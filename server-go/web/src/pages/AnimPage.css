@@ -254,6 +254,11 @@
   justify-content: center;
 }
 
+/* Encart question+réponse RAFALE (.rafale-anim-qcard*) — DÉPLACÉ vers la
+   zone centrale (#198, retour QUALIF 8.0.0.13) : ces règles vivent
+   désormais dans components/AnimRafaleQuestion.css, rendu par
+   AnimConductPanel.jsx (L3), plus par AnimPage.jsx directement. */
+
 /* ------------------------------------------------------------------ */
 /* Zone conduite — voir AnimConductPanel.css (#166/F5)                 */
 /* ------------------------------------------------------------------ */

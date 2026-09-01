@@ -112,7 +112,10 @@ func TestQuestionFixtures_RoundTrip_TypedContent(t *testing.T) {
 	// loudly instead of reporting a vacuous pass. Update this constant
 	// deliberately (and AllQuestionTypes()-check below) if fixtures are
 	// added/removed.
-	const wantFixtureCount = 6
+	//
+	// 7 since v8.0.0 (#107): rafale.json added, covering the 6th
+	// QuestionType (RAFALE, contracts/rafale.md §3.3).
+	const wantFixtureCount = 7
 	if tested != wantFixtureCount {
 		t.Errorf("expected to test %d testdata/questions/*.json fixtures, tested %d — fixture count changed (update wantFixtureCount if deliberate) or the fixtures dir was not found as expected", wantFixtureCount, tested)
 	}

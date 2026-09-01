@@ -10,6 +10,7 @@ import Podium from '../components/Podium'
 import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
 import EntractePanel from '../components/EntractePanel'
+import RafaleTimers from '../components/RafaleTimers'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
 import { escapeWifiString } from '../utils/wifiUtils'
@@ -49,6 +50,10 @@ const GAME_TYPE_COLORS = {
   ARDOISE:  { color: '#fcd34d', shadow: 'rgba(252,211,77,0.6)' },
   QCM:      { color: '#34d399', shadow: 'rgba(52,211,153,0.6)' },
   MEMOTION: { color: '#f472b6', shadow: 'rgba(244,114,182,0.6)' },
+  // RAFALE (v8.0.0, #16/#198) — même couleur que le badge de type et le
+  // sélecteur (utils/questionTypeMeta.js, #f97316) : bugfix cohérence UI,
+  // même esprit que le badge de QuestionCard.jsx (retour QUALIF 8.0.0.3).
+  RAFALE:   { color: '#f97316', shadow: 'rgba(249,115,22,0.6)' },
 }
 
 function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
@@ -645,6 +650,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     (!gameState.question && (gameState.MEMORY_PARTICIPATING_TEAMS?.length ?? 0) > 0 && showMemoryGrid)
   const isMemotion = gameState.question?.TYPE === 'MEMOTION'
   const isArdoise = gameState.question?.TYPE === 'ARDOISE'
+  // RAFALE (contrat rafale.md §2.1, milestone v8.0.0) — même patron que
+  // MEMOTION/ARDOISE : un QuestionType, dispatché POSITIVEMENT, sans repli
+  // implicite sur le bloc SPEEDY/ARDOISE générique (§2.1 : "RAFALE suit le
+  // patron MEMOTION"). Ajouté à `isKnownOtherType` pour la même raison que
+  // MEMOTION/ARDOISE : sans lui, un TYPE "RAFALE" tomberait dans `isSpeedy`
+  // et afficherait le bloc générique à la place du bloc dédié ci-dessous.
+  const isRafale = gameState.question?.TYPE === 'RAFALE'
   // #183/A-F1 — dispatch positif du type de contenu affiché : remplace les
   // gardes par négation (`!isQcm && !isMemory && !isMemotion`), répétées à 3
   // endroits pour la mise en page par défaut partagée SPEEDY/ARDOISE.
@@ -654,7 +666,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // renseigné qui ne correspond à aucune des 4 branches ci-dessus (donc
   // inconnu des 5 types gérés) n'est plus traité comme SPEEDY par défaut —
   // inatteignable avec les données actuelles (5 types connus).
-  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale
   const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
@@ -1477,8 +1489,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               </motion.div>
             )}
 
-            {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number */}
-            {showCountdown && (isSpeedy || isArdoise) && (
+            {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number.
+                RAFALE (v8.0.0, #16/#198, bugfix TV vide — retour utilisateur QUALIF 8.0.0.3) : inclus
+                ici comme SPEEDY/ARDOISE — depuis le bugfix CATEGORY unique (2026-08-29, contrat §3.3),
+                gameState.question.CATEGORY est renseigné pour RAFALE comme pour tout autre type, la
+                catégorie s'anime donc normalement en plus du timer + décompte. */}
+            {showCountdown && (isSpeedy || isArdoise || isRafale) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1541,8 +1557,17 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               </div>
             )}
 
-            {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM) */}
-            {showReady && (isSpeedy || isArdoise) && (
+            {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM).
+                RAFALE (v8.0.0, #16/#198, bugfix TV vide en READY — retour utilisateur QUALIF
+                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE — ReadyCategoryDisplay affiche désormais
+                la vraie catégorie de la manche (gameState.question.CATEGORY, unique depuis le
+                bugfix 2026-08-29, contrat §3.3), comme pour tout autre type. Cause racine (READY
+                totalement vide, avant ce bugfix-ci) :
+                `showGameContent` (bloc RAFALE dédié, plus bas) ne couvre que STARTED/PAUSED/
+                STOPPED/REVEALED — READY (et COUNTDOWN ci-dessus) en étaient exclus, et `isRafale`
+                étant dans `isKnownOtherType`, RAFALE ne retombait plus non plus sur ce bloc
+                générique par défaut (#183) — l'écran restait vide faute d'un chemin explicite. */}
+            {showReady && (isSpeedy || isArdoise || isRafale) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -2786,6 +2811,133 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 </motion.div>
               </div>
             )}
+
+            {/* RAFALE TV Content — RÉVISION 2026-08-28 (contrat rafale.md
+                §4/§4bis/§8.2, maquette docs/mockups/rafale-v8.html §9,
+                SECTION FAISANT AUTORITÉ — remplace l'ancien §3/§4/§4bis).
+                Dispatch POSITIF sur `isRafale` (déclaré ci-dessus, ajouté à
+                `isKnownOtherType`) : sans lui, rien ne s'affiche pour ce
+                type — aucun repli implicite sur le bloc SPEEDY/ARDOISE
+                générique (§2.1). Statique — aucune des zones ci-dessous ne
+                défile (overflow: hidden, unités viewport,
+                PlayerDisplay.css).
+                Nouveau design (§9.1) : l'encart coloré équipe PORTE
+                directement la question — plus de bandeau "c'est le tour
+                de" séparé (source de la panne "aucune question visible"
+                constatée en QUALIF, §9 "Le problème constaté"). AUCUN
+                score/compteur/classement sur TV (retour utilisateur
+                2026-08-28) — la grille d'équipes est retirée. La réponse
+                attendue N'EST JAMAIS lue ici : `RAFALE_CURRENT_QUESTION`
+                (contrat §4) ne porte pas `ANSWER`, contrairement à l'action
+                dédiée `RAFALE_ANSWER` (admin+anim uniquement, §2.3). */}
+            {isRafale && showGameContent && gameState.question && (() => {
+              const current = gameState.RAFALE_CURRENT_QUESTION || {}
+              const participatingTeams = gameState.RAFALE_PARTICIPATING_TEAMS || []
+              const isMultiTeam = participatingTeams.length > 0
+              const currentTeam = gameState.RAFALE_CURRENT_TEAM || ''
+              const currentTeamColorArr = gameState.RAFALE_CURRENT_TEAM_COLOR
+              const currentTeamCss = Array.isArray(currentTeamColorArr) && currentTeamColorArr.length === 3
+                ? `rgb(${currentTeamColorArr.join(',')})`
+                : 'var(--error)'
+              const catMeta = categoryMeta(current.CATEGORY, apiCategories)
+
+              // VPlayer (v8.0.0, #16/#198, contrat §8.1/§8.2, tâche 38) —
+              // AUCUN élément interactif, affichage seul. Layout ENTIÈREMENT
+              // différent du TV : la tablette d'un joueur n'a pas besoin du
+              // timer/de la question (répondue à l'oral, animateur/admin
+              // seuls voient RAFALE_ANSWER, §2.3) — seul l'indicateur
+              // "équipe active" a un sens ici. Actif uniquement en mode
+              // multi (RAFALE_MODE ≠ SOLO, §8.2) ; en SOLO, rien de plus à
+              // dire côté VPlayer (pas de tour à annoncer, une seule équipe
+              // joue en continu).
+              if (isVPlayer) {
+                if (!isMultiTeam) {
+                  return (
+                    <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
+                      <span className="rafale-vplayer-fs-message">Manche RAFALE en cours</span>
+                    </div>
+                  )
+                }
+                const isMyTurn = !!teamName && teamName === currentTeam
+                return isMyTurn ? (
+                  <motion.div
+                    className="rafale-vplayer-fullscreen rafale-vplayer-active"
+                    style={{ '--rafale-active-color': currentTeamCss }}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    <span className="rafale-vplayer-fs-team">{currentTeam}</span>
+                    <span className="rafale-vplayer-fs-message">À VOUS DE<br />RÉPONDRE</span>
+                    <span className="rafale-vplayer-fs-hint">à l'oral</span>
+                  </motion.div>
+                ) : (
+                  <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
+                    <span className="rafale-vplayer-fs-label">EN COURS</span>
+                    <span className="rafale-vplayer-fs-message">
+                      Au tour des<br />
+                      <span style={{ color: currentTeamCss }}>{currentTeam || '—'}</span>
+                    </span>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="game-content-zones rafale-tv">
+                  {/* Zone 1: double timer (manche + question, §2.2) */}
+                  <div className="zone-timer rafale-tv-zone-timer">
+                    <RafaleTimers
+                      roundTime={gameState.timer}
+                      roundTotal={gameState.totalTime}
+                      questionTime={gameState.RAFALE_QUESTION_TIME || 0}
+                      questionTotal={gameState.question?.RAFALE_QUESTION_TIME || 3}
+                      phase={gameState.phase}
+                      size="xl"
+                    />
+                  </div>
+
+                  {/* Zone 2: vide (§9.1) — la question vit désormais DANS
+                      l'encart d'équipe (zone 3), pas dans un bloc séparé. */}
+                  <div className="zone-question" />
+
+                  {/* Zone 3: encart coloré équipe = LA question (§9.1/§9.4).
+                      S'affiche même en SOLO (couleur fixe de l'unique
+                      équipe pour toute la manche, §9.4 — aucune variante
+                      simplifiée). Jamais la réponse (§2.3). */}
+                  <div className="zone-media rafale-tv-zone-media">
+                    <motion.div
+                      className="rafale-tv-qcard"
+                      style={{ '--rafale-active-color': currentTeamCss }}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      {currentTeam && (
+                        <span className="rafale-tv-qcard-team">{currentTeam}</span>
+                      )}
+                      {(catMeta || current.DIFFICULTY > 0) && (
+                        <div className="rafale-tv-meta">
+                          {catMeta && (
+                            <span className="rafale-tv-chip">
+                              {catMeta.imageURL
+                                ? <img src={catMeta.imageURL} alt={catMeta.label} className="rafale-tv-chip-img" />
+                                : <span>{catMeta.icon}</span>}
+                              {' '}{catMeta.label}
+                            </span>
+                          )}
+                          {current.DIFFICULTY > 0 && (
+                            <span className="rafale-tv-chip">{'★'.repeat(current.DIFFICULTY)}</span>
+                          )}
+                        </div>
+                      )}
+                      <p className="rafale-tv-qcard-text">{current.QUESTION}</p>
+                    </motion.div>
+                  </div>
+
+                  {/* Zone 4: vide — AUCUN score/compteur/classement sur TV
+                      (retour utilisateur 2026-08-28, maquette §9.1). */}
+                  <div className="zone-answers rafale-tv-zone-answers" />
+                </div>
+              )
+            })()}
 
             {/* Waiting State - no question selected (NOT shown for VPlayer) */}
             {!isVPlayer && !gameState.question && ['STOPPED', 'REVEALED'].includes(gameState.phase) && (

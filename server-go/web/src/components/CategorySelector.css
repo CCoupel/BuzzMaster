@@ -1,0 +1,171 @@
+/* CategorySelector — extrait de QuestionsPage.css (#95/#97/#100) lors du
+   partage avec RafalePage.jsx (v8.0.0, #16/#197, bugfix cohérence UI).
+   Règles inchangées — seul l'emplacement du fichier change. */
+
+.category-selector-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.category-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.category-btn {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  background: white;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.category-btn:hover {
+  border-color: var(--cat-color);
+  background: color-mix(in srgb, var(--cat-color) 10%, white);
+}
+
+.category-btn.active {
+  border-color: var(--cat-color);
+  background: var(--cat-color);
+}
+
+.category-btn.active .category-icon {
+  filter: brightness(1.2);
+}
+
+.category-icon {
+  font-size: 1.25rem;
+}
+
+.category-img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.category-btn--custom.active .category-img {
+  opacity: 0.9;
+}
+
+/* Bouton + ajout catégorie (#97) */
+.category-btn--add {
+  border-style: dashed;
+  border-color: var(--gray-300);
+  color: var(--gray-500);
+  font-size: 1.25rem;
+  font-weight: 300;
+  background: transparent;
+}
+
+.category-btn--add:hover {
+  border-color: var(--primary-500, #6366f1);
+  color: var(--primary-500, #6366f1);
+  background: color-mix(in srgb, var(--primary-500, #6366f1) 8%, white);
+}
+
+/* Formulaire inline ajout catégorie (#97) */
+.add-category-inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 0.5rem);
+  margin-top: var(--space-2, 0.5rem);
+  padding: var(--space-3, 0.75rem);
+  background: var(--gray-50, #f9fafb);
+  border: 1px solid var(--gray-200, #e5e7eb);
+  border-radius: var(--radius-md, 0.5rem);
+}
+
+.add-category-input {
+  width: 100%;
+  padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+  border: 1px solid var(--gray-300, #d1d5db);
+  border-radius: var(--radius-sm, 0.375rem);
+  font-size: 0.875rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.add-category-input:focus {
+  border-color: var(--primary-500, #6366f1);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-500, #6366f1) 20%, transparent);
+}
+
+.add-category-actions {
+  display: flex;
+  gap: var(--space-2, 0.5rem);
+}
+
+.add-category-validate {
+  padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
+  background: var(--primary-500, #6366f1);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm, 0.375rem);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast, 150ms);
+}
+
+.add-category-validate:hover {
+  background: var(--primary-600, #4f46e5);
+}
+
+.add-category-cancel {
+  padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
+  background: transparent;
+  color: var(--gray-600, #4b5563);
+  border: 1px solid var(--gray-300, #d1d5db);
+  border-radius: var(--radius-sm, 0.375rem);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background var(--transition-fast, 150ms);
+}
+
+.add-category-cancel:hover {
+  background: var(--gray-100, #f3f4f6);
+}
+
+.add-category-error {
+  font-size: 0.75rem;
+  color: var(--error, #ef4444);
+  margin: 0;
+}
+
+/* File upload label dans le formulaire add-category (#100) */
+.add-category-file-label {
+  display: block;
+  cursor: pointer;
+}
+
+.add-category-file-btn {
+  display: inline-block;
+  padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
+  border: 1px dashed var(--gray-300, #d1d5db);
+  border-radius: var(--radius-sm, 0.375rem);
+  font-size: 0.8125rem;
+  color: var(--gray-600, #4b5563);
+  background: var(--gray-50, #f9fafb);
+  transition: border-color var(--transition-fast, 150ms);
+  word-break: break-all;
+}
+
+.add-category-file-label:hover .add-category-file-btn {
+  border-color: var(--primary-500, #6366f1);
+  color: var(--primary-500, #6366f1);
+}
+
+.category-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: var(--space-1);
+}

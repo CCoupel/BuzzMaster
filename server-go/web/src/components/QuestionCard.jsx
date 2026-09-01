@@ -52,6 +52,15 @@ export default function QuestionCard({
   const isMemory = question.TYPE === 'MEMORY'
   const isMemotion = question.TYPE === 'MEMOTION'
   const isArdoise = question.TYPE === 'ARDOISE'
+  // Source unique des couleurs de badge de type (questionTypeMeta.js,
+  // #183/A-F2) — remplace la liste CSS `.qcard-type-badge.type-*`
+  // (QuestionCard.css) qui divergeait silencieusement du sélecteur de type
+  // (QuestionsPage.jsx `.type-btn.*`) : RAFALE avait une entrée dans
+  // questionTypeMeta.js/le sélecteur mais AUCUNE règle CSS ici, laissant le
+  // badge sans fond (texte blanc flottant sur le fond ambiant de la carte).
+  // Un seul style calculé depuis la même source pour les deux surfaces —
+  // ne peut plus diverger pour ce type ni pour un futur type.
+  const typeMeta = getQuestionTypeMeta(question.TYPE)
   const qcmColor = isQCM && question.QCM_CORRECT ? QCM_COLORS[question.QCM_CORRECT] : null
   const memoryPairCount = isMemory && question.MEMORY_PAIRS ? question.MEMORY_PAIRS.length : 0
 
@@ -105,12 +114,16 @@ export default function QuestionCard({
 
       {/* Header row 2: Category, type, target, time, points */}
       <div className="qcard-header-row2">
+        {/* RAFALE (contrat rafale.md §3.3, bugfix 2026-08-29) — CATEGORY
+            est désormais une catégorie unique pour ce type, comme pour
+            tous les autres : le chemin générique suffit, plus de branche
+            isRafale dédiée (l'ancien RAFALE_CATEGORIES multi est retiré). */}
         {question.CATEGORY && (
           <CategoryBadge catKey={question.CATEGORY} customCategories={customCategories} size="sm" />
         )}
 
-        <span className={`qcard-type-badge type-${(question.TYPE || 'normal').toLowerCase()}`}>
-          {getQuestionTypeMeta(question.TYPE).label}
+        <span className="qcard-type-badge" style={{ backgroundColor: typeMeta.color }}>
+          {typeMeta.label}
         </span>
 
         <span

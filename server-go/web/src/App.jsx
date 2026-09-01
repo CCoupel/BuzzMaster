@@ -7,6 +7,7 @@ import GamePage from './pages/GamePage'
 import ScoresPage from './pages/ScoresPage'
 import TeamsPage from './pages/TeamsPage'
 import QuestionsPage from './pages/QuestionsPage'
+import RafalePage from './pages/RafalePage'
 import HistoryPage from './pages/HistoryPage'
 import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
 import LogsPage from './pages/LogsPage'
@@ -28,6 +29,9 @@ const adminRoutes = [
   { path: 'scoreboard', element: <ScoresPage /> },
   { path: 'teams', element: <TeamsPage /> },
   { path: 'quiz', element: <QuestionsPage /> },
+  // RAFALE (milestone v8.0.0, #16/#197/#198) — éditeur du réservoir,
+  // page dédiée séparée du Quiz/MEMOTION (contrat rafale.md §2.4/§9).
+  { path: 'rafale', element: <RafalePage /> },
   { path: 'history', element: <HistoryPage /> },
   { path: 'palmares', element: <CategoryPalmaresPage /> },
   { path: 'settings', element: <ConfigPage /> },

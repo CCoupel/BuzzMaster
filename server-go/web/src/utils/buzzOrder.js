@@ -33,6 +33,35 @@ export function sortTeamsByBuzzOrder(teamsList, phase) {
 }
 
 /**
+ * sortTeamsByRafaleCounter — classement RAFALE (v8.0.0, #16/#199, contrat
+ * rafale.md §6.1) : trié par COMPTEUR de manche décroissant, pas par score
+ * réel (aucun point n'est attribué avant la fin de manche, §6.1). En mode
+ * `MAILLON_FAIBLE`, le compteur courant retombe à 0 sur mauvaise réponse
+ * (§3.4) — le classement suit donc le MEILLEUR compteur atteint
+ * (RAFALE_TEAM_BEST) plutôt que le compteur courant, seul mode où les deux
+ * divergent (contrat §6.2 : "compteur_retenu = RAFALE_TEAM_BEST en
+ * MAILLON_FAIBLE, RAFALE_TEAM_COUNTERS sinon" — même règle que l'attribution
+ * de fin de manche, réutilisée ici pour l'affichage).
+ *
+ * Mutualisé entre `/admin` (GamePage.jsx) et `/anim` (AnimPage.jsx, tâche 34)
+ * — même discipline que `sortTeamsByBuzzOrder` ci-dessus : un seul classement,
+ * jamais deux règles qui pourraient diverger silencieusement.
+ *
+ * @param {Array<{name:string}>} teamsList
+ * @param {object} question - question courante (TYPE RAFALE, RAFALE_MODE)
+ * @param {Object<string,number>} teamCounters - gameState.RAFALE_TEAM_COUNTERS
+ * @param {Object<string,number>} teamBest - gameState.RAFALE_TEAM_BEST
+ * @returns {Array} nouvelle liste (ne mute pas `teamsList`) — inchangée si
+ *   `question` n'est pas de type RAFALE
+ */
+export function sortTeamsByRafaleCounter(teamsList, question, teamCounters, teamBest) {
+  if (question?.TYPE !== 'RAFALE') return teamsList
+  const useBest = question.RAFALE_MODE === 'MAILLON_FAIBLE'
+  const source = useBest ? (teamBest || {}) : (teamCounters || {})
+  return [...teamsList].sort((a, b) => (source[b.name] || 0) - (source[a.name] || 0))
+}
+
+/**
  * Badge de classement (🏆 🥈 🥉) pour un rang donné — null au-delà de la 3e place.
  * @param {number} rank - 1-based
  * @returns {string|null}

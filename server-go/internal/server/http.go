@@ -280,6 +280,18 @@ func (h *HTTPServer) setupRoutes() {
 	// Categories API (v5.6.2 — #95)
 	h.mux.HandleFunc("/api/categories", h.handleAPICategories)
 
+	// RAFALE reservoir API (v8.0.0 — #197, contracts/rafale.md §9)
+	h.mux.HandleFunc("/api/rafale/questions", h.handleRafaleQuestions)
+	// Exact-path registration BEFORE the "/api/rafale/questions/" prefix
+	// route below: net/http's ServeMux always prefers the more specific
+	// (longer, exact) match regardless of registration order, so
+	// "/api/rafale/questions/reset-all" routes here and everything else
+	// under the prefix (including "/{id}" and "/{id}/reset") still falls
+	// through to handleRafaleQuestionByID. Feature #197.
+	h.mux.HandleFunc("/api/rafale/questions/reset-all", h.handleRafaleResetAllUsed)
+	h.mux.HandleFunc("/api/rafale/questions/", h.handleRafaleQuestionByID)
+	h.mux.HandleFunc("/api/rafale/pool", h.handleRafalePool)
+
 	// AI question generator (v6.0.0 — #8)
 	h.mux.HandleFunc("/api/generate-questions", h.handleGenerateQuestions)
 
@@ -1106,6 +1118,57 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 			question["ARDOISE_KEYBOARD_TYPE"] = kbType
 		}
 		// If not provided or invalid, omit the field (frontend defaults to AZERTY)
+	}
+
+	// Handle RAFALE specific fields (v8.0.0, #107, contract §3.3) — round
+	// configuration: difficulty/mode/seconds-per-question/max-questions.
+	// CATEGORY is already handled generically above (shared field, contract
+	// §3.3 bugfix 2026-08-29) — RAFALE reuses it like every other type.
+	//
+	// ⚠️ Bugfix (2026-08-31, 2nd QUALIF cycle of the SAME external symptom
+	// — "3s countdown then nothing"): this block was missing ENTIRELY.
+	// QuestionsPage.jsx has sent these 4 fields in the multipart POST since
+	// #107 shipped (data.append('RAFALE_DIFFICULTY', ...) etc.), but
+	// handleUploadQuestion never read them — no `if questionType ==
+	// "RAFALE"` block existed here at all, unlike QCM/MEMORY/MEMOTION/
+	// ARDOISE just above. Every RAFALE round-config question ever saved
+	// through the editor therefore lost its difficulty/mode/question-time/
+	// max-questions on save: loadQuestion() (main.go) reloads it with Go's
+	// zero values. RAFALE_QUESTION_TIME/RAFALE_MAX_QUESTIONS both fall back
+	// to sane engine-side defaults when zero (3s, 100) and RAFALE_MODE
+	// falls back to SOLO — harmless. RAFALE_DIFFICULTY has NO such
+	// fallback: 0 is not a valid difficulty (1-3), so the reservoir pool
+	// filter (contract §7, exact DIFFICULTY match) never matched ANY
+	// question (real reservoir entries are always 1-3) — reproducing the
+	// EXACT SAME external symptom the CATEGORY=="" bugfix (commit
+	// d6939e51, previous cycle) fixed, but via a genuinely DIFFERENT
+	// missing field, which is why that fix alone didn't resolve this
+	// recurrence. See participantsConform's own doc comment (engine.go) —
+	// extended in the same commit to also gate on RafaleDifficulty, so a
+	// future gap in this class (a static round-config field missing from a
+	// saved question) can never again reach STARTED silently.
+	if questionType == "RAFALE" {
+		if diffStr := r.FormValue("RAFALE_DIFFICULTY"); diffStr != "" {
+			if diff, err := strconv.Atoi(diffStr); err == nil && diff >= 1 && diff <= 3 {
+				question["RAFALE_DIFFICULTY"] = diff
+			}
+		}
+		if mode := r.FormValue("RAFALE_MODE"); mode != "" {
+			question["RAFALE_MODE"] = mode
+		}
+		if qtStr := r.FormValue("RAFALE_QUESTION_TIME"); qtStr != "" {
+			if qt, err := strconv.Atoi(qtStr); err == nil && qt > 0 {
+				question["RAFALE_QUESTION_TIME"] = qt
+			}
+		}
+		if maxStr := r.FormValue("RAFALE_MAX_QUESTIONS"); maxStr != "" {
+			if maxQ, err := strconv.Atoi(maxStr); err == nil && maxQ > 0 {
+				if maxQ > 100 {
+					maxQ = 100 // contract §7.2 hard cap
+				}
+				question["RAFALE_MAX_QUESTIONS"] = maxQ
+			}
+		}
 	}
 
 	// Handle question media upload
@@ -2103,6 +2166,282 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// ---- RAFALE reservoir API (v8.0.0 — #197, contracts/rafale.md §9) --------
+
+// rafaleQuestionResponse is the wire shape of one reservoir question for
+// GET /api/rafale/questions — USED is derived at read time from
+// rafale_used.json, never stored in the reservoir itself (contract §3.2/§9).
+type rafaleQuestionResponse struct {
+	ID         string `json:"ID"`
+	Question   string `json:"QUESTION"`
+	Answer     string `json:"ANSWER"`
+	Category   string `json:"CATEGORY"`
+	Difficulty int    `json:"DIFFICULTY"`
+	Used       bool   `json:"USED"`
+}
+
+// isKnownRafaleCategory reports whether key matches a hardcoded category or
+// a custom category discovered on disk (data/files/categories/) — same
+// vocabulary check as handleGetCategories, reused here for reservoir
+// question validation (contract §9, POST /api/rafale/questions 400 on an
+// unknown category).
+func (h *HTTPServer) isKnownRafaleCategory(key string) bool {
+	for _, c := range hardcodedCategories {
+		if c.Key == key {
+			return true
+		}
+	}
+	catDir := filepath.Join(h.dataDir, "files", "categories")
+	entries, _ := os.ReadDir(catDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
+			continue
+		}
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if toUpperSnakeCase(stem) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// handleRafaleQuestions handles GET (list, optional filters) and POST
+// (create/update) on the RAFALE reservoir — contracts/rafale.md §9.
+func (h *HTTPServer) handleRafaleQuestions(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetRafaleQuestions(w, r)
+	case http.MethodPost:
+		h.handlePostRafaleQuestion(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleGetRafaleQuestions lists the reservoir, optionally filtered by
+// ?categories=A,B (OR) and/or ?difficulty=N — contract §9.
+func (h *HTTPServer) handleGetRafaleQuestions(w http.ResponseWriter, r *http.Request) {
+	var catFilter map[string]struct{}
+	if raw := r.URL.Query().Get("categories"); raw != "" {
+		catFilter = make(map[string]struct{})
+		for _, c := range strings.Split(raw, ",") {
+			c = strings.TrimSpace(c)
+			if c != "" {
+				catFilter[c] = struct{}{}
+			}
+		}
+	}
+
+	hasDiffFilter := false
+	diffFilter := 0
+	if raw := r.URL.Query().Get("difficulty"); raw != "" {
+		d, err := strconv.Atoi(raw)
+		if err != nil {
+			http.Error(w, "Invalid difficulty", http.StatusBadRequest)
+			return
+		}
+		diffFilter = d
+		hasDiffFilter = true
+	}
+
+	questions, used := h.engine.SnapshotRafaleReservoir()
+
+	result := make([]rafaleQuestionResponse, 0, len(questions))
+	for _, q := range questions {
+		if catFilter != nil {
+			if _, ok := catFilter[string(q.Category)]; !ok {
+				continue
+			}
+		}
+		if hasDiffFilter && q.Difficulty != diffFilter {
+			continue
+		}
+		result = append(result, rafaleQuestionResponse{
+			ID:         q.ID,
+			Question:   q.Question,
+			Answer:     q.Answer,
+			Category:   string(q.Category),
+			Difficulty: q.Difficulty,
+			Used:       used[q.ID],
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"QUESTIONS": result,
+		"TOTAL":     len(result),
+	})
+}
+
+// handlePostRafaleQuestion creates (no ID in body) or updates (ID present)
+// one reservoir question — contract §9. Body is JSON, not multipart:
+// reservoir questions carry no media (arbitrage D3).
+func (h *HTTPServer) handlePostRafaleQuestion(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID         string `json:"ID"`
+		Question   string `json:"QUESTION"`
+		Answer     string `json:"ANSWER"`
+		Category   string `json:"CATEGORY"`
+		Difficulty int    `json:"DIFFICULTY"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(body.Question) == "" {
+		http.Error(w, "QUESTION must not be empty", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(body.Answer) == "" {
+		http.Error(w, "ANSWER must not be empty", http.StatusBadRequest)
+		return
+	}
+	if body.Difficulty < 1 || body.Difficulty > 3 {
+		http.Error(w, "DIFFICULTY must be between 1 and 3", http.StatusBadRequest)
+		return
+	}
+	if !h.isKnownRafaleCategory(body.Category) {
+		http.Error(w, "Unknown CATEGORY", http.StatusBadRequest)
+		return
+	}
+
+	saved, err := h.engine.UpsertRafaleQuestion(game.RafaleQuestion{
+		ID:         body.ID,
+		Question:   body.Question,
+		Answer:     body.Answer,
+		Category:   game.QuestionCategory(body.Category),
+		Difficulty: body.Difficulty,
+	})
+	if err != nil {
+		log.Printf("[HTTP] Rafale question upsert failed: %v", err)
+		http.Error(w, "Failed to save question", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"ID": saved.ID})
+}
+
+// handleRafaleQuestionByID handles DELETE /api/rafale/questions/{id} and
+// POST /api/rafale/questions/{id}/reset — contract §9. The "/reset" suffix
+// (feature #197) is parsed here rather than given its own mux route: the
+// route registered is the "/api/rafale/questions/" prefix, so anything
+// after {id} (or {id} itself) is this handler's job to interpret.
+func (h *HTTPServer) handleRafaleQuestionByID(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/api/rafale/questions/")
+	path = strings.TrimSuffix(path, "/")
+
+	if id, ok := strings.CutSuffix(path, "/reset"); ok {
+		h.handleRafaleResetOneUsed(w, r, id)
+		return
+	}
+
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := path
+	if id == "" {
+		http.Error(w, "ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.engine.DeleteRafaleQuestion(id); err != nil {
+		http.Error(w, "Question not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"DELETED": id})
+}
+
+// handleRafaleResetOneUsed handles POST /api/rafale/questions/{id}/reset —
+// contract §9, feature #197: makes ONE reservoir question available again
+// (removes it from the "already used" flag) without touching the reservoir
+// itself. Silently succeeds (no-op) if the question was not marked used.
+func (h *HTTPServer) handleRafaleResetOneUsed(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if id == "" {
+		http.Error(w, "ID required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.engine.MarkRafaleQuestionAvailable(id); err != nil {
+		http.Error(w, "Question not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ID": id, "AVAILABLE": true})
+}
+
+// handleRafaleResetAllUsed handles POST /api/rafale/questions/reset-all —
+// contract §9, feature #197: makes the ENTIRE reservoir available again
+// (empties the "already used" flag) without touching the reservoir itself —
+// unlike the destructive /reset-select?rafale=true (handleResetSelect),
+// which also deletes every reservoir question.
+func (h *HTTPServer) handleRafaleResetAllUsed(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	n, err := h.engine.ResetAllRafaleUsed()
+	if err != nil {
+		log.Printf("[HTTP] Rafale reset-all-used failed: %v", err)
+		http.Error(w, "Failed to reset used flags", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{"RESET": n})
+}
+
+// handleRafalePool returns the pool count (available/used/total) for a
+// category/difficulty filter — contract §9, feeding the pre-round alert
+// (§7.2: blocking when available==0, warning when short of the estimated
+// need, neutral otherwise).
+//
+// ?category=X (singular, v8.0.0 bugfix, 2026-08-29): a RAFALE round now
+// filters on exactly one category, same as every other question type's
+// CATEGORY field — RAFALE_CATEGORIES (multi-select, ?categories=A,B) was
+// removed. See contracts/CHANGELOG.md.
+func (h *HTTPServer) handleRafalePool(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	if category == "" {
+		http.Error(w, "category required", http.StatusBadRequest)
+		return
+	}
+
+	difficulty, err := strconv.Atoi(r.URL.Query().Get("difficulty"))
+	if err != nil {
+		http.Error(w, "Invalid difficulty", http.StatusBadRequest)
+		return
+	}
+
+	available, used, total := h.engine.CountRafalePool(category, difficulty)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{
+		"AVAILABLE": available,
+		"USED":      used,
+		"TOTAL":     total,
+	})
+}
+
 // handleBackupSelect creates a selective backup based on query parameters
 // Query params: questions=true, teams=true, bumpers=true, history=true, medias=true, ambiance=true
 func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) {
@@ -2119,19 +2458,24 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 	// this flag — it stays anchored to "history" (a session's identity, not
 	// an ambiance/visual setting), unchanged from before #152.
 	includeAmbiance := r.URL.Query().Get("ambiance") == "true"
+	// RAFALE reservoir (v8.0.0, #197, contract §10) — dedicated flag,
+	// deliberately not piggybacked on "questions": the reservoir is a
+	// separate global pool, not part of the per-quiz Questions directory.
+	includeRafale := r.URL.Query().Get("rafale") == "true"
 
 	// If nothing selected, include everything
-	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias && !includeAmbiance {
+	if !includeQuestions && !includeTeams && !includeBumpers && !includeHistory && !includeMedias && !includeAmbiance && !includeRafale {
 		includeQuestions = true
 		includeTeams = true
 		includeBumpers = true
 		includeHistory = true
 		includeMedias = true
 		includeAmbiance = true
+		includeRafale = true
 	}
 
-	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v",
-		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias, includeAmbiance)
+	log.Printf("[HTTP] Selective backup: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v, rafale=%v",
+		includeQuestions, includeTeams, includeBumpers, includeHistory, includeMedias, includeAmbiance, includeRafale)
 
 	// Set headers for TAR download
 	cfg := config.Get()
@@ -2238,6 +2582,23 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// Add RAFALE reservoir (v8.0.0, #197) — the question bank
+	// (files/rafale/reservoir.json) and the "already used this game" flags
+	// (config/rafale_used.json). Without this, the reservoir would be
+	// silently excluded from a selective backup while still riding along
+	// in a full /fs-backup archive (contract §10) — a discreet, easy-to-miss
+	// gap this dedicated flag closes.
+	if includeRafale {
+		rafaleDir := filepath.Join(filesDir, "rafale")
+		if _, err := os.Stat(rafaleDir); err == nil {
+			h.addDirToTAR(tw, rafaleDir, "files/rafale")
+		}
+		rafaleUsedPath := filepath.Join(configDir, "rafale_used.json")
+		if _, err := os.Stat(rafaleUsedPath); err == nil {
+			h.addFileToTAR(tw, rafaleUsedPath, "config/rafale_used.json")
+		}
+	}
+
 	log.Printf("[HTTP] Selective backup completed")
 }
 
@@ -2320,6 +2681,9 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 	// see its doc comment for the full rationale (code-reviewer's #150
 	// finding). game_state.json stays on resetHistory, unchanged.
 	resetAmbiance := r.URL.Query().Get("ambiance") == "true"
+	// RAFALE reservoir (v8.0.0, #197) — mirrors handleBackupSelect's
+	// includeRafale, see its doc comment for the rationale.
+	resetRafale := r.URL.Query().Get("rafale") == "true"
 	resetAll := r.URL.Query().Get("all") == "true"
 
 	// "all" means reset everything
@@ -2330,10 +2694,11 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		resetHistory = true
 		resetMedias = true
 		resetAmbiance = true
+		resetRafale = true
 	}
 
-	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v",
-		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias, resetAmbiance)
+	log.Printf("[HTTP] Selective reset: questions=%v, teams=%v, bumpers=%v, history=%v, medias=%v, ambiance=%v, rafale=%v",
+		resetQuestions, resetTeams, resetBumpers, resetHistory, resetMedias, resetAmbiance, resetRafale)
 
 	result := make(map[string]bool)
 	configDir := filepath.Join(h.dataDir, "config")
@@ -2445,6 +2810,23 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 		if mediasOk {
 			result["medias"] = true
 		}
+	}
+
+	// Reset RAFALE reservoir + "already used" flags (v8.0.0, #197, contract
+	// §10) — purges both the question bank and the used-flag file, mirroring
+	// handleBackupSelect's includeRafale.
+	if resetRafale {
+		rafaleDir := filepath.Join(filesDir, "rafale")
+		if err := os.RemoveAll(rafaleDir); err == nil {
+			os.MkdirAll(rafaleDir, 0755)
+			h.engine.ClearRafaleReservoir()
+			result["rafale"] = true
+			log.Printf("[HTTP] Reset: Rafale reservoir cleared")
+		}
+		rafaleUsedPath := filepath.Join(configDir, "rafale_used.json")
+		os.Remove(rafaleUsedPath)
+		h.engine.ClearRafaleUsed()
+		log.Printf("[HTTP] Reset: Rafale used-flags cleared")
 	}
 
 	// Notify clients of changes
@@ -2634,6 +3016,16 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(configDir, "game_state.json")
 				allowed = true
 			}
+		case strings.HasPrefix(tarPath, "files/rafale/"):
+			if detected["rafale"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
+		case tarPath == "config/rafale_used.json":
+			if detected["rafale"] {
+				targetPath = filepath.Join(configDir, "rafale_used.json")
+				allowed = true
+			}
 		// Legacy format: questions directly in root
 		case strings.HasPrefix(tarPath, "questions/"):
 			if detected["questions"] {
@@ -2759,6 +3151,22 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if detected["rafale"] {
+		// #197 — reload both stores from the just-extracted files (paths set
+		// once at startup, same ones this handler just wrote into).
+		if err := h.engine.LoadRafale(); err == nil {
+			log.Printf("[HTTP] Restore: Rafale reservoir loaded into engine")
+		} else {
+			log.Printf("[HTTP] Restore: Rafale reservoir extracted but could not be reloaded: %v", err)
+		}
+		if err := h.engine.LoadRafaleUsed(); err == nil {
+			log.Printf("[HTTP] Restore: Rafale used-flags loaded into engine")
+		} else {
+			log.Printf("[HTTP] Restore: Rafale used-flags extracted but could not be reloaded: %v", err)
+		}
+		restoredMap["rafale"] = true
+	}
+
 	log.Printf("[HTTP] Intelligent restore completed")
 
 	if h.OnAction != nil {
@@ -2781,6 +3189,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"entracte":    false, // #119 — files/entracte/ (ENTRACTE panel image, v6.5.2)
 		"gameConfig":  false, // #150 — game-config.json (default delay + neon effect)
 		"gameState":   false, // #141 — game_state.json (quiz metadata)
+		"rafale":      false, // #197 (v8.0.0) — files/rafale/ + config/rafale_used.json
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -2811,6 +3220,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["gameConfig"] = true
 		case tarPath == "config/game_state.json":
 			detected["gameState"] = true
+		case strings.HasPrefix(tarPath, "files/rafale/"), tarPath == "config/rafale_used.json":
+			detected["rafale"] = true
 		}
 	}
 

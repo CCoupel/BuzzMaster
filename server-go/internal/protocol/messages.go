@@ -128,6 +128,26 @@ const (
 	// would make an accidental cross-wipe between the two forms more
 	// likely, not less).
 	ActionUpdateEntracteConfig = "UPDATE_ENTRACTE_CONFIG"
+
+	// RAFALE actions (v8.0.0, #107 — contracts/rafale.md §5). RAFALE_VALIDATE/
+	// INVALIDATE mirror MEMOTION's "conduite en direct" pattern (admin+anim,
+	// empty {} payload, same as MEMOTION_REVEAL/MEMOTION_STOP_TIMER above —
+	// no dedicated payload struct needed). RAFALE_SET_TEAMS reuses the
+	// {TEAMS:[...]} shape (RafaleSetTeamsPayload, alias below), admin-only
+	// like MEMORY_SET_TEAMS/MEMOTION_SET_TEAMS (contract §5.1).
+	ActionRafaleValidate   = "RAFALE_VALIDATE"   // Admin/Anim → Server: current answer judged correct
+	ActionRafaleInvalidate = "RAFALE_INVALIDATE" // Admin/Anim → Server: current answer judged incorrect
+	ActionRafaleSetTeams   = "RAFALE_SET_TEAMS"  // Admin → Server: participating teams + play order
+	// RAFALE_ANSWER/RAFALE_TICK are SERVER → CLIENT only (contract §5.2) —
+	// deliberately absent from internal/server/inbound_allowlist.go (see
+	// inbound_allowlist_rafale_test.go's regression guard). RAFALE_ANSWER
+	// carries the expected answer, contract §2.3: never diffused through
+	// GameState, sent only to admin+anim via BroadcastToTypes — see
+	// RafaleAnswerPayload below. RAFALE_TICK is the lightweight per-question
+	// countdown (contract §2.2's "seul mécanisme réellement nouveau"),
+	// broadcast to all clients without re-emitting the full GameState.
+	ActionRafaleAnswer = "RAFALE_ANSWER"
+	ActionRafaleTick   = "RAFALE_TICK"
 )
 
 // FSInfo represents file storage information
@@ -478,6 +498,61 @@ type QCMHintPayload struct {
 // SetVirtualPlayerLimitPayload for SET_VIRTUAL_PLAYER_LIMIT action
 type SetVirtualPlayerLimitPayload struct {
 	Limit int `json:"LIMIT"` // Maximum number of virtual players
+}
+
+// RafaleSetTeamsPayload is an alias for MemorySetTeamsPayload — same
+// {TEAMS: [...]} structure (RAFALE_SET_TEAMS action, contract §5.1),
+// same pattern as MotionSetTeamsPayload above.
+type RafaleSetTeamsPayload = MemorySetTeamsPayload
+
+// RafaleNextPayload carries the question suite's statement WITHOUT its
+// answer (#202, contract §13.3) — same shape as GameState's own
+// RafaleCurrent (models.go), a distinct type here (rather than reusing
+// RafaleCurrent's JSON tags directly) only so this file's payload types
+// stay self-contained and independently documented, same convention as
+// every other *Payload in this file.
+//
+// Deliberately has NO Answer field: the next question's answer is not
+// needed before it becomes current (it arrives on the FOLLOWING
+// RAFALE_ANSWER broadcast, at the instant it does), transmitting it now
+// would double the leak surface this whole payload is already restricted
+// to guard (see RafaleAnswerPayload's own comment), and displaying it would
+// work against the "SUIVANTE" zone's entire point of being unobtrusive
+// (contract §13.6).
+type RafaleNextPayload struct {
+	ID         string `json:"ID"`
+	Question   string `json:"QUESTION"`
+	Category   string `json:"CATEGORY"`
+	Difficulty int    `json:"DIFFICULTY"`
+}
+
+// RafaleAnswerPayload for the RAFALE_ANSWER action (Server → admin+anim
+// only, contract §5.2/§2.3) — the current RAFALE question's expected
+// answer. Deliberately its own dedicated action rather than a GameState
+// field: SerializeForWebClient serves the identical payload to /tv and
+// /anim, so no per-field exclusion list could keep the answer off TV
+// (contract §2.3 — see the ardoise_leak_128 precedent this design avoids
+// reproducing).
+//
+// Next (#202, contract §13.3) extends this SAME restricted channel to the
+// pre-fetched next question's statement — same confidentiality reasoning
+// as Answer above applies to it too (§13.2: a competitive advantage in a
+// ~3s-per-question mode). Deliberately NO `omitempty`: nil/null is a
+// meaningful value ("no next question" — pool empty or cap imminent,
+// contract §13.5), not an absence the client should have to special-case
+// away from "field missing" — same "no omitempty" discipline the project
+// already applies to GameState (CLAUDE.md).
+type RafaleAnswerPayload struct {
+	ID     string             `json:"ID"`     // RafaleQuestion.ID this answer belongs to
+	Answer string             `json:"ANSWER"` // expected answer, text only
+	Next   *RafaleNextPayload `json:"NEXT"`   // pre-fetched next question, answer-free; null = none (contract §13.5)
+}
+
+// RafaleTickPayload for the RAFALE_TICK action (Server → all clients,
+// contract §5.2) — the lightweight per-question countdown, broadcast
+// without re-emitting the full GameState (contract §2.2).
+type RafaleTickPayload struct {
+	QuestionTime int `json:"QUESTION_TIME"` // seconds remaining on the current question
 }
 
 // PlayerConnectPayload for PLAYER_CONNECT action (virtual player enrollment)

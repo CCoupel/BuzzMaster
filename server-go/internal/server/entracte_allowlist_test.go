@@ -70,6 +70,14 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionMotionDone:            false,
 	protocol.ActionVPlayerQCMAnswer:      false,
 	protocol.ActionArdoiseInput:          false,
+	// RAFALE (v8.0.0, #107) — same refused-during-entracte bucket as the
+	// other game-mode actions above (MEMORY/MEMOTION*): entracte is only
+	// reachable outside PhaseStarted (D4), and a RAFALE round only exists
+	// while PhaseStarted, so this can never come up in practice — but the
+	// exhaustive sweep still requires an explicit, recorded decision.
+	protocol.ActionRafaleValidate:   false,
+	protocol.ActionRafaleInvalidate: false,
+	protocol.ActionRafaleSetTeams:   false,
 }
 
 // TestIsActionAllowedDuringEntracte_ExhaustiveOverAllInboundActions is the

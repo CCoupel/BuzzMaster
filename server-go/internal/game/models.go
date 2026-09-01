@@ -159,6 +159,7 @@ const (
 	QuestionTypeMemory   QuestionType = "MEMORY"
 	QuestionTypeMemotion QuestionType = "MEMOTION" // NEW (v5.0.0): grid of cards with 3 faces
 	QuestionTypeArdoise  QuestionType = "ARDOISE"  // NEW (v5.6.0): free-text answer via virtual keyboard
+	QuestionTypeRafale   QuestionType = "RAFALE"   // NEW (v8.0.0, #107): timed round drawing from the RAFALE reservoir — contracts/rafale.md
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -230,6 +231,19 @@ const (
 	MemoryModeTantQueJeGagne MemoryMode = "TANT_QUE_JE_GAGNE"
 )
 
+// RafaleMode is Question.RafaleMode's value set — contracts/rafale.md §3.4.
+// TypedContent.RafaleMode itself stays a plain string (mirrors
+// Question.MotionMode), these constants exist for comparison, same idiom as
+// MemoryMode above.
+type RafaleMode string
+
+const (
+	RafaleModeSolo           RafaleMode = "SOLO"              // one team, no rotation ever (#107)
+	RafaleModeChacunSonTour  RafaleMode = "CHACUN_SON_TOUR"   // rotates after every question regardless of outcome
+	RafaleModeTantQueJeGagne RafaleMode = "TANT_QUE_JE_GAGNE" // rotates only on an incorrect answer/timeout; a correct answer keeps the hand
+	RafaleModeMaillonFaible  RafaleMode = "MAILLON_FAIBLE"    // rotates every question like CHACUN_SON_TOUR, but the counter resets to 0 on an incorrect answer (best kept separately, RAFALE_TEAM_BEST)
+)
+
 // TypedContent holds the fields that carry a QuestionType's own content —
 // QCM answers, MEMORY pairs, ARDOISE keyboard layout, and the plain-text
 // ANSWER shared by SPEEDY/ARDOISE. Embedded anonymously (flat, no JSON
@@ -279,6 +293,35 @@ type TypedContent struct {
 	MemoryPairs  []MemoryPair  `json:"MEMORY_PAIRS,omitempty"`
 	MemoryConfig *MemoryConfig `json:"MEMORY_CONFIG,omitempty"`
 	MemoryMode   string        `json:"MEMORY_MODE,omitempty"`
+	// RAFALE (v8.0.0, #107, contracts/rafale.md §3.3) — question host only,
+	// never nestable in a MEMOTION card (RAFALE has no notion of a single
+	// card; it drives a whole timed round). Unlike QCM/MEMORY, a RAFALE
+	// "question" carries no statement of its own here — TIME/POINTS
+	// (declared directly on Question, reused per §3.3) plus these 4 fields
+	// are the round's CONFIGURATION; the actual questions come from the
+	// reservoir (RafaleQuestion, rafale_store.go), drawn at play time.
+	//
+	// Category filter: RAFALE_CATEGORIES (multi-selection, []string) was
+	// removed (v8.0.0 bugfix, 2026-08-29) in favor of the generic
+	// Question.Category field every other type already uses — RAFALE was
+	// the first (and only) type to introduce multi-category selection, and
+	// it was never rendered correctly by the generic question card (which
+	// reads question.CATEGORY, not a type-specific field) despite a prior
+	// attempted fix. Single category, same as SPEEDY/QCM/MEMORY/MEMOTION/
+	// ARDOISE, resolves the display bug structurally instead of adding a
+	// dedicated RAFALE branch client-side. See contracts/CHANGELOG.md.
+	//
+	// RafaleDifficulty: omitempty like every other TypedContent field in
+	// this struct (models_roundtrip_test.go enforces byte-for-byte fixture
+	// round-trips — a foreign type's owned field must never appear on the
+	// wire for a question that doesn't carry it). 0 is not a valid
+	// difficulty (1..3); an admin-configured RAFALE round always sets it
+	// explicitly before START, same as every other required config field
+	// on this struct.
+	RafaleDifficulty   int    `json:"RAFALE_DIFFICULTY,omitempty"`
+	RafaleMode         string `json:"RAFALE_MODE,omitempty"`          // SOLO | CHACUN_SON_TOUR | TANT_QUE_JE_GAGNE | MAILLON_FAIBLE (contract §3.4)
+	RafaleQuestionTime int    `json:"RAFALE_QUESTION_TIME,omitempty"` // seconds per question, default 3 — NOT GameState.RafaleQuestionTime (the live countdown; same JSON key, different struct, contract §4 note)
+	RafaleMaxQuestions int    `json:"RAFALE_MAX_QUESTIONS,omitempty"` // hard cap, default 100, max 100
 }
 
 // MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
@@ -411,7 +454,7 @@ const (
 	MotionCardStateDone     MotionCardState = "DONE"     // played, DoneMotionCard called
 )
 
-// AllQuestionTypes returns the full registry of question types, i.e. the 5
+// AllQuestionTypes returns the full registry of question types, i.e. the 6
 // values QuestionType may take. Exported as a test-exhaustiveness helper —
 // see contracts/question-types.md §10 (test d'agnosticité) — not consumed by
 // production code in v7.0.0.
@@ -422,7 +465,46 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeMemory,
 		QuestionTypeMemotion,
 		QuestionTypeArdoise,
+		QuestionTypeRafale,
 	}
+}
+
+// RafaleQuestion is one question in the RAFALE reservoir — a global pool of
+// text-only question/answer pairs, independent from Quiz/MEMOTION questions
+// (contracts/rafale.md §2.4/§3.1, milestone #16, #197). Stored as a single
+// file (data/files/rafale/reservoir.json), never one directory per question:
+// RAFALE questions carry no media (arbitrage D3).
+type RafaleQuestion struct {
+	ID         string           `json:"ID"`         // stable identifier, unique within the reservoir
+	Question   string           `json:"QUESTION"`   // statement, text only
+	Answer     string           `json:"ANSWER"`     // expected answer, text only
+	Category   QuestionCategory `json:"CATEGORY"`   // reuses the existing enum + custom categories on disk
+	Difficulty int              `json:"DIFFICULTY"` // 1..3 — same scale as MotionCard.Difficulty
+}
+
+// RafaleSubPhase is the sub-phase of a RAFALE round (GameState.RafaleSubPhase,
+// "" outside a RAFALE question) — contracts/rafale.md §4. Defined here
+// (models) ahead of the GameState fields that will carry it (#107, Phase 2)
+// so the reservoir/editor work (#197) doesn't need to wait on the solo
+// engine.
+type RafaleSubPhase string
+
+const (
+	RafaleSubPhaseNone     RafaleSubPhase = ""          // inactive
+	RafaleSubPhaseQuestion RafaleSubPhase = "QUESTION"  // question asked, question timer running
+	RafaleSubPhaseRoundEnd RafaleSubPhase = "ROUND_END" // round over, points attribution pending
+)
+
+// RafaleCurrent is the question currently asked during a RAFALE round,
+// WITHOUT the expected answer (contracts/rafale.md §2.3: the answer never
+// transits through GameState — it is broadcast separately via the dedicated
+// RAFALE_ANSWER action, to admin+anim only). See RafaleSubPhase's doc
+// comment for why this is defined ahead of #107.
+type RafaleCurrent struct {
+	ID         string `json:"ID"`
+	Question   string `json:"QUESTION"`
+	Category   string `json:"CATEGORY"`
+	Difficulty int    `json:"DIFFICULTY"`
 }
 
 // Question represents a quiz question
@@ -619,6 +701,58 @@ type GameState struct {
 	// SetQuizDisplay, not SetQuizMeta (contract H1-H5, rule H1: never null,
 	// always initialized to []string{}).
 	QuizHiddenFields []string `json:"QUIZ_HIDDEN_FIELDS"`
+
+	// RAFALE fields (v8.0.0, #107, contracts/rafale.md §4) — NO omitempty
+	// (project rule): maps/slices/strings must be serialized even when
+	// empty/zero so the frontend always resets cleanly between rounds.
+	// Ephemeral game-play state, never persisted — excluded from
+	// PersistedGameState (state_persistence.go), same precedent as
+	// MotionActive. Initialized non-nil in NewEngine() and reset at every
+	// NEW_GAME/Ready(), same discipline as the MEMOTION/MEMORY fields
+	// above.
+	//
+	// RafaleCurrentQuestion never carries the expected answer (contract
+	// §2.3 — RafaleCurrent, models.go, has no ANSWER field by construction).
+	// The answer is broadcast separately via the dedicated RAFALE_ANSWER
+	// action, to admin+anim only (protocol.ActionRafaleAnswer).
+	//
+	// RafaleQuestionTime here is the LIVE countdown for the current
+	// question (decremented by the dedicated RAFALE question ticker,
+	// diffused via RAFALE_TICK) — NOT TypedContent.RafaleQuestionTime (the
+	// per-round configured seconds-per-question default). Same JSON key,
+	// deliberately: one is the Question's static config, the other is
+	// GameState's live value, exactly like Question.Time vs
+	// GameState.CurrentTime for the round's global timer.
+	//
+	// RafaleTeamBest (v8.0.0 bugfix, 2026-08-30): the historical maximum of
+	// RafaleTeamStreak for each team, computed generically for all 4 modes
+	// (advanceRafaleUnsafe, engine.go) — no longer a MAILLON_FAIBLE-specific
+	// calculation off RafaleTeamCounters. Populated in every mode now, not
+	// just MAILLON_FAIBLE.
+	//
+	// RafaleTeamStreak (v8.0.0 bugfix, 2026-08-30, contract §6.1) — the
+	// CURRENT streak of consecutive correct answers per team, reset to 0 on
+	// any incorrect answer/timeout, in ALL 4 modes. Distinct from
+	// RafaleTeamCounters, which keeps its own per-mode reset policy
+	// (cumulative except in MAILLON_FAIBLE) — see advanceRafaleUnsafe's own
+	// comment for why the two are deliberately not unified.
+	//
+	// RafaleTeamErrors (v8.0.0 bugfix, 2026-08-30) — same precedent as
+	// MemoryTeamErrors: cumulative count of incorrect answers/timeouts per
+	// team, never reset mid-round, all 4 modes.
+	RafaleSubPhase           RafaleSubPhase `json:"RAFALE_SUBPHASE"`
+	RafaleCurrentQuestion    RafaleCurrent  `json:"RAFALE_CURRENT_QUESTION"`
+	RafaleQuestionTime       int            `json:"RAFALE_QUESTION_TIME"`
+	RafaleTeamCounters       map[string]int `json:"RAFALE_TEAM_COUNTERS"`
+	RafaleTeamBest           map[string]int `json:"RAFALE_TEAM_BEST"`
+	RafaleTeamStreak         map[string]int `json:"RAFALE_TEAM_STREAK"`
+	RafaleTeamErrors         map[string]int `json:"RAFALE_TEAM_ERRORS"`
+	RafaleCurrentTeam        string         `json:"RAFALE_CURRENT_TEAM"`
+	RafaleParticipatingTeams []string       `json:"RAFALE_PARTICIPATING_TEAMS"`
+	RafaleCurrentTeamColor   []int          `json:"RAFALE_CURRENT_TEAM_COLOR"`
+	RafaleAskedCount         int            `json:"RAFALE_ASKED_COUNT"`
+	RafalePoolRemaining      int            `json:"RAFALE_POOL_REMAINING"`
+	RafaleExhausted          bool           `json:"RAFALE_EXHAUSTED"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data

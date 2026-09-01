@@ -3,18 +3,20 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
-import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
+import { CATEGORIES } from '../utils/categoryUtils'
 import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
 import { QUESTION_TYPES } from '../utils/questionTypeMeta'
 import { isMotionCardTypeLocked, motionCardLockReason } from '../utils/motionCardLock'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
-import CategoryBadge from '../components/CategoryBadge'
+import CategorySelector from '../components/CategorySelector'
+import CategoryFilterBar from '../components/CategoryFilterBar'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
 import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
+import RafalePoolAlert from '../components/RafalePoolAlert'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
@@ -48,11 +50,6 @@ export default function QuestionsPage() {
   const bgInputRef = useRef(null)
   const [draggedBgIndex, setDraggedBgIndex] = useState(null)
 
-  // Add category inline form state (#97 + #100)
-  const [showAddCategory, setShowAddCategory] = useState(false)
-  const [newCategoryName, setNewCategoryName] = useState('')
-  const [newCategoryFile, setNewCategoryFile] = useState(null)
-  const [addCategoryError, setAddCategoryError] = useState('')
 
   // Form state
   const [formData, setFormData] = useState({
@@ -76,6 +73,19 @@ export default function QuestionsPage() {
     ],
     // ARDOISE fields (v5.6.0)
     ardoiseKeyboardType: 'AZERTY',
+    // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3) — pas un
+    // énoncé/réponse, une CONFIGURATION de manche : difficulté unique
+    // (RAFALE_DIFFICULTY), mode (RAFALE_MODE), temps par question
+    // (RAFALE_QUESTION_TIME, défaut 3s), plafond dur (RAFALE_MAX_QUESTIONS,
+    // défaut 100, max 100). TIME/POINTS/CATEGORY réutilisent les champs
+    // génériques déjà présents (durée de manche / barème d'une bonne
+    // réponse / catégorie du filtre de pioche) — bugfix 2026-08-29 :
+    // CATEGORY est désormais unique, comme tous les autres types (l'ancien
+    // RAFALE_CATEGORIES multi est retiré, contrat §3.3).
+    rafaleDifficulty: 1,
+    rafaleMode: 'SOLO',
+    rafaleQuestionTime: 3,
+    rafaleMaxQuestions: 100,
     // MEMOTION fields (v5.0.0)
     motionMode: 'SOLO',
     // #184/B-F4 — chaque carte porte désormais `type` + les valeurs de
@@ -762,8 +772,21 @@ export default function QuestionsPage() {
       const updates = { [field]: value }
       // Auto-set pointsTarget when type changes
       if (field === 'type') {
-        // QCM, MEMORY, MEMOTION and ARDOISE default to TEAM, SPEEDY defaults to PLAYER
-        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE') ? 'TEAM' : 'PLAYER'
+        // QCM, MEMORY, MEMOTION, ARDOISE and RAFALE default to TEAM, SPEEDY defaults to PLAYER
+        updates.pointsTarget = (value === 'QCM' || value === 'MEMORY' || value === 'MEMOTION' || value === 'ARDOISE' || value === 'RAFALE') ? 'TEAM' : 'PLAYER'
+        // RAFALE (v8.0.0, #16, contrat rafale.md §3.3) — défauts distincts
+        // du reste des types : durée de MANCHE (120s, pas 30s) et barème
+        // de 2pts/bonne réponse (maquette rafale-v8.html §2). Uniquement
+        // appliqué en ENTRANT dans RAFALE, jamais en sortant (une valeur
+        // déjà saisie par l'admin pour un autre type n'est pas écrasée par
+        // erreur si l'admin revient sur RAFALE après l'avoir quitté —
+        // repris à l'identique à chaque sélection, cohérent avec le fait
+        // que ces deux champs sont remis à zéro par handleNewQuestion/
+        // chargés depuis la question par handleQuestionClick de toute façon).
+        if (value === 'RAFALE') {
+          updates.time = '120'
+          updates.points = '2'
+        }
       }
       return { ...prev, ...updates }
     })
@@ -787,7 +810,7 @@ export default function QuestionsPage() {
     setEditingId(question.ID)
     const qType = question.TYPE || 'SPEEDY'
     // Default pointsTarget based on type if not set
-    const defaultTarget = (qType === 'QCM' || qType === 'MEMORY' || qType === 'ARDOISE') ? 'TEAM' : 'PLAYER'
+    const defaultTarget = (qType === 'QCM' || qType === 'MEMORY' || qType === 'ARDOISE' || qType === 'RAFALE') ? 'TEAM' : 'PLAYER'
 
     // Load memory pairs from question data
     let memoryPairs = [
@@ -961,6 +984,13 @@ export default function QuestionsPage() {
       motionMemorizeDuration: question.MOTION_MEMORIZE_DURATION || 0,
       // ARDOISE fields
       ardoiseKeyboardType: question.ARDOISE_KEYBOARD_TYPE || 'AZERTY',
+      // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3) — CATEGORY
+      // (générique, ligne `category:` ci-dessus) porte désormais le filtre
+      // de manche, comme tous les autres types (bugfix 2026-08-29).
+      rafaleDifficulty: question.RAFALE_DIFFICULTY || 1,
+      rafaleMode: question.RAFALE_MODE || 'SOLO',
+      rafaleQuestionTime: question.RAFALE_QUESTION_TIME || 3,
+      rafaleMaxQuestions: question.RAFALE_MAX_QUESTIONS || 100,
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -1057,6 +1087,12 @@ export default function QuestionsPage() {
       motionMemorizeDuration: 0,
       // ARDOISE fields
       ardoiseKeyboardType: 'AZERTY',
+      // RAFALE fields (v8.0.0, #16/#107) — voir commentaire de l'état
+      // initial (useState ci-dessus) pour le détail des champs.
+      rafaleDifficulty: 1,
+      rafaleMode: 'SOLO',
+      rafaleQuestionTime: 3,
+      rafaleMaxQuestions: 100,
       points: '1',
       time: '30',
       media: null,
@@ -1291,7 +1327,17 @@ export default function QuestionsPage() {
       const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
       if (validCards.length < 2) return
     }
-
+    if (formData.type === 'RAFALE' && !formData.category) {
+      // code-review-20260829-163049.md [MAJEUR] — CATEGORY est OPTIONNEL
+      // pour tous les autres types (purement cosmétique, ignoré du moteur),
+      // mais FONCTIONNELLEMENT REQUIS pour RAFALE : c'est le filtre de
+      // pioche du réservoir (contrat §7, `q.CATEGORY == CATEGORY`).
+      // L'enregistrer vide garantirait un pool vide (ErrRafalePoolEmpty)
+      // dès le lancement — défense en profondeur, en plus du blocage côté
+      // GamePage.jsx (rafaleBlocked). Même style que la validation
+      // MEMORY/MEMOTION ci-dessus (retour silencieux, aucun POST envoyé).
+      return
+    }
     setIsUploading(true)
 
     const data = new FormData()
@@ -1487,6 +1533,21 @@ export default function QuestionsPage() {
 
       // Set answer to number of cards for display
       data.append('answer', `${formData.motionCards.length} cartes`)
+    } else if (formData.type === 'RAFALE') {
+      // RAFALE mode — configuration de manche (contrat rafale.md §3.3),
+      // aucun énoncé/réponse propre (les questions viennent du réservoir,
+      // /admin/rafale). `category` (singulier) EST utilisé par ce type
+      // depuis le bugfix 2026-08-29 — comme tous les autres types, déjà
+      // envoyé ci-dessus (`if (formData.category) { data.append('category', ...) }`),
+      // jamais ici. L'ancien RAFALE_CATEGORIES (multi) est retiré.
+      data.append('RAFALE_DIFFICULTY', String(formData.rafaleDifficulty))
+      data.append('RAFALE_MODE', formData.rafaleMode)
+      data.append('RAFALE_QUESTION_TIME', String(formData.rafaleQuestionTime))
+      data.append('RAFALE_MAX_QUESTIONS', String(formData.rafaleMaxQuestions))
+      // Réponse d'affichage dans la liste des questions (patron MEMORY/
+      // MEMOTION ci-dessus — `answer` reste un champ purement informatif
+      // pour QuestionCard.jsx, jamais lu par le moteur RAFALE).
+      data.append('answer', `${formData.category || '?'} - ${'★'.repeat(formData.rafaleDifficulty)}`)
     }
 
     if (formData.media) {
@@ -2060,37 +2121,17 @@ export default function QuestionsPage() {
       <div className="category-filter-group">
         <CategoryBalance questions={sortedQuestions} />
 
-        {/* Category filter bar (#40) — supports custom categories */}
-        {availableCategories.length > 0 && (
-          <div className="category-filter-bar questions-page-filter-bar">
-            {availableCategories.map(catKey => {
-              const meta = categoryMeta(catKey, customCategories)
-              if (!meta) return null
-              const isActive = selectedCategories.has(catKey)
-              return (
-                <button
-                  key={catKey}
-                  className={`category-filter-pill${isActive ? ' active' : ''}`}
-                  style={{ '--cat-color': meta.color }}
-                  onClick={() => toggleCategoryFilter(catKey)}
-                  title={meta.label}
-                >
-                  <CategoryBadge catKey={catKey} customCategories={customCategories} size="md" chip={false} />
-                  <span className="cat-pill-label">{meta.label}</span>
-                </button>
-              )
-            })}
-            {selectedCategories.size > 0 && (
-              <button
-                className="category-filter-reset"
-                onClick={clearCategoryFilters}
-                title="Réinitialiser les filtres"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        )}
+        {/* Category filter bar (#40) — CategoryFilterBar.jsx (v8.0.0,
+            #16/#197, bugfix cohérence UI/mutualisation, code-review
+            20260829-131404 MAJEUR 2) : composant partagé avec
+            RafalePage.jsx, plus de copie inline divergente ici. */}
+        <CategoryFilterBar
+          availableCategories={availableCategories}
+          selectedCategories={selectedCategories}
+          customCategories={customCategories}
+          onToggle={toggleCategoryFilter}
+          onClear={clearCategoryFilters}
+        />
       </div>
 
       {/* #149 — barre de mélange, entre les filtres et la grille (maquette validée §1) */}
@@ -2220,111 +2261,22 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector — boucle unifiée hardcoded + custom (#95) + bouton + (#97) */}
+                {/* Category Selector — CategorySelector.jsx (v8.0.0, #16/#197,
+                    bugfix cohérence UI), extrait ici (#95/#97/#100), aussi
+                    utilisé par RafalePage.jsx — un seul composant, plus de
+                    variante dupliquée. RAFALE utilise désormais ce MEME
+                    sélecteur (bugfix 2026-08-29, contrat §3.3) : CATEGORY
+                    est une catégorie unique pour ce type comme pour tous
+                    les autres, l'ancien multi-sélecteur RAFALE_CATEGORIES
+                    est retiré (plus de branche dédiée). */}
                 <div className="form-group">
                   <label>Categorie</label>
-                  <div className="category-selector">
-                    {[...Object.keys(CATEGORIES), ...customCategories.map(c => c.key)].map(key => {
-                      const meta = categoryMeta(key, customCategories)
-                      if (!meta) return null
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`category-btn ${formData.category === key ? 'active' : ''}`}
-                          style={{ '--cat-color': meta.color }}
-                          onClick={() => handleInputChange('category', formData.category === key ? '' : key)}
-                          title={meta.label}
-                        >
-                          <CategoryBadge catKey={key} customCategories={customCategories} size="lg" chip={false} />
-                        </button>
-                      )
-                    })}
-                    {/* Bouton + pour créer une catégorie (#97) */}
-                    {!showAddCategory && (
-                      <button
-                        type="button"
-                        className="category-btn category-btn--add"
-                        title="Créer une catégorie"
-                        onClick={() => { setShowAddCategory(true); setAddCategoryError('') }}
-                      >
-                        +
-                      </button>
-                    )}
-                  </div>
-                  {/* Formulaire inline ajout catégorie (#97) */}
-                  {showAddCategory && (
-                    <div className="add-category-inline">
-                      <input
-                        type="text"
-                        className="add-category-input"
-                        placeholder="Nom de la catégorie..."
-                        value={newCategoryName}
-                        maxLength={50}
-                        onChange={(e) => { setNewCategoryName(e.target.value); setAddCategoryError('') }}
-                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowAddCategory(false); setNewCategoryName(''); setNewCategoryFile(null) } }}
-                        autoFocus
-                      />
-                      <label className="add-category-file-label">
-                        <input
-                          type="file"
-                          accept=".png,.jpg,.jpeg,.webp"
-                          style={{ display: 'none' }}
-                          onChange={(e) => { setNewCategoryFile(e.target.files[0] || null); setAddCategoryError('') }}
-                        />
-                        <span className="add-category-file-btn">
-                          {newCategoryFile ? '✓ ' + newCategoryFile.name : '📁 Choisir une image…'}
-                        </span>
-                      </label>
-                      <div className="add-category-actions">
-                        <button
-                          type="button"
-                          className="add-category-validate"
-                          onClick={async () => {
-                            if (!newCategoryName.trim()) { setAddCategoryError('Nom invalide'); return }
-                            if (!newCategoryFile) { setAddCategoryError('Image requise'); return }
-                            try {
-                              const fd = new FormData()
-                              fd.append('name', newCategoryName.trim())
-                              fd.append('file', newCategoryFile)
-                              // Ne PAS définir Content-Type — le browser gère le boundary
-                              const res = await fetch('/api/categories', { method: 'POST', body: fd })
-                              if (res.ok) {
-                                const created = await res.json()
-                                setShowAddCategory(false)
-                                setNewCategoryName('')
-                                setNewCategoryFile(null)
-                                setAddCategoryError('')
-                                await refetchCategories()
-                                handleInputChange('category', created.key)
-                              } else if (res.status === 409) {
-                                setAddCategoryError('Cette catégorie existe déjà')
-                              } else {
-                                setAddCategoryError('Nom invalide ou image non supportée')
-                              }
-                            } catch {
-                              setAddCategoryError('Erreur réseau')
-                            }
-                          }}
-                        >
-                          Valider
-                        </button>
-                        <button
-                          type="button"
-                          className="add-category-cancel"
-                          onClick={() => { setShowAddCategory(false); setNewCategoryName(''); setNewCategoryFile(null); setAddCategoryError('') }}
-                        >
-                          Annuler
-                        </button>
-                      </div>
-                      {addCategoryError && <p className="add-category-error">{addCategoryError}</p>}
-                    </div>
-                  )}
-                  {formData.category && (() => {
-                    const meta = categoryMeta(formData.category, customCategories)
-                    if (!meta) return null
-                    return <span className="category-label" style={{ color: meta.color }}>{meta.label}</span>
-                  })()}
+                  <CategorySelector
+                    value={formData.category}
+                    onChange={(key) => handleInputChange('category', key)}
+                    customCategories={customCategories}
+                    onRefetchCategories={refetchCategories}
+                  />
                 </div>
 
                 {/* Points Target Selector */}
@@ -3101,6 +3053,103 @@ export default function QuestionsPage() {
                   </div>
                 )}
 
+                {/* RAFALE — configuration de manche (v8.0.0, #16/#107,
+                    contrat rafale.md §3.3, tâche 26 du plan). "Points"/
+                    "Temps (s)" ci-dessous (form-row générique) portent ici
+                    le BARÈME (points par bonne réponse) et la DURÉE DE
+                    MANCHE — mêmes champs génériques que les autres types
+                    (TIME/POINTS réutilisés tel quel, contrat §3.3). */}
+                {formData.type === 'RAFALE' && (
+                  <div className="rafale-section">
+                    {/* Categorie — bugfix 2026-08-29 (contrat §3.3) : retire
+                        le multi-selecteur RAFALE_CATEGORIES, RAFALE utilise
+                        desormais le CategorySelector generique ci-dessus
+                        (formData.category, comme tous les autres types). */}
+                    <div className="form-group">
+                      <label>Difficulte (une seule par manche)</label>
+                      <div className="memotion-difficulty-row">
+                        {[1, 2, 3].map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            className={`memotion-diff-btn ${formData.rafaleDifficulty === d ? 'active' : ''}`}
+                            onClick={() => handleInputChange('rafaleDifficulty', d)}
+                          >
+                            {'★'.repeat(d)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Mode Selector — meme patron que MEMORY/MEMOTION
+                        ci-dessus (v8.0.0, #16/#199, bugfix cohérence UI) :
+                        .memory-mode-selector/-options/-option, radios,
+                        reutilises tels quels (aucune nouvelle classe). */}
+                    <div className="memory-mode-selector">
+                      <label>Mode de jeu</label>
+                      <div className="memory-mode-options">
+                        {[
+                          { value: 'SOLO', label: 'SOLO', desc: 'Une equipe joue seule' },
+                          { value: 'CHACUN_SON_TOUR', label: 'CHACUN SON TOUR', desc: 'Rotation apres chaque reponse (juste ou fausse)' },
+                          { value: 'TANT_QUE_JE_GAGNE', label: 'TANT QUE JE GAGNE', desc: 'Garde la main si bonne reponse' },
+                          { value: 'MAILLON_FAIBLE', label: 'MAILLON FAIBLE', desc: 'Compteur remis a 0 sur erreur, meilleur score memorise' },
+                        ].map(mode => (
+                          <label key={mode.value} className="memory-mode-option">
+                            <input
+                              type="radio"
+                              name="rafaleMode"
+                              value={mode.value}
+                              checked={formData.rafaleMode === mode.value}
+                              onChange={(e) => handleInputChange('rafaleMode', e.target.value)}
+                            />
+                            <span className="memory-mode-label">
+                              <strong>{mode.label}</strong>
+                              <small>{mode.desc}</small>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="rafale-question-time-input">Temps par question (s)</label>
+                        <input
+                          id="rafale-question-time-input"
+                          type="number"
+                          value={formData.rafaleQuestionTime}
+                          onChange={(e) => handleInputChange('rafaleQuestionTime', parseInt(e.target.value) || 1)}
+                          min="1"
+                          max="30"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="rafale-max-questions-input">Plafond de questions</label>
+                        <input
+                          id="rafale-max-questions-input"
+                          type="number"
+                          value={formData.rafaleMaxQuestions}
+                          onChange={(e) => handleInputChange('rafaleMaxQuestions', Math.min(100, parseInt(e.target.value) || 1))}
+                          min="1"
+                          max="100"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Alerte de pool (contrat §7.2) — mêmes 3 états
+                        qu'avant le lancement (GamePage.jsx), calculés ici
+                        depuis les catégories/difficulté en cours d'édition
+                        pour guider l'admin AVANT même de sauvegarder la
+                        manche. */}
+                    <RafalePoolAlert
+                      category={formData.category}
+                      difficulty={formData.rafaleDifficulty}
+                      roundTime={parseInt(formData.time) || 0}
+                      questionTime={formData.rafaleQuestionTime}
+                    />
+                  </div>
+                )}
+
                 <div className="form-row">
                   {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card */}
                   {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
@@ -3131,8 +3180,9 @@ export default function QuestionsPage() {
                   )}
                 </div>
 
-                {/* Hide Image question/answer for MEMORY/MEMOTION only — ARDOISE supports images (#94) */}
-                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
+                {/* Hide Image question/answer for MEMORY/MEMOTION/RAFALE — ARDOISE supports images (#94).
+                    RAFALE (v8.0.0, #16) — aucun média, contrat §3.3/D3 (texte seul, réservoir). */}
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>

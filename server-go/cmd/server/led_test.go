@@ -738,6 +738,135 @@ func TestLEDMemory_MultiTeam_NotSelected(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// RAFALE — sendLEDSetAllBuzzers must carry a dedicated case (post-review
+// MINEUR-3, code-review-20260828-183037.md): without it, RAFALE fell into
+// the generic `default:` branch (plain per-buzzer team color), so any admin
+// action that re-triggers sendLEDSetAllBuzzers mid-round (e.g. editing
+// bumpers/teams) would transiently overwrite the active-team grid until the
+// next RAFALE advance self-corrected it via OnRafaleTeamsChanged. These
+// mirror TestLEDMemory_MultiTeam_Next/_NotSelected above, but exercised
+// through sendLEDSetAllBuzzers directly (not sendLEDSetRafaleTeams) — the
+// exact call site the review flagged.
+// ---------------------------------------------------------------------------
+
+// TestLEDRafale_AllBuzzers_MultiTeam_ActiveNextOther verifies
+// sendLEDSetAllBuzzers produces the active/next/other-participant grid for
+// a RAFALE round in a multi-team mode — not the generic team-color fallback.
+func TestLEDRafale_AllBuzzers_MultiTeam_ActiveNextOther(t *testing.T) {
+	app := newTestApp(t)
+
+	question := &game.Question{
+		ID: "rq1", Type: game.QuestionTypeRafale,
+		TypedContent: game.TypedContent{RafaleMode: string(game.RafaleModeChacunSonTour)},
+	}
+	app.engine.Ready("rq1", question)
+	app.engine.SetBumpers(map[string]*game.Bumper{
+		"MAC:A1": {Team: "TeamA"},
+		"MAC:B1": {Team: "TeamB"},
+		"MAC:C1": {Team: "TeamC"},
+	})
+	// SetRafaleParticipatingTeams requires PREPARE/READY — call before SetPhase(STARTED).
+	if err := app.engine.SetRafaleParticipatingTeams([]string{"TeamA", "TeamB", "TeamC"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+	app.engine.SetPhase(game.PhaseStarted)
+
+	app.sendLEDSetAllBuzzers()
+
+	// TeamA=active: SOLID 100%
+	sA := app.bumperLEDState["MAC:A1"]
+	if sA.Effect != "SOLID" || sA.Intensity != 255 {
+		t.Errorf("RAFALE active: expected SOLID 255, got effect=%s intensity=%d", sA.Effect, sA.Intensity)
+	}
+
+	// TeamB=next: SOLID 50% (intensity=128)
+	sB := app.bumperLEDState["MAC:B1"]
+	if sB.Effect != "SOLID" || sB.Intensity != 128 {
+		t.Errorf("RAFALE next: expected SOLID 128, got effect=%s intensity=%d", sB.Effect, sB.Intensity)
+	}
+
+	// TeamC=other participating: DIM
+	sC := app.bumperLEDState["MAC:C1"]
+	if sC.Effect != "DIM" {
+		t.Errorf("RAFALE other participating: expected DIM, got effect=%s intensity=%d", sC.Effect, sC.Intensity)
+	}
+}
+
+// TestLEDRafale_AllBuzzers_Solo_AllOff verifies SOLO mode turns every
+// buzzer off via sendLEDSetAllBuzzers (contract §8.3: "Mode SOLO | Éteint
+// pour tous") — deliberately different from MEMORY's own SOLO branch
+// (active=SOLID/inactive=DIM).
+func TestLEDRafale_AllBuzzers_Solo_AllOff(t *testing.T) {
+	app := newTestApp(t)
+
+	question := &game.Question{
+		ID: "rq1", Type: game.QuestionTypeRafale,
+		TypedContent: game.TypedContent{RafaleMode: string(game.RafaleModeSolo)},
+	}
+	app.engine.Ready("rq1", question)
+	app.engine.SetBumpers(map[string]*game.Bumper{
+		"MAC:A1": {Team: "TeamA"},
+	})
+	app.engine.SetPhase(game.PhaseStarted)
+
+	app.sendLEDSetAllBuzzers()
+
+	sA := app.bumperLEDState["MAC:A1"]
+	if sA.Color != [3]int{0, 0, 0} || sA.Intensity != 0 {
+		t.Errorf("RAFALE SOLO: expected OFF (0,0,0 intensity=0), got color=%v intensity=%d", sA.Color, sA.Intensity)
+	}
+}
+
+// TestLEDRafale_AllBuzzers_MultiTeam_NonParticipant_Off closes the 4th cell
+// of the grid for RAFALE — TestLEDRafale_AllBuzzers_MultiTeam_ActiveNextOther
+// above only covers active/next/other-participant, mirroring
+// TestLEDMemory_MultiTeam_Next; this one mirrors
+// TestLEDMemory_MultiTeam_NotSelected. sendLEDSetMultiTeam is the SAME
+// shared function for both modes (main.go, "shared by MEMORY ... and RAFALE"
+// doc comment), so this exercises the actual RAFALE CALL SITE
+// (sendLEDSetForBuzzerRafale/sendLEDSetRafaleTeams) with a team NOT in
+// RafaleParticipatingTeams — a future regression passing the wrong
+// participants slice at that call site (e.g. nil, or MemoryParticipatingTeams
+// by copy-paste) would not be caught by the MEMORY-only version of this
+// test, which never touches the RAFALE call site at all.
+func TestLEDRafale_AllBuzzers_MultiTeam_NonParticipant_Off(t *testing.T) {
+	app := newTestApp(t)
+
+	question := &game.Question{
+		ID: "rq1", Type: game.QuestionTypeRafale,
+		TypedContent: game.TypedContent{RafaleMode: string(game.RafaleModeChacunSonTour)},
+	}
+	app.engine.Ready("rq1", question)
+	app.engine.SetBumpers(map[string]*game.Bumper{
+		"MAC:A1": {Team: "TeamA"},
+		"MAC:B1": {Team: "TeamB"},
+		"MAC:C1": {Team: "TeamC"}, // not selected
+	})
+	// Only A and B participate; RafaleCurrentTeam = TeamA (first).
+	if err := app.engine.SetRafaleParticipatingTeams([]string{"TeamA", "TeamB"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams failed: %v", err)
+	}
+	app.engine.SetPhase(game.PhaseStarted)
+
+	app.sendLEDSetAllBuzzers()
+
+	sC := app.bumperLEDState["MAC:C1"]
+	if sC.Color != [3]int{0, 0, 0} || sC.Intensity != 0 {
+		t.Errorf("RAFALE non-participating team: expected OFF (0,0,0 intensity=0), got color=%v intensity=%d", sC.Color, sC.Intensity)
+	}
+
+	// Non-regression: A (active) and B (next) are unaffected by C's exclusion.
+	sA := app.bumperLEDState["MAC:A1"]
+	if sA.Effect != "SOLID" || sA.Intensity != 255 {
+		t.Errorf("RAFALE active (non-regression): expected SOLID 255, got effect=%s intensity=%d", sA.Effect, sA.Intensity)
+	}
+	sB := app.bumperLEDState["MAC:B1"]
+	if sB.Effect != "SOLID" || sB.Intensity != 128 {
+		t.Errorf("RAFALE next (non-regression): expected SOLID 128, got effect=%s intensity=%d", sB.Effect, sB.Intensity)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // #113 B3 fast-follow (code-review 20260726) — MEMORY dim intensity must be
 // tone-relative too, not just NORMAL. A flat Intensity 64 nearly extinguishes a
 // deep-toned team color (L≈35%); dimIntensityFor compensates so the LED stays

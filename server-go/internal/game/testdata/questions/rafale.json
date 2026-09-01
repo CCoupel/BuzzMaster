@@ -1,0 +1,14 @@
+{
+  "ANSWER": "",
+  "CATEGORY": "HISTORY",
+  "ID": "t-rafale",
+  "ORDER": 7,
+  "POINTS": "10",
+  "QUESTION": "Manche RAFALE — Histoire, difficulté 2",
+  "RAFALE_DIFFICULTY": 2,
+  "RAFALE_MAX_QUESTIONS": 100,
+  "RAFALE_MODE": "SOLO",
+  "RAFALE_QUESTION_TIME": 3,
+  "TIME": "120",
+  "TYPE": "RAFALE"
+}

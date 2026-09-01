@@ -112,6 +112,28 @@
   box-shadow: 0 0 6px color-mix(in srgb, var(--primary-500) 50%, transparent);
 }
 
+/* RAFALE (v8.0.0, #16/#199) — suggestion de fin de manche (orange, meme
+   teinte que utils/questionTypeMeta.js). Reprend .memory-acquired-badge tel
+   quel, seule la couleur change. */
+.rafale-suggested-badge {
+  background: #f97316;
+  box-shadow: 0 0 6px rgba(249, 115, 22, 0.5);
+}
+
+/* Compteur RAFALE "live" (pas encore en ROUND_END) — neutre, distinct des
+   badges de credit (aucun point n'est reellement attribue avant la fin de
+   manche, contrat §6.1). */
+.rafale-counter-badge {
+  padding: 2px var(--space-2);
+  background: var(--gray-100);
+  color: var(--gray-700);
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
 /* Points target badge - shows if points go to player or team */
 .points-target-badge {
   display: flex;

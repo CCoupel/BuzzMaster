@@ -2,6 +2,320 @@
 
 ---
 
+## [20260901] — RAFALE : aperçu de la question suivante sur /anim (#202, feature)
+
+> Demande utilisateur après validation de #201 sur QUALIF 8.0.0.20 : sur `/anim`, agrandir
+> l'énoncé de la question courante et afficher la **question suivante** en bas de l'encart, pour
+> que l'animateur puisse s'y préparer. Contrat `contracts/rafale.md` §13 (nouveau).
+
+- **[CHANGED]** `RAFALE_ANSWER` (WS, serveur → `admin`+`anim`) — ajout d'un champ `NEXT`
+  (`{ID, QUESTION, CATEGORY, DIFFICULTY}`, ou `null`) portant la question **suivante**, sans sa
+  réponse. **Additif et rétrocompatible** : `ID`/`ANSWER` inchangés, destinataires inchangés.
+  Aucune nouvelle action WebSocket n'est créée — `RAFALE_ANSWER` est déjà le canal privilégié
+  `admin`+`anim`, déjà émis à l'instant exact où une question devient courante, et sa garde
+  anti-obsolescence côté client (`ID === RAFALE_CURRENT_QUESTION.ID`) couvre gratuitement le
+  nouveau champ. Voir rafale.md §13.3.
+- **[NON RETENU]** champ `GameState` `RAFALE_NEXT_QUESTION` (piste évoquée dans l'issue #202) —
+  `SerializeForWebClient` sert le même payload à `/tv` et `/anim` : tout champ `GameState`
+  atteindrait la TV, donc la salle. Connaître l'énoncé suivant est un avantage compétitif
+  matériel à ~3 s par question — même famille que `ardoise_leak_128`. La question suivante est
+  donc restreinte à `admin`+`anim` **comme la réponse**. Voir rafale.md §13.2.
+- **[NON RETENU]** aperçu jetable non consommant (option (b) de l'issue) — le tirage étant
+  aléatoire uniforme (§7), la question prévisualisée ne serait pas celle réellement posée. Retenu
+  à la place : **pré-tirage réel** (`Engine.rafaleNext`, champ privé), consommé tel quel au tick
+  suivant. Voir rafale.md §13.1/§13.4.
+- **[CHANGED]** `RAFALE_POOL_REMAINING` (`GameState`) — **sémantique préservée explicitement** :
+  le compteur inclut désormais la question « sur le pont » (`len(pool) + 1` quand un pré-tirage
+  est détenu), pour rester numériquement identique à aujourd'hui à position de manche égale.
+  Aucune valeur attendue de test existant ne change.
+- **Aucun changement BREAKING.** `RAFALE_EXHAUSTED`, `RAFALE_CURRENT_QUESTION`, `RAFALE_TICK`,
+  les 4 modes, le plafond `RAFALE_MAX_QUESTIONS` et les endpoints HTTP RAFALE sont inchangés.
+- **Nouvelle obligation moteur** : toute fin de manche libère le pré-tirage non posé
+  (`delete(rafaleUsed, id)` + persistance). Sans elle, chaque manche brûlerait une question jamais
+  posée — érosion silencieuse du réservoir. rafale.md §13.4, non-régression §13.8.
+
+---
+
+## [20260903] — RAFALE : sélection d'équipes périmée survivant à une manche terminée (#199, bugfix, 3e cycle)
+
+> Retour utilisateur, 3e cycle du même symptôme (« START possible sans équipe ») : l'utilisateur a
+> rouvert ET re-sauvegardé sa question RAFALE de test (invalidant l'hypothèse du rapport
+> dev-backend précédent, `_work/reports/dev-backend-20260830-190737.md` — `RAFALE_MODE` périmé),
+> symptôme toujours présent.
+
+- **[CONFIRMÉ, reproduit directement] Cause racine** : `Engine.Ready()` ne réinitialisait
+  `RAFALE_PARTICIPATING_TEAMS`/`RAFALE_CURRENT_TEAM`/`RAFALE_CURRENT_TEAM_COLOR` que sur
+  `isNewQuestion` (ID de question différent) — jamais sur le rechargement de la **même** question
+  RAFALE pour une nouvelle manche, alors que ce pattern (une question de config rejouée
+  plusieurs fois par partie) est le fonctionnement NORMAL de RAFALE. `Stop()` ne touche pas non
+  plus ces champs (par conception). La sélection d'équipes d'une manche déjà terminée restait donc
+  active en mémoire côté serveur et satisfaisait silencieusement `participantsConform` à la manche
+  suivante, sans que rien n'ait été resélectionné — alors que l'UI affichait « aucune équipe »
+  (état local frontend, déconnecté du `GameState` réel).
+  - Reproduit et confirmé par `TestReady_RafaleReplay_ResetsStaleParticipatingTeams`
+    (internal/game) : lancer une manche multi AVEC équipes → la terminer (STOP) → recharger la
+    MÊME question SANS resélectionner → `RAFALE_PARTICIPATING_TEAMS` non vide, `START` accepté
+    **avant** ce correctif.
+  - Reproduit aussi via le VRAI dispatch WS en tant que `ClientTypeAnim`
+    (`TestRafaleReplay_AnimDispatch_StaleTeamsFromPreviousManche_StartRefused`, cmd/server) — le
+    scénario exact demandé par le CDP.
+  - Correctif : `Ready()` réinitialise désormais ces trois champs aussi quand
+    `RAFALE_SUBPHASE != ""` au moment de l'appel (une manche a déjà été jouée sur cette question),
+    en plus de `isNewQuestion`. Comportement inchangé pour le cas « re-`Ready()` avant tout
+    démarrage » (la sélection continue de survivre — c'était l'intention d'origine du garde-fou
+    `isNewQuestion`, non touchée par ce correctif).
+- Contrat §3.4 mis à jour avec le détail de la cause et du correctif.
+- **Dette identifiée, non traitée dans ce cycle** (hors scope, urgence) : `MEMORY_PARTICIPATING_TEAMS`/
+  `MOTION_PARTICIPATING_TEAMS` partagent la même structure `isNewQuestion`-only dans `Ready()` —
+  la même classe de bug pourrait théoriquement affecter MEMORY/MEMOTION si une question y est
+  rejouée avec le même ID au sein d'une partie (moins probable en pratique : ces types sont
+  normalement joués une fois chacun, contrairement à RAFALE conçu pour la rejouabilité). À vérifier
+  si un scénario de rejeu MEMORY/MEMOTION est un jour rapporté.
+
+---
+
+## [20260902] — RAFALE : garde START sans équipe sélectionnée en mode multi (#199, feature)
+
+> Milestone v8.0.0 · Retour utilisateur QUALIF 8.0.0.13 : « je ne dois pas pouvoir faire START si
+> aucune équipe n'est sélectionnée » en mode multi-équipes (`CHACUN_SON_TOUR`/`TANT_QUE_JE_GAGNE`/
+> `MAILLON_FAIBLE`).
+
+- **[NEW]** `participantsConform` (engine.go, §3.3) gagne un troisième cas RAFALE : en mode multi
+  (`RAFALE_MODE != SOLO`, même défaut vide⇒SOLO qu'`advanceRafaleUnsafe`), `PREPARE→READY` exige
+  désormais `len(RAFALE_PARTICIPATING_TEAMS) >= 1`. `SOLO` reste exempté. Défense en profondeur —
+  même mécanisme que les gardes `CATEGORY`/`RAFALE_DIFFICULTY` des cycles précédents, mais ici en
+  réponse à une demande fonctionnelle directe, pas un bugfix de mort silencieuse.
+- Aucun changement de code dans `SetRafaleParticipatingTeams` : elle appelait déjà
+  `reevaluatePrepareReadyUnsafe()` par anticipation d'un futur changement de contrat exactement de
+  cette nature — vider la sélection d'équipes en mode multi pendant READY fait donc automatiquement
+  redescendre en PREPARE.
+- Contrat §3.4 mis à jour avec le détail de la garde.
+- UI de blocage correspondante côté `/anim` : à la charge de dev-frontend (même pattern que
+  catégorie/difficulté).
+
+---
+
+## [20260901] — RAFALE : reset manuel du flag « déjà utilisée », individuel + global (#197, feature)
+
+> Milestone v8.0.0 · Retour utilisateur après test manuel du binaire QUALIF 8.0.0.12 : le flag
+> « déjà utilisée » (`data/config/rafale_used.json`, §3.2) n'avait qu'un seul point de remise à
+> zéro (`NEW_GAME`, automatique) — besoin de pouvoir remettre une question précise (ou tout le
+> pool) en disponible manuellement, sans passer par un `NEW_GAME` complet ni par la
+> réinitialisation destructive `/reset-select?rafale=true` (§10, qui supprime aussi le réservoir).
+
+- **[NEW]** `POST /api/rafale/questions/{id}/reset` — remet une seule question à disponible
+  (retire son ID du flag). 404 si l'ID n'existe pas dans le réservoir (même contrat d'erreur que
+  `DELETE /api/rafale/questions/{id}`). No-op silencieux si elle n'était pas marquée utilisée.
+- **[NEW]** `POST /api/rafale/questions/reset-all` — remet tout le pool à disponible (vide le
+  flag entièrement). Le réservoir (les questions elles-mêmes) n'est **jamais** touché par ces deux
+  endpoints — à ne pas confondre avec la réinitialisation sélective existante (§10), qui purge le
+  réservoir **et** le flag.
+- **[ENGINE]** Nouvelle méthode `Engine.MarkRafaleQuestionAvailable(id string) error` (persistance
+  synchrone, même patron que `DeleteRafaleQuestion`). `Engine.ClearRafaleUsed()` existait déjà
+  (utilisée jusqu'ici uniquement par `NEW_GAME` et par la réinitialisation sélective destructive)
+  — réutilisée telle quelle pour le nouvel endpoint global, aucune modification de son
+  comportement.
+- Contrat §9 mis à jour avec les deux nouveaux endpoints.
+
+---
+
+## [20260831] — RAFALE : RAFALE_DIFFICULTY jamais persisté par l'éditeur (#107, bugfix, 2e cycle)
+
+> Milestone v8.0.0 · Retour QUALIF sur le binaire 8.0.0.10 : symptôme **identique, mot pour mot**
+> à celui du [20260830] ci-dessous — "après le décompte, aucun compteur ne se lance, aucune
+> question ne s'affiche" — alors que la question RAFALE utilisée avait déjà une `CATEGORY` **et**
+> une `DIFFICULTY` valides depuis plusieurs cycles (pool affiché "3 disponibles" avant même le fix
+> du 2026-08-30). Le diagnostic du 2026-08-30 (CATEGORY vide) a donc été explicitement écarté
+> comme explication de CETTE récidive, et une reproduction sceptique du cas normal (catégorie +
+> difficulté valides, pool non vide) a été menée avant toute conclusion.
+
+- **[CONFIRMÉ] Cause racine différente de celle du 2026-08-30, même symptôme externe, même
+  mécanisme de mort interne** — `handleUploadQuestion` (`internal/server/http.go`, `POST
+  /questions`) n'avait **aucun** bloc de lecture pour `RAFALE_DIFFICULTY`/`RAFALE_MODE`/
+  `RAFALE_QUESTION_TIME`/`RAFALE_MAX_QUESTIONS`, contrairement à QCM/MEMORY/MEMOTION/ARDOISE qui
+  ont chacun le leur. Vérifié par inspection (grep : zéro occurrence de `RAFALE_` dans le
+  handler d'upload avant ce correctif, alors que `QuestionsPage.jsx` envoie bien ces 4 champs
+  depuis la livraison de #107) — **pas une hypothèse**. Conséquence : toute question RAFALE
+  enregistrée via l'éditeur standard perdait silencieusement sa difficulté (persistée à `0`,
+  invalide — l'échelle contractuelle est 1..3). `startRafaleRoundUnsafe` retombe alors sur le même
+  filet de sécurité que le 2026-08-30 (pool vide pour `DIFFICULTY=0` → `Stop()` dans le même tick
+  que `actualStart()`), d'où un symptôme externe identique pour une cause interne distincte.
+  - Correctif 1 : ajout du bloc `RAFALE` manquant dans `handleUploadQuestion` (les 4 champs,
+    avec les mêmes validations que documentées côté modèle : `DIFFICULTY` borné 1..3,
+    `MAX_QUESTIONS` plafonné à 100 — contrat §7.2).
+  - Correctif 2 (défense en profondeur) : `participantsConform` — déjà étendu le 2026-08-30 pour
+    `CATEGORY != ""` — gagne aussi `1 <= RAFALE_DIFFICULTY <= 3`. Objectif : qu'un futur oubli de
+    persistance similaire, sur n'importe quel champ statique de configuration RAFALE, se traduise
+    par un blocage propre en `PREPARE` plutôt qu'une mort silencieuse en `STARTED`.
+- **[GAP DE COUVERTURE COMBLÉ]** — l'entrée [20260830] ci-dessous affirmait avoir vérifié le
+  correctif précédent avec « un test d'intégration bout-en-bout... câblage identique à
+  `setupCallbacks()`, VRAI START dispatché, countdown réel de 3s ». Ce test était réel au moment
+  du diagnostic mais **n'a jamais été committé** (jetable, utilisé pour le diagnostic puis
+  supprimé) — `rafale_107_test.go` (le seul fichier permanent couvrant ce flux) documente
+  lui-même, dans son en-tête, utiliser `StartImmediate` et ne câbler aucun callback `OnRafale*`
+  précisément pour éviter les ~3s réelles du countdown, en jugeant (rétrospectivement, à tort)
+  que cette transition n'était « pas le risque à couvrir ». Cette absence de test permanent est
+  très probablement ce qui a laissé passer la récidive de ce cycle. Corrigé : nouveau fichier
+  `cmd/server/rafale_countdown_wire_test.go`, **permanent**, committé — VRAI `START` dispatché via
+  `handleWebMessage`, VRAI countdown 3s (aucun raccourci), câblage `OnStateChange`/
+  `OnCountdownTick`/`OnTimerTick`/`OnRafaleAnswer`/`OnRafaleQuestionTick`/`OnRafaleTeamsChanged`
+  identique à `setupCallbacks()`, et un client TV réellement connecté (`httptest.Server` +
+  `gorilla/websocket`) sur lequel on vérifie la réception effective sur le fil : `UPDATE` avec
+  `PHASE=STARTED` et `RAFALE_CURRENT_QUESTION.ID` non vide, puis au moins un `RAFALE_TICK` à
+  valeur positive.
+
+---
+
+## [20260830] — RAFALE : fix timer de question + RAFALE_TEAM_STREAK/_ERRORS (#107/#199, bugfix)
+
+> Milestone v8.0.0 · Maquette finalisée `docs/mockups/rafale-v8.html` (§3/§9, fait autorité).
+> Retour QUALIF répété : après le countdown générique (3s, OK), en phase STARTED, aucun compte à
+> rebours de question ne démarrait et aucune question n'était diffusée.
+
+- **[FIXED] Cause racine identifiée et corrigée** — une manche RAFALE dont la question de
+  configuration a une `CATEGORY` vide (résidu d'avant la migration catégorie-unique du
+  2026-08-29, ou jamais configurée) atteignait quand même `STARTED` puis mourait
+  **immédiatement** : `drawRafaleQuestionUnsafe` (garde `category==""`, commit `159bb39e`)
+  renvoie un pool vide → `startRafaleRoundUnsafe` déclenche son filet de sécurité existant
+  (`roundEnded=true` → `Stop()`) **dans le même tick** que `actualStart()` — `Phase` bascule
+  `STARTED`→`STOPPED` avant qu'aucun client ne puisse réagir. Le filet de sécurité lui-même est
+  correct et reste en place (une race — réservoir édité entre READY et START — reste possible) ;
+  le vrai bug est l'ABSENCE d'une garde en amont empêchant une manche mal configurée d'atteindre
+  `READY` du tout.
+  - Correctif : `participantsConform` (engine.go, le gate `PREPARE↔READY` déjà utilisé par
+    MEMORY/MEMOTION) gagne un cas `RAFALE : question.CATEGORY != ""`. Une manche RAFALE sans
+    catégorie reste désormais bloquée en `PREPARE` (jamais `READY`, donc `Start()` la refuse
+    structurellement) au lieu d'atteindre `STARTED` puis de mourir silencieusement.
+  - Vérifié par un test d'intégration bout-en-bout distinct de celui existant
+    (`rafale_107_test.go` utilise `StartImmediate`, qui contourne le VRAI countdown de 3s ET ne
+    câble aucun des callbacks `OnRafale*`/`OnStateChange` que `setupCallbacks()` câble en
+    production — masquait donc ce bug précis) : câblage identique à `setupCallbacks()`, VRAI
+    `START` dispatché, countdown réel de 3s attendu, client TV/admin connecté. Confirme que le
+    chemin de production (démarrage réel → ticker → diffusion) fonctionne intégralement une fois
+    la catégorie correctement configurée.
+- **[NEW]** `RAFALE_TEAM_STREAK` (`map[string]int`) — série de bonnes réponses **en cours** par
+  équipe, remise à 0 sur mauvaise réponse, dans **les 4 modes**. Distinct de
+  `RAFALE_TEAM_COUNTERS`, qui garde sa propre politique de reset par mode (cumulatif sauf en
+  `MAILLON_FAIBLE`, §6.1 table inchangée).
+- **[NEW]** `RAFALE_TEAM_ERRORS` (`map[string]int`) — précédent exact `MemoryTeamErrors` : nombre
+  cumulé de réponses incorrectes/timeouts par équipe, jamais remis à 0 en cours de manche.
+- **[CHANGED]** `RAFALE_TEAM_BEST` redéfini comme le maximum historique de `RAFALE_TEAM_STREAK`
+  (calculé génériquement pour les 4 modes), au lieu d'un calcul spécifique à `MAILLON_FAIBLE` off
+  `RAFALE_TEAM_COUNTERS`. Alimenté dans **tous** les modes désormais, pas seulement
+  `MAILLON_FAIBLE`. La formule de points suggérée (§6.2, `compteur_retenu = RAFALE_TEAM_BEST` en
+  MAILLON_FAIBLE, `RAFALE_TEAM_COUNTERS` sinon) est **inchangée** — seule la source du maximum
+  change, pas le choix du champ par mode.
+- Champs `GameState` `RAFALE_*` : 11 → 13 (les 2 nouveaux ci-dessus). Mêmes règles que les 11
+  existants (sans `omitempty`, initialisés non-nil, éphémères — exclus de `PersistedGameState`).
+
+Détail complet : `contracts/rafale.md` §4/§6.
+
+---
+
+## [20260829] — RAFALE : catégorie de manche unique, pas multi (#107, bugfix)
+
+> Milestone v8.0.0 · Retour utilisateur post-QUALIF : la catégorie ne s'affichait toujours pas
+> correctement sur la card d'une question RAFALE malgré un premier correctif. RAFALE était le
+> premier (et seul) type à introduire une sélection multi-catégorie ; la card générique lit
+> `question.CATEGORY` (champ existant), pas un champ spécifique à un type — un cas particulier
+> qui n'avait pas sa place et masquait le vrai problème.
+
+- **[CHANGED]** `RAFALE_CATEGORIES` (`[]string`, multi-sélection, filtre OR) **supprimé**. RAFALE
+  réutilise désormais `CATEGORY` (champ générique de `Question`, catégorie **unique**), exactement
+  comme SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE. Résout le bug d'affichage **structurellement** (plus
+  besoin d'une branche `isRafale` dédiée dans `QuestionCard.jsx` côté frontend) plutôt que de le
+  patcher côté client.
+- **[CHANGED]** `Engine.DrawRafaleQuestion(categories []string, difficulty int)` →
+  `DrawRafaleQuestion(category string, difficulty int)`. Idem `CountRafalePool`. Le filtre de pool
+  devient une égalité stricte (`q.CATEGORY == CATEGORY`) au lieu d'une appartenance à un ensemble.
+- **[CHANGED]** `GET /api/rafale/pool` : `?categories=A,B&difficulty=N` → `?category=A&difficulty=N`
+  (paramètre singulier, requis, 400 si absent — inchangé). L'endpoint d'édition du réservoir
+  (`GET /api/rafale/questions?categories=A,B`, filtre de LISTE côté éditeur, pas de configuration
+  de manche) **n'est pas concerné** — il reste multi, c'est une simple facilité de navigation.
+- **[UNCHANGED]** Le réservoir lui-même (`RafaleQuestion.CATEGORY`, #197) — il était déjà en
+  catégorie unique par question ; c'était uniquement le FILTRE de manche (config admin au
+  démarrage) qui était multi. Aucun impact sur `data/files/rafale/reservoir.json`.
+- **[CHANGED]** `question_types.go` — `questionTypeRegistry[QuestionTypeRafale].OwnedFields` passe
+  de 5 à 4 entrées (`RAFALE_CATEGORIES` retiré).
+
+**Non-breaking pour un réservoir existant** : aucune migration de données nécessaire
+(`RafaleQuestion.CATEGORY` inchangé). Une manche déjà configurée avec `RAFALE_CATEGORIES` (avant ce
+bugfix) doit être reconfigurée par l'admin avec une catégorie unique — pas de conversion
+automatique multi→simple (le contrat ne spécifie pas laquelle des catégories choisies garder).
+
+Détail complet : `contracts/rafale.md` §3.3/§7/§9.
+
+---
+
+## [20260828] — Mode de jeu RAFALE (#107, #197, #198, #199)
+
+> Milestone v8.0.0 · Contrat écrit **avant** implémentation (contract-first)
+> Référence complète : `contracts/rafale.md` · Arbitrages : `_work/reports/plan-ambiguities-20260828-155055.md`
+
+- **[NEW]** `QuestionType` `"RAFALE"` — nouveau type de jeu. Porte une **configuration de manche**,
+  pas un énoncé (les énoncés viennent du réservoir dédié). Entrée obligatoire au registre
+  `questionTypeRegistry`, sous peine d'échec de `TestQuestionTypeRegistry_Exhaustive`.
+- **[NEW]** Modèle `RafaleQuestion` (`ID`, `QUESTION`, `ANSWER`, `CATEGORY`, `DIFFICULTY` 1–3) —
+  réservoir global dédié, **texte seul**, stocké en fichier unique `data/files/rafale/reservoir.json`.
+  Ne réutilise **pas** le patron « un répertoire par question » des questions Quiz (justification
+  en `rafale.md` §2.4 : évite une 4ᵉ duplication du chargement de questions).
+- **[NEW]** Flag « déjà utilisée » persistant — `data/config/rafale_used.json`, réinitialisé
+  automatiquement dans `InitGame()` (`NEW_GAME`).
+- **[NEW]** Champs `GameState` `RAFALE_*` (11 champs, §4 de `rafale.md`) — **sans `omitempty`**,
+  initialisés non-nil, **exclus** de `PersistedGameState`.
+- **[NEW]** Champs de configuration de manche : `RAFALE_CATEGORIES` (multi), `RAFALE_DIFFICULTY`
+  (unique), `RAFALE_MODE`, `RAFALE_QUESTION_TIME`, `RAFALE_MAX_QUESTIONS`. Les champs existants
+  `TIME` (durée de manche) et `POINTS` (barème de manche) sont **réutilisés**, pas dupliqués.
+- **[NEW]** Actions entrantes `RAFALE_VALIDATE`, `RAFALE_INVALIDATE` (admin + anim),
+  `RAFALE_SET_TEAMS` (admin). ⚠️ À déclarer dans `inbound_allowlist.go` — allow-list **fermée**,
+  une action absente est rejetée silencieusement.
+- **[NEW]** Actions sortantes `RAFALE_ANSWER` (**admin + anim uniquement**) et `RAFALE_TICK` (tous).
+  La réponse attendue ne transite **jamais** par `GameState` : `SerializeForWebClient` sert le même
+  payload à `/tv` et `/anim`, aucune liste d'exclusion ne peut les séparer. Prévention de la classe
+  de fuite `ardoise_leak_128`.
+- **[NEW]** Endpoints `GET/POST /api/rafale/questions`, `DELETE /api/rafale/questions/{id}`,
+  `GET /api/rafale/pool` (comptage pré-manche). Corps **JSON**, pas multipart.
+- **[CHANGED]** Sauvegarde/restauration/réinitialisation **sélectives** — ajout du drapeau `rafale`
+  à `handleBackupSelect`, `handleResetSelect`, `detectTARContents`, `handleRestore` et
+  `BackupPage.jsx`. Sans cet ajout, le réservoir serait présent dans la sauvegarde intégrale mais
+  **absent** de la sauvegarde sélective et de la restauration — perte de données silencieuse.
+- **[CHANGED]** `TEAM_POINTS` — **aucune modification de contrat**, mais nouvel appelant :
+  l'attribution des points de fin de manche RAFALE réutilise cette action existante (clic équipe).
+  Aucune action d'attribution dédiée n'est créée.
+- **[CHANGED]** *(complément du 2026-08-28)* Indicateur « équipe active » en mode multi, sur trois
+  canaux — VPlayer de l'équipe active (élément plein écran passif), TV (bandeau fort), et **LED des
+  buzzers** de l'équipe active. Amende D4 : les LED sont désormais **pilotées** et le VPlayer
+  **affiche** un indicateur, mais la règle de fond est inchangée — *aucun appui buzzer n'est traité,
+  aucun élément interactif n'est ajouté*. Les LED déclinent la grille existante de
+  `sendLEDSetMemoryMultiTeam` (actif `SOLID 255` / suivant `SOLID 128` / participant `DIM` /
+  absent éteint), couleur résolue via `COLOR_NAME`. Aucun nouveau champ ni action : l'indicateur
+  consomme `RAFALE_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM_COLOR` et `RAFALE_PARTICIPATING_TEAMS`
+  déjà prévus. Traversée de `SerializeForVPlayer`/`buildVPlayerPayloads` (chemin de fan-out
+  "chaud", qui construit sa propre carte de champs indépendamment) vérifiée et verrouillée par
+  test — `rafale_vplayer_traversal_test.go` (protocol) et `rafale_vplayer_fanout_test.go`
+  (cmd/server) : les 3 champs traversaient déjà par construction (listes d'exclusion, jamais
+  d'inclusion), aucun code de sérialisation n'a eu besoin d'être modifié.
+
+- **[CHANGED]** *(complément post-review, code-review-20260828-182815.md — MINEUR)* Factorisation
+  du helper de rotation d'équipe (`team_rotation.go`, `rotateTeam`, partagé par `rotateMotionTeam`
+  et le nouveau `rotateRafaleTeam`) : changement de comportement subtil sur
+  `MEMOTION_CURRENT_TEAM_COLOR`. Avant la factorisation, `rotateMotionTeam` ne mettait à jour la
+  couleur que si l'équipe suivante existait encore dans `e.data.Teams` — sinon la **dernière
+  couleur connue** était conservée. Le helper partagé assigne désormais la couleur
+  **inconditionnellement** (`nil` si l'équipe est absente de `teamsData`). Cas limite très
+  improbable en usage normal (suppression d'une équipe pendant qu'elle reste listée dans
+  `MEMOTION_PARTICIPATING_TEAMS`, pendant une manche MEMOTION multi-équipes en cours) — jugé plus
+  sûr (évite d'afficher une couleur périmée) mais **non identique** à l'existant ; non corrigé
+  (le cas n'est pas couvert par un test dédié), documenté ici pour traçabilité comme demandé par
+  la revue.
+
+**Aucun changement BREAKING** : tous les ajouts sont additifs. Les types de questions existants
+(SPEEDY, QCM, MEMORY, MEMOTION, ARDOISE), le timer global, `TEAM_POINTS` et les charges utiles
+`/tv`, `/player`, `/anim`, buzzers restent inchangés à périmètre constant, à l'exception du cas
+limite `MEMOTION_CURRENT_TEAM_COLOR` documenté juste au-dessus.
+
+---
+
 ## [20260827] — FLIP_MEMORY_CARD : écran TV public jamais interactif (#187 cycle 7)
 
 > Milestone v7.1.0 · Correctif de contrat suite au code `8af17927` (`dev-frontend`)

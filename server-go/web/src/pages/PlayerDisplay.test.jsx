@@ -305,7 +305,13 @@ describe('PlayerDisplay.jsx — plus de garde en liste de négations (#183 crit�
   })
 
   it('utilise bien le dispatch positif `isSpeedy` dans les 3 gardes concernées (COUNTDOWN/READY/STARTED)', () => {
-    const occurrences = codeOnly.match(/\(isSpeedy \|\| isArdoise\)/g) || []
+    // v8.0.0 (#16/#198, bugfix TV vide RAFALE en COUNTDOWN/READY) — les
+    // gardes COUNTDOWN/READY portent désormais `|| isRafale` en plus
+    // (RAFALE rejoint SPEEDY/ARDOISE sur ces deux écrans génériques, la
+    // STARTED garde son bloc RAFALE dédié séparé) : le motif recherché
+    // s'arrête donc après `isArdoise`, sans exiger la parenthèse fermante
+    // immédiate, pour matcher les 3 occurrences quel que soit le suffixe.
+    const occurrences = codeOnly.match(/\(isSpeedy \|\| isArdoise\b/g) || []
     expect(occurrences.length).toBeGreaterThanOrEqual(3)
   })
 })

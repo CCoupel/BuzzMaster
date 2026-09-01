@@ -37,6 +37,12 @@ export const QUESTION_TYPES = [
   { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: true },
   { key: 'MEMOTION', label: 'Memotion', icon: '🎞️', color: '#c8568f', nestable: false },
   { key: 'ARDOISE', label: 'Ardoise', icon: '🖊️', color: '#10b981', nestable: false },
+  // RAFALE (v8.0.0, #16/#107, contrat rafale.md §2.1) — un QuestionType
+  // porteur d'une CONFIGURATION de manche (aucun énoncé, les questions
+  // viennent du réservoir /admin/rafale, RafalePage.jsx). Jamais nestable
+  // (une manche RAFALE n'a pas de sens à l'intérieur d'une carte MEMOTION,
+  // aucune mention au contrat).
+  { key: 'RAFALE', label: 'Rafale', icon: '🌀', color: '#f97316', nestable: false },
 ]
 
 export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
@@ -70,8 +76,16 @@ export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
  * de génération de `MEMOTION`, pas un type indépendant en fin de liste.
  */
 export const GENERABLE_TYPES = (() => {
-  const memotionIndex = QUESTION_TYPES.findIndex(t => t.key === 'MEMOTION')
-  const withMemotionPlus = [...QUESTION_TYPES]
+  // RAFALE (v8.0.0, #16) — génération IA HORS SCOPE pour le réservoir
+  // (maquette rafale-v8.html §8 : « Génération IA des questions du
+  // réservoir — Hors scope, l'infrastructure existe et pourra être
+  // branchée ensuite »). Sans ce filtre explicite, RAFALE fuiterait
+  // silencieusement dans AIGenerateModal.jsx dès son ajout à QUESTION_TYPES
+  // ci-dessus — exactement le type de divergence que ce fichier existe pour
+  // éliminer (#183).
+  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE')
+  const memotionIndex = generableBase.findIndex(t => t.key === 'MEMOTION')
+  const withMemotionPlus = [...generableBase]
   withMemotionPlus.splice(memotionIndex + 1, 0, {
     key: 'MEMOTION_PLUS', label: 'MEMOTION+', icon: '🎞️', color: '#c8568f',
   })

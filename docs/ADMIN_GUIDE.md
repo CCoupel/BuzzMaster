@@ -1715,4 +1715,157 @@ sans image de fond.
    - L'Objectif n'est pas visible (masqué au serveur)
    - Les champs cochés "Afficher TV" s'affichent selon la phase
 
+---
+
+## Mode RAFALE — Guide Animateur (v8.0.0, #16)
+
+### Vue d'ensemble
+
+RAFALE est un mode de jeu « questions en rafale » : sur une manche de ~2 minutes, des questions s'enchaînent automatiquement avec ~3 secondes par question. **L'animateur valide ou invalide chaque réponse via deux gros boutons tactiles** sur sa tablette (`/anim`). Les points sont attribués manuellement en fin de manche.
+
+### Configuration de manche
+
+Sur l'écran admin (`/admin`) :
+
+1. **Créer/éditer une question de type RAFALE**
+   - Cliquer « Question de type RAFALE »
+   - Réglages : durée manche (~120 s), barème de manche (points par bonne réponse)
+
+2. **Filtrer le réservoir**
+   - Sélectionner une ou plusieurs **catégories**
+   - Choisir une **difficulté unique** (1–3)
+   - Voir le nombre de questions **disponibles** et **utilisées**
+
+3. **Pré-validations automatiques**
+   - 🔴 **Bloquant** : aucune question disponible → démarrage refusé
+   - 🟠 **Avertissement** : trop peu de questions → risque fin anticipée
+   - ✅ **OK** : assez de questions → aucun avertissement
+
+4. **Sélectionner les équipes** (si mode multi)
+   - Ordre = ordre de rotation
+
+### Pendant la manche
+
+Sur la tablette animateur (`/anim`, en grand écran) — v8.0.0 (mockups §9/§3) :
+
+**Encart question** (haut, coloré aux couleurs équipe active) :
+```
+┌─────────────────────────────────────────────┐
+│ Team Red                                    │
+│ Capitale de l'Italie ?                      │
+│                                              │
+│ ⏱ Manche: 01:45 | Question: 2.3s            │
+└─────────────────────────────────────────────┘
+```
+- Nom équipe + couleur de fond (`RAFALE_CURRENT_TEAM_COLOR`)
+- Question courante (gros texte, lisible de loin)
+- Double timer (haut, bar long + bar courte)
+- **Réponse attendue : visible** (animateur doit juger)
+
+**Panneau équipes** (bas, l'équipe active en évidence) — v8.0.0 (mockups §3) :
+Pour chaque équipe, afficher :
+- Nom + couleur badge
+- Bonnes réponses (cumulatif `RAFALE_TEAM_COUNTERS`)
+- Mauvaises réponses (cumulatif `RAFALE_TEAM_ERRORS`)
+- Série en cours (courant `RAFALE_TEAM_STREAK`)
+
+**Boutons validation** (L2, gros, tactiles) :
+```
+┌─────────────────────┬─────────────────────┐
+│  ✓ RÉPONSE VALIDE   │  ✗ RÉPONSE INVALIDE │
+│     (vert)          │       (rouge)        │
+└─────────────────────┴─────────────────────┘
+```
+
+**Actions** :
+- **Appuyer RÉPONSE VALIDE** → série++, compteur++ (règle mode-dependent), équipe garde/perd main, nouvelle question
+- **Appuyer RÉPONSE INVALIDE** → série=0, erreurs++, rotation/perte main, nouvelle question
+- **Timer question expire (0 s)** → équivalent à RÉPONSE INVALIDE
+- **Attendre fin manche** (timer global à 0 ou pool épuisée)
+
+### Modes de jeu
+
+| Mode | Règle | Animation Utile |
+|------|-------|-----------------|
+| **SOLO** | Une équipe joue seule, aucune rotation | Compteur équipe visible |
+| **CHACUN SON TOUR** | Bonne OU mauvaise → équipe suivante | Nom équipe change tout le temps |
+| **TANT QUE JE GAGNE** | Bonne → garde la main ; Mauvaise → suivante | Équipe peut rester longtemps |
+| **MAILLON FAIBLE** | Idem CHACUN, mais compteur → 0 sur mauvaise (meilleur mémorisé) | Affichage meilleur compteur, pas compteur courant |
+
+### Fin de manche
+
+Sous-phase `ROUND_END` : écran affiche les compteurs finaux et un tableau d'attribution :
+
+```
+Compteurs finaux :
+  Red:   12 points
+  Blue:  8  points
+  Green: 10 points
+
+Attribution des points (cliquer une équipe) :
+  [ Red (12 × 5 = 60 pts suggérés) ]
+  [ Blue (8 × 5 = 40 pts) ]
+  [ Green (10 × 5 = 50 pts) ]
+```
+
+**À l'admin (ou l'animateur s'il a accès) :
+1. Cliquer une équipe → valeur pré-remplie = compteur × barème
+2. Ajuster si souhaité (ex: attribuer au seul gagnant, ou répartir)
+3. Valider → fin manche, retour à STOPPED
+
+**Important** : aucun point n'est attribué pendant la manche, seuls les compteurs visibles. L'attribution manuelle en fin de manche est **l'étape décisive**.
+
+### Gestion du réservoir (`/admin/rafale`)
+
+**Avant les premières manches** :
+
+1. Créer des questions en RAFALE (`/admin/rafale`)
+2. Chaque question = énoncé + réponse + catégorie + difficulté
+3. Sauvegarder
+
+**Entre les manches** :
+
+- Les questions utilisées sont marquées **"Utilisée"**
+- Elles ne réapparaissent plus dans la même manche (même après arrêt/redémarrage serveur)
+- Ajouter de nouvelles questions ou réinitialiser le flag (commande admin `/reset` sélectif) pour relancer
+
+**Réinitialisation sélective** (`/admin/backup`) :
+
+- Checkbox « Questions RAFALE » permet de réinitialiser le flag uniquement (garde le réservoir intact)
+- Permet de rejouer les mêmes questions sans les re-créer
+
+**Boutons de reset dans l'éditeur** (`/admin/rafale`) — v8.0.0 :
+
+La page d'édition du réservoir inclut deux boutons :
+
+1. **Reset question individuelle** (petit bouton ↻ à côté de chaque question "Utilisée")
+   - Remet une seule question à l'état disponible
+   - Utile pour rejouer une question précise sans réinitialiser tout le pool
+   - Action : `POST /api/rafale/questions/{id}/reset`
+
+2. **Reset pool global** (gros bouton « Réinitialiser tout le pool » en haut)
+   - Remet toutes les questions à l'état disponible (vide le flag)
+   - **Nécessite confirmation** : clic → dialog "Êtes-vous sûr ?" → validation
+   - Utile entre deux séries de manches pour repartir avec un pool frais
+   - Action : `POST /api/rafale/questions/reset-all`
+
+**Note** : ces boutons ne **suppriment jamais** de questions — ils ne font que remettre à zéro le flag « déjà utilisée ». Le réservoir (les questions elles-mêmes) reste intègre.
+
+### Affichages
+
+**Sur la TV (`/tv`)** :
+- Question courante (gros texte)
+- Double timer (manche + question)
+- Équipe active (si mode multi)
+- **Jamais la réponse** (seulement l'animateur la voit)
+
+**Sur les VJoueurs (`/player`)** :
+- Indicateur « C'est ton tour ! » (si équipe active, mode multi)
+- Aucun bouton tactile pendant RAFALE (tous les contrôles sont sur l'interface animateur)
+
+**Sur les LED buzzers** :
+- Équipe active : couleur pleine
+- Équipe suivante : couleur atténuée
+- Autres : très atténuées ou éteintes
+
 

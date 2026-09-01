@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"math/rand"
 	"os"
@@ -117,12 +118,59 @@ type Engine struct {
 	bumpersPath      string
 	statusesPath     string // Path to question_statuses.json
 	statePath        string // Path to game_state.json (#141 — quiz metadata persistence)
-	mu               sync.RWMutex
-	timer            *time.Ticker
-	stopCh           chan struct{}
-	countdownTimer   *time.Ticker
-	countdownStopCh  chan struct{}
-	pendingDelay     int // Store delay for after countdown
+
+	// RAFALE reservoir (#197, contracts/rafale.md §2.4/§3). Kept as two
+	// independent stores, deliberately not merged: editing the reservoir
+	// must never rewrite game-play state, and playing must never rewrite
+	// the reservoir (contract §3.2). Both are guarded by e.mu, same as
+	// questionStatuses above.
+	rafaleQuestions map[string]*RafaleQuestion // reservoir, keyed by ID
+	rafalePath      string                     // path to data/files/rafale/reservoir.json
+	rafaleUsed      map[string]bool            // "already asked this game" flag, keyed by question ID
+	rafaleUsedPath  string                     // path to data/config/rafale_used.json
+
+	// rafaleNext (#202, contract §13.4) — the pre-fetched "on deck" RAFALE
+	// question, drawn (and marked used) one question in ADVANCE so the
+	// question shown as "next" on /anim (RAFALE_ANSWER's own NEXT field) is
+	// GUARANTEED to be the one that actually becomes current at the
+	// following advance — never re-drawn independently (contract §13.1: a
+	// second draw path could disagree with this one on which question is
+	// next in the general case, showing the animateur a preview that never
+	// appears). Private, NEVER serialized, NEVER exposed via GameState
+	// (contract §13.2 — same "SerializeForWebClient serves /tv and /anim
+	// identically" reasoning as §2.3's own answer-confidentiality rule).
+	//
+	// Set by prefetchRafaleNextUnsafe (nil when the pool is empty or the
+	// cap is imminent — contract §13.5's NEXT=null case), consumed by
+	// advanceRafaleUnsafe (nil there is what actually ends the round, same
+	// timing as before #202 — see its own comment), and MUST be released
+	// (releaseRafaleNextUnsafe: un-marks it used, resets to nil) on every
+	// manche-ending path — stopUnsafe(), Ready()'s RAFALE reset block,
+	// InitGame() — or drawRafaleQuestionUnsafe's immediate "mark used on
+	// draw" (contract §7) silently burns one reservoir question per manche
+	// that was NEVER actually posed to anyone. See releaseRafaleNextUnsafe's
+	// own doc comment for the exhaustive list of call sites.
+	rafaleNext *RafaleQuestion
+
+	// rafaleQuestionTimer/rafaleQuestionStopCh (v8.0.0, #107, contract
+	// rafale.md §2.2) — the per-question ~3s countdown, DELIBERATELY its own
+	// pair of fields, never e.timer/e.stopCh. The global round timer
+	// (started via the existing startTimer(), reused unchanged for RAFALE's
+	// manche timer) and this question ticker run CONCURRENTLY for the
+	// whole round — the first time two tickers are live at once in this
+	// codebase (MEMOTION's per-card timer reuses e.timer/e.stopCh instead,
+	// because it and the global timer are mutually exclusive — never both
+	// running). Mixing this ticker into e.timer/e.stopCh would make
+	// StartRafaleQuestionTimer's "stop any existing timer first" step also
+	// kill the round timer, and vice versa.
+	rafaleQuestionTimer  *time.Ticker
+	rafaleQuestionStopCh chan struct{}
+	mu                   sync.RWMutex
+	timer                *time.Ticker
+	stopCh               chan struct{}
+	countdownTimer       *time.Ticker
+	countdownStopCh      chan struct{}
+	pendingDelay         int // Store delay for after countdown
 
 	// motionCardRoundClosed (#187 cycle 4, B3) — true once the ACTIVE
 	// MEMOTION card's own timer round has ended (natural expiry via
@@ -147,6 +195,27 @@ type Engine struct {
 	// card whose ID isn't the current MotionSelected, so a stale `true`
 	// left over from the previous card has no way to reach a live guard.
 	motionCardRoundClosed bool
+
+	// questionEverStarted (#200 cycle 5) — true once actualStart()/
+	// StartImmediate() has run for the question CURRENTLY loaded in
+	// e.state.Question, false otherwise. Set unconditionally (any question
+	// type) at the top of both Start entry points, reset to false by every
+	// Ready() call (a freshly-(re)prepared question, replay or not, has by
+	// definition not started yet). Exists specifically because MEMORY/
+	// MEMOTION have no field that reliably tells "this manche was started"
+	// apart from "this manche made game progress" — see Ready()'s own
+	// comment on memoryOrMotionRoundAlreadyPlayed for the concrete gap this
+	// closes (a manche started then STOPPED with zero gameplay actions,
+	// e.g. no card ever flipped/selected, used to be indistinguishable from
+	// "never started", leaving a stale team selection able to satisfy
+	// participantsConform on a same-ID replay — confirmed exploitable,
+	// QUALIF v8.0.0.18). RAFALE keeps its own dedicated RafaleSubPhase-based
+	// signal (rafaleRoundAlreadyPlayed) unchanged — untouched by this field,
+	// deliberately not migrated to avoid touching an already-reviewed,
+	// already-tested mechanism for no added coverage (RafaleSubPhase already
+	// becomes non-None unconditionally at Start(), same semantics as this
+	// field, just RAFALE-specific and pre-existing).
+	questionEverStarted bool
 
 	// Callbacks
 	//
@@ -175,6 +244,44 @@ type Engine struct {
 	OnCountdownTick func(countdownTime int)
 	OnBuzzerPress   func(bumperID, teamID string, pressTime int64, button string)
 	OnQCMHint       func(invalidatedColor string, remainingAnswers int) // QCM hint callback
+	// RAFALE callbacks (v8.0.0, #107, contract §5.2/§2.2).
+	//
+	// OnRafaleAnswer fires whenever a new RAFALE question is drawn — round
+	// start (startRafaleRoundUnsafe) and every subsequent advance
+	// (advanceRafaleUnsafe, whether from RAFALE_VALIDATE/INVALIDATE or the
+	// question timer's own expiry). The consumer (cmd/server/main.go) must
+	// broadcast it via RAFALE_ANSWER to admin+anim ONLY
+	// (BroadcastToTypes) — contract §2.3/§13.2: NEITHER the answer NOR the
+	// pre-fetched next question's statement ever ride GameState.
+	//
+	// next (#202, contract §13.3) — the pre-fetched question that will
+	// become current at the FOLLOWING advance, answer-free (RafaleCurrent,
+	// same shape as the current question's own GameState representation),
+	// nil when the pool is empty or the cap is imminent (contract §13.5).
+	// Guarded by the exact same admin+anim-only rule as answer above — see
+	// this field's own "never widen this recipient list" warning at its
+	// consumer (cmd/server/main.go, broadcastRafaleAnswer).
+	OnRafaleAnswer func(id, answer string, next *RafaleCurrent)
+	// OnRafaleQuestionTick fires every second the RAFALE question ticker is
+	// live and NOT expiring this tick — the consumer broadcasts RAFALE_TICK
+	// (lightweight, all clients, no full GameState re-emission — contract
+	// §5.2). On expiry (questionTime reaches 0), no tick fires at all —
+	// the ticker instead routes straight into the SAME advance path as
+	// RAFALE_INVALIDATE (contract §6.1's "identique à réponse invalide"),
+	// which fires OnStateChange (full UPDATE, carrying the new
+	// RAFALE_CURRENT_QUESTION/RAFALE_SUBPHASE) and OnRafaleAnswer instead.
+	OnRafaleQuestionTick func(questionTime int)
+	// OnRafaleTeamsChanged (v8.0.0, #199, contract §8.3) fires whenever
+	// RAFALE's active/next/participating team set MAY need a buzzer LED
+	// refresh: round start, RAFALE_SET_TEAMS, and every advance (VALIDATE/
+	// INVALIDATE/question-timer expiry) — including an advance where
+	// RafaleCurrentTeam doesn't actually change (TANT_QUE_JE_GAGNE/SOLO
+	// keeping the hand), since §8.3 requires a refresh "à chaque...
+	// changement de question" too, not only an actual rotation. No
+	// parameters — the consumer (cmd/server/main.go, sendLEDSetRafaleTeams)
+	// re-reads live GetState()/GetTeamsAndBumpers() itself, same pattern as
+	// OnStateChange.
+	OnRafaleTeamsChanged func()
 	// #187 cycle 3 briefly added OnMotionCardAutoRevealed here (a MEMORY
 	// card auto-revealing at timer expiry) — REVERTED in cycle 4: the
 	// user-validated behavior is that expiry on an incomplete grid leaves
@@ -203,6 +310,16 @@ func NewEngine() *Engine {
 			MotionActive:             MotionActive{State: map[string]interface{}{}},
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
+			// RAFALE (v8.0.0, #107): initialize empty (not nil) so JSON
+			// serializes []/{} (not null) — same "no omitempty" discipline
+			// as MEMOTION/ARDOISE above (contracts/rafale.md §4).
+			RafaleCurrentQuestion:    RafaleCurrent{},
+			RafaleTeamCounters:       map[string]int{},
+			RafaleTeamBest:           map[string]int{},
+			RafaleTeamStreak:         map[string]int{},
+			RafaleTeamErrors:         map[string]int{},
+			RafaleParticipatingTeams: []string{},
+			RafaleCurrentTeamColor:   []int{},
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -232,6 +349,9 @@ func NewEngine() *Engine {
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
+		rafaleQuestions:  make(map[string]*RafaleQuestion),
+		rafaleUsed:       make(map[string]bool),
+		rafaleNext:       nil, // #202 — no pre-fetch until a RAFALE round actually starts; see its own field doc comment
 		stopCh:           make(chan struct{}),
 	}
 }
@@ -668,11 +788,22 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 			applyConnEventUnsafe(bumper, ConnEventDisconnect)
 		}
 	}
+	teamLostLastBumper := ""
 	if team, ok := data["TEAM"].(string); ok {
 		oldTeam := bumper.Team
 		bumper.Team = team
 		if oldTeam != team {
 			e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+			// #200 cycle 6: does oldTeam still have ANY bumper after this
+			// reassignment? bumper.Team was already updated above (bumper
+			// is the *Bumper stored at e.data.Bumpers[id], not a copy), so
+			// e.data.Bumpers is fully consistent here — teamsWithBumpers
+			// reflects the POST-reassignment state. If oldTeam is now
+			// absent, its participant selection (if any) is stale — see
+			// purgeInactiveParticipantUnsafe's own doc comment.
+			if oldTeam != "" && !teamsWithBumpers(e.data.Bumpers)[oldTeam] {
+				teamLostLastBumper = oldTeam
+			}
 		}
 	}
 	if version, ok := data["VERSION"].(string); ok {
@@ -703,7 +834,24 @@ func (e *Engine) UpdateBumper(id string, data map[string]interface{}) {
 	}
 
 	log.Printf("[Engine] Updated bumper %s: team=%s, name=%s, protocol=%s", id, bumper.Team, bumper.Name, bumper.Protocol)
+
+	// #200 cycle 6: teamLostLastBumper is only ever non-empty when a TEAM
+	// reassignment just made it lose its last bumper (set above) — purge it
+	// from any live participant selection and re-check the PREPARE<->READY
+	// gate, same release-before-call pattern as every other function in this
+	// file that can flip the phase (Ready()/ForceReady()/
+	// SetMemoryParticipatingTeams()/...).
+	newPhase := GamePhase("")
+	if teamLostLastBumper != "" {
+		e.purgeInactiveParticipantUnsafe(teamLostLastBumper)
+		newPhase = e.reevaluatePrepareReadyUnsafe()
+	}
+	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
 
 	// Auto-save bumpers to disk
 	safeGo("SaveBumpers", e.SaveBumpers)
@@ -776,13 +924,91 @@ func (e *Engine) SetBumpers(bumpers map[string]*Bumper) {
 			e.syncConnStateForTeamChangeUnsafe(newBumper, oldTeam)
 		}
 	}
+	// #200 cycle 6: this bulk path IS the real admin flow for reassigning a
+	// bumper's team (TeamsPage save, per this function's own comment above)
+	// — a team present in oldBumpers but absent from the new bumpers map has
+	// just lost its last bumper, exactly like the single-bumper case in
+	// UpdateBumper. See purgeInactiveParticipantUnsafe's own doc comment for
+	// why this matters (stale MEMORY/MEMOTION/RAFALE participant selection
+	// silently satisfying participantsConform).
+	oldActiveTeams := teamsWithBumpers(oldBumpers)
 	e.data.Bumpers = bumpers
+	newActiveTeams := teamsWithBumpers(bumpers)
+	teamsLostLastBumper := false
+	for teamID := range oldActiveTeams {
+		if !newActiveTeams[teamID] {
+			e.purgeInactiveParticipantUnsafe(teamID)
+			teamsLostLastBumper = true
+		}
+	}
+	newPhase := GamePhase("")
+	if teamsLostLastBumper {
+		newPhase = e.reevaluatePrepareReadyUnsafe()
+	}
 	// Synchronize VirtualPlayerCount with actual bumper count
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
 
 	// Auto-save bumpers to disk
 	safeGo("SaveBumpers", e.SaveBumpers)
+}
+
+// DeleteBumper removes a single bumper from the live roster and returns the
+// deleted bumper (nil if id didn't exist) — everything (delete, participant
+// purge, PREPARE<->READY re-evaluation) happens under e.mu.
+//
+// #200 cycle 7 (code-review 20260831-225004, CRITIQUE on cycle 6/7e1a5746):
+// the previous production call site (cmd/server/main.go's handleDeleteBumper)
+// read e.data.Bumpers via GetTeamsAndBumpers() — which returns e.data
+// directly, NOT a copy — deleted the entry IN PLACE on that LIVE map (an
+// unlocked mutation of engine-owned state, a latent race with any
+// concurrent e.data.Bumpers reader/writer, discovered while investigating
+// this), and only THEN called SetBumpers with that ALREADY-mutated map.
+// SetBumpers's own oldBumpers/newBumpers diff (#200 cycle 6, 7e1a5746) then
+// compared two references to the EXACT SAME map — already identical by the
+// time SetBumpers ran, since the delete had happened directly on the object
+// oldBumpers itself aliases. No diff, no purge: deleting a team's only
+// bumper via DELETE_BUMPER left a stale MEMORY/MEMOTION/RAFALE participant
+// selection in place, silently satisfying participantsConform — confirmed
+// empirically by code-review (MEMORY SOLO, team selected via its only
+// bumper, READY reached, DELETE_BUMPER(that bumper) — Phase stayed READY).
+// This dedicated method closes both issues at once: the delete, the
+// old/new-active-teams diff, and the purge all happen atomically under the
+// SAME lock acquisition, on data nothing outside the engine can alias.
+func (e *Engine) DeleteBumper(id string) *Bumper {
+	e.mu.Lock()
+
+	deleted, exists := e.data.Bumpers[id]
+	if !exists {
+		e.mu.Unlock()
+		return nil
+	}
+	deletedTeam := deleted.Team
+	delete(e.data.Bumpers, id)
+	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+
+	newPhase := GamePhase("")
+	if deletedTeam != "" && !teamsWithBumpers(e.data.Bumpers)[deletedTeam] {
+		e.purgeInactiveParticipantUnsafe(deletedTeam)
+		newPhase = e.reevaluatePrepareReadyUnsafe()
+	}
+
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
+
+	// Auto-save bumpers to disk (same convention as UpdateBumper/SetBumpers).
+	safeGo("SaveBumpers", e.SaveBumpers)
+
+	return deleted
 }
 
 // Ready prepares a new question round
@@ -802,9 +1028,92 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// Check if this is a NEW question (different from current)
 	isNewQuestion := e.state.Question == nil || e.state.Question.ID != questionID
 
+	// RAFALE bugfix (v8.0.0, #199, 2026-09-03, 3rd QUALIF cycle of the "je
+	// peux lancer START sans équipe" report — 393c6dc7's participantsConform
+	// gate itself is sound, exhaustively re-verified, but a RAFALE
+	// round-config question is DESIGNED to be replayed across several
+	// manches within the SAME game with the SAME question ID (unlike
+	// QCM/MEMORY/MEMOTION, each normally played once per game) — so
+	// isNewQuestion (an ID comparison) is the WRONG staleness signal for
+	// its participant selection specifically. RafaleParticipatingTeams/
+	// RafaleCurrentTeam/RafaleCurrentTeamColor are reset by
+	// startRafaleRoundUnsafe() at the NEXT actualStart(), and by this
+	// function's own isNewQuestion branch below on a genuinely different
+	// question — but NOT by stopUnsafe() (Stop() never touches them, by
+	// design — see its own comment), and NOT here on a same-ID replay,
+	// since the whole reset block was skipped. Result, reproduced and
+	// confirmed by TestReady_RafaleReplay_ResetsStaleParticipatingTeams:
+	// launch a multi-mode manche WITH teams selected, let it finish (STOP),
+	// then Ready() the SAME question ID again for a new manche WITHOUT
+	// reselecting anything — the previous manche's team selection was still
+	// sitting in GameState, silently satisfying participantsConform, and
+	// START succeeded. Captured HERE, before ANY reset below (including the
+	// isNewQuestion branch, which would itself reset RafaleSubPhase back to
+	// None on a genuine new-question transition — this flag must reflect
+	// the OUTGOING question's state).
+	rafaleRoundAlreadyPlayed := e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale &&
+		e.state.RafaleSubPhase != RafaleSubPhaseNone
+
+	// MEMORY/MEMOTION generalization of the RAFALE bugfix above (#200).
+	// MemoryParticipatingTeams/MemoryCurrentTeam/MemoryCurrentTeamColor/
+	// MemoryTeamPairs/MemoryTeamErrors/MemoryPairOwners (MEMORY) and
+	// MotionParticipatingTeams/MotionCurrentTeam/MotionCurrentTeamColor/
+	// MotionCardTeams (MEMOTION) are, below, reset only when isNewQuestion —
+	// the exact same isNewQuestion-only staleness gap RAFALE had — and
+	// participantsConform (this file, above) reads
+	// MemoryParticipatingTeams/MotionParticipatingTeams directly, so a
+	// same-ID replay of an ALREADY-PLAYED MEMORY/MEMOTION question can
+	// silently satisfy that gate with the PREVIOUS manche's selection, same
+	// as RAFALE. Unlike RAFALE though, actualStart()/StartImmediate() DO
+	// unconditionally clear MemoryFlippedCards/MemoryMatchedPairs/
+	// MemoryErrors and re-run initMotionStateUnsafe() on EVERY Start() (not
+	// just a new question — see their own "for fresh start"/"mirrors
+	// actualStart" comments), so those specific fields are never at risk;
+	// only the participant-selection fields above are.
+	//
+	// "Already played" can't reuse a RafaleSubPhase-shaped signal here:
+	// MotionSubPhase itself is set to MEMORIZE/GRID by THIS SAME Ready()
+	// call's own isNewQuestion branch below (initMotionStateUnsafe — the
+	// PREPARE-phase grid preview, #71/#72) even before any Start() ever
+	// happens, so unlike RafaleSubPhase it can't tell "just previewed" apart
+	// from "actually played".
+	//
+	// 2026-08-31 first attempt (superseded, see 2026-09-04 below): a
+	// gameplay-progress signal (MemoryFlippedCards/MemoryMatchedPairs/
+	// MemoryErrors non-empty for MEMORY, any MotionCardStates entry off
+	// UNPLAYED for MEMOTION) — correctly false across a re-Ready() on a
+	// not-yet-started question (these fields only mutate through a
+	// Phase==STARTED action), but left a confirmed-exploitable gap: a manche
+	// STARTED then STOPPED with LITERALLY ZERO gameplay actions (no card
+	// ever flipped/selected — e.g. admin/anim clicks START then immediately
+	// STOP to fix a wrong config, a completely ordinary workflow) is
+	// indistinguishable from "never started" by these fields alone, since
+	// actualStart()/StartImmediate() only ever reset them, they never set a
+	// distinguishing "started" marker. Confirmed end-to-end (QUALIF
+	// v8.0.0.18, #200 cycle 5): the replay then reaches READY — and START —
+	// on the STALE selection, with the user never reselecting anything for
+	// this manche.
+	//
+	// 2026-09-04 fix: e.questionEverStarted (field's own doc comment) closes
+	// this precisely — true iff Start() genuinely ran for the CURRENT
+	// question, regardless of what happened afterward, so "started but zero
+	// actions" now correctly reads as "already played" while "re-Ready()
+	// before any Start()" still correctly reads as "not played" (the case
+	// this isNewQuestion guard exists to protect — verified by dedicated
+	// tests for both scenarios, MEMORY and MEMOTION).
+	memoryOrMotionRoundAlreadyPlayed := e.questionEverStarted && e.state.Question != nil &&
+		(e.state.Question.Type == QuestionTypeMemory || e.state.Question.Type == QuestionTypeMemotion)
+
 	e.state.Phase = PhasePrepare
 	e.state.Question = question
 	e.setQuestionStatus(StatusPrepare)
+	// The question being (re)loaded here — new or replayed — has not
+	// started yet; see questionEverStarted's own doc comment. Must be
+	// written AFTER capturing memoryOrMotionRoundAlreadyPlayed above (which
+	// reads the OUTGOING question's value) and rafaleRoundAlreadyPlayed
+	// above (RAFALE keeps its own independent RafaleSubPhase-based signal,
+	// unaffected by this field either way).
+	e.questionEverStarted = false
 
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
@@ -826,9 +1135,13 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// Always reset QCM hints state at PREPARE (new question or same question re-PREPARED)
 	e.state.QcmInvalidated = []string{}
 
-	// Reset Memory game state ONLY for NEW question
-	// This allows team selection to persist during PREPARE→READY transition
-	if isNewQuestion {
+	// Reset Memory/MEMOTION game state for a NEW question, OR when the
+	// OUTGOING question already had a manche STARTED on it (#200 — see
+	// memoryOrMotionRoundAlreadyPlayed's own comment above, same
+	// generalization as RAFALE's rafaleRoundAlreadyPlayed/a7b70057). This
+	// still allows team selection to persist during a PREPARE→READY
+	// transition (re-Ready() on a not-yet-started question).
+	if isNewQuestion || memoryOrMotionRoundAlreadyPlayed {
 		// Use empty slices/maps instead of nil so they are serialized in JSON (not omitted)
 		e.state.MemoryFlippedCards = []string{}
 		e.state.MemoryMatchedPairs = []int{}
@@ -860,11 +1173,57 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
 	}
 
+	// Reset RAFALE state — v8.0.0, #107 originally (unconditional on
+	// question TYPE, so leftover values from a previous RAFALE round never
+	// leak into the next question), extended 2026-09-03 (#199 bugfix, see
+	// rafaleRoundAlreadyPlayed's own comment above) to ALSO fire on a
+	// same-ID replay of a RAFALE question that already completed at least
+	// one round — not just on isNewQuestion. Every other field this block
+	// resets is already re-initialized fresh by startRafaleRoundUnsafe() at
+	// the next actual round start regardless (counters, asked count, pool
+	// remaining, current question) — resetting them here too on a replay is
+	// redundant but harmless; RafaleParticipatingTeams/RafaleCurrentTeam/
+	// RafaleCurrentTeamColor are the ONLY fields this fixes anything for
+	// (startRafaleRoundUnsafe never touches them, by design — team
+	// selection is meant to survive a countdown, not a full stopped round).
+	// #202 (contract §13.4): release any outstanding RAFALE pre-fetch on the
+	// same "manche ending/replayed" condition as the reset block below. In
+	// practice this is almost always a no-op by the time Ready() runs — the
+	// allowedPhases guard above already refuses Ready() while Phase==STARTED,
+	// so a previous RAFALE round can only reach this point via stopUnsafe()
+	// (Stop(), or advanceRafaleUnsafe's own round-ending branches), which
+	// already released it — kept anyway as defense-in-depth (plan risk R1:
+	// "un chemin oublié = érosion silencieuse du réservoir"), and it is the
+	// one path that matters for the "PREPARE/READY but never actually
+	// started" edge case (rafaleNext is never set before an actual START,
+	// so this is trivially a no-op there too, but costs nothing to call).
+	rafaleNextReleased := false
+	if isNewQuestion || rafaleRoundAlreadyPlayed {
+		rafaleNextReleased = e.releaseRafaleNextUnsafe()
+		e.state.RafaleSubPhase = RafaleSubPhaseNone
+		e.state.RafaleCurrentQuestion = RafaleCurrent{}
+		e.state.RafaleQuestionTime = 0
+		e.state.RafaleTeamCounters = map[string]int{}
+		e.state.RafaleTeamBest = map[string]int{}
+		e.state.RafaleTeamStreak = map[string]int{}
+		e.state.RafaleTeamErrors = map[string]int{}
+		e.state.RafaleCurrentTeam = ""
+		e.state.RafaleParticipatingTeams = []string{}
+		e.state.RafaleCurrentTeamColor = []int{}
+		e.state.RafaleAskedCount = 0
+		e.state.RafalePoolRemaining = 0
+		e.state.RafaleExhausted = false
+	}
+
 	log.Printf("[Engine] Game ready with question: %s", questionID)
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
 	e.mu.Unlock()
+
+	if rafaleNextReleased {
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
 
 	if callback != nil {
 		callback(PhasePrepare)
@@ -900,6 +1259,98 @@ func (e *Engine) getActiveTeams() map[string]*Team {
 		}
 	}
 	return active
+}
+
+// teamsWithBumpers returns the set of team IDs that have at least one
+// bumper assigned, from the given bumper map — the same "active" criterion
+// as getActiveTeams, but computable from a plain bumper map (no e.data.Teams
+// lookup needed) so it can be diffed against a PRIOR snapshot before/after
+// a bulk SetBumpers swap. Pure function, no locking.
+func teamsWithBumpers(bumpers map[string]*Bumper) map[string]bool {
+	set := make(map[string]bool)
+	for _, b := range bumpers {
+		if b != nil && b.Team != "" {
+			set[b.Team] = true
+		}
+	}
+	return set
+}
+
+// purgeInactiveParticipantUnsafe (#200 cycle 6) removes teamID from every
+// *_PARTICIPATING_TEAMS selection (MEMORY/MEMOTION/RAFALE) and clears the
+// matching *_CURRENT_TEAM(_COLOR) pointer if it pointed at teamID, then
+// re-evaluates the PREPARE<->READY gate exactly like Set*ParticipatingTeams
+// already does after any selection change (reevaluatePrepareReadyUnsafe).
+//
+// Called from UpdateBumper/SetBumpers whenever a reassignment makes teamID
+// lose its LAST bumper. Root cause this closes (confirmed exploitable,
+// QUALIF v8.0.0.18, dev-frontend's own trace of GamePage.jsx's team-chip
+// rendering): participantsConform (this file) only counts
+// MemoryParticipatingTeams/MotionParticipatingTeams/RafaleParticipatingTeams
+// by NAME/length — it is a pure GameState-only function (deliberately, see
+// its own doc comment — exercised by table tests with no bumpers/teams at
+// all) with no access to e.data.Bumpers/e.data.Teams, so it has no way to
+// know a listed team no longer has any buzzer. Selecting a team for MEMORY
+// SOLO, then reassigning that team's ONLY bumper to another team from
+// TeamsPage (an entirely ordinary admin action, no Stop/Ready involved) used
+// to leave the stale name in MemoryParticipatingTeams forever — silently
+// satisfying participantsConform while the frontend's own team-chip list
+// renders NOTHING selected (GamePage.jsx filters chips through
+// teamsWithBuzzers first, so a name with zero buzzers is invisible in BOTH
+// the "selected" and "available" columns) — exactly the reported symptom.
+//
+// Scoped to PREPARE/READY only, mirroring Set*ParticipatingTeams's own phase
+// restriction: a reassignment during a LIVE round (STARTED/PAUSED) is an
+// unrelated concern and must never touch gameplay-in-progress data — the
+// per-team score/progress maps (MemoryTeamPairs/MemoryPairOwners/
+// RafaleTeamCounters/etc.) are deliberately left untouched here, this only
+// ever touches the PARTICIPATING_TEAMS/CURRENT_TEAM selection fields.
+// Must be called with e.mu already held (write).
+func (e *Engine) purgeInactiveParticipantUnsafe(teamID string) {
+	if teamID == "" || (e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady) {
+		return
+	}
+
+	removed := false
+	if removeStringUnsafe(&e.state.MemoryParticipatingTeams, teamID) {
+		removed = true
+		if e.state.MemoryCurrentTeam == teamID {
+			e.state.MemoryCurrentTeam = ""
+			e.state.MemoryCurrentTeamColor = []int{}
+		}
+	}
+	if removeStringUnsafe(&e.state.MotionParticipatingTeams, teamID) {
+		removed = true
+		if e.state.MotionCurrentTeam == teamID {
+			e.state.MotionCurrentTeam = ""
+			e.state.MotionCurrentTeamColor = []int{}
+		}
+	}
+	if removeStringUnsafe(&e.state.RafaleParticipatingTeams, teamID) {
+		removed = true
+		if e.state.RafaleCurrentTeam == teamID {
+			e.state.RafaleCurrentTeam = ""
+			e.state.RafaleCurrentTeamColor = []int{}
+		}
+	}
+
+	if removed {
+		log.Printf("[Engine] Purged inactive team %q from participant selection (lost its last bumper during %s)", teamID, e.state.Phase)
+	}
+}
+
+// removeStringUnsafe removes the first occurrence of s from *slice
+// in-place, reports whether anything was removed. Preserves order (simple
+// append-based removal — these slices are at most a handful of team names,
+// no need for a swap-remove).
+func removeStringUnsafe(slice *[]string, s string) bool {
+	for i, v := range *slice {
+		if v == s {
+			*slice = append((*slice)[:i], (*slice)[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Engine) updateTeamsReady() {
@@ -944,6 +1395,29 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 	return true
 }
 
+// participantsCountConform (#201) is the shared SOLO/multi participant
+// threshold rule, factored out of the MEMORY/MEMOTION/RAFALE branches of
+// participantsConform below — all three types independently ended up with
+// the exact same rule (MEMORY first, #172; RAFALE/MEMOTION generalized here
+// per the user's explicit request while clarifying #201's functional spec,
+// rather than each branch re-deriving its own count check): a genuinely
+// SOLO round needs EXACTLY one participant, a multi-team round (a rotation
+// BETWEEN teams) needs AT LEAST two — one team can't "rotate" with itself.
+//
+// Takes the raw mode string rather than a typed enum: MEMORY (MemoryMode),
+// MEMOTION (a plain string field) and RAFALE (RafaleMode) each define their
+// own mode type/constants for their own switch statements elsewhere in this
+// file, but all three independently use the literal string "SOLO" for the
+// solo variant and default an empty string to SOLO too — a single
+// string-based helper avoids three near-identical typed wrappers for zero
+// added safety (the caller already has the right field for its own type).
+func participantsCountConform(mode string, count int) bool {
+	if mode == "" || mode == "SOLO" {
+		return count == 1
+	}
+	return count >= 2
+}
+
 // participantsConform (#172 B1) reports whether the currently selected participants
 // satisfy the minimum requirement for question's type. Pure function, no locking —
 // safe to call from any context, including while e.mu is already held.
@@ -951,27 +1425,95 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 // Table of rules (plan §6/§7 B1 — no branch by type outside this function):
 //   - SPEEDY, QCM, ARDOISE: no requirement of its own — "at least one active team"
 //     is already enforced by AreAllTeamsReady, so this simply returns true.
-//   - MEMORY SOLO: exactly one team selected.
-//   - MEMORY multi (CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE): at least two teams selected.
-//   - MEMOTION: at least one team selected.
+//   - MEMORY, MEMOTION, RAFALE: the shared SOLO/multi rule
+//     (participantsCountConform, #201) — SOLO (or an unset/empty mode
+//     field, which every one of these types defaults to SOLO): exactly one
+//     team selected. Multi (any other mode value — CHACUN_SON_TOUR/
+//     TANT_QUE_JE_GAGNE for MEMORY/MEMOTION, plus MAILLON_FAIBLE for
+//     RAFALE): at least two teams selected.
+//   - RAFALE additionally requires CATEGORY to be set AND RAFALE_DIFFICULTY
+//     to be 1..3 (v8.0.0, 2026-08-30/31 bugfixes — see below), on top of the
+//     shared SOLO/multi rule above.
 //   - Unknown/future question type, or nil question: permissive by default (true).
+//
+// RAFALE's CATEGORY/DIFFICULTY checks are not really about PARTICIPANTS, but they plug into
+// the exact same PREPARE↔READY gate this function already drives, and the
+// function's own design principle is "no per-type branch outside this one
+// place" — a second, parallel gating function would duplicate the
+// reevaluatePrepareReadyUnsafe/ForceReady wiring for no real benefit.
+// Root-caused QUALIF report (2026-08-30): a RAFALE round with an unset
+// CATEGORY (e.g. a round-config question saved before the 2026-08-29
+// single-category migration, still carrying no CATEGORY) reached STARTED
+// and immediately died — drawRafaleQuestionUnsafe's category=="" guard
+// (rafalePoolUnsafe, engine.go) made the pool empty, so
+// startRafaleRoundUnsafe's existing safety net fired (roundEnded=true,
+// finishRafaleRoundStart calls Stop()) within the same tick actualStart()
+// ran — Phase flips STARTED→STOPPED before any client can act on it,
+// exactly the "3s countdown OK, then nothing" symptom reported. That safety
+// net is CORRECT and stays (a race — the reservoir edited between READY and
+// START — is always possible), but it shouldn't be the ONLY defense: this
+// gate stops a mis-configured round from ever reaching READY at all, giving
+// the admin the same clear "stuck in PREPARE" signal MEMORY/MEMOTION already
+// give for their own participant-conformity gaps, instead of a confusing
+// instant start-then-stop. Deliberately does NOT also check pool
+// availability (available>0) — that's dynamic (draws from other rounds,
+// reservoir edits) and already covered live by the frontend's pre-round
+// alert (GET /api/rafale/pool, contract §7.2); this gate only catches the
+// STATIC, always-knowable defect (no category selected at all).
+//
+// RAFALE_DIFFICULTY join the gate 2026-08-31 (2nd QUALIF cycle, SAME
+// external symptom — "3s countdown then nothing" — recurring after the
+// CATEGORY fix above shipped, tested, and deployed): root cause this time
+// was http.go's handleUploadQuestion never reading RAFALE_DIFFICULTY (nor
+// RAFALE_MODE/_QUESTION_TIME/_MAX_QUESTIONS) from the multipart form at
+// all — no `if questionType == "RAFALE"` block existed there, unlike
+// every other typed question. Every RAFALE round-config question ever
+// saved through the editor silently lost its difficulty on save,
+// reloading as Go's zero value (0) — not a valid difficulty (1-3), so the
+// reservoir pool filter (contract §7, exact match) never matched any
+// question, same empty-pool-at-round-start death as the CATEGORY bug, via
+// a different missing field. MODE/QUESTION_TIME/MAX_QUESTIONS all default
+// safely to SOLO/3/100 when zero (engine-side fallbacks already exist for
+// those), so only DIFFICULTY needed a gate here — see http.go's own fix in
+// the same commit for the actual persistence gap.
+//
+// The RAFALE_PARTICIPATING_TEAMS check (2026-09-02, #199; generalized into
+// participantsCountConform 2026-09-01, #201) is a DIFFERENT kind of guard
+// from CATEGORY/DIFFICULTY above — not a bugfix for a silent-death symptom,
+// a direct QUALIF/functional-spec feature request: "je ne dois pas pouvoir
+// faire START si aucune équipe n'est sélectionnée" in a multi-team RAFALE
+// mode, then refined by the user into the exact same SOLO/multi rule MEMORY
+// already enforced (#201: SOLO needs exactly one team, multi needs at least
+// two — a rotation with only one team makes no functional sense) — see
+// participantsCountConform's own doc comment for the shared rule, now also
+// reused by MEMORY and MEMOTION above instead of each re-deriving it.
 func participantsConform(question *Question, state *GameState) bool {
 	if question == nil {
 		return true
 	}
 	switch question.Type {
 	case QuestionTypeMemory:
-		memoryMode := question.MemoryMode
-		if memoryMode == "" {
-			memoryMode = string(MemoryModeSolo)
-		}
-		if memoryMode == string(MemoryModeSolo) {
-			return len(state.MemoryParticipatingTeams) == 1
-		}
-		// CHACUN_SON_TOUR / TANT_QUE_JE_GAGNE
-		return len(state.MemoryParticipatingTeams) >= 2
+		return participantsCountConform(question.MemoryMode, len(state.MemoryParticipatingTeams))
 	case QuestionTypeMemotion:
-		return len(state.MotionParticipatingTeams) >= 1
+		// #201: was unconditionally >=1 regardless of MOTION_MODE — folded
+		// into the shared SOLO==1/multi>=2 rule for consistency with MEMORY/
+		// RAFALE (MEMOTION's own mode field, like theirs, defaults "" to
+		// SOLO — see e.g. makeMotionQuestion's own doc comment, test-only,
+		// and the field's own "(default SOLO)" tag in models.go).
+		return participantsCountConform(question.MotionMode, len(state.MotionParticipatingTeams))
+	case QuestionTypeRafale:
+		if question.Category == "" || question.RafaleDifficulty < 1 || question.RafaleDifficulty > 3 {
+			return false
+		}
+		// #201: was SOLO exempt (`return true` unconditionally) — the user
+		// confirmed RAFALE SOLO must require exactly one team too, same as
+		// MEMORY SOLO, closing the asymmetry between the two types (RAFALE's
+		// own advanceRafaleUnsafe already treats RafaleCurrentTeam=="" as a
+		// harmless SOLO no-op — see its own comment — so requiring exactly
+		// one selected team here doesn't change round LOGIC, only the
+		// PREPARE->READY gate: SOLO now needs an explicit "who is playing"
+		// selection, same UX as MEMORY SOLO, before START).
+		return participantsCountConform(question.RafaleMode, len(state.RafaleParticipatingTeams))
 	default:
 		return true
 	}
@@ -1216,6 +1758,7 @@ func (e *Engine) actualStart() {
 	e.state.Phase = PhaseStarted
 	e.state.CountdownTime = 0
 	e.state.GameTime = time.Now().UnixMicro()
+	e.questionEverStarted = true // #200 cycle 5 — see field's own doc comment
 
 	e.setQuestionStatus(StatusStarted)
 
@@ -1261,6 +1804,13 @@ func (e *Engine) actualStart() {
 
 	log.Printf("[Engine] Countdown finished, game started with delay %d", e.pendingDelay)
 
+	// RAFALE (v8.0.0, #107): init counters + draw the first question. A
+	// no-op (isRafale=false) for every other question type. Must run
+	// BEFORE startTimer() below sets CurrentTime — RAFALE reuses the exact
+	// same global timer for its round countdown (contract §2.2), it does
+	// not skip it the way MEMOTION does.
+	rafaleStart := e.startRafaleRoundUnsafe()
+
 	// Start main timer — MEMOTION uses per-card timers (StartMotionCardTimer), not a global one
 	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemotion {
 		e.startTimer()
@@ -1278,6 +1828,10 @@ func (e *Engine) actualStart() {
 	if motionMemorizeDuration > 0 {
 		e.StartMotionMemorizeTimer(motionMemorizeDuration)
 	}
+
+	// RAFALE: broadcast the first answer (admin+anim) and start the
+	// per-question ticker — after unlock, same reasoning as MEMORIZE above.
+	e.finishRafaleRoundStart(rafaleStart)
 }
 
 // StartImmediate starts the game immediately without countdown (for tests)
@@ -1290,6 +1844,7 @@ func (e *Engine) StartImmediate(delay int) {
 	e.state.GameTime = time.Now().UnixMicro()
 	e.state.Delay = delay
 	e.state.CurrentTime = delay
+	e.questionEverStarted = true // #200 cycle 5 — mirrors actualStart(), see field's own doc comment
 
 	e.setQuestionStatus(StatusStarted)
 
@@ -1322,6 +1877,10 @@ func (e *Engine) StartImmediate(delay int) {
 
 	log.Printf("[Engine] Game started immediately (no countdown) with delay %d", delay)
 
+	// RAFALE (v8.0.0, #107) — mirrors actualStart(); StartImmediate bypasses
+	// actualStart entirely (used by tests), so it needs the same init call.
+	rafaleStart := e.startRafaleRoundUnsafe()
+
 	// Start main timer
 	e.startTimer()
 
@@ -1332,6 +1891,8 @@ func (e *Engine) StartImmediate(delay int) {
 	if callback != nil {
 		callback(PhaseStarted)
 	}
+
+	e.finishRafaleRoundStart(rafaleStart)
 
 	// Start MEMORIZE timer after broadcast — must be called after unlock to avoid deadlock
 	if motionMemorizeDuration > 0 {
@@ -1574,7 +2135,38 @@ func (e *Engine) invalidateRandomWrongAnswer() (string, int) {
 // Stop ends the game round
 func (e *Engine) Stop() {
 	e.mu.Lock()
+	released := e.stopUnsafe()
 
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	// #202: persist the released pre-fetch's rafaleUsed flag, if any — AFTER
+	// e.mu is released, same discipline as every other rafaleUsed mutation.
+	if released {
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+
+	if callback != nil {
+		callback(PhaseStopped)
+	}
+}
+
+// stopUnsafe is Stop()'s locked core — caller must hold e.mu (write lock).
+// Extracted (v8.0.0, #107) so RAFALE's pool-exhausted/RAFALE_MAX_QUESTIONS
+// round-end paths (advanceRafaleUnsafe/startRafaleRoundUnsafe, themselves
+// invoked from an already-locked section) can reuse the exact same
+// termination semantics as a manual STOP or the global timer's own expiry,
+// without releasing and re-acquiring e.mu mid-transition — which would open
+// a window for a second concurrent action (another VALIDATE, a manual STOP)
+// to interleave and observe a half-transitioned state.
+//
+// Returns true iff a RAFALE pre-fetch was released (#202,
+// releaseRafaleNextUnsafe) — every caller of stopUnsafe (Stop() above, and
+// advanceRafaleUnsafe's own two round-ending branches) must persist
+// rafaleUsed via safeGo("SaveRafaleUsed", ...) AFTER its own e.mu.Unlock()
+// when this is true.
+func (e *Engine) stopUnsafe() bool {
 	// Signal countdown timer goroutine to stop (if running)
 	if e.countdownStopCh != nil {
 		select {
@@ -1612,20 +2204,588 @@ func (e *Engine) Stop() {
 
 	e.setQuestionStatus(StatusStopped)
 
-	log.Printf("[Engine] Game stopped")
+	// RAFALE (#107, contract §7.1/§24): a round in progress ends here too,
+	// whichever of the 4 conditions triggered this Stop (manual STOP, the
+	// global round timer reaching 0 — both reach this function unchanged —
+	// or the pool-exhausted/cap-reached paths, which call stopUnsafe
+	// directly from advanceRafaleUnsafe/startRafaleRoundUnsafe). The
+	// question ticker is stopped and the sub-phase moves to ROUND_END so
+	// the animateur can attribute points (§6.2). Guarded on RafaleSubPhase
+	// == QUESTION so a round that already reached ROUND_END by another path
+	// (e.g. startRafaleRoundUnsafe's own pool-empty-at-start branch, which
+	// sets ROUND_END itself before calling Stop()) isn't touched twice.
+	//
+	// releaseRafaleNextUnsafe (#202) below is DELIBERATELY unconditional on
+	// RafaleSubPhase (unlike the ticker-stop/ROUND_END transition just
+	// above) — a pre-fetch can be outstanding even once RafaleSubPhase has
+	// already moved to ROUND_END by another path, and every manche-ending
+	// call to stopUnsafe must release it or leak a used-flag (contract
+	// §13.4, plan risk R1). Guarded only on the current question actually
+	// being RAFALE, same as the ticker/ROUND_END block.
+	released := false
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
+		released = e.releaseRafaleNextUnsafe()
+		if e.state.RafaleSubPhase == RafaleSubPhaseQuestion {
+			e.stopRafaleQuestionTimerUnsafe()
+			e.state.RafaleSubPhase = RafaleSubPhaseRoundEnd
+		}
+	}
 
-	// Release lock BEFORE calling callback to avoid deadlock
-	callback := e.OnStateChange
+	log.Printf("[Engine] Game stopped")
+	return released
+}
+
+// ---------------------------------------------------------------------------
+// RAFALE — moteur solo (v8.0.0, #107, contracts/rafale.md §2/§6/§7/§8.1).
+//
+// Scope of this block: the round MACHINERY (draw → judge → advance → end),
+// shared unchanged by every RAFALE_MODE. Team rotation and the 4 modes'
+// distinct counter/rotation policies (CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/
+// MAILLON_FAIBLE, contract §3.4/§6.1) are Phase 3 (#199) — until
+// RAFALE_SET_TEAMS (also Phase 3) sets GameState.RafaleCurrentTeam, it stays
+// "" and the counter-increment below is a documented, forward-compatible
+// no-op: this batch's SOLO round runs end-to-end (draw/timer/judge/advance/
+// end) without a participating team ever being required to do so.
+// ---------------------------------------------------------------------------
+
+// ErrRafaleNotInQuestion is returned by RafaleValidate/RafaleInvalidate when
+// the engine isn't currently in a live RAFALE question (wrong phase, wrong
+// question type, or RafaleSubPhase != QUESTION — e.g. already ROUND_END, or
+// a race against the question timer's own expiry).
+var ErrRafaleNotInQuestion = errors.New("rafale_not_in_question")
+
+// StartRafaleQuestionTimer starts the per-question countdown ticker for a
+// RAFALE round (contract §2.2's "seul mécanisme réellement nouveau") — runs
+// CONCURRENTLY with the round's own global timer, see rafaleQuestionTimer's
+// field doc comment for why this needs its own fields. Mirrors
+// StartMotionCardTimer's shape/discipline (defer e.mu.Unlock() in the tick,
+// recoverBackgroundPanic, callbacks fired outside the lock).
+func (e *Engine) StartRafaleQuestionTimer(seconds int) {
+	e.mu.Lock()
+
+	if seconds <= 0 {
+		log.Printf("[Engine] RAFALE StartRafaleQuestionTimer: seconds<=0, no timer started")
+		e.mu.Unlock()
+		return
+	}
+
+	e.stopRafaleQuestionTimerUnsafe() // defensive — a fresh Start must never leak a prior goroutine
+
+	e.state.RafaleQuestionTime = seconds
+
+	e.rafaleQuestionStopCh = make(chan struct{})
+	e.rafaleQuestionTimer = time.NewTicker(1 * time.Second)
+
+	ticker := e.rafaleQuestionTimer
+	stopCh := e.rafaleQuestionStopCh
+
+	log.Printf("[Engine] RAFALE StartRafaleQuestionTimer: seconds=%d", seconds)
 	e.mu.Unlock()
 
-	if callback != nil {
-		callback(PhaseStopped)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				func() {
+					defer recoverBackgroundPanic("RAFALE question timer")
+					result := e.processRafaleQuestionTick()
+
+					if result.guardFailed {
+						ticker.Stop()
+						return
+					}
+					if result.paused {
+						// Mirror processTimerTick's own pause handling —
+						// skip this tick, keep the ticker running so it
+						// resumes transparently on Continue().
+						return
+					}
+					if !result.expired {
+						if e.OnRafaleQuestionTick != nil {
+							e.OnRafaleQuestionTick(result.questionTime)
+						}
+						return
+					}
+
+					// Expired — contract §6.1 "identique à réponse
+					// invalide": already judged (as incorrect) and
+					// advanced/ended under lock by processRafaleQuestionTick
+					// itself. This ticker's job is done either way.
+					ticker.Stop()
+					e.fireRafaleAdvanceCallbacks(result.advance)
+				}()
+			case <-stopCh:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// StopRafaleQuestionTimer stops the RAFALE per-question ticker, if running.
+// Public counterpart to StopMotionCardTimer.
+func (e *Engine) StopRafaleQuestionTimer() {
+	e.mu.Lock()
+	e.stopRafaleQuestionTimerUnsafe()
+	e.mu.Unlock()
+}
+
+// stopRafaleQuestionTimerUnsafe is StopRafaleQuestionTimer's locked core —
+// caller must hold e.mu (write lock). Idempotent — safe to call when no
+// ticker is running.
+func (e *Engine) stopRafaleQuestionTimerUnsafe() {
+	if e.rafaleQuestionStopCh != nil {
+		select {
+		case <-e.rafaleQuestionStopCh:
+			// Already closed
+		default:
+			close(e.rafaleQuestionStopCh)
+		}
+		e.rafaleQuestionStopCh = nil
+	}
+	if e.rafaleQuestionTimer != nil {
+		e.rafaleQuestionTimer.Stop()
+		e.rafaleQuestionTimer = nil
+	}
+}
+
+// rafaleQuestionTickResult carries the outcome of one locked RAFALE
+// question-timer tick (processRafaleQuestionTick) out to the unlocked
+// caller — mirrors motionCardTickResult/timerTickResult's "compute under
+// lock, act after unlock" discipline (#151).
+type rafaleQuestionTickResult struct {
+	guardFailed  bool // no longer a live RAFALE question at all — caller stops the ticker for good
+	paused       bool // Phase != STARTED — caller skips this tick but keeps the ticker running
+	questionTime int  // meaningful when !guardFailed && !paused && !expired
+	expired      bool // hit 0 this tick; advance already computed under this same lock
+	advance      rafaleAdvanceResult
+}
+
+// processRafaleQuestionTick applies one RAFALE question-timer tick under
+// lock. Extracted (like every other tick handler in this file, #151) so
+// `defer e.mu.Unlock()` guarantees the mutex is released even on a panic.
+func (e *Engine) processRafaleQuestionTick() rafaleQuestionTickResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale || e.state.RafaleSubPhase != RafaleSubPhaseQuestion {
+		return rafaleQuestionTickResult{guardFailed: true}
+	}
+	if e.state.Phase != PhaseStarted {
+		return rafaleQuestionTickResult{paused: true}
+	}
+
+	e.state.RafaleQuestionTime--
+	qt := e.state.RafaleQuestionTime
+	if qt > 0 {
+		return rafaleQuestionTickResult{questionTime: qt}
+	}
+
+	// Expired — judge as incorrect (contract §6.1) and advance/end the
+	// round in the SAME locked section (advanceRafaleUnsafe assumes e.mu
+	// is already held — no re-entrant Lock here).
+	advance := e.advanceRafaleUnsafe(false)
+	return rafaleQuestionTickResult{expired: true, advance: advance}
+}
+
+// rafaleAdvanceResult carries the outcome of one RAFALE question-advance
+// decision (RAFALE_VALIDATE, RAFALE_INVALIDATE, or a question-timer expiry —
+// contract §6.1, all three funnel through advanceRafaleUnsafe) out to the
+// unlocked caller (fireRafaleAdvanceCallbacks).
+type rafaleAdvanceResult struct {
+	guardFailed bool // not in an active RAFALE question — caller does nothing (ErrRafaleNotInQuestion)
+	roundEnded  bool // pool exhausted or RAFALE_MAX_QUESTIONS reached — RafaleSubPhase is now ROUND_END, Phase is now STOPPED (stopUnsafe already ran)
+	// releasedRafaleNext (#202) — set when roundEnded AND stopUnsafe()
+	// actually released an outstanding pre-fetch; the unlocked caller
+	// (fireRafaleAdvanceCallbacks) must then persist rafaleUsed. Almost
+	// always false in practice (by the time either roundEnded branch below
+	// fires, e.rafaleNext is already nil — prefetchRafaleNextUnsafe itself
+	// refuses to prefetch once the cap is imminent, and the "consume nil"
+	// branch's very condition IS e.rafaleNext==nil) — kept anyway rather
+	// than assumed, so a future change to either guard can't silently
+	// reintroduce a leak here without a compiler-visible reminder.
+	releasedRafaleNext bool
+	// nextQuestionID/nextAnswer/nextQuestionTime are set when !roundEnded —
+	// the caller must broadcast RAFALE_ANSWER and (re)start the question
+	// ticker. nextQuestionID/nextAnswer are the question THIS advance moved
+	// TO (formerly e.rafaleNext, now RafaleCurrentQuestion) — do not
+	// confuse with next below, the FOLLOWING one.
+	nextQuestionID   string
+	nextAnswer       string
+	nextQuestionTime int
+	// next (#202, contract §13.3) — the freshly pre-fetched question that
+	// will become current at the FOLLOWING advance (answer-free), nil when
+	// the pool is empty or the cap is imminent (contract §13.5). Forwarded
+	// to OnRafaleAnswer's own next parameter — see its doc comment.
+	next *RafaleCurrent
+}
+
+// advanceRafaleUnsafe judges the current RAFALE question (correct==true for
+// RAFALE_VALIDATE, false for RAFALE_INVALIDATE or a question-timer expiry)
+// and moves the round to its next question, or ends it (ROUND_END) if the
+// pool is exhausted or the question cap is reached. Caller must hold e.mu
+// (write lock).
+func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
+	if e.state.Phase != PhaseStarted || e.state.Question == nil ||
+		e.state.Question.Type != QuestionTypeRafale || e.state.RafaleSubPhase != RafaleSubPhaseQuestion {
+		return rafaleAdvanceResult{guardFailed: true}
+	}
+
+	e.stopRafaleQuestionTimerUnsafe()
+
+	team := e.state.RafaleCurrentTeam
+
+	// Streak / errors / best (v8.0.0 bugfix, 2026-08-30, contract §6.1) —
+	// mode-AGNOSTIC, unlike RafaleTeamCounters below: every mode resets a
+	// team's streak to 0 on an incorrect answer/timeout and bumps its error
+	// tally, exactly what MAILLON_FAIBLE alone used to do to its counter.
+	// RafaleTeamBest is now this streak's historical maximum, computed here
+	// once for all 4 modes — no per-mode branch needed, unlike the
+	// mode-specific rotation/counter switch below.
+	if team != "" {
+		if correct {
+			e.state.RafaleTeamStreak[team]++
+			if e.state.RafaleTeamStreak[team] > e.state.RafaleTeamBest[team] {
+				e.state.RafaleTeamBest[team] = e.state.RafaleTeamStreak[team]
+			}
+		} else {
+			e.state.RafaleTeamStreak[team] = 0
+			e.state.RafaleTeamErrors[team]++
+		}
+	}
+
+	// The 4 modes (v8.0.0, #199, contract §3.4/§6.1) — a question-timer
+	// expiry (correct==false) is deliberately routed through the exact same
+	// switch as RAFALE_INVALIDATE ("identique à réponse invalide", §6.1),
+	// never a separate branch. RafaleCurrentTeam=="" (RAFALE_SET_TEAMS never
+	// called — e.g. a solo round with no team concept in play at all) makes
+	// every branch below a no-op on the counter/rotation, matching this
+	// batch's predecessor behavior exactly. RafaleTeamCounters keeps its own
+	// PER-MODE reset policy below (cumulative except in MAILLON_FAIBLE) —
+	// deliberately NOT unified with RafaleTeamStreak above, which is a
+	// distinct field with its own always-resets semantics (§6.1).
+	mode := e.state.Question.RafaleMode
+	if mode == "" {
+		mode = string(RafaleModeSolo)
+	}
+	switch mode {
+	case string(RafaleModeSolo):
+		// "Aucune rotation" (§3.4) — counter[team]++ on correct, nothing on
+		// incorrect/timeout (§6.1's "—" for every SOLO cell besides the
+		// first row).
+		if correct && team != "" {
+			e.state.RafaleTeamCounters[team]++
+		}
+	case string(RafaleModeChacunSonTour):
+		// Rotates after EVERY question, regardless of outcome.
+		if correct && team != "" {
+			e.state.RafaleTeamCounters[team]++
+		}
+		e.rotateRafaleTeam()
+	case string(RafaleModeTantQueJeGagne):
+		// Correct answer keeps the hand (no rotation); incorrect/timeout
+		// rotates.
+		if correct {
+			if team != "" {
+				e.state.RafaleTeamCounters[team]++
+			}
+		} else {
+			e.rotateRafaleTeam()
+		}
+	case string(RafaleModeMaillonFaible):
+		// Like CHACUN_SON_TOUR (rotates every question either way), but an
+		// incorrect answer/timeout also resets THIS team's running counter
+		// to 0. RafaleTeamBest is no longer computed here (bugfix,
+		// 2026-08-30) — it's now the RafaleTeamStreak maximum, updated
+		// generically above for all 4 modes.
+		if correct {
+			if team != "" {
+				e.state.RafaleTeamCounters[team]++
+			}
+		} else if team != "" {
+			e.state.RafaleTeamCounters[team] = 0
+		}
+		e.rotateRafaleTeam()
+	default:
+		// Unknown mode string — treat as SOLO (same "absent ⇒ default"
+		// discipline as mode=="" above), never panics or silently drops the
+		// question.
+		if correct && team != "" {
+			e.state.RafaleTeamCounters[team]++
+		}
+	}
+
+	// Hard cap (contract §7.2), default/max 100. Factored into
+	// rafaleMaxQuestionsUnsafe (#202) so prefetchRafaleNextUnsafe shares the
+	// exact same threshold.
+	maxQuestions := rafaleMaxQuestionsUnsafe(e.state.Question)
+	if e.state.RafaleAskedCount >= maxQuestions {
+		log.Printf("[Engine] RAFALE: RAFALE_MAX_QUESTIONS (%d) reached, ending round", maxQuestions)
+		released := e.stopUnsafe()
+		return rafaleAdvanceResult{roundEnded: true, releasedRafaleNext: released}
+	}
+
+	// #202 (contract §13.1/§13.4): CONSUME the pre-fetched question instead
+	// of drawing a new one here — startRafaleRoundUnsafe or this same
+	// function's own previous iteration already drew it into e.rafaleNext
+	// via prefetchRafaleNextUnsafe, specifically so the question shown as
+	// "next" on /anim is EXACTLY the one that becomes current below (a
+	// second, independent draw here could disagree in the general case).
+	// e.rafaleNext == nil means the pool was already empty, OR the cap was
+	// imminent, at the LAST prefetch — same "round ends here" outcome as
+	// the pre-#202 "drew and got ErrRafalePoolEmpty" path, just detected
+	// one step earlier (at prefetch time) instead of by drawing again now.
+	if e.rafaleNext == nil {
+		log.Printf("[Engine] RAFALE: pool exhausted mid-round, ending round")
+		e.state.RafaleExhausted = true
+		released := e.stopUnsafe()
+		return rafaleAdvanceResult{roundEnded: true, releasedRafaleNext: released}
+	}
+
+	drawn := e.rafaleNext
+	e.rafaleNext = nil // consumed — prefetchRafaleNextUnsafe below draws the FOLLOWING one fresh
+	e.state.RafaleCurrentQuestion = RafaleCurrent{
+		ID: drawn.ID, Question: drawn.Question,
+		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
+	}
+	e.state.RafaleAskedCount++
+
+	e.prefetchRafaleNextUnsafe()
+	e.refreshRafalePoolRemainingUnsafe()
+
+	questionTime := e.state.Question.RafaleQuestionTime
+	if questionTime <= 0 {
+		questionTime = 3
+	}
+
+	return rafaleAdvanceResult{
+		nextQuestionID: drawn.ID, nextAnswer: drawn.Answer, nextQuestionTime: questionTime,
+		next: rafaleNextPreview(e.rafaleNext),
+	}
+}
+
+// rotateRafaleTeam advances RafaleCurrentTeam to the next team in
+// RafaleParticipatingTeams (circular) via the shared rotateTeam helper
+// (team_rotation.go, #199 task 28) — RAFALE's counterpart to
+// rotateMotionTeam. A no-op when no teams are participating (RAFALE_SET_TEAMS
+// never called, or called with an empty list) — matches rotateMotionTeam's
+// own early-return. Caller must hold e.mu (write lock).
+func (e *Engine) rotateRafaleTeam() {
+	if len(e.state.RafaleParticipatingTeams) == 0 {
+		return
+	}
+
+	prev := e.state.RafaleCurrentTeam
+	next, color := rotateTeam(e.state.RafaleParticipatingTeams, e.state.RafaleCurrentTeam, e.data.Teams)
+	e.state.RafaleCurrentTeam = next
+	e.state.RafaleCurrentTeamColor = color
+
+	log.Printf("[Engine] RAFALE team rotated: %s → %s", prev, next)
+}
+
+// fireRafaleAdvanceCallbacks performs the UNLOCKED side effects of one
+// RAFALE advance — shared by RafaleValidate/RafaleInvalidate and
+// StartRafaleQuestionTimer's own expiry handling so both paths broadcast
+// identically (contract §6.1's "identique à réponse invalide" must actually
+// look identical on the wire too). Must be called with e.mu NOT held.
+func (e *Engine) fireRafaleAdvanceCallbacks(result rafaleAdvanceResult) {
+	if result.roundEnded {
+		// #202: persist the released pre-fetch's rafaleUsed flag, if any —
+		// AFTER e.mu was released by the caller (RafaleValidate/
+		// RafaleInvalidate/the question-timer goroutine), matching the
+		// "never save while still locked" discipline of every other
+		// rafaleUsed mutation in this file.
+		if result.releasedRafaleNext {
+			safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+		}
+		if e.OnStateChange != nil {
+			e.OnStateChange(PhaseStopped)
+		}
+		return
+	}
+	if e.OnRafaleAnswer != nil {
+		e.OnRafaleAnswer(result.nextQuestionID, result.nextAnswer, result.next)
+	}
+	e.StartRafaleQuestionTimer(result.nextQuestionTime)
+	// #199 task 36: LEDs are refreshed on EVERY advance, not just an actual
+	// rotation — contract §8.3 says "à chaque... changement de question",
+	// and TANT_QUE_JE_GAGNE/SOLO can advance without RafaleCurrentTeam
+	// changing at all. The consumer (cmd/server/main.go) re-reads live
+	// state, same as OnStateChange below — no data passed here.
+	if e.OnRafaleTeamsChanged != nil {
+		e.OnRafaleTeamsChanged()
+	}
+	if e.OnStateChange != nil {
+		// Not a real phase transition (Phase stays STARTED) — OnStateChange
+		// is reused here purely as "please rebroadcast full state"
+		// (broadcastGameState re-reads live state and ignores this
+		// argument, per its own doc comment). This is what delivers the
+		// new RAFALE_CURRENT_QUESTION/RAFALE_ASKED_COUNT/
+		// RAFALE_POOL_REMAINING to clients for the question-timer-expiry
+		// path, which — unlike RAFALE_VALIDATE/INVALIDATE — has no WS
+		// handler of its own to call broadcastUpdate() afterward.
+		e.OnStateChange(PhaseStarted)
+	}
+}
+
+// RafaleValidate processes RAFALE_VALIDATE (contract §5.1): the current
+// question's answer was judged correct. Advances to the next question or
+// ends the round — see advanceRafaleUnsafe.
+func (e *Engine) RafaleValidate() error {
+	e.mu.Lock()
+	result := e.advanceRafaleUnsafe(true)
+	e.mu.Unlock()
+
+	if result.guardFailed {
+		return ErrRafaleNotInQuestion
+	}
+	e.fireRafaleAdvanceCallbacks(result)
+	return nil
+}
+
+// RafaleInvalidate processes RAFALE_INVALIDATE (contract §5.1): the current
+// question's answer was judged incorrect. Same advance/end logic as
+// RafaleValidate, just without the counter increment (correct=false).
+func (e *Engine) RafaleInvalidate() error {
+	e.mu.Lock()
+	result := e.advanceRafaleUnsafe(false)
+	e.mu.Unlock()
+
+	if result.guardFailed {
+		return ErrRafaleNotInQuestion
+	}
+	e.fireRafaleAdvanceCallbacks(result)
+	return nil
+}
+
+// rafaleRoundStartResult carries the outcome of initializing a fresh RAFALE
+// round (startRafaleRoundUnsafe) out to the unlocked caller (actualStart/
+// StartImmediate) — same "compute under lock, act after unlock" discipline
+// as actualStart's own motionMemorizeDuration.
+type rafaleRoundStartResult struct {
+	isRafale     bool // false ⇒ not a RAFALE question, caller does nothing further
+	roundEnded   bool // pool was already empty at round start (contract §7.1) — caller must call Stop()
+	questionID   string
+	answer       string
+	questionTime int
+	// next (#202, contract §13.3) — the pre-fetched question that will
+	// become current at the FIRST advance (answer-free), nil when the pool
+	// is empty after the first draw or the cap is imminent (contract
+	// §13.5). Forwarded to OnRafaleAnswer's own next parameter.
+	next *RafaleCurrent
+}
+
+// startRafaleRoundUnsafe initializes a fresh RAFALE round: resets the
+// per-round counters and draws the first question. Caller must hold e.mu
+// (write lock) — called from actualStart()/StartImmediate() while already
+// locked, mirroring the MEMOTION grid-init call in the same functions.
+func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale {
+		return rafaleRoundStartResult{}
+	}
+
+	e.state.RafaleAskedCount = 0
+	e.state.RafaleExhausted = false
+	e.state.RafaleTeamCounters = map[string]int{}
+	e.state.RafaleTeamBest = map[string]int{}
+	e.state.RafaleTeamStreak = map[string]int{}
+	e.state.RafaleTeamErrors = map[string]int{}
+
+	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
+	if err != nil {
+		// contract §7.1: never reproposes anything, ends immediately. Should
+		// not normally happen — §7.2's pre-round alert blocks START when
+		// available==0 — but a race (reservoir edited concurrently) is
+		// always possible; this is the safety net, not the primary defense.
+		log.Printf("[Engine] RAFALE: pool already empty at round start, ending immediately")
+		e.state.RafaleExhausted = true
+		e.state.RafaleSubPhase = RafaleSubPhaseRoundEnd
+		e.state.RafalePoolRemaining = 0
+		return rafaleRoundStartResult{isRafale: true, roundEnded: true}
+	}
+
+	e.state.RafaleSubPhase = RafaleSubPhaseQuestion
+	e.state.RafaleCurrentQuestion = RafaleCurrent{
+		ID: drawn.ID, Question: drawn.Question,
+		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
+	}
+	e.state.RafaleAskedCount = 1
+
+	// #202 (contract §13.4): pre-fetch the SECOND question right away, so
+	// it's ready to be consumed as-is by the first advanceRafaleUnsafe call
+	// — see prefetchRafaleNextUnsafe's own doc comment.
+	e.prefetchRafaleNextUnsafe()
+	e.refreshRafalePoolRemainingUnsafe()
+
+	questionTime := e.state.Question.RafaleQuestionTime
+	if questionTime <= 0 {
+		questionTime = 3
+	}
+
+	return rafaleRoundStartResult{
+		isRafale: true, questionID: drawn.ID, answer: drawn.Answer, questionTime: questionTime,
+		next: rafaleNextPreview(e.rafaleNext),
+	}
+}
+
+// finishRafaleRoundStart performs the UNLOCKED side effects of
+// startRafaleRoundUnsafe — called from actualStart()/StartImmediate() after
+// e.mu.Unlock() and after callback(PhaseStarted) has already fired (so the
+// round-ended branch's own e.Stop() call, if taken, is a real, visible
+// second transition — see its own comment for why that's an acceptable
+// trade-off over a more tangled in-lock special case).
+func (e *Engine) finishRafaleRoundStart(result rafaleRoundStartResult) {
+	if !result.isRafale {
+		return
+	}
+	if result.roundEnded {
+		// Pool was already empty — the round is over before it visibly
+		// started. Started's own startTimer() call already ran (harmless:
+		// this stops it again a moment later) — reusing the public Stop()
+		// here, rather than a special in-lock case in actualStart, keeps
+		// that rare edge case out of the hot path.
+		e.Stop()
+		return
+	}
+	if e.OnRafaleAnswer != nil {
+		e.OnRafaleAnswer(result.questionID, result.answer, result.next)
+	}
+	e.StartRafaleQuestionTimer(result.questionTime)
+	// #199 task 36 — initial LED grid for the round (active team, if any
+	// RAFALE_SET_TEAMS was called before START; all-off in SOLO or if no
+	// teams were set).
+	if e.OnRafaleTeamsChanged != nil {
+		e.OnRafaleTeamsChanged()
 	}
 }
 
 // Pause pauses the game (single buzzer)
 func (e *Engine) Pause() {
 	e.mu.Lock()
+
+	// #200 cycle 3: Pause/Continue had NO phase guard at all, unlike every
+	// other transition (Start's #172 B4 guard above, Reveal's below) —
+	// discovered while chasing the QUALIF report "START possible sans
+	// équipe sélectionnée" on MEMORY. The replay-staleness fix (142ffc3c)
+	// only closed the Ready()-replay angle; this is a DIFFERENT, more
+	// direct bypass: ACTION:"CONTINUE" (cmd/server/main.go, ActionContinue)
+	// forwards straight to Continue(), which used to set
+	// Phase=PhaseStarted UNCONDITIONALLY — reachable even from PREPARE,
+	// before any team was ever selected, skipping participantsConform/
+	// AreAllTeamsReady/TransitionToReady/ForceReady entirely. Since
+	// Continue()'s own guard (below) only accepts PhasePaused, closing that
+	// hole alone would still leave a 2-step bypass open (PREPARE
+	// --Pause()--> PAUSED --Continue()--> STARTED) unless Pause() ITSELF is
+	// also restricted to firing only from a genuinely running game
+	// (PhaseStarted) — the only phase "pausing" is semantically meaningful
+	// for. Every existing call site/test already only calls Pause() from
+	// PhaseStarted (see e.g. TestEngine_Pause, e2e_test.go), so this is not
+	// a behavior change for the intended flow.
+	if e.state.Phase != PhaseStarted {
+		log.Printf("[Engine] Cannot pause game from phase %s (must be STARTED)", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
 
 	e.state.Phase = PhasePaused
 
@@ -1650,6 +2810,22 @@ func (e *Engine) PauseAll() {
 // Continue resumes the game
 func (e *Engine) Continue() {
 	e.mu.Lock()
+
+	// #200 cycle 3 — see Pause()'s own comment above for the full root-cause
+	// analysis. Continue() used to set Phase=PhaseStarted unconditionally,
+	// from ANY phase — the direct engine-level bypass of the START gate.
+	// Restricting it to PhasePaused only (its only legitimate use: resuming
+	// a genuinely paused game) closes that hole, and — combined with
+	// Pause()'s own new guard (PhaseStarted-only) — makes it structurally
+	// impossible to reach PhasePaused without having gone through a
+	// properly-gated STARTED first. Every existing call site/test already
+	// only calls Continue() after Pause() (see e.g. TestEngine_Continue,
+	// e2e_test.go), so this is not a behavior change for the intended flow.
+	if e.state.Phase != PhasePaused {
+		log.Printf("[Engine] Cannot continue game from phase %s (must be PAUSED)", e.state.Phase)
+		e.mu.Unlock()
+		return
+	}
 
 	e.state.Phase = PhaseStarted
 
@@ -1751,6 +2927,19 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	// Ignore buzz for MEMOTION questions - admin controls the card selection
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
 		log.Printf("[Engine] Ignoring buzz for MEMOTION question from %s", bumperID)
+		e.mu.Unlock()
+		return
+	}
+
+	// Ignore buzz for RAFALE questions (v8.0.0, #107, contract §8.1) — no
+	// player interaction during RAFALE, buzzer presses are always ignored.
+	// The answer is judged by admin/anim via RAFALE_VALIDATE/INVALIDATE.
+	// This guard is deliberately about INPUT only — it does not touch LED
+	// output, which is piloted separately (contract §8.3, Phase 3 tasks
+	// 35-36): a RAFALE buzzer's LED can be lit to show its team is active
+	// even though pressing it here still has zero effect on game state.
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
+		log.Printf("[Engine] Ignoring buzz for RAFALE question from %s", bumperID)
 		e.mu.Unlock()
 		return
 	}
@@ -2015,6 +3204,12 @@ func (e *Engine) InitGame() []string {
 	// Set phase to NEW_GAME
 	e.state.Phase = PhaseNewGame
 
+	// #200 cycle 5 — defensive: e.state.Question is nil now, so the next
+	// Ready() will treat isNewQuestion==true regardless anyway, making this
+	// moot in practice — reset here too so no stale `true` can ever leak
+	// across a NEW_GAME boundary (see questionEverStarted's own doc comment).
+	e.questionEverStarted = false
+
 	// Reset MEMOTION state completely
 	e.state.MotionSubPhase = ""
 	e.state.MotionSelected = ""
@@ -2028,6 +3223,38 @@ func (e *Engine) InitGame() []string {
 	// Reset ARDOISE answers (v5.6.0)
 	e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
 
+	// Release any outstanding RAFALE pre-fetch (#202, contract §13.4)
+	// BEFORE wiping rafaleUsed wholesale below — releaseRafaleNextUnsafe's
+	// own delete(rafaleUsed, id) becomes moot the instant the map is
+	// replaced, but e.rafaleNext ITSELF must still be nilled here, or a
+	// stale pointer from the previous game would be silently consumed by
+	// this new game's own first advance. Return value ignored: the
+	// unconditional safeGo("SaveRafaleUsed", ...) below already persists
+	// the (now-empty) map regardless of whether anything was "released".
+	e.releaseRafaleNextUnsafe()
+
+	// Reset RAFALE "already used" flags (#197, contract §3.2) — a fresh
+	// game must be able to draw the whole reservoir again. The reservoir
+	// itself (rafaleQuestions) is untouched: NEW_GAME resets game-play
+	// state, never the editor's question bank.
+	e.rafaleUsed = make(map[string]bool)
+
+	// Reset RAFALE ephemeral GameState fields (#107, contract §4) — same
+	// defense-in-depth as the MEMOTION/ARDOISE resets just above.
+	e.state.RafaleSubPhase = RafaleSubPhaseNone
+	e.state.RafaleCurrentQuestion = RafaleCurrent{}
+	e.state.RafaleQuestionTime = 0
+	e.state.RafaleTeamCounters = map[string]int{}
+	e.state.RafaleTeamBest = map[string]int{}
+	e.state.RafaleTeamStreak = map[string]int{}
+	e.state.RafaleTeamErrors = map[string]int{}
+	e.state.RafaleCurrentTeam = ""
+	e.state.RafaleParticipatingTeams = []string{}
+	e.state.RafaleCurrentTeamColor = []int{}
+	e.state.RafaleAskedCount = 0
+	e.state.RafalePoolRemaining = 0
+	e.state.RafaleExhausted = false
+
 	log.Printf("[Engine] Game initialized: scores, history, question statuses reset")
 	e.mu.Unlock()
 
@@ -2036,6 +3263,7 @@ func (e *Engine) InitGame() []string {
 	safeGo("SaveTeams", e.SaveTeams)
 	safeGo("SaveBumpers", e.SaveBumpers)
 	safeGo("SaveStatuses", e.SaveStatuses)
+	safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
 
 	return purgedVPlayerIDs
 }
@@ -2831,6 +4059,265 @@ func (e *Engine) SaveAll() {
 	safeGo("SaveBumpers", e.SaveBumpers)
 	safeGo("SaveHistory", e.SaveHistory)
 	safeGo("SaveStatuses", e.SaveStatuses)
+}
+
+// ErrRafalePoolEmpty is returned by DrawRafaleQuestion when no reservoir
+// question matches the requested category/difficulty filter and is not
+// already used — contracts/rafale.md §7.1. The caller must react by ending
+// the round (RAFALE_EXHAUSTED), never by silently repeating an already-seen
+// question.
+var ErrRafalePoolEmpty = errors.New("rafale_pool_empty")
+
+// rafalePoolUnsafe returns the reservoir questions matching category ∩
+// difficulty (both exact) ∩ not-yet-used — contracts/rafale.md §7. Caller
+// must hold e.mu (read or write lock).
+//
+// Single category (v8.0.0 bugfix, 2026-08-29): a RAFALE round now filters
+// on exactly one category, same as every other question type's Category
+// field — RAFALE_CATEGORIES (multi-select, OR-matched) was removed. See
+// TypedContent's own doc comment (models.go) and contracts/CHANGELOG.md.
+func (e *Engine) rafalePoolUnsafe(category string, difficulty int) []*RafaleQuestion {
+	// Defense in depth (post-review, 2026-08-29): an empty/unset category is
+	// an unconfigured manche, never a wildcard — must match nothing, even
+	// though a reservoir question with CategoryNone ("") could otherwise
+	// satisfy `string(q.Category) != category` below. The frontend now
+	// blocks this case upstream (GamePage.jsx/QuestionsPage.jsx), but the
+	// engine must never rely on that alone.
+	if category == "" {
+		return nil
+	}
+	var pool []*RafaleQuestion
+	for _, q := range e.rafaleQuestions {
+		if string(q.Category) != category {
+			continue
+		}
+		if q.Difficulty != difficulty {
+			continue
+		}
+		if e.rafaleUsed[q.ID] {
+			continue
+		}
+		pool = append(pool, q)
+	}
+	return pool
+}
+
+// CountRafalePool returns (available, used, total) reservoir questions for
+// a category/difficulty filter — contracts/rafale.md §7.2, the pre-round
+// alert (GET /api/rafale/pool): blocking when available==0, a warning when
+// available < the estimated need, informational otherwise.
+func (e *Engine) CountRafalePool(category string, difficulty int) (available, used, total int) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	// Defense in depth (post-review, 2026-08-29) — same reasoning as
+	// rafalePoolUnsafe's own guard just above: an empty/unset category must
+	// count as zero, never accidentally match a reservoir question whose own
+	// CATEGORY is also unset (CategoryNone == "").
+	if category == "" {
+		return 0, 0, 0
+	}
+
+	for _, q := range e.rafaleQuestions {
+		if string(q.Category) != category {
+			continue
+		}
+		if q.Difficulty != difficulty {
+			continue
+		}
+		total++
+		if e.rafaleUsed[q.ID] {
+			used++
+		} else {
+			available++
+		}
+	}
+	return available, used, total
+}
+
+// DrawRafaleQuestion draws one question uniformly at random from the pool
+// (category ∩ difficulty ∩ not-used — contracts/rafale.md §7), marks it
+// used immediately and persists the flag asynchronously so a restart mid-
+// round never re-proposes it. Returns ErrRafalePoolEmpty when the pool is
+// empty; the caller (Phase 2, #107) reacts per contract §7.1.
+//
+// Public entry point for callers NOT already holding e.mu (e.g. a future
+// HTTP/test caller outside the engine). The RAFALE round engine (#107,
+// advanceRafaleUnsafe/startRafaleRoundUnsafe) is already inside a locked
+// section when it needs to draw — it calls drawRafaleQuestionUnsafe
+// directly instead, to stay within one atomic transition rather than
+// releasing and re-acquiring e.mu mid-round-advance.
+func (e *Engine) DrawRafaleQuestion(category string, difficulty int) (*RafaleQuestion, error) {
+	e.mu.Lock()
+	drawn, err := e.drawRafaleQuestionUnsafe(category, difficulty)
+	e.mu.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
+
+	safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+
+	return drawn, nil
+}
+
+// drawRafaleQuestionUnsafe is DrawRafaleQuestion's locked core. Caller must
+// hold e.mu (write lock) and is responsible for persisting rafaleUsed
+// (safeGo("SaveRafaleUsed", e.SaveRafaleUsed)) once its own locked section
+// ends — this function only mutates in-memory state.
+func (e *Engine) drawRafaleQuestionUnsafe(category string, difficulty int) (*RafaleQuestion, error) {
+	pool := e.rafalePoolUnsafe(category, difficulty)
+	if len(pool) == 0 {
+		return nil, ErrRafalePoolEmpty
+	}
+
+	picked := pool[rand.Intn(len(pool))]
+	drawn := *picked // copy: the caller must never hold a pointer into e.rafaleQuestions
+	e.rafaleUsed[drawn.ID] = true
+
+	return &drawn, nil
+}
+
+// rafaleMaxQuestionsUnsafe (#202) resolves the RAFALE_MAX_QUESTIONS hard cap
+// (contract §7.2 — default/max 100) for the given round-config question.
+// Factored out of advanceRafaleUnsafe's own inline computation so
+// prefetchRafaleNextUnsafe can share the EXACT same threshold — #202 would
+// otherwise have introduced a third, independent computation site; #107's
+// own CATEGORY bug came from exactly this shape of overlooked duplicate
+// site. Pure function, no locking; question must be non-nil.
+func rafaleMaxQuestionsUnsafe(question *Question) int {
+	maxQuestions := 100
+	if question.RafaleMaxQuestions > 0 && question.RafaleMaxQuestions < 100 {
+		maxQuestions = question.RafaleMaxQuestions
+	}
+	return maxQuestions
+}
+
+// rafaleNextPreview (#202, contract §13.3) converts a pre-fetched
+// *RafaleQuestion (e.rafaleNext) into the answer-free *RafaleCurrent shape
+// broadcast as RAFALE_ANSWER's own NEXT field — nil in, nil out (contract
+// §13.5: no pool-remaining question / cap imminent). Pure function, no
+// locking.
+func rafaleNextPreview(q *RafaleQuestion) *RafaleCurrent {
+	if q == nil {
+		return nil
+	}
+	return &RafaleCurrent{ID: q.ID, Question: q.Question, Category: string(q.Category), Difficulty: q.Difficulty}
+}
+
+// prefetchRafaleNextUnsafe (#202, contract §13.1/§13.4) draws the question
+// that will become current at the NEXT advance into e.rafaleNext ("on
+// deck"), to be CONSUMED as-is by advanceRafaleUnsafe rather than drawn
+// independently — a second, non-consuming draw path could disagree with
+// this one on which question comes next in the general case, showing the
+// animateur a "next" preview that never actually appears (contract §13.1's
+// reasoning for rejecting that design outright).
+//
+// Must be called with e.mu held (write), and ONLY once e.state.Question is
+// the live RAFALE round-config question AND e.state.RafaleAskedCount
+// already reflects the question just asked (both call sites —
+// startRafaleRoundUnsafe right after AskedCount=1, advanceRafaleUnsafe
+// right after AskedCount++ — satisfy this). Assumes e.rafaleNext is already
+// nil on entry (true at both call sites: startRafaleRoundUnsafe never set
+// it before, advanceRafaleUnsafe nils it at the point of consuming the
+// previous value) — does NOT release a pre-existing value itself, so
+// calling this out of turn would leak a used-flag; see
+// releaseRafaleNextUnsafe's own doc comment for the invariant this relies
+// on.
+//
+// No-op (e.rafaleNext left nil) when RafaleAskedCount has already reached
+// the cap (rafaleMaxQuestionsUnsafe) — i.e. the question JUST asked (the
+// one AskedCount was bumped for, at either call site) was the LAST one the
+// cap allows, so prefetching one more would need releasing again for zero
+// benefit, and NEXT must read null ("dernière question du réservoir",
+// contract §13.5) rather than a phantom draw.
+//
+// Deliberately `>=`, NOT `AskedCount+1 >= cap`: with e.g. cap=3, the round
+// must still ask a 3rd question (AskedCount goes 1→2→3, matching
+// advanceRafaleUnsafe's own hard-cap guard `AskedCount >= maxQuestions`
+// checked BEFORE consuming the next one) — an off-by-one `+1` here would
+// skip prefetching that legitimate 3rd question right after the 2nd one is
+// asked (AskedCount==2), making the NEXT advance see a nil e.rafaleNext and
+// end the round ONE question short of the configured cap (caught by
+// TestRafaleNext_MaxQuestionsCapUnchanged during development — the plan's
+// own "+1" wording turned out to be off by one against the pre-existing
+// hard-cap check's semantics; this comment documents the deviation).
+//
+// Never returns an error: a pool-empty draw here just leaves e.rafaleNext
+// nil too (same contract §13.5 case) — it is advanceRafaleUnsafe's own
+// CONSUMPTION of a nil e.rafaleNext that actually ends the round (contract
+// §13.4), not this function.
+func (e *Engine) prefetchRafaleNextUnsafe() {
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale {
+		return
+	}
+	if e.state.RafaleAskedCount >= rafaleMaxQuestionsUnsafe(e.state.Question) {
+		return
+	}
+	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
+	if err != nil {
+		return // pool empty — e.rafaleNext stays nil, contract §13.5
+	}
+	e.rafaleNext = drawn
+}
+
+// releaseRafaleNextUnsafe (#202, contract §13.4) releases the pre-fetched
+// "on deck" RAFALE question, if any: un-marks it used in e.rafaleUsed and
+// resets e.rafaleNext to nil. Returns true iff something was actually
+// released — the caller MUST THEN persist rafaleUsed
+// (safeGo("SaveRafaleUsed", e.SaveRafaleUsed)) AFTER releasing e.mu, never
+// while still holding it (same async-persist discipline as every other
+// rafaleUsed mutation in this file, e.g. DrawRafaleQuestion).
+//
+// Call sites — EVERY path that can end a RAFALE manche while a pre-fetch
+// might be outstanding (recensed exhaustively, #202 plan risk R1):
+//   - stopUnsafe() — manual STOP, the global round timer's own expiry
+//     (both reach stopUnsafe via the public Stop()), AND the
+//     RAFALE_MAX_QUESTIONS-reached / pool-exhausted-at-consumption branches
+//     inside advanceRafaleUnsafe (which call stopUnsafe directly, already
+//     e.mu-locked) — guarded on the current question being a RAFALE
+//     question, unconditional on RafaleSubPhase (a pre-fetch can be
+//     outstanding even once RafaleSubPhase has already moved to
+//     ROUND_END by another path).
+//   - Ready()'s RAFALE reset block — a manche replayed (same question ID)
+//     or genuinely new; mirrors RafaleParticipatingTeams/RafaleSubPhase's
+//     own reset there.
+//   - InitGame() — a fresh game; e.rafaleUsed is about to be wiped
+//     entirely anyway (fresh reservoir), but e.rafaleNext ITSELF must still
+//     be nilled or a stale pointer would be silently consumed by the next
+//     game's own first advance.
+//
+// Without this, drawRafaleQuestionUnsafe's "mark used on draw" (contract
+// §7, immediate — not deferred until the question is actually asked)
+// silently burns one reservoir question per manche that was pre-fetched
+// but never posed to anyone — an ever-growing, invisible erosion of the
+// reservoir, worst for small ones. Must be called with e.mu held (write).
+func (e *Engine) releaseRafaleNextUnsafe() bool {
+	if e.rafaleNext == nil {
+		return false
+	}
+	delete(e.rafaleUsed, e.rafaleNext.ID)
+	e.rafaleNext = nil
+	return true
+}
+
+// refreshRafalePoolRemainingUnsafe (#202, contract §13.4) sets
+// RAFALE_POOL_REMAINING to the count of reservoir questions not yet asked
+// NOR already shown as "on deck" — the pre-fetched e.rafaleNext, if any,
+// counts as still-to-come from a client's point of view, so it is included
+// (+1) or the field would read one lower than before #202 at the same
+// manche position (a silent display regression, contract §13.4's own
+// worked formula). Single source of truth for both call sites
+// (startRafaleRoundUnsafe, advanceRafaleUnsafe) that used to compute this
+// inline and independently — again, exactly #107's own CATEGORY-bug shape
+// of overlooked duplicate site. Must be called with e.mu held (write);
+// e.state.Question must be the live RAFALE round-config question.
+func (e *Engine) refreshRafalePoolRemainingUnsafe() {
+	count := len(e.rafalePoolUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty))
+	if e.rafaleNext != nil {
+		count++
+	}
+	e.state.RafalePoolRemaining = count
 }
 
 // FlipMemoryCard handles flipping a Memory card with game logic
@@ -3747,27 +5234,40 @@ func (e *Engine) reconnectVPlayer(sessionID string) (string, *Bumper, error) {
 // AssignVirtualPlayer assigns a virtual player to a team and answer color
 func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerColor) error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	bumper, exists := e.data.Bumpers[bumperID]
 	if !exists {
+		e.mu.Unlock()
 		return &EnrollmentError{Reason: "BUMPER_NOT_FOUND"}
 	}
 
 	if !bumper.IsVirtual {
+		e.mu.Unlock()
 		return &EnrollmentError{Reason: "NOT_VIRTUAL_PLAYER"}
 	}
 
 	// Check if team exists
 	if _, exists := e.data.Teams[team]; !exists {
+		e.mu.Unlock()
 		return &EnrollmentError{Reason: "TEAM_NOT_FOUND"}
 	}
 
 	// Assign team and answer color (only physical buzzers get color, VPlayers respond to all)
 	oldTeam := bumper.Team
 	bumper.Team = team
+	newPhase := GamePhase("")
 	if oldTeam != team {
 		e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+		// #200 cycle 7 (code-review 20260831-225004, MINOR — currently no
+		// production caller reassigns a team this way, verified by grep, but
+		// this is the exact same structural gap UpdateBumper/SetBumpers/
+		// DeleteBumper close: fixed now, by consistency, before this method
+		// gets wired to a future handler and silently reintroduces it. See
+		// purgeInactiveParticipantUnsafe's own doc comment.
+		if oldTeam != "" && !teamsWithBumpers(e.data.Bumpers)[oldTeam] {
+			e.purgeInactiveParticipantUnsafe(oldTeam)
+			newPhase = e.reevaluatePrepareReadyUnsafe()
+		}
 	}
 	if !bumper.IsVPlayer {
 		bumper.AnswerColor = answerColor
@@ -3775,6 +5275,13 @@ func (e *Engine) AssignVirtualPlayer(bumperID, team string, answerColor AnswerCo
 	// VPlayers keep AnswerColor empty (they respond to all colors)
 
 	log.Printf("[Engine] Virtual player assigned: id=%s, team=%s, color=%s, isVPlayer=%v", bumperID, team, answerColor, bumper.IsVPlayer)
+
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
 
 	// Save bumpers to disk
 	safeGo("SaveBumpers", e.SaveBumpers)
@@ -4336,6 +5843,100 @@ func (e *Engine) SetMotionParticipatingTeams(teams []string) error {
 	return nil
 }
 
+// RafaleError represents a RAFALE-specific error (v8.0.0, #199) — same
+// {Reason string} shape as MotionError/MemoryError, for consistency with
+// the two sibling "set participating teams" families this mirrors.
+type RafaleError struct {
+	Reason string
+}
+
+func (e *RafaleError) Error() string {
+	return e.Reason
+}
+
+// SetRafaleParticipatingTeams sets the RAFALE round's participating teams
+// and play order (contract §5.1: "équipes participantes + ordre de
+// passage", RAFALE_SET_TEAMS action) — mirrors SetMemoryParticipatingTeams/
+// SetMotionParticipatingTeams above. Allowed during PREPARE or READY (before
+// START), same as those two. The first team in the list becomes
+// RafaleCurrentTeam immediately (so a round that never rotates — SOLO, or
+// TANT_QUE_JE_GAGNE staying on a winning streak — still has an active team
+// from the very first question); an empty list clears it back to "".
+//
+// No minimum-team-count gate is imposed here (unlike MEMORY SOLO/multi —
+// participantsConform's default case already returns true for RAFALE,
+// engine.go:1038): a RAFALE round has never required a participating team
+// at all (contract §3.4 SOLO, Batch 2/#107) — this action is additive, not
+// a new precondition on reaching READY/START.
+func (e *Engine) SetRafaleParticipatingTeams(teams []string) error {
+	e.mu.Lock()
+
+	if e.state.Phase != PhasePrepare && e.state.Phase != PhaseReady {
+		e.mu.Unlock()
+		return &RafaleError{Reason: "NOT_IN_PREPARE_OR_READY_PHASE"}
+	}
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale {
+		e.mu.Unlock()
+		return &RafaleError{Reason: "NOT_RAFALE_QUESTION"}
+	}
+
+	// Validate all teams exist — same discipline as the two sibling
+	// functions above.
+	for _, teamName := range teams {
+		if _, exists := e.data.Teams[teamName]; !exists {
+			e.mu.Unlock()
+			return &RafaleError{Reason: "TEAM_NOT_FOUND"}
+		}
+	}
+
+	e.state.RafaleParticipatingTeams = teams
+	if len(teams) > 0 {
+		e.state.RafaleCurrentTeam = teams[0]
+		if team, exists := e.data.Teams[teams[0]]; exists {
+			e.state.RafaleCurrentTeamColor = team.Color
+		}
+	} else {
+		e.state.RafaleCurrentTeam = ""
+		e.state.RafaleCurrentTeamColor = []int{}
+	}
+
+	log.Printf("[Engine] RAFALE SetRafaleParticipatingTeams: teams=%v currentTeam=%s",
+		teams, e.state.RafaleCurrentTeam)
+
+	// Same PREPARE↔READY re-check as SetMemoryParticipatingTeams/
+	// SetMotionParticipatingTeams. Was a no-op for RAFALE at the time this
+	// comment was first written (participantsConform had no RAFALE
+	// participant-count rule yet) — kept anyway for consistency with the two
+	// sibling functions, precisely so a future contract change wouldn't
+	// silently diverge from them. That future change landed 2026-09-02
+	// (#199): in a multi-team mode, clearing teams here (teams == []) now
+	// actually reverts READY -> PREPARE, and selecting at least one team
+	// again re-promotes PREPARE -> READY — see participantsConform's RAFALE
+	// case.
+	newPhase := e.reevaluatePrepareReadyUnsafe()
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	stateCallback := e.OnStateChange
+	teamsCallback := e.OnRafaleTeamsChanged
+	e.mu.Unlock()
+
+	// #199 task 36 — fired unconditionally; the consumer
+	// (sendLEDSetRafaleTeams, cmd/server/main.go) gates on Phase==STARTED
+	// itself (mirrors sendLEDSetForBuzzerMemory's own phase dispatch — the
+	// multi-team grid is a STARTED-only concept, same as MEMORY's), so
+	// calling this during PREPARE/READY (this function's only phases) is a
+	// harmless no-op today, not a premature LED change.
+	if teamsCallback != nil {
+		teamsCallback()
+	}
+
+	if stateCallback != nil && newPhase != "" {
+		stateCallback(newPhase)
+	}
+
+	return nil
+}
+
 // rotateMotionTeam advances MotionCurrentTeam to the next team in MotionParticipatingTeams.
 // Must be called with e.mu held (write).
 func (e *Engine) rotateMotionTeam() {
@@ -4343,26 +5944,12 @@ func (e *Engine) rotateMotionTeam() {
 		return
 	}
 
-	// Find current team index
-	currentIndex := -1
-	for i, team := range e.state.MotionParticipatingTeams {
-		if team == e.state.MotionCurrentTeam {
-			currentIndex = i
-			break
-		}
-	}
-
-	// Circular rotation
-	nextIndex := (currentIndex + 1) % len(e.state.MotionParticipatingTeams)
 	prev := e.state.MotionCurrentTeam
-	e.state.MotionCurrentTeam = e.state.MotionParticipatingTeams[nextIndex]
+	next, color := rotateTeam(e.state.MotionParticipatingTeams, e.state.MotionCurrentTeam, e.data.Teams)
+	e.state.MotionCurrentTeam = next
+	e.state.MotionCurrentTeamColor = color
 
-	// Update current team color
-	if team, exists := e.data.Teams[e.state.MotionCurrentTeam]; exists {
-		e.state.MotionCurrentTeamColor = team.Color
-	}
-
-	log.Printf("[Engine] MEMOTION team rotated: %s → %s (index %d)", prev, e.state.MotionCurrentTeam, nextIndex)
+	log.Printf("[Engine] MEMOTION team rotated: %s → %s", prev, next)
 }
 
 // StartMotionCardTimer starts a per-card countdown for MEMOTION.

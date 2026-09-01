@@ -6,7 +6,7 @@ import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder } from '../utils/questionOrder'
-import { sortTeamsByBuzzOrder } from '../utils/buzzOrder'
+import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
 import {
@@ -22,6 +22,8 @@ import {
   calcMemoryScore,
   calcArdoiseDefaultPoints,
   resolvePointsAward,
+  rafaleCounterForTeam,
+  calcRafaleTeamAward,
 } from '../utils/pointsAward'
 import Button from '../components/Button'
 import Card from '../components/Card'
@@ -31,6 +33,8 @@ import QuestionPreview from '../components/QuestionPreview'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
+import RafalePoolAlert from '../components/RafalePoolAlert'
+import AnimRafaleActions from '../components/AnimRafaleActions'
 import './GamePage.css'
 import '../styles/entracte.css'
 
@@ -53,6 +57,10 @@ export default function GamePage() {
     simulateButton,
     simulatePong,
     sendMessage,
+    rafaleSetTeams,
+    rafaleAnswer,
+    rafaleValidate,
+    rafaleInvalidate,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -84,6 +92,9 @@ export default function GamePage() {
   const selectedTeams = gameState.MEMORY_PARTICIPATING_TEAMS || []
   // MEMOTION team selection
   const selectedMotionTeams = gameState.MEMOTION_PARTICIPATING_TEAMS || []
+  // RAFALE team selection (v8.0.0, #16/#199, contrat rafale.md §5.1) — même
+  // patron que MEMORY/MEMOTION ci-dessus.
+  const selectedRafaleTeams = gameState.RAFALE_PARTICIPATING_TEAMS || []
 
   // Group bumpers by team and sort by timestamp
   const teamBumpers = useMemo(() => {
@@ -175,9 +186,20 @@ export default function GamePage() {
         return errorsA - errorsB
       })
     }
+
+    // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.1, tâche 34) —
+    // classement par compteur de manche, mêmes phases actives que MEMORY
+    // ci-dessus. SOLO exclu (une seule équipe, tri sans objet).
+    if (gameState.question?.TYPE === 'RAFALE' &&
+        gameState.question?.RAFALE_MODE &&
+        gameState.question.RAFALE_MODE !== 'SOLO' &&
+        ['STARTED', 'PAUSED', 'STOPPED'].includes(gameState.phase)) {
+      return sortTeamsByRafaleCounter(teamsWithPlayers, gameState.question, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+    }
+
     // For all other cases, use the standard sortedTeams order (filtered)
     return teamsWithPlayers
-  }, [sortedTeams, gameState.question, gameState.phase, gameState.MEMORY_TEAM_PAIRS, gameState.MEMORY_TEAM_ERRORS])
+  }, [sortedTeams, gameState.question, gameState.phase, gameState.MEMORY_TEAM_PAIRS, gameState.MEMORY_TEAM_ERRORS, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST])
 
   // Teams that have at least one VJoueur (ARDOISE panel filter #93)
   const vplayerTeamNames = useMemo(() =>
@@ -344,6 +366,23 @@ export default function GamePage() {
     sendMessage('MEMOTION_SET_TEAMS', { TEAMS: newSelection })
   }
 
+  // RAFALE (v8.0.0, #16/#199, contrat rafale.md §5.1, tâche 33) — même
+  // patron que toggleTeam/toggleMotionTeam ci-dessus. `rafaleSetTeams`
+  // (useWebSocket.js, posé en Batch 2) émet RAFALE_SET_TEAMS.
+  const toggleRafaleTeam = (teamName) => {
+    const rafaleMode = gameState.question?.RAFALE_MODE
+    const isSolo = !rafaleMode || rafaleMode === 'SOLO'
+    let newSelection
+    if (isSolo) {
+      newSelection = selectedRafaleTeams.includes(teamName) ? [] : [teamName]
+    } else {
+      newSelection = selectedRafaleTeams.includes(teamName)
+        ? selectedRafaleTeams.filter(t => t !== teamName)
+        : [...selectedRafaleTeams, teamName]
+    }
+    rafaleSetTeams(newSelection)
+  }
+
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
     if (ctrlKey && gameState.phase === 'PREPARE') {
       // Ctrl+click in PREPARE: simulate PONG response (debug)
@@ -387,6 +426,43 @@ export default function GamePage() {
   // START button only active in READY phase
   const canStart = canStartRule(gameState.phase)
 
+  // RAFALE (v8.0.0, #16/#107, contrat rafale.md §7.2, tâche 26) — pool
+  // vide pour le filtre de la manche sélectionnée = démarrage REFUSÉ.
+  // `rafalePoolLevel` vient de RafalePoolAlert (onLevelChange), même appel
+  // GET /api/rafale/pool que celui déjà utilisé pour l'affichage de
+  // l'alerte ci-dessous — pas de second calcul dupliqué ici.
+  //
+  // code-review-20260829-163049.md [MAJEUR] — `rafalePoolLevel` vaut `null`
+  // dans PLUSIEURS cas distincts (catégorie non sélectionnée, chargement en
+  // cours, erreur réseau — RafalePoolAlert.jsx), pas seulement "pool
+  // confirmé non-bloquant". Bloquer UNIQUEMENT sur `'blocking'` laissait
+  // passer tous les autres `null` — dont l'absence de catégorie —, un
+  // START possible sans filtre valide alors que le moteur refuse
+  // systématiquement (ErrRafalePoolEmpty garanti, contrat §7.2 :
+  // "disponibles == 0 → Bloquant"). Liste blanche plutôt que liste noire :
+  // seuls les deux niveaux confirmés non-bloquants autorisent le START —
+  // tout le reste (blocking, chargement, erreur, catégorie absente) bloque
+  // par défaut ("fail closed").
+  const isRafaleSelected = gameState.question?.TYPE === 'RAFALE'
+  const [rafalePoolLevel, setRafalePoolLevel] = useState(null)
+  const rafaleBlocked = isRafaleSelected && rafalePoolLevel !== 'ok' && rafalePoolLevel !== 'warning'
+
+  // #199 — retour QUALIF, gate backend prêt (dev-backend SHA 393c6dc7,
+  // engine.go participantsConform) : en mode RAFALE multi (≠SOLO), aucune
+  // équipe dans RAFALE_PARTICIPATING_TEAMS bloque la transition PREPARE->
+  // READY côté moteur (reevaluatePrepareReadyUnsafe) — Start() lui-même
+  // refuse toute phase ≠ READY (#172/B4), donc START ne PEUT déjà plus
+  // être cliqué avec succès dans ce cas. Ce gate ajoute le même pattern
+  // défense en profondeur que rafaleBlocked ci-dessus (fail-closed, pas
+  // une liste noire) pour exposer un message clair sur le bouton
+  // lui-même, plutôt que de compter uniquement sur l'effet de bord
+  // "phase jamais READY" — voir aussi le motif affiché dans le sélecteur
+  // d'équipes RAFALE (prepareWaitReason.js, même mécanisme que MEMORY/
+  // MEMOTION).
+  const rafaleMode = gameState.question?.RAFALE_MODE
+  const rafaleIsSolo = !rafaleMode || rafaleMode === 'SOLO'
+  const rafaleTeamsBlocked = isRafaleSelected && !rafaleIsSolo && selectedRafaleTeams.length === 0
+
   // ENTRACTE (#119, C2) — le bouton a déménagé dans Navbar.jsx (visible sur
   // toutes les pages admin, pas seulement ici) ; seul l'estompage de
   // l'interface reste porté par GamePage. .game-page (GamePage.css:23-30) n'a
@@ -405,6 +481,14 @@ export default function GamePage() {
       {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
 
       <div className={`game-page page${entracteDim}`} style={entracteTransitionStyle}>
+      {/* Colonne centrale (chrono + apercu TV) — grille a rangee UNIQUE
+          (#198, retour QUALIF 8.0.0.13 : la zone "questions disponibles"
+          poussait l'apercu TV et la liste equipes vers le bas). Chaque
+          colonne du layout est desormais UN SEUL item de grille avec son
+          propre flux vertical interne (voir .admin-col-* / .right-panel
+          dans GamePage.css) — la hauteur de la colonne 1 (commande) ne
+          peut plus jamais influencer la position des colonnes 2/3. */}
+      <div className="admin-col-center">
       {/* Timer + Display Section (stacked vertically) */}
       <div className="timer-display-section">
         <Card variant="elevated" padding="md" className="timer-card">
@@ -656,6 +740,72 @@ export default function GamePage() {
           )
         })()}
 
+        {/* RAFALE Team Selection — même patron que Memory/Memotion ci-dessus
+            (v8.0.0, #16/#199, contrat rafale.md §5.1, tâche 33). */}
+        {(gameState.phase === 'PREPARE' || gameState.phase === 'READY') &&
+         gameState.question?.TYPE === 'RAFALE' && (() => {
+          const rafaleMode = gameState.question?.RAFALE_MODE
+          const isSolo = !rafaleMode || rafaleMode === 'SOLO'
+          const modeLabel = {
+            SOLO: 'Mode SOLO',
+            CHACUN_SON_TOUR: 'Chacun son tour',
+            TANT_QUE_JE_GAGNE: 'Tant que je gagne',
+            MAILLON_FAIBLE: 'Maillon faible',
+          }[rafaleMode] || 'Mode SOLO'
+          const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+          const selected = teamsWithBuzzers.filter(t => selectedRafaleTeams.includes(t.name))
+          const available = teamsWithBuzzers.filter(t => !selectedRafaleTeams.includes(t.name))
+          // #199 (retour QUALIF, dev-backend SHA 393c6dc7) — même motif
+          // d'attente que MEMORY/MEMOTION ci-dessus (utils/prepareWaitReason.js,
+          // miroir client-side de participantsConform, engine.go).
+          const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
+          return (
+            <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
+              <div className="memory-selector-label">
+                🌀 RAFALE · {modeLabel}
+                {waitReason && ` · ${waitReason}`}
+              </div>
+              <div className="memory-chips-row">
+                {selected.map((team, idx) => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  return (
+                    <div
+                      key={team.name}
+                      className={`memory-team-chip selected${isSolo ? ' solo-active' : ''}`}
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={!isSolo ? () => toggleRafaleTeam(team.name) : undefined}
+                      title={!isSolo ? 'Cliquer pour retirer' : undefined}
+                    >
+                      {!isSolo && <span className="chip-order">{idx + 1}</span>}
+                      <span className="chip-name">{team.name}</span>
+                      {!isSolo && <span className="chip-action">×</span>}
+                    </div>
+                  )
+                })}
+                {selected.length > 0 && available.length > 0 && (
+                  <span className="memory-chips-divider">|</span>
+                )}
+                {available.map(team => {
+                  const teamColor = getRgbColor(team.COLOR)
+                  const notReady = !isTeamReady(team)
+                  return (
+                    <div
+                      key={team.name}
+                      className={`memory-team-chip available${notReady ? ' not-ready' : ''}`}
+                      style={{ backgroundColor: teamColor, '--team-color': teamColor }}
+                      onClick={notReady ? undefined : () => toggleRafaleTeam(team.name)}
+                      title={notReady ? 'Buzzer(s) non prêt(s)' : 'Cliquer pour ajouter'}
+                    >
+                      <span className="chip-name">{team.name}</span>
+                      {!notReady && <span className="chip-action">+</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
         {/* ARDOISE — zone réponses équipes (pattern Memory team zone) */}
         {gameState.question?.TYPE === 'ARDOISE' &&
          ['STARTED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
@@ -699,6 +849,19 @@ export default function GamePage() {
         )}
       </div>
 
+      {/* TV Preview — deplace ici (etait plus bas, cote a cote de la
+          liste equipes) pour former UN SEUL item de grille avec
+          timer-display-section ci-dessus, cf. commentaire admin-col-center
+          (#198). */}
+      <div className="tv-preview-container">
+        <QuestionPreview />
+      </div>
+      </div>
+
+      {/* Colonne gauche (commande + questions) — meme raisonnement que
+          admin-col-center ci-dessus : un seul item de grille, flux vertical
+          interne, jamais d'influence sur les colonnes voisines (#198). */}
+      <div className="admin-col-left">
       {/* Questions Panel - Left */}
       <div className="questions-panel">
         <h2 className="panel-title">Questions</h2>
@@ -817,6 +980,121 @@ export default function GamePage() {
               )}
             </div>
           </div>
+
+          {/* RAFALE — panneau de configuration de manche + alerte de pool
+              (v8.0.0, #16/#107, contrat rafale.md §7.2, tâche 26 du plan).
+              Affiché AVANT le lancement uniquement — pendant la manche
+              (STARTED), la conduite se fait depuis /anim (AnimConductPanel,
+              boutons VALIDE/INVALIDE) : ce panneau ne duplique pas cette
+              zone, il informe et bloque le démarrage si besoin. */}
+          {isRafaleSelected && !isPlaying && (
+            <div className="rafale-admin-panel">
+              <div className="rafale-admin-config">
+                {/* CATEGORY unique (bugfix 2026-08-29, contrat §3.3) — un
+                    seul CategoryBadge, comme pour tous les autres types,
+                    remplace l'ancien compteur RAFALE_CATEGORIES (multi). */}
+                {gameState.question.CATEGORY && (
+                  <span className="rafale-admin-chip">
+                    <CategoryBadge catKey={gameState.question.CATEGORY} customCategories={customCategories} size="sm" />
+                    {' '}
+                    {categoryMeta(gameState.question.CATEGORY, customCategories)?.label}
+                  </span>
+                )}
+                <span className="rafale-admin-chip">
+                  {'★'.repeat(gameState.question.RAFALE_DIFFICULTY || 1)}
+                </span>
+                <span className="rafale-admin-chip">
+                  {gameState.question.RAFALE_MODE || 'SOLO'}
+                </span>
+                <span className="rafale-admin-chip">
+                  {gameState.question.RAFALE_QUESTION_TIME || 3}s/question
+                </span>
+              </div>
+              <RafalePoolAlert
+                category={gameState.question.CATEGORY || ''}
+                // Bugfix régression (retour utilisateur QUALIF 8.0.0.5,
+                // suite au fail-closed SHA 1a742782) — cause racine :
+                // RAFALE_DIFFICULTY est omitempty côté serveur (contrat
+                // §3.3, contrainte models_roundtrip_test.go) ; le chip
+                // d'affichage juste au-dessus utilise déjà un repli `|| 1`
+                // pour ce champ, mais cette prop ne l'avait PAS — un admin
+                // voyait "★" dans le chip (repli visuel) tout en recevant
+                // `difficulty=undefined` ici, faisant échouer `hasFilter`
+                // dans RafalePoolAlert ("Sélectionnez au moins une
+                // catégorie...") puis bloquant le START via le fail-closed
+                // (rafalePoolLevel resté `null`). Avant 1a742782, un niveau
+                // `null` ne bloquait rien : l'incohérence de repli était
+                // invisible. Même repli qu'utilisé partout ailleurs pour ce
+                // champ (défaut RAFALE_DIFFICULTY = 1, QuestionsPage.jsx).
+                difficulty={gameState.question.RAFALE_DIFFICULTY || 1}
+                roundTime={parseInt(timeInput) || 0}
+                questionTime={gameState.question.RAFALE_QUESTION_TIME || 3}
+                onLevelChange={setRafalePoolLevel}
+              />
+            </div>
+          )}
+
+          {/* RÉVISION 2026-08-28 (maquette rafale-v8.html §9.3, section
+              faisant autorité — remplace §3/§4/§4bis) — question ET réponse
+              affichées ensemble sur /admin pendant la manche, même encart
+              coloré équipe que /anim (§9.2). Choix d'affichage uniquement :
+              RAFALE_ANSWER était déjà diffusé à l'admin (contrat §2.3,
+              destinataires admin+anim), simplement jamais rendu ici avant
+              cette refonte — aucun changement de protocole/sécurité. */}
+          {isRafaleSelected && isPlaying && (() => {
+            const current = gameState.RAFALE_CURRENT_QUESTION || {}
+            const teamColorArr = gameState.RAFALE_CURRENT_TEAM_COLOR
+            const teamCss = Array.isArray(teamColorArr) && teamColorArr.length === 3
+              ? `rgb(${teamColorArr.join(',')})`
+              : 'var(--error)'
+            const answerValue = (rafaleAnswer && rafaleAnswer.ID === current.ID) ? rafaleAnswer.ANSWER : ''
+            const catMeta = categoryMeta(current.CATEGORY, customCategories)
+            return (
+              <div className="rafale-admin-live">
+                <div className="rafale-anim-qcard" style={{ '--rafale-active-color': teamCss }}>
+                  <div className="rafale-anim-qcard-meta">
+                    {gameState.RAFALE_CURRENT_TEAM && (
+                      <span className="chip rafale-anim-qcard-team">{gameState.RAFALE_CURRENT_TEAM}</span>
+                    )}
+                    {catMeta && (
+                      <span className="rafale-admin-chip">
+                        <CategoryBadge catKey={current.CATEGORY} customCategories={customCategories} size="sm" />
+                        {' '}{catMeta.label}
+                      </span>
+                    )}
+                    {current.DIFFICULTY > 0 && (
+                      <span className="rafale-admin-chip">{'★'.repeat(current.DIFFICULTY)}</span>
+                    )}
+                    {gameState.RAFALE_ASKED_COUNT > 0 && (
+                      <span className="rafale-admin-chip">question {gameState.RAFALE_ASKED_COUNT}</span>
+                    )}
+                  </div>
+                  {current.QUESTION && <p className="rafale-anim-qcard-text">{current.QUESTION}</p>}
+                  {answerValue && (
+                    <div className="ans rafale-anim-qcard-answer">
+                      <b>Réponse attendue</b>
+                      {answerValue}
+                    </div>
+                  )}
+                </div>
+                {/* Retour utilisateur QUALIF 8.0.0.10, issue #198 — le
+                    cadrage initial prévoyait explicitement la validation
+                    manuelle depuis /anim OU /admin ; seul /anim avait été
+                    câblé (fix critique 2f4d4207). Réutilise TEL QUEL le
+                    composant AnimRafaleActions (mêmes actions rafaleValidate/
+                    rafaleInvalidate, même logique de désactivation que
+                    /anim, contrat §5.1) plutôt que d'en recréer un — même
+                    discipline de mutualisation que CategorySelector/
+                    CategoryFilterBar. */}
+                <AnimRafaleActions
+                  disabled={gameState.RAFALE_SUBPHASE !== 'QUESTION'}
+                  rafaleMode={gameState.question?.RAFALE_MODE}
+                  onValidate={rafaleValidate}
+                  onInvalidate={rafaleInvalidate}
+                />
+              </div>
+            )
+          })()}
 
           {/* MEMOTION subphase controls — shown when MEMOTION question is STARTED */}
           {gameState.question?.TYPE === 'MEMOTION' && gameState.phase === 'STARTED' && (() => {
@@ -991,7 +1269,14 @@ export default function GamePage() {
                 variant={isPlaying ? 'danger' : 'success'}
                 size="lg"
                 onClick={handleStartStop}
-                disabled={!canStart && !isPlaying}
+                title={
+                  rafaleTeamsBlocked && !isPlaying
+                    ? 'Selectionnez au moins une equipe participante avant de demarrer — contrat §5.1'
+                    : rafaleBlocked && !isPlaying
+                      ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2'
+                      : undefined
+                }
+                disabled={!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked)}
               >
                 {isPlaying ? 'STOP' : 'START'}
               </Button>
@@ -1019,9 +1304,6 @@ export default function GamePage() {
         </Card>
       </div>
 
-      {/* TV Preview (Row 2 Col 2) */}
-      <div className="tv-preview-container">
-        <QuestionPreview />
       </div>
 
       {/* Right Panel - Teams */}
@@ -1061,6 +1343,19 @@ export default function GamePage() {
                     errorPenalty: gameState.question?.MEMORY_CONFIG?.ERROR_PENALTY || 0,
                     completionBonus: gameState.question?.MEMORY_CONFIG?.COMPLETION_BONUS || 0,
                   } : null}
+                  rafaleStats={gameState.question?.TYPE === 'RAFALE' ? {
+                    counter: gameState.RAFALE_TEAM_COUNTERS?.[team.name] || 0,
+                    // Suggestion de fin de manche (contrat §6.2) — uniquement
+                    // en sous-phase ROUND_END, null sinon (badge de compteur
+                    // "live" affiché à la place, voir TeamCard.jsx).
+                    suggestedPoints: gameState.RAFALE_SUBPHASE === 'ROUND_END'
+                      ? calcRafaleTeamAward(
+                          gameState.question,
+                          pointsInput,
+                          rafaleCounterForTeam(gameState.question, team.name, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+                        )?.amount ?? null
+                      : null,
+                  } : null}
                   onTeamClick={(teamName) => {
                     if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
                       // For Memory multi-team, calculate team-specific points
@@ -1098,6 +1393,16 @@ export default function GamePage() {
                         const teamBumperList = Object.values(bumpers).filter(b => b.TEAM === teamName)
                         const award = calcQcmTeamAward(gameState.question, pointsInput, teamBumperList, gameState.qcmInvalidated?.length || 0)
                         pointsToAward = award.amount
+                      } else if (gameState.question?.TYPE === 'RAFALE') {
+                        // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.2) —
+                        // suggestion pré-remplie par pointsInput (ajustable,
+                        // même mécanisme que QCM/MEMORY ci-dessus) ×
+                        // compteur retenu (RAFALE_TEAM_BEST en
+                        // MAILLON_FAIBLE, RAFALE_TEAM_COUNTERS sinon,
+                        // utils/pointsAward.js, mutualisé avec AnimPage.jsx).
+                        const counter = rafaleCounterForTeam(gameState.question, teamName, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+                        const award = calcRafaleTeamAward(gameState.question, pointsInput, counter)
+                        if (award) pointsToAward = award.amount
                       }
                       setTeamPoints(teamName, pointsToAward)
                     }

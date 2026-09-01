@@ -186,6 +186,45 @@
   opacity: 0.85;
 }
 
+/* RÉVISION 2026-08-28 (maquette rafale-v8.html §3, conservée par la
+   refonte §9) — panneau RAFALE enrichi : 3 compteurs par équipe (bonnes /
+   mauvaises / série en cours) au lieu du seul total de bonnes réponses.
+   Composé depuis AnimPage.jsx, même discipline `children` que ci-dessus. */
+.rafale-anim-team-stats {
+  display: flex;
+  gap: var(--space-3, 12px);
+}
+
+.rafale-anim-team-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.rafale-anim-team-stat small {
+  font-family: inherit;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.75;
+}
+
+.rafale-anim-team-stat-good {
+  color: var(--success, #22c55e);
+}
+
+.rafale-anim-team-stat-bad {
+  color: var(--error, #ef4444);
+}
+
+.rafale-anim-team-stat-streak {
+  color: var(--accent-cyan, #22d3ee);
+}
+
 /* #171/F6 — motif discret "pas de buzz"/"pas de réponse" : à CÔTÉ du
    geste de crédit (jamais à sa place), quand l'équipe n'a pas tenté la
    question (utils/canAwardPoints.js). Composé depuis AnimPage.jsx, même

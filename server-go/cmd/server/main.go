@@ -235,6 +235,14 @@ func main() {
 		server.LogWarn(game.LogComponentApp, "Could not load question statuses: %v", err)
 	}
 
+	// Load RAFALE reservoir + "already used" flags (v8.0.0, #197)
+	if err := app.engine.LoadRafale(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load rafale reservoir: %v", err)
+	}
+	if err := app.engine.LoadRafaleUsed(); err != nil {
+		server.LogWarn(game.LogComponentApp, "Could not load rafale used-flags: %v", err)
+	}
+
 	// Load persisted game state (#141: quiz metadata, virtual player limit).
 	// Must run AFTER app.init() (which already set the path below) and after
 	// loadBackgrounds()/loadNewGameBackgrounds() (called from init() at
@@ -290,6 +298,14 @@ func (a *App) init() {
 	a.engine.SetBumpersPath(filepath.Join(configDir, "bumpers.json"))
 	a.engine.SetStatusesPath(filepath.Join(configDir, "question_statuses.json"))
 	a.engine.SetStatePath(filepath.Join(configDir, "game_state.json")) // #141
+
+	// RAFALE reservoir persistence (v8.0.0, #197, contracts/rafale.md §2.4/§3.2)
+	filesDirForRafale := a.config.Storage.FilesDir
+	if filesDirForRafale == "" {
+		filesDirForRafale = "./data/files"
+	}
+	a.engine.SetRafalePath(filepath.Join(filesDirForRafale, "rafale", "reservoir.json"))
+	a.engine.SetRafaleUsedPath(filepath.Join(configDir, "rafale_used.json"))
 
 	// WebSocket hub (web clients: admin/TV/VPlayer)
 	a.wsHub = server.NewWebSocketHub()
@@ -457,6 +473,25 @@ func (a *App) setupCallbacks() {
 	// QCM hint (when a wrong answer is invalidated)
 	a.engine.OnQCMHint = func(invalidatedColor string, remainingAnswers int) {
 		a.broadcastQCMHint(invalidatedColor, remainingAnswers)
+	}
+
+	// RAFALE (v8.0.0, #107, contract §5.2) — the expected answer, admin+anim
+	// ONLY (never GameState — contract §2.3). next (#202, contract §13.3)
+	// extends this to the pre-fetched next question's statement, same
+	// restricted channel — see broadcastRafaleAnswer's own comment.
+	a.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+		a.broadcastRafaleAnswer(id, answer, next)
+	}
+
+	// RAFALE per-question countdown — lightweight, all clients, no full
+	// GameState re-emission (contract §5.2).
+	a.engine.OnRafaleQuestionTick = func(questionTime int) {
+		a.broadcastRafaleTick(questionTime)
+	}
+
+	// RAFALE active-team LED grid (v8.0.0, #199 task 36, contract §8.3).
+	a.engine.OnRafaleTeamsChanged = func() {
+		a.sendLEDSetRafaleTeams()
 	}
 
 	// #187 cycle 3 briefly wired engine.OnMotionCardAutoRevealed here — a
@@ -1151,12 +1186,34 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionPause:
 		a.logger.Info(game.LogComponentEngine, "PAUSE all")
 		a.engine.PauseAll()
-		a.broadcastPauseAll()
+		// #200 cycle 4 (code-review 20260831-112306, same reasoning as
+		// handleStart's own GetPhase() check above): Engine.Pause() gained a
+		// phase guard in cycle 3 (64b23dff, only STARTED→PAUSED is accepted)
+		// but silently no-ops on refusal — no return value to tell success
+		// from refusal at this call site. Without this check,
+		// broadcastPauseAll() fired unconditionally, sending every connected
+		// client a real ACTION:"PAUSE" even when nothing was actually
+		// paused — exactly the "undefined behavior for any client-side logic
+		// keyed on the action name rather than the payload" handleStart's
+		// own comment warns about (confirmed exploitable here: useWebSocket.js
+		// sets phase:'PAUSED' from the action label alone). GetPhase()==
+		// PhasePaused is a safe, side-effect-free way to check Pause() truly
+		// took effect: it's set synchronously under the engine's own lock
+		// before Pause() returns, on every accepted call.
+		if a.engine.GetPhase() == game.PhasePaused {
+			a.broadcastPauseAll()
+		}
 
 	case protocol.ActionContinue:
 		a.logger.Info(game.LogComponentEngine, "CONTINUE game")
 		a.engine.Continue()
-		a.broadcastContinue()
+		// #200 cycle 4 — mirrors the ActionPause check just above (and
+		// handleStart's own) for Engine.Continue()'s cycle 3 phase guard
+		// (64b23dff, only PAUSED→STARTED is accepted): only broadcast when
+		// Continue() actually transitioned, never on a silent refusal.
+		if a.engine.GetPhase() == game.PhaseStarted {
+			a.broadcastContinue()
+		}
 
 	case protocol.ActionReveal:
 		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
@@ -1243,6 +1300,15 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionMotionSetTeams:
 		a.handleMotionSetTeams(msg)
+
+	case protocol.ActionRafaleValidate:
+		a.handleRafaleValidate(msg)
+
+	case protocol.ActionRafaleInvalidate:
+		a.handleRafaleInvalidate(msg)
+
+	case protocol.ActionRafaleSetTeams:
+		a.handleRafaleSetTeams(msg)
 
 	case protocol.ActionShowQRCode:
 		a.handleShowQRCode()
@@ -1777,7 +1843,28 @@ func (a *App) handleStart(msg *protocol.Message) {
 
 	a.logger.Info(game.LogComponentEngine, "START game with delay=%ds", payload.Delay)
 	a.engine.Start(payload.Delay)
-	a.broadcastStart()
+	// #199 QUALIF 8.0.0.14 investigation: Engine.Start() silently no-ops
+	// (logs "Cannot start game from phase X (must be READY)") when the
+	// engine refuses — e.g. a RAFALE multi-mode round with no team selected
+	// (participantsConform), or any question type sent from a stale
+	// PREPARE/STARTED client. Before this fix, broadcastStart() (and its
+	// unconditional sendLEDSetAllBuzzers() call) fired regardless, sending
+	// every connected client a real ACTION:"START" WS message even though
+	// nothing actually started — Engine.Start has no return value, so this
+	// call site had no way to tell success from refusal. The broadcast
+	// itself DOES carry the true (unchanged) PHASE via GetGameJSON(), so it
+	// wasn't provably the root cause of the reported symptom (a client
+	// reading MSG.GAME.PHASE would still see e.g. "PREPARE"), but sending a
+	// START action while nothing started is undefined behavior for any
+	// client-side logic keyed on the action name rather than the payload,
+	// and wastes a broadcast + a full per-buzzer LED pass on every refusal.
+	// GetPhase()==PhaseCountdown is a safe, side-effect-free way to check
+	// Start() actually took effect: Start() sets this synchronously, under
+	// its own lock, before returning, on every accepted call — no race
+	// window between the call above and this check.
+	if a.engine.GetPhase() == game.PhaseCountdown {
+		a.broadcastStart()
+	}
 }
 
 func (a *App) handleRemote(msg *protocol.Message) {
@@ -1842,16 +1929,22 @@ func (a *App) handleDeleteBumper(msg *protocol.Message) {
 
 	server.LogInfo(game.LogComponentApp, "DELETE_BUMPER: id=%s", payload.ID)
 
-	// Remove bumper from engine
-	bumpers := a.engine.GetTeamsAndBumpers().Bumpers
-	deletedBumper, exists := bumpers[payload.ID]
-	if !exists {
+	// Remove bumper from engine. #200 cycle 7: was
+	// `bumpers := a.engine.GetTeamsAndBumpers().Bumpers; delete(bumpers, id);
+	// a.engine.SetBumpers(bumpers)` — GetTeamsAndBumpers() returns e.data
+	// directly (not a copy), so that in-place delete on the LIVE map, ALSO
+	// mutated outside e.mu, made SetBumpers's own old/new diff (added #200
+	// cycle 6) compare a map against itself: no diff ever detected, so a
+	// team losing its only bumper this way kept a stale MEMORY/MEMOTION/
+	// RAFALE participant selection forever (confirmed by code-review
+	// 20260831-225004). Engine.DeleteBumper does the delete + diff + purge
+	// atomically under its own lock, on data nothing outside the engine can
+	// alias — see its own doc comment.
+	deletedBumper := a.engine.DeleteBumper(payload.ID)
+	if deletedBumper == nil {
 		server.LogWarn(game.LogComponentApp, "DELETE_BUMPER: Bumper %s not found", payload.ID)
 		return
 	}
-
-	delete(bumpers, payload.ID)
-	a.engine.SetBumpers(bumpers)
 
 	server.LogInfo(game.LogComponentApp, "Deleted bumper: %s", payload.ID)
 
@@ -2435,6 +2528,57 @@ func (a *App) handleMotionSetTeams(msg *protocol.Message) {
 
 	a.broadcastUpdate()
 	a.sendLEDSetAllBuzzers()
+}
+
+// handleRafaleValidate processes RAFALE_VALIDATE (contract rafale.md §5.1):
+// the current question's answer was judged correct. All broadcasting
+// (RAFALE_ANSWER, RAFALE_TICK restart, full UPDATE) is handled internally
+// by the engine via the OnRafaleAnswer/OnStateChange callbacks (setupCallbacks
+// below) — unlike handleMotionDone above, this handler has nothing left to
+// broadcast itself once the engine call returns.
+func (a *App) handleRafaleValidate(msg *protocol.Message) {
+	server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE")
+	if err := a.engine.RafaleValidate(); err != nil {
+		server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE error: %v", err)
+	}
+}
+
+// handleRafaleInvalidate processes RAFALE_INVALIDATE (contract rafale.md
+// §5.1): the current question's answer was judged incorrect. Same
+// broadcasting story as handleRafaleValidate above.
+func (a *App) handleRafaleInvalidate(msg *protocol.Message) {
+	server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE")
+	if err := a.engine.RafaleInvalidate(); err != nil {
+		server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE error: %v", err)
+	}
+}
+
+// handleRafaleSetTeams processes RAFALE_SET_TEAMS (contract rafale.md §5.1,
+// #199 task 31): participating teams + play order. Unlike
+// handleMotionSetTeams, the LED refresh is NOT called explicitly here —
+// Engine.SetRafaleParticipatingTeams already fires OnRafaleTeamsChanged
+// internally (setupCallbacks below), which is a no-op today (PREPARE/READY,
+// not STARTED — see sendLEDSetRafaleTeams' own phase gate) but keeps this
+// handler correct unchanged if that ever stops being true. broadcastUpdate()
+// IS still needed here: SetRafaleParticipatingTeams' own OnStateChange only
+// fires on an actual PREPARE↔READY flip, which participantsConform's
+// default case (engine.go:1038) means never happens for RAFALE — without
+// this call, the new team selection would never reach any client.
+func (a *App) handleRafaleSetTeams(msg *protocol.Message) {
+	var payload protocol.RafaleSetTeamsPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogError(game.LogComponentApp, "Failed to parse RAFALE_SET_TEAMS: %v", err)
+		return
+	}
+
+	server.LogInfo(game.LogComponentEngine, "RAFALE_SET_TEAMS: teams=%v", payload.Teams)
+
+	if err := a.engine.SetRafaleParticipatingTeams(payload.Teams); err != nil {
+		server.LogError(game.LogComponentEngine, "RAFALE_SET_TEAMS error: %v", err)
+		return
+	}
+
+	a.broadcastUpdate()
 }
 
 func (a *App) handleBumperPoints(msg *protocol.Message) {
@@ -4063,11 +4207,30 @@ func (a *App) sendLEDSetForBuzzerMemory(mac string, bumper *game.Bumper, phase g
 
 // sendLEDSetMemoryMultiTeam computes the LED for a buzzer in a multi-team Memory round.
 func (a *App) sendLEDSetMemoryMultiTeam(mac string, bumper *game.Bumper, state game.GameState) {
+	a.sendLEDSetMultiTeam(mac, bumper, state.MemoryCurrentTeam, a.nextMemoryTeam(state), state.MemoryParticipatingTeams)
+}
+
+// sendLEDSetMultiTeam computes and sends the LED for one buzzer in a
+// multi-team round — the "active/next/other-participant/non-participant"
+// grid shared by MEMORY (sendLEDSetMemoryMultiTeam) and RAFALE
+// (sendLEDSetRafaleTeams, v8.0.0, #199 task 35): active team SOLID 100%
+// (INTENSITY=255), next team SOLID 50% (INTENSITY=128), other participating
+// teams DIM at a tone-relative intensity (dimIntensityFor — #113 B3, a flat
+// value nearly extinguishes deep-toned team colors), non-participants OFF.
+// Color is always resolved via bumper.Team's COLOR_NAME (teamColorToRGB),
+// never a hard-coded RGB triplet (contract LED_SET_PROTOCOL.md §11).
+//
+// Deliberately parameterized by (activeTeam, nextTeam, participatingTeams)
+// rather than a game.GameState — the caller decides which mode's fields
+// those come from (Memory* vs Rafale*), this function only knows the grid
+// itself, exactly the same separation team_rotation.go's rotateTeam keeps
+// between rotation MECHANISM and per-mode rotation POLICY.
+func (a *App) sendLEDSetMultiTeam(mac string, bumper *game.Bumper, activeTeam, nextTeam string, participatingTeams []string) {
 	rgb := a.teamColorToRGB(bumper)
 
 	// Not in participating teams → OFF
 	participating := false
-	for _, t := range state.MemoryParticipatingTeams {
+	for _, t := range participatingTeams {
 		if t == bumper.Team {
 			participating = true
 			break
@@ -4079,15 +4242,13 @@ func (a *App) sendLEDSetMemoryMultiTeam(mac string, bumper *game.Bumper, state g
 	}
 
 	// Active team
-	if bumper.Team == state.MemoryCurrentTeam {
+	if bumper.Team == activeTeam {
 		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
 		return
 	}
 
-	// Determine "next" team
-	nextTeam := a.nextMemoryTeam(state)
+	// Next team: SOLID 50% (INTENSITY=128)
 	if nextTeam != "" && bumper.Team == nextTeam {
-		// Next team: SOLID 50% (INTENSITY=128)
 		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 128, Effect: "SOLID"})
 		return
 	}
@@ -4113,6 +4274,102 @@ func (a *App) nextMemoryTeam(state game.GameState) string {
 	return ""
 }
 
+// nextRafaleTeam returns the name of the team that plays after
+// RafaleCurrentTeam, cycling through RafaleParticipatingTeams in order —
+// RAFALE's counterpart to nextMemoryTeam above (v8.0.0, #199 task 35/36).
+func (a *App) nextRafaleTeam(state game.GameState) string {
+	teams := state.RafaleParticipatingTeams
+	if len(teams) < 2 {
+		return ""
+	}
+	for i, t := range teams {
+		if t == state.RafaleCurrentTeam {
+			return teams[(i+1)%len(teams)]
+		}
+	}
+	return ""
+}
+
+// sendLEDSetForBuzzerRafale computes and sends the LED for ONE buzzer during
+// a RAFALE question — mirrors sendLEDSetForBuzzerMemory's per-buzzer phase
+// dispatch (STOPPED/PREPARE/READY/REVEALED → plain team color, PAUSED →
+// DIM, STARTED → the mode-specific grid). Extracted (post-review MINEUR-3,
+// code-review-20260828-183037.md) so sendLEDSetAllBuzzers can call it
+// per-buzzer like every other question type's case in that switch — without
+// this, RAFALE fell into the `default:` branch there (plain per-buzzer team
+// color, no active/next/dim/off grid at all), so an admin action that
+// re-triggers sendLEDSetAllBuzzers mid-round (e.g. editing bumpers/teams)
+// transiently overwrote the "active team" grid until the next RAFALE
+// advance self-corrected it via OnRafaleTeamsChanged — never a state/data
+// loss, but a visible flicker.
+//
+// STARTED/SOLO is OFF for everyone (contract §8.3's own table: "Mode SOLO |
+// Éteint pour tous") — deliberately NOT the same as MEMORY's own SOLO
+// branch (active=SOLID/inactive=DIM): RAFALE has no notion of "my turn" LED
+// feedback in SOLO, there is exactly one team and nothing to distinguish.
+func (a *App) sendLEDSetForBuzzerRafale(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
+	rgb := a.teamColorToRGB(bumper)
+	dimIntensity := dimIntensityFor(rgb)
+
+	switch phase {
+	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseRevealed:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	case game.PhasePaused:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
+	case game.PhaseStarted:
+		mode := ""
+		if state.Question != nil {
+			mode = state.Question.RafaleMode
+		}
+		if mode == "" || mode == string(game.RafaleModeSolo) {
+			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
+			return
+		}
+		a.sendLEDSetMultiTeam(mac, bumper, state.RafaleCurrentTeam, a.nextRafaleTeam(state), state.RafaleParticipatingTeams)
+	default:
+		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
+	}
+}
+
+// sendLEDSetRafaleTeams refreshes buzzer LEDs for the active RAFALE round —
+// contract §8.3. Wired to Engine.OnRafaleTeamsChanged (setupCallbacks
+// below) — fired on round start, RAFALE_SET_TEAMS, and every advance (task
+// 36: "rafraîchi à chaque rotation d'équipe et chaque changement de
+// question").
+//
+// Phase-gated to STARTED, mirroring sendLEDSetForBuzzerRafale's own
+// dispatch: the multi-team grid is a "round in progress" concept — a no-op
+// during PREPARE/READY (see SetRafaleParticipatingTeams' doc comment) and
+// during ROUND_END (whatever was lit for the last question stays lit; no
+// LED behavior is specified past the round ending, and the next START —
+// any question type — resets buzzer LEDs via sendLEDSetAllBuzzers as
+// usual, which now also carries a dedicated RAFALE case — see it below).
+//
+// ⚠️ This function only ever drives LED OUTPUT — buzzer presses stay
+// ignored regardless of what's lit (engine.go ProcessButtonPress, #107 task
+// 25, untouched by this batch).
+func (a *App) sendLEDSetRafaleTeams() {
+	state := a.engine.GetState()
+	if state.Phase != game.PhaseStarted || state.Question == nil || state.Question.Type != game.QuestionTypeRafale {
+		return
+	}
+
+	tb := a.engine.GetTeamsAndBumpers()
+	if tb == nil {
+		return
+	}
+
+	for mac, bumper := range tb.Bumpers {
+		if bumper.IsVPlayer {
+			continue
+		}
+		a.sendLEDSetForBuzzerRafale(mac, bumper, state.Phase, state)
+	}
+	// One broadcast for all AckPending state changes set by the loop above —
+	// same rationale as sendLEDSetAllBuzzers' own trailing call (#127/#129).
+	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
+}
+
 // sendLEDSetAllBuzzers sends per-buzzer LED_SET based on current game state (READY/START/STOPPED phase).
 // Called after READY, START, and FULL updates.
 func (a *App) sendLEDSetAllBuzzers() {
@@ -4132,6 +4389,13 @@ func (a *App) sendLEDSetAllBuzzers() {
 			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
 			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
+		case state.Question != nil && state.Question.Type == game.QuestionTypeRafale:
+			// Post-review MINEUR-3 (code-review-20260828-183037.md): without
+			// this case, RAFALE fell into `default:` below (plain per-buzzer
+			// team color) — any admin action that re-triggers
+			// sendLEDSetAllBuzzers mid-round (editing bumpers/teams) would
+			// transiently overwrite the active-team grid.
+			a.sendLEDSetForBuzzerRafale(mac, bumper, phase, state)
 		case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
 			// MEMOTION: buzzers display team color (same as NORMAL)
 			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
@@ -4409,6 +4673,48 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state
 	a.broadcastUpdate()
+}
+
+// broadcastRafaleAnswer sends RAFALE_ANSWER to admin+anim ONLY (contract
+// rafale.md §2.3/§5.2) — never TV, never VPlayer. This is the ONE place in
+// the codebase that must never widen this recipient list: RAFALE_ANSWER
+// carries the expected answer AND, since #202 (contract §13.3), the
+// pre-fetched NEXT question's statement — TWO sensitive fields now, not
+// one. SerializeForWebClient/serializeForClientType serve the identical
+// payload to TV and /anim, so — unlike GameState fields, which use an
+// exclusion list — the ONLY thing keeping either field off TV is this call
+// site's explicit, narrow type list (precedent: ardoise_leak_128). Do not
+// add ClientTypeTV/ClientTypeVPlayer/ClientTypeBuzzer here.
+func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleCurrent) {
+	payload := protocol.RafaleAnswerPayload{ID: id, Answer: answer, Next: rafaleNextPayload(next)}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionRafaleAnswer, data, false,
+		server.ClientTypeAdmin, server.ClientTypeAnim)
+	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER: id=%s next=%v", id, next != nil)
+}
+
+// rafaleNextPayload (#202) maps the engine's answer-free preview
+// (*game.RafaleCurrent) onto the wire payload's own NEXT type
+// (*protocol.RafaleNextPayload) — nil in, nil out (contract §13.5). A
+// distinct type from game.RafaleCurrent by design (see
+// protocol.RafaleNextPayload's own doc comment); this is the one place
+// that converts between them.
+func rafaleNextPayload(next *game.RafaleCurrent) *protocol.RafaleNextPayload {
+	if next == nil {
+		return nil
+	}
+	return &protocol.RafaleNextPayload{
+		ID: next.ID, Question: next.Question, Category: next.Category, Difficulty: next.Difficulty,
+	}
+}
+
+// broadcastRafaleTick sends RAFALE_TICK to all clients — the lightweight
+// per-question countdown, contract §5.2, no full GameState re-emission.
+func (a *App) broadcastRafaleTick(questionTime int) {
+	payload := protocol.RafaleTickPayload{QuestionTime: questionTime}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionRafaleTick, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 }
 
 func (a *App) broadcastShowQRCode() {

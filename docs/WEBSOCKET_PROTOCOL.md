@@ -1377,6 +1377,52 @@ L'élargissement de la liste blanche pour permettre l'entrée **directe** des jo
 
 ---
 
+## Actions WebSocket — Mode RAFALE (v8.0.0, #16)
+
+### Actions Entrantes (Client → Serveur)
+
+| Action | ClientType | Payload | Description |
+|--------|-----------|---------|-------------|
+| `RAFALE_VALIDATE` | admin, anim | `{}` | Réponse jugée correcte — avance question |
+| `RAFALE_INVALIDATE` | admin, anim | `{}` | Réponse jugée incorrecte — avance question |
+| `RAFALE_SET_TEAMS` | admin | `{"TEAMS": ["team_A", "team_B"]}` | Sélection équipes + ordre rotation |
+
+**Déclaration Allow-list requise** : `inbound_allowlist.go` (allow-list fermée, absence = rejet silencieux)
+
+**Example JSON** :
+```json
+{ "ACTION": "RAFALE_VALIDATE", "MSG": {}, "ID": "<admin_id>" }
+{ "ACTION": "RAFALE_INVALIDATE", "MSG": {}, "ID": "<anim_id>" }
+{ "ACTION": "RAFALE_SET_TEAMS", "MSG": {"TEAMS": ["red", "blue"]}, "ID": "<admin_id>" }
+```
+
+### Actions Sortantes (Serveur → Client)
+
+| Action | Destinataires | Payload | Description |
+|--------|---|---------|-------------|
+| `RAFALE_ANSWER` | **admin, anim uniquement** | `{"ID": "r-001", "ANSWER": "Rome", "NEXT": {...}}` | Réponse attendue + aperçu prochaine question (jamais TV/VPlayer) |
+| `RAFALE_TICK` | tous | `{"QUESTION_TIME": 2500}` | Décompte timer question (µs) |
+| `UPDATE_TIMER` | tous | `{"CURRENT_TIME": 95000}` | Décompte timer manche (inchangée, réutilisée) |
+
+**Fuite zéro garantie** : `RAFALE_ANSWER` ne transite **jamais** via `GameState` — diffusion par site d'appel étroit (`broadcastRafaleAnswer`, patron `BroadcastToTypes(msg, ClientTypeAdmin, ClientTypeAnim)`). Champ `NEXT` **jamais** transmis à `/tv` ou `/player`, même par futur copier-colle.
+
+**Champ NEXT — pré-tirage de la question suivante** (v8.0.0, #202) :
+- **Présence** : `NEXT` est toujours présent dans `RAFALE_ANSWER`, même si `null` (information utile : pas de question suivante disponible, pool épuisé ou plafond atteint).
+- **Contenu** : `NEXT = {"ID": "r-002", "QUESTION": "Capitale de la France ?", "CATEGORY": "géo", "DIFFICULTY": 2}` — **aucun champ `ANSWER`**, par sécurité (même régime que la réponse courante).
+- **Destinataires** : `NEXT` ne quitte **jamais** les clients admin+anim — rejet précoce à la sérialisation pour `/tv` et `/player`.
+- **Garantie moteur** : la question pré-tirée est réellement consommée au tick suivant (pas un aperçu jetable). Libération exhaustive en fin de manche ou STOP (flag `used` remis à disposition).
+
+**Example JSON** :
+```json
+{ "ACTION": "RAFALE_ANSWER", "MSG": {"ID": "r-001", "ANSWER": "Rome", "NEXT": {"ID": "r-002", "QUESTION": "Capitale de la France ?", "CATEGORY": "géo", "DIFFICULTY": 2}} }
+{ "ACTION": "RAFALE_ANSWER", "MSG": {"ID": "r-005", "ANSWER": "Paris", "NEXT": null} }
+{ "ACTION": "RAFALE_TICK", "MSG": {"QUESTION_TIME": 2500} }
+```
+
+**Invariant de sérialisation** : `RAFALE_ANSWER` n'est émise que par callback dédié, jamais incluse dans une diffusion globale `UPDATE`. Deux champs sensibles protégés : `ANSWER` et `NEXT.QUESTION` (jamais aux clients non-admin).
+
+---
+
 ## References
 
 - [RFC 6455 - WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)
@@ -1384,3 +1430,4 @@ L'élargissement de la liste blanche pour permettre l'entrée **directe** des jo
 - [gorilla/websocket (Go)](https://github.com/gorilla/websocket)
 - [Contrat question-types.md](../contracts/question-types.md) — discriminant de type MEMOTION, portée des actions, invariant de scope
 - [Contrat websocket-actions.md](../contracts/websocket-actions.md) — allow-list entrante par ClientType, table complète des actions
+- [Contrat rafale.md](../contracts/rafale.md) — Mode RAFALE, actions entrantes/sortantes, sérialisation réponse

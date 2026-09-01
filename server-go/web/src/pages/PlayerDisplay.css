@@ -3486,3 +3486,175 @@
 .ardoise-team-card.no-answer .ardoise-team-card-answer {
   color: rgba(255, 255, 255, 0.35);
 }
+
+/* ------------------------------------------------------------------ */
+/* RAFALE — TV Content (contrat rafale.md §4/§4bis, milestone v8.0.0)  */
+/* Statique — mêmes zones que le bloc SPEEDY/ARDOISE générique (4      */
+/* zones verticales), overflow:hidden hérité de .game-content-zones,  */
+/* aucune unité non-viewport, contenu plafonné à 6 équipes (§4bis).    */
+/* ------------------------------------------------------------------ */
+
+.rafale-tv-zone-timer {
+  height: 16vh;
+}
+
+.rafale-tv-question {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
+  width: 100%;
+}
+
+.rafale-tv-meta {
+  display: flex;
+  gap: 0.6vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rafale-tv-chip {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: 0.3vh 1vw;
+  font-size: clamp(0.65rem, 1.6vh, 0.9rem);
+  color: var(--text-secondary, #94a3b8);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3vw;
+}
+
+.rafale-tv-chip-img {
+  width: 1.4em;
+  height: 1.4em;
+  object-fit: contain;
+}
+
+.rafale-tv-question-text {
+  margin: 0;
+}
+
+/* Zone 3 — RÉVISION 2026-08-28 (maquette §9.1/§9.4, section faisant
+   autorité) : l'encart coloré équipe PORTE directement la question — plus
+   de bandeau "c'est le tour de" séparé, plus de grille de compteurs sur TV
+   (retour utilisateur : aucun score/compteur/classement affiché ici).
+   S'affiche même en SOLO, couleur fixe de l'unique équipe pour toute la
+   manche (§9.4 — aucune variante simplifiée). */
+.rafale-tv-qcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vh;
+  padding: 3vh 5vw;
+  width: 85%;
+  max-width: 820px;
+  border: 5px solid var(--rafale-active-color, var(--error));
+  border-radius: var(--radius-xl);
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 20%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 7%, transparent));
+  box-shadow: 0 0 4vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 55%, transparent);
+  animation: rafale-active-pulse 1.6s ease-in-out infinite;
+  text-align: center;
+  overflow: hidden;
+}
+
+/* Bandeau renforcé (#198, tâche 38) — pulsation lente, lisible de loin, ne
+   gêne jamais la lecture (amplitude faible, jamais d'opacité à 0). */
+@keyframes rafale-active-pulse {
+  0%, 100% { box-shadow: 0 0 4vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 45%, transparent); }
+  50%      { box-shadow: 0 0 7vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 75%, transparent); }
+}
+
+.rafale-tv-qcard-team {
+  font-size: clamp(0.7rem, 1.6vh, 1rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--rafale-active-color, var(--error));
+  font-weight: 700;
+}
+
+.rafale-tv-qcard-text {
+  font-size: clamp(1.3rem, 4.5vh, 2.6rem);
+  font-weight: 800;
+  line-height: 1.25;
+  color: #ffffff;
+  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.4);
+  margin: 0;
+  /* Contenu plafonné, jamais de défilement (règle TV, CLAUDE.md) — un
+     énoncé trop long est tronqué plutôt que de faire déborder l'encart. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* RAFALE — VPlayer plein écran (contrat rafale.md §8.1/§8.2, tâche 38)*/
+/* Affichage SEUL — aucun bouton, aucune saisie. Statique (hérite de     */
+/* .game-display : height:100%, overflow:hidden, flex column).         */
+/* ------------------------------------------------------------------ */
+
+.rafale-vplayer-fullscreen {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2vh;
+  text-align: center;
+  padding: 4vh 6vw;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rafale-vplayer-active {
+  border: 6px solid var(--rafale-active-color, var(--error));
+  border-radius: var(--radius-2xl, 24px);
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 25%, transparent),
+    color-mix(in srgb, var(--rafale-active-color, var(--error)) 8%, transparent));
+  box-shadow: 0 0 6vh color-mix(in srgb, var(--rafale-active-color, var(--error)) 55%, transparent);
+  margin: 4vh 4vw;
+  animation: rafale-active-pulse 1.6s ease-in-out infinite;
+}
+
+.rafale-vplayer-fs-team {
+  font-size: clamp(0.75rem, 2.2vh, 1.1rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #94a3b8);
+  font-weight: 700;
+}
+
+.rafale-vplayer-fs-message {
+  font-size: clamp(1.8rem, 8vh, 4.5rem);
+  font-weight: 900;
+  line-height: 1.15;
+  color: #ffffff;
+  text-shadow: 0 0.2vh 1vh rgba(0, 0, 0, 0.5);
+}
+
+.rafale-vplayer-fs-hint {
+  font-size: clamp(0.7rem, 1.8vh, 1rem);
+  color: var(--text-secondary, #94a3b8);
+}
+
+.rafale-vplayer-neutral {
+  color: var(--text-secondary, #94a3b8);
+}
+
+.rafale-vplayer-fs-label {
+  font-size: clamp(0.65rem, 1.6vh, 0.9rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.rafale-vplayer-neutral .rafale-vplayer-fs-message {
+  font-size: clamp(1.2rem, 4.5vh, 2.4rem);
+  color: var(--text-secondary, #cbd5e1);
+  font-weight: 700;
+}

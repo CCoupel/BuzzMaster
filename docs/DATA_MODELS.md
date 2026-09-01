@@ -1169,3 +1169,157 @@ amplitude nulle qui tournerait quand même. Le panneau reste fixe.
 
 Sous `prefers-reduced-motion: reduce`, animation neutralisée quelle que soit la 
 configuration (accessibilité, respect des préférences système).
+
+## Question (RAFALE type) - v8.0.0, #16
+
+### Modèle RafaleQuestion — Élément du réservoir
+
+```json
+{
+  "ID": "r-001",
+  "QUESTION": "Capitale de l'Italie ?",
+  "ANSWER": "Rome",
+  "CATEGORY": "GEOGRAPHY",
+  "DIFFICULTY": 1
+}
+```
+
+**Champs** :
+- `ID` : identifiant stable, unique dans le réservoir (chaîne)
+- `QUESTION` : énoncé, texte seul (pas de média)
+- `ANSWER` : réponse attendue, texte seul
+- `CATEGORY` : réutilise l'enum `QuestionCategory` + catégories personnalisées découvertes dans `data/files/categories/`
+- `DIFFICULTY` : échelle 1–3 (identique `MotionCard.Difficulty`)
+
+**Stockage** : Fichier unique `data/files/rafale/reservoir.json` avec structure `{"QUESTIONS": [RafaleQuestion, ...]}`
+
+**Persistance** : Typée (`LoadRafale()` / `SaveRafale()` / `SetRafalePath()` dans `internal/game/rafale_store.go`), recharger à `App.init()`.
+
+### Flag "déjà utilisée" — Persistant
+
+```json
+{
+  "USED": {
+    "r-001": true,
+    "r-005": true
+  }
+}
+```
+
+**Stockage** : Fichier `data/config/rafale_used.json`, **séparé du réservoir** intentionnellement.
+
+**Comportement** :
+- Persistant à travers redémarrages (survit fermeture/ouverture serveur)
+- Réinitialisé automatiquement dans `InitGame()` (commande `NEW_GAME`) — appel `safeGo("SaveRafaleUsed", ...)`
+- Édition du réservoir ne réécrira pas le flag (et inversement)
+- La pioche marque la question immédiatement et persiste atomiquement
+
+### Configuration de manche — Question type RAFALE
+
+Réutilise la structure `Question` avec champs existants + nouveaux champs `TypedContent` :
+
+**Champs existants réutilisés** :
+- `TIME` : durée totale de la manche (secondes, défaut 120)
+- `POINTS` : barème de manche (points d'une bonne réponse)
+- `CATEGORY` : catégorie filtre pioche (**catégorie unique**, comme tous les types)
+
+**Champs nouveaux** (portés par `TypedContent`, tous `omitempty`) :
+```go
+RafaleDifficulty   int      `json:"RAFALE_DIFFICULTY,omitempty"`    // 1–3, unique par manche
+RafaleMode         string   `json:"RAFALE_MODE,omitempty"`          // SOLO|CHACUN_SON_TOUR|TANT_QUE_JE_GAGNE|MAILLON_FAIBLE
+RafaleQuestionTime int      `json:"RAFALE_QUESTION_TIME,omitempty"` // secondes par question, défaut 3
+RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond dur, défaut 100, max 100
+```
+
+**Note sur `CATEGORY`** : RAFALE réutilise le champ générique `CATEGORY` de `Question` (catégorie **unique**), exactement comme SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE. Cette unification permet au frontend de lire la catégorie sur la card générique (`question.CATEGORY`) sans branche RAFALE spécifique. La pioche filtre le réservoir selon cette catégorie unique.
+
+### Structure GameState RAFALE
+
+```json
+{
+  "RAFALE_SUBPHASE": "QUESTION",
+  "RAFALE_CURRENT_QUESTION": {
+    "ID": "r-001",
+    "QUESTION": "Capitale de l'Italie ?",
+    "CATEGORY": "GEOGRAPHY",
+    "DIFFICULTY": 1
+  },
+  "RAFALE_QUESTION_TIME": 2500,
+  "RAFALE_TEAM_COUNTERS": {
+    "team_A": 5,
+    "team_B": 3
+  },
+  "RAFALE_TEAM_STREAK": {
+    "team_A": 2,
+    "team_B": 1
+  },
+  "RAFALE_TEAM_ERRORS": {
+    "team_A": 1,
+    "team_B": 2
+  },
+  "RAFALE_TEAM_BEST": {
+    "team_A": 3,
+    "team_B": 2
+  },
+  "RAFALE_CURRENT_TEAM": "team_A",
+  "RAFALE_PARTICIPATING_TEAMS": ["team_A", "team_B"],
+  "RAFALE_CURRENT_TEAM_COLOR": [255, 26, 26],
+  "RAFALE_ASKED_COUNT": 12,
+  "RAFALE_POOL_REMAINING": 38,
+  "RAFALE_EXHAUSTED": false
+}
+```
+
+**Champs** (tous sans `omitempty`, initialisés non-nil) :
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `RAFALE_SUBPHASE` | string | État interne : `""` (inactif), `"QUESTION"` (question posée, timer actif), `"ROUND_END"` (attribution points) |
+| `RAFALE_CURRENT_QUESTION` | object | Question courante **SANS la réponse attendue** (`RafaleCurrent` : ID, QUESTION, CATEGORY, DIFFICULTY uniquement) |
+| `RAFALE_QUESTION_TIME` | int | Décompte timer question courant (microsecondes) |
+| `RAFALE_TEAM_COUNTERS` | map | Compteur **cumulatif** réponses correctes par équipe (jamais décrémenté, sauf en MAILLON_FAIBLE) |
+| `RAFALE_TEAM_STREAK` | map | Série de bonnes réponses **en cours** par équipe (remise à 0 sur mauvaise réponse, **tous modes**) |
+| `RAFALE_TEAM_ERRORS` | map | Nombre cumulé de mauvaises réponses/timeouts par équipe (jamais remis à 0 en manche) |
+| `RAFALE_TEAM_BEST` | map | **Max historique de STREAK** (tous modes, calculé automatiquement) — remplace l'ancien max-de-compteur-en-MAILLON |
+| `RAFALE_CURRENT_TEAM` | string | Équipe active (multi-mode), vide en SOLO |
+| `RAFALE_PARTICIPATING_TEAMS` | array | Équipes en jeu, ordre de rotation |
+| `RAFALE_CURRENT_TEAM_COLOR` | array | Couleur RGB équipe active (utilisée pour LED + affichage) |
+| `RAFALE_ASKED_COUNT` | int | Nombre total questions tirées depuis début manche |
+| `RAFALE_POOL_REMAINING` | int | Questions encore disponibles (recalculé à chaque tirage) |
+| `RAFALE_EXHAUSTED` | bool | `true` si pool vide pendant manche |
+
+**Note sur les compteurs** (v8.0.0, bugfix 2026-08-30) :
+- `RAFALE_TEAM_COUNTERS` : cumulatif, ne décrémente jamais (sauf MAILLON_FAIBLE qui le remet à 0)
+- `RAFALE_TEAM_STREAK` : série **en cours**, remise à 0 sur mauvaise réponse dans **tous les modes**
+- `RAFALE_TEAM_ERRORS` : cumulatif, jamais remis à 0
+- `RAFALE_TEAM_BEST` : défini comme max(STREAK) sur toute la manche, **alimenté dans tous les modes** (pas seulement MAILLON_FAIBLE)
+
+La distinction COUNTERS vs. STREAK permet au panneau d'équipes de l'animateur d'afficher les séries en cours (dynamique, change souvent) tandis que COUNTERS reste pour l'historique global.
+
+**Persistance** : Tous ces champs sont **éphémères** (exclus de `PersistedGameState`). Seul `rafale_used.json` persiste.
+
+### Types d'élément `RafaleCurrent`
+
+```go
+type RafaleCurrent struct {
+    ID         string `json:"ID"`
+    QUESTION   string `json:"QUESTION"`
+    CATEGORY   string `json:"CATEGORY"`
+    DIFFICULTY int    `json:"DIFFICULTY"`
+}
+```
+
+**Invariant critique** : ce type n'a **jamais** de champ `ANSWER`. Cela garantit structurellement que la réponse attendue ne transite jamais via `GameState`, même si un refactor oublie la sérialisation spéciale `RAFALE_ANSWER`.
+
+### Modes de jeu RAFALE
+
+| Mode | Chaîne | Rotation | Compteur sur Mauvais |
+|------|--------|----------|----------------------|
+| Solo | `"SOLO"` | Aucune | N/A (pas de rotation) |
+| Chacun son tour | `"CHACUN_SON_TOUR"` | À chaque réponse (V ou I) | Conservé |
+| Tant que je gagne | `"TANT_QUE_JE_GAGNE"` | Réponse I uniquement | Conservé, même équipe continue sur V |
+| Maillon faible | `"MAILLON_FAIBLE"` | À chaque réponse (V ou I) | Remis à 0, meilleur mémorisé |
+
+**Scoring pendant manche** : Aucun point réel, seul compteur visible.
+
+**Scoring en fin de manche (ROUND_END)** : Admin/anim clique équipe → `TEAM_POINTS`, valeur pré-remplie = `compteur_retenu × POINTS` (compteur_retenu = `TEAM_BEST` en MAILLON, `TEAM_COUNTERS` sinon). Ajustable avant validation.

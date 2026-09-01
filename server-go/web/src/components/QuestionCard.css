@@ -197,7 +197,6 @@
   color: white;
 }
 
-
 .qcard-type-badge {
   font-size: 0.55rem;
   font-weight: 700;
@@ -208,13 +207,14 @@
   letter-spacing: 0.5px;
 }
 
-/* type-normal conservé comme alias rétrocompat pour fichiers JSON non-migrés */
-.qcard-type-badge.type-speedy,
-.qcard-type-badge.type-normal   { background: #6b7280; }
-.qcard-type-badge.type-qcm      { background: #3b82f6; }
-.qcard-type-badge.type-memory   { background: #8b5cf6; }
-.qcard-type-badge.type-memotion { background: #f59e0b; }
-.qcard-type-badge.type-ardoise  { background: #10b981; }
+/* Couleur de fond : voir style inline dans QuestionCard.jsx
+   (typeMeta.color, utils/questionTypeMeta.js) — bugfix cohérence UI
+   (v8.0.0, #16/#107, retour utilisateur QUALIF 8.0.0.3). Cette liste
+   codée en dur ici divergeait silencieusement de questionTypeMeta.js/du
+   sélecteur de type (QuestionsPage.jsx) : RAFALE n'y avait aucune entrée,
+   laissant le badge sans fond. Supprimée plutôt que complétée — une
+   seule source de vérité désormais, pas une deuxième liste à tenir à
+   jour à chaque nouveau type. */
 
 .qcard-target-badge {
   display: flex;

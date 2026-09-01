@@ -1,0 +1,559 @@
+package game
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// ---------------------------------------------------------------------------
+// Tests : mode RAFALE — réservoir, flag « déjà utilisée », pioche, comptage
+// de pool (milestone v8.0.0 #16, issue #197, contrat contracts/rafale.md
+// §2.4/§3/§7). Périmètre Batch 1 (test-writer, en parallèle de dev-backend
+// sur la même branche) : pioche (§7), persistance du flag (§3.2), comptage
+// de pool + estimation du besoin (§7.2). Le CRUD HTTP (§9) et le moteur de
+// manche complet (#107, sous-phases/tickers) sont hors périmètre de ce
+// fichier — voir internal/server (endpoints) et le futur
+// cmd/server/rafale_107_test.go (Batch 2/3).
+//
+// Écrit à partir du contrat (contract-first) — internal/game/rafale_store.go
+// et la partie moteur d'internal/game/engine.go (DrawRafaleQuestion,
+// CountRafalePool, reset InitGame) sont la référence de nommage : ce fichier
+// vérifie leur comportement RÉEL au moment de l'écriture (Batch 1 dev-backend
+// a livré ce module en parallèle), pas une spéculation sur une future API.
+// ---------------------------------------------------------------------------
+
+// seedRafaleReservoir upserts each question into e's reservoir via the public
+// UpsertRafaleQuestion API — no reservoir path is set, so this never touches
+// disk (SaveRafale no-ops when rafalePath == ""), matching e.g.
+// setBumpersNoAutoSave's intent elsewhere in this package: give tests full
+// control over fixture state without background I/O side effects.
+func seedRafaleReservoir(t *testing.T, e *Engine, questions []RafaleQuestion) {
+	t.Helper()
+	for _, q := range questions {
+		if _, err := e.UpsertRafaleQuestion(q); err != nil {
+			t.Fatalf("seedRafaleReservoir: UpsertRafaleQuestion(%q) failed: %v", q.ID, err)
+		}
+	}
+}
+
+// drawRafaleQuestionNoAutoSave draws via the same locked core the public
+// DrawRafaleQuestion uses (drawRafaleQuestionUnsafe, engine.go), but WITHOUT
+// its "safeGo(SaveRafaleUsed, ...)" background-save side effect — mirrors
+// setBumpersNoAutoSave (save_bumpers_atomic_test.go, #120 B2) for the exact
+// same reason: an unawaited background save racing t.TempDir()'s cleanup at
+// test end is flaky by construction (the goroutine's own CreateTemp/Rename
+// can still be mid-flight when RemoveAll walks the directory — "TempDir
+// RemoveAll cleanup: directory not empty" — regardless of how atomic the
+// write itself is). Any test asserting on the ON-DISK rafale_used.json
+// (unlike the pure in-memory pool/draw tests above, which never set a
+// RafaleUsedPath and so never touch disk at all) must use this instead of
+// DrawRafaleQuestion, then call SaveRafaleUsed() itself exactly once,
+// deterministically.
+func drawRafaleQuestionNoAutoSave(t *testing.T, e *Engine, category string, difficulty int) *RafaleQuestion {
+	t.Helper()
+	e.mu.Lock()
+	drawn, err := e.drawRafaleQuestionUnsafe(category, difficulty)
+	e.mu.Unlock()
+	if err != nil {
+		t.Fatalf("drawRafaleQuestionNoAutoSave: drawRafaleQuestionUnsafe failed: %v", err)
+	}
+	return drawn
+}
+
+// ---------------------------------------------------------------------------
+// Pioche (contrat §7) : pool = catégories ∩ difficulté ∩ non utilisée,
+// tirage aléatoire uniforme, marquage immédiat.
+// ---------------------------------------------------------------------------
+
+func TestDrawRafaleQuestion_RespectsFilterIntersection(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+		{ID: "r-2", Question: "Q2", Answer: "A2", Category: CategoryHistory, Difficulty: 2}, // wrong difficulty
+		{ID: "r-3", Question: "Q3", Answer: "A3", Category: CategoryScience, Difficulty: 1}, // wrong category
+		{ID: "r-4", Question: "Q4", Answer: "A4", Category: CategoryHistory, Difficulty: 1}, // matches
+	})
+
+	seen := map[string]bool{}
+	for i := 0; i < 50; i++ {
+		q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+		if err != nil {
+			// Pool of 2 (r-1, r-4) exhausts after 2 draws — expected once seen.
+			if !errors.Is(err, ErrRafalePoolEmpty) {
+				t.Fatalf("draw %d: unexpected error: %v", i, err)
+			}
+			break
+		}
+		if q.Category != CategoryHistory || q.Difficulty != 1 {
+			t.Fatalf("draw %d: got %+v, want CATEGORY=HISTORY DIFFICULTY=1 only (contract §7 intersection)", i, q)
+		}
+		seen[q.ID] = true
+	}
+
+	if len(seen) != 2 || !seen["r-1"] || !seen["r-4"] {
+		t.Errorf("expected exactly {r-1, r-4} to be drawable (HISTORY ∩ 1), got %v", seen)
+	}
+	if seen["r-2"] || seen["r-3"] {
+		t.Errorf("r-2 (wrong difficulty) and r-3 (wrong category) must never be drawn, got %v", seen)
+	}
+}
+
+func TestDrawRafaleQuestion_MarksUsedImmediately(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+	})
+
+	availableBefore, usedBefore, _ := e.CountRafalePool(string(CategoryHistory), 1)
+	if availableBefore != 1 || usedBefore != 0 {
+		t.Fatalf("pre-condition: available=%d used=%d, want 1/0", availableBefore, usedBefore)
+	}
+
+	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); err != nil {
+		t.Fatalf("DrawRafaleQuestion failed: %v", err)
+	}
+
+	availableAfter, usedAfter, _ := e.CountRafalePool(string(CategoryHistory), 1)
+	if availableAfter != 0 || usedAfter != 1 {
+		t.Errorf("after one draw: available=%d used=%d, want 0/1 (marking must be immediate, not deferred to save)", availableAfter, usedAfter)
+	}
+}
+
+func TestDrawRafaleQuestion_EmptyPool_ReturnsErrRafalePoolEmpty(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+	})
+
+	// Draw the only match, exhausting the pool.
+	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); err != nil {
+		t.Fatalf("first draw should succeed: %v", err)
+	}
+
+	q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	if !errors.Is(err, ErrRafalePoolEmpty) {
+		t.Errorf("expected ErrRafalePoolEmpty on an exhausted pool, got q=%v err=%v", q, err)
+	}
+}
+
+func TestDrawRafaleQuestion_EmptyReservoir_ReturnsErrRafalePoolEmpty(t *testing.T) {
+	e := NewEngine()
+	q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	if !errors.Is(err, ErrRafalePoolEmpty) {
+		t.Errorf("drawing from an empty reservoir must return ErrRafalePoolEmpty, got q=%v err=%v", q, err)
+	}
+}
+
+func TestDrawRafaleQuestion_EmptyCategoryFilter_NeverMatches(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+		// r-2 has an unset CATEGORY (CategoryNone == "") at the SAME
+		// difficulty — this is the actual case the guard below protects
+		// against: without it, an unconfigured manche (category=="") would
+		// silently match this exact reservoir entry instead of drawing
+		// nothing (post-review, 2026-08-29 — the previous version of this
+		// test never seeded such a question, so it couldn't actually prove
+		// the guarantee its own comment described).
+		{ID: "r-2", Question: "Q2", Answer: "A2", Category: CategoryNone, Difficulty: 1},
+	})
+	// §3.3 (v8.0.0 bugfix, 2026-08-29 — single CATEGORY, RAFALE_CATEGORIES
+	// multi-select removed): an empty/unset category ("") is an
+	// invalid/unconfigured manche, and must draw nothing — neither r-1
+	// (different category) nor r-2 (also unset, which a naive `==`
+	// comparison would otherwise match).
+	_, err := e.DrawRafaleQuestion("", 1)
+	if !errors.Is(err, ErrRafalePoolEmpty) {
+		t.Errorf("an empty category filter must match nothing (including a reservoir question with an unset CATEGORY), got err=%v", err)
+	}
+
+	// Belt-and-braces: CountRafalePool must agree (contract §7.2's pre-round
+	// alert relies on the same guard).
+	available, used, total := e.CountRafalePool("", 1)
+	if available != 0 || used != 0 || total != 0 {
+		t.Errorf("CountRafalePool(\"\", 1) = (%d, %d, %d), want (0, 0, 0)", available, used, total)
+	}
+}
+
+// TestDrawRafaleQuestion_StrictCategoryEquality_NotSetMembership is the
+// explicit regression guard for the v8.0.0 bugfix (2026-08-29, contract
+// §3.3): RAFALE_CATEGORIES (multi-select, OR-matched membership — a
+// question was drawable if its Category was IN the selected set) was
+// removed in favor of a single Category, compared by EXACT STRING EQUALITY
+// (rafalePoolUnsafe: `string(q.Category) != category`). This test names
+// that distinction directly: a reservoir question whose category would
+// have matched under the OLD "belongs to a set" semantics (HISTORY is one
+// of several categories a manche might have selected) must NEVER be drawn
+// when the manche's single configured category is something else — there
+// is no set to belong to anymore, only one value to equal.
+//
+// TestDrawRafaleQuestion_RespectsFilterIntersection above already proves
+// this structurally (r-3/SCIENCE is never drawn while filtering HISTORY);
+// this test exists to make the "equality, not membership" invariant
+// impossible to miss for anyone reading this file after the bugfix.
+func TestDrawRafaleQuestion_StrictCategoryEquality_NotSetMembership(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-history", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+		{ID: "r-science", Question: "Q2", Answer: "A2", Category: CategoryScience, Difficulty: 1},
+		{ID: "r-sports", Question: "Q3", Answer: "A3", Category: CategorySports, Difficulty: 1},
+	})
+
+	// The manche is configured for exactly ONE category: HISTORY. Under the
+	// removed multi-select semantics, a manche could have selected
+	// {HISTORY, SCIENCE, SPORTS} and any of the three would have been
+	// drawable (membership). Under the current single-CATEGORY contract,
+	// only the exact match is ever eligible — SCIENCE and SPORTS must never
+	// be drawn, no matter how many draws are attempted.
+	drawnIDs := map[string]bool{}
+	for i := 0; i < 20; i++ {
+		q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+		if err != nil {
+			if errors.Is(err, ErrRafalePoolEmpty) {
+				break // pool of 1 (r-history) exhausts after the first draw — expected
+			}
+			t.Fatalf("draw %d: unexpected error: %v", i, err)
+		}
+		drawnIDs[q.ID] = true
+		if q.Category != CategoryHistory {
+			t.Fatalf("draw %d: got CATEGORY=%s, want strictly HISTORY (equality, not set membership)", i, q.Category)
+		}
+	}
+
+	if len(drawnIDs) != 1 || !drawnIDs["r-history"] {
+		t.Fatalf("expected only r-history ever drawn, got %v", drawnIDs)
+	}
+	if drawnIDs["r-science"] || drawnIDs["r-sports"] {
+		t.Errorf("r-science (SCIENCE) and r-sports (SPORTS) must never be drawn when the manche's category is HISTORY — got %v", drawnIDs)
+	}
+
+	// Same invariant on the read-only side (CountRafalePool): SCIENCE/SPORTS
+	// questions must not be counted into a HISTORY-filtered pool either —
+	// total stays 1 (the sole HISTORY question, now used), never 3.
+	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	if total != 1 || used != 1 || available != 0 {
+		t.Errorf("CountRafalePool(HISTORY, 1) after exhausting the sole HISTORY question: want (available=0, used=1, total=1) — SCIENCE/SPORTS must not leak in, got available=%d used=%d total=%d", available, used, total)
+	}
+	scienceAvailable, _, scienceTotal := e.CountRafalePool(string(CategoryScience), 1)
+	if scienceTotal != 1 || scienceAvailable != 1 {
+		t.Errorf("CountRafalePool(SCIENCE, 1): want the untouched SCIENCE question counted on ITS OWN filter (available=1, total=1), got available=%d total=%d", scienceAvailable, scienceTotal)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Persistance du flag « déjà utilisée » (contrat §3.2) : aller-retour
+// disque, survie à un redémarrage, reset au NEW_GAME.
+// ---------------------------------------------------------------------------
+
+func TestRafaleUsedFlag_SaveRoundTrip_OnDiskShape(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+	})
+
+	dir := t.TempDir()
+	usedPath := filepath.Join(dir, "rafale_used.json")
+	e.SetRafaleUsedPath(usedPath)
+
+	// drawRafaleQuestionNoAutoSave (not the public DrawRafaleQuestion): the
+	// public method's safeGo(SaveRafaleUsed) background write is an
+	// unawaited goroutine — the explicit SaveRafaleUsed() call right below
+	// does NOT wait for it, it only performs its OWN separate write. Its
+	// CreateTemp/Rename can still be mid-flight when this test function
+	// returns and t.TempDir() removes the directory ("TempDir RemoveAll
+	// cleanup: directory not empty") — see the helper's own doc comment.
+	drawn := drawRafaleQuestionNoAutoSave(t, e, string(CategoryHistory), 1)
+
+	if err := e.SaveRafaleUsed(); err != nil {
+		t.Fatalf("SaveRafaleUsed failed: %v", err)
+	}
+
+	data, err := os.ReadFile(usedPath)
+	if err != nil {
+		t.Fatalf("rafale_used.json should exist and be readable: %v", err)
+	}
+
+	// Contract §3.2 fixes the exact on-disk shape: {"USED": {"<id>": true}}.
+	var envelope struct {
+		Used map[string]bool `json:"USED"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		t.Fatalf("rafale_used.json must be valid JSON matching {\"USED\": {...}}: %v (raw: %s)", err, data)
+	}
+	if !envelope.Used[drawn.ID] {
+		t.Errorf("rafale_used.json USED map must contain %q=true, got %v", drawn.ID, envelope.Used)
+	}
+}
+
+func TestRafaleUsedFlag_SurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	reservoirPath := filepath.Join(dir, "reservoir.json")
+	usedPath := filepath.Join(dir, "rafale_used.json")
+
+	// --- "Before restart" engine ---
+	e1 := NewEngine()
+	e1.SetRafalePath(reservoirPath)
+	seedRafaleReservoir(t, e1, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 2},
+		{ID: "r-2", Question: "Q2", Answer: "A2", Category: CategoryHistory, Difficulty: 2},
+	})
+	if err := e1.SaveRafale(); err != nil {
+		t.Fatalf("SaveRafale failed: %v", err)
+	}
+	e1.SetRafaleUsedPath(usedPath)
+
+	// drawRafaleQuestionNoAutoSave, not DrawRafaleQuestion — see the helper's
+	// doc comment: its public counterpart's safeGo(SaveRafaleUsed) is an
+	// unawaited background write that the SaveRafaleUsed() call right below
+	// does NOT wait for (it only performs its own separate, later write).
+	drawn := drawRafaleQuestionNoAutoSave(t, e1, string(CategoryHistory), 2)
+	if err := e1.SaveRafaleUsed(); err != nil { // deterministic flush, see comment above
+		t.Fatalf("SaveRafaleUsed failed: %v", err)
+	}
+
+	// --- Simulated restart: a brand new Engine loading the same files ---
+	e2 := NewEngine()
+	e2.SetRafalePath(reservoirPath)
+	if err := e2.LoadRafale(); err != nil {
+		t.Fatalf("LoadRafale failed: %v", err)
+	}
+	e2.SetRafaleUsedPath(usedPath)
+	if err := e2.LoadRafaleUsed(); err != nil {
+		t.Fatalf("LoadRafaleUsed failed: %v", err)
+	}
+
+	available, used, total := e2.CountRafalePool(string(CategoryHistory), 2)
+	if total != 2 {
+		t.Fatalf("restart must see the full reservoir, total=%d want 2", total)
+	}
+	if used != 1 || available != 1 {
+		t.Errorf("restart must remember the pre-restart draw: available=%d used=%d, want 1/1", available, used)
+	}
+
+	// The only remaining draw must be the OTHER question — never the one
+	// drawn (and persisted) before the restart. This is the exact
+	// regression contract §7.1 forbids ("jamais de reproposition silencieuse
+	// d'une question déjà vue"). No-auto-save variant again — this is the
+	// test's last draw, with nothing after it to deterministically flush a
+	// background safeGo save before t.TempDir() cleans up.
+	second := drawRafaleQuestionNoAutoSave(t, e2, string(CategoryHistory), 2)
+	if second.ID == drawn.ID {
+		t.Fatalf("restart re-proposed the already-used question %q — the used flag did not survive", drawn.ID)
+	}
+
+	if _, err := e2.DrawRafaleQuestion(string(CategoryHistory), 2); !errors.Is(err, ErrRafalePoolEmpty) {
+		t.Errorf("pool should now be exhausted post-restart, got err=%v", err)
+	}
+}
+
+func TestInitGame_ResetsRafaleUsedFlag_ButNotTheReservoir(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+	})
+
+	drawn, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	if err != nil {
+		t.Fatalf("draw failed: %v", err)
+	}
+
+	// Pre-condition: pool now empty.
+	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); !errors.Is(err, ErrRafalePoolEmpty) {
+		t.Fatalf("pre-condition failed: pool should be empty before InitGame, err=%v", err)
+	}
+
+	e.InitGame()
+
+	// Reservoir itself is untouched (contract §3.2: "La réinitialisation du
+	// flag ... Réservoir ... contient ce que l'admin a édité — jamais
+	// réinitialisé par NEW_GAME").
+	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	if total != 1 {
+		t.Errorf("InitGame must not touch the reservoir itself, total=%d want 1", total)
+	}
+	if used != 0 || available != 1 {
+		t.Errorf("InitGame must reset the used flag: available=%d used=%d, want 1/0", available, used)
+	}
+
+	again, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	if err != nil {
+		t.Fatalf("question should be drawable again after NEW_GAME reset: %v", err)
+	}
+	if again.ID != drawn.ID {
+		t.Errorf("only one question exists in the reservoir — expected %q again, got %q", drawn.ID, again.ID)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Comptage de pool (contrat §7.2, GET /api/rafale/pool) et formule
+// d'estimation du besoin — les 3 états d'alerte avant démarrage.
+// ---------------------------------------------------------------------------
+
+func TestCountRafalePool_Filtering(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoir(t, e, []RafaleQuestion{
+		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
+		{ID: "r-2", Question: "Q2", Answer: "A2", Category: CategoryHistory, Difficulty: 1},
+		{ID: "r-3", Question: "Q3", Answer: "A3", Category: CategoryHistory, Difficulty: 2},
+		{ID: "r-4", Question: "Q4", Answer: "A4", Category: CategoryScience, Difficulty: 1},
+	})
+	// Mark r-1 used.
+	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); err != nil {
+		t.Fatalf("setup draw failed: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		category      string
+		difficulty    int
+		wantAvailable int
+		wantUsed      int
+		wantTotal     int
+	}{
+		{"HISTORY/1: one used, one available", string(CategoryHistory), 1, 1, 1, 2},
+		{"HISTORY/2: single, untouched", string(CategoryHistory), 2, 1, 0, 1},
+		{"SCIENCE/1: single, untouched", string(CategoryScience), 1, 1, 0, 1},
+		{"HISTORY/3: no such difficulty", string(CategoryHistory), 3, 0, 0, 0},
+		{"SPORTS/1: unknown category in reservoir", string(CategorySports), 1, 0, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			available, used, total := e.CountRafalePool(tt.category, tt.difficulty)
+			if available != tt.wantAvailable || used != tt.wantUsed || total != tt.wantTotal {
+				t.Errorf("CountRafalePool(%v, %d) = (%d, %d, %d), want (%d, %d, %d)",
+					tt.category, tt.difficulty, available, used, total,
+					tt.wantAvailable, tt.wantUsed, tt.wantTotal)
+			}
+		})
+	}
+}
+
+func TestCountRafalePool_EmptyReservoir_AllZero(t *testing.T) {
+	e := NewEngine()
+	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	if available != 0 || used != 0 || total != 0 {
+		t.Errorf("empty reservoir must count (0,0,0), got (%d,%d,%d)", available, used, total)
+	}
+}
+
+// rafalePoolAlertLevel mirrors contract §7.2's three-state pre-round alert,
+// purely as a spec-level formula check: besoin_estimé = ceil(TIME /
+// RAFALE_QUESTION_TIME); disponible==0 → BLOCKING (démarrage refusé),
+// disponible<besoin → WARNING (démarrage autorisé, risque de fin
+// anticipée), disponible≥besoin → OK. This is NOT a production function —
+// it documents the classification this test exercises against
+// CountRafalePool's real numbers, so a future change to the formula's
+// boundary conditions (e.g. off-by-one on the ceiling) is caught here even
+// before the HTTP/GamePage layer computes it (#26, Batch 2).
+func rafalePoolAlertLevel(available, roundTimeSeconds, questionTimeSeconds int) string {
+	if questionTimeSeconds <= 0 {
+		questionTimeSeconds = 1
+	}
+	neededEstimate := (roundTimeSeconds + questionTimeSeconds - 1) / questionTimeSeconds // ceil
+	switch {
+	case available == 0:
+		return "BLOCKING"
+	case available < neededEstimate:
+		return "WARNING"
+	default:
+		return "OK"
+	}
+}
+
+func TestRafalePoolEstimate_ThreeAlertStates(t *testing.T) {
+	// Default manche: TIME=120s, RAFALE_QUESTION_TIME=3s → besoin_estimé = 40.
+	const roundTime = 120
+	const questionTime = 3
+	const neededEstimate = 40 // sanity check for the table below
+
+	if got := rafalePoolAlertLevel(neededEstimate, roundTime, questionTime); got != "OK" {
+		t.Fatalf("sanity: available==neededEstimate must be OK (boundary is inclusive), got %s", got)
+	}
+
+	tests := []struct {
+		name      string
+		available int
+		want      string
+	}{
+		{"0 disponible : bloquant, quel que soit le besoin", 0, "BLOCKING"},
+		{"moins que le besoin estimé : avertissement", 10, "WARNING"},
+		{"juste en dessous du seuil : avertissement (39 < 40)", neededEstimate - 1, "WARNING"},
+		{"exactement le besoin estimé : neutre (limite incluse)", neededEstimate, "OK"},
+		{"largement au-dessus : neutre", 100, "OK"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := NewEngine()
+			questions := make([]RafaleQuestion, tt.available)
+			for i := range questions {
+				questions[i] = RafaleQuestion{
+					ID: "r-" + string(rune('a'+i)), Question: "Q", Answer: "A",
+					Category: CategoryHistory, Difficulty: 1,
+				}
+			}
+			seedRafaleReservoir(t, e, questions)
+
+			available, _, _ := e.CountRafalePool(string(CategoryHistory), 1)
+			if available != tt.available {
+				t.Fatalf("setup: CountRafalePool available=%d, want %d", available, tt.available)
+			}
+			if got := rafalePoolAlertLevel(available, roundTime, questionTime); got != tt.want {
+				t.Errorf("rafalePoolAlertLevel(%d, %d, %d) = %s, want %s", available, roundTime, questionTime, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRafalePoolEstimate_CeilingRoundsUp(t *testing.T) {
+	// 121s / 3s = 40.33 → the estimate must round UP to 41 (contract §7.2:
+	// "estimation majorante ... à présenter comme un plancher de sécurité").
+	// A pool of exactly 40 must therefore be a WARNING, not OK, once
+	// rounding is applied correctly.
+	if got := rafalePoolAlertLevel(40, 121, 3); got != "WARNING" {
+		t.Errorf("121s/3s must ceil to 41 (not floor to 40): available=40 should be WARNING, got %s", got)
+	}
+	if got := rafalePoolAlertLevel(41, 121, 3); got != "OK" {
+		t.Errorf("available=41 should meet the ceil(121/3)=41 estimate and be OK, got %s", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CRUD réservoir — couverture légère (le gros du contrat §9 est testé côté
+// HTTP handlers, hors périmètre de ce fichier) : uniquement les invariants
+// portés par l'Engine lui-même (assignation d'ID, erreur 404-mappable).
+// ---------------------------------------------------------------------------
+
+func TestUpsertRafaleQuestion_CreateAssignsSequentialID(t *testing.T) {
+	e := NewEngine()
+	q1, err := e.UpsertRafaleQuestion(RafaleQuestion{Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1})
+	if err != nil {
+		t.Fatalf("first upsert failed: %v", err)
+	}
+	if q1.ID == "" {
+		t.Fatal("create (no ID in input) must assign one")
+	}
+
+	q2, err := e.UpsertRafaleQuestion(RafaleQuestion{Question: "Q2", Answer: "A2", Category: CategoryHistory, Difficulty: 1})
+	if err != nil {
+		t.Fatalf("second upsert failed: %v", err)
+	}
+	if q2.ID == "" || q2.ID == q1.ID {
+		t.Errorf("second create must get a distinct, non-empty ID: q1=%q q2=%q", q1.ID, q2.ID)
+	}
+
+	got, ok := e.GetRafaleQuestion(q1.ID)
+	if !ok || got.Question != "Q1" {
+		t.Errorf("GetRafaleQuestion(%q) = %+v, %v — expected the stored Q1", q1.ID, got, ok)
+	}
+}
+
+func TestDeleteRafaleQuestion_UnknownID_ReturnsErrRafaleQuestionNotFound(t *testing.T) {
+	e := NewEngine()
+	err := e.DeleteRafaleQuestion("does-not-exist")
+	if !errors.Is(err, ErrRafaleQuestionNotFound) {
+		t.Errorf("deleting an unknown ID must return ErrRafaleQuestionNotFound (contract §9, 404), got %v", err)
+	}
+}

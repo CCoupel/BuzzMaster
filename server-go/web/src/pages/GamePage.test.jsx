@@ -722,7 +722,7 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
     expect(label.textContent).toBe('Chacun son tour · sélectionnez au moins deux équipes')
   })
 
-  it('MEMOTION, aucune équipe sélectionnée, buzzers prêts → libellé "🃏 MEMOTION · Mode SOLO · sélectionnez au moins une équipe"', () => {
+  it('MEMOTION SOLO, aucune équipe sélectionnée, buzzers prêts → libellé "🃏 MEMOTION · Mode SOLO · sélectionnez une équipe" (#201 suivi)', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'PREPARE',
@@ -737,7 +737,7 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
 
     const { container } = render(<GamePage />)
     const label = container.querySelector('.memory-team-selector .memory-selector-label')
-    expect(label.textContent).toBe('🃏 MEMOTION · Mode SOLO · sélectionnez au moins une équipe')
+    expect(label.textContent).toBe('🃏 MEMOTION · Mode SOLO · sélectionnez une équipe')
   })
 
   it('un buzzer non prêt prime sur la conformité : libellé "Mode SOLO · Buzzers en attente" même si la sélection est déjà valide', () => {

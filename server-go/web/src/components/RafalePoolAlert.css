@@ -1,0 +1,49 @@
+/* RafalePoolAlert — contrat rafale.md §7.2, maquette rafale-v8.html §2.
+   Partagé QuestionsPage.jsx / GamePage.jsx — CSS variables du design
+   system uniquement, mêmes conventions que le reste du projet. */
+
+.rafale-pool-alert {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.85rem;
+  margin-top: var(--space-2);
+}
+
+.rafale-pool-alert-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.rafale-pool-alert-detail {
+  margin: var(--space-1) 0 0;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.rafale-pool-alert-neutral {
+  background: var(--bg-tertiary, var(--gray-100));
+  color: var(--text-secondary, var(--gray-600));
+  border: 1px solid var(--gray-200);
+}
+
+.rafale-pool-alert-ok {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+
+.rafale-pool-alert-warning {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+
+.rafale-pool-alert-blocking {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  border: 1px solid var(--error);
+  color: var(--error);
+}

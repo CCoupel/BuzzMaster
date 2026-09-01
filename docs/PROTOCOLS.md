@@ -486,4 +486,129 @@ Actions WebSocket OTA :
 ```
 
 Fichiers : `internal/server/firmware.go` (FirmwareManager), `internal/server/http_firmware.go` (handlers), `src/BuzzClick/click_otaManager.h` (`performOTA()` dans FreeRTOS task 16 KB).
-| DNS | 53 | Captive portal (optional) |
+
+---
+
+## Endpoints HTTP — Mode RAFALE (v8.0.0, #16)
+
+Tous les endpoints RAFALE utilisent le **protocole JSON**, pas multipart (les questions sont texte seul, pas de média).
+
+### GET /api/rafale/questions
+
+Lister le réservoir avec filtres optionnels.
+
+**Paramètres** (optionnels) :
+- `categories` (query) : liste virgule-séparée (ex: `HISTORY,SCIENCE`)
+- `difficulty` (query) : 1–3
+
+**Réponse 200** :
+```json
+{
+  "QUESTIONS": [
+    {
+      "ID": "r-001",
+      "QUESTION": "Capitale de l'Italie ?",
+      "ANSWER": "Rome",
+      "CATEGORY": "GEOGRAPHY",
+      "DIFFICULTY": 1,
+      "USED": false
+    }
+  ],
+  "TOTAL": 1
+}
+```
+
+**Note** : champ `USED` est **dérivé à la lecture** depuis `rafale_used.json` (jamais stocké dans le réservoir).
+
+### POST /api/rafale/questions
+
+Créer ou modifier une question.
+
+**Corps** :
+```json
+{
+  "ID": "r-001",                    // omis pour création (serveur génère l'ID)
+  "QUESTION": "Capitale de l'Italie ?",
+  "ANSWER": "Rome",
+  "CATEGORY": "GEOGRAPHY",
+  "DIFFICULTY": 1
+}
+```
+
+**Réponse 200** :
+```json
+{ "ID": "r-001" }
+```
+
+**Erreurs** :
+- `400` : énoncé/réponse vide, `DIFFICULTY` hors 1–3, catégorie inconnue
+- `409` : ID déjà existant (création avec ID explicite non autorisée)
+
+### DELETE /api/rafale/questions/{id}
+
+Supprimer une question du réservoir.
+
+**Réponse 200** :
+```json
+{ "DELETED": "r-001" }
+```
+
+**Erreurs** :
+- `404` : question non trouvée
+
+**Note** : la suppression **n'efface pas** le flag `used[r-001]`. Une question supprimée ne réapparaît jamais tant que le flag existe.
+
+### POST /api/rafale/questions/{id}/reset
+
+Remet **une seule** question du réservoir à l'état disponible (retire son ID du flag « déjà utilisée »). No-op silencieux si la question n'était pas marquée utilisée. Corps : vide.
+
+**Réponse 200** :
+```json
+{ "ID": "r-001", "AVAILABLE": true }
+```
+
+**Erreurs** :
+- `404` : ID absent du réservoir
+
+**Cas d'usage** : l'animateur/admin peut remettre une question précise en disponible sans refaire un `NEW_GAME` complet.
+
+### POST /api/rafale/questions/reset-all
+
+Remet **tout** le réservoir à l'état disponible (vide complètement le flag « déjà utilisée »), indépendamment d'un `NEW_GAME`. Le réservoir lui-même (les questions) n'est **jamais** touché. À ne pas confondre avec `POST /reset-select?rafale=true` (sauvegarde/restauration), qui **supprime** tout le réservoir en plus du flag. Corps : vide.
+
+**Réponse 200** :
+```json
+{ "RESET": 42 }
+```
+
+Où `42` = nombre d'entrées effacées du flag.
+
+**Cas d'usage** : réinitialiser tout le pool de questions pour une nouvelle série de manches (sans `NEW_GAME`).
+
+### GET /api/rafale/pool
+
+Comptage pré-manche (pour alertes).
+
+**Paramètres** (optionnels) :
+- `categories` (query) : liste virgule-séparée
+- `difficulty` (query) : 1–3
+
+**Réponse 200** :
+```json
+{
+  "AVAILABLE": 42,   // questions pool non utilisées
+  "USED": 8,         // questions pool déjà utilisées
+  "TOTAL": 50        // total réservoir
+}
+```
+
+**Logique** :
+- `AVAILABLE` = {q ∈ réservoir | q.CATEGORY ∈ catégories ∧ q.DIFFICULTY == difficulté ∧ ¬used[q.ID]}
+- `USED` = même filtre mais `used[q.ID] == true`
+- `TOTAL` = même filtre (total toutes questions)
+
+**Besoin estimé** (calculé côté frontend) :
+```
+estimatedNeed = ceil( MANCHE_TIME / QUESTION_TIME )
+ex: ceil( 120 / 3 ) = 40 questions pour manche 2mn × 3s
+```

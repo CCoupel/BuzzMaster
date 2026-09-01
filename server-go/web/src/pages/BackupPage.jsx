@@ -21,6 +21,7 @@ export default function BackupPage() {
     history: true,
     medias: true,
     ambiance: true,
+    rafale: true,
   })
 
   // Reset options
@@ -31,6 +32,7 @@ export default function BackupPage() {
     history: false,
     medias: false,
     ambiance: false,
+    rafale: false,
   })
 
   const handleBackup = async () => {
@@ -43,6 +45,7 @@ export default function BackupPage() {
       if (backupOptions.history) params.append('history', 'true')
       if (backupOptions.medias) params.append('medias', 'true')
       if (backupOptions.ambiance) params.append('ambiance', 'true')
+      if (backupOptions.rafale) params.append('rafale', 'true')
 
       const response = await fetch(`/backup-select?${params.toString()}`)
       const blob = await response.blob()
@@ -73,7 +76,8 @@ export default function BackupPage() {
       bumpers: 'Joueurs',
       history: 'Historique',
       medias: 'Médias & Catégories',
-      ambiance: 'Configuration Ambiance'
+      ambiance: 'Configuration Ambiance',
+      rafale: 'Questions RAFALE'
     }
     const selectedLabels = selected.map(k => labels[k]).join(', ')
 
@@ -142,7 +146,8 @@ export default function BackupPage() {
                 bumpers: 'Joueurs',
                 history: 'Historique',
                 medias: 'Médias & Catégories',
-                ambiance: 'Configuration Ambiance'
+                ambiance: 'Configuration Ambiance',
+                rafale: 'Questions RAFALE'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">
                   <input
@@ -219,7 +224,8 @@ export default function BackupPage() {
                 bumpers: 'Joueurs',
                 history: 'Historique',
                 medias: 'Médias & Catégories',
-                ambiance: 'Configuration Ambiance'
+                ambiance: 'Configuration Ambiance',
+                rafale: 'Questions RAFALE'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">
                   <input
