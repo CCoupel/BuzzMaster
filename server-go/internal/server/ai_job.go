@@ -30,8 +30,12 @@ import (
 type aiJob struct {
 	mu sync.Mutex
 
-	ID           string
-	Provider     string
+	ID       string
+	Provider string
+	// Target is "QUIZ" or "RAFALE" (#203, v8.1.0) — set once at tryStart and
+	// never mutated afterward, so it's safe to read via snapshot() without
+	// extra synchronization beyond the mu already guarding the struct.
+	Target       string
 	State        string // "RUNNING" | "DONE" | "FAILED" | "CANCELLED"
 	BatchesDone  int
 	BatchesTotal int
@@ -71,6 +75,7 @@ func (j *aiJob) snapshot() protocol.AIGenerationProgressPayload {
 	defer j.mu.Unlock()
 	return protocol.AIGenerationProgressPayload{
 		JobID:        j.ID,
+		Target:       j.Target,
 		State:        j.State,
 		BatchesDone:  j.BatchesDone,
 		BatchesTotal: j.BatchesTotal,
@@ -95,7 +100,13 @@ type aiJobRegistry struct {
 
 var globalAIJobRegistry = &aiJobRegistry{}
 
-func (r *aiJobRegistry) tryStart(provider string, batchesTotal int) (*aiJob, bool) {
+// target is "QUIZ" or "RAFALE" (#203) — stamped on the job once, at
+// creation, so every progress broadcast (and a reconnecting admin's replay
+// via CurrentAIJobProgress) carries it. tryStart itself enforces "un seul
+// job à la fois, tous chemins confondus" (contract rafale-ai-generation.md
+// §1.2) regardless of target: a RAFALE job cannot start while a QUIZ job is
+// RUNNING, and vice versa — the check below doesn't look at target at all.
+func (r *aiJobRegistry) tryStart(provider string, batchesTotal int, target string) (*aiJob, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.job != nil {
@@ -117,6 +128,7 @@ func (r *aiJobRegistry) tryStart(provider string, batchesTotal int) (*aiJob, boo
 	j := &aiJob{
 		ID:              newAIJobID(),
 		Provider:        provider,
+		Target:          target,
 		State:           "RUNNING",
 		BatchesTotal:    batchesTotal,
 		cancelRequested: make(chan struct{}),
@@ -224,7 +236,7 @@ func (h *HTTPServer) startAIGenerationJob(req generateQuestionsRequest, aiCfg co
 		batchesTotal = 1
 	}
 
-	job, started := globalAIJobRegistry.tryStart(aiCfg.Provider, batchesTotal)
+	job, started := globalAIJobRegistry.tryStart(aiCfg.Provider, batchesTotal, "QUIZ")
 	if !started {
 		return "", 0, false
 	}
@@ -509,7 +521,7 @@ func (h *HTTPServer) broadcastAIJobProgress(job *aiJob, state, errorCode, errorM
 		job.ErrorMessage = errorMessage
 	}
 	payload := protocol.AIGenerationProgressPayload{
-		JobID: job.ID, State: job.State, BatchesDone: job.BatchesDone, BatchesTotal: job.BatchesTotal,
+		JobID: job.ID, Target: job.Target, State: job.State, BatchesDone: job.BatchesDone, BatchesTotal: job.BatchesTotal,
 		CreatedCount: job.CreatedCount, SkippedCount: job.SkippedCount, ErrorCode: job.ErrorCode,
 		ErrorMessage: job.ErrorMessage, Provider: job.Provider,
 	}
