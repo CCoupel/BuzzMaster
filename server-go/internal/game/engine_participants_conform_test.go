@@ -109,6 +109,41 @@ func TestParticipantsConform_Rules(t *testing.T) {
 			state:    &GameState{MotionParticipatingTeams: []string{"red"}},
 			want:     true,
 		},
+		// #201 (test-writer complement): the two cases above rely on the
+		// EMPTY-MotionMode default (""->SOLO, same as MEMORY) to exercise
+		// SOLO's count==1 rule — coincidentally correct (dev-backend's own
+		// handoff note: "aucune fixture MEMOTION n'a eu besoin de correction
+		// par coïncidence de leur construction"), but never pinned down with
+		// an EXPLICIT MotionMode value, and MEMOTION's multi-mode direction
+		// (count>=2, #201's actual new rule for this type) had NO coverage
+		// at all before this. Mirrors MEMORY's own explicit SOLO/multi table
+		// entries above line-for-line so participantsCountConform's shared
+		// rule is pinned for MEMOTION exactly as thoroughly as for MEMORY,
+		// independent of the default-mode coincidence.
+		{
+			name:     "MEMOTION explicit SOLO with zero teams is not conform",
+			question: &Question{Type: QuestionTypeMemotion, MotionMode: string(MemoryModeSolo)},
+			state:    &GameState{MotionParticipatingTeams: []string{}},
+			want:     false,
+		},
+		{
+			name:     "MEMOTION explicit SOLO with exactly one team is conform",
+			question: &Question{Type: QuestionTypeMemotion, MotionMode: string(MemoryModeSolo)},
+			state:    &GameState{MotionParticipatingTeams: []string{"red"}},
+			want:     true,
+		},
+		{
+			name:     "MEMOTION CHACUN_SON_TOUR with one team is not conform",
+			question: &Question{Type: QuestionTypeMemotion, MotionMode: string(MemoryModeChacunSonTour)},
+			state:    &GameState{MotionParticipatingTeams: []string{"red"}},
+			want:     false,
+		},
+		{
+			name:     "MEMOTION CHACUN_SON_TOUR with two teams is conform",
+			question: &Question{Type: QuestionTypeMemotion, MotionMode: string(MemoryModeChacunSonTour)},
+			state:    &GameState{MotionParticipatingTeams: []string{"red", "blue"}},
+			want:     true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -466,5 +501,55 @@ func TestStart_Memotion_UnreachableWithoutExplicitSelection(t *testing.T) {
 	e.Start(10)
 	if e.GetPhase() != PhasePrepare {
 		t.Errorf("Start() must refuse to leave PREPARE — MEMOTION must never start without a participant, got %s", e.GetPhase())
+	}
+}
+
+// TestMotionReady_MultiModeOneTeam_NeverReachesReady (#201 test-writer
+// complement) mirrors TestRafaleReady_MultiModeOneTeam_NeverReachesReady
+// (rafale_modes_test.go) for MEMOTION: the participantsCountConform("multi
+// mode" -> count>=2) direction had ZERO end-to-end coverage for MEMOTION
+// before this (only the pure participantsConform table above, added
+// alongside this test, ever exercised it) — CHACUN_SON_TOUR with a single
+// selected team must never let ForceReady()/Start() leave PREPARE. Positive
+// control included (2 teams -> READY -> START accepted), same pattern as
+// every other #201 regression test in this repo.
+func TestMotionReady_MultiModeOneTeam_NeverReachesReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
+	e.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
+	e.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})
+
+	cards := defaultMotionCards()
+	q := makeMotionQuestion("mo1", cards, "CHACUN_SON_TOUR")
+	e.Ready("mo1", q)
+	if err := e.SetMotionParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetMotionParticipatingTeams: %v", err)
+	}
+	e.SetBumperReady("b1")
+	e.SetBumperReady("b2")
+
+	if e.ParticipantsConform() {
+		t.Fatal("MEMOTION CHACUN_SON_TOUR with a single team selected must not be conform (needs >=2)")
+	}
+	e.ForceReady()
+	if e.GetPhase() != PhasePrepare {
+		t.Errorf("ForceReady() must refuse to leave PREPARE with only 1 team in a MEMOTION multi mode, got %s", e.GetPhase())
+	}
+	e.Start(10)
+	if e.GetPhase() == PhaseCountdown || e.GetPhase() == PhaseStarted {
+		t.Errorf("Start() must refuse a MEMOTION multi-mode round with only 1 team selected, got %s", e.GetPhase())
+	}
+
+	// Positive control: 2 teams reaches READY and START is accepted.
+	if err := e.SetMotionParticipatingTeams([]string{"red", "blue"}); err != nil {
+		t.Fatalf("SetMotionParticipatingTeams (2 teams): %v", err)
+	}
+	e.ForceReady()
+	if e.GetPhase() != PhaseReady {
+		t.Fatalf("expected READY with 2 teams selected in CHACUN_SON_TOUR, got %s", e.GetPhase())
+	}
+	e.Start(10)
+	if e.GetPhase() != PhaseCountdown && e.GetPhase() != PhaseStarted {
+		t.Errorf("expected Start() to be accepted with 2 teams selected, got %s", e.GetPhase())
 	}
 }
