@@ -1357,8 +1357,11 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 //   - MEMOTION: at least one team selected.
 //   - RAFALE: CATEGORY must be set AND RAFALE_DIFFICULTY must be 1..3
 //     (v8.0.0, 2026-08-30/31 bugfixes — see below) AND, in any multi-team
-//     mode (RAFALE_MODE != SOLO), at least one team must be selected in
-//     RAFALE_PARTICIPATING_TEAMS (v8.0.0, 2026-09-02, #199 — see below).
+//     mode (RAFALE_MODE != SOLO — CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/
+//     MAILLON_FAIBLE), at least TWO teams must be selected in
+//     RAFALE_PARTICIPATING_TEAMS (v8.0.0, 2026-09-02, #199 introduced the
+//     check at >=1; #201, 2026-09-01, corrected the threshold to >=2 — a
+//     rotation between teams makes no sense with only one — see below).
 //   - Unknown/future question type, or nil question: permissive by default (true).
 //
 // RAFALE's CATEGORY/DIFFICULTY checks are not really about PARTICIPANTS, but they plug into
@@ -1402,18 +1405,31 @@ func (e *Engine) areAllTeamsReadyUnsafe() bool {
 // those), so only DIFFICULTY needed a gate here — see http.go's own fix in
 // the same commit for the actual persistence gap.
 //
-// The RAFALE_PARTICIPATING_TEAMS check (2026-09-02, #199) is a DIFFERENT
-// kind of guard from CATEGORY/DIFFICULTY above — not a bugfix for a
-// silent-death symptom, a direct QUALIF feature request: "je ne dois pas
-// pouvoir faire START si aucune équipe n'est sélectionnée" in a multi-team
-// RAFALE mode. Mirrors MEMOTION's own single-line rule immediately above
-// (`len(state.MotionParticipatingTeams) >= 1`) — SOLO is deliberately
-// exempt (RafaleCurrentTeam=="" is already a valid, tested "no team concept
-// in play" no-op for SOLO throughout advanceRafaleUnsafe, see its own
-// comment). Uses the exact same empty-string->SOLO default as
-// advanceRafaleUnsafe's own `mode := ...; if mode == "" { mode =
-// string(RafaleModeSolo) }` — keeping this gate and the actual round logic
-// from silently disagreeing on what "SOLO" means for a given question.
+// The RAFALE_PARTICIPATING_TEAMS check (2026-09-02, #199; threshold
+// corrected 2026-09-01, #201) is a DIFFERENT kind of guard from CATEGORY/
+// DIFFICULTY above — not a bugfix for a silent-death symptom, a direct
+// QUALIF/functional-spec feature request: "je ne dois pas pouvoir faire
+// START si aucune équipe n'est sélectionnée" in a multi-team RAFALE mode,
+// then refined to "au moins DEUX équipes" once the user clarified the spec
+// (#201 — a CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/MAILLON_FAIBLE rotation with
+// only one team makes no functional sense). #199 originally mirrored
+// MEMOTION's own single-line rule immediately above
+// (`len(state.MotionParticipatingTeams) >= 1`); #201 instead mirrors
+// MEMORY's own CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE branch (`>= 2`), the
+// closer functional analog (a genuine multi-team rotation) — MOTION's own
+// `>=1` is intentionally left as-is, out of #201's scope (not requested,
+// and MEMOTION's single-active-card gameplay has no rotation concept to
+// require a minimum of two for). SOLO is deliberately exempt
+// (RafaleCurrentTeam=="" is already a valid, tested "no team concept in
+// play" no-op for SOLO throughout advanceRafaleUnsafe, see its own
+// comment) — #201's own issue text describes a SOLO "exactly one team"
+// requirement, but that would be a further, undocumented behavior change
+// to this long-standing, deliberately-tested exemption; not applied here,
+// flagged back to the CDP instead (see handoff).  Uses the exact same
+// empty-string->SOLO default as advanceRafaleUnsafe's own `mode := ...; if
+// mode == "" { mode = string(RafaleModeSolo) }` — keeping this gate and the
+// actual round logic from silently disagreeing on what "SOLO" means for a
+// given question.
 func participantsConform(question *Question, state *GameState) bool {
 	if question == nil {
 		return true
@@ -1440,7 +1456,16 @@ func participantsConform(question *Question, state *GameState) bool {
 			rafaleMode = string(RafaleModeSolo)
 		}
 		if rafaleMode != string(RafaleModeSolo) {
-			return len(state.RafaleParticipatingTeams) >= 1
+			// #201: a multi-team mode (CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE/
+			// MAILLON_FAIBLE) is a rotation BETWEEN teams — a single
+			// selected team makes no functional sense for it, exactly like
+			// MEMORY's own CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE branch above
+			// (>=2, not >=1). Was >=1 since #199 (7b8659d5/a7b70057) — that
+			// threshold blocked the ZERO-team bypass those commits targeted,
+			// but never enforced the >=2 minimum a rotation actually needs;
+			// unnoticed until the user specified the exact rule while
+			// clarifying #201's functional spec.
+			return len(state.RafaleParticipatingTeams) >= 2
 		}
 		return true
 	default:
