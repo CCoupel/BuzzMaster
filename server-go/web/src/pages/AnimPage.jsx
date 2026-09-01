@@ -308,6 +308,22 @@ export default function AnimPage() {
   const rafaleAnswerValue = (rafaleAnswer && rafaleAnswer.ID === rafaleCurrentQuestion.ID)
     ? rafaleAnswer.ANSWER
     : ''
+  // NEXT (#202, contrat §13.3) — pré-tirage de la question suivante,
+  // transporté par le MÊME `RAFALE_ANSWER` que la réponse ci-dessus (pas
+  // de canal séparé, §13.3). Réutilise EXACTEMENT la garde anti-obsolescence
+  // déjà écrite pour `rafaleAnswerValue` juste au-dessus — surtout ne pas en
+  // recréer une seconde (rappel explicite de la tâche 13/du contrat) :
+  // un `NEXT` dont l'ID ne correspond plus à la question RAFALE actuellement
+  // affichée ne doit jamais apparaître sous une question à laquelle il
+  // n'appartient pas. `NEXT === null` est une information à part entière
+  // (§13.5, "aucune question suivante" / fin de réservoir) — distincte de
+  // "pas encore reçu" (rafaleAnswer absent ou périmé), d'où `undefined` en
+  // repli plutôt que `null` : `AnimRafaleQuestion` doit pouvoir distinguer
+  // "rien à afficher pour l'instant" de "dernière question du réservoir".
+  const rafaleNext = (rafaleAnswer && rafaleAnswer.ID === rafaleCurrentQuestion.ID)
+    ? rafaleAnswer.NEXT
+    : undefined
+  const rafaleNextCatMeta = rafaleNext ? categoryMeta(rafaleNext.CATEGORY, customCategories) : null
   // RÉVISION 2026-08-28 (maquette rafale-v8.html §9.2) — RAFALE affiche
   // désormais question ET réponse ensemble dans un encart coloré équipe
   // dédié, sans passer par AnimAnswerZone (masquage hold-to-peek retiré
@@ -771,6 +787,14 @@ export default function AnimPage() {
             answerValue: rafaleAnswerValue,
             catMeta: rafaleCatMeta,
             askedCount: gameState.RAFALE_ASKED_COUNT,
+            // NEXT (#202, contrat §13.3/§13.5/§13.6) — zone "SUIVANTE" de
+            // AnimRafaleQuestion. `showNext` reprend TELLE QUELLE la
+            // condition déjà posée sur `rafaleDisabled` ci-dessus (sous-phase
+            // QUESTION uniquement — masquée en ROUND_END, §13.5 dernière
+            // ligne) : rien à préparer hors tirage courant.
+            next: rafaleNext,
+            nextCatMeta: rafaleNextCatMeta,
+            showNext: gameState.RAFALE_SUBPHASE === 'QUESTION',
           } : null}
         />
       </div>

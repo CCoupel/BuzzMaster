@@ -593,8 +593,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // donc jamais côté /ws/tv ou /ws/player en pratique, mais reste
         // inoffensif si un serveur mal configuré l'envoyait quand même —
         // rafaleAnswer n'est JAMAIS lu par PlayerDisplay.jsx.
+        // NEXT (#202, contrat §13.3) — pré-tirage de la question suivante,
+        // même canal admin+anim, mêmes garanties de confidentialité que
+        // ANSWER ci-dessus. `MSG.NEXT ?? null` (pas de `|| null` : un objet
+        // NEXT valide ne doit jamais être confondu avec une valeur falsy).
+        // `null` est une information à part entière (§13.3 : "aucune
+        // question suivante"), jamais une absence — donc pas de repli sur
+        // un état précédent.
         if (MSG?.ID) {
-          setRafaleAnswer({ ID: MSG.ID, ANSWER: MSG.ANSWER || '' })
+          setRafaleAnswer({ ID: MSG.ID, ANSWER: MSG.ANSWER || '', NEXT: MSG.NEXT ?? null })
         }
         break
 
