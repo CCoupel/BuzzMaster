@@ -102,4 +102,130 @@ describe('AnimRafaleQuestion — aucune prop (montage isolé, repli de AnimCondu
     expect(container.querySelector('.rafale-anim-qcard-answer')).not.toBeInTheDocument()
     expect(container.querySelector('.rafale-anim-qcard-team')).not.toBeInTheDocument()
   })
+
+  it('next absent (défaut undefined) : la zone SUIVANTE n\'est pas rendue non plus (même repli que les autres props)', () => {
+    const { container } = render(<AnimRafaleQuestion />)
+    expect(container.querySelector('.rafale-anim-qcard-next')).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Zone « SUIVANTE » (#202, contrat rafale.md §13) — pré-tirage de la question
+// suivante, transporté par `RAFALE_ANSWER.NEXT` (§13.3), jamais par
+// `GameState`. Trois valeurs distinctes pour `next` (§13.5 + doc du
+// composant) :
+//   - objet {ID, QUESTION, CATEGORY, DIFFICULTY} → zone rendue avec l'énoncé
+//   - null → fin de réservoir, message "Dernière question du réservoir"
+//   - undefined (défaut) → garde anti-obsolescence côté appelant (AnimPage.jsx)
+//     a jugé le NEXT périmé pour la question courante (ID ne correspondant
+//     plus) OU pas encore reçu — la zone ne rend RIEN plutôt que d'afficher
+//     une information potentiellement fausse (même discipline qu'answerValue).
+// `showNext` (sous-phase QUESTION, §13.5 dernière ligne) masque la zone
+// ENTIÈREMENT quel que soit `next`, ex. ROUND_END.
+// ---------------------------------------------------------------------------
+
+describe('AnimRafaleQuestion — zone SUIVANTE : next objet (#202, contrat §13.5)', () => {
+  const next = { ID: 'r-017', QUESTION: 'Plus long fleuve d\'Europe ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 }
+  const nextCatMeta = { icon: '🌍', label: 'Geographie' }
+
+  it('affiche le libellé "Suivante" et l\'énoncé de la question suivante', () => {
+    const { container } = render(
+      <AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={next} nextCatMeta={nextCatMeta} showNext />
+    )
+    expect(screen.getByText('Suivante')).toBeInTheDocument()
+    expect(screen.getByText('Plus long fleuve d\'Europe ?')).toBeInTheDocument()
+    expect(container.querySelector('.rafale-anim-qcard-next')).toBeInTheDocument()
+  })
+
+  it('affiche catégorie et difficulté de la question suivante, résolues séparément de la question courante', () => {
+    render(
+      <AnimRafaleQuestion
+        current={{ QUESTION: 'Q courante', DIFFICULTY: 1 }}
+        catMeta={{ icon: '📜', label: 'Histoire' }}
+        next={next}
+        nextCatMeta={nextCatMeta}
+        showNext
+      />
+    )
+    expect(screen.getByText('Geographie')).toBeInTheDocument()
+    expect(screen.getByText('🌍')).toBeInTheDocument()
+    expect(screen.getByText('★★')).toBeInTheDocument() // next.DIFFICULTY=2
+    // La question courante garde sa propre catégorie, non écrasée par celle de next.
+    expect(screen.getByText('Histoire')).toBeInTheDocument()
+  })
+
+  it('l\'énoncé courant et l\'énoncé suivant vivent dans des blocs DOM distincts (hiérarchie visuelle, contrat §13.6)', () => {
+    const { container } = render(
+      <AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={next} nextCatMeta={nextCatMeta} showNext />
+    )
+    expect(container.querySelector('.rafale-anim-qcard-text').textContent).toBe('Q courante')
+    expect(container.querySelector('.rafale-anim-qcard-next-text').textContent).toBe('Plus long fleuve d\'Europe ?')
+  })
+
+  it('pas de classe "dernière question" quand une vraie question suivante est fournie', () => {
+    const { container } = render(
+      <AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={next} nextCatMeta={nextCatMeta} showNext />
+    )
+    expect(container.querySelector('.rafale-anim-qcard-next-last')).not.toBeInTheDocument()
+  })
+})
+
+describe('AnimRafaleQuestion — zone SUIVANTE : next === null, fin de réservoir (#202, contrat §13.5)', () => {
+  it('affiche "Dernière question du réservoir" au lieu d\'un énoncé', () => {
+    const { container } = render(<AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={null} showNext />)
+    expect(screen.getByText('Dernière question du réservoir')).toBeInTheDocument()
+    expect(container.querySelector('.rafale-anim-qcard-next-last')).toBeInTheDocument()
+  })
+
+  it('n\'affiche aucun chip catégorie/difficulté (rien à préparer, pas de méta pour une question qui n\'existe pas)', () => {
+    const { container } = render(
+      <AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={null} nextCatMeta={{ icon: '🌍', label: 'Geographie' }} showNext />
+    )
+    expect(container.querySelector('.rafale-anim-qcard-next-label').querySelectorAll('.anim-chip').length).toBe(0)
+  })
+
+  it('la question COURANTE reste affichée normalement (seule la zone SUIVANTE change)', () => {
+    render(<AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={null} showNext />)
+    expect(screen.getByText('Q courante')).toBeInTheDocument()
+  })
+})
+
+describe('AnimRafaleQuestion — zone SUIVANTE : next === undefined, périmé ou pas encore reçu (#202)', () => {
+  it('NEXT périmé (garde anti-obsolescence de l\'appelant, ID ne correspondant plus à la question courante) : la zone SUIVANTE n\'est PAS rendue', () => {
+    // AnimPage.jsx transmet `undefined` (jamais `null`) quand
+    // rafaleAnswer.ID !== RAFALE_CURRENT_QUESTION.ID — reproduit ici tel
+    // quel, sans dépendre de la logique de dérivation d'AnimPage.jsx.
+    const { container } = render(<AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={undefined} showNext />)
+    expect(container.querySelector('.rafale-anim-qcard-next')).not.toBeInTheDocument()
+    expect(screen.queryByText('Suivante')).not.toBeInTheDocument()
+    expect(screen.queryByText('Dernière question du réservoir')).not.toBeInTheDocument()
+  })
+
+  it('la question courante reste affichée même quand la zone SUIVANTE est absente', () => {
+    render(<AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={undefined} showNext />)
+    expect(screen.getByText('Q courante')).toBeInTheDocument()
+  })
+})
+
+describe('AnimRafaleQuestion — zone SUIVANTE : showNext (sous-phase QUESTION, #202, contrat §13.5 dernière ligne)', () => {
+  const next = { ID: 'r-017', QUESTION: 'Plus long fleuve d\'Europe ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 }
+
+  it('showNext === false (ex. ROUND_END) : la zone SUIVANTE est entièrement masquée, MÊME avec un next valide', () => {
+    const { container } = render(
+      <AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={next} showNext={false} />
+    )
+    expect(container.querySelector('.rafale-anim-qcard-next')).not.toBeInTheDocument()
+    expect(screen.queryByText('Plus long fleuve d\'Europe ?')).not.toBeInTheDocument()
+  })
+
+  it('showNext === false : masque aussi le message "dernière question" (next === null)', () => {
+    const { container } = render(<AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={null} showNext={false} />)
+    expect(container.querySelector('.rafale-anim-qcard-next')).not.toBeInTheDocument()
+    expect(screen.queryByText('Dernière question du réservoir')).not.toBeInTheDocument()
+  })
+
+  it('showNext absent (repli true, rétrocompatibilité documentée) : la zone SUIVANTE est rendue si next est fourni', () => {
+    const { container } = render(<AnimRafaleQuestion current={{ QUESTION: 'Q courante' }} next={next} />)
+    expect(container.querySelector('.rafale-anim-qcard-next')).toBeInTheDocument()
+  })
 })

@@ -150,6 +150,12 @@ describe('useWebSocket — RAFALE_TICK (contrat §5.2)', () => {
 // ---------------------------------------------------------------------------
 
 describe('useWebSocket — RAFALE_ANSWER (contrat §2.3/§5.2)', () => {
+  // #202 (contrat §13.3) — RAFALE_ANSWER porte désormais TOUJOURS un champ
+  // NEXT (objet, ou `null` explicite : §13.3 "null est une information à
+  // part entière"). Les 4 assertions ci-dessous incluent donc `NEXT: null`
+  // depuis #202 (CHANGELOG [20260901], CHANGED additif — MSG ne porte pas
+  // NEXT dans ces payloads de test, donc `MSG.NEXT ?? null` résout à null) —
+  // mise à jour couverte par le CHANGELOG documentant ce changement.
   it('met à jour rafaleAnswer depuis MSG.ID/MSG.ANSWER', async () => {
     const { result } = renderHook(() => useWebSocket('/ws/test'))
 
@@ -157,7 +163,7 @@ describe('useWebSocket — RAFALE_ANSWER (contrat §2.3/§5.2)', () => {
       wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-042', ANSWER: 'Rome' } }) })
     })
 
-    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-042', ANSWER: 'Rome' })
+    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-042', ANSWER: 'Rome', NEXT: null })
   })
 
   it('un RAFALE_ANSWER ultérieur écrase le précédent (question suivante)', async () => {
@@ -166,12 +172,12 @@ describe('useWebSocket — RAFALE_ANSWER (contrat §2.3/§5.2)', () => {
     await act(async () => {
       wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-001', ANSWER: 'Paris' } }) })
     })
-    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-001', ANSWER: 'Paris' })
+    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-001', ANSWER: 'Paris', NEXT: null })
 
     await act(async () => {
       wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-002', ANSWER: 'Berlin' } }) })
     })
-    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-002', ANSWER: 'Berlin' })
+    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-002', ANSWER: 'Berlin', NEXT: null })
   })
 
   it('MSG.ID absent : rafaleAnswer n\'est PAS modifié (garde explicite, évite un état {ID: undefined})', async () => {
@@ -191,7 +197,7 @@ describe('useWebSocket — RAFALE_ANSWER (contrat §2.3/§5.2)', () => {
       wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-042' } }) })
     })
 
-    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-042', ANSWER: '' })
+    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-042', ANSWER: '', NEXT: null })
   })
 
   it('rafaleAnswer reste dans son propre état, JAMAIS fusionné dans gameState (contrat §2.3 — TV/VPlayer ne lisent que gameState)', async () => {
@@ -201,8 +207,85 @@ describe('useWebSocket — RAFALE_ANSWER (contrat §2.3/§5.2)', () => {
       wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-042', ANSWER: 'SECRET' } }) })
     })
 
-    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-042', ANSWER: 'SECRET' })
+    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-042', ANSWER: 'SECRET', NEXT: null })
     // Aucune clé de gameState (sérialisé) ne doit contenir la réponse.
     expect(JSON.stringify(result.current.gameState)).not.toContain('SECRET')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// RAFALE_ANSWER.NEXT (#202, contrat §13.3) — pré-tirage de la question
+// suivante, transporté par le MÊME canal admin+anim que ANSWER ci-dessus.
+// `null` est une information à part entière ("aucune question suivante",
+// fin de réservoir, §13.5), jamais une absence — donc `MSG.NEXT ?? null`,
+// PAS `MSG.NEXT || null` (un objet NEXT valide ne doit jamais être confondu
+// avec une valeur falsy).
+// ---------------------------------------------------------------------------
+
+describe('useWebSocket — RAFALE_ANSWER.NEXT (#202, contrat §13.3)', () => {
+  it('MSG.NEXT objet valide : NEXT reflète exactement cet objet', async () => {
+    const { result } = renderHook(() => useWebSocket('/ws/test'))
+    const next = { ID: 'r-017', QUESTION: 'Plus long fleuve d\'Europe ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 }
+
+    await act(async () => {
+      wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-042', ANSWER: 'Rome', NEXT: next } }) })
+    })
+
+    expect(result.current.rafaleAnswer.NEXT).toEqual(next)
+  })
+
+  it('MSG.NEXT absent (clé manquante) : NEXT vaut null', async () => {
+    const { result } = renderHook(() => useWebSocket('/ws/test'))
+
+    await act(async () => {
+      wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-042', ANSWER: 'Rome' } }) })
+    })
+
+    expect(result.current.rafaleAnswer.NEXT).toBeNull()
+  })
+
+  it('MSG.NEXT explicitement null (dernière question du réservoir, §13.5) : NEXT reste null', async () => {
+    const { result } = renderHook(() => useWebSocket('/ws/test'))
+
+    await act(async () => {
+      wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-042', ANSWER: 'Rome', NEXT: null } }) })
+    })
+
+    expect(result.current.rafaleAnswer.NEXT).toBeNull()
+  })
+
+  it('un NEXT non-null suivi d\'un NEXT null (fin de réservoir atteinte) : le dernier message fait foi, pas de résidu de l\'objet précédent', async () => {
+    const { result } = renderHook(() => useWebSocket('/ws/test'))
+
+    await act(async () => {
+      wsInstance.onmessage({
+        data: JSON.stringify({
+          ACTION: 'RAFALE_ANSWER',
+          MSG: { ID: 'r-001', ANSWER: 'Paris', NEXT: { ID: 'r-002', QUESTION: 'Q2', CATEGORY: 'HISTORY', DIFFICULTY: 1 } },
+        }),
+      })
+    })
+    expect(result.current.rafaleAnswer.NEXT).not.toBeNull()
+
+    await act(async () => {
+      wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_ANSWER', MSG: { ID: 'r-002', ANSWER: 'Q2 answer', NEXT: null } }) })
+    })
+    expect(result.current.rafaleAnswer).toEqual({ ID: 'r-002', ANSWER: 'Q2 answer', NEXT: null })
+  })
+
+  it('l\'énoncé de NEXT ne fuite jamais dans gameState (même discipline que ANSWER, même famille que ardoise_leak_128)', async () => {
+    const { result } = renderHook(() => useWebSocket('/ws/test'))
+
+    await act(async () => {
+      wsInstance.onmessage({
+        data: JSON.stringify({
+          ACTION: 'RAFALE_ANSWER',
+          MSG: { ID: 'r-042', ANSWER: 'Rome', NEXT: { ID: 'r-017', QUESTION: 'ENONCE_SUIVANT_SECRET', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 } },
+        }),
+      })
+    })
+
+    expect(result.current.rafaleAnswer.NEXT.QUESTION).toBe('ENONCE_SUIVANT_SECRET')
+    expect(JSON.stringify(result.current.gameState)).not.toContain('ENONCE_SUIVANT_SECRET')
   })
 })

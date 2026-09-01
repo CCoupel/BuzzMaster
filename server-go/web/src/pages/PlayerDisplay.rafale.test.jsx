@@ -95,6 +95,13 @@ function makeMock({
   rafaleCurrentTeamColor = [],
   rafaleTeamCounters = {},
   rafaleQuestionTime = 2,
+  // #202 (contrat §13.2) — rafaleAnswer n'est PAS lu par PlayerDisplay.jsx
+  // (useGame() ne le destructure même pas, voir bloc de tests dédié
+  // plus bas) : ce champ optionnel permet néanmoins de le fournir dans le
+  // mock useGame(), exactement comme un vrai GameContext le ferait, pour
+  // que le test de non-fuite exerce un scénario réaliste plutôt qu'un
+  // useGame() qui omettrait le champ par construction.
+  rafaleAnswer = null,
 } = {}) {
   return {
     gameState: {
@@ -123,6 +130,7 @@ function makeMock({
     flipMemoryCard: vi.fn(),
     showQRCode: false,
     selectMotionCard: vi.fn(),
+    rafaleAnswer,
   }
 }
 
@@ -447,5 +455,47 @@ describe('PlayerDisplay — RAFALE : absence de défilement introduit (garde-fou
       return overflow === 'auto' || overflow === 'scroll'
     })
     expect(offenders).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #202 (contrat §13.2) — rafaleAnswer (réponse ET NEXT) n'est JAMAIS lu ni
+// affiché par PlayerDisplay.jsx (TV ni VPlayer). `useGame()` ne le
+// destructure même pas (`const { gameState, teams, bumpers, flipMemoryCard,
+// showQRCode, selectMotionCard } = useGame()`, PlayerDisplay.jsx ~L176) —
+// une garantie STRUCTURELLE, pas seulement comportementale. Ce bloc en fait
+// une garantie TESTÉE : même si useGame() expose rafaleAnswer (comme un vrai
+// GameContext le fait), et même si son contenu contient un texte
+// reconnaissable, il ne doit apparaître NULLE PART dans le DOM rendu — même
+// famille de garde que ardoise_leak_128 et le test WS dédié
+// (useWebSocket.rafale.test.js, "l'énoncé de NEXT ne fuite jamais dans
+// gameState").
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay — rafaleAnswer (réponse + NEXT) jamais lu ni affiché, TV et VPlayer (#202, contrat §13.2)', () => {
+  const leakyRafaleAnswer = {
+    ID: 'r-042',
+    ANSWER: 'REPONSE_SECRETE_JAMAIS_AFFICHEE',
+    NEXT: { ID: 'r-017', QUESTION: 'ENONCE_SUIVANT_SECRET_JAMAIS_AFFICHE', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2 },
+  }
+
+  it('TV : ni la réponse ni l\'énoncé de NEXT n\'apparaissent dans le rendu, même si useGame() les expose', () => {
+    const { container } = renderTV({ rafaleAnswer: leakyRafaleAnswer })
+    expect(screen.queryByText('REPONSE_SECRETE_JAMAIS_AFFICHEE')).not.toBeInTheDocument()
+    expect(screen.queryByText('ENONCE_SUIVANT_SECRET_JAMAIS_AFFICHE')).not.toBeInTheDocument()
+    expect(container.innerHTML).not.toContain('REPONSE_SECRETE_JAMAIS_AFFICHEE')
+    expect(container.innerHTML).not.toContain('ENONCE_SUIVANT_SECRET_JAMAIS_AFFICHE')
+  })
+
+  it('VPlayer : ni la réponse ni l\'énoncé de NEXT n\'apparaissent dans le rendu, même si useGame() les expose', () => {
+    const { container } = renderVPlayer({
+      rafaleAnswer: leakyRafaleAnswer,
+      rafaleParticipatingTeams: ['Équipe A', 'Équipe B'],
+      rafaleCurrentTeam: 'Équipe A',
+    })
+    expect(screen.queryByText('REPONSE_SECRETE_JAMAIS_AFFICHEE')).not.toBeInTheDocument()
+    expect(screen.queryByText('ENONCE_SUIVANT_SECRET_JAMAIS_AFFICHE')).not.toBeInTheDocument()
+    expect(container.innerHTML).not.toContain('REPONSE_SECRETE_JAMAIS_AFFICHEE')
+    expect(container.innerHTML).not.toContain('ENONCE_SUIVANT_SECRET_JAMAIS_AFFICHE')
   })
 })
