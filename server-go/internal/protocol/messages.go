@@ -405,7 +405,15 @@ type QuizMetaPayload struct {
 // generation job (contract ai-multi-provider.md §10). CreatedCount/SkippedCount
 // are cumulative over the whole job, not per-batch.
 type AIGenerationProgressPayload struct {
-	JobID        string `json:"JOB_ID"`
+	JobID string `json:"JOB_ID"`
+	// Target distinguishes which generation path emitted this progress —
+	// "QUIZ" (default, existing chemin) or "RAFALE" (#203, v8.1.0). Additive
+	// and backward-compatible: a client that doesn't know this field simply
+	// ignores it and keeps behaving as before (contract
+	// rafale-ai-generation.md §6). Always populated by the server (never
+	// omitted) since AI_GENERATION_PROGRESS is now a singleton shared by two
+	// independent modales that must each filter on it.
+	Target       string `json:"TARGET"`
 	State        string `json:"STATE"` // "RUNNING" | "DONE" | "FAILED" | "CANCELLED"
 	BatchesDone  int    `json:"BATCHES_DONE"`
 	BatchesTotal int    `json:"BATCHES_TOTAL"`
