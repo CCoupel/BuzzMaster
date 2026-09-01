@@ -173,10 +173,16 @@ func TestRafaleReady_ValidCategory_ReachesReadyNormally(t *testing.T) {
 	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
 	e.Ready("rq1", q)
 
+	// #201: SOLO now requires exactly one selected team — select it before
+	// ForceReady(), same as MEMORY SOLO already required.
+	if err := e.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
+
 	e.ForceReady()
 
 	if state := e.GetState(); state.Phase != PhaseReady {
-		t.Errorf("RAFALE with a valid CATEGORY must reach READY via ForceReady, got %s", state.Phase)
+		t.Errorf("RAFALE with a valid CATEGORY and its SOLO team selected must reach READY via ForceReady, got %s", state.Phase)
 	}
 }
 
@@ -203,16 +209,23 @@ func TestParticipantsConform_Rafale(t *testing.T) {
 		{"zero difficulty does not conform (the 2026-08-31 bug)", CategoryHistory, 0, string(RafaleModeSolo), nil, false},
 		{"difficulty below range does not conform", CategoryHistory, -1, string(RafaleModeSolo), nil, false},
 		{"difficulty above range does not conform", CategoryHistory, 4, string(RafaleModeSolo), nil, false},
-		{"set category and valid difficulty=1 conforms", CategoryHistory, 1, string(RafaleModeSolo), nil, true},
-		{"set category and valid difficulty=2 conforms", CategoryHistory, 2, string(RafaleModeSolo), nil, true},
-		{"set category and valid difficulty=3 conforms", CategoryHistory, 3, string(RafaleModeSolo), nil, true},
+		// #201: SOLO now requires exactly one team (was exempt) — these three
+		// isolate the CATEGORY/DIFFICULTY dimension specifically, so a team
+		// is selected to keep that isolation (team count is NOT what's under
+		// test in these three rows).
+		{"set category and valid difficulty=1 conforms", CategoryHistory, 1, string(RafaleModeSolo), []string{"red"}, true},
+		{"set category and valid difficulty=2 conforms", CategoryHistory, 2, string(RafaleModeSolo), []string{"red"}, true},
+		{"set category and valid difficulty=3 conforms", CategoryHistory, 3, string(RafaleModeSolo), []string{"red"}, true},
 		{"empty category AND zero difficulty does not conform", CategoryNone, 0, string(RafaleModeSolo), nil, false},
 		// --- 2026-09-02, #199: multi-team mode requires a minimum of selected
-		// teams; threshold corrected 2026-09-01, #201: >=2 (was >=1), aligned
-		// on MEMORY's own CHACUN_SON_TOUR/TANT_QUE_JE_GAGNE branch — a
-		// rotation between teams makes no sense with only one. ---
-		{"SOLO with no teams still conforms (exempt)", CategoryHistory, 1, string(RafaleModeSolo), nil, true},
-		{"empty RAFALE_MODE defaults to SOLO, no teams still conforms", CategoryHistory, 1, "", nil, true},
+		// teams; #201, 2026-09-01/2026-09-02: threshold corrected to >=2 (was
+		// >=1) for multi modes, AND SOLO no longer exempt — both now share
+		// participantsCountConform (SOLO==1, multi>=2), same rule as MEMORY. ---
+		{"SOLO with no teams does not conform (#201 — was exempt before the fix)", CategoryHistory, 1, string(RafaleModeSolo), nil, false},
+		{"SOLO with one team conforms (#201)", CategoryHistory, 1, string(RafaleModeSolo), []string{"red"}, true},
+		{"SOLO with two teams does not conform (#201 — exactly one required)", CategoryHistory, 1, string(RafaleModeSolo), []string{"red", "blue"}, false},
+		{"empty RAFALE_MODE defaults to SOLO, no teams does not conform (#201)", CategoryHistory, 1, "", nil, false},
+		{"empty RAFALE_MODE defaults to SOLO, one team conforms (#201)", CategoryHistory, 1, "", []string{"red"}, true},
 		{"CHACUN_SON_TOUR with no teams does not conform", CategoryHistory, 1, string(RafaleModeChacunSonTour), nil, false},
 		{"CHACUN_SON_TOUR with one team does not conform (#201 — was wrongly true before the >=2 fix)", CategoryHistory, 1, string(RafaleModeChacunSonTour), []string{"red"}, false},
 		{"CHACUN_SON_TOUR with two teams conforms", CategoryHistory, 1, string(RafaleModeChacunSonTour), []string{"red", "blue"}, true},
@@ -370,18 +383,65 @@ func TestRafaleReady_MultiModeWithTeams_ReachesReadyNormally(t *testing.T) {
 	}
 }
 
-func TestRafaleReady_SoloNoTeams_ReachesReadyNormally(t *testing.T) {
+// TestRafaleReady_SoloNoTeams_NeverReachesReady is the #201 update of this
+// test — SOLO used to be exempt from any participant-selection requirement
+// (this test's own name/assertion, inverted here). The user confirmed
+// RAFALE SOLO must require exactly one team, same as MEMORY SOLO
+// (participantsCountConform, engine.go) — a SOLO round with ZERO teams ever
+// selected must now stay stuck in PREPARE and refuse Start(), mirroring
+// TestStart_MemorySolo_UnreachableWithoutExplicitSelection
+// (engine_participants_conform_test.go).
+func TestRafaleReady_SoloNoTeams_NeverReachesReady(t *testing.T) {
 	e := NewEngine()
 	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
 	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
 	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
-	e.Ready("rq1", q) // no RAFALE_SET_TEAMS — SOLO must not require one
+	e.Ready("rq1", q) // no RAFALE_SET_TEAMS
+
+	if e.ParticipantsConform() {
+		t.Fatal("precondition: no team was ever selected, SOLO must not conform (#201)")
+	}
 
 	e.ForceReady()
-
-	if state := e.GetState(); state.Phase != PhaseReady {
-		t.Errorf("SOLO must reach READY without any participating team selected, got %s", state.Phase)
+	if state := e.GetState(); state.Phase != PhasePrepare {
+		t.Errorf("BUG: SOLO reached %s with ZERO teams ever selected — #201 requires exactly one", state.Phase)
 	}
+
+	e.Start(30)
+	if state := e.GetState(); state.Phase == PhaseCountdown || state.Phase == PhaseStarted {
+		t.Errorf("BUG: Start() succeeded (phase=%s) for a SOLO round with no team selected — #201", state.Phase)
+	}
+}
+
+// TestRafaleReady_SoloOneTeam_ReachesReady is the #201 positive-control
+// regression test explicitly requested by the CDP: RAFALE SOLO with exactly
+// ONE team selected must reach READY and accept Start() normally — proving
+// the fix above (TestRafaleReady_SoloNoTeams_NeverReachesReady) narrows the
+// gate, it doesn't turn SOLO into an unreachable dead end.
+func TestRafaleReady_SoloOneTeam_ReachesReady(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
+	seedRafaleReservoirBulk(t, e, 5, CategoryHistory, 1)
+	q := makeRafaleQuestion("rq1", string(RafaleModeSolo), CategoryHistory, 1)
+	e.Ready("rq1", q)
+
+	if err := e.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
+	if !e.ParticipantsConform() {
+		t.Fatal("precondition: exactly one team selected in SOLO must conform (#201)")
+	}
+
+	e.ForceReady()
+	if state := e.GetState(); state.Phase != PhaseReady {
+		t.Fatalf("expected READY with one team selected in SOLO, got %s", state.Phase)
+	}
+
+	e.Start(30)
+	if state := e.GetState(); state.Phase != PhaseCountdown {
+		t.Errorf("expected Start() to succeed with one team selected in SOLO, got phase=%s", state.Phase)
+	}
+	e.Stop()
 }
 
 // TestSetRafaleParticipatingTeams_ClearingInMultiMode_RevertsReadyToPrepare

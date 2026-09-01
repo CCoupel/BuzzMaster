@@ -155,16 +155,23 @@ func TestRafaleMultiTeamGate_RealHTTPUpload_ChacunSonTour_RequiresTeam(t *testin
 	}
 }
 
-// TestRafaleMultiTeamGate_RealHTTPUpload_EmptyMode_DefaultsToSOLO_NoTeamRequired
-// documents, as a DELIBERATE control case (not a bug), the exact mechanism
-// behind the "stale pre-8.0.0.11 question" hypothesis above: a round-config
-// question with NO RAFALE_MODE at all (as any RAFALE question saved before
-// http.go's fix would still have, if never re-saved since) legitimately
-// requires no team, by the SAME "empty ⇒ SOLO" convention used everywhere
-// else in the engine (RafaleQuestionTime<=0⇒3, RafaleMaxQuestions<=0⇒100).
-// This is why the backend cannot structurally distinguish "genuinely SOLO"
-// from "stale/never-saved MODE" — see this file's header comment.
-func TestRafaleMultiTeamGate_RealHTTPUpload_EmptyMode_DefaultsToSOLO_NoTeamRequired(t *testing.T) {
+// TestRafaleMultiTeamGate_RealHTTPUpload_EmptyMode_DefaultsToSOLO documents,
+// as a DELIBERATE control case (not a bug), the exact mechanism behind the
+// "stale pre-8.0.0.11 question" hypothesis above: a round-config question
+// with NO RAFALE_MODE at all (as any RAFALE question saved before http.go's
+// fix would still have, if never re-saved since) is treated EXACTLY like an
+// explicit SOLO, by the SAME "empty ⇒ SOLO" convention used everywhere else
+// in the engine (RafaleQuestionTime<=0⇒3, RafaleMaxQuestions<=0⇒100). This
+// is why the backend cannot structurally distinguish "genuinely SOLO" from
+// "stale/never-saved MODE" — see this file's header comment.
+//
+// #201 (2026-09-02): SOLO itself no longer means "no team required" — it
+// now requires EXACTLY one, same as MEMORY SOLO (participantsCountConform,
+// engine.go). Renamed from its original *_NoTeamRequired name and updated:
+// still proves the empty->SOLO default, but the assertion now checks the
+// current SOLO rule (no team => refused, one team => conforms) rather than
+// the pre-#201 "no team required at all" behavior.
+func TestRafaleMultiTeamGate_RealHTTPUpload_EmptyMode_DefaultsToSOLO(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 	os.MkdirAll(filepath.Join(dataDir, "files", "questions"), 0755)
 	server.engine.SetTeams(map[string]*game.Team{"red": {Name: "Team Red"}})
@@ -175,7 +182,14 @@ func TestRafaleMultiTeamGate_RealHTTPUpload_EmptyMode_DefaultsToSOLO_NoTeamRequi
 	}
 
 	server.engine.Ready(q.ID, q)
+	if server.engine.ParticipantsConform() {
+		t.Error("BUG (#201): an empty RAFALE_MODE (defaults to SOLO) conforms with NO team selected — SOLO now requires exactly one")
+	}
+
+	if err := server.engine.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
 	if !server.engine.ParticipantsConform() {
-		t.Error("expected an empty RAFALE_MODE (defaults to SOLO) to conform with no team selected — this is by-design, not a bug")
+		t.Error("expected an empty RAFALE_MODE (defaults to SOLO) to conform with exactly one team selected — this is by-design, not a bug")
 	}
 }

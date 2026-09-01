@@ -301,11 +301,16 @@ func TestRafaleIntegration_ValidCategory_ReachesReadyViaRealDispatch(t *testing.
 	}
 	app.engine.Ready("rq1", q)
 
+	// #201: SOLO now requires exactly one selected team — dispatch the real
+	// RAFALE_SET_TEAMS action before FORCE_READY, same as MEMORY SOLO
+	// already required via MEMORY_SET_TEAMS.
+	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleSetTeams, protocol.RafaleSetTeamsPayload{Teams: []string{"red"}})
+
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionForceReady, nil)
 
 	state := app.engine.GetState()
 	if state.Phase != game.PhaseReady {
-		t.Fatalf("RAFALE with a valid CATEGORY must reach READY via a real FORCE_READY dispatch, got %s", state.Phase)
+		t.Fatalf("RAFALE with a valid CATEGORY and its SOLO team selected must reach READY via a real FORCE_READY dispatch, got %s", state.Phase)
 	}
 }
 

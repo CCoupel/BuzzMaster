@@ -168,14 +168,18 @@ func TestHandleStart_AcceptedStart_StillBroadcasts(t *testing.T) {
 		ID: "rq1", Question: "RAFALE round", Type: game.QuestionTypeRafale,
 		Category: game.CategoryHistory, Points: "10", Time: "120",
 		TypedContent: game.TypedContent{
-			RafaleDifficulty: 1, RafaleMode: string(game.RafaleModeSolo), // SOLO — no team required
+			RafaleDifficulty: 1, RafaleMode: string(game.RafaleModeSolo), // SOLO — #201: exactly one team required
 			RafaleQuestionTime: 3, RafaleMaxQuestions: 100,
 		},
 	}
 	app.engine.Ready("rq1", q)
+	// #201: SOLO now requires exactly one selected team, same as MEMORY SOLO.
+	if err := app.engine.SetRafaleParticipatingTeams([]string{"red"}); err != nil {
+		t.Fatalf("SetRafaleParticipatingTeams: %v", err)
+	}
 	app.engine.ForceReady()
 	if state := app.engine.GetState(); state.Phase != game.PhaseReady {
-		t.Fatalf("sanity: expected PhaseReady (SOLO, no team required), got %s", state.Phase)
+		t.Fatalf("sanity: expected PhaseReady (SOLO, team selected), got %s", state.Phase)
 	}
 
 	baseURL := startEvictionTestServer(t, app)

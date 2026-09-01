@@ -170,14 +170,18 @@ func TestRafaleCountdownToStarted_RealDispatch_RealCountdown_DeliversQuestionOnT
 	// START->countdown->STARTED transition below, not the READY path
 	// (already covered by TestRafaleIntegration_ValidCategory_ReachesReadyViaRealDispatch).
 	app.engine.Ready("rq1", q)
-	app.engine.ForceReady()
-	if state := app.engine.GetState(); state.Phase != game.PhaseReady {
-		t.Fatalf("sanity: expected PhaseReady before START, got %s", state.Phase)
-	}
 
+	// #201: SOLO now requires exactly one participating team (was exempt
+	// entirely) — select it BEFORE ForceReady(), not after, since the gate
+	// is now evaluated at ForceReady() time.
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleSetTeams, protocol.RafaleSetTeamsPayload{Teams: []string{"red"}})
 	if state := app.engine.GetState(); state.RafaleCurrentTeam != "red" {
 		t.Fatalf("sanity: expected RAFALE_SET_TEAMS to select 'red', got %q", state.RafaleCurrentTeam)
+	}
+
+	app.engine.ForceReady()
+	if state := app.engine.GetState(); state.Phase != game.PhaseReady {
+		t.Fatalf("sanity: expected PhaseReady before START, got %s", state.Phase)
 	}
 
 	baseURL := startEvictionTestServer(t, app) // routes /ws/tv -> ClientTypeTV
