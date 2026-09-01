@@ -2,6 +2,32 @@
 
 Historique des versions du projet BuzzControl.
 
+## [8.1.0] - Milestone v8.1.0 — Génération IA du réservoir RAFALE (#203)
+
+**Issues** : #203. Ajout du chemin de génération IA dédiée au réservoir RAFALE — endpoint asynchrone avec paliers de volume, validation stricte de brièveté (100/40 runes), alerte pré-manche sur insuffisance de données, refus pendant une manche en cours.
+
+### Added
+- **AI generation for RAFALE reservoir — separate path, shared infrastructure** (#203) — Nouvel endpoint `POST /api/rafale/generate-questions` permettant de générer des questions pour le réservoir RAFALE de manière asynchrone (réponse `202`, progression WebSocket). Réutilise l'intégralité de l'infrastructure existante (`aiJobRegistry`, relances, backoff, annulation) sans modification du chemin Quiz — zéro régression garantie (aucune ligne de `runAIJob` n'a changé).
+- **Volume presets instead of free-form count** — Le champ `count` n'accepte que les paliers `{10, 20, 50, 100, 200}` (constante partagée Go ↔ JS). Élimine la classe des saisies aberrantes et se manipule au doigt sur tablette. Une énumération fermée remplace un entier libre : on remplit un réservoir par lots, pas à la question près.
+- **Strict brevity constraint — rejection, never truncation** (#203, §5.2) — Une question générée hors plafond (`QUESTION` > 100 runes, `ANSWER` > 40 runes, mesuré en runes après `TrimSpace`) est **écartée** et comptée dans `SKIPPED_COUNT`, jamais tronquée. Tronquer un énoncé produit une question sans fin ; tronquer une réponse produit une réponse **fausse**, que l'animateur validerait contre la bonne réponse d'un joueur — un faux négatif indétectable. La défense en profondeur est assurée : consigne au prompt (cible 80/25) + validation serveur.
+- **Manual editor gains same length limits** — L'endpoint `POST /api/rafale/questions` (éditeur manuel du réservoir) rejette maintenant en `400` les questions hors plafond. Le plafond est une propriété **du réservoir**, pas de la génération — sans cela, la contrainte serait contournable en trois clics dans l'éditeur. Aucune donnée existante n'est supprimée ni tronquée ; une question trop longue déjà en base reste jouable, elle ne peut simplement plus être ré-enregistrée.
+- **Refusal during active RAFALE round** (#203, §7) — Une génération est refusée si une manche RAFALE est en cours (`409 rafale_round_in_progress`). La condition exacte : phase `STARTED` ou `PAUSED` avec question courante de type `RAFALE`. Justification : la pioche lit le réservoir à chaque tirage, et injecter des questions au milieu invaliderait l'estimation de besoin calculée au lancement.
+- **`TARGET` field on `AI_GENERATION_PROGRESS`** (WebSocket, `/ws/admin`) — Nouvel champ `TARGET` (`"QUIZ"` | `"RAFALE"`) pour distinguer les deux chemins de génération. **Additif et rétrocompatible** : absent ⇒ `"QUIZ"`. Nécessaire au frontend : la progression est un singleton global et deux modales l'écoutent désormais — sans ce champ, un job RAFALE ferait basculer la modale Quiz en « génération en cours ». Toujours présent (jamais omis).
+- **Batch write with atomic ID allocation** — Nouvelle méthode `Engine.AppendRafaleQuestions()` écrivant par lot : IDs `r-NNN` alloués **sous un verrou unique**, puis `SaveRafale()` appelée **une fois** après insertion du lot entier. Discipline stricte : `Lock → insérer → Unlock → Save` — jamais `SaveRafale()` sous verrou (le `RWMutex` n'est pas réentrant). Le chemin Quiz (`runAIJob`) est **strictement inchangé** — la boucle RAFALE (`runAIRafaleJob`) la duplique pour éviter de la réécrire (risque R1, durcie sur plusieurs cycles QUALIF).
+- **Category selection and annotation** (#203, §3.1) — L'interface propose **toutes** les catégories connues (pas seulement celles du réservoir existant) — cela évite un blocage d'amorçage. L'existant est en revanche **affiché** : chaque catégorie est annotée du nombre de questions déjà présentes pour les difficultés sélectionnées, et la répartition finale est montrée en `existant → après`. Comptes calculés **côté client** depuis la liste déjà chargée — aucun endpoint nouveau.
+- **Shared modal shell extracted** (composant) — Extraction de `AIJobModalShell` depuis `AIGenerateModal` : enveloppe, machine à états, cycle de vie du job et les 6 corps d'état (`running`, `done`, `cancelled`, `failed`, `submit-error`, `unavailable`) sont réutilisés par les deux modales (Quiz et RAFALE). Chaque modale ne porte plus que son formulaire et son payload. Sûr : les 6 corps d'état existants sont **déjà** génériques — déplacement, pas réécriture.
+
+### Changed
+- **[BREAKING, mineur]** Questions trop longues rejetées dans l'éditeur manuel du réservoir — voir section Added ci-dessus. Aucun suppression de donnée existante.
+
+### Fixed
+- **Non-regression guarantee on Quiz generation path** — Audit du diff : `ai_job.go:runAIJob` n'a **aucune** ligne modifiée dans son corps. Tout ce qui est partagé (`aiJobRegistry.tryStart`, `aiJob`, `broadcastAIJobProgress`, backoff, annulation, temporisation inter-lots) l'est sans divergence — zero risk sur le chemin dès maintenant éprouvé en PROD depuis v8.0.0.
+
+### Security
+- **API key never logged, returned or exposed** — Réutilisation complète de `sanitizeUpstreamMessage` et de la chaîne de sécurité existante. `instructions` jamais persisté. Progression jamais diffusée hors `/ws/admin`. Le LLM ne peut pas désigner une entrée existante (absence d'`ID` au schéma JSON).
+
+---
+
 ## [7.0.0] - Milestone v7.0.0 — MEMOTION+ : cœur (#25)
 
 **Issues** : #183 (refactor), #184 (cœur), #185 (QCM en carte). Polymorphisme des cartes MEMOTION
