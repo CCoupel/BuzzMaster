@@ -2,6 +2,48 @@
 
 ---
 
+## [20260902] — Éclairage d'ambiance : événements, pilote abstrait, écrivain (#205, feature, v10.0.0)
+
+> Nouveau contrat `contracts/lighting.md`. Première brique du milestone v10.0.0 (éclairage de la
+> salle synchronisé sur les événements de jeu). **Entièrement interne au serveur** : aucun
+> endpoint HTTP, aucune action WebSocket, aucun changement de `GameState`. Le schéma de
+> configuration et les endpoints viendront avec #207.
+
+- **[NEW]** `internal/lighting` — vocabulaire d'événements d'ambiance (`EventKind` : `IDLE`,
+  `READY`, `RUNNING`, `BUZZ`, `PAUSE_ALL`, `REVEAL`, `TEAM_TURN`, `ENTRACTE`, `SCORE`) et
+  `Event{Kind, Teams []string}`. `Teams` porte des **noms d'équipe**, pas des identifiants :
+  `game.Team` n'a pas de champ `ID`, une équipe est désignée par son `Name` partout dans le
+  projet. C'est un slice parce que le REVEAL en QCM concerne plusieurs équipes à la fois. Champ
+  requis par #213 (éclairage différencié par équipe) — le faire circuler dès #205 évite de
+  rouvrir ce contrat.
+- **[NEW]** `lighting.Driver` — `Apply(ctx, State) error` + `Close() error`. `State` porte des
+  zones `{Zone, Color [3]int, Intensity int}`, **au format et à l'échelle exacts de
+  `protocol.LEDSetPayload`** (RGB 0-255, intensité 0-255) : c'est ce qui garantit que la salle et
+  les buzzers affichent la **même** couleur pour la **même** équipe. La conversion vers le format
+  du matériel appartient au pilote (#206). Garantie du contrat : `Apply` n'est appelé que depuis
+  une goroutine unique, un pilote n'a donc pas à être sûr en accès concurrent.
+- **[NEW]** Écrivain asynchrone — **ne met jamais un état en mémoire tampon**, il retient qu'un
+  rafraîchissement est dû et re-dérive depuis le `GameState` vivant. Invariant repris tel quel de
+  `BroadcastCoalescer` (`cmd/server/broadcast_coalescer.go`) : une émission différée est toujours
+  redondante avec l'état qui existait quand elle a été programmée, jamais périmée. C'est ce qui
+  rend « dernier état gagnant » correct **par construction**, et non par discipline. Exception
+  unique : `SCORE`, qui n'est pas dérivable d'un état (une attribution de points est un instant),
+  traité en **registre à une place avec échéance de 4800 ms** — alignée sur le
+  `time.AfterFunc(4800ms)` qui restaure les LED en fin de `sendLEDSetComet` (`main.go:4619`), pour
+  que salle et buzzers reviennent à la normale au même instant.
+- **[NEW]** Recensement normatif de **21 sites émetteurs** dans `cmd/server/main.go`, plus
+  4 fonctions annotées « pas d'ambiance » avec motif (`resendLEDOnReconnect`, la restauration de
+  fin de COMET, et les deux fonctions mortes `broadcastLEDSet` / `sendLEDSetToTeam` de l'audit
+  #132). **L'ambiance se branche exclusivement sur la couche événement** — jamais sur la couche
+  de rendu : `sendLEDSet` (`main.go:3861`) est un goulot **par buzzer**, un REVEAL s'y traduit en
+  N appels.
+- **[NEW]** Test d'exhaustivité par analyse syntaxique `go/ast` (stdlib, aucune dépendance
+  ajoutée), indexé sur les paires **(fonction englobante, fonction LED appelée)** et non sur des
+  numéros de ligne — un test indexé sur les lignes serait désarmé en trois jours.
+- **Aucun changement BREAKING.** Le comportement par défaut est strictement inchangé : sans
+  éclairage configuré, aucune goroutine n'est lancée, aucun appel matériel n'est fait, aucune
+  ligne de log n'est écrite.
+
 ## [20260901] — RAFALE : génération IA du réservoir de questions (#203, feature, v8.1.0)
 
 > Nouveau contrat `contracts/rafale-ai-generation.md`. Maquette
