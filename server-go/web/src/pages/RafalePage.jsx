@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
+import { useOptionalGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import CategoryBadge from '../components/CategoryBadge'
 import CategorySelector from '../components/CategorySelector'
 import CategoryFilterBar from '../components/CategoryFilterBar'
+import RafaleAIGenerateModal from '../components/RafaleAIGenerateModal'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import './RafalePage.css'
@@ -12,6 +14,20 @@ import './RafalePage.css'
 const DIFFICULTIES = [1, 2, 3]
 
 const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULTY: 1 }
+
+// #203 (v8.1.0) — plafonds de longueur du réservoir, contrat
+// rafale-ai-generation.md §5.1 (source de vérité : `rafaleMaxQuestionRunes`/
+// `rafaleMaxAnswerRunes` côté serveur, internal/server/ai_generator_rafale.go).
+// Mesurés en RUNES (points de code Unicode), pas en unités UTF-16 : `Array.from`
+// itère par point de code (contrairement à `.length`), même discipline que
+// `utf8.RuneCountInString` côté Go — un caractère accentué ou un emoji ne
+// coûte jamais double.
+const RAFALE_MAX_QUESTION_RUNES = 100
+const RAFALE_MAX_ANSWER_RUNES = 40
+
+function runeCount(str) {
+  return Array.from((str || '').trim()).length
+}
 
 /**
  * RafalePage — éditeur du réservoir RAFALE (`/admin/rafale`, contrat
@@ -62,6 +78,59 @@ export default function RafalePage() {
   const [resettingId, setResettingId] = useState(null)
   const [resettingAll, setResettingAll] = useState(false)
 
+  // Génération IA du réservoir (#203, v8.1.0, tâche 12) — même motif que
+  // QuestionsPage.jsx (aiConfig/providerConfigured/canOpenAiModal) : la clé
+  // API n'est jamais transmise au frontend, seul son état "configurée ou
+  // non" l'est via GET /config.json.
+  // useOptionalGame (pas useGame) : RafalePage.rafale.test.jsx (27 tests,
+  // antérieurs à #203) rend `<RafalePage />` sans GameProvider — useGame()
+  // y lèverait. aiJob/cancelAiGeneration retombent alors sur leurs valeurs
+  // par défaut ci-dessous, sans rien changer au comportement déjà testé.
+  const game = useOptionalGame()
+  const aiJob = game?.aiJob ?? null
+  const cancelAiGeneration = game?.cancelAiGeneration
+  const [showAIModal, setShowAIModal] = useState(false)
+  const [aiConfig, setAiConfig] = useState({
+    provider: 'anthropic',
+    apiKeyConfigured: false,
+    groqApiKeyConfigured: false,
+    interBatchDelayMs: 60000,
+    maxConsecutiveFailures: 2,
+    maxQuestions: 200,
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    const fetchAiStatus = async () => {
+      try {
+        const res = await fetch('/config.json')
+        if (!res.ok) return
+        const data = await res.json()
+        if (!cancelled && data?.ai) {
+          setAiConfig({
+            provider: data.ai.provider || 'anthropic',
+            apiKeyConfigured: !!data.ai.api_key_configured,
+            groqApiKeyConfigured: !!data.ai.groq_api_key_configured,
+            interBatchDelayMs: data.ai.inter_batch_delay_ms || 60000,
+            maxConsecutiveFailures: data.ai.max_consecutive_failures || 2,
+            maxQuestions: data.ai.max_questions || 200,
+          })
+        }
+      } catch {
+        // Génération indisponible — le bouton reste désactivé, la modale (si
+        // ouverte malgré tout) retombera sur l'état "Indisponible".
+      }
+    }
+    fetchAiStatus()
+    return () => { cancelled = true }
+  }, [])
+
+  const providerConfigured = aiConfig.provider === 'groq' ? aiConfig.groqApiKeyConfigured : aiConfig.apiKeyConfigured
+  // Reste cliquable si une génération RAFALE tourne déjà (ré-attachement) —
+  // MÊME cible seulement : un job Quiz en cours ailleurs ne doit pas activer
+  // ce bouton (contrat rafale-ai-generation.md §6, filtrage TARGET).
+  const canOpenAiModal = providerConfigured || (aiJob?.state === 'RUNNING' && (aiJob?.target || 'QUIZ') === 'RAFALE')
+
   const loadQuestions = useCallback(() => {
     setLoading(true)
     setError(null)
@@ -84,6 +153,29 @@ export default function RafalePage() {
     loadQuestions()
   }, [loadQuestions])
 
+  // Refetch du réservoir piloté par la progression du job IA (#203, tâche 12,
+  // contrat rafale-ai-generation.md §6 "Rafraîchissement de la liste du
+  // réservoir") — AUCUN nouveau broadcast WebSocket : le réservoir n'a pas
+  // d'équivalent de OnQuestionUpload, ce refetch réutilise `loadQuestions`
+  // (déjà exercée par les 5 mutations existantes de cette page). Se déclenche
+  // à chaque progression où CREATED_COUNT a augmenté ET TARGET === "RAFALE"
+  // — jamais sur un job Quiz (filtrage identique à celui de la coquille de
+  // modale, ai/AIJobModalShell.jsx, mais nécessaire ICI séparément : cette
+  // page n'affiche pas forcément la modale au moment où le job avance).
+  const lastRafaleProgressRef = useRef({ jobId: null, createdCount: 0 })
+  useEffect(() => {
+    if (!aiJob || (aiJob.target || 'QUIZ') !== 'RAFALE') return
+    const tracked = lastRafaleProgressRef.current
+    const createdCount = aiJob.createdCount || 0
+    if (tracked.jobId !== aiJob.jobId) {
+      lastRafaleProgressRef.current = { jobId: aiJob.jobId, createdCount: 0 }
+    }
+    if (createdCount > lastRafaleProgressRef.current.createdCount) {
+      lastRafaleProgressRef.current = { jobId: aiJob.jobId, createdCount }
+      loadQuestions()
+    }
+  }, [aiJob, loadQuestions])
+
   // useCategoryFilter attend q.CATEGORY (case commune Quiz/RAFALE, §3.1).
   const {
     selectedCategories,
@@ -102,6 +194,13 @@ export default function RafalePage() {
   }, [categoryFiltered, selectedDifficulty, onlyUnused])
 
   const usedCount = useMemo(() => questions.filter(q => q.USED).length, [questions])
+
+  // #203 (tâche 13) — compteurs de caractères de l'éditeur manuel, mêmes
+  // plafonds que la génération IA (contrat §5.1/§5.3).
+  const questionRuneCount = useMemo(() => runeCount(form.QUESTION), [form.QUESTION])
+  const answerRuneCount = useMemo(() => runeCount(form.ANSWER), [form.ANSWER])
+  const questionOverLimit = questionRuneCount > RAFALE_MAX_QUESTION_RUNES
+  const answerOverLimit = answerRuneCount > RAFALE_MAX_ANSWER_RUNES
 
   const resetForm = () => {
     setForm(EMPTY_FORM)
@@ -170,6 +269,21 @@ export default function RafalePage() {
       setFormError('Enonce et reponse sont obligatoires.')
       return
     }
+    // #203 (tâche 13) — mêmes plafonds que la génération IA et que la
+    // validation serveur de POST /api/rafale/questions (contrat
+    // rafale-ai-generation.md §5.1/§5.3) : garde-fou client pour que le
+    // compteur de caractères ci-dessous ne soit jamais contredit par un 400
+    // surprise. Le bouton d'enregistrement est déjà désactivé au-delà de ces
+    // plafonds (voir questionOverLimit/answerOverLimit) — ce contrôle reste
+    // un filet, ex. soumission par la touche Entrée sur le champ Réponse.
+    if (runeCount(form.QUESTION) > RAFALE_MAX_QUESTION_RUNES) {
+      setFormError(`Enonce trop long (${RAFALE_MAX_QUESTION_RUNES} caracteres max).`)
+      return
+    }
+    if (runeCount(form.ANSWER) > RAFALE_MAX_ANSWER_RUNES) {
+      setFormError(`Reponse trop longue (${RAFALE_MAX_ANSWER_RUNES} caracteres max).`)
+      return
+    }
     if (!form.CATEGORY) {
       setFormError('Selectionnez une categorie.')
       return
@@ -213,6 +327,30 @@ export default function RafalePage() {
       <div className="rafale-layout">
         {/* Filtres + liste */}
         <Card padding="lg" className="rafale-list-card">
+          {/* #203 (v8.1.0, tâche 12) — point d'entrée de la génération IA du
+              réservoir, dans l'en-tête de la carte (maquette §03). Même
+              motif que QuestionsPage.jsx : désactivé tant qu'aucune clé
+              n'est configurée pour le provider sélectionné, tooltip
+              explicite, hint additionnel sous l'en-tête. */}
+          <div className="rafale-card-header">
+            <h2 className="rafale-card-title">Réservoir RAFALE</h2>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowAIModal(true)}
+              disabled={!canOpenAiModal}
+              title={canOpenAiModal ? 'Générer des questions via IA' : 'Configurer une clé API dans Paramètres pour activer la génération IA'}
+            >
+              ✨ Générer via IA
+            </Button>
+          </div>
+          {!canOpenAiModal && (
+            <p className="ai-generate-hint">
+              <span className="ai-generate-hint-dot" aria-hidden="true">●</span>
+              Configurer une clé API dans Paramètres pour activer la génération IA
+            </p>
+          )}
+
           <div className="rafale-filters">
             {/* CategoryFilterBar (v8.0.0, #16/#197, bugfix cohérence UI) —
                 même composant/pattern que QuestionsPage.jsx (base
@@ -347,6 +485,13 @@ export default function RafalePage() {
                   rows={3}
                   required
                 />
+                {/* #203 (tâche 13) — compteur de caractères (en runes, comme
+                    la validation serveur) pour que le 400 de POST
+                    /api/rafale/questions (plafond 100, contrat §5.3) ne soit
+                    jamais atteint par surprise. */}
+                <span className={`rafale-char-count ${questionOverLimit ? 'over' : ''}`}>
+                  {questionRuneCount}/{RAFALE_MAX_QUESTION_RUNES}
+                </span>
               </div>
               <div className="form-group">
                 <label>Reponse</label>
@@ -356,6 +501,9 @@ export default function RafalePage() {
                   onChange={e => setForm(prev => ({ ...prev, ANSWER: e.target.value }))}
                   required
                 />
+                <span className={`rafale-char-count ${answerOverLimit ? 'over' : ''}`}>
+                  {answerRuneCount}/{RAFALE_MAX_ANSWER_RUNES}
+                </span>
               </div>
               <div className="form-group">
                 <label>Categorie</label>
@@ -388,7 +536,13 @@ export default function RafalePage() {
               {formError && <p className="rafale-status rafale-status-error">{formError}</p>}
 
               <div className="section-actions">
-                <Button type="submit" variant="primary" disabled={submitting} loading={submitting}>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={submitting || questionOverLimit || answerOverLimit}
+                  loading={submitting}
+                  title={questionOverLimit || answerOverLimit ? 'Raccourcissez le champ en dépassement avant d\'enregistrer' : undefined}
+                >
                   {form.ID ? 'Enregistrer' : 'Ajouter'}
                 </Button>
                 {form.ID && (
@@ -401,6 +555,21 @@ export default function RafalePage() {
           </Card>
         </motion.div>
       </div>
+
+      {showAIModal && (
+        <RafaleAIGenerateModal
+          onClose={() => setShowAIModal(false)}
+          apiKeyConfigured={providerConfigured}
+          provider={aiConfig.provider}
+          aiJob={aiJob}
+          onCancelGeneration={cancelAiGeneration}
+          interBatchDelayMs={aiConfig.interBatchDelayMs}
+          maxConsecutiveFailures={aiConfig.maxConsecutiveFailures}
+          categories={apiCategories}
+          questions={questions}
+          maxQuestions={aiConfig.maxQuestions}
+        />
+      )}
     </div>
   )
 }

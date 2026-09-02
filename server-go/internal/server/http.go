@@ -291,6 +291,11 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/rafale/questions/reset-all", h.handleRafaleResetAllUsed)
 	h.mux.HandleFunc("/api/rafale/questions/", h.handleRafaleQuestionByID)
 	h.mux.HandleFunc("/api/rafale/pool", h.handleRafalePool)
+	// RAFALE reservoir AI generation (v8.1.0 — #203, contracts/rafale-ai-generation.md §2).
+	// Distinct path from "/api/rafale/questions/" — not a prefix of it, so
+	// net/http's exact-match-wins rule (see the comment above) isn't even in
+	// play here; still verified by an explicit test (plan task 7 note).
+	h.mux.HandleFunc("/api/rafale/generate-questions", h.handleGenerateRafaleQuestions)
 
 	// AI question generator (v6.0.0 — #8)
 	h.mux.HandleFunc("/api/generate-questions", h.handleGenerateQuestions)
@@ -2298,6 +2303,22 @@ func (h *HTTPServer) handlePostRafaleQuestion(w http.ResponseWriter, r *http.Req
 	}
 	if strings.TrimSpace(body.Answer) == "" {
 		http.Error(w, "ANSWER must not be empty", http.StatusBadRequest)
+		return
+	}
+	// Length caps (contract rafale-ai-generation.md §5.3, feature #203) —
+	// [BREAKING] mineur : ces plafonds n'existaient pas avant v8.1.0. Aucune
+	// question existante n'est supprimée ni tronquée ; ils s'appliquent
+	// uniquement à l'écriture (create/update depuis cet éditeur), et sont la
+	// MÊME source (rafaleMaxQuestionRunes/rafaleMaxAnswerRunes,
+	// ai_generator_rafale.go) que celle utilisée par la génération IA — un
+	// texte accepté ici est garanti ré-écrivable depuis le chemin IA et
+	// inversement.
+	if n := rafaleRuneLen(body.Question); n > rafaleMaxQuestionRunes {
+		http.Error(w, fmt.Sprintf("QUESTION must be at most %d characters (got %d)", rafaleMaxQuestionRunes, n), http.StatusBadRequest)
+		return
+	}
+	if n := rafaleRuneLen(body.Answer); n > rafaleMaxAnswerRunes {
+		http.Error(w, fmt.Sprintf("ANSWER must be at most %d characters (got %d)", rafaleMaxAnswerRunes, n), http.StatusBadRequest)
 		return
 	}
 	if body.Difficulty < 1 || body.Difficulty > 3 {

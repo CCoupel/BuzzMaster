@@ -20,6 +20,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Catégories personnalisées](#catégories-personnalisées-v570)
 - [Palette de 16 couleurs d'équipes](#palette-de-16-couleurs-déquipes-v5725)
 - [Générateur de questions via IA](#générateur-de-questions-via-ia-v600)
+- [Générateur du réservoir RAFALE via IA](#générateur-du-réservoir-rafale-via-ia-v810)
 
 ---
 
@@ -1489,6 +1490,97 @@ Si vous êtes insatisfait des questions générées :
 3. L'IA tiendra compte du nouvel état (les questions supprimées ne seront **pas régénérées identiques**)
 
 **Note** : Il n'existe **pas de bouton "Annuler"** pour une génération passée — la suppression manuelle sert de mécanisme de correction. Pour arrêter une génération **en cours**, utilisez le bouton "Arrêter" (voir section ci-dessus).
+
+---
+
+## Générateur du réservoir RAFALE via IA (v8.1.0, #203)
+
+### Présentation
+
+Le **réservoir RAFALE** est un stock global de questions pour le mode de jeu RAFALE (questions en rafale avec ~3 secondes par réponse). Contrairement aux questions Quiz stockées individuellement, le réservoir est unique et alimenté par générations successives via IA.
+
+Cette section décrit comment **générer en masse** des questions pour le réservoir RAFALE. Pour **éditer manuellement** des questions existantes, voir la page dédiée `/admin/rafale` (onglet Éditeur du réservoir).
+
+**Prérequis** : Une **clé API IA configurée** dans les Paramètres (Claude ou Groq, comme pour la génération Quiz). Voir section "Générateur de questions via IA" ci-dessus pour les détails.
+
+### Contrainte de brièveté — crucial pour RAFALE
+
+Une manche RAFALE laisse **~3 secondes** par question. Les énoncés ou réponses trop longs sont **silencieusement tronqués** par les surfaces d'affichage — ce qui produit des données fausses.
+
+**Règle fondamentale** : les questions générées **et** manuelles sont rejetées si :
+- **Énoncé** > **100 caractères** (en runes, après suppression espaces début/fin)
+- **Réponse** > **40 caractères** (en runes)
+
+Une question trop longue est **écartée** (comptée dans `SKIPPED_COUNT`), **jamais tronquée**. Une réponse trop longue serait fausse (l'animateur validerait la réponse raccourcie contre la réponse correcte d'un joueur — faux négatif indétectable).
+
+**Conséquence** : À la fin d'une génération, le compteur montre `CREATED_COUNT` questions réussies + `SKIPPED_COUNT` rejetées. L'UI affiche aussi le nouveau total du réservoir.
+
+### Utilisation : Générer pour le réservoir RAFALE
+
+#### Accès au formulaire
+
+1. Aller à la page **RAFALE** (`/admin/rafale` ou lien "🏃 RAFALE" en haut)
+2. Localiser le bouton **"✨ Générer via IA"** en haut de la modale de génération
+3. Cliquer → ouverture du formulaire de génération RAFALE
+
+#### Formulaire de génération RAFALE
+
+| Champ | Type | Obligatoire | Domaine | Notes |
+|-------|------|-------------|---------|-------|
+| **Thème** | Texte | ✅ | ≤ 200 car. | Sujet général (ex: "Culture générale — France") |
+| **Populations** | Cases à cocher | ✅ | 1+ parmi (Junior, Ado, Adulte, Senior, Famille) | Cibles (ado, adulte, etc.) |
+| **Langue** | Liste déroulante | ✅ | Français, Anglais, Allemand… | Langue des questions |
+| **Instructions** | Texte optionnel | ❌ | ≤ 2000 car. | Consignes supplémentaires au modèle (ex: "Éviter l'actualité récente"), jamais stockées |
+| **Catégories** | Cases à cocher | ✅ | 1+ parmi toutes les catégories connues | Pas restreint à l'existant (voir ci-dessous) |
+| **Difficultés** | Cases à cocher | ✅ | 1+ parmi (1 ⭐, 2 ⭐⭐, 3 ⭐⭐⭐) | Niveaux de difficulté (entiers 1..3, pas de libellés) |
+| **Volume** | Boutons segmentés | ✅ | `{10, 20, 50, 100, 200}` | Paliers fermés — on remplit par lots, pas à la question près |
+
+**Annotation des catégories** : Chaque catégorie affiche le **nombre de questions déjà présentes** dans le réservoir pour les difficultés sélectionnées, et la **répartition finale** `existant → après génération`.
+
+> **Pourquoi les catégories ne sont pas restreintes à l'existant** : Laisser l'IA amorcer une nouvelle catégorie vide (ex: "Littérature Japonaise") sans être obligé de saisir manuellement la première question. C'est précisément le travail que ce générateur existe pour éviter.
+
+#### Workflow asynchrone
+
+1. **Cliquer "Générer"** → le serveur crée un **job asynchrone** (réponse `202 Accepté`, pas `200 OK`)
+2. **Barre de progression** affiche nombre de questions créées et rejetées en temps réel
+3. **Trois états finaux** :
+   - **✅ Succès** : X questions créées, Y rejetées (hors plafond). Panneau résumé : nouveau total du réservoir
+   - **❌ Erreur** : Le fournisseur a refusé (quota épuisé, clé invalide, etc.). Détail du message d'erreur en panneau repliable
+   - **⏹️ Arrêt manuel** : Vous avez cliqué le bouton "Arrêter" → questions générées jusqu'à présent sont conservées
+
+#### Implication : Une seule génération à la fois
+
+Une génération Quiz et une génération RAFALE ne peuvent **pas** tourner en parallèle — elles partagent l'infrastructure globale de job.
+
+- Si une génération est en cours, tous les boutons "Générer" (Quiz et RAFALE) affichent `"Génération en cours..."` et sont désactivés
+- Une tentative retourne `409 Génération déjà en cours`
+- Pendant une **manche RAFALE active**, le serveur refuse les générations avec `409 Manche RAFALE en cours` (injecter des questions au milieu invaliderait l'estimation de besoin calculée au lancement)
+
+### Répartition du volume
+
+Les `count` questions sont réparties uniformément sur les `len(catégories) × len(difficultés)` couples.
+
+**Exemple** :
+- Catégories : Histoire, Géographie (2)
+- Difficultés : 1 ⭐, 2 ⭐⭐ (2)
+- Volume demandé : 50
+- → 4 couples (`Histoire×1`, `Histoire×2`, `Géographie×1`, `Géographie×2`)
+- → `50 ÷ 4 = 12 par couple` + `2 restantes`
+- → Distribution : 13, 13, 12, 12 (les 2 premières couples reçoivent le reste)
+
+Le répartition est **affichée avant lancement** sous la forme d'une matrice `existant → après`.
+
+### Après la génération
+
+**Révision fortement recommandée** (surtout avec Groq gratuit) :
+
+1. Allez à `/admin/rafale`
+2. Lisez les dernières questions générées
+3. **Supprimez** les aberrantes (cliquer le bouton ×)
+4. **Modifiez** celles avec typos ou formulations bizarres
+5. Testez en partie réelle (`NEW_GAME` → mode RAFALE)
+
+**Conservation automatique** : Les questions générées ne portent **pas de marquage spécial** — elles sont indiscernables des questions saisies manuellement.
 
 ---
 

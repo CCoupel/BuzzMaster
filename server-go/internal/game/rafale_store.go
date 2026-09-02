@@ -295,12 +295,54 @@ func (e *Engine) UpsertRafaleQuestion(q RafaleQuestion) (RafaleQuestion, error) 
 	return q, nil
 }
 
+// AppendRafaleQuestions adds a batch of reservoir questions in a single
+// locked operation, followed by exactly one SaveRafale() call — contract
+// rafale-ai-generation.md §8, feature #203 (AI generation of the RAFALE
+// reservoir). Any ID present on an input question is ignored: the server
+// always allocates fresh sequential "r-NNN" identifiers itself, the same
+// guarantee UpsertRafaleQuestion(q.ID=="") already gives one question at a
+// time — a caller (the generation job) can therefore never target, and so
+// never overwrite, an existing reservoir entry. Returns the stored copies,
+// in the same order as qs, with their assigned IDs. A nil/empty qs is a
+// no-op (no lock taken, no save).
+//
+// ⚠️ SaveRafale() takes RLock — it CANNOT be called while holding the write
+// lock acquired here (sync.RWMutex is not reentrant). The order is
+// therefore strictly Lock → allocate+insert the WHOLE batch → Unlock →
+// SaveRafale(), never interleaved with a save per question. This is exactly
+// why this method exists instead of a loop calling UpsertRafaleQuestion: a
+// loop would call SaveRafale() once per question (UpsertRafaleQuestion's own
+// contract), and SaveRafale() rewrites the ENTIRE reservoir file each time —
+// O(N×M) for a batch of M into a reservoir of N, and M separate windows
+// during which an interrupted process would leave the reservoir in a
+// partial, unintended state. One lock, one save, whatever the batch size.
+func (e *Engine) AppendRafaleQuestions(qs []RafaleQuestion) ([]RafaleQuestion, error) {
+	if len(qs) == 0 {
+		return nil, nil
+	}
+
+	e.mu.Lock()
+	stored := make([]RafaleQuestion, len(qs))
+	for i, q := range qs {
+		q.ID = e.nextRafaleIDUnsafe()
+		cp := q
+		e.rafaleQuestions[q.ID] = &cp
+		stored[i] = q
+	}
+	e.mu.Unlock()
+
+	if err := e.SaveRafale(); err != nil {
+		return nil, err
+	}
+	return stored, nil
+}
+
 // nextRafaleIDUnsafe returns the next free "r-NNN" identifier, scanning
 // existing reservoir IDs of the form "r-<digits>" for the highest numeric
 // suffix (an ID that doesn't match this shape — e.g. hand-picked via the
 // API's optional ID field — is simply ignored by the scan, never crashes
 // it). Caller must hold e.mu (write lock — called only from
-// UpsertRafaleQuestion).
+// UpsertRafaleQuestion and AppendRafaleQuestions).
 func (e *Engine) nextRafaleIDUnsafe() string {
 	highest := 0
 	for id := range e.rafaleQuestions {

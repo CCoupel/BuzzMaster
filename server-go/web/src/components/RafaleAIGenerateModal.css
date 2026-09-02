@@ -1,0 +1,97 @@
+/* RafaleAIGenerateModal — formulaire de génération IA du réservoir RAFALE
+   (#203, v8.1.0, tâche 11). Réutilise les classes génériques de la coquille
+   partagée (components/ai/AIJobModalShell.css : .ai-modal-*, .ai-field,
+   .ai-chip*, .ai-volume-toggle) — ce fichier ne définit que ce qui est
+   PROPRE à ce formulaire : le compte par catégorie sur les chips et la
+   matrice "existant → après génération" (maquette §04). */
+
+.rafale-ai-hint {
+  font-size: 0.76rem;
+  color: var(--gray-400);
+}
+
+/* Compte "déjà présent au réservoir" sur chaque chip de catégorie (contrat
+   rafale-ai-generation.md §3.1 — "carte des trous"). */
+.rafale-ai-cat-count {
+  margin-left: var(--space-1);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78em;
+  color: var(--gray-400);
+}
+
+.ai-chip.active .rafale-ai-cat-count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rafale-ai-cat-count.zero {
+  color: var(--warning, #d97706);
+  font-weight: 600;
+}
+
+.ai-chip.active .rafale-ai-cat-count.zero {
+  color: #fde68a;
+}
+
+/* Chips ★/★★/★★★ — même base que .ai-chip, police mono pour un alignement
+   régulier des étoiles. */
+.rafale-ai-star-chip {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+}
+
+/* Matrice existant → après génération */
+.rafale-ai-matrix-block {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+}
+
+.rafale-ai-matrix-title {
+  margin: 0 0 var(--space-2);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.rafale-ai-matrix-scroll {
+  overflow-x: auto;
+}
+
+.rafale-ai-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.rafale-ai-matrix th,
+.rafale-ai-matrix td {
+  padding: var(--space-1) var(--space-2);
+  text-align: center;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.rafale-ai-matrix td:first-child,
+.rafale-ai-matrix th:first-child {
+  text-align: left;
+  color: var(--gray-600);
+}
+
+.rafale-ai-matrix thead th {
+  font-weight: 600;
+  color: var(--gray-500);
+}
+
+.rafale-ai-matrix-cell {
+  font-variant-numeric: tabular-nums;
+  color: var(--gray-400);
+}
+
+.rafale-ai-matrix-cell strong {
+  color: var(--gray-800);
+}
+
+.rafale-ai-matrix-arrow {
+  color: var(--gray-400);
+  margin: 0 2px;
+}

@@ -719,7 +719,7 @@ Le serveur émet toujours le GameState complet (jamais de payload partiel) à ch
 
 ---
 
-## Action AI_GENERATION_PROGRESS (v6.1.1, post-QUALIF #137)
+## Action AI_GENERATION_PROGRESS (v6.1.1, post-QUALIF #137; TARGET depuis v8.1.0 #203)
 
 Progression d'une génération de questions via l'API Claude (Anthropic) ou Groq (gratuit).
 
@@ -733,32 +733,42 @@ Progression d'une génération de questions via l'API Claude (Anthropic) ou Groq
 {
   "ACTION": "AI_GENERATION_PROGRESS",
   "MSG": {
+    "JOB_ID": "gen-20260901-162300-a1b2",
+    "TARGET": "RAFALE",
     "STATE": "RUNNING",
-    "BATCH_NUMBER": 2,
-    "TOTAL_BATCHES": 5,
+    "BATCHES_DONE": 2,
+    "BATCHES_TOTAL": 5,
     "CREATED_COUNT": 40,
     "SKIPPED_COUNT": 0,
     "ERROR_CODE": "",
-    "ERROR_MESSAGE": ""
+    "ERROR_MESSAGE": "",
+    "PROVIDER": "groq"
   }
 }
 ```
 
 ### Champs
 
-| Champ | Type | Description | États possibles |
-|-------|------|-------------|-----------------|
-| `STATE` | string | État actuel du job | `RUNNING`, `DONE`, `FAILED`, `CANCELLED` |
-| `BATCH_NUMBER` | int | Numéro du lot en cours (base 1) | ≥ 1 |
-| `TOTAL_BATCHES` | int | Nombre total de lots prévu | ≥ 1 |
-| `CREATED_COUNT` | int | Nombre de questions créées jusqu'ici | ≥ 0 |
-| `SKIPPED_COUNT` | int | Nombre de questions rejetées/invalides | ≥ 0 |
-| `ERROR_CODE` | string | Code d'erreur stable (machine-friendly) | Vide, ou `no_api_key`, `api_key_rejected`, `quota_exceeded`, `upstream_error`, `network_error`, etc. — vide si `STATE != FAILED` |
-| `ERROR_MESSAGE` | string | Message d'erreur réel du provider, assaini (clés API masquées) | Vide sauf `STATE = FAILED` — exemple Groq #142 (avant correction) : `"discriminator: multiple candidate properties CATEGORY, DIFFICULTY, TYPE [discriminator_multiple_candidates]"` |
+| Champ | Type | Description | États possibles | Depuis |
+|-------|------|-------------|-----------------|--------|
+| `TARGET` | string | Destination de la génération | `"QUIZ"` (défaut si absent), `"RAFALE"` | v8.1.0 #203 |
+| `STATE` | string | État actuel du job | `RUNNING`, `DONE`, `FAILED`, `CANCELLED` | v6.1.1 |
+| `BATCHES_DONE` | int | Nombre de lots terminés | ≥ 0 | v6.1.1 (`BATCH_NUMBER` anciennement) |
+| `BATCHES_TOTAL` | int | Nombre total de lots prévu | ≥ 1 | v6.1.1 (`TOTAL_BATCHES` anciennement) |
+| `CREATED_COUNT` | int | Nombre de questions créées jusqu'ici | ≥ 0 | v6.1.1 |
+| `SKIPPED_COUNT` | int | Nombre de questions rejetées/invalides | ≥ 0 | v6.1.1 |
+| `ERROR_CODE` | string | Code d'erreur stable (machine-friendly) | Vide, ou `no_api_key`, `api_key_rejected`, `quota_exceeded`, `upstream_error`, `network_error`, etc. — vide si `STATE != FAILED` | v6.1.1 |
+| `ERROR_MESSAGE` | string | Message d'erreur réel du provider, assaini (clés API masquées) | Vide sauf `STATE = FAILED` — exemple Groq #142 (avant correction) : `"discriminator: multiple candidate properties CATEGORY, DIFFICULTY, TYPE [discriminator_multiple_candidates]"` | v6.1.1 |
+| `PROVIDER` | string | Fournisseur utilisé pour ce job | `"anthropic"`, `"groq"` | v6.1.1 |
+| `JOB_ID` | string | Identifiant unique du job | ex. `"gen-20260901-162300-a1b2"` | v6.1.1 |
 
 ### Sémantique
 
 - **STATE transitions** : `RUNNING` → (`DONE` \| `FAILED` \| `CANCELLED`)
+- **TARGET** :
+  - **Additif et rétrocompatible** : absent ou `"QUIZ"` = chemin générique (Quiz/MEMOTION+)
+  - **`"RAFALE"`** (v8.1.0 #203) = génération du réservoir RAFALE (endpoint distinct, schéma plat, paliers de volume)
+  - **Nécessaire au frontend** : la progression est un singleton global et deux modales l'écoutent (page Questions et page RAFALE). Sans ce champ, un job RAFALE ferait basculer la modale Quiz en « génération en cours »
 - **ERROR_MESSAGE** :
   - **Absent** (`omitempty`) quand `STATE != FAILED` (pas de message d'erreur généré)
   - **Présent** quand `STATE = FAILED` — message texte réel du provider (Anthropic ou Groq API response body) avec :
@@ -768,18 +778,24 @@ Progression d'une génération de questions via l'API Claude (Anthropic) ou Groq
 
 ### Exemple de flux complet
 
-**Succès** :
+**Succès — génération Quiz** (v6.1.1–v8.0.0) :
 ```json
-{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 1, "TOTAL_BATCHES": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0 } }
-{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 2, "TOTAL_BATCHES": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0 } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "QUIZ", "STATE": "RUNNING", "BATCHES_DONE": 1, "BATCHES_TOTAL": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0, "JOB_ID": "gen-123", "PROVIDER": "groq" } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "QUIZ", "STATE": "RUNNING", "BATCHES_DONE": 2, "BATCHES_TOTAL": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0, "JOB_ID": "gen-123", "PROVIDER": "groq" } }
 ...
-{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "DONE", "BATCH_NUMBER": 5, "TOTAL_BATCHES": 5, "CREATED_COUNT": 200, "SKIPPED_COUNT": 0, "ERROR_CODE": "", "ERROR_MESSAGE": "" } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "QUIZ", "STATE": "DONE", "BATCHES_DONE": 5, "BATCHES_TOTAL": 5, "CREATED_COUNT": 200, "SKIPPED_COUNT": 0, "JOB_ID": "gen-123", "PROVIDER": "groq", "ERROR_CODE": "", "ERROR_MESSAGE": "" } }
+```
+
+**Succès — génération RAFALE** (v8.1.0 #203) :
+```json
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "RAFALE", "STATE": "RUNNING", "BATCHES_DONE": 1, "BATCHES_TOTAL": 3, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0, "JOB_ID": "gen-456", "PROVIDER": "groq" } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "RAFALE", "STATE": "DONE", "BATCHES_DONE": 3, "BATCHES_TOTAL": 3, "CREATED_COUNT": 50, "SKIPPED_COUNT": 2, "JOB_ID": "gen-456", "PROVIDER": "groq", "ERROR_CODE": "", "ERROR_MESSAGE": "" } }
 ```
 
 **Erreur avec détail** (Groq #142, post-QUALIF v6.1.1) :
 ```json
-{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 1, "TOTAL_BATCHES": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0 } }
-{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "FAILED", "BATCH_NUMBER": 1, "TOTAL_BATCHES": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0, "ERROR_CODE": "upstream_error", "ERROR_MESSAGE": "invalid JSON schema for response_format: 'buzz_questions': /properties/questions/items/anyOf: anyOf disambiguation failed: anyOf: discriminator: multiple candidate properties CATEGORY, DIFFICULTY, TYPE [discriminator_multiple_candidates]" } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "QUIZ", "STATE": "RUNNING", "BATCHES_DONE": 1, "BATCHES_TOTAL": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0, "JOB_ID": "gen-123", "PROVIDER": "groq" } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "QUIZ", "STATE": "FAILED", "BATCHES_DONE": 1, "BATCHES_TOTAL": 5, "CREATED_COUNT": 0, "SKIPPED_COUNT": 0, "JOB_ID": "gen-123", "PROVIDER": "groq", "ERROR_CODE": "upstream_error", "ERROR_MESSAGE": "invalid JSON schema for response_format: 'buzz_questions': /properties/questions/items/anyOf: anyOf disambiguation failed: anyOf: discriminator: multiple candidate properties CATEGORY, DIFFICULTY, TYPE [discriminator_multiple_candidates]" } }
 ```
 
 Frontend affiche :
@@ -788,8 +804,8 @@ Frontend affiche :
 
 **Arrêt utilisateur** :
 ```json
-{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "RUNNING", "BATCH_NUMBER": 2, "TOTAL_BATCHES": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0 } }
-{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "STATE": "CANCELLED", "BATCH_NUMBER": 2, "TOTAL_BATCHES": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0, "ERROR_CODE": "", "ERROR_MESSAGE": "" } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "RAFALE", "STATE": "RUNNING", "BATCHES_DONE": 2, "BATCHES_TOTAL": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0, "JOB_ID": "gen-456", "PROVIDER": "groq" } }
+{ "ACTION": "AI_GENERATION_PROGRESS", "MSG": { "TARGET": "RAFALE", "STATE": "CANCELLED", "BATCHES_DONE": 2, "BATCHES_TOTAL": 5, "CREATED_COUNT": 40, "SKIPPED_COUNT": 0, "JOB_ID": "gen-456", "PROVIDER": "groq", "ERROR_CODE": "", "ERROR_MESSAGE": "" } }
 ```
 
 Frontend affiche un panneau de résumé (40 questions créées, arrêt gracieux).
