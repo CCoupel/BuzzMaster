@@ -9,14 +9,14 @@
   "milestone_num": 31,
   "phases": {
     "clarification": { "status": "completed", "skipped": false },
-    "plan":          { "status": "in_progress", "report": null },
-    "dev-backend":   { "status": "pending" },
-    "dev-frontend":  { "status": "pending" },
-    "test-writer":   { "status": "pending" },
-    "review":        { "status": "pending" },
-    "qa":            { "status": "pending" },
-    "doc":           { "status": "pending" },
-    "deploy-qualif": { "status": "pending" },
-    "deploy-prod":   { "status": "pending" }
+    "plan":          { "status": "completed", "report": "_work/reports/plan-20260901-162105.md" },
+    "dev-backend":   { "status": "completed", "sha": "ac2e61a7", "handoff": "_work/handoff/dev-backend-20260901-173041.md" },
+    "dev-frontend":  { "status": "completed", "sha": "53d17e4a", "handoff": "_work/handoff/dev-frontend-20260901-173135.md" },
+    "test-writer":   { "status": "completed", "sha": "958c52ed", "handoff": "_work/handoff/test-writer-20260901-173832.md" },
+    "review":        { "status": "completed", "verdict": "APPROUVE_AVEC_RESERVES", "report": "_work/reports/code-review-20260901-175014.md", "note": "2 majeurs (couverture test) corrigés par test-writer (SHA 3ac3aa97)" },
+    "qa":            { "status": "completed", "verdict": "VALIDATED", "report": "_work/reports/qa-20260901-174932.md" },
+    "doc":           { "status": "completed", "sha": "6c38797d", "handoff": null },
+    "deploy-qualif": { "status": "completed", "sha": "b05e62d3", "version": "8.1.0.1" },
+    "deploy-prod":   { "status": "completed", "sha": "f48cfabe", "tag": "v8.1.0" }
   }
 }
