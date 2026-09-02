@@ -4,6 +4,7 @@ import (
 	"buzzcontrol/assets"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"buzzcontrol/internal/lighting"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"buzzcontrol/web"
@@ -44,6 +45,10 @@ type App struct {
 	dnsServer   *server.DNSServer
 	logger      *server.BroadcastLogger
 	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
+	// lighting is the ambiance-lighting writer (#205, contracts/lighting.md).
+	// nil when lighting is not configured: every a.lighting.Notify*() call
+	// is then a no-op, so the 21 event sites carry no guard (contract §4.3).
+	lighting *lighting.Writer
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).
@@ -411,6 +416,9 @@ func (a *App) init() {
 	// DNS server (captive portal - redirects all DNS to this server)
 	a.dnsServer = server.NewDNSServer(53, nil)
 
+	// Ambiance lighting writer (#205) — nil unless configured (ambiance.go).
+	a.setupAmbiance()
+
 	// Set up callbacks
 	a.setupCallbacks()
 }
@@ -492,6 +500,7 @@ func (a *App) setupCallbacks() {
 	// RAFALE active-team LED grid (v8.0.0, #199 task 36, contract §8.3).
 	a.engine.OnRafaleTeamsChanged = func() {
 		a.sendLEDSetRafaleTeams()
+		a.lighting.NotifyState()
 	}
 
 	// #187 cycle 3 briefly wired engine.OnMotionCardAutoRevealed here — a
@@ -947,6 +956,13 @@ func (a *App) start() error {
 
 	// Start ACK manager background goroutine (v3.8.0); uses app context for clean shutdown.
 	go a.ackManager.Start(a.ctx)
+
+	// Ambiance lighting writer (#205): same lifecycle as AckManager, stopped
+	// by a.cancelCtx() in stop(). Not configured ⇒ nil ⇒ NO goroutine at all
+	// (contract §4.5 — not even one that returns at once).
+	if a.lighting != nil {
+		go a.lighting.Start(a.ctx)
+	}
 
 	// Start UDP broadcaster
 	if err := a.udpBcast.Start(); err != nil {
@@ -1723,6 +1739,7 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 	a.broadcastUpdate()
 	// Refresh LED state on all buzzers after team/bumper changes
 	a.sendLEDSetAllBuzzers()
+	a.lighting.NotifyState()
 }
 
 func (a *App) handleUpdate(msg *protocol.Message) {
@@ -1748,6 +1765,7 @@ func (a *App) handlePoints(msg *protocol.Message) {
 			teamID = bumper.Team
 		}
 		a.sendLEDSetComet(teamID)
+		a.lighting.NotifyPulse(lighting.KindScore, []string{teamID}, lighting.ScorePulseDuration)
 	}
 
 	a.broadcastUpdate()
@@ -2293,6 +2311,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 				server.LogInfo(game.LogComponentEngine, "Memory auto-flip-back after %dms", flipDelay)
 				a.broadcastUpdate()
 				a.sendLEDSetAllBuzzers()
+				a.lighting.NotifyState()
 			}()
 		}
 	}
@@ -2300,6 +2319,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 	if isMatch {
 		server.LogInfo(game.LogComponentEngine, "Memory MATCH found!")
 		a.sendLEDSetAllBuzzers()
+		a.lighting.NotifyState()
 	}
 
 	if isComplete {
@@ -2325,6 +2345,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 			a.engine.Stop()
 			a.broadcastUpdate()
 			a.sendLEDSetAllBuzzers()
+			a.lighting.NotifyState()
 		}
 	}
 }
@@ -2352,6 +2373,7 @@ func (a *App) handleMemorySetTeams(msg *protocol.Message) {
 	// Broadcast updated game state to all clients
 	a.broadcastUpdate()
 	a.sendLEDSetAllBuzzers()
+	a.lighting.NotifyState()
 }
 
 // ============================================================
@@ -2457,6 +2479,7 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 	// Award LED comet effect to winning team
 	if points > 0 && payload.WinnerTeam != "" {
 		a.sendLEDSetComet(payload.WinnerTeam)
+		a.lighting.NotifyPulse(lighting.KindScore, []string{payload.WinnerTeam}, lighting.ScorePulseDuration)
 	}
 
 	// Record event to history
@@ -2506,6 +2529,7 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentEngine, "MEMOTION game COMPLETE! All cards played.")
 		a.engine.Stop()
 		a.sendLEDSetAllBuzzers()
+		a.lighting.NotifyState()
 	}
 
 	a.broadcastUpdate()
@@ -2528,6 +2552,7 @@ func (a *App) handleMotionSetTeams(msg *protocol.Message) {
 
 	a.broadcastUpdate()
 	a.sendLEDSetAllBuzzers()
+	a.lighting.NotifyState()
 }
 
 // handleRafaleValidate processes RAFALE_VALIDATE (contract rafale.md §5.1):
@@ -2599,6 +2624,7 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 			teamID = b.Team
 		}
 		a.sendLEDSetComet(teamID)
+		a.lighting.NotifyPulse(lighting.KindScore, []string{teamID}, lighting.ScorePulseDuration)
 	}
 
 	// Record event to history
@@ -2666,6 +2692,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	// Send COMET LED effect to the team that received points (if points > 0)
 	if payload.Points > 0 {
 		a.sendLEDSetComet(payload.Team)
+		a.lighting.NotifyPulse(lighting.KindScore, []string{payload.Team}, lighting.ScorePulseDuration)
 	}
 
 	// Record event to history
@@ -2802,9 +2829,11 @@ func (a *App) handleEntracteSet(msg *protocol.Message) {
 
 	if payload.Active {
 		a.sendLEDSetAllEntracteOff()
+		a.lighting.NotifyState()
 		server.LogInfo(game.LogComponentApp, "Entracte activated — buzzer LEDs off")
 	} else {
 		a.sendLEDSetAllBuzzers()
+		a.lighting.NotifyState()
 		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
 	}
 
@@ -3595,6 +3624,7 @@ func (a *App) broadcastStart() {
 	a.broadcast(protocol.ActionStart, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetAllBuzzers()
+	a.lighting.NotifyState()
 }
 
 func (a *App) broadcastStop() {
@@ -3602,6 +3632,7 @@ func (a *App) broadcastStop() {
 	a.broadcast(protocol.ActionStop, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetStop()
+	a.lighting.NotifyState()
 }
 
 func (a *App) broadcastPause(bumperID string) {
@@ -3609,6 +3640,7 @@ func (a *App) broadcastPause(bumperID string) {
 	a.broadcast(protocol.ActionPause, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetPause(bumperID)
+	a.lighting.NotifyState()
 }
 
 func (a *App) broadcastPauseAll() {
@@ -3616,6 +3648,7 @@ func (a *App) broadcastPauseAll() {
 	a.broadcast(protocol.ActionPause, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetPauseAll()
+	a.lighting.NotifyState()
 }
 
 func (a *App) broadcastContinue() {
@@ -3623,6 +3656,7 @@ func (a *App) broadcastContinue() {
 	a.broadcast(protocol.ActionContinue, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetContinue()
+	a.lighting.NotifyState()
 }
 
 func (a *App) broadcastTimerUpdate(currentTime int) {
@@ -3650,6 +3684,7 @@ func (a *App) broadcastReady() {
 	a.broadcast(protocol.ActionReady, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeAnim)
 	a.sendLEDSetAllBuzzers()
+	a.lighting.NotifyState()
 }
 
 func (a *App) broadcastReveal(answer string) {
@@ -3657,6 +3692,7 @@ func (a *App) broadcastReveal(answer string) {
 	a.broadcast(protocol.ActionReveal, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetReveal(answer)
+	a.lighting.NotifyState()
 }
 
 // answerColorToRGB maps a QCM AnswerColor to an [R, G, B] array for buzzer LED.
@@ -3836,10 +3872,19 @@ func nearestPaletteColorByHue(r, g, b int) [3]int {
 //  1. team.ColorName (explicit name set by frontend) → direct palette lookup
 //  2. Hue-based nearest palette color (more robust than Euclidean distance)
 func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
-	if bumper.Team == "" {
+	return a.teamNameToRGB(bumper.Team)
+}
+
+// teamNameToRGB is the shared trunk of teamColorToRGB: team NAME → palette
+// RGB (game.Team has no ID). Factored out for the ambiance scene table (#205,
+// contracts/lighting.md §8), which only knows team names and must show the
+// SAME colour as the buzzers — never a second palette. Gray {128,128,128}
+// for no/unknown team, unchanged.
+func (a *App) teamNameToRGB(teamName string) [3]int {
+	if teamName == "" {
 		return [3]int{128, 128, 128}
 	}
-	team := a.engine.GetTeam(bumper.Team)
+	team := a.engine.GetTeam(teamName)
 	if team == nil {
 		return [3]int{128, 128, 128}
 	}
