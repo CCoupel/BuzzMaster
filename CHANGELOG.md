@@ -151,6 +151,24 @@ Nouveau mode de jeu « questions en rafale » : sur une manche de ~2 mn, des que
 
 ## [Unreleased]
 
+### Added
+
+- **Normalized ambient lighting events vocabulary** (#205) — Nouveau vocabulaire fermé de 9 genres d'événements (`EventKind` : IDLE, READY, RUNNING, BUZZ, PAUSE_ALL, REVEAL, TEAM_TURN, ENTRACTE, SCORE) pilotant l'ambiance de la salle indépendamment des LED buzzers. Permet aux futurs pilotes (BLE, Hue, DMX, etc.) de brancher une logique uniforme **ne connaissant que ces genres**, pas les détails de jeu.
+
+- **Abstract lighting driver interface** (#205) — Nouveau contrat `internal/lighting.Driver` normalisé (`Apply(ctx, State) error`) offrant au pilote une garantie de monofilarité : `Apply` n'est appelé que depuis une goroutine unique, zéro race possible. `State` réutilise les formats numériques du protocole buzzer (RGB 0-255, intensité 0-255) — garantit que la salle et les buzzers affichent **la même** couleur pour **la même** équipe sans conversion locale.
+
+- **Asynchronous coalescing writer** (#205) — Écrivain unique (`internal/lighting.Writer`), ne mémorisant jamais la charge utile (§4.1 du contrat) mais seulement « un rafraîchissement est dû » — redérive l'état vivant au moment réel d'émission, éliminant les conditions de course sur un tampon. Registre à une place pour les impulsions SCORE (non dérivables, 4800ms) avec échéance programmée — rafale d'événements N produit **au maximum** `T/100ms + 1` appels à `Apply` (v10.0.0 : `MinInterval = 100ms`, paramètre provisoire en attente du spike #204).
+
+- **Exhaustive audit of 21 trigger sites with AST guard test** (#205) — Analyse syntaxique `go/parser` + `go/ast` (stdlib) parcourant `cmd/server/main.go` pour collecter toutes les paires `(fonction LED englobante, nom d'appel sendLEDSet*)` et comparant au registre déclaré dans `cmd/server/ambiance.go`. Test obligatoire : un nouveau site LED **sans décision d'ambiance** échoue nommément (`ambiance: site LED sans décision — handleNouveauTruc -> sendLEDSetAllBuzzers`). Prévention contre la classe de défaut la plus probable du milestone (« les buzzers s'allument, la salle non ») — même famille que la fuite #128.
+
+- **Package `internal/lighting`** (#205) — Nouvelle organisation : types (EventKind, Event, State, ZoneState), constructeur Writer (nil-safe, optionnel), Driver interface, registre de décisions d'ambiance par site, code test d'exhaustivité (test/ambiance_registry_test.go). À noter : `ZoneState` prépare l'extension #213 (une zone par équipe) ; v10.0.0 utilise une seule zone « general ».
+
+### Changed
+
+- **Contrat technique normatif** — Le fichier `contracts/lighting.md` formalise le contrat en 8 sections : motivation + piège évité, vocabulaire, interface pilote, écrivain (invariants, forme imposée, débit, cycle de vie), sûreté concurrente, 21 sites + exclusions explicites, test d'exhaustivité, table de scènes. Ce contrat ne peut être modifié sans notification publique (amendement du 2026-09-02 sur `Teams`/multiplicité d'équipes ajouté pour #213).
+
+---
+
 ## [6.5.1] - Milestone v6.5.1 — Bugfix CI/Infra (#27)
 
 **Issues** : #151 (durcissement goroutines), #153 (job CI testing), #161 (nettoyage code mort),
