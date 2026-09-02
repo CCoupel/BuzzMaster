@@ -348,7 +348,7 @@ Trois points levés à l'implémentation de #205, sans changer l'intention du co
    verrou) — `GetTeamsAndBumpers()` rend les maps vivantes, inutilisables hors de la goroutine de
    dispatch sans course.
 
-Le registre compte **24 entrées** : 15 `NotifyState` + 4 `NotifyPulse` (les 21 sites du §6
+Le registre compte **23 entrées** : 15 `NotifyState` + 4 `NotifyPulse` (les 21 sites du §6
 donnent 20 paires distinctes, `handleFlipMemoryCard` appelant trois fois `sendLEDSetAllBuzzers`)
 + 4 `NoAmbiance` du §6.1, dont 2 documentaires dont la fonction englobante est de la couche de
 rendu (`sendLEDSetComet`, `sendLEDSetToTeam`). Le prédicat `ambianceIsRenderingLayer` (préfixe
