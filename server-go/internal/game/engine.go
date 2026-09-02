@@ -711,6 +711,36 @@ func (e *Engine) GetTeamsAndBumpers() *TeamsAndBumpers {
 	return e.data
 }
 
+// GetTeamsAndBumpersSnapshot returns a deep copy of teams and bumpers taken
+// under the read lock (#205). Unlike GetTeamsAndBumpers, which hands out the
+// live maps, the result can be iterated from any goroutine — the ambiance
+// writer derives its scene on its own goroutine while the engine keeps
+// mutating bumpers (press times, teams, ACK flags).
+func (e *Engine) GetTeamsAndBumpersSnapshot() TeamsAndBumpers {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	out := TeamsAndBumpers{
+		Teams:   make(map[string]*Team, len(e.data.Teams)),
+		Bumpers: make(map[string]*Bumper, len(e.data.Bumpers)),
+	}
+	for name, t := range e.data.Teams {
+		if t == nil {
+			continue
+		}
+		c := *t
+		c.Color = append([]int(nil), t.Color...)
+		out.Teams[name] = &c
+	}
+	for mac, b := range e.data.Bumpers {
+		if b == nil {
+			continue
+		}
+		c := *b
+		out.Bumpers[mac] = &c
+	}
+	return out
+}
+
 // GetTeam returns a specific team
 func (e *Engine) GetTeam(id string) *Team {
 	e.mu.RLock()
