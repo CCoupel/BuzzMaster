@@ -9,6 +9,13 @@
 > endpoint HTTP, aucune action WebSocket, aucun changement de `GameState`. Le schéma de
 > configuration et les endpoints viendront avec #207.
 
+- **[CHANGED — dev-backend, 2026-09-02]** `lighting.md` §6.2/§6.3 : `PhaseStarted` avec équipe
+  active dérive `KindTeamTurn` (et non `KindRunning` + équipe — la scène TEAM_TURN n'avait aucune
+  ligne de dérivation) ; `PhaseNewGame`/`PhaseEnroll` → `KindIdle` ; le buzzeur en PAUSED et les
+  équipes correctes au REVEAL sont dérivés de l'état moteur (`Bumper.Time`, `AnswerColor`) via la
+  nouvelle méthode `Engine.GetTeamsAndBumpersSnapshot()`, jamais de `App.bumperBuzzState`
+  (goroutine de dispatch uniquement). Détail et motifs dans `lighting.md` §6.3.
+
 - **[NEW]** `internal/lighting` — vocabulaire d'événements d'ambiance (`EventKind` : `IDLE`,
   `READY`, `RUNNING`, `BUZZ`, `PAUSE_ALL`, `REVEAL`, `TEAM_TURN`, `ENTRACTE`, `SCORE`) et
   `Event{Kind, Teams []string}`. `Teams` porte des **noms d'équipe**, pas des identifiants :

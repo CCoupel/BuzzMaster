@@ -310,9 +310,10 @@ l'application**, dérive `Event` depuis le `GameState` vivant :
 | Condition sur l'état vivant | `Kind` | `Teams` |
 |---|---|---|
 | Entracte actif | `KindEntracte` | — |
-| `PhaseStopped` | `KindIdle` | — |
+| `PhaseStopped` (et `PhaseNewGame`, `PhaseEnroll` — aucune partie en cours) | `KindIdle` | — |
 | `PhasePrepare` / `PhaseReady` / `PhaseCountdown` | `KindReady` | — |
-| `PhaseStarted` | `KindRunning` | équipe active si MEMORY/MEMOTION/RAFALE, sinon vide |
+| `PhaseStarted`, équipe active (MEMORY/MEMOTION/RAFALE) | `KindTeamTurn` | équipe active |
+| `PhaseStarted`, pas d'équipe active | `KindRunning` | — |
 | `PhasePaused`, un buzzeur identifié | `KindBuzz` | équipe du buzzeur |
 | `PhasePaused`, aucun buzzeur | `KindPauseAll` | — |
 | `PhaseRevealed` | `KindReveal` | équipes ayant bien répondu, **vide si aucune** |
@@ -322,6 +323,36 @@ L'entracte est testé **avant** la phase : c'est un mode transverse, pas une pha
 > ⚠️ `PhaseCountdown` **n'a pas** de rendu propre : la couche LED le groupe déjà avec
 > `PhaseStopped/PhasePrepare/PhaseReady` (`sendLEDSetForBuzzerNormal`). L'ambiance suit le même
 > groupement — ne pas inventer une scène de décompte, elle appartient au milestone v10.1 (#212).
+
+### 6.3 Précisions d'implémentation (dev-backend, 2026-09-02) — ⚠️ Contract Modification
+
+Trois points levés à l'implémentation de #205, sans changer l'intention du contrat :
+
+1. **`KindTeamTurn` n'avait aucune ligne de dérivation** : la version initiale du tableau §6.2
+   produisait `KindRunning` + équipe active en STARTED, et la table de scènes §8 ne colore
+   `RUNNING` que d'un bleu neutre — la couleur de l'équipe active n'aurait jamais été rendue.
+   La ligne est scindée : STARTED **avec** équipe active (`MemoryCurrentTeam` /
+   `MotionCurrentTeam` / `RafaleCurrentTeam` selon `Question.Type`) → `KindTeamTurn`, sans →
+   `KindRunning`. C'est ce que les sites « équipe active » du §6 attendaient.
+2. **`PhaseNewGame` et `PhaseEnroll`** n'étaient pas cités : ils rejoignent `KindIdle` (aucune
+   partie en cours ; la couche LED les rend déjà comme STOPPED via le `default` de
+   `sendLEDSetForBuzzerNormal`).
+3. **Identification du buzzeur en PAUSED** : `App.bumperBuzzState` appartient à la goroutine de
+   dispatch (aucun mutex — voir le commentaire du struct `App`) et **ne doit pas** être lu depuis
+   la goroutine de l'écrivain. L'adaptateur utilise l'état vivant du moteur : le bumper au
+   `Time` de pression le plus récent (`Bumper.Time`, remis à zéro sur READY) donne l'équipe du
+   buzz ; aucun `Time > 0` ⇒ `KindPauseAll`. Pour le REVEAL QCM, les équipes « ayant bien
+   répondu » sont celles des bumpers ayant buzzé (`Time > 0`) avec `AnswerColor ==
+   Question.QCMCorrect`, ordonnées par temps de pression, dédoublonnées. Ces lectures passent par
+   une **nouvelle méthode moteur `Engine.GetTeamsAndBumpersSnapshot()`** (copie profonde sous
+   verrou) — `GetTeamsAndBumpers()` rend les maps vivantes, inutilisables hors de la goroutine de
+   dispatch sans course.
+
+Le registre compte **24 entrées** : 15 `NotifyState` + 4 `NotifyPulse` (les 21 sites du §6
+donnent 20 paires distinctes, `handleFlipMemoryCard` appelant trois fois `sendLEDSetAllBuzzers`)
++ 4 `NoAmbiance` du §6.1, dont 2 documentaires dont la fonction englobante est de la couche de
+rendu (`sendLEDSetComet`, `sendLEDSetToTeam`). Le prédicat `ambianceIsRenderingLayer` (préfixe
+`sendLEDSet`) est ce qui permet au test §7 d'exclure la couche de rendu de la comparaison.
 
 ---
 
