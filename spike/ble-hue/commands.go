@@ -43,6 +43,15 @@ func cmdDemo(adapter *bluetooth.Adapter, macs []string, mode WriteMode, report *
 		on, dOn, err1 := b.ReadPower()
 		bri, dBri, err2 := b.ReadBrightness()
 		logf("%-20s power=%v (%.0fms) brightness=%d (%.0fms) err=%v/%v", b.Label, on, ms(dOn), bri, ms(dBri), err1, err2)
+		// Link state right after the first protected access: a
+		// status=Unreachable together with connected=false means the link
+		// was torn down when the OS tried to raise its security (typically
+		// the peripheral rejected the stored key — no matching LTK).
+		connected, cerr := b.Connected()
+		logf("%-20s link after first protected access: connected=%v err=%v", b.Label, connected, cerr)
+		if !connected && (err1 != nil || err2 != nil) {
+			report.Note("%s: link dropped on the first protected access (connected=false) — the peripheral most likely rejected the key Windows tried to use: no matching bond on the bulb side", b.Label)
+		}
 	}
 
 	type step struct {
