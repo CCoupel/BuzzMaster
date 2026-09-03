@@ -86,6 +86,27 @@ causes, à départager dans cet ordre :
 | **T3** | Contrôle croisé | Même ampoule sur le **Raspberry Pi** après `bluetoothctl pair` + `trust` | Linux ✅ / Windows ❌ ⇒ le problème est spécifique au chemin WinRT, pas à l'ampoule ni au protocole. |
 | **T4** | **Type d'adresse LE ignoré par tinygo.** `FD:1B:…` est une adresse **aléatoire statique** (deux bits de poids fort à 1). tinygo crée le périphérique avec `FromBluetoothAddressAsync(addr)` — surcharge **sans type d'adresse** (son commentaire : « IsRandom ignoré sous Windows ») — alors que bleak, qui pilote des Hue sous Windows, passe `BluetoothAddressType.Random`. Si Windows indexe la liaison par (adresse, type), la clé existe mais n'est jamais trouvée : 0x0F en `plain`, `Unreachable` instantané dès qu'un niveau de protection est demandé — les deux formes observées, **y compris après réappairage**. | Backend WinRT direct, sans tinygo, avec le type d'adresse explicite :<br>`spike-ble-hue.exe -bulbs MAC -backend winrt -addr-type random -out demo-win-winrt.json demo`<br>puis, si besoin, `-backend winrt -addr-type random -protection encrypt`.<br>Contre-épreuve : `-backend winrt -addr-type public` (doit reproduire l'échec, ou répondre « Windows knows no LE device … with address type public »). | ✅ ⇒ cause logicielle confirmée : **le pilote #206 ne peut pas utiliser `Connect` de tinygo sous Windows tel quel** (passer le type d'adresse — patch tinygo ou appel WinRT direct). ❌ identique ⇒ hypothèse écartée, la conclusion §5 du rapport s'applique. |
 
+**T5 — option B : appairage programmatique (commande `pairtest`, Windows).** Ce que fait bleak et que
+ni tinygo ni l'appairage Paramètres ne font : l'application appaire elle-même, en choisissant le
+niveau de protection, sans interface. Séquence automatique sur UNE ampoule :
+`résolution (type d'adresse explicite, scan si Windows a oublié l'adresse) → lecture de
+DeviceInformation.Pairing → UnpairAsync si déjà appairée → PairWithProtectionLevelAsync(ConfirmOnly,
+niveau) avec handler PairingRequested→Accept() (repli Encryption puis PairAsync, comme bleak) →
+connexion backend WinRT → écritures demo → UnpairAsync final (bleak #1943)`.
+
+```
+spike-ble-hue.exe -bulbs MAC -out pairtest-win.json pairtest              # -pair-level auth (défaut)
+spike-ble-hue.exe -bulbs MAC -pair-level encrypt -out pairtest-win-enc.json pairtest
+spike-ble-hue.exe -bulbs MAC -keep-pairing pairtest                       # garder l'appairage en fin de run
+```
+
+Lecture : `status=Paired` puis écritures ✅ ⇒ cause logicielle confirmée, #206 doit appairer
+lui-même (classes `internal/winenum`). `status=Paired` puis écritures ❌ (0x0F / Unreachable) **avant
+le désappairage final** ⇒ condition d'arrêt : aucune voie Windows ne fonctionne avec cette pile.
+`status≠Paired` (AuthenticationFailure, Failed, RejectedByHandler…) ⇒ l'ampoule ou Windows refuse
+la liaison elle-même — même conclusion. Aucune interaction GUI n'est nécessaire ; si `UnpairAsync`
+échoue (`AccessDenied`), supprimer l'appareil une dernière fois dans Paramètres et relancer.
+
 Ce que la sortie `demo` affiche désormais pour trancher : une ligne **`security probe`** par
 caractéristique Hue (`props=…` et `protection=Plain|EncryptionAndAuthenticationRequired` tel que vu
 par Windows), les lignes `security: hue-0002 protection: Plain → …` quand `-protection` est actif,

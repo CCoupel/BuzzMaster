@@ -300,15 +300,15 @@ func cmdPairTest(adapter *tb.Adapter, macs []string, mode WriteMode, report *Rep
 	if err != nil {
 		return err
 	}
-	defer dev.Release()
+	defer func() { dev.Release() }() // closure: dev may be re-resolved after the unpair
 
 	logf("===== pairtest 2/6: DeviceInformation.Pairing =====")
 	di, pairing, err := winPairingOf(dev)
 	if err != nil {
 		return err
 	}
-	defer di.Release()
-	defer pairing.Release()
+	defer func() { di.Release() }()
+	defer func() { pairing.Release() }()
 	if name, err := di.GetName(); err == nil {
 		logf("  name: %q", name)
 	}
@@ -327,10 +327,43 @@ func cmdPairTest(adapter *tb.Adapter, macs []string, mode WriteMode, report *Rep
 		if !unpaired {
 			return fmt.Errorf("could not unpair programmatically (%s) — remove the device in Windows Settings once, then rerun", status)
 		}
-		time.Sleep(2 * time.Second)
-		mid := winPairingState(pairing)
+		// Run 1 showed the SAME DeviceInformation object still reporting
+		// IsPaired=true 2 s after Unpaired(0): the pairing state is cached in
+		// the object. Drop every handle, re-resolve the device (scanning if
+		// Windows forgot it) and re-create DeviceInformation until it reports
+		// IsPaired=false — a pairing attempted on a still-"paired" record is
+		// not a clean test (bleak would have skipped it).
+		pairing.Release()
+		di.Release()
+		dev.Release()
+		var mid pairingState
+		deadline := time.Now().Add(20 * time.Second)
+		for {
+			time.Sleep(1500 * time.Millisecond)
+			d2, err := winResolveDevice(adapter, mac, addrType, 15*time.Second)
+			if err != nil {
+				return fmt.Errorf("re-resolve after unpair: %w", err)
+			}
+			di2, p2, err := winPairingOf(d2)
+			if err != nil {
+				d2.Release()
+				return fmt.Errorf("re-read pairing after unpair: %w", err)
+			}
+			mid = winPairingState(p2)
+			logf("  after unpair (fresh objects): IsPaired=%v CanPair=%v ProtectionLevel=%s", mid.IsPaired, mid.CanPair, mid.ProtectionLevel)
+			if !mid.IsPaired || time.Now().After(deadline) {
+				dev, di, pairing = d2, di2, p2
+				break
+			}
+			p2.Release()
+			di2.Release()
+			d2.Release()
+		}
 		section["pairing_after_unpair"] = mid
-		logf("  after unpair: IsPaired=%v CanPair=%v", mid.IsPaired, mid.CanPair)
+		if mid.IsPaired {
+			report.Note("UnpairAsync returned Unpaired but Windows still reports IsPaired=true 20 s later — the OS did not drop the record; remove the device in Settings once and rerun")
+			return fmt.Errorf("device still reported paired 20 s after UnpairAsync — remove it in Windows Settings (Bluetooth → Hue go → Remove device), wait until it disappears, then rerun pairtest")
+		}
 	} else {
 		logf("  not paired — nothing to unpair")
 	}
