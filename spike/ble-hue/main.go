@@ -24,6 +24,8 @@ var (
 	flagTimeout   = flag.Duration("timeout", 20*time.Second, "per-bulb connect / discover timeout")
 	flagWriteMode = flag.String("write-mode", "auto", "GATT write procedure: auto|request|command")
 	flagAdapter   = flag.String("adapter", "", "Linux only: BlueZ adapter id (default hci0); ignored on Windows")
+	flagBackend   = flag.String("backend", "tinygo", "BLE backend: tinygo (default, tinygo.org/x/bluetooth) | winrt (Windows only: direct WinRT calls, passes the LE address type — see README §3.2 bis T4)")
+	flagAddrType  = flag.String("addr-type", "auto", "winrt backend: LE address type of the bulb: auto (random if the first byte is 0b11xxxxxx, i.e. static random) | public | random")
 	flagProtect   = flag.String("protection", "plain", "Windows only: GATT protection level requested on the Hue characteristics before any access: plain|encrypt|auth (auth = EncryptionAndAuthenticationRequired — the fix to test after an ATT 0x0F failure)")
 	flagVerbose   = flag.Bool("v", false, "verbose logging")
 
@@ -93,6 +95,21 @@ func main() {
 		fatal(fmt.Errorf("unknown -protection %q (plain|encrypt|auth)", *flagProtect))
 	}
 	protectionMode = *flagProtect
+	switch *flagBackend {
+	case "tinygo", "winrt":
+		backendMode = *flagBackend
+	default:
+		fatal(fmt.Errorf("unknown -backend %q (tinygo|winrt)", *flagBackend))
+	}
+	switch *flagAddrType {
+	case "auto", "public", "random":
+		addrTypeMode = *flagAddrType
+	default:
+		fatal(fmt.Errorf("unknown -addr-type %q (auto|public|random)", *flagAddrType))
+	}
+	if backendMode == "winrt" && !winrtBackendSupported {
+		fatal(fmt.Errorf("-backend winrt is Windows-only"))
+	}
 	if protectionMode != "plain" && !platformSecuritySupported {
 		logf("NOTE: -protection %s is Windows-only; ignored on this OS (BlueZ negotiates security from the bond)", protectionMode)
 	}

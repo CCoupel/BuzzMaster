@@ -212,13 +212,65 @@ func splitList(s string) []string {
 // Bulb
 // ---------------------------------------------------------------------------
 
+// gattChar is what Bulb needs from a characteristic, whichever backend
+// resolved it (tinygo wrapper, or raw WinRT on Windows — winconnect_windows.go).
+type gattChar interface {
+	UUID() string
+	Read() ([]byte, error)
+	// Write performs an ATT Write Request (mode != WriteCommand) or Write
+	// Command. Must return an error containing "write not supported" when the
+	// characteristic lacks the requested property, so WriteAuto can fall back.
+	Write(data []byte, mode WriteMode) error
+	Describe() string
+	ApplyProtection(mode string) (string, error)
+}
+
+// bulbLink is the connection handle behind a Bulb.
+type bulbLink interface {
+	Connected() (bool, error)
+	Disconnect() error
+}
+
+// backendMode / addrTypeMode are the -backend / -addr-type flags.
+var (
+	backendMode  = "tinygo"
+	addrTypeMode = "auto"
+)
+
+// --- tinygo backend adapters ---
+
+type tgChar struct {
+	c bluetooth.DeviceCharacteristic
+}
+
+func (t tgChar) UUID() string          { return strings.ToLower(t.c.UUID().String()) }
+func (t tgChar) Read() ([]byte, error) { return platformRead(t.c) }
+func (t tgChar) Describe() string      { return platformDescribe(t.c) }
+func (t tgChar) ApplyProtection(m string) (string, error) {
+	return platformApplyProtection(t.c, m)
+}
+func (t tgChar) Write(data []byte, mode WriteMode) error {
+	var err error
+	if mode == WriteCommand {
+		_, err = t.c.WriteWithoutResponse(data)
+	} else {
+		_, err = t.c.Write(data)
+	}
+	return err
+}
+
+type tgLink struct{ dev bluetooth.Device }
+
+func (l tgLink) Connected() (bool, error) { return l.dev.Connected() }
+func (l tgLink) Disconnect() error        { return l.dev.Disconnect() }
+
 // Bulb is one connected Hue bulb with its resolved characteristics.
 type Bulb struct {
 	MAC   string
 	Label string
 
-	dev   bluetooth.Device
-	chars map[string]bluetooth.DeviceCharacteristic
+	link  bulbLink
+	chars map[string]gattChar
 
 	ConnectDuration  time.Duration
 	DiscoverDuration time.Duration
@@ -260,36 +312,58 @@ func connectBulb(adapter *bluetooth.Adapter, mac string, timeout time.Duration) 
 	if err != nil {
 		return nil, err
 	}
-	b := &Bulb{MAC: strings.ToUpper(mac), Label: strings.ToUpper(mac), chars: map[string]bluetooth.DeviceCharacteristic{}, resolvedMode: map[string]WriteMode{}}
+	b := &Bulb{MAC: strings.ToUpper(mac), Label: strings.ToUpper(mac), chars: map[string]gattChar{}, resolvedMode: map[string]WriteMode{}}
 
-	type res struct {
-		dev bluetooth.Device
-		err error
-	}
-	ch := make(chan res, 1)
-	start := time.Now()
-	go func() {
-		d, err := adapter.Connect(addr, bluetooth.ConnectionParams{})
-		ch <- res{d, err}
-	}()
-	select {
-	case r := <-ch:
-		if r.err != nil {
-			return nil, fmt.Errorf("connect %s: %w", mac, r.err)
+	if backendMode == "winrt" {
+		// Raw WinRT path: connect + discover in one go, with an explicit LE
+		// address type (the thing tinygo's Connect leaves unspecified).
+		addrType := resolveAddrType(b.MAC, addrTypeMode)
+		start := time.Now()
+		link, chars, nSvc, nChars, err := winConnectWithTimeout(b.MAC, addrType, timeout, func(f string, a ...any) {
+			b.SecurityNotes = append(b.SecurityNotes, fmt.Sprintf(f, a...))
+		})
+		if err != nil {
+			return nil, fmt.Errorf("connect %s (winrt, addr-type %s): %w", mac, addrType, err)
 		}
-		b.dev = r.dev
-	case <-time.After(timeout):
-		return nil, fmt.Errorf("connect %s: timeout after %s (stack call still pending — bulb off, out of range, or not paired?)", mac, timeout)
-	}
-	b.ConnectDuration = time.Since(start)
-	b.connectedState = true
+		b.link, b.chars, b.Services, b.Characteristics = link, chars, nSvc, nChars
+		b.ConnectDuration = time.Since(start) // connect+discover are one sequence here
+		b.SecurityNotes = append(b.SecurityNotes, "backend winrt, address type "+addrType)
+		if !b.Has(uuidHuePower) {
+			_ = b.link.Disconnect()
+			return nil, fmt.Errorf("%s: Hue light service %s not found (%d services / %d characteristics)", b.MAC, uuidHueLightService, b.Services, b.Characteristics)
+		}
+	} else {
+		type res struct {
+			dev bluetooth.Device
+			err error
+		}
+		ch := make(chan res, 1)
+		start := time.Now()
+		go func() {
+			d, err := adapter.Connect(addr, bluetooth.ConnectionParams{})
+			ch <- res{d, err}
+		}()
+		var dev bluetooth.Device
+		select {
+		case r := <-ch:
+			if r.err != nil {
+				return nil, fmt.Errorf("connect %s: %w", mac, r.err)
+			}
+			dev = r.dev
+		case <-time.After(timeout):
+			return nil, fmt.Errorf("connect %s: timeout after %s (stack call still pending — bulb off, out of range, or not paired?)", mac, timeout)
+		}
+		b.link = tgLink{dev: dev}
+		b.ConnectDuration = time.Since(start)
 
-	start = time.Now()
-	if err := b.discover(timeout); err != nil {
-		_ = b.dev.Disconnect()
-		return nil, err
+		start = time.Now()
+		if err := b.discover(dev, timeout); err != nil {
+			_ = b.link.Disconnect()
+			return nil, err
+		}
+		b.DiscoverDuration = time.Since(start)
 	}
-	b.DiscoverDuration = time.Since(start)
+	b.connectedState = true
 
 	// Raise the link security level before the first protected access
 	// (no-op with -protection plain, and outside Windows).
@@ -305,14 +379,14 @@ func connectBulb(adapter *bluetooth.Adapter, mac string, timeout time.Duration) 
 
 // discover walks every service/characteristic (nil filter) so that bulbs with
 // a partial table — e.g. white-only bulbs without 0005 — still resolve.
-func (b *Bulb) discover(timeout time.Duration) error {
+func (b *Bulb) discover(dev bluetooth.Device, timeout time.Duration) error {
 	type res struct {
 		svcs []bluetooth.DeviceService
 		err  error
 	}
 	ch := make(chan res, 1)
 	go func() {
-		s, err := b.dev.DiscoverServices(nil)
+		s, err := dev.DiscoverServices(nil)
 		ch <- res{s, err}
 	}()
 	var svcs []bluetooth.DeviceService
@@ -333,7 +407,7 @@ func (b *Bulb) discover(timeout time.Duration) error {
 			continue
 		}
 		for _, c := range chars {
-			b.chars[strings.ToLower(c.UUID().String())] = c
+			b.chars[strings.ToLower(c.UUID().String())] = tgChar{c: c}
 			b.Characteristics++
 		}
 	}
@@ -382,19 +456,14 @@ func (b *Bulb) write(uuid string, data []byte, mode WriteMode) (time.Duration, e
 	b.mu.Unlock()
 
 	start := time.Now()
-	var err error
-	if mode == WriteCommand {
-		_, err = c.WriteWithoutResponse(data)
-	} else {
-		_, err = c.Write(data)
-	}
+	err := c.Write(data, mode)
 	d := time.Since(start)
 
 	// WriteAuto fallback: Windows backend refuses Write when the "write"
 	// property bit is absent; try Write Command once and remember it.
 	if err != nil && mode == WriteRequest && strings.Contains(err.Error(), "write not supported") {
 		start = time.Now()
-		_, err = c.WriteWithoutResponse(data)
+		err = c.Write(data, WriteCommand)
 		d = time.Since(start)
 		if err == nil {
 			b.mu.Lock()
@@ -440,7 +509,7 @@ func (b *Bulb) read(uuid string) ([]byte, time.Duration, error) {
 		return nil, 0, fmt.Errorf("%s %s: %w", b.MAC, uuid, errNoCharacteristic)
 	}
 	start := time.Now()
-	v, err := platformRead(c) // status-aware on Windows (security_windows.go)
+	v, err := c.Read() // status-aware on Windows (security_windows.go)
 	d := time.Since(start)
 	if err != nil {
 		return nil, d, fmt.Errorf("%s read %s: %w", b.Label, shortUUID(uuid), err)
@@ -477,7 +546,7 @@ func (b *Bulb) applyProtection(mode string) {
 		if !ok {
 			continue
 		}
-		res, err := platformApplyProtection(c, mode)
+		res, err := c.ApplyProtection(mode)
 		if err != nil {
 			b.SecurityNotes = append(b.SecurityNotes, fmt.Sprintf("%s protection: %s FAILED: %v", shortUUID(uuid), res, err))
 			continue
@@ -497,7 +566,7 @@ func (b *Bulb) SecurityProbe() []string {
 			out = append(out, shortUUID(uuid)+": not exposed")
 			continue
 		}
-		out = append(out, shortUUID(uuid)+": "+platformDescribe(c))
+		out = append(out, shortUUID(uuid)+": "+c.Describe())
 	}
 	return out
 }
@@ -534,7 +603,7 @@ func (b *Bulb) ReadName() (string, error) {
 
 // Connected asks the stack whether the link is still up.
 func (b *Bulb) Connected() (bool, error) {
-	return b.dev.Connected()
+	return b.link.Connected()
 }
 
 // Disconnect drops the link.
@@ -542,7 +611,7 @@ func (b *Bulb) Disconnect() error {
 	b.mu.Lock()
 	b.connectedState = false
 	b.mu.Unlock()
-	return b.dev.Disconnect()
+	return b.link.Disconnect()
 }
 
 // connectAll connects sequentially (one at a time is the realistic server

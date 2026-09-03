@@ -159,6 +159,29 @@ func TestApplyProtectionPlainIsNoOp(t *testing.T) {
 	}
 }
 
+func TestAddressLooksRandomAndResolveAddrType(t *testing.T) {
+	// Hue Go seen in the field: FD:… → 0b11111101 → static random.
+	for _, mac := range []string{"FD:1B:08:B5:5F:AA", "c0:00:00:00:00:01", "FF:FF:FF:FF:FF:FF"} {
+		if !addressLooksRandom(mac) {
+			t.Errorf("%s must look random (static)", mac)
+		}
+		if got := resolveAddrType(mac, "auto"); got != "random" {
+			t.Errorf("auto for %s = %q, want random", mac, got)
+		}
+	}
+	for _, mac := range []string{"00:11:22:33:44:55", "7F:00:00:00:00:00", "BF:00:00:00:00:00", "", "zz"} {
+		if addressLooksRandom(mac) {
+			t.Errorf("%s must not look random", mac)
+		}
+		if got := resolveAddrType(mac, "auto"); got != "public" {
+			t.Errorf("auto for %q = %q, want public", mac, got)
+		}
+	}
+	if resolveAddrType("FD:00:00:00:00:00", "public") != "public" || resolveAddrType("00:00:00:00:00:00", "random") != "random" {
+		t.Error("explicit modes must be returned as-is")
+	}
+}
+
 func TestParseAddress(t *testing.T) {
 	addr, err := parseAddress("aa:bb:cc:dd:ee:ff")
 	if err != nil {

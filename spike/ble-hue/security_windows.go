@@ -278,6 +278,11 @@ func platformApplyProtection(c tb.DeviceCharacteristic, mode string) (string, er
 	if err != nil {
 		return "", err
 	}
+	return applyProtectionGatt(gc, mode)
+}
+
+// applyProtectionGatt is the backend-independent core of platformApplyProtection.
+func applyProtectionGatt(gc *genericattributeprofile.GattCharacteristic, mode string) (string, error) {
 	before, err := getProtectionLevel(gc)
 	if err != nil {
 		return "", fmt.Errorf("GetProtectionLevel: %w", err)
@@ -303,6 +308,11 @@ func platformDescribe(c tb.DeviceCharacteristic) string {
 	if err != nil {
 		return "(raw access failed: " + err.Error() + ")"
 	}
+	return describeGatt(gc)
+}
+
+// describeGatt is the backend-independent core of platformDescribe.
+func describeGatt(gc *genericattributeprofile.GattCharacteristic) string {
 	props, perr := gc.GetCharacteristicProperties()
 	level, lerr := getProtectionLevel(gc)
 	s := ""
