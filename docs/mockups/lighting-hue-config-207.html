@@ -133,50 +133,112 @@
 
 <header class="mast">
   <div class="eyebrow">
-    <span>Issue #207</span><span>Milestone v10.0.0</span><span>Phase Plan</span><span>À valider — GATE 2</span>
+    <span>Issue #207</span><span>Milestone v10.0.0</span><span>Phase Plan</span><span>Révision 2 — 2026-09-03</span>
   </div>
   <h1>Éclairage d'ambiance — configuration du pont Hue</h1>
   <p class="standfirst">
-    Nouvelle section de <code>/admin/settings</code> permettant de connecter BuzzMaster à un pont
-    Philips Hue et de choisir les ampoules qu'il pilotera. Elle couvre trois gestes : trouver le
-    pont, l'associer en appuyant sur son bouton, puis sélectionner et tester les ampoules.
-    <strong>Rien d'autre sur cette page ne change.</strong>
+    Nouvelle page <code>/admin/ambiance</code>, atteignable par une entrée <strong>« Ambiance »</strong>
+    ajoutée au menu abeille, permettant de connecter BuzzMaster à un pont Philips Hue et de choisir
+    les ampoules qu'il pilotera. Elle couvre trois gestes : trouver le pont, l'associer en appuyant
+    sur son bouton, puis sélectionner et tester les ampoules.
   </p>
   <div class="refs">
     <div><b>Contrat</b> contracts/hue-bridge.md — adossé à contracts/lighting.md (#205, livré)</div>
     <div><b>Base validée</b> spike sur pont Hue réel — découverte 0,2 s, écriture 19-61 ms, 100 % de succès</div>
     <div><b>Sert de référence à</b> test-writer (scénarios) · qa (conformité) · dev-frontend (implémentation)</div>
+    <div><b>Révision 2</b> page dédiée dans le menu abeille, au lieu d'une section de /admin/settings (retour utilisateur)</div>
   </div>
 </header>
 
 <section>
-  <h2><span class="num">01</span>Où la section s'insère</h2>
+  <h2><span class="num">01</span>Point d'entrée — une entrée « Ambiance » dans le menu abeille</h2>
   <p class="lede">
-    Une <code>config-section</code> de plus dans la carte « Système » de <code>ConfigPage.jsx</code>,
-    en dernière position. <strong>Aucune route nouvelle</strong>, aucune entrée de menu nouvelle.
+    <strong>Révision 2.</strong> La première version logeait la configuration dans une
+    <code>config-section</code> de plus au bas de <code>/admin/settings</code>. Retour utilisateur :
+    l'éclairage mérite une <strong>entrée de premier niveau</strong>, au même titre que Config ou
+    Backup — pas une sous-section qu'il faut aller déterrer.
   </p>
+
+  <h3>Le menu abeille, avant et après</h3>
   <div class="screen">
-    <div class="screen-hd">/admin/settings — carte « Système », sections empilées</div>
+    <div class="screen-hd">Navbar — menu déroulant du logo 🐝 (components/Navbar.jsx)</div>
     <div class="screen-bd">
-      <table>
-        <tr><td>Paramètres serveur · Configuration du WiFi · Firmware Buzzers · Image par défaut ·
-            Mode Démo · IA · Effet Néon</td><td style="text-align:right"><span class="bulb-i">existant, inchangé</span></td></tr>
-        <tr><td><b>Éclairage d'ambiance</b></td><td style="text-align:right"><span class="status warn"><span class="dot"></span>nouveau — #207</span></td></tr>
-      </table>
+      <div class="row2">
+        <div>
+          <p class="lbl">Aujourd'hui</p>
+          <div class="fieldset" style="margin-bottom:0">
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">⚙️ <span class="bulb-n">Config</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">💾 <span class="bulb-n">Backup/Restaure</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">🔄 <span class="bulb-n">Mises à jour</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">📋 <span class="bulb-n">Logs</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0;color:var(--no)">⏻ <span class="bulb-n" style="color:var(--no)">Quitter</span></div>
+          </div>
+        </div>
+        <div>
+          <p class="lbl">Proposé</p>
+          <div class="fieldset" style="margin-bottom:0;border-color:var(--accent-dim)">
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">⚙️ <span class="bulb-n">Config</span></div>
+            <div class="bulb" style="border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);padding:5px 8px">💡 <span class="bulb-n">Ambiance</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">💾 <span class="bulb-n">Backup/Restaure</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">🔄 <span class="bulb-n">Mises à jour</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0">📋 <span class="bulb-n">Logs</span></div>
+            <div class="bulb" style="border:none;background:transparent;padding:5px 0;color:var(--no)">⏻ <span class="bulb-n" style="color:var(--no)">Quitter</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint">
+        Placée <b>juste après Config</b> : les deux entrées de configuration se suivent, et l'ordre
+        existant n'est pas bousculé. « Quitter » reste la dernière entrée, isolée — c'est la seule
+        action et non une navigation.
+      </p>
     </div>
   </div>
-  <div class="call info">
-    <span class="call-t">Vocabulaire</span>
-    L'intitulé visible est « Éclairage d'ambiance ». La clé de configuration est
-    <code>lighting</code>, <strong>jamais <code>ambiance</code></strong> : ce mot désigne déjà la
-    catégorie de sauvegarde qui couvre <code>game-config.json</code> (#152).
+
+  <h3>Ce que cela représente en code</h3>
+  <div class="scroll">
+    <table>
+      <tr><th style="width:38%">Fichier</th><th>Changement</th></tr>
+      <tr><td><code>components/Navbar.jsx</code></td>
+          <td>Une entrée dans <code>menuItems</code> (l. 146-155) :<br>
+              <code>{ path: 'ambiance', label: 'Ambiance', icon: '💡' }</code></td></tr>
+      <tr><td><code>App.jsx</code></td>
+          <td>Une entrée dans <code>adminRoutes</code> (l. 27-40) :<br>
+              <code>{ path: 'ambiance', element: &lt;AmbiancePage /&gt; }</code></td></tr>
+      <tr><td><code>pages/AmbiancePage.jsx</code> + <code>.css</code> + <code>.test.jsx</code></td>
+          <td><b>Nouvelle page.</b> Même squelette que les autres pages admin :
+              <code>header.page-header</code> (<code>h1.page-title</code> + <code>p.page-subtitle</code>)
+              puis une <code>&lt;Card&gt;</code>.</td></tr>
+      <tr><td><code>pages/ConfigPage.jsx</code></td>
+          <td><b>Inchangée.</b> Aucune section n'y est ajoutée — c'est tout l'objet de cette révision.</td></tr>
+    </table>
+  </div>
+  <p class="hint">
+    Le routage passe par le tableau <code>adminRoutes</code> déjà en place : l'entrée est montée
+    sous <code>/admin/ambiance</code> exactement comme <code>backup</code> ou <code>updates</code>.
+    Aucun mécanisme nouveau.
+  </p>
+
+  <div class="call warn">
+    <span class="call-t">⚠️ Collision de vocabulaire à trancher</span>
+    La page Backup affiche déjà une case <b>« Configuration Ambiance »</b>
+    (<code>BackupPage.jsx</code>, #152) — qui désigne <code>game-config.json</code> : délai par
+    défaut et effet néon, <b>rien à voir avec l'éclairage de la salle</b>. Une fois « Ambiance »
+    promue au menu, cette case devient franchement trompeuse.
+    <br><br>
+    <b>Proposition</b> : renommer la case de Backup en <b>« Réglages de jeu »</b>, qui décrit ce
+    qu'elle sauvegarde réellement. Changement d'un seul libellé, aucun impact sur le format des
+    archives. <b>À valider ou à écarter.</b>
+    <br><br>
+    À ne pas confondre avec la clé de configuration serveur, qui reste
+    <code>lighting</code> et <b>ne doit pas</b> être renommée en <code>ambiance</code> : le mot est
+    déjà pris côté sauvegarde.
   </div>
 </section>
 
 <section>
   <h2><span class="num">02</span>Les quatre états de la section</h2>
   <p class="lede">
-    Un badge unique en tête de section, à quatre valeurs. Il reprend la forme du badge tri-état des
+    Un badge unique en tête de page, à quatre valeurs. Il reprend la forme du badge tri-état des
     clés IA, qui est le précédent direct du projet.
   </p>
   <div class="screen">
@@ -218,12 +280,13 @@
 
   <h3>Avant recherche</h3>
   <div class="screen">
-    <div class="screen-hd">Éclairage d'ambiance — état initial</div>
+    <div class="screen-hd">/admin/ambiance — page vierge, aucun pont associé</div>
     <div class="screen-bd">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-        <span style="font-weight:600">Éclairage d'ambiance</span>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <span style="font-weight:700;font-size:1.15rem">Ambiance</span>
         <span class="status idle"><span class="dot"></span>Non configuré</span>
       </div>
+      <p class="hint" style="margin:0 0 14px">Éclairage de la salle piloté par le jeu</p>
       <p class="hint" style="margin-top:0">
         Pilote l'éclairage de la salle en réaction au jeu — buzz, révélation, points. Nécessite un
         pont Philips Hue sur le même réseau. Fonctionnalité facultative : sans pont, rien ne change.
@@ -293,7 +356,7 @@
   <div class="screen">
     <div class="screen-bd">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-        <span style="font-weight:600">Éclairage d'ambiance</span>
+        <span style="font-weight:700;font-size:1.15rem">Ambiance</span>
         <span class="status ok"><span class="dot"></span>Pont connecté</span>
       </div>
       <p class="hint" style="margin-top:0">192.168.1.101 · BSB002 · associé le 3 septembre 2026</p>
@@ -346,7 +409,7 @@
     est sur le pont nous appartient.
   </p>
   <div class="screen">
-    <div class="screen-hd">Éclairage d'ambiance — ampoules du pont</div>
+    <div class="screen-hd">/admin/ambiance — ampoules du pont</div>
     <div class="screen-bd">
       <div class="bulb">
         <span class="box on"></span>
@@ -445,7 +508,7 @@
       <tr><td><b>Deux ampoules du même nom</b></td>
           <td>Refus explicite. BuzzMaster ne devine pas laquelle est la bonne.</td></tr>
       <tr><td><b>Serveur sans pont configuré</b></td>
-          <td>Section repliée sur son seul bouton « Rechercher un pont ». Zéro appel réseau, zéro ligne de journal.</td></tr>
+          <td>Page réduite à son seul bouton « Rechercher un pont ». Zéro appel réseau, zéro ligne de journal. L'entrée de menu reste visible — c'est par elle qu'on configure.</td></tr>
     </table>
   </div>
 </section>
@@ -461,12 +524,30 @@
       impossible.</li>
     <li><b>Tout coché par défaut, mais tout montré.</b> Conséquence directe du pont dédié. La
       présélection épargne un geste ; l'affichage explicite empêche la supposition implicite.</li>
-    <li><b>Aucune route ni entrée de menu nouvelle.</b> La fonctionnalité est un réglage, pas un
-      espace de travail.</li>
+    <li><b>Une entrée de menu et une page dédiées</b> — <i>révisé</i>. La première version en
+      faisait une section de plus au bas de <code>/admin/settings</code>, au motif qu'une
+      fonctionnalité facultative est un réglage et non un espace de travail. L'usage réel dit le
+      contraire : on y revient pour associer un pont, ajouter une ampoule, tester avant une soirée,
+      diagnostiquer un pont muet. Une page qu'on ouvre régulièrement mérite son entrée — c'est
+      d'ailleurs le raisonnement qui a déjà valu à Backup et Mises à jour la leur, alors que ce sont
+      aussi des réglages.</li>
     <li><b>Pas de réglage de couleur ni de scène dans cet écran.</b> La table de scènes est câblée en
       dur pour ce milestone ; son édition est renvoyée à v10.1 (#210). Exposer des couleurs ici
       laisserait croire qu'elles sont modifiables.</li>
   </ol>
+  <div class="call info">
+    <span class="call-t">Proposition optionnelle — pastille d'alerte sur l'entrée de menu</span>
+    Le menu abeille sait déjà porter une pastille : « Mises à jour » en affiche une quand une
+    version est disponible (<code>badge: updateInfo?.update_available</code>,
+    <code>Navbar.jsx</code> l. 149). Le même mécanisme pourrait signaler un
+    <b>pont configuré mais injoignable</b> — sans quoi on ne le découvre qu'au moment où la salle
+    ne réagit plus, c'est-à-dire en pleine partie.
+    <br><br>
+    Coût : une valeur booléenne de plus, tirée de <code>GET /api/lighting/status</code>. Aucune
+    pastille tant qu'aucun pont n'est configuré — une fonctionnalité facultative ne réclame jamais
+    l'attention. <b>À valider ou à écarter.</b>
+  </div>
+
   <div class="call warn">
     <span class="call-t">Défaut existant à corriger au passage</span>
     <code>.wifi-toast-warning</code> n'est défini nulle part dans la feuille de style : un toast
@@ -476,8 +557,8 @@
 </section>
 
 <footer>
-  Maquette produite en phase Plan · à valider avant dispatch de dev-frontend · issue #207 ·
-  milestone v10.0.0 · BuzzControl
+  Maquette produite en phase Plan · <b>révision 2</b> (page dédiée dans le menu abeille) ·
+  à valider avant dispatch de dev-frontend · issue #207 · milestone v10.0.0 · BuzzControl
 </footer>
 
 </div>
