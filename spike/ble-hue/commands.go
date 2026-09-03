@@ -28,6 +28,16 @@ func cmdDemo(adapter *bluetooth.Adapter, macs []string, mode WriteMode, report *
 		return errors.New("no bulb connected")
 	}
 
+	// Security probe — how the OS stack sees each Hue characteristic
+	// (properties, protection level). Read this first when writes fail with
+	// ATT 0x05/0x0F: it tells whether the link security was ever raised.
+	for _, b := range bulbs {
+		logf("%-20s security probe (-protection %s):", b.Label, protectionMode)
+		for _, line := range b.SecurityProbe() {
+			logf("    %s", line)
+		}
+	}
+
 	// Initial state read — proves GATT reads work without any pairing prompt.
 	for _, b := range bulbs {
 		on, dOn, err1 := b.ReadPower()

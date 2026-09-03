@@ -24,6 +24,7 @@ var (
 	flagTimeout   = flag.Duration("timeout", 20*time.Second, "per-bulb connect / discover timeout")
 	flagWriteMode = flag.String("write-mode", "auto", "GATT write procedure: auto|request|command")
 	flagAdapter   = flag.String("adapter", "", "Linux only: BlueZ adapter id (default hci0); ignored on Windows")
+	flagProtect   = flag.String("protection", "plain", "Windows only: GATT protection level requested on the Hue characteristics before any access: plain|encrypt|auth (auth = EncryptionAndAuthenticationRequired — the fix to test after an ATT 0x0F failure)")
 	flagVerbose   = flag.Bool("v", false, "verbose logging")
 
 	// scan
@@ -87,6 +88,13 @@ func main() {
 	writeMode, err := parseWriteMode(*flagWriteMode)
 	if err != nil {
 		fatal(err)
+	}
+	if !validProtectionMode(*flagProtect) {
+		fatal(fmt.Errorf("unknown -protection %q (plain|encrypt|auth)", *flagProtect))
+	}
+	protectionMode = *flagProtect
+	if protectionMode != "plain" && !platformSecuritySupported {
+		logf("NOTE: -protection %s is Windows-only; ignored on this OS (BlueZ negotiates security from the bond)", protectionMode)
 	}
 
 	report := newReport(cmd, os.Args[1:])

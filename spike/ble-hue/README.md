@@ -71,6 +71,29 @@ Repérer son adresse MAC : `spike-ble-hue scan` (elle apparaît avec `HUE`, nom 
 > Bluetooth de Windows — c'est le cas après appairage) et pose une `GattSession` avec
 > `MaintainConnection=true`, ce qui garde le lien ouvert.
 
+### 3.2 bis — Diagnostic : les écritures échouent en `ATT error 0x000F` (Windows)
+
+Symptôme observé au premier essai réel (2026-09-03) : connexion et découverte OK, aucune invite,
+mais **toutes** les lectures échouent (`Paramètre incorrect.`) et toutes les écritures renvoient
+`Bluetooth ATT error (code 0x000F)`. Les caractéristiques Hue exigent un lien **chiffré et
+authentifié** ; 0x0F/0x05 signifie que le lien ne l'était pas au moment de l'écriture. Deux
+causes, à départager dans cet ordre :
+
+| # | Hypothèse | Test | Lecture du résultat |
+|---|-----------|------|---------------------|
+| **T1** | La liaison (LTK) existe mais Windows n'a jamais chiffré le lien, parce que la bibliothèque laisse `ProtectionLevel = Plain` | Même appairage, relancer avec **`-protection auth`** :<br>`spike-ble-hue.exe -bulbs MAC -protection auth -out demo-win-auth.json demo` | ✅ écritures OK ⇒ **correctif logiciel suffisant**, l'appairage Windows était bon.<br>🔔 une notification Windows « Ajouter un appareil / Autoriser » apparaît ⇒ il n'y avait **pas** de liaison réelle (voir T2) — c'est aussi l'« invite runtime » que #204 doit exclure.<br>❌ `AccessDenied` ou toujours 0x0F ⇒ pas de liaison réelle ⇒ T2. |
+| **T2** | L'appairage fait dans Paramètres **n'a pas créé de liaison LE** : l'ampoule n'était pas en mode appairage, ou était encore liée à l'app du téléphone (même symptôme que HueBLE issue #9, réponse du mainteneur : « la lampe était-elle en mode appairage ? ») | 1. Paramètres → Bluetooth → ampoule → **Supprimer l'appareil**.<br>2. Téléphone : fermer l'app Hue, **couper le Bluetooth**.<br>3. Mettre l'ampoule **en mode appairage** : app Hue Bluetooth → Paramètres → Assistants vocaux → Alexa/Google → *Rendre détectable* — ou reset usine (⚠️ **la MAC change** : refaire `scan`).<br>4. Paramètres → Ajouter un appareil ; attendre « Connecté/Couplé » ; **fermer Paramètres**.<br>5. Relancer `demo` **d'abord avec `-protection plain`**, puis avec `-protection auth`. | plain ✅ ⇒ l'appairage seul suffisait (cause = mode appairage).<br>plain ❌ / auth ✅ ⇒ les deux étaient nécessaires : documenter `-protection auth` comme prérequis Windows.<br>les deux ❌ ⇒ conclure sur Windows (voir §7 du rapport de diagnostic). |
+| **T3** | Contrôle croisé | Même ampoule sur le **Raspberry Pi** après `bluetoothctl pair` + `trust` | Linux ✅ / Windows ❌ ⇒ le problème est spécifique au chemin WinRT, pas à l'ampoule ni au protocole. |
+
+Ce que la sortie `demo` affiche désormais pour trancher : une ligne **`security probe`** par
+caractéristique Hue (`props=…` et `protection=Plain|EncryptionAndAuthenticationRequired` tel que vu
+par Windows), les lignes `security: hue-0002 protection: Plain → …` quand `-protection` est actif,
+et des erreurs de lecture explicites (`read refused: status=ProtocolError…` au lieu de
+`Paramètre incorrect.`). Tout est aussi dans le JSON (`security_probe`, `security_notes`).
+
+Sous Linux, `-protection` est ignoré : BlueZ élève lui-même la sécurité du lien à partir de la
+liaison créée par `bluetoothctl pair`.
+
 ### 3.3 Raspberry Pi / Linux
 
 ```bash

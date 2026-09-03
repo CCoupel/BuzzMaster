@@ -224,6 +224,9 @@ type Bulb struct {
 	DiscoverDuration time.Duration
 	Services         int
 	Characteristics  int
+	// SecurityNotes collects what applyProtection and the first protected
+	// read reported — printed by connectAll, kept in the JSON report.
+	SecurityNotes []string
 
 	mu             sync.Mutex
 	resolvedMode   map[string]WriteMode // per characteristic, after WriteAuto fallback
@@ -232,16 +235,18 @@ type Bulb struct {
 
 // ConnectResult is the JSON-friendly outcome of one connection attempt.
 type ConnectResult struct {
-	MAC             string  `json:"mac"`
-	OK              bool    `json:"ok"`
-	Error           string  `json:"error,omitempty"`
-	Name            string  `json:"name,omitempty"`
-	ConnectMs       float64 `json:"connect_ms"`
-	DiscoverMs      float64 `json:"discover_ms"`
-	Services        int     `json:"services"`
-	Characteristics int     `json:"characteristics"`
-	HasColor        bool    `json:"has_color"`
-	HasTemperature  bool    `json:"has_temperature"`
+	MAC             string   `json:"mac"`
+	OK              bool     `json:"ok"`
+	Error           string   `json:"error,omitempty"`
+	Name            string   `json:"name,omitempty"`
+	ConnectMs       float64  `json:"connect_ms"`
+	DiscoverMs      float64  `json:"discover_ms"`
+	Services        int      `json:"services"`
+	Characteristics int      `json:"characteristics"`
+	HasColor        bool     `json:"has_color"`
+	HasTemperature  bool     `json:"has_temperature"`
+	SecurityNotes   []string `json:"security_notes,omitempty"`
+	SecurityProbe   []string `json:"security_probe,omitempty"`
 }
 
 var errNoCharacteristic = errors.New("characteristic not exposed by this bulb")
@@ -286,8 +291,14 @@ func connectBulb(adapter *bluetooth.Adapter, mac string, timeout time.Duration) 
 	}
 	b.DiscoverDuration = time.Since(start)
 
+	// Raise the link security level before the first protected access
+	// (no-op with -protection plain, and outside Windows).
+	b.applyProtection(protectionMode)
+
 	if name, err := b.ReadName(); err == nil && name != "" {
 		b.Label = name
+	} else if err != nil {
+		b.SecurityNotes = append(b.SecurityNotes, "name read failed: "+err.Error())
 	}
 	return b, nil
 }
@@ -350,6 +361,8 @@ func (b *Bulb) Result() ConnectResult {
 		Characteristics: b.Characteristics,
 		HasColor:        b.Has(uuidHueColorXY),
 		HasTemperature:  b.Has(uuidHueTemperature),
+		SecurityNotes:   append([]string(nil), b.SecurityNotes...),
+		SecurityProbe:   b.SecurityProbe(),
 	}
 }
 
@@ -426,14 +439,67 @@ func (b *Bulb) read(uuid string) ([]byte, time.Duration, error) {
 	if !ok {
 		return nil, 0, fmt.Errorf("%s %s: %w", b.MAC, uuid, errNoCharacteristic)
 	}
-	buf := make([]byte, 64)
 	start := time.Now()
-	n, err := c.Read(buf)
+	v, err := platformRead(c) // status-aware on Windows (security_windows.go)
 	d := time.Since(start)
 	if err != nil {
 		return nil, d, fmt.Errorf("%s read %s: %w", b.Label, shortUUID(uuid), err)
 	}
-	return buf[:n], d, nil
+	return v, d, nil
+}
+
+// protectionMode is the -protection flag: "plain" (tinygo default, no
+// change), "encrypt" or "auth" (Windows only: GattCharacteristic.ProtectionLevel
+// set on the Hue characteristics right after discovery, so the OS raises the
+// link security BEFORE the first read/write — see security_windows.go).
+var protectionMode = "plain"
+
+func validProtectionMode(s string) bool {
+	switch s {
+	case "plain", "encrypt", "auth":
+		return true
+	}
+	return false
+}
+
+// hueCharacteristics lists the protected Hue/Signify characteristics the
+// security probe and the protection level apply to.
+var hueCharacteristics = []string{uuidHuePower, uuidHueBrightness, uuidHueTemperature, uuidHueColorXY, uuidHueName}
+
+// applyProtection sets the requested protection level on every Hue
+// characteristic the bulb exposes and records what happened.
+func (b *Bulb) applyProtection(mode string) {
+	if mode == "plain" || !platformSecuritySupported {
+		return
+	}
+	for _, uuid := range hueCharacteristics {
+		c, ok := b.chars[uuid]
+		if !ok {
+			continue
+		}
+		res, err := platformApplyProtection(c, mode)
+		if err != nil {
+			b.SecurityNotes = append(b.SecurityNotes, fmt.Sprintf("%s protection: %s FAILED: %v", shortUUID(uuid), res, err))
+			continue
+		}
+		b.SecurityNotes = append(b.SecurityNotes, fmt.Sprintf("%s protection: %s", shortUUID(uuid), res))
+	}
+}
+
+// SecurityProbe describes each Hue characteristic (properties, protection
+// level) as seen by the OS stack — the first thing to read when writes fail
+// with ATT 0x05/0x0F.
+func (b *Bulb) SecurityProbe() []string {
+	var out []string
+	for _, uuid := range hueCharacteristics {
+		c, ok := b.chars[uuid]
+		if !ok {
+			out = append(out, shortUUID(uuid)+": not exposed")
+			continue
+		}
+		out = append(out, shortUUID(uuid)+": "+platformDescribe(c))
+	}
+	return out
 }
 
 // ReadPower reads the on/off state.
@@ -496,6 +562,9 @@ func connectAll(adapter *bluetooth.Adapter, macs []string, timeout time.Duration
 		r := b.Result()
 		log("        OK  name=%q connect=%.0fms discover=%.0fms services=%d chars=%d color=%v",
 			b.Label, r.ConnectMs, r.DiscoverMs, r.Services, r.Characteristics, r.HasColor)
+		for _, n := range b.SecurityNotes {
+			log("        security: %s", n)
+		}
 		bulbs = append(bulbs, b)
 		results = append(results, r)
 	}

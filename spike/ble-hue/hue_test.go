@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -124,6 +125,37 @@ func TestParseWriteMode(t *testing.T) {
 	}
 	if _, err := parseWriteMode("bogus"); err == nil {
 		t.Error("bogus mode must fail")
+	}
+}
+
+func TestValidProtectionMode(t *testing.T) {
+	for _, ok := range []string{"plain", "encrypt", "auth"} {
+		if !validProtectionMode(ok) {
+			t.Errorf("%q must be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", "AUTH", "none", "encryption"} {
+		if validProtectionMode(bad) {
+			t.Errorf("%q must be rejected", bad)
+		}
+	}
+}
+
+func TestApplyProtectionPlainIsNoOp(t *testing.T) {
+	b := &Bulb{MAC: "AA:BB:CC:DD:EE:FF", Label: "x"}
+	b.applyProtection("plain")
+	if len(b.SecurityNotes) != 0 {
+		t.Fatalf("plain must not touch anything: %v", b.SecurityNotes)
+	}
+	// No characteristics resolved → probe reports every Hue UUID as absent.
+	probe := b.SecurityProbe()
+	if len(probe) != len(hueCharacteristics) {
+		t.Fatalf("probe lines = %d, want %d", len(probe), len(hueCharacteristics))
+	}
+	for _, l := range probe {
+		if !strings.HasSuffix(l, ": not exposed") {
+			t.Errorf("unexpected probe line %q", l)
+		}
 	}
 }
 

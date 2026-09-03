@@ -3,14 +3,14 @@ module buzzcontrol/spike-ble-hue
 go 1.24.0
 
 require (
+	github.com/go-ole/go-ole v1.2.6
 	github.com/gorilla/websocket v1.5.1
+	github.com/saltosystems/winrt-go v0.0.0-20260317170058-9c2fec580d96
 	tinygo.org/x/bluetooth v0.15.0
 )
 
 require (
-	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/saltosystems/winrt-go v0.0.0-20260317170058-9c2fec580d96 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/soypat/cyw43439 v0.1.0 // indirect
 	github.com/soypat/lneto v0.1.0 // indirect
