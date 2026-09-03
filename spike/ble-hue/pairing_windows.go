@@ -273,10 +273,15 @@ func winPairCustom(p *winenum.DeviceInformationPairing, requested int) ([]pairAt
 		if pairingSucceeded(int(status)) {
 			return attempts, true, nil
 		}
-		if !pairingLevelNotMet(int(status)) {
+		// bleak lowers the level only on ProtectionLevelCouldNotBeMet. Run 4
+		// (bulb in pairing mode) returned Failed(19) instead: a NoInputNoOutput
+		// peripheral cannot satisfy EncryptionAndAuthentication (MITM) with
+		// Just Works, and Windows reports that as a plain failure. Lower the
+		// level on Failed too, so one pairtest covers auth → encrypt → none.
+		if !pairingLevelNotMet(int(status)) && status != winenum.DevicePairingResultStatusFailed {
 			return attempts, false, nil
 		}
-		logf("  protection level not met — lowering, like bleak")
+		logf("  %s — lowering the protection level (bleak's ladder, extended to Failed)", att.Status)
 	}
 	return attempts, false, nil
 }
