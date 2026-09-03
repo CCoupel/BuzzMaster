@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Éclairage d'ambiance — configuration du pont Hue</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    --col:940px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--ground);color:var(--txt);font-family:var(--sans);line-height:1.6;padding:48px 20px 80px}
+  .wrap{max-width:var(--col);margin:0 auto}
+
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:44px}
+  .eyebrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .eyebrow span{font-family:var(--mono);font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:3px 8px}
+  h1{font-size:2rem;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:14px}
+  .standfirst{color:var(--dim);font-size:1.02rem;max-width:74ch}
+  .refs{margin-top:20px;display:flex;flex-direction:column;gap:5px;font-family:var(--mono);font-size:.76rem;color:var(--faint)}
+  .refs b{color:var(--dim);font-weight:600;margin-right:8px}
+
+  section{margin-bottom:52px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.01em;margin-bottom:8px;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+  .lede{color:var(--dim);margin-bottom:22px;max-width:74ch}
+  h3{font-size:.95rem;font-weight:600;margin:26px 0 10px;color:var(--txt)}
+
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:18px}
+  .screen-hd{background:var(--sunken);border-bottom:1px solid var(--line);padding:9px 14px;
+    font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .screen-bd{padding:20px}
+
+  .fieldset{border:1px solid var(--line-soft);border-radius:6px;padding:16px;margin-bottom:14px;background:var(--raised)}
+  .fs-t{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:14px}
+  .fld{margin-bottom:14px}
+  .fld:last-child{margin-bottom:0}
+  .lbl{display:block;font-size:.8rem;font-weight:500;color:var(--dim);margin-bottom:6px}
+  .ctl{display:block;background:var(--sunken);border:1px solid var(--line);border-radius:5px;
+    padding:9px 12px;font-size:.86rem;color:var(--txt);font-family:var(--sans)}
+  .ctl.ph{color:var(--faint)}
+  .ctl.mono{font-family:var(--mono);font-size:.8rem}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .btnrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .btn{background:var(--raised);border:1px solid var(--line);color:var(--txt);border-radius:6px;
+    padding:8px 15px;font-size:.83rem;font-weight:500;font-family:var(--sans)}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:#170c02;font-weight:600}
+  .btn.g{background:transparent;border-color:transparent;color:var(--dim)}
+  .btn.dis{opacity:.42}
+  .hint{font-size:.78rem;color:var(--faint);margin-top:9px}
+
+  .status{display:inline-flex;align-items:center;gap:7px;font-size:.8rem;font-weight:600;
+    border-radius:999px;padding:4px 12px;border:1px solid var(--line)}
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+  .status.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  .status.ok .dot{background:var(--ok)}
+  .status.no{color:var(--no);border-color:color-mix(in srgb,var(--no) 40%,transparent)}
+  .status.no .dot{background:var(--no)}
+  .status.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+  .status.warn .dot{background:var(--warn)}
+  .status.idle{color:var(--faint)}
+
+  .call{border-left:3px solid var(--line);background:var(--panel);border-radius:0 6px 6px 0;
+    padding:13px 16px;margin:16px 0;font-size:.87rem;color:var(--dim)}
+  .call-t{display:block;font-weight:600;color:var(--txt);margin-bottom:4px;font-size:.85rem}
+  .call.ok{border-left-color:var(--ok)}
+  .call.no{border-left-color:var(--no)}
+  .call.warn{border-left-color:var(--warn)}
+  .call.info{border-left-color:var(--info)}
+
+  table{width:100%;border-collapse:collapse;font-size:.83rem}
+  th{text-align:left;font-weight:600;color:var(--dim);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--sunken)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--dim)}
+  td b{color:var(--txt);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--sunken);border:1px solid var(--line-soft);
+    border-radius:3px;padding:1px 5px;color:#c9d5e1}
+
+  .bulb{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line-soft);
+    border-radius:6px;background:var(--raised);margin-bottom:9px}
+  .bulb:last-child{margin-bottom:0}
+  .box{width:16px;height:16px;border:1.5px solid var(--faint);border-radius:3px;flex:none}
+  .box.on{background:var(--accent);border-color:var(--accent);position:relative}
+  .box.on::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:#170c02;font-size:.7rem;font-weight:700}
+  .bulb-n{font-weight:600;color:var(--txt);font-size:.87rem}
+  .bulb-i{font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .bulb-sp{flex:1}
+  .sw{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);flex:none}
+
+  .wait{display:flex;align-items:center;gap:12px;background:var(--sunken);border:1px dashed var(--warn);
+    border-radius:6px;padding:14px 16px}
+  .wait-ring{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);
+    border-top-color:var(--warn);flex:none}
+  .wait-t{font-weight:600;color:var(--txt);font-size:.87rem}
+  .wait-s{font-size:.79rem;color:var(--dim)}
+  .cdown{font-family:var(--mono);font-size:1.15rem;font-weight:600;color:var(--warn)}
+
+  .toast{display:inline-block;border-radius:6px;padding:9px 18px;font-size:.83rem;font-weight:500;color:#fff}
+  .toast.s{background:var(--ok)} .toast.e{background:var(--no)} .toast.w{background:var(--warn);color:#231a03}
+
+  ol.reasons{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
+  ol.reasons li{margin-bottom:9px} ol.reasons li:last-child{margin-bottom:0}
+  ol.reasons b{color:var(--txt)}
+  ul.pl{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
+  ul.pl li{margin-bottom:7px} ul.pl li:last-child{margin-bottom:0}
+
+  footer{border-top:1px solid var(--line);padding-top:20px;margin-top:56px;
+    font-family:var(--mono);font-size:.73rem;color:var(--faint)}
+
+  @media (max-width:640px){
+    body{padding:28px 14px 56px} h1{font-size:1.5rem} .row2{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Issue #207</span><span>Milestone v10.0.0</span><span>Phase Plan</span><span>À valider — GATE 2</span>
+  </div>
+  <h1>Éclairage d'ambiance — configuration du pont Hue</h1>
+  <p class="standfirst">
+    Nouvelle section de <code>/admin/settings</code> permettant de connecter BuzzMaster à un pont
+    Philips Hue et de choisir les ampoules qu'il pilotera. Elle couvre trois gestes : trouver le
+    pont, l'associer en appuyant sur son bouton, puis sélectionner et tester les ampoules.
+    <strong>Rien d'autre sur cette page ne change.</strong>
+  </p>
+  <div class="refs">
+    <div><b>Contrat</b> contracts/hue-bridge.md — adossé à contracts/lighting.md (#205, livré)</div>
+    <div><b>Base validée</b> spike sur pont Hue réel — découverte 0,2 s, écriture 19-61 ms, 100 % de succès</div>
+    <div><b>Sert de référence à</b> test-writer (scénarios) · qa (conformité) · dev-frontend (implémentation)</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span>Où la section s'insère</h2>
+  <p class="lede">
+    Une <code>config-section</code> de plus dans la carte « Système » de <code>ConfigPage.jsx</code>,
+    en dernière position. <strong>Aucune route nouvelle</strong>, aucune entrée de menu nouvelle.
+  </p>
+  <div class="screen">
+    <div class="screen-hd">/admin/settings — carte « Système », sections empilées</div>
+    <div class="screen-bd">
+      <table>
+        <tr><td>Paramètres serveur · Configuration du WiFi · Firmware Buzzers · Image par défaut ·
+            Mode Démo · IA · Effet Néon</td><td style="text-align:right"><span class="bulb-i">existant, inchangé</span></td></tr>
+        <tr><td><b>Éclairage d'ambiance</b></td><td style="text-align:right"><span class="status warn"><span class="dot"></span>nouveau — #207</span></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="call info">
+    <span class="call-t">Vocabulaire</span>
+    L'intitulé visible est « Éclairage d'ambiance ». La clé de configuration est
+    <code>lighting</code>, <strong>jamais <code>ambiance</code></strong> : ce mot désigne déjà la
+    catégorie de sauvegarde qui couvre <code>game-config.json</code> (#152).
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span>Les quatre états de la section</h2>
+  <p class="lede">
+    Un badge unique en tête de section, à quatre valeurs. Il reprend la forme du badge tri-état des
+    clés IA, qui est le précédent direct du projet.
+  </p>
+  <div class="screen">
+    <div class="screen-bd">
+      <table>
+        <tr>
+          <td style="width:210px"><span class="status idle"><span class="dot"></span>Non configuré</span></td>
+          <td>Aucun pont associé. <b>Aucun appel réseau n'est fait</b>, aucune goroutine ne tourne — le serveur se comporte exactement comme aujourd'hui.</td>
+        </tr>
+        <tr>
+          <td><span class="status ok"><span class="dot"></span>Pont connecté</span></td>
+          <td>Pont joignable, clé acceptée. Le nombre d'ampoules jointes est affiché à côté.</td>
+        </tr>
+        <tr>
+          <td><span class="status no"><span class="dot"></span>Pont injoignable</span></td>
+          <td>Réseau, pont éteint ou débranché. <b>La partie continue normalement.</b> Geste attendu : rebrancher.</td>
+        </tr>
+        <tr>
+          <td><span class="status warn"><span class="dot"></span>Association refusée</span></td>
+          <td>Clé absente, invalide ou révoquée. Geste attendu : ré-associer.</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="call warn">
+    <span class="call-t">Ne jamais fondre « injoignable » et « refusée » en une « erreur »</span>
+    Les deux gestes correctifs sont opposés — rebrancher le pont, ou le ré-associer. C'est
+    exactement l'ambiguïté qui a rendu #142 coûteux à diagnostiquer, et le motif retenu par
+    <code>contracts/ai-key-validation.md</code> §3.
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span>Étape 1 — Trouver le pont</h2>
+  <p class="lede">
+    La découverte est automatique (mDNS puis SSDP, aucun appel cloud) et a été mesurée à 0,2 s sur
+    le matériel réel. <strong>Aucune adresse IP à saisir dans le cas nominal.</strong>
+  </p>
+
+  <h3>Avant recherche</h3>
+  <div class="screen">
+    <div class="screen-hd">Éclairage d'ambiance — état initial</div>
+    <div class="screen-bd">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <span style="font-weight:600">Éclairage d'ambiance</span>
+        <span class="status idle"><span class="dot"></span>Non configuré</span>
+      </div>
+      <p class="hint" style="margin-top:0">
+        Pilote l'éclairage de la salle en réaction au jeu — buzz, révélation, points. Nécessite un
+        pont Philips Hue sur le même réseau. Fonctionnalité facultative : sans pont, rien ne change.
+      </p>
+      <div class="btnrow"><span class="btn p">Rechercher un pont</span></div>
+    </div>
+  </div>
+
+  <h3>Pont trouvé</h3>
+  <div class="screen">
+    <div class="screen-bd">
+      <div class="fieldset">
+        <div class="fs-t">Pont détecté</div>
+        <div class="row2">
+          <div class="fld"><span class="lbl">Adresse</span><span class="ctl mono">192.168.1.101</span></div>
+          <div class="fld"><span class="lbl">Identifiant</span><span class="ctl mono">001788fffea0591e</span></div>
+        </div>
+        <p class="hint" style="margin-top:0">Modèle BSB002 · trouvé en 0,2 s par mDNS</p>
+      </div>
+      <div class="btnrow">
+        <span class="btn p">Associer ce pont</span>
+        <span class="btn g">Rechercher à nouveau</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="call info">
+    <span class="call-t">Replis prévus, mais discrets</span>
+    <ul class="pl" style="margin-top:8px">
+      <li><b>Aucun pont trouvé</b> → message explicatif (même réseau ? pont allumé ?) et un lien
+        « Saisir l'adresse manuellement » qui déplie un champ IP. Le champ n'est <b>pas</b> affiché
+        d'emblée : ce serait suggérer une saisie qui n'est presque jamais nécessaire.</li>
+      <li><b>Plusieurs ponts trouvés</b> → liste à choix. Aucun n'est présélectionné.</li>
+    </ul>
+  </div>
+  <div class="call">
+    <span class="call-t">L'identifiant fait foi, pas l'adresse</span>
+    Les deux sont enregistrés. Si le bail DHCP change l'adresse, BuzzMaster re-découvre le pont par
+    son identifiant et se répare seul — plutôt que de tomber en panne un soir de jeu.
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span>Étape 2 — Associer (appui sur le bouton du pont)</h2>
+  <p class="lede">
+    Le protocole Hue impose un appui physique sur le pont pour autoriser une application. C'est une
+    <strong>attente temporisée, pas une décision</strong> — elle se déroule donc <strong>en ligne
+    dans la section</strong>, pas dans une fenêtre modale.
+  </p>
+
+  <h3>Pendant l'attente</h3>
+  <div class="screen">
+    <div class="screen-bd">
+      <div class="wait">
+        <div class="wait-ring"></div>
+        <div style="flex:1">
+          <div class="wait-t">Appuyez sur le bouton rond au centre du pont</div>
+          <div class="wait-s">BuzzMaster réessaie automatiquement toutes les 2 secondes.</div>
+        </div>
+        <div class="cdown">38 s</div>
+      </div>
+      <div class="btnrow"><span class="btn g">Annuler</span></div>
+    </div>
+  </div>
+
+  <h3>Association réussie</h3>
+  <div class="screen">
+    <div class="screen-bd">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span style="font-weight:600">Éclairage d'ambiance</span>
+        <span class="status ok"><span class="dot"></span>Pont connecté</span>
+      </div>
+      <p class="hint" style="margin-top:0">192.168.1.101 · BSB002 · associé le 3 septembre 2026</p>
+      <div class="btnrow"><span class="btn">Dissocier ce pont</span></div>
+      <p style="margin-top:16px"><span class="toast s">Pont associé.</span></p>
+    </div>
+  </div>
+
+  <h3>Délai écoulé sans appui</h3>
+  <div class="screen">
+    <div class="screen-bd">
+      <div class="wait" style="border-color:var(--line);border-style:solid">
+        <div style="flex:1">
+          <div class="wait-t">Bouton non pressé</div>
+          <div class="wait-s">Le délai de 45 secondes est écoulé. Rien n'a été enregistré.</div>
+        </div>
+      </div>
+      <div class="btnrow"><span class="btn p">Réessayer</span><span class="btn g">Annuler</span></div>
+    </div>
+  </div>
+
+  <div class="call ok">
+    <span class="call-t">Le bouton non pressé est un cas nominal, pas une panne</span>
+    Le pont répond une erreur <code>101</code> tant que personne n'a appuyé — c'est le déroulement
+    normal, pas un incident. L'écran ne doit ni s'alarmer, ni parler d'erreur : il attend, puis
+    propose de réessayer.
+  </div>
+  <div class="call">
+    <span class="call-t">Pourquoi en ligne et non en modale</span>
+    Le projet n'utilise une modale que pour deux choses : une aide statique à la demande
+    (<code>ApiKeyHelpModal</code>) et un <b>point de décision bloquant</b> où l'utilisateur doit
+    trancher entre deux issues (<code>ApiKeyValidationDialog</code>). Une attente temporisée n'est
+    ni l'un ni l'autre, et il n'existe aucun précédent de modale d'attente dans cette page.
+  </div>
+  <div class="call warn">
+    <span class="call-t">La clé ne s'affiche jamais</span>
+    La clé délivrée par le pont est un secret. Elle est enregistrée côté serveur, <b>jamais renvoyée
+    au navigateur</b>, jamais journalisée, et <code>config.json</code> vit hors du dossier archivé
+    par les sauvegardes — elle ne peut pas fuir par un export. Aucun champ de saisie de clé n'existe
+    dans cet écran : elle s'obtient par l'appui bouton, pas au clavier.
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">05</span>Étape 3 — Choisir et tester les ampoules</h2>
+  <p class="lede">
+    Le pont de production est <strong>dédié à BuzzMaster</strong> : toutes ses ampoules ont
+    vocation à être pilotées. L'écran les propose donc <strong>toutes cochées</strong> — mais les
+    affiche explicitement et laisse les décocher. On ne suppose jamais en silence que tout ce qui
+    est sur le pont nous appartient.
+  </p>
+  <div class="screen">
+    <div class="screen-hd">Éclairage d'ambiance — ampoules du pont</div>
+    <div class="screen-bd">
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#f2c88a"></span>
+        <span><span class="bulb-n">Salle gauche</span><br><span class="bulb-i">id 8 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <span class="btn">Tester</span>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#f2c88a"></span>
+        <span><span class="bulb-n">Salle droite</span><br><span class="bulb-i">id 9 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <span class="btn">Tester</span>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#2b3038"></span>
+        <span><span class="bulb-n">Scène</span><br><span class="bulb-i">id 11 · <span style="color:var(--no)">éteinte au mur</span></span></span>
+        <span class="bulb-sp"></span>
+        <span class="btn dis">Tester</span>
+      </div>
+      <div class="btnrow">
+        <span class="btn p">Enregistrer</span>
+        <span class="btn">Tester toutes les ampoules</span>
+        <span class="btn g">Actualiser la liste</span>
+      </div>
+      <p class="hint">« Tester » produit un bref flash puis rend l'ampoule à son état précédent.</p>
+    </div>
+  </div>
+
+  <div class="call">
+    <span class="call-t">Les ampoules sont mémorisées par leur nom, jamais par leur identifiant</span>
+    Les identifiants Hue sont de petits entiers <b>réattribués</b> quand une ampoule est supprimée du
+    pont : mémoriser un identifiant, c'est risquer d'allumer une autre ampoule que celle voulue. Une
+    ampoule renommée dans l'application Hue apparaît donc comme <b>introuvable</b>, avec un message
+    explicite — plutôt qu'une ampoule voisine qui s'allumerait à sa place.
+  </div>
+  <div class="call">
+    <span class="call-t">Ampoule éteinte au mur</span>
+    Signalée, non cochable pour le test, et <b>sans effet sur les autres</b>. Ce n'est pas une
+    erreur de configuration : c'est un interrupteur mural, cas parfaitement banal en soirée.
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">06</span>Ce que #213 ajoutera — hors périmètre de #207</h2>
+  <p class="lede">
+    Montré ici uniquement pour que la structure retenue en #207 accueille #213 sans être refaite.
+    <strong>Cette colonne n'est pas livrée par #207.</strong>
+  </p>
+  <div class="screen">
+    <div class="screen-hd">Aperçu #213 — affectation par équipe</div>
+    <div class="screen-bd">
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#e14b4b"></span>
+        <span><span class="bulb-n">Salle gauche</span><br><span class="bulb-i">id 8</span></span>
+        <span class="bulb-sp"></span>
+        <span class="ctl" style="width:190px;padding:6px 10px">Équipe — Les Rouges</span>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#4b7de1"></span>
+        <span><span class="bulb-n">Salle droite</span><br><span class="bulb-i">id 9</span></span>
+        <span class="bulb-sp"></span>
+        <span class="ctl" style="width:190px;padding:6px 10px">Équipe — Les Bleus</span>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#f2c88a"></span>
+        <span><span class="bulb-n">Scène</span><br><span class="bulb-i">id 11</span></span>
+        <span class="bulb-sp"></span>
+        <span class="ctl" style="width:190px;padding:6px 10px">Éclairage général</span>
+      </div>
+    </div>
+  </div>
+  <div class="call info">
+    <span class="call-t">Le schéma de configuration est figé dès #207</span>
+    Y compris le rôle « équipe », que #207 n'expose pas encore. Casser ce schéma en #213 imposerait
+    une migration de <code>config.json</code> sur une section livrée quelques jours plus tôt.
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">07</span>Cas dégradés</h2>
+  <div class="scroll">
+    <table>
+      <tr><th style="width:34%">Situation</th><th>Ce que l'écran fait</th></tr>
+      <tr><td><b>Pont débranché</b> après configuration</td>
+          <td>Badge <span class="status no" style="padding:2px 9px"><span class="dot"></span>Pont injoignable</span>, liste d'ampoules grisée avec la dernière sélection connue. <b>Aucune perte de configuration.</b> La partie en cours continue sans latence.</td></tr>
+      <tr><td><b>Clé révoquée</b> depuis l'application Hue</td>
+          <td>Badge <span class="status warn" style="padding:2px 9px"><span class="dot"></span>Association refusée</span> et bouton « Ré-associer ». Aucune relance en boucle : seul un geste utilisateur débloque.</td></tr>
+      <tr><td><b>Ampoule renommée</b> dans l'application Hue</td>
+          <td>Ligne marquée « introuvable », les autres continuent de fonctionner. Jamais de repli silencieux sur une autre ampoule.</td></tr>
+      <tr><td><b>Deux ampoules du même nom</b></td>
+          <td>Refus explicite. BuzzMaster ne devine pas laquelle est la bonne.</td></tr>
+      <tr><td><b>Serveur sans pont configuré</b></td>
+          <td>Section repliée sur son seul bouton « Rechercher un pont ». Zéro appel réseau, zéro ligne de journal.</td></tr>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">08</span>Décisions de conception</h2>
+  <ol class="reasons">
+    <li><b>Trois étapes visibles, une seule à la fois.</b> Trouver, associer, choisir. Chaque étape
+      n'apparaît qu'une fois la précédente franchie — un écran qui montre tout d'emblée demande à
+      l'utilisateur de deviner par où commencer.</li>
+    <li><b>Pas de champ de clé API.</b> Contrairement à la section IA, la clé ne se saisit pas : elle
+      s'obtient par l'appui sur le bouton du pont. Afficher un champ vide serait proposer un geste
+      impossible.</li>
+    <li><b>Tout coché par défaut, mais tout montré.</b> Conséquence directe du pont dédié. La
+      présélection épargne un geste ; l'affichage explicite empêche la supposition implicite.</li>
+    <li><b>Aucune route ni entrée de menu nouvelle.</b> La fonctionnalité est un réglage, pas un
+      espace de travail.</li>
+    <li><b>Pas de réglage de couleur ni de scène dans cet écran.</b> La table de scènes est câblée en
+      dur pour ce milestone ; son édition est renvoyée à v10.1 (#210). Exposer des couleurs ici
+      laisserait croire qu'elles sont modifiables.</li>
+  </ol>
+  <div class="call warn">
+    <span class="call-t">Défaut existant à corriger au passage</span>
+    <code>.wifi-toast-warning</code> n'est défini nulle part dans la feuille de style : un toast
+    d'avertissement s'affiche aujourd'hui en texte blanc sur fond transparent. Cet écran en a besoin
+    — à ajouter dans <code>ConfigPage.css</code>.
+  </div>
+</section>
+
+<footer>
+  Maquette produite en phase Plan · à valider avant dispatch de dev-frontend · issue #207 ·
+  milestone v10.0.0 · BuzzControl
+</footer>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

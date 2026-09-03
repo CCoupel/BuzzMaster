@@ -2,6 +2,49 @@
 
 ---
 
+## [20260903] — Pilote Philips Hue Bridge : la voie BLE est abandonnée (#206/#207/#213, v10.0.0)
+
+> Nouveau contrat `contracts/hue-bridge.md`, qui **étend** `contracts/lighting.md` sans le
+> modifier — c'est précisément ce pour quoi l'abstraction `lighting.Driver` avait été conçue :
+> le matériel derrière est interchangeable. #205 reste livré et intact.
+> Base : spike exécuté sur un vrai Hue Bridge v2 (`_work/reports/dev-backend-hue-bridge-spike-20260903-195500.md`).
+
+- **[REMOVED]** Voie **BLE directe** — abandonnée. Le spike #204 a établi, après ~15 tests réels,
+  un défaut systémique entre la pile Bluetooth de Windows 11 et les ampoules Hue, indépendant du
+  code du projet. Les détails BLE (service GATT `932c32bd-…`, bonding, appairage hors bande via
+  `bluetoothctl` / Paramètres Windows) sont **caducs** et retirés des issues #206/#207/#213.
+- **[NEW]** `contracts/hue-bridge.md` — pilote Hue Bridge sur l'**API v1 locale**
+  (`PUT /api/<clé>/lights/<id>/state`). La v2 (`/clip/v2`) est écartée : elle impose HTTPS avec un
+  certificat dont le CN est l'identifiant du bridge, signé par une racine Signify, pour un gain nul
+  sur notre usage. Dépréciation de la v1 assumée, **mitigée par l'abstraction** : une migration v2
+  serait un pilote de remplacement, pas une refonte.
+- **[NEW]** **Décision : ampoules individuelles, pas groupes/zones Hue.** Quatre raisons : le
+  budget de débit est 10× plus favorable (~10 commandes/s sur `/lights` contre ~1/s sur `/groups`,
+  un groupe passant par une diffusion Zigbee plus coûteuse) ; **#213 annule l'avantage du groupe**
+  puisqu'un groupe impose un état unique à tous ses membres alors que colorer par équipe demande
+  des couleurs différentes ; aucune dépendance à des zones créées à la main dans l'application Hue,
+  qui peuvent dériver ; et c'est ce que le spike a validé à 100 %. Compensation de la perte de
+  simultanéité : n'écrire que les ampoules dont l'état change, et **mesurer** l'étalement réel.
+- **[NEW]** Identité du matériel : le bridge est mémorisé par **`bridge_id` autant que par `ip`**
+  (une IP DHCP renouvelée ne doit pas casser l'installation), et les ampoules sont référencées par
+  **nom, jamais par id** — les ids Hue sont réattribués après suppression d'une ampoule. 0 ou > 1
+  correspondance ⇒ refus, jamais de choix arbitraire. Garde-fou `guardRequest` du spike repris,
+  liste blanche élargie au strict nécessaire.
+- **[NEW]** Section `lighting` de **`config.json`** — schéma **figé en entier dès #207**, `role:
+  "team"` compris, que #213 se contentera d'activer : casser ce schéma en #213 imposerait une
+  migration sur une section livrée quelques jours plus tôt. Clé API traitée comme les clés IA
+  (masquage `maskedConfigJSON`, `clear_api_key`, `api_key_configured` dérivé, surcharge
+  `BUZZCONTROL_HUE_API_KEY` sans écriture disque, jamais dans les logs). **Vérifié** :
+  `config.json` vit à la racine du serveur, hors du `dataDir` archivé par `handleFSBackup` — la clé
+  ne peut pas fuir par une sauvegarde.
+- **[NEW]** `POST /api/lighting/discover`, `POST /api/lighting/register`,
+  `GET /api/lighting/lights`, `POST /api/lighting/test`, `GET /api/lighting/status`. Taxonomie à
+  **trois** issues `ok` / `refused` / `unreachable` (modèle `contracts/ai-key-validation.md` §3) —
+  les fondre en une « erreur » serait une régression de diagnostic : réappairer n'est pas
+  rebrancher. `link_button_not_pressed` est un **cas nominal**, pas une panne.
+- **Aucun changement BREAKING.** `contracts/lighting.md` est inchangé. Module optionnel : sans
+  bridge configuré, aucune goroutine, aucun appel réseau, aucune ligne de log.
+
 ## [20260902] — Éclairage d'ambiance : événements, pilote abstrait, écrivain (#205, feature, v10.0.0)
 
 > Nouveau contrat `contracts/lighting.md`. Première brique du milestone v10.0.0 (éclairage de la
