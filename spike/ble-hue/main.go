@@ -19,15 +19,17 @@ import (
 )
 
 var (
-	flagBulbs     = flag.String("bulbs", "", "comma-separated bulb MAC addresses (AA:BB:CC:DD:EE:FF,...), already paired with the OS")
-	flagOut       = flag.String("out", "", "write a JSON report to this file")
-	flagTimeout   = flag.Duration("timeout", 20*time.Second, "per-bulb connect / discover timeout")
-	flagWriteMode = flag.String("write-mode", "auto", "GATT write procedure: auto|request|command")
-	flagAdapter   = flag.String("adapter", "", "Linux only: BlueZ adapter id (default hci0); ignored on Windows")
-	flagBackend   = flag.String("backend", "tinygo", "BLE backend: tinygo (default, tinygo.org/x/bluetooth) | winrt (Windows only: direct WinRT calls, passes the LE address type — see README §3.2 bis T4)")
-	flagAddrType  = flag.String("addr-type", "auto", "winrt backend: LE address type of the bulb: auto (random if the first byte is 0b11xxxxxx, i.e. static random) | public | random")
-	flagProtect   = flag.String("protection", "plain", "Windows only: GATT protection level requested on the Hue characteristics before any access: plain|encrypt|auth (auth = EncryptionAndAuthenticationRequired — the fix to test after an ATT 0x0F failure)")
-	flagVerbose   = flag.Bool("v", false, "verbose logging")
+	flagBulbs       = flag.String("bulbs", "", "comma-separated bulb MAC addresses (AA:BB:CC:DD:EE:FF,...), already paired with the OS")
+	flagOut         = flag.String("out", "", "write a JSON report to this file")
+	flagTimeout     = flag.Duration("timeout", 20*time.Second, "per-bulb connect / discover timeout")
+	flagWriteMode   = flag.String("write-mode", "auto", "GATT write procedure: auto|request|command")
+	flagAdapter     = flag.String("adapter", "", "Linux only: BlueZ adapter id (default hci0); ignored on Windows")
+	flagBackend     = flag.String("backend", "tinygo", "BLE backend: tinygo (default, tinygo.org/x/bluetooth) | winrt (Windows only: direct WinRT calls, passes the LE address type — see README §3.2 bis T4)")
+	flagAddrType    = flag.String("addr-type", "auto", "winrt backend: LE address type of the bulb: auto (random if the first byte is 0b11xxxxxx, i.e. static random) | public | random")
+	flagPairLevel   = flag.String("pair-level", "auth", "pairtest: minimum protection level requested at programmatic pairing: auth (EncryptionAndAuthentication, bleak's first try) | encrypt | default")
+	flagKeepPairing = flag.Bool("keep-pairing", false, "pairtest: do not UnpairAsync at the end of the session (bleak #1943 unpairs)")
+	flagProtect     = flag.String("protection", "plain", "Windows only: GATT protection level requested on the Hue characteristics before any access: plain|encrypt|auth (auth = EncryptionAndAuthenticationRequired — the fix to test after an ATT 0x0F failure)")
+	flagVerbose     = flag.Bool("v", false, "verbose logging")
 
 	// scan
 	flagScanDur = flag.Duration("scan-duration", 10*time.Second, "scan: how long to listen")
@@ -61,6 +63,8 @@ Commands:
   bench     measure GATT write latency and group desync (sequential vs parallel writes)
   hold      keep persistent connections to -bulbs for -duration, log drops/reconnects
   coexist   2.4 GHz protocol: ping the buzzers (+ server logs) across BLE on/off phases
+  pairtest  Windows only, ONE bulb: unpair → programmatic pairing (ConfirmOnly, auto-accept,
+            -pair-level) → connect (winrt backend) → demo writes → unpair (option B, #204)
   info      print OS / library versions and exit
 
 Flags:
@@ -146,6 +150,11 @@ func main() {
 		err = cmdHold(adapter, macs, report)
 	case "coexist":
 		err = cmdCoexist(adapter, macs, writeMode, report)
+	case "pairtest":
+		if !programmaticPairingSupported {
+			fatal(fmt.Errorf("pairtest is Windows-only"))
+		}
+		err = cmdPairTest(adapter, macs, writeMode, report)
 	default:
 		usage()
 		os.Exit(2)

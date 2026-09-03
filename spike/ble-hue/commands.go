@@ -54,6 +54,18 @@ func cmdDemo(adapter *bluetooth.Adapter, macs []string, mode WriteMode, report *
 		}
 	}
 
+	failures, st := runDemoSteps(bulbs, mode, report)
+	logf("demo summary: %d bulb(s) connected / %d requested, %d write failure(s), latency %s", len(bulbs), len(macs), failures, st)
+	if failures > 0 {
+		return fmt.Errorf("%d write(s) failed", failures)
+	}
+	return nil
+}
+
+// runDemoSteps drives on / colours / dim / off on every bulb, logging each
+// write, and returns the failure count and the latency stats. Shared by
+// `demo` and `pairtest`.
+func runDemoSteps(bulbs []*Bulb, mode WriteMode, report *Report) (int, Stats) {
 	type step struct {
 		name string
 		fn   func(*Bulb) (time.Duration, error)
@@ -96,15 +108,11 @@ func cmdDemo(adapter *bluetooth.Adapter, macs []string, mode WriteMode, report *
 
 	st := all.Stats()
 	report.Sections["demo"] = map[string]any{"steps": steps2, "write_latency": st, "failures": failures, "write_mode": mode.String()}
-	logf("demo summary: %d bulb(s) connected / %d requested, %d write failure(s), latency %s", len(bulbs), len(macs), failures, st)
 	if st.MaxMs > 5000 {
 		report.Note("a write took > 5 s: on Windows this usually means the OS raised a pairing/consent prompt in the background — check the notification area")
 		logf("NOTE: %s", report.Notes[len(report.Notes)-1])
 	}
-	if failures > 0 {
-		return fmt.Errorf("%d write(s) failed", failures)
-	}
-	return nil
+	return failures, st
 }
 
 // ---------------------------------------------------------------------------
