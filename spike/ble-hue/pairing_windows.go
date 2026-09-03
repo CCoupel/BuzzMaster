@@ -271,6 +271,19 @@ func winPairCustom(p *winenum.DeviceInformationPairing, requested int) ([]pairAt
 		attempts = append(attempts, att)
 		logf("  → status=%s levelUsed=%s handlerCalls=%d after %.0fms", att.Status, att.LevelUsed, att.HandlerCalls, att.DurationMs)
 		if pairingSucceeded(int(status)) {
+			// Runs 1-2 and the clean pairing-mode run all returned Paired with
+			// levelUsed=None and IsPaired=false right after: a "success"
+			// without any key. Do not stop the ladder on it — unpair
+			// (best effort, the record is usually already gone) and try the
+			// next, weaker level, so one run observes every rung.
+			if used == winenum.DevicePairingProtectionLevelNone && lvl != -1 {
+				logf("  Paired but levelUsed=None (no key distributed) — not a usable bond; unpairing and trying the next level")
+				if st, _, err := winUnpair(p); err == nil {
+					logf("  UnpairAsync → %s", st)
+				}
+				time.Sleep(1500 * time.Millisecond)
+				continue
+			}
 			return attempts, true, nil
 		}
 		// bleak lowers the level only on ProtectionLevelCouldNotBeMet. Run 4
