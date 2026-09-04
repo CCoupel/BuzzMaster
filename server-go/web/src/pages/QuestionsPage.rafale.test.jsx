@@ -26,6 +26,15 @@ vi.mock('../hooks/GameContext', () => ({
   GameProvider: ({ children }) => children,
 }))
 
+// #215 — QuestionsPage appelle désormais useNavigate()/useSearchParams()
+// (onglets Questions/Rafale, lien "configurer le quiz" → navigation vers
+// Backstage) : ces tests ne montent aucun Router réel, donc mock plutôt que
+// de faire porter <MemoryRouter> à chacun des (nombreux) render() ci-dessous.
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}))
+
 vi.mock('../hooks/useCategoryFilter', () => ({
   useCategoryFilter: vi.fn((questions) => ({
     selectedCategories: new Set(),
@@ -112,7 +121,11 @@ const makeCategoriesMock = (overrides = {}) => ({
 
 /** Sélectionne le type RAFALE puis retourne les 4 radios de mode. */
 function switchToRafaleAndGetModeRadios(container) {
-  fireEvent.click(screen.getByText('Rafale').closest('button'))
+  // getByRole('button', ...) plutôt que getByText().closest('button') : #215
+  // ajoute un onglet "Rafale" (role="tab") sur cette même page — même
+  // libellé visible que le bouton de type, texte seul ne suffit plus à
+  // distinguer les deux.
+  fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
   return {
     solo: container.querySelector('input[name="rafaleMode"][value="SOLO"]'),
     chacunSonTour: container.querySelector('input[name="rafaleMode"][value="CHACUN_SON_TOUR"]'),
@@ -135,7 +148,9 @@ describe('QuestionsPage — sélecteur de mode RAFALE (v8.0.0, #199, bugfix coh�
 
   it('le bouton de type "Rafale" est présent dans le sélecteur de type', () => {
     render(<QuestionsPage />)
-    expect(screen.getByText('Rafale')).toBeInTheDocument()
+    // getByRole('button', ...) : #215 ajoute un onglet "Rafale" (role="tab")
+    // sur cette même page — distinct du bouton de type ciblé ici.
+    expect(screen.getByRole('button', { name: 'Rafale' })).toBeInTheDocument()
   })
 
   it('le sélecteur de mode RAFALE (4 radios) n\'est PAS rendu tant que le type RAFALE n\'est pas sélectionné', () => {
@@ -233,7 +248,7 @@ describe('QuestionsPage — sélecteur de mode RAFALE (v8.0.0, #199, bugfix coh�
 
     // Bascule sur un autre type puis retour sur Rafale.
     fireEvent.click(screen.getByText(/qcm/i).closest('button'))
-    fireEvent.click(screen.getByText('Rafale').closest('button'))
+    fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
 
     radios = {
       solo: container.querySelector('input[name="rafaleMode"][value="SOLO"]'),
@@ -307,7 +322,7 @@ describe('QuestionsPage — RAFALE : sélecteur de catégorie unique (bugfix 202
     fireEvent.click(screen.getByTitle('Histoire'))
 
     fireEvent.click(screen.getByText(/qcm/i).closest('button'))
-    fireEvent.click(screen.getByText('Rafale').closest('button'))
+    fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
 
     expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
   })

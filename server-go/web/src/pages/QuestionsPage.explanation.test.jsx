@@ -20,6 +20,15 @@ vi.mock('../hooks/GameContext', () => ({
   GameProvider: ({ children }) => children,
 }))
 
+// #215 — QuestionsPage appelle désormais useNavigate()/useSearchParams()
+// (onglets Questions/Rafale, lien "configurer le quiz" → navigation vers
+// Backstage) : ces tests ne montent aucun Router réel, donc mock plutôt que
+// de faire porter <MemoryRouter> à chacun des (nombreux) render() ci-dessous.
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}))
+
 vi.mock('../hooks/useCategoryFilter', () => ({
   useCategoryFilter: vi.fn((questions) => ({
     selectedCategories: new Set(),
