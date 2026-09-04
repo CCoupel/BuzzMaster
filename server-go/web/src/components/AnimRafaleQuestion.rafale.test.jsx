@@ -229,3 +229,38 @@ describe('AnimRafaleQuestion — zone SUIVANTE : showNext (sous-phase QUESTION, 
     expect(container.querySelector('.rafale-anim-qcard-next')).toBeInTheDocument()
   })
 })
+
+// ---------------------------------------------------------------------------
+// current.POINTS — barème résolu de la question en cours (#216, milestone
+// v9.0.0, Lot 2, contrats/rafale.md §4 : "la valeur résolue pour la question
+// EN COURS est diffusée dans RAFALE_CURRENT_QUESTION.POINTS ... pour
+// l'affichage TV + animateur"). NOUVEAU champ, valeur variable d'une
+// question à l'autre selon sa difficulté (RAFALE_POINTS_BY_DIFFICULTY côté
+// backend) — contrairement à DIFFICULTY (étoiles) déjà affiché ci-dessus,
+// rien n'existait avant #216 pour ce champ : assertions volontairement
+// tolérantes au format exact (le nombre de points doit être visible dans la
+// zone méta, peu importe le gabarit textuel choisi par dev-frontend).
+// ---------------------------------------------------------------------------
+
+describe('AnimRafaleQuestion — current.POINTS : valeur en points de la question courante (#216)', () => {
+  it('current.POINTS fourni : la valeur est visible dans la zone méta de la question', () => {
+    const { container } = render(<AnimRafaleQuestion current={{ QUESTION: 'Q', DIFFICULTY: 2, POINTS: 15 }} />)
+    const meta = container.querySelector('.rafale-anim-qcard-meta')
+    expect(meta).not.toBeNull()
+    expect(meta.textContent).toMatch(/15/)
+  })
+
+  it('current.POINTS change d\'une question à l\'autre (barème par difficulté, pas une valeur figée)', () => {
+    const { container, rerender } = render(<AnimRafaleQuestion current={{ QUESTION: 'Q1', DIFFICULTY: 1, POINTS: 5 }} />)
+    expect(container.querySelector('.rafale-anim-qcard-meta').textContent).toMatch(/5/)
+
+    rerender(<AnimRafaleQuestion current={{ QUESTION: 'Q2', DIFFICULTY: 3, POINTS: 25 }} />)
+    expect(container.querySelector('.rafale-anim-qcard-meta').textContent).toMatch(/25/)
+  })
+
+  it('current.POINTS absent/0 : ne plante pas, aucun chip "0" trompeur affiché', () => {
+    const { container } = render(<AnimRafaleQuestion current={{ QUESTION: 'Q', DIFFICULTY: 1 }} />)
+    expect(container.querySelector('.rafale-anim-qcard-meta')).not.toBeNull()
+    expect(screen.queryByText('0')).not.toBeInTheDocument()
+  })
+})

@@ -367,6 +367,40 @@ describe('PlayerDisplay — RAFALE TV : aucun score/classement/compteur (révisi
 })
 
 // ---------------------------------------------------------------------------
+// RAFALE_CURRENT_QUESTION.POINTS — barème résolu de la question en cours
+// (#216, milestone v9.0.0, Lot 2, contrats/rafale.md §4 : "diffusée dans
+// RAFALE_CURRENT_QUESTION.POINTS ... pour l'affichage TV + animateur").
+// NOUVEAU champ, valeur variable d'une question à l'autre selon sa
+// difficulté (RAFALE_POINTS_BY_DIFFICULTY côté backend) — assertions
+// volontairement tolérantes au gabarit textuel exact, scopées à
+// `.rafale-tv-meta` (zone des chips catégorie/difficulté déjà existante).
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay — RAFALE TV : valeur en points de la question courante (#216)', () => {
+  it('POINTS fourni : la valeur est visible dans la zone méta de la question, sur TV', () => {
+    const { container } = renderTV({
+      rafaleCurrentQuestion: { ID: 'r-042', QUESTION: 'Capitale de l\'Italie ?', CATEGORY: 'GEOGRAPHY', DIFFICULTY: 2, POINTS: 15 },
+    })
+    const meta = container.querySelector('.rafale-tv-meta')
+    expect(meta).not.toBeNull()
+    expect(meta.textContent).toMatch(/15/)
+  })
+
+  it('POINTS varie d\'une question à l\'autre (barème par difficulté, pas figé)', () => {
+    const { container, rerender } = renderTV({
+      rafaleCurrentQuestion: { ID: 'r-1', QUESTION: 'Q1', CATEGORY: 'HISTORY', DIFFICULTY: 1, POINTS: 5 },
+    })
+    expect(container.querySelector('.rafale-tv-meta').textContent).toMatch(/5/)
+
+    useGame.mockReturnValue(makeMock({
+      rafaleCurrentQuestion: { ID: 'r-2', QUESTION: 'Q2', CATEGORY: 'HISTORY', DIFFICULTY: 3, POINTS: 25 },
+    }))
+    rerender(<PlayerDisplay />)
+    expect(container.querySelector('.rafale-tv-meta').textContent).toMatch(/25/)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // VPlayer — indicateur « équipe active » (tâche 38, contrat §8.1/§8.2).
 // Vit DANS PlayerDisplay.jsx (branche `if (isVPlayer)` du bloc `isRafale`),
 // pas dans VPlayerPage.jsx — voir le commentaire de renderVPlayer ci-dessus.

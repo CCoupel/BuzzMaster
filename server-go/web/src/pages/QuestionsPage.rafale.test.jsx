@@ -260,23 +260,28 @@ describe('QuestionsPage — sélecteur de mode RAFALE (v8.0.0, #199, bugfix coh�
 })
 
 // ---------------------------------------------------------------------------
-// Sélecteur de catégorie RAFALE — catégorie UNIQUE (bugfix 2026-08-29,
-// contrat rafale.md §3.3). Le multi-sélecteur RAFALE_CATEGORIES dédié a été
-// entièrement retiré : RAFALE réutilise désormais le MÊME CategorySelector
-// générique que tous les autres types (formData.category), sans branche
-// spécifique. Pas de nouveau composant à tester ici — CategorySelector a
-// déjà sa propre couverture unitaire (components/CategorySelector.test.jsx)
-// et son intégration dans QuestionsPage est déjà exercée pour SPEEDY par
-// QuestionsPage.v571.test.jsx — ce bloc vérifie seulement que RAFALE suit
-// exactement le même chemin (rendu, sélection, persistance), sans dupliquer
-// les scénarios déjà couverts ailleurs (création inline, 400/409/réseau).
+// ⚠️ [CHANGED] #216 (milestone v9.0.0, Lot 2, réouverture ASSUMÉE de #107,
+// décision utilisateur explicite — contracts/rafale.md §3.3) — RAFALE est
+// retiré du CategorySelector générique (guard `formData.type !== 'RAFALE'`
+// dans QuestionsPage.jsx) : il a de nouveau besoin de PLUSIEURS catégories
+// ET plusieurs difficultés (non exclusives), plus un barème par étoile en
+// repli sur POINTS générique. Le bloc precedent ("sélecteur de catégorie
+// unique, bugfix 2026-08-29") affirmait exactement le comportement
+// opposé — réécrit ci-dessous, pas supprimé, avec le nouveau sélecteur à
+// chips (motif éprouvé RafaleAIGenerateModal.jsx, classe .rafale-multi-chip,
+// pas .category-btn/.category-selector).
 // ---------------------------------------------------------------------------
 
-describe('QuestionsPage — RAFALE : sélecteur de catégorie unique (bugfix 2026-08-29, contrat §3.3)', () => {
+describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficultés (#216)', () => {
+  const TWO_CATEGORIES = [
+    { key: 'HISTORY', name: 'Histoire', imageURL: '', isCustom: false },
+    { key: 'GEOGRAPHY', name: 'Geographie', imageURL: '', isCustom: false },
+  ]
+
   beforeEach(() => {
     vi.clearAllMocks()
     useGame.mockReturnValue(makeQPageMock())
-    useCategories.mockReturnValue(makeCategoriesMock())
+    useCategories.mockReturnValue(makeCategoriesMock({ categories: TWO_CATEGORIES }))
     global.fetch = vi.fn()
   })
 
@@ -284,56 +289,100 @@ describe('QuestionsPage — RAFALE : sélecteur de catégorie unique (bugfix 202
     vi.clearAllMocks()
   })
 
-  it('le CategorySelector générique est rendu pour le type RAFALE (même composant que les autres types, pas de variante dédiée)', () => {
-    const { container } = render(<QuestionsPage />)
-    switchToRafaleAndGetModeRadios(container) // sélectionne le type Rafale
-
-    // 8 catégories codées en dur + 1 custom (GEOGRAPHY du mock, ignoré ici
-    // car déjà hardcodée — voir makeCategoriesMock) + le bouton "+".
-    expect(container.querySelectorAll('.category-selector .category-btn').length).toBeGreaterThan(0)
-    expect(screen.getByTitle('Histoire')).toBeInTheDocument()
-  })
-
-  it('cliquer sur une catégorie la sélectionne (classe "active"), comme pour n\'importe quel autre type', () => {
+  it('le CategorySelector générique n\'est PLUS rendu pour RAFALE (retiré au profit du sélecteur multi-chips dédié)', () => {
     const { container } = render(<QuestionsPage />)
     switchToRafaleAndGetModeRadios(container)
 
-    fireEvent.click(screen.getByTitle('Histoire'))
-
-    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
+    expect(container.querySelector('.category-selector')).toBeNull()
+    expect(container.querySelectorAll('.rafale-multi-chip').length).toBeGreaterThan(0)
   })
 
-  it('la catégorie sélectionnée est PERSISTÉE au changement de sous-mode RAFALE (état du formulaire commun)', () => {
-    const { container } = render(<QuestionsPage />)
-    switchToRafaleAndGetModeRadios(container)
-    fireEvent.click(screen.getByTitle('Histoire'))
+  it('plusieurs catégories peuvent être sélectionnées simultanément (non exclusives)', () => {
+    render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(document.body)
 
-    // Changer de mode RAFALE (SOLO -> CHACUN_SON_TOUR) ne doit rien
-    // réinitialiser côté catégorie — champs indépendants du même formData.
-    const chacunSonTour = container.querySelector('input[name="rafaleMode"][value="CHACUN_SON_TOUR"]')
-    fireEvent.click(chacunSonTour)
+    const histoire = screen.getByRole('button', { name: /Histoire/ })
+    const geographie = screen.getByRole('button', { name: /Geographie/ })
+    fireEvent.click(histoire)
+    fireEvent.click(geographie)
 
-    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
+    expect(histoire.className).toMatch(/\bactive\b/)
+    expect(geographie.className).toMatch(/\bactive\b/)
   })
 
-  it('la catégorie sélectionnée est PERSISTÉE après un aller-retour vers un autre type (RAFALE -> QCM -> RAFALE)', () => {
+  it('re-cliquer sur une catégorie déjà active la désélectionne, sans affecter l\'autre (toggle indépendant)', () => {
+    render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(document.body)
+
+    const histoire = screen.getByRole('button', { name: /Histoire/ })
+    const geographie = screen.getByRole('button', { name: /Geographie/ })
+    fireEvent.click(histoire)
+    fireEvent.click(geographie)
+    fireEvent.click(histoire)
+
+    expect(histoire.className).not.toMatch(/\bactive\b/)
+    expect(geographie.className).toMatch(/\bactive\b/)
+  })
+
+  it('plusieurs difficultés peuvent être sélectionnées simultanément (non exclusives, contrairement à MEMOTION)', () => {
     const { container } = render(<QuestionsPage />)
     switchToRafaleAndGetModeRadios(container)
-    fireEvent.click(screen.getByTitle('Histoire'))
+
+    const diffChips = container.querySelectorAll('.rafale-multi-chip-row')[1].querySelectorAll('.rafale-multi-chip')
+    fireEvent.click(diffChips[0]) // ★
+    fireEvent.click(diffChips[2]) // ★★★
+
+    expect(diffChips[0].className).toMatch(/\bactive\b/)
+    expect(diffChips[1].className).not.toMatch(/\bactive\b/)
+    expect(diffChips[2].className).toMatch(/\bactive\b/)
+  })
+
+  it('sélection persistée après un aller-retour vers un autre type (RAFALE -> QCM -> RAFALE)', () => {
+    render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(document.body)
+    fireEvent.click(screen.getByRole('button', { name: /Histoire/ }))
 
     fireEvent.click(screen.getByText(/qcm/i).closest('button'))
     fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
 
-    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
+    expect(screen.getByRole('button', { name: /Histoire/ }).className).toMatch(/\bactive\b/)
   })
 
-  it('re-cliquer sur la catégorie déjà sélectionnée la désélectionne (toggle, même comportement que les autres types)', () => {
+  it('éditeur de barème par difficulté : n\'apparaît qu\'après sélection d\'au moins une difficulté, un champ par difficulté sélectionnée', () => {
     const { container } = render(<QuestionsPage />)
     switchToRafaleAndGetModeRadios(container)
-    fireEvent.click(screen.getByTitle('Histoire'))
-    expect(screen.getByTitle('Histoire').className).toMatch(/\bactive\b/)
 
-    fireEvent.click(screen.getByTitle('Histoire'))
-    expect(screen.getByTitle('Histoire').className).not.toMatch(/\bactive\b/)
+    expect(container.querySelector('.rafale-points-by-difficulty-row')).toBeNull()
+
+    const diffChips = container.querySelectorAll('.rafale-multi-chip-row')[1].querySelectorAll('.rafale-multi-chip')
+    fireEvent.click(diffChips[0]) // ★
+    fireEvent.click(diffChips[1]) // ★★
+
+    const baremeRow = container.querySelector('.rafale-points-by-difficulty-row')
+    expect(baremeRow).not.toBeNull()
+    expect(baremeRow.querySelectorAll('input[type="number"]').length).toBe(2)
+  })
+
+  it('saisie libre du barème : la valeur saisie pour une difficulté est conservée dans le champ correspondant', () => {
+    const { container } = render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(container)
+
+    const diffChips = container.querySelectorAll('.rafale-multi-chip-row')[1].querySelectorAll('.rafale-multi-chip')
+    fireEvent.click(diffChips[1]) // ★★
+
+    const input = container.querySelector('#rafale-points-diff-2')
+    expect(input).not.toBeNull()
+    fireEvent.change(input, { target: { value: '15' } })
+    expect(input.value).toBe('15')
+  })
+
+  it('validation au submit : au moins une catégorie ET une difficulté requises, sinon aucun POST envoyé (défense en profondeur, réouverture code-review-20260829-163049.md)', () => {
+    render(<QuestionsPage />)
+    switchToRafaleAndGetModeRadios(document.body)
+    // Ni catégorie ni difficulté sélectionnée — tente d'enregistrer.
+    const saveBtn = screen.queryByText(/enregistrer|ajouter/i)
+    if (saveBtn) fireEvent.click(saveBtn)
+
+    expect(global.fetch).not.toHaveBeenCalledWith('/questions', expect.anything())
   })
 })
