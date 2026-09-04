@@ -5438,6 +5438,15 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 			continue
 		}
 		q := sorted[i].data
+		// #214: an ENTRACTE entry is a pause, not "the next question" — never
+		// shown as the à-suivre preview (contract game-state.md §"Second
+		// déclencheur", "score, palmarès, à suivre"). Parity requirement
+		// with GamePage.jsx's own nextUnplayedQuestion (this function's own
+		// doc comment above) — dev-frontend mirrors the same exclusion
+		// client-side.
+		if qType, _ := q["TYPE"].(string); qType == string(game.QuestionTypeEntracte) {
+			continue
+		}
 		payload := &protocol.NextQuestionPayload{
 			ID:              sorted[i].id,
 			CurrentPosition: currentPosition,
