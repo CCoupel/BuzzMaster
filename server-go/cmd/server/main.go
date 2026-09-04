@@ -9,6 +9,7 @@ import (
 	"buzzcontrol/web"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -118,6 +119,31 @@ func resolvePort(configPort, flagPort int) int {
 	return configPort
 }
 
+// resolvePortSource returns a short human-readable description of where the
+// effective HTTP port came from — surfaced in HTTPServer's bind-wait log
+// messages (#220 acceptance criterion: "le message d'attente nomme le port
+// résolu et sa provenance"). Reads config.json's raw bytes independently of
+// config.Load/ApplyDefaults purely to tell an explicit http_port in the file
+// apart from the code default (both of which config.Load already merges into
+// one int by the time main() sees it) — best-effort only, this is diagnostic
+// text, never used for any decision.
+func resolvePortSource(configPath string, flagPort, effectivePort int) string {
+	if flagPort > 0 {
+		return fmt.Sprintf("--port flag (%d)", flagPort)
+	}
+	if data, err := os.ReadFile(configPath); err == nil {
+		var probe struct {
+			Server struct {
+				HTTPPort int `json:"http_port"`
+			} `json:"server"`
+		}
+		if json.Unmarshal(data, &probe) == nil && probe.Server.HTTPPort != 0 {
+			return fmt.Sprintf("config.json (%d)", probe.Server.HTTPPort)
+		}
+	}
+	return fmt.Sprintf("code default (%d)", effectivePort)
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("=== BuzzControl Server (Go) ===")
@@ -138,6 +164,10 @@ func main() {
 
 	// --port flag overrides config.json when provided
 	cfg.Server.HTTPPort = resolvePort(cfg.Server.HTTPPort, *portFlag)
+	// #220: remembered for HTTPServer's bind-wait log messages (SetPortSource
+	// below, once app.httpServer exists) — computed here, not later, so it
+	// reflects the exact same config.json/--port precedence as the line above.
+	portSource := resolvePortSource("config.json", *portFlag, cfg.Server.HTTPPort)
 
 	// Override version with embedded value (set via -ldflags at build time)
 	if Version != "dev" {
@@ -172,6 +202,7 @@ func main() {
 
 	// Initialize components
 	app.init()
+	app.httpServer.SetPortSource(portSource) // #220 — see resolvePortSource's doc comment
 
 	// Try to load saved teams and bumpers from disk
 	teamsLoaded := app.engine.LoadTeams() == nil && len(app.engine.GetTeamsAndBumpers().Teams) > 0
@@ -265,8 +296,39 @@ func main() {
 	// that call's own removed-code comment in init() for why.
 	app.refreshEntracteImageIsCustom()
 
+	// Install signal handling BEFORE app.start() (#220): HTTPServer.Start now
+	// blocks synchronously until the port is bound (or ctx is cancelled), so
+	// Ctrl+C must be able to interrupt THAT wait too, not just the idle wait
+	// further down — previously signal.Notify only ran after app.start() had
+	// already returned, so a Ctrl+C during a long port-busy/EACCES retry was
+	// silently dropped until the OS's own SIGINT default (or a second signal)
+	// killed the process. A signal is delivered to sigCh at most once, so a
+	// single goroutine owns cancelling appCtx from it — the wait after
+	// app.start() below reacts to that same cancellation via appCtx.Done(),
+	// never a second read of sigCh.
+	// os.Interrupt catches CTRL_CLOSE_EVENT on Windows (console window closed)
+	// in addition to the standard SIGINT / SIGTERM.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	go func() {
+		<-sigCh
+		server.LogInfo(game.LogComponentApp, "Shutdown signal received")
+		appCancel()
+	}()
+
 	// Start servers
 	if err := app.start(); err != nil {
+		if errors.Is(err, context.Canceled) {
+			// Startup was interrupted by the signal handler above — e.g.
+			// Ctrl+C while HTTPServer.Start was still waiting on a busy or
+			// permission-denied port. Not a failure: shut down whatever did
+			// start and exit cleanly, no os.Exit (#220: never os.Exit on a
+			// bind error, and this isn't even a bind error, just a request
+			// to stop waiting for one).
+			server.LogInfo(game.LogComponentApp, "Startup interrupted before the server finished binding")
+			app.stop()
+			return
+		}
 		server.LogError(game.LogComponentApp, "Failed to start: %v", err)
 		os.Exit(1)
 	}
@@ -276,12 +338,10 @@ func main() {
 	// Display all accessible URLs and open browser if enabled
 	displayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
 
-	// Wait for shutdown signal.
-	// os.Interrupt catches CTRL_CLOSE_EVENT on Windows (console window closed)
-	// in addition to the standard SIGINT / SIGTERM.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	<-sigCh
+	// Wait for shutdown — appCtx is cancelled exactly once, by the goroutine
+	// installed above. If that already happened during startup, app.start()
+	// would have returned early above and this point would never be reached.
+	<-appCtx.Done()
 
 	server.LogInfo(game.LogComponentApp, "Shutting down...")
 	app.stop()
@@ -948,23 +1008,33 @@ func (a *App) start() error {
 	// Start ACK manager background goroutine (v3.8.0); uses app context for clean shutdown.
 	go a.ackManager.Start(a.ctx)
 
-	// Start UDP broadcaster
+	// Start UDP broadcaster — this only opens the outbound send socket, it
+	// does not announce anything yet (see BroadcasterManager.Start below,
+	// gated on the HTTP bind), so starting it before HTTP is harmless.
 	if err := a.udpBcast.Start(); err != nil {
 		return err
 	}
 	a.logger.Info(game.LogComponentUDP, "UDP broadcaster started on port %d", server.BuzzerDiscoveryPort)
 
-	// Start BUZZ_SERVER heartbeat broadcasts for automatic IP discovery
-	a.broadcaster.Start()
-	a.logger.Info(game.LogComponentUDP, "BroadcasterManager started (interval=5s, http_port=%d)", a.config.Server.HTTPPort)
-
-	// Start HTTP server
-	if err := a.httpServer.Start(); err != nil {
+	// Start HTTP server. #220: Start now BLOCKS until the port is actually
+	// bound, or a.ctx is cancelled — nothing that announces this server's
+	// presence to buzzers (UDP heartbeat, mDNS) may start before this
+	// returns successfully, or they'd be pointed at a dead endpoint while
+	// the bind is still retrying (busy port, or a permission-denied port
+	// looping at its own slow cadence).
+	if err := a.httpServer.Start(a.ctx); err != nil {
 		return err
 	}
 	a.logger.Info(game.LogComponentHTTP, "HTTP server started on port %d", a.config.Server.HTTPPort)
 
-	// Start mDNS server (non-fatal if it fails)
+	// Start BUZZ_SERVER heartbeat broadcasts for automatic IP discovery — only
+	// now that HTTP has actually bound (#220; previously this started before
+	// the HTTP listener even attempted its first bind).
+	a.broadcaster.Start()
+	a.logger.Info(game.LogComponentUDP, "BroadcasterManager started (interval=5s, http_port=%d)", a.config.Server.HTTPPort)
+
+	// Start mDNS server (non-fatal if it fails) — likewise gated on the HTTP
+	// bind having actually succeeded (#220).
 	if err := a.mdnsServer.Start(); err != nil {
 		a.logger.Warn(game.LogComponentApp, "Failed to start mDNS: %v", err)
 	}
