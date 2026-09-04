@@ -13,6 +13,7 @@ import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
 import LogsPage from './pages/LogsPage'
 import ConfigPage from './pages/ConfigPage'
 import BackupPage from './pages/BackupPage'
+import AmbiancePage from './pages/AmbiancePage'
 import UpdatePage from './pages/UpdatePage'
 import PlayerDisplay from './pages/PlayerDisplay'
 import EnrollPage from './pages/EnrollPage'
@@ -35,6 +36,9 @@ const adminRoutes = [
   { path: 'history', element: <HistoryPage /> },
   { path: 'palmares', element: <CategoryPalmaresPage /> },
   { path: 'settings', element: <ConfigPage /> },
+  // #207 (milestone v10.0.0) — éclairage d'ambiance Philips Hue, page dédiée
+  // du menu abeille (contrats hue-bridge.md §7, maquette rév. 4).
+  { path: 'ambiance', element: <AmbiancePage /> },
   { path: 'backup', element: <BackupPage /> },
   { path: 'updates', element: <UpdatePage /> },
 ]

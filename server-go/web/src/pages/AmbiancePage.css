@@ -1,0 +1,370 @@
+/* #207 — /admin/ambiance : pont Philips Hue (maquette lighting-hue-config-207.html rév. 4).
+   Page admin classique (page-header + Card), jamais affichée sur /tv. */
+.ambiance-page {
+  min-height: calc(100vh - var(--admin-chrome-h));
+  padding: var(--space-6);
+}
+
+.ambiance-header,
+.ambiance-card {
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ambiance-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  border-left: 4px solid var(--warning);
+}
+
+.ambiance-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.ambiance-title-row .page-title {
+  margin: 0;
+}
+
+/* ---- Badge d'état — QUATRE valeurs, jamais fondues (maquette §02) ---- */
+.ambiance-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--gray-300);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  background: var(--gray-50);
+}
+
+.ambiance-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gray-400);
+  flex: none;
+}
+
+.ambiance-status-badge.is-ok {
+  color: var(--success);
+  border-color: var(--success);
+}
+.ambiance-status-badge.is-ok .ambiance-status-dot { background: var(--success); }
+
+/* Injoignable (réseau) : rouge — geste attendu, rebrancher. */
+.ambiance-status-badge.is-unreachable {
+  color: var(--error);
+  border-color: var(--error);
+}
+.ambiance-status-badge.is-unreachable .ambiance-status-dot { background: var(--error); }
+
+/* Refusée (clé) : orange — geste attendu, ré-associer. */
+.ambiance-status-badge.is-refused {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+.ambiance-status-badge.is-refused .ambiance-status-dot { background: var(--warning); }
+
+/* ---- Étapes ---- */
+.ambiance-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ambiance-step-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin: 0;
+}
+
+.ambiance-hint {
+  font-size: 0.875rem;
+  color: var(--gray-600);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.ambiance-meta {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  margin: 0;
+}
+
+.ambiance-mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.ambiance-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  margin-bottom: var(--space-1);
+}
+
+.ambiance-value {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  color: var(--gray-800);
+}
+
+.ambiance-fieldset {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: 0;
+  background: var(--gray-50);
+}
+
+.ambiance-fieldset-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+  padding: 0 var(--space-2);
+}
+
+.ambiance-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.ambiance-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  color: var(--gray-800);
+}
+
+.ambiance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--gray-200);
+}
+
+/* Notice en ligne (aucun pont trouvé, pont injoignable, association refusée). */
+.ambiance-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--gray-300);
+  background: var(--gray-50);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-size: 0.875rem;
+  color: var(--gray-600);
+}
+
+.ambiance-notice strong { color: var(--gray-800); }
+.ambiance-notice.is-unreachable { border-left-color: var(--error); }
+.ambiance-notice.is-refused { border-left-color: var(--warning); }
+
+.ambiance-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: var(--space-1);
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--primary-600);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ambiance-manual {
+  margin-top: var(--space-2);
+}
+
+.ambiance-manual-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ambiance-manual-row input {
+  flex: 1 1 200px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.ambiance-manual-row input:focus {
+  outline: none;
+  border-color: var(--primary-400);
+}
+
+/* ---- Attente « appuyez sur le bouton » — EN LIGNE, pas en modale (maquette §04) ---- */
+.ambiance-wait {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--warning);
+  border-radius: var(--radius-lg);
+  background: var(--gray-50);
+}
+
+.ambiance-wait.is-timeout {
+  border-style: solid;
+  border-color: var(--gray-300);
+}
+
+.ambiance-wait.is-unreachable { border-style: solid; border-color: var(--error); }
+.ambiance-wait.is-error { border-style: solid; border-color: var(--error); }
+
+.ambiance-wait-ring {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--gray-300);
+  border-top-color: var(--warning);
+  animation: ambiance-spin 0.9s linear infinite;
+}
+
+.ambiance-wait-text { flex: 1; min-width: 0; }
+
+.ambiance-wait-title {
+  font-weight: 600;
+  color: var(--gray-800);
+  font-size: 0.9rem;
+}
+
+.ambiance-wait-sub {
+  font-size: 0.8rem;
+  color: var(--gray-600);
+}
+
+.ambiance-wait-countdown {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--warning);
+  min-width: 3ch;
+  text-align: right;
+}
+
+@keyframes ambiance-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambiance-wait-ring { animation: none; }
+}
+
+/* ---- Ampoules (maquette §05) ---- */
+.ambiance-bridge-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.ambiance-bridge-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ambiance-lights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ambiance-light {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: var(--gray-50);
+}
+
+.ambiance-light-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.ambiance-light-main input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-500);
+  flex-shrink: 0;
+}
+
+.ambiance-light-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ambiance-light-name {
+  font-weight: 600;
+  color: var(--gray-800);
+  font-size: 0.9rem;
+}
+
+.ambiance-light-meta {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* Éteinte au mur : signalée, pas une erreur de configuration. */
+.ambiance-light.is-unreachable .ambiance-light-meta { color: var(--error); }
+
+/* Introuvable (renommée/supprimée) ou nom en double : jamais de repli silencieux. */
+.ambiance-light.is-missing,
+.ambiance-light.is-duplicate {
+  border-style: dashed;
+  border-color: var(--warning);
+}
+.ambiance-light.is-missing .ambiance-light-meta,
+.ambiance-light.is-duplicate .ambiance-light-meta { color: var(--warning); }
+
+/* Pont injoignable/refusé : dernière sélection connue, gelée. */
+.ambiance-lights.is-frozen {
+  opacity: 0.55;
+}
+
+@media (max-width: 768px) {
+  .ambiance-page { padding: var(--space-4); }
+  .ambiance-fields { grid-template-columns: 1fr; }
+  .ambiance-actions { flex-direction: column; }
+  .ambiance-actions button { width: 100%; }
+  .ambiance-light { flex-wrap: wrap; }
+}
