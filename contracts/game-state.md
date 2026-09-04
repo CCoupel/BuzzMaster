@@ -815,7 +815,17 @@ Réutilise **tel quel** le type `EntracteConfig` déjà défini pour `GameState.
 `.EntracteConfigSaved` ci-dessus — même précédent que `TypedContent.MemoryConfig *MemoryConfig`.
 `IMAGE_IS_CUSTOM` (champ dérivé du disque pour l'entracte global) n'a pas d'équivalent ici :
 l'image de fond éventuelle de cette occurrence est le champ générique `Question.MEDIA`, comme pour
-tout autre type — pas de mécanisme dédié.
+tout autre type — pas de mécanisme dédié côté serveur.
+
+> **Précision frontend (dev-frontend, 2026-09-04)** : le panneau (`EntractePanel.jsx`) ne lisait
+> jusqu'ici que `IMAGE_IS_CUSTOM`/l'endpoint global — « réutilisé tel quel » vaut pour le panneau
+> lui-même (rendu, transition, animation), pas pour sa **source d'image**, qui diffère selon le
+> déclencheur. Le composant gagne une prop `mediaUrl` optionnelle, **prioritaire** quand fournie,
+> repli sur `IMAGE_IS_CUSTOM`/l'endpoint global sinon (donc **inchangé** pour le déclencheur
+> manuel). `PlayerDisplay.jsx`/`VPlayerPage.jsx` la résolvent depuis `gameState.question.MEDIA`
+> **uniquement** quand `gameState.entracte && question.TYPE === 'ENTRACTE'` — la seule situation où
+> `ENTRACTE` peut valoir `true` en `STARTED` (§ci-dessus). Aucune action côté serveur : `MEDIA`
+> transite déjà normalement dans `GameState.QUESTION`, comme pour tout autre type.
 
 **Mécanisme d'activation — au `START`, pas via `ENTRACTE_SET`.** Quand une question `ENTRACTE`
 atteint `STARTED` :
