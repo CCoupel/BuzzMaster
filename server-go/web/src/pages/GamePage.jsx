@@ -61,6 +61,7 @@ export default function GamePage() {
     rafaleAnswer,
     rafaleValidate,
     rafaleInvalidate,
+    newGame,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -543,6 +544,18 @@ export default function GamePage() {
             {gameState.phase === 'ENROLL' && <span className="phase-badge phase-enroll">INSCRIPTION</span>}
             {gameState.phase === 'NEW_GAME' && <span className="phase-badge phase-new-game">NOUVELLE PARTIE</span>}
           </div>
+          {/* #215 (AC9) — NOUVELLE PARTIE reste accessible depuis /admin, en
+              plus de /admin/backstage (QuizMetaForm) : l'animateur ne doit
+              pas changer de page en pleine soirée pour relancer. */}
+          <Button
+            variant="fun"
+            size="sm"
+            className="new-game-btn"
+            onClick={newGame}
+            title="Réinitialiser le jeu et préparer une nouvelle partie"
+          >
+            NOUVELLE PARTIE
+          </Button>
           {nextUnplayedQuestion && (
             <button
               className="next-question-btn"
