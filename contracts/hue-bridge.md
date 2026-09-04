@@ -297,24 +297,39 @@ Effet : un flash bref puis **retour à l'état antérieur**. Réponse `200 {"res
 
 #### 7.1 Amendement du 2026-09-04 — l'indicateur du menu
 
-Décision utilisateur : l'entrée « Ambiance » du menu abeille porte une **ampoule à trois
-couleurs**. Les quatre états de cet endpoint s'y projettent ainsi — correspondance **normative**,
-pour que le frontend n'ait pas à l'inventer :
+Décision utilisateur : l'entrée « Ambiance » du menu abeille porte une **ampoule**, dont la
+**forme** dit l'état et dont la couleur ne fait que renforcer. Les quatre états de cet endpoint s'y
+projettent ainsi — correspondance **normative**, pour que le frontend n'ait pas à l'inventer :
 
-| `state` | Couleur | Sens pour l'utilisateur |
-|---|---|---|
-| `ok` | **verte** | pont configuré et qui répond |
-| `unreachable` | **orange** | pont configuré mais qui ne répond plus |
-| `refused` | **orange** | pont configuré mais qui refuse la clé — même geste : aller voir la page |
-| `disabled` | **grise** | aucun pont configuré |
+| `state` | Glyphe | Couleur | Sens pour l'utilisateur |
+|---|---|---|---|
+| `ok` | ampoule **pleine, avec rayons** | verte | pont configuré et qui répond |
+| `unreachable` | ampoule **en contour + pastille d'alerte** | orange | pont configuré mais qui ne répond plus |
+| `refused` | ampoule **en contour + pastille d'alerte** | orange | pont configuré mais qui refuse la clé — même geste : aller voir la page |
+| `disabled` | ampoule **en contour nu** | grise | aucun pont configuré |
+
+**Trois glyphes distincts, pas une même forme recolorée** (révision 4 de la maquette). La
+distinction reste lisible en niveaux de gris et pour un daltonien : rayons → contour + pastille →
+contour nu. Trois teintes sur une forme unique auraient été indiscernables, et à peine lisibles à
+15 pixels.
+
+Un emoji ne permet ni de changer la couleur ni de changer la forme : les trois glyphes sont des
+**SVG en ligne** tracés en `currentColor`. Tracés de référence dans
+`docs/mockups/lighting-hue-config-207.html` §01.
 
 `refused` et `unreachable` partagent la couleur **orange** : dans les deux cas le pont est
 configuré et ne fonctionne pas, et la conduite à tenir est la même — ouvrir la page Ambiance. La
 distinction reste **entière dans l'API et sur la page**, où elle commande deux gestes correctifs
 opposés (§5.6) ; elle est simplement inutile à trois pixels dans un menu.
 
-**Le gris ne réclame aucune attention.** Une fonctionnalité facultative non configurée ne doit
-jamais ressembler à une alerte.
+**Le contour nu ne réclame aucune attention.** Une fonctionnalité facultative non configurée ne
+doit jamais ressembler à une alerte — d'où l'absence de pastille sur ce seul glyphe, qui est
+précisément ce qui le distingue de l'état « injoignable ».
+
+**Accessibilité** : l'entrée expose un `title` disant l'état en toutes lettres, et le SVG est
+`aria-hidden` (le libellé « Ambiance » porte le sens). La forme étant devenue le porteur principal,
+ce `title` n'est plus l'unique ligne de défense — mais il reste requis : un lecteur d'écran ne voit
+aucune forme.
 
 **Rafraîchissement** : le frontend interroge cet endpoint **au montage puis toutes les 30 s**, et
 immédiatement après un enregistrement de configuration. Le précédent du projet (`useUpdates`,

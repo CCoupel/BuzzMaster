@@ -8,12 +8,15 @@
 > de la maquette `docs/mockups/lighting-hue-config-207.html` (révision 3).
 
 - **[CHANGED]** `GET /api/lighting/status` — **correspondance normative** de ses quatre états vers
-  les trois couleurs de l'ampoule du menu abeille : `ok` → verte, `unreachable` et `refused` →
-  **orange**, `disabled` → grise. Les deux états orange partagent une couleur parce que la conduite
-  à tenir est la même (ouvrir la page) ; la distinction reste entière dans l'API et sur la page, où
-  elle commande deux gestes opposés. Rafraîchissement : au montage puis **toutes les 30 s**, et
-  après tout enregistrement — l'endpoint ne fait aucune I/O, il lit un état en mémoire.
-  Rétrocompatible : aucun champ ajouté ni retiré.
+  l'ampoule du menu abeille, par la **forme** d'abord et la couleur ensuite : `ok` → ampoule pleine
+  avec rayons, verte · `unreachable` et `refused` → ampoule en contour + pastille d'alerte, orange ·
+  `disabled` → ampoule en contour nu, grise. **Trois glyphes distincts, pas une même forme
+  recolorée** : la distinction reste lisible en niveaux de gris et pour un daltonien, là où trois
+  teintes sur une forme unique auraient été indiscernables à 15 pixels. Les deux états orange
+  partagent glyphe et couleur parce que la conduite à tenir est la même (ouvrir la page) ; la
+  distinction reste entière dans l'API et sur la page, où elle commande deux gestes opposés.
+  Rafraîchissement : au montage puis **toutes les 30 s**, et après tout enregistrement — l'endpoint
+  ne fait aucune I/O, il lit un état en mémoire. Rétrocompatible : aucun champ ajouté ni retiré.
 - **[CHANGED]** *(interface, hors API)* La case « Configuration Ambiance » de `BackupPage.jsx`
   (#152) devient **« Réglages de jeu »**. **Libellé visible seul** : la clé de l'option, le
   paramètre `ambiance=true` et le format des archives sont inchangés, aucune archive existante
