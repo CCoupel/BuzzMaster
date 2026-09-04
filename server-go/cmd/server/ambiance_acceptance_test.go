@@ -89,7 +89,7 @@ func TestCA1_NonRegressionLED_SeeProcedureForDiffCheck(t *testing.T) {
 
 func TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing(t *testing.T) {
 	app := newTestApp(t)
-	if app.lighting != nil {
+	if app.ambiance() != nil {
 		t.Fatal("setup invalide : une App fraîchement construite ne doit pas avoir de writer d'ambiance")
 	}
 	if app.ambianceIsConfigured() {
@@ -101,7 +101,7 @@ func TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing(t *tes
 	runtime.Gosched()
 	after := runtime.NumGoroutine()
 
-	if app.lighting != nil {
+	if app.ambiance() != nil {
 		t.Fatal("CA2 : setupAmbiance() a construit un writer alors qu'ambianceIsConfigured() est false")
 	}
 	if after > before {
@@ -111,8 +111,8 @@ func TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing(t *tes
 	// Les 21 sites appellent a.lighting.Notify*() sans aucune garde `if` —
 	// c'est le nil de a.lighting qui absorbe l'appel (contract §4.3). On le
 	// vérifie directement ici plutôt que de le supposer.
-	app.lighting.NotifyState()
-	app.lighting.NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
+	app.ambiance().NotifyState()
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
 }
 
 // TestCA2_StartAmbianceLifecycleGuard_IsPresentInSource is a lightweight,
@@ -124,7 +124,7 @@ func TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing(t *tes
 // unconfigured case) — it guards the OTHER half of CA2's guarantee: that the
 // goroutine launch itself stays conditional, which matters once #207 makes
 // ambianceIsConfigured() sometimes true.
-var tw205LightingGuardRE = regexp.MustCompile(`if\s+a\.lighting\s*!=\s*nil\s*\{[^}]*go\s+a\.lighting\.Start\(`)
+var tw205LightingGuardRE = regexp.MustCompile(`if\s+w\s*:=\s*a\.ambiance\(\);\s*w\s*!=\s*nil\s*\{[^}]*go\s+w\.Start\(`)
 
 func TestCA2_StartAmbianceLifecycleGuard_IsPresentInSource(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -336,10 +336,10 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 		"TeamB": {Name: "TeamB", Color: []int{0, 0, 255}},
 	})
 	fake := lighting.NewFakeDriver()
-	app.lighting = app.newAmbianceWriter(fake)
+	app.lightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go app.lighting.Start(ctx)
+	go app.ambiance().Start(ctx)
 
 	// tw205Step attend le CONTENU attendu dans le dernier State appliqué,
 	// jamais un compte d'Apply précis : le vrai MinInterval (100 ms, non
@@ -352,7 +352,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	tw205Step := func(t *testing.T, phase game.GamePhase, question *game.Question, bumpers map[string]*game.Bumper, wantColor [3]int, wantIntensity int) {
 		t.Helper()
 		tw205SetGame(t, app, phase, question, bumpers)
-		app.lighting.NotifyState()
+		app.ambiance().NotifyState()
 		tw205WaitFor(t, 5*time.Second, func() bool {
 			last, ok := fake.Last()
 			return ok && len(last.Zones) == 1 && last.Zones[0].Color == wantColor && last.Zones[0].Intensity == wantIntensity
@@ -397,7 +397,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	// cmd/server, jamais reproduit hors charge extrême. Les délais d'attente
 	// ci-dessous sont portés à 5 s pour la même raison (temps réel, pas
 	// d'horloge injectée ici — voir la note sur tw205Step plus haut).
-	app.lighting.NotifyPulse(lighting.KindScore, []string{"TeamA"}, 600*time.Millisecond)
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 600*time.Millisecond)
 	tw205WaitFor(t, 5*time.Second, func() bool {
 		last, ok := fake.Last()
 		return ok && len(last.Zones) == 1 && last.Zones[0].Color == wantTeamA && last.Zones[0].Intensity == 255
@@ -441,9 +441,9 @@ func TestCA5_ConcurrentEngineMutationAndNotify_RaceFree(t *testing.T) {
 		"m2": {Name: "m2", Team: "TeamB"},
 	})
 	fake := lighting.NewFakeDriver()
-	app.lighting = app.newAmbianceWriter(fake)
+	app.lightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
-	go app.lighting.Start(ctx)
+	go app.ambiance().Start(ctx)
 
 	const goroutines, perGoroutine = 8, 150
 	var wg sync.WaitGroup
@@ -455,12 +455,12 @@ func TestCA5_ConcurrentEngineMutationAndNotify_RaceFree(t *testing.T) {
 			for i := 0; i < perGoroutine; i++ {
 				switch (i + g) % 4 {
 				case 0:
-					app.lighting.NotifyState()
+					app.ambiance().NotifyState()
 				case 1:
-					app.lighting.NotifyPulse(lighting.KindScore, []string{"TeamA"}, 2*time.Millisecond)
+					app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 2*time.Millisecond)
 				case 2:
 					app.engine.SetPhase(phases[(i+g)%len(phases)])
-					app.lighting.NotifyState()
+					app.ambiance().NotifyState()
 				default:
 					app.engine.SetBumpers(map[string]*game.Bumper{
 						"m1": {Name: "m1", Team: "TeamA", Time: int64(i + g)},
