@@ -216,6 +216,17 @@
    seule source de vérité désormais, pas une deuxième liste à tenir à
    jour à chaque nouveau type. */
 
+/* #216 — chip de difficulté RAFALE (une par valeur sélectionnée, à côté des
+   CategoryBadge de qcard-header-row2 — même ligne, même flex-wrap). */
+.qcard-rafale-diff-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--warning, #d29922);
+  padding: 1px 4px;
+}
+
 .qcard-target-badge {
   display: flex;
   align-items: center;

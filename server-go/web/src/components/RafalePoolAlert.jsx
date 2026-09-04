@@ -19,10 +19,10 @@ import './RafalePoolAlert.css'
  * présenter comme un plancher de sécurité (§7.2).
  *
  * @param {Object} props
- * @param {string} props.category - CATEGORY de la manche (bugfix 2026-08-29,
- *   contrat §3.3/§9 : catégorie UNIQUE désormais, comme tous les autres
- *   types — l'ancien RAFALE_CATEGORIES multi est retiré)
- * @param {number} props.difficulty - RAFALE_DIFFICULTY (1..3)
+ * @param {string[]} props.categories - RAFALE_CATEGORIES de la manche (#216,
+ *   réouverture assumée de #107, contrat §3.3/§9 : union catégories ×
+ *   difficultés, au moins une catégorie et une difficulté requises)
+ * @param {number[]} props.difficulties - RAFALE_DIFFICULTIES (chaque valeur 1..3)
  * @param {number} props.roundTime - durée de la manche en secondes (TIME)
  * @param {number} props.questionTime - secondes par question (RAFALE_QUESTION_TIME)
  * @param {string} [props.className]
@@ -33,12 +33,21 @@ import './RafalePoolAlert.css'
  *   vide (§7.2 : "disponibles == 0 → Bloquant — démarrage refusé"),
  *   `QuestionsPage.jsx` l'ignore (pas de bouton à bloquer en édition).
  */
-export default function RafalePoolAlert({ category = '', difficulty, roundTime, questionTime, className = '', onLevelChange }) {
+export default function RafalePoolAlert({ categories = [], difficulties = [], roundTime, questionTime, className = '', onLevelChange }) {
   const [pool, setPool] = useState(null) // { AVAILABLE, USED, TOTAL } | null
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const hasFilter = !!category && difficulty >= 1 && difficulty <= 3
+  const hasFilter = categories.length > 0 && difficulties.length > 0 && difficulties.every(d => d >= 1 && d <= 3)
+  // Clés stables (chaîne) plutôt que les tableaux eux-mêmes en dépendance
+  // d'effet — `formData.rafaleCategories`/`rafaleDifficulties` (appelant
+  // QuestionsPage.jsx) sont de NOUVEAUX tableaux à chaque `setFormData`, même
+  // quand leur contenu est identique (ex. un re-render déclenché par un
+  // autre champ du formulaire) : sans cette stabilisation, un effet par
+  // référence redéclencherait un fetch réseau à chaque frappe ailleurs dans
+  // le formulaire, pas seulement au changement réel du filtre.
+  const categoriesKey = categories.join(',')
+  const difficultiesKey = difficulties.join(',')
 
   useEffect(() => {
     if (!hasFilter) {
@@ -50,8 +59,10 @@ export default function RafalePoolAlert({ category = '', difficulty, roundTime, 
     setLoading(true)
     setError(null)
     const params = new URLSearchParams()
-    params.set('category', category)
-    params.set('difficulty', String(difficulty))
+    // #216 — pluriel virgule-séparé (contrat §9, union sur le produit
+    // cartésien), même convention que GET /api/rafale/questions.
+    params.set('categories', categoriesKey)
+    params.set('difficulties', difficultiesKey)
     fetch(`/api/rafale/pool?${params.toString()}`)
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -70,7 +81,7 @@ export default function RafalePoolAlert({ category = '', difficulty, roundTime, 
         }
       })
     return () => { cancelled = true }
-  }, [category, difficulty, hasFilter])
+  }, [categoriesKey, difficultiesKey, hasFilter])
 
   const need = (roundTime > 0 && questionTime > 0) ? Math.ceil(roundTime / questionTime) : 0
   const level = (hasFilter && !loading && !error && pool)
