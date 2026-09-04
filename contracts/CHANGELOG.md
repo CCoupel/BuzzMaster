@@ -2,6 +2,67 @@
 
 ---
 
+## [20260904] — RAFALE multi-catégorie / multi-difficulté + barème par difficulté (#216, feature, v9.0.0) [BREAKING]
+
+> Backend uniquement (Lot 1B, Batch 1) — le volet frontend (Lot 2 : `QuestionsPage.jsx`,
+> `QuestionCard.jsx`, `RafalePoolAlert.jsx`, `GamePage.jsx`, `PlayerDisplay.jsx`/`AnimPage.jsx`)
+> vient dans un lot séquentiel ultérieur, déblocage : Lot 1A (#215) + ce lot. Détail complet :
+> `contracts/rafale.md` §3.3 (modèle de données), §7 (pioche, réécrit entièrement), §9
+> (`GET /api/rafale/pool`). Réouverture assumée de la décision du 2026-08-29 (#107) — décision
+> utilisateur explicite après retour terrain, voir `_work/reports/plan-v900-20260904-145156.md`
+> §216-Q1.
+
+- **[BREAKING]** Format persisté `question.json` (manche RAFALE) — `RAFALE_CATEGORIES ([]string)`
+  réintroduit, `RAFALE_DIFFICULTIES ([]int)` ajouté (la difficulté n'avait jamais été multi),
+  `RAFALE_POINTS_BY_DIFFICULTY (map[int]int)` ajouté (barème libre par difficulté, 216-Q7). Les
+  champs mono `CATEGORY`/`RAFALE_DIFFICULTY` sont **conservés en lecture seule** (jamais migrés
+  sur disque) — toute lecture passe par `Question.EffectiveRafaleCategories()`/
+  `EffectiveRafaleDifficulties()` (précédent : `MotionCard.EffectiveType()`), qui convertissent
+  automatiquement mono → liste à un élément (216-Q6). Une question RAFALE sauvegardée avant #216
+  continue de fonctionner sans reconfiguration. C'est cette rupture de format qui justifie le
+  passage à `X = 9` du milestone (le seul changement de données du cycle).
+- **[BREAKING]** `Engine.rafalePoolUnsafe`/`CountRafalePool`/`DrawRafaleQuestion` — signature
+  `(category string, difficulty int)` (égalité exacte) → `(categories []string, difficulties
+  []int)` (appartenance ensembliste : `q.CATEGORY ∈ categories ∧ q.DIFFICULTY ∈ difficulties`).
+  Toutes les 4 sites d'appel historiques du filtre (`startRafaleRoundUnsafe`,
+  `prefetchRafaleNextUnsafe`, `refreshRafalePoolRemainingUnsafe`, `CountRafalePool`) routent
+  désormais par le même prédicat partagé `rafaleQuestionMatchesFilter` — c'est exactement la
+  classe de bug (un site oublié, une seconde implémentation divergente du filtre) qui avait
+  causé la régression d'origine de #107.
+- **[BREAKING]** `GET /api/rafale/pool?category=A&difficulty=2` (singulier) →
+  `?categories=A,B&difficulties=1,2` (pluriel, virgule-séparé) — réutilise la convention déjà en
+  place sur `GET /api/rafale/questions?categories=A,B` et le corps JSON de
+  `POST /api/rafale/generate-questions` (#203) plutôt que d'en inventer une troisième. Réponse
+  `{AVAILABLE, USED, TOTAL}` inchangée — union sur le produit cartésien demandé.
+- **[NEW]** Tirage en cours de manche : remplace le tirage uniforme dans l'union par un **tirage
+  stratifié par permutation aléatoire** du produit cartésien `catégories × difficultés`, rejouée
+  (nouvelle permutation) une fois épuisée — ni pondéré indépendant, ni ordre fixe (216-Q9,
+  décision utilisateur explicite). Un couple vide ou épuisé — au lancement **ou** en cours de
+  manche, traitement **unifié** (216-Q5/Q8) — sort définitivement de la liste active ; le tirage
+  se rééquilibre sur les couples restants ; **jamais de blocage** pour un seul couple vide (seule
+  une union totalement vide bloque le START, §7.5). Tient compte de la question déjà pré-tirée
+  (#202, `prefetchRafaleNextUnsafe` partage le même état de tirage que le tirage courant) — sans
+  quoi l'équilibrage aurait été décalé d'un cran en permanence.
+- **[NEW]** `RafaleCurrent.Points` (`GameState.RAFALE_CURRENT_QUESTION.POINTS`) — valeur en points
+  résolue pour la question EN COURS (`RAFALE_POINTS_BY_DIFFICULTY[difficulty]`, repli sur le
+  `POINTS` générique de la manche), diffusée à **tous** les clients (TV, animateur, admin) pour
+  affichage (216-Q7d). Nécessaire parce que TV/anim ne reçoivent jamais `GAME.QUESTIONS` (diffusé
+  admin uniquement, `broadcastQuestions`) et ne peuvent donc pas résoudre eux-mêmes le barème de
+  la manche depuis sa configuration complète.
+- **[CHANGED]** `question_types.go` — `OwnedFields` de `QuestionTypeRafale` gagne
+  `RAFALE_CATEGORIES`, `RAFALE_DIFFICULTIES`, `RAFALE_POINTS_BY_DIFFICULTY`.
+- **[CHANGED]** `engine.go` `participantsConform` (RAFALE) — la garde CATEGORY/DIFFICULTY (bugfixes
+  2026-08-30/31) lit désormais les listes effectives (`EffectiveRafaleCategories()`/
+  `EffectiveRafaleDifficulties()`, non vides, chaque difficulté 1..3) au lieu des champs mono bruts.
+- **[NON RETENU, périmètre]** La formule de suggestion de fin de manche (§6.2,
+  `points_suggérés = compteur_retenu × POINTS`) n'est **pas** révisée par ce lot — elle reste un
+  multiplicateur unique sur tout le compteur de la manche, même si les questions posées ont pu
+  appartenir à des difficultés différentes. Non demandé par les critères d'acceptation #216 —
+  signalé explicitement plutôt qu'assumé silencieusement, à trancher séparément si besoin.
+- **[UNCHANGED]** `RafaleQuestion` (élément du réservoir, §3.1) reste **mono** par question
+  (`CATEGORY`, `DIFFICULTY` scalaires) — seul le FILTRE de manche redevient multi, pas le
+  réservoir lui-même. `POST/GET/DELETE /api/rafale/questions*` (édition du réservoir) inchangés.
+
 ## [20260904] — Démarrage bloquant et observable sur port occupé (#220, bugfix, v9.0.0)
 
 > Aucun endpoint HTTP ni action WebSocket modifié — changement de sémantique **interne** de

@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AIJobModalShell from './ai/AIJobModalShell'
-import { QUIZ_POPULATIONS, QUIZ_LANGUAGES } from '../pages/QuestionsPage'
+import { QUIZ_POPULATIONS, QUIZ_LANGUAGES } from './QuizMetaForm'
 import './RafaleAIGenerateModal.css'
 
 // #203 (v8.1.0, tâche 11) — Modale de génération IA du réservoir RAFALE

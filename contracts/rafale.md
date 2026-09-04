@@ -234,6 +234,92 @@ RafaleMaxQuestions int      `json:"RAFALE_MAX_QUESTIONS,omitempty"` // plafond d
 > « persist during PREPARE→READY transition »), mais plus après une manche terminée. Voir
 > `contracts/CHANGELOG.md`.
 
+> ⚠️ **[BREAKING] Modification de contrat (dev-backend, feature, 2026-09-04, #216, milestone
+> v9.0.0)** : réouverture assumée du bugfix du 2026-08-29 (#107) ci-dessus, décision utilisateur
+> explicite après retour terrain — voir `_work/reports/plan-v900-20260904-145156.md` §216-Q1.
+> `RAFALE_CATEGORIES` (`[]string`) est **réintroduit**, `RAFALE_DIFFICULTIES` (`[]int`) est
+> **ajouté** (la difficulté n'avait jamais été multi jusqu'ici), et un **barème par difficulté**
+> (`RAFALE_POINTS_BY_DIFFICULTY`) fait son apparition — axe absent de l'issue d'origine, demandé
+> explicitement par l'utilisateur (216-Q7).
+>
+> **Ce n'est PAS un retour en arrière sur le bugfix de #107.** Le motif de #107 restait valable :
+> « la card générique lit `question.CATEGORY`, pas un champ spécifique à un type ». La solution
+> cette fois n'est **pas** de refaire porter l'affichage par un champ type-spécifique — c'est
+> l'affichage en **chips multiples** (216-Q2/Q3, `contracts/CHANGELOG.md`, travail frontend Lot 2,
+> `QuestionCard.jsx`) qui rend `RAFALE_CATEGORIES`/`RAFALE_DIFFICULTIES` affichables sans
+> réintroduire de branche `isRafale` dédiée — la card reste générique, elle affiche simplement
+> N chips au lieu d'une valeur scalaire quand le type le fournit.
+>
+> ```go
+> RafaleCategories         []string    `json:"RAFALE_CATEGORIES,omitempty"`
+> RafaleDifficulty         int         `json:"RAFALE_DIFFICULTY,omitempty"`         // legacy, lecture seule — voir EffectiveRafaleDifficulties
+> RafaleDifficulties       []int       `json:"RAFALE_DIFFICULTIES,omitempty"`
+> RafalePointsByDifficulty map[int]int `json:"RAFALE_POINTS_BY_DIFFICULTY,omitempty"` // difficulté (1..3) → points, saisie libre (216-Q7c)
+> ```
+>
+> **Rétro-compatibilité (216-Q6, conversion automatique)** : `Question.Category` (générique, mono)
+> et `RAFALE_DIFFICULTY` (mono, ci-dessus) sont **conservés tels quels**, jamais migrés sur disque.
+> Toute lecture passe par deux nouvelles méthodes qui appliquent la conversion mono → liste à la
+> volée (précédent : `MotionCard.EffectiveType()`) :
+>
+> ```go
+> func (q *Question) EffectiveRafaleCategories() []string {
+>     // RafaleCategories si non-vide ; sinon []string{string(q.Category)} si q.Category != "" ; sinon nil
+> }
+> func (q *Question) EffectiveRafaleDifficulties() []int {
+>     // RafaleDifficulties si non-vide ; sinon []int{q.RafaleDifficulty} si 1..3 ; sinon nil
+> }
+> ```
+>
+> **Tout le moteur (§7) et `participantsConform` (§3.3 ci-dessus, `engine.go:1490`) lisent
+> exclusivement via ces deux méthodes** — jamais les champs bruts directement — de sorte qu'une
+> question RAFALE sauvegardée avant #216 (mono uniquement) continue de fonctionner sans
+> reconfiguration, exactement la même discipline que la conversion automatique demandée en 216-Q6.
+> Aucune migration de fichier, aucun script : la conversion est purement une lecture, recalculée à
+> chaque accès, jamais écrite sur disque tant que l'admin n'a pas ré-enregistré la question depuis
+> l'éditeur (qui écrira alors les champs listes, §9bis).
+>
+> **Barème par difficulté (216-Q7)** : `RAFALE_POINTS_BY_DIFFICULTY[difficulty]` quand défini et
+> `> 0`, sinon repli sur le champ générique `POINTS` de la manche (216-Q7b — comportement identique
+> à toutes les manches RAFALE d'avant #216, aucune régression pour une manche jamais reconfigurée
+> avec un barème par difficulté). Saisie **libre** par l'admin (216-Q7c) — jamais dérivée
+> automatiquement de `POINTS`. La valeur résolue pour la question EN COURS est diffusée dans
+> `RAFALE_CURRENT_QUESTION.POINTS` (§4) pour l'affichage TV + animateur (216-Q7d) — voir cette
+> section pour le détail.
+>
+> ⚠️ **Portée volontairement limitée (signalement de périmètre, à la demande du plan §216-Q7)** :
+> ce lot ne touche **pas** la formule de suggestion de fin de manche (§6.2,
+> `points_suggérés = compteur_retenu × POINTS`) — celle-ci reste un multiplicateur unique sur tout
+> le compteur de la manche, même si les questions posées ont pu appartenir à des difficultés
+> différentes (donc valoir des points différents chacune). Réviser cette formule pour qu'elle
+> somme le barème réellement gagné question par question est un choix produit qui n'a pas été
+> demandé dans les critères d'acceptation #216 — à trancher séparément si besoin (Lot 2 frontend
+> ou issue dédiée), pas assumé silencieusement ici.
+>
+> Impact : `rafalePoolUnsafe`/`CountRafalePool`/`DrawRafaleQuestion` (engine.go) prennent désormais
+> `categories []string, difficulties []int` (appartenance ensembliste) au lieu de
+> `category string, difficulty int` (égalité exacte) ; `GET /api/rafale/pool` reprend
+> `?categories=A,B&difficulties=1,2` (§9). Le réservoir lui-même (`RafaleQuestion.CATEGORY`/
+> `.DIFFICULTY`, §3.1) reste **mono par question** — inchangé, seul le FILTRE de manche redevient
+> multi. Voir `contracts/CHANGELOG.md`.
+>
+> **Format multipart** (`POST /questions`, `handleUploadQuestion`, type `RAFALE`) — les 3 nouveaux
+> champs sont envoyés comme des chaînes **JSON-encodées** dans le formulaire multipart, même
+> convention que le champ `motion_config` déjà en place dans ce même handler (pas de convention
+> virgule-séparée ici : les valeurs peuvent contenir des caractères arbitraires, JSON est plus sûr
+> qu'un split naïf) :
+> ```
+> RAFALE_CATEGORIES:          '["HISTORY","SCIENCE"]'
+> RAFALE_DIFFICULTIES:        '[1,2,3]'
+> RAFALE_POINTS_BY_DIFFICULTY: '{"1":5,"2":10,"3":15}'
+> ```
+> Les 4 champs mono existants (`CATEGORY` générique, `RAFALE_DIFFICULTY`) restent lus si envoyés
+> (rétro-compatibilité, aucun champ retiré du formulaire), mais l'éditeur (Lot 2, frontend) enverra
+> désormais les 3 champs ci-dessus comme source de vérité pour toute nouvelle sauvegarde. Validation
+> serveur : `400` si un élément de `RAFALE_DIFFICULTIES` est hors 1–3 (même règle que le mono
+> `RAFALE_DIFFICULTY` avant #216), silencieusement ignoré (comme les autres champs RAFALE de ce
+> bloc, cohérent avec le style existant du handler) si le JSON ne parse pas.
+
 ---
 
 ## 4. Champs `GameState`
@@ -264,6 +350,14 @@ type RafaleCurrent struct {
     Question   string `json:"QUESTION"`
     Category   string `json:"CATEGORY"`
     Difficulty int    `json:"DIFFICULTY"`
+    Points     int    `json:"POINTS"` // #216, 216-Q7d — barème résolu pour CETTE question
+                                       // (RAFALE_POINTS_BY_DIFFICULTY[Difficulty], repli sur
+                                       // POINTS générique de la manche) ; permet l'affichage TV +
+                                       // animateur sans exposer la config complète de la manche
+                                       // (TV/anim ne reçoivent jamais GAME.QUESTIONS — admin only,
+                                       // voir main.go broadcastQuestions) — même diffusé aussi dans
+                                       // le champ NEXT de RAFALE_ANSWER (§13.3), résolu de la même
+                                       // façon pour la question pré-tirée.
 }
 
 type RafaleSubPhase string
@@ -373,32 +467,128 @@ conformément au cadrage du milestone #16.
 
 ## 7. Pioche
 
+> ⚠️ **[BREAKING] Réécriture (dev-backend, feature, 2026-09-04, #216)** — remplace entièrement la
+> section pré-#216 (filtre mono par égalité exacte). Voir §3.3 pour le détail des nouveaux champs
+> et de la rétro-compatibilité.
+
+### 7.1 Pool — appartenance ensembliste (comptage/estimation)
+
 ```
-pool = { q ∈ réservoir |
-           q.CATEGORY == CATEGORY
-         ∧ q.DIFFICULTY == RAFALE_DIFFICULTY
+pool(catégories, difficultés) = { q ∈ réservoir |
+           q.CATEGORY ∈ catégories
+         ∧ q.DIFFICULTY ∈ difficultés
          ∧ ¬used[q.ID] }
 ```
 
-> Catégorie **unique** (bugfix 2026-08-29, §3.3) — anciennement une
-> intersection OR sur `RAFALE_CATEGORIES` (multi). `DrawRafaleQuestion(category
-> string, difficulty int)` / `CountRafalePool(category string, difficulty int)`.
+Ensemble **vide ⇒ pool vide, jamais wildcard** (catégories ou difficultés vides = manche non
+configurée, garde conservée depuis le bugfix 2026-08-29). Fonction **unique**, partagée par
+**tous** les points d'appel du filtre (`rafaleQuestionMatchesFilter`, engine.go) — c'est
+exactement le site oublié qui avait causé le bug d'origine de #107 ; ce lot ne duplique
+l'appartenance ensembliste nulle part :
 
-- Tirage **aléatoire uniforme** dans `pool`.
-- La question tirée est immédiatement flaggée `used[q.ID] = true` **et persistée**
-  (`safeGo("SaveRafaleUsed", ...)`) — un redémarrage en pleine manche ne la reproposera pas.
-- `RAFALE_POOL_REMAINING` est recalculé à chaque tirage et diffusé.
+- `rafalePoolUnsafe(categories []string, difficulties []int)` — pool disponible (non utilisées).
+- `CountRafalePool(categories []string, difficulties []int) (available, used, total int)` —
+  comptage pour l'alerte pré-manche (§9), même prédicat que `rafalePoolUnsafe`.
+- `DrawRafaleQuestion(categories []string, difficulties []int)` — entrée publique équivalente à
+  `drawRafaleQuestionUnsafe` (tirage uniforme dans `pool(categories, difficulties)`), pour un
+  appelant qui ne tient pas déjà `e.mu`.
 
-### 7.1 Épuisement en cours de manche
+`pool(...)` sert au **comptage/estimation** (§9, alerte pré-manche) — **pas** directement au
+tirage en cours de manche, qui suit le tirage stratifié ci-dessous (§7.2). Appeler `pool(...)` avec
+les catégories/difficultés **complètes** de la manche (`Question.EffectiveRafaleCategories()`/
+`EffectiveRafaleDifficulties()`, §3.3) donne le même total qu'une somme sur les seuls couples
+encore actifs : un couple exclu (§7.3/§7.4) a par définition 0 disponible, donc ne contribue rien
+à l'union — les deux formulations sont numériquement équivalentes, la première est simplement plus
+simple à écrire.
 
-Si `pool` est vide alors que le timer de manche tourne encore :
-`RAFALE_EXHAUSTED = true`, sous-phase → `ROUND_END`, arrêt du timer de manche, message explicite
-à l'animateur. **Jamais de reproposition silencieuse d'une question déjà vue.**
+### 7.2 Tirage stratifié par permutation du produit cartésien (216-Q9)
 
-### 7.2 Prévention avant démarrage (arbitrage B6b)
+Le tirage en cours de manche **n'est plus un tirage uniforme dans l'union** (ce qui sur-représenterait
+la catégorie/difficulté ayant le réservoir le plus fourni) — c'est un tirage **stratifié** par
+**permutation aléatoire** du produit cartésien `catégories × difficultés`, rejouée (nouvelle
+permutation) une fois épuisée. Ni un tirage pondéré indépendant (n'atteint l'équilibre
+qu'asymptotiquement), ni un ordre fixe (216-Q9, décision utilisateur explicite).
 
-Avant le lancement, l'admin voit le nombre de questions disponibles pour son filtre et une
-estimation du besoin :
+**État de manche** (`rafaleDrawState`, engine.go — éphémère, jamais sérialisé, jamais persisté,
+reconstruit intégralement à chaque `startRafaleRoundUnsafe`, même nature que `Engine.rafaleNext`) :
+
+```go
+type rafaleCouple struct {
+    category   string
+    difficulty int
+}
+
+type rafaleDrawState struct {
+    active []rafaleCouple // couples encore viables cette manche (rétrécit, jamais ne regrossit)
+    order  []rafaleCouple // permutation en cours, consommée par `pos`
+    pos    int
+}
+```
+
+**Construction initiale** (`newRafaleDrawStateUnsafe`, appelée par `startRafaleRoundUnsafe`) :
+pour chaque couple `(catégorie, difficulté)` du produit cartésien configuré, le couple entre dans
+`active` **seulement si** `pool([catégorie], [difficulté])` est non vide **au moment du lancement**
+— sinon il est exclu d'emblée (§7.3, unifié avec l'épuisement en cours de manche ci-dessous).
+
+**Tirage d'une question** (`drawNextRafaleUnsafe`, remplace l'ancien tirage exact-match direct) :
+1. `active` vide → pool globalement épuisé (§7.2, la manche se termine).
+2. Cycle courant (`order`) épuisé (`pos >= len(order)`) → **nouvelle permutation** aléatoire de
+   `active`, `pos` repart à 0.
+3. Prend `order[pos]`, `pos++`, tire dans `pool([couple.category], [couple.difficulty])`
+   (appartenance ensembliste à un singleton = équivalent exact-match, même prédicat que §7.1).
+4. Si ce tirage échoue (couple épuisé, découvert à l'instant) : **retiré définitivement de
+   `active`** (§7.3, rééquilibrage — jamais de reproposition, jamais de blocage), `order`/`pos`
+   réinitialisés (la permutation en cours est invalidée par le retrait, une nouvelle est tirée sur
+   `active` au prochain passage à l'étape 2) — retour à l'étape 1.
+5. Sinon : la question tirée est retournée, flaggée `used[q.ID] = true` et persistée
+   (`safeGo("SaveRafaleUsed", ...)`) — inchangé.
+
+⚠️ **Interaction avec le pré-tirage (#202, §13)** : `prefetchRafaleNextUnsafe` appelle
+`drawNextRafaleUnsafe` — **le même état de manche**, jamais une pioche indépendante — donc la
+question annoncée en `NEXT` (§13.3) est garantie être exactement celle qui deviendra courante au
+prochain `advanceRafaleUnsafe`, y compris quand ce tirage traverse un retrait de couple épuisé.
+C'est la condition explicitement posée par le plan (216-Q9 : « l'équilibrage doit tenir compte de
+la question déjà pré-tirée, sinon l'alternance est décalée d'un cran en permanence ») — satisfaite
+structurellement en partageant `e.rafaleDraw`, pas par un correctif ad hoc.
+
+`RAFALE_POOL_REMAINING` reste calculé sur `pool(EffectiveRafaleCategories(), EffectiveRafaleDifficulties())`
+(§7.1, union complète — équivalent à la somme sur `active` par construction), +1 si une question
+est pré-tirée (`e.rafaleNext != nil`) — inchangé depuis #202.
+
+### 7.3 Épuisement d'un couple — au lancement OU en cours de manche (unifié, 216-Q5/Q8)
+
+**Un seul comportement, un seul chemin de code**, que le couple soit vide dès la construction de
+`active` (§7.2, étape « construction initiale ») ou découvert vide en cours de manche (§7.2, étape
+4) :
+
+- Le couple **sort de la liste active**, définitivement, pour le reste de la manche.
+- **Alerte, jamais de blocage** — le jeu continue avec les couples restants, rééquilibré (nouvelle
+  permutation sur l'ensemble `active` réduit).
+- **Jamais de reproposition silencieuse** d'une question déjà vue pour ce couple.
+- La manche ne se termine **que** si `active` devient entièrement vide (§7.2) — un seul couple
+  épuisé parmi plusieurs n'interrompt jamais rien.
+
+> Décision utilisateur explicite (2026-09-04) : simplification bienvenue par rapport à la
+> recommandation initiale du plan (qui distinguait blocage-au-lancement vs tolérance-en-cours) —
+> un seul mécanisme couvre les deux cas, aucune branche `isLaunchTime` séparée dans le moteur.
+
+### 7.4 Épuisement total — fin de manche
+
+Si `active` est vide (tous les couples configurés sont épuisés, ou l'étaient déjà au lancement) :
+`RAFALE_EXHAUSTED = true`, sous-phase → `ROUND_END`, arrêt du timer de manche. **Jamais de
+reproposition silencieuse d'une question déjà vue.**
+
+- Au lancement (`startRafaleRoundUnsafe`, `active` vide dès la construction) : la manche se
+  termine **immédiatement** — filet de sécurité (§9 bloque déjà le START quand l'union globale est
+  à 0, mais une édition concurrente du réservoir entre READY et START reste possible).
+- En cours de manche (`drawNextRafaleUnsafe`, `active` devient vide après un retrait) :
+  `advanceRafaleUnsafe` termine la manche au prochain avancement — comportement inchangé depuis
+  avant #216, seule la condition de déclenchement (union `active`, plus un seul couple) change.
+
+### 7.5 Prévention avant démarrage (arbitrage B6b, étendu #216)
+
+Avant le lancement, l'admin voit le nombre de questions disponibles pour son filtre (§7.1, union
+sur `EffectiveRafaleCategories()`/`EffectiveRafaleDifficulties()`) et une estimation du besoin :
 
 ```
 besoin_estimé = plafond( TIME / RAFALE_QUESTION_TIME )
@@ -410,9 +600,15 @@ présenter comme tel.)*
 
 | Condition | Signalement admin |
 |---|---|
-| `disponibles == 0` | **Bloquant** — démarrage refusé |
+| `disponibles == 0` (union totale) | **Bloquant** — démarrage refusé |
 | `disponibles < besoin_estimé` | **Avertissement** — démarrage autorisé, risque de fin anticipée |
 | `disponibles ≥ besoin_estimé` | Information neutre |
+
+> ⚠️ **216-Q8, précision** : le blocage AVANT lancement (`disponibles == 0`) porte désormais sur
+> **l'union totale** des couples configurés, jamais sur un couple individuel — un couple vide
+> parmi plusieurs n'empêche jamais le START (§7.1). Seule une union totalement vide bloque, exactement
+> comme avant #216 pour une manche mono-couple (cas particulier : un seul couple configuré, vide,
+> l'union == ce couple == 0).
 
 **Plafond dur** : `RAFALE_MAX_QUESTIONS`, défaut **100**, maximum **100**. Une manche s'arrête
 lorsque `RAFALE_ASKED_COUNT` l'atteint, même si le timer tourne encore.
@@ -553,10 +749,19 @@ réservoir en plus du flag. Corps : vide.
 
 ### GET /api/rafale/pool
 
-Comptage pour l'alerte pré-manche (§7.2). `?category=A&difficulty=2` (catégorie
-**unique**, bugfix 2026-08-29 — anciennement `?categories=A,B`, voir §3.3).
+Comptage pour l'alerte pré-manche (§7.5).
 
-**Réponse 200** :
+> ⚠️ **[BREAKING] Modification de contrat (dev-backend, feature, 2026-09-04, #216)** :
+> `?category=A&difficulty=2` (singulier, bugfix 2026-08-29) redevient
+> **`?categories=A,B&difficulties=1,2`** (pluriel, virgule-séparé) — même convention que
+> `GET /api/rafale/questions?categories=A,B` (§9, précédent déjà en place) et que le corps JSON de
+> `POST /api/rafale/generate-questions` (`contracts/rafale-ai-generation.md`, #203) : réutilise un
+> patron déjà éprouvé plutôt que d'en réinventer un troisième pour la même notion. Union sur le
+> produit cartésien (§7.1), pas une liste de couples explicites. `400` si `categories` ou
+> `difficulties` est absent/vide, ou si une valeur de `difficulties` n'est pas un entier — même
+> contrat d'erreur que la version mono qu'il remplace.
+
+**Réponse 200** — inchangée :
 ```json
 { "AVAILABLE": 42, "USED": 8, "TOTAL": 50 }
 ```
@@ -588,8 +793,11 @@ chemins codée en dur**. Sans ajout explicite, le réservoir serait :
 
 1. `models.go` — `QuestionTypeRafale QuestionType = "RAFALE"`
 2. `models.go` — ajout à `AllQuestionTypes()`
-3. `question_types.go` — entrée `questionTypeRegistry` (`OwnedFields` = les 4 champs de §3.3,
-   `MediaSlots` vide, `NestableInMotionCard: false`, `HasPlayerInput: false`)
+3. `question_types.go` — entrée `questionTypeRegistry` (`OwnedFields` = les 6 champs de §3.3 —
+   `RAFALE_CATEGORIES`, `RAFALE_DIFFICULTY`, `RAFALE_DIFFICULTIES`, `RAFALE_MODE`,
+   `RAFALE_QUESTION_TIME`, `RAFALE_MAX_QUESTIONS`, `RAFALE_POINTS_BY_DIFFICULTY` — 7 en réalité,
+   §216 ajoute 3 aux 4 déjà listés — `MediaSlots` vide, `NestableInMotionCard: false`,
+   `HasPlayerInput: false`)
 4. ⚠️ **Garde de build** : `TestQuestionTypeRegistry_Exhaustive` **casse la compilation** si 2 et 3 divergent
 5. `models.go` — champs `GameState` de §4, sans `omitempty`, initialisés non-nil dans `NewEngine()`
 6. `messages.go` — constantes d'action + payloads de §5
@@ -600,6 +808,16 @@ chemins codée en dur**. Sans ajout explicite, le réservoir serait :
 11. `engine.go` `InitGame()` — reset du flag « déjà utilisée » + `safeGo("SaveRafaleUsed", ...)`
 12. `engine.go` `ProcessButtonPress` — garde d'ignorance des buzzers en RAFALE
 13. `main.go` `App.init()` — `SetRafalePath` / `SetRafaleUsedPath`, chargement au démarrage
+14. ⚠️ **#216 — les 4 points d'appel du filtre** (`startRafaleRoundUnsafe`, `prefetchRafaleNextUnsafe`,
+    `refreshRafalePoolRemainingUnsafe`, `CountRafalePool`) **doivent tous** router par
+    `rafaleQuestionMatchesFilter` (§7.1) — jamais une seconde implémentation indépendante de
+    l'appartenance ensembliste. C'est exactement la classe de bug d'origine de #107.
+15. ⚠️ **#216 — lecture rétro-compatible** : tout consommateur de la catégorie/difficulté d'une
+    manche RAFALE (moteur, `participantsConform`, validation HTTP) passe par
+    `Question.EffectiveRafaleCategories()`/`EffectiveRafaleDifficulties()` (§3.3) — jamais les
+    champs bruts `RAFALE_CATEGORIES`/`RAFALE_DIFFICULTIES`/`Category`/`RafaleDifficulty`
+    directement, sous peine de casser la conversion mono → liste pour une question sauvegardée
+    avant #216.
 
 ---
 
