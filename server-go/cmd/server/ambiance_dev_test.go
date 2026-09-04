@@ -411,7 +411,10 @@ func TestDevAmbianceFirstEnableIsAtomicUnderConcurrency(t *testing.T) {
 	if w == nil || !w.Enabled() || app.LightingDriver() == nil {
 		t.Fatal("enable must publish one writer and one driver")
 	}
-	deadline := time.Now().Add(2 * time.Second)
+	// The driver the handlers see must be the one the writer drives (not one
+	// closed by a later hot-swap), and it must reach ok. Generous deadline:
+	// the full package under -race is slow.
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) && (!w.Running() || app.LightingDriver().Status().State != hue.StateOK) {
 		time.Sleep(5 * time.Millisecond)
 	}

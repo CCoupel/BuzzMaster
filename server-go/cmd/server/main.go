@@ -54,6 +54,10 @@ type App struct {
 	// runtime enable (reconfigureAmbiance, HTTP goroutine) sets it while the
 	// event sites read it from other goroutines.
 	lightingWriter atomic.Pointer[lighting.Writer]
+	// ambianceMu serialises setupAmbiance/reconfigureAmbiance: two config
+	// updates in flight must never leave hueDriver and the writer's driver
+	// pointing at different (or already closed) drivers.
+	ambianceMu sync.Mutex
 	// hueDriver is the live Hue driver behind a.ambiance() (nil when disabled),
 	// read by the /api/lighting/* handlers without I/O (#207).
 	hueDriver atomic.Pointer[hue.Driver]

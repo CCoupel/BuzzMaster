@@ -164,6 +164,8 @@ func (a *App) ambiance() *lighting.Writer {
 // stays nil, every Notify* on it is a no-op and start() launches nothing
 // (contract lighting.md §4.3/§4.5).
 func (a *App) setupAmbiance() {
+	a.ambianceMu.Lock()
+	defer a.ambianceMu.Unlock()
 	d := a.buildHueDriver()
 	if d == nil {
 		return
@@ -177,28 +179,29 @@ func (a *App) setupAmbiance() {
 // and hot-swaps it into the writer (lighting.Writer.SetDriver), starting the
 // writer goroutine on the first runtime enable.
 //
-// First runtime enable (lighting not configured at startup): the writer is
-// published with CompareAndSwap(nil, w) so two concurrent config updates can
-// never start two writers; the loser falls through to the hot-swap path on
-// the writer the winner published.
+// Serialised by ambianceMu: concurrent config updates are applied one after
+// the other, so exactly one writer is ever started and hueDriver always names
+// the driver the writer holds. The 21 event sites keep reading the writer
+// through the atomic a.ambiance() without taking the mutex.
 func (a *App) reconfigureAmbiance() {
+	a.ambianceMu.Lock()
+	defer a.ambianceMu.Unlock()
 	d := a.buildHueDriver()
-	if a.ambiance() == nil {
+	w := a.ambiance()
+	if w == nil {
 		if d == nil {
 			a.hueDriver.Store(nil)
 			return
 		}
-		w := a.newAmbianceWriter(d)
-		if a.lightingWriter.CompareAndSwap(nil, w) {
-			a.hueDriver.Store(d)
-			if a.ctx != nil {
-				go w.Start(a.ctx)
-			}
-			w.NotifyState()
-			return
+		w = a.newAmbianceWriter(d)
+		a.hueDriver.Store(d)
+		a.lightingWriter.Store(w) // first runtime enable: publish, then start
+		if a.ctx != nil {
+			go w.Start(a.ctx)
 		}
+		w.NotifyState()
+		return
 	}
-	w := a.ambiance()
 	a.hueDriver.Store(d)
 	// A nil *hue.Driver must become a nil INTERFACE (a typed nil would count
 	// as an attached driver and panic on Close).
