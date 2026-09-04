@@ -124,13 +124,14 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 	QuestionTypeRafale: {
 		Type: QuestionTypeRafale,
 		OwnedFields: []string{
-			// CATEGORY is deliberately NOT listed here (v8.0.0 bugfix,
-			// 2026-08-29): RAFALE reuses the generic Question.Category field
-			// (like every other type), it doesn't own a type-specific one —
-			// RAFALE_CATEGORIES (multi-select) was removed, see TypedContent's
-			// own doc comment and contracts/CHANGELOG.md.
-			"RAFALE_DIFFICULTY", "RAFALE_MODE",
-			"RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS",
+			// CATEGORY (generic, unqualified) is deliberately NOT listed here:
+			// it's Question.Category, shared with every other type, not a
+			// RAFALE-owned field — kept only as RAFALE's legacy mono
+			// retro-compat source (TypedContent's own doc comment,
+			// EffectiveRafaleCategories). RAFALE_CATEGORIES below (#216,
+			// reintroduced, v9.0.0) IS type-specific and IS owned.
+			"RAFALE_CATEGORIES", "RAFALE_DIFFICULTY", "RAFALE_DIFFICULTIES", "RAFALE_MODE",
+			"RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS", "RAFALE_POINTS_BY_DIFFICULTY",
 		},
 		MediaSlots: nil, // reservoir questions are text-only, no media (contracts/rafale.md §2.4/D3)
 		// A RAFALE round has no notion of a single card — it drives a whole
