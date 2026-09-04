@@ -1,38 +1,29 @@
 // Suite test-writer pour la configuration Hue (contracts/hue-bridge.md §6,
-// §6.1), écrite avant l'implémentation par dev-backend, en TDD (précédent
-// #205 : le contrat suffit, pas besoin d'attendre le code).
+// §6.1), écrite en TDD avant l'implémentation de la persistance (précédent
+// #205 : le contrat suffit, pas besoin d'attendre le code). dev-backend a
+// depuis ajouté `config.Config.Lighting` / `LightingConfig` /
+// `LightingLightEntry` / `EnvHueAPIKey` / `EffectiveAPIKey()` /
+// `EffectiveAPIKeyConfigured()` (internal/config/config.go) exactement selon
+// le schéma ci-dessous — cette suite compile donc contre le vrai type. Elle
+// peut néanmoins rester partiellement ROUGE tant que `handleConfig`
+// (internal/server/http.go) et `maskedConfigJSON` n'ont pas encore le
+// câblage POST/GET pour la section `lighting` (round-trip, masquage,
+// fusion champ-par-champ de la clé) — c'est le signal normal de ce qu'il
+// reste à faire côté #207 backend, pas une régression de ma part.
 //
-// ---------------------------------------------------------------------------
-// SEAM D'API REQUIS (test-writer, dev-backend implémente cette forme — le
-// schéma JSON lui-même est normatif, contract §6, verbatim ci-dessous ; les
-// noms Go sont mon choix, documentés pour lever toute ambiguïté) :
-//
-//	// internal/config/config.go
-//	type Config struct {
-//	    ...
-//	    Lighting LightingConfig `json:"lighting"`
-//	}
+// Schéma (rappel, désormais réel) :
 //
 //	type LightingConfig struct {
-//	    Enabled          bool                 `json:"enabled"`
-//	    BridgeIP         string               `json:"bridge_ip"`
-//	    BridgeID         string               `json:"bridge_id"`
-//	    APIKey           string               `json:"api_key"`
-//	    APIKeyConfigured bool                 `json:"api_key_configured,omitempty"` // dérivé, jamais persisté
-//	    ClearAPIKey      bool                 `json:"clear_api_key,omitempty"`      // request-only, jamais persisté
-//	    Lights           []LightingLightEntry `json:"lights"`
+//	    Enabled          bool
+//	    BridgeIP         string
+//	    BridgeID         string
+//	    APIKey           string               // secret — voir régime ci-dessous
+//	    APIKeyConfigured bool                 // dérivé, jamais persisté
+//	    ClearAPIKey      bool                 // request-only, jamais persisté
+//	    Lights           []LightingLightEntry
 //	}
-//
-//	type LightingLightEntry struct {
-//	    Name string `json:"name"`
-//	    Role string `json:"role"`
-//	    Team string `json:"team,omitempty"`
-//	}
-//
-//	const EnvHueAPIKey = "BUZZCONTROL_HUE_API_KEY" // nom donné verbatim par le contrat §6.1
-//
-//	func (l LightingConfig) EffectiveAPIKey() string          // env prioritaire sur config.json
-//	func (l LightingConfig) EffectiveAPIKeyConfigured() bool  // EffectiveAPIKey() != ""
+//	type LightingLightEntry struct { Name, Role, Team string }
+//	const EnvHueAPIKey = "BUZZCONTROL_HUE_API_KEY"
 //
 // Mêmes règles que AIConfig.AnthropicAPIKey (internal/config/config.go) :
 // absente/vide dans le POST ⇒ préservée ; clear_api_key:true ⇒ effacée ;
@@ -237,7 +228,7 @@ func TestHTTPServer_LightingConfig_APIKeyNeverExposed(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHTTPServer_LightingConfig_EnvOverride_NeverWritesToDisk(t *testing.T) {
-	t.Setenv("BUZZCONTROL_HUE_API_KEY", "hue-env-key")
+	t.Setenv(config.EnvHueAPIKey, "hue-env-key") // config.EnvHueAPIKey == "BUZZCONTROL_HUE_API_KEY" (contract §6.1)
 	server, _ := setupTestHTTPServer(t)
 
 	// Aucune clé en config.json, uniquement l'environnement : la config

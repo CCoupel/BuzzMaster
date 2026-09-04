@@ -210,7 +210,7 @@ func noRediscover(c *Config) {
 // ---------------------------------------------------------------------------
 
 func TestDriver_RenamedLight_NeverFoundNeverFallsBack(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "Salle gauche")
 	fb.addLight("9", "Salle droite") // pourrait être confondue à tort avec la cible
 
@@ -253,7 +253,7 @@ func TestDriver_RenamedLight_NeverFoundNeverFallsBack(t *testing.T) {
 }
 
 func TestDriver_AmbiguousName_RefusedNeverGuesses(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "BuzzHue1")
 	fb.addLight("9", "BuzzHue1") // homonyme
 
@@ -277,7 +277,7 @@ func TestDriver_AmbiguousName_RefusedNeverGuesses(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDriver_BridgeOff_StatusUnreachable(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "BuzzHue1")
 	d := newTestDriver(t, fb, []LightSpec{{Name: "BuzzHue1"}}, func(c *Config) { c.Timeout = 200 * time.Millisecond; noRediscover(c) })
 	fb.srv.Close() // pont "éteint"
@@ -292,7 +292,7 @@ func TestDriver_BridgeOff_StatusUnreachable(t *testing.T) {
 }
 
 func TestDriver_RevokedKey_StatusRefused_NeverConfusedWithUnreachable(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "BuzzHue1")
 	fb.authError() // toute requête répond "unauthorized" (type 1)
 
@@ -307,7 +307,7 @@ func TestDriver_RevokedKey_StatusRefused_NeverConfusedWithUnreachable(t *testing
 }
 
 func TestDriver_Refused_NeverRetriesInALoop(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "BuzzHue1")
 	fb.authError()
 	d := newTestDriver(t, fb, []LightSpec{{Name: "BuzzHue1"}}, nil)
@@ -329,7 +329,7 @@ func TestDriver_Refused_NeverRetriesInALoop(t *testing.T) {
 }
 
 func TestDriver_Unreachable_BackoffPreventsRequestStorm(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "BuzzHue1")
 	d := newTestDriver(t, fb, []LightSpec{{Name: "BuzzHue1"}}, func(c *Config) { c.Timeout = 100 * time.Millisecond; noRediscover(c) })
 	fb.srv.Close()
@@ -355,7 +355,7 @@ func TestDriver_Unreachable_BackoffPreventsRequestStorm(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDriver_WritesOnlyWhatChanges(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "BuzzHue1")
 	fb.addLight("9", "BuzzHue2")
 	d := newTestDriver(t, fb, []LightSpec{{Name: "BuzzHue1"}, {Name: "BuzzHue2"}}, nil)
@@ -390,7 +390,7 @@ func TestDriver_WritesOnlyWhatChanges(t *testing.T) {
 }
 
 func TestDriver_WriteError_InvalidatesCacheForRetryOnNextApply(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	l := fb.addLight("8", "BuzzHue1")
 	d := newTestDriver(t, fb, []LightSpec{{Name: "BuzzHue1"}}, nil)
 	ctx := context.Background()
@@ -427,7 +427,7 @@ func TestDriver_WriteError_InvalidatesCacheForRetryOnNextApply(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDriver_OneUnreachableLight_OthersStillWritten(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	off := fb.addLight("8", "Scène") // "éteinte au mur"
 	off.reachable = false
 	off.putErr = &hueError{Type: 201, Description: "device is off"}
@@ -463,7 +463,7 @@ func TestDriver_OneUnreachableLight_OthersStillWritten(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDriver_LogsOnceOnStateChange_NeverPerFailure(t *testing.T) {
-	fb := newFakeBridge(t, "001788fffea0591e")
+	fb := newFakeBridge(t, "fffe0000deadbeef")
 	fb.addLight("8", "BuzzHue1")
 	var mu sync.Mutex
 	var lines []string
@@ -603,7 +603,7 @@ func TestNew_BridgeIDOnly_NoNetworkIO(t *testing.T) {
 	// Ni IP ni appel réseau au moment de New() — seule Apply()/Inventory()
 	// déclenchera une découverte (contract §4.1, "au démarrage, si bridge_id
 	// est connu et que l'IP a changé... le pilote re-découvre").
-	d, err := New(Config{BridgeID: "001788fffea0591e", APIKey: "abc", Lights: []LightSpec{{Name: "A"}}})
+	d, err := New(Config{BridgeID: "fffe0000deadbeef", APIKey: "abc", Lights: []LightSpec{{Name: "A"}}})
 	if err != nil {
 		t.Fatalf("bridge_id seul doit être accepté sans IP : %v", err)
 	}
@@ -619,12 +619,12 @@ func TestNew_BridgeIDOnly_NoNetworkIO(t *testing.T) {
 func TestDriver_BridgeIDMismatch_Rediscovers(t *testing.T) {
 	oldBridge := newFakeBridge(t, "AAAA") // un AUTRE pont répond maintenant à l'ancienne IP
 	oldBridge.addLight("1", "Autre")
-	newBridgeSrv := newFakeBridge(t, "001788fffea0591e")
+	newBridgeSrv := newFakeBridge(t, "fffe0000deadbeef")
 	newBridgeSrv.addLight("8", "BuzzHue1")
 
 	findCalls := 0
 	d := newTestDriver(t, oldBridge, []LightSpec{{Name: "BuzzHue1"}}, func(c *Config) {
-		c.BridgeID = "001788fffea0591e" // attendu — ne correspond pas à oldBridge
+		c.BridgeID = "fffe0000deadbeef" // attendu — ne correspond pas à oldBridge
 		c.FindBridge = func(ctx context.Context, id string, timeout time.Duration) (Bridge, bool, error) {
 			findCalls++
 			return Bridge{IP: newBridgeSrv.srv.URL, ID: id}, true, nil
