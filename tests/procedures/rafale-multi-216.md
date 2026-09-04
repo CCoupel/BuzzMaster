@@ -16,13 +16,13 @@ désormais livré et couvert par des tests automatisés (`_work/reports/test-wri
 **Les scénarios 1 à 3 sont donc redevenus testables via l'interface normale** (méthode API conservée
 en note pour qui préfère vérifier le moteur isolément) — les N/A précédents sont levés.
 
-⚠️ **Point d'attention non résolu au moment de cette mise à jour** (régression détectée pendant la
-rédaction des tests automatisés, signalée à dev-frontend) : une question RAFALE **mono, créée avant
-#216, dont la difficulté n'a JAMAIS été explicitement configurée** (`RAFALE_DIFFICULTY` réellement
-absent/0, pas juste égal à 1) peut rester **bloquée au démarrage** — régression du bug historique
-SHA 75b0472c (QUALIF 8.0.0.5). Ce cas précis est ajouté en sous-étape du Scénario 6 ci-dessous — s'il
-échoue, ce n'est PAS une anomalie à signaler comme nouvelle, elle est déjà connue et en cours de
-traitement côté dev-frontend.
+✅ **Régression détectée pendant la rédaction des tests automatisés, CORRIGÉE** (dev-frontend, commits
+`8d76cc25`/`cca2b91b`, confirmée par re-test indépendant) : une question RAFALE mono, créée avant
+#216, dont la difficulté n'avait jamais été explicitement configurée pouvait rester bloquée au
+démarrage — régression du bug historique SHA 75b0472c (QUALIF 8.0.0.5). Fix : repli `[1]` restauré
+localement dans `GamePage.jsx` (par-dessus `effectiveRafaleDifficulties`, jamais dans l'éditeur
+`QuestionsPage.jsx` qui doit montrer l'état réel). La sous-étape correspondante du Scénario 6
+ci-dessous reste comme test de non-régression, mais n'est plus un échec attendu.
 
 ---
 
@@ -127,9 +127,9 @@ RAFALE_DIFFICULTY, sans les nouveaux champs liste) continue de fonctionner sans 
 | 1 | Identifier (ou créer via l'interface standard, sans passer par l'API multi) une question RAFALE mono-catégorie/mono-difficulté existante | Question présente, format ancien (pas de `RAFALE_CATEGORIES`/`RAFALE_DIFFICULTIES`) | | |
 | 2 | Lancer une manche sur cette question, sans aucune modification | Démarrage normal — aucune erreur, aucun message de configuration invalide | | |
 | 3 | Jouer plusieurs questions | Toutes proviennent de la catégorie/difficulté unique d'origine (comportement identique à avant #216) | | |
-| 4 | ⚠️ **Cas de régression connu** (voir note en tête de fichier) — si possible, tester spécifiquement une question mono dont la difficulté n'a **jamais** été explicitement enregistrée (`RAFALE_DIFFICULTY` réellement absent, pas juste « star 1 » cochée puis sauvegardée) : catégorie définie, difficulté jamais touchée | Le bouton START doit rester cliquable (pas de blocage fail-closed). **Si bloqué : ne pas re-signaler, régression déjà connue et transmise à dev-frontend.** | | |
+| 4 | Non-régression (fix `8d76cc25`/`cca2b91b`, voir note en tête de fichier) — tester spécifiquement une question mono dont la difficulté n'a **jamais** été explicitement enregistrée (`RAFALE_DIFFICULTY` réellement absent, pas juste « star 1 » cochée puis sauvegardée) : catégorie définie, difficulté jamais touchée | Le bouton START reste cliquable (pas de blocage fail-closed) | | |
 
-**Verdict** : [ ] PASS  [ ] FAIL  [ ] PASS AVEC RÉSERVE (étape 4 en échec connu, cf. note)
+**Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
@@ -151,9 +151,8 @@ RAFALE_DIFFICULTY, sans les nouveaux champs liste) continue de fonctionner sans 
 
 - [ ] Scénarios 1 à 7 : PASS via l'interface normale (Lot 2 livré, méthode API conservée en repli)
 - [ ] Aucun blocage observé sur couple vide/épuisé, à aucun moment
-- [ ] Rétro-compatibilité confirmée sans reconfiguration manuelle — **sauf** le cas de régression
-      connu (Scénario 6, étape 4 : difficulté mono jamais explicitement configurée) tant qu'il n'est
-      pas confirmé résolu par dev-frontend
+- [ ] Rétro-compatibilité confirmée sans reconfiguration manuelle, y compris le cas régression
+      SHA 75b0472c (Scénario 6, étape 4 : difficulté mono jamais explicitement configurée)
 
 ---
 
