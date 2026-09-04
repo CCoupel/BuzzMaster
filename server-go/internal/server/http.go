@@ -1324,6 +1324,49 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 				question["RAFALE_MAX_QUESTIONS"] = maxQ
 			}
 		}
+
+		// #216 (v9.0.0) — multi-category/multi-difficulty round filter, plus
+		// a free-entry points-per-difficulty barème. JSON-encoded strings in
+		// the multipart form, same convention as `motion_config` just above
+		// in this same handler (contract §3.3 "Format multipart") — a
+		// comma-separated convention (like handleGetRafaleQuestions's own
+		// ?categories=A,B query param) would be fine for category NAMES but
+		// is a worse fit here since RAFALE_POINTS_BY_DIFFICULTY is itself a
+		// map, not a flat list.
+		//
+		// The legacy mono fields above (RAFALE_DIFFICULTY, and CATEGORY read
+		// generically elsewhere in this handler) are left untouched — both
+		// are still read if sent, and EffectiveRafaleCategories/
+		// EffectiveRafaleDifficulties (models.go) fall back to them when the
+		// lists below are absent, so an older client (or a hand-crafted
+		// request) saving only the mono fields keeps working unmodified.
+		if catsStr := r.FormValue("RAFALE_CATEGORIES"); catsStr != "" {
+			var cats []string
+			if err := json.Unmarshal([]byte(catsStr), &cats); err == nil && len(cats) > 0 {
+				question["RAFALE_CATEGORIES"] = cats
+			}
+		}
+		if diffsStr := r.FormValue("RAFALE_DIFFICULTIES"); diffsStr != "" {
+			var diffs []int
+			if err := json.Unmarshal([]byte(diffsStr), &diffs); err == nil {
+				valid := true
+				for _, d := range diffs {
+					if d < 1 || d > 3 {
+						valid = false
+						break
+					}
+				}
+				if valid && len(diffs) > 0 {
+					question["RAFALE_DIFFICULTIES"] = diffs
+				}
+			}
+		}
+		if pointsStr := r.FormValue("RAFALE_POINTS_BY_DIFFICULTY"); pointsStr != "" {
+			var points map[string]int
+			if err := json.Unmarshal([]byte(pointsStr), &points); err == nil && len(points) > 0 {
+				question["RAFALE_POINTS_BY_DIFFICULTY"] = points
+			}
+		}
 	}
 
 	// Handle question media upload
@@ -2577,33 +2620,54 @@ func (h *HTTPServer) handleRafaleResetAllUsed(w http.ResponseWriter, r *http.Req
 }
 
 // handleRafalePool returns the pool count (available/used/total) for a
-// category/difficulty filter — contract §9, feeding the pre-round alert
-// (§7.2: blocking when available==0, warning when short of the estimated
-// need, neutral otherwise).
+// categories/difficulties filter — contract §9, feeding the pre-round alert
+// (§7.5: blocking when available==0 across the whole union, warning when
+// short of the estimated need, neutral otherwise).
 //
-// ?category=X (singular, v8.0.0 bugfix, 2026-08-29): a RAFALE round now
-// filters on exactly one category, same as every other question type's
-// CATEGORY field — RAFALE_CATEGORIES (multi-select, ?categories=A,B) was
-// removed. See contracts/CHANGELOG.md.
+// ?categories=A,B&difficulties=1,2 (plural, comma-separated, #216, v9.0.0):
+// a RAFALE round now filters on N categories and N difficulties (set
+// membership on both) — reuses the exact convention already established by
+// the sibling endpoint GET /api/rafale/questions?categories=A,B just above,
+// rather than inventing a new one. Replaces the v8.0.0 singular
+// ?category=A&difficulty=2 (bugfix 2026-08-29, itself since reverted — see
+// contracts/CHANGELOG.md).
 func (h *HTTPServer) handleRafalePool(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	category := strings.TrimSpace(r.URL.Query().Get("category"))
-	if category == "" {
-		http.Error(w, "category required", http.StatusBadRequest)
+	var categories []string
+	for _, c := range strings.Split(r.URL.Query().Get("categories"), ",") {
+		c = strings.TrimSpace(c)
+		if c != "" {
+			categories = append(categories, c)
+		}
+	}
+	if len(categories) == 0 {
+		http.Error(w, "categories required", http.StatusBadRequest)
 		return
 	}
 
-	difficulty, err := strconv.Atoi(r.URL.Query().Get("difficulty"))
-	if err != nil {
-		http.Error(w, "Invalid difficulty", http.StatusBadRequest)
+	var difficulties []int
+	for _, d := range strings.Split(r.URL.Query().Get("difficulties"), ",") {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		parsed, err := strconv.Atoi(d)
+		if err != nil {
+			http.Error(w, "Invalid difficulties", http.StatusBadRequest)
+			return
+		}
+		difficulties = append(difficulties, parsed)
+	}
+	if len(difficulties) == 0 {
+		http.Error(w, "difficulties required", http.StatusBadRequest)
 		return
 	}
 
-	available, used, total := h.engine.CountRafalePool(category, difficulty)
+	available, used, total := h.engine.CountRafalePool(categories, difficulties)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]int{
