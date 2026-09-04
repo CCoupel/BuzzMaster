@@ -37,6 +37,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -45,6 +46,25 @@ import (
 
 	"buzzcontrol/internal/config"
 )
+
+// decodedLightingSection decodes a /config.json response body and returns
+// its "lighting" section as a map — same pattern as the existing AI-key
+// tests (http_test.go's TestHTTPServer_Config_GET_APIKeyMasking), rather
+// than a raw strings.Contains on the JSON text: json.MarshalIndent inserts
+// a space after each key's colon ("api_key_configured": true), which a
+// naive `"api_key_configured":true` substring check would never match.
+func decodedLightingSection(t *testing.T, body []byte) map[string]interface{} {
+	t.Helper()
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatalf("réponse /config.json invalide en JSON : %v\n%s", err, body)
+	}
+	lighting, ok := parsed["lighting"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("section \"lighting\" absente ou mal formée dans la réponse : %s", body)
+	}
+	return lighting
+}
 
 // ---------------------------------------------------------------------------
 // Round-trip et additivité par section (contrat §6, tâche #207)
@@ -209,8 +229,8 @@ func TestHTTPServer_LightingConfig_APIKeyNeverExposed(t *testing.T) {
 	if strings.Contains(w.Body.String(), "hue-secret-abc123") {
 		t.Errorf("GET /config.json expose la clé Hue en clair : %s", w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `"api_key_configured":true`) {
-		t.Errorf("GET /config.json doit dériver api_key_configured=true (clé présente), got %s", w.Body.String())
+	if lighting := decodedLightingSection(t, w.Body.Bytes()); lighting["api_key_configured"] != true {
+		t.Errorf("GET /config.json doit dériver api_key_configured=true (clé présente), got %v", lighting["api_key_configured"])
 	}
 
 	// Une réponse POST ne doit pas non plus la faire fuiter (même motif que
@@ -236,8 +256,8 @@ func TestHTTPServer_LightingConfig_EnvOverride_NeverWritesToDisk(t *testing.T) {
 	req := httptest.NewRequest("GET", "/config.json", nil)
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
-	if !strings.Contains(w.Body.String(), `"api_key_configured":true`) {
-		t.Errorf("une clé fournie par BUZZCONTROL_HUE_API_KEY doit rendre api_key_configured=true même sans clé stockée : %s", w.Body.String())
+	if lighting := decodedLightingSection(t, w.Body.Bytes()); lighting["api_key_configured"] != true {
+		t.Errorf("une clé fournie par BUZZCONTROL_HUE_API_KEY doit rendre api_key_configured=true même sans clé stockée, got %v", lighting["api_key_configured"])
 	}
 	if strings.Contains(w.Body.String(), "hue-env-key") {
 		t.Errorf("la clé d'environnement ne doit jamais apparaître dans la réponse : %s", w.Body.String())
