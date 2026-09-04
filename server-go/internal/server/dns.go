@@ -1,6 +1,8 @@
 package server
 
 import (
+	"buzzcontrol/internal/game"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -38,19 +40,25 @@ func (d *DNSServer) Start() error {
 	// Create DNS handler
 	handler := &dnsHandler{serverIP: d.serverIP}
 
-	// Create server
+	// Create server — honor the configured port (#220: this used to be
+	// hardcoded to ":53", silently ignoring d.port whatever it was set to).
+	addr := fmt.Sprintf(":%d", d.port)
 	d.server = &dns.Server{
-		Addr:    ":53",
+		Addr:    addr,
 		Net:     "udp",
 		Handler: handler,
 	}
 
-	log.Printf("[DNS] Starting DNS server on port 53, redirecting to %s", d.serverIP.String())
+	LogInfo(game.LogComponentApp, "[DNS] Starting DNS server on %s, redirecting to %s", addr, d.serverIP.String())
 
-	// Start in goroutine
+	// Start in goroutine. A bind failure here (port 53 needs elevated
+	// privileges on most OSes) is deliberately non-fatal for the HTTP server
+	// (#220 acceptance criterion — DNS/mDNS failures never block startup),
+	// but must stay VISIBLE: LogWarn (not the previous log.Printf) so it
+	// reaches /ws/logs and the broadcast history buffer, not just stdout.
 	go func() {
 		if err := d.server.ListenAndServe(); err != nil {
-			log.Printf("[DNS] Server error: %v", err)
+			LogWarn(game.LogComponentApp, "[DNS] Server error: %v", err)
 		}
 	}()
 
