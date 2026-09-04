@@ -42,6 +42,14 @@ type HTTPServer struct {
 	updater                   *Updater         // Auto-update handler
 	firmwareManager           *FirmwareManager // OTA firmware manager (v3.1.0+)
 	defaultQuestionImageAsset []byte           // Embedded fallback image (v3.2.2)
+	// portSource is a short human-readable description of where the configured
+	// HTTP port came from (e.g. "config.json (8080)", "--port flag (8080)",
+	// "code default (80)") — surfaced in the bind-wait log messages so an
+	// operator staring at a busy/refused port knows exactly which file or flag
+	// to change (#220, contract: plan §4 "le message d'attente nomme le port
+	// résolu et sa provenance"). Empty until SetPortSource is called; Start()
+	// falls back to "unknown" in that case rather than printing a blank field.
+	portSource string
 	// questionIDMu serializes question ID allocation AND directory creation
 	// (contract ai-generation.md §5.1, #8). Without it, two concurrent
 	// requests (e.g. a manual upload racing an AI batch generation) can
@@ -105,6 +113,13 @@ func (h *HTTPServer) SetDefaultQuestionImageAsset(data []byte) {
 	h.defaultQuestionImageAsset = data
 }
 
+// SetPortSource records where the configured HTTP port came from, for the
+// bind-wait log messages (#220). Call before Start(). See the portSource
+// field's doc comment for the expected format.
+func (h *HTTPServer) SetPortSource(source string) {
+	h.portSource = source
+}
+
 // SetReactDir sets the directory for React build files
 func (h *HTTPServer) SetReactDir(dir string) {
 	h.reactDir = dir
@@ -141,15 +156,47 @@ func (l *lingerListener) Accept() (net.Conn, error) {
 	return conn, nil
 }
 
+// Port-bind retry tuning (#220).
+//
+//   - portBindLogInterval / portAccessLogInterval throttle the WARN/ERROR log
+//     emitted while waiting so a sustained wait (auto-update taking a while,
+//     or a permanently misconfigured privileged port) cannot flood the
+//     global logger's bounded ring buffer (1000 entries, see InitLogger call
+//     sites) and evict the startup history before any /ws/logs client reads
+//     it. The historical flat 500ms retry logged ~2 lines/second and could
+//     saturate that buffer in well under ten minutes.
+//   - portBindInitialDelay / portBindMaxDelay implement the specified
+//     500ms → 1s → 5s (capped) backoff for a busy port.
+//   - portAccessLogInterval doubles as the EACCES retry cadence itself (not
+//     just its log throttle) — a permission failure is not going to resolve
+//     itself in milliseconds, so there is no point spinning fast on it.
+const (
+	portBindInitialDelay  = 500 * time.Millisecond
+	portBindMaxDelay      = 5 * time.Second
+	portBindLogInterval   = 30 * time.Second
+	portAccessLogInterval = 30 * time.Second
+)
+
 // Start begins the HTTP server.
 //
-// Two layers of defense against port-busy on restart:
+// The pre-bind is SYNCHRONOUS and ctx-interruptible (#220): Start blocks the
+// calling goroutine until the port is actually bound, or ctx is cancelled,
+// and only returns nil once the socket is genuinely listening. Before this
+// change Start() returned nil immediately even on a busy port — the retry
+// happened silently in a detached goroutine, so callers (main.go) logged
+// "started successfully" and opened a browser tab on a URL that was not
+// actually serving yet, and a port-busy or permission-denied condition was
+// invisible until a client tried to connect. It never gives up and never
+// calls os.Exit on any bind error, whatever it is (EADDRINUSE, EACCES, or
+// anything else) — see bindPort's doc comment.
+//
+// Two layers of defense against port-busy on restart, unchanged by this fix:
 //  1. newReuseAddrListener sets SO_REUSEADDR so the server can bind
 //     immediately even if the port is still in TIME_WAIT.
 //  2. lingerListener sets SO_LINGER(0) on every accepted connection so
 //     that closing it sends RST instead of FIN, eliminating TIME_WAIT
 //     for client connections on both Linux and Windows.
-func (h *HTTPServer) Start() error {
+func (h *HTTPServer) Start(ctx context.Context) error {
 	h.setupRoutes()
 
 	addr := fmt.Sprintf(":%d", h.port)
@@ -158,34 +205,137 @@ func (h *HTTPServer) Start() error {
 		Handler: h.corsMiddleware(h.mux),
 	}
 
-	LogInfo(game.LogComponentHTTP, "Server starting on port %d", h.port)
+	LogInfo(game.LogComponentHTTP, "Server starting on port %d (source: %s)", h.port, h.portSourceOrUnknown())
+
+	ln, err := h.bindPort(ctx, addr)
+	if err != nil {
+		return err
+	}
+
+	LogInfo(game.LogComponentHTTP, "Server bind succeeded on port %d", h.port)
+
 	go func() {
-		for {
-			ln, err := newReuseAddrListener("tcp", addr)
-			if err != nil {
-				if isPortInUse(err) {
-					LogWarn(game.LogComponentHTTP, "Port %d busy, retrying in 500ms...", h.port)
-					time.Sleep(500 * time.Millisecond)
-					continue
-				}
-				LogError(game.LogComponentHTTP, "Server error (listener): %v", err)
-				return
-			}
-			err = h.server.Serve(newLingerListener(ln))
-			if errors.Is(err, http.ErrServerClosed) {
-				return
-			}
-			LogError(game.LogComponentHTTP, "Server error: %v", err)
+		err := h.server.Serve(newLingerListener(ln))
+		if errors.Is(err, http.ErrServerClosed) {
 			return
 		}
+		LogError(game.LogComponentHTTP, "Server error: %v", err)
 	}()
 
 	return nil
 }
 
-func isPortInUse(err error) bool {
-	return strings.Contains(err.Error(), "address already in use") ||
-		strings.Contains(err.Error(), "Only one usage")
+// bindPort synchronously retries net.Listen(addr) until it succeeds or ctx is
+// cancelled. It classifies each failure into one of three buckets, all of
+// which retry (#220 acceptance criterion: no os.Exit on any bind error):
+//
+//   - EADDRINUSE (port genuinely busy, e.g. an old process still holding it
+//     during an auto-update relaunch): fast progressive backoff, 500ms → 1s
+//     → 5s capped.
+//   - EACCES (permission denied, e.g. a port <1024 without privileges):
+//     handled as its own branch, never merged into the EADDRINUSE bucket —
+//     it will not resolve on its own, so it retries at a slow, actionable
+//     30s cadence instead of hammering the log with a message nobody asked
+//     for. A double-clicked launch on Windows must not close its console
+//     before this message is readable, hence "loop forever with a clear
+//     message" instead of "fail fast".
+//   - anything else: cannot be classified as transient or permanent from
+//     here, so it is treated the same as a busy port (retry + backoff)
+//     rather than assumed fatal.
+//
+// The wait is entirely select-driven on ctx.Done() (never a blind
+// time.Sleep) so a Ctrl+C during the wait is honored immediately instead of
+// after the current backoff step, and no goroutine survives past return.
+func (h *HTTPServer) bindPort(ctx context.Context, addr string) (net.Listener, error) {
+	delay := portBindInitialDelay
+	attempt := 0
+	var lastLog time.Time
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		ln, err := newReuseAddrListener("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		attempt++
+
+		if isPermissionDenied(err) {
+			if attempt == 1 || time.Since(lastLog) >= portAccessLogInterval {
+				LogError(game.LogComponentHTTP,
+					"Permission denied binding port %d (source: %s): a port below 1024 requires elevated privileges on this OS. Set http_port to a value >=1024 in config.json, pass --port, or run with elevated privileges (sudo / Administrator). Retrying in %s...",
+					h.port, h.portSourceOrUnknown(), portAccessLogInterval)
+				lastLog = time.Now()
+			}
+			if !sleepOrDone(ctx, portAccessLogInterval) {
+				return nil, ctx.Err()
+			}
+			continue
+		}
+
+		if isPortInUse(err) {
+			if attempt == 1 || time.Since(lastLog) >= portBindLogInterval {
+				LogWarn(game.LogComponentHTTP, "Port %d busy (source: %s), retrying in %s...", h.port, h.portSourceOrUnknown(), delay)
+				lastLog = time.Now()
+			}
+			if !sleepOrDone(ctx, delay) {
+				return nil, ctx.Err()
+			}
+			delay = nextPortBindDelay(delay)
+			continue
+		}
+
+		// Unclassified bind error: never fatal here either (#220) — retry at
+		// the same cadence as a busy port instead of exiting, since we cannot
+		// tell transient apart from permanent from this vantage point.
+		if attempt == 1 || time.Since(lastLog) >= portBindLogInterval {
+			LogError(game.LogComponentHTTP, "Unexpected error binding port %d (source: %s): %v — retrying in %s...", h.port, h.portSourceOrUnknown(), err, delay)
+			lastLog = time.Now()
+		}
+		if !sleepOrDone(ctx, delay) {
+			return nil, ctx.Err()
+		}
+		delay = nextPortBindDelay(delay)
+	}
+}
+
+// nextPortBindDelay implements the specified 500ms → 1s → 5s backoff
+// schedule for consecutive EADDRINUSE (or unclassified) bind failures, then
+// plateaus at 5s.
+func nextPortBindDelay(current time.Duration) time.Duration {
+	switch {
+	case current < time.Second:
+		return time.Second
+	default:
+		return portBindMaxDelay
+	}
+}
+
+// sleepOrDone waits for d, returning true when the wait elapsed normally, or
+// false immediately if ctx is cancelled first — the mechanism that lets
+// bindPort's wait be interrupted mid-backoff instead of riding out the
+// current sleep.
+func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// portSourceOrUnknown returns portSource, or "unknown" when SetPortSource was
+// never called (e.g. in tests that construct an HTTPServer directly) so log
+// messages never print a blank field.
+func (h *HTTPServer) portSourceOrUnknown() string {
+	if h.portSource == "" {
+		return "unknown"
+	}
+	return h.portSource
 }
 
 // Stop shuts down the HTTP server
