@@ -141,6 +141,16 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		NestableInMotionCard: false,
 		HasPlayerInput:       false, // buzzer presses are ignored during RAFALE (contract §8.1) — judged by admin/anim only
 	},
+	QuestionTypeEntracte: {
+		Type:        QuestionTypeEntracte,
+		OwnedFields: []string{"ENTRACTE_CONFIG"},
+		MediaSlots:  nil, // never nests, so MediaSlots is never consulted; the panel's own background image (if any) rides the generic Question.MEDIA field
+		// Decision utilisateur (#214): a pause has no meaning as one face of a
+		// MEMOTION card — never nestable, same permanence as MEMOTION itself
+		// (contract question-types.md §7.4).
+		NestableInMotionCard: false,
+		HasPlayerInput:       false, // no buzzer interaction at all (contract game-state.md §"Second déclencheur")
+	},
 }
 
 // TypeDescriptorFor returns the registry entry for t and whether t is a

@@ -160,6 +160,12 @@ const (
 	QuestionTypeMemotion QuestionType = "MEMOTION" // NEW (v5.0.0): grid of cards with 3 faces
 	QuestionTypeArdoise  QuestionType = "ARDOISE"  // NEW (v5.6.0): free-text answer via virtual keyboard
 	QuestionTypeRafale   QuestionType = "RAFALE"   // NEW (v8.0.0, #107): timed round drawing from the RAFALE reservoir — contracts/rafale.md
+	// QuestionTypeEntracte (v9.0.0, #214): a déroulé entry that raises the
+	// pre-existing ENTRACTE flag (GameState.Entracte, v6.5.2 #119) from its
+	// OWN per-occurrence config on START — a second trigger for that same
+	// mechanism, not a new one. See TypedContent.EntracteConfig and
+	// contracts/game-state.md §"Second déclencheur — entracte programmée".
+	QuestionTypeEntracte QuestionType = "ENTRACTE"
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -339,6 +345,22 @@ type TypedContent struct {
 	// this field. A round configured before #216 (map nil/empty) behaves
 	// exactly as before: every question worth the flat POINTS value.
 	RafalePointsByDifficulty map[int]int `json:"RAFALE_POINTS_BY_DIFFICULTY,omitempty"`
+
+	// EntracteConfig (v9.0.0, #214) — the per-occurrence panel configuration
+	// of an ENTRACTE-type question, question host only, never nestable
+	// (contract question-types.md §7.4). Reuses the EntracteConfig type
+	// already defined for GameState.EntracteConfig/.EntracteConfigSaved
+	// as-is — same precedent as TypedContent.MemoryConfig *MemoryConfig.
+	// Pointer + omitempty: nil for every other question type, and for an
+	// ENTRACTE question that has genuinely never been configured (defense
+	// in depth — the editor always sets one before save).
+	//
+	// Raised into GameState.Entracte/.EntracteConfig directly at this
+	// question's own START (never GameState.EntracteConfigSaved, the
+	// global config, which this field must NEVER overwrite) — see
+	// contracts/game-state.md §"Second déclencheur — entracte programmée"
+	// for the full mechanism and the automatic-restoration rule on exit.
+	EntracteConfig *EntracteConfig `json:"ENTRACTE_CONFIG,omitempty"`
 }
 
 // EffectiveRafaleCategories returns q's RAFALE round categories, converting
@@ -506,10 +528,10 @@ const (
 	MotionCardStateDone     MotionCardState = "DONE"     // played, DoneMotionCard called
 )
 
-// AllQuestionTypes returns the full registry of question types, i.e. the 6
-// values QuestionType may take. Exported as a test-exhaustiveness helper —
-// see contracts/question-types.md §10 (test d'agnosticité) — not consumed by
-// production code in v7.0.0.
+// AllQuestionTypes returns the full registry of question types, i.e. the 7
+// values QuestionType may take (v9.0.0, #214, adds QuestionTypeEntracte).
+// Exported as a test-exhaustiveness helper — see contracts/question-types.md
+// §10 (test d'agnosticité) — not consumed by production code in v7.0.0.
 func AllQuestionTypes() []QuestionType {
 	return []QuestionType{
 		QuestionTypeSpeedy,
@@ -518,6 +540,7 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeMemotion,
 		QuestionTypeArdoise,
 		QuestionTypeRafale,
+		QuestionTypeEntracte,
 	}
 }
 
