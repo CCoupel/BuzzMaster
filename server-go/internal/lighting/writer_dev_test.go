@@ -277,3 +277,63 @@ func TestDevApplyErrorIsCountedAndReported(t *testing.T) {
 		t.Fatalf("stats = %+v", w.Stats())
 	}
 }
+
+// #207 — SetDriver hot-swaps the driver without touching the Writer pointer
+// the 21 sites read: nil disables (Notify* no-op, goroutine idles), a new
+// driver renders the current scene once, a re-enabled writer resumes.
+func TestDevSetDriverHotSwap(t *testing.T) {
+	w := NewWriter(Config{Derive: func() Event { return Event{Kind: KindReady} }, Scene: sceneOf, MinInterval: time.Millisecond})
+	if w.Enabled() || w.Running() {
+		t.Fatal("writer without driver must be disabled and not running")
+	}
+	w.Start(context.Background()) // returns at once: disabled
+	if w.Running() {
+		t.Fatal("Start on a disabled writer must not run")
+	}
+
+	first := NewFakeDriver()
+	w.SetDriver(first)
+	if !w.Enabled() {
+		t.Fatal("SetDriver must enable")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.Start(ctx)
+	waitFor(t, func() bool { return first.Count() >= 1 }, "first driver renders the current scene after SetDriver")
+	waitFor(t, w.Running, "running")
+	if w.Stats().Notifies != 0 {
+		t.Fatal("the SetDriver refresh is not a notify")
+	}
+
+	// Swap: the old driver is closed, the new one gets the scene, notifies go to it.
+	second := NewFakeDriver()
+	w.SetDriver(second)
+	waitFor(t, first.Closed, "previous driver closed on swap")
+	waitFor(t, func() bool { return second.Count() >= 1 }, "second driver rendered")
+	w.NotifyState()
+	waitFor(t, func() bool { return second.Count() >= 2 }, "notify reaches the second driver")
+	firstCount := first.Count()
+
+	// Disable: notifies are no-ops, nothing reaches either driver, goroutine idles.
+	w.SetDriver(nil)
+	if w.Enabled() {
+		t.Fatal("SetDriver(nil) must disable")
+	}
+	w.NotifyState()
+	w.NotifyPulse(KindScore, []string{"A"}, time.Second)
+	time.Sleep(20 * time.Millisecond)
+	if first.Count() != firstCount || second.Count() != 2 {
+		t.Fatalf("disabled writer must not apply: first=%d second=%d", first.Count(), second.Count())
+	}
+	if !w.Running() {
+		t.Fatal("goroutine must keep idling while disabled")
+	}
+
+	// Re-enable on the same goroutine.
+	third := NewFakeDriver()
+	w.SetDriver(third)
+	waitFor(t, func() bool { return third.Count() >= 1 }, "re-enabled writer renders again")
+	cancel()
+	waitFor(t, third.Closed, "driver closed on ctx cancel")
+	waitFor(t, func() bool { return !w.Running() }, "running flag cleared")
+}

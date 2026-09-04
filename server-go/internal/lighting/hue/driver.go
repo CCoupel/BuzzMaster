@@ -507,8 +507,8 @@ func (d *Driver) rediscover(ctx context.Context, why string) error {
 	}
 	old := d.base
 	d.client.close()
-	d.client = newClient(base, d.cfg.APIKey, d.cfg.Timeout)
 	d.mu.Lock()
+	d.client = newClient(base, d.cfg.APIKey, d.cfg.Timeout)
 	d.base = base
 	d.bridgeChecked = false
 	d.mu.Unlock()

@@ -376,6 +376,23 @@ func Register(ctx context.Context, bridgeIP string, https bool, devicetype strin
 	}
 }
 
+// BridgeIdentity reads /config with the given key (one guarded GET) —
+// used right after a successful registration to store bridge_id next to
+// bridge_ip (contract §4.1). Errors follow the taxonomy.
+func BridgeIdentity(ctx context.Context, bridgeIP string, https bool, key string) (BridgeInfo, error) {
+	base, err := bridgeBase(bridgeIP, https)
+	if err != nil {
+		return BridgeInfo{}, err
+	}
+	c := newClient(base, key, HTTPTimeout)
+	defer c.close()
+	info, err := c.config(ctx)
+	if err != nil {
+		return BridgeInfo{}, classify(err)
+	}
+	return info, nil
+}
+
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		s = s[:i]

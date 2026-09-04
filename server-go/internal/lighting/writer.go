@@ -3,6 +3,7 @@ package lighting
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -61,8 +62,12 @@ type pulse struct {
 // The mutex protects ONLY refreshDue and pulse. It is never held during
 // Apply nor during a GameState read (contract §5).
 type Writer struct {
+	// enabled/driver are read by Notify* and by the writer goroutine and
+	// swapped by SetDriver (#207 runtime reconfiguration) — under mu, which
+	// is still never held during Apply.
 	enabled     bool
 	driver      Driver
+	running     atomic.Bool // Start's goroutine is alive
 	derive      func() Event
 	scene       func(Event) State
 	minInterval time.Duration
@@ -122,7 +127,55 @@ func NewWriter(cfg Config) *Writer {
 }
 
 // Enabled reports whether a driver is attached. Safe on a nil receiver.
-func (w *Writer) Enabled() bool { return w != nil && w.enabled }
+func (w *Writer) Enabled() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.enabled
+}
+
+// Running reports whether Start's goroutine is alive. Safe on a nil receiver.
+func (w *Writer) Running() bool { return w != nil && w.running.Load() }
+
+// SetDriver hot-swaps the driver (#207: the bridge was configured, changed
+// or disabled at runtime). nil disables: every Notify* becomes a no-op and
+// the goroutine, if running, idles. The previous driver is closed. A new
+// driver gets one refresh so it renders the current scene; if no goroutine
+// is running the owner must call `go Start(ctx)` (see Running).
+func (w *Writer) SetDriver(d Driver) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	old := w.driver
+	w.driver = d
+	w.enabled = d != nil
+	if d != nil {
+		w.refreshDue = true
+	}
+	w.mu.Unlock()
+	if old != nil && old != d {
+		_ = old.Close()
+	}
+	if d != nil {
+		select {
+		case w.wake <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// currentDriver reads the driver under the lock.
+func (w *Writer) currentDriver() Driver {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.enabled {
+		return nil
+	}
+	return w.driver
+}
 
 // Stats returns a copy of the counters. Safe on a nil receiver.
 func (w *Writer) Stats() Stats {
@@ -138,10 +191,14 @@ func (w *Writer) Stats() Stats {
 // state. NEVER blocks; safe on a nil or disabled writer, so call sites need
 // no guard (contract §4.3).
 func (w *Writer) NotifyState() {
-	if w == nil || !w.enabled {
+	if w == nil {
 		return
 	}
 	w.mu.Lock()
+	if !w.enabled {
+		w.mu.Unlock()
+		return
+	}
 	w.refreshDue = true
 	w.mu.Unlock()
 	w.countNotify()
@@ -155,10 +212,14 @@ func (w *Writer) NotifyState() {
 // the room falls back to the derived state on its own. Last pulse wins.
 // NEVER blocks; safe on a nil or disabled writer.
 func (w *Writer) NotifyPulse(kind EventKind, teams []string, d time.Duration) {
-	if w == nil || !w.enabled {
+	if w == nil {
 		return
 	}
 	w.mu.Lock()
+	if !w.enabled {
+		w.mu.Unlock()
+		return
+	}
 	w.pulse = &pulse{kind: kind, teams: append([]string(nil), teams...), deadline: w.now().Add(d)}
 	w.refreshDue = true
 	w.mu.Unlock()
@@ -179,15 +240,21 @@ func (w *Writer) countNotify() {
 // driver. Returns immediately (no goroutine, no Close) when disabled. Call as
 // `go w.Start(ctx)` from (*App).start(), exactly like AckManager.
 func (w *Writer) Start(ctx context.Context) {
-	if w == nil || !w.enabled {
+	if w == nil || !w.Enabled() {
 		return
+	}
+	if !w.running.CompareAndSwap(false, true) {
+		return // already running (SetDriver re-enabled an existing goroutine)
 	}
 	defer func() {
 		if w.cancelTimer != nil {
 			w.cancelTimer()
 			w.cancelTimer = nil
 		}
-		_ = w.driver.Close()
+		if drv := w.currentDriver(); drv != nil {
+			_ = drv.Close()
+		}
+		w.running.Store(false)
 	}()
 	for {
 		select {
@@ -244,7 +311,11 @@ func (w *Writer) drain(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		err := w.driver.Apply(ctx, st)
+		drv := w.currentDriver()
+		if drv == nil {
+			return // disabled by SetDriver(nil) while running: idle
+		}
+		err := drv.Apply(ctx, st)
 		w.lastApply = w.now()
 		w.statsMu.Lock()
 		w.stats.Applies++

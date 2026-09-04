@@ -5,6 +5,7 @@ import (
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
+	"buzzcontrol/internal/lighting/hue"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"buzzcontrol/web"
@@ -24,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -49,6 +51,9 @@ type App struct {
 	// nil when lighting is not configured: every a.lighting.Notify*() call
 	// is then a no-op, so the 21 event sites carry no guard (contract §4.3).
 	lighting *lighting.Writer
+	// hueDriver is the live Hue driver behind a.lighting (nil when disabled),
+	// read by the /api/lighting/* handlers without I/O (#207).
+	hueDriver atomic.Pointer[hue.Driver]
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).
@@ -418,6 +423,7 @@ func (a *App) init() {
 
 	// Ambiance lighting writer (#205) — nil unless configured (ambiance.go).
 	a.setupAmbiance()
+	a.httpServer.Lighting = a // /api/lighting/* read the live driver (#207)
 
 	// Set up callbacks
 	a.setupCallbacks()
@@ -572,6 +578,9 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
+		// #207: the `lighting` section may have changed — rebuild/hot-swap
+		// the Hue driver (no-op when nothing relevant changed).
+		a.reconfigureAmbiance()
 		// #119 (v6.5.2, C1): this shared callback is also what the entracte
 		// panel-image endpoint (/api/game/entracte-image POST/DELETE) fires
 		// after every upload/delete — refresh IMAGE_IS_CUSTOM from disk and

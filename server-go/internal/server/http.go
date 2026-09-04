@@ -59,7 +59,10 @@ type HTTPServer struct {
 	OnShutdown                func()              // Called before server shutdown for cleanup
 	OnLoadDemo                func()              // Called to load demo data
 	OnConfigUpdate            func()              // Called after config update to broadcast to clients
-	OnBuzzerWifiConfig        func() int          // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
+	// Lighting gives the /api/lighting/* handlers the live Hue driver (#207,
+	// contracts/hue-bridge.md §7); nil provider or nil driver = "disabled".
+	Lighting           LightingProvider
+	OnBuzzerWifiConfig func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
 	// The callback registers the message for ACK tracking and sets AckPending on the bumper (v3.8.0).
@@ -302,6 +305,13 @@ func (h *HTTPServer) setupRoutes() {
 
 	// AI API key validation (v6.0.3, #9 — contract ai-key-validation.md §5)
 	h.mux.HandleFunc("/api/ai/validate-key", h.handleValidateAPIKey)
+
+	// Ambiance lighting — Hue Bridge (v10.0.0, #207 — contract hue-bridge.md §7)
+	h.mux.HandleFunc("/api/lighting/status", h.handleLightingStatus)
+	h.mux.HandleFunc("/api/lighting/discover", h.handleLightingDiscover)
+	h.mux.HandleFunc("/api/lighting/register", h.handleLightingRegister)
+	h.mux.HandleFunc("/api/lighting/lights", h.handleLightingLights)
+	h.mux.HandleFunc("/api/lighting/test", h.handleLightingTest)
 
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
@@ -1330,6 +1340,13 @@ func maskedConfigJSON(cfg *config.Config) ([]byte, error) {
 	resp.AI.GroqAPIKeyConfigured = resp.AI.EffectiveGroqAPIKeyConfigured()
 	resp.AI.GroqAPIKey = ""
 	resp.AI.ClearGroqAPIKey = false
+	// Hue Bridge key: same secret regime (v10.0.0, #207 — contract hue-bridge.md §6.1).
+	resp.Lighting.APIKeyConfigured = resp.Lighting.EffectiveAPIKeyConfigured()
+	resp.Lighting.APIKey = ""
+	resp.Lighting.ClearAPIKey = false
+	if resp.Lighting.Lights == nil {
+		resp.Lighting.Lights = []config.LightingLightEntry{} // [] not null for the frontend
+	}
 	return json.MarshalIndent(&resp, "", "  ")
 }
 
@@ -1538,6 +1555,63 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 				cfg.AI.GroqAPIKey = incoming.GroqAPIKey
 			default:
 				cfg.AI.GroqAPIKey = preservedGroqKey
+			}
+		}
+
+		if data, ok := raw["lighting"]; ok {
+			// Same field-by-field merge as "ai" (contract hue-bridge.md §6.1):
+			// the Ambiance page saves lights, bridge and enabled from separate
+			// steps, each POST carrying only the keys it owns — a whole-section
+			// replace would silently erase api_key at the first "save lights".
+			var incoming config.LightingConfig
+			if err := json.Unmarshal(data, &incoming); err != nil {
+				http.Error(w, "Invalid JSON in \"lighting\" section", http.StatusBadRequest)
+				return
+			}
+			var lRaw map[string]json.RawMessage
+			if err := json.Unmarshal(data, &lRaw); err != nil {
+				http.Error(w, "Invalid JSON in \"lighting\" section", http.StatusBadRequest)
+				return
+			}
+			if _, ok := lRaw["enabled"]; ok {
+				cfg.Lighting.Enabled = incoming.Enabled
+			}
+			if _, ok := lRaw["bridge_ip"]; ok {
+				cfg.Lighting.BridgeIP = strings.TrimSpace(incoming.BridgeIP)
+			}
+			if _, ok := lRaw["bridge_id"]; ok {
+				cfg.Lighting.BridgeID = strings.ToLower(strings.TrimSpace(incoming.BridgeID))
+			}
+			if _, ok := lRaw["lights"]; ok {
+				lights := make([]config.LightingLightEntry, 0, len(incoming.Lights))
+				for _, l := range incoming.Lights {
+					l.Name = strings.TrimSpace(l.Name)
+					if l.Name == "" {
+						continue
+					}
+					if l.Role == "" {
+						l.Role = "general"
+					}
+					lights = append(lights, l)
+				}
+				cfg.Lighting.Lights = lights
+			}
+			// The secret: absent or empty preserves, clear_api_key erases,
+			// a non-empty value replaces. Derived/request-only flags never persist.
+			preservedHueKey := cfg.Lighting.APIKey
+			cfg.Lighting.APIKeyConfigured = false
+			cfg.Lighting.ClearAPIKey = false
+			switch {
+			case incoming.ClearAPIKey:
+				cfg.Lighting.APIKey = ""
+			case incoming.APIKey != "":
+				if strings.ContainsAny(incoming.APIKey, "/?#\" \t\r\n") {
+					http.Error(w, "Format de clé API Hue invalide", http.StatusBadRequest)
+					return
+				}
+				cfg.Lighting.APIKey = incoming.APIKey
+			default:
+				cfg.Lighting.APIKey = preservedHueKey
 			}
 		}
 

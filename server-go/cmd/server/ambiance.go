@@ -18,8 +18,10 @@ import (
 	"sort"
 	"strings"
 
+	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
+	"buzzcontrol/internal/lighting/hue"
 	"buzzcontrol/internal/server"
 )
 
@@ -94,35 +96,116 @@ var ambianceSiteRegistry = map[ambianceSite]ambianceDecision{
 // Lifecycle (contract §4.5, §9)
 // ---------------------------------------------------------------------------
 
-// ambianceIsConfigured reports whether ambiance lighting is usable.
-// #205: always false — no real driver exists yet, so the observable
-// behaviour is strictly today's: no goroutine, no hardware call, no log.
-// #207 derives it from the `lighting` section of config.json.
+// ambianceIsConfigured reports whether ambiance lighting is usable
+// (contract hue-bridge.md §5.5/§6): the `lighting` section is enabled, a key
+// is available (stored or BUZZCONTROL_HUE_API_KEY) and the bridge is known
+// by IP or by id. #205 returned false unconditionally; #207 reads config.json.
 func (a *App) ambianceIsConfigured() bool {
-	return false
+	lc := config.Get().Lighting
+	return lc.Enabled && lc.EffectiveAPIKeyConfigured() && (strings.TrimSpace(lc.BridgeIP) != "" || strings.TrimSpace(lc.BridgeID) != "")
+}
+
+// buildHueDriver builds the Hue driver from the current configuration, or
+// returns nil when lighting is not usable. No network I/O (hue.New). An
+// invalid configuration is logged once here and treated as "not configured".
+func (a *App) buildHueDriver() *hue.Driver {
+	if !a.ambianceIsConfigured() {
+		return nil
+	}
+	lc := config.Get().Lighting
+	specs := make([]hue.LightSpec, 0, len(lc.Lights))
+	for _, l := range lc.Lights {
+		specs = append(specs, hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team})
+	}
+	d, err := hue.New(hue.Config{
+		BridgeIP: lc.BridgeIP,
+		BridgeID: lc.BridgeID,
+		APIKey:   lc.EffectiveAPIKey(), // never logged, never echoed
+		Lights:   specs,
+		Logger: func(format string, args ...any) {
+			server.LogInfo(game.LogComponentApp, "Ambiance: "+format, args...)
+		},
+	})
+	if err != nil {
+		server.LogWarn(game.LogComponentApp, "Ambiance: lighting configuration rejected: %v", err)
+		return nil
+	}
+	return d
 }
 
 // newAmbianceWriter builds the writer bound to this App's live state and
-// scene table. Shared by setupAmbiance (real driver, #207) and by tests
+// scene table. Shared by setupAmbiance (real driver) and by tests
 // (lighting.FakeDriver): a.lighting = a.newAmbianceWriter(fake); go a.lighting.Start(ctx).
+// A Hue driver gets the writer pacing the contract requires for it
+// (hue.RecommendedMinInterval, §5.4); other drivers keep the #205 default.
 func (a *App) newAmbianceWriter(drv lighting.Driver) *lighting.Writer {
-	return lighting.NewWriter(lighting.Config{
+	cfg := lighting.Config{
 		Driver: drv,
 		Derive: a.deriveAmbianceEvent,
 		Scene:  a.ambianceScene,
 		OnError: func(err error) {
 			server.LogWarn(game.LogComponentApp, "Ambiance: driver error: %v", err)
 		},
-	})
+	}
+	if _, isHue := drv.(*hue.Driver); isHue {
+		cfg.MinInterval = hue.RecommendedMinInterval
+	}
+	return lighting.NewWriter(cfg)
 }
 
 // setupAmbiance is called from (*App).setup(). Not configured ⇒ a.lighting
-// stays nil, and every Notify* on it is a no-op (contract §4.3).
+// stays nil, every Notify* on it is a no-op and start() launches nothing
+// (contract lighting.md §4.3/§4.5).
 func (a *App) setupAmbiance() {
-	if !a.ambianceIsConfigured() {
+	d := a.buildHueDriver()
+	if d == nil {
 		return
 	}
-	// #207: build the configured driver here and assign a.lighting.
+	a.hueDriver.Store(d)
+	a.lighting = a.newAmbianceWriter(d)
+}
+
+// reconfigureAmbiance is called from OnConfigUpdate (POST /config.json,
+// /api/lighting/register): it rebuilds the driver from the new configuration
+// and hot-swaps it into the writer (lighting.Writer.SetDriver), starting the
+// writer goroutine on the first runtime enable.
+//
+// Known limitation: when lighting was NOT configured at startup, this first
+// enable assigns a.lighting (nil → writer) while the 21 event sites may read
+// it from other goroutines. It happens once, on an admin action, and the 21
+// sites tolerate both values; making the handle atomic would change the field
+// type asserted by cmd/server/ambiance_acceptance_test.go — deferred.
+func (a *App) reconfigureAmbiance() {
+	d := a.buildHueDriver()
+	if a.lighting == nil {
+		if d == nil {
+			a.hueDriver.Store(nil)
+			return
+		}
+		a.hueDriver.Store(d)
+		a.lighting = a.newAmbianceWriter(d)
+		go a.lighting.Start(a.ctx)
+		a.lighting.NotifyState()
+		return
+	}
+	a.hueDriver.Store(d)
+	// A nil *hue.Driver must become a nil INTERFACE (a typed nil would count
+	// as an attached driver and panic on Close).
+	var drv lighting.Driver
+	if d != nil {
+		drv = d
+	}
+	a.lighting.SetDriver(drv) // nil disables; closes the previous driver
+	if d != nil && !a.lighting.Running() && a.ctx != nil {
+		go a.lighting.Start(a.ctx)
+	}
+	a.lighting.NotifyState()
+}
+
+// LightingDriver implements server.LightingProvider for the /api/lighting/*
+// handlers: the live driver, nil when disabled. Read without I/O.
+func (a *App) LightingDriver() *hue.Driver {
+	return a.hueDriver.Load()
 }
 
 // ---------------------------------------------------------------------------

@@ -8,11 +8,16 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
+	"buzzcontrol/internal/lighting/hue"
 )
 
 func TestDevAmbianceNilWriterSitesAreNoOps(t *testing.T) {
@@ -266,4 +271,77 @@ func waitForCount(t *testing.T, f *lighting.FakeDriver, n int) {
 		time.Sleep(2 * time.Millisecond)
 	}
 	t.Fatalf("driver received %d state(s), want >= %d", f.Count(), n)
+}
+
+// #207 — the App builds/hot-swaps the Hue driver from config.json's
+// `lighting` section: disabled ⇒ no writer, no driver; enabled at runtime ⇒
+// writer + driver + goroutine; disabled again ⇒ driver nil, writer idles.
+func TestDevAmbianceReconfigureFromConfig(t *testing.T) {
+	// A minimal Hue v1 fake (config + lights + state) with a fictitious id.
+	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/config"):
+			_, _ = w.Write([]byte(`{"bridgeid":"fffe0000deadbeef","modelid":"BSB002"}`))
+		case strings.HasSuffix(r.URL.Path, "/lights"):
+			_, _ = w.Write([]byte(`{"8":{"name":"BuzzHue1","state":{"on":false,"bri":1,"xy":[0.3,0.3],"reachable":true}}}`))
+		case strings.HasSuffix(r.URL.Path, "/state") && r.Method == "PUT":
+			_, _ = w.Write([]byte(`[{"success":{"/lights/8/state/on":true}}]`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer bridge.Close()
+
+	app := newTestApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.ctx = ctx
+	saved := *config.Get()
+	t.Cleanup(func() { config.SetInstance(&saved) })
+
+	// Not configured: nothing.
+	app.setupAmbiance()
+	if app.lighting != nil || app.LightingDriver() != nil || app.ambianceIsConfigured() {
+		t.Fatal("no lighting config ⇒ no writer, no driver")
+	}
+
+	// Enabled at runtime through OnConfigUpdate ⇒ driver + writer + goroutine.
+	cfg := saved
+	cfg.Lighting = config.LightingConfig{Enabled: true, BridgeIP: bridge.URL, BridgeID: "fffe0000deadbeef", APIKey: "k",
+		Lights: []config.LightingLightEntry{{Name: "BuzzHue1", Role: "general"}}}
+	config.SetInstance(&cfg)
+	app.reconfigureAmbiance()
+	if app.lighting == nil || !app.lighting.Enabled() || app.LightingDriver() == nil {
+		t.Fatal("enabled config ⇒ writer + driver")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && app.LightingDriver().Status().State != hue.StateOK {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if st := app.LightingDriver().Status(); st.State != hue.StateOK || st.LightsOK != 1 {
+		t.Fatalf("driver did not reach ok on the fake bridge: %+v", st)
+	}
+	if !app.lighting.Running() {
+		t.Fatal("writer goroutine must be running after the first runtime enable")
+	}
+
+	// Disabled again ⇒ driver nil (status endpoint says disabled), writer idles.
+	cfg2 := cfg
+	cfg2.Lighting.Enabled = false
+	config.SetInstance(&cfg2)
+	app.reconfigureAmbiance()
+	if app.LightingDriver() != nil || app.lighting.Enabled() {
+		t.Fatal("disabled config ⇒ no driver, writer disabled")
+	}
+	if !app.lighting.Running() {
+		t.Fatal("writer goroutine keeps idling (no restart needed)")
+	}
+	// Key from the environment only, without a stored key: still configured.
+	t.Setenv(config.EnvHueAPIKey, "env-key")
+	cfg3 := cfg
+	cfg3.Lighting.APIKey = ""
+	config.SetInstance(&cfg3)
+	if !app.ambianceIsConfigured() {
+		t.Fatal("BUZZCONTROL_HUE_API_KEY must count as a configured key")
+	}
 }
