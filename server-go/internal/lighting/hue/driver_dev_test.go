@@ -43,7 +43,7 @@ type devRecorded struct {
 
 func newDevBridge(t *testing.T, names ...string) *devBridge {
 	t.Helper()
-	f := &devBridge{lights: map[string]map[string]any{}, bridgeID: "001788fffea0591e", key: "k", offLights: map[string]bool{}}
+	f := &devBridge{lights: map[string]map[string]any{}, bridgeID: "fffe0000deadbeef", key: "k", offLights: map[string]bool{}}
 	for i, n := range names {
 		f.lights[fmt.Sprint(i+1)] = map[string]any{"name": n, "type": "Extended color light", "modelid": "LCA001",
 			"state": map[string]any{"on": false, "bri": 1, "xy": []float64{0.3, 0.3}, "reachable": true}}
@@ -184,7 +184,7 @@ func TestDevNewValidatesWithoutIO(t *testing.T) {
 			t.Errorf("config %d must be rejected", i)
 		}
 	}
-	d, err := New(Config{BridgeIP: "192.168.1.101", BridgeID: "001788fffea0591e", APIKey: "k", Lights: []LightSpec{{Name: "BuzzHue1"}}})
+	d, err := New(Config{BridgeIP: "192.168.1.101", BridgeID: "fffe0000deadbeef", APIKey: "k", Lights: []LightSpec{{Name: "BuzzHue1"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
