@@ -550,6 +550,8 @@ type TypeDescriptor struct {
 | `ARDOISE` | `recto`, `question` | ❌ — **abandonné**, voir §7.2 | ✅ |
 | `MEMORY` | `recto` + N paires | ✅ **(#187, v7.1.0)** | ✅ — voir §7.3 |
 | `MEMOTION` | — | ❌ **jamais** (profondeur 1) | ❌ |
+| `RAFALE` | — (texte seul, `contracts/rafale.md` §2.4/D3) | ❌ — pas de notion de carte unique | ❌ — jugé par admin/anim |
+| `ENTRACTE` | — | ❌ — décision utilisateur, voir §7.4 | ❌ — aucune interaction |
 
 Un registre **en dur et exhaustif**. Pas de DSL, pas d'architecture à plugins — décision explicite
 de #184 (hors portée : « toute abstraction spéculative pour des types qui n'existent pas encore »).
@@ -589,6 +591,16 @@ active — le joueur retourne des cartes.
 > autorisée pour `tv`, `vplayer` et `anim`. Ce qui est nouveau, c'est la **portée** (`MOTION_CARD_ID`,
 > §9) et la **vérification du tour** (`contracts/websocket-actions.md`, fiche `FLIP_MEMORY_CARD`) —
 > pas le droit d'émettre.
+
+### 7.4 `ENTRACTE` n'est pas imbricable — décision utilisateur (#214, 2026-09-04)
+
+`NestableInMotionCard` reste **`false`** pour `ENTRACTE`. Une pause programmée est une entrée du
+déroulé au même niveau qu'une question — elle n'a pas de sens comme face d'une carte MEMOTION (un
+« mini-entracte » à l'intérieur d'une grille de jeu n'a été demandé par personne, et casserait la
+règle « la pause engage toute la salle », `contracts/websocket-actions.md` §`ENTRACTE_SET`).
+
+Détail complet du type (déclencheur, configuration par occurrence, restauration à la sortie) :
+`contracts/game-state.md` §"Second déclencheur — entracte programmée (#214)".
 
 ---
 
