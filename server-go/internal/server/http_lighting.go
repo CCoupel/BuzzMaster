@@ -56,7 +56,10 @@ func writeLightingError(w http.ResponseWriter, err error) {
 	case errors.Is(err, hue.ErrUnreachable):
 		writeLightingJSON(w, http.StatusServiceUnavailable, map[string]string{"result": "unreachable"})
 	default:
-		writeLightingJSON(w, http.StatusInternalServerError, map[string]string{"result": "error", "message": err.Error()})
+		// Security (SSRF audit): the message may carry text from the target
+		// (bridge body, Hue error description) — log it, never echo it.
+		LogWarn(game.LogComponentHTTP, "Lighting: %v", err)
+		writeLightingJSON(w, http.StatusInternalServerError, map[string]string{"result": "error"})
 	}
 }
 
@@ -91,6 +94,12 @@ func (h *HTTPServer) handleLightingDiscover(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	release, ok := lightingBusy.acquire(&lightingBusy.discover)
+	if !ok {
+		writeLightingJSON(w, http.StatusTooManyRequests, map[string]string{"result": "busy", "reason": "discover_in_progress"})
+		return
+	}
+	defer release()
 	ctx, cancel := context.WithTimeout(r.Context(), lightingDiscoverTimeout+time.Second)
 	defer cancel()
 	bridges, err := hue.Discover(ctx, lightingDiscoverTimeout/2)
@@ -123,16 +132,37 @@ func (h *HTTPServer) handleLightingRegister(w http.ResponseWriter, r *http.Reque
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), lightingRequestTimeout)
 	defer cancel()
-	key, err := hue.Register(ctx, req.BridgeIP, false, lightingDevicetype(), 0)
+	// Security (SSRF): the target must be a private-network address BEFORE any
+	// outbound request — this endpoint must not become a LAN/Internet prober.
+	bridgeAddr, err := validateBridgeAddress(ctx, req.BridgeIP)
+	if err != nil {
+		LogWarn(game.LogComponentHTTP, "Lighting register refused: %v", err)
+		writeLightingJSON(w, http.StatusBadRequest, map[string]string{"result": "error", "reason": "bridge_ip_not_private"})
+		return
+	}
+	release, ok := lightingBusy.acquire(&lightingBusy.register)
+	if !ok {
+		writeLightingJSON(w, http.StatusTooManyRequests, map[string]string{"result": "busy", "reason": "register_in_progress"})
+		return
+	}
+	defer release()
+	key, err := hue.Register(ctx, bridgeAddr, false, lightingDevicetype(), 0)
 	if err != nil {
 		writeLightingError(w, err)
+		return
+	}
+	// A key handed back by the target is untrusted input: same rule as
+	// POST /config.json, applied before anything is persisted.
+	if !validHueAPIKey(key) {
+		LogWarn(game.LogComponentHTTP, "Lighting register: bridge %s returned a malformed key (%d chars) — not stored", bridgeAddr, len(key))
+		writeLightingJSON(w, http.StatusBadGateway, map[string]string{"result": "error", "reason": "invalid_key_from_bridge"})
 		return
 	}
 
 	// Store the secret (never echoed), plus the bridge identity when readable.
 	cfg := *config.Get()
 	cfg.Lighting.APIKey = key
-	cfg.Lighting.BridgeIP = strings.TrimSpace(req.BridgeIP)
+	cfg.Lighting.BridgeIP = bridgeAddr
 	if info, ierr := hue.BridgeIdentity(ctx, cfg.Lighting.BridgeIP, false, key); ierr == nil && info.BridgeID != "" {
 		cfg.Lighting.BridgeID = strings.ToLower(info.BridgeID)
 	}
@@ -222,6 +252,12 @@ func (h *HTTPServer) handleLightingTest(w http.ResponseWriter, r *http.Request) 
 		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
 		return
 	}
+	release, ok := lightingBusy.acquire(&lightingBusy.test)
+	if !ok {
+		writeLightingJSON(w, http.StatusTooManyRequests, map[string]string{"result": "busy", "reason": "test_in_progress"})
+		return
+	}
+	defer release()
 	ctx, cancel := context.WithTimeout(r.Context(), lightingRequestTimeout)
 	defer cancel()
 	if err := d.TestFlash(ctx, strings.TrimSpace(req.Name), lightingTestFlashHold, nil); err != nil {

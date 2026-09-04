@@ -1577,7 +1577,18 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 				cfg.Lighting.Enabled = incoming.Enabled
 			}
 			if _, ok := lRaw["bridge_ip"]; ok {
-				cfg.Lighting.BridgeIP = strings.TrimSpace(incoming.BridgeIP)
+				ip := strings.TrimSpace(incoming.BridgeIP)
+				if ip != "" {
+					// Security (SSRF audit): the driver will talk to this address
+					// unattended — only private-network bridges are accepted.
+					norm, verr := validateBridgeAddress(r.Context(), ip)
+					if verr != nil {
+						http.Error(w, "lighting.bridge_ip doit être une adresse du réseau local (privée)", http.StatusBadRequest)
+						return
+					}
+					ip = norm
+				}
+				cfg.Lighting.BridgeIP = ip
 			}
 			if _, ok := lRaw["bridge_id"]; ok {
 				cfg.Lighting.BridgeID = strings.ToLower(strings.TrimSpace(incoming.BridgeID))
