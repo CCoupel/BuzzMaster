@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -151,6 +152,19 @@ type Engine struct {
 	// that was NEVER actually posed to anyone. See releaseRafaleNextUnsafe's
 	// own doc comment for the exhaustive list of call sites.
 	rafaleNext *RafaleQuestion
+
+	// rafaleDraw (#216, contracts/rafale.md §7.2) sequences the current
+	// RAFALE round's stratified draw across its configured categories ×
+	// difficulties — a random permutation of the still-viable (category,
+	// difficulty) pairs, replayed (reshuffled) once fully cycled, so the
+	// round stays balanced instead of degenerating into a straight union
+	// draw. Same ephemeral nature as rafaleNext above: never serialized,
+	// entirely rebuilt by startRafaleRoundUnsafe (newRafaleDrawStateUnsafe)
+	// at every round start, so a stale value between rounds is always
+	// overwritten before ever being read — no explicit reset needed at
+	// Ready()/InitGame()/stopUnsafe() the way rafaleNext requires (see
+	// drawNextRafaleUnsafe's own doc comment).
+	rafaleDraw rafaleDrawState
 
 	// rafaleQuestionTimer/rafaleQuestionStopCh (v8.0.0, #107, contract
 	// rafale.md §2.2) — the per-question ~3s countdown, DELIBERATELY its own
@@ -1502,8 +1516,19 @@ func participantsConform(question *Question, state *GameState) bool {
 		// and the field's own "(default SOLO)" tag in models.go).
 		return participantsCountConform(question.MotionMode, len(state.MotionParticipatingTeams))
 	case QuestionTypeRafale:
-		if question.Category == "" || question.RafaleDifficulty < 1 || question.RafaleDifficulty > 3 {
+		// #216: reads the EFFECTIVE (retro-compatible mono→liste) lists,
+		// never the raw fields directly — a question saved before #216
+		// (mono CATEGORY/RAFALE_DIFFICULTY only) must still satisfy this
+		// gate exactly as it did pre-#216 (contract §3.3 "216-Q6").
+		categories := question.EffectiveRafaleCategories()
+		difficulties := question.EffectiveRafaleDifficulties()
+		if len(categories) == 0 || len(difficulties) == 0 {
 			return false
+		}
+		for _, d := range difficulties {
+			if d < 1 || d > 3 {
+				return false
+			}
 		}
 		// #201: was SOLO exempt (`return true` unconditionally) — the user
 		// confirmed RAFALE SOLO must require exactly one team too, same as
@@ -2547,6 +2572,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 	e.state.RafaleCurrentQuestion = RafaleCurrent{
 		ID: drawn.ID, Question: drawn.Question,
 		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
+		Points: resolveRafalePoints(e.state.Question, drawn.Difficulty), // #216
 	}
 	e.state.RafaleAskedCount++
 
@@ -2560,7 +2586,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 
 	return rafaleAdvanceResult{
 		nextQuestionID: drawn.ID, nextAnswer: drawn.Answer, nextQuestionTime: questionTime,
-		next: rafaleNextPreview(e.rafaleNext),
+		next: rafaleNextPreview(e.rafaleNext, e.state.Question),
 	}
 }
 
@@ -2691,11 +2717,17 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	e.state.RafaleTeamStreak = map[string]int{}
 	e.state.RafaleTeamErrors = map[string]int{}
 
-	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
+	// #216: (re)build the round's stratified draw state — cartesian product
+	// of categories × difficulties, active couples only — BEFORE the first
+	// draw, so drawNextRafaleUnsafe below (and every subsequent prefetch/
+	// advance this round) shares one consistent sequence.
+	e.rafaleDraw = e.newRafaleDrawStateUnsafe(e.state.Question)
+
+	drawn, err := e.drawNextRafaleUnsafe()
 	if err != nil {
-		// contract §7.1: never reproposes anything, ends immediately. Should
-		// not normally happen — §7.2's pre-round alert blocks START when
-		// available==0 — but a race (reservoir edited concurrently) is
+		// contract §7.4: never reproposes anything, ends immediately. Should
+		// not normally happen — §7.5's pre-round alert blocks START when the
+		// UNION is empty — but a race (reservoir edited concurrently) is
 		// always possible; this is the safety net, not the primary defense.
 		log.Printf("[Engine] RAFALE: pool already empty at round start, ending immediately")
 		e.state.RafaleExhausted = true
@@ -2708,6 +2740,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	e.state.RafaleCurrentQuestion = RafaleCurrent{
 		ID: drawn.ID, Question: drawn.Question,
 		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
+		Points: resolveRafalePoints(e.state.Question, drawn.Difficulty), // #216
 	}
 	e.state.RafaleAskedCount = 1
 
@@ -2724,7 +2757,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 
 	return rafaleRoundStartResult{
 		isRafale: true, questionID: drawn.ID, answer: drawn.Answer, questionTime: questionTime,
-		next: rafaleNextPreview(e.rafaleNext),
+		next: rafaleNextPreview(e.rafaleNext, e.state.Question),
 	}
 }
 
@@ -4068,30 +4101,54 @@ func (e *Engine) SaveAll() {
 // question.
 var ErrRafalePoolEmpty = errors.New("rafale_pool_empty")
 
-// rafalePoolUnsafe returns the reservoir questions matching category ∩
-// difficulty (both exact) ∩ not-yet-used — contracts/rafale.md §7. Caller
-// must hold e.mu (read or write lock).
+// rafaleQuestionMatchesFilter reports whether q's (CATEGORY, DIFFICULTY) is
+// a member of the requested sets — the SINGLE membership predicate shared by
+// every RAFALE pool-filtering site (contracts/rafale.md §7.1, #216). Passing
+// a one-element categories/difficulties pair reduces to the pre-#216 exact
+// match (used for a single active couple's own draw, drawNextRafaleUnsafe).
 //
-// Single category (v8.0.0 bugfix, 2026-08-29): a RAFALE round now filters
-// on exactly one category, same as every other question type's Category
-// field — RAFALE_CATEGORIES (multi-select, OR-matched) was removed. See
-// TypedContent's own doc comment (models.go) and contracts/CHANGELOG.md.
-func (e *Engine) rafalePoolUnsafe(category string, difficulty int) []*RafaleQuestion {
-	// Defense in depth (post-review, 2026-08-29): an empty/unset category is
-	// an unconfigured manche, never a wildcard — must match nothing, even
-	// though a reservoir question with CategoryNone ("") could otherwise
-	// satisfy `string(q.Category) != category` below. The frontend now
-	// blocks this case upstream (GamePage.jsx/QuestionsPage.jsx), but the
-	// engine must never rely on that alone.
-	if category == "" {
-		return nil
+// Ensemble **vide ⇒ pool vide, jamais wildcard** (post-review guard,
+// 2026-08-29, carried forward unchanged by #216's generalization): an
+// unconfigured manche (no category, or no difficulty, selected) must match
+// nothing, even though a reservoir question with an equally unset CATEGORY
+// could otherwise satisfy an empty-slice "contains" check.
+func rafaleQuestionMatchesFilter(q *RafaleQuestion, categories []string, difficulties []int) bool {
+	if len(categories) == 0 || len(difficulties) == 0 {
+		return false
 	}
+	catOK := false
+	for _, c := range categories {
+		if string(q.Category) == c {
+			catOK = true
+			break
+		}
+	}
+	if !catOK {
+		return false
+	}
+	for _, d := range difficulties {
+		if q.Difficulty == d {
+			return true
+		}
+	}
+	return false
+}
+
+// rafalePoolUnsafe returns the AVAILABLE (not-yet-used) reservoir questions
+// matching categories ∈ set ∩ difficulties ∈ set — contracts/rafale.md §7.1.
+// Caller must hold e.mu (read or write lock).
+//
+// Set membership (#216, milestone v9.0.0): was a single exact match
+// (category string, difficulty int) pre-#216 — see rafaleQuestionMatchesFilter,
+// the one place this predicate is implemented; #107's original bug was
+// exactly a second, independently-drifted copy of this filter at a
+// forgotten call site, which is why every RAFALE pool site (this function,
+// CountRafalePool below, and every caller of either) shares this one helper
+// instead of re-deriving the match condition locally.
+func (e *Engine) rafalePoolUnsafe(categories []string, difficulties []int) []*RafaleQuestion {
 	var pool []*RafaleQuestion
 	for _, q := range e.rafaleQuestions {
-		if string(q.Category) != category {
-			continue
-		}
-		if q.Difficulty != difficulty {
+		if !rafaleQuestionMatchesFilter(q, categories, difficulties) {
 			continue
 		}
 		if e.rafaleUsed[q.ID] {
@@ -4102,27 +4159,22 @@ func (e *Engine) rafalePoolUnsafe(category string, difficulty int) []*RafaleQues
 	return pool
 }
 
-// CountRafalePool returns (available, used, total) reservoir questions for
-// a category/difficulty filter — contracts/rafale.md §7.2, the pre-round
-// alert (GET /api/rafale/pool): blocking when available==0, a warning when
-// available < the estimated need, informational otherwise.
-func (e *Engine) CountRafalePool(category string, difficulty int) (available, used, total int) {
+// CountRafalePool returns (available, used, total) reservoir questions
+// matching categories ∈ set ∩ difficulties ∈ set (#216, set membership —
+// was a single exact match pre-#216) — contracts/rafale.md §7.5, the
+// pre-round alert (GET /api/rafale/pool): blocking when available==0 across
+// the WHOLE union, a warning when available < the estimated need,
+// informational otherwise. Shares rafaleQuestionMatchesFilter with
+// rafalePoolUnsafe above rather than rafalePoolUnsafe itself (this function
+// additionally needs the USED branch, which rafalePoolUnsafe deliberately
+// excludes) — same single predicate either way, never a second independent
+// filter implementation.
+func (e *Engine) CountRafalePool(categories []string, difficulties []int) (available, used, total int) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	// Defense in depth (post-review, 2026-08-29) — same reasoning as
-	// rafalePoolUnsafe's own guard just above: an empty/unset category must
-	// count as zero, never accidentally match a reservoir question whose own
-	// CATEGORY is also unset (CategoryNone == "").
-	if category == "" {
-		return 0, 0, 0
-	}
-
 	for _, q := range e.rafaleQuestions {
-		if string(q.Category) != category {
-			continue
-		}
-		if q.Difficulty != difficulty {
+		if !rafaleQuestionMatchesFilter(q, categories, difficulties) {
 			continue
 		}
 		total++
@@ -4136,20 +4188,20 @@ func (e *Engine) CountRafalePool(category string, difficulty int) (available, us
 }
 
 // DrawRafaleQuestion draws one question uniformly at random from the pool
-// (category ∩ difficulty ∩ not-used — contracts/rafale.md §7), marks it
-// used immediately and persists the flag asynchronously so a restart mid-
-// round never re-proposes it. Returns ErrRafalePoolEmpty when the pool is
-// empty; the caller (Phase 2, #107) reacts per contract §7.1.
+// (categories ∈ set ∩ difficulties ∈ set ∩ not-used — contracts/rafale.md
+// §7.1), marks it used immediately and persists the flag asynchronously so a
+// restart mid-round never re-proposes it. Returns ErrRafalePoolEmpty when
+// the pool is empty; the caller reacts per contract §7.3/§7.4.
 //
 // Public entry point for callers NOT already holding e.mu (e.g. a future
-// HTTP/test caller outside the engine). The RAFALE round engine (#107,
-// advanceRafaleUnsafe/startRafaleRoundUnsafe) is already inside a locked
-// section when it needs to draw — it calls drawRafaleQuestionUnsafe
-// directly instead, to stay within one atomic transition rather than
-// releasing and re-acquiring e.mu mid-round-advance.
-func (e *Engine) DrawRafaleQuestion(category string, difficulty int) (*RafaleQuestion, error) {
+// HTTP/test caller outside the engine). The RAFALE round engine itself never
+// calls this directly — its own stratified draw (drawNextRafaleUnsafe, §7.2)
+// calls drawRafaleQuestionUnsafe with a ONE-couple set per active pair,
+// already inside a locked section, to stay within one atomic transition
+// rather than releasing and re-acquiring e.mu mid-round-advance.
+func (e *Engine) DrawRafaleQuestion(categories []string, difficulties []int) (*RafaleQuestion, error) {
 	e.mu.Lock()
-	drawn, err := e.drawRafaleQuestionUnsafe(category, difficulty)
+	drawn, err := e.drawRafaleQuestionUnsafe(categories, difficulties)
 	e.mu.Unlock()
 
 	if err != nil {
@@ -4165,8 +4217,8 @@ func (e *Engine) DrawRafaleQuestion(category string, difficulty int) (*RafaleQue
 // hold e.mu (write lock) and is responsible for persisting rafaleUsed
 // (safeGo("SaveRafaleUsed", e.SaveRafaleUsed)) once its own locked section
 // ends — this function only mutates in-memory state.
-func (e *Engine) drawRafaleQuestionUnsafe(category string, difficulty int) (*RafaleQuestion, error) {
-	pool := e.rafalePoolUnsafe(category, difficulty)
+func (e *Engine) drawRafaleQuestionUnsafe(categories []string, difficulties []int) (*RafaleQuestion, error) {
+	pool := e.rafalePoolUnsafe(categories, difficulties)
 	if len(pool) == 0 {
 		return nil, ErrRafalePoolEmpty
 	}
@@ -4176,6 +4228,136 @@ func (e *Engine) drawRafaleQuestionUnsafe(category string, difficulty int) (*Raf
 	e.rafaleUsed[drawn.ID] = true
 
 	return &drawn, nil
+}
+
+// rafaleCouple is one (category, difficulty) pair from a RAFALE round's
+// configured cartesian product — contracts/rafale.md §7.2 (#216). A small
+// comparable value type, freely copied into permutation orderings.
+type rafaleCouple struct {
+	category   string
+	difficulty int
+}
+
+// rafaleDrawState (#216, contract §7.2) sequences a RAFALE round's stratified
+// draw: a random permutation of the still-viable couples, replayed
+// (reshuffled) once fully cycled. `active` only ever shrinks — a couple
+// found empty, at construction or mid-round, is removed permanently (never
+// re-added, contract §7.3's "au lancement OU en cours de manche, unifié").
+// See the Engine.rafaleDraw field's own doc comment for its lifecycle.
+type rafaleDrawState struct {
+	active []rafaleCouple // couples not yet known-exhausted this round
+	order  []rafaleCouple // current permutation of `active`, drained by `pos`
+	pos    int            // index into `order` for the NEXT draw attempt
+}
+
+// newRafaleDrawStateUnsafe builds the initial rafaleDrawState for a fresh
+// round: the cartesian product of question's effective categories ×
+// difficulties, keeping only couples with at least one available reservoir
+// question RIGHT NOW — a couple with none is excluded upfront (contract
+// §7.3, unified with the mid-round exhaustion path in drawNextRafaleUnsafe,
+// which removes a couple the exact same way the moment it's discovered
+// empty, instead of before). Caller must hold e.mu (write lock).
+func (e *Engine) newRafaleDrawStateUnsafe(question *Question) rafaleDrawState {
+	var active []rafaleCouple
+	for _, cat := range question.EffectiveRafaleCategories() {
+		for _, diff := range question.EffectiveRafaleDifficulties() {
+			if len(e.rafalePoolUnsafe([]string{cat}, []int{diff})) > 0 {
+				active = append(active, rafaleCouple{category: cat, difficulty: diff})
+			} else {
+				log.Printf("[Engine] RAFALE: couple category=%s difficulty=%d has no available question at round start, excluded from the active set (contract §7.3)", cat, diff)
+			}
+		}
+	}
+	return rafaleDrawState{active: active}
+}
+
+// reshuffleRafaleDrawUnsafe draws a fresh random permutation of e.rafaleDraw
+// active into its order, resetting pos to 0 — contract §7.2 "nouvelle
+// permutation une fois épuisée". Caller must hold e.mu (write lock).
+func (e *Engine) reshuffleRafaleDrawUnsafe() {
+	order := make([]rafaleCouple, len(e.rafaleDraw.active))
+	copy(order, e.rafaleDraw.active)
+	rand.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
+	e.rafaleDraw.order = order
+	e.rafaleDraw.pos = 0
+}
+
+// removeRafaleActiveCoupleUnsafe permanently drops couple from
+// e.rafaleDraw.active (contract §7.3 — a couple found empty, whether at
+// round start or mid-round, never re-enters a future permutation this
+// round) and invalidates the current in-flight permutation: order/pos are
+// reset so the NEXT draw attempt reshuffles from the now-shrunk active set,
+// rather than keep draining a permutation built from a larger one (a
+// slightly shorter/uneven current cycle is an acceptable one-time
+// rebalancing blip, not a recurring bias). Caller must hold e.mu (write
+// lock).
+func (e *Engine) removeRafaleActiveCoupleUnsafe(couple rafaleCouple) {
+	for i, c := range e.rafaleDraw.active {
+		if c == couple {
+			e.rafaleDraw.active = append(e.rafaleDraw.active[:i], e.rafaleDraw.active[i+1:]...)
+			break
+		}
+	}
+	e.rafaleDraw.order = nil
+	e.rafaleDraw.pos = 0
+}
+
+// drawNextRafaleUnsafe draws the round's next reservoir question following
+// the stratified permutation sequence in e.rafaleDraw (contract §7.2, #216)
+// — replaces the pre-#216 direct single-couple draw at every one of
+// startRafaleRoundUnsafe/prefetchRafaleNextUnsafe's own call sites, sharing
+// the SAME e.rafaleDraw so the pre-fetched "next" question (#202) is always
+// drawn from the exact same sequence as the question that will actually
+// become current, never a second independent draw that could disagree
+// (contract §7.2's own note on the #202 interaction).
+//
+// Returns ErrRafalePoolEmpty only when e.rafaleDraw.active is entirely empty
+// — a couple found individually exhausted along the way is removed
+// (contract §7.3) and the loop keeps trying the remaining couples,
+// rebalancing; it NEVER surfaces that couple's own emptiness as an error to
+// the caller. Caller must hold e.mu (write lock).
+func (e *Engine) drawNextRafaleUnsafe() (*RafaleQuestion, error) {
+	for {
+		if len(e.rafaleDraw.active) == 0 {
+			return nil, ErrRafalePoolEmpty
+		}
+		if e.rafaleDraw.pos >= len(e.rafaleDraw.order) {
+			e.reshuffleRafaleDrawUnsafe()
+		}
+
+		couple := e.rafaleDraw.order[e.rafaleDraw.pos]
+		e.rafaleDraw.pos++
+
+		drawn, err := e.drawRafaleQuestionUnsafe([]string{couple.category}, []int{couple.difficulty})
+		if err == nil {
+			return drawn, nil
+		}
+
+		// Couple genuinely exhausted (found empty just now, whether it was
+		// its first attempt or a later cycle) — remove permanently and keep
+		// trying the remaining couples (contract §7.3: unified with the
+		// pre-round exclusion in newRafaleDrawStateUnsafe, never blocks).
+		log.Printf("[Engine] RAFALE: couple category=%s difficulty=%d exhausted mid-round, removed from the active set (contract §7.3)", couple.category, couple.difficulty)
+		e.removeRafaleActiveCoupleUnsafe(couple)
+	}
+}
+
+// resolveRafalePoints (#216, contract §3.3/§216-Q7) resolves the points
+// value for a RAFALE question drawn at the given difficulty:
+// question.RafalePointsByDifficulty[difficulty] when explicitly set and >0,
+// falling back to the round's generic POINTS field otherwise (216-Q7b —
+// identical behavior to every RAFALE round configured before #216, which
+// never had a per-difficulty barème at all). question must be non-nil; an
+// unparseable POINTS resolves to 0 (same silent-zero fallback every other
+// POINTS consumer in this codebase already accepts for a malformed value).
+func resolveRafalePoints(question *Question, difficulty int) int {
+	if question.RafalePointsByDifficulty != nil {
+		if p, ok := question.RafalePointsByDifficulty[difficulty]; ok && p > 0 {
+			return p
+		}
+	}
+	p, _ := strconv.Atoi(question.Points)
+	return p
 }
 
 // rafaleMaxQuestionsUnsafe (#202) resolves the RAFALE_MAX_QUESTIONS hard cap
@@ -4196,13 +4378,18 @@ func rafaleMaxQuestionsUnsafe(question *Question) int {
 // rafaleNextPreview (#202, contract §13.3) converts a pre-fetched
 // *RafaleQuestion (e.rafaleNext) into the answer-free *RafaleCurrent shape
 // broadcast as RAFALE_ANSWER's own NEXT field — nil in, nil out (contract
-// §13.5: no pool-remaining question / cap imminent). Pure function, no
-// locking.
-func rafaleNextPreview(q *RafaleQuestion) *RafaleCurrent {
+// §13.5: no pool-remaining question / cap imminent). roundQuestion resolves
+// Points (#216, resolveRafalePoints) the same way the CURRENT question's own
+// RafaleCurrent does — the NEXT preview must never show a misleading 0 for a
+// round with a per-difficulty barème. Pure function, no locking.
+func rafaleNextPreview(q *RafaleQuestion, roundQuestion *Question) *RafaleCurrent {
 	if q == nil {
 		return nil
 	}
-	return &RafaleCurrent{ID: q.ID, Question: q.Question, Category: string(q.Category), Difficulty: q.Difficulty}
+	return &RafaleCurrent{
+		ID: q.ID, Question: q.Question, Category: string(q.Category), Difficulty: q.Difficulty,
+		Points: resolveRafalePoints(roundQuestion, q.Difficulty),
+	}
 }
 
 // prefetchRafaleNextUnsafe (#202, contract §13.1/§13.4) draws the question
@@ -4254,7 +4441,11 @@ func (e *Engine) prefetchRafaleNextUnsafe() {
 	if e.state.RafaleAskedCount >= rafaleMaxQuestionsUnsafe(e.state.Question) {
 		return
 	}
-	drawn, err := e.drawRafaleQuestionUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty)
+	// #216: shares e.rafaleDraw with the round's own current-question draw
+	// (startRafaleRoundUnsafe/advanceRafaleUnsafe) instead of drawing a
+	// single couple independently — see drawNextRafaleUnsafe's own doc
+	// comment for why that sharing is what keeps NEXT accurate.
+	drawn, err := e.drawNextRafaleUnsafe()
 	if err != nil {
 		return // pool empty — e.rafaleNext stays nil, contract §13.5
 	}
@@ -4313,7 +4504,11 @@ func (e *Engine) releaseRafaleNextUnsafe() bool {
 // of overlooked duplicate site. Must be called with e.mu held (write);
 // e.state.Question must be the live RAFALE round-config question.
 func (e *Engine) refreshRafalePoolRemainingUnsafe() {
-	count := len(e.rafalePoolUnsafe(string(e.state.Question.Category), e.state.Question.RafaleDifficulty))
+	// #216: union over the round's full effective categories/difficulties
+	// (contract §7.1) — numerically equivalent to summing over only the
+	// still-active couples, since an excluded couple is by definition empty
+	// and contributes nothing either way; this is simply less code.
+	count := len(e.rafalePoolUnsafe(e.state.Question.EffectiveRafaleCategories(), e.state.Question.EffectiveRafaleDifficulties()))
 	if e.rafaleNext != nil {
 		count++
 	}
