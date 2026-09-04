@@ -234,6 +234,7 @@
 }
 
 .ambiance-wait.is-unreachable { border-style: solid; border-color: var(--error); }
+.ambiance-wait.is-rejected { border-style: solid; border-color: var(--warning); }
 .ambiance-wait.is-error { border-style: solid; border-color: var(--error); }
 
 .ambiance-wait-ring {

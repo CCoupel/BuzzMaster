@@ -50,11 +50,42 @@ const readJsonSafe = async (res) => {
   try { return await res.json() } catch { return {} }
 }
 
-// Taxonomie §5.6 appliquée à une réponse d'inventaire/test : trois issues.
+// Taxonomie §5.6 appliquée à une réponse d'inventaire/test : trois issues
+// (+ `busy` : une opération est déjà en cours, ce n'est pas une panne).
 function classifyFailure(res, body) {
+  if (res.status === 429 || body?.result === 'busy') return 'busy'
   if (res.status === 503 || body?.result === 'unreachable') return 'unreachable'
   if (res.status === 401 || res.status === 409 || body?.result === 'refused') return 'refused'
   return 'error'
+}
+
+// Issues de POST /api/lighting/register hors succès (http_lighting.go). Le
+// serveur ne renvoie JAMAIS de `message` : les textes sont fixés ici.
+//   409 link_button_not_pressed   → nominal, on relance dans 2 s
+//   429 busy (register_in_progress) → une association tourne déjà, on relance
+//   503 unreachable               → « Pont injoignable » (rebrancher)
+//   400 bridge_ip_not_private     → adresse hors réseau local : changer d'adresse
+//   409 api_key_refused, 502 invalid_key_from_bridge, 500 {result:error}
+//                                 → « Association impossible », texte fixe
+function registerOutcome(res, body) {
+  const reason = body?.reason || ''
+  if (res.status === 409 && (reason === '' || reason === 'link_button_not_pressed')) return { kind: 'retry' }
+  if (res.status === 429 || body?.result === 'busy') return { kind: 'retry' }
+  if (res.status === 503 || body?.result === 'unreachable') return { kind: 'unreachable' }
+  if (res.status === 400 && reason === 'bridge_ip_not_private') return { kind: 'rejected' }
+  if (res.status === 502 && reason === 'invalid_key_from_bridge') {
+    return { kind: 'error', detail: 'Le pont a renvoyé une clé inutilisable.' }
+  }
+  if (res.status === 409) return { kind: 'error', detail: "Le pont a refusé l'association." }
+  return { kind: 'error', detail: `Réponse inattendue du serveur (HTTP ${res.status}).` }
+}
+
+// Sélection par défaut des ampoules : la config fait foi ; si elle est vide
+// (association toute fraîche) TOUT est coché — le pont est dédié à BuzzMaster.
+function defaultSelectionFor(configLights, inventoryLights) {
+  const fromConfig = configLights.map(l => l.name)
+  if (fromConfig.length > 0) return fromConfig
+  return inventoryLights.map(l => l.name)
 }
 
 export default function AmbiancePage() {
@@ -75,7 +106,12 @@ export default function AmbiancePage() {
 
   // Étape 3 — inventaire et sélection.
   const [inventory, setInventory] = useState({ phase: 'idle', lights: [], failure: null })
-  const [selectedNames, setSelectedNames] = useState([])
+  // null = « par défaut » : la sélection effective est DÉRIVÉE (useMemo) de la
+  // config et de l'inventaire dans le même rendu que les lignes — jamais fixée
+  // après coup par un effet, qui laisserait un rendu intermédiaire tout
+  // décoché (course relevée en revue). Un tableau = choix explicite de
+  // l'utilisateur, non encore enregistré.
+  const [selectedNames, setSelectedNames] = useState(null)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(null) // nom en cours de test, ou '*' pour toutes
 
@@ -126,6 +162,11 @@ export default function AmbiancePage() {
     setManualOpen(false)
     try {
       const res = await postJson('/api/lighting/discover')
+      if (res.status === 429) {
+        // Une recherche tourne déjà (autre onglet) : pas une panne.
+        setDiscovery({ phase: 'done', bridges: [], busy: true })
+        return
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await readJsonSafe(res)
       const bridges = Array.isArray(data.bridges) ? data.bridges : []
@@ -149,27 +190,27 @@ export default function AmbiancePage() {
     setPairing({ bridge, phase: 'waiting', remaining: REGISTER_TIMEOUT_S })
   }
 
-  // Association réussie : la clé est enregistrée côté serveur, jamais renvoyée.
-  // On persiste ici le pont (ip + id) et on active la section. `api_key`
-  // absente => préservée (§6.1). Les ampoules déjà choisies (cas « ré-associer »
-  // depuis l'état refusé) sont conservées telles quelles.
+  // Association réussie : le serveur a DÉJÀ persisté la clé, `bridge_ip` et le
+  // `bridge_id` qu'il vient de lire sur le pont (http_lighting.go). La page ne
+  // renvoie donc que `enabled: true` — le merge de `handleConfig` est champ par
+  // champ, toute clé absente est laissée intacte. Renvoyer un `bridge_id`
+  // calculé côté client écrasait à vide celui du serveur après une saisie
+  // manuelle de l'IP (bug relevé en revue). Les ampoules déjà choisies sont
+  // préservées pour la même raison (clé absente).
+  // L'étape 2 reste affichée jusqu'à ce que la config rechargée dise
+  // « configuré » : pas d'aller-retour visuel par l'étape 1.
   const onPairedRef = useRef(null)
-  onPairedRef.current = async (bridge) => {
+  onPairedRef.current = async () => {
     try {
-      const res = await saveLighting({
-        enabled: true,
-        bridge_ip: bridge.ip,
-        bridge_id: bridge.id || lighting.bridge_id || '',
-        lights: lighting.lights,
-      })
+      const res = await saveLighting({ enabled: true })
       if (!res.ok) throw new Error(await res.text())
-      setPairing(null)
-      setToast({ message: 'Pont associé.', type: 'success' })
       await afterSave()
+      setToast({ message: 'Pont associé.', type: 'success' })
     } catch (error) {
-      console.error('Save bridge failed:', error)
-      setPairing(null)
+      console.error('Enable lighting failed:', error)
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setPairing(null)
     }
   }
 
@@ -196,13 +237,17 @@ export default function AmbiancePage() {
       }
       if (cancelled) return
       if (res.ok) {
-        onPairedRef.current?.(bridge)
+        // 200 {"result":"ok","bridge_id":"…"} — l'identité est déjà persistée
+        // côté serveur, rien à renvoyer.
+        onPairedRef.current?.()
         return
       }
       const body = await readJsonSafe(res)
       if (cancelled) return
-      if (res.status === 409 || body.result === 'refused') {
-        // Cas NOMINAL : personne n'a encore appuyé. On attend, on réessaie.
+      const outcome = registerOutcome(res, body)
+      if (outcome.kind === 'retry') {
+        // Cas NOMINAL : personne n'a encore appuyé (ou une association tourne
+        // déjà). On attend, on réessaie.
         if (Date.now() >= deadline) {
           setPairing(p => (p ? { ...p, phase: 'timeout', remaining: 0 } : p))
           return
@@ -210,11 +255,7 @@ export default function AmbiancePage() {
         retry = setTimeout(attempt, REGISTER_RETRY_MS)
         return
       }
-      if (res.status === 503 || body.result === 'unreachable') {
-        setPairing(p => (p ? { ...p, phase: 'unreachable' } : p))
-        return
-      }
-      setPairing(p => (p ? { ...p, phase: 'error', detail: `HTTP ${res.status}` } : p))
+      setPairing(p => (p ? { ...p, phase: outcome.kind, detail: outcome.detail } : p))
     }
 
     attempt()
@@ -235,19 +276,24 @@ export default function AmbiancePage() {
   // ---- Étape 3 : inventaire ------------------------------------------------
   const loadInventory = useCallback(async () => {
     setInventory(prev => ({ ...prev, phase: 'loading' }))
+    let next
     try {
       const res = await fetch('/api/lighting/lights')
       if (!res.ok) {
         const body = await readJsonSafe(res)
-        setInventory({ phase: 'done', lights: [], failure: classifyFailure(res, body) })
-        return
+        next = { phase: 'done', lights: [], failure: classifyFailure(res, body) }
+      } else {
+        const data = await readJsonSafe(res)
+        next = { phase: 'done', lights: Array.isArray(data.lights) ? data.lights : [], failure: null }
       }
-      const data = await readJsonSafe(res)
-      setInventory({ phase: 'done', lights: Array.isArray(data.lights) ? data.lights : [], failure: null })
     } catch (error) {
       console.error('Load lights failed:', error)
-      setInventory({ phase: 'done', lights: [], failure: 'error' })
+      next = { phase: 'done', lights: [], failure: 'error' }
     }
+    // Un nouvel inventaire repart de la sélection par défaut (dérivée dans le
+    // même rendu que les lignes — voir selectedNames).
+    setSelectedNames(null)
+    setInventory(next)
   }, [])
 
   useEffect(() => {
@@ -255,17 +301,15 @@ export default function AmbiancePage() {
     else setInventory({ phase: 'idle', lights: [], failure: null })
   }, [configured, lighting.bridge_ip, loadInventory])
 
-  // Sélection initiale : la config fait foi ; si elle est vide (association
-  // toute fraîche) TOUT est coché — le pont est dédié à BuzzMaster. Mais tout
-  // reste affiché et décochable (maquette §05).
-  const inventoryKey = inventory.lights.map(l => l.name).join(' ')
-  useEffect(() => {
-    if (inventory.phase !== 'done') return
-    const fromConfig = lighting.lights.map(l => l.name)
-    if (fromConfig.length > 0) setSelectedNames(fromConfig)
-    else setSelectedNames(inventory.lights.map(l => l.name))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inventory.phase, inventoryKey, lighting.lights])
+  // Sélection effective : choix explicite de l'utilisateur s'il existe, sinon
+  // la sélection par défaut — dérivée de façon SYNCHRONE, donc cochée dès le
+  // premier rendu des lignes (« tout coché » est l'état initial, pas un état
+  // atteint après un flash de cases vides).
+  const defaultSelection = useMemo(
+    () => defaultSelectionFor(lighting.lights, inventory.lights),
+    [lighting.lights, inventory.lights]
+  )
+  const effectiveSelected = selectedNames ?? defaultSelection
 
   // Lignes affichées : inventaire + noms configurés introuvables (§4.2 — on
   // signale, on ne remplace jamais par une voisine). Doublon de nom => refus
@@ -291,7 +335,10 @@ export default function AmbiancePage() {
   const frozen = inventory.failure === 'unreachable' || inventory.failure === 'refused'
 
   const toggleName = (name, checked) => {
-    setSelectedNames(prev => (checked ? [...new Set([...prev, name])] : prev.filter(n => n !== name)))
+    setSelectedNames(prev => {
+      const base = prev ?? defaultSelection
+      return checked ? [...new Set([...base, name])] : base.filter(n => n !== name)
+    })
   }
 
   const handleSaveLights = async () => {
@@ -299,15 +346,13 @@ export default function AmbiancePage() {
     try {
       // Les entrées existantes sont reprises telles quelles (rôle/équipe #213
       // préservés) ; les nouvelles sont `general` — seul rôle actif en #207.
+      // Seules les clés possédées par cette étape sont envoyées (merge champ
+      // par champ côté serveur) : pont et clé restent intacts.
       const existing = new Map(lighting.lights.map(l => [l.name, l]))
-      const lights = selectedNames.map(name => existing.get(name) || { name, role: 'general' })
-      const res = await saveLighting({
-        enabled: true,
-        bridge_ip: lighting.bridge_ip,
-        bridge_id: lighting.bridge_id,
-        lights,
-      })
+      const lights = effectiveSelected.map(name => existing.get(name) || { name, role: 'general' })
+      const res = await saveLighting({ enabled: true, lights })
       if (!res.ok) throw new Error(await res.text())
+      setSelectedNames(null) // la config rechargée devient la référence
       setToast({ message: 'Ampoules enregistrées.', type: 'success' })
       await afterSave()
     } catch (error) {
@@ -325,12 +370,13 @@ export default function AmbiancePage() {
       if (!res.ok) {
         const body = await readJsonSafe(res)
         const failure = classifyFailure(res, body)
-        setToast({
-          message: failure === 'unreachable' ? 'Pont injoignable — test impossible.'
-            : failure === 'refused' ? 'Association refusée — ré-associez le pont.'
-            : `Erreur : HTTP ${res.status}`,
-          type: failure === 'error' ? 'error' : 'warning',
-        })
+        // Aucun `message` serveur n'est supposé : textes fixés ici.
+        const message = failure === 'busy' ? 'Un test est déjà en cours — patientez un instant.'
+          : failure === 'unreachable' ? 'Pont injoignable — test impossible.'
+          : failure === 'refused' && body?.reason === 'not_configured' ? 'Enregistrez d\'abord la configuration.'
+          : failure === 'refused' ? 'Association refusée — ré-associez le pont.'
+          : `Test impossible (HTTP ${res.status}).`
+        setToast({ message, type: failure === 'error' ? 'error' : 'warning' })
       }
     } catch (error) {
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
@@ -414,9 +460,11 @@ export default function AmbiancePage() {
 
             {discovery.phase === 'done' && discovery.bridges.length === 0 && !selectedBridge && (
               <div className="ambiance-notice">
-                <strong>Aucun pont trouvé.</strong>
+                <strong>{discovery.busy ? 'Une recherche est déjà en cours.' : 'Aucun pont trouvé.'}</strong>
                 <span>
-                  Le pont est-il allumé, et sur le même réseau que ce serveur ?
+                  {discovery.busy
+                    ? 'Réessayez dans quelques secondes.'
+                    : 'Le pont est-il allumé, et sur le même réseau que ce serveur ?'}
                   {discovery.error ? ` (${discovery.error})` : ''}
                 </span>
                 {!manualOpen && (
@@ -548,6 +596,23 @@ export default function AmbiancePage() {
               </>
             )}
 
+            {pairing.phase === 'rejected' && (
+              <>
+                <div className="ambiance-wait is-rejected" role="alert">
+                  <div className="ambiance-wait-text">
+                    <div className="ambiance-wait-title">Adresse hors du réseau local</div>
+                    <div className="ambiance-wait-sub">
+                      Le pont doit être sur une adresse privée du réseau (par exemple 192.168.x.x ou 10.x.x.x).
+                      Rien n'a été enregistré — corrigez l'adresse.
+                    </div>
+                  </div>
+                </div>
+                <div className="ambiance-actions">
+                  <Button variant="ghost" onClick={handleCancelPairing}>Annuler</Button>
+                </div>
+              </>
+            )}
+
             {(pairing.phase === 'unreachable' || pairing.phase === 'error') && (
               <>
                 <div className={`ambiance-wait is-${pairing.phase}`} role="alert">
@@ -558,7 +623,7 @@ export default function AmbiancePage() {
                     <div className="ambiance-wait-sub">
                       {pairing.phase === 'unreachable'
                         ? "Le pont ne répond pas à cette adresse. Vérifiez qu'il est allumé et branché au réseau."
-                        : `Réponse inattendue du serveur${pairing.detail ? ` (${pairing.detail})` : ''}.`}
+                        : `${pairing.detail || 'Réponse inattendue du serveur.'} Rien n'a été enregistré.`}
                     </div>
                   </div>
                 </div>
@@ -607,14 +672,21 @@ export default function AmbiancePage() {
               <p className="ambiance-hint">Lecture des ampoules…</p>
             )}
 
-            {inventory.phase === 'done' && rows.length === 0 && !frozen && (
+            {inventory.phase === 'done' && (inventory.failure === 'error' || inventory.failure === 'busy') && (
+              <div className="ambiance-notice" role="status">
+                <strong>{inventory.failure === 'busy' ? 'Le pont est occupé.' : 'Lecture des ampoules impossible.'}</strong>
+                <span>Réessayez avec « Actualiser la liste ».</span>
+              </div>
+            )}
+
+            {inventory.phase === 'done' && rows.length === 0 && !frozen && !inventory.failure && (
               <p className="ambiance-hint">Aucune ampoule sur ce pont.</p>
             )}
 
             {rows.length > 0 && (
               <ul className={`ambiance-lights ${frozen ? 'is-frozen' : ''}`} aria-label="Ampoules">
                 {rows.map(row => {
-                  const checked = selectedNames.includes(row.name)
+                  const checked = effectiveSelected.includes(row.name)
                   const blocked = frozen || row.duplicate
                   return (
                     <li
@@ -665,7 +737,7 @@ export default function AmbiancePage() {
                 variant="secondary"
                 onClick={() => handleTest(null)}
                 loading={testing === '*'}
-                disabled={frozen || testing !== null || selectedNames.length === 0}
+                disabled={frozen || testing !== null || effectiveSelected.length === 0}
               >
                 Tester toutes les ampoules
               </Button>

@@ -42,9 +42,11 @@ function makeServer({ lighting = {}, status = { state: 'disabled' }, register, l
       return respond(200, { lighting: { ...server.lighting, api_key_configured: server.keyStored } })
     }
     if (method === 'POST' && url === '/config.json') {
-      const { clear_api_key, ...section } = body.lighting
+      // Merge champ par champ, comme handleConfig (http.go) : seules les clés
+      // PRÉSENTES sont écrites — y compris une chaîne vide.
+      const { clear_api_key, api_key_configured, ...section } = body.lighting
       if (clear_api_key) server.keyStored = false
-      server.lighting = { ...section }
+      server.lighting = { ...server.lighting, ...section }
       return respond(200, { ok: true })
     }
     if (method === 'GET' && url === '/api/lighting/status') {
@@ -56,7 +58,13 @@ function makeServer({ lighting = {}, status = { state: 'disabled' }, register, l
     }
     if (method === 'POST' && url === '/api/lighting/register') {
       const r = typeof register === 'function' ? register(body) : (register ?? { status: 409, body: { result: 'refused', reason: 'link_button_not_pressed' } })
-      if (r.status === 200) server.keyStored = true
+      if (r.status === 200) {
+        // Comme http_lighting.go : clé + bridge_ip + bridge_id lu sur le pont
+        // sont persistés côté serveur AVANT la réponse 200.
+        server.keyStored = true
+        server.lighting.bridge_ip = body.bridge_ip
+        server.lighting.bridge_id = r.body?.bridge_id ?? ''
+      }
       return respond(r.status, r.body)
     }
     if (method === 'GET' && url === '/api/lighting/lights') {
@@ -183,6 +191,20 @@ describe('Étape 1 — non configuré, découverte', () => {
     expect(screen.getByText('Associer ce pont')).toBeInTheDocument()
   })
 
+  it('découverte 429 busy : « Une recherche est déjà en cours », pas une panne', async () => {
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      if (url === '/config.json') return { ok: true, status: 200, json: async () => ({ lighting: {} }) }
+      if (url === '/api/lighting/status') return { ok: true, status: 200, json: async () => ({ state: 'disabled' }) }
+      if (url === '/api/lighting/discover') return { ok: false, status: 429, json: async () => ({ result: 'busy', reason: 'discover_in_progress' }) }
+      throw new Error(`inattendu ${opts.method || 'GET'} ${url}`)
+    })
+    render(<AmbiancePage />)
+    fireEvent.click(await screen.findByText('Rechercher un pont'))
+    await screen.findByText('Une recherche est déjà en cours.')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByText('Rechercher à nouveau')).toBeInTheDocument()
+  })
+
   it('plusieurs ponts : liste à choix, AUCUN présélectionné, « Associer » inactif tant qu\'aucun choix', async () => {
     const other = { ip: '192.168.1.102', id: 'aaaa0000bbbb1111', model: 'BSB002' }
     makeServer({ discover: { bridges: [BRIDGE, other] } })
@@ -244,13 +266,13 @@ describe('Étape 2 — association par appui bouton', () => {
     expect(screen.getByText(`${REGISTER_TIMEOUT_S - 4} s`)).toBeInTheDocument()
   })
 
-  it('succès après deux 409 : pont persisté (enabled, ip, id), toast « Pont associé. », passage à l\'étape 3, Navbar prévenue', async () => {
+  it('succès après deux 409 : la page n\'envoie QUE enabled:true (ip/id/clé déjà persistés par register), toast « Pont associé. », étape 3, Navbar prévenue', async () => {
     let n = 0
     const server = makeServer({
       discover: { bridges: [BRIDGE] },
       register: () => (++n < 3
         ? { status: 409, body: { result: 'refused', reason: 'link_button_not_pressed' } }
-        : { status: 200, body: { result: 'ok' } }),
+        : { status: 200, body: { result: 'ok', bridge_id: BRIDGE.id } }),
       lights: INVENTORY,
     })
     const onChanged = vi.fn()
@@ -263,11 +285,14 @@ describe('Étape 2 — association par appui bouton', () => {
 
     const saves = callsTo(server, 'POST', '/config.json')
     expect(saves).toHaveLength(1)
-    expect(saves[0].body).toEqual({
-      lighting: { enabled: true, bridge_ip: BRIDGE.ip, bridge_id: BRIDGE.id, lights: [] },
-    })
-    // La clé n'apparaît nulle part côté client.
+    expect(saves[0].body).toEqual({ lighting: { enabled: true } })
+    // Ni bridge_id ni bridge_ip ne sont renvoyés : une clé présente serait
+    // écrite telle quelle par le merge serveur, même vide (bug de revue).
+    expect(saves[0].body.lighting).not.toHaveProperty('bridge_id')
+    expect(saves[0].body.lighting).not.toHaveProperty('bridge_ip')
     expect(JSON.stringify(saves[0].body)).not.toMatch(/api_key/)
+    expect(server.lighting.bridge_id).toBe(BRIDGE.id)
+    expect(screen.getByText(BRIDGE.id)).toBeInTheDocument()
 
     expect(screen.getByText('Pont associé.')).toBeInTheDocument()
     expect(screen.queryByText(/Appuyez sur le bouton/)).toBeNull()
@@ -313,6 +338,116 @@ describe('Étape 2 — association par appui bouton', () => {
     expect(screen.getByText('Réessayer')).toBeInTheDocument()
   })
 
+  it('saisie IP manuelle (aucun pont trouvé) : le bridge_id lu par register est CONSERVÉ, jamais écrasé à vide', async () => {
+    const server = makeServer({
+      discover: { bridges: [] },
+      register: { status: 200, body: { result: 'ok', bridge_id: '0017deadbeef0001' } },
+      lights: INVENTORY,
+    })
+    render(<AmbiancePage />)
+    await tick()
+    fireEvent.click(screen.getByText('Rechercher un pont'))
+    await tick()
+    fireEvent.click(screen.getByText("Saisir l'adresse manuellement"))
+    fireEvent.change(screen.getByLabelText('Adresse du pont'), { target: { value: '192.168.1.50' } })
+    fireEvent.click(screen.getByText('Utiliser cette adresse'))
+    fireEvent.click(screen.getByText('Associer ce pont'))
+    await tick()
+    await tick()
+
+    expect(callsTo(server, 'POST', '/api/lighting/register')[0].body).toEqual({ bridge_ip: '192.168.1.50' })
+    const saves = callsTo(server, 'POST', '/config.json')
+    expect(saves).toHaveLength(1)
+    expect(saves[0].body.lighting).not.toHaveProperty('bridge_id')
+    expect(server.lighting.bridge_id).toBe('0017deadbeef0001')
+    expect(server.lighting.bridge_ip).toBe('192.168.1.50')
+    expect(screen.getByText('0017deadbeef0001')).toBeInTheDocument()
+    expect(screen.getByText('Ampoules du pont')).toBeInTheDocument()
+  })
+
+  it('après le 200, l\'étape 2 reste affichée jusqu\'à l\'étape 3 — jamais de passage par « Trouver le pont »', async () => {
+    makeServer({
+      discover: { bridges: [BRIDGE] },
+      register: { status: 200, body: { result: 'ok', bridge_id: BRIDGE.id } },
+      lights: INVENTORY,
+    })
+    render(<AmbiancePage />)
+    await tick()
+    fireEvent.click(screen.getByText('Rechercher un pont'))
+    await tick()
+    let sawStep1 = false
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('.ambiance-step-discover')) sawStep1 = true
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    fireEvent.click(screen.getByText('Associer ce pont'))
+    await tick()
+    await tick()
+    observer.disconnect()
+    expect(screen.getByText('Ampoules du pont')).toBeInTheDocument()
+    expect(sawStep1).toBe(false)
+  })
+
+  it('429 busy (association déjà en cours) : traité comme « pas encore », relance dans 2 s, aucune alerte', async () => {
+    let n = 0
+    const server = await startPairing(makeServer({
+      discover: { bridges: [BRIDGE] },
+      register: () => (++n === 1
+        ? { status: 429, body: { result: 'busy', reason: 'register_in_progress' } }
+        : { status: 409, body: { result: 'refused', reason: 'link_button_not_pressed' } }),
+    }))
+    expect(screen.getByText('Appuyez sur le bouton rond au centre du pont')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+    await tick(REGISTER_RETRY_MS)
+    expect(callsTo(server, 'POST', '/api/lighting/register')).toHaveLength(2)
+    expect(screen.getByText('Appuyez sur le bouton rond au centre du pont')).toBeInTheDocument()
+  })
+
+  it('400 bridge_ip_not_private : adresse hors réseau local — pas de Réessayer (changer l\'adresse), rien enregistré', async () => {
+    const server = await startPairing(makeServer({
+      discover: { bridges: [BRIDGE] },
+      register: { status: 400, body: { result: 'error', reason: 'bridge_ip_not_private' } },
+    }))
+    expect(screen.getByRole('alert').textContent).toContain('Adresse hors du réseau local')
+    expect(screen.queryByText('Réessayer')).toBeNull()
+    expect(screen.getByText('Annuler')).toBeInTheDocument()
+    await tick(10_000)
+    expect(callsTo(server, 'POST', '/api/lighting/register')).toHaveLength(1)
+    expect(callsTo(server, 'POST', '/config.json')).toHaveLength(0)
+  })
+
+  it('502 invalid_key_from_bridge : « Association impossible » avec texte fixe, Réessayer proposé', async () => {
+    await startPairing(makeServer({
+      discover: { bridges: [BRIDGE] },
+      register: { status: 502, body: { result: 'error', reason: 'invalid_key_from_bridge' } },
+    }))
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('Association impossible')
+    expect(alert.textContent).toContain('clé inutilisable')
+    expect(screen.getByText('Réessayer')).toBeInTheDocument()
+  })
+
+  it('500 {result:error} sans message : texte générique, jamais « undefined »', async () => {
+    await startPairing(makeServer({
+      discover: { bridges: [BRIDGE] },
+      register: { status: 500, body: { result: 'error' } },
+    }))
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('Association impossible')
+    expect(alert.textContent).toContain('HTTP 500')
+    expect(alert.textContent).not.toMatch(/undefined|null/)
+  })
+
+  it('409 api_key_refused (pas link_button_not_pressed) : ce n\'est PAS « pas encore » — arrêt, pas de relance', async () => {
+    const server = await startPairing(makeServer({
+      discover: { bridges: [BRIDGE] },
+      register: { status: 409, body: { result: 'refused', reason: 'api_key_refused' } },
+    }))
+    expect(screen.getByRole('alert').textContent).toContain("refusé l'association")
+    await tick(10_000)
+    expect(callsTo(server, 'POST', '/api/lighting/register')).toHaveLength(1)
+  })
+
   it('« Annuler » : retour à l\'étape 1, plus aucune relance', async () => {
     const server = await startPairing(makeServer({ discover: { bridges: [BRIDGE] } }))
     fireEvent.click(screen.getByText('Annuler'))
@@ -354,6 +489,30 @@ describe('Étape 3 — pont configuré', () => {
     expect(screen.getByText(/bref flash puis rend l'ampoule/)).toBeInTheDocument()
   })
 
+  it('aucun rendu intermédiaire avec des cases décochées (sélection dérivée, pas fixée par un effet)', async () => {
+    makeServer({ lighting: CONFIGURED, status: { state: 'ok' }, lights: INVENTORY })
+    const snapshots = []
+    const observer = new MutationObserver(() => {
+      const boxes = Array.from(document.querySelectorAll('input[type="checkbox"]'))
+      if (boxes.length > 0) snapshots.push(boxes.map(b => b.checked))
+    })
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true })
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    observer.disconnect()
+    expect(snapshots.length).toBeGreaterThan(0)
+    snapshots.forEach(snap => snap.forEach(checked => expect(checked).toBe(true)))
+  })
+
+  it('inventaire en 500 {result:error} : message explicite, pas « Aucune ampoule », rien ne casse', async () => {
+    makeServer({ lighting: CONFIGURED, status: { state: 'ok' }, lights: { status: 500, body: { result: 'error' } } })
+    render(<AmbiancePage />)
+    await screen.findByText('Lecture des ampoules impossible.')
+    expect(screen.queryByText('Aucune ampoule sur ce pont.')).toBeNull()
+    expect(screen.getByText('Actualiser la liste')).toBeInTheDocument()
+  })
+
   it('« Enregistrer » persiste les noms cochés en role general, prévient la Navbar', async () => {
     const server = makeServer({ lighting: CONFIGURED, status: { state: 'ok' }, lights: INVENTORY })
     const onChanged = vi.fn()
@@ -367,15 +526,15 @@ describe('Étape 3 — pont configuré', () => {
     await screen.findByText('Ampoules enregistrées.')
     const saves = callsTo(server, 'POST', '/config.json')
     expect(saves).toHaveLength(1)
+    // Seules les clés de cette étape : pont et clé restent intacts côté serveur.
     expect(saves[0].body.lighting).toEqual({
       enabled: true,
-      bridge_ip: BRIDGE.ip,
-      bridge_id: BRIDGE.id,
       lights: [
         { name: 'Salle gauche', role: 'general' },
         { name: 'Salle droite', role: 'general' },
       ],
     })
+    expect(server.lighting.bridge_id).toBe(BRIDGE.id)
     expect(onChanged).toHaveBeenCalledTimes(1)
     window.removeEventListener(LIGHTING_CHANGED_EVENT, onChanged)
   })
