@@ -1703,6 +1703,52 @@
   margin-top: var(--space-1);
 }
 
+/* #216 — chips multi-sélection Catégories/Difficultés de l'éditeur RAFALE
+   (même motif visuel que .memotion-diff-btn ci-dessous, forme pilule plutôt
+   que carrée — rapproche du style .chip de la maquette rafale-multi-216.html). */
+.rafale-multi-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.rafale-multi-chip {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--gray-200);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.rafale-multi-chip:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.rafale-multi-chip.active {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, var(--bg-secondary));
+  color: var(--warning);
+  font-weight: 700;
+}
+
+/* Barème par étoile (216-Q7c) — un mini form-group par difficulté
+   sélectionnée, alignés en ligne. */
+.rafale-points-by-difficulty-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.rafale-points-by-difficulty-row .form-group {
+  flex: 0 0 auto;
+  width: 88px;
+}
+
 /* ARDOISE keyboard selector — two large option buttons */
 .ardoise-keyboard-selector {
   display: flex;
