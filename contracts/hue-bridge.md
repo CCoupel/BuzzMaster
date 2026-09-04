@@ -293,7 +293,38 @@ Effet : un flash bref puis **retour à l'état antérieur**. Réponse `200 {"res
 
 ### `GET /api/lighting/status`
 `200 {"state":"ok|refused|unreachable|disabled","bridge_id":"…","bridge_ip":"…","lights_ok":2,"lights_total":3}`.
-**Ne fait aucun appel bloquant** : renvoie l'état connu du pilote.
+**Ne fait aucun appel bloquant** : renvoie l'état connu du pilote, jamais une interrogation du pont.
+
+#### 7.1 Amendement du 2026-09-04 — l'indicateur du menu
+
+Décision utilisateur : l'entrée « Ambiance » du menu abeille porte une **ampoule à trois
+couleurs**. Les quatre états de cet endpoint s'y projettent ainsi — correspondance **normative**,
+pour que le frontend n'ait pas à l'inventer :
+
+| `state` | Couleur | Sens pour l'utilisateur |
+|---|---|---|
+| `ok` | **verte** | pont configuré et qui répond |
+| `unreachable` | **orange** | pont configuré mais qui ne répond plus |
+| `refused` | **orange** | pont configuré mais qui refuse la clé — même geste : aller voir la page |
+| `disabled` | **grise** | aucun pont configuré |
+
+`refused` et `unreachable` partagent la couleur **orange** : dans les deux cas le pont est
+configuré et ne fonctionne pas, et la conduite à tenir est la même — ouvrir la page Ambiance. La
+distinction reste **entière dans l'API et sur la page**, où elle commande deux gestes correctifs
+opposés (§5.6) ; elle est simplement inutile à trois pixels dans un menu.
+
+**Le gris ne réclame aucune attention.** Une fonctionnalité facultative non configurée ne doit
+jamais ressembler à une alerte.
+
+**Rafraîchissement** : le frontend interroge cet endpoint **au montage puis toutes les 30 s**, et
+immédiatement après un enregistrement de configuration. Le précédent du projet (`useUpdates`,
+`web/src/hooks/useUpdates.js`, appelé une fois au montage par `Navbar.jsx:87-89`) ne suffit pas
+ici : un pont peut devenir injoignable **pendant** une session, alors qu'une mise à jour
+disponible, elle, ne se volatilise pas. L'intervalle est acceptable précisément parce que cet
+endpoint **ne fait aucune I/O** — il lit un état déjà en mémoire.
+
+> Une diffusion WebSocket serait plus élégante, mais introduirait un mécanisme nouveau pour un
+> indicateur cosmétique. Candidat d'amélioration, pas un prérequis.
 
 ---
 

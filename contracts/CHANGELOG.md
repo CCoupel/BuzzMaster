@@ -2,6 +2,26 @@
 
 ---
 
+## [20260904] — Éclairage : indicateur tri-couleur du menu (#207, amendement)
+
+> Amendement `contracts/hue-bridge.md` §7.1. Décisions utilisateur du 2026-09-04, après validation
+> de la maquette `docs/mockups/lighting-hue-config-207.html` (révision 3).
+
+- **[CHANGED]** `GET /api/lighting/status` — **correspondance normative** de ses quatre états vers
+  les trois couleurs de l'ampoule du menu abeille : `ok` → verte, `unreachable` et `refused` →
+  **orange**, `disabled` → grise. Les deux états orange partagent une couleur parce que la conduite
+  à tenir est la même (ouvrir la page) ; la distinction reste entière dans l'API et sur la page, où
+  elle commande deux gestes opposés. Rafraîchissement : au montage puis **toutes les 30 s**, et
+  après tout enregistrement — l'endpoint ne fait aucune I/O, il lit un état en mémoire.
+  Rétrocompatible : aucun champ ajouté ni retiré.
+- **[CHANGED]** *(interface, hors API)* La case « Configuration Ambiance » de `BackupPage.jsx`
+  (#152) devient **« Réglages de jeu »**. **Libellé visible seul** : la clé de l'option, le
+  paramètre `ambiance=true` et le format des archives sont inchangés, aucune archive existante
+  n'est invalidée. Motivé par la promotion d'« Ambiance » au premier niveau du menu, qui rendait
+  l'ancien libellé trompeur — il désigne le délai par défaut et l'effet néon, pas l'éclairage.
+
+---
+
 ## [20260903] — Pilote Philips Hue Bridge : la voie BLE est abandonnée (#206/#207/#213, v10.0.0)
 
 > Nouveau contrat `contracts/hue-bridge.md`, qui **étend** `contracts/lighting.md` sans le

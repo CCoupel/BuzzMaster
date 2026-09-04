@@ -114,6 +114,9 @@
   .toast{display:inline-block;border-radius:6px;padding:9px 18px;font-size:.83rem;font-weight:500;color:#fff}
   .toast.s{background:var(--ok)} .toast.e{background:var(--no)} .toast.w{background:var(--warn);color:#231a03}
 
+  .bico{width:15px;height:15px;flex:none;vertical-align:-2px}
+  .bico.on{color:var(--ok)} .bico.ko{color:var(--warn)} .bico.off{color:var(--faint)}
+
   ol.reasons{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
   ol.reasons li{margin-bottom:9px} ol.reasons li:last-child{margin-bottom:0}
   ol.reasons b{color:var(--txt)}
@@ -133,7 +136,7 @@
 
 <header class="mast">
   <div class="eyebrow">
-    <span>Issue #207</span><span>Milestone v10.0.0</span><span>Phase Plan</span><span>Révision 2 — 2026-09-03</span>
+    <span>Issue #207</span><span>Milestone v10.0.0</span><span>Révision 3</span><span>✅ Validée — 2026-09-04</span>
   </div>
   <h1>Éclairage d'ambiance — configuration du pont Hue</h1>
   <p class="standfirst">
@@ -146,7 +149,8 @@
     <div><b>Contrat</b> contracts/hue-bridge.md — adossé à contracts/lighting.md (#205, livré)</div>
     <div><b>Base validée</b> spike sur pont Hue réel — découverte 0,2 s, écriture 19-61 ms, 100 % de succès</div>
     <div><b>Sert de référence à</b> test-writer (scénarios) · qa (conformité) · dev-frontend (implémentation)</div>
-    <div><b>Révision 2</b> page dédiée dans le menu abeille, au lieu d'une section de /admin/settings (retour utilisateur)</div>
+    <div><b>Révision 2</b> page dédiée dans le menu abeille, au lieu d'une section de /admin/settings</div>
+    <div><b>Révision 3</b> ampoule tri-couleur sur l'entrée de menu · « Configuration Ambiance » renommée « Réglages de jeu »</div>
   </div>
 </header>
 
@@ -178,7 +182,9 @@
           <p class="lbl">Proposé</p>
           <div class="fieldset" style="margin-bottom:0;border-color:var(--accent-dim)">
             <div class="bulb" style="border:none;background:transparent;padding:5px 0">⚙️ <span class="bulb-n">Config</span></div>
-            <div class="bulb" style="border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);padding:5px 8px">💡 <span class="bulb-n">Ambiance</span></div>
+            <div class="bulb" style="border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);padding:5px 8px">
+              <svg class="bico on" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2Z"/><rect x="9.5" y="19.2" width="5" height="1.6" rx=".8"/><rect x="10.2" y="21.6" width="3.6" height="1.6" rx=".8"/></svg>
+              <span class="bulb-n">Ambiance</span></div>
             <div class="bulb" style="border:none;background:transparent;padding:5px 0">💾 <span class="bulb-n">Backup/Restaure</span></div>
             <div class="bulb" style="border:none;background:transparent;padding:5px 0">🔄 <span class="bulb-n">Mises à jour</span></div>
             <div class="bulb" style="border:none;background:transparent;padding:5px 0">📋 <span class="bulb-n">Logs</span></div>
@@ -190,6 +196,35 @@
         Placée <b>juste après Config</b> : les deux entrées de configuration se suivent, et l'ordre
         existant n'est pas bousculé. « Quitter » reste la dernière entrée, isolée — c'est la seule
         action et non une navigation.
+      </p>
+    </div>
+  </div>
+
+  <h3>L'ampoule dit l'état de l'éclairage, sans ouvrir la page</h3>
+  <div class="screen">
+    <div class="screen-hd">Entrée « Ambiance » — trois états</div>
+    <div class="screen-bd">
+      <div class="bulb">
+        <svg class="bico on" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2Z"/><rect x="9.5" y="19.2" width="5" height="1.6" rx=".8"/><rect x="10.2" y="21.6" width="3.6" height="1.6" rx=".8"/></svg>
+        <span class="bulb-n">Ambiance</span><span class="bulb-sp"></span>
+        <span style="color:var(--ok);font-size:.8rem;font-weight:600">Verte</span>
+        <span class="bulb-i" style="width:290px;text-align:right">pont configuré et qui répond</span>
+      </div>
+      <div class="bulb">
+        <svg class="bico ko" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2Z"/><rect x="9.5" y="19.2" width="5" height="1.6" rx=".8"/><rect x="10.2" y="21.6" width="3.6" height="1.6" rx=".8"/></svg>
+        <span class="bulb-n">Ambiance</span><span class="bulb-sp"></span>
+        <span style="color:var(--warn);font-size:.8rem;font-weight:600">Orange</span>
+        <span class="bulb-i" style="width:290px;text-align:right">pont configuré mais qui ne répond plus</span>
+      </div>
+      <div class="bulb">
+        <svg class="bico off" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2Z"/><rect x="9.5" y="19.2" width="5" height="1.6" rx=".8"/><rect x="10.2" y="21.6" width="3.6" height="1.6" rx=".8"/></svg>
+        <span class="bulb-n">Ambiance</span><span class="bulb-sp"></span>
+        <span style="color:var(--faint);font-size:.8rem;font-weight:600">Grise</span>
+        <span class="bulb-i" style="width:290px;text-align:right">aucun pont configuré</span>
+      </div>
+      <p class="hint">
+        Sans elle, un pont débranché ne se découvre qu'au moment où la salle ne réagit plus —
+        c'est-à-dire en pleine partie, au pire moment.
       </p>
     </div>
   </div>
@@ -225,9 +260,10 @@
     défaut et effet néon, <b>rien à voir avec l'éclairage de la salle</b>. Une fois « Ambiance »
     promue au menu, cette case devient franchement trompeuse.
     <br><br>
-    <b>Proposition</b> : renommer la case de Backup en <b>« Réglages de jeu »</b>, qui décrit ce
-    qu'elle sauvegarde réellement. Changement d'un seul libellé, aucun impact sur le format des
-    archives. <b>À valider ou à écarter.</b>
+    <b>✅ Tranché le 2026-09-04</b> : la case de Backup est renommée <b>« Réglages de jeu »</b>,
+    qui décrit ce qu'elle sauvegarde réellement. <b>Le libellé visible seul change</b> — la clé de
+    l'option, le paramètre <code>ambiance=true</code> de la requête et le format des archives
+    restent identiques, donc aucune archive existante n'est invalidée.
     <br><br>
     À ne pas confondre avec la clé de configuration serveur, qui reste
     <code>lighting</code> et <b>ne doit pas</b> être renommée en <code>ambiance</code> : le mot est
@@ -535,17 +571,36 @@
       dur pour ce milestone ; son édition est renvoyée à v10.1 (#210). Exposer des couleurs ici
       laisserait croire qu'elles sont modifiables.</li>
   </ol>
-  <div class="call info">
-    <span class="call-t">Proposition optionnelle — pastille d'alerte sur l'entrée de menu</span>
-    Le menu abeille sait déjà porter une pastille : « Mises à jour » en affiche une quand une
-    version est disponible (<code>badge: updateInfo?.update_available</code>,
-    <code>Navbar.jsx</code> l. 149). Le même mécanisme pourrait signaler un
-    <b>pont configuré mais injoignable</b> — sans quoi on ne le découvre qu'au moment où la salle
-    ne réagit plus, c'est-à-dire en pleine partie.
+  <div class="call ok">
+    <span class="call-t">✅ Tranché le 2026-09-04 — ampoule tri-couleur, pas une pastille générique</span>
+    L'entrée de menu porte une <b>ampoule verte / orange / grise</b> (§01) plutôt que la pastille
+    booléenne de « Mises à jour ». C'est plus juste : trois états à distinguer, pas deux.
+    L'ampoule <b>grise</b> ne réclame aucune attention — une fonctionnalité facultative non
+    configurée ne doit jamais ressembler à une alerte.
+  </div>
+
+  <div class="call warn">
+    <span class="call-t">⚠️ Contrainte technique — la couleur d'un emoji n'est pas pilotable</span>
+    Les autres entrées du menu sont des emojis (<code>⚙️ 💾 🔄 📋</code>) et la couleur d'un emoji
+    est fixée par la police du système : ni <code>color</code> ni aucune règle CSS ne la change.
+    Un <code>💡</code> littéral ne peut donc pas être vert, orange puis gris.
     <br><br>
-    Coût : une valeur booléenne de plus, tirée de <code>GET /api/lighting/status</code>. Aucune
-    pastille tant qu'aucun pont n'est configuré — une fonctionnalité facultative ne réclame jamais
-    l'attention. <b>À valider ou à écarter.</b>
+    <b>Implémentation retenue</b> : une petite <b>ampoule en SVG en ligne</b>, dessinée avec
+    <code>fill="currentColor"</code>, dont la couleur est pilotée par une classe CSS. C'est le seul
+    moyen d'obtenir réellement les trois couleurs, et le rendu devient identique sur Windows,
+    Raspberry Pi et mobile — là où un emoji varie d'une plateforme à l'autre.
+    <br><br>
+    <b>Aucune modification du code de rendu du menu</b> : <code>Navbar.jsx</code> écrit déjà
+    <code>&lt;span className="menu-icon"&gt;{item.icon}&lt;/span&gt;</code>, et React y accepte un
+    élément aussi bien qu'une chaîne. Seule la <b>définition</b> de l'entrée change.
+  </div>
+
+  <div class="call info">
+    <span class="call-t">La couleur ne doit jamais porter l'information à elle seule</span>
+    L'entrée expose un <code>title</code> qui dit l'état <b>en toutes lettres</b> — « Éclairage :
+    pont connecté », « pont injoignable », « non configuré » — et le SVG est
+    <code>aria-hidden</code>, le libellé « Ambiance » portant déjà le sens. Sans quoi l'information
+    est perdue pour une partie des utilisateurs, et pour quiconque regarde l'écran de loin.
   </div>
 
   <div class="call warn">
@@ -557,8 +612,8 @@
 </section>
 
 <footer>
-  Maquette produite en phase Plan · <b>révision 2</b> (page dédiée dans le menu abeille) ·
-  à valider avant dispatch de dev-frontend · issue #207 · milestone v10.0.0 · BuzzControl
+  Maquette produite en phase Plan · <b>révision 3 — VALIDÉE</b>, gate UI levé le 2026-09-04 ·
+  référence pour dev-frontend, test-writer et qa · issue #207 · milestone v10.0.0 · BuzzControl
 </footer>
 
 </div>
