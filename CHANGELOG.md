@@ -2,6 +2,11 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased]
+
+### Changed
+- **HTTP server startup is now blocking and observable on port conflict (#220)** — Le démarrage du serveur HTTP est désormais **bloquant** jusqu'à ce que le port soit effectivement lié, au lieu d'annoncer « started successfully » pendant qu'une boucle silencieuse retentait en arrière-plan. Signature de `HTTPServer.Start()` passée de synchrone non-bloquante à `Start(ctx context.Context) error` (bloquante, interruptible via `ctx`). Comportement du startup : **backoff progressif** sur port occupé (500ms → 1s → 5s plafonné), **message actionnable** nommant le port et sa provenance (`config.json`, `--port flag`, défaut code) en cas de refus de permission, jamais d'`os.Exit()` sur erreur de bind. **Gating UDP/mDNS** : annonce BUZZ_SERVER (heartbeat) et publication mDNS démarrent désormais **après** un bind HTTP réussi — auparavant, les buzzers recevaient une annonce pointant vers un port potentiellement mort. Échec DNS/mDNS reste **non fatal** mais devient **visible** dans `/ws/logs` et le tampon d'historique (log remplacé de `log.Printf` à `LogWarn`). **Non-régression auto-update** : relance du binaire pendant que l'ancien process tient le port fonctionne désormais de façon observable au lieu de silencieuse.
+
 ## [8.1.0] - Milestone v8.1.0 — Génération IA du réservoir RAFALE (#203)
 
 **Issues** : #203. Ajout du chemin de génération IA dédiée au réservoir RAFALE — endpoint asynchrone avec paliers de volume, validation stricte de brièveté (100/40 runes), alerte pré-manche sur insuffisance de données, refus pendant une manche en cours.
