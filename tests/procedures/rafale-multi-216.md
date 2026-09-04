@@ -1,30 +1,28 @@
 # Procédure de Test — RAFALE multi-catégorie / multi-difficulté (#216)
 
-**Version** : 9.0.0.x (milestone v9.0.0, Batch 1 — **backend uniquement**)
-**Date** : 2026-09-04
+**Version** : 9.0.0.x (milestone v9.0.0, Batch 1 + Batch 2)
+**Date** : 2026-09-04 (mise à jour : Lot 2 frontend livré)
 **Issue** : #216
 **Maquette** : `docs/mockups/rafale-multi-216.html`
 **Testeur** : QA / Utilisateur (validation manuelle obligatoire — jamais exécuté par `qa`/`deployer`)
 
 ---
 
-## ⚠️ Prérequis — périmètre livré à ce jour
+## ⚠️ Mise à jour Batch 2 — Lot 2 frontend livré, N/A levés
 
-**Seul le Lot 1B (moteur backend) est livré à la date de rédaction.** Le Lot 2 frontend (chips
-multiples sur la card question `QuestionsPage.jsx`, sélecteur multi-catégories/difficultés dans
-l'éditeur, affichage du barème résolu sur TV/animateur, `RafalePoolAlert.jsx` en union) **n'est pas
-encore développé** — le formulaire d'édition RAFALE dans `/admin/quiz` n'accepte encore qu'**une
-seule** catégorie et **une seule** difficulté par l'interface.
+Le Lot 2 frontend (sélecteur multi-catégories/difficultés + barème dans l'éditeur, chips multiples
+sur la card question, affichage du barème sur TV/animateur, `RafalePoolAlert.jsx` en union) est
+désormais livré et couvert par des tests automatisés (`_work/reports/test-writer-216-lot2-*.md`).
+**Les scénarios 1 à 3 sont donc redevenus testables via l'interface normale** (méthode API conservée
+en note pour qui préfère vérifier le moteur isolément) — les N/A précédents sont levés.
 
-**Conséquence pour cette procédure** :
-- Les scénarios 1 à 3 (configuration multi, affichage chips, barème sur TV/anim) **ne sont pas
-  testables via l'interface actuelle** — une méthode API alternative (`curl`) est fournie pour
-  valider le moteur backend dès maintenant, en attendant le Lot 2.
-- Les scénarios 4 à 7 (épuisement, couple vide, rétro-compatibilité, endpoint pluriel) sont
-  **pleinement testables dès aujourd'hui**, y compris via l'interface pour ceux qui ne nécessitent
-  pas de configuration multi (rétro-compat mono, scénario 6).
-- **Refaire passer les scénarios 1 à 3 en méthode UI une fois le Lot 2 livré** — cette procédure sera
-  alors mise à jour (ou une nouvelle version publiée) pour retirer la mention Lot 2.
+⚠️ **Point d'attention non résolu au moment de cette mise à jour** (régression détectée pendant la
+rédaction des tests automatisés, signalée à dev-frontend) : une question RAFALE **mono, créée avant
+#216, dont la difficulté n'a JAMAIS été explicitement configurée** (`RAFALE_DIFFICULTY` réellement
+absent/0, pas juste égal à 1) peut rester **bloquée au démarrage** — régression du bug historique
+SHA 75b0472c (QUALIF 8.0.0.5). Ce cas précis est ajouté en sous-étape du Scénario 6 ci-dessous — s'il
+échoue, ce n'est PAS une anomalie à signaler comme nouvelle, elle est déjà connue et en cours de
+traitement côté dev-frontend.
 
 ---
 
@@ -39,18 +37,25 @@ seule** catégorie et **une seule** difficulté par l'interface.
 
 ---
 
-## Scénario 1 — Configurer une manche avec plusieurs catégories ET difficultés (méthode API)
+## Scénario 1 — Configurer une manche avec plusieurs catégories ET difficultés
 
-**Objectif** : Vérifier que le moteur accepte un filtre multi et joue effectivement sur l'union.
+**Objectif** : Vérifier que l'éditeur accepte un filtre multi et que le moteur joue effectivement sur
+l'union.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Créer/éditer une question RAFALE via `POST /questions` (multipart), en envoyant `RAFALE_CATEGORIES` = `["HISTORY","SCIENCE"]` (JSON) et `RAFALE_DIFFICULTIES` = `[1,2]` (JSON), en plus des champs standards (TYPE=RAFALE, QUESTION, etc.) | Réponse 200/201, question enregistrée | | |
-| 2 | Recharger `/admin/quiz`, ouvrir la question créée en édition | La question est reconnue comme RAFALE (le formulaire peut n'afficher qu'une valeur mono par limitation d'interface actuelle — **attendu**, voir prérequis) | | |
-| 3 | Lancer la manche depuis `/admin` (GamePage) | La manche démarre normalement, sans erreur | | |
-| 4 | Jouer plusieurs questions à la suite (valider/invalider) en notant la catégorie/difficulté de chaque question affichée (visible dans le payload WebSocket `RAFALE_CURRENT_QUESTION` ou via les outils développeur réseau) | Les questions proviennent des **deux** catégories (HISTORY et SCIENCE) et des **deux** difficultés (1 et 2) — jamais d'une catégorie/difficulté hors de cet ensemble | | |
+| 1 | Sur `/admin/quiz`, créer une question de type RAFALE | Section RAFALE affichée dans l'éditeur, avec un sélecteur de catégories en chips (plus le CategorySelector générique — retiré pour ce type) | | |
+| 2 | Cliquer plusieurs chips de catégorie (ex. Histoire, Sciences) | Chaque chip cliqué devient actif, sélection non exclusive (plusieurs actifs en même temps) | | |
+| 3 | Cliquer plusieurs chips de difficulté (ex. ★ et ★★★) | Même comportement non exclusif | | |
+| 4 | Enregistrer la question | Enregistrement réussi | | |
+| 5 | Lancer la manche depuis `/admin` (GamePage) | La manche démarre normalement, sans erreur | | |
+| 6 | Jouer plusieurs questions à la suite (valider/invalider) en notant la catégorie/difficulté de chaque question affichée | Les questions proviennent des **deux** catégories et des **deux** difficultés sélectionnées — jamais d'une catégorie/difficulté hors de cet ensemble | | |
 
-**Verdict** : [ ] PASS  [ ] FAIL  [ ] N/A (Lot 2 UI non disponible, testé en API uniquement)
+**Verdict** : [ ] PASS  [ ] FAIL
+
+*(Méthode API alternative, pour isoler le moteur backend sans passer par l'éditeur : `POST
+/questions` multipart avec `RAFALE_CATEGORIES`/`RAFALE_DIFFICULTIES` en JSON — voir
+`_work/reports/test-writer-procedures-215-216-*.md` pour le détail des champs.)*
 
 ---
 
@@ -60,10 +65,10 @@ seule** catégorie et **une seule** difficulté par l'interface.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Sur `/admin/quiz`, repérer la card de la question RAFALE multi créée au Scénario 1 | La card affiche **plusieurs chips** de catégorie (HISTORY, SCIENCE) et **plusieurs chips** de difficulté (1, 2), pas une seule valeur | | |
+| 1 | Sur `/admin/quiz`, repérer la card de la question RAFALE multi créée au Scénario 1 | La card affiche **plusieurs badges** de catégorie (un par catégorie sélectionnée) et **plusieurs chips étoilés** de difficulté (un par difficulté sélectionnée), pas une seule valeur | | |
+| 2 | Repérer une question RAFALE mono, créée avant #216 (si disponible) | La card affiche un seul badge catégorie et un seul chip difficulté — comportement identique à avant #216, sans reconfiguration | | |
 
-**Verdict** : [ ] N/A — **Lot 2 frontend non livré à ce jour.** Marquer EN ATTENTE, à rejouer après
-livraison de `QuestionCard.jsx` (chips multiples).
+**Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
@@ -73,12 +78,12 @@ livraison de `QuestionCard.jsx` (chips multiples).
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Éditer la question RAFALE multi, envoyer `RAFALE_POINTS_BY_DIFFICULTY` = `{"1":5,"2":15}` (JSON) via `POST /questions` | Question enregistrée avec le barème | | |
-| 2 | Lancer la manche, observer le payload WebSocket `RAFALE_CURRENT_QUESTION.POINTS` à chaque question | La valeur correspond au barème de la difficulté tirée (5 pour difficulté 1, 15 pour difficulté 2) | | |
-| 3 | *(une fois Lot 2 livré)* Observer l'écran TV et l'interface animateur pendant la manche | La valeur de la question en cours (POINTS résolu) est visible à l'écran | | |
-| 4 | Éditer une question RAFALE **sans** `RAFALE_POINTS_BY_DIFFICULTY` | `RAFALE_CURRENT_QUESTION.POINTS` retombe sur la valeur générique `POINTS` de la manche | | |
+| 1 | Dans l'éditeur, après avoir sélectionné au moins une difficulté, repérer la zone « Points par bonne réponse, selon la difficulté » | Un champ de saisie par difficulté sélectionnée, vide par défaut (placeholder = barème général de la manche) | | |
+| 2 | Saisir des valeurs différentes par difficulté (ex. 5 pour ★, 15 pour ★★★) puis enregistrer | Enregistrement réussi | | |
+| 3 | Lancer la manche, observer l'écran TV et l'interface animateur à chaque question | La valeur en points affichée correspond au barème de la difficulté de la question EN COURS (varie d'une question à l'autre) | | |
+| 4 | Éditer une question RAFALE **sans** saisir de barème par difficulté | Aucun champ de barème saisi ; en jeu, la valeur affichée retombe sur le `POINTS` générique de la manche | | |
 
-**Verdict** : [ ] PASS (moteur, étapes 1-2-4)  [ ] N/A (étape 3, affichage TV/anim — Lot 2 non livré)
+**Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
@@ -122,8 +127,9 @@ RAFALE_DIFFICULTY, sans les nouveaux champs liste) continue de fonctionner sans 
 | 1 | Identifier (ou créer via l'interface standard, sans passer par l'API multi) une question RAFALE mono-catégorie/mono-difficulté existante | Question présente, format ancien (pas de `RAFALE_CATEGORIES`/`RAFALE_DIFFICULTIES`) | | |
 | 2 | Lancer une manche sur cette question, sans aucune modification | Démarrage normal — aucune erreur, aucun message de configuration invalide | | |
 | 3 | Jouer plusieurs questions | Toutes proviennent de la catégorie/difficulté unique d'origine (comportement identique à avant #216) | | |
+| 4 | ⚠️ **Cas de régression connu** (voir note en tête de fichier) — si possible, tester spécifiquement une question mono dont la difficulté n'a **jamais** été explicitement enregistrée (`RAFALE_DIFFICULTY` réellement absent, pas juste « star 1 » cochée puis sauvegardée) : catégorie définie, difficulté jamais touchée | Le bouton START doit rester cliquable (pas de blocage fail-closed). **Si bloqué : ne pas re-signaler, régression déjà connue et transmise à dev-frontend.** | | |
 
-**Verdict** : [ ] PASS  [ ] FAIL
+**Verdict** : [ ] PASS  [ ] FAIL  [ ] PASS AVEC RÉSERVE (étape 4 en échec connu, cf. note)
 
 ---
 
@@ -143,14 +149,11 @@ RAFALE_DIFFICULTY, sans les nouveaux champs liste) continue de fonctionner sans 
 
 ## Critères de Validation
 
-- [ ] Scénarios 4, 5, 6, 7 : PASS (pleinement testables, backend seul)
-- [ ] Scénarios 1, 3 (moteur) : PASS via méthode API
-- [ ] Scénarios 2, 3 (affichage) : marqués N/A, à rejouer explicitement après livraison du Lot 2
-      frontend — **ne pas fermer #216 comme totalement validé tant que ces 2 points restent N/A**
-      si la clôture attendue couvre l'issue complète (à clarifier avec le CDP selon le découpage
-      réel du lot)
+- [ ] Scénarios 1 à 7 : PASS via l'interface normale (Lot 2 livré, méthode API conservée en repli)
 - [ ] Aucun blocage observé sur couple vide/épuisé, à aucun moment
-- [ ] Rétro-compatibilité confirmée sans reconfiguration manuelle
+- [ ] Rétro-compatibilité confirmée sans reconfiguration manuelle — **sauf** le cas de régression
+      connu (Scénario 6, étape 4 : difficulté mono jamais explicitement configurée) tant qu'il n'est
+      pas confirmé résolu par dev-frontend
 
 ---
 
