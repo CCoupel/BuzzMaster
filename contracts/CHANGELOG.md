@@ -2,6 +2,34 @@
 
 ---
 
+## [20260904] — Démarrage bloquant et observable sur port occupé (#220, bugfix, v9.0.0)
+
+> Aucun endpoint HTTP ni action WebSocket modifié — changement de sémantique **interne** de
+> `HTTPServer.Start()` uniquement. Consigné ici parce qu'il inverse la polarité d'un contrat de
+> test existant (`http_port_retry_test.go`), pas parce qu'une interface publique du serveur
+> change.
+
+- **[CHANGED]** `HTTPServer.Start()` → `HTTPServer.Start(ctx context.Context) error` — devient
+  **synchrone et bloquant** jusqu'à ce que le port soit effectivement lié, au lieu de renvoyer
+  `nil` immédiatement pendant qu'une boucle de retry tournait silencieusement en arrière-plan.
+  `ctx` permet d'interrompre l'attente (Ctrl+C) sans laisser de goroutine résiduelle. Avant ce
+  correctif, un port occupé au démarrage laissait le serveur logger « started successfully » et
+  ouvrir le navigateur sur une URL qui n'écoutait pas encore. `isPortInUse` (interne) passe d'une
+  comparaison de chaînes anglaise à `errors.Is(err, syscall.EADDRINUSE)` (+ l'équivalent Windows
+  `WSAEADDRINUSE`) ; `EACCES`/`ERROR_ACCESS_DENIED` est désormais traité comme un cas séparé, non
+  fatal, à cadence lente (30 s) plutôt que classé comme « port occupé ». Aucun `os.Exit` n'est
+  jamais déclenché sur une erreur de bind, quelle qu'elle soit. Non-régression conservée :
+  l'auto-update (relance du binaire pendant que l'ancien process tient le port) continue de
+  fonctionner, désormais de façon observable dans `/ws/logs`.
+- **[CHANGED]** L'annonce UDP `BUZZ_SERVER` (heartbeat de `BroadcasterManager`) et la publication
+  mDNS ne démarrent plus qu'**après** un bind HTTP réussi — auparavant l'annonce partait avant même
+  la première tentative de bind HTTP, pointant les buzzers vers un port potentiellement mort
+  pendant toute la durée de l'attente.
+- **[CHANGED]** `internal/server/dns.go` : le serveur DNS (captive portal) honore désormais
+  `DNSServer.port` au lieu d'un `":53"` en dur (le champ était silencieusement ignoré). Un échec de
+  bind DNS reste non fatal pour le démarrage HTTP, mais passe de `log.Printf` (stdout uniquement) à
+  `LogWarn` — visible dans `/ws/logs` et le tampon d'historique.
+
 ## [20260901] — RAFALE : génération IA du réservoir de questions (#203, feature, v8.1.0)
 
 > Nouveau contrat `contracts/rafale-ai-generation.md`. Maquette
