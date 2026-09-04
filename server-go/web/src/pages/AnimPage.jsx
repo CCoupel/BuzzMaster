@@ -607,6 +607,13 @@ export default function AnimPage() {
                   {rafaleCurrentQuestion.DIFFICULTY > 0 && (
                     <span className="anim-chip">{'★'.repeat(rafaleCurrentQuestion.DIFFICULTY)}</span>
                   )}
+                  {/* #216, 216-Q7d — barème résolu de la question en cours
+                      (contrat §4) : la valeur d'une manche RAFALE peut
+                      désormais varier d'une question à l'autre selon sa
+                      difficulté (maquette rafale-multi-216.html §04). */}
+                  {rafaleCurrentQuestion.POINTS > 0 && (
+                    <span className="anim-chip">{rafaleCurrentQuestion.POINTS} pts</span>
+                  )}
                   {gameState.RAFALE_ASKED_COUNT > 0 && (
                     <span className="anim-chip anim-chip-count">question {gameState.RAFALE_ASKED_COUNT}</span>
                   )}

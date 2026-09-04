@@ -2913,7 +2913,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       {currentTeam && (
                         <span className="rafale-tv-qcard-team">{currentTeam}</span>
                       )}
-                      {(catMeta || current.DIFFICULTY > 0) && (
+                      {(catMeta || current.DIFFICULTY > 0 || current.POINTS > 0) && (
                         <div className="rafale-tv-meta">
                           {catMeta && (
                             <span className="rafale-tv-chip">
@@ -2925,6 +2925,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           )}
                           {current.DIFFICULTY > 0 && (
                             <span className="rafale-tv-chip">{'★'.repeat(current.DIFFICULTY)}</span>
+                          )}
+                          {/* #216, 216-Q7d — barème résolu de la question en
+                              cours (contrat §4) : la valeur d'une manche
+                              RAFALE peut désormais varier d'une question à
+                              l'autre selon sa difficulté, elle doit donc être
+                              lisible pour la salle (maquette §04). */}
+                          {current.POINTS > 0 && (
+                            <span className="rafale-tv-chip">{current.POINTS} pts</span>
                           )}
                         </div>
                       )}
