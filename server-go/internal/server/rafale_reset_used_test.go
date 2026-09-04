@@ -28,10 +28,10 @@ func TestHTTPServer_RafaleResetOneUsed_MakesQuestionAvailableAgain(t *testing.T)
 	}); err != nil {
 		t.Fatalf("seed reservoir: UpsertRafaleQuestion failed: %v", err)
 	}
-	if _, err := server.engine.DrawRafaleQuestion(string(game.CategoryHistory), 1); err != nil {
+	if _, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("seed used-flag: DrawRafaleQuestion failed: %v", err)
 	}
-	if available, _, _ := server.engine.CountRafalePool(string(game.CategoryHistory), 1); available != 0 {
+	if available, _, _ := server.engine.CountRafalePool([]string{string(game.CategoryHistory)}, []int{1}); available != 0 {
 		t.Fatalf("sanity: expected r-1 marked used (available=0), got available=%d", available)
 	}
 
@@ -53,7 +53,7 @@ func TestHTTPServer_RafaleResetOneUsed_MakesQuestionAvailableAgain(t *testing.T)
 		t.Errorf("expected {ID:r-1 AVAILABLE:true}, got %+v", resp)
 	}
 
-	if available, used, _ := server.engine.CountRafalePool(string(game.CategoryHistory), 1); available != 1 || used != 0 {
+	if available, used, _ := server.engine.CountRafalePool([]string{string(game.CategoryHistory)}, []int{1}); available != 1 || used != 0 {
 		t.Errorf("expected available=1 used=0 after reset, got available=%d used=%d", available, used)
 	}
 }
@@ -120,13 +120,13 @@ func TestHTTPServer_RafaleResetAllUsed_ClearsEveryEntry_ReservoirUntouched(t *te
 			t.Fatalf("seed reservoir: UpsertRafaleQuestion(%s) failed: %v", id, err)
 		}
 	}
-	if _, err := server.engine.DrawRafaleQuestion(string(game.CategoryHistory), 1); err != nil {
+	if _, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("seed used-flag: DrawRafaleQuestion failed: %v", err)
 	}
-	if _, err := server.engine.DrawRafaleQuestion(string(game.CategoryHistory), 1); err != nil {
+	if _, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("seed used-flag: DrawRafaleQuestion failed: %v", err)
 	}
-	if available, used, _ := server.engine.CountRafalePool(string(game.CategoryHistory), 1); available != 0 || used != 2 {
+	if available, used, _ := server.engine.CountRafalePool([]string{string(game.CategoryHistory)}, []int{1}); available != 0 || used != 2 {
 		t.Fatalf("sanity: expected available=0 used=2 before reset, got available=%d used=%d", available, used)
 	}
 
@@ -147,7 +147,7 @@ func TestHTTPServer_RafaleResetAllUsed_ClearsEveryEntry_ReservoirUntouched(t *te
 		t.Errorf("expected RESET=2, got %d", resp.Reset)
 	}
 
-	if available, used, total := server.engine.CountRafalePool(string(game.CategoryHistory), 1); available != 2 || used != 0 || total != 2 {
+	if available, used, total := server.engine.CountRafalePool([]string{string(game.CategoryHistory)}, []int{1}); available != 2 || used != 0 || total != 2 {
 		t.Errorf("expected available=2 used=0 total=2 after global reset, got available=%d used=%d total=%d", available, used, total)
 	}
 	for _, id := range []string{"r-1", "r-2"} {

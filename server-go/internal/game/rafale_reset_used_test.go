@@ -32,7 +32,7 @@ func TestMarkRafaleQuestionAvailable_RemovesFromUsedFlag(t *testing.T) {
 	}
 
 	// Sanity: r-1 is now marked used, and the pool for this filter is empty.
-	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	available, used, total := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if available != 0 || used != 1 || total != 1 {
 		t.Fatalf("sanity: expected available=0 used=1 total=1 after draw, got available=%d used=%d total=%d", available, used, total)
 	}
@@ -41,7 +41,7 @@ func TestMarkRafaleQuestionAvailable_RemovesFromUsedFlag(t *testing.T) {
 		t.Fatalf("MarkRafaleQuestionAvailable failed: %v", err)
 	}
 
-	available, used, total = e.CountRafalePool(string(CategoryHistory), 1)
+	available, used, total = e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if available != 1 || used != 0 || total != 1 {
 		t.Errorf("expected available=1 used=0 total=1 after reset, got available=%d used=%d total=%d", available, used, total)
 	}
@@ -79,7 +79,7 @@ func TestMarkRafaleQuestionAvailable_AlreadyAvailable_IsANoOpNotAnError(t *testi
 		t.Errorf("expected no error resetting an already-available question, got %v", err)
 	}
 
-	available, _, _ := e.CountRafalePool(string(CategoryHistory), 1)
+	available, _, _ := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if available != 1 {
 		t.Errorf("expected r-1 still available, got available=%d", available)
 	}
@@ -97,7 +97,7 @@ func TestResetAllRafaleUsed_ClearsEveryEntry_ReservoirUntouched(t *testing.T) {
 	// r-3 deliberately left available, to prove the count reflects only what
 	// was ACTUALLY cleared, not the full reservoir size.
 
-	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	available, used, total := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if available != 1 || used != 2 || total != 3 {
 		t.Fatalf("sanity: expected available=1 used=2 total=3 before reset, got available=%d used=%d total=%d", available, used, total)
 	}
@@ -110,7 +110,7 @@ func TestResetAllRafaleUsed_ClearsEveryEntry_ReservoirUntouched(t *testing.T) {
 		t.Errorf("expected ResetAllRafaleUsed to report 2 cleared entries, got %d", n)
 	}
 
-	available, used, total = e.CountRafalePool(string(CategoryHistory), 1)
+	available, used, total = e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if available != 3 || used != 0 || total != 3 {
 		t.Errorf("expected available=3 used=0 total=3 after global reset, got available=%d used=%d total=%d", available, used, total)
 	}
