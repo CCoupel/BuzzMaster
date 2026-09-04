@@ -353,7 +353,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 		t.Helper()
 		tw205SetGame(t, app, phase, question, bumpers)
 		app.lighting.NotifyState()
-		tw205WaitFor(t, 2*time.Second, func() bool {
+		tw205WaitFor(t, 5*time.Second, func() bool {
 			last, ok := fake.Last()
 			return ok && len(last.Zones) == 1 && last.Zones[0].Color == wantColor && last.Zones[0].Intensity == wantIntensity
 		})
@@ -390,10 +390,15 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	// Points attribués à TeamA — pulse SCORE. Doit survivre au MinInterval
 	// réel de 100 ms qui suit l'Apply de REVEAL, sans quoi il expirerait
 	// avant même d'être rendu (même piège documenté par dev-backend dans
-	// TestDevAmbianceWriterRendersLiveState : 300 ms, pas 4800 ms, pour
-	// garder le test rapide tout en restant sûr).
-	app.lighting.NotifyPulse(lighting.KindScore, []string{"TeamA"}, 300*time.Millisecond)
-	tw205WaitFor(t, 2*time.Second, func() bool {
+	// TestDevAmbianceWriterRendersLiveState). 600 ms (pas 4800 ms, pour
+	// garder le test rapide) — porté de 300 à 600 ms après un flake observé
+	// par dev-backend sous un `go test -race ./...` du dépôt entier (fort
+	// contention CPU/scheduler) : passait ×3 isolément et en run complet de
+	// cmd/server, jamais reproduit hors charge extrême. Les délais d'attente
+	// ci-dessous sont portés à 5 s pour la même raison (temps réel, pas
+	// d'horloge injectée ici — voir la note sur tw205Step plus haut).
+	app.lighting.NotifyPulse(lighting.KindScore, []string{"TeamA"}, 600*time.Millisecond)
+	tw205WaitFor(t, 5*time.Second, func() bool {
 		last, ok := fake.Last()
 		return ok && len(last.Zones) == 1 && last.Zones[0].Color == wantTeamA && last.Zones[0].Intensity == 255
 	})
@@ -401,7 +406,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	// l'état vivant est toujours PhaseRevealed avec les mêmes réponses, donc
 	// la scène de repli est la MÊME scène REVEAL bonne réponse, pas STOP
 	// (qui n'arrive qu'à l'étape suivante).
-	tw205WaitFor(t, 2*time.Second, func() bool {
+	tw205WaitFor(t, 5*time.Second, func() bool {
 		last, ok := fake.Last()
 		return ok && len(last.Zones) == 1 && last.Zones[0].Color == [3]int{0, 220, 60} && last.Zones[0].Intensity == 255
 	})
@@ -410,7 +415,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	tw205Step(t, game.PhaseStopped, nil, answered, [3]int{255, 214, 170}, 120)
 
 	cancel()
-	tw205WaitFor(t, time.Second, fake.Closed)
+	tw205WaitFor(t, 5*time.Second, fake.Closed)
 }
 
 // ---------------------------------------------------------------------------
