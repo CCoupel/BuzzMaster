@@ -252,6 +252,12 @@ export default function GamePage() {
     const currentIndex = sortedQuestions.findIndex(q => q.ID === currentId)
     for (let i = currentIndex + 1; i < sortedQuestions.length; i++) {
       const q = sortedQuestions[i]
+      // ENTRACTE (#214) — exclue du "à suivre" (maquette entracte-programme-
+      // 214.html §04, "pas une question à score" ; critère d'acceptation
+      // frontend) : une pause programmée n'est pas ce que "Question
+      // suivante" doit annoncer, on continue vers la vraie prochaine
+      // question du déroulé.
+      if (q.TYPE === 'ENTRACTE') continue
       if (!['STOPPED', 'REVEALED', 'PLAYED'].includes(q.STATUS)) return q
     }
     return null

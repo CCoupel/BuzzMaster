@@ -43,6 +43,13 @@ export const QUESTION_TYPES = [
   // (une manche RAFALE n'a pas de sens à l'intérieur d'une carte MEMOTION,
   // aucune mention au contrat).
   { key: 'RAFALE', label: 'Rafale', icon: '🌀', color: '#f97316', nestable: false },
+  // ENTRACTE (#214, milestone v9.0.0) — second déclencheur du mécanisme
+  // ENTRACTE existant (#119) : une entrée du déroulé qui porte sa propre
+  // configuration de pause (titre/sous-titre/image, mêmes réglages que
+  // l'entracte global). Ni énoncé/réponse, ni score, ni imbrication en
+  // carte MEMOTION (maquette entracte-programme-214.html §04 — "pas une
+  // question à score", "pas imbriquable").
+  { key: 'ENTRACTE', label: 'Entracte', icon: '⏸️', color: '#6b7280', nestable: false },
 ]
 
 export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
@@ -79,11 +86,13 @@ export const GENERABLE_TYPES = (() => {
   // RAFALE (v8.0.0, #16) — génération IA HORS SCOPE pour le réservoir
   // (maquette rafale-v8.html §8 : « Génération IA des questions du
   // réservoir — Hors scope, l'infrastructure existe et pourra être
-  // branchée ensuite »). Sans ce filtre explicite, RAFALE fuiterait
+  // branchée ensuite »). ENTRACTE (#214) — hors génération IA par nature
+  // (pas une question, une pause : rien à générer, contrat backend
+  // dev-backend-214). Sans ce filtre explicite, l'un ou l'autre fuiterait
   // silencieusement dans AIGenerateModal.jsx dès son ajout à QUESTION_TYPES
   // ci-dessus — exactement le type de divergence que ce fichier existe pour
   // éliminer (#183).
-  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE')
+  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE' && t.key !== 'ENTRACTE')
   const memotionIndex = generableBase.findIndex(t => t.key === 'MEMOTION')
   const withMemotionPlus = [...generableBase]
   withMemotionPlus.splice(memotionIndex + 1, 0, {

@@ -657,6 +657,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // MEMOTION/ARDOISE : sans lui, un TYPE "RAFALE" tomberait dans `isSpeedy`
   // et afficherait le bloc générique à la place du bloc dédié ci-dessous.
   const isRafale = gameState.question?.TYPE === 'RAFALE'
+  // ENTRACTE (#214, milestone v9.0.0) — second déclencheur du mécanisme
+  // ENTRACTE existant (#119) : une entrée du déroulé, ni buzzer, ni équipe,
+  // ni minuteur de question (cycle standard PREPARE→READY→START, backend
+  // engine.go). Le panneau ENTRACTE lui-même (EntractePanel, plus bas) est
+  // un frère de tout ceci, gated uniquement par `gameState.entracte` —
+  // AUCUN changement requis ici pour lui. Ce flag ne sert qu'à éviter le
+  // piège documenté ci-dessous (dispatch positif, #183/A-F1) : un TYPE
+  // "ENTRACTE" non reconnu ne doit jamais retomber silencieusement sur un
+  // bloc générique conçu pour un autre type de contenu.
+  const isEntracte = gameState.question?.TYPE === 'ENTRACTE'
   // #183/A-F1 — dispatch positif du type de contenu affiché : remplace les
   // gardes par négation (`!isQcm && !isMemory && !isMemotion`), répétées à 3
   // endroits pour la mise en page par défaut partagée SPEEDY/ARDOISE.
@@ -666,7 +676,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // renseigné qui ne correspond à aucune des 4 branches ci-dessus (donc
   // inconnu des 5 types gérés) n'est plus traité comme SPEEDY par défaut —
   // inatteignable avec les données actuelles (5 types connus).
-  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte
   const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
@@ -1566,8 +1576,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 `showGameContent` (bloc RAFALE dédié, plus bas) ne couvre que STARTED/PAUSED/
                 STOPPED/REVEALED — READY (et COUNTDOWN ci-dessus) en étaient exclus, et `isRafale`
                 étant dans `isKnownOtherType`, RAFALE ne retombait plus non plus sur ce bloc
-                générique par défaut (#183) — l'écran restait vide faute d'un chemin explicite. */}
-            {showReady && (isSpeedy || isArdoise || isRafale) && (
+                générique par défaut (#183) — l'écran restait vide faute d'un chemin explicite.
+                ENTRACTE (#214) inclus ici pour la même raison, à titre préventif : avant START (donc
+                avant que `gameState.entracte` ne lève le panneau, backend engine.go SetEntracte),
+                READY afficherait sinon un écran vide plutôt que le même minuteur neutre que les
+                autres types. */}
+            {showReady && (isSpeedy || isArdoise || isRafale || isEntracte) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -2946,6 +2960,25 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 </div>
               )
             })()}
+
+            {/* ENTRACTE (#214) — dispatch positif requis (voir isEntracte
+                ci-dessus), STARTED/PAUSED/STOPPED/REVEALED. Contenu
+                délibérément minimal : le panneau ENTRACTE (EntractePanel,
+                frère de ce bloc plus bas dans le DOM) porte tout le message
+                visuel dès que `gameState.entracte` (backend engine.go
+                SetEntracte, levé à START pour ce type) devient actif — ce
+                bloc n'existe que pour éviter un écran cassé/vide pendant la
+                fenêtre entre STARTED et la propagation du drapeau, jamais un
+                minuteur/une question (ni buzzer, ni équipe, ni minuteur de
+                question pour ce type, contrat question-types.md). */}
+            {isEntracte && showGameContent && gameState.question && (
+              <div className="game-content-zones">
+                <div className="zone-timer" />
+                <div className="zone-question" />
+                <div className="zone-media" />
+                <div className="zone-answers" />
+              </div>
+            )}
 
             {/* Waiting State - no question selected (NOT shown for VPlayer) */}
             {!isVPlayer && !gameState.question && ['STOPPED', 'REVEALED'].includes(gameState.phase) && (
