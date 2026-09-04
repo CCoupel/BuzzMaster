@@ -2,6 +2,9 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
+import { useLightingStatus } from '../hooks/useLightingStatus'
+import { lightingStateTitle } from '../utils/lightingState'
+import LightingBulbIcon from './LightingBulbIcon'
 import useElementHeightVar from '../hooks/useElementHeightVar'
 import { useGame } from '../hooks/GameContext'
 import { canToggleEntracte } from '../utils/phaseRules'
@@ -62,6 +65,11 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const menuRef = useRef(null)
   const buttonRef = useRef(null)
   const { updateInfo, checkForUpdates } = useUpdates()
+  // #207 — ampoule d'état de l'entrée « Ambiance » : au montage, toutes les
+  // 30 s et après chaque enregistrement (contrat hue-bridge.md §7.1). Un pont
+  // peut devenir injoignable PENDANT une session — un appel au montage seul,
+  // comme useUpdates, ne suffirait pas.
+  const { status: lightingStatus } = useLightingStatus()
 
   // #179 (F3) — mesure la hauteur RÉELLE de la Navbar (jamais garantie par
   // son CSS, qui ne déclare aucune hauteur fixe) et la partage via
@@ -146,6 +154,16 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // Menu items dans le menu déroulant
   const menuItems = [
     { path: 'settings', label: 'Config', icon: '⚙️' },
+    // #207 — juste après Config. L'icône est un ÉLÉMENT React (SVG en ligne,
+    // 3 glyphes distincts selon l'état), pas un emoji : ni la couleur ni la
+    // forme d'un emoji ne sont pilotables. `title` dit l'état en toutes
+    // lettres pour les lecteurs d'écran (le SVG est aria-hidden).
+    {
+      path: 'ambiance',
+      label: 'Ambiance',
+      icon: <LightingBulbIcon state={lightingStatus.state} />,
+      title: lightingStateTitle(lightingStatus.state),
+    },
     { path: 'backup', label: 'Backup/Restaure', icon: '💾' },
     { path: 'updates', label: 'Mises à jour', icon: '🔄', badge: updateInfo?.update_available },
     { path: 'logs', label: 'Logs', icon: '📋' },
@@ -260,6 +278,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
                     to={getFullPath(item.path)}
                     className={() => `menu-item ${isActiveRoute(item.path) ? 'active' : ''}`}
                     onClick={() => setIsMenuOpen(false)}
+                    title={item.title}
                   >
                     <span className="menu-icon">{item.icon}</span>
                     <span className="menu-label">{item.label}</span>

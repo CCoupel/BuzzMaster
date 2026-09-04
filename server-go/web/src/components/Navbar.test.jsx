@@ -28,6 +28,15 @@ vi.mock('../hooks/useUpdates', () => ({
   }),
 }))
 
+// #207 — Navbar consomme useLightingStatus (ampoule de l'entrée « Ambiance »,
+// GET /api/lighting/status au montage + toutes les 30 s). Mock ici pour la
+// même raison que useUpdates : les tests #175 ci-dessous comptent les appels
+// `fetch` globaux (« aucun fetch », « fetch('/shutdown') appelé une fois »).
+// Couverture propre de l'entrée dans Navbar.ambiance.test.jsx.
+vi.mock('../hooks/useLightingStatus', () => ({
+  useLightingStatus: () => ({ status: { state: 'disabled' }, refresh: vi.fn() }),
+}))
+
 // ENTRACTE (#119, delta C2) — Navbar consomme désormais useGame() (bouton
 // ENTRACTE / FIN D'ENTRACTE, cf. Navbar.entracte.test.jsx pour sa propre
 // couverture). Mock minimal ici, additif et sans rapport avec les tests
