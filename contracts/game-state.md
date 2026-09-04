@@ -875,17 +875,39 @@ ENTRACTE_SET{ACTIVE:false} → GameState.ENTRACTE ← false
 
 Sans cette règle, le **prochain** entracte manuel afficherait le titre/sous-titre de la dernière
 pause programmée (ex. le bouton navbar affichant « Pause déjeuner — retour 14h » en pleine soirée)
-— exactement le scénario que cette règle prévient. La règle est **universelle** (appliquée à toute
-désactivation, pas seulement en sortie d'une pause programmée) : pour un entracte manuel, elle est
-un no-op — `ENTRACTE_CONFIG` égale déjà `ENTRACTE_CONFIG_SAVED` depuis l'activation (§"Configuration
-gelée à l'activation" ci-dessus) — donc aucune branche `isProgrammed` séparée n'est nécessaire dans
-le moteur.
+— exactement le scénario que cette règle prévient. La restauration elle-même est **universelle**
+(appliquée à toute désactivation, pas seulement en sortie d'une pause programmée) : pour un
+entracte manuel, elle est un no-op — `ENTRACTE_CONFIG` égale déjà `ENTRACTE_CONFIG_SAVED` depuis
+l'activation (§"Configuration gelée à l'activation" ci-dessus).
 
-Après `ENTRACTE_SET{ACTIVE:false}`, la question `ENTRACTE` reste **courante**, en phase `STARTED` —
-la pause est terminée mais la question elle-même se termine comme n'importe quelle autre, par le
-geste normal (`STOP`, puis sélection de l'entrée suivante). Rien de spécifique à ajouter à la liste
-blanche d'entracte pour cela : une fois `ENTRACTE` redevenu `false`, cette garde ne s'applique plus
-du tout aux actions suivantes.
+⚠️ **Révision (dev-backend, 2026-09-04, suite retour code-reviewer)** : le paragraphe qui suivait
+ici décrivait un comportement **non retenu** à l'implémentation — la question `ENTRACTE` restant
+courante en `STARTED` après la sortie, à terminer par un `STOP` manuel séparé. Un test end-to-end
+(`entracte_programme_214_test.go`,
+`TestEntracteProgrammed_FullCycle_ThenManualEntracteUsesGlobalAgain`) a révélé que ce
+comportement **rendait la réactivation manuelle suivante impossible** : `SetEntracte(true)` refuse
+toute phase autre que `STOPPED`/`PREPARE`/`READY`/`NEW_GAME`/`REVEALED` (tableau « Phases
+autorisées » ci-dessus), et une question restée bloquée en `STARTED` ne quitte jamais cet
+ensemble sans un geste supplémentaire — contredisant « Retour à l'écran d'attente » (maquette §03)
+et l'étanchéité attendue entre les deux déclencheurs.
+
+**Comportement retenu** : `ENTRACTE_SET{ACTIVE:false}` met **aussi** fin à la question
+sous-jacente — **uniquement** quand elle termine un entracte **programmé** spécifiquement
+(`Phase == STARTED` ET la question courante est de type `ENTRACTE`) — en réutilisant
+`stopUnsafe()`, le **même** chemin de terminaison qu'un `STOP` manuel (`Phase → STOPPED`, arrêt des
+timers le cas échéant, `OnStateChange(PhaseStopped)` déclenché après déverrouillage pour que
+`broadcastQuestions()` resynchronise le statut de la question). Une seule branche, dans
+`Engine.SetEntracte` — pas un second mécanisme de terminaison. Pour un entracte **manuel**, ce
+chemin est **inatteignable** : son propre garde-fou d'activation refuse déjà `STARTED`, donc
+`Phase` ne peut jamais y valoir `STARTED` au moment d'une désactivation manuelle.
+
+Conséquence pratique : le geste de sortie d'une pause programmée est **un seul clic**
+(`ENTRACTE_SET{ACTIVE:false}`) — panneau ET question se terminent ensemble, prêt pour la sélection
+de l'entrée suivante du déroulé. Rien de spécifique n'a dû être ajouté à la liste blanche
+d'entracte pour cela : une fois `ENTRACTE` redevenu `false`, cette garde ne s'applique plus du tout
+aux actions suivantes — voir `internal/server/inbound_allowlist.go` (le commentaire de
+`ProcessButtonPress`, pas cette liste, est la garde qui protège réellement contre un appui buzzer
+physique pendant `STARTED`, un chemin distinct de `handleWebMessage`).
 
 **Score, palmarès, « à suivre »** — une entrée `ENTRACTE` ne rapporte **jamais** de point : aucun
 mécanisme de score n'est câblé pour ce type (pas de buzz, pas d'équipe, aucune action

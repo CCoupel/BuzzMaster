@@ -288,10 +288,24 @@ func IsSetClientTypeAllowed(currentType ClientType) bool {
 //
 // Everything else — READY/START/STOP/PAUSE/CONTINUE/REVEAL/REMOTE/NEW_GAME/
 // RAZ/SHOW_QR_CODE/UPDATE_QUIZ_META/point credits/MEMORY*/MEMOTION*/
-// ARDOISE_INPUT/... — is refused. Physical buzz presses need no entry here:
-// handleButton already no-ops outside PhaseStarted, and entracte is only
-// reachable outside PhaseStarted (D4) — see the dedicated non-regression
-// test instead of a guard here.
+// ARDOISE_INPUT/... — is refused. Physical buzz presses need no entry here
+// EITHER WAY: this list only ever gates messages arriving through
+// handleWebMessage (admin/tv/vplayer/anim WebSocket clients) — a physical
+// buzzer press reaches the engine through the entirely separate BuzzerHub /
+// ProcessButtonPress path, which never consults this map at all.
+//
+// ⚠️ Revised (dev-backend, 2026-09-04, #214, v9.0.0): this comment used to
+// additionally justify the omission by "entracte is only reachable outside
+// PhaseStarted (D4)" — no longer true. A PROGRAMMED entracte (a déroulé
+// entry of QuestionType ENTRACTE, contracts/game-state.md §"Second
+// déclencheur — entracte programmée") raises GameState.Entracte directly
+// inside that question's own START transition, so ENTRACTE can now be
+// `true` WHILE Phase == STARTED — the one deliberate exception to D4's
+// "never while a round is live" for the manual trigger. The actual guard
+// against a buzzer press during that window is
+// ProcessButtonPress's own ENTRACTE case (engine.go), a completely
+// independent mechanism from this file — see the dedicated non-regression
+// test for it, not this list.
 var entracteAllowedActions = map[string]bool{
 	protocol.ActionEntracteSet:          true,
 	protocol.ActionHello:                true,
