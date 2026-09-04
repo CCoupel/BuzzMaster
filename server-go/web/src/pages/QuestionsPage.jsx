@@ -19,6 +19,7 @@ import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
 import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
+import EntracteFields from '../components/EntracteFields'
 import RafalePage from './RafalePage'
 import './QuestionsPage.css'
 import './ConfigPage.css'
@@ -86,6 +87,17 @@ export default function QuestionsPage() {
     rafaleMode: 'SOLO',
     rafaleQuestionTime: 3,
     rafaleMaxQuestions: 100,
+    // ENTRACTE fields (#214, milestone v9.0.0) — second déclencheur du
+    // mécanisme ENTRACTE existant (#119, EntracteConfigForm.jsx/#215) :
+    // chaque occurrence du déroulé porte sa propre config, MÊME STRUCTURE
+    // que la config globale (composant partagé components/EntracteFields.jsx,
+    // contrat backend TypedContent.EntracteConfig — réutilise le type Go
+    // EntracteConfig existant). L'image de fond réutilise le champ MEDIA
+    // générique de la question (formData.media/existingMedia ci-dessous,
+    // déjà envoyé par tous les autres types) — pas un endpoint dédié comme
+    // l'image d'entracte globale (spécifique à un panneau unique, sans
+    // équivalent per-occurrence).
+    entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
     // MEMOTION fields (v5.0.0)
     motionMode: 'SOLO',
     // #184/B-F4 — chaque carte porte désormais `type` + les valeurs de
@@ -472,6 +484,15 @@ export default function QuestionsPage() {
     }))
   }
 
+  // #214 — un seul champ (field, value) générique, consommé par
+  // <EntracteFields onChange> (même signature que dans EntracteConfigForm.jsx).
+  const handleEntracteConfigChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      entracteConfig: { ...prev.entracteConfig, [field]: value },
+    }))
+  }
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -676,6 +697,17 @@ export default function QuestionsPage() {
       rafaleMode: question.RAFALE_MODE || 'SOLO',
       rafaleQuestionTime: question.RAFALE_QUESTION_TIME || 3,
       rafaleMaxQuestions: question.RAFALE_MAX_QUESTIONS || 100,
+      // ENTRACTE (#214) — ENTRACTE_CONFIG (nested, contrat backend
+      // TypedContent.EntracteConfig) : mêmes défauts que la config globale
+      // (EntracteConfigForm.jsx) si l'occurrence n'en porte pas encore.
+      entracteConfig: {
+        title: question.ENTRACTE_CONFIG?.TITLE ?? 'ENTRACTE',
+        subtitle: question.ENTRACTE_CONFIG?.SUBTITLE ?? 'Retour dans 20mn',
+        panelSize: question.ENTRACTE_CONFIG?.PANEL_SIZE ?? 65,
+        animPeriod: question.ENTRACTE_CONFIG?.ANIM_PERIOD ?? 10,
+        animIntensity: question.ENTRACTE_CONFIG?.ANIM_INTENSITY ?? 20,
+        transitionMs: question.ENTRACTE_CONFIG?.TRANSITION_MS ?? 2000,
+      },
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -781,6 +813,9 @@ export default function QuestionsPage() {
       rafaleMode: 'SOLO',
       rafaleQuestionTime: 3,
       rafaleMaxQuestions: 100,
+      // ENTRACTE fields — voir commentaire de l'état initial (useState
+      // ci-dessus) pour le détail des champs.
+      entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
       points: '1',
       time: '30',
       media: null,
@@ -1241,6 +1276,25 @@ export default function QuestionsPage() {
       // repli textuel pour tout consommateur qui n'afficherait pas les chips
       // dédiées de QuestionCard.jsx).
       data.append('answer', `${formData.rafaleCategories.join('/') || '?'} - ${formData.rafaleDifficulties.map(d => '★'.repeat(d)).join(', ')}`)
+    } else if (formData.type === 'ENTRACTE') {
+      // ENTRACTE (#214) — configuration du panneau PAR OCCURRENCE, envoyée
+      // en JSON-encodé (même convention que motion_config/RAFALE_*_BY_*
+      // ci-dessus, contrat backend TypedContent.EntracteConfig *EntracteConfig,
+      // réutilise le type Go EntracteConfig existant — mêmes clés UPPER_SNAKE
+      // que la config globale, contracts/game-state.md §ENTRACTE_CONFIG).
+      // L'image de fond utilise le champ MEDIA générique (data.append('file', ...)
+      // ci-dessous, commun à tous les types), pas un endpoint dédié.
+      data.append('ENTRACTE_CONFIG', JSON.stringify({
+        TITLE: formData.entracteConfig.title,
+        SUBTITLE: formData.entracteConfig.subtitle,
+        PANEL_SIZE: formData.entracteConfig.panelSize,
+        ANIM_PERIOD: formData.entracteConfig.animPeriod,
+        ANIM_INTENSITY: formData.entracteConfig.animIntensity,
+        TRANSITION_MS: formData.entracteConfig.transitionMs,
+      }))
+      // Réponse d'affichage — patron RAFALE ci-dessus (`answer` purement
+      // informatif pour QuestionCard.jsx/le déroulé).
+      data.append('answer', '—')
     }
 
     if (formData.media) {
@@ -2413,9 +2467,71 @@ export default function QuestionsPage() {
                   </div>
                 )}
 
+                {/* ENTRACTE (#214, milestone v9.0.0) — second déclencheur du
+                    mécanisme ENTRACTE existant (#119) : cette entrée du
+                    déroulé porte sa propre configuration de panneau, MÊME
+                    STRUCTURE de champs que la config globale (composant
+                    partagé EntracteFields, factorisé avec
+                    EntracteConfigForm.jsx/#215 plutôt que dupliqué). Le champ
+                    "Question" générique ci-dessus reste le libellé affiché
+                    dans le déroulé (maquette §02) — Titre/Sous-titre
+                    ci-dessous sont ce qui s'affiche RÉELLEMENT sur le
+                    panneau pendant la pause. */}
+                {formData.type === 'ENTRACTE' && (
+                  <div className="rafale-section">
+                    <EntracteFields
+                      values={formData.entracteConfig}
+                      onChange={handleEntracteConfigChange}
+                      titleId="question-entracte-title"
+                      subtitleId="question-entracte-subtitle"
+                    />
+                    {/* Image de fond — contracts/game-state.md §"Second
+                        déclencheur — entracte programmée" : "l'image de fond
+                        éventuelle de cette occurrence est le champ générique
+                        Question.MEDIA, comme pour tout autre type — pas de
+                        mécanisme dédié" (contrairement à IMAGE_IS_CUSTOM de
+                        l'entracte manuel, fichier unique sur disque). Lue
+                        côté panneau via EntractePanel `mediaUrl` (résolu par
+                        PlayerDisplay.jsx/VPlayerPage.jsx depuis
+                        gameState.question.MEDIA quand la pause active est
+                        celle de la question courante). */}
+                    <div className="form-group">
+                      <label htmlFor="entracte-media-input">Image de fond (optionnel)</label>
+                      <input
+                        id="entracte-media-input"
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="image/*"
+                      />
+                      {(formData.media || formData.existingMedia) && (
+                        <div className="media-preview">
+                          <img
+                            src={formData.media ? URL.createObjectURL(formData.media) : formData.existingMedia}
+                            alt="Aperçu de l'image de fond"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, media: null, existingMedia: null }))
+                              if (fileInputRef.current) fileInputRef.current.value = ''
+                            }}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      )}
+                      <p className="section-hint">Dégradé par défaut si aucune image n'est choisie.</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-row">
-                  {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card */}
-                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
+                  {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card.
+                      ENTRACTE (#214) — ne rapporte jamais aucun point (maquette
+                      entracte-programme-214.html §04). */}
+                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && (
                     <div className="form-group">
                       <label htmlFor="points-input">Points</label>
                       <input
@@ -2444,8 +2560,12 @@ export default function QuestionsPage() {
                 </div>
 
                 {/* Hide Image question/answer for MEMORY/MEMOTION/RAFALE — ARDOISE supports images (#94).
-                    RAFALE (v8.0.0, #16) — aucun média, contrat §3.3/D3 (texte seul, réservoir). */}
-                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && (
+                    RAFALE (v8.0.0, #16) — aucun média, contrat §3.3/D3 (texte seul, réservoir).
+                    ENTRACTE (#214) — le champ MEDIA générique EST utilisé (image de fond du
+                    panneau), mais avec son propre champ dédié dans la section ENTRACTE ci-dessous
+                    (libellé "Image de fond", pas "Image question") — pas de "Image reponse" (aucun
+                    sens pour ce type), donc exclu ici comme les 3 autres. */}
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>

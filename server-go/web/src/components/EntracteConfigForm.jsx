@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Button from './Button'
 import Card, { CardHeader, CardBody } from './Card'
+import EntracteFields from './EntracteFields'
 
 /**
  * EntracteConfigForm — onglet "Entracte" de BackstagePage (#215, extrait de
@@ -141,28 +142,24 @@ export default function EntracteConfigForm({ gameState, sendMessage }) {
               Panneau affiche sur l'ecran TV et VJoueur pendant une pause globale (repas, changement de salle...), declenchee depuis la barre de navigation. Le reste de l'interface (TV, VJoueur, admin, animateur) est estompe pendant toute la duree de la pause.
             </p>
 
-            <div className="wifi-form">
-              <label className="wifi-field">
-                <span>Titre</span>
-                <input
-                  type="text"
-                  value={entracteTitle}
-                  onChange={(e) => setEntracteTitle(e.target.value)}
-                  placeholder="ENTRACTE"
-                  maxLength={40}
-                />
-              </label>
-              <label className="wifi-field">
-                <span>Sous-titre</span>
-                <input
-                  type="text"
-                  value={entracteSubtitle}
-                  onChange={(e) => setEntracteSubtitle(e.target.value)}
-                  placeholder="Retour dans 20mn"
-                  maxLength={80}
-                />
-              </label>
-            </div>
+            <EntracteFields
+              values={{
+                title: entracteTitle,
+                subtitle: entracteSubtitle,
+                panelSize: entractePanelSize,
+                animPeriod: entracteAnimPeriod,
+                animIntensity: entracteAnimIntensity,
+                transitionMs: entracteTransitionMs,
+              }}
+              onChange={(field, value) => {
+                if (field === 'title') setEntracteTitle(value)
+                else if (field === 'subtitle') setEntracteSubtitle(value)
+                else if (field === 'panelSize') setEntractePanelSize(value)
+                else if (field === 'animPeriod') setEntracteAnimPeriod(value)
+                else if (field === 'animIntensity') setEntracteAnimIntensity(value)
+                else if (field === 'transitionMs') setEntracteTransitionMs(value)
+              }}
+            />
 
             <div className="default-image-preview">
               {entracteImageIsCustom ? (
@@ -201,74 +198,6 @@ export default function EntracteConfigForm({ gameState, sendMessage }) {
                   Retirer l'image
                 </Button>
               )}
-            </div>
-
-            <div className="slider-group">
-              <div className="slider-row">
-                <label>Taille du panneau</label>
-                <div className="slider-control">
-                  <input
-                    type="range"
-                    min="20"
-                    max="100"
-                    value={entractePanelSize}
-                    onChange={(e) => setEntractePanelSize(parseInt(e.target.value))}
-                  />
-                  <span className="slider-value">{entractePanelSize}%</span>
-                </div>
-                <p className="section-hint">
-                  Même réglage, même rendu sur TV et VJoueur — pas de taille séparée par écran.
-                </p>
-              </div>
-
-              <div className="slider-row">
-                <label>Vitesse du mouvement</label>
-                <div className="slider-control">
-                  <input
-                    type="range"
-                    min="2"
-                    max="30"
-                    value={entracteAnimPeriod}
-                    onChange={(e) => setEntracteAnimPeriod(parseInt(e.target.value))}
-                  />
-                  <span className="slider-value">{entracteAnimPeriod}s</span>
-                </div>
-                <p className="section-hint">Durée d'un cycle complet — plus court = plus rapide.</p>
-              </div>
-
-              <div className="slider-row">
-                <label>Intensité du mouvement</label>
-                <div className="slider-control">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={entracteAnimIntensity}
-                    onChange={(e) => setEntracteAnimIntensity(parseInt(e.target.value))}
-                  />
-                  <span className="slider-value">
-                    {entracteAnimIntensity === 0 ? 'animation désactivée' : entracteAnimIntensity}
-                  </span>
-                </div>
-              </div>
-
-              <div className="slider-row">
-                <label>Vitesse de transition</label>
-                <div className="slider-control">
-                  <input
-                    type="range"
-                    min="0"
-                    max="10000"
-                    step="100"
-                    value={entracteTransitionMs}
-                    onChange={(e) => setEntracteTransitionMs(parseInt(e.target.value))}
-                  />
-                  <span className="slider-value">
-                    {entracteTransitionMs === 0 ? 'transition instantanée' : `${(entracteTransitionMs / 1000).toFixed(1)}s`}
-                  </span>
-                </div>
-                <p className="section-hint">Durée du fondu à l'entrée et à la sortie de la pause.</p>
-              </div>
             </div>
 
             <div className="config-section-actions">

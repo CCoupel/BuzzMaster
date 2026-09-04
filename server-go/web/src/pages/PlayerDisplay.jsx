@@ -978,6 +978,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // cette garde les deux filtres se composeraient et l'écran deviendrait
   // presque noir (piège documenté au plan, "double filtrage").
   const entracteActiveHere = !!gameState.entracte && !isVPlayer
+  // #214 — pause PROGRAMMÉE (question TYPE=ENTRACTE, jamais l'entracte
+  // manuel qui n'a pas de `question` de ce type) : l'image de fond de
+  // l'occurrence vient de Question.MEDIA, pas de IMAGE_IS_CUSTOM
+  // (contracts/game-state.md §"Second déclencheur — entracte programmée").
+  // `gameState.entracte` seul ne suffit pas à distinguer les deux
+  // déclencheurs — `question.TYPE === 'ENTRACTE'` le fait (c'est la SEULE
+  // façon dont ENTRACTE peut valoir true pendant STARTED, même contrat).
+  const entracteMediaUrl = (gameState.entracte && gameState.question?.TYPE === 'ENTRACTE')
+    ? (gameState.question.MEDIA || null)
+    : null
   // Transition progressive (#119, C3) — --ep-transition posée ici, héritée
   // par .entracte-dim et le fondu du panneau (même durée pour les deux
   // mécanismes). Depuis entracteConfig (diffusé, gelé pendant une pause
@@ -3024,7 +3034,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
           instantanément à la sortie, quelle que soit TRANSITION_MS — il
           n'existerait plus pour jouer son fondu de sortie. */}
       <AnimatePresence>
-        {entracteActiveHere && <EntractePanel key="entracte-panel" config={gameState.entracteConfig} />}
+        {entracteActiveHere && <EntractePanel key="entracte-panel" config={gameState.entracteConfig} mediaUrl={entracteMediaUrl} />}
       </AnimatePresence>
 
       {/* QR Code Overlay — suppressed during ENROLL (dedicated two-QR view handles it) */}
