@@ -1761,6 +1761,39 @@ func (e *Engine) processCountdownTick() (active bool, countdownTime int) {
 	return true, e.state.CountdownTime
 }
 
+// startEntracteQuestionUnsafe (#214, v9.0.0) raises GameState.Entracte from
+// the CURRENT question's own per-occurrence config
+// (Question.TypedContent.EntracteConfig) when it is of type ENTRACTE — the
+// "second trigger" for the pre-existing #119 mechanism (contract
+// game-state.md §"Second déclencheur — entracte programmée"). No-op for
+// every other question type, or for an ENTRACTE question with no config set
+// (defense in depth — the editor always sets one before save).
+//
+// Deliberately does NOT call the public SetEntracte(true): that method's own
+// phase guard refuses activation once Phase is STARTED (contract "never
+// while a round is live"), and by the time this runs (called from inside
+// actualStart()/StartImmediate(), both already mid-transition to STARTED)
+// that guard would always refuse. This is instead an intrinsic PART of the
+// question's own START transition, already inside its locked section — not
+// a second, separate activation request.
+//
+// Writes ONLY e.state.EntracteConfig (from the question's own config, NEVER
+// EntracteConfigSaved — a programmed pause must never overwrite the global
+// saved config, contract §216-Q9's sibling rule for #214) and
+// e.state.Entracte. Caller must hold e.mu (write lock).
+func (e *Engine) startEntracteQuestionUnsafe() {
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeEntracte {
+		return
+	}
+	if e.state.Question.EntracteConfig == nil {
+		log.Printf("[Engine] ENTRACTE question %s started with no panel config — Entracte flag NOT raised", e.state.Question.ID)
+		return
+	}
+	e.state.EntracteConfig = *e.state.Question.EntracteConfig
+	e.state.Entracte = true
+	log.Printf("[Engine] Entracte: activated from programmed question %s (#214)", e.state.Question.ID)
+}
+
 // actualStart is called after countdown finishes to start the actual game
 func (e *Engine) actualStart() {
 	e.mu.Lock()
@@ -1836,8 +1869,18 @@ func (e *Engine) actualStart() {
 	// not skip it the way MEMOTION does.
 	rafaleStart := e.startRafaleRoundUnsafe()
 
-	// Start main timer — MEMOTION uses per-card timers (StartMotionCardTimer), not a global one
-	if e.state.Question == nil || e.state.Question.Type != QuestionTypeMemotion {
+	// ENTRACTE (#214, v9.0.0): raise the pause flag from this question's own
+	// config — see startEntracteQuestionUnsafe's own doc comment. A no-op
+	// for every other question type.
+	e.startEntracteQuestionUnsafe()
+
+	// Start main timer — MEMOTION uses per-card timers (StartMotionCardTimer),
+	// not a global one; ENTRACTE (#214) has no timer at all, "ni minuteur de
+	// question" (contract game-state.md §"Second déclencheur") — Question.TIME
+	// is simply never read for this type, and letting the global timer run
+	// anyway would auto-Stop() the pause the moment CURRENT_TIME first
+	// reaches 0 (processTimerTick's own <=0 branch), silently ending it.
+	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeMemotion && e.state.Question.Type != QuestionTypeEntracte) {
 		e.startTimer()
 	}
 
@@ -1906,8 +1949,16 @@ func (e *Engine) StartImmediate(delay int) {
 	// actualStart entirely (used by tests), so it needs the same init call.
 	rafaleStart := e.startRafaleRoundUnsafe()
 
-	// Start main timer
-	e.startTimer()
+	// ENTRACTE (#214, v9.0.0) — mirrors actualStart(), same reasoning.
+	e.startEntracteQuestionUnsafe()
+
+	// Start main timer — skipped for ENTRACTE (#214), same "ni minuteur de
+	// question" reasoning as actualStart()'s own guard; MEMOTION is
+	// deliberately NOT excluded here, an existing asymmetry with
+	// actualStart() that predates #214 and is out of this change's scope.
+	if e.state.Question == nil || e.state.Question.Type != QuestionTypeEntracte {
+		e.startTimer()
+	}
 
 	// Release lock BEFORE calling callback to avoid deadlock
 	callback := e.OnStateChange
@@ -2973,6 +3024,19 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	// even though pressing it here still has zero effect on game state.
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
 		log.Printf("[Engine] Ignoring buzz for RAFALE question from %s", bumperID)
+		e.mu.Unlock()
+		return
+	}
+
+	// Ignore buzz for ENTRACTE questions (v9.0.0, #214) — "ni buzzer"
+	// (contract game-state.md §"Second déclencheur"): a programmed pause has
+	// no player interaction whatsoever, same discipline as the RAFALE guard
+	// just above. This gate is what actually matters here — the WS-level
+	// entracte allow-list (inbound_allowlist.go) only ever sees admin/anim
+	// messages, physical buzzer presses reach the engine through this
+	// entirely separate path (BuzzerHub) and would otherwise bypass it.
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeEntracte {
+		log.Printf("[Engine] Ignoring buzz for ENTRACTE question from %s", bumperID)
 		e.mu.Unlock()
 		return
 	}
@@ -4792,11 +4856,18 @@ func (e *Engine) GetShowQRCode() bool {
 // logged and returns false, changing nothing else in state.
 //
 // Deactivation always succeeds, from ANY phase — ENTRACTE must never be a
-// dead end (contract, risk table "Entracte sans issue").
+// dead end (contract, risk table "Entracte sans issue"). Also serves,
+// unchanged, as the exit gesture for a PROGRAMMED entracte (#214, v9.0.0):
+// GameState.Entracte is only ever true during STARTED for an ENTRACTE-type
+// question (raised directly by that question's own START, never through
+// this method's activation branch — see startEntracteQuestionUnsafe), and
+// this deactivation branch neither knows nor cares which trigger raised the
+// flag it is now lowering.
 //
-// Deliberately touches ONLY e.state.Entracte and (on activation)
-// e.state.EntracteConfig: Phase, Question and everything else are read-only
-// here, so a question selected in PREPARE is found intact on exit.
+// Deliberately touches ONLY e.state.Entracte and e.state.EntracteConfig:
+// Phase, Question and everything else are read-only here, so a question
+// selected in PREPARE — or, since #214, a live ENTRACTE question in
+// STARTED — is found intact on exit.
 //
 // C4 (2026-08-20, arbitrage): on activation, recopies EntracteConfigSaved
 // into EntracteConfig — under this SAME lock, BEFORE raising the flag — so
@@ -4808,13 +4879,55 @@ func (e *Engine) GetShowQRCode() bool {
 // after every activation, and after every LoadState() at startup — "equal
 // outside a pause" is not just true by convention, it's enforced at the
 // one place the pause begins.
+//
+// #214 (v9.0.0): the SAME recopy now also happens on DEACTIVATION —
+// restoring the global config the moment ANY entracte ends, universally,
+// not just before the next manual one begins. Contract game-state.md
+// §"Second déclencheur — entracte programmée", restoration rule: without
+// this, a programmed pause's own occurrence config (title/subtitle/…)
+// would linger in EntracteConfig until the NEXT activation, so the very
+// next manual entracte — or anything else reading the diffused config
+// between pauses — would show the just-ended programmed pause's text
+// instead of the global one. For a manual entracte this line is a no-op:
+// EntracteConfig already equals EntracteConfigSaved from its own
+// activation above, so restoring it here changes nothing observable.
 func (e *Engine) SetEntracte(active bool) bool {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 
 	if !active {
 		e.state.Entracte = false
+		e.state.EntracteConfig = e.state.EntracteConfigSaved
 		log.Printf("[Engine] Entracte: deactivated (phase=%s)", e.state.Phase)
+
+		// #214 (v9.0.0): exiting a PROGRAMMED entracte also ends the
+		// underlying ENTRACTE question — "retour à l'écran d'attente"
+		// (maquette entracte-programme-214.html §03), not just the panel
+		// disappearing while Phase stays stuck on STARTED with nothing left
+		// to advance. Reuses stopUnsafe() (the exact same termination path
+		// as a manual STOP) rather than hand-rolling a second one — RAFALE's
+		// own block inside it is a no-op here (Question.Type is ENTRACTE,
+		// never RAFALE, so `released` below is always false, contract
+		// game-state.md §"Second déclencheur", "sortie et règle de
+		// restauration"). A MANUAL entracte's deactivation never reaches
+		// this branch: SetEntracte's own activation gate above already
+		// refuses STARTED for it, so Phase can only be STARTED here via the
+		// programmed path (startEntracteQuestionUnsafe, called from
+		// actualStart()/StartImmediate()).
+		endedProgrammedQuestion := e.state.Phase == PhaseStarted &&
+			e.state.Question != nil && e.state.Question.Type == QuestionTypeEntracte
+		if endedProgrammedQuestion {
+			e.stopUnsafe()
+		}
+
+		// Release lock BEFORE calling callback to avoid deadlock — same
+		// discipline as Stop()/actualStart()/every other phase-changing
+		// function in this file (see OnStateChange field's own doc comment).
+		callback := e.OnStateChange
+		e.mu.Unlock()
+
+		if endedProgrammedQuestion && callback != nil {
+			callback(PhaseStopped)
+		}
 		return true
 	}
 
@@ -4823,12 +4936,14 @@ func (e *Engine) SetEntracte(active bool) bool {
 		e.state.Phase == PhaseRevealed
 	if !allowedPhases {
 		log.Printf("[Engine] Entracte: activation refused, phase=%s not eligible", e.state.Phase)
+		e.mu.Unlock()
 		return false
 	}
 
 	e.state.EntracteConfig = e.state.EntracteConfigSaved
 	e.state.Entracte = true
 	log.Printf("[Engine] Entracte: activated (phase=%s)", e.state.Phase)
+	e.mu.Unlock()
 	return true
 }
 
