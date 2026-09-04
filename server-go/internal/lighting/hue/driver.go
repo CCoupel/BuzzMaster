@@ -1,9 +1,13 @@
 // Package hue implements lighting.Driver for a Philips Hue Bridge over its
 // local REST API v1 (contracts/hue-bridge.md, #206).
 //
-// The driver is only ever called from the single writer goroutine
-// (contracts/lighting.md §4), so Apply may block; Status() may however be
-// read from HTTP handlers (#207), hence the small mutex around bookkeeping.
+// Concurrency: Apply runs on the single writer goroutine (contracts/
+// lighting.md §4) while Inventory/RefreshInventory/TestFlash/Status/Close are
+// called from HTTP handler goroutines (#207) on the SAME live driver. The
+// I/O operations are therefore serialised by opMu (one exchange sequence with
+// the bridge at a time — a scene write can never slip between a test flash
+// and its restore, and two re-discoveries never interleave), and every field,
+// including the client/base pair swapped by re-discovery, is read under mu.
 // No goroutine is started, ever: when lighting is not configured the owner
 // simply does not create a Driver (contract §5.5).
 package hue
@@ -147,12 +151,14 @@ type resolvedLight struct {
 
 // Driver implements lighting.Driver for one bridge.
 type Driver struct {
-	cfg    Config
-	now    func() time.Time
-	client *client
-	base   string
+	cfg Config
+	now func() time.Time
+
+	opMu sync.Mutex // serialises the I/O operations (Apply, Inventory, TestFlash, Close)
 
 	mu            sync.Mutex // protects everything below; never held during I/O
+	client        *client    // nil until the bridge is known by IP (re-discovery by id)
+	base          string
 	status        BridgeState
 	reported      bool // false until the first ok/fail has been logged (initial status is provisional)
 	reason        string
@@ -266,8 +272,18 @@ func (d *Driver) logf(format string, args ...any) {
 	}
 }
 
-// Close releases the HTTP transport. Idempotent.
+// conn snapshots the current client/base pair under the lock; the caller
+// uses the snapshot for its I/O so a concurrent re-discovery never races it.
+func (d *Driver) conn() (*client, string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.client, d.base
+}
+
+// Close releases the HTTP transport once no operation is in flight. Idempotent.
 func (d *Driver) Close() error {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.closed = true
@@ -311,6 +327,8 @@ func (d *Driver) Status() Status {
 // classified error (ErrUnreachable / ErrRefused) and are rate-limited by
 // the backoff so the writer is never blocked by a dead bridge.
 func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
 	d.mu.Lock()
 	d.stats.Applies++
 	closed, invalid := d.closed, d.invalid
@@ -353,8 +371,9 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 	}
 	d.mu.Unlock()
 
+	c, _ := d.conn()
 	for _, w := range plan {
-		err := d.client.setState(ctx, w.id, w.want.toV1())
+		err := c.setState(ctx, w.id, w.want.toV1())
 		d.mu.Lock()
 		d.stats.Writes++
 		if err != nil {
@@ -417,7 +436,7 @@ func (d *Driver) ensureResolved(ctx context.Context, force bool) error {
 	if fresh {
 		return nil
 	}
-	if d.client == nil { // only an id is known: discover first
+	if c, _ := d.conn(); c == nil { // only an id is known: discover first
 		if err := d.rediscover(ctx, "no ip configured"); err != nil {
 			return err
 		}
@@ -427,12 +446,14 @@ func (d *Driver) ensureResolved(ctx context.Context, force bool) error {
 			return err
 		}
 	}
-	lights, err := d.client.lights(ctx)
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
 	if err != nil {
 		// IP may have changed (DHCP): one re-discovery by id, then retry once.
 		if d.cfg.BridgeID != "" && errors.Is(classify(err), ErrUnreachable) {
 			if rerr := d.rediscover(ctx, "inventory unreachable"); rerr == nil {
-				lights, err = d.client.lights(ctx)
+				c, _ = d.conn()
+				lights, err = c.lights(ctx)
 			}
 		}
 		if err != nil {
@@ -446,7 +467,8 @@ func (d *Driver) ensureResolved(ctx context.Context, force bool) error {
 // checkBridgeIdentity reads /config once; a bridge id mismatch means another
 // bridge answers at this IP — re-discover by id (contract §4.1).
 func (d *Driver) checkBridgeIdentity(ctx context.Context) error {
-	info, err := d.client.config(ctx)
+	c, base := d.conn()
+	info, err := c.config(ctx)
 	if err != nil {
 		// A bridge (or fake) that does not serve /config at all: identity
 		// cannot be verified, but nothing is wrong with the link — skip.
@@ -459,7 +481,8 @@ func (d *Driver) checkBridgeIdentity(ctx context.Context) error {
 		}
 		if d.cfg.BridgeID != "" && errors.Is(classify(err), ErrUnreachable) {
 			if rerr := d.rediscover(ctx, "config unreachable"); rerr == nil {
-				info, err = d.client.config(ctx)
+				c, base = d.conn()
+				info, err = c.config(ctx)
 			}
 		}
 		if err != nil {
@@ -467,10 +490,11 @@ func (d *Driver) checkBridgeIdentity(ctx context.Context) error {
 		}
 	}
 	if d.cfg.BridgeID != "" && !strings.EqualFold(info.BridgeID, d.cfg.BridgeID) {
-		if rerr := d.rediscover(ctx, fmt.Sprintf("bridge at %s is %s, expected %s", d.base, info.BridgeID, d.cfg.BridgeID)); rerr != nil {
-			return fmt.Errorf("%w: bridge id mismatch at %s (%s ≠ %s) and re-discovery failed: %v", ErrUnreachable, d.base, info.BridgeID, d.cfg.BridgeID, rerr)
+		if rerr := d.rediscover(ctx, fmt.Sprintf("bridge at %s is %s, expected %s", base, info.BridgeID, d.cfg.BridgeID)); rerr != nil {
+			return fmt.Errorf("%w: bridge id mismatch at %s (%s ≠ %s) and re-discovery failed: %v", ErrUnreachable, base, info.BridgeID, d.cfg.BridgeID, rerr)
 		}
-		info, err = d.client.config(ctx)
+		c, _ = d.conn()
+		info, err = c.config(ctx)
 		if err != nil {
 			return err
 		}
@@ -502,16 +526,17 @@ func (d *Driver) rediscover(ctx context.Context, why string) error {
 	if err != nil {
 		return err
 	}
+	d.mu.Lock()
 	if base == d.base && d.client != nil {
+		d.mu.Unlock()
 		return nil
 	}
-	old := d.base
-	d.client.close()
-	d.mu.Lock()
+	old, oldClient := d.base, d.client
 	d.client = newClient(base, d.cfg.APIKey, d.cfg.Timeout)
 	d.base = base
 	d.bridgeChecked = false
 	d.mu.Unlock()
+	oldClient.close() // idle connections only; a nil client is fine
 	d.logf("Hue bridge %s moved from %s to %s (%s)", d.cfg.BridgeID, old, base, why)
 	return nil
 }
@@ -634,19 +659,32 @@ type LightInfo struct {
 // returns the list sorted by id. It also lifts a refused state if the key
 // works again (user gesture: re-registration).
 func (d *Driver) Inventory(ctx context.Context) ([]LightInfo, error) {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
 	d.mu.Lock()
 	if d.status == StateRefused {
 		d.status, d.reason = StateUnreachable, "re-checking after refused"
 	}
 	d.mu.Unlock()
-	if d.client == nil {
+	if c, _ := d.conn(); c == nil {
 		if err := d.rediscover(ctx, "no ip configured"); err != nil {
 			return nil, d.fail(err)
 		}
 	}
-	lights, err := d.client.lights(ctx)
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
 	if err != nil {
-		return nil, d.fail(err)
+		// Same DHCP rule as the writer path: one re-discovery by id, one retry
+		// (a user gesture must not wait for the backoff to expire).
+		if d.cfg.BridgeID != "" && errors.Is(classify(err), ErrUnreachable) {
+			if rerr := d.rediscover(ctx, "inventory unreachable"); rerr == nil {
+				c, _ = d.conn()
+				lights, err = c.lights(ctx)
+			}
+		}
+		if err != nil {
+			return nil, d.fail(err)
+		}
 	}
 	if err := d.checkBridgeIdentity(ctx); err != nil {
 		return nil, d.fail(err)
@@ -680,10 +718,13 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 	if sleep == nil {
 		sleep = time.Sleep
 	}
+	d.opMu.Lock() // the writer cannot slip a scene between the flash and its restore
+	defer d.opMu.Unlock()
 	if err := d.ensureResolved(ctx, false); err != nil {
 		return d.fail(err)
 	}
-	lights, err := d.client.lights(ctx)
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
 	if err != nil {
 		return d.fail(err)
 	}
@@ -704,7 +745,7 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 	white := applied{on: true, bri: 254, xy: rgbToXY(255, 255, 255)}
 	var firstErr error
 	for _, t := range targets {
-		if err := d.client.setState(ctx, t.id, white.toV1()); err != nil && firstErr == nil {
+		if err := c.setState(ctx, t.id, white.toV1()); err != nil && firstErr == nil {
 			firstErr = classify(err)
 		}
 	}
@@ -717,7 +758,7 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 		} else {
 			restore.xy = rgbToXY(255, 214, 170)
 		}
-		if err := d.client.setState(ctx, t.id, restore.toV1()); err != nil && firstErr == nil {
+		if err := c.setState(ctx, t.id, restore.toV1()); err != nil && firstErr == nil {
 			firstErr = classify(err)
 		}
 		d.mu.Lock()

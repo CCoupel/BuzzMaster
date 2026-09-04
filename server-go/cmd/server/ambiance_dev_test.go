@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,17 +23,17 @@ import (
 
 func TestDevAmbianceNilWriterSitesAreNoOps(t *testing.T) {
 	app := newTestApp(t)
-	if app.lighting != nil {
+	if app.ambiance() != nil {
 		t.Fatal("test app must start with no lighting writer")
 	}
 	if app.ambianceIsConfigured() {
 		t.Fatal("#205: ambiance must not be configured")
 	}
 	// Every site calls these unguarded; they must be no-ops on nil.
-	app.lighting.NotifyState()
-	app.lighting.NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
+	app.ambiance().NotifyState()
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
 	app.setupAmbiance()
-	if app.lighting != nil {
+	if app.ambiance() != nil {
 		t.Fatal("setupAmbiance must leave lighting nil when not configured")
 	}
 }
@@ -226,13 +227,13 @@ func TestDevAmbianceRegistryShape(t *testing.T) {
 func TestDevAmbianceWriterRendersLiveState(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lighting = app.newAmbianceWriter(fake)
+	app.lightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go app.lighting.Start(ctx)
+	go app.ambiance().Start(ctx)
 
 	app.engine.SetPhase(game.PhasePrepare)
-	app.lighting.NotifyState()
+	app.ambiance().NotifyState()
 	waitForCount(t, fake, 1)
 	if last, _ := fake.Last(); last.Zones[0].Color != [3]int{255, 255, 255} {
 		t.Fatalf("READY scene expected, got %+v", last)
@@ -241,7 +242,7 @@ func TestDevAmbianceWriterRendersLiveState(t *testing.T) {
 	// The pulse must outlive the 100 ms throttle that follows the first
 	// Apply, otherwise it legitimately expires before being rendered (last
 	// state wins). Real SCORE pulses last 4800 ms; 300 ms keeps the test fast.
-	app.lighting.NotifyPulse(lighting.KindScore, []string{"TeamB"}, 300*time.Millisecond)
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamB"}, 300*time.Millisecond)
 	waitForCount(t, fake, 2)
 	if last, _ := fake.Last(); last.Zones[0].Color != app.teamNameToRGB("TeamB") {
 		t.Fatalf("SCORE pulse must use TeamB's palette colour, got %+v", last)
@@ -301,7 +302,7 @@ func TestDevAmbianceReconfigureFromConfig(t *testing.T) {
 
 	// Not configured: nothing.
 	app.setupAmbiance()
-	if app.lighting != nil || app.LightingDriver() != nil || app.ambianceIsConfigured() {
+	if app.ambiance() != nil || app.LightingDriver() != nil || app.ambianceIsConfigured() {
 		t.Fatal("no lighting config ⇒ no writer, no driver")
 	}
 
@@ -311,7 +312,7 @@ func TestDevAmbianceReconfigureFromConfig(t *testing.T) {
 		Lights: []config.LightingLightEntry{{Name: "BuzzHue1", Role: "general"}}}
 	config.SetInstance(&cfg)
 	app.reconfigureAmbiance()
-	if app.lighting == nil || !app.lighting.Enabled() || app.LightingDriver() == nil {
+	if app.ambiance() == nil || !app.ambiance().Enabled() || app.LightingDriver() == nil {
 		t.Fatal("enabled config ⇒ writer + driver")
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -321,7 +322,7 @@ func TestDevAmbianceReconfigureFromConfig(t *testing.T) {
 	if st := app.LightingDriver().Status(); st.State != hue.StateOK || st.LightsOK != 1 {
 		t.Fatalf("driver did not reach ok on the fake bridge: %+v", st)
 	}
-	if !app.lighting.Running() {
+	if !app.ambiance().Running() {
 		t.Fatal("writer goroutine must be running after the first runtime enable")
 	}
 
@@ -330,10 +331,10 @@ func TestDevAmbianceReconfigureFromConfig(t *testing.T) {
 	cfg2.Lighting.Enabled = false
 	config.SetInstance(&cfg2)
 	app.reconfigureAmbiance()
-	if app.LightingDriver() != nil || app.lighting.Enabled() {
+	if app.LightingDriver() != nil || app.ambiance().Enabled() {
 		t.Fatal("disabled config ⇒ no driver, writer disabled")
 	}
-	if !app.lighting.Running() {
+	if !app.ambiance().Running() {
 		t.Fatal("writer goroutine keeps idling (no restart needed)")
 	}
 	// Key from the environment only, without a stored key: still configured.
@@ -343,5 +344,91 @@ func TestDevAmbianceReconfigureFromConfig(t *testing.T) {
 	config.SetInstance(&cfg3)
 	if !app.ambianceIsConfigured() {
 		t.Fatal("BUZZCONTROL_HUE_API_KEY must count as a configured key")
+	}
+}
+
+// Review #206/#207 (MAJEUR): the first runtime enable publishes the writer
+// while the 21 event sites read it from other goroutines, and two config
+// updates may race. Exactly one writer/goroutine must result; the race
+// detector guards the memory model.
+func TestDevAmbianceFirstEnableIsAtomicUnderConcurrency(t *testing.T) {
+	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/config"):
+			_, _ = w.Write([]byte(`{"bridgeid":"fffe0000deadbeef","modelid":"BSB002"}`))
+		case strings.HasSuffix(r.URL.Path, "/lights"):
+			_, _ = w.Write([]byte(`{"8":{"name":"BuzzHue1","state":{"on":false,"bri":1,"xy":[0.3,0.3],"reachable":true}}}`))
+		case strings.HasSuffix(r.URL.Path, "/state") && r.Method == "PUT":
+			_, _ = w.Write([]byte(`[{"success":{"/lights/8/state/on":true}}]`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer bridge.Close()
+
+	app := newTestApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.ctx = ctx
+	saved := *config.Get()
+	t.Cleanup(func() { config.SetInstance(&saved) })
+	app.setupAmbiance()
+	if app.ambiance() != nil {
+		t.Fatal("not configured at startup ⇒ nil writer")
+	}
+	cfg := saved
+	cfg.Lighting = config.LightingConfig{Enabled: true, BridgeIP: bridge.URL, BridgeID: "fffe0000deadbeef", APIKey: "k",
+		Lights: []config.LightingLightEntry{{Name: "BuzzHue1", Role: "general"}}}
+	config.SetInstance(&cfg)
+
+	stop := make(chan struct{})
+	var readers sync.WaitGroup
+	for i := 0; i < 4; i++ { // event sites, before/during/after the enable
+		readers.Add(1)
+		go func() {
+			defer readers.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					app.ambiance().NotifyState()
+					app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
+				}
+			}
+		}()
+	}
+	var updates sync.WaitGroup
+	for i := 0; i < 8; i++ { // concurrent OnConfigUpdate calls
+		updates.Add(1)
+		go func() { defer updates.Done(); app.reconfigureAmbiance() }()
+	}
+	updates.Wait()
+	close(stop)
+	readers.Wait()
+
+	w := app.ambiance()
+	if w == nil || !w.Enabled() || app.LightingDriver() == nil {
+		t.Fatal("enable must publish one writer and one driver")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && (!w.Running() || app.LightingDriver().Status().State != hue.StateOK) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !w.Running() || app.LightingDriver().Status().State != hue.StateOK {
+		t.Fatalf("writer running=%v, driver %+v", w.Running(), app.LightingDriver().Status())
+	}
+	// Disable, then re-enable: still the same single writer handle.
+	off := cfg
+	off.Lighting.Enabled = false
+	config.SetInstance(&off)
+	app.reconfigureAmbiance()
+	if app.ambiance() != w || w.Enabled() || app.LightingDriver() != nil {
+		t.Fatal("disable must keep the writer handle and drop the driver")
+	}
+	config.SetInstance(&cfg)
+	app.reconfigureAmbiance()
+	if app.ambiance() != w || !w.Enabled() || app.LightingDriver() == nil {
+		t.Fatal("re-enable must reuse the writer handle")
 	}
 }

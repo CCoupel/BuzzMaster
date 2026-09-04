@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -695,4 +696,131 @@ func TestDevMeasureRafaleBurstThroughWriter(t *testing.T) {
 	}
 	b, _ := json.MarshalIndent(results, "", "  ")
 	t.Logf("BURST_MEASUREMENT %s", b)
+}
+
+// ---------------------------------------------------------------------------
+// Review #206/#207 (CRITIQUE): Apply (writer goroutine) runs concurrently with
+// Inventory / RefreshInventory / TestFlash / Status / Close (HTTP goroutines)
+// on the SAME live driver, including re-discovery by id in the middle.
+// The race detector is the oracle: `go test -race` fails on any unsynchronised
+// access to client/base/bridgeInfo.
+// ---------------------------------------------------------------------------
+
+func TestDevConcurrentApplyInventoryTestFlashWithRediscovery(t *testing.T) {
+	a := newDevBridge(t, "BuzzHue1", "BuzzHue2")
+	b := newDevBridge(t, "BuzzHue1", "BuzzHue2")
+	var target atomic.Pointer[devBridge]
+	target.Store(a)
+	sink := &devLogSink{}
+	// Known by id only (contract §4.1): the first contact re-discovers, and a
+	// later unreachable answer re-discovers again — to bridge b.
+	d, err := New(Config{BridgeID: a.bridgeID, APIKey: a.key, Logger: sink.logf, DiscoverTimeout: 10 * time.Millisecond,
+		Lights: []LightSpec{{Name: "BuzzHue1"}, {Name: "BuzzHue2", Role: RoleTeam, Team: "Rouge"}},
+		FindBridge: func(context.Context, string, time.Duration) (Bridge, bool, error) {
+			return Bridge{IP: target.Load().srv.URL, ID: a.bridgeID}, true, nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	run := func(f func(i int)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; ; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+					f(i)
+				}
+			}
+		}()
+	}
+	run(func(i int) { // the writer
+		st := devGeneral([3]int{255, 0, 0}, 255)
+		if i%2 == 1 {
+			st = devGeneral([3]int{0, 0, 255}, 128)
+		}
+		st.Zones = append(st.Zones, lighting.ZoneState{Zone: "Rouge", Color: [3]int{255, 0, 0}, Intensity: 200})
+		_ = d.Apply(ctx, st)
+	})
+	run(func(int) { _, _ = d.Inventory(ctx) })                                     // GET /lights
+	run(func(int) { _ = d.RefreshInventory(ctx) })                                 // register handler
+	run(func(int) { _ = d.TestFlash(ctx, "BuzzHue1", 0, func(time.Duration) {}) }) // test handler
+	run(func(int) { _ = d.Status() })                                              // status handler
+	// Mid-run: bridge a dies, the id is now answered by b (DHCP move).
+	time.Sleep(60 * time.Millisecond)
+	target.Store(b)
+	a.srv.Close()
+	time.Sleep(120 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+
+	// After the move: the driver may sit in its backoff (contract §5.5 — the
+	// loops above accumulated failures on the dead bridge a). The user
+	// gesture (RefreshInventory) re-discovers by id at once, lifting the
+	// backoff; the writer then follows.
+	if err := d.RefreshInventory(ctx); err != nil {
+		t.Fatalf("RefreshInventory after the move: %v (status %+v)", err, d.Status())
+	}
+	if err := d.Apply(ctx, devGeneral([3]int{0, 255, 0}, 255)); err != nil {
+		t.Fatalf("Apply after the move: %v (status %+v)", err, d.Status())
+	}
+	if st := d.Status(); st.State != StateOK || st.BridgeIP != b.srv.URL {
+		t.Fatalf("driver must follow the bridge to %s, status %+v", b.srv.URL, st)
+	}
+	if len(b.puts()) == 0 {
+		t.Fatal("no write reached bridge b")
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Apply(ctx, devGeneral([3]int{0, 255, 0}, 255)); err == nil {
+		t.Fatal("Apply after Close must fail")
+	}
+}
+
+// A scene write can never slip between the flash and its restore: while
+// TestFlash holds (sleep hook blocked), Apply from the writer goroutine waits.
+func TestDevApplyWaitsBehindTestFlashRestore(t *testing.T) {
+	f := newDevBridge(t, "BuzzHue1")
+	d, _ := newDevDriver(t, f, LightSpec{Name: "BuzzHue1"})
+	ctx := context.Background()
+	if err := d.Apply(ctx, devGeneral([3]int{255, 0, 0}, 255)); err != nil {
+		t.Fatal(err)
+	}
+	holding := make(chan struct{})
+	release := make(chan struct{})
+	flashDone := make(chan error, 1)
+	go func() {
+		flashDone <- d.TestFlash(ctx, "BuzzHue1", time.Millisecond, func(time.Duration) {
+			close(holding)
+			<-release
+		})
+	}()
+	<-holding
+	applyDone := make(chan error, 1)
+	go func() { applyDone <- d.Apply(ctx, devGeneral([3]int{0, 0, 255}, 255)) }()
+	select {
+	case err := <-applyDone:
+		t.Fatalf("Apply completed during the flash hold (err=%v) — the scene overwrote the flash and the restore will undo it", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-flashDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-applyDone; err != nil {
+		t.Fatal(err)
+	}
+	puts := f.puts()
+	if len(puts) != 4 { // scene, flash on, restore, scene
+		t.Fatalf("want 4 PUTs (scene, flash, restore, scene), got %d", len(puts))
+	}
+	if !strings.Contains(puts[3].body, `"xy"`) || strings.Contains(puts[2].body, `"xy":[0.`) && puts[2].body == puts[3].body {
+		t.Fatalf("last PUT must be the writer's scene after the restore: %+v", puts)
+	}
 }

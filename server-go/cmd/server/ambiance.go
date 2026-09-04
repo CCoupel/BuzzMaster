@@ -135,7 +135,7 @@ func (a *App) buildHueDriver() *hue.Driver {
 
 // newAmbianceWriter builds the writer bound to this App's live state and
 // scene table. Shared by setupAmbiance (real driver) and by tests
-// (lighting.FakeDriver): a.lighting = a.newAmbianceWriter(fake); go a.lighting.Start(ctx).
+// (lighting.FakeDriver): a.lightingWriter.Store(a.newAmbianceWriter(fake)); go a.ambiance().Start(ctx).
 // A Hue driver gets the writer pacing the contract requires for it
 // (hue.RecommendedMinInterval, §5.4); other drivers keep the #205 default.
 func (a *App) newAmbianceWriter(drv lighting.Driver) *lighting.Writer {
@@ -153,7 +153,14 @@ func (a *App) newAmbianceWriter(drv lighting.Driver) *lighting.Writer {
 	return lighting.NewWriter(cfg)
 }
 
-// setupAmbiance is called from (*App).setup(). Not configured ⇒ a.lighting
+// ambiance returns the ambiance-lighting writer, nil when lighting is not
+// configured (every Notify* on a nil writer is a no-op, contract §4.3). The
+// only accessor of a.lightingWriter: an atomic read, safe from any goroutine.
+func (a *App) ambiance() *lighting.Writer {
+	return a.lightingWriter.Load()
+}
+
+// setupAmbiance is called from (*App).setup(). Not configured ⇒ a.ambiance()
 // stays nil, every Notify* on it is a no-op and start() launches nothing
 // (contract lighting.md §4.3/§4.5).
 func (a *App) setupAmbiance() {
@@ -162,7 +169,7 @@ func (a *App) setupAmbiance() {
 		return
 	}
 	a.hueDriver.Store(d)
-	a.lighting = a.newAmbianceWriter(d)
+	a.lightingWriter.Store(a.newAmbianceWriter(d))
 }
 
 // reconfigureAmbiance is called from OnConfigUpdate (POST /config.json,
@@ -170,24 +177,28 @@ func (a *App) setupAmbiance() {
 // and hot-swaps it into the writer (lighting.Writer.SetDriver), starting the
 // writer goroutine on the first runtime enable.
 //
-// Known limitation: when lighting was NOT configured at startup, this first
-// enable assigns a.lighting (nil → writer) while the 21 event sites may read
-// it from other goroutines. It happens once, on an admin action, and the 21
-// sites tolerate both values; making the handle atomic would change the field
-// type asserted by cmd/server/ambiance_acceptance_test.go — deferred.
+// First runtime enable (lighting not configured at startup): the writer is
+// published with CompareAndSwap(nil, w) so two concurrent config updates can
+// never start two writers; the loser falls through to the hot-swap path on
+// the writer the winner published.
 func (a *App) reconfigureAmbiance() {
 	d := a.buildHueDriver()
-	if a.lighting == nil {
+	if a.ambiance() == nil {
 		if d == nil {
 			a.hueDriver.Store(nil)
 			return
 		}
-		a.hueDriver.Store(d)
-		a.lighting = a.newAmbianceWriter(d)
-		go a.lighting.Start(a.ctx)
-		a.lighting.NotifyState()
-		return
+		w := a.newAmbianceWriter(d)
+		if a.lightingWriter.CompareAndSwap(nil, w) {
+			a.hueDriver.Store(d)
+			if a.ctx != nil {
+				go w.Start(a.ctx)
+			}
+			w.NotifyState()
+			return
+		}
 	}
+	w := a.ambiance()
 	a.hueDriver.Store(d)
 	// A nil *hue.Driver must become a nil INTERFACE (a typed nil would count
 	// as an attached driver and panic on Close).
@@ -195,11 +206,11 @@ func (a *App) reconfigureAmbiance() {
 	if d != nil {
 		drv = d
 	}
-	a.lighting.SetDriver(drv) // nil disables; closes the previous driver
-	if d != nil && !a.lighting.Running() && a.ctx != nil {
-		go a.lighting.Start(a.ctx)
+	w.SetDriver(drv) // nil disables; closes the previous driver
+	if d != nil && !w.Running() && a.ctx != nil {
+		go w.Start(a.ctx)
 	}
-	a.lighting.NotifyState()
+	w.NotifyState()
 }
 
 // LightingDriver implements server.LightingProvider for the /api/lighting/*
