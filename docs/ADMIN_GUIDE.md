@@ -21,6 +21,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Palette de 16 couleurs d'équipes](#palette-de-16-couleurs-déquipes-v5725)
 - [Générateur de questions via IA](#générateur-de-questions-via-ia-v600)
 - [Générateur du réservoir RAFALE via IA](#générateur-du-réservoir-rafale-via-ia-v810)
+- [Configuration Éclairage d'Ambiance Philips Hue](#configuration-éclairage-dambiance-philips-hue-v1000)
 
 ---
 
@@ -1959,5 +1960,103 @@ La page d'édition du réservoir inclut deux boutons :
 - Équipe active : couleur pleine
 - Équipe suivante : couleur atténuée
 - Autres : très atténuées ou éteintes
+
+---
+
+## Configuration Éclairage d'Ambiance Philips Hue (v10.0.0)
+
+L'éclairage d'ambiance de la salle réagit aux mêmes événements de jeu que les LED des buzzers : démarrage d'une manche, buzz, révélation, changement d'équipe active, attributions de points. La configuration se fait via une page dédiée (`/admin/ambiance`, accessible depuis le menu admin via l'icône **🐝**).
+
+### Prérequis
+
+- Un **Philips Hue Bridge v2** ou compatible (modèles BSB002, BSB001, etc.) sur le même réseau local
+- Ampoules Hue associées au bridge (noms lisibles, ex. "Salle", "Entrée", etc.)
+- Pas d'IP fixe requise : BuzzControl découvre le bridge automatiquement via **mDNS** (détection instantanée, 0,2 s)
+
+### Procédure d'association
+
+**Étape 1 : Découverte du bridge**
+
+1. Naviguez vers `/admin` → icône 🐝 (ou lien direct `/admin/ambiance`)
+2. Cliquez sur « Découvrir le pont »
+3. BuzzControl cherche le bridge automatiquement (mDNS, puis SSDP en repli)
+4. Si trouvé : affichage de l'adresse IP et de l'identifiant du pont
+5. Si non trouvé : champ de saisie manuel pour entrer l'IP du bridge (ex. `192.168.1.50`)
+
+**Étape 2 : Appui sur le bouton du bridge**
+
+1. BuzzControl affiche : « **Appuyez sur le bouton du bridge** »
+2. Compteur à rebours **45 secondes** (si dépassé, recommencez)
+3. **Appuyez physiquement sur le bouton situé sur le dessus du bridge** (petit bouton circulaire)
+4. BuzzControl réessaye toutes les 2 secondes
+5. Une fois le bouton pressé, le pont génère une clé d'accès (aucune saisie manuelle)
+
+**Étape 3 : Sélection des ampoules**
+
+1. BuzzControl affiche la liste de **toutes les ampoules** trouvées sur le pont
+2. Cochez les ampoules que vous souhaitez piloter (tout coché par défaut)
+3. Chaque ampoule désélectionnée reste allumée normalement et ne réagira pas aux événements de jeu
+4. Cliquez « Enregistrer » pour valider la configuration
+
+### Barre d'état
+
+Un badge dans le coin supérieur de la page affiche l'état du pont :
+
+| État | Icône | Signification | Action |
+|------|-------|---|---|
+| **Connecté** | ✅ vert | Bridge joignable et associé | — |
+| **Injoignable** | 🔴 rouge | Bridge ne répond pas (éteint, débranché, WiFi perte) | Rebranchez-le et attendez 10 s |
+| **Association refusée** | 🟠 orange | Clé d'accès invalide ou supprimée du pont | Cliquez « Ré-associer » et répétez l'étape 2 |
+| **Non configuré** | ⚪ gris | Aucun pont configuré | Suivez la procédure d'association ci-dessus |
+
+### Récupération après erreur
+
+**Le bridge ne répond pas**
+
+- Vérifiez qu'il est allumé et branché
+- Vérifiez la connexion WiFi du bridge (LED bleue)
+- Attendez 10 secondes et rechargez la page
+- Si la liste des ampoules reste figée, vous pouvez l'actualiser : cliquez « Actualiser l'inventaire »
+
+**Erreur « Association refusée »**
+
+- La clé d'accès a peut-être été supprimée du bridge (ou le bridge a été réinitialisé)
+- Cliquez « Ré-associer » et suivez l'étape 2 à nouveau
+
+**Ampoule renommée ou supprimée du bridge**
+
+- Si vous renommez une ampoule dans l'application Philips Hue : BuzzControl détecte le changement au redémarrage (rafraîchissement automatique toutes les 5 min)
+- Si une ampoule disparaît : elle s'affiche comme « (introuvable) » dans la configuration — elle peut rester sélectionnée, mais n'aura aucun effet
+
+### Homonymes interdits
+
+Si deux ampoules portent le **même nom** sur le bridge, BuzzControl les refuse explicitement dans la configuration :
+
+- Vous verrez un message « Ambiguïté détectée »
+- Renommez une des deux ampoules dans l'application Philips Hue
+- Rafraîchissez la page
+
+### Sauvegarde de la configuration
+
+La configuration du pont (IP, identifiant, liste d'ampoules) est automatiquement sauvegardée dans `data/config/config.json` section `lighting`.
+
+**Lors d'une sauvegarde de partie** (`/admin/backup`) :
+
+- Checkbox « Réglages de jeu » inclut la configuration d'ambiance (bridge, ampoules sélectionnées)
+- La clé d'accès n'est **jamais** sauvegardée ou journalisée (sécurité)
+- À la restauration : la configuration du bridge est restaurée, mais vous devrez ré-associer si le pont a changé d'identifiant
+
+### Dissociation
+
+Pour arrêter complètement de piloter les ampoules :
+
+1. Naviguez vers `/admin/ambiance`
+2. Cliquez « Dissocier » en bas de la page
+3. La configuration du pont est supprimée, les ampoules reviennent à leur état normal
+4. Les futures attributions de points n'affecteront plus la salle
+
+### Pour en savoir plus
+
+Consultez le **contrat technique** `contracts/lighting.md` pour les détails de l'implémentation, les politiques de débit, et la sûreté d'accès concurrent.
 
 
