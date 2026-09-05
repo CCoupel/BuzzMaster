@@ -2240,6 +2240,19 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   })}
                 </div>
               )
+              // #217 (milestone v9.0.0, contrat rafale.md §14.2) — carte
+              // RAFALE : mini-manche à plusieurs questions, état vivant
+              // exclusivement dans MEMOTION_ACTIVE.STATE (getTypeState, jamais
+              // les 13 champs globaux GameState.RAFALE_* — hôtes mutuellement
+              // exclusifs). `.currentQuestion.POINTS` vaut toujours 0 en carte
+              // (barème par question sans objet, §14.2) — jamais affiché ici.
+              // TV = affichage passif pur (§8.1) : aucune réponse
+              // (RAFALE_ANSWER) n'atteint jamais ce client, rien à masquer.
+              const cardRafaleState = getTypeState(gameState, cardHostContext).rafale
+              const cardRafaleCatMeta = cardType === 'RAFALE'
+                ? categoryMeta(cardRafaleState.currentQuestion.CATEGORY, apiCategories)
+                : null
+
               const motionCfg = gameState.question?.MOTION_CONFIG
               const diffPts = d => getMotionCardPoints(d, motionCfg)
 
@@ -2528,26 +2541,55 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'absolute', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
-                    {/* Row 1 : Texte de la question */}
+                    {/* Row 1 : Texte de la question — #217, carte RAFALE :
+                        `selectedCard.QUESTION_TEXT` est vide (aucune question
+                        propre à la carte, contrat §14.1 : mini-manche à
+                        plusieurs questions) — le texte affiché suit la
+                        question TIRÉE en cours (`cardRafaleState.currentQuestion`,
+                        MEMOTION_ACTIVE.STATE), jamais un champ figé de
+                        MOTION_CARDS[i]. */}
                     <div className="memotion-tv-fs-header memotion-tv-fs-recto-zone">
-                      {selectedCard.QUESTION_TEXT && (
+                      {(cardType === 'RAFALE' ? cardRafaleState.currentQuestion.QUESTION : selectedCard.QUESTION_TEXT) && (
                         <motion.p
+                          key={cardType === 'RAFALE' ? cardRafaleState.currentQuestion.ID : undefined}
                           className="memotion-tv-fs-question-text"
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.3 }}
                         >
-                          {selectedCard.QUESTION_TEXT}
+                          {cardType === 'RAFALE' ? cardRafaleState.currentQuestion.QUESTION : selectedCard.QUESTION_TEXT}
                         </motion.p>
                       )}
                     </div>
                     {/* Row 2 : Image de la question — #187, MEMORY n'a pas de
                         `question` MediaSlot (contrat §7 : "recto + N paires") :
                         la grille EST le contenu de la carte, elle occupe cet
-                        emplacement à la place d'une image. */}
+                        emplacement à la place d'une image. #217, RAFALE : pas
+                        de MediaSlot non plus (exemption texte seul, contrat
+                        question-types.md §7.6) — cet emplacement porte les
+                        chips catégorie/difficulté de la question tirée
+                        (jamais POINTS, toujours 0 en carte, §14.2 — barème
+                        distribué en STARS_PRORATA sur le DIFFICULTY commun
+                        de la carte, pas par question). */}
                     <div className="memotion-tv-fs-body">
                       {cardType === 'MEMORY' ? (
                         renderCardMemoryGrid()
+                      ) : cardType === 'RAFALE' ? (
+                        (cardRafaleCatMeta || cardRafaleState.currentQuestion.DIFFICULTY > 0) && (
+                          <div className="memotion-tv-fs-rafale-meta">
+                            {cardRafaleCatMeta && (
+                              <span className="memotion-tv-fs-rafale-chip">
+                                {cardRafaleCatMeta.imageURL
+                                  ? <img src={cardRafaleCatMeta.imageURL} alt={cardRafaleCatMeta.label} className="memotion-tv-fs-rafale-chip-img" />
+                                  : <span>{cardRafaleCatMeta.icon}</span>}
+                                {' '}{cardRafaleCatMeta.label}
+                              </span>
+                            )}
+                            {cardRafaleState.currentQuestion.DIFFICULTY > 0 && (
+                              <span className="memotion-tv-fs-rafale-chip">{'★'.repeat(cardRafaleState.currentQuestion.DIFFICULTY)}</span>
+                            )}
+                          </div>
+                        )
                       ) : selectedCard.QUESTION_IMAGE && (
                         <motion.img
                           src={selectedCard.QUESTION_IMAGE}
@@ -2563,10 +2605,28 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         réponses ici (#185/C-F2). Vide pour SPEEDY — aucun
                         contenu propre à ce type sur la face VERSO (contrat
                         §3.1 : SPEEDY ne possède que ANSWER_TEXT/ANSWER_IMAGE,
-                        tous deux affichés en REVEAL, pas ici). */}
+                        tous deux affichés en REVEAL, pas ici). #217, RAFALE :
+                        progression (question N) + minuteur PAR QUESTION
+                        (~3s, `cardRafaleState.questionTime`) — le minuteur de
+                        MANCHE générique (RAFALE_ROUND_TIME) est déjà affiché
+                        par `gridView` (zone-timer, gameState.timer/totalTime,
+                        partagé par toute carte, §14.1), pas de doublon ici. */}
                     {cardType === 'QCM' ? (
                       <div className="memotion-tv-fs-footer memotion-tv-fs-qcm-zone">
                         {renderCardQcmGrid(false)}
+                      </div>
+                    ) : cardType === 'RAFALE' ? (
+                      <div className="memotion-tv-fs-footer memotion-tv-fs-rafale-zone">
+                        {cardRafaleState.askedCount > 0 && (
+                          <span className="memotion-tv-fs-rafale-chip">question {cardRafaleState.askedCount}</span>
+                        )}
+                        <Timer
+                          currentTime={cardRafaleState.questionTime}
+                          totalTime={selectedCard.RAFALE_QUESTION_TIME || 3}
+                          phase={gameState.phase}
+                          size="sm"
+                          showPhase={false}
+                        />
                       </div>
                     ) : (
                       <div className="memotion-tv-fs-footer" />
