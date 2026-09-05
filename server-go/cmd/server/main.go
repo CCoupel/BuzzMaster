@@ -554,6 +554,17 @@ func (a *App) setupCallbacks() {
 		a.sendLEDSetRafaleTeams()
 	}
 
+	// RAFALE-in-MEMOTION-card (#217, v9.0.0, contract §14.5/§14.6) — fires
+	// on each RAFALE_VALIDATE/INVALIDATE advance within a card's own
+	// mini-round (never at round start: handleMotionFlip broadcasts that
+	// first answer directly via broadcastRafaleCardAnswer, since starting
+	// the round is a direct engine call from main.go, not itself wrapped
+	// in a callback). Same admin+anim-only channel as classic
+	// OnRafaleAnswer above — see broadcastRafaleCardAnswer's own comment.
+	a.engine.OnRafaleCardAnswer = func(cardID, id, answer string) {
+		a.broadcastRafaleCardAnswer(cardID, id, answer)
+	}
+
 	// #187 cycle 3 briefly wired engine.OnMotionCardAutoRevealed here — a
 	// MEMORY card auto-revealing (and broadcasting a full UPDATE) at timer
 	// expiry. REVERTED in cycle 4: the user-validated behavior is
@@ -2450,6 +2461,24 @@ func (a *App) handleMotionSelect(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
+// findMotionCard looks up a MotionCard by ID in the current Question's
+// grid. Returns nil if there's no active Question or no matching card —
+// used only for reading a nestable type's own TypedContent fields (here:
+// RAFALE_ROUND_TIME, #217), never to mutate engine state directly (that
+// always goes through an Engine method, per the project's mutex
+// discipline).
+func (a *App) findMotionCard(state game.GameState, cardID string) *game.MotionCard {
+	if state.Question == nil {
+		return nil
+	}
+	for i := range state.Question.MotionCards {
+		if state.Question.MotionCards[i].ID == cardID {
+			return &state.Question.MotionCards[i]
+		}
+	}
+	return nil
+}
+
 // handleMotionFlip processes MEMOTION_FLIP: transitions selected card to QUESTION face and starts timer.
 func (a *App) handleMotionFlip(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "MEMOTION_FLIP")
@@ -2459,8 +2488,36 @@ func (a *App) handleMotionFlip(msg *protocol.Message) {
 		return
 	}
 
-	// Start per-card timer if Question.Time > 0
 	state := a.engine.GetState()
+
+	// #217 (v9.0.0, contract §14.5) — a RAFALE card starts its OWN
+	// mini-round right after the generic flip: draw the first question,
+	// start its own round timer (MotionCard.RAFALE_ROUND_TIME, NOT
+	// Question.TIME — contract §14.3's "durée propre"), start the shared
+	// per-question ticker, and broadcast the expected answer on the
+	// restricted admin+anim channel. The generic MEMOTION host itself
+	// (SelectMotionCard/FlipMotionCard/RevealMotionCard) never learns
+	// about RAFALE — this branch lives entirely in this dispatch layer
+	// (#184's agnosticity test, contract §10; §14.7 declares this as one
+	// of the three declared touch points).
+	if state.MotionActive.Type == game.QuestionTypeRafale {
+		cardID := state.MotionSelected
+		questionID, answer, questionTime, err := a.engine.StartRafaleMotionCardRound(cardID)
+		if err != nil {
+			server.LogWarn(game.LogComponentEngine, "MEMOTION_FLIP: RAFALE card round could not start: %v (cardId=%s)", err, cardID)
+			a.broadcastUpdate()
+			return
+		}
+		if card := a.findMotionCard(state, cardID); card != nil && card.RafaleRoundTime > 0 {
+			a.engine.StartMotionCardTimer(card.RafaleRoundTime)
+		}
+		a.engine.StartRafaleQuestionTimer(questionTime)
+		a.broadcastRafaleCardAnswer(cardID, questionID, answer)
+		a.broadcastUpdate()
+		return
+	}
+
+	// Start per-card timer if Question.Time > 0 (every other nestable type)
 	if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
 		var delay int
 		if _, err2 := fmt.Sscanf(state.Question.Time, "%d", &delay); err2 == nil && delay > 0 {
@@ -2600,13 +2657,50 @@ func (a *App) handleMotionSetTeams(msg *protocol.Message) {
 	a.sendLEDSetAllBuzzers()
 }
 
+// parseRafaleCardScope extracts the optional MOTION_CARD_ID from a
+// RAFALE_VALIDATE/RAFALE_INVALIDATE payload (#217, contract §14.5/§9). Both
+// actions historically carried no payload at all, so msg.Msg may be nil or
+// empty — that's the classic manche-scoped case, not a parse error.
+func parseRafaleCardScope(msg *protocol.Message) string {
+	if len(msg.Msg) == 0 {
+		return ""
+	}
+	var payload protocol.RafaleCardActionPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogWarn(game.LogComponentApp, "RAFALE_VALIDATE/INVALIDATE: failed to parse MSG, treating as classic round: %v", err)
+		return ""
+	}
+	return payload.MotionCardID
+}
+
 // handleRafaleValidate processes RAFALE_VALIDATE (contract rafale.md §5.1):
-// the current question's answer was judged correct. All broadcasting
-// (RAFALE_ANSWER, RAFALE_TICK restart, full UPDATE) is handled internally
-// by the engine via the OnRafaleAnswer/OnStateChange callbacks (setupCallbacks
-// below) — unlike handleMotionDone above, this handler has nothing left to
-// broadcast itself once the engine call returns.
+// the current question's answer was judged correct.
+//
+// #217 (v9.0.0, contract §14.5/§9) — an optional MOTION_CARD_ID scopes this
+// to a MEMOTION card's own RAFALE mini-round instead of the classic
+// manche-scoped round; absent/empty ⇒ classic behavior, unchanged. Card
+// scope is validated explicitly via ValidateCardScope first (same
+// visibility as FLIP_MEMORY_CARD's own check, handleFlipMemoryCard above)
+// before routing to RafaleValidateCard.
+//
+// All broadcasting (RAFALE_ANSWER, RAFALE_TICK restart, full UPDATE) is
+// handled internally by the engine via the OnRafaleAnswer/OnRafaleCardAnswer/
+// OnStateChange callbacks (setupCallbacks below) — unlike handleMotionDone
+// above, this handler has nothing left to broadcast itself once the engine
+// call returns.
 func (a *App) handleRafaleValidate(msg *protocol.Message) {
+	cardID := parseRafaleCardScope(msg)
+	if cardID != "" {
+		if err := a.engine.ValidateCardScope(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE rejected: %v (motionCardId=%s)", err, cardID)
+			return
+		}
+		server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE: cardId=%s", cardID)
+		if err := a.engine.RafaleValidateCard(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE (card) error: %v", err)
+		}
+		return
+	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE")
 	if err := a.engine.RafaleValidate(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE error: %v", err)
@@ -2615,8 +2709,20 @@ func (a *App) handleRafaleValidate(msg *protocol.Message) {
 
 // handleRafaleInvalidate processes RAFALE_INVALIDATE (contract rafale.md
 // §5.1): the current question's answer was judged incorrect. Same
-// broadcasting story as handleRafaleValidate above.
+// CardScope routing and broadcasting story as handleRafaleValidate above.
 func (a *App) handleRafaleInvalidate(msg *protocol.Message) {
+	cardID := parseRafaleCardScope(msg)
+	if cardID != "" {
+		if err := a.engine.ValidateCardScope(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE rejected: %v (motionCardId=%s)", err, cardID)
+			return
+		}
+		server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE: cardId=%s", cardID)
+		if err := a.engine.RafaleInvalidateCard(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE (card) error: %v", err)
+		}
+		return
+	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE")
 	if err := a.engine.RafaleInvalidate(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE error: %v", err)
@@ -4761,6 +4867,24 @@ func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleCurrent)
 	a.broadcast(protocol.ActionRafaleAnswer, data, false,
 		server.ClientTypeAdmin, server.ClientTypeAnim)
 	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER: id=%s next=%v", id, next != nil)
+}
+
+// broadcastRafaleCardAnswer sends RAFALE_ANSWER to admin+anim ONLY, scoped
+// to a MEMOTION card's own RAFALE mini-round (#217, v9.0.0, contract
+// §14.6) — same recipient list and same confidentiality discipline as
+// broadcastRafaleAnswer above (never TV/VPlayer/buzzer; do not widen this
+// call site's client-type list either). Next is always nil here: a card's
+// mini-round never pre-fetches a next question (contract §14.2, a
+// deliberate scope-reduction versus the classic round's #202 behavior).
+func (a *App) broadcastRafaleCardAnswer(cardID, id, answer string) {
+	payload := protocol.RafaleAnswerPayload{
+		ID: id, Answer: answer, Next: nil,
+		CardScope: protocol.CardScope{MotionCardID: cardID},
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionRafaleAnswer, data, false,
+		server.ClientTypeAdmin, server.ClientTypeAnim)
+	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER (card): cardId=%s id=%s", cardID, id)
 }
 
 // rafaleNextPayload (#202) maps the engine's answer-free preview

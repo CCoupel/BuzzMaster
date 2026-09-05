@@ -1218,12 +1218,15 @@ sous-système RAFALE, et aucune connaissance RAFALE n'entre dans le cœur MEMOTI
 ### 14.8 Borne de charge utile (contract §10.1, `contracts/question-types.md`)
 
 `MEMOTION_ACTIVE` pour une carte RAFALE (§14.2) est mesuré, comme pour MEMORY, sur l'état
-**réellement produit par le moteur** — jamais un `MotionActive` construit à la main. Borne propre
-au type (§10.1 : « une grille MEMORY coûte légitimement plus qu'une liste de réponses QCM
-invalidées, écraser la borne commune la viderait de son sens ») : un `RAFALE_CURRENT_QUESTION`
-(énoncé texte + 3 scalaires) plus 5 scalaires/booléens reste largement sous la borne absolue
-(200 octets, `Test184_GamePayload_MotionActiveAbsoluteBound`), sans qu'aucune conversion de
-`RAFALE_TEAM_*` (map par équipe, absente ici — §14.2) n'entre en jeu.
+**réellement produit par le moteur** — jamais un `MotionActive` construit à la main
+(`Test184_GamePayload_MotionActiveAbsoluteBound_RAFALE`, implémenté via
+`StartRafaleMotionCardRound`/`RafaleValidateCard`). Borne propre au type, distincte de celle de
+QCM (§10.1 : « une grille MEMORY coûte légitimement plus qu'une liste de réponses QCM invalidées,
+écraser la borne commune la viderait de son sens ») : un `RAFALE_CURRENT_QUESTION` (énoncé texte +
+3 scalaires — mesuré 401 octets pour un énoncé réaliste long de 118 caractères) plus 5
+scalaires/booléens reste sous une borne absolue de 600 octets, dimensionnée avec une marge large
+pour ce type de contenu — sans qu'aucune conversion de `RAFALE_TEAM_*` (map par équipe, absente
+ici — §14.2) n'entre en jeu.
 
 ### 14.9 Réservoir partagé — un seul magasin, deux hôtes (217-Q5)
 
