@@ -131,6 +131,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -151,6 +163,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
     ],
     motionConfig: { points1: 1, points2: 3, points3: 5 },
@@ -581,6 +605,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -601,6 +637,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
     ]
     if (question.MOTION_CARDS && Array.isArray(question.MOTION_CARDS)) {
@@ -652,6 +700,15 @@ export default function QuestionsPage() {
               revealDelay: card.MEMORY_CONFIG.REVEAL_DELAY ?? 0.5,
             }
           : { flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0, useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5 },
+        // #217 — RAFALE d'une carte MEMOTION : toujours des listes complètes
+        // dès la création par cet éditeur (mode SOLO forcé, jamais de forme
+        // mono historique à convertir — contrairement à la manche RAFALE
+        // classique, contrat §7.4).
+        rafaleCategories: card.RAFALE_CATEGORIES || [],
+        rafaleDifficulties: card.RAFALE_DIFFICULTIES || [],
+        rafaleRoundTime: card.RAFALE_ROUND_TIME || 120,
+        rafaleQuestionTime: card.RAFALE_QUESTION_TIME || 3,
+        rafaleMaxQuestions: card.RAFALE_MAX_QUESTIONS || 100,
       }))
     }
 
@@ -778,6 +835,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
         { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -798,6 +867,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
       ],
       motionConfig: { points1: 1, points2: 3, points3: 5 },
@@ -935,6 +1016,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
         ]
       }
@@ -1023,6 +1116,36 @@ export default function QuestionsPage() {
       motionCards: prev.motionCards.map(c => c.id !== cardId ? c : {
         ...c,
         memoryConfig: { ...c.memoryConfig, [field]: value },
+      }),
+    }))
+  }
+
+  // #217 — sous-éditeur RAFALE d'une carte MEMOTION. Même mécanique que les
+  // handlers de manche classique (toggleRafaleCategory/toggleRafaleDifficulty),
+  // scopée à `cardId` — patron handleMotionCardMemoryConfigChange ci-dessus.
+  // Pas d'équivalent carte pour handleRafalePointsByDifficultyChange : le
+  // barème par difficulté n'a pas de sens en carte (contrat rafale.md §14.2,
+  // STARS_PRORATA sur le DIFFICULTY commun de la carte, comme MEMORY, #217-Q4).
+  const toggleMotionCardRafaleCategory = (cardId, key) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : {
+        ...c,
+        rafaleCategories: c.rafaleCategories.includes(key)
+          ? c.rafaleCategories.filter(k => k !== key)
+          : [...c.rafaleCategories, key],
+      }),
+    }))
+  }
+
+  const toggleMotionCardRafaleDifficulty = (cardId, d) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : {
+        ...c,
+        rafaleDifficulties: c.rafaleDifficulties.includes(d)
+          ? c.rafaleDifficulties.filter(x => x !== d)
+          : [...c.rafaleDifficulties, d],
       }),
     }))
   }
@@ -1217,6 +1340,24 @@ export default function QuestionsPage() {
               SHOW_DURING_MEMORIZE: card.memoryConfig?.showDuringMemorize ?? true,
               REVEAL_DELAY: card.memoryConfig?.revealDelay ?? 0.5,
             },
+          }
+        }
+        if (cardType === 'RAFALE') {
+          // #217 — mini-manche RAFALE d'une carte MEMOTION, mode SOLO forcé
+          // (jamais envoyé/exposé — contrairement à RAFALE_MODE de la manche
+          // classique, aucun sens en contexte carte, une seule équipe joue
+          // la carte). QUESTION_TEXT/QUESTION_IMAGE de `base` ci-dessus
+          // n'ont pas de sens pour ce type (pas de question propre à la
+          // carte) — laissés tels quels (vides, l'éditeur ne les remplit
+          // jamais pour RAFALE) plutôt que de complexifier `base` avec une
+          // exception par type.
+          return {
+            ...base,
+            RAFALE_CATEGORIES: card.rafaleCategories,
+            RAFALE_DIFFICULTIES: card.rafaleDifficulties,
+            RAFALE_ROUND_TIME: card.rafaleRoundTime,
+            RAFALE_QUESTION_TIME: card.rafaleQuestionTime,
+            RAFALE_MAX_QUESTIONS: card.rafaleMaxQuestions,
           }
         }
         return {
@@ -2182,16 +2323,26 @@ export default function QuestionsPage() {
                               grille. */}
                           <div className="memotion-face-section">
                             <div className="memotion-face-label memotion-face-verso">VERSO (Question)</div>
-                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                              <textarea
-                                value={card.questionText}
-                                onChange={(e) => handleMotionCardChange(card.id, 'questionText', e.target.value)}
-                                placeholder="Texte de la question..."
-                                rows={2}
-                                className="memory-card-text-input"
-                              />
-                            </div>
-                            {cardType !== 'MEMORY' && (
+                            {/* #217 — une carte RAFALE n'a PAS de question
+                                propre (mini-manche qui pioche dans le
+                                réservoir global, comme la manche RAFALE
+                                classique) : le texte/l'image génériques
+                                ci-dessous n'ont pas de sens pour ce type,
+                                masqués au profit du sous-éditeur dédié plus
+                                bas — même discipline que MEMORY masquant
+                                l'image question (§7, "recto + N paires"). */}
+                            {cardType !== 'RAFALE' && (
+                              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                                <textarea
+                                  value={card.questionText}
+                                  onChange={(e) => handleMotionCardChange(card.id, 'questionText', e.target.value)}
+                                  placeholder="Texte de la question..."
+                                  rows={2}
+                                  className="memory-card-text-input"
+                                />
+                              </div>
+                            )}
+                            {cardType !== 'MEMORY' && cardType !== 'RAFALE' && (
                               <div className="memotion-img-row">
                                 {card.questionImage ? (
                                   <div className="memory-card-image-preview">
@@ -2234,6 +2385,95 @@ export default function QuestionsPage() {
                                 onCardChange={(pairId, cardKey, field, value) => handleMotionCardMemoryCardChange(card.id, pairId, cardKey, field, value)}
                                 onConfigChange={(field, value) => handleMotionCardMemoryConfigChange(card.id, field, value)}
                               />
+                            )}
+                            {/* #217 — sous-éditeur RAFALE d'une carte MEMOTION :
+                                catégories/difficultés multi-chips réutilisées
+                                telles quelles (filtrage du tirage, motif
+                                éprouvé rafale-multi-216.html) — MOINS le
+                                sélecteur de mode (SOLO forcé, 217-Q3 — aucun
+                                autre choix possible pour une carte, rien à
+                                afficher) et MOINS le barème par difficulté
+                                (contrat rafale.md §14.2 : « sans objet » en
+                                carte — le barème appartient à l'hôte, la carte
+                                porte son propre DIFFICULTY commun/étoiles,
+                                distribué en STARS_PRORATA comme MEMORY, #217-Q4).
+                                PLUS les deux bornes de la carte (durée propre,
+                                plafond de questions) au lieu du TIME générique
+                                de la manche classique. */}
+                            {cardType === 'RAFALE' && (
+                              <div className="rafale-section">
+                                <div className="form-group">
+                                  <label>Catégories — plusieurs possibles</label>
+                                  <div className="rafale-multi-chip-row">
+                                    {apiCategories.map(c => (
+                                      <button
+                                        type="button"
+                                        key={c.key}
+                                        className={`rafale-multi-chip ${card.rafaleCategories.includes(c.key) ? 'active' : ''}`}
+                                        onClick={() => toggleMotionCardRafaleCategory(card.id, c.key)}
+                                      >
+                                        {card.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
+                                        {c.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="form-group">
+                                  <label>Difficultés — plusieurs possibles</label>
+                                  <div className="rafale-multi-chip-row">
+                                    {[1, 2, 3].map(d => (
+                                      <button
+                                        key={d}
+                                        type="button"
+                                        className={`rafale-multi-chip ${card.rafaleDifficulties.includes(d) ? 'active' : ''}`}
+                                        onClick={() => toggleMotionCardRafaleDifficulty(card.id, d)}
+                                      >
+                                        {'★'.repeat(d)}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="form-row">
+                                  <div className="form-group">
+                                    <label htmlFor={`motion-card-${card.id}-duration`}>Durée de la carte (s)</label>
+                                    <input
+                                      id={`motion-card-${card.id}-duration`}
+                                      type="number"
+                                      value={card.rafaleRoundTime}
+                                      onChange={(e) => handleMotionCardChange(card.id, 'rafaleRoundTime', parseInt(e.target.value) || 1)}
+                                      min="5"
+                                      max="300"
+                                    />
+                                  </div>
+                                  <div className="form-group">
+                                    <label htmlFor={`motion-card-${card.id}-question-time`}>Temps par question (s)</label>
+                                    <input
+                                      id={`motion-card-${card.id}-question-time`}
+                                      type="number"
+                                      value={card.rafaleQuestionTime}
+                                      onChange={(e) => handleMotionCardChange(card.id, 'rafaleQuestionTime', parseInt(e.target.value) || 1)}
+                                      min="1"
+                                      max="30"
+                                    />
+                                  </div>
+                                  <div className="form-group">
+                                    <label htmlFor={`motion-card-${card.id}-max-questions`}>Plafond de questions</label>
+                                    <input
+                                      id={`motion-card-${card.id}-max-questions`}
+                                      type="number"
+                                      value={card.rafaleMaxQuestions}
+                                      onChange={(e) => handleMotionCardChange(card.id, 'rafaleMaxQuestions', Math.min(100, parseInt(e.target.value) || 1))}
+                                      min="1"
+                                      max="100"
+                                    />
+                                  </div>
+                                </div>
+                                <p className="section-hint">
+                                  Bornée par les deux à la fois — durée propre de la carte ET plafond de questions (217-Q2), comme la manche RAFALE classique (TIME + plafond).
+                                </p>
+                              </div>
                             )}
                           </div>
 
