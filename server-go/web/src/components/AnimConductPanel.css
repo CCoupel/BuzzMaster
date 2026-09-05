@@ -111,6 +111,18 @@
   flex: 1;
 }
 
+/* #217 — carte RAFALE en L3 : question tirée (AnimRafaleQuestion) au-dessus,
+   boutons VALIDE/INVALIDE (AnimRafaleActions) en dessous — pas de geste L2
+   propre à cette carte, contrairement à QCM/MEMORY (voir motionCardRenderers
+   .RAFALE, AnimConductPanel.jsx). */
+.anim-card-rafale {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-height: 0;
+}
+
 /* ------------------------------------------------------------------ */
 /* L2 / L4 — réservées, vides, sans état ni action (#166/E4)           */
 /* ------------------------------------------------------------------ */

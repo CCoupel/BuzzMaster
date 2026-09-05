@@ -143,6 +143,17 @@ function buttonSubLabel(key, state, phase, waitReason) {
  *   AnimRafaleQuestion.jsx pour le détail de chaque champ). `null`/absent
  *   avant que `AnimPage.jsx` ne les câble (jamais le cas en pratique dès
  *   qu'`isRafale`, mais évite un crash si le composant est monté isolément).
+ * @param {Object} [props.cardRafale] - RAFALE en carte MEMOTION (#217, contrat
+ *   rafale.md §14) — mêmes champs que `rafale` ci-dessus MOINS `teamName`/
+ *   `teamColorCss` (mode SOLO forcé, l'équipe est déjà affichée en L2 par
+ *   `AnimMotionActions`) et MOINS `next`/`nextCatMeta` (pas de pré-tirage en
+ *   carte, §14.2) — `showNext` vaut toujours `false`. `null` hors carte RAFALE.
+ * @param {boolean} [props.cardRafaleDisabled] - désactive VALIDE/INVALIDE
+ *   pour la carte RAFALE active (hors sous-cycle QUESTION, §14.3)
+ * @param {() => void} [props.onCardRafaleValidate] - émet RAFALE_VALIDATE
+ *   scopé `MOTION_CARD_ID` (contrat §14.5)
+ * @param {() => void} [props.onCardRafaleInvalidate] - émet RAFALE_INVALIDATE
+ *   scopé `MOTION_CARD_ID` (contrat §14.5)
  */
 export default function AnimConductPanel({
   phase,
@@ -172,6 +183,10 @@ export default function AnimConductPanel({
   onRafaleValidate,
   onRafaleInvalidate,
   rafale = null,
+  cardRafale = null,
+  cardRafaleDisabled = false,
+  onCardRafaleValidate,
+  onCardRafaleInvalidate,
 }) {
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
   const isQcm = question?.TYPE === 'QCM'
@@ -253,6 +268,29 @@ export default function AnimConductPanel({
         globalErrors={cardMemory?.errors}
         onFlip={onFlipMemoryCard}
       />
+    ),
+    // #217 — carte RAFALE : mini-manche à plusieurs questions, pas une
+    // question fixe (contrairement à QCM/MEMORY ci-dessus) — L3 porte donc
+    // à la fois la question tirée EN COURS (`AnimRafaleQuestion`, même
+    // composant que la manche classique, `cardRafale` déjà résolu par
+    // `AnimPage.jsx`) ET les deux boutons qui avancent le sous-cycle
+    // (`AnimRafaleActions`) : contrairement à QCM/MEMORY, RAFALE n'a pas de
+    // geste propre en L2 pour une carte — cet emplacement reste occupé par
+    // le cycle générique `AnimMotionActions` (STOP CHRONO/RÉVÉLER/SANS
+    // VAINQUEUR, §14.5), donc VALIDE/INVALIDE n'ont nulle part d'autre où
+    // vivre. `card` (le paramètre) n'est pas consommé ici : la carte réelle
+    // à afficher est la question TIRÉE (`cardRafale.current`), pas la
+    // définition statique `MOTION_CARDS[i]` (catégories/difficultés
+    // choisies, jamais un énoncé).
+    RAFALE: () => (
+      <div className="anim-card-rafale">
+        <AnimRafaleQuestion {...(cardRafale || {})} />
+        <AnimRafaleActions
+          disabled={cardRafaleDisabled}
+          onValidate={onCardRafaleValidate}
+          onInvalidate={onCardRafaleInvalidate}
+        />
+      </div>
     ),
   }
 
