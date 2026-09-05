@@ -2351,6 +2351,19 @@ var ErrRafaleNotInQuestion = errors.New("rafale_not_in_question")
 // field doc comment for why this needs its own fields. Mirrors
 // StartMotionCardTimer's shape/discipline (defer e.mu.Unlock() in the tick,
 // recoverBackgroundPanic, callbacks fired outside the lock).
+//
+// #217 (v9.0.0, contract §14.1/§14.7) — the countdown SEED must land in the
+// SAME location processRafaleQuestionTick's own branch reads/decrements
+// from: MotionActive.State["RAFALE_QUESTION_TIME"] for a card-hosted round,
+// e.state.RafaleQuestionTime (global) for the classic round. Writing only
+// the global field unconditionally here — the pre-#217 shape of this
+// function — left the card's own STATE entry never seeded, so its first
+// tick read the Go zero value (0), decremented to -1, and treated the very
+// first question as expired-on-arrival regardless of the real countdown.
+// This is the 4th declared touch point alongside newRafaleDrawStateUnsafe/
+// rafaleMaxQuestionsUnsafe/processRafaleQuestionTick (§14.7) — same branch
+// condition as processRafaleQuestionTick's own, so the two can never drift
+// apart on which host is "active" at call time.
 func (e *Engine) StartRafaleQuestionTimer(seconds int) {
 	e.mu.Lock()
 
@@ -2362,7 +2375,11 @@ func (e *Engine) StartRafaleQuestionTimer(seconds int) {
 
 	e.stopRafaleQuestionTimerUnsafe() // defensive — a fresh Start must never leak a prior goroutine
 
-	e.state.RafaleQuestionTime = seconds
+	if card := e.activeMotionCardUnsafe(); card != nil && card.EffectiveType() == QuestionTypeRafale {
+		e.state.MotionActive.State["RAFALE_QUESTION_TIME"] = seconds
+	} else {
+		e.state.RafaleQuestionTime = seconds
+	}
 
 	e.rafaleQuestionStopCh = make(chan struct{})
 	e.rafaleQuestionTimer = time.NewTicker(1 * time.Second)

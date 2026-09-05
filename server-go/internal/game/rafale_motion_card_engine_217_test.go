@@ -87,6 +87,64 @@ func TestStartRafaleMotionCardRound_PopulatesMotionActiveState_NeverGlobalFields
 	}
 }
 
+// TestStartRafaleQuestionTimer_CardHost_SeedsMotionActiveState_NotGlobalField
+// is a regression test for a real bug caught after the first #217 review
+// pass: StartRafaleQuestionTimer used to write the countdown seed
+// unconditionally into the GLOBAL e.state.RafaleQuestionTime field, even
+// when the active host is a MEMOTION card. processRafaleCardQuestionTickUnsafe
+// reads/decrements MotionActive.State["RAFALE_QUESTION_TIME"] instead — a
+// field that was therefore NEVER seeded for a card round, so its first real
+// tick read the Go zero value (0), decremented to -1, and treated the very
+// first question as expired-on-arrival regardless of the configured
+// RAFALE_QUESTION_TIME. StartRafaleQuestionTimer now branches on the active
+// host exactly like processRafaleQuestionTick's own branch (contract §14.7,
+// 4th declared touch point) — this test drives the exact production call
+// sequence (StartRafaleMotionCardRound then StartRafaleQuestionTimer, same
+// two calls handleMotionFlip makes) and a real processRafaleQuestionTick()
+// tick, rather than only the RafaleValidateCard/InvalidateCard entry points
+// the other tests above use (which advance the mini-round WITHOUT ever
+// going through a real timer tick).
+func TestStartRafaleQuestionTimer_CardHost_SeedsMotionActiveState_NotGlobalField(t *testing.T) {
+	e := NewEngine()
+	seedRafaleReservoirCouple(t, e, "h", 5, CategoryHistory, 1)
+	card := rafaleMotionCard("mc-timer", []string{string(CategoryHistory)}, []int{1}, 3, 10)
+	_, _, questionTime := startMEMOTIONAtRafaleCardQuestion(t, e, card)
+	defer e.Stop()
+
+	// startMEMOTIONAtRafaleCardQuestion only calls StartRafaleMotionCardRound
+	// (the pure draw) — StartRafaleQuestionTimer is main.go's own
+	// responsibility in production (handleMotionFlip). Call it explicitly
+	// here with the exact same argument production passes, to exercise the
+	// real seeding path this test guards.
+	e.StartRafaleQuestionTimer(questionTime)
+
+	state := e.GetState()
+	qt, ok := state.MotionActive.State["RAFALE_QUESTION_TIME"].(int)
+	if !ok || qt != questionTime {
+		t.Fatalf("MotionActive.State[RAFALE_QUESTION_TIME] = %v (ok=%v), want %d — the countdown seed must land in the card's own STATE",
+			state.MotionActive.State["RAFALE_QUESTION_TIME"], ok, questionTime)
+	}
+	if state.RafaleQuestionTime != 0 {
+		t.Errorf("global GameState.RAFALE_QUESTION_TIME = %d after a card-hosted round's timer start, want 0 (untouched) — contract §14.2", state.RafaleQuestionTime)
+	}
+
+	// One real tick (not a sleep — processRafaleQuestionTick is exactly what
+	// the ticker goroutine calls every second) must decrement the CARD's own
+	// counter and NOT treat questionTime-1 as instant expiry.
+	e.processRafaleQuestionTick()
+	state = e.GetState()
+	if qt2, _ := state.MotionActive.State["RAFALE_QUESTION_TIME"].(int); qt2 != questionTime-1 {
+		t.Errorf("after one real tick, RAFALE_QUESTION_TIME = %v, want %d", state.MotionActive.State["RAFALE_QUESTION_TIME"], questionTime-1)
+	}
+	if sub, _ := state.MotionActive.State["RAFALE_SUBPHASE"].(string); sub != string(RafaleSubPhaseQuestion) {
+		t.Errorf("RAFALE_SUBPHASE after one tick (not yet expired) = %q, want %q — regression check for the qt=0→-1 instant-expiry bug",
+			sub, RafaleSubPhaseQuestion)
+	}
+	if asked, _ := state.MotionActive.State["RAFALE_ASKED_COUNT"].(int); asked != 1 {
+		t.Errorf("RAFALE_ASKED_COUNT after one non-expiring tick = %v, want unchanged (1) — a spurious expiry would have advanced it", state.MotionActive.State["RAFALE_ASKED_COUNT"])
+	}
+}
+
 func TestStartRafaleMotionCardRound_EmptyPool_ReturnsErrRafalePoolEmpty(t *testing.T) {
 	e := NewEngine()
 	// No reservoir seeded at all.
