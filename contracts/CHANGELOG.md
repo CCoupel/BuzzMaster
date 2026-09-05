@@ -2,6 +2,44 @@
 
 ---
 
+## [20260905] — RAFALE nestable en carte MEMOTION (#217, feature, v9.0.0)
+
+> Backend uniquement (Lot 4, Batch 4, dernier lot du milestone) — réouverture assumée de la
+> décision « RAFALE jamais nestable » : une carte RAFALE est une mini-manche distincte, en mode
+> SOLO forcé, comme QCM (#185) et MEMORY (#187) avant elle. Détail complet :
+> `contracts/rafale.md` §14 "RAFALE en carte MEMOTION" — référence unique pour ce type imbriqué,
+> comme pour la manche classique.
+
+- **[NEW]** `QuestionTypeRafale.NestableInMotionCard` : `false` → `true`. `DefaultPointsRule:
+  STARS_PRORATA`, même barème que MEMORY (217-Q4) — `Units`/`UnitsTotal` dérivés serveur
+  (`RAFALE_CORRECT_COUNT`/`RAFALE_ASKED_COUNT`), tout `UNITS` client ignoré pour une carte
+  `TYPE=RAFALE`, même garde que MEMORY (contract question-types.md §9.3).
+- **[NEW]** Exemption `MediaSlots` pour `RAFALE` (deuxième exception nommée et testée après
+  `MEMOTION`, `contracts/question-types.md` §7.6) — texte seul par conception, comme la manche
+  classique.
+- **[NEW]** `TypedContent.RAFALE_ROUND_TIME` (`omitempty`) — durée propre d'une carte, portée par
+  `MotionCard` (déjà embarqué). Sans effet pour une manche classique portée par une `Question`.
+- **[NEW]** État vivant d'une carte RAFALE dans `MEMOTION_ACTIVE.STATE`, scopé `CARD_ID` — jamais
+  les 13 champs `GameState.RAFALE_*` globaux, qui restent réservés à la manche classique. Pas de
+  pré-tirage `NEXT` (#202) en contexte carte — un tirage à la demande à chaque avancement.
+- **[NEW]** `RAFALE_VALIDATE`/`RAFALE_INVALIDATE` gagnent `MOTION_CARD_ID` (`CardScope`,
+  optionnel) — deuxième consommateur réel de ce mécanisme après `FLIP_MEMORY_CARD` (#187). Absent
+  ⇒ manche classique, comportement inchangé.
+- **[NEW]** `RafaleAnswerPayload.MOTION_CARD_ID` (optionnel) — la réponse attendue reste
+  **admin+anim uniquement**, jamais dans `GameState`/`MEMOTION_ACTIVE.STATE` (piège documenté
+  `contracts/question-types.md` §5.4, évité explicitement).
+- **[CHANGED]** `internal/game/engine.go` — deux signatures généralisées (modification déclarée,
+  `contracts/question-types.md` §10.2/`contracts/rafale.md` §14.7, comportement identique pour la
+  manche classique) : `newRafaleDrawStateUnsafe(*Question)` → `(categories []string, difficulties
+  []int)` ; `rafaleMaxQuestionsUnsafe(*Question) int` → `(raw int) int`. `motionCardPointsForOutcome`/
+  `DoneMotionCard` gagnent un second `case` RAFALE à côté du `case` MEMORY existant.
+- **[UNCHANGED]** Manche RAFALE classique (`contracts/rafale.md` §1-§13) : cycle, contrat de
+  données, endpoints HTTP, tirage stratifié (#216) — tous inchangés. Réservoir/`rafale_used`
+  **partagés** entre manche classique et carte de la même partie (217-Q5) — un seul magasin,
+  jamais dupliqué.
+- **[UNCHANGED]** Génération IA : `RAFALE` reste hors `GENERABLE_TYPES`/`generableQuestionTypes` —
+  décision du 2026-08-28 non rouverte par ce lot.
+
 ## [20260904] — RAFALE multi-catégorie / multi-difficulté + barème par difficulté (#216, feature, v9.0.0) [BREAKING]
 
 > Backend uniquement (Lot 1B, Batch 1) — le volet frontend (Lot 2 : `QuestionsPage.jsx`,

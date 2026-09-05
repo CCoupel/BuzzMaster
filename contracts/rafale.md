@@ -404,15 +404,20 @@ const (
 
 | Action | Payload | Clients autorisés | Effet |
 |---|---|---|---|
-| `RAFALE_VALIDATE` | `{}` | `admin`, `anim` | Réponse jugée correcte |
-| `RAFALE_INVALIDATE` | `{}` | `admin`, `anim` | Réponse jugée incorrecte |
-| `RAFALE_SET_TEAMS` | `{"TEAMS": ["team_A", ...]}` | `admin` | Équipes participantes + ordre de passage |
+| `RAFALE_VALIDATE` | `{}` + `CardScope` optionnel (#217) | `admin`, `anim` | Réponse jugée correcte |
+| `RAFALE_INVALIDATE` | `{}` + `CardScope` optionnel (#217) | `admin`, `anim` | Réponse jugée incorrecte |
+| `RAFALE_SET_TEAMS` | `{"TEAMS": ["team_A", ...]}` | `admin` | Équipes participantes + ordre de passage (manche classique **uniquement** — sans objet en carte, mode SOLO forcé, §14.3) |
 
 ```json
 { "ACTION": "RAFALE_VALIDATE",   "MSG": {} }
 { "ACTION": "RAFALE_INVALIDATE", "MSG": {} }
 { "ACTION": "RAFALE_SET_TEAMS",  "MSG": { "TEAMS": ["team_A", "team_B"] } }
 ```
+
+> ⚠️ **[NEW] #217, v9.0.0** : `RAFALE_VALIDATE`/`RAFALE_INVALIDATE` gagnent `MOTION_CARD_ID`
+> (`protocol.CardScope`, `contracts/question-types.md` §9.1), optionnel. Absent ⇒ manche classique,
+> comportement inchangé. Présent ⇒ avance le sous-cycle de la carte MEMOTION désignée, après
+> vérification `ValidateCardScope` (`contracts/question-types.md` §9.2). Détail complet : §14.5.
 
 > ⚠️ **Allow-list fermée.** Chaque action ci-dessus doit être déclarée dans
 > `internal/server/inbound_allowlist.go`. Une action absente est **rejetée silencieusement**
@@ -426,8 +431,8 @@ précédent `TeamCard.onTeamClick` → `setTeamPoints` (arbitrage B3).
 
 | Action | Payload | Destinataires | Effet |
 |---|---|---|---|
-| `RAFALE_ANSWER` | `{"ID": "...", "ANSWER": "..."}` | **`admin` + `anim` uniquement** | Réponse attendue de la question courante (§2.3) |
-| `RAFALE_TICK` | `{"QUESTION_TIME": 2}` | tous | Décompte du timer question (diffusion légère, ne réémet pas tout `GameState`) |
+| `RAFALE_ANSWER` | `{"ID": "...", "ANSWER": "...", "MOTION_CARD_ID": "..."}` (#217, dernier champ optionnel) | **`admin` + `anim` uniquement** | Réponse attendue de la question courante (§2.3) — `MOTION_CARD_ID` absent/vide ⇒ manche classique, présent ⇒ carte MEMOTION désignée (§14.6) |
+| `RAFALE_TICK` | `{"QUESTION_TIME": 2}` | tous | Décompte du timer question (diffusion légère, ne réémet pas tout `GameState`) — partagé entre manche classique et carte (§14.1). Aucune ambiguïté à résoudre côté client : les deux hôtes ne sont jamais actifs simultanément (un `Question` porte un seul `TYPE`), donc l'écran déjà affiché (question ou carte) est sans équivoque la cible. Le moteur tient `MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME` synchronisé à chaque tick (comme `GameState.RAFALE_QUESTION_TIME` pour la manche classique), pour qu'un client qui se reconnecte en cours de compte à rebours voie la valeur correcte sans attendre le `RAFALE_TICK` suivant |
 
 Le timer de manche utilise l'action existante `UPDATE_TIMER` (`CURRENT_TIME`) — inchangée.
 
@@ -1029,3 +1034,211 @@ Principes de lisibilité à respecter dans la maquette :
 | `RAFALE_EXHAUSTED` | Drapeau posé trop tôt | Test : le drapeau reste posé à la **consommation**, pas au pré-tirage |
 | Plafond `RAFALE_MAX_QUESTIONS` | Le pré-tirage change l'instant d'arrêt | Test : nombre de questions posées inchangé au plafond |
 | Timer / verrou | Le pré-tirage s'exécute dans la section verrouillée d'avance | Suite `internal/game` intégralement au vert, `-race` |
+
+---
+
+## 14. RAFALE en carte MEMOTION (#217, v9.0.0)
+
+> Réouverture assumée : RAFALE devient **nestable** (`NestableInMotionCard: true`,
+> `contracts/question-types.md` §7/§7.4), une mini-manche jouable comme carte MEMOTION+, comme
+> QCM (#185) et MEMORY (#187) avant elle. **Aucune génération IA** — la décision du 2026-08-28
+> n'est pas rouverte (`generableQuestionTypes`, `internal/server/ai_generator.go`, et
+> `GENERABLE_TYPES`, `questionTypeMeta.js`, restent inchangés).
+
+### 14.1 Ce qui est réutilisé tel quel
+
+- Le **réservoir** (`e.rafaleQuestions`/`e.rafaleUsed`) — un seul magasin, jamais dupliqué par
+  carte. Une question tirée par une carte marque `used[q.ID] = true` **au même endroit** qu'une
+  manche classique de la même partie — §7.6 ci-dessous.
+- Le **tirage stratifié par permutation** (§7.2) — `newRafaleDrawStateUnsafe`,
+  `drawNextRafaleUnsafe`, `rafaleQuestionMatchesFilter` — **généralisés** pour accepter des
+  `(categories []string, difficulties []int)` déjà résolues par l'appelant, plutôt qu'un
+  `*Question` (changement mécanique, comportement identique pour la manche classique — voir
+  §14.7).
+- Le cycle générique de carte MEMOTION (`MEMOTION_SELECT` → `MEMOTION_FLIP` → `MEMOTION_DONE`,
+  `SelectMotionCard`/`FlipMotionCard`/`DoneMotionCard`) — **inchangé**, zéro ligne RAFALE à
+  l'intérieur (test d'agnosticité, `contracts/question-types.md` §10).
+- Le minuteur générique de carte (`StartMotionCardTimer`/`processMotionCardTick`,
+  `e.timer`/`e.stopCh`) — sert la **durée propre** de la carte (§14.3), avec un délai fourni par
+  l'appelant (`MotionCard.RAFALE_ROUND_TIME`) au lieu du `Question.TIME` partagé par les autres
+  types de carte.
+- Le minuteur par question (`StartRafaleQuestionTimer`/`processRafaleQuestionTick`,
+  `e.rafaleQuestionTimer`) — **partagé**, jamais dupliqué : une manche classique (`Question.TYPE
+  == RAFALE`) et une carte RAFALE ne sont **jamais** actives simultanément (un `Question` porte un
+  seul `TYPE`), donc réutiliser les mêmes champs moteur est sûr. `processRafaleQuestionTick`
+  distingue les deux hôtes à son point d'entrée (§14.7) — ce n'est **pas** une modification de
+  l'hôte MEMOTION : ce fichier appartient au sous-système RAFALE lui-même, pas au cœur MEMOTION
+  générique.
+
+### 14.2 Ce qui n'est PAS réutilisé — jamais les champs globaux
+
+**Aucun des 13 champs `GameState.RAFALE_*` n'est jamais lu ni écrit pour une carte.** L'état vivant
+d'une carte RAFALE vit exclusivement dans `MEMOTION_ACTIVE.STATE`, scopé par `CARD_ID` — même
+principe que MEMORY (§5.4, `contracts/question-types.md`) :
+
+```jsonc
+"MEMOTION_ACTIVE": {
+  "CARD_ID": "mc-7",
+  "TYPE": "RAFALE",
+  "STATE": {
+    "RAFALE_SUBPHASE": "QUESTION",           // "" | "QUESTION" | "ROUND_END"
+    "RAFALE_CURRENT_QUESTION": {
+      "ID": "r-042", "QUESTION": "...", "CATEGORY": "HISTORY", "DIFFICULTY": 2, "POINTS": 0
+    },
+    "RAFALE_QUESTION_TIME": 2,                // décompte live de la question en cours
+    "RAFALE_ASKED_COUNT": 4,
+    "RAFALE_CORRECT_COUNT": 3,                // "Units" — voir §14.4
+    "RAFALE_POOL_REMAINING": 11,
+    "RAFALE_EXHAUSTED": false
+  }
+}
+```
+
+**Absents, volontairement** (contrairement à la manche classique) :
+- `RAFALE_MODE`, `RAFALE_CURRENT_TEAM`, `RAFALE_PARTICIPATING_TEAMS`,
+  `RAFALE_CURRENT_TEAM_COLOR`, tous les `RAFALE_TEAM_*` (map par équipe) — **mode SOLO forcé**
+  (§14.3) : l'unique équipe qui joue est `GameState.MEMOTION_CURRENT_TEAM`, déjà porté par l'hôte
+  MEMOTION. Aucune notion d'équipe propre à la carte, exactement le motif MEMORY §6.3 ("la
+  rotation appartient à MEMOTION").
+- Le **barème par question** (`RAFALE_POINTS_BY_DIFFICULTY`, #216) — sans objet : le barème
+  appartient à l'hôte (`contracts/question-types.md` §6.1), `STARS_PRORATA` distribue les étoiles
+  de la carte, il n'y a pas de valeur par question à afficher. `RAFALE_CURRENT_QUESTION.POINTS`
+  reste présent pour la parité de forme avec la manche classique mais vaut toujours `0` en carte —
+  ne pas l'afficher côté client pour ce contexte.
+- Le **pré-tirage `NEXT`** (#202, §13) — fonctionnalité de la manche classique uniquement. Une
+  carte tire à la demande, à chaque avancement (§14.7) ; pas d'aperçu de la question suivante.
+
+`RAFALE_ROUND_TIME` (nouveau champ `TypedContent`, `omitempty`, porté par `MotionCard` — §14.3)
+n'a, symétriquement, **aucun effet** pour une manche classique portée par une `Question` : le champ
+existe sur le même `TypedContent` embarqué (précédent : tout champ `RAFALE_*`/`MEMORY_*` est
+partagé par construction), mais seule une carte le lit.
+
+### 14.3 Mode SOLO forcé, bornes durée ET nombre de questions (217-Q2/Q3)
+
+Une carte RAFALE joue **une seule équipe** (`MotionCurrentTeam`) — la rotation `RAFALE_MODE`
+(`CHACUN_SON_TOUR`/`TANT_QUE_JE_GAGNE`/`MAILLON_FAIBLE`) **n'a aucun sens en carte** et n'est
+**jamais lue** dans ce contexte (même traitement que `RAFALE_CATEGORIES`/`RAFALE_DIFFICULTIES`,
+déjà portés par `MotionCard.TypedContent` sans changement de forme). C'est le motif exact qui a
+fait refuser ARDOISE en carte (#186) — SOLO lève le blocage (217-Q3, révision de la recommandation
+initiale du plan).
+
+**Deux bornes, simultanées, comme demandé** (« ce qui arrive en premier ») :
+
+| Borne | Source | Mécanisme |
+|---|---|---|
+| **Durée propre** | `MotionCard.RAFALE_ROUND_TIME` (secondes) | Minuteur de carte générique (`StartMotionCardTimer`), fourni ce délai au lieu de `Question.TIME` à `MEMOTION_FLIP`. Expiration → `motionCardRoundClosed = true` (mécanisme générique existant, inchangé) — refuse tout nouveau `RAFALE_VALIDATE`/`INVALIDATE` scopé sur cette carte, sans toucher `MotionSubPhase` (même « sortie asymétrique » que MEMORY). |
+| **Nombre de questions** | `MotionCard.RAFALE_MAX_QUESTIONS` (défaut/max 100, même règle que la manche classique, §7.5) | Vérifié à chaque avancement (`advanceRafaleCardUnsafe`) — atteint ⇒ `RAFALE_SUBPHASE → ROUND_END` dans `MEMOTION_ACTIVE.STATE`. |
+
+Aucune des deux bornes n'appelle `Stop()` ni ne change `Phase`/`MotionSubPhase` — une carte qui
+atteint sa borne reste en `MOTION_SUBPHASE=QUESTION`, comme une carte MEMORY dont le minuteur a
+expiré (§10.1's «asymmetric exit», `contracts/question-types.md`). L'animateur clôt la carte
+explicitement via `MEMOTION_DONE`, à tout moment — y compris **avant** qu'une borne soit atteinte
+(admin toujours libre d'écourter, même comportement que MEMORY, §14.4).
+
+### 14.4 Barème `STARS_PRORATA` — dérivation serveur (217-Q4)
+
+`QuestionTypeRafale.DefaultPointsRule = STARS_PRORATA` (`contracts/question-types.md` §6.2) — même
+barème que MEMORY :
+
+```
+Units      = MEMOTION_ACTIVE.STATE.RAFALE_CORRECT_COUNT
+UnitsTotal = MEMOTION_ACTIVE.STATE.RAFALE_ASKED_COUNT
+```
+
+🔴 **Même garde que MEMORY (§9.3, `contracts/question-types.md`)** : le serveur dérive `Units` ET
+`UnitsTotal` de son propre état à `MEMOTION_DONE` et **ignore tout `UNITS` reçu du client** pour
+une carte `TYPE=RAFALE` — `DoneMotionCard` gagne un second `case` (à côté de MEMORY) appelant
+`rafaleCardOutcomeUnsafe(card)`, exactement le point d'accroche déjà déclaré par #187 (§10.2,
+`contracts/question-types.md`) pour ce type de dérivation.
+
+`UnitsTotal <= 0` (carte jamais démarrée, ou stoppée avant la première question) → **0 point** —
+garde déjà normative (§6.2).
+
+### 14.5 Cycle : `MEMOTION_FLIP` démarre la mini-manche, `RAFALE_VALIDATE`/`INVALIDATE` l'avancent
+
+Contrairement à QCM/SPEEDY-en-carte (une question, une désignation), une carte RAFALE est une
+**mini-manche à plusieurs questions** — le cycle générique `SELECT → FLIP → (QUESTION) → DONE`
+encadre un **sous-cycle RAFALE propre**, démarré à `MEMOTION_FLIP` :
+
+1. **`MEMOTION_SELECT`** — générique, inchangé. `MEMOTION_ACTIVE` réinitialisé à vide (§5.1),
+   comme pour tout type.
+2. **`MEMOTION_FLIP`** — générique (`FlipMotionCard`, `MotionSubPhase → QUESTION`), **suivi**
+   (`cmd/server/main.go`, branchement par type — la carte MEMOTION n'a jamais besoin de le savoir)
+   de :
+   - `Engine.StartRafaleMotionCardRound(cardID)` — tire la première question, initialise
+     `MEMOTION_ACTIVE.STATE` (§14.2).
+   - `StartMotionCardTimer(card.RAFALE_ROUND_TIME)` — durée propre (§14.3), au lieu du
+     `Question.TIME` habituel.
+   - `StartRafaleQuestionTimer(questionTime)` — minuteur par question, partagé (§14.1).
+   - Diffusion de la réponse attendue via `RAFALE_ANSWER` (admin+anim uniquement, §14.6).
+3. **`RAFALE_VALIDATE` / `RAFALE_INVALIDATE`, portée `MOTION_CARD_ID`** — avance le sous-cycle
+   (tire la question suivante, incrémente les compteurs, vérifie les deux bornes §14.3) ; identique
+   en substance à `advanceRafaleUnsafe`, mais écrit dans `MEMOTION_ACTIVE.STATE` au lieu des champs
+   globaux. Expiration du minuteur par question ⇒ **identique à une réponse incorrecte**, même
+   règle que §6.1.
+4. **`MEMOTION_DONE`** — générique, à tout moment (y compris avant qu'une borne soit atteinte,
+   §14.3) — attribue les points via `STARS_PRORATA` (§14.4) et referme la carte.
+
+### 14.6 Réponse attendue — confidentialité inchangée, portée ajoutée
+
+`RAFALE_ANSWER` reste **admin+anim uniquement** (§2.3), jamais dans `GameState`/`MEMOTION_ACTIVE` —
+⚠️ le piège documenté par `contracts/question-types.md` §5.4 (« `serializeFiltered` ne descend pas
+dans un objet imbriqué ») s'applique **directement** ici : si l'énoncé/réponse RAFALE atterrissait
+un jour dans `MEMOTION_ACTIVE.STATE`, il fuirait vers `/tv`/`/player` sans qu'aucun filtre ne le
+retienne. `RAFALE_CURRENT_QUESTION` (§14.2) ne porte donc **jamais** la réponse — même règle que
+`GameState.RAFALE_CURRENT_QUESTION` pour la manche classique.
+
+`RafaleAnswerPayload` gagne un champ optionnel :
+
+```jsonc
+{ "ID": "r-042", "ANSWER": "Paris", "NEXT": null, "MOTION_CARD_ID": "mc-7" }
+```
+
+`MOTION_CARD_ID` absent/vide ⇒ manche classique (comportement actuel, inchangé). Présent ⇒
+identifie la carte concernée, pour un client qui suivrait plusieurs cartes RAFALE potentielles dans
+la même grille. `NEXT` reste toujours `null` en contexte carte (§14.2 — pas de pré-tirage).
+
+### 14.7 Modifications d'hôte déclarées (contract §10.2)
+
+Trois points de code partagés, listés explicitement — aucune connaissance MEMOTION n'entre dans le
+sous-système RAFALE, et aucune connaissance RAFALE n'entre dans le cœur MEMOTION générique
+(`SelectMotionCard`/`FlipMotionCard`/`RevealMotionCard` restent intouchés) :
+
+1. **`newRafaleDrawStateUnsafe`** : `(question *Question)` → `(categories []string, difficulties
+   []int)`. Changement mécanique — l'appelant classique passe désormais
+   `question.EffectiveRafaleCategories()`/`EffectiveRafaleDifficulties()` explicitement.
+2. **`rafaleMaxQuestionsUnsafe`** : `(question *Question) int` → `(raw int) int`. Même
+   changement — l'appelant classique passe `question.RafaleMaxQuestions`.
+3. **`processRafaleQuestionTick`** : gagne un branchement d'entrée sur l'hôte actif (carte RAFALE
+   active vs. `Question.TYPE == RAFALE`) — ce fichier appartient au sous-système RAFALE, pas au
+   cœur MEMOTION (voir §14.1).
+4. **`DoneMotionCard`** : gagne un second `case card.EffectiveType() == QuestionTypeRafale` à côté
+   du `case` MEMORY existant (#187, §10.2) — même point d'accroche, déjà déclaré extensible.
+
+### 14.8 Borne de charge utile (contract §10.1, `contracts/question-types.md`)
+
+`MEMOTION_ACTIVE` pour une carte RAFALE (§14.2) est mesuré, comme pour MEMORY, sur l'état
+**réellement produit par le moteur** — jamais un `MotionActive` construit à la main. Borne propre
+au type (§10.1 : « une grille MEMORY coûte légitimement plus qu'une liste de réponses QCM
+invalidées, écraser la borne commune la viderait de son sens ») : un `RAFALE_CURRENT_QUESTION`
+(énoncé texte + 3 scalaires) plus 5 scalaires/booléens reste largement sous la borne absolue
+(200 octets, `Test184_GamePayload_MotionActiveAbsoluteBound`), sans qu'aucune conversion de
+`RAFALE_TEAM_*` (map par équipe, absente ici — §14.2) n'entre en jeu.
+
+### 14.9 Réservoir partagé — un seul magasin, deux hôtes (217-Q5)
+
+Aucun second magasin « déjà utilisée » n'existe pour les cartes. `e.rafaleUsed`/`SaveRafaleUsed`
+restent l'**unique** source de vérité, qu'une question ait été tirée par une manche classique ou
+par une carte de la **même partie** — une question tirée par l'une n'est plus jamais proposée à
+l'autre. `NewGame`/`InitGame()` réinitialise ce flag globalement, comme aujourd'hui, sans
+distinction d'hôte.
+
+### 14.10 Non-régression exigée (s'ajoute à §12/§13.8)
+
+| Zone | Risque | Vérification |
+|---|---|---|
+| Fuite `MEMOTION_ACTIVE` | La réponse RAFALE atterrit dans `RAFALE_CURRENT_QUESTION` | Test dédié : `MEMOTION_ACTIVE.STATE` ne contient jamais de champ `ANSWER` |
+| Isolation GameState | Une carte touche un des 13 champs globaux `RAFALE_*` | `TestRafaleMotionCard_NeverLeaksIntoGlobalGameStateFields` (test-writer, #217) |
+| Réservoir | Une carte et une manche classique se marchent dessus | `TestRafaleReservoir_SharedBetweenClassicRoundAndMotionCard` (test-writer, #217) |
+| Manche classique | Le changement de signature §14.7 modifie un comportement existant | Suite `internal/game` RAFALE (#216/#202/#199/#107) intégralement au vert, `-race` |
+| Deux cartes RAFALE | Compteurs mélangés entre deux passages de cartes différentes | `MEMOTION_ACTIVE` remis à zéro à chaque `MEMOTION_SELECT` (§5.1, acquis générique) — test dédié recommandé |
