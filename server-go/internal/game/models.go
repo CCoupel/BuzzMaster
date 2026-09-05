@@ -345,6 +345,16 @@ type TypedContent struct {
 	// this field. A round configured before #216 (map nil/empty) behaves
 	// exactly as before: every question worth the flat POINTS value.
 	RafalePointsByDifficulty map[int]int `json:"RAFALE_POINTS_BY_DIFFICULTY,omitempty"`
+	// RafaleRoundTime (v9.0.0, #217, contracts/rafale.md §14.2/§14.3) — a
+	// MEMOTION card's OWN round duration, in seconds. Meaningless for a
+	// classic RAFALE round hosted by a Question (which uses the generic
+	// Question.TIME field for its round timer, contract §2.2) — this field
+	// exists specifically because MotionCard has no equivalent of Question's
+	// TIME field, and every OTHER nestable type's per-card timer shares the
+	// HOST question's TIME (see cmd/server/main.go handleMotionFlip) rather
+	// than needing its own. A RAFALE card needs a card-own value ("durée
+	// propre", task #217), so it gets a dedicated OwnedField instead.
+	RafaleRoundTime int `json:"RAFALE_ROUND_TIME,omitempty"`
 
 	// EntracteConfig (v9.0.0, #214) — the per-occurrence panel configuration
 	// of an ENTRACTE-type question, question host only, never nestable

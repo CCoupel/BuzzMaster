@@ -113,13 +113,23 @@ func TestQuestionTypeRegistry_MemoryDefaultPointsRuleIsStarsProrata(t *testing.T
 // explicit non-regression companion: every OTHER type must still fall
 // through to STARS (empty DefaultPointsRule) — #187 cycle 5 must not have
 // silently changed the barème for SPEEDY/QCM/ARDOISE/MEMOTION.
+//
+// #217 (v9.0.0): RAFALE joins MEMORY with a non-empty default
+// (STARS_PRORATA, 217-Q4 — same barème, same reasoning: a nested RAFALE
+// mini-round is a progression type, contracts/rafale.md §14.4) — excluded
+// here alongside MEMORY rather than silently widening what this test
+// tolerates.
 func TestQuestionTypeRegistry_OtherTypesHaveNoDefaultPointsRule(t *testing.T) {
+	exempt := map[QuestionType]bool{
+		QuestionTypeMemory: true,
+		QuestionTypeRafale: true,
+	}
 	for qt, desc := range questionTypeRegistry {
-		if qt == QuestionTypeMemory {
+		if exempt[qt] {
 			continue
 		}
 		if desc.DefaultPointsRule != "" {
-			t.Errorf("type %q declares DefaultPointsRule=%q, want empty (STARS, unchanged) — only MEMORY has a non-empty default (#187)", qt, desc.DefaultPointsRule)
+			t.Errorf("type %q declares DefaultPointsRule=%q, want empty (STARS, unchanged) — only MEMORY and RAFALE (#217) have a non-empty default", qt, desc.DefaultPointsRule)
 		}
 	}
 }
