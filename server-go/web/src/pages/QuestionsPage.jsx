@@ -1369,6 +1369,7 @@ export default function QuestionsPage() {
           className={`page-tab ${activeTab === 'questions' ? 'active' : ''}`}
           onClick={() => setActiveTab('questions')}
         >
+          <span className="page-tab-icon" aria-hidden="true">📋</span>
           Questions
         </button>
         <button
@@ -1378,6 +1379,11 @@ export default function QuestionsPage() {
           className={`page-tab ${activeTab === 'rafale' ? 'active' : ''}`}
           onClick={() => setActiveTab('rafale')}
         >
+          {/* 🌀 — même icône que le type RAFALE partout ailleurs dans l'app
+              (utils/questionTypeMeta.js, QuestionCard/AnimPage/GamePage) —
+              plus cohérente que l'éclair ⚡ de la maquette (déjà pris par
+              SPEEDY dans ce même registre). */}
+          <span className="page-tab-icon" aria-hidden="true">🌀</span>
           Rafale
         </button>
       </div>

@@ -8,10 +8,13 @@ import './ConfigPage.css'
 import '../styles/sliders.css'
 import '../styles/tabs.css'
 
+// Icônes — ravalement visuel "pastilles + icônes" (direction D retenue sur
+// maquette docs/mockups/onglets-styles.html §01/D), hors périmètre
+// fonctionnel du milestone v9.0.0.
 const TABS = [
-  { key: 'quiz', label: 'Quiz' },
-  { key: 'entracte', label: 'Entracte' },
-  { key: 'backgrounds', label: "Fonds d'écran" },
+  { key: 'quiz', label: 'Quiz', icon: '🎬' },
+  { key: 'entracte', label: 'Entracte', icon: '🎭' },
+  { key: 'backgrounds', label: "Fonds d'écran", icon: '🎨' },
 ]
 
 /**
@@ -50,6 +53,7 @@ export default function BackstagePage() {
             className={`page-tab ${activeTab === t.key ? 'active' : ''}`}
             onClick={() => setActiveTab(t.key)}
           >
+            <span className="page-tab-icon" aria-hidden="true">{t.icon}</span>
             {t.label}
           </button>
         ))}
