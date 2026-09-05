@@ -91,9 +91,10 @@ describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCa
     MEMORY: true,
     MEMOTION: false,
     ARDOISE: false,
-    // RAFALE (v8.0.0, #16) — jamais nestable, aucune mention au contrat
+    // RAFALE — nestable depuis #217 (milestone v9.0.0), mode SOLO forcé
+    // (217-Q3). Avant #217 : jamais nestable, aucune mention au contrat
     // (rafale.md) d'une manche RAFALE portée par une carte MEMOTION.
-    RAFALE: false,
+    RAFALE: true,
     // ENTRACTE (#214) — jamais nestable (maquette entracte-programme-214.html
     // §04 : "pas imbriquable dans une carte MEMOTION", une pause interrompt
     // la partie, elle n'a pas de sens à l'intérieur d'une manche).

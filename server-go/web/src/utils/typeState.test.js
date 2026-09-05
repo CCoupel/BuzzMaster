@@ -9,6 +9,12 @@ import { getTypeState } from './typeState'
 // ---------------------------------------------------------------------------
 
 const EMPTY_MEMORY = { flippedCards: [], matchedPairs: [], errors: 0 }
+// #217 — état RAFALE d'une carte MEMOTION, ajouté à getTypeState. Les tests
+// de ce fichier antérieurs à #217 vérifient l'objet ENTIER par égalité
+// stricte (toEqual) : chacun gagne ce champ vide pour rester exact plutôt
+// que de basculer sur un `expect.objectContaining` qui masquerait une
+// régression de forme sur les DEUX autres champs (qcmInvalidated/memory).
+const EMPTY_RAFALE = { subphase: '', currentQuestion: {}, questionTime: 0, askedCount: 0, correctCount: 0, poolRemaining: 0, exhausted: false }
 
 describe('getTypeState — hôte question (cardId vide)', () => {
   it('lit qcmInvalidated directement sur gameState, jamais MEMOTION_ACTIVE', () => {
@@ -17,12 +23,12 @@ describe('getTypeState — hôte question (cardId vide)', () => {
       MEMOTION_ACTIVE: { CARD_ID: 'mc-9', TYPE: 'QCM', STATE: { QCM_INVALIDATED: ['BLUE'] } },
     }
     const hostContext = { playable: true, revealed: false, timerRunning: true, cardId: '' }
-    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: ['RED', 'YELLOW'], memory: EMPTY_MEMORY })
+    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: ['RED', 'YELLOW'], memory: EMPTY_MEMORY, rafale: EMPTY_RAFALE })
   })
 
   it('gameState.qcmInvalidated absent → tableau vide, pas d’exception', () => {
     const hostContext = { playable: true, revealed: false, timerRunning: true, cardId: '' }
-    expect(getTypeState({}, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY })
+    expect(getTypeState({}, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY, rafale: EMPTY_RAFALE })
   })
 
   // #187 — état MEMORY question-scopé (memoryFlippedCards/memoryMatchedPairs/
@@ -47,7 +53,7 @@ describe('getTypeState — hôte carte MEMOTION (cardId renseigné)', () => {
       MEMOTION_ACTIVE: { CARD_ID: 'mc-3', TYPE: 'QCM', STATE: { QCM_INVALIDATED: ['GREEN', 'YELLOW'] } },
     }
     const hostContext = { playable: true, revealed: false, timerRunning: true, cardId: 'mc-3' }
-    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: ['GREEN', 'YELLOW'], memory: EMPTY_MEMORY })
+    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: ['GREEN', 'YELLOW'], memory: EMPTY_MEMORY, rafale: EMPTY_RAFALE })
   })
 
   it('MEMOTION_ACTIVE.CARD_ID ne correspond pas à hostContext.cardId (transition en cours) → état vide, pas l’ancien état', () => {
@@ -55,18 +61,18 @@ describe('getTypeState — hôte carte MEMOTION (cardId renseigné)', () => {
       MEMOTION_ACTIVE: { CARD_ID: 'mc-2', TYPE: 'QCM', STATE: { QCM_INVALIDATED: ['GREEN'] } },
     }
     const hostContext = { playable: true, revealed: false, timerRunning: true, cardId: 'mc-3' }
-    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY })
+    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY, rafale: EMPTY_RAFALE })
   })
 
   it('MEMOTION_ACTIVE absent (champ pas encore câblé côté useWebSocket.js) → état vide, pas d’exception', () => {
     const hostContext = { playable: true, revealed: false, timerRunning: true, cardId: 'mc-3' }
-    expect(getTypeState({}, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY })
+    expect(getTypeState({}, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY, rafale: EMPTY_RAFALE })
   })
 
   it('MEMOTION_ACTIVE.STATE vide ({}) → tableau vide', () => {
     const gameState = { MEMOTION_ACTIVE: { CARD_ID: 'mc-3', TYPE: '', STATE: {} } }
     const hostContext = { playable: false, revealed: false, timerRunning: false, cardId: 'mc-3' }
-    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY })
+    expect(getTypeState(gameState, hostContext)).toEqual({ qcmInvalidated: [], memory: EMPTY_MEMORY, rafale: EMPTY_RAFALE })
   })
 
   // #187 — état MEMORY d'une carte MEMOTION, lu sur MEMOTION_ACTIVE.STATE,

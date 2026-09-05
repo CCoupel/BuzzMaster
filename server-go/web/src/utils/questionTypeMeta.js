@@ -39,10 +39,14 @@ export const QUESTION_TYPES = [
   { key: 'ARDOISE', label: 'Ardoise', icon: '🖊️', color: '#10b981', nestable: false },
   // RAFALE (v8.0.0, #16/#107, contrat rafale.md §2.1) — un QuestionType
   // porteur d'une CONFIGURATION de manche (aucun énoncé, les questions
-  // viennent du réservoir /admin/rafale, RafalePage.jsx). Jamais nestable
-  // (une manche RAFALE n'a pas de sens à l'intérieur d'une carte MEMOTION,
-  // aucune mention au contrat).
-  { key: 'RAFALE', label: 'Rafale', icon: '🌀', color: '#f97316', nestable: false },
+  // viennent du réservoir /admin/rafale, RafalePage.jsx).
+  // #217 (milestone v9.0.0) — devient nestable : une mini-manche RAFALE
+  // jouable comme carte MEMOTION, mode SOLO forcé (la rotation d'équipes du
+  // mode manche classique n'a pas de sens pour une carte, décision
+  // utilisateur 217-Q3 — même motif que le refus définitif d'ARDOISE en
+  // carte, mais ici SOLO lève le blocage). Reste hors GENERABLE_TYPES
+  // ci-dessous (pas de génération IA, décision du 2026-08-28 non rouverte).
+  { key: 'RAFALE', label: 'Rafale', icon: '🌀', color: '#f97316', nestable: true },
   // ENTRACTE (#214, milestone v9.0.0) — second déclencheur du mécanisme
   // ENTRACTE existant (#119) : une entrée du déroulé qui porte sa propre
   // configuration de pause (titre/sous-titre/image, mêmes réglages que
