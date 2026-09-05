@@ -1,10 +1,21 @@
 # Procédure de Test — RAFALE en carte MEMOTION (#217)
 
 **Version** : 9.0.0.x (milestone v9.0.0, Batch 4 — dernier lot du milestone)
-**Date** : 2026-09-05
+**Date** : 2026-09-05 (mise à jour : second passage, implémentation complète confirmée)
 **Issue** : #217
 **Maquette** : couverte par `memotion-card-type-selector-184.html` (pas de nouvelle maquette dédiée)
 **Testeur** : QA / Utilisateur (validation manuelle obligatoire — jamais exécuté par `qa`/`deployer`)
+
+---
+
+## ✅ Mise à jour second passage
+
+Les deux zones signalées non couvertes au premier passage (scoping `MOTION_CARD_ID` sur
+`RAFALE_VALIDATE`/`INVALIDATE`, rendu `PlayerDisplay.jsx`/`AnimConductPanel.jsx`) sont désormais
+implémentées et testées automatiquement (`RafaleValidateCard`/`InvalidateCard` côté moteur,
+`getTypeState(...).rafale` côté frontend — voir le rapport du second passage). Les scénarios
+ci-dessous n'ont pas nécessité de changement de fond, seul le nom exact du champ « durée propre »
+(`RAFALE_ROUND_TIME`) a été précisé au Scénario 1.
 
 ---
 
@@ -35,7 +46,7 @@ type, décision non rouverte.
 | 1 | Créer/éditer une question MEMOTION, ajouter une carte | Éditeur de carte affiché | | |
 | 2 | Dans le sélecteur de type de carte, choisir « Rafale » | Type disponible dans la liste (aux côtés de Speedy/QCM/Memory) | | |
 | 3 | Configurer catégories/difficultés (comme pour une manche classique) | Sélecteur multi-chips identique à celui de #216 | | |
-| 4 | Configurer une **durée propre** à la carte ET un **nombre de questions maximum** | Les deux champs sont présents et modifiables | | |
+| 4 | Configurer une **durée propre** à la carte (champ « Durée de la manche », `RAFALE_ROUND_TIME` — distinct du temps par question) ET un **nombre de questions maximum** | Les deux champs sont présents et modifiables | | |
 | 5 | Enregistrer la carte | Enregistrement réussi | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL

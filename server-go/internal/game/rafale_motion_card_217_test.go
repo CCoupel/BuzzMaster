@@ -158,3 +158,68 @@ func TestRafaleNestable_StillExcludedFromAIGeneration(t *testing.T) {
 		t.Error("QuestionTypeRafale.HasPlayerInput = true — RAFALE stays judged by admin/anim only, even nested (contract §8.1), unaffected by #217's nestability change")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// SECOND PASS (2026-09-05) — investigated after reviewing dev-backend's own
+// rafale_motion_card_engine_217_test.go (StartRafaleMotionCardRound,
+// RafaleValidateCard/InvalidateCard, ErrRafaleCardNotFound, MotionActive.State
+// keys RAFALE_SUBPHASE/RAFALE_CURRENT_QUESTION/RAFALE_ASKED_COUNT/
+// RAFALE_CORRECT_COUNT/RAFALE_QUESTION_TIME — all confirmed exactly as this
+// file's own header left undetermined on the first pass).
+//
+// The second-pass handoff asked for "isolation from an already-played
+// classic round's global stats, still sitting in GameState from earlier in
+// the same session". A first attempt at this test (played a classic round,
+// e.Stop()'d it, then started a MEMOTION+RAFALE-card question, then
+// compared the classic round's recorded stats before/after playing the
+// card) FAILED — but not because of a #217 bug: e.Ready() ALREADY resets
+// every global RAFALE_* field unconditionally whenever a new question loads
+// (engine.go, the `if isNewQuestion || rafaleRoundAlreadyPlayed { ... }`
+// block, pre-dating #217 entirely — it fires for a next SPEEDY question
+// exactly the same way). So the scenario that test assumed ("a classic
+// round's live stats persist into the following question") never actually
+// occurs for ANY question type, RAFALE-card or not — there is no real game
+// state where a classic round's live counters and a card's live counters
+// coexist to be corrupted. The misleading test was removed rather than kept
+// red for the wrong reason.
+//
+// What DOES remain meaningful, and is verified below without relying on
+// that false premise: the reset fires correctly at the exact transition
+// this feature introduces (classic round → next question hosts a RAFALE
+// card), confirming #217 didn't accidentally special-case this transition
+// out of the existing reset.
+// ---------------------------------------------------------------------------
+
+func TestRafaleGlobalFields_ResetWhenNextQuestionHostsARafaleCard(t *testing.T) {
+	e := NewEngine()
+	e.SetTeams(map[string]*Team{"red": {Name: "Team Red"}})
+	seedRafaleReservoirCouple(t, e, "classic", 10, CategoryHistory, 1)
+	seedRafaleReservoirCouple(t, e, "card", 10, CategoryScience, 2)
+
+	classicQ := makeRafaleQuestion("classic-round", string(RafaleModeSolo), CategoryHistory, 1)
+	e.Ready(classicQ.ID, classicQ)
+	e.StartImmediate(0)
+	if err := e.RafaleValidate(); err != nil {
+		t.Fatalf("classic round RafaleValidate: %v", err)
+	}
+	if e.GetState().RafaleAskedCount == 0 {
+		t.Fatal("setup failed: classic round's global RAFALE_ASKED_COUNT is still 0 after 1 answer")
+	}
+	e.Stop()
+
+	card := rafaleMotionCard("mc-later", []string{string(CategoryScience)}, []int{2}, 3, 10)
+	q := makeMotionQuestion("mq-later", []MotionCard{card}, "SOLO")
+	e.Ready(q.ID, q)
+	defer e.Stop()
+
+	state := e.GetState()
+	if state.RafaleAskedCount != 0 {
+		t.Errorf("global RAFALE_ASKED_COUNT = %d after readying a MEMOTION+ question following a classic round, want 0 (reset) — #217 must not special-case this transition out of the pre-existing per-question reset", state.RafaleAskedCount)
+	}
+	if len(state.RafaleTeamCounters) != 0 {
+		t.Errorf("global RAFALE_TEAM_COUNTERS = %v, want empty after the reset", state.RafaleTeamCounters)
+	}
+	if state.RafaleCurrentQuestion != (RafaleCurrent{}) {
+		t.Errorf("global RAFALE_CURRENT_QUESTION = %+v, want zero value after the reset", state.RafaleCurrentQuestion)
+	}
+}
