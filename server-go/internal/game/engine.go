@@ -296,6 +296,21 @@ type Engine struct {
 	// re-reads live GetState()/GetTeamsAndBumpers() itself, same pattern as
 	// OnStateChange.
 	OnRafaleTeamsChanged func()
+	// OnRafaleCardAnswer (#217, v9.0.0, contracts/rafale.md §14.6) is
+	// OnRafaleAnswer's card-scoped counterpart: fires whenever a new
+	// question is drawn for a RAFALE-in-card mini-round — card round start
+	// (StartRafaleMotionCardRound) and every subsequent advance
+	// (advanceRafaleCardUnsafe, via RafaleValidateCard/RafaleInvalidateCard
+	// or that card's own question-timer expiry). The consumer
+	// (cmd/server/main.go) must broadcast it via RAFALE_ANSWER to admin+anim
+	// ONLY, same confidentiality rule as OnRafaleAnswer — never GameState,
+	// never MotionActive.State (contract §14.6's own restatement of the
+	// §5.4 "serializeFiltered ne descend pas dans un objet imbriqué" trap).
+	// No `next` parameter: a card round never pre-fetches (§14.2, no #202
+	// NEXT-preview in card context). Deliberately a SEPARATE callback field
+	// from OnRafaleAnswer rather than an added cardID parameter on it — the
+	// classic round's own consumer wiring (setupCallbacks) stays untouched.
+	OnRafaleCardAnswer func(cardID, id, answer string)
 	// #187 cycle 3 briefly added OnMotionCardAutoRevealed here (a MEMORY
 	// card auto-revealing at timer expiry) — REVERTED in cycle 4: the
 	// user-validated behavior is that expiry on an incomplete grid leaves
@@ -2388,7 +2403,15 @@ func (e *Engine) StartRafaleQuestionTimer(seconds int) {
 					// advanced/ended under lock by processRafaleQuestionTick
 					// itself. This ticker's job is done either way.
 					ticker.Stop()
-					e.fireRafaleAdvanceCallbacks(result.advance)
+					// #217: branch to the card-scoped callback firer when
+					// this tick belonged to a RAFALE-in-card mini-round
+					// (processRafaleCardQuestionTickUnsafe sets cardAdvance,
+					// never both fields on the same result).
+					if result.cardAdvance != nil {
+						e.fireRafaleCardAdvanceCallbacks(*result.cardAdvance)
+					} else {
+						e.fireRafaleAdvanceCallbacks(result.advance)
+					}
 				}()
 			case <-stopCh:
 				ticker.Stop()
@@ -2430,19 +2453,37 @@ func (e *Engine) stopRafaleQuestionTimerUnsafe() {
 // caller — mirrors motionCardTickResult/timerTickResult's "compute under
 // lock, act after unlock" discipline (#151).
 type rafaleQuestionTickResult struct {
-	guardFailed  bool // no longer a live RAFALE question at all — caller stops the ticker for good
+	guardFailed  bool // no longer a live RAFALE question/card at all — caller stops the ticker for good
 	paused       bool // Phase != STARTED — caller skips this tick but keeps the ticker running
 	questionTime int  // meaningful when !guardFailed && !paused && !expired
 	expired      bool // hit 0 this tick; advance already computed under this same lock
 	advance      rafaleAdvanceResult
+	// cardAdvance (#217) is non-nil when this tick belonged to a RAFALE-in-
+	// card mini-round instead of the classic round — mutually exclusive
+	// with `advance` above (never both meaningful for the same tick). The
+	// caller (StartRafaleQuestionTimer's ticker goroutine) branches on this
+	// to fire fireRafaleCardAdvanceCallbacks instead of
+	// fireRafaleAdvanceCallbacks on expiry.
+	cardAdvance *rafaleCardAdvanceResult
 }
 
 // processRafaleQuestionTick applies one RAFALE question-timer tick under
 // lock. Extracted (like every other tick handler in this file, #151) so
 // `defer e.mu.Unlock()` guarantees the mutex is released even on a panic.
+//
+// #217 (v9.0.0): gains a card branch at entry — the classic round and a
+// RAFALE-in-card mini-round share this SAME ticker (e.rafaleQuestionTimer),
+// safely, because the two hosts are mutually exclusive (contracts/rafale.md
+// §14.1/§14.7: this is RAFALE's own subsystem gaining a second host, not a
+// MEMOTION host modification — processMotionCardTick, the actual MEMOTION
+// per-card timer handler, is untouched).
 func (e *Engine) processRafaleQuestionTick() rafaleQuestionTickResult {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	if card := e.activeMotionCardUnsafe(); card != nil && card.EffectiveType() == QuestionTypeRafale {
+		return e.processRafaleCardQuestionTickUnsafe(card)
+	}
 
 	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale || e.state.RafaleSubPhase != RafaleSubPhaseQuestion {
 		return rafaleQuestionTickResult{guardFailed: true}
@@ -2462,6 +2503,36 @@ func (e *Engine) processRafaleQuestionTick() rafaleQuestionTickResult {
 	// is already held — no re-entrant Lock here).
 	advance := e.advanceRafaleUnsafe(false)
 	return rafaleQuestionTickResult{expired: true, advance: advance}
+}
+
+// processRafaleCardQuestionTickUnsafe (#217) is processRafaleQuestionTick's
+// card-scoped branch — same tick/expire logic as the classic round, targeting
+// MEMOTION_ACTIVE.STATE instead of the global RAFALE_QUESTION_TIME. Caller
+// (processRafaleQuestionTick) must hold e.mu; card must already be confirmed
+// active and RAFALE-typed.
+func (e *Engine) processRafaleCardQuestionTickUnsafe(card *MotionCard) rafaleQuestionTickResult {
+	if s, _ := e.state.MotionActive.State["RAFALE_SUBPHASE"].(string); s != string(RafaleSubPhaseQuestion) {
+		return rafaleQuestionTickResult{guardFailed: true}
+	}
+	if e.state.Phase != PhaseStarted {
+		return rafaleQuestionTickResult{paused: true}
+	}
+
+	qt := 0
+	if v, ok := e.state.MotionActive.State["RAFALE_QUESTION_TIME"].(int); ok {
+		qt = v
+	}
+	qt--
+	e.state.MotionActive.State["RAFALE_QUESTION_TIME"] = qt
+	if qt > 0 {
+		return rafaleQuestionTickResult{questionTime: qt}
+	}
+
+	// Expired — "identique à une réponse incorrecte" (contract §6.1, same
+	// rule as the classic round) — advance/end the mini-round in the SAME
+	// locked section.
+	advance := e.advanceRafaleCardUnsafe(false)
+	return rafaleQuestionTickResult{expired: true, cardAdvance: &advance}
 }
 
 // rafaleAdvanceResult carries the outcome of one RAFALE question-advance
@@ -2594,7 +2665,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 	// Hard cap (contract §7.2), default/max 100. Factored into
 	// rafaleMaxQuestionsUnsafe (#202) so prefetchRafaleNextUnsafe shares the
 	// exact same threshold.
-	maxQuestions := rafaleMaxQuestionsUnsafe(e.state.Question)
+	maxQuestions := rafaleMaxQuestionsUnsafe(e.state.Question.RafaleMaxQuestions)
 	if e.state.RafaleAskedCount >= maxQuestions {
 		log.Printf("[Engine] RAFALE: RAFALE_MAX_QUESTIONS (%d) reached, ending round", maxQuestions)
 		released := e.stopUnsafe()
@@ -2771,8 +2842,11 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	// #216: (re)build the round's stratified draw state — cartesian product
 	// of categories × difficulties, active couples only — BEFORE the first
 	// draw, so drawNextRafaleUnsafe below (and every subsequent prefetch/
-	// advance this round) shares one consistent sequence.
-	e.rafaleDraw = e.newRafaleDrawStateUnsafe(e.state.Question)
+	// advance this round) shares one consistent sequence. #217: resolves the
+	// categories/difficulties HERE (the classic round's own retro-compatible
+	// source) before calling the now-generalized builder — see that
+	// function's own doc comment.
+	e.rafaleDraw = e.newRafaleDrawStateUnsafe(e.state.Question.EffectiveRafaleCategories(), e.state.Question.EffectiveRafaleDifficulties())
 
 	drawn, err := e.drawNextRafaleUnsafe()
 	if err != nil {
@@ -4315,16 +4389,29 @@ type rafaleDrawState struct {
 }
 
 // newRafaleDrawStateUnsafe builds the initial rafaleDrawState for a fresh
-// round: the cartesian product of question's effective categories ×
-// difficulties, keeping only couples with at least one available reservoir
-// question RIGHT NOW — a couple with none is excluded upfront (contract
-// §7.3, unified with the mid-round exhaustion path in drawNextRafaleUnsafe,
-// which removes a couple the exact same way the moment it's discovered
-// empty, instead of before). Caller must hold e.mu (write lock).
-func (e *Engine) newRafaleDrawStateUnsafe(question *Question) rafaleDrawState {
+// round: the cartesian product of the given categories × difficulties,
+// keeping only couples with at least one available reservoir question RIGHT
+// NOW — a couple with none is excluded upfront (contract §7.3, unified with
+// the mid-round exhaustion path in drawNextRafaleUnsafe, which removes a
+// couple the exact same way the moment it's discovered empty, instead of
+// before). Caller must hold e.mu (write lock).
+//
+// ⚠️ Signature changed by #217 (v9.0.0, contracts/rafale.md §14.7 —
+// declared host-shared modification, same discipline as §10.2):
+// (question *Question) → (categories []string, difficulties []int). A
+// classic round (the sole caller before #217, startRafaleRoundUnsafe) now
+// resolves its own categories/difficulties from the round-config Question
+// (EffectiveRafaleCategories/EffectiveRafaleDifficulties) BEFORE calling
+// this — behavior is byte-for-byte identical for that caller, only the
+// resolution step moved to the call site. This lets a RAFALE-in-card round
+// (startRafaleCardRoundUnsafe, contracts/rafale.md §14.5) share the exact
+// same function with its own source (MotionCard.RafaleCategories/
+// RafaleDifficulties, which have no legacy-mono fallback to resolve — a
+// card never existed before #217).
+func (e *Engine) newRafaleDrawStateUnsafe(categories []string, difficulties []int) rafaleDrawState {
 	var active []rafaleCouple
-	for _, cat := range question.EffectiveRafaleCategories() {
-		for _, diff := range question.EffectiveRafaleDifficulties() {
+	for _, cat := range categories {
+		for _, diff := range difficulties {
 			if len(e.rafalePoolUnsafe([]string{cat}, []int{diff})) > 0 {
 				active = append(active, rafaleCouple{category: cat, difficulty: diff})
 			} else {
@@ -4425,16 +4512,24 @@ func resolveRafalePoints(question *Question, difficulty int) int {
 }
 
 // rafaleMaxQuestionsUnsafe (#202) resolves the RAFALE_MAX_QUESTIONS hard cap
-// (contract §7.2 — default/max 100) for the given round-config question.
-// Factored out of advanceRafaleUnsafe's own inline computation so
+// (contract §7.2 — default/max 100) from a raw configured value. Factored
+// out of advanceRafaleUnsafe's own inline computation so
 // prefetchRafaleNextUnsafe can share the EXACT same threshold — #202 would
 // otherwise have introduced a third, independent computation site; #107's
 // own CATEGORY bug came from exactly this shape of overlooked duplicate
-// site. Pure function, no locking; question must be non-nil.
-func rafaleMaxQuestionsUnsafe(question *Question) int {
+// site. Pure function, no locking.
+//
+// ⚠️ Signature changed by #217 (v9.0.0, contracts/rafale.md §14.7 —
+// declared host-shared modification, same discipline as §10.2):
+// (question *Question) → (raw int). The classic round's callers now pass
+// question.RafaleMaxQuestions explicitly — behavior byte-for-byte identical
+// for them — so a RAFALE-in-card round (contracts/rafale.md §14.3) can
+// share this exact function with MotionCard.RafaleMaxQuestions instead of
+// needing its own parallel copy of the same clamp.
+func rafaleMaxQuestionsUnsafe(raw int) int {
 	maxQuestions := 100
-	if question.RafaleMaxQuestions > 0 && question.RafaleMaxQuestions < 100 {
-		maxQuestions = question.RafaleMaxQuestions
+	if raw > 0 && raw < 100 {
+		maxQuestions = raw
 	}
 	return maxQuestions
 }
@@ -4502,7 +4597,7 @@ func (e *Engine) prefetchRafaleNextUnsafe() {
 	if e.state.Question == nil || e.state.Question.Type != QuestionTypeRafale {
 		return
 	}
-	if e.state.RafaleAskedCount >= rafaleMaxQuestionsUnsafe(e.state.Question) {
+	if e.state.RafaleAskedCount >= rafaleMaxQuestionsUnsafe(e.state.Question.RafaleMaxQuestions) {
 		return
 	}
 	// #216: shares e.rafaleDraw with the round's own current-question draw
@@ -4577,6 +4672,298 @@ func (e *Engine) refreshRafalePoolRemainingUnsafe() {
 		count++
 	}
 	e.state.RafalePoolRemaining = count
+}
+
+// ============================================================
+// RAFALE in a MEMOTION card (#217, v9.0.0, contracts/rafale.md §14)
+//
+// A mini-round, mode SOLO forced (217-Q3): the single active team is
+// GameState.MotionCurrentTeam (MEMOTION's own field — never a card-local
+// team concept, same reasoning as MEMORY, contract §6.3 "la rotation
+// appartient à MEMOTION"). Live state lives EXCLUSIVELY in
+// MotionActive.State, scoped by CARD_ID — NEVER the 13 global GameState
+// RAFALE_* fields, which stay reserved for a classic round hosted by a
+// Question of TYPE RAFALE (contract §14.2). The two hosts are mutually
+// exclusive by construction (a Question has exactly one TYPE), which is
+// what makes it safe to REUSE the engine-level e.rafaleDraw (the stratified
+// permutation state, §7.2) and e.rafaleQuestionTimer (the per-question
+// ticker) for a card round — only one RAFALE round, classic or card-scoped,
+// can ever be live at a time.
+//
+// Deliberately NOT reused for cards: e.rafaleNext (the #202 "on deck"
+// pre-fetch) — a card round draws on demand, at start and at every advance,
+// no pre-fetch/NEXT-preview (contract §14.2 — that's a classic-round-only
+// feature). This also means drawNextRafaleUnsafe is called directly here,
+// never through prefetchRafaleNextUnsafe (which is itself wired to
+// e.rafaleNext and the classic round's own guards).
+// ============================================================
+
+// motionActiveRafaleAskedCount reads RAFALE_ASKED_COUNT from
+// MEMOTION_ACTIVE.STATE — the card-scoped counterpart of the question-host
+// GameState.RafaleAskedCount (contract §14.2). Absent or unexpectedly-shaped
+// ⇒ 0; never panics.
+func motionActiveRafaleAskedCount(state map[string]interface{}) int {
+	v, ok := state["RAFALE_ASKED_COUNT"]
+	if !ok {
+		return 0
+	}
+	n, ok := v.(int)
+	if !ok {
+		return 0
+	}
+	return n
+}
+
+// motionActiveRafaleCorrectCount reads RAFALE_CORRECT_COUNT from
+// MEMOTION_ACTIVE.STATE — the card's own "Units" numerator (contract
+// §14.4), no question-host equivalent (the classic round tracks this
+// per-team, RafaleTeamCounters; a card is always SOLO, one scalar).
+// Absent or unexpectedly-shaped ⇒ 0; never panics.
+func motionActiveRafaleCorrectCount(state map[string]interface{}) int {
+	v, ok := state["RAFALE_CORRECT_COUNT"]
+	if !ok {
+		return 0
+	}
+	n, ok := v.(int)
+	if !ok {
+		return 0
+	}
+	return n
+}
+
+// rafaleCardOutcomeUnsafe derives (units, unitsTotal) for the active card's
+// own RAFALE mini-round — contract §14.4/§9.3 (`contracts/question-types.md`):
+// "le serveur dérive Units ET UnitsTotal de son propre état [...] et ignore
+// tout UNITS reçu [du client]", same guard as MEMORY (memoryCardOutcomeUnsafe,
+// its exact sibling). Must be called with e.mu held; card must be the card
+// DoneMotionCard is closing, already known to be RAFALE-typed
+// (card.EffectiveType() == QuestionTypeRafale) by the caller.
+func (e *Engine) rafaleCardOutcomeUnsafe(card *MotionCard) (units, unitsTotal int) {
+	return motionActiveRafaleCorrectCount(e.state.MotionActive.State), motionActiveRafaleAskedCount(e.state.MotionActive.State)
+}
+
+// refreshRafaleCardPoolRemainingUnsafe sets MEMOTION_ACTIVE.STATE's
+// RAFALE_POOL_REMAINING — the card-scoped counterpart of
+// refreshRafalePoolRemainingUnsafe (contract §14.2). No pre-fetch to account
+// for (unlike the classic round's own +1, §14.1's "no #202 next-question
+// prefetch in card context") — a straight union count. Must be called with
+// e.mu held (write).
+func (e *Engine) refreshRafaleCardPoolRemainingUnsafe(card *MotionCard) {
+	e.state.MotionActive.State["RAFALE_POOL_REMAINING"] = len(e.rafalePoolUnsafe(card.RafaleCategories, card.RafaleDifficulties))
+}
+
+// startRafaleCardRoundUnsafe (#217) begins a RAFALE mini-round for a
+// just-flipped card: builds a fresh stratified draw state scoped to the
+// card's own categories/difficulties (never a legacy-mono fallback — a card
+// never existed before #217, so card.RafaleCategories/RafaleDifficulties
+// are always the sole source, unlike a classic round's
+// EffectiveRafaleCategories/Difficulties) and draws the first question. ok
+// is false when the pool is already empty for every configured couple —
+// contract §14.3's safety net, mirrored from startRafaleRoundUnsafe's own
+// pool-empty-at-start branch, except a card round simply never starts
+// (RAFALE_SUBPHASE stays "") rather than ending an already-STARTED phase.
+// Caller (StartRafaleMotionCardRound) must hold e.mu (write) and must
+// already have confirmed card is the active, RAFALE-typed card.
+func (e *Engine) startRafaleCardRoundUnsafe(card *MotionCard) (drawn *RafaleQuestion, ok bool) {
+	e.rafaleDraw = e.newRafaleDrawStateUnsafe(card.RafaleCategories, card.RafaleDifficulties)
+
+	drawn, err := e.drawNextRafaleUnsafe()
+	if err != nil {
+		log.Printf("[Engine] RAFALE card %s: pool already empty at round start", card.ID)
+		e.state.MotionActive.State["RAFALE_EXHAUSTED"] = true
+		e.state.MotionActive.State["RAFALE_POOL_REMAINING"] = 0
+		return nil, false
+	}
+
+	e.state.MotionActive.State["RAFALE_SUBPHASE"] = string(RafaleSubPhaseQuestion)
+	e.state.MotionActive.State["RAFALE_CURRENT_QUESTION"] = RafaleCurrent{
+		ID: drawn.ID, Question: drawn.Question,
+		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
+		// Points stays 0 — a card's barème is STARS_PRORATA (host-owned,
+		// contract §14.2/§6.1), there is no per-question point value to show.
+	}
+	e.state.MotionActive.State["RAFALE_ASKED_COUNT"] = 1
+	e.state.MotionActive.State["RAFALE_CORRECT_COUNT"] = 0
+	e.state.MotionActive.State["RAFALE_EXHAUSTED"] = false
+	e.refreshRafaleCardPoolRemainingUnsafe(card)
+
+	return drawn, true
+}
+
+// StartRafaleMotionCardRound (#217) is startRafaleCardRoundUnsafe's locked,
+// guarded, exported entry point — called by cmd/server/main.go's
+// handleMotionFlip immediately after the generic FlipMotionCard() succeeds
+// for a RAFALE-typed card (contract §14.5 step 2). Returns the first
+// question's ID/answer/per-question countdown for the caller to broadcast
+// the confidential RAFALE_ANSWER (admin+anim only, §14.6) and start
+// StartRafaleQuestionTimer — mirrors startRafaleRoundUnsafe's own result
+// shape, flattened into return values since there is no OnStateChange
+// concern here to justify a two-phase "compute under lock, act after
+// unlock" split (the caller's own generic broadcastUpdate() already
+// delivers everything else in MotionActive.State).
+func (e *Engine) StartRafaleMotionCardRound(cardID string) (questionID, answer string, questionTime int, err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.state.Phase != PhaseStarted || cardID == "" || e.state.MotionSelected != cardID || e.state.MotionSubPhase != MotionSubPhaseQuestion {
+		return "", "", 0, ErrRafaleNotInQuestion
+	}
+	card := e.activeMotionCardUnsafe()
+	if card == nil || card.EffectiveType() != QuestionTypeRafale {
+		return "", "", 0, ErrRafaleNotInQuestion
+	}
+
+	drawn, ok := e.startRafaleCardRoundUnsafe(card)
+	if !ok {
+		return "", "", 0, ErrRafalePoolEmpty
+	}
+
+	questionTime = card.RafaleQuestionTime
+	if questionTime <= 0 {
+		questionTime = 3
+	}
+	return drawn.ID, drawn.Answer, questionTime, nil
+}
+
+// rafaleCardAdvanceResult carries the outcome of one card-scoped RAFALE
+// advance (RAFALE_VALIDATE/INVALIDATE scoped to a card, or that card's own
+// question-timer expiry) out to the unlocked caller — the card-scoped
+// counterpart of rafaleAdvanceResult, without any team-rotation fields
+// (mode SOLO forced, contract §14.3 — there is nothing to rotate).
+type rafaleCardAdvanceResult struct {
+	guardFailed      bool   // not a live RAFALE card round — caller does nothing (ErrRafaleNotInQuestion)
+	roundEnded       bool   // pool exhausted or RAFALE_MAX_QUESTIONS reached — RAFALE_SUBPHASE is now ROUND_END; Phase/MotionSubPhase untouched (contract §14.3, unlike the classic round's stopUnsafe())
+	cardID           string // the card this result is for — needed by the unlocked callback firer, which cannot re-read e.state.MotionSelected (may have changed by then)
+	nextQuestionID   string
+	nextAnswer       string
+	nextQuestionTime int
+}
+
+// advanceRafaleCardUnsafe (#217) judges the active card's current RAFALE
+// question and moves to the next one, or ends the card's mini-round —
+// the card-scoped counterpart of advanceRafaleUnsafe, contract §14.5 step
+// 3. No team modes, no rotation (SOLO forced, §14.3): a correct answer
+// simply increments RAFALE_CORRECT_COUNT. Caller must hold e.mu (write).
+func (e *Engine) advanceRafaleCardUnsafe(correct bool) rafaleCardAdvanceResult {
+	if e.state.Phase != PhaseStarted || e.state.MotionSubPhase != MotionSubPhaseQuestion || e.motionCardRoundClosed {
+		return rafaleCardAdvanceResult{guardFailed: true}
+	}
+	card := e.activeMotionCardUnsafe()
+	if card == nil || card.EffectiveType() != QuestionTypeRafale {
+		return rafaleCardAdvanceResult{guardFailed: true}
+	}
+	if s, _ := e.state.MotionActive.State["RAFALE_SUBPHASE"].(string); s != string(RafaleSubPhaseQuestion) {
+		return rafaleCardAdvanceResult{guardFailed: true}
+	}
+	cardID := e.state.MotionSelected
+
+	e.stopRafaleQuestionTimerUnsafe()
+
+	if correct {
+		e.state.MotionActive.State["RAFALE_CORRECT_COUNT"] = motionActiveRafaleCorrectCount(e.state.MotionActive.State) + 1
+	}
+
+	maxQuestions := rafaleMaxQuestionsUnsafe(card.RafaleMaxQuestions)
+	if motionActiveRafaleAskedCount(e.state.MotionActive.State) >= maxQuestions {
+		log.Printf("[Engine] RAFALE card %s: RAFALE_MAX_QUESTIONS (%d) reached, ending mini-round", cardID, maxQuestions)
+		e.state.MotionActive.State["RAFALE_SUBPHASE"] = string(RafaleSubPhaseRoundEnd)
+		return rafaleCardAdvanceResult{roundEnded: true, cardID: cardID}
+	}
+
+	drawn, err := e.drawNextRafaleUnsafe()
+	if err != nil {
+		log.Printf("[Engine] RAFALE card %s: pool exhausted mid-round, ending mini-round", cardID)
+		e.state.MotionActive.State["RAFALE_EXHAUSTED"] = true
+		e.state.MotionActive.State["RAFALE_SUBPHASE"] = string(RafaleSubPhaseRoundEnd)
+		return rafaleCardAdvanceResult{roundEnded: true, cardID: cardID}
+	}
+
+	e.state.MotionActive.State["RAFALE_CURRENT_QUESTION"] = RafaleCurrent{
+		ID: drawn.ID, Question: drawn.Question,
+		Category: string(drawn.Category), Difficulty: drawn.Difficulty,
+	}
+	e.state.MotionActive.State["RAFALE_ASKED_COUNT"] = motionActiveRafaleAskedCount(e.state.MotionActive.State) + 1
+	e.refreshRafaleCardPoolRemainingUnsafe(card)
+
+	questionTime := card.RafaleQuestionTime
+	if questionTime <= 0 {
+		questionTime = 3
+	}
+
+	return rafaleCardAdvanceResult{
+		cardID: cardID, nextQuestionID: drawn.ID, nextAnswer: drawn.Answer, nextQuestionTime: questionTime,
+	}
+}
+
+// fireRafaleCardAdvanceCallbacks performs the UNLOCKED side effects of one
+// card-scoped RAFALE advance — the card-scoped counterpart of
+// fireRafaleAdvanceCallbacks, shared by RafaleValidateCard/RafaleInvalidateCard
+// and the question-timer's own expiry handling (processRafaleQuestionTick's
+// card branch), same "both paths broadcast identically" reasoning as the
+// classic round (contract §6.1). Must be called with e.mu NOT held.
+func (e *Engine) fireRafaleCardAdvanceCallbacks(result rafaleCardAdvanceResult) {
+	if result.roundEnded {
+		if e.OnStateChange != nil {
+			// Not a real phase transition (Phase/MotionSubPhase stay put,
+			// contract §14.3) — reused purely as "please rebroadcast full
+			// state", same convention as the classic round's own use of this
+			// callback for a non-transition (fireRafaleAdvanceCallbacks).
+			e.OnStateChange(PhaseStarted)
+		}
+		return
+	}
+	if e.OnRafaleCardAnswer != nil {
+		e.OnRafaleCardAnswer(result.cardID, result.nextQuestionID, result.nextAnswer)
+	}
+	e.StartRafaleQuestionTimer(result.nextQuestionTime)
+	if e.OnStateChange != nil {
+		e.OnStateChange(PhaseStarted)
+	}
+}
+
+// ErrRafaleCardNotFound is returned by RafaleValidateCard/RafaleInvalidateCard
+// when cardID isn't a live RAFALE mini-round in progress — contract §14.5.
+var ErrRafaleCardNotFound = errors.New("rafale_card_not_in_question")
+
+// RafaleValidateCard processes a card-scoped RAFALE_VALIDATE (contract
+// §14.5 step 3, `MOTION_CARD_ID` already accepted by
+// cmd/server/main.go's ValidateCardScope check): the active card's current
+// question was judged correct. The card-scoped counterpart of
+// RafaleValidate.
+func (e *Engine) RafaleValidateCard(cardID string) error {
+	e.mu.Lock()
+	if e.state.MotionSelected != cardID {
+		e.mu.Unlock()
+		return ErrRafaleCardNotFound
+	}
+	result := e.advanceRafaleCardUnsafe(true)
+	e.mu.Unlock()
+
+	if result.guardFailed {
+		return ErrRafaleCardNotFound
+	}
+	e.fireRafaleCardAdvanceCallbacks(result)
+	return nil
+}
+
+// RafaleInvalidateCard processes a card-scoped RAFALE_INVALIDATE (contract
+// §14.5 step 3) — same advance/end logic as RafaleValidateCard, without the
+// counter increment (correct=false). The card-scoped counterpart of
+// RafaleInvalidate.
+func (e *Engine) RafaleInvalidateCard(cardID string) error {
+	e.mu.Lock()
+	if e.state.MotionSelected != cardID {
+		e.mu.Unlock()
+		return ErrRafaleCardNotFound
+	}
+	result := e.advanceRafaleCardUnsafe(false)
+	e.mu.Unlock()
+
+	if result.guardFailed {
+		return ErrRafaleCardNotFound
+	}
+	e.fireRafaleCardAdvanceCallbacks(result)
+	return nil
 }
 
 // FlipMemoryCard handles flipping a Memory card with game logic
@@ -6027,7 +6414,8 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 				card := &e.state.Question.MotionCards[i]
 				if card.ID == cardID {
 					effUnits, unitsTotal := units, 0
-					if card.EffectiveType() == QuestionTypeMemory {
+					switch card.EffectiveType() {
+					case QuestionTypeMemory:
 						// #187 contract §9.3 — the server is sole authority
 						// on a MEMORY card's outcome: derive Units AND
 						// UnitsTotal from the card's own active grid state,
@@ -6037,6 +6425,15 @@ func (e *Engine) DoneMotionCard(cardID string, winnerTeam string, units int) (in
 						// in this new mechanism, exactly the dette #12 owes
 						// to close.
 						effUnits, unitsTotal = e.memoryCardOutcomeUnsafe(card)
+					case QuestionTypeRafale:
+						// #217 (v9.0.0, contracts/rafale.md §14.4) — same
+						// guard as MEMORY above: the server derives Units
+						// AND UnitsTotal from the card's own mini-round
+						// state (RAFALE_CORRECT_COUNT/RAFALE_ASKED_COUNT),
+						// ignoring whatever UNITS the client sent, for the
+						// exact same reason (STARS_PRORATA makes Units the
+						// score itself).
+						effUnits, unitsTotal = e.rafaleCardOutcomeUnsafe(card)
 					}
 					pts := e.motionCardPointsForOutcome(card, effUnits, unitsTotal)
 					ok := pts > 0
