@@ -14,6 +14,7 @@ import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategorySelector from '../components/CategorySelector'
 import CategoryFilterBar from '../components/CategoryFilterBar'
+import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
@@ -1657,25 +1658,32 @@ export default function QuestionsPage() {
                 </div>
 
                 {/* Question Type Selector — généré depuis la table unique
-                    utils/questionTypeMeta.js (#183/A-F2), regroupement visuel
-                    3+2 conservé à l'identique (rows CSS .type-filter-row) */}
+                    utils/questionTypeMeta.js (#183/A-F2).
+                    🔴 Retour QUALIF v9.0.0.4 (Lot B, #214) — l'ancien
+                    regroupement figé `[slice(0,3), slice(3)]` (2 rangées) a
+                    été écrit pour 5 types ; ENTRACTE (#214, 6e) puis un 7e
+                    type ont fait déborder la seconde rangée (4 boutons
+                    `flex: 1` sans `flex-wrap`). Une SEULE rangée désormais,
+                    construite contre QUESTION_TYPES (jamais un découpage par
+                    tranche codé en dur) — le retour à la ligne est porté par
+                    la règle CSS `.type-filter-row`/`.type-btn` (C4,
+                    QuestionsPage.css), partagée avec le sélecteur de type de
+                    carte MEMOTION ci-dessous. */}
                 <div className="form-group">
                   <label>Type de question</label>
                   <div className="type-filter-grid">
-                    {[QUESTION_TYPES.slice(0, 3), QUESTION_TYPES.slice(3)].map((row, rowIdx) => (
-                      <div className="type-filter-row" key={rowIdx}>
-                        {row.map(t => (
-                          <button
-                            key={t.key}
-                            type="button"
-                            className={`type-btn ${t.key.toLowerCase()} ${formData.type === t.key ? 'active' : ''}`}
-                            onClick={() => handleInputChange('type', t.key)}
-                          >
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
+                    <div className="type-filter-row">
+                      {QUESTION_TYPES.map(t => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          className={`type-btn ${t.key.toLowerCase()} ${formData.type === t.key ? 'active' : ''}`}
+                          onClick={() => handleInputChange('type', t.key)}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -2414,6 +2422,7 @@ export default function QuestionsPage() {
                                         onClick={() => toggleMotionCardRafaleCategory(card.id, c.key)}
                                       >
                                         {card.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
+                                        <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
                                         {c.name}
                                       </button>
                                     ))}
@@ -2598,6 +2607,7 @@ export default function QuestionsPage() {
                             onClick={() => toggleRafaleCategory(c.key)}
                           >
                             {formData.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
+                            <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
                             {c.name}
                           </button>
                         ))}
