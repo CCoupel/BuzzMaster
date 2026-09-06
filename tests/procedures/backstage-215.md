@@ -19,6 +19,16 @@ trois briques déplacées avaient déjà leurs points d'accès (`UPDATE_QUIZ_MET
 
 ---
 
+## ⚠️ Mise à jour Batch 2 — retour QUALIF v9.0.0.4 (Lot B / #214)
+
+#214 a ajouté un 7e type de question (Entracte) sans toucher au sélecteur de type de `/admin/quiz`
+→ onglet Questions, écrit pour 5 types (regroupement figé en 2 rangées) — la seconde rangée porte
+désormais 4 boutons qui débordent en largeur réduite. **Scénario 10 ci-dessous**, corrigé dans ce
+lot (même règle CSS que le sélecteur de type de carte MEMOTION, `tests/procedures/
+rafale-memotion-217.md` Scénario 5, étape 6 — RAFALE y est devenu nestable pour la même raison).
+
+---
+
 ## Prérequis
 
 - [ ] Environnement : QUALIF ou LOCAL, serveur démarré
@@ -170,6 +180,21 @@ corrigé par #215 — l'ancienne cible n'existe plus sur cette page).
 
 ---
 
+## Scénario 10 — Sélecteur de type de question ne déborde plus (Lot B, retour QUALIF v9.0.0.4)
+
+**Objectif** : Vérifier que les 7 types de question restent tous accessibles, y compris en largeur
+réduite.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Sur `/admin/quiz` (onglet Questions), ouvrir le formulaire d'ajout de question, observer le sélecteur « Type de question » en pleine largeur d'écran | Les 7 types (Speedy, QCM, Memory, Memotion, Ardoise, Rafale, Entracte) sont tous visibles, aucun tronqué | | |
+| 2 | Réduire la largeur de la fenêtre (ou passer en vue tablette portrait) | Les boutons passent à la ligne proprement (`flex-wrap`) — aucun bouton coupé, poussé hors cadre, ni texte tronqué | | |
+| 3 | Cliquer sur « Entracte » (dernier type de la liste) | Le type est bien sélectionné (bouton actif), quelle que soit la largeur d'écran testée à l'étape 2 | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Critères de Validation
 
 - [ ] Les 3 onglets Backstage fonctionnent et persistent leurs données
@@ -180,6 +205,8 @@ corrigé par #215 — l'ancienne cible n'existe plus sur cette page).
 - [ ] Aucun favori `/admin/rafale` cassé
 - [ ] Navigation réelle (pas de scroll résiduel) depuis la modale IA
 - [ ] Navbar cohérente avec la nouvelle structure
+- [ ] Sélecteur de type de question (7 types) ne déborde/ne tronque jamais, y compris en largeur
+      réduite (Scénario 10)
 
 ---
 
