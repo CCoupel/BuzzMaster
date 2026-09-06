@@ -726,11 +726,13 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 
 	catMap := make(map[string]*catAccum)
 
-	for _, event := range history {
-		if event.EventType != "POINTS_AWARDED" || event.Points <= 0 {
-			continue
-		}
-		key := event.QuestionCategory
+	// creditCategory credits `points` (a whole event's Points, or one of its
+	// CategoryBreakdown shares — Lot A+1, v9.0.0) to `key`'s bucket. Factored
+	// out of the loop below so a breakdown can fan out across several
+	// categories using EXACTLY the same accumulation logic as a normal,
+	// single-category event — no duplicated bucket/team/player bookkeeping
+	// to keep in sync between the two cases.
+	creditCategory := func(event game.GameEvent, key string, points int) {
 		if key == "" {
 			key = "UNKNOWN"
 		}
@@ -747,7 +749,7 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 			}
 			catMap[key] = acc
 		}
-		acc.totalPoints += event.Points
+		acc.totalPoints += points
 
 		switch event.WinnerType {
 		case "TEAM":
@@ -757,7 +759,7 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 					ts = &TeamScore{Name: event.TeamName, Color: event.TeamColor}
 					acc.teams[event.TeamName] = ts
 				}
-				ts.Points += event.Points
+				ts.Points += points
 			}
 		case "PLAYER":
 			if event.PlayerName != "" {
@@ -767,8 +769,29 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 					ps = &PlayerScore{Name: event.PlayerName, Team: event.TeamName}
 					acc.players[playerKey] = ps
 				}
-				ps.Points += event.Points
+				ps.Points += points
 			}
+		}
+	}
+
+	for _, event := range history {
+		if event.EventType != "POINTS_AWARDED" || event.Points <= 0 {
+			continue
+		}
+
+		// Lot A+1 (v9.0.0, plan §2.3/§2.4) — a classic RAFALE event carrying
+		// a CategoryBreakdown fans out across each category it names,
+		// crediting only its own share (the shares sum to EXACTLY
+		// event.Points — game.RafaleCategoryBreakdown's own guarantee).
+		// Every other event (no breakdown: not RAFALE, or a RAFALE round
+		// with no configured category) keeps today's behavior exactly: one
+		// credit, to QuestionCategory — non-regression.
+		if len(event.CategoryBreakdown) > 0 {
+			for cat, pts := range event.CategoryBreakdown {
+				creditCategory(event, cat, pts)
+			}
+		} else {
+			creditCategory(event, event.QuestionCategory, event.Points)
 		}
 	}
 

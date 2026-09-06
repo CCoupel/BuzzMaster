@@ -544,9 +544,11 @@ func (a *App) setupCallbacks() {
 	}
 
 	// RAFALE per-question countdown — lightweight, all clients, no full
-	// GameState re-emission (contract §5.2).
-	a.engine.OnRafaleQuestionTick = func(questionTime int) {
-		a.broadcastRafaleTick(questionTime)
+	// GameState re-emission (contract §5.2). cardID (C1, retour QUALIF
+	// v9.0.0.4) — "" for the classic round, the active card's ID for a
+	// #217 mini-round; see broadcastRafaleTick's own comment.
+	a.engine.OnRafaleQuestionTick = func(cardID string, questionTime int) {
+		a.broadcastRafaleTick(cardID, questionTime)
 	}
 
 	// RAFALE active-team LED grid (v8.0.0, #199 task 36, contract §8.3).
@@ -2798,10 +2800,19 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 	questionID := ""
 	questionText := ""
 	questionCategory := ""
+	var categoryBreakdown map[string]int
 	if state.Question != nil {
 		questionID = state.Question.ID
 		questionText = state.Question.Question
 		questionCategory = string(state.Question.Category)
+		// Lot A+1 (v9.0.0, plan §2.3) — a classic RAFALE round's own
+		// Category is meaningless (it uses RAFALE_CATEGORIES, a multi-select,
+		// not a single Category — #216); split the award across the
+		// categories that actually produced it instead of writing the empty
+		// string into history.json (the "Inconnue" defect).
+		if state.Question.Type == game.QuestionTypeRafale {
+			categoryBreakdown = game.RafaleCategoryBreakdown(state.Question, payload.Points, state.RafaleTeamCategoryCounters[teamName])
+		}
 	}
 	catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(questionCategory)
 	event := game.GameEvent{
@@ -2821,6 +2832,7 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 		PlayerName:          bumperName,
 		PlayerColor:         playerColor,
 		Points:              payload.Points,
+		CategoryBreakdown:   categoryBreakdown,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -2853,10 +2865,16 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	questionID := ""
 	questionText := ""
 	questionCategory := ""
+	var categoryBreakdown map[string]int
 	if state.Question != nil {
 		questionID = state.Question.ID
 		questionText = state.Question.Question
 		questionCategory = string(state.Question.Category)
+		// Lot A+1 (v9.0.0, plan §2.3) — see handleBumperPoints' own comment
+		// on this same branch.
+		if state.Question.Type == game.QuestionTypeRafale {
+			categoryBreakdown = game.RafaleCategoryBreakdown(state.Question, payload.Points, state.RafaleTeamCategoryCounters[payload.Team])
+		}
 	}
 	catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(questionCategory)
 	event := game.GameEvent{
@@ -2874,6 +2892,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 		TeamName:            payload.Team,
 		TeamColor:           teamColor,
 		Points:              payload.Points,
+		CategoryBreakdown:   categoryBreakdown,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -4904,8 +4923,17 @@ func rafaleNextPayload(next *game.RafaleCurrent) *protocol.RafaleNextPayload {
 
 // broadcastRafaleTick sends RAFALE_TICK to all clients — the lightweight
 // per-question countdown, contract §5.2, no full GameState re-emission.
-func (a *App) broadcastRafaleTick(questionTime int) {
-	payload := protocol.RafaleTickPayload{QuestionTime: questionTime}
+//
+// cardID (C1, retour QUALIF v9.0.0.4) — "" for the classic manche-scoped
+// round (MOTION_CARD_ID absent on the wire, unchanged shape), the active
+// card's ID for a #217 mini-round. ❌ Do not ALSO patch
+// GameState.RafaleQuestionTime here for a card-hosted tick — that field
+// belongs to the classic round only (contract §14.2) and is already
+// correctly left untouched by StartRafaleQuestionTimer/
+// processRafaleCardQuestionTickUnsafe (engine.go, fixed in caae3d49); this
+// broadcast is purely additive on top of that.
+func (a *App) broadcastRafaleTick(cardID string, questionTime int) {
+	payload := protocol.RafaleTickPayload{QuestionTime: questionTime, CardScope: protocol.CardScope{MotionCardID: cardID}}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionRafaleTick, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
