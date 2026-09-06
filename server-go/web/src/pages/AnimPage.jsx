@@ -13,6 +13,7 @@ import { prepareWaitReason } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
+import { effectiveRafaleCategories } from '../utils/rafaleEffective'
 import { getMotionCardPoints } from '../utils/motionGrid'
 import { getPhaseBadge } from '../utils/phaseBadge'
 import { canAwardPoints } from '../utils/canAwardPoints'
@@ -199,7 +200,19 @@ export default function AnimPage() {
   const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
 
   const question = gameState.question
-  const categoryInfo = question?.CATEGORY ? categoryMeta(question.CATEGORY, customCategories) : null
+  // 🔴 Retour QUALIF v9.0.0.4 (point A+5) — depuis #216 une manche RAFALE
+  // porte une LISTE de catégories (RAFALE_CATEGORIES), question.CATEGORY
+  // (singulier) est vide : la chip catégorie disparaissait entièrement pour
+  // ce type dans la barre méta de l'animateur. `effectiveRafaleCategories`
+  // (#216, repli mono automatique) — une chip PAR catégorie retenue, jamais
+  // concaténées (même discipline que les pastilles READY, A1).
+  const categoryInfoList = question?.TYPE === 'RAFALE'
+    ? effectiveRafaleCategories(question)
+        .map(cat => ({ key: cat, meta: categoryMeta(cat, customCategories) }))
+        .filter(entry => entry.meta)
+    : (question?.CATEGORY
+        ? [{ key: question.CATEGORY, meta: categoryMeta(question.CATEGORY, customCategories) }].filter(entry => entry.meta)
+        : [])
   // #166/F3 — icône + libellé de type (D4), repli SPEEDY géré par
   // getQuestionTypeMeta lui-même (même convention que #163).
   const typeMeta = getQuestionTypeMeta(question?.TYPE)
@@ -706,12 +719,12 @@ export default function AnimPage() {
                       <span className="anim-question-counter-total">/{questionPosition.total}</span>
                     </span>
                   )}
-                  {categoryInfo && (
-                    <span className="anim-chip">
-                      {categoryInfo.icon && <span className="anim-chip-glyph">{categoryInfo.icon}</span>}
-                      {categoryInfo.label}
+                  {categoryInfoList.map(({ key, meta }) => (
+                    <span className="anim-chip" key={key}>
+                      {meta.icon && <span className="anim-chip-glyph">{meta.icon}</span>}
+                      {meta.label}
                     </span>
-                  )}
+                  ))}
                   <span className="anim-chip">
                     <span className="anim-chip-glyph">{typeMeta.icon}</span>
                     {typeMeta.label}

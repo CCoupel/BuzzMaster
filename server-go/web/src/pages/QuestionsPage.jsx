@@ -77,10 +77,13 @@ export default function QuestionsPage() {
     // manche redevient multi : rafaleCategories/rafaleDifficulties (listes,
     // au moins un élément chacune) + rafalePointsByDifficulty (barème par
     // étoile, saisie libre, clé = difficulté 1..3, repli sur POINTS générique
-    // si absent/0 pour une difficulté donnée). rafaleDifficulty (mono) est
-    // conservé UNIQUEMENT pour charger une manche enregistrée avant #216
-    // (voir handleQuestionClick) — plus jamais écrit depuis cet éditeur.
-    rafaleDifficulty: 1,
+    // si absent/0 pour une difficulté donnée).
+    // 🔴 Retour QUALIF v9.0.0.4 (point A+7) — l'ancien `rafaleDifficulty`
+    // (mono, camelCase) a été retiré : `effectiveRafaleDifficulties(question)`
+    // (utils/rafaleEffective.js) porte DÉJÀ le repli mono → liste pour une
+    // manche enregistrée avant #216 (chargé directement dans
+    // `rafaleDifficulties` par handleQuestionClick) — `rafaleDifficulty`
+    // n'était plus lu nulle part (ni rendu, ni handleSubmit), résidu mort.
     rafaleCategories: [],
     rafaleDifficulties: [],
     rafalePointsByDifficulty: {},
@@ -747,7 +750,6 @@ export default function QuestionsPage() {
       // EffectiveRafaleDifficulties, §3.3) : une manche enregistrée avant
       // #216 (CATEGORY/RAFALE_DIFFICULTY mono, listes absentes) charge
       // quand même ses valeurs dans l'éditeur multi, sans reconfiguration.
-      rafaleDifficulty: question.RAFALE_DIFFICULTY || 1,
       rafaleCategories: effectiveRafaleCategories(question),
       rafaleDifficulties: effectiveRafaleDifficulties(question),
       rafalePointsByDifficulty: question.RAFALE_POINTS_BY_DIFFICULTY || {},
@@ -887,7 +889,6 @@ export default function QuestionsPage() {
       ardoiseKeyboardType: 'AZERTY',
       // RAFALE fields — voir commentaire de l'état initial (useState
       // ci-dessus) pour le détail des champs.
-      rafaleDifficulty: 1,
       rafaleCategories: [],
       rafaleDifficulties: [],
       rafalePointsByDifficulty: {},

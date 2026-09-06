@@ -593,15 +593,19 @@ export default function GamePage() {
               style={!canSelectQuestion ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
             >
               <span className="nq-label">à suivre : #{nextUnplayedQuestion.ID}</span>
-              {nextUnplayedQuestion.CATEGORY && (() => {
-                const catMeta = categoryMeta(nextUnplayedQuestion.CATEGORY, customCategories)
+              {/* 🔴 Retour QUALIF v9.0.0.4 (point A+6, cosmétique) — depuis
+                  #216 une manche RAFALE porte une LISTE de catégories,
+                  CATEGORY (singulier) est vide : cette pastille disparaissait
+                  pour ce type. Une pastille par catégorie retenue. */}
+              {(nextUnplayedQuestion.TYPE === 'RAFALE' ? effectiveRafaleCategories(nextUnplayedQuestion) : (nextUnplayedQuestion.CATEGORY ? [nextUnplayedQuestion.CATEGORY] : [])).map(cat => {
+                const catMeta = categoryMeta(cat, customCategories)
                 if (!catMeta) return null
                 return (
-                  <span className="nq-badge nq-badge-cat" style={{ backgroundColor: catMeta.color }}>
-                    <CategoryBadge catKey={nextUnplayedQuestion.CATEGORY} customCategories={customCategories} size="sm" chip={false} />
+                  <span className="nq-badge nq-badge-cat" key={cat} style={{ backgroundColor: catMeta.color }}>
+                    <CategoryBadge catKey={cat} customCategories={customCategories} size="sm" chip={false} />
                   </span>
                 )
-              })()}
+              })}
               <span className="nq-badge nq-badge-type">{nextUnplayedQuestion.TYPE || 'SPEEDY'}</span>
               <span className="nq-title">
                 {(nextUnplayedQuestion.QUESTION || '').substring(0, 30)}{(nextUnplayedQuestion.QUESTION || '').length > 30 ? '…' : ''}
@@ -609,15 +613,19 @@ export default function GamePage() {
             </button>
           )}
           <div className="question-indicators">
-            {gameState.question?.CATEGORY && (() => {
-              const catMeta = categoryMeta(gameState.question.CATEGORY, customCategories)
+            {/* 🔴 Retour QUALIF v9.0.0.4 (point A+6, cosmétique) — même cause
+                racine que ci-dessus : `rafaleCategories` (déjà mémoïsé plus
+                haut via effectiveRafaleCategories) couvre la manche RAFALE
+                courante, un indicateur par catégorie retenue. */}
+            {(gameState.question?.TYPE === 'RAFALE' ? rafaleCategories : (gameState.question?.CATEGORY ? [gameState.question.CATEGORY] : [])).map(cat => {
+              const catMeta = categoryMeta(cat, customCategories)
               if (!catMeta) return null
               return (
-                <div className="category-indicator" style={{ backgroundColor: catMeta.color }} title={catMeta.label}>
-                  <CategoryBadge catKey={gameState.question.CATEGORY} customCategories={customCategories} size="sm" chip={false} />
+                <div className="category-indicator" key={cat} style={{ backgroundColor: catMeta.color }} title={catMeta.label}>
+                  <CategoryBadge catKey={cat} customCategories={customCategories} size="sm" chip={false} />
                 </div>
               )
-            })()}
+            })}
             {gameState.question?.POINTS_TARGET && (
               <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points à l\'équipe' : 'Points au joueur'}>
                 {gameState.question.POINTS_TARGET === 'TEAM' ? (

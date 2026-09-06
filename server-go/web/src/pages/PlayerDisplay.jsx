@@ -933,6 +933,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
   // Get category color for neon effect
   // Priority: MEMOTION team color > Memory team color > Category color > default
+  //
+  // 🔴 Retour QUALIF v9.0.0.4 (point A+4) — depuis #216 une manche RAFALE
+  // porte une LISTE de catégories (question.CATEGORY, singulier, est vide) :
+  // le néon perdait sa teinte pendant TOUTE la manche. `RAFALE_CURRENT_QUESTION.CATEGORY`
+  // (la question réellement tirée à l'instant présent) existe déjà et suit
+  // naturellement chaque question — même champ déjà lu par le bloc RAFALE TV
+  // dédié plus bas (`categoryMeta(current.CATEGORY, ...)`) — plutôt qu'un
+  // repli statique sur `effectiveRafaleCategories(question)[0]` qui figerait
+  // le néon sur une seule catégorie pour toute la manche même si plusieurs
+  // sont retenues.
   const neonCategoryColor = useMemo(() => {
     // MEMOTION: use current team color
     if (Array.isArray(gameState?.MEMOTION_CURRENT_TEAM_COLOR) && gameState.MEMOTION_CURRENT_TEAM_COLOR.length === 3) {
@@ -942,9 +952,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     if (Array.isArray(gameState?.MEMORY_CURRENT_TEAM_COLOR) && gameState.MEMORY_CURRENT_TEAM_COLOR.length === 3) {
       return `rgb(${gameState.MEMORY_CURRENT_TEAM_COLOR.join(',')})`
     }
+    // RAFALE : la catégorie suit la question tirée, pas la manche (§3.3 —
+    // question.CATEGORY n'existe plus depuis #216 pour ce type).
+    if (gameState?.question?.TYPE === 'RAFALE') {
+      return getCategoryColor(gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY)
+    }
     // Otherwise, use category color
     return getCategoryColor(gameState?.question?.CATEGORY)
-  }, [gameState?.question?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR, gameState?.MEMOTION_CURRENT_TEAM_COLOR])
+  }, [gameState?.question?.TYPE, gameState?.question?.CATEGORY, gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR, gameState?.MEMOTION_CURRENT_TEAM_COLOR])
 
   // Neon style variables
   const neonStyle = useMemo(() => {
