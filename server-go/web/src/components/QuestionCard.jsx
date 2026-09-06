@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import CategoryBadge from './CategoryBadge'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
+import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import './QuestionCard.css'
 
 // Export motion for pages that need AnimatePresence
@@ -52,6 +53,15 @@ export default function QuestionCard({
   const isMemory = question.TYPE === 'MEMORY'
   const isMemotion = question.TYPE === 'MEMOTION'
   const isArdoise = question.TYPE === 'ARDOISE'
+  const isRafale = question.TYPE === 'RAFALE'
+  // #216 (réouverture assumée de #107, maquette rafale-multi-216.html §01) —
+  // le bug d'affichage historique venait d'une carte lisant un champ CATEGORY
+  // unique alors que RAFALE en admet plusieurs : résolu ici par des chips
+  // multiples (une par catégorie ET par difficulté), jamais par une branche
+  // qui suppose une seule valeur. utils/rafaleEffective.js applique la même
+  // rétro-compatibilité mono → liste que le moteur (contrat §3.3).
+  const rafaleCategories = isRafale ? effectiveRafaleCategories(question) : []
+  const rafaleDifficulties = isRafale ? effectiveRafaleDifficulties(question) : []
   // Source unique des couleurs de badge de type (questionTypeMeta.js,
   // #183/A-F2) — remplace la liste CSS `.qcard-type-badge.type-*`
   // (QuestionCard.css) qui divergeait silencieusement du sélecteur de type
@@ -114,12 +124,22 @@ export default function QuestionCard({
 
       {/* Header row 2: Category, type, target, time, points */}
       <div className="qcard-header-row2">
-        {/* RAFALE (contrat rafale.md §3.3, bugfix 2026-08-29) — CATEGORY
-            est désormais une catégorie unique pour ce type, comme pour
-            tous les autres : le chemin générique suffit, plus de branche
-            isRafale dédiée (l'ancien RAFALE_CATEGORIES multi est retiré). */}
-        {question.CATEGORY && (
-          <CategoryBadge catKey={question.CATEGORY} customCategories={customCategories} size="sm" />
+        {/* #216 — RAFALE affiche autant de chips que de catégories ET de
+            difficultés sélectionnées (pas un badge unique) ; tous les autres
+            types gardent le badge de catégorie générique unique, inchangé. */}
+        {isRafale ? (
+          <>
+            {rafaleCategories.map(cat => (
+              <CategoryBadge key={cat} catKey={cat} customCategories={customCategories} size="sm" />
+            ))}
+            {rafaleDifficulties.map(d => (
+              <span key={d} className="qcard-rafale-diff-chip">{'★'.repeat(d)}</span>
+            ))}
+          </>
+        ) : (
+          question.CATEGORY && (
+            <CategoryBadge catKey={question.CATEGORY} customCategories={customCategories} size="sm" />
+          )
         )}
 
         <span className="qcard-type-badge" style={{ backgroundColor: typeMeta.color }}>

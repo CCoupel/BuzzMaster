@@ -143,6 +143,17 @@ function buttonSubLabel(key, state, phase, waitReason) {
  *   AnimRafaleQuestion.jsx pour le détail de chaque champ). `null`/absent
  *   avant que `AnimPage.jsx` ne les câble (jamais le cas en pratique dès
  *   qu'`isRafale`, mais évite un crash si le composant est monté isolément).
+ * @param {Object} [props.cardRafale] - RAFALE en carte MEMOTION (#217, contrat
+ *   rafale.md §14) — mêmes champs que `rafale` ci-dessus MOINS `teamName`/
+ *   `teamColorCss` (mode SOLO forcé, l'équipe est déjà affichée en L2 par
+ *   `AnimMotionActions`) et MOINS `next`/`nextCatMeta` (pas de pré-tirage en
+ *   carte, §14.2) — `showNext` vaut toujours `false`. `null` hors carte RAFALE.
+ * @param {boolean} [props.cardRafaleDisabled] - désactive VALIDE/INVALIDE
+ *   pour la carte RAFALE active (hors sous-cycle QUESTION, §14.3)
+ * @param {() => void} [props.onCardRafaleValidate] - émet RAFALE_VALIDATE
+ *   scopé `MOTION_CARD_ID` (contrat §14.5)
+ * @param {() => void} [props.onCardRafaleInvalidate] - émet RAFALE_INVALIDATE
+ *   scopé `MOTION_CARD_ID` (contrat §14.5)
  */
 export default function AnimConductPanel({
   phase,
@@ -172,6 +183,10 @@ export default function AnimConductPanel({
   onRafaleValidate,
   onRafaleInvalidate,
   rafale = null,
+  cardRafale = null,
+  cardRafaleDisabled = false,
+  onCardRafaleValidate,
+  onCardRafaleInvalidate,
 }) {
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
   const isQcm = question?.TYPE === 'QCM'
@@ -193,22 +208,39 @@ export default function AnimConductPanel({
     ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
     : 0
   // #187 cycle 4 (F1) — gain affiché sur le bouton d'attribution (L2,
-  // AnimMotionActions, sous-phase REVEAL) : pour une carte MEMORY en barème
-  // STARS_PRORATA (le défaut — POINTS_RULE absent ou MODE explicite
+  // AnimMotionActions, sous-phase REVEAL) : pour une carte en barème
+  // STARS_PRORATA (le défaut du TYPE — POINTS_RULE absent ou MODE explicite
   // "STARS_PRORATA", contrat §6.2/§6.3), le montant plein NE DOIT PAS être
-  // affiché — le serveur, seule autorité, crédite le prorata des paires
-  // trouvées. Une surcharge explicite STARS/FIXED/PER_UNIT sur la carte
-  // reste au barème étoiles plein (tout-ou-rien, §6.2). Sans ce branchement,
-  // l'animateur voit un montant différent de celui réellement attribué —
-  // c'est le défaut corrigé par ce cycle (computeStarsProrataPoints existait
-  // déjà, testée, mais n'était appelée nulle part).
-  const isMemoryStarsProrata = selectedMotionCard?.TYPE === 'MEMORY'
+  // affiché — le serveur, seule autorité, crédite le prorata réel. Une
+  // surcharge explicite STARS/FIXED/PER_UNIT sur la carte reste au barème
+  // étoiles plein (tout-ou-rien, §6.2). Sans ce branchement, l'animateur
+  // voit un montant différent de celui réellement attribué.
+  //
+  // 🔴 C3 (retour QUALIF v9.0.0.4, réouverture #187 cycle 4) — ce test
+  // testait `selectedMotionCard?.TYPE === 'MEMORY'` EN DUR : RAFALE devenu
+  // nestable (#217) avec le MÊME barème par défaut (contrat rafale.md §14.4)
+  // a reproduit exactement le même défaut (montant plein au lieu du
+  // prorata). Corrigé en testant la RÈGLE effective du TYPE
+  // (`defaultPointsRule`, utils/questionTypeMeta.js — miroir du registre Go,
+  // question-types.md §6.2), jamais le type lui-même — un 3e type nestable
+  // STARS_PRORATA futur n'aura donc pas à recorriger ce point une 3e fois.
+  const isStarsProrataCard = selectedMotionCard
+    && getQuestionTypeMeta(selectedMotionCard.TYPE).defaultPointsRule === 'STARS_PRORATA'
     && (!selectedMotionCard.POINTS_RULE?.MODE || selectedMotionCard.POINTS_RULE.MODE === 'STARS_PRORATA')
-  const motionCardPoints = isMemoryStarsProrata
+  // Units/UnitsTotal du prorata — propres à chaque type (contrat §9.3/§14.4) :
+  // MEMORY compte les paires trouvées sur le total de paires de la carte,
+  // RAFALE compte les bonnes réponses sur le nombre de questions posées
+  // (`cardRafale.correctCount`/`askedCount`, déjà résolus côté carte par
+  // `getTypeState`/`AnimPage.jsx`, mêmes noms que `typeState.rafale`).
+  const motionCardPoints = isStarsProrataCard
     ? computeStarsProrataPoints(
         selectedMotionCardStars,
-        cardMemory?.matchedPairs?.length || 0,
-        selectedMotionCard.MEMORY_PAIRS?.length || 0,
+        selectedMotionCard.TYPE === 'RAFALE'
+          ? (cardRafale?.correctCount || 0)
+          : (cardMemory?.matchedPairs?.length || 0),
+        selectedMotionCard.TYPE === 'RAFALE'
+          ? (cardRafale?.askedCount || 0)
+          : (selectedMotionCard.MEMORY_PAIRS?.length || 0),
       )
     : selectedMotionCardStars
   const modeLabel = question?.TYPE ? getQuestionTypeMeta(question.TYPE).label : null
@@ -253,6 +285,36 @@ export default function AnimConductPanel({
         globalErrors={cardMemory?.errors}
         onFlip={onFlipMemoryCard}
       />
+    ),
+    // #217 — carte RAFALE : mini-manche à plusieurs questions, pas une
+    // question fixe (contrairement à QCM/MEMORY ci-dessus) — L3 porte donc
+    // à la fois la question tirée EN COURS (`AnimRafaleQuestion`, même
+    // composant que la manche classique, `cardRafale` déjà résolu par
+    // `AnimPage.jsx`) ET les deux boutons qui avancent le sous-cycle
+    // (`AnimRafaleActions`) : contrairement à QCM/MEMORY, RAFALE n'a pas de
+    // geste propre en L2 pour une carte — cet emplacement reste occupé par
+    // le cycle générique `AnimMotionActions` (STOP CHRONO/RÉVÉLER/SANS
+    // VAINQUEUR, §14.5), donc VALIDE/INVALIDE n'ont nulle part d'autre où
+    // vivre. `card` (le paramètre) n'est pas consommé ici : la carte réelle
+    // à afficher est la question TIRÉE (`cardRafale.current`), pas la
+    // définition statique `MOTION_CARDS[i]` (catégories/difficultés
+    // choisies, jamais un énoncé).
+    // 🔴 C6b (retour QUALIF v9.0.0.4) — AUCUN chrono de question monté ici,
+    // délibérément : depuis C6 (PlayerDisplay.jsx), le double minuteur
+    // (durée de manche + durée par question) vit dans la zone haute de la
+    // TV, seule source de vérité visuelle pour l'animateur comme pour la
+    // régie. `AnimRafaleQuestion` n'affiche déjà aucun chrono (chips
+    // catégorie/difficulté/équipe/progression uniquement) — n'y ajouter
+    // aucun Timer/RafaleTimers ici reproduirait le doublon corrigé côté TV.
+    RAFALE: () => (
+      <div className="anim-card-rafale">
+        <AnimRafaleQuestion {...(cardRafale || {})} />
+        <AnimRafaleActions
+          disabled={cardRafaleDisabled}
+          onValidate={onCardRafaleValidate}
+          onInvalidate={onCardRafaleInvalidate}
+        />
+      </div>
     ),
   }
 

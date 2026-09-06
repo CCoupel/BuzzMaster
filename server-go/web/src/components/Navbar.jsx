@@ -131,9 +131,11 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const configItems = [
     { path: 'teams', label: 'Joueurs', icon: '👥' },
     { path: 'quiz', label: 'Quiz', icon: '❓' },
-    // RAFALE (milestone v8.0.0, #16/#197/#198) — réservoir de questions,
-    // page dédiée (App.jsx adminRoutes).
-    { path: 'rafale', label: 'Rafale', icon: '⚡' },
+    // Backstage (#215, milestone v9.0.0) — préparation de la partie (Quiz
+    // méta/Entracte/Fonds d'écran), extraite de la page Quiz. L'entrée
+    // "Rafale" est retirée : le réservoir devient un onglet de la page Quiz
+    // (App.jsx adminRoutes, /admin/rafale conservée en redirection).
+    { path: 'backstage', label: 'Backstage', icon: '🎭' },
   ]
 
   // Zone TV: affichage TV, joueurs et animateur

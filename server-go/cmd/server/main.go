@@ -9,6 +9,7 @@ import (
 	"buzzcontrol/web"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -118,6 +119,31 @@ func resolvePort(configPort, flagPort int) int {
 	return configPort
 }
 
+// resolvePortSource returns a short human-readable description of where the
+// effective HTTP port came from — surfaced in HTTPServer's bind-wait log
+// messages (#220 acceptance criterion: "le message d'attente nomme le port
+// résolu et sa provenance"). Reads config.json's raw bytes independently of
+// config.Load/ApplyDefaults purely to tell an explicit http_port in the file
+// apart from the code default (both of which config.Load already merges into
+// one int by the time main() sees it) — best-effort only, this is diagnostic
+// text, never used for any decision.
+func resolvePortSource(configPath string, flagPort, effectivePort int) string {
+	if flagPort > 0 {
+		return fmt.Sprintf("--port flag (%d)", flagPort)
+	}
+	if data, err := os.ReadFile(configPath); err == nil {
+		var probe struct {
+			Server struct {
+				HTTPPort int `json:"http_port"`
+			} `json:"server"`
+		}
+		if json.Unmarshal(data, &probe) == nil && probe.Server.HTTPPort != 0 {
+			return fmt.Sprintf("config.json (%d)", probe.Server.HTTPPort)
+		}
+	}
+	return fmt.Sprintf("code default (%d)", effectivePort)
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("=== BuzzControl Server (Go) ===")
@@ -138,6 +164,10 @@ func main() {
 
 	// --port flag overrides config.json when provided
 	cfg.Server.HTTPPort = resolvePort(cfg.Server.HTTPPort, *portFlag)
+	// #220: remembered for HTTPServer's bind-wait log messages (SetPortSource
+	// below, once app.httpServer exists) — computed here, not later, so it
+	// reflects the exact same config.json/--port precedence as the line above.
+	portSource := resolvePortSource("config.json", *portFlag, cfg.Server.HTTPPort)
 
 	// Override version with embedded value (set via -ldflags at build time)
 	if Version != "dev" {
@@ -172,6 +202,7 @@ func main() {
 
 	// Initialize components
 	app.init()
+	app.httpServer.SetPortSource(portSource) // #220 — see resolvePortSource's doc comment
 
 	// Try to load saved teams and bumpers from disk
 	teamsLoaded := app.engine.LoadTeams() == nil && len(app.engine.GetTeamsAndBumpers().Teams) > 0
@@ -265,8 +296,39 @@ func main() {
 	// that call's own removed-code comment in init() for why.
 	app.refreshEntracteImageIsCustom()
 
+	// Install signal handling BEFORE app.start() (#220): HTTPServer.Start now
+	// blocks synchronously until the port is bound (or ctx is cancelled), so
+	// Ctrl+C must be able to interrupt THAT wait too, not just the idle wait
+	// further down — previously signal.Notify only ran after app.start() had
+	// already returned, so a Ctrl+C during a long port-busy/EACCES retry was
+	// silently dropped until the OS's own SIGINT default (or a second signal)
+	// killed the process. A signal is delivered to sigCh at most once, so a
+	// single goroutine owns cancelling appCtx from it — the wait after
+	// app.start() below reacts to that same cancellation via appCtx.Done(),
+	// never a second read of sigCh.
+	// os.Interrupt catches CTRL_CLOSE_EVENT on Windows (console window closed)
+	// in addition to the standard SIGINT / SIGTERM.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	go func() {
+		<-sigCh
+		server.LogInfo(game.LogComponentApp, "Shutdown signal received")
+		appCancel()
+	}()
+
 	// Start servers
 	if err := app.start(); err != nil {
+		if errors.Is(err, context.Canceled) {
+			// Startup was interrupted by the signal handler above — e.g.
+			// Ctrl+C while HTTPServer.Start was still waiting on a busy or
+			// permission-denied port. Not a failure: shut down whatever did
+			// start and exit cleanly, no os.Exit (#220: never os.Exit on a
+			// bind error, and this isn't even a bind error, just a request
+			// to stop waiting for one).
+			server.LogInfo(game.LogComponentApp, "Startup interrupted before the server finished binding")
+			app.stop()
+			return
+		}
 		server.LogError(game.LogComponentApp, "Failed to start: %v", err)
 		os.Exit(1)
 	}
@@ -276,12 +338,10 @@ func main() {
 	// Display all accessible URLs and open browser if enabled
 	displayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
 
-	// Wait for shutdown signal.
-	// os.Interrupt catches CTRL_CLOSE_EVENT on Windows (console window closed)
-	// in addition to the standard SIGINT / SIGTERM.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	<-sigCh
+	// Wait for shutdown — appCtx is cancelled exactly once, by the goroutine
+	// installed above. If that already happened during startup, app.start()
+	// would have returned early above and this point would never be reached.
+	<-appCtx.Done()
 
 	server.LogInfo(game.LogComponentApp, "Shutting down...")
 	app.stop()
@@ -484,14 +544,27 @@ func (a *App) setupCallbacks() {
 	}
 
 	// RAFALE per-question countdown — lightweight, all clients, no full
-	// GameState re-emission (contract §5.2).
-	a.engine.OnRafaleQuestionTick = func(questionTime int) {
-		a.broadcastRafaleTick(questionTime)
+	// GameState re-emission (contract §5.2). cardID (C1, retour QUALIF
+	// v9.0.0.4) — "" for the classic round, the active card's ID for a
+	// #217 mini-round; see broadcastRafaleTick's own comment.
+	a.engine.OnRafaleQuestionTick = func(cardID string, questionTime int) {
+		a.broadcastRafaleTick(cardID, questionTime)
 	}
 
 	// RAFALE active-team LED grid (v8.0.0, #199 task 36, contract §8.3).
 	a.engine.OnRafaleTeamsChanged = func() {
 		a.sendLEDSetRafaleTeams()
+	}
+
+	// RAFALE-in-MEMOTION-card (#217, v9.0.0, contract §14.5/§14.6) — fires
+	// on each RAFALE_VALIDATE/INVALIDATE advance within a card's own
+	// mini-round (never at round start: handleMotionFlip broadcasts that
+	// first answer directly via broadcastRafaleCardAnswer, since starting
+	// the round is a direct engine call from main.go, not itself wrapped
+	// in a callback). Same admin+anim-only channel as classic
+	// OnRafaleAnswer above — see broadcastRafaleCardAnswer's own comment.
+	a.engine.OnRafaleCardAnswer = func(cardID, id, answer string) {
+		a.broadcastRafaleCardAnswer(cardID, id, answer)
 	}
 
 	// #187 cycle 3 briefly wired engine.OnMotionCardAutoRevealed here — a
@@ -948,23 +1021,33 @@ func (a *App) start() error {
 	// Start ACK manager background goroutine (v3.8.0); uses app context for clean shutdown.
 	go a.ackManager.Start(a.ctx)
 
-	// Start UDP broadcaster
+	// Start UDP broadcaster — this only opens the outbound send socket, it
+	// does not announce anything yet (see BroadcasterManager.Start below,
+	// gated on the HTTP bind), so starting it before HTTP is harmless.
 	if err := a.udpBcast.Start(); err != nil {
 		return err
 	}
 	a.logger.Info(game.LogComponentUDP, "UDP broadcaster started on port %d", server.BuzzerDiscoveryPort)
 
-	// Start BUZZ_SERVER heartbeat broadcasts for automatic IP discovery
-	a.broadcaster.Start()
-	a.logger.Info(game.LogComponentUDP, "BroadcasterManager started (interval=5s, http_port=%d)", a.config.Server.HTTPPort)
-
-	// Start HTTP server
-	if err := a.httpServer.Start(); err != nil {
+	// Start HTTP server. #220: Start now BLOCKS until the port is actually
+	// bound, or a.ctx is cancelled — nothing that announces this server's
+	// presence to buzzers (UDP heartbeat, mDNS) may start before this
+	// returns successfully, or they'd be pointed at a dead endpoint while
+	// the bind is still retrying (busy port, or a permission-denied port
+	// looping at its own slow cadence).
+	if err := a.httpServer.Start(a.ctx); err != nil {
 		return err
 	}
 	a.logger.Info(game.LogComponentHTTP, "HTTP server started on port %d", a.config.Server.HTTPPort)
 
-	// Start mDNS server (non-fatal if it fails)
+	// Start BUZZ_SERVER heartbeat broadcasts for automatic IP discovery — only
+	// now that HTTP has actually bound (#220; previously this started before
+	// the HTTP listener even attempted its first bind).
+	a.broadcaster.Start()
+	a.logger.Info(game.LogComponentUDP, "BroadcasterManager started (interval=5s, http_port=%d)", a.config.Server.HTTPPort)
+
+	// Start mDNS server (non-fatal if it fails) — likewise gated on the HTTP
+	// bind having actually succeeded (#220).
 	if err := a.mdnsServer.Start(); err != nil {
 		a.logger.Warn(game.LogComponentApp, "Failed to start mDNS: %v", err)
 	}
@@ -2380,6 +2463,24 @@ func (a *App) handleMotionSelect(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
+// findMotionCard looks up a MotionCard by ID in the current Question's
+// grid. Returns nil if there's no active Question or no matching card —
+// used only for reading a nestable type's own TypedContent fields (here:
+// RAFALE_ROUND_TIME, #217), never to mutate engine state directly (that
+// always goes through an Engine method, per the project's mutex
+// discipline).
+func (a *App) findMotionCard(state game.GameState, cardID string) *game.MotionCard {
+	if state.Question == nil {
+		return nil
+	}
+	for i := range state.Question.MotionCards {
+		if state.Question.MotionCards[i].ID == cardID {
+			return &state.Question.MotionCards[i]
+		}
+	}
+	return nil
+}
+
 // handleMotionFlip processes MEMOTION_FLIP: transitions selected card to QUESTION face and starts timer.
 func (a *App) handleMotionFlip(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "MEMOTION_FLIP")
@@ -2389,8 +2490,36 @@ func (a *App) handleMotionFlip(msg *protocol.Message) {
 		return
 	}
 
-	// Start per-card timer if Question.Time > 0
 	state := a.engine.GetState()
+
+	// #217 (v9.0.0, contract §14.5) — a RAFALE card starts its OWN
+	// mini-round right after the generic flip: draw the first question,
+	// start its own round timer (MotionCard.RAFALE_ROUND_TIME, NOT
+	// Question.TIME — contract §14.3's "durée propre"), start the shared
+	// per-question ticker, and broadcast the expected answer on the
+	// restricted admin+anim channel. The generic MEMOTION host itself
+	// (SelectMotionCard/FlipMotionCard/RevealMotionCard) never learns
+	// about RAFALE — this branch lives entirely in this dispatch layer
+	// (#184's agnosticity test, contract §10; §14.7 declares this as one
+	// of the three declared touch points).
+	if state.MotionActive.Type == game.QuestionTypeRafale {
+		cardID := state.MotionSelected
+		questionID, answer, questionTime, err := a.engine.StartRafaleMotionCardRound(cardID)
+		if err != nil {
+			server.LogWarn(game.LogComponentEngine, "MEMOTION_FLIP: RAFALE card round could not start: %v (cardId=%s)", err, cardID)
+			a.broadcastUpdate()
+			return
+		}
+		if card := a.findMotionCard(state, cardID); card != nil && card.RafaleRoundTime > 0 {
+			a.engine.StartMotionCardTimer(card.RafaleRoundTime)
+		}
+		a.engine.StartRafaleQuestionTimer(questionTime)
+		a.broadcastRafaleCardAnswer(cardID, questionID, answer)
+		a.broadcastUpdate()
+		return
+	}
+
+	// Start per-card timer if Question.Time > 0 (every other nestable type)
 	if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
 		var delay int
 		if _, err2 := fmt.Sscanf(state.Question.Time, "%d", &delay); err2 == nil && delay > 0 {
@@ -2530,13 +2659,50 @@ func (a *App) handleMotionSetTeams(msg *protocol.Message) {
 	a.sendLEDSetAllBuzzers()
 }
 
+// parseRafaleCardScope extracts the optional MOTION_CARD_ID from a
+// RAFALE_VALIDATE/RAFALE_INVALIDATE payload (#217, contract §14.5/§9). Both
+// actions historically carried no payload at all, so msg.Msg may be nil or
+// empty — that's the classic manche-scoped case, not a parse error.
+func parseRafaleCardScope(msg *protocol.Message) string {
+	if len(msg.Msg) == 0 {
+		return ""
+	}
+	var payload protocol.RafaleCardActionPayload
+	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
+		server.LogWarn(game.LogComponentApp, "RAFALE_VALIDATE/INVALIDATE: failed to parse MSG, treating as classic round: %v", err)
+		return ""
+	}
+	return payload.MotionCardID
+}
+
 // handleRafaleValidate processes RAFALE_VALIDATE (contract rafale.md §5.1):
-// the current question's answer was judged correct. All broadcasting
-// (RAFALE_ANSWER, RAFALE_TICK restart, full UPDATE) is handled internally
-// by the engine via the OnRafaleAnswer/OnStateChange callbacks (setupCallbacks
-// below) — unlike handleMotionDone above, this handler has nothing left to
-// broadcast itself once the engine call returns.
+// the current question's answer was judged correct.
+//
+// #217 (v9.0.0, contract §14.5/§9) — an optional MOTION_CARD_ID scopes this
+// to a MEMOTION card's own RAFALE mini-round instead of the classic
+// manche-scoped round; absent/empty ⇒ classic behavior, unchanged. Card
+// scope is validated explicitly via ValidateCardScope first (same
+// visibility as FLIP_MEMORY_CARD's own check, handleFlipMemoryCard above)
+// before routing to RafaleValidateCard.
+//
+// All broadcasting (RAFALE_ANSWER, RAFALE_TICK restart, full UPDATE) is
+// handled internally by the engine via the OnRafaleAnswer/OnRafaleCardAnswer/
+// OnStateChange callbacks (setupCallbacks below) — unlike handleMotionDone
+// above, this handler has nothing left to broadcast itself once the engine
+// call returns.
 func (a *App) handleRafaleValidate(msg *protocol.Message) {
+	cardID := parseRafaleCardScope(msg)
+	if cardID != "" {
+		if err := a.engine.ValidateCardScope(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE rejected: %v (motionCardId=%s)", err, cardID)
+			return
+		}
+		server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE: cardId=%s", cardID)
+		if err := a.engine.RafaleValidateCard(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE (card) error: %v", err)
+		}
+		return
+	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE")
 	if err := a.engine.RafaleValidate(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE error: %v", err)
@@ -2545,8 +2711,20 @@ func (a *App) handleRafaleValidate(msg *protocol.Message) {
 
 // handleRafaleInvalidate processes RAFALE_INVALIDATE (contract rafale.md
 // §5.1): the current question's answer was judged incorrect. Same
-// broadcasting story as handleRafaleValidate above.
+// CardScope routing and broadcasting story as handleRafaleValidate above.
 func (a *App) handleRafaleInvalidate(msg *protocol.Message) {
+	cardID := parseRafaleCardScope(msg)
+	if cardID != "" {
+		if err := a.engine.ValidateCardScope(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE rejected: %v (motionCardId=%s)", err, cardID)
+			return
+		}
+		server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE: cardId=%s", cardID)
+		if err := a.engine.RafaleInvalidateCard(cardID); err != nil {
+			server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE (card) error: %v", err)
+		}
+		return
+	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE")
 	if err := a.engine.RafaleInvalidate(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE error: %v", err)
@@ -2622,10 +2800,19 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 	questionID := ""
 	questionText := ""
 	questionCategory := ""
+	var categoryBreakdown map[string]int
 	if state.Question != nil {
 		questionID = state.Question.ID
 		questionText = state.Question.Question
 		questionCategory = string(state.Question.Category)
+		// Lot A+1 (v9.0.0, plan §2.3) — a classic RAFALE round's own
+		// Category is meaningless (it uses RAFALE_CATEGORIES, a multi-select,
+		// not a single Category — #216); split the award across the
+		// categories that actually produced it instead of writing the empty
+		// string into history.json (the "Inconnue" defect).
+		if state.Question.Type == game.QuestionTypeRafale {
+			categoryBreakdown = game.RafaleCategoryBreakdown(state.Question, payload.Points, state.RafaleTeamCategoryCounters[teamName])
+		}
 	}
 	catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(questionCategory)
 	event := game.GameEvent{
@@ -2645,6 +2832,7 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 		PlayerName:          bumperName,
 		PlayerColor:         playerColor,
 		Points:              payload.Points,
+		CategoryBreakdown:   categoryBreakdown,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -2677,10 +2865,16 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	questionID := ""
 	questionText := ""
 	questionCategory := ""
+	var categoryBreakdown map[string]int
 	if state.Question != nil {
 		questionID = state.Question.ID
 		questionText = state.Question.Question
 		questionCategory = string(state.Question.Category)
+		// Lot A+1 (v9.0.0, plan §2.3) — see handleBumperPoints' own comment
+		// on this same branch.
+		if state.Question.Type == game.QuestionTypeRafale {
+			categoryBreakdown = game.RafaleCategoryBreakdown(state.Question, payload.Points, state.RafaleTeamCategoryCounters[payload.Team])
+		}
 	}
 	catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(questionCategory)
 	event := game.GameEvent{
@@ -2698,6 +2892,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 		TeamName:            payload.Team,
 		TeamColor:           teamColor,
 		Points:              payload.Points,
+		CategoryBreakdown:   categoryBreakdown,
 	}
 	a.engine.AddGameEvent(event)
 
@@ -4693,6 +4888,24 @@ func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleCurrent)
 	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER: id=%s next=%v", id, next != nil)
 }
 
+// broadcastRafaleCardAnswer sends RAFALE_ANSWER to admin+anim ONLY, scoped
+// to a MEMOTION card's own RAFALE mini-round (#217, v9.0.0, contract
+// §14.6) — same recipient list and same confidentiality discipline as
+// broadcastRafaleAnswer above (never TV/VPlayer/buzzer; do not widen this
+// call site's client-type list either). Next is always nil here: a card's
+// mini-round never pre-fetches a next question (contract §14.2, a
+// deliberate scope-reduction versus the classic round's #202 behavior).
+func (a *App) broadcastRafaleCardAnswer(cardID, id, answer string) {
+	payload := protocol.RafaleAnswerPayload{
+		ID: id, Answer: answer, Next: nil,
+		CardScope: protocol.CardScope{MotionCardID: cardID},
+	}
+	data, _ := json.Marshal(payload)
+	a.broadcast(protocol.ActionRafaleAnswer, data, false,
+		server.ClientTypeAdmin, server.ClientTypeAnim)
+	server.LogDebug(game.LogComponentEngine, "RAFALE_ANSWER (card): cardId=%s id=%s", cardID, id)
+}
+
 // rafaleNextPayload (#202) maps the engine's answer-free preview
 // (*game.RafaleCurrent) onto the wire payload's own NEXT type
 // (*protocol.RafaleNextPayload) — nil in, nil out (contract §13.5). A
@@ -4710,8 +4923,17 @@ func rafaleNextPayload(next *game.RafaleCurrent) *protocol.RafaleNextPayload {
 
 // broadcastRafaleTick sends RAFALE_TICK to all clients — the lightweight
 // per-question countdown, contract §5.2, no full GameState re-emission.
-func (a *App) broadcastRafaleTick(questionTime int) {
-	payload := protocol.RafaleTickPayload{QuestionTime: questionTime}
+//
+// cardID (C1, retour QUALIF v9.0.0.4) — "" for the classic manche-scoped
+// round (MOTION_CARD_ID absent on the wire, unchanged shape), the active
+// card's ID for a #217 mini-round. ❌ Do not ALSO patch
+// GameState.RafaleQuestionTime here for a card-hosted tick — that field
+// belongs to the classic round only (contract §14.2) and is already
+// correctly left untouched by StartRafaleQuestionTimer/
+// processRafaleCardQuestionTickUnsafe (engine.go, fixed in caae3d49); this
+// broadcast is purely additive on top of that.
+func (a *App) broadcastRafaleTick(cardID string, questionTime int) {
+	payload := protocol.RafaleTickPayload{QuestionTime: questionTime, CardScope: protocol.CardScope{MotionCardID: cardID}}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionRafaleTick, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
@@ -5368,6 +5590,15 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 			continue
 		}
 		q := sorted[i].data
+		// #214: an ENTRACTE entry is a pause, not "the next question" — never
+		// shown as the à-suivre preview (contract game-state.md §"Second
+		// déclencheur", "score, palmarès, à suivre"). Parity requirement
+		// with GamePage.jsx's own nextUnplayedQuestion (this function's own
+		// doc comment above) — dev-frontend mirrors the same exclusion
+		// client-side.
+		if qType, _ := q["TYPE"].(string); qType == string(game.QuestionTypeEntracte) {
+			continue
+		}
 		payload := &protocol.NextQuestionPayload{
 			ID:              sorted[i].id,
 			CurrentPosition: currentPosition,

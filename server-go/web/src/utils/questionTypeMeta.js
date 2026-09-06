@@ -29,20 +29,46 @@
  * §1). Consommé par le sélecteur de type de carte (`QuestionsPage.jsx`) pour
  * filtrer les boutons proposés — pas de registre séparé côté JS, cette table
  * reste la source unique.
+ *
+ * `defaultPointsRule` (retour QUALIF v9.0.0.4, point C3, réouverture #187
+ * cycle 4) — miroir JS de `TypeDescriptor.DefaultPointsRule` (registre Go,
+ * contrat question-types.md §6.2) : le barème PAR DÉFAUT d'une carte de ce
+ * type quand `POINTS_RULE` est absent. Absent ici = pas de notion de
+ * prorata pour ce type (SPEEDY/QCM/ARDOISE/MEMOTION — score tout-ou-rien ou
+ * sans objet). `AnimConductPanel.jsx` (`isMemoryStarsProrata`, #187 cycle 4)
+ * testait `TYPE === 'MEMORY'` EN DUR — RAFALE devenu nestable (#217) avec le
+ * même défaut STARS_PRORATA par défaut (contrat rafale.md §14.4) a
+ * reproduit EXACTEMENT le même défaut d'affichage (montant plein au lieu du
+ * prorata). Ce champ existe pour qu'un 3e type nestable STARS_PRORATA futur
+ * ne le reproduise pas une 3e fois — tester la RÈGLE effective, jamais le
+ * type en dur.
  */
 
 export const QUESTION_TYPES = [
   { key: 'SPEEDY', label: 'Speedy', icon: '⚡', color: '#3b7fc4', nestable: true },
   { key: 'QCM', label: 'QCM', icon: '🔠', color: '#8a5cc4', nestable: true },
-  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: true },
+  { key: 'MEMORY', label: 'Memory', icon: '🃏', color: '#2e9e6d', nestable: true, defaultPointsRule: 'STARS_PRORATA' },
   { key: 'MEMOTION', label: 'Memotion', icon: '🎞️', color: '#c8568f', nestable: false },
   { key: 'ARDOISE', label: 'Ardoise', icon: '🖊️', color: '#10b981', nestable: false },
   // RAFALE (v8.0.0, #16/#107, contrat rafale.md §2.1) — un QuestionType
   // porteur d'une CONFIGURATION de manche (aucun énoncé, les questions
-  // viennent du réservoir /admin/rafale, RafalePage.jsx). Jamais nestable
-  // (une manche RAFALE n'a pas de sens à l'intérieur d'une carte MEMOTION,
-  // aucune mention au contrat).
-  { key: 'RAFALE', label: 'Rafale', icon: '🌀', color: '#f97316', nestable: false },
+  // viennent du réservoir /admin/rafale, RafalePage.jsx).
+  // #217 (milestone v9.0.0) — devient nestable : une mini-manche RAFALE
+  // jouable comme carte MEMOTION, mode SOLO forcé (la rotation d'équipes du
+  // mode manche classique n'a pas de sens pour une carte, décision
+  // utilisateur 217-Q3 — même motif que le refus définitif d'ARDOISE en
+  // carte, mais ici SOLO lève le blocage). Reste hors GENERABLE_TYPES
+  // ci-dessous (pas de génération IA, décision du 2026-08-28 non rouverte).
+  // `defaultPointsRule: 'STARS_PRORATA'` (217-Q4, contrat rafale.md §14.4) —
+  // même barème que MEMORY.
+  { key: 'RAFALE', label: 'Rafale', icon: '🌀', color: '#f97316', nestable: true, defaultPointsRule: 'STARS_PRORATA' },
+  // ENTRACTE (#214, milestone v9.0.0) — second déclencheur du mécanisme
+  // ENTRACTE existant (#119) : une entrée du déroulé qui porte sa propre
+  // configuration de pause (titre/sous-titre/image, mêmes réglages que
+  // l'entracte global). Ni énoncé/réponse, ni score, ni imbrication en
+  // carte MEMOTION (maquette entracte-programme-214.html §04 — "pas une
+  // question à score", "pas imbriquable").
+  { key: 'ENTRACTE', label: 'Entracte', icon: '⏸️', color: '#6b7280', nestable: false },
 ]
 
 export const QUESTION_TYPE_META = QUESTION_TYPES.reduce((acc, t) => {
@@ -79,11 +105,13 @@ export const GENERABLE_TYPES = (() => {
   // RAFALE (v8.0.0, #16) — génération IA HORS SCOPE pour le réservoir
   // (maquette rafale-v8.html §8 : « Génération IA des questions du
   // réservoir — Hors scope, l'infrastructure existe et pourra être
-  // branchée ensuite »). Sans ce filtre explicite, RAFALE fuiterait
+  // branchée ensuite »). ENTRACTE (#214) — hors génération IA par nature
+  // (pas une question, une pause : rien à générer, contrat backend
+  // dev-backend-214). Sans ce filtre explicite, l'un ou l'autre fuiterait
   // silencieusement dans AIGenerateModal.jsx dès son ajout à QUESTION_TYPES
   // ci-dessus — exactement le type de divergence que ce fichier existe pour
   // éliminer (#183).
-  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE')
+  const generableBase = QUESTION_TYPES.filter(t => t.key !== 'RAFALE' && t.key !== 'ENTRACTE')
   const memotionIndex = generableBase.findIndex(t => t.key === 'MEMOTION')
   const withMemotionPlus = [...generableBase]
   withMemotionPlus.splice(memotionIndex + 1, 0, {

@@ -2,6 +2,170 @@
 
 ---
 
+## [20260906] — Correctifs retour QUALIF v9.0.0.4 : Lot A+1 (#216) et Lot C1/C2 (#217)
+
+> Backend uniquement (Batch 1). Plan : `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md`.
+> **Traçabilité** : le Lot A+1 corrige une régression de **#216** (RAFALE multi-catégorie/
+> difficulté) — pas de #217. Les Lots C1/C2 corrigent des défauts de **#217** (RAFALE en carte
+> MEMOTION). Ne pas attribuer à #217 des défauts qu'il n'a pas introduits.
+
+- **[NEW]** Lot A+1 — `GameState.RAFALE_TEAM_CATEGORY_COUNTERS map[string]map[string]int`
+  (`contracts/rafale.md` §4), tally par équipe/catégorie des bonnes réponses d'une manche RAFALE
+  **classique** (jamais alimenté par une carte MEMOTION #217 — hors périmètre). Alimente
+  **[NEW]** `GameEvent.CATEGORY_BREAKDOWN` (`contracts/models.md`, `omitempty`) — répartition des
+  points d'un gain RAFALE entre les catégories effectivement tirées, méthode du plus fort reste,
+  somme toujours exactement égale à `POINTS`. Corrige le défaut « Inconnue » : les événements
+  RAFALE écrivaient jusqu'ici une `QUESTION_CATEGORY` vide dans `history.json` (une manche RAFALE
+  utilise `RAFALE_CATEGORIES`, un multi-select, jamais un `CATEGORY` singulier — #216).
+- **[CHANGED]** Lot A+1 — `GET /palmares` (`contracts/http-endpoints.md`) : un événement portant
+  `CATEGORY_BREAKDOWN` crédite chacune de ses catégories de sa propre part au lieu d'un crédit
+  unique sur `QUESTION_CATEGORY` ; un événement sans `CATEGORY_BREAKDOWN` garde le comportement
+  actuel exactement (non-régression).
+- **[CHANGED]** Lot C1 — `RafaleTickPayload` (`RAFALE_TICK`, `contracts/rafale.md` §5.2) gagne
+  `MOTION_CARD_ID` (`CardScope`, optionnel). Corrige le « chrono figé » d'une carte RAFALE : la
+  version #217 initiale affirmait qu'aucune ambiguïté client n'existait sans cet identifiant — ce
+  raisonnement était faux en pratique (le moteur décomptait correctement en interne, le client
+  n'avait juste aucun moyen de router le tick vers sa carte). `Engine.OnRafaleQuestionTick` et
+  `App.broadcastRafaleTick` remontent désormais le `cardID` (`""` pour la manche classique).
+- **[FIXED]** Lot C2 — assertion `.(int)` fragile sur `MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME`
+  (échoue silencieusement si la valeur a transité par un aller-retour JSON — devient `float64` —
+  et traite alors à tort la question comme expirée). Nouveau lecteur tolérant `motionActiveInt`
+  (int OU float64), appliqué également à `RAFALE_ASKED_COUNT`/`RAFALE_CORRECT_COUNT` (même classe
+  de fragilité, corrigée en cohérence bien que non explicitement nommée par le lot — ces deux
+  valeurs alimentent le barème `STARS_PRORATA` d'une carte, un bug identique y aurait
+  silencieusement corrompu un score plutôt qu'un simple décompte).
+- **[UNCHANGED]** Aucune autre section de `contracts/rafale.md`/`contracts/question-types.md`
+  n'est touchée — cycle de vie carte (§14.1-§14.10), barème, réservoir partagé : tous inchangés.
+
+---
+
+## [20260905] — RAFALE nestable en carte MEMOTION (#217, feature, v9.0.0)
+
+> Backend uniquement (Lot 4, Batch 4, dernier lot du milestone) — réouverture assumée de la
+> décision « RAFALE jamais nestable » : une carte RAFALE est une mini-manche distincte, en mode
+> SOLO forcé, comme QCM (#185) et MEMORY (#187) avant elle. Détail complet :
+> `contracts/rafale.md` §14 "RAFALE en carte MEMOTION" — référence unique pour ce type imbriqué,
+> comme pour la manche classique.
+
+- **[NEW]** `QuestionTypeRafale.NestableInMotionCard` : `false` → `true`. `DefaultPointsRule:
+  STARS_PRORATA`, même barème que MEMORY (217-Q4) — `Units`/`UnitsTotal` dérivés serveur
+  (`RAFALE_CORRECT_COUNT`/`RAFALE_ASKED_COUNT`), tout `UNITS` client ignoré pour une carte
+  `TYPE=RAFALE`, même garde que MEMORY (contract question-types.md §9.3).
+- **[NEW]** Exemption `MediaSlots` pour `RAFALE` (deuxième exception nommée et testée après
+  `MEMOTION`, `contracts/question-types.md` §7.6) — texte seul par conception, comme la manche
+  classique.
+- **[NEW]** `TypedContent.RAFALE_ROUND_TIME` (`omitempty`) — durée propre d'une carte, portée par
+  `MotionCard` (déjà embarqué). Sans effet pour une manche classique portée par une `Question`.
+- **[NEW]** État vivant d'une carte RAFALE dans `MEMOTION_ACTIVE.STATE`, scopé `CARD_ID` — jamais
+  les 13 champs `GameState.RAFALE_*` globaux, qui restent réservés à la manche classique. Pas de
+  pré-tirage `NEXT` (#202) en contexte carte — un tirage à la demande à chaque avancement.
+- **[NEW]** `RAFALE_VALIDATE`/`RAFALE_INVALIDATE` gagnent `MOTION_CARD_ID` (`CardScope`,
+  optionnel) — deuxième consommateur réel de ce mécanisme après `FLIP_MEMORY_CARD` (#187). Absent
+  ⇒ manche classique, comportement inchangé.
+- **[NEW]** `RafaleAnswerPayload.MOTION_CARD_ID` (optionnel) — la réponse attendue reste
+  **admin+anim uniquement**, jamais dans `GameState`/`MEMOTION_ACTIVE.STATE` (piège documenté
+  `contracts/question-types.md` §5.4, évité explicitement).
+- **[CHANGED]** `internal/game/engine.go` — deux signatures généralisées (modification déclarée,
+  `contracts/question-types.md` §10.2/`contracts/rafale.md` §14.7, comportement identique pour la
+  manche classique) : `newRafaleDrawStateUnsafe(*Question)` → `(categories []string, difficulties
+  []int)` ; `rafaleMaxQuestionsUnsafe(*Question) int` → `(raw int) int`. `motionCardPointsForOutcome`/
+  `DoneMotionCard` gagnent un second `case` RAFALE à côté du `case` MEMORY existant.
+- **[UNCHANGED]** Manche RAFALE classique (`contracts/rafale.md` §1-§13) : cycle, contrat de
+  données, endpoints HTTP, tirage stratifié (#216) — tous inchangés. Réservoir/`rafale_used`
+  **partagés** entre manche classique et carte de la même partie (217-Q5) — un seul magasin,
+  jamais dupliqué.
+- **[UNCHANGED]** Génération IA : `RAFALE` reste hors `GENERABLE_TYPES`/`generableQuestionTypes` —
+  décision du 2026-08-28 non rouverte par ce lot.
+
+## [20260904] — RAFALE multi-catégorie / multi-difficulté + barème par difficulté (#216, feature, v9.0.0) [BREAKING]
+
+> Backend uniquement (Lot 1B, Batch 1) — le volet frontend (Lot 2 : `QuestionsPage.jsx`,
+> `QuestionCard.jsx`, `RafalePoolAlert.jsx`, `GamePage.jsx`, `PlayerDisplay.jsx`/`AnimPage.jsx`)
+> vient dans un lot séquentiel ultérieur, déblocage : Lot 1A (#215) + ce lot. Détail complet :
+> `contracts/rafale.md` §3.3 (modèle de données), §7 (pioche, réécrit entièrement), §9
+> (`GET /api/rafale/pool`). Réouverture assumée de la décision du 2026-08-29 (#107) — décision
+> utilisateur explicite après retour terrain, voir `_work/reports/plan-v900-20260904-145156.md`
+> §216-Q1.
+
+- **[BREAKING]** Format persisté `question.json` (manche RAFALE) — `RAFALE_CATEGORIES ([]string)`
+  réintroduit, `RAFALE_DIFFICULTIES ([]int)` ajouté (la difficulté n'avait jamais été multi),
+  `RAFALE_POINTS_BY_DIFFICULTY (map[int]int)` ajouté (barème libre par difficulté, 216-Q7). Les
+  champs mono `CATEGORY`/`RAFALE_DIFFICULTY` sont **conservés en lecture seule** (jamais migrés
+  sur disque) — toute lecture passe par `Question.EffectiveRafaleCategories()`/
+  `EffectiveRafaleDifficulties()` (précédent : `MotionCard.EffectiveType()`), qui convertissent
+  automatiquement mono → liste à un élément (216-Q6). Une question RAFALE sauvegardée avant #216
+  continue de fonctionner sans reconfiguration. C'est cette rupture de format qui justifie le
+  passage à `X = 9` du milestone (le seul changement de données du cycle).
+- **[BREAKING]** `Engine.rafalePoolUnsafe`/`CountRafalePool`/`DrawRafaleQuestion` — signature
+  `(category string, difficulty int)` (égalité exacte) → `(categories []string, difficulties
+  []int)` (appartenance ensembliste : `q.CATEGORY ∈ categories ∧ q.DIFFICULTY ∈ difficulties`).
+  Toutes les 4 sites d'appel historiques du filtre (`startRafaleRoundUnsafe`,
+  `prefetchRafaleNextUnsafe`, `refreshRafalePoolRemainingUnsafe`, `CountRafalePool`) routent
+  désormais par le même prédicat partagé `rafaleQuestionMatchesFilter` — c'est exactement la
+  classe de bug (un site oublié, une seconde implémentation divergente du filtre) qui avait
+  causé la régression d'origine de #107.
+- **[BREAKING]** `GET /api/rafale/pool?category=A&difficulty=2` (singulier) →
+  `?categories=A,B&difficulties=1,2` (pluriel, virgule-séparé) — réutilise la convention déjà en
+  place sur `GET /api/rafale/questions?categories=A,B` et le corps JSON de
+  `POST /api/rafale/generate-questions` (#203) plutôt que d'en inventer une troisième. Réponse
+  `{AVAILABLE, USED, TOTAL}` inchangée — union sur le produit cartésien demandé.
+- **[NEW]** Tirage en cours de manche : remplace le tirage uniforme dans l'union par un **tirage
+  stratifié par permutation aléatoire** du produit cartésien `catégories × difficultés`, rejouée
+  (nouvelle permutation) une fois épuisée — ni pondéré indépendant, ni ordre fixe (216-Q9,
+  décision utilisateur explicite). Un couple vide ou épuisé — au lancement **ou** en cours de
+  manche, traitement **unifié** (216-Q5/Q8) — sort définitivement de la liste active ; le tirage
+  se rééquilibre sur les couples restants ; **jamais de blocage** pour un seul couple vide (seule
+  une union totalement vide bloque le START, §7.5). Tient compte de la question déjà pré-tirée
+  (#202, `prefetchRafaleNextUnsafe` partage le même état de tirage que le tirage courant) — sans
+  quoi l'équilibrage aurait été décalé d'un cran en permanence.
+- **[NEW]** `RafaleCurrent.Points` (`GameState.RAFALE_CURRENT_QUESTION.POINTS`) — valeur en points
+  résolue pour la question EN COURS (`RAFALE_POINTS_BY_DIFFICULTY[difficulty]`, repli sur le
+  `POINTS` générique de la manche), diffusée à **tous** les clients (TV, animateur, admin) pour
+  affichage (216-Q7d). Nécessaire parce que TV/anim ne reçoivent jamais `GAME.QUESTIONS` (diffusé
+  admin uniquement, `broadcastQuestions`) et ne peuvent donc pas résoudre eux-mêmes le barème de
+  la manche depuis sa configuration complète.
+- **[CHANGED]** `question_types.go` — `OwnedFields` de `QuestionTypeRafale` gagne
+  `RAFALE_CATEGORIES`, `RAFALE_DIFFICULTIES`, `RAFALE_POINTS_BY_DIFFICULTY`.
+- **[CHANGED]** `engine.go` `participantsConform` (RAFALE) — la garde CATEGORY/DIFFICULTY (bugfixes
+  2026-08-30/31) lit désormais les listes effectives (`EffectiveRafaleCategories()`/
+  `EffectiveRafaleDifficulties()`, non vides, chaque difficulté 1..3) au lieu des champs mono bruts.
+- **[NON RETENU, périmètre]** La formule de suggestion de fin de manche (§6.2,
+  `points_suggérés = compteur_retenu × POINTS`) n'est **pas** révisée par ce lot — elle reste un
+  multiplicateur unique sur tout le compteur de la manche, même si les questions posées ont pu
+  appartenir à des difficultés différentes. Non demandé par les critères d'acceptation #216 —
+  signalé explicitement plutôt qu'assumé silencieusement, à trancher séparément si besoin.
+- **[UNCHANGED]** `RafaleQuestion` (élément du réservoir, §3.1) reste **mono** par question
+  (`CATEGORY`, `DIFFICULTY` scalaires) — seul le FILTRE de manche redevient multi, pas le
+  réservoir lui-même. `POST/GET/DELETE /api/rafale/questions*` (édition du réservoir) inchangés.
+
+## [20260904] — Démarrage bloquant et observable sur port occupé (#220, bugfix, v9.0.0)
+
+> Aucun endpoint HTTP ni action WebSocket modifié — changement de sémantique **interne** de
+> `HTTPServer.Start()` uniquement. Consigné ici parce qu'il inverse la polarité d'un contrat de
+> test existant (`http_port_retry_test.go`), pas parce qu'une interface publique du serveur
+> change.
+
+- **[CHANGED]** `HTTPServer.Start()` → `HTTPServer.Start(ctx context.Context) error` — devient
+  **synchrone et bloquant** jusqu'à ce que le port soit effectivement lié, au lieu de renvoyer
+  `nil` immédiatement pendant qu'une boucle de retry tournait silencieusement en arrière-plan.
+  `ctx` permet d'interrompre l'attente (Ctrl+C) sans laisser de goroutine résiduelle. Avant ce
+  correctif, un port occupé au démarrage laissait le serveur logger « started successfully » et
+  ouvrir le navigateur sur une URL qui n'écoutait pas encore. `isPortInUse` (interne) passe d'une
+  comparaison de chaînes anglaise à `errors.Is(err, syscall.EADDRINUSE)` (+ l'équivalent Windows
+  `WSAEADDRINUSE`) ; `EACCES`/`ERROR_ACCESS_DENIED` est désormais traité comme un cas séparé, non
+  fatal, à cadence lente (30 s) plutôt que classé comme « port occupé ». Aucun `os.Exit` n'est
+  jamais déclenché sur une erreur de bind, quelle qu'elle soit. Non-régression conservée :
+  l'auto-update (relance du binaire pendant que l'ancien process tient le port) continue de
+  fonctionner, désormais de façon observable dans `/ws/logs`.
+- **[CHANGED]** L'annonce UDP `BUZZ_SERVER` (heartbeat de `BroadcasterManager`) et la publication
+  mDNS ne démarrent plus qu'**après** un bind HTTP réussi — auparavant l'annonce partait avant même
+  la première tentative de bind HTTP, pointant les buzzers vers un port potentiellement mort
+  pendant toute la durée de l'attente.
+- **[CHANGED]** `internal/server/dns.go` : le serveur DNS (captive portal) honore désormais
+  `DNSServer.port` au lieu d'un `":53"` en dur (le champ était silencieusement ignoré). Un échec de
+  bind DNS reste non fatal pour le démarrage HTTP, mais passe de `log.Printf` (stdout uniquement) à
+  `LogWarn` — visible dans `/ws/logs` et le tampon d'historique.
+
 ## [20260901] — RAFALE : génération IA du réservoir de questions (#203, feature, v8.1.0)
 
 > Nouveau contrat `contracts/rafale-ai-generation.md`. Maquette

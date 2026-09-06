@@ -9,6 +9,7 @@ import { sortQuestionsByOrder } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
+import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import {
   canSelectQuestion as canSelectQuestionRule,
   canStart as canStartRule,
@@ -61,6 +62,7 @@ export default function GamePage() {
     rafaleAnswer,
     rafaleValidate,
     rafaleInvalidate,
+    newGame,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -250,6 +252,12 @@ export default function GamePage() {
     const currentIndex = sortedQuestions.findIndex(q => q.ID === currentId)
     for (let i = currentIndex + 1; i < sortedQuestions.length; i++) {
       const q = sortedQuestions[i]
+      // ENTRACTE (#214) — exclue du "à suivre" (maquette entracte-programme-
+      // 214.html §04, "pas une question à score" ; critère d'acceptation
+      // frontend) : une pause programmée n'est pas ce que "Question
+      // suivante" doit annoncer, on continue vers la vraie prochaine
+      // question du déroulé.
+      if (q.TYPE === 'ENTRACTE') continue
       if (!['STOPPED', 'REVEALED', 'PLAYED'].includes(q.STATUS)) return q
     }
     return null
@@ -446,6 +454,28 @@ export default function GamePage() {
   const isRafaleSelected = gameState.question?.TYPE === 'RAFALE'
   const [rafalePoolLevel, setRafalePoolLevel] = useState(null)
   const rafaleBlocked = isRafaleSelected && rafalePoolLevel !== 'ok' && rafalePoolLevel !== 'warning'
+  // #216 — filtre de manche multi (contrat §3.3), lu via les mêmes
+  // fonctions de rétro-compatibilité que QuestionsPage.jsx/QuestionCard.jsx
+  // (utils/rafaleEffective.js) — jamais les champs bruts directement.
+  const rafaleCategories = useMemo(() => effectiveRafaleCategories(gameState.question), [gameState.question])
+  const rafaleDifficulties = useMemo(() => {
+    const eff = effectiveRafaleDifficulties(gameState.question)
+    // Repli historique conservé ICI uniquement (bugfix régression SHA
+    // 75b0472c, GamePage.rafaleStartGate.test.jsx) — une question RAFALE
+    // enregistrée pendant la fenêtre où #107 laissait RAFALE_DIFFICULTY non
+    // persistée (bug backend depuis corrigé) reste sur disque avec ce champ
+    // à 0/absent pour toujours ; `effectiveRafaleDifficulties` (contrat
+    // §3.3) ne comble PAS ce cas par design — à raison pour l'éditeur
+    // (QuestionsPage.jsx doit montrer l'état réel, pas une valeur inventée),
+    // à tort pour cette page : bloquer indéfiniment le START d'une manche
+    // par ailleurs valide (catégorie présente, pool disponible) pour un
+    // artefact de sérialisation historique serait la régression 75b0472c
+    // qui a motivé ce repli. Jamais appliqué si la catégorie est ELLE-MÊME
+    // absente (le blocage reste légitime dans ce cas, non-régression du
+    // fail-closed 1a742782).
+    if (eff.length === 0 && rafaleCategories.length > 0) return [1]
+    return eff
+  }, [gameState.question, rafaleCategories])
 
   // #199 — retour QUALIF, gate backend prêt (dev-backend SHA 393c6dc7,
   // engine.go participantsConform) : en mode RAFALE multi (≠SOLO), aucune
@@ -543,6 +573,18 @@ export default function GamePage() {
             {gameState.phase === 'ENROLL' && <span className="phase-badge phase-enroll">INSCRIPTION</span>}
             {gameState.phase === 'NEW_GAME' && <span className="phase-badge phase-new-game">NOUVELLE PARTIE</span>}
           </div>
+          {/* #215 (AC9) — NOUVELLE PARTIE reste accessible depuis /admin, en
+              plus de /admin/backstage (QuizMetaForm) : l'animateur ne doit
+              pas changer de page en pleine soirée pour relancer. */}
+          <Button
+            variant="fun"
+            size="sm"
+            className="new-game-btn"
+            onClick={newGame}
+            title="Réinitialiser le jeu et préparer une nouvelle partie"
+          >
+            NOUVELLE PARTIE
+          </Button>
           {nextUnplayedQuestion && (
             <button
               className="next-question-btn"
@@ -551,15 +593,19 @@ export default function GamePage() {
               style={!canSelectQuestion ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
             >
               <span className="nq-label">à suivre : #{nextUnplayedQuestion.ID}</span>
-              {nextUnplayedQuestion.CATEGORY && (() => {
-                const catMeta = categoryMeta(nextUnplayedQuestion.CATEGORY, customCategories)
+              {/* 🔴 Retour QUALIF v9.0.0.4 (point A+6, cosmétique) — depuis
+                  #216 une manche RAFALE porte une LISTE de catégories,
+                  CATEGORY (singulier) est vide : cette pastille disparaissait
+                  pour ce type. Une pastille par catégorie retenue. */}
+              {(nextUnplayedQuestion.TYPE === 'RAFALE' ? effectiveRafaleCategories(nextUnplayedQuestion) : (nextUnplayedQuestion.CATEGORY ? [nextUnplayedQuestion.CATEGORY] : [])).map(cat => {
+                const catMeta = categoryMeta(cat, customCategories)
                 if (!catMeta) return null
                 return (
-                  <span className="nq-badge nq-badge-cat" style={{ backgroundColor: catMeta.color }}>
-                    <CategoryBadge catKey={nextUnplayedQuestion.CATEGORY} customCategories={customCategories} size="sm" chip={false} />
+                  <span className="nq-badge nq-badge-cat" key={cat} style={{ backgroundColor: catMeta.color }}>
+                    <CategoryBadge catKey={cat} customCategories={customCategories} size="sm" chip={false} />
                   </span>
                 )
-              })()}
+              })}
               <span className="nq-badge nq-badge-type">{nextUnplayedQuestion.TYPE || 'SPEEDY'}</span>
               <span className="nq-title">
                 {(nextUnplayedQuestion.QUESTION || '').substring(0, 30)}{(nextUnplayedQuestion.QUESTION || '').length > 30 ? '…' : ''}
@@ -567,15 +613,19 @@ export default function GamePage() {
             </button>
           )}
           <div className="question-indicators">
-            {gameState.question?.CATEGORY && (() => {
-              const catMeta = categoryMeta(gameState.question.CATEGORY, customCategories)
+            {/* 🔴 Retour QUALIF v9.0.0.4 (point A+6, cosmétique) — même cause
+                racine que ci-dessus : `rafaleCategories` (déjà mémoïsé plus
+                haut via effectiveRafaleCategories) couvre la manche RAFALE
+                courante, un indicateur par catégorie retenue. */}
+            {(gameState.question?.TYPE === 'RAFALE' ? rafaleCategories : (gameState.question?.CATEGORY ? [gameState.question.CATEGORY] : [])).map(cat => {
+              const catMeta = categoryMeta(cat, customCategories)
               if (!catMeta) return null
               return (
-                <div className="category-indicator" style={{ backgroundColor: catMeta.color }} title={catMeta.label}>
-                  <CategoryBadge catKey={gameState.question.CATEGORY} customCategories={customCategories} size="sm" chip={false} />
+                <div className="category-indicator" key={cat} style={{ backgroundColor: catMeta.color }} title={catMeta.label}>
+                  <CategoryBadge catKey={cat} customCategories={customCategories} size="sm" chip={false} />
                 </div>
               )
-            })()}
+            })}
             {gameState.question?.POINTS_TARGET && (
               <div className={`points-target-indicator ${gameState.question.POINTS_TARGET.toLowerCase()}`} title={gameState.question.POINTS_TARGET === 'TEAM' ? 'Points à l\'équipe' : 'Points au joueur'}>
                 {gameState.question.POINTS_TARGET === 'TEAM' ? (
@@ -990,19 +1040,22 @@ export default function GamePage() {
           {isRafaleSelected && !isPlaying && (
             <div className="rafale-admin-panel">
               <div className="rafale-admin-config">
-                {/* CATEGORY unique (bugfix 2026-08-29, contrat §3.3) — un
-                    seul CategoryBadge, comme pour tous les autres types,
-                    remplace l'ancien compteur RAFALE_CATEGORIES (multi). */}
-                {gameState.question.CATEGORY && (
-                  <span className="rafale-admin-chip">
-                    <CategoryBadge catKey={gameState.question.CATEGORY} customCategories={customCategories} size="sm" />
+                {/* #216 — chips multiples (réouverture assumée de #107),
+                    lues via effectiveRafaleCategories/Difficulties (repli
+                    mono automatique pour une manche enregistrée avant #216,
+                    utils/rafaleEffective.js) — jamais les champs bruts. */}
+                {rafaleCategories.map(cat => (
+                  <span className="rafale-admin-chip" key={cat}>
+                    <CategoryBadge catKey={cat} customCategories={customCategories} size="sm" />
                     {' '}
-                    {categoryMeta(gameState.question.CATEGORY, customCategories)?.label}
+                    {categoryMeta(cat, customCategories)?.label || cat}
                   </span>
-                )}
-                <span className="rafale-admin-chip">
-                  {'★'.repeat(gameState.question.RAFALE_DIFFICULTY || 1)}
-                </span>
+                ))}
+                {rafaleDifficulties.map(d => (
+                  <span className="rafale-admin-chip" key={d}>
+                    {'★'.repeat(d)}
+                  </span>
+                ))}
                 <span className="rafale-admin-chip">
                   {gameState.question.RAFALE_MODE || 'SOLO'}
                 </span>
@@ -1011,22 +1064,16 @@ export default function GamePage() {
                 </span>
               </div>
               <RafalePoolAlert
-                category={gameState.question.CATEGORY || ''}
-                // Bugfix régression (retour utilisateur QUALIF 8.0.0.5,
-                // suite au fail-closed SHA 1a742782) — cause racine :
-                // RAFALE_DIFFICULTY est omitempty côté serveur (contrat
-                // §3.3, contrainte models_roundtrip_test.go) ; le chip
-                // d'affichage juste au-dessus utilise déjà un repli `|| 1`
-                // pour ce champ, mais cette prop ne l'avait PAS — un admin
-                // voyait "★" dans le chip (repli visuel) tout en recevant
-                // `difficulty=undefined` ici, faisant échouer `hasFilter`
-                // dans RafalePoolAlert ("Sélectionnez au moins une
-                // catégorie...") puis bloquant le START via le fail-closed
-                // (rafalePoolLevel resté `null`). Avant 1a742782, un niveau
-                // `null` ne bloquait rien : l'incohérence de repli était
-                // invisible. Même repli qu'utilisé partout ailleurs pour ce
-                // champ (défaut RAFALE_DIFFICULTY = 1, QuestionsPage.jsx).
-                difficulty={gameState.question.RAFALE_DIFFICULTY || 1}
+                // #216 — union catégories×difficultés (contrat §7.5), plus
+                // les scalaires category/difficulty d'avant #216 — voir le
+                // commentaire historique du bugfix régression QUALIF 8.0.0.5
+                // (SHA 1a742782) qui avait motivé le repli explicite ici :
+                // même discipline, désormais portée par
+                // effectiveRafaleCategories/Difficulties (jamais `undefined`
+                // silencieux qui ferait échouer hasFilter et bloquerait le
+                // START via le fail-closed rafaleBlocked ci-dessus).
+                categories={rafaleCategories}
+                difficulties={rafaleDifficulties}
                 roundTime={parseInt(timeInput) || 0}
                 questionTime={gameState.question.RAFALE_QUESTION_TIME || 3}
                 onLevelChange={setRafalePoolLevel}
@@ -1064,6 +1111,14 @@ export default function GamePage() {
                     )}
                     {current.DIFFICULTY > 0 && (
                       <span className="rafale-admin-chip">{'★'.repeat(current.DIFFICULTY)}</span>
+                    )}
+                    {/* #216, 216-Q7d — barème résolu de CETTE question
+                        (RAFALE_POINTS_BY_DIFFICULTY[DIFFICULTY], repli sur
+                        POINTS générique), plus lisible qu'un barème unique
+                        maintenant qu'il peut varier d'une question à l'autre
+                        selon sa difficulté (contrat §4). */}
+                    {current.POINTS > 0 && (
+                      <span className="rafale-admin-chip">{current.POINTS} pts</span>
                     )}
                     {gameState.RAFALE_ASKED_COUNT > 0 && (
                       <span className="rafale-admin-chip">question {gameState.RAFALE_ASKED_COUNT}</span>

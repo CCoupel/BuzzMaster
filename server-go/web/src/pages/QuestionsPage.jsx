@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
@@ -7,49 +8,43 @@ import { CATEGORIES } from '../utils/categoryUtils'
 import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
 import { QUESTION_TYPES } from '../utils/questionTypeMeta'
 import { isMotionCardTypeLocked, motionCardLockReason } from '../utils/motionCardLock'
+import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategorySelector from '../components/CategorySelector'
 import CategoryFilterBar from '../components/CategoryFilterBar'
+import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
 import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
+import EntracteFields from '../components/EntracteFields'
+import RafalePage from './RafalePage'
 import './QuestionsPage.css'
 import './ConfigPage.css'
 import '../styles/sliders.css'
-
-// Énumérations partagées avec la modale IA et le contrat backend
-// (contracts/ai-generation.md §6) — source de vérité pour les selects
-// Population/Langue et le multi-select Difficulté, ici comme dans la modale.
-export const QUIZ_POPULATIONS = ['Junior (6-12 ans)', 'Ado (13-17 ans)', 'Adulte (18-64 ans)', 'Senior (65+ ans)', 'Famille']
-export const QUIZ_DIFFICULTIES = ['Facile', 'Moyen', 'Difficile', 'Expert']
-export const QUIZ_LANGUAGES = ['Français', 'Anglais', 'Espagnol']
+import '../styles/tabs.css'
 
 // Re-export CATEGORIES for backward compatibility
 export { CATEGORIES }
 
 export default function QuestionsPage() {
-  const { questions, fsInfo, deleteQuestion, sendMessage, gameState, newGame, aiJob, cancelAiGeneration } = useGame()
+  const { questions, fsInfo, deleteQuestion, sendMessage, gameState, aiJob, cancelAiGeneration } = useGame()
+  const navigate = useNavigate()
+  // #215 — 2 onglets (Questions/Rafale). `/admin/rafale` redirige désormais
+  // vers `/admin/quiz?tab=rafale` (App.jsx) pour préserver les favoris —
+  // lu ici en état initial uniquement (pas de synchronisation continue avec
+  // l'URL au clic sur un onglet : même patron que BackstagePage.jsx).
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'rafale' ? 'rafale' : 'questions')
   const [isUploading, setIsUploading] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
   const fileAnswerInputRef = useRef(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
-
-  // NEW_GAME backgrounds management state (multi-images, mirrors Zone Ambiance)
-  const [uploadingNgBg, setUploadingNgBg] = useState(false)
-  const ngBgInputRef = useRef(null)
-  const [draggedNgBgIndex, setDraggedNgBgIndex] = useState(null)
-
-  // Background management state
-  const [uploadingBg, setUploadingBg] = useState(false)
-  const bgInputRef = useRef(null)
-  const [draggedBgIndex, setDraggedBgIndex] = useState(null)
-
 
   // Form state
   const [formData, setFormData] = useState({
@@ -74,18 +69,39 @@ export default function QuestionsPage() {
     // ARDOISE fields (v5.6.0)
     ardoiseKeyboardType: 'AZERTY',
     // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3) — pas un
-    // énoncé/réponse, une CONFIGURATION de manche : difficulté unique
-    // (RAFALE_DIFFICULTY), mode (RAFALE_MODE), temps par question
-    // (RAFALE_QUESTION_TIME, défaut 3s), plafond dur (RAFALE_MAX_QUESTIONS,
-    // défaut 100, max 100). TIME/POINTS/CATEGORY réutilisent les champs
-    // génériques déjà présents (durée de manche / barème d'une bonne
-    // réponse / catégorie du filtre de pioche) — bugfix 2026-08-29 :
-    // CATEGORY est désormais unique, comme tous les autres types (l'ancien
-    // RAFALE_CATEGORIES multi est retiré, contrat §3.3).
-    rafaleDifficulty: 1,
+    // énoncé/réponse, une CONFIGURATION de manche : mode (RAFALE_MODE), temps
+    // par question (RAFALE_QUESTION_TIME, défaut 3s), plafond dur
+    // (RAFALE_MAX_QUESTIONS, défaut 100, max 100). TIME/POINTS réutilisent
+    // les champs génériques déjà présents (durée de manche / barème général
+    // en repli, contrat §3.3).
+    // #216 (milestone v9.0.0, réouverture assumée de #107) — le filtre de
+    // manche redevient multi : rafaleCategories/rafaleDifficulties (listes,
+    // au moins un élément chacune) + rafalePointsByDifficulty (barème par
+    // étoile, saisie libre, clé = difficulté 1..3, repli sur POINTS générique
+    // si absent/0 pour une difficulté donnée).
+    // 🔴 Retour QUALIF v9.0.0.4 (point A+7) — l'ancien `rafaleDifficulty`
+    // (mono, camelCase) a été retiré : `effectiveRafaleDifficulties(question)`
+    // (utils/rafaleEffective.js) porte DÉJÀ le repli mono → liste pour une
+    // manche enregistrée avant #216 (chargé directement dans
+    // `rafaleDifficulties` par handleQuestionClick) — `rafaleDifficulty`
+    // n'était plus lu nulle part (ni rendu, ni handleSubmit), résidu mort.
+    rafaleCategories: [],
+    rafaleDifficulties: [],
+    rafalePointsByDifficulty: {},
     rafaleMode: 'SOLO',
     rafaleQuestionTime: 3,
     rafaleMaxQuestions: 100,
+    // ENTRACTE fields (#214, milestone v9.0.0) — second déclencheur du
+    // mécanisme ENTRACTE existant (#119, EntracteConfigForm.jsx/#215) :
+    // chaque occurrence du déroulé porte sa propre config, MÊME STRUCTURE
+    // que la config globale (composant partagé components/EntracteFields.jsx,
+    // contrat backend TypedContent.EntracteConfig — réutilise le type Go
+    // EntracteConfig existant). L'image de fond réutilise le champ MEDIA
+    // générique de la question (formData.media/existingMedia ci-dessous,
+    // déjà envoyé par tous les autres types) — pas un endpoint dédié comme
+    // l'image d'entracte globale (spécifique à un panneau unique, sans
+    // équivalent per-occurrence).
+    entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
     // MEMOTION fields (v5.0.0)
     motionMode: 'SOLO',
     // #184/B-F4 — chaque carte porte désormais `type` + les valeurs de
@@ -119,6 +135,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -139,6 +167,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
     ],
     motionConfig: { points1: 1, points2: 3, points3: 5 },
@@ -163,42 +203,6 @@ export default function QuestionsPage() {
     explanation: '',
   })
 
-  // Quiz metadata form state
-  const [quizName, setQuizName] = useState(gameState.quizName || '')
-  const [quizTheme, setQuizTheme] = useState(gameState.quizTheme || '')
-  const [quizNotes, setQuizNotes] = useState(gameState.quizNotes || '')
-  // v6.1.0 (#137) — publics/difficultés multiples (remplacent les valeurs
-  // uniques v6.0.0), objectif de partie, visibilité TV par champ. Contract
-  // game-state.md §"Métadonnées Quiz".
-  const [quizPopulations, setQuizPopulations] = useState(gameState.quizPopulations || [])
-  const [quizDifficulties, setQuizDifficulties] = useState(gameState.quizDifficulties || [])
-  const [quizLanguage, setQuizLanguage] = useState(gameState.quizLanguage || 'Français')
-  const [quizObjectives, setQuizObjectives] = useState(gameState.quizObjectives || '')
-  const [quizHiddenFields, setQuizHiddenFields] = useState(gameState.quizHiddenFields || [])
-  const [quizSaved, setQuizSaved] = useState(false)
-
-  // ENTRACTE (#119, corrections C1/C4) — configuration du panneau de pause
-  // globale, propriété de la partie (comme les métadonnées Quiz ci-dessus),
-  // éditée depuis cette page via l'action dédiée UPDATE_ENTRACTE_CONFIG.
-  // Alimenté depuis gameState.entracteConfigSaved (la config ENREGISTRÉE,
-  // toujours à jour) — JAMAIS gameState.entracteConfig (la config DIFFUSÉE
-  // au panneau, gelée pendant une pause active) : sinon un enregistrement
-  // fait pendant l'entracte semblerait perdu au retour sur cette page (C4).
-  const savedEntracteCfg = gameState.entracteConfigSaved || {}
-  const [entracteTitle, setEntracteTitle] = useState(savedEntracteCfg.TITLE || 'ENTRACTE')
-  const [entracteSubtitle, setEntracteSubtitle] = useState(savedEntracteCfg.SUBTITLE || 'Retour dans 20mn')
-  const [entracteImageIsCustom, setEntracteImageIsCustom] = useState(savedEntracteCfg.IMAGE_IS_CUSTOM || false)
-  const [entractePanelSize, setEntractePanelSize] = useState(savedEntracteCfg.PANEL_SIZE ?? 65)
-  const [entracteAnimPeriod, setEntracteAnimPeriod] = useState(savedEntracteCfg.ANIM_PERIOD ?? 10)
-  const [entracteAnimIntensity, setEntracteAnimIntensity] = useState(savedEntracteCfg.ANIM_INTENSITY ?? 20)
-  const [entracteTransitionMs, setEntracteTransitionMs] = useState(savedEntracteCfg.TRANSITION_MS ?? 2000)
-  const [entracteSaved, setEntracteSaved] = useState(false)
-  const [entracteImageCacheBuster, setEntracteImageCacheBuster] = useState(() => Date.now())
-  const [uploadingEntracteImage, setUploadingEntracteImage] = useState(false)
-  const [deletingEntracteImage, setDeletingEntracteImage] = useState(false)
-  const [entracteImageToast, setEntracteImageToast] = useState(null)
-  const entracteImageFileRef = useRef(null)
-
   // AI generation modal (v6.0.0 #8, multi-provider + tâche de fond v6.1.0 #137)
   const [showAIModal, setShowAIModal] = useState(false)
   const [aiConfig, setAiConfig] = useState({
@@ -216,7 +220,6 @@ export default function QuestionsPage() {
   // re-render tant que le job reste dans le même état terminal, et pour ne
   // pas toaster un job dont la fin a été vue en direct dans la modale.
   const toastedAiJobIdRef = useRef(null)
-  const quizMetaSectionRef = useRef(null)
 
   // #137 — le bouton "✨ Générer via IA" s'active selon la clé du provider
   // ACTUELLEMENT sélectionné (maquette 137 §7), pas "si n'importe lequel en
@@ -224,62 +227,6 @@ export default function QuestionsPage() {
   // ré-attachement/l'annulation même si la clé a depuis été retirée.
   const providerConfigured = aiConfig.provider === 'groq' ? aiConfig.groqApiKeyConfigured : aiConfig.apiKeyConfigured
   const canOpenAiModal = providerConfigured || aiJob?.state === 'RUNNING'
-
-  // Sync quiz form with gameState (populated from WS after mount)
-  useEffect(() => {
-    setQuizName(gameState.quizName || '')
-    setQuizTheme(gameState.quizTheme || '')
-    setQuizNotes(gameState.quizNotes || '')
-    setQuizPopulations(gameState.quizPopulations || [])
-    setQuizDifficulties(gameState.quizDifficulties || [])
-    setQuizLanguage(gameState.quizLanguage || 'Français')
-    setQuizObjectives(gameState.quizObjectives || '')
-    setQuizHiddenFields(gameState.quizHiddenFields || [])
-  }, [gameState.quizName, gameState.quizTheme, gameState.quizNotes, gameState.quizPopulations, gameState.quizDifficulties, gameState.quizLanguage, gameState.quizObjectives, gameState.quizHiddenFields])
-
-  // ENTRACTE (#119, C1/C4) — sync depuis gameState.entracteConfigSaved
-  // (jamais entracteConfig, voir commentaire de déclaration d'état ci-dessus).
-  useEffect(() => {
-    const cfg = gameState.entracteConfigSaved
-    if (!cfg) return
-    setEntracteTitle(cfg.TITLE ?? 'ENTRACTE')
-    setEntracteSubtitle(cfg.SUBTITLE ?? 'Retour dans 20mn')
-    setEntracteImageIsCustom(cfg.IMAGE_IS_CUSTOM ?? false)
-    setEntractePanelSize(cfg.PANEL_SIZE ?? 65)
-    setEntracteAnimPeriod(cfg.ANIM_PERIOD ?? 10)
-    setEntracteAnimIntensity(cfg.ANIM_INTENSITY ?? 20)
-    setEntracteTransitionMs(cfg.TRANSITION_MS ?? 2000)
-  }, [gameState.entracteConfigSaved])
-
-  // ENTRACTE image toast auto-hide (même patron que les autres toasts de la page)
-  useEffect(() => {
-    if (entracteImageToast) {
-      const timer = setTimeout(() => setEntracteImageToast(null), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [entracteImageToast])
-
-  // v6.1.0 (#137, T2.5) — comparaison indépendante de l'ordre pour les deux
-  // tableaux : "publics/difficultés dans un ordre différent" ne doit pas être
-  // traité comme une divergence.
-  const arraysEqualUnordered = (a, b) => {
-    if (a.length !== b.length) return false
-    const sa = [...a].sort()
-    const sb = [...b].sort()
-    return sa.every((v, i) => v === sb[i])
-  }
-
-  // T2.5 — écart entre le formulaire de la section Quiz et le GameState
-  // réellement diffusé, restreint aux 5 champs qui alimentent la génération
-  // (thème/publics/difficultés/langue/objectif) — QUIZ_NAME et QUIZ_NOTES
-  // partagent le même bouton Enregistrer mais n'affectent pas la génération,
-  // les inclure ferait apparaître le bandeau de la modale IA à tort.
-  const quizFormDiverged =
-    quizTheme !== (gameState.quizTheme || '') ||
-    quizLanguage !== (gameState.quizLanguage || 'Français') ||
-    quizObjectives !== (gameState.quizObjectives || '') ||
-    !arraysEqualUnordered(quizPopulations, gameState.quizPopulations || []) ||
-    !arraysEqualUnordered(quizDifficulties, gameState.quizDifficulties || [])
 
   // AI: état de la clé API + provider sélectionné — source de vérité pour
   // activer/désactiver le bouton "✨ Générer via IA" (contract
@@ -350,114 +297,6 @@ export default function QuestionsPage() {
     }
   }, [aiJob, showAIModal])
 
-  const handleSaveQuizMeta = (e) => {
-    e.preventDefault()
-    sendMessage('UPDATE_QUIZ_META', {
-      NAME: quizName,
-      THEME: quizTheme,
-      NOTES: quizNotes,
-      POPULATIONS: quizPopulations,
-      DIFFICULTIES: quizDifficulties,
-      LANGUAGE: quizLanguage,
-      OBJECTIVES: quizObjectives,
-      HIDDEN_FIELDS: quizHiddenFields,
-    })
-    setQuizSaved(true)
-    setTimeout(() => setQuizSaved(false), 2000)
-  }
-
-  // ENTRACTE (#119, C1) — action dédiée, distincte d'UPDATE_QUIZ_META
-  // (plan : deux formulaires séparés, chacun propriétaire de ses champs,
-  // pour ne pas risquer qu'un enregistrement du bloc Quiz efface les
-  // réglages d'entracte ou réciproquement). Acceptée par le serveur même
-  // pendant un entracte actif (C4) — écrit ENTRACTE_CONFIG_SAVED sans
-  // rafraîchir le panneau déjà diffusé.
-  const handleSaveEntracteConfig = (e) => {
-    e.preventDefault()
-    sendMessage('UPDATE_ENTRACTE_CONFIG', {
-      TITLE: entracteTitle,
-      SUBTITLE: entracteSubtitle,
-      PANEL_SIZE: entractePanelSize,
-      ANIM_PERIOD: entracteAnimPeriod,
-      ANIM_INTENSITY: entracteAnimIntensity,
-      TRANSITION_MS: entracteTransitionMs,
-    })
-    setEntracteSaved(true)
-    setTimeout(() => setEntracteSaved(false), 2000)
-  }
-
-  // Image de fond du panneau — copie du patron "Image par défaut"
-  // (anciennement dans ConfigPage.jsx, déplacé ici avec la configuration,
-  // C1). Endpoint renommé /api/game/entracte-image (C1-B6, l'image
-  // appartient désormais à la partie, pas à la config serveur).
-  const handleEntracteImageUpload = async () => {
-    const file = entracteImageFileRef.current?.files?.[0]
-    if (!file) {
-      setEntracteImageToast({ message: 'Veuillez selectionner une image', type: 'error' })
-      return
-    }
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
-    const ext = '.' + file.name.split('.').pop().toLowerCase()
-    if (!allowed.includes(ext)) {
-      setEntracteImageToast({ message: 'Format non supporte. Utilisez jpg, png, gif, webp ou svg', type: 'error' })
-      return
-    }
-    setUploadingEntracteImage(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch('/api/game/entracte-image', { method: 'POST', body: formData })
-      const data = await res.json()
-      if (res.ok && (data.is_custom || data.image_is_custom)) {
-        setEntracteImageIsCustom(true)
-        setEntracteImageCacheBuster(Date.now())
-        setEntracteImageToast({ message: 'Image d\'entracte enregistree', type: 'success' })
-        if (entracteImageFileRef.current) entracteImageFileRef.current.value = ''
-      } else {
-        setEntracteImageToast({ message: 'Erreur lors de l\'upload', type: 'error' })
-      }
-    } catch (err) {
-      setEntracteImageToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
-    } finally {
-      setUploadingEntracteImage(false)
-    }
-  }
-
-  const handleEntracteImageDelete = async () => {
-    if (!window.confirm('Retirer l\'image d\'entracte ? Le panneau restera lisible sans image.')) return
-    setDeletingEntracteImage(true)
-    try {
-      const res = await fetch('/api/game/entracte-image', { method: 'DELETE' })
-      if (res.ok) {
-        setEntracteImageIsCustom(false)
-        setEntracteImageCacheBuster(Date.now())
-        setEntracteImageToast({ message: 'Image d\'entracte supprimee', type: 'success' })
-      } else {
-        setEntracteImageToast({ message: 'Erreur lors de la suppression', type: 'error' })
-      }
-    } catch (err) {
-      setEntracteImageToast({ message: 'Erreur reseau: ' + err.message, type: 'error' })
-    } finally {
-      setDeletingEntracteImage(false)
-    }
-  }
-
-  // Chips multi-sélection (motif AIGenerateModal.jsx — catégories)
-  const toggleQuizPopulation = (p) => {
-    setQuizPopulations(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p])
-  }
-  const toggleQuizDifficulty = (d) => {
-    setQuizDifficulties(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
-  }
-
-  // Interrupteur "Afficher sur la TV" — case cochée = champ ABSENT de
-  // QUIZ_HIDDEN_FIELDS. L'inversion (liste des champs masqués ↔ case "visible")
-  // est absorbée ici uniquement (plan §5, T2.2).
-  const isQuizFieldVisibleOnTV = (field) => !quizHiddenFields.includes(field)
-  const toggleQuizFieldVisibility = (field) => {
-    setQuizHiddenFields(prev => prev.includes(field) ? prev.filter(f => f !== field) : [...prev, field])
-  }
-
   // AI: après une génération (terminée/arrêtée/en échec partiel) et la
   // fermeture de la modale, défiler jusqu'à la première question créée
   // (maquette §4). AIGenerateModal calcule déjà cet ID (delta sur
@@ -470,84 +309,13 @@ export default function QuestionsPage() {
     }, 300)
   }
 
+  // #215 — le lien "configurer le quiz" de la modale IA naviguait auparavant
+  // par scrollIntoView vers la section Quiz (autrefois sur cette même page).
+  // Cette section vit désormais sur /admin/backstage (BackstagePage.jsx) :
+  // une vraie navigation inter-page est donc nécessaire, pas un défilement.
   const handleNavigateToQuizSettings = () => {
     setShowAIModal(false)
-    quizMetaSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  // NEW_GAME backgrounds handlers (mirror Zone Ambiance, endpoint: /new-game-backgrounds)
-  const handleNgBackgroundUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadingNgBg(true)
-    const fd = new FormData()
-    fd.append('file', file)
-    try {
-      const response = await fetch('/new-game-backgrounds', { method: 'POST', body: fd })
-      if (response.ok) {
-        window.location.reload()
-      } else {
-        const text = await response.text()
-        alert('Erreur: ' + text)
-      }
-    } catch (error) {
-      console.error('NG background upload failed:', error)
-      alert('Erreur: ' + error.message)
-    } finally {
-      setUploadingNgBg(false)
-      if (ngBgInputRef.current) ngBgInputRef.current.value = ''
-    }
-  }
-
-  const handleRemoveNgBackground = async (bgPath) => {
-    if (!window.confirm('Supprimer cette image de fond Nouvelle Partie ?')) return
-    try {
-      const filename = bgPath.split('/').pop()
-      await fetch(`/new-game-backgrounds?file=${encodeURIComponent(filename)}`, { method: 'DELETE' })
-    } catch (error) {
-      console.error('Remove NG background failed:', error)
-    }
-  }
-
-  const handleRemoveAllNgBackgrounds = async () => {
-    if (!window.confirm('Supprimer toutes les images de fond Nouvelle Partie ?')) return
-    try {
-      await fetch('/new-game-backgrounds', { method: 'DELETE' })
-    } catch (error) {
-      console.error('Remove all NG backgrounds failed:', error)
-    }
-  }
-
-  const handleNgDurationChange = async (index, newDuration) => {
-    const backgrounds = [...(gameState?.newGameBackgrounds || [])]
-    backgrounds[index] = { ...backgrounds[index], duration: parseInt(newDuration) || 10 }
-    await saveNgBackgrounds(backgrounds)
-  }
-
-  const handleNgOpacityChange = async (index, newOpacity) => {
-    const backgrounds = [...(gameState?.newGameBackgrounds || [])]
-    backgrounds[index] = { ...backgrounds[index], opacity: Math.max(0, Math.min(100, parseInt(newOpacity) || 100)) }
-    await saveNgBackgrounds(backgrounds)
-  }
-
-  const handleNgMoveBackground = async (fromIndex, toIndex) => {
-    if (fromIndex === toIndex) return
-    const backgrounds = [...(gameState?.newGameBackgrounds || [])]
-    const [moved] = backgrounds.splice(fromIndex, 1)
-    backgrounds.splice(toIndex, 0, moved)
-    await saveNgBackgrounds(backgrounds)
-  }
-
-  const saveNgBackgrounds = async (backgrounds) => {
-    try {
-      await fetch('/new-game-backgrounds', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(backgrounds)
-      })
-    } catch (error) {
-      console.error('Save NG backgrounds failed:', error)
-    }
+    navigate('/admin/backstage')
   }
 
   // #149 — mise à jour optimiste de l'ordre après "Mélanger les questions" :
@@ -594,83 +362,6 @@ export default function QuestionsPage() {
 
   // Category filter (shared hook) — passes custom categories for filter support
   const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions, customCategories)
-
-  // Background handlers
-  const handleBackgroundUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploadingBg(true)
-    const formData = new FormData()
-    formData.append('file', file)
-
-    try {
-      const response = await fetch('/background', { method: 'POST', body: formData })
-      if (response.ok) {
-        window.location.reload()
-      } else {
-        const text = await response.text()
-        alert('Erreur: ' + text)
-      }
-    } catch (error) {
-      console.error('Background upload failed:', error)
-      alert('Erreur: ' + error.message)
-    } finally {
-      setUploadingBg(false)
-      if (bgInputRef.current) bgInputRef.current.value = ''
-    }
-  }
-
-  const handleRemoveBackground = async (bgPath) => {
-    if (!window.confirm('Supprimer cette image de fond ?')) return
-    try {
-      const filename = bgPath.split('/').pop()
-      await fetch(`/background?file=${encodeURIComponent(filename)}`, { method: 'DELETE' })
-    } catch (error) {
-      console.error('Remove background failed:', error)
-    }
-  }
-
-  const handleRemoveAllBackgrounds = async () => {
-    if (!window.confirm('Supprimer toutes les images de fond ?')) return
-    try {
-      await fetch('/background', { method: 'DELETE' })
-    } catch (error) {
-      console.error('Remove all backgrounds failed:', error)
-    }
-  }
-
-  const handleDurationChange = async (index, newDuration) => {
-    const backgrounds = [...(gameState?.backgrounds || [])]
-    backgrounds[index] = { ...backgrounds[index], duration: parseInt(newDuration) || 10 }
-    await saveBackgrounds(backgrounds)
-  }
-
-  const handleOpacityChange = async (index, newOpacity) => {
-    const backgrounds = [...(gameState?.backgrounds || [])]
-    backgrounds[index] = { ...backgrounds[index], opacity: Math.max(0, Math.min(100, parseInt(newOpacity) || 100)) }
-    await saveBackgrounds(backgrounds)
-  }
-
-  const handleMoveBackground = async (fromIndex, toIndex) => {
-    if (fromIndex === toIndex) return
-    const backgrounds = [...(gameState?.backgrounds || [])]
-    const [moved] = backgrounds.splice(fromIndex, 1)
-    backgrounds.splice(toIndex, 0, moved)
-    await saveBackgrounds(backgrounds)
-  }
-
-  const saveBackgrounds = async (backgrounds) => {
-    try {
-      await fetch('/background', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(backgrounds)
-      })
-    } catch (error) {
-      console.error('Save backgrounds failed:', error)
-    }
-  }
 
   // Drag and drop handlers
   const handleDragStart = (e, questionId) => {
@@ -792,6 +483,44 @@ export default function QuestionsPage() {
     })
   }
 
+  // #216 — chips multi-sélection Catégories/Difficultés de l'éditeur RAFALE
+  // (motif éprouvé : RafaleAIGenerateModal.jsx toggleCategory/toggleDifficulty).
+  const toggleRafaleCategory = (key) => {
+    setFormData(prev => ({
+      ...prev,
+      rafaleCategories: prev.rafaleCategories.includes(key)
+        ? prev.rafaleCategories.filter(k => k !== key)
+        : [...prev.rafaleCategories, key],
+    }))
+  }
+  const toggleRafaleDifficulty = (d) => {
+    setFormData(prev => ({
+      ...prev,
+      rafaleDifficulties: prev.rafaleDifficulties.includes(d)
+        ? prev.rafaleDifficulties.filter(x => x !== d)
+        : [...prev.rafaleDifficulties, d],
+    }))
+  }
+  // Barème par étoile (216-Q7c, saisie libre) — clé = difficulté (string,
+  // cohérent avec la carte JSON `map[int]int` reçue/envoyée en clés
+  // decimales). 0/vide = pas de barème pour cette difficulté, repli sur le
+  // champ générique POINTS de la manche (contrat §3.3).
+  const handleRafalePointsByDifficultyChange = (d, value) => {
+    setFormData(prev => ({
+      ...prev,
+      rafalePointsByDifficulty: { ...prev.rafalePointsByDifficulty, [String(d)]: parseInt(value) || 0 },
+    }))
+  }
+
+  // #214 — un seul champ (field, value) générique, consommé par
+  // <EntracteFields onChange> (même signature que dans EntracteConfigForm.jsx).
+  const handleEntracteConfigChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      entracteConfig: { ...prev.entracteConfig, [field]: value },
+    }))
+  }
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -880,6 +609,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
       { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -900,6 +641,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
     ]
     if (question.MOTION_CARDS && Array.isArray(question.MOTION_CARDS)) {
@@ -951,6 +704,15 @@ export default function QuestionsPage() {
               revealDelay: card.MEMORY_CONFIG.REVEAL_DELAY ?? 0.5,
             }
           : { flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0, useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5 },
+        // #217 — RAFALE d'une carte MEMOTION : toujours des listes complètes
+        // dès la création par cet éditeur (mode SOLO forcé, jamais de forme
+        // mono historique à convertir — contrairement à la manche RAFALE
+        // classique, contrat §7.4).
+        rafaleCategories: card.RAFALE_CATEGORIES || [],
+        rafaleDifficulties: card.RAFALE_DIFFICULTIES || [],
+        rafaleRoundTime: card.RAFALE_ROUND_TIME || 120,
+        rafaleQuestionTime: card.RAFALE_QUESTION_TIME || 3,
+        rafaleMaxQuestions: card.RAFALE_MAX_QUESTIONS || 100,
       }))
     }
 
@@ -984,13 +746,28 @@ export default function QuestionsPage() {
       motionMemorizeDuration: question.MOTION_MEMORIZE_DURATION || 0,
       // ARDOISE fields
       ardoiseKeyboardType: question.ARDOISE_KEYBOARD_TYPE || 'AZERTY',
-      // RAFALE fields (v8.0.0, #16/#107, contrat rafale.md §3.3) — CATEGORY
-      // (générique, ligne `category:` ci-dessus) porte désormais le filtre
-      // de manche, comme tous les autres types (bugfix 2026-08-29).
-      rafaleDifficulty: question.RAFALE_DIFFICULTY || 1,
+      // RAFALE fields (contrat rafale.md §3.3). #216 — rétro-compatibilité
+      // mono → liste (précédent Go : EffectiveRafaleCategories/
+      // EffectiveRafaleDifficulties, §3.3) : une manche enregistrée avant
+      // #216 (CATEGORY/RAFALE_DIFFICULTY mono, listes absentes) charge
+      // quand même ses valeurs dans l'éditeur multi, sans reconfiguration.
+      rafaleCategories: effectiveRafaleCategories(question),
+      rafaleDifficulties: effectiveRafaleDifficulties(question),
+      rafalePointsByDifficulty: question.RAFALE_POINTS_BY_DIFFICULTY || {},
       rafaleMode: question.RAFALE_MODE || 'SOLO',
       rafaleQuestionTime: question.RAFALE_QUESTION_TIME || 3,
       rafaleMaxQuestions: question.RAFALE_MAX_QUESTIONS || 100,
+      // ENTRACTE (#214) — ENTRACTE_CONFIG (nested, contrat backend
+      // TypedContent.EntracteConfig) : mêmes défauts que la config globale
+      // (EntracteConfigForm.jsx) si l'occurrence n'en porte pas encore.
+      entracteConfig: {
+        title: question.ENTRACTE_CONFIG?.TITLE ?? 'ENTRACTE',
+        subtitle: question.ENTRACTE_CONFIG?.SUBTITLE ?? 'Retour dans 20mn',
+        panelSize: question.ENTRACTE_CONFIG?.PANEL_SIZE ?? 65,
+        animPeriod: question.ENTRACTE_CONFIG?.ANIM_PERIOD ?? 10,
+        animIntensity: question.ENTRACTE_CONFIG?.ANIM_INTENSITY ?? 20,
+        transitionMs: question.ENTRACTE_CONFIG?.TRANSITION_MS ?? 2000,
+      },
       points: question.POINTS || '1',
       time: question.TIME || '30',
       media: null,
@@ -1061,6 +838,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
         { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
@@ -1081,18 +870,35 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
       ],
       motionConfig: { points1: 1, points2: 3, points3: 5 },
       motionMemorizeDuration: 0,
       // ARDOISE fields
       ardoiseKeyboardType: 'AZERTY',
-      // RAFALE fields (v8.0.0, #16/#107) — voir commentaire de l'état
-      // initial (useState ci-dessus) pour le détail des champs.
-      rafaleDifficulty: 1,
+      // RAFALE fields — voir commentaire de l'état initial (useState
+      // ci-dessus) pour le détail des champs.
+      rafaleCategories: [],
+      rafaleDifficulties: [],
+      rafalePointsByDifficulty: {},
       rafaleMode: 'SOLO',
       rafaleQuestionTime: 3,
       rafaleMaxQuestions: 100,
+      // ENTRACTE fields — voir commentaire de l'état initial (useState
+      // ci-dessus) pour le détail des champs.
+      entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
       points: '1',
       time: '30',
       media: null,
@@ -1212,6 +1018,18 @@ export default function QuestionsPage() {
           flipDelay: 3, pointsPerPair: 10, errorPenalty: 0, completionBonus: 0,
           useTimer: true, memorizeTime: 5, showDuringMemorize: true, revealDelay: 0.5,
         },
+        // #217 — OwnedFields RAFALE d'une carte MEMOTION, valeurs de création
+        // (mode SOLO forcé, jamais exposé/écrit par cet éditeur — contrairement
+        // à la manche RAFALE classique — contrat question-types.md §7.4).
+        rafaleCategories: [],
+        rafaleDifficulties: [],
+        // 217-Q2 — bornée par LES DEUX (durée propre à la carte ET nombre de
+        // questions), comme la manche RAFALE classique (TIME + RAFALE_MAX_QUESTIONS)
+        // mais avec une durée SÉPARÉE de la manche hôte MEMOTION (rafaleRoundTime,
+        // pas le TIME générique de formData qui reste celui de la manche entière).
+        rafaleRoundTime: 120,
+        rafaleQuestionTime: 3,
+        rafaleMaxQuestions: 100,
       },
         ]
       }
@@ -1304,6 +1122,36 @@ export default function QuestionsPage() {
     }))
   }
 
+  // #217 — sous-éditeur RAFALE d'une carte MEMOTION. Même mécanique que les
+  // handlers de manche classique (toggleRafaleCategory/toggleRafaleDifficulty),
+  // scopée à `cardId` — patron handleMotionCardMemoryConfigChange ci-dessus.
+  // Pas d'équivalent carte pour handleRafalePointsByDifficultyChange : le
+  // barème par difficulté n'a pas de sens en carte (contrat rafale.md §14.2,
+  // STARS_PRORATA sur le DIFFICULTY commun de la carte, comme MEMORY, #217-Q4).
+  const toggleMotionCardRafaleCategory = (cardId, key) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : {
+        ...c,
+        rafaleCategories: c.rafaleCategories.includes(key)
+          ? c.rafaleCategories.filter(k => k !== key)
+          : [...c.rafaleCategories, key],
+      }),
+    }))
+  }
+
+  const toggleMotionCardRafaleDifficulty = (cardId, d) => {
+    setFormData(prev => ({
+      ...prev,
+      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : {
+        ...c,
+        rafaleDifficulties: c.rafaleDifficulties.includes(d)
+          ? c.rafaleDifficulties.filter(x => x !== d)
+          : [...c.rafaleDifficulties, d],
+      }),
+    }))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     // For normal questions, need question and answer
@@ -1327,13 +1175,12 @@ export default function QuestionsPage() {
       const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
       if (validCards.length < 2) return
     }
-    if (formData.type === 'RAFALE' && !formData.category) {
-      // code-review-20260829-163049.md [MAJEUR] — CATEGORY est OPTIONNEL
-      // pour tous les autres types (purement cosmétique, ignoré du moteur),
-      // mais FONCTIONNELLEMENT REQUIS pour RAFALE : c'est le filtre de
-      // pioche du réservoir (contrat §7, `q.CATEGORY == CATEGORY`).
-      // L'enregistrer vide garantirait un pool vide (ErrRafalePoolEmpty)
-      // dès le lancement — défense en profondeur, en plus du blocage côté
+    if (formData.type === 'RAFALE' && (formData.rafaleCategories.length === 0 || formData.rafaleDifficulties.length === 0)) {
+      // code-review-20260829-163049.md [MAJEUR], réouvert #216 — au moins
+      // une catégorie ET une difficulté sont FONCTIONNELLEMENT REQUISES
+      // pour RAFALE : c'est le filtre de pioche du réservoir (contrat §7).
+      // Un filtre vide garantirait un pool vide (ErrRafalePoolEmpty) dès le
+      // lancement — défense en profondeur, en plus du blocage côté
       // GamePage.jsx (rafaleBlocked). Même style que la validation
       // MEMORY/MEMOTION ci-dessus (retour silencieux, aucun POST envoyé).
       return
@@ -1497,6 +1344,24 @@ export default function QuestionsPage() {
             },
           }
         }
+        if (cardType === 'RAFALE') {
+          // #217 — mini-manche RAFALE d'une carte MEMOTION, mode SOLO forcé
+          // (jamais envoyé/exposé — contrairement à RAFALE_MODE de la manche
+          // classique, aucun sens en contexte carte, une seule équipe joue
+          // la carte). QUESTION_TEXT/QUESTION_IMAGE de `base` ci-dessus
+          // n'ont pas de sens pour ce type (pas de question propre à la
+          // carte) — laissés tels quels (vides, l'éditeur ne les remplit
+          // jamais pour RAFALE) plutôt que de complexifier `base` avec une
+          // exception par type.
+          return {
+            ...base,
+            RAFALE_CATEGORIES: card.rafaleCategories,
+            RAFALE_DIFFICULTIES: card.rafaleDifficulties,
+            RAFALE_ROUND_TIME: card.rafaleRoundTime,
+            RAFALE_QUESTION_TIME: card.rafaleQuestionTime,
+            RAFALE_MAX_QUESTIONS: card.rafaleMaxQuestions,
+          }
+        }
         return {
           ...base,
           ANSWER_TEXT: card.answerText,
@@ -1536,18 +1401,43 @@ export default function QuestionsPage() {
     } else if (formData.type === 'RAFALE') {
       // RAFALE mode — configuration de manche (contrat rafale.md §3.3),
       // aucun énoncé/réponse propre (les questions viennent du réservoir,
-      // /admin/rafale). `category` (singulier) EST utilisé par ce type
-      // depuis le bugfix 2026-08-29 — comme tous les autres types, déjà
-      // envoyé ci-dessus (`if (formData.category) { data.append('category', ...) }`),
-      // jamais ici. L'ancien RAFALE_CATEGORIES (multi) est retiré.
-      data.append('RAFALE_DIFFICULTY', String(formData.rafaleDifficulty))
+      // /admin/rafale).
+      // #216 — RAFALE_CATEGORIES/RAFALE_DIFFICULTIES/RAFALE_POINTS_BY_DIFFICULTY
+      // (listes/carte) deviennent la source de vérité, envoyées en JSON-encodé
+      // dans le formulaire multipart (même convention que motion_config,
+      // contrat §3.3 "Format multipart"). Les champs mono CATEGORY générique/
+      // RAFALE_DIFFICULTY ne sont plus émis par cet éditeur (rétro-
+      // compatibilité en LECTURE seulement, côté serveur — EffectiveRafale*).
+      data.append('RAFALE_CATEGORIES', JSON.stringify(formData.rafaleCategories))
+      data.append('RAFALE_DIFFICULTIES', JSON.stringify(formData.rafaleDifficulties))
+      data.append('RAFALE_POINTS_BY_DIFFICULTY', JSON.stringify(formData.rafalePointsByDifficulty))
       data.append('RAFALE_MODE', formData.rafaleMode)
       data.append('RAFALE_QUESTION_TIME', String(formData.rafaleQuestionTime))
       data.append('RAFALE_MAX_QUESTIONS', String(formData.rafaleMaxQuestions))
       // Réponse d'affichage dans la liste des questions (patron MEMORY/
-      // MEMOTION ci-dessus — `answer` reste un champ purement informatif
-      // pour QuestionCard.jsx, jamais lu par le moteur RAFALE).
-      data.append('answer', `${formData.category || '?'} - ${'★'.repeat(formData.rafaleDifficulty)}`)
+      // MEMOTION ci-dessus — `answer` reste un champ purement informatif,
+      // repli textuel pour tout consommateur qui n'afficherait pas les chips
+      // dédiées de QuestionCard.jsx).
+      data.append('answer', `${formData.rafaleCategories.join('/') || '?'} - ${formData.rafaleDifficulties.map(d => '★'.repeat(d)).join(', ')}`)
+    } else if (formData.type === 'ENTRACTE') {
+      // ENTRACTE (#214) — configuration du panneau PAR OCCURRENCE, envoyée
+      // en JSON-encodé (même convention que motion_config/RAFALE_*_BY_*
+      // ci-dessus, contrat backend TypedContent.EntracteConfig *EntracteConfig,
+      // réutilise le type Go EntracteConfig existant — mêmes clés UPPER_SNAKE
+      // que la config globale, contracts/game-state.md §ENTRACTE_CONFIG).
+      // L'image de fond utilise le champ MEDIA générique (data.append('file', ...)
+      // ci-dessous, commun à tous les types), pas un endpoint dédié.
+      data.append('ENTRACTE_CONFIG', JSON.stringify({
+        TITLE: formData.entracteConfig.title,
+        SUBTITLE: formData.entracteConfig.subtitle,
+        PANEL_SIZE: formData.entracteConfig.panelSize,
+        ANIM_PERIOD: formData.entracteConfig.animPeriod,
+        ANIM_INTENSITY: formData.entracteConfig.animIntensity,
+        TRANSITION_MS: formData.entracteConfig.transitionMs,
+      }))
+      // Réponse d'affichage — patron RAFALE ci-dessus (`answer` purement
+      // informatif pour QuestionCard.jsx/le déroulé).
+      data.append('answer', '—')
     }
 
     if (formData.media) {
@@ -1600,522 +1490,51 @@ export default function QuestionsPage() {
     <div className="questions-page page">
       <header className="page-header">
         <h1 className="page-title">Gestion des Questions</h1>
-        <p className="page-subtitle">
-          {filteredQuestions.length !== sortedQuestions.length
-            ? `${filteredQuestions.length} / ${sortedQuestions.length} questions`
-            : `${sortedQuestions.length} questions disponibles`}
-        </p>
+        {activeTab === 'questions' && (
+          <p className="page-subtitle">
+            {filteredQuestions.length !== sortedQuestions.length
+              ? `${filteredQuestions.length} / ${sortedQuestions.length} questions`
+              : `${sortedQuestions.length} questions disponibles`}
+          </p>
+        )}
       </header>
 
-      {/* Zone 1 — Quiz */}
-      <section className="quiz-meta-section" ref={quizMetaSectionRef}>
-        <Card padding="lg">
-          <CardHeader>
-            <div className="section-header">
-              <h3 className="section-title">Quiz</h3>
-              <Button variant="fun" size="sm" onClick={newGame} title="Réinitialiser le jeu et préparer une nouvelle partie">
-                NOUVELLE PARTIE
-              </Button>
-            </div>
-          </CardHeader>
-          <CardBody>
-            <form onSubmit={handleSaveQuizMeta} className="quiz-meta-form">
-              <div className="quiz-meta-grid">
-                <div className="form-group">
-                  <label htmlFor="quiz-name">Nom du quiz</label>
-                  <input
-                    id="quiz-name"
-                    type="text"
-                    value={quizName}
-                    onChange={e => setQuizName(e.target.value)}
-                    placeholder="Ex : Quiz Science et Nature"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="quiz-theme">
-                    Thème général
-                    <span className="quiz-tv-toggle">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isQuizFieldVisibleOnTV('THEME')}
-                        aria-label="Afficher le thème sur la TV"
-                        className={`quiz-switch ${isQuizFieldVisibleOnTV('THEME') ? 'on' : ''}`}
-                        onClick={() => toggleQuizFieldVisibility('THEME')}
-                      />
-                      TV
-                    </span>
-                  </label>
-                  <input
-                    id="quiz-theme"
-                    type="text"
-                    value={quizTheme}
-                    onChange={e => setQuizTheme(e.target.value)}
-                    placeholder="Ex : Culture générale"
-                  />
-                </div>
-                {/* v6.1.0 (#137) — publics/difficultés multiples (chips, motif
-                    AIGenerateModal.jsx catégories) + interrupteur "Afficher sur
-                    la TV" par champ (contract game-state.md, QUIZ_HIDDEN_FIELDS) */}
-                <div className="form-group quiz-meta-wide">
-                  <span className="quiz-field-label">
-                    Publics cibles <span className="quiz-field-hint">— au moins un</span>
-                    <span className="quiz-tv-toggle">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isQuizFieldVisibleOnTV('POPULATIONS')}
-                        aria-label="Afficher les publics sur la TV"
-                        className={`quiz-switch ${isQuizFieldVisibleOnTV('POPULATIONS') ? 'on' : ''}`}
-                        onClick={() => toggleQuizFieldVisibility('POPULATIONS')}
-                      />
-                      TV
-                    </span>
-                  </span>
-                  <div className="quiz-chip-row">
-                    {QUIZ_POPULATIONS.map(p => (
-                      <button
-                        type="button"
-                        key={p}
-                        className={`quiz-chip ${quizPopulations.includes(p) ? 'active' : ''}`}
-                        onClick={() => toggleQuizPopulation(p)}
-                      >
-                        {quizPopulations.includes(p) && <span className="quiz-chip-check" aria-hidden="true">✓</span>}
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="form-group quiz-meta-wide">
-                  <span className="quiz-field-label">
-                    Difficultés visées <span className="quiz-field-hint">— au moins une</span>
-                    <span className="quiz-tv-toggle">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isQuizFieldVisibleOnTV('DIFFICULTIES')}
-                        aria-label="Afficher les difficultés sur la TV"
-                        className={`quiz-switch ${isQuizFieldVisibleOnTV('DIFFICULTIES') ? 'on' : ''}`}
-                        onClick={() => toggleQuizFieldVisibility('DIFFICULTIES')}
-                      />
-                      TV
-                    </span>
-                  </span>
-                  <div className="quiz-chip-row">
-                    {QUIZ_DIFFICULTIES.map(d => (
-                      <button
-                        type="button"
-                        key={d}
-                        className={`quiz-chip ${quizDifficulties.includes(d) ? 'active' : ''}`}
-                        onClick={() => toggleQuizDifficulty(d)}
-                      >
-                        {quizDifficulties.includes(d) && <span className="quiz-chip-check" aria-hidden="true">✓</span>}
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="quiz-field-hint">
-                    Interrupteur éteint : sélection prise en compte pour la génération, mais non annoncée aux joueurs.
-                  </span>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="quiz-language">
-                    Langue
-                    <span className="quiz-tv-toggle">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={isQuizFieldVisibleOnTV('LANGUAGE')}
-                        aria-label="Afficher la langue sur la TV"
-                        className={`quiz-switch ${isQuizFieldVisibleOnTV('LANGUAGE') ? 'on' : ''}`}
-                        onClick={() => toggleQuizFieldVisibility('LANGUAGE')}
-                      />
-                      TV
-                    </span>
-                  </label>
-                  <select
-                    id="quiz-language"
-                    value={quizLanguage}
-                    onChange={e => setQuizLanguage(e.target.value)}
-                  >
-                    {QUIZ_LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </div>
-                <div className="form-group quiz-meta-wide">
-                  <span className="quiz-field-label">
-                    Objectif de la partie
-                    <span className="quiz-field-visibility private">🔒 Non affiché aux joueurs</span>
-                  </span>
-                  <textarea
-                    id="quiz-objectives"
-                    value={quizObjectives}
-                    onChange={e => setQuizObjectives(e.target.value)}
-                    placeholder="Ex : révision du chapitre 3, team building, faire marquer les timides..."
-                    rows={2}
-                    maxLength={2000}
-                  />
-                  <span className="quiz-field-hint">Sert de consigne au générateur IA et de rappel pour l'animateur.</span>
-                </div>
-                <div className="form-group quiz-meta-wide">
-                  <span className="quiz-field-label">
-                    Texte libre
-                    <span className="quiz-field-visibility public">📺 Affiché aux joueurs</span>
-                  </span>
-                  <textarea
-                    id="quiz-notes"
-                    value={quizNotes}
-                    onChange={e => setQuizNotes(e.target.value)}
-                    placeholder="Notes, règles, anecdotes..."
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <div className="quiz-meta-actions">
-                <Button type="submit" variant="primary" size="sm">
-                  {quizSaved ? 'Enregistré ✓' : 'Enregistrer'}
-                </Button>
-              </div>
-            </form>
+      {/* #215 — page en 2 onglets : Questions (définition du contenu du jeu,
+          inchangée) et Rafale (accueille le réservoir de RafalePage.jsx, qui
+          avait sa propre route /admin/rafale — désormais conservée en
+          redirection vers cet onglet, App.jsx). Les zones Quiz/Entracte/Fonds
+          d'écran ont déménagé vers /admin/backstage (BackstagePage.jsx). */}
+      <div className="page-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'questions'}
+          className={`page-tab ${activeTab === 'questions' ? 'active' : ''}`}
+          onClick={() => setActiveTab('questions')}
+        >
+          <span className="page-tab-icon" aria-hidden="true">📋</span>
+          Questions
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'rafale'}
+          className={`page-tab ${activeTab === 'rafale' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rafale')}
+        >
+          {/* 🌀 — même icône que le type RAFALE partout ailleurs dans l'app
+              (utils/questionTypeMeta.js, QuestionCard/AnimPage/GamePage) —
+              plus cohérente que l'éclair ⚡ de la maquette (déjà pris par
+              SPEEDY dans ce même registre). */}
+          <span className="page-tab-icon" aria-hidden="true">🌀</span>
+          Rafale
+        </button>
+      </div>
 
-            {/* Image(s) de fond — écran "Nouvelle Partie" */}
-            <div className="new-game-bg-section">
-              <div className="new-game-bg-header">
-                <h4 className="new-game-bg-title">Image(s) de fond — Nouvelle Partie</h4>
-                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                  <label className="upload-bg-btn">
-                    <input
-                      type="file"
-                      ref={ngBgInputRef}
-                      accept="image/*"
-                      onChange={handleNgBackgroundUpload}
-                      style={{ display: 'none' }}
-                    />
-                    <Button variant="primary" size="sm" as="span" loading={uploadingNgBg}>
-                      + Image
-                    </Button>
-                  </label>
-                  {gameState?.newGameBackgrounds?.length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={handleRemoveAllNgBackgrounds}>
-                      Tout supprimer
-                    </Button>
-                  )}
-                </div>
-              </div>
-              <p className="new-game-bg-hint">
-                Images affichees en rotation sur l'ecran TV lors de la phase "Nouvelle Partie". Par defaut, un degrade anime est utilise.
-              </p>
-              <p className="section-hint">Glissez-deposez pour changer l'ordre.</p>
-              <div className="backgrounds-grid">
-                {gameState?.newGameBackgrounds?.length > 0 ? (
-                  gameState.newGameBackgrounds.map((bg, index) => (
-                    <motion.div
-                      key={bg.path}
-                      className={`background-item ${draggedNgBgIndex === index ? 'dragging' : ''}`}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      draggable
-                      onDragStart={() => setDraggedNgBgIndex(index)}
-                      onDragEnd={() => setDraggedNgBgIndex(null)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => {
-                        if (draggedNgBgIndex !== null) {
-                          handleNgMoveBackground(draggedNgBgIndex, index)
-                        }
-                      }}
-                    >
-                      <img src={bg.path} alt={`Nouvelle Partie fond ${index + 1}`} className="bg-thumb" />
-                      <button
-                        className="bg-delete-btn"
-                        onClick={() => handleRemoveNgBackground(bg.path)}
-                        title="Supprimer"
-                      >
-                        ×
-                      </button>
-                      <span className="bg-index">{index + 1}</span>
-                      <div className="bg-controls">
-                        <div className="bg-duration">
-                          <input
-                            type="number"
-                            min="1"
-                            max="300"
-                            value={bg.duration || 10}
-                            onChange={(e) => handleNgDurationChange(index, e.target.value)}
-                            className="duration-input"
-                          />
-                          <span className="duration-label">s</span>
-                        </div>
-                        <div className="bg-opacity">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={bg.opacity ?? 100}
-                            onChange={(e) => handleNgOpacityChange(index, e.target.value)}
-                            className="opacity-slider"
-                          />
-                          <span className="opacity-value">{bg.opacity ?? 100}%</span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))
-                ) : (
-                  <div className="backgrounds-empty">
-                    <p className="empty-state">Aucune image (degrade anime par defaut)</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ENTRACTE (#119, corrections C1) — configuration du panneau de
-                pause globale, propriété de la partie (comme le reste de cette
-                page). Le déclenchement lui-même se fait depuis la barre de
-                navigation (bouton ENTRACTE / FIN D'ENTRACTE, C2). */}
-            <form onSubmit={handleSaveEntracteConfig} className="new-game-bg-section">
-              <div className="new-game-bg-header">
-                <h4 className="new-game-bg-title">Entracte (pause globale)</h4>
-              </div>
-              <p className="new-game-bg-hint">
-                Panneau affiche sur l'ecran TV et VJoueur pendant une pause globale (repas, changement de salle...), declenchee depuis la barre de navigation. Le reste de l'interface (TV, VJoueur, admin, animateur) est estompe pendant toute la duree de la pause.
-              </p>
-
-              <div className="wifi-form">
-                <label className="wifi-field">
-                  <span>Titre</span>
-                  <input
-                    type="text"
-                    value={entracteTitle}
-                    onChange={(e) => setEntracteTitle(e.target.value)}
-                    placeholder="ENTRACTE"
-                    maxLength={40}
-                  />
-                </label>
-                <label className="wifi-field">
-                  <span>Sous-titre</span>
-                  <input
-                    type="text"
-                    value={entracteSubtitle}
-                    onChange={(e) => setEntracteSubtitle(e.target.value)}
-                    placeholder="Retour dans 20mn"
-                    maxLength={80}
-                  />
-                </label>
-              </div>
-
-              <div className="default-image-preview">
-                {entracteImageIsCustom ? (
-                  <img
-                    src={`/api/game/entracte-image?t=${entracteImageCacheBuster}`}
-                    alt="Image d'entracte"
-                    className="default-image-thumbnail"
-                  />
-                ) : (
-                  <span className="default-image-filename">Aucune image (panneau sans fond)</span>
-                )}
-                {entracteImageIsCustom && (
-                  <span className="default-image-filename">Image personnalisée</span>
-                )}
-              </div>
-
-              <div className="firmware-upload-row">
-                <input
-                  ref={entracteImageFileRef}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.gif,.webp,.svg"
-                  className="firmware-file-input"
-                  id="entracte-image-file-input"
-                />
-                <label htmlFor="entracte-image-file-input" className="firmware-file-label">
-                  Choisir une image (jpg, png, gif, webp, svg)
-                </label>
-              </div>
-
-              <div className="config-section-actions">
-                <Button type="button" variant="primary" onClick={handleEntracteImageUpload} loading={uploadingEntracteImage}>
-                  Enregistrer l'image
-                </Button>
-                {entracteImageIsCustom && (
-                  <Button type="button" variant="secondary" onClick={handleEntracteImageDelete} loading={deletingEntracteImage}>
-                    Retirer l'image
-                  </Button>
-                )}
-              </div>
-
-              <div className="slider-group">
-                <div className="slider-row">
-                  <label>Taille du panneau</label>
-                  <div className="slider-control">
-                    <input
-                      type="range"
-                      min="20"
-                      max="100"
-                      value={entractePanelSize}
-                      onChange={(e) => setEntractePanelSize(parseInt(e.target.value))}
-                    />
-                    <span className="slider-value">{entractePanelSize}%</span>
-                  </div>
-                  <p className="section-hint">
-                    Même réglage, même rendu sur TV et VJoueur — pas de taille séparée par écran.
-                  </p>
-                </div>
-
-                <div className="slider-row">
-                  <label>Vitesse du mouvement</label>
-                  <div className="slider-control">
-                    <input
-                      type="range"
-                      min="2"
-                      max="30"
-                      value={entracteAnimPeriod}
-                      onChange={(e) => setEntracteAnimPeriod(parseInt(e.target.value))}
-                    />
-                    <span className="slider-value">{entracteAnimPeriod}s</span>
-                  </div>
-                  <p className="section-hint">Durée d'un cycle complet — plus court = plus rapide.</p>
-                </div>
-
-                <div className="slider-row">
-                  <label>Intensité du mouvement</label>
-                  <div className="slider-control">
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={entracteAnimIntensity}
-                      onChange={(e) => setEntracteAnimIntensity(parseInt(e.target.value))}
-                    />
-                    <span className="slider-value">
-                      {entracteAnimIntensity === 0 ? 'animation désactivée' : entracteAnimIntensity}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="slider-row">
-                  <label>Vitesse de transition</label>
-                  <div className="slider-control">
-                    <input
-                      type="range"
-                      min="0"
-                      max="10000"
-                      step="100"
-                      value={entracteTransitionMs}
-                      onChange={(e) => setEntracteTransitionMs(parseInt(e.target.value))}
-                    />
-                    <span className="slider-value">
-                      {entracteTransitionMs === 0 ? 'transition instantanée' : `${(entracteTransitionMs / 1000).toFixed(1)}s`}
-                    </span>
-                  </div>
-                  <p className="section-hint">Durée du fondu à l'entrée et à la sortie de la pause.</p>
-                </div>
-              </div>
-
-              <div className="config-section-actions">
-                <Button type="submit" variant="primary">
-                  {entracteSaved ? 'Enregistré ✓' : 'Enregistrer'}
-                </Button>
-                {gameState.entracte && (
-                  <span className="section-hint" role="status">
-                    Un entracte est en cours — prendra effet au prochain entracte.
-                  </span>
-                )}
-              </div>
-            </form>
-          </CardBody>
-        </Card>
-      </section>
-
-      {/* Zone 2 — Ambiance (fonds d'écran) */}
-      <section className="background-section">
-        <Card padding="lg">
-          <CardHeader>
-            <div className="section-header">
-              <h3 className="section-title">Fonds d'ecran</h3>
-              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                <label className="upload-bg-btn">
-                  <input
-                    type="file"
-                    ref={bgInputRef}
-                    accept="image/*"
-                    onChange={handleBackgroundUpload}
-                    style={{ display: 'none' }}
-                  />
-                  <Button variant="primary" size="sm" as="span" loading={uploadingBg}>
-                    + Image
-                  </Button>
-                </label>
-                {gameState?.backgrounds?.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={handleRemoveAllBackgrounds}>
-                    Tout supprimer
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardBody>
-            <p className="section-hint">Glissez-deposez pour changer l'ordre.</p>
-            <div className="backgrounds-grid">
-              {gameState?.backgrounds?.length > 0 ? (
-                gameState.backgrounds.map((bg, index) => (
-                  <motion.div
-                    key={bg.path}
-                    className={`background-item ${draggedBgIndex === index ? 'dragging' : ''}`}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.05 }}
-                    draggable
-                    onDragStart={() => setDraggedBgIndex(index)}
-                    onDragEnd={() => setDraggedBgIndex(null)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => {
-                      if (draggedBgIndex !== null) {
-                        handleMoveBackground(draggedBgIndex, index)
-                      }
-                    }}
-                  >
-                    <img src={bg.path} alt={`Background ${index + 1}`} className="bg-thumb" />
-                    <button
-                      className="bg-delete-btn"
-                      onClick={() => handleRemoveBackground(bg.path)}
-                      title="Supprimer"
-                    >
-                      ×
-                    </button>
-                    <span className="bg-index">{index + 1}</span>
-                    <div className="bg-controls">
-                      <div className="bg-duration">
-                        <input
-                          type="number"
-                          min="1"
-                          max="300"
-                          value={bg.duration || 10}
-                          onChange={(e) => handleDurationChange(index, e.target.value)}
-                          className="duration-input"
-                        />
-                        <span className="duration-label">s</span>
-                      </div>
-                      <div className="bg-opacity">
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={bg.opacity ?? 100}
-                          onChange={(e) => handleOpacityChange(index, e.target.value)}
-                          className="opacity-slider"
-                        />
-                        <span className="opacity-value">{bg.opacity ?? 100}%</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))
-              ) : (
-                <div className="backgrounds-empty">
-                  <p className="empty-state">Aucune image de fond</p>
-                </div>
-              )}
-            </div>
-          </CardBody>
-        </Card>
-      </section>
+      {activeTab === 'rafale' ? (
+        <RafalePage />
+      ) : (
+        <>
 
       {/* Category Balance + Filters — div unique pour alignement parfait */}
       <div className="category-filter-group">
@@ -2239,45 +1658,55 @@ export default function QuestionsPage() {
                 </div>
 
                 {/* Question Type Selector — généré depuis la table unique
-                    utils/questionTypeMeta.js (#183/A-F2), regroupement visuel
-                    3+2 conservé à l'identique (rows CSS .type-filter-row) */}
+                    utils/questionTypeMeta.js (#183/A-F2).
+                    🔴 Retour QUALIF v9.0.0.4 (Lot B, #214) — l'ancien
+                    regroupement figé `[slice(0,3), slice(3)]` (2 rangées) a
+                    été écrit pour 5 types ; ENTRACTE (#214, 6e) puis un 7e
+                    type ont fait déborder la seconde rangée (4 boutons
+                    `flex: 1` sans `flex-wrap`). Une SEULE rangée désormais,
+                    construite contre QUESTION_TYPES (jamais un découpage par
+                    tranche codé en dur) — le retour à la ligne est porté par
+                    la règle CSS `.type-filter-row`/`.type-btn` (C4,
+                    QuestionsPage.css), partagée avec le sélecteur de type de
+                    carte MEMOTION ci-dessous. */}
                 <div className="form-group">
                   <label>Type de question</label>
                   <div className="type-filter-grid">
-                    {[QUESTION_TYPES.slice(0, 3), QUESTION_TYPES.slice(3)].map((row, rowIdx) => (
-                      <div className="type-filter-row" key={rowIdx}>
-                        {row.map(t => (
-                          <button
-                            key={t.key}
-                            type="button"
-                            className={`type-btn ${t.key.toLowerCase()} ${formData.type === t.key ? 'active' : ''}`}
-                            onClick={() => handleInputChange('type', t.key)}
-                          >
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
+                    <div className="type-filter-row">
+                      {QUESTION_TYPES.map(t => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          className={`type-btn ${t.key.toLowerCase()} ${formData.type === t.key ? 'active' : ''}`}
+                          onClick={() => handleInputChange('type', t.key)}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
                 {/* Category Selector — CategorySelector.jsx (v8.0.0, #16/#197,
                     bugfix cohérence UI), extrait ici (#95/#97/#100), aussi
                     utilisé par RafalePage.jsx — un seul composant, plus de
-                    variante dupliquée. RAFALE utilise désormais ce MEME
-                    sélecteur (bugfix 2026-08-29, contrat §3.3) : CATEGORY
-                    est une catégorie unique pour ce type comme pour tous
-                    les autres, l'ancien multi-sélecteur RAFALE_CATEGORIES
-                    est retiré (plus de branche dédiée). */}
-                <div className="form-group">
-                  <label>Categorie</label>
-                  <CategorySelector
-                    value={formData.category}
-                    onChange={(key) => handleInputChange('category', key)}
-                    customCategories={customCategories}
-                    onRefetchCategories={refetchCategories}
-                  />
-                </div>
+                    variante dupliquée. #216 (réouverture assumée de #107) —
+                    RAFALE seul en est retiré : il a de nouveau besoin de
+                    PLUSIEURS catégories, son propre sélecteur multi-chips vit
+                    désormais dans la section RAFALE ci-dessous (contrat
+                    §3.3). Tous les autres types restent sur ce sélecteur
+                    unique, inchangé. */}
+                {formData.type !== 'RAFALE' && (
+                  <div className="form-group">
+                    <label>Categorie</label>
+                    <CategorySelector
+                      value={formData.category}
+                      onChange={(key) => handleInputChange('category', key)}
+                      customCategories={customCategories}
+                      onRefetchCategories={refetchCategories}
+                    />
+                  </div>
+                )}
 
                 {/* Points Target Selector */}
                 <div className="form-group">
@@ -2858,9 +2287,19 @@ export default function QuestionsPage() {
                                 required
                               />
                             </div>
-                            {/* Difficulty selector */}
+                            {/* Difficulty selector — commun à tous les types de carte
+                                (étoiles = valeur/poids de la carte, contrat §3.1).
+                                🔴 Retour QUALIF v9.0.0.4 (point C5) — libellé
+                                "Difficulte :" ambigu pour une carte RAFALE, qui
+                                porte un SECOND sélecteur d'étoiles juste plus bas
+                                (RAFALE_DIFFICULTIES, filtre de pioche du réservoir,
+                                sans rapport) : deux sélecteurs d'étoiles côte à côte
+                                sans distinction visuelle claire. Renommé pour ce
+                                qu'il désigne réellement — le barème STARS_PRORATA/
+                                étoiles pleines de la carte elle-même (§6.2), jamais
+                                un filtre. */}
                             <div className="memotion-difficulty-row">
-                              <span className="memotion-diff-label">Difficulte :</span>
+                              <span className="memotion-diff-label">Valeur de la carte :</span>
                               {[1, 2, 3].map(d => (
                                 <button
                                   key={d}
@@ -2903,16 +2342,26 @@ export default function QuestionsPage() {
                               grille. */}
                           <div className="memotion-face-section">
                             <div className="memotion-face-label memotion-face-verso">VERSO (Question)</div>
-                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
-                              <textarea
-                                value={card.questionText}
-                                onChange={(e) => handleMotionCardChange(card.id, 'questionText', e.target.value)}
-                                placeholder="Texte de la question..."
-                                rows={2}
-                                className="memory-card-text-input"
-                              />
-                            </div>
-                            {cardType !== 'MEMORY' && (
+                            {/* #217 — une carte RAFALE n'a PAS de question
+                                propre (mini-manche qui pioche dans le
+                                réservoir global, comme la manche RAFALE
+                                classique) : le texte/l'image génériques
+                                ci-dessous n'ont pas de sens pour ce type,
+                                masqués au profit du sous-éditeur dédié plus
+                                bas — même discipline que MEMORY masquant
+                                l'image question (§7, "recto + N paires"). */}
+                            {cardType !== 'RAFALE' && (
+                              <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                                <textarea
+                                  value={card.questionText}
+                                  onChange={(e) => handleMotionCardChange(card.id, 'questionText', e.target.value)}
+                                  placeholder="Texte de la question..."
+                                  rows={2}
+                                  className="memory-card-text-input"
+                                />
+                              </div>
+                            )}
+                            {cardType !== 'MEMORY' && cardType !== 'RAFALE' && (
                               <div className="memotion-img-row">
                                 {card.questionImage ? (
                                   <div className="memory-card-image-preview">
@@ -2955,6 +2404,106 @@ export default function QuestionsPage() {
                                 onCardChange={(pairId, cardKey, field, value) => handleMotionCardMemoryCardChange(card.id, pairId, cardKey, field, value)}
                                 onConfigChange={(field, value) => handleMotionCardMemoryConfigChange(card.id, field, value)}
                               />
+                            )}
+                            {/* #217 — sous-éditeur RAFALE d'une carte MEMOTION :
+                                catégories/difficultés multi-chips réutilisées
+                                telles quelles (filtrage du tirage, motif
+                                éprouvé rafale-multi-216.html) — MOINS le
+                                sélecteur de mode (SOLO forcé, 217-Q3 — aucun
+                                autre choix possible pour une carte, rien à
+                                afficher) et MOINS le barème par difficulté
+                                (contrat rafale.md §14.2 : « sans objet » en
+                                carte — le barème appartient à l'hôte, la carte
+                                porte son propre DIFFICULTY commun/étoiles,
+                                distribué en STARS_PRORATA comme MEMORY, #217-Q4).
+                                PLUS les deux bornes de la carte (durée propre,
+                                plafond de questions) au lieu du TIME générique
+                                de la manche classique. */}
+                            {cardType === 'RAFALE' && (
+                              <div className="rafale-section">
+                                <div className="form-group">
+                                  <label>Catégories — plusieurs possibles</label>
+                                  <div className="rafale-multi-chip-row">
+                                    {apiCategories.map(c => (
+                                      <button
+                                        type="button"
+                                        key={c.key}
+                                        className={`rafale-multi-chip ${card.rafaleCategories.includes(c.key) ? 'active' : ''}`}
+                                        onClick={() => toggleMotionCardRafaleCategory(card.id, c.key)}
+                                      >
+                                        {card.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
+                                        <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
+                                        {c.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="form-group">
+                                  {/* 🔴 Retour QUALIF v9.0.0.4 (point C5) — libellé
+                                      distinct du sélecteur "Valeur de la carte" plus
+                                      haut (RECTO, étoiles pleines de la carte) : ce
+                                      second sélecteur filtre le TIRAGE dans le
+                                      réservoir, sans rapport avec le barème de la
+                                      carte. Rien à retirer (ne rien supprimer sous
+                                      peine de casser le filtre de pioche) — le
+                                      problème était l'ambiguïté visuelle entre les
+                                      deux sélecteurs d'étoiles, pas la présence des
+                                      deux. */}
+                                  <label>Difficultés des questions tirées — plusieurs possibles</label>
+                                  <div className="rafale-multi-chip-row">
+                                    {[1, 2, 3].map(d => (
+                                      <button
+                                        key={d}
+                                        type="button"
+                                        className={`rafale-multi-chip ${card.rafaleDifficulties.includes(d) ? 'active' : ''}`}
+                                        onClick={() => toggleMotionCardRafaleDifficulty(card.id, d)}
+                                      >
+                                        {'★'.repeat(d)}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="form-row">
+                                  <div className="form-group">
+                                    <label htmlFor={`motion-card-${card.id}-duration`}>Durée de la carte (s)</label>
+                                    <input
+                                      id={`motion-card-${card.id}-duration`}
+                                      type="number"
+                                      value={card.rafaleRoundTime}
+                                      onChange={(e) => handleMotionCardChange(card.id, 'rafaleRoundTime', parseInt(e.target.value) || 1)}
+                                      min="5"
+                                      max="300"
+                                    />
+                                  </div>
+                                  <div className="form-group">
+                                    <label htmlFor={`motion-card-${card.id}-question-time`}>Temps par question (s)</label>
+                                    <input
+                                      id={`motion-card-${card.id}-question-time`}
+                                      type="number"
+                                      value={card.rafaleQuestionTime}
+                                      onChange={(e) => handleMotionCardChange(card.id, 'rafaleQuestionTime', parseInt(e.target.value) || 1)}
+                                      min="1"
+                                      max="30"
+                                    />
+                                  </div>
+                                  <div className="form-group">
+                                    <label htmlFor={`motion-card-${card.id}-max-questions`}>Plafond de questions</label>
+                                    <input
+                                      id={`motion-card-${card.id}-max-questions`}
+                                      type="number"
+                                      value={card.rafaleMaxQuestions}
+                                      onChange={(e) => handleMotionCardChange(card.id, 'rafaleMaxQuestions', Math.min(100, parseInt(e.target.value) || 1))}
+                                      min="1"
+                                      max="100"
+                                    />
+                                  </div>
+                                </div>
+                                <p className="section-hint">
+                                  Bornée par les deux à la fois — durée propre de la carte ET plafond de questions (217-Q2), comme la manche RAFALE classique (TIME + plafond).
+                                </p>
+                              </div>
                             )}
                           </div>
 
@@ -3061,25 +2610,70 @@ export default function QuestionsPage() {
                     (TIME/POINTS réutilisés tel quel, contrat §3.3). */}
                 {formData.type === 'RAFALE' && (
                   <div className="rafale-section">
-                    {/* Categorie — bugfix 2026-08-29 (contrat §3.3) : retire
-                        le multi-selecteur RAFALE_CATEGORIES, RAFALE utilise
-                        desormais le CategorySelector generique ci-dessus
-                        (formData.category, comme tous les autres types). */}
+                    {/* #216 (réouverture assumée de #107, maquette
+                        rafale-multi-216.html §02) — catégories ET difficultés
+                        redeviennent multi. Motif chips éprouvé de
+                        RafaleAIGenerateModal.jsx (toggle sur Set/array,
+                        classe "active" au lieu de "on" — cohérent avec le
+                        reste de cet éditeur, cf. .type-btn/.quiz-chip). */}
                     <div className="form-group">
-                      <label>Difficulte (une seule par manche)</label>
-                      <div className="memotion-difficulty-row">
+                      <label>Catégories — plusieurs possibles</label>
+                      <div className="rafale-multi-chip-row">
+                        {apiCategories.map(c => (
+                          <button
+                            type="button"
+                            key={c.key}
+                            className={`rafale-multi-chip ${formData.rafaleCategories.includes(c.key) ? 'active' : ''}`}
+                            onClick={() => toggleRafaleCategory(c.key)}
+                          >
+                            {formData.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
+                            <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
+                            {c.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Difficultés — plusieurs possibles</label>
+                      <div className="rafale-multi-chip-row">
                         {[1, 2, 3].map(d => (
                           <button
                             key={d}
                             type="button"
-                            className={`memotion-diff-btn ${formData.rafaleDifficulty === d ? 'active' : ''}`}
-                            onClick={() => handleInputChange('rafaleDifficulty', d)}
+                            className={`rafale-multi-chip ${formData.rafaleDifficulties.includes(d) ? 'active' : ''}`}
+                            onClick={() => toggleRafaleDifficulty(d)}
                           >
                             {'★'.repeat(d)}
                           </button>
                         ))}
                       </div>
                     </div>
+
+                    {formData.rafaleDifficulties.length > 0 && (
+                      <div className="form-group">
+                        <label>Points par bonne réponse, selon la difficulté</label>
+                        <div className="rafale-points-by-difficulty-row">
+                          {[...formData.rafaleDifficulties].sort((a, b) => a - b).map(d => (
+                            <div className="form-group" key={d}>
+                              <label htmlFor={`rafale-points-diff-${d}`}>{'★'.repeat(d)}</label>
+                              <input
+                                id={`rafale-points-diff-${d}`}
+                                type="number"
+                                min="0"
+                                max="100"
+                                placeholder={formData.points || '—'}
+                                value={formData.rafalePointsByDifficulty[String(d)] || ''}
+                                onChange={(e) => handleRafalePointsByDifficultyChange(d, e.target.value)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <span className="section-hint">
+                          Saisie libre. Si rien n'est renseigné pour une difficulté, le barème général de la manche (« Points » ci-dessous) s'applique.
+                        </span>
+                      </div>
+                    )}
 
                     {/* Mode Selector — meme patron que MEMORY/MEMOTION
                         ci-dessus (v8.0.0, #16/#199, bugfix cohérence UI) :
@@ -3136,23 +2730,85 @@ export default function QuestionsPage() {
                       </div>
                     </div>
 
-                    {/* Alerte de pool (contrat §7.2) — mêmes 3 états
-                        qu'avant le lancement (GamePage.jsx), calculés ici
-                        depuis les catégories/difficulté en cours d'édition
-                        pour guider l'admin AVANT même de sauvegarder la
-                        manche. */}
+                    {/* Alerte de pool (contrat §7.2, adaptée #216 à l'union
+                        catégories×difficultés) — mêmes 3 états qu'avant le
+                        lancement (GamePage.jsx), calculés ici depuis le
+                        filtre en cours d'édition pour guider l'admin AVANT
+                        même de sauvegarder la manche. */}
                     <RafalePoolAlert
-                      category={formData.category}
-                      difficulty={formData.rafaleDifficulty}
+                      categories={formData.rafaleCategories}
+                      difficulties={formData.rafaleDifficulties}
                       roundTime={parseInt(formData.time) || 0}
                       questionTime={formData.rafaleQuestionTime}
                     />
                   </div>
                 )}
 
+                {/* ENTRACTE (#214, milestone v9.0.0) — second déclencheur du
+                    mécanisme ENTRACTE existant (#119) : cette entrée du
+                    déroulé porte sa propre configuration de panneau, MÊME
+                    STRUCTURE de champs que la config globale (composant
+                    partagé EntracteFields, factorisé avec
+                    EntracteConfigForm.jsx/#215 plutôt que dupliqué). Le champ
+                    "Question" générique ci-dessus reste le libellé affiché
+                    dans le déroulé (maquette §02) — Titre/Sous-titre
+                    ci-dessous sont ce qui s'affiche RÉELLEMENT sur le
+                    panneau pendant la pause. */}
+                {formData.type === 'ENTRACTE' && (
+                  <div className="rafale-section">
+                    <EntracteFields
+                      values={formData.entracteConfig}
+                      onChange={handleEntracteConfigChange}
+                      titleId="question-entracte-title"
+                      subtitleId="question-entracte-subtitle"
+                    />
+                    {/* Image de fond — contracts/game-state.md §"Second
+                        déclencheur — entracte programmée" : "l'image de fond
+                        éventuelle de cette occurrence est le champ générique
+                        Question.MEDIA, comme pour tout autre type — pas de
+                        mécanisme dédié" (contrairement à IMAGE_IS_CUSTOM de
+                        l'entracte manuel, fichier unique sur disque). Lue
+                        côté panneau via EntractePanel `mediaUrl` (résolu par
+                        PlayerDisplay.jsx/VPlayerPage.jsx depuis
+                        gameState.question.MEDIA quand la pause active est
+                        celle de la question courante). */}
+                    <div className="form-group">
+                      <label htmlFor="entracte-media-input">Image de fond (optionnel)</label>
+                      <input
+                        id="entracte-media-input"
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="image/*"
+                      />
+                      {(formData.media || formData.existingMedia) && (
+                        <div className="media-preview">
+                          <img
+                            src={formData.media ? URL.createObjectURL(formData.media) : formData.existingMedia}
+                            alt="Aperçu de l'image de fond"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, media: null, existingMedia: null }))
+                              if (fileInputRef.current) fileInputRef.current.value = ''
+                            }}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      )}
+                      <p className="section-hint">Dégradé par défaut si aucune image n'est choisie.</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-row">
-                  {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card */}
-                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && (
+                  {/* Hide Points for MEMORY and MEMOTION - calculated per pair/card.
+                      ENTRACTE (#214) — ne rapporte jamais aucun point (maquette
+                      entracte-programme-214.html §04). */}
+                  {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'ENTRACTE' && (
                     <div className="form-group">
                       <label htmlFor="points-input">Points</label>
                       <input
@@ -3181,8 +2837,12 @@ export default function QuestionsPage() {
                 </div>
 
                 {/* Hide Image question/answer for MEMORY/MEMOTION/RAFALE — ARDOISE supports images (#94).
-                    RAFALE (v8.0.0, #16) — aucun média, contrat §3.3/D3 (texte seul, réservoir). */}
-                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && (
+                    RAFALE (v8.0.0, #16) — aucun média, contrat §3.3/D3 (texte seul, réservoir).
+                    ENTRACTE (#214) — le champ MEDIA générique EST utilisé (image de fond du
+                    panneau), mais avec son propre champ dédié dans la section ENTRACTE ci-dessous
+                    (libellé "Image de fond", pas "Image question") — pas de "Image reponse" (aucun
+                    sens pour ce type), donc exclu ici comme les 3 autres. */}
+                {formData.type !== 'MEMORY' && formData.type !== 'MEMOTION' && formData.type !== 'RAFALE' && formData.type !== 'ENTRACTE' && (
                   <>
                     <div className="form-group">
                       <label htmlFor="media-input">Image question (optionnel)</label>
@@ -3276,6 +2936,8 @@ export default function QuestionsPage() {
           </Card>
         </aside>
       </div>
+        </>
+      )}
 
       {showAIModal && (
         <AIGenerateModal
@@ -3291,7 +2953,11 @@ export default function QuestionsPage() {
           quizDifficulties={gameState.quizDifficulties}
           quizLanguage={gameState.quizLanguage}
           quizObjectives={gameState.quizObjectives}
-          hasUnsavedQuizChanges={quizFormDiverged}
+          // #215 — hasUnsavedQuizChanges (T2.5) omis délibérément : le
+          // formulaire Quiz vit désormais sur une page séparée
+          // (BackstagePage.jsx), donc plus jamais "non enregistré ET visible
+          // en même temps" que cette modale — le prop retombe sur son défaut
+          // (false), structurellement toujours correct depuis cette page.
           questions={questions}
           aiJob={aiJob}
           onCancelGeneration={cancelAiGeneration}
@@ -3311,12 +2977,6 @@ export default function QuestionsPage() {
       {shuffleToast && (
         <div className={`wifi-toast wifi-toast-${shuffleToast.type}`}>
           {shuffleToast.message}
-        </div>
-      )}
-
-      {entracteImageToast && (
-        <div className={`wifi-toast wifi-toast-${entracteImageToast.type}`}>
-          {entracteImageToast.message}
         </div>
       )}
     </div>

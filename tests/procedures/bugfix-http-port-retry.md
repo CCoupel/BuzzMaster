@@ -5,6 +5,13 @@
 **Commit** : f625bbe
 **Testeur** : QA
 
+> ⚠️ **Scénario 4 superseded par #220** (milestone v9.0.0, 2026-09-04) — voir
+> `tests/procedures/port-busy-startup-220.md`. #220 inverse volontairement ce comportement :
+> `EACCES` (permission refusée) ne doit **plus** faire planter le serveur sans retry ; il doit
+> désormais boucler à cadence lente avec un message actionnable, exactement comme un port occupé.
+> Ce fichier est conservé tel quel pour l'historique du fix original (f625bbe) — les Scénarios 1 à 3
+> restent valides tels que décrits.
+
 ---
 
 ## Contexte du Bug

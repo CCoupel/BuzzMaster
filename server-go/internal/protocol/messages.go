@@ -513,6 +513,18 @@ type SetVirtualPlayerLimitPayload struct {
 // same pattern as MotionSetTeamsPayload above.
 type RafaleSetTeamsPayload = MemorySetTeamsPayload
 
+// RafaleCardActionPayload for RAFALE_VALIDATE / RAFALE_INVALIDATE
+// (Admin/Anim → Server). CardScope.MotionCardID (#217, v9.0.0, contract
+// §14.5/§9) is optional and additive, same convention as
+// FlipMemoryCardPayload above: absent/empty ⇒ classic manche-scoped round
+// (today's behavior, unchanged); present ⇒ binds the validate/invalidate
+// to a MEMOTION card's own RAFALE mini-round instead. Both actions carried
+// no payload at all before #217 — an older client sending no MSG (or `{}`)
+// still parses fine into this struct's zero value.
+type RafaleCardActionPayload struct {
+	CardScope
+}
+
 // RafaleNextPayload carries the question suite's statement WITHOUT its
 // answer (#202, contract §13.3) — same shape as GameState's own
 // RafaleCurrent (models.go), a distinct type here (rather than reusing
@@ -550,17 +562,34 @@ type RafaleNextPayload struct {
 // contract §13.5), not an absence the client should have to special-case
 // away from "field missing" — same "no omitempty" discipline the project
 // already applies to GameState (CLAUDE.md).
+// CardScope (#217, v9.0.0, contract §14.6) is optional and additive:
+// MotionCardID absent/empty ⇒ classic manche-scoped round (today's
+// behavior, unchanged). Present ⇒ this answer belongs to a MEMOTION card's
+// own RAFALE mini-round instead — Next is always nil in that case (a
+// card's mini-round never pre-fetches, contract §14.2).
 type RafaleAnswerPayload struct {
 	ID     string             `json:"ID"`     // RafaleQuestion.ID this answer belongs to
 	Answer string             `json:"ANSWER"` // expected answer, text only
 	Next   *RafaleNextPayload `json:"NEXT"`   // pre-fetched next question, answer-free; null = none (contract §13.5)
+	CardScope
 }
 
 // RafaleTickPayload for the RAFALE_TICK action (Server → all clients,
 // contract §5.2) — the lightweight per-question countdown, broadcast
 // without re-emitting the full GameState (contract §2.2).
+//
+// CardScope.MotionCardID (C1, retour QUALIF v9.0.0.4) — "" for the classic
+// manche-scoped round (unchanged behavior), the active card's ID for a
+// #217 RAFALE mini-round. Before C1 this payload carried no host
+// information at all, so a client had no way to tell a card-hosted tick
+// apart from a classic one — the "chrono figé" bug: a client scoping its
+// own display to MOTION_CARD_ID could never find a match and the card's
+// countdown never advanced on screen, even though the engine was ticking
+// it down correctly the whole time (contracts/rafale.md §14, engine-level
+// coverage already existed for this).
 type RafaleTickPayload struct {
 	QuestionTime int `json:"QUESTION_TIME"` // seconds remaining on the current question
+	CardScope
 }
 
 // PlayerConnectPayload for PLAYER_CONNECT action (virtual player enrollment)

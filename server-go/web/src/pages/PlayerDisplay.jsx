@@ -18,6 +18,7 @@ import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils
 import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
+import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
@@ -168,6 +169,46 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
           </motion.span>
         </>
       )}
+    </div>
+  )
+}
+
+// RAFALE — pastilles catégorie/difficulté (retour QUALIF v9.0.0.4, point A1/A2,
+// `docs/mockups/rafale-ready-217.html` §02/§03). Une manche RAFALE porte une
+// LISTE de catégories/difficultés depuis #216 (`effectiveRafaleCategories`/
+// `effectiveRafaleDifficulties`, `utils/rafaleEffective.js` — repli mono
+// automatique pour une manche enregistrée avant #216) — jamais une valeur
+// singulière comme les autres types. Une pastille PAR élément, jamais des
+// étoiles concaténées dans une seule pastille (« ★ ★★ » se lit comme un
+// unique niveau à 3 étoiles) — utilisé par l'écran READY (dédié, plus bas)
+// et par l'écran COUNTDOWN (zone catégorie, remplace le badge unique
+// devenu vide depuis #216 pour ce type).
+function RafaleCategoryPastilles({ categories, customCategories }) {
+  if (!categories?.length) return null
+  return (
+    <div className="rafale-ready-row">
+      {categories.map(cat => {
+        const meta = categoryMeta(cat, customCategories)
+        return (
+          <span key={cat} className="rafale-ready-cat" style={{ backgroundColor: meta?.color || 'var(--gray-400)' }}>
+            {meta?.imageURL
+              ? <img src={meta.imageURL} alt={meta.label} className="rafale-ready-cat-img" />
+              : meta?.icon && <span className="rafale-ready-cat-icon">{meta.icon}</span>}
+            <span className="rafale-ready-cat-label">{meta?.label || cat}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function RafaleDifficultyPastilles({ difficulties }) {
+  if (!difficulties?.length) return null
+  return (
+    <div className="rafale-ready-row">
+      {difficulties.map(d => (
+        <span key={d} className="rafale-ready-diff">{'★'.repeat(d)}</span>
+      ))}
     </div>
   )
 }
@@ -657,6 +698,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // MEMOTION/ARDOISE : sans lui, un TYPE "RAFALE" tomberait dans `isSpeedy`
   // et afficherait le bloc générique à la place du bloc dédié ci-dessous.
   const isRafale = gameState.question?.TYPE === 'RAFALE'
+  // ENTRACTE (#214, milestone v9.0.0) — second déclencheur du mécanisme
+  // ENTRACTE existant (#119) : une entrée du déroulé, ni buzzer, ni équipe,
+  // ni minuteur de question (cycle standard PREPARE→READY→START, backend
+  // engine.go). Le panneau ENTRACTE lui-même (EntractePanel, plus bas) est
+  // un frère de tout ceci, gated uniquement par `gameState.entracte` —
+  // AUCUN changement requis ici pour lui. Ce flag ne sert qu'à éviter le
+  // piège documenté ci-dessous (dispatch positif, #183/A-F1) : un TYPE
+  // "ENTRACTE" non reconnu ne doit jamais retomber silencieusement sur un
+  // bloc générique conçu pour un autre type de contenu.
+  const isEntracte = gameState.question?.TYPE === 'ENTRACTE'
   // #183/A-F1 — dispatch positif du type de contenu affiché : remplace les
   // gardes par négation (`!isQcm && !isMemory && !isMemotion`), répétées à 3
   // endroits pour la mise en page par défaut partagée SPEEDY/ARDOISE.
@@ -666,7 +717,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // renseigné qui ne correspond à aucune des 4 branches ci-dessus (donc
   // inconnu des 5 types gérés) n'est plus traité comme SPEEDY par défaut —
   // inatteignable avec les données actuelles (5 types connus).
-  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale
+  const isKnownOtherType = isQcm || isMemory || isMemotion || isArdoise || isRafale || isEntracte
   const isSpeedy = !isKnownOtherType && (!gameState.question?.TYPE || gameState.question?.TYPE === 'SPEEDY')
   // QCM answers visible from READY through REVEALED (no re-render on transition)
   const showQcmAnswers = ['READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
@@ -882,6 +933,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
   // Get category color for neon effect
   // Priority: MEMOTION team color > Memory team color > Category color > default
+  //
+  // 🔴 Retour QUALIF v9.0.0.4 (point A+4) — depuis #216 une manche RAFALE
+  // porte une LISTE de catégories (question.CATEGORY, singulier, est vide) :
+  // le néon perdait sa teinte pendant TOUTE la manche. `RAFALE_CURRENT_QUESTION.CATEGORY`
+  // (la question réellement tirée à l'instant présent) existe déjà et suit
+  // naturellement chaque question — même champ déjà lu par le bloc RAFALE TV
+  // dédié plus bas (`categoryMeta(current.CATEGORY, ...)`) — plutôt qu'un
+  // repli statique sur `effectiveRafaleCategories(question)[0]` qui figerait
+  // le néon sur une seule catégorie pour toute la manche même si plusieurs
+  // sont retenues.
   const neonCategoryColor = useMemo(() => {
     // MEMOTION: use current team color
     if (Array.isArray(gameState?.MEMOTION_CURRENT_TEAM_COLOR) && gameState.MEMOTION_CURRENT_TEAM_COLOR.length === 3) {
@@ -891,9 +952,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     if (Array.isArray(gameState?.MEMORY_CURRENT_TEAM_COLOR) && gameState.MEMORY_CURRENT_TEAM_COLOR.length === 3) {
       return `rgb(${gameState.MEMORY_CURRENT_TEAM_COLOR.join(',')})`
     }
+    // RAFALE : la catégorie suit la question tirée, pas la manche (§3.3 —
+    // question.CATEGORY n'existe plus depuis #216 pour ce type).
+    if (gameState?.question?.TYPE === 'RAFALE') {
+      return getCategoryColor(gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY)
+    }
     // Otherwise, use category color
     return getCategoryColor(gameState?.question?.CATEGORY)
-  }, [gameState?.question?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR, gameState?.MEMOTION_CURRENT_TEAM_COLOR])
+  }, [gameState?.question?.TYPE, gameState?.question?.CATEGORY, gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR, gameState?.MEMOTION_CURRENT_TEAM_COLOR])
 
   // Neon style variables
   const neonStyle = useMemo(() => {
@@ -968,6 +1034,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // cette garde les deux filtres se composeraient et l'écran deviendrait
   // presque noir (piège documenté au plan, "double filtrage").
   const entracteActiveHere = !!gameState.entracte && !isVPlayer
+  // #214 — pause PROGRAMMÉE (question TYPE=ENTRACTE, jamais l'entracte
+  // manuel qui n'a pas de `question` de ce type) : l'image de fond de
+  // l'occurrence vient de Question.MEDIA, pas de IMAGE_IS_CUSTOM
+  // (contracts/game-state.md §"Second déclencheur — entracte programmée").
+  // `gameState.entracte` seul ne suffit pas à distinguer les deux
+  // déclencheurs — `question.TYPE === 'ENTRACTE'` le fait (c'est la SEULE
+  // façon dont ENTRACTE peut valoir true pendant STARTED, même contrat).
+  const entracteMediaUrl = (gameState.entracte && gameState.question?.TYPE === 'ENTRACTE')
+    ? (gameState.question.MEDIA || null)
+    : null
   // Transition progressive (#119, C3) — --ep-transition posée ici, héritée
   // par .entracte-dim et le fondu du panneau (même durée pour les deux
   // mécanismes). Depuis entracteConfig (diffusé, gelé pendant une pause
@@ -1490,10 +1566,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number.
-                RAFALE (v8.0.0, #16/#198, bugfix TV vide — retour utilisateur QUALIF 8.0.0.3) : inclus
-                ici comme SPEEDY/ARDOISE — depuis le bugfix CATEGORY unique (2026-08-29, contrat §3.3),
-                gameState.question.CATEGORY est renseigné pour RAFALE comme pour tout autre type, la
-                catégorie s'anime donc normalement en plus du timer + décompte. */}
+                RAFALE (v8.0.0, #16/#198) : inclus ici comme SPEEDY/ARDOISE.
+                🔴 Retour QUALIF v9.0.0.4 (point A2) — depuis #216 une manche
+                RAFALE porte une LISTE de catégories (RAFALE_CATEGORIES),
+                `gameState.question.CATEGORY` (singulier) est vide : la zone
+                catégorie retombait sur `null`, silencieusement vide, tout le
+                temps du décompte — même cause racine que l'écran READY (A1).
+                Repli via `effectiveRafaleCategories` (une pastille par
+                catégorie retenue, `RafaleCategoryPastilles` ci-dessus),
+                SPEEDY/ARDOISE inchangés (une seule catégorie, badge unique). */}
             {showCountdown && (isSpeedy || isArdoise || isRafale) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
@@ -1509,7 +1590,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 2: Category badge animates from center to question zone */}
                 <div className="zone-question">
-                  {(() => {
+                  {isRafale ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 150, scale: 1.2 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                    >
+                      <RafaleCategoryPastilles categories={effectiveRafaleCategories(gameState.question)} customCategories={apiCategories} />
+                    </motion.div>
+                  ) : (() => {
                     const catMeta = categoryMeta(gameState.question?.CATEGORY, apiCategories)
                     if (!catMeta) return null
                     return (
@@ -1559,15 +1648,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
             {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM).
                 RAFALE (v8.0.0, #16/#198, bugfix TV vide en READY — retour utilisateur QUALIF
-                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE — ReadyCategoryDisplay affiche désormais
-                la vraie catégorie de la manche (gameState.question.CATEGORY, unique depuis le
-                bugfix 2026-08-29, contrat §3.3), comme pour tout autre type. Cause racine (READY
-                totalement vide, avant ce bugfix-ci) :
-                `showGameContent` (bloc RAFALE dédié, plus bas) ne couvre que STARTED/PAUSED/
-                STOPPED/REVEALED — READY (et COUNTDOWN ci-dessus) en étaient exclus, et `isRafale`
-                étant dans `isKnownOtherType`, RAFALE ne retombait plus non plus sur ce bloc
-                générique par défaut (#183) — l'écran restait vide faute d'un chemin explicite. */}
-            {showReady && (isSpeedy || isArdoise || isRafale) && (
+                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE à l'origine — ReadyCategoryDisplay lisait
+                gameState.question.CATEGORY, unique depuis le bugfix 2026-08-29 (contrat §3.3).
+                🔴 Retour QUALIF v9.0.0.4 (point A1) — depuis #216 une manche RAFALE porte une LISTE
+                de catégories/difficultés (RAFALE_CATEGORIES/RAFALE_DIFFICULTIES), CATEGORY
+                (singulier) redevient vide : `catKey` nul faisait retomber ReadyCategoryDisplay sur
+                son repli ✋ PRÉPAREZ-VOUS — visuellement indiscernable de l'écran PREPARE. RAFALE
+                retiré d'ici, bloc dédié juste en dessous (maquette rafale-ready-217.html).
+                ENTRACTE (#214) reste inclus ici pour la même raison qu'à l'origine : avant START
+                (donc avant que `gameState.entracte` ne lève le panneau, backend engine.go
+                SetEntracte), READY afficherait sinon un écran vide plutôt que le même minuteur
+                neutre que les autres types. */}
+            {showReady && (isSpeedy || isArdoise || isEntracte) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1600,6 +1692,102 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 <div className="zone-answers" />
               </div>
             )}
+
+            {/* READY State — RAFALE, branche dédiée (retour QUALIF v9.0.0.4,
+                point A1, `docs/mockups/rafale-ready-217.html` — validée).
+                Patron repris du bloc READY MEMOTION (isMemotion, plus bas,
+                `if (showReady) { ... }`) : double minuteur dès READY (pas
+                de saut de mise en page au lancement, §02), équipes
+                participantes en zone basse (§02). ❌ Aucun plafond de
+                questions affiché (arbitrage utilisateur explicite, §03) —
+                RAFALE_MAX_QUESTIONS n'est lu nulle part ici. VPlayer : pas
+                de contenu détaillé (la tablette d'un joueur n'a pas besoin
+                des catégories, même philosophie que le bloc RAFALE
+                showGameContent ci-dessous). */}
+            {showReady && isRafale && (() => {
+              const rafaleReadyCategories = effectiveRafaleCategories(gameState.question)
+              const rafaleReadyDifficulties = effectiveRafaleDifficulties(gameState.question)
+              const rafaleReadyTeams = gameState.RAFALE_PARTICIPATING_TEAMS || []
+              const rafaleReadyQuestionTime = gameState.question?.RAFALE_QUESTION_TIME || 3
+
+              if (isVPlayer) {
+                return (
+                  <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
+                    <span className="rafale-vplayer-fs-message">Préparez-vous —<br />manche RAFALE</span>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="game-content-zones rafale-tv rafale-tv-ready">
+                  {/* Zone 1: double minuteur, dès READY (§02 — pas de saut de
+                      mise en page au lancement). Encore statique : le round
+                      n'a pas démarré, roundTime === totalTime et le minuteur
+                      de question affiche sa pleine durée. */}
+                  <div className="zone-timer rafale-tv-zone-timer">
+                    <RafaleTimers
+                      roundTime={gameState.timer}
+                      roundTotal={gameState.totalTime}
+                      questionTime={rafaleReadyQuestionTime}
+                      questionTotal={rafaleReadyQuestionTime}
+                      phase={gameState.phase}
+                      size="xl"
+                    />
+                  </div>
+
+                  <div className="zone-question" />
+
+                  {/* Zone 3: type de jeu + une pastille par catégorie/difficulté
+                      retenue (jamais d'étoiles concaténées, §03). */}
+                  <div className="zone-media">
+                    <motion.div
+                      className="rafale-ready-display"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      <span
+                        className="rafale-ready-gtype"
+                        style={{ color: GAME_TYPE_COLORS.RAFALE.color, textShadow: `0 0 20px ${GAME_TYPE_COLORS.RAFALE.shadow}, 0 0 50px ${GAME_TYPE_COLORS.RAFALE.shadow}` }}
+                      >
+                        RAFALE
+                      </span>
+                      {rafaleReadyCategories.length > 0 && (
+                        <>
+                          <div className="rafale-ready-group-label">{rafaleReadyCategories.length > 1 ? 'CATÉGORIES' : 'CATÉGORIE'}</div>
+                          <RafaleCategoryPastilles categories={rafaleReadyCategories} customCategories={apiCategories} />
+                        </>
+                      )}
+                      {rafaleReadyDifficulties.length > 0 && (
+                        <>
+                          <div className="rafale-ready-group-label">{rafaleReadyDifficulties.length > 1 ? 'DIFFICULTÉS' : 'DIFFICULTÉ'}</div>
+                          <RafaleDifficultyPastilles difficulties={rafaleReadyDifficulties} />
+                        </>
+                      )}
+                    </motion.div>
+                  </div>
+
+                  {/* Zone 4: équipes participantes — même patron que le READY
+                      MEMOTION (memory-team-chip inactive). */}
+                  <div className="zone-answers">
+                    {rafaleReadyTeams.length > 0 && (
+                      <div className="memory-team-bar">
+                        {rafaleReadyTeams.map((tName) => {
+                          const teamData = teams[tName]
+                          const tColor = teamData?.COLOR
+                            ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
+                            : 'var(--gray-400)'
+                          return (
+                            <div key={tName} className="memory-team-chip inactive" style={{ backgroundColor: tColor, '--team-color': tColor }}>
+                              <span className="team-name">{tName}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* QCM Game Content - unified block for READY through REVEALED (no flash on transition) */}
             {isQcm && showQcmAnswers && gameState.question && (
@@ -2216,6 +2404,19 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   })}
                 </div>
               )
+              // #217 (milestone v9.0.0, contrat rafale.md §14.2) — carte
+              // RAFALE : mini-manche à plusieurs questions, état vivant
+              // exclusivement dans MEMOTION_ACTIVE.STATE (getTypeState, jamais
+              // les 13 champs globaux GameState.RAFALE_* — hôtes mutuellement
+              // exclusifs). `.currentQuestion.POINTS` vaut toujours 0 en carte
+              // (barème par question sans objet, §14.2) — jamais affiché ici.
+              // TV = affichage passif pur (§8.1) : aucune réponse
+              // (RAFALE_ANSWER) n'atteint jamais ce client, rien à masquer.
+              const cardRafaleState = getTypeState(gameState, cardHostContext).rafale
+              const cardRafaleCatMeta = cardType === 'RAFALE'
+                ? categoryMeta(cardRafaleState.currentQuestion.CATEGORY, apiCategories)
+                : null
+
               const motionCfg = gameState.question?.MOTION_CONFIG
               const diffPts = d => getMotionCardPoints(d, motionCfg)
 
@@ -2237,16 +2438,38 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 <div className={`game-content-zones memory-game memotion-game${subphase === 'MEMORIZE' ? ' memotion-memorize-active' : ''}`}>
                   {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif.
                       hintMarkers (#185, correction ponctuelle) : repères de seuils d'indices,
-                      null hors carte QCM à indices activés — cf. qcmHintMarkers ci-dessus. */}
-                  <div className="zone-timer">
-                    <Timer
-                      currentTime={gameState.timer}
-                      totalTime={gameState.totalTime}
-                      phase={gameState.phase}
-                      size="xl"
-                      showPhase={false}
-                      hintMarkers={qcmHintMarkers}
-                    />
+                      null hors carte QCM à indices activés — cf. qcmHintMarkers ci-dessus.
+                      🔴 C6 (retour QUALIF v9.0.0.4) — carte RAFALE : double
+                      minuteur (RafaleTimers, même composant/mêmes libellés A3
+                      que la manche classique) au lieu du Timer générique
+                      seul — la durée de manche ET la durée par question sont
+                      TOUTES DEUX pertinentes pour une mini-manche RAFALE,
+                      contrairement aux autres types de carte (une seule
+                      durée). `gameState.timer`/`totalTime` reste le minuteur
+                      de CARTE générique et partagé (contrat rafale.md
+                      §14.1 : sert la durée propre de la carte,
+                      `RAFALE_ROUND_TIME`) — aucun doublon avec le Timer
+                      per-question retiré du footer (Row 3, C6b). */}
+                  <div className={`zone-timer${cardType === 'RAFALE' ? ' rafale-tv-zone-timer' : ''}`}>
+                    {cardType === 'RAFALE' ? (
+                      <RafaleTimers
+                        roundTime={gameState.timer}
+                        roundTotal={gameState.totalTime}
+                        questionTime={cardRafaleState.questionTime}
+                        questionTotal={selectedCard?.RAFALE_QUESTION_TIME || 3}
+                        phase={gameState.phase}
+                        size="xl"
+                      />
+                    ) : (
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="xl"
+                        showPhase={false}
+                        hintMarkers={qcmHintMarkers}
+                      />
+                    )}
                   </div>
 
                   {/* Zones 2-4: contenu grille — dimmed séparément quand overlay actif */}
@@ -2504,26 +2727,55 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
                     style={{ position: 'absolute', top: '10vh', left: 0, right: 0, bottom: 0, zIndex: 10, perspective: '1200px' }}
                   >
-                    {/* Row 1 : Texte de la question */}
+                    {/* Row 1 : Texte de la question — #217, carte RAFALE :
+                        `selectedCard.QUESTION_TEXT` est vide (aucune question
+                        propre à la carte, contrat §14.1 : mini-manche à
+                        plusieurs questions) — le texte affiché suit la
+                        question TIRÉE en cours (`cardRafaleState.currentQuestion`,
+                        MEMOTION_ACTIVE.STATE), jamais un champ figé de
+                        MOTION_CARDS[i]. */}
                     <div className="memotion-tv-fs-header memotion-tv-fs-recto-zone">
-                      {selectedCard.QUESTION_TEXT && (
+                      {(cardType === 'RAFALE' ? cardRafaleState.currentQuestion.QUESTION : selectedCard.QUESTION_TEXT) && (
                         <motion.p
+                          key={cardType === 'RAFALE' ? cardRafaleState.currentQuestion.ID : undefined}
                           className="memotion-tv-fs-question-text"
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: 0.3 }}
                         >
-                          {selectedCard.QUESTION_TEXT}
+                          {cardType === 'RAFALE' ? cardRafaleState.currentQuestion.QUESTION : selectedCard.QUESTION_TEXT}
                         </motion.p>
                       )}
                     </div>
                     {/* Row 2 : Image de la question — #187, MEMORY n'a pas de
                         `question` MediaSlot (contrat §7 : "recto + N paires") :
                         la grille EST le contenu de la carte, elle occupe cet
-                        emplacement à la place d'une image. */}
+                        emplacement à la place d'une image. #217, RAFALE : pas
+                        de MediaSlot non plus (exemption texte seul, contrat
+                        question-types.md §7.6) — cet emplacement porte les
+                        chips catégorie/difficulté de la question tirée
+                        (jamais POINTS, toujours 0 en carte, §14.2 — barème
+                        distribué en STARS_PRORATA sur le DIFFICULTY commun
+                        de la carte, pas par question). */}
                     <div className="memotion-tv-fs-body">
                       {cardType === 'MEMORY' ? (
                         renderCardMemoryGrid()
+                      ) : cardType === 'RAFALE' ? (
+                        (cardRafaleCatMeta || cardRafaleState.currentQuestion.DIFFICULTY > 0) && (
+                          <div className="memotion-tv-fs-rafale-meta">
+                            {cardRafaleCatMeta && (
+                              <span className="memotion-tv-fs-rafale-chip">
+                                {cardRafaleCatMeta.imageURL
+                                  ? <img src={cardRafaleCatMeta.imageURL} alt={cardRafaleCatMeta.label} className="memotion-tv-fs-rafale-chip-img" />
+                                  : <span>{cardRafaleCatMeta.icon}</span>}
+                                {' '}{cardRafaleCatMeta.label}
+                              </span>
+                            )}
+                            {cardRafaleState.currentQuestion.DIFFICULTY > 0 && (
+                              <span className="memotion-tv-fs-rafale-chip">{'★'.repeat(cardRafaleState.currentQuestion.DIFFICULTY)}</span>
+                            )}
+                          </div>
+                        )
                       ) : selectedCard.QUESTION_IMAGE && (
                         <motion.img
                           src={selectedCard.QUESTION_IMAGE}
@@ -2539,10 +2791,26 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         réponses ici (#185/C-F2). Vide pour SPEEDY — aucun
                         contenu propre à ce type sur la face VERSO (contrat
                         §3.1 : SPEEDY ne possède que ANSWER_TEXT/ANSWER_IMAGE,
-                        tous deux affichés en REVEAL, pas ici). */}
+                        tous deux affichés en REVEAL, pas ici).
+                        🔴 C6/C6b/C7 (retour QUALIF v9.0.0.4) — RAFALE :
+                        progression (rang de la question) SEULE ici, plus de
+                        minuteur par question dupliqué (le double minuteur vit
+                        désormais dans `gridView`, zone haute, C6 — un
+                        Timer isolé ici en aurait été la copie exacte). C7 —
+                        "question 4" (un rang) juxtaposé à "Question · 2" (une
+                        durée) se lisait comme deux nombres de même nature ;
+                        recomposé en ordinal ("4ᵉ question") pour lever toute
+                        ambiguïté, même hors de portée visuelle du minuteur
+                        depuis son déplacement. */}
                     {cardType === 'QCM' ? (
                       <div className="memotion-tv-fs-footer memotion-tv-fs-qcm-zone">
                         {renderCardQcmGrid(false)}
+                      </div>
+                    ) : cardType === 'RAFALE' ? (
+                      <div className="memotion-tv-fs-footer memotion-tv-fs-rafale-zone">
+                        {cardRafaleState.askedCount > 0 && (
+                          <span className="memotion-tv-fs-rafale-chip">{cardRafaleState.askedCount}ᵉ question</span>
+                        )}
                       </div>
                     ) : (
                       <div className="memotion-tv-fs-footer" />
@@ -2913,7 +3181,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       {currentTeam && (
                         <span className="rafale-tv-qcard-team">{currentTeam}</span>
                       )}
-                      {(catMeta || current.DIFFICULTY > 0) && (
+                      {(catMeta || current.DIFFICULTY > 0 || current.POINTS > 0) && (
                         <div className="rafale-tv-meta">
                           {catMeta && (
                             <span className="rafale-tv-chip">
@@ -2925,6 +3193,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           )}
                           {current.DIFFICULTY > 0 && (
                             <span className="rafale-tv-chip">{'★'.repeat(current.DIFFICULTY)}</span>
+                          )}
+                          {/* #216, 216-Q7d — barème résolu de la question en
+                              cours (contrat §4) : la valeur d'une manche
+                              RAFALE peut désormais varier d'une question à
+                              l'autre selon sa difficulté, elle doit donc être
+                              lisible pour la salle (maquette §04). */}
+                          {current.POINTS > 0 && (
+                            <span className="rafale-tv-chip">{current.POINTS} pts</span>
                           )}
                         </div>
                       )}
@@ -2938,6 +3214,25 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 </div>
               )
             })()}
+
+            {/* ENTRACTE (#214) — dispatch positif requis (voir isEntracte
+                ci-dessus), STARTED/PAUSED/STOPPED/REVEALED. Contenu
+                délibérément minimal : le panneau ENTRACTE (EntractePanel,
+                frère de ce bloc plus bas dans le DOM) porte tout le message
+                visuel dès que `gameState.entracte` (backend engine.go
+                SetEntracte, levé à START pour ce type) devient actif — ce
+                bloc n'existe que pour éviter un écran cassé/vide pendant la
+                fenêtre entre STARTED et la propagation du drapeau, jamais un
+                minuteur/une question (ni buzzer, ni équipe, ni minuteur de
+                question pour ce type, contrat question-types.md). */}
+            {isEntracte && showGameContent && gameState.question && (
+              <div className="game-content-zones">
+                <div className="zone-timer" />
+                <div className="zone-question" />
+                <div className="zone-media" />
+                <div className="zone-answers" />
+              </div>
+            )}
 
             {/* Waiting State - no question selected (NOT shown for VPlayer) */}
             {!isVPlayer && !gameState.question && ['STOPPED', 'REVEALED'].includes(gameState.phase) && (
@@ -2983,7 +3278,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
           instantanément à la sortie, quelle que soit TRANSITION_MS — il
           n'existerait plus pour jouer son fondu de sortie. */}
       <AnimatePresence>
-        {entracteActiveHere && <EntractePanel key="entracte-panel" config={gameState.entracteConfig} />}
+        {entracteActiveHere && <EntractePanel key="entracte-panel" config={gameState.entracteConfig} mediaUrl={entracteMediaUrl} />}
       </AnimatePresence>
 
       {/* QR Code Overlay — suppressed during ENROLL (dedicated two-QR view handles it) */}

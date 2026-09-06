@@ -4,6 +4,19 @@ import './CategoryBalance.css'
 
 // Import categories from QuestionsPage
 import { CATEGORIES } from '../pages/QuestionsPage'
+import { effectiveRafaleCategories } from '../utils/rafaleEffective'
+
+// 🔴 Retour QUALIF v9.0.0.4 (point A+3) — depuis #216 une manche RAFALE porte
+// une LISTE de catégories (RAFALE_CATEGORIES), q.CATEGORY (singulier) est
+// vide : toute manche RAFALE tombait dans 'UNCATEGORIZED', exclue à la fois
+// des catégories représentées ET du dénominateur (totalQuestions). Une
+// manche RAFALE compte pour CHACUNE de ses catégories effectives (couverture
+// du quiz, pas une répartition de points — sans objet ici, ce composant
+// travaille sur la définition des questions, pas une partie en cours).
+function questionCategoryKeys(q) {
+  if (q.TYPE === 'RAFALE') return effectiveRafaleCategories(q)
+  return q.CATEGORY ? [q.CATEGORY] : []
+}
 
 /**
  * CategoryBalance - Displays category distribution balance
@@ -19,13 +32,16 @@ export default function CategoryBalance({ questions = [] }) {
     const categoryData = {}
 
     questions.forEach(q => {
-      const cat = q.CATEGORY || 'UNCATEGORIZED'
-      if (!categoryData[cat]) {
-        categoryData[cat] = { count: 0, points: 0, questions: [] }
-      }
-      categoryData[cat].count += 1
-      categoryData[cat].points += parseInt(q.POINTS) || 0
-      categoryData[cat].questions.push(q)
+      const cats = questionCategoryKeys(q)
+      const keys = cats.length > 0 ? cats : ['UNCATEGORIZED']
+      keys.forEach(cat => {
+        if (!categoryData[cat]) {
+          categoryData[cat] = { count: 0, points: 0, questions: [] }
+        }
+        categoryData[cat].count += 1
+        categoryData[cat].points += parseInt(q.POINTS) || 0
+        categoryData[cat].questions.push(q)
+      })
     })
 
     // Only keep categories that have questions and are in CATEGORIES
@@ -38,7 +54,7 @@ export default function CategoryBalance({ questions = [] }) {
     }
 
     // Calculate totals and averages
-    const totalQuestions = questions.filter(q => q.CATEGORY && CATEGORIES[q.CATEGORY]).length
+    const totalQuestions = questions.filter(q => questionCategoryKeys(q).some(cat => CATEGORIES[cat])).length
     const totalPoints = representedCategories.reduce((sum, cat) => sum + categoryData[cat].points, 0)
     const avgQuestions = totalQuestions / representedCategories.length
     const avgPoints = totalPoints / representedCategories.length

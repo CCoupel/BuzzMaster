@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { GameProvider, useGame } from './hooks/GameContext'
 import Navbar from './components/Navbar'
 import RegieMessageBar from './components/RegieMessageBar'
@@ -7,7 +7,7 @@ import GamePage from './pages/GamePage'
 import ScoresPage from './pages/ScoresPage'
 import TeamsPage from './pages/TeamsPage'
 import QuestionsPage from './pages/QuestionsPage'
-import RafalePage from './pages/RafalePage'
+import BackstagePage from './pages/BackstagePage'
 import HistoryPage from './pages/HistoryPage'
 import CategoryPalmaresPage from './pages/CategoryPalmaresPage'
 import LogsPage from './pages/LogsPage'
@@ -29,9 +29,13 @@ const adminRoutes = [
   { path: 'scoreboard', element: <ScoresPage /> },
   { path: 'teams', element: <TeamsPage /> },
   { path: 'quiz', element: <QuestionsPage /> },
-  // RAFALE (milestone v8.0.0, #16/#197/#198) — éditeur du réservoir,
-  // page dédiée séparée du Quiz/MEMOTION (contrat rafale.md §2.4/§9).
-  { path: 'rafale', element: <RafalePage /> },
+  // Backstage (#215, milestone v9.0.0) — préparation de la partie (Quiz
+  // méta/Entracte/Fonds d'écran), extraite de QuestionsPage qui mélangeait
+  // deux métiers sans rapport. RAFALE (milestone v8.0.0, #16/#197/#198)
+  // n'est plus une route dédiée : son réservoir est devenu un onglet de
+  // QuestionsPage — /admin/rafale est conservée en redirection ci-dessous
+  // pour ne pas casser les favoris existants.
+  { path: 'backstage', element: <BackstagePage /> },
   { path: 'history', element: <HistoryPage /> },
   { path: 'palmares', element: <CategoryPalmaresPage /> },
   { path: 'settings', element: <ConfigPage /> },
@@ -76,6 +80,11 @@ function AppContent() {
 
           {/* Logs page (dedicated WebSocket) */}
           <Route path="/admin/logs" element={<LogsPage />} />
+
+          {/* #215 — /admin/rafale (route dédiée jusqu'à v9.0.0) redirige vers
+              l'onglet Rafale de /admin/quiz, pour ne pas casser les favoris
+              existants (maquette backstage-215.html §02). */}
+          <Route path="/admin/rafale" element={<Navigate to="/admin/quiz?tab=rafale" replace />} />
 
           {/* Animateur page — its own single route, connected via /ws/anim (#155) */}
           <Route path="/anim" element={<AnimPage />} />

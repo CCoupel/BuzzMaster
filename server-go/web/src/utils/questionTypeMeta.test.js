@@ -33,23 +33,24 @@ const AI_GENERATE_MODAL_PATH = path.join(HERE, '..', 'components', 'AIGenerateMo
 
 // KNOWN_TYPES — les 5 types "réels" antérieurs à RAFALE (v8.0.0, #16) :
 // reste le périmètre exact de GENERABLE_TYPES (génération IA), qui EXCLUT
-// RAFALE à dessein (maquette rafale-v8.html §8 — hors scope v8.0). Voir
+// RAFALE et ENTRACTE à dessein (maquette rafale-v8.html §8 — hors scope
+// v8.0 ; ENTRACTE #214 — pas une question, une pause, rien à générer). Voir
 // ALL_TYPES ci-dessous pour les tests génériques du registre complet.
 const KNOWN_TYPES = ['SPEEDY', 'QCM', 'MEMORY', 'MEMOTION', 'ARDOISE']
-// ALL_TYPES — les 6 types réellement enregistrés dans QUESTION_TYPES depuis
-// RAFALE (v8.0.0, #16, contrat rafale.md §2.1 : un QuestionType comme les
-// autres, porteur d'une configuration de manche).
-const ALL_TYPES = [...KNOWN_TYPES, 'RAFALE']
+// ALL_TYPES — les 7 types réellement enregistrés dans QUESTION_TYPES depuis
+// RAFALE (v8.0.0, #16, contrat rafale.md §2.1) et ENTRACTE (#214, milestone
+// v9.0.0, second déclencheur du mécanisme ENTRACTE existant #119).
+const ALL_TYPES = [...KNOWN_TYPES, 'RAFALE', 'ENTRACTE']
 
 // ---------------------------------------------------------------------------
-// 1. Le registre — 6 types connus, forme attendue.
+// 1. Le registre — 7 types connus, forme attendue.
 // ---------------------------------------------------------------------------
 
 describe('questionTypeMeta — registre QUESTION_TYPES / QUESTION_TYPE_META', () => {
-  it('QUESTION_TYPES contient exactement les 6 types connus, une fois chacun', () => {
+  it('QUESTION_TYPES contient exactement les 7 types connus, une fois chacun', () => {
     const keys = QUESTION_TYPES.map(t => t.key)
-    expect(keys).toHaveLength(6)
-    expect(new Set(keys).size).toBe(6)
+    expect(keys).toHaveLength(7)
+    expect(new Set(keys).size).toBe(7)
     ALL_TYPES.forEach(type => expect(keys).toContain(type))
   })
 
@@ -60,7 +61,7 @@ describe('questionTypeMeta — registre QUESTION_TYPES / QUESTION_TYPE_META', ()
     expect(entry.icon).toBeTruthy()
   })
 
-  it('QUESTION_TYPE_META est dérivée de QUESTION_TYPES (même 6 clés, même contenu)', () => {
+  it('QUESTION_TYPE_META est dérivée de QUESTION_TYPES (même 7 clés, même contenu)', () => {
     expect(Object.keys(QUESTION_TYPE_META).sort()).toEqual([...ALL_TYPES].sort())
     ALL_TYPES.forEach(type => {
       const fromArray = QUESTION_TYPES.find(t => t.key === type)
@@ -90,9 +91,14 @@ describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCa
     MEMORY: true,
     MEMOTION: false,
     ARDOISE: false,
-    // RAFALE (v8.0.0, #16) — jamais nestable, aucune mention au contrat
+    // RAFALE — nestable depuis #217 (milestone v9.0.0), mode SOLO forcé
+    // (217-Q3). Avant #217 : jamais nestable, aucune mention au contrat
     // (rafale.md) d'une manche RAFALE portée par une carte MEMOTION.
-    RAFALE: false,
+    RAFALE: true,
+    // ENTRACTE (#214) — jamais nestable (maquette entracte-programme-214.html
+    // §04 : "pas imbriquable dans une carte MEMOTION", une pause interrompt
+    // la partie, elle n'a pas de sens à l'intérieur d'une manche).
+    ENTRACTE: false,
   }
 
   it.each(ALL_TYPES)('QUESTION_TYPES[%s] porte un champ `nestable` booléen', (type) => {
@@ -117,8 +123,8 @@ describe('questionTypeMeta — nestable (#184/B-F4, miroir de NestableInMotionCa
 // ---------------------------------------------------------------------------
 
 describe('GENERABLE_TYPES — pseudo-type MEMOTION_PLUS, séparé de QUESTION_TYPES (#196)', () => {
-  it('QUESTION_TYPES contient TOUJOURS exactement 6 entrées — MEMOTION_PLUS ne doit JAMAIS y fuiter', () => {
-    expect(QUESTION_TYPES).toHaveLength(6)
+  it('QUESTION_TYPES contient TOUJOURS exactement 7 entrées — MEMOTION_PLUS ne doit JAMAIS y fuiter', () => {
+    expect(QUESTION_TYPES).toHaveLength(7)
     expect(QUESTION_TYPES.some(t => t.key === 'MEMOTION_PLUS')).toBe(false)
   })
 
@@ -133,6 +139,11 @@ describe('GENERABLE_TYPES — pseudo-type MEMOTION_PLUS, séparé de QUESTION_TY
   it('GENERABLE_TYPES n\'inclut JAMAIS RAFALE (v8.0.0, #16) — génération IA du réservoir hors scope (maquette rafale-v8.html §8)', () => {
     const keys = GENERABLE_TYPES.map(t => t.key)
     expect(keys).not.toContain('RAFALE')
+  })
+
+  it('GENERABLE_TYPES n\'inclut JAMAIS ENTRACTE (#214) — pas une question, rien à générer', () => {
+    const keys = GENERABLE_TYPES.map(t => t.key)
+    expect(keys).not.toContain('ENTRACTE')
   })
 
   it('GENERABLE_TYPES contient bien les 5 types réels de QUESTION_TYPES, inchangés (même objets)', () => {

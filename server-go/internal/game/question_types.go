@@ -124,21 +124,47 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 	QuestionTypeRafale: {
 		Type: QuestionTypeRafale,
 		OwnedFields: []string{
-			// CATEGORY is deliberately NOT listed here (v8.0.0 bugfix,
-			// 2026-08-29): RAFALE reuses the generic Question.Category field
-			// (like every other type), it doesn't own a type-specific one —
-			// RAFALE_CATEGORIES (multi-select) was removed, see TypedContent's
-			// own doc comment and contracts/CHANGELOG.md.
-			"RAFALE_DIFFICULTY", "RAFALE_MODE",
-			"RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS",
+			// CATEGORY (generic, unqualified) is deliberately NOT listed here:
+			// it's Question.Category, shared with every other type, not a
+			// RAFALE-owned field — kept only as RAFALE's legacy mono
+			// retro-compat source (TypedContent's own doc comment,
+			// EffectiveRafaleCategories). RAFALE_CATEGORIES below (#216,
+			// reintroduced, v9.0.0) IS type-specific and IS owned.
+			"RAFALE_CATEGORIES", "RAFALE_DIFFICULTY", "RAFALE_DIFFICULTIES", "RAFALE_MODE",
+			"RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS", "RAFALE_POINTS_BY_DIFFICULTY",
+			"RAFALE_ROUND_TIME", // #217 — a MEMOTION card's own round duration, meaningless for the classic round
 		},
-		MediaSlots: nil, // reservoir questions are text-only, no media (contracts/rafale.md §2.4/D3)
-		// A RAFALE round has no notion of a single card — it drives a whole
-		// timed sequence drawn from the reservoir, never a MEMOTION card's
-		// content (contract §2.1: RAFALE is a QuestionType like MEMOTION,
-		// not something MEMOTION nests).
+		// #217 (v9.0.0): text-only by design, exactly like a classic RAFALE
+		// round (contracts/rafale.md §2.4/D3) — a deliberate, named, tested
+		// exception to "every nestable type declares >=1 MediaSlot"
+		// (contracts/question-types.md §7.6, question_types_test.go's
+		// mediaSlotExemptNestableTypes carve-out). No slot was added for it;
+		// this is not an oversight.
+		MediaSlots: nil,
+		// #217 (v9.0.0, reopens the prior "no notion of a single card"
+		// decision): a card RAFALE is a mini-round, mode SOLO forced
+		// (217-Q3, contracts/rafale.md §14.3) — its own state lives in
+		// MotionActive.State, never the global GameState.RAFALE_* fields
+		// (contract §14.2). See contracts/rafale.md §14 for the full
+		// mechanism.
+		NestableInMotionCard: true,
+		HasPlayerInput:       false, // buzzer presses are ignored during RAFALE (contract §8.1) — judged by admin/anim only, unaffected by nestability
+		// DefaultPointsRule (#217, 217-Q4) — same STARS_PRORATA barème as
+		// MEMORY: Units/UnitsTotal are server-derived from the card's own
+		// RAFALE_CORRECT_COUNT/RAFALE_ASKED_COUNT (rafaleCardOutcomeUnsafe,
+		// engine.go), never the client-supplied MEMOTION_DONE.UNITS —
+		// contract §9.3's guard, same as MEMORY.
+		DefaultPointsRule: PointsRuleModeStarsProrata,
+	},
+	QuestionTypeEntracte: {
+		Type:        QuestionTypeEntracte,
+		OwnedFields: []string{"ENTRACTE_CONFIG"},
+		MediaSlots:  nil, // never nests, so MediaSlots is never consulted; the panel's own background image (if any) rides the generic Question.MEDIA field
+		// Decision utilisateur (#214): a pause has no meaning as one face of a
+		// MEMOTION card — never nestable, same permanence as MEMOTION itself
+		// (contract question-types.md §7.4).
 		NestableInMotionCard: false,
-		HasPlayerInput:       false, // buzzer presses are ignored during RAFALE (contract §8.1) — judged by admin/anim only
+		HasPlayerInput:       false, // no buzzer interaction at all (contract game-state.md §"Second déclencheur")
 	},
 }
 

@@ -6,8 +6,9 @@
 //   - "Aucune chaîne libre GRID/SELECTED/QUESTION/REVEAL/MEMORIZE/UNPLAYED/
 //     DONE dans le Go non-test" — TestNoFreeMotionLiteralStrings_183.
 //   - AllQuestionTypes() retourne exactement les types connus (5 à l'origine,
-//     6 depuis RAFALE — v8.0.0, #107), support de tous les tests
-//     d'exhaustivité ultérieurs (#184/B-B8) — TestAllQuestionTypes_183.
+//     6 depuis RAFALE — v8.0.0, #107, 7 depuis ENTRACTE — v9.0.0, #214),
+//     support de tous les tests d'exhaustivité ultérieurs (#184/B-B8) —
+//     TestAllQuestionTypes_183.
 //   - Équivalence des valeurs sérialisées des constantes MotionSubPhase*/
 //     MotionCardState* (round-trip JSON MEMOTION_SUBPHASE/MEMOTION_CARD_STATES,
 //     #160/#171) — TestMotionSubPhaseConstantValues_183,
@@ -36,6 +37,8 @@ func TestAllQuestionTypes_183(t *testing.T) {
 
 	// v8.0.0 (#107): RAFALE added as the 6th type — contracts/rafale.md
 	// §11 checklist item 2 explicitly calls out updating AllQuestionTypes().
+	// v9.0.0 (#214): ENTRACTE added as the 7th type — contracts/game-state.md
+	// §"Second déclencheur — entracte programmée".
 	want := map[QuestionType]bool{
 		QuestionTypeSpeedy:   true,
 		QuestionTypeQCM:      true,
@@ -43,10 +46,11 @@ func TestAllQuestionTypes_183(t *testing.T) {
 		QuestionTypeMemotion: true,
 		QuestionTypeArdoise:  true,
 		QuestionTypeRafale:   true,
+		QuestionTypeEntracte: true,
 	}
 
 	if len(got) != len(want) {
-		t.Fatalf("AllQuestionTypes() a %d entrées, attendu %d (6 types connus) — got=%v", len(got), len(want), got)
+		t.Fatalf("AllQuestionTypes() a %d entrées, attendu %d (7 types connus) — got=%v", len(got), len(want), got)
 	}
 
 	seen := map[QuestionType]bool{}
@@ -56,7 +60,7 @@ func TestAllQuestionTypes_183(t *testing.T) {
 		}
 		seen[qt] = true
 		if !want[qt] {
-			t.Errorf("AllQuestionTypes() contient %q, absent des 6 types connus (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE/RAFALE)", qt)
+			t.Errorf("AllQuestionTypes() contient %q, absent des 7 types connus (SPEEDY/QCM/MEMORY/MEMOTION/ARDOISE/RAFALE/ENTRACTE)", qt)
 		}
 	}
 	for qt := range want {

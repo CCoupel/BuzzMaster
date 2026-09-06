@@ -1,0 +1,18 @@
+{
+  "ANSWER": "",
+  "ENTRACTE_CONFIG": {
+    "ANIM_INTENSITY": 20,
+    "ANIM_PERIOD": 10,
+    "IMAGE_IS_CUSTOM": false,
+    "PANEL_SIZE": 65,
+    "SUBTITLE": "Retour à 14h00",
+    "TITLE": "PAUSE DÉJEUNER",
+    "TRANSITION_MS": 2000
+  },
+  "ID": "t-entracte",
+  "ORDER": 8,
+  "POINTS": "",
+  "QUESTION": "Pause déjeuner — retour 14h",
+  "TIME": "",
+  "TYPE": "ENTRACTE"
+}

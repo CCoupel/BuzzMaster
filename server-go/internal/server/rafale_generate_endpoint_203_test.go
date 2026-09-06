@@ -295,7 +295,7 @@ func TestRafaleGenerateQuestions_FullCycle_ReservoirGrows_UsedUnaffected_AllNewA
 	if err != nil {
 		t.Fatalf("seed failed: %v", err)
 	}
-	if _, err := server.engine.DrawRafaleQuestion(string(game.CategoryHistory), 1); err != nil {
+	if _, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("failed to mark the seeded question used: %v", err)
 	}
 	_, usedBefore := server.engine.SnapshotRafaleReservoir()
@@ -358,7 +358,7 @@ func TestRafaleGenerateQuestions_GeneratedQuestion_IsDrawable(t *testing.T) {
 		t.Fatalf("expected a successful generation with at least 1 created question, got %v", final)
 	}
 
-	drawn, err := server.engine.DrawRafaleQuestion(string(game.CategoryHistory), 1)
+	drawn, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryHistory)}, []int{1})
 	if err != nil {
 		t.Fatalf("expected the generated question to be drawable on its couple, got error: %v", err)
 	}

@@ -617,6 +617,13 @@ export default function VPlayerPage() {
   // Check if current question is ARDOISE
   const isArdoiseQuestion = gameState.question?.TYPE === 'ARDOISE'
 
+  // #214 — pause PROGRAMMÉE : image de fond depuis Question.MEDIA (pas
+  // IMAGE_IS_CUSTOM, réservé au déclencheur manuel) — voir le commentaire
+  // jumeau dans PlayerDisplay.jsx (même contrat, même logique).
+  const entracteMediaUrl = (gameState.entracte && gameState.question?.TYPE === 'ENTRACTE')
+    ? (gameState.question.MEDIA || null)
+    : null
+
   // #118 (F3) : reconnectError/evictedReason sont désormais vérifiés AVANT
   // `!playerSession` — depuis #118, les deux chemins de nettoyage de session
   // (rejet de reconnexion, éviction) remettent playerSession à `null` pour
@@ -800,7 +807,7 @@ export default function VPlayerPage() {
           ses enfants directs sont interceptés). */}
       <AnimatePresence>
         {gameState.entracte && (
-          <EntractePanel key="entracte-panel" config={gameState.entracteConfig} />
+          <EntractePanel key="entracte-panel" config={gameState.entracteConfig} mediaUrl={entracteMediaUrl} />
         )}
         {gameState.entracte && (
           <motion.div

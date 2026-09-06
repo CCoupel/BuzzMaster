@@ -63,7 +63,7 @@ func TestHTTPServer_RafaleResetOneUsed_ReflectedInRealGETReread(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed reservoir: UpsertRafaleQuestion failed: %v", err)
 	}
-	if _, err := server.engine.DrawRafaleQuestion(string(game.CategoryGeography), 2); err != nil {
+	if _, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryGeography)}, []int{2}); err != nil {
 		t.Fatalf("seed used-flag: DrawRafaleQuestion failed: %v", err)
 	}
 
@@ -108,10 +108,10 @@ func TestHTTPServer_RafaleResetAllUsed_ReflectedInRealGETReread(t *testing.T) {
 	// Draw twice: DrawRafaleQuestion picks randomly among the still-available
 	// pool, so which 2 of the 3 IDs end up used is non-deterministic — assert
 	// on the count (2 used, 1 available), not on specific IDs.
-	if _, err := server.engine.DrawRafaleQuestion(string(game.CategoryHistory), 1); err != nil {
+	if _, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("seed used-flag: DrawRafaleQuestion failed: %v", err)
 	}
-	if _, err := server.engine.DrawRafaleQuestion(string(game.CategoryHistory), 1); err != nil {
+	if _, err := server.engine.DrawRafaleQuestion([]string{string(game.CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("seed used-flag: DrawRafaleQuestion failed: %v", err)
 	}
 

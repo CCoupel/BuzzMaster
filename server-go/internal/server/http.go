@@ -42,6 +42,14 @@ type HTTPServer struct {
 	updater                   *Updater         // Auto-update handler
 	firmwareManager           *FirmwareManager // OTA firmware manager (v3.1.0+)
 	defaultQuestionImageAsset []byte           // Embedded fallback image (v3.2.2)
+	// portSource is a short human-readable description of where the configured
+	// HTTP port came from (e.g. "config.json (8080)", "--port flag (8080)",
+	// "code default (80)") — surfaced in the bind-wait log messages so an
+	// operator staring at a busy/refused port knows exactly which file or flag
+	// to change (#220, contract: plan §4 "le message d'attente nomme le port
+	// résolu et sa provenance"). Empty until SetPortSource is called; Start()
+	// falls back to "unknown" in that case rather than printing a blank field.
+	portSource string
 	// questionIDMu serializes question ID allocation AND directory creation
 	// (contract ai-generation.md §5.1, #8). Without it, two concurrent
 	// requests (e.g. a manual upload racing an AI batch generation) can
@@ -105,6 +113,13 @@ func (h *HTTPServer) SetDefaultQuestionImageAsset(data []byte) {
 	h.defaultQuestionImageAsset = data
 }
 
+// SetPortSource records where the configured HTTP port came from, for the
+// bind-wait log messages (#220). Call before Start(). See the portSource
+// field's doc comment for the expected format.
+func (h *HTTPServer) SetPortSource(source string) {
+	h.portSource = source
+}
+
 // SetReactDir sets the directory for React build files
 func (h *HTTPServer) SetReactDir(dir string) {
 	h.reactDir = dir
@@ -141,15 +156,47 @@ func (l *lingerListener) Accept() (net.Conn, error) {
 	return conn, nil
 }
 
+// Port-bind retry tuning (#220).
+//
+//   - portBindLogInterval / portAccessLogInterval throttle the WARN/ERROR log
+//     emitted while waiting so a sustained wait (auto-update taking a while,
+//     or a permanently misconfigured privileged port) cannot flood the
+//     global logger's bounded ring buffer (1000 entries, see InitLogger call
+//     sites) and evict the startup history before any /ws/logs client reads
+//     it. The historical flat 500ms retry logged ~2 lines/second and could
+//     saturate that buffer in well under ten minutes.
+//   - portBindInitialDelay / portBindMaxDelay implement the specified
+//     500ms → 1s → 5s (capped) backoff for a busy port.
+//   - portAccessLogInterval doubles as the EACCES retry cadence itself (not
+//     just its log throttle) — a permission failure is not going to resolve
+//     itself in milliseconds, so there is no point spinning fast on it.
+const (
+	portBindInitialDelay  = 500 * time.Millisecond
+	portBindMaxDelay      = 5 * time.Second
+	portBindLogInterval   = 30 * time.Second
+	portAccessLogInterval = 30 * time.Second
+)
+
 // Start begins the HTTP server.
 //
-// Two layers of defense against port-busy on restart:
+// The pre-bind is SYNCHRONOUS and ctx-interruptible (#220): Start blocks the
+// calling goroutine until the port is actually bound, or ctx is cancelled,
+// and only returns nil once the socket is genuinely listening. Before this
+// change Start() returned nil immediately even on a busy port — the retry
+// happened silently in a detached goroutine, so callers (main.go) logged
+// "started successfully" and opened a browser tab on a URL that was not
+// actually serving yet, and a port-busy or permission-denied condition was
+// invisible until a client tried to connect. It never gives up and never
+// calls os.Exit on any bind error, whatever it is (EADDRINUSE, EACCES, or
+// anything else) — see bindPort's doc comment.
+//
+// Two layers of defense against port-busy on restart, unchanged by this fix:
 //  1. newReuseAddrListener sets SO_REUSEADDR so the server can bind
 //     immediately even if the port is still in TIME_WAIT.
 //  2. lingerListener sets SO_LINGER(0) on every accepted connection so
 //     that closing it sends RST instead of FIN, eliminating TIME_WAIT
 //     for client connections on both Linux and Windows.
-func (h *HTTPServer) Start() error {
+func (h *HTTPServer) Start(ctx context.Context) error {
 	h.setupRoutes()
 
 	addr := fmt.Sprintf(":%d", h.port)
@@ -158,34 +205,137 @@ func (h *HTTPServer) Start() error {
 		Handler: h.corsMiddleware(h.mux),
 	}
 
-	LogInfo(game.LogComponentHTTP, "Server starting on port %d", h.port)
+	LogInfo(game.LogComponentHTTP, "Server starting on port %d (source: %s)", h.port, h.portSourceOrUnknown())
+
+	ln, err := h.bindPort(ctx, addr)
+	if err != nil {
+		return err
+	}
+
+	LogInfo(game.LogComponentHTTP, "Server bind succeeded on port %d", h.port)
+
 	go func() {
-		for {
-			ln, err := newReuseAddrListener("tcp", addr)
-			if err != nil {
-				if isPortInUse(err) {
-					LogWarn(game.LogComponentHTTP, "Port %d busy, retrying in 500ms...", h.port)
-					time.Sleep(500 * time.Millisecond)
-					continue
-				}
-				LogError(game.LogComponentHTTP, "Server error (listener): %v", err)
-				return
-			}
-			err = h.server.Serve(newLingerListener(ln))
-			if errors.Is(err, http.ErrServerClosed) {
-				return
-			}
-			LogError(game.LogComponentHTTP, "Server error: %v", err)
+		err := h.server.Serve(newLingerListener(ln))
+		if errors.Is(err, http.ErrServerClosed) {
 			return
 		}
+		LogError(game.LogComponentHTTP, "Server error: %v", err)
 	}()
 
 	return nil
 }
 
-func isPortInUse(err error) bool {
-	return strings.Contains(err.Error(), "address already in use") ||
-		strings.Contains(err.Error(), "Only one usage")
+// bindPort synchronously retries net.Listen(addr) until it succeeds or ctx is
+// cancelled. It classifies each failure into one of three buckets, all of
+// which retry (#220 acceptance criterion: no os.Exit on any bind error):
+//
+//   - EADDRINUSE (port genuinely busy, e.g. an old process still holding it
+//     during an auto-update relaunch): fast progressive backoff, 500ms → 1s
+//     → 5s capped.
+//   - EACCES (permission denied, e.g. a port <1024 without privileges):
+//     handled as its own branch, never merged into the EADDRINUSE bucket —
+//     it will not resolve on its own, so it retries at a slow, actionable
+//     30s cadence instead of hammering the log with a message nobody asked
+//     for. A double-clicked launch on Windows must not close its console
+//     before this message is readable, hence "loop forever with a clear
+//     message" instead of "fail fast".
+//   - anything else: cannot be classified as transient or permanent from
+//     here, so it is treated the same as a busy port (retry + backoff)
+//     rather than assumed fatal.
+//
+// The wait is entirely select-driven on ctx.Done() (never a blind
+// time.Sleep) so a Ctrl+C during the wait is honored immediately instead of
+// after the current backoff step, and no goroutine survives past return.
+func (h *HTTPServer) bindPort(ctx context.Context, addr string) (net.Listener, error) {
+	delay := portBindInitialDelay
+	attempt := 0
+	var lastLog time.Time
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		ln, err := newReuseAddrListener("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		attempt++
+
+		if isPermissionDenied(err) {
+			if attempt == 1 || time.Since(lastLog) >= portAccessLogInterval {
+				LogError(game.LogComponentHTTP,
+					"Permission denied binding port %d (source: %s): a port below 1024 requires elevated privileges on this OS. Set http_port to a value >=1024 in config.json, pass --port, or run with elevated privileges (sudo / Administrator). Retrying in %s...",
+					h.port, h.portSourceOrUnknown(), portAccessLogInterval)
+				lastLog = time.Now()
+			}
+			if !sleepOrDone(ctx, portAccessLogInterval) {
+				return nil, ctx.Err()
+			}
+			continue
+		}
+
+		if isPortInUse(err) {
+			if attempt == 1 || time.Since(lastLog) >= portBindLogInterval {
+				LogWarn(game.LogComponentHTTP, "Port %d busy (source: %s), retrying in %s...", h.port, h.portSourceOrUnknown(), delay)
+				lastLog = time.Now()
+			}
+			if !sleepOrDone(ctx, delay) {
+				return nil, ctx.Err()
+			}
+			delay = nextPortBindDelay(delay)
+			continue
+		}
+
+		// Unclassified bind error: never fatal here either (#220) — retry at
+		// the same cadence as a busy port instead of exiting, since we cannot
+		// tell transient apart from permanent from this vantage point.
+		if attempt == 1 || time.Since(lastLog) >= portBindLogInterval {
+			LogError(game.LogComponentHTTP, "Unexpected error binding port %d (source: %s): %v — retrying in %s...", h.port, h.portSourceOrUnknown(), err, delay)
+			lastLog = time.Now()
+		}
+		if !sleepOrDone(ctx, delay) {
+			return nil, ctx.Err()
+		}
+		delay = nextPortBindDelay(delay)
+	}
+}
+
+// nextPortBindDelay implements the specified 500ms → 1s → 5s backoff
+// schedule for consecutive EADDRINUSE (or unclassified) bind failures, then
+// plateaus at 5s.
+func nextPortBindDelay(current time.Duration) time.Duration {
+	switch {
+	case current < time.Second:
+		return time.Second
+	default:
+		return portBindMaxDelay
+	}
+}
+
+// sleepOrDone waits for d, returning true when the wait elapsed normally, or
+// false immediately if ctx is cancelled first — the mechanism that lets
+// bindPort's wait be interrupted mid-backoff instead of riding out the
+// current sleep.
+func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// portSourceOrUnknown returns portSource, or "unknown" when SetPortSource was
+// never called (e.g. in tests that construct an HTTPServer directly) so log
+// messages never print a blank field.
+func (h *HTTPServer) portSourceOrUnknown() string {
+	if h.portSource == "" {
+		return "unknown"
+	}
+	return h.portSource
 }
 
 // Stop shuts down the HTTP server
@@ -576,11 +726,13 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 
 	catMap := make(map[string]*catAccum)
 
-	for _, event := range history {
-		if event.EventType != "POINTS_AWARDED" || event.Points <= 0 {
-			continue
-		}
-		key := event.QuestionCategory
+	// creditCategory credits `points` (a whole event's Points, or one of its
+	// CategoryBreakdown shares — Lot A+1, v9.0.0) to `key`'s bucket. Factored
+	// out of the loop below so a breakdown can fan out across several
+	// categories using EXACTLY the same accumulation logic as a normal,
+	// single-category event — no duplicated bucket/team/player bookkeeping
+	// to keep in sync between the two cases.
+	creditCategory := func(event game.GameEvent, key string, points int) {
 		if key == "" {
 			key = "UNKNOWN"
 		}
@@ -597,7 +749,7 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 			}
 			catMap[key] = acc
 		}
-		acc.totalPoints += event.Points
+		acc.totalPoints += points
 
 		switch event.WinnerType {
 		case "TEAM":
@@ -607,7 +759,7 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 					ts = &TeamScore{Name: event.TeamName, Color: event.TeamColor}
 					acc.teams[event.TeamName] = ts
 				}
-				ts.Points += event.Points
+				ts.Points += points
 			}
 		case "PLAYER":
 			if event.PlayerName != "" {
@@ -617,8 +769,29 @@ func (h *HTTPServer) handlePalmares(w http.ResponseWriter, r *http.Request) {
 					ps = &PlayerScore{Name: event.PlayerName, Team: event.TeamName}
 					acc.players[playerKey] = ps
 				}
-				ps.Points += event.Points
+				ps.Points += points
 			}
+		}
+	}
+
+	for _, event := range history {
+		if event.EventType != "POINTS_AWARDED" || event.Points <= 0 {
+			continue
+		}
+
+		// Lot A+1 (v9.0.0, plan §2.3/§2.4) — a classic RAFALE event carrying
+		// a CategoryBreakdown fans out across each category it names,
+		// crediting only its own share (the shares sum to EXACTLY
+		// event.Points — game.RafaleCategoryBreakdown's own guarantee).
+		// Every other event (no breakdown: not RAFALE, or a RAFALE round
+		// with no configured category) keeps today's behavior exactly: one
+		// credit, to QuestionCategory — non-regression.
+		if len(event.CategoryBreakdown) > 0 {
+			for cat, pts := range event.CategoryBreakdown {
+				creditCategory(event, cat, pts)
+			}
+		} else {
+			creditCategory(event, event.QuestionCategory, event.Points)
 		}
 	}
 
@@ -1172,6 +1345,49 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 					maxQ = 100 // contract §7.2 hard cap
 				}
 				question["RAFALE_MAX_QUESTIONS"] = maxQ
+			}
+		}
+
+		// #216 (v9.0.0) — multi-category/multi-difficulty round filter, plus
+		// a free-entry points-per-difficulty barème. JSON-encoded strings in
+		// the multipart form, same convention as `motion_config` just above
+		// in this same handler (contract §3.3 "Format multipart") — a
+		// comma-separated convention (like handleGetRafaleQuestions's own
+		// ?categories=A,B query param) would be fine for category NAMES but
+		// is a worse fit here since RAFALE_POINTS_BY_DIFFICULTY is itself a
+		// map, not a flat list.
+		//
+		// The legacy mono fields above (RAFALE_DIFFICULTY, and CATEGORY read
+		// generically elsewhere in this handler) are left untouched — both
+		// are still read if sent, and EffectiveRafaleCategories/
+		// EffectiveRafaleDifficulties (models.go) fall back to them when the
+		// lists below are absent, so an older client (or a hand-crafted
+		// request) saving only the mono fields keeps working unmodified.
+		if catsStr := r.FormValue("RAFALE_CATEGORIES"); catsStr != "" {
+			var cats []string
+			if err := json.Unmarshal([]byte(catsStr), &cats); err == nil && len(cats) > 0 {
+				question["RAFALE_CATEGORIES"] = cats
+			}
+		}
+		if diffsStr := r.FormValue("RAFALE_DIFFICULTIES"); diffsStr != "" {
+			var diffs []int
+			if err := json.Unmarshal([]byte(diffsStr), &diffs); err == nil {
+				valid := true
+				for _, d := range diffs {
+					if d < 1 || d > 3 {
+						valid = false
+						break
+					}
+				}
+				if valid && len(diffs) > 0 {
+					question["RAFALE_DIFFICULTIES"] = diffs
+				}
+			}
+		}
+		if pointsStr := r.FormValue("RAFALE_POINTS_BY_DIFFICULTY"); pointsStr != "" {
+			var points map[string]int
+			if err := json.Unmarshal([]byte(pointsStr), &points); err == nil && len(points) > 0 {
+				question["RAFALE_POINTS_BY_DIFFICULTY"] = points
 			}
 		}
 	}
@@ -2427,33 +2643,54 @@ func (h *HTTPServer) handleRafaleResetAllUsed(w http.ResponseWriter, r *http.Req
 }
 
 // handleRafalePool returns the pool count (available/used/total) for a
-// category/difficulty filter — contract §9, feeding the pre-round alert
-// (§7.2: blocking when available==0, warning when short of the estimated
-// need, neutral otherwise).
+// categories/difficulties filter — contract §9, feeding the pre-round alert
+// (§7.5: blocking when available==0 across the whole union, warning when
+// short of the estimated need, neutral otherwise).
 //
-// ?category=X (singular, v8.0.0 bugfix, 2026-08-29): a RAFALE round now
-// filters on exactly one category, same as every other question type's
-// CATEGORY field — RAFALE_CATEGORIES (multi-select, ?categories=A,B) was
-// removed. See contracts/CHANGELOG.md.
+// ?categories=A,B&difficulties=1,2 (plural, comma-separated, #216, v9.0.0):
+// a RAFALE round now filters on N categories and N difficulties (set
+// membership on both) — reuses the exact convention already established by
+// the sibling endpoint GET /api/rafale/questions?categories=A,B just above,
+// rather than inventing a new one. Replaces the v8.0.0 singular
+// ?category=A&difficulty=2 (bugfix 2026-08-29, itself since reverted — see
+// contracts/CHANGELOG.md).
 func (h *HTTPServer) handleRafalePool(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	category := strings.TrimSpace(r.URL.Query().Get("category"))
-	if category == "" {
-		http.Error(w, "category required", http.StatusBadRequest)
+	var categories []string
+	for _, c := range strings.Split(r.URL.Query().Get("categories"), ",") {
+		c = strings.TrimSpace(c)
+		if c != "" {
+			categories = append(categories, c)
+		}
+	}
+	if len(categories) == 0 {
+		http.Error(w, "categories required", http.StatusBadRequest)
 		return
 	}
 
-	difficulty, err := strconv.Atoi(r.URL.Query().Get("difficulty"))
-	if err != nil {
-		http.Error(w, "Invalid difficulty", http.StatusBadRequest)
+	var difficulties []int
+	for _, d := range strings.Split(r.URL.Query().Get("difficulties"), ",") {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		parsed, err := strconv.Atoi(d)
+		if err != nil {
+			http.Error(w, "Invalid difficulties", http.StatusBadRequest)
+			return
+		}
+		difficulties = append(difficulties, parsed)
+	}
+	if len(difficulties) == 0 {
+		http.Error(w, "difficulties required", http.StatusBadRequest)
 		return
 	}
 
-	available, used, total := h.engine.CountRafalePool(category, difficulty)
+	available, used, total := h.engine.CountRafalePool(categories, difficulties)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]int{
