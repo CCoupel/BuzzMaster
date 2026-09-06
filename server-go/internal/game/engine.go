@@ -284,7 +284,15 @@ type Engine struct {
 	// RAFALE_INVALIDATE (contract §6.1's "identique à réponse invalide"),
 	// which fires OnStateChange (full UPDATE, carrying the new
 	// RAFALE_CURRENT_QUESTION/RAFALE_SUBPHASE) and OnRafaleAnswer instead.
-	OnRafaleQuestionTick func(questionTime int)
+	//
+	// cardID (C1, retour QUALIF v9.0.0.4) — "" for the classic manche-scoped
+	// round (unchanged behavior), the active card's ID for a #217 RAFALE
+	// mini-round. Before C1, this callback carried no host information at
+	// all, so the consumer (broadcastRafaleTick) always wrote to the SAME
+	// global RAFALE_QUESTION_TIME-shaped payload regardless of host — a
+	// card-hosted tick had no way to tell a client which card it belonged
+	// to, so /tv's countdown for a card never advanced ("chrono figé").
+	OnRafaleQuestionTick func(cardID string, questionTime int)
 	// OnRafaleTeamsChanged (v8.0.0, #199, contract §8.3) fires whenever
 	// RAFALE's active/next/participating team set MAY need a buzzer LED
 	// refresh: round start, RAFALE_SET_TEAMS, and every advance (VALIDATE/
@@ -342,13 +350,14 @@ func NewEngine() *Engine {
 			// RAFALE (v8.0.0, #107): initialize empty (not nil) so JSON
 			// serializes []/{} (not null) — same "no omitempty" discipline
 			// as MEMOTION/ARDOISE above (contracts/rafale.md §4).
-			RafaleCurrentQuestion:    RafaleCurrent{},
-			RafaleTeamCounters:       map[string]int{},
-			RafaleTeamBest:           map[string]int{},
-			RafaleTeamStreak:         map[string]int{},
-			RafaleTeamErrors:         map[string]int{},
-			RafaleParticipatingTeams: []string{},
-			RafaleCurrentTeamColor:   []int{},
+			RafaleCurrentQuestion:      RafaleCurrent{},
+			RafaleTeamCounters:         map[string]int{},
+			RafaleTeamCategoryCounters: map[string]map[string]int{},
+			RafaleTeamBest:             map[string]int{},
+			RafaleTeamStreak:           map[string]int{},
+			RafaleTeamErrors:           map[string]int{},
+			RafaleParticipatingTeams:   []string{},
+			RafaleCurrentTeamColor:     []int{},
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -1233,6 +1242,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.RafaleCurrentQuestion = RafaleCurrent{}
 		e.state.RafaleQuestionTime = 0
 		e.state.RafaleTeamCounters = map[string]int{}
+		e.state.RafaleTeamCategoryCounters = map[string]map[string]int{}
 		e.state.RafaleTeamBest = map[string]int{}
 		e.state.RafaleTeamStreak = map[string]int{}
 		e.state.RafaleTeamErrors = map[string]int{}
@@ -2410,7 +2420,7 @@ func (e *Engine) StartRafaleQuestionTimer(seconds int) {
 					}
 					if !result.expired {
 						if e.OnRafaleQuestionTick != nil {
-							e.OnRafaleQuestionTick(result.questionTime)
+							e.OnRafaleQuestionTick(result.cardID, result.questionTime)
 						}
 						return
 					}
@@ -2470,10 +2480,11 @@ func (e *Engine) stopRafaleQuestionTimerUnsafe() {
 // caller — mirrors motionCardTickResult/timerTickResult's "compute under
 // lock, act after unlock" discipline (#151).
 type rafaleQuestionTickResult struct {
-	guardFailed  bool // no longer a live RAFALE question/card at all — caller stops the ticker for good
-	paused       bool // Phase != STARTED — caller skips this tick but keeps the ticker running
-	questionTime int  // meaningful when !guardFailed && !paused && !expired
-	expired      bool // hit 0 this tick; advance already computed under this same lock
+	guardFailed  bool   // no longer a live RAFALE question/card at all — caller stops the ticker for good
+	paused       bool   // Phase != STARTED — caller skips this tick but keeps the ticker running
+	questionTime int    // meaningful when !guardFailed && !paused && !expired
+	cardID       string // C1 (retour QUALIF v9.0.0.4) — "" for the classic round, the active card's ID for a card-hosted tick; meaningful whenever questionTime is
+	expired      bool   // hit 0 this tick; advance already computed under this same lock
 	advance      rafaleAdvanceResult
 	// cardAdvance (#217) is non-nil when this tick belonged to a RAFALE-in-
 	// card mini-round instead of the classic round — mutually exclusive
@@ -2535,14 +2546,16 @@ func (e *Engine) processRafaleCardQuestionTickUnsafe(card *MotionCard) rafaleQue
 		return rafaleQuestionTickResult{paused: true}
 	}
 
-	qt := 0
-	if v, ok := e.state.MotionActive.State["RAFALE_QUESTION_TIME"].(int); ok {
-		qt = v
-	}
+	// C2 (retour QUALIF v9.0.0.4) — tolerant read (motionActiveInt): a naive
+	// `.(int)`-only assertion silently defaults `qt` to 0 the moment this
+	// value has passed through a JSON encode/decode boundary (float64), and
+	// `qt-- ; qt > 0` then treats a live question as expired on the very
+	// next tick — "question expirée à tort", with no log and no crash.
+	qt, _ := motionActiveInt(e.state.MotionActive.State, "RAFALE_QUESTION_TIME")
 	qt--
 	e.state.MotionActive.State["RAFALE_QUESTION_TIME"] = qt
 	if qt > 0 {
-		return rafaleQuestionTickResult{questionTime: qt}
+		return rafaleQuestionTickResult{questionTime: qt, cardID: card.ID}
 	}
 
 	// Expired — "identique à une réponse incorrecte" (contract §6.1, same
@@ -2632,6 +2645,16 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 	if mode == "" {
 		mode = string(RafaleModeSolo)
 	}
+	// Lot A+1 (plan §2.3) — the category of the question JUST answered,
+	// captured before it's overwritten below (RafaleCurrentQuestion is
+	// reassigned to the NEXT question further down this function, after
+	// this switch). recordRafaleTeamCategoryCorrectUnsafe mirrors every
+	// RafaleTeamCounters[team]++ site below exactly, and
+	// resetRafaleTeamCategoryCounterUnsafe mirrors MAILLON_FAIBLE's own
+	// RafaleTeamCounters[team] = 0 reset — see both functions' own comments
+	// for why this keeps sum(RafaleTeamCategoryCounters[team]) ==
+	// RafaleTeamCounters[team] at every instant.
+	category := e.state.RafaleCurrentQuestion.Category
 	switch mode {
 	case string(RafaleModeSolo):
 		// "Aucune rotation" (§3.4) — counter[team]++ on correct, nothing on
@@ -2639,11 +2662,13 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 		// first row).
 		if correct && team != "" {
 			e.state.RafaleTeamCounters[team]++
+			e.recordRafaleTeamCategoryCorrectUnsafe(team, category)
 		}
 	case string(RafaleModeChacunSonTour):
 		// Rotates after EVERY question, regardless of outcome.
 		if correct && team != "" {
 			e.state.RafaleTeamCounters[team]++
+			e.recordRafaleTeamCategoryCorrectUnsafe(team, category)
 		}
 		e.rotateRafaleTeam()
 	case string(RafaleModeTantQueJeGagne):
@@ -2652,6 +2677,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 		if correct {
 			if team != "" {
 				e.state.RafaleTeamCounters[team]++
+				e.recordRafaleTeamCategoryCorrectUnsafe(team, category)
 			}
 		} else {
 			e.rotateRafaleTeam()
@@ -2665,9 +2691,11 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 		if correct {
 			if team != "" {
 				e.state.RafaleTeamCounters[team]++
+				e.recordRafaleTeamCategoryCorrectUnsafe(team, category)
 			}
 		} else if team != "" {
 			e.state.RafaleTeamCounters[team] = 0
+			e.resetRafaleTeamCategoryCounterUnsafe(team)
 		}
 		e.rotateRafaleTeam()
 	default:
@@ -2676,6 +2704,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 		// question.
 		if correct && team != "" {
 			e.state.RafaleTeamCounters[team]++
+			e.recordRafaleTeamCategoryCorrectUnsafe(team, category)
 		}
 	}
 
@@ -2852,6 +2881,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	e.state.RafaleAskedCount = 0
 	e.state.RafaleExhausted = false
 	e.state.RafaleTeamCounters = map[string]int{}
+	e.state.RafaleTeamCategoryCounters = map[string]map[string]int{}
 	e.state.RafaleTeamBest = map[string]int{}
 	e.state.RafaleTeamStreak = map[string]int{}
 	e.state.RafaleTeamErrors = map[string]int{}
@@ -3433,6 +3463,7 @@ func (e *Engine) InitGame() []string {
 	e.state.RafaleCurrentQuestion = RafaleCurrent{}
 	e.state.RafaleQuestionTime = 0
 	e.state.RafaleTeamCounters = map[string]int{}
+	e.state.RafaleTeamCategoryCounters = map[string]map[string]int{}
 	e.state.RafaleTeamBest = map[string]int{}
 	e.state.RafaleTeamStreak = map[string]int{}
 	e.state.RafaleTeamErrors = map[string]int{}
@@ -4715,36 +4746,54 @@ func (e *Engine) refreshRafalePoolRemainingUnsafe() {
 // e.rafaleNext and the classic round's own guards).
 // ============================================================
 
+// motionActiveInt reads an integer value from MEMOTION_ACTIVE.STATE,
+// tolerant of BOTH the Go int a same-process write leaves in place and the
+// float64 encoding/json always produces when a JSON number is decoded into
+// an interface{} target (#217 C2 regression, retour QUALIF v9.0.0.4, plan
+// `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md` §5) — the
+// tolerant-helper precedent motionActiveQCMInvalidated (below) already
+// established for a []string field, extended here for the numeric case a
+// naive `.(int)`-only assertion gets dangerously wrong: it doesn't just
+// return an empty/zero value, a caller decrementing that zero value (the
+// RAFALE per-question countdown, processRafaleCardQuestionTickUnsafe) treats
+// a live question as instantly expired. Absent or of any other unexpected
+// type ⇒ (0, false) — same "never panics" contract as
+// motionActiveQCMInvalidated.
+func motionActiveInt(state map[string]interface{}, key string) (int, bool) {
+	v, ok := state[key]
+	if !ok {
+		return 0, false
+	}
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case float64:
+		return int(n), true
+	default:
+		return 0, false
+	}
+}
+
 // motionActiveRafaleAskedCount reads RAFALE_ASKED_COUNT from
 // MEMOTION_ACTIVE.STATE — the card-scoped counterpart of the question-host
 // GameState.RafaleAskedCount (contract §14.2). Absent or unexpectedly-shaped
-// ⇒ 0; never panics.
+// ⇒ 0; never panics. Tolerant read (motionActiveInt, C2) — this value feeds
+// rafaleCardOutcomeUnsafe's STARS_PRORATA denominator, so the same class of
+// bug here would silently corrupt a team's score, not just mistime a tick.
 func motionActiveRafaleAskedCount(state map[string]interface{}) int {
-	v, ok := state["RAFALE_ASKED_COUNT"]
-	if !ok {
-		return 0
-	}
-	n, ok := v.(int)
-	if !ok {
-		return 0
-	}
+	n, _ := motionActiveInt(state, "RAFALE_ASKED_COUNT")
 	return n
 }
 
 // motionActiveRafaleCorrectCount reads RAFALE_CORRECT_COUNT from
 // MEMOTION_ACTIVE.STATE — the card's own "Units" numerator (contract
 // §14.4), no question-host equivalent (the classic round tracks this
-// per-team, RafaleTeamCounters; a card is always SOLO, one scalar).
-// Absent or unexpectedly-shaped ⇒ 0; never panics.
+// per-team, RafaleTeamCounters; a card is always SOLO, one scalar). Absent
+// or unexpectedly-shaped ⇒ 0; never panics. Tolerant read (motionActiveInt,
+// C2) — same STARS_PRORATA-numerator reasoning as
+// motionActiveRafaleAskedCount above.
 func motionActiveRafaleCorrectCount(state map[string]interface{}) int {
-	v, ok := state["RAFALE_CORRECT_COUNT"]
-	if !ok {
-		return 0
-	}
-	n, ok := v.(int)
-	if !ok {
-		return 0
-	}
+	n, _ := motionActiveInt(state, "RAFALE_CORRECT_COUNT")
 	return n
 }
 
