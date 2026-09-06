@@ -833,19 +833,37 @@ type GameState struct {
 	// RafaleTeamErrors (v8.0.0 bugfix, 2026-08-30) — same precedent as
 	// MemoryTeamErrors: cumulative count of incorrect answers/timeouts per
 	// team, never reset mid-round, all 4 modes.
-	RafaleSubPhase           RafaleSubPhase `json:"RAFALE_SUBPHASE"`
-	RafaleCurrentQuestion    RafaleCurrent  `json:"RAFALE_CURRENT_QUESTION"`
-	RafaleQuestionTime       int            `json:"RAFALE_QUESTION_TIME"`
-	RafaleTeamCounters       map[string]int `json:"RAFALE_TEAM_COUNTERS"`
-	RafaleTeamBest           map[string]int `json:"RAFALE_TEAM_BEST"`
-	RafaleTeamStreak         map[string]int `json:"RAFALE_TEAM_STREAK"`
-	RafaleTeamErrors         map[string]int `json:"RAFALE_TEAM_ERRORS"`
-	RafaleCurrentTeam        string         `json:"RAFALE_CURRENT_TEAM"`
-	RafaleParticipatingTeams []string       `json:"RAFALE_PARTICIPATING_TEAMS"`
-	RafaleCurrentTeamColor   []int          `json:"RAFALE_CURRENT_TEAM_COLOR"`
-	RafaleAskedCount         int            `json:"RAFALE_ASKED_COUNT"`
-	RafalePoolRemaining      int            `json:"RAFALE_POOL_REMAINING"`
-	RafaleExhausted          bool           `json:"RAFALE_EXHAUSTED"`
+	//
+	// RafaleTeamCategoryCounters (v9.0.0, Lot A+1, plan
+	// `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md` §2.3) —
+	// per-team, per-category tally of correct answers during a CLASSIC
+	// RAFALE round (never populated by a #217 card round — out of this
+	// lot's scope, see recordRafaleTeamCategoryCorrectUnsafe's own comment).
+	// Exists so cmd/server/main.go's handleBumperPoints/handleTeamPoints can
+	// split a team's awarded points across the categories that actually
+	// produced them (RafaleCategoryBreakdown), instead of writing an empty
+	// category into history.json — the "Inconnue" defect this lot fixes.
+	// Same map[string]map[string]int shape as no other field in this struct;
+	// a nil inner map is valid (never read directly, only through
+	// RafaleTeamCategoryCounters[team], which is nil-safe for a team with no
+	// recorded category yet — Go's zero value for "missing key" on a nil map
+	// is itself a nil map, safely rangeable). Same lifecycle as the 12
+	// fields above: NO omitempty, initialized non-nil in NewEngine(), reset
+	// at the exact same two sites (engine.go Ready()/InitGame() resets).
+	RafaleSubPhase             RafaleSubPhase            `json:"RAFALE_SUBPHASE"`
+	RafaleCurrentQuestion      RafaleCurrent             `json:"RAFALE_CURRENT_QUESTION"`
+	RafaleQuestionTime         int                       `json:"RAFALE_QUESTION_TIME"`
+	RafaleTeamCounters         map[string]int            `json:"RAFALE_TEAM_COUNTERS"`
+	RafaleTeamCategoryCounters map[string]map[string]int `json:"RAFALE_TEAM_CATEGORY_COUNTERS"`
+	RafaleTeamBest             map[string]int            `json:"RAFALE_TEAM_BEST"`
+	RafaleTeamStreak           map[string]int            `json:"RAFALE_TEAM_STREAK"`
+	RafaleTeamErrors           map[string]int            `json:"RAFALE_TEAM_ERRORS"`
+	RafaleCurrentTeam          string                    `json:"RAFALE_CURRENT_TEAM"`
+	RafaleParticipatingTeams   []string                  `json:"RAFALE_PARTICIPATING_TEAMS"`
+	RafaleCurrentTeamColor     []int                     `json:"RAFALE_CURRENT_TEAM_COLOR"`
+	RafaleAskedCount           int                       `json:"RAFALE_ASKED_COUNT"`
+	RafalePoolRemaining        int                       `json:"RAFALE_POOL_REMAINING"`
+	RafaleExhausted            bool                      `json:"RAFALE_EXHAUSTED"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data
@@ -937,4 +955,12 @@ type GameEvent struct {
 	PlayerColor         string `json:"PLAYER_COLOR,omitempty"`       // Player answer color (RED/GREEN/YELLOW/BLUE)
 	Points              int    `json:"POINTS"`                       // Points awarded
 	ReactionTime        int64  `json:"REACTION_TIME,omitempty"`      // Reaction time in microseconds
+	// CategoryBreakdown (v9.0.0, Lot A+1) — points-per-category split for a
+	// classic RAFALE round's award (game.RafaleCategoryBreakdown), whose
+	// values sum to EXACTLY Points. omitempty: absent for every non-RAFALE
+	// event (current behavior, no history.json migration) and for a RAFALE
+	// event that couldn't be broken down (no configured category at all).
+	// The event itself stays a single row — only /api/palmares (http.go,
+	// handlePalmares) fans it out across categories at aggregation time.
+	CategoryBreakdown map[string]int `json:"CATEGORY_BREAKDOWN,omitempty"`
 }

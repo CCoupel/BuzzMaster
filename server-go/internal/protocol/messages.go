@@ -577,8 +577,19 @@ type RafaleAnswerPayload struct {
 // RafaleTickPayload for the RAFALE_TICK action (Server → all clients,
 // contract §5.2) — the lightweight per-question countdown, broadcast
 // without re-emitting the full GameState (contract §2.2).
+//
+// CardScope.MotionCardID (C1, retour QUALIF v9.0.0.4) — "" for the classic
+// manche-scoped round (unchanged behavior), the active card's ID for a
+// #217 RAFALE mini-round. Before C1 this payload carried no host
+// information at all, so a client had no way to tell a card-hosted tick
+// apart from a classic one — the "chrono figé" bug: a client scoping its
+// own display to MOTION_CARD_ID could never find a match and the card's
+// countdown never advanced on screen, even though the engine was ticking
+// it down correctly the whole time (contracts/rafale.md §14, engine-level
+// coverage already existed for this).
 type RafaleTickPayload struct {
 	QuestionTime int `json:"QUESTION_TIME"` // seconds remaining on the current question
+	CardScope
 }
 
 // PlayerConnectPayload for PLAYER_CONNECT action (virtual player enrollment)
