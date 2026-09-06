@@ -610,10 +610,38 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // léger du timer de QUESTION (~3s), distinct du timer de MANCHE
         // (UPDATE_TIMER/CURRENT_TIME, inchangé). Ne réémet jamais tout
         // GameState — un seul champ mis à jour ici.
-        setGameState(prev => ({
-          ...prev,
-          RAFALE_QUESTION_TIME: MSG?.QUESTION_TIME ?? prev.RAFALE_QUESTION_TIME,
-        }))
+        //
+        // 🔴 C1 (#217, retour QUALIF v9.0.0.4) — `MOTION_CARD_ID` (CardScope,
+        // contrat rafale.md §5.2, déjà livré côté serveur Batch 1) scope ce
+        // tick à une carte RAFALE active plutôt qu'à la manche classique.
+        // Cause du "chrono figé" : ce handler patchait TOUJOURS le champ
+        // global `RAFALE_QUESTION_TIME`, jamais `MEMOTION_ACTIVE.STATE` —
+        // `getTypeState` (utils/typeState.js) lit EXCLUSIVEMENT ce dernier en
+        // hôte carte, donc un tick de carte n'était simplement jamais vu.
+        // ❌ Ne PAS patcher les deux emplacements pour un même tick (anti-motif
+        // déjà corrigé en `caae3d49` pendant #217) : `MOTION_CARD_ID` présent
+        // ⇒ SEUL `MEMOTION_ACTIVE.STATE` bouge, le champ global reste
+        // intact ; absent ⇒ SEUL le champ global bouge, comme avant.
+        // Garde-fou CARD_ID : un tick scopé sur une carte qui n'est plus
+        // l'active courante (transition en cours) est ignoré plutôt
+        // qu'appliqué à l'état d'une autre carte — même discipline que
+        // `getTypeState`.
+        setGameState(prev => {
+          if (MSG?.MOTION_CARD_ID) {
+            if (prev.MEMOTION_ACTIVE?.CARD_ID !== MSG.MOTION_CARD_ID) return prev
+            return {
+              ...prev,
+              MEMOTION_ACTIVE: {
+                ...prev.MEMOTION_ACTIVE,
+                STATE: { ...prev.MEMOTION_ACTIVE.STATE, RAFALE_QUESTION_TIME: MSG.QUESTION_TIME },
+              },
+            }
+          }
+          return {
+            ...prev,
+            RAFALE_QUESTION_TIME: MSG?.QUESTION_TIME ?? prev.RAFALE_QUESTION_TIME,
+          }
+        })
         break
 
       case 'REGIE_MESSAGE':
