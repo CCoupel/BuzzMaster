@@ -2287,9 +2287,19 @@ export default function QuestionsPage() {
                                 required
                               />
                             </div>
-                            {/* Difficulty selector */}
+                            {/* Difficulty selector — commun à tous les types de carte
+                                (étoiles = valeur/poids de la carte, contrat §3.1).
+                                🔴 Retour QUALIF v9.0.0.4 (point C5) — libellé
+                                "Difficulte :" ambigu pour une carte RAFALE, qui
+                                porte un SECOND sélecteur d'étoiles juste plus bas
+                                (RAFALE_DIFFICULTIES, filtre de pioche du réservoir,
+                                sans rapport) : deux sélecteurs d'étoiles côte à côte
+                                sans distinction visuelle claire. Renommé pour ce
+                                qu'il désigne réellement — le barème STARS_PRORATA/
+                                étoiles pleines de la carte elle-même (§6.2), jamais
+                                un filtre. */}
                             <div className="memotion-difficulty-row">
-                              <span className="memotion-diff-label">Difficulte :</span>
+                              <span className="memotion-diff-label">Valeur de la carte :</span>
                               {[1, 2, 3].map(d => (
                                 <button
                                   key={d}
@@ -2430,7 +2440,17 @@ export default function QuestionsPage() {
                                 </div>
 
                                 <div className="form-group">
-                                  <label>Difficultés — plusieurs possibles</label>
+                                  {/* 🔴 Retour QUALIF v9.0.0.4 (point C5) — libellé
+                                      distinct du sélecteur "Valeur de la carte" plus
+                                      haut (RECTO, étoiles pleines de la carte) : ce
+                                      second sélecteur filtre le TIRAGE dans le
+                                      réservoir, sans rapport avec le barème de la
+                                      carte. Rien à retirer (ne rien supprimer sous
+                                      peine de casser le filtre de pioche) — le
+                                      problème était l'ambiguïté visuelle entre les
+                                      deux sélecteurs d'étoiles, pas la présence des
+                                      deux. */}
+                                  <label>Difficultés des questions tirées — plusieurs possibles</label>
                                   <div className="rafale-multi-chip-row">
                                     {[1, 2, 3].map(d => (
                                       <button
