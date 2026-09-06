@@ -3311,9 +3311,10 @@
    Carte MEMOTION de type RAFALE — mini-manche (#217, v9.0.0)
    STATIC — overflow: hidden, cqh/cqw (container-type: size posé sur
    .memotion-tv-fullscreen), jamais de scroll. Row 2 (body) : chips
-   catégorie/difficulté de la question tirée. Row 3 (footer) : progression
-   (question N) + minuteur PAR QUESTION — le minuteur de MANCHE générique
-   reste affiché par le zone-timer partagé (gridView), pas de doublon ici.
+   catégorie/difficulté de la question tirée. Row 3 (footer) : rang de la
+   question SEUL (retour QUALIF v9.0.0.4, point C6/C6b — le double minuteur
+   a été déplacé dans la zone haute partagée de gridView, un Timer isolé ici
+   en aurait été la copie exacte).
    ============================================================ */
 .memotion-tv-fs-rafale-meta {
   display: flex;
@@ -3327,14 +3328,8 @@
 
 .memotion-tv-fs-rafale-zone {
   display: flex;
-  flex-direction: row;
-  gap: 1.5cqw;
   align-items: center;
   justify-content: center;
-  font-size: initial;
-  font-weight: initial;
-  color: initial;
-  text-shadow: none;
 }
 
 .memotion-tv-fs-rafale-chip {

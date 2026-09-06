@@ -2438,16 +2438,38 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 <div className={`game-content-zones memory-game memotion-game${subphase === 'MEMORIZE' ? ' memotion-memorize-active' : ''}`}>
                   {/* Zone 1: Timer — reste visible (non dimmed) quand fullscreen overlay actif.
                       hintMarkers (#185, correction ponctuelle) : repères de seuils d'indices,
-                      null hors carte QCM à indices activés — cf. qcmHintMarkers ci-dessus. */}
-                  <div className="zone-timer">
-                    <Timer
-                      currentTime={gameState.timer}
-                      totalTime={gameState.totalTime}
-                      phase={gameState.phase}
-                      size="xl"
-                      showPhase={false}
-                      hintMarkers={qcmHintMarkers}
-                    />
+                      null hors carte QCM à indices activés — cf. qcmHintMarkers ci-dessus.
+                      🔴 C6 (retour QUALIF v9.0.0.4) — carte RAFALE : double
+                      minuteur (RafaleTimers, même composant/mêmes libellés A3
+                      que la manche classique) au lieu du Timer générique
+                      seul — la durée de manche ET la durée par question sont
+                      TOUTES DEUX pertinentes pour une mini-manche RAFALE,
+                      contrairement aux autres types de carte (une seule
+                      durée). `gameState.timer`/`totalTime` reste le minuteur
+                      de CARTE générique et partagé (contrat rafale.md
+                      §14.1 : sert la durée propre de la carte,
+                      `RAFALE_ROUND_TIME`) — aucun doublon avec le Timer
+                      per-question retiré du footer (Row 3, C6b). */}
+                  <div className={`zone-timer${cardType === 'RAFALE' ? ' rafale-tv-zone-timer' : ''}`}>
+                    {cardType === 'RAFALE' ? (
+                      <RafaleTimers
+                        roundTime={gameState.timer}
+                        roundTotal={gameState.totalTime}
+                        questionTime={cardRafaleState.questionTime}
+                        questionTotal={selectedCard?.RAFALE_QUESTION_TIME || 3}
+                        phase={gameState.phase}
+                        size="xl"
+                      />
+                    ) : (
+                      <Timer
+                        currentTime={gameState.timer}
+                        totalTime={gameState.totalTime}
+                        phase={gameState.phase}
+                        size="xl"
+                        showPhase={false}
+                        hintMarkers={qcmHintMarkers}
+                      />
+                    )}
                   </div>
 
                   {/* Zones 2-4: contenu grille — dimmed séparément quand overlay actif */}
@@ -2769,12 +2791,17 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                         réponses ici (#185/C-F2). Vide pour SPEEDY — aucun
                         contenu propre à ce type sur la face VERSO (contrat
                         §3.1 : SPEEDY ne possède que ANSWER_TEXT/ANSWER_IMAGE,
-                        tous deux affichés en REVEAL, pas ici). #217, RAFALE :
-                        progression (question N) + minuteur PAR QUESTION
-                        (~3s, `cardRafaleState.questionTime`) — le minuteur de
-                        MANCHE générique (RAFALE_ROUND_TIME) est déjà affiché
-                        par `gridView` (zone-timer, gameState.timer/totalTime,
-                        partagé par toute carte, §14.1), pas de doublon ici. */}
+                        tous deux affichés en REVEAL, pas ici).
+                        🔴 C6/C6b/C7 (retour QUALIF v9.0.0.4) — RAFALE :
+                        progression (rang de la question) SEULE ici, plus de
+                        minuteur par question dupliqué (le double minuteur vit
+                        désormais dans `gridView`, zone haute, C6 — un
+                        Timer isolé ici en aurait été la copie exacte). C7 —
+                        "question 4" (un rang) juxtaposé à "Question · 2" (une
+                        durée) se lisait comme deux nombres de même nature ;
+                        recomposé en ordinal ("4ᵉ question") pour lever toute
+                        ambiguïté, même hors de portée visuelle du minuteur
+                        depuis son déplacement. */}
                     {cardType === 'QCM' ? (
                       <div className="memotion-tv-fs-footer memotion-tv-fs-qcm-zone">
                         {renderCardQcmGrid(false)}
@@ -2782,15 +2809,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     ) : cardType === 'RAFALE' ? (
                       <div className="memotion-tv-fs-footer memotion-tv-fs-rafale-zone">
                         {cardRafaleState.askedCount > 0 && (
-                          <span className="memotion-tv-fs-rafale-chip">question {cardRafaleState.askedCount}</span>
+                          <span className="memotion-tv-fs-rafale-chip">{cardRafaleState.askedCount}ᵉ question</span>
                         )}
-                        <Timer
-                          currentTime={cardRafaleState.questionTime}
-                          totalTime={selectedCard.RAFALE_QUESTION_TIME || 3}
-                          phase={gameState.phase}
-                          size="sm"
-                          showPhase={false}
-                        />
                       </div>
                     ) : (
                       <div className="memotion-tv-fs-footer" />

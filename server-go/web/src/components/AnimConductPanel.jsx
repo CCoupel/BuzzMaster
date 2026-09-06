@@ -299,6 +299,13 @@ export default function AnimConductPanel({
     // à afficher est la question TIRÉE (`cardRafale.current`), pas la
     // définition statique `MOTION_CARDS[i]` (catégories/difficultés
     // choisies, jamais un énoncé).
+    // 🔴 C6b (retour QUALIF v9.0.0.4) — AUCUN chrono de question monté ici,
+    // délibérément : depuis C6 (PlayerDisplay.jsx), le double minuteur
+    // (durée de manche + durée par question) vit dans la zone haute de la
+    // TV, seule source de vérité visuelle pour l'animateur comme pour la
+    // régie. `AnimRafaleQuestion` n'affiche déjà aucun chrono (chips
+    // catégorie/difficulté/équipe/progression uniquement) — n'y ajouter
+    // aucun Timer/RafaleTimers ici reproduirait le doublon corrigé côté TV.
     RAFALE: () => (
       <div className="anim-card-rafale">
         <AnimRafaleQuestion {...(cardRafale || {})} />
