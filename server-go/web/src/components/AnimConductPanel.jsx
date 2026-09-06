@@ -208,22 +208,39 @@ export default function AnimConductPanel({
     ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
     : 0
   // #187 cycle 4 (F1) — gain affiché sur le bouton d'attribution (L2,
-  // AnimMotionActions, sous-phase REVEAL) : pour une carte MEMORY en barème
-  // STARS_PRORATA (le défaut — POINTS_RULE absent ou MODE explicite
+  // AnimMotionActions, sous-phase REVEAL) : pour une carte en barème
+  // STARS_PRORATA (le défaut du TYPE — POINTS_RULE absent ou MODE explicite
   // "STARS_PRORATA", contrat §6.2/§6.3), le montant plein NE DOIT PAS être
-  // affiché — le serveur, seule autorité, crédite le prorata des paires
-  // trouvées. Une surcharge explicite STARS/FIXED/PER_UNIT sur la carte
-  // reste au barème étoiles plein (tout-ou-rien, §6.2). Sans ce branchement,
-  // l'animateur voit un montant différent de celui réellement attribué —
-  // c'est le défaut corrigé par ce cycle (computeStarsProrataPoints existait
-  // déjà, testée, mais n'était appelée nulle part).
-  const isMemoryStarsProrata = selectedMotionCard?.TYPE === 'MEMORY'
+  // affiché — le serveur, seule autorité, crédite le prorata réel. Une
+  // surcharge explicite STARS/FIXED/PER_UNIT sur la carte reste au barème
+  // étoiles plein (tout-ou-rien, §6.2). Sans ce branchement, l'animateur
+  // voit un montant différent de celui réellement attribué.
+  //
+  // 🔴 C3 (retour QUALIF v9.0.0.4, réouverture #187 cycle 4) — ce test
+  // testait `selectedMotionCard?.TYPE === 'MEMORY'` EN DUR : RAFALE devenu
+  // nestable (#217) avec le MÊME barème par défaut (contrat rafale.md §14.4)
+  // a reproduit exactement le même défaut (montant plein au lieu du
+  // prorata). Corrigé en testant la RÈGLE effective du TYPE
+  // (`defaultPointsRule`, utils/questionTypeMeta.js — miroir du registre Go,
+  // question-types.md §6.2), jamais le type lui-même — un 3e type nestable
+  // STARS_PRORATA futur n'aura donc pas à recorriger ce point une 3e fois.
+  const isStarsProrataCard = selectedMotionCard
+    && getQuestionTypeMeta(selectedMotionCard.TYPE).defaultPointsRule === 'STARS_PRORATA'
     && (!selectedMotionCard.POINTS_RULE?.MODE || selectedMotionCard.POINTS_RULE.MODE === 'STARS_PRORATA')
-  const motionCardPoints = isMemoryStarsProrata
+  // Units/UnitsTotal du prorata — propres à chaque type (contrat §9.3/§14.4) :
+  // MEMORY compte les paires trouvées sur le total de paires de la carte,
+  // RAFALE compte les bonnes réponses sur le nombre de questions posées
+  // (`cardRafale.correctCount`/`askedCount`, déjà résolus côté carte par
+  // `getTypeState`/`AnimPage.jsx`, mêmes noms que `typeState.rafale`).
+  const motionCardPoints = isStarsProrataCard
     ? computeStarsProrataPoints(
         selectedMotionCardStars,
-        cardMemory?.matchedPairs?.length || 0,
-        selectedMotionCard.MEMORY_PAIRS?.length || 0,
+        selectedMotionCard.TYPE === 'RAFALE'
+          ? (cardRafale?.correctCount || 0)
+          : (cardMemory?.matchedPairs?.length || 0),
+        selectedMotionCard.TYPE === 'RAFALE'
+          ? (cardRafale?.askedCount || 0)
+          : (selectedMotionCard.MEMORY_PAIRS?.length || 0),
       )
     : selectedMotionCardStars
   const modeLabel = question?.TYPE ? getQuestionTypeMeta(question.TYPE).label : null
