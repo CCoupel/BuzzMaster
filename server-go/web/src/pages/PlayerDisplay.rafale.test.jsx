@@ -230,38 +230,83 @@ describe('PlayerDisplay — RAFALE : rendu déclenché par isRafale', () => {
 // contenu non-vide réel, pas juste la présence du motif dans le code.
 // ---------------------------------------------------------------------------
 
-describe('PlayerDisplay — RAFALE : écran TV non-vide en READY (bugfix SHA 56080545)', () => {
-  it('phase READY : rend .game-content-zones avec un contenu textuel non-vide (pas un écran vide)', () => {
+// 🔴 Retour QUALIF v9.0.0.4 (point A1) — réécrit : depuis #216 une manche
+// RAFALE porte une LISTE de catégories/difficultés (RAFALE_CATEGORIES/
+// RAFALE_DIFFICULTIES), `question.CATEGORY` (singulier) redevient vide dans
+// le cas réel — l'ancienne version de ce describe testait le CAS LIMITE
+// (repli générique "PRÉPAREZ-VOUS" quand CATEGORY est absente) comme s'il
+// était le cas RÉEL post-#198, ce qui masquait la régression : le cas réel
+// post-#216 EST le cas "CATEGORY absente" pour toute manche RAFALE. Branche
+// dédiée désormais utilisée (`showReady && isRafale`, PlayerDisplay.jsx,
+// maquette docs/mockups/rafale-ready-217.html) : le libellé RAFALE
+// (`.rafale-ready-gtype`) est TOUJOURS affiché en READY, jamais de repli
+// "PRÉPAREZ-VOUS" pour ce type — indiscernable de la phase PREPARE, c'était
+// précisément le défaut à corriger.
+describe('PlayerDisplay — RAFALE : écran TV non-vide en READY (bugfix SHA 56080545, réécrit v9.0.0.4)', () => {
+  it('phase READY : rend .game-content-zones marqué .rafale-tv avec un contenu textuel non-vide (pas un écran vide)', () => {
     const { container } = renderTV({ phase: 'READY' })
 
     const zones = container.querySelector('.game-content-zones')
     expect(zones).not.toBeNull()
+    expect(zones.classList.contains('rafale-tv')).toBe(true)
     expect(zones.textContent.trim().length).toBeGreaterThan(0)
   })
 
-  it('phase READY, question.CATEGORY configurée (comportement réel depuis le bugfix catégorie unique) : affiche le badge de LA catégorie de la manche, comme les autres types', () => {
+  it('phase READY : le nom du type de jeu (RAFALE) est toujours affiché, jamais le repli "PRÉPAREZ-VOUS" — même sans aucune catégorie/difficulté configurée', () => {
+    renderTV({ phase: 'READY', question: RAFALE_QUESTION }) // fixture par défaut, sans CATEGORY ni RAFALE_CATEGORIES
+    expect(screen.getByText('RAFALE')).toBeInTheDocument()
+    expect(screen.queryByText('PRÉPAREZ-VOUS')).not.toBeInTheDocument()
+  })
+
+  it('phase READY, catégorie unique (repli mono, manche enregistrée avant #216) : une pastille pour cette catégorie, intitulé au singulier', () => {
     renderTV({ phase: 'READY', question: { ...RAFALE_QUESTION, CATEGORY: 'HISTORY' } })
-    // RAFALE réutilise désormais le champ CATEGORY générique (contrat §3.3,
-    // bugfix 2026-08-29) — ReadyCategoryDisplay le lit exactement comme pour
-    // SPEEDY/QCM/etc., plus de fourche RAFALE-spécifique.
+    expect(screen.getByText('CATÉGORIE')).toBeInTheDocument()
     expect(screen.getByText('Histoire')).toBeInTheDocument()
     expect(screen.queryByText('PRÉPAREZ-VOUS')).not.toBeInTheDocument()
   })
 
-  it('phase READY, question.CATEGORY absente (cas limite, pas le cas réel post-bugfix) : repli générique "PRÉPAREZ-VOUS", même comportement que les autres types sans catégorie', () => {
-    renderTV({ phase: 'READY', question: RAFALE_QUESTION }) // fixture par défaut, sans CATEGORY
-    expect(screen.getByText('PRÉPAREZ-VOUS')).toBeInTheDocument()
+  it('phase READY, plusieurs catégories retenues (#216) : une pastille SÉPARÉE par catégorie, intitulé au pluriel', () => {
+    const { container } = renderTV({ phase: 'READY', question: { ...RAFALE_QUESTION, RAFALE_CATEGORIES: ['HISTORY', 'SCIENCE'] } })
+    expect(screen.getByText('CATÉGORIES')).toBeInTheDocument()
+    expect(screen.getByText('Histoire')).toBeInTheDocument()
+    expect(screen.getByText('Sciences & Nature')).toBeInTheDocument()
+    expect(container.querySelectorAll('.rafale-ready-cat')).toHaveLength(2)
   })
 
-  it('phase READY : le timer de manche est bien rendu (Zone 1, pas seulement le repli catégorie)', () => {
+  it('phase READY, plusieurs difficultés retenues : une pastille SÉPARÉE par difficulté, jamais des étoiles concaténées dans une seule pastille', () => {
+    const { container } = renderTV({ phase: 'READY', question: { ...RAFALE_QUESTION, RAFALE_DIFFICULTIES: [1, 2] } })
+    expect(screen.getByText('DIFFICULTÉS')).toBeInTheDocument()
+    const pastilles = container.querySelectorAll('.rafale-ready-diff')
+    expect(pastilles).toHaveLength(2)
+    expect(Array.from(pastilles).map((el) => el.textContent)).toEqual(['★', '★★'])
+  })
+
+  it('phase READY : aucun plafond de nombre de questions affiché (arbitrage utilisateur explicite)', () => {
+    const { container } = renderTV({ phase: 'READY', question: { ...RAFALE_QUESTION, RAFALE_MAX_QUESTIONS: 42 } })
+    expect(container.textContent).not.toContain('42')
+    expect(container.textContent.toLowerCase()).not.toContain('plafond')
+  })
+
+  it('phase READY : le double minuteur (RafaleTimers) est rendu dès cette phase — pas seulement pendant le jeu', () => {
     const { container } = renderTV({ phase: 'READY' })
-    expect(container.querySelector('.zone-timer .timer-display')).not.toBeNull()
+    const displays = Array.from(container.querySelectorAll('.timer-display')).map((el) => el.textContent)
+    expect(displays).toHaveLength(2)
+    expect(container.querySelector('.rafale-timer-round')).not.toBeNull()
+    expect(container.querySelector('.rafale-timer-question')).not.toBeNull()
   })
 
-  it('phase READY, TYPE=SPEEDY (témoin) : même bloc générique, non-régression — RAFALE ne l\'a pas cassé pour les autres types', () => {
+  it('phase READY, équipes participantes définies : chaque équipe apparaît en zone basse (même patron que le READY MEMOTION)', () => {
+    const { container } = renderTV({ phase: 'READY', rafaleParticipatingTeams: ['Équipe A', 'Équipe B'] })
+    expect(screen.getByText('Équipe A')).toBeInTheDocument()
+    expect(screen.getByText('Équipe B')).toBeInTheDocument()
+    expect(container.querySelectorAll('.memory-team-chip')).toHaveLength(2)
+  })
+
+  it('phase READY, TYPE=SPEEDY (témoin) : bloc générique inchangé, non-régression — la branche dédiée RAFALE ne l\'a pas cassé pour les autres types', () => {
     const { container } = renderTV({ phase: 'READY', question: SPEEDY_QUESTION })
     const zones = container.querySelector('.game-content-zones')
     expect(zones).not.toBeNull()
+    expect(zones.classList.contains('rafale-tv')).toBe(false)
     expect(zones.textContent.trim().length).toBeGreaterThan(0)
   })
 })
@@ -280,6 +325,18 @@ describe('PlayerDisplay — RAFALE : écran TV non-vide en COUNTDOWN (bugfix SHA
     const countdown = container.querySelector('.countdown-number')
     expect(countdown).not.toBeNull()
     expect(countdown.textContent.trim().length).toBeGreaterThan(0)
+  })
+
+  // 🔴 Retour QUALIF v9.0.0.4 (point A2) — zone catégorie vide en COUNTDOWN
+  // pour toute manche RAFALE post-#216 (même cause racine que A1 :
+  // `question.CATEGORY` singulier vide, RAFALE_CATEGORIES jamais lu ici
+  // avant le fix). `RafaleCategoryPastilles` remplace le badge unique
+  // devenu muet pour ce type.
+  it('phase COUNTDOWN, plusieurs catégories retenues : chacune apparaît en pastille dans la zone catégorie (plus de zone vide)', () => {
+    const { container } = renderTV({ phase: 'COUNTDOWN', question: { ...RAFALE_QUESTION, RAFALE_CATEGORIES: ['HISTORY', 'SCIENCE'] } })
+    expect(screen.getByText('Histoire')).toBeInTheDocument()
+    expect(screen.getByText('Sciences & Nature')).toBeInTheDocument()
+    expect(container.querySelectorAll('.rafale-ready-cat')).toHaveLength(2)
   })
 
   it('phase COUNTDOWN : le timer de manche est bien rendu', () => {

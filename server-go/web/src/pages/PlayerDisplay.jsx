@@ -18,6 +18,7 @@ import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils
 import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
+import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
@@ -168,6 +169,46 @@ function ReadyCategoryDisplay({ catKey, customCategories, variant, gameType }) {
           </motion.span>
         </>
       )}
+    </div>
+  )
+}
+
+// RAFALE — pastilles catégorie/difficulté (retour QUALIF v9.0.0.4, point A1/A2,
+// `docs/mockups/rafale-ready-217.html` §02/§03). Une manche RAFALE porte une
+// LISTE de catégories/difficultés depuis #216 (`effectiveRafaleCategories`/
+// `effectiveRafaleDifficulties`, `utils/rafaleEffective.js` — repli mono
+// automatique pour une manche enregistrée avant #216) — jamais une valeur
+// singulière comme les autres types. Une pastille PAR élément, jamais des
+// étoiles concaténées dans une seule pastille (« ★ ★★ » se lit comme un
+// unique niveau à 3 étoiles) — utilisé par l'écran READY (dédié, plus bas)
+// et par l'écran COUNTDOWN (zone catégorie, remplace le badge unique
+// devenu vide depuis #216 pour ce type).
+function RafaleCategoryPastilles({ categories, customCategories }) {
+  if (!categories?.length) return null
+  return (
+    <div className="rafale-ready-row">
+      {categories.map(cat => {
+        const meta = categoryMeta(cat, customCategories)
+        return (
+          <span key={cat} className="rafale-ready-cat" style={{ backgroundColor: meta?.color || 'var(--gray-400)' }}>
+            {meta?.imageURL
+              ? <img src={meta.imageURL} alt={meta.label} className="rafale-ready-cat-img" />
+              : meta?.icon && <span className="rafale-ready-cat-icon">{meta.icon}</span>}
+            <span className="rafale-ready-cat-label">{meta?.label || cat}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function RafaleDifficultyPastilles({ difficulties }) {
+  if (!difficulties?.length) return null
+  return (
+    <div className="rafale-ready-row">
+      {difficulties.map(d => (
+        <span key={d} className="rafale-ready-diff">{'★'.repeat(d)}</span>
+      ))}
     </div>
   )
 }
@@ -1510,10 +1551,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
             )}
 
             {/* COUNTDOWN State - Timer + Category animates to question zone + Big countdown number.
-                RAFALE (v8.0.0, #16/#198, bugfix TV vide — retour utilisateur QUALIF 8.0.0.3) : inclus
-                ici comme SPEEDY/ARDOISE — depuis le bugfix CATEGORY unique (2026-08-29, contrat §3.3),
-                gameState.question.CATEGORY est renseigné pour RAFALE comme pour tout autre type, la
-                catégorie s'anime donc normalement en plus du timer + décompte. */}
+                RAFALE (v8.0.0, #16/#198) : inclus ici comme SPEEDY/ARDOISE.
+                🔴 Retour QUALIF v9.0.0.4 (point A2) — depuis #216 une manche
+                RAFALE porte une LISTE de catégories (RAFALE_CATEGORIES),
+                `gameState.question.CATEGORY` (singulier) est vide : la zone
+                catégorie retombait sur `null`, silencieusement vide, tout le
+                temps du décompte — même cause racine que l'écran READY (A1).
+                Repli via `effectiveRafaleCategories` (une pastille par
+                catégorie retenue, `RafaleCategoryPastilles` ci-dessus),
+                SPEEDY/ARDOISE inchangés (une seule catégorie, badge unique). */}
             {showCountdown && (isSpeedy || isArdoise || isRafale) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
@@ -1529,7 +1575,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 2: Category badge animates from center to question zone */}
                 <div className="zone-question">
-                  {(() => {
+                  {isRafale ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 150, scale: 1.2 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                    >
+                      <RafaleCategoryPastilles categories={effectiveRafaleCategories(gameState.question)} customCategories={apiCategories} />
+                    </motion.div>
+                  ) : (() => {
                     const catMeta = categoryMeta(gameState.question?.CATEGORY, apiCategories)
                     if (!catMeta) return null
                     return (
@@ -1579,19 +1633,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
             {/* READY State - Non-QCM, Non-Memory: Timer + centered message (same layout as QCM).
                 RAFALE (v8.0.0, #16/#198, bugfix TV vide en READY — retour utilisateur QUALIF
-                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE — ReadyCategoryDisplay affiche désormais
-                la vraie catégorie de la manche (gameState.question.CATEGORY, unique depuis le
-                bugfix 2026-08-29, contrat §3.3), comme pour tout autre type. Cause racine (READY
-                totalement vide, avant ce bugfix-ci) :
-                `showGameContent` (bloc RAFALE dédié, plus bas) ne couvre que STARTED/PAUSED/
-                STOPPED/REVEALED — READY (et COUNTDOWN ci-dessus) en étaient exclus, et `isRafale`
-                étant dans `isKnownOtherType`, RAFALE ne retombait plus non plus sur ce bloc
-                générique par défaut (#183) — l'écran restait vide faute d'un chemin explicite.
-                ENTRACTE (#214) inclus ici pour la même raison, à titre préventif : avant START (donc
-                avant que `gameState.entracte` ne lève le panneau, backend engine.go SetEntracte),
-                READY afficherait sinon un écran vide plutôt que le même minuteur neutre que les
-                autres types. */}
-            {showReady && (isSpeedy || isArdoise || isRafale || isEntracte) && (
+                8.0.0.3) : inclus ici comme SPEEDY/ARDOISE à l'origine — ReadyCategoryDisplay lisait
+                gameState.question.CATEGORY, unique depuis le bugfix 2026-08-29 (contrat §3.3).
+                🔴 Retour QUALIF v9.0.0.4 (point A1) — depuis #216 une manche RAFALE porte une LISTE
+                de catégories/difficultés (RAFALE_CATEGORIES/RAFALE_DIFFICULTIES), CATEGORY
+                (singulier) redevient vide : `catKey` nul faisait retomber ReadyCategoryDisplay sur
+                son repli ✋ PRÉPAREZ-VOUS — visuellement indiscernable de l'écran PREPARE. RAFALE
+                retiré d'ici, bloc dédié juste en dessous (maquette rafale-ready-217.html).
+                ENTRACTE (#214) reste inclus ici pour la même raison qu'à l'origine : avant START
+                (donc avant que `gameState.entracte` ne lève le panneau, backend engine.go
+                SetEntracte), READY afficherait sinon un écran vide plutôt que le même minuteur
+                neutre que les autres types. */}
+            {showReady && (isSpeedy || isArdoise || isEntracte) && (
               <div className="game-content-zones">
                 {/* Zone 1: Timer */}
                 <div className="zone-timer">
@@ -1624,6 +1677,102 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 <div className="zone-answers" />
               </div>
             )}
+
+            {/* READY State — RAFALE, branche dédiée (retour QUALIF v9.0.0.4,
+                point A1, `docs/mockups/rafale-ready-217.html` — validée).
+                Patron repris du bloc READY MEMOTION (isMemotion, plus bas,
+                `if (showReady) { ... }`) : double minuteur dès READY (pas
+                de saut de mise en page au lancement, §02), équipes
+                participantes en zone basse (§02). ❌ Aucun plafond de
+                questions affiché (arbitrage utilisateur explicite, §03) —
+                RAFALE_MAX_QUESTIONS n'est lu nulle part ici. VPlayer : pas
+                de contenu détaillé (la tablette d'un joueur n'a pas besoin
+                des catégories, même philosophie que le bloc RAFALE
+                showGameContent ci-dessous). */}
+            {showReady && isRafale && (() => {
+              const rafaleReadyCategories = effectiveRafaleCategories(gameState.question)
+              const rafaleReadyDifficulties = effectiveRafaleDifficulties(gameState.question)
+              const rafaleReadyTeams = gameState.RAFALE_PARTICIPATING_TEAMS || []
+              const rafaleReadyQuestionTime = gameState.question?.RAFALE_QUESTION_TIME || 3
+
+              if (isVPlayer) {
+                return (
+                  <div className="rafale-vplayer-fullscreen rafale-vplayer-neutral">
+                    <span className="rafale-vplayer-fs-message">Préparez-vous —<br />manche RAFALE</span>
+                  </div>
+                )
+              }
+
+              return (
+                <div className="game-content-zones rafale-tv rafale-tv-ready">
+                  {/* Zone 1: double minuteur, dès READY (§02 — pas de saut de
+                      mise en page au lancement). Encore statique : le round
+                      n'a pas démarré, roundTime === totalTime et le minuteur
+                      de question affiche sa pleine durée. */}
+                  <div className="zone-timer rafale-tv-zone-timer">
+                    <RafaleTimers
+                      roundTime={gameState.timer}
+                      roundTotal={gameState.totalTime}
+                      questionTime={rafaleReadyQuestionTime}
+                      questionTotal={rafaleReadyQuestionTime}
+                      phase={gameState.phase}
+                      size="xl"
+                    />
+                  </div>
+
+                  <div className="zone-question" />
+
+                  {/* Zone 3: type de jeu + une pastille par catégorie/difficulté
+                      retenue (jamais d'étoiles concaténées, §03). */}
+                  <div className="zone-media">
+                    <motion.div
+                      className="rafale-ready-display"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                    >
+                      <span
+                        className="rafale-ready-gtype"
+                        style={{ color: GAME_TYPE_COLORS.RAFALE.color, textShadow: `0 0 20px ${GAME_TYPE_COLORS.RAFALE.shadow}, 0 0 50px ${GAME_TYPE_COLORS.RAFALE.shadow}` }}
+                      >
+                        RAFALE
+                      </span>
+                      {rafaleReadyCategories.length > 0 && (
+                        <>
+                          <div className="rafale-ready-group-label">{rafaleReadyCategories.length > 1 ? 'CATÉGORIES' : 'CATÉGORIE'}</div>
+                          <RafaleCategoryPastilles categories={rafaleReadyCategories} customCategories={apiCategories} />
+                        </>
+                      )}
+                      {rafaleReadyDifficulties.length > 0 && (
+                        <>
+                          <div className="rafale-ready-group-label">{rafaleReadyDifficulties.length > 1 ? 'DIFFICULTÉS' : 'DIFFICULTÉ'}</div>
+                          <RafaleDifficultyPastilles difficulties={rafaleReadyDifficulties} />
+                        </>
+                      )}
+                    </motion.div>
+                  </div>
+
+                  {/* Zone 4: équipes participantes — même patron que le READY
+                      MEMOTION (memory-team-chip inactive). */}
+                  <div className="zone-answers">
+                    {rafaleReadyTeams.length > 0 && (
+                      <div className="memory-team-bar">
+                        {rafaleReadyTeams.map((tName) => {
+                          const teamData = teams[tName]
+                          const tColor = teamData?.COLOR
+                            ? (Array.isArray(teamData.COLOR) ? `rgb(${teamData.COLOR.join(',')})` : teamData.COLOR)
+                            : 'var(--gray-400)'
+                          return (
+                            <div key={tName} className="memory-team-chip inactive" style={{ backgroundColor: tColor, '--team-color': tColor }}>
+                              <span className="team-name">{tName}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* QCM Game Content - unified block for READY through REVEALED (no flash on transition) */}
             {isQcm && showQcmAnswers && gameState.question && (

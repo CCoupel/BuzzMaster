@@ -3640,6 +3640,82 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* RAFALE — écran READY, branche dédiée (retour QUALIF v9.0.0.4, point  */
+/* A1, docs/mockups/rafale-ready-217.html). Statique — flex-wrap plutôt */
+/* que défilement si beaucoup de catégories/difficultés sont retenues.  */
+/* Réutilisée aussi par l'écran COUNTDOWN (A2, RafaleCategoryPastilles  */
+/* seule, sans .rafale-ready-display/.rafale-ready-group-label).       */
+/* ------------------------------------------------------------------ */
+
+.rafale-ready-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vh;
+  max-width: 90%;
+}
+
+.rafale-ready-gtype {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 5vh, 3rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.rafale-ready-group-label {
+  font-family: var(--font-display);
+  font-size: clamp(0.6rem, 1.4vh, 0.85rem);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.4vh;
+}
+
+.rafale-ready-row {
+  display: flex;
+  gap: 0.8vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rafale-ready-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5vw;
+  padding: 0.8vh 1.6vw;
+  border-radius: var(--radius-xl);
+  font-size: clamp(0.85rem, 2.2vh, 1.3rem);
+  font-weight: 600;
+  color: white;
+  box-shadow: 0 0.4vh 2vh rgba(0, 0, 0, 0.3);
+}
+
+.rafale-ready-cat-img {
+  width: 1.3em;
+  height: 1.3em;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.rafale-ready-cat-icon {
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.rafale-ready-diff {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.6vh 1.4vw;
+  border-radius: var(--radius-xl);
+  font-size: clamp(0.9rem, 2.2vh, 1.3rem);
+  letter-spacing: 0.1em;
+  color: #fcd34d;
+  background: rgba(252, 211, 77, 0.13);
+  border: 1px solid rgba(252, 211, 77, 0.42);
+}
+
+/* ------------------------------------------------------------------ */
 /* RAFALE — VPlayer plein écran (contrat rafale.md §8.1/§8.2, tâche 38)*/
 /* Affichage SEUL — aucun bouton, aucune saisie. Statique (hérite de     */
 /* .game-display : height:100%, overflow:hidden, flex column).         */
