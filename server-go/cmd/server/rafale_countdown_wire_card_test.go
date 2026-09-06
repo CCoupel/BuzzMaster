@@ -155,9 +155,36 @@ func TestRafaleCardCountdown_TickCarriesMotionCardID_QuestionTimeDecreasesOnTheW
 			t.Errorf("tick #%d: MOTION_CARD_ID = %q, want %q — C1: a card-hosted tick must carry the card's own ID", i, tick.MotionCardID, cardID)
 		}
 	}
+
+	// Adjacent ticks must never repeat the same value — that IS the exact
+	// "chrono figé" symptom (a tick fired but the displayed time didn't
+	// move). A jump back UP, however, is a legitimate round restart: the
+	// reservoir has 10 questions and RafaleQuestionTime=3s, so under a
+	// slow scheduler (observed reliably under `go test -race`, ~2/3 runs)
+	// the first question's real 3s timer can fully expire and auto-answer
+	// (see StartRafaleQuestionTimer/RAFALE_ANSWER logs) before this test's
+	// read loop even starts, so the first ticks collected can legitimately
+	// be the tail of question N (e.g. "1") followed by the head of
+	// question N+1 (e.g. "2") — an increase, not a freeze. Asserting a
+	// strict decrease across the ENTIRE collection window (as this test
+	// originally did) conflated the two and made the test flaky under
+	// -race without any production regression (see
+	// dev-backend-correctifs-batch1-20260906-122424.md). Splitting into
+	// per-cycle segments preserves the real regression guard (a freeze
+	// anywhere is still a hard failure) while tolerating the benign
+	// restart-under-slow-execution case.
+	decreases := 0
 	for i := 1; i < len(ticks); i++ {
-		if ticks[i].QuestionTime >= ticks[i-1].QuestionTime {
-			t.Errorf("QUESTION_TIME did not decrease: tick #%d = %d, tick #%d = %d — the exact 'chrono figé' symptom", i-1, ticks[i-1].QuestionTime, i, ticks[i].QuestionTime)
+		switch {
+		case ticks[i].QuestionTime < ticks[i-1].QuestionTime:
+			decreases++
+		case ticks[i].QuestionTime == ticks[i-1].QuestionTime:
+			t.Errorf("QUESTION_TIME frozen: tick #%d = %d, tick #%d = %d — the exact 'chrono figé' symptom", i-1, ticks[i-1].QuestionTime, i, ticks[i].QuestionTime)
+		default:
+			t.Logf("tick #%d = %d -> tick #%d = %d: value increased, treated as a legitimate round restart (not a freeze)", i-1, ticks[i-1].QuestionTime, i, ticks[i].QuestionTime)
 		}
+	}
+	if decreases == 0 {
+		t.Fatalf("no strict decrease observed across %d ticks (%v) — the countdown never actually moved forward", len(ticks), ticks)
 	}
 }
