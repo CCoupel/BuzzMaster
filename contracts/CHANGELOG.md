@@ -2,6 +2,43 @@
 
 ---
 
+## [20260906] — Correctifs retour QUALIF v9.0.0.4 : Lot A+1 (#216) et Lot C1/C2 (#217)
+
+> Backend uniquement (Batch 1). Plan : `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md`.
+> **Traçabilité** : le Lot A+1 corrige une régression de **#216** (RAFALE multi-catégorie/
+> difficulté) — pas de #217. Les Lots C1/C2 corrigent des défauts de **#217** (RAFALE en carte
+> MEMOTION). Ne pas attribuer à #217 des défauts qu'il n'a pas introduits.
+
+- **[NEW]** Lot A+1 — `GameState.RAFALE_TEAM_CATEGORY_COUNTERS map[string]map[string]int`
+  (`contracts/rafale.md` §4), tally par équipe/catégorie des bonnes réponses d'une manche RAFALE
+  **classique** (jamais alimenté par une carte MEMOTION #217 — hors périmètre). Alimente
+  **[NEW]** `GameEvent.CATEGORY_BREAKDOWN` (`contracts/models.md`, `omitempty`) — répartition des
+  points d'un gain RAFALE entre les catégories effectivement tirées, méthode du plus fort reste,
+  somme toujours exactement égale à `POINTS`. Corrige le défaut « Inconnue » : les événements
+  RAFALE écrivaient jusqu'ici une `QUESTION_CATEGORY` vide dans `history.json` (une manche RAFALE
+  utilise `RAFALE_CATEGORIES`, un multi-select, jamais un `CATEGORY` singulier — #216).
+- **[CHANGED]** Lot A+1 — `GET /palmares` (`contracts/http-endpoints.md`) : un événement portant
+  `CATEGORY_BREAKDOWN` crédite chacune de ses catégories de sa propre part au lieu d'un crédit
+  unique sur `QUESTION_CATEGORY` ; un événement sans `CATEGORY_BREAKDOWN` garde le comportement
+  actuel exactement (non-régression).
+- **[CHANGED]** Lot C1 — `RafaleTickPayload` (`RAFALE_TICK`, `contracts/rafale.md` §5.2) gagne
+  `MOTION_CARD_ID` (`CardScope`, optionnel). Corrige le « chrono figé » d'une carte RAFALE : la
+  version #217 initiale affirmait qu'aucune ambiguïté client n'existait sans cet identifiant — ce
+  raisonnement était faux en pratique (le moteur décomptait correctement en interne, le client
+  n'avait juste aucun moyen de router le tick vers sa carte). `Engine.OnRafaleQuestionTick` et
+  `App.broadcastRafaleTick` remontent désormais le `cardID` (`""` pour la manche classique).
+- **[FIXED]** Lot C2 — assertion `.(int)` fragile sur `MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME`
+  (échoue silencieusement si la valeur a transité par un aller-retour JSON — devient `float64` —
+  et traite alors à tort la question comme expirée). Nouveau lecteur tolérant `motionActiveInt`
+  (int OU float64), appliqué également à `RAFALE_ASKED_COUNT`/`RAFALE_CORRECT_COUNT` (même classe
+  de fragilité, corrigée en cohérence bien que non explicitement nommée par le lot — ces deux
+  valeurs alimentent le barème `STARS_PRORATA` d'une carte, un bug identique y aurait
+  silencieusement corrompu un score plutôt qu'un simple décompte).
+- **[UNCHANGED]** Aucune autre section de `contracts/rafale.md`/`contracts/question-types.md`
+  n'est touchée — cycle de vie carte (§14.1-§14.10), barème, réservoir partagé : tous inchangés.
+
+---
+
 ## [20260905] — RAFALE nestable en carte MEMOTION (#217, feature, v9.0.0)
 
 > Backend uniquement (Lot 4, Batch 4, dernier lot du milestone) — réouverture assumée de la

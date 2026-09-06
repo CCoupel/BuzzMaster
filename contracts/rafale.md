@@ -332,6 +332,7 @@ RafaleSubPhase          RafaleSubPhase  `json:"RAFALE_SUBPHASE"`
 RafaleCurrentQuestion   RafaleCurrent   `json:"RAFALE_CURRENT_QUESTION"`
 RafaleQuestionTime      int             `json:"RAFALE_QUESTION_TIME"`
 RafaleTeamCounters      map[string]int  `json:"RAFALE_TEAM_COUNTERS"`
+RafaleTeamCategoryCounters map[string]map[string]int `json:"RAFALE_TEAM_CATEGORY_COUNTERS"` // [NEW] v9.0.0, Lot A+1 — voir Notes
 RafaleTeamBest          map[string]int  `json:"RAFALE_TEAM_BEST"`
 RafaleTeamStreak        map[string]int  `json:"RAFALE_TEAM_STREAK"`
 RafaleTeamErrors        map[string]int  `json:"RAFALE_TEAM_ERRORS"`
@@ -369,6 +370,17 @@ const (
 ```
 
 **Notes** :
+- **[NEW] v9.0.0, Lot A+1** (retour QUALIF v9.0.0.4, plan `_work/reports/plan-v900-correctifs-
+  qualif-20260906-104500.md` §2.3) — `RAFALE_TEAM_CATEGORY_COUNTERS[team][category]` : tally des
+  bonnes réponses de `team` dans `category`, alimenté aux **mêmes points d'appel exacts** que
+  `RAFALE_TEAM_COUNTERS[team]++` (jamais plus, jamais moins — `recordRafaleTeamCategoryCorrectUnsafe`,
+  `server-go/internal/game/rafale_category_breakdown.go`), et remis à `{}` pour `team` exactement
+  quand `RAFALE_TEAM_COUNTERS[team]` est remis à 0 (le cas `MAILLON_FAIBLE`,
+  `resetRafaleTeamCategoryCounterUnsafe`). Invariant : à tout instant, la somme de
+  `RAFALE_TEAM_CATEGORY_COUNTERS[team]` sur toutes les catégories vaut exactement
+  `RAFALE_TEAM_COUNTERS[team]`. Alimente `GameEvent.CATEGORY_BREAKDOWN` (`contracts/models.md`)
+  à l'attribution des points (`cmd/server/main.go`, `handleBumperPoints`/`handleTeamPoints`) —
+  **jamais** pour une carte MEMOTION de type RAFALE (#217, hors périmètre de ce lot).
 - `RAFALE_TEAM_COUNTERS` / `RAFALE_TEAM_BEST` / `RAFALE_TEAM_STREAK` / `RAFALE_TEAM_ERRORS`
   reprennent le patron `MemoryTeamPairs` / `MemoryTeamErrors` (arbitrage B3, précédent
   explicitement demandé) — `RAFALE_TEAM_ERRORS` en est le précédent EXACT.
@@ -432,7 +444,22 @@ précédent `TeamCard.onTeamClick` → `setTeamPoints` (arbitrage B3).
 | Action | Payload | Destinataires | Effet |
 |---|---|---|---|
 | `RAFALE_ANSWER` | `{"ID": "...", "ANSWER": "...", "MOTION_CARD_ID": "..."}` (#217, dernier champ optionnel) | **`admin` + `anim` uniquement** | Réponse attendue de la question courante (§2.3) — `MOTION_CARD_ID` absent/vide ⇒ manche classique, présent ⇒ carte MEMOTION désignée (§14.6) |
-| `RAFALE_TICK` | `{"QUESTION_TIME": 2}` | tous | Décompte du timer question (diffusion légère, ne réémet pas tout `GameState`) — partagé entre manche classique et carte (§14.1). Aucune ambiguïté à résoudre côté client : les deux hôtes ne sont jamais actifs simultanément (un `Question` porte un seul `TYPE`), donc l'écran déjà affiché (question ou carte) est sans équivoque la cible. Le moteur tient `MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME` synchronisé à chaque tick (comme `GameState.RAFALE_QUESTION_TIME` pour la manche classique), pour qu'un client qui se reconnecte en cours de compte à rebours voie la valeur correcte sans attendre le `RAFALE_TICK` suivant |
+| `RAFALE_TICK` | `{"QUESTION_TIME": 2, "MOTION_CARD_ID": "..."}` (C1, dernier champ optionnel) | tous | Décompte du timer question (diffusion légère, ne réémet pas tout `GameState`) — partagé entre manche classique et carte (§14.1). `MOTION_CARD_ID` absent/vide ⇒ manche classique (comportement inchangé), présent ⇒ tick de la carte MEMOTION désignée. Le moteur tient `MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME` synchronisé à chaque tick (comme `GameState.RAFALE_QUESTION_TIME` pour la manche classique), pour qu'un client qui se reconnecte en cours de compte à rebours voie la valeur correcte sans attendre le `RAFALE_TICK` suivant |
+
+⚠️ **Correctif C1 (retour QUALIF v9.0.0.4)** — la version #217 initiale de cette ligne affirmait
+qu'aucune ambiguïté n'existait côté client (« les deux hôtes ne sont jamais actifs simultanément
+... l'écran déjà affiché est sans équivoque la cible ») et omettait donc `MOTION_CARD_ID` sur ce
+payload. Ce raisonnement s'est révélé **faux en pratique** : sans un identifiant explicite sur le
+tick lui-même, le client n'a aucun moyen fiable de savoir qu'un tick donné concerne SA carte —
+symptôme observé en QUALIF : le chrono d'une carte RAFALE reste figé à l'écran alors que le moteur
+décompte correctement en interne (`MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME`, déjà juste — le
+défaut est uniquement sur le fil, pas côté moteur). `Engine.OnRafaleQuestionTick`/
+`App.broadcastRafaleTick` remontent désormais explicitement le `cardID` (`""` pour la manche
+classique) jusqu'au payload. ❌ Ne PAS, en réparant ceci, se mettre à écrire AUSSI
+`GameState.RAFALE_QUESTION_TIME` pour un tick de carte — cette diffusion est purement additive
+par-dessus l'état déjà correctement scopé par carte (`MEMOTION_ACTIVE.STATE`, jamais les champs
+globaux, §14.2) ; reproduire cet anti-motif referait exactement l'erreur déjà corrigée en
+`caae3d49`.
 
 Le timer de manche utilise l'action existante `UPDATE_TIMER` (`CURRENT_TIME`) — inchangée.
 
