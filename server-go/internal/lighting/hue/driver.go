@@ -79,6 +79,14 @@ type Config struct {
 	Now func() time.Time
 	// FindBridge overrides re-discovery by id (tests). nil = FindByID.
 	FindBridge func(ctx context.Context, id string, timeout time.Duration) (Bridge, bool, error)
+	// OnReconnect fires whenever the driver's status moves TO StateOK from
+	// anything else (contract lighting.md §10.3 — "au retour du pont"): the
+	// owner's only job is to trigger a fresh derivation (NotifyState()),
+	// never to replay a snapshot. nil = no-op. Called from whichever
+	// goroutine observed the transition (the writer's own Apply, or an HTTP
+	// handler's Inventory/TestFlash/RefreshInventory) — must itself be safe
+	// to call from any goroutine, exactly like lighting.Writer.NotifyState.
+	OnReconnect func()
 }
 
 // Stats counts what the driver did (diagnostics).
@@ -632,12 +640,25 @@ func (d *Driver) fail(err error) error {
 // ok records a successful contact: back to StateOK, one log line on change.
 func (d *Driver) ok() {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	d.failures = 0
 	d.nextRetry = time.Time{}
-	if d.status != StateOK || !d.reported {
+	changed := d.status != StateOK || !d.reported
+	if changed {
 		d.status, d.reason, d.lastChange, d.reported = StateOK, "", d.now(), true
 		d.logf("Hue bridge ok (%s, %s)", d.base, d.bridgeInfo.BridgeID)
+	}
+	d.mu.Unlock()
+	// contract lighting.md §10.3: a bridge going unreachable/refused → ok is
+	// exactly "le pont redevenu joignable" — the owner (cmd/server/ambiance.go)
+	// re-derives and re-applies the room from the LIVE game state on this
+	// signal alone (NotifyState(), never a snapshot to replay). Called
+	// OUTSIDE d.mu — the callback must never run while this driver's own
+	// lock is held (it may itself end up calling back into this driver, e.g.
+	// via the writer's next Apply). Fires on the very first successful
+	// contact too (not just a genuine reconnection): harmless, since
+	// NotifyState() re-derives rather than replaying anything.
+	if changed && d.cfg.OnReconnect != nil {
+		d.cfg.OnReconnect()
 	}
 }
 

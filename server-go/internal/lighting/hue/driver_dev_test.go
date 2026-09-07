@@ -824,3 +824,61 @@ func TestDevApplyWaitsBehindTestFlashRestore(t *testing.T) {
 		t.Fatalf("last PUT must be the writer's scene after the restore: %+v", puts)
 	}
 }
+
+// TestDevOnReconnect_FiresOnceOnTransitionToOK pins contract lighting.md
+// §10.3 ("au retour du pont, l'éclairage est recalculé et réappliqué") at
+// the driver level: OnReconnect fires exactly when the status moves TO
+// StateOK from something else, never on every successful call while
+// already ok, and never while still refused/unreachable — the owner
+// (cmd/server/ambiance.go) wires this straight to a.ambiance().NotifyState().
+func TestDevOnReconnect_FiresOnceOnTransitionToOK(t *testing.T) {
+	f := newDevBridge(t, "BuzzHue1")
+	var reconnects int32
+	d, err := New(Config{BridgeIP: f.srv.URL, APIKey: "wrong", Lights: []LightSpec{{Name: "BuzzHue1"}},
+		OnReconnect: func() { atomic.AddInt32(&reconnects, 1) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Wrong key: refused, never ok — OnReconnect must not fire.
+	if err := d.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); !errors.Is(err, ErrRefused) {
+		t.Fatalf("setup: %v", err)
+	}
+	if n := atomic.LoadInt32(&reconnects); n != 0 {
+		t.Fatalf("refused must never fire OnReconnect, got %d", n)
+	}
+
+	// Fix the key (same pattern as TestDevRefusedAndUnreachableAreDistinct):
+	// the transition to ok must fire OnReconnect exactly once.
+	f.mu.Lock()
+	f.key = "wrong"
+	f.mu.Unlock()
+	if err := d.RefreshInventory(context.Background()); err != nil {
+		t.Fatalf("refresh after fixing the key: %v", err)
+	}
+	if n := atomic.LoadInt32(&reconnects); n != 1 {
+		t.Fatalf("transition to ok must fire OnReconnect exactly once, got %d", n)
+	}
+
+	// Staying ok on a further successful call must NOT fire it again.
+	if err := d.Apply(context.Background(), devGeneral([3]int{0, 255, 0}, 255)); err != nil {
+		t.Fatal(err)
+	}
+	if n := atomic.LoadInt32(&reconnects); n != 1 {
+		t.Fatalf("OnReconnect must not fire again while already ok, got %d", n)
+	}
+}
+
+// TestDevOnReconnect_NilIsSafe is the default (#207/#213 callers that
+// predate this field, and every config that leaves it unset): a nil
+// OnReconnect must never panic on the ok() transition.
+func TestDevOnReconnect_NilIsSafe(t *testing.T) {
+	f := newDevBridge(t, "BuzzHue1")
+	d, err := New(Config{BridgeIP: f.srv.URL, APIKey: f.key, Lights: []LightSpec{{Name: "BuzzHue1"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); err != nil {
+		t.Fatal(err) // must not panic on a nil OnReconnect
+	}
+}

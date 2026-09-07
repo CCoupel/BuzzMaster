@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
+	"buzzcontrol/internal/lighting/hue"
 )
 
 // TestDevLightingOverrideGeneral_PureLogic pins lightingOverrideGeneral in
@@ -281,5 +283,252 @@ func TestDevShutdownExtinguishHueLighting_AppliesOffToEveryConfiguredZone(t *tes
 	mu.Unlock()
 	if n != 2 {
 		t.Fatalf("shutdown must write OFF to every configured light (general + TeamA), got %d PUT /state call(s)", n)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// §10.3 — resync au retour du pont (gap fermé après le rapport initial de
+// Batch 2 : hue.Driver.Config.OnReconnect, câblé dans buildHueDriver()
+// (ambiance.go) sur a.ambiance().NotifyState()). Ces deux tests pilotent le
+// VRAI *hue.Driver contre un faux pont dont on peut couper/rétablir la
+// joignabilité en cours de route — pas un lighting.FakeDriver, qui ne
+// saurait pas produire une vraie transition unreachable→ok.
+// ---------------------------------------------------------------------------
+
+// devReconnectBridge is a Hue v1 fake whose reachability can be toggled
+// mid-test: "down" resets the TCP connection immediately (no timeout to
+// wait out — classify() still maps it to ErrUnreachable, "dial/network
+// errors"), "up" answers normally and records every /state PUT body.
+type devReconnectBridge struct {
+	mu    sync.Mutex
+	up    bool
+	puts  []string
+	light string
+}
+
+func newDevReconnectBridge(t *testing.T, lightName string) (*httptest.Server, *devReconnectBridge) {
+	t.Helper()
+	b := &devReconnectBridge{up: true, light: lightName}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b.mu.Lock()
+		up := b.up
+		b.mu.Unlock()
+		if !up {
+			if hj, ok := w.(http.Hijacker); ok {
+				if conn, _, err := hj.Hijack(); err == nil {
+					_ = conn.Close()
+					return
+				}
+			}
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/config"):
+			_, _ = w.Write([]byte(`{"bridgeid":"fffe0000deadbeef","modelid":"BSB002"}`))
+		case strings.HasSuffix(r.URL.Path, "/lights"):
+			_, _ = w.Write([]byte(`{"8":{"name":"` + b.light + `","state":{"on":true,"bri":100,"xy":[0.3,0.3],"reachable":true}}}`))
+		case strings.HasSuffix(r.URL.Path, "/state") && r.Method == "PUT":
+			body, _ := io.ReadAll(r.Body)
+			b.mu.Lock()
+			b.puts = append(b.puts, string(body))
+			b.mu.Unlock()
+			_, _ = w.Write([]byte(`[{"success":{"on":true}}]`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, b
+}
+
+func (b *devReconnectBridge) setUp(up bool) {
+	b.mu.Lock()
+	b.up = up
+	b.mu.Unlock()
+}
+
+func (b *devReconnectBridge) count() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.puts)
+}
+
+func (b *devReconnectBridge) last() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.puts) == 0 {
+		return ""
+	}
+	return b.puts[len(b.puts)-1]
+}
+
+// devReconnectApp wires an App against a devReconnectBridge with one
+// "general" light, real driver + real writer running.
+func devReconnectApp(t *testing.T) (*App, *devReconnectBridge, context.CancelFunc) {
+	t.Helper()
+	srv, bridge := newDevReconnectBridge(t, "General1")
+	app := newTestApp(t)
+	saved := *config.Get()
+	t.Cleanup(func() { config.SetInstance(&saved) })
+	cfg := saved
+	cfg.Lighting = config.LightingConfig{
+		// Deliberately NO BridgeID: on a failed contact, a configured
+		// BridgeID makes the driver attempt a REAL mDNS/SSDP re-discovery
+		// (contract §4.1) before giving up — several seconds against no
+		// real bridge on the test network. BridgeIP alone is enough to
+		// satisfy ambianceIsConfigured() and keeps the outage/recovery
+		// cycle below fast and deterministic (same pattern as the
+		// "d2"/dead-bridge case in TestDevRefusedAndUnreachableAreDistinct,
+		// internal/lighting/hue/driver_dev_test.go).
+		Enabled: true, BridgeIP: srv.URL, APIKey: "k",
+		Lights: []config.LightingLightEntry{{Name: "General1", Role: "general"}},
+	}
+	config.SetInstance(&cfg)
+	app.setupAmbiance()
+	if app.LightingDriver() == nil {
+		t.Fatal("driver must be built from a valid, enabled config")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go app.ambiance().Start(ctx)
+	return app, bridge, cancel
+}
+
+func devWaitPutCount(t *testing.T, b *devReconnectBridge, n int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if b.count() >= n {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("bridge received %d PUT(s), want >= %d", b.count(), n)
+}
+
+func devWaitDriverState(t *testing.T, d *hue.Driver, want hue.BridgeState) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if d.Status().State == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("driver state = %v after 2s, want %v", d.Status().State, want)
+}
+
+// TestDevLightingReconnect_AUTO_ResyncsFromLiveGameState is the AUTO half
+// of contract §10.3: a bridge outage during a live game, followed by its
+// recovery, must re-apply the CURRENT live game state — not a stale scene
+// from before the outage, and not merely "whatever happened to be the last
+// successful write". Recovery is observed by RefreshInventory (the same
+// call GET /api/lighting/lights makes) — nothing polls the bridge on its
+// own (contract lighting.md §4, purely event-driven); this mirrors the
+// ordinary "admin reopens the ambiance screen" gesture.
+func TestDevLightingReconnect_AUTO_ResyncsFromLiveGameState(t *testing.T) {
+	app, bridge, cancel := devReconnectApp(t)
+	defer cancel()
+
+	// Partie en cours, pont joignable : KindRunning (bleu neutre, pas
+	// d'équipe active).
+	app.engine.SetPhase(game.PhaseStarted)
+	app.ambiance().NotifyState()
+	devWaitPutCount(t, bridge, 1)
+	if !strings.Contains(bridge.last(), `"on":true`) {
+		t.Fatalf("baseline Apply while up must be lit, got %q", bridge.last())
+	}
+
+	// Coupure du pont EN COURS DE PARTIE.
+	bridge.setUp(false)
+	app.engine.SetPhase(game.PhasePaused) // un événement de jeu survient PENDANT la coupure
+	app.ambiance().NotifyState()
+	devWaitDriverState(t, app.LightingDriver(), hue.StateUnreachable)
+	countDuringOutage := bridge.count()
+
+	// La partie continue de bouger pendant la coupure — la salle ne
+	// bouge PAS (contract §5.5 : "la partie continue sans latence
+	// perceptible", l'écriture échoue en silence côté salle).
+	app.engine.SetPhase(game.PhaseStarted)
+	app.ambiance().NotifyState()
+
+	// Rétablissement, observé par un geste normal (inventaire).
+	bridge.setUp(true)
+	if err := app.LightingDriver().RefreshInventory(context.Background()); err != nil {
+		t.Fatalf("RefreshInventory after recovery: %v", err)
+	}
+	devWaitDriverState(t, app.LightingDriver(), hue.StateOK)
+
+	// §10.3 : la resync doit produire un NOUVEL Apply, réappliquant l'état
+	// de jeu VIVANT (toujours PhaseStarted sans équipe active ⇒
+	// KindRunning, allumé) — pas l'état d'avant la coupure rejoué tel quel.
+	devWaitPutCount(t, bridge, countDuringOutage+1)
+	if !strings.Contains(bridge.last(), `"on":true`) {
+		t.Fatalf("resync AUTO must re-derive a lit KindRunning scene from the live game state, got %q", bridge.last())
+	}
+}
+
+// TestDevLightingReconnect_EngagedOverride_IsReappliedNotTheGame is the
+// override half of contract §10.3/§10.1.1 point 7: "si un override est
+// engagé, il est réappliqué tel quel" — a bridge recovering while the
+// selector is OFF must come back OFF, even though the live game state (if
+// AUTO were in effect) would show a lit scene. One chemin de calcul, one
+// source of truth: (mode courant, état de jeu vivant).
+func TestDevLightingReconnect_EngagedOverride_IsReappliedNotTheGame(t *testing.T) {
+	app, bridge, cancel := devReconnectApp(t)
+	defer cancel()
+
+	app.engine.SetPhase(game.PhaseStarted) // partie en cours — AUTO montrerait une scène allumée
+	app.setLightingMode(lightingModeOff)   // override engagé AVANT la coupure
+	devWaitPutCount(t, bridge, 1)
+	if !strings.Contains(bridge.last(), `"on":false`) {
+		t.Fatalf("OFF must be applied while up, got %q", bridge.last())
+	}
+
+	bridge.setUp(false)
+	app.engine.SetPhase(game.PhasePaused) // le jeu continue de bouger pendant la coupure
+	app.ambiance().NotifyState()
+	// L'override OFF est déjà l'état désiré ET déjà appliqué (§5.3, "n'écrire
+	// que ce qui change") : NotifyState() seul ne produit ICI aucune
+	// tentative d'écriture réseau, donc aucune détection de la coupure — un
+	// geste qui force réellement un contact (RefreshInventory, `force`
+	// bypass la fraîcheur du cache) est nécessaire pour l'observer, comme
+	// dans la vraie vie (ex: l'admin rouvre l'écran Ambiance).
+	_ = app.LightingDriver().RefreshInventory(context.Background()) // erreur attendue : c'est la coupure
+	devWaitDriverState(t, app.LightingDriver(), hue.StateUnreachable)
+	countDuringOutage := bridge.count()
+
+	statsBeforeRecovery := app.LightingDriver().Status().Stats
+
+	bridge.setUp(true)
+	if err := app.LightingDriver().RefreshInventory(context.Background()); err != nil {
+		t.Fatalf("RefreshInventory after recovery: %v", err)
+	}
+	devWaitDriverState(t, app.LightingDriver(), hue.StateOK)
+
+	// §10.3 : la resync (OnReconnect → NotifyState()) doit avoir produit un
+	// NOUVEL Apply — sinon le fix ne serait tout simplement pas câblé. Mais
+	// puisque l'override OFF était DÉJÀ l'état appliqué avant la coupure, cet
+	// Apply ne doit écrire RIEN de nouveau sur le pont (§5.3, "n'écrire que
+	// ce qui change") : c'est la preuve que la resync a bien recalculé OFF,
+	// et non la scène de jeu vivante (PhaseStarted sans override aurait
+	// exigé une écriture "on":true différente, donc un PUT supplémentaire).
+	deadline := time.Now().Add(2 * time.Second)
+	var applies int
+	for time.Now().Before(deadline) {
+		applies = app.LightingDriver().Status().Stats.Applies
+		if applies > statsBeforeRecovery.Applies {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if applies <= statsBeforeRecovery.Applies {
+		t.Fatal("resync must trigger a fresh Apply (OnReconnect → NotifyState) even when nothing ends up needing to be written")
+	}
+	if got := bridge.count(); got != countDuringOutage {
+		t.Fatalf("resync with an engaged OFF override must NOT re-write (already applied) — got %d PUT(s) after reconnect (was %d before) — the live game's AUTO scene must have leaked through", got, countDuringOutage)
+	}
+	if got := app.LightingMode(); got != "OFF" {
+		t.Fatalf("the selector itself must still read OFF after the resync, got %q", got)
 	}
 }

@@ -127,6 +127,16 @@ func (a *App) buildHueDriver() *hue.Driver {
 		Logger: func(format string, args ...any) {
 			server.LogInfo(game.LogComponentApp, "Ambiance: "+format, args...)
 		},
+		// #208/#213 reprise (contract §10.3): "au retour du pont", the room
+		// is re-derived and re-applied from the LIVE game state — the
+		// existing writer already does exactly that on every NotifyState()
+		// (§4.1, never a snapshot to replay), so the reconnection resync
+		// reduces to firing this one call. Reads a.ambiance() live (not a
+		// captured writer): correct across a reconfigureAmbiance() hot-swap
+		// too, since this closure is rebuilt with the new driver each time.
+		OnReconnect: func() {
+			a.ambiance().NotifyState()
+		},
 	})
 	if err != nil {
 		server.LogWarn(game.LogComponentApp, "Ambiance: lighting configuration rejected: %v", err)
