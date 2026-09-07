@@ -14,13 +14,26 @@ import '../styles/entracte.css'
 // DIFFUSÉE (gelée pendant une pause active, corrections C4) — jamais
 // entracteConfigSaved, qui n'est consommé que par le formulaire d'édition.
 //
+// mediaUrl (#214, milestone v9.0.0) — image de fond d'une pause PROGRAMMÉE
+// (entrée ENTRACTE du déroulé), distincte du mécanisme IMAGE_IS_CUSTOM
+// ci-dessus (fichier unique sur disque, réservé au déclencheur MANUEL,
+// contracts/game-state.md §"Second déclencheur — entracte programmée") :
+// "l'image de fond éventuelle de cette occurrence est le champ générique
+// Question.MEDIA, comme pour tout autre type — pas de mécanisme dédié."
+// `ENTRACTE_CONFIG` (le sous-objet ci-dessus) ne porte donc PAS cette image
+// — l'appelant (PlayerDisplay.jsx/VPlayerPage.jsx) la résout depuis
+// `gameState.question.MEDIA` (déjà diffusé génériquement) quand la pause
+// active est celle de la question courante, et la passe ici. `undefined`/
+// `null` (déclencheur manuel, ou occurrence sans image) → repli sur
+// IMAGE_IS_CUSTOM comme avant #214, comportement inchangé.
+//
 // Transition (corrections C3) : ce composant DOIT être monté par l'appelant
 // à l'intérieur d'un <AnimatePresence> entourant son rendu conditionnel
 // ({entracteActive && <EntractePanel .../>}) — sans quoi le panneau disparaît
 // instantanément à la sortie, quelle que soit TRANSITION_MS, faute d'exister
 // encore pendant le fondu. Le composant expose sa propre clé implicite via
 // motion.div ; l'appelant doit lui passer une prop `key` stable.
-export default function EntractePanel({ config }) {
+export default function EntractePanel({ config, mediaUrl = null }) {
   const {
     TITLE = 'ENTRACTE',
     SUBTITLE = '',
@@ -78,7 +91,14 @@ export default function EntractePanel({ config }) {
       transition={{ duration: transitionSec }}
     >
       <div className={`entracte-panel${animated ? ' entracte-panel--animated' : ''}`} style={panelStyle}>
-        {IMAGE_IS_CUSTOM && (
+        {/* #214 — mediaUrl (pause programmée, Question.MEDIA) prend le pas
+            sur IMAGE_IS_CUSTOM (pause manuelle, fichier unique) : les deux
+            ne peuvent jamais être actifs en même temps (une pause est soit
+            manuelle, soit programmée), mais l'ordre protège quand même
+            explicitement le cas manuel si jamais les deux étaient vrais. */}
+        {mediaUrl ? (
+          <div className="entracte-panel-bg" style={{ backgroundImage: `url(${mediaUrl})` }} />
+        ) : IMAGE_IS_CUSTOM && (
           <div
             className="entracte-panel-bg"
             style={{ backgroundImage: `url(/api/game/entracte-image?t=${cacheBuster})` }}

@@ -139,7 +139,7 @@ describe('GamePage — RAFALE_DIFFICULTY absente (omitempty) : START ne doit PAS
     // fetch — le repli présent doit produire un vrai appel réseau avec
     // difficulty=1.
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?categories=HISTORY&difficulties=1')
     })
 
     const startBtn = await screen.findByText('START')
@@ -156,7 +156,7 @@ describe('GamePage — RAFALE_DIFFICULTY absente (omitempty) : START ne doit PAS
     render(<GamePage />)
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?categories=HISTORY&difficulties=1')
     })
   })
 })
@@ -182,7 +182,7 @@ describe('GamePage — non-régression du fail-closed (SHA 1a742782) : catégori
     render(<GamePage />)
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?categories=HISTORY&difficulties=1')
     })
 
     const startBtn = await screen.findByText('START')
@@ -215,7 +215,7 @@ describe('GamePage — rafaleTeamsBlocked : garde équipe en mode multi (SHA 2eb
     // Laisse le gate pool se résoudre à 'ok' d'abord (sinon rafaleBlocked
     // masquerait la cause réellement testée ici).
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?categories=HISTORY&difficulties=1')
     })
 
     const startBtn = await screen.findByText('START')
@@ -236,7 +236,7 @@ describe('GamePage — rafaleTeamsBlocked : garde équipe en mode multi (SHA 2eb
     render(<GamePage />)
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?categories=HISTORY&difficulties=1')
     })
 
     const startBtn = await screen.findByText('START')
@@ -256,7 +256,7 @@ describe('GamePage — rafaleTeamsBlocked : garde équipe en mode multi (SHA 2eb
     render(<GamePage />)
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?categories=HISTORY&difficulties=1')
     })
 
     const startBtn = await screen.findByText('START')
@@ -276,7 +276,7 @@ describe('GamePage — rafaleTeamsBlocked : garde équipe en mode multi (SHA 2eb
     render(<GamePage />)
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?category=HISTORY&difficulty=1')
+      expect(global.fetch).toHaveBeenCalledWith('/api/rafale/pool?categories=HISTORY&difficulties=1')
     })
 
     const startBtn = await screen.findByText('START')

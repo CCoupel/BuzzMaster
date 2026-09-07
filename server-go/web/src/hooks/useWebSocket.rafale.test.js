@@ -142,6 +142,70 @@ describe('useWebSocket — RAFALE_TICK (contrat §5.2)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// C1 — retour QUALIF v9.0.0.4 (plan-v900-correctifs-qualif-20260906-104500.md
+// §5 Lot C, §7 "dette de test #217") : "chrono figé" en carte MEMOTION.
+// Root cause confirmée en lisant le handler actuel : RAFALE_TICK écrit
+// TOUJOURS gameState.RAFALE_QUESTION_TIME (le champ GLOBAL, réservé à la
+// manche RAFALE classique), quel que soit MSG.MOTION_CARD_ID — un tick pour
+// une carte finissait donc sur un champ que personne ne lit en contexte
+// carte (getTypeState lit MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME,
+// jamais le champ global), d'où le chrono figé.
+//
+// ❌ Ne PAS patcher les deux emplacements à la fois pour un même tick —
+// reproduirait l'anti-motif déjà corrigé en caae3d49 (dev-backend's C1
+// handoff). Un tick scopé (MOTION_CARD_ID présent) ne touche QUE
+// MEMOTION_ACTIVE.STATE ; un tick non scopé ne touche QUE le champ global.
+// ---------------------------------------------------------------------------
+
+describe('useWebSocket — RAFALE_TICK scopé par carte (C1, retour QUALIF v9.0.0.4)', () => {
+  it('MOTION_CARD_ID présent : met à jour MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME, laisse le champ global RAFALE_QUESTION_TIME intact', async () => {
+    const { result } = renderHook(() => useWebSocket('/ws/test'))
+
+    // Établit un état de carte active + une valeur globale distincte, pour
+    // détecter sans ambiguïté si l'un fuite vers l'autre.
+    await act(async () => {
+      wsInstance.onmessage({
+        data: JSON.stringify({
+          ACTION: 'UPDATE',
+          MSG: { GAME: { MEMOTION_ACTIVE: { CARD_ID: 'mc-1', TYPE: 'RAFALE', STATE: { RAFALE_QUESTION_TIME: 3 } } } },
+        }),
+      })
+    })
+    await act(async () => {
+      wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_TICK', MSG: { QUESTION_TIME: 9 } }) }) // valeur globale distincte, sentinelle
+    })
+    expect(result.current.gameState.RAFALE_QUESTION_TIME).toBe(9)
+
+    await act(async () => {
+      wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_TICK', MSG: { QUESTION_TIME: 2, MOTION_CARD_ID: 'mc-1' } }) })
+    })
+
+    expect(result.current.gameState.MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME).toBe(2)
+    expect(result.current.gameState.RAFALE_QUESTION_TIME).toBe(9) // inchangé — la sentinelle prouve l'absence de fuite
+  })
+
+  it('MOTION_CARD_ID absent (manche classique) : met à jour le champ global, laisse MEMOTION_ACTIVE.STATE intact', async () => {
+    const { result } = renderHook(() => useWebSocket('/ws/test'))
+
+    await act(async () => {
+      wsInstance.onmessage({
+        data: JSON.stringify({
+          ACTION: 'UPDATE',
+          MSG: { GAME: { MEMOTION_ACTIVE: { CARD_ID: 'mc-1', TYPE: 'RAFALE', STATE: { RAFALE_QUESTION_TIME: 7 } } } }, // sentinelle carte
+        }),
+      })
+    })
+
+    await act(async () => {
+      wsInstance.onmessage({ data: JSON.stringify({ ACTION: 'RAFALE_TICK', MSG: { QUESTION_TIME: 1 } }) })
+    })
+
+    expect(result.current.gameState.RAFALE_QUESTION_TIME).toBe(1)
+    expect(result.current.gameState.MEMOTION_ACTIVE.STATE.RAFALE_QUESTION_TIME).toBe(7) // inchangé
+  })
+})
+
+// ---------------------------------------------------------------------------
 // RAFALE_ANSWER (contrat §2.3/§5.2) — réponse attendue de la question
 // courante, admin+anim uniquement côté serveur. rafaleAnswer est un état
 // SÉPARÉ de gameState (jamais fusionné dedans) — c'est précisément ce qui

@@ -550,6 +550,8 @@ type TypeDescriptor struct {
 | `ARDOISE` | `recto`, `question` | ❌ — **abandonné**, voir §7.2 | ✅ |
 | `MEMORY` | `recto` + N paires | ✅ **(#187, v7.1.0)** | ✅ — voir §7.3 |
 | `MEMOTION` | — | ❌ **jamais** (profondeur 1) | ❌ |
+| `RAFALE` | — (texte seul, `contracts/rafale.md` §2.4/D3, exemption déclarée §7.6) | ✅ **(#217, v9.0.0)** — voir §7.6 | ❌ — jugé par admin/anim |
+| `ENTRACTE` | — | ❌ — décision utilisateur, voir §7.4 | ❌ — aucune interaction |
 
 Un registre **en dur et exhaustif**. Pas de DSL, pas d'architecture à plugins — décision explicite
 de #184 (hors portée : « toute abstraction spéculative pour des types qui n'existent pas encore »).
@@ -589,6 +591,43 @@ active — le joueur retourne des cartes.
 > autorisée pour `tv`, `vplayer` et `anim`. Ce qui est nouveau, c'est la **portée** (`MOTION_CARD_ID`,
 > §9) et la **vérification du tour** (`contracts/websocket-actions.md`, fiche `FLIP_MEMORY_CARD`) —
 > pas le droit d'émettre.
+
+### 7.4 `ENTRACTE` n'est pas imbricable — décision utilisateur (#214, 2026-09-04)
+
+`NestableInMotionCard` reste **`false`** pour `ENTRACTE`. Une pause programmée est une entrée du
+déroulé au même niveau qu'une question — elle n'a pas de sens comme face d'une carte MEMOTION (un
+« mini-entracte » à l'intérieur d'une grille de jeu n'a été demandé par personne, et casserait la
+règle « la pause engage toute la salle », `contracts/websocket-actions.md` §`ENTRACTE_SET`).
+
+Détail complet du type (déclencheur, configuration par occurrence, restauration à la sortie) :
+`contracts/game-state.md` §"Second déclencheur — entracte programmée (#214)".
+
+### 7.5 `RAFALE` devient nestable — réouverture assumée, mode SOLO forcé (#217, v9.0.0)
+
+Réouverture assumée : `RAFALE` était `NestableInMotionCard: false` (« pas de notion de carte
+unique », table ci-dessus) — devient `true`. Ce n'est **pas** un changement de nature de la manche
+classique (`contracts/rafale.md` §1-§13, inchangés) : une carte RAFALE est une **mini-manche**
+distincte, en **mode SOLO forcé** (217-Q3, même motif que le refus d'ARDOISE §7.2 — une carte
+n'active qu'une équipe — mais SOLO lève ici le blocage plutôt que de fermer l'issue).
+
+`DefaultPointsRule: STARS_PRORATA` (§6.2), même barème que MEMORY (217-Q4) — `Units`/`UnitsTotal`
+dérivés serveur exactement comme §9.3 l'exige pour MEMORY, jamais du `UNITS` client.
+
+Détail complet (état vivant, bornes durée+nombre de questions, cycle FLIP→VALIDATE/INVALIDATE→DONE,
+réservoir partagé, modifications d'hôte déclarées) : `contracts/rafale.md` §14 "RAFALE en carte
+MEMOTION" — référence unique pour ce type, comme pour la manche classique (`contracts/rafale.md`
+en-tête).
+
+### 7.6 `RAFALE` — exemption `MediaSlots` (#217)
+
+`RAFALE` est le **second** type nestable sans `MediaSlots` (`MEMOTION` est le premier, mais n'est
+jamais nestable — un cas différent). Texte seul par conception, comme la manche classique
+(`contracts/rafale.md` §2.4/D3) — aucun emplacement média n'a de sens pour un énoncé tiré du
+réservoir. L'invariant « tout type nestable déclare ≥1 `MediaSlot` »
+(`question_types_test.go:TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots`) gagne une
+**exemption nommée et testée** plutôt qu'un affaiblissement silencieux — décision retenue au
+cadrage (217-Q6, non bloquante) : assouplir l'invariant plutôt que doter RAFALE d'un slot
+d'illustration sans usage.
 
 ---
 
@@ -639,6 +678,11 @@ qui n'est pas celle en jeu. Refus silencieux interdit — l'erreur est renvoyée
 > (`FLIP_MEMORY_CARD`, v7.1.0). Il est livré dès v7.0.0 parce qu'il fait partie du contrat que les
 > types imbriqués doivent pouvoir supposer acquis — et parce que le poser après coup obligerait à
 > rouvrir le cœur, ce que le test d'agnosticité de #184 interdit.
+>
+> **#217 (v9.0.0, deuxième consommateur)** : `RAFALE_VALIDATE`/`RAFALE_INVALIDATE` gagnent
+> `CardScope` (`MOTION_CARD_ID` optionnel) — même mécanisme, même invariant `ValidateCardScope`,
+> vérifié par `cmd/server/main.go` avant de router vers le sous-cycle de carte plutôt que la manche
+> classique. Détail : `contracts/rafale.md` §14.5/§14.6.
 
 #### ⚠️ Dérogation à « refus silencieux interdit » — vérification du tour (v7.1.0, #187)
 
@@ -766,3 +810,18 @@ jour en conséquence.
 | `FLIP_MEMORY_CARD.MOTION_CARD_ID` | **NEW**, optionnel | absent hors manche MEMOTION ⇒ comportement actuel |
 | Vérification du tour sur `FLIP_MEMORY_CARD` | **CHANGED**, comportement | **Correction d'un défaut préexistant** : le serveur ne vérifiait rien, seul le client masquait le geste. Le geste devient possible pour tous côté client, mais **sans effet** hors tour côté serveur. Aucun client légitime n'y perd une capacité — `tv` et `anim` ne sont pas concernés (§ fiche `FLIP_MEMORY_CARD`) |
 | `ARDOISE` imbricable | **abandonné** | #186 fermée « not planned » — §7.2 |
+
+### 11.2 Ajouts v9.0.0 (#217) — toujours aucun changement BREAKING
+
+| Élément | Nature | Justification |
+|---|---|---|
+| `RAFALE` imbricable (`NestableInMotionCard`) | **NEW**, additif | aucune carte existante n'est `TYPE=RAFALE` (le type n'existait pas encore comme type de carte) |
+| Exemption `MediaSlots` pour `RAFALE` | **NEW**, carve-out testé | `TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots` — deuxième exception nommée, voir §7.6 |
+| `TypedContent.RAFALE_ROUND_TIME` | **NEW**, optionnel | durée propre d'une carte — sans effet pour une manche classique (`contracts/rafale.md` §14.2) |
+| `MEMOTION_ACTIVE.STATE` pour `TYPE=RAFALE` | **NEW**, additif | `STATE` est déjà de forme libre (§5.2) |
+| `RAFALE_VALIDATE`/`RAFALE_INVALIDATE.MOTION_CARD_ID` | **NEW**, optionnel | absent ⇒ manche classique, comportement actuel inchangé |
+| `RafaleAnswerPayload.MOTION_CARD_ID` | **NEW**, optionnel | absent ⇒ manche classique, comportement actuel inchangé |
+| `newRafaleDrawStateUnsafe`/`rafaleMaxQuestionsUnsafe` | **CHANGED**, interne Go | signatures généralisées (`*Question` → valeurs déjà résolues) — modification déclarée, `contracts/rafale.md` §14.7, même discipline que §10.2 |
+| `motionCardPointsForOutcome`/`DoneMotionCard` | **CHANGED**, interne Go | second `case` RAFALE à côté du `case` MEMORY existant — modification d'hôte déclarée, §10.2/§14.7 |
+| `POINTS_RULE.MODE = "STARS_PRORATA"` pour `RAFALE` | **NEW**, réutilise un mode existant | introduit par #187 (§11.1), aucune extension du mode lui-même |
+| Génération IA | **inchangé** | `RAFALE` reste hors `GENERABLE_TYPES`/`generableQuestionTypes` — décision du 2026-08-28 non rouverte |

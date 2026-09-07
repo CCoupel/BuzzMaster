@@ -1760,6 +1760,22 @@ aucun état de bouton n'existe côté serveur.
 Une activation refusée pour cause de phase est journalisée en `WARN` et **ne renvoie rien au client** :
 même politique que le refus d'allow-list existant.
 
+> ⚠️ **[NEW] Second déclencheur (dev-backend, feature, 2026-09-04, #214, milestone v9.0.0)** —
+> `ENTRACTE_SET{ACTIVE:true}` reste le déclencheur **manuel/global** ci-dessus, inchangé (mêmes
+> phases acceptées/refusées, même admin-only). Un entracte **programmé** (une entrée du déroulé de
+> type `ENTRACTE`, contract `question-types.md` §7) est désormais activable une SECONDE façon :
+> `GameState.Entracte` passe à `true` **directement au `START` de cette question** — la transition
+> `READY → STARTED` standard, sans action `ENTRACTE_SET` ni action dédiée. Ce n'est **pas** un appel
+> interne à `SetEntracte(true)` (son garde-fou de phase refuserait toujours `STARTED`) — c'est une
+> conséquence de la transition START elle-même pour ce type de question, contract `game-state.md`
+> §"Second déclencheur — entracte programmée".
+>
+> **La sortie reste EXACTEMENT `ENTRACTE_SET{ACTIVE:false}`, sans changement** — c'est le même
+> geste, déjà accepté depuis n'importe quelle phase (tableau ci-dessus, ligne « Désactivation »),
+> déjà dans la liste blanche pendant l'entracte (voir plus bas). Aucune entrée n'a dû y être
+> ajoutée : la désactivation était déjà phase-agnostique par conception (« ENTRACTE must never be a
+> dead end »).
+
 ---
 
 ## UPDATE_ENTRACTE_CONFIG ✨ (v6.5.2, #119)
@@ -1881,6 +1897,15 @@ n'atteint jamais son handler.
 Tout le reste — `READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `NEW_GAME`,
 `RAZ`, `SHOW_QR_CODE`, `UPDATE_QUIZ_META`, crédits de points, actions MEMORY/MEMOTION/ARDOISE… —
 est refusé.
+
+> ⚠️ **[NEW] #214 — cette liste n'a pas changé.** Une entracte **programmée** activée au `START`
+> d'une question `ENTRACTE` traverse cette même garde comme n'importe quel entracte : `START`
+> lui-même n'a évidemment pas à y figurer (il a déjà eu lieu, c'est lui qui vient de lever le
+> drapeau) ; la seule action que l'animateur/admin peut ensuite émettre légitimement pendant la
+> pause reste `ENTRACTE_SET{ACTIVE:false}`, déjà présent ci-dessus. `STOP`/`REVEAL`/tout le reste
+> restent refusés jusqu'à la sortie — exactement comme pour un entracte manuel ; ils redeviennent
+> disponibles normalement une fois `ENTRACTE_SET{ACTIVE:false}` traité (`GameState.Entracte` repasse
+> à `false`, cette garde ne s'applique alors plus du tout). Aucune entrée ajoutée, aucune retirée.
 
 > **`UPDATE_ENTRACTE_CONFIG` est la seule action de configuration admise**, et sans exception à la
 > règle générale : elle ne change rien à la pause en cours. Le panneau diffusé reste celui figé au

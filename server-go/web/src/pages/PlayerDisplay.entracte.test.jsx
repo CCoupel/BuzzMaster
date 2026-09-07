@@ -166,3 +166,39 @@ describe('PlayerDisplay (TV) — éléments position:fixed hors du wrapper filtr
     expect(content.contains(overlay)).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// TYPE=ENTRACTE — dispatch positif (#214, milestone v9.0.0, Batch 3).
+//
+// ⚠️ Piège signalé explicitement au cadrage : sans un dispatch POSITIF
+// (isKnownOtherType), un type de question inconnu du switch tombe
+// SILENCIEUSEMENT dans le rendu par défaut SPEEDY (PlayerDisplay.jsx:646-670)
+// — pas d'erreur, pas de crash, juste le mauvais contenu affiché. Ce fichier
+// vérifie le symptôme observable : le contenu SPEEDY (texte de la question)
+// ne doit JAMAIS apparaître pour une question ENTRACTE, y compris PENDANT la
+// fenêtre entre START et la propagation du drapeau `entracte` (le panneau
+// EntractePanel lui-même est couvert par les describe ci-dessus — hors
+// périmètre de ce bloc, qui teste le DISPATCH, pas le panneau).
+// ---------------------------------------------------------------------------
+
+describe('PlayerDisplay (TV) — TYPE=ENTRACTE : dispatch positif, jamais de chute silencieuse vers SPEEDY (#214)', () => {
+  const ENTRACTE_QUESTION = { ID: 'q-entracte-1', TYPE: 'ENTRACTE', QUESTION: 'CE TEXTE NE DOIT JAMAIS APPARAÎTRE (repli SPEEDY)' }
+
+  it("phase STARTED, entracte pas encore levé (fenêtre START→propagation) : le texte SPEEDY de la question n'apparaît jamais", () => {
+    mockUseGame({ phase: 'STARTED', question: ENTRACTE_QUESTION, entracte: false })
+    render(<PlayerDisplay />)
+    expect(screen.queryByText(ENTRACTE_QUESTION.QUESTION)).toBeNull()
+  })
+
+  it('phase STARTED, entracte levé : le texte SPEEDY de la question n\'apparaît toujours pas (le panneau ENTRACTE porte le message)', () => {
+    mockUseGame({ phase: 'STARTED', question: ENTRACTE_QUESTION, entracte: true })
+    render(<PlayerDisplay />)
+    expect(screen.queryByText(ENTRACTE_QUESTION.QUESTION)).toBeNull()
+  })
+
+  it('ne plante pas et rend une zone de contenu (pas un écran cassé/vide) pour TYPE=ENTRACTE', () => {
+    mockUseGame({ phase: 'STARTED', question: ENTRACTE_QUESTION, entracte: false })
+    const { container } = render(<PlayerDisplay />)
+    expect(container.querySelector('.game-content-zones')).not.toBeNull()
+  })
+})

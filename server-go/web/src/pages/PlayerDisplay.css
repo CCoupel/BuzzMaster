@@ -3308,6 +3308,50 @@
 }
 
 /* ============================================================
+   Carte MEMOTION de type RAFALE — mini-manche (#217, v9.0.0)
+   STATIC — overflow: hidden, cqh/cqw (container-type: size posé sur
+   .memotion-tv-fullscreen), jamais de scroll. Row 2 (body) : chips
+   catégorie/difficulté de la question tirée. Row 3 (footer) : rang de la
+   question SEUL (retour QUALIF v9.0.0.4, point C6/C6b — le double minuteur
+   a été déplacé dans la zone haute partagée de gridView, un Timer isolé ici
+   en aurait été la copie exacte).
+   ============================================================ */
+.memotion-tv-fs-rafale-meta {
+  display: flex;
+  gap: 1cqw;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.memotion-tv-fs-rafale-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.memotion-tv-fs-rafale-chip {
+  background: rgba(0, 0, 0, 0.4);
+  border: 0.15cqh solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: 0.4cqh 1.2cqw;
+  font-size: clamp(0.7rem, 2.2cqh, 1.2rem);
+  color: var(--text-secondary, #94a3b8);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4cqw;
+  white-space: nowrap;
+}
+
+.memotion-tv-fs-rafale-chip-img {
+  width: 1.4em;
+  height: 1.4em;
+  object-fit: contain;
+}
+
+/* ============================================================
    Carte MEMOTION de type MEMORY — grille de paires (#187, v7.1.0)
    STATIC — overflow: hidden, cqh/cqw (container-type: size posé sur
    .memotion-tv-fullscreen), jamais de scroll. Occupe Row 2 (body) des faces
@@ -3588,6 +3632,82 @@
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* RAFALE — écran READY, branche dédiée (retour QUALIF v9.0.0.4, point  */
+/* A1, docs/mockups/rafale-ready-217.html). Statique — flex-wrap plutôt */
+/* que défilement si beaucoup de catégories/difficultés sont retenues.  */
+/* Réutilisée aussi par l'écran COUNTDOWN (A2, RafaleCategoryPastilles  */
+/* seule, sans .rafale-ready-display/.rafale-ready-group-label).       */
+/* ------------------------------------------------------------------ */
+
+.rafale-ready-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2vh;
+  max-width: 90%;
+}
+
+.rafale-ready-gtype {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 5vh, 3rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.rafale-ready-group-label {
+  font-family: var(--font-display);
+  font-size: clamp(0.6rem, 1.4vh, 0.85rem);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.4vh;
+}
+
+.rafale-ready-row {
+  display: flex;
+  gap: 0.8vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rafale-ready-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5vw;
+  padding: 0.8vh 1.6vw;
+  border-radius: var(--radius-xl);
+  font-size: clamp(0.85rem, 2.2vh, 1.3rem);
+  font-weight: 600;
+  color: white;
+  box-shadow: 0 0.4vh 2vh rgba(0, 0, 0, 0.3);
+}
+
+.rafale-ready-cat-img {
+  width: 1.3em;
+  height: 1.3em;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+
+.rafale-ready-cat-icon {
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.rafale-ready-diff {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.6vh 1.4vw;
+  border-radius: var(--radius-xl);
+  font-size: clamp(0.9rem, 2.2vh, 1.3rem);
+  letter-spacing: 0.1em;
+  color: #fcd34d;
+  background: rgba(252, 211, 77, 0.13);
+  border: 1px solid rgba(252, 211, 77, 0.42);
 }
 
 /* ------------------------------------------------------------------ */

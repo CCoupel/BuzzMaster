@@ -42,13 +42,31 @@ func TestQuestionTypeRegistry_Exhaustive(t *testing.T) {
 // silently instead of breaking loudly" bug §10.1 exists to catch. MEMOTION
 // is the one deliberate, permanent exception (never nestable, so its nil
 // MediaSlots is correct, not an oversight).
+//
+// ⚠️ [CHANGED] #217 (milestone v9.0.0, réouverture assumée, arbitrage
+// utilisateur "MediaSlots") — RAFALE becomes a SECOND deliberate exception:
+// nestable (NestableInMotionCard: true) yet text-only by design, exactly
+// like a classic RAFALE round (contracts/rafale.md §2.4/D3) — no media slot
+// was ever added for it, on purpose, not an oversight left behind by this
+// invariant. Carved out explicitly here (never silently, per this file's
+// own #10.1 discipline) rather than weakening the invariant itself for
+// every other type.
 func TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots(t *testing.T) {
+	// #217 — RAFALE is the second permanent, deliberate exception (see
+	// MEMOTION's own carve-out in this test's doc comment above).
+	mediaSlotExemptNestableTypes := map[QuestionType]bool{
+		QuestionTypeRafale: true,
+	}
+
 	for qt, desc := range questionTypeRegistry {
 		if !desc.NestableInMotionCard {
 			continue
 		}
+		if mediaSlotExemptNestableTypes[qt] {
+			continue
+		}
 		if len(desc.MediaSlots) == 0 {
-			t.Errorf("type %q is NestableInMotionCard but declares no MediaSlots — a nestable type must have at least one upload slot (contract §7/§8)", qt)
+			t.Errorf("type %q is NestableInMotionCard but declares no MediaSlots — a nestable type must have at least one upload slot (contract §7/§8), unless explicitly exempted", qt)
 		}
 	}
 }
@@ -95,13 +113,23 @@ func TestQuestionTypeRegistry_MemoryDefaultPointsRuleIsStarsProrata(t *testing.T
 // explicit non-regression companion: every OTHER type must still fall
 // through to STARS (empty DefaultPointsRule) — #187 cycle 5 must not have
 // silently changed the barème for SPEEDY/QCM/ARDOISE/MEMOTION.
+//
+// #217 (v9.0.0): RAFALE joins MEMORY with a non-empty default
+// (STARS_PRORATA, 217-Q4 — same barème, same reasoning: a nested RAFALE
+// mini-round is a progression type, contracts/rafale.md §14.4) — excluded
+// here alongside MEMORY rather than silently widening what this test
+// tolerates.
 func TestQuestionTypeRegistry_OtherTypesHaveNoDefaultPointsRule(t *testing.T) {
+	exempt := map[QuestionType]bool{
+		QuestionTypeMemory: true,
+		QuestionTypeRafale: true,
+	}
 	for qt, desc := range questionTypeRegistry {
-		if qt == QuestionTypeMemory {
+		if exempt[qt] {
 			continue
 		}
 		if desc.DefaultPointsRule != "" {
-			t.Errorf("type %q declares DefaultPointsRule=%q, want empty (STARS, unchanged) — only MEMORY has a non-empty default (#187)", qt, desc.DefaultPointsRule)
+			t.Errorf("type %q declares DefaultPointsRule=%q, want empty (STARS, unchanged) — only MEMORY and RAFALE (#217) have a non-empty default", qt, desc.DefaultPointsRule)
 		}
 	}
 }

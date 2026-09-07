@@ -1,18 +1,29 @@
 /**
- * Tests for GamePage — panneau de pré-lancement RAFALE, catégorie unique
- * (v8.0.0, #16/#107, bugfix 2026-08-29, contrat rafale.md §3.3, SHA 8f8ff92d).
+ * Tests for GamePage — panneau de pré-lancement RAFALE (v8.0.0, #16/#107).
  *
- * Le panneau affichait un compteur "N catégorie(s)" (RAFALE_CATEGORIES,
- * multi, retiré) — il affiche désormais un seul CategoryBadge, exactement
- * comme le reste du projet (nextUnplayedQuestion, gameState.question plus
- * haut dans GamePage.jsx, déjà ce même patron avant RAFALE).
+ * Historique : catégorie unique depuis le bugfix 2026-08-29 (contrat
+ * rafale.md §3.3, SHA 8f8ff92d) — le panneau affichait un compteur
+ * "N catégorie(s)" (RAFALE_CATEGORIES, multi, retiré), remplacé par un seul
+ * CategoryBadge.
+ *
+ * ⚠️ [CHANGED] #216 (milestone v9.0.0, Lot 2, GamePage.jsx:997-1031) —
+ * réouverture ASSUMÉE : le panneau affiche désormais un chip par catégorie
+ * ET un chip par difficulté (RAFALE_CATEGORIES/RAFALE_DIFFICULTIES),
+ * exactement le même principe "chips multiples" que QuestionCard.jsx
+ * (contracts/rafale.md §3.3, réouverture documentée du bugfix). Les 2 tests
+ * qui affirmaient explicitement le badge/chip UNIQUE ("CATEGORY définie :
+ * affiche un SEUL CategoryBadge", "transmet la CATEGORY unique à
+ * RafalePoolAlert (pas un tableau)") sont réécrits ci-dessous — pas
+ * supprimés — pour vérifier le nouveau contrat multi.
  *
  * Mocks calqués sur GamePage.categories.test.jsx (même scaffold) — la
  * différence : useCategories() est mocké ici (RafalePoolAlert et le badge
  * de catégorie du panneau RAFALE en dépendent tous les deux via
  * customCategories), RafalePoolAlert lui-même est stubbé (déjà couvert
  * isolément par components/RafalePoolAlert.rafale.test.jsx — inutile de
- * dupliquer ses 3 états d'alerte/son format de requête ici).
+ * dupliquer ses 3 états d'alerte/son format de requête ici) mais capture
+ * désormais les props `categories`/`difficulties` reçues pour vérifier le
+ * câblage GamePage → RafalePoolAlert.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -63,9 +74,18 @@ vi.mock('../components/Button', () => ({
 
 // RafalePoolAlert : déjà couvert isolément (components/RafalePoolAlert.
 // rafale.test.jsx) — stub léger ici, ce fichier teste UNIQUEMENT le
-// panneau GamePage lui-même (badge de catégorie unique).
+// panneau GamePage lui-même (chips catégories/difficultés multiples,
+// #216). Les props categories/difficulties reçues sont exposées en
+// attributs data-* pour vérifier le câblage sans dupliquer le
+// comportement interne de RafalePoolAlert.
 vi.mock('../components/RafalePoolAlert', () => ({
-  default: () => <div data-testid="rafale-pool-alert-stub" />,
+  default: ({ categories, difficulties }) => (
+    <div
+      data-testid="rafale-pool-alert-stub"
+      data-categories={JSON.stringify(categories)}
+      data-difficulties={JSON.stringify(difficulties)}
+    />
+  ),
 }))
 
 vi.mock('./GamePage.css', () => ({}))
@@ -84,7 +104,7 @@ const makeGameMock = (overrides = {}) => ({
   ...overrides,
   gameState: {
     phase: 'STOPPED',
-    question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', CATEGORY: 'HISTORY', RAFALE_DIFFICULTY: 2, RAFALE_MODE: 'SOLO', RAFALE_QUESTION_TIME: 3 },
+    question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', RAFALE_CATEGORIES: ['HISTORY'], RAFALE_DIFFICULTIES: [2], RAFALE_MODE: 'SOLO', RAFALE_QUESTION_TIME: 3 },
     remote: 'GAME',
     timer: 0,
     totalTime: 120,
@@ -127,21 +147,30 @@ describe('GamePage — panneau de pré-lancement RAFALE : catégorie unique (bug
     expect(container.querySelector('.rafale-admin-panel')).not.toBeNull()
   })
 
-  it('CATEGORY définie : affiche un SEUL CategoryBadge (plus de compteur "N catégorie(s)")', () => {
+  it('RAFALE_CATEGORIES à 1 élément : affiche un chip catégorie (#216, cas mono via la liste)', () => {
     useGame.mockReturnValue(makeGameMock())
     const { container } = render(<GamePage />)
 
     const panel = container.querySelector('.rafale-admin-panel')
     expect(panel.querySelectorAll('.category-badge').length).toBe(1)
     expect(screen.getByText('Histoire')).toBeInTheDocument()
-    // L'ancien libellé compteur ne doit plus jamais apparaître.
-    expect(panel.textContent).not.toMatch(/catégorie\(s\)/)
-    expect(panel.textContent).not.toMatch(/\d+\s*catégorie/)
   })
 
-  it('CATEGORY absente : aucun badge de catégorie affiché (pas de repli sur un compteur à 0)', () => {
+  it('RAFALE_CATEGORIES à PLUSIEURS éléments : un chip par catégorie (#216)', () => {
     useGame.mockReturnValue(makeGameMock({
-      gameState: { question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', CATEGORY: '', RAFALE_DIFFICULTY: 1 } },
+      gameState: { question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', RAFALE_CATEGORIES: ['HISTORY', 'GEOGRAPHY'], RAFALE_DIFFICULTIES: [2] } },
+    }))
+    const { container } = render(<GamePage />)
+
+    const panel = container.querySelector('.rafale-admin-panel')
+    expect(panel.querySelectorAll('.category-badge').length).toBe(2)
+    expect(screen.getByText('Histoire')).toBeInTheDocument()
+    expect(screen.getByText('Geographie')).toBeInTheDocument()
+  })
+
+  it('RAFALE_CATEGORIES vide/absent : aucun badge de catégorie affiché', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', RAFALE_CATEGORIES: [], RAFALE_DIFFICULTIES: [1] } },
     }))
     const { container } = render(<GamePage />)
 
@@ -149,24 +178,37 @@ describe('GamePage — panneau de pré-lancement RAFALE : catégorie unique (bug
     expect(panel.querySelectorAll('.category-badge').length).toBe(0)
   })
 
-  it('affiche aussi la difficulté, le mode et le temps par question (autres chips du panneau, non-régression)', () => {
+  it('RAFALE_DIFFICULTIES à PLUSIEURS éléments : un chip étoilé par difficulté (#216)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', RAFALE_CATEGORIES: ['HISTORY'], RAFALE_DIFFICULTIES: [1, 3] } },
+    }))
+    const { container } = render(<GamePage />)
+
+    const panel = container.querySelector('.rafale-admin-panel')
+    const chips = Array.from(panel.querySelectorAll('.rafale-admin-chip')).map(el => el.textContent)
+    expect(chips.some(c => c.trim() === '★')).toBe(true)   // difficulté 1
+    expect(chips.some(c => c.trim() === '★★★')).toBe(true) // difficulté 3
+  })
+
+  it('affiche aussi le mode et le temps par question (autres chips du panneau, non-régression)', () => {
     useGame.mockReturnValue(makeGameMock())
     const { container } = render(<GamePage />)
 
     const panel = container.querySelector('.rafale-admin-panel')
     const chips = Array.from(panel.querySelectorAll('.rafale-admin-chip')).map(el => el.textContent)
-    expect(chips.some(c => c.includes('★★'))).toBe(true) // difficulté 2
     expect(chips.some(c => c === 'SOLO')).toBe(true)
     expect(chips.some(c => c.includes('3s/question'))).toBe(true)
   })
 
-  it('transmet la CATEGORY unique à RafalePoolAlert (pas un tableau)', () => {
-    useGame.mockReturnValue(makeGameMock())
-    render(<GamePage />)
-    // Le stub ne reçoit pas d'assertion de props directement ici — couvert
-    // fonctionnellement par RafalePoolAlert.rafale.test.jsx ; on vérifie
-    // seulement qu'il est bien monté dans ce contexte RAFALE.
-    expect(screen.getByTestId('rafale-pool-alert-stub')).toBeInTheDocument()
+  it('transmet RAFALE_CATEGORIES/RAFALE_DIFFICULTIES (tableaux) à RafalePoolAlert — pas des scalaires (#216)', () => {
+    useGame.mockReturnValue(makeGameMock({
+      gameState: { question: { ID: '1', TYPE: 'RAFALE', STATUS: 'STOPPED', RAFALE_CATEGORIES: ['HISTORY', 'GEOGRAPHY'], RAFALE_DIFFICULTIES: [1, 2] } },
+    }))
+    const { container } = render(<GamePage />)
+
+    const stub = container.querySelector('[data-testid="rafale-pool-alert-stub"]')
+    expect(JSON.parse(stub.dataset.categories)).toEqual(['HISTORY', 'GEOGRAPHY'])
+    expect(JSON.parse(stub.dataset.difficulties)).toEqual([1, 2])
   })
 
   it('question non-RAFALE : le panneau RAFALE n\'est jamais affiché (non-régression)', () => {

@@ -74,12 +74,18 @@ describe('RafaleTimers — deux comptes à rebours indépendants', () => {
     expect(roundAfter).toBe(mmss(5)) // manche, elle, a bien changé
   })
 
-  it('libellés "Manche" et "Question" présents (maquette §3/§4)', () => {
+  // 🔴 Retour QUALIF v9.0.0.4 (point A3, `docs/mockups/rafale-ready-217.html`
+  // §04) — libellés réécrits : « Question — 3 » se lisait comme un NOMBRE de
+  // questions plutôt qu'une durée en secondes. Les deux libellés partagent
+  // désormais le même mot d'attaque et celui de la question porte l'unité
+  // explicite (`questionTotal`, valeur STATIQUE de la configuration —
+  // n'inclut jamais le décompte live `questionTime`).
+  it('libellés "Durée de la manche" et "Durée par question · {questionTotal} s" présents (maquette rafale-ready-217.html §04)', () => {
     const { container } = render(
       <RafaleTimers roundTime={90} roundTotal={120} questionTime={2} questionTotal={3} phase="STARTED" />
     )
-    const labels = Array.from(container.querySelectorAll('.rafale-timer-label')).map((el) => el.textContent)
-    expect(labels).toEqual(['Manche', 'Question'])
+    const labels = Array.from(container.querySelectorAll('.rafale-timer-label')).map((el) => el.textContent.replace(/\s+/g, ' ').trim())
+    expect(labels).toEqual(['Durée de la manche', 'Durée par question · 3 s'])
   })
 
   it('valeurs par défaut (aucune prop) : ne plante pas, 2 Timer à 00:00', () => {

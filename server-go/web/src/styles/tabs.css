@@ -1,0 +1,91 @@
+/* Barre d'onglets générique — partagée entre BackstagePage.jsx (Quiz /
+   Entracte / Fonds d'écran) et QuestionsPage.jsx (Questions / Rafale), #215.
+   Balisage inchangé (.page-tabs > .page-tab[.active]) — voir plus bas pour
+   le style visuel appliqué.
+   Style "D — pastilles + icônes" (ravalement visuel, 2026-09-05, hors
+   périmètre fonctionnel du milestone v9.0.0) : maquette comparative
+   docs/mockups/onglets-styles.html §01/D, choix utilisateur validé sur les
+   5 propositions présentées. Pastille pleine en dégradé indigo sur l'onglet
+   actif (var(--gradient-primary), déjà utilisé ailleurs dans l'app —
+   AIGenerateModal, boutons "fun" — mutualisation plutôt que redéclaration),
+   icône qui grossit légèrement quand l'onglet devient actif.
+   Pas d'indicateur séparé qui glisse d'un onglet à l'autre (contrairement à
+   la démo de la maquette, qui l'anime en JS) : la pastille est portée
+   directement par `.page-tab.active`, seule une transition de couleur/fond
+   s'anime — CSS pur, aucun script, aucun changement de balisage (le
+   `.page-tabs`/`.page-tab` existant suffit), donc aucun des 3 pièges
+   déjà corrigés par planner sur les variantes à indicateur séparé
+   (`left:0` manquant, pastille plus haute que le bouton, indicateur figé
+   sur la première ligne à l'enroulement) ne peut se reproduire ici — il n'y
+   a simplement plus d'élément indicateur à positionner. */
+.page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.page-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: var(--space-2) var(--space-4);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--gray-500);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.page-tab:hover {
+  color: var(--primary-700);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.page-tab:focus-visible {
+  outline: 2px solid var(--primary-500);
+  outline-offset: 2px;
+}
+
+.page-tab.active {
+  color: #fff;
+  font-weight: 600;
+  background: var(--gradient-primary);
+  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.36);
+}
+
+/* L'état hover ne doit rien changer sur l'onglet déjà actif — la pastille
+   pleine reste identique au survol (même logique que la maquette : "on:hover
+   { background: transparent }" annule le fond hover générique en le
+   laissant à la valeur peinte par .active elle-même, la déclaration
+   .active ci-dessus n'étant jamais écrasée par :hover grâce à l'ordre des
+   règles ici). */
+.page-tab.active:hover {
+  background: var(--gradient-primary);
+}
+
+.page-tab-icon {
+  font-size: 1.02em;
+  line-height: 1;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.page-tab.active .page-tab-icon {
+  transform: scale(1.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-tab,
+  .page-tab-icon {
+    transition: none;
+  }
+  .page-tab.active .page-tab-icon {
+    transform: none;
+  }
+}

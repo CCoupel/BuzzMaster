@@ -226,6 +226,58 @@ func Test184_GamePayload_MotionActiveAbsoluteBound_MEMORY(t *testing.T) {
 	t.Logf("MEMOTION_ACTIVE (MEMORY, 6/8 paires + 1 erreur) mesuré : %d octets (borne %d)", len(raw), bound)
 }
 
+// Test184_GamePayload_MotionActiveAbsoluteBound_RAFALE borne le coût de
+// MEMOTION_ACTIVE pour une carte RAFALE (#217, v9.0.0, contract §14.8) —
+// état réellement produit par le moteur (StartRafaleMotionCardRound +
+// RafaleValidateCard/InvalidateCard), jamais un littéral écrit à la main
+// (§10.1). RAFALE_CURRENT_QUESTION porte un énoncé TEXTE (contrairement à
+// QCM/MEMORY, structurellement plus coûteux qu'une liste de couleurs ou de
+// paires) + 3 scalaires, et STATE porte 5 scalaires/booléens de plus
+// (§14.8) — mais toujours pas de map indexée par équipe (RAFALE_TEAM_*,
+// absente en carte, §14.2) — borne dédiée, distincte de celle de QCM,
+// dimensionnée pour un énoncé réaliste long (§10.1 : une borne commune trop
+// serrée pour un type qui porte du texte le viderait de son sens).
+func Test184_GamePayload_MotionActiveAbsoluteBound_RAFALE(t *testing.T) {
+	e := NewEngine()
+	// Un énoncé volontairement long — pire cas réaliste de longueur de
+	// texte. Un réservoir d'UNE seule question garantit (plutôt que de
+	// dépendre de l'ordre du tirage stratifié — non déterministe par
+	// construction, §7.2) que ce long énoncé est encore
+	// RAFALE_CURRENT_QUESTION au moment de la mesure : le round démarre en
+	// le tirant (ASKED_COUNT=1), puis un unique RafaleValidateCard épuise
+	// le réservoir (ROUND_END) SANS jamais réécrire CURRENT_QUESTION —
+	// advanceRafaleCardUnsafe laisse le dernier tirage en place quand le
+	// tirage suivant échoue (contract §14.3/engine.go).
+	longQuestion := RafaleQuestion{
+		Question:   "Quelle est la capitale de ce pays d'Europe de l'Ouest, connue pour sa tour de fer emblématique construite en 1889 ?",
+		Category:   CategoryHistory,
+		Difficulty: 1,
+		Answer:     "Paris",
+	}
+	seedRafaleReservoir(t, e, []RafaleQuestion{longQuestion})
+
+	card := rafaleMotionCard("mc-bound-rafale", []string{string(CategoryHistory)}, []int{1}, 3, 10)
+	startMEMOTIONAtRafaleCardQuestion(t, e, card)
+	defer e.Stop()
+
+	// Épuise le réservoir d'un coup — CORRECT_COUNT passe à 1, SUBPHASE →
+	// ROUND_END, CURRENT_QUESTION reste le long énoncé (voir commentaire
+	// ci-dessus), même chemin moteur que les autres bornes de ce fichier.
+	if err := e.RafaleValidateCard(card.ID); err != nil {
+		t.Fatalf("RafaleValidateCard: %v", err)
+	}
+
+	raw, err := json.Marshal(e.state.MotionActive)
+	if err != nil {
+		t.Fatalf("marshal MotionActive : %v", err)
+	}
+	const bound = 600 // énoncé long (118 caractères, mesuré 401 octets) + 3 scalaires + 5 champs STATE — marge large, §14.8
+	if len(raw) > bound {
+		t.Errorf("MEMOTION_ACTIVE (RAFALE) = %d octets (%s), attendu < %d", len(raw), raw, bound)
+	}
+	t.Logf("MEMOTION_ACTIVE (RAFALE, énoncé long + 2 avancements) mesuré : %d octets (borne %d)", len(raw), bound)
+}
+
 // Test184_GamePayload_GAMENode_MEMOTIONRoundInProgress_Bound mesure la taille
 // totale du nœud "GAME" (json.Marshal(GameState), la valeur sérialisée sous
 // la clé "GAME" de GameData — internal/game/models.go, GetGameJSON) pour une

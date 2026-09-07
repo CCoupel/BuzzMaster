@@ -151,7 +151,7 @@ func TestRafaleNext_NilOnlyOnceCapActuallyReached(t *testing.T) {
 	}
 
 	// Sanity: the pool itself is NOT the reason (plenty of questions remain unused).
-	available, _, _ := e.CountRafalePool(string(CategoryHistory), 1)
+	available, _, _ := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if available < 5 {
 		t.Fatalf("sanity: expected plenty of available reservoir questions, got %d", available)
 	}
@@ -176,7 +176,7 @@ func TestRafaleNext_ReleasedOnStop(t *testing.T) {
 	}
 	e.StartImmediate(0)
 
-	availableBeforeStop, _, total := e.CountRafalePool(string(CategoryHistory), 1)
+	availableBeforeStop, _, total := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	// 1 question asked + 1 pre-fetched = 2 marked used at this point.
 	if availableBeforeStop != total-2 {
 		t.Fatalf("sanity: expected 2 questions marked used (1 asked + 1 pre-fetched), got available=%d total=%d", availableBeforeStop, total)
@@ -184,7 +184,7 @@ func TestRafaleNext_ReleasedOnStop(t *testing.T) {
 
 	e.Stop()
 
-	availableAfterStop, _, _ := e.CountRafalePool(string(CategoryHistory), 1)
+	availableAfterStop, _, _ := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	// Only the ONE question actually asked should remain marked used — the
 	// pre-fetch must be released back to the pool.
 	if availableAfterStop != total-1 {
@@ -212,7 +212,7 @@ func TestRafaleNext_ReleasedOnReadyReplay(t *testing.T) {
 	// flow (white-box — same package) — simulates the state Ready()'s own
 	// release must handle regardless of how it got there.
 	e.mu.Lock()
-	drawn, err := e.drawRafaleQuestionUnsafe(string(CategoryHistory), 1)
+	drawn, err := e.drawRafaleQuestionUnsafe([]string{string(CategoryHistory)}, []int{1})
 	if err != nil {
 		e.mu.Unlock()
 		t.Fatalf("drawRafaleQuestionUnsafe: %v", err)
@@ -263,7 +263,7 @@ func TestRafaleNext_ReleasedOnInitGame(t *testing.T) {
 	e.Ready("rq1", q)
 
 	e.mu.Lock()
-	drawn, err := e.drawRafaleQuestionUnsafe(string(CategoryHistory), 1)
+	drawn, err := e.drawRafaleQuestionUnsafe([]string{string(CategoryHistory)}, []int{1})
 	if err != nil {
 		e.mu.Unlock()
 		t.Fatalf("drawRafaleQuestionUnsafe: %v", err)

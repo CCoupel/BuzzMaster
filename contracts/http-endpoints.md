@@ -484,6 +484,27 @@ Retourne le palmarès de la partie en cours, pré-assemblé côté serveur. (v5.
 
 > Cet endpoint agrège automatiquement `/history` sans double-comptage (clé composite `team|player`). Aucune race condition possible.
 
+### [CHANGED] v9.0.0, Lot A+1 — agrégation par catégorie d'un événement RAFALE ventilé
+
+Un événement `history.json` portant `CATEGORY_BREAKDOWN` (`contracts/models.md` — manche RAFALE
+classique uniquement, retour QUALIF v9.0.0.4) est agrégé **différemment** d'un événement
+ordinaire : au lieu de créditer la totalité de `POINTS` à la seule catégorie
+`QUESTION_CATEGORY`, chaque paire `{catégorie: part}` de `CATEGORY_BREAKDOWN` crédite **sa propre**
+entrée `PalmaresEntry` de sa **propre** part — équipes et joueurs inclus, même logique
+d'attribution que pour un événement ordinaire, juste répétée une fois par catégorie nommée.
+
+- La somme des parts créditées à travers toutes les catégories reste exactement égale à `POINTS`
+  (garantie déjà portée par `CATEGORY_BREAKDOWN` lui-même) — **aucun double-comptage**, un événement
+  ventilé ne fait qu'ajouter des ENTRÉES DE CATÉGORIE, jamais des points.
+- Un événement **sans** `CATEGORY_BREAKDOWN` (tout événement non-RAFALE, et une manche RAFALE dont
+  la répartition n'a pas pu être calculée — aucune catégorie configurée) garde le comportement
+  **actuel, inchangé** : un seul crédit, sur `QUESTION_CATEGORY` (ou `"UNKNOWN"` si vide) — non-
+  régression explicite.
+- Implémentation : `handlePalmares` (`internal/server/http.go`) factorise l'accumulation
+  bucket/équipe/joueur dans une closure `creditCategory`, appelée une fois par événement ordinaire
+  ou une fois par entrée de `CATEGORY_BREAKDOWN` pour un événement ventilé — pas de logique
+  dupliquée entre les deux cas.
+
 ---
 
 ## Système

@@ -14,6 +14,7 @@ package server
 import (
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -65,7 +66,12 @@ func newStopTestServer(t *testing.T) (*HTTPServer, int) {
 	srv := NewHTTPServer(port, engine, wsHub, NewBuzzerWebSocketHub(), logsHub)
 	srv.SetWebDir(dataDir)
 
-	if err := srv.Start(); err != nil {
+	// #220 mechanical adaptation: Start() became Start(ctx) (synchronous,
+	// ctx-interruptible pre-bind — see http_port_retry_test.go file header).
+	// The port is free here, so this call returns almost immediately either
+	// way; passing context.Background() preserves this helper's original
+	// "start and don't worry about cancellation" behaviour unchanged.
+	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("newStopTestServer: Start() returned error: %v", err)
 	}
 
@@ -196,11 +202,13 @@ func TestHTTPServerStop_GracefulDrain(t *testing.T) {
 		close(handlerStarted)              // signal: handler is executing
 		time.Sleep(100 * time.Millisecond) // simulate work in progress
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))   //nolint:errcheck
-		close(handlerDone)      // signal: handler completed and response was written
+		w.Write([]byte("ok")) //nolint:errcheck
+		close(handlerDone)    // signal: handler completed and response was written
 	})
 
-	if err := srv.Start(); err != nil {
+	// #220 mechanical adaptation: Start() became Start(ctx) — see comment in
+	// newStopTestServer above.
+	if err := srv.Start(context.Background()); err != nil {
 		t.Fatalf("Start() returned error: %v", err)
 	}
 

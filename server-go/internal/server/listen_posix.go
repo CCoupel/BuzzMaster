@@ -12,6 +12,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"net"
 	"syscall"
 )
@@ -26,4 +28,20 @@ func newReuseAddrListener(network, addr string) (net.Listener, error) {
 		},
 	}
 	return lc.Listen(context.Background(), network, addr)
+}
+
+// isPortInUse reports whether err is a genuine "address already in use"
+// bind failure (#220). Uses errors.Is against the real syscall errno instead
+// of matching on err.Error() text — the previous string-based check silently
+// broke on any non-English OS locale that translates the error message.
+func isPortInUse(err error) bool {
+	return errors.Is(err, syscall.EADDRINUSE)
+}
+
+// isPermissionDenied reports whether err is a permission-denied bind failure
+// (EACCES — typically a port <1024 without elevated privileges). Deliberately
+// NOT folded into isPortInUse: #220 requires it to retry at its own, slower,
+// actionable cadence rather than the fast EADDRINUSE backoff.
+func isPermissionDenied(err error) bool {
+	return errors.Is(err, fs.ErrPermission)
 }

@@ -13,6 +13,7 @@ import { prepareWaitReason } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
+import { effectiveRafaleCategories } from '../utils/rafaleEffective'
 import { getMotionCardPoints } from '../utils/motionGrid'
 import { getPhaseBadge } from '../utils/phaseBadge'
 import { canAwardPoints } from '../utils/canAwardPoints'
@@ -199,7 +200,19 @@ export default function AnimPage() {
   const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
 
   const question = gameState.question
-  const categoryInfo = question?.CATEGORY ? categoryMeta(question.CATEGORY, customCategories) : null
+  // 🔴 Retour QUALIF v9.0.0.4 (point A+5) — depuis #216 une manche RAFALE
+  // porte une LISTE de catégories (RAFALE_CATEGORIES), question.CATEGORY
+  // (singulier) est vide : la chip catégorie disparaissait entièrement pour
+  // ce type dans la barre méta de l'animateur. `effectiveRafaleCategories`
+  // (#216, repli mono automatique) — une chip PAR catégorie retenue, jamais
+  // concaténées (même discipline que les pastilles READY, A1).
+  const categoryInfoList = question?.TYPE === 'RAFALE'
+    ? effectiveRafaleCategories(question)
+        .map(cat => ({ key: cat, meta: categoryMeta(cat, customCategories) }))
+        .filter(entry => entry.meta)
+    : (question?.CATEGORY
+        ? [{ key: question.CATEGORY, meta: categoryMeta(question.CATEGORY, customCategories) }].filter(entry => entry.meta)
+        : [])
   // #166/F3 — icône + libellé de type (D4), repli SPEEDY géré par
   // getQuestionTypeMeta lui-même (même convention que #163).
   const typeMeta = getQuestionTypeMeta(question?.TYPE)
@@ -264,6 +277,11 @@ export default function AnimPage() {
   const motionCardPoints = selectedMotionCard
     ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
     : 0
+  // #217 — carte RAFALE : pas de QUESTION_TEXT propre à la carte (mini-manche
+  // à plusieurs questions, contrat rafale.md §14.1 — le texte affiché doit
+  // suivre la question COURANTE tirée, `typeState.rafale.currentQuestion`,
+  // pas un champ figé de `MOTION_CARDS[i]`).
+  const isSelectedCardRafale = selectedMotionCard?.TYPE === 'RAFALE'
   // Zone contexte — l'énoncé suit la carte en cours plutôt que rester figé
   // sur l'énoncé de la question MEMOTION (qui n'a pas de sens ici, une
   // question MEMOTION porte plusieurs cartes) : thème + points en SELECTED,
@@ -271,11 +289,13 @@ export default function AnimPage() {
   const motionStatement = isMemotionQuestion
     ? (motionSubphase === 'SELECTED' && selectedMotionCard
         ? `Carte « ${selectedMotionCard.RECTO_THEME} » — ${'★'.repeat(selectedMotionCard.DIFFICULTY || 1)} · ${motionCardPoints}pt${motionCardPoints > 1 ? 's' : ''}`
-        : (motionSubphase === 'QUESTION' || motionSubphase === 'REVEAL') && selectedMotionCard?.QUESTION_TEXT
-          ? selectedMotionCard.QUESTION_TEXT
-          : motionSubphase === 'MEMORIZE'
-            ? 'Mémorisez la grille'
-            : 'Choisissez une carte')
+        : motionSubphase === 'QUESTION' && isSelectedCardRafale
+          ? (typeState.rafale.currentQuestion.QUESTION || 'Rafale en cours')
+          : (motionSubphase === 'QUESTION' || motionSubphase === 'REVEAL') && selectedMotionCard?.QUESTION_TEXT
+            ? selectedMotionCard.QUESTION_TEXT
+            : motionSubphase === 'MEMORIZE'
+              ? 'Mémorisez la grille'
+              : 'Choisissez une carte')
     : null
   // Zone réponse (arbitrage n°1 du GATE 2, #160) — AnimAnswerZone lit
   // `question.ANSWER`/`question.TYPE`/`question.QCM_*`, inexistants en
@@ -333,6 +353,47 @@ export default function AnimPage() {
   const rafaleCurrentTeamCss = Array.isArray(rafaleCurrentTeamColorArr) && rafaleCurrentTeamColorArr.length === 3
     ? `rgb(${rafaleCurrentTeamColorArr.join(',')})`
     : 'var(--error)'
+
+  // RAFALE en carte MEMOTION (#217, milestone v9.0.0, contrat rafale.md
+  // §14) — mini-manche jouable comme carte, mode SOLO forcé. État vivant
+  // exclusivement dans `typeState.rafale` (jamais les 13 champs globaux
+  // `GameState.RAFALE_*` ci-dessus, §14.2 — hôtes mutuellement exclusifs,
+  // un `Question` ne porte qu'un `TYPE`). `RAFALE_CURRENT_QUESTION.POINTS`
+  // vaut toujours 0 en carte (barème par question sans objet, §14.2) — non
+  // transmis ci-dessous, jamais affiché pour cet hôte. Pas de NEXT (pas de
+  // pré-tirage en carte, §14.2) ni de teamName/teamColorCss propres (mode
+  // SOLO, l'équipe est déjà visible via `motion.currentTeam` en L2,
+  // `AnimMotionActions` — un second badge équipe serait redondant ici).
+  const cardRafaleCatMeta = isSelectedCardRafale
+    ? categoryMeta(typeState.rafale.currentQuestion.CATEGORY, customCategories)
+    : null
+  // Réponse attendue — même canal `RAFALE_ANSWER` que la manche classique,
+  // désormais scopé par `MOTION_CARD_ID` (§14.6) : ignoré si absent/différent
+  // de la carte active (comportement classique inchangé, `MOTION_CARD_ID`
+  // absent ⇒ manche classique) — même garde anti-obsolescence par ID de
+  // question que `rafaleAnswerValue` ci-dessus, appliquée en plus de la
+  // portée carte.
+  const cardRafaleAnswerValue = (
+    isSelectedCardRafale
+    && rafaleAnswer
+    && rafaleAnswer.MOTION_CARD_ID === hostContext.cardId
+    && rafaleAnswer.ID === typeState.rafale.currentQuestion.ID
+  ) ? rafaleAnswer.ANSWER : ''
+  const cardRafale = isSelectedCardRafale ? {
+    current: typeState.rafale.currentQuestion,
+    catMeta: cardRafaleCatMeta,
+    answerValue: cardRafaleAnswerValue,
+    askedCount: typeState.rafale.askedCount,
+    showNext: false,
+  } : null
+  // Désactivé hors sous-phase QUESTION du sous-cycle (typeState.rafale.subphase
+  // vaut '' avant le premier tirage ou 'ROUND_END' une fois la borne de
+  // questions atteinte, §14.3) — même discipline que `rafaleDisabled`
+  // ci-dessus pour la manche classique.
+  const cardRafaleDisabled = !isSelectedCardRafale || typeState.rafale.subphase !== 'QUESTION'
+  const onCardRafaleValidate = () => rafaleValidate(hostContext.cardId)
+  const onCardRafaleInvalidate = () => rafaleInvalidate(hostContext.cardId)
+
   // Zone réponse — réutilise AnimAnswerZone TELLE QUELLE (adaptateur en
   // objet "question" synthétique, même patron que MEMOTION ci-dessus) :
   // ANSWER pointe la valeur ci-dessus, jamais gameState.question.ANSWER
@@ -607,6 +668,13 @@ export default function AnimPage() {
                   {rafaleCurrentQuestion.DIFFICULTY > 0 && (
                     <span className="anim-chip">{'★'.repeat(rafaleCurrentQuestion.DIFFICULTY)}</span>
                   )}
+                  {/* #216, 216-Q7d — barème résolu de la question en cours
+                      (contrat §4) : la valeur d'une manche RAFALE peut
+                      désormais varier d'une question à l'autre selon sa
+                      difficulté (maquette rafale-multi-216.html §04). */}
+                  {rafaleCurrentQuestion.POINTS > 0 && (
+                    <span className="anim-chip">{rafaleCurrentQuestion.POINTS} pts</span>
+                  )}
                   {gameState.RAFALE_ASKED_COUNT > 0 && (
                     <span className="anim-chip anim-chip-count">question {gameState.RAFALE_ASKED_COUNT}</span>
                   )}
@@ -651,12 +719,12 @@ export default function AnimPage() {
                       <span className="anim-question-counter-total">/{questionPosition.total}</span>
                     </span>
                   )}
-                  {categoryInfo && (
-                    <span className="anim-chip">
-                      {categoryInfo.icon && <span className="anim-chip-glyph">{categoryInfo.icon}</span>}
-                      {categoryInfo.label}
+                  {categoryInfoList.map(({ key, meta }) => (
+                    <span className="anim-chip" key={key}>
+                      {meta.icon && <span className="anim-chip-glyph">{meta.icon}</span>}
+                      {meta.label}
                     </span>
-                  )}
+                  ))}
                   <span className="anim-chip">
                     <span className="anim-chip-glyph">{typeMeta.icon}</span>
                     {typeMeta.label}
@@ -796,6 +864,18 @@ export default function AnimPage() {
             nextCatMeta: rafaleNextCatMeta,
             showNext: gameState.RAFALE_SUBPHASE === 'QUESTION',
           } : null}
+          // RAFALE en carte MEMOTION (#217, contrat rafale.md §14) —
+          // props DISTINCTES de `rafale`/`rafaleDisabled`/`onRafaleValidate`/
+          // `onRafaleInvalidate` ci-dessus (celles-ci restent réservées à la
+          // manche classique, hôte question) : `motionCardRenderers.RAFALE`
+          // (AnimConductPanel.jsx) les consomme en L3 (zone centrale), la
+          // ligne L2 restant occupée par le cycle générique `AnimMotionActions`
+          // (STOP CHRONO/RÉVÉLER/SANS VAINQUEUR, inchangé — §14.5, aucune
+          // modification déclarée du cœur MEMOTION générique).
+          cardRafale={cardRafale}
+          cardRafaleDisabled={cardRafaleDisabled}
+          onCardRafaleValidate={onCardRafaleValidate}
+          onCardRafaleInvalidate={onCardRafaleInvalidate}
         />
       </div>
 

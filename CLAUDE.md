@@ -60,7 +60,7 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux
 | WebSocket | 80 | `/ws/buzzer` | Buzzers physiques (v3.0.0) |
 | WebSocket | 80 | `/ws/anim` | Animateur interface (tablette) (v6.2.0) |
 | WebSocket | 80 | `/ws/logs` | Logs temps réel |
-| UDP | 1234 | - | Broadcast heartbeat (BuzzerDiscoveryPort) |
+| UDP | 1234 | - | Broadcast destination (BuzzerDiscoveryPort) — socket source éphémère, port 1234 est cible de broadcast uniquement |
 | DNS | 53 | - | Captive portal (optionnel) |
 
 ## Notes for Claude

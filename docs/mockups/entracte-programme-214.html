@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Entracte programmé</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --col:940px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--txt);font-family:var(--sans);
+    font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--col);margin:0 auto;padding:56px 24px 120px}
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);display:flex;gap:10px;flex-wrap:wrap;
+    align-items:center;margin-bottom:14px}
+  .eyebrow span:not(:last-child)::after{content:"·";margin-left:10px;color:var(--faint)}
+  h1{font-size:clamp(1.9rem,4.4vw,2.7rem);font-weight:700;line-height:1.12;
+    letter-spacing:-.022em;margin:0 0 12px;text-wrap:balance}
+  .standfirst{font-size:1.06rem;color:var(--dim);max-width:64ch;margin:0}
+  .refs{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:20px;
+    display:flex;flex-direction:column;gap:4px}
+  .refs b{color:var(--dim);font-weight:500}
+  section{margin-top:64px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.012em;margin:0 0 6px;
+    text-wrap:balance;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--accent);
+    letter-spacing:.06em;flex:none}
+  .lede{color:var(--dim);margin:0 0 22px;max-width:66ch}
+  h3{font-size:.75rem;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--faint);margin:34px 0 12px}
+  p{margin:0 0 14px;max-width:68ch}
+  strong{font-weight:600;color:#fff}
+  em{color:var(--dim);font-style:normal}
+  code{font-family:var(--mono);font-size:.85em;background:var(--sunken);
+    border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px;color:#cdd6e0}
+  ul{margin:0 0 14px;padding-left:0;list-style:none;max-width:68ch}
+  ul li{position:relative;padding-left:20px;margin-bottom:9px}
+  ul li::before{content:"";position:absolute;left:4px;top:.72em;width:5px;height:1px;
+    background:var(--faint)}
+  .call{background:var(--panel);border-left:2px solid var(--info);padding:15px 20px;
+    margin:20px 0;border-radius:0 6px 6px 0;font-size:.95rem}
+  .call > :last-child{margin-bottom:0}
+  .call.no{border-left-color:var(--no)}
+  .call.ok{border-left-color:var(--ok)}
+  .call.warn{border-left-color:var(--warn)}
+  .call-t{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+  .call.no .call-t{color:#f0736e}
+  .call.ok .call-t{color:#57c46a}
+  .call.warn .call-t{color:#e0b53f}
+  .scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:520px}
+  th,td{padding:11px 15px;text-align:left;vertical-align:top;
+    border-bottom:1px solid var(--line-soft)}
+  th{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--faint);background:var(--sunken)}
+  tbody tr:last-child td{border-bottom:none}
+  td code{background:none;border:none;padding:0;color:var(--accent)}
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    overflow:hidden;margin:20px 0}
+  .screen-hd{background:var(--raised);border-bottom:1px solid var(--line);padding:9px 16px;
+    font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.04em}
+  .screen-bd{padding:22px}
+  figure{margin:24px 0;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:24px 20px 18px}
+  figure svg{display:block;width:100%;max-width:100%;height:auto;color:var(--dim)}
+  figcaption{font-size:.86rem;color:var(--faint);margin-top:16px;text-align:center;
+    max-width:62ch;margin-left:auto;margin-right:auto}
+  .fld{margin-bottom:16px}
+  .fld-l{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--faint);margin-bottom:6px}
+  .inp{background:var(--sunken);border:1px solid var(--line);border-radius:6px;
+    padding:9px 12px;font-size:.9rem;color:var(--txt)}
+  .inp.ph{color:var(--faint)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:620px){.row2{grid-template-columns:1fr}}
+  .deroule{display:flex;flex-direction:column;gap:8px}
+  .qrow{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:7px;
+    background:var(--sunken);border:1px solid var(--line);font-size:.89rem}
+  .qrow .ord{font-family:var(--mono);font-size:11px;color:var(--faint);width:20px;flex:none}
+  .qrow .ty{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:2px 7px;
+    border-radius:4px;border:1px solid var(--line);color:var(--dim);flex:none}
+  .qrow .pt{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);flex:none}
+  .qrow.ent{border-color:var(--accent-dim);background:rgba(249,115,22,.07)}
+  .qrow.ent .ty{border-color:var(--accent-dim);color:var(--accent)}
+  .panel-prev{border:1px solid var(--line);border-radius:8px;background:var(--sunken);
+    padding:24px 18px;text-align:center}
+  .panel-prev b{display:block;font-size:1.4rem;letter-spacing:.04em;color:#fff}
+  .panel-prev i{display:block;font-size:.88rem;margin-top:5px;color:var(--dim);font-style:normal}
+  .q{border-top:1px solid var(--line-soft);padding-top:16px;margin-top:16px}
+  .q:first-of-type{border-top:none;padding-top:0;margin-top:0}
+  .q-h{font-weight:600;margin-bottom:5px}
+  .q-a{font-size:.92rem;color:var(--dim);margin:0}
+  .foot{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.9}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow"><span>Milestone v9.0.0</span><span>Issue #214</span><span>Maquette — à valider</span></div>
+  <h1>Entracte programmé</h1>
+  <p class="standfirst">Poser des pauses à des points précis du déroulé, chacune avec son propre
+  message — sans rien retirer au bouton d'entracte manuel, qui reste tel quel.</p>
+  <div class="refs">
+    <div><b>Mécanisme</b> celui d'ENTRACTE (#119, v6.5.2) — panneau, transition, LEDs et estompage réutilisés tels quels</div>
+    <div><b>Ce qui s'ajoute</b> un second déclencheur, et une configuration portée par chaque pause</div>
+    <div><b>Ce qui ne change pas</b> le bouton d'entracte manuel et sa configuration globale</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span> Deux déclencheurs, un seul mécanisme</h2>
+  <p class="lede">L'entracte livré en v6.5.2 se déclenche à la main, depuis la barre de navigation,
+  avec une configuration unique. On lui ajoute une seconde entrée : une pause posée dans le
+  déroulé, qui apporte sa propre configuration le temps de son passage.</p>
+
+  <figure>
+    <svg viewBox="0 0 900 470" role="img" aria-label="Le bouton manuel et une entrée du déroulé déclenchent le même mécanisme d'entracte ; la pause programmée fournit sa propre configuration, et la configuration globale reprend la main à la sortie.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+        </marker>
+        <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#f97316"/>
+        </marker>
+      </defs>
+
+      <text x="125" y="42" text-anchor="middle" font-size="11" font-family="monospace" letter-spacing="1.4" fill="currentColor" opacity=".65">DÉCLENCHEUR</text>
+      <text x="415" y="42" text-anchor="middle" font-size="11" font-family="monospace" letter-spacing="1.4" fill="currentColor" opacity=".65">CONFIGURATION</text>
+      <text x="740" y="42" text-anchor="middle" font-size="11" font-family="monospace" letter-spacing="1.4" fill="currentColor" opacity=".65">EFFET</text>
+
+      <rect x="30" y="55" width="190" height="58" rx="7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="125" y="80" text-anchor="middle" font-size="13" fill="#e6edf3">Bouton ENTRACTE</text>
+      <text x="125" y="98" text-anchor="middle" font-size="11.5" fill="currentColor">navbar — existant</text>
+
+      <rect x="30" y="310" width="190" height="68" rx="7" fill="none" stroke="#f97316" stroke-width="1.4"/>
+      <text x="125" y="334" text-anchor="middle" font-size="13" fill="#f97316">Entrée du déroulé</text>
+      <text x="125" y="352" text-anchor="middle" font-size="11.5" fill="currentColor">START — nouveau</text>
+      <text x="125" y="369" text-anchor="middle" font-size="11.5" fill="currentColor">cycle normal</text>
+
+      <rect x="300" y="55" width="230" height="58" rx="7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="415" y="79" text-anchor="middle" font-size="12.5" fill="#e6edf3">Configuration globale</text>
+      <text x="415" y="97" text-anchor="middle" font-size="11" font-family="monospace" fill="currentColor">ENTRACTE_CONFIG_SAVED</text>
+
+      <rect x="300" y="310" width="230" height="68" rx="7" fill="none" stroke="#f97316" stroke-width="1.4"/>
+      <text x="415" y="336" text-anchor="middle" font-size="12.5" fill="#f97316">Configuration de la pause</text>
+      <text x="415" y="355" text-anchor="middle" font-size="11.5" fill="currentColor">portée par cette entrée</text>
+      <text x="415" y="371" text-anchor="middle" font-size="11.5" fill="currentColor">du déroulé</text>
+
+      <rect x="620" y="165" width="240" height="76" rx="7" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <text x="740" y="194" text-anchor="middle" font-size="12.5" fill="#e6edf3">Configuration diffusée</text>
+      <text x="740" y="212" text-anchor="middle" font-size="11" font-family="monospace" fill="currentColor">ENTRACTE_CONFIG</text>
+      <text x="740" y="229" text-anchor="middle" font-size="11.5" fill="currentColor">gelée pendant la pause</text>
+
+      <rect x="620" y="340" width="240" height="94" rx="7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <text x="740" y="366" text-anchor="middle" font-size="12" fill="#e6edf3">Panneau sur TV et joueur</text>
+      <text x="740" y="386" text-anchor="middle" font-size="12" fill="currentColor">Régie et animateur estompés</text>
+      <text x="740" y="406" text-anchor="middle" font-size="12" fill="currentColor">LEDs des buzzers éteintes</text>
+      <text x="740" y="425" text-anchor="middle" font-size="11.5" fill="currentColor" opacity=".7">actions de jeu refusées</text>
+
+      <line x1="220" y1="84" x2="292" y2="84" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <line x1="220" y1="344" x2="292" y2="344" stroke="#f97316" stroke-width="1.4" marker-end="url(#ao)"/>
+
+      <line x1="530" y1="84" x2="612" y2="180" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <text x="588" y="118" text-anchor="middle" font-size="11" fill="currentColor">alimente</text>
+
+      <line x1="530" y1="344" x2="612" y2="228" stroke="#f97316" stroke-width="1.4" marker-end="url(#ao)"/>
+      <text x="590" y="300" text-anchor="middle" font-size="11" fill="#f97316">alimente</text>
+
+      <line x1="740" y1="241" x2="740" y2="332" stroke="currentColor" stroke-width="1.2" marker-end="url(#ar)"/>
+      <text x="752" y="290" font-size="11" fill="currentColor">pilote</text>
+
+      <path d="M 740 165 L 740 26 L 415 26 L 415 47" fill="none" stroke="#f97316" stroke-width="1.3"
+            stroke-dasharray="5 4" marker-end="url(#ao)"/>
+      <text x="577" y="18" text-anchor="middle" font-size="11.5" fill="#f97316">à la sortie, la configuration globale reprend la main</text>
+    </svg>
+    <figcaption>Le mécanisme est unique. Ce qui distingue les deux modes, c'est la source de la
+    configuration — et le fait que la pause programmée rende la main en sortant.</figcaption>
+  </figure>
+
+  <div class="call ok">
+    <div class="call-t">La règle de restauration</div>
+    <p>Sans elle, le bouton manuel afficherait « Pause déjeuner — retour 14h » en pleine soirée,
+    parce que la dernière pause programmée aurait laissé son texte derrière elle. <strong>Après une
+    pause programmée, la configuration globale redevient la source.</strong> Les deux modes restent
+    étanches.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span> Dans le déroulé</h2>
+  <p class="lede">Une pause se pose et se déplace comme une question. Elle ne rapporte rien et
+  n'apparaît pas au palmarès.</p>
+
+  <div class="screen">
+    <div class="screen-hd">/admin/quiz — onglet Questions</div>
+    <div class="screen-bd">
+      <div class="deroule">
+        <div class="qrow"><span class="ord">6</span><span class="ty">QCM</span>
+          Quelle ville accueille le siège de l'ONU ?<span class="pt">15 pts</span></div>
+        <div class="qrow"><span class="ord">7</span><span class="ty">MEMORY</span>
+          Drapeaux d'Europe<span class="pt">20 pts</span></div>
+        <div class="qrow ent"><span class="ord">8</span><span class="ty">ENTRACTE</span>
+          Pause déjeuner — retour 14h<span class="pt">—</span></div>
+        <div class="qrow"><span class="ord">9</span><span class="ty">RAFALE</span>
+          Manche éclair — Sciences<span class="pt">10 pts / bonne réponse</span></div>
+        <div class="qrow"><span class="ord">10</span><span class="ty">SPEEDY</span>
+          Quel est le plus grand désert ?<span class="pt">10 pts</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-hd">Éditeur — une entrée ENTRACTE</div>
+    <div class="screen-bd">
+      <div class="row2">
+        <div>
+          <div class="fld"><div class="fld-l">Titre</div><div class="inp">PAUSE DÉJEUNER</div></div>
+          <div class="fld"><div class="fld-l">Sous-titre</div><div class="inp">Retour à 14h00</div></div>
+          <div class="fld"><div class="fld-l">Image de fond</div>
+            <div class="inp ph">Aucune — dégradé par défaut</div></div>
+        </div>
+        <div>
+          <div class="fld-l">Aperçu</div>
+          <div class="panel-prev"><b>PAUSE DÉJEUNER</b><i>Retour à 14h00</i></div>
+          <p style="font-size:.84rem;color:var(--faint);margin-top:12px">Mêmes réglages que
+          l'entracte global — taille du panneau et animation compris.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span> Conduite</h2>
+  <p class="lede">Aucun geste nouveau à apprendre : la pause suit le cycle de n'importe quelle
+  question.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Étape</th><th>Ce que fait l'animateur</th><th>Ce que voit la salle</th></tr></thead>
+      <tbody>
+        <tr><td>Sélection</td><td>Choisit l'entrée ENTRACTE dans le déroulé</td><td>Rien encore</td></tr>
+        <tr><td>PREPARE → READY</td><td>Aucune équipe à sélectionner, aucun buzzer mobilisé</td><td>Rien encore</td></tr>
+        <tr><td>START</td><td>Lance comme une question</td><td>Le panneau apparaît en fondu, le contenu s'estompe derrière</td></tr>
+        <tr><td>Pendant</td><td>Les actions de jeu sont refusées</td><td>Panneau, LEDs éteintes</td></tr>
+        <tr><td>Sortie</td><td><b>Même geste que pour l'entracte manuel</b></td><td>Retour à l'écran d'attente</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call warn">
+    <div class="call-t">Le garde-fou à ne pas oublier</div>
+    <p>Pendant un entracte, le serveur refuse les actions de jeu — une liste fermée de gestes
+    autorisés protège la pause. <strong>Le geste de sortie doit y figurer</strong>, sinon une pause
+    programmée n'aurait aucun moyen de se terminer. C'est le seul point où les deux conceptions
+    entrent réellement en collision.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span> Ce que la pause n'est pas</h2>
+  <div class="q">
+    <div class="q-h">Pas une question à score</div>
+    <p class="q-a">Aucun point, absente du palmarès, ignorée par le calcul du « à suivre ».</p>
+  </div>
+  <div class="q">
+    <div class="q-h">Pas imbriquable dans une carte MEMOTION</div>
+    <p class="q-a">Une pause interrompt la partie ; elle n'a pas de sens à l'intérieur d'une manche.</p>
+  </div>
+  <div class="q">
+    <div class="q-h">Pas un remplacement du bouton manuel</div>
+    <p class="q-a">L'imprévu existe toujours. Le bouton reste, avec sa configuration propre.</p>
+  </div>
+  <div class="q">
+    <div class="q-h">Pas un minuteur</div>
+    <p class="q-a">La pause dure ce que l'animateur décide, exactement comme aujourd'hui.</p>
+  </div>
+</section>
+
+<div class="foot">
+  Maquette produite pour validation — issue #214, milestone v9.0.0<br>
+  Sert de référence à test-writer pour dériver les scénarios, et à QA pour valider la livraison<br>
+  Aucune ligne de code écrite à ce stade
+</div>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

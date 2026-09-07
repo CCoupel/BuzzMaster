@@ -55,7 +55,11 @@ func seedRafaleReservoir(t *testing.T, e *Engine, questions []RafaleQuestion) {
 func drawRafaleQuestionNoAutoSave(t *testing.T, e *Engine, category string, difficulty int) *RafaleQuestion {
 	t.Helper()
 	e.mu.Lock()
-	drawn, err := e.drawRafaleQuestionUnsafe(category, difficulty)
+	// #216: drawRafaleQuestionUnsafe became ensemblist (categories []string,
+	// difficulties []int) — this helper's own (category, difficulty) params
+	// stay singular (mechanical adaptation only, every call site below is
+	// unchanged) and are simply wrapped as one-element sets here.
+	drawn, err := e.drawRafaleQuestionUnsafe([]string{category}, []int{difficulty})
 	e.mu.Unlock()
 	if err != nil {
 		t.Fatalf("drawRafaleQuestionNoAutoSave: drawRafaleQuestionUnsafe failed: %v", err)
@@ -79,7 +83,7 @@ func TestDrawRafaleQuestion_RespectsFilterIntersection(t *testing.T) {
 
 	seen := map[string]bool{}
 	for i := 0; i < 50; i++ {
-		q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+		q, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1})
 		if err != nil {
 			// Pool of 2 (r-1, r-4) exhausts after 2 draws — expected once seen.
 			if !errors.Is(err, ErrRafalePoolEmpty) {
@@ -107,16 +111,16 @@ func TestDrawRafaleQuestion_MarksUsedImmediately(t *testing.T) {
 		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
 	})
 
-	availableBefore, usedBefore, _ := e.CountRafalePool(string(CategoryHistory), 1)
+	availableBefore, usedBefore, _ := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if availableBefore != 1 || usedBefore != 0 {
 		t.Fatalf("pre-condition: available=%d used=%d, want 1/0", availableBefore, usedBefore)
 	}
 
-	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); err != nil {
+	if _, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("DrawRafaleQuestion failed: %v", err)
 	}
 
-	availableAfter, usedAfter, _ := e.CountRafalePool(string(CategoryHistory), 1)
+	availableAfter, usedAfter, _ := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if availableAfter != 0 || usedAfter != 1 {
 		t.Errorf("after one draw: available=%d used=%d, want 0/1 (marking must be immediate, not deferred to save)", availableAfter, usedAfter)
 	}
@@ -129,11 +133,11 @@ func TestDrawRafaleQuestion_EmptyPool_ReturnsErrRafalePoolEmpty(t *testing.T) {
 	})
 
 	// Draw the only match, exhausting the pool.
-	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); err != nil {
+	if _, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("first draw should succeed: %v", err)
 	}
 
-	q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	q, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1})
 	if !errors.Is(err, ErrRafalePoolEmpty) {
 		t.Errorf("expected ErrRafalePoolEmpty on an exhausted pool, got q=%v err=%v", q, err)
 	}
@@ -141,7 +145,7 @@ func TestDrawRafaleQuestion_EmptyPool_ReturnsErrRafalePoolEmpty(t *testing.T) {
 
 func TestDrawRafaleQuestion_EmptyReservoir_ReturnsErrRafalePoolEmpty(t *testing.T) {
 	e := NewEngine()
-	q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	q, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1})
 	if !errors.Is(err, ErrRafalePoolEmpty) {
 		t.Errorf("drawing from an empty reservoir must return ErrRafalePoolEmpty, got q=%v err=%v", q, err)
 	}
@@ -160,21 +164,22 @@ func TestDrawRafaleQuestion_EmptyCategoryFilter_NeverMatches(t *testing.T) {
 		// the guarantee its own comment described).
 		{ID: "r-2", Question: "Q2", Answer: "A2", Category: CategoryNone, Difficulty: 1},
 	})
-	// §3.3 (v8.0.0 bugfix, 2026-08-29 — single CATEGORY, RAFALE_CATEGORIES
-	// multi-select removed): an empty/unset category ("") is an
-	// invalid/unconfigured manche, and must draw nothing — neither r-1
-	// (different category) nor r-2 (also unset, which a naive `==`
-	// comparison would otherwise match).
-	_, err := e.DrawRafaleQuestion("", 1)
+	// §3.3 (v8.0.0 bugfix, 2026-08-29 — single CATEGORY; #216, 2026-09-04 —
+	// ensemblist categories/difficulties, contract §7.1 "ensemble vide ⇒
+	// pool vide, jamais wildcard"): an EMPTY categories set (nil, not a
+	// one-element set containing "") is an invalid/unconfigured manche, and
+	// must draw nothing — neither r-1 (different category) nor r-2 (also
+	// unset, which a naive membership test could otherwise match).
+	_, err := e.DrawRafaleQuestion(nil, []int{1})
 	if !errors.Is(err, ErrRafalePoolEmpty) {
-		t.Errorf("an empty category filter must match nothing (including a reservoir question with an unset CATEGORY), got err=%v", err)
+		t.Errorf("an empty categories set must match nothing (including a reservoir question with an unset CATEGORY), got err=%v", err)
 	}
 
-	// Belt-and-braces: CountRafalePool must agree (contract §7.2's pre-round
+	// Belt-and-braces: CountRafalePool must agree (contract §7.1's pre-round
 	// alert relies on the same guard).
-	available, used, total := e.CountRafalePool("", 1)
+	available, used, total := e.CountRafalePool(nil, []int{1})
 	if available != 0 || used != 0 || total != 0 {
-		t.Errorf("CountRafalePool(\"\", 1) = (%d, %d, %d), want (0, 0, 0)", available, used, total)
+		t.Errorf("CountRafalePool(nil, [1]) = (%d, %d, %d), want (0, 0, 0)", available, used, total)
 	}
 }
 
@@ -210,7 +215,7 @@ func TestDrawRafaleQuestion_StrictCategoryEquality_NotSetMembership(t *testing.T
 	// be drawn, no matter how many draws are attempted.
 	drawnIDs := map[string]bool{}
 	for i := 0; i < 20; i++ {
-		q, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+		q, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1})
 		if err != nil {
 			if errors.Is(err, ErrRafalePoolEmpty) {
 				break // pool of 1 (r-history) exhausts after the first draw — expected
@@ -233,11 +238,11 @@ func TestDrawRafaleQuestion_StrictCategoryEquality_NotSetMembership(t *testing.T
 	// Same invariant on the read-only side (CountRafalePool): SCIENCE/SPORTS
 	// questions must not be counted into a HISTORY-filtered pool either —
 	// total stays 1 (the sole HISTORY question, now used), never 3.
-	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	available, used, total := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if total != 1 || used != 1 || available != 0 {
 		t.Errorf("CountRafalePool(HISTORY, 1) after exhausting the sole HISTORY question: want (available=0, used=1, total=1) — SCIENCE/SPORTS must not leak in, got available=%d used=%d total=%d", available, used, total)
 	}
-	scienceAvailable, _, scienceTotal := e.CountRafalePool(string(CategoryScience), 1)
+	scienceAvailable, _, scienceTotal := e.CountRafalePool([]string{string(CategoryScience)}, []int{1})
 	if scienceTotal != 1 || scienceAvailable != 1 {
 		t.Errorf("CountRafalePool(SCIENCE, 1): want the untouched SCIENCE question counted on ITS OWN filter (available=1, total=1), got available=%d total=%d", scienceAvailable, scienceTotal)
 	}
@@ -325,7 +330,7 @@ func TestRafaleUsedFlag_SurvivesRestart(t *testing.T) {
 		t.Fatalf("LoadRafaleUsed failed: %v", err)
 	}
 
-	available, used, total := e2.CountRafalePool(string(CategoryHistory), 2)
+	available, used, total := e2.CountRafalePool([]string{string(CategoryHistory)}, []int{2})
 	if total != 2 {
 		t.Fatalf("restart must see the full reservoir, total=%d want 2", total)
 	}
@@ -344,7 +349,7 @@ func TestRafaleUsedFlag_SurvivesRestart(t *testing.T) {
 		t.Fatalf("restart re-proposed the already-used question %q — the used flag did not survive", drawn.ID)
 	}
 
-	if _, err := e2.DrawRafaleQuestion(string(CategoryHistory), 2); !errors.Is(err, ErrRafalePoolEmpty) {
+	if _, err := e2.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{2}); !errors.Is(err, ErrRafalePoolEmpty) {
 		t.Errorf("pool should now be exhausted post-restart, got err=%v", err)
 	}
 }
@@ -355,13 +360,13 @@ func TestInitGame_ResetsRafaleUsedFlag_ButNotTheReservoir(t *testing.T) {
 		{ID: "r-1", Question: "Q1", Answer: "A1", Category: CategoryHistory, Difficulty: 1},
 	})
 
-	drawn, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	drawn, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1})
 	if err != nil {
 		t.Fatalf("draw failed: %v", err)
 	}
 
 	// Pre-condition: pool now empty.
-	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); !errors.Is(err, ErrRafalePoolEmpty) {
+	if _, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1}); !errors.Is(err, ErrRafalePoolEmpty) {
 		t.Fatalf("pre-condition failed: pool should be empty before InitGame, err=%v", err)
 	}
 
@@ -370,7 +375,7 @@ func TestInitGame_ResetsRafaleUsedFlag_ButNotTheReservoir(t *testing.T) {
 	// Reservoir itself is untouched (contract §3.2: "La réinitialisation du
 	// flag ... Réservoir ... contient ce que l'admin a édité — jamais
 	// réinitialisé par NEW_GAME").
-	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	available, used, total := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if total != 1 {
 		t.Errorf("InitGame must not touch the reservoir itself, total=%d want 1", total)
 	}
@@ -378,7 +383,7 @@ func TestInitGame_ResetsRafaleUsedFlag_ButNotTheReservoir(t *testing.T) {
 		t.Errorf("InitGame must reset the used flag: available=%d used=%d, want 1/0", available, used)
 	}
 
-	again, err := e.DrawRafaleQuestion(string(CategoryHistory), 1)
+	again, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1})
 	if err != nil {
 		t.Fatalf("question should be drawable again after NEW_GAME reset: %v", err)
 	}
@@ -401,7 +406,7 @@ func TestCountRafalePool_Filtering(t *testing.T) {
 		{ID: "r-4", Question: "Q4", Answer: "A4", Category: CategoryScience, Difficulty: 1},
 	})
 	// Mark r-1 used.
-	if _, err := e.DrawRafaleQuestion(string(CategoryHistory), 1); err != nil {
+	if _, err := e.DrawRafaleQuestion([]string{string(CategoryHistory)}, []int{1}); err != nil {
 		t.Fatalf("setup draw failed: %v", err)
 	}
 
@@ -421,9 +426,12 @@ func TestCountRafalePool_Filtering(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			available, used, total := e.CountRafalePool(tt.category, tt.difficulty)
+			// #216: CountRafalePool became ensemblist — table fields stay
+			// singular (mechanical adaptation only), wrapped as one-element
+			// sets here.
+			available, used, total := e.CountRafalePool([]string{tt.category}, []int{tt.difficulty})
 			if available != tt.wantAvailable || used != tt.wantUsed || total != tt.wantTotal {
-				t.Errorf("CountRafalePool(%v, %d) = (%d, %d, %d), want (%d, %d, %d)",
+				t.Errorf("CountRafalePool([%v], [%d]) = (%d, %d, %d), want (%d, %d, %d)",
 					tt.category, tt.difficulty, available, used, total,
 					tt.wantAvailable, tt.wantUsed, tt.wantTotal)
 			}
@@ -433,7 +441,7 @@ func TestCountRafalePool_Filtering(t *testing.T) {
 
 func TestCountRafalePool_EmptyReservoir_AllZero(t *testing.T) {
 	e := NewEngine()
-	available, used, total := e.CountRafalePool(string(CategoryHistory), 1)
+	available, used, total := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 	if available != 0 || used != 0 || total != 0 {
 		t.Errorf("empty reservoir must count (0,0,0), got (%d,%d,%d)", available, used, total)
 	}
@@ -496,7 +504,7 @@ func TestRafalePoolEstimate_ThreeAlertStates(t *testing.T) {
 			}
 			seedRafaleReservoir(t, e, questions)
 
-			available, _, _ := e.CountRafalePool(string(CategoryHistory), 1)
+			available, _, _ := e.CountRafalePool([]string{string(CategoryHistory)}, []int{1})
 			if available != tt.available {
 				t.Fatalf("setup: CountRafalePool available=%d, want %d", available, tt.available)
 			}

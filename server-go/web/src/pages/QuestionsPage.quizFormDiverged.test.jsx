@@ -1,27 +1,39 @@
 /**
- * Tests — QuestionsPage : logique de divergence `quizFormDiverged` (#137
- * Batch 2b T2.5).
+ * Tests — QuestionsPage : bandeau "modifications non enregistrées" de la
+ * modale IA (#137 Batch 2b T2.5), ré-adressé pour #215.
  *
- * Contexte (_work/handoff/task-test-writer-t25-20260807-090407.md, réserve
- * QA `_work/reports/qa-20260806-173500.md` §3.1) : le correctif du bug de
- * fraîcheur (T2.5, plan §5bis) — un écart entre le formulaire local NON
- * enregistré de la section Quiz et `gameState.quiz*` doit être rendu visible
- * dans le popup IA — n'avait aucun test. `quizFormDiverged` n'est pas
- * exportée (variable dérivée privée au composant, comme `arraysEqualUnordered`)
- * : elle est donc exercée ici via son seul effet observable — la prop
- * `hasUnsavedQuizChanges` reçue par le vrai `AIGenerateModal` (non mocké),
- * dont le bandeau est vérifié par ailleurs dans
- * AIGenerateModal.unsavedBanner.test.jsx pour son rendu isolé.
+ * Contexte AVANT #215 (_work/handoff/task-test-writer-t25-20260807-090407.md,
+ * réserve QA `_work/reports/qa-20260806-173500.md` §3.1) : le formulaire de
+ * la section Quiz vivait SUR CETTE MÊME PAGE que la modale de génération IA
+ * — `quizFormDiverged` comparait l'état local (non enregistré) du formulaire
+ * à `gameState.quiz*`, et la divergence pilotait la prop `hasUnsavedQuizChanges`
+ * de `AIGenerateModal` (bandeau d'avertissement).
+ *
+ * #215 (milestone v9.0.0) déplace ce formulaire vers /admin/backstage
+ * (BackstagePage.jsx/QuizMetaForm.jsx) — QuestionsPage ne porte plus AUCUN
+ * état local de méta-quiz. Il est donc devenu STRUCTURELLEMENT IMPOSSIBLE
+ * d'avoir "des modifications non enregistrées de la section Quiz visibles en
+ * même temps que" cette modale (elles vivent sur deux pages distinctes) :
+ * `hasUnsavedQuizChanges` retombe sur son défaut (false, jamais transmis).
+ * Ce fichier verrouille cette nouvelle invariance plutôt que de simuler une
+ * divergence qui ne peut plus se produire depuis cette page.
+ *
+ * Le rendu isolé du bandeau (prop `hasUnsavedQuizChanges={true}` explicite)
+ * reste couvert par AIGenerateModal.unsavedBanner.test.jsx, inchangé.
+ * La divergence du formulaire lui-même (chips Publics/Difficultés vs
+ * gameState) est désormais testée dans BackstagePage.quizChips.test.jsx.
  *
  * `AIGenerateModal` appelle `useNavigate()`/`useLocation()` sans garde — il
  * faut un contexte Router pour le monter réellement (contrairement aux
  * autres tests QuestionsPage.*.test.jsx qui n'ouvrent jamais la modale).
- *
- * Suit le pattern de mocks de QuestionsPage.quizChips.test.jsx.
+ * Depuis #215, QuestionsPage elle-même appelle aussi `useNavigate()`/
+ * `useSearchParams()` (onglets Questions/Rafale, lien "configurer le quiz" →
+ * navigation vers Backstage) — le contexte Router est donc requis pour
+ * TOUTE la page, pas seulement pour la modale.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import QuestionsPage from './QuestionsPage'
 
 // ---------------------------------------------------------------------------
@@ -98,10 +110,6 @@ const BASE_QUIZ_STATE = {
   quizHiddenFields: [],
 }
 
-// NOTE : `gameState` doit être fusionné en DERNIER — sinon un `...overrides`
-// final écraserait le merge BASE_QUIZ_STATE + overrides.gameState par le
-// `overrides.gameState` brut (sans les défauts), un piège classique d'ordre
-// de spread.
 const makeQPageMock = ({ gameState: gameStateOverrides, ...overrides } = {}) => ({
   questions: overrides.questions ?? {},
   fsInfo: { used: 0, total: 100 },
@@ -139,8 +147,15 @@ function renderAndOpenModal(gameStateOverrides = {}) {
   })
 
   render(
-    <MemoryRouter initialEntries={['/admin/questions']}>
-      <QuestionsPage />
+    <MemoryRouter initialEntries={['/admin/quiz']}>
+      <Routes>
+        <Route path="/admin/quiz" element={<QuestionsPage />} />
+        {/* Sentinelle — vérifie une vraie navigation SPA, pas juste que la
+            modale se ferme (le bouton déclencheur "✨ Générer via IA" reste
+            dans le DOM tant que QuestionsPage est monté, modale ouverte ou
+            non : ce n'est PAS un signal de navigation valide). */}
+        <Route path="/admin/backstage" element={<div data-testid="backstage-sentinel">Backstage</div>} />
+      </Routes>
     </MemoryRouter>
   )
 
@@ -151,12 +166,12 @@ function renderAndOpenModal(gameStateOverrides = {}) {
   })
 }
 
-describe('QuestionsPage — quizFormDiverged : bandeau "modifications non enregistrées" (#137 Batch 2b T2.5)', () => {
+describe('QuestionsPage — hasUnsavedQuizChanges : structurellement toujours false depuis #215', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('aucune divergence sur les 5 champs (formulaire local == gameState) : pas de bandeau', async () => {
+  it('aucun bandeau au chargement (gameState "à jour" par construction — plus de formulaire local sur cette page)', async () => {
     await renderAndOpenModal()
 
     expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument()
@@ -165,79 +180,27 @@ describe('QuestionsPage — quizFormDiverged : bandeau "modifications non enregi
     expect(screen.getByText('Cinéma français des années 80')).toBeInTheDocument()
   })
 
-  it('divergence sur le thème seul (formulaire modifié, non enregistré) : bandeau affiché', async () => {
-    await renderAndOpenModal()
-    expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument()
+  it('un changement de gameState (ex. UPDATE_QUIZ_META émis depuis Backstage dans un autre onglet) ne fait toujours apparaître aucun bandeau', async () => {
+    await renderAndOpenModal({ quizTheme: 'Un autre thème, déjà enregistré ailleurs' })
 
-    fireEvent.change(document.getElementById('quiz-theme'), { target: { value: 'Un autre thème' } })
-
-    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument()
-  })
-
-  it('divergence sur la langue seule : bandeau affiché', async () => {
-    await renderAndOpenModal()
-
-    fireEvent.change(document.getElementById('quiz-language'), { target: { value: 'Anglais' } })
-
-    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument()
-  })
-
-  it('divergence sur l\'objectif seul : bandeau affiché', async () => {
-    await renderAndOpenModal()
-
-    fireEvent.change(document.getElementById('quiz-objectives'), { target: { value: 'Nouvel objectif' } })
-
-    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument()
-  })
-
-  it('divergence sur les publics seuls (ajout d\'un chip, non enregistré) : bandeau affiché', async () => {
-    await renderAndOpenModal()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Ado (13-17 ans)' }))
-
-    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument()
-  })
-
-  it('divergence sur les difficultés seules (ajout d\'un chip, non enregistré) : bandeau affiché', async () => {
-    await renderAndOpenModal()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Difficile' }))
-
-    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument()
-  })
-
-  it('divergence sur QUIZ_NAME uniquement (même formulaire/bouton Enregistrer, n\'alimente pas la génération) : PAS de bandeau', async () => {
-    await renderAndOpenModal()
-
-    fireEvent.change(document.getElementById('quiz-name'), { target: { value: 'Nouveau nom' } })
-
+    // Le rappel lecture seule suit la nouvelle valeur diffusée...
+    expect(screen.getByText('Un autre thème, déjà enregistré ailleurs')).toBeInTheDocument()
+    // ...mais aucune notion de "non enregistré" ne peut exister depuis cette
+    // page : il n'y a plus de formulaire local à comparer.
     expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument()
   })
 
-  it('divergence sur QUIZ_NOTES (texte libre) uniquement : PAS de bandeau', async () => {
+  it('le lien "modifier" navigue vers /admin/backstage (plus de scroll — la section Quiz n\'est plus sur cette page)', async () => {
     await renderAndOpenModal()
 
-    fireEvent.change(document.getElementById('quiz-notes'), { target: { value: 'Nouvelle note' } })
+    fireEvent.click(screen.getByText('modifier'))
 
-    expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument()
-  })
-
-  it('arraysEqualUnordered : mêmes publics, ordre différent — pas traité comme une divergence', async () => {
-    // gameState porte 2 publics dans un ordre ; le formulaire local, initialisé
-    // depuis gameState, part du même ordre. On le fait diverger en ORDRE
-    // seulement : retirer puis réajouter un chip le déplace en fin de tableau
-    // (toggleQuizPopulation ajoute en fin de liste), sans changer l'ensemble.
-    await renderAndOpenModal({ quizPopulations: ['Junior (6-12 ans)', 'Ado (13-17 ans)'] })
-    expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Junior (6-12 ans)' })) // retire
-    expect(screen.getByText(BANNER_TEXT)).toBeInTheDocument() // divergence transitoire (1 seul élément local)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Junior (6-12 ans)' })) // réajoute en fin de liste
-
-    // Même contenu (['Ado (13-17 ans)', 'Junior (6-12 ans)'] vs
-    // ['Junior (6-12 ans)', 'Ado (13-17 ans)']), ordre différent — pas une
-    // divergence grâce à arraysEqualUnordered.
-    expect(screen.queryByText(BANNER_TEXT)).not.toBeInTheDocument()
+    // Route réelle /admin/backstage devenue active (QuestionsPage démonté,
+    // sentinelle Backstage affichée) — preuve d'une vraie navigation SPA,
+    // pas d'un simple scrollIntoView comme avant #215.
+    await waitFor(() => {
+      expect(screen.getByTestId('backstage-sentinel')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('✨ Générer via IA')).not.toBeInTheDocument()
   })
 })

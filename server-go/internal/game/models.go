@@ -160,6 +160,12 @@ const (
 	QuestionTypeMemotion QuestionType = "MEMOTION" // NEW (v5.0.0): grid of cards with 3 faces
 	QuestionTypeArdoise  QuestionType = "ARDOISE"  // NEW (v5.6.0): free-text answer via virtual keyboard
 	QuestionTypeRafale   QuestionType = "RAFALE"   // NEW (v8.0.0, #107): timed round drawing from the RAFALE reservoir — contracts/rafale.md
+	// QuestionTypeEntracte (v9.0.0, #214): a déroulé entry that raises the
+	// pre-existing ENTRACTE flag (GameState.Entracte, v6.5.2 #119) from its
+	// OWN per-occurrence config on START — a second trigger for that same
+	// mechanism, not a new one. See TypedContent.EntracteConfig and
+	// contracts/game-state.md §"Second déclencheur — entracte programmée".
+	QuestionTypeEntracte QuestionType = "ENTRACTE"
 )
 
 // KeyboardType represents the virtual keyboard layout for ARDOISE questions
@@ -297,31 +303,109 @@ type TypedContent struct {
 	// never nestable in a MEMOTION card (RAFALE has no notion of a single
 	// card; it drives a whole timed round). Unlike QCM/MEMORY, a RAFALE
 	// "question" carries no statement of its own here — TIME/POINTS
-	// (declared directly on Question, reused per §3.3) plus these 4 fields
+	// (declared directly on Question, reused per §3.3) plus these fields
 	// are the round's CONFIGURATION; the actual questions come from the
 	// reservoir (RafaleQuestion, rafale_store.go), drawn at play time.
 	//
-	// Category filter: RAFALE_CATEGORIES (multi-selection, []string) was
-	// removed (v8.0.0 bugfix, 2026-08-29) in favor of the generic
-	// Question.Category field every other type already uses — RAFALE was
-	// the first (and only) type to introduce multi-category selection, and
-	// it was never rendered correctly by the generic question card (which
-	// reads question.CATEGORY, not a type-specific field) despite a prior
-	// attempted fix. Single category, same as SPEEDY/QCM/MEMORY/MEMOTION/
-	// ARDOISE, resolves the display bug structurally instead of adding a
-	// dedicated RAFALE branch client-side. See contracts/CHANGELOG.md.
-	//
+	// Category/difficulty filter — history: RAFALE_CATEGORIES (multi,
+	// []string) was removed in favor of the generic Question.Category field
+	// (v8.0.0 bugfix, 2026-08-29, #107) because RAFALE was the only type
+	// introducing multi-category selection and the generic question card
+	// only ever read question.CATEGORY, never a type-specific field.
+	// REINTRODUCED (v9.0.0, #216, milestone v9.0.0) as RafaleCategories
+	// below, alongside a NEW RafaleDifficulties (difficulty was never multi
+	// before #216) — decision explicitly confirmed by the user after
+	// production feedback, NOT a reversal of the #107 fix: this time the
+	// card displays N chips instead of one scalar value (frontend, contract
+	// §3.3 [BREAKING] entry), so the generic-field constraint that caused
+	// #107 no longer applies. Question.Category and RafaleDifficulty below
+	// are KEPT, read-only, as the retro-compatible source for a question
+	// saved before #216 — see EffectiveRafaleCategories/
+	// EffectiveRafaleDifficulties, the ONLY correct way to read either axis
+	// (never these fields directly, never RafaleCategories/RafaleDifficulties
+	// directly either).
+	RafaleCategories []string `json:"RAFALE_CATEGORIES,omitempty"`
 	// RafaleDifficulty: omitempty like every other TypedContent field in
 	// this struct (models_roundtrip_test.go enforces byte-for-byte fixture
 	// round-trips — a foreign type's owned field must never appear on the
 	// wire for a question that doesn't carry it). 0 is not a valid
-	// difficulty (1..3); an admin-configured RAFALE round always sets it
-	// explicitly before START, same as every other required config field
-	// on this struct.
+	// difficulty (1..3). Legacy mono field (pre-#216) — kept for
+	// retro-compatible reading only, see EffectiveRafaleDifficulties; a
+	// question saved from #216 onward carries RafaleDifficulties instead.
 	RafaleDifficulty   int    `json:"RAFALE_DIFFICULTY,omitempty"`
+	RafaleDifficulties []int  `json:"RAFALE_DIFFICULTIES,omitempty"`  // #216 — 1..3 each, N per manche
 	RafaleMode         string `json:"RAFALE_MODE,omitempty"`          // SOLO | CHACUN_SON_TOUR | TANT_QUE_JE_GAGNE | MAILLON_FAIBLE (contract §3.4)
 	RafaleQuestionTime int    `json:"RAFALE_QUESTION_TIME,omitempty"` // seconds per question, default 3 — NOT GameState.RafaleQuestionTime (the live countdown; same JSON key, different struct, contract §4 note)
 	RafaleMaxQuestions int    `json:"RAFALE_MAX_QUESTIONS,omitempty"` // hard cap, default 100, max 100
+	// RafalePointsByDifficulty (#216, contract §3.3/§216-Q7) — free-entry
+	// points-per-difficulty barème (difficulty 1..3 → points), admin-typed,
+	// never derived from POINTS automatically. A difficulty absent from this
+	// map, or present with a value <=0, falls back to the manche's generic
+	// POINTS field — see resolveRafalePoints (engine.go), the SOLE reader of
+	// this field. A round configured before #216 (map nil/empty) behaves
+	// exactly as before: every question worth the flat POINTS value.
+	RafalePointsByDifficulty map[int]int `json:"RAFALE_POINTS_BY_DIFFICULTY,omitempty"`
+	// RafaleRoundTime (v9.0.0, #217, contracts/rafale.md §14.2/§14.3) — a
+	// MEMOTION card's OWN round duration, in seconds. Meaningless for a
+	// classic RAFALE round hosted by a Question (which uses the generic
+	// Question.TIME field for its round timer, contract §2.2) — this field
+	// exists specifically because MotionCard has no equivalent of Question's
+	// TIME field, and every OTHER nestable type's per-card timer shares the
+	// HOST question's TIME (see cmd/server/main.go handleMotionFlip) rather
+	// than needing its own. A RAFALE card needs a card-own value ("durée
+	// propre", task #217), so it gets a dedicated OwnedField instead.
+	RafaleRoundTime int `json:"RAFALE_ROUND_TIME,omitempty"`
+
+	// EntracteConfig (v9.0.0, #214) — the per-occurrence panel configuration
+	// of an ENTRACTE-type question, question host only, never nestable
+	// (contract question-types.md §7.4). Reuses the EntracteConfig type
+	// already defined for GameState.EntracteConfig/.EntracteConfigSaved
+	// as-is — same precedent as TypedContent.MemoryConfig *MemoryConfig.
+	// Pointer + omitempty: nil for every other question type, and for an
+	// ENTRACTE question that has genuinely never been configured (defense
+	// in depth — the editor always sets one before save).
+	//
+	// Raised into GameState.Entracte/.EntracteConfig directly at this
+	// question's own START (never GameState.EntracteConfigSaved, the
+	// global config, which this field must NEVER overwrite) — see
+	// contracts/game-state.md §"Second déclencheur — entracte programmée"
+	// for the full mechanism and the automatic-restoration rule on exit.
+	EntracteConfig *EntracteConfig `json:"ENTRACTE_CONFIG,omitempty"`
+}
+
+// EffectiveRafaleCategories returns q's RAFALE round categories, converting
+// a legacy mono Question.Category into a one-element list when
+// RafaleCategories itself is empty (#216, contract §3.3 "216-Q6: conversion
+// automatique en lecture") — the retro-compatible reading EVERY consumer of
+// a RAFALE round's category filter must use instead of reading either field
+// directly (precedent: MotionCard.EffectiveType()). Returns nil when
+// neither is set (unconfigured round — engine-side callers must treat nil
+// as "matches nothing", never a wildcard, same discipline as before #216).
+func (q *Question) EffectiveRafaleCategories() []string {
+	if len(q.RafaleCategories) > 0 {
+		return q.RafaleCategories
+	}
+	if q.Category != "" {
+		return []string{string(q.Category)}
+	}
+	return nil
+}
+
+// EffectiveRafaleDifficulties returns q's RAFALE round difficulties,
+// converting a legacy mono RafaleDifficulty into a one-element list when
+// RafaleDifficulties itself is empty (#216, contract §3.3, same "216-Q6"
+// conversion as EffectiveRafaleCategories above — read together, never
+// separately, by every consumer of a RAFALE round's filter). Returns nil
+// when neither is set, or the legacy value is outside 1..3 (never a
+// wildcard).
+func (q *Question) EffectiveRafaleDifficulties() []int {
+	if len(q.RafaleDifficulties) > 0 {
+		return q.RafaleDifficulties
+	}
+	if q.RafaleDifficulty >= 1 && q.RafaleDifficulty <= 3 {
+		return []int{q.RafaleDifficulty}
+	}
+	return nil
 }
 
 // MotionCard represents one card in a MEMOTION grid (3 faces: RECTO, VERSO, REVEAL)
@@ -454,10 +538,10 @@ const (
 	MotionCardStateDone     MotionCardState = "DONE"     // played, DoneMotionCard called
 )
 
-// AllQuestionTypes returns the full registry of question types, i.e. the 6
-// values QuestionType may take. Exported as a test-exhaustiveness helper —
-// see contracts/question-types.md §10 (test d'agnosticité) — not consumed by
-// production code in v7.0.0.
+// AllQuestionTypes returns the full registry of question types, i.e. the 7
+// values QuestionType may take (v9.0.0, #214, adds QuestionTypeEntracte).
+// Exported as a test-exhaustiveness helper — see contracts/question-types.md
+// §10 (test d'agnosticité) — not consumed by production code in v7.0.0.
 func AllQuestionTypes() []QuestionType {
 	return []QuestionType{
 		QuestionTypeSpeedy,
@@ -466,6 +550,7 @@ func AllQuestionTypes() []QuestionType {
 		QuestionTypeMemotion,
 		QuestionTypeArdoise,
 		QuestionTypeRafale,
+		QuestionTypeEntracte,
 	}
 }
 
@@ -505,6 +590,14 @@ type RafaleCurrent struct {
 	Question   string `json:"QUESTION"`
 	Category   string `json:"CATEGORY"`
 	Difficulty int    `json:"DIFFICULTY"`
+	// Points (#216, contract §3.3/§4/§216-Q7d) — the barème resolved for
+	// THIS question (RafalePointsByDifficulty[Difficulty], falling back to
+	// the round's generic POINTS — see resolveRafalePoints, engine.go).
+	// Broadcast to every client (TV, anim, admin) because TV/anim never
+	// receive the "GAME.QUESTIONS" list (admin-only, main.go
+	// broadcastQuestions) and therefore cannot resolve the barème
+	// themselves from the round's own configuration.
+	Points int `json:"POINTS"`
 }
 
 // Question represents a quiz question
@@ -740,19 +833,37 @@ type GameState struct {
 	// RafaleTeamErrors (v8.0.0 bugfix, 2026-08-30) — same precedent as
 	// MemoryTeamErrors: cumulative count of incorrect answers/timeouts per
 	// team, never reset mid-round, all 4 modes.
-	RafaleSubPhase           RafaleSubPhase `json:"RAFALE_SUBPHASE"`
-	RafaleCurrentQuestion    RafaleCurrent  `json:"RAFALE_CURRENT_QUESTION"`
-	RafaleQuestionTime       int            `json:"RAFALE_QUESTION_TIME"`
-	RafaleTeamCounters       map[string]int `json:"RAFALE_TEAM_COUNTERS"`
-	RafaleTeamBest           map[string]int `json:"RAFALE_TEAM_BEST"`
-	RafaleTeamStreak         map[string]int `json:"RAFALE_TEAM_STREAK"`
-	RafaleTeamErrors         map[string]int `json:"RAFALE_TEAM_ERRORS"`
-	RafaleCurrentTeam        string         `json:"RAFALE_CURRENT_TEAM"`
-	RafaleParticipatingTeams []string       `json:"RAFALE_PARTICIPATING_TEAMS"`
-	RafaleCurrentTeamColor   []int          `json:"RAFALE_CURRENT_TEAM_COLOR"`
-	RafaleAskedCount         int            `json:"RAFALE_ASKED_COUNT"`
-	RafalePoolRemaining      int            `json:"RAFALE_POOL_REMAINING"`
-	RafaleExhausted          bool           `json:"RAFALE_EXHAUSTED"`
+	//
+	// RafaleTeamCategoryCounters (v9.0.0, Lot A+1, plan
+	// `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md` §2.3) —
+	// per-team, per-category tally of correct answers during a CLASSIC
+	// RAFALE round (never populated by a #217 card round — out of this
+	// lot's scope, see recordRafaleTeamCategoryCorrectUnsafe's own comment).
+	// Exists so cmd/server/main.go's handleBumperPoints/handleTeamPoints can
+	// split a team's awarded points across the categories that actually
+	// produced them (RafaleCategoryBreakdown), instead of writing an empty
+	// category into history.json — the "Inconnue" defect this lot fixes.
+	// Same map[string]map[string]int shape as no other field in this struct;
+	// a nil inner map is valid (never read directly, only through
+	// RafaleTeamCategoryCounters[team], which is nil-safe for a team with no
+	// recorded category yet — Go's zero value for "missing key" on a nil map
+	// is itself a nil map, safely rangeable). Same lifecycle as the 12
+	// fields above: NO omitempty, initialized non-nil in NewEngine(), reset
+	// at the exact same two sites (engine.go Ready()/InitGame() resets).
+	RafaleSubPhase             RafaleSubPhase            `json:"RAFALE_SUBPHASE"`
+	RafaleCurrentQuestion      RafaleCurrent             `json:"RAFALE_CURRENT_QUESTION"`
+	RafaleQuestionTime         int                       `json:"RAFALE_QUESTION_TIME"`
+	RafaleTeamCounters         map[string]int            `json:"RAFALE_TEAM_COUNTERS"`
+	RafaleTeamCategoryCounters map[string]map[string]int `json:"RAFALE_TEAM_CATEGORY_COUNTERS"`
+	RafaleTeamBest             map[string]int            `json:"RAFALE_TEAM_BEST"`
+	RafaleTeamStreak           map[string]int            `json:"RAFALE_TEAM_STREAK"`
+	RafaleTeamErrors           map[string]int            `json:"RAFALE_TEAM_ERRORS"`
+	RafaleCurrentTeam          string                    `json:"RAFALE_CURRENT_TEAM"`
+	RafaleParticipatingTeams   []string                  `json:"RAFALE_PARTICIPATING_TEAMS"`
+	RafaleCurrentTeamColor     []int                     `json:"RAFALE_CURRENT_TEAM_COLOR"`
+	RafaleAskedCount           int                       `json:"RAFALE_ASKED_COUNT"`
+	RafalePoolRemaining        int                       `json:"RAFALE_POOL_REMAINING"`
+	RafaleExhausted            bool                      `json:"RAFALE_EXHAUSTED"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data
@@ -844,4 +955,12 @@ type GameEvent struct {
 	PlayerColor         string `json:"PLAYER_COLOR,omitempty"`       // Player answer color (RED/GREEN/YELLOW/BLUE)
 	Points              int    `json:"POINTS"`                       // Points awarded
 	ReactionTime        int64  `json:"REACTION_TIME,omitempty"`      // Reaction time in microseconds
+	// CategoryBreakdown (v9.0.0, Lot A+1) — points-per-category split for a
+	// classic RAFALE round's award (game.RafaleCategoryBreakdown), whose
+	// values sum to EXACTLY Points. omitempty: absent for every non-RAFALE
+	// event (current behavior, no history.json migration) and for a RAFALE
+	// event that couldn't be broken down (no configured category at all).
+	// The event itself stays a single row — only /api/palmares (http.go,
+	// handlePalmares) fans it out across categories at aggregation time.
+	CategoryBreakdown map[string]int `json:"CATEGORY_BREAKDOWN,omitempty"`
 }

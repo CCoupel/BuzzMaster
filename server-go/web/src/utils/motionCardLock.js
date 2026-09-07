@@ -69,6 +69,19 @@ const MEMORY_CONFIG_CREATION_VALUES = {
   revealDelay: 0.5,
 }
 
+// Valeurs de création des OwnedFields RAFALE (#217, milestone v9.0.0) —
+// DOIT rester synchronisé avec `formData`/`handleAddMotionCard` de
+// QuestionsPage.jsx, même piège que QCM/MEMORY ci-dessus. Pas de
+// rafaleMode ni rafalePointsByDifficulty ici : mode SOLO forcé, et barème
+// par difficulté sans objet en carte (contrat rafale.md §14.2 — STARS_PRORATA
+// sur le DIFFICULTY commun de la carte, comme MEMORY) — ni l'un ni l'autre
+// n'est un champ de formulaire pour une carte, rien à comparer.
+const RAFALE_CREATION_VALUES = {
+  rafaleRoundTime: 120,
+  rafaleQuestionTime: 3,
+  rafaleMaxQuestions: 100,
+}
+
 // Une paire est "vide" (valeur de création) si aucune de ses deux cartes ne
 // porte de texte ni d'image — même notion que "réponse QCM saisie" pour
 // QCM_ANSWERS.
@@ -109,6 +122,14 @@ export function isMotionCardTypeLocked(card) {
     )
   }
 
+  if (type === 'RAFALE') {
+    if ((card?.rafaleCategories || []).length > 0) return true
+    if ((card?.rafaleDifficulties || []).length > 0) return true
+    return Object.entries(RAFALE_CREATION_VALUES).some(
+      ([field, creationValue]) => (card?.[field] ?? creationValue) !== creationValue
+    )
+  }
+
   // ARDOISE (#186 fermée « not planned ») : jamais nestable
   // (`nestable: false`, utils/questionTypeMeta.js) — aucun OwnedField de
   // carte à comparer, jamais verrouillé par cette fonction.
@@ -126,5 +147,6 @@ export function motionCardLockReason(card) {
   if (type === 'SPEEDY') return 'Videz la face RÉPONSE pour pouvoir changer de type.'
   if (type === 'QCM') return 'Videz les 4 réponses QCM (et les réglages d\'indices) pour pouvoir changer de type.'
   if (type === 'MEMORY') return 'Videz les paires MEMORY (et la configuration) pour pouvoir changer de type.'
+  if (type === 'RAFALE') return 'Videz les catégories/difficultés RAFALE (et la configuration) pour pouvoir changer de type.'
   return ''
 }

@@ -343,8 +343,34 @@ interface GameEvent {
   PLAYER_COLOR: AnswerColor       // Couleur réponse (si PLAYER)
   POINTS: number
   REACTION_TIME: number           // Temps de réaction en microsecondes
+  CATEGORY_BREAKDOWN?: Record<string, number>  // [NEW] v9.0.0, Lot A+1 — voir note ci-dessous
 }
 ```
+
+### `CATEGORY_BREAKDOWN` — répartition par catégorie d'une manche RAFALE *(v9.0.0, Lot A+1)*
+
+**[NEW], additif, `omitempty`** — absent pour tout événement non-RAFALE (aucune migration de
+`history.json`). Présent uniquement pour un gain sur une manche RAFALE classique
+(`Question.TYPE == "RAFALE"`), dont `QUESTION_CATEGORY` est structurellement vide (une manche
+RAFALE utilise `RAFALE_CATEGORIES`, un multi-select, jamais un `CATEGORY` singulier — #216).
+Résout le défaut « Inconnue » constaté en retour QUALIF v9.0.0.4 : sans ce champ, chaque
+attribution de points RAFALE s'écrivait avec une catégorie vide, absorbée sous « Inconnue » au
+palmarès.
+
+- **Clés** : catégories effectivement tirées pendant la manche.
+- **Valeurs** : part de `POINTS` attribuée à cette catégorie — **la somme des valeurs est
+  toujours exactement égale à `POINTS`** (méthode du plus fort reste, jamais d'unité perdue ni
+  créée — `game.RafaleCategoryBreakdown`/`largestRemainderSplit`, `server-go/internal/game/
+  rafale_category_breakdown.go`).
+- **Base de calcul** : les bonnes réponses par catégorie de l'équipe créditée
+  (`GameState.RAFALE_TEAM_CATEGORY_COUNTERS`, alimenté par `RafaleValidate`). Repli à parts
+  égales entre les catégories effectives de la manche si aucune bonne réponse n'est enregistrée
+  (attribution manuelle admin).
+- **L'événement reste unique** — un gain, une ligne d'historique. Seul `/palmares`
+  (`contracts/http-endpoints.md`) ventile ensuite la valeur entre les catégories qu'elle nomme.
+- **Hors périmètre** : une carte MEMOTION de type RAFALE (#217) n'est PAS concernée — elle est
+  notée via `MEMOTION_DONE`/`STARS_PRORATA`, un chemin déjà correctement rattaché à la catégorie
+  unique de la question MEMOTION hôte.
 
 ### Exemple
 
@@ -362,6 +388,23 @@ interface GameEvent {
   "PLAYER_COLOR": "GREEN",
   "POINTS": 10,
   "REACTION_TIME": 1234567
+}
+```
+
+### Exemple — manche RAFALE avec répartition (v9.0.0, Lot A+1)
+
+```json
+{
+  "TIMESTAMP": 1757152800000000,
+  "QUESTION_ID": "rq1",
+  "QUESTION_TEXT": "Manche RAFALE",
+  "QUESTION_CATEGORY": "",
+  "EVENT_TYPE": "POINTS_AWARDED",
+  "WINNER_TYPE": "TEAM",
+  "TEAM_NAME": "Les Rouges",
+  "TEAM_COLOR": [239, 68, 68],
+  "POINTS": 7,
+  "CATEGORY_BREAKDOWN": { "HISTORY": 3, "SCIENCE": 2, "SPORT": 2 }
 }
 ```
 

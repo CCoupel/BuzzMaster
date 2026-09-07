@@ -18,6 +18,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"net"
 	"syscall"
 
@@ -33,4 +35,26 @@ func newReuseAddrListener(network, addr string) (net.Listener, error) {
 		},
 	}
 	return lc.Listen(context.Background(), network, addr)
+}
+
+// isPortInUse reports whether err is a genuine "address already in use" bind
+// failure (#220). Checks the real WSA error code (WSAEADDRINUSE) via
+// errors.Is instead of matching on err.Error() text — Go's raw Windows
+// syscall errors are NOT translated to the generic syscall.EADDRINUSE the
+// posix build uses (that constant is an invented value for package os, never
+// actually returned by a Winsock bind() failure), and the previous
+// string-based check additionally broke on any non-English Windows locale.
+func isPortInUse(err error) bool {
+	return errors.Is(err, windows.WSAEADDRINUSE)
+}
+
+// isPermissionDenied reports whether err is a permission-denied bind failure
+// (e.g. a URL ACL reservation or a restricted low port). Checked two ways:
+// fs.ErrPermission catches the generic ERROR_ACCESS_DENIED case (which Go's
+// syscall.Errno.Is maps to it on Windows too), and WSAEACCES catches a raw
+// Winsock-level access-denied that generic check does not cover. Deliberately
+// NOT folded into isPortInUse: #220 requires it to retry at its own, slower,
+// actionable cadence rather than the fast EADDRINUSE backoff.
+func isPermissionDenied(err error) bool {
+	return errors.Is(err, fs.ErrPermission) || errors.Is(err, windows.WSAEACCES)
 }

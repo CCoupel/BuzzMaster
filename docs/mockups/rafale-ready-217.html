@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Écran READY RAFALE</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --app:"Fredoka",system-ui,sans-serif;
+    --col:940px;
+    /* couleurs réelles de l'écran TV (PlayerDisplay.css:24, GAME_TYPE_COLORS) */
+    --tv-bg:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
+    --tv-rafale:#f97316; --tv-rafale-glow:rgba(249,115,22,.6);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--txt);font-family:var(--sans);
+    font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--col);margin:0 auto;padding:56px 24px 120px}
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);display:flex;gap:10px;flex-wrap:wrap;
+    align-items:center;margin-bottom:14px}
+  .eyebrow span:not(:last-child)::after{content:"·";margin-left:10px;color:var(--faint)}
+  h1{font-size:clamp(1.9rem,4.4vw,2.7rem);font-weight:700;line-height:1.12;
+    letter-spacing:-.022em;margin:0 0 12px;text-wrap:balance}
+  .standfirst{font-size:1.06rem;color:var(--dim);max-width:64ch;margin:0}
+  .refs{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:20px;
+    display:flex;flex-direction:column;gap:4px}
+  .refs b{color:var(--dim);font-weight:500}
+  section{margin-top:60px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.012em;margin:0 0 6px;
+    display:flex;align-items:baseline;gap:12px;text-wrap:balance}
+  h2 .num{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--accent);
+    letter-spacing:.06em;flex:none}
+  .lede{color:var(--dim);margin:0 0 20px;max-width:66ch}
+  p{margin:0 0 14px;max-width:68ch}
+  strong{font-weight:600;color:#fff}
+  em{color:var(--dim);font-style:normal}
+  code{font-family:var(--mono);font-size:.85em;background:var(--sunken);
+    border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px;color:#cdd6e0}
+  .call{background:var(--panel);border-left:2px solid var(--info);padding:15px 20px;
+    margin:20px 0;border-radius:0 6px 6px 0;font-size:.95rem}
+  .call > :last-child{margin-bottom:0}
+  .call.no{border-left-color:var(--no)} .call.ok{border-left-color:var(--ok)}
+  .call.warn{border-left-color:var(--warn)}
+  .call-t{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+  .call.no .call-t{color:#f0736e} .call.ok .call-t{color:#57c46a}
+  .call.warn .call-t{color:#e0b53f}
+  .scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:520px}
+  th,td{padding:11px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line-soft)}
+  th{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--faint);background:var(--sunken)}
+  tbody tr:last-child td{border-bottom:none}
+  td code{background:none;border:none;padding:0;color:var(--accent)}
+
+  /* ---------- cadre écran TV, valeurs réelles ---------- */
+  .tv{border:1px solid var(--line);border-radius:11px;overflow:hidden;margin:18px 0}
+  .tv-cap{background:var(--raised);border-bottom:1px solid var(--line);padding:8px 15px;
+    font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.05em;
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .tv-cap .st{color:var(--faint)}
+  .tv-scr{background:var(--tv-bg);color:#fff;font-family:var(--app);
+    aspect-ratio:16/9;display:flex;flex-direction:column;padding:16px 20px;
+    position:relative;overflow:hidden}
+  .tv-top{height:14%;display:flex;align-items:center;justify-content:center;gap:26px;flex:none}
+  .tv-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;min-height:0}
+  .tv-bot{height:15%;display:flex;align-items:center;justify-content:center;gap:10px;
+    flex:none;flex-wrap:wrap}
+
+  .tmr{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .tmr-l{font-family:var(--mono);font-size:9px;letter-spacing:.16em;opacity:.55}
+  .tmr-v{font-size:1.9rem;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+  .tmr.q .tmr-v{color:#f87171}
+  .tmr-v i{font-size:.46em;font-style:normal;opacity:.72;margin-left:3px;font-weight:500}
+  .dif{display:inline-flex;align-items:center;padding:6px 15px;border-radius:999px;
+    font-size:1rem;letter-spacing:.1em;color:#fcd34d;background:rgba(252,211,77,.13);
+    border:1px solid rgba(252,211,77,.42)}
+  .opt{border-style:dashed;opacity:.85}
+  .grp-l{font-family:var(--mono);font-size:9px;letter-spacing:.18em;opacity:.5;
+    margin-bottom:-4px}
+
+  .gtype{font-size:2.6rem;font-weight:700;letter-spacing:.06em;color:var(--tv-rafale);
+    text-shadow:0 0 22px var(--tv-rafale-glow),0 0 44px var(--tv-rafale-glow);line-height:1}
+  .cats{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .cat{display:inline-flex;align-items:center;gap:8px;padding:8px 17px;border-radius:999px;
+    font-size:1.02rem;font-weight:500;color:#fff}
+  .cat .g{font-size:1.25em;line-height:1}
+  .cat.geo{background:#0ea5e9} .cat.his{background:#a855f7}
+  .cat.sci{background:#22c55e} .cat.spo{background:#ef4444}
+  .stars{font-size:1.15rem;letter-spacing:.12em;color:#fcd34d;opacity:.92}
+  .teams{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+  .team{padding:5px 14px;border-radius:999px;font-size:.84rem;font-weight:500;
+    border:2px solid;background:rgba(255,255,255,.06)}
+  .team.r{border-color:#ef4444;color:#fca5a5}
+  .team.b{border-color:#3b82f6;color:#93c5fd}
+  .team.g{border-color:#22c55e;color:#86efac}
+  .waiting{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .waiting .em{font-size:3rem;line-height:1}
+  .waiting .tx{font-size:1.5rem;font-weight:600;letter-spacing:.05em;opacity:.9}
+  .badbox{outline:2px solid var(--no);outline-offset:-2px}
+
+  .foot{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.9}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow"><span>Milestone v9.0.0</span><span>Retour QUALIF v9.0.0.4</span><span>Maquette — à valider</span></div>
+  <h1>Écran READY RAFALE</h1>
+  <p class="standfirst">Ce que la TV doit montrer entre la sélection de la manche et son lancement :
+  le type de jeu et les catégories retenues — comme le font déjà tous les autres types.</p>
+  <div class="refs">
+    <div><b>Écran</b> /tv, phase READY</div>
+    <div><b>Couleurs</b> celles de l'application — fond TV réel, orange RAFALE #f97316</div>
+    <div><b>Cause du défaut</b> depuis #216 une manche RAFALE n'a plus de CATEGORY, la TV n'a jamais appris à lire les listes qui l'ont remplacée</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span> Ce qui s'affiche aujourd'hui</h2>
+  <p class="lede">La TV demande la catégorie de la question. Depuis #216, une manche RAFALE n'en a
+  plus — elle porte une <em>liste</em> de catégories. La valeur demandée étant vide, l'écran tombe
+  sur son repli d'attente, qui est le vocabulaire visuel de la phase précédente.</p>
+
+  <div class="tv badbox">
+    <div class="tv-cap"><span>/tv — phase READY, aujourd'hui</span><span class="st">défaut constaté</span></div>
+    <div class="tv-scr">
+      <div class="tv-top"><div class="tmr"><span class="tmr-l">DURÉE DE LA MANCHE</span><span class="tmr-v">2:00</span></div></div>
+      <div class="tv-mid">
+        <div class="waiting"><span class="em">✋</span><span class="tx">PRÉPAREZ-VOUS</span></div>
+      </div>
+      <div class="tv-bot"></div>
+    </div>
+  </div>
+
+  <div class="call no">
+    <div class="call-t">Pourquoi c'est perçu comme « la page de PREPARE »</div>
+    <p>Ce repli emploie exactement le registre de l'écran qui précède (<code>🔔 NOUVELLE
+    QUESTION</code>). Rien n'indique qu'on a changé de phase, ni de quelle manche il s'agit.
+    <strong>RAFALE est le seul type dans ce cas</strong> — tous les autres ont une catégorie
+    unique, donc atteignent le rendu normal.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span> Variante A — une seule catégorie</h2>
+  <p class="lede">Le cas le plus fréquent. Rendu identique à celui des autres types : nom du type
+  de jeu animé, puis la catégorie sur sa pastille de couleur.</p>
+
+  <div class="tv">
+    <div class="tv-cap"><span>/tv — phase READY, une catégorie</span><span class="st">proposition</span></div>
+    <div class="tv-scr">
+      <div class="tv-top">
+        <div class="tmr"><span class="tmr-l">DURÉE DE LA MANCHE</span><span class="tmr-v">2:00</span></div>
+        <div class="tmr q"><span class="tmr-l">DURÉE PAR QUESTION</span><span class="tmr-v">3<i>s</i></span></div>
+      </div>
+      <div class="tv-mid">
+        <span class="gtype">RAFALE</span>
+        <div class="grp-l">CATÉGORIE</div>
+        <div class="cats"><span class="cat his"><span class="g">🏛️</span>Histoire</span></div>
+        <div class="grp-l">DIFFICULTÉ</div>
+        <div class="cats"><span class="dif">★★</span></div>
+      </div>
+      <div class="tv-bot">
+        <div class="teams">
+          <span class="team r">Les Rouges</span>
+          <span class="team b">Les Bleus</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="call">
+    <div class="call-t">Deux détails repris des autres types</div>
+    <p>Le <strong>double minuteur</strong> est présent dès READY — sinon l'écran change de structure
+    au lancement, et la mise en page saute. Les <strong>équipes participantes</strong> occupent la
+    zone basse, comme sur l'écran READY de MEMOTION.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span> Variante B — plusieurs catégories</h2>
+  <p class="lede">Le cas introduit par #216. Une pastille par catégorie retenue, sur la même ligne ;
+  c'est le seul écart avec les autres types, et il est justifié par le mode lui-même.</p>
+
+  <div class="tv">
+    <div class="tv-cap"><span>/tv — phase READY, trois catégories</span><span class="st">proposition</span></div>
+    <div class="tv-scr">
+      <div class="tv-top">
+        <div class="tmr"><span class="tmr-l">DURÉE DE LA MANCHE</span><span class="tmr-v">2:00</span></div>
+        <div class="tmr q"><span class="tmr-l">DURÉE PAR QUESTION</span><span class="tmr-v">3<i>s</i></span></div>
+      </div>
+      <div class="tv-mid">
+        <span class="gtype">RAFALE</span>
+        <div class="grp-l">CATÉGORIES</div>
+        <div class="cats">
+          <span class="cat his"><span class="g">🏛️</span>Histoire</span>
+          <span class="cat sci"><span class="g">🔬</span>Sciences</span>
+          <span class="cat geo"><span class="g">🌍</span>Géographie</span>
+        </div>
+        <div class="grp-l">DIFFICULTÉS</div>
+        <div class="cats">
+          <span class="dif">★</span>
+          <span class="dif">★★</span>
+        </div>
+      </div>
+      <div class="tv-bot">
+        <div class="teams">
+          <span class="team r">Les Rouges</span>
+          <span class="team b">Les Bleus</span>
+          <span class="team g">Les Verts</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="call ok">
+    <div class="call-t">Une pastille par difficulté</div>
+    <p>Les difficultés retenues sont des pastilles <strong>séparées</strong>, comme les catégories.
+    Un bloc d'étoiles collées (<em>★ ★★</em>) se lit comme un seul niveau à trois étoiles ; deux
+    pastilles distinctes disent sans ambiguïté « les questions faciles <em>et</em> moyennes sont au
+    programme ».</p>
+  </div>
+
+  <div class="call warn">
+    <div class="call-t">Un écart assumé avec les autres types</div>
+    <p>Aucun autre type n'affiche la difficulté en phase d'attente. Elle a sa place ici parce
+    qu'une manche RAFALE se configure sur <em>deux</em> axes — annoncer les catégories seules
+    serait incomplet. Le plafond de questions, lui, n'est pas annoncé : l'écran reste sobre.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span> Lever une ambiguïté de lecture</h2>
+  <p class="lede">Le second minuteur affiche le temps accordé à <em>chaque</em> question — trois
+  secondes. Sous un libellé « Question » suivi d'un chiffre nu, il se lit trop facilement comme un
+  nombre de questions. Les deux minuteurs partagent désormais le même mot d'attaque, et chaque
+  rangée de pastilles porte son intitulé : on lit l'écran par paires.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Aujourd'hui</th><th>Proposé</th><th>Pourquoi</th></tr></thead>
+      <tbody>
+        <tr><td><code>Question — 3</code></td><td><code>Durée par question — 3 s</code></td><td>l'unité dit la nature de la valeur</td></tr>
+        <tr><td><code>Manche — 2:00</code></td><td><code>Durée de la manche — 2:00</code></td><td>même mot d'attaque : les deux se lisent comme une paire</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call warn">
+    <div class="call-t">Ce n'est pas qu'un détail de maquette</div>
+    <p>Cette ambiguïté existe <strong>dans l'écran réel</strong>, pas seulement ici : le composant
+    des deux minuteurs affiche un libellé et une valeur, sans unité, pendant toute la manche. Le
+    correctif a donc sa place dans le composant lui-même — il bénéficiera à l'écran de jeu comme à
+    celui d'attente, et à l'interface de l'animateur qui monte le même composant.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">05</span> Ce que ça demande</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Élément</th><th>Source de la donnée</th><th>Existe ?</th></tr></thead>
+      <tbody>
+        <tr><td>Nom du type</td><td>couleur déjà définie pour RAFALE</td><td>oui</td></tr>
+        <tr><td>Catégories</td><td><code>effectiveRafaleCategories()</code></td><td>oui — écrit pendant #216, jamais utilisé par la TV</td></tr>
+        <tr><td>Difficultés</td><td><code>effectiveRafaleDifficulties()</code></td><td>oui — idem</td></tr>
+        <tr><td>Équipes</td><td><code>RAFALE_PARTICIPATING_TEAMS</code></td><td>oui</td></tr>
+        <tr><td>Minuteurs</td><td>composant partagé des deux chronos</td><td>oui — déjà monté en phase de jeu</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call ok">
+    <div class="call-t">Aucune donnée nouvelle</div>
+    <p>Tout ce qu'affiche cette maquette est <strong>déjà diffusé par le serveur</strong>. Les
+    fonctions de lecture ont même été écrites pendant #216 — elles n'ont simplement jamais été
+    appelées par l'écran TV. C'est un correctif d'affichage, sans contrat ni protocole à toucher.</p>
+  </div>
+
+  <p>Le même correctif vaut pour l'écran de <strong>décompte</strong> : il laisse aujourd'hui sa
+  zone question vide, pour exactement la même raison.</p>
+</section>
+
+<div class="foot">
+  Maquette produite pour validation — retour QUALIF v9.0.0.4, point 4<br>
+  Sert de référence à test-writer pour dériver les scénarios, et à QA pour valider la livraison<br>
+  Aucune ligne de code écrite à ce stade
+</div>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

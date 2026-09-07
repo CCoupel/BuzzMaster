@@ -75,6 +75,10 @@ export default function AnimRafaleQuestion({
           </span>
         )}
         {current.DIFFICULTY > 0 && <span className="anim-chip">{'★'.repeat(current.DIFFICULTY)}</span>}
+        {/* #216, 216-Q7d — barème résolu de la question en cours (contrat
+            §4) : peut désormais varier d'une question à l'autre selon sa
+            difficulté (maquette rafale-multi-216.html §04). */}
+        {current.POINTS > 0 && <span className="anim-chip">{current.POINTS} pts</span>}
         {askedCount > 0 && <span className="anim-chip">question {askedCount}</span>}
       </div>
       {current.QUESTION && <p className="rafale-anim-qcard-text">{current.QUESTION}</p>}

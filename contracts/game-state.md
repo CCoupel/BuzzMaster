@@ -792,6 +792,139 @@ sans issue.
 Entrer en entracte **ne modifie aucun autre champ** de `GameState` : une question sélectionnée en
 `PREPARE` est retrouvée intacte à la sortie.
 
+### Second déclencheur — entracte programmée (#214, dev-backend, feature, 2026-09-04, milestone v9.0.0)
+
+> Réouverture assumée d'une décision du 2026-08-20 (#119 : « un mode ENTRACTE global […]
+> indépendant du cycle de question — pas un type de question »). Ce n'est **pas** un retour à la
+> définition d'origine écartée (le type `PRESENTATION`, pipeline SPEEDY sans buzz) : c'est un
+> **second déclencheur** du même mécanisme — le tableau « Phases autorisées » ci-dessus, le champ
+> `ENTRACTE_CONFIG`/`ENTRACTE_CONFIG_SAVED`, le panneau, la transition, les LEDs et l'estompage des
+> 4 surfaces restent **entièrement inchangés**. Décision utilisateur : les deux déclencheurs
+> **coexistent**, jamais l'un ne remplace l'autre.
+
+Un nouveau `QuestionType` = `"ENTRACTE"` (`contracts/question-types.md` §7) est une entrée du
+déroulé comme une autre : elle se pose, s'ordonne (`ORDER`), et suit le cycle **standard**
+`PREPARE → READY → START` — aucun déclenchement automatique, aucun minuteur dédié. Elle porte sa
+**propre** configuration de panneau, portée par `TypedContent` :
+
+```go
+EntracteConfig *EntracteConfig `json:"ENTRACTE_CONFIG,omitempty"`
+```
+
+Réutilise **tel quel** le type `EntracteConfig` déjà défini pour `GameState.EntracteConfig`/
+`.EntracteConfigSaved` ci-dessus — même précédent que `TypedContent.MemoryConfig *MemoryConfig`.
+`IMAGE_IS_CUSTOM` (champ dérivé du disque pour l'entracte global) n'a pas d'équivalent ici :
+l'image de fond éventuelle de cette occurrence est le champ générique `Question.MEDIA`, comme pour
+tout autre type — pas de mécanisme dédié côté serveur.
+
+> **Précision frontend (dev-frontend, 2026-09-04)** : le panneau (`EntractePanel.jsx`) ne lisait
+> jusqu'ici que `IMAGE_IS_CUSTOM`/l'endpoint global — « réutilisé tel quel » vaut pour le panneau
+> lui-même (rendu, transition, animation), pas pour sa **source d'image**, qui diffère selon le
+> déclencheur. Le composant gagne une prop `mediaUrl` optionnelle, **prioritaire** quand fournie,
+> repli sur `IMAGE_IS_CUSTOM`/l'endpoint global sinon (donc **inchangé** pour le déclencheur
+> manuel). `PlayerDisplay.jsx`/`VPlayerPage.jsx` la résolvent depuis `gameState.question.MEDIA`
+> **uniquement** quand `gameState.entracte && question.TYPE === 'ENTRACTE'` — la seule situation où
+> `ENTRACTE` peut valoir `true` en `STARTED` (§ci-dessus). Aucune action côté serveur : `MEDIA`
+> transite déjà normalement dans `GameState.QUESTION`, comme pour tout autre type.
+
+**Mécanisme d'activation — au `START`, pas via `ENTRACTE_SET`.** Quand une question `ENTRACTE`
+atteint `STARTED` :
+
+```
+GameState.ENTRACTE_CONFIG ← Question.TypedContent.ENTRACTE_CONFIG   (PAS EntracteConfigSaved)
+GameState.ENTRACTE        ← true
+```
+
+Ceci se produit **à l'intérieur** de la transition `START` elle-même (`actualStart()`/
+`StartImmediate()`), jamais via un appel à la fonction interne qui gère `ENTRACTE_SET` — celle-ci
+refuse justement toute activation en phase `STARTED`/`COUNTDOWN`/`PAUSED` (tableau « Phases
+autorisées » ci-dessus, **inchangé pour le déclencheur manuel**). `GameState.ENTRACTE_CONFIG_SAVED`
+(la config globale) n'est **jamais** touché par ce chemin — c'est la garantie centrale de
+l'étanchéité entre les deux modes (voir règle de restauration ci-dessous).
+
+> ⚠️ **Amendement au tableau « Phases autorisées » ci-dessus** : celui-ci documente exclusivement le
+> déclencheur **manuel** (`ENTRACTE_SET`). Le déclencheur **programmé** est, par construction, la
+> **seule** façon dont `GameState.ENTRACTE` peut désormais valoir `true` pendant `STARTED` — une
+> exception délibérée et unique, jamais généralisable : elle ne s'applique qu'à une question dont
+> le `TYPE` est `ENTRACTE` elle-même, jamais à un entracte manuel qui tenterait de s'activer en
+> cours de manche.
+
+**Aucune interaction de jeu** — décision utilisateur, cycle standard sans particularité :
+- Aucune équipe à sélectionner : `participantsConform` n'a pas de cas spécial pour `ENTRACTE` (case
+  par défaut, `true`) — le passage PREPARE→READY suit le mécanisme standard piloté par les PONG des
+  buzzers physiques, identique à SPEEDY/QCM/ARDOISE.
+- Les appuis buzzer sont ignorés pendant `STARTED` (même garde que MEMORY/MEMOTION/RAFALE,
+  `ProcessButtonPress`).
+- Aucun minuteur de question : `Question.TIME` n'est pas exploité, le timer global (`startTimer`)
+  n'est **pas** démarré pour ce type (même exclusion que MEMOTION, pour une raison différente : pas
+  de mécanisme d'expiration du tout, ni global ni par carte).
+
+**Sortie et règle de restauration (décision utilisateur explicite, 2026-09-04)** — le geste de
+sortie est **EXACTEMENT le même** que l'entracte manuel : `ENTRACTE_SET{ACTIVE:false}` (admin), déjà
+accepté depuis n'importe quelle phase, déjà dans la liste blanche d'entracte
+(`contracts/websocket-actions.md` §"Actions refusées pendant l'entracte"). Aucun geste distinct,
+aucune nouvelle action.
+
+À la désactivation (`ACTIVE:false`), qu'elle mette fin à un entracte manuel ou programmé,
+`GameState.ENTRACTE_CONFIG` est **systématiquement** ré-aligné sur `ENTRACTE_CONFIG_SAVED` :
+
+```
+ENTRACTE_SET{ACTIVE:false} → GameState.ENTRACTE ← false
+                              GameState.ENTRACTE_CONFIG ← GameState.ENTRACTE_CONFIG_SAVED
+```
+
+Sans cette règle, le **prochain** entracte manuel afficherait le titre/sous-titre de la dernière
+pause programmée (ex. le bouton navbar affichant « Pause déjeuner — retour 14h » en pleine soirée)
+— exactement le scénario que cette règle prévient. La restauration elle-même est **universelle**
+(appliquée à toute désactivation, pas seulement en sortie d'une pause programmée) : pour un
+entracte manuel, elle est un no-op — `ENTRACTE_CONFIG` égale déjà `ENTRACTE_CONFIG_SAVED` depuis
+l'activation (§"Configuration gelée à l'activation" ci-dessus).
+
+⚠️ **Révision (dev-backend, 2026-09-04, suite retour code-reviewer)** : le paragraphe qui suivait
+ici décrivait un comportement **non retenu** à l'implémentation — la question `ENTRACTE` restant
+courante en `STARTED` après la sortie, à terminer par un `STOP` manuel séparé. Un test end-to-end
+(`entracte_programme_214_test.go`,
+`TestEntracteProgrammed_FullCycle_ThenManualEntracteUsesGlobalAgain`) a révélé que ce
+comportement **rendait la réactivation manuelle suivante impossible** : `SetEntracte(true)` refuse
+toute phase autre que `STOPPED`/`PREPARE`/`READY`/`NEW_GAME`/`REVEALED` (tableau « Phases
+autorisées » ci-dessus), et une question restée bloquée en `STARTED` ne quitte jamais cet
+ensemble sans un geste supplémentaire — contredisant « Retour à l'écran d'attente » (maquette §03)
+et l'étanchéité attendue entre les deux déclencheurs.
+
+**Comportement retenu** : `ENTRACTE_SET{ACTIVE:false}` met **aussi** fin à la question
+sous-jacente — **uniquement** quand elle termine un entracte **programmé** spécifiquement
+(`Phase == STARTED` ET la question courante est de type `ENTRACTE`) — en réutilisant
+`stopUnsafe()`, le **même** chemin de terminaison qu'un `STOP` manuel (`Phase → STOPPED`, arrêt des
+timers le cas échéant, `OnStateChange(PhaseStopped)` déclenché après déverrouillage pour que
+`broadcastQuestions()` resynchronise le statut de la question). Une seule branche, dans
+`Engine.SetEntracte` — pas un second mécanisme de terminaison. Pour un entracte **manuel**, ce
+chemin est **inatteignable** : son propre garde-fou d'activation refuse déjà `STARTED`, donc
+`Phase` ne peut jamais y valoir `STARTED` au moment d'une désactivation manuelle.
+
+Conséquence pratique : le geste de sortie d'une pause programmée est **un seul clic**
+(`ENTRACTE_SET{ACTIVE:false}`) — panneau ET question se terminent ensemble, prêt pour la sélection
+de l'entrée suivante du déroulé. Rien de spécifique n'a dû être ajouté à la liste blanche
+d'entracte pour cela : une fois `ENTRACTE` redevenu `false`, cette garde ne s'applique plus du tout
+aux actions suivantes — voir `internal/server/inbound_allowlist.go` (le commentaire de
+`ProcessButtonPress`, pas cette liste, est la garde qui protège réellement contre un appui buzzer
+physique pendant `STARTED`, un chemin distinct de `handleWebMessage`).
+
+**Score, palmarès, « à suivre »** — une entrée `ENTRACTE` ne rapporte **jamais** de point : aucun
+mécanisme de score n'est câblé pour ce type (pas de buzz, pas d'équipe, aucune action
+`TEAM_POINTS`/`MOTION_DONE` équivalente). Le palmarès (`GET /palmares`) n'agrège que les événements
+d'historique `POINTS_AWARDED` — l'exclusion est donc **automatique**, pas une liste noire à
+maintenir. Le **« à suivre »** (`NEXT_QUESTION`, `contracts/websocket-actions.md`) exclut
+explicitement `TYPE == "ENTRACTE"` de la recherche de la prochaine question jouable
+(`getNextQuestionPayload`, `cmd/server/main.go`) — parité requise avec `GamePage.jsx`
+`nextUnplayedQuestion` (volet frontend, même exclusion à porter côté client).
+
+**Non-nestable** (décision utilisateur) : `NestableInMotionCard: false` dans le registre
+(`contracts/question-types.md` §7) — une pause n'a pas de sens comme carte d'une grille MEMOTION.
+
+**Hors génération IA** : absente de `GENERABLE_TYPES` (frontend) et de `generableQuestionTypes`
+(backend, `internal/server/ai_generator.go`) — omission, pas exclusion active : ce n'est pas une
+question, il n'y a rien à générer.
+
 ### Persistance
 
 `ENTRACTE` **n'est pas persisté** — absent de `PersistedGameState`, au même titre que `SHOW_QR_CODE`

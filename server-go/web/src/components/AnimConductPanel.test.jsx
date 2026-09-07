@@ -1100,6 +1100,117 @@ describe('AnimConductPanel — L2, gain STARS_PRORATA affiché sur le bouton de 
   })
 })
 
+// ---------------------------------------------------------------------------
+// C3 (retour QUALIF v9.0.0.4, plan-v900-correctifs-qualif-20260906-104500.md
+// §5 Lot C, réouverture #217) — deuxième occurrence EXACTE du défaut #187
+// cycle 4 ci-dessus : `isMemoryStarsProrata` (AnimConductPanel.jsx) teste
+// `selectedMotionCard?.TYPE === 'MEMORY'` EN DUR. Une carte RAFALE nichée en
+// MEMOTION a pourtant elle aussi STARS_PRORATA comme barème PAR DÉFAUT
+// (`QuestionTypeRafale.DefaultPointsRule`, contrat question-types.md §6.2 ;
+// dérivation serveur : contrat rafale.md §14.4 — `Units =
+// MEMOTION_ACTIVE.STATE.RAFALE_CORRECT_COUNT`, `UnitsTotal =
+// ...RAFALE_ASKED_COUNT`) : le bouton de crédit affiche donc le montant
+// PLEIN pour une carte RAFALE, jamais le prorata — le serveur, seule
+// autorité, crédite lui le prorata réel, donc l'animateur voit un montant
+// FAUX. Écrit contre le CONTRAT (rafale.md §14.4), pas contre
+// l'implémentation actuelle — rouge tant que le câblage RAFALE n'existe pas
+// (même discipline TDD que le test-jumeau C1 sur le fil).
+//
+// Assomption de forme de prop (à documenter/adapter si dev-frontend choisit
+// une autre forme) : `cardRafale` gagne un champ `correctCount`, symétrique
+// du `askedCount` qu'il porte déjà (AnimPage.jsx, mêmes noms que
+// `typeState.rafale.correctCount`/`askedCount`, déjà résolus côté carte par
+// `utils/typeState.js`) — le plus petit delta cohérent avec le câblage
+// existant.
+// ---------------------------------------------------------------------------
+
+describe('AnimConductPanel — L2, gain STARS_PRORATA pour une carte RAFALE nichée (C3, retour QUALIF v9.0.0.4)', () => {
+  // Carte à 2★ = 3 pts (repli 1/3/5, aucun MOTION_CONFIG) — même valeur que
+  // le bloc MEMORY ci-dessus, choisie pour la même raison (distingue sans
+  // ambiguïté prorata vs plein : floor(3*2/3)=2, floor(3*3/3)=3).
+  function rafaleCardQuestion(cardOverrides = {}) {
+    return motionQuestion({
+      MOTION_CARDS: [
+        { ID: 'c1', RECTO_THEME: 'Cinéma', DIFFICULTY: 1 },
+        {
+          ID: 'c2', TYPE: 'RAFALE', RECTO_THEME: 'Rafale éclair', DIFFICULTY: 2,
+          RAFALE_CATEGORIES: ['HISTORY'], RAFALE_DIFFICULTIES: [1], RAFALE_MODE: 'SOLO',
+          RAFALE_QUESTION_TIME: 3, RAFALE_MAX_QUESTIONS: 10, RAFALE_ROUND_TIME: 60,
+          ...cardOverrides,
+        },
+      ],
+    })
+  }
+
+  function renderRevealWithProgress(correctCount, askedCount, cardOverrides = {}) {
+    return render(
+      <AnimConductPanel {...baseProps({
+        phase: 'STARTED',
+        question: rafaleCardQuestion(cardOverrides),
+        hostContext: { playable: false, revealed: true, cardId: 'c2' },
+        motion: motionProps({ subphase: 'REVEAL', selectedId: 'c2', currentTeam: 'Les Rouges' }),
+        cardRafale: {
+          // AnimRafaleQuestion.jsx lit current.DIFFICULTY/CATEGORY sans
+          // garde optionnelle — objet minimal mais réaliste (même forme que
+          // typeState.rafale.currentQuestion), pas de rapport avec le
+          // défaut C3 testé ici (L2), qui porte sur le montant crédité.
+          current: { ID: 'rq1', QUESTION: 'Capitale du Japon ?', CATEGORY: 'HISTORY', DIFFICULTY: 1 },
+          catMeta: null, answerValue: '', showNext: false, correctCount, askedCount,
+        },
+      })} />
+    )
+  }
+
+  function teamCreditButton(container) {
+    return Array.from(container.querySelectorAll('.anim-conduct-l2 .anim-conduct-btn'))
+      .find(btn => btn.textContent.startsWith('Les Rouges'))
+  }
+
+  it('2 bonnes réponses sur 3 posées : le bouton affiche le montant PRORATA (+2 pts), pas la valeur étoiles pleine (+3 pts)', () => {
+    const { container } = renderRevealWithProgress(2, 3)
+    const btn = teamCreditButton(container)
+    expect(btn).not.toBeUndefined()
+    expect(btn.textContent).toContain('+2 pt')
+    expect(btn.textContent).not.toMatch(/\+3 pts?/)
+  })
+
+  it('3 bonnes réponses sur 3 posées : le prorata rend exactement la valeur nominale (+3 pts)', () => {
+    const { container } = renderRevealWithProgress(3, 3)
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+3 pt')
+  })
+
+  it('0 bonne réponse sur 3 posées : le bouton affiche +0 pt (pas de crédit)', () => {
+    const { container } = renderRevealWithProgress(0, 3)
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+0 pt')
+  })
+
+  it('UnitsTotal=0 (aucune question posée avant arrêt) : +0 pt, jamais de division par zéro (contrat rafale.md §14.4)', () => {
+    const { container } = renderRevealWithProgress(0, 0)
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+0 pt')
+  })
+
+  it('surcharge explicite POINTS_RULE.MODE=STARS sur la carte RAFALE : montant plein affiché même round incomplet', () => {
+    const { container } = renderRevealWithProgress(1, 3, { POINTS_RULE: { MODE: 'STARS' } })
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+3 pt')
+  })
+
+  it('non-régression — le bloc MEMORY ci-dessus reste inchangé par ce câblage RAFALE (cardMemory absent, cardRafale renseigné, aucun effet croisé)', () => {
+    // cardMemory volontairement absent ici : si la généralisation attendue
+    // se fait par erreur en lisant cardMemory pour une carte RAFALE (au lieu
+    // de cardRafale), ce test resterait vert par accident — c'est le rôle du
+    // bloc MEMORY existant (describe précédent) de garder cardMemory couvert
+    // séparément. Celui-ci vérifie seulement qu'un cardRafale renseigné SANS
+    // cardMemory fonctionne bien pour une carte RAFALE.
+    const { container } = renderRevealWithProgress(1, 2)
+    const btn = teamCreditButton(container)
+    expect(btn.textContent).toContain('+1 pt') // floor(3*1/2) = 1
+  })
+})
+
 describe('AnimConductPanel — L1/L4/L5 inchangées par MEMOTION (#160/T6, non-régression)', () => {
   // #168 (F7) — L4 rend désormais AnimExplanationNote au lieu de la réserve
   // statique ; motionQuestion() (ci-dessous) ne porte pas de champ

@@ -610,10 +610,38 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // léger du timer de QUESTION (~3s), distinct du timer de MANCHE
         // (UPDATE_TIMER/CURRENT_TIME, inchangé). Ne réémet jamais tout
         // GameState — un seul champ mis à jour ici.
-        setGameState(prev => ({
-          ...prev,
-          RAFALE_QUESTION_TIME: MSG?.QUESTION_TIME ?? prev.RAFALE_QUESTION_TIME,
-        }))
+        //
+        // 🔴 C1 (#217, retour QUALIF v9.0.0.4) — `MOTION_CARD_ID` (CardScope,
+        // contrat rafale.md §5.2, déjà livré côté serveur Batch 1) scope ce
+        // tick à une carte RAFALE active plutôt qu'à la manche classique.
+        // Cause du "chrono figé" : ce handler patchait TOUJOURS le champ
+        // global `RAFALE_QUESTION_TIME`, jamais `MEMOTION_ACTIVE.STATE` —
+        // `getTypeState` (utils/typeState.js) lit EXCLUSIVEMENT ce dernier en
+        // hôte carte, donc un tick de carte n'était simplement jamais vu.
+        // ❌ Ne PAS patcher les deux emplacements pour un même tick (anti-motif
+        // déjà corrigé en `caae3d49` pendant #217) : `MOTION_CARD_ID` présent
+        // ⇒ SEUL `MEMOTION_ACTIVE.STATE` bouge, le champ global reste
+        // intact ; absent ⇒ SEUL le champ global bouge, comme avant.
+        // Garde-fou CARD_ID : un tick scopé sur une carte qui n'est plus
+        // l'active courante (transition en cours) est ignoré plutôt
+        // qu'appliqué à l'état d'une autre carte — même discipline que
+        // `getTypeState`.
+        setGameState(prev => {
+          if (MSG?.MOTION_CARD_ID) {
+            if (prev.MEMOTION_ACTIVE?.CARD_ID !== MSG.MOTION_CARD_ID) return prev
+            return {
+              ...prev,
+              MEMOTION_ACTIVE: {
+                ...prev.MEMOTION_ACTIVE,
+                STATE: { ...prev.MEMOTION_ACTIVE.STATE, RAFALE_QUESTION_TIME: MSG.QUESTION_TIME },
+              },
+            }
+          }
+          return {
+            ...prev,
+            RAFALE_QUESTION_TIME: MSG?.QUESTION_TIME ?? prev.RAFALE_QUESTION_TIME,
+          }
+        })
         break
 
       case 'REGIE_MESSAGE':
@@ -996,17 +1024,28 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   }, [sendMessage])
 
   // RAFALE (v8.0.0, #16/#107, contrat rafale.md §5.1) — juge la réponse de
-  // la question courante. Sans payload (§5.1) : le serveur connaît déjà la
-  // question active (RAFALE_CURRENT_QUESTION) et l'équipe qui répond
-  // (RAFALE_CURRENT_TEAM), même discipline que MEMOTION_FLIP/REVEAL
-  // ci-dessus. `admin`+`anim` uniquement (contrat §5.1) — sans effet
-  // ailleurs si appelé (le serveur rejetterait via l'allow-list entrante).
-  const rafaleValidate = useCallback(() => {
-    sendMessage('RAFALE_VALIDATE', {})
+  // la question courante. Sans payload pour la manche classique (§5.1) : le
+  // serveur connaît déjà la question active (RAFALE_CURRENT_QUESTION) et
+  // l'équipe qui répond (RAFALE_CURRENT_TEAM), même discipline que
+  // MEMOTION_FLIP/REVEAL ci-dessus. `admin`+`anim` uniquement (contrat
+  // §5.1) — sans effet ailleurs si appelé (le serveur rejetterait via
+  // l'allow-list entrante).
+  //
+  // `motionCardId` (#217, milestone v9.0.0) — porte la portée de carte
+  // (`CardScope`, contrat rafale.md §14.5, même motif EXACT que
+  // `flipMemoryCard`/`MOTION_CARD_ID` ci-dessus, #187) quand la question jugée
+  // appartient à une carte RAFALE active — absent (undefined) hors carte,
+  // comportement inchangé pour la manche classique.
+  const rafaleValidate = useCallback((motionCardId) => {
+    const msg = {}
+    if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    sendMessage('RAFALE_VALIDATE', msg)
   }, [sendMessage])
 
-  const rafaleInvalidate = useCallback(() => {
-    sendMessage('RAFALE_INVALIDATE', {})
+  const rafaleInvalidate = useCallback((motionCardId) => {
+    const msg = {}
+    if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    sendMessage('RAFALE_INVALIDATE', msg)
   }, [sendMessage])
 
   // RAFALE (v8.0.0, #16/#199, contrat rafale.md §5.1) — équipes
