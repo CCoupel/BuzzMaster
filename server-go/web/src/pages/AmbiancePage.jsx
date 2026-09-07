@@ -452,14 +452,34 @@ export default function AmbiancePage() {
     return c ? `rgb(${c.rgb.join(',')})` : null
   }, [teams])
 
+  // Revue code-reviewer (rapport code-reviewer-v10-round5-20260907-171136.md,
+  // MAJEUR) — les 3 boutons « Remettre à Libre » ne doivent JAMAIS dépendre
+  // de `effectiveSelected` (l'état des cases à cocher, propre au flux
+  // « Enregistrer », sans rapport conceptuel). Utiliser `effectiveSelected`
+  // faisait qu'une ampoule décochée pour une tout autre raison disparaissait
+  // silencieusement de la config au clic sur "Général" ou "Équipe" — hors de
+  // la portée promise par le texte de confirmation lui-même — et
+  // inversement, une ampoule tout juste cochée mais jamais enregistrée
+  // pouvait être écrite prématurément.
+  //
+  // Source de vérité correcte : les ampoules qui ont RÉELLEMENT un rôle
+  // actuellement — celles déjà persistées (`lighting.lights`) UNION celles
+  // dont le rôle a été changé cette session mais pas encore enregistré
+  // (`roleOverrides`). Une ampoule cochée sans jamais avoir eu de rôle
+  // (persisté ou modifié cette session) n'est dans AUCun des deux : elle
+  // n'a structurellement rien à « libérer », les boutons ne la touchent pas.
+  const currentlyAssignedNames = useMemo(
+    () => Array.from(new Set([...lighting.lights.map(l => l.name), ...Object.keys(roleOverrides)])),
+    [lighting.lights, roleOverrides]
+  )
+
   // Portée de chacun des 3 boutons « Remettre à Libre » — sert uniquement à
   // les désactiver quand ils n'auraient aucun effet (rien à réinitialiser
   // dans leur catégorie) : pas une garde de sécurité comme `allMissing`,
-  // juste une désactivation de confort. « Toutes » n'a pas besoin de son
-  // propre calcul : `effectiveSelected.length === 0` suffit (utilisé
-  // directement au point d'usage).
-  const anyGeneralAssigned = effectiveSelected.some(name => roleFor(name).role === 'general')
-  const anyTeamAssigned = effectiveSelected.some(name => roleFor(name).role === 'team')
+  // juste une désactivation de confort. Dérivées de `currentlyAssignedNames`
+  // ci-dessus, pas de `effectiveSelected` — même correction que le handler.
+  const anyGeneralAssigned = currentlyAssignedNames.some(name => roleFor(name).role === 'general')
+  const anyTeamAssigned = currentlyAssignedNames.some(name => roleFor(name).role === 'team')
 
   const toggleName = (name, checked) => {
     setSelectedNames(prev => {
@@ -524,14 +544,17 @@ export default function AmbiancePage() {
     if (!window.confirm(RESET_CONFIRM[scope])) return
     setResettingScope(scope)
     try {
-      // 'all' : rien ne survit — [] retire toutes les entrées sélectionnées.
+      // 'all' : rien ne survit — [] retire toutes les entrées, sans
+      // dépendre d'aucune source de noms.
       // 'general'/'team' : on RECONSTRUIT le tableau en excluant seulement
-      // la catégorie ciblée — celles de l'autre catégorie gardent EXACTEMENT
-      // leur rôle actuel, elles ne sont pas "re-sauvées à l'identique" par
-      // accident avec une valeur différente.
+      // la catégorie ciblée, à partir de `currentlyAssignedNames` (JAMAIS
+      // `effectiveSelected` — revue MAJEUR, voir son commentaire) — celles
+      // de l'autre catégorie gardent EXACTEMENT leur rôle actuel, elles ne
+      // sont pas "re-sauvées à l'identique" par accident avec une valeur
+      // différente.
       const lights = scope === 'all'
         ? []
-        : effectiveSelected
+        : currentlyAssignedNames
             .filter(name => roleFor(name).role !== scope)
             .map(name => ({ name, ...roleFor(name) }))
       const res = await saveLighting({ enabled: true, lights })
@@ -1002,7 +1025,7 @@ export default function AmbiancePage() {
                 variant="ghost"
                 onClick={() => handleResetToLibre('all')}
                 loading={resettingScope === 'all'}
-                disabled={frozen || allMissing || resettingScope !== null || effectiveSelected.length === 0}
+                disabled={frozen || allMissing || resettingScope !== null || currentlyAssignedNames.length === 0}
               >
                 Remettre à Libre toutes les ampoules
               </Button>
