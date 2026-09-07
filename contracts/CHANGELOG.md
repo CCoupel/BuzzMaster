@@ -2,6 +2,43 @@
 
 ---
 
+## [20260907f] — Éclairage : le sélecteur ne porte que la zone `general` (#208, #213)
+
+> Deux corrections utilisateur du 2026-09-07 sur le §10.1. La première **infirme une précision
+> dérivée du planner**, signalée comme telle depuis sa rédaction.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — **portée du sélecteur ON/AUTO/OFF et de Flash
+  restreinte à la zone `general`** au sens de `hue-bridge.md` §5.2 (ampoules de rôle `general`
+  **plus** les ampoules d'équipe dont l'équipe n'est pas nommée dans l'état courant). Les ampoules
+  **d'une équipe nommée dans l'état courant** restent **toujours** pilotées par la dérivation de
+  jeu (#213), **quelle que soit la position du sélecteur**. La régie force l'ambiance de la salle,
+  elle ne débranche jamais l'information « quelle équipe joue ».
+  ⛔ **Annule** la précision dérivée « éclairage général = toutes les ampoules pilotées, zones
+  d'équipe comprises » : elle confondait *éteindre la salle* et *éteindre l'installation*.
+- **[NEW]** `contracts/lighting.md` §10.1 — les deux conséquences de cette portée, qui découlent de
+  §5.2 : **hors partie**, aucune équipe n'étant nommée, un **OFF** éteint bien **tout** ; **pendant
+  une partie**, un **OFF** plonge la salle dans le noir **en laissant l'ampoule de l'équipe active
+  à sa couleur** — l'effet le plus utile du dispositif. Plus le cas d'une installation **sans
+  ampoule d'équipe** (§5.7), où le OFF éteint tout, couleur d'équipe comprise.
+- **[CHANGED]** `contracts/lighting.md` §10.1 — **recadrage d'usage** : ce n'est **pas** un écran de
+  configuration hors-partie mais un **instrument de conduite en direct**, utilisé par la **régie
+  pendant** une partie, en réaction au jeu. Ce qui avait changé de main lors de la révision
+  `/anim` → `/admin`, c'est **l'opérateur** (l'animateur n'a pas à piloter l'éclairage), **pas la
+  nature de l'outil**.
+  ⛔ **Toute justification reposant sur « cet écran n'est normalement pas ouvert en séance » est
+  retirée.** Le recadrage **renforce** la règle de tenue : un jugement pris en direct par la régie
+  doit tenir jusqu'à ce qu'elle-même en décide autrement.
+- **[CHANGED]** `contracts/lighting.md` §10.1.2 — la précédence de Flash sur le sélecteur est
+  rejustifiée par l'usage live : c'est **précisément** salle éteinte que la régie déclenche un
+  flash pour souligner un moment.
+
+`contracts/hue-bridge.md` **inchangé** : §5.2 et §5.7 définissaient déjà correctement la zone
+`general` et la dégradation — la correction **aligne** le §10.1 sur elles au lieu de les surcharger.
+
+**Aucun BREAKING**, aucun code écrit à ce stade.
+
+---
+
 ## [20260907e] — ⛔ ANNULÉE — annulation automatique du mode par événement de jeu (#208)
 
 > **Cette entrée est annulée et n'a jamais été en vigueur.** Elle décrivait une règle — le mode

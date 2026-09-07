@@ -459,11 +459,19 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 
 ### 10.1 Mode d'éclairage manuel ↔ scènes automatiques
 
-> **Révision de périmètre du 2026-09-07.** Ces commandes ont d'abord été cadrées comme une
-> *conduite de spectacle* sur la tablette `/anim`. **Elles n'y ont jamais eu leur place** : rien
-> dans le cadrage du milestone ne demandait que l'animateur pilote l'éclairage de la salle. Elles
-> sont donc des **outils d'exploitation et de diagnostic**, sur l'écran d'administration
+> **Révision de périmètre du 2026-09-07.** Ces commandes ont d'abord été cadrées sur la tablette
+> `/anim`. **Elles n'y ont jamais eu leur place** : rien dans le cadrage du milestone ne demandait
+> que l'**animateur** pilote l'éclairage de la salle. Elles vivent sur l'écran d'administration
 > `/admin/ambiance` (`AmbiancePage.jsx`, #207), aux côtés de la sélection des ampoules.
+>
+> **Ce qui a changé de main, c'est l'opérateur — pas la nature de l'outil.** C'est bien un
+> **instrument de conduite en direct**, utilisé par la **régie** *pendant* une partie, en réaction
+> au jeu : souligner un moment, faire tomber la salle, la relever. Ce n'est **pas** un écran de
+> configuration qu'on n'ouvrirait qu'entre deux soirées.
+> ⚠️ Toute justification reposant sur « cet écran n'est normalement pas ouvert en séance » est donc
+> **fausse** et a été retirée de ce contrat (correction utilisateur du 2026-09-07). Ce recadrage
+> **renforce** la règle de tenue du §10.1.1 : un jugement pris en direct par la régie doit tenir
+> jusqu'à ce qu'elle-même en décide autrement.
 > L'association effet↔événement **configurable par l'utilisateur** reste renvoyée à #210 (v10.1) —
 > c'est elle, la « seconde phase », **pas** la table de scènes câblée du §8, qui est livrée et
 > reste en place (confirmé au GATE du 2026-09-07).
@@ -484,19 +492,46 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 
 **1. Mode d'éclairage général — sélecteur à trois positions, exclusives par construction :**
 
-| Position | Effet |
+| Position | Effet **sur la zone `general`** |
 |---|---|
-| **ON** | toutes les ampoules pilotées forcées à pleine intensité, blanc neutre |
-| **AUTO** | *(position normale)* l'éclairage suit **l'état du jeu** — dérivation automatique, §6.2 |
-| **OFF** | toutes les ampoules pilotées forcées à `{"on": false}` |
+| **ON** | forcée à pleine intensité, blanc neutre |
+| **AUTO** | *(position normale)* suit **l'état du jeu** — dérivation automatique, §6.2 |
+| **OFF** | forcée à `{"on": false}` |
 
-**2. Flash — bascule séparée**, `ON`/`OFF` : clignotement de toutes les ampoules pilotées, pour
-identifier le matériel pendant la configuration.
+**2. Flash — bascule séparée**, `ON`/`OFF` : clignotement, pour souligner un moment de jeu ou
+identifier une ampoule. Même portée que le sélecteur (zone `general`).
 
-> ⚠️ « Éclairage **général** » désigne ici **toutes les ampoules pilotées, zones d'équipe
-> comprises** — continuité avec les commandes « All ON / All OFF » qu'il remplace. Un OFF qui
-> laisserait les ampoules d'équipe allumées ne serait pas un OFF.
-> *(Précision dérivée, planner — signalée pour relecture.)*
+##### ⚠️ Portée : la zone `general`, **jamais** les ampoules d'une équipe active — normatif
+
+Le sélecteur agit sur la **zone `general` au sens de `hue-bridge.md` §5.2**, et sur elle seule :
+
+> les ampoules de rôle `general`, **plus** toute ampoule d'équipe **dont l'équipe n'est pas nommée
+> dans l'état courant**.
+
+Les ampoules **affectées à une équipe nommée dans l'état courant** restent **toujours pilotées par
+la dérivation de jeu** (#213), **quelle que soit la position du sélecteur**. La régie force
+l'ambiance de la salle ; elle ne débranche jamais l'information « quelle équipe joue ».
+
+Deux conséquences, qui découlent de la définition §5.2 et méritent d'être lues :
+
+- **Hors partie** — ou dès qu'aucune équipe n'est nommée dans l'état courant — **toutes** les
+  ampoules d'équipe appartiennent à la zone `general`. Un **OFF** éteint donc bien **tout**, ce qui
+  correspond à l'attente ordinaire du mot.
+- **Pendant une partie, avec une équipe active** — un **OFF** plonge la salle dans le noir **mais
+  laisse l'ampoule de l'équipe active à sa couleur**. C'est délibéré et c'est même l'effet le plus
+  utile du dispositif : la salle s'efface, l'équipe qui joue reste désignée par la lumière.
+
+- **Installation sans aucune ampoule d'équipe** — cas prévu par `hue-bridge.md` §5.7 : toutes les
+  ampoules sont alors dans la zone `general`, y compris l'information « quelle équipe joue », que
+  la scène générale porte elle-même (`KindTeamTurn`). Un **OFF** y éteint donc **tout**, couleur
+  d'équipe comprise. La garantie « l'équipe active reste allumée » n'existe que si cette équipe
+  **dispose d'une ampoule dédiée** — c'est une raison de plus d'en affecter au moins une par
+  équipe, pas un défaut de la règle.
+
+> Cette portée **corrige** une précision dérivée erronée du planner (« toutes les ampoules pilotées,
+> zones d'équipe comprises »), écartée par l'utilisateur le 2026-09-07. Le raisonnement fautif était
+> qu'« un OFF qui laisserait des ampoules allumées ne serait pas un OFF » : il confondait *éteindre
+> la salle* et *éteindre l'installation*.
 
 #### 10.1.1 AUTO est le seul chemin de retour — normatif
 
@@ -535,16 +570,20 @@ le prochain événement de jeu ; il ne s'y ajoute pas.
 > mérite son nom — et le sélecteur tri-état le rend **beaucoup plus lisible** qu'un bouton
 > « actif » : la position se lit d'un coup d'œil, et **AUTO** nomme explicitement le geste qui
 > corrige la situation.
+> La portée restreinte à la zone `general` en atténue par ailleurs la gravité **pendant une
+> partie** : l'ampoule de l'équipe active reste allumée, la salle n'est donc jamais totalement
+> noire tant qu'une équipe joue. Le cas dur reste **hors partie**, où le OFF couvre tout.
 
 #### 10.1.2 Flash et le sélecteur — précédence, pas exclusion
 
 Flash est un contrôle **séparé** du sélecteur : les deux peuvent être engagés en même temps.
 
 - **Tant que Flash est actif, il prime** sur la position du sélecteur — sans quoi un Flash demandé
-  en position OFF ne produirait rien de visible, et l'outil d'identification serait inopérant au
-  moment précis où on en a besoin.
-- **Le sélecteur ne bouge pas** pour autant : Flash est une **couche de diagnostic transitoire**,
-  pas un quatrième mode. Le sélecteur continue d'afficher le mode sous-jacent, qui reste vrai.
+  alors que la salle est sur OFF ne produirait rien de visible. Or c'est précisément la situation
+  où la régie le déclenche : salle éteinte, un moment à souligner. Un effet inopérant au moment
+  exact où on l'appelle serait un effet inutile.
+- **Le sélecteur ne bouge pas** pour autant : Flash est une **couche transitoire**, pas un quatrième
+  mode. Le sélecteur continue d'afficher le mode sous-jacent, qui reste vrai.
 - **À l'extinction de Flash**, l'éclairage revient à ce que dit le sélecteur : ON, OFF, ou
   re-dérivation depuis l'état de jeu si AUTO.
 
