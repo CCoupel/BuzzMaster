@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Styles d'onglets</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --col:940px;
+
+    /* --- tokens réels de BuzzControl (web/src/styles/index.css) --- */
+    --primary-50:#eef2ff; --primary-100:#e0e7ff; --primary-400:#818cf8;
+    --primary-500:#6366f1; --primary-600:#4f46e5; --primary-700:#4338ca;
+    --a-pink:#ec4899; --a-orange:#f97316; --a-yellow:#eab308; --a-cyan:#06b6d4;
+    --g-100:#f3f4f6; --g-200:#e5e7eb; --g-300:#d1d5db; --g-400:#9ca3af;
+    --g-500:#6b7280; --g-700:#374151; --g-800:#1f2937;
+    --app-display:"Fredoka",system-ui,sans-serif;
+    --app-body:"Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--txt);font-family:var(--sans);
+    font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--col);margin:0 auto;padding:56px 24px 120px}
+
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);display:flex;gap:10px;flex-wrap:wrap;
+    align-items:center;margin-bottom:14px}
+  .eyebrow span:not(:last-child)::after{content:"·";margin-left:10px;color:var(--faint)}
+  h1{font-size:clamp(1.9rem,4.4vw,2.7rem);font-weight:700;line-height:1.12;
+    letter-spacing:-.022em;margin:0 0 12px;text-wrap:balance}
+  .standfirst{font-size:1.06rem;color:var(--dim);max-width:64ch;margin:0}
+  .refs{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:20px;
+    display:flex;flex-direction:column;gap:4px}
+  .refs b{color:var(--dim);font-weight:500}
+
+  section{margin-top:60px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.012em;margin:0 0 6px;
+    text-wrap:balance;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--accent);
+    letter-spacing:.06em;flex:none}
+  .lede{color:var(--dim);margin:0 0 20px;max-width:66ch}
+  p{margin:0 0 14px;max-width:68ch}
+  strong{font-weight:600;color:#fff}
+  code{font-family:var(--mono);font-size:.85em;background:var(--sunken);
+    border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px;color:#cdd6e0}
+
+  .call{background:var(--panel);border-left:2px solid var(--info);padding:15px 20px;
+    margin:20px 0;border-radius:0 6px 6px 0;font-size:.95rem}
+  .call > :last-child{margin-bottom:0}
+  .call.ok{border-left-color:var(--ok)}
+  .call.warn{border-left-color:var(--warn)}
+  .call-t{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+  .call.ok .call-t{color:#57c46a}
+  .call.warn .call-t{color:#e0b53f}
+
+  .scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:600px}
+  th,td{padding:11px 15px;text-align:left;vertical-align:top;
+    border-bottom:1px solid var(--line-soft)}
+  th{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--faint);background:var(--sunken)}
+  tbody tr:last-child td{border-bottom:none}
+  td.pick{color:#57c46a;font-weight:600}
+
+  .prop{margin-top:52px;border-top:1px solid var(--line);padding-top:30px}
+  .prop-hd{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  .prop-k{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.14em;
+    color:var(--accent);border:1px solid var(--accent-dim);border-radius:4px;
+    padding:2px 8px;flex:none}
+  .prop-n{font-size:1.18rem;font-weight:600;letter-spacing:-.01em}
+  .prop-d{color:var(--dim);margin:0 0 20px;max-width:66ch;font-size:.97rem}
+  .prop-note{font-size:.86rem;color:var(--faint);margin:14px 0 0;max-width:68ch}
+  .prop-note b{color:var(--dim);font-weight:500}
+
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:760px){.duo{grid-template-columns:1fr}}
+
+  /* ================= cadre application (rendu fidèle) ================= */
+  .app{border-radius:12px;overflow:hidden;border:1px solid var(--line);
+    background:var(--g-100);font-family:var(--app-body);color:var(--g-800);
+    position:relative;isolation:isolate}
+  .app::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(circle at 18% 82%, rgba(236,72,153,.10) 0%, transparent 50%),
+      radial-gradient(circle at 84% 18%, rgba(99,102,241,.10) 0%, transparent 50%)}
+  .app-cap{position:relative;z-index:1;font-family:var(--mono);font-size:10px;
+    letter-spacing:.1em;color:var(--g-500);padding:8px 16px 0}
+  .app-in{position:relative;z-index:1;padding:10px 16px 18px}
+  .app-h{font-family:var(--app-display);font-weight:600;font-size:1.12rem;
+    color:var(--g-800);margin:2px 0 12px}
+  .stub{background:#fff;border:1px solid var(--g-200);border-radius:10px;
+    padding:13px 15px;box-shadow:0 1px 2px rgb(0 0 0/.05)}
+  .stub-l{height:8px;border-radius:4px;background:var(--g-200);margin-bottom:9px}
+  .stub-l.w70{width:70%} .stub-l.w45{width:45%} .stub-l.last{margin-bottom:0}
+
+  /* ================= socle commun des jeux d'onglets ================= */
+  .tabset{position:relative;display:flex;flex-wrap:wrap;margin-bottom:14px}
+  .tb{font-family:inherit;cursor:pointer;border:none;background:transparent;
+    position:relative;z-index:2;white-space:nowrap;display:inline-flex;
+    align-items:center;gap:7px;line-height:1.2}
+  .tb:focus-visible{outline:2px solid var(--primary-500);outline-offset:2px}
+  .tb .ic{font-size:1.02em;line-height:1}
+  .ind{position:absolute;z-index:1;left:0;pointer-events:none;
+    transition:transform .28s cubic-bezier(.4,0,.2,1), width .28s cubic-bezier(.4,0,.2,1)}
+  @media (prefers-reduced-motion:reduce){
+    .ind{transition:none}
+    .t-e .tb.on::before{animation:none}
+    .tb{transition:none!important}
+  }
+
+  /* ---- A · soulignement glissant ---- */
+  .t-a{gap:2px;border-bottom:2px solid var(--g-200);padding-bottom:0}
+  .t-a .tb{padding:9px 16px;font-size:.9rem;font-weight:500;color:var(--g-500);
+    transition:color .15s ease}
+  .t-a .tb:hover{color:var(--g-800)}
+  .t-a .tb.on{color:var(--primary-600);font-weight:600}
+  .t-a .ind{height:2px;background:var(--primary-500);border-radius:2px}
+
+  /* ---- B · pastilles ---- */
+  .t-b{gap:8px}
+  .t-b .tb{padding:9px 18px;font-size:.9rem;font-weight:500;color:var(--g-500);
+    border-radius:9999px;transition:color .18s ease,background .18s ease}
+  .t-b .tb:hover{background:rgba(99,102,241,.08);color:var(--primary-700)}
+  .t-b .tb.on{color:#fff;font-weight:600}
+  .t-b .tb.on:hover{background:transparent}
+  .t-b .ind{border-radius:9999px;
+    background:linear-gradient(135deg,var(--primary-500),var(--primary-700));
+    box-shadow:0 3px 10px rgba(99,102,241,.36)}
+
+  /* ---- C · sélecteur segmenté ---- */
+  .t-c{gap:0;background:var(--g-200);border-radius:12px;padding:4px;
+    display:inline-flex;flex-wrap:nowrap;max-width:100%;overflow-x:auto}
+  .t-c .tb{padding:8px 18px;font-size:.88rem;font-weight:500;color:var(--g-500);
+    border-radius:9px;transition:color .18s ease}
+  .t-c .tb:hover{color:var(--g-800)}
+  .t-c .tb.on{color:var(--primary-700);font-weight:600}
+  .t-c .ind{background:#fff;border-radius:9px;
+    box-shadow:0 1px 3px rgb(0 0 0/.14)}
+
+  /* ---- D · pastilles + icônes ---- */
+  .t-d{gap:8px}
+  .t-d .tb{padding:9px 17px;font-size:.9rem;font-weight:500;color:var(--g-500);
+    border-radius:9999px;transition:color .18s ease,background .18s ease}
+  .t-d .tb:hover{background:rgba(99,102,241,.08);color:var(--primary-700)}
+  .t-d .tb.on{color:#fff;font-weight:600}
+  .t-d .tb.on:hover{background:transparent}
+  .t-d .tb .ic{transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+  .t-d .tb.on .ic{transform:scale(1.18)}
+  .t-d .ind{border-radius:9999px;
+    background:linear-gradient(135deg,var(--primary-500),var(--primary-700));
+    box-shadow:0 3px 10px rgba(99,102,241,.36)}
+
+  /* ---- E · enseigne de scène ---- */
+  .t-e{gap:8px;padding:6px 0 2px}
+  .t-e .tb{padding:10px 18px 11px;font-size:.9rem;font-weight:500;color:var(--g-500);
+    border-radius:10px;border:1px solid var(--g-200);background:#fff;
+    transition:color .2s ease,border-color .2s ease,box-shadow .3s ease,background .2s ease}
+  .t-e .tb::before{content:"";position:absolute;top:5px;left:11px;right:11px;height:3px;
+    border-radius:2px;opacity:0;transition:opacity .3s ease;
+    background-image:radial-gradient(circle,var(--a-yellow) 42%,transparent 46%);
+    background-size:9px 3px;background-repeat:repeat-x}
+  .t-e .tb:hover{border-color:var(--primary-400);color:var(--primary-700)}
+  .t-e .tb.on{color:var(--primary-700);font-weight:600;background:#fff;
+    border-color:var(--a-yellow);
+    box-shadow:0 0 0 1px rgba(234,179,8,.35), 0 0 18px rgba(234,179,8,.42),
+               0 4px 12px rgba(0,0,0,.07)}
+  .t-e .tb.on::before{opacity:1;animation:bulbs 2.4s ease-in-out infinite}
+  @keyframes bulbs{0%,100%{opacity:1}50%{opacity:.45}}
+  @media (prefers-reduced-motion:reduce){ .t-e .tb.on::before{animation:none} }
+
+  .foot{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.9}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow"><span>BuzzControl</span><span>Ravalement visuel</span><span>Hors périmètre v9.0.0</span></div>
+  <h1>Styles d'onglets</h1>
+  <p class="standfirst">Cinq directions pour les onglets des pages Quiz et Backstage, rendues dans
+  les vraies couleurs et polices de l'application. Cliquez : les onglets réagissent.</p>
+  <div class="refs">
+    <div><b>Portée</b> un seul fichier — <code>web/src/styles/tabs.css</code></div>
+    <div><b>Touche</b> /admin/quiz (Questions · Rafale) et /admin/backstage (Quiz · Entracte · Fonds d'écran)</div>
+    <div><b>Ne touche pas</b> le balisage, les composants, les contrats — aucun changement fonctionnel</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">00</span> Avant de comparer</h2>
+  <p class="lede">Les deux pages partagent déjà une seule barre d'onglets, écrite pendant #215.
+  Changer de style, c'est réécrire ce fichier — les deux pages suivent d'elles-mêmes.</p>
+
+  <div class="call ok">
+    <div class="call-t">Coût réel</div>
+    <p>Le balisage ne bouge pas : <code>.page-tabs</code> contient des
+    <code>.page-tab</code>, l'actif porte <code>.active</code>. Trois des cinq propositions
+    tiennent en CSS seul. Deux (le soulignement glissant et le sélecteur segmenté) demandent en
+    plus <strong>quelques lignes de JavaScript</strong> pour positionner l'indicateur — c'est
+    signalé sous chacune.</p>
+  </div>
+
+  <p>Les aperçus ci-dessous reprennent le fond, les cartes, l'indigo et les polices réels de
+  l'application — Fredoka pour les titres, Inter pour le reste — pour que la comparaison porte sur
+  ce que vous verrez à l'écran, et pas sur une illustration.</p>
+</section>
+
+<section>
+  <h2><span class="num">01</span> Les cinq directions</h2>
+  <p class="lede">Chacune est montrée dans ses deux contextes : deux onglets sur Quiz, trois sur
+  Backstage.</p>
+
+  <!-- ============ A ============ -->
+  <div class="prop">
+    <div class="prop-hd"><span class="prop-k">A</span><span class="prop-n">Soulignement glissant</span></div>
+    <p class="prop-d">L'actuel, remis au propre : le trait sous l'onglet actif ne saute plus, il
+    glisse. Le geste le plus discret de la série — on remarque le mouvement, pas la décoration.</p>
+    <div class="duo">
+      <div class="app">
+        <div class="app-cap">/admin/quiz</div>
+        <div class="app-in">
+          <div class="app-h">Quiz</div>
+          <div class="tabset t-a" data-slide="under">
+            <button class="tb on" type="button">Questions</button>
+            <button class="tb" type="button">Rafale</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+      <div class="app">
+        <div class="app-cap">/admin/backstage</div>
+        <div class="app-in">
+          <div class="app-h">Backstage</div>
+          <div class="tabset t-a" data-slide="under">
+            <button class="tb on" type="button">Quiz</button>
+            <button class="tb" type="button">Entracte</button>
+            <button class="tb" type="button">Fonds d'écran</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+    </div>
+    <p class="prop-note"><b>Coût</b> CSS + ~15 lignes de JS pour positionner le trait.
+    <b>Risque</b> nul — c'est le style actuel, affiné.</p>
+  </div>
+
+  <!-- ============ B ============ -->
+  <div class="prop">
+    <div class="prop-hd"><span class="prop-k">B</span><span class="prop-n">Pastilles</span></div>
+    <p class="prop-d">L'onglet actif devient une pastille indigo pleine, avec une ombre portée
+    colorée. Le plus lisible à distance — utile sur une tablette posée sur une table, en soirée.</p>
+    <div class="duo">
+      <div class="app">
+        <div class="app-cap">/admin/quiz</div>
+        <div class="app-in">
+          <div class="app-h">Quiz</div>
+          <div class="tabset t-b" data-slide="fill">
+            <button class="tb on" type="button">Questions</button>
+            <button class="tb" type="button">Rafale</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+      <div class="app">
+        <div class="app-cap">/admin/backstage</div>
+        <div class="app-in">
+          <div class="app-h">Backstage</div>
+          <div class="tabset t-b" data-slide="fill">
+            <button class="tb on" type="button">Quiz</button>
+            <button class="tb" type="button">Entracte</button>
+            <button class="tb" type="button">Fonds d'écran</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+    </div>
+    <p class="prop-note"><b>Coût</b> CSS seul si la pastille ne glisse pas ; +JS pour l'effet de
+    glissement montré ici. <b>Risque</b> nul.</p>
+  </div>
+
+  <!-- ============ C ============ -->
+  <div class="prop">
+    <div class="prop-hd"><span class="prop-k">C</span><span class="prop-n">Sélecteur segmenté</span></div>
+    <p class="prop-d">Les onglets vivent dans une piste grise, et une tuile blanche glisse sous
+    l'actif. Le vocabulaire des réglages système — il dit « choisissez une vue » plutôt que
+    « naviguez ». Compact, particulièrement à l'aise avec deux onglets.</p>
+    <div class="duo">
+      <div class="app">
+        <div class="app-cap">/admin/quiz</div>
+        <div class="app-in">
+          <div class="app-h">Quiz</div>
+          <div class="tabset t-c" data-slide="thumb">
+            <button class="tb on" type="button">Questions</button>
+            <button class="tb" type="button">Rafale</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+      <div class="app">
+        <div class="app-cap">/admin/backstage</div>
+        <div class="app-in">
+          <div class="app-h">Backstage</div>
+          <div class="tabset t-c" data-slide="thumb">
+            <button class="tb on" type="button">Quiz</button>
+            <button class="tb" type="button">Entracte</button>
+            <button class="tb" type="button">Fonds d'écran</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+    </div>
+    <p class="prop-note"><b>Coût</b> CSS + ~15 lignes de JS. <b>Attention</b> la piste doit tenir
+    sur une ligne ; au-delà de trois onglets longs, elle défile latéralement.</p>
+  </div>
+
+  <!-- ============ D ============ -->
+  <div class="prop">
+    <div class="prop-hd"><span class="prop-k">D</span><span class="prop-n">Pastilles et icônes</span></div>
+    <p class="prop-d">La proposition B, avec une icône par onglet qui grossit légèrement quand il
+    devient actif. On repère l'onglet à sa forme avant de lire son nom — ce qui compte quand on
+    cherche vite, entre deux manches.</p>
+    <div class="duo">
+      <div class="app">
+        <div class="app-cap">/admin/quiz</div>
+        <div class="app-in">
+          <div class="app-h">Quiz</div>
+          <div class="tabset t-d" data-slide="fill">
+            <button class="tb on" type="button"><span class="ic">📋</span>Questions</button>
+            <button class="tb" type="button"><span class="ic">⚡</span>Rafale</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+      <div class="app">
+        <div class="app-cap">/admin/backstage</div>
+        <div class="app-in">
+          <div class="app-h">Backstage</div>
+          <div class="tabset t-d" data-slide="fill">
+            <button class="tb on" type="button"><span class="ic">🎬</span>Quiz</button>
+            <button class="tb" type="button"><span class="ic">🎭</span>Entracte</button>
+            <button class="tb" type="button"><span class="ic">🎨</span>Fonds</button>
+            <span class="ind"></span>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+    </div>
+    <p class="prop-note"><b>Coût</b> identique à B, plus le choix des icônes.
+    <b>Note</b> l'éclair de Rafale reprend celui déjà utilisé dans la barre de navigation.</p>
+  </div>
+
+  <!-- ============ E ============ -->
+  <div class="prop">
+    <div class="prop-hd"><span class="prop-k">E</span><span class="prop-n">Enseigne de scène</span></div>
+    <p class="prop-d">L'onglet actif s'allume : halo chaud et rampe d'ampoules qui respire, comme
+    le fronton d'un théâtre. C'est la seule proposition qui parle la langue du produit — celle qui
+    a déjà donné ENTRACTE, PALMARÈS et Backstage — et elle réutilise le vocabulaire lumineux
+    présent dans <code>neon.css</code>.</p>
+    <div class="duo">
+      <div class="app">
+        <div class="app-cap">/admin/quiz</div>
+        <div class="app-in">
+          <div class="app-h">Quiz</div>
+          <div class="tabset t-e">
+            <button class="tb on" type="button">Questions</button>
+            <button class="tb" type="button">Rafale</button>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+      <div class="app">
+        <div class="app-cap">/admin/backstage</div>
+        <div class="app-in">
+          <div class="app-h">Backstage</div>
+          <div class="tabset t-e">
+            <button class="tb on" type="button">Quiz</button>
+            <button class="tb" type="button">Entracte</button>
+            <button class="tb" type="button">Fonds d'écran</button>
+          </div>
+          <div class="stub"><div class="stub-l w70"></div><div class="stub-l"></div><div class="stub-l w45 last"></div></div>
+        </div>
+      </div>
+    </div>
+    <p class="prop-note"><b>Coût</b> CSS seul, aucun JavaScript. <b>Attention</b> l'animation des
+    ampoules est neutralisée si le système demande moins de mouvement ; à surveiller aussi sur les
+    longues sessions, un clignotement permanent peut fatiguer.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span> Comparer</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Direction</th><th>Ton</th><th>Lisible de loin</th><th>Coût</th></tr></thead>
+      <tbody>
+        <tr><td><b>A</b> Soulignement</td><td>Sobre, professionnel</td><td>Moyen</td><td>CSS + JS léger</td></tr>
+        <tr><td class="pick"><b>B</b> Pastilles</td><td>Franc, coloré</td><td class="pick">Fort</td><td>CSS (JS optionnel)</td></tr>
+        <tr><td><b>C</b> Segmenté</td><td>Réglages, compact</td><td>Moyen</td><td>CSS + JS léger</td></tr>
+        <tr><td class="pick"><b>D</b> Pastilles + icônes</td><td>Ludique, cohérent</td><td class="pick">Fort</td><td>CSS (JS optionnel)</td></tr>
+        <tr><td><b>E</b> Enseigne</td><td>Spectacle, singulier</td><td>Fort</td><td>CSS seul</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call">
+    <div class="call-t">S'il faut un avis</div>
+    <p><strong>D</strong> — les pastilles avec icônes. Le design system s'annonce « Fun &amp;
+    Playful », et les pastilles pleines en indigo en sont l'expression la plus directe ; les icônes
+    ajoutent le repérage rapide qui sert vraiment en conduite de soirée. <strong>E</strong> est la
+    plus mémorable et la moins chère, mais un clignotement permanent dans une page de configuration
+    finit par lasser — l'enseigne serait plus à sa place sur un écran vu par le public que sur un
+    écran d'administration.</p>
+  </div>
+
+  <div class="call warn">
+    <div class="call-t">Un point à trancher avec le choix</div>
+    <p>Les onglets s'enroulent sur plusieurs lignes quand la fenêtre rétrécit. Les pastilles et le
+    soulignement le supportent bien ; le <strong>sélecteur segmenté (C)</strong> non — sa piste
+    doit rester d'un seul tenant et devra défiler. Si l'interface est consultée sur tablette en
+    portrait, cela pèse dans le choix.</p>
+  </div>
+</section>
+
+<div class="foot">
+  Maquette comparative — ravalement visuel des onglets, hors périmètre du milestone v9.0.0<br>
+  Aucun changement fonctionnel · un seul fichier concerné : web/src/styles/tabs.css<br>
+  Aucune ligne de code applicatif écrite à ce stade
+</div>
+
+</div>
+
+<script>
+(function () {
+  var sets = document.querySelectorAll('.tabset');
+  Array.prototype.forEach.call(sets, function (set) {
+    var ind = set.querySelector('.ind');
+    var tabs = set.querySelectorAll('.tb');
+
+    function place(inst) {
+      if (!ind) return;
+      var a = set.querySelector('.tb.on');
+      if (!a) return;
+      var mode = set.getAttribute('data-slide');
+      var left = a.offsetLeft, w = a.offsetWidth;
+      if (inst) ind.style.transition = 'none';
+      var top = a.offsetTop;
+      ind.style.width = w + 'px';
+      if (mode === 'under') {
+        // le trait se cale sous la ligne où se trouve l'onglet actif
+        ind.style.top = (top + a.offsetHeight) + 'px';
+        ind.style.bottom = 'auto';
+        ind.style.transform = 'translateX(' + left + 'px)';
+      } else {
+        ind.style.top = top + 'px';
+        ind.style.height = a.offsetHeight + 'px';
+        ind.style.bottom = 'auto';
+        ind.style.transform = 'translateX(' + left + 'px)';
+      }
+      if (inst) { void ind.offsetWidth; ind.style.transition = ''; }
+    }
+
+    Array.prototype.forEach.call(tabs, function (t) {
+      t.addEventListener('click', function () {
+        Array.prototype.forEach.call(tabs, function (x) { x.classList.remove('on'); });
+        t.classList.add('on');
+        place(false);
+      });
+    });
+
+    place(true);
+    window.addEventListener('resize', function () { place(true); });
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { place(true); });
+    }
+  });
+})();
+</script>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

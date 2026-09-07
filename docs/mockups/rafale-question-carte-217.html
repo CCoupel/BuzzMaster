@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Question RAFALE en carte</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --app:"Fredoka",system-ui,sans-serif;
+    --col:940px;
+    --tv-bg:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--txt);font-family:var(--sans);
+    font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--col);margin:0 auto;padding:56px 24px 120px}
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);display:flex;gap:10px;flex-wrap:wrap;
+    align-items:center;margin-bottom:14px}
+  .eyebrow span:not(:last-child)::after{content:"·";margin-left:10px;color:var(--faint)}
+  h1{font-size:clamp(1.9rem,4.4vw,2.7rem);font-weight:700;line-height:1.12;
+    letter-spacing:-.022em;margin:0 0 12px;text-wrap:balance}
+  .standfirst{font-size:1.06rem;color:var(--dim);max-width:64ch;margin:0}
+  .refs{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:20px;
+    display:flex;flex-direction:column;gap:4px}
+  .refs b{color:var(--dim);font-weight:500}
+  section{margin-top:60px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.012em;margin:0 0 6px;
+    display:flex;align-items:baseline;gap:12px;text-wrap:balance}
+  h2 .num{font-family:var(--mono);font-size:.78rem;font-weight:600;color:var(--accent);
+    letter-spacing:.06em;flex:none}
+  .lede{color:var(--dim);margin:0 0 20px;max-width:66ch}
+  p{margin:0 0 14px;max-width:68ch}
+  strong{font-weight:600;color:#fff}
+  em{color:var(--dim);font-style:normal}
+  code{font-family:var(--mono);font-size:.85em;background:var(--sunken);
+    border:1px solid var(--line-soft);border-radius:4px;padding:1px 5px;color:#cdd6e0}
+  .call{background:var(--panel);border-left:2px solid var(--info);padding:15px 20px;
+    margin:20px 0;border-radius:0 6px 6px 0;font-size:.95rem}
+  .call > :last-child{margin-bottom:0}
+  .call.no{border-left-color:var(--no)} .call.ok{border-left-color:var(--ok)}
+  .call.warn{border-left-color:var(--warn)}
+  .call-t{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+  .call.no .call-t{color:#f0736e} .call.ok .call-t{color:#57c46a}
+  .call.warn .call-t{color:#e0b53f}
+  .scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:560px}
+  th,td{padding:11px 15px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line-soft)}
+  th{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--faint);background:var(--sunken)}
+  tbody tr:last-child td{border-bottom:none}
+  td code{background:none;border:none;padding:0;color:var(--accent)}
+  td.y{color:#57c46a} td.n{color:var(--faint)}
+  td.num{font-variant-numeric:tabular-nums}
+
+  .tv{border:1px solid var(--line);border-radius:11px;overflow:hidden;margin:18px 0}
+  .tv-cap{background:var(--raised);border-bottom:1px solid var(--line);padding:8px 15px;
+    font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.05em;
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .tv-cap .st{color:var(--faint)}
+  .tv-scr{background:var(--tv-bg);color:#fff;font-family:var(--app);
+    aspect-ratio:16/9;display:flex;flex-direction:column;padding:14px 18px;overflow:hidden}
+  .r1{height:20%;display:flex;align-items:center;justify-content:center;flex:none}
+  .r2{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:12px;min-height:0}
+  .r3{height:18%;display:flex;align-items:center;justify-content:center;gap:14px;flex:none}
+  .qtext{font-size:1.28rem;font-weight:500;text-align:center;line-height:1.35;max-width:88%}
+  .chips{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:5px 14px;border-radius:999px;
+    font-size:.92rem;background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.16)}
+  .chip .g{font-size:1.1em;line-height:1}
+  .chip.st{color:#fcd34d}
+  .chip.pt{color:#fdba74;border-color:rgba(249,115,22,.45);background:rgba(249,115,22,.14)}
+  .chip.prog{font-family:var(--mono);font-size:.8rem;opacity:.8}
+  .tmr{display:flex;flex-direction:column;align-items:center;gap:1px}
+  .tmr-l{font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;opacity:.55}
+  .tmr-v{font-size:1.5rem;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+  .tmr.q .tmr-v{color:#f87171}
+  .tmr-v i{font-size:.46em;font-style:normal;opacity:.72;margin-left:3px;font-weight:500}
+  .team-tag{padding:4px 13px;border-radius:999px;font-size:.82rem;border:2px solid #3b82f6;
+    color:#93c5fd;background:rgba(255,255,255,.06)}
+  .strike{position:relative;opacity:.45}
+  .strike::after{content:"";position:absolute;left:-3px;right:-3px;top:50%;height:2px;
+    background:var(--no);transform:rotate(-6deg)}
+
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:800px){.duo{grid-template-columns:1fr}}
+  .duo .tv{margin:0}
+  .anim{background:#f3f4f6;color:#1f2937;font-family:"Inter",system-ui,sans-serif;padding:16px}
+  .anim-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:13px 15px;
+    box-shadow:0 1px 2px rgb(0 0 0/.05)}
+  .anim-meta{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
+  .anim-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;
+    background:#eef2ff;color:#4338ca;font-size:.8rem;font-weight:500}
+  .anim-chip.warnc{background:#fef3c7;color:#92400e}
+  .anim-q{font-size:.95rem;margin-bottom:8px}
+  .anim-a{font-size:.9rem;color:#15803d;font-weight:600}
+  .anim-btn{margin-top:12px;display:flex;gap:8px}
+  .anim-b{padding:7px 15px;border-radius:8px;font-size:.85rem;font-weight:600}
+  .anim-b.v{background:#22c55e;color:#fff} .anim-b.i{background:#ef4444;color:#fff}
+  .foot{margin-top:80px;padding-top:22px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:11.5px;color:var(--faint);line-height:1.9}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow"><span>Milestone v9.0.0</span><span>Retour QUALIF v9.0.0.4</span><span>Maquette — confirmation</span></div>
+  <h1>Question RAFALE en carte</h1>
+  <p class="standfirst">Ce que montre une question tirée pendant une mini-manche RAFALE hébergée par
+  une carte MEMOTION : la catégorie et la difficulté, jamais une valeur en points.</p>
+  <div class="refs">
+    <div><b>Écran</b> /tv, carte MEMOTION de type RAFALE, sous-phase QUESTION</div>
+    <div><b>Statut</b> le code est déjà conforme — cette maquette documente le comportement voulu</div>
+    <div><b>Objet réel</b> rendre explicite l'asymétrie avec la manche classique, pour qu'on ne l'« harmonise » pas dans le mauvais sens</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span> L'écran</h2>
+  <p class="lede">Trois bandes : l'énoncé, les repères de la question, la progression et le
+  décompte. Rien d'autre — le rythme est de trois secondes par question.</p>
+
+  <div class="tv">
+    <div class="tv-cap"><span>/tv — carte RAFALE, sous-phase QUESTION</span><span class="st">comportement voulu</span></div>
+    <div class="tv-scr">
+      <div class="r1"><span class="team-tag">Les Bleus</span></div>
+      <div class="r2">
+        <p class="qtext">Quel fleuve traverse Budapest ?</p>
+        <div class="chips">
+          <span class="chip"><span class="g">🌍</span>Géographie</span>
+          <span class="chip st">★★</span>
+        </div>
+      </div>
+      <div class="r3">
+        <span class="chip prog">4ᵉ question</span>
+        <div class="tmr q"><span class="tmr-l">DURÉE PAR QUESTION</span><span class="tmr-v">2<i>s</i></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="call warn">
+    <div class="call-t">Deux nombres, deux natures</div>
+    <p>La bande basse porte deux valeurs qu'il ne faut pas confondre : <strong>4ᵉ question</strong>
+    est un <em>rang</em> — la quatrième question de la mini-manche — et <strong>2 s</strong> est le
+    <em>temps restant</em> sur celle-ci. Sous les libellés d'aujourd'hui (« question 4 » à côté
+    d'un « Question · 2 » nu), les deux se lisent comme la même chose.</p>
+    <p>L'ambiguïté existe <strong>dans l'écran réel</strong>, pas seulement ici. Le correctif est
+    le même que sur l'écran d'attente : nommer la durée et afficher son unité.</p>
+  </div>
+
+  <div class="call ok">
+    <div class="call-t">Pourquoi pas de points ici</div>
+    <p>Une carte MEMOTION vaut un nombre d'étoiles, et le serveur en crédite une
+    <strong>fraction proportionnelle</strong> aux bonnes réponses de la mini-manche. Il n'existe
+    donc <em>aucune</em> valeur attachée à une question prise isolément : en afficher une serait
+    inventer un chiffre que le score ne suivra pas.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span> L'asymétrie est voulue</h2>
+  <p class="lede">La manche RAFALE classique, elle, <strong>garde</strong> ses points — chaque
+  question y vaut un montant propre selon sa difficulté, décidé lors du cadrage de #216. Les deux
+  écrans doivent donc rester différents.</p>
+
+  <div class="duo">
+    <div class="tv">
+      <div class="tv-cap"><span>Manche classique</span><span class="st">inchangé</span></div>
+      <div class="tv-scr">
+        <div class="r1"><span class="team-tag">Les Bleus</span></div>
+        <div class="r2">
+          <p class="qtext">Quel fleuve traverse Budapest ?</p>
+          <div class="chips">
+            <span class="chip"><span class="g">🌍</span>Géographie</span>
+            <span class="chip st">★★</span>
+            <span class="chip pt">10 pts</span>
+          </div>
+        </div>
+        <div class="r3"><div class="tmr q"><span class="tmr-l">DURÉE PAR QUESTION</span><span class="tmr-v">2<i>s</i></span></div></div>
+      </div>
+    </div>
+    <div class="tv">
+      <div class="tv-cap"><span>En carte MEMOTION</span><span class="st">sans points</span></div>
+      <div class="tv-scr">
+        <div class="r1"><span class="team-tag">Les Bleus</span></div>
+        <div class="r2">
+          <p class="qtext">Quel fleuve traverse Budapest ?</p>
+          <div class="chips">
+            <span class="chip"><span class="g">🌍</span>Géographie</span>
+            <span class="chip st">★★</span>
+            <span class="chip pt strike">10 pts</span>
+          </div>
+        </div>
+        <div class="r3">
+          <span class="chip prog">4ᵉ question</span>
+          <div class="tmr q"><span class="tmr-l">DURÉE PAR QUESTION</span><span class="tmr-v">2<i>s</i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Élément</th><th>Manche classique</th><th>En carte</th></tr></thead>
+      <tbody>
+        <tr><td>Catégorie</td><td class="y">affichée</td><td class="y">affichée</td></tr>
+        <tr><td>Difficulté</td><td class="y">affichée</td><td class="y">affichée</td></tr>
+        <tr><td>Valeur en points</td><td class="y">affichée — varie selon la difficulté</td><td class="n">jamais — le barème appartient à la carte</td></tr>
+        <tr><td>Progression « question N »</td><td class="n">non</td><td class="y">affichée</td></tr>
+        <tr><td>Équipe active</td><td class="y">celle du tour de rôle</td><td class="y">celle de la carte — mode solo</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span> Comment le gain de la carte est calculé</h2>
+  <p class="lede">Une carte vaut un nombre de points fixé par ses étoiles. Ce qu'elle rapporte
+  vraiment dépend de la part des questions réussies pendant la mini-manche.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Étape</th><th>Valeur</th></tr></thead>
+      <tbody>
+        <tr><td>Valeur de la carte, d'après ses étoiles</td><td class="num">★ = 1 · ★★ = 3 · ★★★ = 5</td></tr>
+        <tr><td>Part réussie de la mini-manche</td><td class="num">bonnes réponses ÷ questions posées</td></tr>
+        <tr><td><strong>Gain crédité</strong></td><td class="num"><strong>valeur × bonnes réponses ÷ questions posées</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Exemple : une carte à trois étoiles vaut 5 points. Sur 5 questions posées, 3 bonnes réponses
+  donnent <strong>5 × 3 ÷ 5 = 3 points</strong>.</p>
+
+  <div class="call">
+    <div class="call-t">Le ratio porte sur les questions, pas sur les étoiles</div>
+    <p>Les étoiles fixent ce que <em>vaut</em> la carte ; la proportion, elle, se mesure en
+    questions réussies. Une équipe qui répond à tout obtient la valeur pleine, une équipe qui
+    répond à la moitié en obtient la moitié.</p>
+    <p>La multiplication est faite <strong>avant</strong> la division, volontairement : diviser
+    d'abord ramènerait le résultat à zéro dès que le nombre de questions dépasse la valeur de la
+    carte — une carte à 5 points sur 8 questions ne rapporterait plus rien.</p>
+  </div>
+
+  <div class="call ok">
+    <div class="call-t">Le calcul du serveur est juste</div>
+    <p>Vérifié dans le moteur : c'est bien cette formule qui crédite l'équipe. Le défaut décrit
+    ci-dessous ne porte que sur <strong>l'aperçu affiché à l'animateur</strong> — le score, lui,
+    est correct.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span> Côté animateur — un montant faux à corriger</h2>
+  <p class="lede">L'écran de l'animateur ne montre pas non plus de points sur la question. En
+  revanche, le bouton qui attribue le gain de la carte affiche aujourd'hui le <strong>montant
+  plein</strong>, alors que le serveur en crédite une fraction.</p>
+
+  <div class="tv">
+    <div class="tv-cap"><span>/anim — carte RAFALE</span><span class="st">le montant est faux</span></div>
+    <div class="anim">
+      <div class="anim-card">
+        <div class="anim-meta">
+          <span class="anim-chip">🌍 Géographie</span>
+          <span class="anim-chip">★★</span>
+          <span class="anim-chip">question 4</span>
+        </div>
+        <div class="anim-q">Quel fleuve traverse Budapest ?</div>
+        <div class="anim-a">Réponse attendue : le Danube</div>
+        <div class="anim-btn">
+          <span class="anim-b v">Bonne réponse</span>
+          <span class="anim-b i">Passer</span>
+        </div>
+      </div>
+      <div class="anim-card" style="margin-top:12px">
+        <div class="anim-meta"><span class="anim-chip warnc">Attribuer 5 pts — devrait afficher 3 pts</span></div>
+        <div style="font-size:.85rem;color:#6b7280">Carte à trois étoiles (5 points), 3 bonnes
+        réponses sur 5 questions posées → 5 × 3 ÷ 5 = <strong>3 points</strong> crédités, pas 5.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="call no">
+    <div class="call-t">Défaut déjà corrigé une fois, reproduit ailleurs</div>
+    <p>Le calcul au prorata est bien branché côté serveur ; c'est l'affichage qui ne le suit pas,
+    parce que la condition qui déclenche l'aperçu correct est <strong>écrite en dur pour le type
+    MEMORY</strong>. RAFALE a reçu le même barème sans être ajouté à cette condition.</p>
+    <p>Le même écart avait déjà été corrigé pour MEMORY, avec ce constat inscrit dans le code :
+    <em>« sans ce branchement, l'animateur voit un montant différent de celui réellement
+    attribué »</em>. Il faut tester la <strong>règle de barème</strong> de la carte, pas son type —
+    sinon le défaut reviendra au prochain type imbriqué.</p>
+  </div>
+</section>
+
+<div class="foot">
+  Maquette produite pour validation — retour QUALIF v9.0.0.4, point 5<br>
+  Sert de référence à test-writer pour dériver les scénarios, et à QA pour valider la livraison<br>
+  Aucune ligne de code écrite à ce stade
+</div>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>
