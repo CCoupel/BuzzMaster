@@ -119,6 +119,21 @@ function roleOf(light) {
   return { role: 'general' }
 }
 
+// #213 (revue code-reviewer, v10.0.0 Batch 3) — la `value` du <select> de
+// rôle ne peut PAS être le nom d'équipe brut : une équipe littéralement
+// nommée "general" produirait deux <option value="general"> indiscernables
+// pour `onChange` (e.target.value vaudrait "general" quelle que soit celle
+// cliquée, rendant cette équipe impossible à choisir). Les valeurs d'équipe
+// sont donc préfixées — pendant côté React du garde-fou déjà posé côté
+// backend (`ambiance.go`, `seen[lighting.ZoneGeneral]` : « a team literally
+// named "general" must never shadow it »). Le préfixe ne fuit jamais dans
+// {role, team} envoyé au serveur — seule la value DOM en porte trace.
+const ROLE_SELECT_GENERAL = 'general'
+const TEAM_SELECT_PREFIX = 'team:'
+const roleSelectValue = (role) => (role.role === 'team' ? TEAM_SELECT_PREFIX + role.team : ROLE_SELECT_GENERAL)
+const roleFromSelectValue = (value) =>
+  value.startsWith(TEAM_SELECT_PREFIX) ? { role: 'team', team: value.slice(TEAM_SELECT_PREFIX.length) } : { role: 'general' }
+
 export default function AmbiancePage() {
   const { teams } = useGame()
   const { status, refresh: refreshStatus } = useLightingStatus()
@@ -827,20 +842,19 @@ export default function AmbiancePage() {
                         )}
                         <select
                           className="ambiance-light-role"
-                          value={roleFor(row.name).role === 'team' ? roleFor(row.name).team : 'general'}
+                          value={roleSelectValue(roleFor(row.name))}
                           disabled={blocked}
                           onChange={e => {
-                            const value = e.target.value
                             setRoleOverrides(prev => ({
                               ...prev,
-                              [row.name]: value === 'general' ? { role: 'general' } : { role: 'team', team: value },
+                              [row.name]: roleFromSelectValue(e.target.value),
                             }))
                           }}
                           aria-label={`Rôle de ${row.name}`}
                         >
-                          <option value="general">Éclairage général</option>
+                          <option value={ROLE_SELECT_GENERAL}>Éclairage général</option>
                           {teamNames.map(name => (
-                            <option key={name} value={name}>Équipe — {name}</option>
+                            <option key={name} value={TEAM_SELECT_PREFIX + name}>Équipe — {name}</option>
                           ))}
                         </select>
                       </span>

@@ -137,6 +137,29 @@ describe('AmbiancePage — #213 rôle par ampoule', () => {
     expect(optionLabels).toEqual(['Éclairage général', 'Équipe — Rouges', 'Équipe — Bleus'])
   })
 
+  it('une équipe littéralement nommée "general" reste sélectionnable — pas de collision de value (revue code-reviewer)', async () => {
+    // Sans le préfixe de value (roleSelectValue/TEAM_SELECT_PREFIX), les deux
+    // options porteraient value="general" et onChange ne pourrait jamais
+    // distinguer laquelle a été cliquée — pendant côté React du garde-fou
+    // déjà posé côté backend (ambiance.go, "a team literally named general
+    // must never shadow it").
+    useGame.mockReturnValue({ teams: { general: { COLOR: [1, 2, 3], COLOR_NAME: 'rouge', SCORE: 0 } } })
+    const server = makeServer({ lighting: CONFIGURED, lights: INVENTORY })
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+
+    const select = screen.getByLabelText('Rôle de Salle gauche')
+    const values = Array.from(select.options).map(o => o.value)
+    expect(values).toEqual(['general', 'team:general']) // distincts, jamais deux fois "general"
+
+    fireEvent.change(select, { target: { value: 'team:general' } })
+    fireEvent.click(screen.getByText('Enregistrer'))
+    await screen.findByText('Ampoules enregistrées.')
+
+    const saves = callsTo(server, 'POST', '/config.json')
+    expect(saves[0].body.lighting.lights).toContainEqual({ name: 'Salle gauche', role: 'team', team: 'general' })
+  })
+
   it('sans équipe configurée, seule « Éclairage général » est proposée', async () => {
     useGame.mockReturnValue({ teams: {} })
     makeServer({ lighting: CONFIGURED, lights: INVENTORY })
@@ -159,7 +182,7 @@ describe('AmbiancePage — #213 rôle par ampoule', () => {
     // déjà comme ligne « introuvable » dès la config seule chargée.
     await screen.findByText('Salle droite')
 
-    expect(screen.getByLabelText('Rôle de Salle gauche').value).toBe('Rouges')
+    expect(screen.getByLabelText('Rôle de Salle gauche').value).toBe('team:Rouges')
     expect(screen.getByLabelText('Rôle de Salle droite').value).toBe('general')
   })
 
@@ -168,7 +191,7 @@ describe('AmbiancePage — #213 rôle par ampoule', () => {
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
 
-    fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'Rouges' } })
+    fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
     fireEvent.click(screen.getByText('Enregistrer'))
 
     await screen.findByText('Ampoules enregistrées.')
