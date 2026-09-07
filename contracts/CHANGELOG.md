@@ -2,6 +2,37 @@
 
 ---
 
+## [20260907d] — Éclairage : sélecteur tri-état ON | AUTO | OFF (#208) — design arrêté
+
+> Troisième et dernière formulation du §10.1. **La sémantique de tenue de l'entrée `[20260907c]`
+> est conservée** : ce n'est pas un nouveau renversement, mais la mise en forme qui lui manquait —
+> l'état « relâché » devient une **position nommée et visible** au lieu d'être l'absence des autres.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — les bascules « All ON » / « All OFF » deviennent un
+  **sélecteur unique à trois positions `ON | AUTO | OFF`** pour l'éclairage général, exclusives par
+  construction. **AUTO est la position normale** et formalise « l'éclairage suit l'état du jeu ».
+  **Flash** reste une **bascule séparée**.
+- **[NEW]** `contracts/lighting.md` §10.1.1 — **les deux mécanismes ne coexistent pas** : le
+  sélecteur **remplace** l'écrasement automatique par le prochain événement de jeu, il ne s'y
+  ajoute pas. En ON ou OFF le mode tient, y compris pendant une partie ; **AUTO est le seul chemin
+  de retour** vers l'éclairage piloté par le jeu, par re-dérivation depuis l'état vivant (même code
+  que le §10.3). Motif : un événement qui reprendrait la main sans bouger le sélecteur le ferait
+  **mentir**, et rendrait **ON** et **AUTO** indiscernables.
+- **[NEW]** `contracts/lighting.md` §10.1.2 — **Flash prime sur le sélecteur tant qu'il est actif**
+  (sinon un Flash en position OFF ne produirait rien de visible), **sans déplacer le sélecteur** :
+  c'est une couche de diagnostic transitoire, pas un quatrième mode. À son extinction, l'éclairage
+  revient à ce que dit le sélecteur.
+- **[CHANGED]** `contracts/lighting.md` §10.3 — vocabulaire aligné : au retour du pont, c'est **le
+  mode courant** qui est réappliqué (ON, OFF, ou la scène de jeu si AUTO).
+- **[CHANGED]** `contracts/lighting.md` §10.1 — inscrit explicitement que la **table de scènes
+  câblée du §8 reste en périmètre** : la « seconde phase » évoquée par l'utilisateur désigne
+  l'**éditeur** configurable (#210, v10.1), pas la table livrée par #205. Question close au GATE.
+
+Position par défaut **AUTO** au démarrage, mode **non persisté**, état **serveur** (jamais
+navigateur). **Aucun BREAKING**, aucun code écrit à ce stade.
+
+---
+
 ## [20260907c] — Éclairage : les commandes admin sont des overrides à état, pas des gestes (#208)
 
 > **Cette entrée renverse la décision de tenue prise le matin même** (entrée `[20260907]`, point
