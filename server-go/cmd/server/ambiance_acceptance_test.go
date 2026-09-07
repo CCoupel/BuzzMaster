@@ -117,27 +117,38 @@ func TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing(t *tes
 
 // TestCA2_StartAmbianceLifecycleGuard_IsPresentInSource is a lightweight,
 // text-anchored guard against the specific regression CA2 cares about: the
-// `if a.lighting != nil { go a.lighting.Start(...) }` gate in (*App).start()
-// being accidentally removed or turned unconditional in a future edit. It
-// does not replace TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing
+// `if w := a.ambiance(); w != nil { go w.Start(...) }` gate being
+// accidentally removed or turned unconditional in a future edit. It does
+// not replace TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing
 // above (which proves the ACTUAL cost is zero for #205's hardcoded
 // unconfigured case) — it guards the OTHER half of CA2's guarantee: that the
 // goroutine launch itself stays conditional, which matters once #207 makes
 // ambianceIsConfigured() sometimes true.
-var tw205LightingGuardRE = regexp.MustCompile(`if\s+w\s*:=\s*a\.ambiance\(\);\s*w\s*!=\s*nil\s*\{[^}]*go\s+w\.Start\(`)
+//
+// Anchored on ambiance.go, not main.go: the QUALIF v10.0.0.10 round-2 fix
+// (bug 2 — "pont toujours injoignable après relance", the poll-free
+// architecture never attempting a first contact at startup) extracted this
+// exact gate out of (*App).start() into the named, independently testable
+// (*App).startAmbianceWriter() (ambiance.go) — a NotifyState() kick was
+// added right next to it, and a dedicated App-level test
+// (TestDevQualifRound2Bug2_StartupAloneReachesBridgeWithoutAnyGameEvent,
+// hue_startup_contact_qualif_dev_test.go) now exercises the REAL function
+// end to end against a real *hue.Driver. The gate itself — conditional
+// goroutine launch — is unchanged; only which file it lives in changed.
+var tw205LightingGuardRE = regexp.MustCompile(`if\s+w\s*!=\s*nil\s*\{[^}]*go\s+w\.Start\(`)
 
 func TestCA2_StartAmbianceLifecycleGuard_IsPresentInSource(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller(0) a échoué")
 	}
-	path := filepath.Join(filepath.Dir(thisFile), "main.go")
+	path := filepath.Join(filepath.Dir(thisFile), "ambiance.go")
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("lecture de %s : %v", path, err)
 	}
 	if !tw205LightingGuardRE.Match(content) {
-		t.Fatal("CA2 : la garde conditionnelle 'if a.lighting != nil { go a.lighting.Start(...) }' est introuvable dans main.go — " +
+		t.Fatal("CA2 : la garde conditionnelle 'if w != nil { go w.Start(...) }' est introuvable dans ambiance.go ((*App).startAmbianceWriter) — " +
 			"le lancement de la goroutine d'ambiance doit rester conditionnel, jamais inconditionnel")
 	}
 }

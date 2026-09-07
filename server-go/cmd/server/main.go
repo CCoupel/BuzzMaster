@@ -1062,11 +1062,10 @@ func (a *App) start() error {
 	go a.ackManager.Start(a.ctx)
 
 	// Ambiance lighting writer (#205): same lifecycle as AckManager, stopped
-	// by a.cancelCtx() in stop(). Not configured ⇒ nil ⇒ NO goroutine at all
-	// (contract §4.5 — not even one that returns at once).
-	if w := a.ambiance(); w != nil {
-		go w.Start(a.ctx)
-	}
+	// by a.cancelCtx() in stop(). See startAmbianceWriter's own doc comment
+	// for the QUALIF round-2 bugfix this now carries (bug 2 — "pont
+	// toujours injoignable après relance").
+	a.startAmbianceWriter()
 
 	// Start UDP broadcaster — this only opens the outbound send socket, it
 	// does not announce anything yet (see BroadcasterManager.Start below,

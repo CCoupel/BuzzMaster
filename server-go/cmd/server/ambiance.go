@@ -186,6 +186,38 @@ func (a *App) setupAmbiance() {
 	a.lightingWriter.Store(a.newAmbianceWriter(d))
 }
 
+// startAmbianceWriter starts the writer goroutine built by setupAmbiance
+// (called from (*App).start(), same lifecycle as AckManager — stopped by
+// a.cancelCtx() in stop()). Not configured ⇒ a.ambiance() is nil ⇒ this
+// launches nothing (contract lighting.md §4.3/§4.5 — not even a goroutine
+// that returns at once).
+//
+// Bugfix (QUALIF v10.0.0.10, round 2, bug 2 — "pont toujours injoignable
+// après relance", persisting even with a FRESH association and a truly
+// reachable bridge): this architecture is deliberately poll-free — the
+// writer only ever contacts the bridge in reaction to a NotifyState()/
+// NotifyPulse() from a GAME event (contract §4). reconfigureAmbiance()
+// below already calls w.NotifyState() once right after building a writer
+// (the config-update/register path), for exactly this reason — but nothing
+// equivalent ever ran on the STARTUP path: setupAmbiance() only builds and
+// stores the driver+writer, it never kicks them. A server that starts with
+// a valid, reachable, PERSISTED association therefore never attempted a
+// single real contact until some unrelated game event happened to fire
+// one: GET /api/lighting/status does no I/O by design (contract §7), so
+// the admin screen kept showing the driver's untouched zero-value status —
+// StateUnreachable, reason "not contacted yet" — indistinguishable from a
+// genuinely dead bridge. The fix is the same one-line kick reconfigureAmbiance
+// already had: NotifyState() is nil-safe and a no-op when lighting is not
+// configured (contract §4.3), so it needs no `if` guard, matching every
+// other Notify* call site in the registry.
+func (a *App) startAmbianceWriter() {
+	w := a.ambiance()
+	if w != nil {
+		go w.Start(a.ctx)
+	}
+	w.NotifyState()
+}
+
 // reconfigureAmbiance is called from OnConfigUpdate (POST /config.json,
 // /api/lighting/register): it rebuilds the driver from the new configuration
 // and hot-swaps it into the writer (lighting.Writer.SetDriver), starting the
