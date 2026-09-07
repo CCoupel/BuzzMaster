@@ -1,10 +1,13 @@
 # Procédure de Test — Éclairage d'ambiance Hue : affectation par équipe (#213) et conduite manuelle (#208)
 
 **Version** : 10.0.0.x (milestone v10.0.0, Batch 2 — à exécuter une fois ce batch livré en QUALIF)
-**Date** : 2026-09-07
-**Issues** : #213 (affectation équipe → ampoule, dégradation), #208 (conduite manuelle `/anim`,
-restitution d'état), correctif d'asymétrie ENTRACTE regroupé dans T2.1
-**Contrats** : `contracts/lighting.md`, `contracts/hue-bridge.md`
+**Date** : 2026-09-07 (révision : conduite manuelle passée d'un mécanisme d'écrasement par le jeu à un
+sélecteur tri-état `ON | AUTO | OFF` tenant indéfiniment, déplacé de `/anim` vers `/admin/ambiance`)
+**Issues** : #213 (affectation équipe → ampoule, dégradation), #208 (conduite manuelle sur
+`/admin/ambiance` — sélecteur ON/AUTO/OFF + bascule Flash, restitution d'état), correctif d'asymétrie
+ENTRACTE regroupé dans T2.1
+**Contrats** : `contracts/lighting.md` §10 (SHA `41825c83` — design en vigueur, tenue indéfinie, **pas**
+d'annulation automatique par le jeu), `contracts/hue-bridge.md`
 **Maquettes** : `docs/mockups/lighting-hue-config-207.html` (page existante), et les maquettes #213/#208
 produites en parallèle de cette procédure (`docs/mockups/lighting-team-assignment-213.html`,
 `docs/mockups/lighting-priority-208.md`) — si les libellés d'écran définitifs diffèrent de ceux utilisés
@@ -34,9 +37,12 @@ procédure couvre.
       - 2 ampoules affectées chacune à une **équipe différente** (ex. "Rouges", "Bleus")
       - 1 ampoule supplémentaire, gardée **non affectée**, pour les scénarios de dégradation
 - [ ] Une partie configurée avec **au moins 3 équipes** (pour dépasser volontairement le nombre
-      d'ampoules affectées au scénario 6) et des buzzers physiques opérationnels pour au moins 2 équipes
-- [ ] Accès à la page **Ambiance** de l'admin (colonne d'affectation équipe → ampoule) et à l'interface
-      animateur `/anim`
+      d'ampoules affectées au scénario de dégradation) et des buzzers physiques opérationnels pour au
+      moins 2 équipes
+- [ ] Accès à la page **Ambiance** de l'admin (`/admin/ambiance`) : colonne d'affectation équipe →
+      ampoule, sélecteur d'éclairage général **ON | AUTO | OFF**, bascule **Flash**
+- [ ] Pouvoir ouvrir cette page **Ambiance depuis deux postes ou navigateurs différents** en même temps
+      (scénario badge multi-poste)
 - [ ] Une question au moins de type **ENTRACTE** programmée dans le quiz, en plus d'un accès à l'action
       manuelle ENTRACTE existante (bouton dans `/admin`)
 - [ ] Pouvoir couper l'alimentation du serveur BuzzControl à la demande (Ctrl+C, ou arrêt du service)
@@ -109,7 +115,7 @@ les LED des buzzers.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 4 | Lancer la question ENTRACTE programmée préparée dans le quiz | Au **même instant** où la carte devient active (fin du décompte, pas un événement ultérieur — voir Scénario 11), la salle passe en scène ENTRACTE | | |
+| 4 | Lancer la question ENTRACTE programmée préparée dans le quiz | Au **même instant** où la carte devient active (fin du décompte, pas un événement ultérieur — voir Scénario 14), la salle passe en scène ENTRACTE | | |
 | 5 | Observer les LED des buzzers | **Tous les buzzers s'éteignent**, identique à 3a — c'est le point corrigé par T2.1 | | |
 | 6 | Passer à la question suivante | Sortie d'ENTRACTE, retour normal | | |
 
@@ -121,27 +127,118 @@ programmée, ou l'inverse.
 
 ---
 
-## Scénario 4 — Priorité conduite manuelle : écrasement immédiat par le prochain événement
+## Scénario 4 — Tenue du sélecteur (ON/OFF) pendant une partie en cours
 
-**Objectif** : Vérifier la décision GATE #2 — une commande manuelle depuis `/anim` (Noir / Plein feu /
-Flash) **ne tient pas** jusqu'à la prochaine transition volontaire : le premier événement de jeu qui
-survient, même mineur, reprend la main immédiatement.
+**Objectif** : Vérifier la règle en vigueur (`contracts/lighting.md` §10.1.1, SHA `41825c83`) : en
+position **ON** ou **OFF**, le mode s'impose à l'éclairage et **tient indéfiniment** — aucun événement
+de jeu ne le recouvre, même en pleine partie. Le design intermédiaire d'écrasement automatique (un
+instant en vigueur puis explicitement annulé le même jour) **n'a jamais été livré** : ce scénario
+vérifie qu'il n'a pas survécu par erreur dans le code.
+
+### 4a — ON tient
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Partie en cours, question STARTED | Scène RUNNING (bleu neutre) au mur | | |
-| 2 | Depuis `/anim`, déclencher une commande manuelle d'éclairage (ex. « Plein feu » ou « Flash ») | La salle applique **immédiatement** la commande manuelle | | |
-| 3 | **Sans annuler la commande manuelle**, provoquer un événement de jeu même mineur (ex. un buzzer buzze) | La salle **quitte immédiatement** la commande manuelle et affiche la scène correspondant au nouvel événement (ex. couleur de l'équipe qui a buzzé) — **aucune tenue** de la commande manuelle | | |
-| 4 | Répéter avec la commande « Noir » | Même résultat : le prochain événement de jeu écrase le noir immédiatement, quel qu'il soit | | |
+| 1 | Partie en cours, question STARTED (scène RUNNING au mur, bleu neutre) | Confirmé visuellement | | |
+| 2 | Sur `/admin/ambiance`, placer le sélecteur d'éclairage général sur **ON** | Toutes les ampoules pilotées (general + équipes) passent **immédiatement** à pleine intensité, blanc neutre | | |
+| 3 | Faire buzzer un joueur | **Aucun changement au mur** : les ampoules restent en ON (blanc plein feu) | | |
+| 4 | Enchaîner plusieurs événements de jeu sans toucher au sélecteur (reveal, question suivante, score attribué) | Le mur reste figé sur ON à chaque étape ; le sélecteur affiché à l'écran reste sur **ON** | | |
+
+### 4b — OFF tient
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 5 | Placer le sélecteur sur **OFF** | Toutes les ampoules pilotées s'éteignent immédiatement | | |
+| 6 | Faire buzzer un joueur, marquer un point, passer à la question suivante | Les ampoules restent éteintes à chaque étape ; le sélecteur reste affiché sur **OFF** | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
-> Si la commande manuelle "tient" au-delà du prochain événement (comportement de l'option non
-> retenue au GATE), c'est un écart au choix explicite de l'utilisateur — à signaler, pas à valider.
+⚠️ Un FAIL ici (le sélecteur revient tout seul sur AUTO, ou le mur suit un événement de jeu) signale
+que le mécanisme d'annulation automatique abandonné a été implémenté par erreur — c'est le défaut le
+plus probable si l'implémentation s'est appuyée sur un document périmé.
 
 ---
 
-## Scénario 5 — Affectation équipe → ampoule et cohérence de couleur salle/buzzers
+## Scénario 5 — Relâche explicite (retour sur AUTO) — pendant partie et hors partie
+
+**Objectif** : Vérifier que **seul** un geste manuel sur AUTO relâche un mode ON/OFF, que la
+re-dérivation est immédiate et reflète l'état de jeu **actuel** (pas l'état d'avant l'activation du
+mode), et que AUTO hors partie ne plonge jamais la salle dans le noir.
+
+### 5a — Retour AUTO pendant une partie
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Partie en cours, sélecteur sur **ON** (mur en blanc plein feu) | Confirmé | | |
+| 2 | Sans toucher au sélecteur, faire buzzer un joueur de l'équipe "Rouges" (le mur ne bouge pas, cf. Scénario 4) | Mur toujours en blanc plein feu | | |
+| 3 | Ramener le sélecteur sur **AUTO** | Le mur bascule **immédiatement** sur la scène correspondant à l'état de jeu **actuel** (couleur de l'équipe qui vient de buzzer) — **pas** la scène qui existait avant l'activation de ON | | |
+
+### 5b — Retour AUTO hors partie (jamais de noir)
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 4 | Aucune partie en cours, sélecteur sur **OFF** (mur éteint) | Confirmé éteint | | |
+| 5 | Ramener le sélecteur sur **AUTO** | Le mur revient en **blanc chaud praticable** (scène IDLE, `contracts/lighting.md` §8) — **jamais noir**, alors qu'aucune partie ne tourne | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 6 — Flash : bascule prioritaire et indépendante du sélecteur
+
+**Objectif** : Vérifier que Flash prime sur la position du sélecteur (y compris OFF) sans jamais la
+déplacer, et qu'à son extinction l'éclairage retourne exactement à ce que dit le sélecteur.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Placer le sélecteur sur **OFF** (ampoules éteintes) | Confirmé éteint | | |
+| 2 | Activer la bascule **Flash** | Les ampoules pilotées **clignotent visiblement**, malgré le OFF actif — Flash n'est pas bloqué par un OFF | | |
+| 3 | Observer le sélecteur pendant que Flash clignote | Le sélecteur **affiche toujours OFF** — Flash ne le déplace pas, c'est une couche de diagnostic séparée | | |
+| 4 | Désactiver Flash | Les ampoules reviennent **exactement** à l'état du sélecteur — ici éteintes (OFF) | | |
+| 5 | Placer le sélecteur sur **AUTO**, en partie en cours, puis activer Flash | Flash clignote par-dessus la scène de jeu courante | | |
+| 6 | Désactiver Flash | Retour à la scène de jeu **re-dérivée** depuis l'état vivant (pas une scène figée) | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 7 — Non-persistance du mode au redémarrage du serveur
+
+**Objectif** : Vérifier que le mode (ON/AUTO/OFF, Flash) est un état **serveur en mémoire uniquement** —
+jamais écrit sur disque, jamais restauré au redémarrage. Distinct du Scénario 1 (extinction physique à
+l'arrêt) : ici on vérifie la position du sélecteur **après** un redémarrage, pas ce qui se passe au
+moment de l'arrêt.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Placer le sélecteur sur **OFF** (ou ON) | Ampoules dans l'état correspondant | | |
+| 2 | Arrêter le serveur (méthode normale du projet) puis le relancer | Redémarrage normal | | |
+| 3 | Rouvrir la page Ambiance après redémarrage | Le sélecteur affiche **AUTO** (position par défaut) — le mode OFF/ON précédent n'a **pas** été restauré | | |
+| 4 | Observer le mur | L'éclairage suit l'état de jeu courant (ou la scène IDLE si aucune partie), pas l'état forcé d'avant l'arrêt | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 8 — Badge d'état : lisibilité et cohérence entre postes
+
+**Objectif** : Vérifier que le mode courant (et l'état de Flash) est bien un état **serveur**, visible
+correctement sur l'écran, y compris depuis un second poste, et qu'aucun onglet fermé ne l'affecte.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir la page `/admin/ambiance` sur un premier poste/onglet | Sélecteur affiché sur la position réelle (ex. AUTO) | | |
+| 2 | Ouvrir la même page sur un **second poste ou navigateur** | Affiche **la même position** que le premier poste | | |
+| 3 | Depuis le premier poste, placer le sélecteur sur **ON** | Le premier poste reflète ON immédiatement | | |
+| 4 | Sans rien faire sur le second poste, patienter quelques secondes | Le second poste finit par afficher **ON** lui aussi — c'est un état serveur, pas un état de navigateur | | |
+| 5 | Fermer l'onglet du premier poste | Le mode reste **ON** — fermer un onglet n'a aucun effet sur le mode en cours (vérifiable en rouvrant la page Ambiance ailleurs) | | |
+| 6 | Activer Flash depuis un poste | L'indicateur Flash reflète l'état actif sur tous les postes qui ont la page ouverte | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+## Scénario 9 — Affectation équipe → ampoule et cohérence de couleur salle/buzzers
 
 **Objectif** : Vérifier que chaque équipe affectée à une ampoule reçoit **exactement** la même couleur
 au mur que sur ses buzzers (règle de réemploi strict de la palette, aucune seconde palette).
@@ -158,7 +255,7 @@ au mur que sur ses buzzers (règle de réemploi strict de la palette, aucune sec
 
 ---
 
-## Scénario 6 — Dégradation : moins d'ampoules que d'équipes
+## Scénario 10 — Dégradation : moins d'ampoules que d'équipes
 
 **Objectif** : Vérifier qu'une partie à 3 équipes ou plus, avec seulement 2 ampoules affectées, ne
 plante rien et ne bloque aucune ampoule.
@@ -173,7 +270,7 @@ plante rien et ne bloque aucune ampoule.
 
 ---
 
-## Scénario 7 — Dégradation : équipe sans ampoule affectée
+## Scénario 11 — Dégradation : équipe sans ampoule affectée
 
 **Objectif** : Cas particulier du précédent, isolé pour vérifier spécifiquement qu'une équipe non
 affectée n'empêche pas la partie de se dérouler normalement.
@@ -187,7 +284,7 @@ affectée n'empêche pas la partie de se dérouler normalement.
 
 ---
 
-## Scénario 8 — Dégradation : aucune ampoule affectée → retour au comportement "tout en general"
+## Scénario 12 — Dégradation : aucune ampoule affectée → retour au comportement "tout en general"
 
 **Objectif** : Vérifier le cas de repli total : si aucune équipe n'a d'ampoule affectée (configuration
 `role: "general"` uniquement, comme avant #213), le comportement doit être identique à celui livré par
@@ -202,44 +299,38 @@ affectée n'empêche pas la partie de se dérouler normalement.
 
 ---
 
-## Scénario 9 — Conduite manuelle depuis `/anim` (Noir / Plein feu / Flash)
+## Scénario 13 — Resynchronisation au retour du pont Hue
 
-**Objectif** : Vérifier chaque commande manuelle isolément, en dehors de tout événement de jeu qui
-viendrait la reprendre (partie en pause générale, ou entre deux questions).
+**Objectif** : Vérifier la décision GATE §3 (`contracts/lighting.md` §10.3) — une perte de connexion au
+pont en cours de partie ne touche pas à l'éclairage existant (il reste figé), mais **au retour du
+pont**, l'éclairage doit se recalculer sur **ce que l'éclairage doit montrer maintenant** : la scène de
+jeu courante en position AUTO, ou **le mode ON/OFF réappliqué tel quel** s'il était engagé — jamais un
+état neutre arbitraire.
 
-| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
-|-------|--------|-----------------|----------------|------|
-| 1 | Depuis `/anim`, déclencher **Noir** | Toutes les ampoules configurées (general + équipes) s'éteignent | | |
-| 2 | Déclencher **Plein feu** | Toutes les ampoules s'allument à pleine intensité (couleur neutre/blanche — vérifier ce que l'écran désigne comme "plein feu") | | |
-| 3 | Déclencher **Flash** | Un flash bref est visible sur les ampoules configurées, puis retour automatique à l'état précédent (pas de commande manuelle persistante après le flash) | | |
-| 4 | Vérifier qu'aucune de ces 3 commandes ne nécessite de rafraîchir la page ou de relancer quoi que ce soit côté serveur | Effet immédiat à chaque clic | | |
-
-**Verdict** : [ ] PASS  [ ] FAIL
-
-*(Les libellés exacts des 3 boutons dépendent de l'écran livré par #208 — suivre les libellés réels de
-l'interface `/anim` si différents de "Noir"/"Plein feu"/"Flash".)*
-
----
-
-## Scénario 10 — Resynchronisation au retour du pont Hue
-
-**Objectif** : Vérifier la décision GATE §3 — une perte de connexion au pont en cours de partie ne
-touche pas à l'éclairage existant (il reste figé), mais **au retour du pont**, l'éclairage doit se
-recalculer sur l'état de jeu **courant**, pas revenir à un état neutre arbitraire.
+### 13a — Retour du pont en position AUTO
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Partie en cours, scène visible au mur (ex. couleur d'une équipe active) | Confirmé | | |
+| 1 | Partie en cours, sélecteur sur **AUTO**, scène visible au mur (ex. couleur d'une équipe active) | Confirmé | | |
 | 2 | Couper l'accès réseau du pont Hue (débrancher le pont, ou couper son port réseau/Wi-Fi) | Le badge d'état sur la page Ambiance passe à **injoignable** (orange) | | |
 | 3 | Faire progresser le jeu pendant la coupure (buzz, question suivante, changement d'équipe active) | Le jeu continue normalement, sans latence perceptible ; les ampoules **restent figées** sur la dernière scène reçue (comportement attendu — pas de tentative d'écriture) | | |
 | 4 | Rebrancher/reconnecter le pont | Le badge repasse à **ok** | | |
 | 5 | Observer les ampoules **sans déclencher volontairement de nouvel événement** | Elles se **recalculent et s'appliquent** automatiquement pour refléter l'état de jeu **actuel** (celui atteint à l'étape 3), pas un état neutre ni la scène d'avant la coupure | | |
 
+### 13b — Retour du pont avec un mode ON/OFF engagé
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 6 | Placer le sélecteur sur **OFF**, puis couper l'accès réseau du pont | Badge **injoignable** | | |
+| 7 | Faire progresser le jeu pendant la coupure | Le jeu continue normalement ; les ampoules **restent dans leur dernier état connu** (ici éteintes, avant même la coupure) | | |
+| 8 | Rebrancher/reconnecter le pont | Badge repasse à **ok** | | |
+| 9 | Observer les ampoules | Elles reviennent en **OFF** (le mode réappliqué), **pas** la scène de jeu courante — le sélecteur affiche toujours OFF | | |
+
 **Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
-## Scénario 11 — Notification de fin de décompte (ENTRACTE programmée sans délai)
+## Scénario 14 — Notification de fin de décompte (ENTRACTE programmée sans délai)
 
 **Objectif** : Vérifier le correctif R1 : sur une ENTRACTE programmée, la salle doit passer en scène
 ENTRACTE **dès la fin du décompte de lancement de la carte**, pas seulement au prochain événement sans
@@ -258,10 +349,11 @@ rapport.
 
 ---
 
-## Scénario 12 — Parcours complet des scènes (smoke test visuel)
+## Scénario 15 — Parcours complet des scènes (smoke test visuel)
 
-**Objectif** : Dérouler une partie normale de bout en bout et confirmer visuellement que chaque scène
-de la table de scènes (`contracts/lighting.md` §8) apparaît au bon moment sur l'ampoule `general`.
+**Objectif** : Dérouler une partie normale de bout en bout, sélecteur sur **AUTO**, et confirmer
+visuellement que chaque scène de la table de scènes (`contracts/lighting.md` §8) apparaît au bon moment
+sur l'ampoule `general`.
 
 | Étape | Action | Scène attendue (ampoule `general`) | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
@@ -286,10 +378,17 @@ de la table de scènes (`contracts/lighting.md` §8) apparaît au bon moment sur
       validation du milestone, quel que soit le résultat des autres scénarios
 - [ ] Scénario 3 : les deux voies ENTRACTE (manuelle et programmée) produisent le même résultat sur
       buzzers ET ambiance
-- [ ] Scénario 4 : aucune commande manuelle ne "tient" au-delà du prochain événement de jeu
-- [ ] Scénarios 6-8 : aucune situation de dégradation ne bloque, ne plante, ni ne fait disparaître une
+- [ ] Scénario 4 : ON et OFF tiennent **indéfiniment** face aux événements de jeu — aucune annulation
+      automatique ne doit être observée
+- [ ] Scénario 5 : seul un retour manuel sur AUTO relâche un mode, et AUTO hors partie ne doit jamais
+      éteindre la salle
+- [ ] Scénario 6 : Flash prime toujours sur le sélecteur sans jamais le déplacer
+- [ ] Scénario 7 : aucun mode ON/OFF ne survit à un redémarrage du serveur
+- [ ] Scénario 8 : le mode est un état serveur, identique et à jour sur tous les postes ouverts
+- [ ] Scénarios 10-12 : aucune situation de dégradation ne bloque, ne plante, ni ne fait disparaître une
       ampoule qui devrait fonctionner
-- [ ] Scénario 10 : le retour du pont recalcule l'état courant, jamais un état neutre arbitraire
+- [ ] Scénario 13 : le retour du pont réapplique le mode courant (ON/OFF réappliqué tel quel, ou la
+      scène de jeu re-dérivée si AUTO) — jamais un état neutre arbitraire
 - [ ] Aucune régression visible sur les fonctionnalités déjà livrées en QUALIF v10.0.0.6 (#204-#207 :
       découverte, association, sélection/test d'ampoules, indicateur tri-glyphe du menu)
 
