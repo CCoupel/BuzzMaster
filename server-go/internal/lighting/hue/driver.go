@@ -126,7 +126,8 @@ type Config struct {
 // Stats counts what the driver did (diagnostics).
 type Stats struct {
 	Applies     int `json:"applies"`
-	Writes      int `json:"writes"`
+	Writes      int `json:"writes"`       // HTTP PUTs issued: one per light, or one per group write
+	GroupWrites int `json:"group_writes"` // subset of Writes made via a Hue LightGroup (contract §5.8)
 	Skipped     int `json:"skipped_unchanged"`
 	WriteErrors int `json:"write_errors"`
 	Inventories int `json:"inventories"`
@@ -213,10 +214,17 @@ type Driver struct {
 	ambiguous     map[string]bool
 	lightErr      map[string]string
 	lastInventory time.Time
-	appliedState  map[string]applied // by configured name
+	appliedState  map[string]applied  // by configured name
+	groups        map[string]hueGroup // by BuzzMaster group name (contract §5.8) — reconciled in ensureResolved
 	stats         Stats
 	closed        bool
 	invalid       error // set by NewDriver on an invalid configuration
+
+	// disableGroupsForTest is a test-only seam (dev-backend/test-writer, §8
+	// "gain des groupes"): forces every write through the pre-groups
+	// per-light path so a measurement can honestly compare before/after
+	// rather than assume the arithmetic. Never set outside a test.
+	disableGroupsForTest bool
 }
 
 var _ lighting.Driver = (*Driver)(nil)
@@ -281,6 +289,7 @@ func New(cfg Config) (*Driver, error) {
 		ambiguous:    map[string]bool{},
 		lightErr:     map[string]string{},
 		appliedState: map[string]applied{},
+		groups:       map[string]hueGroup{},
 	}
 	if strings.TrimSpace(cfg.BridgeIP) != "" {
 		base, err := bridgeBase(cfg.BridgeIP, cfg.HTTPS)
@@ -304,6 +313,7 @@ func NewDriver(cfg Config) *Driver {
 	return &Driver{
 		cfg: cfg, now: time.Now, status: StateRefused, reason: "invalid config: " + err.Error(), reported: true,
 		resolved: map[string]resolvedLight{}, ambiguous: map[string]bool{}, lightErr: map[string]string{}, appliedState: map[string]applied{},
+		groups:  map[string]hueGroup{},
 		invalid: err,
 	}
 }
@@ -394,7 +404,21 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 	}
 
 	d.mu.Lock()
-	plan := make([]plannedWrite, 0, len(d.cfg.Lights))
+	// Partition configured+resolved lights into CONFIG-level buckets: the
+	// empty key for role=general (→ buzzmaster-general), a team name for
+	// role=team (→ buzzmaster-team-<team>). Every light in one bucket shares
+	// its lc.Role/lc.Team, so zoneFor gives it the exact same ZoneState for
+	// this Apply — hence the exact same desired() value — which is precisely
+	// the precondition a Hue LightGroup write requires (one state for every
+	// member, contract §5.8).
+	type bucketEntry struct {
+		name  string
+		id    string
+		want  applied
+		dirty bool
+	}
+	buckets := map[string][]bucketEntry{}
+	order := make([]string, 0, len(d.cfg.Lights))
 	for _, lc := range d.cfg.Lights {
 		rl, ok := d.resolved[lc.Name]
 		if !ok {
@@ -405,37 +429,134 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 			continue // zone without configured lights or light without zone: non-event
 		}
 		want := desired(zs)
-		if prev, ok := d.appliedState[lc.Name]; ok && prev == want {
-			d.stats.Skipped++
+		key := ""
+		if lc.Role == RoleTeam {
+			key = lc.Team
+		}
+		if _, seen := buckets[key]; !seen {
+			order = append(order, key)
+		}
+		prev, hadPrev := d.appliedState[lc.Name]
+		buckets[key] = append(buckets[key], bucketEntry{name: lc.Name, id: rl.id, want: want, dirty: !hadPrev || prev != want})
+	}
+
+	var plan []plannedWrite
+	var groupPlan []groupPlannedWrite
+	for _, key := range order {
+		entries := buckets[key]
+		anyDirty := false
+		for _, e := range entries {
+			if e.dirty {
+				anyDirty = true
+			}
+		}
+		if !anyDirty {
+			d.stats.Skipped += len(entries)
 			continue
 		}
-		plan = append(plan, plannedWrite{name: lc.Name, id: rl.id, want: want})
+		groupName := groupNameGeneral
+		if key != "" {
+			groupName = groupNameForTeam(key)
+		}
+		g, hasGroup := d.groups[groupName]
+		ids := make([]string, len(entries))
+		for i, e := range entries {
+			ids[i] = e.id
+		}
+		useGroup := !d.disableGroupsForTest && hasGroup && len(entries) >= 2 && sameIDSet(g.members, ids)
+		if useGroup {
+			members := make([]plannedWrite, len(entries))
+			for i, e := range entries {
+				members[i] = plannedWrite{name: e.name, id: e.id, want: e.want}
+			}
+			groupPlan = append(groupPlan, groupPlannedWrite{groupName: groupName, groupID: g.id, want: entries[0].want, members: members})
+			continue
+		}
+		for _, e := range entries {
+			if e.dirty {
+				plan = append(plan, plannedWrite{name: e.name, id: e.id, want: e.want})
+			} else {
+				d.stats.Skipped++
+			}
+		}
 	}
 	d.mu.Unlock()
 
 	c, _ := d.conn()
-	for _, w := range plan {
-		err := c.setState(ctx, w.id, w.want.toV1())
+
+	for _, gw := range groupPlan {
+		err := c.setGroupState(ctx, gw.groupID, gw.want.toV1())
 		d.mu.Lock()
 		d.stats.Writes++
+		d.stats.GroupWrites++
+		d.mu.Unlock()
 		if err != nil {
-			delete(d.appliedState, w.name) // invalidate: retried on the next Apply
+			d.mu.Lock()
 			d.stats.WriteErrors++
 			d.mu.Unlock()
 			cerr := classify(err)
 			if errors.Is(cerr, ErrUnreachable) || errors.Is(cerr, ErrRefused) {
 				return d.fail(cerr) // bridge-level: stop this Apply
 			}
-			d.mu.Lock()
-			d.lightErr[w.name] = err.Error() // per-light (e.g. 201 device off): others continue
-			d.mu.Unlock()
+			// Rule 5 — repli obligatoire: the group is an optimisation, never a
+			// prerequisite. Fall back to writing this batch's members one by one,
+			// through the exact same path (and bookkeeping) as an ordinary
+			// per-light write.
+			d.logf("Hue group %q write failed (%v) — falling back to per-light writes (contract hue-bridge.md §5.8 rule 5)", gw.groupName, err)
+			for _, m := range gw.members {
+				if ferr := d.writeOne(ctx, c, m.name, m.id, m.want); ferr != nil {
+					return d.fail(ferr)
+				}
+			}
 			continue
 		}
-		d.appliedState[w.name] = w.want
-		delete(d.lightErr, w.name)
+		// Success: the bridge just set EVERY member of the group to gw.want in
+		// one command. Set (never merely delete/invalidate) each member's own
+		// per-light appliedState entry to that same value — the §5.8 dedup
+		// trap: if a member's entry were left stale instead, a later Apply
+		// that falls back to writing it individually (composition drifted
+		// below 2, or a future group write fails) would compare its NEW
+		// desired value against that stale entry rather than the light's real
+		// state, and could wrongly skip a write the bulb still needs.
+		d.mu.Lock()
+		for _, m := range gw.members {
+			d.appliedState[m.name] = gw.want
+			delete(d.lightErr, m.name)
+		}
 		d.mu.Unlock()
 	}
+
+	for _, w := range plan {
+		if ferr := d.writeOne(ctx, c, w.name, w.id, w.want); ferr != nil {
+			return d.fail(ferr)
+		}
+	}
 	d.ok()
+	return nil
+}
+
+// writeOne performs one guarded per-light write and updates bookkeeping
+// (stats, appliedState, lightErr) under d.mu. It returns a non-nil error
+// only for a bridge-level failure (unreachable/refused) that must abort the
+// whole Apply; a per-light Hue error (e.g. 201 "device is off") is recorded
+// in lightErr and reported through Status(), never returned (contract §5.5).
+func (d *Driver) writeOne(ctx context.Context, c *client, name, id string, want applied) error {
+	err := c.setState(ctx, id, want.toV1())
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.stats.Writes++
+	if err != nil {
+		delete(d.appliedState, name) // invalidate: retried on the next Apply
+		d.stats.WriteErrors++
+		cerr := classify(err)
+		if errors.Is(cerr, ErrUnreachable) || errors.Is(cerr, ErrRefused) {
+			return cerr
+		}
+		d.lightErr[name] = err.Error()
+		return nil
+	}
+	d.appliedState[name] = want
+	delete(d.lightErr, name)
 	return nil
 }
 
@@ -443,6 +564,15 @@ type plannedWrite struct {
 	name string
 	id   string
 	want applied
+}
+
+// groupPlannedWrite is one Apply-time decision to write via a BuzzMaster
+// LightGroup instead of one PUT per member (contract §5.8).
+type groupPlannedWrite struct {
+	groupName string
+	groupID   string
+	want      applied
+	members   []plannedWrite
 }
 
 // zoneFor picks the ZoneState a light follows (contract §5.2): a team light
@@ -503,6 +633,7 @@ func (d *Driver) ensureResolved(ctx context.Context, force bool) error {
 		}
 	}
 	d.resolve(lights)
+	d.reconcileGroups(ctx, c) // best-effort (contract §5.8 rule 5); never fails ensureResolved
 	return nil
 }
 
@@ -766,6 +897,7 @@ func (d *Driver) Inventory(ctx context.Context) ([]LightInfo, error) {
 		return nil, d.fail(err)
 	}
 	d.resolve(lights)
+	d.reconcileGroups(ctx, c) // contract §5.8 rule 2: a forced Inventory (startup, or right after a config save, #207) is exactly when reconciliation must run
 	d.ok()
 	out := make([]LightInfo, 0, len(lights))
 	for id, l := range lights {
