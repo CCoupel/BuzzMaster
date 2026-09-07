@@ -258,7 +258,12 @@ func TestDevMissingAndAmbiguousNamesNeverFallBack(t *testing.T) {
 	if byName["Absente"].Resolved || byName["Absente"].LastError != "not found" {
 		t.Errorf("Absente must be not found: %+v", byName["Absente"])
 	}
-	if sink.count() != 2 {
+	// 2 permanent lines ("Hue lights resolved: ...", "Hue bridge ok") + 2
+	// TEMPORARY DIAGNOSTIC lines (round 3, QUALIF bug 1 — see diagFmt's own
+	// doc comment in driver.go) fired unconditionally by the "not found"/
+	// "ambiguous" branches of resolve(). Revert this count to 2 once that
+	// instrumentation is removed.
+	if sink.count() != 4 {
 		t.Errorf("log lines: %v", sink.lines)
 	}
 }
