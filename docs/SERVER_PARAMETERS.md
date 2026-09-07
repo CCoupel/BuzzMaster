@@ -329,11 +329,17 @@ Potential improvements for future versions:
 
 **Section**: `lighting` (système)
 
-Configuration du pont Philips Hue et des ampoules pour l'éclairage d'ambiance de la salle. Ces paramètres sont sauvegardés dans `config.json` et **surviven aux redémarrages**.
+Configuration du pont Philips Hue et des ampoules pour l'éclairage d'ambiance de la salle. Ces paramètres sont sauvegardés dans `config.json` et **survivent aux redémarrages**.
 
-**Attention** : La clé API du pont est un **secret** et n'est jamais sauvegardée en clair sur disque. Elle peut être définie via:
-- Variable d'environnement `BUZZCONTROL_HUE_API_KEY` (recommandé en production)
-- Interface web `/admin/ambiance` (saisie lors de l'association du pont)
+**Attention — Sécurité de la clé API** : La clé API du pont est un **secret** (même régime que les clés IA). Elle est :
+- **Persistée** dans `config.json` (champ `lighting.api_key`), mais **masquée** quand retournée par `GET /config.json`
+- **Jamais incluse dans les backups** (car `config.json` vit à la racine `/`, pas dans `data/` archivé)
+- **Jamais loggée** (ni en clair ni tronquée)
+- **Surpassable par variable d'environnement** `BUZZCONTROL_HUE_API_KEY` (sans écriture disque)
+
+La clé peut être définie/modifiée via :
+- Interface web `/admin/ambiance` (saisie lors de l'association du pont) — persistée dans `config.json`
+- Variable d'environnement `BUZZCONTROL_HUE_API_KEY` (recommandé en production) — bypass la persistance disque
 
 #### Paramètres disponibles
 
@@ -374,8 +380,8 @@ Configuration du pont Philips Hue et des ampoules pour l'éclairage d'ambiance d
 1. Naviguez vers `/admin/ambiance`
 2. Cliquez « Découvrir le pont » (mDNS/SSDP)
 3. Appuyez sur le bouton physique du pont (45 s d'attente)
-4. BuzzControl génère et **persiste** `bridge_ip`, `bridge_id`, `api_key_configured = true`
-5. **La clé API n'est jamais écrite dans `config.json`** — elle est gérée uniquement via mémoire ou environnement
+4. BuzzControl génère et **persiste** dans `config.json` : `bridge_ip`, `bridge_id`, `api_key`, `api_key_configured = true`
+5. **La clé API est persistée** (masquée en GET `/config.json`, jamais dans les logs ni les backups) — elle peut être overridée sans écriture disque via `BUZZCONTROL_HUE_API_KEY`
 
 #### Sélection des ampoules
 
@@ -388,10 +394,12 @@ Configuration du pont Philips Hue et des ampoules pour l'éclairage d'ambiance d
 
 #### Édition manuelle de `config.json`
 
-**Ne pas éditer directement la clé API.** Pour remplacer la clé :
+**La clé API est persistée** (champ `lighting.api_key`). Pour remplacer la clé sans édition disque :
 
-1. Utiliser la variable d'environnement : `export BUZZCONTROL_HUE_API_KEY="nouvelle_clé"`
-2. Ou re-associer via `/admin/ambiance` (« Ré-associer »)
+1. **Recommandé** : Utiliser la variable d'environnement : `export BUZZCONTROL_HUE_API_KEY="nouvelle_clé"` (override sans écriture)
+2. **Alternatif** : Re-associer via `/admin/ambiance` (« Ré-associer ») — génère une nouvelle clé, persistée
+
+Pour supprimer la clé de `config.json` (dissociation) : utiliser l'API ou re-initialiser la section `lighting`.
 
 **Format pour ajouter manuellement une ampoule** (après association) :
 
