@@ -254,6 +254,19 @@ func (h *HTTPServer) handleLightingRegister(w http.ResponseWriter, r *http.Reque
 	if info, ierr := hue.BridgeIdentity(ctx, cfg.Lighting.BridgeIP, false, key); ierr == nil && info.BridgeID != "" {
 		cfg.Lighting.BridgeID = strings.ToLower(info.BridgeID)
 	}
+	// Bugfix (QUALIF v10.0.0.8, bug 2 — retour utilisateur) : a successful
+	// pairing (the user physically pressed the bridge's button — a
+	// deliberate action, same weight as a buzzer's first HELLO) used to
+	// leave `enabled` untouched, defaulting to false. Nothing else in the
+	// documented flow (docs/SERVER_PARAMETERS.md "Enregistrement du bridge"
+	// §1-5) ever sets it, so ambianceIsConfigured() (which requires
+	// lc.Enabled) never actually turned true from persisted state — the
+	// association "worked" only for as long as some other, undocumented
+	// path had flipped it in memory, and never survived a restart. A
+	// pairing IS the user's association gesture; it now enables the module
+	// outright, exactly like a buzzer's MAC-based pairing needs no separate
+	// "activate" step.
+	cfg.Lighting.Enabled = true
 	cfg.Lighting.APIKeyConfigured = false
 	cfg.Lighting.ClearAPIKey = false
 	config.ApplyDefaults(&cfg)

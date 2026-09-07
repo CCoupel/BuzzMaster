@@ -164,8 +164,29 @@ func TestDevLightingRegisterFlowStoresKeyServerSide(t *testing.T) {
 	if lc.APIKey != bridge.key || lc.BridgeID != bridge.bridgeID || lc.BridgeIP != bridge.srv.URL {
 		t.Fatalf("config after register: %+v", lc)
 	}
+	// Bugfix (QUALIF v10.0.0.8, bug 2): a successful pairing enables the
+	// module outright — the deliberate 2026-09-07 change from the ORIGINAL
+	// #206/#207 design (register leaves `enabled` untouched, a separate
+	// step was expected to flip it — never actually wired anywhere, per
+	// docs/SERVER_PARAMETERS.md's own "Enregistrement du bridge" §1-5,
+	// which never mentions one). Without this, ambianceIsConfigured()
+	// (requires lc.Enabled) never turns true from PERSISTED state, so the
+	// association silently fails to survive a restart.
+	if !lc.Enabled {
+		t.Fatal("a successful pairing must enable lighting outright (QUALIF v10.0.0.8 bug 2)")
+	}
 	if updates != 1 {
 		t.Errorf("OnConfigUpdate must fire once, got %d", updates)
+	}
+	// La persistance elle-même : ce qu'un VRAI redémarrage relirait depuis
+	// disque (config.Load, jamais le singleton en mémoire) doit porter les
+	// mêmes valeurs — c'est précisément ce qui manquait à l'utilisateur.
+	reloaded, err := config.Load(config.ConfigPath())
+	if err != nil {
+		t.Fatalf("Load (simulated restart): %v", err)
+	}
+	if !reloaded.Lighting.Enabled || reloaded.Lighting.APIKey != bridge.key || reloaded.Lighting.BridgeIP != bridge.srv.URL {
+		t.Fatalf("l'association ne survit pas à un redémarrage simulé (Load depuis disque) : %+v", reloaded.Lighting)
 	}
 	// GET /config.json never shows the key, but shows it is configured.
 	getW := httptest.NewRecorder()
@@ -178,7 +199,10 @@ func TestDevLightingRegisterFlowStoresKeyServerSide(t *testing.T) {
 		t.Errorf("GET /config.json lighting: %v", cfgOut.Lighting)
 	}
 
-	// Inventory works with the stored key even though no driver is enabled yet.
+	// Inventory works with the stored key regardless of h.lightingDriver()
+	// (prov.d, never populated by this HTTP-layer-only test — the real
+	// App/driver wiring is exercised in cmd/server, not here): handleLightingLights
+	// falls back to a throwaway driver when none is live.
 	code, out = devDo(t, srv, "GET", "/api/lighting/lights", "")
 	if code != 200 {
 		t.Fatalf("lights: %d %v", code, out)
