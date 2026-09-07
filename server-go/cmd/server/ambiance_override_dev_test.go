@@ -286,6 +286,46 @@ func TestDevShutdownExtinguishHueLighting_AppliesOffToEveryConfiguredZone(t *tes
 	}
 }
 
+// TestDevStop_FlashEngagedAtShutdown_FinalStateIsOff is code-reviewer's own
+// regression test for MAJEUR 1 (v10 Batch 2 review,
+// _work/reports/code-reviewer-v10-batch2-20260907-124816.md): Flash still
+// ticking (every ~400 ms) at the moment shutdownExtinguishHueLighting()
+// runs must never re-light the room after the forced OFF. See that
+// function's own doc comment for the mechanism — SetDriver(nil)
+// synchronously quiesces the writer's driver (waiting out any in-flight
+// Apply via hue.Driver's own opMu, then marking it permanently closed)
+// BEFORE the forced OFF is written on a fresh driver instance — so this is
+// a structural guarantee, not a timing one; this test proves it holds in
+// practice against the real blink goroutine, not just by inspection.
+func TestDevStop_FlashEngagedAtShutdown_FinalStateIsOff(t *testing.T) {
+	app, bridge, cancel := devReconnectApp(t)
+	defer cancel()
+
+	app.engine.SetPhase(game.PhaseStarted) // partie en cours, comme au vrai arrêt serveur
+	app.setLightingFlash(true)
+	devWaitPutCount(t, bridge, 1) // au moins un tick de blink a réellement écrit
+
+	app.shutdownExtinguishHueLighting()
+	countAfterShutdown := bridge.count()
+	if !strings.Contains(bridge.last(), `"on":false`) {
+		t.Fatalf("l'état juste après l'extinction forcée doit être OFF, got %q", bridge.last())
+	}
+
+	// Le goroutine de blink doit être bel et bien mort : aucun nouveau PUT,
+	// même en attendant largement plus qu'un cycle complet — pas un simple
+	// sommeil symbolique.
+	time.Sleep(3 * (lightingFlashOnPhase + lightingFlashOffPhase))
+	if got := bridge.count(); got != countAfterShutdown {
+		t.Fatalf("Flash a continué d'écrire après shutdownExtinguishHueLighting() : %d PUT(s) juste après l'extinction, %d après stabilisation — la salle a pu se rallumer, dernier corps %q", countAfterShutdown, got, bridge.last())
+	}
+	if !strings.Contains(bridge.last(), `"on":false`) {
+		t.Fatalf("l'état final observé doit rester OFF après stabilisation, got %q", bridge.last())
+	}
+	if app.LightingFlash() {
+		t.Fatal("Flash doit être signalé désengagé après l'extinction")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // §10.3 — resync au retour du pont (gap fermé après le rapport initial de
 // Batch 2 : hue.Driver.Config.OnReconnect, câblé dans buildHueDriver()
@@ -426,6 +466,32 @@ func devWaitDriverState(t *testing.T, d *hue.Driver, want hue.BridgeState) {
 // call GET /api/lighting/lights makes) — nothing polls the bridge on its
 // own (contract lighting.md §4, purely event-driven); this mirrors the
 // ordinary "admin reopens the ambiance screen" gesture.
+//
+// ⚠️ Review fix (code-reviewer, v10 Batch 2, MAJEUR 2): TWO bugs, not one.
+//  1. Outage detection used to rely on a NotifyState() spontaneously
+//     reaching the writer's goroutine (subject to the real 250 ms
+//     MinInterval throttle of the Hue driver, then a fixed 2 s poll
+//     deadline) — flaky under a loaded `go test -race ./cmd/server/...`
+//     (observed ~1/3), since a busy scheduler can delay the writer's own
+//     timer past the deadline. Fixed the same way
+//     TestDevLightingReconnect_EngagedOverride_IsReappliedNotTheGame
+//     already did for its own outage: force the contact explicitly via
+//     RefreshInventory instead of waiting on spontaneous timing.
+//  2. A SECOND, independent bug, found while chasing #1: the live state at
+//     reconnect time (PhaseStarted, no active team) was IDENTICAL to the
+//     PRE-outage baseline. Whether the write attempted DURING the outage
+//     manages to invalidate the driver's per-light "last applied" cache
+//     (contract hue-bridge.md §5.3) before or after the outage is itself
+//     detected is a genuine race — one interleaving invalidates it (a
+//     fresh write follows recovery), the other leaves it untouched (the
+//     resync's own desired state then equals the cached one, so §5.3
+//     CORRECTLY skips writing — not a bug in the driver, a genuinely
+//     ambiguous test). Fixed by reconnecting on a DIFFERENT phase
+//     (PhasePaused → KindPauseAll, amber) than the baseline (KindRunning,
+//     blue): the resync's desired colour then differs from the cached one
+//     NO MATTER which way that inner race went, so a fresh PUT is now the
+//     only possible correct outcome — deterministic by construction, not
+//     by timing.
 func TestDevLightingReconnect_AUTO_ResyncsFromLiveGameState(t *testing.T) {
 	app, bridge, cancel := devReconnectApp(t)
 	defer cancel()
@@ -438,21 +504,21 @@ func TestDevLightingReconnect_AUTO_ResyncsFromLiveGameState(t *testing.T) {
 	if !strings.Contains(bridge.last(), `"on":true`) {
 		t.Fatalf("baseline Apply while up must be lit, got %q", bridge.last())
 	}
+	baselinePUT := bridge.last()
 
-	// Coupure du pont EN COURS DE PARTIE.
+	// Coupure du pont EN COURS DE PARTIE — la partie change de phase
+	// PENDANT la coupure et Y RESTE (PhasePaused, KindPauseAll ambre),
+	// délibérément DIFFÉRENTE de la scène de base ci-dessus.
 	bridge.setUp(false)
-	app.engine.SetPhase(game.PhasePaused) // un événement de jeu survient PENDANT la coupure
+	app.engine.SetPhase(game.PhasePaused)
 	app.ambiance().NotifyState()
+	_ = app.LightingDriver().RefreshInventory(context.Background()) // force le constat, erreur attendue : c'est la coupure
 	devWaitDriverState(t, app.LightingDriver(), hue.StateUnreachable)
-	countDuringOutage := bridge.count()
 
-	// La partie continue de bouger pendant la coupure — la salle ne
-	// bouge PAS (contract §5.5 : "la partie continue sans latence
-	// perceptible", l'écriture échoue en silence côté salle).
-	app.engine.SetPhase(game.PhaseStarted)
-	app.ambiance().NotifyState()
-
-	// Rétablissement, observé par un geste normal (inventaire).
+	// Rétablissement, observé par un geste normal (inventaire) — le jeu est
+	// resté en PhasePaused pendant toute la coupure, pas de nouvel
+	// événement à l'instant précis de la reconnexion.
+	statsBeforeRecovery := app.LightingDriver().Status().Stats
 	bridge.setUp(true)
 	if err := app.LightingDriver().RefreshInventory(context.Background()); err != nil {
 		t.Fatalf("RefreshInventory after recovery: %v", err)
@@ -460,11 +526,29 @@ func TestDevLightingReconnect_AUTO_ResyncsFromLiveGameState(t *testing.T) {
 	devWaitDriverState(t, app.LightingDriver(), hue.StateOK)
 
 	// §10.3 : la resync doit produire un NOUVEL Apply, réappliquant l'état
-	// de jeu VIVANT (toujours PhaseStarted sans équipe active ⇒
-	// KindRunning, allumé) — pas l'état d'avant la coupure rejoué tel quel.
-	devWaitPutCount(t, bridge, countDuringOutage+1)
+	// de jeu VIVANT au moment de la reconnexion (PhasePaused ⇒
+	// KindPauseAll, ambre) — jamais la scène bleue d'avant la coupure.
+	deadline := time.Now().Add(2 * time.Second)
+	var applies int
+	for time.Now().Before(deadline) {
+		applies = app.LightingDriver().Status().Stats.Applies
+		if applies > statsBeforeRecovery.Applies {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if applies <= statsBeforeRecovery.Applies {
+		t.Fatal("resync must trigger a fresh Apply (OnReconnect → NotifyState)")
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && bridge.last() == baselinePUT {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if bridge.last() == baselinePUT {
+		t.Fatalf("resync must have written a NEW state (KindPauseAll, ambre) distinct from the pre-outage baseline, got the same PUT body %q", baselinePUT)
+	}
 	if !strings.Contains(bridge.last(), `"on":true`) {
-		t.Fatalf("resync AUTO must re-derive a lit KindRunning scene from the live game state, got %q", bridge.last())
+		t.Fatalf("resync AUTO must re-derive a lit KindPauseAll scene from the live game state, got %q", bridge.last())
 	}
 }
 

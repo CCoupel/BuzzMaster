@@ -121,7 +121,15 @@ func (h *HTTPServer) handleLightingMode(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.Lighting == nil {
+	// Review fix (code-reviewer, v10 Batch 2, MINEUR 1): refuse whenever no
+	// driver is actually configured/enabled, not just when h.Lighting itself
+	// is nil (an App always wired in production — that check alone only
+	// ever fires against a minimal test harness). Aligned with
+	// handleLightingTest/handleLightingLights below: a 200 that silently has
+	// no effect on any hardware (lighting.enabled=false, or no bridge
+	// registered) would mislead the admin screen into showing the mode as
+	// applied when nothing is actually listening.
+	if h.Lighting == nil || h.lightingDriver() == nil {
 		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
 		return
 	}
@@ -150,7 +158,9 @@ func (h *HTTPServer) handleLightingFlash(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.Lighting == nil {
+	// Review fix (code-reviewer, v10 Batch 2, MINEUR 1) — see
+	// handleLightingMode's own comment just above for the reasoning.
+	if h.Lighting == nil || h.lightingDriver() == nil {
 		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
 		return
 	}

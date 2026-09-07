@@ -254,7 +254,9 @@ func TestDevLightingDevicetype(t *testing.T) {
 // /status, and an invalid value is refused without changing anything.
 func TestDevLightingMode_RoundTripAndValidation(t *testing.T) {
 	srv, _ := setupTestHTTPServer(t)
-	srv.Lighting = &devProvider{}
+	d, closeD := devDriverForOverrideTests(t)
+	defer closeD()
+	srv.Lighting = &devProvider{d: d}
 
 	code, out := devDo(t, srv, "GET", "/api/lighting/status", "")
 	if code != 200 || out["mode"] != "AUTO" || out["flash"] != false {
@@ -293,10 +295,36 @@ func TestDevLightingMode_RoundTripAndValidation(t *testing.T) {
 		t.Errorf("malformed JSON body must be 400, got %d", code)
 	}
 
+	// Review fix (code-reviewer, v10 Batch 2, MINEUR 1): a provider IS wired
+	// but no driver is actually configured/enabled — must be refused too,
+	// not just the "no provider at all" case below.
+	srv.Lighting = &devProvider{}
+	if code, out := devDo(t, srv, "POST", "/api/lighting/mode", `{"mode":"ON"}`); code != 409 || out["result"] != "refused" {
+		t.Fatalf("provider wired but no driver configured: %d %v", code, out)
+	}
+
 	srv.Lighting = nil
 	if code, out := devDo(t, srv, "POST", "/api/lighting/mode", `{"mode":"ON"}`); code != 409 || out["result"] != "refused" {
 		t.Fatalf("no provider wired: %d %v", code, out)
 	}
+}
+
+// devDriverForOverrideTests builds a real, minimal *hue.Driver against a
+// fake bridge (same pattern as TestDevLightingStatusAndTestWithDriver) —
+// TestDevLightingMode_RoundTripAndValidation/TestDevLightingFlash_RoundTrip
+// need h.lightingDriver() != nil since the MINEUR 1 fix above (409 unless a
+// driver is actually configured).
+func devDriverForOverrideTests(t *testing.T) (*hue.Driver, func() error) {
+	t.Helper()
+	bridge := newDevHueBridge(t)
+	d, err := hue.New(hue.Config{BridgeIP: bridge.srv.URL, BridgeID: bridge.bridgeID, APIKey: bridge.key, Lights: []hue.LightSpec{{Name: "BuzzHue1"}},
+		FindBridge: func(_ context.Context, _ string, _ time.Duration) (hue.Bridge, bool, error) {
+			return hue.Bridge{}, false, nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d, d.Close
 }
 
 // TestDevLightingFlash_RoundTrip mirrors the mode test for the separate
@@ -304,7 +332,9 @@ func TestDevLightingMode_RoundTripAndValidation(t *testing.T) {
 // selector's own position.
 func TestDevLightingFlash_RoundTrip(t *testing.T) {
 	srv, _ := setupTestHTTPServer(t)
-	p := &devProvider{}
+	d, closeD := devDriverForOverrideTests(t)
+	defer closeD()
+	p := &devProvider{d: d}
 	srv.Lighting = p
 	if err := p.SetLightingMode("OFF"); err != nil {
 		t.Fatalf("setup: %v", err)
@@ -330,6 +360,13 @@ func TestDevLightingFlash_RoundTrip(t *testing.T) {
 
 	if code, _ := devDo(t, srv, "GET", "/api/lighting/flash", ""); code != 405 {
 		t.Errorf("GET flash must be 405, got %d", code)
+	}
+
+	// Review fix (code-reviewer, v10 Batch 2, MINEUR 1): a provider IS wired
+	// but no driver is actually configured/enabled — must be refused too.
+	srv.Lighting = &devProvider{}
+	if code, out := devDo(t, srv, "POST", "/api/lighting/flash", `{"on":true}`); code != 409 || out["result"] != "refused" {
+		t.Fatalf("provider wired but no driver configured: %d %v", code, out)
 	}
 
 	srv.Lighting = nil

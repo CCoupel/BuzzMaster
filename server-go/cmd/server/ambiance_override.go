@@ -28,6 +28,7 @@ import (
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
+	"buzzcontrol/internal/lighting/hue"
 	"buzzcontrol/internal/server"
 )
 
@@ -227,16 +228,38 @@ func (a *App) SetLightingFlash(on bool) {
 // and the buzzer WebSocket hubs, so an extinction issued after cancelCtx()
 // is annulled the instant it is emitted).
 //
-// The Hue write goes DIRECTLY through the driver's own Apply — not through
-// NotifyState()/the writer — deliberately: the writer's goroutine is still
-// alive in this narrow pre-cancelCtx() window and could otherwise race this
-// forced OFF with a fresh derivation of its own. hue.Driver.Apply is safe
-// for this: contracts/lighting.md §5's "only the writer's single goroutine"
-// is a permission the driver does not need to rely on, and hue.Driver
-// internally serialises Apply against Inventory/TestFlash/Close via its own
-// opMu (internal/lighting/hue/driver.go) — a second, direct Apply call is
-// exactly what /api/lighting/test already does concurrently with the
-// writer today.
+// ⚠️ Review fix (code-reviewer, v10 Batch 2, MAJEUR 1): a first version of
+// this function wrote the forced OFF directly through a.LightingDriver()
+// while the writer's goroutine — and, if engaged, the Flash blink goroutine
+// (runLightingFlash, ticking every ~400 ms) — were STILL ALIVE in this
+// pre-cancelCtx() window. A late tick could call NotifyState() and the
+// writer could issue one more Apply AFTER the forced OFF, RE-LIGHTING the
+// room — exactly the "pire cas" the contract names ("du code présent, une
+// suite de tests verte, et la salle qui reste allumée").
+//
+// Fix, in order:
+//  1. a.ambiance().SetDriver(nil) — SYNCHRONOUSLY disables the writer
+//     (enabled=false, so every further Notify* is inert per contract §4.3)
+//     AND closes whatever driver it currently holds. Close() takes that
+//     driver's own opMu (internal/lighting/hue/driver.go), the same lock
+//     Apply() holds for its entire duration — so this BLOCKS until any
+//     Apply already in flight (e.g. a Flash tick that started a moment
+//     earlier) has fully finished, and marks the driver `closed` before
+//     returning. Every Apply call on THAT driver from then on — including
+//     one the writer's goroutine might still attempt a moment later — sees
+//     `closed` and returns immediately with an error, WITHOUT ever making
+//     another HTTP request. This is a hard guarantee, not a timing hope.
+//  2. The Flash goroutine is cancelled too (belt-and-suspenders — with the
+//     writer disabled its ticks are already inert via NotifyState's own
+//     `!enabled` guard, but there is no reason to leave it running).
+//  3. A FRESH, independent *hue.Driver is built from the current config
+//     (buildHueDriver, ambiance.go — no network I/O yet) for the actual
+//     extinguishing write. It is never a.LightingDriver(): that field still
+//     names the instance just closed in step 1, permanently unusable now.
+//
+// After step 1 returns, nothing already attached to the (old) driver can
+// write again — the fresh driver built in step 3 is therefore provably the
+// LAST writer of Hue state before the process exits.
 //
 // Own short-lived context (never a.ctx, contract §10.4 point 2); never
 // blocks or retries if the bridge doesn't answer — an unreachable bridge at
@@ -244,16 +267,28 @@ func (a *App) SetLightingFlash(on bool) {
 const shutdownLightingTimeout = 2 * time.Second
 
 func (a *App) shutdownExtinguishHueLighting() {
-	d := a.LightingDriver()
+	a.ambiance().SetDriver(nil) // step 1 — nil-safe, synchronously quiesces the old driver
+
+	a.ambianceMu.Lock()
+	cancel := a.lightingFlashCancel
+	a.lightingFlashCancel = nil
+	a.lightingFlashOn.Store(false)
+	a.ambianceMu.Unlock()
+	if cancel != nil {
+		cancel() // step 2
+	}
+
+	d := a.buildHueDriver() // step 3 — fresh instance, config.json unchanged
 	if d == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownLightingTimeout)
-	defer cancel()
+	defer d.Close()
+	ctx, cancelTimeout := context.WithTimeout(context.Background(), shutdownLightingTimeout)
+	defer cancelTimeout()
 	off := lighting.State{Zones: []lighting.ZoneState{{Zone: lighting.ZoneGeneral, Intensity: 0}}}
 	seen := map[string]bool{}
 	for _, l := range config.Get().Lighting.Lights {
-		if l.Role == "team" && l.Team != "" && !seen[l.Team] {
+		if l.Role == string(hue.RoleTeam) && l.Team != "" && !seen[l.Team] {
 			seen[l.Team] = true
 			off.Zones = append(off.Zones, lighting.ZoneState{Zone: l.Team, Intensity: 0})
 		}
