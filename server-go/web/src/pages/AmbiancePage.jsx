@@ -323,7 +323,20 @@ export default function AmbiancePage() {
     setPairing(p => (p ? { ...p, phase: 'waiting', remaining: REGISTER_TIMEOUT_S } : p))
 
   // ---- Étape 3 : inventaire ------------------------------------------------
-  const loadInventory = useCallback(async () => {
+  // Round 4, Bug 1 (2026-09-07) — une réponse VIDE sans erreur juste après
+  // association a été observée en pratique (29 ampoules réelles sur le
+  // pont), alors que #213/#207 traitaient déjà ce cas comme un simple "rien
+  // à afficher" plutôt qu'un état transitoire à corriger. Deux filets
+  // indépendants, aucun ne remplace l'autre :
+  //   1. Auto-guérison ci-dessous — un seul nouvel essai après un court
+  //      délai si la première réponse est vide SANS erreur, jamais en
+  //      boucle (`isRetry` empêche un second essai).
+  //   2. "Enregistrer" reste désactivé tant que la liste est vide (plus bas,
+  //      `rows.length === 0`) — filet de sécurité qui NE DÉPEND PAS de la
+  //      guérison ci-dessus : même si l'auto-essai échouait aussi, un clic
+  //      prématuré ne peut plus écraser une configuration existante par
+  //      `lights: []`.
+  const loadInventory = useCallback(async (isRetry = false) => {
     setInventory(prev => ({ ...prev, phase: 'loading' }))
     let next
     try {
@@ -345,6 +358,9 @@ export default function AmbiancePage() {
     setSelectedNames(null)
     setRoleOverrides({})
     setInventory(next)
+    if (!isRetry && next.phase === 'done' && !next.failure && next.lights.length === 0) {
+      setTimeout(() => { loadInventory(true) }, 1500)
+    }
   }, [])
 
   useEffect(() => {
@@ -384,6 +400,19 @@ export default function AmbiancePage() {
   }, [inventory.lights, lighting.lights])
 
   const frozen = inventory.failure === 'unreachable' || inventory.failure === 'refused'
+
+  // Round 4, Bug 1 (2026-09-07) — vrai quand AUCUNE ligne affichée ne
+  // provient de l'inventaire réel du pont : soit `rows` est entièrement
+  // vide (rien n'a jamais été configuré ET le pont ne répond rien pour
+  // l'instant), soit toutes les lignes sont des placeholders "introuvable"
+  // dérivés de la config existante (le pont ne confirme aucune des
+  // ampoules déjà enregistrées). `Array.prototype.every` sur un tableau
+  // vide vaut `true` : ce test couvre donc aussi rows.length === 0 sans
+  // condition séparée. Distinct du cas légitime "une partie des ampoules
+  // configurées est introuvable, les autres sont bien là" (#207) — celui-là
+  // NE bloque PAS l'enregistrement, seule l'absence TOTALE de confirmation
+  // du pont le fait.
+  const allMissing = rows.every(r => r.missing)
 
   // ---- #213 : rôle par ampoule ---------------------------------------------
   // Équipes de la partie courante — même source que TeamsPage/GamePage
@@ -752,6 +781,26 @@ export default function AmbiancePage() {
               <p className="ambiance-hint">Aucune ampoule sur ce pont.</p>
             )}
 
+            {/* Round 4, Bug 1 (2026-09-07) — au moins une ligne à afficher,
+                mais AUCUNE ne provient de l'inventaire réel (rows.length > 0
+                uniquement grâce aux placeholders "introuvable" dérivés de la
+                config déjà enregistrée) : le pont ne confirme rien pour
+                l'instant. Distinct du cas légitime "une partie seulement est
+                introuvable" (#207, signalé ligne par ligne, n'empêche rien) :
+                ici c'est la totalité, donc "Enregistrer" est désactivé
+                (§ plus bas) plutôt que de risquer un enregistrement qui
+                efface silencieusement ce qui existe déjà. */}
+            {inventory.phase === 'done' && rows.length > 0 && allMissing && !frozen && !inventory.failure && (
+              <div className="ambiance-notice is-refused" role="status">
+                <strong>Aucune ampoule reconnue par le pont pour l'instant.</strong>
+                <span>
+                  La configuration enregistrée n'est pas perdue, mais « Enregistrer » est
+                  désactivé tant que le pont ne confirme aucune de ces ampoules — un nouvel essai
+                  automatique est en cours ; sinon, cliquez « Actualiser la liste ».
+                </span>
+              </div>
+            )}
+
             {rows.length > 0 && (
               <ul className={`ambiance-lights ${frozen ? 'is-frozen' : ''}`} aria-label="Ampoules">
                 {rows.map(row => {
@@ -828,7 +877,20 @@ export default function AmbiancePage() {
             )}
 
             <div className="ambiance-actions">
-              <Button variant="primary" onClick={handleSaveLights} loading={saving} disabled={frozen}>
+              {/* Round 4, Bug 1 (2026-09-07) — "Enregistrer" n'était désactivé
+                  que sur `frozen` (pont injoignable/refusé), jamais quand le
+                  pont ne confirmait ENCORE AUCUNE ampoule (`allMissing`,
+                  vrai aussi pour rows.length === 0 — voir sa définition).
+                  Sans ce garde-fou, un clic dans cette fenêtre pouvait
+                  envoyer `lights: []` lors d'une toute première association
+                  (rien à préserver, mais rien à sauver non plus), ou
+                  ré-enregistrer une config existante sans jamais avoir été
+                  confirmée par le pont (le backend persiste fidèlement ce
+                  qu'on lui envoie, vérifié par dev-backend) —
+                  indépendamment de la cause exacte de l'absence de
+                  confirmation, et indépendamment de l'auto-essai de
+                  loadInventory ci-dessus, qui peut lui-même échouer. */}
+              <Button variant="primary" onClick={handleSaveLights} loading={saving} disabled={frozen || allMissing}>
                 Enregistrer
               </Button>
               <Button
@@ -839,7 +901,7 @@ export default function AmbiancePage() {
               >
                 Tester toutes les ampoules
               </Button>
-              <Button variant="ghost" onClick={loadInventory} loading={inventory.phase === 'loading'}>
+              <Button variant="ghost" onClick={() => loadInventory()} loading={inventory.phase === 'loading'}>
                 Actualiser la liste
               </Button>
             </div>
