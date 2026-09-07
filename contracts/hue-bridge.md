@@ -63,6 +63,29 @@ La question méritait d'être posée : l'API Hue sait piloter un groupe en un se
   C'est une **optimisation locale documentée, pas un changement de modèle** — la configuration
   reste par ampoule. Ne pas l'implémenter par anticipation.
 
+> ### ⚠️ Clause de sortie DÉCLENCHÉE — 2026-09-07 (retour QUALIF)
+>
+> **Ce §2 n'est pas renversé : il est appliqué.** Son raisonnement reposait sur une prémisse
+> explicite — « notre nombre d'ampoules est **petit (quelques unités)** […] à 2-6 ampoules, cela
+> fait 80 à 240 ms ». **L'installation réelle en compte ~30**, soit ≈ **1,2 s** d'étalement, très
+> au-delà du seuil de perception et **5× la prémisse**. §2 prévoyait précisément qu'on le rouvre
+> sur mesure ; c'est fait.
+>
+> **Ce qui est retenu** : des groupes Hue créés et maintenus par BuzzMaster, **là et seulement là
+> où ils paient** — voir **§5.8**. La règle est chiffrée : **un groupe n'est utilisé que s'il
+> adresse ≥ 2 ampoules**.
+>
+> **Ce qui reste écarté, et pourquoi** : un groupe **par équipe** quand chaque équipe n'a **qu'une**
+> ampoule. Le point 1 ci-dessus vaut toujours, et joue à l'envers de l'intuition — `/groups` est
+> plafonné à **≤ 1 mise à jour/s** contre ~10/s sur `/lights`. Quatre équipes d'une ampoule
+> coûteraient **≈ 4 s** de budget en groupes contre **≈ 160 ms** en écritures directes. Un groupe
+> d'une seule ampoule vise la même cible Zigbee avec un budget 10× plus serré : c'est strictement
+> perdant.
+>
+> **Les points 3 et 4 restent entiers** : aucun groupe créé à la main n'est jamais utilisé
+> (BuzzMaster crée et réconcilie les siens, §5.8), et les groupes restant non validés sur matériel
+> réel, le pilote **doit** savoir s'en passer (repli par ampoule, §5.8).
+
 ---
 
 ## 3. Décision — API Hue v1
@@ -235,6 +258,74 @@ la couleur de l'équipe non pourvue) produirait une salle dont la couleur bascul
 composition matérielle plutôt que selon le jeu. Signalé pour relecture au même titre que le §6.3
 de `lighting.md`.
 
+### 5.8 Groupes Hue — normatif (2026-09-07)
+
+Optimisation d'écriture autorisée par la clause de sortie du §2. **Les groupes ne changent pas le
+modèle de configuration** : l'admin affecte toujours des **ampoules** à des équipes, BuzzMaster en
+**déduit** les groupes. Rien de tout cela n'est visible dans l'écran d'administration.
+
+#### Les trois groupes
+
+| Nom sur le pont | Membres | Usage principal |
+|---|---|---|
+| `buzzmaster-ambiance` | **toutes** les ampoules assignées | All OFF, Flash, extinction à l'arrêt (`lighting.md` §10.4) |
+| `buzzmaster-general` | les ampoules de rôle `general` | la scène de salle — le cas le plus fréquent |
+| `buzzmaster-team-<équipe>` | les ampoules de cette équipe | **créé uniquement si l'équipe a ≥ 2 ampoules** |
+
+#### Type d'objet : `LightGroup`, jamais `Room`, jamais `Zone`
+
+- **`Room` est exclu** : une ampoule n'appartient qu'à **une seule** Room. Nos groupes se
+  **chevauchent** (une ampoule d'équipe est aussi dans `buzzmaster-ambiance`) et une Room
+  écraserait le rangement que l'utilisateur a fait dans son application Hue.
+- **`Zone` est écarté** : fonctionnellement adéquat (chevauchement permis), mais exige un firmware
+  ≥ 1.30 et **s'affiche dans l'application Hue**, où elle peut être renommée ou supprimée — le
+  « état externe qui dérive » que le §2 point 3 voulait éviter.
+- **`LightGroup`** (API v1 `/groups`, `type: "LightGroup"`) : chevauchement autorisé, disponible
+  depuis toujours, discret.
+
+#### Règle d'emploi — chiffrée
+
+> **On écrit par groupe si et seulement si la cible compte ≥ 2 ampoules. Sinon, on écrit
+> directement l'ampoule.**
+
+Motif au §2 : `/groups` est plafonné à **≤ 1 mise à jour/s** contre ~10/s sur `/lights`. Un groupe
+d'une seule ampoule vise la même cible Zigbee avec un budget dix fois plus serré.
+
+#### Cycle de vie
+
+1. **Identification par nom**, jamais par id — même règle que les ampoules (§4.2). Résolution
+   nom → id au moment de l'inventaire.
+2. **Réconciliation** au démarrage **et après chaque enregistrement de configuration** : créer les
+   groupes manquants, corriger la composition de ceux qui ont dérivé, supprimer ceux devenus sans
+   objet (équipe supprimée, ampoules désassignées).
+3. ⚠️ **Ne JAMAIS modifier la composition d'un groupe sur un événement de jeu.** La composition ne
+   dépend **que** de la configuration. La part **dynamique** de la zone `general` (§5.2 : une
+   ampoule d'équipe rejoint `general` quand son équipe n'est pas au plateau) se traite en
+   **choisissant à quelle cible on écrit**, jamais en mutant les membres. Une implémentation qui
+   enverrait un `PUT /groups/<id>` à chaque changement d'équipe serait à la fois lente et sous
+   plafond.
+4. Un groupe Hue exige **≥ 1 membre** : une équipe sans ampoule n'a donc pas de groupe, ce qui
+   coïncide avec le « non-événement silencieux » du §5.2 — aucun cas particulier à écrire.
+5. **Repli obligatoire** : si la création, la résolution ou l'écriture d'un groupe échoue, le pilote
+   **écrit par ampoule**. Les groupes sont une **optimisation**, jamais un préalable — tout le
+   comportement dégradé du §5.5 doit rester vrai sans eux.
+
+#### Articulation avec §5.3 — le piège d'implémentation
+
+Le cache « n'écrire que ce qui change » doit être **indexé par cible** (groupe *ou* ampoule) et,
+lors d'une écriture de groupe, **invalider l'état mémorisé de chaque ampoule membre**. Sans cela,
+une écriture de groupe laisse le cache par ampoule périmé et la déduplication **saute des écritures
+nécessaires** — l'ampoule reste sur une couleur que le serveur croit avoir changée.
+
+#### Articulation avec §5.7 — vérifiée, sans contradiction
+
+| Règle §5.7 | Avec les groupes |
+|---|---|
+| Ampoule injoignable | le pont écrit les autres membres ; l'échec reste per-ampoule |
+| Équipe sans ampoule | pas de groupe (point 4) — inchangé |
+| Moins d'ampoules que d'équipes | inchangé — les équipes pourvues ont leur cible, les autres suivent `general` |
+| Aucune affectation d'équipe | seul `buzzmaster-general` existe — inchangé |
+
 ---
 
 ## 6. Configuration — normatif
@@ -371,7 +462,8 @@ endpoint **ne fait aucune I/O** — il lit un état déjà en mémoire.
 | Mesure | Attendu |
 |---|---|
 | Latence d'une écriture | p95 ≤ **150 ms** (le spike a mesuré 48-59 ms) |
-| **Étalement** entre la première et la dernière ampoule d'un `Apply` à N ampoules | mesuré et **publié** pour N = 2, 4, 6 |
+| **Étalement** entre la première et la dernière ampoule d'un `Apply` à N ampoules | mesuré et **publié** pour N = 2, 4, 6 **et 30** (taille réelle constatée) |
+| **Gain des groupes** (§5.8) | étalement **avant/après** sur le cas « toute la salle d'une couleur » à N = 30 — c'est la mesure qui justifie §5.8 |
 | Rafale simulant des validations RAFALE successives | **100 %** de succès, et **≤ 10 écritures/s** |
 | Bridge débranché en cours de partie | aucune latence perceptible sur les transitions, **une seule** ligne de log |
 

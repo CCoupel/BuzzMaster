@@ -2,6 +2,44 @@
 
 ---
 
+## [20260907g] — Éclairage : groupes Hue là où ils paient, et couleur d'équipe (#208, #213)
+
+> Deux retours QUALIF round 5. Le premier est un **écart d'implémentation au contrat existant**
+> (aucun amendement nécessaire) ; le second **applique** la clause de sortie que §2 avait prévue.
+
+- **[CHANGED]** `contracts/hue-bridge.md` §2 — **clause de sortie déclenchée**. Le refus des
+  groupes reposait sur une prémisse explicite (« quelques unités », 2-6 ampoules, 80-240 ms) que
+  l'installation réelle **invalide** : ~30 ampoules, ≈ 1,2 s d'étalement. §2 prévoyait qu'on le
+  rouvre **sur mesure** — c'est fait. **§2 n'est pas renversé, il est appliqué.**
+  Reste écarté : un groupe **par équipe** quand chaque équipe n'a **qu'une** ampoule — `/groups`
+  est plafonné à **≤ 1 mise à jour/s** contre ~10/s sur `/lights`, donc 4 équipes d'une ampoule
+  coûteraient ≈ 4 s en groupes contre ≈ 160 ms en écritures directes.
+- **[NEW]** `contracts/hue-bridge.md` §5.8 — **groupes Hue**. Trois groupes créés et maintenus par
+  BuzzMaster (`buzzmaster-ambiance`, `buzzmaster-general`, `buzzmaster-team-<équipe>`), de type
+  **`LightGroup`** — ni `Room` (une ampoule n'y appartient qu'à une seule, or nos groupes se
+  chevauchent) ni `Zone` (firmware ≥ 1.30, et visible dans l'app Hue donc altérable).
+  **Règle d'emploi chiffrée : par groupe si ≥ 2 ampoules, par ampoule sinon.**
+  Cycle de vie par **nom**, réconciliation au démarrage et après sauvegarde de configuration.
+  ⚠️ **Interdiction de muter la composition d'un groupe sur un événement de jeu** — la part
+  dynamique de `general` se traite en choisissant la cible, jamais en mutant les membres.
+  **Repli par ampoule obligatoire** à tout échec : les groupes sont une optimisation, jamais un
+  préalable.
+  ⚠️ **Piège §5.3** : le cache « n'écrire que ce qui change » doit être **indexé par cible** et
+  **invalider les ampoules membres** après une écriture de groupe, sinon la déduplication saute des
+  écritures nécessaires.
+- **[CHANGED]** `contracts/hue-bridge.md` §8 — mesures étendues à **N = 30** et gain **avant/après**
+  des groupes : c'est la mesure qui justifie §5.8.
+- `contracts/lighting.md` **inchangé**. Le défaut « l'ampoule d'équipe ne suit pas le jeu » est un
+  **écart d'implémentation**, pas un manque du contrat : `ambianceScene()` émet une zone d'équipe
+  pour les seules équipes de l'**événement** (`ev.Teams`, vide pour 5 genres sur 9) là où §5.2 dit
+  « nommée dans l'**état courant** », c'est-à-dire au **plateau de la partie**. Correctif et
+  justification (le modèle du buzzer : la couleur porte l'identité, l'état module l'intensité) dans
+  `_work/reports/planner-v10-groups-teamcolor-20260907-173831.md`.
+
+**Aucun BREAKING** : aucune configuration existante n'est invalidée, les groupes sont déduits.
+
+---
+
 ## [20260907f] — Éclairage : le sélecteur ne porte que la zone `general` (#208, #213)
 
 > Deux corrections utilisateur du 2026-09-07 sur le §10.1. La première **infirme une précision
