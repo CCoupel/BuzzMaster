@@ -113,14 +113,26 @@
   ul.pl{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
   ul.pl li{margin-bottom:7px} ul.pl li:last-child{margin-bottom:0}
 
-  /* ---- Groupe de 3 overrides mutuellement exclusifs (All ON/All OFF/Flash) ---- */
-  .segrow{display:flex;gap:10px;flex-wrap:wrap}
-  .segbtn{display:inline-flex;align-items:center;gap:9px;background:var(--raised);
-    border:1px solid var(--line);border-radius:6px;padding:9px 16px;font-size:.83rem;
-    font-weight:600;color:var(--dim);font-family:var(--sans)}
-  .segbtn .dot2{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--faint);flex:none}
-  .segbtn.active{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--raised))}
-  .segbtn.active .dot2{background:var(--accent);border-color:var(--accent)}
+  /* ---- Sélecteur tri-état ON/AUTO/OFF (une seule position sélectionnée en permanence) ---- */
+  .tristate{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .tristate span{padding:9px 20px;font-size:.83rem;font-weight:600;color:var(--dim);
+    background:var(--raised);border-right:1px solid var(--line);font-family:var(--sans)}
+  .tristate span:last-child{border-right:none}
+  .tristate span.sel-on{background:var(--accent);color:#170c02}
+  .tristate span.sel-auto{background:var(--ok);color:#06210c}
+  .tristate span.sel-off{background:var(--no);color:#fff}
+
+  /* ---- Bascule on/off indépendante (Flash — identification) ---- */
+  .togglebtn{display:inline-flex;align-items:center;gap:10px;background:var(--raised);
+    border:1px solid var(--line);border-radius:6px;padding:8px 15px;font-size:.83rem;
+    font-weight:500;color:var(--txt);font-family:var(--sans)}
+  .togglebtn .sw2{width:34px;height:18px;border-radius:999px;background:var(--sunken);
+    border:1px solid var(--line);position:relative;flex:none}
+  .togglebtn .sw2::after{content:"";position:absolute;top:1px;left:1px;width:14px;height:14px;
+    border-radius:50%;background:var(--faint)}
+  .togglebtn.on{border-color:var(--accent);color:var(--accent)}
+  .togglebtn.on .sw2{background:color-mix(in srgb,var(--accent) 28%,var(--sunken));border-color:var(--accent)}
+  .togglebtn.on .sw2::after{left:17px;background:var(--accent)}
 
   footer{border-top:1px solid var(--line);padding-top:20px;margin-top:56px;
     font-family:var(--mono);font-size:.73rem;color:var(--faint)}
@@ -135,25 +147,27 @@
 
 <header class="mast">
   <div class="eyebrow">
-    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 3</span><span>À valider — GATE 2</span>
+    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 4</span><span>À valider — GATE 2</span>
   </div>
   <h1>Éclairage d'ambiance — affectation par équipe et commandes de test</h1>
   <p class="standfirst">
     Un seul écran étendu, aucune page nouvelle. <strong>#213</strong> ajoute à
-    <code>/admin/ambiance</code> (livrée par #207) une colonne d'affectation équipe→ampoule, et trois
-    <b>overrides</b> globaux mutuellement exclusifs (<b>All ON</b> / <b>All OFF</b> / <b>Flash</b>)
-    pour tester le résultat pendant qu'on configure. Cette phase 1 se limite à associer le pont,
-    affecter des ampoules aux équipes, et les piloter comme les buzzers — <b>la conduite d'éclairage
-    en direct depuis <code>/anim</code>, associée à des événements de jeu, est une phase 2 hors
-    périmètre</b> (révision suite à correction du 2026-09-07 : une révision précédente plaçait à tort
-    ces commandes sur l'écran animateur).
+    <code>/admin/ambiance</code> (livrée par #207) une colonne d'affectation équipe→ampoule, un
+    <b>sélecteur tri-état ON / AUTO / OFF</b> pour forcer ou libérer l'éclairage global, et une
+    <b>bascule Flash</b> indépendante pour identifier les ampoules. Cette phase 1 se limite à
+    associer le pont, affecter des ampoules aux équipes, et les piloter comme les buzzers —
+    <b>la conduite d'éclairage en direct depuis <code>/anim</code>, associée à des événements de
+    jeu, est une phase 2 hors périmètre</b> (révision suite à correction du 2026-09-07 : une
+    révision précédente plaçait à tort ces commandes sur l'écran animateur).
   </p>
   <div class="refs">
     <div><b>Contrats</b> contracts/hue-bridge.md §5.2/§5.7 (zones, dégradation) · contracts/lighting.md §10, en révision par le planner pour la partie priorité admin/jeu</div>
     <div><b>Base réutilisée</b> docs/mockups/lighting-hue-config-207.html §05/§06 (écran ampoules déjà validé, ici étendu)</div>
     <div><b>Décisions actées</b> _work/handoff/gate1-decisions-v10-20260907.md</div>
     <div><b>Révision 2</b> retrait du panneau de conduite manuelle sur <code>/anim</code>, déplacé sur <code>/admin/ambiance</code></div>
-    <div><b>Révision 3</b> les trois commandes sont en réalité des <b>overrides à état, mutuellement exclusifs</b> (actif/relâché) — pas deux boutons d'action et une bascule isolée ; relâcher un override re-dérive depuis l'état de jeu courant, ce n'est jamais une extinction</div>
+    <div><b>Révision 3 (superseded)</b> avait représenté All ON/All OFF/Flash comme trois overrides mutuellement exclusifs identiques — le planner avait une lecture différente entre-temps</div>
+    <div><b>Révision 4 — design tranché par l'utilisateur</b> All ON/All OFF remplacés par un <b>sélecteur tri-état unique [ON | AUTO | OFF]</b> (AUTO = position normale, éclairage piloté par l'état du jeu — remplace « override relâché ») ; Flash reste une bascule ON/OFF <b>séparée</b> et indépendante</div>
+    <div><b>Confirmé</b> la table de scènes de #205 (événements→couleurs) reste inchangée par cette révision — seul son éditeur (#210/v10.1) est reporté</div>
     <div><b>Sert de référence à</b> test-writer (scénarios T1.4) · qa (conformité) · dev-frontend (implémentation Batch 3)</div>
   </div>
 </header>
@@ -264,109 +278,149 @@
     utilisable d'une curiosité de démonstration » (<code>hue-bridge.md</code> §5.7).
   </div>
 
-  <h3>Overrides de test — All ON / All OFF / Flash</h3>
+  <h3>Commandes de test — sélecteur ON/AUTO/OFF + bascule Flash</h3>
   <p class="lede">
-    Trois <b>overrides</b> globaux, mutuellement exclusifs, sur ce même écran, juste sous la liste
-    des ampoules — un outil pour <b>vérifier immédiatement</b> l'effet d'une affectation pendant
-    qu'on configure (« est-ce bien l'ampoule de la Salle gauche qui vient de s'allumer en rouge ? »),
-    pas un outil de conduite de spectacle en direct. Ce sont les mêmes trois gestes qu'une première
-    version de cette maquette plaçait à tort sur <code>/anim</code> — déplacés ici après correction
-    utilisateur du 2026-09-07 : la conduite d'éclairage associée aux événements de jeu, en direct
-    depuis l'écran animateur, est une phase 2, hors périmètre de ce milestone.
+    Sur ce même écran, juste sous la liste des ampoules — un outil pour <b>vérifier immédiatement</b>
+    l'effet d'une affectation pendant qu'on configure (« est-ce bien l'ampoule de la Salle gauche qui
+    vient de s'allumer en rouge ? »), pas un outil de conduite de spectacle en direct. Déplacé ici
+    après correction utilisateur du 2026-09-07 : la conduite d'éclairage associée aux événements de
+    jeu, en direct depuis l'écran animateur, est une phase 2, hors périmètre de ce milestone.
   </p>
   <div class="screen">
-    <div class="screen-hd">/admin/ambiance — aucun override actif</div>
+    <div class="screen-hd">/admin/ambiance — position AUTO (par défaut)</div>
     <div class="screen-bd">
-      <div class="segrow">
-        <span class="segbtn"><span class="dot2"></span>All ON</span>
-        <span class="segbtn"><span class="dot2"></span>All OFF</span>
-        <span class="segbtn"><span class="dot2"></span>Flash</span>
+      <p class="lbl">Éclairage global</p>
+      <div class="tristate">
+        <span>ON</span>
+        <span class="sel-auto">AUTO</span>
+        <span>OFF</span>
       </div>
-      <p class="hint">Aucun n'est actif : l'éclairage suit normalement l'état du jeu (dérivation automatique).</p>
+      <p class="hint">
+        Position normale : l'éclairage est piloté par l'état du jeu (dérivation automatique). C'est
+        la position de repli — un serveur qui redémarre, ou un écran rechargé, retrouve
+        <b>AUTO</b>, jamais <b>ON</b> ni <b>OFF</b>.
+      </p>
     </div>
   </div>
   <div class="screen">
-    <div class="screen-hd">/admin/ambiance — override « All OFF » actif</div>
+    <div class="screen-hd">/admin/ambiance — position OFF (forcée)</div>
     <div class="screen-bd">
-      <div class="segrow">
-        <span class="segbtn"><span class="dot2"></span>All ON</span>
-        <span class="segbtn active"><span class="dot2"></span>All OFF</span>
-        <span class="segbtn"><span class="dot2"></span>Flash</span>
+      <p class="lbl">Éclairage global</p>
+      <div class="tristate">
+        <span>ON</span>
+        <span>AUTO</span>
+        <span class="sel-off">OFF</span>
       </div>
       <p class="hint">
         Toutes les ampoules pilotées forcées éteintes, quoi que fasse le jeu pendant ce temps.
-        Cliquer <b>All ON</b> ou <b>Flash</b> bascule directement dessus (un seul override actif à
-        la fois — activer l'un désactive automatiquement celui qui l'était). Recliquer sur
-        <b>All OFF</b> (le bouton déjà actif) <b>relâche</b> l'override : l'éclairage repasse sous le
-        contrôle automatique de l'état de jeu courant.
+        Cliquer <b>ON</b> bascule directement sur l'inverse ; cliquer <b>AUTO</b> relâche le forçage
+        et rend la main à l'état de jeu courant — <b>ce n'est jamais « ON » qui annule « OFF »</b>,
+        c'est le retour explicite sur la position <b>AUTO</b>.
       </p>
     </div>
   </div>
 
-  <h3>Les trois overrides</h3>
+  <p class="lbl">Flash — identification (bascule indépendante)</p>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — Flash</div>
+    <div class="screen-bd">
+      <div class="row2">
+        <div>
+          <p class="hint" style="margin:0 0 8px">Arrêté</p>
+          <span class="togglebtn"><span class="sw2"></span>Flash identification</span>
+        </div>
+        <div>
+          <p class="hint" style="margin:0 0 8px">Actif</p>
+          <span class="togglebtn on"><span class="sw2"></span>Flash identification</span>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:14px">
+        <b>Flash</b> est un contrôle <b>séparé</b> du sélecteur ON/AUTO/OFF, pas une quatrième
+        position du même groupe — une simple bascule à deux états. Tant qu'il reste actif, les
+        ampoules pilotées clignotent en continu ; on l'arrête explicitement en recliquant, il ne
+        s'éteint pas seul.
+      </p>
+    </div>
+  </div>
+
+  <h3>Les deux contrôles</h3>
   <div class="scroll">
     <table>
-      <tr><th style="width:20%">Override</th><th>Pendant qu'il est actif</th><th>À la relâche (reclic sur le même bouton)</th></tr>
-      <tr><td><b>All ON</b></td><td>Toutes les ampoules pilotées forcées à pleine intensité, blanc neutre.</td><td>Retour à la dérivation automatique depuis l'état de jeu courant.</td></tr>
-      <tr><td><b>All OFF</b></td><td>Toutes les ampoules pilotées forcées à <code>{"on": false}</code>.</td><td>Retour à la dérivation automatique depuis l'état de jeu courant.</td></tr>
-      <tr><td><b>Flash</b></td><td>Clignotement continu, pour identifier les ampoules pendant la configuration.</td><td>Retour à la dérivation automatique depuis l'état de jeu courant.</td></tr>
+      <tr><th style="width:20%">Contrôle</th><th>Positions</th><th>Effet</th></tr>
+      <tr>
+        <td rowspan="3"><b>Sélecteur global</b></td>
+        <td><b>ON</b></td><td>Toutes les ampoules pilotées forcées à pleine intensité, blanc neutre.</td>
+      </tr>
+      <tr>
+        <td><b>AUTO</b> <span class="bulb-i">(défaut)</span></td><td>Éclairage piloté par l'état de jeu courant — comportement normal, aucun forçage.</td>
+      </tr>
+      <tr>
+        <td><b>OFF</b></td><td>Toutes les ampoules pilotées forcées à <code>{"on": false}</code>.</td>
+      </tr>
+      <tr>
+        <td><b>Flash</b> <span class="bulb-i">(séparé)</span></td>
+        <td>ON/OFF</td>
+        <td>Clignotement continu tant qu'actif, pour identifier les ampoules pendant la configuration.</td>
+      </tr>
     </table>
   </div>
   <div class="call warn">
-    <span class="call-t">« OFF » ne veut jamais dire « éteindre »</span>
-    Relâcher un override (recliquer sur le bouton actif) ne remet <b>pas</b> les ampoules à l'état
-    éteint — ça rend simplement la main à la dérivation automatique, qui peut tout aussi bien
-    afficher une scène allumée si le jeu est en cours. C'est la même mécanique que la
-    resynchronisation déjà décidée au retour du pont (<code>contracts/lighting.md</code> §10.3) :
-    re-dériver depuis l'état de jeu courant, jamais un état neutre figé.
+    <span class="call-t">« AUTO » n'est pas « aucune sélection » — c'est une position à part entière</span>
+    Le sélecteur est <b>toujours</b> sur l'une des trois positions, jamais dans un état indéterminé.
+    AUTO n'est pas l'absence d'un choix : c'est le choix explicite de laisser l'état de jeu piloter
+    l'éclairage. C'est aussi la position qui remplace ce qu'une révision précédente de cette maquette
+    appelait « relâcher un override » — même comportement (retour à la dérivation automatique depuis
+    l'état de jeu courant, jamais un état neutre figé, même mécanique que la resynchronisation déjà
+    décidée au retour du pont, <code>contracts/lighting.md</code> §10.3), formulé cette fois comme
+    une position visible plutôt qu'un « désactivé » implicite.
   </div>
 
   <div class="call ok">
     <span class="call-t">Un outil de configuration, pas de spectacle en direct</span>
-    Ces trois overrides vivent uniquement sur l'écran d'administration, jamais sur <code>/anim</code>.
-    Ils servent à vérifier une configuration avant une soirée (ou entre deux parties), pas à
-    accompagner le jeu en cours — cohérent avec la décision déjà actée en #207 §08 (« pas de réglage
-    de couleur ni de scène dans cet écran ») : ici non plus, aucun curseur, seulement des overrides
-    francs et mutuellement exclusifs.
+    Ce sélecteur et cette bascule vivent uniquement sur l'écran d'administration, jamais sur
+    <code>/anim</code>. Ils servent à vérifier une configuration avant une soirée (ou entre deux
+    parties), pas à accompagner le jeu en cours — cohérent avec la décision déjà actée en #207 §08
+    (« pas de réglage de couleur ni de scène dans cet écran ») : ici non plus, aucun curseur, deux
+    contrôles francs.
   </div>
   <div class="call info">
     <span class="call-t">Priorité admin ↔ jeu en cours — en révision, hors périmètre de cette maquette</span>
-    Ce qui se passe <b>à la relâche</b> d'un override est désormais clair (ci-dessus). Reste ouvert :
-    est-ce qu'un override actif <b>tient</b> face à un événement de jeu qui survient pendant qu'il
-    est actif, ou est-il lui aussi recouvert au prochain événement (même logique que l'ancien §10.1
-    pour le panneau <code>/anim</code> retiré) ? Cette question est en cours de révision par le
-    planner — non tranchée ici. <code>docs/mockups/lighting-priority-208.md</code> sera mis à jour
-    séparément une fois la conclusion reçue.
+    Ce qui se passe en position <b>AUTO</b> est clair (ci-dessus). Reste ouvert : est-ce qu'une
+    position <b>ON</b> ou <b>OFF</b> (ou <b>Flash</b> actif) <b>tient</b> face à un événement de jeu
+    qui survient pendant ce temps, ou est-elle recouverte au prochain événement (même logique que
+    l'ancien §10.1 pour le panneau <code>/anim</code> retiré) ? Cette question est en cours de
+    révision par le planner — non tranchée ici. <code>docs/mockups/lighting-priority-208.md</code>
+    sera mis à jour séparément une fois la conclusion reçue.
   </div>
 </section>
 
 <section>
-  <h2><span class="num">02</span>Trois overrides mutuellement exclusifs, jamais trois actions</h2>
+  <h2><span class="num">02</span>Pourquoi un tri-état, pas trois boutons équivalents</h2>
   <p class="lede">
-    Correction du 2026-09-07 sur la révision précédente de cette section, qui traitait All ON/All
-    OFF comme des clics ponctuels et Flash seul comme une bascule. Les <b>trois</b> sont en réalité
-    des <b>overrides à état</b>, strictement équivalents dans leur mécanique — seul leur effet
-    diffère. Un override est soit <b>actif</b> (il force l'éclairage), soit <b>relâché</b> (il rend
-    la main à la dérivation automatique) — jamais une troisième chose.
+    Design tranché par l'utilisateur le 2026-09-07, après deux lectures concurrentes (une révision
+    de cette maquette avait fait de Flash la seule bascule, la suivante avait fait des trois des
+    overrides identiques). Le <b>sélecteur ON/AUTO/OFF</b> et la <b>bascule Flash</b> sont deux
+    contrôles de nature différente, pas trois variantes du même geste.
   </p>
   <div class="screen">
-    <div class="screen-hd">Ce que chaque override fait — et ne fait pas</div>
+    <div class="screen-hd">Ce que chaque contrôle fait — et ne fait pas</div>
     <div class="screen-bd">
       <ul class="pl">
-        <li>Un clic sur un override <b>inactif</b> l'active, et désactive automatiquement celui qui
-          l'était (jamais deux actifs en même temps — mutuellement exclusifs, comme un groupe de
-          boutons radio).</li>
-        <li>Un clic sur l'override déjà <b>actif</b> le relâche : retour à la dérivation automatique
-          depuis l'état de jeu courant, <b>pas</b> une extinction (§01, encart « OFF ne veut jamais
-          dire éteindre »).</li>
-        <li>Aucun des trois n'est un « bouton d'action » au sens de « Tester » (#207 §05, effet
-          ponctuel puis retour automatique) : les trois se comportent identiquement à l'état, seul
-          l'effet pendant qu'ils sont actifs change (plein feu / éteint / clignotant).</li>
+        <li>Le sélecteur global n'a <b>que trois positions possibles, toujours une seule active</b> —
+          ON, AUTO ou OFF, jamais « rien de sélectionné » ni deux à la fois. Passer de ON à OFF
+          se fait <b>via AUTO</b> conceptuellement (ce sont deux forçages opposés, pas l'inverse l'un
+          de l'autre) même si un clic direct ON→OFF reste possible à l'écran.</li>
+        <li><b>AUTO</b> est la position de repli et l'état normal — pas un « désactivé » creux : elle
+          porte le même sens que « aucun override actif » dans une lecture précédente de cette
+          maquette, formulé cette fois comme une position visible du sélecteur.</li>
+        <li><b>Flash</b> est <b>orthogonal</b> au sélecteur : une bascule à deux états (arrêté/actif),
+          affichée séparément, qui ne fait pas partie du groupe ON/AUTO/OFF — elle sert à identifier
+          une ampoule pendant qu'on règle son rôle (§01), pas à forcer l'état global de la salle.</li>
       </ul>
       <p class="hint" style="margin-top:12px">
-        C'est cette identité de mécanique qui justifie de les représenter comme un seul groupe de
-        trois boutons à état (§01), et non comme deux boutons d'action à côté d'une bascule isolée —
-        présentation de la révision précédente, désormais incorrecte.
+        Distinguer les deux évite une question sans réponse claire : que voudrait dire « Flash
+        actif » comme quatrième position d'un sélecteur qui n'en admet qu'une à la fois ? En le
+        sortant du groupe, la question ne se pose plus.
       </p>
     </div>
   </div>
@@ -376,31 +430,33 @@
   <h2><span class="num">03</span>Décisions de conception</h2>
   <ol class="reasons">
     <li><b>Un outil de configuration sur l'écran admin, jamais sur <code>/anim</code>.</b> Correction
-      de la révision précédente de cette maquette, qui plaçait à tort ces trois overrides sur l'écran
+      de la révision précédente de cette maquette, qui plaçait à tort ces commandes sur l'écran
       animateur : la conduite d'éclairage en direct, associée aux événements de jeu, est une phase 2
       hors périmètre — cette phase 1 s'arrête à associer le pont, affecter des ampoules aux équipes,
       et vérifier ce réglage.</li>
-    <li><b>Les trois overrides partagent une seule mécanique</b> (actif/relâché, mutuellement
-      exclusifs) — pas deux boutons d'action et une bascule à part, présentation corrigée en §02
-      suite à une deuxième précision utilisateur.</li>
-    <li><b>Relâcher un override re-dérive depuis l'état de jeu, jamais un état neutre</b> — même
-      principe que la resynchronisation déjà décidée au retour du pont
-      (<code>contracts/lighting.md</code> §10.3), appliqué ici à un troisième déclencheur.</li>
+    <li><b>Sélecteur tri-état ON/AUTO/OFF pour le forçage global</b>, bascule Flash séparée pour
+      l'identification — deux contrôles de nature différente, pas trois boutons équivalents
+      (présentation retenue après deux itérations, §02).</li>
+    <li><b>AUTO re-dérive depuis l'état de jeu, jamais un état neutre</b> — même principe que la
+      resynchronisation déjà décidée au retour du pont (<code>contracts/lighting.md</code> §10.3),
+      appliqué ici à un troisième déclencheur.</li>
     <li><b>Le rôle « équipe » réutilise le menu déroulant existant du sélecteur d'ampoule</b>, pas un
       nouveau composant de sélection — c'est la même famille d'interaction que le reste de la page
       #207 (case à cocher + libellé), un menu de plus n'introduit rien de nouveau à apprendre.</li>
+    <li><b>La table de scènes de #205 (événements→couleurs) n'est pas retouchée</b> par cette
+      révision — confirmé par l'utilisateur : seul son éditeur (#210/v10.1) reste reporté.</li>
     <li><b>Priorité admin ↔ jeu en cours non tranchée ici</b> — en révision par le planner (§01,
       dernier encart). Cette maquette ne préjuge pas de ce qui se passe si un événement de jeu
-      survient pendant qu'un override reste actif.</li>
+      survient pendant que le sélecteur est sur ON/OFF ou que Flash est actif.</li>
   </ol>
 </section>
 
 <footer>
-  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 3 — à valider</b>, GATE 2 · panneau
-  de conduite manuelle retiré de <code>/anim</code>, déplacé en overrides de test mutuellement
-  exclusifs sur <code>/admin/ambiance</code> (corrections utilisateur du 2026-09-07) · référence pour
-  dev-frontend (Batch 3), test-writer (T1.4) et qa · issues #213/#208 · milestone v10.0.0 ·
-  BuzzControl
+  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 4 — à valider</b>, GATE 2 · panneau
+  de conduite manuelle retiré de <code>/anim</code>, remplacé sur <code>/admin/ambiance</code> par un
+  sélecteur tri-état ON/AUTO/OFF + une bascule Flash séparée (design tranché par l'utilisateur le
+  2026-09-07) · référence pour dev-frontend (Batch 3), test-writer (T1.4) et qa · issues #213/#208 ·
+  milestone v10.0.0 · BuzzControl
 </footer>
 
 </div>
