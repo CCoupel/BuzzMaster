@@ -145,13 +145,17 @@ strict nécessaire de la production :
 |---|---|
 | `POST /api` | enregistrement (bouton) |
 | `GET /api/<clé>/lights` et `/lights/<id>` | inventaire, résolution par nom |
-| `PUT /api/<clé>/lights/<id>/state` | **seule** écriture |
+| `PUT /api/<clé>/lights/<id>/state` | écriture d'**une** ampoule |
 | `GET /api/<clé>/config` | identifiant/modèle/version du bridge, pour l'écran d'état |
+| `GET /api/<clé>/groups` et `POST /api/<clé>/groups` | inventaire des groupes, création (§5.8) |
+| `PUT /api/<clé>/groups/<id>` et `DELETE /api/<clé>/groups/<id>` | correction/suppression de la composition d'**un** groupe BuzzMaster, id strictement positif (§5.8) |
+| `PUT /api/<clé>/groups/<id>/action` | écriture d'un **groupe** (§5.8) — id strictement positif : le groupe implicite 0 (« toutes les ampoules ») reste exclu par construction, même règle que `lights/0/state` |
 
-Tout le reste reste **refusé avant émission** : groupes, scènes, règles, planifications, capteurs,
-`resourcelinks`, whitelist, firmware, `DELETE`, renommage, API v2, chemins contenant `?`, `#` ou
-`..`. Le test des cas interdits (`TestGuardAllowsOnlyTheThreeOperations`, 24 cas) est **repris et
-étendu**.
+Tout le reste reste **refusé avant émission** : scènes, règles, planifications, capteurs,
+`resourcelinks`, whitelist, firmware, lecture d'**un** groupe (`GET /groups/<id>`, jamais
+nécessaire), `POST` sur un groupe précis, renommage, API v2, chemins contenant `?`, `#` ou `..`. Le
+test des cas interdits (`TestGuardAllowsOnlyTheDocumentedOperations`, `internal/lighting/hue/
+guard_test.go`) est **repris et étendu** (Batch B, 2026-09-07).
 
 ---
 
