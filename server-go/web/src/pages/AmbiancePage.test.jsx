@@ -484,7 +484,7 @@ describe('Étape 2 — association par appui bouton', () => {
 // ===========================================================================
 
 describe('Étape 3 — pont configuré', () => {
-  it('badge « Pont connecté » + compteur, toutes les ampoules AFFICHÉES et COCHÉES par défaut, « Tester » inactif pour une ampoule éteinte au mur', async () => {
+  it('badge « Pont connecté » + compteur, toutes les ampoules AFFICHÉES mais AUCUNE cochée par défaut (revirement 2026-09-07), « Tester » inactif pour une ampoule éteinte au mur', async () => {
     makeServer({ lighting: CONFIGURED, status: { state: 'ok', lights_ok: 2, lights_total: 3 }, lights: INVENTORY })
     render(<AmbiancePage />)
 
@@ -496,7 +496,9 @@ describe('Étape 3 — pont configuré', () => {
 
     const boxes = screen.getAllByRole('checkbox')
     expect(boxes).toHaveLength(3)
-    boxes.forEach(b => expect(b).toBeChecked())
+    // Retour QUALIF v10.0.0.13 : une association fraîche ne pré-coche plus
+    // rien — chaque ampoule est affectée explicitement (defaultSelectionFor).
+    boxes.forEach(b => expect(b).not.toBeChecked())
 
     expect(screen.getByText('id 8 · joignable')).toBeInTheDocument()
     expect(screen.getByText('id 11 · éteinte au mur')).toBeInTheDocument()
@@ -507,7 +509,11 @@ describe('Étape 3 — pont configuré', () => {
     expect(screen.getByText(/bref flash puis rend l'ampoule/)).toBeInTheDocument()
   })
 
-  it('aucun rendu intermédiaire avec des cases décochées (sélection dérivée, pas fixée par un effet)', async () => {
+  it('aucun rendu intermédiaire avec des cases cochées par erreur (sélection dérivée, pas fixée par un effet)', async () => {
+    // Retour QUALIF v10.0.0.13 : la sélection par défaut est maintenant
+    // toujours vide (defaultSelectionFor ne lit plus que la config) — ce
+    // test vérifie qu'aucun flash de cases COCHÉES n'apparaît jamais, pas
+    // même transitoirement, plutôt que l'inverse avant ce revirement.
     makeServer({ lighting: CONFIGURED, status: { state: 'ok' }, lights: INVENTORY })
     const snapshots = []
     const observer = new MutationObserver(() => {
@@ -520,7 +526,7 @@ describe('Étape 3 — pont configuré', () => {
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     observer.disconnect()
     expect(snapshots.length).toBeGreaterThan(0)
-    snapshots.forEach(snap => snap.forEach(checked => expect(checked).toBe(true)))
+    snapshots.forEach(snap => snap.forEach(checked => expect(checked).toBe(false)))
   })
 
   it('inventaire en 500 {result:error} : message explicite, pas « Aucune ampoule », rien ne casse', async () => {
@@ -538,7 +544,12 @@ describe('Étape 3 — pont configuré', () => {
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
 
-    fireEvent.click(screen.getByLabelText('Scène')) // décoche
+    // Retour QUALIF v10.0.0.13 : rien n'est coché par défaut — cocher
+    // explicitement Salle gauche et Salle droite (Scène reste décochée,
+    // comme avant ce revirement, mais par absence de coche plutôt que par
+    // un clic qui la décochait).
+    fireEvent.click(screen.getByLabelText('Salle gauche'))
+    fireEvent.click(screen.getByLabelText('Salle droite'))
     fireEvent.click(screen.getByText('Enregistrer'))
 
     await screen.findByText('Ampoules enregistrées.')
@@ -600,6 +611,11 @@ describe('Étape 3 — pont configuré', () => {
     await waitFor(() => expect(callsTo(server, 'POST', '/api/lighting/test')).toHaveLength(1))
     expect(callsTo(server, 'POST', '/api/lighting/test')[0].body).toEqual({ name: 'Salle gauche' })
 
+    // Retour QUALIF v10.0.0.13 : « Tester toutes » est désactivé tant
+    // qu'aucune ampoule n'est cochée (plus de présélection par défaut) —
+    // en cocher une suffit à l'activer, sans rapport avec le test individuel
+    // ci-dessus (l'appel « Tester » d'une ampoule ne la coche pas).
+    fireEvent.click(screen.getByLabelText('Salle gauche'))
     fireEvent.click(screen.getByText('Tester toutes les ampoules'))
     await waitFor(() => expect(callsTo(server, 'POST', '/api/lighting/test')).toHaveLength(2))
     expect(callsTo(server, 'POST', '/api/lighting/test')[1].body).toEqual({})

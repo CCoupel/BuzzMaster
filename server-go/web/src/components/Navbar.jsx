@@ -5,6 +5,7 @@ import { useUpdates } from '../hooks/useUpdates'
 import { useLightingStatus } from '../hooks/useLightingStatus'
 import { lightingStateTitle, normalizeLightingState } from '../utils/lightingState'
 import LightingBulbIcon from './LightingBulbIcon'
+import LightingModePanel from './LightingModePanel'
 import useElementHeightVar from '../hooks/useElementHeightVar'
 import { useGame } from '../hooks/GameContext'
 import { canToggleEntracte } from '../utils/phaseRules'
@@ -70,16 +71,27 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // peut devenir injoignable PENDANT une session — un appel au montage seul,
   // comme useUpdates, ne suffirait pas.
   const { status: lightingStatus } = useLightingStatus()
-  // #208 (v10.0.0, correction utilisateur du 2026-09-07) — garde-fou "mode
-  // oublié" (R8, planner-v10-etat-courant-20260907.md §3) rendu GLOBAL,
-  // même schéma que le bouton ENTRACTE ci-dessus (élargi de GamePage vers la
-  // Navbar pour rester visible sur tout /admin/*, pas seulement l'écran où
-  // vit le panneau de conduite lui-même, components/LightingModePanel.jsx).
+  // #208 — point d'accès UNIQUE aux commandes ON/AUTO/OFF/Flash (retour
+  // utilisateur QUALIF v10.0.0.13, 2026-09-07) : d'abord un simple bandeau
+  // d'avertissement renvoyant vers GamePage (SHA 110dfff3), le panneau
+  // LUI-MÊME y a ensuite vécu un instant (SHA 30ff5abe) avant d'être retiré
+  // le même jour — décision finale : les commandes ne vivent QUE dans la
+  // Navbar, jamais sur un écran particulier, pour rester à portée de main
+  // depuis TOUTE page admin. Ce bouton est donc désormais visible dès que
+  // l'éclairage est configuré (pas seulement quand un mode est engagé) et
+  // ouvre un popover contenant LightingModePanel tel quel (composant
+  // inchangé, seul son point de montage a bougé).
   // Réutilise l'instance useLightingStatus() déjà interrogée ici pour
   // l'ampoule du menu Ambiance — mode/flash sont déjà dans la même réponse
   // (contrat lighting.md §10.1), aucun second polling introduit.
-  const lightingModeEngaged = normalizeLightingState(lightingStatus.state) !== 'disabled'
-    && (lightingStatus.mode === 'ON' || lightingStatus.mode === 'OFF')
+  const lightingConfigured = normalizeLightingState(lightingStatus.state) !== 'disabled'
+  // Repli défensif : useLightingStatus() applique ce défaut lui-même
+  // (EMPTY_LIGHTING_STATUS), mais un mock de test ou un serveur antérieur
+  // au Batch 2 peut renvoyer un statut sans `mode` — jamais planter dessus.
+  const lightingMode = lightingStatus.mode || 'AUTO'
+  const [lightingPopoverOpen, setLightingPopoverOpen] = useState(false)
+  const lightingButtonRef = useRef(null)
+  const lightingPopoverRef = useRef(null)
 
   // #179 (F3) — mesure la hauteur RÉELLE de la Navbar (jamais garantie par
   // son CSS, qui ne déclare aucune hauteur fixe) et la partage via
@@ -122,6 +134,26 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
       }
     }
   }, [isMenuOpen, menuRef, buttonRef])
+
+  // Fermeture du popover Éclairage au clic extérieur — même patron que le
+  // menu abeille ci-dessus, refs et état dédiés (deux popovers indépendants
+  // peuvent en théorie être ouverts en même temps, chacun se ferme sur son
+  // propre clic extérieur).
+  useEffect(() => {
+    function handleClickOutsideLighting(event) {
+      if (lightingPopoverRef.current && !lightingPopoverRef.current.contains(event.target) &&
+          lightingButtonRef.current && !lightingButtonRef.current.contains(event.target)) {
+        setLightingPopoverOpen(false)
+      }
+    }
+
+    if (lightingPopoverOpen) {
+      document.addEventListener('mousedown', handleClickOutsideLighting)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutsideLighting)
+      }
+    }
+  }, [lightingPopoverOpen])
 
   // #175 (F3) — si le serveur redémarre et que la reconnexion aboutit après
   // un "Quitter" (ex. relancé manuellement entre-temps), l'état "arrêté"
@@ -328,23 +360,31 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           {entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
         </Button>
 
-        {/* #208 — garde-fou global "mode éclairage engagé". Absent tant que
-            le sélecteur est sur AUTO (repos) ou que l'éclairage n'est pas
-            configuré — jamais un badge muet en permanence. Cliquable :
-            ramène directement à GamePage, où vit le seul contrôle réel
-            (LightingModePanel) — même geste que version-badge ci-dessus
-            vers Mises à jour. */}
-        {lightingModeEngaged && (
-          <span
-            className={`lighting-mode-nav-badge is-${lightingStatus.mode.toLowerCase()}`}
-            title={`Éclairage général forcé ${lightingStatus.mode === 'ON' ? 'allumé' : 'éteint'} — cliquer pour revenir sur l'écran de jeu`}
-            role="button"
-            tabIndex={0}
-            onClick={() => navigate(getFullPath(''))}
-            onKeyDown={e => e.key === 'Enter' && navigate(getFullPath(''))}
-          >
-            💡 Mode {lightingStatus.mode} engagé
-          </span>
+        {/* #208 — point d'accès complet aux commandes ON/AUTO/OFF/Flash,
+            visible dès que l'éclairage est configuré (pas seulement un mode
+            engagé) : c'est un CONTRÔLE, plus seulement un indicateur.
+            Absent tant que l'éclairage n'est pas configuré — même ligne de
+            conduite que l'entrée Ambiance du menu (aucune trace si aucun
+            pont Hue). */}
+        {lightingConfigured && (
+          <div className="lighting-mode-container">
+            <button
+              ref={lightingButtonRef}
+              type="button"
+              className={`lighting-mode-nav-badge is-${lightingMode.toLowerCase()}`}
+              title="Éclairage général — ouvrir les commandes"
+              aria-haspopup="true"
+              aria-expanded={lightingPopoverOpen}
+              onClick={() => setLightingPopoverOpen(o => !o)}
+            >
+              💡 {lightingMode === 'AUTO' ? 'Éclairage' : `Mode ${lightingMode} engagé`}
+            </button>
+            {lightingPopoverOpen && (
+              <div ref={lightingPopoverRef} className="lighting-mode-popover">
+                <LightingModePanel />
+              </div>
+            )}
+          </div>
         )}
       </div>
 

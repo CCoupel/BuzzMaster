@@ -35,7 +35,6 @@ import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import RafalePoolAlert from '../components/RafalePoolAlert'
-import LightingModePanel from '../components/LightingModePanel'
 import AnimRafaleActions from '../components/AnimRafaleActions'
 import './GamePage.css'
 import '../styles/entracte.css'
@@ -900,14 +899,14 @@ export default function GamePage() {
         )}
       </div>
 
-      {/* #208 (v10.0.0, deplace de AmbiancePage.jsx vers ici le
-          2026-09-07) — conduite en direct ON/AUTO/OFF + Flash pour la
-          regie, controles globaux salle au meme titre que le toggle TV et
-          NOUVELLE PARTIE ci-dessus (bloc timer-display-section) : place
-          juste apres pour rester TOUJOURS au meme endroit, jamais entrelace
-          avec le contenu conditionnel par question/phase. S'auto-masque
-          (retourne null) tant qu'aucun pont Hue n'est configure. */}
-      <LightingModePanel />
+      {/* #208 — le panneau de conduite ON/AUTO/OFF + Flash est passe ICI
+          (SHA 30ff5abe) puis RETIRE le meme jour (retour utilisateur QUALIF
+          v10.0.0.13, correction dev-frontend-navbar-and-unassign-20260907) :
+          les commandes doivent vivre UNIQUEMENT dans la Navbar, accessibles
+          depuis TOUTE page admin, pas seulement GamePage. Le composant
+          LightingModePanel (components/LightingModePanel.jsx) n'a pas
+          bouge — c'est Navbar.jsx qui le monte desormais, dans un popover
+          ouvert depuis le bouton "Eclairage" du bandeau. */}
 
       {/* TV Preview — deplace ici (etait plus bas, cote a cote de la
           liste equipes) pour former UN SEUL item de grille avec

@@ -21,8 +21,18 @@ import './AmbiancePage.css'
 //   - l'attente « appuyez sur le bouton » est EN LIGNE, pas en modale ;
 //   - AUCUN champ de saisie de clé : elle s'obtient par l'appui bouton ;
 //   - « bouton non pressé » (Hue 101 -> 409) est un cas NOMINAL, pas une panne ;
-//   - toutes les ampoules cochées par défaut mais toutes AFFICHÉES ;
+//   - toutes les ampoules AFFICHÉES, cochées ou non (voir revirement 2026-09-07
+//     ci-dessous — ce n'est PLUS "cochées par défaut") ;
 //   - badge à QUATRE valeurs, « injoignable » et « refusée » jamais fondues.
+//
+// ⚠️ Revirement (retour QUALIF v10.0.0.13, 2026-09-07) — le point ci-dessus
+// disait à l'origine « toutes les ampoules cochées par défaut mais toutes
+// affichées » (pont dédié à BuzzMaster, présomption assumée). L'utilisateur
+// ne veut plus de cette présomption : une association fraîche ne coche plus
+// rien, chaque ampoule est affectée explicitement (voir defaultSelectionFor
+// ci-dessous). Ne pas restaurer l'ancien comportement en lisant seulement ce
+// bloc de tête — c'est le code, pas ce commentaire, qui a été corrigé en
+// premier ; ce commentaire reflète l'état actuel.
 //
 // La section de config se nomme `lighting`, jamais `ambiance` (mot déjà pris
 // par la catégorie de sauvegarde de game-config.json, BackupPage.jsx/#152).
@@ -99,12 +109,18 @@ function registerOutcome(res, body) {
   return { kind: 'error', detail: `Réponse inattendue du serveur (HTTP ${res.status}).` }
 }
 
-// Sélection par défaut des ampoules : la config fait foi ; si elle est vide
-// (association toute fraîche) TOUT est coché — le pont est dédié à BuzzMaster.
-function defaultSelectionFor(configLights, inventoryLights) {
-  const fromConfig = configLights.map(l => l.name)
-  if (fromConfig.length > 0) return fromConfig
-  return inventoryLights.map(l => l.name)
+// Sélection par défaut des ampoules — la config fait foi, POINT FINAL.
+//
+// Retour utilisateur QUALIF v10.0.0.13 (2026-09-07) — REVIRE la décision de
+// #207 : une association fraîche ne pré-coche plus rien. Auparavant, config
+// vide ⇒ tout l'inventaire coché (« le pont est dédié à BuzzMaster ») ;
+// l'utilisateur ne veut plus de cette présomption, même sur un pont dédié —
+// chaque ampoule nouvellement détectée démarre NON affectée, à cocher (et
+// affecter un rôle, #213) explicitement une par une. Reste TOUJOURS affichée
+// même non cochée (#207, « toutes les ampoules affichées, cochées ou non »
+// — seule la moitié « cochées » de cette règle change ici).
+function defaultSelectionFor(configLights) {
+  return configLights.map(l => l.name)
 }
 
 // #213 — normalise une entrée `lighting.lights` en {role, team}. Toute
@@ -156,6 +172,7 @@ export default function AmbiancePage() {
   // l'utilisateur, non encore enregistré.
   const [selectedNames, setSelectedNames] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [unassigning, setUnassigning] = useState(false)
   const [testing, setTesting] = useState(null) // nom en cours de test, ou '*' pour toutes
 
   // #213 — rôle par ampoule : { [name]: {role, team} }, seulement les
@@ -369,12 +386,12 @@ export default function AmbiancePage() {
   }, [configured, lighting.bridge_ip, loadInventory])
 
   // Sélection effective : choix explicite de l'utilisateur s'il existe, sinon
-  // la sélection par défaut — dérivée de façon SYNCHRONE, donc cochée dès le
-  // premier rendu des lignes (« tout coché » est l'état initial, pas un état
-  // atteint après un flash de cases vides).
+  // la sélection par défaut (uniquement la config — voir defaultSelectionFor)
+  // — dérivée de façon SYNCHRONE, donc correcte dès le premier rendu des
+  // lignes, jamais un flash intermédiaire incorrect.
   const defaultSelection = useMemo(
-    () => defaultSelectionFor(lighting.lights, inventory.lights),
-    [lighting.lights, inventory.lights]
+    () => defaultSelectionFor(lighting.lights),
+    [lighting.lights]
   )
   const effectiveSelected = selectedNames ?? defaultSelection
 
@@ -432,6 +449,12 @@ export default function AmbiancePage() {
     return c ? `rgb(${c.rgb.join(',')})` : null
   }, [teams])
 
+  // Au moins une ampoule sélectionnée porte-t-elle un rôle "team" ? Sert
+  // uniquement à désactiver « Désassocier toutes » quand elle n'aurait
+  // aucun effet (rien à retirer) — pas une garde de sécurité comme
+  // `allMissing`, juste une désactivation de confort.
+  const anyTeamAssigned = effectiveSelected.some(name => roleFor(name).role === 'team')
+
   const toggleName = (name, checked) => {
     setSelectedNames(prev => {
       const base = prev ?? defaultSelection
@@ -458,6 +481,35 @@ export default function AmbiancePage() {
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  // #213 — désassociation GROUPÉE des rôles/équipes (retour utilisateur
+  // QUALIF v10.0.0.13, 2026-09-07). Distincte de `handleUnpair` ci-dessous
+  // (qui dissocie le PONT entier, efface la clé) : celle-ci ne touche que
+  // les rôles — les ampoules restent détectées, sélectionnées et pilotées,
+  // seule leur affectation équipe repasse à `general`. Persiste
+  // immédiatement (même patron que handleUnpair, pas un simple état local
+  // en attente d'un second clic sur « Enregistrer ») : c'est sa propre
+  // action, avec sa propre confirmation.
+  const handleUnassignAllRoles = async () => {
+    if (!window.confirm(
+      "Retirer l'affectation d'équipe de toutes les ampoules ? Elles resteront détectées et pilotées, mais reviendront toutes à « Éclairage général »."
+    )) return
+    setUnassigning(true)
+    try {
+      const lights = effectiveSelected.map(name => ({ name, role: 'general' }))
+      const res = await saveLighting({ enabled: true, lights })
+      if (!res.ok) throw new Error(await res.text())
+      setSelectedNames(null)
+      setRoleOverrides({})
+      setToast({ message: 'Affectations retirées.', type: 'success' })
+      await afterSave()
+    } catch (error) {
+      console.error('Unassign all roles failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setUnassigning(false)
     }
   }
 
@@ -903,6 +955,18 @@ export default function AmbiancePage() {
               </Button>
               <Button variant="ghost" onClick={() => loadInventory()} loading={inventory.phase === 'loading'}>
                 Actualiser la liste
+              </Button>
+              {/* #213 — désassociation groupée des rôles (2026-09-07), distincte
+                  de « Dissocier ce pont » plus haut (celle-ci efface la clé et
+                  le pont entier ; celle-ci ne touche que les rôles/équipes,
+                  les ampoules restent détectées et pilotées). */}
+              <Button
+                variant="ghost"
+                onClick={handleUnassignAllRoles}
+                loading={unassigning}
+                disabled={frozen || allMissing || !anyTeamAssigned}
+              >
+                Désassocier toutes les ampoules
               </Button>
             </div>
             <p className="ambiance-hint">« Tester » produit un bref flash puis rend l'ampoule à son état précédent.</p>

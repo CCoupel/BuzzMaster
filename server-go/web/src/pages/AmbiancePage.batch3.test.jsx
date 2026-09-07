@@ -8,11 +8,17 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 // l'état de jeu courant (useGame().teams), jamais d'un endpoint dédié.
 //
 // Le panneau #208 (sélecteur ON/AUTO/OFF + Flash) vivait aussi ici dans une
-// première version de ce fichier — déplacé vers GamePage.jsx le 2026-09-07
-// (correction utilisateur : outil de conduite en direct utilisé par la
-// régie PENDANT une partie, pas sur cet écran de configuration). Ses tests
-// vivent désormais dans components/LightingModePanel.test.jsx (composant)
-// et pages/GamePage.lighting208.test.jsx (câblage).
+// première version de ce fichier — passé par GamePage.jsx, puis retiré
+// définitivement le 2026-09-07 (les commandes ne vivent QUE dans la Navbar,
+// dans un popover — retour QUALIF v10.0.0.13). Ses tests vivent désormais
+// dans components/LightingModePanel.test.jsx (composant) et
+// components/Navbar.lighting208.test.jsx (câblage popover).
+//
+// Cocher explicitement chaque ampoule avant « Enregistrer » dans les tests
+// ci-dessous : depuis le même retour QUALIF, une association fraîche ne
+// pré-coche plus rien (voir AmbiancePage.navbarAndUnassign.test.jsx pour la
+// vérification dédiée de ce revirement, et le bouton « Désassocier toutes
+// les ampoules »).
 //
 // Maquette de référence : docs/mockups/lighting-team-assignment-213.html
 // (rev6). Contrats : contracts/lighting.md §10.1 (SHA df448318),
@@ -135,6 +141,10 @@ describe('AmbiancePage — #213 rôle par ampoule', () => {
     const values = Array.from(select.options).map(o => o.value)
     expect(values).toEqual(['general', 'team:general']) // distincts, jamais deux fois "general"
 
+    // Round 4 (2026-09-07) — plus de présélection par défaut (#213/#207
+    // revirement) : cocher explicitement l'ampoule avant de pouvoir
+    // l'enregistrer.
+    fireEvent.click(screen.getByLabelText('Salle gauche'))
     fireEvent.change(select, { target: { value: 'team:general' } })
     fireEvent.click(screen.getByText('Enregistrer'))
     await screen.findByText('Ampoules enregistrées.')
@@ -174,6 +184,10 @@ describe('AmbiancePage — #213 rôle par ampoule', () => {
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
 
+    // Round 4 (2026-09-07) — plus de présélection par défaut : cocher
+    // explicitement les deux ampoules avant de changer le rôle de l'une.
+    fireEvent.click(screen.getByLabelText('Salle gauche'))
+    fireEvent.click(screen.getByLabelText('Salle droite'))
     fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
     fireEvent.click(screen.getByText('Enregistrer'))
 
