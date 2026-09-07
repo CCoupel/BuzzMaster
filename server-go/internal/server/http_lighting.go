@@ -361,7 +361,12 @@ func (h *HTTPServer) handleLightingTest(w http.ResponseWriter, r *http.Request) 
 	defer release()
 	ctx, cancel := context.WithTimeout(r.Context(), lightingRequestTimeout)
 	defer cancel()
-	if err := d.TestFlash(ctx, strings.TrimSpace(req.Name), lightingTestFlashHold, nil); err != nil {
+	// QUALIF v10.0.0.10 round 2: a plain strings.TrimSpace here (round 1)
+	// did not fix the real-device 500 — hue.NormalizeLightName also strips
+	// non-edge/non-"space" invisible characters (zero-width space, BOM,
+	// soft hyphen, control chars), the SAME function TestFlash's own
+	// resolution now uses on both sides of the comparison.
+	if err := d.TestFlash(ctx, hue.NormalizeLightName(req.Name), lightingTestFlashHold, nil); err != nil {
 		writeLightingError(w, err)
 		return
 	}

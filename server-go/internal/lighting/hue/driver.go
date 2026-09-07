@@ -20,9 +20,43 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"buzzcontrol/internal/lighting"
 )
+
+// NormalizeLightName is the ONE normalisation every light-name comparison
+// in this package (and its callers — internal/server/http_lighting.go's
+// POST /api/lighting/test, internal/server/http.go's config merge) must go
+// through, on BOTH sides of every equality check.
+//
+// Bugfix (QUALIF v10.0.0.10, round 2 — real Hue bridge, "hue: no resolved
+// light matches" PERSISTING after a plain strings.TrimSpace fix): a plain
+// edge trim only catches the narrow set of runes unicode.IsSpace
+// recognises, and only at the START/END of the string. It does NOT catch
+// format characters that are invisible but NOT "space" by that definition —
+// zero-width space (U+200B), the BOM/ZERO WIDTH NO-BREAK SPACE (U+FEFF),
+// soft hyphen (U+00AD), joiners — nor a stray control character (NUL,
+// U+0000) ANYWHERE in the string, not just at the edges. Any of these can
+// end up in a bridge-reported light name (phone keyboard autocorrect, an
+// encoding artifact in the bridge's own firmware/app) and would silently
+// split one physical light into two strings that never compare equal,
+// exactly the symptom reported twice now. Stripping every Unicode format
+// character (category Cf — covers all of the above) and control character
+// (category Cc) from the WHOLE string, then trimming plain whitespace, is
+// immune to which exact invisible rune shows up — not another guess at a
+// specific one.
+func NormalizeLightName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.Is(unicode.Cf, r) || unicode.IsControl(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(b.String())
+}
 
 const (
 	// RecommendedMinInterval is the writer pacing for this driver: one Apply is
@@ -203,7 +237,7 @@ func New(cfg Config) (*Driver, error) {
 	}
 	seen := map[string]bool{}
 	for i, l := range cfg.Lights {
-		name := strings.TrimSpace(l.Name)
+		name := NormalizeLightName(l.Name)
 		if name == "" {
 			return nil, fmt.Errorf("hue: light %d has an empty name", i)
 		}
@@ -552,22 +586,23 @@ func (d *Driver) rediscover(ctx context.Context, why string) error {
 // resolve maps configured names to ids: exactly one match required
 // (contract §4.2). Logs resolution changes once.
 //
-// Bugfix (QUALIF v10.0.0.8, real Hue bridge — "hue: no resolved light
-// matches" on a light that WAS visible at association time, e.g.
-// "salon gauche"): the bridge's own light names are matched here AS
-// RETURNED, never trimmed — but New() (below) trims every CONFIGURED name
-// with strings.TrimSpace before storing it in cfg.Lights. A bridge light
-// named with incidental leading/trailing whitespace (the Hue mobile app
-// does not prevent this) therefore NEVER matched its (trimmed) configured
-// counterpart: byName held the untrimmed bridge string as its key, so a
-// lookup by the trimmed configured name silently found nothing — case 0,
-// "not found", not even logged as a name mismatch. Trimming here makes the
-// comparison symmetric with New()'s own trimming, on both sides of the
-// same equality check.
+// Bugfix (QUALIF v10.0.0.8 round 1, then v10.0.0.10 round 2 — real Hue
+// bridge, "hue: no resolved light matches"): the bridge's own light names
+// are matched here AS RETURNED — but New() (below) normalises every
+// CONFIGURED name via NormalizeLightName before storing it in cfg.Lights.
+// Round 1 only trimmed plain edge whitespace here, which turned out to
+// have no observable effect on the real device: the actual character was
+// something strings.TrimSpace does not catch (see NormalizeLightName's own
+// doc comment — zero-width space, BOM, soft hyphen, a stray control
+// character, none of them "space" by unicode.IsSpace's definition, some of
+// them not even at the string's edges). Normalising both sides through the
+// SAME function is what actually closes this class of bug, not another
+// guess at one more specific rune.
 func (d *Driver) resolve(lights map[string]lightV1) {
 	byName := map[string][]string{}
 	for id, l := range lights {
-		byName[strings.TrimSpace(l.Name)] = append(byName[strings.TrimSpace(l.Name)], id)
+		key := NormalizeLightName(l.Name)
+		byName[key] = append(byName[key], id)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()

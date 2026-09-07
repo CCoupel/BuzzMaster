@@ -31,6 +31,14 @@ type devHueBridge struct {
 
 func newDevHueBridge(t *testing.T) *devHueBridge {
 	t.Helper()
+	return newDevHueBridgeNamed(t, "BuzzHue1")
+}
+
+// newDevHueBridgeNamed is newDevHueBridge with a caller-chosen light name —
+// used to reproduce the QUALIF round-2 report with a name containing
+// whitespace exactly as a real bridge might return it.
+func newDevHueBridgeNamed(t *testing.T, lightName string) *devHueBridge {
+	t.Helper()
 	b := &devHueBridge{key: "devkey123", bridgeID: "fffe0000deadbeef"}
 	b.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b.mu.Lock()
@@ -50,7 +58,7 @@ func newDevHueBridge(t *testing.T) *devHueBridge {
 		case len(parts) == 3 && parts[2] == "config":
 			_ = json.NewEncoder(w).Encode(map[string]any{"bridgeid": b.bridgeID, "modelid": "BSB002", "name": "dev"})
 		case len(parts) == 3 && parts[2] == "lights":
-			_ = json.NewEncoder(w).Encode(map[string]any{"8": map[string]any{"name": "BuzzHue1", "type": "Extended color light", "modelid": "LCA001",
+			_ = json.NewEncoder(w).Encode(map[string]any{"8": map[string]any{"name": lightName, "type": "Extended color light", "modelid": "LCA001",
 				"state": map[string]any{"on": false, "bri": 10, "xy": []float64{0.3, 0.3}, "reachable": true}}})
 		case len(parts) == 5 && parts[4] == "state" && r.Method == "PUT":
 			_, _ = w.Write([]byte(`[{"success":{"/lights/8/state/on":true}}]`))
@@ -396,5 +404,97 @@ func TestDevLightingFlash_RoundTrip(t *testing.T) {
 	srv.Lighting = nil
 	if code, out := devDo(t, srv, "POST", "/api/lighting/flash", `{"on":true}`); code != 409 || out["result"] != "refused" {
 		t.Fatalf("no provider wired: %d %v", code, out)
+	}
+}
+
+// TestDevQualifBug1Round2_RealEndToEndFlowWithWhitespaceName reproduces the
+// QUALIF round-2 report end to end, through the REAL HTTP handlers only —
+// register → GET /api/lighting/lights (discovery, RAW bridge name) →
+// POST /config.json "lighting.lights" (save, exactly what AmbiancePage.jsx
+// sends: web/src/pages/AmbiancePage.jsx's `rows`/`handleSaveLights` build
+// the saved name from `inventory.lights[].name`, i.e. the UNTRIMMED
+// discovery response, never from a hand-typed value) → POST
+// /api/lighting/test with THAT SAME untrimmed name (AmbiancePage.jsx's
+// `handleTest(row.name)`, `row.name` also straight from inventory) — never
+// a LightSpec constructed directly in the test, per the round-2 ask.
+//
+// OnConfigUpdate here rebuilds a *hue.Driver from config.Get().Lighting the
+// same way cmd/server/ambiance.go's buildHueDriver does (App-level glue
+// cannot be imported into internal/server without a cycle) — everything
+// else is the production handler code.
+func TestDevQualifBug1Round2_RealEndToEndFlowWithWhitespaceName(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+	bridge := newDevHueBridgeNamed(t, "salon gauche ") // trailing space, exactly the reported case
+	bridge.mu.Lock()
+	bridge.pressed = true
+	bridge.mu.Unlock()
+
+	prov := &devProvider{}
+	srv.Lighting = prov
+	srv.OnConfigUpdate = func() {
+		lc := config.Get().Lighting
+		if !lc.Enabled || lc.EffectiveAPIKey() == "" || (lc.BridgeIP == "" && lc.BridgeID == "") {
+			prov.mu.Lock()
+			prov.d = nil
+			prov.mu.Unlock()
+			return
+		}
+		specs := make([]hue.LightSpec, 0, len(lc.Lights))
+		for _, l := range lc.Lights {
+			specs = append(specs, hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team})
+		}
+		d, err := hue.New(hue.Config{BridgeIP: lc.BridgeIP, BridgeID: lc.BridgeID, APIKey: lc.EffectiveAPIKey(), Lights: specs})
+		if err != nil {
+			t.Fatalf("hue.New (OnConfigUpdate rebuild): %v", err)
+		}
+		prov.mu.Lock()
+		old := prov.d
+		prov.d = d
+		prov.mu.Unlock()
+		if old != nil {
+			_ = old.Close()
+		}
+	}
+
+	// 1. Association (bouton pressé) — POST /api/lighting/register.
+	code, out := devDo(t, srv, "POST", "/api/lighting/register", `{"bridge_ip":"`+bridge.srv.URL+`"}`)
+	if code != 200 {
+		t.Fatalf("register: %d %v", code, out)
+	}
+
+	// 2. Découverte — GET /api/lighting/lights : le nom BRUT du pont, tel
+	// que le frontend le reçoit et l'affiche (AmbiancePage.jsx `rows`).
+	code, out = devDo(t, srv, "GET", "/api/lighting/lights", "")
+	if code != 200 {
+		t.Fatalf("lights: %d %v", code, out)
+	}
+	lights, _ := out["lights"].([]any)
+	if len(lights) != 1 {
+		t.Fatalf("expected 1 discovered light, got %v", out)
+	}
+	discovered := lights[0].(map[string]any)
+	rawName, _ := discovered["name"].(string)
+	if rawName != "salon gauche " {
+		t.Fatalf("setup invalide : le nom découvert devrait porter l'espace parasite, got %q", rawName)
+	}
+
+	// 3. Sélection + sauvegarde — POST /config.json {"lighting":{"lights":[...]}}
+	// avec le nom EXACTEMENT tel que reçu à la découverte (AmbiancePage.jsx
+	// handleSaveLights : `effectiveSelected.map(name => ({name, ...}))`,
+	// `effectiveSelected` dérivé de `rows`, lui-même de `inventory.lights`).
+	code, out = devDo(t, srv, "POST", "/config.json", `{"lighting":{"lights":[{"name":"`+rawName+`","role":"general"}]}}`)
+	if code != 200 {
+		t.Fatalf("save lights: %d %v", code, out)
+	}
+	if got := config.Get().Lighting.Lights[0].Name; got != "salon gauche" {
+		t.Fatalf("le nom sauvegardé doit être trimé côté serveur, got %q", got)
+	}
+
+	// 4. Test — POST /api/lighting/test avec le nom RAW (celui affiché dans
+	// la ligne du tableau, `row.name`, jamais re-résolu depuis la config
+	// sauvegardée côté frontend).
+	code, out = devDo(t, srv, "POST", "/api/lighting/test", `{"name":"`+rawName+`"}`)
+	if code != 200 || out["result"] != "ok" {
+		t.Fatalf(`régression QUALIF round 2 (bug 1) : POST /api/lighting/test échoue encore avec le nom brut de la découverte — %d %v`, code, out)
 	}
 }

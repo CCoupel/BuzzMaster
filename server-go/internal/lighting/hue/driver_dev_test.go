@@ -320,6 +320,62 @@ func TestDevBugfixQualif_WhitespacePaddedBridgeNameStillResolves(t *testing.T) {
 	}
 }
 
+// TestDevNormalizeLightName pins the exact set of invisible characters a
+// plain strings.TrimSpace does NOT catch (round 2's own discovery — see
+// NormalizeLightName's doc comment): zero-width space, BOM/ZWNBSP, soft
+// hyphen, and a stray NUL, none of them "space" by unicode.IsSpace's
+// definition and/or not confined to the string's edges. Ordinary ASCII
+// whitespace at the edges must still be trimmed, and meaningful characters
+// (accents, an internal literal space) must survive untouched.
+func TestDevNormalizeLightName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain, no change needed", "Salon", "Salon"},
+		{"internal space preserved", "salon gauche", "salon gauche"},
+		{"accents preserved", "Éclairage Été", "Éclairage Été"},
+		{"ASCII edge whitespace trimmed", "  Salon\t\n", "Salon"},
+		{"trailing ASCII space (round 1's own case)", "salon gauche ", "salon gauche"},
+		{"trailing NBSP", "salon gauche" + string(rune(0x00A0)), "salon gauche"},
+		{"trailing zero-width space (round 2 — TrimSpace misses this)", "salon gauche" + string(rune(0x200B)), "salon gauche"},
+		{"leading BOM/ZWNBSP (round 2 — TrimSpace misses this)", string(rune(0xFEFF)) + "salon gauche", "salon gauche"},
+		{"internal zero-width space (not just an edge)", "salon" + string(rune(0x200B)) + "gauche", "salongauche"},
+		{"soft hyphen anywhere (round 2 — TrimSpace misses this)", "sa" + string(rune(0x00AD)) + "lon", "salon"},
+		{"stray NUL (round 2 — TrimSpace misses this)", "salon" + string(rune(0x0000)) + "gauche", "salongauche"},
+		{"empty after stripping", string(rune(0x200B)) + string(rune(0x00A0)), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeLightName(tt.in); got != tt.want {
+				t.Errorf("NormalizeLightName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDevBugfixQualifRound2_ZeroWidthSpaceBridgeNameStillResolves is round
+// 2's own regression: a plain edge-space trim (round 1) has NO effect on a
+// bridge name carrying an invisible zero-width space instead of (here, in
+// addition to) a plain one — exactly the class of case the user's
+// persisting report pointed at. The bridge keeps returning the trailing
+// ZWSP on every fetch (a real device's own quirk, not a one-off
+// keystroke); NormalizeLightName is what makes it irrelevant, wherever it
+// came from and on every subsequent resolution.
+func TestDevBugfixQualifRound2_ZeroWidthSpaceBridgeNameStillResolves(t *testing.T) {
+	zwsp := string(rune(0x200B))
+	f := newDevBridge(t, "salon gauche"+zwsp) // invisible trailing character, real space preserved
+	d, _ := newDevDriver(t, f, LightSpec{Name: "salon gauche"})
+
+	if err := d.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); err != nil {
+		t.Fatalf("Apply must resolve a bridge name differing only by a trailing invisible zero-width space: %v", err)
+	}
+	if err := d.TestFlash(context.Background(), "salon gauche", time.Millisecond, func(time.Duration) {}); err != nil {
+		t.Fatalf("TestFlash must resolve it too — the exact QUALIF round-2 regression: %v", err)
+	}
+}
+
 func TestDevRefusedAndUnreachableAreDistinct(t *testing.T) {
 	f := newDevBridge(t, "BuzzHue1")
 	sink := &devLogSink{}

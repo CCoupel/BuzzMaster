@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"buzzcontrol/internal/lighting/hue"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -1815,7 +1816,13 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			if _, ok := lRaw["lights"]; ok {
 				lights := make([]config.LightingLightEntry, 0, len(incoming.Lights))
 				for _, l := range incoming.Lights {
-					l.Name = strings.TrimSpace(l.Name)
+					// QUALIF v10.0.0.10 round 2: a plain TrimSpace here left an
+					// invisible non-"space" character (zero-width space, BOM,
+					// soft hyphen...) baked into the saved name — same
+					// normalisation as hue.New()/resolve() and POST
+					// /api/lighting/test now use, so what lands in config.json
+					// is already canonical.
+					l.Name = hue.NormalizeLightName(l.Name)
 					if l.Name == "" {
 						continue
 					}
