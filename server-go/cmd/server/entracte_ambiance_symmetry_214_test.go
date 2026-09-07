@@ -91,11 +91,23 @@ func TestEntracteProgrammed_AmbianceNotifiedAndBuzzersOff_T21(t *testing.T) {
 	if !ok {
 		t.Fatal("l'écrivain d'ambiance n'a reçu aucun état — NotifyState() n'a pas été appelé à la fin du décompte")
 	}
-	if len(last.Zones) != 1 || last.Zones[0].Zone != lighting.ZoneGeneral {
-		t.Fatalf("scène attendue sur la seule zone 'general', got %+v", last)
+	// Batch A/P1 (planner _work/reports/planner-v10-groups-teamcolor-
+	// 20260907-173831.md) : ENTRACTE n'est pas "hors partie" (KindIdle) —
+	// les équipes du plateau (TeamA/B/C, newTestApp) portent désormais
+	// aussi leur propre zone, atténuée (aucune n'est distinguée pendant
+	// l'entracte). Seule la zone 'general' nous intéresse ici.
+	var general lighting.ZoneState
+	var found bool
+	for _, z := range last.Zones {
+		if z.Zone == lighting.ZoneGeneral {
+			general, found = z, true
+		}
 	}
-	if last.Zones[0].Color != ambianceWarmWhite || last.Zones[0].Intensity != 100 {
-		t.Fatalf("scène KindEntracte attendue (blanc chaud/100, salle praticable), got %+v", last.Zones[0])
+	if !found {
+		t.Fatalf("aucune zone 'general' dans la scène, got %+v", last)
+	}
+	if general.Color != ambianceWarmWhite || general.Intensity != 100 {
+		t.Fatalf("scène KindEntracte attendue sur 'general' (blanc chaud/100, salle praticable), got %+v", general)
 	}
 }
 

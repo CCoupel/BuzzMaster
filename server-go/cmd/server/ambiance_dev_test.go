@@ -203,14 +203,23 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 }
 
 // TestDevAmbianceTeamZones213 pins #213's addition to ambianceScene: one
-// dedicated zone per team named in ev.Teams, on top of the unaffected
-// "general" zone (hue-bridge.md §5.2/§9) — the driver-side routing
-// (zoneFor, internal/lighting/hue/driver.go) already existed before this
-// task; this is what actually feeds it.
+// dedicated zone per team CURRENTLY ON THE BOARD (Batch A/P1 fix,
+// _work/reports/planner-v10-groups-teamcolor-20260907-173831.md §Problème
+// 1 — hue-bridge.md §5.2's "état courant" is the LIVE GAME STATE, not the
+// event), on top of the unaffected "general" zone (§9) — the driver-side
+// routing (zoneFor, internal/lighting/hue/driver.go) already existed
+// before this task; this is what actually feeds it.
+//
+// This test covers the STRUCTURAL shape (which zones appear, general's own
+// colour untouched, dedup, idle exclusion). The distinguished/dimmed
+// INTENSITY matrix has its own dedicated coverage:
+// TestTeamColor_DistinguishedTeamFullIntensity_OthersAttenuated
+// (ambiance_team_color_acceptance_test.go, test-writer/A2).
 func TestDevAmbianceTeamZones213(t *testing.T) {
-	app := newTestApp(t)
+	app := newTestApp(t) // TeamA/TeamB/TeamC configured — see newTestApp's own comment
 	wantTeamA := app.teamNameToRGB("TeamA")
 	wantTeamB := app.teamNameToRGB("TeamB")
+	wantTeamC := app.teamNameToRGB("TeamC")
 	if wantTeamA == wantTeamB {
 		t.Fatal("setup invalide : TeamA et TeamB doivent avoir des couleurs distinctes pour ce test")
 	}
@@ -224,62 +233,75 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 		return out
 	}
 
-	// No team concerned ⇒ general only, exactly as before #213.
+	// KindIdle (hors partie) ⇒ general only, whatever the team roster —
+	// the ONE case the board never applies to.
+	if zones := zonesByName(lighting.Event{Kind: lighting.KindIdle}); len(zones) != 1 {
+		t.Errorf("IDLE (hors partie) : attendu 1 seule zone (general), got %+v", zones)
+	}
+
+	// Any OTHER kind, even with no team named by the event itself, now
+	// emits one zone per team ON THE BOARD (all 3), each at its OWN colour,
+	// dimmed (nobody distinguished) — the whole point of the P1 fix.
 	for _, ev := range []lighting.Event{
-		{Kind: lighting.KindIdle}, {Kind: lighting.KindReady}, {Kind: lighting.KindRunning},
+		{Kind: lighting.KindReady}, {Kind: lighting.KindRunning},
 		{Kind: lighting.KindPauseAll}, {Kind: lighting.KindReveal}, {Kind: lighting.KindEntracte},
 	} {
 		zones := zonesByName(ev)
-		if len(zones) != 1 {
-			t.Errorf("%s sans équipe : attendu 1 seule zone (general), got %+v", ev.Kind, zones)
+		if len(zones) != 4 { // general + TeamA + TeamB + TeamC
+			t.Fatalf("%s : attendu 4 zones (general + les 3 équipes du plateau), got %+v", ev.Kind, zones)
+		}
+		for name, want := range map[string][3]int{"TeamA": wantTeamA, "TeamB": wantTeamB, "TeamC": wantTeamC} {
+			z := zones[name]
+			if z.Color != want {
+				t.Errorf("%s: zone %s doit porter sa propre couleur, got %v want %v", ev.Kind, name, z.Color, want)
+			}
+			if z.Intensity != dimIntensityFor(want) {
+				t.Errorf("%s: zone %s non distinguée doit être atténuée (dimIntensityFor), got intensity=%d", ev.Kind, name, z.Intensity)
+			}
 		}
 	}
 
-	// A single team concerned (BUZZ/TEAM_TURN/SCORE) ⇒ general (already
-	// carrying that team's colour, UseTeamColor) PLUS its own dedicated zone,
-	// same colour, same intensity as the scene.
+	// A single team distinguished (BUZZ/TEAM_TURN/SCORE) ⇒ its own zone at
+	// FULL intensity (255, the buzzer's own SOLID/BLINK equivalent) — the
+	// two OTHER board teams stay present, dimmed. General keeps its own,
+	// unaffected, per-scene colour/intensity (TestDevAmbianceSceneTableAndTeamPalette).
 	for _, ev := range []lighting.Event{
 		{Kind: lighting.KindBuzz, Teams: []string{"TeamA"}},
 		{Kind: lighting.KindTeamTurn, Teams: []string{"TeamA"}},
 		{Kind: lighting.KindScore, Teams: []string{"TeamA"}},
 	} {
 		zones := zonesByName(ev)
-		general, teamZone := zones[lighting.ZoneGeneral], zones["TeamA"]
-		if len(zones) != 2 {
-			t.Fatalf("%s: attendu 2 zones (general + TeamA), got %+v", ev.Kind, zones)
+		if len(zones) != 4 {
+			t.Fatalf("%s: attendu 4 zones (general + les 3 équipes), got %+v", ev.Kind, zones)
 		}
-		if teamZone.Color != wantTeamA {
-			t.Errorf("%s: zone TeamA doit porter sa propre couleur, got %v want %v", ev.Kind, teamZone.Color, wantTeamA)
+		if got := zones["TeamA"]; got.Color != wantTeamA || got.Intensity != 255 {
+			t.Errorf("%s: TeamA (distinguée) doit être à pleine intensité dans sa propre couleur, got %+v", ev.Kind, got)
 		}
-		if teamZone.Color != general.Color || teamZone.Intensity != general.Intensity {
-			t.Errorf("%s: équipe unique concernée — zone TeamA et zone general doivent coïncider (même couleur/intensité), got team=%+v general=%+v", ev.Kind, teamZone, general)
+		if got := zones["TeamB"]; got.Intensity != dimIntensityFor(wantTeamB) {
+			t.Errorf("%s: TeamB (non distinguée) doit rester atténuée, got %+v", ev.Kind, got)
 		}
 	}
 
 	// REVEAL with SEVERAL correct teams: general stays fixed green
-	// (unaffected — REVEAL is not UseTeamColor), each team gets its OWN
-	// colour in its OWN zone — never a shared "success" hue that would
-	// erase which team answered right.
+	// (unaffected — REVEAL is not UseTeamColor), TeamA/TeamB (both
+	// distinguished) at full intensity in their OWN colour — never a
+	// shared "success" hue that would erase which team is which — TeamC
+	// (on the board, not distinguished) stays present, dimmed.
 	zones := zonesByName(lighting.Event{Kind: lighting.KindReveal, Teams: []string{"TeamA", "TeamB"}})
-	if len(zones) != 3 {
-		t.Fatalf("REVEAL multi-équipe : attendu 3 zones (general + TeamA + TeamB), got %+v", zones)
+	if len(zones) != 4 {
+		t.Fatalf("REVEAL multi-équipe : attendu 4 zones (general + les 3 équipes), got %+v", zones)
 	}
 	if g := zones[lighting.ZoneGeneral]; g.Color != [3]int{0, 220, 60} || g.Intensity != 255 {
 		t.Errorf("REVEAL multi-équipe : general doit rester vert fixe (non affecté par #213), got %+v", g)
 	}
 	if zones["TeamA"].Color != wantTeamA || zones["TeamA"].Intensity != 255 {
-		t.Errorf("REVEAL multi-équipe : zone TeamA doit porter sa propre couleur à 255, got %+v", zones["TeamA"])
+		t.Errorf("REVEAL multi-équipe : zone TeamA doit porter sa propre couleur à pleine intensité, got %+v", zones["TeamA"])
 	}
 	if zones["TeamB"].Color != wantTeamB || zones["TeamB"].Intensity != 255 {
-		t.Errorf("REVEAL multi-équipe : zone TeamB doit porter sa propre couleur à 255, got %+v", zones["TeamB"])
+		t.Errorf("REVEAL multi-équipe : zone TeamB doit porter sa propre couleur à pleine intensité, got %+v", zones["TeamB"])
 	}
-
-	// A team-role light without a configured light, or an unnamed team
-	// (empty string, defensive) must never produce a zone: no "" entry, and
-	// duplicates collapse to one (dedup already exercised implicitly above).
-	zones = zonesByName(lighting.Event{Kind: lighting.KindReveal, Teams: []string{""}})
-	if len(zones) != 1 {
-		t.Errorf("Teams:[\"\"] ne doit produire aucune zone supplémentaire, got %+v", zones)
+	if zones["TeamC"].Intensity != dimIntensityFor(wantTeamC) {
+		t.Errorf("REVEAL multi-équipe : TeamC (sur le plateau, non distinguée) doit rester atténuée, got %+v", zones["TeamC"])
 	}
 }
 

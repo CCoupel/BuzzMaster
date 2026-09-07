@@ -82,9 +82,12 @@ func TestDevLightingMode_ScopedToGeneralZoneOnly(t *testing.T) {
 	if general.Intensity != 0 {
 		t.Fatalf("OFF must force the general zone dark, got %+v", general)
 	}
+	// Batch A/P1: TeamA is distinguished by ev.Teams here, so its own zone
+	// is at FULL intensity (255) — not ambianceSceneTeamTurn.Intensity
+	// (200), which is the general zone's own value, unaffected.
 	wantTeamA := app.teamNameToRGB("TeamA")
-	if teamA.Color != wantTeamA || teamA.Intensity != ambianceSceneTeamTurn.Intensity {
-		t.Fatalf("TeamA's own zone must stay auto-derived regardless of the OFF selector, got %+v want colour=%v intensity=%d", teamA, wantTeamA, ambianceSceneTeamTurn.Intensity)
+	if teamA.Color != wantTeamA || teamA.Intensity != 255 {
+		t.Fatalf("TeamA's own zone must stay auto-derived regardless of the OFF selector, got %+v want colour=%v intensity=255", teamA, wantTeamA)
 	}
 }
 

@@ -431,9 +431,10 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 }
 
 // ambianceScene renders an Event into the "general" zone (#205) plus, since
-// #213, one additional zone per team named in ev.Teams. Team colours go
-// through the SAME palette as the buzzers (teamNameToRGB): never a second
-// palette (contract §8, hue-bridge.md §9).
+// #213, one zone per team CURRENTLY ON THE BOARD (Batch A/P1 fix below —
+// see its own paragraph). Team colours go through the SAME palette as the
+// buzzers (teamNameToRGB): never a second palette (contract §8,
+// hue-bridge.md §9).
 //
 // The "general" zone's own colour/intensity is computed exactly as before
 // #213 (unaffected by the per-team zones added below): for a
@@ -448,11 +449,34 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 //     the room alone carries the active team's colour, exactly the
 //     pre-#213 behaviour (lighting.md §6.3).
 //
-// Every zone named in ev.Teams gets its OWN dedicated zone lit in THAT
-// team's own colour (not the scene's fixed colour, e.g. REVEAL's green/red)
-// — so a REVEAL with several correct teams lights each of their own
-// ampoules in their own identifying colour, never a shared "success" hue
-// that would erase which team is which.
+// Bugfix (Batch A/P1, planner diagnostic
+// _work/reports/planner-v10-groups-teamcolor-20260907-173831.md §Problème
+// 1): a team's OWN dedicated zone used to be emitted only for the teams
+// NAMED BY THE EVENT (ev.Teams) — populated for just 4 of the 9 Kinds
+// (BUZZ/TEAM_TURN/REVEAL/SCORE). For the other 5 (IDLE/READY/RUNNING/
+// PAUSE_ALL/ENTRACTE), ev.Teams is empty, so a team's own light fell back
+// to "general" (hue-bridge.md §5.2's zoneFor, correctly applied — the BUG
+// was upstream, in what "the event names" was mistaken for) and showed the
+// ROOM's colour instead of the team's own — e.g. blue all through RUNNING,
+// most of a round. hue-bridge.md §5.2 says "l'équipe n'est pas nommée dans
+// l'ÉTAT COURANT" — the LIVE GAME STATE (the board), not the event that
+// happens to be firing right now.
+//
+// Fix, transposing the buzzer's own model (sendLEDSetForBuzzerNormal,
+// main.go: rgb computed ONCE outside the phase switch, only intensity/
+// effect vary) verbatim to the room: a team's ampoule ALWAYS shows its own
+// colour, for every team on the current board (a.engine's live team
+// roster) — never the scene's fixed colour, never modified by state. Only
+// the INTENSITY varies: full when the team is "distinguished" by this
+// event (buzzed, active turn, answered correctly, credited — i.e. present
+// in ev.Teams, the buzzer's own SOLID/BLINK-255 equivalent), dimmed
+// otherwise (dimIntensityFor, main.go — the SAME threshold the buzzers
+// dim to, reused rather than a second one). No game in progress (KindIdle)
+// ⇒ no board ⇒ no team zones at all, unchanged from before — the ampoule
+// falls back to "general", which §10.1's ON/AUTO/OFF selector then DOES
+// reach (in-game, it never does: a team zone always wins over "general"
+// for that team's own light, keeping the selector correctly out of scope
+// per §10.1's "Portée").
 func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 	def := ambianceSceneFor(ev)
 	color := def.Color
@@ -474,16 +498,30 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 		Intensity: intensity,
 	}}
 	seen := map[string]bool{lighting.ZoneGeneral: true} // defensive: a team literally named "general" must never shadow it
-	for _, team := range ev.Teams {
-		if team == "" || seen[team] {
-			continue
+	if ev.Kind != lighting.KindIdle {
+		distinguished := make(map[string]bool, len(ev.Teams))
+		for _, team := range ev.Teams {
+			if team != "" {
+				distinguished[team] = true
+			}
 		}
-		seen[team] = true
-		zones = append(zones, lighting.ZoneState{
-			Zone:      team,
-			Color:     a.teamNameToRGB(team),
-			Intensity: def.Intensity,
-		})
+		tb := a.engine.GetTeamsAndBumpersSnapshot()
+		for teamName := range tb.Teams {
+			if teamName == "" || seen[teamName] {
+				continue
+			}
+			seen[teamName] = true
+			rgb := a.teamNameToRGB(teamName)
+			teamIntensity := dimIntensityFor(rgb)
+			if distinguished[teamName] {
+				teamIntensity = 255 // full — the room-side equivalent of the buzzer's own SOLID/BLINK at 255
+			}
+			zones = append(zones, lighting.ZoneState{
+				Zone:      teamName,
+				Color:     rgb,
+				Intensity: teamIntensity,
+			})
+		}
 	}
 	return lighting.State{Zones: zones}
 }
