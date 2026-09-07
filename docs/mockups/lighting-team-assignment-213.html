@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Éclairage d'ambiance — affectation équipe et conduite manuelle</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    --col:960px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--ground);color:var(--txt);font-family:var(--sans);line-height:1.6;padding:48px 20px 80px}
+  .wrap{max-width:var(--col);margin:0 auto}
+
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:44px}
+  .eyebrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .eyebrow span{font-family:var(--mono);font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:3px 8px}
+  h1{font-size:2rem;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:14px}
+  .standfirst{color:var(--dim);font-size:1.02rem;max-width:74ch}
+  .refs{margin-top:20px;display:flex;flex-direction:column;gap:5px;font-family:var(--mono);font-size:.76rem;color:var(--faint)}
+  .refs b{color:var(--dim);font-weight:600;margin-right:8px}
+
+  section{margin-bottom:52px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.01em;margin-bottom:8px;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+  .lede{color:var(--dim);margin-bottom:22px;max-width:74ch}
+  h3{font-size:.95rem;font-weight:600;margin:26px 0 10px;color:var(--txt)}
+
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:18px}
+  .screen-hd{background:var(--sunken);border-bottom:1px solid var(--line);padding:9px 14px;
+    font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .screen-bd{padding:20px}
+  .screen-bd.dark{background:#000;padding:22px}
+
+  .fieldset{border:1px solid var(--line-soft);border-radius:6px;padding:16px;margin-bottom:14px;background:var(--raised)}
+  .fs-t{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:14px}
+  .fld{margin-bottom:14px}
+  .fld:last-child{margin-bottom:0}
+  .lbl{display:block;font-size:.8rem;font-weight:500;color:var(--dim);margin-bottom:6px}
+  .ctl{display:block;background:var(--sunken);border:1px solid var(--line);border-radius:5px;
+    padding:9px 12px;font-size:.86rem;color:var(--txt);font-family:var(--sans)}
+  .ctl.ph{color:var(--faint)}
+  .ctl.mono{font-family:var(--mono);font-size:.8rem}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .btnrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .btn{background:var(--raised);border:1px solid var(--line);color:var(--txt);border-radius:6px;
+    padding:8px 15px;font-size:.83rem;font-weight:500;font-family:var(--sans)}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:#170c02;font-weight:600}
+  .btn.g{background:transparent;border-color:transparent;color:var(--dim)}
+  .btn.dis{opacity:.42}
+  .hint{font-size:.78rem;color:var(--faint);margin-top:9px}
+
+  .status{display:inline-flex;align-items:center;gap:7px;font-size:.8rem;font-weight:600;
+    border-radius:999px;padding:4px 12px;border:1px solid var(--line)}
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+  .status.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  .status.ok .dot{background:var(--ok)}
+  .status.no{color:var(--no);border-color:color-mix(in srgb,var(--no) 40%,transparent)}
+  .status.no .dot{background:var(--no)}
+  .status.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+  .status.warn .dot{background:var(--warn)}
+  .status.idle{color:var(--faint)}
+
+  .call{border-left:3px solid var(--line);background:var(--panel);border-radius:0 6px 6px 0;
+    padding:13px 16px;margin:16px 0;font-size:.87rem;color:var(--dim)}
+  .call-t{display:block;font-weight:600;color:var(--txt);margin-bottom:4px;font-size:.85rem}
+  .call.ok{border-left-color:var(--ok)}
+  .call.no{border-left-color:var(--no)}
+  .call.warn{border-left-color:var(--warn)}
+  .call.info{border-left-color:var(--info)}
+
+  table{width:100%;border-collapse:collapse;font-size:.83rem}
+  th{text-align:left;font-weight:600;color:var(--dim);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--sunken)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--dim)}
+  td b{color:var(--txt);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--sunken);border:1px solid var(--line-soft);
+    border-radius:3px;padding:1px 5px;color:#c9d5e1}
+
+  .bulb{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line-soft);
+    border-radius:6px;background:var(--raised);margin-bottom:9px}
+  .bulb:last-child{margin-bottom:0}
+  .box{width:16px;height:16px;border:1.5px solid var(--faint);border-radius:3px;flex:none}
+  .box.on{background:var(--accent);border-color:var(--accent);position:relative}
+  .box.on::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:#170c02;font-size:.7rem;font-weight:700}
+  .bulb-n{font-weight:600;color:var(--txt);font-size:.87rem}
+  .bulb-i{font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .bulb-sp{flex:1}
+  .sw{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);flex:none}
+
+  .toast{display:inline-block;border-radius:6px;padding:9px 18px;font-size:.83rem;font-weight:500;color:#fff}
+  .toast.s{background:var(--ok)} .toast.e{background:var(--no)} .toast.w{background:var(--warn);color:#231a03}
+
+  ol.reasons{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
+  ol.reasons li{margin-bottom:9px} ol.reasons li:last-child{margin-bottom:0}
+  ol.reasons b{color:var(--txt)}
+  ul.pl{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
+  ul.pl li{margin-bottom:7px} ul.pl li:last-child{margin-bottom:0}
+
+  /* ---- Tablette /anim (fond noir, gros boutons tactiles) ---- */
+  .tablet{background:#000;border:1px solid #262626;border-radius:10px;padding:18px;
+    display:flex;flex-direction:column;gap:14px}
+  .tablet-hd{display:flex;align-items:center;justify-content:space-between;
+    font-family:var(--mono);font-size:.7rem;color:#666;text-transform:uppercase;letter-spacing:.05em}
+  .conduct-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+  .cbtn{background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:10px 6px;
+    text-align:center;font-size:.72rem;font-weight:600;color:#777}
+  .cbtn.go{background:#173d1f;border-color:var(--ok);color:#7ee89b}
+  .lighting-panel{border:1px solid #3a2a12;background:#1a1208;border-radius:8px;padding:14px}
+  .lighting-panel-hd{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .lighting-panel-hd svg{width:15px;height:15px;color:var(--accent);flex:none}
+  .lighting-panel-t{font-size:.78rem;font-weight:600;color:#e8b878;text-transform:uppercase;letter-spacing:.04em}
+  .lighting-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .lbtn{background:#241a0c;border:1px solid #4a3418;border-radius:6px;padding:14px 8px;
+    text-align:center;font-size:.85rem;font-weight:600;color:#f0d8b0;display:flex;flex-direction:column;
+    align-items:center;gap:6px}
+  .lbtn svg{width:22px;height:22px;color:var(--accent)}
+  .lighting-note{font-size:.72rem;color:#8a7150;margin-top:10px;line-height:1.5}
+
+  footer{border-top:1px solid var(--line);padding-top:20px;margin-top:56px;
+    font-family:var(--mono);font-size:.73rem;color:var(--faint)}
+
+  @media (max-width:640px){
+    body{padding:28px 14px 56px} h1{font-size:1.5rem} .row2{grid-template-columns:1fr}
+    .lighting-btns,.conduct-strip{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 1</span><span>À valider — GATE 2</span>
+  </div>
+  <h1>Éclairage d'ambiance — affectation par équipe et conduite manuelle</h1>
+  <p class="standfirst">
+    Deux ajouts sur des écrans existants, aucune page nouvelle. <strong>#213</strong> étend
+    <code>/admin/ambiance</code> (livrée par #207) d'une colonne d'affectation équipe→ampoule.
+    <strong>#208</strong> ajoute un petit panneau de conduite manuelle (noir, plein feu, flash) sur
+    <code>/anim</code>, à côté — jamais à l'intérieur — du panneau de conduite de jeu existant.
+  </p>
+  <div class="refs">
+    <div><b>Contrats</b> contracts/hue-bridge.md §5.2/§5.7 (zones, dégradation) · contracts/lighting.md §10 (priorité, restitution)</div>
+    <div><b>Base réutilisée</b> docs/mockups/lighting-hue-config-207.html §06 (aperçu déjà validé du principe, ici développé)</div>
+    <div><b>Décisions actées</b> _work/handoff/gate1-decisions-v10-20260907.md — priorité = écrasement immédiat, restitution réduite à l'arrêt serveur</div>
+    <div><b>Sert de référence à</b> test-writer (scénarios T1.4) · qa (conformité) · dev-frontend (implémentation Batch 3)</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span>#213 — Colonne d'affectation équipe→ampoule</h2>
+  <p class="lede">
+    Sur <code>/admin/ambiance</code>, l'écran « Choisir et tester les ampoules » (#207 §05) gagne une
+    troisième colonne : un sélecteur <b>Rôle</b> par ampoule. <code>Éclairage général</code> reste la
+    valeur par défaut de chaque ampoule — le comportement actuel (toute la salle en <code>general</code>)
+    n'est jamais perdu tant qu'aucune ampoule n'est explicitement basculée en équipe.
+  </p>
+
+  <h3>Écran — deux équipes pourvues, une ampoule générale</h3>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — ampoules du pont, avec affectation d'équipe (#213)</div>
+    <div class="screen-bd">
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#e14b4b"></span>
+        <span><span class="bulb-n">Salle gauche</span><br><span class="bulb-i">id 8 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <select class="ctl" style="width:210px;padding:8px 10px">
+          <option>Éclairage général</option>
+          <option selected>Équipe — Rouges</option>
+          <option>Équipe — Bleus</option>
+        </select>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#1a5eff"></span>
+        <span><span class="bulb-n">Salle droite</span><br><span class="bulb-i">id 9 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <select class="ctl" style="width:210px;padding:8px 10px">
+          <option>Éclairage général</option>
+          <option>Équipe — Rouges</option>
+          <option selected>Équipe — Bleus</option>
+        </select>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#f2c88a"></span>
+        <span><span class="bulb-n">Scène</span><br><span class="bulb-i">id 11 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <select class="ctl" style="width:210px;padding:8px 10px">
+          <option selected>Éclairage général</option>
+          <option>Équipe — Rouges</option>
+          <option>Équipe — Bleus</option>
+        </select>
+      </div>
+      <div class="btnrow">
+        <span class="btn p">Enregistrer</span>
+        <span class="btn">Tester toutes les ampoules</span>
+        <span class="btn g">Actualiser la liste</span>
+      </div>
+      <p class="hint">
+        La liste d'équipes proposée dans chaque menu vient de la configuration de partie courante
+        (mêmes noms que <code>GamePage.jsx</code>/<code>BackstagePage</code>). Une équipe renommée en
+        cours de saison n'invalide rien : c'est le <b>nom</b> qui est stocké dans <code>config.json</code>
+        (§6 de <code>hue-bridge.md</code>), au même titre que le nom d'ampoule — cohérent avec la règle
+        « jamais d'identifiant technique mémorisé » déjà appliquée à #207.
+      </p>
+    </div>
+  </div>
+
+  <div class="call info">
+    <span class="call-t">La couleur salle = la couleur buzzer, jamais une seconde palette</span>
+    L'aperçu de couleur affiché à côté de chaque ampoule (pastille ronde) est la même palette que
+    celle des LED physiques des buzzers (<code>teamColorPalette</code>, <code>main.go</code>) — pas
+    une couleur choisie indépendamment ici. Une équipe « Rouges » est le même rouge sur son buzzer et
+    sur son ampoule.
+  </div>
+
+  <h3>Cas dégradés — les quatre règles normatives (contrat §5.7)</h3>
+  <div class="scroll">
+    <table>
+      <tr><th style="width:30%">Cas</th><th>Ce que l'écran montre</th></tr>
+      <tr>
+        <td><b>Moins d'ampoules que d'équipes</b> <span class="bulb-i">(le plus fréquent)</span></td>
+        <td>Aucun avertissement bloquant. Les équipes non pourvues restent simplement absentes des
+          menus déroulants sélectionnés — elles ne perdent rien, la salle générale continue de porter
+          leur couleur quand c'est leur tour.</td>
+      </tr>
+      <tr>
+        <td><b>Équipe sans ampoule affectée</b></td>
+        <td>Même écran, aucun badge d'erreur. Un <code>.hint</code> neutre en pied de section :
+          « Les équipes sans ampoule dédiée restent éclairées via la scène générale. »</td>
+      </tr>
+      <tr>
+        <td><b>Aucune affectation d'équipe du tout</b></td>
+        <td>Tous les menus sur <code>Éclairage général</code> — c'est l'état de sortie de #207,
+          inchangé. Aucun écran intermédiaire : configurer une équipe est un geste additif, jamais
+          une bascule de mode.</td>
+      </tr>
+      <tr>
+        <td><b>Ampoule affectée mais injoignable</b> <span class="bulb-i">(éteinte au mur)</span></td>
+        <td>Reprend le badge « éteinte au mur » de #207 §05 (case non cochable pour le test), le menu
+          Rôle reste actif et modifiable — la panne d'une ampoule n'empêche pas de configurer les
+          autres.</td>
+      </tr>
+    </table>
+  </div>
+  <div class="call warn">
+    <span class="call-t">Ce que cet écran ne montre jamais</span>
+    Aucune bascule « mode équipe » globale, aucun message d'erreur pour une configuration
+    partielle : les quatre cas ci-dessus sont tous des états normaux de fonctionnement, pas des
+    replis d'urgence. Le contrat est explicite — « ce sont eux qui séparent une fonctionnalité
+    utilisable d'une curiosité de démonstration » (<code>hue-bridge.md</code> §5.7).
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span>#208 — Conduite manuelle sur <code>/anim</code></h2>
+  <p class="lede">
+    Trois gestes ponctuels à la disposition de l'animateur : <b>Noir</b>, <b>Plein feu</b>, <b>Flash
+    applaudissement</b>. Panneau <b>distinct</b> du panneau de conduite de jeu
+    (<code>AnimConductPanel.jsx</code>, LANCER/PAUSE/CONTINUER/STOP/RÉPONSE) — celui-ci pilote la
+    partie, celui de l'éclairage ne pilote qu'une salle. Les mélanger ferait porter au même
+    composant deux responsabilités sans rapport.
+  </p>
+
+  <h3>Emplacement — sous la bande régie, tablette <code>/anim</code></h3>
+  <div class="screen">
+    <div class="screen-hd">/anim — gabarit à quatre zones existant (contexte / conduite / équipes / régie), panneau éclairage ajouté</div>
+    <div class="screen-bd dark">
+      <div class="tablet">
+        <div class="tablet-hd"><span>Zone conduite (AnimConductPanel — inchangé)</span><span>Phase STARTED</span></div>
+        <div class="conduct-strip">
+          <div class="cbtn">LANCER<br><span style="opacity:.6">en cours</span></div>
+          <div class="cbtn go">PAUSE</div>
+          <div class="cbtn">CONTINUER</div>
+          <div class="cbtn go">STOP</div>
+          <div class="cbtn">RÉPONSE</div>
+        </div>
+
+        <div class="lighting-panel">
+          <div class="lighting-panel-hd">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 4a6 6 0 0 0-3.5 10.9V17a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.1A6 6 0 0 0 12 4Z"/></svg>
+            <span class="lighting-panel-t">Éclairage — conduite manuelle</span>
+          </div>
+          <div class="lighting-btns">
+            <div class="lbtn">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>
+              Noir
+            </div>
+            <div class="lbtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke-linecap="round"/></svg>
+              Plein feu
+            </div>
+            <div class="lbtn">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>
+              Flash
+            </div>
+          </div>
+          <div class="lighting-note">
+            Effet ponctuel, sans mémoire. Le prochain événement de jeu (même un simple buzz) reprend
+            la main immédiatement — voir §2 ci-dessous.
+          </div>
+        </div>
+
+        <div class="tablet-hd" style="margin-top:4px"><span>Bande régie (inchangée)</span><span></span></div>
+        <div style="border:1px solid #262626;border-radius:6px;padding:10px 14px;font-size:.78rem;color:#666">
+          Aucun message de la régie
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="hint">
+    Le panneau n'apparaît que si <code>lighting.enabled</code> et au moins une ampoule configurée —
+    un serveur sans pont Hue ne montre aucune trace de cette fonctionnalité sur la tablette, même
+    ligne de conduite que le badge de #207 (« aucune goroutine, aucun appel réseau » quand non
+    configuré).
+  </p>
+
+  <h3>Les trois gestes</h3>
+  <div class="scroll">
+    <table>
+      <tr><th style="width:22%">Geste</th><th>Effet</th></tr>
+      <tr><td><b>Noir</b></td><td>Toutes les ampoules pilotées à <code>{"on": false}</code> — obscurité complète de la salle, effet immédiat.</td></tr>
+      <tr><td><b>Plein feu</b></td><td>Toutes les ampoules à pleine intensité, blanc neutre — l'inverse de Noir, pour une pause ou un rangement de salle.</td></tr>
+      <tr><td><b>Flash</b></td><td>Un flash bref (même mécanique que le « Tester » de #207 §05 — flash puis retour à l'état antérieur), pour ponctuer un moment fort sans figer la salle sur une nouvelle couleur.</td></tr>
+    </table>
+  </div>
+
+  <div class="call ok">
+    <span class="call-t">Trois boutons, pas un dégradé de réglages</span>
+    Aucun curseur de couleur ni d'intensité dans ce panneau — cohérent avec la décision déjà actée
+    en #207 §08 (« pas de réglage de couleur ni de scène dans cet écran ») : la table de scènes reste
+    câblée côté serveur, l'animateur choisit un geste, jamais une valeur.
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span>Pourquoi la conduite manuelle n'a pas d'état « actif »</h2>
+  <p class="lede">
+    Décision utilisateur du 2026-09-07 (<code>gate1-decisions-v10-20260907.md</code>) : la conduite
+    manuelle est <b>écrasée par le prochain événement de jeu</b>, sans exception. Cela a une
+    conséquence directe sur l'écran : <b>aucun des trois boutons ne reste « enfoncé »</b> après un
+    clic.
+  </p>
+  <div class="screen">
+    <div class="screen-hd">Ce que l'écran ne fait PAS</div>
+    <div class="screen-bd">
+      <ul class="pl">
+        <li>Pas de bouton qui reste surligné/actif après un clic sur « Noir » ou « Plein feu ».</li>
+        <li>Pas d'indicateur « conduite manuelle en cours » ailleurs sur la page.</li>
+        <li>Pas de minuteur de tenue, pas de bouton « relâcher la main ».</li>
+      </ul>
+      <p class="hint" style="margin-top:12px">
+        Un clic envoie une commande ponctuelle et le bouton redevient immédiatement cliquable —
+        exactement comme « Tester » sur #207 §05. Introduire un état visuel « actif » suggérerait une
+        tenue qui n'existe pas côté serveur (contrat §10.1 : « c'est l'absence de mécanisme qui EST le
+        mécanisme »), et tromperait l'animateur sur ce qu'il contrôle réellement.
+      </p>
+    </div>
+  </div>
+  <div class="call info">
+    <span class="call-t">Diagramme de référence</span>
+    Le déroulement précis (qui écrase quoi, et quand) est schématisé dans
+    <code>docs/mockups/lighting-priority-208.md</code> — diagramme de séquence, pas une machine à
+    états : la décision utilisateur a explicitement simplifié #208 pour écarter ce besoin.
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span>Décisions de conception</h2>
+  <ol class="reasons">
+    <li><b>Deux panneaux distincts sur <code>/anim</code>, jamais fusionnés.</b> Le panneau de
+      conduite de jeu répond à la question « où en est la partie ? » (cinq emplacements fixes,
+      #166/F5). Le panneau éclairage répond à « que montre la salle, là, tout de suite ? ». Les
+      confondre romprait la règle des cinq emplacements permanents de <code>AnimConductPanel</code>
+      pour un besoin qui n'a rien à voir avec la conduite de partie.</li>
+    <li><b>Trois boutons seulement, aucun réglage fin.</b> Cohérent avec #207 §08 : pas de couleur ni
+      de scène éditable côté client, la table de scènes reste une responsabilité serveur.</li>
+    <li><b>Le rôle « équipe » réutilise le menu déroulant existant du sélecteur d'ampoule</b>, pas un
+      nouveau composant de sélection — c'est la même famille d'interaction que le reste de la page
+      #207 (case à cocher + libellé), un menu de plus n'introduit rien de nouveau à apprendre.</li>
+    <li><b>Aucun indicateur d'état « actif » sur les boutons de conduite manuelle</b> — direct de la
+      décision « écrasement immédiat, pas de tenue » (§03 ci-dessus). Montrer un état qui n'existe
+      pas côté serveur serait le même piège que l'exposition d'un curseur de couleur non persisté.</li>
+    <li><b>Panneau éclairage totalement absent si non configuré</b>, jamais grisé — même principe
+      d'invisibilité que le reste de la fonctionnalité Hue depuis #207 : une installation sans pont
+      Hue ne voit littéralement rien qui y fasse référence.</li>
+  </ol>
+</section>
+
+<footer>
+  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 1 — à valider</b>, GATE 2 ·
+  référence pour dev-frontend (Batch 3), test-writer (T1.4) et qa · issues #213/#208 · milestone
+  v10.0.0 · BuzzControl
+</footer>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>
