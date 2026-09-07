@@ -2,36 +2,21 @@
 
 ---
 
-## [20260907e] — Éclairage : le mode tient face à l'inaction, cède au jeu (#208) — règle définitive
+## [20260907e] — ⛔ ANNULÉE — annulation automatique du mode par événement de jeu (#208)
 
-> Quatrième et dernière passe du §10.1, qui **réconcilie** les deux formulations opposées des
-> passes précédentes au lieu d'en choisir une. Le retour **visuel** sur AUTO est la pièce qui
-> manquait : c'est lui qui rend les deux mécanismes compatibles.
-
-- **[CHANGED]** `contracts/lighting.md` §10.1.1 — un mode **ON**/**OFF** (et la bascule **Flash**)
-  **tient indéfiniment face à l'inaction**, mais est **automatiquement annulé au premier événement
-  de jeu** : le sélecteur **revient visiblement sur AUTO**, Flash repasse sur OFF, et l'éclairage
-  suit la scène de jeu. La relâche explicite par l'admin reste possible à tout moment.
-  L'objection qui avait fait abandonner l'écrasement (« le sélecteur mentirait ») **tombe** dès lors
-  que l'annulation déplace réellement le sélecteur.
-- **[NEW]** `contracts/lighting.md` §10.1.2 — **définition normative d'un « événement de jeu »** :
-  les **entrées notifiantes du registre §6** (15 `NotifyState` + 4 `NotifyPulse`), plus toute entrée
-  ajoutée ensuite — la définition **suit le registre**, que le test d'exhaustivité §7 maintient
-  exact. Les 4 entrées `NoAmbiance` n'en sont pas.
-  ⚠️ **La définition porte sur l'ORIGINE, pas sur la méthode appelée** : `NotifyState()` est aussi
-  invoquée par des chemins techniques qui **ne doivent annuler aucun mode** — resynchronisation au
-  retour du pont (§10.3), réapplication après changement de mode, extinction à l'arrêt (§10.4).
-  Brancher l'annulation sur « tout appel à `NotifyState` » serait **faux tout en passant les tests
-  les plus évidents** : un clignotement réseau annulerait le OFF de l'opérateur.
-- **[NEW]** `contracts/lighting.md` §10.1.3 — l'annulation doit être **visible sans délai
-  perceptible**. ⚠️ Le rafraîchissement de **30 s** de `GET /api/lighting/status` (#207) est **trop
-  lent** : une partie qui démarre laisserait le sélecteur afficher OFF une demi-minute, soit
-  exactement le mensonge que le retour visuel doit empêcher. Le contrat impose le **résultat**, pas
-  le moyen.
-- **[CHANGED]** `contracts/lighting.md` §10.1.4 — un événement de jeu annule **aussi** Flash : les
-  deux contrôles cèdent ensemble, le jeu reprend l'éclairage entier.
-
-**Aucun BREAKING**, aucun code écrit à ce stade.
+> **Cette entrée est annulée et n'a jamais été en vigueur.** Elle décrivait une règle — le mode
+> ON/OFF annulé automatiquement au premier événement de jeu, avec retour visuel sur AUTO — rédigée
+> puis écartée le même jour après confirmation utilisateur.
+>
+> **La règle en vigueur reste celle de l'entrée `[20260907d]`** : le mode **tient**, et **AUTO est
+> le seul chemin de retour, actionné manuellement par l'admin**. Aucun événement de jeu ne lève un
+> mode.
+>
+> Conservée ici en trace plutôt que supprimée, parce que des maquettes et procédures ont été
+> rédigées pendant sa brève existence : si un document mentionne une annulation automatique ou une
+> définition normative d'« événement de jeu » à cette fin, **il est périmé**.
+>
+> Aucun code n'a été écrit sur cette base.
 
 ---
 

@@ -468,17 +468,17 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 > c'est elle, la « seconde phase », **pas** la table de scènes câblée du §8, qui est livrée et
 > reste en place (confirmé au GATE du 2026-09-07).
 
-> **Historique de ce paragraphe** — utile parce que des documents rédigés entre-temps circulent
-> encore. Il a convergé en quatre passes, et la dernière **réconcilie** les deux premières :
-> 1. *Gestes ponctuels sans mémoire*, recouverts par le prochain événement de jeu.
-> 2. *Bascules à état* tenant jusqu'à leur relâche — l'inverse du point 1.
-> 3. *Sélecteur tri-état*, qui donne enfin un nom à l'état « relâché » : **AUTO**.
-> 4. **Version en vigueur** : le sélecteur du point 3, qui **tient face à l'inaction** (point 2)
->    **mais cède au premier événement de jeu** (point 1) — en **revenant visiblement sur AUTO**.
->
-> Ce retour visuel est ce qui rend les deux mécanismes compatibles au lieu de contradictoires :
-> l'objection qui avait fait abandonner le point 1 était qu'un sélecteur figé sur ON pendant une
-> scène de jeu **mentirait**. Un sélecteur qu'on voit revenir sur AUTO ne ment pas.
+> **Historique des deux révisions de ce paragraphe** — utile parce que des documents rédigés entre
+> les deux circulent encore :
+> 1. *Gestes ponctuels sans mémoire*, recouverts par le prochain événement de jeu — **abandonné**.
+> 2. *Bascules à état* qui tiennent jusqu'à leur relâche — **conservé quant au fond**.
+> 3. **Version en vigueur** : un **sélecteur tri-état** qui donne enfin un nom à l'état « relâché ».
+>    La sémantique du point 2 est **inchangée** ; seule l'affordance change, et l'état de repos
+>    devient explicite au lieu d'être l'absence des autres.
+> 4. Une quatrième formulation — *annulation automatique du mode au premier événement de jeu, avec
+>    retour visuel sur AUTO* — a été rédigée puis **annulée le même jour** (confirmation utilisateur
+>    du 2026-09-07). **Elle n'a jamais été en vigueur.** Le retour à AUTO est **manuel**, et lui
+>    seul. Si un document parle d'annulation automatique, il est périmé.
 
 #### Deux contrôles, et deux seulement
 
@@ -498,87 +498,45 @@ identifier le matériel pendant la configuration.
 > laisserait les ampoules d'équipe allumées ne serait pas un OFF.
 > *(Précision dérivée, planner — signalée pour relecture.)*
 
-#### 10.1.1 Tenue face à l'inaction, annulation par le jeu — normatif
+#### 10.1.1 AUTO est le seul chemin de retour — normatif
 
-**Les deux mécanismes coexistent**, et c'est le retour visuel qui les rend compatibles :
+**Les deux mécanismes ne coexistent pas.** Le sélecteur **remplace** l'écrasement automatique par
+le prochain événement de jeu ; il ne s'y ajoute pas.
 
-1. **Tenue face à l'inaction.** En position **ON** ou **OFF**, le mode **s'impose à l'éclairage** et
-   **tient indéfiniment tant qu'aucun événement de jeu ne survient**. Un écran de configuration
-   laissé sur OFF reste sur OFF.
-2. **Annulation par le premier événement de jeu.** Dès qu'un **événement de jeu** survient
-   (défini en §10.1.2), le mode est **automatiquement annulé** : le sélecteur **revient sur AUTO**,
-   et l'éclairage suit la scène de jeu. Il en va de même pour la bascule **Flash**, qui repasse sur
-   OFF.
-3. **Le retour est visuel, pas seulement fonctionnel.** L'annulation **déplace réellement le
-   sélecteur** dans l'interface. C'est ce qui rend ce mécanisme acceptable là où l'écrasement
-   silencieux ne l'était pas : le sélecteur ne peut pas afficher **ON** pendant que la salle montre
-   une scène de jeu, et **ON** ne devient jamais un synonyme muet d'**AUTO**. Un mode annulé est un
-   mode qu'on **voit** s'annuler.
-4. **Relâche explicite.** L'admin peut ramener le sélecteur sur **AUTO** à tout moment, sans
-   attendre un événement.
-5. **AUTO rend l'éclairage au jeu — jamais l'obscurité.** Que le retour soit explicite (point 4) ou
-   automatique (point 2), la scène est **re-dérivée depuis l'état de jeu vivant** et réappliquée
-   immédiatement.
-   > Même mécanisme que le §10.3, et ce doit être **le même code**. Aucune mémorisation de « la
-   > scène d'avant » : rien n'est sauvegardé, tout est re-dérivé (§4.1). Sauvegarder puis restaurer
-   > serait à la fois plus coûteux et faux, la partie ayant pu avancer pendant le forçage.
-6. **AUTO hors partie.** Sans partie en cours, la dérivation donne `KindIdle` (blanc chaud
-   praticable, §8). **AUTO n'éteint jamais la salle.**
-7. **Position par défaut.** **AUTO** au démarrage du serveur. Le mode n'est **pas persisté** : il
+1. **Tenue.** En position **ON** ou **OFF**, le mode **s'impose à l'éclairage** : les événements de
+   jeu **ne le recouvrent pas**, y compris pendant une partie. C'est le sens même d'un mode.
+2. **Pourquoi l'écrasement automatique est écarté.** Un événement de jeu qui reprendrait la main
+   sans bouger le sélecteur laisserait celui-ci afficher **ON** pendant que la salle montre une
+   scène de jeu : **le sélecteur mentirait**. Pire, **ON** et **AUTO** deviendraient deux positions
+   au comportement identique, indiscernables. C'est exactement le défaut — montrer un état qui
+   n'existe pas — que la présence d'une position **AUTO** explicite permet enfin d'éliminer.
+3. **AUTO rend l'éclairage au jeu.** Passer le sélecteur sur **AUTO** — depuis ON comme depuis OFF
+   — **ne signifie pas éteindre**. La scène est **re-dérivée depuis l'état de jeu vivant** et
+   réappliquée immédiatement.
+   > C'est **exactement** le mécanisme du §10.3 (resynchronisation au retour du pont), et ce doit
+   > être **le même code**. Aucune mémorisation de « la scène d'avant » : rien n'est sauvegardé,
+   > tout est re-dérivé (§4.1). Sauvegarder puis restaurer serait à la fois plus coûteux et faux,
+   > la partie ayant pu avancer pendant le forçage.
+4. **AUTO hors partie.** Sans partie en cours, la dérivation donne `KindIdle` (blanc chaud
+   praticable, §8) — jamais l'obscurité. **AUTO n'éteint jamais la salle.**
+5. **Position par défaut.** **AUTO** au démarrage du serveur. Le mode n'est **pas persisté** : il
    n'est écrit dans aucun fichier de configuration et ne survit pas à un redémarrage.
-8. **Propriété serveur.** Le mode courant est un état **du serveur**, jamais du navigateur. Deux
-   admins sur deux postes voient la même position, et **voient tous deux l'annulation** quand elle
-   survient.
-9. **Retour du pont.** Si le pont tombe puis revient, la resynchronisation du §10.3 réapplique **le
-   mode courant** : ON, OFF, ou la scène de jeu si AUTO. Une reconnexion **n'est pas** un événement
-   de jeu et **n'annule donc aucun mode** (§10.1.2).
-10. **Arrêt du serveur.** L'extinction totale du §10.4 s'applique quel que soit le mode ; elle n'a
-    pas à le ramener sur AUTO d'abord.
+6. **Propriété serveur.** Le mode courant est un état **du serveur**, jamais du navigateur. Deux
+   admins sur deux postes voient la même position. Un onglet fermé ne change rien au mode en cours.
+7. **Retour du pont.** Si le pont tombe puis revient, la resynchronisation du §10.3 réapplique **le
+   mode courant** : ON, OFF, ou la scène de jeu si AUTO. Un seul chemin de code — « ce que
+   l'éclairage doit montrer maintenant ».
+8. **Arrêt du serveur.** L'extinction totale du §10.4 s'applique quel que soit le mode ; elle n'a
+   pas à le ramener sur AUTO d'abord.
 
-#### 10.1.2 Ce qui constitue un « événement de jeu » — normatif
+> ⚠️ **Conséquence opérationnelle à assumer.** Un mode ON ou OFF tient **indéfiniment** jusqu'à ce
+> qu'un opérateur le ramène sur AUTO, ou jusqu'à l'arrêt du serveur. Un **OFF** oublié laisse la
+> salle éteinte et **aucun événement de jeu ne la rallumera**. C'est le prix assumé d'un mode qui
+> mérite son nom — et le sélecteur tri-état le rend **beaucoup plus lisible** qu'un bouton
+> « actif » : la position se lit d'un coup d'œil, et **AUTO** nomme explicitement le geste qui
+> corrige la situation.
 
-C'est la définition dont dépend tout le §10.1.1 : trop large, elle annule les modes à contretemps ;
-trop étroite, elle laisse la salle forcée pendant une partie.
-
-**Un événement de jeu est une notification émise par la couche événementielle du jeu** — très
-exactement les **entrées notifiantes du registre §6** (`cmd/server/main.go`) :
-
-- les **15** entrées `NotifyState` (transitions de phase, buzz, révélation, changements d'équipe,
-  entracte, édition des équipes…) ;
-- les **4** entrées `NotifyPulse` (impulsions de score) ;
-- **plus toute entrée notifiante ajoutée ultérieurement au registre** — notamment celle qu'exige le
-  §10.5 pour la fin de décompte. La définition suit le registre, elle ne le double pas : le test
-  d'exhaustivité §7 la maintient exacte sans effort.
-
-Les **4** entrées `NoAmbiance` du §6.1 n'en sont pas : elles ne notifient rien, par décision
-explicite.
-
-> ⚠️ **La définition porte sur l'ORIGINE, pas sur la méthode appelée.** `Writer.NotifyState()` est
-> aussi invoquée par des chemins **techniques** qui ne sont **pas** des événements de jeu et qui ne
-> doivent **annuler aucun mode** :
-> - la **resynchronisation au retour du pont** (§10.3) — sans cette exclusion, un simple
->   clignotement réseau annulerait le OFF de l'opérateur, ce qui serait incompréhensible ;
-> - la **réapplication** consécutive à un changement de mode ou de configuration ;
-> - l'**extinction à l'arrêt** (§10.4).
->
-> Une implémentation qui brancherait l'annulation sur « tout appel à `NotifyState` » serait donc
-> **fausse**, tout en passant les tests les plus évidents. L'annulation se branche sur les **sites
-> de jeu**, pas sur l'écrivain.
-
-#### 10.1.3 Restitution de l'annulation dans l'interface — normatif
-
-Le point 3 du §10.1.1 n'a de valeur que si l'admin **voit** l'annulation **sans délai perceptible**.
-
-- Le mode courant doit être **lisible depuis le serveur** (extension de `GET /api/lighting/status`,
-  #207) — il n'est jamais déduit côté navigateur.
-- ⚠️ **Le rafraîchissement de 30 s de #207 est trop lent pour cet usage.** Une partie qui démarre
-  laisserait le sélecteur afficher **OFF** pendant une demi-minute, c'est-à-dire exactement le
-  mensonge que le retour visuel doit empêcher. L'implémentation doit traiter ce point — par un
-  rafraîchissement plus rapide tant qu'un mode est engagé, ou en s'appuyant sur le flux admin déjà
-  ouvert par la page. **Le contrat n'impose pas le moyen ; il impose le résultat** : l'écart entre
-  l'annulation réelle et son affichage doit être imperceptible à l'usage.
-
-#### 10.1.4 Flash et le sélecteur — précédence, pas exclusion
+#### 10.1.2 Flash et le sélecteur — précédence, pas exclusion
 
 Flash est un contrôle **séparé** du sélecteur : les deux peuvent être engagés en même temps.
 
@@ -589,9 +547,6 @@ Flash est un contrôle **séparé** du sélecteur : les deux peuvent être engag
   pas un quatrième mode. Le sélecteur continue d'afficher le mode sous-jacent, qui reste vrai.
 - **À l'extinction de Flash**, l'éclairage revient à ce que dit le sélecteur : ON, OFF, ou
   re-dérivation depuis l'état de jeu si AUTO.
-- **Un événement de jeu annule Flash aussi** (§10.1.1 point 2) : la bascule repasse visiblement sur
-  OFF, en même temps que le sélecteur revient sur AUTO s'il était engagé. Les deux contrôles
-  cèdent ensemble — le jeu reprend l'éclairage entier, pas une moitié.
 
 *(Précision dérivée, planner — la demande pose Flash comme bascule séparée sans trancher son
 interaction avec le sélecteur ; signalée pour relecture.)*
@@ -605,7 +560,7 @@ interaction avec le sélecteur ; signalée pour relecture.)*
 - `POST /api/lighting/test` (#207) reste le **flash ponctuel** de test d'une ampoule **nommée** :
   geste sans état, distinct de la bascule Flash, et **non remplacé** par elle.
 
-#### 10.1.5 Canal — HTTP REST, jamais WebSocket
+#### 10.1.3 Canal — HTTP REST, jamais WebSocket
 
 Ces commandes étendent la surface REST existante `/api/lighting/*` (#207), seul canal que
 `AmbiancePage.jsx` utilise. **Aucune action WebSocket, aucune entrée d'allowlist** : la question ne
