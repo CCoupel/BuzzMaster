@@ -2,6 +2,47 @@
 
 ---
 
+## [20260907] — Éclairage : conduite manuelle, arrêt, dégradation par équipe (#208, #213, v10.0.0)
+
+> Reprise du milestone v10.0.0 après resynchronisation sur `main` (PROD v9.0.0). Tranche les trois
+> questions que #208 laissait explicitement ouvertes — décisions utilisateur du 2026-09-07,
+> `_work/handoff/gate1-decisions-v10-20260907.md`. Aucun code n'est encore écrit : contract-first.
+
+- **[NEW]** `contracts/lighting.md` §10.1 — priorité conduite manuelle `/anim` ↔ scènes
+  automatiques : la commande manuelle est **écrasée par le premier événement de jeu suivant**,
+  sans aucun mécanisme de tenue. Interdit explicitement d'introduire un état « source de la
+  dernière commande » : il n'aurait aucun lecteur.
+- **[NEW]** `contracts/lighting.md` §10.3 — resynchronisation de l'éclairage au retour d'un pont
+  redevenu joignable, sur l'état de jeu **courant** (jamais un état neutre ni la scène d'avant la
+  coupure). Se réduit à déclencher un `NotifyState` : l'écrivain re-dérive déjà depuis l'état
+  vivant (§4.1).
+- **[NEW]** `contracts/lighting.md` §10.4 — extinction totale (ampoules Hue + LED buzzers) à
+  l'arrêt du serveur, **obligatoirement avant `a.cancelCtx()`** et avec un contexte propre à
+  échéance courte. Une extinction placée après serait annulée à l'instant de son émission —
+  symptôme : code présent, tests verts, salle allumée.
+- **[NEW]** `contracts/hue-bridge.md` §5.7 — les quatre règles de dégradation de l'éclairage par
+  équipe deviennent **normatives** (moins d'ampoules que d'équipes · équipe sans ampoule · aucune
+  affectation ⇒ retour au « toute la salle en `general` » · ampoule injoignable). Elles étaient
+  jusqu'ici une liste de travail au §9.
+- **[CHANGED]** `contracts/lighting.md` §10.2 — restitution d'état : **rien ne change** en fin de
+  partie ni à la perte du pont (périmètre réduit sur décision utilisateur) ; **seul** l'arrêt du
+  serveur déclenche une action.
+- **[CHANGED]** `contracts/lighting.md` §10.5 — tout événement changeant ce que la salle montre
+  doit notifier l'écrivain, **même s'il n'émet aucune LED**. Corrige le cas constaté de l'ENTRACTE
+  programmée (#214), dont le drapeau est levé en fin de décompte alors que le seul site
+  `NotifyState` de la séquence se déclenche à son lancement. **Portée du test d'exhaustivité §7
+  explicitée** : il ne couvre que les sites porteurs de LED — c'est un filet à mailles connues,
+  pas une preuve d'exhaustivité fonctionnelle.
+- **[CHANGED]** `contracts/hue-bridge.md` §9 — réduit à des renvois vers §5.2 et §5.7, et rappelle
+  le réemploi imposé de `teamColorPalette`/`teamColorToRGB`/`nearestPaletteColorByHue` : jamais une
+  seconde palette, la salle et les buzzers montrent la même couleur pour la même équipe.
+
+**Aucun BREAKING.** Le schéma `role`/`team` de la section `lighting` est additif et déjà publié par
+#207 (`internal/config/config.go` porte les deux champs, `role` par défaut `"general"`). Aucune
+configuration existante n'est invalidée, aucun endpoint n'est modifié.
+
+---
+
 ## [20260906] — Correctifs retour QUALIF v9.0.0.4 : Lot A+1 (#216) et Lot C1/C2 (#217)
 
 > Backend uniquement (Batch 1). Plan : `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md`.

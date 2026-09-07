@@ -214,6 +214,27 @@ Reprise de `contracts/ai-key-validation.md` §3, dont c'est le précédent direc
 opposés : réappairer contre rallumer/rebrancher. C'est l'ambiguïté qui a rendu #142 coûteux à
 diagnostiquer.
 
+### 5.7 Dégradation de l'éclairage par équipe — normatif (#213)
+
+> Les quatre cas que le §9 listait comme « à traiter par #213 » sont tranchés ici et deviennent
+> normatifs. #213 est formel : **ce sont eux qui séparent une fonctionnalité utilisable d'une
+> curiosité de démonstration.** Aucun n'est un cas limite exotique — le premier est le cas le plus
+> fréquent en soirée réelle.
+
+| Cas | Règle |
+|---|---|
+| **Moins d'ampoules que d'équipes** *(le plus fréquent)* | Les équipes pourvues sont rendues sur leur ampoule. Les autres ne le sont pas individuellement : elles restent couvertes par la zone `general`, qui garde la scène de la salle. **Jamais de partage d'une ampoule entre deux équipes**, ni de rotation entre elles. |
+| **Équipe sans ampoule affectée** | Cas particulier du précédent, même règle. La zone portant son nom est un **non-événement silencieux** (§5.2), pas une erreur, et **ne repeint pas `general` à la couleur de cette équipe** — la couleur de la salle ne doit pas dépendre de quelle équipe se trouve dépourvue d'ampoule. |
+| **Aucune affectation d'équipe du tout** | Retour intégral au comportement **« toute la salle en `general` »** — c'est-à-dire exactement le comportement pré-#213, dans lequel la scène générale porte déjà la couleur de l'équipe active (`KindTeamTurn`, `lighting.md` §6.3). Une installation sans ampoule d'équipe reste donc pleinement expressive. |
+| **Ampoule affectée mais injoignable** *(éteinte au mur)* | N'empêche **jamais** l'écriture sur les autres ampoules — application directe de la ligne « une ampoule injoignable » du §5.5, rappelée ici parce que c'est sur une ampoule d'équipe qu'on l'oublie le plus facilement. |
+
+⚠️ **Précision dérivée (planner, 2026-09-07)** — les deux lignes centrales tranchent un point que
+ni l'issue ni la décision utilisateur ne formulaient explicitement : une équipe dépourvue d'ampoule
+**ne détourne pas** la zone `general` à son profit. La règle inverse (repeindre toute la salle à
+la couleur de l'équipe non pourvue) produirait une salle dont la couleur bascule selon la
+composition matérielle plutôt que selon le jeu. Signalé pour relecture au même titre que le §6.3
+de `lighting.md`.
+
 ---
 
 ## 6. Configuration — normatif
@@ -358,11 +379,20 @@ endpoint **ne fait aucune I/O** — il lit un état déjà en mémoire.
 
 ## 9. Ce qui appartient à #213
 
-- Activation du `role: "team"` et du champ `team` du §6.
-- Résolution de `Event.Teams` (`lighting.md` §2.2) en zones d'état.
-- Règles de dégradation : moins d'ampoules que d'équipes, équipe sans ampoule, aucune affectation
-  (⇒ retour au comportement « toute la salle en `general` »), ampoule affectée mais injoignable.
+- Activation du `role: "team"` et du champ `team` du §6 — **schéma déjà figé par #207**, rien à
+  migrer (`internal/config/config.go` porte déjà les deux champs).
+- Résolution de `Event.Teams` (`lighting.md` §2.2) en zones d'état. `Event.Teams` est **déjà
+  rempli** par #205 : cette issue le **résout en zones**, elle ne le recalcule pas.
+- Correspondance zone → ampoules : **§5.2** (normatif).
+- Règles de dégradation : **§5.7** (normatif) — les quatre cas y sont tranchés, ils ne sont plus
+  à la charge de l'implémentation.
 - Colonne « équipe » dans l'écran d'administration.
+
+**Réemploi imposé de la machinerie couleur** : `teamColorPalette`, `teamColorToRGB` et
+`nearestPaletteColorByHue` (`cmd/server/main.go`). **Jamais une seconde palette** — la salle et les
+buzzers doivent montrer *la même* couleur pour *la même* équipe. Deux rouges différents seraient
+pires que pas de couleur du tout. C'est ce que garantit déjà le format de `lighting.ZoneState`,
+identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
 
 ## 10. Hors de ce contrat
 

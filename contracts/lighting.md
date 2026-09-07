@@ -451,12 +451,100 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 
 ---
 
-## 10. Hors de ce contrat
+## 10. Conduite manuelle, restitution et arrêt — normatif (#208, décisions du 2026-09-07)
+
+> Section ajoutée à la reprise du milestone v10.0.0. Les trois questions que #208 laissait
+> explicitement ouvertes sont tranchées ici par décision utilisateur du 2026-09-07
+> (`_work/handoff/gate1-decisions-v10-20260907.md`). Elles ne sont plus des choix d'implémentation.
+
+### 10.1 Priorité conduite manuelle ↔ scènes automatiques
+
+Une commande manuelle émise depuis `/anim` (noir, plein feu, flash d'applaudissement) est
+**écrasée par le premier événement de jeu qui suit**, quel qu'il soit — y compris un événement
+mineur (un buzz, une rotation d'équipe). Il n'existe **aucun mécanisme de tenue** : ni verrou, ni
+minuterie, ni priorité conservée.
+
+Formulation opérationnelle : la conduite manuelle **écrit dans le même canal** que les scènes
+automatiques, **sans état propre**. Le prochain `NotifyState` la recouvre naturellement.
+**C'est l'absence de mécanisme qui EST le mécanisme** — ne pas introduire de champ « source de la
+dernière commande » ni de drapeau « manuel en cours » : ils n'auraient aucun lecteur.
+
+Conséquence assumée : un flash d'applaudissement peut être recouvert dans la seconde si le jeu a
+quelque chose à afficher. Le jeu est toujours prioritaire dès qu'il parle.
+
+### 10.2 Restitution d'état — trois situations, trois décisions
+
+| Situation | Comportement de l'éclairage | Action requise |
+|---|---|---|
+| **Fin de partie** | La dernière scène de jeu **reste affichée**. Aucun retour à un état neutre. | **Aucune** — hors périmètre v10.0.0 |
+| **Perte du pont en cours de partie** | **Inchangé.** Seul le badge de statut de l'écran d'administration reflète la perte (§5.6 de `hue-bridge.md`). | **Aucune** sur l'éclairage — voir §10.3 pour le retour |
+| **Arrêt du serveur** | **Extinction totale** : ampoules Hue **et** LED des buzzers. | **Oui — seul cas des trois**, voir §10.4 |
+
+`hue-bridge.md` §5.5 reste la référence pour le comportement dégradé du pont ; la présente section
+ne tranche que ce que l'**éclairage** fait pendant ce temps : rien.
+
+### 10.3 Resynchronisation au retour du pont
+
+Au retour d'un pont redevenu joignable, l'éclairage est **recalculé et réappliqué à partir de
+l'état de jeu courant** — la scène correspondant à ce qui se passe dans le jeu **à cet instant**.
+Jamais un état neutre, jamais la dernière scène connue avant la coupure.
+
+> **Note d'implémentation.** La machinerie existe déjà : l'écrivain **re-dérive systématiquement
+> depuis l'état vivant** à chaque `NotifyState` (§4.1, « ne jamais mémoriser la charge utile »).
+> La resynchronisation se réduit donc à **déclencher un `NotifyState` sur la transition de
+> reconnexion** du pilote. Aucun rejeu, aucun instantané à conserver. Si l'implémentation devient
+> plus compliquée que cela, c'est le signe qu'on s'écarte du contrat.
+
+### 10.4 Extinction à l'arrêt du serveur — et le piège d'ordonnancement
+
+L'arrêt du serveur éteint **les ampoules Hue et les LED des buzzers**.
+
+> ⚠️ **Piège vérifié dans le code (`(*App).stop()`, `cmd/server/main.go`).**
+> `stop()` appelle **`a.cancelCtx()` en tout premier**, avant `ardoiseCoalescer.Stop()`,
+> `dnsServer.Stop()`, `mdnsServer.Stop()`, `httpServer.Stop()`, `broadcaster.Stop()` et
+> `udpBcast.Stop()`.
+>
+> Une extinction écrite naïvement **après** ce `cancelCtx()` est **annulée à l'instant où elle est
+> émise** : la requête HTTP vers le pont porte un contexte déjà mort, et les hubs WebSocket qui
+> portent les buzzers sont en train de tomber. Le symptôme serait le pire possible — du code
+> présent, une suite de tests verte, et la salle qui reste allumée sur la dernière scène.
+
+**Exigences normatives :**
+1. L'extinction s'effectue **avant** `a.cancelCtx()`.
+2. Elle utilise **son propre contexte à échéance courte** (ordre de grandeur : 1 à 2 s), jamais
+   `a.ctx`.
+3. Elle **ne doit jamais retarder ni empêcher l'arrêt** si le pont ne répond pas. Un pont
+   injoignable à l'arrêt est un cas **normal**, pas une erreur — au plus une ligne de log.
+
+### 10.5 Tout événement qui change la salle doit notifier — même sans LED
+
+Tout événement de jeu qui change ce que la salle doit montrer **doit** notifier l'écrivain,
+**y compris lorsqu'il n'émet aucune LED de buzzer**.
+
+Cas fondateur, constaté à la reprise du milestone : le drapeau `GameState.Entracte` d'une
+**ENTRACTE programmée** (#214, ENTRACTE comme 7e type de question) est levé par
+`startEntracteQuestionUnsafe()` depuis `actualStart()`, c'est-à-dire **à la fin du décompte**. Or
+`broadcastStart()` — seul site `NotifyState` de la séquence de démarrage — n'est appelé qu'**au
+lancement** du décompte (`GetPhase() == PhaseCountdown`). Entre les deux, aucune notification : la
+fin de décompte ne déclenche que `OnStateChange` → `broadcastGameState` + `broadcastQuestions`,
+dont **aucun n'émet de LED** et donc aucun n'est un site du registre §6. La salle restait sur la
+scène READY/RUNNING au lieu de passer en `KindEntracte`.
+
+> ⚠️ **Portée réelle du test d'exhaustivité §7 — à ne pas surestimer.**
+> Il compare les sites **porteurs de LED**. Un événement qui change la salle **sans changer une
+> seule LED de buzzer lui est structurellement invisible.** Le registre §6 est un filet à mailles
+> connues, **pas une preuve d'exhaustivité fonctionnelle**. Toute nouvelle transition de jeu doit
+> être confrontée à cette section, pas seulement au test.
+
+---
+
+## 11. Hors de ce contrat
 
 | Sujet | Issue |
 |---|---|
 | Pilote BLE réel, conversion RGB → CIE xy, appairage | #206 |
 | Schéma de configuration, endpoints HTTP, écran d'administration | #207 |
 | Affectation ampoule → équipe, résolution de `Teams` en zones, règles de dégradation | #213 |
-| Conduite manuelle depuis `/anim`, restitution d'état à l'arrêt | #208 |
+| Conduite manuelle depuis `/anim` — **composant et actions** (la règle de priorité est au §10.1) | #208 |
+| Restitution en fin de partie | **retiré du périmètre** (décision du 2026-09-07, §10.2) |
 | Édition des scènes, effets répartis, synchronisation sur le minuteur | v10.1 (#210, #211, #212) |
