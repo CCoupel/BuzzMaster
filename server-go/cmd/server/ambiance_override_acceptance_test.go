@@ -275,9 +275,15 @@ func TestCA208_Flash_NeverAffectsAnActiveTeamZone(t *testing.T) {
 	if !teamAFound {
 		t.Fatal("la zone TeamA a disparu alors que Flash est engagé — elle doit rester présente et auto-dérivée")
 	}
+	// Batch A/P1 (planner _work/reports/planner-v10-groups-teamcolor-
+	// 20260907-173831.md) : une équipe distinguée par l'événement (ici,
+	// TeamA via ev.Teams) est désormais à pleine intensité (255,
+	// l'équivalent SOLID/BLINK du buzzer) dans SA zone dédiée, pas
+	// ambianceSceneTeamTurn.Intensity (200, qui reste la valeur de la zone
+	// general elle-même — inchangée, non affectée par ce fix).
 	wantTeamA := app.teamNameToRGB("TeamA")
-	if teamA.Color != wantTeamA || teamA.Intensity != ambianceSceneTeamTurn.Intensity {
-		t.Fatalf("Flash sur general ne doit jamais affecter la zone d'une équipe active, got %+v want couleur=%v intensité=%d",
-			teamA, wantTeamA, ambianceSceneTeamTurn.Intensity)
+	if teamA.Color != wantTeamA || teamA.Intensity != 255 {
+		t.Fatalf("Flash sur general ne doit jamais affecter la zone d'une équipe active, got %+v want couleur=%v intensité=255",
+			teamA, wantTeamA)
 	}
 }
