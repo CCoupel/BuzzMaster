@@ -27,6 +27,11 @@ export const EMPTY_LIGHTING_STATUS = Object.freeze({
   bridge_ip: '',
   lights_ok: 0,
   lights_total: 0,
+  // #208 — sélecteur ON/AUTO/OFF (contrat lighting.md §10.1.1 pt.5 : AUTO au
+  // démarrage, jamais persisté) et bascule Flash. Défauts sûrs si l'endpoint
+  // ne les renvoie pas encore (404 = serveur antérieur au Batch 2).
+  mode: 'AUTO',
+  flash: false,
 })
 
 /** À appeler après tout enregistrement touchant la section `lighting`. */

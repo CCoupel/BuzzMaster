@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Button from '../components/Button'
 import Card from '../components/Card'
+import { useGame } from '../hooks/GameContext'
 import { useLightingStatus, notifyLightingChanged } from '../hooks/useLightingStatus'
 import { lightingStateLabel, normalizeLightingState } from '../utils/lightingState'
+import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
 
 // #207 — /admin/ambiance : connecter BuzzMaster à un pont Philips Hue et
@@ -24,6 +26,27 @@ import './AmbiancePage.css'
 //
 // La section de config se nomme `lighting`, jamais `ambiance` (mot déjà pris
 // par la catégorie de sauvegarde de game-config.json, BackupPage.jsx/#152).
+//
+// #213/#208 (v10.0.0, Batch 3) — deux ajouts à l'étape 3 ci-dessus, sur cet
+// écran uniquement (jamais /anim). Maquettes de référence : rev6 de
+// docs/mockups/lighting-team-assignment-213.html, rev3 de
+// docs/mockups/lighting-priority-208.md. Contrats : contracts/lighting.md
+// §10.1 (SHA df448318), contracts/hue-bridge.md §5.2/§5.7.
+//
+//   #213 — colonne « Rôle » par ampoule (menu déroulant Éclairage général /
+//   Équipe X), même schéma role/team que #207 fige déjà (config.go). La
+//   liste des équipes vient de l'état de jeu courant (useGame().teams),
+//   pas d'un endpoint dédié — c'est la même source que TeamsPage/GamePage.
+//
+//   #208 — panneau « Éclairage général — conduite en direct » : sélecteur
+//   ON/AUTO/OFF + bascule Flash, tous deux scopés à la zone `general`
+//   UNIQUEMENT (jamais les ampoules d'équipe, contrat §10.1 encart normatif).
+//   État lu depuis GET /api/lighting/status (déjà étendu côté backend avec
+//   `mode`/`flash`), jamais déduit côté client. Le mode TIENT indéfiniment
+//   (pas d'écrasement automatique par le jeu, contrat §10.1.1) — seul un
+//   retour manuel sur AUTO relâche, d'où le bandeau d'avertissement
+//   permanent tant que le mode n'est pas AUTO (garde-fou contre l'« oubli »,
+//   seul filet de sécurité prévu par le contrat).
 
 export const REGISTER_RETRY_MS = 2000
 export const REGISTER_TIMEOUT_S = 45
@@ -88,7 +111,16 @@ function defaultSelectionFor(configLights, inventoryLights) {
   return inventoryLights.map(l => l.name)
 }
 
+// #213 — normalise une entrée `lighting.lights` en {role, team}. Toute
+// valeur de `role` autre que "team" est traitée comme `general` (repli
+// prudent, même principe que normalizeLightingState).
+function roleOf(light) {
+  if (light && light.role === 'team' && light.team) return { role: 'team', team: light.team }
+  return { role: 'general' }
+}
+
 export default function AmbiancePage() {
+  const { teams } = useGame()
   const { status, refresh: refreshStatus } = useLightingStatus()
 
   // Section `lighting` de config.json (clé API jamais présente : masquée).
@@ -114,6 +146,18 @@ export default function AmbiancePage() {
   const [selectedNames, setSelectedNames] = useState(null)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(null) // nom en cours de test, ou '*' pour toutes
+
+  // #213 — rôle par ampoule : { [name]: {role, team} }, seulement les
+  // entrées modifiées cette session (même patron que selectedNames/prev ci-
+  // dessus) — la config chargée fait foi tant que l'utilisateur n'a rien
+  // changé, jamais fixé après coup par un effet.
+  const [roleOverrides, setRoleOverrides] = useState({})
+
+  // #208 — sélecteur ON/AUTO/OFF + bascule Flash : un seul POST en vol à la
+  // fois par contrôle, l'état affiché vient toujours de `status` (source
+  // serveur unique, jamais déduit côté client — contrat §10.1.1 pt.6).
+  const [modeBusy, setModeBusy] = useState(false)
+  const [flashBusy, setFlashBusy] = useState(false)
 
   const [toast, setToast] = useState(null)
 
@@ -291,8 +335,10 @@ export default function AmbiancePage() {
       next = { phase: 'done', lights: [], failure: 'error' }
     }
     // Un nouvel inventaire repart de la sélection par défaut (dérivée dans le
-    // même rendu que les lignes — voir selectedNames).
+    // même rendu que les lignes — voir selectedNames) et des rôles tels
+    // qu'enregistrés (#213 — voir roleOverrides).
     setSelectedNames(null)
+    setRoleOverrides({})
     setInventory(next)
   }, [])
 
@@ -334,6 +380,24 @@ export default function AmbiancePage() {
 
   const frozen = inventory.failure === 'unreachable' || inventory.failure === 'refused'
 
+  // ---- #213 : rôle par ampoule ---------------------------------------------
+  // Équipes de la partie courante — même source que TeamsPage/GamePage
+  // (useGame().teams), pas un endpoint dédié : la liste proposée dans chaque
+  // menu Rôle est TOUJOURS celle de la config de partie en vigueur.
+  const teamNames = useMemo(() => Object.keys(teams || {}), [teams])
+  const existingLights = useMemo(() => new Map(lighting.lights.map(l => [l.name, l])), [lighting.lights])
+
+  const roleFor = useCallback(
+    (name) => roleOverrides[name] ?? roleOf(existingLights.get(name)),
+    [roleOverrides, existingLights]
+  )
+
+  const teamSwatchColor = useCallback((teamName) => {
+    const data = teams?.[teamName]
+    const c = findTeamColor(data?.COLOR_NAME, data?.COLOR)
+    return c ? `rgb(${c.rgb.join(',')})` : null
+  }, [teams])
+
   const toggleName = (name, checked) => {
     setSelectedNames(prev => {
       const base = prev ?? defaultSelection
@@ -344,15 +408,15 @@ export default function AmbiancePage() {
   const handleSaveLights = async () => {
     setSaving(true)
     try {
-      // Les entrées existantes sont reprises telles quelles (rôle/équipe #213
-      // préservés) ; les nouvelles sont `general` — seul rôle actif en #207.
-      // Seules les clés possédées par cette étape sont envoyées (merge champ
-      // par champ côté serveur) : pont et clé restent intacts.
-      const existing = new Map(lighting.lights.map(l => [l.name, l]))
-      const lights = effectiveSelected.map(name => existing.get(name) || { name, role: 'general' })
+      // Rôle/équipe (#213) : l'override de cette session fait foi, sinon la
+      // valeur déjà enregistrée, sinon `general` — même hiérarchie que
+      // `roleFor`. Seules les clés possédées par cette étape sont envoyées
+      // (merge champ par champ côté serveur) : pont et clé restent intacts.
+      const lights = effectiveSelected.map(name => ({ name, ...roleFor(name) }))
       const res = await saveLighting({ enabled: true, lights })
       if (!res.ok) throw new Error(await res.text())
       setSelectedNames(null) // la config rechargée devient la référence
+      setRoleOverrides({})
       setToast({ message: 'Ampoules enregistrées.', type: 'success' })
       await afterSave()
     } catch (error) {
@@ -407,6 +471,42 @@ export default function AmbiancePage() {
   }
 
   const handleReassociate = () => startPairing({ ip: lighting.bridge_ip, id: lighting.bridge_id })
+
+  // ---- #208 : conduite en direct — sélecteur ON/AUTO/OFF + Flash -----------
+  // Aucun état optimiste : après la réponse serveur, on relit le statut
+  // (refreshStatus) — la position affichée est TOUJOURS celle que le serveur
+  // vient de confirmer, jamais une supposition côté client (contrat §10.1.1
+  // pt.6, « propriété serveur »).
+  const handleSetMode = async (mode) => {
+    if (modeBusy || status.mode === mode) return
+    setModeBusy(true)
+    try {
+      const res = await postJson('/api/lighting/mode', { mode })
+      if (!res.ok) throw new Error(await res.text())
+      await refreshStatus()
+    } catch (error) {
+      console.error('Set lighting mode failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setModeBusy(false)
+    }
+  }
+
+  const handleToggleFlash = async () => {
+    if (flashBusy) return
+    const next = !status.flash
+    setFlashBusy(true)
+    try {
+      const res = await postJson('/api/lighting/flash', { on: next })
+      if (!res.ok) throw new Error(await res.text())
+      await refreshStatus()
+    } catch (error) {
+      console.error('Set lighting flash failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setFlashBusy(false)
+    }
+  }
 
   // ---- Badge d'état (4 valeurs, maquette §02) ------------------------------
   // Non configuré tant qu'aucun pont n'est associé. Sinon l'état du pilote
@@ -714,6 +814,36 @@ export default function AmbiancePage() {
                           </span>
                         </span>
                       </label>
+                      {/* #213 — rôle : Éclairage général (défaut) ou Équipe X. Même
+                          disponibilité que la case à cocher : figée si le pont est
+                          injoignable/refusé, ou si le nom est en double. */}
+                      <span className="ambiance-light-role-group">
+                        {roleFor(row.name).role === 'team' && (
+                          <span
+                            className="ambiance-light-swatch"
+                            style={{ backgroundColor: teamSwatchColor(roleFor(row.name).team) || 'var(--gray-300)' }}
+                            aria-hidden="true"
+                          />
+                        )}
+                        <select
+                          className="ambiance-light-role"
+                          value={roleFor(row.name).role === 'team' ? roleFor(row.name).team : 'general'}
+                          disabled={blocked}
+                          onChange={e => {
+                            const value = e.target.value
+                            setRoleOverrides(prev => ({
+                              ...prev,
+                              [row.name]: value === 'general' ? { role: 'general' } : { role: 'team', team: value },
+                            }))
+                          }}
+                          aria-label={`Rôle de ${row.name}`}
+                        >
+                          <option value="general">Éclairage général</option>
+                          {teamNames.map(name => (
+                            <option key={name} value={name}>Équipe — {name}</option>
+                          ))}
+                        </select>
+                      </span>
                       <Button
                         variant="secondary"
                         size="sm"
@@ -746,6 +876,50 @@ export default function AmbiancePage() {
               </Button>
             </div>
             <p className="ambiance-hint">« Tester » produit un bref flash puis rend l'ampoule à son état précédent.</p>
+
+            {/* ---------------- #208 : conduite en direct — ON/AUTO/OFF + Flash ---------------- */}
+            <div className="ambiance-mode-panel">
+              <h3 className="ambiance-mode-title">Éclairage général — conduite en direct</h3>
+              <p className="ambiance-hint">
+                Outil de conduite en direct pour la régie, utilisé pendant une partie — n'affecte que
+                la zone générale : une ampoule affectée à l'équipe active reste pilotée par le jeu,
+                quelle que soit la position ci-dessous.
+              </p>
+              <div className="ambiance-mode-row">
+                <div className="ambiance-mode-tristate" role="radiogroup" aria-label="Éclairage général">
+                  {['ON', 'AUTO', 'OFF'].map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="radio"
+                      aria-checked={status.mode === m}
+                      className={`ambiance-mode-btn is-${m.toLowerCase()} ${status.mode === m ? 'is-selected' : ''}`}
+                      disabled={modeBusy || status.mode === m}
+                      onClick={() => handleSetMode(m)}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className={`ambiance-flash-toggle ${status.flash ? 'is-on' : ''}`}
+                  aria-pressed={status.flash}
+                  disabled={flashBusy}
+                  onClick={handleToggleFlash}
+                >
+                  <span className="ambiance-flash-switch" aria-hidden="true" />
+                  Flash
+                </button>
+              </div>
+              {status.mode !== 'AUTO' && (
+                <p className="ambiance-mode-warning" role="status">
+                  Mode <strong>{status.mode}</strong> engagé — l'éclairage général restera
+                  {status.mode === 'ON' ? ' allumé' : ' éteint'} indéfiniment, même pendant une
+                  partie, jusqu'à un retour manuel sur AUTO.
+                </p>
+              )}
+            </div>
           </section>
         )}
       </Card>

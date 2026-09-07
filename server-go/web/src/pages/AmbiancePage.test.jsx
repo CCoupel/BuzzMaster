@@ -1,18 +1,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
-import AmbiancePage, { REGISTER_RETRY_MS, REGISTER_TIMEOUT_S } from './AmbiancePage'
-import { LIGHTING_CHANGED_EVENT } from '../hooks/useLightingStatus'
 
 // ---------------------------------------------------------------------------
 // #207 — /admin/ambiance. Maquette validée rév. 4 :
 // docs/mockups/lighting-hue-config-207.html. Contrat : contracts/hue-bridge.md
 // §6 (config `lighting`), §7 (endpoints), §5.6 (taxonomie à trois issues).
 //
-// Le backend (#206/#207) n'existe pas encore : `global.fetch` est mocké par
-// route, avec les formes de réponse EXACTES du contrat §7.
+// #213/#208 (Batch 3, v10.0.0) — étendu avec la colonne de rôle par ampoule
+// et le panneau de conduite ON/AUTO/OFF/Flash. `useGame()` (GameContext) est
+// mocké comme dans ConfigPage.test.jsx : AmbiancePage n'a besoin que de
+// `teams`, jamais du reste (WebSocket, updateConfig...).
+//
+// Le backend (#206/#207/#208) : `global.fetch` est mocké par route, avec les
+// formes de réponse EXACTES des contrats §7 (hue-bridge.md) et §10.1
+// (lighting.md — /api/lighting/mode, /api/lighting/flash, mode+flash dans
+// /api/lighting/status).
 // ---------------------------------------------------------------------------
 
 vi.mock('./AmbiancePage.css', () => ({}))
+vi.mock('../hooks/GameContext', () => ({
+  useGame: vi.fn(),
+  GameProvider: ({ children }) => children,
+}))
+
+// Import après le mock (convention du repo, cf. ConfigPage.test.jsx).
+import AmbiancePage, { REGISTER_RETRY_MS, REGISTER_TIMEOUT_S } from './AmbiancePage'
+import { LIGHTING_CHANGED_EVENT } from '../hooks/useLightingStatus'
+import { useGame } from '../hooks/GameContext'
+
+beforeEach(() => {
+  useGame.mockReturnValue({ teams: {} })
+})
 
 // Petit serveur simulé : la section `lighting` de config.json évolue avec les
 // POST, comme le ferait handleConfig (remplacement de section, clé préservée

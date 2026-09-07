@@ -362,10 +362,173 @@
   opacity: 0.55;
 }
 
+/* ---- #213 : rôle par ampoule (colonne ajoutée à la ligne .ambiance-light) ---- */
+.ambiance-light-role-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.ambiance-light-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--gray-300);
+  flex: none;
+}
+
+.ambiance-light-role {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  background: #fff;
+  font-size: 0.82rem;
+  color: var(--gray-800);
+  max-width: 180px;
+}
+
+.ambiance-light-role:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- #208 : conduite en direct — sélecteur ON/AUTO/OFF + Flash ---- */
+.ambiance-mode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  margin-top: var(--space-2);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  background: var(--gray-50);
+}
+
+.ambiance-mode-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gray-600);
+  margin: 0;
+}
+
+.ambiance-mode-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+}
+
+/* Sélecteur tri-état — TOUJOURS une seule position active, jamais un état
+   indéterminé (contrat §10.1.1 pt.2 : AUTO nomme explicitement le repos, ce
+   n'est pas l'absence des deux autres). */
+.ambiance-mode-tristate {
+  display: inline-flex;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.ambiance-mode-btn {
+  padding: var(--space-2) var(--space-4);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--gray-600);
+  background: #fff;
+  border: none;
+  border-right: 1px solid var(--gray-300);
+  cursor: pointer;
+}
+
+.ambiance-mode-btn:last-child { border-right: none; }
+
+/* Le bouton de la position courante reste plein — jamais grisé, même s'il
+   est `disabled` (reclic sans effet) : sa couleur EST l'information. */
+.ambiance-mode-btn:disabled:not(.is-selected) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ambiance-mode-btn.is-selected {
+  color: #fff;
+  cursor: default;
+}
+.ambiance-mode-btn.is-on.is-selected { background: var(--warning); }
+.ambiance-mode-btn.is-auto.is-selected { background: var(--success); }
+.ambiance-mode-btn.is-off.is-selected { background: var(--error); }
+
+/* Flash — bascule indépendante à deux états, même portée que le sélecteur
+   (zone `general`) mais un composant visuellement distinct : ce n'est pas
+   une quatrième position du même groupe (contrat §10.1.2). */
+.ambiance-flash-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  background: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--gray-600);
+  cursor: pointer;
+}
+
+.ambiance-flash-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ambiance-flash-switch {
+  width: 30px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--gray-300);
+  position: relative;
+  flex: none;
+}
+
+.ambiance-flash-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.ambiance-flash-toggle.is-on {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+.ambiance-flash-toggle.is-on .ambiance-flash-switch { background: var(--warning); }
+.ambiance-flash-toggle.is-on .ambiance-flash-switch::after { left: 16px; }
+
+/* Garde-fou permanent contre le mode « oublié » (contrat §10.1.1, encart) —
+   seul filet de sécurité prévu : pas d'annulation automatique, seulement la
+   visibilité constante de l'état engagé. */
+.ambiance-mode-warning {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--warning);
+  background: #fff;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-size: 0.82rem;
+  color: var(--gray-700);
+}
+
 @media (max-width: 768px) {
   .ambiance-page { padding: var(--space-4); }
   .ambiance-fields { grid-template-columns: 1fr; }
   .ambiance-actions { flex-direction: column; }
   .ambiance-actions button { width: 100%; }
   .ambiance-light { flex-wrap: wrap; }
+  .ambiance-mode-row { flex-direction: column; align-items: flex-start; }
 }
