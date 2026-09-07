@@ -163,7 +163,7 @@ describe('GamePage — RAFALE_DIFFICULTY absente (omitempty) : START ne doit PAS
 
 describe('GamePage — non-régression du fail-closed (SHA 1a742782) : catégorie réellement absente reste bloquant', () => {
   it('CATEGORY absente (jamais sélectionnée) : le START reste bloqué, quel que soit RAFALE_DIFFICULTY', async () => {
-    global.fetch = vi.fn() // ne doit même pas être appelé (hasFilter déjà faux sur la catégorie)
+    global.fetch = vi.fn() // le pool RAFALE ne doit même pas être appelé (hasFilter déjà faux sur la catégorie)
     useGame.mockReturnValue(makeGameMock({
       gameState: { question: { ID: '1', TYPE: 'RAFALE', STATUS: 'READY', CATEGORY: '', RAFALE_DIFFICULTY: 2 } },
     }))
@@ -171,7 +171,11 @@ describe('GamePage — non-régression du fail-closed (SHA 1a742782) : catégori
 
     const startBtn = await screen.findByText('START')
     expect(startBtn.disabled).toBe(true)
-    expect(global.fetch).not.toHaveBeenCalled()
+    // #208 (v10.0.0) — GamePage monte désormais aussi <LightingModePanel />,
+    // qui interroge GET /api/lighting/status au montage (effet de bord
+    // légitime, sans rapport avec ce test) : on vérifie que le POOL RAFALE
+    // précisément n'a jamais été appelé, pas `fetch` dans l'absolu.
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/api/rafale/pool'))
   })
 
   it('CATEGORY et RAFALE_DIFFICULTY valides mais pool réellement VIDE (AVAILABLE=0) : START reste bloqué', async () => {

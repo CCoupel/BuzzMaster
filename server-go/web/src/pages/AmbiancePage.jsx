@@ -27,26 +27,22 @@ import './AmbiancePage.css'
 // La section de config se nomme `lighting`, jamais `ambiance` (mot déjà pris
 // par la catégorie de sauvegarde de game-config.json, BackupPage.jsx/#152).
 //
-// #213/#208 (v10.0.0, Batch 3) — deux ajouts à l'étape 3 ci-dessus, sur cet
-// écran uniquement (jamais /anim). Maquettes de référence : rev6 de
-// docs/mockups/lighting-team-assignment-213.html, rev3 de
-// docs/mockups/lighting-priority-208.md. Contrats : contracts/lighting.md
-// §10.1 (SHA df448318), contracts/hue-bridge.md §5.2/§5.7.
+// #213 (v10.0.0, Batch 3) — ajout à l'étape 3 ci-dessus, sur cet écran
+// uniquement (jamais /anim) : colonne « Rôle » par ampoule (menu déroulant
+// Éclairage général / Équipe X), même schéma role/team que #207 fige déjà
+// (config.go). La liste des équipes vient de l'état de jeu courant
+// (useGame().teams), pas d'un endpoint dédié — c'est la même source que
+// TeamsPage/GamePage. Maquette de référence : rev6 de
+// docs/mockups/lighting-team-assignment-213.html. Contrats :
+// contracts/lighting.md §10.1 (SHA df448318), contracts/hue-bridge.md
+// §5.2/§5.7.
 //
-//   #213 — colonne « Rôle » par ampoule (menu déroulant Éclairage général /
-//   Équipe X), même schéma role/team que #207 fige déjà (config.go). La
-//   liste des équipes vient de l'état de jeu courant (useGame().teams),
-//   pas d'un endpoint dédié — c'est la même source que TeamsPage/GamePage.
-//
-//   #208 — panneau « Éclairage général — conduite en direct » : sélecteur
-//   ON/AUTO/OFF + bascule Flash, tous deux scopés à la zone `general`
-//   UNIQUEMENT (jamais les ampoules d'équipe, contrat §10.1 encart normatif).
-//   État lu depuis GET /api/lighting/status (déjà étendu côté backend avec
-//   `mode`/`flash`), jamais déduit côté client. Le mode TIENT indéfiniment
-//   (pas d'écrasement automatique par le jeu, contrat §10.1.1) — seul un
-//   retour manuel sur AUTO relâche, d'où le bandeau d'avertissement
-//   permanent tant que le mode n'est pas AUTO (garde-fou contre l'« oubli »,
-//   seul filet de sécurité prévu par le contrat).
+// #208 — le panneau de conduite en direct ON/AUTO/OFF + Flash a d'abord
+// vécu ici (Batch 3), puis a été déplacé sur GamePage.jsx (correction
+// utilisateur du 2026-09-07) : ce sont des outils utilisés par la régie
+// PENDANT une partie, donc à portée de main sur l'écran qu'elle a ouvert en
+// séance — pas sur cet écran de configuration séparé. Composant réutilisable
+// : components/LightingModePanel.jsx (+ .css).
 
 export const REGISTER_RETRY_MS = 2000
 export const REGISTER_TIMEOUT_S = 45
@@ -167,12 +163,6 @@ export default function AmbiancePage() {
   // dessus) — la config chargée fait foi tant que l'utilisateur n'a rien
   // changé, jamais fixé après coup par un effet.
   const [roleOverrides, setRoleOverrides] = useState({})
-
-  // #208 — sélecteur ON/AUTO/OFF + bascule Flash : un seul POST en vol à la
-  // fois par contrôle, l'état affiché vient toujours de `status` (source
-  // serveur unique, jamais déduit côté client — contrat §10.1.1 pt.6).
-  const [modeBusy, setModeBusy] = useState(false)
-  const [flashBusy, setFlashBusy] = useState(false)
 
   const [toast, setToast] = useState(null)
 
@@ -486,42 +476,6 @@ export default function AmbiancePage() {
   }
 
   const handleReassociate = () => startPairing({ ip: lighting.bridge_ip, id: lighting.bridge_id })
-
-  // ---- #208 : conduite en direct — sélecteur ON/AUTO/OFF + Flash -----------
-  // Aucun état optimiste : après la réponse serveur, on relit le statut
-  // (refreshStatus) — la position affichée est TOUJOURS celle que le serveur
-  // vient de confirmer, jamais une supposition côté client (contrat §10.1.1
-  // pt.6, « propriété serveur »).
-  const handleSetMode = async (mode) => {
-    if (modeBusy || status.mode === mode) return
-    setModeBusy(true)
-    try {
-      const res = await postJson('/api/lighting/mode', { mode })
-      if (!res.ok) throw new Error(await res.text())
-      await refreshStatus()
-    } catch (error) {
-      console.error('Set lighting mode failed:', error)
-      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
-    } finally {
-      setModeBusy(false)
-    }
-  }
-
-  const handleToggleFlash = async () => {
-    if (flashBusy) return
-    const next = !status.flash
-    setFlashBusy(true)
-    try {
-      const res = await postJson('/api/lighting/flash', { on: next })
-      if (!res.ok) throw new Error(await res.text())
-      await refreshStatus()
-    } catch (error) {
-      console.error('Set lighting flash failed:', error)
-      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
-    } finally {
-      setFlashBusy(false)
-    }
-  }
 
   // ---- Badge d'état (4 valeurs, maquette §02) ------------------------------
   // Non configuré tant qu'aucun pont n'est associé. Sinon l'état du pilote
@@ -890,50 +844,6 @@ export default function AmbiancePage() {
               </Button>
             </div>
             <p className="ambiance-hint">« Tester » produit un bref flash puis rend l'ampoule à son état précédent.</p>
-
-            {/* ---------------- #208 : conduite en direct — ON/AUTO/OFF + Flash ---------------- */}
-            <div className="ambiance-mode-panel">
-              <h3 className="ambiance-mode-title">Éclairage général — conduite en direct</h3>
-              <p className="ambiance-hint">
-                Outil de conduite en direct pour la régie, utilisé pendant une partie — n'affecte que
-                la zone générale : une ampoule affectée à l'équipe active reste pilotée par le jeu,
-                quelle que soit la position ci-dessous.
-              </p>
-              <div className="ambiance-mode-row">
-                <div className="ambiance-mode-tristate" role="radiogroup" aria-label="Éclairage général">
-                  {['ON', 'AUTO', 'OFF'].map(m => (
-                    <button
-                      key={m}
-                      type="button"
-                      role="radio"
-                      aria-checked={status.mode === m}
-                      className={`ambiance-mode-btn is-${m.toLowerCase()} ${status.mode === m ? 'is-selected' : ''}`}
-                      disabled={modeBusy || status.mode === m}
-                      onClick={() => handleSetMode(m)}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className={`ambiance-flash-toggle ${status.flash ? 'is-on' : ''}`}
-                  aria-pressed={status.flash}
-                  disabled={flashBusy}
-                  onClick={handleToggleFlash}
-                >
-                  <span className="ambiance-flash-switch" aria-hidden="true" />
-                  Flash
-                </button>
-              </div>
-              {status.mode !== 'AUTO' && (
-                <p className="ambiance-mode-warning" role="status">
-                  Mode <strong>{status.mode}</strong> engagé — l'éclairage général restera
-                  {status.mode === 'ON' ? ' allumé' : ' éteint'} indéfiniment, même pendant une
-                  partie, jusqu'à un retour manuel sur AUTO.
-                </p>
-              )}
-            </div>
           </section>
         )}
       </Card>
