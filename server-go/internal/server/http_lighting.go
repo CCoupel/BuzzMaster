@@ -21,10 +21,21 @@ import (
 	"buzzcontrol/internal/lighting/hue"
 )
 
-// LightingProvider is implemented by the App (cmd/server/ambiance.go).
+// LightingProvider is implemented by the App (cmd/server/ambiance.go,
+// cmd/server/ambiance_override.go).
 type LightingProvider interface {
 	// LightingDriver returns the live driver, or nil when lighting is disabled.
 	LightingDriver() *hue.Driver
+
+	// LightingMode/SetLightingMode/LightingFlash/SetLightingFlash (#208,
+	// contract lighting.md §10.1): the manual ON/AUTO/OFF selector and the
+	// Flash bascule on the "general" zone. String boundary (not an enum
+	// type) so this package never imports package main. SetLightingMode
+	// returns an error for anything other than "ON"/"AUTO"/"OFF".
+	LightingMode() string
+	SetLightingMode(mode string) error
+	LightingFlash() bool
+	SetLightingFlash(on bool)
 }
 
 const (
@@ -71,11 +82,13 @@ func (h *HTTPServer) handleLightingStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	lc := config.Get().Lighting
+	mode, flash := h.lightingModeAndFlash()
 	d := h.lightingDriver()
 	if d == nil {
 		writeLightingJSON(w, http.StatusOK, map[string]any{
 			"state": string(hue.StateDisabled), "bridge_id": lc.BridgeID, "bridge_ip": lc.BridgeIP,
 			"lights_ok": 0, "lights_total": len(lc.Lights), "enabled": lc.Enabled,
+			"mode": mode, "flash": flash,
 		})
 		return
 	}
@@ -85,7 +98,72 @@ func (h *HTTPServer) handleLightingStatus(w http.ResponseWriter, r *http.Request
 		"bridge_id": st.BridgeID, "bridge_ip": st.BridgeIP, "bridge_model": st.Bridge.ModelID,
 		"lights_ok": st.LightsOK, "lights_total": st.LightsTotal, "lights": st.Lights,
 		"last_change": st.LastChange, "enabled": lc.Enabled,
+		"mode": mode, "flash": flash,
 	})
+}
+
+// lightingModeAndFlash reads the #208 selector/Flash state (contract
+// §10.1) — "AUTO"/false when h.Lighting is nil (no App wired, minimal test
+// harnesses only; never the case in production).
+func (h *HTTPServer) lightingModeAndFlash() (string, bool) {
+	if h.Lighting == nil {
+		return "AUTO", false
+	}
+	return h.Lighting.LightingMode(), h.Lighting.LightingFlash()
+}
+
+// handleLightingMode — POST /api/lighting/mode {"mode":"ON"|"AUTO"|"OFF"}
+// (contract §10.1): the tri-state selector, scoped to the "general" zone
+// only — team zones (#213) are never affected, whatever the position.
+// Server state, not persisted (§10.1.1).
+func (h *HTTPServer) handleLightingMode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.Lighting == nil {
+		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	mode := strings.ToUpper(strings.TrimSpace(req.Mode))
+	if err := h.Lighting.SetLightingMode(mode); err != nil {
+		http.Error(w, "mode must be ON, AUTO or OFF", http.StatusBadRequest)
+		return
+	}
+	writeLightingJSON(w, http.StatusOK, map[string]string{"result": "ok", "mode": mode})
+}
+
+// handleLightingFlash — POST /api/lighting/flash {"on":true|false} (contract
+// §10.1.2): a bascule separate from the selector, which it primes over
+// without moving. Server-driven blink (cmd/server/ambiance_override.go),
+// never the browser's responsibility.
+func (h *HTTPServer) handleLightingFlash(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.Lighting == nil {
+		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	var req struct {
+		On bool `json:"on"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	h.Lighting.SetLightingFlash(req.On)
+	writeLightingJSON(w, http.StatusOK, map[string]any{"result": "ok", "flash": req.On})
 }
 
 // handleLightingDiscover — POST /api/lighting/discover: mDNS then SSDP, no cloud.

@@ -462,6 +462,9 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/lighting/register", h.handleLightingRegister)
 	h.mux.HandleFunc("/api/lighting/lights", h.handleLightingLights)
 	h.mux.HandleFunc("/api/lighting/test", h.handleLightingTest)
+	// Conduite manuelle — sélecteur tri-état + Flash (#208, contract §10.1)
+	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
+	h.mux.HandleFunc("/api/lighting/flash", h.handleLightingFlash)
 
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)

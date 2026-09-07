@@ -7,6 +7,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,13 +62,46 @@ func newDevHueBridge(t *testing.T) *devHueBridge {
 	return b
 }
 
-// devProvider hands the handlers a driver (or nil).
+// devProvider hands the handlers a driver (or nil), plus a minimal real
+// mode/flash state (#208, contract §10.1) — AUTO/false until set, exactly
+// LightingProvider's contract, so /api/lighting/mode and /api/lighting/flash
+// can be exercised against a real (if trivial) implementation rather than a
+// stub that always accepts or always refuses.
 type devProvider struct {
-	mu sync.Mutex
-	d  *hue.Driver
+	mu    sync.Mutex
+	d     *hue.Driver
+	mode  string
+	flash bool
 }
 
 func (p *devProvider) LightingDriver() *hue.Driver { p.mu.Lock(); defer p.mu.Unlock(); return p.d }
+
+func (p *devProvider) LightingMode() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mode == "" {
+		return "AUTO"
+	}
+	return p.mode
+}
+
+func (p *devProvider) SetLightingMode(mode string) error {
+	switch mode {
+	case "ON", "AUTO", "OFF":
+		p.mu.Lock()
+		p.mode = mode
+		p.mu.Unlock()
+		return nil
+	default:
+		return errDevInvalidLightingMode
+	}
+}
+
+func (p *devProvider) LightingFlash() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.flash }
+
+func (p *devProvider) SetLightingFlash(on bool) { p.mu.Lock(); p.flash = on; p.mu.Unlock() }
+
+var errDevInvalidLightingMode = errors.New("dev: mode must be ON, AUTO or OFF")
 
 func devDo(t *testing.T, srv *HTTPServer, method, url, body string) (int, map[string]any) {
 	t.Helper()
@@ -206,5 +240,100 @@ func TestDevLightingDevicetype(t *testing.T) {
 	dt := lightingDevicetype()
 	if !strings.HasPrefix(dt, "buzzmaster#") || len(dt) > len("buzzmaster#")+19 || strings.ContainsAny(dt[len("buzzmaster#"):], " /:") {
 		t.Errorf("devicetype %q", dt)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// #208 (T2.3, contract §10.1) — POST /api/lighting/mode, POST
+// /api/lighting/flash.
+// ---------------------------------------------------------------------------
+
+// TestDevLightingMode_RoundTripAndValidation exercises the tri-state
+// selector end to end through devProvider's real (if minimal)
+// implementation: default AUTO, a valid POST changes it and is reflected on
+// /status, and an invalid value is refused without changing anything.
+func TestDevLightingMode_RoundTripAndValidation(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+	srv.Lighting = &devProvider{}
+
+	code, out := devDo(t, srv, "GET", "/api/lighting/status", "")
+	if code != 200 || out["mode"] != "AUTO" || out["flash"] != false {
+		t.Fatalf("default mode/flash: %d %v", code, out)
+	}
+
+	code, out = devDo(t, srv, "POST", "/api/lighting/mode", `{"mode":"OFF"}`)
+	if code != 200 || out["result"] != "ok" || out["mode"] != "OFF" {
+		t.Fatalf("set OFF: %d %v", code, out)
+	}
+	code, out = devDo(t, srv, "GET", "/api/lighting/status", "")
+	if code != 200 || out["mode"] != "OFF" {
+		t.Fatalf("status after OFF: %d %v", code, out)
+	}
+
+	// Lower-case input is normalised (a real client sends what its selector
+	// widget stores; the endpoint must not be a silent no-op for it).
+	code, out = devDo(t, srv, "POST", "/api/lighting/mode", `{"mode":"on"}`)
+	if code != 200 || out["mode"] != "ON" {
+		t.Fatalf("set on (lower-case): %d %v", code, out)
+	}
+
+	code, out = devDo(t, srv, "POST", "/api/lighting/mode", `{"mode":"BOGUS"}`)
+	if code != 400 {
+		t.Fatalf("invalid mode must be refused, got %d %v", code, out)
+	}
+	code, out = devDo(t, srv, "GET", "/api/lighting/status", "")
+	if out["mode"] != "ON" {
+		t.Fatalf("a refused POST must not change the mode, got %v", out)
+	}
+
+	if code, _ := devDo(t, srv, "GET", "/api/lighting/mode", ""); code != 405 {
+		t.Errorf("GET mode must be 405, got %d", code)
+	}
+	if code, _ := devDo(t, srv, "POST", "/api/lighting/mode", `not json`); code != 400 {
+		t.Errorf("malformed JSON body must be 400, got %d", code)
+	}
+
+	srv.Lighting = nil
+	if code, out := devDo(t, srv, "POST", "/api/lighting/mode", `{"mode":"ON"}`); code != 409 || out["result"] != "refused" {
+		t.Fatalf("no provider wired: %d %v", code, out)
+	}
+}
+
+// TestDevLightingFlash_RoundTrip mirrors the mode test for the separate
+// Flash bascule (contract §10.1.2) — engaging it must not move the
+// selector's own position.
+func TestDevLightingFlash_RoundTrip(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+	p := &devProvider{}
+	srv.Lighting = p
+	if err := p.SetLightingMode("OFF"); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	code, out := devDo(t, srv, "POST", "/api/lighting/flash", `{"on":true}`)
+	if code != 200 || out["result"] != "ok" || out["flash"] != true {
+		t.Fatalf("engage flash: %d %v", code, out)
+	}
+	code, out = devDo(t, srv, "GET", "/api/lighting/status", "")
+	if code != 200 || out["flash"] != true || out["mode"] != "OFF" {
+		t.Fatalf("flash engaged must not move the selector: %d %v", code, out)
+	}
+
+	code, out = devDo(t, srv, "POST", "/api/lighting/flash", `{"on":false}`)
+	if code != 200 || out["flash"] != false {
+		t.Fatalf("disengage flash: %d %v", code, out)
+	}
+	code, out = devDo(t, srv, "GET", "/api/lighting/status", "")
+	if out["flash"] != false || out["mode"] != "OFF" {
+		t.Fatalf("selector must still read OFF after flash off: %v", out)
+	}
+
+	if code, _ := devDo(t, srv, "GET", "/api/lighting/flash", ""); code != 405 {
+		t.Errorf("GET flash must be 405, got %d", code)
+	}
+
+	srv.Lighting = nil
+	if code, out := devDo(t, srv, "POST", "/api/lighting/flash", `{"on":true}`); code != 409 || out["result"] != "refused" {
+		t.Fatalf("no provider wired: %d %v", code, out)
 	}
 }
