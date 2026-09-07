@@ -325,14 +325,121 @@ Potential improvements for future versions:
 - [REACT_INTERFACE.md](REACT_INTERFACE.md) - Frontend architecture
 - [ADMIN_GUIDE.md](ADMIN_GUIDE.md) - Administrator user guide
 
+### Paramètres Hue Bridge (v10.0.0)
+
+**Section**: `lighting` (système)
+
+Configuration du pont Philips Hue et des ampoules pour l'éclairage d'ambiance de la salle. Ces paramètres sont sauvegardés dans `config.json` et **surviven aux redémarrages**.
+
+**Attention** : La clé API du pont est un **secret** et n'est jamais sauvegardée en clair sur disque. Elle peut être définie via:
+- Variable d'environnement `BUZZCONTROL_HUE_API_KEY` (recommandé en production)
+- Interface web `/admin/ambiance` (saisie lors de l'association du pont)
+
+#### Paramètres disponibles
+
+```json
+{
+  "lighting": {
+    "enabled": false,
+    "bridge_ip": "192.168.1.101",
+    "bridge_id": "001788fffea0591e",
+    "api_key": "(secret — jamais persisté, pas d'affichage)",
+    "api_key_configured": true,
+    "lights": [
+      { "name": "Salle", "role": "general" },
+      { "name": "Entrée", "role": "general" },
+      { "name": "Bureau Animateur", "role": "team", "team": "Rouges" }
+    ]
+  }
+}
+```
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `enabled` | Boolean | Activer/désactiver le pilotage du pont (défaut: `false`) |
+| `bridge_ip` | String | Adresse IP du bridge Hue (ex. `"192.168.1.101"`) — auto-mise à jour en cas DHCP |
+| `bridge_id` | String | Identifiant unique du bridge (ex. `"001788fffea0591e"`) — immuable, résiste aux changements d'IP |
+| `lights` | Array | Liste des ampoules à piloter, chacune avec `name` (exact), `role` (`"general"` ou `"team"`), et optionnellement `team` (nom d'équipe) |
+
+**Débit et timeouts** :
+
+| Paramètre | Valeur | Rôle |
+|-----------|--------|------|
+| `MinInterval` | 250 ms | Délai minimum entre deux écritures au pont (empiriquement optimisé pour ≤ 10 commandes/s sur `/lights`) |
+| `HTTP Timeout` | 2 s | Timeout pour requêtes HTTP vers le pont (réponse normale ~40-50 ms) |
+| `Reconnexion backoff` | 1s → 60s exponentiel | Délai entre tentatives si pont injoignable |
+
+#### Enregistrement du bridge
+
+1. Naviguez vers `/admin/ambiance`
+2. Cliquez « Découvrir le pont » (mDNS/SSDP)
+3. Appuyez sur le bouton physique du pont (45 s d'attente)
+4. BuzzControl génère et **persiste** `bridge_ip`, `bridge_id`, `api_key_configured = true`
+5. **La clé API n'est jamais écrite dans `config.json`** — elle est gérée uniquement via mémoire ou environnement
+
+#### Sélection des ampoules
+
+1. Après enregistrement, l'interface affiche toutes les ampoules trouvées
+2. Cochez celles que vous souhaitez piloter
+3. Chacune est enregistrée avec:
+   - `name` : nom exact sur le bridge (requis, dupliqua interdit)
+   - `role` : `"general"` (zone salle) ou `"team"` (dédié à une équipe, v10.1+)
+   - `team` : optionnel, nom de l'équipe si `role: "team"`
+
+#### Édition manuelle de `config.json`
+
+**Ne pas éditer directement la clé API.** Pour remplacer la clé :
+
+1. Utiliser la variable d'environnement : `export BUZZCONTROL_HUE_API_KEY="nouvelle_clé"`
+2. Ou re-associer via `/admin/ambiance` (« Ré-associer »)
+
+**Format pour ajouter manuellement une ampoule** (après association) :
+
+```json
+{
+  "lighting": {
+    "lights": [
+      { "name": "Salle", "role": "general" },
+      { "name": "Équipe Rouges", "role": "team", "team": "Rouges" }
+    ]
+  }
+}
+```
+
+#### Résolution des noms d'ampoules
+
+- Les ampoules sont identifiées par **nom** (pas par ID numérique Hue réattribuable)
+- Résolution au démarrage et toutes les 5 min (refresh inventaire)
+- **0 correspondance** → ampoule signalée introuvable (reste en config, aucun effet)
+- **> 1 correspondance** → erreur explicite (renommez l'une des ampoules sur le bridge)
+- **Sûr pour DHCP** : si l'IP du pont change, `bridge_id` permet la re-découverte automatique
+
+#### Comportement en dégradé
+
+| État | Comportement |
+|------|-----------|
+| `enabled: false` | Aucune goroutine, aucun appel réseau, zéro impact |
+| Bridge **injoignable** au démarrage | Serveur démarre normalement, tentatives reconnexion en backoff (1s → 60s) |
+| Bridge **injoignable en partie** | Partie continue sans latence, `Apply()` échoue et rend rapidement une erreur (2s timeout) |
+| Clé **refusée** (401) | Statut `refused` distinct, pas de retry en boucle |
+| **Une ampoule** injoignable | Autres ampoules écrites normalement, jamais d'abandon global |
+| Journalisation | Une ligne au changement d'état, **jamais** une ligne par tentative échouée (évite inondation logs) |
+
+#### Startup et arrêt
+
+- **Démarrage** : pont optionnel — absence de configuration = zéro impact
+- **Arrêt serveur** : éclairage s'éteint complètement (tous les buzzers OFF aussi)
+- **Redémarrage** : aucun mode manuel persisté (ON/OFF/AUTO revient à AUTO défaut)
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.0.0 | 2026-09-07 | Add Hue Bridge parameters (v10.0.0 #206/#207) |
 | 2.49.0 | 2026-02-01 | Initial release: auto_open_browsers and debug parameters |
 
 ---
 
-**Last Updated**: 2026-02-01
+**Last Updated**: 2026-09-07
 **Author**: CDP Agent
 **Status**: Published

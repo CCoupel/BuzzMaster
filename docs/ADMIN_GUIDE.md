@@ -2046,6 +2046,59 @@ La configuration du pont (IP, identifiant, liste d'ampoules) est automatiquement
 - La clé d'accès n'est **jamais** sauvegardée ou journalisée (sécurité)
 - À la restauration : la configuration du bridge est restaurée, mais vous devrez ré-associer si le pont a changé d'identifiant
 
+### Conduite en direct — sélecteur tri-état (régie en séance)
+
+Une fois le pont configuré, la page `/admin/ambiance` affiche un **sélecteur à trois positions** qui permet à la régie de prendre la main sur l'éclairage **pendant une partie en cours** :
+
+| Position | Effet sur la salle | Utilisé pour |
+|---|---|---|
+| **ON** | Salle allumée en blanc neutre, pleine intensité | Moment fort du jeu, besoin de clarté maximale |
+| **AUTO** *(position normale)* | Salle suit **l'état du jeu** — dérive automatiquement depuis les événements (changement d'équipe, buzz, révélation, etc.) | Mode de fonctionnement standard, pas d'intervention |
+| **OFF** | Salle complètement éteinte | Pause de suspense, moment dramatique |
+
+#### ⚠️ Règle critique — ON/OFF tiennent indéfiniment
+
+- Une fois que vous engagez **ON** ou **OFF**, la salle **conserve cet état même pendant une partie en cours**.
+- Aucun événement de jeu (buzz, changement d'équipe, etc.) ne lever ces modes — ils ne cèdent qu'au geste **manuel** de retour sur **AUTO**.
+- C'est un instrument de **conduite en direct par la régie**, utilisé pendant le jeu pour souligner un moment, et vous devez explicitement revenir à AUTO pour relâcher la main.
+
+#### ⚠️ Bandeau d'avertissement
+
+Lorsque ON ou OFF est engagé, un **bandeau jaune permanent** apparaît en haut de `/admin/ambiance` :
+```
+⚠️ Mode manuel engagé — cliquez AUTO pour revenir au pilotage automatique
+```
+
+Ce bandeau reste visible tant que le mode n'est pas désactivé — c'est votre seul rappel visuel sur la page elle-même.
+
+#### Ampoules d'équipe (v10.0.0 + #213)
+
+Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de salle). À l'avenir (#213), une ampoule peut être affectée à une équipe spécifique : ces ampoules **restent toujours pilotées par le jeu** (couleur de l'équipe active), jamais éteintes ou forcées par le sélecteur général.
+
+**Exemple** : vous avez 2 ampoules salle (zone générale) et 1 ampoule rouge dédiée à l'équipe « Les Rouges »
+- Mode OFF : les 2 ampoules salle s'éteignent
+- Les Rouges jouent : l'ampoule rouge reste allumée en couleur rouge (équipe active)
+- Au retour sur AUTO : les 2 ampoules salle reprennent leur scène de jeu
+
+### Comportement à l'arrêt du serveur
+
+À l'arrêt du serveur BuzzControl, **l'éclairage de salle s'éteint complètement** (ampoules générales + ampoules d'équipe). À la relance, un nouvel état de jeu redémarre depuis zéro — aucun mode manuel n'est persisté entre redémarrages.
+
+### Perte de connexion au pont
+
+**Cas : le pont Hue devient injoignable** (débranché, WiFi coupée, etc.)
+
+- **Affichage** : le badge de statut passe à 🔴 **Injoignable** (reste en place)
+- **Sélecteur tri-état** : reste à sa position précédente (aucun changement visible)
+- **Ampoules** : gardent leur dernier état — elles ne basculent pas, ne clignotent pas, ne changent rien
+- **Sélecteur en ON** : ampoules restent ON (blanc neutre)
+- **Sélecteur en OFF** : ampoules restent OFF
+- **Sélecteur en AUTO** : ampoules figées à la couleur qu'elles avaient au moment de la perte de connexion
+
+**Reconnexion automatique** : dès que le pont redevient joignable, BuzzControl **resynchronise automatiquement** l'éclairage sur l'état courant du jeu :
+- Si sélecteur en AUTO : dérives nouvelles depuis l'état actuel
+- Si sélecteur en ON/OFF : resync vers la couleur/intensité du mode engagé
+
 ### Dissociation
 
 Pour arrêter complètement de piloter les ampoules :
