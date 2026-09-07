@@ -14,10 +14,14 @@ import { render, screen, fireEvent } from '@testing-library/react'
 // AmbiancePage.test.jsx (étape 3, tests mis à jour) ; ce fichier ajoute une
 // vérification dédiée et sans ambiguïté.
 //
-// Point 3 — bouton « Désassocier toutes les ampoules » (rôle/équipe,
-// groupé) : distinct de « Dissocier ce pont » (qui efface la clé et le
-// pont entier) — celui-ci ne touche que les rôles, les ampoules restent
-// détectées et pilotées.
+// Point 3 — REMISE À L'ÉTAT LIBRE (rôle/équipe, groupé), 3 boutons à
+// portées disjointes. Corrigé le même jour (précision utilisateur sur
+// SHA b35fddbf) : le modèle a TROIS états — Libre (absente de
+// `lighting.lights[]`), Général (`role:"general"`), Équipe
+// (`role:"team"`) — pas deux. Les boutons remettent à LIBRE (retirent
+// l'entrée), jamais à "general" (ce serait encore un rôle explicite).
+// Distincts de « Dissocier ce pont » (qui efface la clé et le pont
+// entier) — ceux-ci ne touchent que les rôles.
 // ---------------------------------------------------------------------------
 
 vi.mock('./AmbiancePage.css', () => ({}))
@@ -107,71 +111,103 @@ describe('AmbiancePage — point 2 : plus d\'affectation par défaut à l\'assoc
   })
 })
 
-describe('AmbiancePage — point 3 : « Désassocier toutes les ampoules » (groupé)', () => {
-  const unassignBtn = () => screen.getByText('Désassocier toutes les ampoules').closest('button')
+describe('AmbiancePage — point 3 : 3 boutons « Remettre à Libre » à portées disjointes', () => {
+  const allBtn = () => screen.getByText('Remettre à Libre toutes les ampoules').closest('button')
+  const generalBtn = () => screen.getByText('Remettre à Libre les ampoules de rôle Général').closest('button')
+  const teamBtn = () => screen.getByText('Remettre à Libre les ampoules de rôle Équipe').closest('button')
 
-  it('désactivé quand aucune ampoule sélectionnée ne porte de rôle équipe', async () => {
-    makeServer({ lighting: CONFIGURED, lights: INVENTORY })
+  // Prépare un scénario avec les 2 ampoules cochées, l'une en équipe
+  // (Salle gauche → Rouges) et l'autre laissée en général (Salle droite).
+  async function selectOneOfEach() {
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
-
-    expect(unassignBtn()).toBeDisabled() // rien de coché, a fortiori aucune équipe
-
-    fireEvent.click(screen.getByLabelText('Salle gauche')) // cochée mais rôle general
-    expect(unassignBtn()).toBeDisabled()
-  })
-
-  it('activé dès qu\'une ampoule sélectionnée porte un rôle équipe ; distinct de « Dissocier ce pont »', async () => {
-    makeServer({ lighting: CONFIGURED, lights: INVENTORY })
-    render(<AmbiancePage />)
-    await screen.findByText('Salle gauche')
-
     fireEvent.click(screen.getByLabelText('Salle gauche'))
+    fireEvent.click(screen.getByLabelText('Salle droite'))
     fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
+  }
 
-    expect(unassignBtn()).not.toBeDisabled()
-    expect(screen.getByText('Dissocier ce pont')).toBeInTheDocument() // toujours présent, inchangé
-    expect(unassignBtn()).not.toBe(screen.getByText('Dissocier ce pont').closest('button'))
+  it('les 3 boutons sont désactivés tant que rien n\'est coché', async () => {
+    makeServer({ lighting: CONFIGURED, lights: INVENTORY })
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+
+    expect(allBtn()).toBeDisabled()
+    expect(generalBtn()).toBeDisabled()
+    expect(teamBtn()).toBeDisabled()
   })
 
-  it('confirmation refusée : aucun POST /config.json envoyé', async () => {
+  it('« Général » et « Équipe » restent désactivés indépendamment tant qu\'aucune ampoule de leur catégorie n\'est cochée', async () => {
+    makeServer({ lighting: CONFIGURED, lights: INVENTORY })
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+
+    fireEvent.click(screen.getByLabelText('Salle gauche')) // cochée, rôle par défaut "general"
+    expect(allBtn()).not.toBeDisabled()
+    expect(generalBtn()).not.toBeDisabled() // une ampoule "general" existe
+    expect(teamBtn()).toBeDisabled() // aucune ampoule "team"
+  })
+
+  it('confirmation refusée sur n\'importe lequel des 3 boutons : aucun POST /config.json envoyé', async () => {
     const server = makeServer({ lighting: CONFIGURED, lights: INVENTORY })
     vi.spyOn(window, 'confirm').mockReturnValue(false)
-    render(<AmbiancePage />)
-    await screen.findByText('Salle gauche')
+    await selectOneOfEach()
 
-    fireEvent.click(screen.getByLabelText('Salle gauche'))
-    fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
-    fireEvent.click(unassignBtn())
-
+    fireEvent.click(teamBtn())
     expect(window.confirm).toHaveBeenCalledTimes(1)
     expect(callsTo(server, 'POST', '/config.json')).toHaveLength(0)
   })
 
-  it('confirmé : réinitialise le rôle de TOUTES les ampoules sélectionnées à "general" en un seul POST, ampoules toujours pilotées', async () => {
+  it('« Équipe » confirmé : retire UNIQUEMENT l\'ampoule d\'équipe (devient libre), l\'ampoule générale garde EXACTEMENT son rôle', async () => {
     const server = makeServer({ lighting: CONFIGURED, lights: INVENTORY })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    render(<AmbiancePage />)
-    await screen.findByText('Salle gauche')
+    await selectOneOfEach()
 
-    // Deux ampoules cochées, une seule affectée à une équipe — la
-    // désassociation groupée doit quand même renvoyer LES DEUX (elles
-    // restent pilotées), toutes deux en rôle "general".
-    fireEvent.click(screen.getByLabelText('Salle gauche'))
-    fireEvent.click(screen.getByLabelText('Salle droite'))
-    fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
-
-    fireEvent.click(unassignBtn())
-    await screen.findByText('Affectations retirées.')
+    fireEvent.click(teamBtn())
+    await screen.findByText('Ampoules remises à l\'état libre.')
 
     const saves = callsTo(server, 'POST', '/config.json')
     expect(saves).toHaveLength(1)
-    expect(saves[0].body.lighting.lights).toEqual([
-      { name: 'Salle gauche', role: 'general' },
-      { name: 'Salle droite', role: 'general' },
-    ])
-    // Après rechargement de la config, le sélecteur reflète bien "general".
-    expect(screen.getByLabelText('Rôle de Salle gauche').value).toBe('general')
-    expect(screen.getByLabelText('Salle gauche')).toBeChecked() // toujours pilotée, pas décochée
+    // "Salle gauche" (équipe) a disparu du tableau envoyé = libre. "Salle
+    // droite" (général) est réenvoyée à l'IDENTIQUE, jamais réécrite en
+    // "general" par accident si elle avait porté un autre rôle.
+    expect(saves[0].body.lighting.lights).toEqual([{ name: 'Salle droite', role: 'general' }])
+  })
+
+  it('« Général » confirmé : retire UNIQUEMENT l\'ampoule générale (devient libre), l\'ampoule d\'équipe n\'est pas touchée', async () => {
+    const server = makeServer({ lighting: CONFIGURED, lights: INVENTORY })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await selectOneOfEach()
+
+    fireEvent.click(generalBtn())
+    await screen.findByText('Ampoules remises à l\'état libre.')
+
+    const saves = callsTo(server, 'POST', '/config.json')
+    expect(saves[0].body.lighting.lights).toEqual([{ name: 'Salle gauche', role: 'team', team: 'Rouges' }])
+  })
+
+  it('« Toutes » confirmé : aucune entrée envoyée, quelle que soit la catégorie de chacune — LIBRE, jamais "general"', async () => {
+    const server = makeServer({ lighting: CONFIGURED, lights: INVENTORY })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await selectOneOfEach()
+
+    fireEvent.click(allBtn())
+    await screen.findByText('Ampoules remises à l\'état libre.')
+
+    const saves = callsTo(server, 'POST', '/config.json')
+    expect(saves[0].body.lighting.lights).toEqual([]) // pas [{role:"general"}, ...] — LIBRE = absent
+    // Après rechargement, les deux redeviennent décochées (libres), pas
+    // cochées avec un rôle "general" résiduel.
+    expect(screen.getByLabelText('Salle gauche')).not.toBeChecked()
+    expect(screen.getByLabelText('Salle droite')).not.toBeChecked()
+  })
+
+  it('distinct de « Dissocier ce pont », toujours présent et inchangé', async () => {
+    makeServer({ lighting: CONFIGURED, lights: INVENTORY })
+    await selectOneOfEach()
+
+    const dissocier = screen.getByText('Dissocier ce pont').closest('button')
+    expect(dissocier).not.toBe(allBtn())
+    expect(dissocier).not.toBe(generalBtn())
+    expect(dissocier).not.toBe(teamBtn())
   })
 })

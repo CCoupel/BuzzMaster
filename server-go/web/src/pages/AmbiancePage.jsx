@@ -172,7 +172,10 @@ export default function AmbiancePage() {
   // l'utilisateur, non encore enregistré.
   const [selectedNames, setSelectedNames] = useState(null)
   const [saving, setSaving] = useState(false)
-  const [unassigning, setUnassigning] = useState(false)
+  // #213 — remise groupée à l'état LIBRE : null (repos) | 'all' | 'general' |
+  // 'team', identifie quel bouton est en vol (chacun sa propre portée, voir
+  // handleResetToLibre).
+  const [resettingScope, setResettingScope] = useState(null)
   const [testing, setTesting] = useState(null) // nom en cours de test, ou '*' pour toutes
 
   // #213 — rôle par ampoule : { [name]: {role, team} }, seulement les
@@ -449,10 +452,13 @@ export default function AmbiancePage() {
     return c ? `rgb(${c.rgb.join(',')})` : null
   }, [teams])
 
-  // Au moins une ampoule sélectionnée porte-t-elle un rôle "team" ? Sert
-  // uniquement à désactiver « Désassocier toutes » quand elle n'aurait
-  // aucun effet (rien à retirer) — pas une garde de sécurité comme
-  // `allMissing`, juste une désactivation de confort.
+  // Portée de chacun des 3 boutons « Remettre à Libre » — sert uniquement à
+  // les désactiver quand ils n'auraient aucun effet (rien à réinitialiser
+  // dans leur catégorie) : pas une garde de sécurité comme `allMissing`,
+  // juste une désactivation de confort. « Toutes » n'a pas besoin de son
+  // propre calcul : `effectiveSelected.length === 0` suffit (utilisé
+  // directement au point d'usage).
+  const anyGeneralAssigned = effectiveSelected.some(name => roleFor(name).role === 'general')
   const anyTeamAssigned = effectiveSelected.some(name => roleFor(name).role === 'team')
 
   const toggleName = (name, checked) => {
@@ -484,32 +490,61 @@ export default function AmbiancePage() {
     }
   }
 
-  // #213 — désassociation GROUPÉE des rôles/équipes (retour utilisateur
-  // QUALIF v10.0.0.13, 2026-09-07). Distincte de `handleUnpair` ci-dessous
-  // (qui dissocie le PONT entier, efface la clé) : celle-ci ne touche que
-  // les rôles — les ampoules restent détectées, sélectionnées et pilotées,
-  // seule leur affectation équipe repasse à `general`. Persiste
-  // immédiatement (même patron que handleUnpair, pas un simple état local
-  // en attente d'un second clic sur « Enregistrer ») : c'est sa propre
-  // action, avec sa propre confirmation.
-  const handleUnassignAllRoles = async () => {
-    if (!window.confirm(
-      "Retirer l'affectation d'équipe de toutes les ampoules ? Elles resteront détectées et pilotées, mais reviendront toutes à « Éclairage général »."
-    )) return
-    setUnassigning(true)
+  // #213 — remise GROUPÉE à l'état LIBRE (retour utilisateur QUALIF
+  // v10.0.0.13, précision du 2026-09-07 sur SHA b35fddbf) : le modèle a
+  // TROIS états, pas deux — Libre (l'ampoule n'a AUCUNE entrée dans
+  // `lighting.lights[]`, jamais configurée ou explicitement réinitialisée),
+  // Général (entrée avec `role: "general"`), Équipe (entrée avec
+  // `role: "team"`). Une première version de ce bouton remettait à
+  // `role: "general"` — INCORRECT, ça change de rôle explicite, pas de
+  // « libère » l'ampoule. Libre = retirer l'entrée du tableau envoyé, pas
+  // lui donner un rôle. Vérifié cohérent avec le comportement déjà en place
+  // pour une ampoule jamais cochée (#213/#207 revirement du même jour,
+  // handleSaveLights) : une ampoule absente de `lights[]` est justement
+  // affichée décochée avec le rôle de repli « Éclairage général » dans le
+  // sélecteur — sans que cela persiste quoi que ce soit.
+  //
+  // Trois portées, un seul handler paramétré :
+  //   'all'     → toutes les ampoules SÉLECTIONNÉES repassent libres.
+  //   'general' → seules celles actuellement en rôle "general" (les
+  //               ampoules d'équipe ne sont PAS touchées).
+  //   'team'    → seules celles actuellement en rôle "team", quelle que
+  //               soit l'équipe (les ampoules générales ne sont PAS touchées).
+  // Distinct de `handleUnpair` ci-dessous (qui dissocie le PONT entier,
+  // efface la clé) : celui-ci ne touche que les rôles, jamais l'association
+  // du pont. Persiste immédiatement (même patron que handleUnpair, pas un
+  // état local en attente d'un second clic sur « Enregistrer ») : chaque
+  // bouton est sa propre action, avec sa propre confirmation.
+  const RESET_CONFIRM = {
+    all: "Remettre TOUTES les ampoules à l'état libre ? Elles ne seront plus pilotées tant qu'elles ne seront pas ré-affectées (rôle général ou équipe).",
+    general: "Remettre à l'état libre les ampoules actuellement en « Éclairage général » ? Les ampoules affectées à une équipe ne sont pas concernées.",
+    team: "Remettre à l'état libre les ampoules actuellement affectées à une équipe ? Les ampoules en « Éclairage général » ne sont pas concernées.",
+  }
+  const handleResetToLibre = async (scope) => {
+    if (!window.confirm(RESET_CONFIRM[scope])) return
+    setResettingScope(scope)
     try {
-      const lights = effectiveSelected.map(name => ({ name, role: 'general' }))
+      // 'all' : rien ne survit — [] retire toutes les entrées sélectionnées.
+      // 'general'/'team' : on RECONSTRUIT le tableau en excluant seulement
+      // la catégorie ciblée — celles de l'autre catégorie gardent EXACTEMENT
+      // leur rôle actuel, elles ne sont pas "re-sauvées à l'identique" par
+      // accident avec une valeur différente.
+      const lights = scope === 'all'
+        ? []
+        : effectiveSelected
+            .filter(name => roleFor(name).role !== scope)
+            .map(name => ({ name, ...roleFor(name) }))
       const res = await saveLighting({ enabled: true, lights })
       if (!res.ok) throw new Error(await res.text())
       setSelectedNames(null)
       setRoleOverrides({})
-      setToast({ message: 'Affectations retirées.', type: 'success' })
+      setToast({ message: 'Ampoules remises à l\'état libre.', type: 'success' })
       await afterSave()
     } catch (error) {
-      console.error('Unassign all roles failed:', error)
+      console.error('Reset to libre failed:', error)
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
     } finally {
-      setUnassigning(false)
+      setResettingScope(null)
     }
   }
 
@@ -956,17 +991,36 @@ export default function AmbiancePage() {
               <Button variant="ghost" onClick={() => loadInventory()} loading={inventory.phase === 'loading'}>
                 Actualiser la liste
               </Button>
-              {/* #213 — désassociation groupée des rôles (2026-09-07), distincte
-                  de « Dissocier ce pont » plus haut (celle-ci efface la clé et
-                  le pont entier ; celle-ci ne touche que les rôles/équipes,
-                  les ampoules restent détectées et pilotées). */}
+              {/* #213 — remise groupée à l'état LIBRE (2026-09-07, précision
+                  3 états sur SHA b35fddbf), distincte de « Dissocier ce pont »
+                  plus haut (celle-ci efface la clé et le pont entier ; les
+                  trois boutons ci-dessous ne touchent que les rôles — pas
+                  l'association du pont). Trois portées disjointes : "toutes",
+                  seulement "général", seulement "équipe" — chacune sa propre
+                  confirmation, désactivée si rien à faire dans sa catégorie. */}
               <Button
                 variant="ghost"
-                onClick={handleUnassignAllRoles}
-                loading={unassigning}
-                disabled={frozen || allMissing || !anyTeamAssigned}
+                onClick={() => handleResetToLibre('all')}
+                loading={resettingScope === 'all'}
+                disabled={frozen || allMissing || resettingScope !== null || effectiveSelected.length === 0}
               >
-                Désassocier toutes les ampoules
+                Remettre à Libre toutes les ampoules
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => handleResetToLibre('general')}
+                loading={resettingScope === 'general'}
+                disabled={frozen || allMissing || resettingScope !== null || !anyGeneralAssigned}
+              >
+                Remettre à Libre les ampoules de rôle Général
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => handleResetToLibre('team')}
+                loading={resettingScope === 'team'}
+                disabled={frozen || allMissing || resettingScope !== null || !anyTeamAssigned}
+              >
+                Remettre à Libre les ampoules de rôle Équipe
               </Button>
             </div>
             <p className="ambiance-hint">« Tester » produit un bref flash puis rend l'ampoule à son état précédent.</p>
