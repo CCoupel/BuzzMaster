@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
 import { useLightingStatus } from '../hooks/useLightingStatus'
-import { lightingStateTitle } from '../utils/lightingState'
+import { lightingStateTitle, normalizeLightingState } from '../utils/lightingState'
 import LightingBulbIcon from './LightingBulbIcon'
 import useElementHeightVar from '../hooks/useElementHeightVar'
 import { useGame } from '../hooks/GameContext'
@@ -70,6 +70,16 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // peut devenir injoignable PENDANT une session — un appel au montage seul,
   // comme useUpdates, ne suffirait pas.
   const { status: lightingStatus } = useLightingStatus()
+  // #208 (v10.0.0, correction utilisateur du 2026-09-07) — garde-fou "mode
+  // oublié" (R8, planner-v10-etat-courant-20260907.md §3) rendu GLOBAL,
+  // même schéma que le bouton ENTRACTE ci-dessus (élargi de GamePage vers la
+  // Navbar pour rester visible sur tout /admin/*, pas seulement l'écran où
+  // vit le panneau de conduite lui-même, components/LightingModePanel.jsx).
+  // Réutilise l'instance useLightingStatus() déjà interrogée ici pour
+  // l'ampoule du menu Ambiance — mode/flash sont déjà dans la même réponse
+  // (contrat lighting.md §10.1), aucun second polling introduit.
+  const lightingModeEngaged = normalizeLightingState(lightingStatus.state) !== 'disabled'
+    && (lightingStatus.mode === 'ON' || lightingStatus.mode === 'OFF')
 
   // #179 (F3) — mesure la hauteur RÉELLE de la Navbar (jamais garantie par
   // son CSS, qui ne déclare aucune hauteur fixe) et la partage via
@@ -317,6 +327,25 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
         >
           {entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
         </Button>
+
+        {/* #208 — garde-fou global "mode éclairage engagé". Absent tant que
+            le sélecteur est sur AUTO (repos) ou que l'éclairage n'est pas
+            configuré — jamais un badge muet en permanence. Cliquable :
+            ramène directement à GamePage, où vit le seul contrôle réel
+            (LightingModePanel) — même geste que version-badge ci-dessus
+            vers Mises à jour. */}
+        {lightingModeEngaged && (
+          <span
+            className={`lighting-mode-nav-badge is-${lightingStatus.mode.toLowerCase()}`}
+            title={`Éclairage général forcé ${lightingStatus.mode === 'ON' ? 'allumé' : 'éteint'} — cliquer pour revenir sur l'écran de jeu`}
+            role="button"
+            tabIndex={0}
+            onClick={() => navigate(getFullPath(''))}
+            onKeyDown={e => e.key === 'Enter' && navigate(getFullPath(''))}
+          >
+            💡 Mode {lightingStatus.mode} engagé
+          </span>
+        )}
       </div>
 
       <div className="navbar-links">

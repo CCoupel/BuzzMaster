@@ -216,6 +216,40 @@
   box-shadow: none;
 }
 
+/* #208 — garde-fou global "mode éclairage engagé" (contrat lighting.md
+   §10.1.1, encart ; R8, planner-v10-etat-courant-20260907.md §3). Même
+   affordance cliquable que .version-badge-clickable ci-dessus, mais teinté
+   selon le mode plutôt qu'en neutre : ON = warning (forçage actif), OFF =
+   error (salle éteinte), jamais absent tant que le mode n'est pas AUTO. */
+.lighting-mode-nav-badge {
+  position: relative;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  margin-left: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.lighting-mode-nav-badge.is-on { background: var(--warning); }
+.lighting-mode-nav-badge.is-off { background: var(--error); }
+
+.lighting-mode-nav-badge:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+
+.lighting-mode-nav-badge:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
 .update-badge-version {
   display: inline-flex;
   align-items: center;
