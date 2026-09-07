@@ -288,6 +288,38 @@ func TestDevRenamedLightStopsBeingWritten(t *testing.T) {
 	}
 }
 
+// TestDevBugfixQualif_WhitespacePaddedBridgeNameStillResolves reproduces the
+// real QUALIF v10.0.0.8 regression reported by the user against an actual
+// Hue bridge: a light ("salon gauche") visible and selectable at
+// association time (Inventory/GET /api/lighting/lights) failed a later
+// POST /api/lighting/test with "hue: no resolved light matches "salon
+// gauche"" — even though it was correctly configured. Root cause: New()
+// trims every CONFIGURED light name (strings.TrimSpace), but resolve()
+// used to compare against the bridge's OWN light name AS RETURNED, never
+// trimmed. A real bridge light named with incidental leading/trailing
+// whitespace (the Hue app does not prevent this) could therefore never
+// match its own (trimmed) configured counterpart — silently "not found",
+// not even logged as a whitespace mismatch.
+func TestDevBugfixQualif_WhitespacePaddedBridgeNameStillResolves(t *testing.T) {
+	f := newDevBridge(t, "salon gauche ") // bridge-side name: trailing space, exactly the reported case
+	d, _ := newDevDriver(t, f, LightSpec{Name: "salon gauche"})
+
+	if err := d.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); err != nil {
+		t.Fatalf("Apply must resolve a bridge name that only differs by whitespace: %v", err)
+	}
+	if len(f.puts()) != 1 {
+		t.Fatalf("expected 1 write once resolved, got %d: %+v", len(f.puts()), f.puts())
+	}
+	if st := d.Status(); st.LightsOK != 1 || st.Lights[0].LastError != "" {
+		t.Fatalf("light must resolve cleanly, not 'not found': %+v", st.Lights)
+	}
+
+	// The exact regression: POST /api/lighting/test → TestFlash("salon gauche").
+	if err := d.TestFlash(context.Background(), "salon gauche", time.Millisecond, func(time.Duration) {}); err != nil {
+		t.Fatalf(`TestFlash must resolve the whitespace-padded bridge name — this is the exact QUALIF regression ("hue: no resolved light matches"): %v`, err)
+	}
+}
+
 func TestDevRefusedAndUnreachableAreDistinct(t *testing.T) {
 	f := newDevBridge(t, "BuzzHue1")
 	sink := &devLogSink{}

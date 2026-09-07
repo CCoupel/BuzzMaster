@@ -551,10 +551,23 @@ func (d *Driver) rediscover(ctx context.Context, why string) error {
 
 // resolve maps configured names to ids: exactly one match required
 // (contract §4.2). Logs resolution changes once.
+//
+// Bugfix (QUALIF v10.0.0.8, real Hue bridge — "hue: no resolved light
+// matches" on a light that WAS visible at association time, e.g.
+// "salon gauche"): the bridge's own light names are matched here AS
+// RETURNED, never trimmed — but New() (below) trims every CONFIGURED name
+// with strings.TrimSpace before storing it in cfg.Lights. A bridge light
+// named with incidental leading/trailing whitespace (the Hue mobile app
+// does not prevent this) therefore NEVER matched its (trimmed) configured
+// counterpart: byName held the untrimmed bridge string as its key, so a
+// lookup by the trimmed configured name silently found nothing — case 0,
+// "not found", not even logged as a name mismatch. Trimming here makes the
+// comparison symmetric with New()'s own trimming, on both sides of the
+// same equality check.
 func (d *Driver) resolve(lights map[string]lightV1) {
 	byName := map[string][]string{}
 	for id, l := range lights {
-		byName[l.Name] = append(byName[l.Name], id)
+		byName[strings.TrimSpace(l.Name)] = append(byName[strings.TrimSpace(l.Name)], id)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
