@@ -583,29 +583,12 @@ func (d *Driver) rediscover(ctx context.Context, why string) error {
 	return nil
 }
 
-// diagFmt is a TEMPORARY diagnostic helper (QUALIF bug 1, round 3 —
-// "hue: no resolved light matches" persisting against a plain ASCII name,
-// "BuzzHue1", after two guessed-and-shipped fixes — whitespace trim, then
-// invisible-Unicode-character stripping — neither of which can explain a
-// failure on a name with no space and no suspect character at all).
-// Formats a string BOTH as %q (escapes any invisible/control character so
-// it becomes visible in the log) AND as raw hex bytes (catches anything
-// %q might render identically for two actually-different byte sequences,
-// e.g. two distinct Unicode normalisation forms of visually-identical
-// text). Every diagFmt call site below is tagged with WHERE that specific
-// string came from — config.json, the resolved-name cache, or a live
-// bridge fetch — so a real log finally tells us which of the three
-// diverges, instead of guessing a fourth cause.
-//
-// TO REMOVE once the real cause is identified from a user-supplied log —
-// this is not meant to ship long-term. Tracked by the round-3 diagnostic
-// task (_work/handoff/task-dev-backend-diagnose-bug1-20260907.md).
-func diagFmt(s string) string {
-	return fmt.Sprintf("%q(hex=% x)", s, []byte(s))
-}
-
 // resolve maps configured names to ids: exactly one match required
-// (contract §4.2). Logs resolution changes once.
+// (contract §4.2). Logs resolution changes once. Drives d.resolved, the
+// ONLY name→id mapping Apply() (actual gameplay writes) ever consults —
+// deliberately scoped to d.cfg.Lights (saved config), never a light that
+// merely exists on the bridge. See TestFlash's own doc comment for why a
+// NAMED test resolves differently (liveLightID, below).
 //
 // Bugfix (QUALIF v10.0.0.8 round 1, then v10.0.0.10 round 2 — real Hue
 // bridge, "hue: no resolved light matches"): the bridge's own light names
@@ -617,14 +600,11 @@ func diagFmt(s string) string {
 // doc comment — zero-width space, BOM, soft hyphen, a stray control
 // character, none of them "space" by unicode.IsSpace's definition, some of
 // them not even at the string's edges). Normalising both sides through the
-// SAME function is what actually closes this class of bug, not another
-// guess at one more specific rune.
+// SAME function is what actually closes this class of bug.
 //
-// Round 3: the bug PERSISTS on a plain ASCII name with no space and no
-// suspect character — round 1/2's whole hypothesis class is now in doubt.
-// See diagFmt's own doc comment for the diagnostic logging added at the
-// "not found"/"ambiguous" branches below, and at TestFlash's own failure
-// point — no third guessed fix here, only instrumentation.
+// (Rounds 3-4 diagnosed this function looking for a name-matching bug that
+// was never here — the real round-5 cause was entirely in TestFlash, never
+// resolve(); see that function's own doc comment.)
 func (d *Driver) resolve(lights map[string]lightV1) {
 	byName := map[string][]string{}
 	for id, l := range lights {
@@ -667,20 +647,6 @@ func (d *Driver) resolve(lights map[string]lightV1) {
 			delete(d.appliedState, lc.Name)
 			delete(d.ambiguous, lc.Name)
 			d.lightErr[lc.Name] = "not found"
-			// DIAGNOSTIC round 3 (QUALIF bug 1) — diagFmt's own doc comment.
-			// Unconditional (not edge-triggered like `changes` above): we
-			// want data from the ACTUAL resolve() call that backs a user's
-			// failing click, not just the first time this light went
-			// missing. Dumps every live bridge name against the one
-			// configured name that failed to match it.
-			{
-				var live []string
-				for id, l := range lights {
-					live = append(live, fmt.Sprintf("id=%s name=%s", id, diagFmt(l.Name)))
-				}
-				d.logf("DIAGNOSTIC bug1 round3: resolve() NOT FOUND — configured=%s (source=config.json, d.cfg.Lights) has ZERO match in live bridge inventory (source=this resolve() call's own GET /lights, %d light(s)): %s",
-					diagFmt(lc.Name), len(lights), strings.Join(live, " | "))
-			}
 		default:
 			sort.Strings(ids)
 			if !d.ambiguous[lc.Name] {
@@ -690,18 +656,6 @@ func (d *Driver) resolve(lights map[string]lightV1) {
 			delete(d.appliedState, lc.Name)
 			d.ambiguous[lc.Name] = true
 			d.lightErr[lc.Name] = "ambiguous: " + strings.Join(ids, ",")
-			// DIAGNOSTIC round 3 (QUALIF bug 1) — same reasoning as the
-			// "not found" branch above, for completeness (ambiguity would
-			// also surface through TestFlash as an unresolved light, just
-			// via a different d.lightErr reason).
-			{
-				var matches []string
-				for _, id := range ids {
-					matches = append(matches, fmt.Sprintf("id=%s name=%s", id, diagFmt(lights[id].Name)))
-				}
-				d.logf("DIAGNOSTIC bug1 round3: resolve() AMBIGUOUS — configured=%s (source=config.json) matches %d live bridge lights (source=this resolve() call's own GET /lights): %s",
-					diagFmt(lc.Name), len(ids), strings.Join(matches, " | "))
-			}
 		}
 	}
 	if len(changes) > 0 {
@@ -833,9 +787,29 @@ func (d *Driver) RefreshInventory(ctx context.Context) error {
 	return err
 }
 
-// TestFlash flashes one configured light (or all, name == "") bright white
-// for hold, then restores the state read from the bridge beforehand
-// (contract §7 /test). Uses the same guarded write as Apply.
+// TestFlash flashes one light bright white for hold, then restores the
+// state read from the bridge beforehand (contract §7 /test). Uses the same
+// guarded write as Apply.
+//
+// Bugfix (QUALIF, round 5 — the REAL cause, confirmed by the user after 4
+// rounds diagnosing the wrong layer): a NAMED test (name != "") must
+// resolve against the LIVE bridge inventory, not only against d.cfg.Lights
+// (already-saved config). "Tester" exists precisely to let an admin
+// physically identify which bulb is which BEFORE deciding whether/where to
+// assign it — requiring it to already be saved defeats that purpose
+// entirely. Rounds 1-4 diagnosed name normalisation, persistence and
+// startup contact — all real, all correctly fixed, none of them the actual
+// bug: the round-3/4 diagnostic logging (since removed) showed the exact
+// requested name present byte-for-byte in the LIVE inventory fetched by
+// THIS SAME call, every time, while d.cfg.Lights simply had no entry for
+// it — because the light had never been saved, by design of the feature.
+//
+// This does NOT change Apply()'s own resolution (d.resolved, driven solely
+// by resolve()/d.cfg.Lights): a live-only light is never written to during
+// actual gameplay, only by an explicit, single, user-initiated test flash.
+// The name=="" case ("all configured/selected lights", contract §7) is
+// UNCHANGED — it means exactly the saved selection, never "everything the
+// bridge reports".
 func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration, sleep func(time.Duration)) error {
 	if sleep == nil {
 		sleep = time.Sleep
@@ -852,25 +826,6 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 	}
 	d.mu.Lock()
 	var targets []plannedWrite
-	// DIAGNOSTIC round 3 (QUALIF bug 1) — diagFmt's own doc comment.
-	// Snapshotted unconditionally under the SAME lock as the matching loop
-	// (never logged while still holding d.mu — Logger is caller-supplied
-	// and must not run under this lock), only USED if targets ends up
-	// empty below.
-	diagRequested := name
-	diagConfigured := make([]string, 0, len(d.cfg.Lights))
-	for _, lc := range d.cfg.Lights {
-		diagConfigured = append(diagConfigured, fmt.Sprintf("%s(role=%s)", diagFmt(lc.Name), lc.Role))
-	}
-	diagResolved := make([]string, 0, len(d.resolved))
-	for rn, rl := range d.resolved {
-		diagResolved = append(diagResolved, fmt.Sprintf("%s->id=%s,reachable=%v", diagFmt(rn), rl.id, rl.reachable))
-	}
-	diagLastInventory := d.lastInventory
-	diagErrs := make([]string, 0, len(d.lightErr))
-	for ln, le := range d.lightErr {
-		diagErrs = append(diagErrs, fmt.Sprintf("%s: %s", diagFmt(ln), le))
-	}
 	for _, lc := range d.cfg.Lights {
 		if name != "" && lc.Name != name {
 			continue
@@ -880,25 +835,12 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 		}
 	}
 	d.mu.Unlock()
-	if len(targets) == 0 {
-		// DIAGNOSTIC round 3 (QUALIF bug 1) — this IS the exact user-visible
-		// failure point ("hue: no resolved light matches"). `lights` here is
-		// a LIVE bridge fetch made moments ago by THIS SAME TestFlash call
-		// (line ~849 above) — comparing it against d.resolved (cached from
-		// the LAST successful resolve(), up to RefreshEvery=5min old)
-		// directly answers whether the resolution used here is STALE
-		// relative to what the bridge has RIGHT NOW.
-		diagLive := make([]string, 0, len(lights))
-		for id, l := range lights {
-			diagLive = append(diagLive, fmt.Sprintf("id=%s name=%s", id, diagFmt(l.Name)))
+	if name != "" && len(targets) == 0 {
+		if id, ok := liveLightID(lights, name); ok {
+			targets = []plannedWrite{{name: name, id: id}}
 		}
-		age := d.now().Sub(diagLastInventory)
-		d.logf("DIAGNOSTIC bug1 round3: TestFlash FAILED — requested=%s (source=/api/lighting/test request, already normalised by the HTTP handler)", diagFmt(diagRequested))
-		d.logf("DIAGNOSTIC bug1 round3: source=config.json (d.cfg.Lights, %d entries): %s", len(diagConfigured), strings.Join(diagConfigured, " | "))
-		d.logf("DIAGNOSTIC bug1 round3: source=d.resolved cache (%d entries, last inventory fetch %s, %s ago, RefreshEvery=%s): %s",
-			len(diagResolved), diagLastInventory.Format(time.RFC3339Nano), age, d.cfg.RefreshEvery, strings.Join(diagResolved, " | "))
-		d.logf("DIAGNOSTIC bug1 round3: source=d.lightErr (per-light last error, %d entries): %s", len(diagErrs), strings.Join(diagErrs, " | "))
-		d.logf("DIAGNOSTIC bug1 round3: source=LIVE bridge inventory fetched THIS TestFlash call, right now (%d entries): %s", len(diagLive), strings.Join(diagLive, " | "))
+	}
+	if len(targets) == 0 {
 		return fmt.Errorf("hue: no resolved light matches %q", name)
 	}
 	white := applied{on: true, bri: 254, xy: rgbToXY(255, 255, 255)}
@@ -932,4 +874,23 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 	}
 	d.ok()
 	return nil
+}
+
+// liveLightID resolves name against a LIVE bridge inventory fetch (never
+// d.cfg.Lights/d.resolved) — the round-5 fix's own mechanism: TestFlash's
+// only caller of this. Same ambiguity guard as resolve() (contract §4.2,
+// "0 ou > 1 correspondance ⇒ refus, jamais de choix arbitraire"), extended
+// here to a light that was never saved to config at all.
+func liveLightID(lights map[string]lightV1, name string) (string, bool) {
+	want := NormalizeLightName(name)
+	found, count := "", 0
+	for id, l := range lights {
+		if NormalizeLightName(l.Name) == want {
+			found, count = id, count+1
+		}
+	}
+	if count != 1 {
+		return "", false
+	}
+	return found, true
 }

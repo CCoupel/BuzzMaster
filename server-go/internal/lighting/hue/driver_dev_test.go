@@ -258,12 +258,11 @@ func TestDevMissingAndAmbiguousNamesNeverFallBack(t *testing.T) {
 	if byName["Absente"].Resolved || byName["Absente"].LastError != "not found" {
 		t.Errorf("Absente must be not found: %+v", byName["Absente"])
 	}
-	// 2 permanent lines ("Hue lights resolved: ...", "Hue bridge ok") + 2
-	// TEMPORARY DIAGNOSTIC lines (round 3, QUALIF bug 1 — see diagFmt's own
-	// doc comment in driver.go) fired unconditionally by the "not found"/
-	// "ambiguous" branches of resolve(). Revert this count to 2 once that
-	// instrumentation is removed.
-	if sink.count() != 4 {
+	// 2 lines: "Hue lights resolved: ..." and "Hue bridge ok". (The round-3
+	// QUALIF bug-1 diagnostic instrumentation that briefly lived here — see
+	// TestFlash's own doc comment for the round-5 fix that made it
+	// unnecessary — has been removed.)
+	if sink.count() != 2 {
 		t.Errorf("log lines: %v", sink.lines)
 	}
 }
@@ -378,6 +377,50 @@ func TestDevBugfixQualifRound2_ZeroWidthSpaceBridgeNameStillResolves(t *testing.
 	}
 	if err := d.TestFlash(context.Background(), "salon gauche", time.Millisecond, func(time.Duration) {}); err != nil {
 		t.Fatalf("TestFlash must resolve it too — the exact QUALIF round-2 regression: %v", err)
+	}
+}
+
+// TestDevBugfixQualifRound5_TestFlashResolvesLiveUnconfiguredLight is the
+// REAL round-5 fix (see TestFlash's own doc comment): "Tester" must work
+// on ANY light the bridge reports LIVE, configured or not — that is the
+// whole point of the feature, identifying a physical bulb BEFORE deciding
+// where to assign it. Confirmed by the user after 4 rounds diagnosing the
+// wrong layer (name normalisation, persistence, startup contact — all
+// real, correctly-fixed bugs, none of them this one: d.cfg.Lights was
+// simply empty, by design of the feature, not by any of those bugs).
+func TestDevBugfixQualifRound5_TestFlashResolvesLiveUnconfiguredLight(t *testing.T) {
+	f := newDevBridge(t, "BuzzHue1") // on the bridge, but NEVER saved to config
+	d, _ := newDevDriver(t, f)       // zero configured lights — exactly the reported state
+
+	if err := d.TestFlash(context.Background(), "BuzzHue1", time.Millisecond, func(time.Duration) {}); err != nil {
+		t.Fatalf("TestFlash must resolve a light present on the bridge even when unconfigured — the exact round-5 regression: %v", err)
+	}
+
+	// Apply() (actual gameplay writes) must stay UNCHANGED by this fix: an
+	// unconfigured light is never touched during a real game, only by this
+	// explicit, single, user-initiated test flash.
+	if err := d.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); err != nil {
+		t.Fatalf("Apply on an empty configuration must be a harmless no-op, not an error: %v", err)
+	}
+	if len(f.puts()) != 2 { // the test flash's own 2 writes (on, then restore) — Apply added none
+		t.Fatalf("Apply must never write to an unconfigured light — got %d PUT(s) total, want 2 (test flash only): %+v", len(f.puts()), f.puts())
+	}
+}
+
+// TestDevBugfixQualifRound5_TestFlashAllStillMeansConfiguredOnly pins the
+// OTHER half of the round-5 fix: name=="" ("all") still means "all
+// configured/selected lights" (contract hue-bridge.md §7), never
+// "everything the bridge reports" — a live-only light must NOT be flashed
+// by an unnamed test.
+func TestDevBugfixQualifRound5_TestFlashAllStillMeansConfiguredOnly(t *testing.T) {
+	f := newDevBridge(t, "Configuree", "NonConfiguree")
+	d, _ := newDevDriver(t, f, LightSpec{Name: "Configuree"})
+
+	if err := d.TestFlash(context.Background(), "", time.Millisecond, func(time.Duration) {}); err != nil {
+		t.Fatalf(`TestFlash("") must succeed against the one configured light: %v`, err)
+	}
+	if len(f.puts()) != 2 { // exactly the one configured light: on, then restore
+		t.Fatalf(`TestFlash("") must touch ONLY the configured light(s), got %d PUT(s): %+v`, len(f.puts()), f.puts())
 	}
 }
 
@@ -586,13 +629,22 @@ func TestDevInventoryAndTestFlashRestore(t *testing.T) {
 	if !strings.Contains(puts[0].body, `"bri":254`) || !strings.Contains(puts[1].body, `"bri":120`) {
 		t.Errorf("flash then restore expected: %s | %s", puts[0].body, puts[1].body)
 	}
-	if err := d.TestFlash(context.Background(), "Salon", 0, func(time.Duration) {}); err == nil {
-		t.Error("flashing a light that is not configured must be refused")
+	// Round 5 (QUALIF bug 1, the real cause): a NAMED test must resolve
+	// against the LIVE bridge inventory too, not only d.cfg.Lights — see
+	// TestFlash's own doc comment. "Salon" is on the bridge (newDevBridge
+	// above) but was never configured (only "BuzzHue1" was); testing it
+	// must now SUCCEED, the opposite of this test's pre-round-5 assertion.
+	if err := d.TestFlash(context.Background(), "Salon", 0, nil); err != nil {
+		t.Fatalf("flashing a live-but-unconfigured light must succeed (round 5): %v", err)
 	}
+	sawSalon := false
 	for _, p := range f.puts() {
 		if p.path == "/api/k/lights/1/state" {
-			t.Errorf("Salon (not configured) was written: %+v", p)
+			sawSalon = true
 		}
+	}
+	if !sawSalon {
+		t.Error("Salon (id 1, live but unconfigured) must have been written by the named test flash")
 	}
 }
 
