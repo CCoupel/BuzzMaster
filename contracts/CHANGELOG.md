@@ -2,6 +2,36 @@
 
 ---
 
+## [20260907b] — Éclairage : les commandes manuelles passent de `/anim` à `/admin` (#208)
+
+> **Révision de périmètre**, même jour que l'entrée précédente. Correction utilisateur au GATE 2 :
+> il n'a jamais été demandé que l'animateur pilote l'éclairage de la salle. Le travail est
+> **conservé et déplacé**, pas jeté.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — les commandes manuelles quittent la tablette
+  `/anim` pour l'écran d'administration **`/admin/ambiance`** (`AmbiancePage.jsx`, #207) et
+  deviennent des **outils d'exploitation/diagnostic**, non une conduite de spectacle. Libellés
+  arrêtés : **All ON**, **All OFF**, **Flash (bascule)** — ex-« Plein feu », « Noir », « Flash
+  applaudissement ». La règle de priorité (écrasement par le prochain événement de jeu) est
+  **inchangée** : le déplacement la renforce, l'écran n'étant normalement pas ouvert en séance.
+- **[NEW]** `contracts/lighting.md` §10.1.1 — « Flash » est la **seule** commande à porter un état
+  visuel, parce que c'est la seule qui décrit une activité en cours. Clignotement **porté par le
+  pilote côté serveur** (jamais le navigateur), réutilisant la garde d'opération unique en vol de
+  #207, annulé par : bascule OFF, tout événement de jeu, arrêt du serveur. `POST
+  /api/lighting/test` reste le flash **ponctuel** de test et n'est pas remplacé.
+- **[NEW]** `contracts/lighting.md` §10.1.2 — canal **HTTP REST** (`/api/lighting/*`), jamais
+  WebSocket. **Annule** l'amendement de `contracts/websocket-actions.md` annoncé au plan initial :
+  la question d'allowlist ne se posait que tant que la cible était `/anim`.
+- **[CHANGED]** `contracts/lighting.md` §11 — « conduite de l'éclairage par l'animateur » inscrit
+  explicitement **hors périmètre**, et l'association configurable effet ↔ événement (la « seconde
+  phase » évoquée par l'utilisateur) renvoyée à **v10.1 (#210)**.
+
+**Aucun BREAKING**, aucun code écrit à ce stade : la révision intervient avant le Batch 2.
+Détail et instructions de correction des maquettes :
+`_work/reports/planner-v10-scope-revision-20260907-104931.md`.
+
+---
+
 ## [20260907] — Éclairage : conduite manuelle, arrêt, dégradation par équipe (#208, #213, v10.0.0)
 
 > Reprise du milestone v10.0.0 après resynchronisation sur `main` (PROD v9.0.0). Tranche les trois

@@ -4,7 +4,7 @@
 > **Cadrage** : `_work/reports/planner-v10-cadrage-20260902-192243.md`
 > **Plan** : `_work/reports/planner-v10-plan-205-20260902-203000.md`
 > **Consommateurs** : #206 (pilote BLE), #207 (configuration + UI), #213 (éclairage par équipe),
-> #208 (conduite `/anim` + restitution)
+> #208 (commandes manuelles `/admin/ambiance` + restitution)
 >
 > Ce contrat est **normatif**. Il est écrit avant le code, comme l'exige #205. `dev-backend` peut
 > l'ajuster si une contrainte technique l'impose — en documentant la raison, conformément à
@@ -457,20 +457,65 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 > explicitement ouvertes sont tranchées ici par décision utilisateur du 2026-09-07
 > (`_work/handoff/gate1-decisions-v10-20260907.md`). Elles ne sont plus des choix d'implémentation.
 
-### 10.1 Priorité conduite manuelle ↔ scènes automatiques
+### 10.1 Commandes manuelles d'administration ↔ scènes automatiques
 
-Une commande manuelle émise depuis `/anim` (noir, plein feu, flash d'applaudissement) est
-**écrasée par le premier événement de jeu qui suit**, quel qu'il soit — y compris un événement
-mineur (un buzz, une rotation d'équipe). Il n'existe **aucun mécanisme de tenue** : ni verrou, ni
-minuterie, ni priorité conservée.
+> **Révision de périmètre du 2026-09-07.** Ces commandes ont d'abord été cadrées comme une
+> *conduite de spectacle* sur la tablette `/anim`. **Elles n'y ont jamais eu leur place** : rien
+> dans le cadrage du milestone ne demandait que l'animateur pilote l'éclairage de la salle. Elles
+> sont donc des **outils d'exploitation et de diagnostic**, sur l'écran d'administration
+> `/admin/ambiance` (`AmbiancePage.jsx`, #207), aux côtés de la sélection des ampoules.
+> L'association effet↔événement configurable par l'utilisateur reste renvoyée à #210 (v10.1).
 
-Formulation opérationnelle : la conduite manuelle **écrit dans le même canal** que les scènes
-automatiques, **sans état propre**. Le prochain `NotifyState` la recouvre naturellement.
+Trois commandes, et **seulement** trois :
+
+| Commande | Effet | État visuel |
+|---|---|---|
+| **All ON** | toutes les ampoules pilotées à pleine intensité, blanc neutre | aucun |
+| **All OFF** | toutes les ampoules pilotées à `{"on": false}` | aucun |
+| **Flash** | **bascule** : clignotement jusqu'à extinction explicite | **actif pendant le clignotement** |
+
+**Règle de priorité — inchangée par le déplacement d'écran.** Une commande manuelle est **écrasée
+par le premier événement de jeu qui suit**, quel qu'il soit, y compris mineur (un buzz, une
+rotation d'équipe). Il n'existe **aucun mécanisme de tenue** : ni verrou, ni minuterie, ni priorité
+conservée.
+
+Formulation opérationnelle : les commandes manuelles **écrivent dans le même canal** que les scènes
+automatiques, **sans état propre**. Le prochain `NotifyState` les recouvre naturellement.
 **C'est l'absence de mécanisme qui EST le mécanisme** — ne pas introduire de champ « source de la
 dernière commande » ni de drapeau « manuel en cours » : ils n'auraient aucun lecteur.
 
-Conséquence assumée : un flash d'applaudissement peut être recouvert dans la seconde si le jeu a
-quelque chose à afficher. Le jeu est toujours prioritaire dès qu'il parle.
+Le déplacement vers `/admin` **renforce** cette règle au lieu de la fragiliser :
+
+- **Hors partie** — l'usage normal de cet écran — aucun événement de jeu ne survient : rien ne
+  recouvre la commande, l'outil se comporte exactement comme l'opérateur l'attend.
+- **Pendant une partie** — cas anormal, l'écran n'étant pas destiné à rester ouvert en séance — le
+  jeu reprend la main au premier événement. C'est le comportement souhaitable : la salle suit le
+  jeu, jamais un écran de configuration oublié dans un onglet.
+
+**Il n'y a donc aucun arbitrage de priorité à implémenter.**
+
+#### 10.1.1 « Flash » est la seule commande à porter un état — normatif
+
+All ON et All OFF écrivent une valeur et rendent la main : il n'y a rien à afficher après, et
+**aucun bouton ne doit rester surligné**. Flash en bascule est une **activité en cours** : ne pas
+la montrer priverait l'opérateur du moyen de savoir si le clignotement vient de son clic. C'est
+l'unique cas où un état visuel **décrit une réalité** au lieu de l'inventer.
+
+Contraintes d'implémentation :
+1. Le clignotement est **porté par le pilote côté serveur**, jamais par le navigateur — un onglet
+   fermé ne doit pas laisser les ampoules clignoter indéfiniment.
+2. Il réutilise la garde d'**opération unique en vol** de #207 (`lightingBusy`), sans en créer une
+   seconde.
+3. Il s'annule sur **trois** événements : bascule sur OFF · **tout événement de jeu** (la règle
+   ci-dessus s'applique sans exception) · arrêt du serveur (§10.4).
+4. `POST /api/lighting/test` (#207) reste le **flash ponctuel** de test d'une ampoule nommée. La
+   bascule est un mode distinct et **ne le remplace pas**.
+
+#### 10.1.2 Canal — HTTP REST, jamais WebSocket
+
+Ces commandes étendent la surface REST existante `/api/lighting/*` (#207), seul canal que
+`AmbiancePage.jsx` utilise. **Aucune action WebSocket, aucune entrée d'allowlist** : la question ne
+se posait que tant que la cible était `/anim`.
 
 ### 10.2 Restitution d'état — trois situations, trois décisions
 
@@ -545,6 +590,8 @@ scène READY/RUNNING au lieu de passer en `KindEntracte`.
 | Pilote BLE réel, conversion RGB → CIE xy, appairage | #206 |
 | Schéma de configuration, endpoints HTTP, écran d'administration | #207 |
 | Affectation ampoule → équipe, résolution de `Teams` en zones, règles de dégradation | #213 |
-| Conduite manuelle depuis `/anim` — **composant et actions** (la règle de priorité est au §10.1) | #208 |
+| Commandes manuelles `/admin/ambiance` — **composant et endpoints** (la règle est au §10.1) | #208 |
+| Conduite de l'éclairage par l'animateur depuis `/anim` | **jamais demandé — hors périmètre** (révision du 2026-09-07) |
+| Association configurable effet ↔ événement (« seconde phase ») | v10.1 (#210) |
 | Restitution en fin de partie | **retiré du périmètre** (décision du 2026-09-07, §10.2) |
 | Édition des scènes, effets répartis, synchronisation sur le minuteur | v10.1 (#210, #211, #212) |
