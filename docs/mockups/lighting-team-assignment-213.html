@@ -147,7 +147,7 @@
 
 <header class="mast">
   <div class="eyebrow">
-    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 4</span><span>À valider — GATE 2</span>
+    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 5</span><span>À valider — GATE 2</span>
   </div>
   <h1>Éclairage d'ambiance — affectation par équipe et commandes de test</h1>
   <p class="standfirst">
@@ -161,12 +161,13 @@
     révision précédente plaçait à tort ces commandes sur l'écran animateur).
   </p>
   <div class="refs">
-    <div><b>Contrats</b> contracts/hue-bridge.md §5.2/§5.7 (zones, dégradation) · contracts/lighting.md §10, en révision par le planner pour la partie priorité admin/jeu</div>
+    <div><b>Contrats</b> contracts/hue-bridge.md §5.2/§5.7 (zones, dégradation) · contracts/lighting.md §10.1, SHA 41825c83 (mode tri-état, tenue indéfinie, retour AUTO manuel — en vigueur)</div>
     <div><b>Base réutilisée</b> docs/mockups/lighting-hue-config-207.html §05/§06 (écran ampoules déjà validé, ici étendu)</div>
     <div><b>Décisions actées</b> _work/handoff/gate1-decisions-v10-20260907.md</div>
     <div><b>Révision 2</b> retrait du panneau de conduite manuelle sur <code>/anim</code>, déplacé sur <code>/admin/ambiance</code></div>
     <div><b>Révision 3 (superseded)</b> avait représenté All ON/All OFF/Flash comme trois overrides mutuellement exclusifs identiques — le planner avait une lecture différente entre-temps</div>
     <div><b>Révision 4 — design tranché par l'utilisateur</b> All ON/All OFF remplacés par un <b>sélecteur tri-état unique [ON | AUTO | OFF]</b> (AUTO = position normale, éclairage piloté par l'état du jeu — remplace « override relâché ») ; Flash reste une bascule ON/OFF <b>séparée</b> et indépendante</div>
+    <div><b>Révision 5 — priorité admin/jeu tranchée</b> le mode (ON/OFF/Flash) tient <b>indéfiniment</b>, y compris pendant une partie ; <b>AUTO manuel</b> est le seul retour — une formulation d'annulation automatique par le prochain événement de jeu a été explorée puis abandonnée le même jour, jamais en vigueur ; ajout de la précédence Flash sur le sélecteur et de la portée « éclairage général = zones d'équipe comprises »</div>
     <div><b>Confirmé</b> la table de scènes de #205 (événements→couleurs) reste inchangée par cette révision — seul son éditeur (#210/v10.1) est reporté</div>
     <div><b>Sert de référence à</b> test-writer (scénarios T1.4) · qa (conformité) · dev-frontend (implémentation Batch 3)</div>
   </div>
@@ -375,6 +376,13 @@
     une position visible plutôt qu'un « désactivé » implicite.
   </div>
 
+  <div class="call warn">
+    <span class="call-t">« Éclairage général » = toutes les ampoules pilotées, zones d'équipe comprises</span>
+    ON et OFF forcent <b>l'ensemble</b> des ampoules pilotées, y compris celles affectées à une
+    équipe (§01) — continuité directe avec « All ON »/« All OFF ». Un OFF qui laisserait une ampoule
+    d'équipe allumée ne serait pas un OFF (<code>contracts/lighting.md</code> §10.1, encart).
+  </div>
+
   <div class="call ok">
     <span class="call-t">Un outil de configuration, pas de spectacle en direct</span>
     Ce sélecteur et cette bascule vivent uniquement sur l'écran d'administration, jamais sur
@@ -383,14 +391,26 @@
     (« pas de réglage de couleur ni de scène dans cet écran ») : ici non plus, aucun curseur, deux
     contrôles francs.
   </div>
-  <div class="call info">
-    <span class="call-t">Priorité admin ↔ jeu en cours — en révision, hors périmètre de cette maquette</span>
-    Ce qui se passe en position <b>AUTO</b> est clair (ci-dessus). Reste ouvert : est-ce qu'une
-    position <b>ON</b> ou <b>OFF</b> (ou <b>Flash</b> actif) <b>tient</b> face à un événement de jeu
-    qui survient pendant ce temps, ou est-elle recouverte au prochain événement (même logique que
-    l'ancien §10.1 pour le panneau <code>/anim</code> retiré) ? Cette question est en cours de
-    révision par le planner — non tranchée ici. <code>docs/mockups/lighting-priority-208.md</code>
-    sera mis à jour séparément une fois la conclusion reçue.
+  <div class="call ok">
+    <span class="call-t">✅ Tranché le 2026-09-07 — le mode tient, y compris pendant une partie ; AUTO manuel est le seul retour</span>
+    Une position <b>ON</b> ou <b>OFF</b>, comme <b>Flash</b> actif, <b>s'impose indéfiniment</b> —
+    aucun événement de jeu ne les recouvre, aucun ne les annule. Seul un retour <b>manuel</b> sur
+    <b>AUTO</b> (ou l'arrêt du serveur, §10.4) rend la main à l'état de jeu. Une formulation
+    concurrente — annulation automatique au premier événement de jeu, avec retour visuel du
+    sélecteur — a été rédigée puis abandonnée le même jour (confirmation utilisateur) : elle n'a
+    jamais été en vigueur, et un document qui en parle encore est périmé
+    (<code>contracts/lighting.md</code> §10.1, historique des révisions).
+    <br><br>
+    <b>Conséquence assumée</b> : un OFF oublié laisse la salle éteinte et aucun événement de jeu ne
+    la rallumera — c'est le prix d'un mode qui mérite son nom (§02) plutôt qu'un écrasement muet.
+    <br><br>
+    <b>Flash prime sur le sélecteur, sans le déplacer</b> : si Flash est actif alors que le
+    sélecteur est sur OFF, les ampoules clignotent quand même — sinon l'outil d'identification
+    serait inopérant au moment précis où on en a besoin. Le sélecteur continue d'afficher ON, AUTO
+    ou OFF, qui reste l'état réel une fois Flash arrêté (<code>contracts/lighting.md</code> §10.1.2).
+    <br><br>
+    Diagramme détaillé : <code>docs/mockups/lighting-priority-208.md</code> (révisé en même temps
+    que cette section).
   </div>
 </section>
 
@@ -445,18 +465,20 @@
       #207 (case à cocher + libellé), un menu de plus n'introduit rien de nouveau à apprendre.</li>
     <li><b>La table de scènes de #205 (événements→couleurs) n'est pas retouchée</b> par cette
       révision — confirmé par l'utilisateur : seul son éditeur (#210/v10.1) reste reporté.</li>
-    <li><b>Priorité admin ↔ jeu en cours non tranchée ici</b> — en révision par le planner (§01,
-      dernier encart). Cette maquette ne préjuge pas de ce qui se passe si un événement de jeu
-      survient pendant que le sélecteur est sur ON/OFF ou que Flash est actif.</li>
+    <li><b>✅ Priorité admin ↔ jeu en cours — tranchée.</b> Le mode tient indéfiniment, y compris
+      pendant une partie ; <b>AUTO manuel</b> est le seul chemin de retour (§01, dernier encart).
+      Une formulation d'écrasement automatique par le prochain événement de jeu a été explorée puis
+      abandonnée le même jour — jamais en vigueur.</li>
   </ol>
 </section>
 
 <footer>
-  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 4 — à valider</b>, GATE 2 · panneau
+  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 5 — à valider</b>, GATE 2 · panneau
   de conduite manuelle retiré de <code>/anim</code>, remplacé sur <code>/admin/ambiance</code> par un
-  sélecteur tri-état ON/AUTO/OFF + une bascule Flash séparée (design tranché par l'utilisateur le
-  2026-09-07) · référence pour dev-frontend (Batch 3), test-writer (T1.4) et qa · issues #213/#208 ·
-  milestone v10.0.0 · BuzzControl
+  sélecteur tri-état ON/AUTO/OFF + une bascule Flash séparée, tenue indéfinie et retour AUTO manuel
+  uniquement (design tranché par l'utilisateur le 2026-09-07, contrat
+  <code>contracts/lighting.md</code> §10.1, SHA 41825c83) · référence pour dev-frontend (Batch 3),
+  test-writer (T1.4) et qa · issues #213/#208 · milestone v10.0.0 · BuzzControl
 </footer>
 
 </div>
