@@ -6,7 +6,7 @@
 </head>
 <body>
 <!-- ARTIFACT-BODY-START -->
-<title>Éclairage d'ambiance — affectation équipe et conduite manuelle</title>
+<title>Éclairage d'ambiance — affectation équipe et commandes de test</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root{
@@ -113,32 +113,23 @@
   ul.pl{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
   ul.pl li{margin-bottom:7px} ul.pl li:last-child{margin-bottom:0}
 
-  /* ---- Tablette /anim (fond noir, gros boutons tactiles) ---- */
-  .tablet{background:#000;border:1px solid #262626;border-radius:10px;padding:18px;
-    display:flex;flex-direction:column;gap:14px}
-  .tablet-hd{display:flex;align-items:center;justify-content:space-between;
-    font-family:var(--mono);font-size:.7rem;color:#666;text-transform:uppercase;letter-spacing:.05em}
-  .conduct-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
-  .cbtn{background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:10px 6px;
-    text-align:center;font-size:.72rem;font-weight:600;color:#777}
-  .cbtn.go{background:#173d1f;border-color:var(--ok);color:#7ee89b}
-  .lighting-panel{border:1px solid #3a2a12;background:#1a1208;border-radius:8px;padding:14px}
-  .lighting-panel-hd{display:flex;align-items:center;gap:8px;margin-bottom:12px}
-  .lighting-panel-hd svg{width:15px;height:15px;color:var(--accent);flex:none}
-  .lighting-panel-t{font-size:.78rem;font-weight:600;color:#e8b878;text-transform:uppercase;letter-spacing:.04em}
-  .lighting-btns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .lbtn{background:#241a0c;border:1px solid #4a3418;border-radius:6px;padding:14px 8px;
-    text-align:center;font-size:.85rem;font-weight:600;color:#f0d8b0;display:flex;flex-direction:column;
-    align-items:center;gap:6px}
-  .lbtn svg{width:22px;height:22px;color:var(--accent)}
-  .lighting-note{font-size:.72rem;color:#8a7150;margin-top:10px;line-height:1.5}
+  /* ---- Bascule on/off (bouton Flash — seule des trois commandes à porter un état) ---- */
+  .togglebtn{display:inline-flex;align-items:center;gap:10px;background:var(--raised);
+    border:1px solid var(--line);border-radius:6px;padding:8px 15px;font-size:.83rem;
+    font-weight:500;color:var(--txt);font-family:var(--sans)}
+  .togglebtn .sw2{width:34px;height:18px;border-radius:999px;background:var(--sunken);
+    border:1px solid var(--line);position:relative;flex:none}
+  .togglebtn .sw2::after{content:"";position:absolute;top:1px;left:1px;width:14px;height:14px;
+    border-radius:50%;background:var(--faint)}
+  .togglebtn.on{border-color:var(--ok);color:var(--ok)}
+  .togglebtn.on .sw2{background:color-mix(in srgb,var(--ok) 28%,var(--sunken));border-color:var(--ok)}
+  .togglebtn.on .sw2::after{left:17px;background:var(--ok)}
 
   footer{border-top:1px solid var(--line);padding-top:20px;margin-top:56px;
     font-family:var(--mono);font-size:.73rem;color:var(--faint)}
 
   @media (max-width:640px){
     body{padding:28px 14px 56px} h1{font-size:1.5rem} .row2{grid-template-columns:1fr}
-    .lighting-btns,.conduct-strip{grid-template-columns:1fr}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -147,19 +138,24 @@
 
 <header class="mast">
   <div class="eyebrow">
-    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 1</span><span>À valider — GATE 2</span>
+    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 2</span><span>À valider — GATE 2</span>
   </div>
-  <h1>Éclairage d'ambiance — affectation par équipe et conduite manuelle</h1>
+  <h1>Éclairage d'ambiance — affectation par équipe et commandes de test</h1>
   <p class="standfirst">
-    Deux ajouts sur des écrans existants, aucune page nouvelle. <strong>#213</strong> étend
-    <code>/admin/ambiance</code> (livrée par #207) d'une colonne d'affectation équipe→ampoule.
-    <strong>#208</strong> ajoute un petit panneau de conduite manuelle (noir, plein feu, flash) sur
-    <code>/anim</code>, à côté — jamais à l'intérieur — du panneau de conduite de jeu existant.
+    Un seul écran étendu, aucune page nouvelle. <strong>#213</strong> ajoute à
+    <code>/admin/ambiance</code> (livrée par #207) une colonne d'affectation équipe→ampoule, et trois
+    commandes globales de vérification (<b>All ON</b> / <b>All OFF</b> / <b>Flash</b>) pour tester le
+    résultat pendant qu'on configure. Cette phase 1 se limite à associer le pont, affecter des
+    ampoules aux équipes, et les piloter comme les buzzers — <b>la conduite d'éclairage en direct
+    depuis <code>/anim</code>, associée à des événements de jeu, est une phase 2 hors périmètre</b>
+    (révision de cette maquette suite à correction du 2026-09-07 : la révision précédente plaçait à
+    tort ces trois commandes sur l'écran animateur).
   </p>
   <div class="refs">
-    <div><b>Contrats</b> contracts/hue-bridge.md §5.2/§5.7 (zones, dégradation) · contracts/lighting.md §10 (priorité, restitution)</div>
-    <div><b>Base réutilisée</b> docs/mockups/lighting-hue-config-207.html §06 (aperçu déjà validé du principe, ici développé)</div>
-    <div><b>Décisions actées</b> _work/handoff/gate1-decisions-v10-20260907.md — priorité = écrasement immédiat, restitution réduite à l'arrêt serveur</div>
+    <div><b>Contrats</b> contracts/hue-bridge.md §5.2/§5.7 (zones, dégradation) · contracts/lighting.md §10, en révision par le planner pour la partie priorité admin/jeu</div>
+    <div><b>Base réutilisée</b> docs/mockups/lighting-hue-config-207.html §05/§06 (écran ampoules déjà validé, ici étendu)</div>
+    <div><b>Décisions actées</b> _work/handoff/gate1-decisions-v10-20260907.md</div>
+    <div><b>Révision 2</b> retrait du panneau de conduite manuelle sur <code>/anim</code>, déplacé et adapté en commandes de test sur <code>/admin/ambiance</code> (All ON/All OFF ponctuels, Flash devient une bascule)</div>
     <div><b>Sert de référence à</b> test-writer (scénarios T1.4) · qa (conformité) · dev-frontend (implémentation Batch 3)</div>
   </div>
 </header>
@@ -269,147 +265,136 @@
     replis d'urgence. Le contrat est explicite — « ce sont eux qui séparent une fonctionnalité
     utilisable d'une curiosité de démonstration » (<code>hue-bridge.md</code> §5.7).
   </div>
-</section>
 
-<section>
-  <h2><span class="num">02</span>#208 — Conduite manuelle sur <code>/anim</code></h2>
+  <h3>Commandes de test — All ON / All OFF / Flash</h3>
   <p class="lede">
-    Trois gestes ponctuels à la disposition de l'animateur : <b>Noir</b>, <b>Plein feu</b>, <b>Flash
-    applaudissement</b>. Panneau <b>distinct</b> du panneau de conduite de jeu
-    (<code>AnimConductPanel.jsx</code>, LANCER/PAUSE/CONTINUER/STOP/RÉPONSE) — celui-ci pilote la
-    partie, celui de l'éclairage ne pilote qu'une salle. Les mélanger ferait porter au même
-    composant deux responsabilités sans rapport.
+    Trois commandes globales, sur ce même écran, juste sous la liste des ampoules — un outil pour
+    <b>vérifier immédiatement</b> l'effet d'une affectation pendant qu'on configure (« est-ce bien
+    l'ampoule de la Salle gauche qui vient de s'allumer en rouge ? »), pas un outil de conduite de
+    spectacle en direct. Ce sont les mêmes trois gestes qu'une première version de cette maquette
+    plaçait à tort sur <code>/anim</code> — déplacés ici après correction utilisateur du 2026-09-07 :
+    la conduite d'éclairage associée aux événements de jeu, en direct depuis l'écran animateur, est
+    une phase 2, hors périmètre de ce milestone.
   </p>
-
-  <h3>Emplacement — sous la bande régie, tablette <code>/anim</code></h3>
   <div class="screen">
-    <div class="screen-hd">/anim — gabarit à quatre zones existant (contexte / conduite / équipes / régie), panneau éclairage ajouté</div>
-    <div class="screen-bd dark">
-      <div class="tablet">
-        <div class="tablet-hd"><span>Zone conduite (AnimConductPanel — inchangé)</span><span>Phase STARTED</span></div>
-        <div class="conduct-strip">
-          <div class="cbtn">LANCER<br><span style="opacity:.6">en cours</span></div>
-          <div class="cbtn go">PAUSE</div>
-          <div class="cbtn">CONTINUER</div>
-          <div class="cbtn go">STOP</div>
-          <div class="cbtn">RÉPONSE</div>
-        </div>
+    <div class="screen-hd">/admin/ambiance — commandes globales de test</div>
+    <div class="screen-bd">
+      <div class="btnrow">
+        <span class="btn">All ON</span>
+        <span class="btn">All OFF</span>
+      </div>
+      <p class="hint" style="margin-bottom:16px">
+        <b>All ON</b> et <b>All OFF</b> sont des commandes <b>ponctuelles</b> — même mécanique que
+        « Enregistrer »/« Tester toutes les ampoules » juste au-dessus (§01) : un clic, un effet
+        immédiat, aucun état mémorisé côté écran.
+      </p>
 
-        <div class="lighting-panel">
-          <div class="lighting-panel-hd">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 4a6 6 0 0 0-3.5 10.9V17a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-2.1A6 6 0 0 0 12 4Z"/></svg>
-            <span class="lighting-panel-t">Éclairage — conduite manuelle</span>
-          </div>
-          <div class="lighting-btns">
-            <div class="lbtn">
-              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>
-              Noir
-            </div>
-            <div class="lbtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke-linecap="round"/></svg>
-              Plein feu
-            </div>
-            <div class="lbtn">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>
-              Flash
-            </div>
-          </div>
-          <div class="lighting-note">
-            Effet ponctuel, sans mémoire. Le prochain événement de jeu (même un simple buzz) reprend
-            la main immédiatement — voir §2 ci-dessous.
-          </div>
+      <p class="lbl">Flash — identification (bascule)</p>
+      <div class="row2">
+        <div>
+          <p class="hint" style="margin:0 0 8px">Arrêté</p>
+          <span class="togglebtn"><span class="sw2"></span>Flash identification</span>
         </div>
-
-        <div class="tablet-hd" style="margin-top:4px"><span>Bande régie (inchangée)</span><span></span></div>
-        <div style="border:1px solid #262626;border-radius:6px;padding:10px 14px;font-size:.78rem;color:#666">
-          Aucun message de la régie
+        <div>
+          <p class="hint" style="margin:0 0 8px">Actif</p>
+          <span class="togglebtn on"><span class="sw2"></span>Flash identification</span>
         </div>
       </div>
+      <p class="hint" style="margin-top:14px">
+        <b>Flash</b> est la seule des trois commandes à être une <b>bascule</b>, pas une action
+        ponctuelle : tant qu'elle reste active, les ampoules pilotées clignotent en continu — un
+        repère visuel pour identifier physiquement, dans la salle, laquelle est laquelle en réglant
+        les rôles ci-dessus (§01). On l'arrête explicitement ; elle ne s'éteint pas seule.
+      </p>
     </div>
   </div>
-  <p class="hint">
-    Le panneau n'apparaît que si <code>lighting.enabled</code> et au moins une ampoule configurée —
-    un serveur sans pont Hue ne montre aucune trace de cette fonctionnalité sur la tablette, même
-    ligne de conduite que le badge de #207 (« aucune goroutine, aucun appel réseau » quand non
-    configuré).
-  </p>
 
-  <h3>Les trois gestes</h3>
+  <h3>Les trois commandes</h3>
   <div class="scroll">
     <table>
-      <tr><th style="width:22%">Geste</th><th>Effet</th></tr>
-      <tr><td><b>Noir</b></td><td>Toutes les ampoules pilotées à <code>{"on": false}</code> — obscurité complète de la salle, effet immédiat.</td></tr>
-      <tr><td><b>Plein feu</b></td><td>Toutes les ampoules à pleine intensité, blanc neutre — l'inverse de Noir, pour une pause ou un rangement de salle.</td></tr>
-      <tr><td><b>Flash</b></td><td>Un flash bref (même mécanique que le « Tester » de #207 §05 — flash puis retour à l'état antérieur), pour ponctuer un moment fort sans figer la salle sur une nouvelle couleur.</td></tr>
+      <tr><th style="width:22%">Commande</th><th>Effet</th></tr>
+      <tr><td><b>All ON</b></td><td>Toutes les ampoules pilotées à pleine intensité, blanc neutre — ponctuel, un clic.</td></tr>
+      <tr><td><b>All OFF</b></td><td>Toutes les ampoules pilotées à <code>{"on": false}</code> — ponctuel, un clic.</td></tr>
+      <tr><td><b>Flash</b></td><td>Bascule on/off : clignotement continu tant qu'active, pour identifier les ampoules pendant la configuration — pas un flash bref ponctuel.</td></tr>
     </table>
   </div>
 
   <div class="call ok">
-    <span class="call-t">Trois boutons, pas un dégradé de réglages</span>
-    Aucun curseur de couleur ni d'intensité dans ce panneau — cohérent avec la décision déjà actée
-    en #207 §08 (« pas de réglage de couleur ni de scène dans cet écran ») : la table de scènes reste
-    câblée côté serveur, l'animateur choisit un geste, jamais une valeur.
+    <span class="call-t">Un outil de configuration, pas de spectacle en direct</span>
+    Ces trois commandes vivent uniquement sur l'écran d'administration, jamais sur <code>/anim</code>.
+    Elles servent à vérifier une configuration avant une soirée (ou entre deux parties), pas à
+    accompagner le jeu en cours — cohérent avec la décision déjà actée en #207 §08 (« pas de réglage
+    de couleur ni de scène dans cet écran ») : ici non plus, aucun curseur, seulement des commandes
+    de test franches.
+  </div>
+  <div class="call info">
+    <span class="call-t">Priorité admin ↔ jeu en cours — en révision, hors périmètre de cette maquette</span>
+    Que se passe-t-il si ces commandes sont utilisées pendant qu'une partie tourne (l'écrivain
+    d'ambiance re-dérive-t-il l'affichage au prochain événement de jeu, comme le prévoyait
+    <code>contracts/lighting.md</code> §10.1 pour l'ancien panneau <code>/anim</code>) ? Cette
+    question est en cours de révision par le planner suite à ce recadrage — non tranchée ici.
+    <code>docs/mockups/lighting-priority-208.md</code> sera mis à jour séparément une fois la
+    conclusion reçue.
   </div>
 </section>
 
 <section>
-  <h2><span class="num">03</span>Pourquoi la conduite manuelle n'a pas d'état « actif »</h2>
+  <h2><span class="num">02</span>Pourquoi Flash a un état « actif », et pas All ON/All OFF</h2>
   <p class="lede">
-    Décision utilisateur du 2026-09-07 (<code>gate1-decisions-v10-20260907.md</code>) : la conduite
-    manuelle est <b>écrasée par le prochain événement de jeu</b>, sans exception. Cela a une
-    conséquence directe sur l'écran : <b>aucun des trois boutons ne reste « enfoncé »</b> après un
-    clic.
+    Une distinction délibérée entre les trois commandes, pas un oubli : <b>All ON</b> et
+    <b>All OFF</b> sont des actions ponctuelles (comme « Tester » en #207 §05), <b>Flash</b> est la
+    seule à porter un état parce que sa fonction — identifier physiquement une ampoule pendant qu'on
+    règle son rôle — exige que le clignotement <b>dure</b> le temps de l'opération, pas l'instant
+    d'un clic.
   </p>
   <div class="screen">
-    <div class="screen-hd">Ce que l'écran ne fait PAS</div>
+    <div class="screen-hd">Ce que chaque commande fait — et ne fait pas</div>
     <div class="screen-bd">
       <ul class="pl">
-        <li>Pas de bouton qui reste surligné/actif après un clic sur « Noir » ou « Plein feu ».</li>
-        <li>Pas d'indicateur « conduite manuelle en cours » ailleurs sur la page.</li>
-        <li>Pas de minuteur de tenue, pas de bouton « relâcher la main ».</li>
+        <li><b>All ON</b>/<b>All OFF</b> : un clic, un effet, le bouton redevient immédiatement
+          cliquable. Aucun état mémorisé côté écran, aucun indicateur visuel après coup.</li>
+        <li><b>Flash</b> : un clic <b>active</b> la bascule (clignotement continu), l'écran l'indique
+          clairement (§01, ligne « Actif »), et il faut un second clic explicite pour l'arrêter.</li>
+        <li>Aucune des trois commandes ne mémorise quoi que ce soit côté serveur au-delà de son
+          propre état on/off pour Flash — pas de scène persistée, pas de configuration modifiée.</li>
       </ul>
       <p class="hint" style="margin-top:12px">
-        Un clic envoie une commande ponctuelle et le bouton redevient immédiatement cliquable —
-        exactement comme « Tester » sur #207 §05. Introduire un état visuel « actif » suggérerait une
-        tenue qui n'existe pas côté serveur (contrat §10.1 : « c'est l'absence de mécanisme qui EST le
-        mécanisme »), et tromperait l'animateur sur ce qu'il contrôle réellement.
+        Un test qui s'arrêterait tout seul après quelques secondes forcerait à re-cliquer sans cesse
+        pendant qu'on va physiquement vérifier chaque ampoule dans la salle — c'est l'usage réel
+        (configurer seul, aller-retour entre l'écran et les ampoules) qui justifie la bascule
+        explicite plutôt qu'un flash bref.
       </p>
     </div>
   </div>
-  <div class="call info">
-    <span class="call-t">Diagramme de référence</span>
-    Le déroulement précis (qui écrase quoi, et quand) est schématisé dans
-    <code>docs/mockups/lighting-priority-208.md</code> — diagramme de séquence, pas une machine à
-    états : la décision utilisateur a explicitement simplifié #208 pour écarter ce besoin.
-  </div>
 </section>
 
 <section>
-  <h2><span class="num">04</span>Décisions de conception</h2>
+  <h2><span class="num">03</span>Décisions de conception</h2>
   <ol class="reasons">
-    <li><b>Deux panneaux distincts sur <code>/anim</code>, jamais fusionnés.</b> Le panneau de
-      conduite de jeu répond à la question « où en est la partie ? » (cinq emplacements fixes,
-      #166/F5). Le panneau éclairage répond à « que montre la salle, là, tout de suite ? ». Les
-      confondre romprait la règle des cinq emplacements permanents de <code>AnimConductPanel</code>
-      pour un besoin qui n'a rien à voir avec la conduite de partie.</li>
-    <li><b>Trois boutons seulement, aucun réglage fin.</b> Cohérent avec #207 §08 : pas de couleur ni
-      de scène éditable côté client, la table de scènes reste une responsabilité serveur.</li>
+    <li><b>Un outil de configuration sur l'écran admin, jamais sur <code>/anim</code>.</b> Correction
+      de la révision précédente de cette maquette, qui plaçait à tort ces trois commandes sur l'écran
+      animateur : la conduite d'éclairage en direct, associée aux événements de jeu, est une phase 2
+      hors périmètre — cette phase 1 s'arrête à associer le pont, affecter des ampoules aux équipes,
+      et vérifier ce réglage.</li>
+    <li><b>All ON/All OFF réutilisent le vocabulaire d'action déjà présent sur cet écran</b> (boutons
+      pleins, ponctuels) — pas de nouveau patron d'interaction, cohérent avec « Enregistrer »/
+      « Tester toutes les ampoules » juste au-dessus.</li>
+    <li><b>Flash est une bascule visuellement distincte</b> (interrupteur, pas un bouton) — la seule
+      des trois commandes qui a un état à montrer, et le seul endroit de cet écran où un état "actif"
+      a un sens (§02).</li>
     <li><b>Le rôle « équipe » réutilise le menu déroulant existant du sélecteur d'ampoule</b>, pas un
       nouveau composant de sélection — c'est la même famille d'interaction que le reste de la page
       #207 (case à cocher + libellé), un menu de plus n'introduit rien de nouveau à apprendre.</li>
-    <li><b>Aucun indicateur d'état « actif » sur les boutons de conduite manuelle</b> — direct de la
-      décision « écrasement immédiat, pas de tenue » (§03 ci-dessus). Montrer un état qui n'existe
-      pas côté serveur serait le même piège que l'exposition d'un curseur de couleur non persisté.</li>
-    <li><b>Panneau éclairage totalement absent si non configuré</b>, jamais grisé — même principe
-      d'invisibilité que le reste de la fonctionnalité Hue depuis #207 : une installation sans pont
-      Hue ne voit littéralement rien qui y fasse référence.</li>
+    <li><b>Priorité admin ↔ jeu en cours non tranchée ici</b> — en révision par le planner (§01,
+      dernier encart). Cette maquette ne préjuge pas de la conclusion.</li>
   </ol>
 </section>
 
 <footer>
-  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 1 — à valider</b>, GATE 2 ·
-  référence pour dev-frontend (Batch 3), test-writer (T1.4) et qa · issues #213/#208 · milestone
-  v10.0.0 · BuzzControl
+  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 2 — à valider</b>, GATE 2 · panneau
+  de conduite manuelle retiré de <code>/anim</code>, déplacé en commandes de test sur
+  <code>/admin/ambiance</code> (correction utilisateur du 2026-09-07) · référence pour dev-frontend
+  (Batch 3), test-writer (T1.4) et qa · issues #213/#208 · milestone v10.0.0 · BuzzControl
 </footer>
 
 </div>
