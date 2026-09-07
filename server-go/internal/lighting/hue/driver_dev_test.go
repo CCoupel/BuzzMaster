@@ -25,14 +25,23 @@ import (
 )
 
 type devBridge struct {
-	mu        sync.Mutex
-	lights    map[string]map[string]any // id → light object
-	bridgeID  string
-	key       string
-	latency   time.Duration
-	offLights map[string]bool // ids answering error 201 on writes
-	requests  []devRecorded
-	srv       *httptest.Server
+	mu         sync.Mutex
+	lights     map[string]map[string]any // id → light object
+	groups     map[string]*devGroup      // id → group object (Batch B, §5.8)
+	nextGroup  int
+	bridgeID   string
+	key        string
+	latency    time.Duration
+	offLights  map[string]bool // ids answering error 201 on writes
+	groupFails bool            // Batch B: every /groups request answers 404 (simulates a bridge/firmware that never serves groups — rule 5 repli test)
+	requests   []devRecorded
+	srv        *httptest.Server
+}
+
+// devGroup is a fake bridge's BuzzMaster-style LightGroup.
+type devGroup struct {
+	name   string
+	lights []string
 }
 
 type devRecorded struct {
@@ -44,7 +53,7 @@ type devRecorded struct {
 
 func newDevBridge(t *testing.T, names ...string) *devBridge {
 	t.Helper()
-	f := &devBridge{lights: map[string]map[string]any{}, bridgeID: "fffe0000deadbeef", key: "k", offLights: map[string]bool{}}
+	f := &devBridge{lights: map[string]map[string]any{}, groups: map[string]*devGroup{}, bridgeID: "fffe0000deadbeef", key: "k", offLights: map[string]bool{}}
 	for i, n := range names {
 		f.lights[fmt.Sprint(i+1)] = map[string]any{"name": n, "type": "Extended color light", "modelid": "LCA001",
 			"state": map[string]any{"on": false, "bri": 1, "xy": []float64{0.3, 0.3}, "reachable": true}}
@@ -111,9 +120,87 @@ func (f *devBridge) handle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		_, _ = w.Write([]byte(`[{"success":{"/lights/` + id + `/state/on":true}}]`))
+
+	// --- Batch B (§5.8): the same handful of /groups operations a real Hue
+	// bridge answers for a LightGroup — list/create, read one, correct/delete
+	// one by id, and write the group's own state (applies to every member,
+	// exactly like the real bridge). f.groupFails simulates rule 5's trigger
+	// (a bridge that never serves groups at all) with a plain 404 on every one.
+	case len(parts) == 3 && parts[2] == "groups" && r.Method == "GET" && !f.groupFails:
+		out := map[string]any{}
+		for id, g := range f.groups {
+			out[id] = map[string]any{"name": g.name, "type": "LightGroup", "lights": g.lights}
+		}
+		_ = json.NewEncoder(w).Encode(out)
+	case len(parts) == 3 && parts[2] == "groups" && r.Method == "POST" && !f.groupFails:
+		var req struct {
+			Name   string   `json:"name"`
+			Lights []string `json:"lights"`
+			Type   string   `json:"type"`
+		}
+		_ = json.Unmarshal([]byte(body.String()), &req)
+		if len(req.Lights) == 0 {
+			_, _ = w.Write([]byte(`[{"error":{"type":7,"address":"/groups","description":"invalid value, [], for parameter, lights"}}]`))
+			return
+		}
+		f.nextGroup++
+		id := fmt.Sprint(f.nextGroup)
+		f.groups[id] = &devGroup{name: req.Name, lights: append([]string(nil), req.Lights...)}
+		_, _ = w.Write([]byte(`[{"success":{"id":"` + id + `"}}]`))
+	case len(parts) == 4 && parts[2] == "groups" && r.Method == "PUT" && !f.groupFails:
+		id := parts[3]
+		g, ok := f.groups[id]
+		if !ok {
+			_, _ = w.Write([]byte(`[{"error":{"type":3,"address":"/groups/` + id + `","description":"resource not available"}}]`))
+			return
+		}
+		var req struct {
+			Lights []string `json:"lights"`
+		}
+		_ = json.Unmarshal([]byte(body.String()), &req)
+		if req.Lights != nil {
+			g.lights = append([]string(nil), req.Lights...)
+		}
+		_, _ = w.Write([]byte(`[{"success":{"/groups/` + id + `/lights":` + string(mustJSON(g.lights)) + `}}]`))
+	case len(parts) == 4 && parts[2] == "groups" && r.Method == "DELETE" && !f.groupFails:
+		id := parts[3]
+		if _, ok := f.groups[id]; !ok {
+			_, _ = w.Write([]byte(`[{"error":{"type":3,"address":"/groups/` + id + `","description":"resource not available"}}]`))
+			return
+		}
+		delete(f.groups, id)
+		_, _ = w.Write([]byte(`[{"success":"/groups/` + id + ` deleted"}]`))
+	case len(parts) == 5 && parts[2] == "groups" && parts[4] == "action" && r.Method == "PUT" && !f.groupFails:
+		id := parts[3]
+		g, ok := f.groups[id]
+		if !ok {
+			_, _ = w.Write([]byte(`[{"error":{"type":3,"address":"/groups/` + id + `/action","description":"resource not available"}}]`))
+			return
+		}
+		var st map[string]any
+		_ = json.Unmarshal([]byte(body.String()), &st)
+		for _, lid := range g.lights {
+			l, ok := f.lights[lid]
+			if !ok {
+				continue
+			}
+			state := l["state"].(map[string]any)
+			for k, v := range st {
+				if k != "transitiontime" {
+					state[k] = v
+				}
+			}
+		}
+		_, _ = w.Write([]byte(`[{"success":{"/groups/` + id + `/action/on":true}}]`))
+
 	default:
 		w.WriteHeader(404)
 	}
+}
+
+func mustJSON(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 func (f *devBridge) puts() []devRecorded {
@@ -163,6 +250,15 @@ func newDevDriver(t *testing.T, f *devBridge, lights ...LightSpec) (*Driver, *de
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Batch B (§5.8): devBridge (below) predates Hue groups and answers every
+	// /groups request with a plain 404 — faithful to no real endpoint being
+	// registered, but noisy for the ~40 pre-existing tests in this file that
+	// assert exact PUT/log counts and never intended to exercise groups at
+	// all. Group reconciliation/writes are therefore off by default here;
+	// the dedicated group tests below (TestDevGroups*, TestDevApplyWritesVia*,
+	// TestDevMeasureGroupGainAtN30) explicitly flip this back on and use
+	// newDevBridgeWithGroups, which does answer /groups for real.
+	d.disableGroupsForTest = true
 	t.Cleanup(func() { _ = d.Close() })
 	return d, sink
 }
@@ -735,7 +831,12 @@ func TestDevMeasureSpreadForN(t *testing.T) {
 	}
 	const lat = 40 * time.Millisecond
 	var results []devSpreadResult
-	for _, n := range []int{2, 4, 6} {
+	// N=30 added (Batch B, §8): the real installation size ("clause de sortie
+	// DÉCLENCHÉE" — §2 was reopened precisely because 30 ≠ "quelques
+	// unités"). Groups stay off here (newDevDriver's default) — this measures
+	// the SAME no-optimization baseline as N=2,4,6, on purpose: it is the
+	// "avant" half of TestDevMeasureGroupGainAtN30's "avant/après" pair.
+	for _, n := range []int{2, 4, 6, 30} {
 		names := make([]string, n)
 		cfgs := make([]LightSpec, n)
 		for i := range names {
@@ -1026,4 +1127,385 @@ func TestDevOnReconnect_NilIsSafe(t *testing.T) {
 	if err := d.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); err != nil {
 		t.Fatal(err) // must not panic on a nil OnReconnect
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Batch B (§5.8) — Hue native groups: lifecycle (B1), hybrid write + the
+// dedup-cache pitfall (B2), and the N=30 group-gain measurement (B3).
+// newDevDriver defaults every OTHER test in this file to
+// disableGroupsForTest=true (see its own doc comment) — every test below
+// explicitly flips it back on.
+// ---------------------------------------------------------------------------
+
+// newDevGroupsEnabled is newDevDriver plus the Batch B opt-in.
+func newDevGroupsEnabled(t *testing.T, f *devBridge, lights ...LightSpec) (*Driver, *devLogSink) {
+	t.Helper()
+	d, sink := newDevDriver(t, f, lights...)
+	d.disableGroupsForTest = false
+	return d, sink
+}
+
+// TestDevGroupsReconciliation_CreatesCorrectsDeletes covers B1's whole
+// lifecycle against the fake bridge's own group store (f.groups) — never the
+// driver's private cache — so this test would keep meaning the same thing
+// even if the driver's internal bookkeeping changed shape.
+func TestDevGroupsReconciliation_CreatesCorrectsDeletes(t *testing.T) {
+	f := newDevBridge(t, "G1", "G2", "T1a", "T1b", "T2a")
+	// A stale group BuzzMaster once created but no longer wants (team "Ghost"
+	// removed from config since) — reconciliation must delete it.
+	f.groups["99"] = &devGroup{name: "buzzmaster-team-Ghost", lights: []string{"1"}}
+	// A group whose composition has drifted (someone re-pointed it in the Hue
+	// app) — reconciliation must correct it, not leave it or recreate it
+	// under a new id.
+	f.groups["7"] = &devGroup{name: "buzzmaster-general", lights: []string{"1"}} // missing "2"
+
+	d, _ := newDevGroupsEnabled(t, f,
+		LightSpec{Name: "G1"}, LightSpec{Name: "G2"},
+		LightSpec{Name: "T1a", Role: RoleTeam, Team: "A"}, LightSpec{Name: "T1b", Role: RoleTeam, Team: "A"},
+		LightSpec{Name: "T2a", Role: RoleTeam, Team: "B"}, // team B has only 1 bulb: no buzzmaster-team-B (table row)
+	)
+	if err := d.RefreshInventory(context.Background()); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	byName := map[string]*devGroup{}
+	for _, g := range f.groups {
+		byName[g.name] = g
+	}
+	if _, ok := byName["buzzmaster-team-Ghost"]; ok {
+		t.Error("stale group must have been deleted")
+	}
+	if len(byName) != 3 {
+		t.Fatalf("expected exactly 3 buzzmaster groups (ambiance, general, team-A — no team-B, no ghost), got %d: %+v", len(byName), byName)
+	}
+	sortedCopy := func(ss []string) []string { s := append([]string(nil), ss...); sort.Strings(s); return s }
+	if got := sortedCopy(byName["buzzmaster-ambiance"].lights); fmt.Sprint(got) != fmt.Sprint([]string{"1", "2", "3", "4", "5"}) {
+		t.Errorf("buzzmaster-ambiance members = %v, want all 5", got)
+	}
+	if got := sortedCopy(byName["buzzmaster-general"].lights); fmt.Sprint(got) != fmt.Sprint([]string{"1", "2"}) {
+		t.Errorf("buzzmaster-general composition not corrected: %v (drift must have been fixed to G1+G2, not left at just G1, not recreated under a new id)", got)
+	}
+	if id7, ok := f.groups["7"]; !ok || id7.name != "buzzmaster-general" {
+		t.Error("buzzmaster-general must have been corrected IN PLACE (id 7), never deleted+recreated under a new id")
+	}
+	if got := sortedCopy(byName["buzzmaster-team-A"].lights); fmt.Sprint(got) != fmt.Sprint([]string{"3", "4"}) {
+		t.Errorf("buzzmaster-team-A members = %v, want T1a+T1b", got)
+	}
+	if _, ok := byName["buzzmaster-team-B"]; ok {
+		t.Error("team B has only 1 bulb — no group must be created for it (table row, contract §5.8)")
+	}
+
+	// Re-run with nothing changed: idempotent, no spurious deletes/creates.
+	f.mu.Lock()
+	before := len(f.groups)
+	f.mu.Unlock()
+	if err := d.RefreshInventory(context.Background()); err != nil {
+		t.Fatalf("second reconcile: %v", err)
+	}
+	f.mu.Lock()
+	after := len(f.groups)
+	f.mu.Unlock()
+	if before != after {
+		t.Errorf("idempotent reconciliation changed the group count: %d -> %d", before, after)
+	}
+}
+
+// TestDevApplyWritesViaGroupWhenTargetHasAtLeastTwoLights is B2's core rule:
+// one PUT to the group's action, not N PUTs to N lights, once ≥2 members of
+// the same target are dirty — and the ordinary per-light dedup keeps working
+// unchanged once nothing is dirty.
+func TestDevApplyWritesViaGroupWhenTargetHasAtLeastTwoLights(t *testing.T) {
+	f := newDevBridge(t, "G1", "G2")
+	d, _ := newDevGroupsEnabled(t, f, LightSpec{Name: "G1"}, LightSpec{Name: "G2"})
+	ctx := context.Background()
+	if err := d.RefreshInventory(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	if err := d.Apply(ctx, devGeneral([3]int{255, 0, 0}, 200)); err != nil {
+		t.Fatal(err)
+	}
+	puts := f.puts()
+	if len(puts) != 1 || !strings.Contains(puts[0].path, "/groups/") || !strings.HasSuffix(puts[0].path, "/action") {
+		t.Fatalf("expected exactly 1 PUT to a group action, got %+v", puts)
+	}
+	if st := d.Status(); st.Stats.Writes != 1 || st.Stats.GroupWrites != 1 {
+		t.Fatalf("stats: %+v", st.Stats)
+	}
+
+	// Unchanged: no write at all, group or individual.
+	if err := d.Apply(ctx, devGeneral([3]int{255, 0, 0}, 200)); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.puts()) != 1 {
+		t.Fatalf("unchanged state must not be re-written, got %d PUTs total", len(f.puts()))
+	}
+
+	// A genuine change writes via the group again, once.
+	if err := d.Apply(ctx, devGeneral([3]int{0, 0, 255}, 100)); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.puts()) != 2 {
+		t.Fatalf("expected a second single group PUT, got %d total", len(f.puts()))
+	}
+}
+
+// TestDevGroupWriteKeepsPerLightDedupCacheHonest is the dedicated pitfall
+// test the handoff asks for verbatim (contracts/hue-bridge.md §5.8,
+// "articulation avec §5.3"): a group write must update EVERY member's own
+// per-light dedup entry to the value it actually wrote — never leave it
+// stale at whatever it held before groups existed for this target. A stale
+// entry would let a later Apply wrongly believe a bulb already holds a
+// colour it never received (dedup skips a write the bulb still needs).
+//
+// Sequence: write RED individually (pre-group baseline — groups are held
+// OFF via disableGroupsForTest for this one step, the test seam's own
+// purpose, since ensureResolved would otherwise reconcile and start using
+// the group from the very first Apply) — turn groups on and reconcile —
+// write WHITE (both members dirty relative to the RED baseline, written via
+// the group in ONE PUT) — write RED again. If step 4's per-light cache were
+// left at the step-1 RED value instead of being updated to WHITE by the
+// group write, this last Apply would wrongly see "already RED, skip" even
+// though the bulbs are physically WHITE — exactly the bug the contract
+// describes ("l'ampoule reste sur une couleur que le serveur croit avoir
+// changée"). Physical bridge state is asserted at the end, not just PUT
+// counts, per this project's standing rule to verify concretely.
+func TestDevGroupWriteKeepsPerLightDedupCacheHonest(t *testing.T) {
+	f := newDevBridge(t, "L1", "L2")
+	d, _ := newDevDriver(t, f, LightSpec{Name: "L1"}, LightSpec{Name: "L2"}) // disableGroupsForTest=true (default)
+	ctx := context.Background()
+
+	red := devGeneral([3]int{255, 0, 0}, 255)
+	white := devGeneral([3]int{255, 255, 255}, 255)
+
+	// 1. Baseline: groups held off, so this necessarily writes per-light —
+	// exercising the OLD (pre-group) per-light cache path.
+	if err := d.Apply(ctx, red); err != nil {
+		t.Fatal(err)
+	}
+	if puts := f.puts(); len(puts) != 2 || strings.Contains(puts[0].path, "groups") {
+		t.Fatalf("baseline must be 2 individual PUTs, got %+v", puts)
+	}
+
+	// 2. Turn groups on and reconcile: buzzmaster-general (L1+L2) now exists.
+	// Reconciliation itself must not touch the bulbs (no PUT), only the
+	// group object.
+	d.disableGroupsForTest = false
+	putsBefore := len(f.puts())
+	if err := d.RefreshInventory(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(f.puts()) != putsBefore {
+		t.Fatal("reconciliation must never write a light's state")
+	}
+
+	// 3. WHITE differs from the RED baseline for both lights -> written via
+	// the group, ONE PUT.
+	if err := d.Apply(ctx, white); err != nil {
+		t.Fatal(err)
+	}
+	puts := f.puts()
+	if len(puts) != 3 || !strings.Contains(puts[2].path, "/groups/") {
+		t.Fatalf("step 3 must add exactly 1 group PUT, got %+v", puts)
+	}
+
+	// 4. Back to RED: the bulbs are physically WHITE (from step 3). If the
+	// per-light cache were still at step 1's RED, this would be (wrongly)
+	// skipped as "unchanged". It must NOT be skipped.
+	if err := d.Apply(ctx, red); err != nil {
+		t.Fatal(err)
+	}
+	puts = f.puts()
+	if len(puts) != 4 {
+		t.Fatalf("step 4 (RED again) must produce a write — the per-light dedup cache must have been updated by the step-3 GROUP write, not left stale at step 1's RED; got %d total PUTs: %+v", len(puts), puts)
+	}
+
+	// Physical correctness: both bulbs must actually be on RED now (bri 254,
+	// contract §5.2's own bri mapping for intensity 255), not just "a PUT was
+	// sent".
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, id := range []string{"1", "2"} {
+		state := f.lights[id]["state"].(map[string]any)
+		on, _ := state["on"].(bool)
+		bri, _ := state["bri"].(float64)
+		if !on || bri != 254 {
+			t.Errorf("light %s not physically RED after step 4: %+v", id, state)
+		}
+	}
+}
+
+// TestDevGroupWriteFallsBackToPerLightOnFailure is B1 rule 5 ("repli
+// obligatoire"): a group the driver still trusts (from a prior successful
+// reconciliation) that then fails to accept a write — here, simulated by the
+// group vanishing from the bridge between reconciliation and the write, a
+// realistic "someone deleted it in the Hue app" scenario — must fall back to
+// writing every member individually WITHIN THE SAME Apply call, and the
+// overall Apply must still succeed.
+func TestDevGroupWriteFallsBackToPerLightOnFailure(t *testing.T) {
+	f := newDevBridge(t, "L1", "L2")
+	d, _ := newDevGroupsEnabled(t, f, LightSpec{Name: "L1"}, LightSpec{Name: "L2"})
+	ctx := context.Background()
+	if err := d.RefreshInventory(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	var groupID string
+	f.mu.Lock()
+	for id, g := range f.groups {
+		if g.name == groupNameGeneral {
+			groupID = id
+		}
+	}
+	// The group vanishes from the bridge — reconciliation is not due again
+	// yet (RefreshEvery has not elapsed), so the driver still trusts it.
+	delete(f.groups, groupID)
+	f.mu.Unlock()
+
+	if err := d.Apply(ctx, devGeneral([3]int{0, 255, 0}, 200)); err != nil {
+		t.Fatalf("Apply must still succeed via the per-light fallback: %v", err)
+	}
+	paths := f.paths()
+	sawFailedGroupAction, sawBothLights := false, map[string]bool{}
+	for _, p := range paths {
+		if strings.Contains(p, "/groups/"+groupID+"/action") {
+			sawFailedGroupAction = true
+		}
+		if p == "PUT /api/k/lights/1/state" || p == "PUT /api/k/lights/2/state" {
+			sawBothLights[p] = true
+		}
+	}
+	if !sawFailedGroupAction {
+		t.Errorf("expected the (now-vanished) group action to be attempted first, got %v", paths)
+	}
+	if len(sawBothLights) != 2 {
+		t.Errorf("expected both lights individually written after the group failure, got %v", paths)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, id := range []string{"1", "2"} {
+		if on, _ := f.lights[id]["state"].(map[string]any)["on"].(bool); !on {
+			t.Errorf("light %s must have been reached by the fallback", id)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// B3 — §8 "gain des groupes": measured before/after at N=30, same fake-bridge
+// method (injected 40 ms write latency, matching the spike's measured
+// 48-59 ms on real hardware) already established and published for N=2,4,6
+// by TestDevMeasureSpreadForN, extended below to also cover N=30.
+// ---------------------------------------------------------------------------
+
+type devGroupGainResult struct {
+	N                  int     `json:"n_lights"`
+	LatencyMs          float64 `json:"simulated_write_latency_ms"`
+	BeforeWrites       int     `json:"before_writes"`
+	BeforeSpreadMs     float64 `json:"before_spread_first_to_last_ms"`
+	BeforeApplyTotalMs float64 `json:"before_apply_total_ms"`
+	AfterWrites        int     `json:"after_writes"`
+	AfterApplyTotalMs  float64 `json:"after_apply_total_ms"`
+}
+
+// TestDevMeasureGroupGainAtN30 is the §8 "gain des groupes" row: the exact
+// same "toute la salle d'une couleur" scenario measured twice at the real
+// installation size (N=30) — once with groups disabled (the §2/pre-§5.8
+// baseline: N sequential PUTs), once with buzzmaster-general reconciled and
+// used (one PUT to its action). GROUP_GAIN_MEASUREMENT is the report-facing
+// JSON line (same convention as SPREAD_MEASUREMENT/BURST_MEASUREMENT).
+func TestDevMeasureGroupGainAtN30(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing measurement")
+	}
+	const n = 30
+	const lat = 40 * time.Millisecond
+	names := make([]string, n)
+	cfgs := make([]LightSpec, n)
+	for i := range names {
+		names[i] = fmt.Sprintf("L%d", i+1)
+		cfgs[i] = LightSpec{Name: names[i]}
+	}
+
+	// BEFORE.
+	fBefore := newDevBridge(t, names...)
+	fBefore.latency = lat
+	dBefore, _ := newDevDriver(t, fBefore, cfgs...) // disableGroupsForTest=true (default)
+	_ = dBefore.Apply(context.Background(), devGeneral([3]int{255, 255, 255}, 100))
+	fBefore.mu.Lock()
+	fBefore.requests = nil
+	fBefore.mu.Unlock()
+	startBefore := time.Now()
+	if err := dBefore.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); err != nil {
+		t.Fatal(err)
+	}
+	beforeTotal := time.Since(startBefore)
+	beforePuts := f0Sorted(fBefore.puts())
+	if len(beforePuts) != n {
+		t.Fatalf("before: expected %d individual PUTs, got %d", n, len(beforePuts))
+	}
+	beforeSpread := beforePuts[len(beforePuts)-1].at.Sub(beforePuts[0].at)
+
+	// AFTER.
+	fAfter := newDevBridge(t, names...)
+	fAfter.latency = lat
+	dAfter, _ := newDevGroupsEnabled(t, fAfter, cfgs...)
+	if err := dAfter.RefreshInventory(context.Background()); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	var generalMembers int
+	fAfter.mu.Lock()
+	for _, g := range fAfter.groups {
+		if g.name == groupNameGeneral {
+			generalMembers = len(g.lights)
+		}
+	}
+	fAfter.mu.Unlock()
+	if generalMembers != n {
+		t.Fatalf("buzzmaster-general must cover all %d lights before measuring, got %d", n, generalMembers)
+	}
+	_ = dAfter.Apply(context.Background(), devGeneral([3]int{255, 255, 255}, 100))
+	fAfter.mu.Lock()
+	fAfter.requests = nil
+	fAfter.mu.Unlock()
+	startAfter := time.Now()
+	if err := dAfter.Apply(context.Background(), devGeneral([3]int{255, 0, 0}, 255)); err != nil {
+		t.Fatal(err)
+	}
+	afterTotal := time.Since(startAfter)
+	afterPuts := fAfter.puts()
+	if len(afterPuts) != 1 || !strings.Contains(afterPuts[0].path, "/groups/") {
+		t.Fatalf("after: expected exactly 1 group PUT at N=%d, got %+v", n, afterPuts)
+	}
+
+	result := devGroupGainResult{
+		N: n, LatencyMs: devMs(lat),
+		BeforeWrites: len(beforePuts), BeforeSpreadMs: devMs(beforeSpread), BeforeApplyTotalMs: devMs(beforeTotal),
+		AfterWrites: len(afterPuts), AfterApplyTotalMs: devMs(afterTotal),
+	}
+	b, _ := json.MarshalIndent(result, "", "  ")
+	t.Logf("GROUP_GAIN_MEASUREMENT %s", b)
+
+	if result.AfterApplyTotalMs >= result.BeforeApplyTotalMs {
+		t.Errorf("groups must be markedly faster at N=%d: before=%.0fms after=%.0fms", n, result.BeforeApplyTotalMs, result.AfterApplyTotalMs)
+	}
+
+	// Physical correctness: the single group command must actually have
+	// reached every one of the 30 bulbs, not just the ones a naive
+	// "first N members" shortcut might have addressed.
+	fAfter.mu.Lock()
+	defer fAfter.mu.Unlock()
+	for id, l := range fAfter.lights {
+		state := l["state"].(map[string]any)
+		on, _ := state["on"].(bool)
+		bri, _ := state["bri"].(float64)
+		if !on || bri != 254 {
+			t.Errorf("light %s not reached by the group write: %+v", id, state)
+		}
+	}
+}
+
+// f0Sorted sorts a puts() slice by request time (the spread measurements'
+// own repeated idiom, factored out once it is needed a third time).
+func f0Sorted(puts []devRecorded) []devRecorded {
+	sort.Slice(puts, func(i, j int) bool { return puts[i].at.Before(puts[j].at) })
+	return puts
 }

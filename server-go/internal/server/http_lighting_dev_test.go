@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,14 +20,24 @@ import (
 	"buzzcontrol/internal/lighting/hue"
 )
 
-// devHueBridge is a minimal Hue v1 fake: link button state, one light, /config.
+// devHueBridge is a minimal Hue v1 fake: link button state, one light,
+// /config, and (Batch B, §5.8) a minimal /groups so the driver's own
+// reconciliation — now run from every ensureResolved, including the one
+// TestFlash performs — has somewhere real to land instead of a bare 404.
 type devHueBridge struct {
-	mu       sync.Mutex
-	pressed  bool
-	key      string
-	bridgeID string
-	srv      *httptest.Server
-	hits     []string
+	mu        sync.Mutex
+	pressed   bool
+	key       string
+	bridgeID  string
+	srv       *httptest.Server
+	hits      []string
+	groups    map[string]*devHueGroup
+	nextGroup int
+}
+
+type devHueGroup struct {
+	name   string
+	lights []string
 }
 
 func newDevHueBridge(t *testing.T) *devHueBridge {
@@ -39,8 +50,14 @@ func newDevHueBridge(t *testing.T) *devHueBridge {
 // whitespace exactly as a real bridge might return it.
 func newDevHueBridgeNamed(t *testing.T, lightName string) *devHueBridge {
 	t.Helper()
-	b := &devHueBridge{key: "devkey123", bridgeID: "fffe0000deadbeef"}
+	b := &devHueBridge{key: "devkey123", bridgeID: "fffe0000deadbeef", groups: map[string]*devHueGroup{}}
 	b.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := ""
+		if r.Body != nil {
+			buf := make([]byte, 4096)
+			n, _ := r.Body.Read(buf)
+			body = string(buf[:n])
+		}
 		b.mu.Lock()
 		b.hits = append(b.hits, r.Method+" "+r.URL.Path)
 		pressed, key := b.pressed, b.key
@@ -62,6 +79,68 @@ func newDevHueBridgeNamed(t *testing.T, lightName string) *devHueBridge {
 				"state": map[string]any{"on": false, "bri": 10, "xy": []float64{0.3, 0.3}, "reachable": true}}})
 		case len(parts) == 5 && parts[4] == "state" && r.Method == "PUT":
 			_, _ = w.Write([]byte(`[{"success":{"/lights/8/state/on":true}}]`))
+		// Batch B (§5.8): the small set of /groups operations reconciliation
+		// needs — list/create, correct/delete one by id, write its action.
+		case len(parts) == 3 && parts[2] == "groups" && r.Method == "GET":
+			b.mu.Lock()
+			out := map[string]any{}
+			for id, g := range b.groups {
+				out[id] = map[string]any{"name": g.name, "type": "LightGroup", "lights": g.lights}
+			}
+			b.mu.Unlock()
+			_ = json.NewEncoder(w).Encode(out)
+		case len(parts) == 3 && parts[2] == "groups" && r.Method == "POST":
+			var req struct {
+				Name   string   `json:"name"`
+				Lights []string `json:"lights"`
+			}
+			_ = json.Unmarshal([]byte(body), &req)
+			b.mu.Lock()
+			b.nextGroup++
+			id := fmt.Sprint(b.nextGroup)
+			b.groups[id] = &devHueGroup{name: req.Name, lights: req.Lights}
+			b.mu.Unlock()
+			_, _ = w.Write([]byte(`[{"success":{"id":"` + id + `"}}]`))
+		case len(parts) == 4 && parts[2] == "groups" && r.Method == "PUT":
+			id := parts[3]
+			b.mu.Lock()
+			g, ok := b.groups[id]
+			b.mu.Unlock()
+			if !ok {
+				_, _ = w.Write([]byte(`[{"error":{"type":3,"address":"/groups/` + id + `","description":"resource not available"}}]`))
+				return
+			}
+			var req struct {
+				Lights []string `json:"lights"`
+			}
+			_ = json.Unmarshal([]byte(body), &req)
+			if req.Lights != nil {
+				b.mu.Lock()
+				g.lights = req.Lights
+				b.mu.Unlock()
+			}
+			_, _ = w.Write([]byte(`[{"success":{"/groups/` + id + `/lights":true}}]`))
+		case len(parts) == 4 && parts[2] == "groups" && r.Method == "DELETE":
+			id := parts[3]
+			b.mu.Lock()
+			_, ok := b.groups[id]
+			delete(b.groups, id)
+			b.mu.Unlock()
+			if !ok {
+				_, _ = w.Write([]byte(`[{"error":{"type":3,"address":"/groups/` + id + `","description":"resource not available"}}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[{"success":"/groups/` + id + ` deleted"}]`))
+		case len(parts) == 5 && parts[2] == "groups" && parts[4] == "action" && r.Method == "PUT":
+			id := parts[3]
+			b.mu.Lock()
+			_, ok := b.groups[id]
+			b.mu.Unlock()
+			if !ok {
+				_, _ = w.Write([]byte(`[{"error":{"type":3,"address":"/groups/` + id + `/action","description":"resource not available"}}]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[{"success":{"/groups/` + id + `/action/on":true}}]`))
 		default:
 			w.WriteHeader(404)
 		}
@@ -258,12 +337,21 @@ func TestDevLightingStatusAndTestWithDriver(t *testing.T) {
 	if code != 500 || out["result"] != "error" {
 		t.Fatalf("flashing an unconfigured light: %d %v", code, out)
 	}
-	// The fake bridge only ever saw guarded paths.
+	// The fake bridge only ever saw guarded paths — checked against the REAL
+	// guard (hue.GuardRequest), not a hardcoded substring list, so this stays
+	// meaningful as the allow-list evolves (Batch B, §5.8: TestFlash's own
+	// ensureResolved now also reconciles groups, so "groups" requests are
+	// legitimately expected here — what must never happen is one the guard
+	// itself would refuse).
 	bridge.mu.Lock()
 	defer bridge.mu.Unlock()
 	for _, h := range bridge.hits {
-		if strings.Contains(h, "groups") || strings.HasPrefix(h, "DELETE") {
-			t.Errorf("forbidden request reached the bridge: %s", h)
+		method, path, ok := strings.Cut(h, " ")
+		if !ok {
+			t.Fatalf("malformed recorded hit %q", h)
+		}
+		if err := hue.GuardRequest(method, path); err != nil {
+			t.Errorf("request reached the bridge but the guard would have refused it: %s (%v)", h, err)
 		}
 	}
 }
