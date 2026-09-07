@@ -163,12 +163,19 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 		t.Fatal("unknown/no team must stay gray {128,128,128}")
 	}
 
+	// #213: an event concerning teams now ALSO carries one zone per team
+	// (TestDevAmbianceTeamZones213 below) — this helper isolates the
+	// "general" zone's own colour/intensity, unaffected by that addition
+	// (contract §8's table is about the general zone specifically).
 	zone := func(ev lighting.Event) lighting.ZoneState {
 		st := app.ambianceScene(ev)
-		if len(st.Zones) != 1 || st.Zones[0].Zone != lighting.ZoneGeneral {
-			t.Fatalf("#205 renders exactly one 'general' zone, got %+v", st)
+		for _, z := range st.Zones {
+			if z.Zone == lighting.ZoneGeneral {
+				return z
+			}
 		}
-		return st.Zones[0]
+		t.Fatalf("no 'general' zone in %+v", st)
+		return lighting.ZoneState{}
 	}
 	tests := []struct {
 		ev        lighting.Event
@@ -195,6 +202,87 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 	}
 }
 
+// TestDevAmbianceTeamZones213 pins #213's addition to ambianceScene: one
+// dedicated zone per team named in ev.Teams, on top of the unaffected
+// "general" zone (hue-bridge.md §5.2/§9) — the driver-side routing
+// (zoneFor, internal/lighting/hue/driver.go) already existed before this
+// task; this is what actually feeds it.
+func TestDevAmbianceTeamZones213(t *testing.T) {
+	app := newTestApp(t)
+	wantTeamA := app.teamNameToRGB("TeamA")
+	wantTeamB := app.teamNameToRGB("TeamB")
+	if wantTeamA == wantTeamB {
+		t.Fatal("setup invalide : TeamA et TeamB doivent avoir des couleurs distinctes pour ce test")
+	}
+
+	zonesByName := func(ev lighting.Event) map[string]lighting.ZoneState {
+		st := app.ambianceScene(ev)
+		out := make(map[string]lighting.ZoneState, len(st.Zones))
+		for _, z := range st.Zones {
+			out[z.Zone] = z
+		}
+		return out
+	}
+
+	// No team concerned ⇒ general only, exactly as before #213.
+	for _, ev := range []lighting.Event{
+		{Kind: lighting.KindIdle}, {Kind: lighting.KindReady}, {Kind: lighting.KindRunning},
+		{Kind: lighting.KindPauseAll}, {Kind: lighting.KindReveal}, {Kind: lighting.KindEntracte},
+	} {
+		zones := zonesByName(ev)
+		if len(zones) != 1 {
+			t.Errorf("%s sans équipe : attendu 1 seule zone (general), got %+v", ev.Kind, zones)
+		}
+	}
+
+	// A single team concerned (BUZZ/TEAM_TURN/SCORE) ⇒ general (already
+	// carrying that team's colour, UseTeamColor) PLUS its own dedicated zone,
+	// same colour, same intensity as the scene.
+	for _, ev := range []lighting.Event{
+		{Kind: lighting.KindBuzz, Teams: []string{"TeamA"}},
+		{Kind: lighting.KindTeamTurn, Teams: []string{"TeamA"}},
+		{Kind: lighting.KindScore, Teams: []string{"TeamA"}},
+	} {
+		zones := zonesByName(ev)
+		general, teamZone := zones[lighting.ZoneGeneral], zones["TeamA"]
+		if len(zones) != 2 {
+			t.Fatalf("%s: attendu 2 zones (general + TeamA), got %+v", ev.Kind, zones)
+		}
+		if teamZone.Color != wantTeamA {
+			t.Errorf("%s: zone TeamA doit porter sa propre couleur, got %v want %v", ev.Kind, teamZone.Color, wantTeamA)
+		}
+		if teamZone.Color != general.Color || teamZone.Intensity != general.Intensity {
+			t.Errorf("%s: équipe unique concernée — zone TeamA et zone general doivent coïncider (même couleur/intensité), got team=%+v general=%+v", ev.Kind, teamZone, general)
+		}
+	}
+
+	// REVEAL with SEVERAL correct teams: general stays fixed green
+	// (unaffected — REVEAL is not UseTeamColor), each team gets its OWN
+	// colour in its OWN zone — never a shared "success" hue that would
+	// erase which team answered right.
+	zones := zonesByName(lighting.Event{Kind: lighting.KindReveal, Teams: []string{"TeamA", "TeamB"}})
+	if len(zones) != 3 {
+		t.Fatalf("REVEAL multi-équipe : attendu 3 zones (general + TeamA + TeamB), got %+v", zones)
+	}
+	if g := zones[lighting.ZoneGeneral]; g.Color != [3]int{0, 220, 60} || g.Intensity != 255 {
+		t.Errorf("REVEAL multi-équipe : general doit rester vert fixe (non affecté par #213), got %+v", g)
+	}
+	if zones["TeamA"].Color != wantTeamA || zones["TeamA"].Intensity != 255 {
+		t.Errorf("REVEAL multi-équipe : zone TeamA doit porter sa propre couleur à 255, got %+v", zones["TeamA"])
+	}
+	if zones["TeamB"].Color != wantTeamB || zones["TeamB"].Intensity != 255 {
+		t.Errorf("REVEAL multi-équipe : zone TeamB doit porter sa propre couleur à 255, got %+v", zones["TeamB"])
+	}
+
+	// A team-role light without a configured light, or an unnamed team
+	// (empty string, defensive) must never produce a zone: no "" entry, and
+	// duplicates collapse to one (dedup already exercised implicitly above).
+	zones = zonesByName(lighting.Event{Kind: lighting.KindReveal, Teams: []string{""}})
+	if len(zones) != 1 {
+		t.Errorf("Teams:[\"\"] ne doit produire aucune zone supplémentaire, got %+v", zones)
+	}
+}
+
 func TestDevAmbianceRegistryShape(t *testing.T) {
 	state, pulse, none := 0, 0, 0
 	for site, d := range ambianceSiteRegistry {
@@ -215,10 +303,13 @@ func TestDevAmbianceRegistryShape(t *testing.T) {
 			t.Errorf("%+v: a rendering-layer function can never emit ambiance (contract §1)", site)
 		}
 	}
-	// 21 sites in main.go collapse to 20 distinct (func, LED) pairs:
+	// 21 sites in main.go collapse to 20 distinct (func, LED) pairs, plus
+	// the T2.1 (#214/R1) fix's own site (onPhaseStarted → sendLEDSetAllEntracteOff,
+	// contract §10.5) and the T2.3 (#208) shutdown extinction site
+	// (stop → sendLEDSetAllEntracteOff, contract §10.4) — 16 state / 4 pulse / 5 none.
 	// handleFlipMemoryCard calls sendLEDSetAllBuzzers three times.
-	if state != 15 || pulse != 4 || none != 4 {
-		t.Fatalf("registry = %d state / %d pulse / %d none, want 15 / 4 / 4", state, pulse, none)
+	if state != 16 || pulse != 4 || none != 5 {
+		t.Fatalf("registry = %d state / %d pulse / %d none, want 16 / 4 / 5", state, pulse, none)
 	}
 }
 

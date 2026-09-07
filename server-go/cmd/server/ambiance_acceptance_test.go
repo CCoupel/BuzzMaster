@@ -349,13 +349,30 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	// qui compte pour CA4/l'intégration légère est que l'état FINALEMENT
 	// rendu, une fois le régime établi, corresponde à la table §8 — pas le
 	// nombre exact d'Apply intermédiaires.
+	// tw205GeneralZone isolates the "general" zone from a State — since #213
+	// (T2.2), a State concerning a team also carries that team's OWN zone
+	// (cmd/server/ambiance.go's ambianceScene), so this table's own
+	// assertions — about the general/room scene specifically, contract §8 —
+	// must look the zone up by name rather than assume it is the only one.
+	tw205GeneralZone := func(st lighting.State) (lighting.ZoneState, bool) {
+		for _, z := range st.Zones {
+			if z.Zone == lighting.ZoneGeneral {
+				return z, true
+			}
+		}
+		return lighting.ZoneState{}, false
+	}
 	tw205Step := func(t *testing.T, phase game.GamePhase, question *game.Question, bumpers map[string]*game.Bumper, wantColor [3]int, wantIntensity int) {
 		t.Helper()
 		tw205SetGame(t, app, phase, question, bumpers)
 		app.ambiance().NotifyState()
 		tw205WaitFor(t, 5*time.Second, func() bool {
 			last, ok := fake.Last()
-			return ok && len(last.Zones) == 1 && last.Zones[0].Color == wantColor && last.Zones[0].Intensity == wantIntensity
+			if !ok {
+				return false
+			}
+			z, ok := tw205GeneralZone(last)
+			return ok && z.Color == wantColor && z.Intensity == wantIntensity
 		})
 	}
 
@@ -400,7 +417,11 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 600*time.Millisecond)
 	tw205WaitFor(t, 5*time.Second, func() bool {
 		last, ok := fake.Last()
-		return ok && len(last.Zones) == 1 && last.Zones[0].Color == wantTeamA && last.Zones[0].Intensity == 255
+		if !ok {
+			return false
+		}
+		z, ok := tw205GeneralZone(last)
+		return ok && z.Color == wantTeamA && z.Intensity == 255
 	})
 	// Retombe seul sur son échéance, sans nouvelle notification externe —
 	// l'état vivant est toujours PhaseRevealed avec les mêmes réponses, donc
@@ -408,7 +429,11 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	// (qui n'arrive qu'à l'étape suivante).
 	tw205WaitFor(t, 5*time.Second, func() bool {
 		last, ok := fake.Last()
-		return ok && len(last.Zones) == 1 && last.Zones[0].Color == [3]int{0, 220, 60} && last.Zones[0].Intensity == 255
+		if !ok {
+			return false
+		}
+		z, ok := tw205GeneralZone(last)
+		return ok && z.Color == [3]int{0, 220, 60} && z.Intensity == 255
 	})
 
 	// STOP

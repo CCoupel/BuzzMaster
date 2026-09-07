@@ -62,6 +62,18 @@ type App struct {
 	// hueDriver is the live Hue driver behind a.ambiance() (nil when disabled),
 	// read by the /api/lighting/* handlers without I/O (#207).
 	hueDriver atomic.Pointer[hue.Driver]
+	// lightingModeState is the #208 manual override on the "general" zone
+	// (contract lighting.md §10.1): AUTO (zero value, contract §10.1.1 point
+	// 5) follows the game; ON/OFF force it indefinitely. Server-owned state,
+	// never the browser's, never persisted. See cmd/server/ambiance_override.go.
+	lightingModeState atomic.Value // holds lightingMode
+	// lightingFlashOn/-PhaseOn are the Flash bascule (§10.1.2): -On is
+	// whether Flash is engaged at all, -PhaseOn is the current blink phase
+	// (toggled by runLightingFlash). lightingFlashCancel stops that
+	// goroutine; guarded by ambianceMu, reused rather than a fourth mutex.
+	lightingFlashOn      atomic.Bool
+	lightingFlashPhaseOn atomic.Bool
+	lightingFlashCancel  context.CancelFunc
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).
@@ -532,6 +544,9 @@ func (a *App) setupCallbacks() {
 		// silently subsumed into (and indistinguishable from) the
 		// phase-change UPDATE that follows.
 		a.ardoiseCoalescer.Flush()
+		if phase == game.PhaseStarted {
+			a.onPhaseStarted()
+		}
 		a.broadcastGameState(string(phase))
 		a.broadcastQuestions() // Sync question status with phase
 	}
@@ -1104,6 +1119,20 @@ func (a *App) start() error {
 }
 
 func (a *App) stop() {
+	// #208 (T2.3, contract §10.4): extinction totale des ampoules Hue et des
+	// LED buzzers, AVANT a.cancelCtx() — a.ctx porte le client HTTP vers le
+	// pont ET les hubs WebSocket buzzers, donc une extinction émise après
+	// cancelCtx() serait annulée à l'instant même où elle part (voir la
+	// doc de shutdownExtinguishHueLighting, cmd/server/ambiance_override.go).
+	a.shutdownExtinguishHueLighting()
+	// Buzzer LEDs off — reuses the ENTRACTE OFF payload/function (T2.1) for
+	// its effect, not its name: same "every buzzer dark" outcome, one
+	// function, best-effort (a disconnected buzzer simply misses it). Called
+	// directly here (not from shutdownExtinguishHueLighting) so this
+	// sendLEDSet* site lives in main.go, where the AST exhaustiveness test
+	// (contract §7) actually looks for it — see ambianceSiteRegistry below.
+	a.sendLEDSetAllEntracteOff()
+
 	// Cancel the application context — stops the AckManager goroutine and any other ctx-aware components.
 	if a.cancelCtx != nil {
 		a.cancelCtx()
@@ -3049,6 +3078,33 @@ func (a *App) handleEntracteSet(msg *protocol.Message) {
 	}
 
 	a.broadcastUpdate()
+}
+
+// onPhaseStarted runs the extra bookkeeping tied to the engine actually
+// ENTERING PhaseStarted — called from OnStateChange (setupCallbacks) for
+// every path that lands there: actualStart() at the end of the countdown,
+// StartImmediate() (tests), and any other engine transition into STARTED.
+//
+// Bug R1 (T2.1, contract lighting.md §10.5): broadcastStart() — the only
+// NotifyState() site of the start sequence (contract §6) — fires only when
+// the countdown BEGINS (handleStart, on entering PhaseCountdown). Nothing
+// notified the room when the countdown actually ENDS, a real game
+// transition (READY/RUNNING scene → RUNNING/TEAM_TURN, or ENTRACTE below).
+//
+// Bug #2 (asymmetry, same task): a programmed ENTRACTE question (#214)
+// raises GameState.Entracte from INSIDE actualStart()/StartImmediate()
+// (startEntracteQuestionUnsafe, internal/game/engine.go) — with no LED call
+// of its own, so this transition is structurally invisible to the AST
+// exhaustiveness test (contract §10.5, "un événement qui change la salle
+// sans changer une seule LED de buzzer lui est structurellement
+// invisible"). The manual voie (ENTRACTE_SET, handleEntracteSet above)
+// explicitly turns buzzer LEDs off on activation; the programmed voie must
+// go through the exact SAME function for the two voies to stay symmetric.
+func (a *App) onPhaseStarted() {
+	if a.engine.IsEntracte() {
+		a.sendLEDSetAllEntracteOff()
+	}
+	a.ambiance().NotifyState()
 }
 
 // sendLEDSetAllEntracteOff turns off every non-VPlayer buzzer's LED (B5,

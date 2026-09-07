@@ -78,6 +78,7 @@ var ambianceSiteRegistry = map[ambianceSite]ambianceDecision{
 	{"handleEntracteSet", "sendLEDSetAllEntracteOff"}: {ambianceNotifyState, "ENTRACTE on"},
 	{"handleEntracteSet", "sendLEDSetAllBuzzers"}:     {ambianceNotifyState, "ENTRACTE off"},
 	{"handleFullUpdate", "sendLEDSetAllBuzzers"}:      {ambianceNotifyState, "teams/bumpers edited — team colours may have changed"},
+	{"onPhaseStarted", "sendLEDSetAllEntracteOff"}:    {ambianceNotifyState, "ENTRACTE programmée (#214) — actualStart()/StartImmediate()→STARTED, symétrie avec handleEntracteSet (T2.1, contract §10.5)"},
 
 	// --- Event layer: pulses (NotifyPulse KindScore, 4800 ms) ---
 	{"handlePoints", "sendLEDSetComet"}:       {ambianceNotifyPulse, "points awarded — credited team"},
@@ -90,6 +91,7 @@ var ambianceSiteRegistry = map[ambianceSite]ambianceDecision{
 	{"sendLEDSetComet", "sendLEDSetAllBuzzers"}:     {ambianceNoAmbiance, "AfterFunc +4.8 s restore — the SCORE pulse deadline already ends the scene at the same instant"},
 	{"broadcastLEDSet", "sendLEDSet"}:               {ambianceNoAmbiance, "DEAD CODE (audit #132, zero call sites) — decision to revisit if ever reactivated"},
 	{"sendLEDSetToTeam", "sendLEDSet"}:              {ambianceNoAmbiance, "DEAD CODE (audit #132, zero call sites) — decision to revisit if ever reactivated"},
+	{"stop", "sendLEDSetAllEntracteOff"}:            {ambianceNoAmbiance, "server shutdown (#208, contract §10.4) — the process is exiting, nothing left to notify; the Hue side is switched off directly via LightingDriver().Apply() (shutdownExtinguishHueLighting), not through NotifyState()"},
 }
 
 // ---------------------------------------------------------------------------
@@ -386,12 +388,33 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 	return ambianceSceneIdle
 }
 
-// ambianceScene renders an Event into the single "general" zone (#205).
-// Team colours go through the SAME palette as the buzzers (teamNameToRGB):
-// never a second palette (contract §8).
+// ambianceScene renders an Event into the "general" zone (#205) plus, since
+// #213, one additional zone per team named in ev.Teams. Team colours go
+// through the SAME palette as the buzzers (teamNameToRGB): never a second
+// palette (contract §8, hue-bridge.md §9).
+//
+// The "general" zone's own colour/intensity is computed exactly as before
+// #213 (unaffected by the per-team zones added below): for a
+// UseTeamColor scene (BUZZ/TEAM_TURN/SCORE) it already carries the
+// PRINCIPAL team's colour (ev.Teams[0]) — this is what makes the
+// degradation rules of hue-bridge.md §5.7 fall out for free, with no
+// special-casing here:
+//   - a team with no dedicated light never repaints "general" (its own zone
+//     is simply never picked up by any light — hue-bridge.md §5.2's
+//     zoneFor, a non-event, not an error);
+//   - no team-role light configured at all ⇒ every light is "general" ⇒
+//     the room alone carries the active team's colour, exactly the
+//     pre-#213 behaviour (lighting.md §6.3).
+//
+// Every zone named in ev.Teams gets its OWN dedicated zone lit in THAT
+// team's own colour (not the scene's fixed colour, e.g. REVEAL's green/red)
+// — so a REVEAL with several correct teams lights each of their own
+// ampoules in their own identifying colour, never a shared "success" hue
+// that would erase which team is which.
 func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 	def := ambianceSceneFor(ev)
 	color := def.Color
+	intensity := def.Intensity
 	if def.UseTeamColor {
 		team := ""
 		if len(ev.Teams) > 0 {
@@ -399,9 +422,26 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 		}
 		color = a.teamNameToRGB(team)
 	}
-	return lighting.State{Zones: []lighting.ZoneState{{
+	// #208 (contract §10.1): the manual ON/AUTO/OFF selector and Flash act
+	// ONLY on this "general" zone, applied last so they always win over the
+	// auto-derived scene — team zones below are never touched.
+	color, intensity = a.lightingOverrideGeneral(color, intensity)
+	zones := []lighting.ZoneState{{
 		Zone:      lighting.ZoneGeneral,
 		Color:     color,
-		Intensity: def.Intensity,
-	}}}
+		Intensity: intensity,
+	}}
+	seen := map[string]bool{lighting.ZoneGeneral: true} // defensive: a team literally named "general" must never shadow it
+	for _, team := range ev.Teams {
+		if team == "" || seen[team] {
+			continue
+		}
+		seen[team] = true
+		zones = append(zones, lighting.ZoneState{
+			Zone:      team,
+			Color:     a.teamNameToRGB(team),
+			Intensity: def.Intensity,
+		})
+	}
+	return lighting.State{Zones: zones}
 }
