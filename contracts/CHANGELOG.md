@@ -2,6 +2,37 @@
 
 ---
 
+## [20260907c] — Éclairage : les commandes admin sont des overrides à état, pas des gestes (#208)
+
+> **Cette entrée renverse la décision de tenue prise le matin même** (entrée `[20260907]`, point
+> « priorité »). Précision utilisateur de seconde passe. Signalée explicitement plutôt qu'appliquée
+> en silence : les maquettes et procédures rédigées entre-temps sont bâties sur la règle abandonnée.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — All ON / All OFF / Flash ne sont plus des **gestes
+  ponctuels sans mémoire recouverts par le prochain événement de jeu**, mais **trois bascules à
+  état, mutuellement exclusives** (un seul override actif à la fois). Tant qu'un override est
+  actif, il **s'impose** : les événements de jeu ne le recouvrent pas. Les **trois** portent
+  désormais un état visuel actif — la distinction « seul Flash a un état » de l'entrée précédente
+  est caduque.
+- **[NEW]** `contracts/lighting.md` §10.1.1 — sémantique de **relâche** : désactiver l'override
+  actif **n'éteint pas**, il **rend l'éclairage au jeu** par **re-dérivation depuis l'état vivant**
+  — **le même code que le §10.3** (resync au retour du pont), jamais une mémorisation de la scène
+  d'avant. Hors partie, la relâche donne `KindIdle` (blanc chaud praticable) : **relâcher n'éteint
+  jamais la salle**. L'override est un état **serveur** (deux admins voient le même, un onglet
+  fermé n'y change rien), **non persistant** au redémarrage.
+- **[CHANGED]** `contracts/lighting.md` §10.3 — un override actif au retour du pont est réappliqué
+  **à la place** de la scène de jeu : un seul chemin de code, « ce que l'éclairage doit montrer
+  maintenant ».
+
+⚠️ **Conséquence assumée, écrite au contrat** : un override tient **indéfiniment** jusqu'à relâche
+explicite ou arrêt du serveur. Un « All OFF » oublié laisse la salle éteinte et **aucun événement
+de jeu ne la rallumera**. C'est le corollaire direct du choix de la tenue ; il est compensé par
+l'état visuel permanent et le badge de la page.
+
+**Aucun BREAKING**, aucun code écrit à ce stade.
+
+---
+
 ## [20260907b] — Éclairage : les commandes manuelles passent de `/anim` à `/admin` (#208)
 
 > **Révision de périmètre**, même jour que l'entrée précédente. Correction utilisateur au GATE 2 :

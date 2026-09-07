@@ -457,7 +457,7 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 > explicitement ouvertes sont tranchées ici par décision utilisateur du 2026-09-07
 > (`_work/handoff/gate1-decisions-v10-20260907.md`). Elles ne sont plus des choix d'implémentation.
 
-### 10.1 Commandes manuelles d'administration ↔ scènes automatiques
+### 10.1 Overrides manuels d'administration ↔ scènes automatiques
 
 > **Révision de périmètre du 2026-09-07.** Ces commandes ont d'abord été cadrées comme une
 > *conduite de spectacle* sur la tablette `/anim`. **Elles n'y ont jamais eu leur place** : rien
@@ -466,50 +466,67 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 > `/admin/ambiance` (`AmbiancePage.jsx`, #207), aux côtés de la sélection des ampoules.
 > L'association effet↔événement configurable par l'utilisateur reste renvoyée à #210 (v10.1).
 
-Trois commandes, et **seulement** trois :
+> ⚠️ **Précision utilisateur du 2026-09-07 (seconde passe) — elle REMPLACE la décision de tenue
+> prise au GATE précédent.** La première formulation faisait de ces commandes des gestes ponctuels
+> sans mémoire, recouverts par le prochain événement de jeu. **Ce sont en réalité des bascules à
+> état qui tiennent jusqu'à leur relâche.** Le §10.1 ci-dessous est la version qui fait foi ; toute
+> lecture antérieure (maquettes, procédures, diagramme de priorité rédigés avant cette date) est
+> périmée sur ce point.
 
-| Commande | Effet | État visuel |
-|---|---|---|
-| **All ON** | toutes les ampoules pilotées à pleine intensité, blanc neutre | aucun |
-| **All OFF** | toutes les ampoules pilotées à `{"on": false}` | aucun |
-| **Flash** | **bascule** : clignotement jusqu'à extinction explicite | **actif pendant le clignotement** |
+#### Les trois overrides
 
-**Règle de priorité — inchangée par le déplacement d'écran.** Une commande manuelle est **écrasée
-par le premier événement de jeu qui suit**, quel qu'il soit, y compris mineur (un buzz, une
-rotation d'équipe). Il n'existe **aucun mécanisme de tenue** : ni verrou, ni minuterie, ni priorité
-conservée.
+Trois bascules, **mutuellement exclusives** — au plus **un** override actif à la fois :
 
-Formulation opérationnelle : les commandes manuelles **écrivent dans le même canal** que les scènes
-automatiques, **sans état propre**. Le prochain `NotifyState` les recouvre naturellement.
-**C'est l'absence de mécanisme qui EST le mécanisme** — ne pas introduire de champ « source de la
-dernière commande » ni de drapeau « manuel en cours » : ils n'auraient aucun lecteur.
+| Override | Effet tant qu'il est actif |
+|---|---|
+| **All ON** | toutes les ampoules pilotées à pleine intensité, blanc neutre |
+| **All OFF** | toutes les ampoules pilotées à `{"on": false}` |
+| **Flash** | clignotement de toutes les ampoules pilotées |
 
-Le déplacement vers `/admin` **renforce** cette règle au lieu de la fragiliser :
+**Les trois portent un état visuel actif** : l'opérateur voit en permanence lequel est engagé. Un
+override est une situation qui dure, pas un geste — le montrer **décrit une réalité** au lieu de
+l'inventer.
 
-- **Hors partie** — l'usage normal de cet écran — aucun événement de jeu ne survient : rien ne
-  recouvre la commande, l'outil se comporte exactement comme l'opérateur l'attend.
-- **Pendant une partie** — cas anormal, l'écran n'étant pas destiné à rester ouvert en séance — le
-  jeu reprend la main au premier événement. C'est le comportement souhaitable : la salle suit le
-  jeu, jamais un écran de configuration oublié dans un onglet.
+#### 10.1.1 Tenue, exclusion mutuelle et relâche — normatif
 
-**Il n'y a donc aucun arbitrage de priorité à implémenter.**
+1. **Tenue.** Tant qu'un override est actif, il **s'impose à l'éclairage** : les événements de jeu
+   ne le recouvrent pas. C'est le sens même du mot *override*.
+2. **Exclusion mutuelle.** Activer un override **relâche automatiquement** celui qui l'était ; il
+   n'est jamais nécessaire de relâcher d'abord. Deux overrides ne sont jamais actifs ensemble.
+3. **Relâche — le point à ne pas se tromper.** Désactiver l'override actif **ne signifie pas
+   éteindre**. La relâche **rend l'éclairage au jeu** : la scène est **re-dérivée depuis l'état de
+   jeu vivant** et réappliquée immédiatement.
+   > C'est **exactement** le mécanisme du §10.3 (resynchronisation au retour du pont), et il doit
+   > être **le même code**. Aucune mémorisation de « la scène d'avant l'override » : rien n'est
+   > sauvegardé, tout est re-dérivé — règle §4.1. Sauvegarder puis restaurer serait à la fois plus
+   > coûteux et faux, la partie ayant pu avancer pendant l'override.
+4. **Relâche hors partie.** Si aucune partie n'est en cours, la re-dérivation donne `KindIdle`
+   (blanc chaud praticable, §8) — jamais l'obscurité. **Relâcher n'éteint jamais la salle.**
+5. **Propriété serveur.** L'override actif est un état **du serveur**, jamais du navigateur. Deux
+   admins sur deux postes voient le même. Un onglet fermé ne change rien à l'override en cours.
+6. **Pas de persistance.** L'override ne survit pas à un redémarrage du serveur : au démarrage,
+   aucun override n'est actif. Il n'est écrit dans aucun fichier de configuration.
+7. **Interaction avec le pont.** Si le pont tombe puis revient pendant qu'un override est actif, la
+   resynchronisation du §10.3 réapplique **l'override**, pas la scène de jeu — l'override est l'état
+   courant de l'éclairage tant qu'il n'est pas relâché.
+8. **Arrêt du serveur.** L'extinction totale du §10.4 s'applique quel que soit l'override actif ;
+   elle n'a pas à le relâcher d'abord.
 
-#### 10.1.1 « Flash » est la seule commande à porter un état — normatif
+> ⚠️ **Conséquence opérationnelle à assumer.** Un override tient **indéfiniment** jusqu'à sa
+> relâche explicite ou l'arrêt du serveur. Un opérateur qui laisse « All OFF » engagé et ferme son
+> onglet laisse la salle éteinte, et **aucun événement de jeu ne la rallumera**. C'est le prix
+> assumé d'un override qui mérite son nom ; il est payé par l'état visuel permanent (point 5) et par
+> le badge de la page, qui rendent la situation lisible dès qu'un admin rouvre l'écran. Ce risque
+> n'existait pas dans la formulation « gestes ponctuels » abandonnée ci-dessus — il est le
+> corollaire direct du choix de la tenue.
 
-All ON et All OFF écrivent une valeur et rendent la main : il n'y a rien à afficher après, et
-**aucun bouton ne doit rester surligné**. Flash en bascule est une **activité en cours** : ne pas
-la montrer priverait l'opérateur du moyen de savoir si le clignotement vient de son clic. C'est
-l'unique cas où un état visuel **décrit une réalité** au lieu de l'inventer.
+#### Implémentation du clignotement (Flash)
 
-Contraintes d'implémentation :
-1. Le clignotement est **porté par le pilote côté serveur**, jamais par le navigateur — un onglet
-   fermé ne doit pas laisser les ampoules clignoter indéfiniment.
-2. Il réutilise la garde d'**opération unique en vol** de #207 (`lightingBusy`), sans en créer une
-   seconde.
-3. Il s'annule sur **trois** événements : bascule sur OFF · **tout événement de jeu** (la règle
-   ci-dessus s'applique sans exception) · arrêt du serveur (§10.4).
-4. `POST /api/lighting/test` (#207) reste le **flash ponctuel** de test d'une ampoule nommée. La
-   bascule est un mode distinct et **ne le remplace pas**.
+- Le clignotement est **porté par le pilote côté serveur**, jamais par le navigateur.
+- Il réutilise la garde d'**opération unique en vol** de #207 (`lightingBusy`), sans en créer une
+  seconde.
+- `POST /api/lighting/test` (#207) reste le **flash ponctuel** de test d'une ampoule nommée : c'est
+  un geste sans état, distinct de l'override Flash, et il n'est **pas** remplacé par lui.
 
 #### 10.1.2 Canal — HTTP REST, jamais WebSocket
 
@@ -539,6 +556,11 @@ Jamais un état neutre, jamais la dernière scène connue avant la coupure.
 > La resynchronisation se réduit donc à **déclencher un `NotifyState` sur la transition de
 > reconnexion** du pilote. Aucun rejeu, aucun instantané à conserver. Si l'implémentation devient
 > plus compliquée que cela, c'est le signe qu'on s'écarte du contrat.
+
+**Si un override du §10.1 est actif au retour du pont**, c'est **l'override** qui est réappliqué,
+pas la scène de jeu : il est l'état courant de l'éclairage tant qu'il n'est pas relâché. La
+resynchronisation réapplique donc « ce que l'éclairage doit montrer maintenant », dont l'override
+fait partie — même formulation, même code, un seul chemin.
 
 ### 10.4 Extinction à l'arrêt du serveur — et le piège d'ordonnancement
 
