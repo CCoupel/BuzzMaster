@@ -610,6 +610,63 @@ func TestDevChronoPulse_SuppressedBySelector(t *testing.T) {
 	t.Fatal("mode OFF never forced 'general' off over the chrono-pulse")
 }
 
+// TestDevChronoPulse_SuppressedBySelector_ON is the code-reviewer-flagged
+// (v10-3lots, MINEUR 2) companion to the OFF test above — defense in depth,
+// not a functional gap: lightingOverrideGeneral treats ON and OFF as two
+// structurally symmetric branches of the SAME switch (only the forced
+// value differs, never the bypass mechanism), so OFF already proves the
+// mechanism works for both. This test guards specifically against a FUTURE
+// regression that would give ON its own special-cased path no longer
+// running through lightingOverrideGeneral, which the OFF test alone could
+// not catch.
+//
+// Uses a real, NON-white theme (GEOGRAPHY, blue) — unlike the OFF test,
+// ON's forced colour (lightingOnColor, white/255) would otherwise coincide
+// with the pulse's own tier-1 high-phase value in a themeless fixture
+// (white, same as TestDevChronoPulse_SuppressedBySelector's own doc
+// comment explains for why THAT test uses OFF), leaving a stale pulse
+// sample indistinguishable from a genuinely forced one.
+func TestDevChronoPulse_SuppressedBySelector_ON(t *testing.T) {
+	app := newTestApp(t)
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+	fake := lighting.NewFakeDriver()
+	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go app.ambiance().Start(ctx)
+	go app.runChronoPulse(ctx)
+
+	geography := [3]int{0x3b, 0x82, 0xf6} // #3b82f6 (hardcodedCategories) — deliberately NOT white, unlike lightingOnColor
+	qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM, Category: game.CategoryGeography}
+	app.engine.Ready(qcm.ID, qcm)
+	app.engine.StartImmediate(15)
+	defer app.engine.Stop()
+	waitForChronoPulseTier(t, app, 1)
+	if got := app.ambianceThemeColor(); got != geography {
+		t.Fatalf("setup invalide : thème attendu GEOGRAPHY %v, got %v", geography, got)
+	}
+
+	app.setLightingMode(lightingModeOn)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		last, ok := fake.Last()
+		if ok && len(last.Zones) > 0 {
+			z := last.Zones[0]
+			if z.Color == lightingOnColor && z.Intensity == lightingOnIntensity {
+				if z.TransitionMs != 0 {
+					t.Fatalf("a forced ON must snap, never fade (chrono-pulse's own transitionMs must not leak through), got %+v", z)
+				}
+				return
+			}
+			// Anything else (the theme colour, amber, red — a pulse phase
+			// sample that predates the mode change) is simply not yet the
+			// settled forced state: keep polling rather than fail early.
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("mode ON never forced 'general' to its own scene over the chrono-pulse")
+}
+
 // #207 — the App builds/hot-swaps the Hue driver from config.json's
 // `lighting` section: disabled ⇒ no writer, no driver; enabled at runtime ⇒
 // writer + driver + goroutine; disabled again ⇒ driver nil, writer idles.

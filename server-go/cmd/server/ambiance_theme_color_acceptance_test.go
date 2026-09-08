@@ -186,4 +186,3 @@ func TestThemeColor_Rafale_ThemeFollowsEachDrawnQuestion_NotTheRoundsOwnCategory
 		t.Fatalf("setup insuffisant : attendu au moins un tirage HISTORY ET un tirage SCIENCE sur 8 tirages, got history=%v science=%v", sawHistory, sawScience)
 	}
 }
-

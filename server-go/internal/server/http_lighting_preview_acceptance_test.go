@@ -164,7 +164,7 @@ func TestPreview_UnreachableBridge_ReturnsProperErrorTaxonomy(t *testing.T) {
 
 	d, err := hue.New(hue.Config{
 		BridgeIP: deadURL, BridgeID: "fffe0000deadbeef", APIKey: "k",
-		Lights: []hue.LightSpec{{Name: "BuzzHue1"}},
+		Lights:  []hue.LightSpec{{Name: "BuzzHue1"}},
 		Timeout: 300 * time.Millisecond,
 		FindBridge: func(context.Context, string, time.Duration) (hue.Bridge, bool, error) {
 			return hue.Bridge{}, false, nil
