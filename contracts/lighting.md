@@ -441,9 +441,12 @@ que les buzzers » :
 | Hors partie, `PREPARE`, `READY`, `COUNTDOWN` | **pleine** — comme un buzzer, `SOLID` 255 |
 | `STARTED` / `PAUSED` / `REVEALED`, équipe **distinguée** par l'événement | **pleine** |
 | `STARTED` / `PAUSED` / `REVEALED`, équipe **non distinguée** | **atténuée** — `dimIntensityFor()`, la fonction **déjà employée par les buzzers**, jamais un second seuil |
+| `ENTRACTE` (mode transverse) | **pleine, toujours** — l'entracte n'est jamais un des trois phases « jeu actif » ci-dessus, quelle que soit l'équipe |
 
 > Un buzzer n'est atténué **que** pendant le jeu actif. Hors partie il est à pleine intensité — la
-> salle suit la même règle, sans quoi les deux s'atténueraient à contretemps.
+> salle suit la même règle, sans quoi les deux s'atténueraient à contretemps. `ENTRACTE`, mode
+> transverse testé avant la phase (§6.2), n'appartient à aucune des trois lignes « jeu actif » : il
+> suit la même règle que « hors partie » plutôt que d'exiger une quatrième case à part.
 
 **Impulsion SCORE — clignotement or, proportionnel aux points :**
 

@@ -224,8 +224,17 @@ func (a *App) startScoreFlash(team string, points int) {
 	ctx, cancel := context.WithCancel(parent)
 	a.scoreFlashCancel = cancel
 	epoch := a.scoreFlashEpoch.Add(1)
-	a.ambianceMu.Unlock()
+	// code-reviewer (Batch C, MINEUR 1): Store belongs INSIDE the critical
+	// section, not after Unlock — two SCORE events for two different teams
+	// arriving a few instructions apart (engine callbacks are not
+	// serialised, contract lighting.md §5) could otherwise interleave their
+	// two Store calls out of order relative to their two critical sections,
+	// leaving scoreFlashTeam naming the STALE team even though the newer
+	// (higher-epoch) goroutine is the one actually running. Publishing the
+	// team name atomically with cancel/epoch under the same lock makes the
+	// whole start sequence indivisible with respect to a concurrent call.
 	a.scoreFlashTeam.Store(team)
+	a.ambianceMu.Unlock()
 	go a.runScoreFlash(ctx, cycles, epoch)
 }
 
@@ -256,10 +265,18 @@ func (a *App) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
 		case <-time.After(lightingFlashOffPhase):
 		}
 	}
+	// Same critical section as startScoreFlash's own team publication (code-
+	// reviewer, Batch C, MINEUR 1): checking scoreFlashEpoch and clearing
+	// scoreFlashTeam must be atomic with respect to a brand new
+	// startScoreFlash call landing in the narrow window between the check
+	// and the clear — otherwise this goroutine's natural end-of-run could
+	// wipe out a newer flicker's just-published team name.
+	a.ambianceMu.Lock()
 	if a.scoreFlashEpoch.Load() == epoch {
 		a.scoreFlashTeam.Store("")
-		a.ambiance().NotifyState()
 	}
+	a.ambianceMu.Unlock()
+	a.ambiance().NotifyState() // harmless even if a newer flicker is now live: always re-derives from current state, never buffers (contract §4.1)
 }
 
 // ---------------------------------------------------------------------------
