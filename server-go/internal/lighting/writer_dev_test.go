@@ -89,7 +89,7 @@ func sceneOf(ev Event) State {
 func TestDevNilAndDisabledWriterAreNoOps(t *testing.T) {
 	var nilW *Writer
 	nilW.NotifyState()
-	nilW.NotifyPulse(KindScore, []string{"A"}, time.Second)
+	nilW.NotifyPulse(KindScore, []string{"A"}, 3, time.Second)
 	nilW.Start(context.Background()) // must return immediately
 	if nilW.Enabled() {
 		t.Fatal("nil writer must not be enabled")
@@ -186,7 +186,7 @@ func TestDevPulseRendersThenFallsBack(t *testing.T) {
 	defer cancel()
 	go w.Start(ctx)
 
-	w.NotifyPulse(KindScore, []string{"TeamA"}, ScorePulseDuration)
+	w.NotifyPulse(KindScore, []string{"TeamA"}, 3, ScorePulseDuration)
 	waitFor(t, func() bool { return drv.Count() == 1 }, "pulse applied")
 	if last, _ := drv.Last(); last.Zones[0].Color != [3]int{len(KindScore), 1, 0} {
 		t.Fatalf("pulse scene not rendered: %+v", last)
@@ -219,7 +219,7 @@ func TestDevNotifyNeverBlocksWhileApplyIsStuck(t *testing.T) {
 	go func() {
 		for i := 0; i < 1000; i++ {
 			w.NotifyState()
-			w.NotifyPulse(KindScore, []string{"X"}, time.Second)
+			w.NotifyPulse(KindScore, []string{"X"}, 3, time.Second)
 		}
 		close(done)
 	}()
@@ -245,7 +245,7 @@ func TestDevConcurrentNotifiesRaceFree(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < 500; i++ {
 				if (i+g)%3 == 0 {
-					w.NotifyPulse(KindScore, []string{"T"}, 50*time.Millisecond)
+					w.NotifyPulse(KindScore, []string{"T"}, 3, 50*time.Millisecond)
 				} else {
 					w.NotifyState()
 				}
@@ -320,7 +320,7 @@ func TestDevSetDriverHotSwap(t *testing.T) {
 		t.Fatal("SetDriver(nil) must disable")
 	}
 	w.NotifyState()
-	w.NotifyPulse(KindScore, []string{"A"}, time.Second)
+	w.NotifyPulse(KindScore, []string{"A"}, 3, time.Second)
 	time.Sleep(20 * time.Millisecond)
 	if first.Count() != firstCount || second.Count() != 2 {
 		t.Fatalf("disabled writer must not apply: first=%d second=%d", first.Count(), second.Count())

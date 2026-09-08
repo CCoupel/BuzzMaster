@@ -45,6 +45,7 @@ type Config struct {
 type pulse struct {
 	kind     EventKind
 	teams    []string
+	points   int // Batch C, contract §2.4 — carried into the rendered Event, 0 outside SCORE
 	deadline time.Time
 }
 
@@ -210,8 +211,10 @@ func (w *Writer) NotifyState() {
 
 // NotifyPulse registers a non-derivable event (SCORE) rendered for d, then
 // the room falls back to the derived state on its own. Last pulse wins.
-// NEVER blocks; safe on a nil or disabled writer.
-func (w *Writer) NotifyPulse(kind EventKind, teams []string, d time.Duration) {
+// NEVER blocks; safe on a nil or disabled writer. points (contract §2.4) is
+// carried into the rendered Event's Points field — 0 for anything that is
+// not a score celebration.
+func (w *Writer) NotifyPulse(kind EventKind, teams []string, points int, d time.Duration) {
 	if w == nil {
 		return
 	}
@@ -220,7 +223,7 @@ func (w *Writer) NotifyPulse(kind EventKind, teams []string, d time.Duration) {
 		w.mu.Unlock()
 		return
 	}
-	w.pulse = &pulse{kind: kind, teams: append([]string(nil), teams...), deadline: w.now().Add(d)}
+	w.pulse = &pulse{kind: kind, teams: append([]string(nil), teams...), points: points, deadline: w.now().Add(d)}
 	w.refreshDue = true
 	w.mu.Unlock()
 	w.countNotify()
@@ -302,7 +305,7 @@ func (w *Writer) drain(ctx context.Context) {
 		// Outside the lock: derive from live state (or render the pulse).
 		var ev Event
 		if p != nil {
-			ev = Event{Kind: p.kind, Teams: append([]string(nil), p.teams...)}
+			ev = Event{Kind: p.kind, Teams: append([]string(nil), p.teams...), Points: p.points}
 		} else {
 			ev = w.derive()
 		}

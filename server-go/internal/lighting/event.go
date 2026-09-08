@@ -32,9 +32,15 @@ const (
 // Event is one ambiance event. Teams holds team NAMES (game.Team has no ID —
 // contract §2.2), first = principal; empty = no team concerned. It is a slice
 // because a QCM REVEAL concerns several teams at once.
+//
+// Points (Batch C, contract §2.4) is the number of points a SCORE pulse
+// celebrates — 0 for every other Kind, and 0 is also a valid (if inert)
+// value for a SCORE event that somehow carries none: cmd/server/ambiance.go
+// clamps it to [1, 6] before using it, never this package.
 type Event struct {
-	Kind  EventKind
-	Teams []string
+	Kind   EventKind
+	Teams  []string
+	Points int
 }
 
 // State is the desired lighting state at a given instant. In #205 there is

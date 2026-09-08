@@ -118,7 +118,7 @@ func TestCA2_NilWriter_NoGoroutineNoDriverCall(t *testing.T) {
 
 	var w *Writer
 	w.NotifyState()
-	w.NotifyPulse(KindScore, []string{"TeamA"}, time.Second)
+	w.NotifyPulse(KindScore, []string{"TeamA"}, 3, time.Second)
 	w.Start(context.Background()) // must return immediately, no goroutine spawned by the caller either
 	if w.Enabled() {
 		t.Fatal("un Writer nil ne doit jamais être considéré comme activé")
@@ -154,7 +154,7 @@ func TestCA2_DisabledWriter_NoGoroutineNoDriverCall(t *testing.T) {
 	}
 
 	w.NotifyState()
-	w.NotifyPulse(KindScore, []string{"TeamA"}, time.Second)
+	w.NotifyPulse(KindScore, []string{"TeamA"}, 3, time.Second)
 
 	runtime.Gosched()
 	time.Sleep(5 * time.Millisecond) // laisse une éventuelle goroutine fautive apparaître avant de mesurer
@@ -176,7 +176,7 @@ func TestCA2_ExplicitlyEnabledButNeverStarted_DriverNeverCalled(t *testing.T) {
 		t.Fatal("setup invalide pour ce test : le Writer doit être activé")
 	}
 	w.NotifyState()
-	w.NotifyPulse(KindScore, []string{"TeamA"}, time.Millisecond)
+	w.NotifyPulse(KindScore, []string{"TeamA"}, 3, time.Millisecond)
 	time.Sleep(5 * time.Millisecond)
 	// L'absence de panique de twlNeverCalledDriver EST l'assertion.
 }
@@ -256,7 +256,7 @@ func TestCA5_ConcurrentNotifyStateAndPulse_RaceFree(t *testing.T) {
 				if (i+g)%2 == 0 {
 					w.NotifyState()
 				} else {
-					w.NotifyPulse(KindScore, []string{"TeamA"}, time.Millisecond)
+					w.NotifyPulse(KindScore, []string{"TeamA"}, 3, time.Millisecond)
 				}
 			}
 		}(g)
@@ -300,7 +300,7 @@ func TestPulseTakesPrecedenceOverConcurrentStateNotify(t *testing.T) {
 	go w.Start(ctx)
 
 	// Un pulse est en cours de rendu (Apply bloqué par la porte).
-	w.NotifyPulse(KindScore, []string{"TeamA"}, time.Hour) // longue échéance : ne doit pas expirer pendant ce test
+	w.NotifyPulse(KindScore, []string{"TeamA"}, 3, time.Hour) // longue échéance : ne doit pas expirer pendant ce test
 	twlWaitFor(t, time.Second, func() bool { return true })
 	time.Sleep(5 * time.Millisecond) // laisse drain() entrer dans Apply (bloqué sur la porte)
 
@@ -351,7 +351,7 @@ func TestPulseExpiry_FallsBackToLiveDerivationOnItsOwn(t *testing.T) {
 	go w.Start(ctx)
 
 	const pulseDuration = 30 * time.Millisecond
-	w.NotifyPulse(KindScore, []string{"TeamA"}, pulseDuration)
+	w.NotifyPulse(KindScore, []string{"TeamA"}, 3, pulseDuration)
 	twlWaitFor(t, time.Second, func() bool { return drv.Count() >= 1 })
 	if last, _ := drv.Last(); last.Zones[0].Intensity != len(KindScore) {
 		t.Fatalf("premier Apply attendu = pulse, got %+v", last)
@@ -385,7 +385,7 @@ func TestNotifyNeverBlocks_EvenWithManyPendingCallsDuringSlowApply(t *testing.T)
 	go func() {
 		for i := 0; i < 2000; i++ {
 			w.NotifyState()
-			w.NotifyPulse(KindScore, []string{"X"}, time.Second)
+			w.NotifyPulse(KindScore, []string{"X"}, 3, time.Second)
 		}
 		close(done)
 	}()
