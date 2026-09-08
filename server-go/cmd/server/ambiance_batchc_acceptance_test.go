@@ -414,7 +414,18 @@ func TestC2b_ScoreFlashAndGeneralFlash_RunSimultaneouslyWithoutInterference(t *t
 	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 2, lighting.ScorePulseDuration)
 	app.startScoreFlash("TeamA", 2) // clignotement SCORE (zone 'TeamA')
 
-	sawGeneralFlashLit, sawGeneralFlashDark, sawTeamGold, sawTeamOwn := false, false, false, false
+	// 2026-09-08 revision (task-dev-backend-flash-room-color-20260908.md) :
+	// le Flash général n'a plus de phase "sombre" — il alterne désormais
+	// blanc / couleur de la salle (ambianceThemeColor()), toujours à pleine
+	// intensité. Ce test-ci (tw208NewWriterApp -> newTestApp, sans
+	// httpServer/thème) dégénère donc en blanc/blanc — cas accepté, non
+	// discriminant, documenté par dev-backend — l'alternance de couleur
+	// elle-même a sa propre couverture dédiée
+	// (TestDevLightingFlash_BlinksAndReturnsToSelector, ambiance_override_dev_test.go,
+	// avec un vrai thème). Ce qui reste à vérifier ICI, la coexistence avec
+	// le clignotement SCORE, devient : general reste TOUJOURS allumé
+	// (jamais 0) pendant que la zone d'équipe alterne or/couleur propre.
+	sawGeneralLit, sawGeneralDark, sawTeamGold, sawTeamOwn := false, false, false, false
 	deadline := time.Now().Add(2500 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		last, ok := fake.Last()
@@ -422,11 +433,11 @@ func TestC2b_ScoreFlashAndGeneralFlash_RunSimultaneouslyWithoutInterference(t *t
 			for _, z := range last.Zones {
 				switch z.Zone {
 				case lighting.ZoneGeneral:
-					if z.Color == lightingFlashColor && z.Intensity == lightingOnIntensity {
-						sawGeneralFlashLit = true
+					if z.Intensity == lightingOnIntensity {
+						sawGeneralLit = true
 					}
 					if z.Intensity == 0 {
-						sawGeneralFlashDark = true
+						sawGeneralDark = true
 					}
 				case "TeamA":
 					if z.Color == ambianceScoreGold {
@@ -438,13 +449,16 @@ func TestC2b_ScoreFlashAndGeneralFlash_RunSimultaneouslyWithoutInterference(t *t
 				}
 			}
 		}
-		if sawGeneralFlashLit && sawGeneralFlashDark && sawTeamGold && sawTeamOwn {
+		if sawGeneralLit && sawTeamGold && sawTeamOwn {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if !sawGeneralFlashLit || !sawGeneralFlashDark {
-		t.Errorf("le Flash général doit continuer d'alterner pendant le clignotement SCORE : lit=%v dark=%v", sawGeneralFlashLit, sawGeneralFlashDark)
+	if !sawGeneralLit {
+		t.Error("le Flash général doit rester allumé pendant le clignotement SCORE")
+	}
+	if sawGeneralDark {
+		t.Error("le Flash général ne doit plus jamais avoir de phase sombre (révision 2026-09-08)")
 	}
 	if !sawTeamGold || !sawTeamOwn {
 		t.Errorf("le clignotement SCORE doit continuer d'alterner pendant le Flash général : or=%v couleur d'équipe=%v", sawTeamGold, sawTeamOwn)

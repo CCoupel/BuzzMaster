@@ -148,10 +148,13 @@ func (a *App) setLightingFlash(on bool) {
 }
 
 // runLightingFlash is the Flash blink loop (contract §10.1.2): alternates
-// the phase lightingOverrideGeneral reads and re-derives on every tick.
-// Stops the instant ctx is cancelled — by setLightingFlash(false), or by
-// a.cancelCtx() at server shutdown ((*App).stop(), main.go) — never left
-// blinking after a browser tab closes or the process exits.
+// the phase lightingOverrideGeneral reads and re-derives on every tick —
+// white (lit phase) alternating with the room's own current colour (2026-
+// 09-08 revision, see lightingOverrideGeneral's own doc comment; NOT a
+// dark/off phase any more). Stops the instant ctx is cancelled — by
+// setLightingFlash(false), or by a.cancelCtx() at server shutdown
+// ((*App).stop(), main.go) — never left blinking after a browser tab closes
+// or the process exits.
 func (a *App) runLightingFlash(ctx context.Context) {
 	phase := true // start lit — an operator pressing Flash wants to SEE it fire
 	for {
@@ -177,12 +180,25 @@ func (a *App) runLightingFlash(ctx context.Context) {
 // Flash are always exactly "ce que l'éclairage doit montrer maintenant":
 // one chemin de calcul, shared with the reconnection resync of §10.3 and
 // with AUTO's own return (§10.1.1).
+//
+// 2026-09-08 revision: Flash's un-lit phase used to be a dark/off state
+// ({0,0,0}, 0) — it now alternates white with the room's own CURRENT
+// colour, at full intensity throughout, so an operator identifying the
+// installation always sees two lit, distinguishable phases rather than a
+// blink to black. "The room's own colour" reuses ambianceThemeColor()
+// verbatim (never autoColor, the scene ALREADY on screen when Flash was
+// engaged — SCORE's own team colour or ENTRACTE's warm white, for
+// instance, are not what "la couleur de la salle" means here) — the exact
+// same resolution POST /api/lighting/preview's "general" role already
+// uses (PreviewColor, above), never a second copy of the logic. A
+// themeless room (no question active, or no category) degenerates to
+// white/white, which is an accepted, unremarkable case, not a special one.
 func (a *App) lightingOverrideGeneral(autoColor [3]int, autoIntensity int) ([3]int, int) {
 	if a.isLightingFlashOn() {
 		if a.lightingFlashPhaseOn.Load() {
 			return lightingFlashColor, lightingOnIntensity
 		}
-		return [3]int{0, 0, 0}, 0
+		return a.ambianceThemeColor(), lightingOnIntensity
 	}
 	switch a.lightingMode() {
 	case lightingModeOn:

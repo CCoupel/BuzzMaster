@@ -56,9 +56,14 @@ func TestDevLightingOverrideGeneral_PureLogic(t *testing.T) {
 	if color, intensity := app.lightingOverrideGeneral(auto, 160); color != lightingFlashColor || intensity != lightingOnIntensity {
 		t.Fatalf("Flash ON-phase must win over OFF, got %v/%d", color, intensity)
 	}
+	// 2026-09-08 revision: the un-lit phase is no longer dark — it shows the
+	// room's own current colour (ambianceThemeColor(), white here since
+	// newTestApp sets no httpServer/live question), at the SAME full
+	// intensity as the white phase.
 	app.lightingFlashPhaseOn.Store(false)
-	if color, intensity := app.lightingOverrideGeneral(auto, 160); color != [3]int{0, 0, 0} || intensity != 0 {
-		t.Fatalf("Flash OFF-phase must be dark, got %v/%d", color, intensity)
+	white := [3]int{255, 255, 255}
+	if color, intensity := app.lightingOverrideGeneral(auto, 160); color != white || intensity != lightingOnIntensity {
+		t.Fatalf("Flash's other phase must show the room's own colour (white here) at full intensity, got %v/%d", color, intensity)
 	}
 }
 
@@ -125,6 +130,13 @@ func TestDevLightingMode_ReDerivesThroughTheRealWriter(t *testing.T) {
 // exactly to the selector's own position (here OFF) — contract §10.1.2.
 func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	app := newTestApp(t)
+	// A real, NON-white theme so the 2026-09-08 white<->room-colour
+	// alternation is actually observable (a themeless room degenerates to
+	// white/white, an accepted but non-discriminating case — see
+	// lightingOverrideGeneral's own doc comment).
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+	app.engine.Ready("q1", &game.Question{ID: "q1", Type: game.QuestionTypeQCM, Category: game.CategoryGeography})
+	geography := [3]int{0x3b, 0x82, 0xf6}
 	fake := lighting.NewFakeDriver()
 	app.lightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,14 +150,23 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	if !app.LightingFlash() {
 		t.Fatal("LightingFlash() must report engaged")
 	}
-	// Wait for at least one full on/off cycle: two more applies after the
-	// initial OFF, alternating intensity.
+	// Wait for at least one full white/room-colour cycle: two more applies
+	// after the initial OFF, alternating COLOUR (2026-09-08 revision — no
+	// longer intensity, both phases are now full/lit).
 	waitForCount(t, fake, 3)
 	first, _ := fake.Last()
 	waitForCount(t, fake, 4)
 	second, _ := fake.Last()
-	if first.Zones[0].Intensity == second.Zones[0].Intensity {
-		t.Fatalf("Flash must alternate intensity between ticks, got %d then %d", first.Zones[0].Intensity, second.Zones[0].Intensity)
+	if first.Zones[0].Color == second.Zones[0].Color {
+		t.Fatalf("Flash must alternate colour between ticks, got %v then %v", first.Zones[0].Color, second.Zones[0].Color)
+	}
+	if first.Zones[0].Intensity != lightingOnIntensity || second.Zones[0].Intensity != lightingOnIntensity {
+		t.Fatalf("both Flash phases must stay at full intensity, got %d then %d", first.Zones[0].Intensity, second.Zones[0].Intensity)
+	}
+	for _, z := range []lighting.ZoneState{first.Zones[0], second.Zones[0]} {
+		if z.Color != lightingFlashColor && z.Color != geography {
+			t.Fatalf("Flash phase colour must be white or the room's theme, got %v", z.Color)
+		}
 	}
 
 	app.setLightingFlash(false)

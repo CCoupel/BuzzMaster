@@ -628,6 +628,13 @@ désigne déjà la catégorie de sauvegarde couvrant `game-config.json` (`Backup
 **2. Flash — bascule séparée**, `ON`/`OFF` : clignotement, pour souligner un moment de jeu ou
 identifier une ampoule. Même portée que le sélecteur (zone `general`).
 
+> **Révision du 2026-09-08** : les deux phases du clignotement sont désormais **blanc** et la
+> **couleur actuelle de la salle** (zone `general` — le thème de la question en cours,
+> `ambianceThemeColor()`, blanc par défaut hors partie ou sans thème), toutes deux à **pleine
+> intensité** — plus de phase sombre/éteinte. Une salle sans thème actif dégénère naturellement en
+> blanc/blanc, un cas accepté, pas une exception à coder. Voir « Implémentation du clignotement »
+> ci-dessous.
+
 ##### ⚠️ Portée : la zone `general`, **jamais** les ampoules d'une équipe active — normatif
 
 Le sélecteur agit sur la **zone `general` au sens de `hue-bridge.md` §5.2**, et sur elle seule :
@@ -727,6 +734,13 @@ interaction avec le sélecteur ; signalée pour relecture.)*
   seconde.
 - `POST /api/lighting/test` (#207) reste le **flash ponctuel** de test d'une ampoule **nommée** :
   geste sans état, distinct de la bascule Flash, et **non remplacé** par elle.
+- **Couleur des deux phases (révision du 2026-09-08)** : `lightingOverrideGeneral`
+  (`cmd/server/ambiance_override.go`) alterne `lightingFlashColor` (blanc) et
+  `ambianceThemeColor()` — la **même** résolution que `POST /api/lighting/preview`'s rôle
+  `"general"` (`hue-bridge.md` §7) et que la table de scènes (§8), **jamais une copie** de cette
+  logique. Toujours l'auto-dérivée, jamais `autoColor` (la couleur de la scène affichée au moment
+  où Flash a été engagé) : un Flash pendant SCORE ou ENTRACTE montre la couleur de la salle, pas la
+  couleur d'équipe ou le blanc chaud de l'entracte.
 
 #### 10.1.3 Canal — HTTP REST, jamais WebSocket
 
