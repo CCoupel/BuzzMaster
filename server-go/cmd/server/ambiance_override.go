@@ -65,6 +65,22 @@ const (
 	lightingFlashOffPhase = 400 * time.Millisecond
 )
 
+// scoreFlashGoldPhase/-TeamPhase drive the SCORE flicker's own cadence
+// (planner-v10-score-rhythm-20260908-105438.md §1.1, confirmed by the user
+// 2026-09-08) — DEDICATED constants, never lightingFlashOnPhase/-OffPhase:
+// the two blinks read differently on purpose (a sharp 250 ms gold burst,
+// the room "claque" instead of "respire", against a longer 500 ms rest on
+// the team's own colour — asymmetric 1:2, not the Flash bascule's even
+// 400/400). 250 ms is the hard floor, not a stylistic choice: the Hue
+// driver paces every Apply at hue.RecommendedMinInterval (250 ms, contract
+// hue-bridge.md §5.4) — a shorter phase would be delayed or silently
+// absorbed, so what would actually render in the room stops matching what
+// was scheduled.
+const (
+	scoreFlashGoldPhase = 250 * time.Millisecond
+	scoreFlashTeamPhase = 500 * time.Millisecond
+)
+
 // lightingMode reads the current selector position. AUTO is the zero value
 // (an unset atomic.Value.Load() returns nil, which the type assertion below
 // turns into "") — contract §10.1.1 point 5 needs no explicit
@@ -188,11 +204,22 @@ func (a *App) lightingOverrideGeneral(autoColor [3]int, autoIntensity int) ([3]i
 // ---------------------------------------------------------------------------
 
 // startScoreFlash begins the SCORE flicker for the credited team:
-// clamp(points, 1, 6) cycles of lightingFlashOnPhase/-OffPhase (400/400 ms,
-// reused — not a second cadence constant), gold then the team's own colour,
-// after which the team's light settles on its own colour for the remainder
-// of the pulse (contract §2.4 — ScorePulseDuration itself is unchanged,
-// 4800 ms = exactly 6 such cycles, so points>=6 fills the whole pulse).
+// clamp(ceil(points/5), 1, 6) cycles of scoreFlashGoldPhase/-TeamPhase
+// (250/500 ms), gold then the team's own colour, after which the team's
+// light settles on its own colour for the remainder of the pulse. Grouping
+// by 5 points per pulsation (planner-v10-score-rhythm-20260908-105438.md
+// §1.2, confirmed by the user 2026-09-08): 1-5 points ⇒ 1 pulsation, 6-10 ⇒
+// 2, ..., 30+ ⇒ 6 (ceiling, never integer division — a plain points/5 would
+// render the single most common score, 1 point, as ZERO pulsations).
+//
+// ScorePulseDuration stays FIXED at 4800 ms regardless of the cycle count —
+// an explicit, confirmed user choice against the planner's own suggestion
+// of a variable N×750ms duration: a 1-5 point score deliberately renders as
+// one 750 ms pulsation followed by ~4 s of the team's own colour before the
+// pulse ends, rather than a shorter celebration. Do not "fix" this into a
+// variable duration without a new decision — see the report referenced
+// above for the tradeoff as stated to the user.
+//
 // Called from every NotifyPulse(KindScore, ...) site in main.go, ALONGSIDE
 // it, never instead of it — NotifyPulse drives the "general" zone's own
 // COMET scene (unchanged, §2.5), this drives only the credited team's zone.
@@ -206,9 +233,12 @@ func (a *App) startScoreFlash(team string, points int) {
 	if team == "" {
 		return
 	}
-	cycles := points
-	if cycles < 1 {
-		cycles = 1
+	// ceil(points/5) via integer arithmetic — no float round-trip — then
+	// clamped to [1, 6]. points<=0 (defensive: every real call site already
+	// gates on points>0) falls through to the floor of 1.
+	cycles := 1
+	if points > 0 {
+		cycles = (points + 4) / 5
 	}
 	if cycles > 6 {
 		cycles = 6
@@ -255,14 +285,14 @@ func (a *App) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(lightingFlashOnPhase):
+		case <-time.After(scoreFlashGoldPhase):
 		}
 		a.scoreFlashPhaseGold.Store(false)
 		a.ambiance().NotifyState()
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(lightingFlashOffPhase):
+		case <-time.After(scoreFlashTeamPhase):
 		}
 	}
 	// Same critical section as startScoreFlash's own team publication (code-

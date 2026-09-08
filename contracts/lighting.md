@@ -448,18 +448,20 @@ que les buzzers » :
 > transverse testé avant la phase (§6.2), n'appartient à aucune des trois lignes « jeu actif » : il
 > suit la même règle que « hors partie » plutôt que d'exiger une quatrième case à part.
 
-**Impulsion SCORE — clignotement or, proportionnel aux points :**
+**Impulsion SCORE — clignotement or, proportionnel aux points (révision du 2026-09-08, rythme
+final confirmé) :**
 
 | Paramètre | Valeur |
 |---|---|
 | Couleurs alternées | **couleur de l'équipe créditée** ↔ **or `{255, 190, 0}`**, pleine intensité |
-| Cadence | **400 ms / 400 ms** — celle du Flash du §10.1, jamais un second réglage |
-| Nombre de clignotements | **`clamp(points, 1, 6)`** — un par point marqué, plafonné |
-| Durée totale | **`ScorePulseDuration` (4800 ms), constante quel que soit le score** : après ses `N` clignotements, l'ampoule tient la couleur d'équipe à pleine intensité jusqu'à l'échéance |
+| Cadence | **250 ms (or) / 500 ms (couleur d'équipe)** — asymétrique 1:2, **dédiée** (jamais celle du Flash du §10.1). 250 ms est le **plancher physique** : `hue.RecommendedMinInterval` (contract hue-bridge.md §5.4) cadence déjà `Apply` à 250 ms minimum, une phase plus courte ne serait pas rendue fidèlement |
+| Nombre de clignotements | **`clamp(ceil(points / 5), 1, 6)`** — une pulsation toutes les 5 points, **arrondi au supérieur** (une division entière ferait disparaître le cas le plus fréquent : 1 à 4 points ne produiraient aucun clignotement), plancher 1, plafond 6 |
+| Durée totale | **`ScorePulseDuration` (4800 ms), constante quel que soit le score** — choix **explicite de l'utilisateur**, contre la recommandation initiale d'une durée variable `N × 750 ms` : un score de 1 à 5 points ne produit qu'**une** pulsation de 750 ms puis reste sur la couleur d'équipe pendant **≈ 4 s avant l'échéance**. Assumé, ne pas « corriger » en durée variable sans nouvelle décision (voir `_work/reports/planner-v10-score-rhythm-20260908-105438.md` pour l'arbitrage tel que présenté à l'utilisateur) |
 
-> **Pourquoi 6** : `4800 / 800 = 6` exactement. Le plafond n'est pas un renoncement, c'est ce que
-> le pulse contient — et au-delà, l'œil ne compte plus. Garder une durée **constante** préserve
-> `ScorePulseDuration` comme réglage unique et le registre d'impulsion à une place du §4.2.
+> **Pourquoi le regroupement par 5, en arrondi supérieur** : la donnée réelle du projet montre que
+> le score le plus fréquent est **1 point** (MEMOTION 1/3/5 étoiles, buzz courants) — une division
+> entière (`points / 5`) l'aurait rendu à **zéro** clignotement, l'effet le plus fréquent aurait
+> été le plus terne. `ceil` garantit qu'un score marqué s'annonce toujours, même minimal.
 
 > ⚠️ **Seule dérogation à « toujours la couleur de son équipe »**, avec l'extinction du §10.4. Elle
 > est **bornée** : transitoire, déclenchée par le score **de cette équipe-là**, alternée avec **sa

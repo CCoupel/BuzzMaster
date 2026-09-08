@@ -322,22 +322,30 @@ func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *tes
 	// sites appellent TOUJOURS NotifyPulse ET startScoreFlash ensemble
 	// (main.go) — on reproduit exactement cet appariement ici, avec la VRAIE
 	// durée de pulse pour ne jamais l'expirer avant la fin du clignotement.
-	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 2, lighting.ScorePulseDuration)
-	app.startScoreFlash("TeamA", 2)
+	//
+	// Rythme final (2026-09-08, planner-v10-score-rhythm-20260908-105438.md,
+	// confirmé par l'utilisateur) : cadence 250 ms or / 500 ms couleur
+	// d'équipe (jamais 400/400, celle du Flash général), regroupement
+	// clamp(ceil(points/5), 1, 6) — points=6 est la plus petite valeur qui
+	// produit exactement 2 cycles (ceil(6/5)=2 ; points=1..5 n'en donnent
+	// qu'1).
+	const points = 6
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, points, lighting.ScorePulseDuration)
+	app.startScoreFlash("TeamA", points)
 
 	// Cycle 1 : or, puis retour à la couleur d'équipe.
 	twCWaitTeamZoneColor(t, fake, "TeamA", ambianceScoreGold, 800*time.Millisecond)
 	twCWaitTeamZoneColor(t, fake, "TeamA", wantTeamA, 800*time.Millisecond)
-	// Cycle 2 : or, puis retour — et c'est le DERNIER cycle (points=2).
+	// Cycle 2 : or, puis retour — et c'est le DERNIER cycle (ceil(6/5)=2).
 	twCWaitTeamZoneColor(t, fake, "TeamA", ambianceScoreGold, 800*time.Millisecond)
 	twCWaitTeamZoneColor(t, fake, "TeamA", wantTeamA, 800*time.Millisecond)
 
 	// Le clignotement doit s'arrêter de lui-même juste après ce 2e cycle
 	// (la couleur d'équipe ci-dessus a été observée dès le DÉBUT de la
-	// dernière phase "off", avant même que ses 400 ms ne soient écoulées et
-	// que le nettoyage de fin de cycle ne s'exécute — on laisse donc une
-	// marge avant d'exiger currentScoreFlashTeam()=="") — et surtout,
-	// aucun 3e passage à l'or ne doit apparaître entre-temps.
+	// dernière phase "couleur d'équipe" (500 ms), avant même que le
+	// nettoyage de fin de cycle ne s'exécute — on laisse donc une marge
+	// avant d'exiger currentScoreFlashTeam()=="") — et surtout, aucun 3e
+	// passage à l'or ne doit apparaître entre-temps.
 	sawThirdGold := false
 	settleDeadline := time.Now().Add(1500 * time.Millisecond)
 	for time.Now().Before(settleDeadline) {
@@ -354,10 +362,10 @@ func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *tes
 		time.Sleep(20 * time.Millisecond)
 	}
 	if sawThirdGold {
-		t.Fatal("un 3e passage à l'or a été observé alors que points=2 ne doit produire que 2 cycles")
+		t.Fatal("un 3e passage à l'or a été observé alors que points=6 (ceil(6/5)=2) ne doit produire que 2 cycles")
 	}
 	if got := app.currentScoreFlashTeam(); got != "" {
-		t.Fatalf("le clignotement devrait s'être terminé de lui-même après 2 cycles (points=2), currentScoreFlashTeam=%q", got)
+		t.Fatalf("le clignotement devrait s'être terminé de lui-même après 2 cycles (points=6), currentScoreFlashTeam=%q", got)
 	}
 }
 
@@ -371,20 +379,24 @@ func TestC2b_ScoreFlash_ClampsAboveSixPoints(t *testing.T) {
 	app.ambiance().NotifyState()
 	twCWaitTeamZoneColor(t, fake, "TeamA", app.teamNameToRGB("TeamA"), 2*time.Second)
 
-	app.startScoreFlash("TeamA", 9) // au-delà de 6 : doit être plafonné à 6
+	// Rythme final (2026-09-08, confirmé par l'utilisateur) :
+	// clamp(ceil(points/5), 1, 6) — points=40 donne ceil(40/5)=8, largement
+	// au-delà du plafond de 6 (atteint dès points=30). Cadence 250 ms or /
+	// 500 ms couleur d'équipe = 750 ms/cycle (jamais 400/400).
+	app.startScoreFlash("TeamA", 40) // ceil(40/5)=8, au-delà de 6 : doit être plafonné à 6
 
-	// 6 cycles = 6 x 800 ms = 4800 ms. On attend un peu plus (5,3 s) et on
-	// exige que le clignotement soit déjà terminé — s'il ne l'était pas
-	// (9 cycles réels = 7,2 s), currentScoreFlashTeam() serait encore "TeamA"
-	// à cette échéance, ce qui distingue sans ambiguïté 6 de 9.
-	deadline := time.Now().Add(5300 * time.Millisecond)
+	// 6 cycles x 750 ms = 4500 ms ; 8 cycles réels feraient 6000 ms. 4700 ms
+	// laisse une marge confortable au-dessus de 6 cycles tout en restant
+	// nettement sous ce que 7 ou 8 cycles réels prendraient — de quoi
+	// distinguer sans ambiguïté "plafonné à 6" de "pas plafonné".
+	deadline := time.Now().Add(4700 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		if app.currentScoreFlashTeam() == "" {
 			return // terminé — plafond respecté
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("le clignotement n'était pas terminé à 5,3 s — points=9 n'a pas été plafonné à 6 cycles (6 x 800 ms = 4800 ms attendu)")
+	t.Fatalf("le clignotement n'était pas terminé à 4,7 s — points=40 n'a pas été plafonné à 6 cycles (6 x 750 ms = 4500 ms attendu)")
 }
 
 func TestC2b_ScoreFlashAndGeneralFlash_RunSimultaneouslyWithoutInterference(t *testing.T) {
