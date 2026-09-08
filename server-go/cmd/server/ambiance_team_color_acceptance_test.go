@@ -170,15 +170,30 @@ func TestTeamColor_TeamOffTheBoard_FallsBackToGeneral_ReachedByOff(t *testing.T)
 		}
 	}
 
-	// KindIdle est "hors partie" même quand le roster n'a PAS été vidé (une
-	// partie précédente a laissé des équipes configurées) : aucune partie en
-	// cours ⇒ aucun plateau ⇒ aucune zone d'équipe, quel que soit le roster.
+	// Batch C/C1a (planner-v10-teamcolor-changes-20260908-092100.md §1) :
+	// KindIdle ("hors partie") n'est plus l'exception — une ampoule d'équipe
+	// affichée dans le roster reste allumée dans SA couleur, à pleine
+	// intensité, même hors partie (c'est exactement le point de C1a : "en
+	// partie comme hors partie, jamais de repli"). L'ancienne attente
+	// ("roster non vide ⇒ quand même 'general' seul en IDLE") est renversée
+	// ici, sciemment.
 	twTCSetRoster(t, app, map[string]*game.Team{
 		"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}},
 	})
 	st := app.ambianceScene(lighting.Event{Kind: lighting.KindIdle})
-	if len(st.Zones) != 1 || st.Zones[0].Zone != lighting.ZoneGeneral {
-		t.Fatalf("KindIdle doit retomber sur 'general' même avec un roster non vide, got %+v", st.Zones)
+	if len(st.Zones) != 2 {
+		t.Fatalf("KindIdle avec un roster non vide doit désormais porter la zone de l'équipe (C1a), got %+v", st.Zones)
+	}
+	teamZone, ok := func() (lighting.ZoneState, bool) {
+		for _, z := range st.Zones {
+			if z.Zone == "TeamA" {
+				return z, true
+			}
+		}
+		return lighting.ZoneState{}, false
+	}()
+	if !ok || teamZone.Intensity != 255 {
+		t.Fatalf("KindIdle : zone TeamA attendue à pleine intensité, got ok=%v %+v", ok, teamZone)
 	}
 	twTCSetRoster(t, app, map[string]*game.Team{}) // reset pour la suite du test
 

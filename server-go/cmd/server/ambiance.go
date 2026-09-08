@@ -391,6 +391,12 @@ type ambianceSceneDef struct {
 
 var (
 	ambianceWarmWhite = [3]int{255, 214, 170}
+	// ambianceScoreGold is C2b's transient colour (contract §8.1): a
+	// credited team's own light alternates with it during a SCORE pulse.
+	// Not a second team palette — see ambianceScene's own doc comment for
+	// why this is the one documented exception to C1a "never another
+	// colour than the team's own".
+	ambianceScoreGold = [3]int{255, 190, 0}
 
 	ambianceSceneIdle       = ambianceSceneDef{Color: ambianceWarmWhite, Intensity: 120}     // room stays usable
 	ambianceSceneReady      = ambianceSceneDef{Color: [3]int{255, 255, 255}, Intensity: 200} // attention rising
@@ -430,11 +436,45 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 	return ambianceSceneIdle
 }
 
-// ambianceScene renders an Event into the "general" zone (#205) plus, since
-// #213, one zone per team CURRENTLY ON THE BOARD (Batch A/P1 fix below —
-// see its own paragraph). Team colours go through the SAME palette as the
-// buzzers (teamNameToRGB): never a second palette (contract §8,
-// hue-bridge.md §9).
+// ambianceTeamZoneDimsWhenUndistinguished reports whether ev's Kind is one
+// of the three "active game" phases (STARTED/PAUSED/REVEALED, transposed
+// literally from the buzzer's own sendLEDSetForBuzzerNormal switch) in which
+// a team not distinguished by the event is attenuated. Every other Kind — no
+// game in progress, PREPARE/READY/COUNTDOWN, and the transverse ENTRACTE
+// mode, none of them named in that switch — renders every team light at
+// full intensity, exactly like a buzzer outside active play (Batch C/C1a,
+// planner-v10-teamcolor-changes-20260908-092100.md §1.3).
+//
+//	STOPPED, PREPARE, READY, COUNTDOWN     -> full, always        (KindIdle, KindReady)
+//	STARTED  (no active turn / active turn) -> full if distinguished, else dim (KindRunning, KindTeamTurn)
+//	PAUSED   (admin / a buzz)               -> full if distinguished, else dim (KindPauseAll, KindBuzz)
+//	REVEALED                                -> full if distinguished, else dim (KindReveal)
+//	SCORE (pulse, not a phase of its own)   -> same rule for every OTHER team; the CREDITED team is
+//	                                            governed separately by the C2b flicker, always full (KindScore)
+//	ENTRACTE (transverse, no phase table row) -> full, always     (KindEntracte)
+func ambianceTeamZoneDimsWhenUndistinguished(kind lighting.EventKind) bool {
+	switch kind {
+	case lighting.KindRunning, lighting.KindTeamTurn, lighting.KindBuzz, lighting.KindPauseAll, lighting.KindReveal, lighting.KindScore:
+		return true
+	}
+	return false
+}
+
+// currentScoreFlashTeam is the team currently flickering gold/team-colour
+// (C2b, ambiance_override.go's startScoreFlash/runScoreFlash), "" when no
+// SCORE flicker is in flight. Safe on the zero atomic.Value (nil -> "").
+func (a *App) currentScoreFlashTeam() string {
+	v, _ := a.scoreFlashTeam.Load().(string)
+	return v
+}
+
+// ambianceScene renders an Event into the "general" zone (#205) plus one
+// zone per team CURRENTLY ON THE BOARD (#213, extended by Batch A/P1 below,
+// then made unconditional by Batch C/C1a below that). Team colours go
+// through the SAME palette as the buzzers (teamNameToRGB): never a second
+// palette (contract §8, hue-bridge.md §9) — with exactly one transient
+// exception, C2b's gold SCORE flicker, documented at the bottom of this
+// comment.
 //
 // The "general" zone's own colour/intensity is computed exactly as before
 // #213 (unaffected by the per-team zones added below): for a
@@ -464,19 +504,39 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 //
 // Fix, transposing the buzzer's own model (sendLEDSetForBuzzerNormal,
 // main.go: rgb computed ONCE outside the phase switch, only intensity/
-// effect vary) verbatim to the room: a team's ampoule ALWAYS shows its own
-// colour, for every team on the current board (a.engine's live team
-// roster) — never the scene's fixed colour, never modified by state. Only
-// the INTENSITY varies: full when the team is "distinguished" by this
-// event (buzzed, active turn, answered correctly, credited — i.e. present
-// in ev.Teams, the buzzer's own SOLID/BLINK-255 equivalent), dimmed
-// otherwise (dimIntensityFor, main.go — the SAME threshold the buzzers
-// dim to, reused rather than a second one). No game in progress (KindIdle)
-// ⇒ no board ⇒ no team zones at all, unchanged from before — the ampoule
-// falls back to "general", which §10.1's ON/AUTO/OFF selector then DOES
-// reach (in-game, it never does: a team zone always wins over "general"
-// for that team's own light, keeping the selector correctly out of scope
-// per §10.1's "Portée").
+// effect vary) to the room: a team's ampoule ALWAYS shows its own colour,
+// for every team on the current board (a.engine's live team roster) — never
+// the scene's fixed colour, never modified by state. Only the INTENSITY
+// varies (ambianceTeamZoneDimsWhenUndistinguished, above).
+//
+// Batch C/C1a (planner-v10-teamcolor-changes-20260908-092100.md §1): the
+// "no game in progress ⇒ no team zones at all, falls back to general"
+// carve-out above is GONE — a team's own light is now emitted for EVERY
+// event Kind, KindIdle included, and correspondingly is now ALWAYS at full
+// intensity there (ambianceTeamZoneDimsWhenUndistinguished(KindIdle) is
+// false). A team's own light therefore never again falls back to "general"
+// — with exactly two documented exceptions elsewhere in the codebase, never
+// here: an orphaned team assignment (the light's team absent from
+// tb.Teams below — §1.7, a config inconsistency, not a game state, so
+// simply falls out of this loop with no entry to append) and the shutdown
+// extinction of contract §10.4 (ambiance_override.go's
+// shutdownExtinguishHueLighting, untouched — it already forces every zone,
+// general AND team, to Intensity 0 directly, never through this function).
+// This also means #208's ON/AUTO/OFF selector and Flash NEVER reach a
+// team's own light, in game or out — lightingOverrideGeneral below is
+// applied to the "general" zone only, same as always.
+//
+// Batch C/C2b (same report, §2): a SCORE pulse's CREDITED team (the single
+// entry of ev.Teams for KindScore) alternates between its own colour and
+// ambianceScoreGold — the flicker's phase and which team is flickering are
+// read from currentScoreFlashTeam()/a.scoreFlashPhaseGold, both owned by
+// ambiance_override.go's startScoreFlash/runScoreFlash (started alongside
+// every NotifyPulse(KindScore, ...) call in main.go). This is NOT a
+// violation of "a team's ampoule always shows its own colour": the gold is
+// TRANSIENT, triggered by THIS team's OWN score, alternates WITH its own
+// colour and returns to it — celebrating the team's identity, never
+// replacing it with another team's or the room's. It is the only exception
+// to that rule besides §10.4's shutdown extinction.
 func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 	def := ambianceSceneFor(ev)
 	color := def.Color
@@ -490,7 +550,9 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 	}
 	// #208 (contract §10.1): the manual ON/AUTO/OFF selector and Flash act
 	// ONLY on this "general" zone, applied last so they always win over the
-	// auto-derived scene — team zones below are never touched.
+	// auto-derived scene — team zones below are never touched (Batch C/C1a:
+	// they never fall back to "general" in the first place, so this was
+	// already implied, now it is unconditionally true).
 	color, intensity = a.lightingOverrideGeneral(color, intensity)
 	zones := []lighting.ZoneState{{
 		Zone:      lighting.ZoneGeneral,
@@ -498,30 +560,36 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 		Intensity: intensity,
 	}}
 	seen := map[string]bool{lighting.ZoneGeneral: true} // defensive: a team literally named "general" must never shadow it
-	if ev.Kind != lighting.KindIdle {
-		distinguished := make(map[string]bool, len(ev.Teams))
-		for _, team := range ev.Teams {
-			if team != "" {
-				distinguished[team] = true
-			}
+	distinguished := make(map[string]bool, len(ev.Teams))
+	for _, team := range ev.Teams {
+		if team != "" {
+			distinguished[team] = true
 		}
-		tb := a.engine.GetTeamsAndBumpersSnapshot()
-		for teamName := range tb.Teams {
-			if teamName == "" || seen[teamName] {
-				continue
-			}
-			seen[teamName] = true
-			rgb := a.teamNameToRGB(teamName)
-			teamIntensity := dimIntensityFor(rgb)
-			if distinguished[teamName] {
-				teamIntensity = 255 // full — the room-side equivalent of the buzzer's own SOLID/BLINK at 255
-			}
-			zones = append(zones, lighting.ZoneState{
-				Zone:      teamName,
-				Color:     rgb,
-				Intensity: teamIntensity,
-			})
+	}
+	dims := ambianceTeamZoneDimsWhenUndistinguished(ev.Kind)
+	flashTeam := ""
+	if ev.Kind == lighting.KindScore {
+		flashTeam = a.currentScoreFlashTeam()
+	}
+	tb := a.engine.GetTeamsAndBumpersSnapshot()
+	for teamName := range tb.Teams {
+		if teamName == "" || seen[teamName] {
+			continue
 		}
+		seen[teamName] = true
+		rgb := a.teamNameToRGB(teamName)
+		teamIntensity := 255 // full — the room-side equivalent of the buzzer's own SOLID/BLINK at 255
+		if dims && !distinguished[teamName] {
+			teamIntensity = dimIntensityFor(rgb)
+		}
+		if teamName == flashTeam && a.scoreFlashPhaseGold.Load() {
+			rgb = ambianceScoreGold // C2b — transient, see this function's own doc comment
+		}
+		zones = append(zones, lighting.ZoneState{
+			Zone:      teamName,
+			Color:     rgb,
+			Intensity: teamIntensity,
+		})
 	}
 	return lighting.State{Zones: zones}
 }

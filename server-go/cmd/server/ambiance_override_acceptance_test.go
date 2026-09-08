@@ -110,7 +110,7 @@ func TestCA208_Hold_ON_SurvivesRealGameEventsDuringASession(t *testing.T) {
 			app.engine.SetPhase(game.PhasePaused)
 			app.ambiance().NotifyState()
 		},
-		func() { app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 50*time.Millisecond) },
+		func() { app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 3, 50*time.Millisecond) },
 		func() {
 			app.engine.SetPhase(game.PhaseReady) // ENTRACTE activation requires an eligible phase
 			app.ambiance().NotifyState()
@@ -175,14 +175,27 @@ func TestCA208_AutoOutsideGame_NeverGoesDark(t *testing.T) {
 	// documenter l'intention du test plutôt que de compter sur le zéro-valeur.
 	app.setLightingMode(lightingModeAuto)
 	st := app.ambianceScene(ev)
-	if len(st.Zones) != 1 || st.Zones[0].Zone != lighting.ZoneGeneral {
-		t.Fatalf("hors partie, sans équipe concernée : une seule zone 'general' attendue, got %+v", st.Zones)
+	// Batch C/C1a (planner-v10-teamcolor-changes-20260908-092100.md §1) :
+	// une ampoule d'équipe est désormais TOUJOURS présente, y compris hors
+	// partie (newTestApp configure TeamA/TeamB/TeamC) — ce test porte sur la
+	// zone 'general' uniquement (§10.1.1 point 4), pas sur le nombre total
+	// de zones ; on la retrouve par son nom plutôt que de supposer qu'elle
+	// est seule.
+	var general lighting.ZoneState
+	var found bool
+	for _, z := range st.Zones {
+		if z.Zone == lighting.ZoneGeneral {
+			general, found = z, true
+		}
 	}
-	if st.Zones[0].Intensity == 0 {
+	if !found {
+		t.Fatalf("aucune zone 'general' dans la scène, got %+v", st.Zones)
+	}
+	if general.Intensity == 0 {
 		t.Fatalf("AUTO hors partie ne doit JAMAIS éteindre la salle (contract §10.1.1 point 4), got intensité 0")
 	}
-	if st.Zones[0].Color != ambianceSceneIdle.Color || st.Zones[0].Intensity != ambianceSceneIdle.Intensity {
-		t.Fatalf("AUTO hors partie doit rendre la scène IDLE (blanc chaud praticable), got %+v want %+v", st.Zones[0], ambianceSceneIdle)
+	if general.Color != ambianceSceneIdle.Color || general.Intensity != ambianceSceneIdle.Intensity {
+		t.Fatalf("AUTO hors partie doit rendre la scène IDLE (blanc chaud praticable), got %+v want %+v", general, ambianceSceneIdle)
 	}
 }
 

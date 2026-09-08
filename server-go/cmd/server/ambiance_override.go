@@ -178,6 +178,91 @@ func (a *App) lightingOverrideGeneral(autoColor [3]int, autoIntensity int) ([3]i
 }
 
 // ---------------------------------------------------------------------------
+// SCORE gold/team-colour flicker (Batch C/C2b, contract §2.4/§8.1) — reuses
+// the Flash bascule's own pattern (a phase flag + NotifyState() re-derives)
+// verbatim, on the credited team's OWN zone instead of "general", and for a
+// BOUNDED number of cycles instead of an indefinite toggle. No modification
+// to internal/lighting/hue/ at all: the driver keeps receiving ordinary
+// State values, unaware anything is blinking (planner-v10-teamcolor-
+// changes-20260908-092100.md §2.1).
+// ---------------------------------------------------------------------------
+
+// startScoreFlash begins the SCORE flicker for the credited team:
+// clamp(points, 1, 6) cycles of lightingFlashOnPhase/-OffPhase (400/400 ms,
+// reused — not a second cadence constant), gold then the team's own colour,
+// after which the team's light settles on its own colour for the remainder
+// of the pulse (contract §2.4 — ScorePulseDuration itself is unchanged,
+// 4800 ms = exactly 6 such cycles, so points>=6 fills the whole pulse).
+// Called from every NotifyPulse(KindScore, ...) site in main.go, ALONGSIDE
+// it, never instead of it — NotifyPulse drives the "general" zone's own
+// COMET scene (unchanged, §2.5), this drives only the credited team's zone.
+//
+// A newer call (a second score arriving before the first's flicker ends)
+// supersedes the running one — same "last one wins" rule as the pulse
+// register itself (contract §4.2) — by cancelling its context; team=""
+// is a no-op (nothing to celebrate, contract §2.3's "0 pour tout genre
+// autre que SCORE" case reached defensively).
+func (a *App) startScoreFlash(team string, points int) {
+	if team == "" {
+		return
+	}
+	cycles := points
+	if cycles < 1 {
+		cycles = 1
+	}
+	if cycles > 6 {
+		cycles = 6
+	}
+	a.ambianceMu.Lock()
+	if cancel := a.scoreFlashCancel; cancel != nil {
+		cancel()
+	}
+	parent := a.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	a.scoreFlashCancel = cancel
+	epoch := a.scoreFlashEpoch.Add(1)
+	a.ambianceMu.Unlock()
+	a.scoreFlashTeam.Store(team)
+	go a.runScoreFlash(ctx, cycles, epoch)
+}
+
+// runScoreFlash is the flicker loop itself (see startScoreFlash). Stops the
+// instant ctx is cancelled — by a newer SCORE pulse superseding it (via
+// startScoreFlash), or by a.cancelCtx() at server shutdown — never left
+// flashing gold after the process exits or a later score arrives.
+//
+// epoch guards the natural end-of-run tail (clearing scoreFlashTeam once all
+// cycles are done) against a race with a BRAND NEW flicker that started in
+// the narrow window between this goroutine's last timer firing and it
+// reaching that tail: if scoreFlashEpoch has moved on, a newer flicker is
+// already live and this stale goroutine must touch nothing further.
+func (a *App) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
+	for i := 0; i < cycles; i++ {
+		a.scoreFlashPhaseGold.Store(true)
+		a.ambiance().NotifyState()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(lightingFlashOnPhase):
+		}
+		a.scoreFlashPhaseGold.Store(false)
+		a.ambiance().NotifyState()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(lightingFlashOffPhase):
+		}
+	}
+	if a.scoreFlashEpoch.Load() == epoch {
+		a.scoreFlashTeam.Store("")
+		a.ambiance().NotifyState()
+	}
+}
+
+// ---------------------------------------------------------------------------
 // LightingProvider (internal/server/http_lighting.go) — mode/flash surface
 // for POST /api/lighting/mode and /api/lighting/flash.
 // ---------------------------------------------------------------------------

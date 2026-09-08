@@ -74,6 +74,18 @@ type App struct {
 	lightingFlashOn      atomic.Bool
 	lightingFlashPhaseOn atomic.Bool
 	lightingFlashCancel  context.CancelFunc
+	// scoreFlashTeam/-PhaseGold/-Epoch/-Cancel drive the SCORE gold/team-
+	// colour flicker (Batch C/C2b, contract lighting.md §2.4/§8.1) —
+	// scoreFlashTeam is the team currently flickering ("" = none),
+	// scoreFlashPhaseGold the current phase (toggled by runScoreFlash,
+	// ambiance_override.go), scoreFlashEpoch guards the flicker's own
+	// natural end-of-run against a race with a newer SCORE pulse superseding
+	// it, scoreFlashCancel stops the running goroutine when a newer pulse
+	// arrives; guarded by ambianceMu, same pattern as lightingFlashCancel.
+	scoreFlashTeam      atomic.Value // holds string
+	scoreFlashPhaseGold atomic.Bool
+	scoreFlashEpoch     atomic.Int64
+	scoreFlashCancel    context.CancelFunc
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).
@@ -1892,7 +1904,8 @@ func (a *App) handlePoints(msg *protocol.Message) {
 			teamID = bumper.Team
 		}
 		a.sendLEDSetComet(teamID)
-		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, lighting.ScorePulseDuration)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, payload.Points, lighting.ScorePulseDuration)
+		a.startScoreFlash(teamID, payload.Points)
 	}
 
 	a.broadcastUpdate()
@@ -2652,7 +2665,8 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 	// Award LED comet effect to winning team
 	if points > 0 && payload.WinnerTeam != "" {
 		a.sendLEDSetComet(payload.WinnerTeam)
-		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.WinnerTeam}, lighting.ScorePulseDuration)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.WinnerTeam}, points, lighting.ScorePulseDuration)
+		a.startScoreFlash(payload.WinnerTeam, points)
 	}
 
 	// Record event to history
@@ -2846,7 +2860,8 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 			teamID = b.Team
 		}
 		a.sendLEDSetComet(teamID)
-		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, lighting.ScorePulseDuration)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, payload.Points, lighting.ScorePulseDuration)
+		a.startScoreFlash(teamID, payload.Points)
 	}
 
 	// Record event to history
@@ -2924,7 +2939,8 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	// Send COMET LED effect to the team that received points (if points > 0)
 	if payload.Points > 0 {
 		a.sendLEDSetComet(payload.Team)
-		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.Team}, lighting.ScorePulseDuration)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.Team}, payload.Points, lighting.ScorePulseDuration)
+		a.startScoreFlash(payload.Team, payload.Points)
 	}
 
 	// Record event to history

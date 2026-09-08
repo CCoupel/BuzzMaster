@@ -112,7 +112,7 @@ func TestCA2_SetupAmbiance_NotConfigured_LeavesLightingNilAndCostsNothing(t *tes
 	// c'est le nil de a.lighting qui absorbe l'appel (contract §4.3). On le
 	// vérifie directement ici plutôt que de le supposer.
 	app.ambiance().NotifyState()
-	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 3, lighting.ScorePulseDuration)
 }
 
 // TestCA2_StartAmbianceLifecycleGuard_IsPresentInSource is a lightweight,
@@ -425,7 +425,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	// cmd/server, jamais reproduit hors charge extrême. Les délais d'attente
 	// ci-dessous sont portés à 5 s pour la même raison (temps réel, pas
 	// d'horloge injectée ici — voir la note sur tw205Step plus haut).
-	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 600*time.Millisecond)
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 3, 600*time.Millisecond)
 	tw205WaitFor(t, 5*time.Second, func() bool {
 		last, ok := fake.Last()
 		if !ok {
@@ -493,7 +493,7 @@ func TestCA5_ConcurrentEngineMutationAndNotify_RaceFree(t *testing.T) {
 				case 0:
 					app.ambiance().NotifyState()
 				case 1:
-					app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 2*time.Millisecond)
+					app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 3, 2*time.Millisecond)
 				case 2:
 					app.engine.SetPhase(phases[(i+g)%len(phases)])
 					app.ambiance().NotifyState()

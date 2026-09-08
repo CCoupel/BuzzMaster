@@ -31,7 +31,7 @@ func TestDevAmbianceNilWriterSitesAreNoOps(t *testing.T) {
 	}
 	// Every site calls these unguarded; they must be no-ops on nil.
 	app.ambiance().NotifyState()
-	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 3, lighting.ScorePulseDuration)
 	app.setupAmbiance()
 	if app.ambiance() != nil {
 		t.Fatal("setupAmbiance must leave lighting nil when not configured")
@@ -210,9 +210,17 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 // routing (zoneFor, internal/lighting/hue/driver.go) already existed
 // before this task; this is what actually feeds it.
 //
+// Batch C/C1a (planner-v10-teamcolor-changes-20260908-092100.md §1):
+// updated — a team's own zone is now emitted for EVERY Kind, KindIdle
+// included (no more "hors partie ⇒ general only" carve-out), and is at
+// FULL intensity outside the three "active game" Kinds
+// (RUNNING/PAUSE_ALL/REVEAL — TEAM_TURN/BUZZ/SCORE always have their sole
+// concerned team distinguished so they never actually surface the dimmed
+// branch in this particular test's shape-only assertions below).
+//
 // This test covers the STRUCTURAL shape (which zones appear, general's own
-// colour untouched, dedup, idle exclusion). The distinguished/dimmed
-// INTENSITY matrix has its own dedicated coverage:
+// colour untouched, dedup). The distinguished/dimmed INTENSITY matrix has
+// its own dedicated coverage:
 // TestTeamColor_DistinguishedTeamFullIntensity_OthersAttenuated
 // (ambiance_team_color_acceptance_test.go, test-writer/A2).
 func TestDevAmbianceTeamZones213(t *testing.T) {
@@ -233,18 +241,32 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 		return out
 	}
 
-	// KindIdle (hors partie) ⇒ general only, whatever the team roster —
-	// the ONE case the board never applies to.
-	if zones := zonesByName(lighting.Event{Kind: lighting.KindIdle}); len(zones) != 1 {
-		t.Errorf("IDLE (hors partie) : attendu 1 seule zone (general), got %+v", zones)
+	// KindIdle (hors partie), KindReady (PREPARE/READY/COUNTDOWN) and
+	// KindEntracte: a team's own zone is now ALWAYS present, at FULL
+	// intensity — C1a's "jamais de repli, hors partie comme en partie",
+	// with the buzzer-table intensity rule ("STOPPED/PREPARE/READY/
+	// COUNTDOWN ⇒ full, always").
+	for _, ev := range []lighting.Event{{Kind: lighting.KindIdle}, {Kind: lighting.KindReady}, {Kind: lighting.KindEntracte}} {
+		zones := zonesByName(ev)
+		if len(zones) != 4 { // general + TeamA + TeamB + TeamC
+			t.Fatalf("%s : attendu 4 zones (general + les 3 équipes du plateau, C1a), got %+v", ev.Kind, zones)
+		}
+		for name, want := range map[string][3]int{"TeamA": wantTeamA, "TeamB": wantTeamB, "TeamC": wantTeamC} {
+			z := zones[name]
+			if z.Color != want {
+				t.Errorf("%s: zone %s doit porter sa propre couleur, got %v want %v", ev.Kind, name, z.Color, want)
+			}
+			if z.Intensity != 255 {
+				t.Errorf("%s: zone %s (hors des 3 phases actives) doit être à pleine intensité, got intensity=%d", ev.Kind, name, z.Intensity)
+			}
+		}
 	}
 
-	// Any OTHER kind, even with no team named by the event itself, now
-	// emits one zone per team ON THE BOARD (all 3), each at its OWN colour,
-	// dimmed (nobody distinguished) — the whole point of the P1 fix.
+	// The three "active game" Kinds (STARTED-no-turn/PAUSED-admin/REVEALED
+	// with nobody credited) still dim an undistinguished team's own zone —
+	// unaffected by C1a, which only removed the fallback, not this rule.
 	for _, ev := range []lighting.Event{
-		{Kind: lighting.KindReady}, {Kind: lighting.KindRunning},
-		{Kind: lighting.KindPauseAll}, {Kind: lighting.KindReveal}, {Kind: lighting.KindEntracte},
+		{Kind: lighting.KindRunning}, {Kind: lighting.KindPauseAll}, {Kind: lighting.KindReveal},
 	} {
 		zones := zonesByName(ev)
 		if len(zones) != 4 { // general + TeamA + TeamB + TeamC
@@ -355,7 +377,7 @@ func TestDevAmbianceWriterRendersLiveState(t *testing.T) {
 	// The pulse must outlive the 100 ms throttle that follows the first
 	// Apply, otherwise it legitimately expires before being rendered (last
 	// state wins). Real SCORE pulses last 4800 ms; 300 ms keeps the test fast.
-	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamB"}, 300*time.Millisecond)
+	app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamB"}, 3, 300*time.Millisecond)
 	waitForCount(t, fake, 2)
 	if last, _ := fake.Last(); last.Zones[0].Color != app.teamNameToRGB("TeamB") {
 		t.Fatalf("SCORE pulse must use TeamB's palette colour, got %+v", last)
@@ -506,7 +528,7 @@ func TestDevAmbianceFirstEnableIsAtomicUnderConcurrency(t *testing.T) {
 					return
 				default:
 					app.ambiance().NotifyState()
-					app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, lighting.ScorePulseDuration)
+					app.ambiance().NotifyPulse(lighting.KindScore, []string{"TeamA"}, 3, lighting.ScorePulseDuration)
 				}
 			}
 		}()
