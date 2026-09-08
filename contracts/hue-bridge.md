@@ -178,8 +178,31 @@ jamais `internal/game` ni `internal/protocol`.
 
 | Zone | Ampoules ciblées |
 |---|---|
-| `"general"` | toutes les ampoules de rôle `general`, **plus** toute ampoule d'équipe dont l'équipe n'est pas nommée dans l'état courant |
+| `"general"` | les ampoules de **rôle `general`** — et elles seules |
 | nom d'équipe (#213) | les ampoules affectées à cette équipe |
+
+> ### ⚠️ Révision du 2026-09-08 — une ampoule d'équipe ne rejoint **jamais** `general`
+>
+> La version précédente faisait retomber dans `general` « toute ampoule d'équipe dont l'équipe
+> n'est pas nommée dans l'état courant ». **Cette retombée est supprimée**, en partie comme hors
+> partie (exigence utilisateur : « on ne doit **jamais** avoir une couleur autre que celle de
+> l'équipe »).
+>
+> **Une ampoule de rôle `team` rend toujours la couleur de son équipe.** Elle n'affiche jamais la
+> scène générale ni l'identité d'une autre équipe. La composition des zones devient **entièrement
+> statique** : elle ne dépend plus que de la configuration, jamais de l'état du jeu.
+>
+> **Deux réserves, seules dérogations :**
+> 1. **Extinction à l'arrêt du serveur** (`lighting.md` §10.4) — éteint **toutes** les ampoules,
+>    d'équipe comprises. Cette règle régit l'exploitation, pas l'arrêt.
+> 2. **Impulsion SCORE** (`lighting.md` §8) — clignotement **transitoire** vers l'or, sur le score
+>    **de cette équipe-là**, alternant avec **sa propre** couleur et y revenant : il célèbre
+>    l'identité au lieu de l'effacer.
+>
+> **Affectation orpheline** — une ampoule affectée à une équipe **absente de la configuration** est
+> traitée comme **non affectée** : c'est une ampoule `general` ordinaire. Une incohérence de
+> configuration n'est pas un état de jeu, et une ampoule grise à vie serait indéchiffrable.
+> *(Précision dérivée, planner — signalée pour relecture.)*
 
 Une zone présente dans `State` mais sans aucune ampoule configurée est un **non-événement
 silencieux**, pas une erreur.
@@ -274,6 +297,7 @@ modèle de configuration** : l'admin affecte toujours des **ampoules** à des é
 |---|---|---|
 | `buzzmaster-ambiance` | **toutes** les ampoules assignées | All OFF, Flash, extinction à l'arrêt (`lighting.md` §10.4) |
 | `buzzmaster-general` | les ampoules de rôle `general` | la scène de salle — le cas le plus fréquent |
+| | *(depuis la révision du §5.2 du 2026-09-08, cet ensemble est **purement statique** : la composition dynamique que le point 3 ci-dessous devait contourner a disparu. La règle « ne jamais muter sur un événement de jeu » reste écrite, mais elle est désormais trivialement satisfaite.)* | |
 | `buzzmaster-team-<équipe>` | les ampoules de cette équipe | **créé uniquement si l'équipe a ≥ 2 ampoules** |
 
 #### Type d'objet : `LightGroup`, jamais `Room`, jamais `Zone`

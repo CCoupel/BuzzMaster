@@ -2,6 +2,55 @@
 
 ---
 
+## [20260908] — Éclairage : l'ampoule d'équipe ne quitte jamais sa couleur, et SCORE clignote en or (#213, #208)
+
+> Deux changements demandés après validation du Batch A en QUALIF round 6. Le premier **renverse
+> une règle documentée** — signalé comme tel, avec l'audit des règles qui en dépendaient.
+
+- **[CHANGED]** `contracts/hue-bridge.md` §5.2 — **suppression de la retombée vers `general`**.
+  Une ampoule de rôle `team` rend **toujours** la couleur de son équipe, en partie **comme hors
+  partie** ; elle n'affiche jamais la scène générale ni l'identité d'une autre équipe. La
+  composition des zones devient **entièrement statique** : elle ne dépend plus que de la
+  configuration.
+  **Audit des règles dépendantes** : §5.7 (4 règles de dégradation) et `lighting.md` §10.4
+  (extinction à l'arrêt) sont **intacts** — la seconde a été **vérifiée dans le code**, elle émet
+  déjà une zone d'extinction par équipe et n'a jamais dépendu de la retombée.
+  **Affectation orpheline** (équipe supprimée) ⇒ ampoule `general` ordinaire : une incohérence de
+  configuration n'est pas un état de jeu. *(Précision dérivée, planner.)*
+- **[CHANGED]** `contracts/lighting.md` §10.1 — le sélecteur ON/AUTO/OFF n'atteint **jamais** une
+  ampoule d'équipe, **en permanence**. ⛔ L'affirmation « hors partie, un OFF éteint tout » est
+  **corrigée** : un OFF éteint la zone `general` et laisse chaque ampoule d'équipe à sa couleur.
+  Ce qui ne valait que pendant une partie est **étendu à tout instant** — la règle en devient plus
+  simple.
+- **[CHANGED]** `contracts/lighting.md` §10.1 (encart R8) — le risque « mode oublié »
+  **s'atténue** : dès qu'une affectation existe, la salle n'est **jamais** totalement noire. Le cas
+  dur se réduit à une installation sans aucune ampoule d'équipe.
+- **[NEW]** `contracts/lighting.md` §10.4 exigence 0 — **réserve explicite** : l'extinction à
+  l'arrêt porte sur **toutes** les ampoules, d'équipe comprises. Cette règle régit l'exploitation,
+  pas l'arrêt.
+- **[NEW]** `contracts/lighting.md` §8.1 — **intensité des ampoules d'équipe**, transposée du
+  buzzer : **pleine** hors partie et en `PREPARE`/`READY`/`COUNTDOWN`, pleine si l'équipe est
+  distinguée en jeu actif, **atténuée sinon** via `dimIntensityFor()` — la fonction **déjà employée
+  par les buzzers**, jamais un second seuil.
+- **[NEW]** `contracts/lighting.md` §8.1 — **impulsion SCORE** : clignotement **couleur d'équipe ↔
+  or `{255,190,0}`**, cadence 400/400 ms (celle du Flash), **`clamp(points, 1, 6)` clignotements**,
+  **durée totale constante à `ScorePulseDuration`**. Le plafond 6 n'est pas un compromis :
+  `4800 / 800 = 6` exactement.
+  ⚠️ **Seule dérogation** au §5.2 avec l'extinction : transitoire, sur le score **de cette
+  équipe-là**, alternée avec **sa propre** couleur et y revenant — ne pas la « corriger ».
+- **[NEW]** `contracts/lighting.md` §2.4 — **`Event.Points int`**, renseigné pour `KindScore`
+  seulement, `0` ailleurs. Champ optionnel, aucun appelant invalidé. Sans lui, la proportionnalité
+  du §8.1 n'a pas d'entrée.
+- **[CHANGED]** `contracts/hue-bridge.md` §5.8 — `buzzmaster-general` devient un ensemble
+  **purement statique** : la composition dynamique que le point 3 devait contourner disparaît.
+
+**Aucun BREAKING** : `Event.Points` est additif, aucune configuration existante n'est invalidée, et
+`internal/lighting/hue/` n'est pas modifié (le clignotement est un drapeau de phase plus une
+re-dérivation, patron `runLightingFlash` déjà en place).
+Détail, audit et découpage : `_work/reports/planner-v10-teamcolor-changes-20260908-092100.md`.
+
+---
+
 ## [20260907g] — Éclairage : groupes Hue là où ils paient, et couleur d'équipe (#208, #213)
 
 > Deux retours QUALIF round 5. Le premier est un **écart d'implémentation au contrat existant**

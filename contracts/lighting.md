@@ -95,6 +95,19 @@ elle est traitée explicitement.
 
 ---
 
+### 2.4 `Event.Points` — normatif (2026-09-08)
+
+`Event` porte, en plus de `Kind` et `Teams`, un champ **`Points int`** :
+
+- renseigné **uniquement** pour `KindScore`, avec le nombre de points marqués ;
+- **`0` pour tout autre genre** — champ optionnel, aucun appelant existant n'est invalidé ;
+- seul consommateur : le nombre de clignotements de l'impulsion SCORE (§8.1).
+
+Les quatre sites d'émission `NotifyPulse(KindScore, …)` de `cmd/server/main.go` doivent le
+renseigner ; sans lui, la proportionnalité du §8.1 n'a pas d'entrée.
+
+---
+
 ## 3. Interface du pilote — normatif
 
 ```go
@@ -416,6 +429,40 @@ ambiance: site LED sans décision d'ambiance — handleNouveauTruc -> sendLEDSet
 > Plonger la pièce dans le noir pendant l'entracte serait le contraire du service rendu. Cette
 > divergence est **délibérée** et ne doit pas être « corrigée » par alignement sur les buzzers.
 
+### 8.1 Ampoules d'équipe — intensité et impulsion SCORE (révision du 2026-09-08)
+
+Une ampoule de rôle `team` rend **toujours** la couleur de son équipe (`hue-bridge.md` §5.2). Ce
+que l'état du jeu module, c'est son **intensité** — transposition littérale de
+`sendLEDSetForBuzzerNormal`, la référence que fixe l'intention « gérer ces Hue de la même façon
+que les buzzers » :
+
+| Situation | Intensité |
+|---|---|
+| Hors partie, `PREPARE`, `READY`, `COUNTDOWN` | **pleine** — comme un buzzer, `SOLID` 255 |
+| `STARTED` / `PAUSED` / `REVEALED`, équipe **distinguée** par l'événement | **pleine** |
+| `STARTED` / `PAUSED` / `REVEALED`, équipe **non distinguée** | **atténuée** — `dimIntensityFor()`, la fonction **déjà employée par les buzzers**, jamais un second seuil |
+
+> Un buzzer n'est atténué **que** pendant le jeu actif. Hors partie il est à pleine intensité — la
+> salle suit la même règle, sans quoi les deux s'atténueraient à contretemps.
+
+**Impulsion SCORE — clignotement or, proportionnel aux points :**
+
+| Paramètre | Valeur |
+|---|---|
+| Couleurs alternées | **couleur de l'équipe créditée** ↔ **or `{255, 190, 0}`**, pleine intensité |
+| Cadence | **400 ms / 400 ms** — celle du Flash du §10.1, jamais un second réglage |
+| Nombre de clignotements | **`clamp(points, 1, 6)`** — un par point marqué, plafonné |
+| Durée totale | **`ScorePulseDuration` (4800 ms), constante quel que soit le score** : après ses `N` clignotements, l'ampoule tient la couleur d'équipe à pleine intensité jusqu'à l'échéance |
+
+> **Pourquoi 6** : `4800 / 800 = 6` exactement. Le plafond n'est pas un renoncement, c'est ce que
+> le pulse contient — et au-delà, l'œil ne compte plus. Garder une durée **constante** préserve
+> `ScorePulseDuration` comme réglage unique et le registre d'impulsion à une place du §4.2.
+
+> ⚠️ **Seule dérogation à « toujours la couleur de son équipe »**, avec l'extinction du §10.4. Elle
+> est **bornée** : transitoire, déclenchée par le score **de cette équipe-là**, alternée avec **sa
+> propre** couleur et y revenant. Elle **célèbre** l'identité au lieu de l'effacer — ne pas la
+> « corriger » au nom du §5.2.
+
 **Résolution de la couleur d'équipe** — réutiliser la machinerie existante, **jamais une seconde
 palette** : `teamColorPalette` (`main.go:3687`), `teamColorToRGB` (3838),
 `nearestPaletteColorByHue` (3797), `dimIntensityFor` (3779).
@@ -508,25 +555,26 @@ Le sélecteur agit sur la **zone `general` au sens de `hue-bridge.md` §5.2**, e
 > les ampoules de rôle `general`, **plus** toute ampoule d'équipe **dont l'équipe n'est pas nommée
 > dans l'état courant**.
 
-Les ampoules **affectées à une équipe nommée dans l'état courant** restent **toujours pilotées par
-la dérivation de jeu** (#213), **quelle que soit la position du sélecteur**. La régie force
-l'ambiance de la salle ; elle ne débranche jamais l'information « quelle équipe joue ».
+Les ampoules **affectées à une équipe** restent **toujours pilotées par la dérivation de jeu**
+(#213), **quelle que soit la position du sélecteur**. La régie force l'ambiance de la salle ; elle
+ne débranche jamais l'information « quelle équipe joue ».
 
-Deux conséquences, qui découlent de la définition §5.2 et méritent d'être lues :
+> ⚠️ **Révisé le 2026-09-08.** La version précédente faisait retomber les ampoules d'équipe dans
+> `general` hors partie, et affirmait qu'« hors partie, un OFF éteint tout ». **C'est faux
+> désormais** : `hue-bridge.md` §5.2 a supprimé toute retombée. Ce qui ne valait que pendant une
+> partie est **étendu à tout instant** — la règle en devient plus simple, pas plus complexe.
 
-- **Hors partie** — ou dès qu'aucune équipe n'est nommée dans l'état courant — **toutes** les
-  ampoules d'équipe appartiennent à la zone `general`. Un **OFF** éteint donc bien **tout**, ce qui
-  correspond à l'attente ordinaire du mot.
-- **Pendant une partie, avec une équipe active** — un **OFF** plonge la salle dans le noir **mais
-  laisse l'ampoule de l'équipe active à sa couleur**. C'est délibéré et c'est même l'effet le plus
-  utile du dispositif : la salle s'efface, l'équipe qui joue reste désignée par la lumière.
+Conséquence unique, valable **en permanence** :
+
+- Un **OFF** éteint la zone `general` **et laisse chaque ampoule d'équipe à la couleur de son
+  équipe** — en partie comme hors partie. C'est délibéré, et c'est l'effet le plus utile du
+  dispositif : la salle s'efface, les équipes restent désignées par la lumière.
 
 - **Installation sans aucune ampoule d'équipe** — cas prévu par `hue-bridge.md` §5.7 : toutes les
-  ampoules sont alors dans la zone `general`, y compris l'information « quelle équipe joue », que
-  la scène générale porte elle-même (`KindTeamTurn`). Un **OFF** y éteint donc **tout**, couleur
-  d'équipe comprise. La garantie « l'équipe active reste allumée » n'existe que si cette équipe
-  **dispose d'une ampoule dédiée** — c'est une raison de plus d'en affecter au moins une par
-  équipe, pas un défaut de la règle.
+  ampoules sont de rôle `general`, y compris l'information « quelle équipe joue », que la scène
+  générale porte elle-même (`KindTeamTurn`). Un **OFF** y éteint donc **tout**. La garantie « les
+  ampoules d'équipe restent allumées » n'existe que si des ampoules **leur sont affectées** —
+  c'est une raison de plus d'en affecter au moins une par équipe, pas un défaut de la règle.
 
 > Cette portée **corrige** une précision dérivée erronée du planner (« toutes les ampoules pilotées,
 > zones d'équipe comprises »), écartée par l'utilisateur le 2026-09-07. Le raisonnement fautif était
@@ -570,9 +618,10 @@ le prochain événement de jeu ; il ne s'y ajoute pas.
 > mérite son nom — et le sélecteur tri-état le rend **beaucoup plus lisible** qu'un bouton
 > « actif » : la position se lit d'un coup d'œil, et **AUTO** nomme explicitement le geste qui
 > corrige la situation.
-> La portée restreinte à la zone `general` en atténue par ailleurs la gravité **pendant une
-> partie** : l'ampoule de l'équipe active reste allumée, la salle n'est donc jamais totalement
-> noire tant qu'une équipe joue. Le cas dur reste **hors partie**, où le OFF couvre tout.
+> **Depuis la révision du 2026-09-08, ce risque s'atténue nettement** : toute ampoule affectée à
+> une équipe reste allumée **en permanence**, en partie comme hors partie. Dès qu'au moins une
+> affectation existe, la salle n'est **jamais** totalement noire. Le cas dur se réduit à une
+> installation **sans aucune ampoule d'équipe**.
 
 #### 10.1.2 Flash et le sélecteur — précédence, pas exclusion
 
@@ -649,6 +698,10 @@ L'arrêt du serveur éteint **les ampoules Hue et les LED des buzzers**.
 > présent, une suite de tests verte, et la salle qui reste allumée sur la dernière scène.
 
 **Exigences normatives :**
+0. L'extinction porte sur **toutes** les ampoules pilotées, **y compris celles affectées à une
+   équipe** — c'est l'une des deux dérogations à la règle « une ampoule d'équipe garde toujours sa
+   couleur » (`hue-bridge.md` §5.2, révision du 2026-09-08). Cette règle régit l'**exploitation**,
+   pas l'arrêt : laisser une ampoule allumée après l'arrêt du serveur reste inacceptable.
 1. L'extinction s'effectue **avant** `a.cancelCtx()`.
 2. Elle utilise **son propre contexte à échéance courte** (ordre de grandeur : 1 à 2 s), jamais
    `a.ctx`.
