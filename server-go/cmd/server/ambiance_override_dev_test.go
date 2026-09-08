@@ -18,6 +18,7 @@ import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
 	"buzzcontrol/internal/lighting/hue"
+	"buzzcontrol/internal/server"
 )
 
 // TestDevLightingOverrideGeneral_PureLogic pins lightingOverrideGeneral in
@@ -617,5 +618,59 @@ func TestDevLightingReconnect_EngagedOverride_IsReappliedNotTheGame(t *testing.T
 	}
 	if got := app.LightingMode(); got != "OFF" {
 		t.Fatalf("the selector itself must still read OFF after the resync, got %q", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// PreviewColor (task-dev-backend-preview-real-color-20260908.md): POST
+// /api/lighting/preview shows the REAL colour a bulb will carry once
+// assigned, not a fixed white — team palette for "team:<name>", the
+// general zone's own current colour otherwise.
+// ---------------------------------------------------------------------------
+
+// TestDevPreviewColor_TeamRoleUsesTeamPalette pins the "team:<name>" branch:
+// the SAME palette as everywhere else (teamNameToRGB), never a second one.
+func TestDevPreviewColor_TeamRoleUsesTeamPalette(t *testing.T) {
+	app := newTestApp(t) // TeamA/TeamB/TeamC configured — see newTestApp's own comment
+	want := app.teamNameToRGB("TeamA")
+	if got := app.PreviewColor("team:TeamA"); got != want {
+		t.Fatalf(`PreviewColor("team:TeamA") = %v, want teamNameToRGB("TeamA") = %v`, got, want)
+	}
+	// Unknown team name: teamNameToRGB's own documented gray fallback, not
+	// a special case here.
+	gray := [3]int{128, 128, 128}
+	if got := app.PreviewColor("team:NePasExister"); got != gray {
+		t.Fatalf(`PreviewColor of an unknown team must fall back to gray like teamNameToRGB itself, got %v`, got)
+	}
+}
+
+// TestDevPreviewColor_GeneralRoleUsesCurrentTheme pins the "general" (and
+// default/unrecognised) branch: ambianceThemeColor()'s OWN live resolution,
+// never a duplicated copy of its logic — a themed question changes what
+// PreviewColor("general") returns, and no question at all falls back to
+// white, exactly like ambianceThemeColor's own dedicated coverage
+// (TestDevAmbianceThemeColor_ResolutionOrder, ambiance_dev_test.go).
+func TestDevPreviewColor_GeneralRoleUsesCurrentTheme(t *testing.T) {
+	app := newTestApp(t)
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+	white := [3]int{255, 255, 255}
+
+	for _, role := range []string{"general", "", "n'importe-quoi"} {
+		if got := app.PreviewColor(role); got != white {
+			t.Fatalf("PreviewColor(%q) with no live question must be white, got %v", role, got)
+		}
+	}
+
+	geography := [3]int{0x3b, 0x82, 0xf6}
+	app.engine.Ready("q1", &game.Question{ID: "q1", Type: game.QuestionTypeQCM, Category: game.CategoryGeography})
+	for _, role := range []string{"general", "", "n'importe-quoi"} {
+		if got := app.PreviewColor(role); got != geography {
+			t.Fatalf("PreviewColor(%q) must reflect the live question's theme, got %v want %v", role, got, geography)
+		}
+	}
+	// Sanity: this must be the SAME value ambianceThemeColor() itself
+	// returns right now — never a second, independently-computed copy.
+	if got, want := app.PreviewColor("general"), app.ambianceThemeColor(); got != want {
+		t.Fatalf("PreviewColor(\"general\") = %v must equal ambianceThemeColor() = %v exactly", got, want)
 	}
 }

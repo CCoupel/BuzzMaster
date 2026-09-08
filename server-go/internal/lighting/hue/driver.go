@@ -1058,12 +1058,19 @@ func liveLightID(lights map[string]lightV1, name string) (string, bool) {
 	return found, true
 }
 
-// SetLightDirect writes ONE named light to a fixed, PERSISTENT state — full
-// white (on, bri 254) or off — with no restore and no flash timer, unlike
-// TestFlash. Backs POST /api/lighting/preview (#207 P2a,
-// planner-v10-general-theme-toggle-20260908-114420.md §Partie 2): an admin
-// sees a bulb light up or go dark the instant they check/uncheck it in the
-// UI, even (deliberately) BEFORE it is saved to configuration.
+// SetLightDirect writes ONE named light to a fixed, PERSISTENT state — the
+// given colour at full intensity (on, bri 254), or off — with no restore
+// and no flash timer, unlike TestFlash. Backs POST /api/lighting/preview
+// (#207 P2a, planner-v10-general-theme-toggle-20260908-114420.md §Partie 2):
+// an admin sees a bulb light up in its REAL colour (team or general theme —
+// resolved by the caller, cmd/server, this package knows neither teams nor
+// questions) or go dark the instant they check/uncheck it in the UI, even
+// (deliberately) BEFORE it is saved to configuration. color is ignored when
+// on is false.
+//
+// 2026-09-08 revision: originally always full white regardless of colour —
+// the caller now resolves and passes the actual colour to preview (team
+// palette or the live theme colour, contract hue-bridge.md §7).
 //
 // Resolution follows the EXACT same two-step rule as TestFlash's own doc
 // comment, for the same reason (QUALIF rounds 1-5, contract §7): try the
@@ -1073,7 +1080,7 @@ func liveLightID(lights map[string]lightV1, name string) (string, bool) {
 // resolve against configuration ALONE. A light that is not yet saved has no
 // entry in d.resolved at all, so it always falls through to the live path,
 // exactly the case this endpoint exists for.
-func (d *Driver) SetLightDirect(ctx context.Context, name string, on bool) error {
+func (d *Driver) SetLightDirect(ctx context.Context, name string, on bool, color [3]int) error {
 	name = NormalizeLightName(name)
 	if name == "" {
 		return errors.New("hue: light name is required")
@@ -1101,7 +1108,7 @@ func (d *Driver) SetLightDirect(ctx context.Context, name string, on bool) error
 	}
 	want := applied{on: false}
 	if on {
-		want = applied{on: true, bri: 254, xy: rgbToXY(255, 255, 255)}
+		want = applied{on: true, bri: 254, xy: rgbToXY(color[0], color[1], color[2])}
 	}
 	if err := c.setState(ctx, id, want.toV1()); err != nil {
 		cerr := classify(err)

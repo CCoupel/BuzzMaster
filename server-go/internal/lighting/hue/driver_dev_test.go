@@ -529,7 +529,8 @@ func TestDevSetLightDirect_ResolvesLiveUnconfiguredLight(t *testing.T) {
 	f := newDevBridge(t, "BuzzHue1") // on the bridge, but NEVER saved to config
 	d, _ := newDevDriver(t, f)       // zero configured lights — exactly the reported state
 
-	if err := d.SetLightDirect(context.Background(), "BuzzHue1", true); err != nil {
+	white := [3]int{255, 255, 255}
+	if err := d.SetLightDirect(context.Background(), "BuzzHue1", true, white); err != nil {
 		t.Fatalf("SetLightDirect(on) must resolve a light present on the bridge even when unconfigured: %v", err)
 	}
 	puts := f.puts()
@@ -537,7 +538,7 @@ func TestDevSetLightDirect_ResolvesLiveUnconfiguredLight(t *testing.T) {
 		t.Fatalf("expected one PUT turning the light full white, got %+v", puts)
 	}
 
-	if err := d.SetLightDirect(context.Background(), "BuzzHue1", false); err != nil {
+	if err := d.SetLightDirect(context.Background(), "BuzzHue1", false, white); err != nil {
 		t.Fatalf("SetLightDirect(off): %v", err)
 	}
 	puts = f.puts()
@@ -554,7 +555,7 @@ func TestDevSetLightDirect_UnknownNameIsRefused(t *testing.T) {
 	f := newDevBridge(t, "Salon")
 	d, _ := newDevDriver(t, f)
 
-	if err := d.SetLightDirect(context.Background(), "Inconnue", true); err == nil {
+	if err := d.SetLightDirect(context.Background(), "Inconnue", true, [3]int{255, 255, 255}); err == nil {
 		t.Fatal("SetLightDirect must refuse a name matching no light on the bridge")
 	}
 	if len(f.puts()) != 0 {
@@ -583,7 +584,7 @@ func TestDevSetLightDirect_InvalidatesWriterDedupCache(t *testing.T) {
 	}
 
 	// Out-of-band preview write, bypassing the writer entirely.
-	if err := d.SetLightDirect(ctx, "L1", true); err != nil {
+	if err := d.SetLightDirect(ctx, "L1", true, [3]int{255, 255, 255}); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.puts()) != 2 {
@@ -598,6 +599,39 @@ func TestDevSetLightDirect_InvalidatesWriterDedupCache(t *testing.T) {
 	}
 	if len(f.puts()) != 3 {
 		t.Fatalf("the writer's next Apply must re-assert L1's state rather than trust a cache SetLightDirect bypassed, got %d PUTs: %+v", len(f.puts()), f.puts())
+	}
+}
+
+// TestDevSetLightDirect_UsesTheGivenColour pins the 2026-09-08 revision
+// (task-dev-backend-preview-real-color-20260908.md): SetLightDirect no
+// longer hardcodes white — the caller's colour is what actually reaches the
+// bridge, always at full intensity (bri 254). Verified against rgbToXY
+// directly (the same conversion the rest of the package already trusts,
+// never re-implemented here) so this test would catch a regression to a
+// literal white payload regardless of which RGB is passed in.
+func TestDevSetLightDirect_UsesTheGivenColour(t *testing.T) {
+	f := newDevBridge(t, "L1")
+	d, _ := newDevDriver(t, f)
+	ctx := context.Background()
+
+	blue := [3]int{59, 130, 246} // GEOGRAPHY theme, arbitrarily NOT white — see contracts/hue-bridge.md §7
+	if err := d.SetLightDirect(ctx, "L1", true, blue); err != nil {
+		t.Fatal(err)
+	}
+	want := rgbToXY(blue[0], blue[1], blue[2])
+	puts := f.puts()
+	if len(puts) != 1 {
+		t.Fatalf("expected exactly 1 PUT, got %+v", puts)
+	}
+	var body struct {
+		XY  [2]float64 `json:"xy"`
+		Bri int        `json:"bri"`
+	}
+	if err := json.Unmarshal([]byte(puts[0].body), &body); err != nil {
+		t.Fatalf("PUT body not valid JSON: %v (%s)", err, puts[0].body)
+	}
+	if body.XY != want || body.Bri != 254 {
+		t.Fatalf("expected the GIVEN colour's own xy %v at full intensity (bri 254), got xy=%v bri=%d", want, body.XY, body.Bri)
 	}
 }
 

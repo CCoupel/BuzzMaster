@@ -484,12 +484,25 @@ Sert la sélection dans l'écran d'administration.
 Corps : `{"name":"BuzzHue1"}` ou `{}` pour toutes les ampoules sélectionnées.
 Effet : un flash bref puis **retour à l'état antérieur**. Réponse `200 {"result":"ok"}`.
 
-### `POST /api/lighting/preview` (2026-09-08, #207 P2a)
-Corps : `{"name":"BuzzHue1","on":true|false}` — `name` obligatoire (jamais « toutes »).
+### `POST /api/lighting/preview` (2026-09-08, #207 P2a ; `role` ajouté le 2026-09-08)
+Corps : `{"name":"BuzzHue1","on":true|false,"role":"general"|"team:<équipe>"}` — `name`
+obligatoire (jamais « toutes »), `role` optionnel.
 Effet : écrit un état **persistant**, sans restauration ni minuterie de flash, contrairement à
-`/test` — `on:true` ⇒ blanc pleine intensité, `on:false` ⇒ `{"on":false}`. Réponse
-`200 {"result":"ok"}`, même taxonomie d'erreurs et même garde d'opération unique en vol
-(`lightingBusy`, 429 `{"result":"busy","reason":"preview_in_progress"}`) que `/test`.
+`/test` — `on:true` ⇒ la **vraie couleur** du rôle choisi, pleine intensité ; `on:false` ⇒
+`{"on":false}` (le rôle n'a alors aucun effet). Réponse `200 {"result":"ok"}`, même taxonomie
+d'erreurs et même garde d'opération unique en vol (`lightingBusy`, 429
+`{"result":"busy","reason":"preview_in_progress"}`) que `/test`.
+
+**Résolution de la couleur par `role`** (`LightingProvider.PreviewColor`, jamais dupliquée) :
+
+| `role` | Couleur |
+|---|---|
+| `"team:<nom d'équipe>"` | couleur de l'équipe (`teamNameToRGB`) — la **même** palette que partout ailleurs, jamais une seconde valeur. Équipe inconnue ⇒ gris `{128,128,128}`, comme `teamNameToRGB` |
+| `"general"`, absent, vide, ou toute autre valeur | couleur **actuelle** de la zone générale — réutilise `ambianceThemeColor()` telle quelle (thème de la question en cours, blanc si aucune/catégorie inconnue ou personnalisée) |
+
+Le frontend envoie le rôle **actuellement sélectionné** dans le `<select>` de la ligne, avant même
+son enregistrement — la case cochée doit prévisualiser la couleur qu'elle **aura** une fois
+assignée, pas une couleur arbitraire.
 
 Sert l'allumage/extinction immédiat au coché/décoché d'une ampoule sur `/admin/ambiance`, **avant**
 même son enregistrement en configuration — c'est pourquoi la résolution du nom suit exactement la

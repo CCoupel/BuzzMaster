@@ -23,6 +23,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"buzzcontrol/internal/config"
@@ -340,6 +341,27 @@ func (a *App) LightingFlash() bool {
 // SetLightingFlash engages/disengages Flash.
 func (a *App) SetLightingFlash(on bool) {
 	a.setLightingFlash(on)
+}
+
+// previewTeamRolePrefix is the "team:<name>" encoding POST /api/lighting/
+// preview's role field uses (contract hue-bridge.md §7, 2026-09-08) — the
+// row's currently-SELECTED role in the admin UI, not yet saved.
+const previewTeamRolePrefix = "team:"
+
+// PreviewColor implements LightingProvider (internal/server/http_lighting.go):
+// resolves what colour POST /api/lighting/preview should light a bulb with
+// for the given role. "team:<name>" -> that team's own palette colour
+// (teamNameToRGB, main.go — the SAME palette as everywhere else, never a
+// second one); anything else (empty, "general", or unrecognised — the safe
+// default) -> the general zone's own CURRENT colour, reusing
+// ambianceThemeColor() verbatim rather than duplicating its resolution
+// order (live question theme, white if none/unknown/custom category or no
+// question at all — contract lighting.md §8.2's own doc comment).
+func (a *App) PreviewColor(role string) [3]int {
+	if team, ok := strings.CutPrefix(role, previewTeamRolePrefix); ok {
+		return a.teamNameToRGB(team)
+	}
+	return a.ambianceThemeColor()
 }
 
 // ---------------------------------------------------------------------------

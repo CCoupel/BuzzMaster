@@ -159,6 +159,11 @@ type devProvider struct {
 	d     *hue.Driver
 	mode  string
 	flash bool
+	// previewColor overrides PreviewColor's resolution for a test that
+	// cares about the exact colour (e.g. an HTTP-level test checking what
+	// reaches the bridge); nil uses devPreviewColor's own minimal default
+	// (this fake has no team palette or live question of its own).
+	previewColor func(role string) [3]int
 }
 
 func (p *devProvider) LightingDriver() *hue.Driver { p.mu.Lock(); defer p.mu.Unlock(); return p.d }
@@ -187,6 +192,29 @@ func (p *devProvider) SetLightingMode(mode string) error {
 func (p *devProvider) LightingFlash() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.flash }
 
 func (p *devProvider) SetLightingFlash(on bool) { p.mu.Lock(); p.flash = on; p.mu.Unlock() }
+
+// devWhite/devTeamMarker are this fake's own minimal PreviewColor default
+// (no real team palette or live question here) — a "team:" role gets a
+// colour that can never be confused with the general/white default, so a
+// test can assert role resolution actually happened without needing a real
+// engine.
+var (
+	devWhite      = [3]int{255, 255, 255}
+	devTeamMarker = [3]int{9, 9, 9}
+)
+
+func (p *devProvider) PreviewColor(role string) [3]int {
+	p.mu.Lock()
+	override := p.previewColor
+	p.mu.Unlock()
+	if override != nil {
+		return override(role)
+	}
+	if strings.HasPrefix(role, "team:") {
+		return devTeamMarker
+	}
+	return devWhite
+}
 
 var errDevInvalidLightingMode = errors.New("dev: mode must be ON, AUTO or OFF")
 
@@ -436,6 +464,57 @@ func TestDevLightingPreview_BusyGuard(t *testing.T) {
 	code, out = devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"BuzzHue1","on":true}`)
 	if code != 200 || out["result"] != "ok" {
 		t.Fatalf("retry after release: %d %v", code, out)
+	}
+}
+
+// TestDevLightingPreview_RolePassedToPreviewColor pins the 2026-09-08
+// revision (task-dev-backend-preview-real-color-20260908.md): the request
+// body's "role" reaches LightingProvider.PreviewColor UNCHANGED — the
+// actual colour→xy threading from there down to the bridge is
+// internal/lighting/hue's own concern, already covered there
+// (TestDevSetLightDirect_UsesTheGivenColour); this test is only about the
+// HTTP layer's own plumbing, using devProvider's override hook to observe
+// exactly what role the handler passed.
+func TestDevLightingPreview_RolePassedToPreviewColor(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+	bridge := newDevHueBridge(t)
+	d, err := hue.New(hue.Config{BridgeIP: bridge.srv.URL, BridgeID: bridge.bridgeID, APIKey: bridge.key,
+		FindBridge: func(_ context.Context, _ string, _ time.Duration) (hue.Bridge, bool, error) {
+			return hue.Bridge{}, false, nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	var gotRole string
+	provider := &devProvider{d: d, previewColor: func(role string) [3]int {
+		gotRole = role
+		return [3]int{1, 2, 3} // arbitrary, distinguishable — this test only checks the ROLE reaches here
+	}}
+	srv.Lighting = provider
+
+	for _, role := range []string{"team:LesBleus", "general", ""} {
+		gotRole = "unset"
+		body := `{"name":"BuzzHue1","on":true,"role":"` + role + `"}`
+		code, out := devDo(t, srv, "POST", "/api/lighting/preview", body)
+		if code != 200 || out["result"] != "ok" {
+			t.Fatalf("role=%q: %d %v", role, code, out)
+		}
+		if gotRole != role {
+			t.Errorf("role=%q: PreviewColor received %q", role, gotRole)
+		}
+	}
+
+	// off: PreviewColor is still called (documented as unconditional, no
+	// I/O, keeps a single code path), but its result plays no part in the
+	// actual write — hue.Driver.SetLightDirect ignores colour when !on.
+	gotRole = "unset"
+	code, out := devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"BuzzHue1","on":false,"role":"team:LesBleus"}`)
+	if code != 200 || out["result"] != "ok" {
+		t.Fatalf("off: %d %v", code, out)
+	}
+	if gotRole != "team:LesBleus" {
+		t.Errorf("off: role must still reach PreviewColor, got %q", gotRole)
 	}
 }
 

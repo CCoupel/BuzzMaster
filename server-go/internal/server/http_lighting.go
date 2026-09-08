@@ -36,6 +36,15 @@ type LightingProvider interface {
 	SetLightingMode(mode string) error
 	LightingFlash() bool
 	SetLightingFlash(on bool)
+
+	// PreviewColor resolves the REAL colour POST /api/lighting/preview
+	// (#207 P2a, 2026-09-08 revision) should light a bulb with for the
+	// given role — "team:<name>" for the team palette colour, anything
+	// else (including "", general, or an unrecognised value) for the
+	// general zone's own CURRENT colour (the live question's theme, white
+	// if none — contract hue-bridge.md §7). This package knows neither
+	// teams nor questions, so it never computes this itself.
+	PreviewColor(role string) [3]int
 }
 
 const (
@@ -373,15 +382,21 @@ func (h *HTTPServer) handleLightingTest(w http.ResponseWriter, r *http.Request) 
 	writeLightingJSON(w, http.StatusOK, map[string]string{"result": "ok"})
 }
 
-// handleLightingPreview — POST /api/lighting/preview {"name","on"} (#207
-// P2a, planner-v10-general-theme-toggle-20260908-114420.md §Partie 2):
-// unlike /test, this writes a PERSISTENT state (full white or off), no
-// restore, no flash timer — the instant on-screen feedback for checking or
-// unchecking a bulb on /admin/ambiance, BEFORE it is necessarily saved.
-// Same error taxonomy, same single-in-flight-operation guard, same pattern
-// as handleLightingTest above; the only different behaviour lives in the
-// driver (hue.Driver.SetLightDirect's own doc comment on why it resolves
-// against the live inventory first and foremost).
+// handleLightingPreview — POST /api/lighting/preview {"name","on","role"}
+// (#207 P2a, planner-v10-general-theme-toggle-20260908-114420.md §Partie 2;
+// role added 2026-09-08): unlike /test, this writes a PERSISTENT state (the
+// role's REAL colour, full intensity, or off), no restore, no flash timer —
+// the instant on-screen feedback for checking or unchecking a bulb on
+// /admin/ambiance, BEFORE it is necessarily saved, showing the colour it
+// will actually carry once assigned: the team palette colour for
+// "team:<name>", the general zone's own current colour (live question
+// theme, white if none) for anything else. Same error taxonomy, same
+// single-in-flight-operation guard, same pattern as handleLightingTest
+// above; the only different behaviour lives in the driver
+// (hue.Driver.SetLightDirect's own doc comment on why it resolves against
+// the live inventory first and foremost) and in PreviewColor (LightingProvider,
+// above) for the colour resolution itself — this package knows neither
+// teams nor questions.
 func (h *HTTPServer) handleLightingPreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -391,6 +406,7 @@ func (h *HTTPServer) handleLightingPreview(w http.ResponseWriter, r *http.Reques
 	var req struct {
 		Name string `json:"name"`
 		On   bool   `json:"on"`
+		Role string `json:"role"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -414,7 +430,11 @@ func (h *HTTPServer) handleLightingPreview(w http.ResponseWriter, r *http.Reques
 	defer release()
 	ctx, cancel := context.WithTimeout(r.Context(), lightingRequestTimeout)
 	defer cancel()
-	if err := d.SetLightDirect(ctx, name, req.On); err != nil {
+	// Resolved even when !req.On (SetLightDirect ignores it for off) — no
+	// I/O involved, and keeping the call unconditional avoids a second,
+	// divergent code path for "what colour would this be".
+	color := h.Lighting.PreviewColor(req.Role)
+	if err := d.SetLightDirect(ctx, name, req.On, color); err != nil {
 		writeLightingError(w, err)
 		return
 	}
