@@ -16,6 +16,7 @@ package main
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"buzzcontrol/internal/config"
@@ -381,12 +382,17 @@ func (a *App) ambianceCorrectTeams(state game.GameState) []string {
 // Scene table v1 (contract §8) — hard-wired for #205, editable in v10.1 (#210)
 // ---------------------------------------------------------------------------
 
-// ambianceScene is one row of the scene table: colour + intensity, with
-// useTeamColor meaning "the colour is the concerned team's palette colour".
+// ambianceSceneDef is one row of the scene table: colour + intensity.
+// UseTeamColor means "the colour is the concerned team's palette colour"
+// (SCORE only, as of the 2026-09-08 theme revision below); UseThemeColor
+// means "the colour is the current question's category theme, white if
+// none" (ambianceThemeColor, below) — the two are mutually exclusive across
+// the table, never combined on the same row.
 type ambianceSceneDef struct {
-	Color        [3]int
-	Intensity    int
-	UseTeamColor bool
+	Color         [3]int
+	Intensity     int
+	UseTeamColor  bool
+	UseThemeColor bool
 }
 
 var (
@@ -398,16 +404,28 @@ var (
 	// colour than the team's own".
 	ambianceScoreGold = [3]int{255, 190, 0}
 
-	ambianceSceneIdle       = ambianceSceneDef{Color: ambianceWarmWhite, Intensity: 120}     // room stays usable
-	ambianceSceneReady      = ambianceSceneDef{Color: [3]int{255, 255, 255}, Intensity: 200} // attention rising
-	ambianceSceneRunning    = ambianceSceneDef{Color: [3]int{40, 90, 255}, Intensity: 160}   // neutral blue, no team colour
-	ambianceSceneBuzz       = ambianceSceneDef{UseTeamColor: true, Intensity: 255}           // exactly the buzzers' RGB
-	ambianceScenePauseAll   = ambianceSceneDef{Color: [3]int{255, 170, 0}, Intensity: 120}   // amber: nothing is being played
-	ambianceSceneRevealGood = ambianceSceneDef{Color: [3]int{0, 220, 60}, Intensity: 255}    // at least one correct answer
-	ambianceSceneRevealNone = ambianceSceneDef{Color: [3]int{230, 30, 30}, Intensity: 255}   // nobody found it
-	ambianceSceneTeamTurn   = ambianceSceneDef{UseTeamColor: true, Intensity: 200}
-	ambianceSceneScore      = ambianceSceneDef{UseTeamColor: true, Intensity: 255}       // room-side COMET, same duration
-	ambianceSceneEntracte   = ambianceSceneDef{Color: ambianceWarmWhite, Intensity: 100} // deliberate divergence: buzzers go dark, the room stays lit
+	// Revision 2026-09-08 (planner-v10-general-theme-toggle-20260908-
+	// 114420.md §1.3, validated AND EXTENDED by the user — REVEAL and
+	// PAUSE_ALL included too, against the planner's own recommendation to
+	// leave them as fixed information colours): "general" now shows the
+	// CURRENT QUESTION's category theme (ambianceThemeColor, white if none)
+	// everywhere a question is relevant, replacing the neutral blue of
+	// RUNNING, the amber of PAUSE_ALL, the green/red of REVEAL, and the
+	// team colour of TEAM_TURN/BUZZ (redundant since C1a: a team's own
+	// identity is now carried permanently by its own bulb). Only IDLE (no
+	// question at all — plain white, brighter than before: 200 not the old
+	// warm-white 120) and ENTRACTE (deliberate divergence, unchanged) stay
+	// outside this rule. SCORE is untouched — it is a pulse, not a phase of
+	// this table, and stays the credited team's own colour (§2.5).
+	ambianceSceneIdle     = ambianceSceneDef{Color: [3]int{255, 255, 255}, Intensity: 200} // no question at all: plain white
+	ambianceSceneReady    = ambianceSceneDef{UseThemeColor: true, Intensity: 200}          // question designated: announce its theme before it starts
+	ambianceSceneRunning  = ambianceSceneDef{UseThemeColor: true, Intensity: 200}          // ⭐ the case that motivated this revision
+	ambianceSceneBuzz     = ambianceSceneDef{UseThemeColor: true, Intensity: 255}
+	ambianceScenePauseAll = ambianceSceneDef{UseThemeColor: true, Intensity: 120}
+	ambianceSceneReveal   = ambianceSceneDef{UseThemeColor: true, Intensity: 255} // good/bad no longer distinguished by 'general' — user's explicit extension
+	ambianceSceneTeamTurn = ambianceSceneDef{UseThemeColor: true, Intensity: 200}
+	ambianceSceneScore    = ambianceSceneDef{UseTeamColor: true, Intensity: 255}       // unchanged — room-side COMET, same duration, credited team's colour
+	ambianceSceneEntracte = ambianceSceneDef{Color: ambianceWarmWhite, Intensity: 100} // unchanged — buzzers go dark, the room stays lit
 )
 
 // ambianceSceneFor picks the table row for an event.
@@ -422,10 +440,7 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 	case lighting.KindPauseAll:
 		return ambianceScenePauseAll
 	case lighting.KindReveal:
-		if len(ev.Teams) > 0 {
-			return ambianceSceneRevealGood
-		}
-		return ambianceSceneRevealNone
+		return ambianceSceneReveal
 	case lighting.KindTeamTurn:
 		return ambianceSceneTeamTurn
 	case lighting.KindScore:
@@ -541,12 +556,15 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 	def := ambianceSceneFor(ev)
 	color := def.Color
 	intensity := def.Intensity
-	if def.UseTeamColor {
+	switch {
+	case def.UseTeamColor:
 		team := ""
 		if len(ev.Teams) > 0 {
 			team = ev.Teams[0]
 		}
 		color = a.teamNameToRGB(team)
+	case def.UseThemeColor:
+		color = a.ambianceThemeColor()
 	}
 	// #208 (contract §10.1): the manual ON/AUTO/OFF selector and Flash act
 	// ONLY on this "general" zone, applied last so they always win over the
@@ -592,4 +610,58 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 		})
 	}
 	return lighting.State{Zones: zones}
+}
+
+// ambianceThemeColor resolves the CURRENT question's category theme colour
+// (2026-09-08 revision, contract §8.1) — read live at render time, like
+// every other derivation in this file, never memoised. Resolution order:
+//  1. a drawn RAFALE question's OWN category (state.RafaleCurrentQuestion —
+//     "the theme follows each question drawn", livelier than the round's
+//     multi-category list, #216);
+//  2. else the host question's own category (state.Question.Category,
+//     including a MEMOTION host question);
+//  3. empty/unknown/custom-category colour, or no question at all ⇒ white.
+//
+// Reuses ResolveCategoryMeta (internal/server, already called 4× elsewhere
+// in main.go) rather than a second category→colour table — these are UI
+// accent colours repurposed as light colours (contract's own documented
+// caveat: calibrated for a screen, not a room; hex values taken as-is for
+// this revision, not passed through nearestPaletteColorByHue).
+func (a *App) ambianceThemeColor() [3]int {
+	white := [3]int{255, 255, 255}
+	if a.httpServer == nil { // defensive: nil in some minimal test harnesses, never in production (setup() before any scene is ever rendered)
+		return white
+	}
+	state := a.engine.GetState()
+	category := ""
+	switch {
+	case state.Question != nil && state.Question.Type == game.QuestionTypeRafale && state.RafaleCurrentQuestion.ID != "":
+		category = state.RafaleCurrentQuestion.Category
+	case state.Question != nil:
+		category = string(state.Question.Category)
+	}
+	if category == "" {
+		return white
+	}
+	_, _, hex := a.httpServer.ResolveCategoryMeta(category)
+	rgb, ok := hexToRGB(hex)
+	if !ok {
+		return white
+	}
+	return rgb
+}
+
+// hexToRGB parses a "#rrggbb" colour (ResolveCategoryMeta's own format)
+// into the project's [3]int 0-255 RGB. false for anything else (empty —
+// custom category or none, malformed, wrong length).
+func hexToRGB(s string) ([3]int, bool) {
+	s = strings.TrimPrefix(s, "#")
+	if len(s) != 6 {
+		return [3]int{}, false
+	}
+	v, err := strconv.ParseUint(s, 16, 32)
+	if err != nil {
+		return [3]int{}, false
+	}
+	return [3]int{int(v >> 16 & 0xff), int(v >> 8 & 0xff), int(v & 0xff)}, true
 }

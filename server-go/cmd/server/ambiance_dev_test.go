@@ -19,6 +19,7 @@ import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
 	"buzzcontrol/internal/lighting/hue"
+	"buzzcontrol/internal/server"
 )
 
 func TestDevAmbianceNilWriterSitesAreNoOps(t *testing.T) {
@@ -177,19 +178,32 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 		t.Fatalf("no 'general' zone in %+v", st)
 		return lighting.ZoneState{}
 	}
+	// 2026-09-08 revision (planner-v10-general-theme-toggle-20260908-114420.md
+	// §1.3, validated AND EXTENDED by the user): READY/RUNNING/BUZZ/
+	// PAUSE_ALL/REVEAL/TEAM_TURN now render the CURRENT QUESTION's theme
+	// colour on 'general' (white if none) instead of a fixed colour or the
+	// team's own — see ambianceThemeColor's own doc comment. newTestApp sets
+	// no httpServer and no live question, so ambianceThemeColor's own nil
+	// guard/empty-category path is exercised here, always falling back to
+	// white — the SPECIFIC resolution order (RAFALE > host question >
+	// unknown/empty ⇒ white) has its own dedicated coverage,
+	// TestDevAmbianceThemeColor_ResolutionOrder, below. Only IDLE (plain
+	// white, unconditionally) and ENTRACTE (unchanged) stay fixed; SCORE
+	// stays the credited team's own colour, untouched by this revision.
+	white := [3]int{255, 255, 255}
 	tests := []struct {
 		ev        lighting.Event
 		color     [3]int
 		intensity int
 	}{
-		{lighting.Event{Kind: lighting.KindIdle}, [3]int{255, 214, 170}, 120},
-		{lighting.Event{Kind: lighting.KindReady}, [3]int{255, 255, 255}, 200},
-		{lighting.Event{Kind: lighting.KindRunning}, [3]int{40, 90, 255}, 160},
-		{lighting.Event{Kind: lighting.KindBuzz, Teams: []string{"TeamA"}}, wantTeamA, 255},
-		{lighting.Event{Kind: lighting.KindPauseAll}, [3]int{255, 170, 0}, 120},
-		{lighting.Event{Kind: lighting.KindReveal, Teams: []string{"TeamA"}}, [3]int{0, 220, 60}, 255},
-		{lighting.Event{Kind: lighting.KindReveal}, [3]int{230, 30, 30}, 255},
-		{lighting.Event{Kind: lighting.KindTeamTurn, Teams: []string{"TeamA"}}, wantTeamA, 200},
+		{lighting.Event{Kind: lighting.KindIdle}, white, 200},
+		{lighting.Event{Kind: lighting.KindReady}, white, 200},
+		{lighting.Event{Kind: lighting.KindRunning}, white, 200},
+		{lighting.Event{Kind: lighting.KindBuzz, Teams: []string{"TeamA"}}, white, 255},
+		{lighting.Event{Kind: lighting.KindPauseAll}, white, 120},
+		{lighting.Event{Kind: lighting.KindReveal, Teams: []string{"TeamA"}}, white, 255},
+		{lighting.Event{Kind: lighting.KindReveal}, white, 255},
+		{lighting.Event{Kind: lighting.KindTeamTurn, Teams: []string{"TeamA"}}, white, 200},
 		{lighting.Event{Kind: lighting.KindScore, Teams: []string{"TeamA"}}, wantTeamA, 255},
 		{lighting.Event{Kind: lighting.KindScore}, gray, 255},
 		{lighting.Event{Kind: lighting.KindEntracte}, [3]int{255, 214, 170}, 100}, // room stays lit, buzzers go dark
@@ -199,6 +213,40 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 		if z.Color != tt.color || z.Intensity != tt.intensity {
 			t.Errorf("scene(%s %v) = %v/%d, want %v/%d", tt.ev.Kind, tt.ev.Teams, z.Color, z.Intensity, tt.color, tt.intensity)
 		}
+	}
+}
+
+// TestDevAmbianceThemeColor_ResolutionOrder covers ambianceThemeColor's own
+// 3-step resolution order (contract §8.1, 2026-09-08 revision) against a
+// REAL httpServer (ResolveCategoryMeta needs one) and real question/RAFALE
+// fixtures: a drawn RAFALE question's OWN category wins over the host
+// question's, the host question's category is used otherwise, and an empty/
+// unknown category (or no question at all) falls back to white — never a
+// panic on the nil-httpServer path exercised by every other test in this
+// file (TestDevAmbianceSceneTableAndTeamPalette, above).
+func TestDevAmbianceThemeColor_ResolutionOrder(t *testing.T) {
+	app := newTestApp(t)
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+	white := [3]int{255, 255, 255}
+	geography := [3]int{0x3b, 0x82, 0xf6} // #3b82f6, hardcodedCategories (internal/server/http.go)
+
+	if got := app.ambianceThemeColor(); got != white {
+		t.Fatalf("no question at all: got %v, want white", got)
+	}
+
+	app.engine.Ready("q1", &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Category: game.CategoryGeography})
+	if got := app.ambianceThemeColor(); got != geography {
+		t.Fatalf("host question's own category: got %v, want %v (GEOGRAPHY)", got, geography)
+	}
+
+	app.engine.Ready("q2", &game.Question{ID: "q2", Type: game.QuestionTypeSpeedy, Category: ""})
+	if got := app.ambianceThemeColor(); got != white {
+		t.Fatalf("empty category must fall back to white, got %v", got)
+	}
+
+	app.engine.Ready("q3", &game.Question{ID: "q3", Type: game.QuestionTypeSpeedy, Category: "NE_EXISTE_PAS"})
+	if got := app.ambianceThemeColor(); got != white {
+		t.Fatalf("unknown category must fall back to white, got %v", got)
 	}
 }
 
@@ -313,8 +361,13 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 	if len(zones) != 4 {
 		t.Fatalf("REVEAL multi-équipe : attendu 4 zones (general + les 3 équipes), got %+v", zones)
 	}
-	if g := zones[lighting.ZoneGeneral]; g.Color != [3]int{0, 220, 60} || g.Intensity != 255 {
-		t.Errorf("REVEAL multi-équipe : general doit rester vert fixe (non affecté par #213), got %+v", g)
+	// 2026-09-08 revision: 'general' on REVEAL now carries the question's
+	// theme colour, not a fixed green/red — white here since newTestApp
+	// leaves httpServer nil (see TestDevAmbianceThemeColor_ResolutionOrder
+	// for the dedicated colour-resolution coverage). Unaffected either way
+	// by #213's per-team zones, which is this test's own actual point.
+	if g := zones[lighting.ZoneGeneral]; g.Color != [3]int{255, 255, 255} || g.Intensity != 255 {
+		t.Errorf("REVEAL multi-équipe : general doit porter le thème (blanc ici, non affecté par #213), got %+v", g)
 	}
 	if zones["TeamA"].Color != wantTeamA || zones["TeamA"].Intensity != 255 {
 		t.Errorf("REVEAL multi-équipe : zone TeamA doit porter sa propre couleur à pleine intensité, got %+v", zones["TeamA"])

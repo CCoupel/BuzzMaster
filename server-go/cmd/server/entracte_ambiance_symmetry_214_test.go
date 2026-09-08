@@ -137,8 +137,13 @@ func TestEntracteProgrammed_OrdinaryStartAlsoNotifiesAmbiance(t *testing.T) {
 	if !ok {
 		t.Fatal("l'écrivain d'ambiance n'a reçu aucun état à la fin du décompte pour une question normale")
 	}
-	if last.Zones[0].Color != ambianceSceneRunning.Color || last.Zones[0].Intensity != ambianceSceneRunning.Intensity {
-		t.Fatalf("scène KindRunning attendue à la fin du décompte, got %+v", last.Zones[0])
+	// 2026-09-08 revision: KindRunning now carries the question's theme
+	// colour on 'general' (ambianceSceneRunning.UseThemeColor), white here
+	// since this Speedy fixture has no Category — ambianceSceneRunning's own
+	// Color field is no longer meaningful (theme-derived), only its
+	// Intensity still is.
+	if last.Zones[0].Color != [3]int{255, 255, 255} || last.Zones[0].Intensity != ambianceSceneRunning.Intensity {
+		t.Fatalf("scène KindRunning (aucun thème, repli blanc) attendue à la fin du décompte, got %+v", last.Zones[0])
 	}
 
 	// Not an entracte: no LED was sent to any buzzer by onPhaseStarted itself

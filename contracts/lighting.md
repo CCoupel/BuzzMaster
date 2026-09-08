@@ -410,18 +410,39 @@ ambiance: site LED sans décision d'ambiance — handleNouveauTruc -> sendLEDSet
 
 **Câblée en dur pour #205** (l'édition par l'utilisateur est renvoyée à #210, milestone v10.1).
 
+> **Révision du 2026-09-08** (`planner-v10-general-theme-toggle-20260908-114420.md` §1.3, validée
+> **et étendue** par l'utilisateur) : `general` porte désormais la **couleur du thème** de la
+> question courante sur la quasi-totalité des genres — REVEAL et PAUSE_ALL inclus, contre la
+> recommandation initiale du planner de les garder fixes (« le vert/rouge et l'ambre disparaissent
+> au profit du thème », décision utilisateur explicite). Seuls `KindIdle` (aucune question,
+> **blanc uni**) et `KindEntracte` (divergence délibérée, inchangée) restent en dehors de cette
+> règle ; `KindScore` (impulsion, pas une ligne de cette table) reste porté par la couleur de
+> l'équipe créditée, inchangé.
+
 | `Kind` | Couleur RGB | Intensité | Justification |
 |---|---|---|---|
-| `KindIdle` | `{255, 214, 170}` blanc chaud | 120 | La salle reste **praticable** hors partie. |
-| `KindReady` | `{255, 255, 255}` | 200 | Attention montante. |
-| `KindRunning` | `{40, 90, 255}` bleu | 160 | Neutre, ne concurrence aucune couleur d'équipe. |
-| `KindBuzz` | couleur de l'équipe | 255 | **Exactement** le RGB de ses buzzers (§3). |
-| `KindPauseAll` | `{255, 170, 0}` ambre | 120 | Distinct du buzz : rien n'est joué. |
-| `KindReveal`, `Teams` non vide | `{0, 220, 60}` vert | 255 | Au moins une bonne réponse. |
-| `KindReveal`, `Teams` vide | `{230, 30, 30}` rouge | 255 | Personne n'a trouvé. |
-| `KindTeamTurn` | couleur de l'équipe active | 200 | |
-| `KindScore` | couleur de l'équipe créditée | 255 | Équivalent salle du COMET, même durée. |
-| `KindEntracte` | `{255, 214, 170}` blanc chaud | 100 | **Divergence assumée** — voir ci-dessous. |
+| `KindIdle` | `{255, 255, 255}` blanc | 200 | Aucune question active : blanc uni, plus lumineux qu'avant. |
+| `KindReady` | **couleur du thème**, repli blanc | 200 | La question est **désignée** : annoncer son thème avant qu'elle démarre. |
+| `KindRunning` | **couleur du thème**, repli blanc | 200 | ⭐ Remplace l'ancien bleu neutre qui cohabitait mal avec les ampoules d'équipe (C1a). |
+| `KindBuzz` | **couleur du thème**, repli blanc | 255 | Depuis C1a, l'identité de l'équipe qui buzze est portée par **sa propre ampoule** — `general` n'a plus à la redire. |
+| `KindPauseAll` | **couleur du thème**, repli blanc | 120 | Extension utilisateur du 2026-09-08 — l'ambre disparaît au profit du thème. |
+| `KindReveal` (bonne ou mauvaise réponse) | **couleur du thème**, repli blanc | 255 | Extension utilisateur du 2026-09-08 — le vert/rouge disparaît au profit du thème ; plus de distinction `Teams` vide/non vide pour `general`. |
+| `KindTeamTurn` | **couleur du thème**, repli blanc | 200 | Idem `KindBuzz` — identité déjà portée par l'ampoule d'équipe. |
+| `KindScore` | couleur de l'équipe créditée | 255 | **Inchangé** — équivalent salle du COMET, même durée ; ce n'est pas une ligne de cette table (impulsion, §2.3/§4.2). |
+| `KindEntracte` | `{255, 214, 170}` blanc chaud | 100 | **Divergence assumée** — voir ci-dessous. **Inchangé.** |
+
+> **Résolution de la couleur du thème** (ordre normatif) :
+> 1. `RafaleCurrentQuestion.Category` si une question RAFALE est **tirée** — le thème suit chaque
+>    question tirée, plus vivant que la liste multi-catégories de la manche (#216) ;
+> 2. sinon `Question.Category` (y compris pour une question hôte MEMOTION) ;
+> 3. couleur vide, catégorie inconnue/personnalisée, ou aucune question du tout ⇒ **blanc**
+>    `{255, 255, 255}`.
+>
+> Format source : hex `#rrggbb` (`ResolveCategoryMeta`, `internal/server/http.go`) → `[3]int`.
+> Valeurs reprises **telles quelles** (jamais passées par `nearestPaletteColorByHue`) — ce sont des
+> accents d'interface (badges, pastilles) réemployés comme couleurs de salle, pas une seconde
+> palette calibrée pour l'éclairage. Seules les 8 catégories intégrées portent une couleur ; une
+> catégorie personnalisée (image déposée par l'utilisateur) n'en a pas et retombe sur le blanc.
 
 > **Pourquoi l'entracte n'éteint pas la salle**, alors que `sendLEDSetAllEntracteOff`
 > (`main.go:2819`) éteint tous les buzzers : les buzzers s'éteignent pour cesser d'attirer

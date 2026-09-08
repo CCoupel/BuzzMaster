@@ -393,27 +393,40 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 		"m2": {Name: "m2", Team: "TeamB"},
 	}
 
+	// 2026-09-08 revision (planner-v10-general-theme-toggle-20260908-114420.md
+	// §1.3, validated AND EXTENDED by the user): 'general' now carries the
+	// CURRENT QUESTION's theme colour on READY/RUNNING/BUZZ/REVEAL (and
+	// PAUSE_ALL, not exercised by this particular sequence) instead of a
+	// fixed/team colour — white here since none of this test's questions
+	// carry a Category and app.httpServer is nil throughout (newTestApp),
+	// both of which ambianceThemeColor falls back to white for. SCORE stays
+	// the credited team's own colour, untouched by this revision (still
+	// exercised below).
+	white := [3]int{255, 255, 255}
+
 	// READY (PREPARE)
-	tw205Step(t, game.PhasePrepare, qcm, noBuzz, [3]int{255, 255, 255}, 200)
+	tw205Step(t, game.PhasePrepare, qcm, noBuzz, white, 200)
 
 	// RUNNING (STARTED, question classique sans équipe active)
-	tw205Step(t, game.PhaseStarted, qcm, noBuzz, [3]int{40, 90, 255}, 160)
+	tw205Step(t, game.PhaseStarted, qcm, noBuzz, white, 200)
 
-	// BUZZ (m1/TeamA presse en premier)
+	// BUZZ (m1/TeamA presse en premier) — team identity is now carried by
+	// TeamA's own bulb (Batch C/C1a), not 'general' any more.
 	buzzed := map[string]*game.Bumper{
 		"m1": {Name: "m1", Team: "TeamA", Time: 1000},
 		"m2": {Name: "m2", Team: "TeamB"},
 	}
 	wantTeamA := app.teamNameToRGB("TeamA")
-	tw205Step(t, game.PhasePaused, qcm, buzzed, wantTeamA, 255)
+	tw205Step(t, game.PhasePaused, qcm, buzzed, white, 255)
 
-	// REVEAL (m1 a répondu correctement)
+	// REVEAL (m1 a répondu correctement) — good/bad no longer distinguished
+	// by 'general' colour either (user's explicit extension).
 	qcmRed := &game.Question{Type: game.QuestionTypeQCM, TypedContent: game.TypedContent{QCMCorrect: "RED"}}
 	answered := map[string]*game.Bumper{
 		"m1": {Name: "m1", Team: "TeamA", Time: 1000, AnswerColor: game.AnswerColorRed},
 		"m2": {Name: "m2", Team: "TeamB"},
 	}
-	tw205Step(t, game.PhaseRevealed, qcmRed, answered, [3]int{0, 220, 60}, 255)
+	tw205Step(t, game.PhaseRevealed, qcmRed, answered, white, 255)
 
 	// Points attribués à TeamA — pulse SCORE. Doit survivre au MinInterval
 	// réel de 100 ms qui suit l'Apply de REVEAL, sans quoi il expirerait
@@ -436,7 +449,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 	})
 	// Retombe seul sur son échéance, sans nouvelle notification externe —
 	// l'état vivant est toujours PhaseRevealed avec les mêmes réponses, donc
-	// la scène de repli est la MÊME scène REVEAL bonne réponse, pas STOP
+	// la scène de repli est la MÊME scène REVEAL (thème/blanc ici), pas STOP
 	// (qui n'arrive qu'à l'étape suivante).
 	tw205WaitFor(t, 5*time.Second, func() bool {
 		last, ok := fake.Last()
@@ -444,11 +457,11 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 			return false
 		}
 		z, ok := tw205GeneralZone(last)
-		return ok && z.Color == [3]int{0, 220, 60} && z.Intensity == 255
+		return ok && z.Color == white && z.Intensity == 255
 	})
 
-	// STOP
-	tw205Step(t, game.PhaseStopped, nil, answered, [3]int{255, 214, 170}, 120)
+	// STOP — IDLE is plain white now too (200, not the old warm-white 120).
+	tw205Step(t, game.PhaseStopped, nil, answered, white, 200)
 
 	cancel()
 	tw205WaitFor(t, 5*time.Second, fake.Closed)
