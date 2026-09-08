@@ -517,15 +517,28 @@ func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 	}
 }
 
-// TestDevChronoPulse_RenderedZoneCarriesTheFadeAndTheRightPhaseColours
+// TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours
 // verifies what actually reaches the driver (not just the internal
 // atomics): the 'general' zone alternates between the theme colour (white
 // here — newTestApp sets no httpServer/question category) at full
 // intensity and, depending on tier, the theme again (tier 1), amber (tier
-// 2) or red (tier 3) at a lower intensity — each write carrying
-// chronoPulseTransitionMs, never 0, for the fade the whole effect exists
-// for.
-func TestDevChronoPulse_RenderedZoneCarriesTheFadeAndTheRightPhaseColours(t *testing.T) {
+// 2) or red (tier 3) at a lower intensity.
+//
+// 2026-09-08 (QUALIF v10.0.0.17): every write carries TransitionMs == 0 —
+// an INSTANT switch, not a fade. The pulse originally faded over
+// chronoPulseTransitionMs (half a cycle), but the bridge interpolates
+// colour in raw CIE xy space, and a straight line between two
+// sufficiently different hues (a cool theme <-> amber/red, in particular)
+// passes near or through the white point — a real, user-reported "washed
+// out" artifact
+// (_work/reports/dev-backend-pulse-color-artifact-20260908.md), not
+// implementation noise. The user's decision was an instant switch on all
+// 3 tiers rather than fading only where hue doesn't change (tier 1) — see
+// chronoPulseTransitionMs's own doc comment for the full account. The
+// per-write TransitionMs mechanism itself (lighting.ZoneState, the hue
+// driver) is otherwise unaffected and still covered on its own terms by
+// internal/lighting/hue's TestDevDesired_TransitionMsBecomesDeciseconds.
+func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
 	app.lightingWriter.Store(app.newAmbianceWriter(fake))
@@ -549,8 +562,8 @@ func TestDevChronoPulse_RenderedZoneCarriesTheFadeAndTheRightPhaseColours(t *tes
 			if z.Zone != lighting.ZoneGeneral {
 				t.Fatalf("zone 0 must be 'general', got %+v", last.Zones)
 			}
-			if z.TransitionMs != chronoPulseTransitionMs {
-				t.Fatalf("every chrono-pulse write must carry the half-cycle fade (%d ms), got %+v", chronoPulseTransitionMs, z)
+			if z.TransitionMs != 0 {
+				t.Fatalf("every chrono-pulse write must be an instant switch (TransitionMs 0) since the 2026-09-08 colour-artifact fix, got %+v", z)
 			}
 			if z.Color == white && z.Intensity == chronoPulseIntensityFull {
 				sawHighWhiteFull = true

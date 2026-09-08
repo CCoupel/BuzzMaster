@@ -456,12 +456,13 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 }
 
 // ---------------------------------------------------------------------------
-// Chrono-pulse — 'general' breathes in sync with the active question's
-// GLOBAL timer (2026-09-08, planner-v10-chrono-pulse-v2-20260908-120128.md
-// §3, design confirmed by the user). One phase-flag/re-derivation loop
-// (runChronoPulse), the exact patron of runScoreFlash/runLightingFlash —
-// internal/lighting/hue/ is untouched, the driver still only ever sees
-// ordinary State values.
+// Chrono-pulse — 'general' pulses in sync with the active question's GLOBAL
+// timer (2026-09-08, planner-v10-chrono-pulse-v2-20260908-120128.md §3,
+// design confirmed by the user; switched to an INSTANT phase change —
+// chronoPulseTransitionMs, below — after a colour-artifact fix on
+// 2026-09-08). One phase-flag/re-derivation loop (runChronoPulse), the
+// exact patron of runScoreFlash/runLightingFlash — internal/lighting/hue/
+// is untouched, the driver still only ever sees ordinary State values.
 // ---------------------------------------------------------------------------
 
 const (
@@ -483,13 +484,34 @@ const (
 	// cycle (250 ms theme / 750 ms red — "rouge dominant"); tiers 1-2 split
 	// their cycle evenly (chronoPulseCycle/2).
 	chronoPulseHighMsTier3 = 250 * time.Millisecond
-	// chronoPulseTransitionMs is "demi-cycle" (half of chronoPulseCycle),
-	// sent as transitiontime on EVERY chrono-pulse write, uniformly across
-	// all 3 tiers regardless of that tier's own phase split (contract
-	// hue-bridge.md §5.2 amendment) — the bridge interpolates the fade
-	// itself, so the room breathes instead of stepping between two flat
-	// levels.
-	chronoPulseTransitionMs = int(chronoPulseCycle / time.Millisecond / 2)
+	// chronoPulseTransitionMs — 2026-09-08, REVISED after QUALIF v10.0.0.17:
+	// the fade WAS "demi-cycle" (500 ms, chronoPulseCycle/2), sent as
+	// transitiontime on every write so the bridge itself would interpolate
+	// a breathing effect. Investigation
+	// (_work/reports/dev-backend-pulse-color-artifact-20260908.md)
+	// confirmed the user's report: the bridge interpolates colour in raw
+	// CIE xy space, and a straight line between two sufficiently different
+	// hues (a cool theme <-> the tier 2/3 amber/red, in particular) passes
+	// near or through the white point — a real, visible "washed out"
+	// artifact, not implementation noise. A second, independent cause was
+	// also found: tier 3's asymmetric 250/750 ms phase split was shorter
+	// than the flat 500 ms fade, so the "theme" phase was cut off
+	// mid-transition on every cycle.
+	//
+	// User's decision: an INSTANT switch (0) on all 3 tiers, including
+	// tier 1 — simpler than fading only where hue changes (tiers 2-3) and
+	// keeping tier 1's pure intensity breathing, which was this package's
+	// own first recommendation. tier 1 never changes hue (couleurBasse ==
+	// couleurHaute) so it was never subject to the xy artifact either way;
+	// dropping its fade too is a readability choice, not a workaround.
+	//
+	// The constant — and lighting.ZoneState.TransitionMs / the hue driver's
+	// whole per-write transitiontime plumbing it drives — are DELIBERATELY
+	// kept, not removed: this is the ONLY line that needs to change to
+	// re-enable fading later (v10.1+), and the mechanism itself remains
+	// available to any other effect that wants it (contract hue-bridge.md
+	// §5.2's own amendment is unaffected).
+	chronoPulseTransitionMs = 0
 
 	chronoPulseIntensityFull = 255 // 100%
 	chronoPulseIntensityHalf = 128 // 50% of 255, rounded (127.5 -> 128) — tiers 1-2's low phase

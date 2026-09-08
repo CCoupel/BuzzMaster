@@ -232,6 +232,12 @@ qui délaverait un flash d'événement.
 > `appliedState`) : deux écritures à la même couleur/intensité mais un fondu différent ne sont
 > **pas** le même état appliqué — un appelant qui ne change que la vitesse de fondu obtient bien une
 > écriture, jamais une déduplication silencieuse.
+>
+> **Révision du 2026-09-08 (QUALIF v10.0.0.17)** : le motif ci-dessus reste la raison d'être de ce
+> paramètre, mais la pulsation chronomètre elle-même **n'envoie plus de fondu** — un artefact
+> d'interpolation xy l'a fait revenir à `transitiontime = 0` sur ses 3 paliers (`lighting.md` §8.2
+> pour le détail). Le mécanisme par-écriture reste en place, prêt pour un usage futur (v10.1+) ; ce
+> n'est qu'un paramètre d'appel qui change, pas l'infrastructure.
 
 ### 5.3 N'écrire que ce qui change — obligatoire
 

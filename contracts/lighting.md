@@ -499,7 +499,7 @@ d'un nom. L'adaptateur doit donc extraire le chemin de résolution
 `teamColorToRGB` plutôt qu'en le recopiant. Le gris de repli `{128, 128, 128}` d'équipe inconnue
 est conservé à l'identique.
 
-### 8.2 Pulsation chronomètre — respiration de `general` synchronisée au minuteur global (2026-09-08, design confirmé)
+### 8.2 Pulsation chronomètre — `general` pulse en synchronisation avec le minuteur global (2026-09-08, design confirmé, révisé le 2026-09-08 après QUALIF v10.0.0.17)
 
 Conception : `_work/reports/planner-v10-chrono-pulse-v2-20260908-120128.md`. **Une seule
 primitive**, paramétrée par `(couleurHaute, couleurBasse, intensitéHaute, intensitéBasse, cycle)` —
@@ -516,9 +516,24 @@ Le palier 3 est resté à un cycle d'**1 s** — jamais les 0,5 s demandés litt
 `hue-bridge.md` §5.4 pour le budget qui a tranché ce point. L'urgence passe par la dominante rouge
 et l'amplitude, pas par la fréquence — coût de débit **identique** aux paliers 1-2.
 
-**`transitiontime` = demi-cycle** (500 ms, `hue-bridge.md` §5.2 amendement) sur **chaque** écriture,
-uniformément pour les 3 paliers : le pont interpole lui-même le fondu, la salle respire au lieu de
-sauter entre deux paliers d'intensité — au même nombre d'écritures qu'une alternance carrée.
+> ### ⚠️ Révision du 2026-09-08 (QUALIF v10.0.0.17) — bascule instantanée, pas de fondu
+>
+> La version initialement livrée envoyait `transitiontime` = demi-cycle (500 ms) sur chaque
+> écriture, pour un fondu interpolé par le pont. **Retour utilisateur en QUALIF** : des couleurs
+> intermédiaires parasites apparaissaient pendant le fondu (notamment du blanc). Investigation
+> (`_work/reports/dev-backend-pulse-color-artifact-20260908.md`) : le pont interpole en espace **CIE
+> xy brut** — la droite entre deux teintes suffisamment différentes (un thème froid ↔ l'or/le rouge
+> des paliers 2-3, en particulier) passe **près ou par le point blanc**, un artefact géométrique
+> réel, pas un bruit d'implémentation. Une seconde cause, indépendante, a aussi été trouvée : le
+> découpage asymétrique du palier 3 (250/750 ms) était plus court que le fondu fixe de 500 ms, qui
+> se retrouvait donc **interrompu à mi-chemin** à chaque cycle.
+>
+> **Décision utilisateur** : bascule **instantanée** (`transitiontime = 0`) sur les **3** paliers, y
+> compris le palier 1 — plus simple que de ne fondre que l'intensité du palier 1 (qui n'aurait de
+> toute façon jamais été sujet à l'artefact, aucun changement de teinte). L'infrastructure
+> `TransitionMs`/`transitiontime` par écriture (`hue-bridge.md` §5.2) est **conservée intacte** —
+> dans `lighting.ZoneState` comme dans le pilote — pour un usage futur (v10.1+) ; seul l'appel du
+> pulse chronomètre passe désormais `0`.
 
 **Écriture — décision utilisateur explicite** : systématiquement via le groupe
 `buzzmaster-general`, **jamais de repli individuel par ampoule**, même au-delà de la recommandation
