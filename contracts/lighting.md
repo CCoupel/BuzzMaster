@@ -499,6 +499,45 @@ d'un nom. L'adaptateur doit donc extraire le chemin de résolution
 `teamColorToRGB` plutôt qu'en le recopiant. Le gris de repli `{128, 128, 128}` d'équipe inconnue
 est conservé à l'identique.
 
+### 8.2 Pulsation chronomètre — respiration de `general` synchronisée au minuteur global (2026-09-08, design confirmé)
+
+Conception : `_work/reports/planner-v10-chrono-pulse-v2-20260908-120128.md`. **Une seule
+primitive**, paramétrée par `(couleurHaute, couleurBasse, intensitéHaute, intensitéBasse, cycle)` —
+patron de `runScoreFlash` (drapeau de phase + re-dérivation), **aucune modification
+d'`internal/lighting/hue/`**.
+
+| Palier | Déclencheur | Cycle | Intensité | Teinte |
+|---|---|---|---|---|
+| **1** | dès le début d'une question chronométrée en `RUNNING` (`remaining > 10 s`) | 1 s | 100 % ↔ 50 % | thème seul — `couleurBasse == couleurHaute` : **respiration pure** |
+| **2** | `remaining ≤ 10 s` | 1 s | 100 % ↔ 50 % | thème ↔ **or `{255, 170, 0}`** (repris de l'ancienne couleur fixe de `PAUSE_ALL`, jamais une 2ᵉ valeur) |
+| **3** | `remaining ≤ 5 s` | 1 s | **100 % ↔ 30 %** (amplitude accrue) | thème ↔ **rouge `{230, 30, 30}`** (repris de l'ancienne couleur fixe de `REVEAL`), phase rouge **dominante** : 250 ms thème / 750 ms rouge dans le cycle d'1 s |
+
+Le palier 3 est resté à un cycle d'**1 s** — jamais les 0,5 s demandés littéralement au départ, voir
+`hue-bridge.md` §5.4 pour le budget qui a tranché ce point. L'urgence passe par la dominante rouge
+et l'amplitude, pas par la fréquence — coût de débit **identique** aux paliers 1-2.
+
+**`transitiontime` = demi-cycle** (500 ms, `hue-bridge.md` §5.2 amendement) sur **chaque** écriture,
+uniformément pour les 3 paliers : le pont interpole lui-même le fondu, la salle respire au lieu de
+sauter entre deux paliers d'intensité — au même nombre d'écritures qu'une alternance carrée.
+
+**Écriture — décision utilisateur explicite** : systématiquement via le groupe
+`buzzmaster-general`, **jamais de repli individuel par ampoule**, même au-delà de la recommandation
+Philips `/groups` — voir `hue-bridge.md` §5.4 pour le détail chiffré et l'arbitrage assumé.
+
+**Articulation avec le reste** :
+- Ne s'applique qu'à `KindRunning` avec un minuteur de question **global** actif
+  (`GameState.Delay > 0`) — jamais RAFALE par question ni MEMOTION par carte. Ce n'est **pas** un
+  cas particulier codé : une manche RAFALE ou une carte MEMOTION active ont toujours une équipe
+  courante (`ambianceActiveTeam`), donc dérivent `KindTeamTurn`, jamais `KindRunning` — le
+  périmètre tombe de la dérivation d'événement existante (§6.2), sans code dédié.
+- S'efface devant `BUZZ`, `PAUSE_ALL`, `REVEAL`, `ENTRACTE`, `TEAM_TURN` (Kinds différents, la
+  pulsation n'est simplement jamais considérée) et devant le sélecteur ON/AUTO/OFF/Flash du §10.1
+  (vérifié avec les **mêmes primitives** que celui-ci, jamais une 2ᵉ logique qui pourrait diverger).
+- Se **gèle en pause** : `PhasePaused` dérive `KindBuzz`/`KindPauseAll`, pas `KindRunning` — et
+  `GameState.CurrentTime` lui-même cesse de décompter pendant la pause (comportement existant du
+  moteur, non spécifique à cet effet).
+- Ne touche **jamais** les ampoules d'équipe (§5.2 de `hue-bridge.md`).
+
 ---
 
 ## 9. Configuration — la part de #205 seulement

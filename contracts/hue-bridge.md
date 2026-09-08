@@ -211,8 +211,27 @@ silencieux**, pas une erreur.
 (`spike/hue-bridge/hue.go:313`, repris tel quel). `Intensity` 0-255 → `bri` Hue 1-254, et
 `Intensity == 0` ⇒ `{"on": false}` plutôt qu'une luminosité nulle.
 
-**`transitiontime`** : `0` (instantané). Le bridge applique 400 ms par défaut, ce qui délaverait
-un flash d'événement. Constante nommée, pas un littéral dispersé.
+**`transitiontime`** : `0` (instantané) **par défaut** — le bridge applique 400 ms par défaut, ce
+qui délaverait un flash d'événement.
+
+> ### Amendement du 2026-09-08 — `transitiontime` devient un paramètre par écriture
+>
+> `ZoneState` (`lighting.md` §3) porte désormais un champ **`TransitionMs int`**, converti ici en
+> deciseconde Hue (`ms / 100`) et appliqué à **chaque** écriture — `0` (valeur zéro de tout appelant
+> qui ne le renseigne pas) reproduit exactement le comportement d'avant, littéral pour littéral :
+> aucune régression pour `TestFlash`, `SetLightDirect` ou une scène ordinaire, qui ne renseignent
+> jamais ce champ.
+>
+> **Motif** : la pulsation chronomètre (`lighting.md` §8.2) a besoin d'une vraie **respiration** —
+> le pont interpole lui-même le fondu entre deux écritures espacées d'un demi-cycle, plutôt que de
+> recevoir deux paliers d'intensité qui « sautent ». Une constante unique aurait empêché ce cas
+> d'usage sans en ouvrir un second, moins sûr (une écriture instantanée suivie d'un minuteur côté
+> serveur pour simuler un fondu).
+>
+> `transitionTime` fait partie de l'égalité comparée par le cache de dédoublonnage (§5.3,
+> `appliedState`) : deux écritures à la même couleur/intensité mais un fondu différent ne sont
+> **pas** le même état appliqué — un appelant qui ne change que la vitesse de fondu obtient bien une
+> écriture, jamais une déduplication silencieuse.
 
 ### 5.3 N'écrire que ce qui change — obligatoire
 
@@ -232,6 +251,34 @@ Un échec d'écriture **invalide** l'entrée mémorisée pour cette ampoule, afi
 - Écritures **séquentielles**, sans temporisation artificielle ajoutée : à ~40 ms l'unité, six
   ampoules tiennent dans la fenêtre de 250 ms.
 - Le budget cible est **≤ 10 écritures/s** sur `/lights`, conformément à la recommandation Philips.
+
+> ### ⚠️ Amendement du 2026-09-08 — la pulsation chronomètre dépasse `/groups` d'un facteur ~2,
+> > **assumé**
+>
+> La pulsation générale (`lighting.md` §8.2) écrit `buzzmaster-general` à raison de **2
+> écritures/s, en continu, pendant toute question chronométrée** — un régime permanent, pas une
+> salve. `/groups` reste plafonné à **≤ 1 mise à jour/s** (§2) : ce module le dépasse d'un facteur
+> **~2**, sur chaque question, toute la soirée.
+>
+> **Décision utilisateur explicite** : écrire **systématiquement** via `buzzmaster-general`, **sans
+> repli individuel par ampoule**, même au-delà de cette recommandation — le même arbitrage assumé
+> que la durée fixe du SCORE (§8.1). Le rapport planner
+> (`_work/reports/planner-v10-chrono-pulse-v2-20260908-120128.md` §2.4) avait identifié qu'un repli
+> individuel sous 5 ampoules dans `general` resterait, lui, dans le budget `/lights` — cette
+> option a été **explicitement écartée** : le groupe est utilisé pour cet effet quelle que soit la
+> taille de la zone `general`.
+>
+> **Pourquoi ce n'est pas une contradiction avec le §5.8** : la règle « groupe si ≥ 2 ampoules »
+> reste la règle par défaut pour les changements de scène **occasionnels**. La pulsation
+> chronomètre est un cas à part, documenté séparément — un effet **soutenu** où le choix du débit a
+> été tranché par l'utilisateur en connaissance du dépassement, pas dérivé mécaniquement du §5.8.
+>
+> **Le palier 3 (urgence, ≤ 5 s restantes) reste à un cycle d'1 s** — jamais 0,5 s comme demandé
+> littéralement au départ : à 4 écritures/s, ce serait **4×** le plafond `/groups` et **exactement**
+> la limite du `MinInterval` du writer (250 ms), sans la moindre marge pour la latence HTTP réelle
+> (~40 ms) — un rythme qui serait irrégulier, pas simplement plus rapide. L'urgence du palier 3 est
+> rendue par la dominante rouge et l'amplitude d'intensité (§8.2), à coût de débit identique aux
+> paliers 1-2.
 
 ### 5.5 Comportement dégradé — normatif
 

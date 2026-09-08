@@ -86,6 +86,22 @@ type App struct {
 	scoreFlashPhaseGold atomic.Bool
 	scoreFlashEpoch     atomic.Int64
 	scoreFlashCancel    context.CancelFunc
+	// chronoPulse* drive the RUNNING-only breathing pulse on 'general'
+	// synchronised to the active question's global timer (2026-09-08,
+	// contracts/lighting.md §5.4/§8.1) — chronoPulseActive is whether a
+	// pulse is currently live (KindRunning + a timed question),
+	// chronoPulseTier is 1/2/3 (ambianceChronoPulseColor, ambiance.go),
+	// chronoPulseHigh the current phase. All three are written ONLY by
+	// runChronoPulse (ambiance.go) and read ONLY by ambianceScene — no
+	// mutex needed, same pattern as scoreFlashPhaseGold. chronoPulseStarted
+	// makes runChronoPulse's own goroutine start idempotent (it is invoked
+	// from two call sites, mirroring the writer's own two "go w.Start"
+	// sites, which are mutually exclusive in practice but not provably so
+	// without this guard — see runChronoPulse's own doc comment).
+	chronoPulseActive  atomic.Bool
+	chronoPulseTier    atomic.Int32
+	chronoPulseHigh    atomic.Bool
+	chronoPulseStarted atomic.Bool
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).

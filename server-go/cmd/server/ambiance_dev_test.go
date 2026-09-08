@@ -462,6 +462,154 @@ func waitForCount(t *testing.T, f *lighting.FakeDriver, n int) {
 	t.Fatalf("driver received %d state(s), want >= %d", f.Count(), n)
 }
 
+// waitForChronoPulseTier polls the LIVE atomics runChronoPulse writes
+// (never a value this test computes itself) until they report the wanted
+// tier while active, or the timeout elapses.
+func waitForChronoPulseTier(t *testing.T, app *App, wantTier int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if app.chronoPulseActive.Load() && app.chronoPulseTier.Load() == wantTier {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("chrono-pulse never reported tier %d (active=%v tier=%d)", wantTier, app.chronoPulseActive.Load(), app.chronoPulseTier.Load())
+}
+
+// TestDevChronoPulse_TierSelectionFromLiveTimer covers runChronoPulse's own
+// tier arithmetic against the REAL engine timer (StartImmediate(delay) sets
+// GameState.CurrentTime = Delay = delay directly, contract §5.4/§8.1's own
+// tier boundaries: >10s tier 1, <=10s tier 2, <=5s tier 3) — not a
+// synthetic GameState, the actual live path runChronoPulse reads.
+func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
+	app := newTestApp(t)
+	fake := lighting.NewFakeDriver()
+	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go app.ambiance().Start(ctx)
+	go app.runChronoPulse(ctx) // not wired via a bare Start(ctx) — see startAmbianceWriter's own two call sites
+
+	for _, tt := range []struct {
+		delay    int
+		wantTier int32
+	}{
+		{15, 1}, // > 10 s remaining
+		{10, 2}, // <= 10 s remaining
+		{5, 3},  // <= 5 s remaining
+	} {
+		qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
+		app.engine.Ready(qcm.ID, qcm)
+		app.engine.StartImmediate(tt.delay)
+		waitForChronoPulseTier(t, app, tt.wantTier)
+		app.engine.Stop()
+		// Leaving RUNNING must clear the pulse promptly (belt-and-suspenders
+		// NotifyState in runChronoPulse's own "become inactive" branch —
+		// see its doc comment on why this isn't load-bearing either way).
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) && app.chronoPulseActive.Load() {
+			time.Sleep(5 * time.Millisecond)
+		}
+		if app.chronoPulseActive.Load() {
+			t.Fatalf("delay=%d: chrono-pulse still active after Stop()", tt.delay)
+		}
+	}
+}
+
+// TestDevChronoPulse_RenderedZoneCarriesTheFadeAndTheRightPhaseColours
+// verifies what actually reaches the driver (not just the internal
+// atomics): the 'general' zone alternates between the theme colour (white
+// here — newTestApp sets no httpServer/question category) at full
+// intensity and, depending on tier, the theme again (tier 1), amber (tier
+// 2) or red (tier 3) at a lower intensity — each write carrying
+// chronoPulseTransitionMs, never 0, for the fade the whole effect exists
+// for.
+func TestDevChronoPulse_RenderedZoneCarriesTheFadeAndTheRightPhaseColours(t *testing.T) {
+	app := newTestApp(t)
+	fake := lighting.NewFakeDriver()
+	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go app.ambiance().Start(ctx)
+	go app.runChronoPulse(ctx)
+
+	qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
+	app.engine.Ready(qcm.ID, qcm)
+	app.engine.StartImmediate(4) // tier 3 immediately: theme <-> red
+	defer app.engine.Stop()
+	waitForChronoPulseTier(t, app, 3)
+
+	white := [3]int{255, 255, 255}
+	sawHighWhiteFull, sawLowRedDim := false, false
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && !(sawHighWhiteFull && sawLowRedDim) {
+		if last, ok := fake.Last(); ok && len(last.Zones) > 0 {
+			z := last.Zones[0]
+			if z.Zone != lighting.ZoneGeneral {
+				t.Fatalf("zone 0 must be 'general', got %+v", last.Zones)
+			}
+			if z.TransitionMs != chronoPulseTransitionMs {
+				t.Fatalf("every chrono-pulse write must carry the half-cycle fade (%d ms), got %+v", chronoPulseTransitionMs, z)
+			}
+			if z.Color == white && z.Intensity == chronoPulseIntensityFull {
+				sawHighWhiteFull = true
+			}
+			if z.Color == ambianceChronoPulseRed && z.Intensity == chronoPulseIntensityLow {
+				sawLowRedDim = true
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !sawHighWhiteFull || !sawLowRedDim {
+		t.Fatalf("expected both phases to be rendered within one cycle: high(white/full)=%v low(red/dim)=%v", sawHighWhiteFull, sawLowRedDim)
+	}
+}
+
+// TestDevChronoPulse_SuppressedBySelector covers "s'efface devant le
+// sélecteur ON/AUTO/OFF" (contract §10.1): a forced ON must show the
+// selector's own forced scene, never a pulse colour, and never a fade
+// (TransitionMs 0 — a forced state must snap).
+func TestDevChronoPulse_SuppressedBySelector(t *testing.T) {
+	app := newTestApp(t)
+	fake := lighting.NewFakeDriver()
+	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go app.ambiance().Start(ctx)
+	go app.runChronoPulse(ctx)
+
+	qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
+	app.engine.Ready(qcm.ID, qcm)
+	app.engine.StartImmediate(15)
+	defer app.engine.Stop()
+	waitForChronoPulseTier(t, app, 1) // pulse genuinely active underneath
+
+	// OFF (not ON): its forced {0,0,0}/0 can never coincide with a pulse
+	// phase's own colour/intensity (white/theme, amber or red, always >0),
+	// so a match unambiguously proves the selector actually won — unlike
+	// ON's white/255, which happens to equal the pulse's own high-phase
+	// value in this test's fixture (no theme configured) and would leave a
+	// stale pulse-phase sample indistinguishable from a genuinely forced
+	// one.
+	app.setLightingMode(lightingModeOff)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		last, ok := fake.Last()
+		if ok && len(last.Zones) > 0 {
+			z := last.Zones[0]
+			if z.Color == [3]int{0, 0, 0} && z.Intensity == 0 {
+				if z.TransitionMs != 0 {
+					t.Fatalf("a forced OFF must snap, never fade (chrono-pulse's own transitionMs must not leak through), got %+v", z)
+				}
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("mode OFF never forced 'general' off over the chrono-pulse")
+}
+
 // #207 — the App builds/hot-swaps the Hue driver from config.json's
 // `lighting` section: disabled ⇒ no writer, no driver; enabled at runtime ⇒
 // writer + driver + goroutine; disabled again ⇒ driver nil, writer idles.
