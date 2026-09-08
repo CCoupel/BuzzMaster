@@ -77,6 +77,8 @@ function makeServer({ lighting, lights }) {
     if (method === 'GET' && url === '/api/lighting/status') return respond(200, { state: 'ok' })
     if (method === 'GET' && url === '/api/lighting/lights') return respond(lights.status, lights.body)
     if (method === 'POST' && url === '/api/lighting/test') return respond(200, { result: 'ok' })
+    // P2b (2026-09-08) — allumage/extinction immédiat au coché/décoché.
+    if (method === 'POST' && url === '/api/lighting/preview') return respond(200, { result: 'ok' })
     throw new Error(`Route non mockée : ${method} ${url}`)
   })
 

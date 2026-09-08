@@ -177,6 +177,11 @@ export default function AmbiancePage() {
   // handleResetToLibre).
   const [resettingScope, setResettingScope] = useState(null)
   const [testing, setTesting] = useState(null) // nom en cours de test, ou '*' pour toutes
+  // P2b (2026-09-08) — allumage/extinction immédiat au coché/décoché,
+  // planner-v10-general-theme-toggle-20260908-114420.md §Partie 2. Nom de
+  // l'ampoule dont la case vient d'être basculée, tant que
+  // POST /api/lighting/preview est en vol.
+  const [previewing, setPreviewing] = useState(null)
 
   // #213 — rôle par ampoule : { [name]: {role, team} }, seulement les
   // entrées modifiées cette session (même patron que selectedNames/prev ci-
@@ -486,6 +491,36 @@ export default function AmbiancePage() {
       const base = prev ?? defaultSelection
       return checked ? [...new Set([...base, name])] : base.filter(n => n !== name)
     })
+  }
+
+  // P2b — bascule la sélection ET allume/éteint l'ampoule EN DIRECT
+  // (planner §2.3) : cocher ⇒ blanc pleine intensité immédiat, décocher ⇒
+  // éteinte immédiate. `toggleName` s'applique D'ABORD et SANS CONDITION —
+  // la sélection ne dépend jamais du résultat de l'appel réseau : « la
+  // configuration ne dépend pas du pont » (§2.3, ligne « pont
+  // injoignable »). L'appel à /preview est un effet de bord best-effort,
+  // jamais un prérequis à la bascule de case.
+  const handlePreviewToggle = (name, checked) => {
+    toggleName(name, checked)
+    setPreviewing(name)
+    postJson('/api/lighting/preview', { name, on: checked })
+      .then(async (res) => {
+        if (res.ok) return
+        const body = await readJsonSafe(res)
+        const failure = classifyFailure(res, body)
+        // Même table de messages que « Tester » (handleTest ci-dessous),
+        // reformulée pour l'action réelle (allumer/éteindre, pas tester).
+        const message = failure === 'busy' ? 'Une prévisualisation est déjà en cours — patientez un instant.'
+          : failure === 'unreachable' ? 'Pont injoignable — impossible d\'allumer/éteindre immédiatement.'
+          : failure === 'refused' && body?.reason === 'not_configured' ? 'Enregistrez d\'abord la configuration.'
+          : failure === 'refused' ? 'Association refusée — ré-associez le pont.'
+          : `Prévisualisation impossible (HTTP ${res.status}).`
+        setToast({ message, type: failure === 'error' ? 'error' : 'warning' })
+      })
+      .catch(error => {
+        setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+      })
+      .finally(() => setPreviewing(null))
   }
 
   const handleSaveLights = async () => {
@@ -925,8 +960,8 @@ export default function AmbiancePage() {
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={blocked}
-                          onChange={e => toggleName(row.name, e.target.checked)}
+                          disabled={blocked || previewing !== null || testing !== null}
+                          onChange={e => handlePreviewToggle(row.name, e.target.checked)}
                           aria-label={row.name}
                         />
                         <span className="ambiance-light-text">
@@ -940,6 +975,19 @@ export default function AmbiancePage() {
                                   ? `id ${row.id} · joignable`
                                   : `id ${row.id} · éteinte au mur`}
                           </span>
+                          {/* P2b, cas limite §2.3 — à signaler, pas à corriger : une
+                              ampoule déjà dans la config ENREGISTRÉE, décochée mais
+                              pas encore sauvegardée (« Enregistrer » pas cliqué),
+                              s'éteint immédiatement via /preview mais reste PILOTÉE
+                              par le writer jusqu'à l'enregistrement — la prochaine
+                              scène la rallumera. Un second mécanisme d'override
+                              résistant au jeu dupliquerait celui du §10.1 (contrat) :
+                              mention discrète, pas un vrai état "en attente". */}
+                          {!checked && existingLights.has(row.name) && (
+                            <span className="ambiance-light-pending-hint">
+                              sera rallumée tant que non enregistré
+                            </span>
+                          )}
                         </span>
                       </label>
                       {/* #213 — rôle : Éclairage général (défaut) ou Équipe X. Même
@@ -974,7 +1022,7 @@ export default function AmbiancePage() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        disabled={blocked || row.missing || !row.reachable || testing !== null}
+                        disabled={blocked || row.missing || !row.reachable || testing !== null || previewing !== null}
                         loading={testing === row.name}
                         onClick={() => handleTest(row.name)}
                       >
@@ -1007,7 +1055,7 @@ export default function AmbiancePage() {
                 variant="secondary"
                 onClick={() => handleTest(null)}
                 loading={testing === '*'}
-                disabled={frozen || testing !== null || effectiveSelected.length === 0}
+                disabled={frozen || testing !== null || previewing !== null || effectiveSelected.length === 0}
               >
                 Tester toutes les ampoules
               </Button>

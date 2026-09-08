@@ -93,6 +93,12 @@ function makeServer({ lighting = {}, status = { state: 'disabled' }, register, l
       const r = typeof test === 'function' ? test(body) : (test ?? { status: 200, body: { result: 'ok' } })
       return respond(r.status, r.body)
     }
+    // P2b (2026-09-08) — allumage/extinction immédiat au coché/décoché,
+    // même taxonomie que /test. Défaut neutre : les tests de CE fichier ne
+    // portent pas sur /preview lui-même (voir AmbiancePage.preview.test.jsx).
+    if (method === 'POST' && url === '/api/lighting/preview') {
+      return respond(200, { result: 'ok' })
+    }
     throw new Error(`Route non mockée : ${method} ${url}`)
   })
 
@@ -616,6 +622,11 @@ describe('Étape 3 — pont configuré', () => {
     // en cocher une suffit à l'activer, sans rapport avec le test individuel
     // ci-dessus (l'appel « Tester » d'une ampoule ne la coche pas).
     fireEvent.click(screen.getByLabelText('Salle gauche'))
+    // P2b (2026-09-08) — cocher déclenche aussi POST /api/lighting/preview
+    // en vol ; « Tester toutes » partage la même garde `previewing !== null`
+    // (même ressource lightingBusy côté serveur) — attendre que l'appel se
+    // termine avant de cliquer, sans quoi le bouton est encore désactivé.
+    await waitFor(() => expect(screen.getByText('Tester toutes les ampoules').closest('button')).not.toBeDisabled())
     fireEvent.click(screen.getByText('Tester toutes les ampoules'))
     await waitFor(() => expect(callsTo(server, 'POST', '/api/lighting/test')).toHaveLength(2))
     expect(callsTo(server, 'POST', '/api/lighting/test')[1].body).toEqual({})

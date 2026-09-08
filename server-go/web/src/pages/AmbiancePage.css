@@ -339,6 +339,17 @@
   font-size: 0.9rem;
 }
 
+/* P2b — cas limite §2.3 : ampoule décochée déjà présente dans la config
+   ENREGISTRÉE (pas encore sauvegardée non cochée) — reste pilotée jusqu'à
+   « Enregistrer », donc rallumée à la prochaine scène malgré /preview.
+   Mention discrète, pas une alerte : ambre léger, taille réduite, en italique. */
+.ambiance-light-pending-hint {
+  display: block;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--warning);
+}
+
 .ambiance-light-meta {
   font-size: 0.75rem;
   color: var(--gray-500);
