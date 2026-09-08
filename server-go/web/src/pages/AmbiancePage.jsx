@@ -493,17 +493,15 @@ export default function AmbiancePage() {
     })
   }
 
-  // P2b — bascule la sélection ET allume/éteint l'ampoule EN DIRECT
-  // (planner §2.3) : cocher ⇒ blanc pleine intensité immédiat, décocher ⇒
-  // éteinte immédiate. `toggleName` s'applique D'ABORD et SANS CONDITION —
-  // la sélection ne dépend jamais du résultat de l'appel réseau : « la
-  // configuration ne dépend pas du pont » (§2.3, ligne « pont
-  // injoignable »). L'appel à /preview est un effet de bord best-effort,
-  // jamais un prérequis à la bascule de case.
-  const handlePreviewToggle = (name, checked) => {
-    toggleName(name, checked)
+  // P2b/P2d — allume/éteint l'ampoule EN DIRECT (planner §Partie 2, puis
+  // extension "envoyer le rôle sélectionné" du 2026-09-08) : `role` (au
+  // format `roleSelectValue` — "general" ou "team:<X>", EXACTEMENT la
+  // valeur brute du <select>) n'est envoyé que pour `on:true` — décocher
+  // n'a pas de couleur à prévisualiser. Effet de bord best-effort, jamais
+  // un prérequis : ne bloque rien, ses erreurs sont un simple toast.
+  const sendPreview = (name, on, role) => {
     setPreviewing(name)
-    postJson('/api/lighting/preview', { name, on: checked })
+    postJson('/api/lighting/preview', on ? { name, on, role } : { name, on })
       .then(async (res) => {
         if (res.ok) return
         const body = await readJsonSafe(res)
@@ -521,6 +519,27 @@ export default function AmbiancePage() {
         setToast({ message: 'Erreur : ' + error.message, type: 'error' })
       })
       .finally(() => setPreviewing(null))
+  }
+
+  // Bascule la sélection ET prévisualise EN DIRECT (planner §2.3) :
+  // `toggleName` s'applique D'ABORD et SANS CONDITION — la sélection ne
+  // dépend jamais du résultat de l'appel réseau : « la configuration ne
+  // dépend pas du pont » (§2.3, ligne « pont injoignable »).
+  const handlePreviewToggle = (name, checked) => {
+    toggleName(name, checked)
+    sendPreview(name, checked, checked ? roleSelectValue(roleFor(name)) : undefined)
+  }
+
+  // P2d (2026-09-08) — si le rôle change alors que la case est DÉJÀ cochée,
+  // la prévisualisation doit suivre : sans ça, l'admin verrait toujours la
+  // couleur du rôle précédent en choisissant "Équipe — Rouges" après avoir
+  // déjà coché en "général". Décidé d'inclure ce cas dans ce lot plutôt que
+  // de le reporter : c'est la même mécanique que le cochage (même
+  // `sendPreview`), le coût marginal est nul et l'utilité — voir la vraie
+  // couleur qu'on est en train de choisir, pas seulement au moment du clic
+  // sur la case — est directement dans l'esprit de la fonctionnalité.
+  const handleRoleChangePreview = (name, roleValue, checked) => {
+    if (checked) sendPreview(name, true, roleValue)
   }
 
   const handleSaveLights = async () => {
@@ -1004,12 +1023,18 @@ export default function AmbiancePage() {
                         <select
                           className="ambiance-light-role"
                           value={roleSelectValue(roleFor(row.name))}
-                          disabled={blocked}
+                          disabled={blocked || previewing !== null}
                           onChange={e => {
+                            const value = e.target.value
                             setRoleOverrides(prev => ({
                               ...prev,
-                              [row.name]: roleFromSelectValue(e.target.value),
+                              [row.name]: roleFromSelectValue(value),
                             }))
+                            // P2d — la case est DÉJÀ cochée : la
+                            // prévisualisation en cours doit suivre le
+                            // nouveau rôle, `value` est déjà au format
+                            // roleSelectValue attendu par /preview.
+                            handleRoleChangePreview(row.name, value, checked)
                           }}
                           aria-label={`Rôle de ${row.name}`}
                         >

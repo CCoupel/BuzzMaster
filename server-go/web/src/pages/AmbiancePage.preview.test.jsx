@@ -17,6 +17,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 //   - une ampoule déjà dans la config ENREGISTRÉE, décochée mais pas
 //     encore sauvegardée, affiche une mention discrète (elle reste
 //     pilotée jusqu'à « Enregistrer », donc rallumée à la prochaine scène).
+//
+// P2d (2026-09-08) — extension "envoyer le rôle sélectionné" : `on:true`
+// porte désormais `role` (format `roleSelectValue` — "general" ou
+// "team:<X>", EXACTEMENT la valeur brute du <select>), pour que /preview
+// applique la vraie couleur plutôt qu'un blanc fixe. Un changement de rôle
+// pendant que la case est DÉJÀ cochée redéclenche /preview avec le nouveau
+// rôle (décision dev-frontend, signalée : coût marginal nul, cohérent avec
+// l'esprit "voir la couleur avant d'enregistrer").
 // ---------------------------------------------------------------------------
 
 vi.mock('./AmbiancePage.css', () => ({}))
@@ -95,7 +103,7 @@ describe('AmbiancePage — P2b : allumage/extinction immédiat', () => {
     // Bascule synchrone, avant même que la promesse ne résolve.
     expect(screen.getByLabelText('Salle gauche')).toBeChecked()
     await waitFor(() => expect(callsTo(server, 'POST', '/api/lighting/preview')).toHaveLength(1))
-    expect(callsTo(server, 'POST', '/api/lighting/preview')[0].body).toEqual({ name: 'Salle gauche', on: true })
+    expect(callsTo(server, 'POST', '/api/lighting/preview')[0].body).toEqual({ name: 'Salle gauche', on: true, role: 'general' })
   })
 
   it('décocher une ampoule appelle POST .../preview {name, on:false}', async () => {
@@ -186,5 +194,61 @@ describe('AmbiancePage — P2b : allumage/extinction immédiat', () => {
     // et jamais dans lighting.lights : pas de mention.
     expect(screen.getByLabelText('Salle gauche')).not.toBeChecked()
     expect(screen.queryByText('sera rallumée tant que non enregistré')).toBeNull()
+  })
+})
+
+describe('AmbiancePage — P2d : le rôle sélectionné est envoyé à /preview', () => {
+  const TEAMS = { Rouges: { COLOR: [255, 26, 26], COLOR_NAME: 'rouge', SCORE: 0 } }
+
+  it('cocher une ampoule dont le rôle est "Équipe" envoie role:"team:<X>"', async () => {
+    useGame.mockReturnValue({ teams: TEAMS })
+    const server = makeServer({ lighting: CONFIGURED_WITH_LIGHT })
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+    // Décoche d'abord (déjà cochée par défaut, config existante), choisit
+    // le rôle équipe, puis coche de nouveau — reproduit le geste réel.
+    fireEvent.click(screen.getByLabelText('Salle gauche'))
+    fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
+    fireEvent.click(screen.getByLabelText('Salle gauche'))
+
+    const previews = callsTo(server, 'POST', '/api/lighting/preview')
+    expect(previews[previews.length - 1].body).toEqual({ name: 'Salle gauche', on: true, role: 'team:Rouges' })
+  })
+
+  it('changer le rôle pendant que la case est DÉJÀ cochée redéclenche /preview avec le nouveau rôle', async () => {
+    useGame.mockReturnValue({ teams: TEAMS })
+    const server = makeServer({ lighting: CONFIGURED_WITH_LIGHT }) // cochée par défaut, rôle "general"
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+    await waitFor(() => expect(callsTo(server, 'POST', '/api/lighting/preview')).toHaveLength(0)) // pas de cochage automatique = pas d'appel
+
+    fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
+
+    await waitFor(() => expect(callsTo(server, 'POST', '/api/lighting/preview')).toHaveLength(1))
+    expect(callsTo(server, 'POST', '/api/lighting/preview')[0].body).toEqual({ name: 'Salle gauche', on: true, role: 'team:Rouges' })
+  })
+
+  it('changer le rôle pendant que la case est DÉCOCHÉE n\'envoie aucun appel (rien à prévisualiser)', async () => {
+    useGame.mockReturnValue({ teams: TEAMS })
+    const server = makeServer({ lighting: CONFIGURED }) // "Salle gauche" jamais configurée, décochée par défaut
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+
+    fireEvent.change(screen.getByLabelText('Rôle de Salle gauche'), { target: { value: 'team:Rouges' } })
+
+    expect(callsTo(server, 'POST', '/api/lighting/preview')).toHaveLength(0)
+  })
+
+  it('décocher n\'envoie pas de champ "role" (rien à prévisualiser en éteignant)', async () => {
+    const server = makeServer({ lighting: CONFIGURED_WITH_LIGHT })
+    render(<AmbiancePage />)
+    await screen.findByText('Salle gauche')
+
+    fireEvent.click(screen.getByLabelText('Salle gauche')) // décoche
+
+    const previews = callsTo(server, 'POST', '/api/lighting/preview')
+    expect(previews).toHaveLength(1)
+    expect(previews[0].body).toEqual({ name: 'Salle gauche', on: false })
+    expect(previews[0].body).not.toHaveProperty('role')
   })
 })
