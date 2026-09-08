@@ -854,6 +854,75 @@ func TestDevOffPayloadAndClassify(t *testing.T) {
 	}
 }
 
+// TestDevDesired_TransitionMsBecomesDeciseconds pins the 2026-09-08
+// amendment (contract §5.2, the chrono-pulse's own "économie de rendu"):
+// lighting.ZoneState.TransitionMs is per-write now, converted to Hue's
+// deciseconds unit — 0 (every caller before this amendment, and every one
+// besides cmd/server's chrono-pulse effect since) still yields the exact
+// same "transitiontime":0 payload as before, byte for byte.
+func TestDevDesired_TransitionMsBecomesDeciseconds(t *testing.T) {
+	zero := desired(lighting.ZoneState{Color: [3]int{255, 255, 255}, Intensity: 255})
+	b, _ := json.Marshal(zero.toV1())
+	if !strings.Contains(string(b), `"on":true`) || !strings.Contains(string(b), `"bri":254`) || !strings.Contains(string(b), `"transitiontime":0`) {
+		t.Errorf("TransitionMs=0 (unset) payload changed, got %s — every existing caller must be unaffected", b)
+	}
+	half := desired(lighting.ZoneState{Color: [3]int{255, 255, 255}, Intensity: 255, TransitionMs: 500})
+	b, _ = json.Marshal(half.toV1())
+	if !strings.Contains(string(b), `"transitiontime":5`) {
+		t.Errorf("TransitionMs=500 must become transitiontime=5 (deciseconds), got %s", b)
+	}
+	// Also on the OFF branch — a fade-to-off is just as valid a use as a
+	// fade between two "on" states, contract §5.2's own wording is not
+	// scoped to "on" only.
+	offFaded := desired(lighting.ZoneState{Intensity: 0, TransitionMs: 300})
+	if offFaded.on {
+		t.Fatal("intensity 0 must still be off regardless of TransitionMs")
+	}
+	if b, _ := json.Marshal(offFaded.toV1()); !strings.Contains(string(b), `"transitiontime":3`) {
+		t.Errorf("off with TransitionMs=300 must carry transitiontime=3, got %s", b)
+	}
+	if got := msToDeciseconds(-1); got != 0 {
+		t.Errorf("negative TransitionMs must floor to 0 (instant), got %d", got)
+	}
+}
+
+// TestDevApply_SustainedAlternatingWritesStillUseTheGroup is the chrono-
+// pulse's own write-path concern: a target that keeps alternating between
+// two DIFFERENT states every Apply (never settling, the exact shape of a
+// breathing effect) must still go through the buzzmaster-general group for
+// every single write once >=2 members are configured — the existing §5.8
+// hybrid logic (Batch B) was designed around occasional scene changes, this
+// pins that it holds just as well under a sustained back-and-forth with a
+// non-zero TransitionMs on every write.
+func TestDevApply_SustainedAlternatingWritesStillUseTheGroup(t *testing.T) {
+	f := newDevBridge(t, "L1", "L2")
+	d, _ := newDevGroupsEnabled(t, f, LightSpec{Name: "L1"}, LightSpec{Name: "L2"})
+	ctx := context.Background()
+	if err := d.RefreshInventory(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	high := lighting.State{Zones: []lighting.ZoneState{{Zone: lighting.ZoneGeneral, Color: [3]int{255, 255, 255}, Intensity: 255, TransitionMs: 500}}}
+	low := lighting.State{Zones: []lighting.ZoneState{{Zone: lighting.ZoneGeneral, Color: [3]int{255, 170, 0}, Intensity: 128, TransitionMs: 500}}}
+	for i := 0; i < 6; i++ {
+		st := high
+		if i%2 == 1 {
+			st = low
+		}
+		if err := d.Apply(ctx, st); err != nil {
+			t.Fatalf("Apply #%d: %v", i, err)
+		}
+	}
+	puts := f.puts()
+	if len(puts) != 6 {
+		t.Fatalf("expected 6 writes (one per alternation, never deduped — each differs from the last), got %d: %+v", len(puts), puts)
+	}
+	for i, p := range puts {
+		if !strings.Contains(p.path, "/groups/") {
+			t.Errorf("write #%d must go through the group, got %s", i, p.path)
+		}
+	}
+}
+
 func TestDevRegisterFlow(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

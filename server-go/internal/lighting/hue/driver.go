@@ -63,8 +63,15 @@ const (
 	// up to N HTTP writes at ~40 ms each, where #205 reasoned on a single
 	// write (contract §5.4). Wired by #207 into lighting.Config.MinInterval.
 	RecommendedMinInterval = 250 * time.Millisecond
-	// TransitionTime is sent with every write: 0 = instant. The bridge default
-	// (400 ms) would wash out an event flash (contract §5.2).
+	// TransitionTime is sent with every write that does not request
+	// otherwise: 0 = instant. The bridge default (400 ms) would wash out an
+	// event flash (contract §5.2). 2026-09-08 amendment: transitiontime is
+	// now a PER-WRITE value (applied.transitionTime, desired() below,
+	// driven by lighting.ZoneState.TransitionMs) — every existing caller
+	// that never sets TransitionMs still gets exactly this constant via
+	// applied's zero value, so nothing changes for Apply's ordinary scene
+	// writes, TestFlash or SetLightDirect — only the chrono-pulse effect
+	// (cmd/server/ambiance.go) ever asks for anything else.
 	TransitionTime = 0
 	// DefaultRefreshEvery is how often the light inventory is re-read and the
 	// name→id resolution re-verified (contract §4.2: at resolution and
@@ -161,14 +168,25 @@ type Status struct {
 }
 
 // applied is the last state effectively written to a light (contract §5.3).
+//
+// transitionTime (2026-09-08 amendment, hue-bridge.md §5.2) is in Hue
+// deciseconds (1 = 100 ms) and defaults to TransitionTime (0, instant) via
+// Go's own zero value — every applied{...} literal in this package besides
+// desired() (TestFlash's white/restore, SetLightDirect's want) never sets
+// it, so they are UNCHANGED by this amendment. Deliberately part of the
+// struct's own equality (used by the §5.3 dedup cache, appliedState): two
+// writes to the same colour/intensity but a different transition time are
+// NOT the same "applied" state, so a caller that changes only the fade
+// speed still gets a fresh write, never silently deduped away.
 type applied struct {
-	on  bool
-	bri int
-	xy  [2]float64
+	on             bool
+	bri            int
+	xy             [2]float64
+	transitionTime int
 }
 
 func (a applied) toV1() stateV1 {
-	tt := TransitionTime
+	tt := a.transitionTime
 	if !a.on {
 		off := false
 		return stateV1{On: &off, TransitionTime: &tt}
@@ -180,11 +198,23 @@ func (a applied) toV1() stateV1 {
 }
 
 // desired maps a ZoneState to the state to write (contract §5.2).
+// z.TransitionMs (milliseconds, the vocabulary internal/lighting uses
+// throughout) is converted to Hue's own deciseconds unit; 0 (every existing
+// caller) yields TransitionTime's default of 0 (instant), unchanged.
 func desired(z lighting.ZoneState) applied {
 	if z.Intensity <= 0 {
-		return applied{on: false}
+		return applied{on: false, transitionTime: msToDeciseconds(z.TransitionMs)}
 	}
-	return applied{on: true, bri: intensityToBri(z.Intensity), xy: rgbToXY(z.Color[0], z.Color[1], z.Color[2])}
+	return applied{on: true, bri: intensityToBri(z.Intensity), xy: rgbToXY(z.Color[0], z.Color[1], z.Color[2]), transitionTime: msToDeciseconds(z.TransitionMs)}
+}
+
+// msToDeciseconds converts milliseconds to Hue's transitiontime unit
+// (tenths of a second). <=0 maps to 0 (instant, TransitionTime's default).
+func msToDeciseconds(ms int) int {
+	if ms <= 0 {
+		return 0
+	}
+	return ms / 100
 }
 
 type resolvedLight struct {

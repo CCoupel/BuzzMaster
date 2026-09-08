@@ -53,10 +53,18 @@ type State struct {
 // the exact format and scale of protocol.LEDSetPayload (RGB 0-255, intensity
 // 0-255) so that the room and the buzzers show the SAME colour for the same
 // team (contract §3). Conversion to hardware formats belongs to the driver.
+//
+// TransitionMs (2026-09-08, hue-bridge.md §5.2 amendment) is how long the
+// driver should fade INTO this state, 0 = instant (the zero value, so every
+// existing caller that never sets it keeps the original snap-to-value
+// behaviour unchanged). Only the chrono-pulse effect (cmd/server/
+// ambiance.go) sets this — a breathing effect needs the bridge's own
+// interpolation, where a flash/score cue explicitly wants none.
 type ZoneState struct {
-	Zone      string
-	Color     [3]int
-	Intensity int
+	Zone         string
+	Color        [3]int
+	Intensity    int
+	TransitionMs int
 }
 
 // ZoneGeneral is the single zone name used by #205.
