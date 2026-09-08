@@ -520,6 +520,87 @@ func TestDevBugfixQualifRound5_TestFlashAllStillMeansConfiguredOnly(t *testing.T
 	}
 }
 
+// TestDevSetLightDirect_ResolvesLiveUnconfiguredLight is P2a's own version
+// of the round-5 lesson (contract §7, POST /api/lighting/preview,
+// planner-v10-general-theme-toggle-20260908-114420.md §Partie 2): checking
+// a bulb BEFORE it is saved to configuration must still light it up — the
+// exact case that cost 5 QUALIF rounds when TestFlash got this wrong.
+func TestDevSetLightDirect_ResolvesLiveUnconfiguredLight(t *testing.T) {
+	f := newDevBridge(t, "BuzzHue1") // on the bridge, but NEVER saved to config
+	d, _ := newDevDriver(t, f)       // zero configured lights — exactly the reported state
+
+	if err := d.SetLightDirect(context.Background(), "BuzzHue1", true); err != nil {
+		t.Fatalf("SetLightDirect(on) must resolve a light present on the bridge even when unconfigured: %v", err)
+	}
+	puts := f.puts()
+	if len(puts) != 1 || !strings.Contains(puts[0].body, `"on":true`) || !strings.Contains(puts[0].body, `"bri":254`) {
+		t.Fatalf("expected one PUT turning the light full white, got %+v", puts)
+	}
+
+	if err := d.SetLightDirect(context.Background(), "BuzzHue1", false); err != nil {
+		t.Fatalf("SetLightDirect(off): %v", err)
+	}
+	puts = f.puts()
+	if len(puts) != 2 || !strings.Contains(puts[1].body, `"on":false`) || strings.Contains(puts[1].body, `"bri"`) {
+		t.Fatalf("expected a second PUT turning the light off (no bri), got %+v", puts)
+	}
+}
+
+// TestDevSetLightDirect_UnknownNameIsRefused mirrors resolve()'s own "0 ou
+// >1 correspondance ⇒ refus" rule (contract §4.2) for the live-inventory
+// path: a name matching nothing on the bridge must error, never silently
+// succeed or guess.
+func TestDevSetLightDirect_UnknownNameIsRefused(t *testing.T) {
+	f := newDevBridge(t, "Salon")
+	d, _ := newDevDriver(t, f)
+
+	if err := d.SetLightDirect(context.Background(), "Inconnue", true); err == nil {
+		t.Fatal("SetLightDirect must refuse a name matching no light on the bridge")
+	}
+	if len(f.puts()) != 0 {
+		t.Fatalf("no write must be attempted when resolution fails, got %+v", f.puts())
+	}
+}
+
+// TestDevSetLightDirect_InvalidatesWriterDedupCache closes the §5.3 dedup
+// pitfall for this out-of-band write path too (same pattern as TestFlash's
+// own restore): a light already configured AND already at the state
+// SetLightDirect is about to (re)write must still be re-asserted by the
+// writer's NEXT ordinary Apply, not skipped as "unchanged" against a cache
+// this out-of-band write never went through.
+func TestDevSetLightDirect_InvalidatesWriterDedupCache(t *testing.T) {
+	f := newDevBridge(t, "L1")
+	d, _ := newDevDriver(t, f, LightSpec{Name: "L1"})
+	ctx := context.Background()
+
+	// Apply once so appliedState["L1"] is populated with a WHITE value that
+	// happens to equal what SetLightDirect(on) will later write physically.
+	if err := d.Apply(ctx, devGeneral([3]int{255, 255, 255}, 255)); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.puts()) != 1 {
+		t.Fatalf("setup: %+v", f.puts())
+	}
+
+	// Out-of-band preview write, bypassing the writer entirely.
+	if err := d.SetLightDirect(ctx, "L1", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.puts()) != 2 {
+		t.Fatalf("SetLightDirect must have written, got %+v", f.puts())
+	}
+
+	// Same colour/intensity as before: if the cache were left untouched by
+	// SetLightDirect, this would be (wrongly) skipped as "unchanged" — the
+	// bug this test exists to catch.
+	if err := d.Apply(ctx, devGeneral([3]int{255, 255, 255}, 255)); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.puts()) != 3 {
+		t.Fatalf("the writer's next Apply must re-assert L1's state rather than trust a cache SetLightDirect bypassed, got %d PUTs: %+v", len(f.puts()), f.puts())
+	}
+}
+
 func TestDevRefusedAndUnreachableAreDistinct(t *testing.T) {
 	f := newDevBridge(t, "BuzzHue1")
 	sink := &devLogSink{}

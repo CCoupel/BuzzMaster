@@ -372,3 +372,51 @@ func (h *HTTPServer) handleLightingTest(w http.ResponseWriter, r *http.Request) 
 	}
 	writeLightingJSON(w, http.StatusOK, map[string]string{"result": "ok"})
 }
+
+// handleLightingPreview — POST /api/lighting/preview {"name","on"} (#207
+// P2a, planner-v10-general-theme-toggle-20260908-114420.md §Partie 2):
+// unlike /test, this writes a PERSISTENT state (full white or off), no
+// restore, no flash timer — the instant on-screen feedback for checking or
+// unchecking a bulb on /admin/ambiance, BEFORE it is necessarily saved.
+// Same error taxonomy, same single-in-flight-operation guard, same pattern
+// as handleLightingTest above; the only different behaviour lives in the
+// driver (hue.Driver.SetLightDirect's own doc comment on why it resolves
+// against the live inventory first and foremost).
+func (h *HTTPServer) handleLightingPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var req struct {
+		Name string `json:"name"`
+		On   bool   `json:"on"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	name := hue.NormalizeLightName(req.Name)
+	if name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	d := h.lightingDriver()
+	if d == nil {
+		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
+		return
+	}
+	release, ok := lightingBusy.acquire(&lightingBusy.preview)
+	if !ok {
+		writeLightingJSON(w, http.StatusTooManyRequests, map[string]string{"result": "busy", "reason": "preview_in_progress"})
+		return
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(r.Context(), lightingRequestTimeout)
+	defer cancel()
+	if err := d.SetLightDirect(ctx, name, req.On); err != nil {
+		writeLightingError(w, err)
+		return
+	}
+	writeLightingJSON(w, http.StatusOK, map[string]string{"result": "ok"})
+}

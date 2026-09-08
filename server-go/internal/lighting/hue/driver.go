@@ -1009,10 +1009,11 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 }
 
 // liveLightID resolves name against a LIVE bridge inventory fetch (never
-// d.cfg.Lights/d.resolved) — the round-5 fix's own mechanism: TestFlash's
-// only caller of this. Same ambiguity guard as resolve() (contract §4.2,
-// "0 ou > 1 correspondance ⇒ refus, jamais de choix arbitraire"), extended
-// here to a light that was never saved to config at all.
+// d.cfg.Lights/d.resolved) — the round-5 fix's own mechanism, reused by both
+// TestFlash and SetLightDirect (below). Same ambiguity guard as resolve()
+// (contract §4.2, "0 ou > 1 correspondance ⇒ refus, jamais de choix
+// arbitraire"), extended here to a light that was never saved to config at
+// all.
 func liveLightID(lights map[string]lightV1, name string) (string, bool) {
 	want := NormalizeLightName(name)
 	found, count := "", 0
@@ -1025,4 +1026,68 @@ func liveLightID(lights map[string]lightV1, name string) (string, bool) {
 		return "", false
 	}
 	return found, true
+}
+
+// SetLightDirect writes ONE named light to a fixed, PERSISTENT state — full
+// white (on, bri 254) or off — with no restore and no flash timer, unlike
+// TestFlash. Backs POST /api/lighting/preview (#207 P2a,
+// planner-v10-general-theme-toggle-20260908-114420.md §Partie 2): an admin
+// sees a bulb light up or go dark the instant they check/uncheck it in the
+// UI, even (deliberately) BEFORE it is saved to configuration.
+//
+// Resolution follows the EXACT same two-step rule as TestFlash's own doc
+// comment, for the same reason (QUALIF rounds 1-5, contract §7): try the
+// saved configuration first (d.resolved, so an already-configured light
+// keeps using its already-verified id without an extra round trip), then
+// fall back to a FRESH live bridge inventory fetch (liveLightID) — never
+// resolve against configuration ALONE. A light that is not yet saved has no
+// entry in d.resolved at all, so it always falls through to the live path,
+// exactly the case this endpoint exists for.
+func (d *Driver) SetLightDirect(ctx context.Context, name string, on bool) error {
+	name = NormalizeLightName(name)
+	if name == "" {
+		return errors.New("hue: light name is required")
+	}
+	d.opMu.Lock() // serialises against a concurrent Apply/Inventory/TestFlash, same as every other public operation
+	defer d.opMu.Unlock()
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return d.fail(err)
+	}
+	c, _ := d.conn()
+	d.mu.Lock()
+	rl, resolved := d.resolved[name]
+	d.mu.Unlock()
+	id := rl.id
+	if !resolved {
+		lights, err := c.lights(ctx)
+		if err != nil {
+			return d.fail(err)
+		}
+		lid, ok := liveLightID(lights, name)
+		if !ok {
+			return fmt.Errorf("hue: no resolved light matches %q", name)
+		}
+		id = lid
+	}
+	want := applied{on: false}
+	if on {
+		want = applied{on: true, bri: 254, xy: rgbToXY(255, 255, 255)}
+	}
+	if err := c.setState(ctx, id, want.toV1()); err != nil {
+		cerr := classify(err)
+		if errors.Is(cerr, ErrUnreachable) || errors.Is(cerr, ErrRefused) {
+			return d.fail(cerr)
+		}
+		return cerr
+	}
+	// This write happened OUTSIDE the writer's own desired()/appliedState
+	// bookkeeping (contract §5.3) — invalidate this light's cache entry, if
+	// any, so the writer's next scene Apply freshly decides for it instead
+	// of possibly trusting a value that predates this out-of-band write
+	// (same pattern as TestFlash's own restore, above).
+	d.mu.Lock()
+	delete(d.appliedState, name)
+	d.mu.Unlock()
+	d.ok()
+	return nil
 }

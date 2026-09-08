@@ -356,6 +356,89 @@ func TestDevLightingStatusAndTestWithDriver(t *testing.T) {
 	}
 }
 
+// TestDevLightingPreview_TurnsOnAndOffEvenUnconfigured is P2a's own round
+// trip (#207, planner-v10-general-theme-toggle-20260908-114420.md §Partie
+// 2): the light named is NEVER saved to the driver's configuration (zero
+// hue.LightSpec) — exactly the checked-before-registered case the endpoint
+// exists for, mirroring TestDevLightingStatusAndTestWithDriver's own
+// bridge/driver setup for /test.
+func TestDevLightingPreview_TurnsOnAndOffEvenUnconfigured(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+	bridge := newDevHueBridge(t)
+	d, err := hue.New(hue.Config{BridgeIP: bridge.srv.URL, BridgeID: bridge.bridgeID, APIKey: bridge.key,
+		// Deliberately NO Lights entry for "BuzzHue1" — it is on the fake
+		// bridge (newDevHueBridge always names its one light "BuzzHue1") but
+		// never configured, the exact scenario this endpoint must handle.
+		FindBridge: func(_ context.Context, _ string, _ time.Duration) (hue.Bridge, bool, error) {
+			return hue.Bridge{}, false, nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	srv.Lighting = &devProvider{d: d}
+
+	code, out := devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"BuzzHue1","on":true}`)
+	if code != 200 || out["result"] != "ok" {
+		t.Fatalf("preview on (unconfigured light): %d %v", code, out)
+	}
+	code, out = devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"BuzzHue1","on":false}`)
+	if code != 200 || out["result"] != "ok" {
+		t.Fatalf("preview off: %d %v", code, out)
+	}
+	code, out = devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"Inconnue","on":true}`)
+	if code != 500 || out["result"] != "error" {
+		t.Fatalf("previewing a name matching no light: %d %v", code, out)
+	}
+	code, _ = devDo(t, srv, "POST", "/api/lighting/preview", `{"on":true}`)
+	if code != 400 {
+		t.Fatalf("empty name must be rejected before any I/O: %d", code)
+	}
+}
+
+// TestDevLightingPreview_NoDriverIsRefused mirrors /test's own "not
+// configured" answer (contract §5.6 taxonomy): no lighting driver at all
+// must never attempt a network call.
+func TestDevLightingPreview_NoDriverIsRefused(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+	code, out := devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"BuzzHue1","on":true}`)
+	if code != http.StatusConflict || out["result"] != "refused" || out["reason"] != "not_configured" {
+		t.Fatalf("no driver: want 409 refused/not_configured, got %d %v", code, out)
+	}
+}
+
+// TestDevLightingPreview_BusyGuard mirrors TestDevLightingOneInFlightPerOperation's
+// pattern (http_lighting_sec_dev_test.go) for the one operation that table
+// cannot cover without its own driver setup: a second /preview call while
+// one is already in flight gets 429, never a second network exchange.
+func TestDevLightingPreview_BusyGuard(t *testing.T) {
+	srv, _ := setupTestHTTPServer(t)
+	bridge := newDevHueBridge(t)
+	d, err := hue.New(hue.Config{BridgeIP: bridge.srv.URL, BridgeID: bridge.bridgeID, APIKey: bridge.key,
+		FindBridge: func(_ context.Context, _ string, _ time.Duration) (hue.Bridge, bool, error) {
+			return hue.Bridge{}, false, nil
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	srv.Lighting = &devProvider{d: d}
+
+	if !lightingBusy.preview.CompareAndSwap(false, true) {
+		t.Fatal("flag already held")
+	}
+	code, out := devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"BuzzHue1","on":true}`)
+	lightingBusy.preview.Store(false)
+	if code != http.StatusTooManyRequests || out["result"] != "busy" || out["reason"] != "preview_in_progress" {
+		t.Fatalf("want 429 busy/preview_in_progress, got %d %v", code, out)
+	}
+	// Released: a retry is served normally.
+	code, out = devDo(t, srv, "POST", "/api/lighting/preview", `{"name":"BuzzHue1","on":true}`)
+	if code != 200 || out["result"] != "ok" {
+		t.Fatalf("retry after release: %d %v", code, out)
+	}
+}
+
 func TestDevLightingDevicetype(t *testing.T) {
 	dt := lightingDevicetype()
 	if !strings.HasPrefix(dt, "buzzmaster#") || len(dt) > len("buzzmaster#")+19 || strings.ContainsAny(dt[len("buzzmaster#"):], " /:") {

@@ -431,6 +431,20 @@ Sert la sélection dans l'écran d'administration.
 Corps : `{"name":"BuzzHue1"}` ou `{}` pour toutes les ampoules sélectionnées.
 Effet : un flash bref puis **retour à l'état antérieur**. Réponse `200 {"result":"ok"}`.
 
+### `POST /api/lighting/preview` (2026-09-08, #207 P2a)
+Corps : `{"name":"BuzzHue1","on":true|false}` — `name` obligatoire (jamais « toutes »).
+Effet : écrit un état **persistant**, sans restauration ni minuterie de flash, contrairement à
+`/test` — `on:true` ⇒ blanc pleine intensité, `on:false` ⇒ `{"on":false}`. Réponse
+`200 {"result":"ok"}`, même taxonomie d'erreurs et même garde d'opération unique en vol
+(`lightingBusy`, 429 `{"result":"busy","reason":"preview_in_progress"}`) que `/test`.
+
+Sert l'allumage/extinction immédiat au coché/décoché d'une ampoule sur `/admin/ambiance`, **avant**
+même son enregistrement en configuration — c'est pourquoi la résolution du nom suit exactement la
+règle de `TestFlash` depuis le correctif du round 5 (`6d8918de`) : configuration enregistrée
+d'abord, puis **repli sur l'inventaire vivant** du pont si absente — jamais la configuration
+**seule**. C'est la leçon des 5 rounds de QUALIF coûtés par cette même erreur sur `/test` ; ne pas
+la répéter ici.
+
 ### `GET /api/lighting/status`
 `200 {"state":"ok|refused|unreachable|disabled","bridge_id":"…","bridge_ip":"…","lights_ok":2,"lights_total":3}`.
 **Ne fait aucun appel bloquant** : renvoie l'état connu du pilote, jamais une interrogation du pont.

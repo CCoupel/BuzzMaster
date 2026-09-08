@@ -129,10 +129,10 @@ func validHueAPIKey(key string) bool {
 	return !strings.ContainsAny(key, "/?#\" \t\r\n")
 }
 
-// lightingInFlight serialises the three outbound operations: a second
-// concurrent request gets 429 instead of starting another network exchange.
+// lightingInFlight serialises the outbound operations: a second concurrent
+// request gets 429 instead of starting another network exchange.
 type lightingInFlight struct {
-	register, discover, test atomic.Bool
+	register, discover, test, preview atomic.Bool
 }
 
 var lightingBusy lightingInFlight
