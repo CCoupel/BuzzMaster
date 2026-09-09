@@ -216,6 +216,63 @@
   box-shadow: none;
 }
 
+/* #208 — bouton d'accès aux commandes ON/AUTO/OFF/Flash (contrat lighting.md
+   §10.1). Toujours visible dès que l'éclairage est configuré (pas
+   seulement quand un mode est engagé, R8 planner-v10-etat-courant-
+   20260907.md §3) : c'est un vrai bouton, teinté selon le mode — AUTO =
+   neutre (repos), ON = warning (forçage actif), OFF = error (salle
+   éteinte). `.lighting-mode-container` porte le `position: relative` dont
+   le popover a besoin, même patron que `.brand-logo-container` plus haut. */
+.lighting-mode-container {
+  position: relative;
+  margin-left: var(--space-2);
+}
+
+.lighting-mode-nav-badge {
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+  user-select: none;
+}
+
+.lighting-mode-nav-badge.is-auto { background: var(--gray-400); }
+.lighting-mode-nav-badge.is-on { background: var(--warning); }
+.lighting-mode-nav-badge.is-off { background: var(--error); }
+
+.lighting-mode-nav-badge:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+
+.lighting-mode-nav-badge:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Popover — même patron que .navbar-menu-dropdown (position absolue,
+   ombre, coin arrondi), ancré à droite (le bouton est en fin de
+   .navbar-brand, un popover ancré à gauche déborderait de l'écran). */
+.lighting-mode-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--space-2);
+  z-index: 1000;
+  min-width: 280px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md), 0 8px 16px rgba(0, 0, 0, 0.1);
+  animation: slideDown 200ms ease-out;
+}
+
 .update-badge-version {
   display: inline-flex;
   align-items: center;

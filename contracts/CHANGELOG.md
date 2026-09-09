@@ -2,6 +2,281 @@
 
 ---
 
+## [20260908] — Éclairage : l'ampoule d'équipe ne quitte jamais sa couleur, et SCORE clignote en or (#213, #208)
+
+> Deux changements demandés après validation du Batch A en QUALIF round 6. Le premier **renverse
+> une règle documentée** — signalé comme tel, avec l'audit des règles qui en dépendaient.
+
+- **[CHANGED]** `contracts/hue-bridge.md` §5.2 — **suppression de la retombée vers `general`**.
+  Une ampoule de rôle `team` rend **toujours** la couleur de son équipe, en partie **comme hors
+  partie** ; elle n'affiche jamais la scène générale ni l'identité d'une autre équipe. La
+  composition des zones devient **entièrement statique** : elle ne dépend plus que de la
+  configuration.
+  **Audit des règles dépendantes** : §5.7 (4 règles de dégradation) et `lighting.md` §10.4
+  (extinction à l'arrêt) sont **intacts** — la seconde a été **vérifiée dans le code**, elle émet
+  déjà une zone d'extinction par équipe et n'a jamais dépendu de la retombée.
+  **Affectation orpheline** (équipe supprimée) ⇒ ampoule `general` ordinaire : une incohérence de
+  configuration n'est pas un état de jeu. *(Précision dérivée, planner.)*
+- **[CHANGED]** `contracts/lighting.md` §10.1 — le sélecteur ON/AUTO/OFF n'atteint **jamais** une
+  ampoule d'équipe, **en permanence**. ⛔ L'affirmation « hors partie, un OFF éteint tout » est
+  **corrigée** : un OFF éteint la zone `general` et laisse chaque ampoule d'équipe à sa couleur.
+  Ce qui ne valait que pendant une partie est **étendu à tout instant** — la règle en devient plus
+  simple.
+- **[CHANGED]** `contracts/lighting.md` §10.1 (encart R8) — le risque « mode oublié »
+  **s'atténue** : dès qu'une affectation existe, la salle n'est **jamais** totalement noire. Le cas
+  dur se réduit à une installation sans aucune ampoule d'équipe.
+- **[NEW]** `contracts/lighting.md` §10.4 exigence 0 — **réserve explicite** : l'extinction à
+  l'arrêt porte sur **toutes** les ampoules, d'équipe comprises. Cette règle régit l'exploitation,
+  pas l'arrêt.
+- **[NEW]** `contracts/lighting.md` §8.1 — **intensité des ampoules d'équipe**, transposée du
+  buzzer : **pleine** hors partie et en `PREPARE`/`READY`/`COUNTDOWN`, pleine si l'équipe est
+  distinguée en jeu actif, **atténuée sinon** via `dimIntensityFor()` — la fonction **déjà employée
+  par les buzzers**, jamais un second seuil.
+- **[NEW]** `contracts/lighting.md` §8.1 — **impulsion SCORE** : clignotement **couleur d'équipe ↔
+  or `{255,190,0}`**, cadence 400/400 ms (celle du Flash), **`clamp(points, 1, 6)` clignotements**,
+  **durée totale constante à `ScorePulseDuration`**. Le plafond 6 n'est pas un compromis :
+  `4800 / 800 = 6` exactement.
+  ⚠️ **Seule dérogation** au §5.2 avec l'extinction : transitoire, sur le score **de cette
+  équipe-là**, alternée avec **sa propre** couleur et y revenant — ne pas la « corriger ».
+- **[NEW]** `contracts/lighting.md` §2.4 — **`Event.Points int`**, renseigné pour `KindScore`
+  seulement, `0` ailleurs. Champ optionnel, aucun appelant invalidé. Sans lui, la proportionnalité
+  du §8.1 n'a pas d'entrée.
+- **[CHANGED]** `contracts/hue-bridge.md` §5.8 — `buzzmaster-general` devient un ensemble
+  **purement statique** : la composition dynamique que le point 3 devait contourner disparaît.
+
+**Aucun BREAKING** : `Event.Points` est additif, aucune configuration existante n'est invalidée, et
+`internal/lighting/hue/` n'est pas modifié (le clignotement est un drapeau de phase plus une
+re-dérivation, patron `runLightingFlash` déjà en place).
+Détail, audit et découpage : `_work/reports/planner-v10-teamcolor-changes-20260908-092100.md`.
+
+---
+
+## [20260907g] — Éclairage : groupes Hue là où ils paient, et couleur d'équipe (#208, #213)
+
+> Deux retours QUALIF round 5. Le premier est un **écart d'implémentation au contrat existant**
+> (aucun amendement nécessaire) ; le second **applique** la clause de sortie que §2 avait prévue.
+
+- **[CHANGED]** `contracts/hue-bridge.md` §2 — **clause de sortie déclenchée**. Le refus des
+  groupes reposait sur une prémisse explicite (« quelques unités », 2-6 ampoules, 80-240 ms) que
+  l'installation réelle **invalide** : ~30 ampoules, ≈ 1,2 s d'étalement. §2 prévoyait qu'on le
+  rouvre **sur mesure** — c'est fait. **§2 n'est pas renversé, il est appliqué.**
+  Reste écarté : un groupe **par équipe** quand chaque équipe n'a **qu'une** ampoule — `/groups`
+  est plafonné à **≤ 1 mise à jour/s** contre ~10/s sur `/lights`, donc 4 équipes d'une ampoule
+  coûteraient ≈ 4 s en groupes contre ≈ 160 ms en écritures directes.
+- **[NEW]** `contracts/hue-bridge.md` §5.8 — **groupes Hue**. Trois groupes créés et maintenus par
+  BuzzMaster (`buzzmaster-ambiance`, `buzzmaster-general`, `buzzmaster-team-<équipe>`), de type
+  **`LightGroup`** — ni `Room` (une ampoule n'y appartient qu'à une seule, or nos groupes se
+  chevauchent) ni `Zone` (firmware ≥ 1.30, et visible dans l'app Hue donc altérable).
+  **Règle d'emploi chiffrée : par groupe si ≥ 2 ampoules, par ampoule sinon.**
+  Cycle de vie par **nom**, réconciliation au démarrage et après sauvegarde de configuration.
+  ⚠️ **Interdiction de muter la composition d'un groupe sur un événement de jeu** — la part
+  dynamique de `general` se traite en choisissant la cible, jamais en mutant les membres.
+  **Repli par ampoule obligatoire** à tout échec : les groupes sont une optimisation, jamais un
+  préalable.
+  ⚠️ **Piège §5.3** : le cache « n'écrire que ce qui change » doit être **indexé par cible** et
+  **invalider les ampoules membres** après une écriture de groupe, sinon la déduplication saute des
+  écritures nécessaires.
+- **[CHANGED]** `contracts/hue-bridge.md` §8 — mesures étendues à **N = 30** et gain **avant/après**
+  des groupes : c'est la mesure qui justifie §5.8.
+- `contracts/lighting.md` **inchangé**. Le défaut « l'ampoule d'équipe ne suit pas le jeu » est un
+  **écart d'implémentation**, pas un manque du contrat : `ambianceScene()` émet une zone d'équipe
+  pour les seules équipes de l'**événement** (`ev.Teams`, vide pour 5 genres sur 9) là où §5.2 dit
+  « nommée dans l'**état courant** », c'est-à-dire au **plateau de la partie**. Correctif et
+  justification (le modèle du buzzer : la couleur porte l'identité, l'état module l'intensité) dans
+  `_work/reports/planner-v10-groups-teamcolor-20260907-173831.md`.
+
+**Aucun BREAKING** : aucune configuration existante n'est invalidée, les groupes sont déduits.
+
+---
+
+## [20260907f] — Éclairage : le sélecteur ne porte que la zone `general` (#208, #213)
+
+> Deux corrections utilisateur du 2026-09-07 sur le §10.1. La première **infirme une précision
+> dérivée du planner**, signalée comme telle depuis sa rédaction.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — **portée du sélecteur ON/AUTO/OFF et de Flash
+  restreinte à la zone `general`** au sens de `hue-bridge.md` §5.2 (ampoules de rôle `general`
+  **plus** les ampoules d'équipe dont l'équipe n'est pas nommée dans l'état courant). Les ampoules
+  **d'une équipe nommée dans l'état courant** restent **toujours** pilotées par la dérivation de
+  jeu (#213), **quelle que soit la position du sélecteur**. La régie force l'ambiance de la salle,
+  elle ne débranche jamais l'information « quelle équipe joue ».
+  ⛔ **Annule** la précision dérivée « éclairage général = toutes les ampoules pilotées, zones
+  d'équipe comprises » : elle confondait *éteindre la salle* et *éteindre l'installation*.
+- **[NEW]** `contracts/lighting.md` §10.1 — les deux conséquences de cette portée, qui découlent de
+  §5.2 : **hors partie**, aucune équipe n'étant nommée, un **OFF** éteint bien **tout** ; **pendant
+  une partie**, un **OFF** plonge la salle dans le noir **en laissant l'ampoule de l'équipe active
+  à sa couleur** — l'effet le plus utile du dispositif. Plus le cas d'une installation **sans
+  ampoule d'équipe** (§5.7), où le OFF éteint tout, couleur d'équipe comprise.
+- **[CHANGED]** `contracts/lighting.md` §10.1 — **recadrage d'usage** : ce n'est **pas** un écran de
+  configuration hors-partie mais un **instrument de conduite en direct**, utilisé par la **régie
+  pendant** une partie, en réaction au jeu. Ce qui avait changé de main lors de la révision
+  `/anim` → `/admin`, c'est **l'opérateur** (l'animateur n'a pas à piloter l'éclairage), **pas la
+  nature de l'outil**.
+  ⛔ **Toute justification reposant sur « cet écran n'est normalement pas ouvert en séance » est
+  retirée.** Le recadrage **renforce** la règle de tenue : un jugement pris en direct par la régie
+  doit tenir jusqu'à ce qu'elle-même en décide autrement.
+- **[CHANGED]** `contracts/lighting.md` §10.1.2 — la précédence de Flash sur le sélecteur est
+  rejustifiée par l'usage live : c'est **précisément** salle éteinte que la régie déclenche un
+  flash pour souligner un moment.
+
+`contracts/hue-bridge.md` **inchangé** : §5.2 et §5.7 définissaient déjà correctement la zone
+`general` et la dégradation — la correction **aligne** le §10.1 sur elles au lieu de les surcharger.
+
+**Aucun BREAKING**, aucun code écrit à ce stade.
+
+---
+
+## [20260907e] — ⛔ ANNULÉE — annulation automatique du mode par événement de jeu (#208)
+
+> **Cette entrée est annulée et n'a jamais été en vigueur.** Elle décrivait une règle — le mode
+> ON/OFF annulé automatiquement au premier événement de jeu, avec retour visuel sur AUTO — rédigée
+> puis écartée le même jour après confirmation utilisateur.
+>
+> **La règle en vigueur reste celle de l'entrée `[20260907d]`** : le mode **tient**, et **AUTO est
+> le seul chemin de retour, actionné manuellement par l'admin**. Aucun événement de jeu ne lève un
+> mode.
+>
+> Conservée ici en trace plutôt que supprimée, parce que des maquettes et procédures ont été
+> rédigées pendant sa brève existence : si un document mentionne une annulation automatique ou une
+> définition normative d'« événement de jeu » à cette fin, **il est périmé**.
+>
+> Aucun code n'a été écrit sur cette base.
+
+---
+
+## [20260907d] — Éclairage : sélecteur tri-état ON | AUTO | OFF (#208) — design arrêté
+
+> Troisième et dernière formulation du §10.1. **La sémantique de tenue de l'entrée `[20260907c]`
+> est conservée** : ce n'est pas un nouveau renversement, mais la mise en forme qui lui manquait —
+> l'état « relâché » devient une **position nommée et visible** au lieu d'être l'absence des autres.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — les bascules « All ON » / « All OFF » deviennent un
+  **sélecteur unique à trois positions `ON | AUTO | OFF`** pour l'éclairage général, exclusives par
+  construction. **AUTO est la position normale** et formalise « l'éclairage suit l'état du jeu ».
+  **Flash** reste une **bascule séparée**.
+- **[NEW]** `contracts/lighting.md` §10.1.1 — **les deux mécanismes ne coexistent pas** : le
+  sélecteur **remplace** l'écrasement automatique par le prochain événement de jeu, il ne s'y
+  ajoute pas. En ON ou OFF le mode tient, y compris pendant une partie ; **AUTO est le seul chemin
+  de retour** vers l'éclairage piloté par le jeu, par re-dérivation depuis l'état vivant (même code
+  que le §10.3). Motif : un événement qui reprendrait la main sans bouger le sélecteur le ferait
+  **mentir**, et rendrait **ON** et **AUTO** indiscernables.
+- **[NEW]** `contracts/lighting.md` §10.1.2 — **Flash prime sur le sélecteur tant qu'il est actif**
+  (sinon un Flash en position OFF ne produirait rien de visible), **sans déplacer le sélecteur** :
+  c'est une couche de diagnostic transitoire, pas un quatrième mode. À son extinction, l'éclairage
+  revient à ce que dit le sélecteur.
+- **[CHANGED]** `contracts/lighting.md` §10.3 — vocabulaire aligné : au retour du pont, c'est **le
+  mode courant** qui est réappliqué (ON, OFF, ou la scène de jeu si AUTO).
+- **[CHANGED]** `contracts/lighting.md` §10.1 — inscrit explicitement que la **table de scènes
+  câblée du §8 reste en périmètre** : la « seconde phase » évoquée par l'utilisateur désigne
+  l'**éditeur** configurable (#210, v10.1), pas la table livrée par #205. Question close au GATE.
+
+Position par défaut **AUTO** au démarrage, mode **non persisté**, état **serveur** (jamais
+navigateur). **Aucun BREAKING**, aucun code écrit à ce stade.
+
+---
+
+## [20260907c] — Éclairage : les commandes admin sont des overrides à état, pas des gestes (#208)
+
+> **Cette entrée renverse la décision de tenue prise le matin même** (entrée `[20260907]`, point
+> « priorité »). Précision utilisateur de seconde passe. Signalée explicitement plutôt qu'appliquée
+> en silence : les maquettes et procédures rédigées entre-temps sont bâties sur la règle abandonnée.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — All ON / All OFF / Flash ne sont plus des **gestes
+  ponctuels sans mémoire recouverts par le prochain événement de jeu**, mais **trois bascules à
+  état, mutuellement exclusives** (un seul override actif à la fois). Tant qu'un override est
+  actif, il **s'impose** : les événements de jeu ne le recouvrent pas. Les **trois** portent
+  désormais un état visuel actif — la distinction « seul Flash a un état » de l'entrée précédente
+  est caduque.
+- **[NEW]** `contracts/lighting.md` §10.1.1 — sémantique de **relâche** : désactiver l'override
+  actif **n'éteint pas**, il **rend l'éclairage au jeu** par **re-dérivation depuis l'état vivant**
+  — **le même code que le §10.3** (resync au retour du pont), jamais une mémorisation de la scène
+  d'avant. Hors partie, la relâche donne `KindIdle` (blanc chaud praticable) : **relâcher n'éteint
+  jamais la salle**. L'override est un état **serveur** (deux admins voient le même, un onglet
+  fermé n'y change rien), **non persistant** au redémarrage.
+- **[CHANGED]** `contracts/lighting.md` §10.3 — un override actif au retour du pont est réappliqué
+  **à la place** de la scène de jeu : un seul chemin de code, « ce que l'éclairage doit montrer
+  maintenant ».
+
+⚠️ **Conséquence assumée, écrite au contrat** : un override tient **indéfiniment** jusqu'à relâche
+explicite ou arrêt du serveur. Un « All OFF » oublié laisse la salle éteinte et **aucun événement
+de jeu ne la rallumera**. C'est le corollaire direct du choix de la tenue ; il est compensé par
+l'état visuel permanent et le badge de la page.
+
+**Aucun BREAKING**, aucun code écrit à ce stade.
+
+---
+
+## [20260907b] — Éclairage : les commandes manuelles passent de `/anim` à `/admin` (#208)
+
+> **Révision de périmètre**, même jour que l'entrée précédente. Correction utilisateur au GATE 2 :
+> il n'a jamais été demandé que l'animateur pilote l'éclairage de la salle. Le travail est
+> **conservé et déplacé**, pas jeté.
+
+- **[CHANGED]** `contracts/lighting.md` §10.1 — les commandes manuelles quittent la tablette
+  `/anim` pour l'écran d'administration **`/admin/ambiance`** (`AmbiancePage.jsx`, #207) et
+  deviennent des **outils d'exploitation/diagnostic**, non une conduite de spectacle. Libellés
+  arrêtés : **All ON**, **All OFF**, **Flash (bascule)** — ex-« Plein feu », « Noir », « Flash
+  applaudissement ». La règle de priorité (écrasement par le prochain événement de jeu) est
+  **inchangée** : le déplacement la renforce, l'écran n'étant normalement pas ouvert en séance.
+- **[NEW]** `contracts/lighting.md` §10.1.1 — « Flash » est la **seule** commande à porter un état
+  visuel, parce que c'est la seule qui décrit une activité en cours. Clignotement **porté par le
+  pilote côté serveur** (jamais le navigateur), réutilisant la garde d'opération unique en vol de
+  #207, annulé par : bascule OFF, tout événement de jeu, arrêt du serveur. `POST
+  /api/lighting/test` reste le flash **ponctuel** de test et n'est pas remplacé.
+- **[NEW]** `contracts/lighting.md` §10.1.2 — canal **HTTP REST** (`/api/lighting/*`), jamais
+  WebSocket. **Annule** l'amendement de `contracts/websocket-actions.md` annoncé au plan initial :
+  la question d'allowlist ne se posait que tant que la cible était `/anim`.
+- **[CHANGED]** `contracts/lighting.md` §11 — « conduite de l'éclairage par l'animateur » inscrit
+  explicitement **hors périmètre**, et l'association configurable effet ↔ événement (la « seconde
+  phase » évoquée par l'utilisateur) renvoyée à **v10.1 (#210)**.
+
+**Aucun BREAKING**, aucun code écrit à ce stade : la révision intervient avant le Batch 2.
+Détail et instructions de correction des maquettes :
+`_work/reports/planner-v10-scope-revision-20260907-104931.md`.
+
+---
+
+## [20260907] — Éclairage : conduite manuelle, arrêt, dégradation par équipe (#208, #213, v10.0.0)
+
+> Reprise du milestone v10.0.0 après resynchronisation sur `main` (PROD v9.0.0). Tranche les trois
+> questions que #208 laissait explicitement ouvertes — décisions utilisateur du 2026-09-07,
+> `_work/handoff/gate1-decisions-v10-20260907.md`. Aucun code n'est encore écrit : contract-first.
+
+- **[NEW]** `contracts/lighting.md` §10.1 — priorité conduite manuelle `/anim` ↔ scènes
+  automatiques : la commande manuelle est **écrasée par le premier événement de jeu suivant**,
+  sans aucun mécanisme de tenue. Interdit explicitement d'introduire un état « source de la
+  dernière commande » : il n'aurait aucun lecteur.
+- **[NEW]** `contracts/lighting.md` §10.3 — resynchronisation de l'éclairage au retour d'un pont
+  redevenu joignable, sur l'état de jeu **courant** (jamais un état neutre ni la scène d'avant la
+  coupure). Se réduit à déclencher un `NotifyState` : l'écrivain re-dérive déjà depuis l'état
+  vivant (§4.1).
+- **[NEW]** `contracts/lighting.md` §10.4 — extinction totale (ampoules Hue + LED buzzers) à
+  l'arrêt du serveur, **obligatoirement avant `a.cancelCtx()`** et avec un contexte propre à
+  échéance courte. Une extinction placée après serait annulée à l'instant de son émission —
+  symptôme : code présent, tests verts, salle allumée.
+- **[NEW]** `contracts/hue-bridge.md` §5.7 — les quatre règles de dégradation de l'éclairage par
+  équipe deviennent **normatives** (moins d'ampoules que d'équipes · équipe sans ampoule · aucune
+  affectation ⇒ retour au « toute la salle en `general` » · ampoule injoignable). Elles étaient
+  jusqu'ici une liste de travail au §9.
+- **[CHANGED]** `contracts/lighting.md` §10.2 — restitution d'état : **rien ne change** en fin de
+  partie ni à la perte du pont (périmètre réduit sur décision utilisateur) ; **seul** l'arrêt du
+  serveur déclenche une action.
+- **[CHANGED]** `contracts/lighting.md` §10.5 — tout événement changeant ce que la salle montre
+  doit notifier l'écrivain, **même s'il n'émet aucune LED**. Corrige le cas constaté de l'ENTRACTE
+  programmée (#214), dont le drapeau est levé en fin de décompte alors que le seul site
+  `NotifyState` de la séquence se déclenche à son lancement. **Portée du test d'exhaustivité §7
+  explicitée** : il ne couvre que les sites porteurs de LED — c'est un filet à mailles connues,
+  pas une preuve d'exhaustivité fonctionnelle.
+- **[CHANGED]** `contracts/hue-bridge.md` §9 — réduit à des renvois vers §5.2 et §5.7, et rappelle
+  le réemploi imposé de `teamColorPalette`/`teamColorToRGB`/`nearestPaletteColorByHue` : jamais une
+  seconde palette, la salle et les buzzers montrent la même couleur pour la même équipe.
+
+**Aucun BREAKING.** Le schéma `role`/`team` de la section `lighting` est additif et déjà publié par
+#207 (`internal/config/config.go` porte les deux champs, `role` par défaut `"general"`). Aucune
+configuration existante n'est invalidée, aucun endpoint n'est modifié.
+
+---
+
 ## [20260906] — Correctifs retour QUALIF v9.0.0.4 : Lot A+1 (#216) et Lot C1/C2 (#217)
 
 > Backend uniquement (Batch 1). Plan : `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md`.
@@ -165,6 +440,120 @@
   `DNSServer.port` au lieu d'un `":53"` en dur (le champ était silencieusement ignoré). Un échec de
   bind DNS reste non fatal pour le démarrage HTTP, mais passe de `log.Printf` (stdout uniquement) à
   `LogWarn` — visible dans `/ws/logs` et le tampon d'historique.
+## [20260904] — Éclairage : indicateur tri-couleur du menu (#207, amendement)
+
+> Amendement `contracts/hue-bridge.md` §7.1. Décisions utilisateur du 2026-09-04, après validation
+> de la maquette `docs/mockups/lighting-hue-config-207.html` (révision 3).
+
+- **[CHANGED]** `GET /api/lighting/status` — **correspondance normative** de ses quatre états vers
+  l'ampoule du menu abeille, par la **forme** d'abord et la couleur ensuite : `ok` → ampoule pleine
+  avec rayons, verte · `unreachable` et `refused` → ampoule en contour + pastille d'alerte, orange ·
+  `disabled` → ampoule en contour nu, grise. **Trois glyphes distincts, pas une même forme
+  recolorée** : la distinction reste lisible en niveaux de gris et pour un daltonien, là où trois
+  teintes sur une forme unique auraient été indiscernables à 15 pixels. Les deux états orange
+  partagent glyphe et couleur parce que la conduite à tenir est la même (ouvrir la page) ; la
+  distinction reste entière dans l'API et sur la page, où elle commande deux gestes opposés.
+  Rafraîchissement : au montage puis **toutes les 30 s**, et après tout enregistrement — l'endpoint
+  ne fait aucune I/O, il lit un état en mémoire. Rétrocompatible : aucun champ ajouté ni retiré.
+- **[CHANGED]** *(interface, hors API)* La case « Configuration Ambiance » de `BackupPage.jsx`
+  (#152) devient **« Réglages de jeu »**. **Libellé visible seul** : la clé de l'option, le
+  paramètre `ambiance=true` et le format des archives sont inchangés, aucune archive existante
+  n'est invalidée. Motivé par la promotion d'« Ambiance » au premier niveau du menu, qui rendait
+  l'ancien libellé trompeur — il désigne le délai par défaut et l'effet néon, pas l'éclairage.
+
+---
+
+## [20260903] — Pilote Philips Hue Bridge : la voie BLE est abandonnée (#206/#207/#213, v10.0.0)
+
+> Nouveau contrat `contracts/hue-bridge.md`, qui **étend** `contracts/lighting.md` sans le
+> modifier — c'est précisément ce pour quoi l'abstraction `lighting.Driver` avait été conçue :
+> le matériel derrière est interchangeable. #205 reste livré et intact.
+> Base : spike exécuté sur un vrai Hue Bridge v2 (`_work/reports/dev-backend-hue-bridge-spike-20260903-195500.md`).
+
+- **[REMOVED]** Voie **BLE directe** — abandonnée. Le spike #204 a établi, après ~15 tests réels,
+  un défaut systémique entre la pile Bluetooth de Windows 11 et les ampoules Hue, indépendant du
+  code du projet. Les détails BLE (service GATT `932c32bd-…`, bonding, appairage hors bande via
+  `bluetoothctl` / Paramètres Windows) sont **caducs** et retirés des issues #206/#207/#213.
+- **[NEW]** `contracts/hue-bridge.md` — pilote Hue Bridge sur l'**API v1 locale**
+  (`PUT /api/<clé>/lights/<id>/state`). La v2 (`/clip/v2`) est écartée : elle impose HTTPS avec un
+  certificat dont le CN est l'identifiant du bridge, signé par une racine Signify, pour un gain nul
+  sur notre usage. Dépréciation de la v1 assumée, **mitigée par l'abstraction** : une migration v2
+  serait un pilote de remplacement, pas une refonte.
+- **[NEW]** **Décision : ampoules individuelles, pas groupes/zones Hue.** Quatre raisons : le
+  budget de débit est 10× plus favorable (~10 commandes/s sur `/lights` contre ~1/s sur `/groups`,
+  un groupe passant par une diffusion Zigbee plus coûteuse) ; **#213 annule l'avantage du groupe**
+  puisqu'un groupe impose un état unique à tous ses membres alors que colorer par équipe demande
+  des couleurs différentes ; aucune dépendance à des zones créées à la main dans l'application Hue,
+  qui peuvent dériver ; et c'est ce que le spike a validé à 100 %. Compensation de la perte de
+  simultanéité : n'écrire que les ampoules dont l'état change, et **mesurer** l'étalement réel.
+- **[NEW]** Identité du matériel : le bridge est mémorisé par **`bridge_id` autant que par `ip`**
+  (une IP DHCP renouvelée ne doit pas casser l'installation), et les ampoules sont référencées par
+  **nom, jamais par id** — les ids Hue sont réattribués après suppression d'une ampoule. 0 ou > 1
+  correspondance ⇒ refus, jamais de choix arbitraire. Garde-fou `guardRequest` du spike repris,
+  liste blanche élargie au strict nécessaire.
+- **[NEW]** Section `lighting` de **`config.json`** — schéma **figé en entier dès #207**, `role:
+  "team"` compris, que #213 se contentera d'activer : casser ce schéma en #213 imposerait une
+  migration sur une section livrée quelques jours plus tôt. Clé API traitée comme les clés IA
+  (masquage `maskedConfigJSON`, `clear_api_key`, `api_key_configured` dérivé, surcharge
+  `BUZZCONTROL_HUE_API_KEY` sans écriture disque, jamais dans les logs). **Vérifié** :
+  `config.json` vit à la racine du serveur, hors du `dataDir` archivé par `handleFSBackup` — la clé
+  ne peut pas fuir par une sauvegarde.
+- **[NEW]** `POST /api/lighting/discover`, `POST /api/lighting/register`,
+  `GET /api/lighting/lights`, `POST /api/lighting/test`, `GET /api/lighting/status`. Taxonomie à
+  **trois** issues `ok` / `refused` / `unreachable` (modèle `contracts/ai-key-validation.md` §3) —
+  les fondre en une « erreur » serait une régression de diagnostic : réappairer n'est pas
+  rebrancher. `link_button_not_pressed` est un **cas nominal**, pas une panne.
+- **Aucun changement BREAKING.** `contracts/lighting.md` est inchangé. Module optionnel : sans
+  bridge configuré, aucune goroutine, aucun appel réseau, aucune ligne de log.
+
+## [20260902] — Éclairage d'ambiance : événements, pilote abstrait, écrivain (#205, feature, v10.0.0)
+
+> Nouveau contrat `contracts/lighting.md`. Première brique du milestone v10.0.0 (éclairage de la
+> salle synchronisé sur les événements de jeu). **Entièrement interne au serveur** : aucun
+> endpoint HTTP, aucune action WebSocket, aucun changement de `GameState`. Le schéma de
+> configuration et les endpoints viendront avec #207.
+
+- **[CHANGED — dev-backend, 2026-09-02]** `lighting.md` §6.2/§6.3 : `PhaseStarted` avec équipe
+  active dérive `KindTeamTurn` (et non `KindRunning` + équipe — la scène TEAM_TURN n'avait aucune
+  ligne de dérivation) ; `PhaseNewGame`/`PhaseEnroll` → `KindIdle` ; le buzzeur en PAUSED et les
+  équipes correctes au REVEAL sont dérivés de l'état moteur (`Bumper.Time`, `AnswerColor`) via la
+  nouvelle méthode `Engine.GetTeamsAndBumpersSnapshot()`, jamais de `App.bumperBuzzState`
+  (goroutine de dispatch uniquement). Détail et motifs dans `lighting.md` §6.3.
+
+- **[NEW]** `internal/lighting` — vocabulaire d'événements d'ambiance (`EventKind` : `IDLE`,
+  `READY`, `RUNNING`, `BUZZ`, `PAUSE_ALL`, `REVEAL`, `TEAM_TURN`, `ENTRACTE`, `SCORE`) et
+  `Event{Kind, Teams []string}`. `Teams` porte des **noms d'équipe**, pas des identifiants :
+  `game.Team` n'a pas de champ `ID`, une équipe est désignée par son `Name` partout dans le
+  projet. C'est un slice parce que le REVEAL en QCM concerne plusieurs équipes à la fois. Champ
+  requis par #213 (éclairage différencié par équipe) — le faire circuler dès #205 évite de
+  rouvrir ce contrat.
+- **[NEW]** `lighting.Driver` — `Apply(ctx, State) error` + `Close() error`. `State` porte des
+  zones `{Zone, Color [3]int, Intensity int}`, **au format et à l'échelle exacts de
+  `protocol.LEDSetPayload`** (RGB 0-255, intensité 0-255) : c'est ce qui garantit que la salle et
+  les buzzers affichent la **même** couleur pour la **même** équipe. La conversion vers le format
+  du matériel appartient au pilote (#206). Garantie du contrat : `Apply` n'est appelé que depuis
+  une goroutine unique, un pilote n'a donc pas à être sûr en accès concurrent.
+- **[NEW]** Écrivain asynchrone — **ne met jamais un état en mémoire tampon**, il retient qu'un
+  rafraîchissement est dû et re-dérive depuis le `GameState` vivant. Invariant repris tel quel de
+  `BroadcastCoalescer` (`cmd/server/broadcast_coalescer.go`) : une émission différée est toujours
+  redondante avec l'état qui existait quand elle a été programmée, jamais périmée. C'est ce qui
+  rend « dernier état gagnant » correct **par construction**, et non par discipline. Exception
+  unique : `SCORE`, qui n'est pas dérivable d'un état (une attribution de points est un instant),
+  traité en **registre à une place avec échéance de 4800 ms** — alignée sur le
+  `time.AfterFunc(4800ms)` qui restaure les LED en fin de `sendLEDSetComet` (`main.go:4619`), pour
+  que salle et buzzers reviennent à la normale au même instant.
+- **[NEW]** Recensement normatif de **21 sites émetteurs** dans `cmd/server/main.go`, plus
+  4 fonctions annotées « pas d'ambiance » avec motif (`resendLEDOnReconnect`, la restauration de
+  fin de COMET, et les deux fonctions mortes `broadcastLEDSet` / `sendLEDSetToTeam` de l'audit
+  #132). **L'ambiance se branche exclusivement sur la couche événement** — jamais sur la couche
+  de rendu : `sendLEDSet` (`main.go:3861`) est un goulot **par buzzer**, un REVEAL s'y traduit en
+  N appels.
+- **[NEW]** Test d'exhaustivité par analyse syntaxique `go/ast` (stdlib, aucune dépendance
+  ajoutée), indexé sur les paires **(fonction englobante, fonction LED appelée)** et non sur des
+  numéros de ligne — un test indexé sur les lignes serait désarmé en trois jours.
+- **Aucun changement BREAKING.** Le comportement par défaut est strictement inchangé : sans
+  éclairage configuré, aucune goroutine n'est lancée, aucun appel matériel n'est fait, aucune
+  ligne de log n'est écrite.
 
 ## [20260901] — RAFALE : génération IA du réservoir de questions (#203, feature, v8.1.0)
 

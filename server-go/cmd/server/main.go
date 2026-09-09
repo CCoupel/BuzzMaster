@@ -4,6 +4,8 @@ import (
 	"buzzcontrol/assets"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"buzzcontrol/internal/lighting"
+	"buzzcontrol/internal/lighting/hue"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"buzzcontrol/web"
@@ -24,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -45,6 +48,60 @@ type App struct {
 	dnsServer   *server.DNSServer
 	logger      *server.BroadcastLogger
 	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
+	// lightingWriter is the ambiance-lighting writer (#205, contracts/
+	// lighting.md), read through a.ambiance(). nil when lighting is not
+	// configured: every a.ambiance().Notify*() call is then a no-op, so the 21
+	// event sites carry no guard (contract §4.3). Atomic because the first
+	// runtime enable (reconfigureAmbiance, HTTP goroutine) sets it while the
+	// event sites read it from other goroutines.
+	lightingWriter atomic.Pointer[lighting.Writer]
+	// ambianceMu serialises setupAmbiance/reconfigureAmbiance: two config
+	// updates in flight must never leave hueDriver and the writer's driver
+	// pointing at different (or already closed) drivers.
+	ambianceMu sync.Mutex
+	// hueDriver is the live Hue driver behind a.ambiance() (nil when disabled),
+	// read by the /api/lighting/* handlers without I/O (#207).
+	hueDriver atomic.Pointer[hue.Driver]
+	// lightingModeState is the #208 manual override on the "general" zone
+	// (contract lighting.md §10.1): AUTO (zero value, contract §10.1.1 point
+	// 5) follows the game; ON/OFF force it indefinitely. Server-owned state,
+	// never the browser's, never persisted. See cmd/server/ambiance_override.go.
+	lightingModeState atomic.Value // holds lightingMode
+	// lightingFlashOn/-PhaseOn are the Flash bascule (§10.1.2): -On is
+	// whether Flash is engaged at all, -PhaseOn is the current blink phase
+	// (toggled by runLightingFlash). lightingFlashCancel stops that
+	// goroutine; guarded by ambianceMu, reused rather than a fourth mutex.
+	lightingFlashOn      atomic.Bool
+	lightingFlashPhaseOn atomic.Bool
+	lightingFlashCancel  context.CancelFunc
+	// scoreFlashTeam/-PhaseGold/-Epoch/-Cancel drive the SCORE gold/team-
+	// colour flicker (Batch C/C2b, contract lighting.md §2.4/§8.1) —
+	// scoreFlashTeam is the team currently flickering ("" = none),
+	// scoreFlashPhaseGold the current phase (toggled by runScoreFlash,
+	// ambiance_override.go), scoreFlashEpoch guards the flicker's own
+	// natural end-of-run against a race with a newer SCORE pulse superseding
+	// it, scoreFlashCancel stops the running goroutine when a newer pulse
+	// arrives; guarded by ambianceMu, same pattern as lightingFlashCancel.
+	scoreFlashTeam      atomic.Value // holds string
+	scoreFlashPhaseGold atomic.Bool
+	scoreFlashEpoch     atomic.Int64
+	scoreFlashCancel    context.CancelFunc
+	// chronoPulse* drive the RUNNING-only breathing pulse on 'general'
+	// synchronised to the active question's global timer (2026-09-08,
+	// contracts/lighting.md §5.4/§8.1) — chronoPulseActive is whether a
+	// pulse is currently live (KindRunning + a timed question),
+	// chronoPulseTier is 1/2/3 (ambianceChronoPulseColor, ambiance.go),
+	// chronoPulseHigh the current phase. All three are written ONLY by
+	// runChronoPulse (ambiance.go) and read ONLY by ambianceScene — no
+	// mutex needed, same pattern as scoreFlashPhaseGold. chronoPulseStarted
+	// makes runChronoPulse's own goroutine start idempotent (it is invoked
+	// from two call sites, mirroring the writer's own two "go w.Start"
+	// sites, which are mutually exclusive in practice but not provably so
+	// without this guard — see runChronoPulse's own doc comment).
+	chronoPulseActive  atomic.Bool
+	chronoPulseTier    atomic.Int32
+	chronoPulseHigh    atomic.Bool
+	chronoPulseStarted atomic.Bool
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).
@@ -471,6 +528,10 @@ func (a *App) init() {
 	// DNS server (captive portal - redirects all DNS to this server)
 	a.dnsServer = server.NewDNSServer(53, nil)
 
+	// Ambiance lighting writer (#205) — nil unless configured (ambiance.go).
+	a.setupAmbiance()
+	a.httpServer.Lighting = a // /api/lighting/* read the live driver (#207)
+
 	// Set up callbacks
 	a.setupCallbacks()
 }
@@ -511,6 +572,9 @@ func (a *App) setupCallbacks() {
 		// silently subsumed into (and indistinguishable from) the
 		// phase-change UPDATE that follows.
 		a.ardoiseCoalescer.Flush()
+		if phase == game.PhaseStarted {
+			a.onPhaseStarted()
+		}
 		a.broadcastGameState(string(phase))
 		a.broadcastQuestions() // Sync question status with phase
 	}
@@ -554,6 +618,7 @@ func (a *App) setupCallbacks() {
 	// RAFALE active-team LED grid (v8.0.0, #199 task 36, contract §8.3).
 	a.engine.OnRafaleTeamsChanged = func() {
 		a.sendLEDSetRafaleTeams()
+		a.ambiance().NotifyState()
 	}
 
 	// RAFALE-in-MEMOTION-card (#217, v9.0.0, contract §14.5/§14.6) — fires
@@ -636,6 +701,9 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
+		// #207: the `lighting` section may have changed — rebuild/hot-swap
+		// the Hue driver (no-op when nothing relevant changed).
+		a.reconfigureAmbiance()
 		// #119 (v6.5.2, C1): this shared callback is also what the entracte
 		// panel-image endpoint (/api/game/entracte-image POST/DELETE) fires
 		// after every upload/delete — refresh IMAGE_IS_CUSTOM from disk and
@@ -1021,6 +1089,12 @@ func (a *App) start() error {
 	// Start ACK manager background goroutine (v3.8.0); uses app context for clean shutdown.
 	go a.ackManager.Start(a.ctx)
 
+	// Ambiance lighting writer (#205): same lifecycle as AckManager, stopped
+	// by a.cancelCtx() in stop(). See startAmbianceWriter's own doc comment
+	// for the QUALIF round-2 bugfix this now carries (bug 2 — "pont
+	// toujours injoignable après relance").
+	a.startAmbianceWriter()
+
 	// Start UDP broadcaster — this only opens the outbound send socket, it
 	// does not announce anything yet (see BroadcasterManager.Start below,
 	// gated on the HTTP bind), so starting it before HTTP is harmless.
@@ -1072,6 +1146,20 @@ func (a *App) start() error {
 }
 
 func (a *App) stop() {
+	// #208 (T2.3, contract §10.4): extinction totale des ampoules Hue et des
+	// LED buzzers, AVANT a.cancelCtx() — a.ctx porte le client HTTP vers le
+	// pont ET les hubs WebSocket buzzers, donc une extinction émise après
+	// cancelCtx() serait annulée à l'instant même où elle part (voir la
+	// doc de shutdownExtinguishHueLighting, cmd/server/ambiance_override.go).
+	a.shutdownExtinguishHueLighting()
+	// Buzzer LEDs off — reuses the ENTRACTE OFF payload/function (T2.1) for
+	// its effect, not its name: same "every buzzer dark" outcome, one
+	// function, best-effort (a disconnected buzzer simply misses it). Called
+	// directly here (not from shutdownExtinguishHueLighting) so this
+	// sendLEDSet* site lives in main.go, where the AST exhaustiveness test
+	// (contract §7) actually looks for it — see ambianceSiteRegistry below.
+	a.sendLEDSetAllEntracteOff()
+
 	// Cancel the application context — stops the AckManager goroutine and any other ctx-aware components.
 	if a.cancelCtx != nil {
 		a.cancelCtx()
@@ -1806,6 +1894,7 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 	a.broadcastUpdate()
 	// Refresh LED state on all buzzers after team/bumper changes
 	a.sendLEDSetAllBuzzers()
+	a.ambiance().NotifyState()
 }
 
 func (a *App) handleUpdate(msg *protocol.Message) {
@@ -1831,6 +1920,8 @@ func (a *App) handlePoints(msg *protocol.Message) {
 			teamID = bumper.Team
 		}
 		a.sendLEDSetComet(teamID)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, payload.Points, lighting.ScorePulseDuration)
+		a.startScoreFlash(teamID, payload.Points)
 	}
 
 	a.broadcastUpdate()
@@ -2376,6 +2467,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 				server.LogInfo(game.LogComponentEngine, "Memory auto-flip-back after %dms", flipDelay)
 				a.broadcastUpdate()
 				a.sendLEDSetAllBuzzers()
+				a.ambiance().NotifyState()
 			}()
 		}
 	}
@@ -2383,6 +2475,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 	if isMatch {
 		server.LogInfo(game.LogComponentEngine, "Memory MATCH found!")
 		a.sendLEDSetAllBuzzers()
+		a.ambiance().NotifyState()
 	}
 
 	if isComplete {
@@ -2408,6 +2501,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 			a.engine.Stop()
 			a.broadcastUpdate()
 			a.sendLEDSetAllBuzzers()
+			a.ambiance().NotifyState()
 		}
 	}
 }
@@ -2435,6 +2529,7 @@ func (a *App) handleMemorySetTeams(msg *protocol.Message) {
 	// Broadcast updated game state to all clients
 	a.broadcastUpdate()
 	a.sendLEDSetAllBuzzers()
+	a.ambiance().NotifyState()
 }
 
 // ============================================================
@@ -2586,6 +2681,8 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 	// Award LED comet effect to winning team
 	if points > 0 && payload.WinnerTeam != "" {
 		a.sendLEDSetComet(payload.WinnerTeam)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.WinnerTeam}, points, lighting.ScorePulseDuration)
+		a.startScoreFlash(payload.WinnerTeam, points)
 	}
 
 	// Record event to history
@@ -2635,6 +2732,7 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentEngine, "MEMOTION game COMPLETE! All cards played.")
 		a.engine.Stop()
 		a.sendLEDSetAllBuzzers()
+		a.ambiance().NotifyState()
 	}
 
 	a.broadcastUpdate()
@@ -2657,6 +2755,7 @@ func (a *App) handleMotionSetTeams(msg *protocol.Message) {
 
 	a.broadcastUpdate()
 	a.sendLEDSetAllBuzzers()
+	a.ambiance().NotifyState()
 }
 
 // parseRafaleCardScope extracts the optional MOTION_CARD_ID from a
@@ -2777,6 +2876,8 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 			teamID = b.Team
 		}
 		a.sendLEDSetComet(teamID)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, payload.Points, lighting.ScorePulseDuration)
+		a.startScoreFlash(teamID, payload.Points)
 	}
 
 	// Record event to history
@@ -2854,6 +2955,8 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	// Send COMET LED effect to the team that received points (if points > 0)
 	if payload.Points > 0 {
 		a.sendLEDSetComet(payload.Team)
+		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.Team}, payload.Points, lighting.ScorePulseDuration)
+		a.startScoreFlash(payload.Team, payload.Points)
 	}
 
 	// Record event to history
@@ -2997,13 +3100,42 @@ func (a *App) handleEntracteSet(msg *protocol.Message) {
 
 	if payload.Active {
 		a.sendLEDSetAllEntracteOff()
+		a.ambiance().NotifyState()
 		server.LogInfo(game.LogComponentApp, "Entracte activated — buzzer LEDs off")
 	} else {
 		a.sendLEDSetAllBuzzers()
+		a.ambiance().NotifyState()
 		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
 	}
 
 	a.broadcastUpdate()
+}
+
+// onPhaseStarted runs the extra bookkeeping tied to the engine actually
+// ENTERING PhaseStarted — called from OnStateChange (setupCallbacks) for
+// every path that lands there: actualStart() at the end of the countdown,
+// StartImmediate() (tests), and any other engine transition into STARTED.
+//
+// Bug R1 (T2.1, contract lighting.md §10.5): broadcastStart() — the only
+// NotifyState() site of the start sequence (contract §6) — fires only when
+// the countdown BEGINS (handleStart, on entering PhaseCountdown). Nothing
+// notified the room when the countdown actually ENDS, a real game
+// transition (READY/RUNNING scene → RUNNING/TEAM_TURN, or ENTRACTE below).
+//
+// Bug #2 (asymmetry, same task): a programmed ENTRACTE question (#214)
+// raises GameState.Entracte from INSIDE actualStart()/StartImmediate()
+// (startEntracteQuestionUnsafe, internal/game/engine.go) — with no LED call
+// of its own, so this transition is structurally invisible to the AST
+// exhaustiveness test (contract §10.5, "un événement qui change la salle
+// sans changer une seule LED de buzzer lui est structurellement
+// invisible"). The manual voie (ENTRACTE_SET, handleEntracteSet above)
+// explicitly turns buzzer LEDs off on activation; the programmed voie must
+// go through the exact SAME function for the two voies to stay symmetric.
+func (a *App) onPhaseStarted() {
+	if a.engine.IsEntracte() {
+		a.sendLEDSetAllEntracteOff()
+	}
+	a.ambiance().NotifyState()
 }
 
 // sendLEDSetAllEntracteOff turns off every non-VPlayer buzzer's LED (B5,
@@ -3790,6 +3922,7 @@ func (a *App) broadcastStart() {
 	a.broadcast(protocol.ActionStart, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetAllBuzzers()
+	a.ambiance().NotifyState()
 }
 
 func (a *App) broadcastStop() {
@@ -3797,6 +3930,7 @@ func (a *App) broadcastStop() {
 	a.broadcast(protocol.ActionStop, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetStop()
+	a.ambiance().NotifyState()
 }
 
 func (a *App) broadcastPause(bumperID string) {
@@ -3804,6 +3938,7 @@ func (a *App) broadcastPause(bumperID string) {
 	a.broadcast(protocol.ActionPause, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetPause(bumperID)
+	a.ambiance().NotifyState()
 }
 
 func (a *App) broadcastPauseAll() {
@@ -3811,6 +3946,7 @@ func (a *App) broadcastPauseAll() {
 	a.broadcast(protocol.ActionPause, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetPauseAll()
+	a.ambiance().NotifyState()
 }
 
 func (a *App) broadcastContinue() {
@@ -3818,6 +3954,7 @@ func (a *App) broadcastContinue() {
 	a.broadcast(protocol.ActionContinue, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetContinue()
+	a.ambiance().NotifyState()
 }
 
 func (a *App) broadcastTimerUpdate(currentTime int) {
@@ -3845,6 +3982,7 @@ func (a *App) broadcastReady() {
 	a.broadcast(protocol.ActionReady, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeAnim)
 	a.sendLEDSetAllBuzzers()
+	a.ambiance().NotifyState()
 }
 
 func (a *App) broadcastReveal(answer string) {
@@ -3852,6 +3990,7 @@ func (a *App) broadcastReveal(answer string) {
 	a.broadcast(protocol.ActionReveal, data, true,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetReveal(answer)
+	a.ambiance().NotifyState()
 }
 
 // answerColorToRGB maps a QCM AnswerColor to an [R, G, B] array for buzzer LED.
@@ -4031,10 +4170,19 @@ func nearestPaletteColorByHue(r, g, b int) [3]int {
 //  1. team.ColorName (explicit name set by frontend) → direct palette lookup
 //  2. Hue-based nearest palette color (more robust than Euclidean distance)
 func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
-	if bumper.Team == "" {
+	return a.teamNameToRGB(bumper.Team)
+}
+
+// teamNameToRGB is the shared trunk of teamColorToRGB: team NAME → palette
+// RGB (game.Team has no ID). Factored out for the ambiance scene table (#205,
+// contracts/lighting.md §8), which only knows team names and must show the
+// SAME colour as the buzzers — never a second palette. Gray {128,128,128}
+// for no/unknown team, unchanged.
+func (a *App) teamNameToRGB(teamName string) [3]int {
+	if teamName == "" {
 		return [3]int{128, 128, 128}
 	}
-	team := a.engine.GetTeam(bumper.Team)
+	team := a.engine.GetTeam(teamName)
 	if team == nil {
 		return [3]int{128, 128, 128}
 	}

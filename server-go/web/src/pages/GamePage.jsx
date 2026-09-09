@@ -899,6 +899,15 @@ export default function GamePage() {
         )}
       </div>
 
+      {/* #208 — le panneau de conduite ON/AUTO/OFF + Flash est passe ICI
+          (SHA 30ff5abe) puis RETIRE le meme jour (retour utilisateur QUALIF
+          v10.0.0.13, correction dev-frontend-navbar-and-unassign-20260907) :
+          les commandes doivent vivre UNIQUEMENT dans la Navbar, accessibles
+          depuis TOUTE page admin, pas seulement GamePage. Le composant
+          LightingModePanel (components/LightingModePanel.jsx) n'a pas
+          bouge — c'est Navbar.jsx qui le monte desormais, dans un popover
+          ouvert depuis le bouton "Eclairage" du bandeau. */}
+
       {/* TV Preview — deplace ici (etait plus bas, cote a cote de la
           liste equipes) pour former UN SEUL item de grille avec
           timer-display-section ci-dessus, cf. commentaire admin-col-center

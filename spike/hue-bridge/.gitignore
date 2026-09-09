@@ -1,0 +1,7 @@
+# Hue API key obtained after the link-button press — never committed.
+.hue-username
+# run artefacts
+*.json
+spike-hue-bridge
+spike-hue-bridge-*
+*.exe

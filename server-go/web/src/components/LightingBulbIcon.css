@@ -1,0 +1,21 @@
+/* #207 — ampoule d'état de l'entrée « Ambiance » (menu abeille).
+   La forme porte l'état (LightingBulbIcon.jsx) ; la couleur ne fait que
+   renforcer. Dimension calée sur .menu-icon (Navbar.css, 1.1rem). */
+.lighting-bulb-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  display: block;
+}
+
+.lighting-bulb-lit {
+  color: var(--success);
+}
+
+.lighting-bulb-alert {
+  color: var(--warning);
+}
+
+.lighting-bulb-off {
+  color: var(--gray-400);
+}

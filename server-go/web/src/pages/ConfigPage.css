@@ -768,6 +768,13 @@
   background: var(--error);
 }
 
+/* #207 — manquait depuis la section IA (« enregistrer quand même » affichait
+   un texte blanc sur fond transparent). Utilisé aussi par AmbiancePage. */
+.wifi-toast-warning {
+  background: var(--warning);
+  color: var(--gray-900);
+}
+
 @keyframes wifi-toast-in {
   from {
     opacity: 0;

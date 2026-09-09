@@ -2,6 +2,10 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUpdates } from '../hooks/useUpdates'
+import { useLightingStatus } from '../hooks/useLightingStatus'
+import { lightingStateTitle, normalizeLightingState } from '../utils/lightingState'
+import LightingBulbIcon from './LightingBulbIcon'
+import LightingModePanel from './LightingModePanel'
 import useElementHeightVar from '../hooks/useElementHeightVar'
 import { useGame } from '../hooks/GameContext'
 import { canToggleEntracte } from '../utils/phaseRules'
@@ -62,6 +66,32 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const menuRef = useRef(null)
   const buttonRef = useRef(null)
   const { updateInfo, checkForUpdates } = useUpdates()
+  // #207 — ampoule d'état de l'entrée « Ambiance » : au montage, toutes les
+  // 30 s et après chaque enregistrement (contrat hue-bridge.md §7.1). Un pont
+  // peut devenir injoignable PENDANT une session — un appel au montage seul,
+  // comme useUpdates, ne suffirait pas.
+  const { status: lightingStatus } = useLightingStatus()
+  // #208 — point d'accès UNIQUE aux commandes ON/AUTO/OFF/Flash (retour
+  // utilisateur QUALIF v10.0.0.13, 2026-09-07) : d'abord un simple bandeau
+  // d'avertissement renvoyant vers GamePage (SHA 110dfff3), le panneau
+  // LUI-MÊME y a ensuite vécu un instant (SHA 30ff5abe) avant d'être retiré
+  // le même jour — décision finale : les commandes ne vivent QUE dans la
+  // Navbar, jamais sur un écran particulier, pour rester à portée de main
+  // depuis TOUTE page admin. Ce bouton est donc désormais visible dès que
+  // l'éclairage est configuré (pas seulement quand un mode est engagé) et
+  // ouvre un popover contenant LightingModePanel tel quel (composant
+  // inchangé, seul son point de montage a bougé).
+  // Réutilise l'instance useLightingStatus() déjà interrogée ici pour
+  // l'ampoule du menu Ambiance — mode/flash sont déjà dans la même réponse
+  // (contrat lighting.md §10.1), aucun second polling introduit.
+  const lightingConfigured = normalizeLightingState(lightingStatus.state) !== 'disabled'
+  // Repli défensif : useLightingStatus() applique ce défaut lui-même
+  // (EMPTY_LIGHTING_STATUS), mais un mock de test ou un serveur antérieur
+  // au Batch 2 peut renvoyer un statut sans `mode` — jamais planter dessus.
+  const lightingMode = lightingStatus.mode || 'AUTO'
+  const [lightingPopoverOpen, setLightingPopoverOpen] = useState(false)
+  const lightingButtonRef = useRef(null)
+  const lightingPopoverRef = useRef(null)
 
   // #179 (F3) — mesure la hauteur RÉELLE de la Navbar (jamais garantie par
   // son CSS, qui ne déclare aucune hauteur fixe) et la partage via
@@ -104,6 +134,26 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
       }
     }
   }, [isMenuOpen, menuRef, buttonRef])
+
+  // Fermeture du popover Éclairage au clic extérieur — même patron que le
+  // menu abeille ci-dessus, refs et état dédiés (deux popovers indépendants
+  // peuvent en théorie être ouverts en même temps, chacun se ferme sur son
+  // propre clic extérieur).
+  useEffect(() => {
+    function handleClickOutsideLighting(event) {
+      if (lightingPopoverRef.current && !lightingPopoverRef.current.contains(event.target) &&
+          lightingButtonRef.current && !lightingButtonRef.current.contains(event.target)) {
+        setLightingPopoverOpen(false)
+      }
+    }
+
+    if (lightingPopoverOpen) {
+      document.addEventListener('mousedown', handleClickOutsideLighting)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutsideLighting)
+      }
+    }
+  }, [lightingPopoverOpen])
 
   // #175 (F3) — si le serveur redémarre et que la reconnexion aboutit après
   // un "Quitter" (ex. relancé manuellement entre-temps), l'état "arrêté"
@@ -148,6 +198,16 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // Menu items dans le menu déroulant
   const menuItems = [
     { path: 'settings', label: 'Config', icon: '⚙️' },
+    // #207 — juste après Config. L'icône est un ÉLÉMENT React (SVG en ligne,
+    // 3 glyphes distincts selon l'état), pas un emoji : ni la couleur ni la
+    // forme d'un emoji ne sont pilotables. `title` dit l'état en toutes
+    // lettres pour les lecteurs d'écran (le SVG est aria-hidden).
+    {
+      path: 'ambiance',
+      label: 'Ambiance',
+      icon: <LightingBulbIcon state={lightingStatus.state} />,
+      title: lightingStateTitle(lightingStatus.state),
+    },
     { path: 'backup', label: 'Backup/Restaure', icon: '💾' },
     { path: 'updates', label: 'Mises à jour', icon: '🔄', badge: updateInfo?.update_available },
     { path: 'logs', label: 'Logs', icon: '📋' },
@@ -262,6 +322,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
                     to={getFullPath(item.path)}
                     className={() => `menu-item ${isActiveRoute(item.path) ? 'active' : ''}`}
                     onClick={() => setIsMenuOpen(false)}
+                    title={item.title}
                   >
                     <span className="menu-icon">{item.icon}</span>
                     <span className="menu-label">{item.label}</span>
@@ -298,6 +359,33 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
         >
           {entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
         </Button>
+
+        {/* #208 — point d'accès complet aux commandes ON/AUTO/OFF/Flash,
+            visible dès que l'éclairage est configuré (pas seulement un mode
+            engagé) : c'est un CONTRÔLE, plus seulement un indicateur.
+            Absent tant que l'éclairage n'est pas configuré — même ligne de
+            conduite que l'entrée Ambiance du menu (aucune trace si aucun
+            pont Hue). */}
+        {lightingConfigured && (
+          <div className="lighting-mode-container">
+            <button
+              ref={lightingButtonRef}
+              type="button"
+              className={`lighting-mode-nav-badge is-${lightingMode.toLowerCase()}`}
+              title="Éclairage général — ouvrir les commandes"
+              aria-haspopup="true"
+              aria-expanded={lightingPopoverOpen}
+              onClick={() => setLightingPopoverOpen(o => !o)}
+            >
+              💡 {lightingMode === 'AUTO' ? 'Éclairage' : `Mode ${lightingMode} engagé`}
+            </button>
+            {lightingPopoverOpen && (
+              <div ref={lightingPopoverRef} className="lighting-mode-popover">
+                <LightingModePanel />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="navbar-links">

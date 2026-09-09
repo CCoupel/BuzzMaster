@@ -76,7 +76,7 @@ export default function BackupPage() {
       bumpers: 'Joueurs',
       history: 'Historique',
       medias: 'Médias & Catégories',
-      ambiance: 'Configuration Ambiance',
+      ambiance: 'Réglages de jeu',
       rafale: 'Questions RAFALE'
     }
     const selectedLabels = selected.map(k => labels[k]).join(', ')
@@ -146,7 +146,7 @@ export default function BackupPage() {
                 bumpers: 'Joueurs',
                 history: 'Historique',
                 medias: 'Médias & Catégories',
-                ambiance: 'Configuration Ambiance',
+                ambiance: 'Réglages de jeu',
                 rafale: 'Questions RAFALE'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">
@@ -224,7 +224,7 @@ export default function BackupPage() {
                 bumpers: 'Joueurs',
                 history: 'Historique',
                 medias: 'Médias & Catégories',
-                ambiance: 'Configuration Ambiance',
+                ambiance: 'Réglages de jeu',
                 rafale: 'Questions RAFALE'
               }).map(([key, label]) => (
                 <label key={key} className="checkbox-item">

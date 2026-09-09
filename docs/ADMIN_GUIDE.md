@@ -21,6 +21,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Palette de 16 couleurs d'équipes](#palette-de-16-couleurs-déquipes-v5725)
 - [Générateur de questions via IA](#générateur-de-questions-via-ia-v600)
 - [Générateur du réservoir RAFALE via IA](#générateur-du-réservoir-rafale-via-ia-v810)
+- [Configuration Éclairage d'Ambiance Philips Hue](#configuration-éclairage-dambiance-philips-hue-v1000)
 
 ---
 
@@ -1959,5 +1960,156 @@ La page d'édition du réservoir inclut deux boutons :
 - Équipe active : couleur pleine
 - Équipe suivante : couleur atténuée
 - Autres : très atténuées ou éteintes
+
+---
+
+## Configuration Éclairage d'Ambiance Philips Hue (v10.0.0)
+
+L'éclairage d'ambiance de la salle réagit aux mêmes événements de jeu que les LED des buzzers : démarrage d'une manche, buzz, révélation, changement d'équipe active, attributions de points. La configuration se fait via une page dédiée (`/admin/ambiance`, accessible depuis le menu admin via l'icône **🐝**).
+
+### Prérequis
+
+- Un **Philips Hue Bridge v2** ou compatible (modèles BSB002, BSB001, etc.) sur le même réseau local
+- Ampoules Hue associées au bridge (noms lisibles, ex. "Salle", "Entrée", etc.)
+- Pas d'IP fixe requise : BuzzControl découvre le bridge automatiquement via **mDNS** (détection instantanée, 0,2 s)
+
+### Procédure d'association
+
+**Étape 1 : Découverte du bridge**
+
+1. Naviguez vers `/admin` → icône 🐝 (ou lien direct `/admin/ambiance`)
+2. Cliquez sur « Découvrir le pont »
+3. BuzzControl cherche le bridge automatiquement (mDNS, puis SSDP en repli)
+4. Si trouvé : affichage de l'adresse IP et de l'identifiant du pont
+5. Si non trouvé : champ de saisie manuel pour entrer l'IP du bridge (ex. `192.168.1.50`)
+
+**Étape 2 : Appui sur le bouton du bridge**
+
+1. BuzzControl affiche : « **Appuyez sur le bouton du bridge** »
+2. Compteur à rebours **45 secondes** (si dépassé, recommencez)
+3. **Appuyez physiquement sur le bouton situé sur le dessus du bridge** (petit bouton circulaire)
+4. BuzzControl réessaye toutes les 2 secondes
+5. Une fois le bouton pressé, le pont génère une clé d'accès (aucune saisie manuelle)
+
+**Étape 3 : Sélection des ampoules**
+
+1. BuzzControl affiche la liste de **toutes les ampoules** trouvées sur le pont
+2. Cochez les ampoules que vous souhaitez piloter (tout coché par défaut)
+3. Chaque ampoule désélectionnée reste allumée normalement et ne réagira pas aux événements de jeu
+4. Cliquez « Enregistrer » pour valider la configuration
+
+### Barre d'état
+
+Un badge dans le coin supérieur de la page affiche l'état du pont :
+
+| État | Icône | Signification | Action |
+|------|-------|---|---|
+| **Connecté** | ✅ vert | Bridge joignable et associé | — |
+| **Injoignable** | 🔴 rouge | Bridge ne répond pas (éteint, débranché, WiFi perte) | Rebranchez-le et attendez 10 s |
+| **Association refusée** | 🟠 orange | Clé d'accès invalide ou supprimée du pont | Cliquez « Ré-associer » et répétez l'étape 2 |
+| **Non configuré** | ⚪ gris | Aucun pont configuré | Suivez la procédure d'association ci-dessus |
+
+### Récupération après erreur
+
+**Le bridge ne répond pas**
+
+- Vérifiez qu'il est allumé et branché
+- Vérifiez la connexion WiFi du bridge (LED bleue)
+- Attendez 10 secondes et rechargez la page
+- Si la liste des ampoules reste figée, vous pouvez l'actualiser : cliquez « Actualiser l'inventaire »
+
+**Erreur « Association refusée »**
+
+- La clé d'accès a peut-être été supprimée du bridge (ou le bridge a été réinitialisé)
+- Cliquez « Ré-associer » et suivez l'étape 2 à nouveau
+
+**Ampoule renommée ou supprimée du bridge**
+
+- Si vous renommez une ampoule dans l'application Philips Hue : BuzzControl détecte le changement au redémarrage (rafraîchissement automatique toutes les 5 min)
+- Si une ampoule disparaît : elle s'affiche comme « (introuvable) » dans la configuration — elle peut rester sélectionnée, mais n'aura aucun effet
+
+### Homonymes interdits
+
+Si deux ampoules portent le **même nom** sur le bridge, BuzzControl les refuse explicitement dans la configuration :
+
+- Vous verrez un message « Ambiguïté détectée »
+- Renommez une des deux ampoules dans l'application Philips Hue
+- Rafraîchissez la page
+
+### Sauvegarde de la configuration
+
+La configuration du pont (IP, identifiant, liste d'ampoules) est automatiquement sauvegardée dans `data/config/config.json` section `lighting`.
+
+**Lors d'une sauvegarde de partie** (`/admin/backup`) :
+
+- Checkbox « Réglages de jeu » inclut la configuration d'ambiance (bridge, ampoules sélectionnées)
+- La clé d'accès n'est **jamais** sauvegardée ou journalisée (sécurité)
+- À la restauration : la configuration du bridge est restaurée, mais vous devrez ré-associer si le pont a changé d'identifiant
+
+### Conduite en direct — sélecteur tri-état (régie en séance)
+
+Une fois le pont configuré, la page `/admin/ambiance` affiche un **sélecteur à trois positions** qui permet à la régie de prendre la main sur l'éclairage **pendant une partie en cours** :
+
+| Position | Effet sur la salle | Utilisé pour |
+|---|---|---|
+| **ON** | Salle allumée en blanc neutre, pleine intensité | Moment fort du jeu, besoin de clarté maximale |
+| **AUTO** *(position normale)* | Salle suit **l'état du jeu** — dérive automatiquement depuis les événements (changement d'équipe, buzz, révélation, etc.) | Mode de fonctionnement standard, pas d'intervention |
+| **OFF** | Salle complètement éteinte | Pause de suspense, moment dramatique |
+
+#### ⚠️ Règle critique — ON/OFF tiennent indéfiniment
+
+- Une fois que vous engagez **ON** ou **OFF**, la salle **conserve cet état même pendant une partie en cours**.
+- Aucun événement de jeu (buzz, changement d'équipe, etc.) ne lever ces modes — ils ne cèdent qu'au geste **manuel** de retour sur **AUTO**.
+- C'est un instrument de **conduite en direct par la régie**, utilisé pendant le jeu pour souligner un moment, et vous devez explicitement revenir à AUTO pour relâcher la main.
+
+#### ⚠️ Bandeau d'avertissement
+
+Lorsque ON ou OFF est engagé, un **bandeau jaune permanent** apparaît en haut de `/admin/ambiance` :
+```
+⚠️ Mode manuel engagé — cliquez AUTO pour revenir au pilotage automatique
+```
+
+Ce bandeau reste visible tant que le mode n'est pas désactivé — c'est votre seul rappel visuel sur la page elle-même.
+
+#### Ampoules d'équipe (v10.0.0 + #213)
+
+Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de salle). À l'avenir (#213), une ampoule peut être affectée à une équipe spécifique : ces ampoules **restent toujours pilotées par le jeu** (couleur de l'équipe active), jamais éteintes ou forcées par le sélecteur général.
+
+**Exemple** : vous avez 2 ampoules salle (zone générale) et 1 ampoule rouge dédiée à l'équipe « Les Rouges »
+- Mode OFF : les 2 ampoules salle s'éteignent
+- Les Rouges jouent : l'ampoule rouge reste allumée en couleur rouge (équipe active)
+- Au retour sur AUTO : les 2 ampoules salle reprennent leur scène de jeu
+
+### Comportement à l'arrêt du serveur
+
+À l'arrêt du serveur BuzzControl, **l'éclairage de salle s'éteint complètement** (ampoules générales + ampoules d'équipe). À la relance, un nouvel état de jeu redémarre depuis zéro — aucun mode manuel n'est persisté entre redémarrages.
+
+### Perte de connexion au pont
+
+**Cas : le pont Hue devient injoignable** (débranché, WiFi coupée, etc.)
+
+- **Affichage** : le badge de statut passe à 🔴 **Injoignable** (reste en place)
+- **Sélecteur tri-état** : reste à sa position précédente (aucun changement visible)
+- **Ampoules** : gardent leur dernier état — elles ne basculent pas, ne clignotent pas, ne changent rien
+- **Sélecteur en ON** : ampoules restent ON (blanc neutre)
+- **Sélecteur en OFF** : ampoules restent OFF
+- **Sélecteur en AUTO** : ampoules figées à la couleur qu'elles avaient au moment de la perte de connexion
+
+**Reconnexion automatique** : dès que le pont redevient joignable, BuzzControl **resynchronise automatiquement** l'éclairage sur l'état courant du jeu :
+- Si sélecteur en AUTO : dérives nouvelles depuis l'état actuel
+- Si sélecteur en ON/OFF : resync vers la couleur/intensité du mode engagé
+
+### Dissociation
+
+Pour arrêter complètement de piloter les ampoules :
+
+1. Naviguez vers `/admin/ambiance`
+2. Cliquez « Dissocier » en bas de la page
+3. La configuration du pont est supprimée, les ampoules reviennent à leur état normal
+4. Les futures attributions de points n'affecteront plus la salle
+
+### Pour en savoir plus
+
+Consultez le **contrat technique** `contracts/lighting.md` pour les détails de l'implémentation, les politiques de débit, et la sûreté d'accès concurrent.
 
 

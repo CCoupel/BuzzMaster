@@ -164,7 +164,54 @@ Nouveau mode de jeu « questions en rafale » : sur une manche de ~2 mn, des que
 
 ---
 
-## [Unreleased]
+## [10.0.0] - 2026-09-09
+
+**Milestone v10.0.0 — Éclairage d'ambiance Philips Hue (#28)** : Écosystème complet d'éclairage
+de salle réagissant aux événements de jeu. Intégration Hue Bridge (API v1, découverte mDNS/SSDP),
+coloration par équipe, conduite manuelle par la régie, gestion automatique des défaillances, et
+documentation utilisateur/technique. Neuf cycles QUALIF, version finale v10.0.0.18.
+
+### Added
+
+- **Philips Hue Bridge REST driver (API v1, replaces abandoned BLE path)** (#206) — Pilote implémentant `lighting.Driver` pour ampoules Hue connectées via bridge API v1. **Découverte mDNS + SSDP en 0,2 s, sans IP fixe ni appel cloud** ; identité bridge par `bridge_id` (immuable) et `bridge_ip` (auto-mise à jour DHCP) ; ampoules par **nom** (jamais par entier réattribué), résolution au démarrage et toutes les 5 min. **Débit : 250 ms min** (mesuré réel 19-61 ms, séquentiel pour séries courtes ≤ 6 ampoules, gain 30× sur groupes Hue natifs). Écriture seulement des changements d'état (RGB → CIE xy, intensité). Dégradé fin-grained : pont injoignable → backoff 1-60s exponentiel ; clé refusée → état distinct ; ampoule inconnue → non-événement silencieux. Test exhaustif sans matériel (faux pont `httptest`, latence simulée). `server-go/internal/lighting/hue/` : `discover.go` (mDNS/SSDP), `guard.go` (SSRF + requêtes whitelistées), `client.go` (v1 GET/POST), `color.go` (RGB→CIE xy conversions), `driver.go` (interface `lighting.Driver`), `groups.go` (groupes Hue natifs pour performance).
+
+- **Admin page for Hue Bridge configuration** (#207) — Nouvelle page `/admin/ambiance` avec trois étapes séquentielles : (1) **Découverte automatique** (mDNS/SSDP) ou IP manuelle ; (2) **Appui bouton requis** (45s countdown, relances 2s, sans champ clé) ; (3) **Sélection ampoules** (cases à cocher, tout coché défaut). Badge d'état : ✅ ok (vert) / 🔴 injoignable (rouge) / 🟠 refusée (orange) / ⚪ non-configurée (gris). Glyphes distincts : pastille/rayons (ok), pastille/vide (alerte), vide (arrêt) — résiste niveaux de gris. Renommage : « Configuration Ambiance » (backup) → « Réglages de jeu ». Clé API **persistée** dans config.json (masquée en GET, jamais en backups, jamais en logs, surpassable par `BUZZCONTROL_HUE_API_KEY`), régime identique aux clés IA.
+
+- **Conduite manuelle en direct par la régie — sélecteur tri-état ON/AUTO/OFF + Flash** — Interface Navbar admin enrichie de quatre contrôles : (1) **Sélecteur tri-état** ON/AUTO/OFF (zone générale uniquement) : ON = blanc neutre pleine intensité, AUTO = suit l'état du jeu automatiquement (défaut), OFF = éteint. **Règle critique** : ON/OFF tiennent indéfiniment, même pendant une partie — seul AUTO rend la main. (2) **Bouton Flash** (prime sur le sélecteur tant qu'actif, alterne blanc/couleur générale). (3) **Bandeau jaune d'avertissement** permanent quand ON/OFF engagé. (4) **État « libre »** par défaut, trois boutons de réinit groupée (une ampoule générale, toute ampoule, toutes les zones). Portée : zone générale seulement — ampoules d'équipe (#213 future) jamais affectées. Armement au montage, nettoyage à l'arrêt.
+
+- **Couleur d'équipe permanente et modulée selon phase de jeu** (#208/#213 prep) — Ampoule(s) d'équipe affichent toujours la couleur exacte de l'équipe (RGB via `teamColorPalette`, idem buzzers, zéro divergence), intensité modulée selon l'état du jeu (pleine en équipe active, atténuée sinon, jamais OFF). Identité de couleur garantie par réutilisation exact du même format numérique (`protocol.LEDSetPayload`, RGB 0-255, intensité 0-255).
+
+- **Zone générale piloté par thème de la question + pulsation chronomètre** — **Zone générale** (ampoules de salle) reflète : (1) **couleur du thème courant** si défini, blanc neutre sinon, dérive automatiquement avec changements d'équipe active (mode multi) ; (2) **pulsation synchronisée au chronomètre de question** (urgence croissante à l'approche de la fin), impulsion SCORE avec clignotement équipe/or proportionnel aux points marqués. Chaque événement de jeu dérimatise l'état vivant, jamais mémorisé — rafales d'événements produisent ≤`T/250ms+1` appels (`MinInterval=250ms`).
+
+- **Extinction totale à l'arrêt propre du serveur** (Hue + buzzers) — À `/shutdown`, l'éclairage s'éteint complètement avant arrêt. État non persisté entre redémarrages (mode manuel revient à AUTO défaut).
+
+- **Resynchronisation automatique au retour de connexion du pont** — Pont injoignable : ampoules figées à dernier état, badge passe à 🔴 Injoignable. Reconnexion : badge retourne à ✅ ok, éclairage se resynchronise sur l'état courant du jeu (AUTO rederive, ON/OFF resync vers mode engagé).
+
+- **Correctifs QUALIF v10.0.0 (9 rounds)** — (1) Résolution nom d'ampoule stabilisée (5 cycles, test direct sur pont) ; (2) Contact actif au démarrage, sauvegarde inventaire frontend (2 cycles) ; (3) Couleurs preview/Flash corrigées (round 9). Tous les lots en cours finalement approuvés en v10.0.0.18.
+
+- **Documentation utilisateur et technique pour Hue Bridge (Batch 4, 2026-09-07 + corrections)** — `docs/ADMIN_GUIDE.md` enrichie : sélecteur tri-état avec règle indéfinité ON/OFF, bandeau d'avertissement, ampoules d'équipe, arrêt serveur, perte connexion. `docs/SERVER_PARAMETERS.md` nouveau : section `lighting` normative (`enabled`, `bridge_ip`, `bridge_id`, `lights[]`, débit 250ms, timeouts, backoff, secrets). `docs/LED_SET_PROTOCOL.md` §1 : distinction LED buzzers (WebSocket) vs Hue (HTTP), deux systèmes parallèles découplés. `contracts/lighting.md` (§10 : tri-état + retour manuel fermé GATE 2026-09-07), `contracts/hue-bridge.md` (§5.1-§5.7 : architecture, couleur, dégradation, cycles de vie).
+
+- **Team-differentiated lighting prepared for #213** (#206, #207, #213 prep) — Architecture zone générale + zones par équipe (`ZoneState` union), fonctionnalité d'équipe prête pour #213. V10.0.0 : une seule zone « general » utilisée ; champ `role` ignoré jusqu'à #213.
+
+### Changed
+
+- **Security fix : SSRF protection on Hue Bridge registration** (#206) — Validation stricte des adresses de pont avant tout appel sortant : `validateBridgeAddress` résout les noms d'hôte et exige **toutes** les adresses privées/link-local (RFC 1918, 169.254/16, loopback). Rejette non-http(s), userinfo, chemin, query, fragment. Application dans `handleLightingRegister` + `/config.json`. Test `TestDevLightingRegisterRefusesPublicTargetWithoutNetwork` ✅ < 500ms sans réseau. Pas de réflexion du corps cible (log serveur, réponse générique client). Clé validée avant persistance ; échec → 502.
+
+- **Rate-limit guard on concurrent lighting operations** (#206) — Opérations longues (register, discover, test) sérialisées via `lightingInFlight` atomic : concurrent → `429 busy` sans appel réseau (prévention SSRF scanner). Test prouve pont touché une fois.
+
+- **Normalized ambient lighting events vocabulary** (#205) — Vocabulaire fermé 9 genres (`EventKind`: IDLE, READY, RUNNING, BUZZ, PAUSE_ALL, REVEAL, TEAM_TURN, ENTRACTE, SCORE) pilotant ambiance indépendant des LED buzzers. Futurs pilotes (BLE/Hue/DMX) branchent logique uniforme ne connaissant que genres.
+
+- **Abstract lighting driver interface** (#205) — Contrat `internal/lighting.Driver` normalisé (`Apply(ctx, State) error`), garantie monofilarité : `Apply` une seule goroutine, zéro race. `State` réutilise formats buzzer (RGB 0-255, intensité 0-255) — salle et buzzers affichent **même** couleur pour **même** équipe sans conversion.
+
+- **Asynchronous coalescing writer** (#205) — Écrivain unique `Writer`, jamais mémorisé, redérive l'état vivant à l'émission. Registre à une place pour impulsions SCORE (4800ms avec échéance). Rafale N événements → ≤`T/250ms+1` appels (v10.0.0 : MinInterval=250ms, calibré empiriquement sur spike #204).
+
+- **Exhaustive audit 21 trigger sites with AST guard test** (#205) — Syntaxe `go/parser`+`go/ast` parcourt `main.go`, collecte paires `(fonction englobante, appel sendLEDSet*)`, compare au registre `ambiance.go`. Test : site LED nouveau **sans décision** échoue nommément. Prévention défaut probable du milestone.
+
+- **Package `internal/lighting`** (#205) — Types (EventKind/Event/State/ZoneState), Writer (nil-safe), Driver interface, registre ambiance, test exhaustivité. `ZoneState` prépare #213 (zone par équipe) ; v10.0.0 : une seule zone « general ».
+
+- **Contrat technique normatif** — `contracts/lighting.md` normalise 8 sections : motivation/piège, vocabulaire, interface pilote, écrivain (invariants/débit/cycle), concurrence, 21 sites, test, table scènes. Amendement 2026-09-02 : `Teams` multiplicité pour #213.
+
+---
 
 ## [6.5.1] - Milestone v6.5.1 — Bugfix CI/Infra (#27)
 

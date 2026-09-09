@@ -22,7 +22,59 @@ type Config struct {
 	Storage      StorageConfig      `json:"storage"`
 	WiFiDefaults WiFiDefaultsConfig `json:"wifi_defaults"`
 	AI           AIConfig           `json:"ai"`
+	Lighting     LightingConfig     `json:"lighting"`
 	Version      string             `json:"version"`
+}
+
+// LightingConfig is the `lighting` section (v10.0.0, #207 — contracts/
+// hue-bridge.md §6): a Philips Hue Bridge driving the room lights from the
+// game events. Optional: Enabled=false (the default) means no driver, no
+// goroutine, no network call. The section is named "lighting", never
+// "ambiance" (that word is already the backup category of game-config.json).
+type LightingConfig struct {
+	Enabled  bool   `json:"enabled"`
+	BridgeIP string `json:"bridge_ip"`
+	BridgeID string `json:"bridge_id"` // authoritative identity; the IP may change (DHCP)
+	// APIKey is a SECRET under exactly the AIConfig regime (contract §6.1):
+	// never returned by GET, absent/empty in a POST preserves it,
+	// ClearAPIKey erases it, overridable by BUZZCONTROL_HUE_API_KEY without
+	// any disk write, never logged. config.json is not part of any backup
+	// archive (handleFSBackup/handleGameBackup are bounded to dataDir).
+	APIKey string `json:"api_key"`
+	// APIKeyConfigured is derived, never persisted: set only on the copy
+	// built for a GET/POST response.
+	APIKeyConfigured bool `json:"api_key_configured,omitempty"`
+	// ClearAPIKey is request-only (POST /config.json): true erases the stored
+	// key. Never persisted, never returned.
+	ClearAPIKey bool                 `json:"clear_api_key,omitempty"`
+	Lights      []LightingLightEntry `json:"lights"`
+}
+
+// LightingLightEntry is one bulb, addressed by NAME (Hue ids are reassignable).
+// Role "general" is implemented by #207; "team" (+ Team) is activated by #213
+// — the schema is frozen here so #213 needs no migration (contract §6).
+type LightingLightEntry struct {
+	Name string `json:"name"`
+	Role string `json:"role"`
+	Team string `json:"team,omitempty"`
+}
+
+// EnvHueAPIKey overrides lighting.api_key without ever touching config.json
+// (contract hue-bridge.md §6.1) — same mechanism as the AI keys.
+const EnvHueAPIKey = "BUZZCONTROL_HUE_API_KEY"
+
+// EffectiveAPIKey is the key actually used to talk to the bridge: the
+// environment wins over the stored value. Read at call time, never cached.
+func (l LightingConfig) EffectiveAPIKey() string {
+	if v := os.Getenv(EnvHueAPIKey); v != "" {
+		return v
+	}
+	return l.APIKey
+}
+
+// EffectiveAPIKeyConfigured reports whether a usable key exists (stored or env).
+func (l LightingConfig) EffectiveAPIKeyConfigured() bool {
+	return l.EffectiveAPIKey() != ""
 }
 
 // AIConfig holds settings for the AI question generator (v6.0.0, #8).
@@ -211,6 +263,10 @@ func Load(path string) (*Config, error) {
 	// — contract ai-multi-provider.md §8, same treatment as the Anthropic key).
 	cfg.AI.GroqAPIKeyConfigured = false
 	cfg.AI.ClearGroqAPIKey = false
+	// Same rule for the Hue key's derived/request-only fields (v10.0.0, #207 —
+	// contract hue-bridge.md §6.1).
+	cfg.Lighting.APIKeyConfigured = false
+	cfg.Lighting.ClearAPIKey = false
 
 	ApplyDefaults(&cfg)
 
@@ -296,6 +352,19 @@ func ApplyDefaults(cfg *Config) {
 		cfg.AI.GroqModel = "openai/gpt-oss-120b"
 	}
 	// GroqAPIKey has no default (empty = not configured), same as AnthropicAPIKey.
+
+	// Lighting (v10.0.0, #207 — contract hue-bridge.md §6): disabled and empty
+	// by default; APIKey has no default. A light without a role is "general";
+	// Lights is serialised as [] rather than null so the frontend never has to
+	// special-case a missing array.
+	for i := range cfg.Lighting.Lights {
+		if cfg.Lighting.Lights[i].Role == "" {
+			cfg.Lighting.Lights[i].Role = "general"
+		}
+	}
+	if cfg.Lighting.Lights == nil {
+		cfg.Lighting.Lights = []LightingLightEntry{}
+	}
 }
 
 var (

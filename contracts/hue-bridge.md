@@ -1,0 +1,604 @@
+# Contrat — Pilote Philips Hue Bridge (API REST locale)
+
+> **Étend** `contracts/lighting.md` (#205). Tout ce qui n'est pas redéfini ici y reste valable.
+> **Issues** : #206 (pilote), #207 (configuration + écran d'administration), #213 (éclairage par équipe)
+> **Base validée** : `_work/reports/dev-backend-hue-bridge-spike-20260903-195500.md`, code `spike/hue-bridge/`
+> **Plan** : `_work/reports/planner-v10-replan-hue-bridge-20260903-220000.md`
+>
+> Ce contrat est **normatif**. `dev-backend` peut l'ajuster si une contrainte technique l'impose,
+> en documentant la raison (`contracts/README.md`), mais pas par confort d'implémentation.
+
+---
+
+## 1. Base technique — ce qui est déjà prouvé
+
+Le spike `spike/hue-bridge/` a été exécuté sur un **vrai** Hue Bridge v2 (BSB002). Ces résultats
+sont acquis et ne sont pas à re-démontrer :
+
+| Point | Résultat mesuré |
+|---|---|
+| Découverte | mDNS `_hue._tcp` en **0,2 s**, puis SSDP en repli. **Aucune IP fixe requise**, aucun appel cloud. |
+| Enregistrement | `POST /api` + appui bouton, erreur `101` tant que non pressé, relance toutes les 2 s. |
+| Latence d'écriture | **19-61 ms**, p95 **48-59 ms**. |
+| Fiabilité | **100 %** à 300 ms **et** à 150 ms d'intervalle (≈7 commandes/s). |
+| Dépendances | **stdlib + `grandcat/zeroconf`**, déjà dans `server-go/go.mod`. « 100 % Go » tenu. |
+| Conversion couleur | `rgbToXY` implémentée et exercée (`spike/hue-bridge/hue.go:313`). |
+
+**Réutiliser le code du spike plutôt que le réécrire** : `discover.go`, `rgbToXY`, la boucle
+d'enregistrement et le garde-fou `guardRequest` sont directement transposables.
+
+---
+
+## 2. Décision — ampoules individuelles, pas groupes/zones Hue
+
+> **Tranché : le pilote adresse des ampoules individuelles. BuzzMaster détient le mapping
+> équipe → ampoules dans sa propre configuration, et ne délègue aucun regroupement au bridge.**
+
+La question méritait d'être posée : l'API Hue sait piloter un groupe en un seul appel, et
+« une équipe = une zone » est séduisant. Quatre raisons tranchent contre.
+
+1. **Le budget de débit est 10× plus favorable aux ampoules.** Philips recommande ~**10
+   commandes/s** sur `/lights` (100 ms entre appels) mais **≤ 1 mise à jour/s** sur `/groups` — un
+   groupe passe par une **diffusion Zigbee**, plus coûteuse pour le réseau maillé. Notre nombre
+   d'ampoules est petit (quelques unités) : `N` écritures unitaires coûtent moins cher, dans ce
+   budget, qu'une commande de groupe.
+2. **#213 annule l'avantage principal du groupe.** Un groupe impose **un état unique à tous ses
+   membres**. Or dès qu'on colore par équipe, chaque cible a une couleur **différente** — il
+   faudrait un groupe par équipe, souvent d'une seule ampoule. Le groupe ne sert que le cas « toute
+   la salle d'une seule couleur », qui n'est pas le cas différenciant du milestone.
+3. **Aucune dépendance à un état externe qui peut dériver.** Une zone créée à la main dans
+   l'application Hue peut être renommée, supprimée, recréée avec un autre id, modifiée par
+   quelqu'un d'autre. La configuration BuzzMaster, elle, est sous notre contrôle et sauvegardée
+   avec le reste.
+4. **C'est ce que le spike a validé**, à 100 % sur du matériel réel. Les groupes ne l'ont pas été.
+
+**Ce que l'on perd, et comment on le compense.** Le groupcast Zigbee est réellement simultané ;
+`N` écritures unitaires séquentielles s'étalent sur ≈ `N × 40 ms`. À 2-6 ampoules, cela fait 80 à
+240 ms. Deux mitigations, dans cet ordre :
+
+- **N'écrire que ce qui change** (§5.3) — dans la plupart des transitions, une seule ampoule change.
+- **Mesurer l'étalement réel** (§8, critère chiffré). Si et seulement si la mesure le rend
+  visuellement gênant sur le cas « toute la salle d'une couleur », #206 pourra ajouter **un seul
+  groupe Hue « général », créé et maintenu par BuzzMaster**, utilisé pour ce cas et lui seul.
+  C'est une **optimisation locale documentée, pas un changement de modèle** — la configuration
+  reste par ampoule. Ne pas l'implémenter par anticipation.
+
+> ### ⚠️ Clause de sortie DÉCLENCHÉE — 2026-09-07 (retour QUALIF)
+>
+> **Ce §2 n'est pas renversé : il est appliqué.** Son raisonnement reposait sur une prémisse
+> explicite — « notre nombre d'ampoules est **petit (quelques unités)** […] à 2-6 ampoules, cela
+> fait 80 à 240 ms ». **L'installation réelle en compte ~30**, soit ≈ **1,2 s** d'étalement, très
+> au-delà du seuil de perception et **5× la prémisse**. §2 prévoyait précisément qu'on le rouvre
+> sur mesure ; c'est fait.
+>
+> **Ce qui est retenu** : des groupes Hue créés et maintenus par BuzzMaster, **là et seulement là
+> où ils paient** — voir **§5.8**. La règle est chiffrée : **un groupe n'est utilisé que s'il
+> adresse ≥ 2 ampoules**.
+>
+> **Ce qui reste écarté, et pourquoi** : un groupe **par équipe** quand chaque équipe n'a **qu'une**
+> ampoule. Le point 1 ci-dessus vaut toujours, et joue à l'envers de l'intuition — `/groups` est
+> plafonné à **≤ 1 mise à jour/s** contre ~10/s sur `/lights`. Quatre équipes d'une ampoule
+> coûteraient **≈ 4 s** de budget en groupes contre **≈ 160 ms** en écritures directes. Un groupe
+> d'une seule ampoule vise la même cible Zigbee avec un budget 10× plus serré : c'est strictement
+> perdant.
+>
+> **Les points 3 et 4 restent entiers** : aucun groupe créé à la main n'est jamais utilisé
+> (BuzzMaster crée et réconcilie les siens, §5.8), et les groupes restant non validés sur matériel
+> réel, le pilote **doit** savoir s'en passer (repli par ampoule, §5.8).
+
+---
+
+## 3. Décision — API Hue v1
+
+Le pilote cible l'**API v1** (`/api/<clé>/lights/<id>/state`), celle que le spike a validée.
+
+**Pourquoi pas la v2** (`/clip/v2`, en-tête `hue-application-key`) : elle impose HTTPS avec un
+certificat dont le *Common Name* est l'identifiant du bridge, signé par une racine Signify — donc
+soit embarquer cette racine et forcer `ServerName`, soit épingler l'empreinte. C'est un chantier
+réel, pour un gain nul sur notre usage (allumer et colorer des ampoules).
+
+**Risque assumé** : la v1 est officiellement dépréciée. **Mitigation structurelle** : le pilote est
+derrière `lighting.Driver` (#205). Une migration v2 est un **pilote de remplacement**, pas une
+refonte — c'est exactement ce pour quoi l'abstraction a été conçue. Candidat pour v10.1.
+
+Le transport doit accepter **HTTP et HTTPS auto-signé** (`InsecureSkipVerify` sur le seul chemin
+Hue, jamais globalement), comme le drapeau `-https` du spike : certains firmwares récents forcent
+TLS.
+
+---
+
+## 4. Identité du matériel — normatif
+
+### 4.1 Le bridge
+
+Configuration : `bridge_ip` **et** `bridge_id`. La découverte remplit les deux.
+
+Au démarrage, si `bridge_id` est connu et que l'IP a changé (DHCP), le pilote **re-découvre** et
+met à jour l'IP tout seul. L'identifiant fait foi, pas l'adresse — sinon un bail DHCP renouvelé
+casse l'installation un soir de jeu.
+
+### 4.2 Les ampoules — par **nom**, jamais par id
+
+Les identifiants Hue sont de petits entiers **réattribuables** après suppression d'une ampoule.
+Écrire sur un id mémorisé, c'est risquer d'allumer une autre ampoule que celle voulue.
+
+Règle, reprise du garde-fou du spike et **promue en production** :
+
+1. La configuration stocke le **nom** de l'ampoule.
+2. L'id est résolu au démarrage et sur changement de configuration, par nom **exact**.
+3. **0 correspondance ⇒ l'ampoule est signalée introuvable.** **> 1 correspondance ⇒ refus, jamais
+   de choix arbitraire.**
+4. Avant écriture, l'id doit être un **entier strictement positif**.
+
+> Le spike relisait l'ampoule **avant chaque écriture** pour re-vérifier son nom. En production
+> c'est un aller-retour de trop à chaque changement de couleur : la re-vérification a lieu **à la
+> résolution** et **périodiquement** (à chaque rafraîchissement de l'inventaire), pas à chaque
+> écriture. C'est un assouplissement délibéré du garde-fou du spike, justifié par le fait que le
+> **bridge de production est dédié à BuzzMaster** — pas le bridge domestique de l'utilisateur.
+
+### 4.3 Garde-fou des requêtes
+
+`guardRequest` (`spike/hue-bridge/guard.go`) est **repris**, avec sa liste blanche élargie au
+strict nécessaire de la production :
+
+| Autorisé | Usage |
+|---|---|
+| `POST /api` | enregistrement (bouton) |
+| `GET /api/<clé>/lights` et `/lights/<id>` | inventaire, résolution par nom |
+| `PUT /api/<clé>/lights/<id>/state` | écriture d'**une** ampoule |
+| `GET /api/<clé>/config` | identifiant/modèle/version du bridge, pour l'écran d'état |
+| `GET /api/<clé>/groups` et `POST /api/<clé>/groups` | inventaire des groupes, création (§5.8) |
+| `PUT /api/<clé>/groups/<id>` et `DELETE /api/<clé>/groups/<id>` | correction/suppression de la composition d'**un** groupe BuzzMaster, id strictement positif (§5.8) |
+| `PUT /api/<clé>/groups/<id>/action` | écriture d'un **groupe** (§5.8) — id strictement positif : le groupe implicite 0 (« toutes les ampoules ») reste exclu par construction, même règle que `lights/0/state` |
+
+Tout le reste reste **refusé avant émission** : scènes, règles, planifications, capteurs,
+`resourcelinks`, whitelist, firmware, lecture d'**un** groupe (`GET /groups/<id>`, jamais
+nécessaire), `POST` sur un groupe précis, renommage, API v2, chemins contenant `?`, `#` ou `..`. Le
+test des cas interdits (`TestGuardAllowsOnlyTheDocumentedOperations`, `internal/lighting/hue/
+guard_test.go`) est **repris et étendu** (Batch B, 2026-09-07).
+
+---
+
+## 5. Le pilote — normatif
+
+### 5.1 Place dans l'architecture
+
+Implémente `lighting.Driver` (`contracts/lighting.md` §3) : `Apply(ctx, State) error` + `Close()`.
+
+Garantie du contrat #205, sur laquelle ce pilote **s'appuie** : `Apply` n'est appelé que depuis la
+goroutine unique de l'écrivain. **Le pilote n'a donc pas à être sûr en accès concurrent**, et il a
+le droit de bloquer.
+
+Package : `server-go/internal/lighting/hue/`. Il peut importer `internal/lighting` (les types),
+jamais `internal/game` ni `internal/protocol`.
+
+### 5.2 De `State` aux ampoules
+
+`State.Zones` porte des `ZoneState{Zone, Color [3]int, Intensity int}` (§3 de `lighting.md`).
+
+| Zone | Ampoules ciblées |
+|---|---|
+| `"general"` | les ampoules de **rôle `general`** — et elles seules |
+| nom d'équipe (#213) | les ampoules affectées à cette équipe |
+
+> ### ⚠️ Révision du 2026-09-08 — une ampoule d'équipe ne rejoint **jamais** `general`
+>
+> La version précédente faisait retomber dans `general` « toute ampoule d'équipe dont l'équipe
+> n'est pas nommée dans l'état courant ». **Cette retombée est supprimée**, en partie comme hors
+> partie (exigence utilisateur : « on ne doit **jamais** avoir une couleur autre que celle de
+> l'équipe »).
+>
+> **Une ampoule de rôle `team` rend toujours la couleur de son équipe.** Elle n'affiche jamais la
+> scène générale ni l'identité d'une autre équipe. La composition des zones devient **entièrement
+> statique** : elle ne dépend plus que de la configuration, jamais de l'état du jeu.
+>
+> **Deux réserves, seules dérogations :**
+> 1. **Extinction à l'arrêt du serveur** (`lighting.md` §10.4) — éteint **toutes** les ampoules,
+>    d'équipe comprises. Cette règle régit l'exploitation, pas l'arrêt.
+> 2. **Impulsion SCORE** (`lighting.md` §8) — clignotement **transitoire** vers l'or, sur le score
+>    **de cette équipe-là**, alternant avec **sa propre** couleur et y revenant : il célèbre
+>    l'identité au lieu de l'effacer.
+>
+> **Affectation orpheline** — une ampoule affectée à une équipe **absente de la configuration** est
+> traitée comme **non affectée** : c'est une ampoule `general` ordinaire. Une incohérence de
+> configuration n'est pas un état de jeu, et une ampoule grise à vie serait indéchiffrable.
+> *(Précision dérivée, planner — signalée pour relecture.)*
+
+Une zone présente dans `State` mais sans aucune ampoule configurée est un **non-événement
+silencieux**, pas une erreur.
+
+**Conversion couleur** : `Color [3]int` (RGB 0-255) → CIE xy par `rgbToXY`
+(`spike/hue-bridge/hue.go:313`, repris tel quel). `Intensity` 0-255 → `bri` Hue 1-254, et
+`Intensity == 0` ⇒ `{"on": false}` plutôt qu'une luminosité nulle.
+
+**`transitiontime`** : `0` (instantané) **par défaut** — le bridge applique 400 ms par défaut, ce
+qui délaverait un flash d'événement.
+
+> ### Amendement du 2026-09-08 — `transitiontime` devient un paramètre par écriture
+>
+> `ZoneState` (`lighting.md` §3) porte désormais un champ **`TransitionMs int`**, converti ici en
+> deciseconde Hue (`ms / 100`) et appliqué à **chaque** écriture — `0` (valeur zéro de tout appelant
+> qui ne le renseigne pas) reproduit exactement le comportement d'avant, littéral pour littéral :
+> aucune régression pour `TestFlash`, `SetLightDirect` ou une scène ordinaire, qui ne renseignent
+> jamais ce champ.
+>
+> **Motif** : la pulsation chronomètre (`lighting.md` §8.2) a besoin d'une vraie **respiration** —
+> le pont interpole lui-même le fondu entre deux écritures espacées d'un demi-cycle, plutôt que de
+> recevoir deux paliers d'intensité qui « sautent ». Une constante unique aurait empêché ce cas
+> d'usage sans en ouvrir un second, moins sûr (une écriture instantanée suivie d'un minuteur côté
+> serveur pour simuler un fondu).
+>
+> `transitionTime` fait partie de l'égalité comparée par le cache de dédoublonnage (§5.3,
+> `appliedState`) : deux écritures à la même couleur/intensité mais un fondu différent ne sont
+> **pas** le même état appliqué — un appelant qui ne change que la vitesse de fondu obtient bien une
+> écriture, jamais une déduplication silencieuse.
+>
+> **Révision du 2026-09-08 (QUALIF v10.0.0.17)** : le motif ci-dessus reste la raison d'être de ce
+> paramètre, mais la pulsation chronomètre elle-même **n'envoie plus de fondu** — un artefact
+> d'interpolation xy l'a fait revenir à `transitiontime = 0` sur ses 3 paliers (`lighting.md` §8.2
+> pour le détail). Le mécanisme par-écriture reste en place, prêt pour un usage futur (v10.1+) ; ce
+> n'est qu'un paramètre d'appel qui change, pas l'infrastructure.
+
+### 5.3 N'écrire que ce qui change — obligatoire
+
+Le pilote garde le dernier état **effectivement appliqué** par ampoule et **n'émet une écriture
+que pour les ampoules dont l'état cible diffère**.
+
+Ce n'est pas une optimisation de confort : c'est la principale mitigation du budget de débit (§2),
+et elle est simple et manifestement correcte puisque le pilote est seul à écrire.
+
+Un échec d'écriture **invalide** l'entrée mémorisée pour cette ampoule, afin que le prochain
+`Apply` la retente.
+
+### 5.4 Débit
+
+- `lighting.Writer.MinInterval` passe de 100 ms à **250 ms** pour ce pilote : un `Apply` vaut
+  jusqu'à `N` écritures HTTP, là où #205 raisonnait sur une écriture unique.
+- Écritures **séquentielles**, sans temporisation artificielle ajoutée : à ~40 ms l'unité, six
+  ampoules tiennent dans la fenêtre de 250 ms.
+- Le budget cible est **≤ 10 écritures/s** sur `/lights`, conformément à la recommandation Philips.
+
+> ### ⚠️ Amendement du 2026-09-08 — la pulsation chronomètre dépasse `/groups` d'un facteur ~2,
+> > **assumé**
+>
+> La pulsation générale (`lighting.md` §8.2) écrit `buzzmaster-general` à raison de **2
+> écritures/s, en continu, pendant toute question chronométrée** — un régime permanent, pas une
+> salve. `/groups` reste plafonné à **≤ 1 mise à jour/s** (§2) : ce module le dépasse d'un facteur
+> **~2**, sur chaque question, toute la soirée.
+>
+> **Décision utilisateur explicite** : écrire **systématiquement** via `buzzmaster-general`, **sans
+> repli individuel par ampoule**, même au-delà de cette recommandation — le même arbitrage assumé
+> que la durée fixe du SCORE (§8.1). Le rapport planner
+> (`_work/reports/planner-v10-chrono-pulse-v2-20260908-120128.md` §2.4) avait identifié qu'un repli
+> individuel sous 5 ampoules dans `general` resterait, lui, dans le budget `/lights` — cette
+> option a été **explicitement écartée** : le groupe est utilisé pour cet effet quelle que soit la
+> taille de la zone `general`.
+>
+> **Pourquoi ce n'est pas une contradiction avec le §5.8** : la règle « groupe si ≥ 2 ampoules »
+> reste la règle par défaut pour les changements de scène **occasionnels**. La pulsation
+> chronomètre est un cas à part, documenté séparément — un effet **soutenu** où le choix du débit a
+> été tranché par l'utilisateur en connaissance du dépassement, pas dérivé mécaniquement du §5.8.
+>
+> **Le palier 3 (urgence, ≤ 5 s restantes) reste à un cycle d'1 s** — jamais 0,5 s comme demandé
+> littéralement au départ : à 4 écritures/s, ce serait **4×** le plafond `/groups` et **exactement**
+> la limite du `MinInterval` du writer (250 ms), sans la moindre marge pour la latence HTTP réelle
+> (~40 ms) — un rythme qui serait irrégulier, pas simplement plus rapide. L'urgence du palier 3 est
+> rendue par la dominante rouge et l'amplitude d'intensité (§8.2), à coût de débit identique aux
+> paliers 1-2.
+
+### 5.5 Comportement dégradé — normatif
+
+Le module est **optionnel**. Le serveur doit fonctionner normalement sans bridge, contrainte actée
+dès le cadrage de #182.
+
+| Situation | Comportement |
+|---|---|
+| `lighting.enabled == false` ou aucune clé | **Aucune goroutine, aucun appel réseau, aucune ligne de log.** Comportement strictement identique à aujourd'hui. |
+| Bridge injoignable au démarrage | Le serveur démarre normalement. Reconnexion en **retrait exponentiel plafonné** (1 s → 60 s). |
+| Bridge injoignable en cours de partie | La partie continue **sans latence perceptible**. `Apply` échoue vite (timeout court) et retourne une erreur ; l'écrivain n'est jamais bloqué. |
+| Clé refusée (`401`/erreur Hue `1`) | État **« refusé »**, distinct d'« injoignable ». Pas de retentative en boucle : c'est un geste utilisateur qui débloque. |
+| Une ampoule injoignable (éteinte au mur) | Les autres sont écrites normalement. Jamais d'abandon global pour une ampoule absente. |
+| Journalisation | Une ligne au changement d'état, **jamais une ligne par échec**. Un bridge débranché ne doit pas inonder les logs d'une soirée. |
+
+**Timeout HTTP : 2 s.** Le bridge est sur le LAN et répond en ~40 ms ; au-delà de 2 s il est
+injoignable, pas lent.
+
+### 5.6 Taxonomie d'état — trois issues, jamais deux
+
+Reprise de `contracts/ai-key-validation.md` §3, dont c'est le précédent direct :
+
+| État | Déclencheurs |
+|---|---|
+| `ok` | bridge joignable, clé acceptée |
+| `refused` | clé absente, invalide ou révoquée ; bouton non pressé pendant l'enregistrement (erreur Hue `101`) |
+| `unreachable` | DNS, réseau, TLS, timeout, bridge éteint |
+
+**Ne jamais fondre `refused` et `unreachable` en une « erreur ».** Les gestes correctifs sont
+opposés : réappairer contre rallumer/rebrancher. C'est l'ambiguïté qui a rendu #142 coûteux à
+diagnostiquer.
+
+### 5.7 Dégradation de l'éclairage par équipe — normatif (#213)
+
+> Les quatre cas que le §9 listait comme « à traiter par #213 » sont tranchés ici et deviennent
+> normatifs. #213 est formel : **ce sont eux qui séparent une fonctionnalité utilisable d'une
+> curiosité de démonstration.** Aucun n'est un cas limite exotique — le premier est le cas le plus
+> fréquent en soirée réelle.
+
+| Cas | Règle |
+|---|---|
+| **Moins d'ampoules que d'équipes** *(le plus fréquent)* | Les équipes pourvues sont rendues sur leur ampoule. Les autres ne le sont pas individuellement : elles restent couvertes par la zone `general`, qui garde la scène de la salle. **Jamais de partage d'une ampoule entre deux équipes**, ni de rotation entre elles. |
+| **Équipe sans ampoule affectée** | Cas particulier du précédent, même règle. La zone portant son nom est un **non-événement silencieux** (§5.2), pas une erreur, et **ne repeint pas `general` à la couleur de cette équipe** — la couleur de la salle ne doit pas dépendre de quelle équipe se trouve dépourvue d'ampoule. |
+| **Aucune affectation d'équipe du tout** | Retour intégral au comportement **« toute la salle en `general` »** — c'est-à-dire exactement le comportement pré-#213, dans lequel la scène générale porte déjà la couleur de l'équipe active (`KindTeamTurn`, `lighting.md` §6.3). Une installation sans ampoule d'équipe reste donc pleinement expressive. |
+| **Ampoule affectée mais injoignable** *(éteinte au mur)* | N'empêche **jamais** l'écriture sur les autres ampoules — application directe de la ligne « une ampoule injoignable » du §5.5, rappelée ici parce que c'est sur une ampoule d'équipe qu'on l'oublie le plus facilement. |
+
+⚠️ **Précision dérivée (planner, 2026-09-07)** — les deux lignes centrales tranchent un point que
+ni l'issue ni la décision utilisateur ne formulaient explicitement : une équipe dépourvue d'ampoule
+**ne détourne pas** la zone `general` à son profit. La règle inverse (repeindre toute la salle à
+la couleur de l'équipe non pourvue) produirait une salle dont la couleur bascule selon la
+composition matérielle plutôt que selon le jeu. Signalé pour relecture au même titre que le §6.3
+de `lighting.md`.
+
+### 5.8 Groupes Hue — normatif (2026-09-07)
+
+Optimisation d'écriture autorisée par la clause de sortie du §2. **Les groupes ne changent pas le
+modèle de configuration** : l'admin affecte toujours des **ampoules** à des équipes, BuzzMaster en
+**déduit** les groupes. Rien de tout cela n'est visible dans l'écran d'administration.
+
+#### Les trois groupes
+
+| Nom sur le pont | Membres | Usage principal |
+|---|---|---|
+| `buzzmaster-ambiance` | **toutes** les ampoules assignées | All OFF, Flash, extinction à l'arrêt (`lighting.md` §10.4) |
+| `buzzmaster-general` | les ampoules de rôle `general` | la scène de salle — le cas le plus fréquent |
+| | *(depuis la révision du §5.2 du 2026-09-08, cet ensemble est **purement statique** : la composition dynamique que le point 3 ci-dessous devait contourner a disparu. La règle « ne jamais muter sur un événement de jeu » reste écrite, mais elle est désormais trivialement satisfaite.)* | |
+| `buzzmaster-team-<équipe>` | les ampoules de cette équipe | **créé uniquement si l'équipe a ≥ 2 ampoules** |
+
+#### Type d'objet : `LightGroup`, jamais `Room`, jamais `Zone`
+
+- **`Room` est exclu** : une ampoule n'appartient qu'à **une seule** Room. Nos groupes se
+  **chevauchent** (une ampoule d'équipe est aussi dans `buzzmaster-ambiance`) et une Room
+  écraserait le rangement que l'utilisateur a fait dans son application Hue.
+- **`Zone` est écarté** : fonctionnellement adéquat (chevauchement permis), mais exige un firmware
+  ≥ 1.30 et **s'affiche dans l'application Hue**, où elle peut être renommée ou supprimée — le
+  « état externe qui dérive » que le §2 point 3 voulait éviter.
+- **`LightGroup`** (API v1 `/groups`, `type: "LightGroup"`) : chevauchement autorisé, disponible
+  depuis toujours, discret.
+
+#### Règle d'emploi — chiffrée
+
+> **On écrit par groupe si et seulement si la cible compte ≥ 2 ampoules. Sinon, on écrit
+> directement l'ampoule.**
+
+Motif au §2 : `/groups` est plafonné à **≤ 1 mise à jour/s** contre ~10/s sur `/lights`. Un groupe
+d'une seule ampoule vise la même cible Zigbee avec un budget dix fois plus serré.
+
+#### Cycle de vie
+
+1. **Identification par nom**, jamais par id — même règle que les ampoules (§4.2). Résolution
+   nom → id au moment de l'inventaire.
+2. **Réconciliation** au démarrage **et après chaque enregistrement de configuration** : créer les
+   groupes manquants, corriger la composition de ceux qui ont dérivé, supprimer ceux devenus sans
+   objet (équipe supprimée, ampoules désassignées).
+3. ⚠️ **Ne JAMAIS modifier la composition d'un groupe sur un événement de jeu.** La composition ne
+   dépend **que** de la configuration. La part **dynamique** de la zone `general` (§5.2 : une
+   ampoule d'équipe rejoint `general` quand son équipe n'est pas au plateau) se traite en
+   **choisissant à quelle cible on écrit**, jamais en mutant les membres. Une implémentation qui
+   enverrait un `PUT /groups/<id>` à chaque changement d'équipe serait à la fois lente et sous
+   plafond.
+4. Un groupe Hue exige **≥ 1 membre** : une équipe sans ampoule n'a donc pas de groupe, ce qui
+   coïncide avec le « non-événement silencieux » du §5.2 — aucun cas particulier à écrire.
+5. **Repli obligatoire** : si la création, la résolution ou l'écriture d'un groupe échoue, le pilote
+   **écrit par ampoule**. Les groupes sont une **optimisation**, jamais un préalable — tout le
+   comportement dégradé du §5.5 doit rester vrai sans eux.
+
+#### Articulation avec §5.3 — le piège d'implémentation
+
+Le cache « n'écrire que ce qui change » doit être **indexé par cible** (groupe *ou* ampoule) et,
+lors d'une écriture de groupe, **invalider l'état mémorisé de chaque ampoule membre**. Sans cela,
+une écriture de groupe laisse le cache par ampoule périmé et la déduplication **saute des écritures
+nécessaires** — l'ampoule reste sur une couleur que le serveur croit avoir changée.
+
+#### Articulation avec §5.7 — vérifiée, sans contradiction
+
+| Règle §5.7 | Avec les groupes |
+|---|---|
+| Ampoule injoignable | le pont écrit les autres membres ; l'échec reste per-ampoule |
+| Équipe sans ampoule | pas de groupe (point 4) — inchangé |
+| Moins d'ampoules que d'équipes | inchangé — les équipes pourvues ont leur cible, les autres suivent `general` |
+| Aucune affectation d'équipe | seul `buzzmaster-general` existe — inchangé |
+
+---
+
+## 6. Configuration — normatif
+
+Section `lighting` de **`config.json`** (config *système*), déclarée selon la procédure établie du
+projet : struct + champ dans `Config`, défauts dans `ApplyDefaults`, bloc de décodage **additif par
+section** dans `handleConfig` (`internal/server/http.go` ~1400-1440).
+
+```jsonc
+"lighting": {
+  "enabled": false,
+  "bridge_ip": "192.168.1.101",
+  "bridge_id": "001788fffea0591e",
+  "api_key": "…",                 // SECRET — voir §6.1
+  "api_key_configured": true,     // dérivé, jamais persisté
+  "clear_api_key": false,         // request-only, jamais persisté
+  "lights": [
+    { "name": "BuzzHue1", "role": "general" },
+    { "name": "BuzzHue2", "role": "team", "team": "Rouges" }   // role "team" = #213
+  ]
+}
+```
+
+> **Le schéma complet est figé ici, y compris `role: "team"` et `team`.** #207 n'implémente que
+> `role: "general"` ; #213 active `"team"`. C'est délibéré : casser ce schéma en #213 imposerait une
+> migration de `config.json` sur une section livrée quelques jours plus tôt.
+
+⚠️ **La section se nomme `lighting`, jamais `ambiance`** : « ambiance » désigne déjà la catégorie de
+sauvegarde couvrant `game-config.json` (`BackupPage.jsx`, #152).
+
+### 6.1 La clé API est un secret
+
+Même régime que les clés IA, sans exception :
+
+- **Masquée** dans `GET /config.json` (`maskedConfigJSON`, `http.go:1320`).
+- Motif « absente/vide ⇒ préservée, `clear_api_key: true` ⇒ effacée, `api_key_configured` dérivé
+  jamais persisté ».
+- Surcharge par **`BUZZCONTROL_HUE_API_KEY`**, **sans aucune écriture disque**.
+- **Jamais dans les logs**, ni en clair ni tronquée.
+
+**Vérifié** : `config.json` vit à la racine du serveur, alors que `handleFSBackup` archive
+`h.dataDir` (`data/`) et `handleGameBackup` archive `data/files`. **`config.json` n'est donc inclus
+dans aucune archive de sauvegarde** — la clé ne peut pas fuir par un backup. Ce fait doit être
+préservé : ne pas déplacer la section `lighting` vers `game-config.json`.
+
+> **Pourquoi `config.json` et non un fichier séparé** comme le `.hue-username` du spike : le projet
+> a déjà un régime de secret éprouvé, avec masquage, surcharge par environnement, effacement
+> explicite et exclusion des sauvegardes. Un second mécanisme n'apporterait rien et créerait un
+> deuxième endroit où se tromper.
+
+---
+
+## 7. Endpoints HTTP — normatif
+
+Enregistrés dans `setupRoutes` (`internal/server/http.go`). Toutes les réponses d'erreur portent la
+taxonomie du §5.6.
+
+### `POST /api/lighting/discover`
+Découverte mDNS puis SSDP. **Aucun appel cloud.** Timeout 5 s.
+Réponse : `200 {"bridges":[{"ip":"…","id":"…","model":"BSB002"}]}` — liste possiblement vide.
+
+### `POST /api/lighting/register`
+`POST /api` vers le bridge avec `{"devicetype":"buzzmaster#<hôte>"}`.
+Corps : `{"bridge_ip":"…"}`.
+- `200 {"result":"ok"}` — clé obtenue et **enregistrée côté serveur**, jamais renvoyée au client.
+- `409 {"result":"refused","reason":"link_button_not_pressed"}` — **cas nominal**, pas une panne :
+  l'utilisateur n'a pas encore appuyé. Le client relance.
+- `503 {"result":"unreachable"}`.
+
+### `GET /api/lighting/lights`
+Inventaire : `200 {"lights":[{"id":"8","name":"BuzzHue1","reachable":true,"on":false}]}`.
+Sert la sélection dans l'écran d'administration.
+
+### `POST /api/lighting/test`
+Corps : `{"name":"BuzzHue1"}` ou `{}` pour toutes les ampoules sélectionnées.
+Effet : un flash bref puis **retour à l'état antérieur**. Réponse `200 {"result":"ok"}`.
+
+### `POST /api/lighting/preview` (2026-09-08, #207 P2a ; `role` ajouté le 2026-09-08)
+Corps : `{"name":"BuzzHue1","on":true|false,"role":"general"|"team:<équipe>"}` — `name`
+obligatoire (jamais « toutes »), `role` optionnel.
+Effet : écrit un état **persistant**, sans restauration ni minuterie de flash, contrairement à
+`/test` — `on:true` ⇒ la **vraie couleur** du rôle choisi, pleine intensité ; `on:false` ⇒
+`{"on":false}` (le rôle n'a alors aucun effet). Réponse `200 {"result":"ok"}`, même taxonomie
+d'erreurs et même garde d'opération unique en vol (`lightingBusy`, 429
+`{"result":"busy","reason":"preview_in_progress"}`) que `/test`.
+
+**Résolution de la couleur par `role`** (`LightingProvider.PreviewColor`, jamais dupliquée) :
+
+| `role` | Couleur |
+|---|---|
+| `"team:<nom d'équipe>"` | couleur de l'équipe (`teamNameToRGB`) — la **même** palette que partout ailleurs, jamais une seconde valeur. Équipe inconnue ⇒ gris `{128,128,128}`, comme `teamNameToRGB` |
+| `"general"`, absent, vide, ou toute autre valeur | couleur **actuelle** de la zone générale — réutilise `ambianceThemeColor()` telle quelle (thème de la question en cours, blanc si aucune/catégorie inconnue ou personnalisée) |
+
+Le frontend envoie le rôle **actuellement sélectionné** dans le `<select>` de la ligne, avant même
+son enregistrement — la case cochée doit prévisualiser la couleur qu'elle **aura** une fois
+assignée, pas une couleur arbitraire.
+
+Sert l'allumage/extinction immédiat au coché/décoché d'une ampoule sur `/admin/ambiance`, **avant**
+même son enregistrement en configuration — c'est pourquoi la résolution du nom suit exactement la
+règle de `TestFlash` depuis le correctif du round 5 (`6d8918de`) : configuration enregistrée
+d'abord, puis **repli sur l'inventaire vivant** du pont si absente — jamais la configuration
+**seule**. C'est la leçon des 5 rounds de QUALIF coûtés par cette même erreur sur `/test` ; ne pas
+la répéter ici.
+
+### `GET /api/lighting/status`
+`200 {"state":"ok|refused|unreachable|disabled","bridge_id":"…","bridge_ip":"…","lights_ok":2,"lights_total":3}`.
+**Ne fait aucun appel bloquant** : renvoie l'état connu du pilote, jamais une interrogation du pont.
+
+#### 7.1 Amendement du 2026-09-04 — l'indicateur du menu
+
+Décision utilisateur : l'entrée « Ambiance » du menu abeille porte une **ampoule**, dont la
+**forme** dit l'état et dont la couleur ne fait que renforcer. Les quatre états de cet endpoint s'y
+projettent ainsi — correspondance **normative**, pour que le frontend n'ait pas à l'inventer :
+
+| `state` | Glyphe | Couleur | Sens pour l'utilisateur |
+|---|---|---|---|
+| `ok` | ampoule **pleine, avec rayons** | verte | pont configuré et qui répond |
+| `unreachable` | ampoule **en contour + pastille d'alerte** | orange | pont configuré mais qui ne répond plus |
+| `refused` | ampoule **en contour + pastille d'alerte** | orange | pont configuré mais qui refuse la clé — même geste : aller voir la page |
+| `disabled` | ampoule **en contour nu** | grise | aucun pont configuré |
+
+**Trois glyphes distincts, pas une même forme recolorée** (révision 4 de la maquette). La
+distinction reste lisible en niveaux de gris et pour un daltonien : rayons → contour + pastille →
+contour nu. Trois teintes sur une forme unique auraient été indiscernables, et à peine lisibles à
+15 pixels.
+
+Un emoji ne permet ni de changer la couleur ni de changer la forme : les trois glyphes sont des
+**SVG en ligne** tracés en `currentColor`. Tracés de référence dans
+`docs/mockups/lighting-hue-config-207.html` §01.
+
+`refused` et `unreachable` partagent la couleur **orange** : dans les deux cas le pont est
+configuré et ne fonctionne pas, et la conduite à tenir est la même — ouvrir la page Ambiance. La
+distinction reste **entière dans l'API et sur la page**, où elle commande deux gestes correctifs
+opposés (§5.6) ; elle est simplement inutile à trois pixels dans un menu.
+
+**Le contour nu ne réclame aucune attention.** Une fonctionnalité facultative non configurée ne
+doit jamais ressembler à une alerte — d'où l'absence de pastille sur ce seul glyphe, qui est
+précisément ce qui le distingue de l'état « injoignable ».
+
+**Accessibilité** : l'entrée expose un `title` disant l'état en toutes lettres, et le SVG est
+`aria-hidden` (le libellé « Ambiance » porte le sens). La forme étant devenue le porteur principal,
+ce `title` n'est plus l'unique ligne de défense — mais il reste requis : un lecteur d'écran ne voit
+aucune forme.
+
+**Rafraîchissement** : le frontend interroge cet endpoint **au montage puis toutes les 30 s**, et
+immédiatement après un enregistrement de configuration. Le précédent du projet (`useUpdates`,
+`web/src/hooks/useUpdates.js`, appelé une fois au montage par `Navbar.jsx:87-89`) ne suffit pas
+ici : un pont peut devenir injoignable **pendant** une session, alors qu'une mise à jour
+disponible, elle, ne se volatilise pas. L'intervalle est acceptable précisément parce que cet
+endpoint **ne fait aucune I/O** — il lit un état déjà en mémoire.
+
+> Une diffusion WebSocket serait plus élégante, mais introduirait un mécanisme nouveau pour un
+> indicateur cosmétique. Candidat d'amélioration, pas un prérequis.
+
+---
+
+## 8. Critères chiffrés attendus de #206
+
+À produire, avec la même méthode que le spike (sortie JSON, p50/p95) :
+
+| Mesure | Attendu |
+|---|---|
+| Latence d'une écriture | p95 ≤ **150 ms** (le spike a mesuré 48-59 ms) |
+| **Étalement** entre la première et la dernière ampoule d'un `Apply` à N ampoules | mesuré et **publié** pour N = 2, 4, 6 **et 30** (taille réelle constatée) |
+| **Gain des groupes** (§5.8) | étalement **avant/après** sur le cas « toute la salle d'une couleur » à N = 30 — c'est la mesure qui justifie §5.8 |
+| Rafale simulant des validations RAFALE successives | **100 %** de succès, et **≤ 10 écritures/s** |
+| Bridge débranché en cours de partie | aucune latence perceptible sur les transitions, **une seule** ligne de log |
+
+---
+
+## 9. Ce qui appartient à #213
+
+- Activation du `role: "team"` et du champ `team` du §6 — **schéma déjà figé par #207**, rien à
+  migrer (`internal/config/config.go` porte déjà les deux champs).
+- Résolution de `Event.Teams` (`lighting.md` §2.2) en zones d'état. `Event.Teams` est **déjà
+  rempli** par #205 : cette issue le **résout en zones**, elle ne le recalcule pas.
+- Correspondance zone → ampoules : **§5.2** (normatif).
+- Règles de dégradation : **§5.7** (normatif) — les quatre cas y sont tranchés, ils ne sont plus
+  à la charge de l'implémentation.
+- Colonne « équipe » dans l'écran d'administration.
+
+**Réemploi imposé de la machinerie couleur** : `teamColorPalette`, `teamColorToRGB` et
+`nearestPaletteColorByHue` (`cmd/server/main.go`). **Jamais une seconde palette** — la salle et les
+buzzers doivent montrer *la même* couleur pour *la même* équipe. Deux rouges différents seraient
+pires que pas de couleur du tout. C'est ce que garantit déjà le format de `lighting.ZoneState`,
+identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
+
+## 10. Hors de ce contrat
+
+| Sujet | Où |
+|---|---|
+| Vocabulaire d'événements, écrivain, recensement des sites | `contracts/lighting.md` (#205, livré) |
+| Conduite manuelle depuis `/anim`, restitution d'état à l'arrêt | #208 |
+| Édition des scènes, effets répartis, synchronisation minuteur | v10.1 (#210, #211, #212) |
+| Migration vers l'API Hue v2 | candidat v10.1 (§3) |

@@ -8,6 +8,15 @@ Avant v3.4.0, le firmware calculait l'état LED depuis l'état de jeu reçu dans
 - **Logique dupliquée** : La logique LED était implémentée à la fois dans le firmware (calcul depuis UPDATE) et dans le serveur (envoi des actions spécialisées `QCM_COLOR`, `QCM_DIM`, etc.), créant des divergences.
 - **Couplage fort** : Tout ajout d'effet ou de phase de jeu nécessitait un OTA firmware, rendant les évolutions lentes et risquées.
 
+### Distinction : LED buzzers vs. ambiance Hue (v10.0.0+)
+
+Ce protocole concerne **exclusivement les buzzers physiques** (LED embarquées ESP32-C3). L'éclairage d'ambiance (ampoules Hue pilotées via bridge) est un mécanisme **parallèle et découplé** :
+
+- **LED Buzzers** : pilotées par `LED_SET` via WebSocket, transport par buzzer
+- **Ambiance Hue** : pilotée par événements de jeu (contrat `contracts/lighting.md`), HTTP vers le bridge
+
+Les deux systèmes réagissent aux **mêmes événements de jeu** (buzz, révélation, etc.) mais ne partagent aucun canal : les buzzers ne savent rien de Hue, Hue ne savoir rien des buzzers. Voir [Éclairage d'ambiance](ADMIN_GUIDE.md#configuration-éclairage-dambiance-philips-hue-v1000) pour la configuration Hue utilisateur.
+
 ## 2. Principe
 
 Le serveur est l'unique source de vérité pour l'état LED pendant le jeu.

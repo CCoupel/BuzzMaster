@@ -1,0 +1,1130 @@
+// Package hue implements lighting.Driver for a Philips Hue Bridge over its
+// local REST API v1 (contracts/hue-bridge.md, #206).
+//
+// Concurrency: Apply runs on the single writer goroutine (contracts/
+// lighting.md §4) while Inventory/RefreshInventory/TestFlash/Status/Close are
+// called from HTTP handler goroutines (#207) on the SAME live driver. The
+// I/O operations are therefore serialised by opMu (one exchange sequence with
+// the bridge at a time — a scene write can never slip between a test flash
+// and its restore, and two re-discoveries never interleave), and every field,
+// including the client/base pair swapped by re-discovery, is read under mu.
+// No goroutine is started, ever: when lighting is not configured the owner
+// simply does not create a Driver (contract §5.5).
+package hue
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+
+	"buzzcontrol/internal/lighting"
+)
+
+// NormalizeLightName is the ONE normalisation every light-name comparison
+// in this package (and its callers — internal/server/http_lighting.go's
+// POST /api/lighting/test, internal/server/http.go's config merge) must go
+// through, on BOTH sides of every equality check.
+//
+// Bugfix (QUALIF v10.0.0.10, round 2 — real Hue bridge, "hue: no resolved
+// light matches" PERSISTING after a plain strings.TrimSpace fix): a plain
+// edge trim only catches the narrow set of runes unicode.IsSpace
+// recognises, and only at the START/END of the string. It does NOT catch
+// format characters that are invisible but NOT "space" by that definition —
+// zero-width space (U+200B), the BOM/ZERO WIDTH NO-BREAK SPACE (U+FEFF),
+// soft hyphen (U+00AD), joiners — nor a stray control character (NUL,
+// U+0000) ANYWHERE in the string, not just at the edges. Any of these can
+// end up in a bridge-reported light name (phone keyboard autocorrect, an
+// encoding artifact in the bridge's own firmware/app) and would silently
+// split one physical light into two strings that never compare equal,
+// exactly the symptom reported twice now. Stripping every Unicode format
+// character (category Cf — covers all of the above) and control character
+// (category Cc) from the WHOLE string, then trimming plain whitespace, is
+// immune to which exact invisible rune shows up — not another guess at a
+// specific one.
+func NormalizeLightName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.Is(unicode.Cf, r) || unicode.IsControl(r) {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+const (
+	// RecommendedMinInterval is the writer pacing for this driver: one Apply is
+	// up to N HTTP writes at ~40 ms each, where #205 reasoned on a single
+	// write (contract §5.4). Wired by #207 into lighting.Config.MinInterval.
+	RecommendedMinInterval = 250 * time.Millisecond
+	// TransitionTime is sent with every write that does not request
+	// otherwise: 0 = instant. The bridge default (400 ms) would wash out an
+	// event flash (contract §5.2). 2026-09-08 amendment: transitiontime is
+	// now a PER-WRITE value (applied.transitionTime, desired() below,
+	// driven by lighting.ZoneState.TransitionMs) — every existing caller
+	// that never sets TransitionMs still gets exactly this constant via
+	// applied's zero value, so nothing changes for Apply's ordinary scene
+	// writes, TestFlash or SetLightDirect — only the chrono-pulse effect
+	// (cmd/server/ambiance.go) ever asks for anything else.
+	TransitionTime = 0
+	// DefaultRefreshEvery is how often the light inventory is re-read and the
+	// name→id resolution re-verified (contract §4.2: at resolution and
+	// periodically, not before every write).
+	DefaultRefreshEvery = 5 * time.Minute
+	// DefaultDiscoverTimeout bounds the re-discovery by bridge id when the IP
+	// changed (contract §4.1).
+	DefaultDiscoverTimeout = 3 * time.Second
+	// backoff for an unreachable bridge (contract §5.5): 1 s → 60 s.
+	backoffMin = time.Second
+	backoffMax = 60 * time.Second
+)
+
+// LightRole of a configured light.
+type LightRole string
+
+const (
+	RoleGeneral LightRole = "general"
+	RoleTeam    LightRole = "team" // activated by #213
+)
+
+// LightSpec is one configured light (contract §6): addressed by NAME.
+type LightSpec struct {
+	Name string    `json:"name"`
+	Role LightRole `json:"role"`
+	Team string    `json:"team,omitempty"`
+}
+
+// Config of a Driver — filled by #207 from config.json's `lighting` section.
+type Config struct {
+	BridgeIP string // plain IP/host (http://<ip> unless HTTPS) or scheme://host
+	Base     string // full scheme://host[:port] override (tests: httptest.Server.URL); wins over BridgeIP
+	BridgeID string // authoritative identity; the IP may change (DHCP)
+	APIKey   string
+	HTTPS    bool
+	Lights   []LightSpec
+
+	Timeout         time.Duration // HTTP, default HTTPTimeout (2 s)
+	RefreshEvery    time.Duration // default DefaultRefreshEvery
+	DiscoverTimeout time.Duration // default DefaultDiscoverTimeout
+
+	// Logger receives ONE line per state change (ok/unreachable/refused,
+	// resolution changes, IP change). Never one line per failure. nil = silent.
+	Logger func(format string, args ...any)
+	// Now is injectable for tests.
+	Now func() time.Time
+	// FindBridge overrides re-discovery by id (tests). nil = FindByID.
+	FindBridge func(ctx context.Context, id string, timeout time.Duration) (Bridge, bool, error)
+	// OnReconnect fires whenever the driver's status moves TO StateOK from
+	// anything else (contract lighting.md §10.3 — "au retour du pont"): the
+	// owner's only job is to trigger a fresh derivation (NotifyState()),
+	// never to replay a snapshot. nil = no-op. Called from whichever
+	// goroutine observed the transition (the writer's own Apply, or an HTTP
+	// handler's Inventory/TestFlash/RefreshInventory) — must itself be safe
+	// to call from any goroutine, exactly like lighting.Writer.NotifyState.
+	OnReconnect func()
+}
+
+// Stats counts what the driver did (diagnostics).
+type Stats struct {
+	Applies     int `json:"applies"`
+	Writes      int `json:"writes"`       // HTTP PUTs issued: one per light, or one per group write
+	GroupWrites int `json:"group_writes"` // subset of Writes made via a Hue LightGroup (contract §5.8)
+	Skipped     int `json:"skipped_unchanged"`
+	WriteErrors int `json:"write_errors"`
+	Inventories int `json:"inventories"`
+}
+
+// LightStatus is the per-light part of Status.
+type LightStatus struct {
+	Name      string    `json:"name"`
+	Role      LightRole `json:"role"`
+	Team      string    `json:"team,omitempty"`
+	ID        string    `json:"id,omitempty"`
+	Resolved  bool      `json:"resolved"`
+	Ambiguous bool      `json:"ambiguous,omitempty"`
+	Reachable bool      `json:"reachable"`
+	LastError string    `json:"last_error,omitempty"`
+}
+
+// Status is the driver's known state — read without any I/O (contract §7 /status).
+type Status struct {
+	State       BridgeState   `json:"state"`
+	Reason      string        `json:"reason,omitempty"`
+	BridgeID    string        `json:"bridge_id"`
+	BridgeIP    string        `json:"bridge_ip"`
+	Bridge      BridgeInfo    `json:"bridge_info"`
+	LightsTotal int           `json:"lights_total"`
+	LightsOK    int           `json:"lights_ok"`
+	Lights      []LightStatus `json:"lights"`
+	LastChange  time.Time     `json:"last_change"`
+	NextRetry   time.Time     `json:"next_retry,omitempty"`
+	Stats       Stats         `json:"stats"`
+}
+
+// applied is the last state effectively written to a light (contract §5.3).
+//
+// transitionTime (2026-09-08 amendment, hue-bridge.md §5.2) is in Hue
+// deciseconds (1 = 100 ms) and defaults to TransitionTime (0, instant) via
+// Go's own zero value — every applied{...} literal in this package besides
+// desired() (TestFlash's white/restore, SetLightDirect's want) never sets
+// it, so they are UNCHANGED by this amendment. Deliberately part of the
+// struct's own equality (used by the §5.3 dedup cache, appliedState): two
+// writes to the same colour/intensity but a different transition time are
+// NOT the same "applied" state, so a caller that changes only the fade
+// speed still gets a fresh write, never silently deduped away.
+type applied struct {
+	on             bool
+	bri            int
+	xy             [2]float64
+	transitionTime int
+}
+
+func (a applied) toV1() stateV1 {
+	tt := a.transitionTime
+	if !a.on {
+		off := false
+		return stateV1{On: &off, TransitionTime: &tt}
+	}
+	on := true
+	bri := a.bri
+	xy := a.xy
+	return stateV1{On: &on, Bri: &bri, XY: &xy, TransitionTime: &tt}
+}
+
+// desired maps a ZoneState to the state to write (contract §5.2).
+// z.TransitionMs (milliseconds, the vocabulary internal/lighting uses
+// throughout) is converted to Hue's own deciseconds unit; 0 (every existing
+// caller) yields TransitionTime's default of 0 (instant), unchanged.
+func desired(z lighting.ZoneState) applied {
+	if z.Intensity <= 0 {
+		return applied{on: false, transitionTime: msToDeciseconds(z.TransitionMs)}
+	}
+	return applied{on: true, bri: intensityToBri(z.Intensity), xy: rgbToXY(z.Color[0], z.Color[1], z.Color[2]), transitionTime: msToDeciseconds(z.TransitionMs)}
+}
+
+// msToDeciseconds converts milliseconds to Hue's transitiontime unit
+// (tenths of a second). <=0 maps to 0 (instant, TransitionTime's default).
+func msToDeciseconds(ms int) int {
+	if ms <= 0 {
+		return 0
+	}
+	return ms / 100
+}
+
+type resolvedLight struct {
+	id        string
+	reachable bool
+}
+
+// Driver implements lighting.Driver for one bridge.
+type Driver struct {
+	cfg Config
+	now func() time.Time
+
+	opMu sync.Mutex // serialises the I/O operations (Apply, Inventory, TestFlash, Close)
+
+	mu            sync.Mutex // protects everything below; never held during I/O
+	client        *client    // nil until the bridge is known by IP (re-discovery by id)
+	base          string
+	status        BridgeState
+	reported      bool // false until the first ok/fail has been logged (initial status is provisional)
+	reason        string
+	lastChange    time.Time
+	failures      int
+	nextRetry     time.Time
+	bridgeInfo    BridgeInfo
+	bridgeChecked bool
+	resolved      map[string]resolvedLight // by configured name
+	ambiguous     map[string]bool
+	lightErr      map[string]string
+	lastInventory time.Time
+	appliedState  map[string]applied  // by configured name
+	groups        map[string]hueGroup // by BuzzMaster group name (contract §5.8) — reconciled in ensureResolved
+	stats         Stats
+	closed        bool
+	invalid       error // set by NewDriver on an invalid configuration
+
+	// disableGroupsForTest is a test-only seam (dev-backend/test-writer, §8
+	// "gain des groupes"): forces every write through the pre-groups
+	// per-light path so a measurement can honestly compare before/after
+	// rather than assume the arithmetic. Never set outside a test.
+	disableGroupsForTest bool
+}
+
+var _ lighting.Driver = (*Driver)(nil)
+
+// New validates cfg and builds a Driver. It performs NO network I/O.
+func New(cfg Config) (*Driver, error) {
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		return nil, errors.New("hue: api key is required")
+	}
+	if strings.TrimSpace(cfg.Base) != "" {
+		cfg.BridgeIP = strings.TrimSpace(cfg.Base)
+	}
+	if strings.TrimSpace(cfg.BridgeIP) == "" && strings.TrimSpace(cfg.BridgeID) == "" {
+		return nil, errors.New("hue: bridge ip or bridge id is required")
+	}
+	if strings.ContainsAny(cfg.APIKey, "/?#") {
+		return nil, errors.New("hue: api key contains invalid characters")
+	}
+	seen := map[string]bool{}
+	for i, l := range cfg.Lights {
+		name := NormalizeLightName(l.Name)
+		if name == "" {
+			return nil, fmt.Errorf("hue: light %d has an empty name", i)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("hue: light %q is configured twice", name)
+		}
+		seen[name] = true
+		switch l.Role {
+		case RoleGeneral, "":
+			cfg.Lights[i].Role = RoleGeneral
+		case RoleTeam:
+			if strings.TrimSpace(l.Team) == "" {
+				return nil, fmt.Errorf("hue: light %q has role team but no team", name)
+			}
+		default:
+			return nil, fmt.Errorf("hue: light %q has unknown role %q", name, l.Role)
+		}
+		cfg.Lights[i].Name = name
+	}
+	if cfg.Timeout <= 0 {
+		cfg.Timeout = HTTPTimeout
+	}
+	if cfg.RefreshEvery <= 0 {
+		cfg.RefreshEvery = DefaultRefreshEvery
+	}
+	if cfg.DiscoverTimeout <= 0 {
+		cfg.DiscoverTimeout = DefaultDiscoverTimeout
+	}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	if cfg.FindBridge == nil {
+		cfg.FindBridge = FindByID
+	}
+	d := &Driver{
+		cfg:          cfg,
+		now:          cfg.Now,
+		status:       StateUnreachable, // nothing verified yet; flips to ok on first contact
+		reason:       "not contacted yet",
+		resolved:     map[string]resolvedLight{},
+		ambiguous:    map[string]bool{},
+		lightErr:     map[string]string{},
+		appliedState: map[string]applied{},
+		groups:       map[string]hueGroup{},
+	}
+	if strings.TrimSpace(cfg.BridgeIP) != "" {
+		base, err := bridgeBase(cfg.BridgeIP, cfg.HTTPS)
+		if err != nil {
+			return nil, err
+		}
+		d.base = base
+		d.client = newClient(base, cfg.APIKey, cfg.Timeout)
+	}
+	return d, nil
+}
+
+// NewDriver is New without the error return (test-writer seam): an invalid
+// configuration yields a Driver that performs no I/O, whose Apply returns
+// the validation error and whose Status is StateRefused with the reason.
+func NewDriver(cfg Config) *Driver {
+	d, err := New(cfg)
+	if err == nil {
+		return d
+	}
+	return &Driver{
+		cfg: cfg, now: time.Now, status: StateRefused, reason: "invalid config: " + err.Error(), reported: true,
+		resolved: map[string]resolvedLight{}, ambiguous: map[string]bool{}, lightErr: map[string]string{}, appliedState: map[string]applied{},
+		groups:  map[string]hueGroup{},
+		invalid: err,
+	}
+}
+
+func (d *Driver) logf(format string, args ...any) {
+	if d.cfg.Logger != nil {
+		d.cfg.Logger(format, args...)
+	}
+}
+
+// conn snapshots the current client/base pair under the lock; the caller
+// uses the snapshot for its I/O so a concurrent re-discovery never races it.
+func (d *Driver) conn() (*client, string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.client, d.base
+}
+
+// Close releases the HTTP transport once no operation is in flight. Idempotent.
+func (d *Driver) Close() error {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.closed = true
+	d.client.close()
+	return nil
+}
+
+// Status returns the known state without any I/O (contract §7).
+func (d *Driver) Status() Status {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	r := Status{
+		State: d.status, Reason: d.reason, BridgeID: d.cfg.BridgeID, BridgeIP: d.base,
+		Bridge: d.bridgeInfo, LightsTotal: len(d.cfg.Lights), LastChange: d.lastChange,
+		NextRetry: d.nextRetry, Stats: d.stats,
+	}
+	if d.bridgeInfo.BridgeID != "" {
+		r.BridgeID = d.bridgeInfo.BridgeID
+	}
+	for _, lc := range d.cfg.Lights {
+		ls := LightStatus{Name: lc.Name, Role: lc.Role, Team: lc.Team, Ambiguous: d.ambiguous[lc.Name], LastError: d.lightErr[lc.Name]}
+		if rl, ok := d.resolved[lc.Name]; ok {
+			ls.ID, ls.Resolved, ls.Reachable = rl.id, true, rl.reachable
+			if rl.reachable && ls.LastError == "" {
+				r.LightsOK++
+			}
+		}
+		r.Lights = append(r.Lights, ls)
+	}
+	return r
+}
+
+// ---------------------------------------------------------------------------
+// Apply
+// ---------------------------------------------------------------------------
+
+// Apply writes the zones of st to the configured lights — only the lights
+// whose desired state differs from the last applied one (contract §5.3).
+// Per-light Hue errors never abort the others and are reported through
+// Status(), not as an error (contract §5.5); bridge-level failures return a
+// classified error (ErrUnreachable / ErrRefused) and are rate-limited by
+// the backoff so the writer is never blocked by a dead bridge.
+func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
+	d.mu.Lock()
+	d.stats.Applies++
+	closed, invalid := d.closed, d.invalid
+	status, nextRetry := d.status, d.nextRetry
+	d.mu.Unlock()
+	if invalid != nil {
+		return fmt.Errorf("%w: invalid config: %v", ErrRefused, invalid)
+	}
+	if closed {
+		return errors.New("hue: driver closed")
+	}
+	now := d.now()
+	switch {
+	case status == StateRefused:
+		return ErrRefused // no I/O, no retry loop: a user gesture unblocks (Refresh)
+	case status == StateUnreachable && now.Before(nextRetry):
+		return ErrUnreachable // fast fail during backoff
+	}
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return d.fail(err)
+	}
+
+	d.mu.Lock()
+	// Partition configured+resolved lights into CONFIG-level buckets: the
+	// empty key for role=general (→ buzzmaster-general), a team name for
+	// role=team (→ buzzmaster-team-<team>). Every light in one bucket shares
+	// its lc.Role/lc.Team, so zoneFor gives it the exact same ZoneState for
+	// this Apply — hence the exact same desired() value — which is precisely
+	// the precondition a Hue LightGroup write requires (one state for every
+	// member, contract §5.8).
+	type bucketEntry struct {
+		name  string
+		id    string
+		want  applied
+		dirty bool
+	}
+	buckets := map[string][]bucketEntry{}
+	order := make([]string, 0, len(d.cfg.Lights))
+	for _, lc := range d.cfg.Lights {
+		rl, ok := d.resolved[lc.Name]
+		if !ok {
+			continue // missing/ambiguous: logged at resolution, silently skipped here
+		}
+		zs, ok := zoneFor(lc, st)
+		if !ok {
+			continue // zone without configured lights or light without zone: non-event
+		}
+		want := desired(zs)
+		key := ""
+		if lc.Role == RoleTeam {
+			key = lc.Team
+		}
+		if _, seen := buckets[key]; !seen {
+			order = append(order, key)
+		}
+		prev, hadPrev := d.appliedState[lc.Name]
+		buckets[key] = append(buckets[key], bucketEntry{name: lc.Name, id: rl.id, want: want, dirty: !hadPrev || prev != want})
+	}
+
+	var plan []plannedWrite
+	var groupPlan []groupPlannedWrite
+	for _, key := range order {
+		entries := buckets[key]
+		anyDirty := false
+		for _, e := range entries {
+			if e.dirty {
+				anyDirty = true
+			}
+		}
+		if !anyDirty {
+			d.stats.Skipped += len(entries)
+			continue
+		}
+		groupName := groupNameGeneral
+		if key != "" {
+			groupName = groupNameForTeam(key)
+		}
+		g, hasGroup := d.groups[groupName]
+		ids := make([]string, len(entries))
+		for i, e := range entries {
+			ids[i] = e.id
+		}
+		useGroup := !d.disableGroupsForTest && hasGroup && len(entries) >= 2 && sameIDSet(g.members, ids)
+		if useGroup {
+			members := make([]plannedWrite, len(entries))
+			for i, e := range entries {
+				members[i] = plannedWrite{name: e.name, id: e.id, want: e.want}
+			}
+			groupPlan = append(groupPlan, groupPlannedWrite{groupName: groupName, groupID: g.id, want: entries[0].want, members: members})
+			continue
+		}
+		for _, e := range entries {
+			if e.dirty {
+				plan = append(plan, plannedWrite{name: e.name, id: e.id, want: e.want})
+			} else {
+				d.stats.Skipped++
+			}
+		}
+	}
+	d.mu.Unlock()
+
+	c, _ := d.conn()
+
+	for _, gw := range groupPlan {
+		err := c.setGroupState(ctx, gw.groupID, gw.want.toV1())
+		d.mu.Lock()
+		d.stats.Writes++
+		d.stats.GroupWrites++
+		d.mu.Unlock()
+		if err != nil {
+			d.mu.Lock()
+			d.stats.WriteErrors++
+			d.mu.Unlock()
+			cerr := classify(err)
+			if errors.Is(cerr, ErrUnreachable) || errors.Is(cerr, ErrRefused) {
+				return d.fail(cerr) // bridge-level: stop this Apply
+			}
+			// Rule 5 — repli obligatoire: the group is an optimisation, never a
+			// prerequisite. Fall back to writing this batch's members one by one,
+			// through the exact same path (and bookkeeping) as an ordinary
+			// per-light write.
+			d.logf("Hue group %q write failed (%v) — falling back to per-light writes (contract hue-bridge.md §5.8 rule 5)", gw.groupName, err)
+			for _, m := range gw.members {
+				if ferr := d.writeOne(ctx, c, m.name, m.id, m.want); ferr != nil {
+					return d.fail(ferr)
+				}
+			}
+			continue
+		}
+		// Success: the bridge just set EVERY member of the group to gw.want in
+		// one command. Set (never merely delete/invalidate) each member's own
+		// per-light appliedState entry to that same value — the §5.8 dedup
+		// trap: if a member's entry were left stale instead, a later Apply
+		// that falls back to writing it individually (composition drifted
+		// below 2, or a future group write fails) would compare its NEW
+		// desired value against that stale entry rather than the light's real
+		// state, and could wrongly skip a write the bulb still needs.
+		d.mu.Lock()
+		for _, m := range gw.members {
+			d.appliedState[m.name] = gw.want
+			delete(d.lightErr, m.name)
+		}
+		d.mu.Unlock()
+	}
+
+	for _, w := range plan {
+		if ferr := d.writeOne(ctx, c, w.name, w.id, w.want); ferr != nil {
+			return d.fail(ferr)
+		}
+	}
+	d.ok()
+	return nil
+}
+
+// writeOne performs one guarded per-light write and updates bookkeeping
+// (stats, appliedState, lightErr) under d.mu. It returns a non-nil error
+// only for a bridge-level failure (unreachable/refused) that must abort the
+// whole Apply; a per-light Hue error (e.g. 201 "device is off") is recorded
+// in lightErr and reported through Status(), never returned (contract §5.5).
+func (d *Driver) writeOne(ctx context.Context, c *client, name, id string, want applied) error {
+	err := c.setState(ctx, id, want.toV1())
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.stats.Writes++
+	if err != nil {
+		delete(d.appliedState, name) // invalidate: retried on the next Apply
+		d.stats.WriteErrors++
+		cerr := classify(err)
+		if errors.Is(cerr, ErrUnreachable) || errors.Is(cerr, ErrRefused) {
+			return cerr
+		}
+		d.lightErr[name] = err.Error()
+		return nil
+	}
+	d.appliedState[name] = want
+	delete(d.lightErr, name)
+	return nil
+}
+
+type plannedWrite struct {
+	name string
+	id   string
+	want applied
+}
+
+// groupPlannedWrite is one Apply-time decision to write via a BuzzMaster
+// LightGroup instead of one PUT per member (contract §5.8).
+type groupPlannedWrite struct {
+	groupName string
+	groupID   string
+	want      applied
+	members   []plannedWrite
+}
+
+// zoneFor picks the ZoneState a light follows (contract §5.2): a team light
+// follows its team's zone when present in st, otherwise the general zone.
+func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
+	if lc.Role == RoleTeam {
+		for _, z := range st.Zones {
+			if z.Zone == lc.Team {
+				return z, true
+			}
+		}
+	}
+	for _, z := range st.Zones {
+		if z.Zone == lighting.ZoneGeneral {
+			return z, true
+		}
+	}
+	return lighting.ZoneState{}, false
+}
+
+// ---------------------------------------------------------------------------
+// Resolution, bridge identity, status bookkeeping
+// ---------------------------------------------------------------------------
+
+// ensureResolved reads the inventory when it is stale (or forced), verifies
+// the bridge identity on first contact, and resolves configured names to
+// ids. Returns a raw error (caller classifies through fail()).
+func (d *Driver) ensureResolved(ctx context.Context, force bool) error {
+	d.mu.Lock()
+	fresh := !force && d.resolved != nil && !d.lastInventory.IsZero() && d.now().Sub(d.lastInventory) < d.cfg.RefreshEvery
+	checked := d.bridgeChecked
+	d.mu.Unlock()
+	if fresh {
+		return nil
+	}
+	if c, _ := d.conn(); c == nil { // only an id is known: discover first
+		if err := d.rediscover(ctx, "no ip configured"); err != nil {
+			return err
+		}
+	}
+	if !checked {
+		if err := d.checkBridgeIdentity(ctx); err != nil {
+			return err
+		}
+	}
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
+	if err != nil {
+		// IP may have changed (DHCP): one re-discovery by id, then retry once.
+		if d.cfg.BridgeID != "" && errors.Is(classify(err), ErrUnreachable) {
+			if rerr := d.rediscover(ctx, "inventory unreachable"); rerr == nil {
+				c, _ = d.conn()
+				lights, err = c.lights(ctx)
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	d.resolve(lights)
+	d.reconcileGroups(ctx, c) // best-effort (contract §5.8 rule 5); never fails ensureResolved
+	return nil
+}
+
+// checkBridgeIdentity reads /config once; a bridge id mismatch means another
+// bridge answers at this IP — re-discover by id (contract §4.1).
+func (d *Driver) checkBridgeIdentity(ctx context.Context) error {
+	c, base := d.conn()
+	info, err := c.config(ctx)
+	if err != nil {
+		// A bridge (or fake) that does not serve /config at all: identity
+		// cannot be verified, but nothing is wrong with the link — skip.
+		var hs httpStatusError
+		if errors.As(err, &hs) && (hs.Code == 404 || hs.Code == 405) {
+			d.mu.Lock()
+			d.bridgeChecked = true
+			d.mu.Unlock()
+			return nil
+		}
+		if d.cfg.BridgeID != "" && errors.Is(classify(err), ErrUnreachable) {
+			if rerr := d.rediscover(ctx, "config unreachable"); rerr == nil {
+				c, base = d.conn()
+				info, err = c.config(ctx)
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if d.cfg.BridgeID != "" && !strings.EqualFold(info.BridgeID, d.cfg.BridgeID) {
+		if rerr := d.rediscover(ctx, fmt.Sprintf("bridge at %s is %s, expected %s", base, info.BridgeID, d.cfg.BridgeID)); rerr != nil {
+			return fmt.Errorf("%w: bridge id mismatch at %s (%s ≠ %s) and re-discovery failed: %v", ErrUnreachable, base, info.BridgeID, d.cfg.BridgeID, rerr)
+		}
+		c, _ = d.conn()
+		info, err = c.config(ctx)
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(info.BridgeID, d.cfg.BridgeID) {
+			return fmt.Errorf("%w: discovered bridge %s does not match configured id %s", ErrUnreachable, info.BridgeID, d.cfg.BridgeID)
+		}
+	}
+	d.mu.Lock()
+	d.bridgeInfo = info
+	d.bridgeChecked = true
+	d.mu.Unlock()
+	return nil
+}
+
+// rediscover finds the configured bridge id on the LAN and switches the
+// client to its current IP (contract §4.1). One log line when the IP changes.
+func (d *Driver) rediscover(ctx context.Context, why string) error {
+	if d.cfg.BridgeID == "" {
+		return fmt.Errorf("%w: %s and no bridge id to re-discover", ErrUnreachable, why)
+	}
+	b, found, err := d.cfg.FindBridge(ctx, d.cfg.BridgeID, d.cfg.DiscoverTimeout)
+	if err != nil {
+		return fmt.Errorf("%w: re-discovery (%s): %v", ErrUnreachable, why, err)
+	}
+	if !found {
+		return fmt.Errorf("%w: bridge %s not found on the network (%s)", ErrUnreachable, d.cfg.BridgeID, why)
+	}
+	base, err := bridgeBase(b.IP, d.cfg.HTTPS)
+	if err != nil {
+		return err
+	}
+	d.mu.Lock()
+	if base == d.base && d.client != nil {
+		d.mu.Unlock()
+		return nil
+	}
+	old, oldClient := d.base, d.client
+	d.client = newClient(base, d.cfg.APIKey, d.cfg.Timeout)
+	d.base = base
+	d.bridgeChecked = false
+	d.mu.Unlock()
+	oldClient.close() // idle connections only; a nil client is fine
+	d.logf("Hue bridge %s moved from %s to %s (%s)", d.cfg.BridgeID, old, base, why)
+	return nil
+}
+
+// resolve maps configured names to ids: exactly one match required
+// (contract §4.2). Logs resolution changes once. Drives d.resolved, the
+// ONLY name→id mapping Apply() (actual gameplay writes) ever consults —
+// deliberately scoped to d.cfg.Lights (saved config), never a light that
+// merely exists on the bridge. See TestFlash's own doc comment for why a
+// NAMED test resolves differently (liveLightID, below).
+//
+// Bugfix (QUALIF v10.0.0.8 round 1, then v10.0.0.10 round 2 — real Hue
+// bridge, "hue: no resolved light matches"): the bridge's own light names
+// are matched here AS RETURNED — but New() (below) normalises every
+// CONFIGURED name via NormalizeLightName before storing it in cfg.Lights.
+// Round 1 only trimmed plain edge whitespace here, which turned out to
+// have no observable effect on the real device: the actual character was
+// something strings.TrimSpace does not catch (see NormalizeLightName's own
+// doc comment — zero-width space, BOM, soft hyphen, a stray control
+// character, none of them "space" by unicode.IsSpace's definition, some of
+// them not even at the string's edges). Normalising both sides through the
+// SAME function is what actually closes this class of bug.
+//
+// (Rounds 3-4 diagnosed this function looking for a name-matching bug that
+// was never here — the real round-5 cause was entirely in TestFlash, never
+// resolve(); see that function's own doc comment.)
+func (d *Driver) resolve(lights map[string]lightV1) {
+	byName := map[string][]string{}
+	for id, l := range lights {
+		key := NormalizeLightName(l.Name)
+		byName[key] = append(byName[key], id)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.stats.Inventories++
+	d.lastInventory = d.now()
+	var changes []string
+	for _, lc := range d.cfg.Lights {
+		ids := byName[lc.Name]
+		prev, had := d.resolved[lc.Name]
+		switch len(ids) {
+		case 1:
+			id := ids[0]
+			if !validLightID(id) {
+				delete(d.resolved, lc.Name)
+				d.ambiguous[lc.Name] = false
+				d.lightErr[lc.Name] = "invalid light id " + id
+				changes = append(changes, fmt.Sprintf("%s: invalid id %q", lc.Name, id))
+				continue
+			}
+			rl := resolvedLight{id: id, reachable: lights[id].State.Reachable}
+			if !had || prev.id != id {
+				delete(d.appliedState, lc.Name) // unknown state on a (re)resolved light
+				changes = append(changes, fmt.Sprintf("%s → id %s", lc.Name, id))
+			}
+			d.resolved[lc.Name] = rl
+			delete(d.ambiguous, lc.Name)
+			if d.lightErr[lc.Name] == "not found" || strings.HasPrefix(d.lightErr[lc.Name], "ambiguous") || strings.HasPrefix(d.lightErr[lc.Name], "invalid light id") {
+				delete(d.lightErr, lc.Name)
+			}
+		case 0:
+			if had || d.lightErr[lc.Name] != "not found" {
+				changes = append(changes, lc.Name+": not found")
+			}
+			delete(d.resolved, lc.Name)
+			delete(d.appliedState, lc.Name)
+			delete(d.ambiguous, lc.Name)
+			d.lightErr[lc.Name] = "not found"
+		default:
+			sort.Strings(ids)
+			if !d.ambiguous[lc.Name] {
+				changes = append(changes, fmt.Sprintf("%s: ambiguous (ids %s) — refusing to guess", lc.Name, strings.Join(ids, ",")))
+			}
+			delete(d.resolved, lc.Name)
+			delete(d.appliedState, lc.Name)
+			d.ambiguous[lc.Name] = true
+			d.lightErr[lc.Name] = "ambiguous: " + strings.Join(ids, ",")
+		}
+	}
+	if len(changes) > 0 {
+		d.logf("Hue lights resolved: %s", strings.Join(changes, "; "))
+	}
+}
+
+// fail records a bridge-level failure: status + backoff, one log line on change.
+func (d *Driver) fail(err error) error {
+	cerr := classify(err)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	now := d.now()
+	var st BridgeState
+	switch {
+	case errors.Is(cerr, ErrRefused):
+		st = StateRefused
+		d.nextRetry = time.Time{} // no retry loop
+	default:
+		st = StateUnreachable
+		d.failures++
+		wait := backoffMin << uint(min(d.failures-1, 6)) // 1,2,4,…,64 → capped
+		if wait > backoffMax {
+			wait = backoffMax
+		}
+		d.nextRetry = now.Add(wait)
+	}
+	if d.status != st || !d.reported {
+		d.status, d.reason, d.lastChange, d.reported = st, cerr.Error(), now, true
+		d.logf("Hue bridge %s: %v", st, cerr)
+	} else {
+		d.reason = cerr.Error()
+	}
+	return cerr
+}
+
+// ok records a successful contact: back to StateOK, one log line on change.
+func (d *Driver) ok() {
+	d.mu.Lock()
+	d.failures = 0
+	d.nextRetry = time.Time{}
+	changed := d.status != StateOK || !d.reported
+	if changed {
+		d.status, d.reason, d.lastChange, d.reported = StateOK, "", d.now(), true
+		d.logf("Hue bridge ok (%s, %s)", d.base, d.bridgeInfo.BridgeID)
+	}
+	d.mu.Unlock()
+	// contract lighting.md §10.3: a bridge going unreachable/refused → ok is
+	// exactly "le pont redevenu joignable" — the owner (cmd/server/ambiance.go)
+	// re-derives and re-applies the room from the LIVE game state on this
+	// signal alone (NotifyState(), never a snapshot to replay). Called
+	// OUTSIDE d.mu — the callback must never run while this driver's own
+	// lock is held (it may itself end up calling back into this driver, e.g.
+	// via the writer's next Apply). Fires on the very first successful
+	// contact too (not just a genuine reconnection): harmless, since
+	// NotifyState() re-derives rather than replaying anything.
+	if changed && d.cfg.OnReconnect != nil {
+		d.cfg.OnReconnect()
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Operations for #207 (inventory, forced refresh, test flash)
+// ---------------------------------------------------------------------------
+
+// LightInfo is one bridge light as returned by Inventory (contract §7 /lights).
+type LightInfo struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type,omitempty"`
+	Model     string `json:"model,omitempty"`
+	Reachable bool   `json:"reachable"`
+	On        bool   `json:"on"`
+}
+
+// Inventory reads all lights (GET only), refreshes the resolution and
+// returns the list sorted by id. It also lifts a refused state if the key
+// works again (user gesture: re-registration).
+func (d *Driver) Inventory(ctx context.Context) ([]LightInfo, error) {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
+	d.mu.Lock()
+	if d.status == StateRefused {
+		d.status, d.reason = StateUnreachable, "re-checking after refused"
+	}
+	d.mu.Unlock()
+	if c, _ := d.conn(); c == nil {
+		if err := d.rediscover(ctx, "no ip configured"); err != nil {
+			return nil, d.fail(err)
+		}
+	}
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
+	if err != nil {
+		// Same DHCP rule as the writer path: one re-discovery by id, one retry
+		// (a user gesture must not wait for the backoff to expire).
+		if d.cfg.BridgeID != "" && errors.Is(classify(err), ErrUnreachable) {
+			if rerr := d.rediscover(ctx, "inventory unreachable"); rerr == nil {
+				c, _ = d.conn()
+				lights, err = c.lights(ctx)
+			}
+		}
+		if err != nil {
+			return nil, d.fail(err)
+		}
+	}
+	if err := d.checkBridgeIdentity(ctx); err != nil {
+		return nil, d.fail(err)
+	}
+	d.resolve(lights)
+	d.reconcileGroups(ctx, c) // contract §5.8 rule 2: a forced Inventory (startup, or right after a config save, #207) is exactly when reconciliation must run
+	d.ok()
+	out := make([]LightInfo, 0, len(lights))
+	for id, l := range lights {
+		out = append(out, LightInfo{ID: id, Name: l.Name, Type: l.Type, Model: l.Model, Reachable: l.State.Reachable, On: l.State.On})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if len(out[i].ID) != len(out[j].ID) {
+			return len(out[i].ID) < len(out[j].ID)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+// RefreshInventory forces a new inventory/resolution (configuration change, user
+// gesture after refused). Equivalent to Inventory without the list.
+func (d *Driver) RefreshInventory(ctx context.Context) error {
+	_, err := d.Inventory(ctx)
+	return err
+}
+
+// TestFlash flashes one light bright white for hold, then restores the
+// state read from the bridge beforehand (contract §7 /test). Uses the same
+// guarded write as Apply.
+//
+// Bugfix (QUALIF, round 5 — the REAL cause, confirmed by the user after 4
+// rounds diagnosing the wrong layer): a NAMED test (name != "") must
+// resolve against the LIVE bridge inventory, not only against d.cfg.Lights
+// (already-saved config). "Tester" exists precisely to let an admin
+// physically identify which bulb is which BEFORE deciding whether/where to
+// assign it — requiring it to already be saved defeats that purpose
+// entirely. Rounds 1-4 diagnosed name normalisation, persistence and
+// startup contact — all real, all correctly fixed, none of them the actual
+// bug: the round-3/4 diagnostic logging (since removed) showed the exact
+// requested name present byte-for-byte in the LIVE inventory fetched by
+// THIS SAME call, every time, while d.cfg.Lights simply had no entry for
+// it — because the light had never been saved, by design of the feature.
+//
+// This does NOT change Apply()'s own resolution (d.resolved, driven solely
+// by resolve()/d.cfg.Lights): a live-only light is never written to during
+// actual gameplay, only by an explicit, single, user-initiated test flash.
+// The name=="" case ("all configured/selected lights", contract §7) is
+// UNCHANGED — it means exactly the saved selection, never "everything the
+// bridge reports".
+func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration, sleep func(time.Duration)) error {
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+	d.opMu.Lock() // the writer cannot slip a scene between the flash and its restore
+	defer d.opMu.Unlock()
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return d.fail(err)
+	}
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
+	if err != nil {
+		return d.fail(err)
+	}
+	d.mu.Lock()
+	var targets []plannedWrite
+	for _, lc := range d.cfg.Lights {
+		if name != "" && lc.Name != name {
+			continue
+		}
+		if rl, ok := d.resolved[lc.Name]; ok {
+			targets = append(targets, plannedWrite{name: lc.Name, id: rl.id})
+		}
+	}
+	d.mu.Unlock()
+	if name != "" && len(targets) == 0 {
+		if id, ok := liveLightID(lights, name); ok {
+			targets = []plannedWrite{{name: name, id: id}}
+		}
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("hue: no resolved light matches %q", name)
+	}
+	white := applied{on: true, bri: 254, xy: rgbToXY(255, 255, 255)}
+	var firstErr error
+	for _, t := range targets {
+		if err := c.setState(ctx, t.id, white.toV1()); err != nil && firstErr == nil {
+			firstErr = classify(err)
+		}
+	}
+	sleep(hold)
+	for _, t := range targets {
+		prev := lights[t.id]
+		restore := applied{on: prev.State.On, bri: clamp(prev.State.Bri, 1, 254)}
+		if len(prev.State.XY) == 2 {
+			restore.xy = [2]float64{prev.State.XY[0], prev.State.XY[1]}
+		} else {
+			restore.xy = rgbToXY(255, 214, 170)
+		}
+		if err := c.setState(ctx, t.id, restore.toV1()); err != nil && firstErr == nil {
+			firstErr = classify(err)
+		}
+		d.mu.Lock()
+		delete(d.appliedState, t.name) // the writer's view is unknown now
+		d.mu.Unlock()
+	}
+	if firstErr != nil {
+		if errors.Is(firstErr, ErrUnreachable) || errors.Is(firstErr, ErrRefused) {
+			return d.fail(firstErr)
+		}
+		return firstErr
+	}
+	d.ok()
+	return nil
+}
+
+// liveLightID resolves name against a LIVE bridge inventory fetch (never
+// d.cfg.Lights/d.resolved) — the round-5 fix's own mechanism, reused by both
+// TestFlash and SetLightDirect (below). Same ambiguity guard as resolve()
+// (contract §4.2, "0 ou > 1 correspondance ⇒ refus, jamais de choix
+// arbitraire"), extended here to a light that was never saved to config at
+// all.
+func liveLightID(lights map[string]lightV1, name string) (string, bool) {
+	want := NormalizeLightName(name)
+	found, count := "", 0
+	for id, l := range lights {
+		if NormalizeLightName(l.Name) == want {
+			found, count = id, count+1
+		}
+	}
+	if count != 1 {
+		return "", false
+	}
+	return found, true
+}
+
+// SetLightDirect writes ONE named light to a fixed, PERSISTENT state — the
+// given colour at full intensity (on, bri 254), or off — with no restore
+// and no flash timer, unlike TestFlash. Backs POST /api/lighting/preview
+// (#207 P2a, planner-v10-general-theme-toggle-20260908-114420.md §Partie 2):
+// an admin sees a bulb light up in its REAL colour (team or general theme —
+// resolved by the caller, cmd/server, this package knows neither teams nor
+// questions) or go dark the instant they check/uncheck it in the UI, even
+// (deliberately) BEFORE it is saved to configuration. color is ignored when
+// on is false.
+//
+// 2026-09-08 revision: originally always full white regardless of colour —
+// the caller now resolves and passes the actual colour to preview (team
+// palette or the live theme colour, contract hue-bridge.md §7).
+//
+// Resolution follows the EXACT same two-step rule as TestFlash's own doc
+// comment, for the same reason (QUALIF rounds 1-5, contract §7): try the
+// saved configuration first (d.resolved, so an already-configured light
+// keeps using its already-verified id without an extra round trip), then
+// fall back to a FRESH live bridge inventory fetch (liveLightID) — never
+// resolve against configuration ALONE. A light that is not yet saved has no
+// entry in d.resolved at all, so it always falls through to the live path,
+// exactly the case this endpoint exists for.
+func (d *Driver) SetLightDirect(ctx context.Context, name string, on bool, color [3]int) error {
+	name = NormalizeLightName(name)
+	if name == "" {
+		return errors.New("hue: light name is required")
+	}
+	d.opMu.Lock() // serialises against a concurrent Apply/Inventory/TestFlash, same as every other public operation
+	defer d.opMu.Unlock()
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return d.fail(err)
+	}
+	c, _ := d.conn()
+	d.mu.Lock()
+	rl, resolved := d.resolved[name]
+	d.mu.Unlock()
+	id := rl.id
+	if !resolved {
+		lights, err := c.lights(ctx)
+		if err != nil {
+			return d.fail(err)
+		}
+		lid, ok := liveLightID(lights, name)
+		if !ok {
+			return fmt.Errorf("hue: no resolved light matches %q", name)
+		}
+		id = lid
+	}
+	want := applied{on: false}
+	if on {
+		want = applied{on: true, bri: 254, xy: rgbToXY(color[0], color[1], color[2])}
+	}
+	if err := c.setState(ctx, id, want.toV1()); err != nil {
+		cerr := classify(err)
+		if errors.Is(cerr, ErrUnreachable) || errors.Is(cerr, ErrRefused) {
+			return d.fail(cerr)
+		}
+		return cerr
+	}
+	// This write happened OUTSIDE the writer's own desired()/appliedState
+	// bookkeeping (contract §5.3) — invalidate this light's cache entry, if
+	// any, so the writer's next scene Apply freshly decides for it instead
+	// of possibly trusting a value that predates this out-of-band write
+	// (same pattern as TestFlash's own restore, above).
+	d.mu.Lock()
+	delete(d.appliedState, name)
+	d.mu.Unlock()
+	d.ok()
+	return nil
+}

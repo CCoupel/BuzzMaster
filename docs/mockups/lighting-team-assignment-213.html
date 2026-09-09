@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Éclairage d'ambiance — affectation équipe et commandes de test</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    --col:960px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--ground);color:var(--txt);font-family:var(--sans);line-height:1.6;padding:48px 20px 80px}
+  .wrap{max-width:var(--col);margin:0 auto}
+
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:44px}
+  .eyebrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .eyebrow span{font-family:var(--mono);font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:3px 8px}
+  h1{font-size:2rem;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:14px}
+  .standfirst{color:var(--dim);font-size:1.02rem;max-width:74ch}
+  .refs{margin-top:20px;display:flex;flex-direction:column;gap:5px;font-family:var(--mono);font-size:.76rem;color:var(--faint)}
+  .refs b{color:var(--dim);font-weight:600;margin-right:8px}
+
+  section{margin-bottom:52px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.01em;margin-bottom:8px;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+  .lede{color:var(--dim);margin-bottom:22px;max-width:74ch}
+  h3{font-size:.95rem;font-weight:600;margin:26px 0 10px;color:var(--txt)}
+
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:18px}
+  .screen-hd{background:var(--sunken);border-bottom:1px solid var(--line);padding:9px 14px;
+    font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .screen-bd{padding:20px}
+  .screen-bd.dark{background:#000;padding:22px}
+
+  .fieldset{border:1px solid var(--line-soft);border-radius:6px;padding:16px;margin-bottom:14px;background:var(--raised)}
+  .fs-t{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:14px}
+  .fld{margin-bottom:14px}
+  .fld:last-child{margin-bottom:0}
+  .lbl{display:block;font-size:.8rem;font-weight:500;color:var(--dim);margin-bottom:6px}
+  .ctl{display:block;background:var(--sunken);border:1px solid var(--line);border-radius:5px;
+    padding:9px 12px;font-size:.86rem;color:var(--txt);font-family:var(--sans)}
+  .ctl.ph{color:var(--faint)}
+  .ctl.mono{font-family:var(--mono);font-size:.8rem}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .btnrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .btn{background:var(--raised);border:1px solid var(--line);color:var(--txt);border-radius:6px;
+    padding:8px 15px;font-size:.83rem;font-weight:500;font-family:var(--sans)}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:#170c02;font-weight:600}
+  .btn.g{background:transparent;border-color:transparent;color:var(--dim)}
+  .btn.dis{opacity:.42}
+  .hint{font-size:.78rem;color:var(--faint);margin-top:9px}
+
+  .status{display:inline-flex;align-items:center;gap:7px;font-size:.8rem;font-weight:600;
+    border-radius:999px;padding:4px 12px;border:1px solid var(--line)}
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+  .status.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  .status.ok .dot{background:var(--ok)}
+  .status.no{color:var(--no);border-color:color-mix(in srgb,var(--no) 40%,transparent)}
+  .status.no .dot{background:var(--no)}
+  .status.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+  .status.warn .dot{background:var(--warn)}
+  .status.idle{color:var(--faint)}
+
+  .call{border-left:3px solid var(--line);background:var(--panel);border-radius:0 6px 6px 0;
+    padding:13px 16px;margin:16px 0;font-size:.87rem;color:var(--dim)}
+  .call-t{display:block;font-weight:600;color:var(--txt);margin-bottom:4px;font-size:.85rem}
+  .call.ok{border-left-color:var(--ok)}
+  .call.no{border-left-color:var(--no)}
+  .call.warn{border-left-color:var(--warn)}
+  .call.info{border-left-color:var(--info)}
+
+  table{width:100%;border-collapse:collapse;font-size:.83rem}
+  th{text-align:left;font-weight:600;color:var(--dim);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--sunken)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top;color:var(--dim)}
+  td b{color:var(--txt);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--sunken);border:1px solid var(--line-soft);
+    border-radius:3px;padding:1px 5px;color:#c9d5e1}
+
+  .bulb{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line-soft);
+    border-radius:6px;background:var(--raised);margin-bottom:9px}
+  .bulb:last-child{margin-bottom:0}
+  .box{width:16px;height:16px;border:1.5px solid var(--faint);border-radius:3px;flex:none}
+  .box.on{background:var(--accent);border-color:var(--accent);position:relative}
+  .box.on::after{content:"✓";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:#170c02;font-size:.7rem;font-weight:700}
+  .bulb-n{font-weight:600;color:var(--txt);font-size:.87rem}
+  .bulb-i{font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .bulb-sp{flex:1}
+  .sw{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);flex:none}
+
+  .toast{display:inline-block;border-radius:6px;padding:9px 18px;font-size:.83rem;font-weight:500;color:#fff}
+  .toast.s{background:var(--ok)} .toast.e{background:var(--no)} .toast.w{background:var(--warn);color:#231a03}
+
+  ol.reasons{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
+  ol.reasons li{margin-bottom:9px} ol.reasons li:last-child{margin-bottom:0}
+  ol.reasons b{color:var(--txt)}
+  ul.pl{margin:0 0 0 20px;color:var(--dim);font-size:.88rem}
+  ul.pl li{margin-bottom:7px} ul.pl li:last-child{margin-bottom:0}
+
+  /* ---- Sélecteur tri-état ON/AUTO/OFF (une seule position sélectionnée en permanence) ---- */
+  .tristate{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .tristate span{padding:9px 20px;font-size:.83rem;font-weight:600;color:var(--dim);
+    background:var(--raised);border-right:1px solid var(--line);font-family:var(--sans)}
+  .tristate span:last-child{border-right:none}
+  .tristate span.sel-on{background:var(--accent);color:#170c02}
+  .tristate span.sel-auto{background:var(--ok);color:#06210c}
+  .tristate span.sel-off{background:var(--no);color:#fff}
+
+  /* ---- Bascule on/off indépendante (Flash — identification) ---- */
+  .togglebtn{display:inline-flex;align-items:center;gap:10px;background:var(--raised);
+    border:1px solid var(--line);border-radius:6px;padding:8px 15px;font-size:.83rem;
+    font-weight:500;color:var(--txt);font-family:var(--sans)}
+  .togglebtn .sw2{width:34px;height:18px;border-radius:999px;background:var(--sunken);
+    border:1px solid var(--line);position:relative;flex:none}
+  .togglebtn .sw2::after{content:"";position:absolute;top:1px;left:1px;width:14px;height:14px;
+    border-radius:50%;background:var(--faint)}
+  .togglebtn.on{border-color:var(--accent);color:var(--accent)}
+  .togglebtn.on .sw2{background:color-mix(in srgb,var(--accent) 28%,var(--sunken));border-color:var(--accent)}
+  .togglebtn.on .sw2::after{left:17px;background:var(--accent)}
+
+  footer{border-top:1px solid var(--line);padding-top:20px;margin-top:56px;
+    font-family:var(--mono);font-size:.73rem;color:var(--faint)}
+
+  @media (max-width:640px){
+    body{padding:28px 14px 56px} h1{font-size:1.5rem} .row2{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Issues #213 / #208</span><span>Milestone v10.0.0</span><span>Révision 6</span><span>À valider — GATE 2</span>
+  </div>
+  <h1>Éclairage d'ambiance — affectation par équipe et conduite en direct</h1>
+  <p class="standfirst">
+    Un seul écran étendu, aucune page nouvelle. <strong>#213</strong> ajoute à
+    <code>/admin/ambiance</code> (livrée par #207) une colonne d'affectation équipe→ampoule, un
+    <b>sélecteur tri-état ON / AUTO / OFF</b> et une <b>bascule Flash</b> indépendante — deux
+    <b>instruments de conduite en direct</b>, utilisés par la <b>régie</b> pendant une partie pour
+    réagir au jeu (souligner un moment, faire tomber la salle, la relever). Ce qui a changé de
+    main, c'est l'<b>opérateur</b> — pas la nature de l'outil : rien dans le cadrage du milestone ne
+    demandait que l'<b>animateur</b> pilote l'éclairage depuis sa tablette, ces commandes vivent
+    donc sur l'écran d'administration, jamais sur <code>/anim</code> (révision du 2026-09-07 : une
+    version précédente les y avait placées à tort).
+  </p>
+  <div class="refs">
+    <div><b>Contrats</b> contracts/hue-bridge.md §5.2/§5.7 (zones, dégradation) · contracts/lighting.md §10.1, SHA df448318 (portée zone générale, outil de conduite en direct — en vigueur)</div>
+    <div><b>Base réutilisée</b> docs/mockups/lighting-hue-config-207.html §05/§06 (écran ampoules déjà validé, ici étendu)</div>
+    <div><b>Décisions actées</b> _work/handoff/gate1-decisions-v10-20260907.md</div>
+    <div><b>Révision 2</b> retrait du panneau de conduite manuelle sur <code>/anim</code>, déplacé sur <code>/admin/ambiance</code></div>
+    <div><b>Révision 3 (superseded)</b> avait représenté All ON/All OFF/Flash comme trois overrides mutuellement exclusifs identiques — le planner avait une lecture différente entre-temps</div>
+    <div><b>Révision 4 — design tranché par l'utilisateur</b> All ON/All OFF remplacés par un <b>sélecteur tri-état unique [ON | AUTO | OFF]</b> (AUTO = position normale, éclairage piloté par l'état du jeu — remplace « override relâché ») ; Flash reste une bascule ON/OFF <b>séparée</b> et indépendante</div>
+    <div><b>Révision 5 — priorité admin/jeu tranchée</b> le mode (ON/OFF/Flash) tient <b>indéfiniment</b>, y compris pendant une partie ; <b>AUTO manuel</b> est le seul retour — une formulation d'annulation automatique par le prochain événement de jeu a été explorée puis abandonnée le même jour, jamais en vigueur</div>
+    <div><b>Révision 6 — deux corrections utilisateur</b> (a) le sélecteur ON/AUTO/OFF <b>ne porte que sur la zone <code>general</code></b> (<code>hue-bridge.md</code> §5.2) — les ampoules d'une équipe nommée dans l'état courant restent <b>toujours</b> pilotées par #213, quelle que soit sa position ; corrige une précision erronée de la révision 5 (« zones d'équipe comprises »). (b) ce n'est <b>pas</b> un outil de configuration hors-partie : c'est un outil de <b>conduite live</b>, utilisé par la régie pendant que le jeu tourne — toute formulation « écran normalement fermé en séance » est retirée</div>
+    <div><b>Confirmé</b> la table de scènes de #205 (événements→couleurs) reste inchangée par cette révision — seul son éditeur (#210/v10.1) est reporté</div>
+    <div><b>Sert de référence à</b> test-writer (scénarios T1.4) · qa (conformité) · dev-frontend (implémentation Batch 3)</div>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span>#213 — Colonne d'affectation équipe→ampoule</h2>
+  <p class="lede">
+    Sur <code>/admin/ambiance</code>, l'écran « Choisir et tester les ampoules » (#207 §05) gagne une
+    troisième colonne : un sélecteur <b>Rôle</b> par ampoule. <code>Éclairage général</code> reste la
+    valeur par défaut de chaque ampoule — le comportement actuel (toute la salle en <code>general</code>)
+    n'est jamais perdu tant qu'aucune ampoule n'est explicitement basculée en équipe.
+  </p>
+
+  <h3>Écran — deux équipes pourvues, une ampoule générale</h3>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — ampoules du pont, avec affectation d'équipe (#213)</div>
+    <div class="screen-bd">
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#e14b4b"></span>
+        <span><span class="bulb-n">Salle gauche</span><br><span class="bulb-i">id 8 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <select class="ctl" style="width:210px;padding:8px 10px">
+          <option>Éclairage général</option>
+          <option selected>Équipe — Rouges</option>
+          <option>Équipe — Bleus</option>
+        </select>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#1a5eff"></span>
+        <span><span class="bulb-n">Salle droite</span><br><span class="bulb-i">id 9 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <select class="ctl" style="width:210px;padding:8px 10px">
+          <option>Éclairage général</option>
+          <option>Équipe — Rouges</option>
+          <option selected>Équipe — Bleus</option>
+        </select>
+      </div>
+      <div class="bulb">
+        <span class="box on"></span>
+        <span class="sw" style="background:#f2c88a"></span>
+        <span><span class="bulb-n">Scène</span><br><span class="bulb-i">id 11 · joignable</span></span>
+        <span class="bulb-sp"></span>
+        <select class="ctl" style="width:210px;padding:8px 10px">
+          <option selected>Éclairage général</option>
+          <option>Équipe — Rouges</option>
+          <option>Équipe — Bleus</option>
+        </select>
+      </div>
+      <div class="btnrow">
+        <span class="btn p">Enregistrer</span>
+        <span class="btn">Tester toutes les ampoules</span>
+        <span class="btn g">Actualiser la liste</span>
+      </div>
+      <p class="hint">
+        La liste d'équipes proposée dans chaque menu vient de la configuration de partie courante
+        (mêmes noms que <code>GamePage.jsx</code>/<code>BackstagePage</code>). Une équipe renommée en
+        cours de saison n'invalide rien : c'est le <b>nom</b> qui est stocké dans <code>config.json</code>
+        (§6 de <code>hue-bridge.md</code>), au même titre que le nom d'ampoule — cohérent avec la règle
+        « jamais d'identifiant technique mémorisé » déjà appliquée à #207.
+      </p>
+    </div>
+  </div>
+
+  <div class="call info">
+    <span class="call-t">La couleur salle = la couleur buzzer, jamais une seconde palette</span>
+    L'aperçu de couleur affiché à côté de chaque ampoule (pastille ronde) est la même palette que
+    celle des LED physiques des buzzers (<code>teamColorPalette</code>, <code>main.go</code>) — pas
+    une couleur choisie indépendamment ici. Une équipe « Rouges » est le même rouge sur son buzzer et
+    sur son ampoule.
+  </div>
+
+  <h3>Cas dégradés — les quatre règles normatives (contrat §5.7)</h3>
+  <div class="scroll">
+    <table>
+      <tr><th style="width:30%">Cas</th><th>Ce que l'écran montre</th></tr>
+      <tr>
+        <td><b>Moins d'ampoules que d'équipes</b> <span class="bulb-i">(le plus fréquent)</span></td>
+        <td>Aucun avertissement bloquant. Les équipes non pourvues restent simplement absentes des
+          menus déroulants sélectionnés — elles ne perdent rien, la salle générale continue de porter
+          leur couleur quand c'est leur tour.</td>
+      </tr>
+      <tr>
+        <td><b>Équipe sans ampoule affectée</b></td>
+        <td>Même écran, aucun badge d'erreur. Un <code>.hint</code> neutre en pied de section :
+          « Les équipes sans ampoule dédiée restent éclairées via la scène générale. »</td>
+      </tr>
+      <tr>
+        <td><b>Aucune affectation d'équipe du tout</b></td>
+        <td>Tous les menus sur <code>Éclairage général</code> — c'est l'état de sortie de #207,
+          inchangé. Aucun écran intermédiaire : configurer une équipe est un geste additif, jamais
+          une bascule de mode.</td>
+      </tr>
+      <tr>
+        <td><b>Ampoule affectée mais injoignable</b> <span class="bulb-i">(éteinte au mur)</span></td>
+        <td>Reprend le badge « éteinte au mur » de #207 §05 (case non cochable pour le test), le menu
+          Rôle reste actif et modifiable — la panne d'une ampoule n'empêche pas de configurer les
+          autres.</td>
+      </tr>
+    </table>
+  </div>
+  <div class="call warn">
+    <span class="call-t">Ce que cet écran ne montre jamais</span>
+    Aucune bascule « mode équipe » globale, aucun message d'erreur pour une configuration
+    partielle : les quatre cas ci-dessus sont tous des états normaux de fonctionnement, pas des
+    replis d'urgence. Le contrat est explicite — « ce sont eux qui séparent une fonctionnalité
+    utilisable d'une curiosité de démonstration » (<code>hue-bridge.md</code> §5.7).
+  </div>
+
+  <h3>Conduite en direct — sélecteur ON/AUTO/OFF + bascule Flash</h3>
+  <p class="lede">
+    Sur ce même écran, juste sous la liste des ampoules — <b>deux instruments de conduite en
+    direct</b> pour la régie, utilisés <b>pendant</b> que le jeu tourne, en réaction à ce qui s'y
+    passe : souligner un moment fort, faire tomber la salle, la relever. Ce n'est pas un écran
+    qu'on n'ouvrirait qu'entre deux soirées — la régie le garde ouvert en séance.
+  </p>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — position AUTO (par défaut)</div>
+    <div class="screen-bd">
+      <p class="lbl">Éclairage général</p>
+      <div class="tristate">
+        <span>ON</span>
+        <span class="sel-auto">AUTO</span>
+        <span>OFF</span>
+      </div>
+      <p class="hint">
+        Position normale : la zone <code>general</code> est pilotée par l'état du jeu (dérivation
+        automatique). C'est la position de repli — un serveur qui redémarre, ou un écran rechargé,
+        retrouve <b>AUTO</b>, jamais <b>ON</b> ni <b>OFF</b>.
+      </p>
+    </div>
+  </div>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — position OFF, pendant une partie, équipe « Rouges » active</div>
+    <div class="screen-bd">
+      <p class="lbl">Éclairage général</p>
+      <div class="tristate">
+        <span>ON</span>
+        <span>AUTO</span>
+        <span class="sel-off">OFF</span>
+      </div>
+      <p class="hint" style="margin-bottom:14px">
+        La zone <code>general</code> forcée à <code>{"on": false}</code>. Cliquer <b>ON</b> bascule
+        directement sur l'inverse ; cliquer <b>AUTO</b> relâche le forçage et rend la main à l'état
+        de jeu courant — <b>ce n'est jamais « ON » qui annule « OFF »</b>, c'est le retour explicite
+        sur la position <b>AUTO</b>.
+      </p>
+      <p class="lbl">Ce que montrent les ampoules pendant ce temps</p>
+      <div class="bulb">
+        <span class="box"></span>
+        <span class="sw" style="background:#e14b4b"></span>
+        <span><span class="bulb-n">Salle gauche</span><br><span class="bulb-i">équipe Rouges — active</span></span>
+        <span class="bulb-sp"></span>
+        <span style="color:var(--ok);font-size:.8rem;font-weight:600">Allumée, rouge</span>
+      </div>
+      <div class="bulb">
+        <span class="box"></span>
+        <span class="sw" style="background:#2b3038"></span>
+        <span><span class="bulb-n">Scène</span><br><span class="bulb-i">rôle général</span></span>
+        <span class="bulb-sp"></span>
+        <span style="color:var(--faint);font-size:.8rem;font-weight:600">Éteinte</span>
+      </div>
+      <p class="hint" style="margin-top:12px">
+        <b>L'ampoule de l'équipe active n'obéit pas à OFF</b> — elle appartient à la zone
+        « Rouges », pas à <code>general</code>, et reste pilotée par le jeu (#213). C'est l'effet le
+        plus utile du dispositif : la salle s'efface, l'équipe qui joue reste désignée par la
+        lumière (<code>contracts/lighting.md</code> §10.1).
+      </p>
+    </div>
+  </div>
+
+  <p class="lbl">Flash — bascule indépendante</p>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — Flash</div>
+    <div class="screen-bd">
+      <div class="row2">
+        <div>
+          <p class="hint" style="margin:0 0 8px">Arrêté</p>
+          <span class="togglebtn"><span class="sw2"></span>Flash</span>
+        </div>
+        <div>
+          <p class="hint" style="margin:0 0 8px">Actif</p>
+          <span class="togglebtn on"><span class="sw2"></span>Flash</span>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:14px">
+        <b>Flash</b> est un contrôle <b>séparé</b> du sélecteur ON/AUTO/OFF, pas une quatrième
+        position du même groupe — une simple bascule à deux états, même portée (zone
+        <code>general</code>). En direct, il sert à <b>souligner un moment de jeu</b> ou à
+        identifier une ampoule pendant un réglage. Tant qu'il reste actif, la zone générale
+        clignote en continu ; on l'arrête explicitement en recliquant, il ne s'éteint pas seul.
+      </p>
+    </div>
+  </div>
+
+  <h3>Les deux contrôles</h3>
+  <div class="scroll">
+    <table>
+      <tr><th style="width:20%">Contrôle</th><th>Positions</th><th>Effet <span class="bulb-i">(zone <code>general</code> uniquement)</span></th></tr>
+      <tr>
+        <td rowspan="3"><b>Sélecteur</b></td>
+        <td><b>ON</b></td><td>Zone générale forcée à pleine intensité, blanc neutre.</td>
+      </tr>
+      <tr>
+        <td><b>AUTO</b> <span class="bulb-i">(défaut)</span></td><td>Zone générale pilotée par l'état de jeu courant — comportement normal, aucun forçage.</td>
+      </tr>
+      <tr>
+        <td><b>OFF</b></td><td>Zone générale forcée à <code>{"on": false}</code>.</td>
+      </tr>
+      <tr>
+        <td><b>Flash</b> <span class="bulb-i">(séparé)</span></td>
+        <td>ON/OFF</td>
+        <td>Zone générale en clignotement continu tant qu'actif, pour souligner un moment ou identifier une ampoule.</td>
+      </tr>
+    </table>
+  </div>
+  <div class="call warn">
+    <span class="call-t">« AUTO » n'est pas « aucune sélection » — c'est une position à part entière</span>
+    Le sélecteur est <b>toujours</b> sur l'une des trois positions, jamais dans un état indéterminé.
+    AUTO n'est pas l'absence d'un choix : c'est le choix explicite de laisser l'état de jeu piloter
+    la zone générale. C'est aussi la position qui remplace ce qu'une révision précédente de cette
+    maquette appelait « relâcher un override » — même comportement (retour à la dérivation
+    automatique depuis l'état de jeu courant, jamais un état neutre figé, même mécanique que la
+    resynchronisation déjà décidée au retour du pont, <code>contracts/lighting.md</code> §10.3),
+    formulé cette fois comme une position visible plutôt qu'un « désactivé » implicite.
+  </div>
+
+  <div class="call warn">
+    <span class="call-t">✅ Tranché le 2026-09-07 — le sélecteur ne porte que sur la zone <code>general</code>, jamais sur une équipe active</span>
+    Portée exacte : les ampoules de rôle <code>general</code>, <b>plus</b> toute ampoule d'équipe
+    <b>dont l'équipe n'est pas nommée dans l'état courant</b> (<code>hue-bridge.md</code> §5.2). Les
+    ampoules d'une équipe <b>active</b> restent <b>toujours</b> pilotées par #213, quelle que soit
+    la position du sélecteur — la régie force l'ambiance de la salle, elle ne débranche jamais
+    l'information « quelle équipe joue » (exemple visuel ci-dessus). Corrige une précision erronée
+    de la révision précédente de cette maquette (« zones d'équipe comprises »), écartée par
+    l'utilisateur.
+    <br><br>
+    Deux cas où <b>OFF éteint bien tout</b>, équipe comprise — ils découlent de la même règle de
+    zone, ce ne sont pas des exceptions séparées :
+    <ul class="pl" style="margin-top:8px">
+      <li><b>Hors partie</b>, ou dès qu'aucune équipe n'est nommée dans l'état courant : toutes les
+        ampoules d'équipe appartiennent alors à <code>general</code>.</li>
+      <li><b>Installation sans aucune ampoule d'équipe</b> (cas de dégradation, §5.7) : la couleur
+        d'équipe est portée par la scène générale elle-même — <code>general</code> est tout ce qu'il
+        y a. La garantie « l'équipe active reste allumée » n'existe que si elle dispose d'une
+        ampoule dédiée ; ce n'est pas un défaut de la règle, c'est une raison de plus d'en affecter
+        une par équipe.</li>
+    </ul>
+  </div>
+
+  <div class="call ok">
+    <span class="call-t">Un outil de conduite en direct, pas un écran de configuration hors-partie</span>
+    Ce sélecteur et cette bascule vivent uniquement sur l'écran d'administration, jamais sur
+    <code>/anim</code> — mais ce n'est pas parce qu'on ne les utiliserait qu'entre deux parties :
+    la régie les garde ouverts <b>pendant</b> qu'elle joue, exactement comme elle utiliserait une
+    console de lumière physique. C'est cohérent avec la décision déjà actée en #207 §08 (« pas de
+    réglage de couleur ni de scène dans cet écran ») : ici non plus, aucun curseur, deux contrôles
+    francs — mais francs ne veut pas dire occasionnels.
+  </div>
+  <div class="call ok">
+    <span class="call-t">✅ Tranché le 2026-09-07 — le mode tient, y compris pendant une partie ; AUTO manuel est le seul retour</span>
+    Une position <b>ON</b> ou <b>OFF</b>, comme <b>Flash</b> actif, <b>s'impose indéfiniment</b> —
+    aucun événement de jeu ne les recouvre, aucun ne les annule. Seul un retour <b>manuel</b> sur
+    <b>AUTO</b> (ou l'arrêt du serveur, §10.4) rend la main à l'état de jeu. Une formulation
+    concurrente — annulation automatique au premier événement de jeu, avec retour visuel du
+    sélecteur — a été rédigée puis abandonnée le même jour (confirmation utilisateur) : elle n'a
+    jamais été en vigueur, et un document qui en parle encore est périmé
+    (<code>contracts/lighting.md</code> §10.1, historique des révisions).
+    <br><br>
+    <b>Conséquence assumée</b> : un OFF oublié laisse la zone générale éteinte et aucun événement de
+    jeu ne la rallumera — c'est le prix d'un mode qui mérite son nom (§02) plutôt qu'un écrasement
+    muet. La portée restreinte à <code>general</code> (encart ci-dessus) en atténue la gravité
+    pendant une partie : l'équipe active reste allumée, la salle n'est donc jamais totalement noire
+    tant qu'une équipe joue. Le cas dur reste hors partie, où OFF couvre tout.
+    <br><br>
+    <b>Flash prime sur le sélecteur, sans le déplacer</b> : si Flash est actif alors que le
+    sélecteur est sur OFF, la zone générale clignote quand même — sinon l'effet serait inopérant au
+    moment précis où la régie le déclenche (salle éteinte, un instant à souligner). Le sélecteur
+    continue d'afficher ON, AUTO ou OFF, qui reste l'état réel une fois Flash arrêté
+    (<code>contracts/lighting.md</code> §10.1.2).
+    <br><br>
+    Diagramme détaillé : <code>docs/mockups/lighting-priority-208.md</code> (révisé en même temps
+    que cette section).
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span>Pourquoi un tri-état, pas trois boutons équivalents</h2>
+  <p class="lede">
+    Design tranché par l'utilisateur le 2026-09-07, après deux lectures concurrentes (une révision
+    de cette maquette avait fait de Flash la seule bascule, la suivante avait fait des trois des
+    overrides identiques). Le <b>sélecteur ON/AUTO/OFF</b> et la <b>bascule Flash</b> sont deux
+    contrôles de nature différente, pas trois variantes du même geste.
+  </p>
+  <div class="screen">
+    <div class="screen-hd">Ce que chaque contrôle fait — et ne fait pas</div>
+    <div class="screen-bd">
+      <ul class="pl">
+        <li>Le sélecteur global n'a <b>que trois positions possibles, toujours une seule active</b> —
+          ON, AUTO ou OFF, jamais « rien de sélectionné » ni deux à la fois. Passer de ON à OFF
+          se fait <b>via AUTO</b> conceptuellement (ce sont deux forçages opposés, pas l'inverse l'un
+          de l'autre) même si un clic direct ON→OFF reste possible à l'écran.</li>
+        <li><b>AUTO</b> est la position de repli et l'état normal — pas un « désactivé » creux : elle
+          porte le même sens que « aucun override actif » dans une lecture précédente de cette
+          maquette, formulé cette fois comme une position visible du sélecteur.</li>
+        <li><b>Flash</b> est <b>orthogonal</b> au sélecteur : une bascule à deux états (arrêté/actif),
+          affichée séparément, qui ne fait pas partie du groupe ON/AUTO/OFF — elle sert à souligner
+          un moment de jeu en direct ou identifier une ampoule pendant un réglage (§01), avec la
+          même portée que le sélecteur (zone <code>general</code> seule).</li>
+      </ul>
+      <p class="hint" style="margin-top:12px">
+        Distinguer les deux évite une question sans réponse claire : que voudrait dire « Flash
+        actif » comme quatrième position d'un sélecteur qui n'en admet qu'une à la fois ? En le
+        sortant du groupe, la question ne se pose plus.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span>Décisions de conception</h2>
+  <ol class="reasons">
+    <li><b>Un outil de conduite en direct sur l'écran admin, jamais sur <code>/anim</code>.</b> Ce qui
+      a changé de main est l'<b>opérateur</b> (régie, pas animateur), pas la nature de l'outil : ce
+      n'est pas un écran de configuration qu'on n'ouvrirait qu'entre deux soirées. Correction de la
+      révision précédente de cette maquette sur ce dernier point, qui le présentait à tort comme un
+      outil de test hors-partie.</li>
+    <li><b>Sélecteur tri-état ON/AUTO/OFF pour le forçage de la zone générale</b>, bascule Flash
+      séparée de même portée — deux contrôles de nature différente, pas trois boutons équivalents
+      (présentation retenue après deux itérations, §02).</li>
+    <li><b>Le sélecteur ne porte que sur la zone <code>general</code></b>, jamais sur une équipe
+      active — corrige une précision erronée d'une révision précédente (§01, encart normatif).
+      L'équipe qui joue reste toujours désignée par sa lumière, quelle que soit la position du
+      sélecteur.</li>
+    <li><b>AUTO re-dérive depuis l'état de jeu, jamais un état neutre</b> — même principe que la
+      resynchronisation déjà décidée au retour du pont (<code>contracts/lighting.md</code> §10.3),
+      appliqué ici à un troisième déclencheur.</li>
+    <li><b>Le rôle « équipe » réutilise le menu déroulant existant du sélecteur d'ampoule</b>, pas un
+      nouveau composant de sélection — c'est la même famille d'interaction que le reste de la page
+      #207 (case à cocher + libellé), un menu de plus n'introduit rien de nouveau à apprendre.</li>
+    <li><b>La table de scènes de #205 (événements→couleurs) n'est pas retouchée</b> par cette
+      révision — confirmé par l'utilisateur : seul son éditeur (#210/v10.1) reste reporté.</li>
+    <li><b>✅ Priorité admin ↔ jeu en cours — tranchée.</b> Le mode tient indéfiniment, y compris
+      pendant une partie ; <b>AUTO manuel</b> est le seul chemin de retour (§01, dernier encart).
+      Une formulation d'écrasement automatique par le prochain événement de jeu a été explorée puis
+      abandonnée le même jour — jamais en vigueur.</li>
+  </ol>
+</section>
+
+<footer>
+  Maquette produite en phase Plan (T1.3, Batch 1) · <b>révision 6 — à valider</b>, GATE 2 · panneau
+  de conduite manuelle retiré de <code>/anim</code>, remplacé sur <code>/admin/ambiance</code> par un
+  sélecteur tri-état ON/AUTO/OFF (zone <code>general</code> uniquement) + une bascule Flash séparée,
+  tenue indéfinie et retour AUTO manuel uniquement, outil de conduite en direct pour la régie
+  (corrections utilisateur du 2026-09-07, contrat <code>contracts/lighting.md</code> §10.1,
+  SHA df448318) · référence pour dev-frontend (Batch 3),
+  test-writer (T1.4) et qa · issues #213/#208 · milestone v10.0.0 · BuzzControl
+</footer>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

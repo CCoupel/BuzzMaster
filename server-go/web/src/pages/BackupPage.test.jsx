@@ -53,7 +53,10 @@ describe('BackupPage', () => {
       expect(screen.getAllByLabelText('Historique').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByLabelText('Médias & Catégories').length).toBeGreaterThanOrEqual(1)
       // #152 — case dédiée game-config.json, plus rattachée à "Historique"
-      expect(screen.getAllByLabelText('Configuration Ambiance').length).toBeGreaterThanOrEqual(1)
+      // #207 — libellé renommé « Réglages de jeu » (clé `ambiance` et paramètre
+      // `ambiance=true` inchangés : les archives existantes restent restaurables)
+      expect(screen.getAllByLabelText('Réglages de jeu').length).toBeGreaterThanOrEqual(1)
+      expect(screen.queryByLabelText('Configuration Ambiance')).toBeNull()
     })
 
     it('should render all reset checkboxes', () => {
@@ -109,6 +112,42 @@ describe('BackupPage', () => {
       expect(firstResetCheckbox).not.toBeChecked()
       fireEvent.click(firstResetCheckbox)
       expect(firstResetCheckbox).toBeChecked()
+    })
+  })
+
+  // #207 — le renommage « Configuration Ambiance » → « Réglages de jeu » ne
+  // touche QUE le libellé visible : le paramètre `ambiance=true` de la
+  // requête de sauvegarde est inchangé (une archive produite avant le
+  // renommage doit continuer à se restaurer).
+  describe('#207 — renommage « Réglages de jeu », paramètre de requête inchangé', () => {
+    it('la sauvegarde envoie toujours ambiance=true', async () => {
+      global.fetch = vi.fn().mockResolvedValue({ blob: async () => new Blob([]) })
+      global.URL.createObjectURL = vi.fn(() => 'blob:x')
+      global.URL.revokeObjectURL = vi.fn()
+      renderBackupPage()
+
+      fireEvent.click(screen.getByText('Sauvegarder'))
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+      const url = global.fetch.mock.calls[0][0]
+      expect(url).toContain('ambiance=true')
+      expect(url).not.toContain('lighting')
+    })
+
+    it('la réinitialisation utilise toujours la clé ambiance', async () => {
+      global.fetch = vi.fn().mockResolvedValue({ ok: true })
+      global.confirm = vi.fn(() => true)
+      const reload = vi.fn()
+      Object.defineProperty(window, 'location', { value: { reload }, writable: true })
+      renderBackupPage()
+
+      const resetCheckbox = screen.getAllByLabelText('Réglages de jeu')[1]
+      fireEvent.click(resetCheckbox)
+      fireEvent.click(screen.getByText('Reinitialiser'))
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+      expect(global.fetch.mock.calls[0][0]).toContain('ambiance=true')
+      expect(global.confirm.mock.calls[0][0]).toContain('Réglages de jeu')
     })
   })
 
