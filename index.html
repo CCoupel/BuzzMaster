@@ -531,6 +531,10 @@
                     <span class="hero-stat-icon">🤖</span>
                     <span class="hero-stat-label">IA integree</span>
                 </div>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-icon">💡</span>
+                    <span class="hero-stat-label">Eclairage Hue</span>
+                </div>
             </div>
         </div>
     </section>
@@ -736,7 +740,7 @@
 
                 <!-- Zone Animateur -->
                 <div class="demo-zone">
-                    <h3 class="demo-zone-title">Interface Animateur <span class="badge badge-new">Nouveau v6.3.0</span></h3>
+                    <h3 class="demo-zone-title">Interface Animateur</h3>
                     <p class="demo-zone-desc">Conduisez toute la partie depuis une tablette, sans jamais retourner a la regie.</p>
                     <div class="demo-showcase">
                         <div class="demo-item demo-item-large">
@@ -825,7 +829,7 @@
                     <div class="feature-card">
                         <img class="feature-shot" src="images/Features/memotion.png" alt="MEMOTION Secret Mode - cartes theme et selection par coordonnee" loading="lazy">
                         <div class="feature-icon">🃏</div>
-                        <h3>MEMOTION Secret Mode <span class="badge badge-new">Nouveau v7.0.0</span></h3>
+                        <h3>MEMOTION Secret Mode</h3>
                         <p>Phase de memorisation chronometree : les cartes sont visibles face RECTO, puis cachees. Chaque equipe selectionne par coordonnee (A1, B3...) — plus de triche possible ! Certaines cartes peuvent cacher une vraie question QCM a 4 reponses colorees (v7.0.0), un mini-jeu Memory a associer (v7.1.0), ou meme une mini-manche RAFALE en solo (v9.0.0), pour varier le rythme au sein d'une meme manche.</p>
                         <div class="audience-badges">
                             <span class="aud-badge aud-joueurs">🧑‍🤝‍🧑 Joueurs</span>
@@ -858,10 +862,23 @@
                 <div class="cat-header">
                     <span class="cat-icon">🎉</span>
                     <span class="cat-title">Experience en salle</span>
-                    <span class="cat-count">3 fonctionnalites</span>
+                    <span class="cat-count">4 fonctionnalites</span>
                 </div>
-                <p class="cat-desc">Ce qui se passe en direct pendant l'evenement : affichage, classements et participation depuis un smartphone.</p>
+                <p class="cat-desc">Ce qui se passe en direct pendant l'evenement : affichage, classements, eclairage et participation depuis un smartphone.</p>
                 <div class="features-grid">
+                    <div class="feature-card feature-card--new">
+                        <div class="feature-card-top">
+                            <div class="feature-icon">💡</div>
+                            <span class="badge badge-new">Nouveau v10.0.0</span>
+                        </div>
+                        <h3>Eclairage d'ambiance (Philips Hue)</h3>
+                        <p>La salle rejoue avec vous : chaque equipe recoit sa propre couleur sur un pont Philips Hue, qui suit la partie exactement comme les buzzers physiques (couleur fixe, intensite qui varie selon l'action) — et l'eclairage general prend la teinte du theme de la question en cours. Un score marque declenche un clignotement equipe/or proportionnel aux points, et une pulsation douce accompagne le compte a rebours pour monter la pression en fin de temps. Association du pont en un clic, affectation des ampoules aux equipes depuis un ecran dedie, et un panneau de conduite manuelle (allume/eteint/automatique + flash d'identification) accessible depuis n'importe quel ecran admin. Reprise automatique apres une coupure reseau, extinction propre a l'arret du serveur. Entierement optionnel — sans pont Hue, rien ne change.</p>
+                        <div class="audience-badges">
+                            <span class="aud-badge aud-public">👀 Public</span>
+                            <span class="aud-badge aud-animateur">🎤 Animateur</span>
+                            <span class="aud-badge aud-technique">🔧 Technique</span>
+                        </div>
+                    </div>
                     <div class="feature-card">
                         <img class="feature-shot" src="images/Features/tv.png" alt="Affichage TV plein ecran" loading="lazy">
                         <div class="feature-icon">📺</div>
@@ -908,11 +925,8 @@
                 </div>
                 <p class="cat-desc">Les outils cote animateur pour preparer, suivre et conserver les parties.</p>
                 <div class="features-grid">
-                    <div class="feature-card feature-card--new">
-                        <div class="feature-card-top">
-                            <div class="feature-icon">✨</div>
-                            <span class="badge badge-new">Nouveau v6.1.0</span>
-                        </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">✨</div>
                         <h3>Generation de questions par IA</h3>
                         <p>Laissez une intelligence artificielle (Claude ou Groq, au choix) preparer tout ou partie de votre quiz. Decrivez le theme, choisissez le ou les publics vises (enfants, ados, adultes, seniors...), le ou les niveaux de difficulte et le nombre de questions souhaite (ou la duree de partie visee) — l'IA redige des questions Simple, QCM, Memory, MEMOTION et ARDOISE pretes a jouer, reparties selon vos consignes, sans toucher a vos questions existantes. Vous utilisez votre propre cle (Claude ou Groq), testee automatiquement des l'enregistrement pour eviter les mauvaises surprises le jour J. Depuis la v8.1.0, la meme IA remplit aussi le reservoir de questions courtes du mode RAFALE, par lots de 10 a 200 questions.</p>
                         <div class="audience-badges">
@@ -1019,6 +1033,7 @@
                         <li>Go 1.21+</li>
                         <li>React 18</li>
                         <li>WebSocket</li>
+                        <li>Philips Hue (optionnel)</li>
                     </ul>
                 </div>
                 <div class="component-card">
