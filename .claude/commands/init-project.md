@@ -658,6 +658,8 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
   "version": "0.1.0",
   "initialized_at": "<TIMESTAMP>",
   "initialized_from": "analysis|manual|workshop",
+  "src_dir": "<SRC_DIR>",
+  "version_file": "<VERSION_FILE>",
   "stack": {
     "backend": { "language": "go", "framework": null },
     "frontend": { "language": "typescript", "framework": "react" },
@@ -683,7 +685,8 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
     "test": "<TEST_CMD>",
     "lint": "<LINT_CMD>",
     "audit": "<AUDIT_CMD>",
-    "typecheck": "<TYPECHECK_CMD>"
+    "typecheck": "<TYPECHECK_CMD>",
+    "coverage": "<COVERAGE_CMD>"
   },
   "agents": {
     "idle_ttl_minutes": 15,
@@ -704,6 +707,9 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `commands.lint` | Stack : `golangci-lint run` / `npm run lint` / `ruff check .` |
 | `commands.audit` | Stack : `govulncheck ./...` / `npm audit` / `pip-audit` |
 | `commands.typecheck` | Frontend TS : `npm run typecheck` / `tsc --noEmit` — vide sinon |
+| `commands.coverage` | Stack : `go test -cover ./...` / `npm run test -- --coverage` / `pytest --cov` |
+| `src_dir` | Detection Etape 0 (repertoire source principal) ou stack par defaut : `src`, `cmd`... |
+| `version_file` | Fichier source de verite de la version (ex: `package.json`, `config.json`, `VERSION`) |
 
 ### 2. Agents dev-*
 
@@ -759,7 +765,11 @@ TEST_CMD=$(jq -r '.commands.test      // ""'         .claude/project-config.json
 LINT_CMD=$(jq -r '.commands.lint      // ""'         .claude/project-config.json)
 AUDIT_CMD=$(jq -r '.commands.audit    // ""'         .claude/project-config.json)
 TYPECHECK_CMD=$(jq -r '.commands.typecheck // ""'    .claude/project-config.json)
+COVERAGE_CMD=$(jq -r '.commands.coverage // ""'      .claude/project-config.json)
 PLUGIN_PLATFORM=$(jq -r '.stack.plugin.platform // ""' .claude/project-config.json)
+SRC_DIR=$(jq -r '.src_dir // ""'                     .claude/project-config.json)
+VERSION_FILE=$(jq -r '.version_file // ""'           .claude/project-config.json)
+REPO_URL=$(git remote get-url origin 2>/dev/null | sed -E 's#^git@([^:]+):#https://\1/#; s#\.git$##')
 ```
 
 Echapper les caracteres speciaux sed (`&`, `\`, `|`) dans les valeurs de commandes
@@ -772,12 +782,14 @@ TEST_CMD_ESC=$(escape_sed "$TEST_CMD")
 LINT_CMD_ESC=$(escape_sed "$LINT_CMD")
 AUDIT_CMD_ESC=$(escape_sed "$AUDIT_CMD")
 TYPECHECK_CMD_ESC=$(escape_sed "$TYPECHECK_CMD")
+COVERAGE_CMD_ESC=$(escape_sed "$COVERAGE_CMD")
 ```
 
-Appliquer la substitution sur les fichiers deployes (commandes + agents generiques) :
+Appliquer la substitution sur les fichiers deployes (commandes + agents generiques + contextes partages) :
 
 ```bash
-for f in .claude/commands/*.md .claude/agents/*.template.md; do
+for f in .claude/commands/*.md .claude/agents/*.template.md .claude/commands/context/*.template.md .claude/agents/context/*.template.md; do
+  [[ -f "$f" ]] || continue
   name=$(basename "$f")
   [[ "$name" == "init-project.md" ]] && continue  # contient des {VAR} d'exemple — ne pas substituer
   sed -i \
@@ -790,7 +802,11 @@ for f in .claude/commands/*.md .claude/agents/*.template.md; do
     -e "s|{LINT_CMD}|${LINT_CMD_ESC}|g"          \
     -e "s|{AUDIT_CMD}|${AUDIT_CMD_ESC}|g"        \
     -e "s|{TYPECHECK_CMD}|${TYPECHECK_CMD_ESC}|g" \
+    -e "s|{COVERAGE_CMD}|${COVERAGE_CMD_ESC}|g"  \
     -e "s|{PLUGIN_PLATFORM}|${PLUGIN_PLATFORM}|g" \
+    -e "s|{SRC_DIR}|${SRC_DIR}|g"                \
+    -e "s|{VERSION_FILE}|${VERSION_FILE}|g"      \
+    -e "s|{REPO_URL}|${REPO_URL}|g"              \
     "$f"
   echo "  ✓ placeholders appliques dans $name"
 done

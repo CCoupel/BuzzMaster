@@ -7,6 +7,8 @@
   "version": "5.7.0",
   "initialized_at": "2026-04-28",
   "initialized_from": "analysis",
+  "src_dir": "server-go/",
+  "version_file": "server-go/config.json",
   "stack": {
     "backend": { "language": "go", "framework": null },
     "frontend": { "language": "javascript", "framework": "react" },
@@ -31,7 +33,8 @@
     "test": "cd server-go && go test ./...",
     "lint": "cd server-go && go vet ./...",
     "audit": "cd server-go && govulncheck ./...",
-    "typecheck": ""
+    "typecheck": "",
+    "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out"
   },
   "extended_commands": {
     "repo_url": "https://github.com/CCoupel/BuzzMaster",
