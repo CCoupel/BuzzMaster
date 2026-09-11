@@ -184,8 +184,8 @@ SendMessage({
 | Nom | Rôle | Fichier | Spawn |
 |-----|------|---------|-------|
 | `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.template.md` | permanent |
-| `dev-backend` | Backend Go | `.claude/agents/dev-backend.template.md` | permanent |
-| `dev-frontend` | Frontend React | `.claude/agents/dev-frontend.template.md` | permanent |
+| `dev-backend` | Backend (go) | `.claude/agents/dev-backend.template.md` | permanent |
+| `dev-frontend` | Frontend (react) | `.claude/agents/dev-frontend.template.md` | permanent |
 | `dev-buzzclick` | Firmware ESP32-C3 | `.claude/agents/dev-buzzclick.md` | ponctuel |
 | `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
 | `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
