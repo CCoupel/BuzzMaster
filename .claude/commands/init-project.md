@@ -115,10 +115,14 @@ fi
 KNOWN_COMMIT=$([ -f TEMPLATE_claude/.template-source.json ] && \
   cat TEMPLATE_claude/.template-source.json | jq -r '.commit // ""' || echo "")
 
-LATEST_COMMIT=$(gh api repos/$TEMPLATE_REPO/commits/$TEMPLATE_BRANCH --jq '.sha')
+# Reference = le commit du dernier TAG (pas le HEAD de branche) : un commit
+# non tagge est une version intermediaire non stabilisee, elle ne doit ni
+# etre proposee en mise a jour ni etre deployee.
+LATEST_TAG=$(gh api repos/$TEMPLATE_REPO/tags --jq '.[0].name // empty')
+LATEST_COMMIT=$(gh api repos/$TEMPLATE_REPO/tags --jq '.[0].commit.sha // empty')
 
 if [ "$KNOWN_COMMIT" = "$LATEST_COMMIT" ]; then
-  echo "Template deja a jour ($LATEST_COMMIT)"
+  echo "Template deja a jour ($LATEST_TAG - $LATEST_COMMIT)"
   # Continuer quand meme (fichiers peuvent etre absents si gitignores)
 fi
 ```
@@ -126,12 +130,14 @@ fi
 #### 3. Fetcher TEMPLATE_claude/ depuis GitHub
 
 ```bash
-gh api repos/$TEMPLATE_REPO/git/trees/$TEMPLATE_BRANCH?recursive=1 \
+# Fetch au commit du tag resolu a l'etape precedente (pas la branche) : les
+# fichiers deployes viennent toujours d'une version stabilisee et taggee.
+gh api repos/$TEMPLATE_REPO/git/trees/$LATEST_COMMIT?recursive=1 \
   --jq '.tree[] | select(.type=="blob") | .path' \
   | grep -E '^TEMPLATE_claude/' \
   | while read FILE; do
       mkdir -p "$(dirname $FILE)"
-      gh api repos/$TEMPLATE_REPO/contents/$FILE \
+      gh api "repos/$TEMPLATE_REPO/contents/$FILE?ref=$LATEST_COMMIT" \
         --jq '.content' | base64 -d > "$FILE"
       echo "  ✓ $FILE"
     done
@@ -182,11 +188,12 @@ cat > TEMPLATE_claude/.template-source.json <<EOF
 {
   "repo": "$TEMPLATE_REPO",
   "branch": "$TEMPLATE_BRANCH",
+  "tag": "$LATEST_TAG",
   "commit": "$LATEST_COMMIT",
   "synced_at": "$TODAY"
 }
 EOF
-echo "✓ TEMPLATE_claude/.template-source.json mis a jour ($LATEST_COMMIT)"
+echo "✓ TEMPLATE_claude/.template-source.json mis a jour ($LATEST_TAG - $LATEST_COMMIT)"
 ```
 
 ---
@@ -207,6 +214,87 @@ HAS_OLD_SOURCE=$([ -f .claude/.template-source.json ] && echo "yes" || echo "no"
 | present | present | - | Projet v3 → Reinitialisation |
 | present | absent | present | **Projet v2 → Migration v3** |
 | present | absent | absent | **Projet v1 → Migration v3** |
+
+---
+
+## Migration du schema `infrastructure` (deploy → environments[])
+
+Independante de la migration de structure ci-dessus (v1/v2 → v3) — s'applique des que
+`HAS_CONFIG=yes`, quel que soit le chemin emprunte ensuite (Reinitialisation ou Migration
+v1/v2 → v3). Avant l'introduction du modele BUILD/PUBLISH/DEPLOY a 3 phases (voir
+`TEMPLATE_claude/agents/deploy.md`), `infrastructure` portait un seul mecanisme de deploiement
+(`infrastructure.deploy`, string) commun a tous les environnements. Il est remplace par
+`infrastructure.environments[]` (tableau ordonne, mecanisme publish/deploy propre a chaque
+environnement — voir Etape 8). Detecter et convertir automatiquement :
+
+```bash
+OLD_DEPLOY=$(jq -r '.infrastructure.deploy // empty' .claude/project-config.json 2>/dev/null)
+HAS_ENVIRONMENTS=$(jq -e '.infrastructure.environments' .claude/project-config.json >/dev/null 2>&1 && echo yes || echo no)
+
+# Normaliser vers l'enum utilise par la generation des fichiers d'environnement (section
+# "3bis. Fichiers d'environnement") — l'ancien champ etait du texte libre (ex: "docker").
+case "$OLD_DEPLOY" in
+  docker|docker-compose) MECH=docker-compose ;;
+  kubernetes|k8s|helm)   MECH=kubernetes ;;
+  serverless)            MECH=serverless ;;
+  vps|bare-metal)        MECH=vps ;;
+  paas)                  MECH=paas ;;
+  cloud-run|cloudrun|app-engine) MECH=cloud-run ;;
+  *)                     MECH=docker-compose ;;  # repli par defaut, signale a l'utilisateur ci-dessous
+esac
+```
+
+Si `OLD_DEPLOY` non vide ET `HAS_ENVIRONMENTS=no` → config au format precedent, informer et convertir :
+
+```
+Configuration de deploiement au format precedent detectee (infrastructure.deploy: "<OLD_DEPLOY>").
+Le nouveau modele separe BUILD (compilation) / PUBLISH (mise a disposition, mecanisme par
+environnement) / DEPLOY (installation) — voir TEMPLATE_claude/agents/deploy.md.
+
+Conversion automatique proposee :
+  QUALIF : publish.mode = promote      (reutilise l'artefact tel quel, zero rebuild)
+  PROD   : publish.mode = rebuild-ci   (merge + tag officiel, rebuild deterministe via CI)
+  deploy.mechanism (les deux environnements) = "<MECH>" (normalise depuis "<OLD_DEPLOY>")
+
+Convertir maintenant ? [O/n] — Non bloquant : repondre "n" laisse infrastructure.deploy en
+l'etat (les commandes /build, /publish <env>, /deploy <env> nouvellement synchronisees ne
+fonctionneront pas correctement tant que la conversion n'est pas faite).
+```
+
+Si confirme :
+
+```bash
+jq --arg mech "$MECH" '
+  .infrastructure.environments = [
+    { "name": "QUALIF", "order": 1,
+      "publish": { "mode": "promote", "target": "build/qualif_v{X.Y.Z}/" },
+      "deploy":  { "mechanism": $mech } },
+    { "name": "PROD", "order": 2,
+      "publish": { "mode": "rebuild-ci", "trigger": "git-tag", "pipeline": ".github/workflows/release.yml" },
+      "deploy":  { "mechanism": $mech } }
+  ] | del(.infrastructure.deploy)
+' .claude/project-config.json > /tmp/project-config.json.tmp \
+  && mv /tmp/project-config.json.tmp .claude/project-config.json
+
+echo "✓ infrastructure.environments genere depuis infrastructure.deploy=\"$OLD_DEPLOY\" (mecanisme normalise : $MECH)."
+echo "  Verifier/ajuster manuellement les cibles (docker-compose.*.yml, chart Helm, pipeline CI) si besoin."
+
+# Generer les fichiers d'environnement correspondants (sinon agents/deploy.md reference des
+# fichiers inexistants) — meme logique que la section "3bis. Fichiers d'environnement"
+# ci-dessous, executee ici immediatement apres la conversion de schema.
+```
+
+> Executer ensuite la generation des fichiers d'environnement (section "3bis. Fichiers
+> d'environnement" ci-dessous) pour ces deux environnements — indispensable, `agents/deploy.md`
+> reference desormais `.claude/agents/environments/{publish,deploy}.{qualif,prod}.template.md`
+> a chaque tache PUBLISH/DEPLOY.
+
+> Cette conversion ne devine que le mecanisme de deploiement (repris tel quel pour les deux
+> environnements) et le mecanisme de publication par defaut (`promote` QUALIF /
+> `rebuild-ci` PROD) — elle ne peut pas deviner des cibles specifiques (fichier
+> docker-compose different par environnement, chemin Helm...) : les signaler comme a
+> verifier manuellement dans le rapport de fin d'execution (Option d, Etape d8, ou message de
+> fin en flux Migration v1/v2 → v3).
 
 ---
 
@@ -350,7 +438,8 @@ Migration → v3 terminee.
 
   Fichiers PROJET preserves :
     ✓ .claude/CLAUDE.md
-    ✓ .claude/project-config.json
+    ✓ .claude/project-config.json (hors migration ponctuelle du schema `infrastructure`, voir
+      section "Migration du schema `infrastructure`" — appliquee avant cette etape si besoin)
     ✓ .claude/memory/
     ✓ .claude/agents/dev-*.md (si presents)
     ✓ .claude/agents/*.md et context/*.md compagnons (si presents)
@@ -605,17 +694,45 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
 
 ---
 
-## Etape 8 : Deploiement
+## Etape 8 : Environnements et Deploiement
 
 ```
-9. Comment deploies-tu ton application ?
+9. Comment deploies-tu ton application ? (mecanisme d'installation par defaut)
    a) Docker / Docker Compose
-   b) Kubernetes
+   b) Kubernetes / Helm
    c) Serverless (AWS Lambda, Vercel, Netlify)
    d) VPS / Bare metal
    e) PaaS (Heroku, Railway, Render)
    f) Cloud Run / App Engine
+
+9bis. Quels environnements de release utilises-tu, dans l'ordre de promotion ?
+   a) QUALIF puis PROD (defaut)
+   b) DEV puis QUALIF puis PROD
+   c) QUALIF puis PRE-PROD puis PROD
+   d) Personnalise — lister les noms, dans l'ordre de promotion
 ```
+
+Chaque environnement declare dans `infrastructure.environments[]` recoit un mecanisme
+`publish.mode` :
+- **`promote`** (defaut pour tout environnement sauf le dernier) — reutilise tel quel
+  l'artefact du BUILD (ou de l'environnement precedent), zero rebuild.
+- **`rebuild-ci`** (defaut pour le dernier environnement de la chaine, generalement PROD) —
+  merge + tag officiel, declenche un rebuild deterministe via la CI choisie a l'Etape 7.
+
+Le mecanisme `deploy.mechanism` de chaque environnement reprend par defaut la reponse a la
+question 9 (docker-compose / helm / serverless / vps / paas / cloud-run) — proposer a
+l'utilisateur de le personnaliser par environnement uniquement s'il le demande explicitement.
+
+> Seule la chaine QUALIF -> PROD est cablee dans l'orchestration CDP (voir
+> `agents/cdp.template.md`, section "Points de Validation Utilisateur"). Un environnement
+> supplementaire (DEV, PRE-PROD...) est genere dans la config mais se publie/deploie
+> manuellement via `/publish <env>` et `/deploy <env>`, hors flux CDP automatise — le signaler
+> a l'utilisateur s'il en ajoute.
+>
+> Cette etape ne cree que la configuration et les procedures generiques (section 3bis) — jamais
+> les artefacts d'infra eux-memes (Dockerfile, `docker-compose.<env>.yml`, chart Helm...). Ceux-ci
+> sont scaffoldes a la demande par l'agent `infra`, au premier deploiement sur chaque
+> environnement (voir `agents/infra.md` section "Mode Validation", etape 0) — pas a l'init.
 
 ---
 
@@ -670,7 +787,20 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
   },
   "infrastructure": {
     "cicd": "github-actions",
-    "deploy": "docker"
+    "environments": [
+      {
+        "name": "QUALIF",
+        "order": 1,
+        "publish": { "mode": "promote", "target": "build/qualif_v{X.Y.Z}/" },
+        "deploy":  { "mechanism": "docker-compose", "target": "docker-compose.qualif.yml" }
+      },
+      {
+        "name": "PROD",
+        "order": 2,
+        "publish": { "mode": "rebuild-ci", "trigger": "git-tag", "pipeline": ".github/workflows/release.yml" },
+        "deploy":  { "mechanism": "docker-compose", "target": "docker-compose.prod.yml" }
+      }
+    ]
   },
   "testing": {
     "backend": ["go-test"],
@@ -710,6 +840,8 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `commands.coverage` | Stack : `go test -cover ./...` / `npm run test -- --coverage` / `pytest --cov` |
 | `src_dir` | Detection Etape 0 (repertoire source principal) ou stack par defaut : `src`, `cmd`... |
 | `version_file` | Fichier source de verite de la version (ex: `package.json`, `config.json`, `VERSION`) |
+| `infrastructure.environments` | Defaut `[QUALIF, PROD]` (Etape 8, question 9bis) ; `publish.mode` = `promote` pour tous sauf le dernier (`rebuild-ci`) ; `deploy.mechanism` reprend la reponse a la question 9 pour chaque environnement, sauf personnalisation explicite |
+| Nom de fichier des environnements | `infrastructure.environments[].name` normalise : minuscules, espaces/underscores → tirets (ex. `PRE-PROD` → `pre-prod`) — utilise pour `.claude/agents/environments/{publish,deploy}.<nom>.template.md` (section 3bis) |
 
 ### 2. Agents dev-*
 
@@ -748,6 +880,150 @@ et remplacer les placeholders :
 | `{GO_VERSION}` | `1.22` |
 | `{NODE_VERSION}` | `20` |
 | `{MIN_BINARY_SIZE}` | `5242880` |
+
+### 3bis. Fichiers d'environnement (publish/deploy par environnement)
+
+Pour chaque entree d'`infrastructure.environments[]` (generee a l'Etape 8 ou par la migration
+de schema, voir section "Migration du schema `infrastructure`") : copier la source generique
+correspondante depuis `TEMPLATE_claude/templates/environments/` vers
+`.claude/agents/environments/{publish,deploy}.<env>.template.md`, ou `<env>` est le nom de
+l'environnement normalise (minuscules, espaces/underscores → tirets — ex. `PRE-PROD` →
+`pre-prod`).
+
+Selection de la source, par mecanisme (pas par nom d'environnement) :
+
+| Champ | Valeur | Source |
+|-------|--------|--------|
+| `publish.mode` | `promote` | `TEMPLATE_claude/templates/environments/publish-promote.md` |
+| `publish.mode` | `rebuild-ci` | `TEMPLATE_claude/templates/environments/publish-rebuild-ci.md` |
+| `deploy.mechanism` | `docker-compose` | `TEMPLATE_claude/templates/environments/deploy-docker-compose.md` |
+| `deploy.mechanism` | `kubernetes` ou `helm` | `TEMPLATE_claude/templates/environments/deploy-kubernetes-helm.md` |
+| `deploy.mechanism` | `serverless` | `TEMPLATE_claude/templates/environments/deploy-serverless.md` |
+| `deploy.mechanism` | `vps` | `TEMPLATE_claude/templates/environments/deploy-vps.md` |
+| `deploy.mechanism` | `paas` | `TEMPLATE_claude/templates/environments/deploy-paas.md` |
+| `deploy.mechanism` | `cloud-run` | `TEMPLATE_claude/templates/environments/deploy-cloud-run.md` |
+
+Detection best-effort des variables deja referencees dans les fichiers existants du projet
+(noms uniquement — **aucune valeur n'est jamais lue ni copiee**, seuls les motifs `${VAR}` et
+`secrets.VAR` sont extraits) :
+
+```bash
+scan_var_names() {
+  [ "$#" -eq 0 ] && return
+  grep -ohE '\$\{[A-Za-z_][A-Za-z0-9_]*|\$[A-Za-z_][A-Za-z0-9_]*|secrets\.[A-Za-z_][A-Za-z0-9_]*' "$@" 2>/dev/null \
+    | sed -E 's/^\$\{?//; s/^secrets\.//' | sort -u
+}
+# Ajoute les noms absents a un .env.example existant (touch si absent), jamais de valeur,
+# jamais de ligne existante touchee. Ecrit un en-tete seulement si au moins un nom est ajoute.
+merge_env_example() {
+  local file="$1" header="$2"; shift 2
+  touch "$file"
+  local added=0
+  for v in "$@"; do
+    [ -n "$v" ] || continue
+    grep -q "^${v}=" "$file" 2>/dev/null && continue
+    if [ "$added" -eq 0 ]; then printf '\n%s\n' "$header" >> "$file"; fi
+    echo "${v}=" >> "$file"
+    added=$((added + 1))
+  done
+  echo "$added"
+}
+
+# Global (fichiers sans suffixe d'environnement) -> .env.example a la racine
+GLOBAL_FILES=$(ls docker-compose.yml docker-compose.yaml Dockerfile .github/workflows/*.y*ml 2>/dev/null)
+GLOBAL_VARS=$(scan_var_names $GLOBAL_FILES)
+if [ -n "$GLOBAL_VARS" ]; then
+  N=$(merge_env_example .env.example \
+    "# Variables detectees dans les fichiers existants du projet (docker-compose.yml, workflows...) — a verifier manuellement, aucune valeur lue ni copiee :" \
+    $GLOBAL_VARS)
+  [ "$N" -gt 0 ] && echo "  ✓ .env.example (racine) enrichi de $N variable(s) detectee(s) — a verifier manuellement"
+fi
+```
+
+```bash
+mkdir -p .claude/agents/environments
+jq -c '.infrastructure.environments[]' .claude/project-config.json | while read -r ENV; do
+  NAME=$(echo "$ENV" | jq -r '.name')
+  ENV_LOWER=$(echo "$NAME" | tr '[:upper:] _' '[:lower:]--')
+  PUB_MODE=$(echo "$ENV" | jq -r '.publish.mode')
+  DEP_MECH=$(echo "$ENV" | jq -r '.deploy.mechanism')
+  PUB_TARGET=$(echo "$ENV" | jq -r '.publish.target // .publish.trigger // ""')
+  CI_PIPELINE=$(echo "$ENV" | jq -r '.publish.pipeline // ""')
+  DEP_TARGET=$(echo "$ENV" | jq -r '.deploy.target // ""')
+
+  case "$PUB_MODE" in
+    promote)     PUB_SRC="TEMPLATE_claude/templates/environments/publish-promote.md" ;;
+    rebuild-ci)  PUB_SRC="TEMPLATE_claude/templates/environments/publish-rebuild-ci.md" ;;
+  esac
+  case "$DEP_MECH" in
+    docker-compose)        DEP_SRC="TEMPLATE_claude/templates/environments/deploy-docker-compose.md" ;;
+    kubernetes|helm)       DEP_SRC="TEMPLATE_claude/templates/environments/deploy-kubernetes-helm.md" ;;
+    serverless)            DEP_SRC="TEMPLATE_claude/templates/environments/deploy-serverless.md" ;;
+    vps)                   DEP_SRC="TEMPLATE_claude/templates/environments/deploy-vps.md" ;;
+    paas)                  DEP_SRC="TEMPLATE_claude/templates/environments/deploy-paas.md" ;;
+    cloud-run)             DEP_SRC="TEMPLATE_claude/templates/environments/deploy-cloud-run.md" ;;
+  esac
+
+  sed -e "s|{ENV_NAME_LOWER}|${ENV_LOWER}|g" -e "s|{ENV_NAME}|${NAME}|g" \
+      -e "s|{PUBLISH_TARGET}|${PUB_TARGET}|g" -e "s|{CI_PIPELINE}|${CI_PIPELINE}|g" \
+      "$PUB_SRC" > ".claude/agents/environments/publish.${ENV_LOWER}.template.md"
+  sed -e "s|{ENV_NAME_LOWER}|${ENV_LOWER}|g" -e "s|{ENV_NAME}|${NAME}|g" \
+      -e "s|{PUBLISH_TARGET}|${PUB_TARGET}|g" -e "s|{DEPLOY_TARGET}|${DEP_TARGET}|g" \
+      "$DEP_SRC" > ".claude/agents/environments/deploy.${ENV_LOWER}.template.md"
+  echo "  ✓ fichiers d'environnement generes pour $NAME (publish: $PUB_MODE, deploy: $DEP_MECH)"
+
+  # Variables attendues (union publish + deploy) -> <env>.env.example, committe, valeurs vides.
+  # Le <env>.env reel (valeurs completees) n'est jamais genere automatiquement — voir
+  # agents/deploy.md section "Fichiers d'Environnement".
+  case "$PUB_MODE" in
+    promote)     PUB_VARS="REGISTRY_USER REGISTRY_PASSWORD" ;;
+    rebuild-ci)  PUB_VARS="" ;;  # secrets geres cote CI, pas dans .env local
+  esac
+  case "$DEP_MECH" in
+    docker-compose) DEP_VARS="REGISTRY_USER REGISTRY_PASSWORD SSH_KEY_PATH" ;;
+    kubernetes|helm) DEP_VARS="KUBE_CONTEXT KUBECONFIG" ;;
+    serverless)     DEP_VARS="AWS_PROFILE VERCEL_TOKEN NETLIFY_AUTH_TOKEN" ;;
+    vps)            DEP_VARS="SSH_KEY_PATH" ;;
+    paas)           DEP_VARS="HEROKU_API_KEY RAILWAY_TOKEN RENDER_API_KEY" ;;
+    cloud-run)      DEP_VARS="GCP_PROJECT GOOGLE_APPLICATION_CREDENTIALS" ;;
+  esac
+
+  ENV_EXAMPLE=".claude/agents/environments/${ENV_LOWER}.env.example"
+  {
+    echo "# Variables specifiques a $NAME — voir agents/deploy.md section \"Fichiers d'Environnement\"."
+    echo "# Copier en ${ENV_LOWER}.env (jamais commite) et completer les valeurs."
+    for v in $(echo "$PUB_VARS $DEP_VARS" | tr ' ' '\n' | sort -u); do
+      [ -n "$v" ] && echo "$v="
+    done
+  } > "$ENV_EXAMPLE"
+  echo "  ✓ $ENV_EXAMPLE genere"
+
+  # Detection par environnement — fichiers dont le nom contient <env> (docker-compose.prod.yml,
+  # values-prod.yaml...), meme regles que la detection globale ci-dessus.
+  PER_ENV_FILES=$(find . -maxdepth 3 \( -iname "*${ENV_LOWER}*.yml" -o -iname "*${ENV_LOWER}*.yaml" \) \
+    -not -path "*/node_modules/*" -not -path "*/TEMPLATE_claude/*" -not -path "*/.git/*" \
+    -not -path "*/build/*" 2>/dev/null)
+  PER_ENV_VARS=$(scan_var_names $PER_ENV_FILES)
+  if [ -n "$PER_ENV_VARS" ]; then
+    N=$(merge_env_example "$ENV_EXAMPLE" \
+      "# Variables detectees dans les fichiers existants pour $NAME — a verifier manuellement, aucune valeur lue ni copiee :" \
+      $PER_ENV_VARS)
+    [ "$N" -gt 0 ] && echo "  ✓ $ENV_EXAMPLE enrichi de $N variable(s) detectee(s) pour $NAME"
+  fi
+done
+```
+
+> Compagnons optionnels `publish.<env>.md` / `deploy.<env>.md` : jamais generes automatiquement,
+> crees manuellement par le projet pour ses propres adaptations (memes conventions que les
+> compagnons d'agents, voir § precedent).
+>
+> `<env>.env.example` est committe (noms de variables, valeurs vides) ; `<env>.env` (valeurs
+> reelles) est gitignore et n'est jamais cree automatiquement — le projet le cree manuellement
+> a partir du `.example`. Meme convention pour `.env`/`.env.example` a la racine (variables
+> globales, applicatif ET infra, communes a tous les environnements) : `/init-project` le
+> cree/enrichit uniquement s'il detecte des variables referencees dans des fichiers existants
+> (ci-dessus) — jamais un fichier vide invente sans raison — et ne gere jamais `.env` (valeurs
+> reelles), a la charge du projet.
 
 ### 4. Application des placeholders dans les commandes et agents deployes
 
@@ -788,7 +1064,7 @@ COVERAGE_CMD_ESC=$(escape_sed "$COVERAGE_CMD")
 Appliquer la substitution sur les fichiers deployes (commandes + agents generiques + contextes partages) :
 
 ```bash
-for f in .claude/commands/*.md .claude/agents/*.template.md .claude/commands/context/*.template.md .claude/agents/context/*.template.md; do
+for f in .claude/commands/*.md .claude/agents/*.template.md .claude/commands/context/*.template.md .claude/agents/context/*.template.md .claude/agents/environments/*.template.md; do
   [[ -f "$f" ]] || continue
   name=$(basename "$f")
   [[ "$name" == "init-project.md" ]] && continue  # contient des {VAR} d'exemple — ne pas substituer
@@ -871,11 +1147,11 @@ fi
 Projet "<PROJECT_NAME>" initialise avec succes !
 
 Configuration :
-- Backend  : <BACKEND>
-- Frontend : <FRONTEND>
-- Database : <DATABASE>
-- CI/CD    : <CICD>
-- Deploy   : <DEPLOY>
+- Backend      : <BACKEND>
+- Frontend     : <FRONTEND>
+- Database     : <DATABASE>
+- CI/CD        : <CICD>
+- Environnements : <ENVIRONMENTS>  (ex: QUALIF -> PROD)
 
 Agents generes :
 - .claude/agents/dev-backend.template.md
@@ -884,7 +1160,7 @@ Agents generes :
 Commandes disponibles :
 - /feature, /bugfix, /hotfix, /refactor
 - /review, /qa, /secu
-- /deploy qualif, /deploy prod
+- /build, /publish qualif|prod, /deploy qualif|prod
 - /milestone new/status/close
 - /backlog, /marketing
 - /progression, /context-audit
@@ -988,6 +1264,39 @@ for f in .claude/agents/context/*.md .claude/commands/context/*.md; do
   mv "$f" "$dest"
   echo "  ✓ migration contexte : $(basename $f) → $(basename $dest)"
 done
+```
+
+#### Etape d1d — Vérification des fichiers d'environnement
+
+> ⚠ **SCOPE STRICT** : cette étape **crée uniquement les fichiers manquants** — comme
+> `dev-backend.template.md` (jamais resynchronisé automatiquement par l'option d, voir note
+> d3b), les fichiers `.claude/agents/environments/*.template.md` déjà présents ne sont **jamais**
+> modifiés ici, même si leur source `TEMPLATE_claude/templates/environments/` a changé. C'est un
+> filet de sécurité (éviter qu'`agents/deploy.md` référence un fichier inexistant), pas une
+> synchronisation complète — limitation assumée, à signaler dans le rapport si applicable.
+
+```bash
+if jq -e '.infrastructure.environments' .claude/project-config.json >/dev/null 2>&1; then
+  MISSING_ENV_FILES=()
+  jq -c '.infrastructure.environments[]' .claude/project-config.json | while read -r ENV; do
+    NAME=$(echo "$ENV" | jq -r '.name')
+    ENV_LOWER=$(echo "$NAME" | tr '[:upper:] _' '[:lower:]--')
+    for TASK in publish deploy; do
+      f=".claude/agents/environments/${TASK}.${ENV_LOWER}.template.md"
+      [[ -f "$f" ]] || MISSING_ENV_FILES+=("$TASK.$ENV_LOWER")
+    done
+  done
+fi
+```
+
+Si `MISSING_ENV_FILES[]` non vide → exécuter pour ces seules entrées manquantes la génération
+décrite en section "3bis. Fichiers d'environnement" (Génération de la Configuration), puis
+informer :
+
+```
+⚠ Fichiers d'environnement manquants générés : publish.qualif, deploy.qualif
+  (project-config.json déclare ces environnements mais les fichiers n'existaient pas encore —
+   vérifier/ajuster les cibles générées, voir "Fichiers d'Environnement" dans agents/deploy.md)
 ```
 
 #### Etape d2 — Calculer les noms deployes attendus
@@ -1192,9 +1501,9 @@ Le fetcher depuis la racine du repo GitHub pour que les projets existants reçoi
 les mises à jour (Message de Fin, corrections de bugs, etc.) :
 
 ```bash
-gh api repos/$TEMPLATE_REPO/contents/init-project.md \
+gh api "repos/$TEMPLATE_REPO/contents/init-project.md?ref=$LATEST_COMMIT" \
   --jq '.content' | base64 -d > .claude/commands/init-project.md
-echo "  ✓ .claude/commands/init-project.md mis à jour (depuis racine repo)"
+echo "  ✓ .claude/commands/init-project.md mis à jour (depuis le tag $LATEST_TAG)"
 ```
 
 **Option A uniquement — Supprimer les reliquats :**
@@ -1466,10 +1775,12 @@ Synchronisation terminee.
   CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
   CLAUDE.md table Agents Disponibles : mis à jour (N lignes — documentation uniquement)
   Labels GitHub                     : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
+  Schema infrastructure             : [convertit vers environments[] | deja a jour | inchange (refuse)]
 
   Fichiers PROJET preserves (non touches) :
     ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL et hors table Agents Disponibles)
-    ✓ .claude/project-config.json
+    ✓ .claude/project-config.json (hors migration ponctuelle du schema `infrastructure`, voir
+      section "Migration du schema `infrastructure`" — champs projet non touches sinon)
     ✓ .claude/memory/
     ✓ .claude/agents/dev-*.md   (jamais modifiés par la sync de la table Agents Disponibles)
 ```

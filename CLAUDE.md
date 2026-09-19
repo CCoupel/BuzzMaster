@@ -191,7 +191,7 @@ SendMessage({
 | `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
 | `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | permanent |
 | `doc-updater` | Documentation | `.claude/agents/doc-updater.template.md` | permanent |
-| `deployer` | Déploiement QUALIF/PROD | `.claude/agents/deploy.template.md` | permanent |
+| `deployer` | Build + Publication + Déploiement QUALIF/PROD | `.claude/agents/deploy.template.md` | permanent |
 | `security` | Audit sécurité | `.claude/agents/security.template.md` | ponctuel |
 | `infra` | Infrastructure (si configurée) | `.claude/agents/infra.template.md` | ponctuel |
 
@@ -203,5 +203,9 @@ SendMessage({
 
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
 > **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-buzzclick`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.md`).
+
+> Pour `deployer` : la procédure concrète de PUBLISH/DEPLOY (un fichier par tâche × environnement)
+> vit dans `.claude/agents/environments/{publish,deploy}.<env>.md` — voir `agents/deploy.md`
+> section "Fichiers d'Environnement".
 
 

@@ -170,6 +170,21 @@ TEMPLATE_claude/
 .claude/commands/context/*.template.md
 .claude/agents/context/*.template.md
 
+# Fichiers d'environnement generes depuis TEMPLATE_claude/templates/environments/ (*.template.md
+# - jamais edites manuellement, meme convention que les agents ci-dessus). Les compagnons
+# publish.<env>.md / deploy.<env>.md (hors .template.md) sont des adaptations projet - trackes.
+.claude/agents/environments/*.template.md
+
+# Variables et secrets par environnement - jamais commites (valeurs reelles). Le compagnon
+# <env>.env.example (noms de variables attendus, valeurs vides) reste, lui, tracke.
+.claude/agents/environments/*.env
+!.claude/agents/environments/*.env.example
+
+# Variables et secrets globaux au projet (applicatif + infra, communs a tous les environnements)
+# - jamais commites. Voir .env.example a la racine s'il existe.
+.env
+!.env.example
+
 # Marketing site worktree (gh-pages branch) — anchored at repo root
 # (/MARKETING/) so this doesn't also match docs/marketing/: core.ignorecase=true
 # on this repo makes an unanchored "MARKETING/" match case-insensitively

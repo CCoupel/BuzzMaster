@@ -18,7 +18,20 @@
   },
   "infrastructure": {
     "cicd": "github-actions",
-    "deploy": "bare-metal"
+    "environments": [
+      {
+        "name": "QUALIF",
+        "order": 1,
+        "publish": { "mode": "promote", "target": "build/qualif_v{X.Y.Z}/" },
+        "deploy": { "mechanism": "vps", "target": "local-windows-binary (meme poste, pas de ssh distant)" }
+      },
+      {
+        "name": "PROD",
+        "order": 2,
+        "publish": { "mode": "rebuild-ci", "trigger": "git-tag", "pipeline": ".github/workflows/release.yml" },
+        "deploy": { "mechanism": "none", "target": "aucune plateforme geree par deployer — installation manuelle utilisateur depuis la GitHub Release" }
+      }
+    ]
   },
   "testing": {
     "backend": ["go-test"],

@@ -7,11 +7,14 @@ color: red
 
 # Agent Deploy — Adaptations BuzzControl
 
-> **Base** : Voir `deploy.template.md` pour le role, le declenchement, les workflows QUALIF/PROD
-> generiques, le protocole d'echec CI, le rollback et la checklist. Ce fichier ne contient que
-> les regles specifiques a BuzzControl qui overrident ou completent les etapes generiques.
+> **Base** : Voir `deploy.template.md` pour le role, le declenchement, la Tache BUILD generique,
+> le protocole d'echec, le rollback et la checklist. La mecanique concrete PUBLISH/DEPLOY par
+> environnement vit desormais dans `.claude/agents/environments/{publish,deploy}.{qualif,prod}.template.md`
+> (+ compagnons `.md` — adaptations BuzzControl : QUALIF n'a pas de serveur distant, PROD n'a pas
+> de plateforme geree par `deployer`, voir ces fichiers). Ce fichier ne contient que les regles
+> BUILD specifiques a BuzzControl, qui n'ont pas de fichier d'environnement (BUILD est agnostique).
 
-## BuzzControl — Règles spécifiques QUALIF
+## BuzzControl — Tâche BUILD
 
 ### Ordre de build OBLIGATOIRE (BORE)
 
@@ -20,8 +23,8 @@ Le binaire embarque le firmware BuzzClick (merged) ET le frontend React.
 
 ```bash
 # Racine du repo, calculee explicitement — ne jamais deriver de cd relatifs qui se perdent
-# au fil des etapes (voir deploy.template.md : QUALIF_DIR doit toujours resoudre a la racine,
-# meme en monorepo, meme apres un cd server-go/web pour le build frontend)
+# au fil des etapes (voir deploy.template.md : les repertoires doivent toujours resoudre a la
+# racine, meme en monorepo, meme apres un cd server-go/web pour le build frontend)
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
@@ -52,16 +55,17 @@ rm buzzclick-merged.bin
 cd "$REPO_ROOT/server-go/web" && npm run build
 cd "$REPO_ROOT"
 
-# Etape 3 — Backend Go — cross-compilation Windows exe (QUALIF testable directement)
-# QUALIF_DIR ancre sur $REPO_ROOT (pas relatif au cwd courant) — non negociable, voir
+# Etape 3 — Backend Go — cross-compilation Windows exe (candidat local, agnostique a
+# l'environnement — c'est PUBLISH QUALIF qui le rend disponible pour QUALIF)
+# BUILD_DIR ancre sur $REPO_ROOT (pas relatif au cwd courant) — non negociable, voir
 # deploy.template.md pour l'exemple INCORRECT (monorepo) que cet ancrage evite.
 export PATH="$PATH:/usr/local/go/bin"
 MILESTONE_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)\..*/\1/')
 FULL_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
-QUALIF_DIR="$REPO_ROOT/build/qualif_v${MILESTONE_VERSION}"
-mkdir -p "$QUALIF_DIR"
+BUILD_DIR="$REPO_ROOT/build/candidate_v${MILESTONE_VERSION}"
+mkdir -p "$BUILD_DIR"
 cd server-go && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-  go build -ldflags="-s -w" -o "$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" ./cmd/server
+  go build -ldflags="-s -w" -o "$BUILD_DIR/buzzcontrol-candidate-${FULL_VERSION}-windows-amd64.exe" ./cmd/server
 cd "$REPO_ROOT"
 ```
 
@@ -73,35 +77,9 @@ cd "$REPO_ROOT"
 - La CI/CD PROD fait exactement la meme chose -> BORE garanti
 - Regle memoire : `feedback_qualif_windows_firmware.md`
 
-> ⚠️ **Règle** : ne jamais demander la validation QUALIF à l'utilisateur avant que l'étape 3
-> (binaire Windows) soit terminée — l'utilisateur teste systématiquement depuis Windows.
+### Artefact BUILD
 
-### Smoke tests QUALIF BuzzControl
-
-Le serveur QUALIF est lancé sur le **port 9090** pour éviter toute interférence avec un serveur de production tournant sur le port 80.
-
-```bash
-# Depuis la racine du projet — lancer le binaire QUALIF sur port 9090 (flag --port, v5.1.3+)
-"$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" --port 9090 &
-QUALIF_PID=$!
-sleep 2  # attendre démarrage
-
-BASE="http://localhost:9090"
-
-# Smoke tests
-curl -sf $BASE/version               # version
-curl -sf $BASE/                      # page principale
-curl -sf $BASE/api/firmware/buzzclick/version  # firmware endpoint
-curl -sf $BASE/questions             # questions
-curl -sf $BASE/listGame              # liste des jeux
-curl -sf $BASE/tv                    # affichage TV
-
-# Arrêt propre
-kill $QUALIF_PID
-```
-
-### Artefact QUALIF
-
-Convention de chemin/nommage : voir `deploy.template.md` (checklist QUALIF). Nom d'artefact
-BuzzControl : `buzzcontrol-qualif-<version>[-windows-amd64].exe`. Copier vers le serveur
-Raspberry Pi via scp ou rsync.
+Convention de chemin/nommage : voir `deploy.template.md` (checklist BUILD). Nom d'artefact
+BuzzControl : `buzzcontrol-candidate-<version>-windows-amd64.exe`, produit dans
+`build/candidate_v<X.Y.Z>/` — candidat local, pas encore disponible pour QUALIF tant que
+PUBLISH QUALIF ne l'a pas promu (voir `.claude/agents/environments/publish.qualif.md`).
