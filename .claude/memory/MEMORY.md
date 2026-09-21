@@ -9,6 +9,16 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## #228 + #229 DONE — v11.0 (2026-09-21)
+
+- **#228 (pilote de sortie audio, `oto/v3`, Windows+Linux/RPi) et #229 (sons par défaut synthétisés + restauration) toutes deux terminées** — review + QA validées sans réserve pour les deux. Commits #228 : `62754ba0`/`fd86bdc5`/`a91887a8`. Commits #229 : `072f7433`/`6d7c5d20`.
+- **Trou de contrat trouvé et corrigé avant tout code #228** : `contracts/sound.md` disait "Play MAY block" — une implémentation non bloquante aurait été conforme et aurait reproduit exactement le bug du spike #226 (fermeture prématurée). Corrigé en "Play DOIT bloquer jusqu'à la fin réelle du rendu". Vérifié par lecture directe du code source d'`oto/v3` dans le cache de modules (pas seulement la doc).
+- **Mitigation systemd appliquée** (non vérifiée sur Pi réel, tracée explicitement comme telle) : `XDG_RUNTIME_DIR`/`PULSE_SERVER` ajoutés à l'unité *system* existante (jamais d'unité utilisateur — le serveur écoute le port 80). Doc dans `docs/ADMIN_GUIDE.md`/`server-go/README.md`.
+- **#229 sans `//go:embed`** (décision CDP, s'écarte du cadrage initial) : le générateur synthétise 7 WAV déterministes (aucun aléa/horodatage) au premier démarrage — la taille du binaire n'augmente pas, la restauration est idempotente par construction. Sons courts (<1s, contrainte liée au blocage de `Play`), enveloppe anti-clic. Reset des sons régénère immédiatement les défauts (choix délibéré, diffère de backgrounds/entracte qui restent vides).
+- **Point utile pour #230** (relevé par code-reviewer sur #228) : aucune validation de durée à l'upload aujourd'hui, un `.wav` valide mais trop long serait tronqué silencieusement à 10s plutôt que rejeté — à couvrir dans le contrat d'upload de #230.
+- **Validation matérielle utilisateur toujours en attente** (Windows + Raspberry Pi + Bluetooth + écoute des 7 sons) — différée jusqu'ici pour ne pas fausser l'impression avec le paravent de #227 seul, maintenant pertinente puisque #228+#229 sont là.
+- **Prochaine étape** : #230 (page admin — upload/remplacement/test des sons) débloquée, dernière issue de la ligne globale v11.0. #231 (bruitages fins par type) reste en v11.1.
+
 ## #227 DONE — v11.0 (2026-09-21)
 
 - **#227 (vocabulaire de bruitages, moteur abstrait, câblage) validée** — code-reviewer APPROUVÉ AVEC RÉSERVES (1 majeur doc uniquement, corrigé), QA VALIDATED (couverture 92.6% `internal/audio`/63.9% `cmd/server`, `-race` propre, non-régression lumineuse confirmée). Commits `9c25d9b4`→`e259711a` sur `milestone/v11.0`. Aucun son audible à ce stade — voulu, le pilote réel est #228.
