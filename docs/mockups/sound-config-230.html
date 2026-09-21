@@ -156,7 +156,7 @@
 
 <header class="mast">
   <div class="eyebrow">
-    <span>Issue #230</span><span>Milestone v11.0</span><span>Révision 4</span><span>⏳ À valider</span>
+    <span>Issue #230</span><span>Milestone v11.0</span><span>Révision 5</span><span>⏳ À valider</span>
   </div>
   <h1>Bruitage d'événement — administration des sons</h1>
   <p class="standfirst">
@@ -258,9 +258,11 @@
           <span class="status ok"><span class="dot"></span>Son actif</span>
         </div>
         <p class="hint">
-          Les sons sont joués sur l'enceinte reliée au serveur ; le volume se règle sur l'enceinte
-          elle-même. État établi au démarrage du serveur — pour vérifier qu'une enceinte répond
-          maintenant, utilisez « Tester sur l'enceinte ».
+          <b style="color:var(--warn)">Éteindre coupe le son immédiatement. Rallumer ne prend
+          effet qu'au prochain démarrage du serveur.</b>
+          <br>Les sons sont joués sur l'enceinte reliée au serveur ; le volume se règle sur
+          l'enceinte elle-même. État établi au démarrage du serveur — pour vérifier qu'une enceinte
+          répond maintenant, utilisez « Tester sur l'enceinte ».
         </p>
       </div>
 
@@ -358,6 +360,20 @@
     <br><br>
     L'interrupteur du haut reste le maître : éteint, il coupe tout, quels que soient les sept
     interrupteurs de lignes. Ceux-ci ne servent qu'à découper à l'intérieur de ce qui est allumé.
+  </div>
+
+  <div class="call warn">
+    <span class="call-t">L'interrupteur général n'agit pas dans les deux sens de la même façon</span>
+    <b>Éteindre est immédiat</b> — c'est le geste qui compte en conditions réelles : couper un
+    bruitage qui gêne, en pleine partie, sans rien redémarrer.
+    <br><br>
+    <b>Rallumer exige un redémarrage du serveur.</b> La sortie audio ne peut être ouverte qu'une
+    fois par processus : si les bruitages étaient éteints au démarrage, rien n'a été construit, et
+    aucune bascule ne peut le créer après coup. L'interface doit le dire à côté de l'interrupteur
+    plutôt que de laisser l'utilisateur attendre un son qui ne viendra pas.
+    <br><br>
+    Les sept interrupteurs de lignes, eux, sont <b>immédiats dans les deux sens</b> : ils ne
+    touchent pas à la sortie, seulement au flux d'événements.
   </div>
 
   <div class="call info">
@@ -681,6 +697,8 @@
         <tr><td><b>Modale de test</b></td><td>Un bouton unique « Tester », deux sections, un verdict manuel par section</td></tr>
         <tr><td><b>Déclenchement des écoutes</b></td><td>Un clic explicite par section — rien ne se joue à l'ouverture, la page est atteignable en pleine partie</td></tr>
         <tr><td><b>Durée de vie des verdicts</b></td><td>Éphémères, le temps de la séance — un verdict conservé se périmerait au premier changement</td></tr>
+        <tr><td><b>Interrupteur général, extinction</b></td><td>Immédiate — c'est le geste urgent en conditions réelles</td></tr>
+        <tr><td><b>Interrupteur général, allumage</b></td><td>« Prend effet au prochain démarrage du serveur », dit explicitement à côté de l'interrupteur</td></tr>
         <tr><td><b>Pastille à deux états</b></td><td>« Son actif » / « Son inactif » — éteint et en panne fusionnés, la cause reste donnée par le bouton de test</td></tr>
       </tbody>
     </table>
