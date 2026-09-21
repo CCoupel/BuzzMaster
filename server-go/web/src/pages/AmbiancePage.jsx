@@ -4,8 +4,10 @@ import Card from '../components/Card'
 import { useGame } from '../hooks/GameContext'
 import { useLightingStatus, notifyLightingChanged } from '../hooks/useLightingStatus'
 import { lightingStateLabel, normalizeLightingState } from '../utils/lightingState'
+import LightingBulbIcon from '../components/LightingBulbIcon'
 import { useSoundStatus, notifySoundChanged } from '../hooks/useSoundStatus'
 import { soundStateLabel } from '../utils/soundState'
+import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
 import SoundsManager from '../components/SoundsManager'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -772,8 +774,29 @@ export default function AmbiancePage() {
             data-state={badgeState}
             role="status"
           >
+            <LightingBulbIcon state={badgeState} />
             <span className="ambiance-status-dot" aria-hidden="true" />
             {lightingStateLabel(badgeState)}{lightsSummary}
+          </span>
+          {/* #234 (correction) — seconde pastille, dédiée au son. Classe
+              DISTINCTE de `.ambiance-status-badge` : AmbiancePage.test.jsx:123
+              sélectionne ce nom de classe AU SINGULIER (querySelector), dans
+              une dizaine d'assertions dont deux négatives
+              (not.toContain('refusée'/'injoignable')) — le texte du son ne
+              doit jamais pouvoir atterrir dans le même élément. Même rendu
+              visuel que la pastille lumière (règles partagées dans
+              AmbiancePage.css), sous son propre sélecteur. Un glyphe par
+              pastille (LightingBulbIcon/SoundSpeakerIcon) les rend
+              auto-descriptives — AUCUN libellé texte modifié (les
+              assertions existantes sont sensibles à la casse). */}
+          <span
+            className={`ambiance-sound-badge is-${soundStatus.active ? 'ok' : 'idle'}`}
+            data-state={soundStatus.active ? 'ok' : 'idle'}
+            role="status"
+          >
+            <SoundSpeakerIcon active={soundStatus.active} />
+            <span className="ambiance-status-dot" aria-hidden="true" />
+            {soundStateLabel(soundStatus.active)}
           </span>
         </div>
         <p className="page-subtitle">Éclairage et bruitages de la salle, pilotés par le jeu</p>

@@ -31,8 +31,16 @@
   margin: 0;
 }
 
-/* ---- Badge d'état — QUATRE valeurs, jamais fondues (maquette §02) ---- */
-.ambiance-status-badge {
+/* ---- Badge d'état — QUATRE valeurs, jamais fondues (maquette §02) ----
+   #234 (correction) — `.ambiance-sound-badge` (bandeau, pastille dédiée au
+   son) PARTAGE ce rendu via les mêmes règles, étendues par sélecteur plutôt
+   que dupliquées, SANS jamais porter le nom de classe `.ambiance-status-badge`
+   lui-même : ce nom reste réservé à l'éclairage (AmbiancePage.test.jsx:123
+   le sélectionne au singulier — querySelector, pas querySelectorAll — dans
+   une dizaine d'assertions dont deux négatives). Voir AmbiancePage.jsx pour
+   le pourquoi complet. */
+.ambiance-status-badge,
+.ambiance-sound-badge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -53,20 +61,32 @@
   flex: none;
 }
 
-.ambiance-status-badge.is-ok {
+/* Glyphe d'identification du canal (#234) — réduit par rapport à sa taille
+   par défaut (1.1rem, Navbar) pour tenir dans la pastille à côté du point
+   de couleur et du texte. */
+.ambiance-status-badge .lighting-bulb-icon,
+.ambiance-sound-badge .sound-speaker-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.ambiance-status-badge.is-ok,
+.ambiance-sound-badge.is-ok {
   color: var(--success);
   border-color: var(--success);
 }
-.ambiance-status-badge.is-ok .ambiance-status-dot { background: var(--success); }
+.ambiance-status-badge.is-ok .ambiance-status-dot,
+.ambiance-sound-badge.is-ok .ambiance-status-dot { background: var(--success); }
 
-/* Injoignable (réseau) : rouge — geste attendu, rebrancher. */
+/* Injoignable (réseau) : rouge — geste attendu, rebrancher. Lumière
+   uniquement — le son n'a que deux états (is-ok / is-idle), jamais celui-ci. */
 .ambiance-status-badge.is-unreachable {
   color: var(--error);
   border-color: var(--error);
 }
 .ambiance-status-badge.is-unreachable .ambiance-status-dot { background: var(--error); }
 
-/* Refusée (clé) : orange — geste attendu, ré-associer. */
+/* Refusée (clé) : orange — geste attendu, ré-associer. Lumière uniquement. */
 .ambiance-status-badge.is-refused {
   color: var(--warning);
   border-color: var(--warning);

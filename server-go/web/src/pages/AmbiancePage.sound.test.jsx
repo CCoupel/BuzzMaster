@@ -166,6 +166,60 @@ describe('AmbiancePage — onglets Lumière/Son', () => {
 })
 
 // ===========================================================================
+// #234 (correction, SHA ba62910b puis handoff task-dev-frontend-234-
+// correction-20260921-190000.md) — le bandeau doit porter DEUX pastilles
+// distinctes (lumière + son), pas une seule qui ne parle que de l'éclairage
+// sous un sous-titre qui annonce deux canaux. Contrainte vérifiée ici :
+// `.ambiance-status-badge` doit rester une classe RÉSERVÉE à la pastille
+// lumière (AmbiancePage.test.jsx:123 la sélectionne au singulier, dix
+// assertions dont deux négatives) — la pastille son porte donc sa PROPRE
+// classe (`.ambiance-sound-badge`), jamais celle-là.
+// ===========================================================================
+
+describe('AmbiancePage — bandeau : deux pastilles distinctes (#234 correction)', () => {
+  it('la pastille lumière (.ambiance-status-badge) et la pastille son (.ambiance-sound-badge) coexistent, chacune sous son propre nom de classe', async () => {
+    makeSoundServer({ soundStatus: { active: true } })
+    const { container } = render(<AmbiancePage />)
+    await screen.findByText('Rechercher un pont')
+
+    // Une seule pastille lumière : la classe reste réservée à l'éclairage,
+    // exactement la contrainte que le handoff demande de vérifier.
+    const lightingBadges = container.querySelectorAll('.ambiance-status-badge')
+    expect(lightingBadges).toHaveLength(1)
+    const soundBadges = container.querySelectorAll('.ambiance-sound-badge')
+    expect(soundBadges).toHaveLength(1)
+    expect(lightingBadges[0]).not.toBe(soundBadges[0])
+
+    // Chacune porte son propre glyphe (auto-descriptive, aucun libellé
+    // texte modifié pour autant — voir le test suivant).
+    expect(lightingBadges[0].querySelector('svg.lighting-bulb-icon')).not.toBeNull()
+    expect(lightingBadges[0].querySelector('svg.sound-speaker-icon')).toBeNull()
+    expect(soundBadges[0].querySelector('svg.sound-speaker-icon')).not.toBeNull()
+    expect(soundBadges[0].querySelector('svg.lighting-bulb-icon')).toBeNull()
+  })
+
+  it.each([
+    [true, 'on', 'Son actif'],
+    [false, 'off', 'Son inactif'],
+  ])('pastille son active=%s → glyphe %s, « %s », sans jamais changer le libellé lumière', async (active, glyph, label) => {
+    makeSoundServer({ soundStatus: { active } })
+    const { container } = render(<AmbiancePage />)
+    await screen.findByText('Rechercher un pont')
+
+    const soundBadge = container.querySelector('.ambiance-sound-badge')
+    expect(soundBadge.textContent).toContain(label)
+    expect(soundBadge.querySelector('svg').dataset.glyph).toBe(glyph)
+
+    // Le libellé de l'éclairage (sensible à la casse dans les assertions
+    // existantes d'AmbiancePage.test.jsx) reste EXACTEMENT « Non configuré »
+    // — server non associé dans cette fixture — quel que soit l'état du son.
+    const lightingBadge = container.querySelector('.ambiance-status-badge')
+    expect(lightingBadge.textContent).toContain('Non configuré')
+    expect(lightingBadge.textContent).not.toContain('Son')
+  })
+})
+
+// ===========================================================================
 // Tableau — origine, durée, actions conditionnelles.
 // ===========================================================================
 
