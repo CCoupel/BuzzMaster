@@ -9,6 +9,15 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## #230 DONE — milestone v11.0 complet côté dev (2026-09-21)
+
+- **#230 (page admin des sons) livrée** après un cycle REFUSÉ→corrigé : `handleConfig` (`POST /config.json`) n'avait aucune branche pour la clé `"sound"` (interrupteurs répondant 200 OK sans rien persister), et l'asymétrie du toggle général n'était pas câblée. Correctif `a778ea4d`, re-review APPROUVÉ, QA VALIDATED. **Les 5 issues de v11.0 (#226-#230) sont toutes DONE.**
+- **Décisions produit actées pendant la maquette** (5 itérations avec l'utilisateur) : terminologie "défaut" (jamais "livré") ; interrupteur par cue en plus du toggle général (`CuesDisabled`, stocke ce qui est désactivé — pas l'inverse, pour un zéro-value sûr) ; toggle général asymétrique (extinction immédiate, allumage nécessite un redémarrage — contrainte dure du contexte audio unique de #228) ; bouton "Tester" unique ouvrant une modale à 2 écoutes (locale navigateur / enceinte serveur) avec verdict **manuel** ok/ko/pas-testé, jamais dérivé de la réponse serveur, jamais persisté ; pastille d'état simplifiée à 2 états (actif/inactif) après avoir découvert qu'aucune surveillance temps réel de la connexion Bluetooth n'existe.
+- **Nouvelles issues ouvertes** : #232 (rééchantillonnage automatique à l'upload, v11.1, faisabilité confirmée ~150-250 lignes Go pur sans dépendance) ; #233 (race intermittente `TestSoundChain_*` sur `config.Get()` singleton + goroutine timer, confirmée antérieure à #230/#227, non bloquante).
+- **`BackgroundsManager` volontairement écarté comme modèle** pour l'upload de sons : les 7 emplacements sont fixes (nom de fichier = la cue), pas une galerie libre — `SoundsManager.jsx` distinct plutôt qu'une généralisation forcée.
+- **Fermeture GitHub des issues** : volontairement PAS fermées (juste labellées DONE) — règle projet "fermeture = validation manuelle utilisateur". #228/#229 validées à l'oreille sur Windows (fermables). #230 (page admin) pas encore testée manuellement par l'utilisateur — à faire avant fermeture et avant clôture du milestone #34.
+- **Pi toujours non testé** — reste le seul point dur non levé avant une éventuelle PROD de v11.0.
+
 ## Validation manuelle Windows confirmée (2026-09-21)
 
 - **Son entendu réellement sur Windows** (build candidat `11.0.0.1`, `build/candidate_v11.0.0/`) : `depart` et `reveal` confirmés sur un cycle de jeu normal — comportement attendu, les 5 autres cues (`gagne`/`temps-ecoule`/`perdu`/`entracte-*`) exigent des déclencheurs spécifiques non joués lors de ce test.
