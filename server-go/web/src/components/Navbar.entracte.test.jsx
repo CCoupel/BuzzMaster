@@ -28,6 +28,17 @@ vi.mock('../hooks/GameContext', () => ({
   useGame: vi.fn(),
 }))
 
+// #234 — Navbar consomme désormais useSoundStatus (haut-parleur de l'entrée
+// « Ambiance ») en plus de useLightingStatus (ni l'un ni l'autre n'était
+// mocké ici avant #234, ce fichier ne porte pas sur cette entrée — il
+// survivait via le `global.fetch` générique posé plus bas). Simulé
+// explicitement quand même, pour que les quatre fichiers de tests de la
+// Navbar soient traités de la même façon (handoff #234 §4) — ce fichier
+// n'a rien à dire sur l'état du son, seule la forme du mock compte ici.
+vi.mock('../hooks/useSoundStatus', () => ({
+  useSoundStatus: () => ({ status: { active: false }, refresh: vi.fn() }),
+}))
+
 import { useGame } from '../hooks/GameContext'
 
 class ResizeObserverMock {

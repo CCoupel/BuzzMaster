@@ -37,6 +37,15 @@ vi.mock('../hooks/useLightingStatus', () => ({
   useLightingStatus: () => ({ status: { state: 'disabled' }, refresh: vi.fn() }),
 }))
 
+// #234 — même raison, même patron : Navbar consomme désormais aussi
+// useSoundStatus (haut-parleur de l'entrée « Ambiance », GET
+// /api/sound/status). Sans ce mock, le vrai hook s'exécuterait ici (fetch
+// non simulé, avertissements act()) dans un fichier qui ne porte pas sur le
+// son. Couverture propre de l'entrée dans Navbar.ambiance.test.jsx.
+vi.mock('../hooks/useSoundStatus', () => ({
+  useSoundStatus: () => ({ status: { active: false }, refresh: vi.fn() }),
+}))
+
 // ENTRACTE (#119, delta C2) — Navbar consomme désormais useGame() (bouton
 // ENTRACTE / FIN D'ENTRACTE, cf. Navbar.entracte.test.jsx pour sa propre
 // couverture). Mock minimal ici, additif et sans rapport avec les tests

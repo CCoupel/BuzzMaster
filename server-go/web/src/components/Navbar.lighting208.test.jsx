@@ -24,6 +24,7 @@ import Navbar from './Navbar'
 
 vi.mock('./Navbar.css', () => ({}))
 vi.mock('./LightingBulbIcon.css', () => ({}))
+vi.mock('./SoundSpeakerIcon.css', () => ({}))
 vi.mock('./LightingModePanel.css', () => ({}))
 vi.mock('../styles/entracte.css', () => ({}))
 
@@ -41,6 +42,15 @@ vi.mock('../hooks/GameContext', () => ({
 const lightingMock = { status: { state: 'disabled', mode: 'AUTO', flash: false }, refresh: vi.fn() }
 vi.mock('../hooks/useLightingStatus', () => ({
   useLightingStatus: () => lightingMock,
+}))
+
+// #234 — Navbar consomme désormais aussi useSoundStatus (haut-parleur de
+// l'entrée « Ambiance ») ; ce fichier ne porte pas sur cette entrée
+// (couverture propre : Navbar.ambiance.test.jsx) mais monte <Navbar>, donc
+// le vrai hook s'exécuterait sans ce mock (fetch non simulé, avertissements
+// act()). Statique, jamais varié dans ce fichier.
+vi.mock('../hooks/useSoundStatus', () => ({
+  useSoundStatus: () => ({ status: { active: false }, refresh: vi.fn() }),
 }))
 
 class ResizeObserverMock {

@@ -6,6 +6,9 @@ import { useLightingStatus } from '../hooks/useLightingStatus'
 import { lightingStateTitle, normalizeLightingState } from '../utils/lightingState'
 import LightingBulbIcon from './LightingBulbIcon'
 import LightingModePanel from './LightingModePanel'
+import { useSoundStatus } from '../hooks/useSoundStatus'
+import { soundStateTitle } from '../utils/soundState'
+import SoundSpeakerIcon from './SoundSpeakerIcon'
 import useElementHeightVar from '../hooks/useElementHeightVar'
 import { useGame } from '../hooks/GameContext'
 import { canToggleEntracte } from '../utils/phaseRules'
@@ -71,6 +74,12 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // peut devenir injoignable PENDANT une session — un appel au montage seul,
   // comme useUpdates, ne suffirait pas.
   const { status: lightingStatus } = useLightingStatus()
+  // #234 — même mécanique, jumelle (hooks/useSoundStatus.js, livré en #230) :
+  // sondage 30 s + événement de réveil indépendant, pour le second glyphe de
+  // l'entrée « Ambiance » ci-dessous. Aucun second polling de l'éclairage
+  // introduit — deux hooks, deux intervalles indépendants, comme prévu par
+  // le handoff (§4, "Second sondage réseau").
+  const { status: soundStatus } = useSoundStatus()
   // #208 — point d'accès UNIQUE aux commandes ON/AUTO/OFF/Flash (retour
   // utilisateur QUALIF v10.0.0.13, 2026-09-07) : d'abord un simple bandeau
   // d'avertissement renvoyant vers GamePage (SHA 110dfff3), le panneau
@@ -202,11 +211,26 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     // 3 glyphes distincts selon l'état), pas un emoji : ni la couleur ni la
     // forme d'un emoji ne sont pilotables. `title` dit l'état en toutes
     // lettres pour les lecteurs d'écran (le SVG est aria-hidden).
+    //
+    // #234 — la page /admin/ambiance a deux onglets (Lumière, Son) depuis
+    // #230 : cette entrée de menu porte donc désormais DEUX glyphes côte à
+    // côte, l'ampoule Hue (inchangée) et le haut-parleur (nouveau). `icon`
+    // accepte du JSX arbitraire (voir les trois sites qui rendent
+    // `{item.icon}` dans ce fichier) : un fragment se propage sans aucune
+    // autre modification, quel que soit celui qui affiche cette entrée.
+    // Aucun popover pour le son (contrairement à l'ampoule) : c'est une
+    // pastille d'état, pas une commande — cliquer l'entrée mène à la page,
+    // comme aujourd'hui.
     {
       path: 'ambiance',
       label: 'Ambiance',
-      icon: <LightingBulbIcon state={lightingStatus.state} />,
-      title: lightingStateTitle(lightingStatus.state),
+      icon: (
+        <span className="ambiance-menu-icons">
+          <LightingBulbIcon state={lightingStatus.state} />
+          <SoundSpeakerIcon active={soundStatus.active} />
+        </span>
+      ),
+      title: `${lightingStateTitle(lightingStatus.state)} · ${soundStateTitle(soundStatus.active)}`,
     },
     { path: 'backup', label: 'Backup/Restaure', icon: '💾' },
     { path: 'updates', label: 'Mises à jour', icon: '🔄', badge: updateInfo?.update_available },
