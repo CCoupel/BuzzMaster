@@ -153,6 +153,22 @@ type Output interface {
 > temps au lieu de se superposer. C'est une contrainte d'architecture qui pèse sur le choix des
 > sons (#229 : sons courts, cible < 1 s), pas un défaut de ce contrat.
 
+> **Amendement normatif (2026-09-21, #230) — un accesseur exporté doit signaler un `Output`
+> neutre.** `NewOutput` (#228) ne renvoie jamais d'erreur et ne remonte **aucune information
+> d'état** : une dégradation à la construction (contexte refusé, jamais prêt, matériel absent)
+> produit un `noopOutput` **indiscernable de l'extérieur** d'un pilote réel qui fonctionne — les
+> deux satisfont l'interface `Output` à l'identique. `GET /api/sound/status`
+> (`contracts/http-endpoints.md` §Sound) a besoin de distinguer les deux cas pour établir son
+> état, et ne peut pas le faire aujourd'hui : `Engine.Enabled()` rend `true` dès qu'un `Output`
+> est attaché, neutre ou non, et `Stats.PlayErrors` ne comble pas ce trou — un `noopOutput` ne
+> produit jamais d'erreur non plus (§5.5, dégradation silencieuse jusqu'au bout).
+>
+> **Exigence pour le Lot B de #230** : `internal/audio` expose une fonction — par exemple
+> `IsNeutral(o Output) bool` — vraie pour le `noopOutput` retourné par `NewOutput` en cas de
+> dégradation (`output.go`/`output_other.go`) et pour tout `Output` nil, fausse pour un pilote réel
+> attaché. **Purement additif** : aucune logique de construction, de lecture ou de dégradation
+> existante n'est modifiée, seule une lecture d'état est ajoutée.
+
 ---
 
 ## 5. Le moteur — normatif, forme imposée
@@ -296,6 +312,68 @@ test-garde lumineux (`lighting.md` §7) n'a jamais eu à l'exclure, puisque son 
 Spécification complète du test, registre et message d'échec attendu : à la charge de Lot C
 (`test-writer`), conformément au plan de dev §3.5/§C.1 — ce contrat pose la frontière, pas
 l'implémentation du test.
+
+### 6.3 `CuesDisabled` — filtrage par cue, normatif (2026-09-21, #230)
+
+Nouveau champ de `SoundConfig` (`internal/config/config.go`) :
+
+```go
+CuesDisabled map[string]bool `json:"cues_disabled,omitempty"`
+```
+
+**On stocke ce qui est ÉTEINT, jamais ce qui est allumé.** Avec un `CueEnabled` (l'inverse), une
+carte absente de `config.json` se désérialise en `nil` : toute lecture naïve rend `false`, et
+**tous les sons deviendraient muets sur chaque configuration existante** — il faudrait compenser
+dans `ApplyDefaults`, peupler les sept clés, et rester vigilant à chaque cue ajoutée. En stockant
+les cues **désactivées**, la valeur zéro — carte absente, vide ou `nil` — signifie exactement
+« rien n'est désactivé », c'est-à-dire le comportement d'aujourd'hui. Aucune migration, et une cue
+ajoutée en #231 est active sans que personne n'ait rien à faire. Même discipline que celle qui a
+rendu `Bank` nil-safe en #227 (§5) : la valeur zéro doit être le comportement correct.
+
+**Point de filtrage, normatif : dans `notifySound` (`cmd/server/sound.go`), avant l'appel au
+moteur — jamais ailleurs.**
+
+```go
+func (a *App) notifySound(c audio.Cue) {
+    if config.Get().Sound.CuesDisabled[string(c)] {
+        return
+    }
+    a.sound().PlayCue(c)
+}
+```
+
+Trois raisons :
+- `internal/audio` n'importe rien du serveur (§2, package testable seul) — la configuration n'a
+  pas à y entrer, le filtrage ne peut donc pas vivre dans le moteur ;
+- `notifySound` est le **point d'entrée unique** du fan-out, garanti par le test-garde AST du §6.2
+  — une cue désactivée ne peut donc pas passer par un chemin détourné ;
+- filtrer **avant** `PlayCue` évite de consommer une place de file et de gonfler
+  `Stats.Accepted` pour un son qui ne sera jamais joué.
+
+**Lecture à l'appel, jamais en cache** dans un champ de l'`App` — sinon une bascule depuis
+l'interface ne prendrait effet qu'au redémarrage. Même discipline que `a.buildAudioOutput()` lit
+`config.Get().Sound` à chaque construction plutôt qu'une fois pour toutes.
+
+> ⚠️ **`notifySound` est du code de #227, déjà revu et testé — ceci est une extension ADDITIVE,
+> pas une réouverture.** Le corps existant est inchangé, une condition est ajoutée en amont ; à
+> valeur zéro (`CuesDisabled` absent/vide/nil), le comportement est **identique au bit près** à
+> celui livré en #227 ; aucun site d'émission, aucune signature, aucun contrat de concurrence
+> n'est modifié ; le test-garde AST du §6.2 reste valide tel quel (le sélecteur scanné ne change
+> pas). **Test exigé** : une configuration vide produit exactement les mêmes cues qu'aujourd'hui —
+> c'est ce test qui transforme « additif » d'une affirmation en une propriété vérifiée.
+
+**Interaction avec l'interrupteur général — normatif** : `sound.enabled` reste **maître**. Éteint,
+il coupe tout (le moteur n'est même pas démarré, contract §5.5), quels que soient les sept
+interrupteurs de `CuesDisabled`. Une cue individuellement désactivée **reste testable** par
+`POST /api/sounds/<cue>/test` (`contracts/http-endpoints.md` §Sound) : ce test appelle le moteur
+**directement**, jamais via `notifySound` — tester est un geste explicite de l'utilisateur, seul
+le déroulé de la partie doit rester muet pour une cue désactivée.
+
+**Aucun endpoint dédié pour ces deux réglages** (activation générale, `CuesDisabled`) : ils
+s'écrivent par le patch partiel additif existant `POST /config.json` avec un corps
+`{ "sound": {...} }`, exactement comme `{ "lighting": {...} }` le fait déjà pour l'éclairage
+(`contracts/http-endpoints.md` §Configuration). Aucun nouvel endpoint n'est introduit pour ce seul
+besoin.
 
 ---
 

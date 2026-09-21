@@ -2,6 +2,51 @@
 
 ---
 
+## [20260921e] — Bruitage d'événement : contrat de l'interface d'administration (#230, Lot A)
+
+> Contrat uniquement — aucune implémentation dans ce lot. Référence normative pour les libellés
+> et les états : `docs/mockups/sound-config-230.html` (révision 3).
+
+- **[NEW]** `contracts/http-endpoints.md` §Sound — cinq nouveaux endpoints spécifiés :
+  `GET /api/sounds` (état des 7 cues), `POST /api/sounds/{cue}` (remplacement, validation format
+  **et durée** — refus > 5 s, avertissement > 2 s, ferme le point relevé par `code-reviewer` sur
+  #228), `POST /api/sounds/{cue}/restore` (restauration unitaire, idempotente),
+  `POST /api/sounds/{cue}/test` (lecture réelle sur l'enceinte, **trois** résultats distincts
+  `played`/`disabled`/`unavailable`, appelle le moteur directement — jamais via `notifySound`, une
+  cue désactivée reste testable), `GET /api/sound/status` (état de la sortie, **deux** états
+  fusionnés délibérément — asymétrie de granularité voulue avec l'endpoint de test, motivée dans
+  le contrat). `POST /api/sounds/restore-defaults` (#229) documenté, non redéfini.
+- **[NEW]** `contracts/http-endpoints.md` §Sound — garde de sécurité normative : `{cue}` validé
+  contre le catalogue fermé avant toute jointure de chemin (même discipline que la garde SSRF de
+  #206), `404` sur toute valeur hors catalogue.
+- **[NEW]** `contracts/http-endpoints.md` §Sound — aucun endpoint dédié pour l'activation générale
+  ni pour l'interrupteur par cue : les deux s'écrivent par le patch partiel additif existant
+  `POST /config.json` avec `{ "sound": {...} }`, symétrique de `{ "lighting": {...} }`.
+- **[NEW]** `contracts/sound.md` §6.3 — `SoundConfig.CuesDisabled map[string]bool` : stocke ce qui
+  est **éteint**, jamais ce qui est allumé (la valeur zéro — absente/vide/nil — doit rester « rien
+  n'est désactivé », sans quoi chaque configuration existante deviendrait silencieuse et chaque
+  cue future à #231 nécessiterait une migration). Point de filtrage normatif dans `notifySound`
+  (`cmd/server/sound.go`), **avant** l'appel au moteur, lu à l'appel — jamais mis en cache.
+  ⚠️ **Extension additive d'un code déjà revu (#227)** : le corps existant de `notifySound` ne
+  change pas, une condition s'ajoute en amont ; à valeur zéro le comportement reste identique au
+  bit près. Test exigé : une configuration vide produit exactement les mêmes cues qu'aujourd'hui.
+- **[NEW]** `contracts/sound.md` §4 (amendement) — exigence d'un accesseur exporté
+  (`audio.IsNeutral(Output) bool` ou équivalent) distinguant un pilote réel d'un `noopOutput` de
+  dégradation : `NewOutput` (#228) ne remonte aujourd'hui aucune information d'état, ce que
+  `GET /api/sound/status` et `POST /api/sounds/{cue}/test` nécessitent tous les deux. Purement
+  additif, aucune logique de construction/dégradation existante modifiée.
+- **[NEW]** Terminologie normative de l'interface : **« défaut »**, jamais « livré » (réservé aux
+  rapports techniques).
+
+**Aucun BREAKING.** Tout est additif : nouveaux endpoints, nouveau champ de configuration à valeur
+zéro rétrocompatible, nouvel accesseur sans effet sur le comportement existant. Aucune
+configuration ni comportement existant n'est invalidé.
+
+Détail complet : `_work/reports/plan-dev-230-20260921-144000.md`,
+`_work/reports/plan-delta-230-20260921-152000.md`, `docs/mockups/sound-config-230.html`.
+
+---
+
 ## [20260921d] — Bruitage d'événement : sons par défaut synthétisés + premier endpoint (#229)
 
 > Décision actée au cadrage : pas de `//go:embed` pour les sons livrés. Puisqu'ils sont
