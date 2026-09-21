@@ -21,6 +21,7 @@ Ce document décrit l'interface web React de BuzzControl.
 | `/admin/teams` | TeamsPage | Gestion des joueurs et équipes |
 | `/admin/quiz` | QuestionsPage | Gestion des questions |
 | `/admin/settings` | ConfigPage | Configuration |
+| `/admin/ambiance` | AmbiancePage | Éclairage d'ambiance (Hue) et bruitages d'événement (v11.0, #230) — onglets Lumière/Son |
 | `/admin/history` | HistoryPage | Historique des événements |
 | `/admin/palmares` | CategoryPalmaresPage | Palmarès par catégorie |
 | `/admin/logs` | LogsPage | Logs serveur temps réel |
@@ -1649,3 +1650,185 @@ Fichier CSS partagé déclarant :
 **Comportement** :
 - Inclus/exclus `data/files/rafale/` ET `data/config/rafale_used.json` ensemble
 - Aucune sélection partielle
+
+---
+
+## Page d'Ambiance — `/admin/ambiance` (v11.0, #230)
+
+**Fichier** : `web/src/pages/AmbiancePage.jsx` + `AmbiancePage.css`
+
+**Description** : Page d'administration d'ambiance combinant deux canaux — éclairage d'ambiance (Philips Hue) et bruitages d'événement (sounds).
+
+### Structure avec onglets
+
+La page utilise une **barre d'onglets** (`role="tablist"`) avec deux positions mutuellement exclusives :
+
+| Onglet | Contenu | Statut |
+|---|---|---|
+| 🔆 **Lumière** | Configuration Philips Hue (pont, ampoules, sélecteur ON/AUTO/OFF) | Actif par défaut |
+| 🔊 **Son** | Gestion des sept cues sonores, interrupteur général | v11.0 (#230) |
+
+#### Mécanique des onglets
+
+```jsx
+const TABS = [
+  { id: "lighting", label: "Lumière", icon: "💡" },
+  { id: "sound", label: "Son", icon: "🔊" }
+];
+
+const [activeTab, setActiveTab] = useState("lighting");
+```
+
+Rendu :
+- Un seul onglet est actif à la fois
+- Cliquer change le contenu affiché — les deux sections ne sont jamais simultanément visibles
+- Styles CSS `.page-tabs`, `.page-tab`, `.page-tab.active` (réutilisés depuis `BackstagePage`)
+
+#### Badge de statut
+
+Un **badge de statut** unique (en haut de la page) reflète **uniquement** l'état de l'éclairage Hue :
+
+| Badge | Signification |
+|---|---|
+| 🟢 **Connecté** | Pont Hue trouvé et associé |
+| 🟡 **Non associé** | Pont détecté, en attente d'appairage |
+| 🔴 **Injoignable** | Pont connu mais actuellement indisponible |
+
+L'état du son (actif/inactif) s'affiche **dans l'onglet Son lui-même**, pas dans le badge global — c'est un choix volontaire pour garder le badge dédié à la lumière.
+
+### Onglet Lumière — Éclairage Hue
+
+Réutilise intégralement le contenu existant de `AmbiancePage` (v10.0.0+). Voir section précédente ou `contracts/lighting.md` pour les détails.
+
+**Composants** :
+- Découverte du pont (étape 1)
+- Appairage (étape 2)
+- Gestion des ampoules et des scènes (étape 3)
+- Sélecteur ON/AUTO/OFF pour la conduite en direct
+
+### Onglet Son — Bruitages d'événement
+
+**Fichier** : `web/src/components/SoundsManager.jsx`
+
+**Description** : Tableau de gestion des sept cues sonores — affichage de l'état (défaut/personnalisé), durée, et trois actions.
+
+#### Interrupteur général
+
+En haut de l'onglet Son, un **bascule ON/OFF** pour activer/désactiver les bruitages :
+
+```jsx
+<div className="sound-toggle">
+  <label>
+    <input type="checkbox" checked={soundEnabled} onChange={handleToggleSound} />
+    Bruitages d'événement
+  </label>
+  <span className="hint">Redémarrage du serveur requis</span>
+</div>
+```
+
+**Comportement** :
+- **OFF → ON** : Demande un redémarrage du serveur (contexte audio doit être initialisé)
+- **ON → OFF** : Immédiat, aucun redémarrage
+
+État affiché aussi dans la pastille (badge `active` en haut de l'onglet).
+
+#### Tableau des sept cues — `SoundsManager`
+
+Pour chaque cue, une ligne affiche :
+
+| Colonne | Contenu |
+|---|---|
+| **Nom** | Identifiant de la cue (ex: `depart`, `temps-ecoule`) |
+| **Origine** | Étiquette « Défaut » ou « Personnalisé » |
+| **Durée** | Affichée en secondes (ex: `0.42 s`) |
+| **Action 1 : Écouter ici** | Lien `<audio>` qui joue le fichier dans le navigateur (sur votre ordinateur) |
+| **Action 2 : Tester sur l'enceinte** | Bouton POST vers `/api/sounds/{cue}/test`, attend une réponse `{result: "played"|"disabled"|"unavailable"}` |
+| **Action 3 : Restaurer** | Bouton `POST /api/sounds/{cue}/restore` — **n'apparaît que si la cue est personnalisée** |
+| **Téléverser** | Champ `<input type="file" accept=".wav" />` pour remplacer le son |
+
+**État du fichier téléversé** :
+
+```jsx
+<FormData> formData;
+formData.append("file", file);
+const response = await fetch(`/api/sounds/${cue}`, { method: "POST", body: formData });
+const result = await response.json();
+
+// Réponse 200
+{
+  "status": "ok",
+  "cue": "depart",
+  "custom": true,
+  "duration_seconds": 0.42,
+  "warning": null   // ou message si durée > ~2 s
+}
+```
+
+| Cas | Affichage |
+|---|---|
+| ✅ Fichier accepté | Ligne de la cue se rafraîchit, origine passe à « Personnalisé », bouton Restaurer apparaît |
+| ⚠️ Avertissement (durée > ~2 s) | Message jaune « Ce son est long et risque de déborder sur l'événement suivant », mais accepté |
+| ❌ Fichier refusé (format ou durée > 5 s) | Message d'erreur rouge expliquant le problème (`400` : lisez le corpus d'erreurs dans `contracts/http-endpoints.md` §Sound `POST /api/sounds/{cue}`) |
+
+#### Bouton global « Restaurer tous les sons livrés »
+
+En bas du tableau `SoundsManager` :
+
+```jsx
+<button onClick={handleRestoreAllSounds} className="btn btn-secondary">
+  🔄 Restaurer tous les sons livrés
+</button>
+```
+
+**Effet** : `POST /api/sounds/restore-defaults` — régénère les sept sons, écrase tous les personnalisés.
+
+**Dialogue de confirmation** : « Cette action est définitive — les sons personnalisés seront perdus. Continuer ? »
+
+#### Résultat du test sur l'enceinte
+
+Quand l'utilisateur clique « Tester sur l'enceinte », il reçoit un des trois messages :
+
+```json
+{ "result": "played" }
+```
+
+Affichage : « ✅ Son envoyé à l'enceinte »
+
+```json
+{ "result": "disabled" }
+```
+
+Affichage : « ⚠️ Bruitages désactivés — rien n'a été joué »
+
+```json
+{ "result": "unavailable" }
+```
+
+Affichage : « ❌ Enceinte indisponible — rien n'a été joué »
+
+**⚠️ Aucun verdict automatique de succès auditif** — l'interface affiche seulement si le son a **quitté le serveur**. L'utilisateur doit écouter réellement pour confirmer.
+
+### Hooks et état
+
+**Fichier** : `web/src/hooks/useSoundStatus.js`
+
+Hook symétrique de `useLighting` pour pollster l'état du son :
+
+```jsx
+const { status, enabled } = useSoundStatus();
+// status: "active" | "disabled" | "unavailable"
+// enabled: bool
+```
+
+Utilisé pour afficher le badge et la pastille de statut.
+
+**Fichier** : `web/src/utils/soundState.js`
+
+Utilitaires pour normaliser l'état du son, appels d'API, stockage d'état local.
+
+### Styles
+
+**Fichier** : `web/src/pages/AmbiancePage.css`
+
+Classes `.sound-*` préfixées (ex: `.sound-toggle`, `.sound-table`, `.sound-cue-row`) — **aucune collision** avec les styles `.lighting-*` existants. Tous les styles sont scoped sous `.ambiance-page`.
+

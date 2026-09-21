@@ -2197,36 +2197,187 @@ Vous devez voir :
 Linger=yes
 ```
 
-### Fonctionnalités
+### Page de Configuration — `/admin/ambiance`
 
-#### Restauration des sons par défaut
+La page `/admin/ambiance` combine deux canaux d'ambiance dans une seule interface à **deux onglets** :
 
-La page `/admin/ambiance` expose un bouton **Restaurer les sons livrés** qui réinitialise les sept sons par défaut. Les sons personnalisés ne sont pas affectés — seuls les sons en excédent sont supprimés.
+| Onglet | Contenu |
+|---|---|
+| **Lumière** | Configuration de l'éclairage Philips Hue (voir section précédente) |
+| **Son** | Gestion des sept cues sonores, sept emplacements fixes |
 
-#### Sons personnalisés
+#### Structure des sons — Sept emplacements fixes, pas une galerie
 
-Chaque son par défaut peut être remplacé via `/admin/files/sounds/` :
+Les bruitages d'événement du jeu portent des noms normalisés (cues), chacun correspondant à un **événement précis** :
 
-1. Naviguez vers `/admin/files/sounds/`
-2. Téléversez un fichier WAV aux **mêmes spécifications** que les sons livrés (voir ci-dessous)
-3. Le serveur joue immédiatement votre son à la place du son par défaut
-4. Un redémarrage ne change rien — votre personnalisation persiste
+| Cue | Événement | Exemple d'usage |
+|---|---|---|
+| `depart` | Début d'une nouvelle question | Appel cloche |
+| `temps-ecoule` | Expiration du chronomètre | Carillon descendant |
+| `gagne` | Points crédités à une équipe | Arpège ascendant |
+| `perdu` | Paire échouée (MEMORY) ou réponse invalide | Note basse sourde |
+| `reveal` | Révélation (affichage de la réponse) | Carillon court |
+| `entracte-debut` | Début d'une pause programmée | Descente musicale |
+| `entracte-fin` | Fin de la pause | Montée musicale |
 
-#### Spécifications des fichiers audio
+Vous **ne pouvez pas ajouter** de nouveaux sons au-delà de ces sept. Chaque cue est un **emplacement fixe** : vous pouvez le **personnaliser** ou le **restaurer au défaut**, mais pas le supprimer.
 
-Tous les sons doivent être au format **WAV mono ou stéréo, 16 bits, 44 100 Hz** :
+#### Sons par défaut vs. sons personnalisés
+
+- **Son par défaut** : le son synthétisé à la livraison de cette version du logiciel
+- **Son personnalisé** : un son que vous avez téléversé pour remplacer le défaut
+
+L'interface affiche clairement lequel des deux est actif pour chaque cue. Un bouton **Restaurer** n'apparaît que sur les cues personnalisées.
+
+### Remplacer un son
+
+**Procédure** :
+
+1. Allez à la page `/admin/ambiance` et sélectionnez l'onglet **Son**
+2. Localisez la cue que vous souhaitez remplacer (ex: `depart`)
+3. Cliquez sur **Téléverser** — une boîte de dialogue s'ouvre
+4. Choisissez un fichier `.wav` correspondant aux spécifications ci-dessous
+5. Le serveur **valide instantanément** le fichier :
+   - ✅ Accepté → le son est remplacé **immédiatement**, aucun redémarrage
+   - ⚠️ Avertissement → fichier accepté, mais sa durée pourrait gêner la fluidité du jeu (ex: > 2 s)
+   - ❌ Refusé → format invalide ou trop long (> 5 s) — message d'erreur explique pourquoi
+
+### Formats acceptés — Spécifications strictes
+
+**Obligatoire** : WAV uniquement — aucune conversion automatique.
+
+Les sons de BuzzControl partagent un seul contexte audio par processus (contrainte d'architecture). Tous les fichiers doivent donc être **strictement conformes au format canonique** :
+
+| Paramètre | Valeur | Raison |
+|---|---|---|
+| Extension | **`.wav`** seulement | Décision utilisateur. Aucune conversion serveur ni navigateur |
+| Conteneur | **RIFF/WAVE valide** | Sinon, fichier rejeté au téléversement |
+| Codec | **PCM** (non compressé) | Un seul contexte audio pour toute l'application |
+| Fréquence | **44 100 Hz** exactement | Imposée par le pilote matériel (#228) |
+| Canaux | **Stéréo (2 canaux)** ou mono (1 canal) | Stéréo préféré pour les sons mélodiques |
+| Profondeur | **16 bits** | Qualité CD standard, équilibre taille/qualité |
+| Durée | **Maximum 5 s** ; avertissement au-delà de 2 s | Lecture séquentielle bloquante — sons longs retardent les événements suivants |
+| Taille fichier | **Maximum ~2 Mo** | Un son de 5 s pèse ~880 Ko, cette limite est très généreuse |
+
+**Convertir un fichier au bon format** (exemple depuis MP3 ou M4A) :
 
 ```bash
-# Vérifier un fichier WAV existant
-ffprobe -v error -show_entries format=sample_rate,channels,duration -of default=noprint_wrappers=1 votre_son.wav
-
-# Convertir un MP3, M4A, etc. au bon format (avec enveloppe anti-clic)
-ffmpeg -i votre_son.m4a -af "asoftvolume=volume=0.8:precision=fixed" -acodec pcm_s16le -ar 44100 votre_son.wav
+# Avec ffmpeg (Windows/macOS/Linux)
+ffmpeg -i votre_chanson.m4a \
+  -acodec pcm_s16le -ar 44100 -ac 2 \
+  -af "asoftvolume=volume=0.8:precision=fixed" \
+  votre_son.wav
 ```
 
-**Durée maximale recommandée** : **moins d'une seconde** par son. La lecture est séquentielle — des sons trop longs allongent le délai avant le prochain événement.
+**Vérifier un fichier existant** :
 
-**Enveloppe anti-clic** : Les sons qui démarre ou s'arrête à amplitude non nulle produisent un clic audible. Assurez-vous que chaque son a un fondu d'attaque et d'extinction (quelques millisecondes suffit).
+```bash
+ffprobe -v error -show_entries format=sample_rate,channels,duration \
+  -of default=noprint_wrappers=1 votre_son.wav
+```
+
+Résultat attendu : `sample_rate=44100, channels=2, duration=0.50` (exemple pour un son d'une demi-seconde).
+
+**Enveloppe anti-clic — obligatoire pour un son « propre »** :
+
+Les sons qui démarrent ou s'arrêtent à amplitude maximale produisent un **clic** audible, désagréable. Ajoutez un **fondu d'attaque et d'extinction** (quelques millisecondes suffit) :
+
+```bash
+# ffmpeg : fondu d'attaque/extinction automatique (10 ms chaque)
+ffmpeg -i votre_son.wav \
+  -af "afade=t=in:st=0:d=0.01,afade=t=out:st=$DURATION-0.01:d=0.01" \
+  -acodec pcm_s16le -ar 44100 -ac 2 \
+  votre_son_clean.wav
+```
+
+### Deux actions d'écoute distinctes — Comprendre la différence
+
+Deux boutons coexistent dans l'interface pour tester un son, mais ils ont des rôles **opposés** :
+
+#### 1️⃣ Écouter ici (navigateur)
+
+| Aspect | Détail |
+|---|---|
+| **Bouton** | « Écouter ici » |
+| **Où ça joue** | Sur **votre ordinateur**, dans le navigateur (haut-parleur/casque connectés à votre écran admin) |
+| **Utilité** | Vérifier le **contenu** d'un fichier (décodage, durée, qualité perçue sur votre appareil) |
+| **Limitation** | Aucune vérification du serveur, du chemin réseau ni de l'enceinte cible |
+| **Latence** | Instantanée — le son joue immédiatement |
+
+**Cas d'usage** : Vous êtes en salle de contrôle admin, loin de l'enceinte. Vous avez téléversé un son pour `depart` depuis votre ordinateur portable. Avant de le valider, vous cliquez « Écouter ici » pour entendre ce que vous aviez préparé — aucune dépendance à la liaison réseau ni à l'enceinte.
+
+#### 2️⃣ Tester sur l'enceinte (serveur)
+
+| Aspect | Détail |
+|---|---|
+| **Bouton** | « Tester sur l'enceinte » |
+| **Où ça joue** | Sur **l'enceinte reliée au serveur** (sortie audio du Raspberry Pi ou du serveur Linux/Windows) |
+| **Utilité** | Valider la **chaîne complète** : serveur → sortie audio → enceinte réelle |
+| **Limitation** | Aucun son n'est entendu si l'enceinte est éteinte, déconnectée ou indisponible — l'interface le signale clairement |
+| **Latence** | Peut être significative (quelques centaines de ms) si l'enceinte est distante |
+
+**Résultat du test — trois possibilités** :
+
+| Résultat | Signification | Prochaine étape |
+|---|---|---|
+| ✅ **Son envoyé à l'enceinte** | Le serveur a accepté le son et l'a confié à la sortie. **Cela ne garantit pas que vous l'ayez entendu.** | Allez vérifier près de l'enceinte, ou écoutez attentivement. Si aucun son n'est entendu malgré ce message : l'enceinte est peut-être éteinte ou trop loin. |
+| ⚠️ **Bruitages désactivés** | L'interrupteur général du son (en haut de l'onglet) est **éteint**. Aucun son ne sortira. | Cliquez l'interrupteur pour activer le son. Le serveur doit **redémarrer** pour appliquer le changement — patientez quelques secondes. |
+| ❌ **Enceinte indisponible** | L'interrupteur est actif, mais le serveur n'a pas pu ouvrir une sortie audio au démarrage (enceinte absente, driver manquant, permissions insuffisantes). | Vérifiez que l'enceinte est allumée et branchée. Puis **redémarrez le serveur** (le test se relancera automatiquement si vous le réactivez). |
+
+**⚠️ Point critique** : le système **ne peut jamais être sûr qu'un son a été entendu**. Le test ne fait que vérifier que le son a **quitté le serveur**. Si vous ne l'entendez pas :
+
+1. Vérifiez d'abord que l'enceinte fonctionne (testez-la avec une autre source)
+2. Rapprochez-vous de l'enceinte
+3. Vérifiez l'état de la connexion réseau (si l'enceinte est distante)
+4. Redémarrez le serveur pour réinitialiser la sortie audio
+
+### Activation et désactivation du son — Interrupteur général
+
+La barre de statut en haut de l'onglet Son affiche un **interrupteur à deux positions** :
+
+#### 🔊 Bouton ON (Activation)
+
+**Comportement** : Quand vous cliquez ON :
+- L'interrupteur passe immédiatement au vert
+- **Le serveur doit redémarrer** pour appliquer le changement — c'est une opération système
+- Patientez 5–10 secondes le temps que le serveur se redémarre
+
+**Pourquoi un redémarrage** : Le contexte audio du serveur est créé **une seule fois** au démarrage. Changer l'interrupteur en cours de jeu n'aurait aucun effet immédiat — seul un redémarrage l'actualise.
+
+**Note** : Pendant un jeu, un redémarrage stoppe la partie. Prévoyez cette action en pause ou avant une partie.
+
+#### 🔇 Bouton OFF (Désactivation)
+
+**Comportement** : Quand vous cliquez OFF :
+- L'interrupteur passe immédiatement au rouge
+- Les bruitages s'arrêtent **instantanément** — aucun redémarrage requis
+- Tout test ou jeu en cours ne produit plus aucun son
+
+C'est l'asymétrie du système : OFF est immédiat (le moteur ignore les cues), ON demande un redémarrage (initialiser le contexte audio matériel).
+
+### Restaurer un son
+
+#### Bouton Restaurer (par cue)
+
+Apparaît uniquement sur les cues personnalisées. Cliquez-le pour **revenir au son par défaut** de cette cue :
+
+```
+[  Restaurer  ]  ← visible si la cue est personnalisée
+```
+
+**Effet** : Le son par défaut de cette cue est régénéré et remplace immédiatement le fichier personnalisé. **Aucun redémarrage requis.**
+
+#### Bouton Restaurer tous les sons livrés (global)
+
+En bas de l'onglet Son, un bouton :
+
+```
+[ 🔄 Restaurer tous les sons livrés ]
+```
+
+Cliquez-le pour **restaurer les sept sons par défaut** en une seule action. Les sons personnalisés sont écrasés. **Cette action est définitive** — les fichiers personnalisés sont perdus.
+
+**Utilité** : Après avoir testé plusieurs sons personnalisés, ramener rapidement la salle à une configuration « neuve ».
 
 ### Note de traçabilité — Hypothèse non vérifiée
 
