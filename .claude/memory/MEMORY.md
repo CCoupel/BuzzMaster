@@ -9,6 +9,11 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## #227 en dev, décision sons par défaut (2026-09-21)
+
+- **#227 (vocabulaire + moteur + câblage)** : Lot A livré (contrats `sound.md`/`lighting.md`/`http-endpoints.md`, config, bump toolchain go1.25 isolé, SHA `9c25d9b4`+`2f0612eb`). Piège trouvé par le planner en vérifiant le Lot B avant dispatch : la cue `depart` se déclenchait aussi sur `Continue()` (reprise après PAUSE), pas seulement au vrai départ — sur une question SPEEDY à 5 buzz (buzz→pause→statue→continue ×5), le son aurait joué 6 fois. Détection de front réduite au seul site `depart` (mémorisation de la phase précédente + mutex), les 6 autres cues restant des appels directs sans état. Lot B (dev-backend) + Lot C (test-writer) dispatchés en parallèle avec ce correctif.
+- **Décision sons par défaut (#229)** : sons **synthétisés programmatiquement** (bips/carillons générés en code, comme les tons de test du spike #226), pas de recherche de fichiers `.wav` sur internet — évite les questions de licence, cohérent avec le principe "100% Go, aucune dépendance externe", et aucun agent ne peut vérifier à l'oreille la qualité d'un fichier téléchargé. Ce sont des placeholders fonctionnels de premier jet, remplaçables via l'upload de #230 dès que l'utilisateur a de vrais sons.
+
 ## Spike #226 clos, v11.0 dev débloqué (2026-09-21)
 
 - **Verdict** : `github.com/ebitengine/oto/v3` v3.5.1, bump toolchain `go 1.24.0` → `go 1.25.0` (coût CI ~2 lignes, +1,19 Mo de binaire). `oto v3.4.1` (supposé "compatible sans bump" par la recherche préalable) ne compilait en fait **pas du tout** pour `linux/arm64` sous `CGO_ENABLED=0` — découverte du spike, pas un simple arbitrage.
