@@ -9,6 +9,14 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## Spike #226 clos, v11.0 dev débloqué (2026-09-21)
+
+- **Verdict** : `github.com/ebitengine/oto/v3` v3.5.1, bump toolchain `go 1.24.0` → `go 1.25.0` (coût CI ~2 lignes, +1,19 Mo de binaire). `oto v3.4.1` (supposé "compatible sans bump" par la recherche préalable) ne compilait en fait **pas du tout** pour `linux/arm64` sous `CGO_ENABLED=0` — découverte du spike, pas un simple arbitrage.
+- **Bug trouvé et corrigé pendant la validation utilisateur** : le programme de démo fermait le lecteur audio avant que la lecture n'ait réellement commencé (`BufferedSize()` légitimement à 0 juste après `Play()`, condition d'attente jamais vraie) — expliquait le silence total sur toutes les sorties (PC et Bluetooth), sans rapport avec le Bluetooth lui-même. Corrigé (`708a3295`), son confirmé audible sur Windows par l'utilisateur. Volume perçu faible expliqué : ton de test synthétique à 60% d'amplitude, sans rapport avec les futurs vrais sons (#229).
+- **Risque accepté, non levé** : tâches 0.2/0.3 (Raspberry Pi) jamais vérifiées sur matériel réel — l'utilisateur n'a pas de Pi disponible et a choisi de poursuivre le développement malgré ce risque résiduel. Le point le plus sensible (service systemd *system* documenté dans `ADMIN_GUIDE.md`, probable absence de session PipeWire → repli silencieux vers la prise jack) reçoit une mitigation **proactive et non vérifiée** dans #228 (ajout `XDG_RUNTIME_DIR`/`PULSE_SERVER` à l'unité, ou passage en service utilisateur) — à confirmer/corriger dès qu'un Pi réel est disponible.
+- **Décision produit** : upload de sons (#230) limité à **WAV uniquement**, aucune conversion MP3→WAV (ni serveur ni navigateur) — évite de réintroduire le risque du décodeur MP3 Go non maintenu déjà écarté pour la lecture.
+- **#226 fermée**, #227-#230 débloquées. `planner` dispatché pour le plan de dev détaillé de #227 (vocabulaire + moteur + câblage).
+
 ## Chantier v11.0 lancé (2026-09-21)
 
 - **Branche `milestone/v11.0` ouverte** (commit `ef74cb0a`, version serveur `11.0.0.0`). #218 "Bruitage d'événement" cadrée par `planner` (rapports `_work/reports/plan-20260921-095033.md`, `plan-decoupage-218-20260921-100500.md`, `plan-tableau-evenements-218-20260921-100500.md`) puis décomposée en 6 issues GitHub, #218 fermée avec renvoi.
