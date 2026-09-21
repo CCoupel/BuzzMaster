@@ -146,7 +146,12 @@ describe('AmbiancePage — invariants', () => {
     const { container } = render(<AmbiancePage />)
     await screen.findByText('Rechercher un pont')
     expect(container.querySelector('header.page-header h1.page-title').textContent).toBe('Ambiance')
-    expect(container.querySelector('header.page-header p.page-subtitle').textContent).toBe('Éclairage de la salle piloté par le jeu')
+    // #230 — MODIFICATION ASSUMÉE ET TRACÉE (pas un test cassé qu'on répare) :
+    // le périmètre de la page a réellement changé (elle couvre désormais le
+    // son en plus de la lumière) — plan-dev-230-20260921-144000.md §2 "Ce qui
+    // doit quand même changer, et qu'il faut assumer", handoff test-writer
+    // #230 §3. Ancien texte : 'Éclairage de la salle piloté par le jeu'.
+    expect(container.querySelector('header.page-header p.page-subtitle').textContent).toBe('Éclairage et bruitages de la salle, pilotés par le jeu')
     expect(container.querySelector('.card.ambiance-card')).not.toBeNull()
   })
 
