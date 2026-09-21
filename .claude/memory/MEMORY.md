@@ -9,6 +9,12 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## #227 DONE — v11.0 (2026-09-21)
+
+- **#227 (vocabulaire de bruitages, moteur abstrait, câblage) validée** — code-reviewer APPROUVÉ AVEC RÉSERVES (1 majeur doc uniquement, corrigé), QA VALIDATED (couverture 92.6% `internal/audio`/63.9% `cmd/server`, `-race` propre, non-régression lumineuse confirmée). Commits `9c25d9b4`→`e259711a` sur `milestone/v11.0`. Aucun son audible à ce stade — voulu, le pilote réel est #228.
+- **Deux vrais bugs trouvés et corrigés pendant le dev** (avant même la review) : (1) planner a détecté que la cue `depart` se déclenchait aussi sur `Continue()` (reprise après pause) — sur une question SPEEDY à 5 buzz, aurait sonné 6 fois ; corrigé par une allowlist `previousPhase ∈ {COUNTDOWN,PREPARE,READY}` plutôt qu'une denylist ad hoc — plus robuste, couvre par construction tout futur réemploi de `OnStateChange(PhaseStarted)` comme rebroadcast (déjà 2 cas RAFALE identifiés). (2) test-writer a trouvé en TDD que RAFALE_INVALIDATE rejouait `depart` en plus de `perdu` via ce même mécanisme — corrigé par dev-backend dans le même correctif.
+- **Prochaine étape** : #228 (pilote de sortie audio) et #229 (sons par défaut — décision : synthétisés, pas de fichiers internet) débloquées en parallèle, #230 (page admin) attend les deux.
+
 ## #227 en dev, décision sons par défaut (2026-09-21)
 
 - **#227 (vocabulaire + moteur + câblage)** : Lot A livré (contrats `sound.md`/`lighting.md`/`http-endpoints.md`, config, bump toolchain go1.25 isolé, SHA `9c25d9b4`+`2f0612eb`). Piège trouvé par le planner en vérifiant le Lot B avant dispatch : la cue `depart` se déclenchait aussi sur `Continue()` (reprise après PAUSE), pas seulement au vrai départ — sur une question SPEEDY à 5 buzz (buzz→pause→statue→continue ×5), le son aurait joué 6 fois. Détection de front réduite au seul site `depart` (mémorisation de la phase précédente + mutex), les 6 autres cues restant des appels directs sans état. Lot B (dev-backend) + Lot C (test-writer) dispatchés en parallèle avec ce correctif.
