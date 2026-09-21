@@ -46,3 +46,21 @@ type OutputConfig struct {
 func NewOutput(cfg OutputConfig) Output {
 	return newPlatformOutput(cfg)
 }
+
+// IsNeutral reports whether o is the silent-degradation Output — the one
+// NewOutput returns when it could not reach real hardware (contract §4
+// amendment, 2026-09-21, #230) — or nil. A real pilote (otoOutput, or any
+// other future backend) is never neutral. This is the ONLY way to tell a
+// working Output from a degraded one from outside this package: NewOutput
+// itself never errors, and neither Engine.Enabled() nor Stats.PlayErrors
+// can make the distinction (a noopOutput never fails either — dégradation
+// silencieuse jusqu'au bout, contract §5.5). #230's `GET /api/sound/status`
+// and `POST /api/sounds/{cue}/test` both need it — see contracts/sound.md
+// §4 and contracts/http-endpoints.md §Sound.
+func IsNeutral(o Output) bool {
+	if o == nil {
+		return true
+	}
+	_, ok := o.(noopOutput)
+	return ok
+}

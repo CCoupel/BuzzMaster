@@ -196,7 +196,21 @@ func (a *App) startSoundEngine() {
 // (contract lighting.md §4.3). This is what keeps
 // cmd/server/sound_sites_test.go's registry lisible et vérifiable: ONE
 // selector name to scan for, contract §6.2.
+//
+// CuesDisabled filtering (#230, contract §6.3) is applied HERE, before
+// PlayCue — never inside internal/audio (which imports nothing from the
+// server, contract §2.1) and never by skipping the call at each of the 22
+// game-event sites individually. Read from config.Get() on every call,
+// never cached on the App: a toggle flipped via POST /config.json must
+// take effect on the very next cue, not after a restart. This is an
+// ADDITIVE extension of #227's already-reviewed body — the call to
+// a.sound().PlayCue(c) itself is untouched; at the zero value
+// (CuesDisabled absent/empty/nil), the condition is always false and the
+// behaviour is identical to the bit to what #227 shipped.
 func (a *App) notifySound(c audio.Cue) {
+	if config.Get().Sound.CuesDisabled[string(c)] {
+		return
+	}
 	a.sound().PlayCue(c)
 }
 
@@ -235,4 +249,37 @@ func (a *App) soundTrackPhase(phase game.GamePhase) (previous game.GamePhase) {
 	a.soundPhase.last = phase
 	a.soundPhase.mu.Unlock()
 	return previous
+}
+
+// ---------------------------------------------------------------------------
+// server.SoundProvider (internal/server/http_sound.go) — #230
+// ---------------------------------------------------------------------------
+
+// SoundEnabled implements server.SoundProvider: read directly from
+// configuration, never from the engine — this is what lets
+// POST /api/sounds/{cue}/test decide "disabled" WITHOUT touching the
+// engine at all (contracts/http-endpoints.md §Sound: "disabled est
+// vérifié avant tout accès au moteur").
+func (a *App) SoundEnabled() bool {
+	return config.Get().Sound.Enabled
+}
+
+// SoundOutputAvailable implements server.SoundProvider: true iff a REAL
+// (non-neutral) Output is attached to the engine (contract sound.md §4
+// amendment, audio.IsNeutral). Well-defined even when SoundEnabled() is
+// false (Engine.OutputAvailable's own doc comment) — GET /api/sound/status
+// still calls SoundEnabled() first for clarity, matching the contract's
+// prose, but the order is not load-bearing here.
+func (a *App) SoundOutputAvailable() bool {
+	return a.sound().OutputAvailable()
+}
+
+// TestSoundCue implements server.SoundProvider: calls the engine
+// DIRECTLY (audio.Engine.PlayCue), never through notifySound — a cue
+// individually disabled via CuesDisabled must stay testable (contract
+// §6.3: "tester est un geste explicite, seul le déroulé de la partie est
+// muet"). c is assumed already validated against the closed catalogue by
+// the HTTP layer (contracts/http-endpoints.md §Sound "Sécurité").
+func (a *App) TestSoundCue(c audio.Cue) (accepted bool) {
+	return a.sound().PlayCue(c)
 }

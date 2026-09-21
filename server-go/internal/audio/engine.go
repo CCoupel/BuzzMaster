@@ -88,6 +88,18 @@ func (e *Engine) Enabled() bool { return e != nil && e.enabled }
 // Running reports whether Start's goroutine is alive. Safe on a nil receiver.
 func (e *Engine) Running() bool { return e != nil && e.running.Load() }
 
+// OutputAvailable reports whether a REAL (non-neutral) Output is attached
+// (contract §4 amendment, #230) — distinguishes "bruitages désactivés"
+// (Enabled()==false, no Output at all) from "sortie indisponible" (Enabled()
+// is still true — a neutral Output IS an Output — but nothing will actually
+// be heard). Well-defined regardless of Enabled(): a disabled engine's
+// output is nil, and IsNeutral(nil) is true, so this correctly reports
+// false either way — callers do not need to check Enabled() first. Safe on
+// a nil receiver.
+func (e *Engine) OutputAvailable() bool {
+	return e != nil && !IsNeutral(e.output)
+}
+
 // Stats returns a copy of the counters. Safe on a nil receiver.
 func (e *Engine) Stats() Stats {
 	if e == nil {

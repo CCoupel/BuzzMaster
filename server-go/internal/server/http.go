@@ -71,7 +71,12 @@ type HTTPServer struct {
 	OnConfigUpdate            func()              // Called after config update to broadcast to clients
 	// Lighting gives the /api/lighting/* handlers the live Hue driver (#207,
 	// contracts/hue-bridge.md §7); nil provider or nil driver = "disabled".
-	Lighting           LightingProvider
+	Lighting LightingProvider
+	// Sound gives the /api/sounds/*, /api/sound/status handlers access to
+	// the live sound engine (#230, contracts/http-endpoints.md §Sound); nil
+	// provider is never expected in production (cmd/server always sets it,
+	// same as Lighting) but every accessor below is nil-safe regardless.
+	Sound              SoundProvider
 	OnBuzzerWifiConfig func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
@@ -482,9 +487,15 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/firmware/buzzclick/upload", h.handleAPIFirmwareUpload)
 	h.mux.HandleFunc("/api/firmware/buzzclick/restore-embedded", h.handleAPIFirmwareRestoreEmbedded)
 
-	// Sound bruitage — restore defaults (v11.0, #229). Upload/list/delete
-	// endpoints belong to #230 (contracts/http-endpoints.md §Sound).
+	// Sound bruitage (v11.0, #227-#230, contracts/http-endpoints.md §Sound).
+	// The exact route below always wins over the prefix route beneath it
+	// (http.ServeMux picks the longest matching pattern) — #229's
+	// restore-defaults keeps working unambiguously alongside #230's
+	// per-cue routes.
 	h.mux.HandleFunc("/api/sounds/restore-defaults", h.handleAPISoundsRestoreDefaults)
+	h.mux.HandleFunc("/api/sounds", h.handleAPISoundsList)
+	h.mux.HandleFunc("/api/sounds/", h.handleAPISoundsRouter)
+	h.mux.HandleFunc("/api/sound/status", h.handleAPISoundStatus)
 
 	// WiFi defaults API
 	h.mux.HandleFunc("/api/wifi/defaults", h.handleAPIWiFiDefaults)

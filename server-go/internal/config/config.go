@@ -78,6 +78,16 @@ type SoundConfig struct {
 	// here). A non-empty value is logged once as "not yet honoured" by
 	// internal/audio.NewOutput rather than silently ignored or rejected.
 	Device string `json:"device,omitempty"`
+	// CuesDisabled stores what is OFF, never what is on (contract sound.md
+	// §6.3, #230) — deliberately the inverse of the `CueEnabled` shape
+	// first proposed. The zero value (absent/empty/nil map, exactly what
+	// every config.json predating #230 already has) means "nothing is
+	// disabled" — today's behaviour, with no migration and no `ApplyDefaults`
+	// population needed. A future cue (#231) is active without anyone
+	// having to touch this field. Checked in cmd/server/sound.go's
+	// notifySound, before PlayCue — never inside internal/audio (this
+	// package is never imported there, contract §2.1).
+	CuesDisabled map[string]bool `json:"cues_disabled,omitempty"`
 }
 
 // EnvHueAPIKey overrides lighting.api_key without ever touching config.json

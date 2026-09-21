@@ -541,6 +541,7 @@ func (a *App) init() {
 	// Ambiance lighting writer (#205) — nil unless configured (ambiance.go).
 	a.setupAmbiance()
 	a.httpServer.Lighting = a // /api/lighting/* read the live driver (#207)
+	a.httpServer.Sound = a    // /api/sounds/*, /api/sound/status (#230)
 
 	// Sound bruitage engine (#227/#228) — real Output when `sound.enabled`
 	// is true (sound.go).
