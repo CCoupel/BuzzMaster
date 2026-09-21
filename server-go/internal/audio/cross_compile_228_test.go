@@ -58,7 +58,6 @@ func tw228cModuleRoot(t *testing.T) string {
 func tw228cCrossBuild(t *testing.T, goos, goarch string) {
 	t.Helper()
 	root := tw228cModuleRoot(t)
-	out := filepath.Join(t.TempDir(), "audio_cross_build")
 
 	// Bornage généreux (module cache déjà chaud pour ces dépendances dans
 	// tout environnement dev/CI ayant déjà exécuté cette suite une fois),
@@ -67,7 +66,15 @@ func tw228cCrossBuild(t *testing.T, goos, goarch string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", out, "./internal/audio/...")
+	// BUGFIX (dev-backend, #229, coordination directe) : pas de `-o
+	// <fichier>` — `./internal/audio/...` couvrait un seul paquet quand ce
+	// test a été écrit ; #229 y a ajouté `internal/audio/synth`, et `go
+	// build` refuse d'écrire plusieurs paquets vers un fichier de sortie
+	// unique ("cannot write multiple packages to non-directory"). Sans
+	// `-o`, `go build` compile et jette le résultat pour un paquet non
+	// `main` — exactement la vérification voulue ici (la compilation
+	// réussit ou non), sans avoir besoin de conserver un artefact.
+	cmd := exec.CommandContext(ctx, "go", "build", "./internal/audio/...")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(),
 		"GOOS="+goos,
