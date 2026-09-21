@@ -535,6 +535,10 @@
                     <span class="hero-stat-icon">💡</span>
                     <span class="hero-stat-label">Éclairage Hue</span>
                 </div>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-icon">🔊</span>
+                    <span class="hero-stat-label">Ambiance sonore</span>
+                </div>
             </div>
         </div>
     </section>
@@ -847,7 +851,7 @@
                     <div class="feature-card">
                         <img class="feature-shot" src="images/Features/rafale.png" alt="Mode RAFALE - double minuteur manche et question" loading="lazy">
                         <div class="feature-icon">⏱️</div>
-                        <h3>Mode RAFALE <span class="badge badge-new">Nouveau v8.0.0</span></h3>
+                        <h3>Mode RAFALE</h3>
                         <p>Une manche de 2 minutes ou les questions s'enchaînent toutes seules, environ 3 secondes de réflexion chacune — l'animateur valide ou invalide chaque réponse d'un tap. Quatre variantes pour l'ambiance : en solo, chacun son tour, tant qu'on gagne, ou le maillon faible. Idéal pour un final rythme et sans temps mort. Le réservoir de questions courtes se remplit désormais lui aussi par IA, par lots de 10 à 200 (v8.1.0). Depuis la v9.0.0, une même manche peut mélanger plusieurs catégories et plusieurs niveaux de difficulté, avec un barème de points personnalisé par niveau — et RAFALE peut même se nicher en mini-manche à l'intérieur d'une carte MEMOTION.</p>
                         <div class="audience-badges">
                             <span class="aud-badge aud-joueurs">🧑‍🤝‍🧑 Joueurs</span>
@@ -862,17 +866,30 @@
                 <div class="cat-header">
                     <span class="cat-icon">🎉</span>
                     <span class="cat-title">Expérience en salle</span>
-                    <span class="cat-count">4 fonctionnalités</span>
+                    <span class="cat-count">5 fonctionnalités</span>
                 </div>
-                <p class="cat-desc">Ce qui se passe en direct pendant l'événement : affichage, classements, éclairage et participation depuis un smartphone.</p>
+                <p class="cat-desc">Ce qui se passe en direct pendant l'événement : affichage, classements, éclairage, ambiance sonore et participation depuis un smartphone.</p>
                 <div class="features-grid">
-                    <div class="feature-card feature-card--new">
+                    <div class="feature-card">
                         <div class="feature-card-top">
                             <div class="feature-icon">💡</div>
-                            <span class="badge badge-new">Nouveau v10.0.0</span>
+                            <span class="badge">v10.0.0</span>
                         </div>
                         <h3>Éclairage d'ambiance (Philips Hue)</h3>
                         <p>La salle rejoue avec vous : chaque équipe brille de sa propre couleur sur un pont Philips Hue, l'éclairage général épouse la teinte de la question en cours, et un flash équipe/or célèbre chaque bonne réponse — jusqu'à la lumière qui pulse avec le chrono en fin de compte à rebours. Entièrement optionnel : sans pont Hue, rien ne change.</p>
+                        <div class="audience-badges">
+                            <span class="aud-badge aud-public">👀 Public</span>
+                            <span class="aud-badge aud-animateur">🎤 Animateur</span>
+                            <span class="aud-badge aud-technique">🔧 Technique</span>
+                        </div>
+                    </div>
+                    <div class="feature-card feature-card--new">
+                        <div class="feature-card-top">
+                            <div class="feature-icon">🔊</div>
+                            <span class="badge badge-new">Nouveau v11.0.0</span>
+                        </div>
+                        <h3>Ambiance sonore</h3>
+                        <p>La salle réagit aux temps forts par le son : départ de chrono, fin de temps, bonne ou mauvaise réponse, révélation, début et fin d'entracte — sept bruitages qui rythment la soirée sans que l'animateur y pense. Diffusion sur l'enceinte du serveur (Bluetooth compris, Windows comme Raspberry Pi), sons livrés d'origine ou remplacés par les vôtres depuis l'onglet Son de l'administration — testables en un clic avant de lancer la partie. Entièrement optionnel, désactivable d'un interrupteur.</p>
                         <div class="audience-badges">
                             <span class="aud-badge aud-public">👀 Public</span>
                             <span class="aud-badge aud-animateur">🎤 Animateur</span>
@@ -1034,6 +1051,7 @@
                         <li>React 18</li>
                         <li>WebSocket</li>
                         <li>Philips Hue (optionnel)</li>
+                        <li>Sortie audio Bluetooth (optionnel)</li>
                     </ul>
                 </div>
                 <div class="component-card">
