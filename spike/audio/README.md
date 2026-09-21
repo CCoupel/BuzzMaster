@@ -38,6 +38,13 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o spike-audio-win.exe .
 
 Puis copier le binaire correspondant sur le Raspberry Pi / le poste Windows.
 
+> **Windows : déjà compilé, rien à faire.** `spike-audio-win.exe` est déjà présent dans ce
+> dossier (`spike/audio/spike-audio-win.exe`), buildé avec exactement les flags CI
+> (`CGO_ENABLED=0 GOOS=windows GOARCH=amd64`) et vérifié PE32+ x86-64 valide. Pas besoin de Go
+> installé ni de `go build` sur le poste Windows : copier ce dossier (ou juste ce fichier) et
+> lancer directement `spike-audio-win.exe diag` puis `spike-audio-win.exe play reveal` — voir
+> la procédure 0.4 plus bas.
+
 ## Procédure par tâche (ce que l'utilisateur doit rejouer sur matériel réel)
 
 ### 0.2 — Preuve Linux/ARM64 + couche traversée
