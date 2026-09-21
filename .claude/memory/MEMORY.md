@@ -9,6 +9,11 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## Décision backlog (2026-09-21)
+
+- **Réorganisation de priorité + renumérotation de 4 milestones**, décidée explicitement par l'utilisateur : `v10.1 — Éclairage ambiance — Extensions` (#32, 4 issues #210/#211/#223/#225) **postposée** (numéro inchangé, mais plus le prochain chantier à attaquer). `Ambiance de musique d'événement` (#34, #218/#219) promue **priorité immédiate**, renommée `v11.0 — Ambiance de musique d'événement`. Pour libérer ce numéro et résoudre au passage une collision préexistante (Roue de la Fortune et PICTIONARY partageaient déjà par erreur le même préfixe `v11.0`), **décalage par X** (pas par Y) des 3 initiatives déplacées, chacune restant une ligne majeure indépendante : `v11.0 — Roue de la Fortune` (#21) → `v12.0`, `v11.1 — Roue de la Fortune — Extensions` (#22) → `v12.1` (relation core/extensions préservée en Y), `v11.0 — PICTIONARY` (#30) → `v13.0`. `vX.0.x — DNS`, `vx.x.x — Scoring MEMORY` et `Jeu PYRAMIDE` (vide) non touchés.
+- **Prochain chantier attendu** : `v11.0 — Ambiance de musique d'événement` — aucun milestone n'est encore branché/actif à ce jour (dernier travail en dev était v10.0.0, mergé).
+
 ## État du projet (2026-09-09)
 
 - **PROD v10.0.0 déployée** (commit `0a6cfbf1 Release v10.0.0`, tag `v10.0.0`, release https://github.com/CCoupel/BuzzMaster/releases/tag/v10.0.0). Milestone GitHub #28 "v10.0.0 — Éclairage ambiance (Philips Hue)" fermé, 8/8 issues : #204 (spike faisabilité BLE — abandonné au profit de l'API REST), #205 (vocabulaire d'événements d'ambiance normalisé + driver abstrait), #206 (pilote Hue Bridge REST), #207 (page admin `/admin/ambiance`), #208 (conduite manuelle `/anim` + bout-en-bout), #212 (synchronisation sur le minuteur), #213 (éclairage différencié par équipe), #224 (groupes Hue natifs).
