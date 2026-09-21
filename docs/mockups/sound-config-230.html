@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<!-- ARTIFACT-BODY-START -->
+<title>Bruitage d'événement — administration des sons</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    --col:940px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--ground);color:var(--txt);font-family:var(--sans);line-height:1.6;padding:48px 20px 80px}
+  .wrap{max-width:var(--col);margin:0 auto}
+
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:44px}
+  .eyebrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .eyebrow span{font-family:var(--mono);font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:3px 8px}
+  h1{font-size:2rem;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:14px}
+  .standfirst{color:var(--dim);font-size:1.02rem;max-width:74ch}
+  .refs{margin-top:20px;display:flex;flex-direction:column;gap:5px;font-family:var(--mono);font-size:.76rem;color:var(--faint)}
+  .refs b{color:var(--dim);font-weight:600;margin-right:8px}
+
+  section{margin-bottom:52px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.01em;margin-bottom:8px;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+  .lede{color:var(--dim);margin-bottom:22px;max-width:74ch}
+  h3{font-size:.95rem;font-weight:600;margin:26px 0 10px;color:var(--txt)}
+
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:18px}
+  .screen-hd{background:var(--sunken);border-bottom:1px solid var(--line);padding:9px 14px;
+    font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .screen-bd{padding:20px}
+
+  .pagehd{border-bottom:1px solid var(--line-soft);padding-bottom:16px;margin-bottom:0}
+  .pagehd h4{font-size:1.4rem;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+  .pagehd p{font-size:.85rem;color:var(--dim)}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:18px 0 0}
+  .tab{display:flex;align-items:center;gap:7px;padding:10px 18px;font-size:.88rem;font-weight:500;
+    color:var(--dim);border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;
+    position:relative;top:1px}
+  .tab.on{color:var(--txt);font-weight:600;background:var(--panel);border-color:var(--line);
+    border-bottom:1px solid var(--panel)}
+  .tab .ic{font-size:1rem}
+
+  .fieldset{border:1px solid var(--line-soft);border-radius:6px;padding:16px;margin-bottom:14px;background:var(--raised)}
+  .fs-t{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:14px}
+  .lbl{display:block;font-size:.8rem;font-weight:500;color:var(--dim);margin-bottom:6px}
+  .ctl{display:block;background:var(--sunken);border:1px solid var(--line);border-radius:5px;
+    padding:9px 12px;font-size:.86rem;color:var(--txt);font-family:var(--sans)}
+  .ctl.ph{color:var(--faint)}
+
+  .btnrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .btn{display:inline-flex;align-items:center;gap:6px;background:var(--raised);border:1px solid var(--line);
+    color:var(--txt);border-radius:6px;padding:8px 15px;font-size:.83rem;font-weight:500;font-family:var(--sans)}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:#170c02;font-weight:600}
+  .btn.g{background:transparent;border-color:transparent;color:var(--dim)}
+  .btn.dis{opacity:.42}
+  .btn.sm{padding:5px 10px;font-size:.78rem}
+  .hint{font-size:.78rem;color:var(--faint);margin-top:9px}
+
+  .toggle{display:inline-flex;align-items:center;gap:11px;font-size:.88rem}
+  .sw{width:38px;height:21px;border-radius:999px;background:var(--sunken);border:1px solid var(--line);
+    position:relative;flex-shrink:0}
+  .sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
+    background:var(--faint)}
+  .sw.on{background:color-mix(in srgb,var(--ok) 30%,var(--sunken));border-color:var(--ok)}
+  .sw.on::after{left:auto;right:2px;background:var(--ok)}
+  .sw.sm{width:30px;height:17px}
+  .sw.sm::after{width:11px;height:11px}
+  tr.off td{opacity:.45}
+  tr.off td:nth-child(2){opacity:1}
+  .vd{display:inline-flex;gap:5px;align-items:center}
+  .vdot{width:9px;height:9px;border-radius:50%;background:var(--faint);border:1px solid var(--line)}
+  .vdot.ok{background:var(--ok);border-color:var(--ok)}
+  .vdot.ko{background:var(--no);border-color:var(--no)}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden;max-width:560px;margin:0 auto}
+  .modal-hd{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;
+    align-items:baseline;justify-content:space-between;gap:12px}
+  .modal-hd b{font-size:1.02rem}
+  .modal-hd .cue{font-family:var(--mono);font-size:.76rem;color:var(--faint)}
+  .modal-bd{padding:20px;display:flex;flex-direction:column;gap:16px}
+  .modal-ft{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg span{padding:5px 12px;font-size:.78rem;font-weight:500;color:var(--faint);
+    border-right:1px solid var(--line)}
+  .seg span:last-child{border-right:none}
+  .seg span.sel{color:var(--txt);font-weight:600;background:var(--raised)}
+  .seg span.sel.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,transparent)}
+  .seg span.sel.ko{color:var(--no);background:color-mix(in srgb,var(--no) 15%,transparent)}
+  .tsec{border:1px solid var(--line-soft);border-radius:7px;padding:15px;background:var(--raised)}
+  .tsec-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}
+  .tsec-hd b{font-size:.92rem;color:var(--txt)}
+  .tsec p{font-size:.81rem;color:var(--faint);margin-bottom:12px}
+  .tsec-ft{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+  .status{display:inline-flex;align-items:center;gap:7px;font-size:.8rem;font-weight:600;
+    border-radius:999px;padding:4px 12px;border:1px solid var(--line)}
+  .status .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+  .status.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  .status.ok .dot{background:var(--ok)}
+  .status.no{color:var(--no);border-color:color-mix(in srgb,var(--no) 40%,transparent)}
+  .status.no .dot{background:var(--no)}
+  .status.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+  .status.warn .dot{background:var(--warn)}
+  .status.idle{color:var(--faint)}
+
+  .tag{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.03em;border-radius:3px;
+    padding:2px 7px;border:1px solid var(--line);color:var(--faint);font-family:var(--mono)}
+  .tag.custom{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+
+  .call{border-left:3px solid var(--line);background:var(--panel);border-radius:0 6px 6px 0;
+    padding:13px 16px;margin:16px 0;font-size:.87rem;color:var(--dim)}
+  .call-t{display:block;font-weight:600;color:var(--txt);margin-bottom:4px;font-size:.85rem}
+  .call.ok{border-left-color:var(--ok)}
+  .call.no{border-left-color:var(--no)}
+  .call.warn{border-left-color:var(--warn)}
+  .call.info{border-left-color:var(--info)}
+  .call.acc{border-left-color:var(--accent)}
+
+  table{width:100%;border-collapse:collapse;font-size:.83rem}
+  th{text-align:left;font-weight:600;color:var(--dim);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;padding:9px 12px;border-bottom:1px solid var(--line);background:var(--sunken)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:middle;color:var(--dim)}
+  td b{color:var(--txt);font-weight:600}
+  td .sub{display:block;font-size:.76rem;color:var(--faint);font-weight:400}
+  tr:last-child td{border-bottom:none}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .num-c{font-family:var(--mono);font-size:.8rem;text-align:right;white-space:nowrap}
+
+  code{font-family:var(--mono);font-size:.86em;background:var(--sunken);border:1px solid var(--line-soft);
+    border-radius:3px;padding:1px 5px;color:var(--txt)}
+  .none{list-style:none;display:flex;flex-direction:column;gap:9px;margin:14px 0}
+  .none li{display:flex;gap:10px;font-size:.87rem;color:var(--dim)}
+  .none li .x{color:var(--faint);flex-shrink:0;font-family:var(--mono)}
+  .none li b{color:var(--txt);font-weight:600}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.split{grid-template-columns:1fr}.acts{justify-content:flex-start}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Issue #230</span><span>Milestone v11.0</span><span>Révision 5</span><span>⏳ À valider</span>
+  </div>
+  <h1>Bruitage d'événement — administration des sons</h1>
+  <p class="standfirst">
+    La page <code>/admin/ambiance</code> gère aujourd'hui l'éclairage de la salle. Elle accueille
+    désormais un <strong>second canal</strong> : le son. Deux onglets — <strong>Lumière</strong> et
+    <strong>Son</strong> — mettent les deux à égalité, sans toucher à l'assistant Hue existant.
+    L'onglet Son associe à chacun des sept moments du jeu un bruitage, que l'on peut écouter,
+    remplacer et restaurer.
+  </p>
+  <div class="refs">
+    <div><b>Contrats</b> contracts/sound.md (#227) · contracts/http-endpoints.md §Sound</div>
+    <div><b>Socle livré</b> #227 moteur · #228 pilote de sortie · #229 sons synthétisés + manifeste</div>
+    <div><b>Sert de référence à</b> test-writer (scénarios) · qa (conformité) · dev-frontend (implémentation)</div>
+    <div><b>Décision</b> onglets plutôt qu'une seconde carte — l'assistant Hue reste intact</div>
+    <div><b>Hors périmètre</b> compensation de latence et choix du périphérique : config.json uniquement</div>
+  </div>
+</header>
+
+<!-- ───────────────────────────── 1 ───────────────────────────── -->
+<section>
+  <h2><span class="num">01</span> La page devient à deux canaux</h2>
+  <p class="lede">
+    Le bandeau ne change pas : même titre, même pastille d'état de l'éclairage — celle-là même que
+    reprend l'ampoule du menu. Seul le sous-titre est réécrit, la page ne parlant plus seulement de
+    lumière. Sous le bandeau, une barre d'onglets apparaît.
+  </p>
+
+  <h3>Avant — l'assistant Hue seul</h3>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — état actuel (v10.0.0)</div>
+    <div class="screen-bd">
+      <div class="pagehd">
+        <h4>Ambiance &nbsp; <span class="status ok"><span class="dot"></span>Pont connecté · 3/5 ampoules</span></h4>
+        <p>Éclairage de la salle piloté par le jeu</p>
+      </div>
+      <div class="fieldset" style="margin-top:18px">
+        <div class="fs-t">Ampoules du pont</div>
+        <p style="font-size:.84rem;color:var(--faint)">L'assistant Hue en trois étapes, inchangé.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Après — deux onglets, l'onglet Lumière actif par défaut</h3>
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — onglet Lumière</div>
+    <div class="screen-bd">
+      <div class="pagehd">
+        <h4>Ambiance &nbsp; <span class="status ok"><span class="dot"></span>Pont connecté · 3/5 ampoules</span></h4>
+        <p>Éclairage et bruitages de la salle, pilotés par le jeu</p>
+      </div>
+      <div class="tabs">
+        <div class="tab on"><span class="ic">🔆</span> Lumière</div>
+        <div class="tab"><span class="ic">🔊</span> Son</div>
+      </div>
+      <div class="fieldset" style="margin-top:18px">
+        <div class="fs-t">Ampoules du pont</div>
+        <p style="font-size:.84rem;color:var(--faint)">
+          Exactement le même contenu qu'avant — l'assistant devient le contenu de l'onglet, sans
+          aucune modification interne.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="call info">
+    <span class="call-t">Pourquoi l'onglet Lumière est actif par défaut</span>
+    Au-delà de la continuité pour l'utilisateur, c'est ce qui garantit que la section Son n'est pas
+    rendue tant qu'on ne la demande pas — et qu'une suite de tests existante, qui vérifie que la
+    page n'expose aucun champ de saisie pendant la recherche du pont, continue de passer sans
+    retouche.
+  </div>
+</section>
+
+<!-- ───────────────────────────── 2 ───────────────────────────── -->
+<section>
+  <h2><span class="num">02</span> L'onglet Son — sept moments, sept sons</h2>
+  <p class="lede">
+    Ce n'est pas une galerie où l'on ajoute des fichiers : ce sont <strong>sept emplacements
+    fixes</strong>, un par moment du jeu. On ne peut ni en créer ni en supprimer — seulement
+    remplacer, et revenir au son par défaut.
+  </p>
+
+  <div class="screen">
+    <div class="screen-hd">/admin/ambiance — onglet Son</div>
+    <div class="screen-bd">
+      <div class="pagehd">
+        <h4>Ambiance &nbsp; <span class="status ok"><span class="dot"></span>Pont connecté · 3/5 ampoules</span></h4>
+        <p>Éclairage et bruitages de la salle, pilotés par le jeu</p>
+      </div>
+      <div class="tabs">
+        <div class="tab"><span class="ic">🔆</span> Lumière</div>
+        <div class="tab on"><span class="ic">🔊</span> Son</div>
+      </div>
+
+      <div class="fieldset" style="margin-top:18px">
+        <div class="fs-t">Sortie audio</div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:18px;justify-content:space-between">
+          <div class="toggle"><span class="sw on"></span> Bruitages activés</div>
+          <span class="status ok"><span class="dot"></span>Son actif</span>
+        </div>
+        <p class="hint">
+          <b style="color:var(--warn)">Éteindre coupe le son immédiatement. Rallumer ne prend
+          effet qu'au prochain démarrage du serveur.</b>
+          <br>Les sons sont joués sur l'enceinte reliée au serveur ; le volume se règle sur
+          l'enceinte elle-même. État établi au démarrage du serveur — pour vérifier qu'une enceinte
+          répond maintenant, utilisez « Tester sur l'enceinte ».
+        </p>
+      </div>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Moment du jeu</th><th style="text-align:center">Actif</th><th>Son</th><th style="text-align:right">Durée</th><th style="text-align:center">Test</th><th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Départ</b><span class="sub">Le chronomètre démarre</span></td>
+              <td style="text-align:center"><span class="sw sm on"></span></td>
+              <td><span class="tag">Défaut</span></td>
+              <td class="num-c">0,42 s</td>
+              <td style="text-align:center"><span class="vd"><span class="vdot "></span><span class="vdot "></span></span></td>
+              <td><div class="acts"><span class="btn sm">▶ Tester</span><span class="btn sm">⬆ Remplacer</span></div></td>
+            </tr>
+            <tr>
+              <td><b>Temps écoulé</b><span class="sub">Le chronomètre arrive à zéro</span></td>
+              <td style="text-align:center"><span class="sw sm on"></span></td>
+              <td><span class="tag custom">Personnalisé</span></td>
+              <td class="num-c">0,88 s</td>
+              <td style="text-align:center"><span class="vd"><span class="vdot ok"></span><span class="vdot ko"></span></span></td>
+              <td><div class="acts"><span class="btn sm">▶ Tester</span><span class="btn sm">⬆ Remplacer</span><span class="btn sm">↺ Restaurer</span></div></td>
+            </tr>
+            <tr>
+              <td><b>Points gagnés</b><span class="sub">La régie crédite une équipe</span></td>
+              <td style="text-align:center"><span class="sw sm on"></span></td>
+              <td><span class="tag">Défaut</span></td>
+              <td class="num-c">0,61 s</td>
+              <td style="text-align:center"><span class="vd"><span class="vdot ok"></span><span class="vdot ok"></span></span></td>
+              <td><div class="acts"><span class="btn sm">▶ Tester</span><span class="btn sm">⬆ Remplacer</span></div></td>
+            </tr>
+            <tr class="off">
+              <td><b>Erreur</b><span class="sub">Paire ratée en MEMORY, réponse invalidée en RAFALE</span></td>
+              <td style="text-align:center"><span class="sw sm"></span></td>
+              <td><span class="tag">Défaut</span></td>
+              <td class="num-c">0,35 s</td>
+              <td style="text-align:center"><span class="vd"><span class="vdot "></span><span class="vdot "></span></span></td>
+              <td><div class="acts"><span class="btn sm">▶ Tester</span><span class="btn sm">⬆ Remplacer</span></div></td>
+            </tr>
+            <tr>
+              <td><b>Révélation</b><span class="sub">La réponse est dévoilée</span></td>
+              <td style="text-align:center"><span class="sw sm on"></span></td>
+              <td><span class="tag">Défaut</span></td>
+              <td class="num-c">0,74 s</td>
+              <td style="text-align:center"><span class="vd"><span class="vdot ok"></span><span class="vdot ok"></span></span></td>
+              <td><div class="acts"><span class="btn sm">▶ Tester</span><span class="btn sm">⬆ Remplacer</span></div></td>
+            </tr>
+            <tr>
+              <td><b>Début d'entracte</b><span class="sub">La pause commence</span></td>
+              <td style="text-align:center"><span class="sw sm on"></span></td>
+              <td><span class="tag">Défaut</span></td>
+              <td class="num-c">0,95 s</td>
+              <td style="text-align:center"><span class="vd"><span class="vdot "></span><span class="vdot "></span></span></td>
+              <td><div class="acts"><span class="btn sm">▶ Tester</span><span class="btn sm">⬆ Remplacer</span></div></td>
+            </tr>
+            <tr>
+              <td><b>Fin d'entracte</b><span class="sub">La partie reprend</span></td>
+              <td style="text-align:center"><span class="sw sm on"></span></td>
+              <td><span class="tag">Défaut</span></td>
+              <td class="num-c">0,95 s</td>
+              <td style="text-align:center"><span class="vd"><span class="vdot "></span><span class="vdot "></span></span></td>
+              <td><div class="acts"><span class="btn sm">▶ Tester</span><span class="btn sm">⬆ Remplacer</span></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="btnrow">
+        <span class="btn">↺ Restaurer tous les sons par défaut</span>
+      </div>
+      <p class="hint">
+        Colonne <b>Test</b> : deux pastilles, écoute locale puis écoute serveur — grise « pas
+        testé », verte « ok », rouge « ko ». Elles font de ce tableau la liste de contrôle d'une
+        séance de réglage.
+        <br>Format accepté : WAV, 44 100 Hz, 16 bits, stéréo — 5 secondes au maximum.
+      </p>
+    </div>
+  </div>
+
+  <div class="call acc">
+    <span class="call-t">« Restaurer » n'apparaît que sur les sons personnalisés</span>
+    Un son par défaut n'a rien à restaurer. Cette colonne d'actions varie donc d'une ligne à l'autre, et
+    c'est voulu : la présence du bouton est elle-même l'indice qu'on a touché à ce son.
+  </div>
+
+  <div class="call acc">
+    <span class="call-t">L'interrupteur par moment — couper un son sans couper tous les autres</span>
+    Chaque ligne a son propre interrupteur. Ici, « Erreur » est éteint : ce moment ne produira aucun
+    son en partie, tandis que les six autres continuent. La ligne s'estompe pour que l'état se lise
+    d'un coup d'œil, sans avoir à comparer sept interrupteurs.
+    <br><br>
+    L'interrupteur du haut reste le maître : éteint, il coupe tout, quels que soient les sept
+    interrupteurs de lignes. Ceux-ci ne servent qu'à découper à l'intérieur de ce qui est allumé.
+  </div>
+
+  <div class="call warn">
+    <span class="call-t">L'interrupteur général n'agit pas dans les deux sens de la même façon</span>
+    <b>Éteindre est immédiat</b> — c'est le geste qui compte en conditions réelles : couper un
+    bruitage qui gêne, en pleine partie, sans rien redémarrer.
+    <br><br>
+    <b>Rallumer exige un redémarrage du serveur.</b> La sortie audio ne peut être ouverte qu'une
+    fois par processus : si les bruitages étaient éteints au démarrage, rien n'a été construit, et
+    aucune bascule ne peut le créer après coup. L'interface doit le dire à côté de l'interrupteur
+    plutôt que de laisser l'utilisateur attendre un son qui ne viendra pas.
+    <br><br>
+    Les sept interrupteurs de lignes, eux, sont <b>immédiats dans les deux sens</b> : ils ne
+    touchent pas à la sortie, seulement au flux d'événements.
+  </div>
+
+  <div class="call info">
+    <span class="call-t">Un moment éteint peut quand même être testé</span>
+    Les boutons d'écoute restent actifs sur une ligne éteinte : tester est un geste explicite, il
+    n'a pas de raison d'être bridé. C'est seulement en <em>partie</em> que le son ne partira pas.
+  </div>
+
+  <div class="call info">
+    <span class="call-t">D'où vient la mention « Défaut » ou « Personnalisé »</span>
+    Le serveur compare les octets du fichier présent sur le disque à ceux qu'il régénérerait
+    lui-même. Le générateur étant déterministe, une correspondance exacte signifie « c'est le son
+    d'origine ». Rien n'est mémorisé : la mention ne peut pas se désynchroniser du fichier.
+  </div>
+</section>
+
+<!-- ───────────────────────────── 3 ───────────────────────────── -->
+<section>
+  <h2><span class="num">03</span> La modale de test — deux écoutes, deux verdicts</h2>
+  <p class="lede">
+    Un seul bouton <b>Tester</b> par ligne. Il ouvre une modale en deux parties, parce qu'il y a
+    deux choses différentes à vérifier — et parce que, dans les deux cas,
+    <strong>seul un humain peut dire si le son était correct</strong>. Le système ne se prononce
+    pas : il joue, puis l'utilisateur tranche.
+  </p>
+
+  <div class="modal">
+    <div class="modal-hd">
+      <b>Tester le son</b>
+      <span class="cue">temps-ecoule.wav · 0,88 s · personnalisé</span>
+    </div>
+    <div class="modal-bd">
+
+      <div class="tsec">
+        <div class="tsec-hd">
+          <b>1 · Écoute locale</b>
+          <span class="btn sm">▶ Jouer dans ce navigateur</span>
+        </div>
+        <p>
+          Vérifie <b>le fichier</b> : est-il audible, au bon volume, sans coupure ni saturation ?
+          Le son sort des haut-parleurs de cet appareil.
+        </p>
+        <div class="tsec-ft">
+          <span style="font-size:.79rem;color:var(--faint)">Ce que j'ai entendu&nbsp;:</span>
+          <span class="seg"><span class="sel">Pas testé</span><span>Ok</span><span>Ko</span></span>
+        </div>
+      </div>
+
+      <div class="tsec">
+        <div class="tsec-hd">
+          <b>2 · Écoute serveur</b>
+          <span class="btn sm">🔊 Jouer sur l'enceinte</span>
+        </div>
+        <p>
+          Vérifie <b>toute la chaîne</b> : le serveur joue le son sur l'enceinte de la salle, par
+          le même chemin qu'en partie. Il faut être à portée d'oreille pour l'entendre.
+        </p>
+        <div class="tsec-ft">
+          <span style="font-size:.79rem;color:var(--faint)">Ce que j'ai entendu&nbsp;:</span>
+          <span class="seg"><span>Pas testé</span><span>Ok</span><span class="sel ko">Ko</span></span>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-ft">
+      <span class="btn g">Fermer</span>
+    </div>
+  </div>
+
+  <div class="call acc">
+    <span class="call-t">Rien ne se joue à l'ouverture — c'est une mesure de sûreté, pas une préférence</span>
+    Cette page reste atteignable <b>pendant une partie</b>. Déclencher l'écoute serveur à
+    l'ouverture de la modale enverrait un bruitage dans la salle, en plein jeu, sans que personne
+    l'ait demandé. Chaque écoute exige donc un clic explicite.
+    <br><br>
+    Et jouer les deux d'un coup n'aurait aucun sens : les deux sons se chevaucheraient, on ne
+    saurait plus lequel on entend — soit exactement ce que la séparation cherche à éviter.
+  </div>
+
+  <div class="call info">
+    <span class="call-t">Pourquoi un verdict manuel plutôt qu'un statut automatique</span>
+    Parce que le serveur ne <em>peut pas</em> savoir si un son est sorti : la lecture rend un
+    succès même quand l'enceinte s'est déconnectée. Un statut auto-rapporté serait donc une
+    affirmation que rien ne soutient. Le verdict manuel dit la vérité sur sa propre nature — c'est
+    l'utilisateur qui a entendu, et lui seul.
+  </div>
+
+  <h3>Les deux verdicts remontent dans le tableau</h3>
+  <p class="lede" style="margin-bottom:14px">
+    La colonne <b>Test</b> porte deux pastilles, écoute locale puis écoute serveur. Le tableau
+    devient la liste de contrôle d'une séance de réglage : d'un coup d'œil, on voit ce qui reste à
+    vérifier.
+  </p>
+  <div class="screen">
+    <div class="screen-bd" style="display:flex;flex-direction:column;gap:11px;font-size:.85rem;color:var(--dim)">
+      <div><span class="vd"><span class="vdot"></span><span class="vdot"></span></span> &nbsp; Pas encore testé</div>
+      <div><span class="vd"><span class="vdot ok"></span><span class="vdot ok"></span></span> &nbsp; Bon des deux côtés</div>
+      <div><span class="vd"><span class="vdot ok"></span><span class="vdot ko"></span></span> &nbsp; Le fichier est bon, mais rien n'est sorti sur l'enceinte — le problème est dans la chaîne, pas dans le son</div>
+      <div><span class="vd"><span class="vdot ko"></span><span class="vdot"></span></span> &nbsp; Le fichier lui-même est mauvais — inutile de tester l'enceinte, il faut d'abord le remplacer</div>
+    </div>
+  </div>
+
+  <div class="call ok">
+    <span class="call-t">Ce que la combinaison des deux verdicts permet de dire</span>
+    C'est là que la séparation devient utile plutôt que décorative : <b>local ok + serveur ko</b>
+    désigne la chaîne audio, <b>local ko</b> désigne le fichier. Un diagnostic qu'un bouton unique
+    ne pourrait pas rendre.
+  </div>
+
+  <div class="call warn">
+    <span class="call-t">Les verdicts ne survivent pas au rechargement de la page — et c'est voulu</span>
+    Ils vivent le temps de la séance de réglage, dans le navigateur, et disparaissent au
+    rechargement. Les conserver créerait une vérité qui se périme : un « ok » resterait affiché
+    après un changement d'enceinte, après un remplacement de fichier, ou sur un autre poste que
+    celui qui a servi au test.
+    <br><br>
+    C'est la même discipline que le reste de cette page : rien n'est mémorisé qui puisse dériver
+    de la réalité. La mention « défaut » ou « personnalisé » elle-même n'est pas un drapeau stocké,
+    mais une comparaison refaite à chaque lecture.
+  </div>
+</section>
+
+<!-- ───────────────────────────── 4 ───────────────────────────── -->
+<section>
+  <h2><span class="num">04</span> Remplacer un son</h2>
+  <p class="lede">
+    Un seul geste : choisir un fichier. Le serveur le vérifie avant de l'accepter, et refuse avec
+    une raison lisible plutôt qu'un code d'erreur.
+  </p>
+
+  <div class="screen">
+    <div class="screen-hd">Remplacer — « Temps écoulé »</div>
+    <div class="screen-bd">
+      <div class="fieldset">
+        <div class="fs-t">Nouveau son</div>
+        <span class="lbl">Fichier</span>
+        <span class="ctl ph">Aucun fichier choisi — WAV, 44 100 Hz, 16 bits, stéréo, 5 s maximum</span>
+        <div class="btnrow">
+          <span class="btn p">Choisir un fichier</span>
+          <span class="btn g">Annuler</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Les refus, et ce qu'ils disent</h3>
+  <div class="screen">
+    <div class="screen-bd" style="display:flex;flex-direction:column;gap:12px">
+      <div class="call no" style="margin:0">
+        <span class="call-t">Ce fichier n'est pas un WAV</span>
+        Seuls les fichiers WAV sont acceptés. Un MP3 renommé en <code>.wav</code> est détecté et refusé.
+      </div>
+      <div class="call no" style="margin:0">
+        <span class="call-t">Format incompatible — 22 050 Hz, mono</span>
+        Le son doit être en 44 100 Hz, 16 bits, stéréo. Tous les bruitages partagent un même format :
+        c'est ce qui permet de les jouer sans conversion.
+      </div>
+      <div class="call no" style="margin:0">
+        <span class="call-t">Ce son dure 8,2 s — la limite est de 5 s</span>
+        Les bruitages sont joués l'un après l'autre. Un son long retarde tous les suivants.
+      </div>
+      <div class="call warn" style="margin:0">
+        <span class="call-t">Ce son dure 3,4 s — il sera accepté, mais c'est long pour un bruitage</span>
+        Au-delà de deux secondes environ, un bruitage risque de déborder sur le moment de jeu
+        suivant. Accepté tel quel.
+      </div>
+    </div>
+  </div>
+
+  <div class="call ok">
+    <span class="call-t">Après acceptation</span>
+    La ligne passe à <span class="tag custom">Personnalisé</span>, sa durée est mise à jour, et le
+    bouton <b>↺ Restaurer</b> apparaît. Le nouveau son est actif immédiatement — aucun
+    redémarrage n'est nécessaire.
+  </div>
+</section>
+
+<!-- ───────────────────────────── 5 ───────────────────────────── -->
+<section>
+  <h2><span class="num">05</span> Restaurer</h2>
+  <p class="lede">
+    Deux portées, deux niveaux de précaution. Restaurer régénère le son d'origine à l'identique —
+    l'opération est reproductible et sans surprise.
+  </p>
+
+  <div class="split">
+    <div class="screen">
+      <div class="screen-hd">↺ Restaurer — une ligne</div>
+      <div class="screen-bd">
+        <p style="font-size:.87rem;color:var(--dim)">
+          Remet le son par défaut pour ce seul moment. Immédiat, sans confirmation : l'action est
+          réversible en re-téléversant le fichier.
+        </p>
+      </div>
+    </div>
+    <div class="screen">
+      <div class="screen-hd">↺ Restaurer tous les sons par défaut</div>
+      <div class="screen-bd">
+        <p style="font-size:.87rem;color:var(--dim)">
+          Remet les sept sons d'origine. <b style="color:var(--txt)">Demande confirmation</b>, en
+          annonçant combien de sons personnalisés seront écrasés.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-hd">Confirmation — restauration globale</div>
+    <div class="screen-bd">
+      <div class="call warn" style="margin:0 0 14px">
+        <span class="call-t">Restaurer les sept sons par défaut ?</span>
+        <b style="color:var(--txt)">2 sons personnalisés</b> seront remplacés par les sons
+        d'origine : « Temps écoulé » et « Révélation ». Cette action ne peut pas être annulée.
+      </div>
+      <div class="btnrow" style="margin:0">
+        <span class="btn p">Restaurer les sept sons</span>
+        <span class="btn g">Annuler</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────────── 6 ───────────────────────────── -->
+<section>
+  <h2><span class="num">06</span> L'état de la sortie audio — deux états, et c'est tout</h2>
+  <p class="lede">
+    Une première version distinguait trois états. Aucun ne reflétait une réalité vérifiée en
+    continu, et la nuance ne servait personne : <strong>pour qui regarde la page, la seule question
+    est « est-ce que du son va sortir ? »</strong>. Deux états y répondent.
+  </p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pastille</th><th>Ce que cela signifie</th><th>Ce qu'il faut faire</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="status ok"><span class="dot"></span>Son actif</span></td>
+          <td>Les bruitages sont activés <b>et</b> une sortie audio a pu être ouverte au démarrage du serveur.</td>
+          <td>Vérifier avec « Tester sur l'enceinte » que le son sort au bon endroit.</td>
+        </tr>
+        <tr>
+          <td><span class="status idle"><span class="dot"></span>Son inactif</span></td>
+          <td>Aucun son ne sortira — que les bruitages soient éteints, ou qu'aucune sortie audio n'ait pu être ouverte.</td>
+          <td>Vérifier l'interrupteur ; s'il est allumé, tester sur l'enceinte pour connaître la cause.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call info">
+    <span class="call-t">Pourquoi fusionner « éteint » et « en panne »</span>
+    Parce que la conséquence est rigoureusement la même : aucun son. Afficher deux rouges
+    différents pour un résultat identique demande au lecteur de faire une distinction qui ne change
+    rien à ce qu'il doit faire dans l'instant. La cause reste connaissable — par le bouton de test,
+    qui la nomme, et par les journaux du serveur.
+  </div>
+
+  <div class="call warn">
+    <span class="call-t">Ce que la pastille ne dit pas — et l'interface doit l'avouer</span>
+    Elle <b>ne détecte pas</b> qu'une enceinte Bluetooth s'est éteinte, endormie ou éloignée en
+    cours de partie : elle resterait au vert. Elle ne dit pas non plus <em>sur quel</em>
+    périphérique le son sort — si l'enceinte était absente au démarrage, le serveur a très bien pu
+    ouvrir la sortie par défaut du système, prise jack comprise, et se déclarer actif.
+    <br><br>
+    Phrase proposée sous la pastille : <em>« État établi au démarrage du serveur. Pour vérifier
+    qu'une enceinte répond maintenant, utilisez “Tester sur l'enceinte”. »</em>
+  </div>
+
+  <div class="call acc">
+    <span class="call-t">Le bouton de test porte ce que la pastille a laissé tomber</span>
+    C'est ce qui rend la simplification tenable : la pastille dit si le son est <em>possible</em>,
+    le bouton dit s'il <em>sort</em> — et lui distingue toujours les trois cas (envoyé, bruitages
+    désactivés, sortie indisponible). La nuance n'est pas perdue, elle est déplacée là où
+    l'utilisateur la demande explicitement.
+  </div>
+</section>
+
+<!-- ───────────────────────────── 7 ───────────────────────────── -->
+<section>
+  <h2><span class="num">07</span> Ce qui n'est délibérément pas là</h2>
+  <p class="lede">
+    Autant que ce que la page montre, ce qu'elle ne montre pas est une décision.
+  </p>
+
+  <ul class="none">
+    <li><span class="x">—</span><span><b>Aucun réglage de volume.</b> Il se fait sur l'enceinte, décision prise au cadrage de #218.</span></li>
+    <li><span class="x">—</span><span><b>Aucun choix de périphérique de sortie.</b> Le pilote ne sait pas encore en sélectionner un ; afficher un menu sans effet serait pire que son absence.</span></li>
+    <li><span class="x">—</span><span><b>Aucun réglage de compensation de latence.</b> Paramètre système, réglable dans <code>config.json</code> — décision de l'utilisateur.</span></li>
+    <li><span class="x">—</span><span><b>Aucun bouton « ajouter un son ».</b> Le catalogue est fermé à sept moments : on remplace, on n'ajoute pas.</span></li>
+    <li><span class="x">—</span><span><b>Aucun bouton « supprimer ».</b> Supprimer rendrait le moment muet. « Restaurer » est l'action qui a du sens.</span></li>
+    <li><span class="x">—</span><span><b>Aucun son par type de question.</b> Reporté en v11.1 (#231) — cette page couvre les sept moments globaux.</span></li>
+    <li><span class="x">—</span><span><b>Aucune conversion de format.</b> Un fichier non conforme est refusé, jamais rééchantillonné — une issue dédiée est proposée pour v11.1.</span></li>
+    <li><span class="x">—</span><span><b>Aucune surveillance permanente de l'enceinte.</b> Le serveur n'en a pas les moyens ; la pastille le dit franchement plutôt que de le laisser croire.</span></li>
+  </ul>
+
+  <div class="call acc">
+    <span class="call-t">Ce que l'onglet Lumière devient</span>
+    Rien de plus qu'un onglet. Son contenu, son comportement et ses trois étapes sont inchangés —
+    aucune ligne de l'assistant Hue n'est réécrite.
+  </div>
+</section>
+
+<!-- ───────────────────────────── 8 ───────────────────────────── -->
+<section>
+  <h2><span class="num">08</span> Points à valider</h2>
+  <p class="lede">Les choix sur lesquels un avis est attendu avant de lancer le développement.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Sujet</th><th>Proposition</th></tr></thead>
+      <tbody>
+        <tr><td><b>Sous-titre de la page</b></td><td>« Éclairage et bruitages de la salle, pilotés par le jeu »</td></tr>
+        <tr><td><b>Intitulés des onglets</b></td><td>« Lumière » et « Son », l'onglet Lumière actif à l'ouverture</td></tr>
+        <tr><td><b>Noms des sept moments</b></td><td>Départ · Temps écoulé · Points gagnés · Erreur · Révélation · Début d'entracte · Fin d'entracte</td></tr>
+        <tr><td><b>« Erreur » ou « Perdu »</b></td><td>« Erreur » paraît plus juste : le son marque une paire ratée ou une réponse invalidée, jamais une sanction</td></tr>
+        <tr><td><b>Durée maximale</b></td><td>Refus au-delà de 5 s, avertissement au-delà de 2 s</td></tr>
+        <tr><td><b>Restauration d'une ligne</b></td><td>Sans confirmation — la restauration globale, elle, en demande une</td></tr>
+        <tr><td><b>Pastille d'état du son</b></td><td>Dans l'onglet Son ; celle du bandeau reste dédiée à l'éclairage, comme l'ampoule du menu</td></tr>
+        <tr><td><b>Interrupteur par moment</b></td><td>Un par ligne, la ligne s'estompe quand il est éteint ; l'interrupteur général reste maître</td></tr>
+        <tr><td><b>Tester un moment éteint</b></td><td>Reste possible — tester est un geste explicite, seule la partie est muette</td></tr>
+        <tr><td><b>Modale de test</b></td><td>Un bouton unique « Tester », deux sections, un verdict manuel par section</td></tr>
+        <tr><td><b>Déclenchement des écoutes</b></td><td>Un clic explicite par section — rien ne se joue à l'ouverture, la page est atteignable en pleine partie</td></tr>
+        <tr><td><b>Durée de vie des verdicts</b></td><td>Éphémères, le temps de la séance — un verdict conservé se périmerait au premier changement</td></tr>
+        <tr><td><b>Interrupteur général, extinction</b></td><td>Immédiate — c'est le geste urgent en conditions réelles</td></tr>
+        <tr><td><b>Interrupteur général, allumage</b></td><td>« Prend effet au prochain démarrage du serveur », dit explicitement à côté de l'interrupteur</td></tr>
+        <tr><td><b>Pastille à deux états</b></td><td>« Son actif » / « Son inactif » — éteint et en panne fusionnés, la cause reste donnée par le bouton de test</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div>
+<!-- ARTIFACT-BODY-END -->
+</body>
+</html>

@@ -2,7 +2,40 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased]
+## [11.0.0] - Milestone v11.0.0 — Ambiance de musique d'événement (#34)
+
+**Contenu livré** : Spike faisabilité audio + Bluetooth (#226), vocabulaire et moteur abstrait (#227), pilotes de sortie réels Windows + Raspberry Pi (#228), sons par défaut synthétisés (#229), interface d'administration des sons (#230), pastille d'état dans la navbar (#234). **Validation manuelle complète** : Windows et Raspberry Pi, toutes les issues fermées.
+
+### Added
+- **Spike #226 — Audio playback feasibility, Windows + Raspberry Pi validation** — Recherche documentaire et preuve de faisabilité de la voie audio retenue `github.com/ebitengine/oto/v3 v3.5.1` (sans cgo, compilation Windows et Linux/arm64 prouvée sous `CGO_ENABLED=0`). Découverte : `oto v3.4.1` ne compile pas du tout pour arm64 sans cgo, **`v3.5.1` est la seule option viables** pour les deux cibles CI. Décision : bump du toolchain **go 1.24 → go 1.25** (trace explicite, coût CI net quasi nul). Protocole de validation acoustique réelle établi pour Raspberry Pi.
+
+- **Sound event vocabulary and abstract engine (#227, Lot A + B)** — Vocabulaire normatif de 7 cues sonores (depart, temps-ecoule, gagne, perdu, reveal, entracte-debut, entracte-fin) — toutes impulsions, jamais d'état. Interface `Output` symétrique de `lighting.Driver`, méthode `Play(ctx, cue)` **bloquante jusqu'à fin du rendu** (amendement de contrat normatif, evite le bug du spike #226 qui fermait le fichier avant le rendu réel). Moteur abstrait sans dépendance matérielle, `FakeOutput` testé avec `Delay` et `Gate` permettant un test complet sans matériel. Fan-out des événements de jeu aux neuf sites d'émission réels, registre de sites normatif avec garde AST. Section `sound` dans `config.json`. Dégradation silencieuse obligatoire : aucune erreur ne remonte au jeu. **Contrat complet** : `contracts/sound.md` (vocabulaire, format canonique, interface, câblage) et `contracts/http-endpoints.md` §Sound (endpoints d'upload/test).
+
+- **Audio output driver, Windows + Linux/Raspberry Pi backends (#228)** — Implémentation `Output` par plateforme derrière build tags : `output_windows.go`, `output_linux.go` (backends ALSA + PulseAudio via `oto`, aucun cgo), `output_other.go` (repli neutre). Contexte audio unique créé une seule fois au démarrage, attente du canal de disponibilité avant première lecture (évite le silence au premier son). Pré-armement du flux A2DP au démarrage (centaines de ms économisées au premier son). Ré-armement automatique après déconnexion d'enceinte, sans jamais bloquer le serveur. **Mitigation systemd tracée** : unité *system* conservée (serveur écoute port 80, unité *user* ne peut l'ouvrir), ajout de `XDG_RUNTIME_DIR` et `PULSE_SERVER` avec documentation explicite de l'hypothèse Raspberry Pi non vérifiée, `loginctl enable-linger` requis pour persistance de session.
+
+- **Default sounds synthesized deterministically in Go (#229)** — Septuple générateur WAV (en-tête RIFF canonique + synthèse PCM déterministe) produisant les sept sons par défaut. **Pas de fichiers embarqués** — le générateur en **est** l'asset (élimine dépendances licence/distribution, taille binaire inchangée, restauration idempotente par construction). Génération au premier démarrage (`data/files/sounds/`), restauration explicite accessible via endpoint HTTP (idempotent : deux appels successifs = mêmes octets). Manifeste `sounds.json` avec comparaison binaire pour distinguer son défaut vs. son personnalisé (pas de drapeau à maintenir). Enveloppe anti-clic sur chaque son (quelques ms de fondu d'attaque/extinction), durée et fréquence cibles documentées. Pas de `//go:embed` (synthèse en est l'asset).
+
+- **Sound administration page integrated into `/admin/ambiance` (#230)** — Nouvelle page d'administration des sons accessible via onglet "Son" dans `/admin/ambiance` (onglets mutuellement exclusifs Lumière/Son). Interface tableau : sept cues sonores, affichage état (défaut/personnalisé), durée, trois actions (écouter ici via navigateur, tester sur l'enceinte serveur, restaurer unitaire). Téléversement WAV avec validation stricte : format canon strict (PCM 16/44100/stéréo), durée maximale 5 s (rejet), avertissement au-delà de 2 s (accepté). Résultats de test à trois verdicts manuels distincts (« Son envoyé à l'enceinte » / « Bruitages désactivés » / « Enceinte indisponible ») — **aucun verdict automatique** (système ne peut pas confirmer qu'un son a été réellement entendu, seul l'utilisateur le peut). **Deux niveaux de contrôle du son** (addendum #230) : interrupteur général ON/OFF (OFF immédiat, ON demande redémarrage du serveur — contexte audio unique) et sept interrupteurs par cue (`CuesDisabled`, effet immédiat). Bouton global « Restaurer tous les sons livrés ». Maquette : `docs/mockups/sound-config-230.html` (revision 5).
+
+- **Sound status badge in navbar (#234)** — Pastille d'état indépendante pour la sortie audio dans la Navbar (à côté de celle de l'éclairage Hue). Reflète `sound.enabled && audio output initialized` (binaire : active ou inactive), fusionnant volontairement le cas « désactivé » et « indisponible » (conséquence identique : aucun son ne sortira). Statut établi une seule fois au démarrage du pilote (pas de boucle de surveillance après coup) — une enceinte qui s'éteint ou se déconnecte ne change pas le statut immédiat, seul un redémarrage du serveur le réévalue.
+
+### Changed
+- **[BREAKING, mineur]** Format persisté GAME_STATE pour la configuration sonore (nouvelle section `sound` dans `config.json`, additive, aucune migration requise).
+
+### Fixed
+- **Asymétrie de l'interrupteur général du son** — OFF est immédiat (moteur ignore les cues), ON demande redémarrage (contexte audio doit être initialisé au démarrage du serveur). Comportement expliqué dans l'interface et la documentation.
+
+### Validation
+- **Validation manuelle utilisateur complète** : Windows exécutable portable (`buzzcontrol-v11.0.0-windows-amd64.exe`) et Raspberry Pi 4 (ARM64 Linux), scénarios de test d'end-to-end couverts (#226 procédure spike, #228 procédure matériel, #230 procédure fonctionnelle utilisateur). Toutes les issues #226 à #234 fermées après validation.
+
+### Backlog — Prochaines étapes
+- **#231 (v11.1)** : Bruitages fins par type de question (indices QCM, sélection MEMORY/MEMOTION, etc.) — catalogue étendu, 15+ cues supplémentaires, fan-out vers les sites fins.
+- **#232 (v11.1/v11.2)** : Rééchantillonnage automatique des uploads non conformes au canon (2e génération de la validation durée, convertir plutôt que rejeter).
+- **#219 (v11.1)** : Type de question sonore/musicale.
+
+---
+
+## [9.0.0] - Milestone v9.0.0
 
 ### Changed
 - **HTTP server startup is now blocking and observable on port conflict (#220)** — Le démarrage du serveur HTTP est désormais **bloquant** jusqu'à ce que le port soit effectivement lié, au lieu d'annoncer « started successfully » pendant qu'une boucle silencieuse retentait en arrière-plan. Signature de `HTTPServer.Start()` passée de synchrone non-bloquante à `Start(ctx context.Context) error` (bloquante, interruptible via `ctx`). Comportement du startup : **backoff progressif** sur port occupé (500ms → 1s → 5s plafonné), **message actionnable** nommant le port et sa provenance (`config.json`, `--port flag`, défaut code) en cas de refus de permission, jamais d'`os.Exit()` sur erreur de bind. **Gating UDP/mDNS** : annonce BUZZ_SERVER (heartbeat) et publication mDNS démarrent désormais **après** un bind HTTP réussi — auparavant, les buzzers recevaient une annonce pointant vers un port potentiellement mort. Échec DNS/mDNS reste **non fatal** mais devient **visible** dans `/ws/logs` et le tampon d'historique (log remplacé de `log.Printf` à `LogWarn`). **Non-régression auto-update** : relance du binaire pendant que l'ancien process tient le port fonctionne désormais de façon observable au lieu de silencieuse.

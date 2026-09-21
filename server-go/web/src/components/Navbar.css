@@ -120,6 +120,24 @@
   width: 1.5rem;
 }
 
+/* #234 — entrée « Ambiance » : deux glyphes (ampoule + haut-parleur) côte à
+   côte dans le même slot d'icône que les entrées à un seul glyphe/emoji
+   ci-dessus (.menu-icon, largeur fixe 1.5rem inchangée pour ne pas désaligner
+   les autres lignes du menu). Légèrement réduits pour tenir dans ce slot ;
+   un débordement mineur reste sans conséquence (.menu-item a son propre
+   `gap` avant le libellé, voir plus haut). */
+.ambiance-menu-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ambiance-menu-icons .lighting-bulb-icon,
+.ambiance-menu-icons .sound-speaker-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
 .menu-label {
   font-size: 0.875rem;
   font-weight: 500;

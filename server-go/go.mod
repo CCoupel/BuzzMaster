@@ -1,20 +1,23 @@
 module buzzcontrol
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.61.0
+	github.com/ebitengine/oto/v3 v3.5.1
 	github.com/gorilla/websocket v1.5.1
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/miekg/dns v1.1.69
-	golang.org/x/sys v0.38.0
+	golang.org/x/sys v0.47.0
 )
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/ebitengine/purego v0.11.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
+	github.com/jfreymuth/pulse v0.1.3 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect

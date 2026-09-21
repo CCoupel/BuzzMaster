@@ -4,8 +4,14 @@ import Card from '../components/Card'
 import { useGame } from '../hooks/GameContext'
 import { useLightingStatus, notifyLightingChanged } from '../hooks/useLightingStatus'
 import { lightingStateLabel, normalizeLightingState } from '../utils/lightingState'
+import LightingBulbIcon from '../components/LightingBulbIcon'
+import { useSoundStatus, notifySoundChanged } from '../hooks/useSoundStatus'
+import { soundStateLabel } from '../utils/soundState'
+import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
+import SoundsManager from '../components/SoundsManager'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
+import '../styles/tabs.css'
 
 // #207 — /admin/ambiance : connecter BuzzMaster à un pont Philips Hue et
 // choisir les ampoules pilotées. Maquette validée (rév. 4) :
@@ -65,6 +71,28 @@ const EMPTY_LIGHTING = Object.freeze({
   api_key_configured: false,
   lights: [],
 })
+
+// #230 — section `sound` de config.json, jumelle de EMPTY_LIGHTING ci-dessus
+// (contracts/sound.md §6.3). `cues_disabled` absent/vide = valeur zéro =
+// « rien n'est désactivé », par construction du contrat.
+const EMPTY_SOUND = Object.freeze({
+  enabled: false,
+  cues_disabled: {},
+})
+
+// #230 — barre d'onglets Lumière/Son (maquette sound-config-230.html rév. 4,
+// handoff §2) : l'assistant Hue existant devient le contenu de l'onglet
+// Lumière, SANS AUCUNE modification interne. Modèle copié de
+// BackstagePage.jsx (tableau TABS, role=tablist/tab, styles/tabs.css) —
+// convention CSS partagée du projet, volontairement non factorisée en
+// composant (handoff §2, "quinze lignes dupliquées, standard du projet").
+// Lumière reste l'onglet actif par défaut : c'est ce qui garantit que la
+// section Son n'est pas rendue tant qu'on ne la demande pas (piège du test
+// « aucun <input> à l'étape 1 », AmbiancePage.test.jsx:140).
+const TABS = [
+  { key: 'light', label: 'Lumière', icon: '🔆' },
+  { key: 'sound', label: 'Son', icon: '🔊' },
+]
 
 const postJson = (url, body) =>
   fetch(url, {
@@ -149,9 +177,19 @@ const roleFromSelectValue = (value) =>
 export default function AmbiancePage() {
   const { teams } = useGame()
   const { status, refresh: refreshStatus } = useLightingStatus()
+  // #230 — jumeau du hook ci-dessus pour la pastille de l'onglet Son
+  // (contracts/http-endpoints.md §Sound, GET /api/sound/status). Appelé
+  // inconditionnellement, comme useLightingStatus : le badge n'est affiché
+  // que dans l'onglet Son, mais l'état est prêt dès le montage.
+  const { status: soundStatus, refresh: refreshSoundStatus } = useSoundStatus()
 
   // Section `lighting` de config.json (clé API jamais présente : masquée).
   const [lighting, setLighting] = useState(EMPTY_LIGHTING)
+  // #230 — section `sound` de config.json, chargée dans le MÊME loadConfig
+  // ci-dessous (surtout pas un second GET /config.json — handoff §1/§5).
+  const [sound, setSound] = useState(EMPTY_SOUND)
+  const [savingSound, setSavingSound] = useState(false)
+  const [activeTab, setActiveTab] = useState('light')
   const [configLoaded, setConfigLoaded] = useState(false)
 
   // Étape 1 — découverte.
@@ -209,6 +247,17 @@ export default function AmbiancePage() {
       const section = data?.lighting && typeof data.lighting === 'object' ? data.lighting : {}
       const next = { ...EMPTY_LIGHTING, ...section, lights: Array.isArray(section.lights) ? section.lights : [] }
       setLighting(next)
+      // #230 (C.5) — lue ICI, dans le loadConfig EXISTANT : surtout pas un
+      // second fetch (risque R.3, AmbiancePage.test.jsx:153-160 compte
+      // exactement un GET /config.json au montage).
+      const soundSection = data?.sound && typeof data.sound === 'object' ? data.sound : {}
+      setSound({
+        ...EMPTY_SOUND,
+        ...soundSection,
+        cues_disabled: soundSection.cues_disabled && typeof soundSection.cues_disabled === 'object'
+          ? soundSection.cues_disabled
+          : {},
+      })
       return next
     } catch (error) {
       console.error('Load lighting config failed:', error)
@@ -228,6 +277,31 @@ export default function AmbiancePage() {
     notifyLightingChanged()
     refreshStatus()
   }, [loadConfig, refreshStatus])
+
+  // #230 — écriture symétrique de saveLighting/afterSave ci-dessus : patch
+  // partiel additif de la section `sound`, aucun endpoint dédié pour
+  // l'interrupteur général (contracts/sound.md §6.3).
+  const saveSound = (patch) => postJson('/config.json', { sound: patch })
+
+  const afterSaveSound = useCallback(async () => {
+    await loadConfig()
+    notifySoundChanged()
+    refreshSoundStatus()
+  }, [loadConfig, refreshSoundStatus])
+
+  const handleToggleSoundEnabled = async () => {
+    setSavingSound(true)
+    try {
+      const res = await saveSound({ enabled: !sound.enabled })
+      if (!res.ok) throw new Error(await res.text())
+      await afterSaveSound()
+    } catch (error) {
+      console.error('Toggle sound enabled failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setSavingSound(false)
+    }
+  }
 
   // ---- Étape 1 : découverte ------------------------------------------------
   const handleDiscover = async () => {
@@ -700,13 +774,51 @@ export default function AmbiancePage() {
             data-state={badgeState}
             role="status"
           >
+            <LightingBulbIcon state={badgeState} />
             <span className="ambiance-status-dot" aria-hidden="true" />
             {lightingStateLabel(badgeState)}{lightsSummary}
           </span>
+          {/* #234 (correction) — seconde pastille, dédiée au son. Classe
+              DISTINCTE de `.ambiance-status-badge` : AmbiancePage.test.jsx:123
+              sélectionne ce nom de classe AU SINGULIER (querySelector), dans
+              une dizaine d'assertions dont deux négatives
+              (not.toContain('refusée'/'injoignable')) — le texte du son ne
+              doit jamais pouvoir atterrir dans le même élément. Même rendu
+              visuel que la pastille lumière (règles partagées dans
+              AmbiancePage.css), sous son propre sélecteur. Un glyphe par
+              pastille (LightingBulbIcon/SoundSpeakerIcon) les rend
+              auto-descriptives — AUCUN libellé texte modifié (les
+              assertions existantes sont sensibles à la casse). */}
+          <span
+            className={`ambiance-sound-badge is-${soundStatus.active ? 'ok' : 'idle'}`}
+            data-state={soundStatus.active ? 'ok' : 'idle'}
+            role="status"
+          >
+            <SoundSpeakerIcon active={soundStatus.active} />
+            <span className="ambiance-status-dot" aria-hidden="true" />
+            {soundStateLabel(soundStatus.active)}
+          </span>
         </div>
-        <p className="page-subtitle">Éclairage de la salle piloté par le jeu</p>
+        <p className="page-subtitle">Éclairage et bruitages de la salle, pilotés par le jeu</p>
       </header>
 
+      <div className="page-tabs" role="tablist">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.key}
+            className={`page-tab ${activeTab === t.key ? 'active' : ''}`}
+            onClick={() => setActiveTab(t.key)}
+          >
+            <span className="page-tab-icon" aria-hidden="true">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'light' && (
       <Card padding="lg" className="ambiance-card">
         {!configLoaded && <p className="ambiance-hint">Chargement…</p>}
 
@@ -1123,6 +1235,68 @@ export default function AmbiancePage() {
           </section>
         )}
       </Card>
+      )}
+
+      {activeTab === 'sound' && (
+        <Card padding="lg" className="ambiance-card sound-card">
+          <section className="ambiance-step sound-step" aria-labelledby="ambiance-sound-title">
+            <h2 id="ambiance-sound-title" className="ambiance-step-title">Sortie audio</h2>
+            <div className="sound-master-row">
+              <label className="sound-master-toggle">
+                <span className="sound-switch">
+                  <input
+                    type="checkbox"
+                    checked={sound.enabled}
+                    disabled={savingSound}
+                    onChange={handleToggleSoundEnabled}
+                  />
+                  <span className="sound-switch-track" aria-hidden="true" />
+                </span>
+                Bruitages activés
+              </label>
+              {/* Même motif visuel que le badge lumière (handoff §2) : la
+                  classe `is-ok` est réutilisée telle quelle pour « Son actif »
+                  (même vert), `is-idle` est propre au son — deux états
+                  seulement, jamais les quatre valeurs de l'éclairage.
+                  #234 (correction, revue code-reviewer) — `.ambiance-sound-badge`,
+                  PAS `.ambiance-status-badge` : cette dernière classe est
+                  réservée à la pastille lumière du bandeau (voir son propre
+                  commentaire plus haut) — la garder ici aurait fait remonter
+                  DEUX éléments sous `.ambiance-status-badge` dès l'onglet Son
+                  ouvert, exactement ce que la correction du bandeau visait à
+                  éviter. Même rendu visuel : le CSS partagé (AmbiancePage.css)
+                  couvre déjà ce nom de classe. */}
+              <span
+                className={`ambiance-sound-badge is-${soundStatus.active ? 'ok' : 'idle'}`}
+                role="status"
+              >
+                <span className="ambiance-status-dot" aria-hidden="true" />
+                {soundStateLabel(soundStatus.active)}
+              </span>
+            </div>
+            <p className="ambiance-hint">
+              {/* Maquette rév. 5 — interrupteur général ASYMÉTRIQUE : éteindre
+                  coupe le fan-out immédiatement (lu à chaque déclenchement,
+                  comme les interrupteurs par cue), mais rallumer ne peut pas
+                  ouvrir de sortie audio a posteriori — un seul essai par
+                  processus (contracts/http-endpoints.md §Sound). Ne concerne
+                  QUE ce commutateur : les sept interrupteurs de ligne restent
+                  immédiats dans les deux sens (ils ne touchent que le flux
+                  d'événements, jamais la sortie elle-même). */}
+              <strong className="sound-hint-warn">
+                Éteindre coupe le son immédiatement. Rallumer ne prend effet qu'au prochain
+                démarrage du serveur.
+              </strong>
+              <br />
+              Les sons sont joués sur l'enceinte reliée au serveur ; le volume se règle sur
+              l'enceinte elle-même. État établi au démarrage du serveur — pour vérifier qu'une
+              enceinte répond maintenant, utilisez « Tester sur l'enceinte ».
+            </p>
+          </section>
+
+          <SoundsManager />
+        </Card>
+      )}
 
       {toast && (
         <div className={`wifi-toast wifi-toast-${toast.type}`} role="status">

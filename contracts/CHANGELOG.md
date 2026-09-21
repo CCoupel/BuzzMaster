@@ -2,6 +2,228 @@
 
 ---
 
+## [20260921f] — Bruitage d'événement : section `sound` de `POST /config.json` (#230, Lot B addendum)
+
+> Trou remonté par `dev-frontend` à l'intégration contre le code réel (pas seulement contre le
+> contrat), vérifié : `handleConfig` n'avait aucune branche `raw["sound"]` — un `POST /config.json`
+> portant `{"sound":{...}}` renvoyait `200 OK` sans rien persister. Omission du plan de #230, pas
+> une erreur de développement ; le contrat lui-même (§6.3, ci-dessus) était déjà juste.
+
+- **[NEW]** `contracts/sound.md` §6.3 — fusion champ par champ, normative, pour la section `sound`
+  de `POST /config.json` : même régime que `lighting`/`ai` (`internal/server/http.go`,
+  `handleConfig`), motivé par deux contrôles **indépendants** écrivant la même section (interrupteur
+  général `enabled`, sept interrupteurs `cues_disabled`) — un remplacement en bloc effacerait
+  silencieusement l'un à chaque écriture de l'autre.
+- **[NEW]** `contracts/sound.md` §6.3 — les trois états de `cues_disabled` (absente = préservée,
+  `{}` = vidée, peuplée = remplacée) et leur validation contre le catalogue fermé (`400` sur clé
+  inconnue, aucune écriture partielle).
+- **[NEW — arbitrage `planner`]** `contracts/sound.md` §6.3 — asymétrie normative de
+  l'interrupteur général : **éteindre est immédiat**, **rallumer exige un redémarrage du serveur**.
+  Ce n'est pas un compromis technique mais une propriété qui émerge sans code spécifique de
+  l'hypothèse déjà posée par #227/#228/#229 (« le moteur est construit une seule fois, au
+  démarrage ») — documentée pour qu'elle ne soit pas prise plus tard pour un oubli. Reconstruction
+  à chaud du moteur explicitement écartée (démontage propre non prévu par la conception actuelle,
+  bénéfice limité face au risque).
+
+**Aucun BREAKING.** Comble un trou d'implémentation sur un contrat déjà correct ; ajoute une
+condition en tête de `notifySound` (`cmd/server/sound.go`), lue comme `CuesDisabled` à chaque appel,
+sans toucher au corps existant ni au cycle de vie du moteur.
+
+Détail complet : `_work/handoff/task-dev-backend-230-lotB-addendum-20260921-171500.md`.
+
+---
+
+## [20260921e] — Bruitage d'événement : contrat de l'interface d'administration (#230, Lot A)
+
+> Contrat uniquement — aucune implémentation dans ce lot. Référence normative pour les libellés
+> et les états : `docs/mockups/sound-config-230.html` (révision 4 — la révision 3 utilisée à la
+> rédaction initiale de ce contrat n'avait pas encore la modale de test à verdict manuel ; aucune
+> des sections ci-dessous n'a eu besoin de changer, seul un renvoi croisé a été ajouté sous
+> `/test`, voir plus bas).
+
+- **[NEW]** `contracts/http-endpoints.md` §Sound — cinq nouveaux endpoints spécifiés :
+  `GET /api/sounds` (état des 7 cues), `POST /api/sounds/{cue}` (remplacement, validation format
+  **et durée** — refus > 5 s, avertissement > 2 s, ferme le point relevé par `code-reviewer` sur
+  #228), `POST /api/sounds/{cue}/restore` (restauration unitaire, idempotente),
+  `POST /api/sounds/{cue}/test` (lecture réelle sur l'enceinte, **trois** résultats distincts
+  `played`/`disabled`/`unavailable`, appelle le moteur directement — jamais via `notifySound`, une
+  cue désactivée reste testable), `GET /api/sound/status` (état de la sortie, **deux** états
+  fusionnés délibérément — asymétrie de granularité voulue avec l'endpoint de test, motivée dans
+  le contrat). `POST /api/sounds/restore-defaults` (#229) documenté, non redéfini.
+- **[NEW]** `contracts/http-endpoints.md` §Sound — garde de sécurité normative : `{cue}` validé
+  contre le catalogue fermé avant toute jointure de chemin (même discipline que la garde SSRF de
+  #206), `404` sur toute valeur hors catalogue.
+- **[NEW]** `contracts/http-endpoints.md` §Sound — aucun endpoint dédié pour l'activation générale
+  ni pour l'interrupteur par cue : les deux s'écrivent par le patch partiel additif existant
+  `POST /config.json` avec `{ "sound": {...} }`, symétrique de `{ "lighting": {...} }`.
+- **[NEW — précision du même jour, coordination `planner`]** `contracts/http-endpoints.md`
+  §`POST /api/sounds/{cue}/test` — renvoi croisé normatif : `result` (`played` compris) ne
+  constate jamais une émission sonore **entendue**, seulement une cue **confiée au moteur**.
+  L'interface (#230, modale de test à verdict manuel — maquette révision 4) ne doit **jamais**
+  dériver son verdict manuel (pas testé/ok/ko) de cette réponse — motivé explicitement pour
+  prévenir le défaut le plus probable d'une implémentation qui ne lirait que cette section.
+- **[NEW]** `contracts/sound.md` §6.3 — `SoundConfig.CuesDisabled map[string]bool` : stocke ce qui
+  est **éteint**, jamais ce qui est allumé (la valeur zéro — absente/vide/nil — doit rester « rien
+  n'est désactivé », sans quoi chaque configuration existante deviendrait silencieuse et chaque
+  cue future à #231 nécessiterait une migration). Point de filtrage normatif dans `notifySound`
+  (`cmd/server/sound.go`), **avant** l'appel au moteur, lu à l'appel — jamais mis en cache.
+  ⚠️ **Extension additive d'un code déjà revu (#227)** : le corps existant de `notifySound` ne
+  change pas, une condition s'ajoute en amont ; à valeur zéro le comportement reste identique au
+  bit près. Test exigé : une configuration vide produit exactement les mêmes cues qu'aujourd'hui.
+- **[NEW]** `contracts/sound.md` §4 (amendement) — exigence d'un accesseur exporté
+  (`audio.IsNeutral(Output) bool` ou équivalent) distinguant un pilote réel d'un `noopOutput` de
+  dégradation : `NewOutput` (#228) ne remonte aujourd'hui aucune information d'état, ce que
+  `GET /api/sound/status` et `POST /api/sounds/{cue}/test` nécessitent tous les deux. Purement
+  additif, aucune logique de construction/dégradation existante modifiée.
+- **[NEW]** Terminologie normative de l'interface : **« défaut »**, jamais « livré » (réservé aux
+  rapports techniques).
+
+**Aucun BREAKING.** Tout est additif : nouveaux endpoints, nouveau champ de configuration à valeur
+zéro rétrocompatible, nouvel accesseur sans effet sur le comportement existant. Aucune
+configuration ni comportement existant n'est invalidé.
+
+Détail complet : `_work/reports/plan-dev-230-20260921-144000.md`,
+`_work/reports/plan-delta-230-20260921-152000.md`, `docs/mockups/sound-config-230.html`.
+
+---
+
+## [20260921d] — Bruitage d'événement : sons par défaut synthétisés + premier endpoint (#229)
+
+> Décision actée au cadrage : pas de `//go:embed` pour les sons livrés. Puisqu'ils sont
+> synthétisés en Go plutôt qu'authored comme fichiers, embarquer des octets calculables n'a plus
+> d'objet — le générateur *est* l'asset (`internal/audio/synth`). Écart par rapport au plan de
+> cadrage initial (qui prévoyait embed + extraction conditionnelle, modèle des fonds d'écran de
+> démo), documenté ici plutôt que laissé implicite.
+
+- **[NEW]** `internal/audio/synth` — catalogue fermé de 7 timbres (un par cue, contracts/sound.md
+  §2.1), générateur WAV **déterministe** (aucun aléa, aucune horodatation — condition normative
+  pour distinguer un son par défaut d'un son personnalisé et garantir une restauration
+  idempotente), enveloppe d'attaque/extinction obligatoire sur chaque note (anti-clic). Toutes les
+  cues restent sous la cible < 1 s du plan de dev #229 §2.3.
+- **[NEW]** `internal/audio.FileBank` (`bank.go`) — remplace le paravent de charge utile de #227
+  (nom de cue en clair) : résout chaque cue en lisant `data/files/sounds/<cue>.wav` sur disque et
+  en validant son en-tête contre le format canonique (contract §3) — un fichier non conforme est
+  **refusé silencieusement** (contract §5.5), jamais accepté puis injouable. `internal/audio.Bank`
+  reste optionnel sur `Config` (nil = comportement placeholder de #227 inchangé), pour ne casser
+  aucun test écrit avant que #229 n'existe.
+- **[NEW]** `POST /api/sounds/restore-defaults` (`contracts/http-endpoints.md` §Sound) — premier
+  endpoint fonctionnel de la section, jusqu'ici purement réservée par #227. Écrase
+  inconditionnellement, calqué sur `RestoreEmbedded` (firmware).
+- **[NEW]** `files/sounds/` inscrit dans les **quatre** chemins identifiés par le cadrage
+  (`internal/server/http.go`) : sauvegarde TAR, réinitialisation (régénère immédiatement les
+  défauts — contrairement à backgrounds/categories/entracte qui restent vides après reset, un
+  choix délibéré documenté inline : les sons sont synthétisés, régénérer ne coûte rien), extraction
+  de restauration, détection de restauration. Ne reproduit pas le trou #152.
+
+**Aucun BREAKING.** `audio.Bank` est additif (nil = comportement #227 inchangé) ; le nouvel
+endpoint est une addition pure ; aucune configuration existante n'est invalidée.
+
+Détail complet : `_work/reports/plan-dev-228-229-20260921-114500.md` Partie 2.
+
+---
+
+## [20260921c] — Bruitage d'événement : `Play` DOIT bloquer jusqu'à la fin du rendu (#228)
+
+> Amendement normatif demandé en tête du plan de dev #228, avant tout code de pilote : la
+> formulation précédente (« aucune garantie de non-blocage côté pilote... peut légitimement
+> attendre ») était un **trou de contrat** qui aurait laissé le bug du spike (fermeture prématurée
+> avant la fin réelle du rendu) redevenir une implémentation valide, invisible à tous les tests de
+> #227 (`FakeOutput` répond instantanément par défaut).
+
+- **[CHANGED — BREAKING pour un futur pilote qui s'appuierait sur l'ancienne formulation]**
+  `contracts/sound.md` §4 — `Output.Play` **DOIT** bloquer jusqu'à la fin **réelle** du rendu (ou
+  jusqu'à l'annulation du contexte), et non plus « peut légitimement attendre ». Le pilote réel
+  livré par #228 (`internal/audio/output_oto.go`, partagé Linux/Windows) implémente exactement
+  cette exigence : contexte `oto` unique créé une seule fois, attente du canal de disponibilité,
+  boucle `IsPlaying()` sensible à l'annulation, délai de grâce de 150 ms pour le tampon du pilote
+  (aligné sur le défaut PulseAudio d'`oto`), pré-armement d'un silence au démarrage.
+- **[NEW]** `contracts/sound.md` — conséquence de second ordre tracée : le moteur lisant
+  strictement séquentiellement et `Play` bloquant réellement, une rafale de cues **s'étale** dans
+  le temps au lieu de se superposer — contrainte reportée sur le choix des sons (#229 : sons
+  courts, cible < 1 s), pas un défaut du contrat.
+
+**Aucune configuration existante invalidée.** `FakeOutput` (`internal/audio`) reste conforme :
+`Delay`/`Gate` permettent de tester le blocage sans matériel, déjà exploité par
+`internal/audio/play_blocks_228_test.go` (test-writer).
+
+Détail complet : `contracts/sound.md` §4, `_work/reports/plan-dev-228-229-20260921-114500.md`
+Partie 0/1.
+
+---
+
+## [20260921b] — Bruitage d'événement : le fan-out sonore est additif, pas un remplacement (#227, Lot B)
+
+> Précision d'implémentation relevée en revue de code sur le Lot B (moteur `internal/audio` +
+> câblage) : la forme du fan-out décrite au cadrage et reprise au §6.1 du Lot A s'est avérée plus
+> coûteuse que nécessaire une fois le câblage réel écrit. Même principe que l'amendement
+> `lighting.md` §6.2/§6.3 du 2026-09-02 cité ci-dessous : documenter l'écart plutôt que le laisser
+> implicite dans le code seul.
+
+- **[CHANGED — dev-backend, 2026-09-21]** `contracts/sound.md` §6.1 — le fan-out **n'a
+  finalement pas remplacé** les 22 appels `a.ambiance().NotifyState()`/`NotifyPulse()` existants,
+  qui restent **intacts**. `notifySound(cue audio.Cue)` (`cmd/server/sound.go`) est un point
+  d'entrée **sonore seul**, **ajouté** en plus de l'appel lumière existant aux seuls **9 sites**
+  qui portent effectivement une cue — pas aux 18 du tableau du §6.1. Les sites sans cue
+  n'appellent `notifySound` nulle part et ne figurent pas dans `soundSiteRegistry`. **Raison** :
+  un remplacement complet aurait exigé de toucher les 22 sites pour un gain nul sur les ~13 qui ne
+  portent aucun son en v11.0, pour un risque de régression plus large sur du code déjà normatif et
+  testé (`ambianceSiteRegistry`) — la frontière du §6.1 (qui doit/ne doit jamais sonner) reste
+  **identique** avec cette forme plus simple, vérifiée par le même test-garde à sélecteur unique
+  (`cmd/server/sound_sites_test.go`, coordination directe avec `test-writer`). Deux sites sonores
+  sans aucune contrepartie lumineuse existent aussi (`OnRafaleInvalid` — RAFALE classique
+  uniquement — et `OnTimeUp`, qui porte les deux) : le son n'est pas strictement un sous-ensemble
+  de la lumière.
+
+**Aucun BREAKING** : la frontière normative (qui doit/ne doit jamais déclencher un son) est
+inchangée, seule la mécanique interne du fan-out est plus légère que celle envisagée au cadrage.
+
+Détail complet : `contracts/sound.md` §6.1 (note d'implémentation), `_work/reports/code-review-20260921-121225.md`.
+
+---
+
+## [20260921] — Bruitage d'événement : vocabulaire, moteur abstrait, frontière des sites (#227, Lot A)
+
+> Premier contrat de la milestone v11.0 (Ambiance de musique d'événement, #34), issu du verdict
+> du spike de faisabilité #226 (`ebitengine/oto/v3` v3.5.1 confirmé sur les deux cibles CI,
+> `go 1.25.0`). Lot A (contrats + socle) seulement — aucun code de production dans ce lot,
+> `internal/audio` et le câblage réel viennent en Lot B.
+
+- **[NEW]** `contracts/sound.md` — vocabulaire fermé de 7 cues sonores (`depart`,
+  `temps-ecoule`, `gagne`, `perdu`, `reveal`, `entracte-debut`, `entracte-fin`), **toutes des
+  impulsions** (aucune scène d'état côté son, à la différence de la lumière). Interface `Output`
+  symétrique de `lighting.Driver` (Apply peut bloquer, appelé depuis une unique goroutine).
+  **Format audio canonique normatif : WAV PCM 16 bits, 44 100 Hz, stéréo** — conséquence directe
+  de la contrainte « un seul contexte audio par processus » établie par le spike. **Frontière
+  normative des sites** : le futur fan-out ne remplace que les sites du registre
+  `ambianceSiteRegistry` marqués événement de jeu — **jamais** le sélecteur ON/AUTO/OFF, le Flash,
+  le clignotement SCORE, la reconnexion du pont, le cycle de vie de l'écrivain, et
+  **absolument jamais** `runChronoPulse` (notifie toutes les 100 ms). Note de traçabilité :
+  mitigation systemd/PipeWire appliquée par prudence, sans vérification sur Raspberry Pi réel
+  (correction confinée au pilote #228 si l'hypothèse s'avère fausse).
+- **[NEW]** `contracts/lighting.md` §2.5 — **`KindCountdown`** (scène d'état, sort `COUNTDOWN` de
+  `KindReady` — **rendu exigé identique au bit près**, non-régression normative, §8) et
+  **`KindTimeUp`** (seconde impulsion du vocabulaire après `KindScore` — corrige un trou de
+  câblage réel : rien ne notifiait aujourd'hui l'expiration du chrono, la salle ne se rattrapant
+  que par le polling 100 ms de `runChronoPulse`). Aucun nouvel effet visuel demandé pour l'un ou
+  l'autre en v11.0 — une mise en scène dédiée reste renvoyée à v10.1 (#212).
+- **[NEW]** `contracts/http-endpoints.md` §Sound — **réservation normative uniquement**, endpoints
+  fonctionnels renvoyés à #230. Allowlist `.wav` **exclusivement**, formulée comme contrainte
+  motivée (contexte audio unique par processus + décodeur MP3 Go non maintenu), jamais comme un
+  oubli — calquée sur le patron `/api/game/entracte-image` (multipart, 10 Mo, nom régénéré).
+- **[NEW]** `docs/SERVER_PARAMETERS.md` — section `sound` (`enabled`,
+  `ambiance_compensation_ms` — **paramètre configurable, pas une constante**, câblage effectif
+  renvoyé à une issue ultérieure).
+
+**Aucun BREAKING** : tout est additif (nouveaux genres `lighting.EventKind`, nouveau vocabulaire
+`audio.Cue`, nouvelle section de configuration ignorée par le frontend existant). Aucune
+configuration ni comportement existant n'est invalidé — comportement observable par défaut
+strictement identique tant que `sound.enabled` reste `false` (défaut).
+
+Détail complet, verdict du spike et frontière des sites : `_work/reports/plan-dev-227-20260921-102500.md`,
+`_work/reports/spike-226-20260921-103221.md`.
+
+---
+
 ## [20260908] — Éclairage : l'ampoule d'équipe ne quitte jamais sa couleur, et SCORE clignote en or (#213, #208)
 
 > Deux changements demandés après validation du Batch A en QUALIF round 6. Le premier **renverse

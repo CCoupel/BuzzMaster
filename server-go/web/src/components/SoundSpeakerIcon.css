@@ -1,0 +1,22 @@
+/* #234 — haut-parleur d'état de l'entrée « Ambiance » (menu abeille).
+   La forme porte l'état (SoundSpeakerIcon.jsx) ; la couleur ne fait que
+   renforcer. Même dimension par défaut que .lighting-bulb-icon (1.1rem) —
+   réduite dans le contexte composite des deux glyphes côte à côte, voir
+   .ambiance-menu-icons dans Navbar.css. */
+.sound-speaker-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  display: block;
+}
+
+.sound-speaker-on {
+  color: var(--success);
+}
+
+/* Inactif = un choix normal (bruitages coupés) ou une sortie indisponible,
+   jamais une panne signalée ici (voir soundState.js) : même gris neutre que
+   l'ampoule éteinte, jamais la couleur d'alerte. */
+.sound-speaker-off {
+  color: var(--gray-400);
+}

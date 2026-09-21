@@ -258,6 +258,19 @@ type Engine struct {
 	OnCountdownTick func(countdownTime int)
 	OnBuzzerPress   func(bumperID, teamID string, pressTime int64, button string)
 	OnQCMHint       func(invalidatedColor string, remainingAnswers int) // QCM hint callback
+	// OnTimeUp (v11.0/#227, contracts/sound.md §2.5/lighting.md §2.5) fires
+	// EXACTLY ONCE, at the instant the GLOBAL question chrono reaches zero —
+	// called from startTimer's goroutine, immediately BEFORE e.Stop(), which
+	// is the only place that can still tell a timeout apart from a manual
+	// STOP (e.Stop() itself makes them indistinguishable, contract's own
+	// "trou de câblage" analysis). Deliberately NOT wired into
+	// StartMotionCardTimer's own per-card tick (processMotionCardTick,
+	// below): a MEMOTION card's timer expiring is a DIFFERENT event,
+	// out of scope for v11.0 (#231, v11.1) — see
+	// _work/reports/plan-verif-front-227-20260921-103500.md §4. No payload:
+	// every consumer re-derives whatever it needs from live state, same
+	// convention as OnRafaleTeamsChanged.
+	OnTimeUp func()
 	// RAFALE callbacks (v8.0.0, #107, contract §5.2/§2.2).
 	//
 	// OnRafaleAnswer fires whenever a new RAFALE question is drawn — round
@@ -304,6 +317,16 @@ type Engine struct {
 	// re-reads live GetState()/GetTeamsAndBumpers() itself, same pattern as
 	// OnStateChange.
 	OnRafaleTeamsChanged func()
+	// OnRafaleInvalid (v11.0/#227, contracts/sound.md §2.1's CuePerdu) fires
+	// on a classic RAFALE round's RAFALE_INVALIDATE (RafaleInvalidate,
+	// below) or its question-timer expiry — "identique à réponse invalide"
+	// per contract §6.1, both judged incorrect. Deliberately NOT wired into
+	// the card-scoped variant (RafaleInvalidateCard / the card timer's own
+	// expiry, processRafaleCardQuestionTickUnsafe) — a RAFALE-in-MEMOTION-
+	// card mini-round's own sound belongs to v11.1 (#231), out of scope
+	// here; see _work/reports/plan-verif-front-227-20260921-103500.md §1.
+	// No payload, same convention as OnRafaleTeamsChanged.
+	OnRafaleInvalid func()
 	// OnRafaleCardAnswer (#217, v9.0.0, contracts/rafale.md §14.6) is
 	// OnRafaleAnswer's card-scoped counterpart: fires whenever a new
 	// question is drawn for a RAFALE-in-card mini-round — card round start
@@ -2075,6 +2098,13 @@ func (e *Engine) startTimer() {
 					}
 
 					if result.currentTime <= 0 {
+						// v11.0/#227: fire BEFORE e.Stop() — this is the only
+						// point that still knows this STOP is a timeout, not
+						// a manual regie STOP (contracts/lighting.md §2.5,
+						// contracts/sound.md §5.4).
+						if e.OnTimeUp != nil {
+							e.OnTimeUp()
+						}
 						e.Stop()
 					}
 				}()
@@ -2467,6 +2497,12 @@ func (e *Engine) StartRafaleQuestionTimer(seconds int) {
 					if result.cardAdvance != nil {
 						e.fireRafaleCardAdvanceCallbacks(*result.cardAdvance)
 					} else {
+						// v11.0/#227: timeout, classic round only — "identique
+						// à réponse invalide" (contract §6.1). Never fired for
+						// the card-scoped branch above (#231, v11.1).
+						if e.OnRafaleInvalid != nil {
+							e.OnRafaleInvalid()
+						}
 						e.fireRafaleAdvanceCallbacks(result.advance)
 					}
 				}()
@@ -2877,6 +2913,10 @@ func (e *Engine) RafaleInvalidate() error {
 
 	if result.guardFailed {
 		return ErrRafaleNotInQuestion
+	}
+	// v11.0/#227: explicit RAFALE_INVALIDATE, classic round (contract §6.1).
+	if e.OnRafaleInvalid != nil {
+		e.OnRafaleInvalid()
 	}
 	e.fireRafaleAdvanceCallbacks(result)
 	return nil

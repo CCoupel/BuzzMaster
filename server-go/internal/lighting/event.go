@@ -18,15 +18,17 @@ import (
 type EventKind string
 
 const (
-	KindIdle     EventKind = "IDLE"      // no game in progress
-	KindReady    EventKind = "READY"     // ready to start (PREPARE, READY, COUNTDOWN)
-	KindRunning  EventKind = "RUNNING"   // question in progress (STARTED)
-	KindBuzz     EventKind = "BUZZ"      // a buzz interrupted the question
-	KindPauseAll EventKind = "PAUSE_ALL" // admin pause, no buzz
-	KindReveal   EventKind = "REVEAL"    // answer revealed
-	KindTeamTurn EventKind = "TEAM_TURN" // active team changed (MEMORY/MEMOTION/RAFALE)
-	KindEntracte EventKind = "ENTRACTE"  // intermission active
-	KindScore    EventKind = "SCORE"     // points awarded — a pulse, see contract §2.3
+	KindIdle      EventKind = "IDLE"      // no game in progress
+	KindReady     EventKind = "READY"     // ready to start (PREPARE, READY)
+	KindCountdown EventKind = "COUNTDOWN" // countdown (3-2-1) — v11.0/#227, contract §2.5
+	KindRunning   EventKind = "RUNNING"   // question in progress (STARTED)
+	KindBuzz      EventKind = "BUZZ"      // a buzz interrupted the question
+	KindPauseAll  EventKind = "PAUSE_ALL" // admin pause, no buzz
+	KindReveal    EventKind = "REVEAL"    // answer revealed
+	KindTeamTurn  EventKind = "TEAM_TURN" // active team changed (MEMORY/MEMOTION/RAFALE)
+	KindEntracte  EventKind = "ENTRACTE"  // intermission active
+	KindScore     EventKind = "SCORE"     // points awarded — a pulse, see contract §2.3
+	KindTimeUp    EventKind = "TIME_UP"   // global chrono expired — a pulse, v11.0/#227, contract §2.5
 )
 
 // Event is one ambiance event. Teams holds team NAMES (game.Team has no ID —
@@ -92,3 +94,14 @@ const MinInterval = 100 * time.Millisecond
 // room and buzzers return to normal at the same instant by construction
 // (contract §4.2).
 const ScorePulseDuration = 4800 * time.Millisecond
+
+// TimeUpPulseDuration is how long a TIME_UP pulse is registered (contract
+// §2.5, v11.0/#227) before the room falls back to the derived state — in
+// practice indistinguishable from that derived state, since KindTimeUp
+// renders identically to KindIdle (contract §8). The pulse register still
+// exists for this Kind so the writer applies it PROMPTLY (its own wake
+// channel), instead of waiting for whichever poll happens to notice the
+// phase change next (runChronoPulse's 100 ms tick, belt-and-suspenders
+// only). Short and arbitrary on purpose — no distinct visual effect depends
+// on this value, unlike ScorePulseDuration's alignment with sendLEDSetComet.
+const TimeUpPulseDuration = 500 * time.Millisecond

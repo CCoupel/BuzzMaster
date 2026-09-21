@@ -793,3 +793,265 @@ du flag `medias` ainsi qu'à la remise à zéro des médias. Cette liste ne couv
 `backgrounds/` et `categories/` : l'image de question par défaut (écrite à la racine `data/files/`)
 et `new-game-backgrounds/` en sont déjà absentes et ne survivent qu'à une sauvegarde intégrale
 `/fs-backup`. Le répertoire dédié évite de reproduire ce trou.
+
+---
+
+## Sound (v11.0, #227/#229/#230)
+
+> Contrat complet du vocabulaire de cues, du format canonique et du moteur :
+> `contracts/sound.md` — en particulier §3 (format), §6.3 (`CuesDisabled`, amendement #230) et
+> l'amendement §4 (accesseur `IsNeutral`, requis par `GET /api/sound/status` ci-dessous).
+>
+> **Terminologie normative de l'interface** (maquette `docs/mockups/sound-config-230.html`,
+> révision 4) : un son est **« défaut »** ou **« personnalisé »** — jamais « livré ». Le mot
+> « livré » ne désigne qu'une issue terminée dans les rapports techniques, jamais un état affiché
+> à l'utilisateur.
+>
+> **Aucun endpoint pour l'activation générale ni pour l'interrupteur par cue.** Les deux
+> s'écrivent par le patch partiel additif déjà existant `POST /config.json` avec un corps
+> `{ "sound": { "enabled": ..., "cues_disabled": {...} } }` — exactement comme `{ "lighting": {...} }`
+> le fait pour l'éclairage. Un lecteur qui chercherait un endpoint `PATCH`/`PUT` dédié à ces deux
+> réglages n'en trouvera jamais : ce n'est pas un oubli.
+
+### Sécurité — le nom de cue vient de l'URL, normatif pour tous les endpoints `{cue}` ci-dessous
+
+Le segment `{cue}` transite par l'URL et sert à construire un chemin de fichier
+(`data/files/sounds/<cue>.wav`). **Il doit être validé contre le catalogue fermé des 7 cues**
+(`contracts/sound.md` §2.1) **avant tout usage** — jamais passé tel quel à une jointure de chemin.
+Une valeur hors catalogue rend `404`, jamais une tentative de résolution disque. Même discipline
+que la garde SSRF de #206 et que `filepath.Base` à la suppression d'un fond d'écran.
+
+### `GET /api/sounds`
+
+Les sept cues du catalogue, dans l'ordre normatif de `contracts/sound.md` §2.1, avec leur état
+actuel — source de vérité : le manifeste réconcilié de #229
+(`internal/audio/synth.ReconcileManifest`, comparaison d'octets contre une synthèse fraîche,
+**aucun état supplémentaire à maintenir**) et `SoundConfig.CuesDisabled`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth | Aucune |
+| Méthode | `GET` uniquement |
+
+#### Response 200
+
+```json
+{
+  "cues": [
+    {
+      "cue": "depart",
+      "enabled": true,
+      "custom": false,
+      "duration_seconds": 0.42,
+      "path": "/files/sounds/depart.wav"
+    }
+  ]
+}
+```
+
+| Champ | Type | Description |
+|---|---|---|
+| `cue` | string | Identifiant de la cue (`contracts/sound.md` §2.1) |
+| `enabled` | bool | `!CuesDisabled[cue]` — interrupteur de ligne. **Indépendant** de l'interrupteur général (`sound.enabled`, voir `GET /api/sound/status` ci-dessous) |
+| `custom` | bool | `true` si l'octet-à-octet diffère d'une synthèse fraîche (manifeste #229) — « personnalisé » à l'affichage, jamais « défaut » |
+| `duration_seconds` | number | Calculée depuis l'en-tête WAV, sans décoder : `taille(data) / (fréquence × canaux × octets_par_échantillon)` |
+| `path` | string | Servi tel quel par `handleFiles` (`/files/**`, sans restriction de sous-dossier — gratuit, aucune route dédiée) ; usage : lecture **locale** dans le navigateur (`<audio>`), jamais un test sur l'enceinte |
+
+### `POST /api/sounds/{cue}`
+
+Remplace le son d'une cue — `multipart/form-data`, champ `file`. Calqué sur le patron
+`/api/game/entracte-image` (nom de fichier régénéré côté serveur, jamais celui envoyé par le
+client), **avec une allowlist et des règles de validation volontairement plus strictes** :
+
+| Règle | Valeur | Motif |
+|---|---|---|
+| Extension | **`.wav` uniquement** | Décision utilisateur actée au cadrage — aucune conversion, ni serveur ni navigateur |
+| Contenu | **RIFF/WAVE valide**, PCM, format canonique strict (§3 : 16 bits, 44 100 Hz, stéréo) | Un seul contexte audio pour tout le processus (`contracts/sound.md` §1/§3) — accepter un fichier non conforme produirait soit un plantage silencieux à la lecture, soit une conversion à la volée jamais voulue. Le validateur s'appuie sur `extractCanonicalPCM` (`internal/audio/bank.go:60`, déjà écrit pour #229 et dont le commentaire anticipe explicitement cet upload) — **jamais un second validateur réécrit pour #230** |
+| **Durée** | **refus au-delà de 5 s** | Le moteur lit **strictement séquentiellement** et `Play` bloque réellement (`contracts/sound.md` §4, amendement #228) — un son long retarde tous les suivants dans la file |
+| **Durée (avertissement)** | accepté, mais signalé au-delà de ~2 s | Au-delà de deux secondes environ, un bruitage risque de déborder sur le moment de jeu suivant — accepté tel quel, l'utilisateur en est informé |
+| Taille | plafond explicite **~2 Mo** | Un son canonique de 5 s pèse ~880 Ko — 2 Mo laisse une marge très généreuse sans autoriser un fichier abusif |
+
+Durée calculée **sans décoder** : `taille(data) / (fréquence_échantillonnage × canaux × octets_par_échantillon)`.
+
+#### Response 200
+
+```json
+{
+  "status": "ok",
+  "cue": "temps-ecoule",
+  "custom": true,
+  "duration_seconds": 1.8,
+  "warning": null
+}
+```
+
+`warning` porte le message d'avertissement de durée (> ~2 s) quand applicable, `null` sinon —
+jamais un champ absent : le frontend n'a pas à distinguer « absent » de « vide ».
+
+#### Errors
+
+| Code | Description |
+|------|-------------|
+| 400 | Fichier absent, extension refusée, contenu non-WAV, format non conforme au canon (fréquence/canaux/bits), ou durée > 5 s — message lisible distinguant explicitement ces cas (maquette révision 4, section « Les refus, et ce qu'ils disent ») |
+| 404 | `{cue}` hors du catalogue fermé |
+| 405 | Méthode autre que `POST` |
+| 413 | Fichier au-delà du plafond de taille |
+
+Après acceptation : le fichier est écrit, `sounds.json` réconcilié (`synth.ReconcileManifest`),
+la cue devient immédiatement active — **aucun redémarrage nécessaire** (`FileBank` ne met jamais
+en cache, `contracts/sound.md` §"disque fait foi").
+
+### `POST /api/sounds/{cue}/restore`
+
+Régénère **une seule** cue à son son par défaut — jamais les six autres. Différence avec
+`POST /api/sounds/restore-defaults` (ci-dessous) : portée unitaire, pas globale. **Idempotent par
+construction**, même raison que le restore global : le générateur (`internal/audio/synth`) est
+déterministe.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth | Aucune |
+| Méthode | `POST` uniquement |
+
+#### Response 200
+
+```json
+{"status": "ok", "cue": "temps-ecoule", "custom": false, "duration_seconds": 0.65}
+```
+
+#### Errors
+
+| Code | Description |
+|------|-------------|
+| 404 | `{cue}` hors du catalogue fermé |
+| 405 | Méthode autre que `POST` |
+| 500 | Échec d'écriture disque |
+
+N'apparaît dans l'interface **que sur une cue déjà personnalisée** (maquette révision 4, « "Restaurer"
+n'apparaît que sur les sons personnalisés ») — un son déjà par défaut n'a rien à restaurer, mais
+l'endpoint lui-même reste appelable sans condition (pas de `409` sur une cue déjà par défaut :
+réécrire les mêmes octets par-dessus eux-mêmes est un no-op sans risque).
+
+### `POST /api/sounds/{cue}/test`
+
+Joue réellement la cue **sur l'enceinte reliée au serveur** — jamais dans le navigateur (voir
+`path` de `GET /api/sounds` pour l'écoute locale). Appelle le moteur **directement**
+(`a.sound().PlayCue(cue)`), **jamais via `notifySound`** : une cue individuellement désactivée
+(`CuesDisabled`) reste testable, seul le déroulé réel de la partie est muet pour elle
+(`contracts/sound.md` §6.3) — tester est un geste explicite de l'utilisateur.
+
+**Trois résultats distincts, normatifs** (maquette révision 4, « Jamais de silence inexpliqué ») —
+tous en `200`, le corps de la réponse porte la distinction, jamais le code HTTP : aucun des trois
+n'est une erreur au sens HTTP, ce sont trois issues métier également valides.
+
+| `result` | Condition | Libellé interface |
+|---|---|---|
+| `played` | `sound.enabled == true` **et** une sortie réelle est attachée (`!audio.IsNeutral(...)`, contract §4) **et** `PlayCue` a accepté la cue en file | « Son envoyé à l'enceinte » |
+| `disabled` | `sound.enabled == false` — l'interrupteur général est éteint, le moteur n'est pas démarré | « Bruitages désactivés — rien n'a été joué » |
+| `unavailable` | `sound.enabled == true` mais aucune sortie réelle n'a pu être ouverte au démarrage (`audio.IsNeutral(...)` vrai), **ou** la file était saturée (cas résiduel, même résultat affiché : aucun son n'est parti) | « Enceinte indisponible — rien n'a été joué » |
+
+`disabled` est vérifié **avant** tout accès au moteur (lecture directe de `config.Get().Sound.Enabled`),
+`unavailable` distingue un pilote neutre d'un pilote réel via l'accesseur du contract §4 —
+`Stats.PlayErrors` ne permet PAS cette distinction : un `noopOutput` ne produit jamais d'erreur
+(dégradation silencieuse jusqu'au bout, `contracts/sound.md` §5.5).
+
+#### Response 200
+
+```json
+{"result": "played"}
+```
+
+#### Errors
+
+| Code | Description |
+|------|-------------|
+| 404 | `{cue}` hors du catalogue fermé |
+| 405 | Méthode autre que `POST` |
+
+> **⚠️ Ce que `result` ne dit PAS — normatif, à ne jamais laisser l'interface déduire.** `played`
+> signifie que la cue a été **confiée au moteur pour l'enceinte**, jamais qu'un son a été
+> **entendu** : `Play` renvoie `nil` que l'enceinte soit présente ou non
+> (`contracts/sound.md` §4) — **aucune** des trois valeurs de `result` ne constate une émission
+> sonore réelle, `played` y compris. L'interface (#230, modale de test à verdict manuel — maquette
+> révision 4) porte à côté de ces trois libellés un contrôle à trois positions (pas testé / ok /
+> ko) que **seul l'utilisateur peut poser, après avoir écouté**. Câbler ce verdict
+> automatiquement depuis `result` (par exemple `played` ⇒ verdict « ok ») **détruirait la raison
+> d'être du contrôle manuel** — c'est le défaut le plus probable d'une implémentation qui ne lit
+> que cette section sans lire aussi `GET /api/sound/status` ci-dessous, où la même limite est
+> détaillée.
+
+### `GET /api/sound/status`
+
+État de la sortie audio, pour la pastille de l'interface — **deux états seulement, fusionnés
+délibérément** (maquette révision 4, section 06 « deux états, et c'est tout »).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth | Aucune |
+| Méthode | `GET` uniquement |
+
+#### Response 200
+
+```json
+{"active": true}
+```
+
+`active = sound.enabled == true ET !audio.IsNeutral(sortie attachée)`. **Tout le reste fusionne en
+`false`** — que le son soit désactivé ou que la sortie soit indisponible : la conséquence pour qui
+regarde la page est identique (aucun son ne sortira), et distinguer la cause dans la pastille
+demanderait une lecture qui ne changerait rien à l'action à mener. La cause reste connaissable —
+par `POST /api/sounds/{cue}/test`, qui la nomme, et par les journaux du serveur.
+
+> **Ce que cet état NE signifie PAS — à ne jamais laisser croire à l'interface.** Il est établi
+> **une seule fois, à la construction du pilote** (`newOtoOutput`,
+> `internal/audio/output_oto.go:71`) : il n'existe **aucune** boucle de reconnexion ni de
+> surveillance après coup. Il ne détecte donc :
+> - **ni** une enceinte qui s'éteint, s'endort ou s'éloigne en cours de partie — la pastille
+>   resterait au vert ;
+> - **ni** le périphérique réellement utilisé — si l'enceinte était absente au démarrage, le
+>   serveur a très bien pu ouvrir la sortie par défaut du système (prise jack comprise) et se
+>   déclarer actif ;
+> - **ni** qu'un son a été **entendu** — `Play` renvoie `nil` que l'enceinte soit présente ou non
+>   (`contracts/sound.md` §4).
+>
+> Le seul remède à un état inactif d'origine matérielle est un **redémarrage du serveur** — la
+> tentative d'ouverture est unique. L'interface doit le dire explicitement, jamais laisser
+> supposer une action corrective côté configuration seule.
+
+### `POST /api/sounds/restore-defaults` — déjà livré en #229
+
+Régénère les **sept** sons du catalogue dans `data/files/sounds/`, **en écrasant
+inconditionnellement** tout fichier déjà présent — défaut ou personnalisé par l'utilisateur.
+Calqué sur `POST /api/firmware/buzzclick/restore-embedded` : action explicite, toujours
+destructrice, jamais le comportement du démarrage ordinaire (qui ne touche **jamais** un fichier
+existant — `createDefaultSounds`, `cmd/server/sound.go`).
+
+**Idempotent par construction** : le générateur (`internal/audio/synth`) est déterministe (aucun
+aléa, aucune horodatation), donc deux appels successifs produisent des octets strictement
+identiques.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth | Aucune |
+| Méthode | `POST` uniquement — `405` sinon |
+
+#### Response 200
+
+```json
+{
+  "status": "ok",
+  "written": ["depart", "temps-ecoule", "gagne", "perdu", "reveal", "entracte-debut", "entracte-fin"]
+}
+```
+
+#### Errors
+
+| Code | Description |
+|------|-------------|
+| 405 | Méthode autre que `POST` |
+| 500 | Échec d'écriture disque (répertoire non accessible en écriture, etc.) |
+
+Réconcilie aussi `data/files/sounds/sounds.json` (manifeste, `internal/audio/synth.ReconcileManifest`)
+après l'écriture — voir `contracts/sound.md` §7. Dans l'interface (maquette révision 4), une
+confirmation nomme explicitement combien de sons personnalisés seront écrasés avant l'action —
+comportement d'interface, hors périmètre de ce contrat HTTP.

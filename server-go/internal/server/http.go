@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"buzzcontrol/internal/audio/synth"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting/hue"
@@ -70,7 +71,12 @@ type HTTPServer struct {
 	OnConfigUpdate            func()              // Called after config update to broadcast to clients
 	// Lighting gives the /api/lighting/* handlers the live Hue driver (#207,
 	// contracts/hue-bridge.md §7); nil provider or nil driver = "disabled".
-	Lighting           LightingProvider
+	Lighting LightingProvider
+	// Sound gives the /api/sounds/*, /api/sound/status handlers access to
+	// the live sound engine (#230, contracts/http-endpoints.md §Sound); nil
+	// provider is never expected in production (cmd/server always sets it,
+	// same as Lighting) but every accessor below is nil-safe regardless.
+	Sound              SoundProvider
 	OnBuzzerWifiConfig func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
@@ -480,6 +486,16 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/firmware/buzzclick/merged.bin", h.handleAPIFirmwareMergedDownload)
 	h.mux.HandleFunc("/api/firmware/buzzclick/upload", h.handleAPIFirmwareUpload)
 	h.mux.HandleFunc("/api/firmware/buzzclick/restore-embedded", h.handleAPIFirmwareRestoreEmbedded)
+
+	// Sound bruitage (v11.0, #227-#230, contracts/http-endpoints.md §Sound).
+	// The exact route below always wins over the prefix route beneath it
+	// (http.ServeMux picks the longest matching pattern) — #229's
+	// restore-defaults keeps working unambiguously alongside #230's
+	// per-cue routes.
+	h.mux.HandleFunc("/api/sounds/restore-defaults", h.handleAPISoundsRestoreDefaults)
+	h.mux.HandleFunc("/api/sounds", h.handleAPISoundsList)
+	h.mux.HandleFunc("/api/sounds/", h.handleAPISoundsRouter)
+	h.mux.HandleFunc("/api/sound/status", h.handleAPISoundStatus)
 
 	// WiFi defaults API
 	h.mux.HandleFunc("/api/wifi/defaults", h.handleAPIWiFiDefaults)
@@ -1853,6 +1869,58 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		if data, ok := raw["sound"]; ok {
+			// Field-by-field merge (contract sound.md §6.3, addendum #230
+			// Lot B) — same regime as "lighting" and "ai" above, and for the
+			// same reason: two INDEPENDENT controls write this one section
+			// (the general switch `enabled` and the seven per-cue switches
+			// `cues_disabled`), each POSTing only the key it owns
+			// (web/src/pages/AmbiancePage.jsx: saveSound({enabled}) vs.
+			// SoundsManager's saveSound({cues_disabled})). A whole-section
+			// replace would let toggling the general switch silently erase
+			// every per-cue switch, and vice versa.
+			var incoming config.SoundConfig
+			if err := json.Unmarshal(data, &incoming); err != nil {
+				http.Error(w, "Invalid JSON in \"sound\" section", http.StatusBadRequest)
+				return
+			}
+			var sRaw map[string]json.RawMessage
+			if err := json.Unmarshal(data, &sRaw); err != nil {
+				http.Error(w, "Invalid JSON in \"sound\" section", http.StatusBadRequest)
+				return
+			}
+			if _, ok := sRaw["enabled"]; ok {
+				cfg.Sound.Enabled = incoming.Enabled
+			}
+			if _, ok := sRaw["ambiance_compensation_ms"]; ok {
+				cfg.Sound.AmbianceCompensationMs = incoming.AmbianceCompensationMs
+			}
+			if _, ok := sRaw["device"]; ok {
+				cfg.Sound.Device = incoming.Device
+			}
+			// cues_disabled is a map, so "absent" and "present but empty"
+			// are two DIFFERENT intents that json.Unmarshal into a struct
+			// cannot tell apart (both leave `incoming.CuesDisabled` as a
+			// map with zero entries, nil or not) — the raw key's presence
+			// in sRaw is the only reliable signal, same technique as
+			// lighting's own fields just above:
+			//   - absent      ⇒ preserve the stored map untouched
+			//   - present, {} ⇒ clear it (nothing individually disabled)
+			//   - present, {…} ⇒ replace it wholesale (the frontend always
+			//     resends the full set, never a partial patch — see
+			//     AmbiancePage.sound.test.jsx's "reconstruit cues_disabled
+			//     en entier")
+			if _, ok := sRaw["cues_disabled"]; ok {
+				for cue := range incoming.CuesDisabled {
+					if _, known := soundCueFromString(cue); !known {
+						http.Error(w, "Unknown sound cue in \"cues_disabled\": "+cue, http.StatusBadRequest)
+						return
+					}
+				}
+				cfg.Sound.CuesDisabled = incoming.CuesDisabled
+			}
+		}
+
 		// Re-apply defaults to any field a partial section reset to zero,
 		// exactly as a config.json load would. (Neon effect clamping moved
 		// to handleGameConfig with the rest of the game settings, #150.)
@@ -2934,6 +3002,12 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		if _, err := os.Stat(entracteDir); err == nil {
 			h.addDirToTAR(tw, entracteDir, "files/entracte")
 		}
+		// v11.0, #229 — added explicitly, dès le premier jet (contract
+		// sound.md, plan de dev #229 §2.4 : ne pas reproduire le trou #152).
+		soundsDir := filepath.Join(filesDir, "sounds")
+		if _, err := os.Stat(soundsDir); err == nil {
+			h.addDirToTAR(tw, soundsDir, "files/sounds")
+		}
 	}
 
 	// Add RAFALE reservoir (v8.0.0, #197) — the question bank
@@ -3161,6 +3235,24 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 				h.OnConfigUpdate()
 			}
 		}
+		// v11.0, #229 — added explicitly, dès le premier jet (plan de dev
+		// #229 §2.4, ne pas reproduire le trou #152). Contrairement à
+		// backgrounds/categories/entracte ci-dessus (qui restent VIDES après
+		// un reset, jusqu'à un futur re-upload ou redémarrage), les sons sont
+		// synthétisés — aucun coût à les régénérer immédiatement, et laisser
+		// le bruitage totalement silencieux jusqu'à un hypothétique
+		// redémarrage serait une régression sur l'objet même du milestone.
+		soundsDir := filepath.Join(filesDir, "sounds")
+		if err := os.RemoveAll(soundsDir); err == nil {
+			if _, genErr := synth.WriteAll(soundsDir, true); genErr != nil {
+				log.Printf("[HTTP] Reset: failed to regenerate default sounds: %v", genErr)
+			}
+			if _, mErr := synth.ReconcileManifest(soundsDir); mErr != nil {
+				log.Printf("[HTTP] Reset: failed to write sounds.json manifest: %v", mErr)
+			}
+			mediasOk = true
+			log.Printf("[HTTP] Reset: Sounds cleared and regenerated to defaults")
+		}
 		if mediasOk {
 			result["medias"] = true
 		}
@@ -3340,6 +3432,12 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(h.dataDir, tarPath)
 				allowed = true
 			}
+		case strings.HasPrefix(tarPath, "files/sounds/"):
+			// v11.0, #229 — ne pas reproduire le trou #152.
+			if detected["sounds"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
 		case tarPath == "config/teams.json":
 			if detected["teams"] {
 				targetPath = filepath.Join(configDir, "teams.json")
@@ -3473,6 +3571,20 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Restore: Entracte image restored")
 	}
 
+	if detected["sounds"] {
+		restoredMap["sounds"] = true
+		// v11.0, #229 — no engine-side list to reload either (same reason
+		// as entracte just above): FileBank never caches, it reads
+		// data/files/sounds/<cue>.wav fresh on every PlayCue. Reconcile the
+		// manifest so sounds.json reflects what was just extracted, rather
+		// than whatever it said before the restore.
+		soundsDir := filepath.Join(h.dataDir, "files", "sounds")
+		if _, err := synth.ReconcileManifest(soundsDir); err != nil {
+			log.Printf("[HTTP] Restore: failed to write sounds.json manifest: %v", err)
+		}
+		log.Printf("[HTTP] Restore: Sounds restored")
+	}
+
 	if detected["gameConfig"] {
 		// #150 — reload from the just-extracted file (same path
 		// GameConfigPath() already resolves to, set once at startup) and
@@ -3544,6 +3656,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"gameConfig":  false, // #150 — game-config.json (default delay + neon effect)
 		"gameState":   false, // #141 — game_state.json (quiz metadata)
 		"rafale":      false, // #197 (v8.0.0) — files/rafale/ + config/rafale_used.json
+		"sounds":      false, // v11.0, #229 — files/sounds/ (bruitage d'événement)
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -3564,6 +3677,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["categories"] = true
 		case strings.HasPrefix(tarPath, "files/entracte/"):
 			detected["entracte"] = true
+		case strings.HasPrefix(tarPath, "files/sounds/"):
+			detected["sounds"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
 		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":

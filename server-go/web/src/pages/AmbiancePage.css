@@ -31,8 +31,16 @@
   margin: 0;
 }
 
-/* ---- Badge d'état — QUATRE valeurs, jamais fondues (maquette §02) ---- */
-.ambiance-status-badge {
+/* ---- Badge d'état — QUATRE valeurs, jamais fondues (maquette §02) ----
+   #234 (correction) — `.ambiance-sound-badge` (bandeau, pastille dédiée au
+   son) PARTAGE ce rendu via les mêmes règles, étendues par sélecteur plutôt
+   que dupliquées, SANS jamais porter le nom de classe `.ambiance-status-badge`
+   lui-même : ce nom reste réservé à l'éclairage (AmbiancePage.test.jsx:123
+   le sélectionne au singulier — querySelector, pas querySelectorAll — dans
+   une dizaine d'assertions dont deux négatives). Voir AmbiancePage.jsx pour
+   le pourquoi complet. */
+.ambiance-status-badge,
+.ambiance-sound-badge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -53,20 +61,32 @@
   flex: none;
 }
 
-.ambiance-status-badge.is-ok {
+/* Glyphe d'identification du canal (#234) — réduit par rapport à sa taille
+   par défaut (1.1rem, Navbar) pour tenir dans la pastille à côté du point
+   de couleur et du texte. */
+.ambiance-status-badge .lighting-bulb-icon,
+.ambiance-sound-badge .sound-speaker-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.ambiance-status-badge.is-ok,
+.ambiance-sound-badge.is-ok {
   color: var(--success);
   border-color: var(--success);
 }
-.ambiance-status-badge.is-ok .ambiance-status-dot { background: var(--success); }
+.ambiance-status-badge.is-ok .ambiance-status-dot,
+.ambiance-sound-badge.is-ok .ambiance-status-dot { background: var(--success); }
 
-/* Injoignable (réseau) : rouge — geste attendu, rebrancher. */
+/* Injoignable (réseau) : rouge — geste attendu, rebrancher. Lumière
+   uniquement — le son n'a que deux états (is-ok / is-idle), jamais celui-ci. */
 .ambiance-status-badge.is-unreachable {
   color: var(--error);
   border-color: var(--error);
 }
 .ambiance-status-badge.is-unreachable .ambiance-status-dot { background: var(--error); }
 
-/* Refusée (clé) : orange — geste attendu, ré-associer. */
+/* Refusée (clé) : orange — geste attendu, ré-associer. Lumière uniquement. */
 .ambiance-status-badge.is-refused {
   color: var(--warning);
   border-color: var(--warning);
@@ -418,4 +438,360 @@
   .ambiance-actions { flex-direction: column; }
   .ambiance-actions button { width: 100%; }
   .ambiance-light { flex-wrap: wrap; }
+}
+
+/* =========================================================================
+   #230 — onglet Son (maquette sound-config-230.html rév. 4). Tout le CSS de
+   SoundsManager.jsx / SoundTestModal.jsx vit ICI, volontairement : ces deux
+   composants n'importent aucun fichier .css propre (seule AmbiancePage les
+   monte) — éviter de reproduire la dépendance implicite de BackgroundsManager
+   vers ConfigPage.css (1315 lignes importées pour un seul composant, plan-dev
+   §3.1). Tout est préfixé `.sound-*`, aucune collision avec `.ambiance-*`.
+   ========================================================================= */
+
+.sound-card {
+  border-left-color: var(--info);
+}
+
+.sound-step {
+  gap: var(--space-3);
+}
+
+.sound-master-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sound-master-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--gray-800);
+  cursor: pointer;
+}
+
+/* Avertissement d'asymétrie de l'interrupteur général (maquette rév. 5) —
+   éteindre est immédiat, rallumer n'a d'effet qu'au prochain démarrage du
+   serveur (une seule tentative d'ouverture de la sortie audio par
+   processus). Ne s'applique JAMAIS aux sept interrupteurs de ligne, qui
+   restent immédiats dans les deux sens. */
+.sound-hint-warn {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+/* Pastille d'état du son (maquette §06) — DEUX états seulement, « idle »
+   n'a pas d'équivalent lumière : elle retombe sur le style par défaut de
+   `.ambiance-status-badge` (gris) sans règle dédiée. `is-ok` est en
+   revanche RÉUTILISÉE telle quelle (handoff §2, « même motif visuel ») —
+   même vert que le badge lumière, pas de nouvelle règle nécessaire non
+   plus. Cette pastille ne vit que dans l'onglet Son ; le badge du bandeau
+   (ci-dessus) reste seul et dédié à l'éclairage. */
+
+/* ---- Interrupteur (piste + curseur) — CSS pur, un seul balisage partagé
+   par le maître (AmbiancePage) et les lignes du tableau (SoundsManager) :
+   <label class="sound-switch [sound-switch-sm]"><input type=checkbox/>
+   <span class="sound-switch-track"/></label> ---- */
+.sound-switch {
+  position: relative;
+  display: inline-flex;
+  width: 38px;
+  height: 21px;
+  flex: none;
+}
+.sound-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.sound-switch-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--gray-200);
+  border: 1px solid var(--gray-300);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  pointer-events: none;
+}
+.sound-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--transition-fast);
+}
+.sound-switch input:checked + .sound-switch-track {
+  background: color-mix(in srgb, var(--success) 30%, white);
+  border-color: var(--success);
+}
+.sound-switch input:checked + .sound-switch-track::after {
+  transform: translateX(17px);
+}
+.sound-switch input:focus-visible + .sound-switch-track {
+  outline: 2px solid var(--primary-500);
+  outline-offset: 2px;
+}
+.sound-switch-sm {
+  width: 30px;
+  height: 17px;
+}
+.sound-switch-sm .sound-switch-track::after {
+  width: 11px;
+  height: 11px;
+}
+.sound-switch-sm input:checked + .sound-switch-track::after {
+  transform: translateX(13px);
+}
+
+/* ---- Tableau des sept sons (maquette §02) ---- */
+.sound-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+}
+
+.sound-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.sound-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--gray-500);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--gray-200);
+  background: var(--gray-50);
+}
+
+.sound-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--gray-100);
+  vertical-align: middle;
+  color: var(--gray-600);
+}
+
+.sound-table tr:last-child td { border-bottom: none; }
+
+.sound-table td b {
+  display: block;
+  color: var(--gray-800);
+  font-weight: 600;
+}
+
+.sound-sub {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--gray-500);
+  font-weight: 400;
+}
+
+.sound-col-center { text-align: center; }
+.sound-col-right { text-align: right; }
+.sound-mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+
+/* Ligne éteinte (interrupteur de la colonne « Actif », maquette §02) : la
+   ligne s'estompe pour que l'état se lise d'un coup d'œil — la colonne
+   Actif elle-même reste pleinement lisible, sinon on ne pourrait plus la
+   rallumer. */
+.sound-table tr.is-off td { opacity: 0.45; }
+.sound-table tr.is-off td.sound-col-center:first-of-type { opacity: 1; }
+
+.sound-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 3px;
+  padding: 2px 7px;
+  border: 1px solid var(--gray-300);
+  color: var(--gray-500);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.sound-tag.is-custom {
+  color: var(--primary-600);
+  border-color: var(--primary-300);
+}
+
+.sound-row-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sound-replace-btn { display: inline-flex; }
+
+.sound-verdict-dots {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+.sound-verdict-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gray-300);
+  border: 1px solid var(--gray-300);
+  display: inline-block;
+}
+.sound-verdict-dot.is-ok { background: var(--success); border-color: var(--success); }
+.sound-verdict-dot.is-ko { background: var(--error); border-color: var(--error); }
+
+.sound-hint-row {
+  text-align: center;
+  color: var(--gray-500);
+  padding: var(--space-4);
+}
+
+.sound-actions { border-top: none; padding-top: var(--space-2); }
+
+/* ---- Modale de test (maquette §03, deux écoutes / deux verdicts) ---- */
+.sound-test-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: var(--space-4);
+}
+
+.sound-test-modal {
+  background: #fff;
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.sound-test-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--gray-200);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sound-test-header b { font-size: 1.02rem; color: var(--gray-800); }
+
+.sound-test-cue {
+  font-size: 0.76rem;
+  color: var(--gray-500);
+}
+
+.sound-test-body {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow-y: auto;
+}
+
+.sound-test-section {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--gray-50);
+}
+
+.sound-test-section-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.sound-test-section-hd b { font-size: 0.92rem; color: var(--gray-800); }
+
+.sound-test-section p {
+  font-size: 0.81rem;
+  color: var(--gray-500);
+  margin: 0 0 var(--space-3);
+}
+
+.sound-test-message {
+  font-size: 0.8rem;
+  color: var(--gray-600);
+  margin: 0 0 var(--space-3);
+}
+.sound-test-message.is-error { color: var(--error); }
+
+.sound-test-section-ft {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.sound-test-verdict-label {
+  font-size: 0.79rem;
+  color: var(--gray-500);
+}
+
+.sound-test-seg {
+  display: inline-flex;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.sound-test-seg-opt {
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--gray-300);
+  cursor: pointer;
+  font-family: inherit;
+}
+.sound-test-seg-opt:last-child { border-right: none; }
+.sound-test-seg-opt.sel {
+  color: var(--gray-800);
+  font-weight: 600;
+  background: var(--gray-100);
+}
+.sound-test-seg-opt.sel.is-ok { color: var(--success); background: color-mix(in srgb, var(--success) 15%, transparent); }
+.sound-test-seg-opt.sel.is-ko { color: var(--error); background: color-mix(in srgb, var(--error) 15%, transparent); }
+
+.sound-test-footer {
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--gray-200);
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .sound-row-actions { justify-content: flex-start; }
 }

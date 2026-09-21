@@ -23,6 +23,7 @@ type Config struct {
 	WiFiDefaults WiFiDefaultsConfig `json:"wifi_defaults"`
 	AI           AIConfig           `json:"ai"`
 	Lighting     LightingConfig     `json:"lighting"`
+	Sound        SoundConfig        `json:"sound"`
 	Version      string             `json:"version"`
 }
 
@@ -57,6 +58,36 @@ type LightingLightEntry struct {
 	Name string `json:"name"`
 	Role string `json:"role"`
 	Team string `json:"team,omitempty"`
+}
+
+// SoundConfig is the `sound` section (v11.0, #227/#228 — contracts/sound.md):
+// event-driven sound bruitage. Optional: Enabled=false (the default) means
+// no audio engine goroutine, no device access at all — contract §5.5.
+type SoundConfig struct {
+	Enabled bool `json:"enabled"`
+	// AmbianceCompensationMs delays the Hue AMBIANCE light only (NEVER the
+	// buzzer LEDs) relative to sound, to perceptually compensate Bluetooth
+	// latency — contract §9, spike #226 task 0.11. A parameter, never a
+	// constant: its right value depends on the paired speaker. Wiring this
+	// delay into the fan-out is not part of #227/#228 — see contract §9.
+	AmbianceCompensationMs int `json:"ambiance_compensation_ms"`
+	// Device reserves a future output sink/device selector (contract §9).
+	// #228's driver does not implement selection yet — `oto` exposes no
+	// such option (a Linux-only bypass via jfreymuth/pulse was identified
+	// as a viable fallback by the spike, #226 verdict §2.4, not built
+	// here). A non-empty value is logged once as "not yet honoured" by
+	// internal/audio.NewOutput rather than silently ignored or rejected.
+	Device string `json:"device,omitempty"`
+	// CuesDisabled stores what is OFF, never what is on (contract sound.md
+	// §6.3, #230) — deliberately the inverse of the `CueEnabled` shape
+	// first proposed. The zero value (absent/empty/nil map, exactly what
+	// every config.json predating #230 already has) means "nothing is
+	// disabled" — today's behaviour, with no migration and no `ApplyDefaults`
+	// population needed. A future cue (#231) is active without anyone
+	// having to touch this field. Checked in cmd/server/sound.go's
+	// notifySound, before PlayCue — never inside internal/audio (this
+	// package is never imported there, contract §2.1).
+	CuesDisabled map[string]bool `json:"cues_disabled,omitempty"`
 }
 
 // EnvHueAPIKey overrides lighting.api_key without ever touching config.json
@@ -364,6 +395,14 @@ func ApplyDefaults(cfg *Config) {
 	}
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}
+	}
+
+	// Sound (v11.0, #227 — contract sound.md §9): disabled by default, no
+	// goroutine, no device access. 200 ms is an interim default (commonly
+	// cited A2DP SBC latency range, 150-250 ms) — spike #226 task 0.5's own
+	// measurement on real hardware is what should really set it.
+	if cfg.Sound.AmbianceCompensationMs <= 0 {
+		cfg.Sound.AmbianceCompensationMs = 200
 	}
 }
 
