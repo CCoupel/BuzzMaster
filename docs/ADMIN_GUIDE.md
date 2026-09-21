@@ -22,6 +22,7 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Générateur de questions via IA](#générateur-de-questions-via-ia-v600)
 - [Générateur du réservoir RAFALE via IA](#générateur-du-réservoir-rafale-via-ia-v810)
 - [Configuration Éclairage d'Ambiance Philips Hue](#configuration-éclairage-dambiance-philips-hue-v1000)
+- [Configuration Sonore (Bruitage d'Événement)](#configuration-sonore-bruitage-dévénement-v1100)
 
 ---
 
@@ -2111,5 +2112,142 @@ Pour arrêter complètement de piloter les ampoules :
 ### Pour en savoir plus
 
 Consultez le **contrat technique** `contracts/lighting.md` pour les détails de l'implémentation, les politiques de débit, et la sûreté d'accès concurrent.
+
+---
+
+## Configuration Sonore (Bruitage d'Événement) (v11.0)
+
+BuzzControl peut produire des sons pour souligner les événements clés d'une partie : démarrage du jeu, temps écoulé, révélation de réponses, etc.
+
+### Prérequis système
+
+La sortie audio repose sur la configuration systemd et l'accès à la session utilisateur :
+
+#### 1. Vérifier le UID de l'utilisateur
+
+Pour déterminer le UID de l'utilisateur qui exécute BuzzControl, ouvrez un terminal et tapez :
+
+```bash
+id -u
+```
+
+Notez la valeur (ex: `1000`).
+
+#### 2. Configuration de systemd — Variables d'environnement
+
+Le service systemd qui lance BuzzControl **sur Raspberry Pi ou Linux** doit inclure deux variables d'environnement pour accéder à la sortie audio. Éditez l'unité systemd existante :
+
+```bash
+sudo systemctl edit buzzcontrol
+```
+
+Ajoutez les lignes suivantes dans la section `[Service]`, en **remplaçant `1000` par votre UID réel** :
+
+```ini
+[Service]
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="PULSE_SERVER=unix:/run/user/1000/pulse/native"
+ExecStart=/opt/buzzcontrol/server
+```
+
+**Exemple complet** :
+
+```ini
+[Unit]
+Description=BuzzControl - Wireless Buzzer System
+After=network.target
+
+[Service]
+Type=simple
+User=buzzcontrol
+WorkingDirectory=/opt/buzzcontrol
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="PULSE_SERVER=unix:/run/user/1000/pulse/native"
+ExecStart=/opt/buzzcontrol/server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**⚠️ Important** : remplacez `1000` par le UID réel de l'utilisateur dont la session PipeWire/PulseAudio tourne. En cas de doute, demandez à l'administrateur système.
+
+#### 3. Activer la persistence de session — `loginctl enable-linger`
+
+Sans cette étape, la session utilisateur `/run/user/<uid>/` **ne persiste pas après un redémarrage si aucune session interactive n'est ouverte**. Le son sera indisponible au démarrage automatique du serveur.
+
+Exécutez une seule fois :
+
+```bash
+loginctl enable-linger buzzcontrol
+```
+
+(Remplacez `buzzcontrol` par le nom réel de l'utilisateur qui exécute le serveur.)
+
+Vérifiez que c'est activé :
+
+```bash
+loginctl show-user buzzcontrol | grep Linger
+```
+
+Vous devez voir :
+
+```
+Linger=yes
+```
+
+### Fonctionnalités
+
+#### Restauration des sons par défaut
+
+La page `/admin/ambiance` expose un bouton **Restaurer les sons livrés** qui réinitialise les sept sons par défaut. Les sons personnalisés ne sont pas affectés — seuls les sons en excédent sont supprimés.
+
+#### Sons personnalisés
+
+Chaque son par défaut peut être remplacé via `/admin/files/sounds/` :
+
+1. Naviguez vers `/admin/files/sounds/`
+2. Téléversez un fichier WAV aux **mêmes spécifications** que les sons livrés (voir ci-dessous)
+3. Le serveur joue immédiatement votre son à la place du son par défaut
+4. Un redémarrage ne change rien — votre personnalisation persiste
+
+#### Spécifications des fichiers audio
+
+Tous les sons doivent être au format **WAV mono ou stéréo, 16 bits, 44 100 Hz** :
+
+```bash
+# Vérifier un fichier WAV existant
+ffprobe -v error -show_entries format=sample_rate,channels,duration -of default=noprint_wrappers=1 votre_son.wav
+
+# Convertir un MP3, M4A, etc. au bon format (avec enveloppe anti-clic)
+ffmpeg -i votre_son.m4a -af "asoftvolume=volume=0.8:precision=fixed" -acodec pcm_s16le -ar 44100 votre_son.wav
+```
+
+**Durée maximale recommandée** : **moins d'une seconde** par son. La lecture est séquentielle — des sons trop longs allongent le délai avant le prochain événement.
+
+**Enveloppe anti-clic** : Les sons qui démarre ou s'arrête à amplitude non nulle produisent un clic audible. Assurez-vous que chaque son a un fondu d'attaque et d'extinction (quelques millisecondes suffit).
+
+### Note de traçabilité — Hypothèse non vérifiée
+
+La configuration systemd proposée ci-dessus a été adoptée **par prudence** pour garantir l'accès au socket PulseAudio sur Raspberry Pi. À ce jour, **cette configuration n'a jamais pu être validée sur un Raspberry Pi réel** — le matériel n'était pas disponible lors du développement (#228, spike #226).
+
+Si, une fois un Pi disponible, cette approche s'avère incorrecte ou inadaptée :
+
+1. La correction reste confinée au **pilote audio** (`internal/audio/output*.go`) et à cette documentation
+2. Aucun autre code ne sera affecté — la dégradation silencieuse garantit que l'absence de son n'impacte pas le jeu
+
+**En cas de problème de son sur Raspberry Pi**, signalez-le avec la sortie exacte des commandes ci-dessous :
+
+```bash
+# Test d'accès au socket
+ls -la /run/user/1000/pulse/native
+
+# État de la session
+loginctl show-user buzzcontrol
+
+# Logs du serveur
+journalctl -u buzzcontrol -n 50
+```
 
 
