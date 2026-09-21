@@ -803,7 +803,7 @@ et `new-game-backgrounds/` en sont déjà absentes et ne survivent qu'à une sau
 > l'amendement §4 (accesseur `IsNeutral`, requis par `GET /api/sound/status` ci-dessous).
 >
 > **Terminologie normative de l'interface** (maquette `docs/mockups/sound-config-230.html`,
-> révision 3) : un son est **« défaut »** ou **« personnalisé »** — jamais « livré ». Le mot
+> révision 4) : un son est **« défaut »** ou **« personnalisé »** — jamais « livré ». Le mot
 > « livré » ne désigne qu'une issue terminée dans les rapports techniques, jamais un état affiché
 > à l'utilisateur.
 >
@@ -892,7 +892,7 @@ jamais un champ absent : le frontend n'a pas à distinguer « absent » de « vi
 
 | Code | Description |
 |------|-------------|
-| 400 | Fichier absent, extension refusée, contenu non-WAV, format non conforme au canon (fréquence/canaux/bits), ou durée > 5 s — message lisible distinguant explicitement ces cas (maquette révision 3, section « Les refus, et ce qu'ils disent ») |
+| 400 | Fichier absent, extension refusée, contenu non-WAV, format non conforme au canon (fréquence/canaux/bits), ou durée > 5 s — message lisible distinguant explicitement ces cas (maquette révision 4, section « Les refus, et ce qu'ils disent ») |
 | 404 | `{cue}` hors du catalogue fermé |
 | 405 | Méthode autre que `POST` |
 | 413 | Fichier au-delà du plafond de taille |
@@ -927,7 +927,7 @@ déterministe.
 | 405 | Méthode autre que `POST` |
 | 500 | Échec d'écriture disque |
 
-N'apparaît dans l'interface **que sur une cue déjà personnalisée** (maquette révision 3, « "Restaurer"
+N'apparaît dans l'interface **que sur une cue déjà personnalisée** (maquette révision 4, « "Restaurer"
 n'apparaît que sur les sons personnalisés ») — un son déjà par défaut n'a rien à restaurer, mais
 l'endpoint lui-même reste appelable sans condition (pas de `409` sur une cue déjà par défaut :
 réécrire les mêmes octets par-dessus eux-mêmes est un no-op sans risque).
@@ -940,7 +940,7 @@ Joue réellement la cue **sur l'enceinte reliée au serveur** — jamais dans le
 (`CuesDisabled`) reste testable, seul le déroulé réel de la partie est muet pour elle
 (`contracts/sound.md` §6.3) — tester est un geste explicite de l'utilisateur.
 
-**Trois résultats distincts, normatifs** (maquette révision 3, « Jamais de silence inexpliqué ») —
+**Trois résultats distincts, normatifs** (maquette révision 4, « Jamais de silence inexpliqué ») —
 tous en `200`, le corps de la réponse porte la distinction, jamais le code HTTP : aucun des trois
 n'est une erreur au sens HTTP, ce sont trois issues métier également valides.
 
@@ -968,10 +968,22 @@ n'est une erreur au sens HTTP, ce sont trois issues métier également valides.
 | 404 | `{cue}` hors du catalogue fermé |
 | 405 | Méthode autre que `POST` |
 
+> **⚠️ Ce que `result` ne dit PAS — normatif, à ne jamais laisser l'interface déduire.** `played`
+> signifie que la cue a été **confiée au moteur pour l'enceinte**, jamais qu'un son a été
+> **entendu** : `Play` renvoie `nil` que l'enceinte soit présente ou non
+> (`contracts/sound.md` §4) — **aucune** des trois valeurs de `result` ne constate une émission
+> sonore réelle, `played` y compris. L'interface (#230, modale de test à verdict manuel — maquette
+> révision 4) porte à côté de ces trois libellés un contrôle à trois positions (pas testé / ok /
+> ko) que **seul l'utilisateur peut poser, après avoir écouté**. Câbler ce verdict
+> automatiquement depuis `result` (par exemple `played` ⇒ verdict « ok ») **détruirait la raison
+> d'être du contrôle manuel** — c'est le défaut le plus probable d'une implémentation qui ne lit
+> que cette section sans lire aussi `GET /api/sound/status` ci-dessous, où la même limite est
+> détaillée.
+
 ### `GET /api/sound/status`
 
 État de la sortie audio, pour la pastille de l'interface — **deux états seulement, fusionnés
-délibérément** (maquette révision 3, section 06 « deux états, et c'est tout »).
+délibérément** (maquette révision 4, section 06 « deux états, et c'est tout »).
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -1040,6 +1052,6 @@ identiques.
 | 500 | Échec d'écriture disque (répertoire non accessible en écriture, etc.) |
 
 Réconcilie aussi `data/files/sounds/sounds.json` (manifeste, `internal/audio/synth.ReconcileManifest`)
-après l'écriture — voir `contracts/sound.md` §7. Dans l'interface (maquette révision 3), une
+après l'écriture — voir `contracts/sound.md` §7. Dans l'interface (maquette révision 4), une
 confirmation nomme explicitement combien de sons personnalisés seront écrasés avant l'action —
 comportement d'interface, hors périmètre de ce contrat HTTP.

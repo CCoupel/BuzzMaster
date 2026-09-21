@@ -5,7 +5,10 @@
 ## [20260921e] — Bruitage d'événement : contrat de l'interface d'administration (#230, Lot A)
 
 > Contrat uniquement — aucune implémentation dans ce lot. Référence normative pour les libellés
-> et les états : `docs/mockups/sound-config-230.html` (révision 3).
+> et les états : `docs/mockups/sound-config-230.html` (révision 4 — la révision 3 utilisée à la
+> rédaction initiale de ce contrat n'avait pas encore la modale de test à verdict manuel ; aucune
+> des sections ci-dessous n'a eu besoin de changer, seul un renvoi croisé a été ajouté sous
+> `/test`, voir plus bas).
 
 - **[NEW]** `contracts/http-endpoints.md` §Sound — cinq nouveaux endpoints spécifiés :
   `GET /api/sounds` (état des 7 cues), `POST /api/sounds/{cue}` (remplacement, validation format
@@ -22,6 +25,12 @@
 - **[NEW]** `contracts/http-endpoints.md` §Sound — aucun endpoint dédié pour l'activation générale
   ni pour l'interrupteur par cue : les deux s'écrivent par le patch partiel additif existant
   `POST /config.json` avec `{ "sound": {...} }`, symétrique de `{ "lighting": {...} }`.
+- **[NEW — précision du même jour, coordination `planner`]** `contracts/http-endpoints.md`
+  §`POST /api/sounds/{cue}/test` — renvoi croisé normatif : `result` (`played` compris) ne
+  constate jamais une émission sonore **entendue**, seulement une cue **confiée au moteur**.
+  L'interface (#230, modale de test à verdict manuel — maquette révision 4) ne doit **jamais**
+  dériver son verdict manuel (pas testé/ok/ko) de cette réponse — motivé explicitement pour
+  prévenir le défaut le plus probable d'une implémentation qui ne lirait que cette section.
 - **[NEW]** `contracts/sound.md` §6.3 — `SoundConfig.CuesDisabled map[string]bool` : stocke ce qui
   est **éteint**, jamais ce qui est allumé (la valeur zéro — absente/vide/nil — doit rester « rien
   n'est désactivé », sans quoi chaque configuration existante deviendrait silencieuse et chaque
