@@ -455,6 +455,16 @@
   cursor: pointer;
 }
 
+/* Avertissement d'asymétrie de l'interrupteur général (maquette rév. 5) —
+   éteindre est immédiat, rallumer n'a d'effet qu'au prochain démarrage du
+   serveur (une seule tentative d'ouverture de la sortie audio par
+   processus). Ne s'applique JAMAIS aux sept interrupteurs de ligne, qui
+   restent immédiats dans les deux sens. */
+.sound-hint-warn {
+  color: var(--warning);
+  font-weight: 600;
+}
+
 /* Pastille d'état du son (maquette §06) — DEUX états seulement, « idle »
    n'a pas d'équivalent lumière : elle retombe sur le style par défaut de
    `.ambiance-status-badge` (gris) sans règle dédiée. `is-ok` est en

@@ -1244,6 +1244,19 @@ export default function AmbiancePage() {
               </span>
             </div>
             <p className="ambiance-hint">
+              {/* Maquette rév. 5 — interrupteur général ASYMÉTRIQUE : éteindre
+                  coupe le fan-out immédiatement (lu à chaque déclenchement,
+                  comme les interrupteurs par cue), mais rallumer ne peut pas
+                  ouvrir de sortie audio a posteriori — un seul essai par
+                  processus (contracts/http-endpoints.md §Sound). Ne concerne
+                  QUE ce commutateur : les sept interrupteurs de ligne restent
+                  immédiats dans les deux sens (ils ne touchent que le flux
+                  d'événements, jamais la sortie elle-même). */}
+              <strong className="sound-hint-warn">
+                Éteindre coupe le son immédiatement. Rallumer ne prend effet qu'au prochain
+                démarrage du serveur.
+              </strong>
+              <br />
               Les sons sont joués sur l'enceinte reliée au serveur ; le volume se règle sur
               l'enceinte elle-même. État établi au démarrage du serveur — pour vérifier qu'une
               enceinte répond maintenant, utilisez « Tester sur l'enceinte ».
