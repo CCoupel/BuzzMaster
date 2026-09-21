@@ -9,6 +9,12 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## Validation manuelle Windows confirmée (2026-09-21)
+
+- **Son entendu réellement sur Windows** (build candidat `11.0.0.1`, `build/candidate_v11.0.0/`) : `depart` et `reveal` confirmés sur un cycle de jeu normal — comportement attendu, les 5 autres cues (`gagne`/`temps-ecoule`/`perdu`/`entracte-*`) exigent des déclencheurs spécifiques non joués lors de ce test.
+- **Piège de config rencontré et résolu** : `sound.enabled=false` par défaut (contrat §5.5, volontaire) — `server-go/config.json` n'avait pas de section `sound` du tout, donc aucun son ne sortait malgré un build correct. Ajouté `"sound": {"enabled": true}` dans `server-go/config.json` ET copié dans `build/candidate_v11.0.0/config.json` (le binaire lit `config.json` relatif à son répertoire de lancement, pas celui de `server-go/`).
+- **Raspberry Pi toujours non testé** — l'hypothèse systemd/PipeWire (mitigation appliquée par prudence en #228, jamais vérifiée sur le vrai matériel) reste un risque ouvert. Ne bloque pas #230 (page admin, cross-plateforme, sans dépendance à ce risque) mais à faire avant toute PROD.
+
 ## #228 + #229 DONE — v11.0 (2026-09-21)
 
 - **#228 (pilote de sortie audio, `oto/v3`, Windows+Linux/RPi) et #229 (sons par défaut synthétisés + restauration) toutes deux terminées** — review + QA validées sans réserve pour les deux. Commits #228 : `62754ba0`/`fd86bdc5`/`a91887a8`. Commits #229 : `072f7433`/`6d7c5d20`.
