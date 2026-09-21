@@ -9,6 +9,13 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## #234 ajoutée et validée, QUALIF v11.0.0.4 (2026-09-21)
+
+- **#234 (pastille son Navbar)** demandée par l'utilisateur après validation de #230, développée/review/QA en une passe, PUIS corrigée une seconde fois suite retour utilisateur (capture d'écran) : la Navbar était correcte dès le premier coup (2 icônes distinctes), mais le bandeau de `/admin/ambiance` n'avait qu'une pastille dédiée à l'éclairage — incohérent avec le sous-titre "Éclairage et bruitages" déjà à 2 canaux depuis #230. Seconde pastille ajoutée + une collision de classe CSS trouvée au passage par code-reviewer (pastille interne de l'onglet Son partageait `.ambiance-status-badge` avec le bandeau éclairage) et corrigée. **Fermée avec validation manuelle utilisateur.**
+- **Leçon de planning notée par le planner lui-même** : 2 erreurs similaires sur ce chantier (omission `handleConfig`/`sound` en #230, contradiction de handoff en #234) — même cause : raisonner sur la structure d'un fichier sans l'ouvrir jusqu'au bout / vérifier les simulations sans vérifier les assertions.
+- **QUALIF poussée à v11.0.0.4** au fil des corrections (4 cycles BUILD+PUBLISH+DEPLOY dans la même session : 11.0.0.1 ad hoc → 11.0.0.2 milestone initial → 11.0.0.3 avec #234 v1 → 11.0.0.4 avec le correctif bandeau).
+- **Règle apprise et déjà tracée** dans `feedback_no_confirm_post_review_pipeline.md` : dès qu'une modification demandée pendant une session de test utilisateur en cours passe review+QA, relancer QUALIF immédiatement sans demander.
+
 ## #230 DONE — milestone v11.0 complet côté dev (2026-09-21)
 
 - **#230 (page admin des sons) livrée** après un cycle REFUSÉ→corrigé : `handleConfig` (`POST /config.json`) n'avait aucune branche pour la clé `"sound"` (interrupteurs répondant 200 OK sans rien persister), et l'asymétrie du toggle général n'était pas câblée. Correctif `a778ea4d`, re-review APPROUVÉ, QA VALIDATED. **Les 5 issues de v11.0 (#226-#230) sont toutes DONE.**
