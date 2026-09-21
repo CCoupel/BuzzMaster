@@ -60,19 +60,24 @@ type LightingLightEntry struct {
 	Team string `json:"team,omitempty"`
 }
 
-// SoundConfig is the `sound` section (v11.0, #227 — contracts/sound.md):
+// SoundConfig is the `sound` section (v11.0, #227/#228 — contracts/sound.md):
 // event-driven sound bruitage. Optional: Enabled=false (the default) means
-// no audio engine goroutine, no device access at all — contract §5.5. No
-// real Output/pilote is wired before #228; this section is accepted and
-// persisted with zero observable effect until then.
+// no audio engine goroutine, no device access at all — contract §5.5.
 type SoundConfig struct {
 	Enabled bool `json:"enabled"`
 	// AmbianceCompensationMs delays the Hue AMBIANCE light only (NEVER the
 	// buzzer LEDs) relative to sound, to perceptually compensate Bluetooth
 	// latency — contract §9, spike #226 task 0.11. A parameter, never a
 	// constant: its right value depends on the paired speaker. Wiring this
-	// delay into the fan-out is not part of #227 — see contract §9.
+	// delay into the fan-out is not part of #227/#228 — see contract §9.
 	AmbianceCompensationMs int `json:"ambiance_compensation_ms"`
+	// Device reserves a future output sink/device selector (contract §9).
+	// #228's driver does not implement selection yet — `oto` exposes no
+	// such option (a Linux-only bypass via jfreymuth/pulse was identified
+	// as a viable fallback by the spike, #226 verdict §2.4, not built
+	// here). A non-empty value is logged once as "not yet honoured" by
+	// internal/audio.NewOutput rather than silently ignored or rejected.
+	Device string `json:"device,omitempty"`
 }
 
 // EnvHueAPIKey overrides lighting.api_key without ever touching config.json

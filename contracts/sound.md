@@ -107,11 +107,15 @@ vérifié par compilation/exécution sur les deux cibles CI.
 
 ```go
 // Output joue un flux PCM déjà décodé et déjà conforme au format canonique
-// (§3) sur du matériel réel. Apply est appelé UNIQUEMENT depuis la
-// goroutine unique de lecture du moteur (§5) : il a donc le droit de
-// bloquer, et n'a PAS besoin d'être sûr en accès concurrent. Même contrat
-// que lighting.Driver.Apply (contracts/lighting.md §3) — délibérément
-// symétrique.
+// (§3) sur du matériel réel. Play est appelé UNIQUEMENT depuis la
+// goroutine unique de lecture du moteur (§5) : il n'a PAS besoin d'être
+// sûr en accès concurrent. Même contrat que lighting.Driver.Apply
+// (contracts/lighting.md §3) — délibérément symétrique.
+//
+// Play DOIT bloquer jusqu'à la fin RÉELLE du rendu — jusqu'à ce que le son
+// ait effectivement fini de jouer sur le matériel, ou que ctx soit annulé.
+// Amendement normatif du 2026-09-21 (#228) : voir la note ci-dessous, ce
+// n'est pas une reformulation cosmétique.
 type Output interface {
     Play(ctx context.Context, pcm io.Reader) error
 
@@ -127,14 +131,27 @@ type Output interface {
   pilote concret, pas du moteur (§6.2 ci-dessous, note de traçabilité systemd).
 - **Aucun format négociable** — `pcm` est toujours au format canonique du §3 ; un `Output` n'a
   jamais à inspecter ni convertir quoi que ce soit.
-- **Aucune garantie de non-blocage côté pilote** — c'est le moteur (§5) qui garantit que
-  l'appelant du jeu ne bloque jamais, pas `Output.Play`. Un pilote réel (#228) peut légitimement
-  attendre la fin de la lecture avant de retourner ; c'est même la forme la plus simple à
-  implémenter par-dessus l'API asynchrone d'`oto` (le spike l'a vérifié : `oto.Player.Play()` ne
-  remplit son tampon interne que sur un cycle de lecture différé — un pilote correct doit attendre
-  `IsPlaying() == false`, jamais retourner sitôt l'appel `Play()` passé, sous peine de fermer le
-  flux avant qu'un seul octet n'ait été lu — piège réel rencontré et corrigé pendant le spike, voir
-  `spike/audio/README.md` §« Correctifs appliqués »).
+
+> **Amendement normatif (2026-09-21, #228) — `Play` DOIT bloquer, ce n'est plus une option.**
+> La version précédente de ce contrat disait « aucune garantie de non-blocage côté pilote... un
+> pilote réel PEUT légitimement attendre la fin de la lecture ». C'était un **trou de contrat** :
+> rien n'empêchait une implémentation de `Play` qui rend la main dès que les octets sont confiés
+> au lecteur — **exactement le bug rencontré et corrigé pendant le spike** (`oto.Player.Play()` est
+> asynchrone par nature ; un `Play` qui retourne sitôt l'appel passé ferme le flux avant qu'un seul
+> octet n'ait été lu). Cette implémentation aurait été **parfaitement conforme** à l'ancienne
+> formulation du contrat, et aucun test de #227 ne l'aurait vue : `FakeOutput` répond
+> instantanément par défaut.
+>
+> **Exigence, sans ambiguïté** : un pilote réel (#228) doit attendre `IsPlaying() == false` (ou
+> l'équivalent de la bibliothèque retenue) avant de retourner de `Play` — jamais réussir puis
+> rendre la main immédiatement. L'attente doit rester sensible à l'annulation de `ctx`, pour que
+> l'arrêt du serveur ne soit jamais retardé par un son en cours. `FakeOutput` (`Delay`/`Gate`)
+> permet de tester cette exigence sans matériel — voir `internal/audio/engine_test.go`.
+>
+> **Conséquence de second ordre, à connaître** : le moteur lit **strictement séquentiellement**
+> (§5.2/§5.3) et `Play` bloque désormais pour de vrai — une rafale de cues **s'étale** dans le
+> temps au lieu de se superposer. C'est une contrainte d'architecture qui pèse sur le choix des
+> sons (#229 : sons courts, cible < 1 s), pas un défaut de ce contrat.
 
 ---
 

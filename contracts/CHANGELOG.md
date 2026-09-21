@@ -2,6 +2,35 @@
 
 ---
 
+## [20260921c] — Bruitage d'événement : `Play` DOIT bloquer jusqu'à la fin du rendu (#228)
+
+> Amendement normatif demandé en tête du plan de dev #228, avant tout code de pilote : la
+> formulation précédente (« aucune garantie de non-blocage côté pilote... peut légitimement
+> attendre ») était un **trou de contrat** qui aurait laissé le bug du spike (fermeture prématurée
+> avant la fin réelle du rendu) redevenir une implémentation valide, invisible à tous les tests de
+> #227 (`FakeOutput` répond instantanément par défaut).
+
+- **[CHANGED — BREAKING pour un futur pilote qui s'appuierait sur l'ancienne formulation]**
+  `contracts/sound.md` §4 — `Output.Play` **DOIT** bloquer jusqu'à la fin **réelle** du rendu (ou
+  jusqu'à l'annulation du contexte), et non plus « peut légitimement attendre ». Le pilote réel
+  livré par #228 (`internal/audio/output_oto.go`, partagé Linux/Windows) implémente exactement
+  cette exigence : contexte `oto` unique créé une seule fois, attente du canal de disponibilité,
+  boucle `IsPlaying()` sensible à l'annulation, délai de grâce de 150 ms pour le tampon du pilote
+  (aligné sur le défaut PulseAudio d'`oto`), pré-armement d'un silence au démarrage.
+- **[NEW]** `contracts/sound.md` — conséquence de second ordre tracée : le moteur lisant
+  strictement séquentiellement et `Play` bloquant réellement, une rafale de cues **s'étale** dans
+  le temps au lieu de se superposer — contrainte reportée sur le choix des sons (#229 : sons
+  courts, cible < 1 s), pas un défaut du contrat.
+
+**Aucune configuration existante invalidée.** `FakeOutput` (`internal/audio`) reste conforme :
+`Delay`/`Gate` permettent de tester le blocage sans matériel, déjà exploité par
+`internal/audio/play_blocks_228_test.go` (test-writer).
+
+Détail complet : `contracts/sound.md` §4, `_work/reports/plan-dev-228-229-20260921-114500.md`
+Partie 0/1.
+
+---
+
 ## [20260921b] — Bruitage d'événement : le fan-out sonore est additif, pas un remplacement (#227, Lot B)
 
 > Précision d'implémentation relevée en revue de code sur le Lot B (moteur `internal/audio` +

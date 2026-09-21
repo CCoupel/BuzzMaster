@@ -97,23 +97,37 @@ func (a *App) newSoundEngine(output audio.Output) *audio.Engine {
 	return audio.NewEngine(audio.Config{Output: output})
 }
 
-// setupSound builds the sound engine from configuration. No real Output
-// exists before #228 — the engine is therefore always constructed
-// disabled for #227 (Output: nil), proving the whole plumbing end to end
-// with sound_sites_test.go/sound_cues_chain_test.go/internal/audio's own
-// tests, while genuinely producing no audible output yet ("aucun son n'est
-// encore audible — c'est normal et voulu", plan de dev #227 §1). #228
-// replaces this Output: nil with a real pilote once one exists; nothing
-// else in this file changes.
+// buildAudioOutput builds the real Output from the current configuration,
+// or nil when sound is disabled — mirrors a.buildHueDriver()'s exact role
+// for the lighting driver (contract §5.5: `Enabled: false` ⇒ Output nil ⇒
+// audio.NewEngine constructs a fully disabled engine, no goroutine at all,
+// contrast with "enabled but hardware unreachable" below, which DOES run
+// the goroutine — same distinction lighting already makes for an
+// unconfigured vs. an unreachable bridge).
+//
+// audio.NewOutput itself NEVER hard-fails (contract §5.5's construction-
+// time degradation) — a missing audio subsystem, permission error, or a
+// context that never becomes ready all degrade to a silent no-op Output
+// instead of an error, so this never blocks setup() or start().
+func (a *App) buildAudioOutput() audio.Output {
+	sc := config.Get().Sound
+	if !sc.Enabled {
+		return nil
+	}
+	return audio.NewOutput(audio.OutputConfig{Device: sc.Device})
+}
+
+// setupSound builds the sound engine from configuration — real Output
+// (#228) when `sound.enabled` is true, nil (fully disabled, contract
+// §5.5) otherwise.
 func (a *App) setupSound() {
-	_ = config.Get().Sound // read for its Enabled/AmbianceCompensationMs fields once #228 wires a real Output
-	a.soundEngine.Store(a.newSoundEngine(nil))
+	a.soundEngine.Store(a.newSoundEngine(a.buildAudioOutput()))
 }
 
 // startSoundEngine starts the engine's playback goroutine — same lifecycle
 // as AckManager and the ambiance writer (contract §5.6), stopped by
-// a.cancelCtx() in stop(). Disabled (no Output yet, #227) ⇒ launches
-// nothing (contract §5.5).
+// a.cancelCtx() in stop(). `sound.enabled: false` ⇒ launches nothing
+// (contract §5.5).
 func (a *App) startSoundEngine() {
 	go a.sound().Start(a.ctx)
 }

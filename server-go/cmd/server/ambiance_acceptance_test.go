@@ -265,6 +265,23 @@ var tw205PreExistingModulePaths = map[string]bool{
 	"golang.org/x/net":                                         true,
 	"golang.org/x/sync":                                        true,
 	"golang.org/x/tools":                                       true,
+	// #228 (v11.0, contracts/sound.md) — amendement TRACÉ, pas un
+	// contournement silencieux (le sens même de CA7, voir son commentaire de
+	// tête). Trois chemins, un seul besoin réel : jouer un son sur
+	// Windows/AMD64 et Linux/ARM64 sous CGO_ENABLED=0 (spike #226, verdict
+	// _work/reports/spike-226-20260921-103221.md) :
+	//   - github.com/ebitengine/oto/v3 : la bibliothèque de lecture elle-même
+	//     (seule voie qui compile sous CGO_ENABLED=0 pour les deux cibles CI —
+	//     v3.4.1 échoue purement et simplement à la compilation pour
+	//     linux/arm64, voir le verdict du spike) ;
+	//   - github.com/ebitengine/purego : la couche d'appel sans cgo qu'oto
+	//     utilise pour charger libasound.so.2 à l'exécution (dlopen), c'est ce
+	//     qui rend le premier point vrai ;
+	//   - github.com/jfreymuth/pulse : le client PulseAudio pur Go qu'oto
+	//     utilise en interne sur Linux (protocole natif, aucun cgo non plus).
+	"github.com/ebitengine/oto/v3": true,
+	"github.com/ebitengine/purego": true,
+	"github.com/jfreymuth/pulse":   true,
 }
 
 // tw205ModulePathRE matches a require-block line's module path: leading

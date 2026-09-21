@@ -542,8 +542,8 @@ func (a *App) init() {
 	a.setupAmbiance()
 	a.httpServer.Lighting = a // /api/lighting/* read the live driver (#207)
 
-	// Sound bruitage engine (#227) — always disabled until #228 wires a
-	// real Output (sound.go).
+	// Sound bruitage engine (#227/#228) — real Output when `sound.enabled`
+	// is true (sound.go).
 	a.setupSound()
 
 	// Set up callbacks
@@ -1133,9 +1133,9 @@ func (a *App) start() error {
 	// toujours injoignable après relance").
 	a.startAmbianceWriter()
 
-	// Sound bruitage engine (#227): same lifecycle as AckManager/the
-	// ambiance writer, stopped by a.cancelCtx() in stop(). Disabled (no
-	// Output before #228) ⇒ launches nothing (contract sound.md §5.5).
+	// Sound bruitage engine (#227/#228): same lifecycle as AckManager/the
+	// ambiance writer, stopped by a.cancelCtx() in stop(). `sound.enabled:
+	// false` ⇒ launches nothing (contract sound.md §5.5).
 	a.startSoundEngine()
 
 	// Start UDP broadcaster — this only opens the outbound send socket, it

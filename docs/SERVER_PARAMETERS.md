@@ -443,10 +443,10 @@ Pour supprimer la clé de `config.json` (dissociation) : utiliser l'API ou re-in
 
 **Section**: `sound` (système)
 
-Configuration du bruitage d'événement (moteur audio, `contracts/sound.md`). Aucun pilote réel
-n'est livré par #227 (Lot A/B) : cette section n'a d'effet observable qu'à partir de #228, qui
-implémente le pilote `oto` réel. Ces paramètres sont sauvegardés dans `config.json` et
-**survivent aux redémarrages**.
+Configuration du bruitage d'événement (moteur audio, `contracts/sound.md`). Depuis #228, un pilote
+réel (`oto`) est câblé : `enabled: true` lance effectivement le moteur et tente d'atteindre une
+sortie audio (Windows/WASAPI ou Linux/PulseAudio-ALSA). Ces paramètres sont sauvegardés dans
+`config.json` et **survivent aux redémarrages**.
 
 #### Paramètres disponibles
 
@@ -454,7 +454,8 @@ implémente le pilote `oto` réel. Ces paramètres sont sauvegardés dans `confi
 {
   "sound": {
     "enabled": false,
-    "ambiance_compensation_ms": 200
+    "ambiance_compensation_ms": 200,
+    "device": ""
   }
 }
 ```
@@ -462,7 +463,13 @@ implémente le pilote `oto` réel. Ces paramètres sont sauvegardés dans `confi
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `enabled` | Boolean | Activer/désactiver le moteur de bruitage (défaut : `false`). Désactivé : aucune goroutine lancée, aucun impact — voir `contracts/sound.md` §5.5 |
-| `ambiance_compensation_ms` | Integer | Délai (ms) dont l'**ambiance lumineuse Hue** est retardée par rapport au son, pour compenser perceptuellement la latence Bluetooth du son (tâche 0.11 du spike #226, `_work/reports/spike-226-20260921-103221.md` §3). **N'affecte jamais les LED des buzzers.** **Paramètre, pas une constante** — sa valeur par défaut est issue de la mesure de latence réelle (0.5) une fois disponible ; une procédure de recalibrage est décrite dans `spike/audio/README.md` §0.5. Câblage effectif du délai : issue ultérieure à #227/#228 (voir `contracts/sound.md` §9) |
+| `ambiance_compensation_ms` | Integer | Délai (ms) dont l'**ambiance lumineuse Hue** est retardée par rapport au son, pour compenser perceptuellement la latence Bluetooth du son (tâche 0.11 du spike #226, `_work/reports/spike-226-20260921-103221.md` §3). **N'affecte jamais les LED des buzzers.** **Paramètre, pas une constante** — sa valeur par défaut est issue de la mesure de latence réelle (0.5) une fois disponible ; une procédure de recalibrage est décrite dans `spike/audio/README.md` §0.5. Câblage effectif du délai : issue ultérieure (voir `contracts/sound.md` §9) |
+| `device` | String | **Réservé, non implémenté par #228** — sélection d'un périphérique/sink de sortie. `oto` n'expose aujourd'hui aucune sélection ; une valeur non vide est journalisée une fois (« pas encore honorée ») puis ignorée, jamais silencieusement. Sélecteur d'interface : #230 |
+
+**Dégradation à la construction (#228)** : si le pilote réel ne peut pas joindre de sortie audio
+(pas de sous-système audio, contexte jamais prêt, permission refusée), le serveur **démarre quand
+même** — le moteur tourne mais chaque son est silencieusement ignoré (compté, jamais remonté au
+jeu). Aucune configuration invalide ne peut empêcher le serveur de démarrer.
 
 **Format audio canonique** (non configurable, normatif) : WAV PCM 16 bits, 44 100 Hz, stéréo —
 `contracts/sound.md` §3. Un seul contexte audio par processus (`oto`) impose un format unique
@@ -480,6 +487,7 @@ converti.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.2.0 | 2026-09-21 | Sound: pilote réel câblé, ajout du paramètre `device` réservé (v11.0 #228) |
 | 3.1.0 | 2026-09-21 | Add Sound parameters (v11.0 #227, Lot A — réservation normative, pilote réel en #228) |
 | 3.0.0 | 2026-09-07 | Add Hue Bridge parameters (v10.0.0 #206/#207) |
 | 2.49.0 | 2026-02-01 | Initial release: auto_open_browsers and debug parameters |
