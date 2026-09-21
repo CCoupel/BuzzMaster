@@ -2,6 +2,36 @@
 
 ---
 
+## [20260921b] — Bruitage d'événement : le fan-out sonore est additif, pas un remplacement (#227, Lot B)
+
+> Précision d'implémentation relevée en revue de code sur le Lot B (moteur `internal/audio` +
+> câblage) : la forme du fan-out décrite au cadrage et reprise au §6.1 du Lot A s'est avérée plus
+> coûteuse que nécessaire une fois le câblage réel écrit. Même principe que l'amendement
+> `lighting.md` §6.2/§6.3 du 2026-09-02 cité ci-dessous : documenter l'écart plutôt que le laisser
+> implicite dans le code seul.
+
+- **[CHANGED — dev-backend, 2026-09-21]** `contracts/sound.md` §6.1 — le fan-out **n'a
+  finalement pas remplacé** les 22 appels `a.ambiance().NotifyState()`/`NotifyPulse()` existants,
+  qui restent **intacts**. `notifySound(cue audio.Cue)` (`cmd/server/sound.go`) est un point
+  d'entrée **sonore seul**, **ajouté** en plus de l'appel lumière existant aux seuls **9 sites**
+  qui portent effectivement une cue — pas aux 18 du tableau du §6.1. Les sites sans cue
+  n'appellent `notifySound` nulle part et ne figurent pas dans `soundSiteRegistry`. **Raison** :
+  un remplacement complet aurait exigé de toucher les 22 sites pour un gain nul sur les ~13 qui ne
+  portent aucun son en v11.0, pour un risque de régression plus large sur du code déjà normatif et
+  testé (`ambianceSiteRegistry`) — la frontière du §6.1 (qui doit/ne doit jamais sonner) reste
+  **identique** avec cette forme plus simple, vérifiée par le même test-garde à sélecteur unique
+  (`cmd/server/sound_sites_test.go`, coordination directe avec `test-writer`). Deux sites sonores
+  sans aucune contrepartie lumineuse existent aussi (`OnRafaleInvalid` — RAFALE classique
+  uniquement — et `OnTimeUp`, qui porte les deux) : le son n'est pas strictement un sous-ensemble
+  de la lumière.
+
+**Aucun BREAKING** : la frontière normative (qui doit/ne doit jamais déclencher un son) est
+inchangée, seule la mécanique interne du fan-out est plus légère que celle envisagée au cadrage.
+
+Détail complet : `contracts/sound.md` §6.1 (note d'implémentation), `_work/reports/code-review-20260921-121225.md`.
+
+---
+
 ## [20260921] — Bruitage d'événement : vocabulaire, moteur abstrait, frontière des sites (#227, Lot A)
 
 > Premier contrat de la milestone v11.0 (Ambiance de musique d'événement, #34), issu du verdict
