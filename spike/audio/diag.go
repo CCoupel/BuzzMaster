@@ -26,8 +26,15 @@ func cmdDiag() error {
 	fmt.Printf("GOOS/GOARCH     = %s/%s\n", runtime.GOOS, runtime.GOARCH)
 
 	fmt.Println("\n=== Raw PulseAudio probe (jfreymuth/pulse, pure Go, no cgo) ===")
-	client, err := pulse.NewClient()
-	if err != nil {
+	if runtime.GOOS != "linux" {
+		// BUGFIX: this probe and its ALSA-fallback commentary are Linux/Pi
+		// specific (tasks 0.2/0.3). Printing "oto will fall back to ALSA" on
+		// Windows was nonsensical noise (Windows uses WASAPI, no ALSA/Pulse
+		// concept exists there) and was reported as confusing.
+		fmt.Printf("N/A on %s — PulseAudio/ALSA are Linux concepts (this probe only matters for\n", runtime.GOOS)
+		fmt.Println("tasks 0.2/0.3 on the Raspberry Pi). On Windows, oto talks to WASAPI directly —")
+		fmt.Println("see the oto.NewContext section below for the path that actually matters here.")
+	} else if client, err := pulse.NewClient(); err != nil {
 		fmt.Printf("PulseAudio UNREACHABLE: %v\n", err)
 		fmt.Println("  -> oto will fall back to ALSA (dlopen libasound.so.2, no cgo needed on v3.5.x).")
 		fmt.Println("  -> On the Pi in production-launch conditions, this is EXACTLY the silent")

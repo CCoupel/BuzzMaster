@@ -99,8 +99,9 @@ en échec explicite sinon, comme observé dans ce sandbox — voir le rapport de
 
 1. Appairer l'enceinte via Paramètres Windows.
 2. `spike-audio-win.exe diag` puis `spike-audio-win.exe play reveal` — son attendu par le
-   backend WASAPI (pas de notion PulseAudio/ALSA sur cette plateforme, la partie Pulse du
-   rapport `diag` sera silencieusement non pertinente ou en erreur — normal).
+   backend WASAPI. `diag` affiche désormais explicitement `N/A on windows` pour la section
+   PulseAudio/ALSA (ces concepts n'existent pas sur cette plateforme — voir « Correctifs
+   appliqués » en bas de ce fichier).
 
 ### 0.5 — Mesure de latence réelle
 
@@ -150,3 +151,45 @@ entre exécutions rapprochées), **pas un défaut d'oto/pulse** — mais cela il
 pourquoi ce spike ne peut PAS remplacer la validation sur le Pi et le poste Windows réels : un
 socket « atteignable » ne garantit pas un flux réellement jouable, ce qui est exactement l'objet
 des tâches 0.2/0.3.
+
+Mise à jour (correctif du 2026-09-21, voir section suivante) : après de nombreuses connexions
+répétées pendant le développement, ce socket RDP est passé d'intermittent à indisponible en
+continu (« resource temporarily unavailable »). Aucune preuve audio supplémentaire n'a donc pu
+être obtenue dans ce sandbox pour re-confirmer le correctif ci-dessous à l'oreille — la
+correction s'appuie sur la lecture directe du code source d'`oto` v3.5.1, pas sur une nouvelle
+exécution réussie ici. Voir « Correctifs appliqués » pour le détail du raisonnement.
+
+## Correctifs appliqués (2026-09-21, retour utilisateur Windows)
+
+**Symptôme rapporté** : aucun son audible sur poste Windows, ni sortie par défaut ni casque
+Bluetooth, avec `play gagne` affichant `buffered=0 bytes, elapsed=0s`.
+
+**Cause racine identifiée par lecture du code source d'`oto` v3.5.1**
+(`internal/mux/mux.go`, fonctions `playImpl`/`finishSourceRead`/`BufferedSize`) : `Play()`
+positionne l'état "en lecture" **de façon synchrone**, mais **ne remplit pas** le tampon interne
+tout de suite — ce remplissage n'a lieu que plus tard, sur le cycle de lecture propre du mux.
+La boucle d'attente de `play.go`/`overlap.go` exigeait à tort `IsPlaying() ET BufferedSize()>0`
+pour continuer à attendre ; juste après `Play()`, `BufferedSize()` valait légitimement 0, donc
+la condition était fausse dès la première vérification, la boucle ne s'exécutait **jamais**, et
+la fonction retournait immédiatement — fermant le lecteur/contexte avant que le mux n'ait eu la
+moindre chance de lire un seul octet de la source. Explique exactement le symptôme observé (zéro
+octet, zéro seconde) et pourquoi c'était indifférent au périphérique de sortie (PC ou Bluetooth) :
+ce n'était jamais un problème de transport audio, la lecture n'avait simplement jamais commencé.
+
+**Correctif** : la condition d'attente ne porte plus que sur `IsPlaying()` (fiable d'après
+`finishSourceRead` : l'état ne repasse à "en pause" qu'une fois EOF atteint **et** le tampon
+réellement vidé), bornée par une échéance de sécurité de 3 s. Un délai de grâce de 300 ms a été
+ajouté après la fin de lecture signalée, avant de fermer le lecteur/contexte, pour ne pas couper
+la fin du son encore dans le tampon propre au pilote (latence PulseAudio par défaut ~100 ms,
+tampon WASAPI équivalent).
+
+**Correctif cosmétique additionnel** : `diag` n'affiche plus le message "oto will fall back to
+ALSA" sur Windows (ALSA n'existe pas sur cette plateforme) — remplacé par un message explicite
+"N/A on windows".
+
+**Confiance dans le correctif** : basée sur la lecture directe et exacte du code source de la
+version d'`oto` utilisée (pas une supposition) — voir le rapport de verdict `_work/reports/` pour
+le détail de l'extrait de code cité. **N'a pas pu être re-testée à l'oreille** dans ce sandbox
+(voir note ci-dessus) : `spike-audio-win.exe` a été recompilé après correctif et vérifié comme
+exécutable Windows valide (PE32+), mais seul un nouveau test utilisateur sur le poste Windows
+réel confirmera le son.

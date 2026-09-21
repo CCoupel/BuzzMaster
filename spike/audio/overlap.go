@@ -50,12 +50,16 @@ func cmdOverlap() error {
 		fmt.Println("this contradicts the researched design and must be investigated before relying on it.")
 	}
 
-	// Bounded drain wait — see play.go's comment on IsPlaying() reliability
-	// in this sandbox's virtual sink; a hard deadline keeps this demo from
-	// ever hanging regardless.
+	// Bounded drain wait, IsPlaying()-only (see play.go's fix note: never AND
+	// it with BufferedSize()>0, which is legitimately 0 right after Play()
+	// and would exit this loop before anything actually played).
 	deadline := time.Now().Add(3 * time.Second)
 	for (pA.IsPlaying() || pB.IsPlaying()) && time.Now().Before(deadline) {
 		time.Sleep(2 * time.Millisecond)
 	}
+	// Same device-drain grace period as play.go — avoids closing the
+	// context while the OS's own output buffer still holds the tail of
+	// whichever cue finished last.
+	time.Sleep(300 * time.Millisecond)
 	return nil
 }
