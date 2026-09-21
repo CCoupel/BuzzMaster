@@ -9,6 +9,15 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## PROD v11.0.0 livrée (2026-09-21)
+
+- **PROD déployée** : merge `b8e8764a` (`--no-ff`, `milestone/v11.0` → `main`), tag `v11.0.0`, CI verte, release GitHub avec 3 assets (Windows, Raspberry Pi arm64, firmware BuzzClick mergé). Milestone GitHub #34 fermé (7/7 : #226-#230, #234). Marketing publié en parallèle du déploiement (release notes, posts sociaux, newsletter, site gh-pages avec nouvelle carte "Ambiance sonore") — commits `3ee4e515` (main) + `b89f62e5` (gh-pages).
+- **CHANGELOG.md racine corrigé au passage** : l'entrée `[Unreleased]` était restée mal étiquetée depuis v9.0.0 (contenu v9.0.0 jamais renommé) — corrigé en `[9.0.0]`, entrée `[11.0.0]` ajoutée avec 2 erreurs factuelles trouvées et corrigées en relecture avant PROD (interrupteur par cue faussement dit absent de v11.0 ; détail inventé sur #219 alors que son corps GitHub est vide).
+- **Validation manuelle complète avant PROD** : Windows ET Raspberry Pi (le point le plus incertain du chantier — hypothèse systemd/PipeWire tracée "par prudence, non vérifiée" en #228, confirmée fonctionnelle sur le vrai matériel par l'utilisateur).
+- **Backlog résiduel réorganisé pendant ce chantier** : v11.1 — Question sonore (#219, milestone dédié créé le jour même), v11.2 — Extensions bruitages (#231 détail par type de question, #232 rééchantillonnage upload).
+- **Chantier #218/#219 → v11.0 en synthèse** : spike (#226) → moteur abstrait (#227, 2 bugs réels trouvés par vérification planner/TDD avant merge : cue `depart` rejouée sur reprise pause, RAFALE_INVALIDATE dupliquant `depart`) → pilote réel (#228) → sons synthétisés déterministes sans `//go:embed` (#229, décision utilisateur : pas de fichiers internet, licence) → page admin intégrée à `/admin/ambiance` en onglets (#230, cycle REFUSÉ→corrigé sur un trou `handleConfig`/`sound`) → pastille Navbar (#234, corrigée une fois suite retour utilisateur). 4 cycles QUALIF dans la même session (v11.0.0.1→.4).
+- **Prochain chantier attendu** : v11.1 — Question sonore (#219, milestone #37, aucune issue de cadrage encore écrite — corps vide).
+
 ## #234 ajoutée et validée, QUALIF v11.0.0.4 (2026-09-21)
 
 - **#234 (pastille son Navbar)** demandée par l'utilisateur après validation de #230, développée/review/QA en une passe, PUIS corrigée une seconde fois suite retour utilisateur (capture d'écran) : la Navbar était correcte dès le premier coup (2 icônes distinctes), mais le bandeau de `/admin/ambiance` n'avait qu'une pastille dédiée à l'éclairage — incohérent avec le sous-titre "Éclairage et bruitages" déjà à 2 canaux depuis #230. Seconde pastille ajoutée + une collision de classe CSS trouvée au passage par code-reviewer (pastille interne de l'onglet Son partageait `.ambiance-status-badge` avec le bandeau éclairage) et corrigée. **Fermée avec validation manuelle utilisateur.**
