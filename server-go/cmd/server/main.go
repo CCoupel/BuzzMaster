@@ -546,6 +546,11 @@ func (a *App) init() {
 	// is true (sound.go).
 	a.setupSound()
 
+	// Default sounds (#229): generates any MISSING cue's WAV into
+	// data/files/sounds/, never overwrites — unconditional at every real
+	// startup (sound.go).
+	a.createDefaultSounds()
+
 	// Set up callbacks
 	a.setupCallbacks()
 }

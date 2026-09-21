@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"buzzcontrol/internal/audio/synth"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting/hue"
@@ -480,6 +481,10 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/firmware/buzzclick/merged.bin", h.handleAPIFirmwareMergedDownload)
 	h.mux.HandleFunc("/api/firmware/buzzclick/upload", h.handleAPIFirmwareUpload)
 	h.mux.HandleFunc("/api/firmware/buzzclick/restore-embedded", h.handleAPIFirmwareRestoreEmbedded)
+
+	// Sound bruitage — restore defaults (v11.0, #229). Upload/list/delete
+	// endpoints belong to #230 (contracts/http-endpoints.md §Sound).
+	h.mux.HandleFunc("/api/sounds/restore-defaults", h.handleAPISoundsRestoreDefaults)
 
 	// WiFi defaults API
 	h.mux.HandleFunc("/api/wifi/defaults", h.handleAPIWiFiDefaults)
@@ -2934,6 +2939,12 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		if _, err := os.Stat(entracteDir); err == nil {
 			h.addDirToTAR(tw, entracteDir, "files/entracte")
 		}
+		// v11.0, #229 — added explicitly, dès le premier jet (contract
+		// sound.md, plan de dev #229 §2.4 : ne pas reproduire le trou #152).
+		soundsDir := filepath.Join(filesDir, "sounds")
+		if _, err := os.Stat(soundsDir); err == nil {
+			h.addDirToTAR(tw, soundsDir, "files/sounds")
+		}
 	}
 
 	// Add RAFALE reservoir (v8.0.0, #197) — the question bank
@@ -3161,6 +3172,24 @@ func (h *HTTPServer) handleResetSelect(w http.ResponseWriter, r *http.Request) {
 				h.OnConfigUpdate()
 			}
 		}
+		// v11.0, #229 — added explicitly, dès le premier jet (plan de dev
+		// #229 §2.4, ne pas reproduire le trou #152). Contrairement à
+		// backgrounds/categories/entracte ci-dessus (qui restent VIDES après
+		// un reset, jusqu'à un futur re-upload ou redémarrage), les sons sont
+		// synthétisés — aucun coût à les régénérer immédiatement, et laisser
+		// le bruitage totalement silencieux jusqu'à un hypothétique
+		// redémarrage serait une régression sur l'objet même du milestone.
+		soundsDir := filepath.Join(filesDir, "sounds")
+		if err := os.RemoveAll(soundsDir); err == nil {
+			if _, genErr := synth.WriteAll(soundsDir, true); genErr != nil {
+				log.Printf("[HTTP] Reset: failed to regenerate default sounds: %v", genErr)
+			}
+			if _, mErr := synth.ReconcileManifest(soundsDir); mErr != nil {
+				log.Printf("[HTTP] Reset: failed to write sounds.json manifest: %v", mErr)
+			}
+			mediasOk = true
+			log.Printf("[HTTP] Reset: Sounds cleared and regenerated to defaults")
+		}
 		if mediasOk {
 			result["medias"] = true
 		}
@@ -3340,6 +3369,12 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 				targetPath = filepath.Join(h.dataDir, tarPath)
 				allowed = true
 			}
+		case strings.HasPrefix(tarPath, "files/sounds/"):
+			// v11.0, #229 — ne pas reproduire le trou #152.
+			if detected["sounds"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
 		case tarPath == "config/teams.json":
 			if detected["teams"] {
 				targetPath = filepath.Join(configDir, "teams.json")
@@ -3473,6 +3508,20 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Restore: Entracte image restored")
 	}
 
+	if detected["sounds"] {
+		restoredMap["sounds"] = true
+		// v11.0, #229 — no engine-side list to reload either (same reason
+		// as entracte just above): FileBank never caches, it reads
+		// data/files/sounds/<cue>.wav fresh on every PlayCue. Reconcile the
+		// manifest so sounds.json reflects what was just extracted, rather
+		// than whatever it said before the restore.
+		soundsDir := filepath.Join(h.dataDir, "files", "sounds")
+		if _, err := synth.ReconcileManifest(soundsDir); err != nil {
+			log.Printf("[HTTP] Restore: failed to write sounds.json manifest: %v", err)
+		}
+		log.Printf("[HTTP] Restore: Sounds restored")
+	}
+
 	if detected["gameConfig"] {
 		// #150 — reload from the just-extracted file (same path
 		// GameConfigPath() already resolves to, set once at startup) and
@@ -3544,6 +3593,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"gameConfig":  false, // #150 — game-config.json (default delay + neon effect)
 		"gameState":   false, // #141 — game_state.json (quiz metadata)
 		"rafale":      false, // #197 (v8.0.0) — files/rafale/ + config/rafale_used.json
+		"sounds":      false, // v11.0, #229 — files/sounds/ (bruitage d'événement)
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -3564,6 +3614,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["categories"] = true
 		case strings.HasPrefix(tarPath, "files/entracte/"):
 			detected["entracte"] = true
+		case strings.HasPrefix(tarPath, "files/sounds/"):
+			detected["sounds"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
 		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":

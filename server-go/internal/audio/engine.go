@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"sync"
@@ -14,11 +15,29 @@ import (
 // playing out of sync with a game that has already moved on.
 const DefaultQueueSize = 8
 
+// Bank resolves a Cue to its canonical PCM bytes (contract §3: WAV PCM
+// 16-bit, 44100 Hz, stereo, header already stripped — Output.Play only
+// ever sees raw samples). #229's FileBank (bank.go) is the real
+// implementation, reading `data/files/sounds/<cue>.wav` from disk; disk is
+// authoritative, a Bank never caches (contract sound.md §9 cadrage's "le
+// disque fait foi"). No entry for a Cue is a silent no-op (contract §5.5).
+type Bank interface {
+	PCM(c Cue) (data []byte, ok bool)
+}
+
 // Config wires an Engine.
 type Config struct {
 	// Output nil disables the engine entirely: PlayCue is a no-op, Start
 	// returns immediately without spawning anything (contract §5.5).
 	Output Output
+	// Bank resolves each Cue to real PCM bytes (#229). nil keeps #227's
+	// placeholder behaviour — the Cue's own name is fed to Output.Play as a
+	// stand-in payload — which is what lets #227's own tests
+	// (engine_test.go, play_blocks_228_test.go) keep passing unchanged:
+	// they were written and coordinated before any real sound bank existed
+	// ("aucun vrai catalogue WAV n'existe avant #229", cue.go's own doc
+	// comment) and never set this field.
+	Bank Bank
 	// QueueSize overrides DefaultQueueSize (0 = default).
 	QueueSize int
 }
@@ -30,6 +49,7 @@ type Stats struct {
 	Dropped    int // PlayCue calls rejected — queue was full, never waited on
 	Played     int // Output.Play calls attempted
 	PlayErrors int
+	NoAsset    int // Bank had no PCM for the requested Cue — silent no-op (contract §5.5)
 }
 
 // Engine is the sound-bruitage moteur (contract §5): a single playback
@@ -40,6 +60,7 @@ type Stats struct {
 type Engine struct {
 	enabled bool
 	output  Output
+	bank    Bank
 	queue   chan Cue
 	running atomic.Bool
 
@@ -56,6 +77,7 @@ func NewEngine(cfg Config) *Engine {
 	return &Engine{
 		enabled: cfg.Output != nil,
 		output:  cfg.Output,
+		bank:    cfg.Bank,
 		queue:   make(chan Cue, size),
 	}
 }
@@ -128,14 +150,33 @@ func (e *Engine) Start(ctx context.Context) {
 	}
 }
 
-// play plays one cue. #227 has no sound bank yet (#229): the payload is a
-// placeholder carrying the Cue's own name, which is all this milestone
-// needs to prove the plumbing end to end with a fake Output — see the
-// Output doc comment. Never returns an error to the caller: dégradation
-// silencieuse (contract §5.5) — an Output error is counted, never
-// propagated into the game.
+// play plays one cue. With a Bank configured (#229), resolves real PCM
+// bytes from disk; a Cue with no asset is a silent no-op (contract §5.5),
+// counted in Stats.NoAsset, never propagated. Without a Bank (nil — #227's
+// placeholder, kept for tests written before #229 existed), the payload is
+// the Cue's own name — see Bank's doc comment. Never returns an error to
+// the caller either way: dégradation silencieuse (contract §5.5) — an
+// Output error is counted, never propagated into the game.
 func (e *Engine) play(ctx context.Context, c Cue) {
-	err := e.output.Play(ctx, strings.NewReader(string(c)))
+	var pcm []byte
+	fromBank := false
+	if e.bank != nil {
+		data, ok := e.bank.PCM(c)
+		if !ok {
+			e.statsMu.Lock()
+			e.stats.NoAsset++
+			e.statsMu.Unlock()
+			return
+		}
+		pcm, fromBank = data, true
+	}
+
+	var err error
+	if fromBank {
+		err = e.output.Play(ctx, bytes.NewReader(pcm))
+	} else {
+		err = e.output.Play(ctx, strings.NewReader(string(c)))
+	}
 	e.statsMu.Lock()
 	e.stats.Played++
 	if err != nil {

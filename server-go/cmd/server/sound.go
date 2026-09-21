@@ -24,11 +24,14 @@
 package main
 
 import (
+	"path/filepath"
 	"sync"
 
 	"buzzcontrol/internal/audio"
+	"buzzcontrol/internal/audio/synth"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"buzzcontrol/internal/server"
 )
 
 // ---------------------------------------------------------------------------
@@ -89,12 +92,56 @@ func (a *App) sound() *audio.Engine {
 	return a.soundEngine.Load()
 }
 
-// newSoundEngine builds an Engine wired to output — mirrors
-// a.newAmbianceWriter(drv)'s exact role for the lighting writer. output nil
-// (setupSound's production default until #228) constructs a disabled
-// engine (audio.NewEngine's own contract).
+// newSoundEngine builds an Engine wired to output, WITHOUT a Bank — mirrors
+// a.newAmbianceWriter(drv)'s exact role for the lighting writer. Signature
+// preserved exactly as #227 left it (Bank-less): test-writer's
+// sound_cues_chain_test.go (#227) calls this directly with a FakeOutput and
+// asserts on the placeholder cue-name-as-payload behaviour (audio.Bank's
+// own doc comment) — changing this signature or its behaviour would break
+// that whole suite. Production (setupSound, below) does NOT use this
+// helper: it builds the real Engine directly, Bank included.
 func (a *App) newSoundEngine(output audio.Output) *audio.Engine {
 	return audio.NewEngine(audio.Config{Output: output})
+}
+
+// soundsDir is where sound files live on disk — data/files/sounds/, same
+// filesDir/fallback convention as backgrounds/entracte (createDemoBackgrounds,
+// ensureCategoriesDir). Shared by buildSoundBank below and by the #229
+// startup generation / manifest reconciliation (main.go).
+func soundsDir(cfg *config.Config) string {
+	filesDir := cfg.Storage.FilesDir
+	if filesDir == "" {
+		filesDir = "./data/files"
+	}
+	return filepath.Join(filesDir, "sounds")
+}
+
+// buildSoundBank builds the real Bank (#229) reading from soundsDir.
+func (a *App) buildSoundBank() audio.Bank {
+	return audio.NewFileBank(soundsDir(a.config))
+}
+
+// createDefaultSounds generates any MISSING default sound (#229, plan de
+// dev §2.1/B.4) — modelled structurally on createDemoBackgrounds's
+// per-file existence check, but invoked unconditionally at every real
+// server startup (setup()), not only when demo data is loaded. Never
+// overwrites: an existing file, default or a user's own customised sound
+// (#230), is always left untouched — see synth.WriteAll's own doc comment.
+// Reconciles data/files/sounds/sounds.json afterwards either way, so it
+// always reflects what's actually on disk (plan de cadrage §2.2's "le
+// disque fait foi").
+func (a *App) createDefaultSounds() {
+	dir := soundsDir(a.config)
+	written, err := synth.WriteAll(dir, false)
+	if err != nil {
+		server.LogError(game.LogComponentApp, "Sound: failed to write default sound(s): %v", err)
+	}
+	if len(written) > 0 {
+		server.LogInfo(game.LogComponentApp, "Sound: generated %d default sound(s): %v", len(written), written)
+	}
+	if _, err := synth.ReconcileManifest(dir); err != nil {
+		server.LogWarn(game.LogComponentApp, "Sound: failed to write sounds.json manifest: %v", err)
+	}
 }
 
 // buildAudioOutput builds the real Output from the current configuration,
@@ -119,9 +166,15 @@ func (a *App) buildAudioOutput() audio.Output {
 
 // setupSound builds the sound engine from configuration — real Output
 // (#228) when `sound.enabled` is true, nil (fully disabled, contract
-// §5.5) otherwise.
+// §5.5) otherwise — WITH the real Bank (#229), so PlayCue resolves actual
+// WAV bytes from soundsDir instead of #227's cue-name placeholder. Builds
+// audio.Engine directly (not via newSoundEngine, kept Bank-less above for
+// test-writer's #227 suite).
 func (a *App) setupSound() {
-	a.soundEngine.Store(a.newSoundEngine(a.buildAudioOutput()))
+	a.soundEngine.Store(audio.NewEngine(audio.Config{
+		Output: a.buildAudioOutput(),
+		Bank:   a.buildSoundBank(),
+	}))
 }
 
 // startSoundEngine starts the engine's playback goroutine — same lifecycle

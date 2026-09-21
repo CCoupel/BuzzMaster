@@ -796,12 +796,48 @@ et `new-game-backgrounds/` en sont déjà absentes et ne survivent qu'à une sau
 
 ---
 
-## Sound (v11.0, #227 — réservation normative ; endpoints implémentés en #230)
+## Sound (v11.0, #227/#229 — un endpoint livré ; upload/liste/suppression en #230)
 
-> **Cette section ne spécifie pas encore d'endpoints fonctionnels.** #227 (Lot A) ne fait que
-> **réserver normativement** la contrainte de format, pour que #230 ne découvre pas le format
-> canonique après coup et n'accepte jamais un fichier que le moteur ne pourra pas jouer.
-> Contrat complet du vocabulaire de cues et du moteur : `contracts/sound.md`.
+> #227 (Lot A) ne réservait que la contrainte de format normative. #229 livre le **premier**
+> endpoint fonctionnel (restauration des sons par défaut synthétisés) ; upload/liste/suppression
+> restent spécifiés par #230. Contrat complet du vocabulaire de cues et du moteur :
+> `contracts/sound.md`.
+
+### `POST /api/sounds/restore-defaults`
+
+Régénère les 7 sons du catalogue v11.0 dans `data/files/sounds/`, **en écrasant
+inconditionnellement** tout fichier déjà présent — défaut ou personnalisé par l'utilisateur.
+Calqué sur `POST /api/firmware/buzzclick/restore-embedded` : action explicite, toujours
+destructrice, jamais le comportement du démarrage ordinaire (qui ne touche **jamais** un fichier
+existant — `createDefaultSounds`, `cmd/server/sound.go`).
+
+**Idempotent par construction** : le générateur (`internal/audio/synth`) est déterministe (aucun
+aléa, aucune horodatation), donc deux appels successifs produisent des octets strictement
+identiques.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Auth | Aucune |
+| Méthode | `POST` uniquement — `405` sinon |
+
+#### Response 200
+
+```json
+{
+  "status": "ok",
+  "written": ["depart", "temps-ecoule", "gagne", "perdu", "reveal", "entracte-debut", "entracte-fin"]
+}
+```
+
+#### Errors
+
+| Code | Description |
+|------|-------------|
+| 405 | Méthode autre que `POST` |
+| 500 | Échec d'écriture disque (répertoire non accessible en écriture, etc.) |
+
+Réconcilie aussi `data/files/sounds/sounds.json` (manifeste, `internal/audio/synth.ReconcileManifest`)
+après l'écriture — voir `contracts/sound.md` §7.
 
 ### `POST` / `PUT` / `DELETE /api/sounds/{cue}` — **à spécifier en détail par #230**
 

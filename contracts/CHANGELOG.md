@@ -2,6 +2,41 @@
 
 ---
 
+## [20260921d] — Bruitage d'événement : sons par défaut synthétisés + premier endpoint (#229)
+
+> Décision actée au cadrage : pas de `//go:embed` pour les sons livrés. Puisqu'ils sont
+> synthétisés en Go plutôt qu'authored comme fichiers, embarquer des octets calculables n'a plus
+> d'objet — le générateur *est* l'asset (`internal/audio/synth`). Écart par rapport au plan de
+> cadrage initial (qui prévoyait embed + extraction conditionnelle, modèle des fonds d'écran de
+> démo), documenté ici plutôt que laissé implicite.
+
+- **[NEW]** `internal/audio/synth` — catalogue fermé de 7 timbres (un par cue, contracts/sound.md
+  §2.1), générateur WAV **déterministe** (aucun aléa, aucune horodatation — condition normative
+  pour distinguer un son par défaut d'un son personnalisé et garantir une restauration
+  idempotente), enveloppe d'attaque/extinction obligatoire sur chaque note (anti-clic). Toutes les
+  cues restent sous la cible < 1 s du plan de dev #229 §2.3.
+- **[NEW]** `internal/audio.FileBank` (`bank.go`) — remplace le paravent de charge utile de #227
+  (nom de cue en clair) : résout chaque cue en lisant `data/files/sounds/<cue>.wav` sur disque et
+  en validant son en-tête contre le format canonique (contract §3) — un fichier non conforme est
+  **refusé silencieusement** (contract §5.5), jamais accepté puis injouable. `internal/audio.Bank`
+  reste optionnel sur `Config` (nil = comportement placeholder de #227 inchangé), pour ne casser
+  aucun test écrit avant que #229 n'existe.
+- **[NEW]** `POST /api/sounds/restore-defaults` (`contracts/http-endpoints.md` §Sound) — premier
+  endpoint fonctionnel de la section, jusqu'ici purement réservée par #227. Écrase
+  inconditionnellement, calqué sur `RestoreEmbedded` (firmware).
+- **[NEW]** `files/sounds/` inscrit dans les **quatre** chemins identifiés par le cadrage
+  (`internal/server/http.go`) : sauvegarde TAR, réinitialisation (régénère immédiatement les
+  défauts — contrairement à backgrounds/categories/entracte qui restent vides après reset, un
+  choix délibéré documenté inline : les sons sont synthétisés, régénérer ne coûte rien), extraction
+  de restauration, détection de restauration. Ne reproduit pas le trou #152.
+
+**Aucun BREAKING.** `audio.Bank` est additif (nil = comportement #227 inchangé) ; le nouvel
+endpoint est une addition pure ; aucune configuration existante n'est invalidée.
+
+Détail complet : `_work/reports/plan-dev-228-229-20260921-114500.md` Partie 2.
+
+---
+
 ## [20260921c] — Bruitage d'événement : `Play` DOIT bloquer jusqu'à la fin du rendu (#228)
 
 > Amendement normatif demandé en tête du plan de dev #228, avant tout code de pilote : la
