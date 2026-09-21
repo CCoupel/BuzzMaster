@@ -1257,9 +1257,17 @@ export default function AmbiancePage() {
               {/* Même motif visuel que le badge lumière (handoff §2) : la
                   classe `is-ok` est réutilisée telle quelle pour « Son actif »
                   (même vert), `is-idle` est propre au son — deux états
-                  seulement, jamais les quatre valeurs de l'éclairage. */}
+                  seulement, jamais les quatre valeurs de l'éclairage.
+                  #234 (correction, revue code-reviewer) — `.ambiance-sound-badge`,
+                  PAS `.ambiance-status-badge` : cette dernière classe est
+                  réservée à la pastille lumière du bandeau (voir son propre
+                  commentaire plus haut) — la garder ici aurait fait remonter
+                  DEUX éléments sous `.ambiance-status-badge` dès l'onglet Son
+                  ouvert, exactement ce que la correction du bandeau visait à
+                  éviter. Même rendu visuel : le CSS partagé (AmbiancePage.css)
+                  couvre déjà ce nom de classe. */}
               <span
-                className={`ambiance-status-badge is-${soundStatus.active ? 'ok' : 'idle'}`}
+                className={`ambiance-sound-badge is-${soundStatus.active ? 'ok' : 'idle'}`}
                 role="status"
               >
                 <span className="ambiance-status-dot" aria-hidden="true" />
