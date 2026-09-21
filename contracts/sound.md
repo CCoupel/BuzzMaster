@@ -369,11 +369,79 @@ interrupteurs de `CuesDisabled`. Une cue individuellement désactivée **reste t
 **directement**, jamais via `notifySound` — tester est un geste explicite de l'utilisateur, seul
 le déroulé de la partie doit rester muet pour une cue désactivée.
 
+**L'interrupteur général est asymétrique — normatif (2026-09-21, #230 addendum)** :
+
+| Bascule | Effet |
+|---|---|
+| **Éteindre** (`enabled` → `false`) | **Immédiat**, sans redémarrage |
+| **Rallumer** (`enabled` → `true`) | **Prend effet au prochain démarrage du serveur** |
+
+Ce n'est pas un compromis technique accepté par défaut : c'est ce que la conception de
+`notifySound` produit **sans rien coder de spécial** pour l'un ou l'autre sens, et c'est la raison
+pour laquelle l'asymétrie est délibérément retenue plutôt que comblée par une reconstruction à
+chaud du moteur.
+
+`notifySound` lit `config.Get().Sound.Enabled` à chaque appel et sort tôt si c'est faux — exactement
+la même lecture-à-l'appel que pour `CuesDisabled` ci-dessus :
+
+```go
+func (a *App) notifySound(c audio.Cue) {
+    if !config.Get().Sound.Enabled {
+        return
+    }
+    if config.Get().Sound.CuesDisabled[string(c)] {
+        return
+    }
+    a.sound().PlayCue(c)
+}
+```
+
+- **Éteindre pendant que le serveur tourne** : le moteur a été construit et sa goroutine tourne
+  (`enabled` était vrai au démarrage) — cette garde le rend muet **immédiatement**, sans démonter
+  ni le moteur ni sa goroutine ni sa file : rien ne le distingue d'un `CuesDisabled` qui listerait
+  les sept cues à la fois.
+- **Rallumer pendant que le serveur tourne** : si `enabled` était faux au démarrage,
+  `a.buildAudioOutput()` a renvoyé `nil` (contract §5.5) et le moteur est un no-op de naissance —
+  repasser `enabled` à `true` ne construit rien après coup, `PlayCue` reste sans effet. Rallumer
+  exige donc un redémarrage, **sans qu'aucune branche du code n'ait besoin de le décider** : c'est
+  une conséquence directe de l'hypothèse « le moteur est construit une seule fois, au démarrage »
+  déjà posée par #227/#228/#229 (§5) et jamais rouverte ici.
+
+**Pourquoi ne pas reconstruire le moteur à chaud** (rejeté explicitement, pas seulement non
+implémenté) : démonter proprement un moteur en fonctionnement — goroutine, périphérique audio déjà
+ouvert (`internal/audio/output_oto.go`) — n'est prévu par aucune conception actuelle, pour un
+bénéfice limité (rallumer le son est un geste rare comparé à l'éteindre en urgence en pleine
+partie, le geste que cette asymétrie sert en priorité). L'interface (`docs/mockups/sound-config-230.html`
+§02, révision 5) l'affiche explicitement à côté de l'interrupteur plutôt que de laisser
+l'utilisateur attendre un son qui ne viendra pas.
+
 **Aucun endpoint dédié pour ces deux réglages** (activation générale, `CuesDisabled`) : ils
 s'écrivent par le patch partiel additif existant `POST /config.json` avec un corps
 `{ "sound": {...} }`, exactement comme `{ "lighting": {...} }` le fait déjà pour l'éclairage
 (`contracts/http-endpoints.md` §Configuration). Aucun nouvel endpoint n'est introduit pour ce seul
 besoin.
+
+**Fusion champ par champ — normatif** (`internal/server/http.go`, `handleConfig`) : la section
+`sound` suit le même régime que `lighting`/`ai`, et pour la même raison — deux contrôles
+**indépendants** écrivent cette section (l'interrupteur général et les sept par cue), chacun
+n'envoyant que la clé qu'il possède. Un remplacement en bloc effacerait silencieusement l'un des
+deux réglages à chaque écriture de l'autre. Règle : **chaque champ présent est appliqué, chaque
+champ absent est préservé**.
+
+`cues_disabled` est une carte : trois états doivent être distingués, ce qu'un `json.Unmarshal` seul
+ne permet pas (absente et vide se désérialisent identiquement) — le JSON brut de la requête est
+donc interrogé, comme la branche `lighting` le fait déjà pour ses propres champs :
+
+| Dans le JSON reçu | Effet |
+|---|---|
+| clé **absente** | valeur existante **préservée** |
+| clé présente, objet **vide** `{}` | carte **vidée** (plus aucune cue désactivée) |
+| clé présente, objet **peuplé** | carte **remplacée** (le frontend renvoie toujours l'ensemble complet, jamais un patch partiel de la carte elle-même) |
+
+Chaque clé de `cues_disabled` est validée contre le catalogue fermé des sept cues
+(`soundCueFromString`, même garde que sur `{cue}` dans les URL de §Sound) — une clé inconnue est
+rejetée en `400`, jamais persistée silencieusement, et rejette la requête entière (aucune écriture
+partielle en cas d'erreur).
 
 ---
 

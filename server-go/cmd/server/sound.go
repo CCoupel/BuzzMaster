@@ -197,6 +197,30 @@ func (a *App) startSoundEngine() {
 // cmd/server/sound_sites_test.go's registry lisible et vérifiable: ONE
 // selector name to scan for, contract §6.2.
 //
+// The `enabled` guard below is deliberately asymmetric in effect, NOT in
+// code (contract §6.3 "Interaction avec l'interrupteur général", arbitrage
+// planner 2026-09-21) — a single early return, read live like CuesDisabled,
+// is enough to make BOTH directions correct without ever touching the
+// engine's lifecycle:
+//   - was disabled at startup ⇒ buildAudioOutput returned nil ⇒ the engine
+//     itself is already a no-op (contract §5.5) — flipping `enabled` back
+//     to true here changes nothing, because nothing was ever built to
+//     un-mute. Re-enabling therefore requires a restart, with NO special
+//     case coded for it: it falls out of #227/#228/#229's "built once at
+//     setupSound()" design, untouched by this guard.
+//   - was enabled at startup ⇒ the engine is built and its goroutine
+//     running — flipping `enabled` to false makes this guard return
+//     immediately, silencing every cue AT ONCE, with the engine, its
+//     goroutine and its queue left exactly as they are (no teardown, no
+//     reconstruction: tearing down a live device mid-game was explicitly
+//     rejected, limited benefit for real risk).
+//
+// Never move this into audio.Engine or gate PlayCue itself: /test
+// (POST /api/sounds/{cue}/test) calls PlayCue directly and must keep
+// working — a manual test is explicit user intent and stays available even
+// with cues disabled or (per contract §Sound "disabled vérifié avant tout
+// accès au moteur") reported separately from this switch.
+//
 // CuesDisabled filtering (#230, contract §6.3) is applied HERE, before
 // PlayCue — never inside internal/audio (which imports nothing from the
 // server, contract §2.1) and never by skipping the call at each of the 22
@@ -208,6 +232,9 @@ func (a *App) startSoundEngine() {
 // (CuesDisabled absent/empty/nil), the condition is always false and the
 // behaviour is identical to the bit to what #227 shipped.
 func (a *App) notifySound(c audio.Cue) {
+	if !config.Get().Sound.Enabled {
+		return
+	}
 	if config.Get().Sound.CuesDisabled[string(c)] {
 		return
 	}

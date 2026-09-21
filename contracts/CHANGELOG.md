@@ -2,6 +2,37 @@
 
 ---
 
+## [20260921f] — Bruitage d'événement : section `sound` de `POST /config.json` (#230, Lot B addendum)
+
+> Trou remonté par `dev-frontend` à l'intégration contre le code réel (pas seulement contre le
+> contrat), vérifié : `handleConfig` n'avait aucune branche `raw["sound"]` — un `POST /config.json`
+> portant `{"sound":{...}}` renvoyait `200 OK` sans rien persister. Omission du plan de #230, pas
+> une erreur de développement ; le contrat lui-même (§6.3, ci-dessus) était déjà juste.
+
+- **[NEW]** `contracts/sound.md` §6.3 — fusion champ par champ, normative, pour la section `sound`
+  de `POST /config.json` : même régime que `lighting`/`ai` (`internal/server/http.go`,
+  `handleConfig`), motivé par deux contrôles **indépendants** écrivant la même section (interrupteur
+  général `enabled`, sept interrupteurs `cues_disabled`) — un remplacement en bloc effacerait
+  silencieusement l'un à chaque écriture de l'autre.
+- **[NEW]** `contracts/sound.md` §6.3 — les trois états de `cues_disabled` (absente = préservée,
+  `{}` = vidée, peuplée = remplacée) et leur validation contre le catalogue fermé (`400` sur clé
+  inconnue, aucune écriture partielle).
+- **[NEW — arbitrage `planner`]** `contracts/sound.md` §6.3 — asymétrie normative de
+  l'interrupteur général : **éteindre est immédiat**, **rallumer exige un redémarrage du serveur**.
+  Ce n'est pas un compromis technique mais une propriété qui émerge sans code spécifique de
+  l'hypothèse déjà posée par #227/#228/#229 (« le moteur est construit une seule fois, au
+  démarrage ») — documentée pour qu'elle ne soit pas prise plus tard pour un oubli. Reconstruction
+  à chaud du moteur explicitement écartée (démontage propre non prévu par la conception actuelle,
+  bénéfice limité face au risque).
+
+**Aucun BREAKING.** Comble un trou d'implémentation sur un contrat déjà correct ; ajoute une
+condition en tête de `notifySound` (`cmd/server/sound.go`), lue comme `CuesDisabled` à chaque appel,
+sans toucher au corps existant ni au cycle de vie du moteur.
+
+Détail complet : `_work/handoff/task-dev-backend-230-lotB-addendum-20260921-171500.md`.
+
+---
+
 ## [20260921e] — Bruitage d'événement : contrat de l'interface d'administration (#230, Lot A)
 
 > Contrat uniquement — aucune implémentation dans ce lot. Référence normative pour les libellés

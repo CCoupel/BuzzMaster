@@ -47,6 +47,16 @@ import (
 // (setupCallbacks — required for the depart/entracte-programmée scenarios,
 // which fire through OnStateChange), plus a sound engine bound to a fresh
 // FakeOutput and started on a context cancelled at test cleanup.
+//
+// app.config.Sound.Enabled = true (#230 addendum, notifySound's new master
+// guard, contracts/sound.md §6.3 "Interaction avec l'interrupteur général")
+// — production only ever wires a real Output when `Sound.Enabled` is true
+// (a.buildAudioOutput), so a FakeOutput injected here must be accompanied
+// by the same flag for notifySound to treat it as "on", exactly like a real
+// deployment. Without it every cue below would be silently swallowed by the
+// new guard, unrelated to what each scenario actually exercises. Restored
+// via t.Cleanup: app.config is the process-wide config.Get() singleton
+// (newTestApp), shared across every test in this package.
 func twa227WireSound(t *testing.T) (*App, *audio.FakeOutput) {
 	t.Helper()
 	app := newTestAppWithHub(t)
@@ -54,6 +64,8 @@ func twa227WireSound(t *testing.T) (*App, *audio.FakeOutput) {
 	app.logger = server.NewBroadcastLogger(100)
 	app.udpBcast = server.NewUDPBroadcaster()
 	app.config.Storage.QuestionsDir = t.TempDir()
+	app.config.Sound.Enabled = true
+	t.Cleanup(func() { app.config.Sound.Enabled = false })
 	app.setupCallbacks()
 
 	fake := audio.NewFakeOutput()

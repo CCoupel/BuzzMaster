@@ -1869,6 +1869,58 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		if data, ok := raw["sound"]; ok {
+			// Field-by-field merge (contract sound.md §6.3, addendum #230
+			// Lot B) — same regime as "lighting" and "ai" above, and for the
+			// same reason: two INDEPENDENT controls write this one section
+			// (the general switch `enabled` and the seven per-cue switches
+			// `cues_disabled`), each POSTing only the key it owns
+			// (web/src/pages/AmbiancePage.jsx: saveSound({enabled}) vs.
+			// SoundsManager's saveSound({cues_disabled})). A whole-section
+			// replace would let toggling the general switch silently erase
+			// every per-cue switch, and vice versa.
+			var incoming config.SoundConfig
+			if err := json.Unmarshal(data, &incoming); err != nil {
+				http.Error(w, "Invalid JSON in \"sound\" section", http.StatusBadRequest)
+				return
+			}
+			var sRaw map[string]json.RawMessage
+			if err := json.Unmarshal(data, &sRaw); err != nil {
+				http.Error(w, "Invalid JSON in \"sound\" section", http.StatusBadRequest)
+				return
+			}
+			if _, ok := sRaw["enabled"]; ok {
+				cfg.Sound.Enabled = incoming.Enabled
+			}
+			if _, ok := sRaw["ambiance_compensation_ms"]; ok {
+				cfg.Sound.AmbianceCompensationMs = incoming.AmbianceCompensationMs
+			}
+			if _, ok := sRaw["device"]; ok {
+				cfg.Sound.Device = incoming.Device
+			}
+			// cues_disabled is a map, so "absent" and "present but empty"
+			// are two DIFFERENT intents that json.Unmarshal into a struct
+			// cannot tell apart (both leave `incoming.CuesDisabled` as a
+			// map with zero entries, nil or not) — the raw key's presence
+			// in sRaw is the only reliable signal, same technique as
+			// lighting's own fields just above:
+			//   - absent      ⇒ preserve the stored map untouched
+			//   - present, {} ⇒ clear it (nothing individually disabled)
+			//   - present, {…} ⇒ replace it wholesale (the frontend always
+			//     resends the full set, never a partial patch — see
+			//     AmbiancePage.sound.test.jsx's "reconstruit cues_disabled
+			//     en entier")
+			if _, ok := sRaw["cues_disabled"]; ok {
+				for cue := range incoming.CuesDisabled {
+					if _, known := soundCueFromString(cue); !known {
+						http.Error(w, "Unknown sound cue in \"cues_disabled\": "+cue, http.StatusBadRequest)
+						return
+					}
+				}
+				cfg.Sound.CuesDisabled = incoming.CuesDisabled
+			}
+		}
+
 		// Re-apply defaults to any field a partial section reset to zero,
 		// exactly as a config.json load would. (Neon effect clamping moved
 		// to handleGameConfig with the rest of the game settings, #150.)
