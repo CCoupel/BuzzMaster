@@ -100,7 +100,12 @@ func TestDevAmbianceDerivationTable(t *testing.T) {
 		{"new game → idle", func() { setState(game.PhaseNewGame, nil) }, lighting.Event{Kind: lighting.KindIdle}},
 		{"prepare → ready", func() { setState(game.PhasePrepare, speedy) }, lighting.Event{Kind: lighting.KindReady}},
 		{"ready → ready", func() { setState(game.PhaseReady, speedy) }, lighting.Event{Kind: lighting.KindReady}},
-		{"countdown → ready (no countdown scene, #212)", func() { setState(game.PhaseCountdown, speedy) }, lighting.Event{Kind: lighting.KindReady}},
+		// v11.0/#227, contract lighting.md §2.5: COUNTDOWN now derives its own
+		// Kind (shared vocabulary point with contracts/sound.md) — but
+		// ambianceSceneFor renders it IDENTICALLY to KindReady (non-regression
+		// requirement, see cmd/server/ambiance.go). No countdown SCENE exists
+		// yet — that's still #212 (v10.1), unchanged.
+		{"countdown → countdown (renders like ready, #227; no distinct scene until #212)", func() { setState(game.PhaseCountdown, speedy) }, lighting.Event{Kind: lighting.KindCountdown}},
 		{"started classic → running", func() { setState(game.PhaseStarted, speedy) }, lighting.Event{Kind: lighting.KindRunning}},
 		{"paused nobody buzzed → pause all", func() { setState(game.PhasePaused, speedy) }, lighting.Event{Kind: lighting.KindPauseAll}},
 		{"paused after buzz → buzz team (latest press)", func() {

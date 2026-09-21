@@ -288,11 +288,18 @@ func (a *App) deriveAmbianceEvent() lighting.Event {
 	}
 
 	switch state.Phase {
-	case game.PhasePrepare, game.PhaseReady, game.PhaseCountdown:
-		// COUNTDOWN has no rendering of its own on buzzers either
-		// (sendLEDSetForBuzzerNormal groups it with STOPPED/PREPARE/READY);
-		// a countdown scene belongs to v10.1 (#212).
+	case game.PhasePrepare, game.PhaseReady:
 		return lighting.Event{Kind: lighting.KindReady}
+
+	case game.PhaseCountdown:
+		// KindCountdown (v11.0/#227, contract §2.5) is its own genre now —
+		// shared vocabulary point with contracts/sound.md — but renders
+		// IDENTICALLY to KindReady (ambianceScene below, non-regression
+		// requirement). Buzzer LEDs still have no rendering of their own for
+		// this phase either (sendLEDSetForBuzzerNormal groups it with
+		// STOPPED/PREPARE/READY) — unchanged. A distinct countdown scene
+		// belongs to v10.1 (#212).
+		return lighting.Event{Kind: lighting.KindCountdown}
 
 	case game.PhaseStarted:
 		if team := ambianceActiveTeam(state); team != "" {
@@ -437,6 +444,11 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 	switch ev.Kind {
 	case lighting.KindReady:
 		return ambianceSceneReady
+	case lighting.KindCountdown:
+		// v11.0/#227, contract lighting.md §2.5 — non-regression requirement:
+		// the SAME value as KindReady, not merely an equal-looking literal,
+		// so no future edit to one can silently desynchronise the other.
+		return ambianceSceneReady
 	case lighting.KindRunning:
 		return ambianceSceneRunning
 	case lighting.KindBuzz:
@@ -451,6 +463,13 @@ func ambianceSceneFor(ev lighting.Event) ambianceSceneDef {
 		return ambianceSceneScore
 	case lighting.KindEntracte:
 		return ambianceSceneEntracte
+	case lighting.KindTimeUp:
+		// v11.0/#227, contract lighting.md §2.5 — no new visual effect is
+		// requested: by the time this pulse applies the game has already
+		// moved to STOPPED, which would derive KindIdle anyway. Same value,
+		// not a coincidental duplicate — see ambianceSceneFor's KindCountdown
+		// case just above for the identical reasoning.
+		return ambianceSceneIdle
 	}
 	return ambianceSceneIdle
 }
@@ -638,13 +657,14 @@ func (a *App) runChronoPulse(ctx context.Context) {
 // full intensity, exactly like a buzzer outside active play (Batch C/C1a,
 // planner-v10-teamcolor-changes-20260908-092100.md §1.3).
 //
-//	STOPPED, PREPARE, READY, COUNTDOWN     -> full, always        (KindIdle, KindReady)
+//	STOPPED, PREPARE, READY, COUNTDOWN     -> full, always        (KindIdle, KindReady, KindCountdown)
 //	STARTED  (no active turn / active turn) -> full if distinguished, else dim (KindRunning, KindTeamTurn)
 //	PAUSED   (admin / a buzz)               -> full if distinguished, else dim (KindPauseAll, KindBuzz)
 //	REVEALED                                -> full if distinguished, else dim (KindReveal)
 //	SCORE (pulse, not a phase of its own)   -> same rule for every OTHER team; the CREDITED team is
 //	                                            governed separately by the C2b flicker, always full (KindScore)
 //	ENTRACTE (transverse, no phase table row) -> full, always     (KindEntracte)
+//	TIME_UP (pulse, v11.0/#227)              -> full, always — renders like KindIdle (KindTimeUp)
 func ambianceTeamZoneDimsWhenUndistinguished(kind lighting.EventKind) bool {
 	switch kind {
 	case lighting.KindRunning, lighting.KindTeamTurn, lighting.KindBuzz, lighting.KindPauseAll, lighting.KindReveal, lighting.KindScore:

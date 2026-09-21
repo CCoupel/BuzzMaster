@@ -245,6 +245,26 @@ qui doit être **normative**, pas laissée à la discipline :
 > mouvement du sélecteur manuel ou du Flash de la régie ferait du bruit sans qu'aucune partie ne
 > soit en cours.
 
+> **Précision d'implémentation (Lot B, 2026-09-21) — ⚠️ Contract Modification, même esprit que
+> `lighting.md` §6.3.** Le fan-out **n'a finalement pas remplacé** les 22 appels
+> `a.ambiance().NotifyState()`/`NotifyPulse()` existants : ceux-ci restent **intacts, tels quels**.
+> `notifySound(cue audio.Cue)` (`cmd/server/sound.go`) est un point d'entrée **sonore seul**,
+> **ajouté** en plus de l'appel lumière existant aux seuls sites qui portent effectivement une cue
+> (`handlePoints`, `handleBumperPoints`, `handleTeamPoints`, `handleMotionDone`,
+> `handleFlipMemoryCard`, `broadcastReveal`, `handleEntracteSet`, `onPhaseStarted`,
+> `setupCallbacks` pour `OnRafaleInvalid`/`OnTimeUp`) — soit 9 fonctions sur les 18 du tableau
+> ci-dessus, pas 18. Les sites sans cue (`broadcastStart`, `broadcastPause`, etc.) n'appellent
+> `notifySound` nulle part et ne figurent donc pas dans `soundSiteRegistry`.
+> **Raison** : un remplacement complet aurait exigé de toucher les 22 sites pour un gain nul sur
+> les ~13 qui ne portent aucun son en v11.0, pour un risque de régression bien plus large sur du
+> code déjà normatif et testé (`ambianceSiteRegistry`) — la frontière du §6.1 (qui doit/ne doit
+> jamais sonner) reste **identique** avec cette forme plus simple, et le test-garde du §6.2 la
+> vérifie exactement pareil (un seul sélecteur `notifySound` à rechercher, calqué sur la
+> coordination directe avec `test-writer`, voir `cmd/server/sound_sites_test.go`). Deux sites
+> **sonores sans aucune contrepartie lumineuse** existent aussi (`OnRafaleInvalid` — RAFALE classique
+> uniquement, jamais la variante MEMOTION — et `OnTimeUp`, qui porte les deux : voir son propre appel
+> combiné dans `setupCallbacks`) : le son n'est pas strictement un sous-ensemble de la lumière.
+
 ### 6.2 Cette frontière doit être vérifiée par un test-garde, pas par discipline
 
 Même raisonnement que `lighting.md` §7 : un test AST symétrique à `ambiance_sites_test.go` doit

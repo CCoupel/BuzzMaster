@@ -2,6 +2,7 @@ package main
 
 import (
 	"buzzcontrol/assets"
+	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
@@ -55,6 +56,15 @@ type App struct {
 	// runtime enable (reconfigureAmbiance, HTTP goroutine) sets it while the
 	// event sites read it from other goroutines.
 	lightingWriter atomic.Pointer[lighting.Writer]
+	// soundEngine is the sound-bruitage engine (#227, contracts/sound.md),
+	// read through a.sound(). No real Output exists before #228, so it is
+	// always constructed disabled (see setupSound) — every notifySound()
+	// call site is therefore unconditional and safe, same discipline as
+	// lightingWriter/a.ambiance() above.
+	soundEngine atomic.Pointer[audio.Engine]
+	// soundPhase is the sound layer's own front-detection memory (contract
+	// sound.md §5.4) — see its doc comment in cmd/server/sound.go.
+	soundPhase soundPhaseTracker
 	// ambianceMu serialises setupAmbiance/reconfigureAmbiance: two config
 	// updates in flight must never leave hueDriver and the writer's driver
 	// pointing at different (or already closed) drivers.
@@ -532,6 +542,10 @@ func (a *App) init() {
 	a.setupAmbiance()
 	a.httpServer.Lighting = a // /api/lighting/* read the live driver (#207)
 
+	// Sound bruitage engine (#227) — always disabled until #228 wires a
+	// real Output (sound.go).
+	a.setupSound()
+
 	// Set up callbacks
 	a.setupCallbacks()
 }
@@ -572,8 +586,14 @@ func (a *App) setupCallbacks() {
 		// silently subsumed into (and indistinguishable from) the
 		// phase-change UPDATE that follows.
 		a.ardoiseCoalescer.Flush()
+		// v11.0/#227, contract sound.md §5.4: record BEFORE anything else in
+		// this closure reads/branches on the phase, so onPhaseStarted below
+		// (and any future site here) sees the phase the game was in just
+		// prior to THIS transition, never a value already overwritten by a
+		// nested/re-entrant call.
+		previousPhase := a.soundTrackPhase(phase)
 		if phase == game.PhaseStarted {
-			a.onPhaseStarted()
+			a.onPhaseStarted(previousPhase)
 		}
 		a.broadcastGameState(string(phase))
 		a.broadcastQuestions() // Sync question status with phase
@@ -582,6 +602,17 @@ func (a *App) setupCallbacks() {
 	// Timer ticks
 	a.engine.OnTimerTick = func(currentTime int) {
 		a.broadcastTimerUpdate(currentTime)
+	}
+
+	// Global chrono expired (v11.0/#227, contracts/lighting.md §2.5 +
+	// sound.md §2.1) — distinct from a manual regie STOP, fires exactly
+	// once, immediately before the engine's own e.Stop(). TimeUpPulseDuration
+	// renders identically to KindIdle (ambiance.go's ambianceSceneFor) — no
+	// new visual effect, only a prompt notification instead of waiting on
+	// runChronoPulse's 100ms poll.
+	a.engine.OnTimeUp = func() {
+		a.ambiance().NotifyPulse(lighting.KindTimeUp, nil, 0, lighting.TimeUpPulseDuration)
+		a.notifySound(audio.CueTempsEcoule)
 	}
 
 	// Countdown ticks (3-2-1 before game starts)
@@ -619,6 +650,13 @@ func (a *App) setupCallbacks() {
 	a.engine.OnRafaleTeamsChanged = func() {
 		a.sendLEDSetRafaleTeams()
 		a.ambiance().NotifyState()
+	}
+
+	// RAFALE invalid answer / timeout, classic round only (v11.0/#227,
+	// contracts/sound.md §2.1's CuePerdu) — sound-only, no lighting
+	// counterpart exists at this site today.
+	a.engine.OnRafaleInvalid = func() {
+		a.notifySound(audio.CuePerdu)
 	}
 
 	// RAFALE-in-MEMOTION-card (#217, v9.0.0, contract §14.5/§14.6) — fires
@@ -1094,6 +1132,11 @@ func (a *App) start() error {
 	// for the QUALIF round-2 bugfix this now carries (bug 2 — "pont
 	// toujours injoignable après relance").
 	a.startAmbianceWriter()
+
+	// Sound bruitage engine (#227): same lifecycle as AckManager/the
+	// ambiance writer, stopped by a.cancelCtx() in stop(). Disabled (no
+	// Output before #228) ⇒ launches nothing (contract sound.md §5.5).
+	a.startSoundEngine()
 
 	// Start UDP broadcaster — this only opens the outbound send socket, it
 	// does not announce anything yet (see BroadcasterManager.Start below,
@@ -1921,6 +1964,7 @@ func (a *App) handlePoints(msg *protocol.Message) {
 		}
 		a.sendLEDSetComet(teamID)
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, payload.Points, lighting.ScorePulseDuration)
+		a.notifySound(audio.CueGagne)
 		a.startScoreFlash(teamID, payload.Points)
 	}
 
@@ -2468,6 +2512,11 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 				a.broadcastUpdate()
 				a.sendLEDSetAllBuzzers()
 				a.ambiance().NotifyState()
+				// CuePerdu (contract sound.md §2.1): a missed pair, the ONLY
+				// MEMORY branch of this function that plays a sound — match
+				// (below) and grid-complete (isComplete, further down) carry
+				// no cue in the v11.0 catalogue.
+				a.notifySound(audio.CuePerdu)
 			}()
 		}
 	}
@@ -2682,6 +2731,7 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 	if points > 0 && payload.WinnerTeam != "" {
 		a.sendLEDSetComet(payload.WinnerTeam)
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.WinnerTeam}, points, lighting.ScorePulseDuration)
+		a.notifySound(audio.CueGagne)
 		a.startScoreFlash(payload.WinnerTeam, points)
 	}
 
@@ -2877,6 +2927,7 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 		}
 		a.sendLEDSetComet(teamID)
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{teamID}, payload.Points, lighting.ScorePulseDuration)
+		a.notifySound(audio.CueGagne)
 		a.startScoreFlash(teamID, payload.Points)
 	}
 
@@ -2956,6 +3007,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 	if payload.Points > 0 {
 		a.sendLEDSetComet(payload.Team)
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.Team}, payload.Points, lighting.ScorePulseDuration)
+		a.notifySound(audio.CueGagne)
 		a.startScoreFlash(payload.Team, payload.Points)
 	}
 
@@ -3101,10 +3153,12 @@ func (a *App) handleEntracteSet(msg *protocol.Message) {
 	if payload.Active {
 		a.sendLEDSetAllEntracteOff()
 		a.ambiance().NotifyState()
+		a.notifySound(audio.CueEntracteDebut)
 		server.LogInfo(game.LogComponentApp, "Entracte activated — buzzer LEDs off")
 	} else {
 		a.sendLEDSetAllBuzzers()
 		a.ambiance().NotifyState()
+		a.notifySound(audio.CueEntracteFin)
 		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
 	}
 
@@ -3131,11 +3185,50 @@ func (a *App) handleEntracteSet(msg *protocol.Message) {
 // invisible"). The manual voie (ENTRACTE_SET, handleEntracteSet above)
 // explicitly turns buzzer LEDs off on activation; the programmed voie must
 // go through the exact SAME function for the two voies to stay symmetric.
-func (a *App) onPhaseStarted() {
+//
+// previousPhase (v11.0/#227, contract sound.md §5.4) is the phase the game
+// was in immediately before THIS transition — recorded by soundTrackPhase
+// in the OnStateChange closure, since OnStateChange itself only ever
+// carries the NEW phase. It exists to answer one question here: is this a
+// REAL start (actualStart/StartImmediate), or something else that also
+// calls this exact function with the identical new phase PhaseStarted?
+// Verified by planner (_work/reports/plan-verif-front-227-20260921-103500.md)
+// after an initial dev-backend pass had missed the first case below (a
+// resume after a buzz PAUSE, Continue()): on a SPEEDY question with 5
+// buzzes, a naive "always depart on STARTED" would sound depart 6 times.
+//
+// A SECOND non-real-start case surfaced during Lot B's own test coordination
+// with test-writer (TestSoundChain_RafaleInvalidate_PlaysPerdu, not
+// anticipated by the verification report): RAFALE's
+// fireRafaleAdvanceCallbacks (internal/game/engine.go) reuses
+// OnStateChange(PhaseStarted) on every classic-round advance PURELY to
+// trigger a "please rebroadcast full state" — the phase was ALREADY
+// PhaseStarted and never actually changed. previousPhase there is
+// PhaseStarted itself, not PhasePaused — a denylist keyed only on PAUSED
+// missed it. Fixed by inverting the logic to an ALLOWLIST: CueDepart only
+// when previousPhase is one of the three phases a genuine start can
+// actually come from (COUNTDOWN/PREPARE/READY) — silence for every other
+// previousPhase, including PAUSED and this redundant re-STARTED case,
+// without having to enumerate every possible non-start reuse by name.
+func (a *App) onPhaseStarted(previousPhase game.GamePhase) {
 	if a.engine.IsEntracte() {
 		a.sendLEDSetAllEntracteOff()
 	}
 	a.ambiance().NotifyState()
+
+	isRealStart := previousPhase == game.PhaseCountdown ||
+		previousPhase == game.PhasePrepare ||
+		previousPhase == game.PhaseReady
+	switch {
+	case !isRealStart:
+		// Resume after PAUSE, a redundant "please rebroadcast" reuse of
+		// OnStateChange(PhaseStarted), or anything else that isn't a genuine
+		// transition into a fresh question — silence, on purpose.
+	case a.engine.IsEntracte():
+		a.notifySound(audio.CueEntracteDebut)
+	default:
+		a.notifySound(audio.CueDepart)
+	}
 }
 
 // sendLEDSetAllEntracteOff turns off every non-VPlayer buzzer's LED (B5,
@@ -3991,6 +4084,7 @@ func (a *App) broadcastReveal(answer string) {
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	a.sendLEDSetReveal(answer)
 	a.ambiance().NotifyState()
+	a.notifySound(audio.CueReveal)
 }
 
 // answerColorToRGB maps a QCM AnswerColor to an [R, G, B] array for buzzer LED.

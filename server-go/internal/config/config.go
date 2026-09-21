@@ -23,6 +23,7 @@ type Config struct {
 	WiFiDefaults WiFiDefaultsConfig `json:"wifi_defaults"`
 	AI           AIConfig           `json:"ai"`
 	Lighting     LightingConfig     `json:"lighting"`
+	Sound        SoundConfig        `json:"sound"`
 	Version      string             `json:"version"`
 }
 
@@ -57,6 +58,21 @@ type LightingLightEntry struct {
 	Name string `json:"name"`
 	Role string `json:"role"`
 	Team string `json:"team,omitempty"`
+}
+
+// SoundConfig is the `sound` section (v11.0, #227 — contracts/sound.md):
+// event-driven sound bruitage. Optional: Enabled=false (the default) means
+// no audio engine goroutine, no device access at all — contract §5.5. No
+// real Output/pilote is wired before #228; this section is accepted and
+// persisted with zero observable effect until then.
+type SoundConfig struct {
+	Enabled bool `json:"enabled"`
+	// AmbianceCompensationMs delays the Hue AMBIANCE light only (NEVER the
+	// buzzer LEDs) relative to sound, to perceptually compensate Bluetooth
+	// latency — contract §9, spike #226 task 0.11. A parameter, never a
+	// constant: its right value depends on the paired speaker. Wiring this
+	// delay into the fan-out is not part of #227 — see contract §9.
+	AmbianceCompensationMs int `json:"ambiance_compensation_ms"`
 }
 
 // EnvHueAPIKey overrides lighting.api_key without ever touching config.json
@@ -364,6 +380,14 @@ func ApplyDefaults(cfg *Config) {
 	}
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}
+	}
+
+	// Sound (v11.0, #227 — contract sound.md §9): disabled by default, no
+	// goroutine, no device access. 200 ms is an interim default (commonly
+	// cited A2DP SBC latency range, 150-250 ms) — spike #226 task 0.5's own
+	// measurement on real hardware is what should really set it.
+	if cfg.Sound.AmbianceCompensationMs <= 0 {
+		cfg.Sound.AmbianceCompensationMs = 200
 	}
 }
 
