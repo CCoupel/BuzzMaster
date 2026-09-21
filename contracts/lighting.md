@@ -4,7 +4,8 @@
 > **Cadrage** : `_work/reports/planner-v10-cadrage-20260902-192243.md`
 > **Plan** : `_work/reports/planner-v10-plan-205-20260902-203000.md`
 > **Consommateurs** : #206 (pilote BLE), #207 (configuration + UI), #213 (éclairage par équipe),
-> #208 (commandes manuelles `/admin/ambiance` + restitution)
+> #208 (commandes manuelles `/admin/ambiance` + restitution), #227 (bruitage d'événement,
+> milestone v11.0 — amendement du 2026-09-21, §2.5 : ajout de `KindCountdown`/`KindTimeUp`)
 >
 > Ce contrat est **normatif**. Il est écrit avant le code, comme l'exige #205. `dev-backend` peut
 > l'ajuster si une contrainte technique l'impose — en documentant la raison, conformément à
@@ -45,20 +46,24 @@ package doit rester testable seul.
 type EventKind string
 
 const (
-    KindIdle     EventKind = "IDLE"      // aucune partie en cours
-    KindReady    EventKind = "READY"     // prêt à démarrer (PREPARE, READY, COUNTDOWN)
-    KindRunning  EventKind = "RUNNING"   // question en cours (STARTED)
-    KindBuzz     EventKind = "BUZZ"      // un buzz a interrompu la question
-    KindPauseAll EventKind = "PAUSE_ALL" // pause générale, sans buzz
-    KindReveal   EventKind = "REVEAL"    // réponse révélée
-    KindTeamTurn EventKind = "TEAM_TURN" // changement d'équipe active (MEMORY/MEMOTION/RAFALE)
-    KindEntracte EventKind = "ENTRACTE"  // entracte actif
-    KindScore    EventKind = "SCORE"     // points attribués — impulsion, voir §2.3
+    KindIdle      EventKind = "IDLE"       // aucune partie en cours
+    KindReady     EventKind = "READY"      // prêt à démarrer (PREPARE, READY)
+    KindCountdown EventKind = "COUNTDOWN"  // décompte (3-2-1) — v11.0/#227, voir §2.5
+    KindRunning   EventKind = "RUNNING"    // question en cours (STARTED)
+    KindBuzz      EventKind = "BUZZ"       // un buzz a interrompu la question
+    KindPauseAll  EventKind = "PAUSE_ALL"  // pause générale, sans buzz
+    KindReveal    EventKind = "REVEAL"     // réponse révélée
+    KindTeamTurn  EventKind = "TEAM_TURN"  // changement d'équipe active (MEMORY/MEMOTION/RAFALE)
+    KindEntracte  EventKind = "ENTRACTE"   // entracte actif
+    KindScore     EventKind = "SCORE"      // points attribués — impulsion, voir §2.3
+    KindTimeUp    EventKind = "TIME_UP"    // chrono expiré — impulsion, v11.0/#227, voir §2.5
 )
 ```
 
-Cette liste est **fermée pour v10.0.0**. Un besoin non couvert se traite en ajoutant un genre au
-contrat, jamais en surchargeant la sémantique d'un genre existant.
+Cette liste était **fermée pour v10.0.0** ; elle est **amendée pour v11.0 (#227, §2.5)** par
+l'ajout de `KindCountdown` et `KindTimeUp` — vocabulaire partagé avec `contracts/sound.md` §6.1,
+qui en a motivé l'ajout. Un besoin non couvert se traite en ajoutant un genre au contrat, jamais
+en surchargeant la sémantique d'un genre existant.
 
 ### 2.2 Les équipes concernées
 
@@ -86,12 +91,14 @@ Ce champ est ajouté à la demande de l'**amendement du 2026-09-02** sur #205 : 
 
 | Nature | Genres | Dérivable de `GameState` ? | Traitement |
 |---|---|---|---|
-| **Scène d'état** | IDLE, READY, RUNNING, BUZZ, PAUSE_ALL, REVEAL, TEAM_TURN, ENTRACTE | **Oui** | Ne jamais mémoriser la charge utile — voir §4.1 |
-| **Impulsion** | SCORE | **Non** | Registre à une place avec échéance — voir §4.2 |
+| **Scène d'état** | IDLE, READY, COUNTDOWN, RUNNING, BUZZ, PAUSE_ALL, REVEAL, TEAM_TURN, ENTRACTE | **Oui** | Ne jamais mémoriser la charge utile — voir §4.1 |
+| **Impulsion** | SCORE, TIME_UP | **Non** | Registre à une place avec échéance — voir §4.2 |
 
 Une attribution de points est un **instant**, pas un état : rien dans `GameState` ne permet de
-savoir, une seconde plus tard, qu'une équipe vient d'être créditée. C'est la seule exception, et
-elle est traitée explicitement.
+savoir, une seconde plus tard, qu'une équipe vient d'être créditée. C'était la seule exception à
+la création de #205 ; `KindTimeUp` en devient la seconde (§2.5) — le chrono expiré est, lui aussi,
+indiscernable un instant plus tard d'un arrêt décidé par la régie (la phase est déjà `STOPPED`
+dans les deux cas).
 
 ---
 
@@ -105,6 +112,54 @@ elle est traitée explicitement.
 
 Les quatre sites d'émission `NotifyPulse(KindScore, …)` de `cmd/server/main.go` doivent le
 renseigner ; sans lui, la proportionnalité du §8.1 n'a pas d'entrée.
+
+---
+
+### 2.5 `KindCountdown` et `KindTimeUp` — normatif (2026-09-21, #227)
+
+Deux genres ajoutés pour servir **un second consommateur** : `contracts/sound.md`, dont le
+vocabulaire de cues sonores a motivé cet amendement (le son a besoin de distinguer un décompte et
+un chrono expiré exactement comme la lumière pourrait vouloir le faire un jour — voir cadrage
+`_work/reports/plan-20260921-095033.md` §C.3). Aucun des deux n'est demandé pour un nouvel effet
+visuel en v11.0 : ce sont des points d'accroche partagés, pas une extension de la table de scènes
+au-delà de ce que §8 exige explicitement ci-dessous.
+
+### `KindCountdown` — scène d'état, rendu **inchangé** — exigence non négociable
+
+`PhaseCountdown` était jusqu'ici groupé avec `PhasePrepare`/`PhaseReady` sous `KindReady` (§6.2).
+Il en sort pour devenir son propre genre, dérivable de `GameState` exactement comme les sept
+autres scènes d'état — **mais son rendu doit rester au bit près identique à celui de
+`KindReady`** (§8 : même ligne de table, mêmes valeurs RGB/intensité). Sortir `COUNTDOWN` de
+`KindReady` sans cette exigence changerait un comportement lumineux déjà livré en v10.0.0, sans
+que personne ne l'ait demandé.
+
+**La scène propre au décompte (distincte de READY) appartient au milestone v10.1 (#212), pas à
+#227.** Un test de non-régression doit prouver l'identité de rendu (`contracts/sound.md` référence
+ce test comme C.2 du plan de dev #227).
+
+### `KindTimeUp` — impulsion, motivée par une correction de fiabilité, pas un nouvel effet
+
+Aujourd'hui, rien ne notifie l'écrivain à l'instant précis où le chrono expire
+(`internal/game/engine.go`, branche `result.currentTime <= 0` juste avant l'appel à `e.Stop()`) :
+la salle ne se rattrape **que** par effet de bord, via la pulsation `runChronoPulse` qui teste la
+condition toutes les 100 ms (`chronoPulseTickInterval`) et n'émet un `NotifyState()` que quand
+elle cesse de trouver la question active. Un `STOP` régie et un chrono expiré sont aujourd'hui
+**indiscernables** au moment où l'écrivain re-dérive — les deux retombent sur `KindIdle`/l'état
+« phase arrêtée » suivant, avec jusqu'à 100 ms d'incertitude sur le moment exact.
+
+`KindTimeUp` **corrige ce trou de câblage** : un site d'émission explicite au point exact de
+l'expiration (Lot B, `internal/game/engine.go` + `cmd/server/`) notifie **immédiatement**, sans
+attendre le prochain passage de `runChronoPulse`. **Aucun nouvel effet visuel n'est demandé pour
+v11.0** : au moment où cette impulsion s'applique, la salle affiche l'entrée de table que
+`KindTimeUp` partage avec `KindIdle` (§8) — la valeur ajoutée est la **synchronicité** de la
+notification, pas une nouvelle identité visuelle. Une mise en scène dédiée (un flash distinct du
+temps écoulé) est renvoyée à v10.1/#212, au même titre que `KindCountdown`.
+
+> **`KindTimeUp` est la seconde impulsion du vocabulaire, après `KindScore`.** Contrairement à
+> `KindScore`, elle ne porte ni `Teams` ni `Points` (aucune équipe ni aucun score n'est concerné
+> par un chrono qui expire) et son rendu, une fois §8 lu, est **délibérément identique** à celui de
+> l'état vers lequel la partie bascule de toute façon — ce n'est pas un oubli, c'est le choix
+> décrit ci-dessus.
 
 ---
 
@@ -324,7 +379,8 @@ l'application**, dérive `Event` depuis le `GameState` vivant :
 |---|---|---|
 | Entracte actif | `KindEntracte` | — |
 | `PhaseStopped` (et `PhaseNewGame`, `PhaseEnroll` — aucune partie en cours) | `KindIdle` | — |
-| `PhasePrepare` / `PhaseReady` / `PhaseCountdown` | `KindReady` | — |
+| `PhasePrepare` / `PhaseReady` | `KindReady` | — |
+| `PhaseCountdown` | `KindCountdown` (§2.5) — **rendu identique à `KindReady`**, §8 | — |
 | `PhaseStarted`, équipe active (MEMORY/MEMOTION/RAFALE) | `KindTeamTurn` | équipe active |
 | `PhaseStarted`, pas d'équipe active | `KindRunning` | — |
 | `PhasePaused`, un buzzeur identifié | `KindBuzz` | équipe du buzzeur |
@@ -333,9 +389,13 @@ l'application**, dérive `Event` depuis le `GameState` vivant :
 
 L'entracte est testé **avant** la phase : c'est un mode transverse, pas une phase.
 
-> ⚠️ `PhaseCountdown` **n'a pas** de rendu propre : la couche LED le groupe déjà avec
-> `PhaseStopped/PhasePrepare/PhaseReady` (`sendLEDSetForBuzzerNormal`). L'ambiance suit le même
-> groupement — ne pas inventer une scène de décompte, elle appartient au milestone v10.1 (#212).
+> ⚠️ `PhaseCountdown` **n'a toujours pas** de rendu propre depuis la révision du 2026-09-21 (§2.5,
+> #227) : la couche LED le groupe déjà avec `PhaseStopped/PhasePrepare/PhaseReady`
+> (`sendLEDSetForBuzzerNormal`), et cette couche-là **n'est pas modifiée**. Ce qui change, c'est
+> que l'ambiance lui donne désormais un genre distinct (`KindCountdown`) plutôt que de le fondre
+> dans `KindReady` — uniquement pour servir de point d'accroche à `contracts/sound.md`. Le rendu
+> lumineux reste **au bit près identique** (§8) — ne pas inventer une scène de décompte, elle
+> appartient toujours au milestone v10.1 (#212).
 
 ### 6.3 Précisions d'implémentation (dev-backend, 2026-09-02) — ⚠️ Contract Modification
 
@@ -423,12 +483,14 @@ ambiance: site LED sans décision d'ambiance — handleNouveauTruc -> sendLEDSet
 |---|---|---|---|
 | `KindIdle` | `{255, 255, 255}` blanc | 200 | Aucune question active : blanc uni, plus lumineux qu'avant. |
 | `KindReady` | **couleur du thème**, repli blanc | 200 | La question est **désignée** : annoncer son thème avant qu'elle démarre. |
+| `KindCountdown` | **identique à `KindReady`, au bit près** | 200 | **v11.0/#227, §2.5** — exigence de non-régression normative, pas une nouvelle scène. Ne pas diverger sans rouvrir #212. |
 | `KindRunning` | **couleur du thème**, repli blanc | 200 | ⭐ Remplace l'ancien bleu neutre qui cohabitait mal avec les ampoules d'équipe (C1a). |
 | `KindBuzz` | **couleur du thème**, repli blanc | 255 | Depuis C1a, l'identité de l'équipe qui buzze est portée par **sa propre ampoule** — `general` n'a plus à la redire. |
 | `KindPauseAll` | **couleur du thème**, repli blanc | 120 | Extension utilisateur du 2026-09-08 — l'ambre disparaît au profit du thème. |
 | `KindReveal` (bonne ou mauvaise réponse) | **couleur du thème**, repli blanc | 255 | Extension utilisateur du 2026-09-08 — le vert/rouge disparaît au profit du thème ; plus de distinction `Teams` vide/non vide pour `general`. |
 | `KindTeamTurn` | **couleur du thème**, repli blanc | 200 | Idem `KindBuzz` — identité déjà portée par l'ampoule d'équipe. |
 | `KindScore` | couleur de l'équipe créditée | 255 | **Inchangé** — équivalent salle du COMET, même durée ; ce n'est pas une ligne de cette table (impulsion, §2.3/§4.2). |
+| `KindTimeUp` | **identique à `KindIdle`** | 200 | **v11.0/#227, §2.5** — impulsion motivée par une correction de fiabilité de notification, pas par un nouvel effet ; ce n'est pas non plus une ligne à part de cette table. Une mise en scène dédiée est renvoyée à v10.1/#212. |
 | `KindEntracte` | `{255, 214, 170}` blanc chaud | 100 | **Divergence assumée** — voir ci-dessous. **Inchangé.** |
 
 > **Résolution de la couleur du thème** (ordre normatif) :

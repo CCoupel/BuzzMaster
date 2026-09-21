@@ -2,6 +2,49 @@
 
 ---
 
+## [20260921] — Bruitage d'événement : vocabulaire, moteur abstrait, frontière des sites (#227, Lot A)
+
+> Premier contrat de la milestone v11.0 (Ambiance de musique d'événement, #34), issu du verdict
+> du spike de faisabilité #226 (`ebitengine/oto/v3` v3.5.1 confirmé sur les deux cibles CI,
+> `go 1.25.0`). Lot A (contrats + socle) seulement — aucun code de production dans ce lot,
+> `internal/audio` et le câblage réel viennent en Lot B.
+
+- **[NEW]** `contracts/sound.md` — vocabulaire fermé de 7 cues sonores (`depart`,
+  `temps-ecoule`, `gagne`, `perdu`, `reveal`, `entracte-debut`, `entracte-fin`), **toutes des
+  impulsions** (aucune scène d'état côté son, à la différence de la lumière). Interface `Output`
+  symétrique de `lighting.Driver` (Apply peut bloquer, appelé depuis une unique goroutine).
+  **Format audio canonique normatif : WAV PCM 16 bits, 44 100 Hz, stéréo** — conséquence directe
+  de la contrainte « un seul contexte audio par processus » établie par le spike. **Frontière
+  normative des sites** : le futur fan-out ne remplace que les sites du registre
+  `ambianceSiteRegistry` marqués événement de jeu — **jamais** le sélecteur ON/AUTO/OFF, le Flash,
+  le clignotement SCORE, la reconnexion du pont, le cycle de vie de l'écrivain, et
+  **absolument jamais** `runChronoPulse` (notifie toutes les 100 ms). Note de traçabilité :
+  mitigation systemd/PipeWire appliquée par prudence, sans vérification sur Raspberry Pi réel
+  (correction confinée au pilote #228 si l'hypothèse s'avère fausse).
+- **[NEW]** `contracts/lighting.md` §2.5 — **`KindCountdown`** (scène d'état, sort `COUNTDOWN` de
+  `KindReady` — **rendu exigé identique au bit près**, non-régression normative, §8) et
+  **`KindTimeUp`** (seconde impulsion du vocabulaire après `KindScore` — corrige un trou de
+  câblage réel : rien ne notifiait aujourd'hui l'expiration du chrono, la salle ne se rattrapant
+  que par le polling 100 ms de `runChronoPulse`). Aucun nouvel effet visuel demandé pour l'un ou
+  l'autre en v11.0 — une mise en scène dédiée reste renvoyée à v10.1 (#212).
+- **[NEW]** `contracts/http-endpoints.md` §Sound — **réservation normative uniquement**, endpoints
+  fonctionnels renvoyés à #230. Allowlist `.wav` **exclusivement**, formulée comme contrainte
+  motivée (contexte audio unique par processus + décodeur MP3 Go non maintenu), jamais comme un
+  oubli — calquée sur le patron `/api/game/entracte-image` (multipart, 10 Mo, nom régénéré).
+- **[NEW]** `docs/SERVER_PARAMETERS.md` — section `sound` (`enabled`,
+  `ambiance_compensation_ms` — **paramètre configurable, pas une constante**, câblage effectif
+  renvoyé à une issue ultérieure).
+
+**Aucun BREAKING** : tout est additif (nouveaux genres `lighting.EventKind`, nouveau vocabulaire
+`audio.Cue`, nouvelle section de configuration ignorée par le frontend existant). Aucune
+configuration ni comportement existant n'est invalidé — comportement observable par défaut
+strictement identique tant que `sound.enabled` reste `false` (défaut).
+
+Détail complet, verdict du spike et frontière des sites : `_work/reports/plan-dev-227-20260921-102500.md`,
+`_work/reports/spike-226-20260921-103221.md`.
+
+---
+
 ## [20260908] — Éclairage : l'ampoule d'équipe ne quitte jamais sa couleur, et SCORE clignote en or (#213, #208)
 
 > Deux changements demandés après validation du Batch A en QUALIF round 6. Le premier **renverse

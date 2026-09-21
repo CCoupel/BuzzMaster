@@ -793,3 +793,32 @@ du flag `medias` ainsi qu'à la remise à zéro des médias. Cette liste ne couv
 `backgrounds/` et `categories/` : l'image de question par défaut (écrite à la racine `data/files/`)
 et `new-game-backgrounds/` en sont déjà absentes et ne survivent qu'à une sauvegarde intégrale
 `/fs-backup`. Le répertoire dédié évite de reproduire ce trou.
+
+---
+
+## Sound (v11.0, #227 — réservation normative ; endpoints implémentés en #230)
+
+> **Cette section ne spécifie pas encore d'endpoints fonctionnels.** #227 (Lot A) ne fait que
+> **réserver normativement** la contrainte de format, pour que #230 ne découvre pas le format
+> canonique après coup et n'accepte jamais un fichier que le moteur ne pourra pas jouer.
+> Contrat complet du vocabulaire de cues et du moteur : `contracts/sound.md`.
+
+### `POST` / `PUT` / `DELETE /api/sounds/{cue}` — **à spécifier en détail par #230**
+
+Calqué sur le patron `/api/game/entracte-image` ci-dessus (`multipart/form-data`, champ `file`,
+10 Mo max, nom de fichier régénéré côté serveur) — **avec une allowlist différente et volontaire**,
+formulée ici pour ne pas être redécouverte comme un oubli en #230 :
+
+| Contrainte | Valeur | Raison (motivée, pas un oubli) |
+|---|---|---|
+| Extensions acceptées | **`.wav` uniquement** | `oto` n'autorise **qu'un seul contexte audio par processus** (une seule fréquence d'échantillonnage, un seul nombre de canaux pour tous les sons) — accepter un second format imposerait soit une conversion serveur, soit un rééchantillonnage à la volée, soit un plantage silencieux à la lecture d'un fichier non conforme. Le décodeur MP3 Go de référence est de plus annoncé **non maintenu** par son auteur (`contracts/sound.md` §3) |
+| Format interne exigé | **WAV PCM 16 bits, 44 100 Hz, stéréo** | Format canonique unique, normatif — `contracts/sound.md` §3. Un fichier `.wav` dont l'en-tête ne correspond pas à ce format doit être **refusé à l'upload** (code d'erreur à spécifier en #230), jamais accepté puis injouable à l'exécution |
+| Aucune conversion, ni serveur ni navigateur | — | Décision utilisateur actée au cadrage (`_work/reports/plan-20260921-095033.md` §A.2/§B.0) : la seule issue cohérente avec « un seul format canonique » est de refuser à l'upload, pas de convertir |
+
+**Ce que #230 devra encore trancher** (hors périmètre #227, listé ici pour ne pas être oublié) :
+le ou les codes d'erreur HTTP distincts pour « extension refusée » contre « en-tête WAV non
+conforme au format canonique » (l'allowlist d'extension seule ne suffit pas — un `.wav` mono ou à
+une autre fréquence d'échantillonnage doit être détecté et refusé, pas seulement un `.mp3`
+renommé) ; la liste/suppression/restauration ; l'inclusion de `data/files/sounds/` dans
+backup/reset/restore (ne pas reproduire le trou #152, déjà rencontré pour `entracte/` ci-dessus et
+pour `new-game-backgrounds/`).

@@ -439,15 +439,53 @@ Pour supprimer la clé de `config.json` (dissociation) : utiliser l'API ou re-in
 - **Arrêt serveur** : éclairage s'éteint complètement (tous les buzzers OFF aussi)
 - **Redémarrage** : aucun mode manuel persisté (ON/OFF/AUTO revient à AUTO défaut)
 
+### Paramètres Sound (v11.0, #227)
+
+**Section**: `sound` (système)
+
+Configuration du bruitage d'événement (moteur audio, `contracts/sound.md`). Aucun pilote réel
+n'est livré par #227 (Lot A/B) : cette section n'a d'effet observable qu'à partir de #228, qui
+implémente le pilote `oto` réel. Ces paramètres sont sauvegardés dans `config.json` et
+**survivent aux redémarrages**.
+
+#### Paramètres disponibles
+
+```json
+{
+  "sound": {
+    "enabled": false,
+    "ambiance_compensation_ms": 200
+  }
+}
+```
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `enabled` | Boolean | Activer/désactiver le moteur de bruitage (défaut : `false`). Désactivé : aucune goroutine lancée, aucun impact — voir `contracts/sound.md` §5.5 |
+| `ambiance_compensation_ms` | Integer | Délai (ms) dont l'**ambiance lumineuse Hue** est retardée par rapport au son, pour compenser perceptuellement la latence Bluetooth du son (tâche 0.11 du spike #226, `_work/reports/spike-226-20260921-103221.md` §3). **N'affecte jamais les LED des buzzers.** **Paramètre, pas une constante** — sa valeur par défaut est issue de la mesure de latence réelle (0.5) une fois disponible ; une procédure de recalibrage est décrite dans `spike/audio/README.md` §0.5. Câblage effectif du délai : issue ultérieure à #227/#228 (voir `contracts/sound.md` §9) |
+
+**Format audio canonique** (non configurable, normatif) : WAV PCM 16 bits, 44 100 Hz, stéréo —
+`contracts/sound.md` §3. Un seul contexte audio par processus (`oto`) impose un format unique
+pour tous les sons de l'application ; un fichier non conforme est refusé à l'upload (#230), jamais
+converti.
+
+#### Comportement en dégradé
+
+| État | Comportement |
+|------|-----------|
+| `enabled: false` | Aucune goroutine, aucun appel matériel, aucune ligne de log — comportement observable strictement identique à aujourd'hui |
+| Aucun pilote réel disponible (avant #228) | Section de configuration acceptée et persistée, sans aucun effet observable |
+
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.1.0 | 2026-09-21 | Add Sound parameters (v11.0 #227, Lot A — réservation normative, pilote réel en #228) |
 | 3.0.0 | 2026-09-07 | Add Hue Bridge parameters (v10.0.0 #206/#207) |
 | 2.49.0 | 2026-02-01 | Initial release: auto_open_browsers and debug parameters |
 
 ---
 
-**Last Updated**: 2026-09-07
+**Last Updated**: 2026-09-21
 **Author**: CDP Agent
 **Status**: Published
