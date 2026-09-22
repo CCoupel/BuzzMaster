@@ -453,6 +453,107 @@
   border-radius: var(--radius-sm);
 }
 
+/* #219 — Son de la question (maquette question-sound-219.html rév. 3 §01).
+   Même esprit visuel que .media-preview (fond neutre, bouton Supprimer),
+   adapté à un lecteur audio plutôt qu'à une image. */
+.sound-preview {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+}
+
+.sound-preview-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sound-preview-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sound-preview-size {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+}
+
+.sound-preview audio {
+  flex: 1 1 220px;
+  height: 32px;
+}
+
+/* CA2 — le refus nomme sa cause (message serveur brut). */
+.sound-error-message {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--error) 10%, white);
+  border: 1px solid color-mix(in srgb, var(--error) 35%, white);
+  color: var(--error);
+  font-size: 0.8rem;
+}
+
+/* Bascule "démarrer le chronomètre à la fin du son" — visible seulement si
+   un son est attaché (maquette §01). */
+.sound-timer-toggle {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sound-timer-toggle-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-600);
+}
+
+.sound-timer-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sound-timer-option.on {
+  border-color: var(--primary-400);
+  background: var(--primary-50);
+}
+
+.sound-timer-option input[type="radio"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.sound-timer-option b {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--gray-800);
+}
+
+.sound-timer-option small {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--gray-500);
+  line-height: 1.3;
+}
+
 .submit-btn {
   margin-top: var(--space-2);
 }

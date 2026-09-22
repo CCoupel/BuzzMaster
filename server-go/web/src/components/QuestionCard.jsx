@@ -165,6 +165,15 @@ export default function QuestionCard({
           )}
         </span>
 
+        {/* #219 — pastille "cette question porte un son". L'éditeur ne
+            propose le champ que pour SPEEDY/QCM/ARDOISE, mais Question.SOUND
+            est structurellement commun à tous les types (plan §0.3) : cette
+            pastille se contente de lire le champ, sans jamais filtrer par
+            TYPE. */}
+        {question.SOUND && (
+          <span className="qcard-sound-badge" title="Cette question a un son">🔊</span>
+        )}
+
         <span className="qcard-meta">
           <span className="qcard-time">{question.TIME}s</span>
           <span className="qcard-points">

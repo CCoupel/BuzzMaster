@@ -43,6 +43,9 @@ export default function QuestionsPage() {
   const [editingId, setEditingId] = useState(null)
   const fileInputRef = useRef(null)
   const fileAnswerInputRef = useRef(null)
+  // #219 — son de la question (SPEEDY/QCM/ARDOISE), même patron de ref que
+  // fileInputRef ci-dessus.
+  const soundInputRef = useRef(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
 
@@ -199,9 +202,29 @@ export default function QuestionsPage() {
     existingMedia: null,
     mediaAnswer: null,
     existingMediaAnswer: null,
+    // #219 — son de la question (SPEEDY/QCM/ARDOISE uniquement dans
+    // l'éditeur — Question.SOUND reste structurellement commun à tous les
+    // types côté modèle, contrat sound.md §10/plan §0.3, mais seul l'éditeur
+    // restreint l'affichage). Même patron que media/existingMedia :
+    // `sound` = nouveau fichier choisi, `existingSound` = URL déjà sur le
+    // serveur. `soundCleared` trace un clic explicite sur "Supprimer" (pour
+    // envoyer sound_cleared=true à l'upload — suppression réelle, contrairement
+    // au bug connu de MEDIA qui ne fait qu'effacer l'état React, cf. plan §12.4).
+    sound: null,
+    existingSound: null,
+    soundTimerDelayed: false,
+    soundCleared: false,
     // Note d'explication — animateur seul (v6.4.x, #168)
     explanation: '',
   })
+
+  // #219 — retour serveur sur l'upload du son (refus nommé CA2, avertissement
+  // contextuel durée/TIME). `soundError` reste affiché tant que le formulaire
+  // n'est pas soumis à nouveau ; `soundToast` s'auto-masque (même patron que
+  // aiToast/shuffleToast ci-dessous), car il accompagne un enregistrement
+  // réussi (le formulaire est déjà revenu à l'état "nouvelle question").
+  const [soundError, setSoundError] = useState(null)
+  const [soundToast, setSoundToast] = useState(null)
 
   // AI generation modal (v6.0.0 #8, multi-provider + tâche de fond v6.1.0 #137)
   const [showAIModal, setShowAIModal] = useState(false)
@@ -279,6 +302,15 @@ export default function QuestionsPage() {
       return () => clearTimeout(timer)
     }
   }, [shuffleToast])
+
+  // #219 — soundToast auto-hide (même patron, délai plus long : l'avertissement
+  // contextuel — durée du son vs Question.TIME — mérite d'être lu en entier).
+  useEffect(() => {
+    if (soundToast) {
+      const timer = setTimeout(() => setSoundToast(null), 6000)
+      return () => clearTimeout(timer)
+    }
+  }, [soundToast])
 
   useEffect(() => {
     if (!aiJob) return
@@ -535,6 +567,18 @@ export default function QuestionsPage() {
     }
   }
 
+  // #219 — choix d'un nouveau fichier son : annule toute suppression en
+  // attente (soundCleared) et efface le refus/avertissement précédent, le
+  // fichier n'a pas encore été soumis au serveur.
+  const handleSoundChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setFormData(prev => ({ ...prev, sound: file, existingSound: null, soundCleared: false }))
+      setSoundError(null)
+      setSoundToast(null)
+    }
+  }
+
   const handleQuestionClick = (question) => {
     setEditingId(question.ID)
     const qType = question.TYPE || 'SPEEDY'
@@ -774,6 +818,14 @@ export default function QuestionsPage() {
       existingMedia: question.MEDIA || null,
       mediaAnswer: null,
       existingMediaAnswer: question.MEDIA_ANSWER || null,
+      // #219 — SOUND/SOUND_TIMER_DELAYED chargés quel que soit le type (le
+      // champ est structurellement commun, plan §0.3) : rien n'empêche une
+      // question MEMORY par ex. de porter déjà un SOUND si le périmètre de
+      // l'éditeur s'élargit un jour — seul l'affichage ci-dessous le masque.
+      sound: null,
+      existingSound: question.SOUND || null,
+      soundTimerDelayed: question.SOUND_TIMER_DELAYED || false,
+      soundCleared: false,
       // Note d'explication — animateur seul (v6.4.x, #168)
       explanation: question.EXPLANATION || '',
     })
@@ -783,6 +835,10 @@ export default function QuestionsPage() {
     if (fileAnswerInputRef.current) {
       fileAnswerInputRef.current.value = ''
     }
+    if (soundInputRef.current) {
+      soundInputRef.current.value = ''
+    }
+    setSoundError(null)
   }
 
   const handleNewQuestion = () => {
@@ -905,6 +961,11 @@ export default function QuestionsPage() {
       existingMedia: null,
       mediaAnswer: null,
       existingMediaAnswer: null,
+      // #219 — voir commentaire de l'état initial (useState ci-dessus).
+      sound: null,
+      existingSound: null,
+      soundTimerDelayed: false,
+      soundCleared: false,
       // Note d'explication — animateur seul (v6.4.x, #168)
       explanation: '',
     })
@@ -914,6 +975,10 @@ export default function QuestionsPage() {
     if (fileAnswerInputRef.current) {
       fileAnswerInputRef.current.value = ''
     }
+    if (soundInputRef.current) {
+      soundInputRef.current.value = ''
+    }
+    setSoundError(null)
   }
 
   const handleQcmAnswerChange = (color, value) => {
@@ -1448,6 +1513,23 @@ export default function QuestionsPage() {
       data.append('file_answer', formData.mediaAnswer)
     }
 
+    // #219 — champs multipart son (contrat sound.md §10 / plan §10, format
+    // figé en tout début de Batch 1 par dev-backend) : `sound` uniquement si
+    // un nouveau fichier a été choisi, `sound_cleared` uniquement si
+    // l'utilisateur a explicitement cliqué "Supprimer" (jamais les deux à la
+    // fois — handleSoundChange remet soundCleared à false dès qu'un nouveau
+    // fichier est choisi). `sound_timer_delayed` est envoyé sans condition de
+    // type : valeur zéro (false) = comportement actuel, sans effet tant
+    // qu'aucun son n'est attaché (contrat §10.7).
+    if (formData.sound) {
+      data.append('sound', formData.sound)
+    } else if (formData.soundCleared) {
+      data.append('sound_cleared', 'true')
+    }
+    data.append('sound_timer_delayed', formData.soundTimerDelayed ? 'true' : 'false')
+
+    setSoundError(null)
+
     try {
       const response = await fetch('/questions', {
         method: 'POST',
@@ -1455,10 +1537,35 @@ export default function QuestionsPage() {
       })
 
       if (response.ok) {
+        // #219 — avertissement contextuel (CA2/plan §10, durée du son vs
+        // Question.TIME) : présent en JSON même en cas de succès ("warning
+        // contextuel, null sinon — jamais une clé absente"), affiché en toast
+        // puisque le formulaire revient à l'état "nouvelle question" juste
+        // après (handleNewQuestion() ci-dessous). Body legacy
+        // `{"status":"ok"}` (pas encore de warning, ou aucune question de
+        // type concerné) → pas de toast, comportement inchangé.
+        let warning = null
+        try {
+          const body = await response.json()
+          warning = body?.warning || null
+        } catch {
+          // Réponse non-JSON ou vide — ignorée.
+        }
+        if (warning) {
+          setSoundToast({ message: warning, type: 'warning' })
+        }
         handleNewQuestion()
+      } else {
+        // #219 — refus nommé (CA2) : le corps HTTP 400/413 est le message
+        // exact renvoyé par ValidateQuestionSound (`http.Error`, texte brut)
+        // — jamais une étiquette générique "fichier invalide". Le formulaire
+        // n'est PAS réinitialisé pour que l'utilisateur puisse corriger.
+        const message = await response.text().catch(() => '')
+        setSoundError(message || `Échec de l'enregistrement (HTTP ${response.status}).`)
       }
     } catch (error) {
       console.error('Upload failed:', error)
+      setSoundError("Erreur réseau — l'enregistrement n'a pas pu être envoyé.")
     } finally {
       setIsUploading(false)
     }
@@ -2901,6 +3008,102 @@ export default function QuestionsPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* #219 — Son de la question, maquette question-sound-219.html
+                        rév. 3 §01. Périmètre : exactement la garde ci-dessus
+                        (SPEEDY/QCM/ARDOISE) — aucune garde propre à créer, plan
+                        §0.2/§7 tâche 12. Question.SOUND reste structurellement
+                        commun à tous les types côté modèle (plan §0.3) : cette
+                        restriction est une décision d'éditeur, pas une garde
+                        serveur. */}
+                    <div className="form-group">
+                      <label htmlFor="sound-input">
+                        Son de la question{' '}
+                        <span className="section-hint">
+                          (optionnel — WAV 44,1 kHz stéréo 16 bits, 30 s maximum)
+                        </span>
+                      </label>
+                      <input
+                        id="sound-input"
+                        type="file"
+                        ref={soundInputRef}
+                        onChange={handleSoundChange}
+                        accept=".wav,audio/wav"
+                      />
+                      {(formData.sound || formData.existingSound) && (
+                        <div className="sound-preview">
+                          <div className="sound-preview-info">
+                            <span className="sound-preview-name">
+                              {formData.sound
+                                ? formData.sound.name
+                                : decodeURIComponent(formData.existingSound.split('/').pop())}
+                            </span>
+                            {formData.sound && (
+                              <span className="sound-preview-size">
+                                {(formData.sound.size / (1024 * 1024)).toFixed(1)} Mo
+                              </span>
+                            )}
+                          </div>
+                          <audio
+                            key={formData.sound ? formData.sound.name + formData.sound.size : formData.existingSound}
+                            controls
+                            preload="metadata"
+                            src={formData.sound ? URL.createObjectURL(formData.sound) : formData.existingSound}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, sound: null, existingSound: null, soundCleared: true }))
+                              setSoundError(null)
+                              setSoundToast(null)
+                              if (soundInputRef.current) soundInputRef.current.value = ''
+                            }}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* CA2 — le refus nomme sa cause (message serveur brut,
+                          ValidateQuestionSound), jamais une étiquette générique. */}
+                      {soundError && (
+                        <p className="sound-error-message">✕ {soundError}</p>
+                      )}
+
+                      {/* Bascule chronomètre — visible SEULEMENT si un son est
+                          attaché (maquette §01, note "La bascule n'existe que
+                          s'il y a un son"). */}
+                      {(formData.sound || formData.existingSound) && (
+                        <div className="sound-timer-toggle">
+                          <label className="sound-timer-toggle-label">Chronomètre de réponse</label>
+                          <label className={`sound-timer-option ${!formData.soundTimerDelayed ? 'on' : ''}`}>
+                            <input
+                              type="radio"
+                              name="sound-timer-mode"
+                              checked={!formData.soundTimerDelayed}
+                              onChange={() => handleInputChange('soundTimerDelayed', false)}
+                            />
+                            <span>
+                              <b>Démarrer en même temps que le son</b>
+                              <small>Comportement habituel — les joueurs écoutent pendant que le temps défile.</small>
+                            </span>
+                          </label>
+                          <label className={`sound-timer-option ${formData.soundTimerDelayed ? 'on' : ''}`}>
+                            <input
+                              type="radio"
+                              name="sound-timer-mode"
+                              checked={formData.soundTimerDelayed}
+                              onChange={() => handleInputChange('soundTimerDelayed', true)}
+                            />
+                            <span>
+                              <b>Démarrer à la fin du son</b>
+                              <small>Le temps ne commence qu'une fois l'extrait terminé — ou dès que vous l'arrêtez vous-même.</small>
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
 
@@ -2977,6 +3180,14 @@ export default function QuestionsPage() {
       {shuffleToast && (
         <div className={`wifi-toast wifi-toast-${shuffleToast.type}`}>
           {shuffleToast.message}
+        </div>
+      )}
+
+      {/* #219 — avertissement contextuel son (durée vs Question.TIME),
+          même patron aiToast/shuffleToast ci-dessus. */}
+      {soundToast && (
+        <div className={`wifi-toast wifi-toast-${soundToast.type}`}>
+          {soundToast.message}
         </div>
       )}
     </div>
