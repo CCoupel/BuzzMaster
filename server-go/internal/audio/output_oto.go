@@ -12,6 +12,7 @@ package audio
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"sync"
@@ -62,6 +63,60 @@ type otoOutput struct {
 	closeOnce sync.Once
 }
 
+// sharedOtoOnce/sharedOtoCtx/sharedOtoErr back sharedOtoContext — the
+// process-wide oto.Context singleton required by contracts/sound.md §10.3
+// (v11.1, #219): `oto` allows exactly ONE context per process, so both the
+// cues backend below (newOtoOutput) AND the question-sound MediaPlayer's
+// oto backend (media_oto.go) must obtain the SAME instance, never each
+// construct their own. Package-level rather than passed as a parameter:
+// neither newOtoOutput's nor newPlatformMediaPlayer's public entry points
+// (NewOutput/NewMediaPlayer) take a shared handle, and threading one
+// through would leak this internal detail across package boundaries.
+var (
+	sharedOtoOnce sync.Once
+	sharedOtoCtx  *oto.Context
+	sharedOtoErr  error
+)
+
+// sharedOtoContext builds the process-wide oto.Context AT MOST ONCE
+// (sync.Once) and hands every caller the same *oto.Context, or the same
+// cached error forever after. This is a pure re-organisation of the
+// construction sequence that used to live inline in newOtoOutput — the
+// wait on the readiness channel, the otoContextReadyTimeout bound, and the
+// post-ready ctx.Err() check all remain EXACTLY as they were, in the same
+// order (contract §10.3's explicit requirement: "aucune signature publique
+// n'est modifiée"). Only the degradation LOGGING moves to each call site
+// (newOtoOutput below, newPlatformMediaPlayer in media_oto.go), since the
+// two paths log a different, path-specific message for the same
+// underlying cause.
+func sharedOtoContext() (*oto.Context, error) {
+	sharedOtoOnce.Do(func() {
+		ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
+			SampleRate:   SampleRate,
+			ChannelCount: ChannelCount,
+			Format:       oto.FormatSignedInt16LE,
+		})
+		if err != nil {
+			sharedOtoErr = fmt.Errorf("oto.NewContext failed: %w", err)
+			return
+		}
+
+		select {
+		case <-ready:
+		case <-time.After(otoContextReadyTimeout):
+			sharedOtoErr = fmt.Errorf("oto context did not become ready within %s", otoContextReadyTimeout)
+			return
+		}
+		if err := ctx.Err(); err != nil {
+			sharedOtoErr = fmt.Errorf("oto context degraded before first use: %w", err)
+			return
+		}
+
+		sharedOtoCtx = ctx
+	})
+	return sharedOtoCtx, sharedOtoErr
+}
+
 // newOtoOutput builds the real backend, or degrades to noopOutput on ANY
 // failure (contract §5.5 — construction-time degradation, never a hard
 // error out of NewOutput). cfg.Device is not yet honoured (see
@@ -73,24 +128,9 @@ func newOtoOutput(cfg OutputConfig) Output {
 		log.Printf("audio: device selection (%q) is not yet implemented — using the system default output (contracts/sound.md §9)", cfg.Device)
 	}
 
-	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
-		SampleRate:   SampleRate,
-		ChannelCount: ChannelCount,
-		Format:       oto.FormatSignedInt16LE,
-	})
+	ctx, err := sharedOtoContext()
 	if err != nil {
-		log.Printf("audio: oto.NewContext failed — sound bruitage disabled (silent degradation, contracts/sound.md §5.5): %v", err)
-		return noopOutput{}
-	}
-
-	select {
-	case <-ready:
-	case <-time.After(otoContextReadyTimeout):
-		log.Printf("audio: oto context did not become ready within %s — sound bruitage disabled (contracts/sound.md §5.5, plan #228 risk R.2)", otoContextReadyTimeout)
-		return noopOutput{}
-	}
-	if err := ctx.Err(); err != nil {
-		log.Printf("audio: oto context degraded before first use — sound bruitage disabled: %v", err)
+		log.Printf("audio: oto context unavailable — sound bruitage disabled (silent degradation, contracts/sound.md §5.5): %v", err)
 		return noopOutput{}
 	}
 
