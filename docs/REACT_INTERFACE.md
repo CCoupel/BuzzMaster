@@ -214,7 +214,7 @@ bouton "à suivre" quitte sa position juste-après-L1 pour un ancrage en bas de 
 | Emplacement | Contenu | Position |
 |---|---|---|
 | **L1** | LANCER · PAUSE · CONTINUER · STOP · RÉPONSE — 5 emplacements fixes | **haut, fixe** — toujours montés, actifs ou éteints selon la phase |
-| **L2** | Gestes spécifiques au mode — `AnimMotionActions` en MEMOTION (**v6.2.0+, #160**) ; `AnimSoundActions` en SPEEDY/QCM/ARDOISE si son attaché (↻ Rejouer / ⏸ Pause-Reprendre / ⏹ Stop) (**v11.1.0, #219**) ; emplacement réservé sinon | bloc central — première occupation ; *ex-L3 de #166* |
+| **L2** | Gestes spécifiques au mode — `AnimMotionActions` en MEMOTION (**v6.2.0+, #160**) ; `AnimSoundActions` en SPEEDY/QCM/ARDOISE si `showSoundRow(phase, question)` (visible STARTED/PAUSED + son attaché, 3 gestes ↻ Rejouer / ⏸ Pause-Reprendre / ⏹ Stop) (**v11.1.0, #219**) ; emplacement réservé sinon | bloc central — première occupation ; *ex-L3 de #166* |
 | **L3** | Contenu de la question — `AnimQcmOptions` en QCM, `AnimMemoryGrid` en MEMORY (**v6.2.0.27, #159**), `AnimMotionGrid` / `AnimMotionCard` en MEMOTION (**v6.2.0+, #160**) ; emplacement réservé sinon | bloc central — *ex-L2 de #166*, branche à 4 voies depuis #160 |
 | **L4** | Note d'explication | bloc central — réservée, vide, préparée pour #168, aucun contrat, **hauteur libre sans plafond** (voir §ancrage ci-dessous) |
 | **L5** | `AnimNextButton` ("à suivre") | **bas, ancré** — dernier enfant de `.anim-conduct`, position fixe quelle que soit la hauteur de L2/L3/L4 |
@@ -1369,20 +1369,21 @@ Voir **`contracts/question-types.md` §3.2** pour la table complète des valeurs
 
 ### Bloc son dans l'éditeur de questions (v11.1.0, #219)
 
-Fichiers : `components/SoundEditor.{jsx,css}` (nouveau) — bloc optionnel montable dans l'éditeur Quiz.
+Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/QuestionsPage.css`, `web/src/components/QuestionCard.jsx`, `web/src/components/QuestionCard.css`.
 
-**Localisation** : à l'intérieur de la garde de type existante (`question.TYPE ∈ {SPEEDY, QCM, ARDOISE}` seulement) qui masque déjà MEMORY/MEMOTION/RAFALE/ENTRACTE pour les images (`MEDIA`). **Structure commune à tous les types** (`question.SOUND` / `question.SOUND_TIMER_DELAYED` n'ont aucune garde serveur), mais l'éditeur choisit de l'exposer qu'à ces trois types.
+**Localisation** : bloc son **inline dans `QuestionsPage.jsx`**, à l'intérieur de la garde de type existante (`question.TYPE ∈ {SPEEDY, QCM, ARDOISE}` seulement) qui masque déjà MEMORY/MEMOTION/RAFALE/ENTRACTE pour les images (`MEDIA`). **Structure commune à tous les types** (`question.SOUND` / `question.SOUND_TIMER_DELAYED` n'ont aucune garde serveur), mais l'éditeur choisit de l'exposer qu'à ces trois types.
 
-**Contenu du bloc** :
-- **Upload WAV** : champ `<input type="file" accept=".wav" />` + pré-écoute locale (balise HTML5 `<audio>`)
-- **Messages de validité** : refus nommés (pas WAV / fréquence-canaux-bits / > 30 s / > 6 Mio)
-- **Bascule mode chronomètre** : switch `ON/OFF` pour `SOUND_TIMER_DELAYED` (défaut OFF = simultané)
-  - Label : « Démarrer le chrono à la fin du son »
-  - Contrôle JavaScript : appel `POST /api/questions/{id}/sound` (multipart `sound` + flag `sound_timer_delayed`)
-- **Pastille statut** : affiche « Son attaché » (clé verte) ou « Aucun son » (gris)
-- **Suppression** : bouton « Supprimer le son » → POST flag `sound_cleared=true`
+**Contenu du bloc** (état `formData.sound` / `existingSound` / `soundTimerDelayed` / `soundCleared`, patron exact `media`/`existingMedia`) :
+- **Upload WAV** : champ `<input type="file" accept=".wav,audio/wav" />` + pré-écoute locale (balise HTML5 `<audio controls>`, nom/taille du fichier affichés)
+- **Messages de validité** : refus nommés sur erreur (pas WAV / fréquence-canaux-bits / > 30 s / > 6 Mio) — lus depuis le corps HTTP brut (400/413) et affichés sous le champ
+- **Bascule mode chronomètre** : deux options radio pour `SOUND_TIMER_DELAYED` (défaut OFF = simultané), visible uniquement si un son est attaché
+  - Label : « Démarrer le chronomètre à la fin du son »
+  - Envoi dans `handleSubmit()` : multipart `POST /questions` (champs `sound`, `sound_cleared`, `sound_timer_delayed`)
+- **Pastille statut** : affiche « Son attaché » (clé verte) ou « Aucun son » (gris) — sur `QuestionCard.jsx` dès que `question.SOUND` existe (aucune garde de type sur la pastille)
+- **Suppression** : bouton « Supprimer le son » → met `soundCleared=true`
+- **Avertissement contextuel** : durée du son vs `Question.TIME` lu depuis `body.warning` de la réponse JSON en cas de succès (200), affiché en toast auto-masqué (6s) — car le formulaire est réinitialisé après succès
 
-**Sérialisation** : champs `SOUND` et `SOUND_TIMER_DELAYED` optionnels dans la question, jamais `omitempty` côté serveur mais stockés sans pénalité disque si absents.
+**Sérialisation** : multipart `POST /questions` avec champs `sound` (fichier), `sound_cleared` (bool), `sound_timer_delayed` (bool). Réponse réelle (v11.1) : `{"status": "ok", "warning": null | <string>}` (contrat `http-endpoints.md` §Questions).
 
 ### Synthèse des bénéfices
 
