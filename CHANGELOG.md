@@ -2,6 +2,30 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] - v11.1.0 — Média sonore attaché à une question (#219, #236, #237)
+
+**En cours de développement** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé).
+
+### Added
+- **Média sonore attaché à une question (#219, #236, #237)** — Chaque question SPEEDY, QCM ou ARDOISE peut porter un fichier WAV (≤30s, ≤6 Mio) téléversé depuis l'éditeur Quiz. Format canonique PCM 16/44100/stéréo, validation stricte des causes de refus. Nouveau champ `Question.SOUND` (structurellement commun à tous les types, restriction d'affichage = décision d'éditeur frontend seulement, aucune garde serveur). Son joue au lancement de la question, sur l'enceinte du serveur via second chemin `audio.MediaPlayer` asynchrone (ne bloque jamais le moteur de jeu).
+- **Chronomètre configurable par question (#219)** — Deux modes : mode simultané (défaut) = son et chronomètre démarrent ensemble ; mode différé = chronomètre figé jusqu'à fin du son. Nouveau champ `Question.SOUND_TIMER_DELAYED` (booléen, décision par question). Mode différé jamais ne fige la question (non-blocage normatif CA12 : absence de son = chronomètre démarre immédiatement).
+- **Gestes d'animation pour le son (#219)** — Rangée L2 (conduite animateur + admin) : trois boutons contextuelss (↻ Rejouer / ⏸ Pause-Reprendre / ⏹ Stop), visibles seulement si son attaché à la question courante. Admin/Anim peuvent rejouer, pause/reprendre, arrêter le son à tout moment, indépendamment du jeu.
+- **Affichage chronomètre différé (#219, CA15)** — Mention "⏳ Le chrono démarre à la fin du son" affichée quand `ANSWER_TIMER_WAITING=true` sur les trois surfaces : `/admin`, `/anim`, `/tv`. TV (contrainte STATIQUE) : position absolue dans zone timer, zéro impact hauteur du flux.
+- **Champs GameState (v11.1.0)** — `QUESTION_SOUND_STATE` (IDLE|PLAYING|PAUSED) et `ANSWER_TIMER_WAITING` (booléen), tous deux jamais `omitempty`, diffusés via `UPDATE`.
+- **Action WebSocket QUESTION_SOUND (#219)** — Entrante depuis `/ws/admin` + `/ws/anim` (allow-list fermée) : `{ACTION: 'QUESTION_SOUND', MSG: {COMMAND: 'PLAY'|'PAUSE'|'RESUME'|'STOP'}}`. Broadcast dès que son change d'état.
+
+### Changed
+- **Requête API questions enrichie** — Multipart : champs `sound` (fichier WAV), `sound_cleared` (flag suppression), `sound_timer_delayed` (booléen) sur `POST /api/questions/{id}`.
+
+### Fixed
+- **Non-régression v11.0** — Moteur de bruitages de cue inchangé (7 sons event toujours via `PlayCue`), test-gardes v11.0 (`sound_sites_test.go`, `play_blocks_228_test.go`, `output_228_test.go`, `isneutral_230_test.go`, `sound_cues_chain_test.go`) passent sans modification.
+
+### Validation
+- **Automatisée** : build, tests Go `-race`/`-short`, tests frontend Vitest 154/154 ✓ ; compilation croisée `windows/amd64` + `linux/arm64` CGO_ENABLED=0 ✓
+- **Manuelle** : procédure `tests/procedures/question-sound-219.md` (13 scénarios) à exécuter par l'utilisateur sur binaire QUALIF avec sortie audio réelle — test Scénario 11 (dégradations x3, non-blocage) critique avant PROD
+
+---
+
 ## [11.0.0] - Milestone v11.0.0 — Ambiance de musique d'événement (#34)
 
 **Contenu livré** : Spike faisabilité audio + Bluetooth (#226), vocabulaire et moteur abstrait (#227), pilotes de sortie réels Windows + Raspberry Pi (#228), sons par défaut synthétisés (#229), interface d'administration des sons (#230), pastille d'état dans la navbar (#234). **Validation manuelle complète** : Windows et Raspberry Pi, toutes les issues fermées.

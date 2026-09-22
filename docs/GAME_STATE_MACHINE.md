@@ -256,6 +256,117 @@ if e.state.Phase != PhaseReady {
 
 **`ForceReady()` (fonction de débogage, admin)** : saute l'attente des PONG mais **respecte toujours** la conformité des participants — voir arbitrage G du plan #172.
 
+## Chronomètre de Réponse Configurable (v11.1.0, #219)
+
+### Vue d'ensemble
+
+À partir de v11.1, le chronomètre de réponse (durée des phases `STARTED` / `PAUSED` sur une question) peut être configurable par question pour les types **SPEEDY, QCM, ARDOISE** : chaque question choisit si le son attaché démarre **simultanément** avec le chronomètre ou si le chronomètre démarre **à la fin du son**.
+
+### Deux branches : Simultané vs Différé
+
+#### Mode Simultané (défaut : `SOUND_TIMER_DELAYED = false`)
+
+**Flux** :
+1. Transition `→ STARTED` (admin clique START)
+2. Son (s'il existe) et chronomètre démarrent **ensemble**
+3. Le chronomètre ne s'arrête jamais avant sa durée normale, même si le son termine plus tôt
+4. Résultat : une question de 30s reste jouable 30s même si le son ne dure que 5s
+
+**Cas d'usage** : Question avec musique de fond, son court (cloche/gong) pour signaler l'arrêt, indicee audio QCM.
+
+#### Mode Différé (`SOUND_TIMER_DELAYED = true`)
+
+**Flux** :
+1. Transition `→ STARTED` (admin clique START)
+2. Son démarre (s'il existe)
+3. Chronomètre reste **figé au temps plein** (affiché comme "⏳ Le chrono démarre à la fin du son" en mode différé)
+4. À la fin naturelle du son **OU** arrêt manuel de l'animateur (action `QUESTION_SOUND {COMMAND: STOP}`), le chronomètre démarre
+5. Résultat : une question SPEEDY de 30s avec son de 10s se joue effectivement en 10s + 30s = 40s total
+
+**Comportements critiques** :
+- **PAUSE du jeu** : le son se met en pause ; chronomètre reste figé jusqu'à CONTINUE
+- **CONTINUE du jeu** : le son reprend sans coupure, chronomètre reprend son décompte depuis où il avait figé
+- **Aucune lecture démarrée ne fige jamais le chronomètre** (Rule CA12 — Non-blocage) :
+  - Son désactivé globalement : chronomètre démarre **immédiatement**
+  - Enceinte indisponible : chronomètre démarre **immédiatement**
+  - Fichier son illisible : chronomètre démarre **immédiatement**
+  - Lecteur matériel ne support pas le format : chronomètre démarre **immédiatement**
+
+**Règle normative** : Une question en mode différé ne doit **jamais** rester gelée ; la dégradation (absence de son) est préférée au blocage.
+
+### Champs GameState (v11.1.0)
+
+```go
+QUESTION_SOUND_STATE  string  // "IDLE" | "PLAYING" | "PAUSED" (état de la lecture du son)
+ANSWER_TIMER_WAITING  bool    // true si chronomètre est figé en attente de fin du son (mode différé uniquement)
+```
+
+**Sérialisation** : **Jamais `omitempty`** — toujours présents dans GameState (évite pertes d'état côté frontend).
+- `QUESTION_SOUND_STATE` = "IDLE" par défaut (no sound attached, or sound finished)
+- `ANSWER_TIMER_WAITING` = false par défaut (timer running or no sound)
+
+### Actions WebSocket pour Son (v11.1.0)
+
+**Client (Admin + Animateur) → Serveur** (allow-list `admin`, `anim`) :
+
+```json
+{
+  "ACTION": "QUESTION_SOUND",
+  "MSG": {
+    "COMMAND": "PLAY" | "PAUSE" | "RESUME" | "STOP"
+  }
+}
+```
+
+| Commande | Description | Appliqué sur | Résultat |
+|----------|-------------|---|---|
+| `PLAY` | Rejouer depuis le début | Son actuellement IDLE, PLAYING ou PAUSED | Arrête lecture courante, redémarre depuis 0 |
+| `PAUSE` | Mettre en pause | Son PLAYING uniquement | Son figé, chronomètre différé reste aussi figé |
+| `RESUME` | Reprendre | Son PAUSED uniquement | Reprend lecture sans coupure, chronomètre reprend |
+| `STOP` | Arrêter définitivement | Son PLAYING ou PAUSED | Arrêt complet, libère chronomètre si différé |
+
+**Serveur → Client** (broadcast à tous) :
+- `UPDATE` : `QUESTION_SOUND_STATE` + `ANSWER_TIMER_WAITING` diffusés à chaque changement d'état du son ou du chronomètre
+
+### Couplage aux Transitions de Phase
+
+| Transition | Comportement Son | Comportement Chronomètre Différé |
+|---|---|---|
+| `→ STARTED` | Démarre immédiatement si son existe et mode simultané ; figé si mode différé | Si mode simultané : démarre ; si mode différé : reste figé |
+| `→ PAUSED` | Mis en pause | Reste figé (ne change pas d'état) |
+| `→ CONTINUED` (depuis PAUSED) | Reprend sans coupure | Reprend depuis où il avait figé |
+| `→ STOPPED` ou timer=0 | Arrêt propre | N/A (manche terminée) |
+| `REVEAL` | Arrêt immédiat | N/A (manche terminée) |
+| `→ READY` (nouvelle question) | Réinitialisation : `QUESTION_SOUND_STATE="IDLE"` | Réinitialisation : `ANSWER_TIMER_WAITING=false` |
+
+### Affichage Frontend — Mention CA15
+
+Sur les trois surfaces (`/admin`, `/anim`, `/tv`), si `ANSWER_TIMER_WAITING = true` :
+- **TV (`PlayerDisplay.jsx`)** : mention "⏳ Le chrono démarre à la fin du son" en `position: absolute` dans la zone timer (hauteur fixe, aucun impact sur flux, contrainte TV STATIQUE)
+- **Admin (`GamePage.jsx`)** : même mention en ligne normale (pas de contrainte de hauteur)
+- **Animateur (`AnimPage.jsx`)** : même mention en ligne normale (pas de contrainte de hauteur)
+
+### Cycle de vie son par étape moteur
+
+```go
+// À la transition STARTED, si son attaché :
+maybeStartDeferredTimerUnsafe()  // Lance le chronomètre selon SOUND_TIMER_DELAYED
+if !q.SoundTimerDelayed {
+    e.startTimer()  // Mode simultané : chronomètre démarre immédiatement
+} else {
+    // Mode différé : chronomètre attend. Libération par :
+    // 1. Fin naturelle du son (callback MediaPlayer.onNaturalEnd)
+    // 2. Action QUESTION_SOUND {STOP} manuelle de l'animateur
+    // 3. Dégradation (son désactivé, enceinte indisponible, fichier illisible)
+}
+
+// À la transition CONTINUE (depuis PAUSED) :
+maybeResumeDeferredTimer()  // Si différé et était figé, reprend depuis la pause
+
+// À toute transition STOP/REVEAL/READY :
+releaseDeferredTimer()  // Libère si chronomètre était figé
+```
+
 ### Frontend Admin (React)
 - Fichier: `server-go/web/src/pages/GamePage.jsx`
 - Les états des boutons sont calculés en fonction de `gameState.phase`

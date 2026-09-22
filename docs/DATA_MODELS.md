@@ -191,6 +191,8 @@ Nouveau champ optionnel dans le payload de reconnexion WebSocket VJoueur.
 | `MEDIA` | string | ❌ | Chemin de l'image/vidéo de la question | v1.0 |
 | `MEDIA_ANSWER` | string | ❌ | Chemin de l'image/vidéo de la réponse | v1.0 |
 | `EXPLANATION` | string | ❌ | Note d'explication (animateur seul, floutée jusqu'à REVEALED) | v6.4.0 (#168) |
+| `SOUND` | string | ❌ | Chemin du fichier WAV audio attaché à la question | v11.1.0 (#219) |
+| `SOUND_TIMER_DELAYED` | boolean | ❌ | Si `true`, le chronomètre démarre à la fin du son ; si `false`, simultanément avec le son | v11.1.0 (#219) |
 
 **Note sur `EXPLANATION`** (v6.4.0, #168) :
 - Affiché **uniquement** sur `/anim`, jamais sur `/admin`, `/tv`, `/player`
@@ -198,6 +200,15 @@ Nouveau champ optionnel dans le payload de reconnexion WebSocket VJoueur.
 - Permanente et lisible en `REVEALED`
 - Persistance optionnelle (`omitempty` en JSON) — aucune migration requise
 - Survit à la réédition de la question
+
+**Note sur `SOUND` et `SOUND_TIMER_DELAYED`** (v11.1.0, #219) :
+- **Structurellement commun à tous les types** — le champ `SOUND` s'attache à n'importe quel `Question`, peu importe son type (`SPEEDY`, `QCM`, `ARDOISE`, `MEMORY`, `MEMOTION`, `ENTRACTE`, `RAFALE`), **pas de garde serveur**.
+- **Restriction d'affichage = décision d'éditeur frontend** — l'interface d'édition (QuestionsPage.jsx) choisit de n'exposer le bloc son qu'aux types `SPEEDY`, `QCM`, `ARDOISE` ; aucune barrière serveur n'empêche une question de type `MEMORY` de porter un son (si réimportée, elle le conserve ; l'éditeur simplement ne l'affiche pas).
+- Chemin canonique — relative à `data/files/questions/{question-id}/` (ex: `sound.wav` → `/question/{id}/sound.wav`).
+- Format WAV canonique : PCM 16 bits, 44 100 Hz, stéréo. Durée maximale **30 secondes**, taille maximale **6 Mio**.
+- Téléversement via `POST /api/questions/{id}/sound` (multipart `sound`), suppression via flag `sound_cleared` (supprime le fichier disque).
+- Persistance optionnelle (`omitempty` en JSON) — un enregistrement sans son survit à la réédition — survit à la réédition.
+- `SOUND_TIMER_DELAYED` détermine le couplage au chronomètre de réponse : `false` (défaut) = démarre simultanément ; `true` = le chronomètre attend la fin du son avant de démarrer. Cette configuration est **strictement une propriété de la question**, pas du type (deux questions SPEEDY différentes peuvent faire des choix opposés).
 
 ## Question (QCM type)
 

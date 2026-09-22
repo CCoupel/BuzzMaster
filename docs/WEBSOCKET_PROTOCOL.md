@@ -388,6 +388,56 @@ Envoye par un joueur virtuel (VPlayer) saisissant une réponse libre en ARDOISE.
 
 ---
 
+### QUESTION_SOUND (Contrôle son question) — v11.1.0, #219
+
+Envoye par l'animateur (`/anim`) ou l'administrateur (`/admin`) pour contrôler la lecture du son attaché à la question courante.
+
+**Endpoints** : `/ws/anim`, `/ws/admin` (allow-list : `admin`, `anim` uniquement)
+
+**Payload** :
+```json
+{
+  "ACTION": "QUESTION_SOUND",
+  "MSG": {
+    "COMMAND": "PLAY" | "PAUSE" | "RESUME" | "STOP"
+  }
+}
+```
+
+| Commande | Appliquée sur | Effet |
+|----------|---|---|
+| `PLAY` | Son IDLE, PLAYING, ou PAUSED | Arrête lecture courante (si active), recommence depuis le début (IDLE) |
+| `PAUSE` | Son PLAYING uniquement | Suspend la lecture sans fermer le fichier |
+| `RESUME` | Son PAUSED uniquement | Reprend depuis le point de pause sans coupure |
+| `STOP` | Son PLAYING ou PAUSED | Arrête définitivement, libère chronomètre si mode différé (`SOUND_TIMER_DELAYED=true`) |
+
+**Comportement serveur** :
+
+1. **Guard question courante** : Si aucune question en cours ou question ne porte pas de son, ignore silencieusement
+2. **Exécution** : Commande transmise au `MediaPlayer` gérant la lecture
+3. **Broadcast UPDATE** : Envoie `QUESTION_SOUND_STATE` + `ANSWER_TIMER_WAITING` mis à jour à **tous les clients** (admin, anim, TV)
+   - `QUESTION_SOUND_STATE` → `"IDLE"` | `"PLAYING"` | `"PAUSED"`
+   - `ANSWER_TIMER_WAITING` → `true` si chronomètre reste figé (mode différé, son toujours actif), `false` sinon
+
+**Cycle de vie du son par commande** :
+
+| Commande | Phase valide | Avant | Après |
+|----------|---|---|---|
+| `PLAY` | `STARTED` / `PAUSED` | Quel que soit l'état | `PLAYING` |
+| `PAUSE` | `STARTED` / `PAUSED` | `PLAYING` | `PAUSED` |
+| `RESUME` | `STARTED` / `PAUSED` | `PAUSED` | `PLAYING` (reprend position sauvegardée) |
+| `STOP` | `STARTED` / `PAUSED` | Quel que soit l'état | `IDLE` + chronomètre libéré si mode différé |
+
+**Couplage chronomètre différé** :
+
+En mode différé (`SOUND_TIMER_DELAYED=true`) :
+- **PLAY** : chronomètre reste figé (`ANSWER_TIMER_WAITING=true`)
+- **PAUSE** : chronomètre reste figé (`ANSWER_TIMER_WAITING=true`)
+- **RESUME** : chronomètre reste figé (`ANSWER_TIMER_WAITING=true`)
+- **STOP** : chronomètre libéré immédiatement (`ANSWER_TIMER_WAITING=false` → le chronomètre commence son décompte)
+
+---
+
 ### LED_ON / LED_OFF (Controle LED)
 
 Allume ou eteint la LED du buzzer.
@@ -606,6 +656,9 @@ Le serveur v3.0.0 gere deja les deux protocoles. Aucune modification serveur n'e
 | PLAYER_REJECTED, PLAYER_CONNECTED, PLAYER_ASSIGNED | ✓ | - | ✓ | - |
 | LED_SET, OTA_UPDATE, WIFI_CONFIG, HELLO | ✓ | - | - | ✓ |
 | ARDOISE_INPUT | - | - | ✓ (send) | - |
+| QUESTION_SOUND | - | - | - | - |
+
+**Action ENTRANTE QUESTION_SOUND** (v11.1.0, #219) — Envoyée depuis `/ws/admin` ou `/ws/anim` seulement (allow-list fermée). Le serveur diffuse les changements d'état (`QUESTION_SOUND_STATE` + `ANSWER_TIMER_WAITING`) via une action `UPDATE` à tous les clients.
 
 **Note sur MEMOTION_*** : Les actions listées ci-dessus (`MEMOTION_*`) sont des actions **SORTANTES** (serveur → client). Les actions **ENTRANTES** acceptées (client → server) sont documentées dans `contracts/websocket-actions.md` §"Sécurité — Allow-list entrante par ClientType" — depuis v6.2.0 (#160), les 5 actions `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE` sont désormais acceptées depuis `/ws/anim` (interface animateur tablette, v6.2.0+), en plus de leurs sources existantes.
 
