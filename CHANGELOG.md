@@ -15,7 +15,7 @@ Historique des versions du projet BuzzControl.
 - **Action WebSocket QUESTION_SOUND (#219)** — Entrante depuis `/ws/admin` + `/ws/anim` (allow-list fermée) : `{ACTION: 'QUESTION_SOUND', MSG: {COMMAND: 'PLAY'|'PAUSE'|'RESUME'|'STOP'}}`. Broadcast dès que son change d'état.
 
 ### Changed
-- **Requête API questions enrichie** — Multipart : champs `sound` (fichier WAV), `sound_cleared` (flag suppression), `sound_timer_delayed` (booléen) sur `POST /api/questions/{id}`.
+- **Requête API questions enrichie** — Multipart : champs `sound` (fichier WAV), `sound_cleared` (flag suppression), `sound_timer_delayed` (booléen) sur `POST /questions` (endpoint existant, enrichi).
 
 ### Fixed
 - **Non-régression v11.0** — Moteur de bruitages de cue inchangé (7 sons event toujours via `PlayCue`), test-gardes v11.0 (`sound_sites_test.go`, `play_blocks_228_test.go`, `output_228_test.go`, `isneutral_230_test.go`, `sound_cues_chain_test.go`) passent sans modification.

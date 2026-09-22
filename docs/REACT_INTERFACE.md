@@ -1379,7 +1379,7 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 - **Bascule mode chronomètre** : deux options radio pour `SOUND_TIMER_DELAYED` (défaut OFF = simultané), visible uniquement si un son est attaché
   - Label : « Démarrer le chronomètre à la fin du son »
   - Envoi dans `handleSubmit()` : multipart `POST /questions` (champs `sound`, `sound_cleared`, `sound_timer_delayed`)
-- **Pastille statut** : affiche « Son attaché » (clé verte) ou « Aucun son » (gris) — sur `QuestionCard.jsx` dès que `question.SOUND` existe (aucune garde de type sur la pastille)
+- **Pastille son** : emoji 🔊 affiché sur `QuestionCard.jsx` dans `qcard-header-row2` seulement si `question.SOUND` existe (aucune garde de type : champ structurellement commun à tous les types, pastille aussi). Rendu conditionnel simple, aucun état « gris » ou texte « Aucun son »
 - **Suppression** : bouton « Supprimer le son » → met `soundCleared=true`
 - **Avertissement contextuel** : durée du son vs `Question.TIME` lu depuis `body.warning` de la réponse JSON en cas de succès (200), affiché en toast auto-masqué (6s) — car le formulaire est réinitialisé après succès
 
