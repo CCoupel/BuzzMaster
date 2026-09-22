@@ -231,6 +231,35 @@ type Engine struct {
 	// field, just RAFALE-specific and pre-existing).
 	questionEverStarted bool
 
+	// timerDeferred/timerReleased (v11.1, #219, contract §10.7) — the
+	// global answer timer's deferred-start bookkeeping. timerDeferred is
+	// true from the moment actualStart() decides NOT to start the ticker
+	// immediately (maybeStartDeferredTimerUnsafe: the current question
+	// carries a sound with SoundTimerDelayed=true) until the deferral is
+	// fully RESOLVED — either ReleaseDeferredTimer() starts the ticker
+	// right away (game not paused), or Continue() does so at resume
+	// (CA14: released while paused ⇒ starts at the NEXT Continue(), never
+	// during the pause) — at which point both fields are set back to their
+	// resting values (false) by the very code that starts the ticker, so a
+	// later pause/resume of the SAME question's now-ordinary running timer
+	// never re-enters this machinery. timerReleased alone distinguishes
+	// "deferred, not yet released" from "deferred, released but the game is
+	// paused" (both need timerDeferred==true).
+	//
+	// Reset to false by resetDeferredTimerUnsafe() — stopUnsafe(), Ready(),
+	// and Reveal() — wherever a question's active life can end BEFORE its
+	// sound (if any) ever finishes, so the deferred timer, if still
+	// pending, never starts after the fact for a question that's already
+	// gone (contract §9 test: "Stop()/Reveal()/changement de question avant
+	// la fin du son ⇒ le chronomètre ne démarre jamais, les deux booléens
+	// sont remis à zéro").
+	//
+	// GameState.AnswerTimerWaiting (models.go) is the WIRE-facing summary
+	// derived from these two — clients never see timerDeferred/
+	// timerReleased directly.
+	timerDeferred bool
+	timerReleased bool
+
 	// Callbacks
 	//
 	// OnStateChange — concurrency contract (#121): invoked from every one of
@@ -407,6 +436,10 @@ func NewEngine() *Engine {
 				Title: "ENTRACTE", Subtitle: "Retour dans 20mn",
 				PanelSize: 65, AnimPeriod: 10, AnimIntensity: 20, TransitionMs: 2000,
 			},
+			// Question sound (v11.1, #219): IDLE, never the Go zero value ""
+			// — contract game-state.md enumerates exactly IDLE/PLAYING/PAUSED,
+			// no empty-string variant (unlike MotionSubPhase's own "" == none).
+			QuestionSoundState: QuestionSoundIdle,
 		},
 		data:             NewTeamsAndBumpers(),
 		questionStatuses: make(map[string]QuestionStatus),
@@ -1206,6 +1239,11 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// unaffected by this field either way).
 	e.questionEverStarted = false
 
+	// v11.1/#219, contract §10.7 — a new/replayed question always starts
+	// with no pending deferred timer, regardless of whatever the OUTGOING
+	// question left behind; see resetDeferredTimerUnsafe's own doc comment.
+	e.resetDeferredTimerUnsafe()
+
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
@@ -1872,6 +1910,107 @@ func (e *Engine) startEntracteQuestionUnsafe() {
 	log.Printf("[Engine] Entracte: activated from programmed question %s (#214)", e.state.Question.ID)
 }
 
+// ---------------------------------------------------------------------------
+// Deferred answer timer (v11.1, #219, contract sound.md §10.7).
+// ---------------------------------------------------------------------------
+
+// maybeStartDeferredTimerUnsafe starts the global answer timer immediately
+// (e.startTimer(), the pre-#219 behavior — "mode simultané") UNLESS the
+// current question carries a sound with SoundTimerDelayed=true, in which
+// case it only records the deferral (timerDeferred/AnswerTimerWaiting) and
+// returns WITHOUT starting the ticker. Called from actualStart(), in the
+// EXACT spot the unconditional e.startTimer() call used to sit — same
+// guard, same lock, no neighbouring line moved (R12, CA16).
+//
+// Purely DATA-driven (Question.Sound/SoundTimerDelayed), never
+// type-driven: the field is structurally common to every QuestionType
+// (contract §10.4bis) — a RAFALE/MEMOTION/ENTRACTE question reaching this
+// call (it can: RAFALE shares this exact call site, see actualStart's own
+// comment) simply never has a non-empty Sound in practice, since the v11.1
+// editor doesn't expose the field for those types. No server-side type
+// check is added here on purpose (§0.3/R15).
+//
+// The "does it actually start playing" non-blocking rule (CA12: neutral
+// player, sound disabled, unreadable file) is NOT decided here — the
+// engine has no notion of the MediaPlayer's own state. That is entirely
+// the question-sound adapter's job (cmd/server/question_sound.go): it
+// calls ReleaseDeferredTimer() immediately whenever playback doesn't
+// actually start, exactly as it does for a genuine natural end. Caller
+// must hold e.mu (write lock).
+func (e *Engine) maybeStartDeferredTimerUnsafe() {
+	if e.state.Question != nil && e.state.Question.SoundTimerDelayed && e.state.Question.Sound != "" {
+		e.timerDeferred = true
+		e.timerReleased = false
+		e.state.AnswerTimerWaiting = true
+		return
+	}
+	e.startTimer()
+}
+
+// ReleaseDeferredTimer starts the answer timer that maybeStartDeferredTimerUnsafe
+// deferred (contract §10.7) — called by the question-sound adapter
+// (cmd/server/question_sound.go) when the attached sound's playback ends,
+// whether NATURALLY or by an explicit animateur Stop (both release it —
+// "la libération est idempotente"), OR immediately when the sound never
+// actually started at all (CA12's non-blocking rule, decided by the
+// adapter, not here).
+//
+// IDEMPOTENT: a no-op if the timer was never deferred for the current
+// question, or was already released — safe to call from both the natural-
+// end callback AND an explicit Stop command without ever double-starting
+// the ticker (CA13: a later "Rejouer" must never re-arm it — this
+// idempotence is exactly what guarantees that, since Rejouer never calls
+// this method to begin with, and even if it mistakenly did, it would be a
+// no-op here).
+func (e *Engine) ReleaseDeferredTimer() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.releaseDeferredTimerUnsafe()
+}
+
+// releaseDeferredTimerUnsafe is ReleaseDeferredTimer's locked core. Caller
+// must hold e.mu (write lock).
+func (e *Engine) releaseDeferredTimerUnsafe() {
+	if !e.timerDeferred || e.timerReleased {
+		return // never deferred for this question, or already released — idempotent (§10.7)
+	}
+	e.timerReleased = true
+	e.state.AnswerTimerWaiting = false
+	if e.state.Phase == PhasePaused {
+		// CA14: released while the GAME is paused ⇒ starts at the NEXT
+		// Continue(), never during the pause. Continue() itself checks
+		// timerDeferred && timerReleased to finish what this call started.
+		return
+	}
+	e.startTimer()
+	e.timerDeferred = false // fully resolved — behaves like an ordinary running timer from now on
+}
+
+// resetDeferredTimerUnsafe clears the deferred-timer bookkeeping (§10.7) —
+// called wherever a question's active life ends BEFORE its sound (if any)
+// ever finished naturally: stopUnsafe(), Ready() (a new question loaded,
+// replay or not), and Reveal() (answer shown early, from STOPPED or
+// PAUSED). Without this, a pending deferral from an abandoned question
+// could resolve later against a DIFFERENT question's timer. Caller must
+// hold e.mu (write lock).
+func (e *Engine) resetDeferredTimerUnsafe() {
+	e.timerDeferred = false
+	e.timerReleased = false
+	e.state.AnswerTimerWaiting = false
+}
+
+// SetQuestionSoundState sets the diffused question-sound playback state
+// (contract game-state.md, v11.1 #219) — called exclusively by the
+// question-sound adapter (cmd/server/question_sound.go) whenever its
+// MediaPlayer's own state changes; internal/game never derives this value
+// itself (contract §10.5: the two audio paths, and their state, only meet
+// in cmd/server).
+func (e *Engine) SetQuestionSoundState(state QuestionSoundState) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.QuestionSoundState = state
+}
+
 // actualStart is called after countdown finishes to start the actual game
 func (e *Engine) actualStart() {
 	e.mu.Lock()
@@ -1959,7 +2098,7 @@ func (e *Engine) actualStart() {
 	// anyway would auto-Stop() the pause the moment CURRENT_TIME first
 	// reaches 0 (processTimerTick's own <=0 branch), silently ending it.
 	if e.state.Question == nil || (e.state.Question.Type != QuestionTypeMemotion && e.state.Question.Type != QuestionTypeEntracte) {
-		e.startTimer()
+		e.maybeStartDeferredTimerUnsafe() // v11.1/#219, contract §10.7 — see its own doc comment
 	}
 
 	// Release lock BEFORE calling callback to avoid deadlock
@@ -2362,6 +2501,11 @@ func (e *Engine) stopUnsafe() bool {
 	e.state.Phase = PhaseStopped
 	e.state.CurrentTime = 0
 	e.state.CountdownTime = 0
+
+	// v11.1/#219, contract §10.7 — a STOP ends the question's active life
+	// before any pending deferred timer ever resolves; see
+	// resetDeferredTimerUnsafe's own doc comment.
+	e.resetDeferredTimerUnsafe()
 
 	e.setQuestionStatus(StatusStopped)
 
@@ -3106,6 +3250,17 @@ func (e *Engine) Continue() {
 
 	e.setQuestionStatus(StatusStarted)
 
+	// v11.1/#219, contract §10.7/CA14: a deferred timer released WHILE the
+	// game was paused (releaseDeferredTimerUnsafe's own PhasePaused branch)
+	// starts HERE, at the moment the game actually resumes — never during
+	// the pause itself. A no-op when nothing was pending (the ordinary
+	// case, and also true once this has already fired once for the current
+	// question — timerDeferred is cleared below).
+	if e.timerDeferred && e.timerReleased {
+		e.startTimer()
+		e.timerDeferred = false
+	}
+
 	log.Printf("[Engine] Game continued")
 
 	// Release lock BEFORE calling callback to avoid deadlock
@@ -3161,6 +3316,12 @@ func (e *Engine) Reveal() string {
 			e.timer = nil
 		}
 	}
+
+	// v11.1/#219, contract §10.7 — revealing the answer ends the question's
+	// active life before any pending deferred timer ever resolves, same
+	// reasoning as stopUnsafe()/Ready(); see resetDeferredTimerUnsafe's own
+	// doc comment.
+	e.resetDeferredTimerUnsafe()
 
 	e.state.Phase = PhaseRevealed
 
