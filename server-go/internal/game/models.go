@@ -626,10 +626,43 @@ type Question struct {
 	Media                  string           `json:"MEDIA,omitempty"`                    // Question media (shown during game)
 	MediaAnswer            string           `json:"MEDIA_ANSWER,omitempty"`             // Answer media (shown during REVEAL)
 	Explanation            string           `json:"EXPLANATION,omitempty"`              // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
-	Status                 QuestionStatus   `json:"STATUS,omitempty"`
+	// Sound (v11.1, #219, contracts/sound.md §10) — a LONG media, distinct
+	// from the cues bruitage catalogue, attached to the question and played
+	// on START via a fully asynchronous second audio path
+	// (internal/audio.MediaPlayer). URL path, same convention as Media
+	// ("/question/<id>/sound_<rand4>.wav"). `omitempty`: additive, every
+	// existing question.json round-trips byte for byte.
+	//
+	// ⚠️ Normative (contract §10.4bis, plan §0.3): this field is
+	// STRUCTURALLY COMMON to every QuestionType, exactly like Media above —
+	// the v11.1 editor only exposes it for SPEEDY/QCM/ARDOISE, but that is a
+	// FRONTEND decision, never a server-side type guard. Do not add one.
+	Sound string `json:"SOUND,omitempty"`
+	// SoundTimerDelayed (v11.1, #219, contract §10.7) — false (the zero
+	// value) is the correct, pre-existing behavior: the global answer timer
+	// starts at the same instant as the sound (mode "simultané"). true
+	// defers the timer until the sound ends — naturally or by an explicit
+	// animateur Stop — never blocking (contract's own non-blocking rule,
+	// CA12): see Engine.maybeStartDeferredTimerUnsafe/ReleaseDeferredTimer.
+	SoundTimerDelayed bool           `json:"SOUND_TIMER_DELAYED,omitempty"`
+	Status            QuestionStatus `json:"STATUS,omitempty"`
 
 	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE (Answer shadowed by the explicit field above)
 }
+
+// QuestionSoundState is the question-sound media's playback state,
+// diffused via GameState.QuestionSoundState (contract game-state.md,
+// v11.1 #219) — the wire values match internal/audio.MediaState
+// (IDLE/PLAYING/PAUSED) exactly, but this is a DISTINCT Go type: internal/
+// game does not import internal/audio (contract §10, the two only meet in
+// cmd/server, same layering as the cues bruitage engine).
+type QuestionSoundState string
+
+const (
+	QuestionSoundIdle    QuestionSoundState = "IDLE"
+	QuestionSoundPlaying QuestionSoundState = "PLAYING"
+	QuestionSoundPaused  QuestionSoundState = "PAUSED"
+)
 
 // MotionActive holds the identity and live state of the single active
 // MEMOTION card — contract §5. There is never more than one card in play
@@ -864,6 +897,28 @@ type GameState struct {
 	RafaleAskedCount           int                       `json:"RAFALE_ASKED_COUNT"`
 	RafalePoolRemaining        int                       `json:"RAFALE_POOL_REMAINING"`
 	RafaleExhausted            bool                      `json:"RAFALE_EXHAUSTED"`
+
+	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
+	// (project rule, CLAUDE.md): always serialized, including their zero
+	// values (IDLE/false), so a client resets cleanly between questions
+	// exactly like the MEMOTION/RAFALE fields above. Ephemeral, never
+	// persisted (state_persistence.go excludes them alongside MotionActive/
+	// Entracte — same precedent: this reflects a live audio device, not
+	// game data).
+	//
+	// QuestionSoundState mirrors internal/audio.MediaState's wire values
+	// (IDLE/PLAYING/PAUSED) but is set ONLY from cmd/server (the question-
+	// sound adapter, contract §10.5) — internal/game never reads or writes
+	// it beyond this declaration and the resets below.
+	//
+	// AnswerTimerWaiting is true exactly while the global answer timer is
+	// deferred and not yet released (contract §10.7, CA15: "/anim, /admin
+	// et la TV disent que le chronomètre attend la fin du son"). Distinct
+	// from — and simpler than — timerDeferred/timerReleased below: those
+	// two are the engine's OWN bookkeeping (also survive a PAUSE), this one
+	// is the wire-facing summary a client actually needs.
+	QuestionSoundState QuestionSoundState `json:"QUESTION_SOUND_STATE"`
+	AnswerTimerWaiting bool               `json:"ANSWER_TIMER_WAITING"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data
