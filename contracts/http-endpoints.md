@@ -119,6 +119,11 @@ Crée ou met à jour une question.
 
 #### Response 200
 
+> ⚠️ **Le corps ci-dessous (`success`/`id`) est un exemple historique déjà signalé stale en #168
+> (non corrigé, hors périmètre de ce lot) — la réponse **réellement** renvoyée par
+> `handleUploadQuestion` (`internal/server/http.go`) est celle documentée juste après, **normative
+> depuis v11.1 (#219)** : c'est celle-ci que le frontend doit lire.
+
 ```json
 {
   "success": true,
@@ -126,11 +131,39 @@ Crée ou met à jour une question.
 }
 ```
 
-> ℹ️ **v11.1 (#219)** : la réponse réelle porte aussi `warning` — `null` quand aucun avertissement
-> (jamais une clé absente, même convention que `POST /api/sounds/{cue}` ci-dessous), sinon une
-> chaîne nommant la cause (mode simultané, son plus long que `time` — voir la note ci-dessus). Cette
-> table hérite de l'écart `success`/`status` déjà signalé en #168 (non corrigé par ce lot, hors
-> périmètre) ; `warning` est décrit ici pour ne pas ajouter une seconde divergence non documentée.
+**Réponse réelle, normative depuis v11.1 (#219)** :
+
+```json
+{
+  "status": "ok",
+  "warning": null
+}
+```
+
+- `status` : toujours `"ok"` sur un `200` (aucune autre valeur possible — un échec ne produit jamais
+  ce corps, voir §Réponses d'erreur ci-dessous).
+- `warning` : `null` quand aucun avertissement (**jamais une clé absente**, même convention que
+  `POST /api/sounds/{cue}` ci-dessous), sinon une **chaîne** nommant la cause — aujourd'hui la seule
+  source possible est le son de question en mode simultané plus long que `time` (voir la note
+  ci-dessus). Non bloquant : la question est enregistrée normalement.
+
+#### Réponses d'erreur (v11.1, #219 — champ `sound`)
+
+Un `sound` rejeté (format non conforme, > 30 s, > 6 Mio, échec d'écriture disque) répond en **texte
+brut** (`http.Error` standard Go — `Content-Type: text/plain`, le message tel quel comme corps, sans
+enveloppe JSON) :
+
+| Cause | Status |
+|---|---|
+| Extension autre que `.wav` | `400` |
+| Pas un WAV canonique / > 30 s (cause nommée dans le corps) | `400` |
+| Lecture du fichier échouée | `400` |
+| > 6 Mio | `413` |
+| Échec d'écriture disque | `500` |
+
+Une erreur sur `sound` **rejette toute la requête** — rien n'est enregistré, y compris les autres
+champs de la question (contrairement à `MEDIA`/`MEDIA_ANSWER`, qui échouent silencieusement sans
+jamais renvoyer d'erreur).
 
 ---
 
