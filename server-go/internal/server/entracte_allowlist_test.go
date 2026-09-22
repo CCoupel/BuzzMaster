@@ -78,6 +78,13 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionRafaleValidate:   false,
 	protocol.ActionRafaleInvalidate: false,
 	protocol.ActionRafaleSetTeams:   false,
+	// QUESTION_SOUND (v11.1, #219, contracts/sound.md §10.2) — same
+	// "conduite en direct" bucket as REVEAL/BUMPER_POINTS/RAFALE_VALIDATE
+	// above: a question's attached sound is part of an active round, and
+	// ENTRACTE is only reachable outside a live round anyway (D4) — same
+	// "can never come up in practice, still requires an explicit decision"
+	// reasoning as the RAFALE actions above.
+	protocol.ActionQuestionSound: false,
 }
 
 // TestIsActionAllowedDuringEntracte_ExhaustiveOverAllInboundActions is the

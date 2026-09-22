@@ -61,6 +61,10 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// périmètre as REVEAL/BUMPER_POINTS/TEAM_POINTS above.
 	protocol.ActionRafaleValidate:   {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionRafaleInvalidate: {ClientTypeAdmin, ClientTypeAnim},
+	// QUESTION_SOUND (v11.1, #219, contract sound.md §10.2): the three
+	// conduite gestures (rejouer/pause/stop) on a question's attached
+	// sound — same périmètre as REVEAL/RAFALE_VALIDATE above.
+	protocol.ActionQuestionSound: {ClientTypeAdmin, ClientTypeAnim},
 
 	// --- Game control (régie) — admin (/admin) only -------------------
 	// Starting/stopping/scoring/resetting/deleting/configuring a game is
