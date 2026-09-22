@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question sonore — maquette</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#0d1117; --panel:#161b22; --raised:#1c2128; --sunken:#0a0e14;
+    --line:#2a323d; --line-soft:#212932;
+    --txt:#e6edf3; --dim:#8d97a5; --faint:#6a7481;
+    --accent:#f97316; --accent-dim:#b4560f;
+    --ok:#2ea043; --no:#da3633; --warn:#d29922; --info:#3f7ee0; --violet:#8957e5;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+    --col:940px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--ground);color:var(--txt);font-family:var(--sans);line-height:1.6;padding:48px 20px 80px}
+  .wrap{max-width:var(--col);margin:0 auto}
+
+  .mast{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:44px}
+  .eyebrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .eyebrow span{font-family:var(--mono);font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:3px 8px}
+  .eyebrow span.hot{color:var(--accent);border-color:var(--accent-dim)}
+  h1{font-size:2rem;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin-bottom:14px}
+  .standfirst{color:var(--dim);font-size:1.02rem;max-width:74ch}
+  .refs{margin-top:20px;display:flex;flex-direction:column;gap:5px;font-family:var(--mono);font-size:.76rem;color:var(--faint)}
+  .refs b{color:var(--dim);font-weight:600;margin-right:8px}
+
+  section{margin-bottom:56px}
+  h2{font-size:1.32rem;font-weight:600;letter-spacing:-.01em;margin-bottom:8px;display:flex;align-items:baseline;gap:12px}
+  h2 .num{font-family:var(--mono);font-size:.82rem;color:var(--accent);font-weight:600}
+  .lede{color:var(--dim);margin-bottom:22px;max-width:74ch}
+  h3{font-size:.95rem;font-weight:600;margin:28px 0 10px;color:var(--txt)}
+  p+p{margin-top:12px}
+
+  .screen{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:16px}
+  .screen-hd{background:var(--sunken);border-bottom:1px solid var(--line);padding:9px 14px;
+    font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+  .screen-bd{padding:20px}
+
+  .fieldset{border:1px solid var(--line-soft);border-radius:6px;padding:16px;background:var(--raised)}
+  .fs-t{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:14px}
+  .lbl{display:block;font-size:.8rem;font-weight:500;color:var(--dim);margin-bottom:6px}
+  .lbl .opt{color:var(--faint);font-weight:400}
+
+  .filebox{display:flex;align-items:center;gap:12px;border:1px dashed var(--line);border-radius:6px;
+    padding:14px;background:var(--sunken)}
+  .filebox.filled{border-style:solid;border-color:var(--line)}
+  .filebox.bad{border-style:solid;border-color:var(--no);background:rgba(218,54,51,.07)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--sans);font-size:.82rem;font-weight:500;
+    border:1px solid var(--line);background:var(--raised);color:var(--txt);border-radius:6px;padding:7px 13px;white-space:nowrap}
+  .btn.ghost{background:transparent;color:var(--dim)}
+  .btn.danger{color:var(--no);border-color:rgba(218,54,51,.4)}
+  .fname{font-family:var(--mono);font-size:.78rem;color:var(--txt);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fmeta{font-family:var(--mono);font-size:.72rem;color:var(--faint)}
+
+  .audiobar{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 12px;
+    background:var(--sunken);border:1px solid var(--line-soft);border-radius:6px}
+  .audiobar .pl{width:26px;height:26px;border-radius:50%;background:var(--raised);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:.7rem;color:var(--dim);flex:none}
+  .track{flex:1;height:4px;border-radius:2px;background:var(--line);position:relative}
+  .track i{position:absolute;left:0;top:0;bottom:0;width:34%;background:var(--dim);border-radius:2px}
+  .tm{font-family:var(--mono);font-size:.72rem;color:var(--faint);flex:none}
+
+  .radio{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .ropt{display:flex;gap:11px;align-items:flex-start;border:1px solid var(--line-soft);border-radius:6px;
+    padding:11px 13px;background:var(--sunken)}
+  .ropt.on{border-color:var(--accent);background:rgba(249,115,22,.07)}
+  .dot{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--faint);flex:none;margin-top:3px;position:relative}
+  .ropt.on .dot{border-color:var(--accent)}
+  .ropt.on .dot::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+  .ropt .t{font-size:.85rem;font-weight:500;color:var(--txt)}
+  .ropt .d{font-size:.78rem;color:var(--faint);margin-top:2px}
+
+  .note{border-left:2px solid var(--line);padding:2px 0 2px 14px;color:var(--dim);font-size:.88rem;margin-top:14px}
+  .note.warn{border-color:var(--warn)}
+  .note.no{border-color:var(--no)}
+  .note.ok{border-color:var(--ok)}
+  .note.acc{border-color:var(--accent)}
+  .note b{color:var(--txt);font-weight:600}
+
+  .msg{display:flex;gap:10px;align-items:flex-start;border-radius:6px;padding:11px 13px;font-size:.84rem;margin-top:12px}
+  .msg.no{background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.3);color:#ffb3b0}
+  .msg.warn{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);color:#e8c46a}
+  .msg .ic{flex:none;font-size:.95rem;line-height:1.4}
+  .msg code{font-family:var(--mono);font-size:.78rem;color:inherit;opacity:.85}
+
+  .conduct{background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:16px}
+  .l1{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}
+  .cbtn{border-radius:7px;padding:13px 6px;text-align:center;border:1px solid var(--line);
+    background:var(--raised);font-size:.82rem;font-weight:600;letter-spacing:.02em}
+  .cbtn .sub{display:block;font-size:.66rem;font-weight:400;color:var(--faint);margin-top:3px;letter-spacing:0}
+  .cbtn.go{background:rgba(46,160,67,.16);border-color:rgba(46,160,67,.5);color:#7ee38f}
+  .cbtn.opt{background:rgba(63,126,224,.13);border-color:rgba(63,126,224,.4);color:#8ab4f0}
+  .cbtn.danger{background:rgba(218,54,51,.13);border-color:rgba(218,54,51,.4);color:#ff9b98}
+  .cbtn.off{color:var(--faint);opacity:.45}
+
+  .l2{border-top:1px dashed var(--line);padding-top:12px}
+  .l2-t{font-family:var(--mono);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--faint);margin-bottom:9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .l2-t .pill{border:1px solid var(--line);border-radius:20px;padding:2px 9px;font-size:.62rem;color:var(--dim)}
+  .l2-t .pill.hot{border-color:var(--accent-dim);color:var(--accent)}
+  .sgroup{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .sbtn{border:1px solid var(--line);background:var(--raised);border-radius:7px;padding:11px 6px;
+    text-align:center;font-size:.8rem;font-weight:600}
+  .sbtn .ic{display:block;font-size:1rem;margin-bottom:3px}
+  .sbtn.on{background:rgba(137,87,229,.16);border-color:rgba(137,87,229,.5);color:#c4a5f5}
+  .sbtn.off{color:var(--faint);opacity:.4}
+
+  .chrono{display:flex;align-items:center;justify-content:center;gap:14px;border:1px solid var(--line);
+    border-radius:8px;padding:16px;background:var(--sunken);margin-bottom:12px}
+  .chrono .big{font-family:var(--mono);font-size:2.1rem;font-weight:600;letter-spacing:.02em}
+  .chrono.frozen .big{color:var(--faint)}
+  .chrono.run .big{color:#7ee38f}
+  .chrono .why{font-size:.8rem;color:var(--accent);max-width:24ch;line-height:1.35}
+
+  table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:12px}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;
+    border-bottom:1px solid var(--line)}
+  td code,p code,li code{font-family:var(--mono);font-size:.78rem;background:var(--sunken);
+    border:1px solid var(--line-soft);border-radius:3px;padding:1px 5px;color:var(--txt)}
+  .st{font-family:var(--mono);font-size:.72rem;border-radius:3px;padding:2px 7px;white-space:nowrap}
+  .st.idle{background:rgba(141,151,165,.15);color:var(--dim)}
+  .st.play{background:rgba(46,160,67,.18);color:#7ee38f}
+  .st.pause{background:rgba(63,126,224,.18);color:#8ab4f0}
+  .st.wait{background:rgba(249,115,22,.18);color:#f9a55f}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}.l1{grid-template-columns:repeat(2,1fr)}}
+
+  .diagram{background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:22px 14px;overflow-x:auto}
+  .diagram svg{display:block;margin:0 auto;min-width:620px}
+
+  ol,ul{margin:10px 0 0 20px;color:var(--dim)}
+  li{margin-bottom:7px}
+  li b{color:var(--txt)}
+
+  .dec{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:16px;margin-bottom:12px}
+  .dec.open{border-color:var(--accent-dim);background:rgba(249,115,22,.05)}
+  .dec-h{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .dec-h .tag{font-family:var(--mono);font-size:.7rem;color:var(--faint);border:1px solid var(--line);
+    border-radius:3px;padding:2px 7px;font-weight:600}
+  .dec.open .dec-h .tag{color:var(--accent);border-color:var(--accent-dim)}
+  .dec-h h4{font-size:.95rem;font-weight:600}
+  .dec-h .stt{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;
+    border-radius:20px;padding:2px 9px}
+  .dec-h .stt.done{background:rgba(46,160,67,.16);color:#7ee38f}
+  .dec-h .stt.todo{background:rgba(249,115,22,.16);color:#f9a55f}
+  .reco{margin-top:9px;font-size:.85rem;color:var(--dim)}
+  .reco b{color:#7ee38f;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">
+    <span>Maquette</span><span>#219</span><span>Milestone v11.1</span><span class="hot">Révision 3</span>
+  </div>
+  <h1>Question sonore — un média de plus, pas un type de plus</h1>
+  <p class="standfirst">
+    Un fichier sonore s'attache à une question exactement comme une image s'y attache déjà. Il est
+    téléversé depuis l'éditeur Quiz, il sort sur <b>l'enceinte du serveur</b> au lancement, et
+    l'animateur peut le rejouer, le mettre en pause ou l'arrêter. <b>Nouveauté de cette
+    révision :</b> chaque son choisit si le chronomètre de réponse démarre <i>en même temps que
+    lui</i> ou <i>seulement à sa fin</i>. Le barème, lui, ne change pas.
+  </p>
+  <div class="refs">
+    <div><b>Plan</b> _work/reports/plan-20260922-103848.md (rév. 3 — révise 102600, qui révisait 093142)</div>
+    <div><b>Contrat</b> contracts/sound.md §10</div>
+    <div><b>Types</b> SPEEDY · QCM · ARDOISE — MEMORY, MEMOTION, ENTRACTE et RAFALE hors périmètre</div>
+    <div><b>Rév. 3</b> périmètre réduit à 3 types · plafond 30 s · chronomètre configurable</div>
+  </div>
+</header>
+
+<!-- ============================================================ 01 -->
+<section>
+  <h2><span class="num">01</span> Le champ, dans l'éditeur Quiz</h2>
+  <p class="lede">
+    Placé sous les images, dans le même bloc, avec les mêmes gestes : choisir, écouter, supprimer.
+    Une bascule s'y ajoute, et elle n'apparaît que lorsqu'un son est attaché.
+  </p>
+
+  <h3>Fichier accepté, et le choix du chronomètre</h3>
+  <div class="screen">
+    <div class="screen-hd">/questions &nbsp;·&nbsp; édition d'une question SPEEDY</div>
+    <div class="screen-bd">
+      <div class="fieldset">
+        <div class="fs-t">Médias</div>
+        <label class="lbl">Son de la question <span class="opt">(optionnel — WAV 44,1 kHz stéréo 16 bits, 30 s maximum)</span></label>
+        <div class="filebox filled">
+          <span class="fname">sound_7314.wav</span>
+          <span class="fmeta">24,0 s · 4,2 Mo</span>
+          <span class="btn danger">Supprimer</span>
+        </div>
+        <div class="audiobar">
+          <span class="pl">▶</span><span class="tm">0:08</span>
+          <span class="track"><i></i></span><span class="tm">0:24</span>
+          <span class="fmeta">écoute locale</span>
+        </div>
+
+        <label class="lbl" style="margin-top:18px">Chronomètre de réponse</label>
+        <div class="radio">
+          <div class="ropt on">
+            <span class="dot"></span>
+            <span>
+              <span class="t">Démarrer en même temps que le son</span>
+              <span class="d">Comportement habituel — les joueurs écoutent pendant que le temps défile.</span>
+            </span>
+          </div>
+          <div class="ropt">
+            <span class="dot"></span>
+            <span>
+              <span class="t">Démarrer à la fin du son</span>
+              <span class="d">Le temps ne commence qu'une fois l'extrait terminé — ou dès que vous l'arrêtez vous-même. Pour un extrait qu'il faut avoir entendu en entier avant de pouvoir répondre.</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note acc">
+    <b>La bascule n'existe que s'il y a un son.</b> Sans son attaché, le chronomètre n'a rien à
+    attendre : la proposer serait un réglage sans objet.
+  </p>
+
+  <h3>Où le son s'attache, selon le type</h3>
+  <table>
+    <tr><th>Type</th><th>Le son est attaché…</th><th>Il part…</th></tr>
+    <tr><td><b>SPEEDY · QCM · ARDOISE</b></td><td>à la question</td><td>au LANCER</td></tr>
+    <tr><td style="color:var(--faint)">MEMORY · MEMOTION · ENTRACTE · RAFALE</td><td colspan="2" style="color:var(--faint)">hors périmètre de cette version</td></tr>
+  </table>
+  <p class="note acc">
+    <b>Exactement le périmètre de l'image, moins ENTRACTE.</b> Le bloc « son » se place dans le même
+    encadré que « Image question » et « Image réponse », sous la même condition d'affichage —
+    il n'y a aucune règle nouvelle à retenir, ni pour l'utilisateur ni pour le code.
+  </p>
+  <p class="note">
+    MEMORY et MEMOTION portent leurs images sur leurs <b>cartes</b>, pas sur la question : leur
+    donner un son demande une décision de conception à part entière, reportée à un chantier
+    ultérieur. Ce report ne coûte rien : le champ est <b>structurellement commun à tous les
+    types</b>, seul l'éditeur choisit de le proposer ou non — les rouvrir plus tard sera un
+    changement d'interface, pas de serveur.
+  </p>
+
+  <h3>Les refus, et ce qu'ils disent</h3>
+  <div class="screen">
+    <div class="screen-hd">/questions &nbsp;·&nbsp; fichier rejeté</div>
+    <div class="screen-bd">
+      <div class="fieldset">
+        <div class="fs-t">Médias</div>
+        <div class="filebox bad">
+          <span class="fname">generique-emission.mp3</span>
+          <span class="fmeta">refusé</span>
+          <span class="btn ghost">Choisir un autre fichier</span>
+        </div>
+        <div class="msg no"><span class="ic">✕</span><span>
+          Ce fichier est au format <code>.mp3</code>. Seul le <b>WAV non compressé</b> est accepté —
+          le serveur ne sait pas décoder un format compressé.
+        </span></div>
+        <div class="msg no"><span class="ic">✕</span><span>
+          Ce WAV est en <b>48 000 Hz mono</b>. Il doit être en <b>44 100 Hz, stéréo, 16 bits</b> —
+          tous les sons du serveur partagent une seule et même sortie audio.
+        </span></div>
+        <div class="msg no"><span class="ic">✕</span><span>
+          Ce son dure <b>42 s</b> — la limite est de <b>30 s</b>.
+        </span></div>
+        <div class="msg warn"><span class="ic">!</span><span>
+          Ce son dure <b>28 s</b>, mais la question n'accorde que <b>20 s</b> de réponse : il sera
+          coupé par la fin du chronomètre. <i>(Cet avertissement disparaît si vous choisissez
+          « démarrer le chronomètre à la fin du son ».)</i>
+        </span></div>
+      </div>
+    </div>
+  </div>
+  <p class="note no">
+    <b>Chaque refus nomme sa cause.</b> Un message unique « fichier invalide » obligerait à deviner
+    laquelle des quatre règles a été enfreinte — et deux d'entre elles (fréquence, canaux) ne sont
+    pas lisibles dans un explorateur de fichiers.
+  </p>
+  <p class="note ok">
+    <b>Le seul avertissement qui reste est celui qui apprend quelque chose.</b> Un seuil fixe du
+    type « au-delà de 20 s, attention » ne dirait que « vous approchez du plafond », ce que le
+    plafond dit déjà. Comparer la durée du son au temps de réponse de la question, en revanche,
+    signale une vraie incohérence — et le faire ne coûte rien, les deux valeurs arrivent dans le
+    même enregistrement.
+  </p>
+</section>
+
+<!-- ============================================================ 02 -->
+<section>
+  <h2><span class="num">02</span> La conduite — trois gestes, et seulement quand ils servent</h2>
+  <p class="lede">
+    Sur la tablette animateur (<code>/anim</code>) et en miroir sur <code>/admin</code>. La rangée
+    des cinq boutons de phase ne bouge pas : les gestes du son vivent <b>en dessous</b>. Quand la
+    question n'a pas de son, la rangée <b>n'est pas rendue du tout</b> — pas grisée, absente.
+  </p>
+
+  <div class="grid2">
+    <div class="screen">
+      <div class="screen-hd">STARTED &nbsp;·&nbsp; mode simultané &nbsp;·&nbsp; le son joue</div>
+      <div class="screen-bd">
+        <div class="conduct">
+          <div class="l1" style="grid-template-columns:repeat(5,1fr)">
+            <div class="cbtn off" style="font-size:.7rem">LANCER</div>
+            <div class="cbtn opt" style="font-size:.7rem">PAUSE</div>
+            <div class="cbtn off" style="font-size:.7rem">CONTIN.</div>
+            <div class="cbtn danger" style="font-size:.7rem">STOP</div>
+            <div class="cbtn off" style="font-size:.7rem">RÉPONSE</div>
+          </div>
+          <div class="l2">
+            <div class="l2-t">Son de la question <span class="pill">en lecture · 0:12 / 0:24</span></div>
+            <div class="sgroup">
+              <div class="sbtn on"><span class="ic">↻</span>Rejouer</div>
+              <div class="sbtn on"><span class="ic">⏸</span>Pause</div>
+              <div class="sbtn on"><span class="ic">⏹</span>Stop</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-hd">PAUSED &nbsp;·&nbsp; le jeu est en pause, le son aussi</div>
+      <div class="screen-bd">
+        <div class="conduct">
+          <div class="l1" style="grid-template-columns:repeat(5,1fr)">
+            <div class="cbtn off" style="font-size:.7rem">LANCER</div>
+            <div class="cbtn off" style="font-size:.7rem">PAUSE</div>
+            <div class="cbtn go" style="font-size:.7rem">CONTIN.</div>
+            <div class="cbtn danger" style="font-size:.7rem">STOP</div>
+            <div class="cbtn off" style="font-size:.7rem">RÉPONSE</div>
+          </div>
+          <div class="l2">
+            <div class="l2-t">Son de la question <span class="pill">en pause · 0:12 / 0:24</span></div>
+            <div class="sgroup">
+              <div class="sbtn on"><span class="ic">↻</span>Rejouer</div>
+              <div class="sbtn on"><span class="ic">▶</span>Reprendre</div>
+              <div class="sbtn on"><span class="ic">⏹</span>Stop</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Mode différé — le chronomètre attend, et il le dit</h3>
+  <div class="screen">
+    <div class="screen-hd">/anim &nbsp;·&nbsp; STARTED &nbsp;·&nbsp; chronomètre en attente de la fin du son</div>
+    <div class="screen-bd">
+      <div class="chrono frozen">
+        <span class="big">00:20</span>
+        <span class="why">⏳ le chronomètre démarrera à la fin du son</span>
+      </div>
+      <div class="conduct">
+        <div class="l1" style="grid-template-columns:repeat(5,1fr)">
+          <div class="cbtn off" style="font-size:.7rem">LANCER</div>
+          <div class="cbtn opt" style="font-size:.7rem">PAUSE</div>
+          <div class="cbtn off" style="font-size:.7rem">CONTIN.</div>
+          <div class="cbtn danger" style="font-size:.7rem">STOP</div>
+          <div class="cbtn off" style="font-size:.7rem">RÉPONSE</div>
+        </div>
+        <div class="l2">
+          <div class="l2-t">
+            Son de la question
+            <span class="pill">en lecture · 0:12 / 0:24</span>
+            <span class="pill hot">⏹ Stop lancera le chronomètre</span>
+          </div>
+          <div class="sgroup">
+            <div class="sbtn on"><span class="ic">↻</span>Rejouer</div>
+            <div class="sbtn on"><span class="ic">⏸</span>Pause</div>
+            <div class="sbtn on"><span class="ic">⏹</span>Stop</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-hd">/anim &nbsp;·&nbsp; le son est fini, le chronomètre est parti</div>
+    <div class="screen-bd">
+      <div class="chrono run">
+        <span class="big">00:17</span>
+        <span class="why" style="color:var(--faint)">en marche</span>
+      </div>
+      <div class="conduct">
+        <div class="l2" style="border-top:none;padding-top:0">
+          <div class="l2-t">Son de la question <span class="pill">au repos</span></div>
+          <div class="sgroup">
+            <div class="sbtn on"><span class="ic">↻</span>Rejouer</div>
+            <div class="sbtn off"><span class="ic">⏸</span>Pause</div>
+            <div class="sbtn off"><span class="ic">⏹</span>Stop</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note warn">
+    <b>Un chronomètre figé ressemble à une panne.</b> C'est le risque principal du mode différé :
+    sans explication, l'animateur relance la question ou l'arrête, et le public croit à un bug.
+    La mention « le chronomètre démarrera à la fin du son » est donc obligatoire sur
+    <code>/anim</code>, <code>/admin</code> <b>et la TV</b> — jamais un simple chiffre immobile.
+  </div>
+  <div class="note acc">
+    <b>« Rejouer » est le geste central, pas « Jouer ».</b> Le son part tout seul — comme l'image
+    apparaît toute seule. Ce que l'animateur ne peut pas faire sans bouton, c'est le
+    <i>re</i>passer : une image se regarde autant qu'on veut, un son passe une fois et disparaît.
+  </div>
+  <div class="note">
+    <b>Et « Rejouer » ne regèle jamais le chronomètre.</b> Une fois le temps parti, il ne s'arrête
+    plus : sinon l'animateur disposerait d'un bouton « rendre du temps » que rien ne justifie.
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section>
+  <h2><span class="num">03</span> Les deux machines à états</h2>
+  <p class="lede">
+    C'est la partie la plus normative de cette maquette : <b>c'est d'elle que sont dérivés les
+    scénarios de test</b>, et c'est à elle que la livraison sera opposée. Deux machines
+    indépendantes — celle du son, et celle du chronomètre de réponse — reliées par un seul
+    évènement.
+  </p>
+
+  <h3>A. Le son</h3>
+  <div class="diagram">
+  <svg viewBox="0 0 860 370" width="860" height="370" role="img" aria-label="Machine à états du média sonore">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#6a7481"/></marker>
+      <marker id="arA" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#f97316"/></marker>
+    </defs>
+    <rect x="40" y="150" width="170" height="70" rx="9" fill="#1c2128" stroke="#2a323d" stroke-width="1.5"/>
+    <text x="125" y="180" text-anchor="middle" fill="#e6edf3" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600">IDLE</text>
+    <text x="125" y="200" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="11.5">au repos — rien ne sort</text>
+
+    <rect x="345" y="150" width="170" height="70" rx="9" fill="rgba(46,160,67,.13)" stroke="#2ea043" stroke-width="1.5"/>
+    <text x="430" y="180" text-anchor="middle" fill="#7ee38f" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600">PLAYING</text>
+    <text x="430" y="200" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="11.5">le son sort sur l'enceinte</text>
+
+    <rect x="650" y="150" width="170" height="70" rx="9" fill="rgba(63,126,224,.13)" stroke="#3f7ee0" stroke-width="1.5"/>
+    <text x="735" y="180" text-anchor="middle" fill="#8ab4f0" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600">PAUSED</text>
+    <text x="735" y="200" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="11.5">suspendu, position gardée</text>
+
+    <path d="M125,150 C125,95 430,95 430,145" fill="none" stroke="#f97316" stroke-width="1.6" marker-end="url(#arA)"/>
+    <text x="278" y="76" text-anchor="middle" fill="#f97316" font-family="IBM Plex Mono,monospace" font-size="11.5" font-weight="600">départ réel de la question</text>
+    <text x="278" y="94" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="10.5">ou geste « Rejouer »</text>
+
+    <path d="M430,225 C430,285 125,285 125,225" fill="none" stroke="#6a7481" stroke-width="1.4" marker-end="url(#ar)"/>
+    <text x="278" y="303" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Mono,monospace" font-size="11.5">STOP · timer = 0 · RÉPONSE</text>
+    <text x="278" y="319" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="10.5">changement de question · geste « Stop » · fin naturelle</text>
+
+    <path d="M515,172 L645,172" fill="none" stroke="#6a7481" stroke-width="1.4" marker-end="url(#ar)"/>
+    <text x="580" y="163" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Mono,monospace" font-size="11">PAUSE</text>
+    <path d="M645,200 L520,200" fill="none" stroke="#6a7481" stroke-width="1.4" marker-end="url(#ar)"/>
+    <text x="580" y="219" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Mono,monospace" font-size="11">CONTINUER</text>
+
+    <path d="M735,225 C735,330 125,330 125,228" fill="none" stroke="#6a7481" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+    <text x="500" y="348" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="10.5">STOP · changement de question · geste « Stop »</text>
+
+    <path d="M395,150 C380,112 480,112 465,150" fill="none" stroke="#f97316" stroke-width="1.4" marker-end="url(#arA)"/>
+    <text x="430" y="130" text-anchor="middle" fill="#f97316" font-family="IBM Plex Sans,sans-serif" font-size="10.5">« Rejouer » = reprise à zéro</text>
+  </svg>
+  </div>
+
+  <h3>B. Le chronomètre de réponse <span style="color:var(--faint);font-weight:400;font-size:.85rem">— uniquement en mode différé</span></h3>
+  <div class="diagram">
+  <svg viewBox="0 0 860 300" width="860" height="300" role="img" aria-label="Machine à états du chronomètre de réponse en mode différé">
+    <defs>
+      <marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#6a7481"/></marker>
+      <marker id="arA2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#f97316"/></marker>
+    </defs>
+    <rect x="40" y="110" width="200" height="74" rx="9" fill="rgba(249,115,22,.1)" stroke="#b4560f" stroke-width="1.5"/>
+    <text x="140" y="140" text-anchor="middle" fill="#f9a55f" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="600">EN ATTENTE</text>
+    <text x="140" y="159" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="11">figé au temps plein,</text>
+    <text x="140" y="173" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="11">aucun décompte</text>
+
+    <rect x="355" y="110" width="200" height="74" rx="9" fill="rgba(46,160,67,.13)" stroke="#2ea043" stroke-width="1.5"/>
+    <text x="455" y="140" text-anchor="middle" fill="#7ee38f" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="600">EN MARCHE</text>
+    <text x="455" y="159" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="11">le temps défile —</text>
+    <text x="455" y="173" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="11">irréversible</text>
+
+    <rect x="670" y="110" width="150" height="74" rx="9" fill="#1c2128" stroke="#2a323d" stroke-width="1.5"/>
+    <text x="745" y="145" text-anchor="middle" fill="#e6edf3" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="600">ARRÊTÉ</text>
+    <text x="745" y="164" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="11">fin de question</text>
+
+    <path d="M245,147 L350,147" fill="none" stroke="#f97316" stroke-width="1.8" marker-end="url(#arA2)"/>
+    <text x="297" y="105" text-anchor="middle" fill="#f97316" font-family="IBM Plex Mono,monospace" font-size="11" font-weight="600">le son se termine</text>
+    <text x="297" y="90" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="10">fin naturelle OU geste « Stop »</text>
+    <text x="297" y="168" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="10">si le jeu est en pause :</text>
+    <text x="297" y="181" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="10">démarre à CONTINUER</text>
+
+    <path d="M560,147 L665,147" fill="none" stroke="#6a7481" stroke-width="1.4" marker-end="url(#ar2)"/>
+    <text x="612" y="138" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Mono,monospace" font-size="10.5">temps = 0 · STOP</text>
+
+    <path d="M140,184 C140,255 745,255 745,190" fill="none" stroke="#6a7481" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ar2)"/>
+    <text x="440" y="273" text-anchor="middle" fill="#6a7481" font-family="IBM Plex Sans,sans-serif" font-size="10.5">STOP · RÉPONSE · changement de question pendant l'attente — le chronomètre n'aura jamais démarré</text>
+
+    <path d="M40,147 L20,147" fill="none" stroke="#f97316" stroke-width="1.6"/>
+    <text x="130" y="60" text-anchor="middle" fill="#f97316" font-family="IBM Plex Sans,sans-serif" font-size="11" font-weight="600">⚠ si la lecture ne démarre pas réellement</text>
+    <text x="130" y="76" text-anchor="middle" fill="#8d97a5" font-family="IBM Plex Sans,sans-serif" font-size="10">(enceinte absente, fichier illisible, son désactivé)</text>
+    <path d="M225,68 C300,68 380,80 420,105" fill="none" stroke="#f97316" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#arA2)"/>
+    <text x="360" y="60" text-anchor="middle" fill="#f97316" font-family="IBM Plex Sans,sans-serif" font-size="10.5">→ démarrage immédiat</text>
+  </svg>
+  </div>
+
+  <div class="note no">
+    <b>La règle qui empêche une partie de se bloquer.</b> Si le son ne part pas — enceinte absente,
+    fichier illisible, bruitages désactivés — le chronomètre démarre <b>immédiatement</b>. Le mode
+    différé dégrade vers le mode simultané, <b>jamais</b> vers une question figée. Un garde-fou
+    temporel libère de toute façon le chronomètre au plus tard quelques secondes après la durée
+    maximale d'un son. C'est le point le plus important de cette maquette.
+  </div>
+
+  <h3>C. Le tableau de vérité</h3>
+  <table>
+    <tr><th>Évènement</th><th>Son</th><th>Chronomètre — simultané</th><th>Chronomètre — différé</th></tr>
+    <tr>
+      <td><b>Départ réel de la question</b><br><span style="color:var(--faint);font-size:.78rem">PREPARE / READY / COUNTDOWN → STARTED</span></td>
+      <td><span class="st play">PLAYING</span></td>
+      <td><span class="st play">démarre</span></td>
+      <td><span class="st wait">EN ATTENTE</span> — figé au temps plein</td>
+    </tr>
+    <tr>
+      <td><b>Le son se termine</b><br><span style="color:var(--faint);font-size:.78rem">fin naturelle OU geste « Stop »</span></td>
+      <td><span class="st idle">IDLE</span></td>
+      <td>inchangé</td>
+      <td><span class="st play">démarre</span></td>
+    </tr>
+    <tr>
+      <td><b>Reprise après pause du jeu</b></td>
+      <td>reprend à la position gardée</td>
+      <td>reprend</td>
+      <td>démarre <b>si</b> le son s'est terminé pendant la pause, sinon reste en attente</td>
+    </tr>
+    <tr>
+      <td><b>Pause du jeu</b></td>
+      <td><span class="st pause">PAUSED</span></td>
+      <td>suspendu</td>
+      <td>reste <span class="st wait">EN ATTENTE</span></td>
+    </tr>
+    <tr>
+      <td><b>Geste « Rejouer »</b></td>
+      <td><span class="st play">PLAYING</span> depuis zéro</td>
+      <td>inchangé</td>
+      <td><b style="color:var(--warn)">inchangé — jamais regelé</b></td>
+    </tr>
+    <tr>
+      <td><b>STOP · temps = 0 · RÉPONSE · changement de question</b></td>
+      <td><span class="st idle">IDLE</span></td>
+      <td>arrêté</td>
+      <td>arrêté — il n'aura jamais démarré</td>
+    </tr>
+    <tr>
+      <td><b>Avance d'une manche RAFALE</b></td>
+      <td colspan="3"><b style="color:var(--warn)">inchangé</b> — ni le son ni le chronomètre ne redémarrent à chaque question de la rafale</td>
+    </tr>
+    <tr>
+      <td><b>La lecture ne démarre pas</b><br><span style="color:var(--faint);font-size:.78rem">enceinte absente · fichier illisible · son désactivé</span></td>
+      <td><span class="st idle">IDLE</span></td>
+      <td><span class="st play">démarre</span></td>
+      <td><span class="st play">démarre immédiatement</span> — jamais de blocage</td>
+    </tr>
+  </table>
+
+  <div class="note warn">
+    <b>Les deux lignes en orange sont les pièges réels.</b> Le moteur réémet « la partie démarre »
+    à chaque reprise après pause <i>et</i> à chaque avance d'une manche RAFALE, sans que la phase
+    change vraiment. Sans garde, le son reprendrait depuis zéro à chaque fois. La garde existe
+    déjà pour le bruitage de départ et protège le média par le même chemin — mais elle est
+    <b>implicite</b>, donc elle doit être couverte par un test dédié.
+  </div>
+  <div class="note ok">
+    <b>Un bruitage pendant le son ne l'interrompt pas.</b> Un buzz correct pendant l'extrait
+    déclenche « gagné » : les deux se <b>mélangent</b>, le bruitage sort immédiatement et l'extrait
+    continue. C'est toute la raison d'être du second chemin de lecture.
+  </div>
+</section>
+
+<!-- ============================================================ 04 -->
+<section>
+  <h2><span class="num">04</span> Ce que ça pèse</h2>
+  <p class="lede">
+    Le serveur ne sait lire que du WAV non compressé : contrainte posée en v11.0, non réouverte
+    ici. Elle a un prix, et il vaut mieux le regarder en face.
+  </p>
+  <table>
+    <tr><th>Durée de l'extrait</th><th>Poids du fichier</th><th>Statut</th></tr>
+    <tr><td>10 s</td><td>1,76 Mo</td><td><span class="st play">accepté</span></td></tr>
+    <tr><td>20 s</td><td>3,53 Mo</td><td><span class="st play">accepté</span></td></tr>
+    <tr><td><b>30 s</b></td><td><b>5,29 Mo</b></td><td><span class="st pause">limite</span></td></tr>
+    <tr><td>42 s</td><td>7,41 Mo</td><td><span class="st idle">refusé</span></td></tr>
+  </table>
+  <p class="note">
+    Le plafond de taille est fixé à <b>6 Mio</b> : de quoi loger 30 s exactement (5,05 Mio) plus
+    l'en-tête et les métadonnées qu'un éditeur WAV tiers ajoute parfois, sans laisser passer un
+    fichier abusif.
+  </p>
+  <div class="note warn">
+    <b>Le vrai facteur limitant n'est pas l'audio, c'est la sauvegarde.</b> Une sauvegarde de
+    questions archive tout le dossier des questions. Avec 85 questions portant chacune un extrait
+    de 30 s, l'archive approcherait <b>450 Mo</b> — sur la carte SD d'un Raspberry Pi. C'est ce qui
+    fixe la limite à 30 s, plus que la mécanique sonore elle-même. L'éditeur affiche le poids de
+    chaque fichier accepté pour que le total ne se découvre pas le jour d'une sauvegarde.
+  </div>
+</section>
+
+<!-- ============================================================ 05 -->
+<section>
+  <h2><span class="num">05</span> Les décisions</h2>
+  <p class="lede">
+    Quatre points étaient ouverts en révision 1. Trois sont tranchés — cette maquette les applique.
+    Un cinquième apparaît, et il reste à trancher.
+  </p>
+
+  <div class="dec">
+    <div class="dec-h"><span class="tag">D0</span><h4>Sur quels types de question ?</h4><span class="stt done">tranché</span></div>
+    <p style="color:var(--dim);font-size:.88rem">
+      <b>SPEEDY, QCM, ARDOISE.</b> MEMORY, MEMOTION, ENTRACTE et RAFALE sont hors périmètre.
+    </p>
+  </div>
+
+  <div class="dec">
+    <div class="dec-h"><span class="tag">D1</span><h4>Le son part tout seul, ou sur commande ?</h4><span class="stt done">tranché</span></div>
+    <p style="color:var(--dim);font-size:.88rem">
+      <b>Automatique</b>, comme l'image — plus un bouton « Rejouer », parce qu'un son ne reste pas
+      à l'écran.
+    </p>
+  </div>
+
+  <div class="dec">
+    <div class="dec-h"><span class="tag">D2</span><h4>Quels contrôles pour l'animateur ?</h4><span class="stt done">tranché</span></div>
+    <p style="color:var(--dim);font-size:.88rem">
+      <b>Rejouer, Pause, Stop</b>, affichés seulement quand la question porte un son, et couplés
+      automatiquement à la partie.
+    </p>
+  </div>
+
+  <div class="dec">
+    <div class="dec-h"><span class="tag">D3</span><h4>Quelle limite de durée ?</h4><span class="stt done">tranché</span></div>
+    <p style="color:var(--dim);font-size:.88rem">
+      <b>30 s maximum, 6 Mio.</b> Le seuil d'avertissement fixe disparaît — il ne disait rien que
+      le plafond ne dise déjà — et cède la place à l'avertissement contextuel du §01.
+    </p>
+  </div>
+
+  <div class="dec">
+    <div class="dec-h"><span class="tag">D4</span><h4>Où vit le son sur MEMORY et MEMOTION ?</h4><span class="stt done">reporté</span></div>
+    <p style="color:var(--dim);font-size:.88rem">
+      <b>Hors périmètre de cette version.</b> Ces deux types portent leurs images sur leurs cartes,
+      pas sur la question : leur donner un son est une décision de conception à part entière, et
+      elle fera l'objet de son propre chantier.
+    </p>
+    <p style="color:var(--dim);font-size:.85rem;margin-top:10px">
+      L'analyse reste consignée dans le plan, pour ce jour-là. En deux mots : un son de
+      <b>manche</b> pour MEMORY et un son <b>par carte</b> pour MEMOTION coûteraient peu ; en
+      revanche un son par <i>carte MEMORY</i> — un « memory sonore » — ne serait pas un média de
+      plus mais <b>un mode de jeu</b>, avec une règle nouvelle à trancher (il faut entendre la
+      première carte <i>puis</i> la seconde, alors qu'un seul son peut sortir à la fois) et jusqu'à
+      <b>127 Mo</b> pour une seule question.
+    </p>
+  </div>
+</section>
+
+<footer style="border-top:1px solid var(--line);padding-top:22px;color:var(--faint);font-family:var(--mono);font-size:.74rem">
+  Maquette révision 2 · #219 · milestone v11.1 · 2026-09-22 · produite par <b>planner</b> en Phase Plan,
+  avant tout développement. Normative pour l'interface et pour les deux machines à états du §03.
+</footer>
+
+</div>
+</body>
+</html>

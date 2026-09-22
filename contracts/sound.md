@@ -492,3 +492,264 @@ dans le câblage des sites de jeu.
 | Bruitages fins par type de question (indice QCM, cartes MEMORY/MEMOTION, RAFALE) | v11.1 (#231) |
 | Compensation de latence son/lumière (délai configurable sur l'ambiance Hue) | Faisabilité tranchée par le spike (§3 du verdict, `_work/reports/spike-226-20260921-103221.md`) — implémentation renvoyée à une issue de câblage ultérieure, hors périmètre Lot A/B de #227 |
 | Amendement du gel de dépendances `TestCA7_NoNewThirdPartyDependency` pour `oto`/`purego`/`jfreymuth/pulse` | #228 (le bump de toolchain seul est fait ici, §10 — voir `contracts/CHANGELOG.md`) |
+
+---
+
+## 10. Média sonore long attaché à une question — normatif (v11.1, #219)
+
+> **Issue** : #219 (milestone #37 — « v11.1 — Question sonore »)
+> **Cadrage utilisateur** : commentaire #219 du 2026-09-22 — ce n'est **pas** un nouveau type de
+> question, c'est un **média** attachable à une question, au même titre qu'une image.
+> **Plan** : `_work/reports/plan-20260922-093142.md` (§0 porte le relevé de code qui fonde cette
+> section)
+> **Maquette normative** : `docs/mockups/question-sound-219.html`
+>
+> Cette section est **additive**. Elle n'amende ni §4 (`Output`), ni §5 (le moteur), ni §2 (le
+> catalogue de cues) : ces trois-là restent **inchangés au bit près**.
+>
+> **Périmètre v11.1 (arbitrage utilisateur, GATE 2 du 2026-09-22)** : **SPEEDY, QCM, ARDOISE**.
+> MEMORY, MEMOTION, ENTRACTE et RAFALE sont **hors périmètre** — ces types portent leurs médias sur
+> leurs cartes (ou n'en portent pas du tout), ce qui demande une décision de conception propre,
+> renvoyée à un chantier ultérieur. L'analyse correspondante est conservée dans
+> `_work/reports/plan-20260922-103848.md` §1.
+
+### 10.1 Pourquoi un second chemin, et non une huitième cue
+
+Quatre propriétés du chemin des cues rendent celui-ci **structurellement** inapte à un média de
+question. Elles sont listées ici pour qu'aucune relecture ultérieure ne reprenne l'idée
+« il suffirait d'ajouter une cue » :
+
+| Obstacle | Où | Conséquence si ignoré |
+|---|---|---|
+| Plafond dur de **10 s** | `otoPlayMaxWait`, `internal/audio/output_oto.go` | Extrait **tronqué à 10 s, silencieusement** — `Play` journalise et rend `nil` |
+| **Sérialisation stricte** (une goroutine, `Play` bloquant réel, file de 8) | §5.2/§5.3 + amendement §4 | Tout bruitage survenant **pendant** le média attend derrière lui, puis est perdu au-delà de 8 |
+| Catalogue de cues **CLOS**, **un** fichier par cue | §2.1 + `FileBank.PCM` | Un média **par question** n'a pas de cue et ne peut pas en avoir une |
+| Validation d'upload calibrée pour des bruitages (5 s / 2 Mo) | `internal/audio/validate.go` | L'assouplir casserait la garantie qui protège la file des cues |
+
+À l'inverse, `oto` **autorise** la coexistence : `Context.NewPlayer` est documenté
+**concurrent-safe** et le mux d'`oto` **mixe** plusieurs `Player` simultanés. Le second chemin
+n'enlève donc rien au premier — il joue **à côté**.
+
+### 10.2 Interface — normative
+
+```go
+// MediaPlayer joue un média sonore LONG attaché à une question, sur un
+// chemin entièrement distinct de celui des cues (§5). Il ne partage avec
+// le moteur de bruitages QUE le contexte audio du processus (§10.3).
+//
+// Contrairement à Output.Play (§4), AUCUNE méthode ne bloque : la lecture
+// est asynchrone, et l'état est lisible à tout instant. C'est cette
+// asymétrie qui rend possibles les contrôles de conduite (rejouer, pause,
+// stop) que l'interface Output n'offre pas et n'a jamais eu à offrir.
+type MediaPlayer interface {
+    // Play démarre la lecture du fichier désigné. VOIX UNIQUE : un Play
+    // pendant une lecture en cours REMPLACE celle-ci (arrêt net), il ne
+    // superpose jamais deux extraits.
+    Play(path string) error
+    Pause()
+    Resume()
+    Stop()
+    State() MediaState
+    Close() error
+}
+
+type MediaState string
+
+const (
+    MediaIdle    MediaState = "IDLE"
+    MediaPlaying MediaState = "PLAYING"
+    MediaPaused  MediaState = "PAUSED"
+)
+```
+
+- **Voix unique, normatif.** Deux extraits ne se superposent jamais. Une question chasse l'autre.
+- **Lecture en flux depuis le disque**, jamais un `os.ReadFile`. Un média de 45 s pèse ~8 Mo de
+  PCM : le charger d'un bloc pour chaque lecture est un gaspillage inutile alors que
+  `oto.Player` consomme un `io.Reader` progressivement. La source **doit** être un
+  `io.ReadSeeker` — `Seek(0, io.SeekStart)` **est** le mécanisme de rejeu.
+- **Dégradation silencieuse identique à §5.5** : plateforme non ciblée, contexte refusé, fichier
+  absent ou non conforme ⇒ implémentation neutre, aucune goroutine, aucune erreur propagée dans
+  le jeu. Un accesseur exporté (`IsNeutralMedia`) signale le cas, symétriquement à `IsNeutral`
+  (§4, amendement #230).
+
+### 10.3 Le contexte `oto` est un singleton de processus — refactor imposé
+
+**`oto` n'autorise qu'un seul contexte audio par processus** (§1, spike #226 §2) — c'est la racine
+même du format canonique du §3. Or ce contexte est aujourd'hui créé **à l'intérieur** de
+`newOtoOutput` et détenu en privé par `otoOutput` (`internal/audio/output_oto.go`). Le
+`MediaPlayer` ne peut donc pas en obtenir un, et n'a **pas le droit** d'en créer un second.
+
+**Exigence normative** : le contexte est extrait en **singleton de package** (`sync.Once`), dont
+`newOtoOutput` **et** le backend `oto` du `MediaPlayer` se servent tous deux.
+
+> ⚠️ **Refactor d'un code déjà revu et testé (#228) — c'est une ré-organisation, pas une
+> réouverture.** L'attente du canal `ready`, le délai de 5 s (`otoContextReadyTimeout`), le
+> pré-armement (`prime`) et la dégradation vers `noopOutput` restent **exactement** où ils sont,
+> dans le même ordre. Aucune signature publique n'est modifiée. Les tests-gardes
+> `play_blocks_228_test.go`, `output_228_test.go`, `cross_compile_228_test.go` et
+> `isneutral_230_test.go` doivent passer **sans une ligne de modification** : toute modification
+> de l'un d'eux est le signe que le refactor a changé un comportement, et **doit** être refusée en
+> revue. Le bug que l'amendement §4 a gravé — `Play` qui rend la main avant la fin réelle du
+> rendu — est précisément celui qu'une ré-organisation maladroite de ce fichier ferait revenir.
+
+> ⚠️ **Piège de durée de vie, non évident.** `oto` documente : « *A player must be kept reachable
+> as long as it should keep playing. A player is closed when it becomes unreachable* » — la
+> fermeture passe par un **finalizer GC**. Le `MediaPlayer` **doit** conserver une référence forte
+> sur le `Player` courant pendant toute la lecture. Sans cela, le son se coupe **au hasard**, plus
+> souvent sur une machine chargée, de façon **irreproductible** — le pire profil de défaut
+> possible. Ce n'est pas une précaution théorique : c'est une contrainte explicite de la
+> bibliothèque.
+
+### 10.4 Format et limites — distinctes de celles des cues, jamais confondues
+
+Le format canonique du **§3 s'applique à l'identique** (WAV PCM 16 bits, 44 100 Hz, stéréo) : c'est
+une conséquence du contexte unique, pas un choix reconductible. **Aucun format compressé n'est
+accepté**, `.mp3` compris — la décision utilisateur du cadrage v11.0 (§3) vaut ici telle quelle, et
+`go.mod` ne contient **aucun** décodeur ni rééchantillonneur.
+
+Les **limites**, en revanche, sont **propres au média** :
+
+| Constante | Valeur | Motif |
+|---|---|---|
+| `MaxQuestionSoundDuration` | **30 s** *(arbitrage utilisateur, GATE 2 du 2026-09-22)* | Un extrait de question dure typiquement 10 à 30 s. Au-delà, le coût disque (10,1 Mo/minute) et le poids des sauvegardes deviennent le facteur limitant, pas l'audio |
+| `MaxQuestionSoundBytes` | **6 Mio** (`6 << 20`) | 30 s canoniques pèsent 5,05 Mio ; 6 Mio laisse **+18,9 %** pour l'en-tête RIFF et d'éventuels chunks `LIST`/`INFO` (que `extractCanonicalPCM` traverse déjà) sans autoriser un fichier abusif |
+
+**Aucun seuil d'avertissement fixe.** Un seuil intermédiaire ne dirait que « vous approchez du
+plafond », ce que le plafond dit déjà. L'avertissement — **non bloquant**, comme l'était celui des
+cues — est **contextuel** : il compare la durée du son au temps de réponse de la question
+(`Question.TIME`), deux valeurs présentes dans la **même** requête multipart. Il n'est émis qu'en
+mode simultané (§10.7) : en mode différé la situation ne peut pas se produire.
+
+> ⚠️ **Normatif : `MaxSoundDuration` (5 s) et `MaxUploadBytes` (2 Mio) ne sont PAS modifiées.**
+> Elles protègent la file des cues (§5.2) et leur justification — « le moteur lit strictement
+> séquentiellement » — reste entièrement valable **pour les cues**. Les deux jeux de constantes
+> coexistent délibérément. Un test-sentinelle vérifie que les valeurs des cues sont inchangées :
+> « factoriser » les deux jeux en un seul est le défaut le plus probable de ce lot, et il
+> supprimerait silencieusement la garantie du §5.2.
+
+Le validateur du média **réutilise `extractCanonicalPCM`** (`internal/audio/bank.go`) — jamais un
+second parseur WAV écrit indépendamment, exactement comme `ValidateUpload` le fait déjà pour les
+cues (§7).
+
+### 10.4bis Le champ est commun à tous les types — la restriction est une décision d'éditeur
+
+> **Normatif.** `Question.SOUND` et `Question.SOUND_TIMER_DELAYED` vivent sur `Question`, **hors
+> `TypedContent`** : ils sont donc persistés, diffusés et lus **quel que soit le type**. Le serveur
+> **ne doit pas** porter de garde « ce type n'a pas le droit d'avoir un son ».
+
+C'est exactement le régime de `MEDIA` aujourd'hui — structurellement commun aux sept types, masqué
+seulement à l'édition. Trois raisons de s'y tenir :
+
+- une telle garde n'apporterait **aucune sécurité** : `GET /questions` est public et sans
+  authentification, et ce champ n'est pas un secret (même raisonnement que `contracts/models.md`
+  §`EXPLANATION`) ;
+- elle rendrait l'élargissement futur du périmètre **plus coûteux qu'il ne doit l'être** : sans
+  garde, rouvrir MEMORY/MEMOTION/ENTRACTE sera un changement **purement frontend** ;
+- elle romprait la symétrie avec `MEDIA`, qu'une relecture ultérieure prendrait pour une
+  incohérence à « corriger » — dans un sens ou dans l'autre.
+
+Ce point est écrit **parce que c'est la correction spontanée qu'une revue est tentée d'exiger** en
+voyant un champ restreint à trois types côté interface et ouvert à tous côté modèle.
+
+---
+
+### 10.5 Frontière avec le fan-out des cues — vérifiée par test, pas par discipline
+
+Le §6.2 impose déjà un test-garde AST sur un **registre fermé** de sites autorisés à appeler
+`notifySound`. Cette section lui ajoute une **frontière symétrique** :
+
+- L'adaptateur du média vit dans un **fichier distinct** (`cmd/server/question_sound.go`), jamais
+  dans `cmd/server/sound.go`.
+- Il n'appelle **jamais** `notifySound` ni `PlayCue` — un média n'est pas une cue.
+- Réciproquement, `sound.go` n'appelle **jamais** le `MediaPlayer`.
+
+Les deux chemins ne se touchent qu'en un seul point : le contexte `oto` partagé (§10.3). Cette
+exclusion mutuelle **doit** être couverte par un test, au même titre que le registre du §6.2 — la
+discipline seule ne suffit pas, c'est précisément le raisonnement que §6.2 tient déjà.
+
+### 10.6 Ce que cette section ne couvre pas
+
+| Sujet | Statut |
+|---|---|
+| *Ducking* (atténuer le média pendant un bruitage) | **Hors v11.1.** `oto.Player.SetVolume` le rendrait trivial, mais il recouplerait les deux chemins que §10.5 sépare. Suite possible, jamais un effet de bord |
+| Lecture en boucle (ambiance d'ENTRACTE prolongée) | **Hors v11.1.** Une lecture = un passage |
+| Position de lecture diffusée dans le `GameState` | **Exclu.** Seul l'**état** (`IDLE`/`PLAYING`/`PAUSED`) est diffusé, à chaque changement. Le chronomètre est le seul flux à cadence du projet ; on n'en ajoute pas un second |
+| Sélection du périphérique de sortie | Inchangé — `SoundConfig.Device` n'est toujours pas honoré par `oto` (§9, `OutputConfig`) |
+| Média sonore de **réponse** (symétrique de `MEDIA_ANSWER`) | Non demandé au cadrage. Additif si un jour souhaité |
+
+> ℹ️ Cette table est celle du périmètre initial. Le **chronomètre de réponse différé**, ajouté par
+> l'arbitrage du GATE 2 du 2026-09-22, est **dans** le périmètre — voir §10.7 ci-dessous.
+
+### 10.7 Chronomètre de réponse différé — normatif (arbitrage utilisateur, GATE 2 du 2026-09-22)
+
+Chaque son porte un réglage propre : le chronomètre de réponse démarre **en même temps que lui**
+(valeur par défaut, comportement d'avant ce lot) ou **à sa fin**.
+
+```go
+// sur Question
+SoundTimerDelayed bool `json:"SOUND_TIMER_DELAYED,omitempty"`
+```
+
+**La valeur zéro est le comportement correct** — `false` = simultané = ce que fait le serveur
+aujourd'hui. Aucune migration, aucun `question.json` existant modifié. Même discipline que
+`CuesDisabled` (§6.3), et pour la même raison : un réglage dont l'absence changerait le
+comportement serait un piège à chaque configuration existante.
+
+**« La fin du son » recouvre deux évènements, jamais un seul** : la fin naturelle de la lecture
+**et** l'arrêt manuel par l'animateur. Les deux libèrent le chronomètre, et la libération est
+**idempotente** — les deux peuvent survenir.
+
+**La libération est irréversible pour la question en cours.** Un « Rejouer » après le démarrage du
+chronomètre ne le regèle **jamais** : l'animateur disposerait sinon d'un bouton « rendre du temps »
+que rien ne justifie.
+
+**Libération pendant une pause de jeu** : si le son se termine alors que la partie est en pause, le
+chronomètre démarre **à la reprise**, jamais pendant la pause.
+
+> ⚠️ **Règle de non-blocage — la plus importante de cette section.**
+> **Si la lecture ne démarre pas réellement, le chronomètre démarre immédiatement.** Lecteur neutre
+> (plateforme non ciblée, contexte audio refusé), fichier absent ou non conforme,
+> `sound.enabled = false` : dans tous ces cas le mode différé **dégrade vers le mode simultané**.
+>
+> C'est l'application directe de la dégradation silencieuse du §5.5, avec sa conséquence explicitée
+> une fois pour toutes : **elle doit dégrader vers le comportement normal, jamais vers un
+> blocage.** Sans cette règle, une enceinte débranchée fige une question en direct, sans message et
+> sans recours — le pire défaut que ce lot puisse produire.
+>
+> **Complément normatif** : un **chien de garde** libère le chronomètre au plus tard à
+> `MaxQuestionSoundDuration + 2 s` après le lancement, même si aucune fin de lecture n'a été
+> signalée (goroutine de surveillance morte, pilote figé). La dégradation ne doit pas dépendre d'un
+> seul chemin de détection.
+
+**L'interface doit dire pourquoi le chronomètre ne bouge pas.** Un chronomètre figé au temps plein
+pendant 30 s sera pris pour une panne — par l'animateur comme par le public. `/anim`, `/admin`
+**et la TV** portent une mention explicite (« le chronomètre démarrera à la fin du son »), jamais
+un simple chiffre immobile. L'état est diffusé par le serveur (`GAME.ANSWER_TIMER_WAITING`), jamais
+déduit côté navigateur.
+
+**Points de couplage, par famille de chronomètre** — les deux sont distincts et ne se partagent
+aucun code :
+
+| Chronomètre | Types | Où il démarre aujourd'hui | Forme du différé |
+|---|---|---|---|
+| **Global** | SPEEDY, QCM, ARDOISE | `Engine.actualStart()`, appel `e.startTimer()` sous verrou | **Ne pas créer le ticker** — `CurrentTime` est déjà au temps plein, le chronomètre s'affiche donc figé sans état d'affichage à inventer. Une méthode exportée `ReleaseDeferredTimer()` le crée à la fin du son |
+
+> ⚠️ **La garde de type existante d'`actualStart()` est préservée à l'identique.** MEMOTION et
+> ENTRACTE n'ont jamais démarré le chronomètre global (MEMOTION utilise un chronomètre **par
+> carte**, démarré par `(*App).handleMotionFlip` et non par le moteur ; ENTRACTE n'a aucun
+> chronomètre). L'ajout du différé s'insère **autour** de l'appel existant, il ne remplace pas cette
+> garde. Un chronomètre global qui démarrerait sur MEMOTION serait une régression, pas un effet de
+> bord acceptable.
+>
+> *Hors périmètre v11.1, conservé parce que c'est un relevé de code vérifié* : le jour où MEMOTION
+> recevra un son, son différé ne demandera **aucune modification du moteur** — il suffira de ne pas
+> appeler `StartMotionCardTimer` au retournement et de laisser le rappel de fin de lecture le faire.
+
+> ⚠️ `Pause()`/`Continue()` **n'arrêtent pas le ticker** — `processTimerTick` se contente de ne
+> rien décrémenter hors `PhaseStarted`. « Mettre le chronomètre en attente » en arrêtant le ticker
+> est donc impossible : la seule forme correcte est de **ne pas le créer**.
+
+> ⚠️ `actualStart()` est un site que RAFALE, ENTRACTE, MEMOTION et MEMORY se partagent déjà, avec
+> des commentaires d'ordonnancement explicites (« must run BEFORE startTimer() »). La garde du
+> différé s'ajoute **autour de l'appel existant**, au même endroit, **sans déplacer une seule ligne
+> voisine**.
