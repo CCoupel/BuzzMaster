@@ -30,6 +30,20 @@ import '../styles/tabs.css'
 // Re-export CATEGORIES for backward compatibility
 export { CATEGORIES }
 
+// #219 (ajustement ergonomie QUALIF v11.1.0.1) — durée d'un son de question,
+// lue via l'évènement `loadedmetadata` d'un <audio> (jamais calculée
+// autrement : c'est la seule source fiable côté navigateur). Le plafond
+// serveur est 30 s (contrat sound.md §10.4), donc la branche minutes ne
+// sert en pratique jamais — conservée pour rester correcte si ce plafond
+// change un jour, plutôt que de coder en dur "toujours des secondes".
+function formatSoundDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return null
+  const total = Math.round(seconds)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
 export default function QuestionsPage() {
   const { questions, fsInfo, deleteQuestion, sendMessage, gameState, aiJob, cancelAiGeneration } = useGame()
   const navigate = useNavigate()
@@ -225,6 +239,12 @@ export default function QuestionsPage() {
   // réussi (le formulaire est déjà revenu à l'état "nouvelle question").
   const [soundError, setSoundError] = useState(null)
   const [soundToast, setSoundToast] = useState(null)
+  // #219 (ajustement ergonomie QUALIF v11.1.0.1) — durée du fichier son,
+  // lue côté navigateur via l'évènement `loadedmetadata` du même `<audio>`
+  // que la pré-écoute (jamais un second élément caché : un seul chemin de
+  // lecture des métadonnées). `null` = pas encore connue (fichier en cours
+  // de décodage, ou aucun son attaché) — jamais affichée dans ce cas.
+  const [soundDuration, setSoundDuration] = useState(null)
 
   // AI generation modal (v6.0.0 #8, multi-provider + tâche de fond v6.1.0 #137)
   const [showAIModal, setShowAIModal] = useState(false)
@@ -391,6 +411,21 @@ export default function QuestionsPage() {
   // Custom categories from API (#95)
   const { categories: apiCategories, refetch: refetchCategories } = useCategories()
   const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+
+  // #219 (ajustement ergonomie QUALIF v11.1.0.1) — URL objet STABLE pour le
+  // fichier son fraîchement choisi, mémoïsée sur `formData.sound` plutôt que
+  // recréée à chaque rendu (ce que faisait l'inline `URL.createObjectURL(...)`
+  // d'origine — un nouveau blob à chaque frappe ailleurs dans le formulaire,
+  // fuite mémoire ET rechargement audible du lecteur de pré-écoute à chaque
+  // rendu non lié). Révoquée au changement de fichier ou au démontage.
+  const soundObjectUrl = useMemo(() => (
+    formData.sound ? URL.createObjectURL(formData.sound) : null
+  ), [formData.sound])
+  useEffect(() => {
+    return () => {
+      if (soundObjectUrl) URL.revokeObjectURL(soundObjectUrl)
+    }
+  }, [soundObjectUrl])
 
   // Category filter (shared hook) — passes custom categories for filter support
   const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions, customCategories)
@@ -576,6 +611,10 @@ export default function QuestionsPage() {
       setFormData(prev => ({ ...prev, sound: file, existingSound: null, soundCleared: false }))
       setSoundError(null)
       setSoundToast(null)
+      // Durée recalculée par `onLoadedMetadata` du <audio> de pré-écoute dès
+      // que le nouveau fichier est décodé — `null` entre-temps pour ne
+      // jamais afficher la durée du fichier PRÉCÉDENT par erreur.
+      setSoundDuration(null)
     }
   }
 
@@ -839,6 +878,10 @@ export default function QuestionsPage() {
       soundInputRef.current.value = ''
     }
     setSoundError(null)
+    // Recalculée par `onLoadedMetadata` si la question chargée porte un son
+    // (existingSound) — `null` entre-temps pour ne jamais montrer la durée
+    // de la question PRÉCÉDEMMENT éditée.
+    setSoundDuration(null)
   }
 
   const handleNewQuestion = () => {
@@ -979,6 +1022,7 @@ export default function QuestionsPage() {
       soundInputRef.current.value = ''
     }
     setSoundError(null)
+    setSoundDuration(null)
   }
 
   const handleQcmAnswerChange = (color, value) => {
@@ -3038,17 +3082,28 @@ export default function QuestionsPage() {
                                 ? formData.sound.name
                                 : decodeURIComponent(formData.existingSound.split('/').pop())}
                             </span>
-                            {formData.sound && (
-                              <span className="sound-preview-size">
-                                {(formData.sound.size / (1024 * 1024)).toFixed(1)} Mo
+                            {/* Ajustement ergonomie QUALIF v11.1.0.1 — durée
+                                lue par `onLoadedMetadata` ci-dessous, jamais
+                                calculée autrement ; taille uniquement pour un
+                                fichier fraîchement choisi (inconnue pour un
+                                son déjà enregistré sans le retélécharger). */}
+                            {(soundDuration != null || formData.sound) && (
+                              <span className="sound-preview-meta">
+                                {soundDuration != null && formatSoundDuration(soundDuration)}
+                                {soundDuration != null && formData.sound && ' · '}
+                                {formData.sound && `${(formData.sound.size / (1024 * 1024)).toFixed(1)} Mo`}
                               </span>
                             )}
                           </div>
                           <audio
-                            key={formData.sound ? formData.sound.name + formData.sound.size : formData.existingSound}
+                            key={soundObjectUrl || formData.existingSound}
                             controls
                             preload="metadata"
-                            src={formData.sound ? URL.createObjectURL(formData.sound) : formData.existingSound}
+                            src={formData.sound ? soundObjectUrl : formData.existingSound}
+                            onLoadedMetadata={(e) => {
+                              const d = e.target.duration
+                              if (Number.isFinite(d)) setSoundDuration(d)
+                            }}
                           />
                           <Button
                             variant="ghost"
@@ -3057,6 +3112,7 @@ export default function QuestionsPage() {
                               setFormData(prev => ({ ...prev, sound: null, existingSound: null, soundCleared: true }))
                               setSoundError(null)
                               setSoundToast(null)
+                              setSoundDuration(null)
                               if (soundInputRef.current) soundInputRef.current.value = ''
                             }}
                           >
@@ -3071,38 +3127,47 @@ export default function QuestionsPage() {
                         <p className="sound-error-message">✕ {soundError}</p>
                       )}
 
-                      {/* Bascule chronomètre — visible SEULEMENT si un son est
-                          attaché (maquette §01, note "La bascule n'existe que
-                          s'il y a un son"). */}
-                      {(formData.sound || formData.existingSound) && (
-                        <div className="sound-timer-toggle">
-                          <label className="sound-timer-toggle-label">Chronomètre de réponse</label>
-                          <label className={`sound-timer-option ${!formData.soundTimerDelayed ? 'on' : ''}`}>
-                            <input
-                              type="radio"
-                              name="sound-timer-mode"
-                              checked={!formData.soundTimerDelayed}
-                              onChange={() => handleInputChange('soundTimerDelayed', false)}
-                            />
-                            <span>
-                              <b>Démarrer en même temps que le son</b>
-                              <small>Comportement habituel — les joueurs écoutent pendant que le temps défile.</small>
-                            </span>
-                          </label>
-                          <label className={`sound-timer-option ${formData.soundTimerDelayed ? 'on' : ''}`}>
-                            <input
-                              type="radio"
-                              name="sound-timer-mode"
-                              checked={formData.soundTimerDelayed}
-                              onChange={() => handleInputChange('soundTimerDelayed', true)}
-                            />
-                            <span>
-                              <b>Démarrer à la fin du son</b>
-                              <small>Le temps ne commence qu'une fois l'extrait terminé — ou dès que vous l'arrêtez vous-même.</small>
-                            </span>
-                          </label>
-                        </div>
-                      )}
+                      {/* Ajustement ergonomie QUALIF v11.1.0.1 — la bascule
+                          reste TOUJOURS montée (même garde de type que le
+                          reste du bloc), pour que l'utilisateur voie le
+                          réglage exister avant même d'attacher un son ; les
+                          deux options sont seulement désactivées tant
+                          qu'aucun son n'est attaché (maquette §01 à mettre à
+                          jour dans ce sens si jugé utile). */}
+                      {(() => {
+                        const hasSound = !!(formData.sound || formData.existingSound)
+                        return (
+                          <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
+                            <label className="sound-timer-toggle-label">Chronomètre de réponse</label>
+                            <label className={`sound-timer-option ${!formData.soundTimerDelayed ? 'on' : ''} ${!hasSound ? 'disabled' : ''}`}>
+                              <input
+                                type="radio"
+                                name="sound-timer-mode"
+                                checked={!formData.soundTimerDelayed}
+                                disabled={!hasSound}
+                                onChange={() => handleInputChange('soundTimerDelayed', false)}
+                              />
+                              <span>
+                                <b>Démarrer en même temps que le son</b>
+                                <small>Comportement habituel — les joueurs écoutent pendant que le temps défile.</small>
+                              </span>
+                            </label>
+                            <label className={`sound-timer-option ${formData.soundTimerDelayed ? 'on' : ''} ${!hasSound ? 'disabled' : ''}`}>
+                              <input
+                                type="radio"
+                                name="sound-timer-mode"
+                                checked={formData.soundTimerDelayed}
+                                disabled={!hasSound}
+                                onChange={() => handleInputChange('soundTimerDelayed', true)}
+                              />
+                              <span>
+                                <b>Démarrer à la fin du son</b>
+                                <small>Le temps ne commence qu'une fois l'extrait terminé — ou dès que vous l'arrêtez vous-même.</small>
+                              </span>
+                            </label>
+                          </div>
+                        )
+                      })()}
                     </div>
                   </>
                 )}

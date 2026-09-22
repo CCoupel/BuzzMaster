@@ -484,7 +484,10 @@
   text-overflow: ellipsis;
 }
 
-.sound-preview-size {
+/* Ajustement ergonomie QUALIF v11.1.0.1 — durée (via `onLoadedMetadata`) et
+   taille (fichier fraîchement choisi uniquement) sur la même ligne,
+   remplace .sound-preview-size (renommée, même usage). */
+.sound-preview-meta {
   font-size: 0.7rem;
   color: var(--gray-500);
 }
@@ -552,6 +555,23 @@
   font-size: 0.72rem;
   color: var(--gray-500);
   line-height: 1.3;
+}
+
+/* Ajustement ergonomie QUALIF v11.1.0.1 — la bascule reste toujours visible
+   (montée dans la garde de type), grisée tant qu'aucun son n'est attaché :
+   l'utilisateur voit le réglage exister avant même d'ajouter un fichier. */
+.sound-timer-toggle.disabled .sound-timer-toggle-label {
+  color: var(--gray-400);
+}
+
+.sound-timer-option.disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  background: var(--gray-50);
+}
+
+.sound-timer-option.disabled:hover {
+  border-color: var(--gray-200);
 }
 
 .submit-btn {

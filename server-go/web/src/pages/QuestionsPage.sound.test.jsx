@@ -138,15 +138,25 @@ describe('QuestionsPage — visibilité du champ son (garde de type, plan §0.2)
     expect(screen.queryByLabelText(/Son de la question/i)).not.toBeInTheDocument()
   })
 
-  it('la bascule "Chronomètre de réponse" est ABSENTE tant qu\'aucun son n\'est attaché (maquette §01)', () => {
+  // Ajustement ergonomie QUALIF v11.1.0.1 — la bascule reste TOUJOURS
+  // montée (l'utilisateur doit voir le réglage exister avant même d'attacher
+  // un fichier), seules les deux options sont désactivées tant qu'aucun son
+  // n'est attaché. Remplace l'ancien comportement (bascule absente du DOM).
+  it('la bascule "Chronomètre de réponse" est VISIBLE mais DÉSACTIVÉE tant qu\'aucun son n\'est attaché', () => {
     render(<QuestionsPage />)
-    expect(screen.queryByText('Chronomètre de réponse')).not.toBeInTheDocument()
+    const label = screen.getByText('Chronomètre de réponse')
+    expect(label).toBeInTheDocument()
+    const radios = label.closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
+    expect(radios).toHaveLength(2)
+    radios.forEach(radio => expect(radio).toBeDisabled())
   })
 
-  it('choisir un fichier son fait apparaître la bascule "Chronomètre de réponse"', () => {
+  it('choisir un fichier son ACTIVE les deux options de la bascule', () => {
     const { container } = render(<QuestionsPage />)
     selectSoundFile(container)
-    expect(screen.getByText('Chronomètre de réponse')).toBeInTheDocument()
+    const label = screen.getByText('Chronomètre de réponse')
+    const radios = label.closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
+    radios.forEach(radio => expect(radio).not.toBeDisabled())
   })
 })
 
@@ -237,14 +247,19 @@ describe('QuestionsPage — édition et suppression d\'un son existant', () => {
     expect(formData.has('sound')).toBe(false)
   })
 
-  it('après suppression, la bascule "Chronomètre de réponse" redevient invisible (plus de son attaché)', () => {
+  it('après suppression, la bascule "Chronomètre de réponse" reste visible mais redevient désactivée', () => {
     useGame.mockReturnValue(makeQPageMock({ questions: questionsWithSound }))
     render(<QuestionsPage />)
     fireEvent.click(screen.getByTestId('qcard-1'))
-    expect(screen.getByText('Chronomètre de réponse')).toBeInTheDocument()
+    const label = screen.getByText('Chronomètre de réponse')
+    expect(label).toBeInTheDocument()
+    let radios = label.closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
+    radios.forEach(radio => expect(radio).not.toBeDisabled())
 
     fireEvent.click(screen.getByText('Supprimer'))
-    expect(screen.queryByText('Chronomètre de réponse')).not.toBeInTheDocument()
+    expect(screen.getByText('Chronomètre de réponse')).toBeInTheDocument()
+    radios = screen.getByText('Chronomètre de réponse').closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
+    radios.forEach(radio => expect(radio).toBeDisabled())
   })
 
   it('choisir un NOUVEAU fichier après "Supprimer" annule la suppression en attente (sound_cleared repasse à false)', async () => {
@@ -325,6 +340,55 @@ describe('QuestionsPage — refus serveur nommé (CA2)', () => {
 // Avertissement contextuel — succès (200) avec `warning` non-null (durée du
 // son vs Question.TIME, mode simultané).
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Durée du son (ajustement ergonomie QUALIF v11.1.0.1) — lue via
+// `loadedmetadata` du même <audio> que la pré-écoute, jamais un second
+// élément caché. jsdom ne décode aucun média réel : `duration` est simulée
+// via Object.defineProperty (propriété propre à l'instance, prioritaire sur
+// le getter du prototype HTMLMediaElement), puis l'évènement est déclenché
+// manuellement — c'est la limite connue de ce test (pas un vrai décodage).
+// ---------------------------------------------------------------------------
+
+describe('QuestionsPage — durée du son affichée (ajustement ergonomie QUALIF v11.1.0.1)', () => {
+  it('fichier fraîchement choisi : la durée s\'affiche après le chargement des métadonnées', () => {
+    const { container } = render(<QuestionsPage />)
+    selectSoundFile(container)
+
+    const audio = container.querySelector('.sound-preview audio')
+    expect(audio).toBeTruthy()
+    Object.defineProperty(audio, 'duration', { value: 24, configurable: true })
+    fireEvent.loadedMetadata(audio)
+
+    expect(screen.getByText(/24s/)).toBeInTheDocument()
+  })
+
+  it('son déjà enregistré (ré-édition) : la durée s\'affiche aussi après chargement des métadonnées', () => {
+    useGame.mockReturnValue(makeQPageMock({
+      questions: { 1: { ID: '1', QUESTION: 'Q', ANSWER: 'A', TYPE: 'SPEEDY', SOUND: '/question/1/sound_1234.wav' } },
+    }))
+    render(<QuestionsPage />)
+    fireEvent.click(screen.getByTestId('qcard-1'))
+
+    const audio = document.querySelector('.sound-preview audio')
+    Object.defineProperty(audio, 'duration', { value: 12, configurable: true })
+    fireEvent.loadedMetadata(audio)
+
+    expect(screen.getByText(/12s/)).toBeInTheDocument()
+  })
+
+  it('choisir un NOUVEAU fichier n\'affiche pas la durée du fichier précédent', () => {
+    const { container } = render(<QuestionsPage />)
+    selectSoundFile(container, { name: 'a.wav' })
+    const firstAudio = container.querySelector('.sound-preview audio')
+    Object.defineProperty(firstAudio, 'duration', { value: 10, configurable: true })
+    fireEvent.loadedMetadata(firstAudio)
+    expect(screen.getByText(/10s/)).toBeInTheDocument()
+
+    selectSoundFile(container, { name: 'b.wav' })
+    expect(screen.queryByText(/10s/)).not.toBeInTheDocument()
+  })
+})
 
 describe('QuestionsPage — avertissement contextuel (succès avec warning)', () => {
   it('réponse 200 avec warning non-null : affiché en toast', async () => {
