@@ -156,6 +156,8 @@ export default function AnimPage() {
     stopMotionTimer,
     revealMotionCard,
     doneMotionCard,
+    // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
+    questionSound,
   } = useGame()
 
   // #176 (F5) — acquittement de la consigne régie par double-tap sur toute
@@ -766,6 +768,13 @@ export default function AnimPage() {
             {phaseBadge && (
               <span className={`phase-badge ${phaseBadge.className}`}>{phaseBadge.label}</span>
             )}
+            {/* #219 (v11.1, CA15) — le chronomètre différé attend la fin du
+                son : sans cette mention un temps figé au plein est pris pour
+                une panne (R11, contrat sound.md §10.7). État diffusé par le
+                serveur (GAME.ANSWER_TIMER_WAITING) — jamais déduit ici. */}
+            {gameState.ANSWER_TIMER_WAITING && (
+              <span className="sound-wait-badge-inline">⏳ le chrono démarre à la fin du son</span>
+            )}
             {/* #166/F10 — zone réponse permanente : remplace le bloc
                 conditionnel #163/F4. Absente si aucune question chargée
                 (AnimAnswerZone rend null). */}
@@ -876,6 +885,10 @@ export default function AnimPage() {
           cardRafaleDisabled={cardRafaleDisabled}
           onCardRafaleValidate={onCardRafaleValidate}
           onCardRafaleInvalidate={onCardRafaleInvalidate}
+          // Son de la question (v11.1, #219) — état diffusé par le serveur
+          // (jamais déduit ici), geste transmis tel quel à questionSound().
+          soundState={gameState.QUESTION_SOUND_STATE}
+          onQuestionSound={questionSound}
         />
       </div>
 

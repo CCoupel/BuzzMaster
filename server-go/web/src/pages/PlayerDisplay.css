@@ -1369,6 +1369,33 @@
   justify-content: center;
   align-items: center;
   flex-shrink: 0;
+  position: relative; /* ancre .sound-wait-badge (#219) sans agrandir la zone */
+}
+
+/* #219 (v11.1, CA15) — mention "le chronomètre démarrera à la fin du son"
+   (contrat sound.md §10.7, R11 : un chronomètre figé au temps plein sans
+   explication est pris pour une panne). Positionnement ABSOLU, exigence
+   TV STATIQUE (CLAUDE.md) : .zone-timer garde sa hauteur fixe de 10vh,
+   cette mention se superpose au bas de la zone (marge verticale déjà
+   disponible sous les chiffres + la barre) plutôt que d'ajouter une ligne
+   au flux flex. */
+.sound-wait-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: clamp(0.55rem, 1.5vh, 0.8rem);
+  font-weight: 600;
+  color: var(--warning, #eab308);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 10px;
+  border-radius: var(--radius-md, 6px);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* VPlayer permanent info - always shown at top of game display */

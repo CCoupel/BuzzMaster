@@ -15,6 +15,7 @@ import {
   canStart as canStartRule,
   isPlaying as isPlayingRule,
   canReveal as canRevealRule,
+  showSoundRow as showSoundRowRule,
 } from '../utils/phaseRules'
 import { isTeamReady, prepareWaitReason } from '../utils/prepareWaitReason'
 import {
@@ -36,6 +37,7 @@ import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import AnimRafaleActions from '../components/AnimRafaleActions'
+import AnimSoundActions from '../components/AnimSoundActions'
 import './GamePage.css'
 import '../styles/entracte.css'
 
@@ -63,6 +65,8 @@ export default function GamePage() {
     rafaleValidate,
     rafaleInvalidate,
     newGame,
+    // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
+    questionSound,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -529,6 +533,13 @@ export default function GamePage() {
             size="lg"
             showPhase={false}
           />
+          {/* #219 (v11.1, CA15) — miroir de la mention /anim (AnimPage.jsx) :
+              le chronomètre différé attend la fin du son, sans quoi un temps
+              figé au plein est pris pour une panne (R11, contrat sound.md
+              §10.7). État diffusé par le serveur — jamais déduit ici. */}
+          {gameState.ANSWER_TIMER_WAITING && (
+            <div className="sound-wait-badge-inline">⏳ le chrono démarre à la fin du son</div>
+          )}
         </Card>
         <Card variant="elevated" padding="sm" className="display-card">
           <span className="toggle-label-vertical">TV</span>
@@ -1159,6 +1170,22 @@ export default function GamePage() {
               </div>
             )
           })()}
+
+          {/* #219 (v11.1) — mêmes gestes de conduite son que /anim
+              (AnimSoundActions, RÉUTILISÉ TEL QUEL — même discipline de
+              mutualisation qu'AnimRafaleActions ci-dessus). Rangée absente
+              (jamais grisée) si la question courante ne porte pas de son ou
+              si la partie n'est pas en cours — phaseRules.showSoundRow,
+              source de vérité unique (jamais une condition réécrite ici). */}
+          {showSoundRowRule(gameState.phase, gameState.question) && (
+            <div className="question-sound-admin-live">
+              <div className="question-sound-admin-label">Son de la question</div>
+              <AnimSoundActions
+                soundState={gameState.QUESTION_SOUND_STATE}
+                onCommand={questionSound}
+              />
+            </div>
+          )}
 
           {/* MEMOTION subphase controls — shown when MEMOTION question is STARTED */}
           {gameState.question?.TYPE === 'MEMOTION' && gameState.phase === 'STARTED' && (() => {

@@ -98,8 +98,10 @@
 
 .timer-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   padding: var(--space-2) var(--space-6);
 }
 
@@ -107,6 +109,23 @@
 .timer-card .timer .timer-display { font-size: 2rem; padding: var(--space-2) var(--space-4); }
 .timer-card .timer .timer-bar-container { max-width: 95%; height: 12px; }
 .timer-card .timer .timer-phase { margin-top: 0; }
+
+/* #219 (v11.1, CA15) — même mention que /anim (AnimPage.css), présentation
+   propre à cette page (patron du projet : feuilles de style séparées par
+   page pour une même classe, cf. .rafale-anim-qcard*). */
+.timer-card .sound-wait-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--warning, #eab308);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  padding: 2px 10px;
+  border-radius: var(--radius-md, 6px);
+  white-space: nowrap;
+}
 
 /* Display card styles (inside timer-display-section) */
 .display-card {
@@ -814,6 +833,24 @@
    projet, cf. .rafale-tv-qcard dans PlayerDisplay.css). */
 .rafale-admin-live {
   margin-bottom: var(--space-3);
+}
+
+/* #219 (v11.1) — miroir admin des gestes de conduite son (AnimSoundActions,
+   RÉUTILISÉ TEL QUEL) — même esprit que .rafale-admin-live ci-dessus, sans
+   l'encart coloré équipe (pas de notion d'équipe pour un son de question). */
+.question-sound-admin-live {
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.question-sound-admin-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .rafale-anim-qcard {

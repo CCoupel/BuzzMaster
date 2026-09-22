@@ -135,6 +135,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     RAFALE_ASKED_COUNT: 0,
     RAFALE_POOL_REMAINING: 0,
     RAFALE_EXHAUSTED: false,
+    // Son de la question (v11.1, #219, contrats game-state.md/sound.md §10).
+    // Jamais omitempty côté serveur (règle projet) : les défauts ci-dessous
+    // sont les valeurs zéro correctes ("aucune lecture en cours" / "le
+    // chronomètre n'est pas différé"), pas des repères d'absence de données.
+    QUESTION_SOUND_STATE: 'IDLE', // 'IDLE' | 'PLAYING' | 'PAUSED'
+    ANSWER_TIMER_WAITING: false, // true tant que le chronomètre différé attend la fin du son (CA15)
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -433,6 +439,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             quizLanguage: MSG.GAME.QUIZ_LANGUAGE !== undefined ? MSG.GAME.QUIZ_LANGUAGE : prev.quizLanguage,
             quizObjectives: MSG.GAME.QUIZ_OBJECTIVES !== undefined ? MSG.GAME.QUIZ_OBJECTIVES : prev.quizObjectives,
             quizHiddenFields: normalizeQuizArray(MSG.GAME.QUIZ_HIDDEN_FIELDS),
+            // Son de la question (v11.1, #219) — diffusé à chaque changement
+            // (rejouer/pause/reprise/arrêt/fin naturelle) via broadcastUpdate(),
+            // donc toujours porté par une UPDATE. `??` (pas `||`) : IDLE/false
+            // sont des valeurs zéro légitimes, jamais à écraser par erreur.
+            QUESTION_SOUND_STATE: MSG.GAME.QUESTION_SOUND_STATE ?? prev.QUESTION_SOUND_STATE,
+            ANSWER_TIMER_WAITING: MSG.GAME.ANSWER_TIMER_WAITING ?? prev.ANSWER_TIMER_WAITING,
           }))
         }
         if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
@@ -917,6 +929,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('TEAM_POINTS', { TEAM: teamName, POINTS: points })
   }, [sendMessage])
 
+  // #219 (v11.1) — un des trois gestes de conduite sur le média sonore de la
+  // question courante (contrat websocket-actions.md §QUESTION_SOUND).
+  // `command` : 'PLAY' (Rejouer) | 'PAUSE' | 'RESUME' | 'STOP'. Sans effet
+  // côté serveur si la question courante ne porte pas de son — cette
+  // fonction n'a donc pas besoin de le vérifier elle-même.
+  const questionSound = useCallback((command) => {
+    sendMessage('QUESTION_SOUND', { COMMAND: command })
+  }, [sendMessage])
+
   // #167 (F1) — envoi/effacement de la consigne régie. Validation (trim,
   // troncature 140 runes, garde d'idempotence) intégralement côté serveur
   // (contrat §REGIE_MESSAGE_SEND règles 1-4) : ces wrappers transmettent le
@@ -1222,6 +1243,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setTeamPoints,
     deleteBumper,
     releaseBumperName,
+    // Son de la question (#219)
+    questionSound,
     sendRegieMessage,
     clearRegieMessage,
     setClientType,

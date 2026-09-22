@@ -1,0 +1,17 @@
+/* AnimSoundActions — ligne L2, trois gestes de conduite sur le média
+   sonore de la question courante (v11.1, #219). Réutilise
+   .anim-conduct-btn-{optional|off} TEL QUEL (AnimConductPanel.css) — jamais
+   redéfini ici, même discipline que AnimRafaleActions.css/
+   AnimMotionActions.css. Seule la mise en page (grille 3 colonnes) est
+   propre à cette ligne. */
+
+.anim-sound-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.anim-sound-action-btn {
+  min-height: 62px;
+}

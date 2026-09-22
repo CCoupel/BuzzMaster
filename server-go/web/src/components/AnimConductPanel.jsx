@@ -4,6 +4,7 @@ import {
   continueButtonState,
   stopButtonState,
   revealButtonState,
+  showSoundRow,
 } from '../utils/phaseRules'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { getMotionCardPoints, computeStarsProrataPoints } from '../utils/motionGrid'
@@ -16,6 +17,7 @@ import AnimMotionActions from './AnimMotionActions'
 import AnimExplanationNote from './AnimExplanationNote'
 import AnimRafaleActions from './AnimRafaleActions'
 import AnimRafaleQuestion from './AnimRafaleQuestion'
+import AnimSoundActions from './AnimSoundActions'
 import './AnimConductPanel.css'
 
 // L1 — cinq emplacements FIXES (#166/F5) : la liste ne varie jamais dans
@@ -154,6 +156,14 @@ function buttonSubLabel(key, state, phase, waitReason) {
  *   scopé `MOTION_CARD_ID` (contrat §14.5)
  * @param {() => void} [props.onCardRafaleInvalidate] - émet RAFALE_INVALIDATE
  *   scopé `MOTION_CARD_ID` (contrat §14.5)
+ * @param {string} [props.soundState] - gameState.QUESTION_SOUND_STATE
+ *   (v11.1, #219) — IDLE par défaut si absent (client plus ancien / message
+ *   partiel), même repli que les autres champs `GameState` de ce composant.
+ * @param {(command: 'PLAY'|'PAUSE'|'RESUME'|'STOP') => void} [props.onQuestionSound] -
+ *   questionSound() (useGame()) — un des trois gestes de conduite du son
+ *   (AnimSoundActions, L2). N'occupe L2 que pour SPEEDY/QCM/ARDOISE porteurs
+ *   d'un son (`phaseRules.showSoundRow`) — jamais en même temps que
+ *   MEMOTION/RAFALE (types mutuellement exclusifs, plan §0.3).
  */
 export default function AnimConductPanel({
   phase,
@@ -187,6 +197,8 @@ export default function AnimConductPanel({
   cardRafaleDisabled = false,
   onCardRafaleValidate,
   onCardRafaleInvalidate,
+  soundState = 'IDLE',
+  onQuestionSound,
 }) {
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
   const isQcm = question?.TYPE === 'QCM'
@@ -200,6 +212,12 @@ export default function AnimConductPanel({
   // — VALIDE/INVALIDE) ; L3 reste l'emplacement réservé générique, RAFALE
   // ne portant aucune grille propre à ce jour (§7).
   const isRafale = question?.TYPE === 'RAFALE'
+  // #219 (v11.1) — SPEEDY/QCM/ARDOISE porteurs d'un son : occupe L2 comme
+  // MEMOTION/RAFALE ci-dessus, mais par PRÉSENCE d'un son plutôt que par
+  // TYPE (le champ est structurellement commun à tous les types, plan
+  // §0.3) — jamais en même temps que MEMOTION/RAFALE en pratique (types
+  // mutuellement exclusifs).
+  const showSound = showSoundRow(phase, question)
   const motionCards = question?.MOTION_CARDS || []
   const selectedMotionCard = isMemotion
     ? motionCards.find(c => c.ID === motion?.selectedId) || null
@@ -367,6 +385,8 @@ export default function AnimConductPanel({
               onValidate={onRafaleValidate}
               onInvalidate={onRafaleInvalidate}
             />
+          ) : showSound ? (
+            <AnimSoundActions soundState={soundState} onCommand={onQuestionSound} />
           ) : (
             <div className="anim-conduct-reserved">{modeGestureText}</div>
           )}

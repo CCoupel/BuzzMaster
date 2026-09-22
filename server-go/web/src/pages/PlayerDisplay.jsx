@@ -1802,6 +1802,14 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     showPhase={false}
                     hintMarkers={qcmHintMarkers}
                   />
+                  {/* #219 (v11.1, CA15) — mention absolue, AUCUNE hauteur
+                      ajoutée au flux (TV STATIQUE, CLAUDE.md) : sans elle un
+                      chronomètre figé au temps plein serait pris pour une
+                      panne (R11, contrat sound.md §10.7). État diffusé par le
+                      serveur — jamais déduit ici. */}
+                  {gameState.ANSWER_TIMER_WAITING && (
+                    <div className="sound-wait-badge">⏳ le chrono démarre à la fin du son</div>
+                  )}
                 </div>
 
                 {/* Zone 2: Question (visible from STARTED) or Category badge (during COUNTDOWN) */}
@@ -2929,6 +2937,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     size="xl"
                     showPhase={false}
                   />
+                  {/* #219 (v11.1, CA15) — voir commentaire jumeau du bloc QCM
+                      ci-dessus : mention absolue, aucune hauteur ajoutée au
+                      flux (TV STATIQUE). */}
+                  {gameState.ANSWER_TIMER_WAITING && (
+                    <div className="sound-wait-badge">⏳ le chrono démarre à la fin du son</div>
+                  )}
                 </div>
 
                 {/* Zone 2: Question */}

@@ -131,3 +131,57 @@ export function canToggleEntracte(phase, entracteActive) {
   if (entracteActive) return true
   return ENTRACTE_ALLOWED_PHASES.includes(phase)
 }
+
+// ---------------------------------------------------------------------------
+// Son de la question (v11.1, #219) — trois gestes de conduite (Rejouer /
+// Pause↔Reprendre / Stop) sur le média sonore attaché à la question
+// courante. Dérivés EXCLUSIVEMENT de `GAME.QUESTION_SOUND_STATE`
+// (IDLE/PLAYING/PAUSED), diffusé par le serveur — jamais un état React
+// local (R4, plan-20260922-103848.md §11 : dérive Go/JS déjà matérialisée
+// 2× sur v7.0.0). Consommés par AnimConductPanel.jsx (via AnimSoundActions)
+// ET GamePage.jsx (miroir admin, même composant réutilisé tel quel).
+// ---------------------------------------------------------------------------
+
+/**
+ * La rangée entière n'est rendue QUE si la question courante porte un son
+ * ET que la partie est en cours (STARTED/PAUSED) — maquette
+ * question-sound-219.html §02 : "quand la question n'a pas de son, la
+ * rangée n'est pas rendue du tout — pas grisée, absente" ; les 4 écrans
+ * illustrés sont tous STARTED/PAUSED, même périmètre que l'action serveur
+ * QUESTION_SOUND (contrat websocket-actions.md : "Phase STARTED ou PAUSED").
+ *
+ * @param {string} phase - gameState.phase
+ * @param {{SOUND?: string}|null} [question] - gameState.question
+ */
+export function showSoundRow(phase, question) {
+  return isPlaying(phase) && !!question?.SOUND
+}
+
+/**
+ * Bouton "Rejouer" — toujours actionnable dès que la rangée est visible,
+ * quel que soit QUESTION_SOUND_STATE (maquette §02 : actif dans les 4 états
+ * illustrés, y compris "au repos"). Paramètre conservé pour une signature
+ * homogène avec les trois fonctions voisines, volontairement inutilisé.
+ */
+export function soundReplayButtonState() {
+  return 'optional'
+}
+
+/** @param {string} soundState - gameState.QUESTION_SOUND_STATE */
+export function soundPauseResumeButtonState(soundState) {
+  return (soundState === 'PLAYING' || soundState === 'PAUSED') ? 'optional' : 'off'
+}
+
+/**
+ * Un seul bouton bascule Pause ↔ Reprendre (maquette §02 : jamais les deux
+ * affichés en même temps) — commande à envoyer selon l'état courant.
+ * @param {string} soundState - gameState.QUESTION_SOUND_STATE
+ */
+export function soundPauseResumeCommand(soundState) {
+  return soundState === 'PAUSED' ? 'RESUME' : 'PAUSE'
+}
+
+/** @param {string} soundState - gameState.QUESTION_SOUND_STATE */
+export function soundStopButtonState(soundState) {
+  return (soundState === 'PLAYING' || soundState === 'PAUSED') ? 'optional' : 'off'
+}
