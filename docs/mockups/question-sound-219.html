@@ -76,6 +76,26 @@
   .ropt .t{font-size:.85rem;font-weight:500;color:var(--txt)}
   .ropt .d{font-size:.78rem;color:var(--faint);margin-top:2px}
 
+  /* Ajustement ergonomie QUALIF v11.1.0.2 — interrupteur compact sur une
+     ligne, remplace .radio/.ropt ci-dessus (2 options empilées, jugées trop
+     volumineuses). Reprend visuellement .quiz-switch (BackstagePage.css,
+     QuizMetaForm.jsx) — même patron réutilisé côté implémentation réelle. */
+  .chrono-switch-row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    margin-top:14px;flex-wrap:wrap}
+  .chrono-switch-label{font-size:.8rem;font-weight:500;color:var(--dim)}
+  .chrono-switch-group{display:inline-flex;align-items:center;gap:10px}
+  .chrono-switch-side{font-size:.76rem;font-weight:500;color:var(--faint);transition:color .15s}
+  .chrono-switch-side.active{color:var(--txt);font-weight:600}
+  .chrono-switch{position:relative;width:34px;height:19px;border-radius:999px;background:var(--line);
+    border:none;padding:0;flex:none;cursor:pointer}
+  .chrono-switch::after{content:"";position:absolute;top:2.5px;left:2.5px;width:14px;height:14px;
+    border-radius:50%;background:#fff;transition:left .15s}
+  .chrono-switch.on{background:var(--accent)}
+  .chrono-switch.on::after{left:17.5px}
+  .chrono-switch-row.disabled .chrono-switch-label,
+  .chrono-switch-row.disabled .chrono-switch-side.active{color:var(--faint);font-weight:500}
+  .chrono-switch-row.disabled .chrono-switch{opacity:.5;cursor:not-allowed}
+
   .note{border-left:2px solid var(--line);padding:2px 0 2px 14px;color:var(--dim);font-size:.88rem;margin-top:14px}
   .note.warn{border-color:var(--warn)}
   .note.no{border-color:var(--no)}
@@ -183,7 +203,8 @@
   <h2><span class="num">01</span> Le champ, dans l'éditeur Quiz</h2>
   <p class="lede">
     Placé sous les images, dans le même bloc, avec les mêmes gestes : choisir, écouter, supprimer.
-    Une bascule s'y ajoute, et elle n'apparaît que lorsqu'un son est attaché.
+    Un interrupteur compact s'y ajoute (chronomètre en même temps que le son, ou à sa fin) —
+    toujours visible, désactivé tant qu'aucun son n'est attaché.
   </p>
 
   <h3>Fichier accepté, et le choix du chronomètre</h3>
@@ -204,32 +225,34 @@
           <span class="fmeta">écoute locale</span>
         </div>
 
-        <label class="lbl" style="margin-top:18px">Chronomètre de réponse</label>
-        <div class="radio">
-          <div class="ropt on">
-            <span class="dot"></span>
-            <span>
-              <span class="t">Démarrer en même temps que le son</span>
-              <span class="d">Comportement habituel — les joueurs écoutent pendant que le temps défile.</span>
-            </span>
-          </div>
-          <div class="ropt">
-            <span class="dot"></span>
-            <span>
-              <span class="t">Démarrer à la fin du son</span>
-              <span class="d">Le temps ne commence qu'une fois l'extrait terminé — ou dès que vous l'arrêtez vous-même. Pour un extrait qu'il faut avoir entendu en entier avant de pouvoir répondre.</span>
-            </span>
-          </div>
+        <!-- Ajustement ergonomie QUALIF v11.1.0.2 — interrupteur compact sur
+             une ligne, remplace les 2 options radio empilées de la
+             v11.1.0.1 (jugées trop volumineuses en QUALIF). -->
+        <div class="chrono-switch-row">
+          <span class="chrono-switch-label">Chrono démarre</span>
+          <span class="chrono-switch-group">
+            <span class="chrono-switch-side active">Début</span>
+            <span class="chrono-switch"></span>
+            <span class="chrono-switch-side">À la fin</span>
+          </span>
         </div>
       </div>
     </div>
   </div>
   <p class="note acc">
-    <b>Amendement ergonomie (retour QUALIF v11.1.0.1) — la bascule est toujours visible, grisée
+    <b>Amendement ergonomie (retour QUALIF v11.1.0.1) — l'interrupteur est toujours visible, grisé
     tant qu'aucun son n'est attaché.</b> L'utilisateur doit voir le réglage exister avant même
     d'ajouter un fichier — plutôt que de le lui masquer entièrement, ce qui laissait croire à une
-    fonctionnalité absente. Sans son attaché, le chronomètre n'a toujours rien à attendre : les deux
-    options restent donc désactivées (non cliquables), pas cachées.
+    fonctionnalité absente. Sans son attaché, le chronomètre n'a toujours rien à attendre : le
+    curseur reste donc désactivé (non cliquable), pas caché.
+  </p>
+  <p class="note acc">
+    <b>Amendement ergonomie (retour QUALIF v11.1.0.2) — un interrupteur compact sur une ligne,
+    pas deux blocs de texte empilés.</b> La version v11.1.0.1 (deux options radio détaillées,
+    chacune avec son propre paragraphe d'explication) prenait trop de place à l'écran pour un
+    réglage binaire. Le curseur seul, entre deux libellés courts ("Début" / "À la fin"), porte la
+    même information sans le volume visuel — même patron que l'interrupteur "Afficher sur la TV"
+    déjà utilisé dans l'onglet Quiz (Backstage).
   </p>
 
   <h3>Où le son s'attache, selon le type</h3>

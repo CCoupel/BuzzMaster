@@ -140,23 +140,22 @@ describe('QuestionsPage — visibilité du champ son (garde de type, plan §0.2)
 
   // Ajustement ergonomie QUALIF v11.1.0.1 — la bascule reste TOUJOURS
   // montée (l'utilisateur doit voir le réglage exister avant même d'attacher
-  // un fichier), seules les deux options sont désactivées tant qu'aucun son
-  // n'est attaché. Remplace l'ancien comportement (bascule absente du DOM).
-  it('la bascule "Chronomètre de réponse" est VISIBLE mais DÉSACTIVÉE tant qu\'aucun son n\'est attaché', () => {
+  // un fichier), seulement désactivée tant qu'aucun son n'est attaché.
+  // Remplace l'ancien comportement (bascule absente du DOM). v11.1.0.2 —
+  // 2 options radio remplacées par un interrupteur compact (`role="switch"`,
+  // patron `.quiz-switch` de QuizMetaForm.jsx), un seul contrôle.
+  it('la bascule "Chrono démarre" est VISIBLE mais DÉSACTIVÉE tant qu\'aucun son n\'est attaché', () => {
     render(<QuestionsPage />)
-    const label = screen.getByText('Chronomètre de réponse')
-    expect(label).toBeInTheDocument()
-    const radios = label.closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
-    expect(radios).toHaveLength(2)
-    radios.forEach(radio => expect(radio).toBeDisabled())
+    expect(screen.getByText('Chrono démarre')).toBeInTheDocument()
+    const toggle = screen.getByRole('switch', { name: /fin du son/i })
+    expect(toggle).toBeDisabled()
   })
 
-  it('choisir un fichier son ACTIVE les deux options de la bascule', () => {
+  it('choisir un fichier son ACTIVE la bascule', () => {
     const { container } = render(<QuestionsPage />)
     selectSoundFile(container)
-    const label = screen.getByText('Chronomètre de réponse')
-    const radios = label.closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
-    radios.forEach(radio => expect(radio).not.toBeDisabled())
+    const toggle = screen.getByRole('switch', { name: /fin du son/i })
+    expect(toggle).not.toBeDisabled()
   })
 })
 
@@ -198,11 +197,11 @@ describe('QuestionsPage — soumission du son (POST /questions)', () => {
     expect(formData.get('sound_timer_delayed')).toBe('false')
   })
 
-  it('bascule "Démarrer à la fin du son" cochée : "sound_timer_delayed" vaut "true"', async () => {
+  it('bascule activée ("À la fin") : "sound_timer_delayed" vaut "true"', async () => {
     const { container } = render(<QuestionsPage />)
     fillMinimalSpeedyForm()
     selectSoundFile(container)
-    fireEvent.click(screen.getByText('Démarrer à la fin du son'))
+    fireEvent.click(screen.getByRole('switch', { name: /fin du son/i }))
     submit(container)
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/questions', expect.anything()))
@@ -229,8 +228,8 @@ describe('QuestionsPage — édition et suppression d\'un son existant', () => {
 
     expect(screen.getByText('sound_1234.wav')).toBeInTheDocument()
     // La bascule doit refléter SOUND_TIMER_DELAYED=true déjà persisté.
-    const delayedRadio = screen.getByText('Démarrer à la fin du son').closest('label').querySelector('input[type="radio"]')
-    expect(delayedRadio.checked).toBe(true)
+    const toggle = screen.getByRole('switch', { name: /fin du son/i })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
   })
 
   it('cliquer "Supprimer" sur le son existant, puis soumettre : sound_cleared="true", aucun champ "sound"', async () => {
@@ -247,19 +246,15 @@ describe('QuestionsPage — édition et suppression d\'un son existant', () => {
     expect(formData.has('sound')).toBe(false)
   })
 
-  it('après suppression, la bascule "Chronomètre de réponse" reste visible mais redevient désactivée', () => {
+  it('après suppression, la bascule "Chrono démarre" reste visible mais redevient désactivée', () => {
     useGame.mockReturnValue(makeQPageMock({ questions: questionsWithSound }))
     render(<QuestionsPage />)
     fireEvent.click(screen.getByTestId('qcard-1'))
-    const label = screen.getByText('Chronomètre de réponse')
-    expect(label).toBeInTheDocument()
-    let radios = label.closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
-    radios.forEach(radio => expect(radio).not.toBeDisabled())
+    expect(screen.getByRole('switch', { name: /fin du son/i })).not.toBeDisabled()
 
     fireEvent.click(screen.getByText('Supprimer'))
-    expect(screen.getByText('Chronomètre de réponse')).toBeInTheDocument()
-    radios = screen.getByText('Chronomètre de réponse').closest('.sound-timer-toggle').querySelectorAll('input[type="radio"]')
-    radios.forEach(radio => expect(radio).toBeDisabled())
+    expect(screen.getByText('Chrono démarre')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /fin du son/i })).toBeDisabled()
   })
 
   it('choisir un NOUVEAU fichier après "Supprimer" annule la suppression en attente (sound_cleared repasse à false)', async () => {

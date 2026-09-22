@@ -3127,44 +3127,34 @@ export default function QuestionsPage() {
                         <p className="sound-error-message">✕ {soundError}</p>
                       )}
 
-                      {/* Ajustement ergonomie QUALIF v11.1.0.1 — la bascule
-                          reste TOUJOURS montée (même garde de type que le
-                          reste du bloc), pour que l'utilisateur voie le
-                          réglage exister avant même d'attacher un son ; les
-                          deux options sont seulement désactivées tant
-                          qu'aucun son n'est attaché (maquette §01 à mettre à
-                          jour dans ce sens si jugé utile). */}
+                      {/* Ajustement ergonomie QUALIF v11.1.0.2 — remplace les
+                          2 options radio empilées (trop volumineuses, retour
+                          QUALIF v11.1.0.1/.2) par un interrupteur compact sur
+                          une seule ligne, patron `.quiz-switch` déjà utilisé
+                          par QuizMetaForm.jsx (BackstagePage.css) — jamais un
+                          nouveau composant de switch inventé. Comportement
+                          inchangé : toujours monté dans cette même garde de
+                          type, désactivé tant qu'aucun son n'est attaché,
+                          lié au même `formData.soundTimerDelayed`. */}
                       {(() => {
                         const hasSound = !!(formData.sound || formData.existingSound)
+                        const delayed = formData.soundTimerDelayed
                         return (
                           <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
-                            <label className="sound-timer-toggle-label">Chronomètre de réponse</label>
-                            <label className={`sound-timer-option ${!formData.soundTimerDelayed ? 'on' : ''} ${!hasSound ? 'disabled' : ''}`}>
-                              <input
-                                type="radio"
-                                name="sound-timer-mode"
-                                checked={!formData.soundTimerDelayed}
+                            <span className="sound-timer-toggle-label">Chrono démarre</span>
+                            <span className="sound-timer-switch-group">
+                              <span className={`sound-timer-switch-side ${!delayed ? 'active' : ''}`}>Début</span>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={delayed}
+                                aria-label="Démarrer le chronomètre à la fin du son plutôt qu'en même temps"
+                                className={`quiz-switch ${delayed ? 'on' : ''}`}
                                 disabled={!hasSound}
-                                onChange={() => handleInputChange('soundTimerDelayed', false)}
+                                onClick={() => handleInputChange('soundTimerDelayed', !delayed)}
                               />
-                              <span>
-                                <b>Démarrer en même temps que le son</b>
-                                <small>Comportement habituel — les joueurs écoutent pendant que le temps défile.</small>
-                              </span>
-                            </label>
-                            <label className={`sound-timer-option ${formData.soundTimerDelayed ? 'on' : ''} ${!hasSound ? 'disabled' : ''}`}>
-                              <input
-                                type="radio"
-                                name="sound-timer-mode"
-                                checked={formData.soundTimerDelayed}
-                                disabled={!hasSound}
-                                onChange={() => handleInputChange('soundTimerDelayed', true)}
-                              />
-                              <span>
-                                <b>Démarrer à la fin du son</b>
-                                <small>Le temps ne commence qu'une fois l'extrait terminé — ou dès que vous l'arrêtez vous-même.</small>
-                              </span>
-                            </label>
+                              <span className={`sound-timer-switch-side ${delayed ? 'active' : ''}`}>À la fin</span>
+                            </span>
                           </div>
                         )
                       })()}

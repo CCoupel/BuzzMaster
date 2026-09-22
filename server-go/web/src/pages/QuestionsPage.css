@@ -508,12 +508,18 @@
   font-size: 0.8rem;
 }
 
-/* Bascule "démarrer le chronomètre à la fin du son" — visible seulement si
-   un son est attaché (maquette §01). */
+/* Bascule "démarrer le chronomètre à la fin du son" — interrupteur compact
+   sur une ligne (ajustement ergonomie QUALIF v11.1.0.2, remplace les 2
+   options radio empilées de la v11.1.0.1, jugées trop volumineuses).
+   Toujours monté dans la garde de type (v11.1.0.1), grisé tant qu'aucun son
+   n'est attaché. Le curseur lui-même réutilise `.quiz-switch` TEL QUEL
+   (BackstagePage.css, QuizMetaForm.jsx) — aucun second patron de switch. */
 .sound-timer-toggle {
   margin-top: var(--space-3);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -523,55 +529,36 @@
   color: var(--gray-600);
 }
 
-.sound-timer-option {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 2px solid var(--gray-200);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.sound-timer-option.on {
-  border-color: var(--primary-400);
-  background: var(--primary-50);
-}
-
-.sound-timer-option input[type="radio"] {
-  margin-top: 3px;
-  flex-shrink: 0;
-}
-
-.sound-timer-option b {
-  display: block;
-  font-size: 0.82rem;
-  color: var(--gray-800);
-}
-
-.sound-timer-option small {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--gray-500);
-  line-height: 1.3;
-}
-
-/* Ajustement ergonomie QUALIF v11.1.0.1 — la bascule reste toujours visible
-   (montée dans la garde de type), grisée tant qu'aucun son n'est attaché :
-   l'utilisateur voit le réglage exister avant même d'ajouter un fichier. */
 .sound-timer-toggle.disabled .sound-timer-toggle-label {
   color: var(--gray-400);
 }
 
-.sound-timer-option.disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-  background: var(--gray-50);
+.sound-timer-switch-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.sound-timer-option.disabled:hover {
-  border-color: var(--gray-200);
+.sound-timer-switch-side {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-400);
+  transition: color var(--transition-fast);
+}
+
+.sound-timer-switch-side.active {
+  color: var(--gray-800);
+  font-weight: 600;
+}
+
+.sound-timer-toggle.disabled .sound-timer-switch-side.active {
+  color: var(--gray-400);
+  font-weight: 500;
+}
+
+.sound-timer-switch-group .quiz-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .submit-btn {
