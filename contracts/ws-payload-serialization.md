@@ -64,6 +64,7 @@ Les besoins TV et VPlayer sont donc identiques côté messages.
 | `GAME.QUIZ_*` sauf `QUIZ_OBJECTIVES` | ✅ | ✅ | ❌ |
 | `GAME.QUIZ_HIDDEN_FIELDS` (**v6.1.0**) | ✅ | ✅ — la TV en a besoin pour **appliquer** la préférence | ❌ |
 | `GAME.QUIZ_OBJECTIVES` (**v6.1.0**) | ✅ | ❌ | ❌ |
+| `GAME.QUESTION_SOUND_STATE` / `GAME.ANSWER_TIMER_WAITING` (**v11.1, #219**) | ✅ | ✅ — la TV en a besoin pour la mention CA15 (« le chronomètre démarrera à la fin du son ») | ❌ — absent du payload minimal buzzer (`PHASE`/`TIME`/`CURRENT_TIME` seulement, `SerializeForBuzzer`), par construction, sans filtrage dédié |
 | `config` (paramètres serveur) | ✅ | ❌ | ❌ |
 | `history` / `palmares` | ✅ | ✅ | ❌ |
 | `remote` | ✅ | ✅ | ❌ |

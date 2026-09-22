@@ -955,3 +955,46 @@ incomplète. Verrue héritée, de même nature que celle décrite par #152.
 Deux champs voisins, deux cycles de vie **opposés** : `ENTRACTE` (état, jamais persisté) et
 `ENTRACTE_CONFIG` (réglage, persisté). Ce n'est pas une incohérence, c'est la distinction même entre
 les deux — ne pas « corriger » l'un en croyant à un oubli.
+
+## Question sound (v11.1, #219)
+
+> **Contrat normatif complet** : `contracts/sound.md` §10/§10.7. Cette section documente uniquement
+> les deux champs `GameState` diffusés ; la machine à états complète (média + chronomètre différé)
+> vit dans `sound.md`.
+
+```typescript
+interface GameState {
+  // ...
+  QUESTION_SOUND_STATE: "IDLE" | "PLAYING" | "PAUSED"
+  ANSWER_TIMER_WAITING: boolean
+}
+```
+
+**`QUESTION_SOUND_STATE`** — l'état de lecture du média sonore attaché à la question courante
+(`Question.SOUND`), diffusé par le serveur à chaque changement (rejouer/pause/reprise/arrêt/fin
+naturelle). Mêmes valeurs de fil que `internal/audio.MediaState`, mais fixées **uniquement** par
+l'adaptateur `cmd/server/question_sound.go` — le moteur de jeu (`internal/game`) ne lit ni n'écrit
+ce champ au-delà de sa valeur initiale. Aucune position de lecture n'est diffusée (`sound.md` §10.6 :
+« le chronomètre est le seul flux à cadence du projet »).
+
+**`ANSWER_TIMER_WAITING`** — `true` exactement pendant que le chronomètre de réponse global est
+**différé** (`Question.SOUND_TIMER_DELAYED=true`) et n'a **pas encore** été libéré par la fin du son
+(naturelle ou arrêt manuel de l'animateur). Tant que ce champ est `true`, `CURRENT_TIME` reste figé
+au temps plein — ce n'est **jamais** un chiffre qui ne bouge plus par accident : `/anim`, `/admin` et
+la TV **doivent** l'expliciter par un message (« le chronomètre démarrera à la fin du son »), jamais
+un chiffre nu (contract `sound.md` §10.7, CA15 — sans quoi l'animateur ou le public prend le
+chronomètre figé pour une panne).
+
+> ⚠️ **Aucun `omitempty` sur les deux champs** (règle projet, CLAUDE.md) : toujours sérialisés, y
+> compris à leurs valeurs zéro (`IDLE`/`false`), pour que le client réinitialise proprement entre
+> deux questions — même discipline que les champs MEMOTION/RAFALE de ce document.
+
+**Diffusion** (`contracts/ws-payload-serialization.md`) : Admin ✅ / TV ✅ / VPlayer ✅ / Buzzer ❌
+(le payload buzzer n'emporte que `PHASE`/`TIME`/`CURRENT_TIME` — ces deux champs n'y figurent donc
+jamais, par construction, sans filtrage dédié). `/anim` passe par `SerializeForWebClient`, donc les
+reçoit comme TV/VPlayer.
+
+**Persistance** : **aucune** — ni l'un ni l'autre ne survit à un redémarrage ou un `NEW_GAME`, même
+principe que `MOTION_ACTIVE`/`ENTRACTE` ci-dessus : ce sont des reflets d'un périphérique audio et
+d'un minuteur en direct, pas des données de partie. `QUESTION_SOUND_STATE` redémarre à `IDLE`,
+`ANSWER_TIMER_WAITING` à `false`.

@@ -66,12 +66,29 @@ Crée ou met à jour une question.
 | explanation | string | ❌ | **v6.4.x (#168)** — note d'explication/justification, visible de l'animateur seul. Texte libre, longueur non bornée. Écrit dans `EXPLANATION` ; **champ absent ou vide = note effacée** (voir note ci-dessous) |
 | file | file | ❌ | Image question |
 | file_answer | file | ❌ | Image réponse |
+| sound | file | ❌ | **v11.1 (#219)** — média sonore de question, `.wav` canonique (44 100 Hz/stéréo/16 bits), ≤ 30 s, ≤ 6 Mio (`contracts/sound.md` §10.4). Écrit dans `SOUND`. Refusé en `400` (cause nommée : pas WAV / fréquence-canaux-bits / > 30 s) ou `413` (> 6 Mio) — voir §Réponses d'erreur ci-dessous |
+| sound_cleared | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` supprime le son existant (fichier disque compris, `os.Remove`) et empêche sa recopie. Sans effet si `sound` est également fourni dans la même requête (le nouveau fichier prévaut) |
+| sound_timer_delayed | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` = chronomètre de réponse différé jusqu'à la fin du son (`contracts/sound.md` §10.7). Écrit dans `SOUND_TIMER_DELAYED` **uniquement si un son est effectivement attaché** (préservé ou fraîchement téléversé) — jamais laissé actif sans son |
 
 > ⚠️ **`explanation` doit être lu explicitement par `handleUploadQuestion`.** Ce handler
 > **reconstruit la question de zéro** à chaque enregistrement et ne recopie depuis le fichier
 > existant que `MEDIA`, `MEDIA_ANSWER` et `ORDER` : un champ non relu est perdu à la première
 > édition. C'est aussi ce qui donne gratuitement la sémantique d'effacement — un `explanation`
 > vide n'est simplement pas réécrit, donc la clé `EXPLANATION` disparaît du `question.json`.
+
+> ⚠️ **`sound` suit la même règle de recopie que `explanation`, avec un piège aggravé** (contract
+> `sound.md` §10, `contracts/models.md` §SOUND) : sans recopie explicite de `SOUND` depuis la
+> question existante, le son serait **détruit silencieusement à chaque ré-édition sans nouveau
+> fichier**. `sound_cleared=true` est l'opt-out explicite, et va plus loin que `MEDIA`/
+> `MEDIA_ANSWER` (qui n'ont aujourd'hui aucun moyen réel de suppression) : le fichier disque est
+> effectivement supprimé, pas seulement dé-référencé.
+>
+> **Refus vs avertissement — deux mécanismes distincts.** Un fichier non conforme (mauvais format,
+> > 30 s, > 6 Mio) est **refusé** (la requête entière échoue, `400`/`413`, rien n'est enregistré).
+> Un fichier **conforme** mais plus long que `time` **en mode simultané** (`sound_timer_delayed`
+> absent/`false`) déclenche un **avertissement non bloquant** — voir §Réponse ci-dessous — jamais en
+> mode différé, où la situation ne peut pas se produire (le chronomètre attend la fin du son quelle
+> que soit `time`).
 
 > ℹ️ Cette table est **incomplète et antérieure** aux types ARDOISE et MEMOTION : les champs
 > `ardoise_keyboard_type`, `memory_*`, `motion_*` et les extras QCM au-delà de ceux listés
@@ -108,6 +125,12 @@ Crée ou met à jour une question.
   "id": "5"
 }
 ```
+
+> ℹ️ **v11.1 (#219)** : la réponse réelle porte aussi `warning` — `null` quand aucun avertissement
+> (jamais une clé absente, même convention que `POST /api/sounds/{cue}` ci-dessous), sinon une
+> chaîne nommant la cause (mode simultané, son plus long que `time` — voir la note ci-dessus). Cette
+> table hérite de l'écart `success`/`status` déjà signalé en #168 (non corrigé par ce lot, hors
+> périmètre) ; `warning` est décrit ici pour ne pas ajouter une seconde divergence non documentée.
 
 ---
 
