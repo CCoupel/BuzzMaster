@@ -2173,8 +2173,13 @@ func (e *Engine) StartImmediate(delay int) {
 	// question" reasoning as actualStart()'s own guard; MEMOTION is
 	// deliberately NOT excluded here, an existing asymmetry with
 	// actualStart() that predates #214 and is out of this change's scope.
+	// v11.1/#219: mirrors actualStart()'s own maybeStartDeferredTimerUnsafe()
+	// call — a test using StartImmediate() on a question with a deferred
+	// sound gets the same deferred behavior as the real Start() path,
+	// instead of silently falling back to "simultané" (test-writer finding,
+	// Batch 1 review).
 	if e.state.Question == nil || e.state.Question.Type != QuestionTypeEntracte {
-		e.startTimer()
+		e.maybeStartDeferredTimerUnsafe()
 	}
 
 	// Release lock BEFORE calling callback to avoid deadlock
