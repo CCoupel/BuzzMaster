@@ -602,10 +602,27 @@ même du format canonique du §3. Or ce contexte est aujourd'hui créé **à l'i
 
 ### 10.4 Format et limites — distinctes de celles des cues, jamais confondues
 
-Le format canonique du **§3 s'applique à l'identique** (WAV PCM 16 bits, 44 100 Hz, stéréo) : c'est
-une conséquence du contexte unique, pas un choix reconductible. **Aucun format compressé n'est
-accepté**, `.mp3` compris — la décision utilisateur du cadrage v11.0 (§3) vaut ici telle quelle, et
-`go.mod` ne contient **aucun** décodeur ni rééchantillonneur.
+Le format canonique du **§3 s'applique**, avec **une seule tolérance propre au média de question**
+— voir l'encart mono ci-dessous : WAV PCM 16 bits, 44 100 Hz, **mono ou stéréo**. **Aucun format
+compressé n'est accepté**, `.mp3` compris — la décision utilisateur du cadrage v11.0 (§3) vaut ici
+telle quelle, et `go.mod` ne contient **aucun** décodeur ni rééchantillonneur de fréquence.
+
+> ⚠️ **Mono accepté — arbitrage utilisateur QUALIF v11.1 (2026-09-22), scope strictement limité au
+> média de question.** Un retour QUALIF a établi qu'un WAV **mono** doit être accepté pour le son
+> de question, alors que le §3 (cues, #229/#230) reste **strictement stéréo, INCHANGÉ** —
+> `extractCanonicalPCM` (`internal/audio/bank.go`), partagée par `FileBank.PCM` (lecture des cues)
+> et `ValidateUpload` (upload des cues), **n'est pas touchée**. Le validateur du média de question
+> utilise un parseur **dédié** (`extractQuestionSoundPCM`, `internal/audio/validate_media.go`),
+> volontairement dupliqué plutôt que paramétré, précisément pour ne courir **aucun** risque de faire
+> déborder cette tolérance sur les cues.
+>
+> Un mono accepté est **suréchantillonné en stéréo à l'upload** (`upmixMonoToStereo` : chaque
+> échantillon dupliqué sur les deux voies) — une opération arithmétique pure sur du PCM déjà
+> décodé, **pas** un « rééchantillonnage à la volée » au sens que le §3 exclut (qui parle de
+> changer la fréquence ou de décoder un codec compressé). Le fichier **réellement stocké sur
+> disque** (`BuildCanonicalWAV`) est donc **toujours** stéréo canonique — le pilote de lecture
+> (`media_oto.go`, #228, déjà revu) ne comporte **aucune** branche supplémentaire pour un second cas
+> de figure ; il ne voit jamais de mono.
 
 Les **limites**, en revanche, sont **propres au média** :
 
@@ -627,9 +644,13 @@ mode simultané (§10.7) : en mode différé la situation ne peut pas se produir
 > « factoriser » les deux jeux en un seul est le défaut le plus probable de ce lot, et il
 > supprimerait silencieusement la garantie du §5.2.
 
-Le validateur du média **réutilise `extractCanonicalPCM`** (`internal/audio/bank.go`) — jamais un
-second parseur WAV écrit indépendamment, exactement comme `ValidateUpload` le fait déjà pour les
-cues (§7).
+> ℹ️ **Amendement (v11.1, arbitrage mono ci-dessus).** Avant cet arbitrage, le validateur du média
+> réutilisait directement `extractCanonicalPCM` (`internal/audio/bank.go`), le même parseur que les
+> cues — c'était vrai jusqu'à ce que la tolérance mono, propre au média de question, exige un
+> parseur distinct (`extractQuestionSoundPCM`) pour ne jamais toucher au comportement des cues. Les
+> deux parseurs restent construits sur les **mêmes constantes** de format (`format.go` :
+> `SampleRate`/`BitsPerSample`), donc ne peuvent pas diverger sur ce qui est canonique — seule la
+> tolérance sur le NOMBRE DE VOIES diffère entre les deux, délibérément.
 
 ### 10.4bis Le champ est commun à tous les types — la restriction est une décision d'éditeur
 

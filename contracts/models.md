@@ -268,8 +268,10 @@ Une note par carte reste un ajout **additif et non breaking**, renvoyé au chant
 Un **média sonore long** attachable à une question, au même titre qu'une image (`MEDIA`), joué sur
 l'enceinte du serveur au lancement de la question via un second chemin audio entièrement
 asynchrone (`internal/audio.MediaPlayer`, distinct du moteur de bruitages/cues). `SOUND` porte
-l'URL (`/question/<id>/sound_<rand4>.wav`, WAV canonique 44 100 Hz/stéréo/16 bits, ≤ 30 s, ≤ 6 Mio
-— limites **distinctes** de celles des cues). `SOUND_TIMER_DELAYED` choisit si le chronomètre de
+l'URL (`/question/<id>/sound_<rand4>.wav`, WAV canonique 44 100 Hz/16 bits, mono **ou** stéréo
+côté upload — toujours suréchantillonné et **stocké stéréo** — ≤ 30 s, ≤ 6 Mio, limites
+**distinctes** de celles des cues ; arbitrage mono : QUALIF v11.1, 2026-09-22, `sound.md` §10.4).
+`SOUND_TIMER_DELAYED` choisit si le chronomètre de
 réponse démarre **en même temps que** le son (`false`, valeur zéro, comportement d'avant ce lot) ou
 **à sa fin** (`true`) — voir `contracts/game-state.md` §`ANSWER_TIMER_WAITING`.
 

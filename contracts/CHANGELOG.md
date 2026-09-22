@@ -2,6 +2,34 @@
 
 ---
 
+## [20260922d] — Média sonore : mono accepté (retour QUALIF, #219, v11.1)
+
+> Retour utilisateur en validation QUALIF v11.1, après livraison DEV : les fichiers WAV **mono**
+> doivent être acceptés pour le son de question — jusqu'ici refusés comme les cues (§3, stéréo
+> strict). Fix ciblé, dev-backend, scope limité à ce point.
+
+- **[CHANGED]** `contracts/sound.md` §10.4 — le format canonique du média de question tolère
+  désormais **mono ou stéréo** en entrée, contre stéréo strict auparavant. Un mono est
+  **suréchantillonné en stéréo à l'upload** (chaque échantillon dupliqué sur les deux voies —
+  opération arithmétique pure, jamais un rééchantillonnage de fréquence ni un décodage de codec) ;
+  le fichier **stocké sur disque** est donc toujours stéréo canonique.
+- **[UNCHANGED, explicitement vérifié]** `contracts/sound.md` §3 (cues, #229/#230) — **stéréo strict
+  inchangé**. `extractCanonicalPCM` (`internal/audio/bank.go`), partagée par `FileBank.PCM`
+  (lecture des cues) et `ValidateUpload` (upload des cues), n'est **pas touchée** ; le validateur du
+  média de question utilise un parseur dédié (`extractQuestionSoundPCM`,
+  `internal/audio/validate_media.go`), délibérément dupliqué plutôt que paramétré pour garantir
+  cette absence d'effet de bord.
+- **[CHANGED]** `contracts/models.md` §SOUND, `contracts/http-endpoints.md` §Questions — wording
+  « stéréo » remplacé par « mono ou stéréo, stocké stéréo ».
+- **[NEW]** `internal/audio.BuildCanonicalWAV` — construit l'en-tête WAV neuf écrit sur disque par
+  `internal/server/http.go` à partir du PCM validé (toujours stéréo), remplace l'écriture des octets
+  bruts uploadés (qui pouvaient être mono, donc non rejouables tels quels par `media_oto.go`).
+
+**Toujours aucun BREAKING** : un upload déjà stéréo produit un résultat inchangé (même limites, même
+comportement) ; seul un mono, auparavant refusé, est maintenant accepté.
+
+---
+
 ## [20260922c] — Média sonore : périmètre réduit à SPEEDY/QCM/ARDOISE (#219, v11.1)
 
 > Second tour de GATE 2 du même jour. **D4 est tranché : MEMORY et MEMOTION sortent du lot** — ni

@@ -1511,7 +1511,13 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		randomNum := rand.Intn(9000) + 1000
 		fileName := fmt.Sprintf("sound_%d.wav", randomNum)
 		filePath := filepath.Join(questionsDir, fileName)
-		if werr := os.WriteFile(filePath, raw, 0644); werr != nil {
+		// Écrit le PCM VALIDÉ (result.PCM, toujours stéréo canonique — un
+		// mono d'origine a déjà été suréchantillonné par
+		// ValidateQuestionSound, arbitrage QUALIF v11.1) dans un en-tête WAV
+		// neuf, jamais les octets bruts uploadés : ceux-ci peuvent être mono
+		// et ne seraient alors plus lisibles tels quels par le pilote de
+		// lecture (media_oto.go, qui exige strictement du stéréo canonique).
+		if werr := os.WriteFile(filePath, audio.BuildCanonicalWAV(result.PCM), 0644); werr != nil {
 			LogError(game.LogComponentHTTP, "Question %s: failed to write sound file %s: %v", id, filePath, werr)
 			http.Error(w, "échec d'écriture du fichier son", http.StatusInternalServerError)
 			return

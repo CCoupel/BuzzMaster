@@ -134,10 +134,85 @@ func TestValidateQuestionSound_Refuses48kHzMono(t *testing.T) {
 	}
 }
 
-func TestValidateQuestionSound_RefusesMono(t *testing.T) {
-	data := tw219vBuildWAV(t, 1, SampleRate, BitsPerSample, tw219vCanonicalDataLen(5*time.Second), 0)
-	if _, err := ValidateQuestionSound(data); err == nil {
-		t.Fatal("un WAV mono (1 canal) doit être refusé — le format canonique exige stéréo (contract §3)")
+// TestValidateQuestionSound_AcceptsMono_UpmixedToStereo verrouille
+// l'arbitrage QUALIF v11.1 (2026-09-22, retour utilisateur) : à la
+// différence des cues (contract §3, INCHANGÉ — extractCanonicalPCM,
+// bank.go, reste strictement stéréo), un WAV mono DOIT être accepté pour
+// le son de question, puis suréchantillonné en stéréo (chaque échantillon
+// dupliqué sur les deux voies) — jamais refusé, jamais stocké mono.
+//
+// Remplace l'ancien TestValidateQuestionSound_RefusesMono (le mono passe
+// désormais du côté accepté).
+func TestValidateQuestionSound_AcceptsMono_UpmixedToStereo(t *testing.T) {
+	const duration = 5 * time.Second
+	// ⚠️ Longueur MONO, pas tw219vCanonicalDataLen (qui calcule une taille
+	// STÉRÉO, FrameSize = 2×BytesPerSample) : un mono de la même durée pèse
+	// moitié moins d'octets bruts.
+	monoDataLen := int(duration.Seconds() * float64(SampleRate) * float64(BytesPerSample))
+	data := tw219vBuildWAV(t, 1, SampleRate, BitsPerSample, monoDataLen, 0)
+
+	result, err := ValidateQuestionSound(data)
+	if err != nil {
+		t.Fatalf("un WAV mono (1 canal, %d Hz, %d bits) doit être accepté (arbitrage QUALIF v11.1, 2026-09-22) : %v", SampleRate, BitsPerSample, err)
+	}
+
+	// Le PCM renvoyé doit être STÉRÉO — deux fois plus d'octets que le mono
+	// d'origine, jamais renvoyé mono tel quel (le pilote de lecture,
+	// media_oto.go, n'accepte que du stéréo canonique).
+	if got, want := len(result.PCM), monoDataLen*2; got != want {
+		t.Fatalf("PCM suréchantillonné de taille inattendue : got %d octets, attendu %d (2× le mono d'origine)", got, want)
+	}
+	// La durée calculée doit rester celle du clip d'ORIGINE — le
+	// suréchantillonnage double le nombre d'octets ET le nombre de voies en
+	// même temps, donc ne doit PAS changer la durée perçue.
+	if diff := result.Duration - duration; diff < -10*time.Millisecond || diff > 10*time.Millisecond {
+		t.Fatalf("durée calculée %s incohérente avec un mono de %s — le suréchantillonnage ne doit jamais changer la durée perçue", result.Duration, duration)
+	}
+
+	// Le fichier RÉELLEMENT STOCKÉ (BuildCanonicalWAV, ce que
+	// internal/server/http.go écrit sur disque) doit être un WAV canonique
+	// stéréo valide — relisible par extractCanonicalPCM (bank.go),
+	// EXACTEMENT le parseur qu'utilisent FileBank et le pilote de lecture
+	// des cues : preuve que le fichier écrit pour un média de question
+	// d'origine mono est indiscernable d'un WAV stéréo natif à la lecture.
+	stored := BuildCanonicalWAV(result.PCM)
+	replayed, err := extractCanonicalPCM(stored)
+	if err != nil {
+		t.Fatalf("le fichier reconstruit par BuildCanonicalWAV n'est pas relisible comme un WAV canonique stéréo : %v", err)
+	}
+	if len(replayed) != len(result.PCM) {
+		t.Fatalf("le PCM relu depuis le fichier stocké diffère en taille : got %d, attendu %d", len(replayed), len(result.PCM))
+	}
+}
+
+// TestUpmixMonoToStereo_DuplicatesEachSampleOntoBothChannels est le test
+// UNITAIRE de la primitive elle-même (package audio, accès direct à la
+// fonction non exportée) : sur un motif de 3 échantillons distincts et non
+// nuls, vérifie que chaque échantillon mono se retrouve identique sur les
+// DEUX voies, dans l'ordre, sans permutation ni décalage d'alignement — un
+// test sur du silence (comme tw219vBuildWAV le génère par défaut) ne
+// pourrait pas distinguer une duplication correcte d'un bug d'alignement,
+// tout étant zéro des deux côtés.
+func TestUpmixMonoToStereo_DuplicatesEachSampleOntoBothChannels(t *testing.T) {
+	mono := []byte{
+		0x01, 0x02, // échantillon 0
+		0x03, 0x04, // échantillon 1
+		0x05, 0x06, // échantillon 2
+	}
+	want := []byte{
+		0x01, 0x02, 0x01, 0x02, // échantillon 0 : gauche puis droite
+		0x03, 0x04, 0x03, 0x04, // échantillon 1
+		0x05, 0x06, 0x05, 0x06, // échantillon 2
+	}
+
+	got := upmixMonoToStereo(mono)
+	if len(got) != len(want) {
+		t.Fatalf("longueur inattendue : got %d octets, attendu %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("octet %d : got 0x%02x, attendu 0x%02x — got=%v want=%v", i, got[i], want[i], got, want)
+		}
 	}
 }
 
