@@ -20,6 +20,7 @@ import AIGenerateModal from '../components/AIGenerateModal'
 import QcmAnswersEditor from '../components/QcmAnswersEditor'
 import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
+import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
 import RafalePage from './RafalePage'
 import './QuestionsPage.css'
@@ -1649,6 +1650,14 @@ export default function QuestionsPage() {
           </p>
         )}
       </header>
+
+      {/* Addendum média indisponible (v11.1, #219/#236/#237, plan
+          _work/reports/plan-20260923-101500.md §3bis/tâche 9bis) — puce
+          globale, "on agit ici" : retirer les sons, ou constater lesquelles
+          en portent. Visible quel que soit l'onglet actif (Questions/Rafale)
+          — l'audio inactif concerne tout le quiz, pas seulement l'onglet
+          courant. État entièrement dérivé, aucun câblage supplémentaire. */}
+      <QuizSoundWarningPill />
 
       {/* #215 — page en 2 onglets : Questions (définition du contenu du jeu,
           inchangée) et Rafale (accueille le réservoir de RafalePage.jsx, qui

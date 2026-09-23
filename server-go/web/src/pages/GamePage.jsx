@@ -35,6 +35,7 @@ import QuestionPreview from '../components/QuestionPreview'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
+import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import AnimRafaleActions from '../components/AnimRafaleActions'
 import AnimSoundActions from '../components/AnimSoundActions'
@@ -513,6 +514,12 @@ export default function GamePage() {
   return (
     <>
       {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
+      {/* Addendum média indisponible (v11.1, #219/#236/#237, plan
+          _work/reports/plan-20260923-101500.md §3bis/tâche 9bis) — puce
+          globale, "on joue ici" : la voir avant de choisir une question,
+          pas en la choisissant. État entièrement dérivé (questions/audio),
+          s'efface d'elle-même, aucun câblage supplémentaire. */}
+      <QuizSoundWarningPill />
 
       <div className={`game-page page${entracteDim}`} style={entracteTransitionStyle}>
       {/* Colonne centrale (chrono + apercu TV) — grille a rangee UNIQUE
@@ -1381,6 +1388,25 @@ export default function GamePage() {
                 {gameState.phase === 'PAUSED' ? 'CONTINUER' : 'PAUSE'}
               </Button>
             </div>
+
+            {/* Addendum média indisponible (v11.1, #219/#236/#237, plan
+                _work/reports/plan-20260923-101500.md tâche 9) — motif à côté
+                du bouton START, même mécanisme que RAFALE/MEMORY/MEMOTION
+                ci-dessus (utils/prepareWaitReason.js), mais SEULEMENT pour
+                les types SANS leur propre sélecteur d'équipes (SPEEDY/QCM/
+                ARDOISE) : ces trois-là n'ont autrement AUCUN affichage du
+                motif d'attente PREPARE, ni pour les buzzers ni pour le son —
+                les blocs MEMORY/MEMOTION/RAFALE l'affichent déjà chacun le
+                leur, l'ajouter aussi ici le dupliquerait. Bouton START
+                lui-même inchangé — son `disabled` reste piloté par `canStart`
+                (phase serveur), jamais par ce texte. */}
+            {!isPlaying && gameState.phase === 'PREPARE'
+              && !['MEMORY', 'MEMOTION', 'RAFALE'].includes(gameState.question?.TYPE)
+              && (() => {
+                const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+                const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
+                return waitReason ? <div className="start-wait-reason">{waitReason}</div> : null
+              })()}
 
             <Button
               variant="secondary"

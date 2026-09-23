@@ -1,0 +1,25 @@
+/* QuizSoundWarningPill — puce d'alerte globale (v11.1, addendum média
+   indisponible, #219/#236/#237). Partagée QuestionsPage.jsx / GamePage.jsx —
+   même discipline que RafalePoolAlert.css (CSS variables du design system
+   uniquement). Un seul niveau (avertissement) : contrairement à
+   RafalePoolAlert, pas de variante "blocking"/"ok" — cette puce est soit
+   affichée (toujours un avertissement), soit absente (elle rend `null`). */
+
+.quiz-sound-warning-pill {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.85rem;
+  margin-top: var(--space-2);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+}
+
+.quiz-sound-warning-pill-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}

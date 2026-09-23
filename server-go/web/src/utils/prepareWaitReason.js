@@ -67,6 +67,31 @@ export function participantsConform(question, participating) {
   return true
 }
 
+// Addendum média indisponible (v11.1, #219/#236/#237, contrat sound.md
+// §10.8) — motifs de la branche son de `participantsConform` côté serveur,
+// diffusés par `GAME.QUESTION_SOUND_UNAVAILABLE` ("" | "DISABLED" | "OUTPUT"
+// | "FILE"). Ne concerne que les questions portant un son (le serveur sort
+// immédiatement de sa branche sinon) — SPEEDY/QCM/ARDOISE dans le périmètre
+// actuel, mais aucune condition de type ici : le champ est structurellement
+// commun à tous les types (plan §0.3 du lot v11.1 initial), une éventuelle
+// question MEMORY/MEMOTION à son futur serait couverte sans modification.
+// Chaque motif NOMME LE REMÈDE réel — jamais une étiquette générique — pour
+// que l'utilisateur sache quoi faire, pas seulement que quelque chose bloque.
+const SOUND_UNAVAILABLE_REASON_LABELS = {
+  DISABLED: {
+    short: 'son désactivé',
+    long: 'Les sons sont désactivés dans la configuration. Les réactiver demande un redémarrage du serveur.',
+  },
+  OUTPUT: {
+    short: 'pas de sortie audio',
+    long: "Aucune sortie audio n'a pu être ouverte au démarrage du serveur. Brancher l'enceinte puis redémarrer le serveur.",
+  },
+  FILE: {
+    short: 'son introuvable',
+    long: 'Le fichier son de cette question est introuvable ou invalide sur le serveur.',
+  },
+}
+
 // Libellés courts (#166, style "à suivre"/"attendu"/"optionnel" —
 // AnimConductPanel.anim-conduct-btn-sub, tablette, place limitée) et
 // libellés complets (régie, memory-selector-label, plus de place).
@@ -96,7 +121,7 @@ function participantsReasonLabel(question, { short } = {}) {
  * @param {Array<{READY?: boolean|string}>} activeTeams - équipes ayant ≥1 buzzer
  *   assigné (même filtre que l'affichage, cf. `AreAllTeamsReady` — "Empty
  *   teams are ignored, matching the frontend display filter")
- * @param {{MEMORY_PARTICIPATING_TEAMS?: string[], MEMOTION_PARTICIPATING_TEAMS?: string[]}} gameState
+ * @param {{MEMORY_PARTICIPATING_TEAMS?: string[], MEMOTION_PARTICIPATING_TEAMS?: string[], QUESTION_SOUND_UNAVAILABLE?: string}} gameState
  * @param {{short?: boolean}} [opts] - `short: true` pour le libellé tablette
  *   (AnimConductPanel, espace contraint) ; sinon libellé complet (régie).
  * @returns {string|null} le motif, ou `null` hors PREPARE / si rien à expliquer
@@ -115,6 +140,16 @@ export function prepareWaitReason(phase, question, activeTeams, gameState, opts 
 
   if (!participantsConform(question, participating)) {
     return participantsReasonLabel(question, opts)
+  }
+
+  // Addendum média indisponible (v11.1, #219/#236/#237) — dernière branche
+  // avant le repli permissif : `GAME.QUESTION_SOUND_UNAVAILABLE` n'est
+  // jamais renseigné par le serveur pour une question sans son (sortie
+  // immédiate de sa propre branche, contrat §10.8), donc aucune garde de
+  // type n'est nécessaire ici non plus.
+  const soundReason = SOUND_UNAVAILABLE_REASON_LABELS[gameState?.QUESTION_SOUND_UNAVAILABLE]
+  if (soundReason) {
+    return opts.short ? soundReason.short : soundReason.long
   }
 
   return null

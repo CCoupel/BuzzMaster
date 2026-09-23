@@ -180,7 +180,7 @@
 
 <header class="mast">
   <div class="eyebrow">
-    <span>Maquette</span><span>#219</span><span>Milestone v11.1</span><span class="hot">Révision 3</span>
+    <span>Maquette</span><span>#219</span><span>Milestone v11.1</span><span class="hot">Révision 8</span>
   </div>
   <h1>Question sonore — un média de plus, pas un type de plus</h1>
   <p class="standfirst">
@@ -191,10 +191,10 @@
     lui</i> ou <i>seulement à sa fin</i>. Le barème, lui, ne change pas.
   </p>
   <div class="refs">
-    <div><b>Plan</b> _work/reports/plan-20260922-103848.md (rév. 3 — révise 102600, qui révisait 093142)</div>
+    <div><b>Plan</b> _work/reports/plan-20260923-101500.md (rév. 8)</div>
     <div><b>Contrat</b> contracts/sound.md §10</div>
     <div><b>Types</b> SPEEDY · QCM · ARDOISE — MEMORY, MEMOTION, ENTRACTE et RAFALE hors périmètre</div>
-    <div><b>Rév. 3</b> périmètre réduit à 3 types · plafond 30 s · chronomètre configurable</div>
+    <div><b>Rév. 8</b> blocage par question (§06) + puce d'alerte globale (§07)</div>
   </div>
 </header>
 
@@ -693,8 +693,173 @@
   </div>
 </section>
 
+<!-- ============================================================ 06 -->
+<section>
+  <h2><span class="num">06</span> Média indisponible : la question ne se lance pas</h2>
+  <p class="lede">
+    Un son de question n'est pas un bruitage d'ambiance : si le média ne sortira pas, <b>la question
+    n'a plus de raison d'être</b>. Elle ne part donc pas — et on dit pourquoi, avant le clic.
+  </p>
+
+  <h3>Deux moments, deux règles — et elles ne se contredisent pas</h3>
+  <table>
+    <tr><th></th><th>Avant le lancement</th><th>Pendant la lecture</th></tr>
+    <tr>
+      <td><b>Situation</b></td>
+      <td>On sait déjà que le média ne sortira pas</td>
+      <td>La question tourne déjà, et le son échoue ou s'arrête</td>
+    </tr>
+    <tr>
+      <td><b>Règle</b></td>
+      <td><span class="st idle">la question ne démarre pas</span></td>
+      <td><span class="st play">le chronomètre part immédiatement</span></td>
+    </tr>
+  </table>
+  <p class="note ok">
+    <b>La règle « jamais de blocage » n'est pas abandonnée — elle est recentrée.</b> Elle protégeait
+    d'une question figée en pleine partie ; c'est toujours exactement ce qu'elle fait. Elle ne dit
+    simplement plus rien sur le moment d'<i>avant</i>, où il vaut mieux ne pas partir du tout.
+  </p>
+
+  <h3>Ce que voit l'animateur</h3>
+  <div class="screen">
+    <div class="screen-hd">/anim &nbsp;&middot;&nbsp; phase PREPARE &nbsp;&middot;&nbsp; question &agrave; son, m&eacute;dia indisponible</div>
+    <div class="screen-bd">
+      <div class="conduct">
+        <div class="l1" style="grid-template-columns:repeat(5,1fr)">
+          <div class="cbtn off" style="font-size:.7rem">LANCER<span class="sub" style="color:var(--accent)">son introuvable</span></div>
+          <div class="cbtn off" style="font-size:.7rem">PAUSE</div>
+          <div class="cbtn off" style="font-size:.7rem">CONTIN.</div>
+          <div class="cbtn off" style="font-size:.7rem">STOP</div>
+          <div class="cbtn off" style="font-size:.7rem">R&Eacute;PONSE</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note acc">
+    <b>Le motif prend la place du sous-libellé du bouton</b>, exactement comme « Buzzers en
+    attente » ou « sélectionnez une équipe » le font déjà. Rien de nouveau à apprendre : la même
+    mécanique, avec une raison de plus.
+  </p>
+
+  <h3>Les trois motifs, et ce qu'ils demandent de faire</h3>
+  <table>
+    <tr><th>Motif</th><th>Ce qui est affiché</th><th>Remède</th></tr>
+    <tr><td><b>Son introuvable ou abîmé</b></td><td>« Le fichier son de cette question est introuvable ou illisible. »</td><td>Re-téléverser depuis l'éditeur</td></tr>
+    <tr><td><b>Sons désactivés</b></td><td>« Les sons sont désactivés. Les réactiver demande un redémarrage du serveur. »</td><td>Réactiver <i>et</i> redémarrer</td></tr>
+    <tr><td><b>Pas de sortie audio</b></td><td>« Aucune sortie audio n'a pu être ouverte au démarrage. Brancher l'enceinte puis redémarrer. »</td><td>Brancher <i>et</i> redémarrer</td></tr>
+  </table>
+  <p class="note">
+    Le contrôle ne regarde pas seulement si le fichier <i>existe</i> : il le <b>revalide
+    entièrement</b>. Un extrait tronqué ou abîmé est donc repéré avant la partie, pas découvert au
+    moment de le jouer.
+  </p>
+
+  <h3>La sortie de secours : le Ctrl+clic qui existe déjà</h3>
+  <div class="screen">
+    <div class="screen-hd">/admin &nbsp;&middot;&nbsp; liste des questions &nbsp;&middot;&nbsp; phase PREPARE</div>
+    <div class="screen-bd">
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div class="filebox filled" style="min-width:230px;border-color:var(--no)">
+          <span class="fname">12 &middot; Reconnaissez ce g&eacute;n&eacute;rique</span>
+          <span class="fmeta" style="color:#ff9b98">son introuvable</span>
+        </div>
+        <div style="font-size:.85rem;color:var(--dim)">
+          clic simple → la question reste <b style="color:var(--faint)">bloquée</b><br>
+          <b style="color:var(--accent)">Ctrl</b> + clic → elle passe en <b>prêt</b>, et se jouera <b>sans son</b>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note acc">
+    <b>Ce geste existe déjà, et fait déjà exactement ça.</b> Ctrl+clic sur une question la force en
+    « prêt » sans attendre les buzzers — c'est un contournement de régie connu, au même titre que
+    simuler un buzzer ou forcer une mise à jour de firmware. Il gagne simplement une chose de plus
+    à ignorer. <b>Rien de neuf à apprendre, et rien de neuf à l'écran :</b> le bouton LANCER, lui,
+    ne change pas.
+  </div>
+  <div class="note no">
+    <b>Mais il ne contourne que le son.</b> Une question dont les équipes participantes ne sont pas
+    correctement sélectionnées reste bloquée, Ctrl+clic ou pas — elle serait injouable. Cette
+    limite est ancienne et délibérée ; le son s'y ajoute sans l'affaiblir.
+  </div>
+  <div class="note warn">
+    <b>Pourquoi cette sortie de secours est indispensable.</b> La sortie audio n'est ouverte qu'une
+    seule fois, au démarrage du serveur : une enceinte branchée trop tard reste invisible, même si
+    elle fonctionne. Sans ce contournement, un simple branchement tardif rendrait injouables toutes
+    les questions sonores de la soirée, jusqu'à un redémarrage.
+  </div>
+  <p class="note">
+    <b>Côté animateur, rien de tout cela.</b> La tablette affiche le motif mais n'offre pas le
+    contournement — il est réservé à la régie, et le geste y serait de toute façon impossible.
+  </p>
+
+  <h3>Dès que c'est réparé, ça repart tout seul</h3>
+  <p class="note">
+    Remettre le fichier en place suffit : la question repasse d'elle-même en état « prêt », sans
+    geste supplémentaire — comme lorsqu'on corrige une sélection d'équipes incomplète.
+  </p>
+</section>
+
+<!-- ============================================================ 07 -->
+<section>
+  <h2><span class="num">07</span> La puce d'alerte globale</h2>
+  <p class="lede">
+    Le blocage du §06 se découvre question par question. Cette puce, elle, prévient <b>avant</b> —
+    d'un coup d'œil, sur l'ensemble du quiz. Les deux coexistent : l'une dit « l'audio ne marchera
+    pour aucune question », l'autre « celle-ci a un problème ».
+  </p>
+
+  <h3>Quand elle apparaît</h3>
+  <div class="screen">
+    <div class="screen-hd">/questions &nbsp;&middot;&nbsp; et /admin</div>
+    <div class="screen-bd">
+      <div class="msg warn"><span class="ic">!</span><span>
+        <b>Ce quiz contient 7 questions sonores, mais l'audio n'est pas disponible.</b>
+        Elles ne pourront pas être lancées. Vérifier la configuration ou brancher l'enceinte,
+        puis <b>redémarrer le serveur</b>.
+      </span></div>
+    </div>
+  </div>
+  <table>
+    <tr><th>Le quiz a des sons</th><th>L'audio est actif</th><th>La puce</th></tr>
+    <tr><td>oui</td><td><b style="color:#ff9b98">non</b></td><td><span class="st wait">affich&eacute;e</span></td></tr>
+    <tr><td>oui</td><td>oui</td><td><span class="st idle">masqu&eacute;e</span></td></tr>
+    <tr><td>non</td><td>non</td><td><span class="st idle">masqu&eacute;e</span></td></tr>
+    <tr><td>non</td><td>oui</td><td><span class="st idle">masqu&eacute;e</span></td></tr>
+  </table>
+  <p class="note ok">
+    <b>Elle s'efface toute seule.</b> Réactiver l'audio la fait disparaître ; retirer le dernier son
+    du quiz aussi. Rien à fermer, rien à acquitter — c'est un reflet, pas une notification.
+  </p>
+
+  <h3>Deux endroits, deux usages</h3>
+  <table>
+    <tr><th>Où</th><th>Pourquoi là</th></tr>
+    <tr><td><b>Page Quiz</b></td><td>C'est là qu'on <b>agit</b> : retirer les sons, ou voir lesquelles en portent</td></tr>
+    <tr><td><b>/admin</b></td><td>C'est là qu'on <b>joue</b> : le savoir avant de choisir une question, pas en la choisissant</td></tr>
+  </table>
+  <p class="note">
+    Pas sur la tablette animateur : elle ne connaît pas la liste des questions, et l'animateur ne
+    peut de toute façon ni réactiver le son ni retirer un média.
+  </p>
+
+  <h3>Ce qu'elle ne regarde pas</h3>
+  <p class="note acc">
+    <b>Elle ignore les fichiers manquants.</b> C'est volontaire : un fichier introuvable concerne
+    <i>une</i> question, et le §06 le signale déjà, nommément, au moment de la choisir. La puce ne
+    parle que de ce qui touche <b>tout le quiz</b> — l'audio coupé, ou aucune sortie disponible.
+  </p>
+  <div class="note warn">
+    <b>Et elle ne remplace pas le haut-parleur du menu.</b> Celui-ci continue de dire simplement si
+    le son est actif ou non — ce qui n'est pas une panne, juste un réglage. La puce dit autre chose :
+    que ce réglage-là est <i>incompatible avec ce quiz-ci</i>. Deux messages différents, deux
+    endroits différents.
+  </div>
+</section>
+
 <footer style="border-top:1px solid var(--line);padding-top:22px;color:var(--faint);font-family:var(--mono);font-size:.74rem">
-  Maquette révision 2 · #219 · milestone v11.1 · 2026-09-22 · produite par <b>planner</b> en Phase Plan,
+  Maquette révision 8 · #219 · milestone v11.1 · 2026-09-23 · produite par <b>planner</b> en Phase Plan,
   avant tout développement. Normative pour l'interface et pour les deux machines à états du §03.
 </footer>
 

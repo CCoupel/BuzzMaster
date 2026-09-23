@@ -141,6 +141,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // chronomètre n'est pas différé"), pas des repères d'absence de données.
     QUESTION_SOUND_STATE: 'IDLE', // 'IDLE' | 'PLAYING' | 'PAUSED'
     ANSWER_TIMER_WAITING: false, // true tant que le chronomètre différé attend la fin du son (CA15)
+    // Addendum média indisponible (v11.1, #219/#236/#237, contrat sound.md
+    // §10.8/game-state.md) — même discipline "jamais omitempty" : "" est la
+    // valeur zéro correcte de QUESTION_SOUND_UNAVAILABLE (aucun motif), pas
+    // une absence de donnée.
+    QUESTION_SOUND_UNAVAILABLE: '', // '' | 'DISABLED' | 'OUTPUT' | 'FILE'
+    SOUND_GATE_BYPASSED: false,
   })
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
@@ -445,6 +451,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // sont des valeurs zéro légitimes, jamais à écraser par erreur.
             QUESTION_SOUND_STATE: MSG.GAME.QUESTION_SOUND_STATE ?? prev.QUESTION_SOUND_STATE,
             ANSWER_TIMER_WAITING: MSG.GAME.ANSWER_TIMER_WAITING ?? prev.ANSWER_TIMER_WAITING,
+            // Addendum média indisponible (v11.1, #219/#236/#237) — même
+            // discipline `??` : '' / false sont des valeurs zéro légitimes.
+            QUESTION_SOUND_UNAVAILABLE: MSG.GAME.QUESTION_SOUND_UNAVAILABLE ?? prev.QUESTION_SOUND_UNAVAILABLE,
+            SOUND_GATE_BYPASSED: MSG.GAME.SOUND_GATE_BYPASSED ?? prev.SOUND_GATE_BYPASSED,
           }))
         }
         if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
