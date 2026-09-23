@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isTeamReady, participantsConform, prepareWaitReason } from './prepareWaitReason'
+import { isTeamReady, participantsConform, prepareWaitReasons } from './prepareWaitReason'
 
 // ---------------------------------------------------------------------------
 // prepareWaitReason.js — miroir client-side, en LECTURE SEULE, du prédicat
@@ -8,6 +8,13 @@ import { isTeamReady, participantsConform, prepareWaitReason } from './prepareWa
 // couvert ici en isolation pure (pas de rendu), table de règles identique à
 // celle vérifiée côté moteur par TestParticipantsConform_Rules (rapport QA
 // #172, `_work/reports/qa-20260817-145412.md` §2).
+//
+// v11.1 (retour QUALIF v11.1.0.5, #219/#236/#237) — `prepareWaitReason`
+// (singulier, un seul motif prioritaire) est devenue `prepareWaitReasons`
+// (pluriel, TOUS les motifs actifs simultanément, dans un tableau). Les
+// tests ci-dessous sont adaptés en conséquence (`.toEqual([...])` au lieu de
+// `.toBe(...)`/`.toBeNull()`), et une section dédiée couvre explicitement
+// les combinaisons à plusieurs motifs actifs en même temps.
 // ---------------------------------------------------------------------------
 
 describe('isTeamReady', () => {
@@ -152,87 +159,90 @@ describe('participantsConform — table B1 (miroir engine.go)', () => {
   })
 })
 
-describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', () => {
+describe('prepareWaitReasons — orchestration (phase, buzzers, conformité)', () => {
   const readyTeam = (name) => ({ name, READY: true })
   const notReadyTeam = (name) => ({ name, READY: false })
 
-  it('hors PREPARE → toujours null, quelle que soit la situation', () => {
+  it('hors PREPARE → toujours [], quelle que soit la situation', () => {
     ;['NEW_GAME', 'ENROLL', 'READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].forEach((phase) => {
       expect(
-        prepareWaitReason(phase, { TYPE: 'MEMORY' }, [notReadyTeam('A')], { MEMORY_PARTICIPATING_TEAMS: [] })
-      ).toBeNull()
+        prepareWaitReasons(phase, { TYPE: 'MEMORY' }, [notReadyTeam('A')], { MEMORY_PARTICIPATING_TEAMS: [] })
+      ).toEqual([])
     })
   })
 
-  it('un buzzer actif non prêt → "Buzzers en attente" (libellé complet), prioritaire sur la conformité', () => {
-    // Sélection déjà conforme (MEMORY SOLO, 1 équipe) mais une équipe active
-    // (non sélectionnée) n'a pas de buzzer prêt : le motif buzzers prime.
-    const reason = prepareWaitReason(
+  it('un buzzer actif non prêt → ["Buzzers en attente"] (libellé complet)', () => {
+    // Sélection déjà conforme (MEMORY SOLO, 1 équipe) : seul le motif
+    // buzzers est actif ici, seul dans le tableau.
+    const reasons = prepareWaitReasons(
       'PREPARE',
       { TYPE: 'MEMORY' },
       [readyTeam('A'), notReadyTeam('B')],
       { MEMORY_PARTICIPATING_TEAMS: ['A'] }
     )
-    expect(reason).toBe('Buzzers en attente')
+    expect(reasons).toEqual(['Buzzers en attente'])
   })
 
-  it('un buzzer actif non prêt → "buzzers" (libellé court, opts.short)', () => {
-    const reason = prepareWaitReason(
+  it('un buzzer actif non prêt → ["buzzers"] (libellé court, opts.short)', () => {
+    // Sélection déjà conforme (MEMORY SOLO, 1 équipe) : isole la SEULE
+    // branche buzzers (le cas "plusieurs motifs à la fois" est couvert
+    // explicitement plus bas, section dédiée).
+    const reasons = prepareWaitReasons(
       'PREPARE',
       { TYPE: 'MEMORY' },
       [notReadyTeam('A')],
-      { MEMORY_PARTICIPATING_TEAMS: [] },
+      { MEMORY_PARTICIPATING_TEAMS: ['A'] },
       { short: true }
     )
-    expect(reason).toBe('buzzers')
+    expect(reasons).toEqual(['buzzers'])
   })
 
   describe('buzzers tous prêts, sélection non conforme → motif mode-spécifique', () => {
-    it('MEMORY SOLO, aucune équipe sélectionnée → "sélectionnez une équipe" (complet) / "1 équipe" (court)', () => {
+    it('MEMORY SOLO, aucune équipe sélectionnée → ["sélectionnez une équipe"] (complet) / ["1 équipe"] (court)', () => {
       const activeTeams = [readyTeam('A'), readyTeam('B')]
       const gameState = { MEMORY_PARTICIPATING_TEAMS: [] }
-      expect(prepareWaitReason('PREPARE', { TYPE: 'MEMORY' }, activeTeams, gameState)).toBe('sélectionnez une équipe')
-      expect(prepareWaitReason('PREPARE', { TYPE: 'MEMORY' }, activeTeams, gameState, { short: true })).toBe('1 équipe')
+      expect(prepareWaitReasons('PREPARE', { TYPE: 'MEMORY' }, activeTeams, gameState)).toEqual(['sélectionnez une équipe'])
+      expect(prepareWaitReasons('PREPARE', { TYPE: 'MEMORY' }, activeTeams, gameState, { short: true })).toEqual(['1 équipe'])
     })
 
-    it('MEMORY multi, une seule équipe sélectionnée → "sélectionnez au moins deux équipes" (complet) / "2 équipes" (court)', () => {
+    it('MEMORY multi, une seule équipe sélectionnée → ["sélectionnez au moins deux équipes"] (complet) / ["2 équipes"] (court)', () => {
       const activeTeams = [readyTeam('A'), readyTeam('B')]
       const gameState = { MEMORY_PARTICIPATING_TEAMS: ['A'] }
       const question = { TYPE: 'MEMORY', MEMORY_MODE: 'CHACUN_SON_TOUR' }
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins deux équipes')
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('2 équipes')
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)).toEqual(['sélectionnez au moins deux équipes'])
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState, { short: true })).toEqual(['2 équipes'])
     })
 
-    it('MEMOTION SOLO (défaut), aucune équipe sélectionnée → "sélectionnez une équipe" (complet) / "1 équipe" (court) — #201 suivi, avant #201 "sélectionnez au moins une équipe"', () => {
+    it('MEMOTION SOLO (défaut), aucune équipe sélectionnée → ["sélectionnez une équipe"] (complet) / ["1 équipe"] (court) — #201 suivi, avant #201 "sélectionnez au moins une équipe"', () => {
       const activeTeams = [readyTeam('A')]
       const gameState = { MEMOTION_PARTICIPATING_TEAMS: [] }
       const question = { TYPE: 'MEMOTION' }
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez une équipe')
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('1 équipe')
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)).toEqual(['sélectionnez une équipe'])
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState, { short: true })).toEqual(['1 équipe'])
     })
 
-    it('MEMOTION multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → "sélectionnez au moins deux équipes" (complet) / "2 équipes" (court) — #201 suivi, avant #201 une seule équipe suffisait', () => {
+    it('MEMOTION multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → ["sélectionnez au moins deux équipes"] (complet) / ["2 équipes"] (court) — #201 suivi, avant #201 une seule équipe suffisait', () => {
       const activeTeams = [readyTeam('A'), readyTeam('B')]
       const gameState = { MEMOTION_PARTICIPATING_TEAMS: ['A'] }
       const question = { TYPE: 'MEMOTION', MOTION_MODE: 'CHACUN_SON_TOUR' }
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins deux équipes')
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('2 équipes')
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)).toEqual(['sélectionnez au moins deux équipes'])
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState, { short: true })).toEqual(['2 équipes'])
     })
 
-    it('RAFALE SOLO, aucune équipe sélectionnée → "sélectionnez une équipe" (complet) / "1 équipe" (court) — #201, avant #201 toujours conforme donc null', () => {
+    it('RAFALE SOLO, aucune équipe sélectionnée → ["sélectionnez une équipe"] (complet) / ["1 équipe"] (court) — #201, avant #201 toujours conforme donc []', () => {
       const activeTeams = [readyTeam('A'), readyTeam('B')]
       const gameState = { RAFALE_PARTICIPATING_TEAMS: [] }
       const question = { TYPE: 'RAFALE' }
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez une équipe')
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('1 équipe')
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)).toEqual(['sélectionnez une équipe'])
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState, { short: true })).toEqual(['1 équipe'])
     })
 
-    it('RAFALE multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → "sélectionnez au moins deux équipes participantes" (complet) / "2 équipes" (court) — #201, avant #201 une seule équipe suffisait', () => {
+    it('RAFALE multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → ["sélectionnez au moins deux équipes participantes"] (complet) / ["2 équipes"] (court) — #201, avant #201 une seule équipe suffisait', () => {
       const activeTeams = [readyTeam('A'), readyTeam('B')]
       const gameState = { RAFALE_PARTICIPATING_TEAMS: ['A'] }
       const question = { TYPE: 'RAFALE', RAFALE_MODE: 'CHACUN_SON_TOUR' }
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe('sélectionnez au moins deux équipes participantes')
-      expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe('2 équipes')
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)).toEqual(['sélectionnez au moins deux équipes participantes'])
+      expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState, { short: true })).toEqual(['2 équipes'])
     })
 
     it('RAFALE lit RAFALE_PARTICIPATING_TEAMS, pas MEMORY_PARTICIPATING_TEAMS', () => {
@@ -244,9 +254,9 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
         MEMORY_PARTICIPATING_TEAMS: ['A', 'B', 'C'],
         RAFALE_PARTICIPATING_TEAMS: [],
       }
-      expect(prepareWaitReason('PREPARE', { TYPE: 'RAFALE', RAFALE_MODE: 'MAILLON_FAIBLE' }, activeTeams, gameState)).toBe(
-        'sélectionnez au moins deux équipes participantes'
-      )
+      expect(prepareWaitReasons('PREPARE', { TYPE: 'RAFALE', RAFALE_MODE: 'MAILLON_FAIBLE' }, activeTeams, gameState)).toEqual([
+        'sélectionnez au moins deux équipes participantes',
+      ])
     })
 
     it('MEMOTION lit MEMOTION_PARTICIPATING_TEAMS, pas MEMORY_PARTICIPATING_TEAMS', () => {
@@ -257,37 +267,35 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
         MEMORY_PARTICIPATING_TEAMS: ['A', 'B', 'C'],
         MEMOTION_PARTICIPATING_TEAMS: [],
       }
-      expect(prepareWaitReason('PREPARE', { TYPE: 'MEMOTION' }, activeTeams, gameState)).toBe(
-        'sélectionnez une équipe'
-      )
+      expect(prepareWaitReasons('PREPARE', { TYPE: 'MEMOTION' }, activeTeams, gameState)).toEqual(['sélectionnez une équipe'])
     })
   })
 
-  it('buzzers tous prêts et sélection conforme → null (rien à expliquer)', () => {
+  it('buzzers tous prêts et sélection conforme → [] (rien à expliquer)', () => {
     const activeTeams = [readyTeam('A'), readyTeam('B')]
     const gameState = { MEMORY_PARTICIPATING_TEAMS: ['A'] }
-    expect(prepareWaitReason('PREPARE', { TYPE: 'MEMORY' }, activeTeams, gameState)).toBeNull()
+    expect(prepareWaitReasons('PREPARE', { TYPE: 'MEMORY' }, activeTeams, gameState)).toEqual([])
   })
 
-  it('SPEEDY/QCM/ARDOISE en PREPARE, buzzers prêts → toujours null (non-régression, aucun changement de comportement #172)', () => {
+  it('SPEEDY/QCM/ARDOISE en PREPARE, buzzers prêts → toujours [] (non-régression, aucun changement de comportement #172)', () => {
     ;['SPEEDY', 'QCM', 'ARDOISE'].forEach((type) => {
-      const reason = prepareWaitReason(
+      const reasons = prepareWaitReasons(
         'PREPARE',
         { TYPE: type },
         [readyTeam('A')],
         { MEMORY_PARTICIPATING_TEAMS: [], MEMOTION_PARTICIPATING_TEAMS: [] }
       )
-      expect(reason).toBeNull()
+      expect(reasons).toEqual([])
     })
   })
 
   it('activeTeams vide (aucune équipe active) → pas de "Buzzers en attente", retombe sur la conformité', () => {
-    const reason = prepareWaitReason('PREPARE', { TYPE: 'MEMORY' }, [], { MEMORY_PARTICIPATING_TEAMS: [] })
-    expect(reason).toBe('sélectionnez une équipe')
+    const reasons = prepareWaitReasons('PREPARE', { TYPE: 'MEMORY' }, [], { MEMORY_PARTICIPATING_TEAMS: [] })
+    expect(reasons).toEqual(['sélectionnez une équipe'])
   })
 
-  it('question null en PREPARE → permissif, null', () => {
-    expect(prepareWaitReason('PREPARE', null, [readyTeam('A')], {})).toBeNull()
+  it('question null en PREPARE → permissif, []', () => {
+    expect(prepareWaitReasons('PREPARE', null, [readyTeam('A')], {})).toEqual([])
   })
 })
 
@@ -295,13 +303,10 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
 // Addendum média indisponible (v11.1, #219/#236/#237, plan
 // _work/reports/plan-20260923-101500.md rév. 8 §6 tâche 13, contrat
 // sound.md §10.8) — la branche `GAME.QUESTION_SOUND_UNAVAILABLE`, dernière
-// avant le repli permissif de `prepareWaitReason`. Dispatché en correctif
-// de revue (le dispatch initial du CDP ne listait pas explicitement ce
-// fichier, mais le plan §6 tâche 13 le demande : "prepareWaitReason.test.js
-// (3 motifs × 2 formulations)").
+// branche évaluée par `prepareWaitReasons`.
 // ---------------------------------------------------------------------------
 
-describe('prepareWaitReason — addendum média indisponible (v11.1, #219/#236/#237)', () => {
+describe('prepareWaitReasons — addendum média indisponible (v11.1, #219/#236/#237)', () => {
   const readyTeam = (name) => ({ name, READY: true })
   // Buzzers déjà prêts et participants conformes (question SPEEDY, jamais
   // de garde participants) — pour isoler la SEULE branche son.
@@ -314,39 +319,31 @@ describe('prepareWaitReason — addendum média indisponible (v11.1, #219/#236/#
     ['FILE', 'son introuvable', 'Le fichier son de cette question est introuvable ou invalide sur le serveur.'],
   ])('QUESTION_SOUND_UNAVAILABLE=%s → libellé court=%j, long=%j', (unavailable, wantShort, wantLong) => {
     const gameState = { QUESTION_SOUND_UNAVAILABLE: unavailable }
-    expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe(wantLong)
-    expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe(wantShort)
+    expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)).toEqual([wantLong])
+    expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState, { short: true })).toEqual([wantShort])
   })
 
   it('chaque motif NOMME LE REMÈDE réel dans le libellé long (jamais une étiquette générique)', () => {
     const gameState = { QUESTION_SOUND_UNAVAILABLE: 'DISABLED' }
-    expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toMatch(/redémarrage du serveur/)
+    expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)[0]).toMatch(/redémarrage du serveur/)
 
     expect(
-      prepareWaitReason('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: 'OUTPUT' })
+      prepareWaitReasons('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: 'OUTPUT' })[0]
     ).toMatch(/brancher l'enceinte/i)
   })
 
-  it('QUESTION_SOUND_UNAVAILABLE="" (disponible) → null, rien à expliquer', () => {
-    expect(prepareWaitReason('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: '' })).toBeNull()
+  it('QUESTION_SOUND_UNAVAILABLE="" (disponible) → [], rien à expliquer', () => {
+    expect(prepareWaitReasons('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: '' })).toEqual([])
   })
 
-  it('QUESTION_SOUND_UNAVAILABLE absent (clé manquante) → null, même comportement que ""', () => {
-    expect(prepareWaitReason('PREPARE', question, activeTeams, {})).toBeNull()
+  it('QUESTION_SOUND_UNAVAILABLE absent (clé manquante) → [], même comportement que ""', () => {
+    expect(prepareWaitReasons('PREPARE', question, activeTeams, {})).toEqual([])
   })
 
-  it('motif inconnu (valeur future non prévue par la table) → null, permissif par défaut (jamais de crash)', () => {
+  it('motif inconnu (valeur future non prévue par la table) → [], permissif par défaut (jamais de crash)', () => {
     expect(
-      prepareWaitReason('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: 'UNE_VALEUR_FUTURE_INCONNUE' })
-    ).toBeNull()
-  })
-
-  it('la branche participants garde PRIORITÉ sur la branche son (ordre normatif : buzzers, puis participants, puis son)', () => {
-    // MEMORY SOLO non conforme ET son indisponible en même temps — le motif
-    // participants doit rester affiché, jamais masqué par le motif son.
-    const memoryQuestion = { TYPE: 'MEMORY' }
-    const gameState = { MEMORY_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: 'DISABLED' }
-    expect(prepareWaitReason('PREPARE', memoryQuestion, activeTeams, gameState)).toBe('sélectionnez une équipe')
+      prepareWaitReasons('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: 'UNE_VALEUR_FUTURE_INCONNUE' })
+    ).toEqual([])
   })
 
   it('aucune garde de type : une question sans SOUND mais avec QUESTION_SOUND_UNAVAILABLE renseigné (état incohérent hypothétique) affiche quand même le motif — le fichier ne réinvente pas la garde serveur (§10.8.4)', () => {
@@ -358,18 +355,107 @@ describe('prepareWaitReason — addendum média indisponible (v11.1, #219/#236/#
     // fichier fait confiance à l'état serveur plutôt que de le
     // re-vérifier lui-même (cohérent avec le principe R4 du projet).
     const gameState = { QUESTION_SOUND_UNAVAILABLE: 'FILE' }
-    expect(prepareWaitReason('PREPARE', { TYPE: 'SPEEDY' }, activeTeams, gameState)).not.toBeNull()
+    expect(prepareWaitReasons('PREPARE', { TYPE: 'SPEEDY' }, activeTeams, gameState)).not.toEqual([])
   })
 
-  it('SPEEDY/QCM/ARDOISE en PREPARE, son disponible → toujours null (non-régression, complète le test existant "toujours null")', () => {
+  it('SPEEDY/QCM/ARDOISE en PREPARE, son disponible → toujours [] (non-régression, complète le test existant "toujours []")', () => {
     ;['SPEEDY', 'QCM', 'ARDOISE'].forEach((type) => {
-      const reason = prepareWaitReason(
+      const reasons = prepareWaitReasons(
         'PREPARE',
         { TYPE: type },
         activeTeams,
         { MEMORY_PARTICIPATING_TEAMS: [], MEMOTION_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: '' }
       )
-      expect(reason).toBeNull()
+      expect(reasons).toEqual([])
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Évolution UX (retour QUALIF v11.1.0.5, #219/#236/#237) — plusieurs motifs
+// actifs EN MÊME TEMPS. Avant cette évolution, `prepareWaitReason`
+// (singulier) ne retournait QUE le motif de plus haute priorité (buzzers >
+// participants > son) : un utilisateur avec deux problèmes simultanés ne
+// voyait que le premier, et découvrait le second seulement après avoir
+// corrigé le premier. `prepareWaitReasons` accumule désormais TOUS les
+// motifs actifs, dans l'ordre buzzers → participants → son.
+// ---------------------------------------------------------------------------
+
+describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour QUALIF v11.1.0.5)', () => {
+  const readyTeam = (name) => ({ name, READY: true })
+  const notReadyTeam = (name) => ({ name, READY: false })
+
+  it('buzzers non prêts ET son indisponible en même temps (SPEEDY) → les DEUX motifs, dans cet ordre', () => {
+    const reasons = prepareWaitReasons(
+      'PREPARE',
+      { TYPE: 'SPEEDY' },
+      [notReadyTeam('A')],
+      { QUESTION_SOUND_UNAVAILABLE: 'FILE' }
+    )
+    expect(reasons).toEqual(['Buzzers en attente', 'Le fichier son de cette question est introuvable ou invalide sur le serveur.'])
+  })
+
+  it('même situation, libellés courts (opts.short) → ["buzzers", "son introuvable"]', () => {
+    const reasons = prepareWaitReasons(
+      'PREPARE',
+      { TYPE: 'SPEEDY' },
+      [notReadyTeam('A')],
+      { QUESTION_SOUND_UNAVAILABLE: 'FILE' },
+      { short: true }
+    )
+    expect(reasons).toEqual(['buzzers', 'son introuvable'])
+  })
+
+  it('participants non conformes ET son indisponible en même temps (MEMORY) → les DEUX motifs, participants avant son', () => {
+    // Buzzers déjà prêts pour isoler participants+son (pas de 3e motif).
+    const reasons = prepareWaitReasons(
+      'PREPARE',
+      { TYPE: 'MEMORY' },
+      [readyTeam('A')],
+      { MEMORY_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: 'DISABLED' }
+    )
+    expect(reasons).toEqual([
+      'sélectionnez une équipe',
+      'Les sons sont désactivés dans la configuration. Les réactiver demande un redémarrage du serveur.',
+    ])
+  })
+
+  it('les TROIS motifs actifs en même temps (buzzers, participants, son) → les trois, dans l\'ordre normatif', () => {
+    const reasons = prepareWaitReasons(
+      'PREPARE',
+      { TYPE: 'MEMORY' },
+      [notReadyTeam('A')],
+      { MEMORY_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: 'OUTPUT' }
+    )
+    expect(reasons).toEqual([
+      'Buzzers en attente',
+      'sélectionnez une équipe',
+      "Aucune sortie audio n'a pu être ouverte au démarrage du serveur. Brancher l'enceinte puis redémarrer le serveur.",
+    ])
+  })
+
+  it('un seul motif actif (les autres résolus) → tableau à un seul élément, jamais de séparateur superflu côté appelant', () => {
+    const reasons = prepareWaitReasons(
+      'PREPARE',
+      { TYPE: 'MEMORY' },
+      [readyTeam('A')],
+      { MEMORY_PARTICIPATING_TEAMS: ['A'], QUESTION_SOUND_UNAVAILABLE: 'FILE' }
+    )
+    expect(reasons).toEqual(['Le fichier son de cette question est introuvable ou invalide sur le serveur.'])
+    // Le patron de jointure utilisé par les appelants (GamePage.jsx,
+    // AnimPage.jsx) est `reasons.join(' · ')` : un seul élément ne produit
+    // donc aucun séparateur, exactement comme avant cette évolution.
+    expect(reasons.join(' · ')).toBe('Le fichier son de cette question est introuvable ou invalide sur le serveur.')
+  })
+
+  it('aucun motif actif → tableau vide, `.join(\' · \')` produit une chaîne vide (jamais affichée par les appelants)', () => {
+    const reasons = prepareWaitReasons(
+      'PREPARE',
+      { TYPE: 'SPEEDY' },
+      [readyTeam('A')],
+      { QUESTION_SOUND_UNAVAILABLE: '' }
+    )
+    expect(reasons).toEqual([])
+    expect(reasons.join(' · ')).toBe('')
   })
 })

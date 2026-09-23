@@ -1,6 +1,8 @@
 /**
- * prepareWaitReason — motif d'attente en phase `PREPARE` (#172/C2, plan
- * `_work/reports/plan-20260817-122307.md` §7 Bloc C).
+ * prepareWaitReasons — motif(s) d'attente en phase `PREPARE` (#172/C2, plan
+ * `_work/reports/plan-20260817-122307.md` §7 Bloc C). Renommée du singulier
+ * `prepareWaitReason` (v11.1, retour QUALIF v11.1.0.5, #219/#236/#237) :
+ * renvoie désormais TOUS les motifs actifs, pas seulement le premier trouvé.
  *
  * MIROIR client-side, en LECTURE SEULE, du prédicat serveur
  * `participantsConform(question, state)` (#172/B1, `engine.go`) et de la
@@ -116,21 +118,44 @@ function participantsReasonLabel(question, { short } = {}) {
 }
 
 /**
+ * prepareWaitReasons — TOUS les motifs de blocage actifs en phase `PREPARE`,
+ * simultanément (évolution UX, retour QUALIF v11.1.0.5, #219/#236/#237).
+ *
+ * Remplace l'ancienne `prepareWaitReason` (singulier), qui ne retournait que
+ * le motif de plus haute priorité (buzzers, PUIS participants, PUIS son) —
+ * un utilisateur avec deux problèmes en même temps (ex. buzzers pas prêts
+ * ET son indisponible) ne voyait que le premier, et découvrait le second
+ * seulement après avoir corrigé le premier. Ici les trois branches
+ * s'accumulent dans un tableau au lieu de `return` dès la première trouvée.
+ *
+ * Choix de présentation (pas de nouveau composant de liste) : chaque appelant
+ * assemble le tableau avec le séparateur `' · '` déjà utilisé partout où ce
+ * motif s'affichait (GamePage.jsx memory-selector-label, sous-libellé
+ * AnimConductPanel) — un tableau vide donne `[].join(' · ') === ''`, donc le
+ * même test `reason &&`/`reasons.length &&` continue de fonctionner sans
+ * changer la mise en page existante (toujours une seule ligne de texte, pas
+ * une liste à puces qui aurait demandé un nouveau composant et plus
+ * d'espace vertical que la tablette `/anim` ou les encarts `/admin`
+ * n'en ont).
+ *
  * @param {string} phase - gameState.phase
  * @param {{TYPE?: string, MEMORY_MODE?: string}|null} question - gameState.question
  * @param {Array<{READY?: boolean|string}>} activeTeams - équipes ayant ≥1 buzzer
  *   assigné (même filtre que l'affichage, cf. `AreAllTeamsReady` — "Empty
  *   teams are ignored, matching the frontend display filter")
  * @param {{MEMORY_PARTICIPATING_TEAMS?: string[], MEMOTION_PARTICIPATING_TEAMS?: string[], QUESTION_SOUND_UNAVAILABLE?: string}} gameState
- * @param {{short?: boolean}} [opts] - `short: true` pour le libellé tablette
- *   (AnimConductPanel, espace contraint) ; sinon libellé complet (régie).
- * @returns {string|null} le motif, ou `null` hors PREPARE / si rien à expliquer
+ * @param {{short?: boolean}} [opts] - `short: true` pour les libellés tablette
+ *   (AnimConductPanel, espace contraint) ; sinon libellés complets (régie).
+ * @returns {string[]} tous les motifs actifs, dans l'ordre buzzers → participants
+ *   → son ; tableau vide (jamais `null`) hors `PREPARE` ou si rien à expliquer.
  */
-export function prepareWaitReason(phase, question, activeTeams, gameState, opts = {}) {
-  if (phase !== 'PREPARE') return null
+export function prepareWaitReasons(phase, question, activeTeams, gameState, opts = {}) {
+  if (phase !== 'PREPARE') return []
+
+  const reasons = []
 
   const buzzersWaiting = (activeTeams || []).some(t => !isTeamReady(t))
-  if (buzzersWaiting) return opts.short ? 'buzzers' : 'Buzzers en attente'
+  if (buzzersWaiting) reasons.push(opts.short ? 'buzzers' : 'Buzzers en attente')
 
   const participating = question?.TYPE === 'MEMOTION'
     ? (gameState?.MEMOTION_PARTICIPATING_TEAMS || [])
@@ -139,18 +164,18 @@ export function prepareWaitReason(phase, question, activeTeams, gameState, opts 
       : (gameState?.MEMORY_PARTICIPATING_TEAMS || [])
 
   if (!participantsConform(question, participating)) {
-    return participantsReasonLabel(question, opts)
+    const label = participantsReasonLabel(question, opts)
+    if (label) reasons.push(label)
   }
 
-  // Addendum média indisponible (v11.1, #219/#236/#237) — dernière branche
-  // avant le repli permissif : `GAME.QUESTION_SOUND_UNAVAILABLE` n'est
-  // jamais renseigné par le serveur pour une question sans son (sortie
-  // immédiate de sa propre branche, contrat §10.8), donc aucune garde de
-  // type n'est nécessaire ici non plus.
+  // Addendum média indisponible (v11.1, #219/#236/#237) — dernière branche :
+  // `GAME.QUESTION_SOUND_UNAVAILABLE` n'est jamais renseigné par le serveur
+  // pour une question sans son (sortie immédiate de sa propre branche,
+  // contrat §10.8), donc aucune garde de type n'est nécessaire ici non plus.
   const soundReason = SOUND_UNAVAILABLE_REASON_LABELS[gameState?.QUESTION_SOUND_UNAVAILABLE]
   if (soundReason) {
-    return opts.short ? soundReason.short : soundReason.long
+    reasons.push(opts.short ? soundReason.short : soundReason.long)
   }
 
-  return null
+  return reasons
 }

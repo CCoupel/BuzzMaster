@@ -9,7 +9,7 @@ import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter, getRankBadge, formatRea
 import { sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward } from '../utils/pointsAward'
 import { isRevealed } from '../utils/phaseRules'
-import { prepareWaitReason } from '../utils/prepareWaitReason'
+import { prepareWaitReasons } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
@@ -457,13 +457,18 @@ export default function AnimPage() {
     )
   }, [teams, bumpers, gameState.phase, question, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST])
 
-  // #172/C2 — motif d'attente PREPARE, passé à AnimConductPanel (repli du
+  // #172/C2 — motif(s) d'attente PREPARE, passé à AnimConductPanel (repli du
   // bouton LANCER, style "à suivre" #166 déjà en place, aucun nouveau
   // badge/CSS). `short: true` — sub-label du bouton, place limitée (F7).
-  const waitReason = useMemo(
-    () => prepareWaitReason(gameState.phase, question, displayTeams, gameState, { short: true }),
-    [gameState, question, displayTeams]
-  )
+  // Évolution UX (retour QUALIF v11.1.0.5, #219/#236/#237) — `AnimConductPanel`
+  // continue de recevoir une seule chaîne (prop `waitReason`, composant et
+  // ses tests INCHANGÉS) : `prepareWaitReasons` peut désormais renvoyer
+  // plusieurs motifs simultanés (buzzers ET son indisponible, par exemple),
+  // joints ici avec le même séparateur `' · '` qu'ailleurs dans ce fichier.
+  const waitReason = useMemo(() => {
+    const reasons = prepareWaitReasons(gameState.phase, question, displayTeams, gameState, { short: true })
+    return reasons.length > 0 ? reasons.join(' · ') : null
+  }, [gameState, question, displayTeams])
 
   // #158/F3 — mode ARDOISE : liste des copies à la place des cartes équipe.
   // Filtre équipes à joueur virtuel, parité #93 (même règle que
