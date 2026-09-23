@@ -727,10 +727,13 @@ que rien ne justifie.
 **Libération pendant une pause de jeu** : si le son se termine alors que la partie est en pause, le
 chronomètre démarre **à la reprise**, jamais pendant la pause.
 
-> ⚠️ **Règle de non-blocage — la plus importante de cette section.**
-> **Si la lecture ne démarre pas réellement, le chronomètre démarre immédiatement.** Lecteur neutre
-> (plateforme non ciblée, contexte audio refusé), fichier absent ou non conforme,
-> `sound.enabled = false` : dans tous ces cas le mode différé **dégrade vers le mode simultané**.
+> ⚠️ **Règle de non-blocage — portée restreinte à T1 par §10.8 (2026-09-23).**
+> **Si la lecture ne démarre pas réellement ALORS QUE LA QUESTION A DÉJÀ DÉMARRÉ, le chronomètre
+> démarre immédiatement.** Lecteur neutre (plateforme non ciblée, contexte audio refusé), fichier
+> absent ou non conforme, `sound.enabled = false` : dans tous ces cas le mode différé **dégrade
+> vers le mode simultané**. Une indisponibilité **connue avant le lancement** relève de §10.8 et
+> **empêche la question de démarrer** — ce n'est pas une exception à cette règle, c'est un instant
+> différent.
 >
 > C'est l'application directe de la dégradation silencieuse du §5.5, avec sa conséquence explicitée
 > une fois pour toutes : **elle doit dégrader vers le comportement normal, jamais vers un
@@ -774,3 +777,236 @@ aucun code :
 > des commentaires d'ordonnancement explicites (« must run BEFORE startTimer() »). La garde du
 > différé s'ajoute **autour de l'appel existant**, au même endroit, **sans déplacer une seule ligne
 > voisine**.
+
+### 10.8 Média indisponible avant le lancement — normatif (arbitrage utilisateur, 2026-09-23)
+
+> **Besoin** : « si le média n'est pas disponible, la question n'a plus de raison d'être » —
+> remonté pendant la validation manuelle du Scénario 11 (#219/#236/#237), puis précisé au GATE 2 :
+> **revalidation complète du format** à chaque contrôle, et **échappatoire par Ctrl+Clic**.
+> **Plan** : `_work/reports/plan-20260923-094500.md`
+
+#### 10.8.1 La frontière T0/T1 — et pourquoi il n'y a pas de contradiction
+
+| | **T0 — avant le lancement** | **T1 — après le lancement** |
+|---|---|---|
+| Situation | L'indisponibilité est **déjà connue** | La question tourne déjà ; la lecture échoue, se dégrade, ou ne signale jamais sa fin |
+| Règle | **BLOQUANT** — la question ne passe pas en `READY` | **JAMAIS BLOQUANT** — §10.7, dégradation silencieuse, chronomètre libéré |
+
+Un bruitage manqué est une perte cosmétique ; un son de question manquant vide la question de son
+contenu. Les deux règles portent donc sur **deux instants distincts**.
+
+> ⚠️ **§10.7 n'est ni supprimée ni affaiblie.** Elle protégeait d'une question **figée en pleine
+> partie, sans recours** — c'est toujours exactement ce qu'elle fait. Toute implémentation qui
+> ferait disparaître la dégradation T1 au prétexte d'avoir ajouté la gate T0 est un **refus de
+> revue**.
+
+#### 10.8.2 « Média disponible » — définition unique, normative
+
+Trois conditions, **toutes** requises :
+
+1. `config.Get().Sound.Enabled` — sinon motif `DISABLED` ;
+2. une sortie réelle est attachée — `!audio.IsNeutralMedia(player)` — sinon motif `OUTPUT` ;
+3. le fichier existe **et se valide entièrement** au format canonique — sinon motif `FILE`.
+
+**Une seule fonction porte cette définition**, réutilisée **à la fois** par la gate T0 **et** par la
+dégradation T1 (`play()`). Deux définitions parallèles divergeraient et produiraient le pire
+symptôme possible : une question bloquée alors que le son aurait fonctionné, ou l'inverse.
+
+> **Arbitrage utilisateur du GATE 2 — la condition 3 est une revalidation COMPLÈTE, pas un simple
+> `os.Stat`.** L'utilisateur a explicitement choisi de revérifier **l'intégrité** du fichier, et
+> pas seulement sa présence : un WAV tronqué ou corrompu hors de l'éditeur doit être détecté
+> **avant** le lancement, pas découvert à la lecture. La validation réutilise la fonction existante
+> (`ValidateQuestionSound` / `extractCanonicalPCM`), **jamais un second parseur**.
+
+#### 10.8.3 Cache de validation — normatif, et non facultatif
+
+La gate est évaluée à **chaque transition `PREPARE ↔ READY`**, donc **à chaque PONG de buzzer**.
+Une revalidation complète naïve relirait jusqu'à 6 Mio par buzzer et par question. **Un cache est
+donc obligatoire**, et sa forme est imposée :
+
+| | |
+|---|---|
+| **Clé** | chemin absolu du fichier |
+| **Empreinte** | `mtime` **et** taille, obtenus par un `os.Stat` (bon marché) |
+| **Hit** | empreinte identique à celle mémorisée ⇒ **réutiliser le verdict**, sans relire le contenu |
+| **Miss** | aucune entrée, ou empreinte différente ⇒ **revalidation complète**, puis mémorisation |
+| **Fichier disparu** | `os.Stat` en erreur ⇒ motif `FILE` **et suppression de l'entrée**, pour qu'un fichier restauré soit revalidé |
+
+> ⚠️ **Les verdicts NÉGATIFS se mettent en cache aussi.** Un fichier corrompu qui ne serait pas
+> mémorisé serait re-parsé intégralement à chaque PONG — exactement le coût que ce cache existe
+> pour éviter, dans le cas précis où il est le plus élevé.
+
+Le cache est borné par le nombre de questions portant un son : **aucune éviction n'est nécessaire**.
+Une limite connue et acceptée : sur un système de fichiers dont le `mtime` a une granularité d'une
+seconde, un fichier remplacé **dans la même seconde et à taille identique** passerait inaperçu — cas
+de figure sans portée pratique ici, l'éditeur régénérant un nom de fichier aléatoire à chaque
+téléversement.
+
+> ⚠️ **La validation ne doit JAMAIS s'exécuter sous le verrou du moteur.** `internal/game`
+> n'importe ni `internal/audio` ni `internal/config` : la disponibilité est calculée **par la
+> couche applicative**, puis poussée dans le `GameState`, d'où `participantsConform` la lit. Un
+> rappel injecté qui ferait de l'entrée/sortie disque depuis `reevaluatePrepareReadyUnsafe`
+> tiendrait `e.mu` pendant une lecture de fichier — c'est l'implémentation naïve à refuser en revue.
+
+#### 10.8.4 Où la gate vit — réutilisation, pas nouveau chemin
+
+La gate est **une branche de `participantsConform`**, le prédicat qui pilote déjà
+`PREPARE ↔ READY` (#172) et qui absorbe **déjà** des conditions étrangères aux participants
+(catégories et difficultés RAFALE), avec sa propre justification : *« a second, parallel gating
+function would duplicate the `reevaluatePrepareReadyUnsafe`/`ForceReady` wiring for no real
+benefit »*.
+
+- **Aucun nouveau chemin de refus n'est créé.** Les trois points de jonction existants consomment
+  déjà ce prédicat.
+- `Engine.Start()` refuse déjà toute phase ≠ `READY` (#172 B4) : **le contrôle serveur est acquis**.
+- `participantsConform` est **pur sur `(Question, GameState)`** et doit le rester.
+- **Une question sans son n'est jamais affectée** : la branche sort immédiatement si
+  `Question.SOUND` est vide. La valeur zéro reste le comportement d'avant, sur **tous** les types.
+
+#### 10.8.5 Le motif remonte comme un état, jamais comme une erreur
+
+`GAME.QUESTION_SOUND_UNAVAILABLE` : `""` | `DISABLED` | `OUTPUT` | `FILE`, **sans `omitempty`**.
+
+> ⚠️ **Diffusion — corrigé (dev-backend, 2026-09-23) : Admin/TV/VPlayer/Anim, pas « admin seul ».**
+> `/anim` doit afficher ce motif (CA26 : « /anim affiche le motif mais n'offre aucune échappatoire »,
+> `prepareWaitReason.js`/`AnimConductPanel.jsx`) — or `/anim` est routé vers exactement le même
+> sérialiseur que TV/VPlayer (`SerializeForWebClient`), et ce lot ne touche pas
+> `internal/protocol/messages.go` ni la sérialisation pour introduire une distinction. Le champ
+> voyage donc avec le `GameState` ordinaire, comme `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` —
+> voir `contracts/game-state.md` pour la matrice complète et le détail du raisonnement. TV/VPlayer le
+> reçoivent aussi, sans jamais l'afficher (aucune donnée confidentielle en jeu).
+
+**Aucun canal d'erreur WebSocket n'est créé** — il n'en existe aucun pour
+`admin`/`anim`, et la politique contractuelle est « journalisé en `WARN`, rien renvoyé au client ».
+Le serveur publie le **fait** ; `web/src/utils/prepareWaitReason.js` en fait un libellé, comme il le
+fait déjà pour les participants. Le fait doit venir du serveur parce que deux des trois motifs sont
+**indécidables côté client**.
+
+Les libellés **doivent nommer le remède réel**, parce qu'il est contre-intuitif : réactiver les sons
+ou brancher une enceinte ne suffit pas, il faut **redémarrer le serveur** (§4 amendement #230 ;
+§6.3).
+
+#### 10.8.6 Échappatoire — le geste existant sur la question (arbitrage GATE 2, corrigé 2026-09-23)
+
+Le blocage reste le **comportement par défaut**. Mais §10.8.8 décrit deux façons réelles de
+verrouiller un quiz entier en direct ; une sortie de secours est donc nécessaire.
+
+**Forme imposée : le `Ctrl`+clic DÉJÀ EXISTANT sur la question**, en phase `PREPARE` — celui qui
+force le passage en `READY` (`Engine.ForceReady()`). **Ni un nouveau geste, ni une action sur le
+bouton LANCER** : le contournement se joue à la frontière `PREPARE → READY`, là où vit la gate, et
+non au lancement.
+
+> ⚠️ **`ForceReady()` ne contourne PAS `participantsConform` aujourd'hui — et ne doit pas se mettre
+> à le faire.** Il marque les buzzers prêts, puis **vérifie explicitement** la conformité et refuse
+> si elle n'est pas atteinte. L'arbitrage #172 B5 en donne la raison : *« ForceReady only skips the
+> PONG wait — it must not also skip participant-selection conformity, or the original bug (a
+> non-conform MEMORY/MEMOTION round reaching STARTED) would return through this debug/admin door. »*
+>
+> **Exigence normative** : le contournement est **limité à la branche son**. `ForceReady()` lève un
+> drapeau (`GAME.SOUND_GATE_BYPASSED`) que **seule** la branche son de `participantsConform` lit ;
+> le refus existant sur les autres branches — participants MEMORY/MEMOTION, catégories et
+> difficultés RAFALE — reste **intact**. Supprimer ce refus pour « simplifier » rouvrirait le bug
+> que #172 B5 a fermé.
+
+Trois propriétés qui en découlent, toutes acquises sans code supplémentaire :
+
+1. **Admin uniquement** — `FORCE_READY` est déjà réservé à `ClientTypeAdmin` dans la liste blanche
+   entrante. `/anim` affiche le motif mais n'offre pas le contournement, ce qui est cohérent : le
+   geste est de toute façon impossible sur une tablette tactile.
+2. **Aucun changement d'interface** — le geste existe, est câblé, et appartient déjà à une famille
+   de contournements par modificateur (forcer `READY`, simuler un PONG, simuler un appui, forcer
+   une mise à jour OTA). Il reste ainsi **non découvrable**, ce qui est voulu.
+3. **Le bouton LANCER n'est pas modifié** — il garde son `disabled` natif, comme pour toutes les
+   autres causes d'inactivité.
+
+Le contournement **ne vaut que pour la question en cours** : il est remis à zéro à la sélection
+d'une question (`Ready()`) et à l'arrêt (`stopUnsafe()`). Un clic simple sur la même question le
+reprend donc à zéro.
+
+Une question forcée joue **sans son**, et son chronomètre **ne** se met **jamais** en attente (le
+mode différé n'a plus d'objet) : c'est la dégradation de §10.7, atteinte délibérément.
+
+#### 10.8.7 Rafraîchissement et réversibilité
+
+La disponibilité est recalculée **avant** chaque évaluation `PREPARE ↔ READY` — donc à chaque PONG —
+ainsi qu'à la sélection d'une question, sur changement de configuration (`OnConfigUpdate`) et juste
+avant `Engine.Start()`. Le cache du §10.8.3 rend ce rythme soutenable.
+
+**Réversibilité, normative** : dès que la condition redevient vraie, la question repasse
+**automatiquement** en `READY`, sans geste supplémentaire — strictement symétrique du retour arrière
+`READY → PREPARE` de #172.
+
+#### 10.8.8 ⚠️ Ce que cette gate rend coûteux — à connaître avant de l'implémenter
+
+Deux propriétés **préexistantes** changent de gravité en devenant des conditions de lancement :
+
+- **L'indisponibilité de sortie est définitive pour la vie du processus.** Le contexte `oto` est un
+  singleton `sync.Once` qui **mémorise son erreur** ; il n'existe aucune boucle de reconnexion
+  (§4, amendement #230). Une enceinte absente ou lente **au démarrage du serveur** rend donc toutes
+  les questions à son injouables **jusqu'au redémarrage**, même une fois l'enceinte branchée.
+- **Rallumer le son exige un redémarrage** (§6.3).
+
+Avant cette section, ces situations coûtaient une question **silencieuse** ; elles coûtent désormais
+une question **injouable**. C'est la raison d'être de l'échappatoire du §10.8.6, et
+`docs/ADMIN_GUIDE.md` doit porter l'avertissement. Une re-sonde du contexte audio est **hors
+périmètre** — elle rouvrirait la conception de #228.
+
+### 10.9 Puce d'alerte globale — signal complémentaire, jamais bloquant (2026-09-23)
+
+> **Besoin** : voir d'un coup d'œil qu'un quiz contient des questions sonores alors que l'audio
+> n'est pas disponible, **sans** avoir à les découvrir une par une.
+> **Ne remplace pas §10.8** — les deux coexistent. La puce dit « l'audio ne marchera pour aucune
+> question » ; la gate dit « celle-ci a un problème ».
+
+#### 10.9.1 Condition — deux critères globaux, jamais le fichier
+
+La puce apparaît si, et seulement si :
+
+1. le quiz contient **au moins une question** portant un `SOUND` ; **et**
+2. l'audio n'est **pas** disponible globalement — `sound.enabled` faux **ou** sortie neutre.
+
+Le second critère est **exactement** ce que `GET /api/sound/status` fusionne déjà en un booléen
+(§Sound, « deux états, et c'est tout ») : la puce **consomme un contrat existant**, elle n'en crée
+pas.
+
+> ⚠️ **Le critère « fichier » de §10.8.2 ne s'applique PAS ici.** L'y inclure serait une erreur de
+> granularité : il faudrait un contrôle disque par question pour alimenter un signal global, alors
+> que ce cas est **déjà couvert question par question** par la gate, qui bloque et nomme le motif
+> `FILE`. Les deux signaux se répartissent proprement.
+
+#### 10.9.2 État dérivé — aucun calcul serveur, aucun endpoint nouveau
+
+Les deux moitiés de la condition sont **déjà disponibles côté client** : la diffusion `QUESTIONS`
+porte toutes les questions à l'admin, et `useSoundStatus()` interroge déjà
+`GET /api/sound/status`. **Aucun agrégat serveur n'est à construire, aucune interrogation
+supplémentaire n'est à ajouter.**
+
+La puce étant un **état dérivé** et non stocké, elle **disparaît d'elle-même** dès que l'audio
+redevient actif ou qu'aucune question ne porte plus de son : aucun cycle de vie, aucune remise à
+zéro, aucune puce fantôme.
+
+*Conséquence de périmètre* : `QUESTIONS` est diffusée à l'**admin seul**. La puce ne peut donc pas
+exister sur `/anim` — sans gravité, l'animateur ne pouvant ni réactiver le son ni retirer un média.
+
+#### 10.9.3 ⚠️ La pastille de menu « Ambiance » n'est PAS détournée
+
+L'implémentation la plus courte — faire passer le haut-parleur du menu en variante « alerte » —
+**contredit une décision explicite** (#234, `web/src/utils/soundState.js`) : *« DEUX formes
+seulement, jamais une troisième « alerte » […] inactif — un choix normal de l'utilisateur, pas une
+panne. »*
+
+Cette décision reste **juste** : « son inactif » n'est pas une anomalie en soi. Le signal de cette
+section est différent — « son inactif **alors que ce quiz en a besoin** », une incohérence entre le
+contenu et l'environnement. Deux sujets, deux indicateurs.
+
+**Exigence normative** : la puce est un composant **distinct**, et `soundStateGlyph` **reste à deux
+formes**. Conflater les deux ferait dire deux choses à la même icône.
+
+#### 10.9.4 Emplacement et libellé
+
+Un composant partagé, monté sur la page **Quiz** (là où l'on agit : retirer les sons, voir
+lesquelles en portent) **et** sur **`/admin`** (là où l'on joue, avant même de sélectionner une
+question) — patron `RafalePoolAlert`, un composant pour deux surfaces.
+
+Le libellé **nomme le remède**, aussi contre-intuitif ici qu'au §10.8.5 : réactiver le son ou
+brancher l'enceinte **exige un redémarrage du serveur** (§10.8.8).

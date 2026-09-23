@@ -2,6 +2,105 @@
 
 ---
 
+## [20260923] — Média sonore : un média indisponible empêche le lancement (#219/#236/#237, v11.1)
+
+> Besoin remonté pendant la validation manuelle du Scénario 11, sur un lot déjà livré et en QUALIF
+> (v11.1.0.4) : « si le média n'est pas disponible, la question n'a plus de raison d'être ».
+> Deux arbitrages complémentaires au GATE 2 : **revalidation complète du format** et
+> **échappatoire par `Ctrl`+clic**. Plan : `_work/reports/plan-20260923-094500.md` (rév. 6).
+>
+> ⚠️ **Ce changement touche un principe déjà revu et approuvé** (R10/CA12, couvert par trois tests
+> dédiés). Il ne le supprime pas : il en **restreint la portée**.
+
+- **[NEW]** `contracts/sound.md` §10.8.1 — **frontière T0/T1**, normative. **T0 (avant le
+  lancement) : BLOQUANT** — la question ne passe pas en `READY`. **T1 (après le lancement) : JAMAIS
+  BLOQUANT** — §10.7 inchangée. Les deux règles portent sur des **instants différents** : un
+  bruitage manqué est une perte cosmétique, un son de question manquant vide la question de son
+  contenu.
+- **[CHANGED]** `contracts/sound.md` §10.7 — règle de non-blocage **restreinte à T1**, sans être
+  affaiblie. Une implémentation qui ferait disparaître la dégradation T1 au prétexte d'avoir ajouté
+  la gate T0 est un **refus de revue**.
+- **[NEW]** `contracts/sound.md` §10.8.2 — **définition unique** de « média disponible » : trois
+  conditions, portées par **une seule fonction** réutilisée par la gate T0 **et** par la dégradation
+  T1. ⚠️ **Arbitrage GATE 2** : la troisième condition est une **revalidation COMPLÈTE du format**,
+  pas un simple `os.Stat` — un WAV tronqué ou corrompu hors éditeur doit être détecté **avant** le
+  lancement, pas découvert à la lecture. Réutilise `ValidateQuestionSound`/`extractCanonicalPCM`,
+  jamais un second parseur.
+- **[NEW — sans quoi la revalidation est intenable]** `contracts/sound.md` §10.8.3 — **cache de
+  validation obligatoire et de forme imposée** : clé = chemin, empreinte = `mtime` **et** taille via
+  un `os.Stat` bon marché ; empreinte identique ⇒ verdict réutilisé sans relire le contenu ;
+  empreinte différente ou absente ⇒ revalidation complète. ⚠️ **Les verdicts NÉGATIFS se mettent en
+  cache aussi** (sans quoi un fichier corrompu serait re-parsé à chaque PONG — le cas où le coût est
+  le plus élevé) ; un fichier disparu supprime son entrée, pour qu'un fichier restauré soit
+  revalidé ; **aucune éviction** n'est nécessaire, le cache est borné par le nombre de questions.
+- **[NEW — piège d'implémentation]** `contracts/sound.md` §10.8.3 — **la validation ne doit jamais
+  s'exécuter sous le verrou du moteur.** La disponibilité est calculée par la **couche applicative**,
+  avant l'appel moteur, puis poussée dans le `GameState`. Un rappel injecté faisant de l'E/S disque
+  depuis `reevaluatePrepareReadyUnsafe` tiendrait `e.mu` pendant une lecture de fichier.
+- **[NEW]** `contracts/sound.md` §10.8.4 — **aucun nouveau chemin de refus**. La gate est une
+  branche de `participantsConform`, qui absorbe **déjà** des conditions étrangères aux participants
+  (catégories/difficultés RAFALE). `Engine.Start()` refusant déjà toute phase ≠ `READY` (#172 B4),
+  **le contrôle serveur est acquis sans code neuf**. `participantsConform` doit **rester pur**.
+- **[NEW]** `contracts/game-state.md` — `GAME.QUESTION_SOUND_UNAVAILABLE`
+  (`""` | `DISABLED` | `OUTPUT` | `FILE`) et `GAME.SOUND_GATE_BYPASSED`, **sans `omitempty`**,
+  éphémères. Le libellé est produit par `prepareWaitReason.js` ; **aucun canal d'erreur WebSocket
+  n'est créé**.
+- **[CHANGED — correction contre le code, dev-backend]** `contracts/sound.md` §10.8.5 disait
+  « diffusé à l'admin seul » — **corrigé** : `contracts/game-state.md`/`ws-payload-serialization.md`
+  diffusent en réalité **Admin/TV/VPlayer/Anim** (❌ Buzzer seulement). `/anim` doit afficher le
+  motif (CA26), or il est routé vers **exactement** le même sérialiseur que TV/VPlayer
+  (`SerializeForWebClient`) — aucune distinction possible à ce niveau sans toucher
+  `internal/protocol/messages.go`/la sérialisation, que ce lot **ne modifie pas** (§4). Même matrice
+  que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` (entrée `[20260922]`).
+- **[NEW — arbitrage GATE 2, corrigé le 2026-09-23]** `contracts/sound.md` §10.8.6 — l'échappatoire
+  est le **`Ctrl`+clic DÉJÀ EXISTANT sur la question** (phase `PREPARE`, `Engine.ForceReady()`),
+  **pas** un geste nouveau sur le bouton LANCER : le contournement se joue à la frontière
+  `PREPARE → READY`, là où vit la gate. Conséquence : **aucune action nouvelle, aucune charge utile
+  nouvelle, aucun changement frontend** — et `FORCE_READY` étant déjà réservé à `ClientTypeAdmin`,
+  la restriction « régie seulement » est acquise sans rien écrire.
+  ⚠️ **Vérification faite contre le code** : `ForceReady()` **ne contourne PAS** `participantsConform`
+  aujourd'hui — il vérifie explicitement la conformité et refuse (arbitrage #172 B5 : *« it must not
+  also skip participant-selection conformity, or the original bug would return through this
+  debug/admin door »*). Le contournement est donc **limité à la branche son** par un drapeau
+  (`GAME.SOUND_GATE_BYPASSED`) que seule cette branche lit ; le refus sur les participants et sur
+  RAFALE reste **intact**. Le supprimer pour « simplifier » rouvrirait le bug que #172 B5 a fermé.
+- **[NEW — avertissement]** `contracts/sound.md` §10.8.8 — deux propriétés **préexistantes**
+  changent de gravité en devenant des conditions de lancement : l'indisponibilité de sortie est
+  **définitive pour la vie du processus** (contexte `oto` en `sync.Once` mémorisant son erreur —
+  §4/#230), et **rallumer le son exige un redémarrage** (§6.3). Avant, ces situations coûtaient une
+  question **silencieuse** ; désormais elles la rendent **injouable**. C'est la raison d'être de
+  l'échappatoire, et `ADMIN_GUIDE.md` doit porter l'avertissement.
+
+- **[NEW — ajout GATE 2 du 2026-09-23]** `contracts/sound.md` §10.9 — **puce d'alerte globale**,
+  complémentaire du blocage par question (les deux coexistent) : visible dès que le quiz contient
+  ≥ 1 question sonore **et** que l'audio est globalement indisponible. **Deux critères seulement**
+  (`sound.enabled` + sortie non neutre) — le critère « fichier » de §10.8.2 **ne s'applique pas** :
+  l'y inclure demanderait un contrôle disque par question pour alimenter un signal global, alors
+  que ce cas est déjà couvert par la gate.
+- **[NEW]** `contracts/sound.md` §10.9.2 — **état dérivé, aucun calcul serveur** : la diffusion
+  `QUESTIONS` porte déjà toutes les questions à l'admin, et `useSoundStatus()` interroge déjà
+  `GET /api/sound/status`. **Aucun endpoint, aucun agrégat, aucune interrogation supplémentaire.**
+  La puce disparaît d'elle-même — aucun cycle de vie à gérer. *(Périmètre : `QUESTIONS` étant
+  admin-seul, la puce n'existe pas sur `/anim`.)*
+- **[NEW — piège d'implémentation]** `contracts/sound.md` §10.9.3 — **la pastille de menu
+  « Ambiance » n'est pas détournée.** Lui ajouter une troisième forme « alerte » contredirait la
+  décision #234 (« deux formes seulement […] inactif = un choix normal de l'utilisateur, pas une
+  panne ») et ferait dire deux choses à la même icône. La puce est un composant **distinct** ;
+  `soundStateGlyph` **reste à deux formes**.
+
+**Aucun BREAKING de protocole** — les champs sont additifs, à valeur zéro correcte. **Mais
+changement de comportement observable assumé** : une question à son dont le média est indisponible
+ne démarre plus, là où elle démarrait silencieusement. C'est l'objet même de l'arbitrage.
+
+**Conséquence sur la recette** : le Scénario 11 de `tests/procedures/question-sound-219.md` est
+**scindé en 11a (T0, bloqué) et 11b (T1, dégradé)** — jamais remplacé, sous peine de perdre la
+couverture de R10 en croyant l'avoir remplacée. **Les trois tests `TestQuestionSoundAdapter_CA12_*`
+restent verts et inchangés** : ils appellent l'adaptateur en dessous de la transition de phase, donc
+une gate placée en amont ne les touche pas — ils passent du statut de « règle » à celui de
+« filet ».
+
+---
+
 ## [20260922d] — Média sonore : mono accepté (retour QUALIF, #219, v11.1)
 
 > Retour utilisateur en validation QUALIF v11.1, après livraison DEV : les fichiers WAV **mono**

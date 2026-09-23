@@ -998,3 +998,58 @@ reçoit comme TV/VPlayer.
 principe que `MOTION_ACTIVE`/`ENTRACTE` ci-dessus : ce sont des reflets d'un périphérique audio et
 d'un minuteur en direct, pas des données de partie. `QUESTION_SOUND_STATE` redémarre à `IDLE`,
 `ANSWER_TIMER_WAITING` à `false`.
+
+## Média indisponible avant le lancement (v11.1, #219/#236/#237, 2026-09-23)
+
+> **Contrat normatif complet** : `contracts/sound.md` §10.8. Cette section documente uniquement les
+> deux champs `GameState` diffusés.
+
+```typescript
+interface GameState {
+  // ...
+  QUESTION_SOUND_UNAVAILABLE: "" | "DISABLED" | "OUTPUT" | "FILE"
+  SOUND_GATE_BYPASSED: boolean
+}
+```
+
+**`QUESTION_SOUND_UNAVAILABLE`** — le motif qui bloque `PREPARE → READY` pour la question courante,
+quand elle porte un son (`Question.SOUND` non vide) et que le média n'est **pas** disponible
+(`sound.md` §10.8.2 : `sound.enabled` faux ⇒ `DISABLED` ; sortie neutre ⇒ `OUTPUT` ; fichier absent
+ou non conforme ⇒ `FILE`). `""` = disponible, ou question sans son (la branche sort immédiatement —
+`sound.md` §10.8.4, non-régression #172 sur tous les types). Recalculé **avant** chaque évaluation
+`PREPARE ↔ READY` — à chaque PONG de buzzer, à la sélection d'une question, sur changement de
+configuration, et juste avant `Engine.Start()` (`sound.md` §10.8.7) — jamais sous le verrou du
+moteur (`internal/game` n'importe ni `internal/audio` ni `internal/config`).
+
+**`SOUND_GATE_BYPASSED`** — `true` quand l'animateur/admin a contourné la gate son pour la question
+courante via le geste **déjà existant** (`Ctrl`+clic sur la question → `ForceReady()`, admin
+uniquement — aucune nouvelle action WebSocket, `contracts/websocket-actions.md` n'est pas modifié
+par ce lot). Ne contourne **que** la branche son de `participantsConform` : les autres branches
+(participants MEMORY/MEMOTION, catégories/difficultés RAFALE) restent bloquantes, arbitrage #172 B5
+préservé. Une question forcée joue sans son, sans que son chronomètre ne se mette jamais en attente
+(dégradation §10.7). Remis à zéro dans `Ready()` **et** `stopUnsafe()` — ne vaut que pour la
+question en cours.
+
+> ⚠️ **Aucun `omitempty` sur les deux champs** (règle projet) — toujours sérialisés, y compris à
+> leur valeur zéro (`""`/`false`), même discipline que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING`
+> ci-dessus.
+
+**Diffusion** (`contracts/ws-payload-serialization.md`) : **Admin ✅ / TV ✅ / VPlayer ✅ / Anim ✅ /
+Buzzer ❌** — même matrice que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` ci-dessus, pour la même
+raison structurelle : `/anim` est routé vers **exactement** le même sérialiseur que TV/VPlayer
+(`SerializeForWebClient`, `contracts/ws-payload-serialization.md` §"Animateur" — aucune distinction
+possible entre ces trois destinataires à ce niveau sans un mécanisme de filtrage dédié, que ce lot
+**n'introduit pas** — `internal/protocol/messages.go` reste inchangé). Or `/anim` **doit** afficher
+le motif (CA26 : *« /anim affiche le motif mais n'offre aucune échappatoire »*, consommé par
+`prepareWaitReason.js` via `AnimConductPanel.jsx`) : le champ ne peut donc pas être limité à l'admin
+au sens strict sans rouvrir la sérialisation, hors périmètre. TV/VPlayer le reçoivent par la même
+voie mais ne l'affichent jamais (`PlayerDisplay.jsx` n'est pas modifié par ce lot) — inoffensif,
+aucune donnée confidentielle.
+>
+> ⚠️ **Correction apportée à `contracts/sound.md` §10.8.5**, qui disait « diffusé à l'admin seul » —
+> formulation resserrée à tort au moment de la rédaction du contrat (avant que CA26 ne soit
+> explicité). Le comportement normatif réel est celui décrit ci-dessus ; `sound.md` §10.8.5 est
+> amendé en conséquence par ce même lot.
+
+**Persistance** : **aucune**, même principe que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` — état
+éphémère, jamais une donnée de partie. Les deux champs redémarrent à `""`/`false`.
