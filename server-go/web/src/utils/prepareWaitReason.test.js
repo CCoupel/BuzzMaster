@@ -290,3 +290,86 @@ describe('prepareWaitReason — orchestration (phase, buzzers, conformité)', ()
     expect(prepareWaitReason('PREPARE', null, [readyTeam('A')], {})).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Addendum média indisponible (v11.1, #219/#236/#237, plan
+// _work/reports/plan-20260923-101500.md rév. 8 §6 tâche 13, contrat
+// sound.md §10.8) — la branche `GAME.QUESTION_SOUND_UNAVAILABLE`, dernière
+// avant le repli permissif de `prepareWaitReason`. Dispatché en correctif
+// de revue (le dispatch initial du CDP ne listait pas explicitement ce
+// fichier, mais le plan §6 tâche 13 le demande : "prepareWaitReason.test.js
+// (3 motifs × 2 formulations)").
+// ---------------------------------------------------------------------------
+
+describe('prepareWaitReason — addendum média indisponible (v11.1, #219/#236/#237)', () => {
+  const readyTeam = (name) => ({ name, READY: true })
+  // Buzzers déjà prêts et participants conformes (question SPEEDY, jamais
+  // de garde participants) — pour isoler la SEULE branche son.
+  const activeTeams = [readyTeam('A')]
+  const question = { TYPE: 'SPEEDY' }
+
+  it.each([
+    ['DISABLED', 'son désactivé', 'Les sons sont désactivés dans la configuration. Les réactiver demande un redémarrage du serveur.'],
+    ['OUTPUT', 'pas de sortie audio', "Aucune sortie audio n'a pu être ouverte au démarrage du serveur. Brancher l'enceinte puis redémarrer le serveur."],
+    ['FILE', 'son introuvable', 'Le fichier son de cette question est introuvable ou invalide sur le serveur.'],
+  ])('QUESTION_SOUND_UNAVAILABLE=%s → libellé court=%j, long=%j', (unavailable, wantShort, wantLong) => {
+    const gameState = { QUESTION_SOUND_UNAVAILABLE: unavailable }
+    expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toBe(wantLong)
+    expect(prepareWaitReason('PREPARE', question, activeTeams, gameState, { short: true })).toBe(wantShort)
+  })
+
+  it('chaque motif NOMME LE REMÈDE réel dans le libellé long (jamais une étiquette générique)', () => {
+    const gameState = { QUESTION_SOUND_UNAVAILABLE: 'DISABLED' }
+    expect(prepareWaitReason('PREPARE', question, activeTeams, gameState)).toMatch(/redémarrage du serveur/)
+
+    expect(
+      prepareWaitReason('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: 'OUTPUT' })
+    ).toMatch(/brancher l'enceinte/i)
+  })
+
+  it('QUESTION_SOUND_UNAVAILABLE="" (disponible) → null, rien à expliquer', () => {
+    expect(prepareWaitReason('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: '' })).toBeNull()
+  })
+
+  it('QUESTION_SOUND_UNAVAILABLE absent (clé manquante) → null, même comportement que ""', () => {
+    expect(prepareWaitReason('PREPARE', question, activeTeams, {})).toBeNull()
+  })
+
+  it('motif inconnu (valeur future non prévue par la table) → null, permissif par défaut (jamais de crash)', () => {
+    expect(
+      prepareWaitReason('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: 'UNE_VALEUR_FUTURE_INCONNUE' })
+    ).toBeNull()
+  })
+
+  it('la branche participants garde PRIORITÉ sur la branche son (ordre normatif : buzzers, puis participants, puis son)', () => {
+    // MEMORY SOLO non conforme ET son indisponible en même temps — le motif
+    // participants doit rester affiché, jamais masqué par le motif son.
+    const memoryQuestion = { TYPE: 'MEMORY' }
+    const gameState = { MEMORY_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: 'DISABLED' }
+    expect(prepareWaitReason('PREPARE', memoryQuestion, activeTeams, gameState)).toBe('sélectionnez une équipe')
+  })
+
+  it('aucune garde de type : une question sans SOUND mais avec QUESTION_SOUND_UNAVAILABLE renseigné (état incohérent hypothétique) affiche quand même le motif — le fichier ne réinvente pas la garde serveur (§10.8.4)', () => {
+    // Documente le choix explicite du handoff dev-frontend : ce fichier ne
+    // reproduit PAS la garde "Question.SOUND == ''" côté serveur — en
+    // pratique le serveur ne pousse jamais QUESTION_SOUND_UNAVAILABLE pour
+    // une question sans son (sortie immédiate de sa propre branche), donc
+    // cet état ne se produit jamais réellement ; ce test verrouille que le
+    // fichier fait confiance à l'état serveur plutôt que de le
+    // re-vérifier lui-même (cohérent avec le principe R4 du projet).
+    const gameState = { QUESTION_SOUND_UNAVAILABLE: 'FILE' }
+    expect(prepareWaitReason('PREPARE', { TYPE: 'SPEEDY' }, activeTeams, gameState)).not.toBeNull()
+  })
+
+  it('SPEEDY/QCM/ARDOISE en PREPARE, son disponible → toujours null (non-régression, complète le test existant "toujours null")', () => {
+    ;['SPEEDY', 'QCM', 'ARDOISE'].forEach((type) => {
+      const reason = prepareWaitReason(
+        'PREPARE',
+        { TYPE: type },
+        activeTeams,
+        { MEMORY_PARTICIPATING_TEAMS: [], MEMOTION_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: '' }
+      )
+      expect(reason).toBeNull()
+    })
+  })
+})
