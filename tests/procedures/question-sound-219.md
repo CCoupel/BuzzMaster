@@ -1,13 +1,15 @@
 # Procédure de Test — Question sonore (#219, milestone v11.1)
 
 **Version** : v11.1.0.x (QUALIF)
-**Date** : 2026-09-22
+**Date** : 2026-09-23 (addendum « Média indisponible = lancement bloqué »)
 **Testeur** : Utilisateur (validation auditive — aucun navigateur/enceinte fiable côté agents)
-**Contrat** : `contracts/sound.md` §10
-**Plan** : `_work/reports/plan-20260922-103848.md` (révision 3)
-**Maquette normative** : `docs/mockups/question-sound-219.html` (révision 3) — **les deux machines à
-états du §03 (le son, le chronomètre de réponse différé) sont la source de vérité de cette
-procédure.**
+**Contrat** : `contracts/sound.md` §10 (socle) et §10.8 (addendum T0/T1, échappatoire, puce globale)
+**Plan** : `_work/reports/plan-20260922-103848.md` (rév. 3, socle) et
+`_work/reports/plan-20260923-101500.md` (rév. 8, addendum — **la seule valable** pour l'addendum)
+**Maquette normative** : `docs/mockups/question-sound-219.html` (**révision 8**) — **les deux
+machines à états du §03** (le son, le chronomètre de réponse différé), **le §06** (média
+indisponible = lancement bloqué) et **le §07** (la puce d'alerte globale) sont la source de vérité
+de cette procédure.
 
 ## Important — pourquoi cette procédure ne peut être exécutée que par l'utilisateur
 
@@ -15,14 +17,26 @@ Aucun test automatisé ne peut constater qu'un son a été **entendu**, ni qu'un
 l'écran est réellement perçu comme « en attente » plutôt que comme une panne. `qa` et `deployer`
 n'exécutent **jamais** cette procédure (règle projet) : ici il n'y a ni navigateur fiable ni
 enceinte dans leur environnement d'exécution. C'est le **seul filet** avant PROD pour le rendu
-sonore et pour le risque R10/R11 (chronomètre figé pris pour une panne).
+sonore et pour les risques R10/R11 (chronomètre figé pris pour une panne) **et** R16/R17 (blocage
+définitif d'un quiz sonore sans l'échappatoire du §06).
+
+## ⚠️ Deux moments, jamais confondus (lire avant de commencer)
+
+L'addendum du 2026-09-23 distingue strictement **T0** (avant le lancement — la question ne doit
+**jamais démarrer** si son média est indisponible) et **T1** (pendant la lecture, question déjà
+`STARTED` — la règle historique « jamais de blocage » reste entière : le chronomètre différé se
+libère **immédiatement**). Les Scénarios 11a et 11b couvrent chacun **exactement un seul** de ces
+deux moments — ne jamais les fusionner ni sauter 11a en pensant que 11b suffit (piège R18 documenté
+au plan rév. 8 §8).
 
 ## Prérequis
 
 - [ ] Environnement : QUALIF (poste avec une sortie audio réelle — obligatoire, contrairement aux
       procédures purement logicielles de ce projet)
-- [ ] Binaire buildé depuis la branche `milestone/v11.1` (ou merge ultérieur), toutes les Phases 0
-      à 3 livrées (socle audio, contrats/upload, chronomètre différé, frontend)
+- [ ] Binaire buildé depuis la branche `milestone/v11.1` (ou merge ultérieur), lot socle (rév. 3) et
+      addendum (rév. 8 — gate T0, cache, échappatoire `Ctrl`+clic, puce globale) tous deux livrés
+- [ ] Accès **admin** (régie, `/admin`) — l'échappatoire `Ctrl`+clic n'existe que là (jamais sur
+      `/anim`)
 - [ ] Jeu de données : au moins
   - [ ] 1 question **SPEEDY** avec un son valide (WAV canonique, ~10-15 s), **chronomètre
         simultané** (réglage par défaut)
@@ -31,17 +45,26 @@ sonore et pour le risque R10/R11 (chronomètre figé pris pour une panne).
   - [ ] 1 question **SPEEDY ou QCM sans aucun son** (non-régression, CA9)
   - [ ] 1 question intégrée dans une **manche RAFALE** (au moins 2 questions), l'une d'elles
         portant un son
+  - [ ] 1 question **MEMORY en mode SOLO, à son, sans équipe participante sélectionnée**
+        (participants non conformes) — dédiée au Scénario 15/CA27
+  - [ ] **Plusieurs** questions à son dans le même quiz (≥ 3, idéalement 5+) — dédié au Scénario 16
+        (la puce globale compte/nomme le nombre de questions concernées)
   - [ ] Fichiers de test prêts hors serveur : un `.mp3` quelconque, un `.wav` en 48 kHz mono, un
-        `.wav` de plus de 30 s (ex. 42 s) — pour le Scénario 2
+        `.wav` de plus de 30 s (ex. 42 s), et un `.wav` **valide de remplacement** (pour le
+        Scénario 14, cas A) — pour les Scénarios 2 et 14
 - [ ] Accès : `/questions` (édition), `/anim` (conduite tablette), `/admin` (miroir), `/tv`
-      (affichage public), configuration serveur (`config.json`, section son) pour le Scénario 12
+      (affichage public), configuration serveur (`config.json`, section son) pour le Scénario 11a,
+      et **capacité de redémarrer le serveur** (Scénarios 11a, 14, 16 — §10.8.8 : réactiver le son
+      ou brancher l'enceinte n'a d'effet qu'après redémarrage)
+- [ ] Accès **au système de fichiers du serveur** (pour altérer/tronquer/restaurer un fichier
+      `.wav` hors de l'éditeur — Scénarios 11a, 11b, 14)
 
 ## Scénarios
 
 ### Scénario 1 — Attacher, écouter, supprimer un son (CA1, CA8)
 
 **Objectif** : vérifier le cycle complet d'édition du champ son, identique dans ses gestes à celui
-de l'image (maquette rév. 3 §01).
+de l'image (maquette §01).
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-------------------|------------------|------|
@@ -59,7 +82,7 @@ de l'image (maquette rév. 3 §01).
 ### Scénario 2 — Refus nommés et avertissement contextuel (CA2)
 
 **Objectif** : vérifier que chaque fichier refusé nomme sa cause exacte, et que l'avertissement
-contextuel n'apparaît que quand il est pertinent (maquette rév. 3 §01).
+contextuel n'apparaît que quand il est pertinent (maquette §01).
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-------------------|------------------|------|
@@ -92,7 +115,7 @@ les deux pièges de non-régression signalés par le plan (reprise après pause,
 ### Scénario 4 — Mode différé : fin naturelle du son (CA4, CA15)
 
 **Objectif** : vérifier la machine à états B (le chronomètre différé) sur son chemin nominal — fin
-naturelle du son, chronomètre figé puis libéré (maquette rév. 3 §02-§03).
+naturelle du son, chronomètre figé puis libéré (maquette §02-§03).
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-------------------|------------------|------|
@@ -196,19 +219,49 @@ chemin média.
 
 ---
 
-### Scénario 11 — Les trois dégradations du mode différé ne figent jamais la question (CA12, ⚠️ le plus important)
+### Scénario 11a — T0 (avant le lancement) : média indisponible = la question ne démarre pas (CA17, CA20, CA21, CA23, CA24, CA26, ⚠️ nouveau point de revue critique)
 
-**Objectif** : prouver la règle de non-blocage (contract §10.7) : dans les trois cas listés, le mode
-différé dégrade **immédiatement** vers le mode simultané — la partie ne se bloque jamais en direct.
+**Objectif** : prouver que l'addendum du 2026-09-23 **bloque** — plutôt que dégrade — les trois
+mêmes causes d'indisponibilité **quand elles sont connues avant le clic LANCER** (maquette §06,
+« Deux moments, deux règles »). ⚠️ Ne pas confondre avec le Scénario 11b (T1, question déjà lancée)
+— les deux sont **volontairement différents**, voir l'avertissement en tête de ce document.
 
-> ⚠️ Ce scénario est le point de revue n°1 du lot (risque R10, plan §11) : un échec ici est
-> **critique**, pas une simple anomalie visuelle.
+> ⚠️ Aussi important que l'ancien Scénario 11 (désormais 11b) : le risque R16/R17 (plan rév. 8 §8)
+> est qu'un quiz sonore entier devienne injouable sans le Scénario 15 (échappatoire) — vérifier les
+> deux ensemble avant de conclure.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-------------------|------------------|------|
-| 1 | **Enceinte indisponible** : débrancher/couper la sortie audio du serveur (ou lancer sur un poste sans périphérique audio), LANCER une question à son en mode différé | Le chronomètre démarre **immédiatement** — la question reste jouable, aucun blocage, aucune erreur visible | | |
-| 2 | **Fichier illisible** : sur une question en mode différé, altérer/supprimer manuellement le fichier `.wav` sur le disque serveur sans passer par l'éditeur, puis LANCER la question | Le chronomètre démarre **immédiatement** — même comportement | | |
-| 3 | **Son désactivé** : couper `sound.enabled` dans la configuration serveur, redémarrer, LANCER une question à son en mode différé | Le chronomètre démarre **immédiatement** — même comportement | | |
+| 1 | **Son désactivé** : couper `sound.enabled` dans la configuration serveur, redémarrer. Sélectionner (sans lancer) une question à son sur `/admin` et `/anim` | Bouton LANCER **grisé**, sous-libellé « son introuvable » ou motif équivalent nommant la cause — **exactement le même mécanisme visuel** que « buzzers en attente » (maquette §06, « rien de nouveau à apprendre ») | | |
+| 2 | Vérifier le texte exact du motif | « Les sons sont désactivés. Les réactiver demande un redémarrage du serveur. » — le remède est **nommé explicitement** | | |
+| 3 | **Sortie audio indisponible** : débrancher l'enceinte (ou démarrer le serveur sans périphérique audio) puis redémarrer. Sélectionner la même question | Bouton LANCER grisé, motif : « Aucune sortie audio n'a pu être ouverte au démarrage. Brancher l'enceinte puis redémarrer. » | | |
+| 4 | **Fichier illisible ou corrompu (CA23, pas seulement absent)** : sur le disque serveur, **tronquer ou corrompre** le contenu du fichier `.wav` d'une question à son (garder le même nom de fichier), sans passer par l'éditeur. Sélectionner cette question | Bouton LANCER grisé, motif : « Le fichier son de cette question est introuvable ou illisible. » — **détecté avant le lancement**, pas découvert à la lecture | | |
+| 5 | Pour chacun des 3 cas ci-dessus, **tenter de cliquer LANCER quand même** | Rien ne se produit — le bouton est réellement inactif, la question reste en `PREPARE` | | |
+| 6 | Pour chacun des 3 cas, observer `/anim` | Le **même motif** est affiché, **sans aucun moyen de le contourner** depuis la tablette (CA26 — vérifié en détail au Scénario 15) | | |
+| 7 | Vérifier qu'une question **sans aucun son** reste totalement insensible à ces trois manipulations (CA21/R22) | Aucun motif, bouton LANCER dans son état habituel, comportement strictement identique à avant l'addendum | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 11b — T1 (pendant la lecture) : les trois dégradations d'une question déjà lancée ne figent jamais la partie (CA12, ⚠️ le plus important)
+
+**Objectif** : prouver la règle de non-blocage historique (contract §10.7/§10.8) : pour une question
+**déjà `STARTED`**, dans les trois mêmes cas d'indisponibilité, le mode différé dégrade
+**immédiatement** vers le mode simultané — la partie ne se bloque jamais en direct. **Distinct du
+Scénario 11a** : ici l'indisponibilité survient (ou n'a pas pu être détectée) **après** que la
+question a déjà démarré.
+
+> ⚠️ Ce scénario est le point de revue n°1 du lot socle (risque R10, plan rév. 3 §11) : un échec ici
+> est **critique**, pas une simple anomalie visuelle. La règle « jamais de blocage » n'est **pas**
+> abandonnée par l'addendum du §06 — elle est recentrée sur ce seul moment (maquette §06, « la
+> règle n'est pas abandonnée, elle est recentrée »).
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-------------------|------------------|------|
+| 1 | **Enceinte indisponible** : LANCER d'abord une question à son en mode différé (média disponible au lancement), **puis** débrancher/couper la sortie audio du serveur pendant la lecture (ou reproduire une panne équivalente en cours de partie) | Le chronomètre démarre **immédiatement** dès que la dégradation survient — la question reste jouable, aucun blocage, aucune erreur visible | | |
+| 2 | **Fichier illisible en cours de lecture** : sur une question en mode différé déjà `STARTED`, altérer/supprimer manuellement le fichier `.wav` sur le disque serveur pendant que le son joue | Le chronomètre démarre **immédiatement** — même comportement | | |
+| 3 | **Son désactivé en cours de partie** : couper `sound.enabled` pendant qu'une question à son différé est `STARTED` | Le chronomètre démarre **immédiatement** — même comportement | | |
 | 4 | Pour chacun des 3 cas ci-dessus, vérifier `/anim`/`/admin`/`/tv` | **Aucune** mention « le chronomètre démarrera à la fin du son » ne reste affichée alors que le chronomètre tourne déjà (pas de mention mensongère) | | |
 | 5 | (Optionnel, robustesse) Simuler une lecture qui ne se termine jamais (ex. couper le processus de lecture sans le signaler) et attendre `MaxQuestionSoundDuration + 2 s` (~32 s) | Le chien de garde libère le chronomètre **au plus tard** à cette échéance | | |
 
@@ -240,9 +293,69 @@ procédure auditive.
 | 1 | `cd server-go && go build ./...` | Compile sans erreur | | |
 | 2 | `go test ./internal/audio/... -v` | 100 % vert, y compris les tests-gardes #228/#229/#230 rejoués sans modification (CA10) | | |
 | 3 | `go test ./internal/audio/... -race` | Vert — aucune race détectée (concurrence son/bruitage) | | |
-| 4 | `go test ./internal/game/... ./internal/server/... ./internal/protocol/... -v` | 100 % vert, y compris `sound_cues_chain_test.go`/`TestSoundChain_MotionCardTimerExpiry_PlaysNoSound` (CA10) | | |
-| 5 | `go test ./cmd/server/... -run 'TestSoundSites|TestQuestionSound' -v` | 100 % vert — frontière des chemins média/cues respectée (§10.5) | | |
+| 4 | `go test ./internal/game/... ./internal/server/... ./internal/protocol/... -v` | 100 % vert, y compris `sound_cues_chain_test.go`/`TestSoundChain_MotionCardTimerExpiry_PlaysNoSound` (CA10) et les tests de gate/cache/réversibilité de l'addendum (CA19, CA24, CA25) | | |
+| 5 | `go test ./cmd/server/... -run 'TestSoundSites|TestQuestionSound' -v` | 100 % vert — frontière des chemins média/cues respectée (§10.5), dispatch `START` sans `FORCE` refusé (CA18), `FORCE_READY` sur participants non conformes toujours refusé (CA27) | | |
 | 6 | `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...` puis `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...` | Compile sans erreur sur les deux cibles CI (CA11) | | |
+| 7 | `cd web && npx vitest run` | 100 % vert, y compris `prepareWaitReason.test.js` (les trois motifs) et la non-régression `GamePage`/puce globale (CA28/CA29) | | |
+
+> ℹ️ Les items 4-5-7 seront complétés par les tests dédiés de l'addendum (Batch 1/2, tâches 10-13
+> du plan rév. 8) au fur et à mesure de leur livraison — cette ligne du tableau n'a pas besoin
+> d'être réécrite à chaque ajout, `qa` exécute simplement la commande sur l'état livré.
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 14 — Réversibilité automatique et course affichage/clic (CA19, CA20)
+
+**Objectif** : vérifier que le blocage T0 (Scénario 11a) n'est jamais définitif au-delà de son
+motif réel (maquette §06, « Dès que c'est réparé, ça repart tout seul »), et que la fenêtre entre
+l'affichage du bouton et le clic ne peut pas faire glisser une question indisponible en `STARTED`.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-------------------|------------------|------|
+| 1 | **Cas A — fichier réparé, sans redémarrage.** Reproduire le blocage « fichier illisible » (Scénario 11a, étape 4) sur une question sélectionnée. Remplacer le fichier corrompu par un `.wav` valide (même nom de fichier), **sans redémarrer le serveur** | En quelques secondes (revalidation par le cache, empreinte `mtime`+taille modifiée), la question repasse **d'elle-même** en `READY` — bouton LANCER redevient actif, motif disparaît, **aucun geste supplémentaire** requis (CA19) | | |
+| 2 | **Cas B — son réactivé, avec redémarrage.** Reproduire le blocage « son désactivé » (Scénario 11a, étape 1). Réactiver `sound.enabled`, **redémarrer le serveur** (§10.8.8 : obligatoire pour ce motif) | Après redémarrage et reconnexion, la question à son repasse en `READY` **automatiquement** — pas besoin de rouvrir/re-sélectionner chaque question une par une | | |
+| 3 | **Course affichage/clic (CA20).** Sélectionner une question à son **disponible** (bouton LANCER actif, aucun motif). **Juste avant de cliquer**, rendre le média indisponible sur le serveur (ex. supprimer le fichier), puis cliquer LANCER immédiatement | La question **ne démarre pas** malgré le clic — elle reste en `PREPARE`, le motif apparaît maintenant. **Aucun plantage, aucun blocage du jeu** — le clic « raté » est silencieusement absorbé | | |
+| 4 | Depuis l'état de l'étape 3, restaurer le fichier et cliquer LANCER à nouveau | La question démarre normalement cette fois | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 15 — L'échappatoire régie : `Ctrl`+clic sur la question (CA22, CA23, CA25, CA26, CA27)
+
+**Objectif** : vérifier le contournement existant (maquette §06, « la sortie de secours ») et sa
+**limite volontaire** — il ne lève que la gate son, jamais la gate participants.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-------------------|------------------|------|
+| 1 | Sur `/admin`, sélectionner (**clic simple**) une question à son dont le média est indisponible (réutiliser un cas du Scénario 11a) | La question reste **bloquée** en `PREPARE`, exactement comme au Scénario 11a | | |
+| 2 | Sur la **même** question, `Ctrl`+**clic** (sur la ligne de la question dans la liste, **pas** sur le bouton LANCER — maquette §06 : « rien de neuf à l'écran, le bouton LANCER ne change pas ») | La question passe en `READY` **malgré** l'indisponibilité — le bouton LANCER redevient actif | | |
+| 3 | Cliquer LANCER | La question **démarre**, mais joue **sans son** — aucun geste de conduite son n'apparaît (comme au Scénario 10, CA9), et si le mode différé était activé, **le chronomètre ne se met jamais en attente** (démarre immédiatement, le mode différé est sans objet) | | |
+| 4 | Arrêter cette question, sélectionner une **autre** question à son également indisponible, **sans refaire `Ctrl`+clic** | Cette nouvelle question reste **bloquée** normalement — le contournement **ne persiste pas** d'une question à l'autre (CA25) | | |
+| 5 | Sélectionner la question **MEMORY SOLO à son, sans équipe participante** (jeu de données dédié). `Ctrl`+clic dessus | La question reste **bloquée** en `PREPARE` — **la limite du contournement** (CA27) : `Ctrl`+clic ne lève que la branche son, jamais la conformité des participants (arbitrage #172 B5, rappelé par la maquette §06 : « elle serait injouable ») | | |
+| 6 | Reproduire l'étape 1 en se connectant sur `/anim` (tablette animateur) au lieu de `/admin` | Le motif est affiché comme sur `/admin`, mais **aucun** geste équivalent au `Ctrl`+clic n'existe sur cette surface — la question reste bloquée sans recours depuis la tablette (CA26) | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 16 — La puce d'alerte globale (CA28, CA29)
+
+**Objectif** : vérifier le signal complémentaire à l'échelle du quiz entier (maquette §07) — visible
+avant même d'ouvrir une question précise — et sa non-interférence avec la pastille de menu
+existante.
+
+| Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
+|-------|--------|-------------------|------------------|------|
+| 1 | Quiz contenant ≥ 1 question sonore, audio **actif** (son activé, enceinte branchée) | **Aucune** puce d'alerte sur `/questions` ni sur `/admin` | | |
+| 2 | Couper `sound.enabled` (ou débrancher l'enceinte), **redémarrer le serveur** | Une puce d'alerte apparaît **en haut de `/questions`**, nommant le **nombre** de questions sonores concernées et le remède (« Vérifier la configuration ou brancher l'enceinte, puis redémarrer le serveur ») | | |
+| 3 | Ouvrir `/admin` (sans sélectionner de question précise) | **La même puce** est visible **avant même** de choisir une question — pas seulement en la sélectionnant (maquette §07, « on le sait avant de choisir ») | | |
+| 4 | Ouvrir `/anim` (tablette animateur) | **Aucune** puce — cette surface ne connaît pas la liste des questions et n'a de toute façon aucune action possible dessus | | |
+| 5 | Réactiver l'audio (`sound.enabled` + enceinte), redémarrer | La puce **disparaît d'elle-même**, sur `/questions` **et** `/admin`, sans action d'acquittement | | |
+| 6 | Audio de nouveau désactivé (retour à l'étape 2). Supprimer/désattacher le son de **chaque** question sonore du quiz une par une, jusqu'à la dernière | La puce **disparaît** dès que la **dernière** question sonore perd son son — même sans jamais avoir réactivé l'audio | | |
+| 7 | Pendant que la puce est affichée (audio désactivé, quiz sonore), observer la pastille de menu « Ambiance » (haut-parleur) | La pastille garde **ses deux formes habituelles** (actif/inactif) — **jamais** une 3ᵉ variante « alerte » visuelle sur cette pastille précise (CA29) ; le message d'alerte vit **uniquement** dans la puce du §07, pas dans l'icône de menu | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -258,20 +371,32 @@ procédure auditive.
 - [ ] Scénario 8 (mixage bruitage) : PASS
 - [ ] Scénario 9 (30 s intégrales) : PASS
 - [ ] Scénario 10 (non-régression sans son) : PASS
-- [ ] **Scénario 11 (dégradation x3, jamais de blocage) : PASS — bloquant, aucune exception**
+- [ ] **Scénario 11a (T0, blocage avant lancement) : PASS — bloquant, aucune exception**
+- [ ] **Scénario 11b (T1, dégradation jamais bloquante) : PASS — bloquant, aucune exception**
 - [ ] Scénario 12 (non-régression MEMOTION/ENTRACTE) : PASS
 - [ ] Scénario 13 (suite automatisée) : PASS
+- [ ] Scénario 14 (réversibilité automatique + course affichage/clic) : PASS
+- [ ] Scénario 15 (échappatoire `Ctrl`+clic et sa limite) : PASS
+- [ ] Scénario 16 (puce d'alerte globale, sans détourner la pastille de menu) : PASS
 - [ ] Aucune régression constatée sur une partie normale (SPEEDY/QCM/ARDOISE/MEMORY/MEMOTION/RAFALE
       mélangés, avec et sans son)
 
 ## Notes QA
 
-- Les Scénarios 1 à 12 nécessitent un navigateur **et** une sortie audio réelle — ils restent du
-  ressort de l'**utilisateur**, jamais de `qa`/`deployer` (règle projet).
-- Le Scénario 13 est une suite de commandes `go test`/`go build` : il peut être exécuté par `qa`
-  sans navigateur, en complément de cette procédure.
-- Le Scénario 11 est le plus important de tous (risque R10, « le mode différé fige la question ») —
-  ne jamais le sauter, même sous pression de planning.
-- Si un des trois cas du Scénario 11 échoue (le chronomètre ne démarre pas), c'est un **bloquant
-  absolu** pour la PROD : une question figée en direct, sans recours, est le pire défaut que ce lot
-  puisse produire.
+- Tous les scénarios sauf le 13 nécessitent un navigateur **et** une sortie audio réelle — ils
+  restent du ressort de l'**utilisateur**, jamais de `qa`/`deployer` (règle projet).
+- Le Scénario 13 est une suite de commandes `go test`/`go build`/`vitest` : il peut être exécuté par
+  `qa` sans navigateur, en complément de cette procédure.
+- **Scénario 11a et 11b sont les deux plus importants**, et **distincts l'un de l'autre** — ne
+  jamais les fusionner ni en sauter un en pensant l'autre suffisant (piège R18, plan rév. 8 §8) :
+  - 11a (T0) : un échec — une question à média indisponible qui démarre quand même — est un
+    **bloquant absolu**, exactement l'inverse du comportement voulu par l'addendum.
+  - 11b (T1) : un échec — une question déjà lancée qui se fige — reste le **pire défaut** que ce
+    lot puisse produire (risque R10 inchangé depuis le socle).
+- **Scénario 15, étape 5 (CA27)** est la limite de sécurité la plus facile à casser par erreur lors
+  d'une évolution future : si `Ctrl`+clic finit par débloquer une question MEMORY/MEMOTION sans
+  participants conformes, c'est une réouverture du bug historique #172 — à signaler immédiatement,
+  jamais comme un simple écart mineur.
+- **Scénario 16, étape 7 (CA29)** protège une décision produit explicite (#234, « deux formes
+  seulement ») — si la pastille de menu affiche un jour un 3ᵉ état « alerte », c'est un écart de
+  conception à signaler, pas une amélioration.
