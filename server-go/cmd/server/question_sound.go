@@ -24,6 +24,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -52,6 +53,27 @@ type questionSoundAdapter struct {
 
 	mu             sync.Mutex
 	watchdogCancel context.CancelFunc // cancels the CURRENT watchdog goroutine, if any
+
+	// validationMu/validationCache back questionSoundAvailability's file
+	// cache (contract sound.md §10.8.3) — a SEPARATE mutex from mu above:
+	// this cache is read/written far more often (every PONG, §10.8.7) and
+	// has nothing to do with the watchdog/playback state mu guards, so
+	// sharing one lock would only add unrelated contention.
+	validationMu    sync.Mutex
+	validationCache map[string]soundValidationEntry
+}
+
+// soundValidationEntry is one entry of the media-file validation cache —
+// shape imposed by contract sound.md §10.8.3, normative: keyed by the
+// sound file's ABSOLUTE path, fingerprinted by mtime+size (a cheap
+// os.Stat), NEGATIVE verdicts cached exactly like positive ones (a
+// corrupt file left uncached would be re-parsed on every single PONG —
+// precisely the case where the cost is highest). reason is "" iff ok.
+type soundValidationEntry struct {
+	modTime time.Time
+	size    int64
+	ok      bool
+	reason  string
 }
 
 // setupQuestionSound builds the question-sound adapter — mirrors
@@ -59,7 +81,7 @@ type questionSoundAdapter struct {
 // silently (contract §5.5/§10.2) on any platform/hardware failure; that
 // degradation is read back later via audio.IsNeutralMedia, never here.
 func (a *App) setupQuestionSound() {
-	qs := &questionSoundAdapter{app: a}
+	qs := &questionSoundAdapter{app: a, validationCache: make(map[string]soundValidationEntry)}
 	sc := config.Get().Sound
 	qs.player = audio.NewMediaPlayer(audio.OutputConfig{Device: sc.Device}, qs.onNaturalEnd)
 	a.qsound = qs
@@ -135,6 +157,92 @@ func (qs *questionSoundAdapter) HandleCommand(command protocol.QuestionSoundComm
 	}
 }
 
+// questionSoundAvailability is the SINGLE definition of "média disponible"
+// (contract sound.md §10.8.2), reused by BOTH the T0 gate — pushed into
+// GameState via Engine.SetQuestionSoundUnavailable, refreshed by the
+// application layer at the four moments of §10.8.7 — and the T1 non-
+// blocking degradation (play(), below, which used to inline only the
+// first two conditions). Two parallel definitions would drift and produce
+// the worst possible symptom: a question blocked when the sound would
+// have worked, or the reverse (CA21, R19).
+//
+// Returns (true, "") when available, or a question that carries no sound
+// at all (nothing to check — same "immediate exit" as
+// participantsConform's own branch, contract §10.8.4). Otherwise
+// (false, reason), reason being one of DISABLED/OUTPUT/FILE.
+//
+// Condition 3 (the file) is a FULL revalidation — never a bare os.Stat —
+// reusing audio.ValidateQuestionSound (itself built on
+// extractCanonicalPCM), never a second parser (§10.8.2's arbitrage). Its
+// cost is made sustainable by validateSoundFile's cache (§10.8.3): calling
+// this with an unchanged file is a cheap os.Stat, not a re-parse.
+func (qs *questionSoundAdapter) questionSoundAvailability(q *game.Question) (ok bool, reason string) {
+	if qs == nil || q == nil || q.Sound == "" {
+		return true, ""
+	}
+	if !config.Get().Sound.Enabled {
+		return false, "DISABLED"
+	}
+	if audio.IsNeutralMedia(qs.player) {
+		return false, "OUTPUT"
+	}
+	if reason := qs.validateSoundFile(qs.app.questionSoundPath(q.Sound)); reason != "" {
+		return false, reason
+	}
+	return true, ""
+}
+
+// validateSoundFile implements the mandatory cache of contract §10.8.3 —
+// questionSoundAvailability's third condition. Keyed by absolute path,
+// fingerprinted by mtime+size via a cheap os.Stat:
+//   - a HIT (fingerprint unchanged) reuses the stored verdict — POSITIVE
+//     or NEGATIVE — without ever reading the file's content again;
+//   - a MISS (no entry, or a different fingerprint) revalidates fully via
+//     audio.ValidateQuestionSound, then memorizes the verdict;
+//   - os.Stat failing (file gone) reports "FILE" AND deletes the entry,
+//     so a file later restored is revalidated rather than trusting a
+//     stale verdict (§10.8.3's own table).
+//
+// No eviction: the cache is bounded by the number of questions that carry
+// a sound (§10.8.3's own "aucune éviction n'est nécessaire").
+func (qs *questionSoundAdapter) validateSoundFile(path string) (reason string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		qs.validationMu.Lock()
+		delete(qs.validationCache, path)
+		qs.validationMu.Unlock()
+		return "FILE"
+	}
+
+	qs.validationMu.Lock()
+	if entry, hit := qs.validationCache[path]; hit && entry.modTime.Equal(info.ModTime()) && entry.size == info.Size() {
+		qs.validationMu.Unlock()
+		return entry.reason
+	}
+	qs.validationMu.Unlock()
+
+	entry := soundValidationEntry{modTime: info.ModTime(), size: info.Size()}
+	if raw, rerr := os.ReadFile(path); rerr != nil {
+		entry.reason = "FILE"
+	} else if _, verr := audio.ValidateQuestionSound(raw); verr != nil {
+		entry.reason = "FILE"
+	} else {
+		entry.ok = true
+	}
+
+	qs.validationMu.Lock()
+	if qs.validationCache == nil {
+		// Defensive: several tests construct questionSoundAdapter{} directly
+		// (bypassing setupQuestionSound's initialization) — never nil in
+		// production, but a nil map must never panic on write here.
+		qs.validationCache = make(map[string]soundValidationEntry)
+	}
+	qs.validationCache[path] = entry
+	qs.validationMu.Unlock()
+
+	return entry.reason
+}
+
 // play is the shared core of Start (automatic, on phase start) and the
 // manual Rejouer gesture (HandleCommand's PLAY) — releaseOnFailure
 // controls §10.7's non-blocking rule: true for the automatic path (a fresh
@@ -145,12 +253,27 @@ func (qs *questionSoundAdapter) play(q *game.Question, releaseOnFailure bool) {
 	qs.cancelWatchdogLocked()
 	qs.mu.Unlock()
 
-	// CA12, non-blocking rule — checked BEFORE ever touching
+	// CA12/CA21, non-blocking rule — checked BEFORE ever touching
 	// QuestionSoundState or the player, so a degraded case never flickers
-	// PLAYING before immediately reverting to IDLE:
-	//   - son désactivé (config)
-	//   - enceinte indisponible (neutral MediaPlayer)
-	if !config.Get().Sound.Enabled || audio.IsNeutralMedia(qs.player) {
+	// PLAYING before immediately reverting to IDLE. Reuses
+	// questionSoundAvailability — the SAME function the T0 gate uses
+	// (CA21/R19), replacing what used to be this file's own inline
+	// `!config.Get().Sound.Enabled || audio.IsNeutralMedia(qs.player)`.
+	//
+	// ⚠️ DISABLED/OUTPUT pre-empt here, exactly as before this lot — a
+	// disabled config or a neutral player can NEVER produce a sound, no
+	// point ever calling Play(). FILE deliberately does NOT pre-empt: T1
+	// has always let the actual Play() attempt surface a bad file through
+	// its OWN error (below) — CA12's own
+	// TestQuestionSoundAdapter_CA12_UnreadableFile_ReleasesImmediately
+	// specifically drives this via a fake MediaPlayer's own Play() error,
+	// never touching a real file at all, and contract CA12 requires that
+	// test to stay green and UNCHANGED. Pre-empting on FILE here too would
+	// mean deciding a real-hardware playback failure from a pure
+	// filesystem check alone — the T0 gate is where a bad file actually
+	// belongs (it runs BEFORE the question ever reaches STARTED); T1 stays
+	// a pure last-resort safety net, per §10.7's own founding reasoning.
+	if ok, reason := qs.questionSoundAvailability(q); !ok && reason != "FILE" {
 		if releaseOnFailure {
 			qs.app.engine.ReleaseDeferredTimer()
 		}
@@ -163,7 +286,10 @@ func (qs *questionSoundAdapter) play(q *game.Question, releaseOnFailure bool) {
 	qs.app.broadcastUpdate()
 
 	if err := qs.player.Play(path); err != nil {
-		// Third non-blocking case: fichier illisible/non conforme.
+		// Third non-blocking case: fichier illisible/non conforme, caught
+		// HERE (not pre-empted above — see this function's own comment on
+		// why FILE never gates play() itself), or a race/lower-level I/O
+		// failure on a file questionSoundAvailability just validated.
 		server.LogWarn(game.LogComponentApp, "Question sound: Play(%s) failed — degrading to no-op (contract §5.5/§10.2): %v", path, err)
 		qs.app.engine.SetQuestionSoundState(game.QuestionSoundIdle)
 		qs.app.broadcastUpdate()
@@ -272,6 +398,23 @@ func (qs *questionSoundAdapter) cancelWatchdogLocked() {
 		qs.watchdogCancel()
 		qs.watchdogCancel = nil
 	}
+}
+
+// refreshQuestionSoundAvailability recomputes the media-availability
+// verdict for the CURRENT question and pushes it into GameState (contract
+// sound.md §10.8.7's "quatre moments" — before every PONG-driven
+// PREPARE↔READY evaluation, at question selection, on OnConfigUpdate, and
+// just before Engine.Start()). Computed entirely in THIS application
+// layer, never under the engine's own lock (§10.8.3: internal/game imports
+// neither internal/audio nor internal/config — participantsConform must
+// stay pure). Cheap and safe to call unconditionally at every one of those
+// moments: Engine.SetQuestionSoundUnavailable is itself a no-op when the
+// verdict hasn't changed, and validateSoundFile's cache (§10.8.3) makes an
+// unchanged file a bare os.Stat, never a re-parse.
+func (a *App) refreshQuestionSoundAvailability() {
+	q := a.engine.GetState().Question
+	_, reason := a.questionSound().questionSoundAvailability(q)
+	a.engine.SetQuestionSoundUnavailable(reason)
 }
 
 // handleQuestionSound dispatches an inbound QUESTION_SOUND message (admin/

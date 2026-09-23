@@ -1244,6 +1244,17 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// question left behind; see resetDeferredTimerUnsafe's own doc comment.
 	e.resetDeferredTimerUnsafe()
 
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.6/CA25) — a
+	// new/replayed question always starts with no sound-gate bypass:
+	// ForceReady() (task 7) is the ONLY writer of SoundGateBypassed, and it
+	// must never leak across a question change. QuestionSoundUnavailable is
+	// reset too — the application layer (cmd/server) refreshes it again
+	// before the next PREPARE↔READY evaluation (contract §10.8.7's "quatre
+	// moments"), so starting from "" here never leaves a stale verdict
+	// visible for longer than that refresh takes.
+	e.state.SoundGateBypassed = false
+	e.state.QuestionSoundUnavailable = ""
+
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
@@ -1621,6 +1632,30 @@ func participantsConform(question *Question, state *GameState) bool {
 	if question == nil {
 		return true
 	}
+
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.4) — a
+	// question carrying a sound whose media is unavailable cannot reach
+	// READY. Structurally common to every QuestionType (§10.4bis): checked
+	// BEFORE the type switch below and combined with it by AND (never OR
+	// — a media-unavailable RAFALE question with non-conform participants
+	// stays refused for either reason, this branch never masks the type
+	// switch's own verdict). Immediate exit when the question carries no
+	// sound (R22: zero-value behavior, unaffected — non-regression #172 on
+	// every type). state.QuestionSoundUnavailable is computed and pushed
+	// here entirely by the application layer (cmd/server/question_sound.go,
+	// SetQuestionSoundUnavailable) — this function stays pure on
+	// (Question, GameState), never touching internal/audio or
+	// internal/config itself (§10.8.3).
+	//
+	// state.SoundGateBypassed (set ONLY by ForceReady(), task 7) erases
+	// ONLY this branch — every branch in the switch below stays exactly as
+	// enforced as it is today (#172 B5, R29): a non-conform MEMORY/MEMOTION
+	// round or an unconfigured RAFALE round must never reach READY through
+	// this door, forced or not.
+	if question.Sound != "" && state.QuestionSoundUnavailable != "" && !state.SoundGateBypassed {
+		return false
+	}
+
 	switch question.Type {
 	case QuestionTypeMemory:
 		return participantsCountConform(question.MemoryMode, len(state.MemoryParticipatingTeams))
@@ -2009,6 +2044,44 @@ func (e *Engine) SetQuestionSoundState(state QuestionSoundState) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.state.QuestionSoundState = state
+}
+
+// SetQuestionSoundUnavailable pushes the media-availability verdict for the
+// CURRENT question into GameState (v11.1/#219/#236/#237, 2026-09-23,
+// contract sound.md §10.8.2/§10.8.7) — computed entirely by the application
+// layer (cmd/server/question_sound.go's questionSoundAvailability, which
+// does the disk/config/audio checks), NEVER here: internal/game imports
+// neither internal/audio nor internal/config, and participantsConform must
+// stay pure (§10.8.3's "jamais sous le verrou du moteur" — the caller is
+// responsible for computing reason BEFORE taking any engine lock).
+//
+// reason is "" when available (or the question carries no sound), or one
+// of DISABLED/OUTPUT/FILE. Same canonical lock/reevaluate/unlock/callback
+// shape as SetMemoryParticipatingTeams and the other
+// reevaluatePrepareReadyUnsafe callers: a change here can flip
+// PREPARE<->READY (CA19's reversibility), so the transition is re-checked
+// and its callback fired exactly like any other conformity input.
+//
+// No-ops (no lock held, no reevaluation, no callback) when reason already
+// matches the stored value — called on every refresh moment (§10.8.7's
+// "quatre moments", in particular every PONG), so an unchanged verdict must
+// never fire a spurious PhaseChange callback.
+func (e *Engine) SetQuestionSoundUnavailable(reason string) {
+	e.mu.Lock()
+	if e.state.QuestionSoundUnavailable == reason {
+		e.mu.Unlock()
+		return
+	}
+	e.state.QuestionSoundUnavailable = reason
+	newPhase := e.reevaluatePrepareReadyUnsafe()
+
+	// Release lock BEFORE calling callback to avoid deadlock
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if callback != nil && newPhase != "" {
+		callback(newPhase)
+	}
 }
 
 // actualStart is called after countdown finishes to start the actual game
@@ -2511,6 +2584,12 @@ func (e *Engine) stopUnsafe() bool {
 	// before any pending deferred timer ever resolves; see
 	// resetDeferredTimerUnsafe's own doc comment.
 	e.resetDeferredTimerUnsafe()
+
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.6/CA25) —
+	// a STOP also ends any sound-gate bypass forced for this question; see
+	// the identical reset in Ready() for the full reasoning.
+	e.state.SoundGateBypassed = false
+	e.state.QuestionSoundUnavailable = ""
 
 	e.setQuestionStatus(StatusStopped)
 
@@ -4037,6 +4116,14 @@ func (e *Engine) ForceReady() {
 	for _, team := range e.data.Teams {
 		team.Ready = true
 	}
+
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.6): raise the
+	// sound-gate bypass BEFORE the conformity check below — participantsConform
+	// erases ONLY its own sound branch when this is set, every other branch
+	// (participants, RAFALE categories/difficulties) stays exactly as
+	// enforced as it is today. Reset in Ready()/stopUnsafe(), never here
+	// (CA25 — bypass lasts only for the current question).
+	e.state.SoundGateBypassed = true
 
 	// #172 B5 (arbitrage G): ForceReady only skips the PONG wait — it must not
 	// also skip participant-selection conformity, or the original bug (a

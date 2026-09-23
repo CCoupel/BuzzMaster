@@ -767,6 +767,11 @@ func (a *App) setupCallbacks() {
 		// broadcast. Harmless (idempotent, cheap) on the other call sites
 		// that share this callback for unrelated config sections.
 		a.refreshEntracteImageIsCustom()
+		// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
+		// `sound.enabled` may have just changed — one of the "quatre
+		// moments", same idempotent-and-cheap discipline as its neighbours
+		// above.
+		a.refreshQuestionSoundAvailability()
 		a.broadcastUpdate()
 	}
 
@@ -1871,6 +1876,13 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 	if a.engine.IsGamePrepare() {
 		a.engine.SetBumperReady(bumperID)
 
+		// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
+		// refresh the media-availability verdict BEFORE the
+		// PREPARE↔READY evaluation below — every PONG is one of the
+		// "quatre moments" this must be recomputed at. Cheap (cached,
+		// §10.8.3) and a no-op when unchanged.
+		a.refreshQuestionSoundAvailability()
+
 		// Check if all ready. #172 B2: PREPARE's exit condition is the two
 		// criteria combined — AreAllTeamsReady (buzzers) AND ParticipantsConform
 		// (selection valid for the question's type). AreAllTeamsReady itself is
@@ -2024,6 +2036,12 @@ func (a *App) handleReady(msg *protocol.Message) {
 	a.logger.Info(game.LogComponentEngine, "READY question=%s", payload.Question)
 	a.engine.Ready(payload.Question, question)
 	a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
+	// question selection is one of the "quatre moments" — Ready() just
+	// reset QUESTION_SOUND_UNAVAILABLE to "", recompute it immediately for
+	// the newly selected question so the very first PREPARE broadcast
+	// already carries the real verdict, not a transient "available".
+	a.refreshQuestionSoundAvailability()
 
 	// #127: a.engine.Ready() already fired OnStateChange(PhasePrepare) above,
 	// which calls broadcastGameState() -> broadcastUpdateTo(Admin, TV,
@@ -2094,6 +2112,15 @@ func (a *App) handleStart(msg *protocol.Message) {
 	}
 
 	a.logger.Info(game.LogComponentEngine, "START game with delay=%ds", payload.Delay)
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7/CA20):
+	// last of the "quatre moments" — an indisponibilité arriving between
+	// the button's display and this very click must still be caught: if
+	// it just became unavailable, this refresh reverts the question to
+	// PREPARE (reevaluatePrepareReadyUnsafe, inside
+	// SetQuestionSoundUnavailable) BEFORE Engine.Start()'s own phase==READY
+	// guard (#172 B4) runs, so Start() correctly refuses instead of racing
+	// a stale READY.
+	a.refreshQuestionSoundAvailability()
 	a.engine.Start(payload.Delay)
 	// #199 QUALIF 8.0.0.14 investigation: Engine.Start() silently no-ops
 	// (logs "Cannot start game from phase X (must be READY)") when the

@@ -919,6 +919,31 @@ type GameState struct {
 	// is the wire-facing summary a client actually needs.
 	QuestionSoundState QuestionSoundState `json:"QUESTION_SOUND_STATE"`
 	AnswerTimerWaiting bool               `json:"ANSWER_TIMER_WAITING"`
+
+	// Média indisponible avant le lancement (v11.1, #219/#236/#237,
+	// 2026-09-23, contracts/sound.md §10.8) — NO omitempty, same discipline
+	// as the two fields above: always serialized, including their zero
+	// values ("" / false), ephemeral (excluded from persistence).
+	//
+	// QuestionSoundUnavailable is the media-availability verdict for the
+	// CURRENT question, computed and pushed ENTIRELY by the application
+	// layer (cmd/server/question_sound.go's questionSoundAvailability, via
+	// Engine.SetQuestionSoundUnavailable) — internal/game never performs
+	// the disk/config/audio checks itself (§10.8.3: participantsConform
+	// must stay pure). "" = available, or the question carries no sound;
+	// otherwise one of DISABLED/OUTPUT/FILE. Read by participantsConform
+	// (engine.go) to gate PREPARE→READY, and diffused for
+	// prepareWaitReason.js/AnimConductPanel.jsx to name the reason.
+	//
+	// SoundGateBypassed is true once ForceReady() (the pre-existing
+	// Ctrl+click-on-the-question escape hatch, admin-only) has bypassed
+	// ONLY the sound branch of participantsConform for the CURRENT
+	// question — every other branch (participants, RAFALE) stays fully
+	// enforced (contract §10.8.6, #172 B5). Reset in Ready() and
+	// stopUnsafe(): the bypass never outlives the question it was raised
+	// for (CA25).
+	QuestionSoundUnavailable string `json:"QUESTION_SOUND_UNAVAILABLE"`
+	SoundGateBypassed        bool   `json:"SOUND_GATE_BYPASSED"`
 }
 
 // TeamsAndBumpers holds all teams and bumpers data
