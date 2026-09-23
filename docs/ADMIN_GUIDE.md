@@ -2526,14 +2526,17 @@ Cette comportement de non-blocage **est une garantie** : le jeu continue toujour
 **Procédure** :
 1. Brancher l'enceinte solidement (vérifier le câble USB ou réseau)
 2. Attendre quelques secondes pour que le système la détecte
-3. **Redémarrer le serveur entièrement** (cliquer le bouton ARRÊT dans `/admin/settings`, attendre le reboot automatique)
-4. Le serveur réinitialise l'audio → questions débloquées
+3. **Redémarrer le serveur** : cliquer le bouton **ARRÊT** (menu déroulant Navbar en haut à droite de `/admin`) — le serveur s'arrête immédiatement
+4. Redémarrer l'exécutable manuellement :
+   - **Windows** : double-clic sur `buzzcontrol-vX.Y.Z-windows-amd64.exe`
+   - **Raspberry Pi** : le service systemd redémarre automatiquement (si configuré)
+5. Le serveur réinitialise l'audio au démarrage → questions débloquées
 
 #### Contournement administrateur — Forcer le lancement
 
 Pour ignorer une blocage son temporaire (ex: enceinte temporairement indisponible, mais vous avez besoin de continuer la partie), un administrateur peut **déverrouiller manuellement la question** :
 
-**Geste** : Appuyez et maintenez **Ctrl + Clic sur la question** (dans `/admin/GamePage.jsx`).
+**Geste** : Sur la page **Régie** (`/admin`), appuyez et maintenez **Ctrl + Clic sur la question** pour la déverrouiller.
 
 **Résultat** :
 - Le bouton START réactivé immédiatement
