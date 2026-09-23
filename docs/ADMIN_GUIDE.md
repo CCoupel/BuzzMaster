@@ -2507,4 +2507,52 @@ Si à la lancement d'une question en mode différé, le son **ne peut pas démar
 
 Cette comportement de non-blocage **est une garantie** : le jeu continue toujours, même en cas de problème audio.
 
+### ⚠️ Gate Média (T0) — Question Bloquée au Lancement (v11.1 addendum, #219/#236/#237)
+
+**NOUVEAU** : Avant le lancement d'une question qui porte un son attaché, le serveur **valide l'availability du média**. Si le son n'est pas disponible, le bouton **START reste grisé** et un **motif d'erreur** s'affiche sous le bouton.
+
+#### Trois raisons de blocage possibles
+
+| Motif | Cause | Remède |
+|-------|-------|--------|
+| **« Le son est désactivé »** | Interrupteur audio OFF dans `/admin/ambiance` | Activer l'audio → le bouton START réactivé automatiquement |
+| **« L'enceinte n'est pas disponible »** ⚠️ | Enceinte non initialisée au démarrage du serveur (peut être : non branchée au démarrage, USB coupée après démarrage, pilote non rechargé) | **Brancher l'enceinte solidement et redémarrer le serveur entièrement** (pas juste « Nouvelle partie ») |
+| **« Le fichier son est indisponible »** | Fichier son cassé, déplacé, droits insuffisants, format non supporté | Réuploader le fichier, puis redémarrer le serveur |
+
+#### Cas critique : enceinte branchée APRÈS le démarrage du serveur
+
+⚠️ **Important** : Si vous branchez l'enceinte **après** le démarrage du serveur, le système ne la détecte pas automatiquement. Les questions restent **bloquées** jusqu'au redémarrage.
+
+**Procédure** :
+1. Brancher l'enceinte solidement (vérifier le câble USB ou réseau)
+2. Attendre quelques secondes pour que le système la détecte
+3. **Redémarrer le serveur entièrement** (cliquer le bouton ARRÊT dans `/admin/settings`, attendre le reboot automatique)
+4. Le serveur réinitialise l'audio → questions débloquées
+
+#### Contournement administrateur — Forcer le lancement
+
+Pour ignorer une blocage son temporaire (ex: enceinte temporairement indisponible, mais vous avez besoin de continuer la partie), un administrateur peut **déverrouiller manuellement la question** :
+
+**Geste** : Appuyez et maintenez **Ctrl + Clic sur la question** (dans `/admin/GamePage.jsx`).
+
+**Résultat** :
+- Le bouton START réactivé immédiatement
+- La question se lance **sans le son** (dégradation gracieuse)
+- Cette dérogation s'applique **à cette question uniquement** — la suivante sera à nouveau contrôlée
+
+**Restriction** : Ce geste **ne contourne que la branche audio** — si la question attend aussi des participants (ex: MEMORY SOLO), ils restent bloquants même avec le Ctrl+clic.
+
+#### Alerte « Audio indisponible »
+
+Sur `/admin` et `/admin/quiz`, une **pastille d'alerte rouge** s'affiche en haut si :
+- Au moins une question du quiz porte un son attaché **ET**
+- L'audio global n'est pas disponible
+
+**Libellé** : *« Ce quiz contient N question(s) sonore(s), mais l'audio n'est pas disponible. Elle(s) ne pourr(a/ont) pas être lancée(s). Vérifier la configuration ou brancher l'enceinte, puis redémarrer le serveur. »*
+
+Cette alerte :
+- Disparaît automatiquement quand vous réactivez l'audio ou redémarrez le serveur
+- N'apparaît **jamais sur `/anim`** (interface animateur, elle n'a pas de rôle de configuration)
+- Vous aide à détecter les situations de blocage avant qu'une question ne reste figée
+
 

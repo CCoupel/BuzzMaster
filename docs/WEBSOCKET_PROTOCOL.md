@@ -419,6 +419,10 @@ Envoye par l'animateur (`/anim`) ou l'administrateur (`/admin`) pour contrôler 
    - `QUESTION_SOUND_STATE` → `"IDLE"` | `"PLAYING"` | `"PAUSED"`
    - `ANSWER_TIMER_WAITING` → `true` si chronomètre reste figé (mode différé, son toujours actif), `false` sinon
 
+**Addendum v11.1 (gate média T0)** : Deux champs supplémentaires diffusés aux mêmes occasions :
+   - `QUESTION_SOUND_UNAVAILABLE` → `""` | `"DISABLED"` | `"OUTPUT"` | `"FILE"` (motif de blocage, si la question est bloquée avant STARTED par manque de média)
+   - `SOUND_GATE_BYPASSED` → `true` si l'admin a déverrouillé via Ctrl+clic, `false` sinon
+
 **Cycle de vie du son par commande** :
 
 | Commande | Phase valide | Avant | Après |

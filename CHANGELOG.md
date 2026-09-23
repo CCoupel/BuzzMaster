@@ -24,6 +24,26 @@ Historique des versions du projet BuzzControl.
 - **Automatisée** : build, tests Go `-race`/`-short`, tests frontend Vitest 154/154 ✓ ; compilation croisée `windows/amd64` + `linux/arm64` CGO_ENABLED=0 ✓
 - **Manuelle** : procédure `tests/procedures/question-sound-219.md` (13 scénarios) à exécuter par l'utilisateur sur binaire QUALIF avec sortie audio réelle — test Scénario 11 (dégradations x3, non-blocage) critique avant PROD
 
+### Addendum : Gate Média (T0) — Lancement Bloqué (#219/#236/#237, v11.1 addendum)
+
+**Contexte** : Le lot v11.1.0 initial documentait le chronomètre configurable et les gestes d'animation pour le son en cours de question (T1 — déjà lancée). Cet addendum spécifie la **validation préalable (T0)** : avant que la question ne se lance, un contrôle de disponibilité du média empêche de commencer si le son est indisponible (trois motifs : DISABLED, OUTPUT, FILE).
+
+#### Added
+- **Validation de disponibilité média avant PREPARE→READY (#219/#236/#237)** — Gate intégrée à `participantsConform()` : refus de transition si la question porte un son et celui-ci n'est pas disponible. Trois motifs : son global `DISABLED`, enceinte `OUTPUT` indisponible, fichier son `FILE` cassé/absent. Champs GameState : `QUESTION_SOUND_UNAVAILABLE` (motif) et `SOUND_GATE_BYPASSED` (bypass admin), jamais `omitempty`.
+- **Cache de validation disque (#219/#236/#237)** — Validation fichier son via `os.Stat` (mtime + taille) avec mémorisation de verdicts, aucune éviction — révalidation automatique si le fichier réapparaît. Verdicts négatifs mis en cache, aucun relecture disque coûteuse à chaque PONG.
+- **Contournement administrateur — Ctrl+Clic (#219/#236/#237, CA22)** — Geste existant `FORCE_READY` étendu : maintenir **Ctrl + clic sur la question** (admin uniquement) pour déverrouiller via le flag `SOUND_GATE_BYPASSED`. Geste **jamais disponible sur `/anim`** (allow-list restreinte). Contournement **son seulement** : autres critères (`participants conformes`, MEMORY SOLO, etc.) restent bloquants.
+- **Alerte globale « Audio indisponible »** — Composant `QuizSoundWarningPill` monté sur `/admin` et `/admin/quiz` : affiche une pastille si le quiz porte des sons et l'audio global n'est pas disponible. Libellé détaillant le problème et la procédure (redémarrer le serveur après connexion de l'enceinte). Disparition automatique (audio réactivé OU dernier son supprimé). Jamais sur `/anim`.
+- **Rafraîchissement dynamique du motif (#219/#236/#237, CA19/CA20)** — À chaque PONG (`handlePong`), après `Ready()` (`handleReady`), à la reconfiguration (`OnConfigUpdate`), et juste avant `Start()` (`handleStart`), le motif de blocage est réévalué — permet une réversibilité automatique (audio réactivé entre deux PONGs, motif remis à `""`) et une fenêtre de course fermée entre affichage UI et clic START (CA20).
+- **Tests automatisés complets** — 40 tests : gate logic (`sound_gate_219_test.go`, 10 tests), cache (`sound_gate_cache_219_test.go`, 7 tests), dispatch WebSocket réel (`sound_gate_dispatch_219_test.go`, 6 tests), frontend `prepareWaitReason` + `QuizSoundWarningPill` (19 tests). Tests CA12 (non-blocage en T1) restent inchangés et passent.
+- **Procédure de recette manuelle étendue** — `tests/procedures/question-sound-219.md` augmentée de 6 scénarios (14-16 : réversibilité, override Ctrl+clic, alerte globale, invariants de pastille de menu). Scénario 11 scindé en 11a (T0 gate) et 11b (T1 dégradation).
+
+#### Changed
+- **Format persisté game state** — Deux champs nouveaux `QuestionSoundUnavailable`/`SoundGateBypassed` dans `GameState`, jamais `omitempty` (même discipline que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING`). Aucune migration — additive.
+
+#### Validation
+- **Automatisée** : Go tests (`./internal/game/...`, `./cmd/server/...`), frontend Vitest (2621/2621 tests +23 pour addendum) — **PASS** — ✓
+- **Manuelle** : Scénarios 14, 15, 16 dans `tests/procedures/question-sound-219.md` à exécuter sur binaire QUALIF — test Scénario 15 (override) et 16 (alerte globale) critiques pour validation addendum
+
 ---
 
 ## [11.0.0] - Milestone v11.0.0 — Ambiance de musique d'événement (#34)

@@ -367,6 +367,61 @@ maybeResumeDeferredTimer()  // Si différé et était figé, reprend depuis la p
 releaseDeferredTimer()  // Libère si chronomètre était figé
 ```
 
+## Gate Média : Lancement Bloqué (T0) — v11.1 Addendum (#219/#236/#237)
+
+### Frontière T0/T1
+
+La machine à états applique **deux garde-fous distincts** contre les problèmes audio :
+
+- **T0 (avant lancement)** : **Gate de conformité à PREPARE→READY** — validation préalable, blocage du lancement si la question porte un média indisponible. Critique : empêche de démarrer une question sans audio en mode différé (chronomètre figé pour toujours).
+- **T1 (pendant la lecture)** : **Dégradation à STARTED** — aucun blocage ; tentative de lecture, filet de dernier recours si le fichier est cassé. La question démarre quand même en mode différé, le chronomètre se libère immédiatement.
+
+### Trois motifs de blocage
+
+Lors de la transition `PREPARE → READY`, une branche supplémentaire de `participantsConform()` évalue la disponibilité du média. Trois motifs de refus possibles :
+
+| Motif | Code | Condition | Utilisateur voit | Remède |
+|-------|------|-----------|-------------------|--------|
+| **Média désactivé globalement** | `DISABLED` | Son global OFF (switch `/admin/ambiance`) | "Le son est désactivé" | Activer le son → transition réussit |
+| **Enceinte indisponible** | `OUTPUT` | Appareil audio non initialisé au démarrage du serveur | "L'enceinte n'est pas disponible" | Brancher/redémarrer enceinte, redémarrer serveur |
+| **Fichier son cassé** | `FILE` | Fichier illisible (corrompu, déplacé, droits insuffisants, format non supporté) | "Le fichier son est indisponible" | Réuploader le fichier, redémarrer serveur |
+
+**Seulement si** la question porte un son attaché (champ `Question.SOUND` non vide). Une question sans son passe la gate automatiquement.
+
+### Champs GameState additionnels (v11.1 addendum)
+
+```go
+QUESTION_SOUND_UNAVAILABLE  string  // "" | "DISABLED" | "OUTPUT" | "FILE"
+SOUND_GATE_BYPASSED         bool    // true = admin a débloqué via Ctrl+clic
+```
+
+**Sérialisation** : **Jamais `omitempty`** — toujours présents dans GameState.
+- `QUESTION_SOUND_UNAVAILABLE` = `""` par défaut (media disponible ou absent)
+- `SOUND_GATE_BYPASSED` = `false` par défaut (pas de bypass activé)
+
+### Cycle de vie du motif d'indisponibilité
+
+1. **À chaque PONG reçu en PREPARE** (`handlePong`) : `refreshQuestionSoundAvailability()` réévalue le motif — peut passer de `DISABLED` à `""` si l'audio est réactivé entre deux PONGs.
+2. **Transition PREPARE→READY échouée** : si motif non vide, `participantsConform()` retourne `false` + motif (ex: `DISABLED`). Le frontend reçoit le motif et l'affiche.
+3. **Transition PREPARE→READY réussie** : motif remis à `""`, `SOUND_GATE_BYPASSED` remis à `false`.
+4. **À la transition STOP ou arrivée en REVEALED** : motif remis à `""`.
+
+### Contournement administrateur — Ctrl+Clic
+
+Un **administrateur uniquement** peut déverrouiller manuellement une question bloquée par la gate son via `FORCE_READY` (action WebSocket existante, comportement étendu) :
+
+**Geste** : Maintenir **Ctrl + clic sur la question** (dans `/admin/GamePage.jsx`).
+
+**Résultat** :
+- Flag `SOUND_GATE_BYPASSED` posé à `true`
+- Branche son de `participantsConform()` contournée (seule cette branche, les autres gardes — participants conformes, MEMORY SOLO — restent actives)
+- Transition `PREPARE → READY` réussit malgré `QUESTION_SOUND_UNAVAILABLE ≠ ""`
+- À la transition `READY → STARTED` ou `→ STOPPED` ou `→ REVEALED`, le flag est remis à `false`
+
+**Restrictions explicites** :
+- Geste **jamais disponible sur `/anim`** (interface animateur, allow-list ne permet pas `FORCE_READY`)
+- Geste **ne contourne jamais les critères participants** (ex: MEMORY SOLO sans équipe reste bloquée, même avec Ctrl+clic sur la question)
+
 ### Frontend Admin (React)
 - Fichier: `server-go/web/src/pages/GamePage.jsx`
 - Les états des boutons sont calculés en fonction de `gameState.phase`
