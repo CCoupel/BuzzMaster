@@ -458,16 +458,18 @@ export default function AnimPage() {
   }, [teams, bumpers, gameState.phase, question, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST])
 
   // #172/C2 — motif(s) d'attente PREPARE, passé à AnimConductPanel (repli du
-  // bouton LANCER, style "à suivre" #166 déjà en place, aucun nouveau
-  // badge/CSS). `short: true` — sub-label du bouton, place limitée (F7).
-  // Évolution UX (retour QUALIF v11.1.0.5, #219/#236/#237) — `AnimConductPanel`
-  // continue de recevoir une seule chaîne (prop `waitReason`, composant et
-  // ses tests INCHANGÉS) : `prepareWaitReasons` peut désormais renvoyer
-  // plusieurs motifs simultanés (buzzers ET son indisponible, par exemple),
-  // joints ici avec le même séparateur `' · '` qu'ailleurs dans ce fichier.
+  // bouton LANCER, style "à suivre" #166 déjà en place). `short: true` —
+  // sub-label du bouton, place limitée (F7).
+  // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6, #219/#236/#237) —
+  // `AnimConductPanel` continue de recevoir une seule chaîne (prop
+  // `waitReason`, composant et ses tests INCHANGÉS) : `prepareWaitReasons`
+  // peut renvoyer plusieurs motifs simultanés (buzzers ET son indisponible,
+  // par exemple). v11.1.0.6 : un motif par LIGNE plutôt que joints avec
+  // ' · ' sur une seule ligne — `'\n'` ici, `white-space: pre-line` sur
+  // `.anim-conduct-btn-sub` (AnimConductPanel.css) fait le reste.
   const waitReason = useMemo(() => {
     const reasons = prepareWaitReasons(gameState.phase, question, displayTeams, gameState, { short: true })
-    return reasons.length > 0 ? reasons.join(' · ') : null
+    return reasons.length > 0 ? reasons.join('\n') : null
   }, [gameState, question, displayTeams])
 
   // #158/F3 — mode ARDOISE : liste des copies à la place des cartes équipe.

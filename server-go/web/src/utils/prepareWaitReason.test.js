@@ -171,7 +171,7 @@ describe('prepareWaitReasons — orchestration (phase, buzzers, conformité)', (
     })
   })
 
-  it('un buzzer actif non prêt → ["Buzzers en attente"] (libellé complet)', () => {
+  it('un buzzer actif non prêt sur 2 → ["Buzzers en attente : 1/2"] (libellé complet, compte réel — retour QUALIF v11.1.0.6)', () => {
     // Sélection déjà conforme (MEMORY SOLO, 1 équipe) : seul le motif
     // buzzers est actif ici, seul dans le tableau.
     const reasons = prepareWaitReasons(
@@ -180,10 +180,10 @@ describe('prepareWaitReasons — orchestration (phase, buzzers, conformité)', (
       [readyTeam('A'), notReadyTeam('B')],
       { MEMORY_PARTICIPATING_TEAMS: ['A'] }
     )
-    expect(reasons).toEqual(['Buzzers en attente'])
+    expect(reasons).toEqual(['Buzzers en attente : 1/2'])
   })
 
-  it('un buzzer actif non prêt → ["buzzers"] (libellé court, opts.short)', () => {
+  it('aucun buzzer prêt sur 1 → ["buzzers 0/1"] (libellé court, opts.short)', () => {
     // Sélection déjà conforme (MEMORY SOLO, 1 équipe) : isole la SEULE
     // branche buzzers (le cas "plusieurs motifs à la fois" est couvert
     // explicitement plus bas, section dédiée).
@@ -194,7 +194,7 @@ describe('prepareWaitReasons — orchestration (phase, buzzers, conformité)', (
       { MEMORY_PARTICIPATING_TEAMS: ['A'] },
       { short: true }
     )
-    expect(reasons).toEqual(['buzzers'])
+    expect(reasons).toEqual(['buzzers 0/1'])
   })
 
   describe('buzzers tous prêts, sélection non conforme → motif mode-spécifique', () => {
@@ -314,22 +314,26 @@ describe('prepareWaitReasons — addendum média indisponible (v11.1, #219/#236/
   const question = { TYPE: 'SPEEDY' }
 
   it.each([
-    ['DISABLED', 'son désactivé', 'Les sons sont désactivés dans la configuration. Les réactiver demande un redémarrage du serveur.'],
-    ['OUTPUT', 'pas de sortie audio', "Aucune sortie audio n'a pu être ouverte au démarrage du serveur. Brancher l'enceinte puis redémarrer le serveur."],
-    ['FILE', 'son introuvable', 'Le fichier son de cette question est introuvable ou invalide sur le serveur.'],
+    ['DISABLED', 'son désactivé', 'Son désactivé (redémarrage requis)'],
+    ['OUTPUT', 'pas de sortie audio', 'Sortie audio indisponible (redémarrage requis)'],
+    ['FILE', 'son introuvable', 'Fichier son illisible'],
   ])('QUESTION_SOUND_UNAVAILABLE=%s → libellé court=%j, long=%j', (unavailable, wantShort, wantLong) => {
     const gameState = { QUESTION_SOUND_UNAVAILABLE: unavailable }
     expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)).toEqual([wantLong])
     expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState, { short: true })).toEqual([wantShort])
   })
 
-  it('chaque motif NOMME LE REMÈDE réel dans le libellé long (jamais une étiquette générique)', () => {
+  // Retour QUALIF v11.1.0.6 — les phrases longues d'origine ("Les sons sont
+  // désactivés dans la configuration. Les réactiver demande un redémarrage
+  // du serveur.") ont été raccourcies : le remède reste référencé, mais
+  // brièvement ("(redémarrage requis)"), plus de phrase complète.
+  it('chaque motif long référence le remède réel BRIÈVEMENT (jamais une étiquette générique, jamais une phrase complète)', () => {
     const gameState = { QUESTION_SOUND_UNAVAILABLE: 'DISABLED' }
-    expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)[0]).toMatch(/redémarrage du serveur/)
+    expect(prepareWaitReasons('PREPARE', question, activeTeams, gameState)[0]).toMatch(/redémarrage requis/)
 
     expect(
       prepareWaitReasons('PREPARE', question, activeTeams, { QUESTION_SOUND_UNAVAILABLE: 'OUTPUT' })[0]
-    ).toMatch(/brancher l'enceinte/i)
+    ).toMatch(/redémarrage requis/)
   })
 
   it('QUESTION_SOUND_UNAVAILABLE="" (disponible) → [], rien à expliquer', () => {
@@ -379,9 +383,14 @@ describe('prepareWaitReasons — addendum média indisponible (v11.1, #219/#236/
 // voyait que le premier, et découvrait le second seulement après avoir
 // corrigé le premier. `prepareWaitReasons` accumule désormais TOUS les
 // motifs actifs, dans l'ordre buzzers → participants → son.
+//
+// v11.1.0.6 — présentation revue une seconde fois : un motif par LIGNE
+// (chaque appelant empile les éléments du tableau, jamais un `.join(' · ')`
+// sur une seule ligne) et libellés plus concis (voir la table des motifs
+// son ci-dessus, et le compte réel "x/y" pour les buzzers).
 // ---------------------------------------------------------------------------
 
-describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour QUALIF v11.1.0.5)', () => {
+describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour QUALIF v11.1.0.5/.6)', () => {
   const readyTeam = (name) => ({ name, READY: true })
   const notReadyTeam = (name) => ({ name, READY: false })
 
@@ -392,10 +401,10 @@ describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour 
       [notReadyTeam('A')],
       { QUESTION_SOUND_UNAVAILABLE: 'FILE' }
     )
-    expect(reasons).toEqual(['Buzzers en attente', 'Le fichier son de cette question est introuvable ou invalide sur le serveur.'])
+    expect(reasons).toEqual(['Buzzers en attente : 0/1', 'Fichier son illisible'])
   })
 
-  it('même situation, libellés courts (opts.short) → ["buzzers", "son introuvable"]', () => {
+  it('même situation, libellés courts (opts.short) → ["buzzers 0/1", "son introuvable"]', () => {
     const reasons = prepareWaitReasons(
       'PREPARE',
       { TYPE: 'SPEEDY' },
@@ -403,7 +412,7 @@ describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour 
       { QUESTION_SOUND_UNAVAILABLE: 'FILE' },
       { short: true }
     )
-    expect(reasons).toEqual(['buzzers', 'son introuvable'])
+    expect(reasons).toEqual(['buzzers 0/1', 'son introuvable'])
   })
 
   it('participants non conformes ET son indisponible en même temps (MEMORY) → les DEUX motifs, participants avant son', () => {
@@ -414,10 +423,7 @@ describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour 
       [readyTeam('A')],
       { MEMORY_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: 'DISABLED' }
     )
-    expect(reasons).toEqual([
-      'sélectionnez une équipe',
-      'Les sons sont désactivés dans la configuration. Les réactiver demande un redémarrage du serveur.',
-    ])
+    expect(reasons).toEqual(['sélectionnez une équipe', 'Son désactivé (redémarrage requis)'])
   })
 
   it('les TROIS motifs actifs en même temps (buzzers, participants, son) → les trois, dans l\'ordre normatif', () => {
@@ -428,27 +434,23 @@ describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour 
       { MEMORY_PARTICIPATING_TEAMS: [], QUESTION_SOUND_UNAVAILABLE: 'OUTPUT' }
     )
     expect(reasons).toEqual([
-      'Buzzers en attente',
+      'Buzzers en attente : 0/1',
       'sélectionnez une équipe',
-      "Aucune sortie audio n'a pu être ouverte au démarrage du serveur. Brancher l'enceinte puis redémarrer le serveur.",
+      'Sortie audio indisponible (redémarrage requis)',
     ])
   })
 
-  it('un seul motif actif (les autres résolus) → tableau à un seul élément, jamais de séparateur superflu côté appelant', () => {
+  it('un seul motif actif (les autres résolus) → tableau à un seul élément (un appelant multi-ligne n\'affiche qu\'une ligne)', () => {
     const reasons = prepareWaitReasons(
       'PREPARE',
       { TYPE: 'MEMORY' },
       [readyTeam('A')],
       { MEMORY_PARTICIPATING_TEAMS: ['A'], QUESTION_SOUND_UNAVAILABLE: 'FILE' }
     )
-    expect(reasons).toEqual(['Le fichier son de cette question est introuvable ou invalide sur le serveur.'])
-    // Le patron de jointure utilisé par les appelants (GamePage.jsx,
-    // AnimPage.jsx) est `reasons.join(' · ')` : un seul élément ne produit
-    // donc aucun séparateur, exactement comme avant cette évolution.
-    expect(reasons.join(' · ')).toBe('Le fichier son de cette question est introuvable ou invalide sur le serveur.')
+    expect(reasons).toEqual(['Fichier son illisible'])
   })
 
-  it('aucun motif actif → tableau vide, `.join(\' · \')` produit une chaîne vide (jamais affichée par les appelants)', () => {
+  it('aucun motif actif → tableau vide (les appelants ne rendent alors aucune ligne)', () => {
     const reasons = prepareWaitReasons(
       'PREPARE',
       { TYPE: 'SPEEDY' },
@@ -456,6 +458,5 @@ describe('prepareWaitReasons — plusieurs motifs actifs simultanément (retour 
       { QUESTION_SOUND_UNAVAILABLE: '' }
     )
     expect(reasons).toEqual([])
-    expect(reasons.join(' · ')).toBe('')
   })
 })

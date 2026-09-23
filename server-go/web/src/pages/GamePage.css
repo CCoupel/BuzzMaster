@@ -418,14 +418,44 @@
 .control-buttons-row > * { flex: 1; }
 .control-buttons button { padding: var(--space-2) var(--space-3); font-size: 0.85rem; }
 
-/* Addendum média indisponible (v11.1, #219/#236/#237) — motif d'attente
+/* #172/C2 (v11.1.0.6, retour QUALIF #219/#236/#237) — un motif de blocage
+   PREPARE par ligne, plutôt qu'une seule ligne jointe par ' · '. `<ul>`
+   générique réutilisé par les 3 sélecteurs d'équipes (MEMORY/MEMOTION/
+   RAFALE, dans .memory-team-selector) ET par .start-wait-reason
+   (SPEEDY/QCM/ARDOISE) ci-dessous — voir WaitReasonLines dans GamePage.jsx.
+   Reprend par défaut le style de .memory-selector-label (petites
+   majuscules) : mêmes lignes que le libellé de mode qui les précède. */
+.wait-reason-list {
+  list-style: none;
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+}
+
+/* Addendum média indisponible (v11.1, #219/#236/#237) — motif(s) d'attente
    PREPARE affiché à côté du bouton START pour SPEEDY/QCM/ARDOISE (buzzers
    en attente, ou média son indisponible). Couleur d'avertissement : ce
-   texte signale une condition qui empêche le lancement. */
+   texte signale une condition qui empêche le lancement. Toutes les
+   propriétés de .wait-reason-list sont explicitement écrasées ici (pas de
+   dépendance à l'ordre des règles dans la feuille de style). */
 .start-wait-reason {
+  margin: 0;
   font-size: 0.78rem;
   font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
   color: var(--warning, #d97706);
+  text-align: center;
+}
+
+.start-wait-reason li {
   text-align: center;
 }
 

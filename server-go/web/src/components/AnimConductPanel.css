@@ -58,6 +58,16 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   opacity: 0.85;
+  /* Retour QUALIF v11.1.0.6 (#219/#236/#237) — plusieurs motifs de blocage
+     PREPARE peuvent s'afficher ensemble (prepareWaitReasons.js), joints par
+     AnimPage.jsx avec '\n' plutôt qu'un séparateur inline : `pre-line`
+     restitue chaque `\n` en saut de ligne réel sans casser le habillage
+     normal du texte (un seul motif continue de tenir sur une ligne comme
+     avant). .anim-conduct-btn est déjà en `min-height` (pas une hauteur
+     fixe) et la grille L1 (`display:grid`) étire toute la rangée sur le
+     plus haut de ses 5 boutons — un sous-libellé sur 2-3 lignes agrandit
+     donc l'ensemble de la rangée au lieu de déborder. */
+  white-space: pre-line;
 }
 
 /* Couleurs sémantiques (#165, étendues #166) : jamais de gris pour un

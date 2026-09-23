@@ -682,9 +682,17 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
     expect(gameMock.sendMessage).not.toHaveBeenCalledWith('MEMOTION_SET_TEAMS', expect.anything())
   })
 
-  // --- C2 : motif d'attente affiché dans memory-selector-label ----------
+  // --- C2 : motif(s) d'attente affichés sous memory-selector-label -------
+  // v11.1.0.6 (retour QUALIF #219/#236/#237) — un motif par ligne
+  // (WaitReasonLines, `.wait-reason-list li`), plus jamais joints avec
+  // ' · ' dans .memory-selector-label lui-même (qui ne porte plus QUE le
+  // libellé de mode désormais).
 
-  it('MEMORY SOLO, aucune équipe sélectionnée, buzzers prêts → libellé "Mode SOLO · sélectionnez une équipe"', () => {
+  // Compte les lignes de motif effectivement rendues sous le sélecteur.
+  const waitReasonLines = (container) =>
+    Array.from(container.querySelectorAll('.memory-team-selector .wait-reason-list li')).map(li => li.textContent)
+
+  it('MEMORY SOLO, aucune équipe sélectionnée, buzzers prêts → libellé "Mode SOLO", motif "sélectionnez une équipe" sur sa propre ligne', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'PREPARE',
@@ -700,10 +708,11 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
 
     const { container } = render(<GamePage />)
     const label = container.querySelector('.memory-team-selector .memory-selector-label')
-    expect(label.textContent).toBe('Mode SOLO · sélectionnez une équipe')
+    expect(label.textContent).toBe('Mode SOLO')
+    expect(waitReasonLines(container)).toEqual(['sélectionnez une équipe'])
   })
 
-  it('MEMORY multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → libellé "... · sélectionnez au moins deux équipes"', () => {
+  it('MEMORY multi (CHACUN_SON_TOUR), une seule équipe sélectionnée → libellé "Chacun son tour", motif "sélectionnez au moins deux équipes"', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'PREPARE',
@@ -719,10 +728,11 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
 
     const { container } = render(<GamePage />)
     const label = container.querySelector('.memory-team-selector .memory-selector-label')
-    expect(label.textContent).toBe('Chacun son tour · sélectionnez au moins deux équipes')
+    expect(label.textContent).toBe('Chacun son tour')
+    expect(waitReasonLines(container)).toEqual(['sélectionnez au moins deux équipes'])
   })
 
-  it('MEMOTION SOLO, aucune équipe sélectionnée, buzzers prêts → libellé "🃏 MEMOTION · Mode SOLO · sélectionnez une équipe" (#201 suivi)', () => {
+  it('MEMOTION SOLO, aucune équipe sélectionnée, buzzers prêts → libellé "🃏 MEMOTION · Mode SOLO", motif "sélectionnez une équipe" (#201 suivi)', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'PREPARE',
@@ -737,10 +747,11 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
 
     const { container } = render(<GamePage />)
     const label = container.querySelector('.memory-team-selector .memory-selector-label')
-    expect(label.textContent).toBe('🃏 MEMOTION · Mode SOLO · sélectionnez une équipe')
+    expect(label.textContent).toBe('🃏 MEMOTION · Mode SOLO')
+    expect(waitReasonLines(container)).toEqual(['sélectionnez une équipe'])
   })
 
-  it('un buzzer non prêt prime sur la conformité : libellé "Mode SOLO · Buzzers en attente" même si la sélection est déjà valide', () => {
+  it('un buzzer non prêt sur 2 → motif "Buzzers en attente : 1/2" sur sa propre ligne, même si la sélection est déjà valide', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'PREPARE',
@@ -756,10 +767,11 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
 
     const { container } = render(<GamePage />)
     const label = container.querySelector('.memory-team-selector .memory-selector-label')
-    expect(label.textContent).toBe('Mode SOLO · Buzzers en attente')
+    expect(label.textContent).toBe('Mode SOLO')
+    expect(waitReasonLines(container)).toEqual(['Buzzers en attente : 1/2'])
   })
 
-  it('sélection déjà conforme et tous les buzzers prêts → aucun motif affiché (pas de " · " superflu)', () => {
+  it('sélection déjà conforme et tous les buzzers prêts → aucune ligne de motif rendue (pas de <ul> vide)', () => {
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'PREPARE',
@@ -775,5 +787,6 @@ describe('GamePage — sélecteur MEMORY/MEMOTION, filtre non-prêtes + motif d\
     const { container } = render(<GamePage />)
     const label = container.querySelector('.memory-team-selector .memory-selector-label')
     expect(label.textContent).toBe('Mode SOLO')
+    expect(container.querySelector('.memory-team-selector .wait-reason-list')).toBeNull()
   })
 })

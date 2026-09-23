@@ -77,20 +77,24 @@ export function participantsConform(question, participating) {
 // actuel, mais aucune condition de type ici : le champ est structurellement
 // commun à tous les types (plan §0.3 du lot v11.1 initial), une éventuelle
 // question MEMORY/MEMOTION à son futur serait couverte sans modification.
-// Chaque motif NOMME LE REMÈDE réel — jamais une étiquette générique — pour
-// que l'utilisateur sache quoi faire, pas seulement que quelque chose bloque.
+// Chaque motif référence le remède réel — jamais une étiquette générique —
+// mais BRIÈVEMENT (retour QUALIF v11.1.0.6 : les phrases longues d'origine,
+// une par ligne désormais que plusieurs motifs peuvent s'afficher ensemble
+// — voir prepareWaitReasons ci-dessous —, prenaient trop de place). Le
+// libellé long garde une nuance de plus que le court (ex. "Sortie audio
+// indisponible" vs juste "pas de sortie audio"), jamais une phrase complète.
 const SOUND_UNAVAILABLE_REASON_LABELS = {
   DISABLED: {
     short: 'son désactivé',
-    long: 'Les sons sont désactivés dans la configuration. Les réactiver demande un redémarrage du serveur.',
+    long: 'Son désactivé (redémarrage requis)',
   },
   OUTPUT: {
     short: 'pas de sortie audio',
-    long: "Aucune sortie audio n'a pu être ouverte au démarrage du serveur. Brancher l'enceinte puis redémarrer le serveur.",
+    long: 'Sortie audio indisponible (redémarrage requis)',
   },
   FILE: {
     short: 'son introuvable',
-    long: 'Le fichier son de cette question est introuvable ou invalide sur le serveur.',
+    long: 'Fichier son illisible',
   },
 }
 
@@ -128,15 +132,14 @@ function participantsReasonLabel(question, { short } = {}) {
  * seulement après avoir corrigé le premier. Ici les trois branches
  * s'accumulent dans un tableau au lieu de `return` dès la première trouvée.
  *
- * Choix de présentation (pas de nouveau composant de liste) : chaque appelant
- * assemble le tableau avec le séparateur `' · '` déjà utilisé partout où ce
- * motif s'affichait (GamePage.jsx memory-selector-label, sous-libellé
- * AnimConductPanel) — un tableau vide donne `[].join(' · ') === ''`, donc le
- * même test `reason &&`/`reasons.length &&` continue de fonctionner sans
- * changer la mise en page existante (toujours une seule ligne de texte, pas
- * une liste à puces qui aurait demandé un nouveau composant et plus
- * d'espace vertical que la tablette `/anim` ou les encarts `/admin`
- * n'en ont).
+ * Choix de présentation (retour QUALIF v11.1.0.6, révisé depuis la v11.1.0.5
+ * qui joignait tout sur une seule ligne avec `' · '`) : **un motif par
+ * ligne**. Toujours pas de nouveau composant de liste — chaque appelant
+ * empile les éléments du tableau (un `<div>`/`<li>` par motif sur `/admin`,
+ * un saut de ligne `'\n'` + `white-space: pre-line` sur le sous-libellé
+ * `/anim`, seul endroit qui ne peut pas se permettre un élément de liste).
+ * Un tableau vide reste un tableau vide (`[]`), donc les appelants gardent
+ * leur garde `reasons.length > 0` inchangée.
  *
  * @param {string} phase - gameState.phase
  * @param {{TYPE?: string, MEMORY_MODE?: string}|null} question - gameState.question
@@ -154,8 +157,17 @@ export function prepareWaitReasons(phase, question, activeTeams, gameState, opts
 
   const reasons = []
 
-  const buzzersWaiting = (activeTeams || []).some(t => !isTeamReady(t))
-  if (buzzersWaiting) reasons.push(opts.short ? 'buzzers' : 'Buzzers en attente')
+  // Compte réel (retour QUALIF v11.1.0.6 : "buzzers en attente" seul ne
+  // disait pas combien manquaient) — `activeTeams` est déjà la liste
+  // complète des équipes actives (≥1 buzzer assigné), le même filtre que
+  // l'affichage (`AreAllTeamsReady`) : `readyCount`/`total` s'en déduisent
+  // sans donnée supplémentaire.
+  const teams = activeTeams || []
+  const readyCount = teams.filter(isTeamReady).length
+  const total = teams.length
+  if (readyCount < total) {
+    reasons.push(opts.short ? `buzzers ${readyCount}/${total}` : `Buzzers en attente : ${readyCount}/${total}`)
+  }
 
   const participating = question?.TYPE === 'MEMOTION'
     ? (gameState?.MEMOTION_PARTICIPATING_TEAMS || [])
