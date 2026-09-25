@@ -66,10 +66,10 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const isMenuOpen = openMenu === 'logo'
   const setIsMenuOpen = (v) => setOpenMenu(v ? 'logo' : null)
   const countsTrigger = useMenuTrigger('counts', openMenu, setOpenMenu)
-  // ≥ 1500 px : Préparation en ligne + bouton Interface ; sinon menu unique.
-  const inlineGroups = useMediaQuery('(min-width: 1500px)', true)
-  // < 810 px : les 5 compteurs se replient dans un badge 👥.
-  const compactCounts = useMediaQuery('(max-width: 809px)', false)
+  // ≥ 1685 px : Préparation en ligne + bouton Interface ; sinon menu unique.
+  const inlineGroups = useMediaQuery('(min-width: 1685px)', true)
+  // < 955 px : les 5 compteurs se replient dans un badge 👥.
+  const compactCounts = useMediaQuery('(max-width: 954px)', false)
   // #175 (F3) — "arrêt demandé" : passe à true après confirmation de
   // l'entrée Quitter. Sans cela, useWebSocket reconnecte toutes les ~5s
   // indéfiniment (RECONNECT_INTERVAL) et l'utilisateur reste devant une page
@@ -150,7 +150,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
       title: `Buzzers connectés/participants : ${buzzerCounts.connected}/${buzzerCounts.participants}`, name: 'Buzzers',
     },
   ]
-  // Badge 👥 (< 810 px) : joueurs = VJoueurs + Buzzers, sévérité la plus grave.
+  // Badge 👥 (< 955 px) : joueurs = VJoueurs + Buzzers, sévérité la plus grave.
   const countsBadge = {
     connected: vjoueurCounts.connected + buzzerCounts.connected,
     participants: vjoueurCounts.participants + buzzerCounts.participants,

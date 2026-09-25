@@ -58,7 +58,7 @@
 }
 
 /* Libellé du bouton Interface : uniquement ≥ 1815 px */
-@media (max-width: 1814px) {
+@media (max-width: 1944px) {
   .navgroup-interface .navgroup-label {
     display: none;
   }

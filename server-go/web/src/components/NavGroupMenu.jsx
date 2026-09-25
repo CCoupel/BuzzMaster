@@ -65,8 +65,8 @@ function Dropdown({ children, label }) {
 /**
  * Groupe « Préparation » (Joueurs, Quiz, Backstage) + « Interface » (TV,
  * Joueur, Animateur, nouvel onglet).
- * - mode "inline"  (≥ 1500 px) : entrées Préparation en ligne + bouton « Interface ▾ » séparé ;
- * - mode "single"  (< 1500 px) : un seul bouton « 🛠️ Préparation ▾ », section INTERFACE dans la liste.
+ * - mode "inline"  (≥ 1685 px) : entrées Préparation en ligne + bouton « Interface ▾ » séparé ;
+ * - mode "single"  (< 1685 px) : un seul bouton « 🛠️ Préparation ▾ », section INTERFACE dans la liste.
  */
 export default function NavGroupMenu({
   mode, prepItems, interfaceItems, renderNavLink, getFullPath, isActiveRoute, pathname,
