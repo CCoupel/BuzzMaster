@@ -75,6 +75,20 @@ Ce document décrit la machine à états qui gouverne le déroulement d'une part
 | **STOPPED** (après jeu) | Question + média + chronomètre arrêté (SANS réponse) | Question + média + chronomètre arrêté + 4 réponses QCM |
 | **REVEALED** | Question + média + **RÉPONSE** | Question + média + **bonne réponse en couleur, mauvaises grisées** |
 
+### Règle C.3 — Forçage Affichage TV au Lancement d'une Manche (#240)
+
+L'affichage TV (sélecteur Jeu/Équipes/Joueurs/Palmarès, champ `state.Page`, action WebSocket `REMOTE`) est **remis automatiquement sur "Jeu"** (valeur `GAME`) lors du lancement d'une manche, pour s'assurer que les joueurs voient le contenu de jeu sans action supplémentaire de l'animateur. Forçage appliqué à :
+- **Entrée PREPARE** : sélection ou changement de question (tous types) ;
+- **Passage READY → STARTED** : clic START, StartImmediate, fin du compte à rebours 3-2-1 ;
+- **CONTINUE après PAUSE** : reprise de la question (décision utilisateur) ;
+- **Départ d'une carte MEMOTION** ou **tirage RAFALE d'une carte** (proposition du plan).
+
+**Pas de forçage sur** : PAUSE (l'affichage peut rester sur Équipes pendant une pause), REVEAL, STOP, retour automatique READY→PREPARE (#172), NEW_GAME, aucune autre transition.
+
+**Pas un verrou** : après le forçage, l'animateur peut toujours rebasculer manuellement sur Équipes/Joueurs/Palmarès via le bouton du sélecteur TV en `/admin` ou l'action `REMOTE`.
+
+**Impact** : serveur uniquement (Go moteur) ; aucun nouveau champ, aucun changement de protocole, aucun impact BuzzClick. Le VPlayer suit le même `state.Page` et bascule automatiquement.
+
 ## États des Boutons Admin
 
 | État | START/STOP | PAUSE/CONTINUE | REPONSE |
