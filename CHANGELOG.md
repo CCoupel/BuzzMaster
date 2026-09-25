@@ -2,11 +2,12 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased] - v11.1.0 — Média sonore attaché à une question (#219, #236, #237)
+## [Unreleased] - v11.1.0 — Média sonore attaché à une question (#219, #236, #237) + Logo BuzzControl (#239)
 
-**En cours de développement** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé).
+**En cours de développement** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé) ; nouveau logo BrandLogo en Navbar.
 
 ### Added
+- **Logo BuzzControl — composant BrandLogo en Navbar admin (#239)** — Nouveau composant `BrandLogo.jsx` remplaçant l'abeille 🐝 animée sur le bouton de menu de la Navbar admin. Logo typographique variante A1 : « Buzz » en indigo, « Control » en rose avec ombre légère, ⚡ en coin, police Fredoka 700. Tokens CSS `--brand-logo-buzz: var(--primary-800)` et `--brand-logo-control: var(--accent-pink)`. Texte « BuzzControl » adjacent supprimé. Rotation infinie de l'abeille supprimée ; zoom au survol du bouton conservé. Taille adaptée ≤768 px (`--brand-logo-size: 1.25rem`). Accès au menu (Config, Logs, Réglages) inchangé.
 - **Média sonore attaché à une question (#219, #236, #237)** — Chaque question SPEEDY, QCM ou ARDOISE peut porter un fichier WAV (≤30s, ≤6 Mio) téléversé depuis l'éditeur Quiz. Format canonique PCM 16/44100/stéréo, validation stricte des causes de refus. Nouveau champ `Question.SOUND` (structurellement commun à tous les types, restriction d'affichage = décision d'éditeur frontend seulement, aucune garde serveur). Son joue au lancement de la question, sur l'enceinte du serveur via second chemin `audio.MediaPlayer` asynchrone (ne bloque jamais le moteur de jeu).
 - **Chronomètre configurable par question (#219)** — Deux modes : mode simultané (défaut) = son et chronomètre démarrent ensemble ; mode différé = chronomètre figé jusqu'à fin du son. Nouveau champ `Question.SOUND_TIMER_DELAYED` (booléen, décision par question). Mode différé jamais ne fige la question (non-blocage normatif CA12 : absence de son = chronomètre démarre immédiatement).
 - **Gestes d'animation pour le son (#219)** — Rangée L2 (conduite animateur + admin) : trois boutons contextuelss (↻ Rejouer / ⏸ Pause-Reprendre / ⏹ Stop), visibles seulement si son attaché à la question courante. Admin/Anim peuvent rejouer, pause/reprendre, arrêter le son à tout moment, indépendamment du jeu.

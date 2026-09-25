@@ -27,11 +27,12 @@ Ce document décrit l'interface web React de BuzzControl.
 | `/admin/logs` | LogsPage | Logs serveur temps réel |
 | `/anim` | AnimPage | Interface animateur (tablette, nouvelle en v6.2.0 — refonte conduite permanente + zone réponse en v6.2.0.15, #166) |
 
-**Navbar (v2.48.0) :**
+**Navbar (v2.48.0 — logo #239) :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
 - Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence
 - Fonction `getFullPath(path)` pour construire les chemins avec le bon préfixe
-- **Menu déroulant sur l'abeille** : Clic sur le logo 🐝 ouvre un menu avec Config et Logs
+- **Menu déroulant sur le logo BrandLogo** : Clic sur le logo typographique BrandLogo (« Buzz » / « Control » + ⚡, #239) ouvre un menu avec Config et Logs
+  - Composant `BrandLogo.jsx` restitue le mot-symbole A1 en Fredoka 700 (indigo/rose)
   - État `isMenuOpen` géré via useState
   - Fermeture au clic extérieur via useRef + useEffect
   - Animation CSS slideDown (200ms)
@@ -1398,9 +1399,9 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 
 ## Organisation UI (v4.0.1+)
 
-**Navbar** :
+**Navbar** (logo BrandLogo #239) :
 - Liens directs : Jeu, Scores, Équipes, Quiz, Historique, Palmarès
-- Menu 🐝 dropdown : Config, Backup/Restaure, Logs, Mises à jour
+- Menu BrandLogo dropdown : Config, Backup/Restaure, Logs, Mises à jour
 
 **Pages admin** :
 | Route | Fonctionnalités |
