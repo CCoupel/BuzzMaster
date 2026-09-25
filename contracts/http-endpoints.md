@@ -66,12 +66,29 @@ Crée ou met à jour une question.
 | explanation | string | ❌ | **v6.4.x (#168)** — note d'explication/justification, visible de l'animateur seul. Texte libre, longueur non bornée. Écrit dans `EXPLANATION` ; **champ absent ou vide = note effacée** (voir note ci-dessous) |
 | file | file | ❌ | Image question |
 | file_answer | file | ❌ | Image réponse |
+| sound | file | ❌ | **v11.1 (#219)** — média sonore de question, `.wav` canonique (44 100 Hz/16 bits, **mono ou stéréo** — un mono est suréchantillonné et stocké stéréo, arbitrage QUALIF 2026-09-22, `contracts/sound.md` §10.4), ≤ 30 s, ≤ 6 Mio. Écrit dans `SOUND`. Refusé en `400` (cause nommée : pas WAV / fréquence-bits / nombre de voies invalide / > 30 s) ou `413` (> 6 Mio) — voir §Réponses d'erreur ci-dessous |
+| sound_cleared | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` supprime le son existant (fichier disque compris, `os.Remove`) et empêche sa recopie. Sans effet si `sound` est également fourni dans la même requête (le nouveau fichier prévaut) |
+| sound_timer_delayed | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` = chronomètre de réponse différé jusqu'à la fin du son (`contracts/sound.md` §10.7). Écrit dans `SOUND_TIMER_DELAYED` **uniquement si un son est effectivement attaché** (préservé ou fraîchement téléversé) — jamais laissé actif sans son |
 
 > ⚠️ **`explanation` doit être lu explicitement par `handleUploadQuestion`.** Ce handler
 > **reconstruit la question de zéro** à chaque enregistrement et ne recopie depuis le fichier
 > existant que `MEDIA`, `MEDIA_ANSWER` et `ORDER` : un champ non relu est perdu à la première
 > édition. C'est aussi ce qui donne gratuitement la sémantique d'effacement — un `explanation`
 > vide n'est simplement pas réécrit, donc la clé `EXPLANATION` disparaît du `question.json`.
+
+> ⚠️ **`sound` suit la même règle de recopie que `explanation`, avec un piège aggravé** (contract
+> `sound.md` §10, `contracts/models.md` §SOUND) : sans recopie explicite de `SOUND` depuis la
+> question existante, le son serait **détruit silencieusement à chaque ré-édition sans nouveau
+> fichier**. `sound_cleared=true` est l'opt-out explicite, et va plus loin que `MEDIA`/
+> `MEDIA_ANSWER` (qui n'ont aujourd'hui aucun moyen réel de suppression) : le fichier disque est
+> effectivement supprimé, pas seulement dé-référencé.
+>
+> **Refus vs avertissement — deux mécanismes distincts.** Un fichier non conforme (mauvais format,
+> > 30 s, > 6 Mio) est **refusé** (la requête entière échoue, `400`/`413`, rien n'est enregistré).
+> Un fichier **conforme** mais plus long que `time` **en mode simultané** (`sound_timer_delayed`
+> absent/`false`) déclenche un **avertissement non bloquant** — voir §Réponse ci-dessous — jamais en
+> mode différé, où la situation ne peut pas se produire (le chronomètre attend la fin du son quelle
+> que soit `time`).
 
 > ℹ️ Cette table est **incomplète et antérieure** aux types ARDOISE et MEMOTION : les champs
 > `ardoise_keyboard_type`, `memory_*`, `motion_*` et les extras QCM au-delà de ceux listés
@@ -102,12 +119,51 @@ Crée ou met à jour une question.
 
 #### Response 200
 
+> ⚠️ **Le corps ci-dessous (`success`/`id`) est un exemple historique déjà signalé stale en #168
+> (non corrigé, hors périmètre de ce lot) — la réponse **réellement** renvoyée par
+> `handleUploadQuestion` (`internal/server/http.go`) est celle documentée juste après, **normative
+> depuis v11.1 (#219)** : c'est celle-ci que le frontend doit lire.
+
 ```json
 {
   "success": true,
   "id": "5"
 }
 ```
+
+**Réponse réelle, normative depuis v11.1 (#219)** :
+
+```json
+{
+  "status": "ok",
+  "warning": null
+}
+```
+
+- `status` : toujours `"ok"` sur un `200` (aucune autre valeur possible — un échec ne produit jamais
+  ce corps, voir §Réponses d'erreur ci-dessous).
+- `warning` : `null` quand aucun avertissement (**jamais une clé absente**, même convention que
+  `POST /api/sounds/{cue}` ci-dessous), sinon une **chaîne** nommant la cause — aujourd'hui la seule
+  source possible est le son de question en mode simultané plus long que `time` (voir la note
+  ci-dessus). Non bloquant : la question est enregistrée normalement.
+
+#### Réponses d'erreur (v11.1, #219 — champ `sound`)
+
+Un `sound` rejeté (format non conforme, > 30 s, > 6 Mio, échec d'écriture disque) répond en **texte
+brut** (`http.Error` standard Go — `Content-Type: text/plain`, le message tel quel comme corps, sans
+enveloppe JSON) :
+
+| Cause | Status |
+|---|---|
+| Extension autre que `.wav` | `400` |
+| Pas un WAV canonique / > 30 s (cause nommée dans le corps) | `400` |
+| Lecture du fichier échouée | `400` |
+| > 6 Mio | `413` |
+| Échec d'écriture disque | `500` |
+
+Une erreur sur `sound` **rejette toute la requête** — rien n'est enregistré, y compris les autres
+champs de la question (contrairement à `MEDIA`/`MEDIA_ANSWER`, qui échouent silencieusement sans
+jamais renvoyer d'erreur).
 
 ---
 

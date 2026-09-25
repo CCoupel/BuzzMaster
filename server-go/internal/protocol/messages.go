@@ -148,7 +148,33 @@ const (
 	// broadcast to all clients without re-emitting the full GameState.
 	ActionRafaleAnswer = "RAFALE_ANSWER"
 	ActionRafaleTick   = "RAFALE_TICK"
+
+	// ActionQuestionSound (v11.1, #219 — contracts/sound.md §10.2,
+	// websocket-actions.md §"QUESTION_SOUND"): admin+anim → server, same
+	// "conduite en direct" périmètre as REVEAL/BUMPER_POINTS/RAFALE_VALIDATE
+	// above. Carries QuestionSoundPayload{COMMAND}. Without effect (never an
+	// error) if the current question carries no sound — the handler is a
+	// thin dispatch onto the question-sound adapter (cmd/server/
+	// question_sound.go), which already no-ops in that case.
+	ActionQuestionSound = "QUESTION_SOUND"
 )
+
+// QuestionSoundCommand is one of the four conduite gestures a client may
+// send with ActionQuestionSound (contract §10.2/§10.7).
+type QuestionSoundCommand string
+
+const (
+	QuestionSoundCommandPlay   QuestionSoundCommand = "PLAY" // (re)start from the beginning — the "Rejouer" gesture
+	QuestionSoundCommandPause  QuestionSoundCommand = "PAUSE"
+	QuestionSoundCommandResume QuestionSoundCommand = "RESUME"
+	QuestionSoundCommandStop   QuestionSoundCommand = "STOP"
+)
+
+// QuestionSoundPayload is ActionQuestionSound's payload (contract
+// websocket-actions.md §"QUESTION_SOUND").
+type QuestionSoundPayload struct {
+	Command QuestionSoundCommand `json:"COMMAND"`
+}
 
 // FSInfo represents file storage information
 type FSInfo struct {

@@ -235,7 +235,7 @@ l'absence totale ailleurs.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Sur `/admin`, ouvrir le menu déroulant (logo 🐝) | Une entrée « Quitter » apparaît **en dernière position**, après « Logs », visuellement distincte (séparateur/teinte d'avertissement) des quatre entrées de navigation | | |
+| 1 | Sur `/admin`, ouvrir le menu déroulant (logo BuzzControl) | Une entrée « Quitter » apparaît **en dernière position**, après « Logs », visuellement distincte (séparateur/teinte d'avertissement) des quatre entrées de navigation | | |
 | 2 | Survoler l'entrée « Quitter » | Aucune barre d'état de navigateur n'affiche une URL de destination (ce n'est pas un lien) | | |
 | 3 | Cliquer sur « Quitter » | Une confirmation apparaît, mentionnant explicitement que TV, joueurs et animateur seront déconnectés | | |
 | 4 | **Annuler** la confirmation | Le menu se referme, **aucune déconnexion** ne se produit, la partie en cours continue normalement — vérifier notamment que `/tv` reste connecté | | |

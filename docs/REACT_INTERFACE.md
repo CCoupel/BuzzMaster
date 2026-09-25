@@ -27,15 +27,24 @@ Ce document décrit l'interface web React de BuzzControl.
 | `/admin/logs` | LogsPage | Logs serveur temps réel |
 | `/anim` | AnimPage | Interface animateur (tablette, nouvelle en v6.2.0 — refonte conduite permanente + zone réponse en v6.2.0.15, #166) |
 
-**Navbar (v2.48.0) :**
+**Navbar (v2.48.0 — groupes #238, logo #239) :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
 - Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence
 - Fonction `getFullPath(path)` pour construire les chemins avec le bon préfixe
-- **Menu déroulant sur l'abeille** : Clic sur le logo 🐝 ouvre un menu avec Config et Logs
-  - État `isMenuOpen` géré via useState
-  - Fermeture au clic extérieur via useRef + useEffect
-  - Animation CSS slideDown (200ms)
+- **Groupe Préparation** (≥1685 px : inline dépliée + bouton « Interface ▾ » séparé ; <1685 px : menu unique « Préparation ▾ » avec INTERFACE en sous-section) :
+  - Entrées : Joueurs, Quiz, Backstage, puis section INTERFACE (TV, Joueur, Animateur) avec `target=_blank`
+  - Ouverture au survol (150 ms) ET au clic/tap ; Échap et clic extérieur ferment
+  - Un seul menu ouvert à la fois (géré par `openMenu` global)
+- **Bouton ENTRACTE** : État repos 🍿 « ENTRACTE », état actif 🎬 « REPRISE » (libellé protégé en largeur) ; libellé masqué <1095 px
+- **Badge 👥 compteurs** (<955 px) : « connectés/participants » (VJoueurs + Buzzers), couleur de sévérité agrégée ; survol/clic déploie détail 5 compteurs
+- **Pastille Connecté** : toujours visible (point), texte masqué <1275 px
+- **Menu déroulant sur le logo BrandLogo** : Clic sur le logo typographique BrandLogo (« Buzz » / « Control » + ⚡, #239) ouvre le menu des Réglages (Réglages, Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter)
+  - Composant `BrandLogo.jsx` restitue le mot-symbole A1 en Fredoka 700 (indigo/rose)
+  - Logo réduit ≤1274 px (`--brand-logo-size: 1.25rem`, depuis #238)
   - Accessibilité : aria-label="Menu de navigation", title="Menu"
+- **Seuils responsifs** (mesurés sous Windows, Segoe UI Emoji) : À partir de ≥955 px compteurs en ligne ; ≥1095 px ENTRACTE/Éclairage avec libellé ; ≥1275 px espacements normaux, logo plein, texte « Connecte » visible ; ≥1495 px libellés Jeu affichés ; ≥1685 px mode Préparation en ligne (JS) sinon menu unique ; ≥1855 px libellés Préparation affichés ; ≥1945 px titre JEU + libellé Interface affichés
+
+**RÈGLE DE MESURE (critique depuis #238)** : Toute vérification de non-débordement de la Navbar (maquette, test automatique, QA visuelle) **doit se faire sous Windows avec la police emoji Segoe UI Emoji** (Chrome/Edge sur Windows, ou Chrome headless avec Segoe installé). Chrome sur Linux/WSL remplace chaque emoji par un carré plus étroit (~100–140 px d'écart par palier) → sous-estime systématiquement les largeurs. Les seuils ci-dessus ont été mesurés sur build réel Windows (planner-verif-238, v11.1.0.13).
 
 ## Composants Clés
 
@@ -214,7 +223,7 @@ bouton "à suivre" quitte sa position juste-après-L1 pour un ancrage en bas de 
 | Emplacement | Contenu | Position |
 |---|---|---|
 | **L1** | LANCER · PAUSE · CONTINUER · STOP · RÉPONSE — 5 emplacements fixes | **haut, fixe** — toujours montés, actifs ou éteints selon la phase |
-| **L2** | Gestes spécifiques au mode — `AnimMotionActions` en MEMOTION (**v6.2.0+, #160**) ; emplacement réservé sinon | bloc central — première occupation ; *ex-L3 de #166* |
+| **L2** | Gestes spécifiques au mode — `AnimMotionActions` en MEMOTION (**v6.2.0+, #160**) ; `AnimSoundActions` en SPEEDY/QCM/ARDOISE si `showSoundRow(phase, question)` (visible STARTED/PAUSED + son attaché, 3 gestes ↻ Rejouer / ⏸ Pause-Reprendre / ⏹ Stop) (**v11.1.0, #219**) ; emplacement réservé sinon | bloc central — première occupation ; *ex-L3 de #166* |
 | **L3** | Contenu de la question — `AnimQcmOptions` en QCM, `AnimMemoryGrid` en MEMORY (**v6.2.0.27, #159**), `AnimMotionGrid` / `AnimMotionCard` en MEMOTION (**v6.2.0+, #160**) ; emplacement réservé sinon | bloc central — *ex-L2 de #166*, branche à 4 voies depuis #160 |
 | **L4** | Note d'explication | bloc central — réservée, vide, préparée pour #168, aucun contrat, **hauteur libre sans plafond** (voir §ancrage ci-dessous) |
 | **L5** | `AnimNextButton` ("à suivre") | **bas, ancré** — dernier enfant de `.anim-conduct`, position fixe quelle que soit la hauteur de L2/L3/L4 |
@@ -1367,6 +1376,24 @@ function isMotionCardTypeLockedByContent(card) {
 
 Voir **`contracts/question-types.md` §3.2** pour la table complète des valeurs de création par type.
 
+### Bloc son dans l'éditeur de questions (v11.1.0, #219)
+
+Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/QuestionsPage.css`, `web/src/components/QuestionCard.jsx`, `web/src/components/QuestionCard.css`.
+
+**Localisation** : bloc son **inline dans `QuestionsPage.jsx`**, à l'intérieur de la garde de type existante (`question.TYPE ∈ {SPEEDY, QCM, ARDOISE}` seulement) qui masque déjà MEMORY/MEMOTION/RAFALE/ENTRACTE pour les images (`MEDIA`). **Structure commune à tous les types** (`question.SOUND` / `question.SOUND_TIMER_DELAYED` n'ont aucune garde serveur), mais l'éditeur choisit de l'exposer qu'à ces trois types.
+
+**Contenu du bloc** (état `formData.sound` / `existingSound` / `soundTimerDelayed` / `soundCleared`, patron exact `media`/`existingMedia`) :
+- **Upload WAV** : champ `<input type="file" accept=".wav,audio/wav" />` + pré-écoute locale (balise HTML5 `<audio controls>`, nom/taille du fichier affichés)
+- **Messages de validité** : refus nommés sur erreur (pas WAV / fréquence-canaux-bits / > 30 s / > 6 Mio) — lus depuis le corps HTTP brut (400/413) et affichés sous le champ
+- **Bascule mode chronomètre** : deux options radio pour `SOUND_TIMER_DELAYED` (défaut OFF = simultané), visible uniquement si un son est attaché
+  - Label : « Démarrer le chronomètre à la fin du son »
+  - Envoi dans `handleSubmit()` : multipart `POST /questions` (champs `sound`, `sound_cleared`, `sound_timer_delayed`)
+- **Pastille son** : emoji 🔊 affiché sur `QuestionCard.jsx` dans `qcard-header-row2` seulement si `question.SOUND` existe (aucune garde de type : champ structurellement commun à tous les types, pastille aussi). Rendu conditionnel simple, aucun état « gris » ou texte « Aucun son »
+- **Suppression** : bouton « Supprimer le son » → met `soundCleared=true`
+- **Avertissement contextuel** : durée du son vs `Question.TIME` lu depuis `body.warning` de la réponse JSON en cas de succès (200), affiché en toast auto-masqué (6s) — car le formulaire est réinitialisé après succès
+
+**Sérialisation** : multipart `POST /questions` avec champs `sound` (fichier), `sound_cleared` (bool), `sound_timer_delayed` (bool). Réponse réelle (v11.1) : `{"status": "ok", "warning": null | <string>}` (contrat `http-endpoints.md` §Questions).
+
 ### Synthèse des bénéfices
 
 | Aspect | Avant v7.0.0 | Après v7.0.0 |
@@ -1380,9 +1407,12 @@ Voir **`contracts/question-types.md` §3.2** pour la table complète des valeurs
 
 ## Organisation UI (v4.0.1+)
 
-**Navbar** :
-- Liens directs : Jeu, Scores, Équipes, Quiz, Historique, Palmarès
-- Menu 🐝 dropdown : Config, Backup/Restaure, Logs, Mises à jour
+**Navbar** (#238 groupes, #239 logo) :
+- **Groupe Préparation** (#238) : Joueurs, Quiz, Backstage (≥1685 px en ligne, <1685 px menu unique) + section INTERFACE : TV, Joueur, Animateur (↗ nouvel onglet)
+- **Groupe Jeu** : Jeu, Scores, Palmarès, Historique
+- **Bouton ENTRACTE** (#238) : 🍿 « ENTRACTE » (repos) / 🎬 « REPRISE » (actif), libellé masqué <1095 px
+- **Badge 👥 compteurs** (#238) : <955 px, survol/clic déploie détail
+- **Menu Réglages** (logo #239) : Réglages (était Config, renommé par #238), Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter
 
 **Pages admin** :
 | Route | Fonctionnalités |
@@ -1497,9 +1527,8 @@ la rétroaction visuelle trompeuse.
 ### Surface Admin — Bouton Navbar
 
 **Rendu** :
-- **Bouton `ENTRACTE` / `FIN D'ENTRACTE`** dans la **Navbar** (entre badge version et groupe 
-  "Jeu", visible sur toutes les pages admin).
-- Reste net (pas filtré), cliquable, contrasté (couleur ambre inactif, rouge actif avec 
+- **Bouton `ENTRACTE` / `REPRISE`** dans la **Navbar** (#238 : libellé actif court pour protéger la largeur) (visible sur toutes les pages admin).
+- Reste net (pas filtré), cliquable, contrasté (couleur ambre inactif pour 🍿 « ENTRACTE », rouge actif pour 🎬 « REPRISE » avec 
   halo, grisé désactivé si phase non autorisée).
 - Accessible sur `/admin`, `/admin/quiz`, `/admin/config`, etc. — présent partout.
 

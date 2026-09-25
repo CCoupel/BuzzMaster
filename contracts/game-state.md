@@ -14,7 +14,7 @@ interface GameState {
   CURRENT_TIME: number       // Temps restant en secondes
   COUNTDOWN_TIME?: number    // 3, 2, 1 countdown avant STARTED (Memory)
   TIME?: number              // Timestamp serveur (microsecondes)
-  REMOTE?: Page              // Vue TV actuelle
+  REMOTE?: Page              // Vue TV actuelle — remise à "GAME" par le serveur au lancement d'une manche (#240, voir ci-dessous)
   QUESTION: Question | null  // Question en cours
 
   // QCM
@@ -955,3 +955,114 @@ incomplète. Verrue héritée, de même nature que celle décrite par #152.
 Deux champs voisins, deux cycles de vie **opposés** : `ENTRACTE` (état, jamais persisté) et
 `ENTRACTE_CONFIG` (réglage, persisté). Ce n'est pas une incohérence, c'est la distinction même entre
 les deux — ne pas « corriger » l'un en croyant à un oubli.
+
+## Question sound (v11.1, #219)
+
+> **Contrat normatif complet** : `contracts/sound.md` §10/§10.7. Cette section documente uniquement
+> les deux champs `GameState` diffusés ; la machine à états complète (média + chronomètre différé)
+> vit dans `sound.md`.
+
+```typescript
+interface GameState {
+  // ...
+  QUESTION_SOUND_STATE: "IDLE" | "PLAYING" | "PAUSED"
+  ANSWER_TIMER_WAITING: boolean
+}
+```
+
+**`QUESTION_SOUND_STATE`** — l'état de lecture du média sonore attaché à la question courante
+(`Question.SOUND`), diffusé par le serveur à chaque changement (rejouer/pause/reprise/arrêt/fin
+naturelle). Mêmes valeurs de fil que `internal/audio.MediaState`, mais fixées **uniquement** par
+l'adaptateur `cmd/server/question_sound.go` — le moteur de jeu (`internal/game`) ne lit ni n'écrit
+ce champ au-delà de sa valeur initiale. Aucune position de lecture n'est diffusée (`sound.md` §10.6 :
+« le chronomètre est le seul flux à cadence du projet »).
+
+**`ANSWER_TIMER_WAITING`** — `true` exactement pendant que le chronomètre de réponse global est
+**différé** (`Question.SOUND_TIMER_DELAYED=true`) et n'a **pas encore** été libéré par la fin du son
+(naturelle ou arrêt manuel de l'animateur). Tant que ce champ est `true`, `CURRENT_TIME` reste figé
+au temps plein — ce n'est **jamais** un chiffre qui ne bouge plus par accident : `/anim`, `/admin` et
+la TV **doivent** l'expliciter par un message (« le chronomètre démarrera à la fin du son »), jamais
+un chiffre nu (contract `sound.md` §10.7, CA15 — sans quoi l'animateur ou le public prend le
+chronomètre figé pour une panne).
+
+> ⚠️ **Aucun `omitempty` sur les deux champs** (règle projet, CLAUDE.md) : toujours sérialisés, y
+> compris à leurs valeurs zéro (`IDLE`/`false`), pour que le client réinitialise proprement entre
+> deux questions — même discipline que les champs MEMOTION/RAFALE de ce document.
+
+**Diffusion** (`contracts/ws-payload-serialization.md`) : Admin ✅ / TV ✅ / VPlayer ✅ / Buzzer ❌
+(le payload buzzer n'emporte que `PHASE`/`TIME`/`CURRENT_TIME` — ces deux champs n'y figurent donc
+jamais, par construction, sans filtrage dédié). `/anim` passe par `SerializeForWebClient`, donc les
+reçoit comme TV/VPlayer.
+
+**Persistance** : **aucune** — ni l'un ni l'autre ne survit à un redémarrage ou un `NEW_GAME`, même
+principe que `MOTION_ACTIVE`/`ENTRACTE` ci-dessus : ce sont des reflets d'un périphérique audio et
+d'un minuteur en direct, pas des données de partie. `QUESTION_SOUND_STATE` redémarre à `IDLE`,
+`ANSWER_TIMER_WAITING` à `false`.
+
+## Média indisponible avant le lancement (v11.1, #219/#236/#237, 2026-09-23)
+
+> **Contrat normatif complet** : `contracts/sound.md` §10.8. Cette section documente uniquement les
+> deux champs `GameState` diffusés.
+
+```typescript
+interface GameState {
+  // ...
+  QUESTION_SOUND_UNAVAILABLE: "" | "DISABLED" | "OUTPUT" | "FILE"
+  SOUND_GATE_BYPASSED: boolean
+}
+```
+
+**`QUESTION_SOUND_UNAVAILABLE`** — le motif qui bloque `PREPARE → READY` pour la question courante,
+quand elle porte un son (`Question.SOUND` non vide) et que le média n'est **pas** disponible
+(`sound.md` §10.8.2 : `sound.enabled` faux ⇒ `DISABLED` ; sortie neutre ⇒ `OUTPUT` ; fichier absent
+ou non conforme ⇒ `FILE`). `""` = disponible, ou question sans son (la branche sort immédiatement —
+`sound.md` §10.8.4, non-régression #172 sur tous les types). Recalculé **avant** chaque évaluation
+`PREPARE ↔ READY` — à chaque PONG de buzzer, à la sélection d'une question, sur changement de
+configuration, et juste avant `Engine.Start()` (`sound.md` §10.8.7) — jamais sous le verrou du
+moteur (`internal/game` n'importe ni `internal/audio` ni `internal/config`).
+
+**`SOUND_GATE_BYPASSED`** — `true` quand l'animateur/admin a contourné la gate son pour la question
+courante via le geste **déjà existant** (`Ctrl`+clic sur la question → `ForceReady()`, admin
+uniquement — aucune nouvelle action WebSocket, `contracts/websocket-actions.md` n'est pas modifié
+par ce lot). Ne contourne **que** la branche son de `participantsConform` : les autres branches
+(participants MEMORY/MEMOTION, catégories/difficultés RAFALE) restent bloquantes, arbitrage #172 B5
+préservé. Une question forcée joue sans son, sans que son chronomètre ne se mette jamais en attente
+(dégradation §10.7). Remis à zéro dans `Ready()` **et** `stopUnsafe()` — ne vaut que pour la
+question en cours.
+
+> ⚠️ **Aucun `omitempty` sur les deux champs** (règle projet) — toujours sérialisés, y compris à
+> leur valeur zéro (`""`/`false`), même discipline que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING`
+> ci-dessus.
+
+**Diffusion** (`contracts/ws-payload-serialization.md`) : **Admin ✅ / TV ✅ / VPlayer ✅ / Anim ✅ /
+Buzzer ❌** — même matrice que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` ci-dessus, pour la même
+raison structurelle : `/anim` est routé vers **exactement** le même sérialiseur que TV/VPlayer
+(`SerializeForWebClient`, `contracts/ws-payload-serialization.md` §"Animateur" — aucune distinction
+possible entre ces trois destinataires à ce niveau sans un mécanisme de filtrage dédié, que ce lot
+**n'introduit pas** — `internal/protocol/messages.go` reste inchangé). Or `/anim` **doit** afficher
+le motif (CA26 : *« /anim affiche le motif mais n'offre aucune échappatoire »*, consommé par
+`prepareWaitReason.js` via `AnimConductPanel.jsx`) : le champ ne peut donc pas être limité à l'admin
+au sens strict sans rouvrir la sérialisation, hors périmètre. TV/VPlayer le reçoivent par la même
+voie mais ne l'affichent jamais (`PlayerDisplay.jsx` n'est pas modifié par ce lot) — inoffensif,
+aucune donnée confidentielle.
+>
+> ⚠️ **Correction apportée à `contracts/sound.md` §10.8.5**, qui disait « diffusé à l'admin seul » —
+> formulation resserrée à tort au moment de la rédaction du contrat (avant que CA26 ne soit
+> explicité). Le comportement normatif réel est celui décrit ci-dessus ; `sound.md` §10.8.5 est
+> amendé en conséquence par ce même lot.
+
+**Persistance** : **aucune**, même principe que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` — état
+éphémère, jamais une donnée de partie. Les deux champs redémarrent à `""`/`false`.
+
+## REMOTE — forçage serveur de la vue « Jeu » (#240, v11.1)
+
+Le champ `REMOTE` (vue TV/VPlayer : `GAME | SCORE | PLAYERS | PALMARES`) n'est plus modifié uniquement par l'action `REMOTE`.
+Le serveur le **remet à `GAME`** (depuis n'importe quelle vue) sur :
+
+- la sélection d'une question (entrée en `PREPARE`, action `READY`) ;
+- le clic START (`READY` → `COUNTDOWN`/`STARTED`, y compris `StartImmediate`) et le passage `COUNTDOWN` → `STARTED` ;
+- `CONTINUE` après une `PAUSE` ;
+- le départ d'une carte MEMOTION (`MEMOTION_SELECT`) et d'un tirage RAFALE de carte.
+
+Pas de forçage sur : `PAUSE`, `REVEAL`, `STOP`, retour automatique `READY` → `PREPARE` (#172), NOUVELLE PARTIE.
+Ce n'est pas un verrou : l'animateur peut rebasculer manuellement (action `REMOTE`) juste après. Aucun nouveau champ ni message ; rétro-compatible (BuzzClick non concerné).

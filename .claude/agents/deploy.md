@@ -65,9 +65,13 @@ FULL_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*
 BUILD_DIR="$REPO_ROOT/build/candidate_v${MILESTONE_VERSION}"
 mkdir -p "$BUILD_DIR"
 cd server-go && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
-  go build -ldflags="-s -w" -o "$BUILD_DIR/buzzcontrol-candidate-${FULL_VERSION}-windows-amd64.exe" ./cmd/server
+  go build -ldflags="-s -w -X main.Version=${FULL_VERSION}" -o "$BUILD_DIR/buzzcontrol-candidate-${FULL_VERSION}-windows-amd64.exe" ./cmd/server
 cd "$REPO_ROOT"
 ```
+
+> **`-X main.Version` obligatoire** (comme la CI, release.yml) : sans lui le binaire lit la version
+> dans le `config.json` du dossier de lancement (souvent obsolete) et /version annonce une mauvaise
+> version. Verifier que /version renvoie `$FULL_VERSION` (serveur ET firmware) au smoke test.
 
 ### Pourquoi le merged binary
 

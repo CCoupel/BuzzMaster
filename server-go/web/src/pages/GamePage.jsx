@@ -15,8 +15,9 @@ import {
   canStart as canStartRule,
   isPlaying as isPlayingRule,
   canReveal as canRevealRule,
+  showSoundRow as showSoundRowRule,
 } from '../utils/phaseRules'
-import { isTeamReady, prepareWaitReason } from '../utils/prepareWaitReason'
+import { isTeamReady, prepareWaitReasons } from '../utils/prepareWaitReason'
 import {
   calcQcmPenalty,
   calcQcmTeamAward,
@@ -34,10 +35,28 @@ import QuestionPreview from '../components/QuestionPreview'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import NetworkWarningBanner from '../components/NetworkWarningBanner'
+import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import AnimRafaleActions from '../components/AnimRafaleActions'
+import AnimSoundActions from '../components/AnimSoundActions'
 import './GamePage.css'
 import '../styles/entracte.css'
+
+// #172/C2 (v11.1.0.6, retour QUALIF #219/#236/#237) — un motif de blocage
+// PREPARE par ligne (prepareWaitReasons.js peut désormais en renvoyer
+// plusieurs à la fois : buzzers, participants, son). Composant partagé par
+// les 3 sélecteurs d'équipes (MEMORY/MEMOTION/RAFALE) et le bloc
+// SPEEDY/QCM/ARDOISE — un seul `<ul>/<li>` plutôt que 4 copies du même map().
+// `className` porte le style propre à l'appelant (ex. `start-wait-reason`),
+// `.wait-reason-list` (GamePage.css) fournit le style par défaut.
+function WaitReasonLines({ reasons, className = '' }) {
+  if (!reasons || reasons.length === 0) return null
+  return (
+    <ul className={`wait-reason-list ${className}`}>
+      {reasons.map((reason, i) => <li key={i}>{reason}</li>)}
+    </ul>
+  )
+}
 
 export default function GamePage() {
   const {
@@ -63,6 +82,8 @@ export default function GamePage() {
     rafaleValidate,
     rafaleInvalidate,
     newGame,
+    // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
+    questionSound,
   } = useGame()
 
   const [timeInput, setTimeInput] = useState(30)
@@ -509,6 +530,12 @@ export default function GamePage() {
   return (
     <>
       {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
+      {/* Addendum média indisponible (v11.1, #219/#236/#237, plan
+          _work/reports/plan-20260923-101500.md §3bis/tâche 9bis) — puce
+          globale, "on joue ici" : la voir avant de choisir une question,
+          pas en la choisissant. État entièrement dérivé (questions/audio),
+          s'efface d'elle-même, aucun câblage supplémentaire. */}
+      <QuizSoundWarningPill />
 
       <div className={`game-page page${entracteDim}`} style={entracteTransitionStyle}>
       {/* Colonne centrale (chrono + apercu TV) — grille a rangee UNIQUE
@@ -529,6 +556,13 @@ export default function GamePage() {
             size="lg"
             showPhase={false}
           />
+          {/* #219 (v11.1, CA15) — miroir de la mention /anim (AnimPage.jsx) :
+              le chronomètre différé attend la fin du son, sans quoi un temps
+              figé au plein est pris pour une panne (R11, contrat sound.md
+              §10.7). État diffusé par le serveur — jamais déduit ici. */}
+          {gameState.ANSWER_TIMER_WAITING && (
+            <div className="sound-wait-badge-inline">⏳ le chrono démarre à la fin du son</div>
+          )}
         </Card>
         <Card variant="elevated" padding="sm" className="display-card">
           <span className="toggle-label-vertical">TV</span>
@@ -683,13 +717,17 @@ export default function GamePage() {
           // conforme à la règle du mode) : miroir client-side en lecture
           // seule de participantsConform (#172/B1) — n'influence aucune
           // action, seulement le texte affiché.
-          const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
+          // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6,
+          // #219/#236/#237) — `prepareWaitReasons` (pluriel) renvoie TOUS les
+          // motifs actifs simultanément (ex. buzzers ET son indisponible en
+          // même temps), un par ligne (WaitReasonLines, sous le libellé de mode).
+          const waitReasons = prepareWaitReasons(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
                 {isSolo ? 'Mode SOLO' : gameState.question.MEMORY_MODE === 'CHACUN_SON_TOUR' ? 'Chacun son tour' : 'Tant que je gagne'}
-                {waitReason && ` · ${waitReason}`}
               </div>
+              <WaitReasonLines reasons={waitReasons} />
               <div className="memory-chips-row">
                 {selected.map((team, idx) => {
                   const teamColor = getRgbColor(team.COLOR)
@@ -741,13 +779,17 @@ export default function GamePage() {
           const selected = teamsWithBuzzers.filter(t => selectedMotionTeams.includes(t.name))
           const available = teamsWithBuzzers.filter(t => !selectedMotionTeams.includes(t.name))
           // #172/C2 — même motif d'attente que MEMORY (voir bloc ci-dessus).
-          const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
+          // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6,
+          // #219/#236/#237) — `prepareWaitReasons` (pluriel) renvoie TOUS les
+          // motifs actifs simultanément (ex. buzzers ET son indisponible en
+          // même temps), un par ligne (WaitReasonLines, sous le libellé de mode).
+          const waitReasons = prepareWaitReasons(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
                 🃏 MEMOTION · {isSolo ? 'Mode SOLO' : motionMode === 'CHACUN_SON_TOUR' ? 'Chacun son tour' : 'Tant que je gagne'}
-                {waitReason && ` · ${waitReason}`}
               </div>
+              <WaitReasonLines reasons={waitReasons} />
               <div className="memory-chips-row">
                 {selected.map((team, idx) => {
                   const teamColor = getRgbColor(team.COLOR)
@@ -808,13 +850,17 @@ export default function GamePage() {
           // #199 (retour QUALIF, dev-backend SHA 393c6dc7) — même motif
           // d'attente que MEMORY/MEMOTION ci-dessus (utils/prepareWaitReason.js,
           // miroir client-side de participantsConform, engine.go).
-          const waitReason = prepareWaitReason(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
+          // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6,
+          // #219/#236/#237) — `prepareWaitReasons` (pluriel) renvoie TOUS les
+          // motifs actifs simultanément (ex. buzzers ET son indisponible en
+          // même temps), un par ligne (WaitReasonLines, sous le libellé de mode).
+          const waitReasons = prepareWaitReasons(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
           return (
             <div className={`memory-team-selector ${isSolo ? 'solo-mode' : 'multi-mode'}`}>
               <div className="memory-selector-label">
                 🌀 RAFALE · {modeLabel}
-                {waitReason && ` · ${waitReason}`}
               </div>
+              <WaitReasonLines reasons={waitReasons} />
               <div className="memory-chips-row">
                 {selected.map((team, idx) => {
                   const teamColor = getRgbColor(team.COLOR)
@@ -1160,6 +1206,22 @@ export default function GamePage() {
             )
           })()}
 
+          {/* #219 (v11.1) — mêmes gestes de conduite son que /anim
+              (AnimSoundActions, RÉUTILISÉ TEL QUEL — même discipline de
+              mutualisation qu'AnimRafaleActions ci-dessus). Rangée absente
+              (jamais grisée) si la question courante ne porte pas de son ou
+              si la partie n'est pas en cours — phaseRules.showSoundRow,
+              source de vérité unique (jamais une condition réécrite ici). */}
+          {showSoundRowRule(gameState.phase, gameState.question) && (
+            <div className="question-sound-admin-live">
+              <div className="question-sound-admin-label">Son de la question</div>
+              <AnimSoundActions
+                soundState={gameState.QUESTION_SOUND_STATE}
+                onCommand={questionSound}
+              />
+            </div>
+          )}
+
           {/* MEMOTION subphase controls — shown when MEMOTION question is STARTED */}
           {gameState.question?.TYPE === 'MEMOTION' && gameState.phase === 'STARTED' && (() => {
             const subphase = gameState.MEMOTION_SUBPHASE
@@ -1354,6 +1416,29 @@ export default function GamePage() {
                 {gameState.phase === 'PAUSED' ? 'CONTINUER' : 'PAUSE'}
               </Button>
             </div>
+
+            {/* Addendum média indisponible (v11.1, #219/#236/#237, plan
+                _work/reports/plan-20260923-101500.md tâche 9) — motif à côté
+                du bouton START, même mécanisme que RAFALE/MEMORY/MEMOTION
+                ci-dessus (utils/prepareWaitReason.js), mais SEULEMENT pour
+                les types SANS leur propre sélecteur d'équipes (SPEEDY/QCM/
+                ARDOISE) : ces trois-là n'ont autrement AUCUN affichage du
+                motif d'attente PREPARE, ni pour les buzzers ni pour le son —
+                les blocs MEMORY/MEMOTION/RAFALE l'affichent déjà chacun le
+                leur, l'ajouter aussi ici le dupliquerait. Bouton START
+                lui-même inchangé — son `disabled` reste piloté par `canStart`
+                (phase serveur), jamais par ce texte. */}
+            {!isPlaying && gameState.phase === 'PREPARE'
+              && !['MEMORY', 'MEMOTION', 'RAFALE'].includes(gameState.question?.TYPE)
+              && (() => {
+                const teamsWithBuzzers = sortedTeams.filter(t => t.buzzers && t.buzzers.length > 0)
+                // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6,
+                // #219/#236/#237) — `prepareWaitReasons` (pluriel) renvoie
+                // TOUS les motifs actifs simultanément (ex. buzzers ET son
+                // indisponible en même temps), un par ligne (WaitReasonLines).
+                const waitReasons = prepareWaitReasons(gameState.phase, gameState.question, teamsWithBuzzers, gameState)
+                return <WaitReasonLines reasons={waitReasons} className="start-wait-reason" />
+              })()}
 
             <Button
               variant="secondary"

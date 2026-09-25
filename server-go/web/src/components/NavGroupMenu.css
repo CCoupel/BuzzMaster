@@ -1,0 +1,65 @@
+.navgroup-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.navgroup-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-xl);
+  background: none;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--gray-600);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-base);
+}
+
+.navgroup-button:hover {
+  background: var(--gray-100);
+  color: var(--gray-800);
+}
+
+.navgroup-button.active {
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+
+.navgroup-caret {
+  font-size: 0.75rem;
+}
+
+.navgroup-dropdown {
+  min-width: 200px;
+}
+
+.menu-section-title {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  border-top: 1px solid var(--gray-200);
+  margin-top: var(--space-1);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--gray-400);
+}
+
+.menu-external {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--gray-400);
+}
+
+/* Libellé du bouton Interface : uniquement ≥ 1945 px */
+@media (max-width: 1944px) {
+  .navgroup-interface .navgroup-label {
+    display: none;
+  }
+}

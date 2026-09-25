@@ -492,3 +492,521 @@ dans le câblage des sites de jeu.
 | Bruitages fins par type de question (indice QCM, cartes MEMORY/MEMOTION, RAFALE) | v11.1 (#231) |
 | Compensation de latence son/lumière (délai configurable sur l'ambiance Hue) | Faisabilité tranchée par le spike (§3 du verdict, `_work/reports/spike-226-20260921-103221.md`) — implémentation renvoyée à une issue de câblage ultérieure, hors périmètre Lot A/B de #227 |
 | Amendement du gel de dépendances `TestCA7_NoNewThirdPartyDependency` pour `oto`/`purego`/`jfreymuth/pulse` | #228 (le bump de toolchain seul est fait ici, §10 — voir `contracts/CHANGELOG.md`) |
+
+---
+
+## 10. Média sonore long attaché à une question — normatif (v11.1, #219)
+
+> **Issue** : #219 (milestone #37 — « v11.1 — Question sonore »)
+> **Cadrage utilisateur** : commentaire #219 du 2026-09-22 — ce n'est **pas** un nouveau type de
+> question, c'est un **média** attachable à une question, au même titre qu'une image.
+> **Plan** : `_work/reports/plan-20260922-093142.md` (§0 porte le relevé de code qui fonde cette
+> section)
+> **Maquette normative** : `docs/mockups/question-sound-219.html`
+>
+> Cette section est **additive**. Elle n'amende ni §4 (`Output`), ni §5 (le moteur), ni §2 (le
+> catalogue de cues) : ces trois-là restent **inchangés au bit près**.
+>
+> **Périmètre v11.1 (arbitrage utilisateur, GATE 2 du 2026-09-22)** : **SPEEDY, QCM, ARDOISE**.
+> MEMORY, MEMOTION, ENTRACTE et RAFALE sont **hors périmètre** — ces types portent leurs médias sur
+> leurs cartes (ou n'en portent pas du tout), ce qui demande une décision de conception propre,
+> renvoyée à un chantier ultérieur. L'analyse correspondante est conservée dans
+> `_work/reports/plan-20260922-103848.md` §1.
+
+### 10.1 Pourquoi un second chemin, et non une huitième cue
+
+Quatre propriétés du chemin des cues rendent celui-ci **structurellement** inapte à un média de
+question. Elles sont listées ici pour qu'aucune relecture ultérieure ne reprenne l'idée
+« il suffirait d'ajouter une cue » :
+
+| Obstacle | Où | Conséquence si ignoré |
+|---|---|---|
+| Plafond dur de **10 s** | `otoPlayMaxWait`, `internal/audio/output_oto.go` | Extrait **tronqué à 10 s, silencieusement** — `Play` journalise et rend `nil` |
+| **Sérialisation stricte** (une goroutine, `Play` bloquant réel, file de 8) | §5.2/§5.3 + amendement §4 | Tout bruitage survenant **pendant** le média attend derrière lui, puis est perdu au-delà de 8 |
+| Catalogue de cues **CLOS**, **un** fichier par cue | §2.1 + `FileBank.PCM` | Un média **par question** n'a pas de cue et ne peut pas en avoir une |
+| Validation d'upload calibrée pour des bruitages (5 s / 2 Mo) | `internal/audio/validate.go` | L'assouplir casserait la garantie qui protège la file des cues |
+
+À l'inverse, `oto` **autorise** la coexistence : `Context.NewPlayer` est documenté
+**concurrent-safe** et le mux d'`oto` **mixe** plusieurs `Player` simultanés. Le second chemin
+n'enlève donc rien au premier — il joue **à côté**.
+
+### 10.2 Interface — normative
+
+```go
+// MediaPlayer joue un média sonore LONG attaché à une question, sur un
+// chemin entièrement distinct de celui des cues (§5). Il ne partage avec
+// le moteur de bruitages QUE le contexte audio du processus (§10.3).
+//
+// Contrairement à Output.Play (§4), AUCUNE méthode ne bloque : la lecture
+// est asynchrone, et l'état est lisible à tout instant. C'est cette
+// asymétrie qui rend possibles les contrôles de conduite (rejouer, pause,
+// stop) que l'interface Output n'offre pas et n'a jamais eu à offrir.
+type MediaPlayer interface {
+    // Play démarre la lecture du fichier désigné. VOIX UNIQUE : un Play
+    // pendant une lecture en cours REMPLACE celle-ci (arrêt net), il ne
+    // superpose jamais deux extraits.
+    Play(path string) error
+    Pause()
+    Resume()
+    Stop()
+    State() MediaState
+    Close() error
+}
+
+type MediaState string
+
+const (
+    MediaIdle    MediaState = "IDLE"
+    MediaPlaying MediaState = "PLAYING"
+    MediaPaused  MediaState = "PAUSED"
+)
+```
+
+- **Voix unique, normatif.** Deux extraits ne se superposent jamais. Une question chasse l'autre.
+- **Lecture en flux depuis le disque**, jamais un `os.ReadFile`. Un média de 45 s pèse ~8 Mo de
+  PCM : le charger d'un bloc pour chaque lecture est un gaspillage inutile alors que
+  `oto.Player` consomme un `io.Reader` progressivement. La source **doit** être un
+  `io.ReadSeeker` — `Seek(0, io.SeekStart)` **est** le mécanisme de rejeu.
+- **Dégradation silencieuse identique à §5.5** : plateforme non ciblée, contexte refusé, fichier
+  absent ou non conforme ⇒ implémentation neutre, aucune goroutine, aucune erreur propagée dans
+  le jeu. Un accesseur exporté (`IsNeutralMedia`) signale le cas, symétriquement à `IsNeutral`
+  (§4, amendement #230).
+
+### 10.3 Le contexte `oto` est un singleton de processus — refactor imposé
+
+**`oto` n'autorise qu'un seul contexte audio par processus** (§1, spike #226 §2) — c'est la racine
+même du format canonique du §3. Or ce contexte est aujourd'hui créé **à l'intérieur** de
+`newOtoOutput` et détenu en privé par `otoOutput` (`internal/audio/output_oto.go`). Le
+`MediaPlayer` ne peut donc pas en obtenir un, et n'a **pas le droit** d'en créer un second.
+
+**Exigence normative** : le contexte est extrait en **singleton de package** (`sync.Once`), dont
+`newOtoOutput` **et** le backend `oto` du `MediaPlayer` se servent tous deux.
+
+> ⚠️ **Refactor d'un code déjà revu et testé (#228) — c'est une ré-organisation, pas une
+> réouverture.** L'attente du canal `ready`, le délai de 5 s (`otoContextReadyTimeout`), le
+> pré-armement (`prime`) et la dégradation vers `noopOutput` restent **exactement** où ils sont,
+> dans le même ordre. Aucune signature publique n'est modifiée. Les tests-gardes
+> `play_blocks_228_test.go`, `output_228_test.go`, `cross_compile_228_test.go` et
+> `isneutral_230_test.go` doivent passer **sans une ligne de modification** : toute modification
+> de l'un d'eux est le signe que le refactor a changé un comportement, et **doit** être refusée en
+> revue. Le bug que l'amendement §4 a gravé — `Play` qui rend la main avant la fin réelle du
+> rendu — est précisément celui qu'une ré-organisation maladroite de ce fichier ferait revenir.
+
+> ⚠️ **Piège de durée de vie, non évident.** `oto` documente : « *A player must be kept reachable
+> as long as it should keep playing. A player is closed when it becomes unreachable* » — la
+> fermeture passe par un **finalizer GC**. Le `MediaPlayer` **doit** conserver une référence forte
+> sur le `Player` courant pendant toute la lecture. Sans cela, le son se coupe **au hasard**, plus
+> souvent sur une machine chargée, de façon **irreproductible** — le pire profil de défaut
+> possible. Ce n'est pas une précaution théorique : c'est une contrainte explicite de la
+> bibliothèque.
+
+### 10.4 Format et limites — distinctes de celles des cues, jamais confondues
+
+Le format canonique du **§3 s'applique**, avec **une seule tolérance propre au média de question**
+— voir l'encart mono ci-dessous : WAV PCM 16 bits, 44 100 Hz, **mono ou stéréo**. **Aucun format
+compressé n'est accepté**, `.mp3` compris — la décision utilisateur du cadrage v11.0 (§3) vaut ici
+telle quelle, et `go.mod` ne contient **aucun** décodeur ni rééchantillonneur de fréquence.
+
+> ⚠️ **Mono accepté — arbitrage utilisateur QUALIF v11.1 (2026-09-22), scope strictement limité au
+> média de question.** Un retour QUALIF a établi qu'un WAV **mono** doit être accepté pour le son
+> de question, alors que le §3 (cues, #229/#230) reste **strictement stéréo, INCHANGÉ** —
+> `extractCanonicalPCM` (`internal/audio/bank.go`), partagée par `FileBank.PCM` (lecture des cues)
+> et `ValidateUpload` (upload des cues), **n'est pas touchée**. Le validateur du média de question
+> utilise un parseur **dédié** (`extractQuestionSoundPCM`, `internal/audio/validate_media.go`),
+> volontairement dupliqué plutôt que paramétré, précisément pour ne courir **aucun** risque de faire
+> déborder cette tolérance sur les cues.
+>
+> Un mono accepté est **suréchantillonné en stéréo à l'upload** (`upmixMonoToStereo` : chaque
+> échantillon dupliqué sur les deux voies) — une opération arithmétique pure sur du PCM déjà
+> décodé, **pas** un « rééchantillonnage à la volée » au sens que le §3 exclut (qui parle de
+> changer la fréquence ou de décoder un codec compressé). Le fichier **réellement stocké sur
+> disque** (`BuildCanonicalWAV`) est donc **toujours** stéréo canonique — le pilote de lecture
+> (`media_oto.go`, #228, déjà revu) ne comporte **aucune** branche supplémentaire pour un second cas
+> de figure ; il ne voit jamais de mono.
+
+Les **limites**, en revanche, sont **propres au média** :
+
+| Constante | Valeur | Motif |
+|---|---|---|
+| `MaxQuestionSoundDuration` | **30 s** *(arbitrage utilisateur, GATE 2 du 2026-09-22)* | Un extrait de question dure typiquement 10 à 30 s. Au-delà, le coût disque (10,1 Mo/minute) et le poids des sauvegardes deviennent le facteur limitant, pas l'audio |
+| `MaxQuestionSoundBytes` | **6 Mio** (`6 << 20`) | 30 s canoniques pèsent 5,05 Mio ; 6 Mio laisse **+18,9 %** pour l'en-tête RIFF et d'éventuels chunks `LIST`/`INFO` (que `extractCanonicalPCM` traverse déjà) sans autoriser un fichier abusif |
+
+**Aucun seuil d'avertissement fixe.** Un seuil intermédiaire ne dirait que « vous approchez du
+plafond », ce que le plafond dit déjà. L'avertissement — **non bloquant**, comme l'était celui des
+cues — est **contextuel** : il compare la durée du son au temps de réponse de la question
+(`Question.TIME`), deux valeurs présentes dans la **même** requête multipart. Il n'est émis qu'en
+mode simultané (§10.7) : en mode différé la situation ne peut pas se produire.
+
+> ⚠️ **Normatif : `MaxSoundDuration` (5 s) et `MaxUploadBytes` (2 Mio) ne sont PAS modifiées.**
+> Elles protègent la file des cues (§5.2) et leur justification — « le moteur lit strictement
+> séquentiellement » — reste entièrement valable **pour les cues**. Les deux jeux de constantes
+> coexistent délibérément. Un test-sentinelle vérifie que les valeurs des cues sont inchangées :
+> « factoriser » les deux jeux en un seul est le défaut le plus probable de ce lot, et il
+> supprimerait silencieusement la garantie du §5.2.
+
+> ℹ️ **Amendement (v11.1, arbitrage mono ci-dessus).** Avant cet arbitrage, le validateur du média
+> réutilisait directement `extractCanonicalPCM` (`internal/audio/bank.go`), le même parseur que les
+> cues — c'était vrai jusqu'à ce que la tolérance mono, propre au média de question, exige un
+> parseur distinct (`extractQuestionSoundPCM`) pour ne jamais toucher au comportement des cues. Les
+> deux parseurs restent construits sur les **mêmes constantes** de format (`format.go` :
+> `SampleRate`/`BitsPerSample`), donc ne peuvent pas diverger sur ce qui est canonique — seule la
+> tolérance sur le NOMBRE DE VOIES diffère entre les deux, délibérément.
+
+### 10.4bis Le champ est commun à tous les types — la restriction est une décision d'éditeur
+
+> **Normatif.** `Question.SOUND` et `Question.SOUND_TIMER_DELAYED` vivent sur `Question`, **hors
+> `TypedContent`** : ils sont donc persistés, diffusés et lus **quel que soit le type**. Le serveur
+> **ne doit pas** porter de garde « ce type n'a pas le droit d'avoir un son ».
+
+C'est exactement le régime de `MEDIA` aujourd'hui — structurellement commun aux sept types, masqué
+seulement à l'édition. Trois raisons de s'y tenir :
+
+- une telle garde n'apporterait **aucune sécurité** : `GET /questions` est public et sans
+  authentification, et ce champ n'est pas un secret (même raisonnement que `contracts/models.md`
+  §`EXPLANATION`) ;
+- elle rendrait l'élargissement futur du périmètre **plus coûteux qu'il ne doit l'être** : sans
+  garde, rouvrir MEMORY/MEMOTION/ENTRACTE sera un changement **purement frontend** ;
+- elle romprait la symétrie avec `MEDIA`, qu'une relecture ultérieure prendrait pour une
+  incohérence à « corriger » — dans un sens ou dans l'autre.
+
+Ce point est écrit **parce que c'est la correction spontanée qu'une revue est tentée d'exiger** en
+voyant un champ restreint à trois types côté interface et ouvert à tous côté modèle.
+
+---
+
+### 10.5 Frontière avec le fan-out des cues — vérifiée par test, pas par discipline
+
+Le §6.2 impose déjà un test-garde AST sur un **registre fermé** de sites autorisés à appeler
+`notifySound`. Cette section lui ajoute une **frontière symétrique** :
+
+- L'adaptateur du média vit dans un **fichier distinct** (`cmd/server/question_sound.go`), jamais
+  dans `cmd/server/sound.go`.
+- Il n'appelle **jamais** `notifySound` ni `PlayCue` — un média n'est pas une cue.
+- Réciproquement, `sound.go` n'appelle **jamais** le `MediaPlayer`.
+
+Les deux chemins ne se touchent qu'en un seul point : le contexte `oto` partagé (§10.3). Cette
+exclusion mutuelle **doit** être couverte par un test, au même titre que le registre du §6.2 — la
+discipline seule ne suffit pas, c'est précisément le raisonnement que §6.2 tient déjà.
+
+### 10.6 Ce que cette section ne couvre pas
+
+| Sujet | Statut |
+|---|---|
+| *Ducking* (atténuer le média pendant un bruitage) | **Hors v11.1.** `oto.Player.SetVolume` le rendrait trivial, mais il recouplerait les deux chemins que §10.5 sépare. Suite possible, jamais un effet de bord |
+| Lecture en boucle (ambiance d'ENTRACTE prolongée) | **Hors v11.1.** Une lecture = un passage |
+| Position de lecture diffusée dans le `GameState` | **Exclu.** Seul l'**état** (`IDLE`/`PLAYING`/`PAUSED`) est diffusé, à chaque changement. Le chronomètre est le seul flux à cadence du projet ; on n'en ajoute pas un second |
+| Sélection du périphérique de sortie | Inchangé — `SoundConfig.Device` n'est toujours pas honoré par `oto` (§9, `OutputConfig`) |
+| Média sonore de **réponse** (symétrique de `MEDIA_ANSWER`) | Non demandé au cadrage. Additif si un jour souhaité |
+
+> ℹ️ Cette table est celle du périmètre initial. Le **chronomètre de réponse différé**, ajouté par
+> l'arbitrage du GATE 2 du 2026-09-22, est **dans** le périmètre — voir §10.7 ci-dessous.
+
+### 10.7 Chronomètre de réponse différé — normatif (arbitrage utilisateur, GATE 2 du 2026-09-22)
+
+Chaque son porte un réglage propre : le chronomètre de réponse démarre **en même temps que lui**
+(valeur par défaut, comportement d'avant ce lot) ou **à sa fin**.
+
+```go
+// sur Question
+SoundTimerDelayed bool `json:"SOUND_TIMER_DELAYED,omitempty"`
+```
+
+**La valeur zéro est le comportement correct** — `false` = simultané = ce que fait le serveur
+aujourd'hui. Aucune migration, aucun `question.json` existant modifié. Même discipline que
+`CuesDisabled` (§6.3), et pour la même raison : un réglage dont l'absence changerait le
+comportement serait un piège à chaque configuration existante.
+
+**« La fin du son » recouvre deux évènements, jamais un seul** : la fin naturelle de la lecture
+**et** l'arrêt manuel par l'animateur. Les deux libèrent le chronomètre, et la libération est
+**idempotente** — les deux peuvent survenir.
+
+**La libération est irréversible pour la question en cours.** Un « Rejouer » après le démarrage du
+chronomètre ne le regèle **jamais** : l'animateur disposerait sinon d'un bouton « rendre du temps »
+que rien ne justifie.
+
+**Libération pendant une pause de jeu** : si le son se termine alors que la partie est en pause, le
+chronomètre démarre **à la reprise**, jamais pendant la pause.
+
+> ⚠️ **Règle de non-blocage — portée restreinte à T1 par §10.8 (2026-09-23).**
+> **Si la lecture ne démarre pas réellement ALORS QUE LA QUESTION A DÉJÀ DÉMARRÉ, le chronomètre
+> démarre immédiatement.** Lecteur neutre (plateforme non ciblée, contexte audio refusé), fichier
+> absent ou non conforme, `sound.enabled = false` : dans tous ces cas le mode différé **dégrade
+> vers le mode simultané**. Une indisponibilité **connue avant le lancement** relève de §10.8 et
+> **empêche la question de démarrer** — ce n'est pas une exception à cette règle, c'est un instant
+> différent.
+>
+> C'est l'application directe de la dégradation silencieuse du §5.5, avec sa conséquence explicitée
+> une fois pour toutes : **elle doit dégrader vers le comportement normal, jamais vers un
+> blocage.** Sans cette règle, une enceinte débranchée fige une question en direct, sans message et
+> sans recours — le pire défaut que ce lot puisse produire.
+>
+> **Complément normatif** : un **chien de garde** libère le chronomètre au plus tard à
+> `MaxQuestionSoundDuration + 2 s` après le lancement, même si aucune fin de lecture n'a été
+> signalée (goroutine de surveillance morte, pilote figé). La dégradation ne doit pas dépendre d'un
+> seul chemin de détection.
+
+**L'interface doit dire pourquoi le chronomètre ne bouge pas.** Un chronomètre figé au temps plein
+pendant 30 s sera pris pour une panne — par l'animateur comme par le public. `/anim`, `/admin`
+**et la TV** portent une mention explicite (« le chronomètre démarrera à la fin du son »), jamais
+un simple chiffre immobile. L'état est diffusé par le serveur (`GAME.ANSWER_TIMER_WAITING`), jamais
+déduit côté navigateur.
+
+**Points de couplage, par famille de chronomètre** — les deux sont distincts et ne se partagent
+aucun code :
+
+| Chronomètre | Types | Où il démarre aujourd'hui | Forme du différé |
+|---|---|---|---|
+| **Global** | SPEEDY, QCM, ARDOISE | `Engine.actualStart()`, appel `e.startTimer()` sous verrou | **Ne pas créer le ticker** — `CurrentTime` est déjà au temps plein, le chronomètre s'affiche donc figé sans état d'affichage à inventer. Une méthode exportée `ReleaseDeferredTimer()` le crée à la fin du son |
+
+> ⚠️ **La garde de type existante d'`actualStart()` est préservée à l'identique.** MEMOTION et
+> ENTRACTE n'ont jamais démarré le chronomètre global (MEMOTION utilise un chronomètre **par
+> carte**, démarré par `(*App).handleMotionFlip` et non par le moteur ; ENTRACTE n'a aucun
+> chronomètre). L'ajout du différé s'insère **autour** de l'appel existant, il ne remplace pas cette
+> garde. Un chronomètre global qui démarrerait sur MEMOTION serait une régression, pas un effet de
+> bord acceptable.
+>
+> *Hors périmètre v11.1, conservé parce que c'est un relevé de code vérifié* : le jour où MEMOTION
+> recevra un son, son différé ne demandera **aucune modification du moteur** — il suffira de ne pas
+> appeler `StartMotionCardTimer` au retournement et de laisser le rappel de fin de lecture le faire.
+
+> ⚠️ `Pause()`/`Continue()` **n'arrêtent pas le ticker** — `processTimerTick` se contente de ne
+> rien décrémenter hors `PhaseStarted`. « Mettre le chronomètre en attente » en arrêtant le ticker
+> est donc impossible : la seule forme correcte est de **ne pas le créer**.
+
+> ⚠️ `actualStart()` est un site que RAFALE, ENTRACTE, MEMOTION et MEMORY se partagent déjà, avec
+> des commentaires d'ordonnancement explicites (« must run BEFORE startTimer() »). La garde du
+> différé s'ajoute **autour de l'appel existant**, au même endroit, **sans déplacer une seule ligne
+> voisine**.
+
+### 10.8 Média indisponible avant le lancement — normatif (arbitrage utilisateur, 2026-09-23)
+
+> **Besoin** : « si le média n'est pas disponible, la question n'a plus de raison d'être » —
+> remonté pendant la validation manuelle du Scénario 11 (#219/#236/#237), puis précisé au GATE 2 :
+> **revalidation complète du format** à chaque contrôle, et **échappatoire par Ctrl+Clic**.
+> **Plan** : `_work/reports/plan-20260923-094500.md`
+
+#### 10.8.1 La frontière T0/T1 — et pourquoi il n'y a pas de contradiction
+
+| | **T0 — avant le lancement** | **T1 — après le lancement** |
+|---|---|---|
+| Situation | L'indisponibilité est **déjà connue** | La question tourne déjà ; la lecture échoue, se dégrade, ou ne signale jamais sa fin |
+| Règle | **BLOQUANT** — la question ne passe pas en `READY` | **JAMAIS BLOQUANT** — §10.7, dégradation silencieuse, chronomètre libéré |
+
+Un bruitage manqué est une perte cosmétique ; un son de question manquant vide la question de son
+contenu. Les deux règles portent donc sur **deux instants distincts**.
+
+> ⚠️ **§10.7 n'est ni supprimée ni affaiblie.** Elle protégeait d'une question **figée en pleine
+> partie, sans recours** — c'est toujours exactement ce qu'elle fait. Toute implémentation qui
+> ferait disparaître la dégradation T1 au prétexte d'avoir ajouté la gate T0 est un **refus de
+> revue**.
+
+#### 10.8.2 « Média disponible » — définition unique, normative
+
+Trois conditions, **toutes** requises :
+
+1. `config.Get().Sound.Enabled` — sinon motif `DISABLED` ;
+2. une sortie réelle est attachée — `!audio.IsNeutralMedia(player)` — sinon motif `OUTPUT` ;
+3. le fichier existe **et se valide entièrement** au format canonique — sinon motif `FILE`.
+
+**Une seule fonction porte cette définition**, réutilisée **à la fois** par la gate T0 **et** par la
+dégradation T1 (`play()`). Deux définitions parallèles divergeraient et produiraient le pire
+symptôme possible : une question bloquée alors que le son aurait fonctionné, ou l'inverse.
+
+> **Arbitrage utilisateur du GATE 2 — la condition 3 est une revalidation COMPLÈTE, pas un simple
+> `os.Stat`.** L'utilisateur a explicitement choisi de revérifier **l'intégrité** du fichier, et
+> pas seulement sa présence : un WAV tronqué ou corrompu hors de l'éditeur doit être détecté
+> **avant** le lancement, pas découvert à la lecture. La validation réutilise la fonction existante
+> (`ValidateQuestionSound` / `extractCanonicalPCM`), **jamais un second parseur**.
+
+#### 10.8.3 Cache de validation — normatif, et non facultatif
+
+La gate est évaluée à **chaque transition `PREPARE ↔ READY`**, donc **à chaque PONG de buzzer**.
+Une revalidation complète naïve relirait jusqu'à 6 Mio par buzzer et par question. **Un cache est
+donc obligatoire**, et sa forme est imposée :
+
+| | |
+|---|---|
+| **Clé** | chemin absolu du fichier |
+| **Empreinte** | `mtime` **et** taille, obtenus par un `os.Stat` (bon marché) |
+| **Hit** | empreinte identique à celle mémorisée ⇒ **réutiliser le verdict**, sans relire le contenu |
+| **Miss** | aucune entrée, ou empreinte différente ⇒ **revalidation complète**, puis mémorisation |
+| **Fichier disparu** | `os.Stat` en erreur ⇒ motif `FILE` **et suppression de l'entrée**, pour qu'un fichier restauré soit revalidé |
+
+> ⚠️ **Les verdicts NÉGATIFS se mettent en cache aussi.** Un fichier corrompu qui ne serait pas
+> mémorisé serait re-parsé intégralement à chaque PONG — exactement le coût que ce cache existe
+> pour éviter, dans le cas précis où il est le plus élevé.
+
+Le cache est borné par le nombre de questions portant un son : **aucune éviction n'est nécessaire**.
+Une limite connue et acceptée : sur un système de fichiers dont le `mtime` a une granularité d'une
+seconde, un fichier remplacé **dans la même seconde et à taille identique** passerait inaperçu — cas
+de figure sans portée pratique ici, l'éditeur régénérant un nom de fichier aléatoire à chaque
+téléversement.
+
+> ⚠️ **La validation ne doit JAMAIS s'exécuter sous le verrou du moteur.** `internal/game`
+> n'importe ni `internal/audio` ni `internal/config` : la disponibilité est calculée **par la
+> couche applicative**, puis poussée dans le `GameState`, d'où `participantsConform` la lit. Un
+> rappel injecté qui ferait de l'entrée/sortie disque depuis `reevaluatePrepareReadyUnsafe`
+> tiendrait `e.mu` pendant une lecture de fichier — c'est l'implémentation naïve à refuser en revue.
+
+#### 10.8.4 Où la gate vit — réutilisation, pas nouveau chemin
+
+La gate est **une branche de `participantsConform`**, le prédicat qui pilote déjà
+`PREPARE ↔ READY` (#172) et qui absorbe **déjà** des conditions étrangères aux participants
+(catégories et difficultés RAFALE), avec sa propre justification : *« a second, parallel gating
+function would duplicate the `reevaluatePrepareReadyUnsafe`/`ForceReady` wiring for no real
+benefit »*.
+
+- **Aucun nouveau chemin de refus n'est créé.** Les trois points de jonction existants consomment
+  déjà ce prédicat.
+- `Engine.Start()` refuse déjà toute phase ≠ `READY` (#172 B4) : **le contrôle serveur est acquis**.
+- `participantsConform` est **pur sur `(Question, GameState)`** et doit le rester.
+- **Une question sans son n'est jamais affectée** : la branche sort immédiatement si
+  `Question.SOUND` est vide. La valeur zéro reste le comportement d'avant, sur **tous** les types.
+
+#### 10.8.5 Le motif remonte comme un état, jamais comme une erreur
+
+`GAME.QUESTION_SOUND_UNAVAILABLE` : `""` | `DISABLED` | `OUTPUT` | `FILE`, **sans `omitempty`**.
+
+> ⚠️ **Diffusion — corrigé (dev-backend, 2026-09-23) : Admin/TV/VPlayer/Anim, pas « admin seul ».**
+> `/anim` doit afficher ce motif (CA26 : « /anim affiche le motif mais n'offre aucune échappatoire »,
+> `prepareWaitReason.js`/`AnimConductPanel.jsx`) — or `/anim` est routé vers exactement le même
+> sérialiseur que TV/VPlayer (`SerializeForWebClient`), et ce lot ne touche pas
+> `internal/protocol/messages.go` ni la sérialisation pour introduire une distinction. Le champ
+> voyage donc avec le `GameState` ordinaire, comme `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` —
+> voir `contracts/game-state.md` pour la matrice complète et le détail du raisonnement. TV/VPlayer le
+> reçoivent aussi, sans jamais l'afficher (aucune donnée confidentielle en jeu).
+
+**Aucun canal d'erreur WebSocket n'est créé** — il n'en existe aucun pour
+`admin`/`anim`, et la politique contractuelle est « journalisé en `WARN`, rien renvoyé au client ».
+Le serveur publie le **fait** ; `web/src/utils/prepareWaitReason.js` en fait un libellé, comme il le
+fait déjà pour les participants. Le fait doit venir du serveur parce que deux des trois motifs sont
+**indécidables côté client**.
+
+Les libellés **doivent nommer le remède réel**, parce qu'il est contre-intuitif : réactiver les sons
+ou brancher une enceinte ne suffit pas, il faut **redémarrer le serveur** (§4 amendement #230 ;
+§6.3).
+
+#### 10.8.6 Échappatoire — le geste existant sur la question (arbitrage GATE 2, corrigé 2026-09-23)
+
+Le blocage reste le **comportement par défaut**. Mais §10.8.8 décrit deux façons réelles de
+verrouiller un quiz entier en direct ; une sortie de secours est donc nécessaire.
+
+**Forme imposée : le `Ctrl`+clic DÉJÀ EXISTANT sur la question**, en phase `PREPARE` — celui qui
+force le passage en `READY` (`Engine.ForceReady()`). **Ni un nouveau geste, ni une action sur le
+bouton LANCER** : le contournement se joue à la frontière `PREPARE → READY`, là où vit la gate, et
+non au lancement.
+
+> ⚠️ **`ForceReady()` ne contourne PAS `participantsConform` aujourd'hui — et ne doit pas se mettre
+> à le faire.** Il marque les buzzers prêts, puis **vérifie explicitement** la conformité et refuse
+> si elle n'est pas atteinte. L'arbitrage #172 B5 en donne la raison : *« ForceReady only skips the
+> PONG wait — it must not also skip participant-selection conformity, or the original bug (a
+> non-conform MEMORY/MEMOTION round reaching STARTED) would return through this debug/admin door. »*
+>
+> **Exigence normative** : le contournement est **limité à la branche son**. `ForceReady()` lève un
+> drapeau (`GAME.SOUND_GATE_BYPASSED`) que **seule** la branche son de `participantsConform` lit ;
+> le refus existant sur les autres branches — participants MEMORY/MEMOTION, catégories et
+> difficultés RAFALE — reste **intact**. Supprimer ce refus pour « simplifier » rouvrirait le bug
+> que #172 B5 a fermé.
+
+Trois propriétés qui en découlent, toutes acquises sans code supplémentaire :
+
+1. **Admin uniquement** — `FORCE_READY` est déjà réservé à `ClientTypeAdmin` dans la liste blanche
+   entrante. `/anim` affiche le motif mais n'offre pas le contournement, ce qui est cohérent : le
+   geste est de toute façon impossible sur une tablette tactile.
+2. **Aucun changement d'interface** — le geste existe, est câblé, et appartient déjà à une famille
+   de contournements par modificateur (forcer `READY`, simuler un PONG, simuler un appui, forcer
+   une mise à jour OTA). Il reste ainsi **non découvrable**, ce qui est voulu.
+3. **Le bouton LANCER n'est pas modifié** — il garde son `disabled` natif, comme pour toutes les
+   autres causes d'inactivité.
+
+Le contournement **ne vaut que pour la question en cours** : il est remis à zéro à la sélection
+d'une question (`Ready()`) et à l'arrêt (`stopUnsafe()`). Un clic simple sur la même question le
+reprend donc à zéro.
+
+Une question forcée joue **sans son**, et son chronomètre **ne** se met **jamais** en attente (le
+mode différé n'a plus d'objet) : c'est la dégradation de §10.7, atteinte délibérément.
+
+#### 10.8.7 Rafraîchissement et réversibilité
+
+La disponibilité est recalculée **avant** chaque évaluation `PREPARE ↔ READY` — donc à chaque PONG —
+ainsi qu'à la sélection d'une question, sur changement de configuration (`OnConfigUpdate`) et juste
+avant `Engine.Start()`. Le cache du §10.8.3 rend ce rythme soutenable.
+
+**Réversibilité, normative** : dès que la condition redevient vraie, la question repasse
+**automatiquement** en `READY`, sans geste supplémentaire — strictement symétrique du retour arrière
+`READY → PREPARE` de #172.
+
+#### 10.8.8 ⚠️ Ce que cette gate rend coûteux — à connaître avant de l'implémenter
+
+Deux propriétés **préexistantes** changent de gravité en devenant des conditions de lancement :
+
+- **L'indisponibilité de sortie est définitive pour la vie du processus.** Le contexte `oto` est un
+  singleton `sync.Once` qui **mémorise son erreur** ; il n'existe aucune boucle de reconnexion
+  (§4, amendement #230). Une enceinte absente ou lente **au démarrage du serveur** rend donc toutes
+  les questions à son injouables **jusqu'au redémarrage**, même une fois l'enceinte branchée.
+- **Rallumer le son exige un redémarrage** (§6.3).
+
+Avant cette section, ces situations coûtaient une question **silencieuse** ; elles coûtent désormais
+une question **injouable**. C'est la raison d'être de l'échappatoire du §10.8.6, et
+`docs/ADMIN_GUIDE.md` doit porter l'avertissement. Une re-sonde du contexte audio est **hors
+périmètre** — elle rouvrirait la conception de #228.
+
+### 10.9 Puce d'alerte globale — signal complémentaire, jamais bloquant (2026-09-23)
+
+> **Besoin** : voir d'un coup d'œil qu'un quiz contient des questions sonores alors que l'audio
+> n'est pas disponible, **sans** avoir à les découvrir une par une.
+> **Ne remplace pas §10.8** — les deux coexistent. La puce dit « l'audio ne marchera pour aucune
+> question » ; la gate dit « celle-ci a un problème ».
+
+#### 10.9.1 Condition — deux critères globaux, jamais le fichier
+
+La puce apparaît si, et seulement si :
+
+1. le quiz contient **au moins une question** portant un `SOUND` ; **et**
+2. l'audio n'est **pas** disponible globalement — `sound.enabled` faux **ou** sortie neutre.
+
+Le second critère est **exactement** ce que `GET /api/sound/status` fusionne déjà en un booléen
+(§Sound, « deux états, et c'est tout ») : la puce **consomme un contrat existant**, elle n'en crée
+pas.
+
+> ⚠️ **Le critère « fichier » de §10.8.2 ne s'applique PAS ici.** L'y inclure serait une erreur de
+> granularité : il faudrait un contrôle disque par question pour alimenter un signal global, alors
+> que ce cas est **déjà couvert question par question** par la gate, qui bloque et nomme le motif
+> `FILE`. Les deux signaux se répartissent proprement.
+
+#### 10.9.2 État dérivé — aucun calcul serveur, aucun endpoint nouveau
+
+Les deux moitiés de la condition sont **déjà disponibles côté client** : la diffusion `QUESTIONS`
+porte toutes les questions à l'admin, et `useSoundStatus()` interroge déjà
+`GET /api/sound/status`. **Aucun agrégat serveur n'est à construire, aucune interrogation
+supplémentaire n'est à ajouter.**
+
+La puce étant un **état dérivé** et non stocké, elle **disparaît d'elle-même** dès que l'audio
+redevient actif ou qu'aucune question ne porte plus de son : aucun cycle de vie, aucune remise à
+zéro, aucune puce fantôme.
+
+*Conséquence de périmètre* : `QUESTIONS` est diffusée à l'**admin seul**. La puce ne peut donc pas
+exister sur `/anim` — sans gravité, l'animateur ne pouvant ni réactiver le son ni retirer un média.
+
+#### 10.9.3 ⚠️ La pastille de menu « Ambiance » n'est PAS détournée
+
+L'implémentation la plus courte — faire passer le haut-parleur du menu en variante « alerte » —
+**contredit une décision explicite** (#234, `web/src/utils/soundState.js`) : *« DEUX formes
+seulement, jamais une troisième « alerte » […] inactif — un choix normal de l'utilisateur, pas une
+panne. »*
+
+Cette décision reste **juste** : « son inactif » n'est pas une anomalie en soi. Le signal de cette
+section est différent — « son inactif **alors que ce quiz en a besoin** », une incohérence entre le
+contenu et l'environnement. Deux sujets, deux indicateurs.
+
+**Exigence normative** : la puce est un composant **distinct**, et `soundStateGlyph` **reste à deux
+formes**. Conflater les deux ferait dire deux choses à la même icône.
+
+#### 10.9.4 Emplacement et libellé
+
+Un composant partagé, monté sur la page **Quiz** (là où l'on agit : retirer les sons, voir
+lesquelles en portent) **et** sur **`/admin`** (là où l'on joue, avant même de sélectionner une
+question) — patron `RafalePoolAlert`, un composant pour deux surfaces.
+
+Le libellé **nomme le remède**, aussi contre-intuitif ici qu'au §10.8.5 : réactiver le son ou
+brancher l'enceinte **exige un redémarrage du serveur** (§10.8.8).

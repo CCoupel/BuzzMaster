@@ -98,8 +98,10 @@
 
 .timer-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
   padding: var(--space-2) var(--space-6);
 }
 
@@ -107,6 +109,23 @@
 .timer-card .timer .timer-display { font-size: 2rem; padding: var(--space-2) var(--space-4); }
 .timer-card .timer .timer-bar-container { max-width: 95%; height: 12px; }
 .timer-card .timer .timer-phase { margin-top: 0; }
+
+/* #219 (v11.1, CA15) — même mention que /anim (AnimPage.css), présentation
+   propre à cette page (patron du projet : feuilles de style séparées par
+   page pour une même classe, cf. .rafale-anim-qcard*). */
+.timer-card .sound-wait-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--warning, #eab308);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  padding: 2px 10px;
+  border-radius: var(--radius-md, 6px);
+  white-space: nowrap;
+}
 
 /* Display card styles (inside timer-display-section) */
 .display-card {
@@ -398,6 +417,47 @@
 .control-buttons-row { display: flex; gap: var(--space-1); }
 .control-buttons-row > * { flex: 1; }
 .control-buttons button { padding: var(--space-2) var(--space-3); font-size: 0.85rem; }
+
+/* #172/C2 (v11.1.0.6, retour QUALIF #219/#236/#237) — un motif de blocage
+   PREPARE par ligne, plutôt qu'une seule ligne jointe par ' · '. `<ul>`
+   générique réutilisé par les 3 sélecteurs d'équipes (MEMORY/MEMOTION/
+   RAFALE, dans .memory-team-selector) ET par .start-wait-reason
+   (SPEEDY/QCM/ARDOISE) ci-dessous — voir WaitReasonLines dans GamePage.jsx.
+   Reprend par défaut le style de .memory-selector-label (petites
+   majuscules) : mêmes lignes que le libellé de mode qui les précède. */
+.wait-reason-list {
+  list-style: none;
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+}
+
+/* Addendum média indisponible (v11.1, #219/#236/#237) — motif(s) d'attente
+   PREPARE affiché à côté du bouton START pour SPEEDY/QCM/ARDOISE (buzzers
+   en attente, ou média son indisponible). Couleur d'avertissement : ce
+   texte signale une condition qui empêche le lancement. Toutes les
+   propriétés de .wait-reason-list sont explicitement écrasées ici (pas de
+   dépendance à l'ordre des règles dans la feuille de style). */
+.start-wait-reason {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--warning, #d97706);
+  text-align: center;
+}
+
+.start-wait-reason li {
+  text-align: center;
+}
 
 .display-toggle { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--gray-200); width: 100%; }
 .toggle-label { font-size: 0.875rem; color: var(--gray-500); }
@@ -814,6 +874,24 @@
    projet, cf. .rafale-tv-qcard dans PlayerDisplay.css). */
 .rafale-admin-live {
   margin-bottom: var(--space-3);
+}
+
+/* #219 (v11.1) — miroir admin des gestes de conduite son (AnimSoundActions,
+   RÉUTILISÉ TEL QUEL) — même esprit que .rafale-admin-live ci-dessus, sans
+   l'encart coloré équipe (pas de notion d'équipe pour un son de question). */
+.question-sound-admin-live {
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.question-sound-admin-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .rafale-anim-qcard {

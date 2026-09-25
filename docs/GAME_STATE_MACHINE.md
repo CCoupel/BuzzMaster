@@ -75,6 +75,20 @@ Ce document décrit la machine à états qui gouverne le déroulement d'une part
 | **STOPPED** (après jeu) | Question + média + chronomètre arrêté (SANS réponse) | Question + média + chronomètre arrêté + 4 réponses QCM |
 | **REVEALED** | Question + média + **RÉPONSE** | Question + média + **bonne réponse en couleur, mauvaises grisées** |
 
+### Affichage TV — Forçage au Lancement d'une Manche (#240)
+
+L'affichage TV (sélecteur Jeu/Équipes/Joueurs/Palmarès, champ `state.Page`, action WebSocket `REMOTE`) est **remis automatiquement sur "Jeu"** (valeur `GAME`) lors du lancement d'une manche, pour s'assurer que les joueurs voient le contenu de jeu sans action supplémentaire de l'animateur. Forçage appliqué à :
+- **Entrée PREPARE** : sélection ou changement de question (tous types) ;
+- **Passage READY → STARTED** : clic START, StartImmediate, fin du compte à rebours 3-2-1 ;
+- **CONTINUE après PAUSE** : reprise de la question (décision utilisateur) ;
+- **Départ d'une carte MEMOTION** ou **tirage RAFALE d'une carte** (validé par l'utilisateur en QUALIF v11.1.0.14).
+
+**Pas de forçage sur** : PAUSE (l'affichage peut rester sur Équipes pendant une pause), REVEAL, STOP, retour automatique READY→PREPARE (#172), NEW_GAME, aucune autre transition.
+
+**Pas un verrou** : après le forçage, l'animateur peut toujours rebasculer manuellement sur Équipes/Joueurs/Palmarès via le bouton du sélecteur TV en `/admin` ou l'action `REMOTE`. **Exception** : un changement de vue manuel envoyé **pendant le compte à rebours 3-2-1** est écrasé à son terme (`actualStart()` re-force `GAME` avant la transition STARTED).
+
+**Impact** : serveur uniquement (Go moteur) ; aucun nouveau champ, aucun changement de protocole, aucun impact BuzzClick. Le VPlayer suit le même `state.Page` et bascule automatiquement.
+
 ## États des Boutons Admin
 
 | État | START/STOP | PAUSE/CONTINUE | REPONSE |
@@ -255,6 +269,172 @@ if e.state.Phase != PhaseReady {
 **Conséquence** : une partie démarrée est nécessairement conforme, et le reste (car `SetMemoryParticipatingTeams` et `SetMotionParticipatingTeams` n'acceptent que PREPARE/READY, interdites une fois `STARTED` atteint).
 
 **`ForceReady()` (fonction de débogage, admin)** : saute l'attente des PONG mais **respecte toujours** la conformité des participants — voir arbitrage G du plan #172.
+
+## Chronomètre de Réponse Configurable (v11.1.0, #219)
+
+### Vue d'ensemble
+
+À partir de v11.1, le chronomètre de réponse (durée des phases `STARTED` / `PAUSED` sur une question) peut être configurable par question pour les types **SPEEDY, QCM, ARDOISE** : chaque question choisit si le son attaché démarre **simultanément** avec le chronomètre ou si le chronomètre démarre **à la fin du son**.
+
+### Deux branches : Simultané vs Différé
+
+#### Mode Simultané (défaut : `SOUND_TIMER_DELAYED = false`)
+
+**Flux** :
+1. Transition `→ STARTED` (admin clique START)
+2. Son (s'il existe) et chronomètre démarrent **ensemble**
+3. Le chronomètre ne s'arrête jamais avant sa durée normale, même si le son termine plus tôt
+4. Résultat : une question de 30s reste jouable 30s même si le son ne dure que 5s
+
+**Cas d'usage** : Question avec musique de fond, son court (cloche/gong) pour signaler l'arrêt, indicee audio QCM.
+
+#### Mode Différé (`SOUND_TIMER_DELAYED = true`)
+
+**Flux** :
+1. Transition `→ STARTED` (admin clique START)
+2. Son démarre (s'il existe)
+3. Chronomètre reste **figé au temps plein** (affiché comme "⏳ Le chrono démarre à la fin du son" en mode différé)
+4. À la fin naturelle du son **OU** arrêt manuel de l'animateur (action `QUESTION_SOUND {COMMAND: STOP}`), le chronomètre démarre
+5. Résultat : une question SPEEDY de 30s avec son de 10s se joue effectivement en 10s + 30s = 40s total
+
+**Comportements critiques** :
+- **PAUSE du jeu** : le son se met en pause ; chronomètre reste figé jusqu'à CONTINUE
+- **CONTINUE du jeu** : le son reprend sans coupure, chronomètre reprend son décompte depuis où il avait figé
+- **Aucune lecture démarrée ne fige jamais le chronomètre** (Rule CA12 — Non-blocage) :
+  - Son désactivé globalement : chronomètre démarre **immédiatement**
+  - Enceinte indisponible : chronomètre démarre **immédiatement**
+  - Fichier son illisible : chronomètre démarre **immédiatement**
+  - Lecteur matériel ne support pas le format : chronomètre démarre **immédiatement**
+
+**Règle normative** : Une question en mode différé ne doit **jamais** rester gelée ; la dégradation (absence de son) est préférée au blocage.
+
+### Champs GameState (v11.1.0)
+
+```go
+QUESTION_SOUND_STATE  string  // "IDLE" | "PLAYING" | "PAUSED" (état de la lecture du son)
+ANSWER_TIMER_WAITING  bool    // true si chronomètre est figé en attente de fin du son (mode différé uniquement)
+```
+
+**Sérialisation** : **Jamais `omitempty`** — toujours présents dans GameState (évite pertes d'état côté frontend).
+- `QUESTION_SOUND_STATE` = "IDLE" par défaut (no sound attached, or sound finished)
+- `ANSWER_TIMER_WAITING` = false par défaut (timer running or no sound)
+
+### Actions WebSocket pour Son (v11.1.0)
+
+**Client (Admin + Animateur) → Serveur** (allow-list `admin`, `anim`) :
+
+```json
+{
+  "ACTION": "QUESTION_SOUND",
+  "MSG": {
+    "COMMAND": "PLAY" | "PAUSE" | "RESUME" | "STOP"
+  }
+}
+```
+
+| Commande | Description | Appliqué sur | Résultat |
+|----------|-------------|---|---|
+| `PLAY` | Rejouer depuis le début | Son actuellement IDLE, PLAYING ou PAUSED | Arrête lecture courante, redémarre depuis 0 |
+| `PAUSE` | Mettre en pause | Son PLAYING uniquement | Son figé, chronomètre différé reste aussi figé |
+| `RESUME` | Reprendre | Son PAUSED uniquement | Reprend lecture sans coupure, chronomètre reprend |
+| `STOP` | Arrêter définitivement | Son PLAYING ou PAUSED | Arrêt complet, libère chronomètre si différé |
+
+**Serveur → Client** (broadcast à tous) :
+- `UPDATE` : `QUESTION_SOUND_STATE` + `ANSWER_TIMER_WAITING` diffusés à chaque changement d'état du son ou du chronomètre
+
+### Couplage aux Transitions de Phase
+
+| Transition | Comportement Son | Comportement Chronomètre Différé |
+|---|---|---|
+| `→ STARTED` | Démarre immédiatement si son existe et mode simultané ; figé si mode différé | Si mode simultané : démarre ; si mode différé : reste figé |
+| `→ PAUSED` | Mis en pause | Reste figé (ne change pas d'état) |
+| `→ CONTINUED` (depuis PAUSED) | Reprend sans coupure | Reprend depuis où il avait figé |
+| `→ STOPPED` ou timer=0 | Arrêt propre | N/A (manche terminée) |
+| `REVEAL` | Arrêt immédiat | N/A (manche terminée) |
+| `→ READY` (nouvelle question) | Réinitialisation : `QUESTION_SOUND_STATE="IDLE"` | Réinitialisation : `ANSWER_TIMER_WAITING=false` |
+
+### Affichage Frontend — Mention CA15
+
+Sur les trois surfaces (`/admin`, `/anim`, `/tv`), si `ANSWER_TIMER_WAITING = true` :
+- **TV (`PlayerDisplay.jsx`)** : mention "⏳ Le chrono démarre à la fin du son" en `position: absolute` dans la zone timer (hauteur fixe, aucun impact sur flux, contrainte TV STATIQUE)
+- **Admin (`GamePage.jsx`)** : même mention en ligne normale (pas de contrainte de hauteur)
+- **Animateur (`AnimPage.jsx`)** : même mention en ligne normale (pas de contrainte de hauteur)
+
+### Cycle de vie son par étape moteur
+
+```go
+// À la transition STARTED, si son attaché :
+maybeStartDeferredTimerUnsafe()  // Lance le chronomètre selon SOUND_TIMER_DELAYED
+if !q.SoundTimerDelayed {
+    e.startTimer()  // Mode simultané : chronomètre démarre immédiatement
+} else {
+    // Mode différé : chronomètre attend. Libération par :
+    // 1. Fin naturelle du son (callback MediaPlayer.onNaturalEnd)
+    // 2. Action QUESTION_SOUND {STOP} manuelle de l'animateur
+    // 3. Dégradation (son désactivé, enceinte indisponible, fichier illisible)
+}
+
+// À la transition CONTINUE (depuis PAUSED) :
+maybeResumeDeferredTimer()  // Si différé et était figé, reprend depuis la pause
+
+// À toute transition STOP/REVEAL/READY :
+releaseDeferredTimer()  // Libère si chronomètre était figé
+```
+
+## Gate Média : Lancement Bloqué (T0) — v11.1 Addendum (#219/#236/#237)
+
+### Frontière T0/T1
+
+La machine à états applique **deux garde-fous distincts** contre les problèmes audio :
+
+- **T0 (avant lancement)** : **Gate de conformité à PREPARE→READY** — validation préalable, blocage du lancement si la question porte un média indisponible. Critique : empêche de démarrer une question sans audio en mode différé (chronomètre figé pour toujours).
+- **T1 (pendant la lecture)** : **Dégradation à STARTED** — aucun blocage ; tentative de lecture, filet de dernier recours si le fichier est cassé. La question démarre quand même en mode différé, le chronomètre se libère immédiatement.
+
+### Trois motifs de blocage
+
+Lors de la transition `PREPARE → READY`, une branche supplémentaire de `participantsConform()` évalue la disponibilité du média. Trois motifs de refus possibles :
+
+| Motif | Code | Condition | Utilisateur voit | Remède |
+|-------|------|-----------|-------------------|--------|
+| **Média désactivé globalement** | `DISABLED` | Son global OFF (switch `/admin/ambiance`) | "Le son est désactivé" | Activer le son → transition réussit |
+| **Enceinte indisponible** | `OUTPUT` | Appareil audio non initialisé au démarrage du serveur | "L'enceinte n'est pas disponible" | Brancher/redémarrer enceinte, redémarrer serveur |
+| **Fichier son cassé** | `FILE` | Fichier illisible (corrompu, déplacé, droits insuffisants, format non supporté) | "Le fichier son est indisponible" | Réuploader le fichier, redémarrer serveur |
+
+**Seulement si** la question porte un son attaché (champ `Question.SOUND` non vide). Une question sans son passe la gate automatiquement.
+
+### Champs GameState additionnels (v11.1 addendum)
+
+```go
+QUESTION_SOUND_UNAVAILABLE  string  // "" | "DISABLED" | "OUTPUT" | "FILE"
+SOUND_GATE_BYPASSED         bool    // true = admin a débloqué via Ctrl+clic
+```
+
+**Sérialisation** : **Jamais `omitempty`** — toujours présents dans GameState.
+- `QUESTION_SOUND_UNAVAILABLE` = `""` par défaut (media disponible ou absent)
+- `SOUND_GATE_BYPASSED` = `false` par défaut (pas de bypass activé)
+
+### Cycle de vie du motif d'indisponibilité
+
+1. **À chaque PONG reçu en PREPARE** (`handlePong`) : `refreshQuestionSoundAvailability()` réévalue le motif — peut passer de `DISABLED` à `""` si l'audio est réactivé entre deux PONGs.
+2. **Transition PREPARE→READY échouée** : si motif non vide, `participantsConform()` retourne `false` + motif (ex: `DISABLED`). Le frontend reçoit le motif et l'affiche.
+3. **Transition PREPARE→READY réussie** : motif remis à `""`, `SOUND_GATE_BYPASSED` remis à `false`.
+4. **À la transition STOP ou arrivée en REVEALED** : motif remis à `""`.
+
+### Contournement administrateur — Ctrl+Clic
+
+Un **administrateur uniquement** peut déverrouiller manuellement une question bloquée par la gate son via `FORCE_READY` (action WebSocket existante, comportement étendu) :
+
+**Geste** : Maintenir **Ctrl + clic sur la question** (dans `/admin/GamePage.jsx`).
+
+**Résultat** :
+- Flag `SOUND_GATE_BYPASSED` posé à `true`
+- Branche son de `participantsConform()` contournée (seule cette branche, les autres gardes — participants conformes, MEMORY SOLO — restent actives)
+- Transition `PREPARE → READY` réussit malgré `QUESTION_SOUND_UNAVAILABLE ≠ ""`
+- À la transition `READY → STARTED` ou `→ STOPPED` ou `→ REVEALED`, le flag est remis à `false`
+
+**Restrictions explicites** :
+- Geste **jamais disponible sur `/anim`** (interface animateur, allow-list ne permet pas `FORCE_READY`)
+- Geste **ne contourne jamais les critères participants** (ex: MEMORY SOLO sans équipe reste bloquée, même avec Ctrl+clic sur la question)
 
 ### Frontend Admin (React)
 - Fichier: `server-go/web/src/pages/GamePage.jsx`

@@ -453,6 +453,114 @@
   border-radius: var(--radius-sm);
 }
 
+/* #219 — Son de la question (maquette question-sound-219.html rév. 3 §01).
+   Même esprit visuel que .media-preview (fond neutre, bouton Supprimer),
+   adapté à un lecteur audio plutôt qu'à une image. */
+.sound-preview {
+  margin-top: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+}
+
+.sound-preview-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sound-preview-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ajustement ergonomie QUALIF v11.1.0.1 — durée (via `onLoadedMetadata`) et
+   taille (fichier fraîchement choisi uniquement) sur la même ligne,
+   remplace .sound-preview-size (renommée, même usage). */
+.sound-preview-meta {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+}
+
+.sound-preview audio {
+  flex: 1 1 220px;
+  height: 32px;
+}
+
+/* CA2 — le refus nomme sa cause (message serveur brut). */
+.sound-error-message {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--error) 10%, white);
+  border: 1px solid color-mix(in srgb, var(--error) 35%, white);
+  color: var(--error);
+  font-size: 0.8rem;
+}
+
+/* Bascule "démarrer le chronomètre à la fin du son" — interrupteur compact
+   sur une ligne (ajustement ergonomie QUALIF v11.1.0.2, remplace les 2
+   options radio empilées de la v11.1.0.1, jugées trop volumineuses).
+   Toujours monté dans la garde de type (v11.1.0.1), grisé tant qu'aucun son
+   n'est attaché. Le curseur lui-même réutilise `.quiz-switch` TEL QUEL
+   (BackstagePage.css, QuizMetaForm.jsx) — aucun second patron de switch. */
+.sound-timer-toggle {
+  margin-top: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.sound-timer-toggle-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-600);
+}
+
+.sound-timer-toggle.disabled .sound-timer-toggle-label {
+  color: var(--gray-400);
+}
+
+.sound-timer-switch-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sound-timer-switch-side {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-400);
+  transition: color var(--transition-fast);
+}
+
+.sound-timer-switch-side.active {
+  color: var(--gray-800);
+  font-weight: 600;
+}
+
+.sound-timer-toggle.disabled .sound-timer-switch-side.active {
+  color: var(--gray-400);
+  font-weight: 500;
+}
+
+.sound-timer-switch-group .quiz-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .submit-btn {
   margin-top: var(--space-2);
 }

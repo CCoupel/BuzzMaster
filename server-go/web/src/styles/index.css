@@ -47,10 +47,15 @@
   /* Accent Colors - Fun & Energetic */
   --accent-pink: #ec4899;
   --accent-orange: #f97316;
+  --conn-badge-orange: #f59e0b;
   --accent-yellow: #eab308;
   --accent-green: #22c55e;
   --accent-cyan: #06b6d4;
   --accent-red: #ef4444;
+
+  /* Logo BuzzControl (#239) */
+  --brand-logo-buzz: var(--primary-800);
+  --brand-logo-control: var(--accent-pink);
 
   /* Neutrals */
   --gray-50: #f9fafb;

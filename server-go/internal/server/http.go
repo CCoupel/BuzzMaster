@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/audio/synth"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
@@ -986,6 +987,26 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		question["ORDER"] = order
 	}
 
+	// Question sound (v11.1, #219, contracts/sound.md §10) — SAME
+	// preservation trap as MEDIA/MEDIA_ANSWER above (R3, precedent
+	// EXPLANATION): this handler reconstructs `question` from scratch, so a
+	// re-edit that sends no "sound" file would otherwise silently destroy
+	// SOUND. "sound_cleared=true" is the explicit opt-out — it BOTH skips
+	// this preservation AND removes the actual file from disk (going
+	// further than MEDIA/MEDIA_ANSWER ever have — contract §12 point 4,
+	// deliberately not backported to those two in this lot).
+	soundCleared := r.FormValue("sound_cleared") == "true"
+	if existingSound, ok := existingQuestion["SOUND"].(string); ok && existingSound != "" {
+		if soundCleared {
+			oldPath := filepath.Join(questionsDir, filepath.Base(existingSound))
+			if err := os.Remove(oldPath); err != nil && !os.IsNotExist(err) {
+				LogWarn(game.LogComponentHTTP, "Question %s: failed to remove cleared sound file %s: %v", id, oldPath, err)
+			}
+		} else {
+			question["SOUND"] = existingSound
+		}
+	}
+
 	// Handle question type (SPEEDY or QCM) — "NORMAL" accepted as alias for backward compatibility
 	questionType := r.FormValue("type")
 	if questionType == "" {
@@ -1456,6 +1477,78 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// Question sound upload (v11.1, #219, contracts/sound.md §10). Unlike
+	// MEDIA/MEDIA_ANSWER above — which silently skip a failed write — a
+	// non-conforming sound REJECTS THE WHOLE SAVE (CA2: "refusé avec un
+	// message qui nomme la cause"), never saves silently as "no sound".
+	// soundTimerDelayed is a plain resubmitted-every-time form field (same
+	// discipline as qcm_hints_enabled above), never preserved from
+	// existingQuestion.
+	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true"
+	var soundWarning string
+	if soundFile, soundHeader, ferr := r.FormFile("sound"); ferr == nil {
+		defer soundFile.Close()
+		if !strings.EqualFold(filepath.Ext(soundHeader.Filename), ".wav") {
+			http.Error(w, "le son doit être un fichier .wav", http.StatusBadRequest)
+			return
+		}
+		raw, rerr := io.ReadAll(io.LimitReader(soundFile, audio.MaxQuestionSoundBytes+1))
+		if rerr != nil {
+			http.Error(w, "lecture du fichier son échouée", http.StatusBadRequest)
+			return
+		}
+		if int64(len(raw)) > audio.MaxQuestionSoundBytes {
+			http.Error(w, fmt.Sprintf("ce fichier pèse plus que la limite de %d Mio pour un son de question", audio.MaxQuestionSoundBytes>>20), http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		result, verr := audio.ValidateQuestionSound(raw)
+		if verr != nil {
+			http.Error(w, verr.Error(), http.StatusBadRequest)
+			return
+		}
+
+		randomNum := rand.Intn(9000) + 1000
+		fileName := fmt.Sprintf("sound_%d.wav", randomNum)
+		filePath := filepath.Join(questionsDir, fileName)
+		// Écrit le PCM VALIDÉ (result.PCM, toujours stéréo canonique — un
+		// mono d'origine a déjà été suréchantillonné par
+		// ValidateQuestionSound, arbitrage QUALIF v11.1) dans un en-tête WAV
+		// neuf, jamais les octets bruts uploadés : ceux-ci peuvent être mono
+		// et ne seraient alors plus lisibles tels quels par le pilote de
+		// lecture (media_oto.go, qui exige strictement du stéréo canonique).
+		if werr := os.WriteFile(filePath, audio.BuildCanonicalWAV(result.PCM), 0644); werr != nil {
+			LogError(game.LogComponentHTTP, "Question %s: failed to write sound file %s: %v", id, filePath, werr)
+			http.Error(w, "échec d'écriture du fichier son", http.StatusInternalServerError)
+			return
+		}
+		question["SOUND"] = "/question/" + id + "/" + fileName
+
+		// Contextual warning (§10.4 — no fixed threshold): meaningful ONLY in
+		// mode SIMULTANÉ. In mode différé the answer timer waits for the
+		// sound regardless of TIME, so the mismatch this warns about cannot
+		// occur.
+		if !soundTimerDelayed {
+			if questionTime, terr := strconv.Atoi(r.FormValue("time")); terr == nil && questionTime > 0 {
+				if result.Duration > time.Duration(questionTime)*time.Second {
+					soundWarning = fmt.Sprintf(
+						"ce son dure %.1f s, plus longtemps que le temps de réponse (%ds) — en mode simultané, la question sera déjà expirée avant la fin du son",
+						result.Duration.Seconds(), questionTime)
+				}
+			}
+		}
+	}
+	// SOUND_TIMER_DELAYED (omitempty, contract §10.7 "valeur zéro =
+	// comportement correct"): written only when true, AND only when a sound
+	// actually ends up attached (preserved or freshly uploaded) — a stale
+	// `true` left over after "sound_cleared" must never linger with no
+	// sound to apply to.
+	if soundTimerDelayed {
+		if soundURL, ok := question["SOUND"].(string); ok && soundURL != "" {
+			question["SOUND_TIMER_DELAYED"] = true
+		}
+	}
+
 	// Save question.json
 	data, _ := json.MarshalIndent(question, "", "  ")
 	os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644)
@@ -1468,7 +1561,11 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "ok"}`))
+	respBody, _ := json.Marshal(map[string]interface{}{
+		"status":  "ok",
+		"warning": nullableString(soundWarning),
+	})
+	w.Write(respBody)
 }
 
 // ErrQuestionIDExhausted is returned by resolveQuestionDir when every ID in

@@ -65,6 +65,13 @@ type App struct {
 	// soundPhase is the sound layer's own front-detection memory (contract
 	// sound.md §5.4) — see its doc comment in cmd/server/sound.go.
 	soundPhase soundPhaseTracker
+	// qsound is the question-sound adapter (v11.1, #219, contracts/
+	// sound.md §10), read through a.questionSound(). Built once in
+	// setup() (setupQuestionSound, cmd/server/question_sound.go) and never
+	// rebuilt — a plain field, unlike soundEngine's atomic.Pointer, since
+	// nothing ever swaps it after construction (only its internal
+	// MediaPlayer's own state changes, guarded by its own mutex).
+	qsound *questionSoundAdapter
 	// ambianceMu serialises setupAmbiance/reconfigureAmbiance: two config
 	// updates in flight must never leave hueDriver and the writer's driver
 	// pointing at different (or already closed) drivers.
@@ -552,6 +559,11 @@ func (a *App) init() {
 	// startup (sound.go).
 	a.createDefaultSounds()
 
+	// Question-sound adapter (v11.1, #219) — second, fully async audio
+	// path for a long sound attached to a question, distinct from the
+	// cues engine above (cmd/server/question_sound.go, contract §10.5).
+	a.setupQuestionSound()
+
 	// Set up callbacks
 	a.setupCallbacks()
 }
@@ -619,6 +631,7 @@ func (a *App) setupCallbacks() {
 	a.engine.OnTimeUp = func() {
 		a.ambiance().NotifyPulse(lighting.KindTimeUp, nil, 0, lighting.TimeUpPulseDuration)
 		a.notifySound(audio.CueTempsEcoule)
+		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — a still-playing question sound must not survive the chrono's own expiry
 	}
 
 	// Countdown ticks (3-2-1 before game starts)
@@ -754,6 +767,11 @@ func (a *App) setupCallbacks() {
 		// broadcast. Harmless (idempotent, cheap) on the other call sites
 		// that share this callback for unrelated config sections.
 		a.refreshEntracteImageIsCustom()
+		// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
+		// `sound.enabled` may have just changed — one of the "quatre
+		// moments", same idempotent-and-cheap discipline as its neighbours
+		// above.
+		a.refreshQuestionSoundAvailability()
 		a.broadcastUpdate()
 	}
 
@@ -1209,6 +1227,13 @@ func (a *App) stop() {
 	// (contract §7) actually looks for it — see ambianceSiteRegistry below.
 	a.sendLEDSetAllEntracteOff()
 
+	// Question sound (v11.1, #219): stop any playing sound and cancel its
+	// watchdog before the app context is cancelled — same ordering
+	// reasoning as the Hue/buzzer LED extinctions above.
+	if a.qsound != nil {
+		a.qsound.Stop()
+	}
+
 	// Cancel the application context — stops the AckManager goroutine and any other ctx-aware components.
 	if a.cancelCtx != nil {
 		a.cancelCtx()
@@ -1400,6 +1425,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionStop:
 		a.logger.Info(game.LogComponentEngine, "STOP game")
 		a.engine.Stop()
+		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — safe unconditionally
 		a.broadcastStop()
 		a.broadcastNextQuestion() // #155/#156 B5 — question ends, "next" may now differ
 
@@ -1422,6 +1448,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// before Pause() returns, on every accepted call.
 		if a.engine.GetPhase() == game.PhasePaused {
 			a.broadcastPauseAll()
+			a.questionSound().Pause() // v11.1/#219, contract §10.7 — "PAUSE du jeu met le son en pause"
 		}
 
 	case protocol.ActionContinue:
@@ -1433,11 +1460,13 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// Continue() actually transitioned, never on a silent refusal.
 		if a.engine.GetPhase() == game.PhaseStarted {
 			a.broadcastContinue()
+			a.questionSound().Resume() // v11.1/#219, contract §10.7 — "CONTINUER le reprend sans coupure"
 		}
 
 	case protocol.ActionReveal:
 		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
 		answer := a.engine.Reveal()
+		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11
 		a.broadcastReveal(answer)
 		a.broadcastNextQuestion() // #155/#156 B5 — REVEALED status can change "next"
 
@@ -1529,6 +1558,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionRafaleSetTeams:
 		a.handleRafaleSetTeams(msg)
+
+	case protocol.ActionQuestionSound:
+		a.handleQuestionSound(msg)
 
 	case protocol.ActionShowQRCode:
 		a.handleShowQRCode()
@@ -1844,6 +1876,13 @@ func (a *App) handlePong(clientID string, msg *protocol.Message) {
 	if a.engine.IsGamePrepare() {
 		a.engine.SetBumperReady(bumperID)
 
+		// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
+		// refresh the media-availability verdict BEFORE the
+		// PREPARE↔READY evaluation below — every PONG is one of the
+		// "quatre moments" this must be recomputed at. Cheap (cached,
+		// §10.8.3) and a no-op when unchanged.
+		a.refreshQuestionSoundAvailability()
+
 		// Check if all ready. #172 B2: PREPARE's exit condition is the two
 		// criteria combined — AreAllTeamsReady (buzzers) AND ParticipantsConform
 		// (selection valid for the question's type). AreAllTeamsReady itself is
@@ -1996,6 +2035,13 @@ func (a *App) handleReady(msg *protocol.Message) {
 
 	a.logger.Info(game.LogComponentEngine, "READY question=%s", payload.Question)
 	a.engine.Ready(payload.Question, question)
+	a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
+	// question selection is one of the "quatre moments" — Ready() just
+	// reset QUESTION_SOUND_UNAVAILABLE to "", recompute it immediately for
+	// the newly selected question so the very first PREPARE broadcast
+	// already carries the real verdict, not a transient "available".
+	a.refreshQuestionSoundAvailability()
 
 	// #127: a.engine.Ready() already fired OnStateChange(PhasePrepare) above,
 	// which calls broadcastGameState() -> broadcastUpdateTo(Admin, TV,
@@ -2066,6 +2112,15 @@ func (a *App) handleStart(msg *protocol.Message) {
 	}
 
 	a.logger.Info(game.LogComponentEngine, "START game with delay=%ds", payload.Delay)
+	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7/CA20):
+	// last of the "quatre moments" — an indisponibilité arriving between
+	// the button's display and this very click must still be caught: if
+	// it just became unavailable, this refresh reverts the question to
+	// PREPARE (reevaluatePrepareReadyUnsafe, inside
+	// SetQuestionSoundUnavailable) BEFORE Engine.Start()'s own phase==READY
+	// guard (#172 B4) runs, so Start() correctly refuses instead of racing
+	// a stale READY.
+	a.refreshQuestionSoundAvailability()
 	a.engine.Start(payload.Delay)
 	// #199 QUALIF 8.0.0.14 investigation: Engine.Start() silently no-ops
 	// (logs "Cannot start game from phase X (must be READY)") when the
@@ -3234,6 +3289,17 @@ func (a *App) onPhaseStarted(previousPhase game.GamePhase) {
 		a.notifySound(audio.CueEntracteDebut)
 	default:
 		a.notifySound(audio.CueDepart)
+	}
+
+	// Question sound (v11.1, #219, contract §10) — SEPARATE from the cues
+	// fan-out just above (never notifySound/PlayCue, contract §10.5). Same
+	// isRealStart guard reuse the plan calls for explicitly: it already
+	// covers a resume-after-PAUSE (Continue()) and a RAFALE advance
+	// (fireRafaleAdvanceCallbacks' redundant OnStateChange(PhaseStarted)
+	// reuse) without a second front-detection mechanism. questionSound().Start
+	// itself no-ops when the current question carries no sound (CA9).
+	if isRealStart {
+		a.questionSound().Start(a.engine.GetState().Question)
 	}
 }
 

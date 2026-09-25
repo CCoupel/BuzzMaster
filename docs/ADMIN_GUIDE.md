@@ -2401,4 +2401,161 @@ loginctl show-user buzzcontrol
 journalctl -u buzzcontrol -n 50
 ```
 
+---
+
+## Son Attaché à une Question (v11.1.0, #219)
+
+En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un **son personnel à une question individuelle** (types SPEEDY, QCM, ARDOISE uniquement). Ce son joue au lancement de la question et peut configurer le chronomètre de réponse.
+
+### Attacher un son à une question
+
+**Procédure** :
+
+1. Allez à `/admin/quiz` et sélectionnez une question SPEEDY, QCM ou ARDOISE
+2. Faites défiler jusqu'au bloc **« Son »** (onglet Questions, dans le formulaire de la question)
+3. Cliquez **« Choisir un fichier »** et sélectionnez un fichier `.wav`
+4. Le serveur **valide instantanément** le fichier selon les spécifications ci-dessous
+5. Une fois accepté, le bouton affiche **« Son attaché »** (pastille verte)
+6. *(Optionnel)* Activez la case **« Démarrer le chrono à la fin du son »** si le chronomètre doit attendre la fin du son avant de commencer
+
+### Formats acceptés — Spécifications strictes
+
+**Important** : le son d'une question suit les **mêmes règles que les bruitages d'événement** (v11.0), avec des plafonds légèrement différents pour permettre des contenus plus longs.
+
+| Paramètre | Valeur | Raison |
+|---|---|---|
+| Extension | **`.wav`** seulement | Décision utilisateur. Aucune conversion serveur ni navigateur |
+| Conteneur | **RIFF/WAVE valide** | Sinon, fichier rejeté au téléversement |
+| Codec | **PCM** (non compressé) | Un seul contexte audio pour toute l'application |
+| Fréquence | **44 100 Hz** exactement | Imposée par le pilote matériel (#228) |
+| Canaux | **Stéréo (2 canaux)** ou mono (1 canal) | Stéréo préféré pour les sons mélodiques |
+| Profondeur | **16 bits** | Qualité CD standard, équilibre taille/qualité |
+| Durée | **Maximum 30 s** ; aucun avertissement | Permet des introductions musicales, enregistrements vocal, vidéos silencieuses avec son |
+| Taille fichier | **Maximum 6 Mio** | Un son de 30 s pèse ~2.6 Mo, cette limite laisse de la marge |
+
+### Modes de démarrage du chronomètre
+
+Lors de l'attache d'un son, vous choisissez **une seule fois** si le chronomètre démarre **simultanément** avec le son ou **à la fin du son** :
+
+#### 🎵 Mode Simultané (défaut)
+
+**Cas** : **« Démarrer le chrono à la fin du son »** est **OFF**.
+
+**Comportement** : Le son et le chronomètre démarrent ensemble à la même seconde. Le chronomètre ne s'arrête pas à la fin du son — il continue jusqu'à sa durée programmée, même si le son a terminé.
+
+**Exemple** : Question SPEEDY de 30 secondes avec son de 5 secondes.
+- Seconde 0: Son et chrono démarrent
+- Seconde 5: Son termine
+- Seconde 30: Chrono expire (question fermée)
+- **Durée effective : 30 secondes** ✓
+
+**Cas d'usage** : Son de fond musical, cloche d'introduction (le texte de la question est lu après).
+
+#### ⏳ Mode Différé
+
+**Cas** : **« Démarrer le chrono à la fin du son »** est **ON**.
+
+**Comportement** : Le son démarre, le chronomètre reste **figé** au temps plein. Une fois le son terminé (naturellement ou arrêté manuellement par l'animateur), le chronomètre commence son décompte.
+
+**Exemple** : Question SPEEDY de 30 secondes avec son de 10 secondes.
+- Seconde 0: Son démarre, chrono figé (affiché comme "⏳ Le chrono démarre à la fin du son")
+- Seconde 10: Son termine
+- Secondes 10-40: Chromo compte à rebours (30 s)
+- **Durée effective : 10 + 30 = 40 secondes** ✓
+
+**Cas d'usage** : Son d'énoncé vocal enregistré pour une question (l'équipe attend la fin avant de répondre), intro musicale avant le texte du quiz (la lecture de la question prend du temps).
+
+### Gestes d'animation — Contrôle du son en direct
+
+Pendant une question avec son attaché, l'animateur voit une **rangée de trois boutons** dans la zone conduite (rangée L2) :
+
+| Geste | Clé | Effet |
+|---|---|---|
+| ↻ **Rejouer** | Rejeu complet | Redémarre le son depuis le début. Si le chronomètre était en mode différé et avait déjà commencé, il repart de zéro. |
+| ⏸ **Pause** (alternée ▶ Reprendre) | Pause/Reprise | Met le son en pause. En mode différé, le chronomètre pause aussi. Le bouton bascule en ▶ pour reprendre. |
+| ⏹ **Stop** | Arrêt | Arrête le son définitivement. En mode différé, **libère le chronomètre immédiatement** — la réponse continue sans attendre la fin du son. |
+
+Ces trois gestes n'apparaissent **que si** une question en cours porte un son attaché.
+
+### Coûts disque et sauvegarde
+
+Chaque fichier WAV de 30 secondes pèse environ **2.6 Mo**. Un quiz complet de 85 questions peut donc consommer jusqu'à **~220 Mo** si toutes les questions portent un son.
+
+**Impact sauvegarde sélective** : Quand vous demandez une sauvegarde incluant les **Questions**, le dossier `data/files/questions/` est archivé en **entier** — tous les sons des questions y sont inclus. Vous ne pouvez pas sauvegarder sélectivement certaines questions uniquement.
+
+**Recommandation** : Si vous hébergez sur un serveur avec stockage limité, téléversez les sons progressivement au fur et à mesure des besoins, plutôt que de tous les préparer d'avance.
+
+### Survie du son à la ré-édition
+
+Une question avec son attaché **conserve son son** si vous :
+- Modifiez le texte, la réponse, les points, les options QCM
+- Changez la durée du chronomètre
+- Modifiez le mode de démarrage du chronomètre (simultané ↔ différé)
+
+**Le son n'est supprimé que si vous cliquez explicitement le bouton « Supprimer le son »**.
+
+### Comportement en cas de dégradation
+
+Si à la lancement d'une question en mode différé, le son **ne peut pas démarrer** (désactivé globalement, enceinte indisponible, fichier illisible), **le chronomètre démarre immédiatement** — jamais de blocage :
+
+| Raison de dégradation | Comportement |
+|---|---|
+| ❌ Son désactivé (interrupteur OFF dans `/admin/ambiance`) | Chrono démarre sans attendre |
+| ❌ Enceinte indisponible (non initialisée au démarrage du serveur) | Chrono démarre sans attendre |
+| ❌ Fichier son illisible (corrompu, déplacé, droits insuffisants) | Chrono démarre sans attendre |
+| ❌ Format non supporté par le pilote | Chrono démarre sans attendre |
+
+Cette comportement de non-blocage **est une garantie** : le jeu continue toujours, même en cas de problème audio.
+
+### ⚠️ Gate Média (T0) — Question Bloquée au Lancement (v11.1 addendum, #219/#236/#237)
+
+**NOUVEAU** : Avant le lancement d'une question qui porte un son attaché, le serveur **valide l'availability du média**. Si le son n'est pas disponible, le bouton **START reste grisé** et un **motif d'erreur** s'affiche sous le bouton.
+
+#### Trois raisons de blocage possibles
+
+| Motif | Cause | Remède |
+|-------|-------|--------|
+| **« Le son est désactivé »** | Interrupteur audio OFF dans `/admin/ambiance` | Activer l'audio → le bouton START réactivé automatiquement |
+| **« L'enceinte n'est pas disponible »** ⚠️ | Enceinte non initialisée au démarrage du serveur (peut être : non branchée au démarrage, USB coupée après démarrage, pilote non rechargé) | **Brancher l'enceinte solidement et redémarrer le serveur entièrement** (pas juste « Nouvelle partie ») |
+| **« Le fichier son est indisponible »** | Fichier son cassé, déplacé, droits insuffisants, format non supporté | Réuploader le fichier, puis redémarrer le serveur |
+
+#### Cas critique : enceinte branchée APRÈS le démarrage du serveur
+
+⚠️ **Important** : Si vous branchez l'enceinte **après** le démarrage du serveur, le système ne la détecte pas automatiquement. Les questions restent **bloquées** jusqu'au redémarrage.
+
+**Procédure** :
+1. Brancher l'enceinte solidement (vérifier le câble USB ou réseau)
+2. Attendre quelques secondes pour que le système la détecte
+3. **Redémarrer le serveur** : cliquer le bouton **ARRÊT** (menu déroulant Navbar en haut à droite de `/admin`) — le serveur s'arrête immédiatement
+4. Redémarrer l'exécutable manuellement :
+   - **Windows** : double-clic sur `buzzcontrol-vX.Y.Z-windows-amd64.exe`
+   - **Raspberry Pi** : le service systemd redémarre automatiquement (si configuré)
+5. Le serveur réinitialise l'audio au démarrage → questions débloquées
+
+#### Contournement administrateur — Forcer le lancement
+
+Pour ignorer une blocage son temporaire (ex: enceinte temporairement indisponible, mais vous avez besoin de continuer la partie), un administrateur peut **déverrouiller manuellement la question** :
+
+**Geste** : Sur la page **Régie** (`/admin`), appuyez et maintenez **Ctrl + Clic sur la question** pour la déverrouiller.
+
+**Résultat** :
+- Le bouton START réactivé immédiatement
+- La question se lance **sans le son** (dégradation gracieuse)
+- Cette dérogation s'applique **à cette question uniquement** — la suivante sera à nouveau contrôlée
+
+**Restriction** : Ce geste **ne contourne que la branche audio** — si la question attend aussi des participants (ex: MEMORY SOLO), ils restent bloquants même avec le Ctrl+clic.
+
+#### Alerte « Audio indisponible »
+
+Sur `/admin` et `/admin/quiz`, une **pastille d'alerte rouge** s'affiche en haut si :
+- Au moins une question du quiz porte un son attaché **ET**
+- L'audio global n'est pas disponible
+
+**Libellé** : *« Ce quiz contient N question(s) sonore(s), mais l'audio n'est pas disponible. Elle(s) ne pourr(a/ont) pas être lancée(s). Vérifier la configuration ou brancher l'enceinte, puis redémarrer le serveur. »*
+
+Cette alerte :
+- Disparaît automatiquement quand vous réactivez l'audio ou redémarrez le serveur
+- N'apparaît **jamais sur `/anim`** (interface animateur, elle n'a pas de rôle de configuration)
+- Vous aide à détecter les situations de blocage avant qu'une question ne reste figée
+
 

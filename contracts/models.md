@@ -181,6 +181,8 @@ interface Question {
   MEDIA?: string         // URL image question
   MEDIA_ANSWER?: string  // URL image réponse
   EXPLANATION?: string   // Note d'explication/justification — animateur uniquement (v6.4.x, #168)
+  SOUND?: string               // URL média sonore de question (v11.1, #219) — voir §SOUND ci-dessous
+  SOUND_TIMER_DELAYED?: boolean // true = chronomètre différé jusqu'à la fin du son (v11.1, #219)
 
   // QCM
   QCM_ANSWERS?: QCMAnswers
@@ -257,6 +259,39 @@ versionnage de schéma n'existe pour `question.json` et **aucune migration n'est
 cartes `MOTION_CARDS`. Une manche MEMOTION a donc **une seule** note pour l'ensemble de ses cartes.
 Une note par carte reste un ajout **additif et non breaking**, renvoyé au chantier MEMOTION+
 (#25, milestone v7.0.0) qui rouvrira de toute façon le modèle de carte.
+
+### `SOUND` / `SOUND_TIMER_DELAYED` — média sonore de question (v11.1, #219)
+
+> **Contrat normatif complet** : `contracts/sound.md` §10. Cette section n'en est qu'un résumé côté
+> modèle — en cas de divergence, `sound.md` §10 fait foi.
+
+Un **média sonore long** attachable à une question, au même titre qu'une image (`MEDIA`), joué sur
+l'enceinte du serveur au lancement de la question via un second chemin audio entièrement
+asynchrone (`internal/audio.MediaPlayer`, distinct du moteur de bruitages/cues). `SOUND` porte
+l'URL (`/question/<id>/sound_<rand4>.wav`, WAV canonique 44 100 Hz/16 bits, mono **ou** stéréo
+côté upload — toujours suréchantillonné et **stocké stéréo** — ≤ 30 s, ≤ 6 Mio, limites
+**distinctes** de celles des cues ; arbitrage mono : QUALIF v11.1, 2026-09-22, `sound.md` §10.4).
+`SOUND_TIMER_DELAYED` choisit si le chronomètre de
+réponse démarre **en même temps que** le son (`false`, valeur zéro, comportement d'avant ce lot) ou
+**à sa fin** (`true`) — voir `contracts/game-state.md` §`ANSWER_TIMER_WAITING`.
+
+> ⚠️ **Normatif — le champ est structurellement commun à tous les `QuestionType`, exactement comme
+> `MEDIA`.** Le périmètre v11.1 (éditeur Quiz : SPEEDY, QCM, ARDOISE) est une **décision d'éditeur
+> frontend**, jamais une garde côté serveur — voir `sound.md` §10.4bis pour le raisonnement complet
+> (aucune sécurité gagnée, élargissement futur plus coûteux, rupture de symétrie avec `MEDIA`). Une
+> revue qui « corrige » cela en ajoutant une garde de type serveur va à l'encontre du contrat.
+
+**Persistance** : additif et rétrocompatible, `omitempty` sur les deux champs — les `question.json`
+existants restent inchangés octet pour octet, valeur zéro (`SOUND` absent, `SOUND_TIMER_DELAYED`
+absent ⇒ `false`) = comportement strictement identique à avant ce lot.
+
+> ⚠️ **Piège d'implémentation — même famille que `EXPLANATION` ci-dessus, en pire** :
+> `handleUploadQuestion` reconstruit la question de zéro à chaque enregistrement. `SOUND` doit être
+> **recopié explicitement** depuis la question existante quand l'upload ne fournit pas de nouveau
+> fichier `sound` — sans quoi le son est **détruit silencieusement à chaque ré-édition**. Suppression
+> réelle via le champ `sound_cleared=true` (`contracts/http-endpoints.md` §Questions) : contrairement
+> à `MEDIA`/`MEDIA_ANSWER` (qui n'ont aujourd'hui aucun moyen réel de suppression, défaut connu —
+> `sound.md` §12 point 4), le fichier disque est effectivement supprimé (`os.Remove`).
 
 ### Exemple NORMAL
 

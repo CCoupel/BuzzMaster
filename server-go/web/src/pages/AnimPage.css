@@ -234,6 +234,24 @@
   min-width: 0;
 }
 
+/* #219 (v11.1, CA15) — mention "le chronomètre démarrera à la fin du son",
+   ligne 3 (.anim-answer-row, flex — pas de contrainte TV STATIQUE ici,
+   contrairement à PlayerDisplay.css : une ligne inline suffit). */
+.sound-wait-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--warning, #eab308);
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  padding: 2px 8px;
+  border-radius: var(--radius-md, 6px);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Phase COUNTDOWN — absente de Timer.css (Timer.jsx n'a lui-même aucune
    branche pour cette phase, #171 ne l'avait pas couverte). Reprend
    exactement la classe/couleur déjà utilisées par GamePage.jsx (admin,

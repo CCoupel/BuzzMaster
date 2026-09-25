@@ -2,6 +2,309 @@
 
 ---
 
+## [20260925] — Forçage de la vue TV « Jeu » au lancement d'une manche (#240, v11.1)
+
+- **[CHANGED]** `contracts/game-state.md` — sémantique de `REMOTE` : remis à `GAME` par le serveur à la sélection de question (PREPARE), au START, au CONTINUE après PAUSE et au départ de carte MEMOTION/RAFALE. Rétro-compatible, aucun nouveau champ.
+
+---
+
+## [20260923] — Média sonore : un média indisponible empêche le lancement (#219/#236/#237, v11.1)
+
+> Besoin remonté pendant la validation manuelle du Scénario 11, sur un lot déjà livré et en QUALIF
+> (v11.1.0.4) : « si le média n'est pas disponible, la question n'a plus de raison d'être ».
+> Deux arbitrages complémentaires au GATE 2 : **revalidation complète du format** et
+> **échappatoire par `Ctrl`+clic**. Plan : `_work/reports/plan-20260923-094500.md` (rév. 6).
+>
+> ⚠️ **Ce changement touche un principe déjà revu et approuvé** (R10/CA12, couvert par trois tests
+> dédiés). Il ne le supprime pas : il en **restreint la portée**.
+
+- **[NEW]** `contracts/sound.md` §10.8.1 — **frontière T0/T1**, normative. **T0 (avant le
+  lancement) : BLOQUANT** — la question ne passe pas en `READY`. **T1 (après le lancement) : JAMAIS
+  BLOQUANT** — §10.7 inchangée. Les deux règles portent sur des **instants différents** : un
+  bruitage manqué est une perte cosmétique, un son de question manquant vide la question de son
+  contenu.
+- **[CHANGED]** `contracts/sound.md` §10.7 — règle de non-blocage **restreinte à T1**, sans être
+  affaiblie. Une implémentation qui ferait disparaître la dégradation T1 au prétexte d'avoir ajouté
+  la gate T0 est un **refus de revue**.
+- **[NEW]** `contracts/sound.md` §10.8.2 — **définition unique** de « média disponible » : trois
+  conditions, portées par **une seule fonction** réutilisée par la gate T0 **et** par la dégradation
+  T1. ⚠️ **Arbitrage GATE 2** : la troisième condition est une **revalidation COMPLÈTE du format**,
+  pas un simple `os.Stat` — un WAV tronqué ou corrompu hors éditeur doit être détecté **avant** le
+  lancement, pas découvert à la lecture. Réutilise `ValidateQuestionSound`/`extractCanonicalPCM`,
+  jamais un second parseur.
+- **[NEW — sans quoi la revalidation est intenable]** `contracts/sound.md` §10.8.3 — **cache de
+  validation obligatoire et de forme imposée** : clé = chemin, empreinte = `mtime` **et** taille via
+  un `os.Stat` bon marché ; empreinte identique ⇒ verdict réutilisé sans relire le contenu ;
+  empreinte différente ou absente ⇒ revalidation complète. ⚠️ **Les verdicts NÉGATIFS se mettent en
+  cache aussi** (sans quoi un fichier corrompu serait re-parsé à chaque PONG — le cas où le coût est
+  le plus élevé) ; un fichier disparu supprime son entrée, pour qu'un fichier restauré soit
+  revalidé ; **aucune éviction** n'est nécessaire, le cache est borné par le nombre de questions.
+- **[NEW — piège d'implémentation]** `contracts/sound.md` §10.8.3 — **la validation ne doit jamais
+  s'exécuter sous le verrou du moteur.** La disponibilité est calculée par la **couche applicative**,
+  avant l'appel moteur, puis poussée dans le `GameState`. Un rappel injecté faisant de l'E/S disque
+  depuis `reevaluatePrepareReadyUnsafe` tiendrait `e.mu` pendant une lecture de fichier.
+- **[NEW]** `contracts/sound.md` §10.8.4 — **aucun nouveau chemin de refus**. La gate est une
+  branche de `participantsConform`, qui absorbe **déjà** des conditions étrangères aux participants
+  (catégories/difficultés RAFALE). `Engine.Start()` refusant déjà toute phase ≠ `READY` (#172 B4),
+  **le contrôle serveur est acquis sans code neuf**. `participantsConform` doit **rester pur**.
+- **[NEW]** `contracts/game-state.md` — `GAME.QUESTION_SOUND_UNAVAILABLE`
+  (`""` | `DISABLED` | `OUTPUT` | `FILE`) et `GAME.SOUND_GATE_BYPASSED`, **sans `omitempty`**,
+  éphémères. Le libellé est produit par `prepareWaitReason.js` ; **aucun canal d'erreur WebSocket
+  n'est créé**.
+- **[CHANGED — correction contre le code, dev-backend]** `contracts/sound.md` §10.8.5 disait
+  « diffusé à l'admin seul » — **corrigé** : `contracts/game-state.md`/`ws-payload-serialization.md`
+  diffusent en réalité **Admin/TV/VPlayer/Anim** (❌ Buzzer seulement). `/anim` doit afficher le
+  motif (CA26), or il est routé vers **exactement** le même sérialiseur que TV/VPlayer
+  (`SerializeForWebClient`) — aucune distinction possible à ce niveau sans toucher
+  `internal/protocol/messages.go`/la sérialisation, que ce lot **ne modifie pas** (§4). Même matrice
+  que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` (entrée `[20260922]`).
+- **[NEW — arbitrage GATE 2, corrigé le 2026-09-23]** `contracts/sound.md` §10.8.6 — l'échappatoire
+  est le **`Ctrl`+clic DÉJÀ EXISTANT sur la question** (phase `PREPARE`, `Engine.ForceReady()`),
+  **pas** un geste nouveau sur le bouton LANCER : le contournement se joue à la frontière
+  `PREPARE → READY`, là où vit la gate. Conséquence : **aucune action nouvelle, aucune charge utile
+  nouvelle, aucun changement frontend** — et `FORCE_READY` étant déjà réservé à `ClientTypeAdmin`,
+  la restriction « régie seulement » est acquise sans rien écrire.
+  ⚠️ **Vérification faite contre le code** : `ForceReady()` **ne contourne PAS** `participantsConform`
+  aujourd'hui — il vérifie explicitement la conformité et refuse (arbitrage #172 B5 : *« it must not
+  also skip participant-selection conformity, or the original bug would return through this
+  debug/admin door »*). Le contournement est donc **limité à la branche son** par un drapeau
+  (`GAME.SOUND_GATE_BYPASSED`) que seule cette branche lit ; le refus sur les participants et sur
+  RAFALE reste **intact**. Le supprimer pour « simplifier » rouvrirait le bug que #172 B5 a fermé.
+- **[NEW — avertissement]** `contracts/sound.md` §10.8.8 — deux propriétés **préexistantes**
+  changent de gravité en devenant des conditions de lancement : l'indisponibilité de sortie est
+  **définitive pour la vie du processus** (contexte `oto` en `sync.Once` mémorisant son erreur —
+  §4/#230), et **rallumer le son exige un redémarrage** (§6.3). Avant, ces situations coûtaient une
+  question **silencieuse** ; désormais elles la rendent **injouable**. C'est la raison d'être de
+  l'échappatoire, et `ADMIN_GUIDE.md` doit porter l'avertissement.
+
+- **[NEW — ajout GATE 2 du 2026-09-23]** `contracts/sound.md` §10.9 — **puce d'alerte globale**,
+  complémentaire du blocage par question (les deux coexistent) : visible dès que le quiz contient
+  ≥ 1 question sonore **et** que l'audio est globalement indisponible. **Deux critères seulement**
+  (`sound.enabled` + sortie non neutre) — le critère « fichier » de §10.8.2 **ne s'applique pas** :
+  l'y inclure demanderait un contrôle disque par question pour alimenter un signal global, alors
+  que ce cas est déjà couvert par la gate.
+- **[NEW]** `contracts/sound.md` §10.9.2 — **état dérivé, aucun calcul serveur** : la diffusion
+  `QUESTIONS` porte déjà toutes les questions à l'admin, et `useSoundStatus()` interroge déjà
+  `GET /api/sound/status`. **Aucun endpoint, aucun agrégat, aucune interrogation supplémentaire.**
+  La puce disparaît d'elle-même — aucun cycle de vie à gérer. *(Périmètre : `QUESTIONS` étant
+  admin-seul, la puce n'existe pas sur `/anim`.)*
+- **[NEW — piège d'implémentation]** `contracts/sound.md` §10.9.3 — **la pastille de menu
+  « Ambiance » n'est pas détournée.** Lui ajouter une troisième forme « alerte » contredirait la
+  décision #234 (« deux formes seulement […] inactif = un choix normal de l'utilisateur, pas une
+  panne ») et ferait dire deux choses à la même icône. La puce est un composant **distinct** ;
+  `soundStateGlyph` **reste à deux formes**.
+
+**Aucun BREAKING de protocole** — les champs sont additifs, à valeur zéro correcte. **Mais
+changement de comportement observable assumé** : une question à son dont le média est indisponible
+ne démarre plus, là où elle démarrait silencieusement. C'est l'objet même de l'arbitrage.
+
+**Conséquence sur la recette** : le Scénario 11 de `tests/procedures/question-sound-219.md` est
+**scindé en 11a (T0, bloqué) et 11b (T1, dégradé)** — jamais remplacé, sous peine de perdre la
+couverture de R10 en croyant l'avoir remplacée. **Les trois tests `TestQuestionSoundAdapter_CA12_*`
+restent verts et inchangés** : ils appellent l'adaptateur en dessous de la transition de phase, donc
+une gate placée en amont ne les touche pas — ils passent du statut de « règle » à celui de
+« filet ».
+
+---
+
+## [20260922d] — Média sonore : mono accepté (retour QUALIF, #219, v11.1)
+
+> Retour utilisateur en validation QUALIF v11.1, après livraison DEV : les fichiers WAV **mono**
+> doivent être acceptés pour le son de question — jusqu'ici refusés comme les cues (§3, stéréo
+> strict). Fix ciblé, dev-backend, scope limité à ce point.
+
+- **[CHANGED]** `contracts/sound.md` §10.4 — le format canonique du média de question tolère
+  désormais **mono ou stéréo** en entrée, contre stéréo strict auparavant. Un mono est
+  **suréchantillonné en stéréo à l'upload** (chaque échantillon dupliqué sur les deux voies —
+  opération arithmétique pure, jamais un rééchantillonnage de fréquence ni un décodage de codec) ;
+  le fichier **stocké sur disque** est donc toujours stéréo canonique.
+- **[UNCHANGED, explicitement vérifié]** `contracts/sound.md` §3 (cues, #229/#230) — **stéréo strict
+  inchangé**. `extractCanonicalPCM` (`internal/audio/bank.go`), partagée par `FileBank.PCM`
+  (lecture des cues) et `ValidateUpload` (upload des cues), n'est **pas touchée** ; le validateur du
+  média de question utilise un parseur dédié (`extractQuestionSoundPCM`,
+  `internal/audio/validate_media.go`), délibérément dupliqué plutôt que paramétré pour garantir
+  cette absence d'effet de bord.
+- **[CHANGED]** `contracts/models.md` §SOUND, `contracts/http-endpoints.md` §Questions — wording
+  « stéréo » remplacé par « mono ou stéréo, stocké stéréo ».
+- **[NEW]** `internal/audio.BuildCanonicalWAV` — construit l'en-tête WAV neuf écrit sur disque par
+  `internal/server/http.go` à partir du PCM validé (toujours stéréo), remplace l'écriture des octets
+  bruts uploadés (qui pouvaient être mono, donc non rejouables tels quels par `media_oto.go`).
+
+**Toujours aucun BREAKING** : un upload déjà stéréo produit un résultat inchangé (même limites, même
+comportement) ; seul un mono, auparavant refusé, est maintenant accepté.
+
+---
+
+## [20260922c] — Média sonore : périmètre réduit à SPEEDY/QCM/ARDOISE (#219, v11.1)
+
+> Second tour de GATE 2 du même jour. **D4 est tranché : MEMORY et MEMOTION sortent du lot** — ni
+> l'option A ni l'option B ne sont implémentées maintenant, le sujet fera l'objet d'une issue
+> séparée. Plan révisé : `_work/reports/plan-20260922-103848.md` (rév. 3).
+>
+> Tout le reste est **conservé sans changement** : le verdict technique (rév. 1 §0), le plafond de
+> 30 s / 6 Mio et l'avertissement contextuel (entrée `[20260922b]`), et le chronomètre de réponse
+> configurable — désormais pour les trois types retenus seulement.
+
+- **[CHANGED — périmètre]** `contracts/sound.md` §10 — **SPEEDY, QCM, ARDOISE** uniquement. MEMORY,
+  MEMOTION, ENTRACTE et RAFALE sont hors périmètre : ces types portent leurs médias sur leurs
+  **cartes** (ou n'en portent pas), ce qui demande une décision de conception propre.
+- **[CHANGED]** `contracts/sound.md` §10.7 — `SoundTimerDelayed` n'est plus spécifié sur
+  `MotionCard`, et la table de couplage ne garde que le chronomètre **global**.
+- **[NEW — garde de non-régression]** `contracts/sound.md` §10.7 — **la garde de type existante
+  d'`actualStart()` est préservée à l'identique.** MEMOTION et ENTRACTE n'ont jamais démarré le
+  chronomètre global ; le différé s'insère **autour** de l'appel existant et ne remplace pas cette
+  garde. Un chronomètre global démarrant sur MEMOTION serait une **régression**, pas un effet de
+  bord acceptable (CA16 du plan). Le relevé de code MEMOTION est conservé en note, hors périmètre :
+  le jour où ce type recevra un son, son différé ne demandera **aucune modification du moteur**.
+- **[NEW — point le plus exposé à une « correction » en revue]** `contracts/sound.md` §10.4bis —
+  **le champ est commun à tous les types ; la restriction est une décision d'ÉDITEUR, jamais une
+  garde serveur.** `Question.SOUND` et `Question.SOUND_TIMER_DELAYED` vivent sur `Question`, hors
+  `TypedContent` : persistés, diffusés et lus quel que soit le type — exactement le régime de
+  `MEDIA`. Une garde serveur n'apporterait **aucune sécurité** (`GET /questions` est public et sans
+  authentification), rendrait l'élargissement futur **plus coûteux qu'il ne doit l'être** (sans
+  garde, ce sera un changement purement frontend), et romprait la symétrie avec `MEDIA` qu'une
+  relecture prendrait ensuite pour une incohérence à corriger.
+- **[REMOVED du périmètre]** `contracts/question-types.md` — le champ `SoundSlots` dans
+  `TypeDescriptor` **n'est plus à écrire**. `MediaSlots`, son invariant testé et sa carve-out
+  `RAFALE` restent intacts, et ne sont pas touchés du tout par ce lot. Le motif qui interdisait
+  d'étendre `MediaSlots` (convention de nommage mécanique `ToUpper(slot)+"_IMAGE"`) est conservé
+  dans le plan §12 pour le chantier ultérieur.
+
+**Toujours aucun BREAKING.** Les deux champs restent `omitempty` à valeur zéro correcte ; §2, §4 et
+§5 de `sound.md` restent inchangés au bit près ; les 85 `question.json` existants restent valides
+octet pour octet.
+
+**Plus aucune décision bloquante** : le plan rév. 3 est prêt pour dispatch DEV (4 batches,
+16 tâches, 5 phases).
+
+---
+
+## [20260922b] — Média sonore : arbitrages GATE 2 (#219, v11.1)
+
+> Révision de l'entrée `[20260922]` ci-dessous après le GATE 2 du même jour. Le **verdict
+> technique** qui la fonde (le chemin des cues est inapte à un média long, un second chemin
+> asynchrone est créé) est **inchangé** — seuls les paramètres et le périmètre bougent, plus un
+> besoin nouveau. Plan révisé : `_work/reports/plan-20260922-102600.md`.
+
+- **[CHANGED]** `contracts/sound.md` §10.4 — plafond de durée ramené de 45 s à **30 s**
+  (arbitrage utilisateur), et `MaxQuestionSoundBytes` recalculé en conséquence : **6 Mio**
+  (30 s canoniques = 5,05 Mio, soit +18,9 % de marge pour l'en-tête RIFF et d'éventuels chunks
+  `LIST`/`INFO`).
+- **[CHANGED]** `contracts/sound.md` §10.4 — **`WarnQuestionSoundDuration` supprimée.** Un seuil
+  fixe à 30 s n'avait plus de sens une fois 30 s devenu le plafond dur, et tout seuil de
+  remplacement n'aurait dit que « vous approchez du plafond », ce que le plafond dit déjà.
+  Remplacée par un avertissement **contextuel** — la durée du son comparée à `Question.TIME`, deux
+  valeurs présentes dans la même requête multipart — émis seulement en mode simultané. Toujours
+  **non bloquant**, comme le seuil qu'il remplace.
+- **[NEW]** `contracts/sound.md` §10.7 — **chronomètre de réponse différé**, besoin nouveau du
+  GATE 2 : `SoundTimerDelayed bool` sur `Question` et sur `MotionCard`, **valeur zéro = comportement
+  actuel** (aucune migration, même discipline que `CuesDisabled` §6.3). « La fin du son » recouvre
+  **deux** évènements — fin naturelle **et** arrêt manuel — la libération est **idempotente** et
+  **irréversible** pour la question en cours ; une libération survenue pendant une pause de jeu ne
+  prend effet qu'à la reprise.
+- **[NEW — règle de sûreté, la plus importante du lot]** `contracts/sound.md` §10.7 — **si la
+  lecture ne démarre pas réellement, le chronomètre démarre immédiatement.** Lecteur neutre,
+  fichier absent ou non conforme, `sound.enabled = false` : le mode différé **dégrade vers le mode
+  simultané**, jamais vers une question figée. Plus un **chien de garde** à
+  `MaxQuestionSoundDuration + 2 s`, pour que la dégradation ne dépende pas d'un seul chemin de
+  détection. Sans cette règle, une enceinte débranchée fige une question en direct, sans message et
+  sans recours.
+- **[NEW]** `contracts/sound.md` §10.7 — points de couplage **distincts** par famille de
+  chronomètre, relevés dans le code : le chronomètre **global** (SPEEDY/QCM/ARDOISE/MEMORY) démarre
+  dans `Engine.actualStart()` et se diffère en **ne créant pas le ticker** (`CurrentTime` est déjà
+  au temps plein — le chronomètre s'affiche figé sans état d'affichage à inventer, et
+  `Pause`/`Continue` n'arrêtant pas le ticker, c'est la **seule** forme correcte) ; le chronomètre
+  **par carte** (MEMOTION) est démarré par `(*App).handleMotionFlip`, pas par le moteur — son
+  différé **ne demande aucune modification du moteur**.
+- **[NEW]** `contracts/game-state.md` *(à écrire, Batch 1)* — `GAME.ANSWER_TIMER_WAITING`, diffusé
+  par le serveur : l'interface ne déduit jamais l'attente côté navigateur. `/anim`, `/admin` **et
+  la TV** doivent dire pourquoi le chronomètre ne bouge pas — un chiffre figé 30 s passe pour une
+  panne.
+- **[CHANGED — périmètre]** Types retenus : **SPEEDY, QCM, ARDOISE, MEMORY, MEMOTION**. ENTRACTE
+  **exclu** (il était dans la liste de la révision 1), RAFALE exclu (confirmé).
+- **[NEW]** `contracts/question-types.md` §7/§8 *(à écrire, Batch 2)* — champ **`SoundSlots []string`**
+  dans `TypeDescriptor`, **distinct de `MediaSlots`**. ⚠️ Motif normatif : la convention de nommage
+  de `MediaSlots` est **mécanique et fermée** (`strings.ToUpper(slot)+"_IMAGE"`,
+  `internal/server/http.go`) — un emplacement `sound` y produirait la clé absurde `SOUND_IMAGE`.
+  `MediaSlots`, son invariant testé `TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots` et sa
+  carve-out `RAFALE` restent **intacts**.
+
+**Toujours aucun BREAKING.** Les deux nouveaux champs sont `omitempty` à valeur zéro correcte ;
+§2, §4 et §5 de `sound.md` restent inchangés au bit près ; les `question.json` existants restent
+valides tels quels.
+
+**Décision encore ouverte, bloquant le seul lot MEMORY/MEMOTION** : la granularité du son sur ces
+deux types (D4 du plan révisé §1). Recommandation `planner` : son de **manche** pour MEMORY, son
+**par carte** pour MEMOTION. L'alternative — un son par carte MEMORY — n'est pas un média mais un
+**mode de jeu** : elle imposerait de changer la forme de `MemoryCard` (discriminant binaire
+texte/image), de trancher une règle de jeu nouvelle contre la voix unique du §10.2, de faire
+remonter au moteur un identifiant de carte qu'il jette aujourd'hui (`extractPairID`), et
+autoriserait 127 Mo pour une seule question (12 paires × 2 cartes × 30 s).
+
+---
+
+## [20260922] — Média sonore attaché à une question : second chemin de lecture (#219, v11.1)
+
+> Section de contrat écrite en Phase Plan, **avant** tout découpage de tâches, parce qu'elle
+> encode un **relevé de code** et non un arbitrage : le point technique critique posé par #219
+> (« `Play()` est bloquant, un extrait long va-t-il geler le moteur de jeu ? ») a été levé contre
+> `internal/audio/*.go` et contre le module `oto/v3 v3.5.1` lui-même. Verdict et preuves :
+> `_work/reports/plan-20260922-093142.md` §0.
+>
+> **La crainte formulée dans #219 est infondée, mais le blocage est réel ailleurs.** `PlayCue` ne
+> bloque jamais (§5.1) : le jeu est structurellement à l'abri, quelle que soit la durée du son.
+> En revanche le chemin des cues est inapte à un média long pour **quatre** raisons indépendantes
+> (plafond dur de 10 s dans le pilote, sérialisation FIFO stricte, catalogue de cues clos à un
+> fichier par cue, validation calibrée à 5 s) — et il n'offre **aucun** contrôle de lecture, donc
+> aucun des gestes d'animateur demandés.
+
+- **[NEW]** `contracts/sound.md` §10 — média sonore long attaché à une question : interface
+  `MediaPlayer` (`Play`/`Pause`/`Resume`/`Stop`/`State`, **aucune méthode bloquante**, voix unique,
+  lecture en flux depuis le disque via `io.ReadSeeker`), états `IDLE`/`PLAYING`/`PAUSED`, et
+  dégradation silencieuse identique au §5.5 avec son accesseur `IsNeutralMedia` symétrique de
+  `IsNeutral` (#230).
+- **[NEW]** `contracts/sound.md` §10.3 — **le contexte `oto` devient un singleton de package**
+  (`sync.Once`), partagé par `newOtoOutput` et par le backend du `MediaPlayer`. Imposé par la
+  contrainte fondatrice du §1 (« un seul contexte audio par processus ») : le contexte est
+  aujourd'hui créé *dans* `newOtoOutput` et détenu en privé, un second chemin ne peut donc pas en
+  obtenir un. ⚠️ **Refactor d'un code #228 déjà revu et testé — ré-organisation, pas réouverture** :
+  aucune signature modifiée, séquence de construction inchangée, et les quatre tests-gardes
+  (`play_blocks_228_test.go`, `output_228_test.go`, `cross_compile_228_test.go`,
+  `isneutral_230_test.go`) doivent passer **sans une ligne de modification** — en modifier un est
+  le signe que le blocage réel de `Play` a régressé, et doit être refusé en revue.
+- **[NEW — piège de bibliothèque, gravé exprès]** `contracts/sound.md` §10.3 — `oto` ferme un
+  `Player` par **finalizer GC** dès qu'il devient inatteignable. Le `MediaPlayer` doit garder une
+  **référence forte** pendant toute la lecture, sans quoi le son se coupe au hasard, plus souvent
+  sur machine chargée, de façon irreproductible.
+- **[NEW]** `contracts/sound.md` §10.4 — jeu de limites **propre au média** :
+  `MaxQuestionSoundDuration` 45 s, `WarnQuestionSoundDuration` 30 s, `MaxQuestionSoundBytes` 8 Mo.
+  ⚠️ **`MaxSoundDuration` (5 s) et `MaxUploadBytes` (2 Mo) ne sont PAS modifiées** — elles
+  protègent la file des cues (§5.2) et leur justification reste entière *pour les cues*. Les deux
+  jeux coexistent délibérément, un test-sentinelle verrouille ceux des cues : « factoriser » les
+  deux est le défaut le plus probable de ce lot et supprimerait silencieusement la garantie du
+  §5.2. Le format canonique du §3 et le **refus du `.mp3`** s'appliquent inchangés.
+- **[NEW]** `contracts/sound.md` §10.5 — frontière symétrique à celle du §6.2 : l'adaptateur du
+  média vit dans un fichier séparé (`cmd/server/question_sound.go`), n'appelle **jamais**
+  `notifySound` ni `PlayCue`, et réciproquement. Exclusion mutuelle **vérifiée par test**, pas par
+  discipline — même raisonnement que le registre AST du §6.2.
+- **[NEW]** `contracts/sound.md` §10.6 — explicitement hors périmètre : *ducking*, lecture en
+  boucle, position de lecture diffusée (seul l'**état** l'est, à chaque changement — le chronomètre
+  reste le seul flux à cadence du projet), média sonore de réponse.
+
+**Aucun BREAKING.** §2 (catalogue de cues), §4 (`Output`) et §5 (le moteur) sont **inchangés au bit
+près** ; les sept cues, leurs endpoints et leurs limites ne bougent pas. Les `question.json`
+existants restent valides tels quels et une configuration sans son se comporte exactement comme
+aujourd'hui.
+
+**Restent à écrire en Batch 0**, après arbitrage des décisions D0/D3 au GATE 2 (spécification
+complète déjà figée dans `_work/reports/plan-20260922-093142.md` §11) : `models.md`
+(`Question.SOUND`), `game-state.md` (`GAME.QUESTION_SOUND_STATE`, **sans `omitempty`**),
+`http-endpoints.md` (champs multipart `sound`/`sound_cleared` de `POST /questions`),
+`websocket-actions.md` (action `QUESTION_SOUND`), `ws-payload-serialization.md` (ligne du
+Tableau 2).
+
+---
+
 ## [20260921f] — Bruitage d'événement : section `sound` de `POST /config.json` (#230, Lot B addendum)
 
 > Trou remonté par `dev-frontend` à l'intégration contre le code réel (pas seulement contre le

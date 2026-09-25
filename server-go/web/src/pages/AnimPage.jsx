@@ -9,7 +9,7 @@ import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter, getRankBadge, formatRea
 import { sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward } from '../utils/pointsAward'
 import { isRevealed } from '../utils/phaseRules'
-import { prepareWaitReason } from '../utils/prepareWaitReason'
+import { prepareWaitReasons } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
@@ -156,6 +156,8 @@ export default function AnimPage() {
     stopMotionTimer,
     revealMotionCard,
     doneMotionCard,
+    // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
+    questionSound,
   } = useGame()
 
   // #176 (F5) — acquittement de la consigne régie par double-tap sur toute
@@ -455,13 +457,20 @@ export default function AnimPage() {
     )
   }, [teams, bumpers, gameState.phase, question, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST])
 
-  // #172/C2 — motif d'attente PREPARE, passé à AnimConductPanel (repli du
-  // bouton LANCER, style "à suivre" #166 déjà en place, aucun nouveau
-  // badge/CSS). `short: true` — sub-label du bouton, place limitée (F7).
-  const waitReason = useMemo(
-    () => prepareWaitReason(gameState.phase, question, displayTeams, gameState, { short: true }),
-    [gameState, question, displayTeams]
-  )
+  // #172/C2 — motif(s) d'attente PREPARE, passé à AnimConductPanel (repli du
+  // bouton LANCER, style "à suivre" #166 déjà en place). `short: true` —
+  // sub-label du bouton, place limitée (F7).
+  // Évolution UX (retour QUALIF v11.1.0.5 puis v11.1.0.6, #219/#236/#237) —
+  // `AnimConductPanel` continue de recevoir une seule chaîne (prop
+  // `waitReason`, composant et ses tests INCHANGÉS) : `prepareWaitReasons`
+  // peut renvoyer plusieurs motifs simultanés (buzzers ET son indisponible,
+  // par exemple). v11.1.0.6 : un motif par LIGNE plutôt que joints avec
+  // ' · ' sur une seule ligne — `'\n'` ici, `white-space: pre-line` sur
+  // `.anim-conduct-btn-sub` (AnimConductPanel.css) fait le reste.
+  const waitReason = useMemo(() => {
+    const reasons = prepareWaitReasons(gameState.phase, question, displayTeams, gameState, { short: true })
+    return reasons.length > 0 ? reasons.join('\n') : null
+  }, [gameState, question, displayTeams])
 
   // #158/F3 — mode ARDOISE : liste des copies à la place des cartes équipe.
   // Filtre équipes à joueur virtuel, parité #93 (même règle que
@@ -766,6 +775,13 @@ export default function AnimPage() {
             {phaseBadge && (
               <span className={`phase-badge ${phaseBadge.className}`}>{phaseBadge.label}</span>
             )}
+            {/* #219 (v11.1, CA15) — le chronomètre différé attend la fin du
+                son : sans cette mention un temps figé au plein est pris pour
+                une panne (R11, contrat sound.md §10.7). État diffusé par le
+                serveur (GAME.ANSWER_TIMER_WAITING) — jamais déduit ici. */}
+            {gameState.ANSWER_TIMER_WAITING && (
+              <span className="sound-wait-badge-inline">⏳ le chrono démarre à la fin du son</span>
+            )}
             {/* #166/F10 — zone réponse permanente : remplace le bloc
                 conditionnel #163/F4. Absente si aucune question chargée
                 (AnimAnswerZone rend null). */}
@@ -876,6 +892,10 @@ export default function AnimPage() {
           cardRafaleDisabled={cardRafaleDisabled}
           onCardRafaleValidate={onCardRafaleValidate}
           onCardRafaleInvalidate={onCardRafaleInvalidate}
+          // Son de la question (v11.1, #219) — état diffusé par le serveur
+          // (jamais déduit ici), geste transmis tel quel à questionSound().
+          soundState={gameState.QUESTION_SOUND_STATE}
+          onQuestionSound={questionSound}
         />
       </div>
 

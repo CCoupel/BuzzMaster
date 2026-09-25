@@ -11,7 +11,7 @@ contrats `contracts/game-state.md` §ENTRACTE, `contracts/websocket-actions.md` 
 §UPDATE_ENTRACTE_CONFIG
 
 > **Ce qui a changé depuis la première version de cette procédure** :
-> - Le bouton `ENTRACTE` / `FIN D'ENTRACTE` a déménagé de l'écran Jeu vers la **barre de
+> - Le bouton `ENTRACTE` / `REPRISE` a déménagé de l'écran Jeu vers la **barre de
 >   navigation** (Navbar) — visible sur **toutes** les pages admin, pas seulement `/admin`.
 > - La configuration du panneau (titre, sous-titre, image, taille, animation, transition) a
 >   déménagé de `/settings` (Config) vers la **page Quiz** (`/admin/quiz`) — c'est désormais une
@@ -62,7 +62,7 @@ affichée.
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Arrêter/révéler la question en cours (phase STOPPED ou REVEALED) | Bouton `ENTRACTE` (Navbar) redevient actif | | |
-| 2 | Cliquer sur `ENTRACTE` | Le bouton passe à `FIN D'ENTRACTE` (rouge/actif), le reste de `/admin` s'assombrit progressivement (grisé/estompé), le bouton lui-même reste NET et cliquable | | |
+| 2 | Cliquer sur `ENTRACTE` | Le bouton passe à `REPRISE` (rouge/actif), le reste de `/admin` s'assombrit progressivement (grisé/estompé), le bouton lui-même reste NET et cliquable | | |
 | 3 | Observer `/tv` | Contenu existant visible mais estompé (gris/sombre), panneau ENTRACTE centré affiché par-dessus (titre + sous-titre) | | |
 | 4 | Observer `/player` (VJoueur) | Même estompage, même panneau centré, proportions identiques à la TV, cadenas 🔒 net au-dessus de la zone de buzz | | |
 | 5 | Observer `/anim` | Interface estompée, indicateur « ⏸ Entracte en cours — contrôle réservé à l'admin » net, aucun bouton de contrôle | | |
@@ -80,7 +80,7 @@ et que son état actif reste évident même sur des pages qui ne s'estompent pas
 |-------|--------|-----------------|----------------|------|
 | 1 | Depuis `/admin`, naviguer vers Quiz, Équipes, Scores, Palmarès, Historique | Le bouton `ENTRACTE` est visible dans la Navbar sur CHACUNE de ces pages | | |
 | 2 | Déclencher l'entracte depuis la page Quiz (pas depuis l'écran Jeu) | Fonctionne — panneau/filtre apparaissent sur TV/VJoueur/anim comme au Scénario 2 | | |
-| 3 | Observer la page Quiz elle-même pendant l'entracte | Le contenu de la page N'EST PAS estompé (seuls `/admin` [écran Jeu] et `/anim` le sont) — mais le bouton `FIN D'ENTRACTE` reste visuellement net et contrasté (rouge) | | |
+| 3 | Observer la page Quiz elle-même pendant l'entracte | Le contenu de la page N'EST PAS estompé (seuls `/admin` [écran Jeu] et `/anim` le sont) — mais le bouton `REPRISE` reste visuellement net et contrasté (rouge) | | |
 | 4 | Terminer l'entracte depuis cette même page | Fonctionne, tout redevient normal | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
@@ -157,7 +157,7 @@ pause reçoit immédiatement le bon état (D2).
 | 2 | Ouvrir la page Quiz (`/admin/quiz`), section Entracte, modifier le titre et cliquer Enregistrer | Confirmation de sauvegarde ; une mention « Prendra effet au prochain entracte » est affichée à côté du bouton | | |
 | 3 | Observer `/tv` et `/player` (déjà ouverts, toujours en pause) | Le titre affiché sur le panneau **N'A PAS CHANGÉ** — toujours l'ancien titre | | |
 | 4 | Quitter la page Quiz, y revenir | Le formulaire affiche bien le **nouveau** titre enregistré (pas l'ancien) — l'enregistrement n'est pas perdu | | |
-| 5 | Cliquer sur `FIN D'ENTRACTE` puis relancer un entracte | Le panneau affiche maintenant le **nouveau** titre sur les 4 surfaces | | |
+| 5 | Cliquer sur `REPRISE` puis relancer un entracte | Le panneau affiche maintenant le **nouveau** titre sur les 4 surfaces | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -185,7 +185,7 @@ entracte, enregistrer met à jour la configuration normalement.
 |-------|--------|-----------------|----------------|------|
 | 1 | Entracte actif, phase ENROLL sur un autre cycle (ou juste après sortie), observer le QR code sur `/tv` si affiché | Position et taille normales, pas de décalage ni de passage derrière le panneau | | |
 | 2 | Sur `/admin`, envoyer un message régie pendant l'entracte (`REGIE_MESSAGE_SEND` reste autorisé, D6) | Le bandeau régie reste ancré en bas d'écran sur `/anim`, non estompé, non décalé | | |
-| 3 | Ouvrir le menu ☰ de la Navbar pendant l'entracte | Le menu déroulant s'affiche par-dessus tout le reste, sans être coupé ni mal positionné — et le bouton `FIN D'ENTRACTE`, juste à côté, reste net | | |
+| 3 | Ouvrir le menu ☰ de la Navbar pendant l'entracte | Le menu déroulant s'affiche par-dessus tout le reste, sans être coupé ni mal positionné — et le bouton `REPRISE`, juste à côté, reste net | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -198,7 +198,7 @@ entracte, enregistrer met à jour la configuration normalement.
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Avant l'entracte, sélectionner une question en `PREPARE` (sans lancer) | Question visible en aperçu sur `/admin` | | |
-| 2 | Déclencher l'entracte, attendre quelques secondes, cliquer sur `FIN D'ENTRACTE` | Panneau et filtre disparaissent progressivement sur les 4 surfaces, LEDs reprennent la couleur de phase courante | | |
+| 2 | Déclencher l'entracte, attendre quelques secondes, cliquer sur `REPRISE` | Panneau et filtre disparaissent progressivement sur les 4 surfaces, LEDs reprennent la couleur de phase courante | | |
 | 3 | Vérifier la question sélectionnée sur `/admin` | Toujours la même question, en PREPARE, prête à lancer | | |
 | 4 | Vérifier les scores des équipes | Inchangés | | |
 
@@ -246,7 +246,7 @@ secondes (valeur par défaut) s'applique au filtre et au panneau, à l'aller com
 |-------|--------|-----------------|----------------|------|
 | 1 | Cliquer sur `ENTRACTE` en observant attentivement `/tv` | L'estompage (grisé/assombri) se produit PROGRESSIVEMENT (~2s), pas d'un coup | | |
 | 2 | Observer l'apparition du panneau au même moment | Le panneau apparaît en fondu (fade-in), pas en un seul instant | | |
-| 3 | Cliquer sur `FIN D'ENTRACTE` en observant `/tv` | L'estompage disparaît PROGRESSIVEMENT (~2s) — même durée qu'à l'entrée | | |
+| 3 | Cliquer sur `REPRISE` en observant `/tv` | L'estompage disparaît PROGRESSIVEMENT (~2s) — même durée qu'à l'entrée | | |
 | 4 | Observer la disparition du panneau au même moment | Le panneau disparaît en fondu (fade-out), reste visible pendant toute la transition (ne disparaît pas instantanément avant la fin du fondu) | | |
 | 5 | Répéter l'observation sur `/player` (VJoueur) — cadenas 🔒 inclus | Même comportement de fondu, cadenas disparaît/apparaît avec le panneau, pas net sur un fond encore en transition | | |
 | 6 | Sur `/anim`, observer l'indicateur « Entracte en cours » à l'entrée et à la sortie | Fondu également, pas d'apparition/disparition brutale | | |

@@ -34,6 +34,7 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | HELLO | ✅ | ✅ | ✅ | ✅ |
 | START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
 | BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
+| **QUESTION_SOUND** | ✅ | ❌ | ❌ | ✅ **(v11.1, #219)** |
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
 | **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
 | **REGIE_MESSAGE_SEND** | ✅ | ❌ | ❌ | ❌ **(v6.4.x, #167)** |
@@ -358,6 +359,48 @@ Affiche la réponse.
 #### Payload
 
 Aucun.
+
+---
+
+### QUESTION_SOUND (v11.1, #219)
+
+Un des trois gestes de conduite sur le média sonore attaché à la question courante (voir
+`contracts/sound.md` §10). `admin` + `anim` uniquement, comme START/STOP/PAUSE/CONTINUE/REVEAL —
+même périmètre « conduite en direct ». **Sans effet** (jamais une erreur) si la question courante ne
+porte pas de son.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` |
+| Phase     | STARTED ou PAUSED (question courante porteuse d'un son) |
+
+#### Payload
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| COMMAND | `"PLAY"` \| `"PAUSE"` \| `"RESUME"` \| `"STOP"` | ✅ | Geste demandé |
+
+`COMMAND: "PLAY"` est le geste **« Rejouer »** : relance le son depuis le début (voix unique — un
+`Play` en cours est remplacé, jamais superposé). ⚠️ Ne **jamais** régler le chronomètre de réponse
+différé : un « Rejouer » après le démarrage du chronomètre ne le regèle jamais (contrat §10.7, CA13).
+
+#### Exemple
+
+```json
+{
+  "ACTION": "QUESTION_SOUND",
+  "MSG": {
+    "COMMAND": "PLAY"
+  }
+}
+```
+
+#### Effet diffusé
+
+`GAME.QUESTION_SOUND_STATE` (`contracts/game-state.md`) reflète l'état réel du lecteur après chaque
+geste — jamais déduit côté client. `PAUSE`/`CONTINUE` (l'action jeu, pas ce geste) pilotent aussi le
+son : voir `contracts/sound.md` §10.7 (« PAUSE du jeu met le son en pause ; CONTINUER le reprend sans
+coupure »).
 
 ---
 
