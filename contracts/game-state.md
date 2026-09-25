@@ -14,7 +14,7 @@ interface GameState {
   CURRENT_TIME: number       // Temps restant en secondes
   COUNTDOWN_TIME?: number    // 3, 2, 1 countdown avant STARTED (Memory)
   TIME?: number              // Timestamp serveur (microsecondes)
-  REMOTE?: Page              // Vue TV actuelle
+  REMOTE?: Page              // Vue TV actuelle — remise à "GAME" par le serveur au lancement d'une manche (#240, voir ci-dessous)
   QUESTION: Question | null  // Question en cours
 
   // QCM
@@ -1053,3 +1053,16 @@ aucune donnée confidentielle.
 
 **Persistance** : **aucune**, même principe que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING` — état
 éphémère, jamais une donnée de partie. Les deux champs redémarrent à `""`/`false`.
+
+## REMOTE — forçage serveur de la vue « Jeu » (#240, v11.1)
+
+Le champ `REMOTE` (vue TV/VPlayer : `GAME | SCORE | PLAYERS | PALMARES`) n'est plus modifié uniquement par l'action `REMOTE`.
+Le serveur le **remet à `GAME`** (depuis n'importe quelle vue) sur :
+
+- la sélection d'une question (entrée en `PREPARE`, action `READY`) ;
+- le clic START (`READY` → `COUNTDOWN`/`STARTED`, y compris `StartImmediate`) et le passage `COUNTDOWN` → `STARTED` ;
+- `CONTINUE` après une `PAUSE` ;
+- le départ d'une carte MEMOTION (`MEMOTION_SELECT`) et d'un tirage RAFALE de carte.
+
+Pas de forçage sur : `PAUSE`, `REVEAL`, `STOP`, retour automatique `READY` → `PREPARE` (#172), NOUVELLE PARTIE.
+Ce n'est pas un verrou : l'animateur peut rebasculer manuellement (action `REMOTE`) juste après. Aucun nouveau champ ni message ; rétro-compatible (BuzzClick non concerné).

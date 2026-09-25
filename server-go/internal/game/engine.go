@@ -1229,6 +1229,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		(e.state.Question.Type == QuestionTypeMemory || e.state.Question.Type == QuestionTypeMemotion)
 
 	e.state.Phase = PhasePrepare
+	e.forceGamePageUnsafe() // #240 — question selection
 	e.state.Question = question
 	e.setQuestionStatus(StatusPrepare)
 	// The question being (re)loaded here — new or replayed — has not
@@ -1819,6 +1820,7 @@ func (e *Engine) Start(delay int) {
 
 	// Enter COUNTDOWN phase
 	e.state.Phase = PhaseCountdown
+	e.forceGamePageUnsafe() // #240 — START click
 	e.state.CountdownTime = countdownDuration
 	e.state.Delay = delay
 	e.state.CurrentTime = delay
@@ -2104,6 +2106,7 @@ func (e *Engine) actualStart() {
 	}
 
 	e.state.Phase = PhaseStarted
+	e.forceGamePageUnsafe() // #240
 	e.state.CountdownTime = 0
 	e.state.GameTime = time.Now().UnixMicro()
 	e.questionEverStarted = true // #200 cycle 5 — see field's own doc comment
@@ -2198,6 +2201,7 @@ func (e *Engine) StartImmediate(delay int) {
 
 	e.pendingDelay = delay
 	e.state.Phase = PhaseStarted
+	e.forceGamePageUnsafe() // #240
 	e.state.CountdownTime = 0
 	e.state.GameTime = time.Now().UnixMicro()
 	e.state.Delay = delay
@@ -3331,6 +3335,7 @@ func (e *Engine) Continue() {
 	}
 
 	e.state.Phase = PhaseStarted
+	e.forceGamePageUnsafe() // #240 — CONTINUE after PAUSE (user Q4)
 
 	e.setQuestionStatus(StatusStarted)
 
@@ -3939,6 +3944,15 @@ func (e *Engine) ClearAll() {
 	// Auto-save empty data
 	safeGo("SaveTeams", e.SaveTeams)
 	safeGo("SaveBumpers", e.SaveBumpers)
+}
+
+// forceGamePageUnsafe (#240) forces the TV/VPlayer selection back to the game
+// view (state.Page = GAME) when a round is launched (question selection ->
+// PREPARE, START, CONTINUE after PAUSE, MEMOTION/RAFALE card start). It is not
+// a lock: the animator may still switch view manually afterwards (REMOTE).
+// Caller must hold e.mu (write).
+func (e *Engine) forceGamePageUnsafe() {
+	e.state.Page = "GAME"
 }
 
 // SetPage sets the remote page
@@ -5206,6 +5220,7 @@ func (e *Engine) StartRafaleMotionCardRound(cardID string) (questionID, answer s
 	if !ok {
 		return "", "", 0, ErrRafalePoolEmpty
 	}
+	e.forceGamePageUnsafe() // #240 — RAFALE card draw
 
 	questionTime = card.RafaleQuestionTime
 	if questionTime <= 0 {
@@ -6674,6 +6689,7 @@ func (e *Engine) SelectMotionCard(cardID string) error {
 		}
 	}
 
+	e.forceGamePageUnsafe() // #240 — MEMOTION card start
 	e.state.MotionCardStates[cardID] = MotionCardStateSelected
 	e.state.MotionSelected = cardID
 	e.state.MotionSubPhase = MotionSubPhaseSelected

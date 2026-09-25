@@ -2,6 +2,12 @@
 
 ---
 
+## [20260925] — Forçage de la vue TV « Jeu » au lancement d'une manche (#240, v11.1)
+
+- **[CHANGED]** `contracts/game-state.md` — sémantique de `REMOTE` : remis à `GAME` par le serveur à la sélection de question (PREPARE), au START, au CONTINUE après PAUSE et au départ de carte MEMOTION/RAFALE. Rétro-compatible, aucun nouveau champ.
+
+---
+
 ## [20260923] — Média sonore : un média indisponible empêche le lancement (#219/#236/#237, v11.1)
 
 > Besoin remonté pendant la validation manuelle du Scénario 11, sur un lot déjà livré et en QUALIF
