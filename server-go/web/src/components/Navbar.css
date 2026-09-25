@@ -46,12 +46,6 @@
   transform: scale(0.95);
 }
 
-.brand-logo {
-  font-size: 1.75rem;
-  line-height: 1;
-  display: block;
-}
-
 .menu-indicator {
   font-size: 0.75rem;
   color: var(--gray-600);
@@ -189,16 +183,6 @@
 
 .navbar-shutdown-icon {
   font-size: 1.2rem;
-}
-
-.brand-text {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-  background: var(--gradient-fun);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .version-badge {
@@ -532,8 +516,8 @@
     padding: var(--space-2) var(--space-3);
   }
 
-  .brand-text {
-    display: none;
+  .brand-logo-button {
+    --brand-logo-size: 1.25rem;
   }
 
   .nav-label {

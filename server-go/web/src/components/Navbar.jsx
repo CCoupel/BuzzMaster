@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import BrandLogo from './BrandLogo'
 import { useUpdates } from '../hooks/useUpdates'
 import { useLightingStatus } from '../hooks/useLightingStatus'
 import { lightingStateTitle, normalizeLightingState } from '../utils/lightingState'
@@ -313,13 +313,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
             title="Menu"
             aria-label="Menu de navigation"
           >
-            <motion.span
-              className="brand-logo"
-              animate={{ rotate: [0, 10, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-            >
-              🐝
-            </motion.span>
+            <BrandLogo />
             <span className="menu-indicator">▼</span>
           </button>
 
@@ -358,7 +352,6 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           )}
         </div>
 
-        <span className="brand-text">BuzzControl</span>
         <span
           className="version-badge version-badge-clickable"
           title={updateInfo?.update_available ? 'Mise à jour disponible — cliquer pour accéder' : 'Version BuzzControl — cliquer pour les mises à jour'}

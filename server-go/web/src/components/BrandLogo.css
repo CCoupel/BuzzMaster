@@ -1,0 +1,34 @@
+.brand-logo-wordmark {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 0.88;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--brand-logo-size, 1.5rem);
+  padding: 2px 0.55em 2px 0;
+}
+
+.brand-logo-buzz {
+  color: var(--brand-logo-buzz);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.brand-logo-control {
+  color: var(--brand-logo-control);
+  font-size: 0.62em;
+  display: inline-block;
+  margin-left: 0.79em;
+  transform: rotate(-6deg);
+  transform-origin: left center;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.brand-logo-bolt {
+  position: absolute;
+  top: -0.18em;
+  right: -0.05em;
+  font-size: 0.6em;
+  transform: rotate(12deg);
+}

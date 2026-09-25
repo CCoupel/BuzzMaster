@@ -46,6 +46,10 @@
 
   /* Accent Colors - Fun & Energetic */
   --accent-pink: #ec4899;
+
+  /* Logo BuzzControl (#239) */
+  --brand-logo-buzz: var(--primary-800);
+  --brand-logo-control: var(--accent-pink);
   --accent-orange: #f97316;
   --accent-yellow: #eab308;
   --accent-green: #22c55e;
