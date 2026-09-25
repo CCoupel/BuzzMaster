@@ -10,18 +10,20 @@ import { useGame } from '../hooks/GameContext'
 // ---------------------------------------------------------------------------
 // #238 — Navbar : groupe « Préparation » (Joueurs, Quiz, Backstage + section
 // INTERFACE : TV, Joueur, Animateur ↗), menu du logo « Config » → « Réglages »,
-// ENTRACTE 🍿/🎬, badge compteurs 👥 sous 810 px, pastille « Connecté » toujours
+// ENTRACTE 🍿/🎬, badge compteurs 👥 sous 955 px, pastille « Connecté » toujours
 // rendue, jamais 2 lignes.
 // Plan : _work/handoff/plan-239-v7-20260925-160000.md (parties B et C, C.2→C.5).
 //
-// CONTRAT RÉEL (NavGroupMenu.jsx, useMediaQuery.js, Navbar.jsx/.css @0ac8c505) :
-//   * JS (matchMedia) : `(min-width: 1500px)` → mode « en ligne » (défaut si
-//     matchMedia absent) ; `(max-width: 809px)` → badge 👥 (.counts-badge,
-//     .counts-dropdown). Ouverture survol (150 ms) + clic, Échap, clic
-//     extérieur ; un seul menu ouvert (état openMenu de Navbar).
-//   * CSS (@media max-width) : 1814 (titre JEU + libellé Interface), 1709
-//     (libellés Préparation), 1389 (libellés Jeu), 1099 (compact + « Connecte »
-//     masqué), 949 (ENTRACTE/Éclairage en icône), 768 (existant).
+// CONTRAT RÉEL (NavGroupMenu.jsx, useMediaQuery.js, Navbar.jsx/.css, seuils
+// mesurés SOUS WINDOWS — police emoji Segoe — @ac0a16b7, v11.1.0.12) :
+//   * JS (matchMedia) : `(min-width: 1685px)` → mode « en ligne » (défaut si
+//     matchMedia absent) ; `(max-width: 954px)` → badge 👥 (.counts-badge,
+//     .counts-dropdown). Survol (150 ms) + clic, Échap, clic extérieur ; un
+//     seul menu ouvert (état openMenu de Navbar).
+//   * CSS (@media max-width) : 1944 (titre JEU + libellé Interface), 1854
+//     (libellés Préparation), 1494 (libellés Jeu), 1274 (compact, logo réduit,
+//     « Connecte » masqué), 1094 (ENTRACTE/Éclairage en icône), 768 (existant).
+//   Seuils de palier (min) : 1945 / 1855 / 1685 / 1495 / 1275 / 1095 / 955.
 // ---------------------------------------------------------------------------
 
 vi.mock('./Navbar.css', () => ({}))
@@ -140,7 +142,7 @@ function mediaBlocks(css) {
 }
 
 // ===========================================================================
-describe('#238 — menu unique « Préparation » (< 1500 px)', () => {
+describe('#238 — menu unique « Préparation » (< 1685 px)', () => {
   it('bouton « Préparation » fermé par défaut : aria-haspopup, aria-expanded=false, aucune entrée rendue', () => {
     renderNavbar()
     const btn = prepButton()
@@ -255,8 +257,8 @@ describe('#238 — menu unique « Préparation » (< 1500 px)', () => {
 })
 
 // ===========================================================================
-describe('#238 — Préparation en ligne (≥ 1500 px)', () => {
-  beforeEach(() => setViewport(1600))
+describe('#238 — Préparation en ligne (≥ 1685 px)', () => {
+  beforeEach(() => setViewport(1700))
 
   it('Joueurs, Quiz, Backstage rendus directement, sans ouvrir de menu', () => {
     renderNavbar()
@@ -307,15 +309,15 @@ describe('#238 — Préparation en ligne (≥ 1500 px)', () => {
 })
 
 // ===========================================================================
-describe('#238 — bascule en ligne / menu unique à 1500 px (JS)', () => {
-  it('1499 → menu unique (bouton Préparation, pas de bouton Interface)', () => {
-    setViewport(1499)
+describe('#238 — bascule en ligne / menu unique à 1685 px (JS)', () => {
+  it('1684 → menu unique (bouton Préparation, pas de bouton Interface)', () => {
+    setViewport(1684)
     renderNavbar()
     expect(screen.queryByRole('button', { name: /Préparation/i })).not.toBeNull()
     expect(screen.queryByRole('button', { name: /^Interface$/i })).toBeNull()
   })
-  it('1500 → en ligne (bouton Interface, pas de bouton Préparation)', () => {
-    setViewport(1500)
+  it('1685 → en ligne (bouton Interface, pas de bouton Préparation)', () => {
+    setViewport(1685)
     renderNavbar()
     expect(screen.queryByRole('button', { name: /Préparation/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /^Interface$/i })).not.toBeNull()
@@ -359,7 +361,7 @@ describe('#238 — un seul menu ouvert à la fois', () => {
   })
 
   it('en mode en ligne : ouvrir Interface ferme le menu du logo', () => {
-    setViewport(1600)
+    setViewport(1700)
     const { container } = renderNavbar()
     fireEvent.click(logoButton())
     fireEvent.click(interfaceButton())
@@ -434,7 +436,7 @@ describe('#238 — libellés réduits : chaque icône seule garde un nom (title 
   })
 
   it('entrées Préparation en ligne : title ou aria-label = libellé', () => {
-    setViewport(1600)
+    setViewport(1700)
     renderNavbar()
     ;[['/admin/teams', 'Joueurs'], ['/admin/quiz', 'Quiz'], ['/admin/backstage', 'Backstage']].forEach(([href, label]) => {
       const a = link(href)
@@ -443,7 +445,7 @@ describe('#238 — libellés réduits : chaque icône seule garde un nom (title 
   })
 
   it('bouton Interface (en ligne) a un nom accessible', () => {
-    setViewport(1600)
+    setViewport(1700)
     renderNavbar()
     expect(interfaceButton()).toBeInTheDocument()
   })
@@ -464,14 +466,14 @@ describe('#238 — pastille de connexion toujours rendue', () => {
     })
   })
 
-  it('le texte reste rendu (masqué en CSS à partir de 1099 px, la pastille non)', () => {
+  it('le texte reste rendu (masqué en CSS à partir de 1274 px, la pastille non)', () => {
     const { container } = renderNavbar({ connectionStatus: 'connected' })
     expect(container.querySelector('.status-text').textContent).toBe('Connecte')
   })
 })
 
 // ===========================================================================
-describe('#238 — badge compteurs 👥 (< 810 px)', () => {
+describe('#238 — badge compteurs 👥 (< 955 px)', () => {
   const bumpers = {
     v1: { IS_VPLAYER: true, IS_VIRTUAL: true, TEAM: 'red', CONN_STATE: '' },
     v2: { IS_VPLAYER: true, IS_VIRTUAL: true, TEAM: 'blue', CONN_STATE: 'orange' },
@@ -564,8 +566,8 @@ describe('#238 — badge compteurs 👥 (< 810 px)', () => {
     expect(badge(container)).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('≥ 810 px : pas de badge, les 5 compteurs sont affichés (X/Y conservés)', () => {
-    setViewport(810)
+  it('≥ 955 px : pas de badge, les 5 compteurs sont affichés (X/Y conservés)', () => {
+    setViewport(955)
     const { container } = renderNavbar({ bumpers })
     expect(badge(container)).toBeNull()
     expect(container.querySelector('.client-counts')).not.toBeNull()
@@ -573,8 +575,8 @@ describe('#238 — badge compteurs 👥 (< 810 px)', () => {
     expect(container.querySelector('.client-count.buzzer').textContent).toContain('2/3')
   })
 
-  it('809 px : badge présent, .client-counts absent', () => {
-    setViewport(809)
+  it('954 px : badge présent, .client-counts absent', () => {
+    setViewport(954)
     const { container } = renderNavbar({ bumpers })
     expect(badge(container)).not.toBeNull()
     expect(container.querySelector('.client-counts')).toBeNull()
@@ -589,8 +591,8 @@ describe('#238 — seuils responsive (lus dans les CSS) — jamais 2 lignes', ()
   const at = (max) => blocks.filter((b) => b.max === max).map((b) => b.body).join('\n')
   const navbarRule = () => (css.match(/(^|\})\s*\.navbar\s*\{([^}]*)\}/) || [])[2] || ''
 
-  it('un palier @media (max-width) CSS par seuil : 1814, 1709, 1389, 1099, 949 (1500 et 810 sont en JS)', () => {
-    ;[1814, 1709, 1389, 1099, 949].forEach((w) => expect(has(w), `max-width:${w}px`).toBe(true))
+  it('un palier @media (max-width) CSS par seuil : 1944, 1854, 1494, 1274, 1094 (1685 et 955 sont en JS)', () => {
+    ;[1944, 1854, 1494, 1274, 1094].forEach((w) => expect(has(w), `max-width:${w}px`).toBe(true))
   })
 
   it('la barre reste sur UNE rangée : .navbar sans flex-wrap: wrap, nowrap ou absent', () => {
@@ -604,29 +606,29 @@ describe('#238 — seuils responsive (lus dans les CSS) — jamais 2 lignes', ()
     })
   })
 
-  it('1814 → titre vertical JEU masqué', () => {
-    expect(at(1814)).toMatch(/\.nav-group-label[^{]*\{[^}]*display:\s*none/)
+  it('1944 → titre vertical JEU masqué', () => {
+    expect(at(1944)).toMatch(/\.nav-group-label[^{]*\{[^}]*display:\s*none/)
   })
 
-  it('1389 → liens Jeu en icône seule', () => {
-    expect(at(1389)).toMatch(/\.nav-group-game \.nav-label[^{]*\{[^}]*display:\s*none/)
+  it('1494 → liens Jeu en icône seule', () => {
+    expect(at(1494)).toMatch(/\.nav-group-game \.nav-label[^{]*\{[^}]*display:\s*none/)
   })
 
-  it('1709 → Préparation dépliée en icônes seules (libellés .nav-label masqués)', () => {
-    expect(at(1709)).toMatch(/\.nav-label[^{]*\{[^}]*display:\s*none/)
+  it('1854 → Préparation dépliée en icônes seules (libellés .nav-label masqués)', () => {
+    expect(at(1854)).toMatch(/\.nav-label[^{]*\{[^}]*display:\s*none/)
   })
 
-  it('1099 → texte « Connecte » masqué, pastille (.status-dot) jamais masquée', () => {
-    expect(at(1099)).toMatch(/\.status-text[^{]*\{[^}]*display:\s*none/)
+  it('1274 → texte « Connecte » masqué, pastille (.status-dot) jamais masquée', () => {
+    expect(at(1274)).toMatch(/\.status-text[^{]*\{[^}]*display:\s*none/)
     blocks.forEach((b) => {
       expect(b.body, `max-width:${b.max}px`).not.toMatch(/\.status-dot[^{]*\{[^}]*display:\s*none/)
       expect(b.body, `max-width:${b.max}px`).not.toMatch(/\.connection-status\s*\{[^}]*display:\s*none/)
     })
   })
 
-  it('949 → ENTRACTE / Éclairage en icône seule (libellé masqué)', () => {
-    expect(at(949)).toMatch(/\.entracte-label[^{]*\{[^}]*display:\s*none|\.entracte-label/)
-    expect(at(949)).toMatch(/\.lighting-label/)
-    expect(at(949)).toMatch(/display:\s*none/)
+  it('1094 → ENTRACTE / Éclairage en icône seule (libellé masqué)', () => {
+    expect(at(1094)).toMatch(/\.entracte-label[^{]*\{[^}]*display:\s*none|\.entracte-label/)
+    expect(at(1094)).toMatch(/\.lighting-label/)
+    expect(at(1094)).toMatch(/display:\s*none/)
   })
 })

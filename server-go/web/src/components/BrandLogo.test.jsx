@@ -94,10 +94,10 @@ describe('BrandLogo — styles (#239 AC4, AC5, AC6)', () => {
     expect(css).toMatch(/var\(--brand-logo-size,\s*1\.5rem\)/)
   })
 
-  it('AC6 — Navbar.css réduit --brand-logo-size à 1.25rem à ≤ 768px (le palier ≤ 1099px du #238 le couvre)', () => {
+  it('AC6 — Navbar.css réduit --brand-logo-size à 1.25rem à ≤ 768px (le palier ≤ 1274px du #238 le couvre)', () => {
     const css = readSrc('./Navbar.css')
-    const start = css.indexOf('@media (max-width: 1099px)') >= 0
-      ? css.indexOf('@media (max-width: 1099px)')
+    const start = css.indexOf('@media (max-width: 1274px)') >= 0
+      ? css.indexOf('@media (max-width: 1274px)')
       : css.indexOf('@media (max-width: 768px)')
     expect(css.slice(start)).toMatch(/\.brand-logo-button\s*\{[^}]*--brand-logo-size:\s*1\.25rem/)
   })
