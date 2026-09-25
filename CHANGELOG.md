@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [11.1.0] - 2026-09-25 — Média sonore (#219, #236, #237) + Navbar refactorisée (#238) + Logo BuzzControl (#239) + Forçage affichage TV (#240)
+## [11.1.0] - 2026-09-25 — Média sonore (#219, #236, #237) + Navbar refactorisée (#238) + Logo BuzzControl (#239) + Forçage affichage TV (#240) [#241 doublon fermé]
 
 **Milestone #37 complète (7/7 issues)** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé) ; Navbar admin refactorisée (groupes, seuils responsifs, badge compteurs) ; nouveau logo BrandLogo ; affichage TV forcé sur le jeu au lancement d'une manche. Validation manuelle complète sur QUALIF v11.1.0.14.
 
@@ -12,7 +12,7 @@ Historique des versions du projet BuzzControl.
 - **Logo BuzzControl — composant BrandLogo en Navbar admin (#239)** — Nouveau composant `BrandLogo.jsx` remplaçant l'abeille 🐝 animée sur le bouton de menu de la Navbar admin. Logo typographique variante A1 : « Buzz » en indigo, « Control » en rose avec ombre légère, ⚡ en coin, police Fredoka 700. Tokens CSS `--brand-logo-buzz: var(--primary-800)` et `--brand-logo-control: var(--accent-pink)`. Texte « BuzzControl » adjacent supprimé. Rotation infinie de l'abeille supprimée ; zoom au survol du bouton conservé. Taille adaptée ≤1274 px (`--brand-logo-size: 1.25rem`, depuis #238). Menu et entrées inchangés (« Config » renommée « Réglages » par #238 ; entrées : Réglages, Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter).
 - **Média sonore attaché à une question (#219, #236, #237)** — Chaque question SPEEDY, QCM ou ARDOISE peut porter un fichier WAV (≤30s, ≤6 Mio) téléversé depuis l'éditeur Quiz. Format canonique PCM 16/44100/stéréo, validation stricte des causes de refus. Nouveau champ `Question.SOUND` (structurellement commun à tous les types, restriction d'affichage = décision d'éditeur frontend seulement, aucune garde serveur). Son joue au lancement de la question, sur l'enceinte du serveur via second chemin `audio.MediaPlayer` asynchrone (ne bloque jamais le moteur de jeu).
 - **Chronomètre configurable par question (#219)** — Deux modes : mode simultané (défaut) = son et chronomètre démarrent ensemble ; mode différé = chronomètre figé jusqu'à fin du son. Nouveau champ `Question.SOUND_TIMER_DELAYED` (booléen, décision par question). Mode différé jamais ne fige la question (non-blocage normatif CA12 : absence de son = chronomètre démarre immédiatement).
-- **Gestes d'animation pour le son (#219)** — Rangée L2 (conduite animateur + admin) : trois boutons contextuelss (↻ Rejouer / ⏸ Pause-Reprendre / ⏹ Stop), visibles seulement si son attaché à la question courante. Admin/Anim peuvent rejouer, pause/reprendre, arrêter le son à tout moment, indépendamment du jeu.
+- **Gestes d'animation pour le son (#219)** — Rangée L2 (conduite animateur + admin) : trois boutons contextuels (↻ Rejouer / ⏸ Pause-Reprendre / ⏹ Stop), visibles seulement si son attaché à la question courante. Admin/Anim peuvent rejouer, pause/reprendre, arrêter le son à tout moment, indépendamment du jeu.
 - **Affichage chronomètre différé (#219, CA15)** — Mention "⏳ Le chrono démarre à la fin du son" affichée quand `ANSWER_TIMER_WAITING=true` sur les trois surfaces : `/admin`, `/anim`, `/tv`. TV (contrainte STATIQUE) : position absolue dans zone timer, zéro impact hauteur du flux.
 - **Champs GameState (v11.1.0)** — `QUESTION_SOUND_STATE` (IDLE|PLAYING|PAUSED) et `ANSWER_TIMER_WAITING` (booléen), tous deux jamais `omitempty`, diffusés via `UPDATE`.
 - **Action WebSocket QUESTION_SOUND (#219)** — Entrante depuis `/ws/admin` + `/ws/anim` (allow-list fermée) : `{ACTION: 'QUESTION_SOUND', MSG: {COMMAND: 'PLAY'|'PAUSE'|'RESUME'|'STOP'}}`. Broadcast dès que son change d'état.
@@ -24,12 +24,12 @@ Historique des versions du projet BuzzControl.
 - **Non-régression v11.0** — Moteur de bruitages de cue inchangé (7 sons event toujours via `PlayCue`), test-gardes v11.0 (`sound_sites_test.go`, `play_blocks_228_test.go`, `output_228_test.go`, `isneutral_230_test.go`, `sound_cues_chain_test.go`) passent sans modification.
 
 ### Validation
-- **Automatisée** : build, tests Go `-race`/`-short`, tests frontend Vitest 154/154 ✓ ; compilation croisée `windows/amd64` + `linux/arm64` CGO_ENABLED=0 ✓
-- **Manuelle** : procédure `tests/procedures/question-sound-219.md` (13 scénarios) à exécuter par l'utilisateur sur binaire QUALIF avec sortie audio réelle — test Scénario 11 (dégradations x3, non-blocage) critique avant PROD
+- **Automatisée** : build, tests Go `-race`/`-short`, tests frontend Vitest 158/158 fichiers, 2727/2727 tests ✓ ; compilation croisée `windows/amd64` + `linux/arm64` CGO_ENABLED=0 ✓
+- **Manuelle** : procédure `tests/procedures/question-sound-219.md` (13 scénarios) exécutée par l'utilisateur sur binaire QUALIF v11.1.0.14 avec sortie audio réelle — Scénario 11 (dégradations x3, non-blocage) validé
 
 ### Addendum : Gate Média (T0) — Lancement Bloqué (#219/#236/#237, v11.1 addendum)
 
-**Contexte** : Le lot v11.1.0 initial documentait le chronomètre configurable et les gestes d'animation pour le son en cours de question (T1 — déjà lancée). Cet addendum spécifie la **validation préalable (T0)** : avant que la question ne se lance, un contrôle de disponibilité du média empêche de commencer si le son est indisponible (trois motifs : DISABLED, OUTPUT, FILE).
+**Contenu** : Validation préalable media (T0, intégration à la phase PREPARE→READY) et cinq mécanismes opérationnels — gate de disponibilité (trois motifs : DISABLED, OUTPUT, FILE), cache de validation disque, contournement administrateur Ctrl+Clic, alerte globale, rafraîchissement dynamique du motif de blocage. Tests automatisés 40+ cas (logic, cache, dispatch WS, frontend). Procédure manuelle étendue (Scénarios 14-16 supplémentaires). Tous les scénarios exécutés et validés sur QUALIF v11.1.0.14.
 
 #### Added
 - **Validation de disponibilité média avant PREPARE→READY (#219/#236/#237)** — Gate intégrée à `participantsConform()` : refus de transition si la question porte un son et celui-ci n'est pas disponible. Trois motifs : son global `DISABLED`, enceinte `OUTPUT` indisponible, fichier son `FILE` cassé/absent. Champs GameState : `QUESTION_SOUND_UNAVAILABLE` (motif) et `SOUND_GATE_BYPASSED` (bypass admin), jamais `omitempty`.
@@ -44,8 +44,8 @@ Historique des versions du projet BuzzControl.
 - **Format persisté game state** — Deux champs nouveaux `QuestionSoundUnavailable`/`SoundGateBypassed` dans `GameState`, jamais `omitempty` (même discipline que `QUESTION_SOUND_STATE`/`ANSWER_TIMER_WAITING`). Aucune migration — additive.
 
 #### Validation
-- **Automatisée** : Go tests (`./internal/game/...`, `./cmd/server/...`), frontend Vitest (2621/2621 tests +23 pour addendum) — **PASS** — ✓
-- **Manuelle** : Scénarios 14, 15, 16 dans `tests/procedures/question-sound-219.md` à exécuter sur binaire QUALIF — test Scénario 15 (override) et 16 (alerte globale) critiques pour validation addendum
+- **Automatisée** : Go tests (`./internal/game/...`, `./cmd/server/...`), frontend Vitest 158/158 fichiers, 2727/2727 tests — **PASS** — ✓
+- **Manuelle** : Scénarios 14, 15, 16 dans `tests/procedures/question-sound-219.md` exécutés sur binaire QUALIF v11.1.0.14 — Scénarios 15 (override) et 16 (alerte globale) validés
 
 ---
 
