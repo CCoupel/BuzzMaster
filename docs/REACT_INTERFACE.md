@@ -42,7 +42,7 @@ Ce document décrit l'interface web React de BuzzControl.
   - Composant `BrandLogo.jsx` restitue le mot-symbole A1 en Fredoka 700 (indigo/rose)
   - Logo réduit ≤1274 px (`--brand-logo-size: 1.25rem`, depuis #238)
   - Accessibilité : aria-label="Menu de navigation", title="Menu"
-- **Seuils responsifs** (mesurés sous Windows, Segoe UI Emoji) : 1945 px (titre JEU + Interface libellé), 1855 px (Préparation libellés masqués), 1685 px (mode inline), 1495 px (menu unique), 1275 px (Jeu icônes), 1095 px (compact/icônes ENTRACTE), 955 px (badge compteurs), 768 px (groupes compacts)
+- **Seuils responsifs** (mesurés sous Windows, Segoe UI Emoji) : À partir de ≥955 px compteurs en ligne ; ≥1095 px ENTRACTE/Éclairage avec libellé ; ≥1275 px espacements normaux, logo plein, texte « Connecte » visible ; ≥1495 px libellés Jeu affichés ; ≥1685 px mode Préparation en ligne (JS) sinon menu unique ; ≥1855 px libellés Préparation affichés ; ≥1945 px titre JEU + libellé Interface affichés
 
 **RÈGLE DE MESURE (critique depuis #238)** : Toute vérification de non-débordement de la Navbar (maquette, test automatique, QA visuelle) **doit se faire sous Windows avec la police emoji Segoe UI Emoji** (Chrome/Edge sur Windows, ou Chrome headless avec Segoe installé). Chrome sur Linux/WSL remplace chaque emoji par un carré plus étroit (~100–140 px d'écart par palier) → sous-estime systématiquement les largeurs. Les seuils ci-dessus ont été mesurés sur build réel Windows (planner-verif-238, v11.1.0.13).
 
@@ -1409,10 +1409,10 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 
 **Navbar** (#238 groupes, #239 logo) :
 - **Groupe Préparation** (#238) : Joueurs, Quiz, Backstage (≥1685 px en ligne, <1685 px menu unique) + section INTERFACE : TV, Joueur, Animateur (↗ nouvel onglet)
-- **Groupe Jeu** : Scores, Équipes, Historique, Palmarès
+- **Groupe Jeu** : Jeu, Scores, Palmarès, Historique
 - **Bouton ENTRACTE** (#238) : 🍿 « ENTRACTE » (repos) / 🎬 « REPRISE » (actif), libellé masqué <1095 px
 - **Badge 👥 compteurs** (#238) : <955 px, survol/clic déploie détail
-- **Menu Réglages** (logo #239) : Réglages (était Config), Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter
+- **Menu Réglages** (logo #239) : Réglages (était Config, renommé par #238), Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter
 
 **Pages admin** :
 | Route | Fonctionnalités |
