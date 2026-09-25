@@ -4,7 +4,7 @@ Historique des versions du projet BuzzControl.
 
 ## [11.1.0] - 2026-09-25 — Média sonore (#219, #236, #237) + Navbar refactorisée (#238) + Logo BuzzControl (#239) + Forçage affichage TV (#240) [#241 doublon fermé]
 
-**Milestone #37 complète (7/7 issues : #219, #236, #237, #238, #239, #240, #241)** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé) ; Navbar admin refactorisée (groupes, seuils responsifs, badge compteurs) ; nouveau logo BrandLogo ; affichage TV forcé sur le jeu au lancement d'une manche. #241 fermée comme doublon de #238. Validation manuelle complète sur QUALIF v11.1.0.14.
+**Milestone #37 complète (7/7 issues : #219, #236, #237, #238, #239, #240, #241)** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé) ; Navbar admin refactorisée (groupes, seuils responsifs, badge compteurs) ; nouveau logo BrandLogo ; affichage TV forcé sur le jeu au lancement d'une manche. #241 fermée comme doublon de #238. Validation manuelle complète sur QUALIF (build final v11.1.0.14).
 
 ### Added
 - **Navbar refactorisée — groupe Préparation + badge compteurs (#238)** — Refactorisé : entrées CONFIG et PAGES fusionnées en groupe « 🛠️ Préparation » (Joueurs, Quiz, Backstage + section INTERFACE : TV, Joueur, Animateur ↗ en nouvel onglet). Mode de présentation responsif selon viewport : ≥1685 px affichage en ligne (dépliés) avec bouton « Interface ▾ » séparé ; <1685 px menu unique « Préparation ▾ » avec INTERFACE en sous-section. Ouverture au survol (150 ms) ET au clic/tap ; Échap et clic extérieur ferment ; un seul menu ouvert à la fois. Entrée « Config » du menu logo renommée « Réglages ». Bouton ENTRACTE : état repos 🍿 « ENTRACTE », état actif 🎬 « REPRISE » ; libellé masqué <1095 px, icône seule. Badge 👥 (connectés/participants) <955 px : survol/clic déploie 5 compteurs avec libellés, couleur de sévérité agrégée. Pastille « Connecté » (point + texte) toujours visible ; texte masqué <1275 px. Paliers responsifs mesurés sous Windows (Segoe UI Emoji) : 1945/1855/1685/1495/1275/1095/955 px. Token `--conn-badge-orange` défini. Aucune migration : refactor de présentation (fusion des groupes CONFIG et PAGES).
@@ -25,11 +25,11 @@ Historique des versions du projet BuzzControl.
 
 ### Validation
 - **Automatisée** : build, tests Go `-race`/`-short`, tests frontend Vitest 158/158 fichiers, 2727/2727 tests ✓ ; compilation croisée `windows/amd64` + `linux/arm64` CGO_ENABLED=0 ✓
-- **Manuelle** : procédure `tests/procedures/question-sound-219.md` (scénarios requis) exécutée par l'utilisateur sur binaire QUALIF v11.1.0.14 avec sortie audio réelle — Scénario 11a (gate T0 bloquant) validé ; Scénario 11b (T1 dégradation) reclassé non bloquant (décision utilisateur 2026-09-25), critère CA12 conservé + tests automatisés
+- **Manuelle** : procédure `tests/procedures/question-sound-219.md` (scénarios requis) exécutée par l'utilisateur sur binaire QUALIF avec sortie audio réelle — Scénario 11a (gate T0 bloquant) validé ; Scénario 11b (T1 dégradation) reclassé non bloquant (décision utilisateur 2026-09-25), critère CA12 conservé + tests automatisés
 
 ### Addendum : Gate Média (T0) — Lancement Bloqué (#219/#236/#237, v11.1 addendum)
 
-**Contenu** : Validation préalable media (T0, intégration à la phase PREPARE→READY) et cinq mécanismes opérationnels — gate de disponibilité (trois motifs : DISABLED, OUTPUT, FILE), cache de validation disque, contournement administrateur Ctrl+Clic, alerte globale, rafraîchissement dynamique du motif de blocage. Tests automatisés 40+ cas (logic, cache, dispatch WS, frontend). Procédure manuelle étendue (Scénarios 14-16 supplémentaires). Tous les scénarios exécutés et validés sur QUALIF v11.1.0.14.
+**Contenu** : Validation préalable media (T0, intégration à la phase PREPARE→READY) et cinq mécanismes opérationnels — gate de disponibilité (trois motifs : DISABLED, OUTPUT, FILE), cache de validation disque, contournement administrateur Ctrl+Clic, alerte globale, rafraîchissement dynamique du motif de blocage. Tests automatisés 40+ cas (logic, cache, dispatch WS, frontend). Procédure manuelle étendue (Scénarios 14-16 supplémentaires). Tous les scénarios requis exécutés et validés sur QUALIF.
 
 #### Added
 - **Validation de disponibilité média avant PREPARE→READY (#219/#236/#237)** — Gate intégrée à `participantsConform()` : refus de transition si la question porte un son et celui-ci n'est pas disponible. Trois motifs : son global `DISABLED`, enceinte `OUTPUT` indisponible, fichier son `FILE` cassé/absent. Champs GameState : `QUESTION_SOUND_UNAVAILABLE` (motif) et `SOUND_GATE_BYPASSED` (bypass admin), jamais `omitempty`.
@@ -45,7 +45,7 @@ Historique des versions du projet BuzzControl.
 
 #### Validation
 - **Automatisée** : Go tests (`./internal/game/...`, `./cmd/server/...`), frontend Vitest 158/158 fichiers, 2727/2727 tests — **PASS** — ✓
-- **Manuelle** : Scénarios 14, 15, 16 (scénarios requis pour l'addendum) exécutés sur binaire QUALIF v11.1.0.14 — Scénarios 15 (override) et 16 (alerte globale) validés
+- **Manuelle** : Scénarios 14, 15, 16 (scénarios requis pour l'addendum) exécutés sur binaire QUALIF — Scénarios 15 (override) et 16 (alerte globale) validés
 
 ---
 
