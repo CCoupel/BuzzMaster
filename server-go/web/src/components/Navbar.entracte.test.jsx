@@ -123,10 +123,10 @@ describe('Navbar — libellé du bouton dérivé de gameState.entracte (D3)', ()
     expect(screen.queryByText(/FIN D.ENTRACTE/i)).toBeNull()
   })
 
-  it("affiche \"FIN D'ENTRACTE\" quand entracte est true", () => {
+  it("affiche \"REPRISE\" (libellé court, #238) quand entracte est true", () => {
     useGame.mockReturnValue(makeGameMock({ gameState: { phase: 'STOPPED', entracte: true } }))
     renderNavbar()
-    expect(screen.getByText(/FIN D.ENTRACTE/i)).toBeInTheDocument()
+    expect(screen.getByText('REPRISE')).toBeInTheDocument()
   })
 })
 

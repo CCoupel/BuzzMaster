@@ -413,7 +413,28 @@ describe('#238 — ENTRACTE 🍿 / 🎬 et Éclairage : icône + nom accessible'
     renderNavbar()
     expect(btn().textContent).toContain('🎬')
     expect(btn().textContent).not.toContain('🍿')
-    expect(screen.getByRole('button', { name: /FIN D.ENTRACTE/i })).toBe(btn())
+    expect(screen.getByRole('button', { name: /fin d.entracte/i })).toBe(btn())
+  })
+
+  it('actif : libellé visible COURT « REPRISE » (pas « FIN D\'ENTRACTE »), aria-label « Fin d\'entracte » conservé', () => {
+    useGame.mockReturnValue(gameMock(true))
+    renderNavbar()
+    const label = btn().querySelector('.entracte-label')
+    expect(label.textContent).toBe('REPRISE')
+    expect(btn().textContent).toContain('🎬')
+    expect(btn().textContent).not.toMatch(/FIN D.ENTRACTE/i)
+    expect(btn().getAttribute('aria-label')).toMatch(/^fin d.entracte$/i)
+  })
+
+  it('protège la largeur : le libellé actif n\'est pas plus long que « ENTRACTE » (barre sur une rangée)', () => {
+    renderNavbar()
+    const idle = btn().querySelector('.entracte-label').textContent
+    document.body.innerHTML = ''
+    useGame.mockReturnValue(gameMock(true))
+    renderNavbar()
+    const active = btn().querySelector('.entracte-label').textContent
+    expect(idle).toBe('ENTRACTE')
+    expect(active.length).toBeLessThanOrEqual(idle.length)
   })
 
   it('Éclairage : nom accessible explicite (le libellé peut être masqué sous 950 px)', () => {
@@ -627,8 +648,10 @@ describe('#238 — seuils responsive (lus dans les CSS) — jamais 2 lignes', ()
   })
 
   it('1094 → ENTRACTE / Éclairage en icône seule (libellé masqué)', () => {
-    expect(at(1094)).toMatch(/\.entracte-label[^{]*\{[^}]*display:\s*none|\.entracte-label/)
-    expect(at(1094)).toMatch(/\.lighting-label/)
-    expect(at(1094)).toMatch(/display:\s*none/)
+    expect(at(1094)).toMatch(/\.entracte-label[^{]*\{[^}]*display:\s*none/)
+    expect(at(1094)).toMatch(/\.lighting-label[^{]*\{[^}]*display:\s*none/)
+    // le libellé ne doit PAS être masqué au palier supérieur (1274 : encore affiché)
+    expect(at(1274)).not.toMatch(/\.entracte-label/)
+    expect(at(1274)).not.toMatch(/\.lighting-label/)
   })
 })

@@ -139,7 +139,8 @@ Conséquences aux largeurs de référence : **1920** → titre JEU masqué et li
 | Etape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | À 1280 px, partie arrêtée | Bouton « 🍿 ENTRACTE » (libellé visible) | | |
-| 2 | Cliquer | Passe à « 🎬 FIN D'ENTRACTE », entracte actif | | |
+| 2 | Cliquer | Passe à « 🎬 **REPRISE** » (libellé court ; infobulle/nom accessible « Fin d'entracte »), entracte actif, barre toujours sur **une seule rangée** | | |
+| 2b | Entracte actif, repasser sur chaque largeur de référence (1920, 1600, 1280, 1024, 768) **avec une barre de défilement verticale Windows visible** (page assez longue) | Pas de débordement ni de pastille perdue ; bouton REPRISE non coupé (la barre verticale réduit la largeur utile d'environ 17 px) | | |
 | 3 | Cliquer à nouveau | Retour à 🍿 ENTRACTE | | |
 | 4 | Réduire sous 1095 px | Icône seule (🍿 / 🎬) avec infobulle ; toujours cliquable | | |
 | 5 | Éclairage (si configuré) : sous 1095 px | Icône 💡 seule avec infobulle ; le popover s'ouvre au clic | | |
