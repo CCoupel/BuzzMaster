@@ -27,16 +27,24 @@ Ce document décrit l'interface web React de BuzzControl.
 | `/admin/logs` | LogsPage | Logs serveur temps réel |
 | `/anim` | AnimPage | Interface animateur (tablette, nouvelle en v6.2.0 — refonte conduite permanente + zone réponse en v6.2.0.15, #166) |
 
-**Navbar (v2.48.0 — logo #239) :**
+**Navbar (v2.48.0 — groupes #238, logo #239) :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
 - Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence
 - Fonction `getFullPath(path)` pour construire les chemins avec le bon préfixe
-- **Menu déroulant sur le logo BrandLogo** : Clic sur le logo typographique BrandLogo (« Buzz » / « Control » + ⚡, #239) ouvre un menu de configuration (Config, Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter)
+- **Groupe Préparation** (≥1685 px : inline dépliée + bouton « Interface ▾ » séparé ; <1685 px : menu unique « Préparation ▾ » avec INTERFACE en sous-section) :
+  - Entrées : Joueurs, Quiz, Backstage, puis section INTERFACE (TV, Joueur, Animateur) avec `target=_blank`
+  - Ouverture au survol (150 ms) ET au clic/tap ; Échap et clic extérieur ferment
+  - Un seul menu ouvert à la fois (géré par `openMenu` global)
+- **Bouton ENTRACTE** : État repos 🍿 « ENTRACTE », état actif 🎬 « REPRISE » (libellé protégé en largeur) ; libellé masqué <1095 px
+- **Badge 👥 compteurs** (<955 px) : « connectés/participants » (VJoueurs + Buzzers), couleur de sévérité agrégée ; survol/clic déploie détail 5 compteurs
+- **Pastille Connecté** : toujours visible (point), texte masqué <1275 px
+- **Menu déroulant sur le logo BrandLogo** : Clic sur le logo typographique BrandLogo (« Buzz » / « Control » + ⚡, #239) ouvre le menu des Réglages (Réglages, Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter)
   - Composant `BrandLogo.jsx` restitue le mot-symbole A1 en Fredoka 700 (indigo/rose)
-  - État `isMenuOpen` géré via useState
-  - Fermeture au clic extérieur via useRef + useEffect
-  - Animation CSS slideDown (200ms)
+  - Logo réduit ≤1274 px (`--brand-logo-size: 1.25rem`, depuis #238)
   - Accessibilité : aria-label="Menu de navigation", title="Menu"
+- **Seuils responsifs** (mesurés sous Windows, Segoe UI Emoji) : 1945 px (titre JEU + Interface libellé), 1855 px (Préparation libellés masqués), 1685 px (mode inline), 1495 px (menu unique), 1275 px (Jeu icônes), 1095 px (compact/icônes ENTRACTE), 955 px (badge compteurs), 768 px (groupes compacts)
+
+**RÈGLE DE MESURE (critique depuis #238)** : Toute vérification de non-débordement de la Navbar (maquette, test automatique, QA visuelle) **doit se faire sous Windows avec la police emoji Segoe UI Emoji** (Chrome/Edge sur Windows, ou Chrome headless avec Segoe installé). Chrome sur Linux/WSL remplace chaque emoji par un carré plus étroit (~100–140 px d'écart par palier) → sous-estime systématiquement les largeurs. Les seuils ci-dessus ont été mesurés sur build réel Windows (planner-verif-238, v11.1.0.13).
 
 ## Composants Clés
 
@@ -1399,9 +1407,12 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 
 ## Organisation UI (v4.0.1+)
 
-**Navbar** (logo BrandLogo #239) :
-- Liens directs : Jeu, Scores, Équipes, Quiz, Historique, Palmarès
-- Menu BrandLogo dropdown : Config, Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter
+**Navbar** (#238 groupes, #239 logo) :
+- **Groupe Préparation** (#238) : Joueurs, Quiz, Backstage (≥1685 px en ligne, <1685 px menu unique) + section INTERFACE : TV, Joueur, Animateur (↗ nouvel onglet)
+- **Groupe Jeu** : Scores, Équipes, Historique, Palmarès
+- **Bouton ENTRACTE** (#238) : 🍿 « ENTRACTE » (repos) / 🎬 « REPRISE » (actif), libellé masqué <1095 px
+- **Badge 👥 compteurs** (#238) : <955 px, survol/clic déploie détail
+- **Menu Réglages** (logo #239) : Réglages (était Config), Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter
 
 **Pages admin** :
 | Route | Fonctionnalités |
@@ -1516,9 +1527,8 @@ la rétroaction visuelle trompeuse.
 ### Surface Admin — Bouton Navbar
 
 **Rendu** :
-- **Bouton `ENTRACTE` / `FIN D'ENTRACTE`** dans la **Navbar** (entre badge version et groupe 
-  "Jeu", visible sur toutes les pages admin).
-- Reste net (pas filtré), cliquable, contrasté (couleur ambre inactif, rouge actif avec 
+- **Bouton `ENTRACTE` / `REPRISE`** dans la **Navbar** (#238 : libellé actif court pour protéger la largeur) (visible sur toutes les pages admin).
+- Reste net (pas filtré), cliquable, contrasté (couleur ambre inactif pour 🍿 « ENTRACTE », rouge actif pour 🎬 « REPRISE » avec 
   halo, grisé désactivé si phase non autorisée).
 - Accessible sur `/admin`, `/admin/quiz`, `/admin/config`, etc. — présent partout.
 
