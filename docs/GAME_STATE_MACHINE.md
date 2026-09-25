@@ -81,7 +81,7 @@ L'affichage TV (sélecteur Jeu/Équipes/Joueurs/Palmarès, champ `state.Page`, a
 - **Entrée PREPARE** : sélection ou changement de question (tous types) ;
 - **Passage READY → STARTED** : clic START, StartImmediate, fin du compte à rebours 3-2-1 ;
 - **CONTINUE après PAUSE** : reprise de la question (décision utilisateur) ;
-- **Départ d'une carte MEMOTION** ou **tirage RAFALE d'une carte** (proposition non encore confirmée par l'utilisateur).
+- **Départ d'une carte MEMOTION** ou **tirage RAFALE d'une carte** (validé par l'utilisateur en QUALIF v11.1.0.14).
 
 **Pas de forçage sur** : PAUSE (l'affichage peut rester sur Équipes pendant une pause), REVEAL, STOP, retour automatique READY→PREPARE (#172), NEW_GAME, aucune autre transition.
 
