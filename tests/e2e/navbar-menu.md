@@ -7,13 +7,13 @@
 
 ---
 
-## Scénario 1 : Menu s'ouvre au clic sur l'abeille
+## Scénario 1 : Menu s'ouvre au clic sur le logo BuzzControl
 
 ### Étapes
 1. Naviguer vers `http://localhost/admin`
 2. Attendre le chargement complet de la navbar
-3. Localiser le bouton abeille (🐝) à gauche avec indicateur `▼`
-4. Cliquer sur le bouton abeille
+3. Localiser le bouton logo BuzzControl à gauche avec indicateur `▼`
+4. Cliquer sur le bouton logo BuzzControl
 5. Vérifier que le menu déroulant s'affiche avec les options Config et Logs
 
 ### Vérifications
@@ -39,7 +39,7 @@
 - Menu `.navbar-menu-dropdown` disparaît du DOM
 - URL change vers `/admin/settings`
 - Page Config contient ses éléments (formulaires, paramètres, etc.)
-- Bouton abeille n'est plus "actif" (visuelle)
+- Bouton logo BuzzControl n'est plus "actif" (visuelle)
 
 ### Acceptation
 ✅ Navigation vers Config et fermeture du menu sont synchrones
@@ -50,7 +50,7 @@
 
 ### Étapes
 1. Depuis la page Admin
-2. Cliquer sur le bouton abeille → Menu s'ouvre
+2. Cliquer sur le bouton logo BuzzControl → Menu s'ouvre
 3. Cliquer en dehors du menu (ex: sur le titre "BuzzControl" ou dans la zone des liens de jeu)
 4. Vérifier que le menu se ferme sans navigation
 
@@ -82,14 +82,14 @@
 
 ---
 
-## Scénario 5 : Menu s'ouvre/ferme en cliquant sur l'abeille plusieurs fois
+## Scénario 5 : Menu s'ouvre/ferme en cliquant sur le logo BuzzControl plusieurs fois
 
 ### Étapes
 1. Page Admin chargée
-2. Cliquer sur abeille → Menu s'ouvre
-3. Cliquer sur abeille → Menu se ferme
-4. Cliquer sur abeille → Menu s'ouvre
-5. Cliquer sur abeille → Menu se ferme
+2. Cliquer sur le logo BuzzControl → Menu s'ouvre
+3. Cliquer sur le logo BuzzControl → Menu se ferme
+4. Cliquer sur le logo BuzzControl → Menu s'ouvre
+5. Cliquer sur le logo BuzzControl → Menu se ferme
 6. Répéter 2-3 fois
 
 ### Vérifications
@@ -124,7 +124,7 @@
 ## Scénario 7 : Vérifier l'accessibilité - Attributs ARIA
 
 ### Étapes
-1. Inspecter le bouton abeille
+1. Inspecter le bouton logo BuzzControl
 2. Vérifier la présence d'attributs ARIA
 
 ### Vérifications
@@ -142,7 +142,7 @@
 ### Étapes
 1. Redimensionner la fenêtre à 600px (mobile)
 2. Naviguer vers `/admin`
-3. Cliquer sur l'abeille
+3. Cliquer sur le logo BuzzControl
 4. Vérifier que le menu s'affiche correctement
 
 ### Vérifications

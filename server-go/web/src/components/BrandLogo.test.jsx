@@ -71,11 +71,22 @@ describe('BrandLogo — styles (#239 AC4, AC5, AC6)', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
   })
 
-  it('AC5 — Fredoka sans ressource réseau (pas d\'URL http(s) ni @import distant)', () => {
+  it('AC5 — Fredoka via --font-display (index.css), sans ressource réseau dans BrandLogo.css', () => {
     const css = readSrc('./BrandLogo.css')
-    expect(css).toMatch(/Fredoka/)
+    expect(css).toMatch(/font-family:\s*var\(--font-display\)/)
+    expect(readSrc('../styles/index.css')).toMatch(/--font-display:\s*'Fredoka'/)
     expect(css).not.toMatch(/https?:\/\//)
     expect(css).not.toMatch(/@import\s+url/)
+  })
+
+  it('maquette — text-shadow uniquement sur .brand-logo-control, pas sur .brand-logo-buzz', () => {
+    const css = readSrc('./BrandLogo.css')
+    const block = (sel) => {
+      const m = css.match(new RegExp(sel.replace('.', '\\.') + '\\s*\\{([^}]*)\\}'))
+      return m ? m[1] : ''
+    }
+    expect(block('.brand-logo-buzz')).not.toMatch(/text-shadow/)
+    expect(block('.brand-logo-control')).toMatch(/text-shadow/)
   })
 
   it('AC6 — taille pilotée par --brand-logo-size (défaut 1.5rem)', () => {

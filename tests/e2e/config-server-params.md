@@ -12,7 +12,7 @@
 
 ### Étapes
 1. Naviguer vers `http://localhost/admin`
-2. Cliquer sur le menu abeille (🐝)
+2. Cliquer sur le menu logo BuzzControl
 3. Sélectionner "⚙️ Config"
 4. Attendre le chargement complet de la page Configuration
 5. Chercher la section "Parametres serveur"

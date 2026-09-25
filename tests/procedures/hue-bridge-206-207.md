@@ -34,7 +34,7 @@ par la maquette, avec un vrai pont.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-------------------|------------------|------|
-| 1 | Menu 🐝 → « Ambiance » | Page `/admin/ambiance`, badge « Non configuré » (ampoule grise, contour nu) | | |
+| 1 | Menu logo BuzzControl → « Ambiance » | Page `/admin/ambiance`, badge « Non configuré » (ampoule grise, contour nu) | | |
 | 2 | Cliquer « Rechercher un pont » | Le pont réel apparaît en **moins de quelques secondes** (mDNS ~0,2 s mesuré au spike), adresse + identifiant affichés | | |
 | 3 | Cliquer « Associer ce pont » **sans appuyer sur le bouton du pont** | Attente en ligne (pas de modale), anneau + décompte depuis 45 s, message « Appuyez sur le bouton rond au centre du pont » | | |
 | 4 | Appuyer sur le bouton rond du pont | Dans les 2 secondes suivantes : toast « Pont associé. », passage à l'étape 3 (liste des ampoules) | | |
@@ -94,7 +94,7 @@ par la maquette, avec un vrai pont.
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-------------------|------------------|------|
-| 1 | Pont non configuré, ouvrir le menu 🐝 | Ampoule **grise**, contour nu, sans pastille | | |
+| 1 | Pont non configuré, ouvrir le menu logo BuzzControl | Ampoule **grise**, contour nu, sans pastille | | |
 | 2 | Pont connecté et fonctionnel | Ampoule **verte**, pleine, avec rayons | | |
 | 3 | Débrancher le pont (ou révoquer la clé depuis l'app Hue officielle) | Ampoule **orange**, contour + pastille d'alerte | | |
 | 4 | Survoler l'entrée « Ambiance » (ou lecteur d'écran) | Info-bulle/`title` dit l'état en toutes lettres (« Éclairage : pont connecté », etc.) | | |
