@@ -24,10 +24,17 @@ définitif d'un quiz sonore sans l'échappatoire du §06).
 
 L'addendum du 2026-09-23 distingue strictement **T0** (avant le lancement — la question ne doit
 **jamais démarrer** si son média est indisponible) et **T1** (pendant la lecture, question déjà
-`STARTED` — la règle historique « jamais de blocage » reste entière : le chronomètre différé se
-libère **immédiatement**). Les Scénarios 11a et 11b couvrent chacun **exactement un seul** de ces
-deux moments — ne jamais les fusionner ni sauter 11a en pensant que 11b suffit (piège R18 documenté
-au plan rév. 8 §8).
+`STARTED` — le mécanisme technique historique « jamais de blocage » reste en place : le chronomètre
+différé se libère **immédiatement**). Les Scénarios 11a et 11b couvrent chacun **exactement un seul**
+de ces deux moments.
+
+**Mise à jour du 2026-09-25 (décision utilisateur)** : seul **T0** (Scénario 11a) reste **requis**
+pour la validation de ce cycle avant PROD. **T1** (Scénario 11b) est **reclassé non pertinent pour
+la validation** — voir sa section dédiée ci-dessous pour le raisonnement complet consigné tel quel.
+Le mécanisme technique sous-jacent (CA12, les 3 tests `TestQuestionSoundAdapter_CA12_*`) reste
+inchangé dans le code ; seul son statut de vérification manuelle bloquante change. Ne jamais sauter
+le Scénario 11a — c'est désormais le **seul** des deux qui conditionne la validation (piège R18
+documenté au plan rév. 8 §8, qui avertissait déjà contre l'idée que 11b puisse à lui seul suffire).
 
 ## Prérequis
 
@@ -244,18 +251,37 @@ mêmes causes d'indisponibilité **quand elles sont connues avant le clic LANCER
 
 ---
 
-### Scénario 11b — T1 (pendant la lecture) : les trois dégradations d'une question déjà lancée ne figent jamais la partie (CA12, ⚠️ le plus important)
+### Scénario 11b — T1 (pendant la lecture) : les trois dégradations d'une question déjà lancée ne figent jamais la partie (CA12)
+
+> ## ⚠️ RECLASSÉ NON PERTINENT POUR LA VALIDATION (décision utilisateur, 2026-09-25)
+>
+> **Raisonnement de l'utilisateur, consigné tel quel** : la règle « jamais de blocage » (R10/CA12)
+> visait à l'origine les bruitages d'ambiance (les 7 cues indépendants du contenu d'une question),
+> qui ne doivent effectivement jamais bloquer le jeu. Mais un son de QUESTION est différent — si le
+> son ne peut pas être joué, il est normal que la question ne soit pas lancée (c'est justement
+> l'objet de la gate T0). La validité étant désormais vérifiée au PREPARE (avec le Ctrl+clic comme
+> échappatoire explicite si l'animateur force quand même), une fois la question STARTED, soit le
+> son a été validé et devrait jouer normalement, soit l'animateur a délibérément choisi de lancer
+> sans son. Un problème survenant PENDANT la lecture d'une question déjà lancée (ex. enceinte
+> débranchée en plein milieu) devient un cas rare que l'animateur gère manuellement (Stop/relance),
+> pas quelque chose que le logiciel doit nécessairement couvrir automatiquement pour la validation
+> de ce lot.
+>
+> **Ce qui ne change pas** : le mécanisme technique existant (chronomètre différé qui se libère
+> immédiatement en cas de dégradation pendant la lecture, CA12, les 3 tests
+> `TestQuestionSoundAdapter_CA12_*`) reste en place tel quel dans le code — ce n'est **pas** un
+> retrait de fonctionnalité, seulement un déclassement de sa validation manuelle comme non-bloquante
+> pour ce cycle.
+>
+> Ce scénario reste documenté ci-dessous pour référence (le mécanisme existe et peut être vérifié à
+> l'occasion), mais son échec **ne bloque plus** la validation avant PROD — voir « Critères de
+> Validation » en fin de document.
 
 **Objectif** : prouver la règle de non-blocage historique (contract §10.7/§10.8) : pour une question
 **déjà `STARTED`**, dans les trois mêmes cas d'indisponibilité, le mode différé dégrade
 **immédiatement** vers le mode simultané — la partie ne se bloque jamais en direct. **Distinct du
 Scénario 11a** : ici l'indisponibilité survient (ou n'a pas pu être détectée) **après** que la
 question a déjà démarré.
-
-> ⚠️ Ce scénario est le point de revue n°1 du lot socle (risque R10, plan rév. 3 §11) : un échec ici
-> est **critique**, pas une simple anomalie visuelle. La règle « jamais de blocage » n'est **pas**
-> abandonnée par l'addendum du §06 — elle est recentrée sur ce seul moment (maquette §06, « la
-> règle n'est pas abandonnée, elle est recentrée »).
 
 | Étape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-------------------|------------------|------|
@@ -265,7 +291,7 @@ question a déjà démarré.
 | 4 | Pour chacun des 3 cas ci-dessus, vérifier `/anim`/`/admin`/`/tv` | **Aucune** mention « le chronomètre démarrera à la fin du son » ne reste affichée alors que le chronomètre tourne déjà (pas de mention mensongère) | | |
 | 5 | (Optionnel, robustesse) Simuler une lecture qui ne se termine jamais (ex. couper le processus de lecture sans le signaler) et attendre `MaxQuestionSoundDuration + 2 s` (~32 s) | Le chien de garde libère le chronomètre **au plus tard** à cette échéance | | |
 
-**Verdict** : [ ] PASS  [ ] FAIL
+**Verdict** : [ ] PASS  [ ] FAIL  [ ] NON APPLICABLE — non bloquant, reclassé non pertinent pour la validation (décision utilisateur, 2026-09-25)
 
 ---
 
@@ -372,7 +398,9 @@ existante.
 - [ ] Scénario 9 (30 s intégrales) : PASS
 - [ ] Scénario 10 (non-régression sans son) : PASS
 - [ ] **Scénario 11a (T0, blocage avant lancement) : PASS — bloquant, aucune exception**
-- [ ] **Scénario 11b (T1, dégradation jamais bloquante) : PASS — bloquant, aucune exception**
+- [ ] Scénario 11b (T1, dégradation jamais bloquante) — **non bloquant, reclassé non pertinent pour
+      la validation (décision utilisateur, 2026-09-25)** ; documenté pour référence, pas exigé pour
+      la clôture de ce cycle
 - [ ] Scénario 12 (non-régression MEMOTION/ENTRACTE) : PASS
 - [ ] Scénario 13 (suite automatisée) : PASS
 - [ ] Scénario 14 (réversibilité automatique + course affichage/clic) : PASS
@@ -387,12 +415,13 @@ existante.
   restent du ressort de l'**utilisateur**, jamais de `qa`/`deployer` (règle projet).
 - Le Scénario 13 est une suite de commandes `go test`/`go build`/`vitest` : il peut être exécuté par
   `qa` sans navigateur, en complément de cette procédure.
-- **Scénario 11a et 11b sont les deux plus importants**, et **distincts l'un de l'autre** — ne
-  jamais les fusionner ni en sauter un en pensant l'autre suffisant (piège R18, plan rév. 8 §8) :
-  - 11a (T0) : un échec — une question à média indisponible qui démarre quand même — est un
-    **bloquant absolu**, exactement l'inverse du comportement voulu par l'addendum.
-  - 11b (T1) : un échec — une question déjà lancée qui se fige — reste le **pire défaut** que ce
-    lot puisse produire (risque R10 inchangé depuis le socle).
+- **Mise à jour du 2026-09-25 (décision utilisateur)** : le **Scénario 11a (T0) est désormais le
+  seul bloquant** des deux — un échec (une question à média indisponible qui démarre quand même)
+  reste un **bloquant absolu**, exactement l'inverse du comportement voulu par l'addendum. Le
+  **Scénario 11b (T1) est reclassé non pertinent pour la validation** (voir sa section dédiée pour
+  le raisonnement complet) : le mécanisme technique (CA12) reste en place dans le code et documenté
+  ici pour référence, mais son échec ne bloque plus ce cycle. Ne jamais sauter le Scénario 11a pour
+  autant (piège R18, plan rév. 8 §8).
 - **Scénario 15, étape 5 (CA27)** est la limite de sécurité la plus facile à casser par erreur lors
   d'une évolution future : si `Ctrl`+clic finit par débloquer une question MEMORY/MEMOTION sans
   participants conformes, c'est une réouverture du bug historique #172 — à signaler immédiatement,
