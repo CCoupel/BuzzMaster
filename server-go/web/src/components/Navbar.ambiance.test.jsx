@@ -79,7 +79,7 @@ describe('#207 — entrée « Ambiance » du menu', () => {
     const { container } = renderNavbar()
     openMenu()
     const labels = Array.from(container.querySelectorAll('.navbar-menu-dropdown .menu-label')).map(el => el.textContent)
-    expect(labels.indexOf('Ambiance')).toBe(labels.indexOf('Config') + 1)
+    expect(labels.indexOf('Ambiance')).toBe(labels.indexOf('Réglages') + 1)
     expect(labels[labels.length - 1]).toBe('Quitter')
 
     const link = getAmbianceLink(container)
@@ -112,7 +112,7 @@ describe('#207 — entrée « Ambiance » du menu', () => {
   it('les autres entrées ne portent pas de title (comportement inchangé)', () => {
     const { container } = renderNavbar()
     openMenu()
-    const config = Array.from(container.querySelectorAll('.navbar-menu-dropdown a')).find(a => a.textContent.includes('Config'))
+    const config = Array.from(container.querySelectorAll('.navbar-menu-dropdown a')).find(a => a.textContent.includes('Réglages'))
     expect(config).not.toHaveAttribute('title')
   })
 

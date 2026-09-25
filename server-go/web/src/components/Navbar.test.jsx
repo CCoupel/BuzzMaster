@@ -378,7 +378,7 @@ describe('#175 — entrée « Quitter », présence et nature (T1, AC1, AC6)', (
     openMenu()
     const dropdown = getDropdown(container)
 
-    ;['Config', 'Backup/Restaure', 'Mises à jour', 'Logs'].forEach(label => {
+    ;['Réglages', 'Backup/Restaure', 'Mises à jour', 'Logs'].forEach(label => {
       const link = Array.from(dropdown.querySelectorAll('a')).find(a => a.textContent.includes(label))
       expect(link, `entrée "${label}" doit rester un <a>`).not.toBeUndefined()
       expect(link).toHaveAttribute('href')
