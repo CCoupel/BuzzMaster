@@ -14,23 +14,14 @@ import { useGame } from '../hooks/GameContext'
 // rendue, jamais 2 lignes.
 // Plan : _work/handoff/plan-239-v7-20260925-160000.md (parties B et C, C.2→C.5).
 //
-// CONTRAT ASSUMÉ (TDD — à aligner avec dev-frontend, voir le rapport) :
-//   * Mode d'affichage du groupe = fonction de `window.matchMedia('(min-width: 1500px)')`
-//     (et de `window.innerWidth`) :
-//       - ≥ 1500 : « en ligne » — Joueurs/Quiz/Backstage rendus directement
-//         + bouton séparé « Interface » (aria-haspopup) ;
-//       - < 1500 (ou matchMedia absent) : menu unique, bouton « Préparation »
-//         (aria-haspopup, aria-expanded), liste rendue seulement une fois ouvert,
-//         avec un en-tête « INTERFACE » (même liste, pas de sous-menu imbriqué).
-//   * Ouverture au survol (délai de fermeture ≈150 ms) ET au clic ; Échap,
-//     clic extérieur et navigation ferment ; un seul menu ouvert à la fois.
-//   * Bouton de groupe actif : classe `active`.
-//   * Badge compteurs : `.client-counts-badge` (bouton, aria-haspopup /
-//     aria-expanded), détail `.client-counts-detail` (les 5 compteurs).
-//   * ENTRACTE : bouton `.entracte-toggle-btn`, icône 🍿 (repos) / 🎬 (actif),
-//     aria-label « ENTRACTE » / « FIN D'ENTRACTE ».
-//   * Paliers (CSS) : media queries `max-width` = seuil − 1 (1814, 1709, 1499,
-//     1389, 1099, 949, 809) dans Navbar.css ou NavGroupMenu.css.
+// CONTRAT RÉEL (NavGroupMenu.jsx, useMediaQuery.js, Navbar.jsx/.css @0ac8c505) :
+//   * JS (matchMedia) : `(min-width: 1500px)` → mode « en ligne » (défaut si
+//     matchMedia absent) ; `(max-width: 809px)` → badge 👥 (.counts-badge,
+//     .counts-dropdown). Ouverture survol (150 ms) + clic, Échap, clic
+//     extérieur ; un seul menu ouvert (état openMenu de Navbar).
+//   * CSS (@media max-width) : 1814 (titre JEU + libellé Interface), 1709
+//     (libellés Préparation), 1389 (libellés Jeu), 1099 (compact + « Connecte »
+//     masqué), 949 (ENTRACTE/Éclairage en icône), 768 (existant).
 // ---------------------------------------------------------------------------
 
 vi.mock('./Navbar.css', () => ({}))
@@ -118,6 +109,7 @@ function renderNavbar({ path = '/admin/scoreboard', connectionStatus = 'connecte
 
 const prepButton = () => screen.getByRole('button', { name: /Préparation/i })
 const interfaceButton = () => screen.getByRole('button', { name: /Interface/i })
+const logoDropdown = (c) => c.querySelector('.brand-logo-container .navbar-menu-dropdown')
 const logoButton = () => screen.getByLabelText('Menu de navigation')
 const link = (href) => document.querySelector(`a[href="${href}"]`)
 const PREP_HREFS = ['/admin/teams', '/admin/quiz', '/admin/backstage']
@@ -315,13 +307,29 @@ describe('#238 — Préparation en ligne (≥ 1500 px)', () => {
 })
 
 // ===========================================================================
+describe('#238 — bascule en ligne / menu unique à 1500 px (JS)', () => {
+  it('1499 → menu unique (bouton Préparation, pas de bouton Interface)', () => {
+    setViewport(1499)
+    renderNavbar()
+    expect(screen.queryByRole('button', { name: /Préparation/i })).not.toBeNull()
+    expect(screen.queryByRole('button', { name: /^Interface$/i })).toBeNull()
+  })
+  it('1500 → en ligne (bouton Interface, pas de bouton Préparation)', () => {
+    setViewport(1500)
+    renderNavbar()
+    expect(screen.queryByRole('button', { name: /Préparation/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Interface$/i })).not.toBeNull()
+  })
+})
+
+// ===========================================================================
 describe('#238 — un seul menu ouvert à la fois', () => {
   it('ouvrir Préparation ferme le menu du logo', () => {
     const { container } = renderNavbar()
     fireEvent.click(logoButton())
-    expect(container.querySelector('.navbar-menu-dropdown')).not.toBeNull()
+    expect(logoDropdown(container)).not.toBeNull()
     fireEvent.click(prepButton())
-    expect(container.querySelector('.navbar-menu-dropdown')).toBeNull()
+    expect(logoDropdown(container)).toBeNull()
     expect(prepButton()).toHaveAttribute('aria-expanded', 'true')
   })
 
@@ -329,7 +337,7 @@ describe('#238 — un seul menu ouvert à la fois', () => {
     const { container } = renderNavbar()
     fireEvent.click(prepButton())
     fireEvent.click(logoButton())
-    expect(container.querySelector('.navbar-menu-dropdown')).not.toBeNull()
+    expect(logoDropdown(container)).not.toBeNull()
     expect(prepButton()).toHaveAttribute('aria-expanded', 'false')
   })
 
@@ -355,7 +363,7 @@ describe('#238 — un seul menu ouvert à la fois', () => {
     const { container } = renderNavbar()
     fireEvent.click(logoButton())
     fireEvent.click(interfaceButton())
-    expect(container.querySelector('.navbar-menu-dropdown')).toBeNull()
+    expect(logoDropdown(container)).toBeNull()
     expect(interfaceButton()).toHaveAttribute('aria-expanded', 'true')
   })
 })
@@ -471,8 +479,8 @@ describe('#238 — badge compteurs 👥 (< 810 px)', () => {
     b2: { TEAM: 'blue', CONN_STATE: 'red' },
     b3: { TEAM: 'blue', CONN_STATE: 'green' },
   }
-  const badge = (c) => c.querySelector('.client-counts-badge')
-  const detail = (c) => c.querySelector('.client-counts-detail')
+  const badge = (c) => c.querySelector('.counts-badge')
+  const detail = (c) => c.querySelector('.counts-dropdown')
 
   beforeEach(() => setViewport(700))
 
@@ -549,10 +557,27 @@ describe('#238 — badge compteurs 👥 (< 810 px)', () => {
     expect(badge(r.container).className).toMatch(/severity-neutral/)
   })
 
-  it('les compteurs par type gardent leur format X/Y (non-régression #participants)', () => {
+  it('au tap (mouseenter puis click émulés) le détail RESTE ouvert (plan C.2 : clic/tap)', () => {
     const { container } = renderNavbar({ bumpers })
+    fireEvent.mouseEnter(badge(container))
+    fireEvent.click(badge(container))
+    expect(badge(container)).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('≥ 810 px : pas de badge, les 5 compteurs sont affichés (X/Y conservés)', () => {
+    setViewport(810)
+    const { container } = renderNavbar({ bumpers })
+    expect(badge(container)).toBeNull()
+    expect(container.querySelector('.client-counts')).not.toBeNull()
     expect(container.querySelector('.client-count.vplayer').textContent).toContain('1/2')
     expect(container.querySelector('.client-count.buzzer').textContent).toContain('2/3')
+  })
+
+  it('809 px : badge présent, .client-counts absent', () => {
+    setViewport(809)
+    const { container } = renderNavbar({ bumpers })
+    expect(badge(container)).not.toBeNull()
+    expect(container.querySelector('.client-counts')).toBeNull()
   })
 })
 
@@ -564,8 +589,8 @@ describe('#238 — seuils responsive (lus dans les CSS) — jamais 2 lignes', ()
   const at = (max) => blocks.filter((b) => b.max === max).map((b) => b.body).join('\n')
   const navbarRule = () => (css.match(/(^|\})\s*\.navbar\s*\{([^}]*)\}/) || [])[2] || ''
 
-  it('un palier @media (max-width) par seuil : 1814, 1709, 1499, 1389, 1099, 949, 809', () => {
-    ;[1814, 1709, 1499, 1389, 1099, 949, 809].forEach((w) => expect(has(w), `max-width:${w}px`).toBe(true))
+  it('un palier @media (max-width) CSS par seuil : 1814, 1709, 1389, 1099, 949 (1500 et 810 sont en JS)', () => {
+    ;[1814, 1709, 1389, 1099, 949].forEach((w) => expect(has(w), `max-width:${w}px`).toBe(true))
   })
 
   it('la barre reste sur UNE rangée : .navbar sans flex-wrap: wrap, nowrap ou absent', () => {
@@ -583,6 +608,10 @@ describe('#238 — seuils responsive (lus dans les CSS) — jamais 2 lignes', ()
     expect(at(1814)).toMatch(/\.nav-group-label[^{]*\{[^}]*display:\s*none/)
   })
 
+  it('1389 → liens Jeu en icône seule', () => {
+    expect(at(1389)).toMatch(/\.nav-group-game \.nav-label[^{]*\{[^}]*display:\s*none/)
+  })
+
   it('1709 → Préparation dépliée en icônes seules (libellés .nav-label masqués)', () => {
     expect(at(1709)).toMatch(/\.nav-label[^{]*\{[^}]*display:\s*none/)
   })
@@ -596,17 +625,8 @@ describe('#238 — seuils responsive (lus dans les CSS) — jamais 2 lignes', ()
   })
 
   it('949 → ENTRACTE / Éclairage en icône seule (libellé masqué)', () => {
+    expect(at(949)).toMatch(/\.entracte-label[^{]*\{[^}]*display:\s*none|\.entracte-label/)
+    expect(at(949)).toMatch(/\.lighting-label/)
     expect(at(949)).toMatch(/display:\s*none/)
-    expect(at(949)).toMatch(/entracte|lighting-mode/)
-  })
-
-  it('809 → les 5 compteurs remplacés par le badge (compteurs masqués, badge affiché)', () => {
-    expect(at(809)).toMatch(/\.client-counts[^{]*\{[^}]*display:\s*none/)
-    expect(css).toMatch(/\.client-counts-badge/)
-  })
-
-  it('le badge n\'est pas affiché par défaut (uniquement sous 810 px)', () => {
-    const base = css.replace(/@media[^{]*\{(?:[^{}]*\{[^}]*\})*[^{}]*\}/g, '')
-    expect(base).toMatch(/\.client-counts-badge[^{]*\{[^}]*display:\s*none/)
   })
 })

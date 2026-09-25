@@ -148,11 +148,12 @@ describe('Navbar — compteur animateur (.client-count.anim)', () => {
 
 describe('Navbar — raccourcis TV/Joueur/Animateur (nouvel onglet, D4)', () => {
   it('ajoute target="_blank" et rel="noopener" sur les 3 entrées absolute', () => {
-    // Scoped to .nav-group-tv — "TV" apparaît aussi dans le badge de
-    // compteur (.client-count.tv .count-icon), getByText('TV') seul serait
-    // ambigu (screen porte sur tout le body).
+    // #238 — TV/Joueur/Animateur vivent désormais dans le menu « Interface »
+    // (jsdom sans matchMedia → mode en ligne : bouton « Interface ») : on
+    // l'ouvre avant de chercher les liens (ancien .nav-group-tv supprimé).
     const { container } = renderNavbar()
-    const links = container.querySelectorAll('.nav-group-tv a.nav-link')
+    fireEvent.click(screen.getByRole('button', { name: 'Interface' }))
+    const links = container.querySelectorAll('.navgroup-dropdown a.menu-item')
     expect(links).toHaveLength(3)
 
     links.forEach(link => {

@@ -69,7 +69,7 @@
 |-------|--------|-----------------|----------------|------|
 | 1 | Survoler le bouton 🛠️ | Le menu s'ouvre : 👥 Joueurs, ❓ Quiz, 🎭 Backstage, puis en-tête **INTERFACE**, puis 📺 TV ↗, 📱 Joueur ↗, 🎤 Animateur ↗ | | |
 | 2 | Éloigner la souris du menu | Il se referme après un très court délai (~150 ms) ; pas de fermeture parasite en descendant vers la liste en diagonale | | |
-| 3 | Cliquer sur le bouton | Le menu s'ouvre ; un second clic le referme | | |
+| 3 | Sortir de la zone, puis cliquer sur le bouton | Le menu s'ouvre ; un second clic le referme (après un survol, le premier clic garde le menu ouvert — comportement voulu pour le tactile) | | |
 | 4 | Menu ouvert : Échap | Se ferme | | |
 | 5 | Menu ouvert : clic dans une zone vide | Se ferme | | |
 | 6 | Cliquer « Quiz » | Page Quiz ouverte dans le même onglet, menu fermé, bouton Préparation **mis en évidence** | | |
@@ -145,7 +145,7 @@
 |-------|--------|-----------------|----------------|------|
 | 1 | À 768 px avec des joueurs/buzzers connectés | Badge « 👥 connectés/participants » (VJoueurs + Buzzers) ; les 5 compteurs ne sont plus affichés | | |
 | 2 | Survoler le badge | Détail : les 5 compteurs avec libellés (admin, TV, animateur, VJoueurs X/Y, Buzzers X/Y) | | |
-| 3 | Cliquer le badge (tactile) | Le détail s'ouvre ; second clic/Échap/clic extérieur le ferme | | |
+| 3 | Cliquer le badge (souris puis **tactile**, mode tactile F12) | Le détail s'ouvre et **reste ouvert** après le tap ; second clic/Échap/clic extérieur le ferme (point de vigilance : un tap émule survol puis clic, le détail ne doit pas s'ouvrir puis se refermer aussitôt) | | |
 | 4 | Débrancher un buzzer / déconnecter un VJoueur | Badge passe à orange puis rouge (sévérité la plus grave) | | |
 | 5 | Repasser à ≥ 810 px | Retour aux 5 compteurs, badge absent | | |
 
