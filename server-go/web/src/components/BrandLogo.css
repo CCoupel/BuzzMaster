@@ -12,7 +12,7 @@
 
 .brand-logo-buzz {
   color: var(--brand-logo-buzz);
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.18);
+  letter-spacing: -0.01em;
 }
 
 .brand-logo-control {
@@ -30,5 +30,6 @@
   top: -0.18em;
   right: -0.05em;
   font-size: 0.6em;
+  line-height: 1;
   transform: rotate(12deg);
 }
