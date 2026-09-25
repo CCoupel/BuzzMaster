@@ -345,20 +345,8 @@
   color: var(--primary-600);
 }
 
-.nav-group-config {
+.nav-group-prep {
   background: linear-gradient(135deg, var(--gray-100), var(--gray-50));
-}
-
-.nav-group-config .nav-group-label {
-  color: var(--gray-500);
-}
-
-.nav-group-tv {
-  background: linear-gradient(135deg, var(--accent-purple-light, #f3e5f5), var(--accent-purple-lighter, #fce4ec));
-}
-
-.nav-group-tv .nav-group-label {
-  color: var(--accent-purple, #9c27b0);
 }
 
 .nav-link {
@@ -504,36 +492,125 @@
   color: var(--gray-600);
 }
 
-/* Responsive */
-@media (max-width: 1200px) {
+/* Bouton Entracte / badge compteurs (#238) */
+.entracte-toggle-btn {
+  white-space: nowrap;
+}
+
+.entracte-icon {
+  margin-right: 4px;
+}
+
+.counts-badge-wrapper {
+  position: relative;
+}
+
+.counts-badge {
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.counts-badge.severity-orange { background: var(--conn-badge-orange, #f59e0b); color: white; }
+.counts-badge.severity-red { background: var(--error, #ef4444); color: white; }
+
+.counts-dropdown {
+  right: 0;
+  left: auto;
+  min-width: 180px;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.count-name {
+  font-weight: 500;
+  margin-left: auto;
+}
+
+/* Une seule rangée, jamais de retour à la ligne */
+.navbar,
+.navbar-brand,
+.navbar-links,
+.navbar-status,
+.nav-group {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/* Responsive — seuils #238 (une rangée, pastille de connexion toujours visible) */
+/* Titre vertical JEU : uniquement ≥ 1815 px (le titre Préparation n'existe plus) */
+@media (max-width: 1814px) {
   .nav-group-label {
     display: none;
   }
 }
 
-@media (max-width: 768px) {
+/* Préparation en ligne : icônes seules de 1500 à 1709 */
+@media (max-width: 1709px) {
+  .nav-group-prep .nav-label {
+    display: none;
+  }
+}
+
+/* Liens Jeu en icône seule */
+@media (max-width: 1389px) {
+  .nav-group-game .nav-label {
+    display: none;
+  }
+}
+
+/* Espacements compacts, logo réduit, pastille seule */
+@media (max-width: 1099px) {
   .navbar {
     padding: var(--space-2) var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .navbar-links,
+  .navbar-status {
+    gap: var(--space-2);
   }
 
   .brand-logo-button {
     --brand-logo-size: 1.25rem;
   }
 
-  .nav-label {
+  .nav-link {
+    padding: var(--space-2);
+  }
+
+  .status-text {
+    display: none;
+  }
+}
+
+/* ENTRACTE / Éclairage en icône seule */
+@media (max-width: 949px) {
+  .entracte-label,
+  .lighting-label {
     display: none;
   }
 
-  .nav-link {
-    padding: var(--space-2);
+  .entracte-icon {
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-label {
+    display: none;
   }
 
   .nav-group {
     padding: var(--space-1);
     gap: 0;
-  }
-
-  .status-text {
-    display: none;
   }
 }

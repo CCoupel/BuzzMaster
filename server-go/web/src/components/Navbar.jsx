@@ -13,6 +13,8 @@ import useElementHeightVar from '../hooks/useElementHeightVar'
 import { useGame } from '../hooks/GameContext'
 import { canToggleEntracte } from '../utils/phaseRules'
 import Button from './Button'
+import NavGroupMenu from './NavGroupMenu'
+import useMediaQuery from '../hooks/useMediaQuery'
 import './Navbar.css'
 import '../styles/entracte.css'
 
@@ -58,7 +60,15 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     if (!canEntracteToggle) return
     setEntracte(!entracteActive)
   }
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  // Un seul menu ouvert à la fois (#238) : 'logo' | 'prep' | 'interface' |
+  // 'lighting' | 'counts' | null.
+  const [openMenu, setOpenMenu] = useState(null)
+  const isMenuOpen = openMenu === 'logo'
+  const setIsMenuOpen = (v) => setOpenMenu(v ? 'logo' : null)
+  // ≥ 1500 px : Préparation en ligne + bouton Interface ; sinon menu unique.
+  const inlineGroups = useMediaQuery('(min-width: 1500px)', true)
+  // < 810 px : les 5 compteurs se replient dans un badge 👥.
+  const compactCounts = useMediaQuery('(max-width: 809px)', false)
   // #175 (F3) — "arrêt demandé" : passe à true après confirmation de
   // l'entrée Quitter. Sans cela, useWebSocket reconnecte toutes les ~5s
   // indéfiniment (RECONNECT_INTERVAL) et l'utilisateur reste devant une page
@@ -98,7 +108,9 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // (EMPTY_LIGHTING_STATUS), mais un mock de test ou un serveur antérieur
   // au Batch 2 peut renvoyer un statut sans `mode` — jamais planter dessus.
   const lightingMode = lightingStatus.mode || 'AUTO'
-  const [lightingPopoverOpen, setLightingPopoverOpen] = useState(false)
+  const lightingPopoverOpen = openMenu === 'lighting'
+  const setLightingPopoverOpen = (fn) =>
+    setOpenMenu(cur => ((typeof fn === 'function' ? fn(cur === 'lighting') : fn) ? 'lighting' : null))
   const lightingButtonRef = useRef(null)
   const lightingPopoverRef = useRef(null)
 
@@ -121,6 +133,28 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     () => computeParticipantCounts(bumpers, b => !b.IS_VIRTUAL && !b.IS_VPLAYER),
     [bumpers]
   )
+
+  const counterItems = [
+    { key: 'admin', cls: 'admin', icon: 'A', value: clientCounts.admin, title: 'Interfaces admin', name: 'Admin' },
+    { key: 'tv', cls: 'tv', icon: 'TV', value: clientCounts.tv, title: 'Ecrans TV/joueurs', name: 'TV/joueurs' },
+    { key: 'anim', cls: 'anim', icon: '🎤', value: clientCounts.anim, title: 'Interfaces animateur', name: 'Animateur' },
+    {
+      key: 'vplayer', cls: `vplayer severity-${vjoueurCounts.severity}`, icon: '📱',
+      value: `${vjoueurCounts.connected}/${vjoueurCounts.participants}`,
+      title: `VJoueurs connectés/participants : ${vjoueurCounts.connected}/${vjoueurCounts.participants}`, name: 'VJoueurs',
+    },
+    {
+      key: 'buzzer', cls: `buzzer severity-${buzzerCounts.severity}`, icon: '🎮',
+      value: `${buzzerCounts.connected}/${buzzerCounts.participants}`,
+      title: `Buzzers connectés/participants : ${buzzerCounts.connected}/${buzzerCounts.participants}`, name: 'Buzzers',
+    },
+  ]
+  // Badge 👥 (< 810 px) : joueurs = VJoueurs + Buzzers, sévérité la plus grave.
+  const countsBadge = {
+    connected: vjoueurCounts.connected + buzzerCounts.connected,
+    participants: vjoueurCounts.participants + buzzerCounts.participants,
+    severity: aggregateSeverity([vjoueurCounts.severity, buzzerCounts.severity]),
+  }
 
   // Vérifier les mises à jour au montage
   useEffect(() => {
@@ -164,6 +198,24 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     }
   }, [lightingPopoverOpen])
 
+  // Échap ferme le menu ouvert ; clic extérieur pour les menus #238.
+  useEffect(() => {
+    if (!openMenu) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') setOpenMenu(null) }
+    const onDown = (e) => {
+      if (['prep', 'interface', 'counts'].includes(openMenu) &&
+          !e.target.closest?.(`[data-navmenu="${openMenu}"]`)) {
+        setOpenMenu(null)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDown)
+    }
+  }, [openMenu])
+
   // #175 (F3) — si le serveur redémarre et que la reconnexion aboutit après
   // un "Quitter" (ex. relancé manuellement entre-temps), l'état "arrêté"
   // n'a plus lieu d'être : la page redevient utilisable normalement.
@@ -186,7 +238,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { path: 'history', label: 'Historique', icon: '📜' },
   ]
 
-  // Zone Config: configuration et gestion (sans Config et Logs qui sont dans le menu)
+  // Groupe Préparation (#238) : préparation de la partie
   const configItems = [
     { path: 'teams', label: 'Joueurs', icon: '👥' },
     { path: 'quiz', label: 'Quiz', icon: '❓' },
@@ -197,7 +249,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
     { path: 'backstage', label: 'Backstage', icon: '🎭' },
   ]
 
-  // Zone TV: affichage TV, joueurs et animateur
+  // Groupe Interface (#238) : affichage TV, joueurs et animateur (nouvel onglet)
   const tvItems = [
     { path: '/tv', label: 'TV', icon: '📺', absolute: true },
     { path: '/player', label: 'Joueur', icon: '📱', absolute: true },
@@ -206,8 +258,8 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
 
   // Menu items dans le menu déroulant
   const menuItems = [
-    { path: 'settings', label: 'Config', icon: '⚙️' },
-    // #207 — juste après Config. L'icône est un ÉLÉMENT React (SVG en ligne,
+    { path: 'settings', label: 'Réglages', icon: '⚙️' },
+    // #207 — juste après Réglages. L'icône est un ÉLÉMENT React (SVG en ligne,
     // 3 glyphes distincts selon l'état), pas un emoji : ni la couleur ni la
     // forme d'un emoji ne sont pilotables. `title` dit l'état en toutes
     // lettres pour les lecteurs d'écran (le SVG est aria-hidden).
@@ -280,6 +332,8 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
         key={item.path}
         to={path}
         className={() => `nav-link ${isActive ? 'active' : ''}`}
+        title={item.label}
+        aria-label={item.label}
         {...(item.absolute ? { target: '_blank', rel: 'noopener' } : {})}
       >
         <span className="nav-icon">{item.icon}</span>
@@ -372,9 +426,11 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           className={`entracte-toggle-btn${entracteActive ? ' active' : ''}`}
           onClick={handleToggleEntracte}
           disabled={!canEntracteToggle}
-          title={!canEntracteToggle ? "Désactivé pendant une question en cours" : undefined}
+          title={!canEntracteToggle ? "Désactivé pendant une question en cours" : (entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE')}
+          aria-label={entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
         >
-          {entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
+          <span className="entracte-icon" aria-hidden="true">{entracteActive ? '🎬' : '🍿'}</span>
+          <span className="entracte-label">{entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}</span>
         </Button>
 
         {/* #208 — point d'accès complet aux commandes ON/AUTO/OFF/Flash,
@@ -393,8 +449,10 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
               aria-haspopup="true"
               aria-expanded={lightingPopoverOpen}
               onClick={() => setLightingPopoverOpen(o => !o)}
+              aria-label={lightingMode === 'AUTO' ? 'Éclairage' : `Mode ${lightingMode} engagé`}
             >
-              💡 {lightingMode === 'AUTO' ? 'Éclairage' : `Mode ${lightingMode} engagé`}
+              <span aria-hidden="true">💡</span>{' '}
+              <span className="lighting-label">{lightingMode === 'AUTO' ? 'Éclairage' : `Mode ${lightingMode} engagé`}</span>
             </button>
             {lightingPopoverOpen && (
               <div ref={lightingPopoverRef} className="lighting-mode-popover">
@@ -412,50 +470,61 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
             {gameItems.map(renderNavLink)}
           </div>
         </div>
-        <div className="nav-group nav-group-config">
-          <span className="nav-group-label">Config</span>
-          <div className="nav-group-items">
-            {configItems.map(renderNavLink)}
-          </div>
-        </div>
-        <div className="nav-group nav-group-tv">
-          <span className="nav-group-label">Pages</span>
-          <div className="nav-group-items">
-            {tvItems.map(renderNavLink)}
-          </div>
-        </div>
+        <NavGroupMenu
+          mode={inlineGroups ? 'inline' : 'single'}
+          prepItems={configItems}
+          interfaceItems={tvItems}
+          renderNavLink={renderNavLink}
+          getFullPath={getFullPath}
+          isActiveRoute={isActiveRoute}
+          pathname={location.pathname}
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
+        />
       </div>
 
       <div className="navbar-status">
-        <div className="client-counts">
-          <span className="client-count admin" title="Interfaces admin">
-            <span className="count-icon">A</span>
-            <span className="count-value">{clientCounts.admin}</span>
-          </span>
-          <span className="client-count tv" title="Ecrans TV/joueurs">
-            <span className="count-icon">TV</span>
-            <span className="count-value">{clientCounts.tv}</span>
-          </span>
-          <span className="client-count anim" title="Interfaces animateur">
-            <span className="count-icon">🎤</span>
-            <span className="count-value">{clientCounts.anim}</span>
-          </span>
-          <span
-            className={`client-count vplayer severity-${vjoueurCounts.severity}`}
-            title={`VJoueurs connectés/participants : ${vjoueurCounts.connected}/${vjoueurCounts.participants}`}
-          >
-            <span className="count-icon">📱</span>
-            <span className="count-value">{vjoueurCounts.connected}/{vjoueurCounts.participants}</span>
-          </span>
-          <span
-            className={`client-count buzzer severity-${buzzerCounts.severity}`}
-            title={`Buzzers connectés/participants : ${buzzerCounts.connected}/${buzzerCounts.participants}`}
-          >
-            <span className="count-icon">🎮</span>
-            <span className="count-value">{buzzerCounts.connected}/{buzzerCounts.participants}</span>
-          </span>
-        </div>
-        <div className={`connection-status ${connectionStatus}`}>
+        {compactCounts ? (
+          <div className="counts-badge-wrapper" data-navmenu="counts"
+            onMouseEnter={() => setOpenMenu('counts')}
+            onMouseLeave={() => setOpenMenu(cur => (cur === 'counts' ? null : cur))}>
+            <button
+              type="button"
+              className={`counts-badge severity-${countsBadge.severity}`}
+              title="Compteurs de connexions"
+              aria-label={`Compteurs de connexions : ${countsBadge.connected}/${countsBadge.participants}`}
+              aria-haspopup="true"
+              aria-expanded={openMenu === 'counts'}
+              onClick={() => setOpenMenu(cur => (cur === 'counts' ? null : 'counts'))}
+            >
+              <span aria-hidden="true">👥</span> {countsBadge.connected}/{countsBadge.participants}
+            </button>
+            {openMenu === 'counts' && (
+              <div className="navbar-menu-dropdown counts-dropdown">
+                {counterItems.map(c => (
+                  <span key={c.key} className={`client-count ${c.cls}`} title={c.title}>
+                    <span className="count-icon">{c.icon}</span>
+                    <span className="count-value">{c.value}</span>
+                    <span className="count-name">{c.name}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="client-counts">
+            {counterItems.map(c => (
+              <span key={c.key} className={`client-count ${c.cls}`} title={c.title}>
+                <span className="count-icon">{c.icon}</span>
+                <span className="count-value">{c.value}</span>
+              </span>
+            ))}
+          </div>
+        )}
+        <div
+          className={`connection-status ${connectionStatus}`}
+          title={connectionStatus === 'connected' ? 'Connecté' : connectionStatus === 'connecting' ? 'Connexion...' : 'Déconnecté'}
+        >
           <span className="status-dot" />
           <span className="status-text">
             {connectionStatus === 'connected' ? 'Connecte' :
