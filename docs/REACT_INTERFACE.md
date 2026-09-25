@@ -31,7 +31,7 @@ Ce document décrit l'interface web React de BuzzControl.
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
 - Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence
 - Fonction `getFullPath(path)` pour construire les chemins avec le bon préfixe
-- **Menu déroulant sur le logo BrandLogo** : Clic sur le logo typographique BrandLogo (« Buzz » / « Control » + ⚡, #239) ouvre un menu avec Config et Logs
+- **Menu déroulant sur le logo BrandLogo** : Clic sur le logo typographique BrandLogo (« Buzz » / « Control » + ⚡, #239) ouvre un menu de configuration (Config, Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter)
   - Composant `BrandLogo.jsx` restitue le mot-symbole A1 en Fredoka 700 (indigo/rose)
   - État `isMenuOpen` géré via useState
   - Fermeture au clic extérieur via useRef + useEffect
@@ -1401,7 +1401,7 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 
 **Navbar** (logo BrandLogo #239) :
 - Liens directs : Jeu, Scores, Équipes, Quiz, Historique, Palmarès
-- Menu BrandLogo dropdown : Config, Backup/Restaure, Logs, Mises à jour
+- Menu BrandLogo dropdown : Config, Ambiance, Backup/Restaure, Mises à jour, Logs, Quitter
 
 **Pages admin** :
 | Route | Fonctionnalités |
