@@ -56,7 +56,7 @@ function MenuEntry({ item, to, active, onNavigate }) {
 
 function Dropdown({ children, label }) {
   return (
-    <div className="navbar-menu-dropdown navgroup-dropdown" role="menu" aria-label={label}>
+    <div className="navbar-menu-dropdown navgroup-dropdown" aria-label={label}>
       {children}
     </div>
   )

@@ -427,11 +427,11 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           className={`entracte-toggle-btn${entracteActive ? ' active' : ''}`}
           onClick={handleToggleEntracte}
           disabled={!canEntracteToggle}
-          title={!canEntracteToggle ? "Désactivé pendant une question en cours" : (entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE')}
-          aria-label={entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}
+          title={!canEntracteToggle ? "Désactivé pendant une question en cours" : (entracteActive ? "Fin d'entracte" : 'ENTRACTE')}
+          aria-label={entracteActive ? "Fin d'entracte" : 'ENTRACTE'}
         >
           <span className="entracte-icon" aria-hidden="true">{entracteActive ? '🎬' : '🍿'}</span>
-          <span className="entracte-label">{entracteActive ? "FIN D'ENTRACTE" : 'ENTRACTE'}</span>
+          <span className="entracte-label">{entracteActive ? 'REPRISE' : 'ENTRACTE'}</span>
         </Button>
 
         {/* #208 — point d'accès complet aux commandes ON/AUTO/OFF/Flash,

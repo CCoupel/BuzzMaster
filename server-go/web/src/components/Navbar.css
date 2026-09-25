@@ -435,7 +435,7 @@
    rouge si ≥1 participant en état "red", sinon orange si ≥1 "orange", sinon neutre. */
 .client-count.vplayer.severity-orange,
 .client-count.buzzer.severity-orange {
-  background: var(--conn-badge-orange, #f59e0b);
+  background: var(--conn-badge-orange);
   color: white;
 }
 
@@ -517,7 +517,7 @@
   color: var(--gray-700);
 }
 
-.counts-badge.severity-orange { background: var(--conn-badge-orange, #f59e0b); color: white; }
+.counts-badge.severity-orange { background: var(--conn-badge-orange); color: white; }
 .counts-badge.severity-red { background: var(--error, #ef4444); color: white; }
 
 .counts-dropdown {
@@ -546,7 +546,7 @@
 }
 
 /* Responsive — seuils #238 (mesurés sous Windows, polices emoji réelles) (une rangée, pastille de connexion toujours visible) */
-/* Titre vertical JEU : uniquement ≥ 1815 px (le titre Préparation n'existe plus) */
+/* Titre vertical JEU : uniquement ≥ 1945 px (le titre Préparation n'existe plus) */
 @media (max-width: 1944px) {
   .nav-group-label {
     display: none;
