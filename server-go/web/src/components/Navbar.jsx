@@ -13,7 +13,7 @@ import useElementHeightVar from '../hooks/useElementHeightVar'
 import { useGame } from '../hooks/GameContext'
 import { canToggleEntracte } from '../utils/phaseRules'
 import Button from './Button'
-import NavGroupMenu from './NavGroupMenu'
+import NavGroupMenu, { useMenuTrigger } from './NavGroupMenu'
 import useMediaQuery from '../hooks/useMediaQuery'
 import './Navbar.css'
 import '../styles/entracte.css'
@@ -65,6 +65,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   const [openMenu, setOpenMenu] = useState(null)
   const isMenuOpen = openMenu === 'logo'
   const setIsMenuOpen = (v) => setOpenMenu(v ? 'logo' : null)
+  const countsTrigger = useMenuTrigger('counts', openMenu, setOpenMenu)
   // ≥ 1500 px : Préparation en ligne + bouton Interface ; sinon menu unique.
   const inlineGroups = useMediaQuery('(min-width: 1500px)', true)
   // < 810 px : les 5 compteurs se replient dans un badge 👥.
@@ -485,9 +486,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
 
       <div className="navbar-status">
         {compactCounts ? (
-          <div className="counts-badge-wrapper" data-navmenu="counts"
-            onMouseEnter={() => setOpenMenu('counts')}
-            onMouseLeave={() => setOpenMenu(cur => (cur === 'counts' ? null : cur))}>
+          <div className="counts-badge-wrapper" {...countsTrigger.wrapperProps}>
             <button
               type="button"
               className={`counts-badge severity-${countsBadge.severity}`}
@@ -495,7 +494,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
               aria-label={`Compteurs de connexions : ${countsBadge.connected}/${countsBadge.participants}`}
               aria-haspopup="true"
               aria-expanded={openMenu === 'counts'}
-              onClick={() => setOpenMenu(cur => (cur === 'counts' ? null : 'counts'))}
+              onClick={countsTrigger.onClick}
             >
               <span aria-hidden="true">👥</span> {countsBadge.connected}/{countsBadge.participants}
             </button>
