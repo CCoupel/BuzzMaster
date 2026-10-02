@@ -296,17 +296,35 @@ Page de visualisation des logs serveur en temps réel.
 
 Pipeline GitHub Actions (`.github/workflows/release.yml`) déclenché sur push `v*`.
 
-**Jobs** :
-1. **Checking** (~10s) — extraction de la version depuis le tag Git, puis injection dans `config.json` / `package.json` / `version.txt` (le tag fait foi, aucune comparaison)
-2. **Compiling** (3 jobs parallèles, ~1-2 min) :
-   - Windows amd64 : Go + React → `buzzcontrol-vX.Y.Z-windows-amd64.exe`
-   - Linux ARM64 : Go + React → `buzzcontrol-vX.Y.Z-linux-arm64`
-   - Firmware : PlatformIO ESP32-C3 → `buzzclick-vX.Y.Z-firmware.bin`
-3. **Releasing** (~30s) — release GitHub avec 3 binaires + notes depuis CHANGELOG.md
+**Jobs** (exécution ordonnée) :
+1. **Testing** (~10-15 min) — tests unitaires (`go test -race`), go vet, govulncheck
+   - Vérifie que la base de code est saine avant release
+   - Bloque la release en cas d'échec
+2. **Checking** (~10s) — vérification de cohérence entre tag et fichiers de version
+   - Vérifie que `config.json`, `package.json`, `platformio.ini` et `version.txt` correspondent au tag
+   - Échoue avec rapport détaillé si une incohérence est trouvée
+   - Tolérance : `version.txt` tolère un suffixe de build `.N` (e.g., `11.1.0.14`)
+3. **Compiling** (3 jobs parallèles, ~1-2 min, tous dépendent de testing + checking) :
+   - **Firmware** (prérequis) : PlatformIO ESP32-C3 → `buzzclick-vX.Y.Z-merged.bin` (bootloader + app merged, supporte USB + OTA)
+   - **Windows amd64** : Go + React + firmware embarqué → `buzzcontrol-vX.Y.Z-windows-amd64.exe`
+   - **Linux ARM64** : Go + React + firmware embarqué → `buzzcontrol-vX.Y.Z-linux-arm64`
+4. **Releasing** (~30s) — release GitHub avec 4 artefacts + SHA256SUMS + notes depuis CHANGELOG.md
+   - Télécharge les 2 serveurs + firmware
+   - Génère checksums SHA256 pour vérification intégrité
+   - Publie la release GitHub
 
-**Versioning unifié** : serveur (`config.json`), frontend (`package.json`), firmware (injecté dans `platformio.ini` par CI).
+**Versioning unifié** : tous les fichiers de version (`config.json`, `package.json`, `platformio.ini`,
+`version.txt`) doivent être bumpes manuellement **avant tagging** et correspondent exactement au
+tag de release.
+
+**Firmware embarqué** : Le binary firmware compilé (`buzzclick-vX.Y.Z-merged.bin`) est automatiquement copié dans `server-go/assets/firmware/` pour les mises à jour OTA (`/ws` endpoint firmware push). Le serveur détecte automatiquement le format merged et en extrait la portion app pour OTA.
 
 > `versioninfo.json` : CI régénère automatiquement pour Windows PE metadata. Le `.syso` généré **ne doit pas** être commité (`.gitignore`). Mise à jour manuelle uniquement pour builds locaux (`build.ps1`).
+
+> `version.txt` : fichier versionné (suivi dans Git) qui porte le numéro de version du firmware embarqué.
+> La CI le vérifie mais ne le modifie pas. Tolère un suffixe de build `.N` (e.g., `11.1.0.14`), mais le
+> segment `X.Y.Z` doit correspondre au tag. Les builds locaux le lisent si présent, sinon utilisent la
+> version de `config.json`.
 
 ## Cross-compilation
 

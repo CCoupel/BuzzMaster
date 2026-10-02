@@ -146,14 +146,13 @@ git status
 
 ---
 
-### 3. Mise à Jour de la Version
+### 3. Mise à Jour de la Version (avant tagging)
 
-> **Le tag fait foi pour ce qui est publié.** La CI réécrit `config.json`,
-> `internal/server/config.json`, `package.json` et `firmware/version.txt` depuis le tag avant de
-> compiler (`.github/workflows/release.yml`, étape « Inject version from tag »). Les valeurs
-> commitées servent aux **builds locaux** (`build.ps1`) et au suivi du cycle de développement —
-> elles n'ont pas besoin d'être parfaites au moment du tag, mais les garder justes évite de
-> livrer un binaire local mal étiqueté.
+> **Le tag fait foi pour ce qui est publié.** TOUS les fichiers de version doivent être bumpes
+> et committes **avant de créer le tag**. La CI ne modifie aucun fichier : elle vérifie seulement
+> que tous les fichiers de version correspondent au tag
+> (`.github/workflows/release.yml`, job « checking »). Si une incohérence est détectée, le
+> workflow échoue et il faut corriger les fichiers, recommitter, puis recréer le tag.
 
 **Fichier 1** : `server-go/config.json`
 ```json
@@ -171,9 +170,40 @@ git status
 }
 ```
 
-**Fichier 3** : `server-go/cmd/server/versioninfo.json` (métadonnées Windows PE)
+**Fichier 3** : `server-go/internal/server/config.json`
+```json
+{
+  "version": "X.Y.Z",
+  ...
+}
+```
 
-Ce fichier doit être maintenu en phase avec la version courante. Mettre à jour les champs suivants :
+**Fichier 4** : `platformio.ini` (firmware version — **critique**)
+
+Le firmware doit être bumpe **manuellement** à la version projet avant chaque tag :
+```ini
+build_flags =
+  -D VERSION='\"X.Y.Z\"'
+  -D FIRMWARE_VERSION='\"X.Y.Z\"'
+```
+
+> **Important** : Contrairement aux versions serveur précédentes, la CI n'injecte plus cette version.
+> Elle doit correspondre exactement au tag `vX.Y.Z`.
+
+**Fichier 5** : `server-go/assets/firmware/version.txt` (versionné — artefact suivi)
+
+Fichier texte contenant la version du firmware embarqué (compatible avec suffixe de build `.N`) :
+```
+X.Y.Z
+```
+
+> **Tolérance** : le fichier tolère un suffixe de build `.N` (e.g., `11.1.0.14`), mais la partie
+> `X.Y.Z` doit correspondre au tag. Exemple : pour le tag `v11.1.0`, le fichier peut contenir
+> `11.1.0`, `11.1.0.1`, `11.1.0.99`, etc. — seul le `X.Y.Z` est vérifié par la CI.
+
+**Fichier 6** : `server-go/cmd/server/versioninfo.json` (métadonnées Windows PE)
+
+Mettre à jour les champs suivants pour les builds locaux :
 ```json
 {
   "FixedFileInfo": {
@@ -187,11 +217,8 @@ Ce fichier doit être maintenu en phase avec la version courante. Mettre à jour
 }
 ```
 
-> **Note** : La CI (job Windows) régénère `versioninfo.json` automatiquement depuis le tag.
-> La mise à jour manuelle du fichier sert uniquement pour les builds locaux via `build.ps1`.
-
-**Fichier 4** : `server-go/internal/server/config.json` — réécrit par la CI au même titre que
-les deux premiers. À garder aligné si vous produisez un build local.
+> **Note** : La CI régénère `versioninfo.json` au moment du build Windows. Cette mise à jour manuelle
+> sert uniquement pour les builds locaux via `build.ps1`. Le `.syso` généré ne doit pas être commité.
 
 ---
 
@@ -318,12 +345,13 @@ git push origin vX.Y.Z
 ```
 
 > **🚀 À ce moment, GitHub Actions se déclenche automatiquement et :**
-> 1. Extrait la version du tag et l'**injecte** dans `config.json`, `internal/server/config.json`,
->    `package.json` et `firmware/version.txt` — le tag fait foi, aucune comparaison n'est faite
+> 1. **Vérifie** que tous les fichiers de version correspondent au tag (`config.json`,
+>    `internal/server/config.json`, `package.json`, `platformio.ini`, `version.txt`) — échoue
+>    avec rapport détaillé si incohérence
 > 2. Build le frontend React
-> 3. Compile les binaires Windows et Linux ARM64
-> 4. Valide l'intégrité des binaires (taille > 5MB)
-> 5. Crée la release GitHub avec les binaires attachés
+> 3. Compile les binaires Windows, Linux ARM64 et firmware BuzzClick en parallèle
+> 4. Valide l'intégrité des binaires (serveur > 5MB, firmware 200KB–3MB)
+> 5. Crée la release GitHub avec tous les artefacts et SHA256SUMS
 > 6. Extrait les notes de release depuis CHANGELOG.md
 
 ---
@@ -335,13 +363,26 @@ git push origin vX.Y.Z
 
 **URL** : https://github.com/CCoupel/BuzzMaster/actions
 
-Le pipeline s'exécute en 3 étapes :
+Le pipeline s'exécute en 4 étapes (testing + checking + compiling x2 + releasing) :
+
+**Vérifications bloquantes avant build** :
+1. ✅ **Tests unitaires** (`go test -race`) — tous les tests doivent passer
+2. ✅ **Go vet** — détecte les erreurs courantes dans le code Go
+3. ✅ **Govulncheck** — scan des vulnérabilités connues dans les dépendances
+4. ✅ **Vérification tag == version** — le tag doit correspondre exactement à la version du dépôt
+
+En cas d'échec de l'une de ces vérifications, la release est bloquée et l'utilisateur doit corriger le problème avant de retenter.
 
 ```
-┌─────────────────────────────────────────────┐
-│  🔍 Checking (~10s)                         │
-│  └─ Extrait la version depuis le tag        │
-└─────────────────────┬───────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  🧪 Testing (~10-15 min)                                │
+│  └─ Tests unitaires, race detector, build frontend      │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+┌─────────────────────────────────────────────────────────┐
+│  🔍 Checking (~10s)                                     │
+│  └─ Vérifie cohérence tag vs fichiers de version       │
+└─────────────────────┬───────────────────────────────────┘
                       │
         ┌─────────────┼─────────────┐
         ▼             ▼             ▼
@@ -350,29 +391,31 @@ Le pipeline s'exécute en 3 étapes :
 │   Windows    │ │   Linux      │ │   Firmware       │
 │  (~1-2 min)  │ │  (~1-2 min)  │ │  (~1-2 min)      │
 │ ├─ npm build │ │ ├─ npm build │ │ ├─ install pio   │
-│ ├─ go build  │ │ ├─ go build  │ │ ├─ inject version│
-│ └─ validate  │ │ └─ validate  │ │ ├─ pio build     │
-│    >5MB      │ │    >5MB      │ │ └─ validate      │
-│              │ │              │ │    200KB-2MB     │
+│ ├─ go build  │ │ ├─ go build  │ │ ├─ pio build     │
+│ └─ validate  │ │ └─ validate  │ │ └─ validate      │
+│    >5MB      │ │    >5MB      │ │    200KB-3MB     │
+│              │ │              │ │                  │
 └──────┬───────┘ └──────┬───────┘ └────────┬─────────┘
        └────────────────┼──────────────────┘
                         ▼
-┌─────────────────────────────────────────────┐
-│  🚀 Releasing (~30s)                        │
-│  ├─ Télécharge les 3 binaires               │
-│  │  • buzzcontrol-windows-amd64.exe         │
-│  │  • buzzcontrol-linux-arm64               │
-│  │  • buzzclick-firmware.bin                │
-│  ├─ Extrait notes du CHANGELOG              │
-│  └─ Publie la release GitHub                │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│  🚀 Releasing (~30s)                                    │
+│  ├─ Télécharge les 3 binaires                           │
+│  │  • buzzcontrol-vX.Y.Z-windows-amd64.exe (~8-9 MB)   │
+│  │  • buzzcontrol-vX.Y.Z-linux-arm64 (~8 MB)           │
+│  │  • buzzclick-vX.Y.Z-merged.bin (~500KB-1MB)         │
+│  ├─ Génère SHA256SUMS                                   │
+│  ├─ Extrait notes du CHANGELOG                          │
+│  └─ Publie la release GitHub                            │
+└─────────────────────────────────────────────────────────┘
 ```
 
 **Durée totale** : ~3-4 minutes (builds en parallèle)
 
 **Claude doit** :
 1. Attendre la fin complète du pipeline (~3-4 minutes)
-2. Vérifier que les 4 jobs sont verts (✅) : checking, compiling x2, compiling-firmware
+2. Vérifier que les 6 jobs sont verts (✅) : checking, testing, compiling-firmware, compiling (Windows),
+   compiling (Linux), releasing
 3. En cas d'échec, analyser les logs et informer l'utilisateur
 
 **En cas d'échec** :
@@ -391,10 +434,11 @@ Le pipeline s'exécute en 3 étapes :
 
 **Claude doit vérifier** :
 1. La release `vX.Y.Z` existe
-2. Les 3 binaires sont attachés :
+2. Les 4 artefacts sont attachés :
    - `buzzcontrol-vX.Y.Z-windows-amd64.exe` (~8-9 MB)
    - `buzzcontrol-vX.Y.Z-linux-arm64` (~8 MB)
-   - `buzzclick-vX.Y.Z-firmware.bin` (~500KB-1MB)
+   - `buzzclick-vX.Y.Z-merged.bin` (~500KB-1MB) — firmware merged (supports USB + OTA)
+   - `SHA256SUMS` — checksums pour tous les binaires
 3. Les notes de release sont extraites du CHANGELOG
 4. Informer l'utilisateur du succès ou de l'échec
 
@@ -431,8 +475,10 @@ curl -s http://localhost/version
 ```
 [ ] 1.  Validation utilisateur obtenue
 [ ] 2.  Fichiers temporaires nettoyés
-[ ] 3.  Version mise à jour (config.json + package.json + versioninfo.json + internal/server/config.json)
+[ ] 3.  Version mise à jour (config.json + package.json + internal/server/config.json +
+        platformio.ini + server-go/assets/firmware/version.txt + versioninfo.json)
         → numéro de prod à 3 segments, le « a » du cycle dev est retiré
+        → firmware bumpe manuellement dans platformio.ini (VERSION et FIRMWARE_VERSION)
 [ ] 4.  CHANGELOG.md mis à jour
 [ ] 5.  CLAUDE.md mis à jour (documentation technique)
 [ ] 6.  README.md mis à jour (si nécessaire)
@@ -441,7 +487,8 @@ curl -s http://localhost/version
 [ ] 9.  Changements commités
 [ ] 10. Commits poussés
 [ ] 11. Tag créé et poussé (déclenche CI)
-[ ] 12. 🤖 CI surveillée par Claude (3 jobs verts ✅)
+[ ] 12. 🤖 CI surveillée par Claude (6 jobs verts ✅ : checking, testing, compiling-firmware,
+        compiling Windows, compiling Linux, releasing)
 [ ] 13. 🤖 Release vérifiée par Claude (binaires + notes)
 [ ] 14. 🤖 Serveur relancé par Claude (version vérifiée)
 ```
@@ -524,4 +571,5 @@ ls -lh releases/
 - Les exécutables portables embarquent le site web (pas besoin de fichiers séparés)
 - Le dossier `data/` est créé automatiquement à côté de l'exécutable
 - Sur Raspberry Pi, donner les droits d'exécution : `chmod +x buzzcontrol-linux-arm64`
-- Le workflow CI utilise Go 1.21 et Node.js 18
+- Le workflow CI utilise Go 1.25 et Node.js 18
+- Le firmware compilé (`buzzclick-vX.Y.Z-merged.bin`) est automatiquement embarqué dans le serveur pour les mises à jour OTA

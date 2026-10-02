@@ -69,6 +69,8 @@ powershell.exe -NoProfile -Command "
 # 1c. Intégrer dans les assets Go (merged binary + version)
 VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
 cp buzzclick-merged.bin server-go/assets/firmware/buzzclick-latest.bin
+# Note : ce script QUALIF écrit version.txt pour les builds locaux. À la release, le fichier
+# doit être pré-bumpe et versionné (commité) AVANT le tag ; la CI vérifie seulement la cohérence.
 echo -n "$VERSION" > server-go/assets/firmware/version.txt
 rm buzzclick-merged.bin
 
