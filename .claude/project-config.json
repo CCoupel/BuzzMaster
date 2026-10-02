@@ -10,10 +10,19 @@
   "src_dir": "server-go/",
   "version_file": "server-go/config.json",
   "stack": {
-    "backend": { "language": "go", "framework": null },
-    "frontend": { "language": "javascript", "framework": "react" },
+    "backend": {
+      "language": "go",
+      "framework": null
+    },
+    "frontend": {
+      "language": "javascript",
+      "framework": "react"
+    },
     "mobile": null,
-    "firmware": { "platform": "esp32-c3", "framework": "platformio" },
+    "firmware": {
+      "platform": "esp32-c3",
+      "framework": "platformio"
+    },
     "database": null
   },
   "infrastructure": {
@@ -22,21 +31,40 @@
       {
         "name": "QUALIF",
         "order": 1,
-        "publish": { "mode": "promote", "target": "build/qualif_v{X.Y.Z}/" },
-        "deploy": { "mechanism": "vps", "target": "local-windows-binary (meme poste, pas de ssh distant)" }
+        "publish": {
+          "mode": "promote",
+          "target": "build/qualif_v{X.Y.Z}/"
+        },
+        "deploy": {
+          "mechanism": "vps",
+          "target": "local-windows-binary (meme poste, pas de ssh distant)"
+        }
       },
       {
         "name": "PROD",
         "order": 2,
-        "publish": { "mode": "rebuild-ci", "trigger": "git-tag", "pipeline": ".github/workflows/release.yml" },
-        "deploy": { "mechanism": "none", "target": "aucune plateforme geree par deployer — installation manuelle utilisateur depuis la GitHub Release" }
+        "publish": {
+          "mode": "rebuild-ci",
+          "trigger": "git-tag",
+          "pipeline": ".github/workflows/release.yml"
+        },
+        "deploy": {
+          "mechanism": "none",
+          "target": "aucune plateforme geree par deployer — installation manuelle utilisateur depuis la GitHub Release"
+        }
       }
     ]
   },
   "testing": {
-    "backend": ["go-test"],
-    "frontend": ["vitest"],
-    "e2e": ["manual"]
+    "backend": [
+      "go-test"
+    ],
+    "frontend": [
+      "vitest"
+    ],
+    "e2e": [
+      "manual"
+    ]
   },
   "security": {
     "concerns": []
@@ -59,5 +87,9 @@
     "server_verify": "curl -s http://localhost/api/version",
     "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
+  },
+  "template_version": {
+    "tag": "v3.9.0",
+    "commit": "cf187ca7904803728ca5f0828d85e5dec200b91a"
   }
 }
