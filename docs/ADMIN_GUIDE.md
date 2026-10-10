@@ -202,6 +202,33 @@ Score total equipe = TeamPoints + sum(scores joueurs)
 { "ACTION": "BUMPER_POINTS", "MSG": { "ID": "AA:BB:CC:DD:EE:FF", "POINTS": 5 } }
 ```
 
+### Attribution groupée après REVEAL (v11.2, #244/#251)
+
+Une fois la réponse révélée, la page de jeu (`/admin`) permet d'attribuer des points à plusieurs équipes d'un coup.
+
+- **Cases à cocher** : chaque carte d'équipe a une case. Une équipe déjà créditée pour la question est grisée, avec
+  la mention « ✓ déjà créditée » et son montant. Elle ne peut pas être recochée.
+- **Barre d'attribution** : un champ « Points par équipe » (− / + et saisie), « Tout sélectionner » et « Tout
+  désélectionner ». Le bouton **« Donner les points (N) »** indique le nombre d'équipes sélectionnées. Si le montant
+  est négatif, il devient **« Retirer les points (N) »**, en rouge. Il est désactivé à N = 0.
+- **Clic sur une réponse QCM** : sélectionne les équipes ayant donné cette réponse et règle le montant. Bonne réponse
+  → points de la question. Mauvaise réponse → **−1** (pénalité par défaut). Modifier le montant à la main garde la
+  sélection.
+- **Montant par équipe** : tant que le montant n'a pas été modifié à la main et qu'il est positif, chaque équipe
+  reçoit le montant de sa propre règle (MEMORY : score des paires ; QCM avec indices : pénalité d'indices ; RAFALE :
+  compteur de l'équipe). Un montant modifié à la main, ou négatif, est appliqué uniforme à toutes les équipes
+  sélectionnées.
+- **Une équipe dans plusieurs réponses** : si ses joueurs ont répondu des couleurs différentes, elle figure dans
+  plusieurs réponses QCM. Le **dernier clic** décide alors du montant. Vérifiez-le avant d'attribuer.
+- **Double crédit impossible** : une équipe déjà créditée pour la question est ignorée par le serveur
+  (`ALREADY_AWARDED`). Un double clic sur « Donner les points » n'attribue donc rien deux fois.
+- **Messages de résultat** : « ✓ +N points donnés à M équipes. » (ou « retirés » si négatif), suivi de « K équipe(s)
+  déjà créditée(s) ignorée(s). ». En cas de refus : « Attribution refusée : la réponse n’est pas révélée » ou « la
+  question a changé ».
+- **Garde de 8 s** : sans réponse du serveur, le bouton se réactive avec « Pas de réponse du serveur — réessayez. ».
+  Si la réponse arrive ensuite, elle est traitée normalement (résultat affiché, sélection réinitialisée si acceptée).
+- Si la connexion est perdue au moment de l'envoi : « Connexion perdue — réessayez. ».
+
 ### POINTS_TARGET sur les questions
 
 Chaque question definit a qui les points sont attribues :
