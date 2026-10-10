@@ -2415,7 +2415,10 @@ func (e *Engine) startTimer() {
 						if e.OnTimeUp != nil {
 							e.OnTimeUp()
 						}
-						e.Stop()
+						if hook := timeoutStopTestHook; hook != nil {
+							hook() // test injection point: a NEW_GAME landing right here
+						}
+						e.stopIfCurrent(ticker)
 					}
 				}()
 			case <-stopCh:
@@ -2423,6 +2426,31 @@ func (e *Engine) startTimer() {
 			}
 		}
 	}()
+}
+
+// timeoutStopTestHook, when set by a test in package game, runs between OnTimeUp
+// and the timeout Stop() to reproduce a NEW_GAME landing in that window (#243).
+var timeoutStopTestHook func()
+
+// stopIfCurrent is Stop() for the timer goroutine's timeout, made atomic with
+// the "still current" check: it stops the game only if ticker is still the live
+// question timer and the phase is still STARTED, under the same lock (#243).
+func (e *Engine) stopIfCurrent(ticker *time.Ticker) {
+	e.mu.Lock()
+	if e.timer != ticker || e.state.Phase != PhaseStarted {
+		e.mu.Unlock()
+		return
+	}
+	released := e.stopUnsafe()
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if released {
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+	if callback != nil {
+		callback(PhaseStopped)
+	}
 }
 
 // timerTickStillCurrent reports whether ticker is still the engine's live
