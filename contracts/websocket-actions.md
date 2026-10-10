@@ -480,7 +480,7 @@ Modifie le score d'une équipe.
 Avec `DISPLAY: false` :
 - **Serveur** : ni comète LED, ni pulsation d'ambiance (`NotifyPulse`), ni son « gagné » (`CueGagne`), ni flash de score lumineux (`startScoreFlash`). Ces effets n'existent déjà que pour un montant positif.
 - **Écrans (TV, VJoueur, anim)** : le score est mis à jour dans l'`UPDATE` (classement cohérent), mais **sans aucune animation** : ni « +X pts » flottant, ni célébration, ni surbrillance ou montée de rang. Les écrans le savent grâce à `GameState.SCORE_CHANGE` (`contracts/game-state.md`).
-- **Historique** : l'entrée `POINTS_AWARDED` est enregistrée normalement, avec `DISPLAY: false` (piste d'audit ; la page Historique de l'admin la marque « 🔇 correction cachée »). Elle compte dans `AWARDED_TEAMS` comme tout crédit de la question courante.
+- **Historique** : l'entrée `POINTS_AWARDED` est enregistrée normalement, avec `DISPLAY: false` (piste d'audit ; la page Historique de l'admin la marque « 🔇 correction cachée »). **Elle ne compte PAS dans `AWARDED_TEAMS`** *(décision utilisateur)* : une correction cachée modifie le score sans rendre l'équipe « déjà créditée » ; l'équipe peut ensuite recevoir normalement les points de la question, y compris par `TEAM_POINTS_BATCH`.
 - **Journal** : `WARN SCORE_CORRECTION_HIDDEN` (`contracts/logging.md`).
 - **Montant** : la page Scores impose un entier non nul de −999 à 999 (prédéfini ou saisie libre). Le serveur ne change pas sa validation de `TEAM_POINTS`/`BUMPER_POINTS` (rétrocompatibilité), sauf `POINTS = 0`, désormais **ignoré** (aucune entrée d'historique, aucun `UPDATE`).
 
@@ -1308,6 +1308,7 @@ la même équipe — que le premier vienne d'une autre tablette ou de la régie.
 |-----------|--------|
 | Direction | `Server→Client` |
 | Cible | `ClientTypeAnim` **et `ClientTypeAdmin`** *(v11.2, #244/#251 — `[CHANGED]` additif : l'admin s'en sert pour griser les équipes déjà créditées dans l'attribution groupée)*. La régie reste **sans restriction** pour le crédit équipe par équipe (§"La régie n'est pas contrainte") |
+| Règle « déjà créditée » | *(v11.2, #252)* Le calcul (`Engine.AwardedTeams`, `getAwardedTeamsPayload`) ne retient que les événements `POINTS_AWARDED` de la question courante, depuis son départ, **avec `DISPLAY` ≠ `false`** (absent = compté) et postérieurs au dernier `TEAM_DELETED` de l'équipe (#249). Les corrections cachées sont ignorées. Même règle pour le grisage de l'admin et le saut `ALREADY_AWARDED` de `TEAM_POINTS_BATCH` |
 | Trigger | `TEAM_POINTS`, `BUMPER_POINTS` et **`TEAM_POINTS_BATCH`** traités (quelle qu'en soit l'origine) ; `READY` (changement de question) ; `NEW_GAME` ; `RAZ` ; suppression/renommage d'équipe (#249) ; HELLO d'un client animateur **ou admin** (état initial) |
 
 #### Payload
