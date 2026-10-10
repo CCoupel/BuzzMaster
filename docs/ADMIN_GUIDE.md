@@ -412,6 +412,16 @@ où vous choisissez ce qui est effacé avant de commencer. **Rien n'est effacé 
 - **Clients sans options** (anciens scripts) : un `NEW_GAME` sans option garde le comportement v11.1. Les
   joueurs et les scores sont purgés, les équipes sont conservées, les questions repassent « à jouer ».
 - Le lancement est journalisé (`WARN NEW_GAME_PURGE`, avec le nombre de joueurs et d'équipes supprimés).
+- **Question en cours** : sans « Questions », la question interrompue repasse « à jouer » si elle n'a jamais été
+  lancée ; si elle était lancée (en cours ou en pause), elle est marquée jouée et interrompue. Une question déjà
+  STOPPED ou REVEALED garde son statut.
+- **Entracte** : « Lancer la partie » est refusé pendant une entracte, avec le message « Impossible pendant une
+  entracte : sortez d'abord de l'entracte ». Sortez de l'entracte, puis relancez.
+- **Pas de réponse** : si le serveur ne confirme pas le lancement sous 5 s, la popup affiche « Pas de réponse du
+  serveur — réessayez. » et redevient utilisable. Si la connexion est perdue au moment de l'envoi : « Connexion
+  perdue — réessayez. ». La popup se ferme seule quand le lancement est observé (la phase passe à NEW_GAME).
+- **LED et ambiance** : après tout lancement, les buzzers reprennent leur état de repos (« sans équipe » si
+  « Équipes » est coché), et l'ambiance est mise à jour.
 
 #### Retrait d'un VJoueur — Réinscription vs. Suppression totale (v5.9.3+, étendu en v5.10.x #134)
 
