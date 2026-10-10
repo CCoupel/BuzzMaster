@@ -150,3 +150,10 @@ func (e *env246) waitLog(t *testing.T, level game.LogLevel, part string) bool {
 	}
 	return false
 }
+
+// setGlobalLogger246 route le logger global vers app.logger (et le remet à nil en fin de test).
+func setGlobalLogger246(t *testing.T, app *App) {
+	t.Helper()
+	server.SetGlobalLogger(app.logger)
+	t.Cleanup(func() { server.SetGlobalLogger(nil) })
+}

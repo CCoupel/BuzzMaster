@@ -255,11 +255,9 @@ func fullUpdateBumpers246(t *testing.T, e *env246, mutate func(map[string]*game.
 		bumpers[id] = &cp
 	}
 	mutate(bumpers)
-	msg, err := protocol.NewMessage(protocol.ActionUpdate, map[string]interface{}{"bumpers": bumpers})
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.app.handleFullUpdate(msg)
+	// par le dispatcher public (la signature interne de handleFullUpdate peut évoluer : #249)
+	_, admin := e.dial(t, "/ws/admin")
+	e.send(t, admin, "admin", protocol.ActionUpdate, map[string]interface{}{"bumpers": bumpers})
 }
 
 // Chemin 3 — renommage par l'admin (UPDATE/FULL) vers un nom déjà porté : ignoré pour ce bumper.
