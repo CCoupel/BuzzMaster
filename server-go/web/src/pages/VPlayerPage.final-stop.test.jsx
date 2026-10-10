@@ -78,6 +78,9 @@ describe('VPlayerPage — ARDOISE_FINAL et accusé (#246, F-STOP)', () => {
   it('texte vide accusé : « ✓ Reçu — aucune réponse écrite » + « Aucune réponse »', async () => {
     const m = mount()
     await act(async () => { vi.advanceTimersByTime(100) })
+    // la page voit le départ de la question (PREPARE → STARTED) puis le STOP sans frappe
+    await m.set({ phase: 'PREPARE' })
+    await m.set({ phase: 'STARTED' })
     await m.set({ phase: 'STOPPED' })
     await m.set({ ack: { questionId: 'q42', hash: '811c9dc5' } })
     const t = txt(m.view.container)

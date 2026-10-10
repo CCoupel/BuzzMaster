@@ -9,6 +9,40 @@ const VPLAYER_SESSION_KEYS = ['vplayer_name', 'vplayer_session', 'vplayer_id']
 
 export function clearVPlayerSession() {
   VPLAYER_SESSION_KEYS.forEach((key) => localStorage.removeItem(key))
+  clearArdoiseDraft()
+}
+
+// #246 — texte ARDOISE en cours, conservé dans le sessionStorage de l'ONGLET
+// (jamais partagé entre onglets) pour survivre à un rechargement de la page
+// (pull-to-refresh) : sinon la page remontée enverrait un ARDOISE_FINAL "" qui
+// écraserait la réponse que le serveur détient encore. Emplacement unique
+// { id, qid, text } : bumper + question. Toutes les opérations tolèrent un
+// sessionStorage indisponible (navigation privée, quota) : comportement dégradé.
+const ARDOISE_DRAFT_KEY = 'vplayer_ardoise_draft'
+
+export function saveArdoiseDraft(id, qid, text) {
+  try {
+    if (!id || qid == null) return
+    if (text) sessionStorage.setItem(ARDOISE_DRAFT_KEY, JSON.stringify({ id, qid: String(qid), text }))
+    else sessionStorage.removeItem(ARDOISE_DRAFT_KEY)
+  } catch { /* dégradé */ }
+}
+
+// Retourne le texte conservé pour CE bumper et CETTE question, sinon ''. Un
+// brouillon d'une autre question est supprimé au passage.
+export function loadArdoiseDraft(id, qid) {
+  try {
+    const raw = sessionStorage.getItem(ARDOISE_DRAFT_KEY)
+    if (!raw) return ''
+    const d = JSON.parse(raw)
+    if (d && d.id === id && d.qid === String(qid) && typeof d.text === 'string') return d.text
+    sessionStorage.removeItem(ARDOISE_DRAFT_KEY)
+  } catch { /* dégradé */ }
+  return ''
+}
+
+export function clearArdoiseDraft() {
+  try { sessionStorage.removeItem(ARDOISE_DRAFT_KEY) } catch { /* dégradé */ }
 }
 
 // #246 (F-ID) — le localStorage est PARTAGÉ par tous les onglets d'un

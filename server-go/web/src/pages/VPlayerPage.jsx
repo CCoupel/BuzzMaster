@@ -8,7 +8,10 @@ import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
 import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
 import { fnv1a } from '../utils/fnv1a'
-import { clearOwnVPlayerSession, getStoredVPlayerId, isStaleVPlayerSession } from '../utils/vplayerSession'
+import {
+  clearOwnVPlayerSession, getStoredVPlayerId, isStaleVPlayerSession,
+  saveArdoiseDraft, loadArdoiseDraft, clearArdoiseDraft,
+} from '../utils/vplayerSession'
 import './VPlayerPage.css'
 import '../styles/entracte.css'
 
@@ -104,6 +107,13 @@ export default function VPlayerPage() {
   // ARDOISE: local text state + throttle ref
   const [ardoiseText, setArdoiseText] = useState('')
   const ardoiseThrottleRef = useRef(null)
+  // #246 — le joueur a-t-il saisi / un texte a-t-il été restauré / la page a-t-elle
+  // vu le démarrage de la question dans CETTE montée ? Sans l'un des trois, un
+  // final vide n'est jamais envoyé (il écraserait la réponse que le serveur détient).
+  const typedRef = useRef(false)
+  const restoredRef = useRef(false)
+  const sawStartRef = useRef(false)
+  const questionIdRef = useRef(null)
   const ardoiseLatestRef = useRef(null) // dernier état saisi non encore envoyé
   const ardoiseLastSentAtRef = useRef(0)
   // Annule l'envoi programmé et oublie l'état en attente (changement de question,
@@ -551,6 +561,7 @@ export default function VPlayerPage() {
     setArdoiseText('')
     cancelArdoiseTimer()
     ardoiseFirstSentRef.current = false
+    clearArdoiseDraft() // question rejouée : l'ancien texte conservé est périmé
   }, [gameState.phase])
 
   // ARDOISE #117: also rearm the immediate-first-send flag on entry into STARTED, so a
@@ -601,6 +612,9 @@ export default function VPlayerPage() {
     if (prev === 'STARTED' && (currentPhase === 'STOPPED' || currentPhase === 'PAUSED')) {
       cancelArdoiseTimer()
       const text = ardoiseTextRef.current
+      // Page remontée sans texte restauré, sans saisie et sans avoir vu le départ
+      // de la question : un final vide écraserait la réponse du serveur → rien.
+      if (text === '' && !typedRef.current && !restoredRef.current && !sawStartRef.current) return
       finalRef.current = {
         qid: String(gameState.question?.ID ?? ''),
         text,
@@ -610,17 +624,38 @@ export default function VPlayerPage() {
       setFinalStatus('sending')
       sendFinal()
     } else if (currentPhase === 'STARTED') {
+      if (prev && prev !== 'STARTED') sawStartRef.current = true
       finalRef.current = null
       setFinalStatus(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.phase])
 
-  // Nouvelle question : plus de final en cours.
+  // Nouvelle question : plus de final en cours, indicateurs de montée remis à zéro.
   useEffect(() => {
     finalRef.current = null
     setFinalStatus(null)
+    typedRef.current = false
+    restoredRef.current = false
+    sawStartRef.current = false
+    // Changement (ou fin) de question : le texte conservé pour l'ancienne est périmé.
+    if (questionIdRef.current !== null && questionIdRef.current !== (gameState.question?.ID ?? null)) {
+      clearArdoiseDraft()
+    }
+    questionIdRef.current = gameState.question?.ID ?? null
   }, [gameState.question?.ID])
+
+  // #246 — restauration du texte en cours après rechargement (même bumper, même
+  // question). Déclaré APRÈS la remise à zéro de la saisie ci-dessus (même commit).
+  useEffect(() => {
+    const qid = gameState.question?.ID
+    if (!playerSession?.id || qid == null || gameState.question?.TYPE !== 'ARDOISE') return
+    const draft = loadArdoiseDraft(playerSession.id, qid)
+    if (draft && !typedRef.current && ardoiseTextRef.current === '') {
+      restoredRef.current = true
+      setArdoiseText(draft)
+    }
+  }, [playerSession?.id, gameState.question?.ID, gameState.question?.TYPE])
 
   // Le final n'a de sens qu'en STOPPED/PAUSED pour SA question : dès qu'on en
   // sort (REVEAL forcé, question suivante...), on l'abandonne et on repasse à
@@ -688,6 +723,8 @@ export default function VPlayerPage() {
   // server timestamps STARTED_AT on the real first keystroke, not the first typing pause).
   const handleArdoiseChange = useCallback((text, reason = 'key') => {
     setArdoiseText(text)
+    typedRef.current = true
+    saveArdoiseDraft(ownIdRef.current, questionIdRef.current, text)
     ardoiseLatestRef.current = { text, reason }
     const id = () => ownIdRef.current ?? bumper?.id
     const flush = () => {

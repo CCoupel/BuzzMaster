@@ -95,6 +95,7 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubGlobal('localStorage', createLocalStorageMock())
+    vi.stubGlobal('sessionStorage', createLocalStorageMock()) // #246 : brouillon de saisie propre à chaque test
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')
     localStorage.setItem('vplayer_id', 'vjoueur_alice')
