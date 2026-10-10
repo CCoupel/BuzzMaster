@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import GamePage from './GamePage'
 import { useGame } from '../hooks/GameContext'
 
@@ -114,7 +114,8 @@ describe('Popup « Lancer la partie » (#243)', () => {
     const t = dlg.textContent
     expect(t).toMatch(/Scores\s*\(10 équipes, 12 joueurs\)/)
     expect(t).toMatch(/Questions\s*\(12 jouées sur 30\)/)
-    expect(t).toMatch(/Joueurs des tablettes\s*\(8 connectés\)/)
+    expect(t).toMatch(/Joueurs des tablettes\s*\(\d+ inscrits, 8 connectés\)/)
+    expect(t).toMatch(/Joueurs des tablettes\s*\(10 inscrits, 8 connectés\)/) // « N inscrits, M connectés » (harmonisation, revue #243)
     expect(t).toMatch(/Équipes\s*\(10\)/)
   })
 
@@ -250,5 +251,81 @@ describe('Popup « Lancer la partie » (#243)', () => {
     useGame.mockReturnValue(mk())
     render(<GamePage />)
     expect(screen.queryByText('NOUVELLE PARTIE')).toBeNull()
+  })
+})
+
+describe('Popup « Lancer la partie » — robustesse (revue #243)', () => {
+  beforeEach(() => { useGame.mockReset(); vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('(f) Critical — si l’envoi échoue (WebSocket fermée : newGame retourne false), rien n’est « envoyé » : message « Connexion perdue », boutons actifs', () => {
+    const newGame = vi.fn(() => false)
+    const { dlg } = open({ newGame })
+    fireEvent.click(goBtn(dlg))
+
+    const d = screen.getByRole('dialog')
+    expect(d.textContent).toMatch(/Connexion perdue/)
+    expect(goBtn(d).disabled).toBe(false)
+    expect(within(d).getByRole('button', { name: 'Annuler' }).disabled).toBe(false)
+    act(() => { vi.advanceTimersByTime(10000) })
+    expect(screen.getByRole('dialog').textContent).not.toMatch(/Pas de réponse du serveur/) // jamais parti : pas de garde de 5 s
+  })
+
+  it('(g) Critical — NEW_GAME jamais confirmé : au bout de 5 s « Pas de réponse du serveur » et les boutons sont réactivés', () => {
+    const { dlg } = open({ newGame: vi.fn(() => true) })
+    fireEvent.click(goBtn(dlg))
+    expect(goBtn(screen.getByRole('dialog')).disabled).toBe(true)
+
+    act(() => { vi.advanceTimersByTime(4900) })
+    expect(goBtn(screen.getByRole('dialog')).disabled).toBe(true) // pas avant 5 s
+    act(() => { vi.advanceTimersByTime(200) })
+
+    const d = screen.getByRole('dialog')
+    expect(d.textContent).toMatch(/Pas de réponse du serveur/)
+    expect(goBtn(d).disabled).toBe(false)
+    expect(within(d).getByRole('button', { name: 'Annuler' }).disabled).toBe(false)
+  })
+
+  it('(h) NEW_GAME_REFUSED { ENTRACTE_ACTIVE } : message « Impossible pendant une entracte », popup ouverte, boutons actifs', () => {
+    const { game, rerender, dlg } = open({ newGame: vi.fn(() => true) })
+    fireEvent.click(goBtn(dlg))
+    useGame.mockReturnValue(mk({ newGame: game.newGame, newGameRefused: { reason: 'ENTRACTE_ACTIVE' } }))
+    rerender(<GamePage />)
+
+    const d = screen.getByRole('dialog')
+    expect(within(d).getAllByRole('alert').map((a) => a.textContent).join(' ')).toMatch(/Impossible pendant une entracte : sortez d'abord de l'entracte/)
+    expect(goBtn(d).disabled).toBe(false)
+  })
+
+  it('(i) Critical — deuxième lancement alors que la phase vaut DÉJÀ NEW_GAME : la popup ne se ferme pas avant un changement observé', () => {
+    const base = { gameState: { phase: 'NEW_GAME', question: null }, newGame: vi.fn(() => true) }
+    const first = mk(base)
+    useGame.mockReturnValue(first)
+    const { rerender } = render(<GamePage />)
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    fireEvent.click(goBtn(screen.getByRole('dialog')))
+
+    // même état rediffusé (mêmes objets) : rien n'est observé → la popup reste ouverte
+    rerender(<GamePage />)
+    expect(screen.queryByRole('dialog')).not.toBeNull()
+
+    // données renouvelées après la purge (nouvel objet bumpers/questions) → lancement observé : fermeture
+    useGame.mockReturnValue(mk({ ...base, bumpers: { ...BUMPERS }, questions: { ...QUESTIONS } }))
+    rerender(<GamePage />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('(j) compteurs « N inscrits, M connectés » : inscrits = tous les VJoueurs, connectés = ceux en ligne', () => {
+    const { dlg } = open()
+    expect(dlg.textContent).toMatch(/Joueurs des tablettes\s*\(10 inscrits, 8 connectés\)/)
+  })
+
+  it('refus pendant une entracte : le message ne dépend pas de la case cochée (aucune case n’est modifiée par le refus)', () => {
+    const { game, rerender, dlg } = open({ newGame: vi.fn(() => true) })
+    fireEvent.click(box(dlg, 'Équipes'))
+    fireEvent.click(goBtn(dlg))
+    useGame.mockReturnValue(mk({ newGame: game.newGame, newGameRefused: { reason: 'ENTRACTE_ACTIVE' } }))
+    rerender(<GamePage />)
+    expect(box(screen.getByRole('dialog'), 'Équipes').checked).toBe(true) // sélection conservée pour relancer
   })
 })
