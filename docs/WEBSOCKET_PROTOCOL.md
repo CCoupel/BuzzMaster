@@ -1307,6 +1307,48 @@ Action de diffusion serveur portant l'état complet du message.
 
 ---
 
+## Affichage public — DISPLAY et SCORE_CHANGE (v11.2, #252)
+
+Source de vérité : `contracts/websocket-actions.md` §TEAM_POINTS, §BUMPER_POINTS, §TEAM_POINTS_BATCH ;
+`contracts/game-state.md` §`SCORE_CHANGE` ; `contracts/logging.md` §3.2 quinquies.
+
+- **`DISPLAY`** (`TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`) : `true` ou absent = effets publics actuels.
+  `false` = **correction cachée**, sans effet animé sur aucun canal.
+- **Honoré seulement pour un émetteur `admin`.** Envoyé par l'animateur ou un appelant interne, il est ignoré :
+  l'attribution est visible et comptée « déjà créditée », et le serveur journalise
+  `WARN SCORE_CORRECTION_HIDDEN_REFUSED`.
+- **Avec `DISPLAY: false`** : ni comète LED, ni pulsation d'ambiance, ni son « gagné », ni flash de score. L'entrée
+  d'historique est enregistrée avec `DISPLAY: false`, mais **n'est pas comptée** dans `AWARDED_TEAMS`.
+  Journal : `WARN SCORE_CORRECTION_HIDDEN`.
+- **`POINTS = 0`** : un client `admin` qui envoie 0 voit son action ignorée (ni historique, ni `UPDATE`, ni
+  `SCORE_CHANGE.SEQ`). Un `POINTS = 0` de l'animateur ou d'un appelant interne reste enregistré : c'est le geste « 0 pt »
+  de #170, un verrou valide.
+- **Montant** : l'interface impose un entier non nul de −999 à 999. **Le serveur ne vérifie pas cette borne** (le
+  contrat de `TEAM_POINTS` et `BUMPER_POINTS` est inchangé).
+
+```json
+{ "ACTION": "BUMPER_POINTS", "MSG": { "ID": "AA:BB:CC:DD:EE:FF", "POINTS": -2, "DISPLAY": false } }
+```
+
+### SCORE_CHANGE (`GameState`, toujours sérialisé)
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `SEQ` | number | +1 à chaque `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` appliqué |
+| `DISPLAY` | bool | Visibilité de la dernière modification |
+| `TEAMS` | string[] | Équipes dont le score a changé |
+| `PLAYERS` | string[] | Joueurs (ID) dont le score a changé |
+
+- Non persisté. Remis à zéro au démarrage et sur `NEW_GAME`.
+- **Dernière modification manuelle uniquement** : les crédits automatiques du moteur (`UpdateScore`) ne l'incrémentent
+  pas, et leurs hausses restent animées.
+- Écrans TV, VJoueur et anim : un nouveau `SEQ` avec `DISPLAY: false` prend les nouveaux scores listés comme référence
+  **sans animation**. Avec `DISPLAY: true`, le comportement est inchangé.
+
+```json
+{ "SCORE_CHANGE": { "SEQ": 14, "DISPLAY": false, "TEAMS": ["Les Bleus"], "PLAYERS": [] } }
+```
+
 ## Action TEAM_POINTS_BATCH — attribution groupée (v11.2, #244/#251)
 
 Envoyée par `admin` (« Donner les points (N) » / « Retirer les points (N) »), **en phase `REVEALED` uniquement**.
