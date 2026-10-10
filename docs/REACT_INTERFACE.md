@@ -1009,6 +1009,10 @@ Page d'historique des événements de jeu :
   - **Vue réduite** : Résumé des points par équipe et par joueur (badges colorés)
   - **Vue détaillée** : Tableau avec Heure, Équipe, Joueur, Temps, Points
 
+**Note v11.2 (#249)** : `TEAM_DELETED` (événement d'audit de suppression d'équipe) est filtré au chargement
+(`HistoryPage.jsx`) : pas de groupe « Question #unknown », pas de ligne à 0 point, pas de compteur. L'événement
+reste dans `history.json` et dans la réponse de `GET /history`.
+
 ### Logs Page (v2.42.0)
 
 Page de visualisation des logs serveur en temps réel :
