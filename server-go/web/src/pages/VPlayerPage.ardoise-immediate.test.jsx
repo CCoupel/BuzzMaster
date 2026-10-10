@@ -175,6 +175,8 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     expect(mock.sendMessage).toHaveBeenNthCalledWith(1, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'P', ID: 'vjoueur_alice' }))
     const duringBurst = mock.sendMessage.mock.calls.length
     expect(duringBurst).toBeGreaterThanOrEqual(2)
+    // Borne de cadence (aucune rafale) : durée 250 ms → au plus 250/200 + 1 envois arrondis au-dessus.
+    expect(duringBurst).toBeLessThanOrEqual(Math.ceil(250 / 200) + 1)
     expect(duringBurst).toBeLessThan(burst.length)
 
     // Le DERNIER état est toujours envoyé (trailing).
@@ -184,6 +186,30 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     const last = mock.sendMessage.mock.calls.at(-1)
     expect(last[0]).toBe('ARDOISE_INPUT')
     expect(last[1]).toEqual(expect.objectContaining({ TEXT: 'Paris', ID: 'vjoueur_alice' }))
+  })
+
+  it("#246 — cadence bornée : une frappe continue de 2 s (une touche toutes les 50 ms) envoie au plus durée/200 ms + 1 messages (≤ 5/s), au moins 5, et le dernier état est le texte courant", async () => {
+    const mock = makeGameMock()
+    useGame.mockReturnValue(mock)
+    const { getByTestId } = render(<VPlayerPage />)
+    const input = getByTestId('ardoise-input')
+
+    const total = 40
+    const full = 'x'.repeat(total)
+    for (let i = 1; i <= total; i++) {
+      await act(async () => {
+        typeChar(input, full.slice(0, i))
+        vi.advanceTimersByTime(50)
+      })
+    }
+    const durationMs = total * 50
+    const during = mock.sendMessage.mock.calls.filter((c) => c[0] === 'ARDOISE_INPUT').length
+    expect(during).toBeGreaterThanOrEqual(5)
+    expect(during).toBeLessThanOrEqual(Math.floor(durationMs / 200) + 1)
+
+    await act(async () => { vi.advanceTimersByTime(250) })
+    const last = mock.sendMessage.mock.calls.filter((c) => c[0] === 'ARDOISE_INPUT').at(-1)
+    expect(last[1]).toEqual(expect.objectContaining({ TEXT: full }))
   })
 
   it('le mécanisme se réarme au changement de question : la question suivante envoie de nouveau son premier caractère immédiatement', async () => {
