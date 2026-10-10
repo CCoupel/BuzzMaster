@@ -277,6 +277,9 @@ Pour débloquer sans tout remettre à zéro, il faut jouer la question puis la r
 - **Limite** : si, dans le même envoi, vous supprimez l'équipe Y, ajoutez l'équipe X et déplacez **tous** les
   joueurs de Y vers X, le serveur reconnaît un renommage Y → X. X hérite alors des états de Y (réponses
   ARDOISE, crédits historiques). Vérifiez ce cas avant de l'enregistrer.
+- **Limite** : renommer une équipe vers le **nom d'une équipe déjà supprimée** (réutilisation du nom) peut faire
+  perdre le verrou « déjà créditée » de la question révélée pour l'équipe renommée : une double attribution
+  devient possible. Cas rare : évitez-le.
 - **Limite** : une équipe sans joueur ne peut pas être « renommée ». Elle est traitée comme supprimée puis
   ajoutée : ses états de jeu sont effacés.
 
