@@ -165,4 +165,26 @@ describe('LaunchGameButton — popup jamais figée (#243, revue)', () => {
     rerender(<LaunchGameButton {...base} onLaunch={onLaunch} phase="NEW_GAME" questions={{ ...QUESTIONS }} />)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
+
+  it('réponse tardive (6 s, après la garde de 5 s) : la popup se ferme, aucun second NEW_GAME', () => {
+    const onLaunch = vi.fn(() => true)
+    const { rerender } = render(<LaunchGameButton {...base} onLaunch={onLaunch} phase="REVEALED" />)
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    fireEvent.click(go())
+    act(() => { vi.advanceTimersByTime(5100) })
+    expect(go().disabled).toBe(false) // débloquée par la garde
+    rerender(<LaunchGameButton {...base} onLaunch={onLaunch} phase="NEW_GAME" />) // réponse du serveur à 6 s
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onLaunch).toHaveBeenCalledTimes(1)
+  })
+
+  it('refus puis changement de phase sans lien : la popup ne se ferme pas', () => {
+    const onLaunch = vi.fn(() => true)
+    const { rerender } = render(<LaunchGameButton {...base} onLaunch={onLaunch} phase="REVEALED" />)
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    fireEvent.click(go())
+    rerender(<LaunchGameButton {...base} onLaunch={onLaunch} phase="REVEALED" refused={{ reason: 'ENTRACTE_ACTIVE' }} />)
+    rerender(<LaunchGameButton {...base} onLaunch={onLaunch} phase="NEW_GAME" refused={{ reason: 'ENTRACTE_ACTIVE' }} />)
+    expect(screen.queryByRole('dialog')).not.toBeNull()
+  })
 })

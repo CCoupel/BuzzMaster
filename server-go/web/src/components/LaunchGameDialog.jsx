@@ -210,20 +210,26 @@ export default function LaunchGameButton({
 
   // Refus serveur : la popup reste ouverte, on peut corriger et relancer.
   useEffect(() => {
-    if (refused && open) setSent(false)
+    if (refused && open) {
+      setSent(false)
+      sentCtxRef.current = null // refus : plus rien à observer pour cet envoi
+    }
   }, [refused, open])
 
   // Lancement observé : changement de phase vers NEW_GAME, ou renouvellement des
   // données quand la phase valait déjà NEW_GAME à l'envoi → fermeture.
   useEffect(() => {
+    // Tant que la popup est ouverte après un envoi EFFECTIF (contexte mémorisé), y compris
+    // si la garde de 5 s l'a déjà débloquée : une réponse tardive doit la fermer (sinon un
+    // second « Lancer » rejouerait un NEW_GAME).
     const ctx = sentCtxRef.current
-    if (!open || !sent || !ctx) return
+    if (!open || !ctx) return
     const phaseChanged = phase === 'NEW_GAME' && ctx.phase !== 'NEW_GAME'
     const dataRenewed = ctx.phase === 'NEW_GAME' && phase === 'NEW_GAME'
       && (teams !== ctx.teams || bumpers !== ctx.bumpers || questions !== ctx.questions)
     if (phaseChanged || dataRenewed) close()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, teams, bumpers, questions, sent, open])
+  }, [phase, teams, bumpers, questions, open])
 
   // Minuterie de garde : NEW_GAME ignoré / jamais confirmé → la popup se débloque.
   useEffect(() => {
