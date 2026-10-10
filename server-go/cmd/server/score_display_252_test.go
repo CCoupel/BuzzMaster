@@ -288,7 +288,9 @@ func TestScoreDisplay252_FreeAmountsAtTheUiBoundsAreApplied(t *testing.T) {
 
 // --- 6. POINTS = 0 ignoré -----------------------------------------------------------------------------------------
 
-func TestScoreDisplay252_Critical_ZeroPointsAreIgnoredNoHistoryNoUpdateNoScoreChange(t *testing.T) {
+// Émetteur ADMIN explicite (e.send(..., e.admin, "admin", ...)) : la règle « 0 ignoré » ne vaut QUE pour l'admin (décision CDP) ;
+// l'anim garde son geste « 0 pt » de refus (#170), testé plus bas.
+func TestScoreDisplay252_Critical_ZeroPointsFromAnAdminAreIgnoredNoHistoryNoUpdateNoScoreChange(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		do   func(t *testing.T, e *env244)
@@ -409,5 +411,34 @@ func TestScoreDisplay252_HiddenCorrectionIsNotInTheAwardedTeamsBroadcast(t *test
 	got := awardedTeamsOf244(t, e.animConn)
 	if _, locked := got["Les Bleus"]; locked {
 		t.Errorf("AWARDED_TEAMS diffusé à l'anim ne contient pas la correction cachée : %v", got)
+	}
+}
+
+// --- Cas inverse : le geste « 0 pt » de l'ANIM (#170) reste enregistré et verrouille « déjà créditée » ---------------
+
+func TestScoreDisplay252_Critical_ZeroPointsFromTheAnimAreRecordedAndLockTheTeam(t *testing.T) {
+	e := newEnv244(t)
+	_, anim := e.dial(t, "/ws/anim") // client de type ANIM (pas admin)
+	hist := e.historyLen()
+	seq := mustScoreChange252(t, e).Seq
+
+	e.send(t, anim, "anim", protocol.ActionTeamPoints, map[string]interface{}{"TEAM": "Les Rouges", "POINTS": 0})
+
+	if e.historyLen() != hist+1 {
+		t.Errorf("le refus « 0 pt » de l'anim est enregistré dans l'historique (%d → %d)", hist, e.historyLen())
+	}
+	if n, sum := e.awardedEvents("Les Rouges"); n != 1 || sum != 0 {
+		t.Errorf("un POINTS_AWARDED à 0 pour Les Rouges : %d événement(s), somme %d", n, sum)
+	}
+	if !teamsCredited249(e.env246, "Les Rouges") {
+		t.Errorf("l'équipe est « déjà créditée » (0 pt verrouille, #170) : %+v", e.app.getAwardedTeamsPayload())
+	}
+	if mustScoreChange252(t, e).Seq <= seq {
+		t.Error("le crédit à 0 de l'anim est un crédit appliqué (SCORE_CHANGE.SEQ avance)")
+	}
+	// et le lot de l'admin l'ignore ensuite (verrou)
+	e.batch(t, qid244, []entry244{{"Les Rouges", 2}}, nil)
+	if r := e.result(t); len(r.Skipped) != 1 || r.Skipped[0].Reason != "ALREADY_AWARDED" {
+		t.Errorf("le lot ignore l'équipe verrouillée par le 0 pt de l'anim : %+v", r)
 	}
 }
