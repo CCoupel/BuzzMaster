@@ -19,6 +19,7 @@ import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCard
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
+import { getArdoiseTvLayout } from '../utils/ardoiseTvLayout'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
@@ -3059,18 +3060,32 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     </motion.div>
                   </div>
 
-                  {/* Sub-zone 2/2 — team cards grid (only VJoueur teams, max 8, static) */}
+                  {/* Sub-zone 2/2 — team cards grid (only VJoueur teams, ALL shown, static).
+                      #250 : plus de plafond à 8 ; grille adaptative (utils/ardoiseTvLayout.js),
+                      jamais de défilement. Équipe résolue par la CLÉ de `teams` (#249). */}
                   <div className="ardoise-footer-bottom">
-                    <div className="ardoise-teams-grid">
-                      {Object.values(teams)
-                        .filter(team => Object.values(bumpers).some(b => b.IS_VPLAYER && b.TEAM === team.NAME))
-                        .slice(0, 8)
-                        .map((team, idx) => {
-                          const answer = (gameState.ARDOISE_ANSWERS || {})[team.NAME]
+                    {(() => {
+                      const ardoiseTeams = Object.entries(teams)
+                        .filter(([key]) => Object.values(bumpers).some(b => b.IS_VPLAYER && b.TEAM === key))
+                      const L = getArdoiseTvLayout(ardoiseTeams.length)
+                      return (
+                    <div
+                      className="ardoise-teams-grid"
+                      style={{
+                        '--cols': L.cols,
+                        '--rows': L.rows,
+                        '--lines': L.lines,
+                        '--fh': L.headerFont.toFixed(4),
+                        '--fa': L.answerFont.toFixed(4),
+                      }}
+                    >
+                      {ardoiseTeams
+                        .map(([teamKey, team], idx) => {
+                          const answer = (gameState.ARDOISE_ANSWERS || {})[teamKey]
                           const teamColor = getRgbColor(team.COLOR)
                           return (
                             <motion.div
-                              key={team.NAME}
+                              key={teamKey}
                               className={`ardoise-team-card ${answer ? 'has-answer' : 'no-answer'}`}
                               initial={{ opacity: 0, y: 15 }}
                               animate={{ opacity: 1, y: 0 }}
@@ -3080,15 +3095,20 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                                 className="ardoise-team-card-header"
                                 style={{ backgroundColor: teamColor }}
                               >
-                                {team.NAME}
+                                {teamKey}
                               </div>
-                              <div className="ardoise-team-card-answer">
+                              <div
+                                className="ardoise-team-card-answer"
+                                title={answer?.TEXT || 'Aucune réponse'}
+                              >
                                 {answer?.TEXT || '—'}
                               </div>
                             </motion.div>
                           )
                         })}
                     </div>
+                      )
+                    })()}
                   </div>
                 </motion.div>
               </div>

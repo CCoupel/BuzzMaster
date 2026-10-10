@@ -295,7 +295,7 @@ describe('PlayerDisplay — ARDOISE TV Reveal : réponses équipes (#90)', () =>
   })
 })
 
-describe('PlayerDisplay — ARDOISE TV Reveal : contrainte max 8 équipes (#90)', () => {
+describe('PlayerDisplay — ARDOISE TV Reveal : grille adaptative, toutes les équipes (#250)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     Object.defineProperty(document.documentElement, 'requestFullscreen', {
@@ -305,7 +305,7 @@ describe('PlayerDisplay — ARDOISE TV Reveal : contrainte max 8 équipes (#90)'
     })
   })
 
-  it('affiche au maximum 8 équipes même si 10 sont présentes', () => {
+  it('affiche TOUTES les équipes (plus de plafond à 8) : 10 équipes → 10 cartes', () => {
     const { container } = renderTV({
       phase: 'REVEALED',
       teams: TEAMS_10,
@@ -313,8 +313,30 @@ describe('PlayerDisplay — ARDOISE TV Reveal : contrainte max 8 équipes (#90)'
       ardoiseAnswers: {},
     })
 
-    const teamCards = container.querySelectorAll('.ardoise-team-card')
-    expect(teamCards.length).toBeLessThanOrEqual(8)
+    expect(container.querySelectorAll('.ardoise-team-card')).toHaveLength(10)
+  })
+
+  it('la grille porte colonnes / lignes / lignes de texte / polices selon le nombre d\'équipes (10 → 2×5, 2 lignes)', () => {
+    const { container } = renderTV({ phase: 'REVEALED', teams: TEAMS_10, bumpers: BUMPERS_10, ardoiseAnswers: {} })
+    const grid = container.querySelector('.ardoise-teams-grid')
+    expect(grid.style.getPropertyValue('--cols')).toBe('5')
+    expect(grid.style.getPropertyValue('--rows')).toBe('2')
+    expect(grid.style.getPropertyValue('--lines')).toBe('2')
+    expect(Number(grid.style.getPropertyValue('--fa'))).toBeGreaterThan(0)
+    expect(Number(grid.style.getPropertyValue('--fh'))).toBeGreaterThan(0)
+  })
+
+  it('équipe résolue par la CLÉ de teams (NAME obsolète ignoré) : en-tête, réponse et titre', () => {
+    const teams = { 'Les Verts': { NAME: 'Ancien nom', COLOR: [0, 200, 0] } }
+    const bumpers = { b1: { TEAM: 'Les Verts', IS_VPLAYER: true, CONNECTED: true } }
+    const { container } = renderTV({
+      phase: 'REVEALED', teams, bumpers,
+      ardoiseAnswers: { 'Les Verts': { TEXT: 'MARSEILLE' } },
+    })
+    expect(container.querySelector('.ardoise-team-card-header').textContent).toBe('Les Verts')
+    const ans = container.querySelector('.ardoise-team-card-answer')
+    expect(ans.textContent).toBe('MARSEILLE')
+    expect(ans.getAttribute('title')).toBe('MARSEILLE')
   })
 })
 
