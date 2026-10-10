@@ -545,3 +545,38 @@ func TestArdoiseFinal246_NoTextEverReachesAVPlayer(t *testing.T) {
 		}
 	}
 }
+
+// Tablette rechargée après le STOP : elle se reliera (PLAYER_CONNECT) mais n'enverra jamais de final
+// (un texte vide écraserait la réponse déjà reçue) — le REVEAL reste bloqué jusqu'au forçage, et la
+// réponse déjà reçue pendant la question est conservée.
+func TestRevealGuard246_TabletReloadedAfterStopStaysBlockedUntilForced(t *testing.T) {
+	e := newEnv246(t)
+	_, paul := e.dial(t, "/ws/player")
+	e.connect(t, paul, "Paul", e.paul)
+	_, mamie := e.dial(t, "/ws/player")
+	e.connect(t, mamie, "Mamie", e.mamie)
+	adminConn, admin := e.dial(t, "/ws/admin")
+	e.typeAs(t, mamie, e.mamie, "LYON", nil)
+	e.stop()
+	e.finalFrom(t, paul, e.paul, "PARIS")
+
+	_, mamie2 := e.dial(t, "/ws/player") // rechargement de la page de Mamie après le STOP
+	e.connect(t, mamie2, "Mamie", e.mamie)
+	e.reveal(t, admin, "admin", false)
+
+	readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", 2*time.Second)
+	if e.app.engine.GetPhase() != game.PhaseStopped {
+		t.Fatalf("REVEAL bloqué tant que le final de Mamie n'est pas reçu : phase=%s", e.app.engine.GetPhase())
+	}
+	if text, received := e.answers(); text["Les Rouges"] != "LYON" || received["Les Rouges"] {
+		t.Errorf("la réponse reçue pendant la question est conservée, non confirmée : %v %v", text, received)
+	}
+
+	e.reveal(t, admin, "admin", true)
+	if e.app.engine.GetPhase() != game.PhaseRevealed {
+		t.Fatalf("le forçage révèle : phase=%s", e.app.engine.GetPhase())
+	}
+	if text, _ := e.answers(); text["Les Rouges"] != "LYON" {
+		t.Errorf("texte révélé = dernier texte reçu : %v", text)
+	}
+}

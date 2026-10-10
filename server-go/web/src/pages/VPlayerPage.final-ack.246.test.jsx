@@ -8,6 +8,14 @@ import { createStorage, seedSession, makeGame, BOUND, sent, clickKey, PAUL } fro
 // Contrat : contracts/websocket-actions.md §ARDOISE_FINAL, §ARDOISE_FINAL_ACK. Les messages affichés
 // (maquette validée) sont dans VPlayerPage.overlay.246.test.jsx ; ici : émission, renvoi, accusé.
 
+// FNV-1a 32 bits UTF-8 calculé ici, indépendamment du code applicatif : les fixtures d'accusé
+// dérivent leur hash du texte tapé (jamais figé à la main — « PARIS » ≠ « Paris »).
+const fnvHex = (str) => {
+  let h = 0x811c9dc5
+  for (const b of new TextEncoder().encode(str)) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0 }
+  return h.toString(16).padStart(8, '0')
+}
+
 const mockNavigate = vi.hoisted(() => vi.fn())
 vi.mock('react-router-dom', () => ({ useNavigate: () => mockNavigate }))
 vi.mock('../hooks/GameContext', () => ({ useGame: vi.fn() }))
@@ -107,6 +115,18 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
     expect(sent(m.send, 'ARDOISE_FINAL')[0]).toMatchObject({ TEXT: '', HASH: '811c9dc5' })
   })
 
+  it('Critical — une page montée APRÈS le STOP (rechargement) n’envoie jamais de final : un texte vide écraserait la réponse déjà reçue', async () => {
+    const send = vi.fn(() => true)
+    const game = makeGame(send, { playerConnectStatus: BOUND(), gameState: { phase: 'STOPPED', question: { ID: 'q42', TYPE: 'ARDOISE', ARDOISE_KEYBOARD_TYPE: 'AZERTY' } } })
+    useGame.mockImplementation(() => game)
+    render(<VPlayerPage />)
+
+    await act(async () => { vi.advanceTimersByTime(5000) })
+
+    expect(sent(send, 'ARDOISE_FINAL')).toEqual([])
+    expect(sent(send, 'ARDOISE_INPUT')).toEqual([])
+  })
+
   describe('accusé ARDOISE_FINAL_ACK', () => {
     function mountAck({ phase: phase0 = 'STARTED' } = {}) {
       const send = vi.fn(() => true)
@@ -139,7 +159,7 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
       await m.setPhase('STOPPED')
       expect(txt(m.view.container)).toMatch(/Envoi de votre réponse…/)
 
-      await m.ack({ questionId: 'q42', hash: '066a01e6' })
+      await m.ack({ questionId: 'q42', hash: fnvHex('PARIS EN FRANCE') })
 
       expect(txt(m.view.container)).toMatch(/✓ Réponse reçue/)
       const n = sent(m.send, 'ARDOISE_FINAL').length
@@ -165,7 +185,7 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
       const m = mountAck()
       await act(async () => { vi.advanceTimersByTime(100) })
       await m.setPhase('STOPPED')
-      await m.ack({ questionId: 'q42', hash: '811c9dc5' })
+      await m.ack({ questionId: 'q42', hash: fnvHex('') })
 
       const t = txt(m.view.container)
       expect(t).toMatch(/✓ Reçu — aucune réponse écrite/)
@@ -177,7 +197,7 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
       await act(async () => { vi.advanceTimersByTime(100) })
       await typeAll(m, 'PARIS')
       await m.setPhase('PAUSED')
-      await m.ack({ questionId: 'q42', hash: '246f9d40' })
+      await m.ack({ questionId: 'q42', hash: fnvHex('PARIS') })
 
       const t = txt(m.view.container)
       expect(t).toMatch(/Jeu en pause · ✓ réponse reçue/)
