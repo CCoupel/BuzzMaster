@@ -289,6 +289,26 @@ Les réponses et compteurs de jeu de l'équipe sont effacés. L'historique des p
 Une équipe recréée sous le même nom ne reprend pas les points déjà attribués à l'ancienne. Elle peut être créditée
 sur la question révélée.
 
+### Fichier `teams.json.bak` et normalisation au démarrage
+
+Au démarrage, le serveur vérifie que le nom de chaque équipe (`NAME`) est égal à sa clé. Si ce n'est pas le
+cas, il corrige le nom et réécrit `data/config/teams.json`. Avant cette réécriture, il copie le fichier d'origine
+dans **`data/config/teams.json.bak`**.
+
+- Le `.bak` est créé à la **première** normalisation seulement. S'il existe déjà, il n'est pas remplacé : il
+  garde la version d'avant la première correction.
+- Aucune copie si rien n'a été corrigé.
+- Le journal contient une ligne `WARN TEAM_NAME_NORMALIZED key=… old_name=… source=load` par équipe corrigée.
+
+**Si une normalisation vous surprend** :
+
+1. Lisez le journal (`WARN TEAM_NAME_NORMALIZED`) : il donne la clé et l'ancien nom.
+2. Comparez `teams.json.bak` et `teams.json` pour retrouver le nom d'origine.
+3. Ne remettez pas le `.bak` à la place de `teams.json` : au démarrage suivant, la même correction serait rejouée.
+4. Pour changer le nom d'une équipe, utilisez la page **Équipes** (hors question), pas le fichier.
+
+La page Historique n'affiche pas les suppressions d'équipe (`TEAM_DELETED`). Elles restent dans `history.json`.
+
 ## Joueurs Virtuels (VPlayer)
 
 ### Presentation
