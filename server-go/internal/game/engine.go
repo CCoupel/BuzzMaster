@@ -2402,6 +2402,12 @@ func (e *Engine) startTimer() {
 					}
 
 					if result.currentTime <= 0 {
+						// #243: a tick already in flight when NEW_GAME (or any reset)
+						// stopped this ticker must neither fire OnTimeUp nor put the
+						// phase back to STOPPED.
+						if !e.timerTickStillCurrent(ticker) {
+							return
+						}
 						// v11.0/#227: fire BEFORE e.Stop() — this is the only
 						// point that still knows this STOP is a timeout, not
 						// a manual regie STOP (contracts/lighting.md §2.5,
@@ -2417,6 +2423,14 @@ func (e *Engine) startTimer() {
 			}
 		}
 	}()
+}
+
+// timerTickStillCurrent reports whether ticker is still the engine's live
+// question timer and the game is still STARTED (#243).
+func (e *Engine) timerTickStillCurrent(ticker *time.Ticker) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.timer == ticker && e.state.Phase == PhaseStarted
 }
 
 // timerTickResult carries the outcome of one locked timer-tick iteration

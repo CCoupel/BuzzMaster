@@ -2020,8 +2020,8 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 	}
 
 	a.logger.Info(game.LogComponentEngine, "NEW_GAME options=%s", newGameOptionsLog(opts))
-	a.questionSound().Stop() // the question sound ends with the question
-	res := a.engine.InitGameWith(opts)
+	res := a.engine.InitGameWith(opts) // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
+	a.questionSound().Stop()           // the question sound ends with the question
 	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
 		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, logToken(res.QuestionBefore))
 
