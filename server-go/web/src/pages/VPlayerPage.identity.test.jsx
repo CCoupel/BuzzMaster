@@ -32,7 +32,7 @@ const ID = 'vjoueur_alice_1'
 const bumpers = { [ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true } }
 
 const makeGameMock = (overrides = {}) => ({
-  sendMessage: vi.fn(),
+  sendMessage: vi.fn(() => true),
   sendClientTrace: vi.fn(),
   gameState: { phase: 'STOPPED', question: null, enrollmentActive: true },
   bumpers,
@@ -171,5 +171,27 @@ describe('VPlayerPage — identité de l\'onglet (#246, F-ID)', () => {
     render(<VPlayerPage />)
     await act(async () => {})
     expect(localStorage.getItem('vplayer_name')).toBe('Alice-serveur')
+  })
+
+  it('SEQ croissant par question et par connexion, REASON clear/backspace_empty/key', async () => {
+    const gameState = { phase: 'STARTED', question: { ID: 'q1', TYPE: 'ARDOISE' }, enrollmentActive: false }
+    const mock = makeGameMock({ gameState, playerConnectStatus: { status: 'connected', id: ID, name: 'Alice' } })
+    useGame.mockReturnValue(mock)
+    const { getByTestId, rerender } = render(<VPlayerPage />)
+    await act(async () => {})
+    const input = getByTestId('ardoise-input')
+    fireEvent.change(input, { target: { value: 'P' } })
+    fireEvent.change(input, { target: { value: 'PA' } })
+    await act(async () => { vi.advanceTimersByTime(250) })
+    const sends = () => mock.sendMessage.mock.calls.filter(([a]) => a === 'ARDOISE_INPUT').map(([, p]) => p)
+    expect(sends().map((p) => p.SEQ)).toEqual([1, 2])
+    expect(sends().every((p) => p.REASON === 'key')).toBe(true)
+
+    // Nouvelle question → SEQ repart à 1
+    useGame.mockReturnValue({ ...mock, gameState: { ...gameState, question: { ID: 'q2', TYPE: 'ARDOISE' } } })
+    rerender(<VPlayerPage />)
+    await act(async () => {})
+    fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'Z' } })
+    expect(sends().at(-1)).toMatchObject({ TEXT: 'Z', SEQ: 1 })
   })
 })

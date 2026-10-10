@@ -118,7 +118,7 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     })
 
     // Sent right away — no timer advance needed at all.
-    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', { TEXT: 'P', ID: 'vjoueur_alice' })
+    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', expect.objectContaining({ TEXT: 'P', ID: 'vjoueur_alice' }))
     expect(mock.sendMessage).toHaveBeenCalledTimes(1)
   })
 
@@ -147,7 +147,7 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
       vi.advanceTimersByTime(1)
     })
     expect(mock.sendMessage).toHaveBeenCalledTimes(2)
-    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', { TEXT: 'Pa', ID: 'vjoueur_alice' })
+    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'Pa', ID: 'vjoueur_alice' }))
   })
 
   it("régression cause racine #3 : une rafale de frappes SANS PAUSE n'envoie qu'un seul message immédiat sur le premier caractère, pas un par lettre", async () => {
@@ -170,14 +170,14 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     // Only the very first keystroke was sent synchronously; the rest are still
     // pending in the debounce timer (no pause long enough for it to fire).
     expect(mock.sendMessage).toHaveBeenCalledTimes(1)
-    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', { TEXT: 'P', ID: 'vjoueur_alice' })
+    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', expect.objectContaining({ TEXT: 'P', ID: 'vjoueur_alice' }))
 
     // Once the team finally pauses, the debounce flushes the latest full text.
     await act(async () => {
       vi.advanceTimersByTime(200)
     })
     expect(mock.sendMessage).toHaveBeenCalledTimes(2)
-    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', { TEXT: 'Paris', ID: 'vjoueur_alice' })
+    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'Paris', ID: 'vjoueur_alice' }))
   })
 
   it('le mécanisme se réarme au changement de question : la question suivante envoie de nouveau son premier caractère immédiatement', async () => {
@@ -213,6 +213,6 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     // Second call overall, but it's the FIRST (immediate) send for question aq2 —
     // proves ardoiseFirstSentRef was rearmed by the question-ID change.
     expect(mock.sendMessage).toHaveBeenCalledTimes(2)
-    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', { TEXT: 'L', ID: 'vjoueur_alice' })
+    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'L', ID: 'vjoueur_alice' }))
   })
 })

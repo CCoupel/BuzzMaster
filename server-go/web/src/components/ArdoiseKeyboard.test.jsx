@@ -98,7 +98,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
 
     // Press 'L'
     fireEvent.click(screen.getByText('L'))
-    expect(onChange).toHaveBeenCalledWith('HELL')
+    expect(onChange).toHaveBeenCalledWith('HELL', 'key')
   })
 
   it('appelle onChange avec texte + espace quand SPACE est pressée', () => {
@@ -106,7 +106,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', onChange })
 
     fireEvent.click(screen.getByText('␣'))
-    expect(onChange).toHaveBeenCalledWith('HELLO ')
+    expect(onChange).toHaveBeenCalledWith('HELLO ', 'key')
   })
 
   it('BACKSPACE appelle onChange en supprimant le dernier caractère', () => {
@@ -114,7 +114,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', onChange })
 
     fireEvent.click(screen.getByText('⌫'))
-    expect(onChange).toHaveBeenCalledWith('HELL')
+    expect(onChange).toHaveBeenCalledWith('HELL', 'key')
   })
 
   it('BACKSPACE sur texte vide appelle onChange avec une chaîne vide', () => {
@@ -122,7 +122,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: '', onChange })
 
     fireEvent.click(screen.getByText('⌫'))
-    expect(onChange).toHaveBeenCalledWith('')
+    expect(onChange).toHaveBeenCalledWith('', 'key')
   })
 
   it('affiche la valeur courante dans la zone de texte', () => {
@@ -154,7 +154,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: 'BUZZ', onChange })
 
     fireEvent.click(screen.getByTitle('Effacer tout'))
-    expect(onChange).toHaveBeenCalledWith('')
+    expect(onChange).toHaveBeenCalledWith('', 'clear')
   })
 })
 
@@ -215,3 +215,20 @@ describe('ArdoiseKeyboard — prop disabled', () => {
     expect(container.querySelector('.ardoise-keyboard.disabled')).not.toBeNull()
   })
 })
+
+describe('ArdoiseKeyboard — motif de l\'envoi (#246, F-LOG)', () => {
+  it('⌫ qui vide le champ → reason backspace_empty', () => {
+    const onChange = vi.fn()
+    renderKeyboard({ keyboardType: 'AZERTY', value: 'A', onChange })
+    fireEvent.click(screen.getByText('⌫'))
+    expect(onChange).toHaveBeenCalledWith('', 'backspace_empty')
+  })
+
+  it('⌫ qui laisse du texte → reason key', () => {
+    const onChange = vi.fn()
+    renderKeyboard({ keyboardType: 'AZERTY', value: 'AB', onChange })
+    fireEvent.click(screen.getByText('⌫'))
+    expect(onChange).toHaveBeenCalledWith('A', 'key')
+  })
+})
+

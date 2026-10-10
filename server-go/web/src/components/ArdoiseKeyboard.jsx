@@ -30,18 +30,21 @@ export default function ArdoiseKeyboard({ keyboardType = 'AZERTY', value = '', o
 
   const handleKey = (key) => {
     if (disabled) return
+    // #246 (F-LOG) : 2e argument = motif de l'envoi (diagnostic serveur,
+    // `ARDOISE_CLEARED reason=…`) — `backspace_empty` quand ⌫ vide le champ.
     if (key === 'BACKSPACE') {
-      onChange(value.slice(0, -1))
+      const next = value.slice(0, -1)
+      onChange(next, next === '' && value !== '' ? 'backspace_empty' : 'key')
     } else if (key === 'SPACE') {
-      onChange(value + ' ')
+      onChange(value + ' ', 'key')
     } else {
-      onChange(value + key)
+      onChange(value + key, 'key')
     }
   }
 
   const handleClear = () => {
     if (disabled) return
-    onChange('')
+    onChange('', 'clear')
   }
 
   return (

@@ -224,6 +224,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [regieMessage, setRegieMessage] = useState({ ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: '' })
 
   const wsRef = useRef(null)
+  // #246 (F-LOG) — diagnostic : endpoint courant (lu par handleMessage, mémoïsé
+  // une fois), envois abandonnés pendant une coupure, instant de la coupure,
+  // dernière longueur de texte ARDOISE vue par équipe (admin/anim).
+  const endpointRef = useRef(endpoint)
+  endpointRef.current = endpoint
+  const droppedSendsRef = useRef(0)
+  const downAtRef = useRef(null)
+  const ardoiseSeenRef = useRef({ qid: undefined, lens: {} })
   const logCallbackRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   // #118 (F1, R6) — instant du dernier message reçu (n'importe lequel,
@@ -255,11 +263,20 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       lastMessageAtRef.current = Date.now()
       setStatus('connected')
       sendMessage('HELLO', {})
+      // #246 : fin d'une coupure → durée + envois abandonnés pendant celle-ci.
+      if (downAtRef.current !== null) {
+        const downMs = Date.now() - downAtRef.current
+        const dropped = droppedSendsRef.current
+        downAtRef.current = null
+        droppedSendsRef.current = 0
+        sendClientTrace('WS_GAP', { DETAIL: { DOWN_MS: downMs, DROPPED_SENDS: dropped } })
+      }
     }
 
     ws.onclose = () => {
       setStatus('disconnected')
       wsRef.current = null
+      if (downAtRef.current === null) downAtRef.current = Date.now()
       // #118 (F5) — dispersion : évite que tous les VJoueurs ne se
       // reconnectent en cadence après une coupure collective.
       reconnectTimeoutRef.current = setTimeout(connect, nextReconnectDelay())
@@ -304,6 +321,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       // Déjà fermé ou fermeture en cours — sans effet sur la suite.
     }
     wsRef.current = null
+    if (downAtRef.current === null) downAtRef.current = Date.now()
     setStatus('disconnected')
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
     reconnectTimeoutRef.current = setTimeout(connect, nextReconnectDelay())
@@ -344,6 +362,29 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     currentQuestionIdRef.current = gameState.question?.ID ?? null
   }, [gameState.question?.ID])
 
+  // #246 (F-LOG) — admin/anim : le texte d'une équipe est passé de non vide à
+  // vide (ou a disparu) dans l'état reçu, pour la MÊME question. Sert à
+  // départager « effacé côté serveur » de « problème d'affichage ». Les remises
+  // à zéro légitimes (nouvelle question, PREPARE, NEW_GAME) ne sont pas tracées.
+  const trackArdoiseCleared = (game) => {
+    if (game.ARDOISE_ANSWERS === undefined) return
+    if (!['/ws/admin', '/ws', '/ws/anim'].includes(endpointRef.current)) return
+    const answers = game.ARDOISE_ANSWERS || {}
+    const qid = game.QUESTION?.ID ?? currentQuestionIdRef.current
+    const seen = ardoiseSeenRef.current
+    const legitReset = seen.qid !== qid || game.PHASE === 'PREPARE' || game.PHASE === 'NEW_GAME'
+    if (!legitReset) {
+      for (const [team, prevLen] of Object.entries(seen.lens)) {
+        if (prevLen > 0 && (answers[team]?.TEXT ?? '').length === 0) {
+          sendClientTrace('ARDOISE_CLEARED_SEEN', { TEAM: team, PREV_LEN: prevLen, CAUSE_ACTION: 'UPDATE' })
+        }
+      }
+    }
+    const lens = {}
+    for (const [team, a] of Object.entries(answers)) lens[team] = (a?.TEXT ?? '').length
+    ardoiseSeenRef.current = { qid, lens }
+  }
+
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data
     console.log('[WS] Received:', ACTION, MSG)
@@ -362,6 +403,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     switch (ACTION) {
       case 'UPDATE':
         if (MSG?.GAME) {
+          trackArdoiseCleared(MSG.GAME)
           setGameState(prev => ({
             ...prev,
             phase: MSG.GAME.PHASE || prev.phase,
@@ -890,9 +932,19 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       return true
     } else {
       console.error('WebSocket is not connected')
+      // #246 : envoi abandonné pendant une coupure (hors traces elles-mêmes) —
+      // rapporté dans `WS_GAP.DETAIL.DROPPED_SENDS` à la reconnexion.
+      if (action !== 'CLIENT_TRACE') droppedSendsRef.current += 1
       return false
     }
   }, [])
+
+  // #246 (F-LOG) — trace de diagnostic vers le journal serveur
+  // (contracts/websocket-actions.md §CLIENT_TRACE). Sans effet sur le jeu ;
+  // jamais comptée comme envoi abandonné.
+  const sendClientTrace = useCallback((kind, extra = {}) => {
+    return sendMessage('CLIENT_TRACE', { KIND: kind, AT: Date.now(), ...extra })
+  }, [sendMessage])
 
   // Game actions
   const startGame = useCallback((delay, points) => {
@@ -1197,6 +1249,37 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setLogs([])
   }, [])
 
+  // #246 (F-LOG) — traces de cycle de vie de la page : visibilité, bfcache,
+  // gel/reprise. Elles prouvent (ou excluent) un onglet endormi par le
+  // navigateur au moment d'une perte de saisie.
+  useEffect(() => {
+    let hiddenAt = document.visibilityState === 'hidden' ? Date.now() : null
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        sendClientTrace('VISIBILITY', { DETAIL: { STATE: 'hidden' } })
+      } else {
+        sendClientTrace('VISIBILITY', {
+          DETAIL: { STATE: 'visible', HIDDEN_MS: hiddenAt ? Date.now() - hiddenAt : 0 },
+        })
+        hiddenAt = null
+      }
+    }
+    const onPageShow = (e) => sendClientTrace('PAGESHOW', { DETAIL: { PERSISTED: !!e.persisted } })
+    const onFreeze = () => sendClientTrace('FREEZE')
+    const onResume = () => sendClientTrace('RESUME')
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pageshow', onPageShow)
+    document.addEventListener('freeze', onFreeze)
+    document.addEventListener('resume', onResume)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pageshow', onPageShow)
+      document.removeEventListener('freeze', onFreeze)
+      document.removeEventListener('resume', onResume)
+    }
+  }, [sendClientTrace])
+
   useEffect(() => {
     connect()
 
@@ -1240,6 +1323,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     rafaleSetTeams,
     // Actions
     sendMessage,
+    sendClientTrace,
     startGame,
     stopGame,
     pauseGame,

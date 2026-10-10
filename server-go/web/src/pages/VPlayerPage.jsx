@@ -98,6 +98,9 @@ export default function VPlayerPage() {
   const ardoiseThrottleRef = useRef(null)
   // #246 : dernier texte local, relu par le renvoi complet à la liaison.
   const ardoiseTextRef = useRef('')
+  // #246 (F-LOG) — SEQ d'ARDOISE_INPUT : croissant par question et par
+  // connexion (remis à 0 à la liaison et au changement de question).
+  const ardoiseSeqRef = useRef(0)
   ardoiseTextRef.current = ardoiseText
   const prevPhaseRef = useRef(null)
   // ARDOISE #117: true once the first non-empty ARDOISE_INPUT has been sent for the
@@ -147,6 +150,16 @@ export default function VPlayerPage() {
       DETAIL: { OWN_ID: ownIdRef.current, STORED_ID: getStoredVPlayerId() },
     })
   }, [stale, status, sendClientTrace])
+
+  // #246 (F-LOG) — ARDOISE_INPUT numéroté (SEQ) + motif (REASON). SEQ n'avance
+  // que si le message est réellement parti.
+  const sendArdoise = useCallback((text, id, reason) => {
+    if (!boundRef.current || staleRef.current || supersededRef.current) return false
+    const seq = ardoiseSeqRef.current + 1
+    const sent = sendMessage('ARDOISE_INPUT', { TEXT: text, ID: id, SEQ: seq, REASON: reason })
+    if (sent) ardoiseSeqRef.current = seq
+    return sent
+  }, [sendMessage])
 
   // La liaison est propre à une connexion : toute perte de connexion la défait.
   useEffect(() => {
@@ -343,6 +356,7 @@ export default function VPlayerPage() {
     // nom affiché est celui du serveur (le cas 1 ne renomme plus).
     if (playerConnectStatus.status === 'connected' && status === 'connected') {
       boundRef.current = true
+      ardoiseSeqRef.current = 0 // nouvelle connexion liée : SEQ repart à 1
       setBound(true)
       if (playerConnectStatus.name) {
         setPlayerSession((prev) => (prev && prev.name !== playerConnectStatus.name
@@ -498,6 +512,7 @@ export default function VPlayerPage() {
     setArdoiseText('')
     if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
     ardoiseFirstSentRef.current = false
+    ardoiseSeqRef.current = 0 // #246 : SEQ repart à 1 pour chaque nouvelle question
   }, [gameState.question?.ID])
 
   // ARDOISE: reset on PREPARE (covers replaying the same question + race conditions)
@@ -523,9 +538,9 @@ export default function VPlayerPage() {
     if (prev === 'STARTED' && currentPhase !== 'STARTED' && ardoiseText) {
       // Cancel pending throttle and send immediately
       if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
-      sendBound('ARDOISE_INPUT', { TEXT: ardoiseText, ID: bumper?.id })
+      sendArdoise(ardoiseText, bumper?.id, 'key')
     }
-  }, [gameState.phase, ardoiseText, sendBound, bumper])
+  }, [gameState.phase, ardoiseText, sendArdoise, bumper])
 
   // #246 — renvoi du texte COMPLET dès que la connexion est (re)liée : les
   // frappes faites pendant la coupure/avant la liaison n'ont pas été émises.
@@ -533,25 +548,25 @@ export default function VPlayerPage() {
     if (!bound || !bumper?.id) return
     if (gameState.phase !== 'STARTED' || gameState.question?.TYPE !== 'ARDOISE') return
     if (!ardoiseTextRef.current) return
-    sendBound('ARDOISE_INPUT', { TEXT: ardoiseTextRef.current, ID: bumper.id, REASON: 'resend' })
+    sendArdoise(ardoiseTextRef.current, bumper.id, 'resend')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bound])
 
   // ARDOISE: handle key input — update local state + debounced send (#117: except the
   // very first non-empty character for the current question, sent immediately so the
   // server timestamps STARTED_AT on the real first keystroke, not the first typing pause).
-  const handleArdoiseChange = useCallback((text) => {
+  const handleArdoiseChange = useCallback((text, reason = 'key') => {
     setArdoiseText(text)
     if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
     if (!ardoiseFirstSentRef.current && text !== '') {
       ardoiseFirstSentRef.current = true
-      sendBound('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
+      sendArdoise(text, bumper?.id, reason)
       return
     }
     ardoiseThrottleRef.current = setTimeout(() => {
-      sendBound('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
+      sendArdoise(text, bumper?.id, reason)
     }, 200)
-  }, [sendBound, bumper])
+  }, [sendArdoise, bumper])
 
   // NoSleep — requires user gesture to enable (called on fullscreen tap or first buzz)
   const activateNoSleep = useCallback(() => {
