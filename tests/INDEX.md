@@ -41,3 +41,5 @@
 | server-go/web/src/components/QuizMetaForm.launch-game.243.test.jsx | unit | admin-game | #243 second point d'entrée (Backstage) | regression | |
 | server-go/web/src/hooks/useWebSocket.new-game.243.test.js | unit | websocket | #243 newGame(options) envoie les quatre champs ; NEW_GAME_REFUSED | regression | critical |
 | tests/procedures/new-game-243.md | manual | admin-game, game-engine | #243 procédure manuelle (utilisateur uniquement) | feature | |
+| server-go/internal/game/new_game_timers_243_test.go | unit | game-engine | #243 NEW_GAME : aucun minuteur ne survit (RAFALE classique, ticks RAFALE de carte / MEMOTION carte et mémorisation inertes, chrono différé de fin de son jamais relancé) + témoins positifs | regression | critical, slow |
+| server-go/cmd/server/new_game_sound_243_test.go | integration | game-engine, sound | #243 NEW_GAME coupe le son de question, QUESTION_SOUND_STATE au repos, fin du son sans effet ; refus = son intact | regression | critical |
