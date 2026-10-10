@@ -9,6 +9,7 @@
 - **[CHANGED]** `models.md` §Team — `NAME` toujours égal à la clé ; normalisation serveur à l'enregistrement et au chargement de `teams.json` (réparation automatique des fichiers existants) ; clients : identité = clé.
 - **[NEW]** `game-state.md` §`TEAMS_LOCKED` — booléen toujours sérialisé, vrai de la sélection d'une question jusqu'à `REVEALED`. **Liste fermée** des états indexés par équipe reportés au renommage (8 maps à clé d'équipe, 2 maps à valeur d'équipe, 3 listes, 3 équipes courantes, historique des points).
 - **[CHANGED]** ⚠️ `websocket-actions.md` §UPDATE (client → serveur) — pendant `TEAMS_LOCKED`, un message qui renomme ou supprime une équipe est **refusé en entier** ; hors verrou, renommage appliqué avec report des états indexés par équipe et de l'historique.
+- **[CHANGED]** `websocket-actions.md` §UPDATE / `game-state.md` §`TEAMS_LOCKED` — *(précision 2026-10-11)* suppression d'équipe hors verrou : historique des points **conservé**, événement `TEAM_DELETED` ajouté ; `AWARDED_TEAMS` ignore les crédits antérieurs au dernier `TEAM_DELETED` de l'équipe (pas d'héritage du verrou par une équipe recréée sous le même nom).
 - **[NEW]** `websocket-actions.md` §TEAMS_UPDATE_REFUSED — réponse ciblée `{REASON: "TEAMS_LOCKED_DURING_QUESTION", TEAMS}`.
 - **[NEW]** `logging.md` §3.2 bis — `TEAM_NAME_NORMALIZED`, `TEAMS_CHANGE_REFUSED`, `TEAM_RENAMED`.
 

@@ -95,7 +95,7 @@ type Page =
   - **Maps dont la valeur est l'équipe** : `MEMORY_PAIR_OWNERS` (paire → équipe), `MEMOTION_CARD_TEAMS` (carte → équipe gagnante).
   - **Listes d'équipes** : `MEMORY_PARTICIPATING_TEAMS`, `MEMOTION_PARTICIPATING_TEAMS`, `RAFALE_PARTICIPATING_TEAMS`.
   - **Équipe courante** : `MEMORY_CURRENT_TEAM`, `MEMOTION_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM` (les `*_CURRENT_TEAM_COLOR` ne changent pas).
-  - **Historique des points** (`GameEvent.TEAM_NAME`, toutes les entrées) : source d'`AWARDED_TEAMS`, ce qui conserve le verrou « déjà créditée » de la question révélée.
+  - **Historique des points** (`GameEvent.TEAM_NAME`, toutes les entrées) : source d'`AWARDED_TEAMS`, ce qui conserve le verrou « déjà créditée » de la question révélée. **Exception — suppression d'équipe** : l'historique n'est ni effacé ni reporté ; un événement `TEAM_DELETED` y est ajouté et `AWARDED_TEAMS` ne compte pour une équipe que les points postérieurs à son dernier `TEAM_DELETED` (`websocket-actions.md` §UPDATE).
   - Les joueurs (`bumpers[*].TEAM`) sont déplacés par le message de renommage lui-même. `MEMOTION_ACTIVE.STATE` ne contient aucune clé d'équipe : rien à reporter.
   - Tout nouveau champ indexé par équipe ajouté à `GameState` **doit** rejoindre cette liste (revue).
 
