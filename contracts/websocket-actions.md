@@ -482,7 +482,7 @@ Avec `DISPLAY: false` :
 - **Écrans (TV, VJoueur, anim)** : le score est mis à jour dans l'`UPDATE` (classement cohérent), mais **sans aucune animation** : ni « +X pts » flottant, ni célébration, ni surbrillance ou montée de rang. Les écrans le savent grâce à `GameState.SCORE_CHANGE` (`contracts/game-state.md`).
 - **Historique** : l'entrée `POINTS_AWARDED` est enregistrée normalement, avec `DISPLAY: false` (piste d'audit ; la page Historique de l'admin la marque « 🔇 correction cachée »). **Elle ne compte PAS dans `AWARDED_TEAMS`** *(décision utilisateur)* : une correction cachée modifie le score sans rendre l'équipe « déjà créditée » ; l'équipe peut ensuite recevoir normalement les points de la question, y compris par `TEAM_POINTS_BATCH`.
 - **Journal** : `WARN SCORE_CORRECTION_HIDDEN` (`contracts/logging.md`).
-- **Montant** : la page Scores impose un entier non nul de −999 à 999 (prédéfini ou saisie libre). Le serveur ne change pas sa validation de `TEAM_POINTS`/`BUMPER_POINTS` (rétrocompatibilité), sauf `POINTS = 0`, désormais **ignoré** (aucune entrée d'historique, aucun `UPDATE`).
+- **Montant** : la page Scores impose un entier non nul de −999 à 999 (prédéfini ou saisie libre). Le serveur ne change pas sa validation de `TEAM_POINTS`/`BUMPER_POINTS` (rétrocompatibilité), sauf **`POINTS = 0` envoyé par un client `admin`**, désormais **ignoré** (ni entrée d'historique, ni `UPDATE`, ni `SCORE_CHANGE.SEQ`). *(Décision CDP)* **Un `POINTS = 0` venant de l'anim ou d'un appelant interne reste enregistré** comme aujourd'hui : c'est le geste « 0 pt » de #170 (refus de l'animateur), un **verrou valide** (§AWARDED_TEAMS « ⚠️ `POINTS` peut valoir `0` »). `TEAM_POINTS_BATCH` interdit déjà 0.
 
 ---
 
@@ -558,7 +558,7 @@ Modifie le score d'un joueur.
 |-------|------|-------------|-------------|
 | ID | string | ✅ | MAC du bumper |
 | POINTS | int | ✅ | Points à ajouter (peut être négatif) |
-| DISPLAY | boolean | ⬜ | *(v11.2, #252)* même règle que `TEAM_POINTS` §« Affichage public » |
+| DISPLAY | boolean | ⬜ | *(v11.2, #252)* même règle que `TEAM_POINTS` §« Affichage public », y compris pour `POINTS = 0` (ignoré seulement si l'émetteur est l'admin) |
 
 ---
 
@@ -1308,7 +1308,7 @@ la même équipe — que le premier vienne d'une autre tablette ou de la régie.
 |-----------|--------|
 | Direction | `Server→Client` |
 | Cible | `ClientTypeAnim` **et `ClientTypeAdmin`** *(v11.2, #244/#251 — `[CHANGED]` additif : l'admin s'en sert pour griser les équipes déjà créditées dans l'attribution groupée)*. La régie reste **sans restriction** pour le crédit équipe par équipe (§"La régie n'est pas contrainte") |
-| Règle « déjà créditée » | *(v11.2, #252)* Le calcul (`Engine.AwardedTeams`, `getAwardedTeamsPayload`) ne retient que les événements `POINTS_AWARDED` de la question courante, depuis son départ, **avec `DISPLAY` ≠ `false`** (absent = compté) et postérieurs au dernier `TEAM_DELETED` de l'équipe (#249). Les corrections cachées sont ignorées. Même règle pour le grisage de l'admin et le saut `ALREADY_AWARDED` de `TEAM_POINTS_BATCH` |
+| Règle « déjà créditée » | *(v11.2, #252)* Le calcul (`Engine.AwardedTeams`, `getAwardedTeamsPayload`) ne retient que les événements `POINTS_AWARDED` de la question courante, depuis son départ, **avec `DISPLAY` ≠ `false`** (absent = compté) et postérieurs au dernier `TEAM_DELETED` de l'équipe (#249). Un crédit à **0 point enregistré** (geste de l'anim, #170) **compte** : c'est un verrou valide ; un `POINTS = 0` de l'admin n'est jamais enregistré, donc ne verrouille rien. Les corrections cachées sont ignorées. Même règle pour le grisage de l'admin et le saut `ALREADY_AWARDED` de `TEAM_POINTS_BATCH` |
 | Trigger | `TEAM_POINTS`, `BUMPER_POINTS` et **`TEAM_POINTS_BATCH`** traités (quelle qu'en soit l'origine) ; `READY` (changement de question) ; `NEW_GAME` ; `RAZ` ; suppression/renommage d'équipe (#249) ; HELLO d'un client animateur **ou admin** (état initial) |
 
 #### Payload
