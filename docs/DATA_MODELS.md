@@ -48,6 +48,17 @@ interface Team {
 - `BUMPER` = ID du premier joueur à buzzer
 - `READY` = true si l'équipe est prête (tous buzzers connectés)
 
+## Identité d'équipe et TEAMS_LOCKED — v11.2 (#249)
+
+- **Identité** : la clé de la map `teams` est l'identité de l'équipe. `Team.NAME` en est une copie, **toujours
+  égale à la clé** (corrigée à l'enregistrement et au chargement, `contracts/models.md` §Identité d'une équipe).
+- **`GameState.TEAMS_LOCKED`** : booléen, sans `omitempty`. Vrai de la sélection d'une question jusqu'à son
+  `REVEALED` (drapeau du moteur, pas déduit de la phase). Faux au démarrage.
+- **Report au renommage** : liste fermée des champs indexés par équipe, dans `contracts/game-state.md`
+  §`TEAMS_LOCKED` (`ARDOISE_ANSWERS`, `MEMORY_TEAM_*`, `RAFALE_TEAM_*`, `MEMORY_PAIR_OWNERS`,
+  `MEMOTION_CARD_TEAMS`, listes et équipes courantes, historique des points). Tout nouveau champ indexé par
+  équipe doit y être ajouté.
+
 ## Palette d'équipes — v5.7.25, #113
 
 16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
