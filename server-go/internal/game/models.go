@@ -181,6 +181,10 @@ type ArdoiseAnswer struct {
 	Text        string `json:"TEXT"`         // Current answer text
 	StartedAt   int64  `json:"STARTED_AT"`   // Timestamp in microseconds of the FIRST non-empty character (frozen, #117)
 	SubmittedAt int64  `json:"SUBMITTED_AT"` // Timestamp in microseconds (last update)
+	// v11.2 (#246) — always serialised (no omitempty): final text received and
+	// acknowledged (ARDOISE_FINAL), and its FNV-1a hash ("" while not received).
+	Received     bool   `json:"RECEIVED"`
+	ReceivedHash string `json:"RECEIVED_HASH"`
 }
 
 // PointsTarget represents who receives points for a question

@@ -216,6 +216,7 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionPlayerConnect:    {ClientTypeVPlayer},
 	protocol.ActionVPlayerQCMAnswer: {ClientTypeVPlayer},
 	protocol.ActionArdoiseInput:     {ClientTypeVPlayer},
+	protocol.ActionArdoiseFinal:     {ClientTypeVPlayer}, // v11.2, #246
 }
 
 // IsActionAllowed reports whether clientType may send action, per
@@ -322,6 +323,7 @@ var entracteAllowedActions = map[string]bool{
 	protocol.ActionRegieMessageClear:    true,
 	protocol.ActionUpdateEntracteConfig: true,
 	protocol.ActionPong:                 true,
+	protocol.ActionClientTrace:          true, // diagnostic: accepted in every phase (#246 arbitrage)
 }
 
 // IsActionAllowedDuringEntracte reports whether action may proceed while

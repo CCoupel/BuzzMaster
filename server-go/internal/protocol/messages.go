@@ -67,6 +67,9 @@ const (
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
+	ActionArdoiseFinal    = "ARDOISE_FINAL"     // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
+	ActionArdoiseFinalAck = "ARDOISE_FINAL_ACK" // Server → VPlayer (targeted): final received (v11.2, #246)
+	ActionRevealRefused   = "REVEAL_REFUSED"    // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
 	ActionClientTrace  = "CLIENT_TRACE"  // Client → Server: diagnostic trace (v11.2, #246)
 	ActionArdoiseInput = "ARDOISE_INPUT" // VPlayer → Server: free-text answer update (throttled)
 	// Log actions (via dedicated /ws/logs WebSocket)
@@ -737,6 +740,38 @@ type ArdoiseInputPayload struct {
 	// v11.2 (#246) — diagnostic only (contracts/websocket-actions.md ARDOISE_INPUT).
 	Seq    int    `json:"SEQ,omitempty"`    // per question & per connection counter, >= 1
 	Reason string `json:"REASON,omitempty"` // key | clear | backspace_empty | resend | visible
+}
+
+// ArdoiseFinalPayload for ARDOISE_FINAL (v11.2, #246).
+type ArdoiseFinalPayload struct {
+	ID         string `json:"ID"`
+	QuestionID string `json:"QUESTION_ID"`
+	Text       string `json:"TEXT"`
+	Hash       string `json:"HASH"`
+	Seq        int    `json:"SEQ,omitempty"`
+}
+
+// ArdoiseFinalAckPayload for ARDOISE_FINAL_ACK — never carries text (#128).
+type ArdoiseFinalAckPayload struct {
+	QuestionID string `json:"QUESTION_ID"`
+	Hash       string `json:"HASH"`
+}
+
+// RevealPayload for REVEAL (v11.2, #246): FORCE reveals despite pending ARDOISE answers.
+type RevealPayload struct {
+	Force bool `json:"FORCE"`
+}
+
+// RevealRefusedPendingTeam is one entry of REVEAL_REFUSED.PENDING.
+type RevealRefusedPendingTeam struct {
+	Team    string `json:"TEAM"`
+	Offline bool   `json:"OFFLINE"`
+}
+
+// RevealRefusedPayload for REVEAL_REFUSED (targeted to the sender).
+type RevealRefusedPayload struct {
+	Reason  string                     `json:"REASON"`
+	Pending []RevealRefusedPendingTeam `json:"PENDING"`
 }
 
 // ClientTracePayload for CLIENT_TRACE (v11.2, #246): client diagnostic event,

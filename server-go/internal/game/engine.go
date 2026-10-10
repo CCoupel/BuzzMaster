@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -3417,6 +3419,11 @@ func (e *Engine) Continue() {
 
 	e.state.Phase = PhaseStarted
 	e.forceGamePageUnsafe() // #240 — CONTINUE after PAUSE (user Q4)
+	// #246: every team must send a fresh final text after the next STOP/PAUSE.
+	for team, a := range e.state.ArdoiseAnswers {
+		a.Received, a.ReceivedHash = false, ""
+		e.state.ArdoiseAnswers[team] = a
+	}
 
 	e.setQuestionStatus(StatusStarted)
 
@@ -5963,10 +5970,13 @@ func (e *Engine) SetArdoiseAnswer(teamName string, text string) bool {
 		startedAt = now
 	}
 
+	prev := e.state.ArdoiseAnswers[teamName]
 	e.state.ArdoiseAnswers[teamName] = ArdoiseAnswer{
-		Text:        text,
-		StartedAt:   startedAt,
-		SubmittedAt: now,
+		Text:         text,
+		StartedAt:    startedAt,
+		SubmittedAt:  now,
+		Received:     prev.Received,
+		ReceivedHash: prev.ReceivedHash,
 	}
 	e.ardoiseControlMu.Lock()
 	if e.ardoiseControl == nil {
@@ -7864,4 +7874,94 @@ func (e *Engine) ClearMotionMemoryFlippedCards(motionCardID string) {
 	}
 	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = []string{}
 	log.Printf("[Engine] MEMOTION memory card flipped cards cleared (cardId=%s)", motionCardID)
+}
+
+// --- ARDOISE_FINAL / REVEAL guard (v11.2, #246) -----------------------------------
+
+// ArdoiseHash returns the FNV-1a 32-bit hash of text (UTF-8), 8 lowercase hex chars.
+func ArdoiseHash(text string) string {
+	h := fnv.New32a()
+	h.Write([]byte(text))
+	return fmt.Sprintf("%08x", h.Sum32())
+}
+
+// ArdoiseFinalResult is the outcome of SetArdoiseFinal.
+type ArdoiseFinalResult int
+
+const (
+	ArdoiseFinalStale        ArdoiseFinalResult = iota // wrong phase/type/question: ignored
+	ArdoiseFinalHashMismatch                           // hash differs from recomputed: ignored
+	ArdoiseFinalAccepted                               // written
+	ArdoiseFinalDuplicate                              // same hash already received: no rewrite
+)
+
+// SetArdoiseFinal records a team's final text (STOPPED/PAUSED, current ARDOISE
+// question). On acceptance it also feeds the ARDOISE_STATE_DIVERGED control copy.
+func (e *Engine) SetArdoiseFinal(teamName, questionID, text, hash string) ArdoiseFinalResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if (e.state.Phase != PhaseStopped && e.state.Phase != PhasePaused) ||
+		e.state.Question == nil || e.state.Question.Type != QuestionTypeArdoise ||
+		e.state.Question.ID != questionID {
+		return ArdoiseFinalStale
+	}
+	computed := ArdoiseHash(text)
+	if computed != hash {
+		return ArdoiseFinalHashMismatch
+	}
+	prev := e.state.ArdoiseAnswers[teamName]
+	if prev.Received && prev.ReceivedHash == hash {
+		return ArdoiseFinalDuplicate
+	}
+	now := time.Now().UnixMicro()
+	startedAt := prev.StartedAt
+	if startedAt == 0 && text != "" {
+		startedAt = now
+	}
+	e.state.ArdoiseAnswers[teamName] = ArdoiseAnswer{
+		Text: text, StartedAt: startedAt, SubmittedAt: now, Received: true, ReceivedHash: hash,
+	}
+	e.ardoiseControlMu.Lock()
+	if e.ardoiseControl == nil {
+		e.ardoiseControl = map[string]string{}
+	}
+	e.ardoiseControl[teamName] = text
+	e.ardoiseControlMu.Unlock()
+	return ArdoiseFinalAccepted
+}
+
+// ArdoisePendingTeam is an expected team whose final text has not been received.
+type ArdoisePendingTeam struct {
+	Team    string
+	Offline bool
+}
+
+// ArdoisePendingTeams returns the expected teams (key of teams with >= 1 bumper
+// IS_VPLAYER whose TEAM is that key) without RECEIVED, sorted by name. Offline =
+// all their VJoueurs are disconnected (display only, does not lift the guard).
+// Empty unless the current question is ARDOISE and the phase is STOPPED/PAUSED.
+func (e *Engine) ArdoisePendingTeams() []ArdoisePendingTeam {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if (e.state.Phase != PhaseStopped && e.state.Phase != PhasePaused) ||
+		e.state.Question == nil || e.state.Question.Type != QuestionTypeArdoise {
+		return nil
+	}
+	var out []ArdoisePendingTeam
+	for team := range e.data.Teams {
+		expected, online := false, false
+		for _, b := range e.data.Bumpers {
+			if b != nil && b.IsVPlayer && b.Team == team {
+				expected = true
+				if b.Connected {
+					online = true
+				}
+			}
+		}
+		if expected && !e.state.ArdoiseAnswers[team].Received {
+			out = append(out, ArdoisePendingTeam{Team: team, Offline: !online})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Team < out[j].Team })
+	return out
 }

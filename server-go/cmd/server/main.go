@@ -1482,6 +1482,27 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		}
 
 	case protocol.ActionReveal:
+		// #246 garde ARDOISE : refus tant qu'une équipe attendue n'a pas son texte final.
+		var revealPayload protocol.RevealPayload
+		if len(msg.Msg) > 0 {
+			_ = json.Unmarshal(msg.Msg, &revealPayload)
+		}
+		if pending := a.engine.ArdoisePendingTeams(); len(pending) > 0 {
+			desc := make([]string, 0, len(pending))
+			refused := protocol.RevealRefusedPayload{Reason: "ARDOISE_PENDING", Pending: []protocol.RevealRefusedPendingTeam{}}
+			for _, p := range pending {
+				desc = append(desc, fmt.Sprintf("%q(offline=%v)", p.Team, p.Offline))
+				refused.Pending = append(refused.Pending, protocol.RevealRefusedPendingTeam{Team: p.Team, Offline: p.Offline})
+			}
+			if !revealPayload.Force {
+				server.LogWarn(game.LogComponentApp, "ARDOISE_REVEAL_REFUSED client=%s type=%s pending=[%s]", incoming.ClientID, clientType, strings.Join(desc, ","))
+				if rm, err := protocol.NewMessage(protocol.ActionRevealRefused, refused); err == nil {
+					a.wsHub.SendToClient(incoming.ClientID, rm)
+				}
+				break
+			}
+			server.LogWarn(game.LogComponentApp, "ARDOISE_REVEAL_FORCED client=%s type=%s pending=[%s]", incoming.ClientID, clientType, strings.Join(desc, ","))
+		}
 		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
 		answer := a.engine.Reveal()
 		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11
@@ -1603,6 +1624,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionArdoiseInput:
 		a.handleArdoiseInput(incoming.ClientID, msg)
+
+	case protocol.ActionArdoiseFinal:
+		a.handleArdoiseFinal(incoming.ClientID, msg)
 
 	case protocol.ActionClientTrace:
 		a.handleClientTrace(incoming.ClientID, clientType, msg)
@@ -3399,7 +3423,7 @@ func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
 // to a bumper (#246 B-ID). ARDOISE_FINAL joins in Batch 2.
 func isBoundPlayerAction(action string) bool {
 	switch action {
-	case protocol.ActionArdoiseInput, protocol.ActionVPlayerQCMAnswer,
+	case protocol.ActionArdoiseInput, protocol.ActionArdoiseFinal, protocol.ActionVPlayerQCMAnswer,
 		protocol.ActionButton, protocol.ActionFlipMemoryCard:
 		return true
 	}
@@ -3756,6 +3780,43 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 	// payload). Flushed immediately on every phase change (OnStateChange) so
 	// the last keystrokes before REVEAL are never held back — CA5/CA6.
 	a.ardoiseCoalescer.Trigger()
+}
+
+// handleArdoiseFinal processes the final ARDOISE text of a bound tablette
+// (v11.2, #246): validates, records, acknowledges ONLY the sender (no text) and
+// pushes an immediate (non-coalesced) UPDATE to admin + anim.
+func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
+	var p protocol.ArdoiseFinalPayload
+	if err := json.Unmarshal(msg.Msg, &p); err != nil {
+		server.LogError(game.LogComponentApp, "ARDOISE_FINAL: error parsing payload: %v", err)
+		return
+	}
+	bumperID := msg.ID // set to the bound bumper by checkPlayerBinding
+	bumper := a.engine.GetBumper(bumperID)
+	if bumper == nil || bumper.Team == "" {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL: bumper %q unknown or without team (client %s)", bumperID, clientID)
+		return
+	}
+	st := a.engine.GetState()
+	currentQ := ""
+	if st.Question != nil {
+		currentQ = st.Question.ID
+	}
+	switch a.engine.SetArdoiseFinal(bumper.Team, p.QuestionID, p.Text, p.Hash) {
+	case game.ArdoiseFinalStale:
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_STALE bumper=%s question_id=%q current_question=%q phase=%s", bumperID, p.QuestionID, currentQ, st.Phase)
+		return
+	case game.ArdoiseFinalHashMismatch:
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, p.Hash, game.ArdoiseHash(p.Text), len(p.Text))
+		return
+	case game.ArdoiseFinalAccepted:
+		server.LogInfo(game.LogComponentApp, "ARDOISE_FINAL_RECEIVED team=%q bumper=%s hash=%s len=%d", bumper.Team, bumperID, p.Hash, len(p.Text))
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
+	}
+	// Accepted or duplicate: acknowledge the sender only, never with text (#128).
+	if ack, err := protocol.NewMessage(protocol.ActionArdoiseFinalAck, protocol.ArdoiseFinalAckPayload{QuestionID: p.QuestionID, Hash: p.Hash}); err == nil {
+		a.wsHub.SendToClient(clientID, ack)
+	}
 }
 
 // ardoiseSeqState tracks the last applied ARDOISE_INPUT SEQ for one connection
