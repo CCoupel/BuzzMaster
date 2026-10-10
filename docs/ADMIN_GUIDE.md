@@ -448,15 +448,14 @@ Les joueurs virtuels **ne peuvent pas** buzzer sur les questions de type MEMORY 
 
 ### Attendre les tablettes avant de révéler
 
-En question ARDOISE, la réponse d'une équipe n'est retenue qu'une fois confirmée par sa tablette, au
-STOP (ou à la PAUSE). Dans `/admin` et `/anim` :
+En question ARDOISE, la réponse d'une équipe n'est considérée comme **définitive** qu'une fois confirmée par sa tablette, au STOP (ou à la PAUSE). Le texte s'affiche en direct pendant la question, mais le REVEAL attend la confirmation de chaque équipe. Dans `/admin` et `/anim` :
 
 - Une pastille par équipe et un compteur `n/N reçues`. Une équipe est en attente tant que sa tablette
   n'a pas confirmé. Une tablette hors ligne bloque aussi, et est signalée comme telle.
 - **REPONSE** reste désactivée tant qu'une équipe est en attente.
-- Si une tablette a été rechargée après le STOP sans qu'un joueur retape son texte, son équipe reste
-  « en attente » : il n'y a rien à confirmer. Reprendre la saisie sur la tablette ou utiliser le
-  forçage ci-dessous.
+- Si une tablette a été rechargée **après** le STOP, elle n'envoie rien, même si elle réaffiche son texte :
+  son équipe reste « en attente ». Utiliser « Révéler quand même… » (ci-dessous). Même chose pour une
+  tablette rechargée ou rejointe en cours de question sur laquelle personne n'a rien écrit.
 - **« Révéler quand même… »** ouvre une confirmation (« Attendre » / « Révéler quand même »). Les
   équipes non confirmées sont révélées avec leur dernier texte reçu, marquées « non confirmée ».
 
