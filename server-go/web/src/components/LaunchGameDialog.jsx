@@ -13,7 +13,7 @@ const PLAYED_STATUSES = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED']
 
 const REFUSAL_MESSAGES = {
   PLAYERS_REQUIRE_SCORES: 'Lancement refusé : supprimer les joueurs des tablettes exige de remettre les scores à zéro.',
-  ENTRACTE_ACTIVE: 'Une entracte est en cours : terminez-la avant de lancer la partie.',
+  ENTRACTE_ACTIVE: "Impossible pendant une entracte : sortez d'abord de l'entracte",
 }
 
 // Sans réponse du serveur après l'envoi : la popup se débloque (pas de modale figée).

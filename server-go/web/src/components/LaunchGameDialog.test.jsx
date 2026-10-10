@@ -152,7 +152,7 @@ describe('LaunchGameButton — popup jamais figée (#243, revue)', () => {
     fireEvent.click(screen.getByText('LANCER LA PARTIE'))
     fireEvent.click(go())
     rerender(<LaunchGameButton {...base} onLaunch={vi.fn(() => true)} phase="REVEALED" refused={{ reason: 'ENTRACTE_ACTIVE' }} />)
-    expect(screen.getByRole('dialog').textContent).toMatch(/Une entracte est en cours : terminez-la avant de lancer la partie/)
+    expect(screen.getByRole('dialog').textContent).toMatch(/Impossible pendant une entracte : sortez d'abord de l'entracte/)
     expect(go().disabled).toBe(false)
   })
 
