@@ -247,7 +247,8 @@ export default function TeamsPage() {
       return
     }
     const newTeams = { ...teams }
-    newTeams[newName] = newTeams[oldName]
+    // #249 : identité = clé — NAME suit la nouvelle clé (le serveur le réécrit de toute façon)
+    newTeams[newName] = { ...newTeams[oldName], NAME: newName }
     delete newTeams[oldName]
     // Update bumpers with new team name
     const newBumpers = { ...bumpers }
