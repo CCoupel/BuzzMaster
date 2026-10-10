@@ -114,22 +114,17 @@
   letter-spacing: 0.05em;
   color: #94a3b8;
 }
-.anim-ardoise-head .ardoise-rcounter { background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-weight: 800; font-size: 0.8rem; padding: 0.15rem 0.6rem; }
-.anim-ardoise-head .ardoise-rcounter.complete { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-.anim-ardoise-head .ardoise-rcounter.live { background: #334155; color: #94a3b8; }
-.anim-ardoise-row.st-wait { border-color: #f59e0b; }
-.anim-ardoise-row.st-off { border-color: #ef4444; }
 /* Icône de réception à gauche du texte (colonne fixe, maquette anim receipt_icon) */
 .anim-ardoise-body { flex-wrap: nowrap; gap: 0.45rem; min-height: 1.9rem; }
 .anim-ardoise-list .ardoise-receipt-icon { flex: 0 0 1.3rem; width: 1.3rem; font-size: 1.05rem; }
 .anim-ardoise-list .ardoise-receipt-icon.ok { color: #22c55e; }
 .anim-ardoise-list .ardoise-receipt-icon.wait { color: #facc15; }
 .anim-ardoise-list .ardoise-receipt-icon.off { color: #fb923c; }
-.anim-ardoise-list .ardoise-receipt-icon.unconfirmed { color: #94a3b8; opacity: 0.55; }
+.anim-ardoise-list .ardoise-receipt-icon.unconfirmed { color: #94a3b8; opacity: 0.75; }
 .anim-ardoise-text.unconfirmed { color: #94a3b8; }
 .anim-ardoise-head .ardoise-legend { margin-left: auto; display: flex; gap: 0.7rem; font-size: 0.72rem; color: #94a3b8; }
 .anim-ardoise-row.st-wait { border-color: #facc15; }
 .anim-ardoise-row.st-off { border-color: #fb923c; }
-.anim-ardoise-head .ardoise-rcounter { background: rgba(250, 204, 21, 0.15); color: #facc15; }
+.anim-ardoise-head .ardoise-rcounter { background: rgba(250, 204, 21, 0.15); color: #facc15; font-weight: 800; font-size: 0.8rem; padding: 0.15rem 0.6rem; }
 .anim-ardoise-head .ardoise-rcounter.complete { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
 .anim-ardoise-head .ardoise-rcounter.live { background: #334155; color: #94a3b8; }
