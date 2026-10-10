@@ -566,6 +566,12 @@ de la partie en cours — pas une section globale de réglages.
   par `STOPPED`.
 - Ordre d'application côté serveur, sous un seul verrou : minuteurs → `PURGE_TEAMS` → `PURGE_PLAYERS` →
   `PURGE_SCORES` → `RESET_QUESTIONS` → remise à zéro des états de jeu.
+- **Statut de la question interrompue** (sans `RESET_QUESTIONS`) : `PREPARE`, `READY`, `COUNTDOWN` → `AVAILABLE` ;
+  `STARTED`, `PAUSED` → `STOPPED` (jouée, interrompue) ; `STOPPED`, `REVEALED` → inchangé.
+- **Son de question** : arrêté après la remise à zéro. Un tick de chrono en vol est ignoré après le `NEW_GAME`.
+- **LED et ambiance** : à chaque `NEW_GAME` appliqué, quelles que soient les options.
+- **Joueurs purgés** : leurs connexions sont déliées dans le hub.
+- **Entracte** : `NEW_GAME` est refusé (`NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }`) ; sortir de l'entracte d'abord.
 - Contrat : `contracts/websocket-actions.md` §NEW_GAME et §NEW_GAME_REFUSED.
 
 **Métadonnées de quiz** (v4.0.1) :

@@ -754,7 +754,8 @@ Backstage.
 - **Garde de 5 s** (`NO_RESPONSE_DELAY_MS`) : sans confirmation, la popup se débloque et affiche « Pas de réponse du
   serveur — réessayez. ». Si la WebSocket est fermée à l'envoi : « Connexion perdue — réessayez. ».
 - **Fermeture** : la popup se ferme sur le lancement observé (phase passée à `NEW_GAME`, ou données renouvelées si la
-  phase valait déjà `NEW_GAME` à l'envoi).
+  phase valait déjà `NEW_GAME` à l'envoi). Une réponse **tardive**, arrivée après la garde de 5 s, ferme aussi la popup :
+  un second « Lancer » ne rejoue pas un `NEW_GAME`.
 - Joueurs des tablettes : libellé « N inscrits, M connectés » (compteurs `vplayers` et `vplayersConnected`).
 - `newGame(options)` (`useWebSocket.js`) envoie toujours les quatre champs.
 
