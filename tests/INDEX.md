@@ -19,3 +19,6 @@
 | server-go/web/src/utils/fnv1a.246.test.js | unit | vplayer | #246 FNV-1a UTF-8 : 6 vecteurs du contrat | feature | |
 | server-go/web/src/pages/VPlayerPage.final-ack.246.test.jsx | unit | vplayer | #246 Batch 2 : texte final au STOP, renvoi 1 s, gel du clavier (désactivé jusqu'à F-STOP : TEST_246_BATCH2=1) | feature | critical |
 | tests/procedures/ardoise-246.md | manual | vplayer, websocket, logging, admin-game, anim | #246 procédure manuelle (utilisateur uniquement) : 10 tablettes, onglet périmé, double onglet, STOP en pleine frappe, mode avion, logs | feature | |
+| server-go/web/src/pages/GamePage.ardoise-reveal-gate.246.test.jsx | unit | admin-game | #246 Batch 2 — maquette admin validée : pastilles, compteur n/N reçues, REPONSE désactivé + motif, « Révéler quand même… » + confirmation, « non confirmée » | feature | critical |
+| server-go/web/src/pages/AnimPage.ardoise-reveal-gate.246.test.jsx | unit | anim | #246 Batch 2 — maquette anim validée : mêmes états et règles que l'admin | feature | critical |
+| server-go/web/src/pages/VPlayerPage.overlay.246.test.jsx | unit | vplayer | #246 Batch 2 — maquette tablette validée : Envoi…, pause sans invitation, « Aucune réponse », connexion perdue, écrans de session | feature | critical |

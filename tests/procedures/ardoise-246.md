@@ -126,8 +126,9 @@
 | Étape | Action | Résultat attendu | Résultat obtenu | OK ? |
 |-------|--------|------------------|-----------------|------|
 | 1 | ARDOISE démarrée ; une tablette tape « PARIS EN FRANCE » **sans pause** et l'admin clique STOP au milieu de la frappe | La réponse affichée à la révélation = le texte **complet** tapé jusqu'au gel du clavier | | |
-| 2 | Regarder la tablette | « Envoi… » puis **« ✓ Réponse reçue »** ; le clavier est gelé | | |
-| 3 | Équipe qui n'a rien écrit | « Reçu — aucune réponse écrite » ; compte comme reçue | | |
+| 2 | Regarder la tablette | « Envoi de votre réponse… » puis **« ✓ Réponse reçue »** ; le clavier est gelé | | |
+| 3 | Équipe qui n'a rien écrit | Clavier verrouillé avec le texte indicatif **« Aucune réponse »** (jamais « Votre réponse… ») et message **« ✓ Reçu — aucune réponse écrite »** ; compte comme reçue | | |
+| 3b | Tablette dont le WiFi est coupé juste après STOP | « ⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau » ; au retour du réseau, passe à « ✓ Réponse reçue » | | |
 | 4 | Admin/anim | Pastilles « reçue » au vert au fil des accusés ; compteur **n/10 reçues** exact | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
@@ -151,7 +152,7 @@
 
 | Étape | Action | Résultat attendu | Résultat obtenu | OK ? |
 |-------|--------|------------------|-----------------|------|
-| 1 | Pendant la saisie : PAUSE | Les finals arrivent (coches vertes) ; clavier gelé | | |
+| 1 | Pendant la saisie : PAUSE | Les finals arrivent (coches vertes) ; clavier gelé. Sur la tablette : **« ⏸ Jeu en pause · ⏳ envoi de votre réponse… »** puis **« ⏸ Jeu en pause · ✓ réponse reçue »** — **aucun** message du type « vous pourrez continuer » ni « Votre réponse… » | | |
 | 2 | CONTINUE | Coches remises à zéro partout (`RECEIVED=false`), la saisie reprend avec le texte déjà écrit | | |
 | 3 | STOP → tout reçu → REPONSE | REVEAL sans blocage | | |
 

@@ -296,3 +296,43 @@ func TestClientTrace246_PayloadAboveOneKilobyteIsIgnored(t *testing.T) {
 		}
 	}
 }
+
+// Non-régression (arbitrage du teamleader) : CLIENT_TRACE est purement diagnostique, il est
+// accepté dans TOUTES les phases, ENTRACTE comprise (la seconde barrière d'allow-list de
+// l'entracte ne doit pas le bloquer : une coupure pendant l'entracte est justement à tracer).
+func TestClientTrace246_AcceptedInEveryPhaseEntracteIncluded(t *testing.T) {
+	phases := []game.GamePhase{
+		game.PhaseEnroll, game.PhasePrepare, game.PhaseReady, game.PhaseCountdown, game.PhaseStarted,
+		game.PhasePaused, game.PhaseStopped, game.PhaseRevealed, game.PhaseNewGame,
+	}
+	for _, ph := range phases {
+		t.Run(string(ph), func(t *testing.T) {
+			e := newEnv246(t)
+			_, cid := e.dial(t, "/ws/player")
+			e.app.engine.SetPhase(ph)
+
+			e.send(t, cid, "vplayer", "CLIENT_TRACE", map[string]interface{}{"KIND": "VISIBILITY", "AT": 1, "DETAIL": map[string]interface{}{"STATE": "hidden"}})
+
+			if !e.waitLog(t, game.LogLevelWarn, "kind=VISIBILITY") {
+				t.Fatalf("CLIENT_TRACE doit être journalisé en phase %s ; logs=%v", ph, e.logLines(""))
+			}
+		})
+	}
+	t.Run("ENTRACTE", func(t *testing.T) {
+		e := newEnv246(t)
+		_, cid := e.dial(t, "/ws/player")
+		e.app.engine.SetPhase(game.PhaseStopped)
+		if !e.app.engine.SetEntracte(true) || !e.app.engine.IsEntracte() {
+			t.Skip("précondition : entracte non activable dans ce montage")
+		}
+
+		e.send(t, cid, "vplayer", "CLIENT_TRACE", map[string]interface{}{"KIND": "WS_GAP", "AT": 1, "DETAIL": map[string]interface{}{"DOWN_MS": 3000, "DROPPED_SENDS": 2}})
+
+		if !e.waitLog(t, game.LogLevelWarn, "kind=WS_GAP") {
+			t.Fatalf("CLIENT_TRACE doit être accepté pendant l'ENTRACTE ; logs=%v", e.logLines(""))
+		}
+		if e.hasLog(game.LogLevelWarn, "blocked during ENTRACTE") {
+			t.Error("CLIENT_TRACE ne doit pas être rejeté par la barrière ENTRACTE")
+		}
+	})
+}

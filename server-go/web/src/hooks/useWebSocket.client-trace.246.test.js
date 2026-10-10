@@ -51,7 +51,9 @@ describe('useWebSocket — CLIENT_TRACE (#246)', () => {
       const e = new Event('pageshow'); e.persisted = true
       window.dispatchEvent(e)
     })
-    expect(traces(ws).filter((t) => t.KIND === 'PAGESHOW')[0].DETAIL.PERSISTED).toBe(true)
+    const pageshow = traces(ws).filter((t) => t.KIND === 'PAGESHOW')
+    expect(pageshow.length, 'un CLIENT_TRACE de KIND PAGESHOW doit être émis sur l’événement pageshow').toBe(1)
+    expect(pageshow[0].DETAIL?.PERSISTED, 'DETAIL.PERSISTED (restauration bfcache)').toBe(true)
   })
 
   it('FREEZE puis RESUME', () => {
@@ -84,7 +86,9 @@ describe('useWebSocket — CLIENT_TRACE (#246)', () => {
     act(() => { vi.advanceTimersByTime(8000) })
     const ws2 = wsInstances[wsInstances.length - 1]
     act(() => { ws2.simulateOpen() })
-    expect(traces(ws2).find((t) => t.KIND === 'WS_GAP').DETAIL.DROPPED_SENDS).toBe(0)
+    const gap = traces(ws2).find((t) => t.KIND === 'WS_GAP')
+    expect(gap, 'un CLIENT_TRACE WS_GAP doit être émis à la reconnexion même sans envoi abandonné').toBeTruthy()
+    expect(gap.DETAIL?.DROPPED_SENDS, 'DETAIL.DROPPED_SENDS').toBe(0)
   })
 
   describe('ARDOISE_CLEARED_SEEN (admin / anim)', () => {

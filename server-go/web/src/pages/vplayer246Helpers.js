@@ -44,6 +44,7 @@ export function makeGame(send, overrides = {}) {
     clearPlayerConnectStatus: vi.fn(),
     playerEvictedStatus: overrides.playerEvictedStatus ?? null,
     clearPlayerEvictedStatus: vi.fn(),
+    ardoiseFinalAck: overrides.ardoiseFinalAck ?? null,
   }
 }
 
