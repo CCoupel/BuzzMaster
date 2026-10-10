@@ -733,6 +733,25 @@ compteur.
 `clearOwnVPlayerSession(ownId)` n'efface `vplayer_*` que si l'ID stocké est celui de l'onglet. Le
 repli par nom a été supprimé (`VPlayerPage`, `EnrollPage`).
 
+## LaunchGameDialog — popup « Lancer la partie » (v11.2, #243)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_new_game__purge_popup_details.html`. Composant
+`components/LaunchGameDialog.jsx` (CSS `LaunchGameDialog.css`), partagé par la page de jeu (`GamePage`) et le
+Backstage.
+
+- Quatre cases : **Scores** et **Questions** cochées par défaut ; **Joueurs des tablettes** et **Équipes**
+  décochées.
+- « Joueurs des tablettes » coche et verrouille « Scores » (`disabled`, note explicative).
+- Compteurs affichés depuis l'état reçu (`getLaunchCounts`) : équipes, joueurs, joueurs de tablette connectés,
+  questions jouées sur le total.
+- Bouton : « Lancer la partie », ou « Lancer sans rien effacer » si aucune case n'est cochée. Envoi désactivé
+  (`sent`) après le premier clic.
+- Avertissements : « Dans tous les cas : la question en cours s'arrête. » et, si une question tourne, « ⚠ Une
+  question est en cours : elle sera interrompue. ».
+- `NEW_GAME_REFUSED` (`newGameRefused`, réducteur de `useWebSocket.js`) : la popup reste ouverte et affiche le
+  motif (`PLAYERS_REQUIRE_SCORES`).
+- `newGame(options)` (`useWebSocket.js`) envoie toujours les quatre champs.
+
 ## Page Équipes — verrou pendant une question (v11.2, #249)
 
 Maquette validée : `docs/mockup/v11.2/ui/admin_teams__lock_during_question.html`.
@@ -1534,7 +1553,7 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 
 **Décisions d'architecture** :
 - Label "Questions" → "Quiz" (v4.0.1) — scope élargi (métadonnées + fonds + questions)
-- Bouton "NOUVELLE PARTIE" déclenche `NEW_GAME` avec reset complet depuis STOPPED uniquement
+- Bouton « LANCER LA PARTIE » (v11.2, #243) ouvre `LaunchGameDialog` et envoie `NEW_GAME` avec options (anciennement « NOUVELLE PARTIE », reset complet depuis STOPPED uniquement)
 - Métadonnées quiz dans Zone Quiz (centralisées), pas sur GamePage
 
 **Fichiers clés** :
