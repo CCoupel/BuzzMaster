@@ -105,6 +105,46 @@ export default function ArdoiseRevealGate({ pending, variant = 'admin', onForce 
   )
 }
 
+const RECEIPT_ICONS = {
+  ok: { glyph: '✓', label: 'Réponse reçue' },
+  wait: { glyph: '⏳', label: 'En attente de la réponse finale' },
+  off: { glyph: '⚠', label: 'Tablette hors ligne — réponse finale non reçue' },
+}
+const UNCONFIRMED_LABEL = 'Non confirmée — révélée sans réponse finale'
+
+/**
+ * Icône de réception d'une équipe, à GAUCHE du texte de la réponse
+ * (maquettes validées `*__receipt_icon`) : ✓ vert reçue · ⏳ en attente · ⚠ orange
+ * hors ligne ; après un REVEAL forcé, le glyphe d'origine grisé (« non confirmée »).
+ * `title` + `aria-label` : l'information ne passe pas seulement par la couleur.
+ * Sans `status`, la colonne reste réservée (même hauteur de carte quel que soit l'état).
+ */
+export function ArdoiseReceiptIcon({ status, revealed }) {
+  const icon = RECEIPT_ICONS[status]
+  if (!icon) return <span className="ardoise-receipt-icon" aria-hidden="true" />
+  if (revealed && status !== 'ok') {
+    return (
+      <span className="ardoise-receipt-icon unconfirmed" role="img" aria-label={UNCONFIRMED_LABEL} title={UNCONFIRMED_LABEL}>
+        {icon.glyph}
+      </span>
+    )
+  }
+  return (
+    <span className={`ardoise-receipt-icon ${status}`} role="img" aria-label={icon.label} title={icon.label}>
+      {icon.glyph}
+    </span>
+  )
+}
+
+/** Légende de l'en-tête (inchangée côté admin ; ajoutée à côté du compteur côté anim). */
+export function ArdoiseReceiptLegend({ className = '' }) {
+  return (
+    <div className={`ardoise-legend ${className}`.trim()}>
+      <span>✓ reçue</span><span>⏳ en attente</span><span>⚠ hors ligne</span>
+    </div>
+  )
+}
+
 /** Pastille de réception d'une équipe (✓ reçue / ⏳ en attente / ⚠ hors ligne / non confirmée). */
 export function ArdoiseReceiptChip({ status, revealed, className = '' }) {
   let kind, label

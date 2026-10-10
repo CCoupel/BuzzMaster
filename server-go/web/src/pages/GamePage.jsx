@@ -27,7 +27,7 @@ import {
   rafaleCounterForTeam,
   calcRafaleTeamAward,
 } from '../utils/pointsAward'
-import ArdoiseRevealGate, { ArdoiseReceiptChip, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
+import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import Button from '../components/Button'
 import Card from '../components/Card'
@@ -939,7 +939,7 @@ export default function GamePage() {
               <div className="memory-selector-label">Réponses ARDOISE</div>
               <ArdoiseReceiptCounter receipt={ardoiseReceipt} live={gameState.phase === 'STARTED'} />
               {gameState.phase !== 'STARTED' && (
-                <div className="ardoise-legend"><span>✓ reçue</span><span>⏳ en attente</span><span>⚠ hors ligne</span></div>
+                <ArdoiseReceiptLegend />
               )}
             </div>
             <div className="ardoise-answers-list">
@@ -963,7 +963,8 @@ export default function GamePage() {
                       {delayLabel && <span className="ardoise-answer-delay">{delayLabel}</span>}
                     </div>
                     <div className="ardoise-answer-text-row">
-                      <span className={`ardoise-answer-text ${answer ? 'has-answer' : 'no-answer'}`}>
+                      <ArdoiseReceiptIcon status={receiptStatus} revealed={gameState.phase === 'REVEALED'} />
+                      <span className={`ardoise-answer-text ${answer ? 'has-answer' : 'no-answer'}${gameState.phase === 'REVEALED' && receiptStatus && receiptStatus !== 'ok' ? ' unconfirmed' : ''}`}>
                         {answer?.TEXT || '—'}
                       </span>
                       {gameState.phase === 'REVEALED' && (
@@ -976,13 +977,6 @@ export default function GamePage() {
                         </button>
                       )}
                     </div>
-                    {receiptStatus && (
-                      <ArdoiseReceiptChip
-                        status={receiptStatus}
-                        revealed={gameState.phase === 'REVEALED'}
-                        className="ardoise-answer-chip"
-                      />
-                    )}
                   </div>
                 )
               })}

@@ -1454,9 +1454,10 @@
      haut au lieu de se centrer verticalement contre tout le bloc de texte
      — conforme à la maquette (_work/mockups/116-ardoise-grid.html). */
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding-left: 1rem;
+  gap: 0.35rem;
+  /* #246 : [icône de réception 1.1rem][texte][+pts] — colonne d'icône fixe */
+  padding-left: 0.1rem;
+  min-height: 1.35rem;
 }
 
 /* #116 (F3) — décision de conception : pas de troncature, pas de line-clamp,
@@ -1537,5 +1538,8 @@
   color: var(--gray-500, #6b7280);
 }
 .ardoise-answer-row.st-pending { border-color: #f59e0b; }
-.ardoise-answer-row.st-offline { border-color: #ef4444; background: #fff7f7; }
-.ardoise-answer-chip { margin-left: 1rem; }
+.ardoise-answer-row.st-offline { border-color: #ea580c; background: #fff7ed; }
+.ardoise-answer-text { flex: 1; }
+.ardoise-answer-text.unconfirmed { color: var(--gray-500, #6b7280); }
+.ardoise-answer-text-row .ardoise-points-btn { margin-left: auto; }
+.ardoise-answer-row.st-offline { background: #fff7ed; }
