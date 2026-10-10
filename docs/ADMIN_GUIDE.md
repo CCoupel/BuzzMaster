@@ -210,7 +210,7 @@ Une fois la réponse révélée, la page de jeu (`/admin`) permet d'attribuer de
   la mention « ✓ déjà créditée » et son montant. Elle ne peut pas être recochée.
 - **Barre d'attribution** : un champ « Points par équipe » (− / + et saisie), « Tout sélectionner » et « Tout
   désélectionner ». Le bouton **« Donner les points (N) »** indique le nombre d'équipes sélectionnées. Si le montant
-  est négatif, il devient **« Retirer les points (N) »**, en rouge. Il est désactivé à N = 0.
+  est négatif, il devient **« Retirer les points (N) »**, en rouge. Il est désactivé à N = 0. Si le lot est bloqué (montant nul, ou hors de −999 à 999), la raison s'affiche sous la barre : « Montant nul ou invalide pour : … » ou « Le montant doit être compris entre −999 et 999 ».
 - **Clic sur une réponse QCM** : sélectionne les équipes ayant donné cette réponse et règle le montant. Bonne réponse
   → points de la question. Mauvaise réponse → **−1** (pénalité par défaut). Modifier le montant à la main garde la
   sélection.
