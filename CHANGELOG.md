@@ -44,7 +44,7 @@ Historique des versions du projet BuzzControl.
 
 - **Automatisée** : `go test -race ./...` vert (9 paquets), `go vet` propre, Vitest 2875/2875, build web OK. Non-régression des autres modes de jeu verte.
 - **Manuelle** : à réaliser par l'utilisateur, procédure `tests/procedures/ardoise-246.md` (matériel réel, veille et bfcache, double onglet, création du fichier de log, rendu visuel des maquettes).
-- **Non couvert par test automatique** : `CLIENT_EVICTED_SLOW` (code présent, pas de test).
+- **Tests automatiques des évictions de diagnostic** : `CLIENT_EVICTED_SLOW` (client, type, taille de la file), `CLIENT_WRITE_TIMEOUT` et `INCOMING_DROPPED` sont couverts (`slow_client_246_test.go`, commit `d5bf6c8e`), y compris le contre-test d'un client qui lit.
 
 ## [11.1.0] - 2026-09-25 — Média sonore (#219, #236, #237) + Navbar refactorisée (#238) + Logo BuzzControl (#239) + Forçage affichage TV (#240) [#241 doublon fermé]
 
