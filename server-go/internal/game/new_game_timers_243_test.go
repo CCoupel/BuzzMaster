@@ -254,3 +254,87 @@ func TestNewGameTimers243_Critical_MemotionCardAndMemorizeTicksBecomeInert(t *te
 		t.Errorf("après NEW_GAME le tick de mémorisation MEMOTION doit être inerte, obtenu %+v", r)
 	}
 }
+
+// --- Réserves de la revue (#243) ---------------------------------------------------------------
+
+// (b) Un tick DÉJÀ EN VOL au moment du NEW_GAME (dernier tick calculé à temps 0, verrou relâché) exécute ensuite
+// OnTimeUp puis Stop() : cela ne doit ni appeler OnTimeUp ni remettre la phase à STOPPED. La course est rendue
+// déterministe en lançant le NEW_GAME DEPUIS le callback OnTimerTick, qui s'exécute précisément entre le calcul du
+// tick (processTimerTick) et le traitement de l'expiration.
+func TestNewGameTimers243_Critical_InFlightExpiryTickNeverFiresTimeUpNorRestoresStopped(t *testing.T) {
+	if testing.Short() {
+		t.Skip("minuteur réel (≈ 3 s), exclu de la boucle rapide (-short)")
+	}
+	e := NewEngine()
+	var timeUps atomic.Int32
+	var injected atomic.Bool
+	e.OnTimeUp = func() { timeUps.Add(1) }
+	e.OnTimerTick = func(ct int) {
+		if ct <= 0 && injected.CompareAndSwap(false, true) {
+			e.InitGameWith(allOptions243(true, false, false, true)) // NEW_GAME pile après le calcul du tick d'expiration
+		}
+	}
+	e.Ready("", &Question{ID: "q1", Type: QuestionTypeArdoise})
+	e.SetPhase(PhaseReady)
+	e.StartImmediate(1) // un seul tick avant expiration
+
+	deadline := time.Now().Add(3 * time.Second)
+	for !injected.Load() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !injected.Load() {
+		t.Fatal("précondition : le tick d'expiration n'a pas eu lieu")
+	}
+	time.Sleep(500 * time.Millisecond) // laisse le goroutine du tick finir son traitement
+
+	if n := timeUps.Load(); n != 0 {
+		t.Errorf("OnTimeUp ne doit pas être appelé pour un tick périmé par le NEW_GAME (%d appel(s))", n)
+	}
+	if ph := e.GetPhase(); ph != GamePhase("NEW_GAME") {
+		t.Errorf("le Stop() tardif du tick ne doit pas remettre la phase à STOPPED, obtenu %s", ph)
+	}
+}
+
+// (d) Sans RESET_QUESTIONS, le statut de la question INTERROMPUE dépend de l'avancement (contrat « statut de la question
+// interrompue ») : jamais lancée → AVAILABLE ; lancée → STOPPED. Avec RESET_QUESTIONS, tout est AVAILABLE.
+func TestNewGame243_Critical_InterruptedQuestionStatusWithoutResetQuestions(t *testing.T) {
+	cases := []struct {
+		phase GamePhase
+		want  QuestionStatus
+	}{
+		{PhasePrepare, "AVAILABLE"},
+		{PhaseReady, "AVAILABLE"},
+		{PhaseCountdown, "AVAILABLE"},
+		{PhaseStarted, "STOPPED"},
+		{PhasePaused, "STOPPED"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.phase), func(t *testing.T) {
+			e := NewEngine()
+			e.Ready("", &Question{ID: "q1", Type: QuestionTypeArdoise})
+			e.SetPhase(tc.phase)
+			if tc.phase == PhaseStarted || tc.phase == PhasePaused {
+				e.mu.Lock()
+				e.setQuestionStatus(StatusStarted) // une question lancée est marquée par le moteur
+				e.mu.Unlock()
+			}
+
+			e.InitGameWith(allOptions243(false, false, false, false))
+
+			got := e.GetQuestionStatus("q1")
+			if got != tc.want && !(tc.want == "AVAILABLE" && got == "") {
+				t.Errorf("question interrompue en %s sans RESET_QUESTIONS : statut %q, attendu %q", tc.phase, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewGame243_InterruptedQuestionIsAvailableWhenQuestionsAreReset(t *testing.T) {
+	e := NewEngine()
+	e.Ready("", &Question{ID: "q1", Type: QuestionTypeArdoise})
+	e.SetPhase(PhaseStarted)
+	e.InitGameWith(allOptions243(true, false, false, true))
+	if got := e.GetQuestionStatus("q1"); got != "AVAILABLE" && got != "" {
+		t.Errorf("RESET_QUESTIONS : toutes à jouer, obtenu %q", got)
+	}
+}

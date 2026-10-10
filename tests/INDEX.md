@@ -43,3 +43,4 @@
 | tests/procedures/new-game-243.md | manual | admin-game, game-engine | #243 procédure manuelle (utilisateur uniquement) | feature | |
 | server-go/internal/game/new_game_timers_243_test.go | unit | game-engine | #243 NEW_GAME : aucun minuteur ne survit (RAFALE classique, ticks RAFALE de carte / MEMOTION carte et mémorisation inertes, chrono différé de fin de son jamais relancé) + témoins positifs | regression | critical, slow |
 | server-go/cmd/server/new_game_sound_243_test.go | integration | game-engine, sound | #243 NEW_GAME coupe le son de question, QUESTION_SOUND_STATE au repos, fin du son sans effet ; refus = son intact | regression | critical |
+| server-go/cmd/server/new_game_review_243_test.go | integration | game-engine, websocket, buzzer-led | #243 revue : refus en entracte (ENTRACTE_ACTIVE ciblé, rien appliqué), déliaison des connexions des joueurs purgés (#246), LED_SET + ambiance après NEW_GAME | regression | critical |
