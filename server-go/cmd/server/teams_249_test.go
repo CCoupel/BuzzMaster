@@ -485,3 +485,137 @@ func serverSetGlobalLogger249(t *testing.T, app *App) {
 	t.Helper()
 	setGlobalLogger246(t, app)
 }
+
+// --- Suppression d'une équipe : historique conservé, TEAM_DELETED, pas d'héritage de « déjà créditée » ---
+// (contrat d6e5fc66 : websocket-actions.md §UPDATE, game-state.md §TEAMS_LOCKED)
+
+// revealedWithCredit249 : question ARDOISE jouée et révélée, « Les Bleus » créditée (+2) ; retourne l'admin.
+func revealedWithCredit249(t *testing.T, e *env246) string {
+	t.Helper()
+	_, admin := e.dial(t, "/ws/admin")
+	_, pc := e.dial(t, "/ws/player")
+	e.connect(t, pc, "Paul", e.paul)
+	e.typeAs(t, pc, e.paul, "PARIS", nil)
+	e.app.engine.Stop()
+	e.app.engine.Reveal()
+	e.send(t, admin, "admin", protocol.ActionTeamPoints, protocol.TeamPointsPayload{Team: "Les Bleus", Points: 2})
+	if !teamsCredited249(e, "Les Bleus") {
+		t.Fatal("précondition : Les Bleus créditée")
+	}
+	return admin
+}
+
+// recreate249 ajoute (ou recrée) une équipe par un UPDATE (sans retirer de clé).
+func (e *env246) recreate249(t *testing.T, admin, team string) {
+	t.Helper()
+	st := e.state249()
+	teams := map[string]interface{}{}
+	for k, v := range st.Teams {
+		teams[k] = v
+	}
+	teams[team] = map[string]interface{}{"NAME": team, "SCORE": 0, "COLOR": []int{0, 0, 255}}
+	e.send(t, admin, "admin", protocol.ActionUpdate, map[string]interface{}{"teams": teams})
+}
+
+func history249(e *env246, eventType, team string) int {
+	n := 0
+	for _, ev := range e.app.engine.GetHistory() {
+		if ev.EventType == eventType && ev.TeamName == team {
+			n++
+		}
+	}
+	return n
+}
+
+func TestTeamDelete249_Critical_RecreatedTeamNeverInheritsTheAlreadyCreditedLock(t *testing.T) {
+	e := newEnv249(t, true)
+	admin := revealedWithCredit249(t, e)
+
+	e.send(t, admin, "admin", protocol.ActionUpdate, e.deletePayload249("Les Bleus"))
+	if _, ok := e.state249().Teams["Les Bleus"]; ok {
+		t.Fatal("précondition : équipe supprimée (REVEALED)")
+	}
+	e.recreate249(t, admin, "Les Bleus") // recréée sous le même nom
+
+	if teamsCredited249(e, "Les Bleus") {
+		t.Fatalf("une équipe recréée sous le même nom ne doit PAS apparaître dans AWARDED_TEAMS : %+v", e.app.getAwardedTeamsPayload())
+	}
+}
+
+func TestTeamDelete249_HistoryIsKeptAndATeamDeletedEventIsAdded(t *testing.T) {
+	e := newEnv249(t, true)
+	admin := revealedWithCredit249(t, e)
+	awardedBefore := history249(e, "POINTS_AWARDED", "Les Bleus")
+	if awardedBefore == 0 {
+		t.Fatal("précondition : un POINTS_AWARDED pour Les Bleus dans l'historique")
+	}
+
+	e.send(t, admin, "admin", protocol.ActionUpdate, e.deletePayload249("Les Bleus"))
+
+	if got := history249(e, "POINTS_AWARDED", "Les Bleus"); got != awardedBefore {
+		t.Errorf("l'historique est conservé (piste d'audit) : POINTS_AWARDED %d → %d", awardedBefore, got)
+	}
+	if got := history249(e, "TEAM_DELETED", "Les Bleus"); got != 1 {
+		t.Errorf("un événement TEAM_DELETED {TEAM_NAME} est ajouté : %d", got)
+	}
+	for _, ev := range e.app.engine.GetHistory() {
+		if ev.EventType == "TEAM_DELETED" && ev.Timestamp == 0 {
+			t.Errorf("TEAM_DELETED porte un TIMESTAMP : %+v", ev)
+		}
+	}
+}
+
+func TestTeamDelete249_CreditedAfterRecreationIsCountedButNotTheOlderOne(t *testing.T) {
+	e := newEnv249(t, true)
+	admin := revealedWithCredit249(t, e)
+	e.send(t, admin, "admin", protocol.ActionUpdate, e.deletePayload249("Les Bleus"))
+	e.recreate249(t, admin, "Les Bleus")
+
+	e.send(t, admin, "admin", protocol.ActionTeamPoints, protocol.TeamPointsPayload{Team: "Les Bleus", Points: 1})
+
+	if !teamsCredited249(e, "Les Bleus") {
+		t.Fatal("un crédit POSTÉRIEUR au dernier TEAM_DELETED est compté")
+	}
+	for _, tm := range e.app.getAwardedTeamsPayload().Teams {
+		if tm.Team == "Les Bleus" && tm.Points != 1 {
+			t.Errorf("seul le nouveau crédit compte (+1), pas l'ancien (+2) : %d", tm.Points)
+		}
+	}
+}
+
+func TestTeamRename249_NoTeamDeletedEventAndTheAlreadyCreditedLockIsKept(t *testing.T) {
+	e := newEnv249(t, true)
+	admin := revealedWithCredit249(t, e)
+
+	e.send(t, admin, "admin", protocol.ActionUpdate, e.renamePayload249("Les Bleus", "Les Azur", "Les Azur"))
+
+	if n := history249(e, "TEAM_DELETED", "Les Bleus") + history249(e, "TEAM_DELETED", "Les Azur"); n != 0 {
+		t.Errorf("un renommage n'est pas une suppression : aucun TEAM_DELETED (%d)", n)
+	}
+	if !teamsCredited249(e, "Les Azur") {
+		t.Errorf("le verrou « déjà créditée » est conservé sous le nouveau nom : %+v", e.app.getAwardedTeamsPayload())
+	}
+}
+
+func TestTeamDelete249_NeverCreditedTeamHasNoSideEffect(t *testing.T) {
+	e := newEnv249(t, true)
+	admin := revealedWithCredit249(t, e) // seule « Les Bleus » est créditée
+	before := e.app.getAwardedTeamsPayload()
+
+	e.send(t, admin, "admin", protocol.ActionUpdate, e.deletePayload249("Les Rouges")) // jamais créditée
+	e.recreate249(t, admin, "Les Rouges")
+
+	if teamsCredited249(e, "Les Rouges") {
+		t.Error("une équipe jamais créditée, supprimée puis recréée, n'est pas « déjà créditée »")
+	}
+	after := e.app.getAwardedTeamsPayload()
+	if len(after.Teams) != len(before.Teams) || !teamsCredited249(e, "Les Bleus") {
+		t.Errorf("les autres équipes créditées sont inchangées : avant %+v, après %+v", before.Teams, after.Teams)
+	}
+	if history249(e, "POINTS_AWARDED", "Les Rouges") != 0 {
+		t.Error("aucun crédit fantôme pour l'équipe supprimée")
+	}
+	if _, ok := e.state249().Teams["Les Rouges"]; !ok {
+		t.Error("la recréation fonctionne")
+	}
+}
