@@ -87,6 +87,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // #249 (v11.2) — liste des équipes verrouillée pendant une question : ni renommage
     // ni suppression (le serveur refuse). Toujours sérialisé côté serveur.
     TEAMS_LOCKED: false,
+    // #252 (v11.2) — dernière modification de score : un nouveau SEQ avec DISPLAY=false est une
+    // correction cachée (les écrans prennent les scores comme référence SANS animation).
+    SCORE_CHANGE: { SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: [] },
     // ENTRACTE_CONFIG — configuration DIFFUSÉE au panneau (gelée pendant une
     // pause active, corrections C4). entracteConfigSaved (ci-dessous) est la
     // configuration ENREGISTRÉE, toujours à jour, admin-only — c'est elle que
@@ -485,6 +488,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // mais on garde le repli sur prev pour un client plus ancien / un message partiel.
             entracte: MSG.GAME.ENTRACTE ?? prev.entracte,
             TEAMS_LOCKED: MSG.GAME.TEAMS_LOCKED ?? prev.TEAMS_LOCKED,
+            SCORE_CHANGE: MSG.GAME.SCORE_CHANGE ?? prev.SCORE_CHANGE,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
             // ENTRACTE_CONFIG_SAVED (corrections C4) — diffusion restreinte à
             // l'admin (AdminOnlyGameFields), même repli que QUIZ_OBJECTIVES :
@@ -1031,12 +1035,18 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('DELETE', { ID: questionId })
   }, [sendMessage])
 
-  const setBumperPoints = useCallback((bumperMac, points) => {
-    sendMessage('BUMPER_POINTS', { ID: bumperMac, POINTS: points })
+  // #252 : `options.display === false` = correction cachée (champ DISPLAY:false, aucun effet
+  // public). Absent / autre = comportement v11.1 (aucun champ DISPLAY envoyé).
+  const setBumperPoints = useCallback((bumperMac, points, options) => {
+    const msg = { ID: bumperMac, POINTS: points }
+    if (options?.display === false) msg.DISPLAY = false
+    return sendMessage('BUMPER_POINTS', msg)
   }, [sendMessage])
 
-  const setTeamPoints = useCallback((teamName, points) => {
-    sendMessage('TEAM_POINTS', { TEAM: teamName, POINTS: points })
+  const setTeamPoints = useCallback((teamName, points, options) => {
+    const msg = { TEAM: teamName, POINTS: points }
+    if (options?.display === false) msg.DISPLAY = false
+    return sendMessage('TEAM_POINTS', msg)
   }, [sendMessage])
 
   // #219 (v11.1) — un des trois gestes de conduite sur le média sonore de la
