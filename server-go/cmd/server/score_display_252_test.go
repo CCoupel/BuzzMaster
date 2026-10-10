@@ -442,3 +442,80 @@ func TestScoreDisplay252_Critical_ZeroPointsFromTheAnimAreRecordedAndLockTheTeam
 		t.Errorf("le lot ignore l'équipe verrouillée par le 0 pt de l'anim : %+v", r)
 	}
 }
+
+// --- DISPLAY:false n'est honoré que pour l'émetteur ADMIN (décision CDP, revue #252 mineur 1) -------------------------
+// Envoyé par l'anim, il est ignoré : le crédit est traité comme visible (effets normaux, SCORE_CHANGE.DISPLAY true,
+// historique visible, équipe « déjà créditée »), avec un WARN journalisé.
+
+func (e *env244) animSend(t *testing.T, action string, payload map[string]interface{}) {
+	t.Helper()
+	_, anim := e.dial(t, "/ws/anim")
+	e.send(t, anim, "anim", action, payload)
+}
+
+// warnHiddenRefused : WARN SCORE_CORRECTION_HIDDEN_REFUSED (contracts/logging.md) avec type=anim et l'action.
+func warnHiddenRefused(e *env244, action string) bool {
+	return e.hasLog(game.LogLevelWarn, "SCORE_CORRECTION_HIDDEN_REFUSED", `type="anim"`, "action="+action)
+}
+
+func TestScoreDisplay252_Critical_DisplayFalseFromTheAnimIsIgnoredAndTreatedAsVisible(t *testing.T) {
+	e := newEnv244(t)
+	ambBefore := e.ambiance.Count()
+
+	e.animSend(t, protocol.ActionTeamPoints, map[string]interface{}{"TEAM": "Les Bleus", "POINTS": 3, "DISPLAY": false})
+
+	time.Sleep(400 * time.Millisecond)
+	if e.gagneCount() != 1 {
+		t.Errorf("effets publics NORMAUX malgré DISPLAY:false de l'anim : son « gagné » (%v)", e.sound.Played())
+	}
+	if !e.cometTeams()["Les Bleus"] {
+		t.Error("comète LED jouée")
+	}
+	if e.ambiance.Count() <= ambBefore {
+		t.Error("pulsation d'ambiance jouée")
+	}
+	sc, _ := e.scoreChange(t)
+	if !sc.Display {
+		t.Errorf("SCORE_CHANGE.DISPLAY = true (le DISPLAY:false de l'anim est ignoré) : %+v", sc)
+	}
+	if ev, ok := e.lastHistoryEvent("Les Bleus"); !ok || ev["DISPLAY"] == false {
+		t.Errorf("historique visible (pas DISPLAY:false) : %v", ev)
+	}
+	if !teamsCredited249(e.env246, "Les Bleus") {
+		t.Error("l'équipe est « déjà créditée » comme pour un crédit normal")
+	}
+	if !warnHiddenRefused(e, `"`+protocol.ActionTeamPoints+`"`) {
+		t.Errorf("WARN SCORE_CORRECTION_HIDDEN_REFUSED type=anim action=TEAM_POINTS ; logs=%v", e.logLines(game.LogLevelWarn))
+	}
+	if e.countLog(game.LogLevelWarn, "SCORE_CORRECTION_HIDDEN ") > 0 {
+		t.Error("ce n'est PAS une correction cachée : pas de SCORE_CORRECTION_HIDDEN")
+	}
+}
+
+func TestScoreDisplay252_DisplayFalseFromTheAnimOnBumperPointsIsIgnoredToo(t *testing.T) {
+	e := newEnv244(t)
+	mac := e.buzzers["Les Bleus"]
+
+	e.animSend(t, protocol.ActionBumperPoints, map[string]interface{}{"ID": mac, "POINTS": 4, "DISPLAY": false})
+
+	time.Sleep(400 * time.Millisecond)
+	sc, _ := e.scoreChange(t)
+	if e.gagneCount() != 1 || !sc.Display || len(sc.Players) != 1 {
+		t.Errorf("effets normaux et SCORE_CHANGE.DISPLAY true (son %d, %+v)", e.gagneCount(), sc)
+	}
+	if !warnHiddenRefused(e, `"`+protocol.ActionBumperPoints+`"`) {
+		t.Errorf("WARN SCORE_CORRECTION_HIDDEN_REFUSED type=anim action=BUMPER_POINTS ; logs=%v", e.logLines(game.LogLevelWarn))
+	}
+}
+
+func TestScoreDisplay252_DisplayFalseFromTheAdminIsStillHonoured(t *testing.T) {
+	e := newEnv244(t)
+	e.teamPoints(t, "Les Bleus", 3, boolPtr252(false))
+	sc, _ := e.scoreChange(t)
+	if sc.Display || e.gagneCount() != 0 || !e.hasLog(game.LogLevelWarn, "SCORE_CORRECTION_HIDDEN") {
+		t.Errorf("non-régression : l'admin garde la correction cachée (DISPLAY %v, son %d)", sc.Display, e.gagneCount())
+	}
+	if e.countLog(game.LogLevelWarn, "SCORE_CORRECTION_HIDDEN_REFUSED") > 0 {
+		t.Error("aucun WARN _REFUSED pour l'admin")
+	}
+}
