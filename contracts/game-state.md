@@ -90,7 +90,14 @@ type Page =
 - `true` **de la sélection d'une question** (`Ready()`, entrée en `PREPARE`) **jusqu'à la révélation de sa réponse** (`REVEALED`), à `false` en `REVEALED`, sur `NEW_GAME`/`InitGame` et au démarrage du serveur. Valeur tenue par un drapeau du moteur, **pas** déduite de la phase : `STOPPED` est aussi la phase de repos (démarrage du serveur, fin d'inscription).
 - Une question qui ne passe jamais par `REVEALED` (abandonnée) garde le verrou jusqu'à la sélection suivante, qui le repose, ou jusqu'à `NEW_GAME`.
 - Effet : tant qu'il vaut `true`, **aucune équipe existante ne peut être renommée ni supprimée** (refus serveur, `websocket-actions.md` §UPDATE) ; ajouter une équipe, changer sa couleur, affecter ou déplacer un joueur restent permis.
-- Raison : de nombreux états de la question sont indexés par le **nom (clé) d'équipe** (`ARDOISE_ANSWERS`, `MEMORY_TEAM_PAIRS`, `MEMORY_TEAM_ERRORS`, `MEMORY_PAIR_OWNERS`, `MEMORY_PARTICIPATING_TEAMS`, `MEMORY_CURRENT_TEAM`, `MEMOTION_CARD_TEAMS`, `MEMOTION_PARTICIPATING_TEAMS`, `MEMOTION_CURRENT_TEAM`, `RAFALE_TEAM_COUNTERS`, `RAFALE_TEAM_BEST`, `RAFALE_PARTICIPATING_TEAMS`, historique des points qui alimente `AWARDED_TEAMS`).
+- Raison : de nombreux états sont indexés par le **nom (clé) d'équipe**. **Liste fermée** (v11.2), reportée en entier sur la nouvelle clé lors d'un renommage permis (hors verrou, `REVEALED` compris) :
+  - **Maps dont la clé est l'équipe** : `ARDOISE_ANSWERS`, `MEMORY_TEAM_PAIRS`, `MEMORY_TEAM_ERRORS`, `RAFALE_TEAM_COUNTERS`, `RAFALE_TEAM_CATEGORY_COUNTERS`, `RAFALE_TEAM_BEST`, `RAFALE_TEAM_STREAK`, `RAFALE_TEAM_ERRORS`.
+  - **Maps dont la valeur est l'équipe** : `MEMORY_PAIR_OWNERS` (paire → équipe), `MEMOTION_CARD_TEAMS` (carte → équipe gagnante).
+  - **Listes d'équipes** : `MEMORY_PARTICIPATING_TEAMS`, `MEMOTION_PARTICIPATING_TEAMS`, `RAFALE_PARTICIPATING_TEAMS`.
+  - **Équipe courante** : `MEMORY_CURRENT_TEAM`, `MEMOTION_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM` (les `*_CURRENT_TEAM_COLOR` ne changent pas).
+  - **Historique des points** (`GameEvent.TEAM_NAME`, toutes les entrées) : source d'`AWARDED_TEAMS`, ce qui conserve le verrou « déjà créditée » de la question révélée.
+  - Les joueurs (`bumpers[*].TEAM`) sont déplacés par le message de renommage lui-même. `MEMOTION_ACTIVE.STATE` ne contient aucune clé d'équipe : rien à reporter.
+  - Tout nouveau champ indexé par équipe ajouté à `GameState` **doit** rejoindre cette liste (revue).
 
 ## Question en cours
 
