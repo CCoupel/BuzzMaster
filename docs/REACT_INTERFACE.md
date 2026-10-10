@@ -680,15 +680,18 @@ ailleurs.
 
 ### `ArdoiseRevealGate` (`components/ArdoiseRevealGate.jsx`)
 
-Motif d'attente, pastilles par équipe, compteur `n/N reçues` (gris « Saisie en cours » pendant
-`STARTED`), bouton **« Révéler quand même… »**. Le bouton ouvre une confirmation (`role="dialog"`,
+Motif d'attente, compteur `n/N reçues` (gris « Saisie en cours » pendant `STARTED`), légende des icônes hors
+`STARTED`. L'icône de réception par équipe est `ArdoiseReceiptIcon` (même fichier, à gauche du texte) :
+✓ vert reçue, ⏳ en attente, ⚠ orange hors ligne, glyphe grisé « non confirmée » après un REVEAL forcé
+(`title` et `aria-label` portent le libellé), bouton **« Révéler quand même… »**. Le bouton ouvre une confirmation (`role="dialog"`,
 « Attendre » / « Révéler quand même »). Seule la confirmation envoie `REVEAL {FORCE: true}`.
 Utilisé par `GamePage` (zone ARDOISE, aussi en PAUSED) et `AnimConductPanel` (RÉPONSE en `off`
-avec sous-libellé « en attente »). `AnimArdoiseList` affiche les mêmes pastilles.
+avec sous-libellé « en attente »). `AnimArdoiseList` affiche les mêmes icônes et la légende à côté du
+compteur.
 
 - Garde active dès que `phase` vaut `STOPPED` ou `PAUSED`, sans dépendre de `question.STATUS`.
 - `REVEAL_REFUSED` reçu : le motif s'affiche et « Révéler quand même… » est proposé (cas de course).
-- « non confirmée » : affiché sur une équipe révélée sans accusé.
+- « non confirmée » : glyphe grisé sur l'icône d'une équipe révélée sans accusé (libellé dans l'infobulle).
 
 ### Hook `useWebSocket.js` (v11.2)
 

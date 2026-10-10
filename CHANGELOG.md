@@ -9,14 +9,14 @@ Historique des versions du projet BuzzControl.
 
 ### ⚠️ Changements de comportement
 
-- **REVEAL bloqué en ARDOISE** : tant qu'une équipe attendue n'a pas confirmé son texte final, le REVEAL est refusé (`REVEAL_REFUSED`), tablette hors ligne comprise. L'animateur ou l'admin peut forcer avec « Révéler quand même… » (confirmation demandée). Les équipes non confirmées sont révélées avec leur dernier texte reçu, marquées « non confirmée ».
+- **REVEAL bloqué en ARDOISE** : tant qu'une équipe attendue n'a pas confirmé son texte final, le REVEAL est refusé (`REVEAL_REFUSED`), tablette hors ligne comprise. L'animateur ou l'admin peut forcer avec « Révéler quand même… » (confirmation demandée). Les équipes non confirmées sont révélées avec leur dernier texte reçu ; leur icône de réception passe en glyphe grisé (libellé « Non confirmée » dans l'infobulle).
 - **Tablettes à recharger après mise à jour** : admin et animateur sont livrés avec le serveur, mais une tablette ouverte sur l'ancien bundle n'envoie pas le nouveau message de liaison. Recharger chaque tablette après la mise à jour.
 - **Tablette rechargée après le STOP, ou rechargée / rejointe en cours de question sans rien écrire** : aucun texte final n'est envoyé ; son équipe reste « en attente » jusqu'au forçage. Une page rechargée en cours de question qui a restauré son brouillon, ou sur laquelle on tape, envoie bien son final.
 - **`CLIENT_TRACE` accepté pendant l'entracte** : diagnostic uniquement, sans effet sur le jeu.
 
 ### Added
 
-- **Confirmation du texte final ARDOISE (#246)** — À la sortie de `STARTED` (STOP ou PAUSE), la tablette envoie son texte complet (`ARDOISE_FINAL`, empreinte FNV-1a) et le renvoie chaque seconde jusqu'à l'accusé de réception (`ARDOISE_FINAL_ACK`, ciblé sur la tablette émettrice, sans texte). Au plus 30 envois par liaison. Admin et animateur voient, par équipe, une pastille « reçue », un compteur `n/N reçues` et les équipes hors ligne.
+- **Confirmation du texte final ARDOISE (#246)** — À la sortie de `STARTED` (STOP ou PAUSE), la tablette envoie son texte complet (`ARDOISE_FINAL`, empreinte FNV-1a) et le renvoie chaque seconde jusqu'à l'accusé de réception (`ARDOISE_FINAL_ACK`, ciblé sur la tablette émettrice, sans texte). Au plus 30 envois par liaison. Admin et animateur voient, à gauche du texte de chaque équipe, une icône de réception (✓ reçue, ⏳ en attente, ⚠ hors ligne), un compteur `n/N reçues` et une légende hors `STARTED`.
 - **Forçage du REVEAL (#246)** — Champ facultatif `FORCE` sur `REVEAL` ; `WARN ARDOISE_REVEAL_FORCED` journalise les équipes manquantes.
 - **Journalisation persistante (#246)** — Fichier `data/logs/buzzcontrol.log` (WARN et plus par défaut), rotation par taille (10 Mo, 5 fichiers), section `logging` dans `config.json`. Erreur disque non bloquante. La ligne par frappe passe en `DEBUG`.
 - **Événements de diagnostic (#246)** — `ARDOISE_CLEARED`, `ARDOISE_SEQ_GAP` / `ARDOISE_SEQ_STALE`, `ARDOISE_STATE_DIVERGED` (invariant sur `ARDOISE_ANSWERS`), `ARDOISE_FINAL_HASH_MISMATCH`, `ARDOISE_REVEAL_REFUSED`, `PLAYER_ACTION_UNBOUND`, `PLAYER_FOREIGN_ID`, `VPLAYER_NAME_MISMATCH`, `VPLAYER_DUPLICATE_SESSION`, `VPLAYER_DUPLICATE_NAME`, `CLIENT_EVICTED_SLOW`, `CLIENT_WRITE_TIMEOUT`, `INCOMING_DROPPED`. Catalogue complet : `contracts/logging.md`.
