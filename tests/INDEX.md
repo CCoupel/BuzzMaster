@@ -5,6 +5,7 @@
 > plus des lignes fichier pour les exceptions (quarantaine). Lot sans ligne = `feature`.
 > Convention : `context/COMMON.md` section 15. Statuts : `feature` | `regression` | `quarantaine`.
 > Tags : `smoke`, `critical`, `slow`.
+> Lignes #246 par fichier (exception COMMON §15.1) : Go exige les `_test.go` dans le dossier du paquet testé (`cmd/server`, `internal/*`), Vitest les colocalise avec le composant ; aucun dossier `<famille>/<theme>/<lot>/` n'est possible sans casser l'accès aux symboles non exportés / aux mocks relatifs. Un fichier = un lot (< 50 cas).
 
 | Chemin | Niveau | Composant | Feature | Statut | Tags |
 |--------|--------|-----------|---------|--------|------|

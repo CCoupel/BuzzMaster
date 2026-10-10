@@ -86,7 +86,8 @@ describe('VPlayerPage — messages ARDOISE après STOP / PAUSE (#246, maquette t
     const t = text(m.view.container)
     expect(t).toMatch(/Jeu en pause/)
     expect(t).toMatch(/envoi de votre réponse…/)
-    expect(t).not.toMatch(/continuer|vous pourrez|Votre réponse…/i)
+    expect(t).not.toMatch(/continuer|vous pourrez/i)
+    expect(t).not.toMatch(/Votre réponse…/) // sensible à la casse : « envoi de votre réponse… » est permis
   })
 
   it('PAUSE, texte vide : « Jeu en pause » et « Aucune réponse », pas de « Votre réponse… »', async () => {
@@ -96,7 +97,8 @@ describe('VPlayerPage — messages ARDOISE après STOP / PAUSE (#246, maquette t
     const t = text(m.view.container)
     expect(t).toMatch(/Jeu en pause/)
     expect(t).toMatch(/Aucune réponse/)
-    expect(t).not.toMatch(/Votre réponse…|continuer/i)
+    expect(t).not.toMatch(/Votre réponse…/)
+    expect(t).not.toMatch(/continuer/i)
   })
 
   it('après STOP, connexion perdue : « Connexion perdue — votre réponse sera envoyée dès le retour du réseau »', async () => {

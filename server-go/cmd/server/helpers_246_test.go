@@ -8,7 +8,6 @@ import (
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -150,14 +149,4 @@ func (e *env246) waitLog(t *testing.T, level game.LogLevel, part string) bool {
 		time.Sleep(20 * time.Millisecond)
 	}
 	return false
-}
-
-// requireBatch2 désactive un test tant que le Batch 2 du lot A (ARDOISE_FINAL, accusé, garde de
-// REVEAL, FORCE, REVEAL_REFUSED) n'est pas implémenté. Définir TEST_246_BATCH2=1 pour les exécuter ;
-// le test-writer retire cet appel au Batch 2, une fois B-STOP livré.
-func requireBatch2(t *testing.T) {
-	t.Helper()
-	if os.Getenv("TEST_246_BATCH2") == "" {
-		t.Skip("Batch 2 #246 (ARDOISE_FINAL / garde REVEAL) non implémenté — TEST_246_BATCH2=1 pour exécuter")
-	}
 }

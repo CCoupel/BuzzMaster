@@ -108,20 +108,26 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
   })
 
   describe('accusé ARDOISE_FINAL_ACK', () => {
-    function mountAck(ackRef, { phase = 'STOPPED' } = {}) {
+    function mountAck({ phase: phase0 = 'STARTED' } = {}) {
       const send = vi.fn(() => true)
-      let ack = null, key = ''
-      let cur = null
+      let phase = phase0, ack = null
+      let cur = null, key = null
+      const build = () => makeGame(send, {
+        playerConnectStatus: BOUND(), ardoiseFinalAck: ack,
+        gameState: { phase, question: { ID: 'q42', TYPE: 'ARDOISE', ARDOISE_KEYBOARD_TYPE: 'AZERTY' } },
+      })
       useGame.mockImplementation(() => {
-        const k = JSON.stringify(ack) + phase
-        if (k !== key) {
-          cur = makeGame(send, { playerConnectStatus: BOUND(), ardoiseFinalAck: ack, gameState: { phase: 'STARTED', question: { ID: 'q42', TYPE: 'ARDOISE', ARDOISE_KEYBOARD_TYPE: 'AZERTY' } } })
-          key = k
-        }
+        const k = `${phase}|${JSON.stringify(ack)}`
+        if (k !== key) { cur = build(); key = k }
         return cur
       })
       const view = render(<VPlayerPage />)
-      return { send, view, setPhase: async (p) => { phase = p; key = ''; cur = makeGame(send, { playerConnectStatus: BOUND(), ardoiseFinalAck: ack, gameState: { phase: p, question: { ID: 'q42', TYPE: 'ARDOISE', ARDOISE_KEYBOARD_TYPE: 'AZERTY' } } }); await act(async () => { view.rerender(<VPlayerPage />) }) }, ack: async (a) => { ack = a; key = ''; cur = makeGame(send, { playerConnectStatus: BOUND(), ardoiseFinalAck: a, gameState: { phase, question: { ID: 'q42', TYPE: 'ARDOISE', ARDOISE_KEYBOARD_TYPE: 'AZERTY' } } }); await act(async () => { view.rerender(<VPlayerPage />) }) } }
+      const re = async () => { await act(async () => { view.rerender(<VPlayerPage />) }) }
+      return {
+        send, view,
+        setPhase: async (p) => { phase = p; await re() },
+        ack: async (a) => { ack = a; await re() },
+      }
     }
     const txt = (c) => c.textContent.replace(/\s+/g, ' ')
     const typeAll = async (m, s) => { for (const ch of s) await act(async () => { fireEvent.click(clickKey(m.view.container, ch === ' ' ? '␣' : ch)) }) }

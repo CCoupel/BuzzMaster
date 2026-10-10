@@ -5,8 +5,7 @@ package main
 // Contrat : contracts/websocket-actions.md §ARDOISE_FINAL, §ARDOISE_FINAL_ACK, §REVEAL,
 // §REVEAL_REFUSED ; contracts/game-state.md §ARDOISE_ANSWERS ; contracts/logging.md §3.1.
 //
-// Tests du BATCH 2 (B-STOP) écrits depuis les contrats : désactivés (requireBatch2) tant que
-// ARDOISE_FINAL n'est pas implémenté. Seul le test des vecteurs de hash tourne toujours.
+// Tests du BATCH 2 (B-STOP), écrits depuis les contrats ; permanents depuis la livraison de B-STOP.
 
 import (
 	"buzzcontrol/internal/game"
@@ -49,6 +48,16 @@ func TestArdoiseFinal246_HashVectorsMatchTheContract(t *testing.T) {
 // --- aides ---------------------------------------------------------------------------
 
 func (e *env246) stop() { e.app.engine.Stop() }
+
+// setOffline marque le bumper déconnecté par la voie publique (UPDATE admin avec CONNECTED=false) :
+// GetBumper renvoie une copie, une mutation directe serait sans effet.
+func (e *env246) setOffline(t *testing.T, id string) {
+	t.Helper()
+	fullUpdateBumpers246(t, e, func(b map[string]*game.Bumper) { b[id].Connected = false })
+	if b := e.app.engine.GetBumper(id); b == nil || b.Connected {
+		t.Skip("précondition : le bumper ne peut pas être mis hors ligne par UPDATE dans ce montage")
+	}
+}
 
 // finalMsg : payload ARDOISE_FINAL valide pour le bumper `id` (hash recalculé).
 func finalPayload246(id, questionID, text string) map[string]interface{} {
@@ -98,7 +107,6 @@ func noAction246(t *testing.T, conn *websocket.Conn, action string, window time.
 // --- ARDOISE_FINAL ----------------------------------------------------------------------
 
 func TestArdoiseFinal246_Critical_AcceptedFinalSetsReceivedAndAcksOnlyTheSender(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	paulConn, paul := e.dial(t, "/ws/player")
 	e.connect(t, paul, "Paul", e.paul)
@@ -144,7 +152,6 @@ func TestArdoiseFinal246_Critical_AcceptedFinalSetsReceivedAndAcksOnlyTheSender(
 }
 
 func TestArdoiseFinal246_EmptyTextIsAcceptedAsNothingWritten(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	conn, cid := e.dial(t, "/ws/player")
 	e.connect(t, cid, "Paul", e.paul)
@@ -162,7 +169,6 @@ func TestArdoiseFinal246_EmptyTextIsAcceptedAsNothingWritten(t *testing.T) {
 }
 
 func TestArdoiseFinal246_RefusedCasesAreIgnoredLoggedAndNeverAcked(t *testing.T) {
-	requireBatch2(t)
 	cases := []struct {
 		name    string
 		prepare func(e *env246)
@@ -201,7 +207,6 @@ func TestArdoiseFinal246_RefusedCasesAreIgnoredLoggedAndNeverAcked(t *testing.T)
 }
 
 func TestArdoiseFinal246_Critical_UnboundOrForeignConnectionIsRefused(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, unbound := e.dial(t, "/ws/player")
 	_, bound := e.dial(t, "/ws/player")
@@ -220,7 +225,6 @@ func TestArdoiseFinal246_Critical_UnboundOrForeignConnectionIsRefused(t *testing
 }
 
 func TestArdoiseFinal246_IsIdempotentOnTheSameHash(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	conn, cid := e.dial(t, "/ws/player")
 	e.connect(t, cid, "Paul", e.paul)
@@ -239,7 +243,6 @@ func TestArdoiseFinal246_IsIdempotentOnTheSameHash(t *testing.T) {
 }
 
 func TestArdoiseFinal246_StartedAtIsSetWhenTheFirstNonEmptyTextArrivesByFinal(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, cid := e.dial(t, "/ws/player")
 	e.connect(t, cid, "Paul", e.paul)
@@ -255,7 +258,6 @@ func TestArdoiseFinal246_StartedAtIsSetWhenTheFirstNonEmptyTextArrivesByFinal(t 
 }
 
 func TestArdoiseFinal246_ReceivedAndHashAreAlwaysSerializedAndInputLeavesThemAlone(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, cid := e.dial(t, "/ws/player")
 	e.connect(t, cid, "Paul", e.paul)
@@ -274,7 +276,6 @@ func TestArdoiseFinal246_ReceivedAndHashAreAlwaysSerializedAndInputLeavesThemAlo
 }
 
 func TestArdoiseFinal246_PauseKeepsFinalsAndContinueResetsReceived(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, cid := e.dial(t, "/ws/player")
 	e.connect(t, cid, "Paul", e.paul)
@@ -297,7 +298,6 @@ func TestArdoiseFinal246_PauseKeepsFinalsAndContinueResetsReceived(t *testing.T)
 }
 
 func TestArdoiseFinal246_NewQuestionResetsReceived(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, cid := e.dial(t, "/ws/player")
 	e.connect(t, cid, "Paul", e.paul)
@@ -329,7 +329,6 @@ func (e *env246) finalFrom(t *testing.T, cid, id, text string) {
 
 // Critical — garde REVEAL : refus tant qu'une équipe attendue n'est pas reçue.
 func TestRevealGuard246_Critical_RefusedWhileAnExpectedTeamIsPending(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, paul := e.dial(t, "/ws/player")
 	e.connect(t, paul, "Paul", e.paul)
@@ -363,7 +362,6 @@ func TestRevealGuard246_Critical_RefusedWhileAnExpectedTeamIsPending(t *testing.
 }
 
 func TestRevealGuard246_AnimIsGuardedToo(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	animConn, anim := e.dial(t, "/ws/anim")
 	e.stop()
@@ -378,12 +376,11 @@ func TestRevealGuard246_AnimIsGuardedToo(t *testing.T) {
 
 // Critical — tablette hors ligne comprise (décision utilisateur) : le refus tient, OFFLINE=true.
 func TestRevealGuard246_Critical_OfflineTabletStillBlocksAndIsFlagged(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, paul := e.dial(t, "/ws/player")
 	e.connect(t, paul, "Paul", e.paul)
 	adminConn, admin := e.dial(t, "/ws/admin")
-	e.app.engine.GetBumper(e.mamie).Connected = false // la tablette de Mamie est coupée
+	e.setOffline(t, e.mamie) // la tablette de Mamie est coupée
 	e.stop()
 	e.finalFrom(t, paul, e.paul, "PARIS")
 
@@ -407,12 +404,11 @@ func TestRevealGuard246_Critical_OfflineTabletStillBlocksAndIsFlagged(t *testing
 
 // Tablette coupée au STOP puis revenue avant le REVEAL : son final arrive, REVEAL se débloque.
 func TestRevealGuard246_ReconnectedTabletUnblocksTheReveal(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, paul := e.dial(t, "/ws/player")
 	e.connect(t, paul, "Paul", e.paul)
 	_, admin := e.dial(t, "/ws/admin")
-	e.app.engine.GetBumper(e.mamie).Connected = false
+	e.setOffline(t, e.mamie)
 	e.stop()
 	e.finalFrom(t, paul, e.paul, "PARIS")
 	e.reveal(t, admin, "admin", false)
@@ -434,7 +430,6 @@ func TestRevealGuard246_ReconnectedTabletUnblocksTheReveal(t *testing.T) {
 }
 
 func TestRevealGuard246_ForceRevealsAndMarksMissingTeamsNotReceived(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, paul := e.dial(t, "/ws/player")
 	e.connect(t, paul, "Paul", e.paul)
@@ -461,7 +456,6 @@ func TestRevealGuard246_ForceRevealsAndMarksMissingTeamsNotReceived(t *testing.T
 }
 
 func TestRevealGuard246_ForceWithNothingMissingIsNotLoggedAsForced(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, paul := e.dial(t, "/ws/player")
 	e.connect(t, paul, "Paul", e.paul)
@@ -481,7 +475,6 @@ func TestRevealGuard246_ForceWithNothingMissingIsNotLoggedAsForced(t *testing.T)
 
 // Équipe attendue = clé de teams avec ≥ 1 bumper IS_VPLAYER ; une équipe sans VJoueur n'est pas attendue.
 func TestRevealGuard246_TeamWithoutVPlayerIsNotExpected(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	e.app.engine.SetTeams(map[string]*game.Team{"Les Bleus": {Name: "Les Bleus"}, "Les Rouges": {Name: "Les Rouges"}, "Les Verts": {Name: "Les Verts"}})
 	_, paul := e.dial(t, "/ws/player")
@@ -501,7 +494,6 @@ func TestRevealGuard246_TeamWithoutVPlayerIsNotExpected(t *testing.T) {
 }
 
 func TestRevealGuard246_NonArdoiseQuestionsAreUnchanged(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, admin := e.dial(t, "/ws/admin")
 	e.app.engine.SetPhase(game.PhaseStopped)
@@ -517,7 +509,6 @@ func TestRevealGuard246_NonArdoiseQuestionsAreUnchanged(t *testing.T) {
 }
 
 func TestRevealGuard246_RevealFromPausedIsAlsoGuarded(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	adminConn, admin := e.dial(t, "/ws/admin")
 	e.app.engine.PauseAll()
@@ -532,7 +523,6 @@ func TestRevealGuard246_RevealFromPausedIsAlsoGuarded(t *testing.T) {
 
 // Confidentialité #128 : aucun texte d'une équipe ne parvient aux VJoueurs, accusé compris.
 func TestArdoiseFinal246_NoTextEverReachesAVPlayer(t *testing.T) {
-	requireBatch2(t)
 	e := newEnv246(t)
 	_, paul := e.dial(t, "/ws/player")
 	e.connect(t, paul, "Paul", e.paul)

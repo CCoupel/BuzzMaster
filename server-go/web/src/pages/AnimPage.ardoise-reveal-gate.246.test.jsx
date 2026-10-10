@@ -35,7 +35,7 @@ const mkGame = (phase, answers) => ({
   status: 'connected',
   gameState: {
     phase, timer: phase === 'STARTED' ? 18 : 0, totalTime: 30, gameTime: 10000000,
-    question: { ID: '7', TYPE: 'ARDOISE', QUESTION: 'Capitale ?', ANSWER: 'Paris', POINTS: '2' },
+    question: { ID: '7', TYPE: 'ARDOISE', STATUS: phase, QUESTION: 'Capitale ?', ANSWER: 'Paris', POINTS: '2' },
     ARDOISE_ANSWERS: answers,
   },
   teams: TEAMS, bumpers: BUMPERS, nextQuestion: null, questionPosition: { position: 1, total: 3 },

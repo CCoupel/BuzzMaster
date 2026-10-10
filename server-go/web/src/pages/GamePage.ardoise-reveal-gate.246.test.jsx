@@ -88,7 +88,7 @@ const ALL_RECEIVED = Object.fromEntries(Object.entries(ANSWERS).map(([k, v]) => 
 const makeGameMock = (phase, answers, extra = {}) => ({
   gameState: {
     phase,
-    question: { ID: '10', TYPE: 'ARDOISE', QUESTION: 'Capitale ?', ANSWER: 'Paris', POINTS: '2', ARDOISE_KEYBOARD_TYPE: 'AZERTY' },
+    question: { ID: '10', TYPE: 'ARDOISE', STATUS: phase, QUESTION: 'Capitale ?', ANSWER: 'Paris', POINTS: '2', ARDOISE_KEYBOARD_TYPE: 'AZERTY' },
     remote: 'GAME', timer: phase === 'STARTED' ? 18 : 0, totalTime: 30, MEMORY_PARTICIPATING_TEAMS: [],
     ARDOISE_ANSWERS: answers, gameTime: 1000000,
   },
