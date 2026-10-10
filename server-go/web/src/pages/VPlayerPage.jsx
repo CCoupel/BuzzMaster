@@ -764,6 +764,9 @@ export default function VPlayerPage() {
     else ardoiseThrottleRef.current = setTimeout(flush, wait)
   }, [sendArdoise, bumper])
 
+  // #246 — aucun envoi programmé ne doit survivre à la sortie de la page.
+  useEffect(() => cancelArdoiseTimer, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // #246 — pull-to-refresh : le geste de tirage agit sur le défilement racine
   // (html/body), pas sur `.vplayer-page` seul. Restauré au démontage pour ne pas
   // toucher les autres pages. Aucun `beforeunload` (bloquerait les rechargements voulus).

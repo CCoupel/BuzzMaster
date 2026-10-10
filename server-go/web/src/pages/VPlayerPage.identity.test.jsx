@@ -275,4 +275,45 @@ describe('VPlayerPage — identité de l\'onglet (#246, F-ID)', () => {
     expect(document.documentElement.style.overscrollBehaviorY).toBe('')
     expect(document.body.style.overscrollBehaviorY).toBe('')
   })
+
+  it('démontage : le timer de throttle est annulé, aucun envoi après la sortie de la page', async () => {
+    const gameState = { phase: 'STARTED', question: { ID: 'q1', TYPE: 'ARDOISE' }, enrollmentActive: false }
+    const mock = makeGameMock({ gameState, playerConnectStatus: { status: 'connected', id: ID, name: 'Alice' } })
+    useGame.mockReturnValue(mock)
+    const { getByTestId, unmount } = render(<VPlayerPage />)
+    await act(async () => {})
+    fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'P' } }) // envoi immédiat
+    fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'PA' } }) // programmé (trailing)
+    const before = mock.sendMessage.mock.calls.filter(([a]) => a === 'ARDOISE_INPUT').length
+    unmount()
+    await act(async () => { vi.advanceTimersByTime(1000) })
+    expect(mock.sendMessage.mock.calls.filter(([a]) => a === 'ARDOISE_INPUT').length).toBe(before)
+  })
+
+  it('brouillon : conservé si la question disparaît puis revient avec le même ID (A → null → A), effacé pour un autre ID', async () => {
+    const q = (id) => ({ phase: 'STARTED', question: id ? { ID: id, TYPE: 'ARDOISE' } : null, enrollmentActive: false })
+    const mock = makeGameMock({ gameState: q('q1'), playerConnectStatus: { status: 'connected', id: ID, name: 'Alice' } })
+    useGame.mockReturnValue(mock)
+    const { getByTestId, rerender } = render(<VPlayerPage />)
+    await act(async () => {})
+    fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'PAR' } })
+    const draft = () => sessionStorage.getItem('vplayer_ardoise_draft')
+    expect(draft()).toContain('PAR')
+
+    useGame.mockReturnValue({ ...mock, gameState: q(null) })
+    rerender(<VPlayerPage />)
+    await act(async () => {})
+    expect(draft()).toContain('PAR')
+
+    useGame.mockReturnValue({ ...mock, gameState: q('q1') })
+    rerender(<VPlayerPage />)
+    await act(async () => {})
+    expect(draft()).toContain('PAR')
+    expect(getByTestId('ardoise-input').value).toBe('PAR') // restauré
+
+    useGame.mockReturnValue({ ...mock, gameState: q('q2') })
+    rerender(<VPlayerPage />)
+    await act(async () => {})
+    expect(draft()).toBeNull()
+  })
 })
