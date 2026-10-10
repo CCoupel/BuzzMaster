@@ -15,6 +15,9 @@ const NUMPAD_ROWS = [
   ['.', '0', 'BACKSPACE'],
 ]
 
+// #246 — taille maximale d'une réponse ARDOISE (caractères), même valeur que le serveur.
+export const ARDOISE_MAX_LENGTH = 2000
+
 const KEY_LABELS = {
   BACKSPACE: '⌫',
   SPACE: '␣',
@@ -42,6 +45,9 @@ export default function ArdoiseKeyboard({ keyboardType = 'AZERTY', value = '', o
     if (key === 'BACKSPACE') {
       const next = value.slice(0, -1)
       onChange(next, next === '' && value !== '' ? 'backspace_empty' : 'key')
+    } else if (value.length >= ARDOISE_MAX_LENGTH) {
+      // #246 : plafond de saisie (aligné sur la limite serveur) — saisie refusée au-delà
+      return
     } else if (key === 'SPACE') {
       onChange(value + ' ', 'key')
     } else {

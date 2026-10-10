@@ -239,3 +239,14 @@ describe('ArdoiseKeyboard — motif de l\'envoi (#246, F-LOG)', () => {
   })
 })
 
+describe('ArdoiseKeyboard — plafond de saisie (#246)', () => {
+  it('refuse toute saisie au-delà de 2000 caractères mais autorise ⌫', () => {
+    const onChange = vi.fn()
+    renderKeyboard({ keyboardType: 'AZERTY', value: 'A'.repeat(2000), onChange })
+    fireEvent.click(screen.getByText('Z'))
+    fireEvent.click(screen.getByText('␣'))
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('⌫'))
+    expect(onChange).toHaveBeenCalledWith('A'.repeat(1999), 'key')
+  })
+})
