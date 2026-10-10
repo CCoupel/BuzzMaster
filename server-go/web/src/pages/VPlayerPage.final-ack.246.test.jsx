@@ -36,9 +36,9 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
-  function mount() {
+  function mount({ phase: phase0 = 'STARTED' } = {}) {
     const send = vi.fn(() => true)
-    let phase = 'STARTED', status = 'connected', bound = true
+    let phase = phase0, status = 'connected', bound = true
     let cur = null, key = ''
     useGame.mockImplementation(() => {
       const k = `${phase}|${status}|${bound}`
@@ -108,11 +108,21 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
     expect(sent(m.send, 'ARDOISE_FINAL').length).toBeGreaterThan(n)
   })
 
-  it('texte vide : envoie un final vide (« rien écrit »)', async () => {
-    const m = mount()
+  it('texte vide : envoie un final vide (« rien écrit ») quand le départ de la question a été vu (PREPARE → STARTED)', async () => {
+    const m = mount({ phase: 'PREPARE' })
+    await act(async () => { vi.advanceTimersByTime(100) })
+    await m.setPhase('STARTED')
     await act(async () => { vi.advanceTimersByTime(100) })
     await m.setPhase('STOPPED')
     expect(sent(m.send, 'ARDOISE_FINAL')[0]).toMatchObject({ TEXT: '', HASH: '811c9dc5' })
+  })
+
+  it('cas inverse — page montée directement en STARTED, sans texte restauré ni frappe ni départ vu : jamais de final vide (n’écrase pas la réponse du serveur)', async () => {
+    const m = mount({ phase: 'STARTED' })
+    await act(async () => { vi.advanceTimersByTime(100) })
+    await m.setPhase('STOPPED')
+    await act(async () => { vi.advanceTimersByTime(3000) })
+    expect(sent(m.send, 'ARDOISE_FINAL')).toEqual([])
   })
 
   it('Critical — une page montée APRÈS le STOP (rechargement) n’envoie jamais de final : un texte vide écraserait la réponse déjà reçue', async () => {
@@ -182,7 +192,9 @@ describe('VPlayerPage — ARDOISE_FINAL (#246, Batch 2)', () => {
     })
 
     it('texte vide accusé : « ✓ Reçu — aucune réponse écrite » et « Aucune réponse » sur le clavier', async () => {
-      const m = mountAck()
+      const m = mountAck({ phase: 'PREPARE' })
+      await act(async () => { vi.advanceTimersByTime(100) })
+      await m.setPhase('STARTED')
       await act(async () => { vi.advanceTimersByTime(100) })
       await m.setPhase('STOPPED')
       await m.ack({ questionId: 'q42', hash: fnvHex('') })
