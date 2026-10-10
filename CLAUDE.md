@@ -180,7 +180,7 @@ pas de `[O/n]`, pas de « dis-moi »). Ça vaut aussi pour les questions remont�
 (`BLOQUE` / `FAILED` — format unique `[NOM] BLOQUE` + `Questions:`, `TEAMMATES_PROTOCOL.md`).
 
 Chaîne : les teammates ne parlent jamais à l'utilisateur — ils t'envoient leurs questions et options
-(`SendMessage` vers `main`), **tu les convertis en `AskUserQuestion`**, puis tu leur renvoies les réponses
+(`SendMessage` vers le teamleader, adresse `main`), **tu les convertis en `AskUserQuestion`**, puis tu leur renvoies les réponses
 via `SendMessage`.
 
 - Questions fermées, 2 à 4 options, label court + description (contexte/conséquence), option par défaut
