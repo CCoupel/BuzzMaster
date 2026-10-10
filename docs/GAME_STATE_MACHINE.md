@@ -630,8 +630,9 @@ Pour une question ARDOISE, la transition vers `REVEAL` est **gardée** :
   avec `RECEIVED = false`. Un `WARN ARDOISE_REVEAL_FORCED` est journalisé.
 - **`CONTINUE`** (retour en `STARTED`) : `RECEIVED` repasse à `false` pour toutes les équipes.
 - **PAUSE** : les finals déjà reçus sont conservés.
-- **Invariant** : `ARDOISE_ANSWERS` ne change que par `ARDOISE_INPUT`, `ARDOISE_FINAL`, `Ready()` ou
-  NEW_GAME. Toute autre modification est journalisée en `ERROR ARDOISE_STATE_DIVERGED`.
+- **Invariant** : le **texte** (`TEXT`) de `ARDOISE_ANSWERS` ne change que par `ARDOISE_INPUT`, `ARDOISE_FINAL`,
+  `Ready()` ou NEW_GAME. Toute autre modification est journalisée en `ERROR ARDOISE_STATE_DIVERGED`.
+  (`CONTINUE` ne touche que `RECEIVED` / `RECEIVED_HASH`.)
 - Hors ARDOISE : la machine d'états est inchangée, `FORCE` est ignoré.
 
 Séquence type :
