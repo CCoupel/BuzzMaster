@@ -553,24 +553,26 @@ export default function VPlayerPage() {
   const sendFinal = useCallback(() => {
     const f = finalRef.current
     if (!f || f.acked || (f.sends || 0) >= FINAL_MAX_SENDS) return false
-    if (!boundRef.current || staleRef.current || supersededRef.current) return false
-    const seq = ardoiseSeqRef.current + 1
-    const sent = sendMessage('ARDOISE_FINAL', {
-      ID: ownIdRef.current,
-      QUESTION_ID: f.qid,
-      TEXT: f.text,
-      HASH: f.hash,
-      SEQ: seq,
-    })
-    if (sent) {
-      ardoiseSeqRef.current = seq
-      f.sends = (f.sends || 0) + 1
-      // Plafond de renvois : on cesse d'insister (trace de diagnostic), un
-      // rebind / retour au premier plan ré-arme le cycle.
-      if (f.sends >= FINAL_MAX_SENDS) {
-        setFinalStatus('stalled')
-        sendClientTrace?.('ARDOISE_FINAL_GIVEUP', { DETAIL: { QUESTION_ID: f.qid, SENDS: f.sends } })
-      }
+    // Contrat §ARDOISE_FINAL « Règle de renvoi » : au plus 30 envois par liaison,
+    // un envoi abandonné (WebSocket fermée / connexion non liée) compte aussi.
+    f.sends = (f.sends || 0) + 1
+    let sent = false
+    if (boundRef.current && !staleRef.current && !supersededRef.current) {
+      const seq = ardoiseSeqRef.current + 1
+      sent = sendMessage('ARDOISE_FINAL', {
+        ID: ownIdRef.current,
+        QUESTION_ID: f.qid,
+        TEXT: f.text,
+        HASH: f.hash,
+        SEQ: seq,
+      })
+      if (sent) ardoiseSeqRef.current = seq
+    }
+    if (f.sends >= FINAL_MAX_SENDS) {
+      // Plafond atteint : arrêt (overlay « ⚠ »), trace de diagnostic. Une nouvelle
+      // liaison de connexion relance un cycle de 30.
+      setFinalStatus('stalled')
+      sendClientTrace?.('ARDOISE_FINAL_GIVEUP', { DETAIL: { QUESTION_ID: f.qid, SENDS: f.sends } })
     }
     return sent
   }, [sendMessage, sendClientTrace])
@@ -640,10 +642,8 @@ export default function VPlayerPage() {
   useEffect(() => {
     if (finalStatus !== 'sending' && finalStatus !== 'stalled') return
     const onVisible = () => {
-      if (document.visibilityState !== 'visible' || !finalRef.current) return
-      finalRef.current.sends = 0
-      setFinalStatus('sending')
-      sendFinal()
+      // Compte dans les 30 envois de la liaison (pas de remise à zéro ici).
+      if (document.visibilityState === 'visible') sendFinal()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -854,7 +854,10 @@ export default function VPlayerPage() {
       ardoiseOverlay = paused
         ? { tone: 'pause', text: `⏸ Jeu en pause · ${empty ? '✓ reçu — aucune réponse écrite' : '✓ réponse reçue'}` }
         : { tone: 'ok', text: empty ? '✓ Reçu — aucune réponse écrite' : '✓ Réponse reçue' }
-    } else if (finalStatus === 'sending' || finalStatus === 'stalled') {
+    } else if (finalStatus === 'stalled') {
+      // Plafond de renvois atteint sans accusé : variante « ⚠ » de la maquette
+      ardoiseOverlay = { tone: 'off', text: '⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau' }
+    } else if (finalStatus === 'sending') {
       if (status !== 'connected') {
         ardoiseOverlay = { tone: 'off', text: '⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau' }
       } else if (paused) {

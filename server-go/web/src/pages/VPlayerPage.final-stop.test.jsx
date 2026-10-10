@@ -140,5 +140,6 @@ describe('VPlayerPage — ARDOISE_FINAL et accusé (#246, F-STOP)', () => {
     expect(sent(m.send, 'ARDOISE_FINAL')).toHaveLength(30)
     const trace = useGame.mock.results.at(-1).value.sendClientTrace
     expect(trace).toHaveBeenCalledWith('ARDOISE_FINAL_GIVEUP', expect.anything())
+    expect(txt(m.view.container)).toMatch(/⚠ Connexion perdue/) // variante « ⚠ » après le plafond
   })
 })

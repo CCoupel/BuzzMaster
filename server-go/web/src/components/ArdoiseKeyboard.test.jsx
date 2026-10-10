@@ -249,4 +249,15 @@ describe('ArdoiseKeyboard — plafond de saisie (#246)', () => {
     fireEvent.click(screen.getByText('⌫'))
     expect(onChange).toHaveBeenCalledWith('A'.repeat(1999), 'key')
   })
+
+  it('compte en points de code Unicode, pas en unités UTF-16 (émoji = 1 caractère)', () => {
+    const onChange = vi.fn()
+    renderKeyboard({ keyboardType: 'AZERTY', value: '😀'.repeat(1999), onChange })
+    fireEvent.click(screen.getByText('Z'))
+    expect(onChange).toHaveBeenCalledTimes(1)
+    onChange.mockClear()
+    renderKeyboard({ keyboardType: 'AZERTY', value: '😀'.repeat(2000), onChange })
+    fireEvent.click(screen.getAllByText('Z')[1])
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })
