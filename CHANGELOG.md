@@ -2,6 +2,51 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] — v11.2 lot A — Fiabilisation ARDOISE, identité des joueurs virtuels, journalisation persistante (#246)
+
+> Retour terrain de la semaine bleue 2026 : le texte ARDOISE d'une équipe a disparu de l'admin et de la TV alors qu'il restait affiché sur la tablette ; des tablettes ont changé de nom sans action du joueur. Ce lot corrige les mécanismes identifiés et rend les incidents de ce type traçables.
+> Contrats : `contracts/websocket-actions.md`, `contracts/game-state.md`, `contracts/models.md`, `contracts/logging.md`, entrée `[20261010]` de `contracts/CHANGELOG.md`.
+
+### ⚠️ Changements de comportement
+
+- **REVEAL bloqué en ARDOISE** : tant qu'une équipe attendue n'a pas confirmé son texte final, le REVEAL est refusé (`REVEAL_REFUSED`), tablette hors ligne comprise. L'animateur ou l'admin peut forcer avec « Révéler quand même… » (confirmation demandée). Les équipes non confirmées sont révélées avec leur dernier texte reçu, marquées « non confirmée ».
+- **Tablettes à recharger après mise à jour** : admin et animateur sont livrés avec le serveur, mais une tablette ouverte sur l'ancien bundle n'envoie pas le nouveau message de liaison. Recharger chaque tablette après la mise à jour.
+- **Tablette rechargée sans texte** : son équipe reste « en attente » jusqu'à une nouvelle saisie ou au forçage.
+- **`CLIENT_TRACE` accepté pendant l'entracte** : diagnostic uniquement, sans effet sur le jeu.
+
+### Added
+
+- **Confirmation du texte final ARDOISE (#246)** — À la sortie de `STARTED` (STOP ou PAUSE), la tablette envoie son texte complet (`ARDOISE_FINAL`, empreinte FNV-1a) et le renvoie chaque seconde jusqu'à l'accusé de réception (`ARDOISE_FINAL_ACK`, ciblé sur la tablette émettrice, sans texte). Au plus 30 envois par liaison. Admin et animateur voient, par équipe, une pastille « reçue », un compteur `n/N reçues` et les équipes hors ligne.
+- **Forçage du REVEAL (#246)** — Champ facultatif `FORCE` sur `REVEAL` ; `WARN ARDOISE_REVEAL_FORCED` journalise les équipes manquantes.
+- **Journalisation persistante (#246)** — Fichier `data/logs/buzzcontrol.log` (WARN et plus par défaut), rotation par taille (10 Mo, 5 fichiers), section `logging` dans `config.json`. Erreur disque non bloquante. La ligne par frappe passe en `DEBUG`.
+- **Événements de diagnostic (#246)** — `ARDOISE_CLEARED`, `ARDOISE_SEQ_GAP` / `ARDOISE_SEQ_STALE`, `ARDOISE_STATE_DIVERGED` (invariant sur `ARDOISE_ANSWERS`), `ARDOISE_FINAL_HASH_MISMATCH`, `ARDOISE_REVEAL_REFUSED`, `PLAYER_ACTION_UNBOUND`, `PLAYER_FOREIGN_ID`, `VPLAYER_NAME_MISMATCH`, `VPLAYER_DUPLICATE_SESSION`, `VPLAYER_DUPLICATE_NAME`, `CLIENT_EVICTED_SLOW`, `CLIENT_WRITE_TIMEOUT`, `INCOMING_DROPPED`. Catalogue complet : `contracts/logging.md`.
+- **`CLIENT_TRACE` (#246)** — Messages de diagnostic émis par les clients (`ARDOISE_CLEARED_SEEN`, `WS_GAP`, `VISIBILITY`, `PAGESHOW`, `FREEZE` / `RESUME`, `STALE_TAB`, `DUPLICATE_SESSION`). Limités à 10/s par connexion et 50/s au total, 1 Ko par message. Aucun effet sur l'état du jeu.
+- **Motif `DUPLICATE_SESSION` (#246)** — Une seule connexion liée par joueur virtuel : la plus récente gagne. L'ancien onglet affiche « Cette session est ouverte ailleurs » et propose « Reprendre ici ».
+- **Limite de 2 000 caractères par réponse ARDOISE (#246)** — Le clavier de la tablette cesse d'ajouter des caractères au-delà. Le serveur ignore en entier un `ARDOISE_INPUT` trop long (sans troncature) et refuse un `ARDOISE_FINAL` trop long (sans accusé).
+- **Champs `SEQ` et `REASON` sur `ARDOISE_INPUT` (#246)** — Facultatifs, diagnostic uniquement.
+
+### Changed
+
+- **Liaison connexion ↔ joueur virtuel (#246)** — Le client envoie `PLAYER_CONNECT {NAME, ID}` à chaque ouverture de sa WebSocket. Les actions joueur (`ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`, `BUTTON`, `FLIP_MEMORY_CARD`) d'une connexion non liée, ou portant un autre `ID`, sont refusées. Les simulations de l'admin et les actions TV et animateur ne sont pas concernées.
+- **Identité des joueurs virtuels (#246)** — Le nom envoyé par le client ne renomme plus le joueur : le nom serveur fait foi. Plus de liaison par nom sur la page joueur ni sur la page d'inscription. Noms de joueurs virtuels uniques, sans tenir compte de la casse.
+- **Onglet périmé (#246)** — Un onglet qui constate que la session stockée appartient à un autre onglet cesse d'émettre et affiche « Session ouverte dans un autre onglet ». Un onglet n'efface plus la session d'un autre (le `localStorage` est partagé entre onglets).
+- **Texte ARDOISE restauré après rechargement (#246)** — Le brouillon en cours est conservé dans `sessionStorage` (propre à l'onglet) et réaffiché au rechargement tant que la question ne change pas.
+- **Envoi en direct pendant la frappe (#246)** — `ARDOISE_INPUT` part au plus toutes les 200 ms pendant la saisie, et le dernier état est toujours envoyé. Avant, un texte tapé sans pause de 200 ms n'était envoyé qu'au STOP, où le serveur le rejetait.
+- **Diffusion de l'ARDOISE (#246)** — Les mises à jour du texte saisi sont coalescées (≤ 1 par 150 ms) vers admin et animateur.
+
+### Fixed
+
+- **Texte ARDOISE vidé sur l'admin et la TV (#246)** — Un `ARDOISE_INPUT` vide pouvait écraser la réponse d'une équipe (connexion ou onglet périmé), sans trace. Au STOP, le final est désormais le texte affiché sur la tablette, avec accusé de réception et garde REVEAL. Scénario reproduit : effacement puis ressaisie sans pause jusqu'au STOP. Cette explication est la plus probable pour l'incident, mais elle n'est pas prouvée pour la partie (pas de journal disponible).
+- **Pull-to-refresh sur la page joueur (#246)** — Le rafraîchissement par glissement vers le bas est désactivé sur la page joueur uniquement. Non vérifié sur appareils réels : voir `tests/procedures/ardoise-246.md`.
+- **Nom de joueur virtuel changé spontanément (#246)** — Un onglet périmé ou une reconnexion pouvait renommer le joueur actuel avec un nom d'une ancienne partie.
+- **Texte final tronqué au STOP (#246)** — Le texte final est envoyé au gel du clavier, débounce compris.
+
+### Validation
+
+- **Automatisée** : `go test -race ./...` vert (9 paquets), `go vet` propre, Vitest 2875/2875, build web OK. Non-régression des autres modes de jeu verte.
+- **Manuelle** : à réaliser par l'utilisateur, procédure `tests/procedures/ardoise-246.md` (matériel réel, veille et bfcache, double onglet, création du fichier de log, rendu visuel des maquettes).
+- **Non couvert par test automatique** : `CLIENT_EVICTED_SLOW` (code présent, pas de test).
+
 ## [11.1.0] - 2026-09-25 — Média sonore (#219, #236, #237) + Navbar refactorisée (#238) + Logo BuzzControl (#239) + Forçage affichage TV (#240) [#241 doublon fermé]
 
 **Milestone #37 complète (7/7 issues : #219, #236, #237, #238, #239, #240, #241)** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé) ; Navbar admin refactorisée (groupes, seuils responsifs, badge compteurs) ; nouveau logo BrandLogo ; affichage TV forcé sur le jeu au lancement d'une manche. #241 fermée comme doublon de #238. Validation manuelle complète sur QUALIF (build final v11.1.0.14).
