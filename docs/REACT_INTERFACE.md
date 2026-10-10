@@ -733,6 +733,37 @@ compteur.
 `clearOwnVPlayerSession(ownId)` n'efface `vplayer_*` que si l'ID stocké est celui de l'onglet. Le
 repli par nom a été supprimé (`VPlayerPage`, `EnrollPage`).
 
+## Page Équipes — verrou pendant une question (v11.2, #249)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_teams__lock_during_question.html`.
+
+- `TeamsPage` : quand `gameState.TEAMS_LOCKED` est vrai, le champ de nom et le bouton ✕ sont `disabled`,
+  avec une infobulle (`title`, `aria-describedby`) et un bandeau `role="status"` ; une icône 🔒 apparaît sur
+  l'équipe. La garde reste aussi dans `handleRenameTeam` et `handleDeleteTeam`.
+- Renommage : `handleRenameTeam` envoie `{ ...teams[ancienne], NAME: nouvelle }` sous la nouvelle clé.
+- Refus (`TEAMS_UPDATE_REFUSED`, réducteur `teamsUpdateRefused` + `clearTeamsUpdateRefused`) : message
+  `role="alert"` « Renommage refusé : une question est en cours. » (ou « Suppression refusée… »). Les champs sont
+  remontés au nom d'origine.
+- Identité d'équipe pour l'ARDOISE : `utils/ardoiseOrder.js` lit `team.name` (la clé) avant `team.NAME`.
+
+## Grille ARDOISE adaptative — TV, REVEAL (v11.2, #250)
+
+Maquette validée : `docs/mockup/v11.2/ui/tv_ardoise_reveal__adaptive_grid.html`. Implémentée dans
+`PlayerDisplay.jsx` (`.ardoise-*`) et `utils/ardoiseTvLayout.js`. Plus de plafond à 8 équipes : toutes les
+équipes sont affichées, sans défilement.
+
+| Équipes | Rangées | Colonnes | Lignes de réponse |
+|---------|---------|----------|-------------------|
+| 1 à 5 | 1 | N | 2 |
+| 6 à 12 | 2 | ⌈N/2⌉ | 2 |
+| 13 à 16 | 2 | ⌈N/2⌉ | 1 |
+| 17 et plus | 3 | ⌈N/3⌉ | 1 |
+
+- Grille : `overflow: hidden`, `minmax(0, 1fr)`, `min-height: 0`. Variables `--cols`, `--rows`, `--lines`,
+  `--fh`, `--fa` posées sur la grille. Polices proportionnelles à la largeur d'une carte.
+- Réponse coupée par `-webkit-line-clamp: var(--lines)` (« … »). Le texte complet reste dans `title`.
+- `-webkit-box` remplace le centrage flex : la réponse est en haut de la carte, comme dans la maquette.
+
 ## Layout GamePage (Admin) - v2.12.0
 
 Layout avec timer pleine largeur + 3 colonnes harmonisées :
