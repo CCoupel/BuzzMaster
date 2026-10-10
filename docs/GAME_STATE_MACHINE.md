@@ -547,10 +547,26 @@ de la partie en cours — pas une section globale de réglages.
 
 ## Phase NEW_GAME (v4.0.1 / v4.0.4)
 
-**Phase NEW_GAME** : état transitoire déclenché par le bouton "NOUVELLE PARTIE" (admin, phase STOPPED uniquement).
-- Reset : scores teams + joueurs à 0, historique vide, tous statuts questions → AVAILABLE, question sélectionnée → nil
+**Phase NEW_GAME** : état transitoire déclenché par le bouton « LANCER LA PARTIE » (admin, v11.2 : depuis toutes les phases, voir ci-dessous).
+- Reset selon les options (v11.2, #243). Sans option (clients antérieurs) : scores teams + joueurs à 0, historique vide, tous statuts questions → AVAILABLE, question sélectionnée → nil
 - Transition : `NEW_GAME → PREPARE` automatique à la sélection de la première question
 - TV (`/tv`) : affiche l'écran "NOUVELLE PARTIE À VENIR" avec métadonnées du quiz
+
+### Options de purge au lancement (v11.2, #243)
+
+| Option | Effet |
+|--------|-------|
+| `PURGE_SCORES` | Scores des équipes et des joueurs à 0, historique des points effacé |
+| `RESET_QUESTIONS` | Toutes les questions « à jouer », réservoir RAFALE à zéro |
+| `PURGE_PLAYERS` | Joueurs des tablettes supprimés (exige `PURGE_SCORES`, sinon `NEW_GAME_REFUSED`) |
+| `PURGE_TEAMS` | Équipes supprimées (même chemin que #249), joueurs conservés sans équipe |
+
+- **Toujours**, quelles que soient les options : tous les minuteurs sont arrêtés, le son de question est arrêté,
+  la question en cours s'arrête, `TEAMS_LOCKED` revient à `false`. La phase passe à `NEW_GAME` sans repasser
+  par `STOPPED`.
+- Ordre d'application côté serveur, sous un seul verrou : minuteurs → `PURGE_TEAMS` → `PURGE_PLAYERS` →
+  `PURGE_SCORES` → `RESET_QUESTIONS` → remise à zéro des états de jeu.
+- Contrat : `contracts/websocket-actions.md` §NEW_GAME et §NEW_GAME_REFUSED.
 
 **Métadonnées de quiz** (v4.0.1) :
 - `quiz_name`, `quiz_theme`, `quiz_notes` — champs GameState, sans `omitempty`, persistés
