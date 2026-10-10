@@ -19,6 +19,8 @@ Historique des versions du projet BuzzControl.
 - **Lancement refusé pendant une entracte (#243)** — ⚠️ `NEW_GAME` est refusé pendant une entracte (`NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }`, message « Impossible pendant une entracte : sortez d'abord de l'entracte »). Avant, le message était ignoré sans réponse et la popup restait figée.
 - **Statut des questions interrompues par « Lancer la partie » (#243)** — ⚠️ Sans l'option « Questions », une question sélectionnée mais jamais lancée repasse « à jouer », et une question lancée (STARTED, PAUSED) est marquée jouée et interrompue. Une question déjà STOPPED ou REVEALED garde son statut.
 - **L'admin reçoit `AWARDED_TEAMS` (#244/#251)** — ⚠️ Sur `/admin`, les équipes déjà créditées pour la question sont désormais signalées (grisées, « ✓ déjà créditée ») et exclues de l'attribution groupée. Auparavant, seule l'interface animateur recevait cette information. Le clic sur une carte d'équipe reste sans restriction.
+- **« 0 point » ignoré pour l'admin seulement (#252)** — ⚠️ Un clic admin avec un montant de 0 n'est plus enregistré : pas d'entrée dans l'historique, pas de mise à jour, et l'équipe n'est pas verrouillée. Le geste « 0 pt » de l'animateur (#170) reste enregistré et verrouille l'équipe.
+- **Correction cachée réservée à l'admin (#252)** — ⚠️ `DISPLAY: false` n'est honoré que pour l'admin. Envoyé par l'animateur, il est ignoré : l'attribution est traitée comme visible et journalisée (`WARN SCORE_CORRECTION_HIDDEN_REFUSED`).
 
 ### Added
 
@@ -40,6 +42,9 @@ Historique des versions du projet BuzzControl.
 - **Clic sur une réponse QCM (#244/#251)** — Sélectionne les équipes ayant donné cette réponse, avec le montant : points de la question pour la bonne réponse, −1 pour une mauvaise.
 - **Messages de résultat de l'attribution (#244/#251)** — « ✓ +N points donnés à M équipes. », et « K équipe(s) déjà créditée(s) ignorée(s). » ; refus : « Attribution refusée : la réponse n’est pas révélée » ou « la question a changé ».
 - **Motif de blocage visible et bornes du montant (#244/#251)** — Le motif qui bloque « Donner les points » s'affiche sous la barre (le texte n'était qu'une infobulle, invisible au toucher). Le montant par équipe est borné à −999 et 999, comme le contrat : au-delà, le serveur aurait refusé tout le lot.
+- **Page Scores : montant libre et correction cachée (#252)** — Montant libre de −999 à 999 (entier non nul), pour les équipes et pour les joueurs, à côté des présélections 1, 2, 5, 10. Interrupteur **« 📺 Afficher sur la TV »**, activé à chaque ouverture de la page. Désactivé, l'attribution est une **correction cachée** : aucune animation ni son ni LED, sur aucun écran (TV, tablettes, animateur). Le classement se met à jour sans animation. Marque 🔇 dans les boutons, dans « Dernières attributions » (5 plus récentes) et dans l'historique.
+- **Correction cachée sans effet sur « déjà créditée » (#252)** — Une correction cachée ne grise pas l'équipe, et n'empêche ni un crédit normal ni une attribution groupée pour la même question.
+- **`SCORE_CHANGE` (#252)** — Marqueur de la dernière modification manuelle de score (numéro de séquence, visibilité, équipes et joueurs concernés), diffusé à tous les écrans web. Les TV et tablettes l'utilisent pour ne rien animer sur une correction cachée.
 
 ### Changed
 
