@@ -49,3 +49,9 @@
 | server-go/web/src/utils/pointsAward.244-251.test.js | unit | scores | #244/#251 defaultTeamAward = source unique du montant (clic unitaire et lot) | regression | |
 | server-go/web/src/hooks/useWebSocket.team-points-batch.244-251.test.js | unit | websocket | #244/#251 teamPointsBatch, TEAM_POINTS_BATCH_RESULT, AWARDED_TEAMS reçu par l'admin | regression | |
 | tests/procedures/award-244-251.md | manual | admin-game, scores | #244/#251 procédure manuelle (utilisateur uniquement) | feature | |
+| server-go/cmd/server/score_display_252_test.go | integration | scores, game-engine, sound, lighting, websocket | #252 DISPLAY (TEAM_POINTS/BUMPER_POINTS/lot) : aucun effet public sur chaque canal, SCORE_CHANGE, 0 ignoré, historique, journal, correction cachée ≠ déjà créditée | regression | critical |
+| server-go/web/src/pages/ScoresPage.free-points-tv.252.test.jsx | unit | scores | #252 page Scores (maquette validée) : montant libre ±999, interrupteur TV, bandeau/🔇, équipes et joueurs, Dernières attributions | regression | critical |
+| server-go/web/src/pages/PlayerDisplay.score-change.252.test.jsx | unit | tv, vplayer | #252 TV/tablette : hausse cachée sans animation (+X pts, confettis, surbrillance, rang), hausse visible suivante = sa propre différence | regression | critical |
+| server-go/web/src/pages/HistoryPage.hidden-correction.252.test.jsx | unit | scores | #252 Historique : marque 🔇 des corrections cachées | regression | |
+| server-go/web/src/hooks/useWebSocket.display.252.test.js | unit | websocket | #252 DISPLAY envoyé seulement si caché ; SCORE_CHANGE suit l'UPDATE | regression | |
+| tests/procedures/scores-252.md | manual | scores, tv, vplayer | #252 procédure manuelle (utilisateur uniquement) | feature | |
