@@ -7,7 +7,7 @@ import EntractePanel from '../components/EntractePanel'
 import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
 import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
-import { clearVPlayerSession } from '../utils/vplayerSession'
+import { clearOwnVPlayerSession, getStoredVPlayerId, isStaleVPlayerSession } from '../utils/vplayerSession'
 import './VPlayerPage.css'
 import '../styles/entracte.css'
 
@@ -37,6 +37,7 @@ export default function VPlayerPage() {
     sendMessage, gameState, bumpers, teams, status,
     playerConnectStatus, clearPlayerConnectStatus,
     playerEvictedStatus, clearPlayerEvictedStatus,
+    sendClientTrace,
   } = useGame()
 
   const [playerSession, setPlayerSession] = useState(null)
@@ -69,13 +70,35 @@ export default function VPlayerPage() {
   // de localStorage — un rechargement repart légitimement de zéro, et F1 est
   // précisément ce qui rend ce rechargement inutile).
   const pendingBuzzRef = useRef(null)
+  // #246 (F-ID) — identité de CET onglet. `ownIdRef` = ID de la session en
+  // mémoire (jamais relu depuis le localStorage courant, qui appartient au
+  // dernier onglet ayant écrit). `bound` = la connexion WebSocket courante est
+  // liée à notre bumper (PLAYER_CONNECTED reçu sur CETTE connexion) ; tant que
+  // faux, aucune action joueur n'est émise (le serveur la refuserait).
+  const ownIdRef = useRef(null)
+  const [bound, setBound] = useState(false)
+  const boundRef = useRef(false)
+  // Onglet périmé (un autre onglet porte une autre session) : plus aucune émission.
+  const [stale, setStale] = useState(false)
+  const staleRef = useRef(false)
+  // Session reprise par une connexion plus récente (PLAYER_EVICTED DUPLICATE_SESSION).
+  const [superseded, setSuperseded] = useState(false)
+  const supersededRef = useRef(false)
+  const staleTracedRef = useRef(false)
+  staleRef.current = stale
+  supersededRef.current = superseded
   const noSleepRef = useRef(null)
+  // #246 : réponse QCM mémorisée tant que la connexion n'est pas liée.
+  const pendingQcmRef = useRef(null)
   // Ref to always have the latest bumper value in async callbacks (avoids stale closure)
   const bumperRef = useRef(null)
 
   // ARDOISE: local text state + throttle ref
   const [ardoiseText, setArdoiseText] = useState('')
   const ardoiseThrottleRef = useRef(null)
+  // #246 : dernier texte local, relu par le renvoi complet à la liaison.
+  const ardoiseTextRef = useRef('')
+  ardoiseTextRef.current = ardoiseText
   const prevPhaseRef = useRef(null)
   // ARDOISE #117: true once the first non-empty ARDOISE_INPUT has been sent for the
   // current question, so the server can timestamp STARTED_AT on the real first
@@ -88,41 +111,68 @@ export default function VPlayerPage() {
     const savedSession = localStorage.getItem('vplayer_session')
     const savedId = localStorage.getItem('vplayer_id')
 
-    if (!savedName || !savedSession) {
-      // No session, redirect to enroll page
+    // #246 : sans ID mémorisé, aucune liaison possible (plus de repli par
+    // nom) — la session est inutilisable, retour à l'inscription.
+    if (!savedName || !savedSession || !savedId) {
+      if (savedName || savedSession) clearOwnVPlayerSession(null)
       navigate('/')
       return
     }
 
+    ownIdRef.current = savedId
     setPlayerSession({
       name: savedName,
       sessionId: savedSession,
-      // F2 (#120): identity by ID, the backend's sole source of truth since
-      // #109 R1. `null` for a session created before this version — the name
-      // fallback below is transitory, expected to fade out as old sessions expire.
-      id: savedId || null,
+      id: savedId,
     })
   }, [navigate])
 
-  // Find bumper by ID in bumpers list (#120 F2) — falls back to name only
-  // when the session predates ID-based identity (no vplayer_id stored yet).
+  // #246 (F-ID) — détection d'onglet périmé sur l'événement `storage` (un
+  // autre onglet vient d'écrire une autre session dans le localStorage partagé).
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== null && e.key !== 'vplayer_id') return
+      if (isStaleVPlayerSession(ownIdRef.current)) setStale(true)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // Trace de diagnostic (une fois) quand l'onglet se déclare périmé — seule
+  // émission autorisée d'un onglet périmé.
+  useEffect(() => {
+    if (!stale || status !== 'connected' || staleTracedRef.current) return
+    staleTracedRef.current = true
+    sendClientTrace?.('STALE_TAB', {
+      DETAIL: { OWN_ID: ownIdRef.current, STORED_ID: getStoredVPlayerId() },
+    })
+  }, [stale, status, sendClientTrace])
+
+  // La liaison est propre à une connexion : toute perte de connexion la défait.
+  useEffect(() => {
+    if (status !== 'connected') {
+      boundRef.current = false
+      setBound(false)
+    }
+  }, [status])
+
+  // Émission d'une action joueur : seulement si la connexion courante est
+  // liée et que l'onglet est actif. Retourne false si non envoyé.
+  const sendBound = useCallback((action, payload) => {
+    if (!boundRef.current || staleRef.current || supersededRef.current) return false
+    return sendMessage(action, payload)
+  }, [sendMessage])
+
+  // Find bumper by ID in bumpers list (#120 F2, #246 : sans repli par nom).
   useEffect(() => {
     if (!playerSession || !bumpers) return
 
+    // #246 : identité par ID uniquement — jamais de repli par nom.
     let bumperId = null
     let bumperData = null
-    if (playerSession.id) {
-      if (bumpers[playerSession.id]) {
-        bumperId = playerSession.id
-        bumperData = bumpers[playerSession.id]
-      }
-      // Deliberately no name fallback once an ID is known: comparing by name
-      // when a real ID is available is exactly the ambiguity #120 removes.
-    } else {
-      const found = Object.entries(bumpers).find(([_, b]) =>
-        b.IS_VIRTUAL && b.NAME === playerSession.name
-      )
-      if (found) [bumperId, bumperData] = found
+    if (playerSession.id && bumpers[playerSession.id]) {
+      bumperId = playerSession.id
+      bumperData = bumpers[playerSession.id]
     }
 
     if (bumperId && bumperData) {
@@ -175,6 +225,17 @@ export default function VPlayerPage() {
   useEffect(() => {
     if (!playerEvictedStatus) return
     console.log('[VPlayer] PLAYER_EVICTED:', playerEvictedStatus.reason)
+    // #246 : DUPLICATE_SESSION — la session reste valide (portée par la
+    // connexion plus récente). On n'efface RIEN, on cesse d'émettre et on
+    // propose « Reprendre ici ».
+    if (playerEvictedStatus.reason === 'DUPLICATE_SESSION') {
+      boundRef.current = false
+      setBound(false)
+      setSuperseded(true)
+      sendClientTrace?.('DUPLICATE_SESSION', { DETAIL: { OWN_ID: ownIdRef.current } })
+      clearPlayerEvictedStatus()
+      return
+    }
     // Fast-follow (#120 code-review [MAJEUR]) : effacer l'ID immédiatement, ne
     // pas attendre le délai de lecture de 3s (celui-ci ne doit retarder que le
     // bandeau/la navigation). Sans ça, si le minuteur de reconnexion hérité de
@@ -182,10 +243,11 @@ export default function VPlayerPage() {
     // soit effacée, il retrouve `vplayer_id` encore présent et renvoie
     // PLAYER_CONNECT avec un ID déjà supprimé — le serveur le traite comme
     // absent et recrée un VJoueur fantôme sous le même nom.
-    localStorage.removeItem('vplayer_id')
+    // #246 : seulement si l'ID stocké est le nôtre (le localStorage est partagé).
+    if (getStoredVPlayerId() === ownIdRef.current) localStorage.removeItem('vplayer_id')
     setEvictedReason(playerEvictedStatus.reason ?? '')
     clearPlayerEvictedStatus()
-  }, [playerEvictedStatus, clearPlayerEvictedStatus])
+  }, [playerEvictedStatus, clearPlayerEvictedStatus, sendClientTrace])
 
   // #120 — filet de sécurité (cf. risques du plan) : si le bumper ne se
   // matérialise jamais (chemin de suppression oublié côté serveur), ne pas
@@ -205,64 +267,37 @@ export default function VPlayerPage() {
     return () => clearTimeout(timeoutId)
   }, [playerSession, status, bumper, reconnectError, evictedReason])
 
-  // Auto-reconnect if session exists but bumper not found after initial state sync
-  // Uses bumperRef (not bumper state) to read the latest value inside the timeout callback,
-  // preventing the stale closure bug that caused PLAYER_CONNECT to be sent even when the
-  // bumper was already found (which could create duplicate VJoueur entries on the server).
+  // #246 (F-ID) — liaison de la connexion : PLAYER_CONNECT {NAME, ID} à CHAQUE
+  // ouverture de WebSocket dès que l'ID est connu, même si le bumper est déjà
+  // trouvé CONNECTED dans l'état reçu (avant #246 on s'en dispensait : la
+  // connexion restait alors non liée et le serveur refuse ses actions).
+  // L'ID vient de la session EN MÉMOIRE (`playerSession.id`), jamais du
+  // localStorage courant, qui peut appartenir à un autre onglet. Rien n'est
+  // envoyé par un onglet périmé ni par une session reprise ailleurs. Renvoi à
+  // 2 s tant que la liaison n'est pas confirmée (opération idempotente).
   useEffect(() => {
     if (!playerSession || status !== 'connected') return
-    // If we already found the bumper, no need to reconnect
-    if (bumperRef.current) return
-    // Fast-follow (#120 code-review [MAJEUR]) : une éviction déjà armée ferme
-    // définitivement toute tentative de reconnexion pour cette session — sans
-    // ce garde, un `PLAYER_EVICTED` reçu avant l'échéance de 2s laissait ce
-    // minuteur, hérité de #109 et indifférent à `evictedReason`, retenter un
-    // PLAYER_CONNECT pendant que le client se redirigeait déjà vers
-    // l'inscription. `evictedReason` étant dans les dépendances, ce garde
-    // s'applique aussi bien à l'exécution initiale qu'à un passage à non-null
-    // en cours de route : le nettoyage ci-dessous annule alors le minuteur
-    // déjà programmé avant qu'il ne puisse se déclencher.
-    if (evictedReason !== null) return
-    // #118 (F3, R1) : même raisonnement pour reconnectError, ajouté par le
-    // filet de sécurité voisin mais oublié ici — un rejet de reconnexion ne
-    // doit pas non plus laisser ce minuteur se réarmer pendant les 3s de
-    // lecture qui précèdent le renvoi.
-    if (reconnectError) return
-
-    const attemptReconnect = () => {
-      // Check ref (latest value) rather than closure-captured bumper
-      if (bumperRef.current) return
-      // Fix R1 (#109) : renvoyer l'ID capturé au précédent PLAYER_CONNECTED
-      // pour une reconnexion sans ambiguïté (lookup par ID côté backend,
-      // plus par nom — évite qu'un nouvel enrôlement homonyme ne vole la
-      // session). Omis si absent (jamais connecté depuis cet appareil).
-      const storedId = localStorage.getItem('vplayer_id')
-      console.log('[VPlayer] Reconnecting with name:', playerSession.name, 'id:', storedId)
-      sendMessage('PLAYER_CONNECT', storedId
-        ? { NAME: playerSession.name, ID: storedId }
-        : { NAME: playerSession.name })
+    if (evictedReason !== null || reconnectError || superseded) return
+    if (stale) return
+    if (isStaleVPlayerSession(playerSession.id)) {
+      setStale(true)
+      return
     }
 
-    if (playerSession.id) {
-      // #118 (F2, R4) : un ID est déjà connu — le serveur envoie l'état dès
-      // le HELLO (sendStateToClient) et sait donc déjà que ce bumper existe.
-      // Attendre n'apporte rien ici et ouvrait la fenêtre d'échec de #118 :
-      // sur un lien instable, ces 2s pouvaient ne jamais s'écouler à
-      // l'intérieur d'une seule fenêtre "connected" ininterrompue, et aucun
-      // PLAYER_CONNECT n'était alors jamais émis. Émission immédiate, plus
-      // une reprise à 2s en cas de message perdu (l'opération est idempotente
-      // côté serveur — cas 1 de ReconnectOrCreateVirtualPlayer).
-      attemptReconnect()
-      const retryId = setTimeout(attemptReconnect, 2000)
-      return () => clearTimeout(retryId)
+    const attemptConnect = () => {
+      if (boundRef.current || staleRef.current || supersededRef.current) return
+      if (isStaleVPlayerSession(playerSession.id)) {
+        setStale(true)
+        return
+      }
+      console.log('[VPlayer] PLAYER_CONNECT name:', playerSession.name, 'id:', playerSession.id)
+      sendMessage('PLAYER_CONNECT', { NAME: playerSession.name, ID: playerSession.id })
     }
 
-    // Premier enrôlement, aucun ID connu : comportement #109 inchangé — le
-    // serveur n'a ici rien à réassocier immédiatement, l'attente de
-    // synchronisation initiale garde son sens.
-    const timeoutId = setTimeout(attemptReconnect, 2000)
-    return () => clearTimeout(timeoutId)
-  }, [playerSession, status, sendMessage, evictedReason, reconnectError])
+    attemptConnect()
+    const retryId = setTimeout(attemptConnect, 2000)
+    return () => clearTimeout(retryId)
+  }, [playerSession, status, sendMessage, evictedReason, reconnectError, stale, superseded])
 
   // Fix R1 (suite, #109) : consommer le résultat d'une tentative de
   // reconnexion. 'connected' ne nécessite rien ici (le bumper apparaîtra
@@ -278,7 +313,7 @@ export default function VPlayerPage() {
       // session locale entière est de toute façon invalidée par ce rejet
       // (#120 F4 : nettoyage mutualisé ; handleRejoinFromScratch la
       // re-effacerait de toute façon 3s plus tard, idempotent).
-      clearVPlayerSession()
+      clearOwnVPlayerSession(ownIdRef.current)
       // #118 (F3, R1) : playerSession (état React) n'était jamais remis à
       // null — seul localStorage l'était. La garde `!playerSession` du
       // minuteur de reconnexion restait donc inopérante : si `status`
@@ -304,8 +339,23 @@ export default function VPlayerPage() {
       }
     }
 
+    // #246 : PLAYER_CONNECTED de la connexion courante = liaison établie. Le
+    // nom affiché est celui du serveur (le cas 1 ne renomme plus).
+    if (playerConnectStatus.status === 'connected' && status === 'connected') {
+      boundRef.current = true
+      setBound(true)
+      if (playerConnectStatus.name) {
+        setPlayerSession((prev) => (prev && prev.name !== playerConnectStatus.name
+          ? { ...prev, name: playerConnectStatus.name }
+          : prev))
+        if (!staleRef.current && getStoredVPlayerId() === ownIdRef.current) {
+          localStorage.setItem('vplayer_name', playerConnectStatus.name)
+        }
+      }
+    }
+
     clearPlayerConnectStatus()
-  }, [playerConnectStatus, clearPlayerConnectStatus])
+  }, [playerConnectStatus, clearPlayerConnectStatus, status])
 
   // Fix R1 (suite) : après un rejet de reconnexion, repartir sur EnrollPage
   // avec un pseudo neuf — l'ancien bumper n'est plus à nous (supprimé ou
@@ -319,7 +369,7 @@ export default function VPlayerPage() {
   // Naviguer vers '/' fait donc automatiquement atterrir l'utilisateur sur le
   // bon écran selon l'état d'enrôlement live — pas de route distincte à choisir.
   const handleRejoinFromScratch = useCallback(() => {
-    clearVPlayerSession()
+    clearOwnVPlayerSession(ownIdRef.current)
     setPlayerSession(null) // #118 (F3, R1) — cf. commentaire sur l'effet ci-dessus
     navigate('/')
   }, [navigate])
@@ -340,7 +390,7 @@ export default function VPlayerPage() {
   // délai de lecture et même bouton de retour immédiat que le rejet de
   // reconnexion ci-dessus, pour rester homogène.
   const handleEvictedRedirect = useCallback(() => {
-    clearVPlayerSession()
+    clearOwnVPlayerSession(ownIdRef.current)
     setPlayerSession(null) // #118 (F3, R1) — cf. commentaire sur l'effet ci-dessus
     try {
       sessionStorage.setItem('vplayer_redirect_reason', evictedReason || '')
@@ -385,9 +435,9 @@ export default function VPlayerPage() {
     if (gameState.phase !== 'PREPARE') return
 
     console.log('[VPlayer] Auto-sending PONG in PREPARE phase, bumper ID:', bumper.id)
-    // Send PONG - ID in payload for web clients
-    sendMessage('PONG', { ID: bumper.id })
-  }, [gameState.phase, bumper, sendMessage])
+    // Send PONG - ID in payload for web clients (#246 : seulement connexion liée)
+    sendBound('PONG', { ID: bumper.id })
+  }, [gameState.phase, bumper, sendBound, bound])
 
   // #118 (F7, déclencheur a) — passage observé en PREPARE : la question
   // change, tout buzz mémorisé pour l'ancienne question est périmé. Vidage
@@ -415,6 +465,7 @@ export default function VPlayerPage() {
     const pending = pendingBuzzRef.current
     if (!pending) return
     if (!bumper?.id || bumper.CONNECTED !== true) return // reconnexion pas encore confirmée
+    if (!bound) return // #246 : connexion pas encore liée à notre bumper
 
     pendingBuzzRef.current = null
 
@@ -429,8 +480,18 @@ export default function VPlayerPage() {
     // Chemin identique à un buzz normal : résolution par payload.ID côté
     // serveur, horodatage serveur fait foi — aucun horodatage client transmis.
     console.log('[VPlayer] Envoi du buzz mémorisé après reconnexion:', bumper.id)
-    sendMessage('BUTTON', { ID: bumper.id, button: 'A' })
-  }, [bumper, gameState.phase, gameState.question?.ID, sendMessage])
+    sendBound('BUTTON', { ID: bumper.id, button: 'A' })
+  }, [bumper, bound, gameState.phase, gameState.question?.ID, sendBound])
+
+  // #246 — envoi de la réponse QCM mémorisée à la liaison (si contexte inchangé).
+  useEffect(() => {
+    const pending = pendingQcmRef.current
+    if (!pending || !bound || !bumper?.id) return
+    pendingQcmRef.current = null
+    if (pending.questionId !== (gameState.question?.ID ?? null)) return
+    if (gameState.phase !== 'STARTED' || gameState.question?.TYPE !== 'QCM') return
+    sendBound('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: pending.color })
+  }, [bound, bumper, gameState.phase, gameState.question?.ID, gameState.question?.TYPE, sendBound])
 
   // ARDOISE: reset text on question change
   useEffect(() => {
@@ -462,9 +523,19 @@ export default function VPlayerPage() {
     if (prev === 'STARTED' && currentPhase !== 'STARTED' && ardoiseText) {
       // Cancel pending throttle and send immediately
       if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
-      sendMessage('ARDOISE_INPUT', { TEXT: ardoiseText, ID: bumper?.id })
+      sendBound('ARDOISE_INPUT', { TEXT: ardoiseText, ID: bumper?.id })
     }
-  }, [gameState.phase, ardoiseText, sendMessage, bumper])
+  }, [gameState.phase, ardoiseText, sendBound, bumper])
+
+  // #246 — renvoi du texte COMPLET dès que la connexion est (re)liée : les
+  // frappes faites pendant la coupure/avant la liaison n'ont pas été émises.
+  useEffect(() => {
+    if (!bound || !bumper?.id) return
+    if (gameState.phase !== 'STARTED' || gameState.question?.TYPE !== 'ARDOISE') return
+    if (!ardoiseTextRef.current) return
+    sendBound('ARDOISE_INPUT', { TEXT: ardoiseTextRef.current, ID: bumper.id, REASON: 'resend' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bound])
 
   // ARDOISE: handle key input — update local state + debounced send (#117: except the
   // very first non-empty character for the current question, sent immediately so the
@@ -474,13 +545,13 @@ export default function VPlayerPage() {
     if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
     if (!ardoiseFirstSentRef.current && text !== '') {
       ardoiseFirstSentRef.current = true
-      sendMessage('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
+      sendBound('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
       return
     }
     ardoiseThrottleRef.current = setTimeout(() => {
-      sendMessage('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
+      sendBound('ARDOISE_INPUT', { TEXT: text, ID: bumper?.id })
     }, 200)
-  }, [sendMessage, bumper])
+  }, [sendBound, bumper])
 
   // NoSleep — requires user gesture to enable (called on fullscreen tap or first buzz)
   const activateNoSleep = useCallback(() => {
@@ -559,7 +630,7 @@ export default function VPlayerPage() {
     // premier de cette coupure (ProcessButtonPress côté serveur ne retient de
     // toute façon que le premier appui d'un bumper pour une question donnée).
     // Envoi différé et validation de contexte : voir les effets F7 ci-dessus.
-    if (status !== 'connected') {
+    if (status !== 'connected' || !boundRef.current) {
       if (!pendingBuzzRef.current) {
         pendingBuzzRef.current = { questionId: gameState.question?.ID ?? null }
         console.log('[VPlayer] Buzz mémorisé pendant la coupure (question', gameState.question?.ID, ')')
@@ -568,7 +639,7 @@ export default function VPlayerPage() {
     }
 
     console.log('[VPlayer] Buzzing:', bumper.id)
-    sendMessage('BUTTON', { ID: bumper.id, button: 'A' })
+    sendBound('BUTTON', { ID: bumper.id, button: 'A' })
   }
 
   const handleQCMAnswer = (color) => {
@@ -578,9 +649,30 @@ export default function VPlayerPage() {
 
     console.log('[VPlayer] QCM answer:', color)
 
+    // #246 : connexion pas (encore) liée → mémoriser la réponse, envoyée à la
+    // liaison si la question et la phase sont toujours les mêmes.
+    if (!boundRef.current) {
+      pendingQcmRef.current = { color, questionId: gameState.question?.ID ?? null }
+      return
+    }
+
     // Send VPLAYER_QCM_ANSWER message - wait for server confirmation
-    sendMessage('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: color })
+    sendBound('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: color })
   }
+
+  // #246 — « Reprendre ici » : cette connexion redevient la connexion liée
+  // (l'autre onglet/appareil recevra à son tour DUPLICATE_SESSION).
+  const handleResume = useCallback(() => {
+    if (isStaleVPlayerSession(ownIdRef.current)) {
+      setStale(true)
+      return
+    }
+    setSuperseded(false)
+    supersededRef.current = false
+    if (playerSession) {
+      sendMessage('PLAYER_CONNECT', { NAME: playerSession.name, ID: playerSession.id })
+    }
+  }, [playerSession, sendMessage])
 
   // Get player name color - always use team color when assigned (#112).
   // Fix #112 : bumper.ANSWER_COLOR n'est pas dédié à l'identité du VJoueur —
@@ -670,6 +762,42 @@ export default function VPlayerPage() {
           <p className="vplayer-reconnect-error-hint">{redirectHint}</p>
           <button className="vplayer-reconnect-btn" onClick={handleEvictedRedirect}>
             Rejoindre à nouveau
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // #246 (A5.3) — onglet périmé : un autre onglet de cette tablette porte une
+  // autre session. Aucune émission, aucune reconnexion, aucun effacement.
+  if (stale) {
+    return (
+      <div className="vplayer-page loading">
+        <div className="vplayer-session-screen" data-testid="vplayer-stale-tab">
+          <div className="vplayer-session-ico" aria-hidden="true">🗂️</div>
+          <h2>Cette page n’est plus active</h2>
+          <p>
+            Votre session de jeu est ouverte dans un <b>autre onglet</b> de cette
+            tablette. Fermez cet onglet et continuez dans l’autre.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // #246 (A5.6) — session reprise par une connexion plus récente.
+  if (superseded) {
+    return (
+      <div className="vplayer-page loading">
+        <div className="vplayer-session-screen" data-testid="vplayer-duplicate-session">
+          <div className="vplayer-session-ico" aria-hidden="true">📱</div>
+          <h2>Votre session est ouverte ailleurs</h2>
+          <p>
+            « {bumper?.NAME || playerSession?.name || ''} » vient d’être repris sur un autre
+            onglet ou un autre appareil. Ici, plus rien n’est envoyé.
+          </p>
+          <button className="vplayer-reconnect-btn" onClick={handleResume}>
+            Reprendre ici
           </button>
         </div>
       </div>

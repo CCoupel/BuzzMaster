@@ -10,3 +10,34 @@ const VPLAYER_SESSION_KEYS = ['vplayer_name', 'vplayer_session', 'vplayer_id']
 export function clearVPlayerSession() {
   VPLAYER_SESSION_KEYS.forEach((key) => localStorage.removeItem(key))
 }
+
+// #246 (F-ID) — le localStorage est PARTAGÉ par tous les onglets d'un
+// navigateur, alors que la session d'un onglet vit en mémoire. Un onglet ne
+// doit donc jamais effacer ni se fier au localStorage courant sans comparer
+// l'ID stocké à son propre ID de session.
+
+export function getStoredVPlayerId() {
+  try {
+    return localStorage.getItem('vplayer_id')
+  } catch {
+    return null
+  }
+}
+
+// Onglet périmé : un autre onglet a enregistré une session différente
+// (`vplayer_id` stocké non vide et ≠ l'ID de CET onglet). Un ID stocké absent
+// n'est pas une preuve de péremption (session effacée par éviction légitime).
+export function isStaleVPlayerSession(ownId) {
+  if (!ownId) return false
+  const stored = getStoredVPlayerId()
+  return stored !== null && stored !== '' && stored !== ownId
+}
+
+// N'efface les clés `vplayer_*` que si l'ID stocké est celui de l'appelant (ou
+// absent). Retourne true si l'effacement a eu lieu.
+export function clearOwnVPlayerSession(ownId) {
+  const stored = getStoredVPlayerId()
+  if (stored && ownId && stored !== ownId) return false
+  clearVPlayerSession()
+  return true
+}

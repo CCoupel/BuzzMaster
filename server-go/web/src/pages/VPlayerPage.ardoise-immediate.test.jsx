@@ -80,7 +80,9 @@ const makeGameMock = (overrides = {}) => ({
   },
   teams: { 'Équipe A': { NAME: 'Équipe A', COLOR: [255, 0, 0] } },
   status: 'connected',
-  playerConnectStatus: null,
+  // #246 : connexion liée à son bumper (PLAYER_CONNECTED reçu) — sans cela les
+  // actions joueur sont mises en attente.
+  playerConnectStatus: { status: 'connected', id: 'vjoueur_alice', name: 'Alice' },
   clearPlayerConnectStatus: vi.fn(),
   ...overrides,
 })
@@ -95,6 +97,7 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     vi.stubGlobal('localStorage', createLocalStorageMock())
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')
+    localStorage.setItem('vplayer_id', 'vjoueur_alice')
     useGame.mockReset()
   })
 
