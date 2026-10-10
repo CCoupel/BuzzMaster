@@ -229,6 +229,30 @@ Une fois la réponse révélée, la page de jeu (`/admin`) permet d'attribuer de
   Si la réponse arrive ensuite, elle est traitée normalement (résultat affiché, sélection réinitialisée si acceptée).
 - Si la connexion est perdue au moment de l'envoi : « Connexion perdue — réessayez. ».
 
+### Page Scores : montant libre et correction cachée (v11.2, #252)
+
+- **Montant libre** : entier de −999 à 999 (non nul), saisi à côté des présélections 1, 2, 5 et 10. Une saisie hors
+  bornes affiche « Entier de −999 à 999 » et désactive les boutons. Les présélections vident le champ libre.
+  Le signe se choisit avec − et +. Une valeur négative saisie revient au même.
+- **Équipes et joueurs** : le montant libre s'applique aux deux listes.
+- **Interrupteur « 📺 Afficher sur la TV »** : activé à **chaque ouverture** de la page (il n'est pas mémorisé).
+  Désactivé, l'attribution est une **correction cachée** :
+  - Rien n'est animé, ni son, ni LED, sur aucun écran (TV, tablettes, animateur).
+  - Le classement change sans animation.
+  - Une bannière « 🔇 Correction cachée » rappelle le mode.
+  - Une marque 🔇 apparaît sur les boutons, dans « Dernières attributions » (5 plus récentes) et dans la page Historique.
+- **Effet sur « déjà créditée »** : une correction cachée ne grise pas l'équipe. Elle n'empêche pas un crédit normal
+  pour la même question, ni une attribution groupée (#244/#251).
+- **Clic à 0** : un clic admin à montant 0 n'est plus enregistré (ni historique, ni verrou pour l'animateur).
+  Le geste « 0 pt » de l'animateur reste enregistré et verrouille l'équipe.
+- **Animateur** : il ne peut pas cacher une correction. Un `DISPLAY: false` venant de `/anim` est ignoré et journalisé.
+
+**Limites** :
+- La borne −999 à 999 est contrôlée par l'interface, **pas par le serveur**.
+- Une vue TV qui ne tourne pas au moment de la correction cachée traite cette correction plus tard. Elle peut alors
+  retarder un changement de rang visible accumulé le même jour. Cas étroit : changement de vue juste après une
+  correction cachée.
+
 ### POINTS_TARGET sur les questions
 
 Chaque question definit a qui les points sont attribues :
