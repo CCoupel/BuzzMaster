@@ -211,6 +211,14 @@ SendMessage({
 
 <!-- END TEAMLEADER_PROTOCOL -->
 
+## Suivi des états des issues
+
+- À **chaque** changement de phase d'un workflow, le teamleader met à jour les labels de **toutes** les issues suivies **avant** d'envoyer l'ordre suivant.
+- Transitions : dev → `EN COURS` (retirer PLANNING, EN REVIEW, EN QA, DONE) ; revue → `EN REVIEW` ; QA en parallèle → `EN QA` en gardant `EN REVIEW` ; QA validée et revue approuvée → `DONE` (retirer EN QA, EN REVIEW, EN COURS) ; retour en dev → `EN COURS` (retirer EN REVIEW, EN QA). Bugfix : pas de `PLANNING`.
+- Commande : `gh issue edit <n> --add-label "<L>" --remove-label "<L1>" --remove-label "<L2>"` (l'outil MCP `issue_write` n'est pas disponible).
+- Une issue n'est **jamais** fermée automatiquement (ni CI verte, ni QA) : la fermeture est une validation manuelle explicite de l'utilisateur. Si elle n'est pas validée, label `EN COURS`.
+- Table complète : `.claude/commands/context/CDP_WORKFLOWS.template.md`, section « Labels GitHub — Suivi de Phase ».
+
 ## Agents Disponibles
 
 | Nom | Rôle | Fichier | Spawn |
