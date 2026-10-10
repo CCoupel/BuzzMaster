@@ -336,7 +336,7 @@ describe('PlayerDisplay — ARDOISE TV Reveal : grille adaptative, toutes les é
     expect(container.querySelector('.ardoise-team-card-header').textContent).toBe('Les Verts')
     const ans = container.querySelector('.ardoise-team-card-answer')
     expect(ans.textContent).toBe('MARSEILLE')
-    expect(ans.getAttribute('title')).toBe('MARSEILLE')
+    expect(ans.hasAttribute('title')).toBe(false) // TV sans pointeur : pas de title
   })
 })
 

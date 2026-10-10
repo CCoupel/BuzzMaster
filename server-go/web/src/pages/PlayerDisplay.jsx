@@ -3097,10 +3097,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                               >
                                 {teamKey}
                               </div>
-                              <div
-                                className="ardoise-team-card-answer"
-                                title={answer?.TEXT || 'Aucune réponse'}
-                              >
+                              <div className="ardoise-team-card-answer">
                                 {answer?.TEXT || '—'}
                               </div>
                             </motion.div>
