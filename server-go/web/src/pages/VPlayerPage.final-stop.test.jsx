@@ -116,4 +116,29 @@ describe('VPlayerPage — ARDOISE_FINAL et accusé (#246, F-STOP)', () => {
     await act(async () => { vi.advanceTimersByTime(3000) })
     expect(sent(send, 'ARDOISE_FINAL')).toHaveLength(0)
   })
+
+  it('sortie de STOPPED (REVEAL forcé) tablette hors ligne : plus aucun final après reconnexion, overlay neutre', async () => {
+    const m = mount()
+    await act(async () => { vi.advanceTimersByTime(100) })
+    await type(m, 'AB')
+    await m.set({ phase: 'STOPPED' })
+    await m.set({ status: 'disconnected' })
+    await m.set({ phase: 'REVEALED' }) // forcé par l'animateur pendant la coupure
+    await m.set({ status: 'connected' })
+    const n = sent(m.send, 'ARDOISE_FINAL').length
+    await act(async () => { vi.advanceTimersByTime(5000) })
+    expect(sent(m.send, 'ARDOISE_FINAL').length).toBe(n)
+    expect(txt(m.view.container)).not.toMatch(/Envoi de votre réponse|Connexion perdue/)
+  })
+
+  it('plafond de renvois (30) : trace CLIENT_TRACE puis arrêt', async () => {
+    const m = mount()
+    await act(async () => { vi.advanceTimersByTime(100) })
+    await type(m, 'AB')
+    await m.set({ phase: 'STOPPED' })
+    await act(async () => { vi.advanceTimersByTime(60000) })
+    expect(sent(m.send, 'ARDOISE_FINAL')).toHaveLength(30)
+    const trace = useGame.mock.results.at(-1).value.sendClientTrace
+    expect(trace).toHaveBeenCalledWith('ARDOISE_FINAL_GIVEUP', expect.anything())
+  })
 })

@@ -32,6 +32,9 @@ const RECONNECT_ERROR_REDIRECT_DELAY_MS = 3000
 // jamais pendant un enrôlement légitime.
 const SESSION_EXPIRED_SAFETY_NET_MS = 10000
 
+// #246 — plafond de renvois d'ARDOISE_FINAL sans accusé (1 renvoi / s).
+const FINAL_MAX_SENDS = 30
+
 export default function VPlayerPage() {
   const navigate = useNavigate()
   const {
@@ -549,7 +552,7 @@ export default function VPlayerPage() {
   // tant que l'accusé n'est pas reçu (voir effets ci-dessous).
   const sendFinal = useCallback(() => {
     const f = finalRef.current
-    if (!f || f.acked) return false
+    if (!f || f.acked || (f.sends || 0) >= FINAL_MAX_SENDS) return false
     if (!boundRef.current || staleRef.current || supersededRef.current) return false
     const seq = ardoiseSeqRef.current + 1
     const sent = sendMessage('ARDOISE_FINAL', {
@@ -559,9 +562,18 @@ export default function VPlayerPage() {
       HASH: f.hash,
       SEQ: seq,
     })
-    if (sent) ardoiseSeqRef.current = seq
+    if (sent) {
+      ardoiseSeqRef.current = seq
+      f.sends = (f.sends || 0) + 1
+      // Plafond de renvois : on cesse d'insister (trace de diagnostic), un
+      // rebind / retour au premier plan ré-arme le cycle.
+      if (f.sends >= FINAL_MAX_SENDS) {
+        setFinalStatus('stalled')
+        sendClientTrace?.('ARDOISE_FINAL_GIVEUP', { DETAIL: { QUESTION_ID: f.qid, SENDS: f.sends } })
+      }
+    }
     return sent
-  }, [sendMessage])
+  }, [sendMessage, sendClientTrace])
 
   // Sortie de STARTED vers STOPPED/PAUSED (question ARDOISE) : gel du clavier
   // (disabled), débounce en attente annulé, texte final = dernier texte local.
@@ -595,6 +607,19 @@ export default function VPlayerPage() {
     setFinalStatus(null)
   }, [gameState.question?.ID])
 
+  // Le final n'a de sens qu'en STOPPED/PAUSED pour SA question : dès qu'on en
+  // sort (REVEAL forcé, question suivante...), on l'abandonne et on repasse à
+  // un état neutre (aucun renvoi, aucun overlay d'envoi).
+  useEffect(() => {
+    if (finalStatus !== 'sending' && finalStatus !== 'stalled') return
+    const f = finalRef.current
+    const inStop = gameState.phase === 'STOPPED' || gameState.phase === 'PAUSED'
+    if (!f || !inStop || String(gameState.question?.ID ?? '') !== f.qid) {
+      finalRef.current = null
+      setFinalStatus(null)
+    }
+  }, [finalStatus, gameState.phase, gameState.question?.ID])
+
   // Renvoi toutes les 1 s tant que l'accusé valide n'est pas reçu.
   useEffect(() => {
     if (finalStatus !== 'sending') return
@@ -604,14 +629,21 @@ export default function VPlayerPage() {
 
   // Renvoi immédiat à la (re)liaison de la connexion et au retour au premier plan.
   useEffect(() => {
-    if (finalStatus === 'sending' && bound) sendFinal()
+    if ((finalStatus === 'sending' || finalStatus === 'stalled') && bound && finalRef.current) {
+      finalRef.current.sends = 0
+      setFinalStatus('sending')
+      sendFinal()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bound])
 
   useEffect(() => {
-    if (finalStatus !== 'sending') return
+    if (finalStatus !== 'sending' && finalStatus !== 'stalled') return
     const onVisible = () => {
-      if (document.visibilityState === 'visible') sendFinal()
+      if (document.visibilityState !== 'visible' || !finalRef.current) return
+      finalRef.current.sends = 0
+      setFinalStatus('sending')
+      sendFinal()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -822,7 +854,7 @@ export default function VPlayerPage() {
       ardoiseOverlay = paused
         ? { tone: 'pause', text: `⏸ Jeu en pause · ${empty ? '✓ reçu — aucune réponse écrite' : '✓ réponse reçue'}` }
         : { tone: 'ok', text: empty ? '✓ Reçu — aucune réponse écrite' : '✓ Réponse reçue' }
-    } else if (finalStatus === 'sending') {
+    } else if (finalStatus === 'sending' || finalStatus === 'stalled') {
       if (status !== 'connected') {
         ardoiseOverlay = { tone: 'off', text: '⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau' }
       } else if (paused) {
