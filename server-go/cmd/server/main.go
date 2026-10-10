@@ -1400,6 +1400,16 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	// it — the logs must distinguish "wrong client type" from "blocked by
 	// entracte" as two different rejection reasons. A CSS filter doesn't stop
 	// a click; this does.
+	if a.engine.IsEntracte() && msg.Action == protocol.ActionNewGame {
+		// #243 (review): refused with an answer instead of silently ignored; the
+		// action stays OUTSIDE the entracte allow-list (nothing is executed).
+		opts := parseNewGameOptions(msg.Msg)
+		server.LogWarn(game.LogComponentApp, "NEW_GAME_REFUSED client=%s options=%s reason=ENTRACTE_ACTIVE", incoming.ClientID, newGameOptionsLog(opts))
+		if rm, err := protocol.NewMessage(protocol.ActionNewGameRefused, protocol.NewGameRefusedPayload{Reason: "ENTRACTE_ACTIVE"}); err == nil {
+			a.wsHub.SendToClient(incoming.ClientID, rm)
+		}
+		return
+	}
 	if a.engine.IsEntracte() && !server.IsActionAllowedDuringEntracte(msg.Action) {
 		a.logger.Warn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): blocked during ENTRACTE", msg.Action, incoming.ClientID, incoming.ClientType)
 		return
@@ -2037,16 +2047,21 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 			a.evictionRegistry.Record(playerID, "GAME_RESET")
 		}
 	}
+	// Purged VJoueurs were just told (PLAYER_EVICTED); now unbind their
+	// connections so they can no longer act for a bumper that is gone (#246 invariant).
+	for _, playerID := range res.PurgedPlayerIDs {
+		a.wsHub.UnbindPlayerID(playerID)
+	}
 	a.broadcastQuestions() // refreshed AVAILABLE statuses
 	a.broadcastUpdate()
 	a.broadcastEnrollmentUpdate()
 	a.broadcastNextQuestion()
 	a.resetCreditPointsForQuestion(nil)
 	a.broadcastAwardedTeams()
+	// Every applied NEW_GAME: LED state and room ambiance follow the reset.
+	a.sendLEDSetAllBuzzers()
+	a.ambiance().NotifyState()
 	if opts.PurgeTeams {
-		// buzzers fall back to the "no team" LED (#243)
-		a.sendLEDSetAllBuzzers()
-		a.ambiance().NotifyState()
 		a.updateBroadcasterFrequency()
 	}
 }

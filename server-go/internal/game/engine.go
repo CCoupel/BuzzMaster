@@ -3881,9 +3881,13 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	// 1. every timer stopped, phase untouched here (a tick must never put the
 	// phase back to STOPPED after the reset below). An interrupted running
 	// question keeps its "played" mark unless questions are reset.
-	if !opts.ResetQuestions && e.state.Question != nil &&
-		(e.state.Phase == PhaseStarted || e.state.Phase == PhasePaused) {
-		e.setQuestionStatus(StatusStopped)
+	if !opts.ResetQuestions && e.state.Question != nil {
+		switch e.state.Phase {
+		case PhasePrepare, PhaseReady, PhaseCountdown:
+			e.setQuestionStatus(StatusAvailable) // selected but never launched: not played
+		case PhaseStarted, PhasePaused:
+			e.setQuestionStatus(StatusStopped) // launched then interrupted: played
+		}
 	}
 	e.stopAllTimersUnsafe()
 

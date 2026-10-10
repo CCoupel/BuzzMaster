@@ -303,6 +303,24 @@ func (c *WebSocketClient) PlayerIDSnapshot() string {
 	return c.PlayerID
 }
 
+// UnbindPlayerID clears the binding of every connection bound to playerID (#243:
+// a purged VJoueur's connection must not keep acting for a bumper that no longer
+// exists). Returns the affected client IDs.
+func (h *WebSocketHub) UnbindPlayerID(playerID string) (unbound []string) {
+	if playerID == "" {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for client := range h.clients {
+		if client.PlayerID == playerID {
+			client.PlayerID = ""
+			unbound = append(unbound, client.ID)
+		}
+	}
+	return unbound
+}
+
 // ClientBinding returns the bumper ID bound to clientID and whether the
 // connection is still registered in the hub (#246).
 func (h *WebSocketHub) ClientBinding(clientID string) (playerID string, connected bool) {
