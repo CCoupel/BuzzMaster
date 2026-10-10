@@ -32,6 +32,8 @@ import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseRec
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import Button from '../components/Button'
 import LaunchGameButton from '../components/LaunchGameDialog'
+import TeamAwardBar from '../components/TeamAwardBar'
+import QcmAnswerPicker from '../components/QcmAnswerPicker'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
@@ -90,6 +92,10 @@ export default function GamePage() {
     newGame,
     newGameRefused,
     clearNewGameRefused,
+    awardedTeams = {},
+    teamPointsBatch,
+    teamPointsBatchResult,
+    clearTeamPointsBatchResult,
     // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
     questionSound,
   } = useGame()
@@ -433,6 +439,133 @@ export default function GamePage() {
     rafaleCounters: gameState.RAFALE_TEAM_COUNTERS,
     rafaleBest: gameState.RAFALE_TEAM_BEST,
   })
+
+  // ─── #244/#251 — attribution groupée après le REVEAL ──────────────────────
+  // Cases à cocher par équipe, montant de base B, bouton « Donner les points (N) »
+  // (TEAM_POINTS_BATCH). Montant par équipe = règle unique `defaultTeamAward` tant que B
+  // n'a pas été modifié à la main et que B > 0 ; sinon montant uniforme B.
+  const isRevealedPhase = gameState.phase === 'REVEALED'
+  const [awardSelected, setAwardSelected] = useState(() => new Set())
+  const [awardAmount, setAwardAmount] = useState(pointsInput)
+  const [awardEdited, setAwardEdited] = useState(false)
+  const [awardSource, setAwardSource] = useState('barème de la question')
+  const [awardSending, setAwardSending] = useState(false)
+  const [awardToast, setAwardToast] = useState(null) // { kind: 'ok'|'error', text }
+  const [pickedColor, setPickedColor] = useState(null)
+  const awardGuardRef = useRef(null)
+
+  // Sélection et B remis à zéro à chaque changement de question ou de phase.
+  useEffect(() => {
+    setAwardSelected(new Set())
+    setAwardAmount(pointsInput)
+    setAwardEdited(false)
+    setAwardSource('barème de la question')
+    setAwardSending(false)
+    setAwardToast(null)
+    setPickedColor(null)
+    if (awardGuardRef.current) clearTimeout(awardGuardRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.question?.ID, gameState.phase])
+  useEffect(() => () => { if (awardGuardRef.current) clearTimeout(awardGuardRef.current) }, [])
+
+  const awardTeamAmount = (teamName) =>
+    (awardEdited || awardAmount <= 0) ? awardAmount : teamDefaultAward(teamName, awardAmount)
+
+  // Équipes sélectionnables = pas encore créditées pour cette question (AWARDED_TEAMS).
+  const awardableTeams = displayTeams.filter(t => !(t.name in awardedTeams))
+  const awardEntries = awardableTeams
+    .filter(t => awardSelected.has(t.name))
+    .map(t => ({ team: t.name, points: awardTeamAmount(t.name) }))
+  const awardInvalid = awardEntries.filter(e => !Number.isInteger(e.points) || e.points === 0)
+  const awardBlockedReason = awardInvalid.length > 0
+    ? `Montant nul ou invalide pour : ${awardInvalid.map(e => e.team).join(', ')}`
+    : null
+
+  const toggleAwardTeam = (name, checked) => {
+    setPickedColor(null)
+    setAwardSelected(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(name); else next.delete(name)
+      return next
+    })
+  }
+  const changeAwardAmount = (value) => {
+    setAwardAmount(value)
+    setAwardEdited(true)
+    setAwardSource('montant modifié à la main')
+  }
+  // QCM : équipe d'une réponse = au moins un joueur avec ANSWER_COLOR = la couleur.
+  const qcmTeamsByColor = useMemo(() => {
+    const byColor = {}
+    Object.values(bumpers).forEach(b => {
+      if (!b.TEAM || !b.ANSWER_COLOR) return
+      if (!byColor[b.ANSWER_COLOR]) byColor[b.ANSWER_COLOR] = new Set()
+      byColor[b.ANSWER_COLOR].add(b.TEAM)
+    })
+    return byColor
+  }, [bumpers])
+  const pickQcmAnswer = (color) => {
+    const correct = color === gameState.question?.QCM_CORRECT
+    const teamNames = [...(qcmTeamsByColor[color] || [])].filter(n => !(n in awardedTeams))
+    setAwardSelected(new Set(teamNames)) // désélectionne d'abord tout, puis sélectionne celles de cette réponse
+    setAwardAmount(correct ? pointsInput : -1)
+    setAwardEdited(false)
+    setAwardSource(correct ? 'bonne réponse : points de la question' : 'mauvaise réponse : pénalité')
+    setPickedColor(color)
+  }
+
+  const giveAwardPoints = () => {
+    if (awardEntries.length === 0 || awardBlockedReason || awardSending) return
+    setAwardToast(null)
+    const sent = teamPointsBatch?.(gameState.question?.ID, awardEntries)
+    if (sent === false) {
+      setAwardToast({ kind: 'error', text: 'Connexion perdue — réessayez.' })
+      return
+    }
+    setAwardSending(true)
+    // Garde : sans réponse du serveur, le bouton se réactive (pas de bouton figé).
+    if (awardGuardRef.current) clearTimeout(awardGuardRef.current)
+    awardGuardRef.current = setTimeout(() => {
+      setAwardSending(false)
+      setAwardToast({ kind: 'error', text: 'Pas de réponse du serveur — réessayez.' })
+    }, 8000)
+  }
+
+  // Résultat de l'attribution (TEAM_POINTS_BATCH_RESULT, ciblé).
+  useEffect(() => {
+    const r = teamPointsBatchResult
+    if (!r) return
+    if (awardGuardRef.current) clearTimeout(awardGuardRef.current)
+    setAwardSending(false)
+    if (r.status === 'REFUSED') {
+      if (r.reason === 'UNKNOWN_TEAM') {
+        setAwardSelected(prev => new Set([...prev].filter(n => !r.teams.includes(n))))
+        setAwardToast({ kind: 'error', text: 'Équipe introuvable (renommée ou supprimée) : sélection mise à jour.' })
+      } else {
+        const msg = {
+          NOT_REVEALED: 'la réponse n’est pas révélée',
+          QUESTION_MISMATCH: 'la question a changé',
+        }[r.reason] || 'montant ou sélection invalide'
+        setAwardToast({ kind: 'error', text: `Attribution refusée : ${msg}.` })
+      }
+    } else {
+      const n = r.applied.length
+      const amounts = [...new Set(r.applied.map(a => a.points))]
+      let text
+      if (n === 0) text = 'Aucune équipe créditée.'
+      else if (amounts.length === 1) {
+        const p = amounts[0]
+        const abs = Math.abs(p)
+        text = `✓ ${p > 0 ? '+' : '−'}${abs} point${abs > 1 ? 's' : ''} ${p > 0 ? 'donné' : 'retiré'}${abs > 1 ? 's' : ''} à ${n} équipe${n > 1 ? 's' : ''}.`
+      } else text = `✓ Points attribués à ${n} équipe${n > 1 ? 's' : ''}.`
+      const k = r.skipped.length
+      if (k > 0) text += ` ${k} équipe${k > 1 ? 's' : ''} déjà créditée${k > 1 ? 's' : ''} ignorée${k > 1 ? 's' : ''}.`
+      setAwardToast({ kind: 'ok', text })
+      setAwardSelected(new Set())
+      setPickedColor(null)
+    }
+    clearTeamPointsBatchResult?.()
+  }, [teamPointsBatchResult]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
     if (ctrlKey && gameState.phase === 'PREPARE') {
@@ -1518,6 +1651,36 @@ export default function GamePage() {
               />
             )}
 
+            {/* #244/#251 — attribution groupée : seulement APRÈS le REVEAL */}
+            {isRevealedPhase && (
+              <>
+                {gameState.question?.TYPE === 'QCM' && (
+                  <QcmAnswerPicker
+                    question={gameState.question}
+                    teamCounts={Object.fromEntries(Object.entries(qcmTeamsByColor).map(([c, set]) => [c, set.size]))}
+                    picked={pickedColor}
+                    onPick={pickQcmAnswer}
+                  />
+                )}
+                <TeamAwardBar
+                  amount={awardAmount}
+                  source={awardSource}
+                  count={awardEntries.length}
+                  sending={awardSending}
+                  blockedReason={awardBlockedReason}
+                  onAmountChange={changeAwardAmount}
+                  onSelectAll={() => { setPickedColor(null); setAwardSelected(new Set(awardableTeams.map(t => t.name))) }}
+                  onSelectNone={() => { setPickedColor(null); setAwardSelected(new Set()) }}
+                  onGive={giveAwardPoints}
+                />
+                {awardToast && (
+                  <div className={`award-toast${awardToast.kind === 'error' ? ' error' : ''}`} role="status">
+                    {awardToast.text}
+                  </div>
+                )}
+              </>
+            )}
+
           </div>
         </Card>
       </div>
@@ -1582,6 +1745,11 @@ export default function GamePage() {
                       setTeamPoints(teamName, pointsToAward)
                     }
                   }}
+                  selectable={isRevealedPhase}
+                  selected={awardSelected.has(team.name)}
+                  onSelectChange={toggleAwardTeam}
+                  awardedInfo={team.name in awardedTeams ? awardedTeams[team.name] : null}
+                  awardPreview={awardSelected.has(team.name) ? awardTeamAmount(team.name) : null}
                   onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}
                   buzzers={team.buzzers.map(b => ({
                     ...b,

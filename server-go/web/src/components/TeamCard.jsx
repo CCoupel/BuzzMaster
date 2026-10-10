@@ -389,6 +389,13 @@ export default function TeamCard({
   memoryStats = null, // { pairs, errors, totalPairs, pointsPerPair, errorPenalty, completionBonus }
   questionType = null, // Question type (QCM, NORMAL, MEMORY)
   rafaleStats = null, // { counter, suggestedPoints } — v8.0.0, #16/#199, contrat rafale.md §6
+  // #244/#251 — attribution groupée (après REVEAL) : case à cocher, grisage « déjà créditée »,
+  // aperçu du montant. `selectable` faux hors REVEALED → rien de tout cela n'est rendu.
+  selectable = false,
+  selected = false,
+  onSelectChange = null,
+  awardedInfo = null, // { POINTS } si l'équipe est dans AWARDED_TEAMS
+  awardPreview = null, // montant prévu (équipe sélectionnée)
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [otaBuzzer, setOtaBuzzer] = useState(null) // buzzer object for OTA modal
@@ -473,7 +480,7 @@ export default function TeamCard({
     <motion.div
       layoutId={`team-${name}`}
       layout
-      className={`team-card ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${isWaitingForBuzz ? 'waiting-buzz' : ''} ${className}`}
+      className={`team-card ${selectable && selected ? 'award-selected' : ''} ${selectable && awardedInfo ? 'award-done' : ''} ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${isWaitingForBuzz ? 'waiting-buzz' : ''} ${className}`}
       style={{ '--team-color': rgbColor, zIndex: active ? 10 : 1 }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -485,6 +492,18 @@ export default function TeamCard({
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
       >
+        {selectable && (
+          <input
+            type="checkbox"
+            className="team-select-checkbox"
+            checked={selected && !awardedInfo}
+            disabled={!!awardedInfo}
+            onChange={(e) => onSelectChange?.(name, e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Sélectionner ${name}`}
+            title={awardedInfo ? 'Déjà créditée pour cette question' : undefined}
+          />
+        )}
         <div className="team-color-indicator" />
         <div className="team-header-content">
           {rankBadge && <span className="rank-badge">{rankBadge}</span>}
@@ -552,6 +571,16 @@ export default function TeamCard({
         >
           {score} Pts
         </motion.span>
+        {selectable && awardedInfo && (
+          <span className="award-done-chip">
+            ✓ déjà créditée {awardedInfo.POINTS > 0 ? '+' : ''}{awardedInfo.POINTS}
+          </span>
+        )}
+        {selectable && !awardedInfo && selected && awardPreview !== null && (
+          <span className={`award-preview${awardPreview < 0 ? ' neg' : ''}`}>
+            {awardPreview > 0 ? '+' : ''}{awardPreview}
+          </span>
+        )}
         {/* Score decomposition tooltip */}
         {showTooltip && (teamPoints > 0 || bumperTotal > 0) && (
           <div className="score-tooltip">

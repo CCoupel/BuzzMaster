@@ -1,0 +1,15 @@
+/* #244/#251 — barre d'attribution (maquette admin_game_team_award__selection) */
+.award-bar { margin-top: 0.8rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.6rem 0.7rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.6rem; }
+.award-bar-label { font-size: 0.8rem; font-weight: 700; color: #374151; }
+.award-amount { display: flex; align-items: center; border: 1px solid #d1d5db; border-radius: 0.45rem; overflow: hidden; background: #fff; }
+.award-amount button { border: 0; background: #f3f4f6; width: 1.9rem; height: 2rem; font-weight: 800; cursor: pointer; }
+.award-amount input { width: 3.6rem; height: 2rem; border: 0; text-align: center; font-weight: 800; font-size: 0.95rem; }
+.award-amount.neg input { color: #dc2626; }
+.award-src { font-size: 0.74rem; color: #6b7280; }
+.award-sel-links { margin-left: auto; display: flex; gap: 0.6rem; font-size: 0.78rem; }
+.award-link { border: 0; background: none; padding: 0; color: #4f46e5; cursor: pointer; text-decoration: underline; font: inherit; }
+.award-give { border: 0; border-radius: 0.5rem; padding: 0.55rem 0.95rem; font-weight: 800; font-size: 0.9rem; color: #fff; background: #4f46e5; cursor: pointer; }
+.award-give.neg { background: #dc2626; }
+.award-give:disabled { opacity: 0.4; cursor: not-allowed; }
+.award-toast { margin-top: 0.6rem; padding: 0.45rem 0.6rem; border-radius: 0.45rem; background: #dcfce7; color: #16a34a; font-size: 0.82rem; font-weight: 700; }
+.award-toast.error { background: #fee2e2; color: #dc2626; }
