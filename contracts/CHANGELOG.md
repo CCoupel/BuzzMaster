@@ -2,6 +2,16 @@
 
 ---
 
+## [20261011] — « Lancer la partie » : options de purge de NEW_GAME (#243, v11.2)
+
+> Retour terrain : « Nouvelle partie » purgeait les joueurs sans le dire. Décisions utilisateur : popup avec trois options, **seuls les scores cochés par défaut** ; « purger les équipes » = équipes supprimées, joueurs sans équipe. **Défaut planner à confirmer** : purge des joueurs sans purge des scores → points des joueurs supprimés transférés dans les points de leur équipe.
+
+- **[NEW]** `websocket-actions.md` §NEW_GAME — section créée : options facultatives `PURGE_SCORES`, `PURGE_PLAYERS`, `PURGE_TEAMS` ; **absentes = comportement actuel** (scores + joueurs, équipes conservées) ; effets par option, persistance, ordre d'application. Aucune BREAKING.
+- **[CHANGED]** `websocket-actions.md` §NEW_GAME — tous les minuteurs sont arrêtés au NEW_GAME (correction : le chrono d'une question en cours survivait et remettait la phase à `STOPPED`).
+- **[NEW]** `logging.md` §3.2 ter — `NEW_GAME_PURGE` (WARN).
+
+---
+
 ## [20261011] — Identité d'équipe = clé ; équipes verrouillées pendant une question (#249, v11.2)
 
 > Bug reproduit pendant l'analyse de #246 : renommer une équipe laissait `NAME` ≠ clé ; l'admin et la TV ne trouvaient plus ses réponses ARDOISE. Décision utilisateur : renommage **interdit pendant une question en cours**. **Décisions utilisateur confirmées** : (1) la question est « en cours » de sa sélection (PREPARE) jusqu'à la révélation ; en `REVEALED`, le renommage est permis et le serveur reporte les états ; (2) la suppression d'équipe suit la même règle (la liste des équipes existantes ne change pas entre la sélection et le REVEAL ; l'ajout reste permis).

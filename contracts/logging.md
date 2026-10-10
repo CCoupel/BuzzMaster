@@ -78,6 +78,12 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `TEAMS_CHANGE_REFUSED` | WARN | `UPDATE`/`FULL` qui renomme ou supprime une équipe pendant une question → refusé | `client`, `teams` (clés retirées), `phase`, `question` |
 | `TEAM_RENAMED` | INFO | Renommage appliqué hors question, états reportés (non écrit sur disque par défaut) | `old`, `new`, `migrated` (liste des états reportés) |
 
+### 3.2 ter Nouvelle partie (v11.2, #243)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `NEW_GAME_PURGE` | WARN | Chaque `NEW_GAME`, quelles que soient les options | `client`, `options` (`scores`/`players`/`teams` vrais), `players_removed`, `teams_removed`, `scores_reset`, `points_transferred` (somme transférée dans `TEAM_POINTS`), `phase_before`, `question_before` |
+
 ### 3.3 Diffusion
 
 | Événement | Niveau | Quand | Champs |
