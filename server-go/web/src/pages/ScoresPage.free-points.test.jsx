@@ -16,7 +16,8 @@ vi.mock('framer-motion', () => {
   return { motion: new Proxy({}, { get: (_, tag) => makeEl(tag) }), AnimatePresence: ({ children }) => children }
 })
 
-const mk = () => ({
+const mk = (seq = 0) => ({
+  gameState: { SCORE_CHANGE: { SEQ: seq, DISPLAY: true, TEAMS: [], PLAYERS: [] } },
   teams: { 'Les Bleus': { SCORE: 42, COLOR: [0, 0, 255] } },
   bumpers: { b1: { NAME: 'Paul', TEAM: 'Les Bleus', SCORE: 12 } },
   setTeamPoints: vi.fn(), setBumperPoints: vi.fn(),
@@ -127,5 +128,42 @@ describe('ScoresPage — montant libre et affichage TV (#252)', () => {
     expect(li.textContent).toMatch(/🔇 correction cachée/)
     expect(screen.getByText(/\+3 Les Bleus \(question 9\)/)).toBeTruthy()
     expect(screen.getByText(/\+5 Paul/)).toBeTruthy()
+  })
+
+  it('historique rechargé sur un nouveau SCORE_CHANGE.SEQ, pas à chaque UPDATE ; intervalle de 5 s conservé', async () => {
+    vi.useFakeTimers()
+    try {
+      const g = mk(0)
+      useGame.mockReturnValue(g)
+      const { rerender } = render(<ScoresPage />)
+      await act(async () => {})
+      const n0 = fetch.mock.calls.length // chargement initial
+      // UPDATE sans nouvelle attribution (nouveaux objets teams/bumpers) : aucun fetch
+      useGame.mockReturnValue({ ...g, teams: { ...g.teams }, bumpers: { ...g.bumpers } })
+      rerender(<ScoresPage />)
+      await act(async () => {})
+      expect(fetch.mock.calls.length).toBe(n0)
+      // nouvelle attribution : un fetch
+      useGame.mockReturnValue({ ...g, gameState: { SCORE_CHANGE: { SEQ: 1, DISPLAY: true, TEAMS: [], PLAYERS: [] } } })
+      rerender(<ScoresPage />)
+      await act(async () => {})
+      expect(fetch.mock.calls.length).toBe(n0 + 1)
+      // l'intervalle de 5 s tourne toujours, sans être réarmé par les UPDATE
+      await act(async () => { vi.advanceTimersByTime(5000) })
+      expect(fetch.mock.calls.length).toBe(n0 + 2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('Dernières attributions : un crédit à 0 s\'affiche « 0 pt », jamais « −0 »', async () => {
+    fetch.mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve([
+      { EVENT_TYPE: 'POINTS_AWARDED', TIMESTAMP: 7, WINNER_TYPE: 'TEAM', TEAM_NAME: 'Les Bleus', POINTS: 0, QUESTION_ID: '9' },
+    ]) }))
+    useGame.mockReturnValue(mk())
+    render(<ScoresPage />)
+    const li = await screen.findByText(/Les Bleus \(question 9\)/)
+    expect(li.textContent).toBe('0 pt Les Bleus (question 9)')
+    expect(li.textContent).not.toMatch(/−0/)
   })
 })

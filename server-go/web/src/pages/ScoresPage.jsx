@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Podium from '../components/Podium'
@@ -17,7 +17,7 @@ function parseFreeAmount(text) {
 }
 
 export default function ScoresPage() {
-  const { teams, bumpers, setBumperPoints, setTeamPoints } = useGame()
+  const { teams, bumpers, gameState, setBumperPoints, setTeamPoints } = useGame()
   const [pointsAmount, setPointsAmount] = useState(1)
   // #252 — montant libre (« autre ») et interrupteur « Afficher sur la TV » : activé à CHAQUE
   // ouverture de la page (état de page, jamais sauvegardé : pas de correction cachée oubliée).
@@ -31,29 +31,38 @@ export default function ScoresPage() {
 
   // « Dernières attributions » : mêmes événements que la page Historique (/history), 5 plus récents.
   const [recent, setRecent] = useState([])
-  useEffect(() => {
-    if (typeof fetch !== 'function') return undefined
-    let cancelled = false
-    const load = async () => {
-      try {
-        const response = await fetch('/history')
-        if (!response.ok) return
-        const data = (await response.json()) || []
-        if (cancelled) return
-        setRecent(
-          data
-            .filter(e => e.EVENT_TYPE !== 'TEAM_DELETED')
-            .sort((a, b) => b.TIMESTAMP - a.TIMESTAMP)
-            .slice(0, 5)
-        )
-      } catch {
-        // historique indisponible : la section reste vide
-      }
+  const mountedRef = useRef(true)
+  const loadRecent = useCallback(async () => {
+    if (typeof fetch !== 'function') return
+    try {
+      const response = await fetch('/history')
+      if (!response.ok) return
+      const data = (await response.json()) || []
+      if (!mountedRef.current) return
+      setRecent(
+        data
+          .filter(e => e.EVENT_TYPE !== 'TEAM_DELETED')
+          .sort((a, b) => b.TIMESTAMP - a.TIMESTAMP)
+          .slice(0, 5)
+      )
+    } catch {
+      // historique indisponible : la section reste vide
     }
-    load()
-    const id = setInterval(load, 5000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [teams, bumpers])
+  }, [])
+  // Rafraîchissement périodique (5 s), jamais réinitialisé par les UPDATE.
+  useEffect(() => {
+    mountedRef.current = true
+    loadRecent()
+    const id = setInterval(loadRecent, 5000)
+    return () => { mountedRef.current = false; clearInterval(id) }
+  }, [loadRecent])
+  // Et seulement quand une attribution vient d'avoir lieu (SCORE_CHANGE.SEQ), pas à chaque UPDATE.
+  const scoreSeq = gameState?.SCORE_CHANGE?.SEQ
+  const firstSeqRef = useRef(true)
+  useEffect(() => {
+    if (firstSeqRef.current) { firstSeqRef.current = false; return }
+    loadRecent()
+  }, [scoreSeq, loadRecent])
 
   // Sort teams by score (descending) with rank calculation
   const sortedTeams = useMemo(() => {
@@ -353,7 +362,7 @@ export default function ScoresPage() {
               const hiddenEntry = e.DISPLAY === false
               return (
                 <li key={`${e.TIMESTAMP}-${i}`} className={hiddenEntry ? 'hidden-entry' : undefined}>
-                  {points > 0 ? '+' : '−'}{Math.abs(points)} {who}
+                  {points === 0 ? '0 pt' : `${points > 0 ? '+' : '−'}${Math.abs(points)}`} {who}
                   {e.QUESTION_ID ? ` (question ${e.QUESTION_ID})` : ''}
                   {hiddenEntry && <span className="silent-mark" title="Correction cachée : sans affichage TV"> 🔇 correction cachée</span>}
                 </li>
