@@ -1801,7 +1801,7 @@ Vecteurs de test (Go et JS doivent produire exactement ces valeurs) :
 - La tablette **ne renvoie le final que tant que** la phase reçue est `STOPPED` ou `PAUSED` **et** que `QUESTION.ID` est celui du final (`QUESTION_ID`). Dès que la phase ou la question change (CONTINUE, REVEAL, nouvelle question, NEW_GAME), les renvois s'arrêtent immédiatement.
 - Cadence : un envoi au gel du clavier, puis **un renvoi par seconde** tant qu'aucun `ARDOISE_FINAL_ACK` valide n'est reçu.
 - **Au plus 30 envois** (premier envoi compris) par **liaison de connexion**. Les envois déclenchés par une nouvelle liaison ou par le retour au premier plan (`visibilitychange` → visible) comptent dans ces 30. Le compteur repart à 0 à chaque nouvelle liaison (reconnexion), et à chaque nouveau gel du clavier (nouvelle sortie de `STARTED` après un `CONTINUE`).
-- Après 30 envois sans accusé : arrêt des renvois. L'overlay garde la variante « ⚠ » de la maquette validée (`vplayer_ardoise_keyboard__final_ack`, état « connexion perdue »). Côté régie, l'équipe reste « en attente » et le forçage reste possible. Une reconnexion ultérieure relance un cycle de 30.
+- Après 30 envois sans accusé : arrêt des renvois et `CLIENT_TRACE { KIND: "ARDOISE_FINAL_GIVEUP" }` (une fois par cycle). L'overlay garde la variante « ⚠ » de la maquette validée (`vplayer_ardoise_keyboard__final_ack`, état « connexion perdue »). Côté régie, l'équipe reste « en attente » et le forçage reste possible. Une reconnexion ultérieure relance un cycle de 30.
 - Un envoi abandonné parce que la WebSocket n'est pas ouverte compte aussi, ce qui garde la tablette bornée même hors ligne.
 
 #### Comportement serveur
@@ -1880,7 +1880,7 @@ couvre la course (réception tardive de l'état) : l'interface affiche le motif 
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| KIND | string | ✅ | `ARDOISE_CLEARED_SEEN` (admin/anim : le texte d'une équipe est passé de non vide à vide ou a disparu dans l'état reçu, même question), `VISIBILITY` (`DETAIL.STATE` = `hidden`/`visible`, `DETAIL.HIDDEN_MS`), `PAGESHOW` (`DETAIL.PERSISTED` = restauration bfcache), `FREEZE` / `RESUME`, `WS_GAP` (`DETAIL.DOWN_MS`, `DETAIL.DROPPED_SENDS` = envois abandonnés pendant la coupure), `STALE_TAB` (`vplayer` : onglet déclaré périmé), `DUPLICATE_SESSION` (`vplayer` : éviction reçue) |
+| KIND | string | ✅ | `ARDOISE_CLEARED_SEEN` (admin/anim : le texte d'une équipe est passé de non vide à vide ou a disparu dans l'état reçu, même question), `VISIBILITY` (`DETAIL.STATE` = `hidden`/`visible`, `DETAIL.HIDDEN_MS`), `PAGESHOW` (`DETAIL.PERSISTED` = restauration bfcache), `FREEZE` / `RESUME`, `WS_GAP` (`DETAIL.DOWN_MS`, `DETAIL.DROPPED_SENDS` = envois abandonnés pendant la coupure), `STALE_TAB` (`vplayer` : onglet déclaré périmé ; `DETAIL.OWN_ID`, `DETAIL.STORED_ID`), `DUPLICATE_SESSION` (`vplayer` : éviction reçue ; `DETAIL.OWN_ID`), **`ARDOISE_FINAL_GIVEUP`** *(v11.2, #246)* (`vplayer` : 30 envois de `ARDOISE_FINAL` sans accusé valide sur la liaison courante, renvois arrêtés — voir §ARDOISE_FINAL « Règle de renvoi » ; `DETAIL.QUESTION_ID`, `DETAIL.SENDS` = nombre d'envois effectués). `FREEZE`/`RESUME` restent autorisés par le contrat mais **ne sont pas émis** par les clients v11.2 |
 | AT | integer | ✅ | Horodatage client, millisecondes epoch |
 | TEAM | string | ⬜ | Pour `ARDOISE_CLEARED_SEEN` |
 | PREV_LEN | integer | ⬜ | Pour `ARDOISE_CLEARED_SEEN` : longueur du texte précédent |

@@ -95,4 +95,5 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `ARDOISE_CLEARED reason=clear` / `backspace_empty` | Effacement fait sur la tablette |
 | `CLIENT_TRACE ARDOISE_CLEARED_SEEN` sans `ARDOISE_CLEARED` serveur | Problème côté écran (admin/anim) |
 | `CLIENT_TRACE WS_GAP` avec `DROPPED_SENDS` > 0 | Frappes perdues pendant une coupure de la tablette |
+| `CLIENT_TRACE ARDOISE_FINAL_GIVEUP` | Une tablette a renoncé à transmettre son texte final (30 envois sans accusé) : l'équipe reste « en attente » ; à rapprocher des `ARDOISE_FINAL_*` serveur (refus, hash, trop long) ou d'une coupure |
 | `CLIENT_EVICTED_SLOW` | Un écran (admin, TV, anim) trop lent a été coupé par le serveur |
