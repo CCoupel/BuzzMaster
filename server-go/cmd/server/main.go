@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unicode/utf8"
 )
 
 // Version is set at build time via -ldflags="-X main.Version=X.Y.Z"
@@ -3766,7 +3767,7 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 			connAge = ms
 		}
 		server.LogWarn(game.LogComponentApp, "ARDOISE_CLEARED team=%q bumper=%s client=%s conn_age_ms=%d prev_len=%d seq=%d reason=%s question=%q phase=%s",
-			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, payload.Reason, questionID, phase)
+			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, logToken(payload.Reason), questionID, phase)
 	}
 
 	// #129 T1.5: admin only — so admin sees answers build up in real-time.
@@ -3790,6 +3791,10 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 	a.ardoiseCoalescer.Trigger()
 }
 
+// ardoiseMaxTextRunes caps ARDOISE_INPUT.TEXT / ARDOISE_FINAL.TEXT, counted in
+// characters (runes), not bytes (#246 review Batch 2, mineur B).
+const ardoiseMaxTextRunes = 2000
+
 // handleArdoiseFinal processes the final ARDOISE text of a bound tablette
 // (v11.2, #246): validates, records, acknowledges ONLY the sender (no text) and
 // pushes an immediate (non-coalesced) UPDATE to admin + anim.
@@ -3805,6 +3810,10 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL: bumper %q unknown or without team (client %s)", bumperID, clientID)
 		return
 	}
+	if n := utf8.RuneCountInString(p.Text); n > ardoiseMaxTextRunes {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s len=%d max=%d", bumperID, n, ardoiseMaxTextRunes)
+		return
+	}
 	st := a.engine.GetState()
 	currentQ := ""
 	if st.Question != nil {
@@ -3815,7 +3824,7 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_STALE bumper=%s question_id=%q current_question=%q phase=%s", bumperID, p.QuestionID, currentQ, st.Phase)
 		return
 	case game.ArdoiseFinalHashMismatch:
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, p.Hash, game.ArdoiseHash(p.Text), len(p.Text))
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, logToken(p.Hash), game.ArdoiseHash(p.Text), len(p.Text))
 		return
 	case game.ArdoiseFinalAccepted:
 		server.LogInfo(game.LogComponentApp, "ARDOISE_FINAL_RECEIVED team=%q bumper=%s hash=%s len=%d", bumper.Team, bumperID, p.Hash, len(p.Text))
@@ -3834,8 +3843,6 @@ type ardoiseSeqState struct {
 	last     int
 }
 
-// checkArdoiseSeq returns false when the message is stale (SEQ <= last applied,
-// same connection and question) and must be ignored; a gap is only logged.
 // forgetClientDiag drops the per-connection diagnostic state of a closed
 // connection (#246 review mineur 1).
 func (a *App) forgetClientDiag(clientID string) {
@@ -3845,6 +3852,8 @@ func (a *App) forgetClientDiag(clientID string) {
 	a.diagMu.Unlock()
 }
 
+// checkArdoiseSeq returns false when the message is stale (SEQ <= last applied,
+// same connection and question) and must be ignored; a gap is only logged.
 func (a *App) checkArdoiseSeq(clientID, bumperID, questionID string, seq int) bool {
 	a.diagMu.Lock()
 	defer a.diagMu.Unlock()
