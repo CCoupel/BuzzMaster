@@ -59,6 +59,15 @@ interface Team {
   `MEMOTION_CARD_TEAMS`, listes et équipes courantes, historique des points). Tout nouveau champ indexé par
   équipe doit y être ajouté.
 
+## SCORE_CHANGE et DISPLAY d'historique — v11.2 (#252)
+
+- **`GameState.SCORE_CHANGE`** : `{SEQ, DISPLAY, TEAMS, PLAYERS}`, toujours sérialisé, listes jamais `null`. Défaut
+  `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: []}`. Décrit la **dernière modification manuelle** de score
+  (`contracts/game-state.md` §`SCORE_CHANGE`).
+- **`GameEvent.DISPLAY`** (historique `POINTS_AWARDED`) : `*bool`, `omitempty`. Absent = visible (anciens fichiers) ;
+  `false` = correction cachée, enregistrée pour l'audit. Une correction cachée **n'est pas** comptée dans la règle
+  « déjà créditée » (`AWARDED_TEAMS`).
+
 ## Palette d'équipes — v5.7.25, #113
 
 16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
