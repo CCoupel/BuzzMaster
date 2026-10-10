@@ -27,6 +27,8 @@ import {
   rafaleCounterForTeam,
   calcRafaleTeamAward,
 } from '../utils/pointsAward'
+import ArdoiseRevealGate, { ArdoiseReceiptChip, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
+import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
@@ -69,6 +71,8 @@ export default function GamePage() {
     pauseGame,
     continueGame,
     revealAnswer,
+    revealRefused,
+    clearRevealRefused,
     selectQuestion,
     setRemoteDisplay,
     setBumperPoints,
@@ -454,6 +458,31 @@ export default function GamePage() {
   const canReveal = canRevealRule(gameState.phase, gameState.question)
   // START button only active in READY phase
   const canStart = canStartRule(gameState.phase)
+
+  // #246 (F-STOP) — garde de REVEAL ARDOISE : règle commune admin + anim
+  // (utils/ardoiseReceipt.js). REPONSE reste désactivé tant qu'une équipe
+  // attendue n'a pas transmis son texte final (tablette hors ligne comprise) ;
+  // « Révéler quand même… » (confirmation) envoie REVEAL {FORCE: true}.
+  const isArdoiseQuestion = gameState.question?.TYPE === 'ARDOISE'
+  const ardoiseReceipt = useMemo(
+    () => getArdoiseReceipt(teams, bumpers, gameState.ARDOISE_ANSWERS),
+    [teams, bumpers, gameState.ARDOISE_ANSWERS]
+  )
+  // Garde active dès l'arrêt (STOPPED/PAUSED) : le motif s'affiche même avant que
+  // `canReveal` (STATUS de la question) ne soit propagé.
+  const ardoiseGateActive = isArdoiseQuestion && (gameState.phase === 'STOPPED' || gameState.phase === 'PAUSED')
+  const ardoiseBlocked = ardoiseGateActive && !ardoiseReceipt.complete
+  // Course (état reçu en retard) : REVEAL_REFUSED porte la liste à jour.
+  const ardoiseGatePending = ardoiseBlocked
+    ? ardoiseReceipt.pending
+    : (ardoiseGateActive && revealRefused?.pending?.length ? revealRefused.pending : [])
+  // Un nouvel état de réponses rend le refus obsolète (les coches font foi).
+  useEffect(() => {
+    clearRevealRefused?.()
+  }, [gameState.ARDOISE_ANSWERS, clearRevealRefused])
+  useEffect(() => {
+    if (revealRefused && gameState.phase !== 'STOPPED' && gameState.phase !== 'PAUSED') clearRevealRefused?.()
+  }, [gameState.phase, revealRefused, clearRevealRefused])
 
   // RAFALE (v8.0.0, #16/#107, contrat rafale.md §7.2, tâche 26) — pool
   // vide pour le filtre de la manche sélectionnée = démarrage REFUSÉ.
@@ -904,18 +933,28 @@ export default function GamePage() {
 
         {/* ARDOISE — zone réponses équipes (pattern Memory team zone) */}
         {gameState.question?.TYPE === 'ARDOISE' &&
-         ['STARTED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
+         ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
           <div className="ardoise-team-zone">
-            <div className="memory-selector-label">Réponses ARDOISE</div>
+            <div className="ardoise-zone-head">
+              <div className="memory-selector-label">Réponses ARDOISE</div>
+              <ArdoiseReceiptCounter receipt={ardoiseReceipt} live={gameState.phase === 'STARTED'} />
+              {gameState.phase !== 'STARTED' && (
+                <div className="ardoise-legend"><span>✓ reçue</span><span>⏳ en attente</span><span>⚠ hors ligne</span></div>
+              )}
+            </div>
             <div className="ardoise-answers-list">
               {sortedArdoiseEntries.map(({ team, teamName, answer }, rank) => {
                 const teamColor = getRgbColor(team.COLOR)
                 const defaultPts = calcArdoiseDefaultPoints(gameState.question, pointsInput)
                 const delayLabel = answer ? formatArdoiseDelay(answer, gameState.gameTime) : null
+                // #246 : état de réception (hors STARTED). Une équipe sans bumper
+                // VJoueur n'est pas « attendue » : aucune pastille.
+                const receiptStatus = gameState.phase !== 'STARTED' ? ardoiseReceipt.byTeam[teamName] : undefined
+                const receiptCls = gameState.phase === 'REVEALED' ? '' : receiptStatus === 'wait' ? 'st-pending' : receiptStatus === 'off' ? 'st-offline' : ''
                 return (
                   <div
                     key={teamName}
-                    className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'} ${rank === 0 && answer ? 'rank-first' : ''}`}
+                    className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'} ${rank === 0 && answer ? 'rank-first' : ''} ${receiptCls}`}
                   >
                     <div className="ardoise-answer-team-name">
                       {answer && <span className="ardoise-answer-rank">{rank + 1}</span>}
@@ -937,6 +976,13 @@ export default function GamePage() {
                         </button>
                       )}
                     </div>
+                    {receiptStatus && (
+                      <ArdoiseReceiptChip
+                        status={receiptStatus}
+                        revealed={gameState.phase === 'REVEALED'}
+                        className="ardoise-answer-chip"
+                      />
+                    )}
                   </div>
                 )
               })}
@@ -1443,11 +1489,20 @@ export default function GamePage() {
             <Button
               variant="secondary"
               size="md"
-              onClick={revealAnswer}
-              disabled={!canReveal}
+              onClick={() => revealAnswer()}
+              disabled={!canReveal || ardoiseBlocked}
+              title={ardoiseBlocked ? `En attente de ${ardoiseReceipt.pending.length} réponse(s)` : undefined}
             >
               REPONSE
             </Button>
+
+            {ardoiseGatePending.length > 0 && (
+              <ArdoiseRevealGate
+                variant="admin"
+                pending={ardoiseGatePending}
+                onForce={() => { clearRevealRefused?.(); revealAnswer(true) }}
+              />
+            )}
 
           </div>
         </Card>

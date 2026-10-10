@@ -9,6 +9,7 @@ import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter, getRankBadge, formatRea
 import { sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward } from '../utils/pointsAward'
 import { isRevealed } from '../utils/phaseRules'
+import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import { prepareWaitReasons } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
@@ -147,6 +148,8 @@ export default function AnimPage() {
     pauseGame,
     continueGame,
     revealAnswer,
+    revealRefused = null,
+    clearRevealRefused = () => {},
     selectQuestion,
     setTeamPoints,
     setBumperPoints,
@@ -500,6 +503,23 @@ export default function AnimPage() {
   // direct, sans résolution PLAYER/bumper via POINTS_TARGET).
   const handleArdoiseCredit = (teamName, points) => setTeamPoints(teamName, points)
 
+  // #246 (F-STOP) — garde de REVEAL ARDOISE, même règle que /admin
+  // (utils/ardoiseReceipt.js) : REPONSE désactivé tant qu'une équipe attendue
+  // n'a pas transmis son texte final ; forçage confirmé via AnimConductPanel.
+  const ardoiseReceipt = useMemo(
+    () => getArdoiseReceipt(teams, bumpers, gameState.ARDOISE_ANSWERS),
+    [teams, bumpers, gameState.ARDOISE_ANSWERS]
+  )
+  const ardoiseGateActive = isArdoise && (gameState.phase === 'STOPPED' || gameState.phase === 'PAUSED')
+  const ardoiseBlocked = ardoiseGateActive && !ardoiseReceipt.complete
+  const ardoiseGatePending = ardoiseBlocked
+    ? ardoiseReceipt.pending
+    : (ardoiseGateActive && revealRefused?.pending?.length ? revealRefused.pending : [])
+  useEffect(() => { clearRevealRefused() }, [gameState.ARDOISE_ANSWERS]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (revealRefused && gameState.phase !== 'STOPPED' && gameState.phase !== 'PAUSED') clearRevealRefused()
+  }, [gameState.phase, revealRefused]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const showRankBadge = RANK_BADGE_PHASES.includes(gameState.phase)
   const showBuzzOrder = BUZZ_ORDER_PHASES.includes(gameState.phase)
   const creditEnabled = CREDIT_PHASES.includes(gameState.phase)
@@ -821,7 +841,12 @@ export default function AnimPage() {
           onPause={pauseGame}
           onContinue={continueGame}
           onStop={stopGame}
-          onReveal={revealAnswer}
+          onReveal={() => revealAnswer()}
+          ardoiseGate={{
+            blocked: ardoiseBlocked,
+            pending: ardoiseGatePending,
+            onForce: () => { clearRevealRefused(); revealAnswer(true) },
+          }}
           onSelectNext={selectQuestion}
           teams={teams}
           memory={{
@@ -915,6 +940,8 @@ export default function AnimPage() {
             revealed={revealed}
             awardedTeams={awardedTeams}
             onCredit={handleArdoiseCredit}
+            phase={gameState.phase}
+            receipt={ardoiseReceipt}
           />
         ) : displayTeams.map((team, index) => {
           const rank = index + 1

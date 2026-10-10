@@ -157,3 +157,11 @@
   font-style: italic;
   color: var(--text-secondary, #94a3b8);
 }
+
+/* #246 — garde de REVEAL ARDOISE : motif + forçage entre L1 et le bloc central */
+.anim-conduct-ardoise-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}

@@ -1519,3 +1519,23 @@
   align-self: flex-end;
   margin-top: 0.15rem;
 }
+
+/* #246 (F-STOP) — zone ARDOISE : en-tête (compteur n/N reçues, légende), états de ligne */
+.ardoise-zone-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.45rem;
+}
+.ardoise-zone-head .memory-selector-label { margin-bottom: 0; }
+.ardoise-legend {
+  margin-left: auto;
+  display: flex;
+  gap: 0.7rem;
+  font-size: 0.72rem;
+  color: var(--gray-500, #6b7280);
+}
+.ardoise-answer-row.st-pending { border-color: #f59e0b; }
+.ardoise-answer-row.st-offline { border-color: #ef4444; background: #fff7f7; }
+.ardoise-answer-chip { margin-left: 1rem; }
