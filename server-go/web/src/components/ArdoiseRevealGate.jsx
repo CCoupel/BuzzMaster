@@ -83,8 +83,8 @@ export default function ArdoiseRevealGate({ pending, variant = 'admin', onForce 
             </ul>
             <p>
               {isAnim
-                ? 'Elles seront révélées avec le dernier texte reçu, marqué « non confirmée ».'
-                : 'Elles seront révélées avec le dernier texte reçu pendant la question, marqué « non confirmée ».'}
+                ? 'Elles garderont leur dernier texte reçu, affiché grisé avec son icône d’origine.'
+                : 'Elles garderont leur dernier texte reçu pendant la question, affiché grisé avec son icône d’origine.'}
             </p>
             <div className="ardoise-gate-actions">
               <button type="button" className="ardoise-gate-cancel" onClick={() => setConfirming(false)}>

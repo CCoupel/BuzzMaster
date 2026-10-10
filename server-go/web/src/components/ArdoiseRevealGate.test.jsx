@@ -29,6 +29,10 @@ describe('ArdoiseRevealGate', () => {
     expect(onForce).not.toHaveBeenCalled()
     const dlg = screen.getByRole('dialog')
     expect(dlg.textContent).toMatch(/Révéler sans toutes les réponses \?/)
+    // #246 : plus de « marquées non confirmée » — le texte grisé et l'icône d'origine le disent
+    expect(dlg.textContent).toMatch(/garderont leur dernier texte reçu/)
+    expect(dlg.textContent).toMatch(/grisé avec son icône d’origine/)
+    expect(dlg.textContent).not.toMatch(/non confirmée/)
     fireEvent.click(within(dlg).getByText('Attendre'))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(onForce).not.toHaveBeenCalled()
