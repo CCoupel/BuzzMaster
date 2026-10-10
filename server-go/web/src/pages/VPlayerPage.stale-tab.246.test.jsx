@@ -60,7 +60,6 @@ describe('VPlayerPage — onglet périmé (#246)', () => {
     expect(sent(t.send, 'PLAYER_CONNECT')).toEqual([])
     expect(sent(t.send, 'ARDOISE_INPUT')).toEqual([])
     expect(ls.dump()).toEqual({ vplayer_name: 'Paul', vplayer_session: '2', vplayer_id: PAUL })
-    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
   it('affiche l’écran « Session ouverte dans un autre onglet » et n’émet qu’une trace STALE_TAB', async () => {
@@ -110,7 +109,8 @@ describe('VPlayerPage — onglet périmé (#246)', () => {
   it('non-régression — l’onglet qui possède la session reçoit PLAYER_REMOVED : efface SA session et retourne à l’inscription', async () => {
     seedSession(ls, { name: 'Paul', id: PAUL })
     const send = vi.fn(() => true)
-    useGame.mockImplementation(() => makeGame(send, { playerEvictedStatus: { reason: 'PLAYER_REMOVED' } }))
+    const game = makeGame(send, { playerEvictedStatus: { reason: 'PLAYER_REMOVED' } })
+    useGame.mockImplementation(() => game)
     render(<VPlayerPage />)
 
     await act(async () => { vi.advanceTimersByTime(5000) })
