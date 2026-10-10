@@ -490,11 +490,11 @@ Réponse **ciblée** à l'émetteur, suivie de l'état complet. Journal : `WARN 
   apparaît **dans le même message**, avec les mêmes joueurs. Le serveur reporte sous la nouvelle clé la
   liste fermée des états (`game-state.md` §`TEAMS_LOCKED`), historique compris. Journal : `INFO TEAM_RENAMED`.
 - Sinon, c'est une suppression suivie d'un ajout : les **états de jeu** de l'équipe supprimée sont effacés.
-  L'historique des points est conservé, avec un événement `TEAM_DELETED` (`TEAM_NAME`, `TIMESTAMP`).
-  `AWARDED_TEAMS` ignore les points antérieurs au dernier `TEAM_DELETED` de l'équipe.
-
-> Implémentation : le report au renommage est livré (`01e119a0`). L'événement `TEAM_DELETED` et le filtrage de
-> `AWARDED_TEAMS` figurent dans le contrat (`d6e5fc66`) ; leur commit moteur est en attente (revue M1).
+  L'historique des points est conservé. Le serveur y ajoute un événement `TEAM_DELETED` (`TEAM_NAME`,
+  `TIMESTAMP`) **à la suppression uniquement**, jamais à un renommage.
+- `AWARDED_TEAMS` ignore les `POINTS_AWARDED` d'une équipe **antérieurs à son dernier `TEAM_DELETED`**. La
+  comparaison se fait sur l'**ordre de l'historique** (indice dans la liste), jamais sur les horodatages.
+  Une équipe recréée sous le même nom n'hérite donc pas du verrou « déjà créditée » de l'ancienne.
 
 ## Liaison VJoueur, ARDOISE final et REVEAL gardé — v11.2 (#246)
 
