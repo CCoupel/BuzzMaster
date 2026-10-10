@@ -85,6 +85,13 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `NEW_GAME_PURGE` | WARN | Chaque `NEW_GAME` appliqué, quelles que soient les options | `client`, `options` (`scores`/`players`/`teams`/`questions` vrais), `players_removed`, `teams_removed`, `scores_reset`, `questions_reset`, `phase_before`, `question_before` |
 | `NEW_GAME_REFUSED` | WARN | `NEW_GAME` refusé (joueurs sans scores, ou entracte active) | `client`, `options`, `reason` (`PLAYERS_REQUIRE_SCORES` / `ENTRACTE_ACTIVE`) |
 
+### 3.2 quater Attribution groupée (v11.2, #244/#251)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `TEAM_POINTS_BATCH` | INFO | Lot appliqué (non écrit sur disque par défaut) | `client`, `question`, `applied` (équipe:montant), `skipped` (équipe:motif) |
+| `TEAM_POINTS_BATCH_REFUSED` | WARN | Lot refusé | `client`, `question`, `reason`, `teams` |
+
 ### 3.3 Diffusion
 
 | Événement | Niveau | Quand | Champs |

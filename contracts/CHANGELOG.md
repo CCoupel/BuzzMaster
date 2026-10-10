@@ -2,6 +2,18 @@
 
 ---
 
+## [20261011] — Attribution groupée des points après le REVEAL (#244/#251, v11.2)
+
+> Décisions utilisateur : cases à cocher par équipe ; en QCM, clic sur une réponse = sélection des équipes qui l'ont donnée + montant (bonne réponse : points de la question ; mauvaise : désélection puis sélection + pénalité −1) ; bouton « Donner les points (N) » visible après le REVEAL ; équipe déjà créditée grisée ; admin seulement.
+
+- **[NEW]** `websocket-actions.md` §TEAM_POINTS_BATCH — action admin, phase `REVEALED`, montants par équipe, refus global sur erreur de validation (`NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, `UNKNOWN_TEAM`), équipes déjà créditées **ignorées** (`ALREADY_AWARDED`), application d'un bloc, effets publics groupés ; champ `DISPLAY` réservé à #252 (absent = affichage).
+- **[NEW]** `websocket-actions.md` §TEAM_POINTS_BATCH_RESULT — réponse ciblée.
+- **[CHANGED]** `websocket-actions.md` §AWARDED_TEAMS — désormais envoyé **aussi à l'admin** (additif) ; nouveaux déclencheurs (lot, renommage/suppression d'équipe, HELLO admin).
+- **[NEW]** `logging.md` §3.2 quater — `TEAM_POINTS_BATCH` (INFO), `TEAM_POINTS_BATCH_REFUSED` (WARN).
+- Aucune BREAKING : `TEAM_POINTS` inchangé, la régie reste libre de recréditer une équipe à l'unité.
+
+---
+
 ## [20261011] — « Lancer la partie » : options de purge de NEW_GAME (#243, v11.2)
 
 > Retour terrain : « Nouvelle partie » purgeait les joueurs sans le dire. Décisions utilisateur : popup à quatre options — scores (cochée par défaut), questions « remettre à jouer » (cochée par défaut, D1), joueurs des tablettes, équipes ; « purger les équipes » = équipes supprimées, joueurs sans équipe ; **supprimer les joueurs sans effacer les scores est interdit** (D2).
