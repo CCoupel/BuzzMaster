@@ -3233,7 +3233,7 @@ func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender)
 	if ignoreAdminZeroPoints(senders, payload.Points) {
 		return
 	}
-	display := a.effectiveDisplay(senders, protocol.ActionBumperPoints, payload.Display)
+	display := a.effectiveDisplay(senders, protocol.ActionBumperPoints, fmt.Sprintf("%q:%+d", payload.ID, payload.Points), payload.Display)
 	newScore := a.engine.UpdateBumperScoreDisplay(payload.ID, payload.Points, display)
 	server.LogInfo(game.LogComponentEngine, "Bumper points: id=%s, points=%+d, newScore=%d",
 		payload.ID, payload.Points, newScore)
@@ -3321,19 +3321,26 @@ func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender)
 // From the animateur, or any caller without an admin sender, the field is ignored
 // (treated as visible: normal public effects and "already credited" lock) and a
 // WARN is journalised.
-func (a *App) effectiveDisplay(senders []updateSender, action string, requested *bool) bool {
+func (a *App) effectiveDisplay(senders []updateSender, action, targets string, requested *bool) bool {
 	if requested == nil || *requested {
 		return true
 	}
 	if len(senders) > 0 && senders[0].ClientType == server.ClientTypeAdmin {
 		return false
 	}
-	clientID, clientType := "", server.ClientType("")
+	clientID, clientType := "", "internal"
 	if len(senders) > 0 {
-		clientID, clientType = senders[0].ClientID, senders[0].ClientType
+		clientID = senders[0].ClientID
+		if senders[0].ClientType != "" {
+			clientType = string(senders[0].ClientType)
+		}
 	}
-	server.LogWarn(game.LogComponentApp, "SCORE_DISPLAY_FALSE_IGNORED client=%s type=%s action=%s (DISPLAY:false is honoured for the admin only)",
-		clientID, logToken(string(clientType)), action)
+	question := ""
+	if st := a.engine.GetState(); st.Question != nil {
+		question = st.Question.ID
+	}
+	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN_REFUSED client=%q type=%q action=%q targets=[%s] question=%q",
+		clientID, clientType, action, targets, question)
 	return true
 }
 
@@ -3471,7 +3478,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message, senders ...updateSender) {
 	if ignoreAdminZeroPoints(senders, payload.Points) {
 		return
 	}
-	display := a.effectiveDisplay(senders, protocol.ActionTeamPoints, payload.Display)
+	display := a.effectiveDisplay(senders, protocol.ActionTeamPoints, fmt.Sprintf("%q:%+d", payload.Team, payload.Points), payload.Display)
 	newScore := a.engine.UpdateTeamScoreDisplay(payload.Team, payload.Points, display)
 	server.LogInfo(game.LogComponentEngine, "Team points: team=%s, points=%+d, newScore=%d",
 		payload.Team, payload.Points, newScore)
