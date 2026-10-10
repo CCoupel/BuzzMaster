@@ -559,7 +559,7 @@ Supprime une question.
 
 ### NEW_GAME (v4.0 · options de purge v11.2, #243)
 
-Relance une partie (bouton admin « LANCER LA PARTIE », popup de purge — maquette `docs/mockup/v11.2/ui/admin_new_game__purge_popup.html`).
+Relance une partie (bouton admin « LANCER LA PARTIE », popup de purge — maquette `docs/mockup/v11.2/ui/admin_new_game__purge_popup_details.html`, qui remplace `admin_new_game__purge_popup.html`).
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -573,13 +573,15 @@ Relance une partie (bouton admin « LANCER LA PARTIE », popup de purge — maqu
 | PURGE_SCORES | boolean | ⬜ | Remettre à 0 les scores (équipes et joueurs) et effacer l'historique des points |
 | PURGE_PLAYERS | boolean | ⬜ | Supprimer tous les **joueurs des tablettes** (VJoueurs) |
 | PURGE_TEAMS | boolean | ⬜ | Supprimer **toutes les équipes** ; les joueurs conservés deviennent **sans équipe** |
+| RESET_QUESTIONS | boolean | ⬜ | Remettre **toutes les questions « à jouer »** (statuts effacés) et le réservoir RAFALE à zéro ; `false` = les questions déjà jouées le restent |
 
-- **Payload vide ou sans aucun de ces champs** (clients et scripts antérieurs) = **comportement actuel** : `PURGE_SCORES = true`, `PURGE_PLAYERS = true`, `PURGE_TEAMS = false`.
-- **Dès qu'un champ est présent**, les champs absents valent `false`. Le nouveau client envoie toujours les trois.
+- **Payload vide ou sans aucun de ces champs** (clients et scripts antérieurs) = **comportement v11.1 inchangé** : `PURGE_SCORES = true`, `PURGE_PLAYERS = true`, `PURGE_TEAMS = false`, `RESET_QUESTIONS = true`.
+- **Dès qu'un champ est présent**, les champs absents valent `false`. Le nouveau client envoie toujours les quatre.
+- **Combinaison interdite** *(décision utilisateur D2)* : `PURGE_PLAYERS = true` avec `PURGE_SCORES = false` → **refus**, rien n'est appliqué (ni arrêt des minuteurs, ni remise à zéro), `NEW_GAME_REFUSED` envoyé à l'émetteur seul, `WARN NEW_GAME_REFUSED`. Le client empêche déjà ce choix (case « Scores » cochée et verrouillée dès que « Joueurs des tablettes » est cochée).
 
 #### Effets — toujours, quelles que soient les options (« relancer la partie »)
 1. **Tous les minuteurs du moteur sont arrêtés** (chrono de question, décompte, chrono RAFALE, minuteurs MEMOTION) et le son de question est coupé, **sans** repasser par `STOPPED`. *(v11.2 : avant, un NEW_GAME pendant une question laissait le chrono tourner, et sa fin remettait la phase à `STOPPED` après la remise à zéro.)*
-2. Phase `NEW_GAME`, plus de question courante, **toutes les questions redeviennent « à jouer »** (statuts effacés), réservoir RAFALE remis à zéro, états de jeu propres aux types (ARDOISE, MEMORY, MEMOTION, RAFALE) remis à zéro, `TEAMS_LOCKED = false`.
+2. Phase `NEW_GAME`, plus de question courante, états de jeu propres aux types (ARDOISE, MEMORY, MEMOTION, RAFALE) remis à zéro, `TEAMS_LOCKED = false`. *(Les statuts des questions ne sont plus remis à zéro systématiquement : option `RESET_QUESTIONS`.)*
 3. Diffusions existantes : `QUESTIONS`, `UPDATE`, `ENROLLMENT_UPDATE`, `NEXT_QUESTION`, `CREDIT_POINTS`, `AWARDED_TEAMS`.
 
 #### Effets par option
@@ -588,14 +590,30 @@ Relance une partie (bouton admin « LANCER LA PARTIE », popup de purge — maqu
 |--------|-------|-------------|
 | `PURGE_SCORES` | `SCORE`, `TEAM_POINTS`, `TIME` des équipes et `SCORE`, `TIME` de tous les joueurs (buzzers et tablettes conservés) à 0 ; **historique des points effacé** (verrous « déjà créditée » libérés) | `history`, `teams.json`, `bumpers.json` |
 | `PURGE_SCORES` absent/`false` | Scores et historique **conservés** (les crédits des parties précédentes restent dans l'historique ; `AWARDED_TEAMS` ne regarde que la question en cours depuis son départ, donc aucun verrou hérité) | — |
-| `PURGE_PLAYERS` | Tous les VJoueurs supprimés ; chacun reçoit `PLAYER_EVICTED { REASON: "GAME_RESET" }` (et le registre d'éviction le retient pour un retour hors ligne) ; ils devront se réinscrire. **Buzzers physiques jamais supprimés.** Si `PURGE_SCORES` est `false`, les points des VJoueurs supprimés sont **transférés dans `TEAM_POINTS` de leur équipe** : le total de l'équipe ne change pas (*défaut planner, à confirmer*) | `bumpers.json`, `teams.json` |
+| `PURGE_PLAYERS` (exige `PURGE_SCORES`) | Tous les VJoueurs supprimés ; chacun reçoit `PLAYER_EVICTED { REASON: "GAME_RESET" }` (et le registre d'éviction le retient pour un retour hors ligne) ; ils devront se réinscrire. **Buzzers physiques jamais supprimés** | `bumpers.json` |
+| `RESET_QUESTIONS` | Statuts de toutes les questions effacés (toutes « à jouer ») ; réservoir RAFALE (`rafale_used.json`) remis à zéro ; diffusion `QUESTIONS` | statuts, `rafale_used.json` |
+| `RESET_QUESTIONS` absent/`false` | Statuts et réservoir RAFALE **conservés** : les questions jouées restent marquées jouées ; la « question suivante » reprend après la dernière jouée | — |
 | `PURGE_TEAMS` | Toutes les équipes supprimées, une par une par le même chemin que la suppression d'équipe de #249 (`PurgeTeamState` : états de jeu effacés, événement `TEAM_DELETED` dans l'historique, pas d'héritage du verrou). **Tous les joueurs conservés** (buzzers physiques, et VJoueurs si `PURGE_PLAYERS` est `false`) passent à `TEAM = ""` : les buzzers repassent en LED « sans équipe » (`LED_SET` à tous les buzzers), les tablettes restent liées (#246) et affichent l'attente d'affectation. Les scores des joueurs suivent `PURGE_SCORES` | `teams.json` (vide), `bumpers.json` |
-| aucune option cochée (les trois à `false`) | Seuls les effets « toujours » s'appliquent (« Lancer sans rien effacer ») | — |
+| aucune option cochée (les quatre à `false`) | Seuls les effets « toujours » s'appliquent (« Lancer sans rien effacer ») | — |
 
-Ordre d'application côté serveur : minuteurs → `PURGE_TEAMS` → `PURGE_PLAYERS` (avec transfert éventuel) → `PURGE_SCORES` → remise à zéro « toujours ». Un seul verrou moteur pour l'ensemble (atomique vu des clients).
+Ordre d'application côté serveur : contrôle de la combinaison interdite → minuteurs → `PURGE_TEAMS` → `PURGE_PLAYERS` → `PURGE_SCORES` → `RESET_QUESTIONS` → remise à zéro « toujours ». Un seul verrou moteur pour l'ensemble (atomique vu des clients).
 
 - **Double validation** : la popup désactive son bouton dès l'envoi ; côté serveur, un second `NEW_GAME` est simplement rejoué (il n'y a plus rien à purger), sans erreur.
-- **Journal** : `WARN NEW_GAME_PURGE client=… options=… players_removed=N teams_removed=N scores_reset=bool phase_before=… question_before=…` (`contracts/logging.md`), écrit sur disque, y compris quand aucune option n'est cochée.
+- **Journal** : `WARN NEW_GAME_PURGE client=… options=… players_removed=N teams_removed=N scores_reset=bool questions_reset=bool phase_before=… question_before=…` (`contracts/logging.md`), écrit sur disque, y compris quand aucune option n'est cochée.
+
+#### NEW_GAME_REFUSED ✨ (v11.2, #243)
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server → Client` (ciblé, émetteur du `NEW_GAME` refusé) |
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| REASON | string | `PLAYERS_REQUIRE_SCORES` (`PURGE_PLAYERS = true` avec `PURGE_SCORES = false`) |
+
+```json
+{ "ACTION": "NEW_GAME_REFUSED", "MSG": { "REASON": "PLAYERS_REQUIRE_SCORES" } }
+```
 
 ---
 

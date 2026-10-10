@@ -4,11 +4,12 @@
 
 ## [20261011] — « Lancer la partie » : options de purge de NEW_GAME (#243, v11.2)
 
-> Retour terrain : « Nouvelle partie » purgeait les joueurs sans le dire. Décisions utilisateur : popup avec trois options, **seuls les scores cochés par défaut** ; « purger les équipes » = équipes supprimées, joueurs sans équipe. **Défaut planner à confirmer** : purge des joueurs sans purge des scores → points des joueurs supprimés transférés dans les points de leur équipe.
+> Retour terrain : « Nouvelle partie » purgeait les joueurs sans le dire. Décisions utilisateur : popup à quatre options — scores (cochée par défaut), questions « remettre à jouer » (cochée par défaut, D1), joueurs des tablettes, équipes ; « purger les équipes » = équipes supprimées, joueurs sans équipe ; **supprimer les joueurs sans effacer les scores est interdit** (D2).
 
-- **[NEW]** `websocket-actions.md` §NEW_GAME — section créée : options facultatives `PURGE_SCORES`, `PURGE_PLAYERS`, `PURGE_TEAMS` ; **absentes = comportement actuel** (scores + joueurs, équipes conservées) ; effets par option, persistance, ordre d'application. Aucune BREAKING.
+- **[NEW]** `websocket-actions.md` §NEW_GAME — section créée : options facultatives `PURGE_SCORES`, `PURGE_PLAYERS`, `PURGE_TEAMS`, `RESET_QUESTIONS` ; **absentes = comportement v11.1** (scores + joueurs + questions, équipes conservées) ; effets par option, persistance, ordre d'application. Aucune BREAKING.
+- **[NEW]** `websocket-actions.md` §NEW_GAME_REFUSED — refus ciblé de la combinaison `PURGE_PLAYERS` sans `PURGE_SCORES` (motif `PLAYERS_REQUIRE_SCORES`), rien n'est appliqué.
 - **[CHANGED]** `websocket-actions.md` §NEW_GAME — tous les minuteurs sont arrêtés au NEW_GAME (correction : le chrono d'une question en cours survivait et remettait la phase à `STOPPED`).
-- **[NEW]** `logging.md` §3.2 ter — `NEW_GAME_PURGE` (WARN).
+- **[NEW]** `logging.md` §3.2 ter — `NEW_GAME_PURGE`, `NEW_GAME_REFUSED` (WARN).
 
 ---
 
