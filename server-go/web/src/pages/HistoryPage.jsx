@@ -366,6 +366,9 @@ export default function HistoryPage() {
                                         <span className={`points-badge ${event.POINTS >= 0 ? 'positive' : 'negative'}`}>
                                           {event.POINTS >= 0 ? '+' : ''}{event.POINTS} pts
                                         </span>
+                                        {event.DISPLAY === false && (
+                                          <span className="hidden-correction-mark" title="Correction cachée : sans affichage TV" aria-label="Correction cachée"> 🔇</span>
+                                        )}
                                       </td>
                                     </motion.tr>
                                   )
