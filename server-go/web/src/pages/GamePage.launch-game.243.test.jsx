@@ -328,4 +328,20 @@ describe('Popup « Lancer la partie » — robustesse (revue #243)', () => {
     rerender(<GamePage />)
     expect(box(screen.getByRole('dialog'), 'Équipes').checked).toBe(true) // sélection conservée pour relancer
   })
+
+  it('(k) Critical — réponse du serveur APRÈS la garde de 5 s (à 6 s) : la popup se ferme et aucun second NEW_GAME n’est envoyé', () => {
+    const newGame = vi.fn(() => true)
+    const { dlg, rerender } = open({ newGame })
+    fireEvent.click(goBtn(dlg))
+    act(() => { vi.advanceTimersByTime(5100) })
+    expect(screen.getByRole('dialog').textContent).toMatch(/Pas de réponse du serveur/) // la garde a débloqué la popup
+    expect(newGame).toHaveBeenCalledTimes(1)
+
+    act(() => { vi.advanceTimersByTime(900) }) // t = 6 s : le serveur répond enfin
+    useGame.mockReturnValue(mk({ gameState: { phase: 'NEW_GAME', question: null }, newGame }))
+    rerender(<GamePage />)
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(newGame).toHaveBeenCalledTimes(1)
+  })
 })

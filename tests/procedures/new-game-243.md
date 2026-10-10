@@ -95,6 +95,19 @@
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
+## Scénario 6 bis — Cas limites : entracte et réponse tardive
+
+| Étape | Action | Résultat attendu | Résultat obtenu | OK ? |
+|-------|--------|------------------|-----------------|------|
+| 1 | Activer une **entracte** puis, sans la quitter, ouvrir la popup et lancer | Message « Impossible pendant une entracte : sortez d'abord de l'entracte » ; la popup reste ouverte ; **rien** n'est effacé ; l'entracte continue | | |
+| 2 | Quitter l'entracte puis relancer | Le lancement s'applique normalement | | |
+| 3 | **Cas limite** : lancer une première fois (la phase passe à NEW_GAME), activer une entracte, puis envoyer un second NEW_GAME (script ou second poste) alors que la phase vaut **déjà NEW_GAME** | Le **refus peut arriver sans qu'aucune popup ne soit ouverte** : aucun message bloquant n'est attendu côté interface, mais le journal contient `NEW_GAME_REFUSED … reason=ENTRACTE_ACTIVE` et l'état n'a pas changé | | |
+| 4 | Provoquer une réponse **tardive** du serveur (couper brièvement le réseau juste après le clic) : la garde de 5 s affiche « Pas de réponse du serveur » ; rétablir le réseau pour que le NEW_GAME arrive à 6 s | La popup **se ferme** à l'arrivée de la réponse ; **un seul** NEW_GAME a été appliqué (une seule ligne `NEW_GAME_PURGE`) | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## Scénario 7 — Double validation et journal
 
 | Étape | Action | Résultat attendu | Résultat obtenu | OK ? |
