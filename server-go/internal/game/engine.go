@@ -8184,4 +8184,12 @@ func (e *Engine) PurgeTeamState(name string) {
 	e.ardoiseControlMu.Lock()
 	delete(e.ardoiseControl, name)
 	e.ardoiseControlMu.Unlock()
+	// History is kept (audit trail); a TEAM_DELETED marker stops a team re-created
+	// under the same name from inheriting the "already credited" lock (#249).
+	e.history = append(e.history, GameEvent{
+		Timestamp: time.Now().UnixMicro(),
+		EventType: "TEAM_DELETED",
+		TeamName:  name,
+	})
+	safeGo("SaveHistory", e.SaveHistory)
 }

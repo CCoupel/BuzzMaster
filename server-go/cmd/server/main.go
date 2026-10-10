@@ -6656,8 +6656,20 @@ func (a *App) getAwardedTeamsPayload() *protocol.AwardedTeamsPayload {
 	teams := make([]protocol.AwardedTeamEntry, 0)
 	if questionID != "" {
 		index := make(map[string]int, 4) // TeamName -> its slot in teams
-		for _, event := range a.engine.GetHistory() {
+		history := a.engine.GetHistory()
+		// #249: credits recorded before a team's last TEAM_DELETED do not count
+		// (a team re-created under the same name starts clean).
+		lastDeleted := map[string]int{}
+		for i, event := range history {
+			if event.EventType == "TEAM_DELETED" {
+				lastDeleted[event.TeamName] = i
+			}
+		}
+		for i, event := range history {
 			if event.EventType != "POINTS_AWARDED" || event.QuestionID != questionID || event.Timestamp < state.GameTime {
+				continue
+			}
+			if d, ok := lastDeleted[event.TeamName]; ok && i < d {
 				continue
 			}
 			if i, ok := index[event.TeamName]; ok {
