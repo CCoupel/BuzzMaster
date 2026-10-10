@@ -131,6 +131,7 @@
 .team-info {
   flex: 1;
   min-width: 0;
+  position: relative; /* #249 : ancre l'icône 🔒 */
 }
 
 .team-name-input {
@@ -959,8 +960,10 @@
 }
 
 .team-lock-icon {
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
   font-size: 0.85rem;
-  margin-right: 0.25rem;
 }
 
 .team-name-input:disabled {
@@ -974,6 +977,4 @@
   cursor: not-allowed;
 }
 
-.team-info { position: relative; }
-.team-lock-icon { position: absolute; left: 0; top: 0.35rem; margin-right: 0; }
 .team-lock-icon + .team-name-input { padding-left: 1.4rem; }
