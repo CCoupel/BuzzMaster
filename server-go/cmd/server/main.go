@@ -1546,6 +1546,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionReboot:
 		server.LogInfo(game.LogComponentApp, "Reboot requested from web client")
 
+	case protocol.ActionTeamPointsBatch:
+		a.handleTeamPointsBatch(incoming.ClientID, msg)
+
 	case protocol.ActionBumperPoints:
 		a.handleBumperPoints(msg)
 
@@ -3302,6 +3305,96 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 
 	a.broadcastUpdate()
 	a.broadcastAwardedTeams() // #170 — this credit may lock the team for other animateurs
+}
+
+// handleTeamPointsBatch applies a grouped team award (#244/#251): complete
+// validation first, one atomic block, grouped public effects, result to the sender.
+func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
+	var p protocol.TeamPointsBatchPayload
+	reply := func(res protocol.TeamPointsBatchResultPayload) {
+		if clientID == "" {
+			return
+		}
+		if res.Applied == nil {
+			res.Applied = []protocol.TeamPointsBatchApplied{}
+		}
+		if res.Skipped == nil {
+			res.Skipped = []protocol.TeamPointsBatchSkipped{}
+		}
+		if res.Teams == nil {
+			res.Teams = []string{}
+		}
+		if rm, err := protocol.NewMessage(protocol.ActionTeamPointsBatchResult, res); err == nil {
+			a.wsHub.SendToClient(clientID, rm)
+		}
+	}
+	refuse := func(reason string, teams []string) {
+		server.LogWarn(game.LogComponentApp, "TEAM_POINTS_BATCH_REFUSED client=%s question=%s reason=%s teams=%s",
+			clientID, logToken(p.QuestionID), reason, logValue(teams))
+		reply(protocol.TeamPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Teams: teams})
+	}
+	if err := json.Unmarshal(msg.Msg, &p); err != nil {
+		refuse("INVALID_ENTRIES", nil)
+		return
+	}
+
+	entries := make([]game.TeamPointsEntry, 0, len(p.Entries))
+	for _, en := range p.Entries {
+		var n float64
+		valid := json.Unmarshal(en.Points, &n) == nil && n == math.Trunc(n) && math.Abs(n) <= 1e9
+		entries = append(entries, game.TeamPointsEntry{Team: en.Team, Points: int(n), Invalid: !valid})
+	}
+
+	state := a.engine.GetState()
+	var meta game.CategoryMeta
+	if state.Question != nil {
+		meta.Name, meta.ImageURL, meta.Color = a.httpServer.ResolveCategoryMeta(string(state.Question.Category))
+	}
+	res := a.engine.ApplyTeamPointsBatch(p.QuestionID, entries, meta)
+	if res.Status == "REFUSED" {
+		refuse(res.Reason, res.Unknown)
+		return
+	}
+
+	out := protocol.TeamPointsBatchResultPayload{Status: "APPLIED", QuestionID: p.QuestionID}
+	applied, skipped := make([]string, 0, len(res.Applied)), make([]string, 0, len(res.Skipped))
+	for _, en := range res.Applied {
+		out.Applied = append(out.Applied, protocol.TeamPointsBatchApplied{Team: en.Team, Points: en.Points})
+		applied = append(applied, fmt.Sprintf("%q:%+d", en.Team, en.Points))
+	}
+	for _, sk := range res.Skipped {
+		out.Skipped = append(out.Skipped, protocol.TeamPointsBatchSkipped{Team: sk.Team, Reason: sk.Reason})
+		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.Team, sk.Reason))
+	}
+	server.LogInfo(game.LogComponentApp, "TEAM_POINTS_BATCH client=%s question=%s applied=[%s] skipped=[%s]",
+		clientID, logToken(p.QuestionID), strings.Join(applied, ","), strings.Join(skipped, ","))
+
+	// Grouped public effects, once for the whole batch (DISPLAY reserved for #252:
+	// absent/true = shown as today; nothing "hidden" is implemented yet).
+	if p.Display == nil || *p.Display {
+		var positive []string
+		best, bestTeam := 0, ""
+		for _, en := range res.Applied {
+			if en.Points > 0 {
+				positive = append(positive, en.Team)
+				a.sendLEDSetComet(en.Team)
+				if en.Points > best { // strict: first of the ties wins
+					best, bestTeam = en.Points, en.Team
+				}
+			}
+		}
+		if len(positive) > 0 {
+			a.ambiance().NotifyPulse(lighting.KindScore, positive, best, lighting.ScorePulseDuration)
+			a.notifySound(audio.CueGagne)
+			a.startScoreFlash(bestTeam, best)
+		}
+	}
+
+	reply(out)
+	if len(res.Applied) > 0 {
+		a.broadcastUpdate()
+		a.broadcastAwardedTeams()
+	}
 }
 
 func (a *App) handleTeamPoints(msg *protocol.Message) {
@@ -6125,6 +6218,12 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		a.wsHub.SendRawToClient(clientID, updateData)
 	}
 
+	// v11.2 (#244/#251): the admin learns the already-credited teams at HELLO
+	// (sent early: the rest of the admin block depends on more wiring).
+	if clientType == server.ClientTypeAdmin {
+		a.wsHub.SendToClient(clientID, a.buildAwardedTeamsMessage())
+	}
+
 	// Send QUESTIONS with statuses — admin only (#155/#156 B4).
 	//
 	// Previously sent unconditionally to every connecting client type;
@@ -6772,7 +6871,8 @@ func (a *App) buildAwardedTeamsMessage() *protocol.Message {
 // history scan on every timer tick (same discipline, same reason, as
 // NEXT_QUESTION's own loadQuestions() restriction).
 func (a *App) broadcastAwardedTeams() {
-	a.wsHub.BroadcastToTypes(a.buildAwardedTeamsMessage(), server.ClientTypeAnim)
+	// v11.2 (#244/#251): the admin also receives it (greys out already-credited teams).
+	a.wsHub.BroadcastToTypes(a.buildAwardedTeamsMessage(), server.ClientTypeAnim, server.ClientTypeAdmin)
 }
 
 // startupPage describes one browser tab opened automatically at server startup.

@@ -8342,3 +8342,146 @@ func (e *Engine) purgeTeamStateUnsafe(name string) {
 	})
 	safeGo("SaveHistory", e.SaveHistory)
 }
+
+// --- TEAM_POINTS_BATCH (v11.2, #244/#251) -------------------------------------
+
+// TeamPointsEntry is one team of a grouped award. Invalid marks a POINTS value
+// that was not a valid integer in the request.
+type TeamPointsEntry struct {
+	Team    string
+	Points  int
+	Invalid bool
+}
+
+// TeamPointsSkip is a team ignored by a grouped award.
+type TeamPointsSkip struct {
+	Team   string
+	Reason string
+}
+
+// TeamPointsBatchResult is the outcome of ApplyTeamPointsBatch.
+type TeamPointsBatchResult struct {
+	Status  string // "APPLIED" | "REFUSED"
+	Reason  string // when REFUSED
+	Unknown []string
+	Applied []TeamPointsEntry
+	Skipped []TeamPointsSkip
+}
+
+// CategoryMeta is the resolved display meta of a question category (history entries).
+type CategoryMeta struct {
+	Name, ImageURL, Color string
+}
+
+const (
+	teamPointsBatchMaxEntries = 64
+	teamPointsBatchMaxPoints  = 999
+)
+
+// awardedTeamSetUnsafe returns the teams already credited for the current
+// question (same rule as AWARDED_TEAMS: POINTS_AWARDED since GameTime, credits
+// before the team's last TEAM_DELETED ignored). Caller holds e.mu.
+func (e *Engine) awardedTeamSetUnsafe(questionID string) map[string]bool {
+	set := map[string]bool{}
+	lastDeleted := map[string]int{}
+	for i, ev := range e.history {
+		if ev.EventType == "TEAM_DELETED" {
+			lastDeleted[ev.TeamName] = i
+		}
+	}
+	for i, ev := range e.history {
+		if ev.EventType != "POINTS_AWARDED" || ev.QuestionID != questionID || ev.Timestamp < e.state.GameTime {
+			continue
+		}
+		if d, ok := lastDeleted[ev.TeamName]; ok && i < d {
+			continue
+		}
+		set[ev.TeamName] = true
+	}
+	return set
+}
+
+// ApplyTeamPointsBatch validates a grouped team award completely BEFORE any
+// effect (global refusal otherwise), then applies it under ONE engine lock:
+// already-credited teams are skipped, the others get TeamPoints += points and a
+// POINTS_AWARDED history entry. Public effects are the caller's.
+func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEntry, meta CategoryMeta) TeamPointsBatchResult {
+	e.mu.Lock()
+	refuse := func(reason string) TeamPointsBatchResult {
+		e.mu.Unlock()
+		return TeamPointsBatchResult{Status: "REFUSED", Reason: reason}
+	}
+	if e.state.Phase != PhaseRevealed {
+		return refuse("NOT_REVEALED")
+	}
+	if e.state.Question == nil || e.state.Question.ID != questionID {
+		return refuse("QUESTION_MISMATCH")
+	}
+	if len(entries) == 0 || len(entries) > teamPointsBatchMaxEntries {
+		return refuse("INVALID_ENTRIES")
+	}
+	seen := map[string]bool{}
+	for _, en := range entries {
+		if en.Team == "" || seen[en.Team] {
+			return refuse("INVALID_ENTRIES")
+		}
+		seen[en.Team] = true
+	}
+	for _, en := range entries {
+		if en.Invalid || en.Points == 0 || en.Points < -teamPointsBatchMaxPoints || en.Points > teamPointsBatchMaxPoints {
+			return refuse("INVALID_POINTS")
+		}
+	}
+	var unknown []string
+	for _, en := range entries {
+		if _, ok := e.data.Teams[en.Team]; !ok {
+			unknown = append(unknown, en.Team)
+		}
+	}
+	if len(unknown) > 0 {
+		e.mu.Unlock()
+		return TeamPointsBatchResult{Status: "REFUSED", Reason: "UNKNOWN_TEAM", Unknown: unknown}
+	}
+
+	res := TeamPointsBatchResult{Status: "APPLIED"}
+	awarded := e.awardedTeamSetUnsafe(questionID)
+	q := e.state.Question
+	for _, en := range entries {
+		if awarded[en.Team] {
+			res.Skipped = append(res.Skipped, TeamPointsSkip{Team: en.Team, Reason: "ALREADY_AWARDED"})
+			continue
+		}
+		team := e.data.Teams[en.Team]
+		team.TeamPoints += en.Points
+		e.recalculateTeamScoreUnsafe(en.Team)
+		var breakdown map[string]int
+		if q.Type == QuestionTypeRafale {
+			breakdown = RafaleCategoryBreakdown(q, en.Points, e.state.RafaleTeamCategoryCounters[en.Team])
+		}
+		e.history = append(e.history, GameEvent{
+			Timestamp:           time.Now().UnixMicro(),
+			QuestionID:          q.ID,
+			QuestionText:        q.Question,
+			QuestionCategory:    string(q.Category),
+			CategoryDisplayName: meta.Name,
+			CategoryImageURL:    meta.ImageURL,
+			CategoryColor:       meta.Color,
+			EventType:           "POINTS_AWARDED",
+			WinnerID:            en.Team,
+			WinnerName:          en.Team,
+			WinnerType:          "TEAM",
+			TeamName:            en.Team,
+			TeamColor:           team.Color,
+			Points:              en.Points,
+			CategoryBreakdown:   breakdown,
+		})
+		res.Applied = append(res.Applied, en)
+	}
+	e.mu.Unlock()
+
+	if len(res.Applied) > 0 {
+		safeGo("SaveTeams", e.SaveTeams)
+		safeGo("SaveHistory", e.SaveHistory)
+	}
+	return res
+}

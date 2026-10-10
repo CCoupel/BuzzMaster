@@ -34,6 +34,7 @@ var entracteExpectedAllowed = map[string]bool{
 	// --- Refused during entracte (everything else) --------------------
 	protocol.ActionClientTrace:           true,  // #246 diagnostic: accepted in every phase (arbitrage teamleader)
 	protocol.ActionArdoiseFinal:          false, // #246 B-STOP
+	protocol.ActionTeamPointsBatch:       false, // #244/#251 grouped award: default-deny during entracte
 	protocol.ActionReady:                 false,
 	protocol.ActionStart:                 false,
 	protocol.ActionStop:                  false,

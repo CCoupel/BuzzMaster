@@ -67,13 +67,15 @@ const (
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
-	ActionArdoiseFinal       = "ARDOISE_FINAL"        // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
-	ActionArdoiseFinalAck    = "ARDOISE_FINAL_ACK"    // Server → VPlayer (targeted): final received (v11.2, #246)
-	ActionTeamsUpdateRefused = "TEAMS_UPDATE_REFUSED" // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
-	ActionNewGameRefused     = "NEW_GAME_REFUSED"     // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
-	ActionRevealRefused      = "REVEAL_REFUSED"       // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
-	ActionClientTrace        = "CLIENT_TRACE"         // Client → Server: diagnostic trace (v11.2, #246)
-	ActionArdoiseInput       = "ARDOISE_INPUT"        // VPlayer → Server: free-text answer update (throttled)
+	ActionArdoiseFinal          = "ARDOISE_FINAL"            // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
+	ActionArdoiseFinalAck       = "ARDOISE_FINAL_ACK"        // Server → VPlayer (targeted): final received (v11.2, #246)
+	ActionTeamsUpdateRefused    = "TEAMS_UPDATE_REFUSED"     // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
+	ActionNewGameRefused        = "NEW_GAME_REFUSED"         // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
+	ActionTeamPointsBatch       = "TEAM_POINTS_BATCH"        // Client → Server (admin): grouped team award (v11.2, #244/#251)
+	ActionTeamPointsBatchResult = "TEAM_POINTS_BATCH_RESULT" // Server → sender: outcome of the grouped award (v11.2)
+	ActionRevealRefused         = "REVEAL_REFUSED"           // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
+	ActionClientTrace           = "CLIENT_TRACE"             // Client → Server: diagnostic trace (v11.2, #246)
+	ActionArdoiseInput          = "ARDOISE_INPUT"            // VPlayer → Server: free-text answer update (throttled)
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
 	ActionLogEntry   = "LOG_ENTRY"
@@ -778,6 +780,37 @@ type NewGamePayload struct {
 // NewGameRefusedPayload for NEW_GAME_REFUSED (targeted to the sender).
 type NewGameRefusedPayload struct {
 	Reason string `json:"REASON"`
+}
+
+// TeamPointsBatchPayload for TEAM_POINTS_BATCH (v11.2, #244/#251). Entry points are
+// raw JSON numbers so a non-integer can be refused as INVALID_POINTS.
+type TeamPointsBatchPayload struct {
+	QuestionID string `json:"QUESTION_ID"`
+	Entries    []struct {
+		Team   string          `json:"TEAM"`
+		Points json.RawMessage `json:"POINTS"`
+	} `json:"ENTRIES"`
+	Display *bool `json:"DISPLAY,omitempty"` // reserved for #252
+}
+
+// TeamPointsBatchApplied / Skipped are the RESULT array items.
+type TeamPointsBatchApplied struct {
+	Team   string `json:"TEAM"`
+	Points int    `json:"POINTS"`
+}
+type TeamPointsBatchSkipped struct {
+	Team   string `json:"TEAM"`
+	Reason string `json:"REASON"`
+}
+
+// TeamPointsBatchResultPayload for TEAM_POINTS_BATCH_RESULT (targeted to the sender).
+type TeamPointsBatchResultPayload struct {
+	Status     string                   `json:"STATUS"`
+	Reason     string                   `json:"REASON,omitempty"`
+	QuestionID string                   `json:"QUESTION_ID"`
+	Applied    []TeamPointsBatchApplied `json:"APPLIED"`
+	Skipped    []TeamPointsBatchSkipped `json:"SKIPPED"`
+	Teams      []string                 `json:"TEAMS"`
 }
 
 // RevealPayload for REVEAL (v11.2, #246): FORCE reveals despite pending ARDOISE answers.

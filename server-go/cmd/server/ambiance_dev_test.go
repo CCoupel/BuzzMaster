@@ -412,8 +412,9 @@ func TestDevAmbianceRegistryShape(t *testing.T) {
 	// handleFlipMemoryCard calls sendLEDSetAllBuzzers three times.
 	// #243: handleNewGame (PURGE_TEAMS → buzzers back to the no-team LED) adds one
 	// state site — 17 state / 4 pulse / 5 none.
-	if state != 17 || pulse != 4 || none != 5 {
-		t.Fatalf("registry = %d state / %d pulse / %d none, want 17 / 4 / 5", state, pulse, none)
+	// #244/#251: handleTeamPointsBatch adds one pulse site — 17 / 5 / 5.
+	if state != 17 || pulse != 5 || none != 5 {
+		t.Fatalf("registry = %d state / %d pulse / %d none, want 17 / 5 / 5", state, pulse, none)
 	}
 }
 

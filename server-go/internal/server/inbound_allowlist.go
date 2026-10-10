@@ -59,6 +59,8 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionReveal:       {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionBumperPoints: {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionTeamPoints:   {ClientTypeAdmin, ClientTypeAnim},
+	// TEAM_POINTS_BATCH (v11.2, #244/#251): admin only; the anim keeps the unit TEAM_POINTS.
+	protocol.ActionTeamPointsBatch: {ClientTypeAdmin},
 	// RAFALE_VALIDATE/INVALIDATE (v8.0.0, #107, contract rafale.md §5.1):
 	// judging the current question's answer is "conduite en direct", same
 	// périmètre as REVEAL/BUMPER_POINTS/TEAM_POINTS above.
