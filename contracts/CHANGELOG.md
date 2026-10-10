@@ -8,7 +8,7 @@
 
 - **[NEW]** `websocket-actions.md` §NEW_GAME — section créée : options facultatives `PURGE_SCORES`, `PURGE_PLAYERS`, `PURGE_TEAMS`, `RESET_QUESTIONS` ; **absentes = comportement v11.1** (scores + joueurs + questions, équipes conservées) ; effets par option, persistance, ordre d'application. Aucune BREAKING.
 - **[NEW]** `websocket-actions.md` §NEW_GAME_REFUSED — refus ciblé de la combinaison `PURGE_PLAYERS` sans `PURGE_SCORES` (motif `PLAYERS_REQUIRE_SCORES`), rien n'est appliqué.
-- **[CHANGED]** `websocket-actions.md` §NEW_GAME — tous les minuteurs sont arrêtés au NEW_GAME (correction : le chrono d'une question en cours survivait et remettait la phase à `STOPPED`).
+- **[CHANGED]** `websocket-actions.md` §NEW_GAME — **garantie défensive** : tous les minuteurs (y compris le chrono différé à la fin du son, #219) et le son de question sont arrêtés au NEW_GAME. *(Formulation corrigée après les tests du test-writer : le retour à `STOPPED` décrit initialement n'est pas reproductible ; l'arrêt du son de question et du chrono différé, absent en v11.1, est en revanche établi par lecture du code.)*
 - **[NEW]** `logging.md` §3.2 ter — `NEW_GAME_PURGE`, `NEW_GAME_REFUSED` (WARN).
 
 ---
