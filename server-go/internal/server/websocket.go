@@ -74,6 +74,10 @@ type WebSocketHub struct {
 	// Mirrors BuzzerWebSocketHub.OnBuzzerDisconnected for physical buzzers.
 	OnPlayerDisconnected func(playerID string)
 
+	// OnClientClosed fires for every closed connection (any type), after it left
+	// the hub: used to drop per-connection diagnostic state (#246).
+	onClientClosed func(clientID string)
+
 	// OnClientRegistered fires whenever a client's type becomes known/changes
 	// — either at connection time (the dedicated /ws/admin, /ws/tv, /ws/player
 	// endpoints know their type immediately, contract ai-multi-provider.md
@@ -138,6 +142,12 @@ func (h *WebSocketHub) Run() {
 			// Fired outside the lock, same pattern as notifyClientChange.
 			if clientType == ClientTypeVPlayer && playerID != "" && h.OnPlayerDisconnected != nil {
 				h.OnPlayerDisconnected(playerID)
+			}
+			h.mu.RLock()
+			closedHook := h.onClientClosed
+			h.mu.RUnlock()
+			if closedHook != nil {
+				closedHook(id)
 			}
 			h.notifyClientChange()
 
@@ -277,6 +287,13 @@ func (h *WebSocketHub) BindClientPlayerID(clientID, playerID string) (evicted []
 		}
 	}
 	return evicted
+}
+
+// SetOnClientClosed installs the closed-connection hook (race-safe, usable after Run started).
+func (h *WebSocketHub) SetOnClientClosed(f func(clientID string)) {
+	h.mu.Lock()
+	h.onClientClosed = f
+	h.mu.Unlock()
 }
 
 // PlayerIDSnapshot returns the bumper ID bound to this connection, read under the hub lock.

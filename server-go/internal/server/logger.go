@@ -254,13 +254,18 @@ func (fs *fileSink) rotate() error {
 	return fs.open()
 }
 
+// singleLine guarantees one physical log line per entry (#246 review MAJEUR-1).
+func singleLine(m string) string {
+	return strings.NewReplacer("\r\n", `\n`, "\n", `\n`, "\r", `\n`).Replace(m)
+}
+
 func (fs *fileSink) write(entry game.LogEntry) {
 	if levelRank(entry.Level) < levelRank(fs.minLevel) {
 		return
 	}
 	line := fmt.Sprintf("%s [%s] [%s] %s\n",
 		time.UnixMilli(entry.Timestamp).Format("2006-01-02T15:04:05.000Z07:00"),
-		entry.Level, entry.Component, strings.TrimRight(entry.Message, "\r\n"))
+		entry.Level, entry.Component, singleLine(entry.Message))
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	if fs.f == nil {

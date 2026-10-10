@@ -141,9 +141,10 @@ type App struct {
 
 	// #246 diagnostic state: per-connection ARDOISE SEQ tracking and
 	// CLIENT_TRACE rate limiting.
-	diagMu    sync.Mutex
-	ardoiseSq map[string]*ardoiseSeqState
-	traceLim  map[string]*traceLimiter
+	diagMu      sync.Mutex
+	ardoiseSq   map[string]*ardoiseSeqState
+	traceLim    map[string]*traceLimiter
+	traceGlobal traceLimiter
 
 	// currentCreditPoints is the animateur's live-synced base credit amount
 	// (code review MAJEUR-1, #155/#156 — contracts/websocket-actions.md
@@ -862,6 +863,7 @@ func (a *App) setupCallbacks() {
 	// WebSocket closes. Extracted as a named method (rather than inlined here) so it can be
 	// unit-tested directly — see onPlayerDisconnected below.
 	a.wsHub.OnPlayerDisconnected = a.onPlayerDisconnected
+	a.wsHub.SetOnClientClosed(a.forgetClientDiag)
 
 	// Handle new log entries - broadcast to logs WebSocket clients
 	a.logger.SetOnNewEntry(func(entry game.LogEntry) {
@@ -2062,6 +2064,9 @@ func (a *App) enforceUniqueVirtualNames(incoming map[string]*game.Bumper) {
 			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_DUPLICATE_NAME id=%s name=%q holder_id=%s", id, incoming[id].Name, holder)
 			if cur := a.engine.GetBumper(id); cur != nil {
 				incoming[id].Name = cur.Name
+			} else {
+				// New VJoueur entry whose name is already taken: rejected.
+				delete(incoming, id)
 			}
 			continue
 		}
@@ -3553,6 +3558,9 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
 	// #246 B-ID: one bound connection per bumper — the most recent wins, the
 	// older one is told (DUPLICATE_SESSION) and unbound.
+	a.diagMu.Lock()
+	delete(a.ardoiseSq, clientID) // #246 review MAJEUR-2: SEQ restarts at 1 on every (re)binding
+	a.diagMu.Unlock()
 	for _, oldClient := range a.wsHub.BindClientPlayerID(clientID, bumperID) {
 		server.LogWarn(game.LogComponentWebSocket, "VPLAYER_DUPLICATE_SESSION id=%s old_client=%s new_client=%s", bumperID, oldClient, clientID)
 		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "DUPLICATE_SESSION"})
@@ -3828,6 +3836,15 @@ type ardoiseSeqState struct {
 
 // checkArdoiseSeq returns false when the message is stale (SEQ <= last applied,
 // same connection and question) and must be ignored; a gap is only logged.
+// forgetClientDiag drops the per-connection diagnostic state of a closed
+// connection (#246 review mineur 1).
+func (a *App) forgetClientDiag(clientID string) {
+	a.diagMu.Lock()
+	delete(a.ardoiseSq, clientID)
+	delete(a.traceLim, clientID)
+	a.diagMu.Unlock()
+}
+
 func (a *App) checkArdoiseSeq(clientID, bumperID, questionID string, seq int) bool {
 	a.diagMu.Lock()
 	defer a.diagMu.Unlock()
@@ -3859,9 +3876,39 @@ type traceLimiter struct {
 }
 
 const (
-	clientTraceMaxPerSecond = 10
-	clientTraceMaxBytes     = 1024
+	clientTraceMaxPerSecond       = 10
+	clientTraceGlobalMaxPerSecond = 50
+	clientTraceMaxBytes           = 1024
 )
+
+// logToken renders a client-supplied string for a log line: bare when it is a
+// harmless token, quoted (%q, control characters escaped) otherwise, so a
+// client can never inject a forged log line (#246 review MAJEUR-1).
+func logToken(s string) string {
+	if s == "" {
+		return `""`
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == ':' || r == '-') {
+			return fmt.Sprintf("%q", s)
+		}
+	}
+	return s
+}
+
+// logValue renders a CLIENT_TRACE DETAIL value: scalars through logToken /
+// number / bool formatting, anything else re-serialised as quoted JSON.
+func logValue(v interface{}) string {
+	switch x := v.(type) {
+	case string:
+		return logToken(x)
+	case bool, float64, int, int64, nil:
+		return fmt.Sprint(x)
+	default:
+		b, _ := json.Marshal(x)
+		return fmt.Sprintf("%q", string(b))
+	}
+}
 
 // handleClientTrace journalises a client diagnostic event. No game effect.
 func (a *App) handleClientTrace(clientID string, clientType server.ClientType, msg *protocol.Message) {
@@ -3874,9 +3921,6 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 	}
 	lim := a.traceLim[clientID]
 	if lim == nil {
-		if len(a.traceLim) > 1000 { // bounded: drop stale entries
-			a.traceLim = make(map[string]*traceLimiter)
-		}
 		lim = &traceLimiter{}
 		a.traceLim[clientID] = lim
 	}
@@ -3890,7 +3934,28 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 	if warn {
 		lim.lastWarn = now
 	}
+	// Global ceiling, all connections together (#246 review mineur 5).
+	globalOver, globalWarn := false, false
+	if !over {
+		if now.Sub(a.traceGlobal.windowStart) >= time.Second {
+			a.traceGlobal.windowStart, a.traceGlobal.count = now, 0
+		}
+		a.traceGlobal.count++
+		if a.traceGlobal.count > clientTraceGlobalMaxPerSecond {
+			globalOver = true
+			if now.Sub(a.traceGlobal.lastWarn) >= time.Minute {
+				a.traceGlobal.lastWarn = now
+				globalWarn = true
+			}
+		}
+	}
 	a.diagMu.Unlock()
+	if globalOver {
+		if globalWarn {
+			server.LogWarn(game.LogComponentWebSocket, "CLIENT_TRACE_THROTTLED scope=global limit=%d/s", clientTraceGlobalMaxPerSecond)
+		}
+		return
+	}
 	if over {
 		if warn {
 			server.LogWarn(game.LogComponentWebSocket, "CLIENT_TRACE_THROTTLED client=%s type=%s", clientID, clientType)
@@ -3903,7 +3968,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		return
 	}
 	playerID, _ := a.wsHub.GetClientPlayerID(clientID)
-	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, playerID, p.Kind, p.At)
+	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, logToken(playerID), logToken(p.Kind), p.At)
 	if p.Team != "" {
 		line += fmt.Sprintf(" team=%q", p.Team)
 	}
@@ -3911,7 +3976,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		line += fmt.Sprintf(" prev_len=%d", p.PrevLen)
 	}
 	if p.CauseAction != "" {
-		line += fmt.Sprintf(" cause_action=%s", p.CauseAction)
+		line += fmt.Sprintf(" cause_action=%s", logToken(p.CauseAction))
 	}
 	if len(p.Detail) > 0 {
 		keys := make([]string, 0, len(p.Detail))
@@ -3920,7 +3985,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			line += fmt.Sprintf(" detail.%s=%v", k, p.Detail[k])
+			line += fmt.Sprintf(" detail.%s=%s", logToken(k), logValue(p.Detail[k]))
 		}
 	}
 	server.LogWarn(game.LogComponentWebSocket, "%s", line)
