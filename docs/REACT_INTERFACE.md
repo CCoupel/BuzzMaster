@@ -740,7 +740,7 @@ après le REVEAL. La variante animateur n'est pas livrée en v11.2.
 
 | Composant | Rôle |
 |-----------|------|
-| `TeamAwardBar` (`components/TeamAwardBar.jsx`) | Montant par équipe (−, saisie, +), source du montant, « Tout sélectionner / Tout désélectionner », bouton « Donner les points (N) » (« Retirer les points (N) », rouge, si négatif). Désactivé à N = 0 et pendant l'envoi. `title` = motif de blocage |
+| `TeamAwardBar` (`components/TeamAwardBar.jsx`) | Montant par équipe (−, saisie, +), source du montant, « Tout sélectionner / Tout désélectionner », bouton « Donner les points (N) » (« Retirer les points (N) », rouge, si négatif). Désactivé à N = 0 et pendant l'envoi. motif de blocage affiché sous la barre (`role="status"`, classe `award-blocked`), montant borné à ±999 (`AWARD_LIMIT`) |
 | `QcmAnswerPicker` (`components/QcmAnswerPicker.jsx`) | Les quatre réponses QCM cliquables ; `teamCounts[clé]` = nombre d'équipes ayant donné la réponse. Marque « ✓ bonne réponse » |
 | `TeamCard` (`components/TeamCard.jsx`) | Case à cocher (`selectable`, `selected`) ; `awardedInfo` = `{POINTS}` si l'équipe est dans `AWARDED_TEAMS` : case désactivée, classe `award-done`, mention « ✓ déjà créditée ±N » |
 
