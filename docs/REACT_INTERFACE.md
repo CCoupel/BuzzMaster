@@ -704,8 +704,8 @@ avec sous-libellé « en attente »). `AnimArdoiseList` affiche les mêmes pasti
 - Saisie : envoi immédiat du premier caractère, puis au plus une fois toutes les **200 ms**, avec le
   dernier état toujours envoyé. Annulé au démontage.
 - Sortie de `STARTED` : `ARDOISE_FINAL` avec le texte affiché au gel du clavier, renvoi chaque seconde
-  jusqu'à l'accusé valide, au plus 30 envois par liaison. Une page montée après le STOP (rechargement)
-  n'envoie jamais de final vide à l'aveugle.
+  jusqu'à l'accusé valide, au plus 30 envois par liaison. Une page montée après le STOP
+  n'envoie aucun final (même si elle réaffiche son brouillon). Une page montée en cours de question, sans texte restauré, sans saisie et sans avoir vu le départ de la question, n'en envoie pas non plus : l'animateur doit forcer.
 - Brouillon : `utils/vplayerSession.js` (`vplayer_ardoise_draft` en `sessionStorage`, propre à l'onglet).
   Restauré au rechargement tant que la question ne change pas, effacé au changement de question ou
   NEW_GAME.
