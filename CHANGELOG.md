@@ -13,6 +13,7 @@ Historique des versions du projet BuzzControl.
 - **Tablettes à recharger après mise à jour** : admin et animateur sont livrés avec le serveur, mais une tablette ouverte sur l'ancien bundle n'envoie pas le nouveau message de liaison. Recharger chaque tablette après la mise à jour.
 - **Tablette rechargée après le STOP, ou rechargée / rejointe en cours de question sans rien écrire** : aucun texte final n'est envoyé ; son équipe reste « en attente » jusqu'au forçage. Une page rechargée en cours de question qui a restauré son brouillon, ou sur laquelle on tape, envoie bien son final.
 - **`CLIENT_TRACE` accepté pendant l'entracte** : diagnostic uniquement, sans effet sur le jeu.
+- **Renommage et suppression d'équipe refusés pendant une question (#249)** : de la sélection d'une question jusqu'à son REVEAL, le serveur refuse en entier un envoi qui renomme ou supprime une équipe (`TEAMS_UPDATE_REFUSED`). L'interface désactive les champs correspondants et explique pourquoi. Une question sélectionnée par erreur bloque donc ces actions jusqu'à son REVEAL ou jusqu'à « Nouvelle partie ».
 
 ### Added
 
@@ -39,6 +40,12 @@ Historique des versions du projet BuzzControl.
 - **Pull-to-refresh sur la page joueur (#246)** — Le rafraîchissement par glissement vers le bas est désactivé sur la page joueur uniquement. Non vérifié sur appareils réels : voir `tests/procedures/ardoise-246.md`.
 - **Nom de joueur virtuel changé spontanément (#246)** — Un onglet périmé ou une reconnexion pouvait renommer le joueur actuel avec un nom d'une ancienne partie.
 - **Texte final tronqué au STOP (#246)** — Le texte final est envoyé au gel du clavier, débounce compris.
+
+- **Identité d'équipe = clé (#249)** — Le nom d'une équipe (`NAME`) est toujours égal à sa clé. Le serveur corrige tout écart à l'enregistrement et au chargement de `teams.json` (`WARN TEAM_NAME_NORMALIZED`). Avant, renommer une équipe gardait l'ancien `NAME` : les réponses ARDOISE étaient rangées sous la nouvelle clé, mais l'admin et la TV les cherchaient sous l'ancien nom, et affichaient « — ».
+- **Renommage hors question conservé (#249)** — Hors question, y compris en REVEALED, le renommage reporte sous la nouvelle clé tous les états de l'équipe (réponses ARDOISE, compteurs MEMORY et RAFALE, historique des points). Le verrou « déjà créditée » reste ainsi valable. Journal : `INFO TEAM_RENAMED`.
+- **Suppression d'équipe hors question (#249)** — Les états de jeu de l'équipe sont effacés. L'historique des points est conservé, avec un événement `TEAM_DELETED`. Une équipe recréée sous le même nom n'hérite pas du verrou « déjà créditée » de l'ancienne.
+- **Page Équipes verrouillée pendant une question (#249)** — Champ de nom et bouton ✕ désactivés, avec un bandeau explicatif. Le refus serveur affiche « Renommage refusé : une question est en cours. » (ou « Suppression refusée… »), et le nom d'origine est réaffiché.
+- **Grille ARDOISE adaptative sur la TV (#250)** — Au REVEAL, toutes les équipes sont affichées, sans plafond à 8. Règle : une rangée jusqu'à 5 équipes, deux rangées de 6 à 16, trois au-delà. La réponse est coupée par « … » à 2 lignes (1 ligne au-delà de 12 équipes). Aucun défilement.
 
 ### Validation
 
