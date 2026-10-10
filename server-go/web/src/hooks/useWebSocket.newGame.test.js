@@ -40,4 +40,14 @@ describe('useWebSocket — NEW_GAME (#243)', () => {
     act(() => result.current.clearNewGameRefused())
     expect(result.current.newGameRefused).toBeNull()
   })
+
+  it('retourne le booléen de sendMessage : false si la WebSocket n\'est pas ouverte', () => {
+    const { result } = renderHook(() => useWebSocket('/ws/admin'))
+    let ok
+    act(() => { ok = result.current.newGame({ purgeScores: true }) })
+    expect(ok).toBe(false)
+    ws.readyState = 1
+    act(() => { ok = result.current.newGame({ purgeScores: true }) })
+    expect(ok).toBe(true)
+  })
 })

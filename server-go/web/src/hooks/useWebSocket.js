@@ -1246,15 +1246,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // événement de clic), payload vide = comportement v11.1 inchangé côté serveur.
   const newGame = useCallback((options) => {
     if (options && typeof options.purgeScores === 'boolean') {
-      sendMessage('NEW_GAME', {
+      return sendMessage('NEW_GAME', {
         PURGE_SCORES: options.purgeScores,
         PURGE_PLAYERS: !!options.purgePlayers,
         PURGE_TEAMS: !!options.purgeTeams,
         RESET_QUESTIONS: !!options.resetQuestions,
       })
-      return
     }
-    sendMessage('NEW_GAME', {})
+    // Retourne true si le message est effectivement parti (false : WebSocket fermée)
+    return sendMessage('NEW_GAME', {})
   }, [sendMessage])
 
   // Quiz metadata: update name, theme, notes, populations, difficulties,
