@@ -100,7 +100,7 @@
 .ardoise-receipt-icon.ok { color: #16a34a; }
 .ardoise-receipt-icon.wait { color: #a16207; }
 .ardoise-receipt-icon.off { color: #ea580c; }
-.ardoise-receipt-icon.unconfirmed { color: #6b7280; opacity: 0.55; }
+.ardoise-receipt-icon.unconfirmed { color: #6b7280; opacity: 0.75; } /* ≥ 3:1 sur fond clair et sombre */
 
 /* Compteur n/N reçues */
 .ardoise-rcounter {

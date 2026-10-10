@@ -245,7 +245,10 @@ describe('GamePage — garde REVEAL ARDOISE : zone Réponses (#246, maquette adm
     expect(dt).toMatch(/Les Verts[^]*hors ligne/)
     expect(dt).toMatch(/Les Oranges/)
     expect(dt).not.toMatch(/Les Bleus/)
-    expect(dt).toMatch(/non confirmée/)
+    // décision utilisateur : le dialogue n'annonce plus « marquées non confirmée » ; il dit ce que deviennent les équipes
+    expect(dt).toMatch(/garderont leur dernier texte reçu/)
+    expect(dt).toMatch(/grisé avec son icône d’origine/)
+    expect(dt).not.toMatch(/marqué/)
     fireEvent.click(within(dlg).getByText('Attendre'))
     expect(game.revealAnswer).not.toHaveBeenCalled()
     expect(baseElement.querySelector('[role="dialog"]')).toBeNull()
