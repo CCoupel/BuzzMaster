@@ -1103,8 +1103,8 @@ point :
 ### Endpoint
 
 - **Direction** : Server → Client
-- **Cible** : `ClientTypeAnim` **exclusivement** (`/ws/anim`), via `BroadcastToTypes(msg, ClientTypeAnim)` — comme `NEXT_QUESTION`. `/admin`, `/tv`, `/player` et `/buzzer` ne reçoivent jamais cette action.
-- **Trigger** : `TEAM_POINTS` et `BUMPER_POINTS` traités (origine `/admin` ou `/anim` indifféremment), `READY` (changement de question), `NEW_GAME`, `RAZ`, HELLO d'un client animateur (état initial)
+- **Cible** : `ClientTypeAnim` (`/ws/anim`) **et `ClientTypeAdmin`** (`/ws/admin`, v11.2 #244/#251), via `BroadcastToTypes` — comme `NEXT_QUESTION`. `/tv`, `/player` et `/buzzer` ne reçoivent jamais cette action.
+- **Trigger** : `TEAM_POINTS`, `BUMPER_POINTS` et `TEAM_POINTS_BATCH` traités (origine `/admin` ou `/anim` indifféremment), `READY` (changement de question), `NEW_GAME`, `RAZ`, HELLO d'un client animateur (état initial)
 
 Informe les interfaces animateur des équipes **déjà créditées pour la question en cours**. Sert
 deux besoins : confirmer à **tous** les animateurs qu'un crédit vient d'avoir lieu (équipe +
@@ -1306,6 +1306,39 @@ Action de diffusion serveur portant l'état complet du message.
 - Retrait `/admin` synchrone sur tous les `/anim`
 
 ---
+
+## Action TEAM_POINTS_BATCH — attribution groupée (v11.2, #244/#251)
+
+Envoyée par `admin` (« Donner les points (N) » / « Retirer les points (N) »), **en phase `REVEALED` uniquement**.
+Contrat détaillé : `contracts/websocket-actions.md` §TEAM_POINTS_BATCH.
+
+```json
+{ "ACTION": "TEAM_POINTS_BATCH", "MSG": { "QUESTION_ID": "9", "ENTRIES": [ {"TEAM": "Les Bleus", "POINTS": 3}, {"TEAM": "Les Rouges", "POINTS": 2} ] } }
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `QUESTION_ID` | string | Question affichée par l'admin au clic |
+| `ENTRIES` | array | 1 à 64 entrées, équipes distinctes. `TEAM` = clé d'équipe ; `POINTS` = entier non nul, de −999 à 999 |
+| `DISPLAY` | bool | **Réservé à #252** (« Afficher sur la TV »). Absent = `true`. Sans effet tant que #252 n'est pas livré |
+
+- **Refus global** (rien n'est appliqué) : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`,
+  `INVALID_POINTS`, ou `UNKNOWN_TEAM` (équipe renommée ou supprimée entre la sélection et le clic, `TEAMS` = clés
+  inconnues). Journal `WARN TEAM_POINTS_BATCH_REFUSED`.
+- **Lot appliqué d'un bloc** : une équipe déjà créditée pour la question (présente dans `AWARDED_TEAMS`) est
+  ignorée (`SKIPPED`, `ALREADY_AWARDED`). Les autres reçoivent `TEAM_POINTS += POINTS` et une entrée
+  `POINTS_AWARDED` par équipe.
+- **Effets publics groupés** (si `DISPLAY` ≠ `false`), une seule fois pour le lot : son « gagné » si un montant est
+  positif ; une comète LED par équipe créditée positivement ; une pulsation d'ambiance ; un seul flash de score pour
+  l'équipe au plus fort montant positif.
+- **Diffusions** : `UPDATE` (scores), `AWARDED_TEAMS` (admin et anim).
+- **Réponse à l'émetteur seul** : `TEAM_POINTS_BATCH_RESULT`.
+
+```json
+{ "ACTION": "TEAM_POINTS_BATCH_RESULT", "MSG": { "STATUS": "APPLIED", "QUESTION_ID": "9", "APPLIED": [ {"TEAM": "Les Bleus", "POINTS": 3} ], "SKIPPED": [ {"TEAM": "Les Rouges", "REASON": "ALREADY_AWARDED"} ], "TEAMS": [] } }
+```
+
+La régie (`TEAM_POINTS` par carte d'équipe) n'est pas contrainte par le verrou « déjà créditée ».
 
 ## Action NEW_GAME — options de purge (v11.2, #243)
 
