@@ -101,4 +101,17 @@ describe('useWebSocket — CLIENT_TRACE (#246)', () => {
     act(() => update(tv, { PHASE: 'STOPPED', QUESTION: { ID: 'q1' }, ARDOISE_ANSWERS: { Verts: { TEXT: '' } } }))
     expect(traces(tv)).toHaveLength(0)
   })
+
+  it.each([['freeze', 'FREEZE'], ['resume', 'RESUME']])('événement Page Lifecycle « %s » → CLIENT_TRACE %s, écouteur retiré au démontage', (evt, kind) => {
+    const { unmount } = renderHook(() => useWebSocket('/ws/anim'))
+    const ws = instances[0]
+    open(ws)
+    act(() => { document.dispatchEvent(new Event(evt)) })
+    const hits = traces(ws).filter((t) => t.KIND === kind)
+    expect(hits).toHaveLength(1)
+    expect(typeof hits[0].AT).toBe('number')
+    unmount()
+    document.dispatchEvent(new Event(evt))
+    expect(traces(ws).filter((t) => t.KIND === kind)).toHaveLength(1)
+  })
 })
