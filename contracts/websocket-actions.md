@@ -1852,6 +1852,7 @@ couvre la course (réception tardive de l'état) : l'interface affiche le motif 
 |-----------|--------|
 | Direction | `Client → Server` (`admin`, `tv`, `vplayer`, `anim`) |
 | Limites | ≤ 10 messages/s par connexion (au-delà : ignorés, un `WARN CLIENT_TRACE_THROTTLED` par minute) ; payload ≤ 1 Ko |
+| Phases | **Toutes**, y compris pendant l'**entracte** (`GameState.ENTRACTE = true`) : le diagnostic ne dépend pas de la phase de jeu. `CLIENT_TRACE` figure dans la liste d'autorisation de l'entracte (§« Actions refusées pendant l'entracte ») *(arbitrage v11.2, #246)* |
 
 #### Payload
 
@@ -2121,6 +2122,7 @@ n'atteint jamais son handler.
 | `REGIE_MESSAGE_SEND`, `REGIE_MESSAGE_CLEAR` | La régie prévient les animateurs — c'est précisément le moment utile |
 | `UPDATE_ENTRACTE_CONFIG` | Préparer le panneau de la **prochaine** pause pendant celle en cours. Sans effet sur le panneau diffusé (gel, voir ci-dessus) |
 | `PONG` | Inoffensif (aucune transition n'en dépend hors `PREPARE`) et évite de faire croire un buzzer muet |
+| `CLIENT_TRACE` *(v11.2, #246)* | Diagnostic pur, sans effet sur l'état du jeu : une coupure ou une mise en veille pendant la pause doit rester traçable |
 
 Tout le reste — `READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `NEW_GAME`,
 `RAZ`, `SHOW_QR_CODE`, `UPDATE_QUIZ_META`, crédits de points, actions MEMORY/MEMOTION/ARDOISE… —

@@ -21,6 +21,7 @@
 - **[CHANGED]** ⚠️ `websocket-actions.md` §REVEAL — champ facultatif `FORCE` ; **garde ARDOISE** : REVEAL refusé tant qu'une équipe attendue n'a pas son texte final reçu, **tablette hors ligne comprise** ; forçage par `FORCE: true`.
 - **[NEW]** `websocket-actions.md` §REVEAL_REFUSED — réponse ciblée `{REASON: "ARDOISE_PENDING", PENDING: [{TEAM, OFFLINE}]}`.
 - **[NEW]** `websocket-actions.md` §CLIENT_TRACE — événements de diagnostic clients (tous types), limités à 10/s et 1 Ko ; allow-list mise à jour (`ARDOISE_FINAL` : vplayer ; `CLIENT_TRACE` : tous).
+- **[CHANGED]** `websocket-actions.md` §CLIENT_TRACE et §« Actions refusées pendant l'entracte » — *(arbitrage du 2026-10-10)* `CLIENT_TRACE` est accepté dans **toutes les phases, entracte comprise** : ajouté à la liste d'autorisation de l'entracte. Le contrat initial était muet sur ce point.
 - **[CHANGED]** `game-state.md` / `models.md` §ArdoiseAnswer — champs **`RECEIVED`** (bool) et **`RECEIVED_HASH`** (string), toujours sérialisés ; `STARTED_AT` ajouté au contrat `game-state.md` (déjà émis depuis #117) ; `RECEIVED` remis à `false` au `CONTINUE` ; invariant « aucune modification sans saisie ».
 - **[NEW]** `logging.md` — section `logging` de `config.json` (fichier tournant, niveau minimal `WARN`), passage en `DEBUG` de la ligne par frappe, catalogue des événements de diagnostic et table de lecture en QUALIF.
 
