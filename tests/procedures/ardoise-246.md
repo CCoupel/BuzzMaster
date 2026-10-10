@@ -119,6 +119,25 @@
 
 ---
 
+## Scénario 6b — Effacer puis retaper sans pause jusqu'au STOP (cause reproduite)
+
+**Objectif** : la frappe continue est visible EN DIRECT, y compris juste après un effacement ; un rechargement de page ne perd pas la réponse.
+
+| Étape | Action | Résultat attendu | Résultat obtenu | OK ? |
+|-------|--------|------------------|-----------------|------|
+| 1 | ARDOISE démarrée (chrono ≥ 20 s). Sur une tablette : taper « PARIS », puis **⌫ ⌫ ⌫ ⌫ ⌫** (ou **✕**) jusqu'au vide | L'admin et l'anim voient la réponse se vider (c'est voulu) | | |
+| 2 | **Sans faire de pause**, retaper « LYONNAISE » d'un trait (≈ 1 s entre le premier et le dernier caractère, aucune pause > 0,2 s) | Pendant la frappe, l'admin et l'anim voient le texte **se construire en direct** (jamais « vide » alors que la tablette affiche du texte) | | |
+| 3 | Continuer à taper jusqu'au STOP automatique du chrono (ou cliquer STOP en pleine frappe) | La réponse révélée = le texte affiché sur la tablette, complet ; compteur « reçue » | | |
+| 4 | Lire `buzzcontrol.log` | `ARDOISE_CLEARED reason=backspace_empty` (ou `clear`) puis **aucun** autre effacement ; pas d'`ARDOISE_STATE_DIVERGED` | | |
+| 5 | **Recharger la page par glissement vers le bas** (pull-to-refresh) en cours de question, après avoir tapé « PARIS » ; **ne rien retaper** ; attendre le STOP | La tablette réaffiche « PARIS » après rechargement ; au STOP la réponse reçue est **« PARIS »** (jamais vide ni « reçu — aucune réponse écrite ») | | |
+| 6 | Même chose mais le rechargement a lieu **après** le STOP | La tablette n'envoie rien (pas de final vide) ; le REVEAL reste bloqué sur cette équipe jusqu'à son éventuel envoi ou au forçage ; la réponse déjà reçue est conservée | | |
+| 7 | Changer de question puis recharger la page | Le clavier est vide (aucun texte de la question précédente) | | |
+| 8 | Glisser vers le bas sur la page joueur (hors rechargement volontaire) | La page ne se recharge pas sur simple geste de défilement (durcissement `overscroll-behavior`) — sur l'admin le comportement est inchangé | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
 ## ⏸ Scénarios 7 à 10 — à jouer après le Batch 2 (garde-fous au STOP)
 
 ## Scénario 7 — STOP en pleine frappe (plus de troncature)
