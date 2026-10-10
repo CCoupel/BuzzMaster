@@ -194,4 +194,26 @@ describe('VPlayerPage — identité de l\'onglet (#246, F-ID)', () => {
     fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'Z' } })
     expect(sends().at(-1)).toMatchObject({ TEXT: 'Z', SEQ: 1 })
   })
+
+  it('le filet « session expirée » (10 s) ne remplace ni l\'écran onglet périmé ni l\'écran session ouverte ailleurs', async () => {
+    // Bumper absent du roster : le filet s'armerait pour un onglet normal.
+    const mock = makeGameMock({ bumpers: {}, playerEvictedStatus: { reason: 'DUPLICATE_SESSION' } })
+    useGame.mockReturnValue(mock)
+    const dup = render(<VPlayerPage />)
+    await act(async () => { vi.advanceTimersByTime(60000) })
+    expect(dup.container.querySelector('[data-testid="vplayer-duplicate-session"]')).not.toBeNull()
+    expect(mockNavigate).not.toHaveBeenCalledWith('/')
+    dup.unmount()
+
+    const mock2 = makeGameMock({ bumpers: {}, status: 'connecting' })
+    useGame.mockReturnValue(mock2)
+    const stale = render(<VPlayerPage />)
+    await act(async () => {})
+    localStorage.setItem('vplayer_id', 'vjoueur_bob_9')
+    useGame.mockReturnValue({ ...mock2, status: 'connected' })
+    stale.rerender(<VPlayerPage />)
+    await act(async () => { vi.advanceTimersByTime(60000) })
+    expect(stale.container.querySelector('[data-testid="vplayer-stale-tab"]')).not.toBeNull()
+    expect(mockNavigate).not.toHaveBeenCalledWith('/')
+  })
 })

@@ -271,6 +271,9 @@ export default function VPlayerPage() {
   useEffect(() => {
     if (!playerSession || status !== 'connected') return
     if (bumper || reconnectError || evictedReason !== null) return
+    // #246 : un onglet périmé ou évincé (DUPLICATE_SESSION) garde son écran
+    // dédié tant que la situation dure — sa session n'est pas expirée.
+    if (stale || superseded) return
 
     const timeoutId = setTimeout(() => {
       console.log('[VPlayer] Safety net: bumper never appeared, redirecting (SESSION_EXPIRED)')
@@ -278,7 +281,7 @@ export default function VPlayerPage() {
     }, SESSION_EXPIRED_SAFETY_NET_MS)
 
     return () => clearTimeout(timeoutId)
-  }, [playerSession, status, bumper, reconnectError, evictedReason])
+  }, [playerSession, status, bumper, reconnectError, evictedReason, stale, superseded])
 
   // #246 (F-ID) — liaison de la connexion : PLAYER_CONNECT {NAME, ID} à CHAQUE
   // ouverture de WebSocket dès que l'ID est connu, même si le bumper est déjà
