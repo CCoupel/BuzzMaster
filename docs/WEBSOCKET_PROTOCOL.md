@@ -466,6 +466,89 @@ Couleurs disponibles : `green`, `red`, `blue`, `yellow`, `orange`, `white`.
 
 ---
 
+## Liaison VJoueur, ARDOISE final et REVEAL gardé — v11.2 (#246)
+
+Source de vérité : `contracts/websocket-actions.md` (sections PLAYER_CONNECT, ARDOISE_INPUT,
+ARDOISE_FINAL, ARDOISE_FINAL_ACK, REVEAL, REVEAL_REFUSED, CLIENT_TRACE) et `contracts/logging.md`.
+
+### Liaison connexion ↔ bumper
+
+- Un `PLAYER_CONNECT {NAME, ID}` accepté **lie la connexion WebSocket** à ce bumper. Le client
+  VJoueur l'envoie à **chaque** ouverture de sa WebSocket, même si l'état reçu le montre déjà connecté.
+- Une seule connexion liée par bumper : la plus récente gagne. L'ancienne reçoit
+  `PLAYER_EVICTED { REASON: "DUPLICATE_SESSION" }` et est déliée (`WARN VPLAYER_DUPLICATE_SESSION`).
+- Actions joueur (`ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`, `BUTTON`, `FLIP_MEMORY_CARD`)
+  émises par un client `vplayer` : refusées sans réponse si la connexion n'est liée à rien
+  (`PLAYER_ACTION_UNBOUND`) ou si `ID` ≠ bumper lié (`PLAYER_FOREIGN_ID`).
+- Le nom n'identifie jamais un joueur côté client. Le `NAME` envoyé ne renomme plus le bumper ;
+  `PLAYER_CONNECTED.NAME` renvoie le nom serveur (`WARN VPLAYER_NAME_MISMATCH` si différent).
+- Noms de VJoueurs uniques (sans casse) : un renommage ou une entrée en doublon venant de
+  `UPDATE`/`FULL` est écarté (`WARN VPLAYER_DUPLICATE_NAME`).
+
+```json
+{ "ACTION": "PLAYER_EVICTED", "MSG": { "REASON": "DUPLICATE_SESSION" } }
+```
+
+### ARDOISE_INPUT — compléments v11.2
+
+Champs facultatifs : `SEQ` (compteur croissant par question et par connexion, `ARDOISE_SEQ_GAP` /
+`ARDOISE_SEQ_STALE` en diagnostic) et `REASON` (`key`, `clear`, `backspace_empty`, `resend`, `visible`).
+`TEXT` est limité à **2 000 caractères** (points de code Unicode). Au-delà, le message est **ignoré en
+entier** (`WARN ARDOISE_INPUT_TOO_LONG`), jamais tronqué.
+
+### ARDOISE_FINAL (VPlayer → Server)
+
+Envoyé à la sortie de `STARTED` (STOP ou PAUSE), pour la question ARDOISE courante.
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `ID` | string | Bumper lié à la connexion |
+| `QUESTION_ID` | string | Doit être la question courante, sinon `ARDOISE_FINAL_STALE` |
+| `TEXT` | string | Texte complet au gel du clavier, `""` autorisé, ≤ 2 000 caractères |
+| `HASH` | string | FNV-1a 32 bits du texte UTF-8, 8 caractères hexadécimaux minuscules |
+| `SEQ` | integer | Facultatif, même compteur que `ARDOISE_INPUT` |
+
+Le serveur recalcule le hash (divergence → `WARN ARDOISE_FINAL_HASH_MISMATCH`, pas d'accusé), écrit
+`ARDOISE_ANSWERS[équipe]` avec `RECEIVED = true` et `RECEIVED_HASH`, répond `ARDOISE_FINAL_ACK` à la
+seule connexion émettrice, puis diffuse `UPDATE` immédiatement vers admin et anim. Il est idempotent.
+
+Vecteurs de test FNV-1a (Go et JS doivent les reproduire) :
+
+| TEXT | HASH |
+|------|------|
+| `""` | `811c9dc5` |
+| `"a"` | `e40c292c` |
+| `"Paris"` | `246f9d40` |
+
+**Renvoi côté tablette** : un envoi au gel, puis un renvoi par seconde tant que l'accusé valide n'est
+pas reçu (même `QUESTION_ID` et même `HASH`). Au plus 30 envois par liaison. Les renvois s'arrêtent
+dès que la phase ou la question change.
+
+### ARDOISE_FINAL_ACK (Server → VPlayer, ciblé)
+
+Payload : `QUESTION_ID`, `HASH`. **Ne contient jamais le texte** (confidentialité, #128).
+
+### REVEAL — garde ARDOISE et FORCE (admin, anim)
+
+- Champ facultatif `FORCE` (booléen). Hors question ARDOISE, il est ignoré.
+- Sans `FORCE: true`, le REVEAL est **refusé** tant qu'une équipe attendue n'a pas `RECEIVED = true`.
+  Une équipe est attendue si elle a au moins un VJoueur. La tablette hors ligne compte comme non reçue.
+- Refus : la phase ne change pas, et l'émetteur seul reçoit `REVEAL_REFUSED`.
+- Avec `FORCE: true` : REVEAL immédiat, `WARN ARDOISE_REVEAL_FORCED` s'il manque des équipes. Ces
+  équipes gardent leur dernier texte reçu, avec `RECEIVED = false`.
+
+```json
+{ "ACTION": "REVEAL_REFUSED", "MSG": { "REASON": "ARDOISE_PENDING", "PENDING": [ { "TEAM": "Les Verts", "OFFLINE": true } ] } }
+```
+
+### CLIENT_TRACE (tous types de client, diagnostic)
+
+Aucun effet sur l'état du jeu. Accepté dans **toutes les phases**, entracte comprise. Limites : 10
+messages/s par connexion, 50/s pour l'ensemble des connexions, 1 Ko par message. Chaque trace produit
+une seule ligne de journal (`KIND`, `AT`, `TEAM`, `PREV_LEN`, `CAUSE_ACTION`, `DETAIL`). Les `KIND`
+sont `ARDOISE_CLEARED_SEEN`, `VISIBILITY`, `PAGESHOW`, `FREEZE`, `RESUME`, `WS_GAP`, `STALE_TAB`,
+`DUPLICATE_SESSION`.
+
 ## Keep-alive
 
 Le serveur envoie un **ping WebSocket natif** toutes les **30 secondes**. Si le buzzer ne repond pas avec un pong dans les **60 secondes**, la connexion est consideree comme perdue et le client est deconnecte.

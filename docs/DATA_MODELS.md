@@ -478,6 +478,26 @@ Voir `WEBSOCKET_PROTOCOL.md` pour comportement complet (throttling 200ms, flush 
 
 ---
 
+### ArdoiseAnswer — RECEIVED / RECEIVED_HASH (v11.2, #246)
+
+Chaque entrée de `ARDOISE_ANSWERS[équipe]` porte désormais :
+
+| Champ | Type | Sérialisation | Rôle |
+|-------|------|---------------|------|
+| `TEXT` | string | toujours | Texte complet de l'équipe |
+| `STARTED_AT` | number (µs) | toujours | Premier texte non vide (figé) |
+| `SUBMITTED_AT` | number (µs) | toujours | Dernière modification |
+| `RECEIVED` | bool | toujours, sans `omitempty` | `true` uniquement après `ARDOISE_FINAL` accepté (phase STOPPED/PAUSED) |
+| `RECEIVED_HASH` | string | toujours | Empreinte FNV-1a 32 bits (8 hex) du texte final ; `""` tant que `RECEIVED = false` |
+
+- `ARDOISE_INPUT` ne modifie jamais `RECEIVED`.
+- `RECEIVED` repasse à `false` pour toutes les équipes au `CONTINUE`, et la map est recréée au
+  `READY` / NEW_GAME.
+- Un `ARDOISE_FINAL` qui apporte le premier texte non vide fixe `STARTED_AT`, comme un `ARDOISE_INPUT`.
+- Une équipe attendue (au moins un VJoueur) sans entrée dans la map compte comme **non reçue**.
+
+Contrats : `contracts/game-state.md` et `contracts/models.md`, section ArdoiseAnswer.
+
 ## GameState — Champs réseau (v5.7.0)
 
 ### NETWORK_ONLY_LOCALHOST
