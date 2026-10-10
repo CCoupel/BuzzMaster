@@ -398,6 +398,21 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     return ranked
   }, [bumpers, teams, isVPlayer, gameState.remote, gameState.phase])
 
+  // #252 (v11.2) — SCORE_CHANGE (contrat game-state.md) : un UPDATE qui apporte un nouveau
+  // SEQ avec DISPLAY = false est une CORRECTION CACHÉE : les nouveaux scores sont pris comme
+  // référence SANS animation (ni « +X pts », ni célébration, ni surbrillance, ni montée de rang).
+  // Chaque effet de détection garde son propre dernier SEQ traité : `hiddenScoreChange` rend les
+  // équipes/joueurs listés quand le SEQ est nouveau ET caché, sinon null (comportement actuel).
+  const scoreChangeSeqRefs = useRef({ ranking: 0, players: 0, celebration: 0 })
+  const hiddenScoreChange = (key) => {
+    const sc = gameState.SCORE_CHANGE
+    const seq = sc?.SEQ ?? 0
+    const isNew = seq !== scoreChangeSeqRefs.current[key]
+    scoreChangeSeqRefs.current[key] = seq
+    if (!isNew || !sc || sc.DISPLAY !== false) return null
+    return { teams: new Set(sc.TEAMS || []), players: new Set(sc.PLAYERS || []) }
+  }
+
   // Detect team ranking changes
   // #127 — gardé aligné sur le gating de sortedTeams ci-dessus : sans ce retour
   // anticipé, un VJoueur hors vue SCORE ré-exécuterait quand même setPreviousRanking
@@ -407,6 +422,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     if (isVPlayer && gameState.remote !== 'SCORE') return
     const currentRanking = {}
     const changes = {}
+    const hidden = hiddenScoreChange('ranking')
 
     sortedTeams.forEach((team, index) => {
       currentRanking[team.name] = { position: index, score: team.score }
@@ -421,7 +437,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       }
     })
 
-    if (Object.keys(changes).length > 0) {
+    // Correction cachée : référence mise à jour, aucune surbrillance ni montée de rang
+    // (y compris pour les équipes dépassées à cause d'elle).
+    if (!hidden && Object.keys(changes).length > 0) {
       setChangedTeams(changes)
       setTimeout(() => setChangedTeams({}), 2000)
     }
@@ -434,6 +452,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     if (isVPlayer && gameState.remote !== 'PLAYERS') return
     const currentScores = {}
     const changes = {}
+    const hidden = hiddenScoreChange('players')
 
     sortedPlayers.forEach((player) => {
       currentScores[player.mac] = player.score
@@ -444,7 +463,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       }
     })
 
-    if (Object.keys(changes).length > 0) {
+    if (!hidden && Object.keys(changes).length > 0) {
       setChangedPlayers(changes)
       setTimeout(() => setChangedPlayers({}), 2000)
     }
@@ -464,13 +483,16 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   useEffect(() => {
     const previous = previousTeamScoresRef.current
     const currentScores = {}
+    const hidden = hiddenScoreChange('celebration')
 
     Object.entries(teams).forEach(([name, data]) => {
       const score = data.SCORE || 0
       currentScores[name] = score
 
       const prevScore = previous[name]
-      if (prevScore !== undefined && score > prevScore) {
+      // #252 : une hausse listée par une correction cachée n'anime rien (la référence est
+      // mise à jour ; la prochaine hausse visible n'anime que sa propre différence).
+      if (prevScore !== undefined && score > prevScore && !hidden?.teams.has(name)) {
         setPointsAnimation({
           name,
           points: score - prevScore,
