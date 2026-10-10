@@ -1307,6 +1307,34 @@ Action de diffusion serveur portant l'état complet du message.
 
 ---
 
+## Action NEW_GAME — options de purge (v11.2, #243)
+
+Envoyée par `admin` (bouton « LANCER LA PARTIE »). Contrat détaillé : `contracts/websocket-actions.md` §NEW_GAME.
+
+```json
+{ "ACTION": "NEW_GAME", "MSG": { "PURGE_SCORES": true, "PURGE_PLAYERS": false, "PURGE_TEAMS": false, "RESET_QUESTIONS": true } }
+```
+
+| Champ | Type | Effet |
+|-------|------|-------|
+| `PURGE_SCORES` | bool | Scores à 0 et historique des points effacé |
+| `PURGE_PLAYERS` | bool | Joueurs des tablettes supprimés (`GAME_RESET`). Exige `PURGE_SCORES` |
+| `PURGE_TEAMS` | bool | Équipes supprimées (`TEAM_DELETED`), joueurs conservés sans équipe |
+| `RESET_QUESTIONS` | bool | Toutes les questions « à jouer » |
+
+- **Payload vide** (clients antérieurs) : comportement v11.1 (scores et joueurs purgés, équipes conservées,
+  questions remises à zéro).
+- **Dès qu'un champ est présent**, les champs absents valent `false`.
+- **Refus** : `PURGE_PLAYERS = true` avec `PURGE_SCORES = false` → rien n'est appliqué, réponse ciblée
+  `NEW_GAME_REFUSED`, journal `WARN NEW_GAME_REFUSED`.
+
+```json
+{ "ACTION": "NEW_GAME_REFUSED", "MSG": { "REASON": "PLAYERS_REQUIRE_SCORES" } }
+```
+
+- **Toujours** : arrêt de tous les minuteurs et du son de question, `TEAMS_LOCKED = false`.
+- **Journal** : `WARN NEW_GAME_PURGE` (options, joueurs et équipes supprimés, phase et question avant le lancement).
+
 ## Action ENTRACTE_SET — Pause Globale (v6.5.2, #119)
 
 ### Action Entrante (Client → Server)
