@@ -4546,6 +4546,15 @@ func (e *Engine) loadTeamsLocked() (bool, []teamEvent, error) {
 	}
 
 	reports := normalizeTeamNamesUnsafe(teams, "load")
+	if len(reports) > 0 {
+		// First repair: keep the original file once (never overwrite an earlier backup).
+		bak := e.teamsPath + ".bak"
+		if _, statErr := os.Stat(bak); os.IsNotExist(statErr) {
+			if werr := os.WriteFile(bak, data, 0644); werr != nil {
+				log.Printf("[Engine] LoadTeams: could not write %s: %v", bak, werr)
+			}
+		}
+	}
 	e.data.Teams = teams
 	log.Printf("[Engine] Teams loaded: %d teams from %s", len(teams), e.teamsPath)
 	return len(reports) > 0, reports, nil

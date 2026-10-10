@@ -2074,6 +2074,10 @@ func (a *App) handleFullUpdate(msg *protocol.Message, senders ...updateSender) {
 				a.engine.PurgeTeamState(r)
 			}
 		}
+		if len(renames) > 0 || len(removed) > 0 {
+			// #249: credits may have moved (rename) or been invalidated (TEAM_DELETED).
+			defer a.broadcastAwardedTeams()
+		}
 	}
 	if data.Bumpers != nil {
 		// #123 B1 — notify BEFORE replacing the roster, same ordering rule as
