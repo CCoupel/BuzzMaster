@@ -7,6 +7,9 @@ import './TeamAwardBar.css'
  * (« Retirer les points (N) », rouge, si le montant est négatif). Désactivé à N = 0 et
  * pendant l'envoi. Visible seulement après le REVEAL (décidé par l'appelant).
  */
+// Bornes du montant par équipe (contrat TEAM_POINTS_BATCH : entier non nul de −999 à 999).
+export const AWARD_LIMIT = 999
+
 export default function TeamAwardBar({
   amount, source, count, sending, blockedReason,
   onAmountChange, onSelectAll, onSelectNone, onGive,
@@ -26,6 +29,8 @@ export default function TeamAwardBar({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           aria-label="Points par équipe"
+          min={-AWARD_LIMIT}
+          max={AWARD_LIMIT}
         />
         <button type="button" onClick={() => onAmountChange(amount + 1)} aria-label="Augmenter">+</button>
       </div>
@@ -43,6 +48,9 @@ export default function TeamAwardBar({
       >
         {negative ? 'Retirer les points' : 'Donner les points'} ({count})
       </button>
+      {/* La raison du blocage doit être VISIBLE (une infobulle sur un bouton désactivé
+          n'apparaît pas au toucher). */}
+      {blockedReason && <div className="award-blocked" role="status">{blockedReason}</div>}
     </div>
   )
 }

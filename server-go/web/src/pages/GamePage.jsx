@@ -32,7 +32,7 @@ import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseRec
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import Button from '../components/Button'
 import LaunchGameButton from '../components/LaunchGameDialog'
-import TeamAwardBar from '../components/TeamAwardBar'
+import TeamAwardBar, { AWARD_LIMIT } from '../components/TeamAwardBar'
 import QcmAnswerPicker from '../components/QcmAnswerPicker'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
@@ -477,9 +477,13 @@ export default function GamePage() {
     .filter(t => awardSelected.has(t.name))
     .map(t => ({ team: t.name, points: awardTeamAmount(t.name) }))
   const awardInvalid = awardEntries.filter(e => !Number.isInteger(e.points) || e.points === 0)
-  const awardBlockedReason = awardInvalid.length > 0
-    ? `Montant nul ou invalide pour : ${awardInvalid.map(e => e.team).join(', ')}`
-    : null
+  // Borne du contrat (±999) : sinon le serveur refuse tout le lot (INVALID_POINTS, message générique).
+  const awardOutOfBounds = awardEntries.some(e => Math.abs(e.points) > AWARD_LIMIT)
+  const awardBlockedReason = awardOutOfBounds
+    ? `Le montant doit être compris entre −${AWARD_LIMIT} et ${AWARD_LIMIT}`
+    : awardInvalid.length > 0
+      ? `Montant nul ou invalide pour : ${awardInvalid.map(e => e.team).join(', ')}`
+      : null
 
   const toggleAwardTeam = (name, checked) => {
     setPickedColor(null)

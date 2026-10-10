@@ -216,4 +216,28 @@ describe('GamePage — sélection d\'équipes et attribution groupée (#244/#251
     rerender(<GamePage />)
     expect(give().textContent).toBe('Donner les points (0)')
   })
+
+  it('montant hors bornes (±999) : bouton désactivé, raison VISIBLE dans le texte (role status), min/max sur la saisie', () => {
+    const g = mkGame('REVEALED')
+    useGame.mockReturnValue(g)
+    render(<GamePage />)
+    const input = screen.getByLabelText('Points par équipe', { selector: 'input' })
+    expect(input.getAttribute('min')).toBe('-999')
+    expect(input.getAttribute('max')).toBe('999')
+    fireEvent.click(box('Les Verts'))
+    fireEvent.change(input, { target: { value: '1000' } })
+    expect(give().disabled).toBe(true)
+    expect(screen.getByText('Le montant doit être compris entre −999 et 999')).toBeTruthy()
+    fireEvent.change(input, { target: { value: '999' } })
+    expect(give().disabled).toBe(false)
+    expect(screen.queryByText(/Le montant doit être compris/)).toBeNull()
+  })
+
+  it('montant nul : la raison est affichée dans le texte, pas seulement en infobulle', () => {
+    useGame.mockReturnValue(mkGame('REVEALED'))
+    render(<GamePage />)
+    fireEvent.click(box('Les Verts'))
+    fireEvent.change(screen.getByLabelText('Points par équipe', { selector: 'input' }), { target: { value: '0' } })
+    expect(screen.getByText('Montant nul ou invalide pour : Les Verts')).toBeTruthy()
+  })
 })
