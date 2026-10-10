@@ -547,7 +547,7 @@ Aucun effet sur l'état du jeu. Accepté dans **toutes les phases**, entracte co
 messages/s par connexion, 50/s pour l'ensemble des connexions, 1 Ko par message. Chaque trace produit
 une seule ligne de journal (`KIND`, `AT`, `TEAM`, `PREV_LEN`, `CAUSE_ACTION`, `DETAIL`). Les `KIND`
 sont `ARDOISE_CLEARED_SEEN`, `VISIBILITY`, `PAGESHOW`, `FREEZE`, `RESUME`, `WS_GAP`, `STALE_TAB`,
-`DUPLICATE_SESSION`.
+`DUPLICATE_SESSION`, `ARDOISE_FINAL_GIVEUP` (émis quand la tablette abandonne le renvoi après 30 envois sans accusé).
 
 ## Keep-alive
 
