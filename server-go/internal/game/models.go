@@ -765,10 +765,13 @@ type GameState struct {
 	// TeamsLocked (v11.2, #249): true from the selection of a question (Ready) until
 	// its answer is revealed; rename/delete of an existing team is refused meanwhile.
 	// Always serialised (no omitempty).
-	TeamsLocked        bool `json:"TEAMS_LOCKED"`
-	VirtualPlayerLimit int  `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
-	EnrollmentActive   bool `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
-	ShowQRCode         bool `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
+	TeamsLocked bool `json:"TEAMS_LOCKED"`
+	// ScoreChange (v11.2, #252): marker of the last score modification, so the
+	// screens animate nothing on a hidden correction. Always serialised.
+	ScoreChange        ScoreChange `json:"SCORE_CHANGE"`
+	VirtualPlayerLimit int         `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
+	EnrollmentActive   bool        `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
+	ShowQRCode         bool        `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
 	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
 	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
 	// NOT persisted (state_persistence.go excludes it explicitly, alongside
@@ -1024,6 +1027,19 @@ type LogEntry struct {
 	Message   string       `json:"message"`
 }
 
+// ScoreChange is GameState.SCORE_CHANGE (contracts/game-state.md §SCORE_CHANGE).
+type ScoreChange struct {
+	Seq     int      `json:"SEQ"`
+	Display bool     `json:"DISPLAY"`
+	Teams   []string `json:"TEAMS"`
+	Players []string `json:"PLAYERS"`
+}
+
+// DefaultScoreChange is the initial / post-NEW_GAME value.
+func DefaultScoreChange() ScoreChange {
+	return ScoreChange{Seq: 0, Display: true, Teams: []string{}, Players: []string{}}
+}
+
 // GameEvent represents a game event for history tracking
 type GameEvent struct {
 	Timestamp           int64  `json:"TIMESTAMP"`                    // Server timestamp in microseconds
@@ -1042,7 +1058,10 @@ type GameEvent struct {
 	PlayerName          string `json:"PLAYER_NAME,omitempty"`        // Player name (only if PLAYER)
 	PlayerColor         string `json:"PLAYER_COLOR,omitempty"`       // Player answer color (RED/GREEN/YELLOW/BLUE)
 	Points              int    `json:"POINTS"`                       // Points awarded
-	ReactionTime        int64  `json:"REACTION_TIME,omitempty"`      // Reaction time in microseconds
+	// Display (v11.2, #252): nil/true = shown; false = hidden correction (audit
+	// trail only, not counted as "already credited").
+	Display      *bool `json:"DISPLAY,omitempty"`
+	ReactionTime int64 `json:"REACTION_TIME,omitempty"` // Reaction time in microseconds
 	// CategoryBreakdown (v9.0.0, Lot A+1) — points-per-category split for a
 	// classic RAFALE round's award (game.RafaleCategoryBreakdown), whose
 	// values sum to EXACTLY Points. omitempty: absent for every non-RAFALE

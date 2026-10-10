@@ -294,14 +294,16 @@ type ReleaseBumperNamePayload struct {
 
 // BumperPointsPayload for BUMPER_POINTS action
 type BumperPointsPayload struct {
-	ID     string `json:"ID"`
-	Points int    `json:"POINTS"`
+	ID      string `json:"ID"`
+	Points  int    `json:"POINTS"`
+	Display *bool  `json:"DISPLAY,omitempty"` // v11.2, #252: false = hidden correction
 }
 
 // TeamPointsPayload for TEAM_POINTS action
 type TeamPointsPayload struct {
-	Team   string `json:"TEAM"`
-	Points int    `json:"POINTS"`
+	Team    string `json:"TEAM"`
+	Points  int    `json:"POINTS"`
+	Display *bool  `json:"DISPLAY,omitempty"` // v11.2, #252: false = hidden correction
 }
 
 // ClientsPayload for CLIENTS action (client count broadcast)

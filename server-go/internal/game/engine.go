@@ -409,6 +409,7 @@ func NewEngine() *Engine {
 			MotionActive:             MotionActive{State: map[string]interface{}{}},
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
+			ScoreChange:    DefaultScoreChange(),
 			// RAFALE (v8.0.0, #107): initialize empty (not nil) so JSON
 			// serializes []/{} (not null) — same "no omitempty" discipline
 			// as MEMOTION/ARDOISE above (contracts/rafale.md §4).
@@ -3737,6 +3738,11 @@ func (e *Engine) UpdateScore(bumperID string, points int) (bumperScore, teamScor
 
 // UpdateBumperScore updates the bumper score and recalculates team score
 func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
+	return e.UpdateBumperScoreDisplay(bumperID, points, true)
+}
+
+// UpdateBumperScoreDisplay is UpdateBumperScore plus the SCORE_CHANGE marker (#252).
+func (e *Engine) UpdateBumperScoreDisplay(bumperID string, points int, display bool) int {
 	e.mu.Lock()
 
 	bumper, ok := e.data.Bumpers[bumperID]
@@ -3751,9 +3757,12 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 		bumperID, points, bumper.Score)
 
 	// Recalculate team score as sum of all bumpers in team
+	var changedTeams []string
 	if bumper.Team != "" {
 		e.recalculateTeamScoreUnsafe(bumper.Team)
+		changedTeams = []string{bumper.Team}
 	}
+	e.recordScoreChangeUnsafe(display, changedTeams, []string{bumperID})
 
 	score := bumper.Score
 	e.mu.Unlock()
@@ -3767,6 +3776,24 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 
 // UpdateTeamScore adds points directly to team's own TeamPoints (not bumpers)
 func (e *Engine) UpdateTeamScore(teamName string, points int) int {
+	return e.UpdateTeamScoreDisplay(teamName, points, true)
+}
+
+// recordScoreChangeUnsafe bumps SCORE_CHANGE (#252). Caller holds e.mu.
+func (e *Engine) recordScoreChangeUnsafe(display bool, teams, players []string) {
+	if teams == nil {
+		teams = []string{}
+	}
+	if players == nil {
+		players = []string{}
+	}
+	e.state.ScoreChange = ScoreChange{Seq: e.state.ScoreChange.Seq + 1, Display: display, Teams: teams, Players: players}
+}
+
+// UpdateTeamScoreDisplay is UpdateTeamScore plus the SCORE_CHANGE marker, set in
+// the same critical section as the score (a concurrent UPDATE never shows the new
+// score without it).
+func (e *Engine) UpdateTeamScoreDisplay(teamName string, points int, display bool) int {
 	e.mu.Lock()
 
 	team, ok := e.data.Teams[teamName]
@@ -3783,6 +3810,7 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 
 	// Recalculate total team score (TeamPoints + bumper scores)
 	e.recalculateTeamScoreUnsafe(teamName)
+	e.recordScoreChangeUnsafe(display, []string{teamName}, nil)
 
 	score := team.Score
 	e.mu.Unlock()
@@ -3979,7 +4007,8 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	}
 
 	// 6. always: no current question, game-type states back to zero.
-	e.state.TeamsLocked = false // #249
+	e.state.TeamsLocked = false                // #249
+	e.state.ScoreChange = DefaultScoreChange() // #252
 	e.state.Question = nil
 	e.state.Phase = PhaseNewGame
 	e.questionEverStarted = false
@@ -8405,6 +8434,9 @@ func (e *Engine) awardedTeamsUnsafe(questionID string) []AwardedTeam {
 		if ev.EventType != "POINTS_AWARDED" || ev.QuestionID != questionID || ev.Timestamp < e.state.GameTime {
 			continue
 		}
+		if ev.Display != nil && !*ev.Display { // hidden correction (#252): not a credit
+			continue
+		}
 		if d, ok := lastDeleted[ev.TeamName]; ok && i < d {
 			continue
 		}
@@ -8441,7 +8473,7 @@ func (e *Engine) awardedTeamSetUnsafe(questionID string) map[string]bool {
 // effect (global refusal otherwise), then applies it under ONE engine lock:
 // already-credited teams are skipped, the others get TeamPoints += points and a
 // POINTS_AWARDED history entry. Public effects are the caller's.
-func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEntry, meta CategoryMeta) TeamPointsBatchResult {
+func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEntry, meta CategoryMeta, display bool) TeamPointsBatchResult {
 	e.mu.Lock()
 	refuse := func(reason string) TeamPointsBatchResult {
 		e.mu.Unlock()
@@ -8494,7 +8526,13 @@ func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEnt
 		if q.Type == QuestionTypeRafale {
 			breakdown = RafaleCategoryBreakdown(q, en.Points, e.state.RafaleTeamCategoryCounters[en.Team])
 		}
+		var displayFlag *bool
+		if !display {
+			f := false
+			displayFlag = &f
+		}
 		e.history = append(e.history, GameEvent{
+			Display:             displayFlag,
 			Timestamp:           time.Now().UnixMicro(),
 			QuestionID:          q.ID,
 			QuestionText:        q.Question,
@@ -8512,6 +8550,13 @@ func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEnt
 			CategoryBreakdown:   breakdown,
 		})
 		res.Applied = append(res.Applied, en)
+	}
+	if len(res.Applied) > 0 {
+		teams := make([]string, 0, len(res.Applied))
+		for _, en := range res.Applied {
+			teams = append(teams, en.Team)
+		}
+		e.recordScoreChangeUnsafe(display, teams, nil)
 	}
 	e.mu.Unlock()
 

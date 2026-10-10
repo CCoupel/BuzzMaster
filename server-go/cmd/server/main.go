@@ -1550,10 +1550,10 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleTeamPointsBatch(incoming.ClientID, msg)
 
 	case protocol.ActionBumperPoints:
-		a.handleBumperPoints(msg)
+		a.handleBumperPoints(msg, updateSender{incoming.ClientID, clientType})
 
 	case protocol.ActionTeamPoints:
-		a.handleTeamPoints(msg)
+		a.handleTeamPoints(msg, updateSender{incoming.ClientID, clientType})
 
 	case protocol.ActionSetCreditPoints:
 		a.handleSetCreditPoints(msg)
@@ -3223,19 +3223,27 @@ func (a *App) handleRafaleSetTeams(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
-func (a *App) handleBumperPoints(msg *protocol.Message) {
+func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender) {
 	var payload protocol.BumperPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to parse BUMPER_POINTS: %v", err)
 		return
 	}
 
-	newScore := a.engine.UpdateBumperScore(payload.ID, payload.Points)
+	if ignoreAdminZeroPoints(senders, payload.Points) {
+		return
+	}
+	display := payload.Display == nil || *payload.Display
+	newScore := a.engine.UpdateBumperScoreDisplay(payload.ID, payload.Points, display)
 	server.LogInfo(game.LogComponentEngine, "Bumper points: id=%s, points=%+d, newScore=%d",
 		payload.ID, payload.Points, newScore)
+	if !display {
+		a.logHiddenCorrection(senders, protocol.ActionBumperPoints, fmt.Sprintf("%q:%+d", payload.ID, payload.Points))
+	}
 
-	// Send COMET LED effect to the team that received points (if points > 0)
-	if payload.Points > 0 {
+	// Send COMET LED effect to the team that received points (if points > 0).
+	// DISPLAY:false (#252) = hidden correction: no public effect on any channel.
+	if display && payload.Points > 0 {
 		teamID := ""
 		if b := a.engine.GetBumper(payload.ID); b != nil {
 			teamID = b.Team
@@ -3300,11 +3308,43 @@ func (a *App) handleBumperPoints(msg *protocol.Message) {
 		PlayerColor:         playerColor,
 		Points:              payload.Points,
 		CategoryBreakdown:   categoryBreakdown,
+		Display:             hiddenFlag(display),
 	}
 	a.engine.AddGameEvent(event)
 
 	a.broadcastUpdate()
 	a.broadcastAwardedTeams() // #170 — this credit may lock the team for other animateurs
+}
+
+// ignoreAdminZeroPoints implements "POINTS = 0 ignored" (#252, contracts §TEAM_POINTS
+// "Montant") for the ADMIN's Scores page only: a zero amount from the admin changes
+// nothing, writes no history entry and triggers no UPDATE. The animateur's "0 pt"
+// refusal gesture (#170, a valid "already credited" lock) is deliberately kept: it
+// comes from /anim (or from internal callers without a sender).
+func ignoreAdminZeroPoints(senders []updateSender, points int) bool {
+	return points == 0 && len(senders) > 0 && senders[0].ClientType == server.ClientTypeAdmin
+}
+
+// hiddenFlag returns the GameEvent.Display value: nil when shown, &false when hidden.
+func hiddenFlag(display bool) *bool {
+	if display {
+		return nil
+	}
+	f := false
+	return &f
+}
+
+// logHiddenCorrection journals a DISPLAY:false score change (#252), values quoted.
+func (a *App) logHiddenCorrection(senders []updateSender, action, targets string) {
+	clientID := ""
+	if len(senders) > 0 {
+		clientID = senders[0].ClientID
+	}
+	question := ""
+	if st := a.engine.GetState(); st.Question != nil {
+		question = st.Question.ID
+	}
+	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN client=%s action=%s targets=[%s] question=%s", clientID, action, targets, logToken(question))
 }
 
 // handleTeamPointsBatch applies a grouped team award (#244/#251): complete
@@ -3350,7 +3390,8 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 	if state.Question != nil {
 		meta.Name, meta.ImageURL, meta.Color = a.httpServer.ResolveCategoryMeta(string(state.Question.Category))
 	}
-	res := a.engine.ApplyTeamPointsBatch(p.QuestionID, entries, meta)
+	batchDisplay := p.Display == nil || *p.Display
+	res := a.engine.ApplyTeamPointsBatch(p.QuestionID, entries, meta, batchDisplay)
 	if res.Status == "REFUSED" {
 		refuse(res.Reason, res.Unknown)
 		return
@@ -3369,9 +3410,11 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 	server.LogInfo(game.LogComponentApp, "TEAM_POINTS_BATCH client=%s question=%s applied=[%s] skipped=[%s]",
 		clientID, logToken(p.QuestionID), strings.Join(applied, ","), strings.Join(skipped, ","))
 
-	// Grouped public effects, once for the whole batch (DISPLAY reserved for #252:
-	// absent/true = shown as today; nothing "hidden" is implemented yet).
-	if p.Display == nil || *p.Display {
+	if !batchDisplay {
+		a.logHiddenCorrection([]updateSender{{ClientID: clientID}}, protocol.ActionTeamPointsBatch, strings.Join(applied, ","))
+	}
+	// Grouped public effects, once for the whole batch; DISPLAY:false (#252) = none.
+	if batchDisplay {
 		var positive []string
 		best, bestTeam := 0, ""
 		for _, en := range res.Applied {
@@ -3397,19 +3440,27 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 	}
 }
 
-func (a *App) handleTeamPoints(msg *protocol.Message) {
+func (a *App) handleTeamPoints(msg *protocol.Message, senders ...updateSender) {
 	var payload protocol.TeamPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to parse TEAM_POINTS: %v", err)
 		return
 	}
 
-	newScore := a.engine.UpdateTeamScore(payload.Team, payload.Points)
+	if ignoreAdminZeroPoints(senders, payload.Points) {
+		return
+	}
+	display := payload.Display == nil || *payload.Display
+	newScore := a.engine.UpdateTeamScoreDisplay(payload.Team, payload.Points, display)
 	server.LogInfo(game.LogComponentEngine, "Team points: team=%s, points=%+d, newScore=%d",
 		payload.Team, payload.Points, newScore)
+	if !display {
+		a.logHiddenCorrection(senders, protocol.ActionTeamPoints, fmt.Sprintf("%q:%+d", payload.Team, payload.Points))
+	}
 
-	// Send COMET LED effect to the team that received points (if points > 0)
-	if payload.Points > 0 {
+	// Send COMET LED effect to the team that received points (if points > 0).
+	// DISPLAY:false (#252) = hidden correction: no public effect on any channel.
+	if display && payload.Points > 0 {
 		a.sendLEDSetComet(payload.Team)
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.Team}, payload.Points, lighting.ScorePulseDuration)
 		a.notifySound(audio.CueGagne)
@@ -3453,6 +3504,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message) {
 		TeamColor:           teamColor,
 		Points:              payload.Points,
 		CategoryBreakdown:   categoryBreakdown,
+		Display:             hiddenFlag(display),
 	}
 	a.engine.AddGameEvent(event)
 
