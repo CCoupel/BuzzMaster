@@ -570,3 +570,79 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 		t.Errorf("symptôme observé (total=%d)", fail)
 	}
 }
+
+// Scénario reproduit (planner-20261010-203000) côté serveur : effacement ("") puis flux de ressaisies à
+// cadence 200 ms (ce que la tablette doit envoyer pendant une frappe continue) → l'état suivi par l'admin
+// reste synchrone EN DIRECT, jamais vide pendant la ressaisie, et l'admin reçoit la dernière valeur avant STOP.
+// Vrai serveur (hub WebSocket réel, dispatch réel, coalesceur réel), `-race`.
+func TestArdoiseConcurrency246_ClearThenContinuousRetypeIsLiveForTheAdmin(t *testing.T) {
+	if testing.Short() {
+		t.Skip("cadence réelle 200 ms (≈ 3 s), exclu de la boucle rapide (-short)")
+	}
+	app, base, names, ids := h246Setup(t, 2)
+	stop := make(chan struct{})
+	admin := h246Dial(t, base, "/ws/admin")
+	defer admin.Close()
+	obs, omu, _ := h246Admin(t, admin, names, stop)
+
+	c := h246Dial(t, base, "/ws/player")
+	defer c.Close()
+	var wmu sync.Mutex
+	bound := h246ConnectPlayer(c, &wmu, "Joueur00", ids[0])
+	if !h246WaitBound(t, bound, names[0]) {
+		return
+	}
+	// « PARIS » posément, effacement, puis ressaisie continue toutes les 200 ms
+	send := func(text, reason string) {
+		_ = h246Send(c, &wmu, protocol.ActionArdoiseInput, map[string]interface{}{"ID": ids[0], "TEXT": text, "REASON": reason})
+	}
+	send("PARIS", "key")
+	time.Sleep(300 * time.Millisecond)
+	send("", "clear")
+	time.Sleep(300 * time.Millisecond)
+	retype := "LYONNAISE"
+	for i := 1; i <= len(retype); i++ {
+		send(retype[:i], "key")
+		time.Sleep(200 * time.Millisecond)
+		// à chaque pas, le serveur détient déjà le texte courant (suivi en direct)
+		if got := h246ServerText(app, names[0]); got != retype[:i] {
+			t.Fatalf("pas %d : texte serveur = %q, attendu %q (l'admin doit suivre en direct)", i, got, retype[:i])
+		}
+	}
+	app.engine.Stop()
+	time.Sleep(400 * time.Millisecond)
+	close(stop)
+
+	omu.Lock()
+	defer omu.Unlock()
+	seenRetype, emptyAfter := false, 0
+	for _, o := range *obs {
+		if len(o.texts[names[0]]) >= 1 && o.texts[names[0]] != "<absent>" && o.texts[names[0]] != "PARIS" {
+			seenRetype = true
+		}
+		if seenRetype && (o.texts[names[0]] == "" || o.texts[names[0]] == "<absent>") {
+			emptyAfter++
+		}
+	}
+	if !seenRetype {
+		t.Fatalf("l'admin n'a jamais vu la ressaisie pendant la question (%d UPDATE)", len(*obs))
+	}
+	if emptyAfter > 0 {
+		t.Errorf("l'admin a revu un texte vide %d fois pendant la ressaisie", emptyAfter)
+	}
+	if last := (*obs)[len(*obs)-1].texts[names[0]]; last != retype {
+		t.Errorf("dernier texte vu par l'admin = %q, attendu %q", last, retype)
+	}
+}
+
+func h246ServerText(app *App, team string) string {
+	var gd struct {
+		Game struct {
+			A map[string]struct {
+				Text string `json:"TEXT"`
+			} `json:"ARDOISE_ANSWERS"`
+		} `json:"GAME"`
+	}
+	_ = json.Unmarshal(app.engine.GetGameJSON(), &gd)
+	return gd.Game.A[team].Text
+}
