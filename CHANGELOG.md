@@ -47,6 +47,10 @@ Historique des versions du projet BuzzControl.
 - **Page Équipes verrouillée pendant une question (#249)** — Champ de nom et bouton ✕ désactivés, avec un bandeau explicatif. Le refus serveur affiche « Renommage refusé : une question est en cours. » (ou « Suppression refusée… »), et le nom d'origine est réaffiché.
 - **Grille ARDOISE adaptative sur la TV (#250)** — Au REVEAL, toutes les équipes sont affichées, sans plafond à 8. Règle : une rangée jusqu'à 5 équipes, deux rangées de 6 à 16, trois au-delà. La réponse est coupée par « … » à 2 lignes (1 ligne au-delà de 12 équipes). Aucun défilement.
 
+- **Sauvegarde avant normalisation de `teams.json` (#249)** — Au premier chargement qui corrige un `NAME` différent de sa clé, le serveur copie le fichier d'origine dans `data/config/teams.json.bak` avant de le réécrire. Un `.bak` existant n'est jamais remplacé. Aucune copie si rien n'est corrigé.
+- **Liste des équipes créditées rediffusée après renommage ou suppression (#249)** — `AWARDED_TEAMS` est rediffusé après tout renommage ou suppression d'équipe, pour que les interfaces ne gardent pas un verrou « déjà créditée » périmé.
+- **Page Historique : suppressions d'équipe masquées (#249)** — Les événements `TEAM_DELETED` sont des lignes d'audit : ils n'apparaissent plus dans un groupe « Question #unknown », ni comme ligne à 0 point, ni dans le compteur. Ils restent dans `history.json`.
+
 ### Validation
 
 - **Automatisée** : `go test -race ./...` vert (9 paquets), `go vet` propre, Vitest 2875/2875, build web OK. Non-régression des autres modes de jeu verte.
