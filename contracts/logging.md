@@ -52,6 +52,8 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `ARDOISE_SEQ_STALE` | WARN | `SEQ` ≤ dernier appliqué sur la même connexion → message ignoré. Le dernier `SEQ` d'une connexion est effacé à chaque (re)liaison (`PLAYER_CONNECT` accepté) et à la fermeture de la connexion | `bumper`, `client`, `last`, `got` |
 | `ARDOISE_STATE_DIVERGED` | **ERROR** | Invariant : `ARDOISE_ANSWERS` diffère de la copie de contrôle tenue **uniquement** par `ARDOISE_INPUT`/`ARDOISE_FINAL`/`Ready()`/NEW_GAME. Vérifié à chaque diffusion d'état complet et à chaque changement de phase | `team`, `expected`, `actual`, `site` (appelant), `phase`, `question` |
 | `ARDOISE_FINAL_STALE` | WARN | `ARDOISE_FINAL` d'une autre question, ou hors `STOPPED`/`PAUSED` | `bumper`, `question_id`, `current_question`, `phase` |
+| `ARDOISE_INPUT_TOO_LONG` | WARN | `ARDOISE_INPUT` de plus de 2 000 caractères → ignoré en entier, sans troncature | `bumper`, `client`, `len` (caractères) |
+| `ARDOISE_FINAL_TOO_LONG` | WARN | `ARDOISE_FINAL` de plus de 2 000 caractères → refusé, sans accusé | `bumper`, `client`, `len` (caractères), `question_id` |
 | `ARDOISE_FINAL_HASH_MISMATCH` | WARN | Hash reçu ≠ hash recalculé | `bumper`, `got`, `computed`, `len` |
 | `ARDOISE_FINAL_RECEIVED` | INFO | Final accepté (non écrit sur disque par défaut) | `team`, `bumper`, `hash`, `len` |
 | `ARDOISE_REVEAL_REFUSED` | WARN | REVEAL refusé par la garde | `client`, `type` (admin/anim), `pending` (équipes + hors ligne) |

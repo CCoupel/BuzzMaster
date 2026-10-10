@@ -1720,7 +1720,7 @@ réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), 
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| TEXT | string | ✅ | Texte complet saisi (pas un delta) |
+| TEXT | string | ✅ | Texte complet saisi (pas un delta). **≤ 2 000 caractères** *(v11.2, #246 — voir « Longueur maximale du texte ARDOISE » ci-dessous)* |
 | ID | string | ⬜ | Bumper ID de l'émetteur, première passe de la résolution 3 passes `payload.ID → msg.ID → clientID` (`handleArdoiseInput`). Présent dans `ArdoiseInputPayload` depuis v5.6.0 mais **omis de ce tableau jusqu'en v7.1.0** — documentation rattrapée, aucun changement de comportement. **v11.2 : doit être égal au bumper lié à la connexion** (voir « Liaison connexion ↔ bumper ») |
 | SEQ | integer | ⬜ *(v11.2, #246)* | Compteur d'envoi ≥ 1, croissant **par question et par connexion** (remis à 1 à chaque nouvelle question et à chaque **nouvelle liaison** de la connexion). Côté serveur, le dernier `SEQ` mémorisé pour une connexion est effacé à chaque `PLAYER_CONNECT` accepté (liaison ou re-liaison) et à la fermeture de la connexion. Côté client, le compteur repart à 0 **uniquement sur la transition non lié → lié** : un second `PLAYER_CONNECTED` sur la même connexion (renvoi de sécurité) ne le remet pas à zéro. *(précisé après revue, commit 3abe5f0d / 9aa8a1d3)* **Diagnostic** : sert à journaliser les trous (`ARDOISE_SEQ_GAP`) et les messages périmés (`ARDOISE_SEQ_STALE`, même connexion, `SEQ` ≤ dernier reçu → message ignoré). Absent = pas de contrôle. |
 | REASON | string | ⬜ *(v11.2, #246)* | Motif de l'envoi, **diagnostic uniquement** : `key` (frappe), `clear` (✕ « Effacer tout »), `backspace_empty` (⌫ jusqu'au vide), `resend` (renvoi après liaison de la connexion), `visible` (retour au premier plan). Journalisé avec `ARDOISE_CLEARED`. |
@@ -1742,6 +1742,7 @@ réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), 
 #### Comportement serveur
 
 1. **Liaison (v11.2)** : ignoré + `WARN` si la connexion n'est pas liée ou si `ID` ≠ bumper lié
+1 bis. **Longueur (v11.2)** : `TEXT` de plus de 2 000 caractères → **message ignoré en entier** (aucune troncature), `WARN ARDOISE_INPUT_TOO_LONG` ; la réponse enregistrée reste la dernière valide
 2. **Guard phase** : ignore silencieusement si `phase ≠ STARTED`
 3. **Guard type** : ignore silencieusement si `question.TYPE ≠ "ARDOISE"`
 4. **SEQ (v11.2)** : même connexion et `SEQ` ≤ dernier appliqué → ignoré + `WARN ARDOISE_SEQ_STALE` ; trou → `WARN ARDOISE_SEQ_GAP` puis appliqué
@@ -1754,6 +1755,16 @@ réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), 
 
 ---
 
+### Longueur maximale du texte ARDOISE (v11.2, #246) — `[CHANGED]`
+
+- **Limite** : `TEXT` (`ARDOISE_INPUT` et `ARDOISE_FINAL`) ≤ **2 000 caractères**, comptés en **points de code Unicode** (Go : `utf8.RuneCountInString` ; JS : `[...text].length`, **pas** `text.length` qui compte des unités UTF-16). Un texte vide est valide. En UTF-8, 2 000 caractères font au plus 8 000 octets, sous la limite de lecture WebSocket (64 Ko).
+- **Pourquoi 2 000** : aucun plafond n'existait (ni clavier, ni serveur) ; une réponse ARDOISE réelle tient en quelques dizaines de caractères. La limite protège la diffusion (texte répété dans chaque `UPDATE` vers admin et anim, 10 équipes) sans gêner aucun usage.
+- **Clavier de la tablette** (`ArdoiseKeyboard`) : à 2 000 caractères, les touches qui ajoutent un caractère (lettres, chiffres, `.`, espace) **n'ont plus d'effet** ; ⌫ et ✕ restent actifs. Aucun autre changement visuel n'est exigé.
+- **Serveur, `ARDOISE_INPUT` trop long** : **ignoré en entier**, jamais tronqué ; `WARN ARDOISE_INPUT_TOO_LONG` (`contracts/logging.md`). *Justification* : tronquer enregistrerait un texte qu'aucune tablette n'affiche, sans que personne le sache. L'empreinte du texte final ne correspondrait plus, et l'admin verrait une réponse différente de la tablette. En l'ignorant, on garde la dernière réponse valide, qui est exactement ce que la tablette affichait avant le dépassement. Ce cas ne peut venir que d'un client défaillant ou modifié, puisque le clavier bloque la saisie.
+- **Serveur, `ARDOISE_FINAL` trop long** : **refusé**, `WARN ARDOISE_FINAL_TOO_LONG`, **pas d'accusé**, `RECEIVED` inchangé. L'équipe reste « en attente » ; seul le forçage permet le REVEAL.
+
+---
+
 ### ARDOISE_FINAL ✨ (v11.2, #246)
 
 Texte **final** d'une tablette pour la question ARDOISE courante, envoyé à la sortie de `STARTED`.
@@ -1761,7 +1772,7 @@ Texte **final** d'une tablette pour la question ARDOISE courante, envoyé à la 
 | Propriété | Valeur |
 |-----------|--------|
 | Direction | `VPlayer → Server` (connexion liée, voir « Liaison connexion ↔ bumper ») |
-| Déclencheur | Réception de `STOP` ou `PAUSE` pendant une question ARDOISE ; renvoi **toutes les 1 s** tant qu'aucun `ARDOISE_FINAL_ACK` valide n'est reçu et que la phase reste `STOPPED`/`PAUSED` pour la même question ; renvoi immédiat après chaque nouvelle liaison de connexion et au retour au premier plan (`visibilitychange` → visible) |
+| Déclencheur | Réception de `STOP` ou `PAUSE` pendant une question ARDOISE ; renvois selon la **règle de renvoi** ci-dessous |
 | Phase acceptée | `STOPPED` ou `PAUSED`, question courante |
 
 #### Payload
@@ -1770,7 +1781,7 @@ Texte **final** d'une tablette pour la question ARDOISE courante, envoyé à la 
 |-------|------|-------------|-------------|
 | ID | string | ✅ | Bumper lié à la connexion |
 | QUESTION_ID | string | ✅ | `QUESTION.ID` de la question courante — un final d'une autre question est ignoré (`WARN ARDOISE_FINAL_STALE`) |
-| TEXT | string | ✅ | Texte complet **au moment du gel du clavier**, debounce en attente inclus. `""` autorisé (« rien écrit ») |
+| TEXT | string | ✅ | Texte complet **au moment du gel du clavier**, debounce en attente inclus. `""` autorisé (« rien écrit »). ≤ 2 000 caractères (au-delà : refusé, voir ci-dessus) |
 | HASH | string | ✅ | Empreinte FNV-1a 32 bits du texte encodé en **UTF-8**, 8 caractères hexadécimaux minuscules (contrôle d'intégrité, pas une sécurité) |
 | SEQ | integer | ⬜ | Même compteur que `ARDOISE_INPUT` (diagnostic) |
 
@@ -1785,9 +1796,17 @@ Vecteurs de test (Go et JS doivent produire exactement ces valeurs) :
 | `"Équipe à côté"` | `c3ff86c2` |
 | `"  espaces  "` | `1e009bcf` |
 
+#### Règle de renvoi (tablette) *(v11.2, #246)*
+
+- La tablette **ne renvoie le final que tant que** la phase reçue est `STOPPED` ou `PAUSED` **et** que `QUESTION.ID` est celui du final (`QUESTION_ID`). Dès que la phase ou la question change (CONTINUE, REVEAL, nouvelle question, NEW_GAME), les renvois s'arrêtent immédiatement.
+- Cadence : un envoi au gel du clavier, puis **un renvoi par seconde** tant qu'aucun `ARDOISE_FINAL_ACK` valide n'est reçu.
+- **Au plus 30 envois** (premier envoi compris) par **liaison de connexion**. Les envois déclenchés par une nouvelle liaison ou par le retour au premier plan (`visibilitychange` → visible) comptent dans ces 30. Le compteur repart à 0 à chaque nouvelle liaison (reconnexion), et à chaque nouveau gel du clavier (nouvelle sortie de `STARTED` après un `CONTINUE`).
+- Après 30 envois sans accusé : arrêt des renvois. L'overlay garde la variante « ⚠ » de la maquette validée (`vplayer_ardoise_keyboard__final_ack`, état « connexion perdue »). Côté régie, l'équipe reste « en attente » et le forçage reste possible. Une reconnexion ultérieure relance un cycle de 30.
+- Un envoi abandonné parce que la WebSocket n'est pas ouverte compte aussi, ce qui garde la tablette bornée même hors ligne.
+
 #### Comportement serveur
 
-1. Liaison vérifiée (comme `ARDOISE_INPUT`) ; phase `STOPPED`/`PAUSED` ; `TYPE = ARDOISE` ; `QUESTION_ID` = question courante ; sinon ignoré + `WARN`.
+1. Liaison vérifiée (comme `ARDOISE_INPUT`) ; `TEXT` ≤ 2 000 caractères (sinon `ARDOISE_FINAL_TOO_LONG`, sans accusé) ; phase `STOPPED`/`PAUSED` ; `TYPE = ARDOISE` ; `QUESTION_ID` = question courante ; sinon ignoré + `WARN`.
 2. Le serveur recalcule le hash de `TEXT` ; s'il diffère de `HASH` → ignoré + `WARN ARDOISE_FINAL_HASH_MISMATCH` (pas d'accusé : la tablette renverra).
 3. Écrit `ARDOISE_ANSWERS[équipe] = { TEXT, STARTED_AT (inchangé ; fixé si c'était le 1ᵉʳ texte non vide), SUBMITTED_AT = maintenant, RECEIVED = true, RECEIVED_HASH = HASH }`. Idempotent : même hash déjà reçu → pas de réécriture.
 4. Répond `ARDOISE_FINAL_ACK` **à cette connexion seule**.
