@@ -81,6 +81,7 @@ var ambianceSiteRegistry = map[ambianceSite]ambianceDecision{
 	{"handleEntracteSet", "sendLEDSetAllEntracteOff"}: {ambianceNotifyState, "ENTRACTE on"},
 	{"handleEntracteSet", "sendLEDSetAllBuzzers"}:     {ambianceNotifyState, "ENTRACTE off"},
 	{"handleFullUpdate", "sendLEDSetAllBuzzers"}:      {ambianceNotifyState, "teams/bumpers edited — team colours may have changed"},
+	{"handleNewGame", "sendLEDSetAllBuzzers"}:         {ambianceNotifyState, "NEW_GAME with PURGE_TEAMS (#243) — buzzers back to the no-team LED"},
 	{"onPhaseStarted", "sendLEDSetAllEntracteOff"}:    {ambianceNotifyState, "ENTRACTE programmée (#214) — actualStart()/StartImmediate()→STARTED, symétrie avec handleEntracteSet (T2.1, contract §10.5)"},
 
 	// --- Event layer: pulses (NotifyPulse KindScore, 4800 ms) ---

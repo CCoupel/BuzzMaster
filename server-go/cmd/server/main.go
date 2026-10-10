@@ -1635,34 +1635,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleClientTrace(incoming.ClientID, clientType, msg)
 
 	case protocol.ActionNewGame:
-		a.logger.Info(game.LogComponentEngine, "NEW_GAME — reset scores, history, statuses")
-		purgedPlayerIDs := a.engine.InitGame()
-		// #123 B3 — a fresh game invalidates any eviction context left over
-		// from before it (e.g. an individual PLAYER_REMOVED from a prior game
-		// session), so clear the registry first. Fresh GAME_RESET entries for
-		// THIS purge are recorded right after, so a player who was offline at
-		// the moment of the purge still learns the true reason on return.
-		a.evictionRegistry.Reset()
-		// #120 — Notify each purged VJoueur individually, BEFORE the general
-		// broadcasts below, so its client learns the authoritative reason first
-		// instead of deducing removal from the roster it's about to receive via
-		// broadcastUpdate (same ordering rule as handleDeleteBumper).
-		if len(purgedPlayerIDs) > 0 {
-			evictedPayload := protocol.PlayerEvictedPayload{Reason: "GAME_RESET"}
-			evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, evictedPayload)
-			for _, playerID := range purgedPlayerIDs {
-				a.wsHub.SendToPlayerID(playerID, evictedMsg)
-				a.evictionRegistry.Record(playerID, "GAME_RESET")
-			}
-		}
-		a.broadcastQuestions() // push refreshed AVAILABLE statuses to all clients
-		a.broadcastUpdate()
-		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
-		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
-		a.broadcastEnrollmentUpdate()
-		a.broadcastNextQuestion()           // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
-		a.resetCreditPointsForQuestion(nil) // code review MAJEUR-1 — no current question, nothing to credit
-		a.broadcastAwardedTeams()           // #170 — InitGame resets history, every lock is released
+		a.handleNewGame(incoming.ClientID, msg)
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -2000,6 +1973,81 @@ func (a *App) notifyEvictedVirtualPlayers(newBumpers map[string]*game.Bumper) {
 		a.wsHub.SendToPlayerID(id, evictedMsg)
 		a.evictionRegistry.Record(id, "PLAYER_REMOVED")
 		server.LogInfo(game.LogComponentWebSocket, "PLAYER_EVICTED: id=%s reason=PLAYER_REMOVED (roster diff)", id)
+	}
+}
+
+// parseNewGameOptions applies the NEW_GAME defaults rule (#243): no recognised
+// field at all = v11.1 behaviour; otherwise absent fields are false.
+func parseNewGameOptions(raw json.RawMessage) game.NewGameOptions {
+	var p protocol.NewGamePayload
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &p)
+	}
+	if p.PurgeScores == nil && p.PurgePlayers == nil && p.PurgeTeams == nil && p.ResetQuestions == nil {
+		return game.DefaultNewGameOptions()
+	}
+	val := func(b *bool) bool { return b != nil && *b }
+	return game.NewGameOptions{
+		PurgeScores: val(p.PurgeScores), PurgePlayers: val(p.PurgePlayers),
+		PurgeTeams: val(p.PurgeTeams), ResetQuestions: val(p.ResetQuestions),
+	}
+}
+
+func newGameOptionsLog(o game.NewGameOptions) string {
+	var on []string
+	for _, kv := range []struct {
+		name string
+		v    bool
+	}{{"scores", o.PurgeScores}, {"players", o.PurgePlayers}, {"teams", o.PurgeTeams}, {"questions", o.ResetQuestions}} {
+		if kv.v {
+			on = append(on, kv.name)
+		}
+	}
+	return "[" + strings.Join(on, ",") + "]"
+}
+
+// handleNewGame runs NEW_GAME with its optional purges (#243).
+func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
+	opts := parseNewGameOptions(msg.Msg)
+
+	// Forbidden combination: players purged without scores. Nothing is applied.
+	if opts.PurgePlayers && !opts.PurgeScores {
+		server.LogWarn(game.LogComponentApp, "NEW_GAME_REFUSED client=%s options=%s reason=PLAYERS_REQUIRE_SCORES", clientID, newGameOptionsLog(opts))
+		if rm, err := protocol.NewMessage(protocol.ActionNewGameRefused, protocol.NewGameRefusedPayload{Reason: "PLAYERS_REQUIRE_SCORES"}); err == nil && clientID != "" {
+			a.wsHub.SendToClient(clientID, rm)
+		}
+		return
+	}
+
+	a.logger.Info(game.LogComponentEngine, "NEW_GAME options=%s", newGameOptionsLog(opts))
+	a.questionSound().Stop() // the question sound ends with the question
+	res := a.engine.InitGameWith(opts)
+	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
+		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, logToken(res.QuestionBefore))
+
+	// #123 B3 — a fresh game invalidates any eviction context left over from
+	// before it, so clear the registry first; fresh GAME_RESET entries follow.
+	a.evictionRegistry.Reset()
+	// #120 — notify each purged VJoueur individually BEFORE the general
+	// broadcasts, so it learns the authoritative reason first.
+	if len(res.PurgedPlayerIDs) > 0 {
+		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "GAME_RESET"})
+		for _, playerID := range res.PurgedPlayerIDs {
+			a.wsHub.SendToPlayerID(playerID, evictedMsg)
+			a.evictionRegistry.Record(playerID, "GAME_RESET")
+		}
+	}
+	a.broadcastQuestions() // refreshed AVAILABLE statuses
+	a.broadcastUpdate()
+	a.broadcastEnrollmentUpdate()
+	a.broadcastNextQuestion()
+	a.resetCreditPointsForQuestion(nil)
+	a.broadcastAwardedTeams()
+	if opts.PurgeTeams {
+		// buzzers fall back to the "no team" LED (#243)
+		a.sendLEDSetAllBuzzers()
+		a.ambiance().NotifyState()
+		a.updateBroadcasterFrequency()
 	}
 }
 

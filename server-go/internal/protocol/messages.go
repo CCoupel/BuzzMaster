@@ -70,6 +70,7 @@ const (
 	ActionArdoiseFinal       = "ARDOISE_FINAL"        // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
 	ActionArdoiseFinalAck    = "ARDOISE_FINAL_ACK"    // Server → VPlayer (targeted): final received (v11.2, #246)
 	ActionTeamsUpdateRefused = "TEAMS_UPDATE_REFUSED" // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
+	ActionNewGameRefused     = "NEW_GAME_REFUSED"     // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
 	ActionRevealRefused      = "REVEAL_REFUSED"       // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
 	ActionClientTrace        = "CLIENT_TRACE"         // Client → Server: diagnostic trace (v11.2, #246)
 	ActionArdoiseInput       = "ARDOISE_INPUT"        // VPlayer → Server: free-text answer update (throttled)
@@ -762,6 +763,21 @@ type ArdoiseFinalAckPayload struct {
 type TeamsUpdateRefusedPayload struct {
 	Reason string   `json:"REASON"`
 	Teams  []string `json:"TEAMS"`
+}
+
+// NewGamePayload for NEW_GAME (v11.2, #243). Pointers tell "absent" from false:
+// no field at all = v11.1 behaviour; as soon as one field is present the absent
+// ones are false.
+type NewGamePayload struct {
+	PurgeScores    *bool `json:"PURGE_SCORES,omitempty"`
+	PurgePlayers   *bool `json:"PURGE_PLAYERS,omitempty"`
+	PurgeTeams     *bool `json:"PURGE_TEAMS,omitempty"`
+	ResetQuestions *bool `json:"RESET_QUESTIONS,omitempty"`
+}
+
+// NewGameRefusedPayload for NEW_GAME_REFUSED (targeted to the sender).
+type NewGameRefusedPayload struct {
+	Reason string `json:"REASON"`
 }
 
 // RevealPayload for REVEAL (v11.2, #246): FORCE reveals despite pending ARDOISE answers.

@@ -3790,55 +3790,154 @@ func (e *Engine) RecalculateAllTeamScores() {
 // notification is the caller's responsibility (main.go), keeping the existing
 // engine/transport separation intact.
 func (e *Engine) InitGame() []string {
-	e.mu.Lock()
+	return e.InitGameWith(DefaultNewGameOptions()).PurgedPlayerIDs
+}
 
-	// Reset all bumper scores/times; purge VJoueurs entirely (fix R1 follow-up
-	// — product invariant: a new game always starts with a clean VJoueur
-	// roster, there is no such thing as a "legacy" VJoueur from a prior
-	// session). Physical buzzers are persistent hardware and are kept, just
-	// with their score/time reset like before.
-	var purgedVPlayerIDs []string
-	for id, bumper := range e.data.Bumpers {
-		if bumper.IsVirtual {
-			delete(e.data.Bumpers, id)
-			purgedVPlayerIDs = append(purgedVPlayerIDs, id)
-			continue
+// NewGameOptions are the optional purges of NEW_GAME (#243, contracts/
+// websocket-actions.md §NEW_GAME).
+type NewGameOptions struct {
+	PurgeScores    bool
+	PurgePlayers   bool
+	PurgeTeams     bool
+	ResetQuestions bool
+}
+
+// DefaultNewGameOptions is the v11.1 behaviour (no options sent): scores and
+// players purged, teams kept, questions back to "to play".
+func DefaultNewGameOptions() NewGameOptions {
+	return NewGameOptions{PurgeScores: true, PurgePlayers: true, PurgeTeams: false, ResetQuestions: true}
+}
+
+// NewGameResult reports what InitGameWith did (for the NEW_GAME_PURGE log and
+// the caller's notifications).
+type NewGameResult struct {
+	PurgedPlayerIDs []string
+	RemovedTeams    []string
+	PhaseBefore     GamePhase
+	QuestionBefore  string
+}
+
+// stopAllTimersUnsafe stops every engine timer WITHOUT touching the phase:
+// question timer, countdown, RAFALE question ticker (MEMOTION timers share the
+// main ticker). Caller holds e.mu.
+func (e *Engine) stopAllTimersUnsafe() {
+	if e.countdownStopCh != nil {
+		select {
+		case <-e.countdownStopCh:
+		default:
+			close(e.countdownStopCh)
 		}
-		bumper.Score = 0
-		bumper.Time = 0
+		e.countdownStopCh = nil
 	}
-	if len(purgedVPlayerIDs) > 0 {
-		e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
-		log.Printf("[Engine] InitGame: purged %d virtual player(s) — fresh VJoueur roster for the new game", len(purgedVPlayerIDs))
+	if e.countdownTimer != nil {
+		e.countdownTimer.Stop()
+		e.countdownTimer = nil
+	}
+	if e.stopCh != nil {
+		select {
+		case <-e.stopCh:
+		default:
+			close(e.stopCh)
+		}
+		e.stopCh = nil
+	}
+	if e.timer != nil {
+		e.timer.Stop()
+		e.timer = nil
+	}
+	e.stopRafaleQuestionTimerUnsafe()
+	e.resetDeferredTimerUnsafe()
+	e.state.CurrentTime = 0
+	e.state.CountdownTime = 0
+	e.state.SoundGateBypassed = false
+	e.state.QuestionSoundUnavailable = ""
+}
+
+// InitGameWith applies a (validated) NEW_GAME under ONE engine lock, in the
+// contract order: timers → PURGE_TEAMS → PURGE_PLAYERS → PURGE_SCORES →
+// RESET_QUESTIONS → always-reset (#243). The forbidden combination (players
+// without scores) must be refused by the caller BEFORE any call.
+func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
+	e.mu.Lock()
+	res := NewGameResult{PhaseBefore: e.state.Phase}
+	if e.state.Question != nil {
+		res.QuestionBefore = e.state.Question.ID
 	}
 
-	// Reset all team scores
-	for _, team := range e.data.Teams {
-		team.Score = 0
-		team.TeamPoints = 0
-		team.Time = 0
+	// 1. every timer stopped, phase untouched here (a tick must never put the
+	// phase back to STOPPED after the reset below). An interrupted running
+	// question keeps its "played" mark unless questions are reset.
+	if !opts.ResetQuestions && e.state.Question != nil &&
+		(e.state.Phase == PhaseStarted || e.state.Phase == PhasePaused) {
+		e.setQuestionStatus(StatusStopped)
+	}
+	e.stopAllTimersUnsafe()
+
+	// 2. PURGE_TEAMS: same path as a team deletion (#249); surviving players
+	// become team-less.
+	if opts.PurgeTeams {
+		for name := range e.data.Teams {
+			res.RemovedTeams = append(res.RemovedTeams, name)
+		}
+		sort.Strings(res.RemovedTeams)
+		for _, name := range res.RemovedTeams {
+			e.purgeTeamStateUnsafe(name)
+		}
+		e.data.Teams = make(map[string]*Team)
+		for _, bumper := range e.data.Bumpers {
+			if bumper != nil && bumper.Team != "" {
+				oldTeam := bumper.Team
+				bumper.Team = ""
+				e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+			}
+		}
 	}
 
-	// Clear history
-	e.history = nil
+	// 3. PURGE_PLAYERS: every VJoueur removed (physical buzzers are kept).
+	if opts.PurgePlayers {
+		for id, bumper := range e.data.Bumpers {
+			if bumper != nil && bumper.IsVirtual {
+				delete(e.data.Bumpers, id)
+				res.PurgedPlayerIDs = append(res.PurgedPlayerIDs, id)
+			}
+		}
+		if len(res.PurgedPlayerIDs) > 0 {
+			e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+			log.Printf("[Engine] InitGame: purged %d virtual player(s)", len(res.PurgedPlayerIDs))
+		}
+	}
+
+	// 4. PURGE_SCORES: scores, times and the points history.
+	if opts.PurgeScores {
+		for _, bumper := range e.data.Bumpers {
+			if bumper != nil {
+				bumper.Score = 0
+				bumper.Time = 0
+			}
+		}
+		for _, team := range e.data.Teams {
+			team.Score = 0
+			team.TeamPoints = 0
+			team.Time = 0
+		}
+		e.history = nil
+	}
+
+	// 5. RESET_QUESTIONS: statuses and the RAFALE "already used" reservoir.
+	// An outstanding RAFALE pre-fetch is always released (#202): the question
+	// it was drawn for is abandoned.
+	e.releaseRafaleNextUnsafe()
+	if opts.ResetQuestions {
+		e.questionStatuses = make(map[string]QuestionStatus)
+		e.rafaleUsed = make(map[string]bool)
+	}
+
+	// 6. always: no current question, game-type states back to zero.
 	e.state.TeamsLocked = false // #249
-
-	// Reset all question statuses
-	e.questionStatuses = make(map[string]QuestionStatus)
-
-	// Clear current question so admin UI doesn't show a stale selection
 	e.state.Question = nil
-
-	// Set phase to NEW_GAME
 	e.state.Phase = PhaseNewGame
-
-	// #200 cycle 5 — defensive: e.state.Question is nil now, so the next
-	// Ready() will treat isNewQuestion==true regardless anyway, making this
-	// moot in practice — reset here too so no stale `true` can ever leak
-	// across a NEW_GAME boundary (see questionEverStarted's own doc comment).
 	e.questionEverStarted = false
 
-	// Reset MEMOTION state completely
 	e.state.MotionSubPhase = ""
 	e.state.MotionSelected = ""
 	e.state.MotionCardStates = make(map[string]MotionCardState)
@@ -3848,28 +3947,16 @@ func (e *Engine) InitGame() []string {
 	e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
 	e.state.MotionParticipatingTeams = []string{}
 
-	// Reset ARDOISE answers (v5.6.0)
 	e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
 	e.resetArdoiseControl()
 
-	// Release any outstanding RAFALE pre-fetch (#202, contract §13.4)
-	// BEFORE wiping rafaleUsed wholesale below — releaseRafaleNextUnsafe's
-	// own delete(rafaleUsed, id) becomes moot the instant the map is
-	// replaced, but e.rafaleNext ITSELF must still be nilled here, or a
-	// stale pointer from the previous game would be silently consumed by
-	// this new game's own first advance. Return value ignored: the
-	// unconditional safeGo("SaveRafaleUsed", ...) below already persists
-	// the (now-empty) map regardless of whether anything was "released".
-	e.releaseRafaleNextUnsafe()
+	e.state.MemoryCurrentTeam = ""
+	e.state.MemoryTeamPairs = map[string]int{}
+	e.state.MemoryTeamErrors = map[string]int{}
+	e.state.MemoryParticipatingTeams = []string{}
+	e.state.MemoryPairOwners = map[int]string{}
+	e.state.MemoryCurrentTeamColor = []int{}
 
-	// Reset RAFALE "already used" flags (#197, contract §3.2) — a fresh
-	// game must be able to draw the whole reservoir again. The reservoir
-	// itself (rafaleQuestions) is untouched: NEW_GAME resets game-play
-	// state, never the editor's question bank.
-	e.rafaleUsed = make(map[string]bool)
-
-	// Reset RAFALE ephemeral GameState fields (#107, contract §4) — same
-	// defense-in-depth as the MEMOTION/ARDOISE resets just above.
 	e.state.RafaleSubPhase = RafaleSubPhaseNone
 	e.state.RafaleCurrentQuestion = RafaleCurrent{}
 	e.state.RafaleQuestionTime = 0
@@ -3885,17 +3972,18 @@ func (e *Engine) InitGame() []string {
 	e.state.RafalePoolRemaining = 0
 	e.state.RafaleExhausted = false
 
-	log.Printf("[Engine] Game initialized: scores, history, question statuses reset")
+	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
+		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
 	e.mu.Unlock()
 
-	// Persist async
 	safeGo("SaveHistory", e.SaveHistory)
 	safeGo("SaveTeams", e.SaveTeams)
 	safeGo("SaveBumpers", e.SaveBumpers)
-	safeGo("SaveStatuses", e.SaveStatuses)
-	safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
-
-	return purgedVPlayerIDs
+	if opts.ResetQuestions {
+		safeGo("SaveStatuses", e.SaveStatuses)
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+	return res
 }
 
 // SetQuizMeta sets the quiz metadata (name, theme, notes, and — since v6.0.0,
@@ -8150,6 +8238,12 @@ func (e *Engine) RenameTeamState(oldName, newName string) []string {
 func (e *Engine) PurgeTeamState(name string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.purgeTeamStateUnsafe(name)
+}
+
+// purgeTeamStateUnsafe is PurgeTeamState with e.mu already held (also used by
+// NEW_GAME with PURGE_TEAMS, #243).
+func (e *Engine) purgeTeamStateUnsafe(name string) {
 	st := &e.state
 	delete(st.ArdoiseAnswers, name)
 	delete(st.MemoryTeamPairs, name)
