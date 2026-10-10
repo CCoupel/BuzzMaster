@@ -749,7 +749,13 @@ Backstage.
 - Avertissements : « Dans tous les cas : la question en cours s'arrête. » et, si une question tourne, « ⚠ Une
   question est en cours : elle sera interrompue. ».
 - `NEW_GAME_REFUSED` (`newGameRefused`, réducteur de `useWebSocket.js`) : la popup reste ouverte et affiche le
-  motif (`PLAYERS_REQUIRE_SCORES`).
+  motif : `PLAYERS_REQUIRE_SCORES` (« Lancement refusé : supprimer les joueurs des tablettes exige de remettre les
+  scores à zéro. ») ou `ENTRACTE_ACTIVE` (« Impossible pendant une entracte : sortez d'abord de l'entracte »).
+- **Garde de 5 s** (`NO_RESPONSE_DELAY_MS`) : sans confirmation, la popup se débloque et affiche « Pas de réponse du
+  serveur — réessayez. ». Si la WebSocket est fermée à l'envoi : « Connexion perdue — réessayez. ».
+- **Fermeture** : la popup se ferme sur le lancement observé (phase passée à `NEW_GAME`, ou données renouvelées si la
+  phase valait déjà `NEW_GAME` à l'envoi).
+- Joueurs des tablettes : libellé « N inscrits, M connectés » (compteurs `vplayers` et `vplayersConnected`).
 - `newGame(options)` (`useWebSocket.js`) envoie toujours les quatre champs.
 
 ## Page Équipes — verrou pendant une question (v11.2, #249)
