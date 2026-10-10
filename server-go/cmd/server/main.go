@@ -1402,6 +1402,14 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.logger.Info(game.LogComponentWebSocket, "Action %s déclenchée depuis l'interface animateur (client %s)", msg.Action, incoming.ClientID)
 	}
 
+	// #246 B-ID — a vplayer connection may only act as the bumper it is bound to
+	// (PLAYER_CONNECT). Admin simulations and tv/anim actions are not concerned.
+	if clientType == server.ClientTypeVPlayer && isBoundPlayerAction(msg.Action) {
+		if !a.checkPlayerBinding(incoming.ClientID, msg) {
+			return
+		}
+	}
+
 	switch msg.Action {
 	case protocol.ActionHello:
 		// Send state directly to the connecting client (not broadcast - avoids race condition)
@@ -1975,6 +1983,7 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 		// handleDeleteBumper: the client must learn the authoritative reason
 		// before it receives an UPDATE broadcast that no longer contains it.
 		a.notifyEvictedVirtualPlayers(data.Bumpers)
+		a.enforceUniqueVirtualNames(data.Bumpers)
 		a.engine.SetBumpers(data.Bumpers)
 		// Bumpers were replaced — recompute broadcaster frequency.
 		a.updateBroadcasterFrequency()
@@ -1983,6 +1992,44 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 	// Refresh LED state on all buzzers after team/bumper changes
 	a.sendLEDSetAllBuzzers()
 	a.ambiance().NotifyState()
+}
+
+// enforceUniqueVirtualNames keeps VJoueur names unique (case-insensitive, trimmed)
+// when the admin replaces the roster (#246 B-ID). A VJoueur whose incoming name is
+// already held by another VJoueur gets its current server-side name back; the
+// holder is the bumper keeping its name unchanged (or the first one in ID order).
+func (a *App) enforceUniqueVirtualNames(incoming map[string]*game.Bumper) {
+	norm := func(n string) string { return strings.ToLower(strings.TrimSpace(n)) }
+	ids := make([]string, 0, len(incoming))
+	for id, b := range incoming {
+		if b != nil && b.IsVirtual {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	holders := make(map[string]string)
+	var changed []string
+	for _, id := range ids {
+		cur := a.engine.GetBumper(id)
+		if cur != nil && norm(cur.Name) == norm(incoming[id].Name) {
+			if _, taken := holders[norm(incoming[id].Name)]; !taken {
+				holders[norm(incoming[id].Name)] = id
+			}
+		} else {
+			changed = append(changed, id)
+		}
+	}
+	for _, id := range changed {
+		key := norm(incoming[id].Name)
+		if holder, taken := holders[key]; taken {
+			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_DUPLICATE_NAME id=%s name=%q holder_id=%s", id, incoming[id].Name, holder)
+			if cur := a.engine.GetBumper(id); cur != nil {
+				incoming[id].Name = cur.Name
+			}
+			continue
+		}
+		holders[key] = id
+	}
 }
 
 func (a *App) handleUpdate(msg *protocol.Message) {
@@ -3335,6 +3382,47 @@ func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
 	a.broadcastEnrollmentUpdate()
 }
 
+// isBoundPlayerAction lists the player actions that require a connection bound
+// to a bumper (#246 B-ID). ARDOISE_FINAL joins in Batch 2.
+func isBoundPlayerAction(action string) bool {
+	switch action {
+	case protocol.ActionArdoiseInput, protocol.ActionVPlayerQCMAnswer,
+		protocol.ActionButton, protocol.ActionFlipMemoryCard:
+		return true
+	}
+	return false
+}
+
+// checkPlayerBinding verifies that the vplayer connection clientID is bound to a
+// bumper and that the message does not claim another identity (#246 B-ID,
+// contracts/websocket-actions.md "Liaison connexion ↔ bumper"). On success the
+// bound ID is written to msg.ID so the handlers' 3-pass resolution
+// (payload.ID → msg.ID → clientID) lands on the bound bumper even when the
+// payload carries no ID. Refusals are silent for the client and logged WARN.
+func (a *App) checkPlayerBinding(clientID string, msg *protocol.Message) bool {
+	boundID, ok := a.wsHub.GetClientPlayerID(clientID)
+	if !ok {
+		var p struct {
+			ID string `json:"ID"`
+		}
+		_ = json.Unmarshal(msg.Msg, &p)
+		server.LogWarn(game.LogComponentWebSocket, "PLAYER_ACTION_UNBOUND action=%s client=%s payload_id=%q", msg.Action, clientID, p.ID)
+		return false
+	}
+	var p struct {
+		ID string `json:"ID"`
+	}
+	_ = json.Unmarshal(msg.Msg, &p)
+	for _, claimed := range []string{p.ID, msg.ID} {
+		if claimed != "" && claimed != boundID {
+			server.LogWarn(game.LogComponentWebSocket, "PLAYER_FOREIGN_ID action=%s client=%s bound_id=%q payload_id=%q", msg.Action, clientID, boundID, claimed)
+			return false
+		}
+	}
+	msg.ID = boundID
+	return true
+}
+
 func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	var payload protocol.PlayerConnectPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -3385,6 +3473,13 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	// PLAYER_CONNECTED — empty on first enrollment), not the name: a name match
 	// with no resolvable ID is REJECTED (NAME_TAKEN), never merged/replaced —
 	// see engine.ReconnectOrCreateVirtualPlayer for the full decision matrix.
+	if payload.ID != "" {
+		if existing := a.engine.GetBumper(payload.ID); existing != nil && existing.IsVirtual &&
+			strings.TrimSpace(existing.Name) != playerName {
+			// #246: case 1 no longer renames; the server name stays authoritative.
+			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_NAME_MISMATCH id=%s server_name=%q client_name=%q client=%s", payload.ID, existing.Name, playerName, clientID)
+		}
+	}
 	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(payload.ID, playerName)
 	if err != nil {
 		// Send rejection to this client only
@@ -3414,7 +3509,13 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	a.wsHub.SendToClient(clientID, connectedMsg)
 
 	// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
-	a.wsHub.SetClientPlayerID(clientID, bumperID)
+	// #246 B-ID: one bound connection per bumper — the most recent wins, the
+	// older one is told (DUPLICATE_SESSION) and unbound.
+	for _, oldClient := range a.wsHub.BindClientPlayerID(clientID, bumperID) {
+		server.LogWarn(game.LogComponentWebSocket, "VPLAYER_DUPLICATE_SESSION id=%s old_client=%s new_client=%s", bumperID, oldClient, clientID)
+		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "DUPLICATE_SESSION"})
+		a.wsHub.SendToClient(oldClient, evictedMsg)
+	}
 
 	if reconnected {
 		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", bumperID, bumper.Name)

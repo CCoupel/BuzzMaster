@@ -5982,9 +5982,8 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 	// Case 1: a resolvable ID is unambiguous — always a genuine reconnection.
 	if id != "" {
 		if bumper, ok := e.data.Bumpers[id]; ok && bumper != nil && bumper.IsVirtual {
-			if bumper.Name != normalized {
-				bumper.Name = normalized
-			}
+			// #246: the client-sent name never renames the bumper (a stale tab used
+			// to rename the current player). The server-side name is authoritative.
 			bumper.Connected = true
 			applyConnEventUnsafe(bumper, ConnEventReconnect)
 			// #122 B2/B3 — the player found their way back on their own: any

@@ -250,6 +250,30 @@ func (h *WebSocketHub) SetClientPlayerID(clientID, playerID string) {
 	h.mu.Unlock()
 }
 
+// BindClientPlayerID links clientID to playerID (#246 B-ID) and enforces "one
+// bound connection per bumper": any OTHER vplayer client currently bound to the
+// same playerID is unbound (its PlayerID cleared, so its later close does not
+// mark the bumper disconnected) and its client ID is returned in evicted so the
+// caller can notify it (PLAYER_EVICTED / DUPLICATE_SESSION). Atomic under h.mu.
+func (h *WebSocketHub) BindClientPlayerID(clientID, playerID string) (evicted []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for client := range h.clients {
+		if client.ID != clientID && client.PlayerID == playerID && playerID != "" {
+			client.PlayerID = ""
+			evicted = append(evicted, client.ID)
+		}
+	}
+	for client := range h.clients {
+		if client.ID == clientID {
+			client.PlayerID = playerID
+			LogInfo(game.LogComponentWebSocket, "Client %s identified as PlayerID: %s", clientID, playerID)
+			break
+		}
+	}
+	return evicted
+}
+
 // GetClientPlayerID returns the VJoueur bumper ID linked to clientID (via
 // SetClientPlayerID), if any. ok is false if the client is unknown or not yet
 // identified as a VJoueur (e.g. admin/TV, or a VPlayer before PLAYER_CONNECT
