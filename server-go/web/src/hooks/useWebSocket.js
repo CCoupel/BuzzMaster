@@ -84,6 +84,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     showQRCode: false, // Whether QR code should be displayed on TV
     // ENTRACTE (v6.5.2, #119) — pause globale, même nature éphémère que showQRCode.
     entracte: false, // true for the whole duration of the pause
+    // #249 (v11.2) — liste des équipes verrouillée pendant une question : ni renommage
+    // ni suppression (le serveur refuse). Toujours sérialisé côté serveur.
+    TEAMS_LOCKED: false,
     // ENTRACTE_CONFIG — configuration DIFFUSÉE au panneau (gelée pendant une
     // pause active, corrections C4). entracteConfigSaved (ci-dessous) est la
     // configuration ENREGISTRÉE, toujours à jour, admin-only — c'est elle que
@@ -206,6 +209,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // détection par balayage de roster, qui ne pouvait pas distinguer "bumper
   // supprimé" de "bumper pas encore reçu" pendant la fenêtre d'enrôlement.
   const [playerEvictedStatus, setPlayerEvictedStatus] = useState(null)
+  // #249 — dernier TEAMS_UPDATE_REFUSED (ciblé, émetteur du UPDATE refusé) :
+  // { reason, teams: string[] } | null. L'état renvoyé par le serveur fait foi.
+  const [teamsUpdateRefused, setTeamsUpdateRefused] = useState(null)
   // #246 (F-STOP) — accusé ciblé du texte final ARDOISE (tablette) : { questionId,
   // hash } | null, nouvel objet à chaque accusé ; et dernier REVEAL_REFUSED
   // (admin/anim) : { reason, pending: [{team, offline}] } | null.
@@ -473,6 +479,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // ENTRACTE (v6.5.2, #119) — jamais omitempty côté serveur (contrat game-state.md),
             // mais on garde le repli sur prev pour un client plus ancien / un message partiel.
             entracte: MSG.GAME.ENTRACTE ?? prev.entracte,
+            TEAMS_LOCKED: MSG.GAME.TEAMS_LOCKED ?? prev.TEAMS_LOCKED,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
             // ENTRACTE_CONFIG_SAVED (corrections C4) — diffusion restreinte à
             // l'admin (AdminOnlyGameFields), même repli que QUIZ_OBJECTIVES :
@@ -775,6 +782,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         }
         setPlayerConnectStatus({ status: 'connected', id: MSG?.ID, name: MSG?.NAME })
         // Player successfully enrolled - state will be updated via UPDATE message
+        break
+
+      case 'TEAMS_UPDATE_REFUSED':
+        setTeamsUpdateRefused({ reason: MSG?.REASON, teams: MSG?.TEAMS || [] })
         break
 
       case 'PLAYER_REJECTED':
@@ -1215,6 +1226,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setPlayerEvictedStatus(null)
   }, [])
 
+  const clearTeamsUpdateRefused = useCallback(() => {
+    setTeamsUpdateRefused(null)
+  }, [])
+
   // New game: trigger full reset and transition to NEW_GAME phase
   const newGame = useCallback(() => {
     sendMessage('NEW_GAME', {})
@@ -1387,6 +1402,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clearPlayerConnectStatus,
     playerEvictedStatus,
     clearPlayerEvictedStatus,
+    teamsUpdateRefused,
+    clearTeamsUpdateRefused,
     // ARDOISE garde-fous au STOP (#246)
     ardoiseFinalAck,
     revealRefused,
