@@ -210,3 +210,48 @@ describe('ScoresPage — « Dernières attributions » (#252, maquette)', () => 
     expect(section.textContent).not.toMatch(/Fantôme/)
   })
 })
+
+describe('ScoresPage — « Dernières attributions » : rechargement et crédit nul (#252, revue)', () => {
+  const historyCalls = () => global.fetch.mock.calls.filter((c) => String(c[0]).includes('/history')).length
+
+  it('ne relance pas /history à chaque UPDATE (équipes, joueurs, état) : seulement quand SCORE_CHANGE.SEQ change', async () => {
+    const base = { ...mk(), gameState: { SCORE_CHANGE: { SEQ: 3, DISPLAY: true, TEAMS: [], PLAYERS: [] } } }
+    useGame.mockReturnValue(base)
+    const { rerender } = render(<ScoresPage />)
+    await screen.findByRole('heading', { name: 'Dernières attributions' })
+    await waitFor(() => expect(historyCalls()).toBeGreaterThan(0))
+    const afterMount = historyCalls()
+
+    // UPDATE sans nouvelle attribution : nouveaux objets équipes / joueurs / gameState, même SEQ.
+    for (let i = 0; i < 3; i++) {
+      useGame.mockReturnValue({
+        ...base,
+        teams: { ...TEAMS },
+        bumpers: { ...BUMPERS },
+        gameState: { SCORE_CHANGE: { SEQ: 3, DISPLAY: true, TEAMS: [], PLAYERS: [] }, PHASE: 'STOPPED' },
+      })
+      rerender(<ScoresPage />)
+    }
+    await new Promise((r) => setTimeout(r, 50))
+    expect(historyCalls()).toBe(afterMount)
+
+    // Nouvelle attribution : SEQ change → un rechargement.
+    useGame.mockReturnValue({ ...base, gameState: { SCORE_CHANGE: { SEQ: 4, DISPLAY: true, TEAMS: ['Les Bleus'], PLAYERS: [] } } })
+    rerender(<ScoresPage />)
+    await waitFor(() => expect(historyCalls()).toBe(afterMount + 1))
+  })
+
+  it('un crédit à 0 s’affiche « 0 pt » (jamais « −0 » ni « +0 »)', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve([{ EVENT_TYPE: 'POINTS', TIMESTAMP: 5000, TEAM_NAME: 'Les Bleus', WINNER_TYPE: 'TEAM', POINTS: 0, QUESTION_ID: '' }]),
+    })))
+    render(<ScoresPage />)
+    const section = (await screen.findByRole('heading', { name: 'Dernières attributions' })).closest('section')
+    await waitFor(() => expect(within(section).getAllByRole('listitem').length).toBe(1))
+    const text = within(section).getAllByRole('listitem')[0].textContent
+    expect(text).toMatch(/0 pt/)
+    expect(text).not.toMatch(/[−-]0/)
+    expect(text).not.toMatch(/\+0/)
+  })
+})
