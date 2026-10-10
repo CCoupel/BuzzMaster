@@ -298,7 +298,7 @@ dans **`data/config/teams.json.bak`**.
 - Le `.bak` est créé à la **première** normalisation seulement. S'il existe déjà, il n'est pas remplacé : il
   garde la version d'avant la première correction.
 - Aucune copie si rien n'a été corrigé.
-- Le journal contient une ligne `WARN TEAM_NAME_NORMALIZED key=… old_name=… source=load` par équipe corrigée.
+- Le journal contient une ligne `WARN TEAM_NAME_NORMALIZED key="…" old_name="…" source=load` par équipe corrigée.
 
 **Si une normalisation vous surprend** :
 
