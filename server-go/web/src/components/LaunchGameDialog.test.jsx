@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import LaunchGameButton, { getLaunchCounts } from './LaunchGameDialog'
 
 // #243 — popup « Lancer la partie » (maquette admin_new_game__purge_popup_details).
@@ -115,6 +115,54 @@ describe('LaunchGameButton / popup (#243)', () => {
     fireEvent.click(screen.getByText('LANCER LA PARTIE'))
     fireEvent.click(go())
     rerender(<LaunchGameButton {...props} phase="NEW_GAME" />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+
+describe('LaunchGameButton — popup jamais figée (#243, revue)', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+  const base = { teams: TEAMS, bumpers: BUMPERS, questions: QUESTIONS, onClearRefused: vi.fn(), refused: null }
+
+  it('WebSocket fermée (onLaunch retourne false) : « Connexion perdue — réessayez », popup ouverte, confirmation active', () => {
+    render(<LaunchGameButton {...base} onLaunch={vi.fn(() => false)} phase="REVEALED" />)
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    fireEvent.click(go())
+    expect(screen.getByRole('dialog').textContent).toMatch(/Connexion perdue — réessayez/)
+    expect(go().disabled).toBe(false)
+  })
+
+  it('aucune réponse en 5 s : la popup se débloque avec « Pas de réponse du serveur — réessayez »', () => {
+    render(<LaunchGameButton {...base} onLaunch={vi.fn(() => true)} phase="REVEALED" />)
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    fireEvent.click(go())
+    expect(go().disabled).toBe(true)
+    act(() => { vi.advanceTimersByTime(4900) })
+    expect(go().disabled).toBe(true)
+    act(() => { vi.advanceTimersByTime(200) })
+    expect(go().disabled).toBe(false)
+    expect(screen.getByRole('dialog').textContent).toMatch(/Pas de réponse du serveur — réessayez/)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' }) // Échap de nouveau possible
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('NEW_GAME_REFUSED ENTRACTE_ACTIVE : message dédié, popup ouverte', () => {
+    const { rerender } = render(<LaunchGameButton {...base} onLaunch={vi.fn(() => true)} phase="REVEALED" />)
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    fireEvent.click(go())
+    rerender(<LaunchGameButton {...base} onLaunch={vi.fn(() => true)} phase="REVEALED" refused={{ reason: 'ENTRACTE_ACTIVE' }} />)
+    expect(screen.getByRole('dialog').textContent).toMatch(/Une entracte est en cours : terminez-la avant de lancer la partie/)
+    expect(go().disabled).toBe(false)
+  })
+
+  it('phase déjà NEW_GAME à l\'envoi : pas de fermeture immédiate ; fermeture au renouvellement des données', () => {
+    const onLaunch = vi.fn(() => true)
+    const { rerender } = render(<LaunchGameButton {...base} onLaunch={onLaunch} phase="NEW_GAME" />)
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    fireEvent.click(go())
+    expect(screen.queryByRole('dialog')).not.toBeNull()
+    rerender(<LaunchGameButton {...base} onLaunch={onLaunch} phase="NEW_GAME" questions={{ ...QUESTIONS }} />)
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 })

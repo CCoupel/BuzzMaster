@@ -13,7 +13,11 @@ const PLAYED_STATUSES = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED']
 
 const REFUSAL_MESSAGES = {
   PLAYERS_REQUIRE_SCORES: 'Lancement refusé : supprimer les joueurs des tablettes exige de remettre les scores à zéro.',
+  ENTRACTE_ACTIVE: 'Une entracte est en cours : terminez-la avant de lancer la partie.',
 }
+
+// Sans réponse du serveur après l'envoi : la popup se débloque (pas de modale figée).
+const NO_RESPONSE_DELAY_MS = 5000
 
 /** Compteurs affichés dans la popup, dérivés de l'état reçu (aucun calcul serveur). */
 export function getLaunchCounts(teams, bumpers, questions) {
@@ -55,7 +59,7 @@ function Option({ id, checked, locked, danger, onChange, title, count, descripti
  * @param {boolean} props.sent - le NEW_GAME est parti : confirmation désactivée (pas de double envoi)
  * @param {string|null} [props.refusedReason] - NEW_GAME_REFUSED reçu : message, la popup reste ouverte
  */
-export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refusedReason }) {
+export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refusedReason, notice }) {
   const [scores, setScores] = useState(true)
   const [questions, setQuestions] = useState(true)
   const [players, setPlayers] = useState(false)
@@ -137,7 +141,7 @@ export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refu
         <Option
           id="lg-players" danger checked={players}
           onChange={(e) => setPlayers(e.target.checked)}
-          title="Joueurs des tablettes" count={`(${counts.vplayersConnected} connectés)`}
+          title="Joueurs des tablettes" count={`(${counts.vplayers} inscrits, ${counts.vplayersConnected} connectés)`}
           description="Supprime tous les joueurs inscrits sur tablette : ils devront se réinscrire (comportement de l'ancien bouton « Nouvelle partie »). Les buzzers physiques ne sont pas concernés."
         />
         <Option
@@ -158,6 +162,7 @@ export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refu
             {REFUSAL_MESSAGES[refusedReason] || 'Lancement refusé par le serveur.'}
           </div>
         )}
+        {notice && !refusedReason && <div className="lg-warn" role="alert">{notice}</div>}
 
         <div className="lg-actions">
           <button type="button" className="lg-btn lg-btn-secondary" onClick={onClose} disabled={sent}>Annuler</button>
@@ -186,12 +191,19 @@ export default function LaunchGameButton({
 }) {
   const [open, setOpen] = useState(false)
   const [sent, setSent] = useState(false)
+  const [notice, setNotice] = useState(null) // échec d'envoi / pas de réponse
   const openerRef = useRef(null)
+  // Contexte à l'envoi : un NEW_GAME n'est « observé » que par un CHANGEMENT d'état
+  // (phase vers NEW_GAME, ou — si la phase vaut déjà NEW_GAME — renouvellement des
+  // données diffusées après la purge), jamais parce que la phase vaut déjà NEW_GAME.
+  const sentCtxRef = useRef(null)
   const counts = useMemo(() => getLaunchCounts(teams, bumpers, questions), [teams, bumpers, questions])
 
   const close = () => {
     setOpen(false)
     setSent(false)
+    setNotice(null)
+    sentCtxRef.current = null
     onClearRefused?.()
     openerRef.current?.focus?.()
   }
@@ -201,11 +213,40 @@ export default function LaunchGameButton({
     if (refused && open) setSent(false)
   }, [refused, open])
 
-  // Lancement accepté (phase NEW_GAME) : fermeture.
+  // Lancement observé : changement de phase vers NEW_GAME, ou renouvellement des
+  // données quand la phase valait déjà NEW_GAME à l'envoi → fermeture.
   useEffect(() => {
-    if (open && sent && phase === 'NEW_GAME') close()
+    const ctx = sentCtxRef.current
+    if (!open || !sent || !ctx) return
+    const phaseChanged = phase === 'NEW_GAME' && ctx.phase !== 'NEW_GAME'
+    const dataRenewed = ctx.phase === 'NEW_GAME' && phase === 'NEW_GAME'
+      && (teams !== ctx.teams || bumpers !== ctx.bumpers || questions !== ctx.questions)
+    if (phaseChanged || dataRenewed) close()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, sent, open])
+  }, [phase, teams, bumpers, questions, sent, open])
+
+  // Minuterie de garde : NEW_GAME ignoré / jamais confirmé → la popup se débloque.
+  useEffect(() => {
+    if (!open || !sent) return
+    const id = setTimeout(() => {
+      setSent(false)
+      setNotice('Pas de réponse du serveur — réessayez.')
+    }, NO_RESPONSE_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [open, sent])
+
+  const confirm = (opts) => {
+    onClearRefused?.()
+    setNotice(null)
+    // Le hook retourne false si la WebSocket est fermée : rien n'est parti.
+    const ok = onLaunch(opts)
+    if (ok === false) {
+      setNotice('Connexion perdue — réessayez.')
+      return
+    }
+    sentCtxRef.current = { phase, teams, bumpers, questions }
+    setSent(true)
+  }
 
   return (
     <>
@@ -224,8 +265,9 @@ export default function LaunchGameButton({
           phase={phase}
           sent={sent}
           refusedReason={refused?.reason ?? null}
+          notice={notice}
           onClose={close}
-          onConfirm={(opts) => { onClearRefused?.(); setSent(true); onLaunch(opts) }}
+          onConfirm={confirm}
         />
       )}
     </>
