@@ -219,6 +219,7 @@ SendMessage({
 | `dev-backend` | Backend (go) | `.claude/agents/dev-backend.template.md` | permanent |
 | `dev-frontend` | Frontend (react) | `.claude/agents/dev-frontend.template.md` | permanent |
 | `dev-buzzclick` | Firmware ESP32-C3 | `.claude/agents/dev-buzzclick.md` | ponctuel |
+| `marketing-release` | Release notes, posts, site gh-pages | `.claude/agents/marketing-release.template.md` + `.claude/agents/marketing-release.md` | ponctuel |
 | `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
 | `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
 | `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | permanent |

@@ -64,7 +64,11 @@
     ],
     "e2e": [
       "manual"
-    ]
+    ],
+    "regression_at_qa": "gated",
+    "full_regression_at": "qualif",
+    "coverage_min": 70,
+    "lot_max_tests": 50
   },
   "security": {
     "concerns": []
@@ -91,5 +95,8 @@
   "template_version": {
     "tag": "v3.14.1",
     "commit": "55872f008976d54e863fb9d5d2b9f48d1623b1b1"
+  },
+  "docs": {
+    "mockup_dir": "docs/mockup"
   }
 }

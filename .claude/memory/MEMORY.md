@@ -9,6 +9,14 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
+## Sync template v3.14.1 (2026-10-10)
+
+- **Template passé de v3.9.1 à v3.14.1** (commits locaux `42094004` + audit), aucun push. Aucune vraie customisation de commande perdue ; `init-project.md` pris au tag. Bloc `TEAMLEADER_PROTOCOL` de CLAUDE.md à jour : ordres > 3 lignes via `_work/tasks/*.md`, questions utilisateur toujours via `AskUserQuestion`.
+- **Adresse du teamleader = `team-lead`**, jamais `main` (rejeté). Corrigé durablement par le compagnon `.claude/agents/context/TEAMMATES_PROTOCOL.md` (le template, lui, dit encore `main`). Le bug signalé à la session v11.1.0 est donc traité côté projet.
+- **Squelettes créés** : `docs/mockup/{INDEX,DECISIONS}.md` (les 19 maquettes historiques restent dans `docs/mockups/`, non indexées — choix utilisateur), `tests/INDEX.md`, `tests/METRICS.md`; `project-config.json` : `docs.mockup_dir` + défauts `testing.*`. `marketing-release` ajouté au tableau Agents de CLAUDE.md.
+- **Gitignore** : ajout `_work/`, `.claude/worktrees/`, `build/`. Fichier `data/WEAPSwrd_Epee…wav` toujours non suivi (hors sujet).
+- Aucun chantier ouvert ; prochain : choisir dans le backlog (v11.2 bruitages #231/#232/#235, ou bugs #189/#242).
+
 ## PROD v11.1.0 livrée (2026-09-25)
 
 - **PROD déployée** : merge `9928dcb8` (`--no-ff`, `milestone/v11.1` → `main`), tag `v11.1.0`, CI verte (run 36152979273), release GitHub avec 3 assets. Milestone #37 « v11.1 — Question sonore » clos 7/7 : #219/#236/#237 (médias sonores par question SPEEDY/QCM/ARDOISE), #239 (logo BuzzControl A1, `BrandLogo`), #238 (Navbar : groupe « Préparation » + section Interface, « Config »→« Réglages » dans le menu du logo, libellés→icônes par paliers 1945/1855/1685/1495/1275/1095/955 px, badge 👥 <955 px, 🍿 ENTRACTE / 🎬 REPRISE, pastille Connecté toujours visible), #240 (forçage TV « Jeu » à la sélection, START, CONTINUE, cartes MEMOTION/RAFALE), #241 (doublon de #238, fermé).
