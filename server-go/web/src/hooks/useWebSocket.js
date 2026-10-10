@@ -214,6 +214,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [teamsUpdateRefused, setTeamsUpdateRefused] = useState(null)
   // #243 — dernier NEW_GAME_REFUSED (ciblé, émetteur) : { reason } | null
   const [newGameRefused, setNewGameRefused] = useState(null)
+  // #244/#251 — dernier TEAM_POINTS_BATCH_RESULT (ciblé, émetteur) : { status, reason, questionId,
+  // applied: [{team, points}], skipped: [{team, reason}], teams: string[] } | null
+  const [teamPointsBatchResult, setTeamPointsBatchResult] = useState(null)
   // #246 (F-STOP) — accusé ciblé du texte final ARDOISE (tablette) : { questionId,
   // hash } | null, nouvel objet à chaque accusé ; et dernier REVEAL_REFUSED
   // (admin/anim) : { reason, pending: [{team, offline}] } | null.
@@ -786,6 +789,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // Player successfully enrolled - state will be updated via UPDATE message
         break
 
+      case 'TEAM_POINTS_BATCH_RESULT':
+        setTeamPointsBatchResult({
+          status: MSG?.STATUS,
+          reason: MSG?.REASON,
+          questionId: MSG?.QUESTION_ID,
+          applied: (MSG?.APPLIED || []).map((e) => ({ team: e.TEAM, points: e.POINTS })),
+          skipped: (MSG?.SKIPPED || []).map((e) => ({ team: e.TEAM, reason: e.REASON })),
+          teams: MSG?.TEAMS || [],
+        })
+        break
+
       case 'NEW_GAME_REFUSED':
         setNewGameRefused({ reason: MSG?.REASON })
         break
@@ -1232,6 +1246,19 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setPlayerEvictedStatus(null)
   }, [])
 
+  // #244/#251 — attribution groupée après le REVEAL. `entries` = [{ team, points }] ; retourne le
+  // booléen de sendMessage (false : WebSocket fermée, rien n'est parti).
+  const teamPointsBatch = useCallback((questionId, entries) => {
+    return sendMessage('TEAM_POINTS_BATCH', {
+      QUESTION_ID: String(questionId ?? ''),
+      ENTRIES: entries.map((e) => ({ TEAM: e.team, POINTS: e.points })),
+    })
+  }, [sendMessage])
+
+  const clearTeamPointsBatchResult = useCallback(() => {
+    setTeamPointsBatchResult(null)
+  }, [])
+
   const clearNewGameRefused = useCallback(() => {
     setNewGameRefused(null)
   }, [])
@@ -1428,6 +1455,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clearTeamsUpdateRefused,
     newGameRefused,
     clearNewGameRefused,
+    teamPointsBatch,
+    teamPointsBatchResult,
+    clearTeamPointsBatchResult,
     // ARDOISE garde-fous au STOP (#246)
     ardoiseFinalAck,
     revealRefused,
