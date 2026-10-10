@@ -26,6 +26,7 @@ import {
   resolvePointsAward,
   rafaleCounterForTeam,
   calcRafaleTeamAward,
+  defaultTeamAward,
 } from '../utils/pointsAward'
 import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
@@ -418,6 +419,20 @@ export default function GamePage() {
     }
     rafaleSetTeams(newSelection)
   }
+
+  // #244/#251 — montant par défaut d'une équipe (clic sur la carte ET lot groupé).
+  const teamDefaultAward = (teamName, basePoints) => defaultTeamAward({
+    question: gameState.question,
+    teamName,
+    basePoints,
+    teamBumpers: Object.values(bumpers).filter(b => b.TEAM === teamName),
+    invalidatedCount: gameState.qcmInvalidated?.length || 0,
+    memorySoloScore: memoryScore,
+    memoryTeamPairs: gameState.MEMORY_TEAM_PAIRS,
+    memoryTeamErrors: gameState.MEMORY_TEAM_ERRORS,
+    rafaleCounters: gameState.RAFALE_TEAM_COUNTERS,
+    rafaleBest: gameState.RAFALE_TEAM_BEST,
+  })
 
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
     if (ctrlKey && gameState.phase === 'PREPARE') {
@@ -1561,52 +1576,9 @@ export default function GamePage() {
                   } : null}
                   onTeamClick={(teamName) => {
                     if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
-                      // For Memory multi-team, calculate team-specific points
-                      // For QCM with hints, use penalty-adjusted points
-                      // Otherwise use pointsInput
-                      let pointsToAward = pointsInput
-                      if (gameState.question?.TYPE === 'MEMORY' &&
-                          gameState.question?.MEMORY_MODE !== 'SOLO' &&
-                          gameState.MEMORY_TEAM_PAIRS?.[teamName] !== undefined) {
-                        // Calculate team-specific Memory points — same rule as
-                        // solo (utils/pointsAward.js calcMemoryScore), only the
-                        // pairs/errors source differs (per-team vs global).
-                        const pairs = gameState.MEMORY_TEAM_PAIRS[teamName] || 0
-                        const errors = gameState.MEMORY_TEAM_ERRORS?.[teamName] || 0
-                        const teamMemoryScore = calcMemoryScore(gameState.question, pairs, errors)
-                        if (teamMemoryScore) pointsToAward = teamMemoryScore.score
-                      } else if (memoryScore) {
-                        // Solo Memory mode - use global score
-                        pointsToAward = memoryScore.score
-                      } else if (gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED) {
-                        // QCM: rule mutualized in utils/pointsAward.js
-                        // (calcQcmTeamAward, #157/T1) — per-player penalty if
-                        // a correct buzzer exists for this team, else falls
-                        // back to the current-invalidated-count penalty.
-                        // #157 note: this now applies the same way in STOPPED
-                        // and REVEALED. Before this refactor, a STOPPED-phase
-                        // click always used the fallback, because
-                        // qcmTeamAcquiredPoints was gated to REVEALED only
-                        // (built for the acquired-points badge) and this
-                        // handler read it as a proxy for "team answered
-                        // correctly" — an accidental coupling between a
-                        // display gate and a credit decision, with no test
-                        // coverage either way. Unifying both consumers onto
-                        // calcQcmTeamAward removes that coupling.
-                        const teamBumperList = Object.values(bumpers).filter(b => b.TEAM === teamName)
-                        const award = calcQcmTeamAward(gameState.question, pointsInput, teamBumperList, gameState.qcmInvalidated?.length || 0)
-                        pointsToAward = award.amount
-                      } else if (gameState.question?.TYPE === 'RAFALE') {
-                        // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.2) —
-                        // suggestion pré-remplie par pointsInput (ajustable,
-                        // même mécanisme que QCM/MEMORY ci-dessus) ×
-                        // compteur retenu (RAFALE_TEAM_BEST en
-                        // MAILLON_FAIBLE, RAFALE_TEAM_COUNTERS sinon,
-                        // utils/pointsAward.js, mutualisé avec AnimPage.jsx).
-                        const counter = rafaleCounterForTeam(gameState.question, teamName, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
-                        const award = calcRafaleTeamAward(gameState.question, pointsInput, counter)
-                        if (award) pointsToAward = award.amount
-                      }
+                      // #244/#251 : règle unique `defaultTeamAward` (utils/pointsAward.js),
+                      // partagée avec l'attribution groupée « Donner les points (N) ».
+                      const pointsToAward = teamDefaultAward(teamName, pointsInput)
                       setTeamPoints(teamName, pointsToAward)
                     }
                   }}

@@ -267,3 +267,49 @@ export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedC
   const fallbackPenalty = calcQcmPenalty(question, basePoints, invalidatedCount)
   return { amount: fallbackPenalty ? fallbackPenalty.effectivePoints : basePoints, hasCorrectAnswer: false }
 }
+
+/**
+ * defaultTeamAward — montant PAR DÉFAUT crédité à une équipe : règle UNIQUE du
+ * clic sur la carte d'équipe de /admin (GamePage `onTeamClick`) et de
+ * l'attribution groupée « Donner les points (N) » (#244/#251, TEAM_POINTS_BATCH).
+ * Extraite pour qu'aucun des deux chemins ne diverge.
+ *
+ * Priorité (identique à l'ancien clic unitaire) :
+ *   1. MEMORY multi-équipes avec compteurs par équipe → score des paires de l'équipe ;
+ *   2. MEMORY solo (score global) → `memorySoloScore.score` ;
+ *   3. QCM avec indices → `calcQcmTeamAward` ;
+ *   4. RAFALE → `calcRafaleTeamAward` (compteur retenu de l'équipe) ;
+ *   5. sinon `basePoints` (SPEEDY, ARDOISE, QCM sans indices, MEMOTION…).
+ *
+ * @param {object} p
+ * @param {object} p.question
+ * @param {string} p.teamName
+ * @param {number} p.basePoints - barème (pointsInput, ou B de la barre d'attribution)
+ * @param {object[]} p.teamBumpers - bumpers bruts de l'équipe
+ * @param {number} p.invalidatedCount - gameState.qcmInvalidated?.length || 0
+ * @param {{score:number}|null} p.memorySoloScore - calcMemoryScore global (solo)
+ * @param {Object<string,number>} [p.memoryTeamPairs] - gameState.MEMORY_TEAM_PAIRS
+ * @param {Object<string,number>} [p.memoryTeamErrors] - gameState.MEMORY_TEAM_ERRORS
+ * @param {Object<string,number>} [p.rafaleCounters] - gameState.RAFALE_TEAM_COUNTERS
+ * @param {Object<string,number>} [p.rafaleBest] - gameState.RAFALE_TEAM_BEST
+ * @returns {number}
+ */
+export function defaultTeamAward({
+  question, teamName, basePoints, teamBumpers, invalidatedCount = 0, memorySoloScore = null,
+  memoryTeamPairs, memoryTeamErrors, rafaleCounters, rafaleBest,
+}) {
+  let amount = basePoints
+  if (question?.TYPE === 'MEMORY' && question?.MEMORY_MODE !== 'SOLO' && memoryTeamPairs?.[teamName] !== undefined) {
+    const teamScore = calcMemoryScore(question, memoryTeamPairs[teamName] || 0, memoryTeamErrors?.[teamName] || 0)
+    if (teamScore) amount = teamScore.score
+  } else if (memorySoloScore) {
+    amount = memorySoloScore.score
+  } else if (question?.TYPE === 'QCM' && question?.QCM_HINTS_ENABLED) {
+    amount = calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount).amount
+  } else if (question?.TYPE === 'RAFALE') {
+    const counter = rafaleCounterForTeam(question, teamName, rafaleCounters, rafaleBest)
+    const award = calcRafaleTeamAward(question, basePoints, counter)
+    if (award) amount = award.amount
+  }
+  return amount
+}

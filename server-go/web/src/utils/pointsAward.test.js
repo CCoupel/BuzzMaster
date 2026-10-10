@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  defaultTeamAward,
   calcQcmPenaltyForHints,
   calcQcmPenalty,
   calcQcmTeamAward,
@@ -384,5 +385,33 @@ describe('calcQcmTeamAward', () => {
     expect(correctBranch.amount).toBe(5)
     const fallbackBranch = calcQcmTeamAward(question, 10, [], 1)
     expect(fallbackBranch.amount).toBe(5)
+  })
+})
+
+describe('defaultTeamAward (#244/#251) — règle unique du clic équipe et du lot', () => {
+  const base = { teamName: 'Les Bleus', basePoints: 3, teamBumpers: [], invalidatedCount: 0, memorySoloScore: null }
+
+  it('SPEEDY / ARDOISE / QCM sans indices : barème B', () => {
+    expect(defaultTeamAward({ ...base, question: { TYPE: 'SPEEDY' } })).toBe(3)
+    expect(defaultTeamAward({ ...base, question: { TYPE: 'ARDOISE' } })).toBe(3)
+    expect(defaultTeamAward({ ...base, question: { TYPE: 'QCM', QCM_CORRECT: 'GREEN' } })).toBe(3)
+  })
+
+  it('RAFALE : compteur retenu × barème', () => {
+    expect(defaultTeamAward({
+      ...base, question: { TYPE: 'RAFALE' }, rafaleCounters: { 'Les Bleus': 4 },
+    })).toBe(12)
+  })
+
+  it('MEMORY solo : score global ; MEMORY multi : score des paires de l\'équipe', () => {
+    expect(defaultTeamAward({ ...base, question: { TYPE: 'MEMORY', MEMORY_MODE: 'SOLO' }, memorySoloScore: { score: 40 } })).toBe(40)
+    const q = { TYPE: 'MEMORY', MEMORY_MODE: 'TEAMS', MEMORY_PAIRS: [1, 2, 3], MEMORY_CONFIG: { POINTS_PER_PAIR: 10, ERROR_PENALTY: 0, COMPLETION_BONUS: 0 } }
+    expect(defaultTeamAward({ ...base, question: q, memoryTeamPairs: { 'Les Bleus': 2 }, memoryTeamErrors: {} })).toBe(20)
+  })
+
+  it('QCM avec indices : pénalité de l\'équipe (bonne réponse buzzée avec 1 indice)', () => {
+    const q = { TYPE: 'QCM', QCM_CORRECT: 'GREEN', QCM_HINTS_ENABLED: true, QCM_PENALTY_1: 0.5, QCM_PENALTY_2: 0.25 }
+    const bumpers = [{ TIME: 1, ANSWER_COLOR: 'GREEN', HINTS_AT_BUZZ: 1 }]
+    expect(defaultTeamAward({ ...base, basePoints: 4, question: q, teamBumpers: bumpers })).toBe(2)
   })
 })
