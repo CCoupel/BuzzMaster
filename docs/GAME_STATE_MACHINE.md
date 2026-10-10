@@ -150,6 +150,28 @@ Si la sélection des participants cesse d'être conforme **alors que la phase es
 - **Comportement** : le motif d'attente est affiché à la régie et sur la tablette animateur (`#172 Bloc C`)
 - **Remise en conformité** : dès que la sélection redevient valide, repasse automatiquement en `READY` sans geste supplémentaire
 
+### Verrou des équipes pendant une question (v11.2, #249)
+
+Le drapeau `TEAMS_LOCKED` suit la question, pas la phase :
+
+| Moment | `TEAMS_LOCKED` |
+|--------|----------------|
+| Démarrage du serveur | `false` |
+| `Ready()` (sélection d'une question, `PREPARE`) | `true` |
+| `STARTED`, `PAUSED`, `STOPPED` de cette question | `true` |
+| `Reveal()` (`REVEALED`) | `false` |
+| `NEW_GAME` / `InitGame` | `false` |
+
+- Une question abandonnée (jamais révélée, sélectionnée par erreur en `PREPARE`/`READY`) garde le verrou
+  jusqu'à la sélection suivante ou jusqu'à `NEW_GAME`. Depuis `PREPARE`/`READY`, `REVEALED` n'est pas
+  atteignable.
+- Verrou actif : renommage et suppression d'équipe refusés (`TEAMS_UPDATE_REFUSED`). Ajout, couleur et
+  affectation de joueurs restent permis.
+- Hors verrou : renommage reporté sous la nouvelle clé ; suppression = effacement des états de jeu de
+  l'équipe, historique conservé avec `TEAM_DELETED`.
+
+Contrats : `contracts/game-state.md` §`TEAMS_LOCKED`, `contracts/websocket-actions.md` §UPDATE.
+
 ## Type de jeu RAFALE (v8.0.0, #16)
 
 ### Vue d'ensemble
