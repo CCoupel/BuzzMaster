@@ -638,12 +638,23 @@ export default function VPlayerPage() {
     typedRef.current = false
     restoredRef.current = false
     sawStartRef.current = false
-    // Changement (ou fin) de question : le texte conservé pour l'ancienne est périmé.
-    if (questionIdRef.current !== null && questionIdRef.current !== (gameState.question?.ID ?? null)) {
+    // Passage vers un AUTRE ID de question non nul : le texte conservé pour
+    // l'ancienne est périmé. A → null → A (reset transitoire à la reconnexion)
+    // conserve le brouillon ; la fin de partie l'efface (effet NEW_GAME ci-dessous).
+    const nextQid = gameState.question?.ID ?? null
+    if (questionIdRef.current !== null && nextQid !== null && questionIdRef.current !== nextQid) {
       clearArdoiseDraft()
     }
-    questionIdRef.current = gameState.question?.ID ?? null
+    if (nextQid !== null) questionIdRef.current = nextQid
   }, [gameState.question?.ID])
+
+  // Fin de partie explicite : plus aucun brouillon à conserver.
+  useEffect(() => {
+    if (gameState.phase === 'NEW_GAME') {
+      clearArdoiseDraft()
+      questionIdRef.current = null
+    }
+  }, [gameState.phase])
 
   // #246 — restauration du texte en cours après rechargement (même bumper, même
   // question). Déclaré APRÈS la remise à zéro de la saisie ci-dessus (même commit).
