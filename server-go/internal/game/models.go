@@ -762,9 +762,13 @@ type GameState struct {
 	// it alongside the other Motion* fields).
 	MotionActive       MotionActive `json:"MEMOTION_ACTIVE"`
 	VirtualPlayerCount int          `json:"VIRTUAL_PLAYER_COUNT"` // Number of enrolled virtual players
-	VirtualPlayerLimit int          `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
-	EnrollmentActive   bool         `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
-	ShowQRCode         bool         `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
+	// TeamsLocked (v11.2, #249): true from the selection of a question (Ready) until
+	// its answer is revealed; rename/delete of an existing team is refused meanwhile.
+	// Always serialised (no omitempty).
+	TeamsLocked        bool `json:"TEAMS_LOCKED"`
+	VirtualPlayerLimit int  `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
+	EnrollmentActive   bool `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
+	ShowQRCode         bool `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
 	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
 	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
 	// NOT persisted (state_persistence.go excludes it explicitly, alongside

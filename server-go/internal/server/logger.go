@@ -18,6 +18,14 @@ func init() {
 	game.ArdoiseDivergenceReporter = func(msg string) {
 		LogError(game.LogComponentEngine, "%s", msg)
 	}
+	// #249 team events (TEAM_NAME_NORMALIZED, TEAM_RENAMED).
+	game.TeamEventReporter = func(level game.LogLevel, msg string) {
+		if level == game.LogLevelWarn {
+			LogWarn(game.LogComponentEngine, "%s", msg)
+		} else {
+			LogInfo(game.LogComponentEngine, "%s", msg)
+		}
+	}
 }
 
 // BroadcastLogger captures logs and broadcasts them to subscribed WebSocket clients

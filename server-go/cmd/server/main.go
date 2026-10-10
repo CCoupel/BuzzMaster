@@ -1429,10 +1429,10 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.sendStateToClient(incoming.ClientID, clientType)
 
 	case protocol.ActionFull:
-		a.handleFullUpdate(msg)
+		a.handleFullUpdate(msg, updateSender{incoming.ClientID, clientType})
 
 	case protocol.ActionUpdate:
-		a.handleUpdate(msg)
+		a.handleUpdate(msg, updateSender{incoming.ClientID, clientType})
 
 	case protocol.ActionPoints:
 		a.handlePoints(msg)
@@ -2003,7 +2003,19 @@ func (a *App) notifyEvictedVirtualPlayers(newBumpers map[string]*game.Bumper) {
 	}
 }
 
-func (a *App) handleFullUpdate(msg *protocol.Message) {
+// updateSender identifies the client behind an UPDATE/FULL (optional: internal
+// callers and legacy tests pass none; a refusal is then only logged).
+type updateSender struct {
+	ClientID   string
+	ClientType server.ClientType
+}
+
+func (a *App) handleFullUpdate(msg *protocol.Message, senders ...updateSender) {
+	var sender updateSender
+	if len(senders) > 0 {
+		sender = senders[0]
+	}
+	clientID, clientType := sender.ClientID, sender.ClientType
 	var data struct {
 		Teams   map[string]*game.Team   `json:"teams"`
 		Bumpers map[string]*game.Bumper `json:"bumpers"`
@@ -2016,7 +2028,52 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 
 	// Only update if data is provided (don't overwrite with nil)
 	if data.Teams != nil {
+		// #249: current roster, to detect removed keys (rename or deletion).
+		before := a.engine.GetTeamsAndBumpersSnapshot()
+		var removed, added []string
+		for k := range before.Teams {
+			if _, ok := data.Teams[k]; !ok {
+				removed = append(removed, k)
+			}
+		}
+		for k := range data.Teams {
+			if _, ok := before.Teams[k]; !ok {
+				added = append(added, k)
+			}
+		}
+		sort.Strings(removed)
+		sort.Strings(added)
+
+		if len(removed) > 0 && a.engine.TeamsLocked() {
+			// Atomic refusal: neither teams nor bumpers are applied.
+			st := a.engine.GetState()
+			qid := ""
+			if st.Question != nil {
+				qid = st.Question.ID
+			}
+			server.LogWarn(game.LogComponentApp, "TEAMS_CHANGE_REFUSED client=%s teams=%s phase=%s question=%s",
+				clientID, logValue(removed), st.Phase, logToken(qid))
+			if clientID != "" {
+				if rm, err := protocol.NewMessage(protocol.ActionTeamsUpdateRefused, protocol.TeamsUpdateRefusedPayload{Reason: "TEAMS_LOCKED_DURING_QUESTION", Teams: removed}); err == nil {
+					a.wsHub.SendToClient(clientID, rm)
+				}
+				a.sendStateToClient(clientID, clientType)
+			}
+			return
+		}
+
+		renames := detectTeamRenames(before, removed, added, data.Bumpers)
 		a.engine.SetTeams(data.Teams)
+		renamedOld := map[string]bool{}
+		for oldKey, newKey := range renames {
+			renamedOld[oldKey] = true
+			a.engine.RenameTeamState(oldKey, newKey)
+		}
+		for _, r := range removed {
+			if !renamedOld[r] {
+				a.engine.PurgeTeamState(r)
+			}
+		}
 	}
 	if data.Bumpers != nil {
 		// #123 B1 — notify BEFORE replacing the roster, same ordering rule as
@@ -2032,6 +2089,43 @@ func (a *App) handleFullUpdate(msg *protocol.Message) {
 	// Refresh LED state on all buzzers after team/bumper changes
 	a.sendLEDSetAllBuzzers()
 	a.ambiance().NotifyState()
+}
+
+// detectTeamRenames recognises renames in a teams update (#249): a removed key r
+// and a new key a, in the same message, with the players of r now assigned to a
+// (bumpers whose TEAM moves from r to a). A removed team without players cannot
+// be matched and is treated as a deletion followed by an addition.
+func detectTeamRenames(before game.TeamsAndBumpers, removed, added []string, newBumpers map[string]*game.Bumper) map[string]string {
+	renames := map[string]string{}
+	if len(removed) == 0 || len(added) == 0 || newBumpers == nil {
+		return renames
+	}
+	isAdded := map[string]bool{}
+	for _, a := range added {
+		isAdded[a] = true
+	}
+	taken := map[string]bool{}
+	for _, r := range removed {
+		target, n := "", 0
+		consistent := true
+		for id, ob := range before.Bumpers {
+			if ob == nil || ob.Team != r {
+				continue
+			}
+			n++
+			nb := newBumpers[id]
+			if nb == nil || !isAdded[nb.Team] || (target != "" && nb.Team != target) {
+				consistent = false
+				break
+			}
+			target = nb.Team
+		}
+		if consistent && n > 0 && !taken[target] {
+			renames[r] = target
+			taken[target] = true
+		}
+	}
+	return renames
 }
 
 // enforceUniqueVirtualNames keeps VJoueur names unique (case-insensitive, trimmed)
@@ -2075,9 +2169,9 @@ func (a *App) enforceUniqueVirtualNames(incoming map[string]*game.Bumper) {
 	}
 }
 
-func (a *App) handleUpdate(msg *protocol.Message) {
+func (a *App) handleUpdate(msg *protocol.Message, senders ...updateSender) {
 	// Similar to FULL but partial update
-	a.handleFullUpdate(msg)
+	a.handleFullUpdate(msg, senders...)
 }
 
 func (a *App) handlePoints(msg *protocol.Message) {

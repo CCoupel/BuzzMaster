@@ -1076,14 +1076,11 @@ func (e *Engine) UpdateTeam(id string, team *Team) {
 // SetTeams sets all teams
 func (e *Engine) SetTeams(teams map[string]*Team) {
 	e.mu.Lock()
-	// Ensure team NAME field is populated from the map key
-	for teamID, team := range teams {
-		if team.Name == "" {
-			team.Name = teamID
-		}
-	}
+	// #249: the map key is the team identity; NAME is always rewritten to it.
+	reports := normalizeTeamNamesUnsafe(teams, "update")
 	e.data.Teams = teams
 	e.mu.Unlock()
+	reportTeamEvents(reports)
 
 	// Auto-save teams to disk. Synchronous (unlike the per-bumper hot paths, which
 	// stay async): SetTeams is a low-frequency bulk action (team roster edits), and
@@ -1230,6 +1227,9 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.mu.Unlock()
 		return
 	}
+
+	// #249: the team roster is locked from question selection until REVEALED.
+	e.state.TeamsLocked = true
 
 	// Check if this is a NEW question (different from current)
 	isNewQuestion := e.state.Question == nil || e.state.Question.ID != questionID
@@ -3501,6 +3501,7 @@ func (e *Engine) Reveal() string {
 	e.resetDeferredTimerUnsafe()
 
 	e.state.Phase = PhaseRevealed
+	e.state.TeamsLocked = false // #249
 
 	var answer string
 	if e.state.Question != nil {
@@ -3820,6 +3821,7 @@ func (e *Engine) InitGame() []string {
 
 	// Clear history
 	e.history = nil
+	e.state.TeamsLocked = false // #249
 
 	// Reset all question statuses
 	e.questionStatuses = make(map[string]QuestionStatus)
@@ -4503,34 +4505,50 @@ func (e *Engine) SaveTeams() error {
 	return nil
 }
 
-// LoadTeams loads teams from disk
+// LoadTeams loads teams from disk. #249: NAME is normalised to the map key and
+// teams.json is rewritten when anything had to be repaired.
 func (e *Engine) LoadTeams() error {
+	changed, reports, err := e.loadTeamsLocked()
+	if err != nil {
+		return err
+	}
+	reportTeamEvents(reports)
+	if changed {
+		if err := e.SaveTeams(); err != nil {
+			log.Printf("[Engine] LoadTeams: rewrite after normalisation failed: %v", err)
+		}
+	}
+	return nil
+}
+
+func (e *Engine) loadTeamsLocked() (bool, []teamEvent, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.teamsPath == "" {
-		return nil
+		return false, nil, nil
 	}
 
 	data, err := os.ReadFile(e.teamsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Printf("[Engine] No teams file found, starting fresh")
-			return nil
+			return false, nil, nil
 		}
 		log.Printf("[Engine] Failed to read teams: %v", err)
-		return err
+		return false, nil, err
 	}
 
 	var teams map[string]*Team
 	if err := json.Unmarshal(data, &teams); err != nil {
 		log.Printf("[Engine] Failed to parse teams: %v", err)
-		return err
+		return false, nil, err
 	}
 
+	reports := normalizeTeamNamesUnsafe(teams, "load")
 	e.data.Teams = teams
 	log.Printf("[Engine] Teams loaded: %d teams from %s", len(teams), e.teamsPath)
-	return nil
+	return len(reports) > 0, reports, nil
 }
 
 // SaveBumpers persists bumpers to disk
@@ -7964,4 +7982,206 @@ func (e *Engine) ArdoisePendingTeams() []ArdoisePendingTeam {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Team < out[j].Team })
 	return out
+}
+
+// --- Team identity = map key (v11.2, #249) ---------------------------------------
+
+// teamEvent is a log line produced under the engine lock and emitted after it.
+type teamEvent struct {
+	Level LogLevel
+	Msg   string
+}
+
+// TeamEventReporter receives #249 team events (wired to the logger by internal/server).
+var TeamEventReporter func(level LogLevel, msg string)
+
+func reportTeamEvents(evs []teamEvent) {
+	if rep := TeamEventReporter; rep != nil {
+		for _, ev := range evs {
+			rep(ev.Level, ev.Msg)
+		}
+	}
+}
+
+// normalizeTeamNamesUnsafe rewrites team.Name = key for every team and returns
+// one WARN TEAM_NAME_NORMALIZED event per correction (an empty NAME is filled
+// silently as before).
+func normalizeTeamNamesUnsafe(teams map[string]*Team, source string) []teamEvent {
+	var evs []teamEvent
+	keys := make([]string, 0, len(teams))
+	for k := range teams {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		team := teams[key]
+		if team == nil || team.Name == key {
+			continue
+		}
+		if team.Name != "" {
+			evs = append(evs, teamEvent{LogLevelWarn, fmt.Sprintf("TEAM_NAME_NORMALIZED key=%q old_name=%q source=%s", key, team.Name, source)})
+		}
+		team.Name = key
+	}
+	return evs
+}
+
+// TeamsLocked reports whether the team roster is locked (a question is selected
+// and not yet revealed).
+func (e *Engine) TeamsLocked() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.TeamsLocked
+}
+
+func moveKey[V any](m map[string]V, oldKey, newKey string) bool {
+	v, ok := m[oldKey]
+	if !ok {
+		return false
+	}
+	delete(m, oldKey)
+	m[newKey] = v
+	return true
+}
+
+func replaceInList(l []string, oldName, newName string) bool {
+	changed := false
+	for i, v := range l {
+		if v == oldName {
+			l[i] = newName
+			changed = true
+		}
+	}
+	return changed
+}
+
+// RenameTeamState carries every state indexed by team name from oldName to
+// newName (closed list: contracts/game-state.md §TEAMS_LOCKED) and the points
+// history. Returns the names of the states actually migrated.
+func (e *Engine) RenameTeamState(oldName, newName string) []string {
+	e.mu.Lock()
+	var migrated []string
+	st := &e.state
+	note := func(ok bool, name string) {
+		if ok {
+			migrated = append(migrated, name)
+		}
+	}
+	note(moveKey(st.ArdoiseAnswers, oldName, newName), "ARDOISE_ANSWERS")
+	e.ardoiseControlMu.Lock() // keep the ARDOISE_STATE_DIVERGED control copy in step
+	moveKey(e.ardoiseControl, oldName, newName)
+	e.ardoiseControlMu.Unlock()
+	note(moveKey(st.MemoryTeamPairs, oldName, newName), "MEMORY_TEAM_PAIRS")
+	note(moveKey(st.MemoryTeamErrors, oldName, newName), "MEMORY_TEAM_ERRORS")
+	note(moveKey(st.RafaleTeamCounters, oldName, newName), "RAFALE_TEAM_COUNTERS")
+	note(moveKey(st.RafaleTeamCategoryCounters, oldName, newName), "RAFALE_TEAM_CATEGORY_COUNTERS")
+	note(moveKey(st.RafaleTeamBest, oldName, newName), "RAFALE_TEAM_BEST")
+	note(moveKey(st.RafaleTeamStreak, oldName, newName), "RAFALE_TEAM_STREAK")
+	note(moveKey(st.RafaleTeamErrors, oldName, newName), "RAFALE_TEAM_ERRORS")
+	ownersChanged := false
+	for id, t := range st.MemoryPairOwners {
+		if t == oldName {
+			st.MemoryPairOwners[id] = newName
+			ownersChanged = true
+		}
+	}
+	note(ownersChanged, "MEMORY_PAIR_OWNERS")
+	cardsChanged := false
+	for id, t := range st.MotionCardTeams {
+		if t == oldName {
+			st.MotionCardTeams[id] = newName
+			cardsChanged = true
+		}
+	}
+	note(cardsChanged, "MEMOTION_CARD_TEAMS")
+	note(replaceInList(st.MemoryParticipatingTeams, oldName, newName), "MEMORY_PARTICIPATING_TEAMS")
+	note(replaceInList(st.MotionParticipatingTeams, oldName, newName), "MEMOTION_PARTICIPATING_TEAMS")
+	note(replaceInList(st.RafaleParticipatingTeams, oldName, newName), "RAFALE_PARTICIPATING_TEAMS")
+	if st.MemoryCurrentTeam == oldName {
+		st.MemoryCurrentTeam = newName
+		migrated = append(migrated, "MEMORY_CURRENT_TEAM")
+	}
+	if st.MotionCurrentTeam == oldName {
+		st.MotionCurrentTeam = newName
+		migrated = append(migrated, "MEMOTION_CURRENT_TEAM")
+	}
+	if st.RafaleCurrentTeam == oldName {
+		st.RafaleCurrentTeam = newName
+		migrated = append(migrated, "RAFALE_CURRENT_TEAM")
+	}
+	histChanged := false
+	for i := range e.history {
+		ev := &e.history[i]
+		if ev.TeamName == oldName {
+			ev.TeamName = newName
+			histChanged = true
+		}
+		if ev.WinnerType == "TEAM" {
+			if ev.WinnerID == oldName {
+				ev.WinnerID = newName
+				histChanged = true
+			}
+			if ev.WinnerName == oldName {
+				ev.WinnerName = newName
+				histChanged = true
+			}
+		}
+	}
+	note(histChanged, "HISTORY")
+	e.mu.Unlock()
+	if histChanged {
+		safeGo("SaveHistory", e.SaveHistory)
+	}
+	reportTeamEvents([]teamEvent{{LogLevelInfo, fmt.Sprintf("TEAM_RENAMED old=%q new=%q migrated=%s", oldName, newName, strings.Join(migrated, ","))}})
+	return migrated
+}
+
+// PurgeTeamState erases the per-team game state of a deleted team (outside the
+// lock). The points history is kept as an audit trail.
+func (e *Engine) PurgeTeamState(name string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := &e.state
+	delete(st.ArdoiseAnswers, name)
+	delete(st.MemoryTeamPairs, name)
+	delete(st.MemoryTeamErrors, name)
+	delete(st.RafaleTeamCounters, name)
+	delete(st.RafaleTeamCategoryCounters, name)
+	delete(st.RafaleTeamBest, name)
+	delete(st.RafaleTeamStreak, name)
+	delete(st.RafaleTeamErrors, name)
+	for id, t := range st.MemoryPairOwners {
+		if t == name {
+			delete(st.MemoryPairOwners, id)
+		}
+	}
+	for id, t := range st.MotionCardTeams {
+		if t == name {
+			delete(st.MotionCardTeams, id)
+		}
+	}
+	drop := func(l []string) []string {
+		out := l[:0]
+		for _, v := range l {
+			if v != name {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	st.MemoryParticipatingTeams = drop(st.MemoryParticipatingTeams)
+	st.MotionParticipatingTeams = drop(st.MotionParticipatingTeams)
+	st.RafaleParticipatingTeams = drop(st.RafaleParticipatingTeams)
+	if st.MemoryCurrentTeam == name {
+		st.MemoryCurrentTeam = ""
+	}
+	if st.MotionCurrentTeam == name {
+		st.MotionCurrentTeam = ""
+	}
+	if st.RafaleCurrentTeam == name {
+		st.RafaleCurrentTeam = ""
+	}
+	e.ardoiseControlMu.Lock()
+	delete(e.ardoiseControl, name)
+	e.ardoiseControlMu.Unlock()
 }

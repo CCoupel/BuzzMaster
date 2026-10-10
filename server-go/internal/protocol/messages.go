@@ -67,11 +67,12 @@ const (
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
-	ActionArdoiseFinal    = "ARDOISE_FINAL"     // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
-	ActionArdoiseFinalAck = "ARDOISE_FINAL_ACK" // Server → VPlayer (targeted): final received (v11.2, #246)
-	ActionRevealRefused   = "REVEAL_REFUSED"    // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
-	ActionClientTrace     = "CLIENT_TRACE"      // Client → Server: diagnostic trace (v11.2, #246)
-	ActionArdoiseInput    = "ARDOISE_INPUT"     // VPlayer → Server: free-text answer update (throttled)
+	ActionArdoiseFinal       = "ARDOISE_FINAL"        // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
+	ActionArdoiseFinalAck    = "ARDOISE_FINAL_ACK"    // Server → VPlayer (targeted): final received (v11.2, #246)
+	ActionTeamsUpdateRefused = "TEAMS_UPDATE_REFUSED" // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
+	ActionRevealRefused      = "REVEAL_REFUSED"       // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
+	ActionClientTrace        = "CLIENT_TRACE"         // Client → Server: diagnostic trace (v11.2, #246)
+	ActionArdoiseInput       = "ARDOISE_INPUT"        // VPlayer → Server: free-text answer update (throttled)
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
 	ActionLogEntry   = "LOG_ENTRY"
@@ -755,6 +756,12 @@ type ArdoiseFinalPayload struct {
 type ArdoiseFinalAckPayload struct {
 	QuestionID string `json:"QUESTION_ID"`
 	Hash       string `json:"HASH"`
+}
+
+// TeamsUpdateRefusedPayload for TEAMS_UPDATE_REFUSED (v11.2, #249).
+type TeamsUpdateRefusedPayload struct {
+	Reason string   `json:"REASON"`
+	Teams  []string `json:"TEAMS"`
 }
 
 // RevealPayload for REVEAL (v11.2, #246): FORCE reveals despite pending ARDOISE answers.
