@@ -100,6 +100,18 @@ const makeGameMock = (phase, answers, extra = {}) => ({
   ...extra,
 })
 
+
+// --- #246 icône de réception (maquette receipt_icon validée) -------------------------------
+const L = {
+  ok: 'Réponse reçue',
+  wait: 'En attente de la réponse finale',
+  off: 'Tablette hors ligne — réponse finale non reçue',
+  unc: 'Non confirmée — révélée sans réponse finale',
+}
+const icons = (c) => [...c.querySelectorAll('[role="img"][aria-label]')].filter((e) => Object.values(L).includes(e.getAttribute('aria-label')))
+const byLabel = (c, label) => icons(c).filter((e) => e.getAttribute('aria-label') === label)
+const ROW = '.ardoise-answer-row'
+const TEXT = '.ardoise-answer-text'
 const text = (c) => c.textContent.replace(/\s+/g, ' ')
 const revealBtn = (c) => [...c.querySelectorAll('button')].find((b) => b.textContent.trim() === 'REPONSE')
 const forceBtn = (c) => [...c.querySelectorAll('button')].find((b) => /Révéler quand même…/.test(b.textContent))
@@ -114,9 +126,64 @@ describe('GamePage — garde REVEAL ARDOISE : zone Réponses (#246, maquette adm
 
     expect(t).toMatch(/1\/3 reçues/)           // « Les Gris » (sans VJoueur) n'est pas attendue
     expect(t).not.toMatch(/\/4 reçues/)
+    // la légende de l'en-tête reste la référence des icônes (inchangée)
     expect(t).toMatch(/✓ reçue/)
     expect(t).toMatch(/⏳ en attente/)
     expect(t).toMatch(/⚠ hors ligne/)
+  })
+
+  it('Critical — une icône par équipe (✓ reçue / ⏳ en attente / ⚠ hors ligne) avec aria-label ET title identiques', () => {
+    useGame.mockReturnValue(makeGameMock('STOPPED', ANSWERS))
+    const { container } = render(<GamePage />)
+
+    expect(byLabel(container, L.ok).map((e) => e.textContent)).toEqual(['✓'])
+    expect(byLabel(container, L.wait).map((e) => e.textContent)).toEqual(['⏳'])
+    expect(byLabel(container, L.off).map((e) => e.textContent)).toEqual(['⚠'])
+    for (const e of icons(container)) expect(e.getAttribute('title')).toBe(e.getAttribute('aria-label'))
+  })
+
+  it('Critical — plus de ligne de pastille sous la réponse : la carte ne contient que le glyphe, jamais « ✓ reçue » / « ⏳ en attente » / « ⚠ hors ligne »', () => {
+    useGame.mockReturnValue(makeGameMock('STOPPED', ANSWERS))
+    const { container } = render(<GamePage />)
+    const rows = [...container.querySelectorAll(ROW)]
+    expect(rows.length).toBe(3)
+    for (const r of rows) expect(r.textContent).not.toMatch(/✓ reçue|⏳ en attente|⚠ hors ligne|non confirmée/)
+  })
+
+  it('l’icône est à GAUCHE du texte, dans la même ligne', () => {
+    useGame.mockReturnValue(makeGameMock('STOPPED', ANSWERS))
+    const { container } = render(<GamePage />)
+    for (const r of container.querySelectorAll(ROW)) {
+      const icon = r.querySelector('[role="img"]')
+      const txt = r.querySelector(TEXT)
+      expect(icon.parentElement).toBe(txt.parentElement)
+      expect(icon.compareDocumentPosition(txt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(txt.previousElementSibling).toBe(icon)
+    }
+  })
+
+  it('colonne d’icône RÉSERVÉE : même structure de carte pendant la saisie (colonne vide aria-hidden) et après STOP — la hauteur ne dépend pas de l’état', () => {
+    useGame.mockReturnValue(makeGameMock('STARTED', ANSWERS))
+    const live = render(<GamePage />)
+    const liveShape = [...live.container.querySelectorAll(ROW)].map((r) => [...r.querySelector(TEXT).parentElement.children].map((c) => c.tagName))
+    for (const r of live.container.querySelectorAll(ROW)) {
+      const slot = r.querySelector(TEXT).previousElementSibling
+      expect(slot, 'colonne réservée avant le texte').toBeTruthy()
+      expect(slot.getAttribute('aria-hidden')).toBe('true')
+      expect(slot.textContent).toBe('')
+    }
+    live.unmount()
+
+    useGame.mockReturnValue(makeGameMock('STOPPED', ANSWERS))
+    const stopped = render(<GamePage />)
+    const stoppedShape = [...stopped.container.querySelectorAll(ROW)].map((r) => [...r.querySelector(TEXT).parentElement.children].map((c) => c.tagName))
+    expect(stoppedShape).toEqual(liveShape)
+  })
+
+  it('pendant la saisie : aucune icône de réception ni légende', () => {
+    useGame.mockReturnValue(makeGameMock('STARTED', ANSWERS))
+    const { container } = render(<GamePage />)
+    expect(icons(container)).toEqual([])
   })
 
   it('Critical — REPONSE désactivé avec le motif listant les équipes en attente (hors ligne signalée)', () => {
@@ -202,16 +269,23 @@ describe('GamePage — garde REVEAL ARDOISE : zone Réponses (#246, maquette adm
 
     const rows = [...container.querySelectorAll('.ardoise-answer-row')]
     const row = (name) => rows.find((r) => r.textContent.includes(name))
-    expect(row('Les Verts').textContent).toMatch(/non confirmée/)
-    expect(row('Les Oranges').textContent).toMatch(/non confirmée/)
-    expect(row('Les Bleus').textContent).not.toMatch(/non confirmée/)
     expect(row('Les Verts').textContent).toMatch(/MARSEILLE/) // dernier texte reçu conservé
+    // « non confirmée » = glyphe d'origine grisé + title/aria-label (pas de pastille, pas de 4ᵉ entrée de légende)
+    const unc = byLabel(container, L.unc)
+    expect(unc.length).toBe(2)
+    expect(row('Les Verts').querySelector('[role="img"]').getAttribute('aria-label')).toBe(L.unc)
+    expect(row('Les Verts').querySelector('[role="img"]').textContent).toBe('⚠')    // glyphe d'origine (hors ligne)
+    expect(row('Les Oranges').querySelector('[role="img"]').textContent).toBe('⏳')  // glyphe d'origine (en attente)
+    expect(row('Les Oranges').querySelector('[role="img"]').getAttribute('title')).toBe(L.unc)
+    expect(row('Les Bleus').querySelector('[role="img"]').getAttribute('aria-label')).toBe(L.ok)
+    for (const r of rows) expect(r.textContent).not.toMatch(/non confirmée/)
   })
 
   it('REVEALED sans forçage (tout reçu) : aucune « non confirmée »', () => {
     useGame.mockReturnValue(makeGameMock('REVEALED', ALL_RECEIVED))
     const { container } = render(<GamePage />)
-    expect(text(container)).not.toMatch(/non confirmée/)
+    expect(byLabel(container, L.unc)).toEqual([])
+    expect(byLabel(container, L.ok).length).toBe(3)
   })
 
   it('PAUSED : mêmes pastilles et même garde que STOPPED', () => {

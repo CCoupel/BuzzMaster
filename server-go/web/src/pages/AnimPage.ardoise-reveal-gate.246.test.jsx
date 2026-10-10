@@ -46,6 +46,18 @@ const mkGame = (phase, answers) => ({
   selectMotionCard: vi.fn(), flipMotionCard: vi.fn(), stopMotionTimer: vi.fn(), revealMotionCard: vi.fn(), doneMotionCard: vi.fn(),
 })
 
+
+// --- #246 icône de réception (maquette receipt_icon validée) -------------------------------
+const L = {
+  ok: 'Réponse reçue',
+  wait: 'En attente de la réponse finale',
+  off: 'Tablette hors ligne — réponse finale non reçue',
+  unc: 'Non confirmée — révélée sans réponse finale',
+}
+const icons = (c) => [...c.querySelectorAll('[role="img"][aria-label]')].filter((e) => Object.values(L).includes(e.getAttribute('aria-label')))
+const byLabel = (c, label) => icons(c).filter((e) => e.getAttribute('aria-label') === label)
+const ROW = '.anim-ardoise-row'
+const TEXT = '.anim-ardoise-text'
 const text = (c) => c.textContent.replace(/\s+/g, ' ')
 const btn = (c, re) => [...c.querySelectorAll('button')].find((b) => re.test(b.textContent.trim()))
 
@@ -57,9 +69,67 @@ describe('AnimPage — liste ARDOISE et garde REVEAL (#246, maquette anim)', () 
     const { container } = render(<AnimPage />)
     const t = text(container)
     expect(t).toMatch(/1\/3 reçues/)
-    expect(t).toMatch(/✓ reçue/)
+    expect(t).toMatch(/✓ reçue/)      // légende ajoutée à côté du compteur (maquette anim)
     expect(t).toMatch(/⏳ en attente/)
     expect(t).toMatch(/⚠ hors ligne/)
+  })
+
+  it('Critical — une icône par équipe (✓ / ⏳ / ⚠) avec aria-label ET title identiques', () => {
+    useGame.mockReturnValue(mkGame('STOPPED', ANSWERS))
+    const { container } = render(<AnimPage />)
+    expect(byLabel(container, L.ok).map((e) => e.textContent)).toEqual(['✓'])
+    expect(byLabel(container, L.wait).map((e) => e.textContent)).toEqual(['⏳'])
+    expect(byLabel(container, L.off).map((e) => e.textContent)).toEqual(['⚠'])
+    for (const e of icons(container)) expect(e.getAttribute('title')).toBe(e.getAttribute('aria-label'))
+  })
+
+  it('Critical — plus de ligne de pastille : les lignes ne contiennent que le glyphe, jamais « ✓ reçue » / « ⏳ en attente » / « ⚠ hors ligne » / « non confirmée »', () => {
+    useGame.mockReturnValue(mkGame('STOPPED', ANSWERS))
+    const { container } = render(<AnimPage />)
+    const rows = [...container.querySelectorAll(ROW)]
+    expect(rows.length).toBe(3)
+    for (const r of rows) expect(r.textContent).not.toMatch(/✓ reçue|⏳ en attente|⚠ hors ligne|non confirmée/)
+  })
+
+  it('l’icône est à GAUCHE du texte, sur la même ligne', () => {
+    useGame.mockReturnValue(mkGame('STOPPED', ANSWERS))
+    const { container } = render(<AnimPage />)
+    for (const r of container.querySelectorAll(ROW)) {
+      const txt = r.querySelector(TEXT)
+      expect(txt.previousElementSibling.getAttribute('role')).toBe('img')
+    }
+  })
+
+  it('colonne d’icône RÉSERVÉE : structure de ligne identique pendant la saisie (colonne vide aria-hidden) et après STOP ; pas de ligne supplémentaire au REVEAL', () => {
+    useGame.mockReturnValue(mkGame('STARTED', ANSWERS))
+    const live = render(<AnimPage />)
+    const shape = (c) => [...c.querySelectorAll(ROW)].map((r) => [...r.querySelector(TEXT).parentElement.children].map((e) => e.tagName))
+    const liveShape = shape(live.container)
+    for (const r of live.container.querySelectorAll(ROW)) {
+      const slot = r.querySelector(TEXT).previousElementSibling
+      expect(slot.getAttribute('aria-hidden')).toBe('true')
+      expect(slot.textContent).toBe('')
+    }
+    live.unmount()
+    useGame.mockReturnValue(mkGame('STOPPED', ANSWERS))
+    const stopped = render(<AnimPage />)
+    expect(shape(stopped.container)).toEqual(liveShape)
+    stopped.unmount()
+
+    useGame.mockReturnValue(mkGame('REVEALED', ANSWERS))
+    const rev = render(<AnimPage />)
+    for (const r of rev.container.querySelectorAll(ROW)) {
+      // une seule ligne [icône][texte][crédit] : l'ancienne pastille n'occupe plus une ligne en plus
+      expect(r.querySelector(TEXT).parentElement.querySelector('[role="img"]')).toBeTruthy()
+      expect(r.textContent).not.toMatch(/non confirmée|✓ reçue/)
+    }
+  })
+
+  it('pendant la saisie : ni icône de réception ni légende', () => {
+    useGame.mockReturnValue(mkGame('STARTED', ANSWERS))
+    const { container } = render(<AnimPage />)
+    expect(icons(container)).toEqual([])
+    expect(text(container)).not.toMatch(/⏳ en attente|⚠ hors ligne/)
   })
 
   it('Critical — RÉPONSE désactivé, motif « En attente de 2 tablettes » avec la tablette hors ligne signalée', () => {
@@ -122,10 +192,14 @@ describe('AnimPage — liste ARDOISE et garde REVEAL (#246, maquette anim)', () 
     const { container } = render(<AnimPage />)
     const rows = [...container.querySelectorAll('.anim-ardoise-row')]
     const row = (n) => rows.find((r) => r.textContent.includes(n))
-    expect(row('Les Verts').textContent).toMatch(/non confirmée/)
     expect(row('Les Verts').textContent).toMatch(/MARSEILLE/)
-    expect(row('Les Oranges').textContent).toMatch(/non confirmée/)
-    expect(row('Les Bleus').textContent).not.toMatch(/non confirmée/)
+    expect(byLabel(container, L.unc).length).toBe(2)
+    expect(row('Les Verts').querySelector('[role="img"]').getAttribute('aria-label')).toBe(L.unc)
+    expect(row('Les Verts').querySelector('[role="img"]').textContent).toBe('⚠')
+    expect(row('Les Oranges').querySelector('[role="img"]').textContent).toBe('⏳')
+    expect(row('Les Oranges').querySelector('[role="img"]').getAttribute('title')).toBe(L.unc)
+    expect(row('Les Bleus').querySelector('[role="img"]').getAttribute('aria-label')).toBe(L.ok)
+    for (const r of rows) expect(r.textContent).not.toMatch(/non confirmée/)
   })
 
   it('PAUSED : mêmes règles que STOPPED', () => {
