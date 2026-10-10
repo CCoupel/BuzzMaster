@@ -733,6 +733,24 @@ compteur.
 `clearOwnVPlayerSession(ownId)` n'efface `vplayer_*` que si l'ID stocké est celui de l'onglet. Le
 repli par nom a été supprimé (`VPlayerPage`, `EnrollPage`).
 
+## ScoresPage et correction cachée — TV et tablettes (v11.2, #252)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_scores__free_points_tv_toggle.html`.
+
+**`pages/ScoresPage.jsx` (admin)** :
+- `FREE_LIMIT = 999`, `FREE_ERROR = 'Entier de −999 à 999'` (`role="alert"`). `parseFreeAmount` refuse 0 et les valeurs hors bornes.
+- Interrupteur `role="switch"` + `aria-checked`, libellé « 📺 Afficher sur la TV » : **état de page**, `true` à chaque montage (non sauvegardé).
+- Marque `silent-mark` (🔇) sur les boutons ; section « Dernières attributions » (5 entrées, même source que `/history`) avec « 0 pt » pour un crédit nul.
+- Le hook n'envoie `DISPLAY` que si `options.display === false`. La page de jeu n'envoie jamais `DISPLAY`.
+
+**`pages/PlayerDisplay.jsx` (TV) et VJoueur** :
+- `hiddenScoreChange(key)` compare `GameState.SCORE_CHANGE.SEQ` au dernier `SEQ` traité **par effet** (`ranking`,
+  `players`, `celebration`).
+- Un nouveau `SEQ` avec `DISPLAY === false` supprime la surbrillance, la montée de rang, le « +X pts » et la célébration.
+  La référence des scores est mise à jour, donc la hausse visible suivante n'anime que sa propre différence.
+- Même `SEQ` rediffusé : aucun effet. Sans `SCORE_CHANGE` (ancien serveur) : comportement actuel.
+- Aucune modification de mise en page : la TV reste statique.
+
 ## Attribution groupée — TeamAwardBar, QcmAnswerPicker, TeamCard (v11.2, #244/#251)
 
 Maquette validée : `docs/mockup/v11.2/ui/admin_game_team_award__selection.html`. Affichée sur `/admin` (`GamePage`)
