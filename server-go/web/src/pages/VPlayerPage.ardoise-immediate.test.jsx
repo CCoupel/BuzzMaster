@@ -167,17 +167,22 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
       })
     }
 
-    // Only the very first keystroke was sent synchronously; the rest are still
-    // pending in the debounce timer (no pause long enough for it to fire).
-    expect(mock.sendMessage).toHaveBeenCalledTimes(1)
-    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', expect.objectContaining({ TEXT: 'P', ID: 'vjoueur_alice' }))
+    // #246 — throttle (leading + trailing) : le premier caractère part tout de
+    // suite, puis un état intermédiaire est envoyé pendant la frappe continue
+    // (un debounce pur n'envoyait RIEN tant que la frappe ne s'arrêtait pas),
+    // jamais un message par lettre.
+    expect(mock.sendMessage).toHaveBeenNthCalledWith(1, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'P', ID: 'vjoueur_alice' }))
+    const duringBurst = mock.sendMessage.mock.calls.length
+    expect(duringBurst).toBeGreaterThanOrEqual(2)
+    expect(duringBurst).toBeLessThan(burst.length)
 
-    // Once the team finally pauses, the debounce flushes the latest full text.
+    // Le DERNIER état est toujours envoyé (trailing).
     await act(async () => {
       vi.advanceTimersByTime(200)
     })
-    expect(mock.sendMessage).toHaveBeenCalledTimes(2)
-    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'Paris', ID: 'vjoueur_alice' }))
+    const last = mock.sendMessage.mock.calls.at(-1)
+    expect(last[0]).toBe('ARDOISE_INPUT')
+    expect(last[1]).toEqual(expect.objectContaining({ TEXT: 'Paris', ID: 'vjoueur_alice' }))
   })
 
   it('le mécanisme se réarme au changement de question : la question suivante envoie de nouveau son premier caractère immédiatement', async () => {

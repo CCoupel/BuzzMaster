@@ -238,4 +238,30 @@ describe('VPlayerPage — identité de l\'onglet (#246, F-ID)', () => {
     expect(seqs.length).toBeGreaterThanOrEqual(3)
     for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBeGreaterThan(seqs[i - 1])
   })
+
+  it('throttle : effacement puis ressaisie continue de 3 s sans pause → envois toutes les ≤ 200 ms et dernier état envoyé', async () => {
+    const gameState = { phase: 'STARTED', question: { ID: 'q1', TYPE: 'ARDOISE' }, enrollmentActive: false }
+    const mock = makeGameMock({ gameState, playerConnectStatus: { status: 'connected', id: ID, name: 'Alice' } })
+    useGame.mockReturnValue(mock)
+    const { getByTestId } = render(<VPlayerPage />)
+    await act(async () => {})
+    const input = () => getByTestId('ardoise-input')
+    fireEvent.change(input(), { target: { value: 'PARIS' } })
+    await act(async () => { vi.advanceTimersByTime(300) })
+    fireEvent.change(input(), { target: { value: '' } }) // effacement
+    let text = ''
+    for (let i = 0; i < 60; i++) { // 3 s à une touche / 50 ms : jamais de pause de 200 ms
+      text += String.fromCharCode(65 + (i % 26))
+      fireEvent.change(input(), { target: { value: text } })
+      await act(async () => { vi.advanceTimersByTime(50) })
+    }
+    const inputs = mock.sendMessage.mock.calls.filter(([a]) => a === 'ARDOISE_INPUT').map(([, p]) => p)
+    const afterClear = inputs.slice(2) // [PARIS, ''?, ...]
+    expect(afterClear.length).toBeGreaterThanOrEqual(10) // ~ 3 s / 200 ms
+    await act(async () => { vi.advanceTimersByTime(250) })
+    const all = mock.sendMessage.mock.calls.filter(([a]) => a === 'ARDOISE_INPUT').map(([, p]) => p)
+    expect(all.at(-1).TEXT).toBe(text)
+    const seqs = all.map((p) => p.SEQ)
+    for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBeGreaterThan(seqs[i - 1])
+  })
 })

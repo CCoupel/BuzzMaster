@@ -32,6 +32,9 @@ const RECONNECT_ERROR_REDIRECT_DELAY_MS = 3000
 // jamais pendant un enrôlement légitime.
 const SESSION_EXPIRED_SAFETY_NET_MS = 10000
 
+// #246 — cadence maximale des ARDOISE_INPUT pendant la frappe (leading + trailing).
+const ARDOISE_THROTTLE_MS = 200
+
 // #246 — plafond de renvois d'ARDOISE_FINAL sans accusé (1 renvoi / s).
 const FINAL_MAX_SENDS = 30
 
@@ -101,6 +104,16 @@ export default function VPlayerPage() {
   // ARDOISE: local text state + throttle ref
   const [ardoiseText, setArdoiseText] = useState('')
   const ardoiseThrottleRef = useRef(null)
+  const ardoiseLatestRef = useRef(null) // dernier état saisi non encore envoyé
+  const ardoiseLastSentAtRef = useRef(0)
+  // Annule l'envoi programmé et oublie l'état en attente (changement de question,
+  // gel du clavier : le final prend le relais).
+  const cancelArdoiseTimer = () => {
+    if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    ardoiseThrottleRef.current = null
+    ardoiseLatestRef.current = null
+    ardoiseLastSentAtRef.current = 0
+  }
   // #246 : dernier texte local, relu par le renvoi complet à la liaison.
   const ardoiseTextRef = useRef('')
   // #246 (F-LOG) — SEQ d'ARDOISE_INPUT : croissant par question et par
@@ -527,7 +540,7 @@ export default function VPlayerPage() {
   // ARDOISE: reset text on question change
   useEffect(() => {
     setArdoiseText('')
-    if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    cancelArdoiseTimer()
     ardoiseFirstSentRef.current = false
     ardoiseSeqRef.current = 0 // #246 : SEQ repart à 1 pour chaque nouvelle question
   }, [gameState.question?.ID])
@@ -536,7 +549,7 @@ export default function VPlayerPage() {
   useEffect(() => {
     if (gameState.phase !== 'PREPARE') return
     setArdoiseText('')
-    if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    cancelArdoiseTimer()
     ardoiseFirstSentRef.current = false
   }, [gameState.phase])
 
@@ -586,7 +599,7 @@ export default function VPlayerPage() {
     prevPhaseRef.current = currentPhase
     if (gameState.question?.TYPE !== 'ARDOISE') return
     if (prev === 'STARTED' && (currentPhase === 'STOPPED' || currentPhase === 'PAUSED')) {
-      if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+      cancelArdoiseTimer()
       const text = ardoiseTextRef.current
       finalRef.current = {
         qid: String(gameState.question?.ID ?? ''),
@@ -675,15 +688,32 @@ export default function VPlayerPage() {
   // server timestamps STARTED_AT on the real first keystroke, not the first typing pause).
   const handleArdoiseChange = useCallback((text, reason = 'key') => {
     setArdoiseText(text)
-    if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
+    ardoiseLatestRef.current = { text, reason }
+    const id = () => ownIdRef.current ?? bumper?.id
+    const flush = () => {
+      ardoiseThrottleRef.current = null
+      const latest = ardoiseLatestRef.current
+      if (!latest) return
+      ardoiseLatestRef.current = null
+      ardoiseLastSentAtRef.current = Date.now()
+      sendArdoise(latest.text, id(), latest.reason)
+    }
+    // Premier caractère non vide de la question : envoi immédiat (STARTED_AT).
     if (!ardoiseFirstSentRef.current && text !== '') {
       ardoiseFirstSentRef.current = true
-      sendArdoise(text, bumper?.id, reason)
+      cancelArdoiseTimer()
+      ardoiseLatestRef.current = { text, reason }
+      flush()
       return
     }
-    ardoiseThrottleRef.current = setTimeout(() => {
-      sendArdoise(text, bumper?.id, reason)
-    }, 200)
+    // #246 — throttle (leading + trailing) et non debounce : pendant une frappe
+    // continue (jamais de pause ≥ 200 ms) le serveur reçoit un état au moins
+    // toutes les 200 ms, et le DERNIER état est toujours envoyé. Un debounce
+    // pur ne partait jamais et laissait admin/TV/anim vides pendant tout le chrono.
+    if (ardoiseThrottleRef.current) return // un envoi est déjà programmé : il prendra le dernier état
+    const wait = ARDOISE_THROTTLE_MS - (Date.now() - ardoiseLastSentAtRef.current)
+    if (wait <= 0) flush()
+    else ardoiseThrottleRef.current = setTimeout(flush, wait)
   }, [sendArdoise, bumper])
 
   // NoSleep — requires user gesture to enable (called on fullscreen tap or first buzz)
