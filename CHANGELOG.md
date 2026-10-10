@@ -39,6 +39,7 @@ Historique des versions du projet BuzzControl.
 - **Attribution groupée après REVEAL (#244/#251)** — Sur `/admin`, cocher plusieurs équipes et cliquer « Donner les points (N) » (ou « Retirer les points (N) », en rouge, si le montant est négatif). Le lot est appliqué d'un bloc, sous un seul verrou : chaque équipe reçoit une entrée d'historique `POINTS_AWARDED`. Une équipe déjà créditée pour la question est ignorée (`ALREADY_AWARDED`), donc jamais créditée deux fois.
 - **Clic sur une réponse QCM (#244/#251)** — Sélectionne les équipes ayant donné cette réponse, avec le montant : points de la question pour la bonne réponse, −1 pour une mauvaise.
 - **Messages de résultat de l'attribution (#244/#251)** — « ✓ +N points donnés à M équipes. », et « K équipe(s) déjà créditée(s) ignorée(s). » ; refus : « Attribution refusée : la réponse n’est pas révélée » ou « la question a changé ».
+- **Motif de blocage visible et bornes du montant (#244/#251)** — Le motif qui bloque « Donner les points » s'affiche sous la barre (le texte n'était qu'une infobulle, invisible au toucher). Le montant par équipe est borné à −999 et 999, comme le contrat : au-delà, le serveur aurait refusé tout le lot.
 
 ### Changed
 
