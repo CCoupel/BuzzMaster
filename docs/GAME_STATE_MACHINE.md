@@ -571,6 +571,7 @@ de la partie en cours — pas une section globale de réglages.
 - **Son de question** : arrêté après la remise à zéro. Un tick de chrono en vol est ignoré après le `NEW_GAME`.
 - **LED et ambiance** : à chaque `NEW_GAME` appliqué, quelles que soient les options.
 - **Joueurs purgés** : leurs connexions sont déliées dans le hub.
+- **`SCORE_CHANGE`** (#252) : remis à zéro (`SEQ` = 0) à chaque NEW_GAME, comme au démarrage.
 - **Entracte** : `NEW_GAME` est refusé (`NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }`) ; sortir de l'entracte d'abord.
 - Contrat : `contracts/websocket-actions.md` §NEW_GAME et §NEW_GAME_REFUSED.
 
