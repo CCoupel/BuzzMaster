@@ -309,6 +309,13 @@ dans **`data/config/teams.json.bak`**.
 
 La page Historique n'affiche pas les suppressions d'équipe (`TEAM_DELETED`). Elles restent dans `history.json`.
 
+### Équipes et lancement de partie
+
+L'option **Équipes** du lancement supprime toutes les équipes, par le même chemin que la suppression d'une
+équipe (voir ci-dessus) : les états de jeu sont effacés et l'historique reçoit un événement `TEAM_DELETED`.
+Les joueurs conservés deviennent sans équipe : les buzzers repassent en LED « sans équipe », et les tablettes
+restent inscrites et attendent une affectation.
+
 ## Joueurs Virtuels (VPlayer)
 
 ### Presentation
@@ -381,9 +388,30 @@ Pour supprimer un joueur virtuel :
 
 **Comportement après suppression** : Le joueur est automatiquement déconnecté et redirigé vers la page d'inscription avec un bandeau explicite « Joueur supprimé ». Il peut immédiatement se réinscrire avec le même pseudo (v5.9.0+, #120).
 
-#### Réinitialisation d'une partie (NEW_GAME)
+#### Relancer une partie : « Lancer la partie » (v11.2, #243)
 
-Lors d'une réinitialisation du jeu (`NEW_GAME`), tous les joueurs virtuels actuellement inscrits sont purgés du roster, même s'ils n'ont pas d'équipe assignée. Ils sont redirigés avec le motif « Partie réinitialisée » et restent libres de se réinscrire après l'ouverture d'une nouvelle phase d'inscriptions.
+Le bouton **« LANCER LA PARTIE »** (page de jeu et Backstage) remplace « NOUVELLE PARTIE ». Il ouvre une popup
+où vous choisissez ce qui est effacé avant de commencer. **Rien n'est effacé sans confirmation.**
+
+| Option | Par défaut | Effet |
+|--------|------------|-------|
+| **Scores** | cochée | Remet à 0 les scores des équipes et des joueurs, et efface l'historique des points. Les verrous « déjà créditée » sont libérés. |
+| **Questions** | cochée | Remet toutes les questions « à jouer ». Décochée : les questions déjà jouées le restent. |
+| **Joueurs des tablettes** | décochée | Supprime les joueurs inscrits sur tablette. Ils reçoivent le motif « Partie réinitialisée » et doivent se réinscrire. Les buzzers physiques ne sont pas concernés. |
+| **Équipes** | décochée | Supprime toutes les équipes. Les joueurs conservés (buzzers et tablettes) restent inscrits, **sans équipe** : il faut recréer les équipes et y affecter les joueurs. |
+
+- **Combinaison refusée** : « Joueurs des tablettes » sans « Scores » est impossible. Cocher « Joueurs des
+  tablettes » coche et verrouille « Scores ». Si le serveur reçoit quand même cette combinaison, il refuse le
+  lancement (« Lancement refusé : supprimer les joueurs des tablettes exige de remettre les scores à zéro. »).
+- **Aucune option cochée** : le bouton devient « Lancer sans rien effacer ». La partie repart sans purge.
+- **Dans tous les cas**, la question en cours s'arrête et tous les minuteurs (question, décompte, son de question)
+  sont arrêtés. Si une question est en cours, la popup le signale.
+- **Changement par rapport à « Nouvelle partie »** : l'ancien bouton supprimait toujours les joueurs des
+  tablettes. Cette suppression est maintenant une option, décochée par défaut. Pour la retrouver, cochez
+  « Joueurs des tablettes ».
+- **Clients sans options** (anciens scripts) : un `NEW_GAME` sans option garde le comportement v11.1. Les
+  joueurs et les scores sont purgés, les équipes sont conservées, les questions repassent « à jouer ».
+- Le lancement est journalisé (`WARN NEW_GAME_PURGE`, avec le nombre de joueurs et d'équipes supprimés).
 
 #### Retrait d'un VJoueur — Réinscription vs. Suppression totale (v5.9.3+, étendu en v5.10.x #134)
 
