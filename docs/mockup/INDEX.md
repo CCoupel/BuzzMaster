@@ -6,6 +6,8 @@
 ## Actives
 | Composant | Feature | Fichier | Version | Relation |
 |-----------|---------|---------|---------|----------|
+| admin_game_ardoise_zone | #246 reveal_gate | `v11.2/ui/admin_game_ardoise_zone__reveal_gate.html` | v11.2 | Maquette admin (validée 2026-10-10) |
+| anim_ardoise_list | #246 reveal_gate | `v11.2/ui/anim_ardoise_list__reveal_gate.html` | v11.2 | Maquette anim (validée 2026-10-10) |
 
 ## Obsolètes
 | Fichier | Remplacée par | Version |
