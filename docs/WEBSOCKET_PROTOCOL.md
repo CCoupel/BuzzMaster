@@ -466,6 +466,36 @@ Couleurs disponibles : `green`, `red`, `blue`, `yellow`, `orange`, `white`.
 
 ---
 
+## Équipes : identité, verrou et renommage — UPDATE / FULL (v11.2, #249)
+
+Source de vérité : `contracts/websocket-actions.md` §UPDATE, §TEAMS_UPDATE_REFUSED et
+`contracts/game-state.md` §`TEAMS_LOCKED`.
+
+- La map `teams` est indexée par **clé**. `NAME` vaut toujours la clé : le serveur le réécrit à chaque
+  `UPDATE`/`FULL` (et au chargement de `teams.json`, avec `WARN TEAM_NAME_NORMALIZED`).
+- **Renommer = changer la clé.** Le client envoie la map où l'ancienne clé a disparu, la nouvelle clé
+  porte `NAME` = nouvelle clé, et les `bumpers` passent à la nouvelle `TEAM`.
+- **`TEAMS_LOCKED`** (`GameState`, toujours sérialisé) : `true` de la sélection d'une question
+  (`Ready()`) jusqu'à son `REVEALED`, sur `NEW_GAME` et au démarrage du serveur : `false`.
+- **Pendant le verrou**, un `UPDATE`/`FULL` qui retire une clé (renommage ou suppression) est refusé
+  **en entier**. Ajout d'équipe, couleur et affectation de joueurs restent permis.
+
+```json
+{ "ACTION": "TEAMS_UPDATE_REFUSED", "MSG": { "REASON": "TEAMS_LOCKED_DURING_QUESTION", "TEAMS": ["Les Bleus"] } }
+```
+
+Réponse **ciblée** à l'émetteur, suivie de l'état complet. Journal : `WARN TEAMS_CHANGE_REFUSED`.
+
+- **Hors verrou** (y compris `REVEALED`), un renommage est reconnu quand une clé disparaît et une nouvelle
+  apparaît **dans le même message**, avec les mêmes joueurs. Le serveur reporte sous la nouvelle clé la
+  liste fermée des états (`game-state.md` §`TEAMS_LOCKED`), historique compris. Journal : `INFO TEAM_RENAMED`.
+- Sinon, c'est une suppression suivie d'un ajout : les **états de jeu** de l'équipe supprimée sont effacés.
+  L'historique des points est conservé, avec un événement `TEAM_DELETED` (`TEAM_NAME`, `TIMESTAMP`).
+  `AWARDED_TEAMS` ignore les points antérieurs au dernier `TEAM_DELETED` de l'équipe.
+
+> Implémentation : le report au renommage est livré (`01e119a0`). L'événement `TEAM_DELETED` et le filtrage de
+> `AWARDED_TEAMS` figurent dans le contrat (`d6e5fc66`) ; leur commit moteur est en attente (revue M1).
+
 ## Liaison VJoueur, ARDOISE final et REVEAL gardé — v11.2 (#246)
 
 Source de vérité : `contracts/websocket-actions.md` (sections PLAYER_CONNECT, ARDOISE_INPUT,
