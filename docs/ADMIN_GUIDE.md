@@ -256,6 +256,36 @@ L'historique est la **source de verite** pour les scores :
 
 ---
 
+## Équipes : renommer et supprimer (v11.2, #249)
+
+### Pendant une question
+
+Dès qu'une question est sélectionnée, les équipes ne peuvent plus être renommées ni supprimées :
+le champ de nom et le bouton ✕ sont désactivés, avec un bandeau. Le serveur refuse aussi l'envoi. Ajouter
+une équipe, changer sa couleur et déplacer des joueurs restent possibles.
+
+Le verrou est levé au **REVEAL** de la question, ou par **« Nouvelle partie »**.
+
+**Limite** : une question sélectionnée par erreur (PREPARE ou READY) bloque donc renommage et suppression
+jusqu'à son REVEAL ou jusqu'à « Nouvelle partie ». Il n'existe pas encore d'action pour annuler la sélection.
+Pour débloquer sans tout remettre à zéro, il faut jouer la question puis la révéler.
+
+### Renommer une équipe (hors question)
+
+- Le nom affiché est la clé de l'équipe. Les réponses ARDOISE, les compteurs MEMORY et RAFALE, et l'historique
+  des points suivent le nouveau nom, y compris après le REVEAL.
+- **Limite** : si, dans le même envoi, vous supprimez l'équipe Y, ajoutez l'équipe X et déplacez **tous** les
+  joueurs de Y vers X, le serveur reconnaît un renommage Y → X. X hérite alors des états de Y (réponses
+  ARDOISE, crédits historiques). Vérifiez ce cas avant de l'enregistrer.
+- **Limite** : une équipe sans joueur ne peut pas être « renommée ». Elle est traitée comme supprimée puis
+  ajoutée : ses états de jeu sont effacés.
+
+### Supprimer une équipe (hors question)
+
+Les réponses et compteurs de jeu de l'équipe sont effacés. L'historique des points est conservé (piste d'audit).
+Une équipe recréée sous le même nom ne reprend pas les points déjà attribués à l'ancienne. Elle peut être créditée
+sur la question révélée.
+
 ## Joueurs Virtuels (VPlayer)
 
 ### Presentation
