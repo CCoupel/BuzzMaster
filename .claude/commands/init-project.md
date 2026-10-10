@@ -22,9 +22,13 @@ jamais du texte brut listant des lettres dans le chat :
   3-4 plus frequentes en options explicites et laisser "Autre" couvrir le reste.
 - Checklist a choix multiples → `multiSelect: true` (toujours dans la limite de 4 options ; au-dela,
   scinder en plusieurs questions du meme appel — jusqu'a 4 questions groupees par appel).
-- Les questions de decouverte du workshop (Option a, phases 1-6) restent des questions ouvertes en
-  texte libre par nature (elles visent a faire emerger une reponse originale) — forcer des options
-  fermees leur ferait perdre leur but.
+- Les questions de decouverte du workshop (Option a, phases 1-6) sont **aussi** posees via `AskUserQuestion`,
+  jamais en texte dans le chat : 2 a 4 options pertinentes deduites du contexte detecte (README, manifestes,
+  reponses precedentes), la saisie libre passant par "Autre". Jusqu'a 4 questions groupees par appel (une phase
+  = 1 a 2 appels). Les listes numerotees des phases ci-dessous sont le **contenu** des questions, pas un
+  format d'affichage.
+- Toute confirmation (« Confirmer ou modifier ? », validation d'un plan, d'un diff, d'un pipeline) suit la meme
+  regle : jamais `[O/n]`, `(o/n)` ni « dis-moi » en texte.
 
 ## Workflow d'Initialisation
 
@@ -55,6 +59,9 @@ jamais du texte brut listant des lettres dans le chat :
     |
     v
 [FINALISATION] --> CLAUDE.md + .gitignore + CI/CD workflow
+    |
+    v
+[AUDIT CONTEXTE] --> commit d'init puis /context-audit (audit complet)
 ```
 
 > La phase **FETCH TEMPLATE** est toujours executee en premier.
@@ -91,7 +98,7 @@ puis deploiera les commandes et agents dans `.claude/`.
 | **COMMANDES** | `.claude/commands/*.md` | Depuis `TEMPLATE_claude/commands/*.md`, déployé en `*.md` — gitignore, pas de compagnon |
 | **AGENTS TEMPLATE** | `.claude/agents/*.template.md` | Depuis `TEMPLATE_claude/agents/*.md`, déployé en `*.template.md` — gitignore |
 | **CONTEXTES PARTAGES** | `.claude/{commands,agents}/context/*.template.md` + compagnon `.claude/{commands,agents}/context/*.md` optionnel | Depuis `TEMPLATE_claude/{commands,agents}/context/*.md` — meme convention template/compagnon que les agents |
-| **PROJET** | `.claude/CLAUDE.md`, `project-config.json`, `memory/`, `agents/dev-*.md`, compagnons `agents/*.md` et `context/*.md` | Trackes dans git, jamais ecrases |
+| **PROJET** | `.claude/CLAUDE.md`, `project-config.json`, `memory/`, `agents/dev-*.md`, specifications `agents/generic.<nom>.md`, compagnons `agents/*.md` et `context/*.md` | Trackes dans git, jamais ecrases |
 
 ---
 
@@ -226,10 +233,11 @@ echo "✓ TEMPLATE_claude/.template-source.json mis a jour ($FETCH_TAG - $FETCH_
 # initialise — a la premiere initialisation, le champ est deja inclus a la creation du fichier
 # (section "Generation de la Configuration").
 if [ -f .claude/project-config.json ]; then
+  mkdir -p _work/tmp
   jq --arg tag "$FETCH_TAG" --arg commit "$FETCH_COMMIT" \
     '.template_version = { "tag": $tag, "commit": $commit }' \
-    .claude/project-config.json > /tmp/project-config.json.tmp \
-    && mv /tmp/project-config.json.tmp .claude/project-config.json
+    .claude/project-config.json > _work/tmp/project-config.json.tmp \
+    && mv _work/tmp/project-config.json.tmp .claude/project-config.json
   echo "✓ project-config.json : template_version mis a jour ($FETCH_TAG - $FETCH_COMMIT)"
 fi
 ```
@@ -361,6 +369,8 @@ AskUserQuestion : "Convertir maintenant vers le nouveau modele ?"
 Si confirme :
 
 ```bash
+mkdir -p _work/tmp
+mkdir -p _work/tmp
 jq --arg mech "$MECH" '
   .infrastructure.environments = [
     { "name": "QUALIF", "order": 1,
@@ -370,8 +380,8 @@ jq --arg mech "$MECH" '
       "publish": { "mode": "rebuild-ci", "trigger": "git-tag", "pipeline": ".github/workflows/release.yml" },
       "deploy":  { "mechanism": $mech } }
   ] | del(.infrastructure.deploy)
-' .claude/project-config.json > /tmp/project-config.json.tmp \
-  && mv /tmp/project-config.json.tmp .claude/project-config.json
+' .claude/project-config.json > _work/tmp/project-config.json.tmp \
+  && mv _work/tmp/project-config.json.tmp .claude/project-config.json
 
 echo "✓ infrastructure.environments genere depuis infrastructure.deploy=\"$OLD_DEPLOY\" (mecanisme normalise : $MECH)."
 echo "  Verifier/ajuster manuellement les cibles (docker-compose.*.yml, chart Helm, pipeline CI) si besoin."
@@ -581,7 +591,7 @@ TRACKED=$(git ls-files MARKETING | wc -l)
     `git show origin/gh-pages:<fichier> | diff - MARKETING/<fichier>`) ; si le contenu local diverge de
     `gh-pages`, l'afficher et demander lequel garder AVANT toute suppression. Puis :
     `git rm -r --cached MARKETING/` (les fichiers restent sur disque), deplacer le dossier
-    (`mv MARKETING /tmp/MARKETING.bak`), `git worktree add MARKETING gh-pages`, recopier les eventuelles
+    (`mkdir -p _work/tmp && mv MARKETING _work/tmp/MARKETING.bak`), `git worktree add MARKETING gh-pages`, recopier les eventuelles
     differences retenues dans le worktree et les commiter **sur `gh-pages`** (`git -C MARKETING ...`).
     Commit de migration sur la branche de code : `chore(site): MARKETING/ devient le worktree de gh-pages`
     (contient uniquement le `git rm --cached` et le `.gitignore`).
@@ -728,7 +738,8 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
 
 ```
 1. Quel est le nom du projet ?
-   [Detecte: nom depuis package.json/go.mod] Confirmer ou modifier ?
+   [Detecte: nom depuis package.json/go.mod] → AskUserQuestion : option « <nom detecte> (Recommande) » +
+   « Autre » pour saisir un autre nom
 
 2. Decris brievement le projet (1-2 phrases) :
 ```
@@ -798,6 +809,35 @@ AskUserQuestion : "Ton projet inclut-il un plugin pour une plateforme existante 
 - Pas de plugin — aucun agent plugin genere
 (Autre plateforme — Obsidian, WordPress, plugin applicatif maison... — preciser via "Autre")
 ```
+
+---
+
+## Etape 5c : Agents generiques — projets non-dev (optionnel)
+
+Pour les taches hors developpement (redaction de presentation, documents metier, analyses...). Chaque
+instance = un agent `generic` (template commun `agents/generic.md`) + une **specification** propre
+`.claude/agents/generic.<nom>.md`. Plusieurs instances possibles, chacune avec sa specification.
+Un projet purement non-dev peut repondre « Pas de ... » aux etapes 2 a 6 et ne declarer que des agents generiques.
+
+```
+AskUserQuestion : "Ton projet a-t-il des taches hors developpement a confier a un agent specialise ?"
+- Oui — declarer un agent generique (ex: redacteur de PowerPoint, redacteur de documentation metier)
+- Non — aucun agent generique
+```
+
+Si **Oui**, pour chaque instance (boucler tant que l'utilisateur en ajoute) :
+
+```
+AskUserQuestion (texte libre via "Autre") :
+- Nom canonique (kebab-case, unique dans la team, ex: redacteur-pptx) — jamais un nom d'agent existant
+  (planner, qa, deployer, dev-*...) ni `generic`
+- Role en une ligne
+- Specification : perimetre, entrees, livrables (formats/chemins), outils/charte, criteres de validation
+- Spawn : permanent (defaut — spawne au /start-session) | ponctuel (spawne a la demande)
+```
+
+Puis « Ajouter une autre instance ? ». Les reponses alimentent `agents.generic[]` et la specification
+(voir "2bis. Agents generiques").
 
 ---
 
@@ -974,10 +1014,16 @@ AskUserQuestion (`multiSelect: true`) : "Quels aspects securite sont importants 
   },
   "agents": {
     "idle_ttl_minutes": 15,
-    "idle_warning_interval_minutes": 5
+    "idle_warning_interval_minutes": 5,
+    "generic": [
+      { "name": "redacteur-pptx", "role": "Redaction de presentations PowerPoint", "spawn": "permanent" }
+    ]
   }
 }
 ```
+
+> `agents.generic` : instances d'agents generiques (Etape 5c) — `[]` ou absent si aucune. Chaque `name`
+> est unique et correspond a un fichier `.claude/agents/generic.<name>.md`.
 
 Valeurs a deriver si elles ne sont pas fournies explicitement :
 
@@ -1023,14 +1069,43 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 > Même convention que les agents génériques (§ précédent) : déployé en `.template.md`,
 > avec un compagnon `.md` optionnel pour les adaptations projet.
 
+### 2bis. Agents generiques (projets non-dev)
+
+Pour chaque entree de `agents.generic[]` (Etape 5c) — idempotent, **ne jamais ecraser** une specification existante :
+
+```bash
+# Le template commun generic.template.md est deja deploye avec les autres agents (etape 4 du fetch)
+for NAME in $(jq -r '.agents.generic[]?.name' .claude/project-config.json); do
+  SPEC=".claude/agents/generic.${NAME}.md"
+  ROLE=$(jq -r --arg n "$NAME" '.agents.generic[] | select(.name==$n) | .role' .claude/project-config.json)
+  [ -f "$SPEC" ] || cat > "$SPEC" <<SPEC_EOF
+# ${NAME} — ${ROLE}
+
+## Role et perimetre
+## Entrees
+## Livrables
+## Outils et conventions
+## Criteres de validation
+SPEC_EOF
+done
+```
+
+Remplir chaque section avec les reponses de l'Etape 5c (specification **non vide** — un agent sans
+specification repond `BLOQUE` au demarrage). Le fichier est **tracke git**, jamais ecrase par la sync
+(le compagnon `generic.md` sans nom reste, lui, un compagnon classique du template `generic.template.md`).
+
+Ajouter une ligne par instance dans la table `## Agents Disponibles` de `CLAUDE.md` :
+`| <name> | <role> | .claude/agents/generic.template.md + .claude/agents/generic.<name>.md | <spawn> |`.
+Le CDP les connait via cette table et `agents.generic[]` (voir `agents/cdp.md`).
+
 ### 3. Workflow CI/CD
 
 Le pipeline de release n'est plus copie d'un modele : il est **audite s'il existe, genere sinon**, selon le
-contrat de `TEMPLATE_claude/agents/infra.md` section 3bis (exigences C1 a C9). Si l'utilisateur a repondu
+contrat de `TEMPLATE_claude/agents/infra.md` section 3bis (exigences C1 a C10). Si l'utilisateur a repondu
 « Aucun » a l'Etape 7, ne rien faire.
 
 1. **Detecter** : `.github/workflows/*.y*ml`, `.gitlab-ci.yml`.
-2. **Pipeline existant → audit** : evaluer C1-C9 (verdict `CONFORME` / `ECART` / `NON APPLICABLE`, fichier et ligne
+2. **Pipeline existant → audit** : evaluer C1-C10 (verdict `CONFORME` / `ECART` / `NON APPLICABLE`, fichier et ligne
    cites), afficher le tableau, puis AskUserQuestion :
    - Corriger les ecarts (Recommande) — patch minimal, diff affiche et valide avant ecriture
    - Garder tel quel — ecarts consignes dans le rapport final (un ecart C1/C5 reste signale comme bloquant
@@ -1396,6 +1471,78 @@ else
 fi
 ```
 
+#### Memoire projet et squelettes lus au demarrage (derniere etape)
+
+`/start-session` lit `.claude/memory/MEMORY.md` (source de verite unique) et le CDP lit `contracts/CHANGELOG.md`.
+Sans ces fichiers, le premier `/start-session` echoue. Les creer a la **toute fin** de l'init
+(apres `project-config.json`, pour en tirer les valeurs) — idempotent, ne jamais ecraser un fichier existant ;
+egalement execute a la reinitialisation d'un projet existant (option d) :
+
+```bash
+mkdir -p .claude/memory _work/handoff _work/reports contracts
+
+PROJECT_NAME=$(jq -r '.name // ""' .claude/project-config.json)
+VERSION=$(jq -r '.version // "0.1.0"' .claude/project-config.json)
+BRANCH=$(git branch --show-current 2>/dev/null); BRANCH=${BRANCH:-main}
+
+[ -f .claude/memory/MEMORY.md ] || cat > .claude/memory/MEMORY.md <<MEMORY_EOF
+# Memoire projet — ${PROJECT_NAME}
+
+> Source de verite unique au demarrage d'une session (/start-session). Mise a jour par /end-session.
+
+## Etat courant
+
+- **Version** : ${VERSION}
+- **Branche** : ${BRANCH}
+- **Travail en cours** : aucun — projet initialise par /init-project
+- **Issues actives** : aucune
+
+## Regles critiques
+
+(aucune pour le moment)
+
+## Corrections de comportement
+
+(aucune pour le moment)
+MEMORY_EOF
+
+[ -f contracts/CHANGELOG.md ] || cat > contracts/CHANGELOG.md <<'CHANGELOG_EOF'
+# Changelog des contrats
+
+> Changements de contrats (API, schemas) : `BREAKING` | `CHANGED` | `ADDED`. Lu par le CDP au GATE 2.
+CHANGELOG_EOF
+```
+
+> `_work/` est gitignore (purge a chaque `/start-session`). `.claude/workflow-state.json` n'est **pas** cree ici :
+> il est cree par le CDP au premier workflow. `.claude/memory/` est tracke — l'inclure dans le commit d'init.
+
+---
+
+### 6. Audit du contexte (`/context-audit`)
+
+Derniere etape avant le message de fin : un init genere beaucoup de fichiers par substitution de placeholders
+(commandes, agents, `environments/*`, `CLAUDE.md`, `project-config.json`) — c'est la que naissent les `{VARIABLE}`
+non remplaces, les references vers un agent non genere et les incoherences entre `project-config.json`,
+`CLAUDE.md` et les agents. `/context-audit` les detecte deja : on le reutilise tel quel, sans variante.
+
+1. **Commiter l'etat initial AVANT l'audit** (fichiers d'init suivis par git, `.claude/memory/` inclus) pour que le
+   diff de l'audit soit isole et facile a relire ou annuler :
+
+   ```bash
+   git add -A && git commit -m "chore(claude): init-project" || true   # || true : rien a commiter = ok
+   ```
+
+2. **Lancer `/context-audit`** en audit complet (sans scope), en suivant `commands/context-audit.md`. Les
+   resolutions `Auto` (doublons, references cassees, optimisations) sont appliquees sans question, les `❓`
+   passent par `AskUserQuestion`, comme d'habitude. Apres un init, `MEMORY.md` est vide : la migration
+   MEMORY → docs (2.4) n'a rien a signaler.
+3. **Presenter le rapport "post-init" en tete du message de fin** : ecarts corriges en Auto, ecarts arbitres, ecarts
+   laisses en l'etat. Ne pas committer les corrections de l'audit : l'utilisateur relit `git diff` (le commit
+   d'init sert de point de retour).
+
+Si `/context-audit` est absent de `.claude/commands/` (deploiement incomplet), le signaler dans le rapport et
+continuer — ne jamais bloquer la fin de l'init.
+
 ---
 
 ## Message de Fin
@@ -1409,6 +1556,12 @@ Configuration :
 - Database     : <DATABASE>
 - CI/CD        : <CICD>
 - Environnements : <ENVIRONMENTS>  (ex: QUALIF -> PROD)
+
+Memoire projet : .claude/memory/MEMORY.md initialisee (si absente)
+Agents generiques : <NOM> (.claude/agents/generic.<NOM>.md), ...   (si declares)
+
+Audit contexte (/context-audit) : N ecarts corriges (Auto), N arbitres, N laisses — voir `git diff`
+  (commit d'init = point de retour)
 
 Agents generes :
 - .claude/agents/dev-backend.template.md
@@ -1468,7 +1621,8 @@ AskUserQuestion : "Le projet est deja initialise — que veux-tu faire ?"
 - Re-analyser le code — relance la detection automatique de stack pour rafraichir le diagnostic
   avant de choisir
 - Annuler — ne modifie rien
-(Pour modifier un seul parametre precis sans tout reconfigurer — preciser via "Autre")
+(Pour modifier un seul parametre precis sans tout reconfigurer — preciser via "Autre". Ex : ajouter une
+instance d'agent generique → Etape 5c puis "2bis. Agents generiques" uniquement, sans toucher au reste)
 ```
 
 ### Option d : Appliquer les mises a jour detectees
@@ -1479,7 +1633,7 @@ AskUserQuestion : "Le projet est deja initialise — que veux-tu faire ?"
 #### Etape d1c — Audit du pipeline CI/CD de release
 
 Appliquer l'etape "3. Workflow CI/CD" (sections Generation de la Configuration) en mode audit : detecter le
-pipeline, evaluer C1-C9 (`agents/infra.md` section 3bis), proposer corrections ou generation si absent. Ne rien
+pipeline, evaluer C1-C10 (`agents/infra.md` section 3bis), proposer corrections ou generation si absent. Ne rien
 modifier sans reponse de l'utilisateur ; ne pas re-poser l'Etape 7 si le systeme CI/CD est deja connu.
 
 #### Etape d1a — Site marketing : worktree `gh-pages`
@@ -1570,6 +1724,58 @@ informer :
    vérifier/ajuster les cibles générées, voir "Fichiers d'Environnement" dans agents/deploy.md)
 ```
 
+#### Etape d1e — Audit du graphe de dépendances des fichiers de définition locaux
+
+Exécutée **avant** tout déploiement (état de référence). Construit le graphe des fichiers de définition
+du projet, puis détecte les **liens cassés** et les **orphelins**. Lecture seule : aucune modification ici —
+les constats alimentent le rapport d4 et sont traités à l'étape d5 / vérifiés à l'étape d5e.
+
+**Noeuds** : `CLAUDE.md`, `.claude/project-config.json`, `.claude/settings.json`, `.claude/memory/*`,
+`.claude/agents/*.md` (compagnons, `dev-*`, `generic.<nom>.md`), `.claude/agents/*.template.md`,
+`.claude/agents/context/*`, `.claude/commands/*` + `context/*`, `.claude/agents/environments/*`,
+`docs/mockup/INDEX.md`, `docs/tests/INDEX.md` (s'ils existent).
+
+**Racines** (points d'entrée, jamais orphelins) : `CLAUDE.md` (tables « Agents Disponibles » et « Commandes
+Disponibles »), `project-config.json` (`stack.*` → `dev-*`, `agents.generic[]` → `generic.<nom>.md`,
+`infrastructure.environments[]` → `environments/{publish,deploy}.<env>.*`, chemins `version_file`,
+`pipeline`, `commands.*`), `settings.json` (hooks → scripts), fichiers template déployés
+(`*.template.md`, `commands/*.md`) tant que leur source existe dans `TEMPLATE_claude/`.
+
+**Arêtes** (lien = référence d'un noeud vers un autre) : colonne `Fichier` des tables de `CLAUDE.md` ;
+`@import X` ; chemins `.claude/...`, `context/X.md`, `docs/...` (liens markdown ou entre backticks) ;
+renvois « voir X section N » / ancres ; commandes de hooks (`settings.json`) ; pairage compagnon ↔ template
+(`xxx.md` ↔ `xxx.template.md`).
+
+```bash
+# Extraction des références (à compléter par la lecture du contenu pour les renvois de section)
+for f in CLAUDE.md .claude/agents/*.md .claude/agents/context/*.md .claude/commands/*.md \
+         .claude/commands/context/*.md .claude/agents/environments/*.md; do
+  [ -f "$f" ] || continue
+  grep -oE '(@import +[A-Za-z0-9_./-]+\.md|(\.claude|docs|context|agents|commands)/[A-Za-z0-9_./*-]+\.(md|json|sh|env|ya?ml))' "$f" \
+    | sed "s|^|$f -> |"
+done
+```
+
+**Liens cassés** (`BROKEN`) — pour chaque arête :
+- la cible n'existe pas (fichier absent, hors motifs `*` / `<...>` / `{...}` volontairement génériques) ;
+- la section ou l'ancre citée n'existe pas dans la cible ;
+- un `{PLACEHOLDER}` reste non substitué dans un fichier déployé ;
+- une ligne de table `Agents Disponibles` / `Commandes Disponibles` pointe vers un fichier absent.
+
+**Orphelins** (`ORPHAN`) — fichier non atteignable depuis une racine et non pairé à un template :
+- compagnon `xxx.md` (agents, `agents/context/`, `commands/context/`) dont `xxx.template.md` n'existe plus
+  ni dans `.claude/` ni dans `TEMPLATE_claude/` (template supprimé ou renommé — **à relier au nouveau nom si
+  un renommage est détectable**) ;
+- `generic.<nom>.md` dont `<nom>` n'est plus dans `agents.generic[]` ; `dev-*.md` dont la stack n'est plus
+  configurée ;
+- `environments/*.<env>.*` dont `<env>` n'est plus dans `infrastructure.environments[]` ;
+- agent déployé (`.template.md`) ou fichier de `agents/` absent de la table `Agents Disponibles` ;
+- `*.template.md` déployé dont la source a disparu de `TEMPLATE_claude/` (reliquat, voir d3).
+
+Le résultat (liste `BROKEN[]` et `ORPHAN[]` avec fichier, cible/raison, correction suggérée) est conservé
+pour d4 (rapport) et d5e (revérification). Aucun fichier de `TEMPLATE_claude/` n'est jamais candidat à
+la suppression ou à la modification : **le template fait toujours foi**.
+
 #### Etape d2 — Calculer les noms deployes attendus
 
 ```bash
@@ -1619,6 +1825,13 @@ for src in TEMPLATE_claude/agents/context/*.md TEMPLATE_claude/commands/context/
   fi
   # stocker dans CONTEXT_STATUS associatif : clé = "subdir/basename", valeur = statut
 done
+
+# Contextes RELIQUAT : *.template.md déployé dont la source n'existe plus dans TEMPLATE_claude/
+for dest in .claude/agents/context/*.template.md .claude/commands/context/*.template.md; do
+  [ -f "$dest" ] || continue
+  subdir=$(echo "$dest" | grep -o 'agents/context\|commands/context')
+  [ -f "TEMPLATE_claude/${subdir}/$(basename $dest .template.md).md" ] || echo "RELIQUAT $dest"
+done
 ```
 
 Pour chaque fichier compare, determiner le statut :
@@ -1656,6 +1869,9 @@ EXPECTED_TEAMMATES=(planner test-writer code-reviewer qa doc-updater deployer se
 [[ -n "$BACKEND_LANG"    ]] && EXPECTED_TEAMMATES+=(dev-backend)
 [[ -n "$FRONTEND_LANG"   ]] && EXPECTED_TEAMMATES+=(dev-frontend)
 [[ -n "$PLUGIN_PLATFORM" ]] && EXPECTED_TEAMMATES+=(dev-plugin)
+# Instances d'agents generiques declarees dans project-config.json (ligne attendue :
+# Role = .role, Fichier = generic.template.md + generic.<nom>.md, Spawn = .spawn)
+while read -r n; do [[ -n "$n" ]] && EXPECTED_TEAMMATES+=("$n"); done < <(jq -r '.agents.generic[]?.name' .claude/project-config.json)
 ```
 
 **Lire la table courante** dans le `CLAUDE.md` du projet (section entre `## Agents Disponibles`
@@ -1704,10 +1920,15 @@ Synchronisation depuis github.com/<repo>
   [!] dev-firmware                        ← RELIQUAT (stack firmware retirée du projet)
   [=] planner, test-writer, code-reviewer, qa, doc-updater, deployer, security, infra (8 inchangés)
 
+  Graphe des fichiers de définition locaux (etape d1e, etat avant mise a jour) :
+  [⛓] CLAUDE.md:42 → .claude/agents/old.md          ← lien casse (cible absente)
+  [○] .claude/agents/context/FOO.md                 ← orphelin (template FOO supprime/renomme)
+
   Nouveaux   : N
   Modifies   : N
   Inchanges  : N
-  Reliquats  : N  ← a supprimer
+  Reliquats  : N  ← a supprimer (commandes, agents ET contextes)
+  Liens casses : N   Orphelins : N  ← traites a l'etape d5 (confirmation) puis reverifies en d5e
 
 AskUserQuestion : "Comment appliquer cette synchronisation ?"
 - Tout appliquer et supprimer les reliquats (Recommande) — deploie nouveaux/modifies, supprime
@@ -1798,7 +2019,33 @@ for name in $DEPLOYED_AGENTS; do
     echo "  ✗ .claude/agents/${name}.template.md supprime (reliquat)"
   fi
 done
+
+# Supprimer les contextes reliquats (source disparue de TEMPLATE_claude/)
+for dest in .claude/agents/context/*.template.md .claude/commands/context/*.template.md; do
+  [ -f "$dest" ] || continue
+  subdir=$(echo "$dest" | grep -o 'agents/context\|commands/context')
+  if [ ! -f "TEMPLATE_claude/${subdir}/$(basename $dest .template.md).md" ]; then
+    rm "$dest"
+    echo "  ✗ ${subdir}/$(basename $dest) supprime (reliquat)"
+  fi
+done
 ```
+
+**Orphelins et liens cassés (d1e) — après le déploiement :** recalculer `BROKEN[]`/`ORPHAN[]` (la suppression
+des reliquats ci-dessus peut en créer : compagnon dont le template vient de disparaître). Les fichiers
+`.template.md` et `TEMPLATE_claude/` ne sont jamais touchés ; seuls les fichiers PROJET le sont, **toujours
+après confirmation** :
+
+```
+AskUserQuestion : "N orphelins / M liens cassés détectés dans les fichiers de définition du projet — que faire ?"
+- Corriger automatiquement (Recommandé) — lien cassé : repointé vers le fichier renommé/déplacé s'il est
+  identifiable sans ambiguïté, sinon la référence est retirée ; orphelin : relié à son nouveau template si un
+  renommage est détecté, sinon supprimé s'il n'a plus de racine
+- Inspecter un par un — décision au cas par cas (corriger / supprimer / conserver)
+- Ignorer — rien n'est modifié, ils seront re-signalés à la prochaine sync
+```
+
+Un fichier suivi par git est retiré avec `git rm` (jamais `rm` seul, pour que la suppression soit commitée).
 
 #### Etape d5b — Détection de doublons (règles identiques ou couvertes)
 
@@ -1994,6 +2241,56 @@ rm -f .claude/.teammates-table.tmp
 echo "✓ CLAUDE.md — table Agents Disponibles mise à jour"
 ```
 
+#### Etape d5e — Vérification post-nettoyage (doublons et graphe)
+
+Exécutée **après** le déploiement des templates (d5), le nettoyage des doublons (d5b), l'arbitrage des
+conflits (d5c) et la mise à jour de la table (d5d). Objectif : prouver que les templates mis à jour sont
+**seuls maîtres** et qu'il ne reste ni doublon ni lien cassé non assumé. Lecture seule, sauf proposition finale.
+
+**1. Doublons résiduels — contrôle déterministe** (en plus de l'analyse sémantique de d5b) :
+
+```bash
+for tmpl in .claude/agents/*.template.md .claude/agents/context/*.template.md .claude/commands/context/*.template.md; do
+  [[ -f "$tmpl" ]] || continue
+  companion="$(dirname "$tmpl")/$(basename "$tmpl" .template.md).md"
+  [[ -f "$companion" ]] || continue
+  # a) compagnon identique au template -> doublon complet
+  cmp -s "$tmpl" "$companion" && echo "DOUBLON-IDENTIQUE $companion"
+  # b) paragraphes du compagnon repris mot pour mot dans le template (hors lignes vides et titres)
+  norm() { grep -v '^\s*$' "$1" | grep -v '^#' | sed 's/[[:space:]]\+/ /g;s/^ //;s/ $//'; }
+  norm "$companion" | while IFS= read -r l; do
+    [[ ${#l} -ge 40 ]] && grep -qxF -- "$l" <(norm "$tmpl") && echo "DOUBLON-LIGNE $companion : ${l:0:60}..."
+  done
+done
+# c) commandes « customisées » (d1b) devenues identiques au template
+for name in "${CUSTOMIZED_COMMANDS[@]}"; do
+  cmp -s "TEMPLATE_claude/commands/${name}.md" ".claude/commands/${name}.md" && echo "CUSTOM-INUTILE $name"
+done
+```
+
+Relancer ensuite la classification sémantique de d5b sur l'état courant. Résultat attendu : **plus aucun
+fichier `IDENTIQUE`/`DERIVE-TEMPLATE`/`MIXTE`**, hors éléments explicitement ignorés (« Ignorer » / « Conserver
+tel quel ») ou arbitrés `[P]` en d5c — ceux-là sont listés comme **doublons assumés**, pas comme erreurs.
+
+**2. Graphe** : relancer l'extraction de d1e. Résultat attendu : `BROKEN[]` et `ORPHAN[]` vides, hors éléments
+ignorés par l'utilisateur. Vérifier en particulier qu'**aucun nettoyage de d5b/d5c n'a cassé un lien** (une
+section retirée d'un compagnon alors qu'un fichier la référence, un compagnon supprimé encore cité dans
+`CLAUDE.md`) et qu'aucun `{PLACEHOLDER}` ne subsiste dans les fichiers déployés.
+
+**3. Rapport et reprise** :
+
+```
+Vérification post-nettoyage :
+  Doublons résiduels  : N  (dont M assumés : ignorés/[P])
+  Liens cassés        : N
+  Orphelins           : N
+```
+
+Si N > 0 hors éléments assumés → `AskUserQuestion` : « Des doublons ou liens cassés subsistent — que faire ? »
+(**Les traiter maintenant** (Recommandé) — relance d5b/d5c/d5 sur ces seuls éléments, puis d5e / **Laisser en
+l'état** — signalés à la prochaine sync). Maximum 2 passes de reprise, pour éviter toute boucle ; au-delà,
+lister les éléments restants dans le rapport final d8.
+
 #### Etape d6 — Mettre à jour le bloc TEAMLEADER_PROTOCOL dans CLAUDE.md
 
 Le bloc entre `<!-- BEGIN TEAMLEADER_PROTOCOL -->` et `<!-- END TEAMLEADER_PROTOCOL -->` est maintenu par le template.  
@@ -2031,6 +2328,9 @@ else
 fi
 ```
 
+Puis appliquer la sous-section **"Memoire projet et squelettes lus au demarrage"** (creation idempotente de
+`.claude/memory/MEMORY.md` et `contracts/CHANGELOG.md` s'ils sont absents).
+
 #### Etape d7 — Vérifier et créer les labels GitHub de phase
 
 S'assurer que les labels de suivi existent sur le repo (même commande que l'init, idempotent) :
@@ -2043,6 +2343,13 @@ gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de te
 gh label create "DONE"      --color "0e8a16" --description "Issue livrée et validée"           --force
 ```
 
+#### Etape d7b — Audit du contexte (`/context-audit`)
+
+Meme etape que « 6. Audit du contexte » de l'init : commiter l'etat synchronise (point de retour), puis lancer
+`/context-audit` en audit complet. Les verifications d1e / d5e (graphe, doublons) restent la verification
+specifique a la synchronisation ; `/context-audit` y ajoute les incoherences et references cassees transverses
+(commandes, agents, contextes). Reporter le resultat dans le rapport d8.
+
 #### Etape d8 — Rapport final
 
 ```
@@ -2053,9 +2360,12 @@ Synchronisation terminee.
   Reliquats supprimes               : N
   Doublons compagnons retires       : N (etape d5b)
   Conflits compagnons arbitres      : N (etape d5c)
+  Liens casses / orphelins corriges : N / N (etapes d1e, d5)
+  Verification post-nettoyage       : N doublons residuels (dont N assumes), N liens casses, N orphelins (etape d5e)
   CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
   CLAUDE.md table Agents Disponibles : mis à jour (N lignes — documentation uniquement)
   Labels GitHub                     : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
+  Audit contexte (/context-audit)   : N corriges (Auto), N arbitres, N laisses (etape d7b)
   Schema infrastructure             : [convertit vers environments[] | deja a jour | inchange (refuse)]
 
   Fichiers PROJET preserves (non touches) :

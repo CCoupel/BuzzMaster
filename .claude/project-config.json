@@ -89,7 +89,7 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.9.1",
-    "commit": "dc3d230f01188ea698f3eab3e7805cbaca9b0260"
+    "tag": "v3.14.1",
+    "commit": "55872f008976d54e863fb9d5d2b9f48d1623b1b1"
   }
 }

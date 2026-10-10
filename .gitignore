@@ -191,3 +191,6 @@ TEMPLATE_claude/
 # anywhere in the tree, which silently swallowed new files added under
 # docs/marketing/ (discovered by marketing-release around the v7.0.0 release).
 /MARKETING/
+_work/
+.claude/worktrees/
+build/
