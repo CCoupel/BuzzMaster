@@ -9,7 +9,7 @@
 
 ```typescript
 interface Team {
-  NAME: string          // Nom de l'équipe
+  NAME: string          // Nom de l'équipe — v11.2 (#249) : TOUJOURS égal à la clé de la map `teams`
   COLOR: number[]       // Couleur RGB [R, G, B] (ex: [255, 26, 26])
   COLOR_NAME?: string   // Clé de palette (ex: "rouge", "bleu-profond") — voir Palette d'équipes
   SCORE: number         // Score total (calculé: TEAM_POINTS + somme joueurs)
@@ -22,6 +22,13 @@ interface Team {
 
 type TeamStatus = "READY" | "PAUSE"
 ```
+
+### Identité d'une équipe (v11.2, #249) — `[CHANGED]`
+
+- **L'identité d'une équipe est la clé de la map `teams`.** `NAME` en est une copie, **toujours égale à la clé** : le serveur la réécrit à chaque enregistrement (`SetTeams`, `UPDATE`/`FULL`) et au chargement de `teams.json` (`LoadTeams`). Tout écart corrigé est journalisé (`WARN TEAM_NAME_NORMALIZED key=… old_name=…`, `contracts/logging.md`) ; un `teams.json` existant est donc réparé au premier démarrage, puis réécrit.
+- Avant v11.2, renommer une équipe dans la page Équipes gardait l'ancien `NAME` sous la nouvelle clé : le serveur rangeait les réponses ARDOISE sous la clé, l'admin et la TV les cherchaient sous `NAME` (réponse introuvable).
+- Tous les clients identifient une équipe **par sa clé** (recherche dans `ARDOISE_ANSWERS`, comparaison avec `bumper.TEAM`, etc.). `NAME` ne sert qu'à l'affichage, et vaut la clé.
+- **Renommer une équipe = changer sa clé.** Règles de renommage et de suppression pendant une question : `contracts/websocket-actions.md` §UPDATE (client → serveur) et `contracts/game-state.md` §`TEAMS_LOCKED`.
 
 ### Exemple
 

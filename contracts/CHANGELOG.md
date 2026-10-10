@@ -2,6 +2,18 @@
 
 ---
 
+## [20261011] — Identité d'équipe = clé ; équipes verrouillées pendant une question (#249, v11.2)
+
+> Bug reproduit pendant l'analyse de #246 : renommer une équipe laissait `NAME` ≠ clé ; l'admin et la TV ne trouvaient plus ses réponses ARDOISE. Décision utilisateur : renommage **interdit pendant une question en cours**. Défauts retenus par le planner, à confirmer : (1) la question est « en cours » de sa sélection jusqu'à `REVEALED` ; en `REVEALED`, le renommage est permis et les états sont reportés ; (2) la suppression d'équipe suit la même règle.
+
+- **[CHANGED]** `models.md` §Team — `NAME` toujours égal à la clé ; normalisation serveur à l'enregistrement et au chargement de `teams.json` (réparation automatique des fichiers existants) ; clients : identité = clé.
+- **[NEW]** `game-state.md` §`TEAMS_LOCKED` — booléen toujours sérialisé, vrai de la sélection d'une question jusqu'à `REVEALED`.
+- **[CHANGED]** ⚠️ `websocket-actions.md` §UPDATE (client → serveur) — pendant `TEAMS_LOCKED`, un message qui renomme ou supprime une équipe est **refusé en entier** ; hors verrou, renommage appliqué avec report des états indexés par équipe et de l'historique.
+- **[NEW]** `websocket-actions.md` §TEAMS_UPDATE_REFUSED — réponse ciblée `{REASON: "TEAMS_LOCKED_DURING_QUESTION", TEAMS}`.
+- **[NEW]** `logging.md` §3.2 bis — `TEAM_NAME_NORMALIZED`, `TEAMS_CHANGE_REFUSED`, `TEAM_RENAMED`.
+
+---
+
 ## [20261010] — Fiabilisation ARDOISE, identité des joueurs virtuels, journalisation persistante (#246, v11.2 — lot A)
 
 > Retour terrain semaine bleue 2026 : le texte ARDOISE d'une équipe disparaissait de l'admin et de

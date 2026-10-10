@@ -490,18 +490,40 @@ Modifie le score d'un joueur.
 
 ### UPDATE
 
-Met à jour les équipes/joueurs.
+Met à jour les équipes/joueurs (page Équipes, page Configuration). Même traitement que `FULL` entrant (`handleFullUpdate`).
 
 | Propriété | Valeur |
 |-----------|--------|
-| Direction | `Client→Server` |
+| Direction | `Client→Server` (`admin`) |
 
 #### Payload
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| teams | object | ❌ | Map des équipes |
+| teams | object | ❌ | Map des équipes (clé = identité de l'équipe, `NAME` réécrit = clé côté serveur, v11.2 #249) |
 | bumpers | object | ❌ | Map des joueurs |
+
+#### Renommage et suppression d'équipe (v11.2, #249) — `[CHANGED]`
+
+- Le client renomme une équipe en envoyant la map `teams` où **l'ancienne clé a disparu** et la **nouvelle clé** porte l'objet équipe, **avec `NAME` = nouvelle clé**, et les `bumpers` dont `TEAM` passe à la nouvelle clé (`TeamsPage.handleRenameTeam`). Le serveur réécrit de toute façon `NAME` = clé.
+- **Pendant une question (`TEAMS_LOCKED = true`)** : un `UPDATE`/`FULL` dont la map `teams` **retire une clé existante** (renommage ou suppression) est **refusé en entier**, rien n'est appliqué (ni équipes ni joueurs). Le serveur répond `TEAMS_UPDATE_REFUSED` **à l'émetteur seul**, journalise `WARN TEAMS_CHANGE_REFUSED`, puis renvoie l'état complet à l'émetteur, qui réaffiche les équipes inchangées. Un message qui ne retire aucune clé (ajout d'équipe, couleur, affectation de joueurs) est appliqué normalement.
+- **Hors question, y compris en `REVEALED`** : le renommage est appliqué, et le serveur **reporte** sous la nouvelle clé tous les états indexés par nom d'équipe (liste : `game-state.md` §`TEAMS_LOCKED`), y compris l'**historique des points**, ce qui conserve le verrou « déjà créditée » (`AWARDED_TEAMS`) de la question révélée. Il journalise `INFO TEAM_RENAMED old=… new=…`. Un renommage est reconnu quand une clé disparaît et qu'une nouvelle apparaît **dans le même message**, avec les mêmes joueurs (`bumpers` dont `TEAM` passe de l'une à l'autre). Sinon, c'est une suppression suivie d'un ajout : les états de l'équipe supprimée sont effacés.
+- Un client antérieur (sans `TEAMS_LOCKED`) voit simplement son renommage refusé pendant une question : changement de comportement **signalé**, livré avec la page Équipes de la même version.
+
+#### TEAMS_UPDATE_REFUSED ✨ (v11.2, #249)
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server → Client` (ciblé, émetteur du `UPDATE`/`FULL` refusé) |
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| REASON | string | `TEAMS_LOCKED_DURING_QUESTION` |
+| TEAMS | string[] | Clés d'équipe que le message tentait de retirer (renommer ou supprimer) |
+
+```json
+{ "ACTION": "TEAMS_UPDATE_REFUSED", "MSG": { "REASON": "TEAMS_LOCKED_DURING_QUESTION", "TEAMS": ["Les Bleus"] } }
+```
 
 ---
 

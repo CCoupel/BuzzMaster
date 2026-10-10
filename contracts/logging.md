@@ -70,6 +70,14 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `VPLAYER_DUPLICATE_NAME` | WARN | Liste admin (`UPDATE`/`FULL`) : renommage d'un VJoueur existant vers un nom déjà porté → ignoré ; nouvelle entrée de VJoueur au nom déjà pris → retirée | `id`, `name`, `holder_id` |
 | `VPLAYER_CONN` | INFO | Connexion/déconnexion d'un VJoueur pendant une question `STARTED`/`PAUSED` (non écrit sur disque par défaut ; les coupures sont tracées en WARN par `CLIENT_TRACE WS_GAP` à la reconnexion) | `id`, `event`, `client`, `question`, `phase` |
 
+### 3.2 bis Équipes (v11.2, #249)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `TEAM_NAME_NORMALIZED` | WARN | `NAME` d'une équipe différent de sa clé, corrigé (enregistrement ou chargement de `teams.json`) | `key`, `old_name`, `source` (`load`/`update`) |
+| `TEAMS_CHANGE_REFUSED` | WARN | `UPDATE`/`FULL` qui renomme ou supprime une équipe pendant une question → refusé | `client`, `teams` (clés retirées), `phase`, `question` |
+| `TEAM_RENAMED` | INFO | Renommage appliqué hors question, états reportés (non écrit sur disque par défaut) | `old`, `new`, `migrated` (liste des états reportés) |
+
 ### 3.3 Diffusion
 
 | Événement | Niveau | Quand | Champs |

@@ -81,6 +81,17 @@ type Page =
 
 ---
 
+## `TEAMS_LOCKED` — liste des équipes verrouillée pendant une question (v11.2, #249)
+
+| Propriété | Type | Défaut | Notes |
+|-----------|------|--------|-------|
+| TEAMS_LOCKED | `boolean` | `false` | **Toujours sérialisé** (règle projet, pas d'`omitempty`). Diffusé à tous les clients web |
+
+- `true` **de la sélection d'une question** (`Ready()`, entrée en `PREPARE`) **jusqu'à la révélation de sa réponse** (`REVEALED`), à `false` en `REVEALED`, sur `NEW_GAME`/`InitGame` et au démarrage du serveur. Valeur tenue par un drapeau du moteur, **pas** déduite de la phase : `STOPPED` est aussi la phase de repos (démarrage du serveur, fin d'inscription).
+- Une question qui ne passe jamais par `REVEALED` (abandonnée) garde le verrou jusqu'à la sélection suivante, qui le repose, ou jusqu'à `NEW_GAME`.
+- Effet : tant qu'il vaut `true`, **aucune équipe existante ne peut être renommée ni supprimée** (refus serveur, `websocket-actions.md` §UPDATE) ; ajouter une équipe, changer sa couleur, affecter ou déplacer un joueur restent permis.
+- Raison : de nombreux états de la question sont indexés par le **nom (clé) d'équipe** (`ARDOISE_ANSWERS`, `MEMORY_TEAM_PAIRS`, `MEMORY_TEAM_ERRORS`, `MEMORY_PAIR_OWNERS`, `MEMORY_PARTICIPATING_TEAMS`, `MEMORY_CURRENT_TEAM`, `MEMOTION_CARD_TEAMS`, `MEMOTION_PARTICIPATING_TEAMS`, `MEMOTION_CURRENT_TEAM`, `RAFALE_TEAM_COUNTERS`, `RAFALE_TEAM_BEST`, `RAFALE_PARTICIPATING_TEAMS`, historique des points qui alimente `AWARDED_TEAMS`).
+
 ## Question en cours
 
 ```typescript
