@@ -83,7 +83,7 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | Événement | Niveau | Quand | Champs |
 |-----------|--------|-------|--------|
 | `NEW_GAME_PURGE` | WARN | Chaque `NEW_GAME` appliqué, quelles que soient les options | `client`, `options` (`scores`/`players`/`teams`/`questions` vrais), `players_removed`, `teams_removed`, `scores_reset`, `questions_reset`, `phase_before`, `question_before` |
-| `NEW_GAME_REFUSED` | WARN | `NEW_GAME` refusé (joueurs sans scores) | `client`, `options`, `reason` |
+| `NEW_GAME_REFUSED` | WARN | `NEW_GAME` refusé (joueurs sans scores, ou entracte active) | `client`, `options`, `reason` (`PLAYERS_REQUIRE_SCORES` / `ENTRACTE_ACTIVE`) |
 
 ### 3.3 Diffusion
 

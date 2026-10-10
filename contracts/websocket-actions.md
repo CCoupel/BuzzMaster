@@ -577,12 +577,14 @@ Relance une partie (bouton admin « LANCER LA PARTIE », popup de purge — maqu
 
 - **Payload vide ou sans aucun de ces champs** (clients et scripts antérieurs) = **comportement v11.1 inchangé** : `PURGE_SCORES = true`, `PURGE_PLAYERS = true`, `PURGE_TEAMS = false`, `RESET_QUESTIONS = true`.
 - **Dès qu'un champ est présent**, les champs absents valent `false`. Le nouveau client envoie toujours les quatre.
+- **Entracte active** *(décision CDP, revue #243)* : un `NEW_GAME` reçu pendant une entracte (`GameState.ENTRACTE = true`) est **refusé** : rien n'est appliqué, `NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }` est envoyé à l'émetteur seul, `WARN NEW_GAME_REFUSED`. `NEW_GAME` reste **hors** de la liste d'autorisation de l'entracte (§« Actions refusées pendant l'entracte ») : il faut d'abord sortir de l'entracte. Avant v11.2, le message était ignoré sans réponse et la popup restait figée.
 - **Combinaison interdite** *(décision utilisateur D2)* : `PURGE_PLAYERS = true` avec `PURGE_SCORES = false` → **refus**, rien n'est appliqué (ni arrêt des minuteurs, ni remise à zéro), `NEW_GAME_REFUSED` envoyé à l'émetteur seul, `WARN NEW_GAME_REFUSED`. Le client empêche déjà ce choix (case « Scores » cochée et verrouillée dès que « Joueurs des tablettes » est cochée).
 
 #### Effets — toujours, quelles que soient les options (« relancer la partie »)
 1. **Garantie défensive : tous les minuteurs du moteur sont arrêtés** (chrono de question, décompte, chrono RAFALE classique et de carte, minuteurs MEMOTION de carte et de mémorisation, **chrono différé à la fin du son** de #219, remis à zéro comme dans `Ready()`), le **son de question est arrêté** (`QUESTION_SOUND_STATE` revient à l'état de repos), sans repasser par `STOPPED`. *(Constat v11.1, par lecture du code : les ticks des minuteurs sont déjà sans effet hors `STARTED`/`COUNTDOWN`, et aucun retour à `STOPPED` n'est reproduit, sauf une course de quelques millisecondes sur le tout dernier tick. En revanche, NEW_GAME n'arrêtait **ni le son de question ni le chrono différé** : le son continuait après la remise à zéro et, à sa fin, pouvait relancer un chrono inerte. Cette garantie couvre ces cas et la course.)*
 2. Phase `NEW_GAME`, plus de question courante, états de jeu propres aux types (ARDOISE, MEMORY, MEMOTION, RAFALE) remis à zéro, `TEAMS_LOCKED = false`. *(Les statuts des questions ne sont plus remis à zéro systématiquement : option `RESET_QUESTIONS`.)*
 3. Diffusions existantes : `QUESTIONS`, `UPDATE`, `ENROLLMENT_UPDATE`, `NEXT_QUESTION`, `CREDIT_POINTS`, `AWARDED_TEAMS`.
+4. **Lumières, à chaque NEW_GAME appliqué, quelles que soient les options** *(revue #243)* : `LED_SET` à tous les buzzers (état de repos ; « sans équipe » si `PURGE_TEAMS`) et notification d'état de l'ambiance (`NotifyState`).
 
 #### Effets par option
 
@@ -590,9 +592,9 @@ Relance une partie (bouton admin « LANCER LA PARTIE », popup de purge — maqu
 |--------|-------|-------------|
 | `PURGE_SCORES` | `SCORE`, `TEAM_POINTS`, `TIME` des équipes et `SCORE`, `TIME` de tous les joueurs (buzzers et tablettes conservés) à 0 ; **historique des points effacé** (verrous « déjà créditée » libérés) | `history`, `teams.json`, `bumpers.json` |
 | `PURGE_SCORES` absent/`false` | Scores et historique **conservés** (les crédits des parties précédentes restent dans l'historique ; `AWARDED_TEAMS` ne regarde que la question en cours depuis son départ, donc aucun verrou hérité) | — |
-| `PURGE_PLAYERS` (exige `PURGE_SCORES`) | Tous les VJoueurs supprimés ; chacun reçoit `PLAYER_EVICTED { REASON: "GAME_RESET" }` (et le registre d'éviction le retient pour un retour hors ligne) ; ils devront se réinscrire. **Buzzers physiques jamais supprimés** | `bumpers.json` |
+| `PURGE_PLAYERS` (exige `PURGE_SCORES`) | Tous les VJoueurs supprimés ; chacun reçoit `PLAYER_EVICTED { REASON: "GAME_RESET" }` (et le registre d'éviction le retient pour un retour hors ligne) ; ils devront se réinscrire. **Les connexions liées à ces joueurs sont déliées dans le hub** (invariant #246 : une connexion liée désigne toujours un joueur existant ; leurs actions joueur sont ensuite refusées comme non liées). **Buzzers physiques jamais supprimés** | `bumpers.json` |
 | `RESET_QUESTIONS` | Statuts de toutes les questions effacés (toutes « à jouer ») ; réservoir RAFALE (`rafale_used.json`) remis à zéro ; diffusion `QUESTIONS` | statuts, `rafale_used.json` |
-| `RESET_QUESTIONS` absent/`false` | Statuts et réservoir RAFALE **conservés** : les questions jouées restent marquées jouées ; la « question suivante » reprend après la dernière jouée | — |
+| `RESET_QUESTIONS` absent/`false` | Statuts et réservoir RAFALE **conservés** : les questions jouées restent marquées jouées ; la « question suivante » reprend après la dernière jouée. **Question courante interrompue par le NEW_GAME** *(revue #243)* : sélectionnée mais jamais lancée (`PREPARE`, `READY`, `COUNTDOWN`) → `AVAILABLE` (jamais jouée) ; lancée (`STARTED`, `PAUSED`) → `STOPPED` (jouée, interrompue) ; déjà `STOPPED`/`REVEALED` → statut inchangé | statuts |
 | `PURGE_TEAMS` | Toutes les équipes supprimées, une par une par le même chemin que la suppression d'équipe de #249 (`PurgeTeamState` : états de jeu effacés, événement `TEAM_DELETED` dans l'historique, pas d'héritage du verrou). **Tous les joueurs conservés** (buzzers physiques, et VJoueurs si `PURGE_PLAYERS` est `false`) passent à `TEAM = ""` : les buzzers repassent en LED « sans équipe » (`LED_SET` à tous les buzzers), les tablettes restent liées (#246) et affichent l'attente d'affectation. Les scores des joueurs suivent `PURGE_SCORES` | `teams.json` (vide), `bumpers.json` |
 | aucune option cochée (les quatre à `false`) | Seuls les effets « toujours » s'appliquent (« Lancer sans rien effacer ») | — |
 
@@ -609,7 +611,7 @@ Ordre d'application côté serveur : contrôle de la combinaison interdite → m
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| REASON | string | `PLAYERS_REQUIRE_SCORES` (`PURGE_PLAYERS = true` avec `PURGE_SCORES = false`) |
+| REASON | string | `PLAYERS_REQUIRE_SCORES` (`PURGE_PLAYERS = true` avec `PURGE_SCORES = false`) ou `ENTRACTE_ACTIVE` (entracte en cours) |
 
 ```json
 { "ACTION": "NEW_GAME_REFUSED", "MSG": { "REASON": "PLAYERS_REQUIRE_SCORES" } }

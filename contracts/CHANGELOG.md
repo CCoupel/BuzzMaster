@@ -10,6 +10,7 @@
 - **[NEW]** `websocket-actions.md` §NEW_GAME_REFUSED — refus ciblé de la combinaison `PURGE_PLAYERS` sans `PURGE_SCORES` (motif `PLAYERS_REQUIRE_SCORES`), rien n'est appliqué.
 - **[CHANGED]** `websocket-actions.md` §NEW_GAME — **garantie défensive** : tous les minuteurs (y compris le chrono différé à la fin du son, #219) et le son de question sont arrêtés au NEW_GAME. *(Formulation corrigée après les tests du test-writer : le retour à `STOPPED` décrit initialement n'est pas reproductible ; l'arrêt du son de question et du chrono différé, absent en v11.1, est en revanche établi par lecture du code.)*
 - **[NEW]** `logging.md` §3.2 ter — `NEW_GAME_PURGE`, `NEW_GAME_REFUSED` (WARN).
+- **[CHANGED]** `websocket-actions.md` §NEW_GAME / §NEW_GAME_REFUSED — *(revue #243)* NEW_GAME pendant une **entracte** → refus ciblé `ENTRACTE_ACTIVE` (avant : ignoré sans réponse, popup figée) ; sans `RESET_QUESTIONS`, statut de la question interrompue : `AVAILABLE` si jamais lancée, `STOPPED` si lancée ; `LED_SET` et ambiance notifiées à chaque NEW_GAME appliqué ; à `PURGE_PLAYERS`, connexions des joueurs purgés déliées (invariant #246).
 
 ---
 
