@@ -667,6 +667,69 @@ extension Chrome interactive non requise pour une mesure programmatique), levant
 précédemment ouverte sur cette résolution pour la zone conduite — les autres réserves de la série
 (flou/QCM_HINT/confirmation pixel/etc., qui nécessitent un œil humain) restent, elles, ouvertes.
 
+## ARDOISE v11.2 — accusés, garde REVEAL et écrans joueur (#246)
+
+Maquettes validées : `docs/mockup/v11.2/ui/` (index : `docs/mockup/INDEX.md`). Contraintes durables :
+`docs/mockup/DECISIONS.md`.
+
+### Règle de réception partagée — `utils/ardoiseReceipt.js`
+
+Une seule règle, utilisée par `/admin` et `/anim` : équipes attendues (au moins un VJoueur), équipes
+hors ligne (tous leurs VJoueurs déconnectés), équipes reçues (`RECEIVED = true`). Ne pas recalculer
+ailleurs.
+
+### `ArdoiseRevealGate` (`components/ArdoiseRevealGate.jsx`)
+
+Motif d'attente, pastilles par équipe, compteur `n/N reçues` (gris « Saisie en cours » pendant
+`STARTED`), bouton **« Révéler quand même… »**. Le bouton ouvre une confirmation (`role="dialog"`,
+« Attendre » / « Révéler quand même »). Seule la confirmation envoie `REVEAL {FORCE: true}`.
+Utilisé par `GamePage` (zone ARDOISE, aussi en PAUSED) et `AnimConductPanel` (RÉPONSE en `off`
+avec sous-libellé « en attente »). `AnimArdoiseList` affiche les mêmes pastilles.
+
+- Garde active dès que `phase` vaut `STOPPED` ou `PAUSED`, sans dépendre de `question.STATUS`.
+- `REVEAL_REFUSED` reçu : le motif s'affiche et « Révéler quand même… » est proposé (cas de course).
+- « non confirmée » : affiché sur une équipe révélée sans accusé.
+
+### Hook `useWebSocket.js` (v11.2)
+
+| Export | Rôle |
+|--------|------|
+| `sendClientTrace(kind, extra)` | Émet un `CLIENT_TRACE` (diagnostic, hors état du jeu) |
+| `ardoiseFinalAck {questionId, hash}` | Accusé de réception pour la tablette |
+| `revealRefused {reason, pending}` + `clearRevealRefused` | Refus de garde |
+| `revealAnswer(force)` | `FORCE` envoyé seulement si `force === true` strict |
+
+### Tablette — `VPlayerPage.jsx` et `ArdoiseKeyboard.jsx`
+
+- Saisie : envoi immédiat du premier caractère, puis au plus une fois toutes les **200 ms**, avec le
+  dernier état toujours envoyé. Annulé au démontage.
+- Sortie de `STARTED` : `ARDOISE_FINAL` avec le texte affiché au gel du clavier, renvoi chaque seconde
+  jusqu'à l'accusé valide, au plus 30 envois par liaison. Une page montée après le STOP (rechargement)
+  n'envoie jamais de final vide à l'aveugle.
+- Brouillon : `utils/vplayerSession.js` (`vplayer_ardoise_draft` en `sessionStorage`, propre à l'onglet).
+  Restauré au rechargement tant que la question ne change pas, effacé au changement de question ou
+  NEW_GAME.
+- `ArdoiseKeyboard` reçoit une prop `overlay {tone, prefix, spin, text}` décidée par la page. Clavier
+  verrouillé et vide : « Aucune réponse ». Au-delà de 2 000 caractères, les touches qui ajoutent un
+  caractère sont inactives ; ⌫ et ✕ restent actifs.
+- Messages d'état (maquette `vplayer_ardoise_keyboard__final_ack`) : « Envoi de votre réponse… »,
+  « ✓ Réponse reçue », « ✓ Reçu — aucune réponse écrite », « ⚠ Connexion perdue — … », « ⏸ Jeu en pause ».
+  Aucune invitation à continuer ou à écrire hors saisie.
+- Empreinte : `utils/fnv1a.js` (FNV-1a 32 bits, UTF-8). Doit reproduire les vecteurs de
+  `contracts/websocket-actions.md`.
+- Pull-to-refresh : désactivé sur la page joueur uniquement (`VPlayerPage.css`,
+  `overscroll-behavior-y: none`).
+
+### Écrans de session joueur (v11.2)
+
+| Écran | `data-testid` | Déclencheur | Comportement |
+|-------|---------------|-------------|--------------|
+| Onglet périmé | `vplayer-stale-tab` | Session stockée ≠ l'ID de cet onglet | Aucune émission. « …Fermez cet onglet et utilisez l'autre. » |
+| Session ouverte ailleurs | `vplayer-duplicate-session` | `PLAYER_EVICTED DUPLICATE_SESSION` | Rien effacé. Bouton « Reprendre ici » (renvoie `PLAYER_CONNECT`) |
+
+`clearOwnVPlayerSession(ownId)` n'efface `vplayer_*` que si l'ID stocké est celui de l'onglet. Le
+repli par nom a été supprimé (`VPlayerPage`, `EnrollPage`).
+
 ## Layout GamePage (Admin) - v2.12.0
 
 Layout avec timer pleine largeur + 3 colonnes harmonisées :

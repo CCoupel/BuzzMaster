@@ -444,6 +444,47 @@ Les joueurs virtuels **ne peuvent pas** buzzer sur les questions de type MEMORY 
 
 ---
 
+## Réponses ARDOISE : attente, forçage et journal (v11.2, #246)
+
+### Attendre les tablettes avant de révéler
+
+En question ARDOISE, la réponse d'une équipe n'est retenue qu'une fois confirmée par sa tablette, au
+STOP (ou à la PAUSE). Dans `/admin` et `/anim` :
+
+- Une pastille par équipe et un compteur `n/N reçues`. Une équipe est en attente tant que sa tablette
+  n'a pas confirmé. Une tablette hors ligne bloque aussi, et est signalée comme telle.
+- **REPONSE** reste désactivée tant qu'une équipe est en attente.
+- Si une tablette a été rechargée après le STOP sans qu'un joueur retape son texte, son équipe reste
+  « en attente » : il n'y a rien à confirmer. Reprendre la saisie sur la tablette ou utiliser le
+  forçage ci-dessous.
+- **« Révéler quand même… »** ouvre une confirmation (« Attendre » / « Révéler quand même »). Les
+  équipes non confirmées sont révélées avec leur dernier texte reçu, marquées « non confirmée ».
+
+### Mise à jour : recharger les tablettes
+
+Après une mise à jour du serveur, recharger chaque tablette (page joueur). Une tablette restée sur
+l'ancienne version n'envoie pas la liaison attendue, et ses réponses sont refusées.
+
+Une tablette rechargée pendant la partie retrouve le texte qu'elle affichait, sauf si la question a
+changé entre-temps (le brouillon est conservé dans l'onglet).
+
+### Journal persistant
+
+Le serveur écrit les avertissements sur disque dans `data/logs/buzzcontrol.log` (niveau `WARN` par
+défaut). Le fichier tourne à 10 Mo, en gardant 5 fichiers : `buzzcontrol.log.1`, `.2`, …
+
+Réglages dans `server-go/config.json`, section `logging` (`file_enabled`, `file_path`,
+`file_min_level`, `file_max_size_mb`, `file_max_files`). Sans section `logging`, les valeurs par défaut
+s'appliquent.
+
+Pour une analyse après partie, chercher :
+
+```bash
+grep -E "ARDOISE_(CLEARED|STATE_DIVERGED|REVEAL_FORCED)|VPLAYER_DUPLICATE|PLAYER_(FOREIGN_ID|ACTION_UNBOUND)" data/logs/buzzcontrol.log
+```
+
+Le catalogue des événements et leur lecture sont dans `contracts/logging.md` (§3 et §4).
+
 ## Configuration Effet Neon
 
 ### Presentation

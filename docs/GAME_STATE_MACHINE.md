@@ -617,6 +617,34 @@ Voir `WEBSOCKET_PROTOCOL.md` pour détails complets.
 
 ---
 
+### Garde REVEAL et accusés finaux (v11.2, #246)
+
+Pour une question ARDOISE, la transition vers `REVEAL` est **gardée** :
+
+- **Phases** : `STOPPED` (et `PAUSED`, comme `engine.Reveal()` existant). Les finals sont acceptés en
+  `STOPPED` ou `PAUSED`.
+- **Garde** : sans `FORCE: true`, le REVEAL est refusé tant qu'une équipe attendue n'a pas
+  `ARDOISE_ANSWERS[équipe].RECEIVED = true`. Une tablette hors ligne bloque aussi. Refus : la phase
+  reste inchangée, et l'émetteur reçoit `REVEAL_REFUSED`.
+- **Forçage** : `FORCE: true` révèle immédiatement. Les équipes manquantes gardent leur dernier texte,
+  avec `RECEIVED = false`. Un `WARN ARDOISE_REVEAL_FORCED` est journalisé.
+- **`CONTINUE`** (retour en `STARTED`) : `RECEIVED` repasse à `false` pour toutes les équipes.
+- **PAUSE** : les finals déjà reçus sont conservés.
+- **Invariant** : `ARDOISE_ANSWERS` ne change que par `ARDOISE_INPUT`, `ARDOISE_FINAL`, `Ready()` ou
+  NEW_GAME. Toute autre modification est journalisée en `ERROR ARDOISE_STATE_DIVERGED`.
+- Hors ARDOISE : la machine d'états est inchangée, `FORCE` est ignoré.
+
+Séquence type :
+
+```
+STARTED --STOP--> STOPPED  (tablettes envoient ARDOISE_FINAL, renvoi 1/s jusqu'à l'accusé)
+STOPPED --REVEAL (sans FORCE, équipe attendue non reçue)--> STOPPED  + REVEAL_REFUSED
+STOPPED --REVEAL (toutes reçues, ou FORCE: true)--> REVEALED
+PAUSED  --CONTINUE--> STARTED   (RECEIVED remis à false)
+```
+
+Contrats : `contracts/websocket-actions.md` §REVEAL, §ARDOISE_FINAL ; `contracts/game-state.md`.
+
 ## Type de jeu MEMOTION (v5.0.0 et v7.0.0)
 
 Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mode équipe. À partir de v7.0.0, les cartes MEMOTION supportent plusieurs types de questions imbriquées (QCM, SPEEDY, ARDOISE, MEMORY) avec un système de points configurable.
