@@ -338,3 +338,56 @@ func TestNewGame243_InterruptedQuestionIsAvailableWhenQuestionsAreReset(t *testi
 		t.Errorf("RESET_QUESTIONS : toutes à jouer, obtenu %q", got)
 	}
 }
+
+// Résidu de la relecture ciblée : un NEW_GAME qui survient ENTRE le contrôle « le tick est toujours le tick courant »
+// et l'arrêt (Stop()) ne doit pas voir sa phase remise à STOPPED. La fenêtre est celle de OnTimeUp (appelé après le contrôle,
+// avant Stop()) : on y lance le NEW_GAME, ce qui rend la course déterministe.
+func TestNewGameTimers243_Critical_NewGameInsideOnTimeUpIsNotUndoneByTheFollowingStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("minuteur réel (≈ 3 s), exclu de la boucle rapide (-short)")
+	}
+	e := NewEngine()
+	var injected atomic.Bool
+	e.OnTimeUp = func() {
+		if injected.CompareAndSwap(false, true) {
+			e.InitGameWith(allOptions243(true, false, false, true)) // NEW_GAME pile après le contrôle, avant e.Stop()
+		}
+	}
+	e.Ready("", &Question{ID: "q1", Type: QuestionTypeArdoise})
+	e.SetPhase(PhaseReady)
+	e.StartImmediate(1)
+
+	deadline := time.Now().Add(3 * time.Second)
+	for !injected.Load() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !injected.Load() {
+		t.Fatal("précondition : OnTimeUp n'a pas été appelé (l'expiration normale doit l'appeler)")
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	if ph := e.GetPhase(); ph != GamePhase("NEW_GAME") {
+		t.Errorf("le Stop() qui suit OnTimeUp ne doit pas défaire un NEW_GAME survenu entre-temps, phase = %s", ph)
+	}
+}
+
+// Témoin : sans NEW_GAME, la même expiration arrête bien la question (le correctif ne désactive pas le STOP normal).
+func TestNewGameTimers243_Control_NormalExpiryStillStopsTheQuestion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("minuteur réel (≈ 3 s), exclu de la boucle rapide (-short)")
+	}
+	e := NewEngine()
+	var timeUps atomic.Int32
+	e.OnTimeUp = func() { timeUps.Add(1) }
+	e.Ready("", &Question{ID: "q1", Type: QuestionTypeArdoise})
+	e.SetPhase(PhaseReady)
+	e.StartImmediate(1)
+
+	deadline := time.Now().Add(4 * time.Second)
+	for e.GetPhase() != PhaseStopped && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if e.GetPhase() != PhaseStopped || timeUps.Load() != 1 {
+		t.Errorf("l'expiration normale appelle OnTimeUp une fois puis passe en STOPPED (phase %s, OnTimeUp ×%d)", e.GetPhase(), timeUps.Load())
+	}
+}
