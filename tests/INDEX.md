@@ -35,3 +35,9 @@
 | server-go/web/src/hooks/useWebSocket.teams-lock.249.test.js | unit | websocket, teams | #249 TEAMS_LOCKED dans l'état reçu, TEAMS_UPDATE_REFUSED | feature | |
 | tests/procedures/teams-249.md | manual | teams, admin-game, anim | #249 procédure manuelle (utilisateur uniquement) | feature | |
 | server-go/web/src/pages/PlayerDisplay.ardoise-grid.250.test.jsx | unit | tv | #250 TV REVEAL ARDOISE (maquette adaptive_grid validée) : toutes les équipes (4→20), règle lignes/colonnes/lignes de texte, polices relatives, équipe par la clé, aucun défilement (CSS), coupe « … », non-régression < 8 équipes et autres jeux | feature | critical |
+| server-go/cmd/server/new_game_243_test.go | integration | game-engine, websocket, logging | #243 NEW_GAME : sans options = v11.1, défaut popup, chaque option isolée, RESET_QUESTIONS, refus joueurs sans scores (état inchangé), minuteurs arrêtés, double lancement, TEAMS_LOCKED/AWARDED_TEAMS, journal NEW_GAME_PURGE/REFUSED | regression | critical, slow |
+| server-go/internal/game/new_game_243_test.go | unit | game-engine | #243 InitGameWith : défauts v11.1, réservoir RAFALE et statuts selon RESET_QUESTIONS, minuteurs (aucun survivant, pas de décompte tardif) | regression | critical, slow |
+| server-go/web/src/pages/GamePage.launch-game.243.test.jsx | unit | admin-game | #243 popup « Lancer la partie » (page de jeu) : cases par défaut, verrouillage Scores par Joueurs, phrases, avertissements, bouton désactivé, NEW_GAME_REFUSED, accessibilité | regression | critical |
+| server-go/web/src/components/QuizMetaForm.launch-game.243.test.jsx | unit | admin-game | #243 second point d'entrée (Backstage) | regression | |
+| server-go/web/src/hooks/useWebSocket.new-game.243.test.js | unit | websocket | #243 newGame(options) envoie les quatre champs ; NEW_GAME_REFUSED | regression | critical |
+| tests/procedures/new-game-243.md | manual | admin-game, game-engine | #243 procédure manuelle (utilisateur uniquement) | feature | |
