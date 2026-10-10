@@ -67,6 +67,7 @@ const (
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
+	ActionClientTrace  = "CLIENT_TRACE"  // Client → Server: diagnostic trace (v11.2, #246)
 	ActionArdoiseInput = "ARDOISE_INPUT" // VPlayer → Server: free-text answer update (throttled)
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
@@ -227,7 +228,12 @@ type IncomingMessage struct {
 	// allow-list (contracts/websocket-actions.md) treats an empty/unrecognized
 	// ClientType as matching no entry, i.e. default-deny, not default-admin.
 	ClientType string
-	Timestamp  time.Time
+	// BoundPlayerID is the bumper ID the connection was bound to when the
+	// message was READ (#246). Used only when the connection has already closed
+	// by the time the message is dispatched (last message before a disconnect),
+	// so that it is not mistaken for an unbound connection. Empty otherwise.
+	BoundPlayerID string
+	Timestamp     time.Time
 }
 
 // ButtonPayload for BUTTON action
@@ -728,6 +734,20 @@ type VPlayerQCMAnswerPayload struct {
 type ArdoiseInputPayload struct {
 	ID   string `json:"ID,omitempty"` // Bumper ID (VPlayer MAC) — explicit, same as VPLAYER_QCM_ANSWER
 	Text string `json:"TEXT"`         // Current answer text (full content, not delta)
+	// v11.2 (#246) — diagnostic only (contracts/websocket-actions.md ARDOISE_INPUT).
+	Seq    int    `json:"SEQ,omitempty"`    // per question & per connection counter, >= 1
+	Reason string `json:"REASON,omitempty"` // key | clear | backspace_empty | resend | visible
+}
+
+// ClientTracePayload for CLIENT_TRACE (v11.2, #246): client diagnostic event,
+// journalised by the server, no effect on game state.
+type ClientTracePayload struct {
+	Kind        string                 `json:"KIND"`
+	At          int64                  `json:"AT"`
+	Team        string                 `json:"TEAM,omitempty"`
+	PrevLen     int                    `json:"PREV_LEN,omitempty"`
+	CauseAction string                 `json:"CAUSE_ACTION,omitempty"`
+	Detail      map[string]interface{} `json:"DETAIL,omitempty"`
 }
 
 // LogHistoryPayload for LOG_HISTORY action (send log history to client)

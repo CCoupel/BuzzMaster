@@ -3,6 +3,7 @@ package game
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -259,6 +260,13 @@ type Engine struct {
 	// timerReleased directly.
 	timerDeferred bool
 	timerReleased bool
+
+	// ardoiseControl (#246, contracts/logging.md ARDOISE_STATE_DIVERGED) is the
+	// control copy of the ARDOISE texts, maintained ONLY by the authorised write
+	// paths (SetArdoiseAnswer, Ready, NEW_GAME/InitGame; ARDOISE_FINAL in Batch 2).
+	// Any difference with state.ArdoiseAnswers at a checkpoint is a rogue write.
+	ardoiseControlMu sync.Mutex
+	ardoiseControl   map[string]string
 
 	// Callbacks
 	//
@@ -793,9 +801,81 @@ func (e *Engine) hostContextUnsafe() HostContext {
 // SetPhase sets the game phase
 func (e *Engine) SetPhase(phase GamePhase) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.state.Phase = phase
 	log.Printf("[Engine] Phase set to: %s", phase)
+	divs := e.ardoiseDivergencesUnsafe("SetPhase")
+	e.mu.Unlock()
+	reportArdoiseDivergences(divs)
+}
+
+// ArdoiseDivergenceReporter receives one formatted ARDOISE_STATE_DIVERGED line
+// per divergence (wired to the ERROR log by internal/server, which the engine
+// cannot import). #246.
+var ArdoiseDivergenceReporter func(msg string)
+
+func reportArdoiseDivergences(divs []string) {
+	if rep := ArdoiseDivergenceReporter; rep != nil {
+		for _, d := range divs {
+			rep(d)
+		}
+	}
+}
+
+// ardoiseDivergencesUnsafe compares state.ArdoiseAnswers with the control copy
+// (caller holds e.mu, read or write) and resyncs the copy so a divergence is
+// reported once.
+func (e *Engine) ardoiseDivergencesUnsafe(site string) []string {
+	e.ardoiseControlMu.Lock()
+	defer e.ardoiseControlMu.Unlock()
+	if e.ardoiseControl == nil {
+		e.ardoiseControl = map[string]string{}
+	}
+	qid := ""
+	if e.state.Question != nil {
+		qid = e.state.Question.ID
+	}
+	var out []string
+	report := func(team, expected, actual string) {
+		out = append(out, fmt.Sprintf("ARDOISE_STATE_DIVERGED team=%q expected=%q actual=%q site=%s phase=%s question=%q",
+			team, expected, actual, site, e.state.Phase, qid))
+	}
+	for team, a := range e.state.ArdoiseAnswers {
+		if exp := e.ardoiseControl[team]; exp != a.Text {
+			report(team, exp, a.Text)
+			e.ardoiseControl[team] = a.Text
+		}
+	}
+	for team, exp := range e.ardoiseControl {
+		if _, ok := e.state.ArdoiseAnswers[team]; !ok {
+			if exp != "" {
+				report(team, exp, "")
+			}
+			delete(e.ardoiseControl, team)
+		}
+	}
+	return out
+}
+
+// VerifyArdoiseInvariant checks the ARDOISE control copy (checkpoint: full-state
+// broadcast, phase change). site names the caller in the log line.
+func (e *Engine) VerifyArdoiseInvariant(site string) {
+	e.mu.RLock()
+	divs := e.ardoiseDivergencesUnsafe(site)
+	e.mu.RUnlock()
+	reportArdoiseDivergences(divs)
+}
+
+// GetArdoiseText returns the current ARDOISE text of a team ("" if none).
+func (e *Engine) GetArdoiseText(teamName string) string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.ArdoiseAnswers[teamName].Text
+}
+
+func (e *Engine) resetArdoiseControl() {
+	e.ardoiseControlMu.Lock()
+	e.ardoiseControl = map[string]string{}
+	e.ardoiseControlMu.Unlock()
 }
 
 // GetTeamsAndBumpers returns teams and bumpers data
@@ -1312,6 +1392,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 		// Reset ARDOISE answers for new question (v5.6.0)
 		e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
+		e.resetArdoiseControl()
 	}
 
 	// Reset RAFALE state — v8.0.0, #107 originally (unconditional on
@@ -3760,6 +3841,7 @@ func (e *Engine) InitGame() []string {
 
 	// Reset ARDOISE answers (v5.6.0)
 	e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
+	e.resetArdoiseControl()
 
 	// Release any outstanding RAFALE pre-fetch (#202, contract §13.4)
 	// BEFORE wiping rafaleUsed wholesale below — releaseRafaleNextUnsafe's
@@ -4081,6 +4163,8 @@ func (e *Engine) GetCurrentBackgroundDuration() int {
 // GetGameJSON returns game state as JSON
 func (e *Engine) GetGameJSON() json.RawMessage {
 	e.mu.RLock()
+	divs := e.ardoiseDivergencesUnsafe("GetGameJSON")
+	defer func() { reportArdoiseDivergences(divs) }()
 	defer e.mu.RUnlock()
 
 	bumpers := e.data.Bumpers
@@ -5884,6 +5968,12 @@ func (e *Engine) SetArdoiseAnswer(teamName string, text string) bool {
 		StartedAt:   startedAt,
 		SubmittedAt: now,
 	}
+	e.ardoiseControlMu.Lock()
+	if e.ardoiseControl == nil {
+		e.ardoiseControl = map[string]string{}
+	}
+	e.ardoiseControl[teamName] = text
+	e.ardoiseControlMu.Unlock()
 	return true
 }
 

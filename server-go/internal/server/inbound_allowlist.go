@@ -39,6 +39,9 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// ClientTypeAnim added v6.2.0 (#155) — interface animateur.
 	protocol.ActionHello: {ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim},
 
+	// CLIENT_TRACE (v11.2, #246): diagnostic only, no effect on the game.
+	protocol.ActionClientTrace: {ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim},
+
 	// --- Conduite en direct — admin + anim (v6.2.0, #155/#156) --------
 	// Exact périmètre acté for the interface animateur (cadrage
 	// _work/reports/plan-20260812-141735.md §1, plan B3

@@ -139,6 +139,12 @@ type App struct {
 	// (OnStateChange) and stopped on server shutdown (a.stop()).
 	ardoiseCoalescer *BroadcastCoalescer
 
+	// #246 diagnostic state: per-connection ARDOISE SEQ tracking and
+	// CLIENT_TRACE rate limiting.
+	diagMu    sync.Mutex
+	ardoiseSq map[string]*ardoiseSeqState
+	traceLim  map[string]*traceLimiter
+
 	// currentCreditPoints is the animateur's live-synced base credit amount
 	// (code review MAJEUR-1, #155/#156 — contracts/websocket-actions.md
 	// §"Animateur" CREDIT_POINTS) — the server-side mirror of /admin's
@@ -475,6 +481,10 @@ func (a *App) init() {
 	// Initialize global logger (singleton)
 	a.logger = server.InitLogger(1000)
 	a.logger.SetDebugEnabled(a.config.Server.Debug)
+	// #246: persistent log file (contracts/logging.md §1). Never fatal.
+	if err := a.logger.SetFileOutput(a.config.Logging); err != nil {
+		a.logger.Warn(game.LogComponentApp, "log file unavailable (%v) — logging to memory/stdout only", err)
+	}
 
 	// UDP broadcaster
 	a.udpBcast = server.NewUDPBroadcaster()
@@ -1405,7 +1415,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	// #246 B-ID — a vplayer connection may only act as the bumper it is bound to
 	// (PLAYER_CONNECT). Admin simulations and tv/anim actions are not concerned.
 	if clientType == server.ClientTypeVPlayer && isBoundPlayerAction(msg.Action) {
-		if !a.checkPlayerBinding(incoming.ClientID, msg) {
+		if !a.checkPlayerBinding(incoming.ClientID, incoming.BoundPlayerID, msg) {
 			return
 		}
 	}
@@ -1593,6 +1603,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionArdoiseInput:
 		a.handleArdoiseInput(incoming.ClientID, msg)
+
+	case protocol.ActionClientTrace:
+		a.handleClientTrace(incoming.ClientID, clientType, msg)
 
 	case protocol.ActionNewGame:
 		a.logger.Info(game.LogComponentEngine, "NEW_GAME — reset scores, history, statuses")
@@ -3399,9 +3412,14 @@ func isBoundPlayerAction(action string) bool {
 // bound ID is written to msg.ID so the handlers' 3-pass resolution
 // (payload.ID → msg.ID → clientID) lands on the bound bumper even when the
 // payload carries no ID. Refusals are silent for the client and logged WARN.
-func (a *App) checkPlayerBinding(clientID string, msg *protocol.Message) bool {
-	boundID, ok := a.wsHub.GetClientPlayerID(clientID)
-	if !ok {
+func (a *App) checkPlayerBinding(clientID, readTimeBoundID string, msg *protocol.Message) bool {
+	boundID, connected := a.wsHub.ClientBinding(clientID)
+	if !connected {
+		// The connection closed between the read and the dispatch (last message
+		// before a disconnect): trust the binding observed at read time.
+		boundID = readTimeBoundID
+	}
+	if boundID == "" {
 		var p struct {
 			ID string `json:"ID"`
 		}
@@ -3684,13 +3702,40 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 		return
 	}
 
+	// #246 SEQ (diagnostic, contracts/websocket-actions.md ARDOISE_INPUT step 4):
+	// only evaluated for a message that would be applied (phase + type guards).
+	st := a.engine.GetState()
+	phase := st.Phase
+	questionID := ""
+	if st.Question != nil {
+		questionID = st.Question.ID
+	}
+	acceptable := phase == game.PhaseStarted && st.Question != nil && st.Question.Type == game.QuestionTypeArdoise
+	if acceptable && payload.Seq > 0 {
+		if !a.checkArdoiseSeq(clientID, bumperID, questionID, payload.Seq) {
+			return
+		}
+	}
+
+	prevText := a.engine.GetArdoiseText(teamName)
+
 	// SetArdoiseAnswer applies phase + type guards and returns false if conditions not met
 	if !a.engine.SetArdoiseAnswer(teamName, payload.Text) {
 		server.LogWarn(game.LogComponentApp, "ARDOISE_INPUT: ignored (phase=%s or question type mismatch)", a.engine.GetPhase())
 		return
 	}
 
-	server.LogInfo(game.LogComponentApp, "ARDOISE_INPUT: team=%s text=%q (from client %s)", teamName, payload.Text, clientID)
+	// #246: the per-keystroke line is DEBUG (it flooded the 1000-entry buffer).
+	server.LogDebug(game.LogComponentApp, "ARDOISE_INPUT: team=%s text=%q (from client %s)", teamName, payload.Text, clientID)
+
+	if prevText != "" && payload.Text == "" {
+		connAge := int64(-1)
+		if ms, ok := a.wsHub.ClientAgeMs(clientID); ok {
+			connAge = ms
+		}
+		server.LogWarn(game.LogComponentApp, "ARDOISE_CLEARED team=%q bumper=%s client=%s conn_age_ms=%d prev_len=%d seq=%d reason=%s question=%q phase=%s",
+			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, payload.Reason, questionID, phase)
+	}
 
 	// #129 T1.5: admin only — so admin sees answers build up in real-time.
 	// TV excluded: PlayerDisplay.jsx:2427 only renders ARDOISE_ANSWERS in
@@ -3711,6 +3756,113 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 	// payload). Flushed immediately on every phase change (OnStateChange) so
 	// the last keystrokes before REVEAL are never held back — CA5/CA6.
 	a.ardoiseCoalescer.Trigger()
+}
+
+// ardoiseSeqState tracks the last applied ARDOISE_INPUT SEQ for one connection
+// and one question (#246).
+type ardoiseSeqState struct {
+	question string
+	last     int
+}
+
+// checkArdoiseSeq returns false when the message is stale (SEQ <= last applied,
+// same connection and question) and must be ignored; a gap is only logged.
+func (a *App) checkArdoiseSeq(clientID, bumperID, questionID string, seq int) bool {
+	a.diagMu.Lock()
+	defer a.diagMu.Unlock()
+	if a.ardoiseSq == nil {
+		a.ardoiseSq = make(map[string]*ardoiseSeqState)
+	}
+	st := a.ardoiseSq[clientID]
+	if st == nil || st.question != questionID {
+		st = &ardoiseSeqState{question: questionID}
+		a.ardoiseSq[clientID] = st
+	}
+	if seq <= st.last {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_STALE bumper=%s client=%s last=%d got=%d", bumperID, clientID, st.last, seq)
+		return false
+	}
+	if seq != st.last+1 {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_GAP bumper=%s client=%s expected=%d got=%d", bumperID, clientID, st.last+1, seq)
+	}
+	st.last = seq
+	return true
+}
+
+// traceLimiter caps CLIENT_TRACE at 10 messages/s per connection and emits one
+// CLIENT_TRACE_THROTTLED warning per minute (#246).
+type traceLimiter struct {
+	windowStart time.Time
+	count       int
+	lastWarn    time.Time
+}
+
+const (
+	clientTraceMaxPerSecond = 10
+	clientTraceMaxBytes     = 1024
+)
+
+// handleClientTrace journalises a client diagnostic event. No game effect.
+func (a *App) handleClientTrace(clientID string, clientType server.ClientType, msg *protocol.Message) {
+	if len(msg.Msg) > clientTraceMaxBytes {
+		return
+	}
+	a.diagMu.Lock()
+	if a.traceLim == nil {
+		a.traceLim = make(map[string]*traceLimiter)
+	}
+	lim := a.traceLim[clientID]
+	if lim == nil {
+		if len(a.traceLim) > 1000 { // bounded: drop stale entries
+			a.traceLim = make(map[string]*traceLimiter)
+		}
+		lim = &traceLimiter{}
+		a.traceLim[clientID] = lim
+	}
+	now := time.Now()
+	if now.Sub(lim.windowStart) >= time.Second {
+		lim.windowStart, lim.count = now, 0
+	}
+	lim.count++
+	over := lim.count > clientTraceMaxPerSecond
+	warn := over && now.Sub(lim.lastWarn) >= time.Minute
+	if warn {
+		lim.lastWarn = now
+	}
+	a.diagMu.Unlock()
+	if over {
+		if warn {
+			server.LogWarn(game.LogComponentWebSocket, "CLIENT_TRACE_THROTTLED client=%s type=%s", clientID, clientType)
+		}
+		return
+	}
+
+	var p protocol.ClientTracePayload
+	if err := json.Unmarshal(msg.Msg, &p); err != nil || p.Kind == "" {
+		return
+	}
+	playerID, _ := a.wsHub.GetClientPlayerID(clientID)
+	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, playerID, p.Kind, p.At)
+	if p.Team != "" {
+		line += fmt.Sprintf(" team=%q", p.Team)
+	}
+	if p.PrevLen != 0 {
+		line += fmt.Sprintf(" prev_len=%d", p.PrevLen)
+	}
+	if p.CauseAction != "" {
+		line += fmt.Sprintf(" cause_action=%s", p.CauseAction)
+	}
+	if len(p.Detail) > 0 {
+		keys := make([]string, 0, len(p.Detail))
+		for k := range p.Detail {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			line += fmt.Sprintf(" detail.%s=%v", k, p.Detail[k])
+		}
+	}
+	server.LogWarn(game.LogComponentWebSocket, "%s", line)
 }
 
 // ardoiseCoalesceWindow is the ≤150ms ceiling #129 T2.1/CA5 sets on how long

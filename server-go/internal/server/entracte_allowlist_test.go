@@ -32,6 +32,7 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionPong:                 true,
 
 	// --- Refused during entracte (everything else) --------------------
+	protocol.ActionClientTrace:           false, // #246 diagnostic: not in the contract's entracte list (default-deny)
 	protocol.ActionReady:                 false,
 	protocol.ActionStart:                 false,
 	protocol.ActionStop:                  false,
