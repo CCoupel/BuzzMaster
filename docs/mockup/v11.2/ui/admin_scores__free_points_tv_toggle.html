@@ -1,0 +1,116 @@
+<!--
+mockup:
+  composant: admin_scores
+  feature: free_points_tv_toggle
+  version: 11.2.0
+  type: ui
+  issue: "#252"
+  validee_le: 2026-10-11
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Scores : points libres et affichage TV (#252)</title>
+<style>
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --red:#dc2626; --ok:#16a34a; --amber:#b45309; --amberbg:#fef3c7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:50; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); }
+  .page { max-width:1100px; margin:0 auto 2rem; padding:0 1rem; }
+  .page-header { display:flex; flex-wrap:wrap; align-items:center; gap:.8rem 1.2rem; background:#fff; border-radius:.75rem; padding:.8rem 1rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .page-title { margin:0; font-size:1.2rem; }
+  .points-selector { display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }
+  .points-label { font-weight:700; font-size:.85rem; color:var(--gray-700); }
+  .points-btn { border:1px solid var(--gray-300); background:#fff; border-radius:.45rem; min-width:2.3rem; height:2.1rem; font-weight:800; cursor:pointer; }
+  .points-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .free { display:flex; align-items:center; gap:.3rem; }
+  .free input { width:4.2rem; height:2.1rem; border:1px solid var(--gray-300); border-radius:.45rem; text-align:center; font-weight:800; font-size:.95rem; }
+  .free input.active { border-color:var(--primary); box-shadow:0 0 0 2px rgba(79,70,229,.25); }
+  .free .err { font-size:.72rem; color:var(--red); }
+  .tv-toggle { margin-left:auto; display:flex; align-items:center; gap:.55rem; padding:.35rem .6rem; border-radius:.6rem; border:1px solid var(--gray-200); background:var(--gray-50); }
+  .tv-toggle .lbl { font-size:.85rem; font-weight:700; }
+  .switch { width:2.6rem; height:1.45rem; border-radius:999px; background:var(--gray-300); position:relative; border:0; cursor:pointer; }
+  .switch::after { content:""; position:absolute; top:.15rem; left:.15rem; width:1.15rem; height:1.15rem; border-radius:50%; background:#fff; transition:left .15s; }
+  .switch.on { background:var(--ok); } .switch.on::after { left:1.3rem; }
+  .tv-state { font-size:.78rem; color:var(--gray-500); }
+  .hidden-banner { display:none; margin:.6rem 0 0; padding:.5rem .7rem; border-radius:.5rem; background:var(--amberbg); color:var(--amber); font-size:.84rem; font-weight:600; }
+  .hidden-banner.show { display:block; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
+  @media (max-width:820px) { .grid { grid-template-columns:1fr; } .tv-toggle { margin-left:0; } }
+  .section { background:#fff; border-radius:.75rem; padding:.8rem 1rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .section-title { margin:0 0 .6rem; font-size:.95rem; }
+  .ranking-item { display:flex; align-items:center; gap:.6rem; padding:.45rem .3rem; border-bottom:1px solid var(--gray-100); }
+  .badge { width:1.8rem; height:1.8rem; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:.85rem; }
+  .info { flex:1; } .name { font-weight:700; font-size:.9rem; } .barw { height:.35rem; background:var(--gray-100); border-radius:999px; margin-top:.25rem; } .barf { height:100%; border-radius:999px; }
+  .score { font-weight:800; width:3rem; text-align:right; }
+  .ctrl { display:flex; gap:.3rem; }
+  .ctrl button { border:0; border-radius:.45rem; height:2rem; padding:0 .55rem; font-weight:800; cursor:pointer; white-space:nowrap; }
+  .ctrl .rm { background:#fee2e2; color:var(--red); } .ctrl .add { background:#dcfce7; color:var(--ok); }
+  .silent-mark { font-size:.75rem; margin-left:.2rem; }
+  .log { margin-top:1rem; } .log li { font-size:.8rem; color:var(--gray-700); margin:.2rem 0; } .log .h { color:var(--amber); font-weight:700; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — état :</strong>
+  <label><input type="radio" name="st" value="preset" checked> Valeur prédéfinie, affiché sur la TV</label>
+  <label><input type="radio" name="st" value="free"> Nombre libre (7)</label>
+  <label><input type="radio" name="st" value="neg"> Nombre libre négatif (−4)</label>
+  <label><input type="radio" name="st" value="hidden"> « Afficher sur la TV » désactivé</label>
+  <label><input type="radio" name="st" value="invalid"> Saisie invalide</label>
+</div>
+<p class="mock-note">Page « Gestion des Scores », en entier. Ajouts : un champ de <b>nombre libre</b> à côté des boutons 1/2/5/10 (le montant sélectionné s'applique aux boutons − / + de chaque ligne ; un nombre négatif est aussi accepté) et un interrupteur <b>« Afficher sur la TV »</b>. Activé par défaut = comportement actuel. Désactivé = <b>correction cachée</b> : ni bandeau, ni son, ni LED, ni flash ; le classement de la TV se met à jour au prochain affichage normal. Proposition à valider : s'applique <b>aux équipes et aux joueurs</b>. Même vocabulaire que la page de jeu (« points », « Donner / Retirer »).</p>
+
+<div class="page">
+  <header class="page-header">
+    <h1 class="page-title">Gestion des Scores</h1>
+    <div class="points-selector">
+      <span class="points-label">Points :</span>
+      <span id="presets"></span>
+      <span class="free"><input id="free" type="number" step="1" min="-999" max="999" placeholder="autre" aria-label="Nombre de points libre (négatif autorisé)" title="Nombre libre, de −999 à 999"><span class="err" id="err"></span></span>
+    </div>
+    <div class="tv-toggle"><span class="lbl">📺 Afficher sur la TV</span><button class="switch on" id="sw" role="switch" aria-checked="true" aria-label="Afficher les attributions sur la TV"></button><span class="tv-state" id="tvs">animation + son + LED</span></div>
+  </header>
+  <div class="hidden-banner" id="hb">🔇 Correction cachée : les points sont enregistrés sans animation, sans son ni LED. Le classement de la TV se mettra à jour au prochain affichage normal.</div>
+  <div class="grid">
+    <section class="section"><h2 class="section-title">Équipes</h2><div id="teams"></div></section>
+    <section class="section"><h2 class="section-title">Joueurs</h2><div id="players"></div></section>
+  </div>
+  <section class="section log"><h2 class="section-title">Dernières attributions</h2><ul id="log"><li>+3 Les Bleus (question 9)</li><li>+5 Les Verts</li></ul></section>
+</div>
+<script>
+const TEAMS = [['Les Bleus','#2563eb',42],['Les Verts','#16a34a',37],['Les Rouges','#dc2626',31],['Les Jaunes','#ca8a04',22]];
+const PLAYERS = [['Paul','#2563eb',12],['Mamie','#16a34a',10],['Alice','#dc2626',9]];
+const $ = id => document.getElementById(id);
+let amount = 1, freeOn = false, tv = true, invalid = false;
+function draw() {
+  $('presets').innerHTML = [1, 2, 5, 10].map(v => '<button class="points-btn' + (!freeOn && amount === v ? ' active' : '') + '" data-v="' + v + '">' + v + '</button>').join(' ');
+  document.querySelectorAll('.points-btn').forEach(b => b.onclick = () => { amount = +b.dataset.v; freeOn = false; $('free').value = ''; invalid = false; draw(); });
+  $('free').classList.toggle('active', freeOn); $('err').textContent = invalid ? 'Entier de −999 à 999' : '';
+  $('sw').classList.toggle('on', tv); $('sw').setAttribute('aria-checked', tv); $('tvs').textContent = tv ? 'animation + son + LED' : 'correction cachée';
+  $('hb').classList.toggle('show', !tv);
+  const a = Math.abs(amount), mark = tv ? '' : '<span class="silent-mark" title="Sans affichage TV">🔇</span>';
+  const row = ([n, c, s], max) => '<div class="ranking-item"><div class="badge" style="background:' + c + '">' + n[0] + '</div><div class="info"><div class="name">' + n + '</div><div class="barw"><div class="barf" style="width:' + Math.round(100 * s / max) + '%;background:' + c + '"></div></div></div><div class="score">' + s + '</div>' +
+    '<div class="ctrl"><button class="rm" ' + (invalid ? 'disabled' : '') + ' title="Retirer ' + a + ' point(s)' + (tv ? '' : ' sans affichage TV') + '">−' + a + mark + '</button><button class="add" ' + (invalid ? 'disabled' : '') + ' title="Donner ' + a + ' point(s)' + (tv ? '' : ' sans affichage TV') + '">+' + a + mark + '</button></div></div>';
+  $('teams').innerHTML = TEAMS.map(t => row(t, 42)).join('');
+  $('players').innerHTML = PLAYERS.map(p => row(p, 12)).join('');
+}
+$('free').oninput = e => { const v = e.target.value; const n = Number(v); invalid = v !== '' && (!Number.isInteger(n) || n < -999 || n > 999 || n === 0); if (!invalid && v !== '') { amount = n; freeOn = true; } draw(); };
+$('sw').onclick = () => { tv = !tv; draw(); };
+function render(s) { amount = 1; freeOn = false; tv = true; invalid = false; $('free').value = '';
+  if (s === 'free') { amount = 7; freeOn = true; $('free').value = 7; }
+  if (s === 'neg') { amount = -4; freeOn = true; $('free').value = -4; }
+  if (s === 'hidden') { tv = false; }
+  if (s === 'invalid') { $('free').value = '2.5'; invalid = true; }
+  draw(); }
+document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => render(e.target.value)));
+render('preset');
+</script>
+</body>
+</html>
