@@ -1325,14 +1325,22 @@ Envoyée par `admin` (bouton « LANCER LA PARTIE »). Contrat détaillé : `cont
 - **Payload vide** (clients antérieurs) : comportement v11.1 (scores et joueurs purgés, équipes conservées,
   questions remises à zéro).
 - **Dès qu'un champ est présent**, les champs absents valent `false`.
-- **Refus** : `PURGE_PLAYERS = true` avec `PURGE_SCORES = false` → rien n'est appliqué, réponse ciblée
-  `NEW_GAME_REFUSED`, journal `WARN NEW_GAME_REFUSED`.
+- **Refus** (réponse ciblée `NEW_GAME_REFUSED`, rien n'est appliqué, `WARN NEW_GAME_REFUSED`) :
+  - `PLAYERS_REQUIRE_SCORES` : `PURGE_PLAYERS = true` avec `PURGE_SCORES = false`.
+  - `ENTRACTE_ACTIVE` : `NEW_GAME` reçu pendant une entracte. `NEW_GAME` n'est pas dans la liste
+    d'autorisation de l'entracte : il faut d'abord sortir de l'entracte. Avant v11.2, le message était ignoré
+    sans réponse et la popup restait figée.
 
 ```json
 { "ACTION": "NEW_GAME_REFUSED", "MSG": { "REASON": "PLAYERS_REQUIRE_SCORES" } }
 ```
 
-- **Toujours** : arrêt de tous les minuteurs et du son de question, `TEAMS_LOCKED = false`.
+- **Toujours** : arrêt de tous les minuteurs et du son de question, `TEAMS_LOCKED = false`, LED de repos
+  (`LED_SET` à tous les buzzers) et notification d'ambiance, à chaque `NEW_GAME` appliqué.
+- **Statut de la question interrompue** (sans `RESET_QUESTIONS`) : sélectionnée mais jamais lancée → `AVAILABLE` ;
+  lancée (`STARTED`, `PAUSED`) → `STOPPED` ; `STOPPED`/`REVEALED` → inchangé.
+- **Joueurs purgés** : les connexions liées à ces joueurs sont déliées dans le hub (une connexion liée désigne
+  toujours un joueur existant).
 - **Journal** : `WARN NEW_GAME_PURGE` (options, joueurs et équipes supprimés, phase et question avant le lancement).
 
 ## Action ENTRACTE_SET — Pause Globale (v6.5.2, #119)
