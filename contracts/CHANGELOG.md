@@ -2,6 +2,18 @@
 
 ---
 
+## [20261011] — Points libres et correction cachée (#252, v11.2)
+
+> Décisions utilisateur : montant libre de −999 à 999 pour les équipes et les joueurs ; interrupteur « Afficher sur la TV » (activé par défaut) ; désactivé = rien d'animé, sur aucun canal ; classement à jour sans animation.
+
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS, §BUMPER_POINTS — champ facultatif `DISPLAY` (absent = `true` = comportement actuel) ; règle « Affichage public » listant tous les canaux coupés ; `POINTS = 0` ignoré.
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH — `DISPLAY` branché (réservé depuis #244/#251).
+- **[NEW]** `game-state.md` §`SCORE_CHANGE` — marqueur de la dernière modification de score (`SEQ`, `DISPLAY`, `TEAMS`, `PLAYERS`), toujours sérialisé, pour que TV, VJoueur et anim ne jouent aucune animation sur une correction cachée.
+- **[NEW]** `logging.md` §3.2 quinquies — `SCORE_CORRECTION_HIDDEN` (WARN).
+- Aucune BREAKING.
+
+---
+
 ## [20261011] — Attribution groupée des points après le REVEAL (#244/#251, v11.2)
 
 > Décisions utilisateur : cases à cocher par équipe ; en QCM, clic sur une réponse = sélection des équipes qui l'ont donnée + montant (bonne réponse : points de la question ; mauvaise : désélection puis sélection + pénalité −1) ; bouton « Donner les points (N) » visible après le REVEAL ; équipe déjà créditée grisée ; admin seulement.

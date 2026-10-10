@@ -469,6 +469,20 @@ Modifie le score d'une équipe.
 |-------|------|-------------|-------------|
 | TEAM | string | ✅ | Nom de l'équipe |
 | POINTS | int | ✅ | Points à ajouter (peut être négatif) |
+| DISPLAY | boolean | ⬜ | *(v11.2, #252)* `false` = correction cachée, voir ci-dessous ; absent = `true` |
+
+#### Affichage public — champ `DISPLAY` (v11.2, #252) — `[CHANGED]` additif
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| DISPLAY | boolean | ⬜ | `true` ou **absent** = comportement actuel (effets publics). `false` = **correction cachée** : **aucun effet animé, sur aucun canal** |
+
+Avec `DISPLAY: false` :
+- **Serveur** : ni comète LED, ni pulsation d'ambiance (`NotifyPulse`), ni son « gagné » (`CueGagne`), ni flash de score lumineux (`startScoreFlash`). Ces effets n'existent déjà que pour un montant positif.
+- **Écrans (TV, VJoueur, anim)** : le score est mis à jour dans l'`UPDATE` (classement cohérent), mais **sans aucune animation** : ni « +X pts » flottant, ni célébration, ni surbrillance ou montée de rang. Les écrans le savent grâce à `GameState.SCORE_CHANGE` (`contracts/game-state.md`).
+- **Historique** : l'entrée `POINTS_AWARDED` est enregistrée normalement, avec `DISPLAY: false` (piste d'audit ; la page Historique de l'admin la marque « 🔇 correction cachée »). Elle compte dans `AWARDED_TEAMS` comme tout crédit de la question courante.
+- **Journal** : `WARN SCORE_CORRECTION_HIDDEN` (`contracts/logging.md`).
+- **Montant** : la page Scores impose un entier non nul de −999 à 999 (prédéfini ou saisie libre). Le serveur ne change pas sa validation de `TEAM_POINTS`/`BUMPER_POINTS` (rétrocompatibilité), sauf `POINTS = 0`, désormais **ignoré** (aucune entrée d'historique, aucun `UPDATE`).
 
 ---
 
@@ -489,7 +503,7 @@ Attribue des points à **plusieurs équipes en une action** (bouton admin « Don
 | ENTRIES | array | ✅ | 1 à 64 entrées, une par équipe sélectionnée, **équipes distinctes** |
 | ENTRIES[].TEAM | string | ✅ | Clé de l'équipe (identité = clé, #249) |
 | ENTRIES[].POINTS | int | ✅ | Montant pour cette équipe, entier non nul de −999 à 999 (le montant peut varier d'une équipe à l'autre : barème du type, §Montants) |
-| DISPLAY | boolean | ⬜ | **Réservé à #252** (« Afficher sur la TV ») : absent = `true` = effets publics actuels. Sans effet tant que #252 n'est pas livré ; même sémantique que sur `TEAM_POINTS`/`BUMPER_POINTS` après #252 |
+| DISPLAY | boolean | ⬜ | *(branché par #252)* même règle que `TEAM_POINTS` §« Affichage public » : `false` = aucun effet public groupé (point 4) et `SCORE_CHANGE.DISPLAY = false` ; absent = `true` |
 
 #### Validation et atomicité
 1. **Refus global** (rien appliqué, `TEAM_POINTS_BATCH_RESULT` avec `STATUS: "REFUSED"`, `WARN TEAM_POINTS_BATCH_REFUSED`) si : phase ≠ `REVEALED` (`NOT_REVEALED`) ; `QUESTION_ID` ≠ question courante (`QUESTION_MISMATCH`) ; `ENTRIES` vide, trop longue ou avec une équipe en double (`INVALID_ENTRIES`) ; un montant nul, non entier ou hors bornes (`INVALID_POINTS`) ; **une équipe inconnue** — renommée ou supprimée entre la sélection et le clic, #249 (`UNKNOWN_TEAM`, avec `TEAMS` = clés inconnues).
@@ -543,7 +557,8 @@ Modifie le score d'un joueur.
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
 | ID | string | ✅ | MAC du bumper |
-| POINTS | int | ✅ | Points à ajouter |
+| POINTS | int | ✅ | Points à ajouter (peut être négatif) |
+| DISPLAY | boolean | ⬜ | *(v11.2, #252)* même règle que `TEAM_POINTS` §« Affichage public » |
 
 ---
 

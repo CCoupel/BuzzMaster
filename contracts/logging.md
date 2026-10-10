@@ -92,6 +92,12 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `TEAM_POINTS_BATCH` | INFO | Lot appliqué (non écrit sur disque par défaut) | `client`, `question`, `applied` (équipe:montant), `skipped` (équipe:motif) |
 | `TEAM_POINTS_BATCH_REFUSED` | WARN | Lot refusé | `client`, `question`, `reason`, `teams` |
 
+### 3.2 quinquies Corrections de score (v11.2, #252)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `SCORE_CORRECTION_HIDDEN` | WARN | `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` avec `DISPLAY: false` | `client`, `action`, `targets` (équipe ou joueur : montant), `question` |
+
 ### 3.3 Diffusion
 
 | Événement | Niveau | Quand | Champs |

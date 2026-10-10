@@ -99,6 +99,16 @@ type Page =
   - Les joueurs (`bumpers[*].TEAM`) sont déplacés par le message de renommage lui-même. `MEMOTION_ACTIVE.STATE` ne contient aucune clé d'équipe : rien à reporter.
   - Tout nouveau champ indexé par équipe ajouté à `GameState` **doit** rejoindre cette liste (revue).
 
+## `SCORE_CHANGE` — dernière modification de score (v11.2, #252)
+
+| Propriété | Type | Défaut | Notes |
+|-----------|------|--------|-------|
+| SCORE_CHANGE | `{ SEQ: number, DISPLAY: boolean, TEAMS: string[], PLAYERS: string[] }` | `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: []}` | **Toujours sérialisé**, listes jamais `null`. Diffusé à tous les clients web |
+
+- Mis à jour **à chaque** `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` appliqué : `SEQ` augmente de 1, `DISPLAY` = valeur de l'action (absent = `true`), `TEAMS` = équipes dont le score change, `PLAYERS` = joueurs (ID de bumper) dont le score change. Non persisté ; remis à zéro au démarrage et sur `NEW_GAME`.
+- **Règle d'affichage des écrans (TV, VJoueur, anim)** : quand un `UPDATE` apporte un nouveau `SCORE_CHANGE.SEQ` avec `DISPLAY = false`, les nouveaux scores des équipes et joueurs listés sont **pris comme référence sans animation**. Pas de « +X pts », pas de célébration, pas de surbrillance ni de montée de rang ; les chiffres du classement changent simplement. Avec `DISPLAY = true`, le comportement actuel est conservé.
+- Si un même `UPDATE` cumule une modification cachée et une visible (rare), seule la dernière (`SEQ` le plus grand) fait foi pour les équipes et joueurs qu'elle liste.
+
 ## Question en cours
 
 ```typescript
