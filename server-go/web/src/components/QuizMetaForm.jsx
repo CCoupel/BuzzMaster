@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Button from './Button'
+import LaunchGameButton from './LaunchGameDialog'
 import Card, { CardHeader, CardBody } from './Card'
 
 // Énumérations partagées avec la modale IA et le contrat backend
@@ -22,7 +23,7 @@ export const QUIZ_LANGUAGES = ['Français', 'Anglais', 'Espagnol']
  * déclencheur NOUVELLE PARTIE directement depuis `useGame().newGame`, sans
  * passer par ce composant.
  */
-export default function QuizMetaForm({ gameState, sendMessage, onNewGame }) {
+export default function QuizMetaForm({ gameState, sendMessage, onNewGame, launchContext }) {
   const [quizName, setQuizName] = useState(gameState.quizName || '')
   const [quizTheme, setQuizTheme] = useState(gameState.quizTheme || '')
   const [quizNotes, setQuizNotes] = useState(gameState.quizNotes || '')
@@ -86,9 +87,15 @@ export default function QuizMetaForm({ gameState, sendMessage, onNewGame }) {
           <div className="section-header">
             <h3 className="section-title">Quiz</h3>
             {onNewGame && (
-              <Button variant="fun" size="sm" onClick={onNewGame} title="Réinitialiser le jeu et préparer une nouvelle partie">
-                NOUVELLE PARTIE
-              </Button>
+              <LaunchGameButton
+                onLaunch={onNewGame}
+                teams={launchContext?.teams}
+                bumpers={launchContext?.bumpers}
+                questions={launchContext?.questions}
+                phase={gameState?.phase}
+                refused={launchContext?.refused}
+                onClearRefused={launchContext?.onClearRefused}
+              />
             )}
           </div>
         </CardHeader>

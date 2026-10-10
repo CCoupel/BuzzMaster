@@ -127,13 +127,16 @@ describe('QuizMetaForm — chips multi-sélection Publics/Difficultés (#137 Bat
     expect(payload.POPULATIONS).toHaveLength(2)
   })
 
-  it('NOUVELLE PARTIE : bouton rendu uniquement quand onNewGame est fourni, appelle le callback au clic (#215)', () => {
+  it('LANCER LA PARTIE : bouton rendu uniquement quand onNewGame est fourni ; le clic ouvre la popup, la confirmation appelle le callback (#215, #243)', () => {
     const onNewGame = vi.fn()
     const { rerender } = render(<QuizMetaForm gameState={makeGameState()} sendMessage={vi.fn()} />)
-    expect(screen.queryByText('NOUVELLE PARTIE')).toBeNull()
+    expect(screen.queryByText('LANCER LA PARTIE')).toBeNull()
 
     rerender(<QuizMetaForm gameState={makeGameState()} sendMessage={vi.fn()} onNewGame={onNewGame} />)
-    fireEvent.click(screen.getByText('NOUVELLE PARTIE'))
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    expect(onNewGame).not.toHaveBeenCalled() // rien n'est envoyé sans confirmation
+    fireEvent.click(screen.getByRole('button', { name: 'Lancer la partie' }))
     expect(onNewGame).toHaveBeenCalledTimes(1)
+    expect(onNewGame).toHaveBeenCalledWith({ purgeScores: true, purgePlayers: false, purgeTeams: false, resetQuestions: true })
   })
 })

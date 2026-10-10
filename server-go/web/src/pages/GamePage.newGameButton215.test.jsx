@@ -95,19 +95,22 @@ describe('GamePage — bouton NOUVELLE PARTIE (#215 AC9)', () => {
     vi.clearAllMocks()
   })
 
-  it('le bouton NOUVELLE PARTIE est présent sur /admin (GamePage), sans passer par Backstage', () => {
+  it('le bouton LANCER LA PARTIE est présent sur /admin (GamePage), sans passer par Backstage (#243)', () => {
     useGame.mockReturnValue(makeGameMock())
     render(<GamePage />)
-    expect(screen.getByText('NOUVELLE PARTIE')).toBeInTheDocument()
+    expect(screen.getByText('LANCER LA PARTIE')).toBeInTheDocument()
   })
 
-  it('cliquer NOUVELLE PARTIE appelle useGame().newGame directement', () => {
+  it('LANCER LA PARTIE ouvre la popup ; la confirmation appelle useGame().newGame directement avec les options (#243)', () => {
     const newGame = vi.fn()
     useGame.mockReturnValue(makeGameMock({ newGame }))
     render(<GamePage />)
 
-    fireEvent.click(screen.getByText('NOUVELLE PARTIE'))
+    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
+    expect(newGame).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Lancer la partie' }))
 
     expect(newGame).toHaveBeenCalledTimes(1)
+    expect(newGame).toHaveBeenCalledWith({ purgeScores: true, purgePlayers: false, purgeTeams: false, resetQuestions: true })
   })
 })

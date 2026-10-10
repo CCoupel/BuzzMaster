@@ -30,6 +30,7 @@ import {
 import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import Button from '../components/Button'
+import LaunchGameButton from '../components/LaunchGameDialog'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
@@ -86,6 +87,8 @@ export default function GamePage() {
     rafaleValidate,
     rafaleInvalidate,
     newGame,
+    newGameRefused,
+    clearNewGameRefused,
     // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
     questionSound,
   } = useGame()
@@ -639,15 +642,17 @@ export default function GamePage() {
           {/* #215 (AC9) — NOUVELLE PARTIE reste accessible depuis /admin, en
               plus de /admin/backstage (QuizMetaForm) : l'animateur ne doit
               pas changer de page en pleine soirée pour relancer. */}
-          <Button
-            variant="fun"
-            size="sm"
+          {/* #243 : « LANCER LA PARTIE » + popup de purge à 4 cases (remplace « NOUVELLE PARTIE ») */}
+          <LaunchGameButton
             className="new-game-btn"
-            onClick={newGame}
-            title="Réinitialiser le jeu et préparer une nouvelle partie"
-          >
-            NOUVELLE PARTIE
-          </Button>
+            onLaunch={newGame}
+            teams={teams}
+            bumpers={bumpers}
+            questions={questions}
+            phase={gameState.phase}
+            refused={newGameRefused}
+            onClearRefused={clearNewGameRefused}
+          />
           {nextUnplayedQuestion && (
             <button
               className="next-question-btn"
