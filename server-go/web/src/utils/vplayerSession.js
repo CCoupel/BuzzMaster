@@ -37,7 +37,8 @@ export function isStaleVPlayerSession(ownId) {
 // absent). Retourne true si l'effacement a eu lieu.
 export function clearOwnVPlayerSession(ownId) {
   const stored = getStoredVPlayerId()
-  if (stored && ownId && stored !== ownId) return false
+  // Sans ID propre connu, un ID stocké appartient forcément à un autre onglet.
+  if (stored && (!ownId || stored !== ownId)) return false
   clearVPlayerSession()
   return true
 }

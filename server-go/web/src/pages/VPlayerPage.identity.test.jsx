@@ -216,4 +216,26 @@ describe('VPlayerPage — identité de l\'onglet (#246, F-ID)', () => {
     expect(stale.container.querySelector('[data-testid="vplayer-stale-tab"]')).not.toBeNull()
     expect(mockNavigate).not.toHaveBeenCalledWith('/')
   })
+
+  it('2 × PLAYER_CONNECTED sur la même connexion : SEQ ne repart pas à 1 (strictement croissant)', async () => {
+    const gameState = { phase: 'STARTED', question: { ID: 'q1', TYPE: 'ARDOISE' }, enrollmentActive: false }
+    const mock = makeGameMock({ gameState, playerConnectStatus: { status: 'connected', id: ID, name: 'Alice' } })
+    useGame.mockReturnValue(mock)
+    const { getByTestId, rerender } = render(<VPlayerPage />)
+    await act(async () => {})
+    fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'P' } })
+    fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'PA' } })
+    await act(async () => { vi.advanceTimersByTime(250) })
+
+    // second PLAYER_CONNECTED (renvoi à 2 s) : nouvel objet de statut, même connexion
+    useGame.mockReturnValue({ ...mock, playerConnectStatus: { status: 'connected', id: ID, name: 'Alice' } })
+    rerender(<VPlayerPage />)
+    await act(async () => {})
+    fireEvent.change(getByTestId('ardoise-input'), { target: { value: 'PAR' } })
+    await act(async () => { vi.advanceTimersByTime(250) })
+
+    const seqs = mock.sendMessage.mock.calls.filter(([a]) => a === 'ARDOISE_INPUT').map(([, p]) => p.SEQ)
+    expect(seqs.length).toBeGreaterThanOrEqual(3)
+    for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBeGreaterThan(seqs[i - 1])
+  })
 })

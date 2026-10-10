@@ -366,8 +366,11 @@ export default function VPlayerPage() {
     // #246 : PLAYER_CONNECTED de la connexion courante = liaison établie. Le
     // nom affiché est celui du serveur (le cas 1 ne renomme plus).
     if (playerConnectStatus.status === 'connected' && status === 'connected') {
+      // SEQ repart à 1 seulement sur la transition non lié → lié (nouvelle
+      // liaison) ; un second PLAYER_CONNECTED de la même connexion (renvoi à 2 s)
+      // ne remet rien à zéro.
+      if (!boundRef.current) ardoiseSeqRef.current = 0
       boundRef.current = true
-      ardoiseSeqRef.current = 0 // nouvelle connexion liée : SEQ repart à 1
       setBound(true)
       if (playerConnectStatus.name) {
         setPlayerSession((prev) => (prev && prev.name !== playerConnectStatus.name
