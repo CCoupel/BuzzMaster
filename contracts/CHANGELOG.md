@@ -2,6 +2,30 @@
 
 ---
 
+## [20261010] — Fiabilisation ARDOISE, identité des joueurs virtuels, journalisation persistante (#246, v11.2 — lot A)
+
+> Retour terrain semaine bleue 2026 : le texte ARDOISE d'une équipe disparaissait de l'admin et de
+> la TV alors qu'il restait sur la tablette ; des tablettes changeaient spontanément de nom.
+> Plan : `_work/reports/planner-20261010-115600.md` (rév. 10) et `_work/reports/planner-20261010-131500.md`.
+> **Aucun changement BREAKING au sens du protocole.** Deux **changements de comportement** sont
+> signalés ci-dessous (⚠️). Ils sont livrés avec les interfaces de la même version.
+
+- **[CHANGED]** ⚠️ `websocket-actions.md` §PLAYER_CONNECT — **liaison connexion ↔ bumper** : le client VJoueur envoie `PLAYER_CONNECT {NAME, ID}` à **chaque** ouverture de WebSocket ; les actions joueur (`ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`, `BUTTON`, `FLIP_MEMORY_CARD`) d'une connexion `vplayer` non liée, ou portant un autre `ID`, sont **refusées**. Un onglet de tablette resté sur un ancien bundle doit être rechargé.
+- **[CHANGED]** `websocket-actions.md` §PLAYER_CONNECT cas 1 — le `NAME` envoyé **ne renomme plus** le bumper ; `PLAYER_CONNECTED.NAME` porte le nom serveur.
+- **[CHANGED]** `websocket-actions.md` §PLAYER_CONNECT — **unicité des noms** de VJoueurs (sans casse) ; plus de liaison **par nom** côté client.
+- **[NEW]** `websocket-actions.md` §PLAYER_EVICTED — motif `DUPLICATE_SESSION` (une seule connexion liée par bumper, la plus récente gagne ; l'évincé n'efface pas la session).
+- **[CHANGED]** `websocket-actions.md` §PLAYER_EVICTED — règle client : les clés `vplayer_*` du `localStorage` ne sont effacées que si `vplayer_id` stocké = l'ID de l'onglet ; onglet périmé = cesse toute émission.
+- **[CHANGED]** `websocket-actions.md` §ARDOISE_INPUT — champs facultatifs `SEQ` et `REASON` (diagnostic ; `SEQ` périmé sur la même connexion → ignoré) ; diffusion documentée telle qu'implémentée (coalescée, admin + anim).
+- **[NEW]** `websocket-actions.md` §ARDOISE_FINAL — texte final + hash FNV-1a (UTF-8), envoyé à la sortie de `STARTED`, renvoyé toutes les 1 s jusqu'à l'accusé ; vecteurs de test fournis.
+- **[NEW]** `websocket-actions.md` §ARDOISE_FINAL_ACK — accusé ciblé (sans texte).
+- **[CHANGED]** ⚠️ `websocket-actions.md` §REVEAL — champ facultatif `FORCE` ; **garde ARDOISE** : REVEAL refusé tant qu'une équipe attendue n'a pas son texte final reçu, **tablette hors ligne comprise** ; forçage par `FORCE: true`.
+- **[NEW]** `websocket-actions.md` §REVEAL_REFUSED — réponse ciblée `{REASON: "ARDOISE_PENDING", PENDING: [{TEAM, OFFLINE}]}`.
+- **[NEW]** `websocket-actions.md` §CLIENT_TRACE — événements de diagnostic clients (tous types), limités à 10/s et 1 Ko ; allow-list mise à jour (`ARDOISE_FINAL` : vplayer ; `CLIENT_TRACE` : tous).
+- **[CHANGED]** `game-state.md` / `models.md` §ArdoiseAnswer — champs **`RECEIVED`** (bool) et **`RECEIVED_HASH`** (string), toujours sérialisés ; `STARTED_AT` ajouté au contrat `game-state.md` (déjà émis depuis #117) ; `RECEIVED` remis à `false` au `CONTINUE` ; invariant « aucune modification sans saisie ».
+- **[NEW]** `logging.md` — section `logging` de `config.json` (fichier tournant, niveau minimal `WARN`), passage en `DEBUG` de la ligne par frappe, catalogue des événements de diagnostic et table de lecture en QUALIF.
+
+---
+
 ## [20260925] — Forçage de la vue TV « Jeu » au lancement d'une manche (#240, v11.1)
 
 - **[CHANGED]** `contracts/game-state.md` — sémantique de `REMOTE` : remis à `GAME` par le serveur à la sélection de question (PREPARE), au START, au CONTINUE après PAUSE et au départ de carte MEMOTION/RAFALE. Rétro-compatible, aucun nouveau champ.

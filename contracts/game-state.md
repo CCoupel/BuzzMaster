@@ -364,16 +364,25 @@ Réponses texte libres des équipes pour les questions de type `ARDOISE`.
 
 ```typescript
 interface ArdoiseAnswer {
-  TEXT: string         // Texte saisi par l'équipe
-  SUBMITTED_AT: number // Timestamp microsecondes (dernière mise à jour)
+  TEXT: string          // Texte saisi par l'équipe (complet, pas un delta)
+  STARTED_AT: number    // µs — 1er texte non vide reçu pour cette question (figé, #117 ; documenté dans models.md)
+  SUBMITTED_AT: number  // µs — dernière modification
+  RECEIVED: boolean     // v11.2 (#246) — texte FINAL reçu et accusé (ARDOISE_FINAL) ; false pendant STARTED
+  RECEIVED_HASH: string // v11.2 (#246) — FNV-1a 32 bits (hex, 8 car.) du texte final reçu ; "" tant que RECEIVED = false
 }
 ```
+
+> **v11.2 (#246) — `[CHANGED]` additif** : `RECEIVED` et `RECEIVED_HASH` sont **toujours
+> sérialisés** (pas d'`omitempty`, règle projet). Un client antérieur les ignore.
 
 **Règles** :
 - Reset à `{}` à chaque nouvelle question (`Ready()`)
 - Reset à `{}` sur `InitGame()` (NEW_GAME)
-- Mise à jour en temps réel via `ARDOISE_INPUT` (broadcast UPDATE immédiat)
+- Mise à jour en temps réel via `ARDOISE_INPUT` (diffusion `UPDATE` coalescée ≤ 150 ms vers admin + anim, #129/#158)
 - `SUBMITTED_AT` = timestamp microsecondes de la dernière modification
+- **v11.2** : `RECEIVED = true` uniquement par `ARDOISE_FINAL` (phase `STOPPED`/`PAUSED`, hash vérifié) ; remis à `false` pour **toutes** les équipes au `CONTINUE` (retour en `STARTED`). `ARDOISE_INPUT` ne le modifie jamais.
+- **v11.2 — garde de REVEAL** (`websocket-actions.md` §REVEAL) : sans `FORCE`, REVEAL refusé tant qu'une **équipe attendue** (≥ 1 bumper `IS_VPLAYER` avec `TEAM` = sa clé) n'a pas `RECEIVED = true`, tablette hors ligne comprise. Une équipe attendue sans entrée dans la map compte comme non reçue.
+- **v11.2 — invariant serveur** : `ARDOISE_ANSWERS` ne change que par `ARDOISE_INPUT`, `ARDOISE_FINAL`, `Ready()` ou NEW_GAME. Toute autre différence détectée → `ERROR ARDOISE_STATE_DIVERGED` (`contracts/logging.md`).
 
 ---
 

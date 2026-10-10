@@ -2,7 +2,7 @@
 
 > **Endpoint** : `/ws`
 > **Format** : JSON
-> **Dernière mise à jour** : 2026-08-13 (#155/#156 — allow-list animateur, action NEXT_QUESTION, v6.2.0)
+> **Dernière mise à jour** : 2026-10-10 (#246, v11.2 — fiabilisation ARDOISE : liaison connexion ↔ bumper, `ARDOISE_FINAL`/`ARDOISE_FINAL_ACK`, garde de `REVEAL` + `REVEAL_REFUSED`, `CLIENT_TRACE`, motif `DUPLICATE_SESSION`)
 
 ---
 
@@ -44,6 +44,8 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | MEMOTION_SELECT | ❌ | ✅ | ❌ | ✅ **(v6.2.x, #160)** |
 | MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE | ✅ | ❌ | ❌ | ✅ **(v6.2.x, #160)** |
 | PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ | ❌ |
+| **ARDOISE_FINAL** | ❌ | ❌ | ✅ | ❌ **(v11.2, #246)** |
+| **CLIENT_TRACE** | ✅ | ✅ | ✅ | ✅ **(v11.2, #246 — diagnostic uniquement)** |
 
 Notes :
 - **SET_CREDIT_POINTS** (v6.2.0, code review MAJEUR-1 sur #155/#156, voir §"Animateur" ci-dessous)
@@ -353,12 +355,33 @@ Affiche la réponse.
 
 | Propriété | Valeur |
 |-----------|--------|
-| Direction | `Client→Server` |
-| Phase     | STOPPED |
+| Direction | `Client→Server` (`admin`, `anim`) |
+| Phase     | STOPPED (ou PAUSED, comportement existant de `engine.Reveal()`) |
 
 #### Payload
 
-Aucun.
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| FORCE | boolean | ⬜ *(v11.2, #246)* | `true` = révéler malgré des réponses ARDOISE non reçues (bouton « Révéler quand même », après confirmation). Absent ou `false` = comportement par défaut ci-dessous. Ignoré hors question ARDOISE. |
+
+#### Garde ARDOISE (v11.2, #246) — `[CHANGED]` comportement
+
+Pour une question `TYPE = "ARDOISE"`, sans `FORCE: true`, le serveur **refuse** le REVEAL tant
+qu'une **équipe attendue** n'a pas `ARDOISE_ANSWERS[équipe].RECEIVED = true` — **y compris si sa
+tablette est hors ligne** (décision utilisateur). Le refus ne change pas la phase et répond
+`REVEAL_REFUSED` **à l'émetteur seul**.
+
+- **Équipe attendue** : toute clé de `teams` ayant au moins un bumper `IS_VPLAYER = true` avec
+  `TEAM` = cette clé. Même règle côté serveur (garde) et côté interfaces (coches, compteur).
+- **Hors ligne** (information d'affichage, ne lève pas la garde) : tous les VJoueurs de l'équipe
+  ont `CONNECTED = false`.
+- `FORCE: true` révèle immédiatement ; le serveur journalise `WARN ARDOISE_REVEAL_FORCED`
+  (`contracts/logging.md`) avec la liste des équipes non reçues. Ces équipes gardent au REVEAL le
+  dernier texte reçu pendant `STARTED`, avec `RECEIVED = false`.
+- Hors ARDOISE : comportement inchangé, `FORCE` ignoré.
+- Un client antérieur (sans `FORCE`) voit ses REVEAL ARDOISE refusés tant que les réponses ne sont
+  pas reçues : **changement de comportement signalé** (CHANGELOG [20261010]). Admin et anim sont
+  livrés dans la même version que le serveur.
 
 ---
 
@@ -793,10 +816,34 @@ Demande d'inscription ou de reconnexion VPlayer.
 
 | # | Situation | Décision |
 |---|---|---|
-| 1 | `ID` fourni et résout un bumper `IsVirtual` existant | Reconnexion — réutilise le bumper (badge → `green`), pas d'ambiguïté possible |
+| 1 | `ID` fourni et résout un bumper `IsVirtual` existant | Reconnexion — réutilise le bumper (badge → `green`), pas d'ambiguïté possible. **v11.2 (#246) `[CHANGED]` : le `NAME` envoyé ne modifie plus le nom du bumper** (avant : le nom était remplacé par celui du client, sans contrôle d'unicité — un onglet périmé renommait ainsi le joueur actuel avec un nom d'une ancienne partie). Si `NAME` ≠ nom du bumper : `WARN VPLAYER_NAME_MISMATCH`, et `PLAYER_CONNECTED.NAME` renvoie le nom **serveur**, que le client adopte. |
 | 2 | `ID` fourni mais introuvable (supprimé par l'admin, périmé, ...) | Traité comme si aucun ID n'était fourni → cas 3/4 |
 | 3 | Pas d'`ID` (ou introuvable), nom déjà pris par un autre VJoueur (connecté **ou** déconnecté) | **`PLAYER_REJECTED { REASON: "NAME_TAKEN" }`** — jamais de fusion/remplacement |
 | 4 | Pas d'`ID` (ou introuvable), nom libre | Nouvel enrôlement — un nouveau bumper est créé, son ID est renvoyé dans `PLAYER_CONNECTED.ID` |
+
+#### Liaison connexion ↔ bumper (v11.2, #246) — `[CHANGED]`
+
+- Un `PLAYER_CONNECT` accepté **lie la connexion WebSocket émettrice** à ce bumper
+  (`WebSocketHub.SetClientPlayerID`, existant).
+- **Le client VJoueur DOIT envoyer `PLAYER_CONNECT {NAME, ID}` à CHAQUE ouverture de sa WebSocket**
+  dès qu'il connaît son ID — y compris quand le bumper est déjà trouvé `CONNECTED` dans l'état reçu
+  (avant v11.2 il s'en dispensait, sa connexion restait alors non liée).
+- **Une seule connexion liée par bumper** : la plus récente l'emporte. L'ancienne reçoit
+  `PLAYER_EVICTED { REASON: "DUPLICATE_SESSION" }` et est déliée (`WARN VPLAYER_DUPLICATE_SESSION`).
+- **Actions joueur liées** : `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`, `BUTTON`,
+  `FLIP_MEMORY_CARD` **émises par un client `vplayer`** sont **refusées** (ignorées, sans réponse)
+  si la connexion n'est liée à aucun bumper (`WARN PLAYER_ACTION_UNBOUND`) ou si leur `ID` ≠ bumper
+  lié (`WARN PLAYER_FOREIGN_ID`). Les simulations `BUTTON`/`PONG` de l'admin et les actions TV/anim
+  ne sont pas concernées.
+- Le client met ses actions joueur en attente jusqu'au `PLAYER_CONNECTED` de la connexion courante,
+  puis les envoie (pour ARDOISE : texte complet courant).
+- **Le nom n'identifie jamais un joueur côté client** : un client sans ID mémorisé ne se lie pas à
+  un bumper par son nom (suppression du repli par nom de la page joueur et de la page
+  d'inscription) — il repasse par l'enrôlement ou la demande de place (#122).
+- **Unicité des noms de VJoueurs** (comparaison sans casse, espaces retirés) : aucune action serveur
+  ne produit deux VJoueurs de même nom. Un renommage admin (`UPDATE`/`FULL`) vers un nom déjà porté
+  par un autre VJoueur est ignoré pour ce bumper (`WARN VPLAYER_DUPLICATE_NAME`), l'état est
+  rediffusé.
 
 > **Important** : l'identité d'un VJoueur repose désormais **uniquement sur l'ID**, jamais sur le
 > nom seul. Un client doit conserver l'`ID` reçu (ex. `localStorage`) et le renvoyer à chaque
@@ -855,12 +902,21 @@ renvois silencieux à la page d'inscription pendant la fenêtre d'enrôlement.
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| REASON | string | `PLAYER_REMOVED` (fiche supprimée par l'animateur) ou `GAME_RESET` (roster VJoueur purgé par `InitGame` sur NEW_GAME) |
+| REASON | string | `PLAYER_REMOVED` (fiche supprimée par l'animateur), `GAME_RESET` (roster VJoueur purgé par `InitGame` sur NEW_GAME), ou **`DUPLICATE_SESSION`** *(v11.2, #246)* : une connexion plus récente s'est liée au même bumper (autre onglet ou autre appareil) |
 
 #### Règles
 
 - Le client qui reçoit `PLAYER_EVICTED` efface sa session locale (`vplayer_name`,
-  `vplayer_session`, `vplayer_id`) et retourne à la page d'inscription **en affichant le motif**.
+  `vplayer_session`, `vplayer_id`) et retourne à la page d'inscription **en affichant le motif** —
+  **sauf `DUPLICATE_SESSION`** *(v11.2)* : la session est toujours valide (portée par l'autre
+  connexion). Le client **n'efface rien**, cesse d'émettre et affiche « Cette session est ouverte
+  ailleurs » avec un bouton « Reprendre ici » (renvoie `PLAYER_CONNECT`).
+- **Règle générale v11.2 (#246)** : un client n'efface les clés `vplayer_*` du `localStorage` que si
+  `vplayer_id` stocké = **son propre** ID de session (ou est absent). Le `localStorage` est partagé
+  par tous les onglets du navigateur ; avant v11.2, un onglet périmé effaçait la session de l'onglet
+  actif. Un onglet qui constate que `vplayer_id` stocké ≠ son ID de session (au montage, à la
+  reconnexion ou sur l'événement `storage`) se déclare **périmé** : il cesse toute émission, n'envoie
+  pas de `PLAYER_CONNECT` et affiche « Session ouverte dans un autre onglet ».
 - L'absence d'un bumper dans une mise à jour de roster n'est **jamais** à elle seule un motif de
   renvoi : seul `PLAYER_EVICTED` fait autorité. C'est la règle qui ferme la course de #120.
 - Un client qui ignore cette action (version antérieure) conserve le comportement précédent —
@@ -1646,7 +1702,9 @@ Définit la limite de VPlayers.
 ### ARDOISE_INPUT ✨ (v5.6.0)
 
 Mise à jour de la réponse texte d'une équipe pour une question ARDOISE.
-Envoyé par le VPlayer (throttlé ~200ms). Envoi forcé sur réception STOP/PAUSE.
+Envoyé par le VPlayer (1ᵉʳ caractère immédiat, puis debounce ~200 ms). **v11.2 (#246)** : à la
+réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), plus par
+`ARDOISE_INPUT` (qui était rejeté par la garde de phase).
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -1660,7 +1718,9 @@ Envoyé par le VPlayer (throttlé ~200ms). Envoi forcé sur réception STOP/PAUS
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
 | TEXT | string | ✅ | Texte complet saisi (pas un delta) |
-| ID | string | ⬜ | Bumper ID de l'émetteur, première passe de la résolution 3 passes `payload.ID → msg.ID → clientID` (`handleArdoiseInput`). Présent dans `ArdoiseInputPayload` depuis v5.6.0 mais **omis de ce tableau jusqu'en v7.1.0** — documentation rattrapée, aucun changement de comportement |
+| ID | string | ⬜ | Bumper ID de l'émetteur, première passe de la résolution 3 passes `payload.ID → msg.ID → clientID` (`handleArdoiseInput`). Présent dans `ArdoiseInputPayload` depuis v5.6.0 mais **omis de ce tableau jusqu'en v7.1.0** — documentation rattrapée, aucun changement de comportement. **v11.2 : doit être égal au bumper lié à la connexion** (voir « Liaison connexion ↔ bumper ») |
+| SEQ | integer | ⬜ *(v11.2, #246)* | Compteur d'envoi ≥ 1, croissant **par question et par connexion** (remis à 1 à chaque nouvelle question et à chaque nouvelle connexion). **Diagnostic** : sert à journaliser les trous (`ARDOISE_SEQ_GAP`) et les messages périmés (`ARDOISE_SEQ_STALE`, même connexion, `SEQ` ≤ dernier reçu → message ignoré). Absent = pas de contrôle. |
+| REASON | string | ⬜ *(v11.2, #246)* | Motif de l'envoi, **diagnostic uniquement** : `key` (frappe), `clear` (✕ « Effacer tout »), `backspace_empty` (⌫ jusqu'au vide), `resend` (renvoi après liaison de la connexion), `visible` (retour au premier plan). Journalisé avec `ARDOISE_CLEARED`. |
 
 #### Exemple
 
@@ -1668,20 +1728,145 @@ Envoyé par le VPlayer (throttlé ~200ms). Envoi forcé sur réception STOP/PAUS
 {
   "ACTION": "ARDOISE_INPUT",
   "MSG": {
-    "TEXT": "Paris"
+    "ID": "vjoueur_Paul_20261006_140000",
+    "TEXT": "Paris",
+    "SEQ": 7,
+    "REASON": "key"
   }
 }
 ```
 
 #### Comportement serveur
 
-1. **Guard phase** : ignore silencieusement si `phase ≠ STARTED`
-2. **Guard type** : ignore silencieusement si `question.TYPE ≠ "ARDOISE"`
-3. **Résolution équipe** : `clientID → bumper → bumper.Team` (protocole natif, aucun champ TEAM dans le payload)
-4. Mise à jour `GameState.ARDOISE_ANSWERS[teamName] = { TEXT, SUBMITTED_AT }`
-5. Broadcast `UPDATE` immédiat vers admin/TV
+1. **Liaison (v11.2)** : ignoré + `WARN` si la connexion n'est pas liée ou si `ID` ≠ bumper lié
+2. **Guard phase** : ignore silencieusement si `phase ≠ STARTED`
+3. **Guard type** : ignore silencieusement si `question.TYPE ≠ "ARDOISE"`
+4. **SEQ (v11.2)** : même connexion et `SEQ` ≤ dernier appliqué → ignoré + `WARN ARDOISE_SEQ_STALE` ; trou → `WARN ARDOISE_SEQ_GAP` puis appliqué
+5. **Résolution équipe** : bumper lié → `bumper.Team` (clé de l'équipe)
+6. Mise à jour `GameState.ARDOISE_ANSWERS[teamName]` (`TEXT`, `SUBMITTED_AT`, `STARTED_AT` figé au 1ᵉʳ texte non vide ; `RECEIVED` inchangé)
+7. Texte précédent non vide → `""` : `WARN ARDOISE_CLEARED` (équipe, bumper, client, âge de connexion, longueur précédente, `SEQ`, `REASON`)
+8. Diffusion `UPDATE` **coalescée** (≤ 1 / 150 ms) vers **admin + anim** (#129/#158 — la TV le reçoit aux changements de phase, le VJoueur jamais, #128). La ligne `INFO` par frappe passe au niveau `DEBUG` (v11.2).
 
 **Fire-and-forget** : aucune réponse du serveur vers le VPlayer.
+
+---
+
+### ARDOISE_FINAL ✨ (v11.2, #246)
+
+Texte **final** d'une tablette pour la question ARDOISE courante, envoyé à la sortie de `STARTED`.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `VPlayer → Server` (connexion liée, voir « Liaison connexion ↔ bumper ») |
+| Déclencheur | Réception de `STOP` ou `PAUSE` pendant une question ARDOISE ; renvoi **toutes les 1 s** tant qu'aucun `ARDOISE_FINAL_ACK` valide n'est reçu et que la phase reste `STOPPED`/`PAUSED` pour la même question ; renvoi immédiat après chaque nouvelle liaison de connexion et au retour au premier plan (`visibilitychange` → visible) |
+| Phase acceptée | `STOPPED` ou `PAUSED`, question courante |
+
+#### Payload
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| ID | string | ✅ | Bumper lié à la connexion |
+| QUESTION_ID | string | ✅ | `QUESTION.ID` de la question courante — un final d'une autre question est ignoré (`WARN ARDOISE_FINAL_STALE`) |
+| TEXT | string | ✅ | Texte complet **au moment du gel du clavier**, debounce en attente inclus. `""` autorisé (« rien écrit ») |
+| HASH | string | ✅ | Empreinte FNV-1a 32 bits du texte encodé en **UTF-8**, 8 caractères hexadécimaux minuscules (contrôle d'intégrité, pas une sécurité) |
+| SEQ | integer | ⬜ | Même compteur que `ARDOISE_INPUT` (diagnostic) |
+
+Vecteurs de test (Go et JS doivent produire exactement ces valeurs) :
+
+| TEXT | HASH |
+|------|------|
+| `""` | `811c9dc5` |
+| `"a"` | `e40c292c` |
+| `"Paris"` | `246f9d40` |
+| `"PARIS EN FRANCE"` | `066a01e6` |
+| `"Équipe à côté"` | `c3ff86c2` |
+| `"  espaces  "` | `1e009bcf` |
+
+#### Comportement serveur
+
+1. Liaison vérifiée (comme `ARDOISE_INPUT`) ; phase `STOPPED`/`PAUSED` ; `TYPE = ARDOISE` ; `QUESTION_ID` = question courante ; sinon ignoré + `WARN`.
+2. Le serveur recalcule le hash de `TEXT` ; s'il diffère de `HASH` → ignoré + `WARN ARDOISE_FINAL_HASH_MISMATCH` (pas d'accusé : la tablette renverra).
+3. Écrit `ARDOISE_ANSWERS[équipe] = { TEXT, STARTED_AT (inchangé ; fixé si c'était le 1ᵉʳ texte non vide), SUBMITTED_AT = maintenant, RECEIVED = true, RECEIVED_HASH = HASH }`. Idempotent : même hash déjà reçu → pas de réécriture.
+4. Répond `ARDOISE_FINAL_ACK` **à cette connexion seule**.
+5. Diffuse `UPDATE` **immédiatement** (non coalescé) vers admin + anim (coches « reçu »). Si c'était la dernière équipe attendue, le bouton REVEAL se débloque côté interfaces.
+6. Plusieurs VJoueurs dans une même équipe (avant le lot B « titulaire ») : le dernier final reçu fait foi ; `RECEIVED` passe à `true` dès le premier.
+
+```json
+{ "ACTION": "ARDOISE_FINAL", "MSG": { "ID": "vjoueur_Paul_20261006_140000", "QUESTION_ID": "42", "TEXT": "Paris", "HASH": "246f9d40", "SEQ": 12 } }
+```
+
+---
+
+### ARDOISE_FINAL_ACK ✨ (v11.2, #246)
+
+Accusé de réception du texte final, **ciblé** sur la connexion émettrice (jamais diffusé, ne
+contient jamais de texte — confidentialité #128).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server → VPlayer` (ciblé) |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| QUESTION_ID | string | Question concernée |
+| HASH | string | Hash enregistré par le serveur |
+
+Côté tablette : accusé valide = même `QUESTION_ID` **et** même `HASH` que le dernier final envoyé →
+affichage « ✓ Réponse reçue », arrêt des renvois. Sinon : ignoré, renvoi au tick suivant.
+
+---
+
+### REVEAL_REFUSED ✨ (v11.2, #246)
+
+Réponse **à l'émetteur seul** (admin ou anim) d'un `REVEAL` refusé par la garde ARDOISE.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server → Client` (ciblé, `admin`/`anim`) |
+
+#### Payload
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| REASON | string | `ARDOISE_PENDING` |
+| PENDING | array | `[{ "TEAM": string, "OFFLINE": boolean }]` — équipes attendues sans `RECEIVED` |
+
+Les interfaces calculent déjà l'attente depuis l'état (coches, bouton désactivé) ; `REVEAL_REFUSED`
+couvre la course (réception tardive de l'état) : l'interface affiche le motif et propose
+« Révéler quand même ».
+
+```json
+{ "ACTION": "REVEAL_REFUSED", "MSG": { "REASON": "ARDOISE_PENDING", "PENDING": [ { "TEAM": "Les Verts", "OFFLINE": true } ] } }
+```
+
+---
+
+### CLIENT_TRACE ✨ (v11.2, #246) — diagnostic
+
+Événement de diagnostic envoyé par un client, journalisé par le serveur (fichier persistant,
+`contracts/logging.md`). **Aucun effet sur l'état du jeu.**
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client → Server` (`admin`, `tv`, `vplayer`, `anim`) |
+| Limites | ≤ 10 messages/s par connexion (au-delà : ignorés, un `WARN CLIENT_TRACE_THROTTLED` par minute) ; payload ≤ 1 Ko |
+
+#### Payload
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| KIND | string | ✅ | `ARDOISE_CLEARED_SEEN` (admin/anim : le texte d'une équipe est passé de non vide à vide ou a disparu dans l'état reçu, même question), `VISIBILITY` (`DETAIL.STATE` = `hidden`/`visible`, `DETAIL.HIDDEN_MS`), `PAGESHOW` (`DETAIL.PERSISTED` = restauration bfcache), `FREEZE` / `RESUME`, `WS_GAP` (`DETAIL.DOWN_MS`, `DETAIL.DROPPED_SENDS` = envois abandonnés pendant la coupure), `STALE_TAB` (`vplayer` : onglet déclaré périmé), `DUPLICATE_SESSION` (`vplayer` : éviction reçue) |
+| AT | integer | ✅ | Horodatage client, millisecondes epoch |
+| TEAM | string | ⬜ | Pour `ARDOISE_CLEARED_SEEN` |
+| PREV_LEN | integer | ⬜ | Pour `ARDOISE_CLEARED_SEEN` : longueur du texte précédent |
+| CAUSE_ACTION | string | ⬜ | Pour `ARDOISE_CLEARED_SEEN` : action du message qui a provoqué la remise à vide |
+| DETAIL | object | ⬜ | Détails propres au `KIND` (clés listées ci-dessus) |
+
+```json
+{ "ACTION": "CLIENT_TRACE", "MSG": { "KIND": "ARDOISE_CLEARED_SEEN", "AT": 1791627000123, "TEAM": "Les Verts", "PREV_LEN": 14, "CAUSE_ACTION": "UPDATE" } }
+```
 
 ---
 

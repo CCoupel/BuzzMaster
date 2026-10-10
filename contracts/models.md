@@ -499,9 +499,11 @@ type KeyboardType = "AZERTY" | "NUMPAD"
 
 ```typescript
 interface ArdoiseAnswer {
-  TEXT: string         // Texte saisi par l'équipe (full content, pas delta)
-  STARTED_AT: number   // Timestamp en microsecondes du PREMIER caractère (figé, #117)
-  SUBMITTED_AT: number // Timestamp en microsecondes (dernière mise à jour)
+  TEXT: string          // Texte saisi par l'équipe (full content, pas delta)
+  STARTED_AT: number    // Timestamp en microsecondes du PREMIER caractère (figé, #117)
+  SUBMITTED_AT: number  // Timestamp en microsecondes (dernière mise à jour)
+  RECEIVED: boolean     // v11.2 (#246) — texte final reçu et accusé (ARDOISE_FINAL)
+  RECEIVED_HASH: string // v11.2 (#246) — hash FNV-1a 32 bits du texte final ("" si non reçu)
 }
 ```
 
@@ -513,6 +515,7 @@ non vide pour cette équipe et cette question.
 - Un effacement complet suivi d'une nouvelle saisie **ne réinitialise pas** `STARTED_AT` :
   l'ordre reflète le moment où l'équipe s'est lancée, pas celui de sa dernière version.
 - Remis à zéro avec le reste de `ARDOISE_ANSWERS` au changement de question.
+- **v11.2 (#246)** : un `ARDOISE_FINAL` qui apporte le premier texte non vide de l'équipe fixe `STARTED_AT` comme le ferait un `ARDOISE_INPUT`. Règles de `RECEIVED`/`RECEIVED_HASH` : `contracts/game-state.md` §ARDOISE_ANSWERS.
 - Référence de calcul du délai affiché : `GameState.TIME` (départ de la question), même
   convention que les temps de réaction au buzzer.
 - Vaut `0` pour une réponse enregistrée avant la v5.8.1 — le frontend doit alors se replier sur
