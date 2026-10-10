@@ -210,10 +210,10 @@ func TestAwardedTeams_NeverFromGenericBroadcastPath(t *testing.T) {
 	}
 }
 
-// TestAwardedTeams_OnlyReachesAnim confirms AWARDED_TEAMS is never sent to
+// TestAwardedTeams_ReachesAdminAndAnimNeverTV confirms AWARDED_TEAMS is never sent to
 // admin/TV/VPlayer — contracts/websocket-endpoints.md exclusivity, same
 // pattern as TestBroadcastNextQuestion_OnlyReachesAnim.
-func TestAwardedTeams_OnlyReachesAnim(t *testing.T) {
+func TestAwardedTeams_ReachesAdminAndAnimNeverTV(t *testing.T) {
 	app := newAwardedTeamsTriggerTestApp(t)
 	dir := app.config.Storage.QuestionsDir
 	writeQuestionFile(t, dir, "1", 1, nil)

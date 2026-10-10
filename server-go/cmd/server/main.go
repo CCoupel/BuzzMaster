@@ -6813,44 +6813,12 @@ func (a *App) handleRegieMessageClear(clientType server.ClientType) {
 //   - A zero-point event still produces (or adds to) an entry: a "0 pt"
 //     refusal is a real credit for locking purposes, never filtered out.
 func (a *App) getAwardedTeamsPayload() *protocol.AwardedTeamsPayload {
-	state := a.engine.GetState()
-	questionID := ""
-	if state.Question != nil {
-		questionID = state.Question.ID
+	// One rule only: Engine.AwardedTeams (also used by the grouped award, #244/#251).
+	questionID, awarded := a.engine.AwardedTeams()
+	teams := make([]protocol.AwardedTeamEntry, 0, len(awarded))
+	for _, t := range awarded {
+		teams = append(teams, protocol.AwardedTeamEntry{Team: t.Team, Points: t.Points, Timestamp: t.Timestamp})
 	}
-
-	teams := make([]protocol.AwardedTeamEntry, 0)
-	if questionID != "" {
-		index := make(map[string]int, 4) // TeamName -> its slot in teams
-		history := a.engine.GetHistory()
-		// #249: credits recorded before a team's last TEAM_DELETED do not count
-		// (a team re-created under the same name starts clean).
-		lastDeleted := map[string]int{}
-		for i, event := range history {
-			if event.EventType == "TEAM_DELETED" {
-				lastDeleted[event.TeamName] = i
-			}
-		}
-		for i, event := range history {
-			if event.EventType != "POINTS_AWARDED" || event.QuestionID != questionID || event.Timestamp < state.GameTime {
-				continue
-			}
-			if d, ok := lastDeleted[event.TeamName]; ok && i < d {
-				continue
-			}
-			if i, ok := index[event.TeamName]; ok {
-				teams[i].Points += event.Points
-				continue
-			}
-			index[event.TeamName] = len(teams)
-			teams = append(teams, protocol.AwardedTeamEntry{
-				Team:      event.TeamName,
-				Points:    event.Points,
-				Timestamp: event.Timestamp,
-			})
-		}
-	}
-
 	return &protocol.AwardedTeamsPayload{QuestionID: questionID, Teams: teams}
 }
 

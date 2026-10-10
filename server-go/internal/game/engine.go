@@ -8378,17 +8378,29 @@ const (
 	teamPointsBatchMaxPoints  = 999
 )
 
-// awardedTeamSetUnsafe returns the teams already credited for the current
-// question (same rule as AWARDED_TEAMS: POINTS_AWARDED since GameTime, credits
-// before the team's last TEAM_DELETED ignored). Caller holds e.mu.
-func (e *Engine) awardedTeamSetUnsafe(questionID string) map[string]bool {
-	set := map[string]bool{}
+// AwardedTeam is a team already credited for the current question.
+type AwardedTeam struct {
+	Team      string
+	Points    int   // sum of its credits for the question
+	Timestamp int64 // µs of its first credit
+}
+
+// awardedTeamsUnsafe is THE "already credited" rule (AWARDED_TEAMS, grouped
+// award): POINTS_AWARDED events of the question since GameTime, credits before
+// the team's last TEAM_DELETED ignored (#249), in chronological order of the
+// first credit, points summed. Caller holds e.mu (read or write).
+func (e *Engine) awardedTeamsUnsafe(questionID string) []AwardedTeam {
+	out := []AwardedTeam{}
+	if questionID == "" {
+		return out
+	}
 	lastDeleted := map[string]int{}
 	for i, ev := range e.history {
 		if ev.EventType == "TEAM_DELETED" {
 			lastDeleted[ev.TeamName] = i
 		}
 	}
+	index := map[string]int{}
 	for i, ev := range e.history {
 		if ev.EventType != "POINTS_AWARDED" || ev.QuestionID != questionID || ev.Timestamp < e.state.GameTime {
 			continue
@@ -8396,7 +8408,31 @@ func (e *Engine) awardedTeamSetUnsafe(questionID string) map[string]bool {
 		if d, ok := lastDeleted[ev.TeamName]; ok && i < d {
 			continue
 		}
-		set[ev.TeamName] = true
+		if k, ok := index[ev.TeamName]; ok {
+			out[k].Points += ev.Points
+			continue
+		}
+		index[ev.TeamName] = len(out)
+		out = append(out, AwardedTeam{Team: ev.TeamName, Points: ev.Points, Timestamp: ev.Timestamp})
+	}
+	return out
+}
+
+// AwardedTeams returns the teams already credited for the current question
+// (empty, never nil, when there is no current question).
+func (e *Engine) AwardedTeams() (questionID string, teams []AwardedTeam) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.state.Question != nil {
+		questionID = e.state.Question.ID
+	}
+	return questionID, e.awardedTeamsUnsafe(questionID)
+}
+
+func (e *Engine) awardedTeamSetUnsafe(questionID string) map[string]bool {
+	set := map[string]bool{}
+	for _, t := range e.awardedTeamsUnsafe(questionID) {
+		set[t.Team] = true
 	}
 	return set
 }
