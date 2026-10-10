@@ -212,6 +212,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // #249 — dernier TEAMS_UPDATE_REFUSED (ciblé, émetteur du UPDATE refusé) :
   // { reason, teams: string[] } | null. L'état renvoyé par le serveur fait foi.
   const [teamsUpdateRefused, setTeamsUpdateRefused] = useState(null)
+  // #243 — dernier NEW_GAME_REFUSED (ciblé, émetteur) : { reason } | null
+  const [newGameRefused, setNewGameRefused] = useState(null)
   // #246 (F-STOP) — accusé ciblé du texte final ARDOISE (tablette) : { questionId,
   // hash } | null, nouvel objet à chaque accusé ; et dernier REVEAL_REFUSED
   // (admin/anim) : { reason, pending: [{team, offline}] } | null.
@@ -784,6 +786,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // Player successfully enrolled - state will be updated via UPDATE message
         break
 
+      case 'NEW_GAME_REFUSED':
+        setNewGameRefused({ reason: MSG?.REASON })
+        break
+
       case 'TEAMS_UPDATE_REFUSED':
         setTeamsUpdateRefused({ reason: MSG?.REASON, teams: MSG?.TEAMS || [] })
         break
@@ -1226,12 +1232,28 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setPlayerEvictedStatus(null)
   }, [])
 
+  const clearNewGameRefused = useCallback(() => {
+    setNewGameRefused(null)
+  }, [])
+
   const clearTeamsUpdateRefused = useCallback(() => {
     setTeamsUpdateRefused(null)
   }, [])
 
   // New game: trigger full reset and transition to NEW_GAME phase
-  const newGame = useCallback(() => {
+  // #243 (v11.2) : `options` = { purgeScores, purgePlayers, purgeTeams, resetQuestions } (popup
+  // « Lancer la partie ») → les QUATRE champs sont toujours envoyés. Sans options (ou avec un
+  // événement de clic), payload vide = comportement v11.1 inchangé côté serveur.
+  const newGame = useCallback((options) => {
+    if (options && typeof options.purgeScores === 'boolean') {
+      sendMessage('NEW_GAME', {
+        PURGE_SCORES: options.purgeScores,
+        PURGE_PLAYERS: !!options.purgePlayers,
+        PURGE_TEAMS: !!options.purgeTeams,
+        RESET_QUESTIONS: !!options.resetQuestions,
+      })
+      return
+    }
     sendMessage('NEW_GAME', {})
   }, [sendMessage])
 
@@ -1404,6 +1426,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clearPlayerEvictedStatus,
     teamsUpdateRefused,
     clearTeamsUpdateRefused,
+    newGameRefused,
+    clearNewGameRefused,
     // ARDOISE garde-fous au STOP (#246)
     ardoiseFinalAck,
     revealRefused,
