@@ -7,6 +7,7 @@ import EntractePanel from '../components/EntractePanel'
 import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
 import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
+import { fnv1a } from '../utils/fnv1a'
 import { clearOwnVPlayerSession, getStoredVPlayerId, isStaleVPlayerSession } from '../utils/vplayerSession'
 import './VPlayerPage.css'
 import '../styles/entracte.css'
@@ -38,6 +39,7 @@ export default function VPlayerPage() {
     playerConnectStatus, clearPlayerConnectStatus,
     playerEvictedStatus, clearPlayerEvictedStatus,
     sendClientTrace,
+    ardoiseFinalAck,
   } = useGame()
 
   const [playerSession, setPlayerSession] = useState(null)
@@ -101,6 +103,12 @@ export default function VPlayerPage() {
   // #246 (F-LOG) — SEQ d'ARDOISE_INPUT : croissant par question et par
   // connexion (remis à 0 à la liaison et au changement de question).
   const ardoiseSeqRef = useRef(0)
+  // #246 (F-STOP) — texte FINAL envoyé à la sortie de STARTED : { qid, text, hash,
+  // acked }. `finalStatus` : 'sending' (renvoi toutes les 1 s jusqu'à l'accusé
+  // valide) | 'received' | null. Jamais créé pour une page montée après le STOP
+  // (rechargement) : envoyer un texte vide écraserait la réponse déjà saisie.
+  const finalRef = useRef(null)
+  const [finalStatus, setFinalStatus] = useState(null)
   ardoiseTextRef.current = ardoiseText
   const prevPhaseRef = useRef(null)
   // ARDOISE #117: true once the first non-empty ARDOISE_INPUT has been sent for the
@@ -533,17 +541,89 @@ export default function VPlayerPage() {
     ardoiseFirstSentRef.current = false
   }, [gameState.phase, gameState.question?.ID])
 
-  // ARDOISE: forced flush on phase change from STARTED → anything else
+  // #246 (F-STOP) — émission du texte final (ARDOISE_FINAL) : texte complet au
+  // moment du gel du clavier, hash FNV-1a UTF-8, QUESTION_ID courant. Renvoyé
+  // tant que l'accusé n'est pas reçu (voir effets ci-dessous).
+  const sendFinal = useCallback(() => {
+    const f = finalRef.current
+    if (!f || f.acked) return false
+    if (!boundRef.current || staleRef.current || supersededRef.current) return false
+    const seq = ardoiseSeqRef.current + 1
+    const sent = sendMessage('ARDOISE_FINAL', {
+      ID: ownIdRef.current,
+      QUESTION_ID: f.qid,
+      TEXT: f.text,
+      HASH: f.hash,
+      SEQ: seq,
+    })
+    if (sent) ardoiseSeqRef.current = seq
+    return sent
+  }, [sendMessage])
+
+  // Sortie de STARTED vers STOPPED/PAUSED (question ARDOISE) : gel du clavier
+  // (disabled), débounce en attente annulé, texte final = dernier texte local.
+  // Retour en STARTED (CONTINUE) : le cycle de réception repart de zéro.
   useEffect(() => {
     const currentPhase = gameState.phase
     const prev = prevPhaseRef.current
     prevPhaseRef.current = currentPhase
-    if (prev === 'STARTED' && currentPhase !== 'STARTED' && ardoiseText) {
-      // Cancel pending throttle and send immediately
+    if (gameState.question?.TYPE !== 'ARDOISE') return
+    if (prev === 'STARTED' && (currentPhase === 'STOPPED' || currentPhase === 'PAUSED')) {
       if (ardoiseThrottleRef.current) clearTimeout(ardoiseThrottleRef.current)
-      sendArdoise(ardoiseText, bumper?.id, 'key')
+      const text = ardoiseTextRef.current
+      finalRef.current = {
+        qid: String(gameState.question?.ID ?? ''),
+        text,
+        hash: fnv1a(text),
+        acked: false,
+      }
+      setFinalStatus('sending')
+      sendFinal()
+    } else if (currentPhase === 'STARTED') {
+      finalRef.current = null
+      setFinalStatus(null)
     }
-  }, [gameState.phase, ardoiseText, sendArdoise, bumper])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.phase])
+
+  // Nouvelle question : plus de final en cours.
+  useEffect(() => {
+    finalRef.current = null
+    setFinalStatus(null)
+  }, [gameState.question?.ID])
+
+  // Renvoi toutes les 1 s tant que l'accusé valide n'est pas reçu.
+  useEffect(() => {
+    if (finalStatus !== 'sending') return
+    const id = setInterval(sendFinal, 1000)
+    return () => clearInterval(id)
+  }, [finalStatus, sendFinal])
+
+  // Renvoi immédiat à la (re)liaison de la connexion et au retour au premier plan.
+  useEffect(() => {
+    if (finalStatus === 'sending' && bound) sendFinal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bound])
+
+  useEffect(() => {
+    if (finalStatus !== 'sending') return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') sendFinal()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [finalStatus, sendFinal])
+
+  // Accusé valide = même question ET même hash que le dernier final envoyé.
+  useEffect(() => {
+    if (!ardoiseFinalAck) return
+    const f = finalRef.current
+    if (!f || f.acked) return
+    if (String(ardoiseFinalAck.questionId) === f.qid && ardoiseFinalAck.hash === f.hash) {
+      f.acked = true
+      setFinalStatus('received')
+    }
+  }, [ardoiseFinalAck])
 
   // #246 — renvoi du texte COMPLET dès que la connexion est (re)liée : les
   // frappes faites pendant la coupure/avant la liaison n'ont pas été émises.
@@ -727,6 +807,34 @@ export default function VPlayerPage() {
   // Check if current question is ARDOISE
   const isArdoiseQuestion = gameState.question?.TYPE === 'ARDOISE'
 
+  // #246 (F-STOP) — message superposé quand le clavier est verrouillé, d'après
+  // l'ACCUSÉ du serveur (maquette final_ack + DECISIONS.md : hors saisie, aucune
+  // invitation à continuer ni à écrire — seulement l'état de jeu et le statut
+  // de la réponse).
+  let ardoiseOverlay = null
+  if (isArdoiseQuestion && gameState.phase !== 'STARTED') {
+    const paused = gameState.phase === 'PAUSED'
+    const empty = ardoiseText === ''
+    if (finalStatus === 'received') {
+      ardoiseOverlay = paused
+        ? { tone: 'pause', text: `⏸ Jeu en pause · ${empty ? '✓ reçu — aucune réponse écrite' : '✓ réponse reçue'}` }
+        : { tone: 'ok', text: empty ? '✓ Reçu — aucune réponse écrite' : '✓ Réponse reçue' }
+    } else if (finalStatus === 'sending') {
+      if (status !== 'connected') {
+        ardoiseOverlay = { tone: 'off', text: '⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau' }
+      } else if (paused) {
+        ardoiseOverlay = { tone: 'pause', prefix: '⏸ Jeu en pause · ', spin: true, text: 'envoi de votre réponse…' }
+      } else {
+        ardoiseOverlay = { tone: 'sending', spin: true, text: 'Envoi de votre réponse…' }
+      }
+    } else if (paused) {
+      ardoiseOverlay = { tone: 'pause', text: '⏸ Jeu en pause' }
+    } else if (gameState.phase !== 'STOPPED' && gameState.phase !== 'REVEALED') {
+      ardoiseOverlay = { tone: 'wait', text: '⏳ En attente…' }
+    }
+  }
+
+
   // #214 — pause PROGRAMMÉE : image de fond depuis Question.MEDIA (pas
   // IMAGE_IS_CUSTOM, réservé au déclencheur manuel) — voir le commentaire
   // jumeau dans PlayerDisplay.jsx (même contrat, même logique).
@@ -796,7 +904,7 @@ export default function VPlayerPage() {
           <h2>Cette page n’est plus active</h2>
           <p>
             Votre session de jeu est ouverte dans un <b>autre onglet</b> de cette
-            tablette. Fermez cet onglet et continuez dans l’autre.
+            tablette. Fermez cet onglet et utilisez l’autre.
           </p>
         </div>
       </div>
@@ -940,6 +1048,7 @@ export default function VPlayerPage() {
             value={ardoiseText}
             onChange={handleArdoiseChange}
             disabled={gameState.phase !== 'STARTED'}
+            overlay={ardoiseOverlay}
           />
         </div>
       )}

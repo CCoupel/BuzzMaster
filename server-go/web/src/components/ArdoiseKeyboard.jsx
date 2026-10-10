@@ -25,7 +25,14 @@ const KEY_CLASSES = {
   SPACE: 'key-space',
 }
 
-export default function ArdoiseKeyboard({ keyboardType = 'AZERTY', value = '', onChange, disabled = false }) {
+/**
+ * @param {Object|null} [props.overlay] - #246 (maquette vplayer_ardoise_keyboard__final_ack) :
+ *   message superposé quand le clavier est verrouillé, décidé par la page d'après
+ *   l'ACCUSÉ du serveur (jamais « envoyé » sans preuve) :
+ *   `{ tone: 'sending'|'ok'|'off'|'pause'|'wait', prefix?: string, spin?: boolean, text: string }`.
+ *   `null`/absent = aucun message. Verrouillé et vide : texte indicatif « Aucune réponse ».
+ */
+export default function ArdoiseKeyboard({ keyboardType = 'AZERTY', value = '', onChange, disabled = false, overlay = null }) {
   const rows = keyboardType === 'NUMPAD' ? NUMPAD_ROWS : AZERTY_ROWS
 
   const handleKey = (key) => {
@@ -52,7 +59,11 @@ export default function ArdoiseKeyboard({ keyboardType = 'AZERTY', value = '', o
       {/* Text display */}
       <div className="ardoise-keyboard-display">
         <span className="ardoise-keyboard-text">
-          {value || <span className="ardoise-keyboard-placeholder">Votre réponse…</span>}
+          {value || (
+            <span className="ardoise-keyboard-placeholder">
+              {disabled ? 'Aucune réponse' : 'Votre réponse…'}
+            </span>
+          )}
         </span>
         {!disabled && value.length > 0 && (
           <button
@@ -67,10 +78,13 @@ export default function ArdoiseKeyboard({ keyboardType = 'AZERTY', value = '', o
       </div>
 
       {/* Disabled overlay */}
-      {disabled && (
+      {disabled && overlay && (
         <div className="ardoise-keyboard-overlay">
-          <span className="ardoise-keyboard-overlay-text">
-            {value ? '✓ Réponse envoyée' : '⏳ En attente…'}
+          <span className={`ardoise-keyboard-overlay-text ov-${overlay.tone}`} data-testid="ardoise-overlay">
+            {overlay.prefix}
+            {overlay.spin && <span className="ardoise-spin">⏳</span>}
+            {overlay.spin ? ' ' : ''}
+            {overlay.text}
           </span>
         </div>
       )}

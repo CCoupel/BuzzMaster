@@ -206,6 +206,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // détection par balayage de roster, qui ne pouvait pas distinguer "bumper
   // supprimé" de "bumper pas encore reçu" pendant la fenêtre d'enrôlement.
   const [playerEvictedStatus, setPlayerEvictedStatus] = useState(null)
+  // #246 (F-STOP) — accusé ciblé du texte final ARDOISE (tablette) : { questionId,
+  // hash } | null, nouvel objet à chaque accusé ; et dernier REVEAL_REFUSED
+  // (admin/anim) : { reason, pending: [{team, offline}] } | null.
+  const [ardoiseFinalAck, setArdoiseFinalAck] = useState(null)
+  const [revealRefused, setRevealRefused] = useState(null)
   const [logs, setLogs] = useState([])
   const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
   // #137 — état du job de génération IA en tâche de fond (un seul job global,
@@ -785,6 +790,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         setPlayerEvictedStatus({ reason: MSG?.REASON })
         break
 
+      case 'ARDOISE_FINAL_ACK':
+        setArdoiseFinalAck({ questionId: MSG?.QUESTION_ID, hash: MSG?.HASH })
+        break
+
+      case 'REVEAL_REFUSED':
+        setRevealRefused({
+          reason: MSG?.REASON,
+          pending: (MSG?.PENDING || []).map((p) => ({ team: p.TEAM, offline: !!p.OFFLINE })),
+        })
+        break
+
       case 'PLAYER_ASSIGNED':
         console.log('[WS] PLAYER_ASSIGNED:', MSG)
         // Player assigned to team - state will be updated via UPDATE message
@@ -963,8 +979,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('CONTINUE', {})
   }, [sendMessage])
 
-  const revealAnswer = useCallback(() => {
-    sendMessage('REVEAL', {})
+  const revealAnswer = useCallback((force) => {
+    // #246 : `force === true` strict (jamais un événement de clic passé tel quel)
+    sendMessage('REVEAL', force === true ? { FORCE: true } : {})
   }, [sendMessage])
 
   const selectQuestion = useCallback((questionId) => {
@@ -1244,6 +1261,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('UNSUBSCRIBE_LOGS', {})
   }, [sendMessage])
 
+  const clearRevealRefused = useCallback(() => setRevealRefused(null), [])
+
   // Logs: Clear local logs state
   const clearLogs = useCallback(() => {
     setLogs([])
@@ -1368,6 +1387,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clearPlayerConnectStatus,
     playerEvictedStatus,
     clearPlayerEvictedStatus,
+    // ARDOISE garde-fous au STOP (#246)
+    ardoiseFinalAck,
+    revealRefused,
+    clearRevealRefused,
     // Logs
     logs,
     subscribeLogs,

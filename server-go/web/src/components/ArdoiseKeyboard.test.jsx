@@ -31,6 +31,7 @@ const renderKeyboard = (props = {}) =>
       value={props.value ?? ''}
       onChange={props.onChange ?? vi.fn()}
       disabled={props.disabled ?? false}
+      overlay={props.overlay}
     />
   )
 
@@ -179,22 +180,28 @@ describe('ArdoiseKeyboard — prop disabled', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('affiche l\'overlay quand disabled=true', () => {
-    const { container } = renderKeyboard({ keyboardType: 'AZERTY', value: '', disabled: true })
+  it('affiche l\'overlay fourni quand disabled=true (#246 : décidé par la page, d\'après l\'accusé)', () => {
+    const { container } = renderKeyboard({
+      keyboardType: 'AZERTY', value: 'HELLO', disabled: true,
+      overlay: { tone: 'ok', text: '✓ Réponse reçue' },
+    })
 
     expect(container.querySelector('.ardoise-keyboard-overlay')).not.toBeNull()
+    expect(screen.getByText('✓ Réponse reçue')).toBeInTheDocument()
   })
 
-  it('overlay affiche "✓ Réponse envoyée" quand disabled=true et valeur non vide', () => {
-    renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', disabled: true })
+  it('#246 : plus de « ✓ Réponse envoyée » affiché sans preuve — aucun overlay sans prop overlay', () => {
+    const { container } = renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', disabled: true })
 
-    expect(screen.getByText('✓ Réponse envoyée')).toBeInTheDocument()
+    expect(container.querySelector('.ardoise-keyboard-overlay')).toBeNull()
+    expect(screen.queryByText('✓ Réponse envoyée')).toBeNull()
   })
 
-  it('overlay affiche "⏳ En attente…" quand disabled=true et valeur vide', () => {
+  it('#246 : verrouillé et vide → texte indicatif « Aucune réponse » (jamais « Votre réponse… »)', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: '', disabled: true })
 
-    expect(screen.getByText('⏳ En attente…')).toBeInTheDocument()
+    expect(screen.getByText('Aucune réponse')).toBeInTheDocument()
+    expect(screen.queryByText('Votre réponse…')).toBeNull()
   })
 
   it('masque le bouton Effacer tout quand disabled=true même si valeur non vide', () => {
