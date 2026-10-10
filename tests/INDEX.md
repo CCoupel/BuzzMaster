@@ -34,3 +34,4 @@
 | server-go/web/src/utils/ardoiseOrder.249.test.js | unit | admin-game, anim | #249 identité = clé dans sortArdoiseEntries | regression | |
 | server-go/web/src/hooks/useWebSocket.teams-lock.249.test.js | unit | websocket, teams | #249 TEAMS_LOCKED dans l'état reçu, TEAMS_UPDATE_REFUSED | feature | |
 | tests/procedures/teams-249.md | manual | teams, admin-game, anim | #249 procédure manuelle (utilisateur uniquement) | feature | |
+| server-go/web/src/pages/PlayerDisplay.ardoise-grid.250.test.jsx | unit | tv | #250 TV REVEAL ARDOISE (maquette adaptive_grid validée) : toutes les équipes (4→20), règle lignes/colonnes/lignes de texte, polices relatives, équipe par la clé, aucun défilement (CSS), coupe « … », non-régression < 8 équipes et autres jeux | feature | critical |
