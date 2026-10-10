@@ -11,6 +11,7 @@
 - **[NEW]** `game-state.md` §`SCORE_CHANGE` — marqueur de la dernière modification de score (`SEQ`, `DISPLAY`, `TEAMS`, `PLAYERS`), toujours sérialisé, pour que TV, VJoueur et anim ne jouent aucune animation sur une correction cachée.
 - **[NEW]** `logging.md` §3.2 quinquies — `SCORE_CORRECTION_HIDDEN` (WARN).
 - **[CHANGED]** `websocket-actions.md` §AWARDED_TEAMS (règle « déjà créditée ») et §TEAM_POINTS « Affichage public » — *(décision utilisateur)* les crédits `DISPLAY: false` sont **ignorés** par le calcul « déjà créditée » : une correction cachée ne grise pas l'équipe et n'empêche ni un crédit normal ni `TEAM_POINTS_BATCH` pour la même question. Classement mis à jour sans animation et interrupteur réactivé à chaque ouverture de la page : défauts confirmés.
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS « Affichage public », §BUMPER_POINTS — *(revue #252, décision CDP)* `DISPLAY: false` **honoré seulement pour un émetteur admin** ; de l'anim ou d'un appelant interne, il est ignoré (attribution visible, comptée « déjà créditée ») et journalisé `WARN SCORE_CORRECTION_HIDDEN_REFUSED` (`logging.md`). `game-state.md` §`SCORE_CHANGE` : dernière modification **manuelle** uniquement, les crédits automatiques (`UpdateScore`) ne l'incrémentent pas.
 - Aucune BREAKING.
 
 ---

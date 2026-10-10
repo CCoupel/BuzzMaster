@@ -475,7 +475,9 @@ Modifie le score d'une équipe.
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| DISPLAY | boolean | ⬜ | `true` ou **absent** = comportement actuel (effets publics). `false` = **correction cachée** : **aucun effet animé, sur aucun canal** |
+| DISPLAY | boolean | ⬜ | `true` ou **absent** = comportement actuel (effets publics). `false` = **correction cachée** : **aucun effet animé, sur aucun canal**. **Honoré uniquement si l'émetteur est un client `admin`** (voir ci-dessous) |
+
+> **Réservé à l'admin** *(décision CDP, revue #252)* : `DISPLAY: false` envoyé par **tout autre émetteur** (anim, appelant interne) est **ignoré** : l'attribution est traitée comme **visible** (effets publics, comptée dans « déjà créditée ») et le serveur journalise `WARN SCORE_CORRECTION_HIDDEN_REFUSED`. Sans cette règle, l'anim (qui partage `TEAM_POINTS`/`BUMPER_POINTS` avec l'admin, §allow-list) pourrait contourner le verrou « déjà créditée » de #170 par une correction cachée. `TEAM_POINTS_BATCH` est déjà réservé à l'admin.
 
 Avec `DISPLAY: false` :
 - **Serveur** : ni comète LED, ni pulsation d'ambiance (`NotifyPulse`), ni son « gagné » (`CueGagne`), ni flash de score lumineux (`startScoreFlash`). Ces effets n'existent déjà que pour un montant positif.
@@ -558,7 +560,7 @@ Modifie le score d'un joueur.
 |-------|------|-------------|-------------|
 | ID | string | ✅ | MAC du bumper |
 | POINTS | int | ✅ | Points à ajouter (peut être négatif) |
-| DISPLAY | boolean | ⬜ | *(v11.2, #252)* même règle que `TEAM_POINTS` §« Affichage public », y compris pour `POINTS = 0` (ignoré seulement si l'émetteur est l'admin) |
+| DISPLAY | boolean | ⬜ | *(v11.2, #252)* même règle que `TEAM_POINTS` §« Affichage public » : `false` honoré **seulement pour l'admin** (sinon ignoré + `WARN SCORE_CORRECTION_HIDDEN_REFUSED`) ; `POINTS = 0` ignoré seulement si l'émetteur est l'admin |
 
 ---
 

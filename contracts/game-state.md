@@ -105,6 +105,7 @@ type Page =
 |-----------|------|--------|-------|
 | SCORE_CHANGE | `{ SEQ: number, DISPLAY: boolean, TEAMS: string[], PLAYERS: string[] }` | `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: []}` | **Toujours sérialisé**, listes jamais `null`. Diffusé à tous les clients web |
 
+- `SCORE_CHANGE` décrit la **dernière modification de score MANUELLE** (actions `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`). Les crédits **automatiques** du moteur (`UpdateScore`, par exemple MEMORY ou attribution automatique d'un type de jeu) **ne l'incrémentent pas** : leurs hausses de score restent animées comme aujourd'hui.
 - Mis à jour **à chaque** `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` appliqué : `SEQ` augmente de 1, `DISPLAY` = valeur de l'action (absent = `true`), `TEAMS` = équipes dont le score change, `PLAYERS` = joueurs (ID de bumper) dont le score change. Non persisté ; remis à zéro au démarrage et sur `NEW_GAME`.
 - **Règle d'affichage des écrans (TV, VJoueur, anim)** : quand un `UPDATE` apporte un nouveau `SCORE_CHANGE.SEQ` avec `DISPLAY = false`, les nouveaux scores des équipes et joueurs listés sont **pris comme référence sans animation**. Pas de « +X pts », pas de célébration, pas de surbrillance ni de montée de rang ; les chiffres du classement changent simplement. Avec `DISPLAY = true`, le comportement actuel est conservé.
 - Si un même `UPDATE` cumule une modification cachée et une visible (rare), seule la dernière (`SEQ` le plus grand) fait foi pour les équipes et joueurs qu'elle liste.

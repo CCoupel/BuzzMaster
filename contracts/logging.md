@@ -96,7 +96,8 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 
 | Événement | Niveau | Quand | Champs |
 |-----------|--------|-------|--------|
-| `SCORE_CORRECTION_HIDDEN` | WARN | `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` avec `DISPLAY: false` | `client`, `action`, `targets` (équipe ou joueur : montant), `question` |
+| `SCORE_CORRECTION_HIDDEN` | WARN | `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` avec `DISPLAY: false` **honoré** (émetteur admin) | `client`, `action`, `targets` (équipe ou joueur : montant), `question` |
+| `SCORE_CORRECTION_HIDDEN_REFUSED` | WARN | `DISPLAY: false` reçu d'un émetteur non admin → ignoré, attribution traitée comme visible | `client`, `type` (`anim`, `internal`…), `action`, `targets`, `question` — valeurs texte entre guillemets (`%q`) |
 
 ### 3.3 Diffusion
 
