@@ -264,4 +264,15 @@ describe('VPlayerPage — identité de l\'onglet (#246, F-ID)', () => {
     const seqs = all.map((p) => p.SEQ)
     for (let i = 1; i < seqs.length; i++) expect(seqs[i]).toBeGreaterThan(seqs[i - 1])
   })
+
+  it('pull-to-refresh : overscroll-behavior-y none sur la racine pendant la page joueur, restauré au démontage', async () => {
+    useGame.mockReturnValue(makeGameMock())
+    const { unmount } = render(<VPlayerPage />)
+    await act(async () => {})
+    expect(document.documentElement.style.overscrollBehaviorY).toBe('none')
+    expect(document.body.style.overscrollBehaviorY).toBe('none')
+    unmount()
+    expect(document.documentElement.style.overscrollBehaviorY).toBe('')
+    expect(document.body.style.overscrollBehaviorY).toBe('')
+  })
 })

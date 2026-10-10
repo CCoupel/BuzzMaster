@@ -753,6 +753,22 @@ export default function VPlayerPage() {
     else ardoiseThrottleRef.current = setTimeout(flush, wait)
   }, [sendArdoise, bumper])
 
+  // #246 — pull-to-refresh : le geste de tirage agit sur le défilement racine
+  // (html/body), pas sur `.vplayer-page` seul. Restauré au démontage pour ne pas
+  // toucher les autres pages. Aucun `beforeunload` (bloquerait les rechargements voulus).
+  useEffect(() => {
+    const root = document.documentElement
+    const body = document.body
+    const prevRoot = root.style.overscrollBehaviorY
+    const prevBody = body.style.overscrollBehaviorY
+    root.style.overscrollBehaviorY = 'none'
+    body.style.overscrollBehaviorY = 'none'
+    return () => {
+      root.style.overscrollBehaviorY = prevRoot
+      body.style.overscrollBehaviorY = prevBody
+    }
+  }, [])
+
   // NoSleep — requires user gesture to enable (called on fullscreen tap or first buzz)
   const activateNoSleep = useCallback(() => {
     if (!noSleepRef.current) noSleepRef.current = new NoSleep()

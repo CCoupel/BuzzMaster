@@ -448,3 +448,9 @@
 .vplayer-session-ico {
   font-size: 3rem;
 }
+
+/* #246 — durcissement pull-to-refresh : un geste de tirage ne recharge plus la
+   page en pleine question (le rechargement efface la saisie). Page joueur seule. */
+.vplayer-page {
+  overscroll-behavior-y: none;
+}
