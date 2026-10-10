@@ -18,6 +18,7 @@ Historique des versions du projet BuzzControl.
 - **Option « Joueurs des tablettes » sans « Scores » refusée (#243)** — ⚠️ Le serveur refuse `NEW_GAME` avec `PURGE_PLAYERS` sans `PURGE_SCORES` (`NEW_GAME_REFUSED`). La popup coche et verrouille « Scores » dans ce cas.
 - **Lancement refusé pendant une entracte (#243)** — ⚠️ `NEW_GAME` est refusé pendant une entracte (`NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }`, message « Impossible pendant une entracte : sortez d'abord de l'entracte »). Avant, le message était ignoré sans réponse et la popup restait figée.
 - **Statut des questions interrompues par « Lancer la partie » (#243)** — ⚠️ Sans l'option « Questions », une question sélectionnée mais jamais lancée repasse « à jouer », et une question lancée (STARTED, PAUSED) est marquée jouée et interrompue. Une question déjà STOPPED ou REVEALED garde son statut.
+- **L'admin reçoit `AWARDED_TEAMS` (#244/#251)** — ⚠️ Sur `/admin`, les équipes déjà créditées pour la question sont désormais signalées (grisées, « ✓ déjà créditée ») et exclues de l'attribution groupée. Auparavant, seule l'interface animateur recevait cette information. Le clic sur une carte d'équipe reste sans restriction.
 
 ### Added
 
@@ -35,6 +36,9 @@ Historique des versions du projet BuzzControl.
 - **Motif `DUPLICATE_SESSION` (#246)** — Une seule connexion liée par joueur virtuel : la plus récente gagne. L'ancien onglet affiche « Votre session est ouverte ailleurs » et propose « Reprendre ici ».
 - **Limite de 2 000 caractères par réponse ARDOISE (#246)** — Le clavier de la tablette cesse d'ajouter des caractères au-delà. Le serveur ignore en entier un `ARDOISE_INPUT` trop long (sans troncature) et refuse un `ARDOISE_FINAL` trop long (sans accusé).
 - **Champs `SEQ` et `REASON` sur `ARDOISE_INPUT` (#246)** — Facultatifs, diagnostic uniquement.
+- **Attribution groupée après REVEAL (#244/#251)** — Sur `/admin`, cocher plusieurs équipes et cliquer « Donner les points (N) » (ou « Retirer les points (N) », en rouge, si le montant est négatif). Le lot est appliqué d'un bloc, sous un seul verrou : chaque équipe reçoit une entrée d'historique `POINTS_AWARDED`. Une équipe déjà créditée pour la question est ignorée (`ALREADY_AWARDED`), donc jamais créditée deux fois.
+- **Clic sur une réponse QCM (#244/#251)** — Sélectionne les équipes ayant donné cette réponse, avec le montant : points de la question pour la bonne réponse, −1 pour une mauvaise.
+- **Messages de résultat de l'attribution (#244/#251)** — « ✓ +N points donnés à M équipes. », et « K équipe(s) déjà créditée(s) ignorée(s). » ; refus : « Attribution refusée : la réponse n’est pas révélée » ou « la question a changé ».
 
 ### Changed
 

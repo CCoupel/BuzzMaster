@@ -175,9 +175,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [questionPosition, setQuestionPosition] = useState({ position: 0, total: 0 })
   // #170 (F1) — équipes déjà créditées pour la question COURANTE, indexé
   // par nom d'équipe pour accès direct (contracts/websocket-actions.md
-  // §AWARDED_TEAMS). Exclusif à /ws/anim, comme nextQuestion/creditPoints —
-  // reste vide ({}) sur les autres endpoints (jamais diffusé par le
-  // serveur ailleurs que ClientTypeAnim). Source de vérité du verrouillage
+  // §AWARDED_TEAMS). Reçu par /ws/anim ET /ws/admin (v11.2, #244/#251 : l'admin
+  // s'en sert pour griser les équipes déjà créditées) — reste vide ({}) sur
+  // les autres endpoints (TV, VPlayer). Source de vérité du verrouillage
   // du crédit (AnimCreditControl, F2) : JAMAIS d'anticipation locale du
   // clic ici, uniquement ce que le serveur confirme.
   const [awardedTeams, setAwardedTeams] = useState({})
