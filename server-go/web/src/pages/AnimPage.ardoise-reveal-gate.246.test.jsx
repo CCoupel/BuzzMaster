@@ -159,7 +159,18 @@ describe('AnimPage — liste ARDOISE et garde REVEAL (#246, maquette anim)', () 
     const { container } = render(<AnimPage />)
     const t = text(container)
     expect(t).toMatch(/Saisie en cours/)
+    // un seul rendu : aucune pastille / ligne « en attente », aucune légende, aucun motif d'attente
     expect(t).not.toMatch(/✓ reçue|⏳ en attente|⚠ hors ligne|En attente de/)
+    expect(icons(container)).toEqual([])
+    expect(btn(container, /Révéler quand même…/)).toBeUndefined()
+    // colonne d'icône réservée mais vide pour chaque équipe
+    const rows = [...container.querySelectorAll(ROW)]
+    expect(rows.length).toBe(3)
+    for (const r of rows) {
+      const slot = r.querySelector(TEXT).previousElementSibling
+      expect(slot.getAttribute('aria-hidden')).toBe('true')
+      expect(slot.textContent).toBe('')
+    }
   })
 
   it('« Révéler quand même… » → confirmation (équipes manquantes) ; « Attendre » annule', () => {
