@@ -841,9 +841,12 @@ Demande d'inscription ou de reconnexion VPlayer.
   un bumper par son nom (suppression du repli par nom de la page joueur et de la page
   d'inscription) — il repasse par l'enrôlement ou la demande de place (#122).
 - **Unicité des noms de VJoueurs** (comparaison sans casse, espaces retirés) : aucune action serveur
-  ne produit deux VJoueurs de même nom. Un renommage admin (`UPDATE`/`FULL`) vers un nom déjà porté
-  par un autre VJoueur est ignoré pour ce bumper (`WARN VPLAYER_DUPLICATE_NAME`), l'état est
-  rediffusé.
+  ne produit deux VJoueurs de même nom. Pour une liste reçue par `UPDATE`/`FULL` (admin) :
+  un renommage d'un VJoueur **existant** vers un nom déjà porté par un autre VJoueur est ignoré
+  (le bumper garde son nom actuel) ; une entrée de VJoueur **absente du moteur** dont le nom est
+  déjà pris est **retirée** de la liste appliquée. Dans les deux cas : `WARN VPLAYER_DUPLICATE_NAME`,
+  puis l'état est rediffusé. Les buzzers physiques ne sont pas concernés. *(précisé après revue,
+  commit 3abe5f0d)*
 
 > **Important** : l'identité d'un VJoueur repose désormais **uniquement sur l'ID**, jamais sur le
 > nom seul. Un client doit conserver l'`ID` reçu (ex. `localStorage`) et le renvoyer à chaque
@@ -1719,7 +1722,7 @@ réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), 
 |-------|------|-------------|-------------|
 | TEXT | string | ✅ | Texte complet saisi (pas un delta) |
 | ID | string | ⬜ | Bumper ID de l'émetteur, première passe de la résolution 3 passes `payload.ID → msg.ID → clientID` (`handleArdoiseInput`). Présent dans `ArdoiseInputPayload` depuis v5.6.0 mais **omis de ce tableau jusqu'en v7.1.0** — documentation rattrapée, aucun changement de comportement. **v11.2 : doit être égal au bumper lié à la connexion** (voir « Liaison connexion ↔ bumper ») |
-| SEQ | integer | ⬜ *(v11.2, #246)* | Compteur d'envoi ≥ 1, croissant **par question et par connexion** (remis à 1 à chaque nouvelle question et à chaque nouvelle connexion). **Diagnostic** : sert à journaliser les trous (`ARDOISE_SEQ_GAP`) et les messages périmés (`ARDOISE_SEQ_STALE`, même connexion, `SEQ` ≤ dernier reçu → message ignoré). Absent = pas de contrôle. |
+| SEQ | integer | ⬜ *(v11.2, #246)* | Compteur d'envoi ≥ 1, croissant **par question et par connexion** (remis à 1 à chaque nouvelle question et à chaque **nouvelle liaison** de la connexion). Côté serveur, le dernier `SEQ` mémorisé pour une connexion est effacé à chaque `PLAYER_CONNECT` accepté (liaison ou re-liaison) et à la fermeture de la connexion. Côté client, le compteur repart à 0 **uniquement sur la transition non lié → lié** : un second `PLAYER_CONNECTED` sur la même connexion (renvoi de sécurité) ne le remet pas à zéro. *(précisé après revue, commit 3abe5f0d / 9aa8a1d3)* **Diagnostic** : sert à journaliser les trous (`ARDOISE_SEQ_GAP`) et les messages périmés (`ARDOISE_SEQ_STALE`, même connexion, `SEQ` ≤ dernier reçu → message ignoré). Absent = pas de contrôle. |
 | REASON | string | ⬜ *(v11.2, #246)* | Motif de l'envoi, **diagnostic uniquement** : `key` (frappe), `clear` (✕ « Effacer tout »), `backspace_empty` (⌫ jusqu'au vide), `resend` (renvoi après liaison de la connexion), `visible` (retour au premier plan). Journalisé avec `ARDOISE_CLEARED`. |
 
 #### Exemple
@@ -1851,7 +1854,7 @@ couvre la course (réception tardive de l'état) : l'interface affiche le motif 
 | Propriété | Valeur |
 |-----------|--------|
 | Direction | `Client → Server` (`admin`, `tv`, `vplayer`, `anim`) |
-| Limites | ≤ 10 messages/s par connexion (au-delà : ignorés, un `WARN CLIENT_TRACE_THROTTLED` par minute) ; payload ≤ 1 Ko |
+| Limites | ≤ 10 messages/s **par connexion** (au-delà : ignorés, au plus un `WARN CLIENT_TRACE_THROTTLED client=… type=…` par minute et par connexion) **et** ≤ 50 messages/s **toutes connexions confondues** (au-delà : ignorés, au plus un `WARN CLIENT_TRACE_THROTTLED scope=global` par minute) ; payload ≤ 1 Ko *(plafond global ajouté après revue, commit 3abe5f0d)* |
 | Phases | **Toutes**, y compris pendant l'**entracte** (`GameState.ENTRACTE = true`) : le diagnostic ne dépend pas de la phase de jeu. `CLIENT_TRACE` figure dans la liste d'autorisation de l'entracte (§« Actions refusées pendant l'entracte ») *(arbitrage v11.2, #246)* |
 
 #### Payload
@@ -1864,6 +1867,8 @@ couvre la course (réception tardive de l'état) : l'interface affiche le motif 
 | PREV_LEN | integer | ⬜ | Pour `ARDOISE_CLEARED_SEEN` : longueur du texte précédent |
 | CAUSE_ACTION | string | ⬜ | Pour `ARDOISE_CLEARED_SEEN` : action du message qui a provoqué la remise à vide |
 | DETAIL | object | ⬜ | Détails propres au `KIND` (clés listées ci-dessus) |
+
+**Journalisation** : une trace produit **une seule ligne** de journal. `KIND`, `CAUSE_ACTION`, l'identifiant du joueur et les clés et valeurs de `DETAIL` sont écrits tels quels s'ils ne contiennent que `[A-Za-z0-9_.:-]`, sinon entre guillemets avec échappement ; une valeur de `DETAIL` non scalaire est re-sérialisée en JSON puis mise entre guillemets ; tout retour à la ligne résiduel est remplacé avant l'écriture sur disque. Un client ne peut donc pas injecter de fausse ligne dans le journal. *(commit 3abe5f0d)*
 
 ```json
 { "ACTION": "CLIENT_TRACE", "MSG": { "KIND": "ARDOISE_CLEARED_SEEN", "AT": 1791627000123, "TEAM": "Les Verts", "PREV_LEN": 14, "CAUSE_ACTION": "UPDATE" } }

@@ -49,7 +49,7 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 |-----------|--------|-------|--------|
 | `ARDOISE_CLEARED` | WARN | Le texte d'une équipe passe de non vide à `""` par `ARDOISE_INPUT` | `team`, `bumper`, `client`, `conn_age_ms`, `prev_len`, `seq`, `reason`, `question`, `phase` |
 | `ARDOISE_SEQ_GAP` | WARN | `SEQ` non consécutif sur une même connexion | `bumper`, `client`, `expected`, `got` |
-| `ARDOISE_SEQ_STALE` | WARN | `SEQ` ≤ dernier appliqué sur la même connexion → message ignoré | `bumper`, `client`, `last`, `got` |
+| `ARDOISE_SEQ_STALE` | WARN | `SEQ` ≤ dernier appliqué sur la même connexion → message ignoré. Le dernier `SEQ` d'une connexion est effacé à chaque (re)liaison (`PLAYER_CONNECT` accepté) et à la fermeture de la connexion | `bumper`, `client`, `last`, `got` |
 | `ARDOISE_STATE_DIVERGED` | **ERROR** | Invariant : `ARDOISE_ANSWERS` diffère de la copie de contrôle tenue **uniquement** par `ARDOISE_INPUT`/`ARDOISE_FINAL`/`Ready()`/NEW_GAME. Vérifié à chaque diffusion d'état complet et à chaque changement de phase | `team`, `expected`, `actual`, `site` (appelant), `phase`, `question` |
 | `ARDOISE_FINAL_STALE` | WARN | `ARDOISE_FINAL` d'une autre question, ou hors `STOPPED`/`PAUSED` | `bumper`, `question_id`, `current_question`, `phase` |
 | `ARDOISE_FINAL_HASH_MISMATCH` | WARN | Hash reçu ≠ hash recalculé | `bumper`, `got`, `computed`, `len` |
@@ -65,7 +65,7 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `PLAYER_FOREIGN_ID` | WARN | Action joueur dont `ID` ≠ bumper lié → refusée | `action`, `client`, `bound_id`, `payload_id` |
 | `VPLAYER_NAME_MISMATCH` | WARN | `PLAYER_CONNECT` cas 1 avec un `NAME` différent du nom du bumper (le nom n'est plus modifié) | `id`, `server_name`, `client_name`, `client` |
 | `VPLAYER_DUPLICATE_SESSION` | WARN | Nouvelle connexion liée à un bumper déjà lié → l'ancienne est évincée | `id`, `old_client`, `new_client` |
-| `VPLAYER_DUPLICATE_NAME` | WARN | Renommage admin vers un nom déjà porté par un autre VJoueur → ignoré | `id`, `name`, `holder_id` |
+| `VPLAYER_DUPLICATE_NAME` | WARN | Liste admin (`UPDATE`/`FULL`) : renommage d'un VJoueur existant vers un nom déjà porté → ignoré ; nouvelle entrée de VJoueur au nom déjà pris → retirée | `id`, `name`, `holder_id` |
 | `VPLAYER_CONN` | INFO | Connexion/déconnexion d'un VJoueur pendant une question `STARTED`/`PAUSED` (non écrit sur disque par défaut ; les coupures sont tracées en WARN par `CLIENT_TRACE WS_GAP` à la reconnexion) | `id`, `event`, `client`, `question`, `phase` |
 
 ### 3.3 Diffusion
@@ -80,8 +80,8 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 
 | Événement | Niveau | Champs |
 |-----------|--------|--------|
-| `CLIENT_TRACE` | WARN | `client`, `type`, `player_id` (si lié), `kind`, `at` (horodatage client), puis les champs du `KIND` (`team`, `prev_len`, `cause_action`, `detail.*`) |
-| `CLIENT_TRACE_THROTTLED` | WARN | Au plus une fois par minute et par connexion qui dépasse 10 traces/s |
+| `CLIENT_TRACE` | WARN | `client`, `type`, `player_id` (si lié), `kind`, `at` (horodatage client), puis les champs du `KIND` (`team`, `prev_len`, `cause_action`, `detail.*`). **Une trace = une seule ligne** : textes (`kind`, `cause_action`, `player_id`, clés et valeurs de `detail`) nus s'ils ne contiennent que `[A-Za-z0-9_.:-]`, sinon entre guillemets échappés ; valeur de `detail` non scalaire → JSON entre guillemets ; retours à la ligne neutralisés à l'écriture disque |
+| `CLIENT_TRACE_THROTTLED` | WARN | `client=… type=…` : au plus une fois par minute et par connexion qui dépasse **10 traces/s** ; `scope=global limit=50/s` : au plus une fois par minute quand l'ensemble des connexions dépasse **50 traces/s** (traces au-delà ignorées) |
 
 ## 4. Lecture en QUALIF — quelle trace prouve quoi
 
