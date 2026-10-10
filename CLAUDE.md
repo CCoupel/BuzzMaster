@@ -100,11 +100,11 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux
 - `server-go/internal/server/ack_manager.go` — registre ACK (v3.8.0)
 
 **Frontend React** :
-- `web/src/pages/GamePage.jsx` — contrôle admin jeu en cours
-- `web/src/pages/PlayerDisplay.jsx` — affichage TV (STATIQUE)
-- `web/src/pages/QuestionsPage.jsx` — éditeur Quiz/MEMOTION
-- `web/src/hooks/GameContext.jsx` — GameProvider + routing endpoint WS
-- `web/src/hooks/useWebSocket.js` — hook WebSocket avec paramètre `endpoint`
+- `server-go/web/src/pages/GamePage.jsx` — contrôle admin jeu en cours
+- `server-go/web/src/pages/PlayerDisplay.jsx` — affichage TV (STATIQUE)
+- `server-go/web/src/pages/QuestionsPage.jsx` — éditeur Quiz/MEMOTION
+- `server-go/web/src/hooks/GameContext.jsx` — GameProvider + routing endpoint WS
+- `server-go/web/src/hooks/useWebSocket.js` — hook WebSocket avec paramètre `endpoint`
 
 **Firmware BuzzClick** :
 - `src/BuzzClick/click_MAIN.cpp` — setup + loop
