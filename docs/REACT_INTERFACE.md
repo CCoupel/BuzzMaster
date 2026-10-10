@@ -733,6 +733,29 @@ compteur.
 `clearOwnVPlayerSession(ownId)` n'efface `vplayer_*` que si l'ID stocké est celui de l'onglet. Le
 repli par nom a été supprimé (`VPlayerPage`, `EnrollPage`).
 
+## Attribution groupée — TeamAwardBar, QcmAnswerPicker, TeamCard (v11.2, #244/#251)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_game_team_award__selection.html`. Affichée sur `/admin` (`GamePage`)
+après le REVEAL. La variante animateur n'est pas livrée en v11.2.
+
+| Composant | Rôle |
+|-----------|------|
+| `TeamAwardBar` (`components/TeamAwardBar.jsx`) | Montant par équipe (−, saisie, +), source du montant, « Tout sélectionner / Tout désélectionner », bouton « Donner les points (N) » (« Retirer les points (N) », rouge, si négatif). Désactivé à N = 0 et pendant l'envoi. `title` = motif de blocage |
+| `QcmAnswerPicker` (`components/QcmAnswerPicker.jsx`) | Les quatre réponses QCM cliquables ; `teamCounts[clé]` = nombre d'équipes ayant donné la réponse. Marque « ✓ bonne réponse » |
+| `TeamCard` (`components/TeamCard.jsx`) | Case à cocher (`selectable`, `selected`) ; `awardedInfo` = `{POINTS}` si l'équipe est dans `AWARDED_TEAMS` : case désactivée, classe `award-done`, mention « ✓ déjà créditée ±N » |
+
+Logique dans `GamePage.jsx` :
+- `pickQcmAnswer(color)` : sélection = équipes de cette réponse **hors `awardedTeams`** ; montant = points de la
+  question (bonne réponse) ou −1 (mauvaise) ; `awardSource` le dit à l'animateur.
+- `changeAwardAmount` : modifie le montant et passe `awardEdited` à vrai, sans changer la sélection.
+- `giveAwardPoints()` : appelle `teamPointsBatch(QUESTION.ID, entries)` (`useWebSocket.js`). Si la WebSocket est
+  fermée, « Connexion perdue — réessayez. ». Garde de **8 s** (`awardGuardRef`) : sans réponse, le bouton se
+  réactive avec « Pas de réponse du serveur — réessayez. ».
+- Réducteur `teamPointsBatchResult` (`TEAM_POINTS_BATCH_RESULT`) : le résultat est traité **à son arrivée, même
+  après la garde** (il annule la garde). Accepté : toast « ✓ … », sélection vidée. Refusé `UNKNOWN_TEAM` : la
+  sélection retire les équipes inconnues. Autres refus : « Attribution refusée : … ».
+- `awardedTeams` vient de `AWARDED_TEAMS`, reçu désormais aussi par `/admin` (#244/#251).
+
 ## LaunchGameDialog — popup « Lancer la partie » (v11.2, #243)
 
 Maquette validée : `docs/mockup/v11.2/ui/admin_new_game__purge_popup_details.html`. Composant
