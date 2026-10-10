@@ -2,7 +2,7 @@ import { getRgbColor } from '../utils/colorUtils'
 import { formatArdoiseDelay } from '../utils/ardoiseOrder'
 import { calcArdoiseDefaultPoints } from '../utils/pointsAward'
 import AnimCreditControl from './AnimCreditControl'
-import { ArdoiseReceiptChip, ArdoiseReceiptCounter } from './ArdoiseRevealGate'
+import { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from './ArdoiseRevealGate'
 import './AnimArdoiseList.css'
 
 /**
@@ -51,6 +51,7 @@ export default function AnimArdoiseList({ entries, question, gameTime, creditPoi
         <div className="anim-ardoise-head">
           <h2>Réponses</h2>
           <ArdoiseReceiptCounter receipt={receipt} live={live} />
+          {!live && <ArdoiseReceiptLegend />}
         </div>
       )}
       {entries.map(({ team, teamName, answer }, index) => {
@@ -65,9 +66,7 @@ export default function AnimArdoiseList({ entries, question, gameTime, creditPoi
         const showCredit = revealed || awarded
         const receiptStatus = receipt && !live ? receipt.byTeam[teamName] : undefined
         const receiptRowCls = revealed ? '' : receiptStatus === 'wait' ? ' st-wait' : receiptStatus === 'off' ? ' st-off' : ''
-        const chip = receiptStatus
-          ? <ArdoiseReceiptChip status={receiptStatus} revealed={revealed} />
-          : null
+        const unconfirmed = revealed && receiptStatus && receiptStatus !== 'ok'
 
         return (
           <div key={teamName} className={`anim-ardoise-row ${hasAnswer ? 'has-answer' : 'no-answer'}${receiptRowCls}`}>
@@ -79,7 +78,8 @@ export default function AnimArdoiseList({ entries, question, gameTime, creditPoi
               {!hasAnswer && <span className="anim-ardoise-no-answer-hint">Aucune copie</span>}
             </div>
             <div className="anim-ardoise-body">
-              <span className={`anim-ardoise-text ${hasAnswer ? 'has-answer' : 'no-answer'}`}>
+              {receipt && <ArdoiseReceiptIcon status={receiptStatus} revealed={revealed} />}
+              <span className={`anim-ardoise-text ${hasAnswer ? 'has-answer' : 'no-answer'}${unconfirmed ? ' unconfirmed' : ''}`}>
                 {answer?.TEXT || '—'}
               </span>
               {showCredit ? (
@@ -89,9 +89,8 @@ export default function AnimArdoiseList({ entries, question, gameTime, creditPoi
                   awarded={awarded}
                   onCredit={(points) => onCredit(teamName, points)}
                 />
-              ) : chip}
+              ) : null}
             </div>
-            {showCredit && chip && <div className="anim-ardoise-chip-row">{chip}</div>}
           </div>
         )
       })}

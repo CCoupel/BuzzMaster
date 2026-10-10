@@ -119,9 +119,17 @@
 .anim-ardoise-head .ardoise-rcounter.live { background: #334155; color: #94a3b8; }
 .anim-ardoise-row.st-wait { border-color: #f59e0b; }
 .anim-ardoise-row.st-off { border-color: #ef4444; }
-.anim-ardoise-chip-row { padding-left: 1.1rem; margin-top: 0.2rem; }
-.anim-ardoise-list .ardoise-rx { font-size: 0.7rem; font-weight: 800; padding: 0.08rem 0.45rem; }
-.anim-ardoise-list .ardoise-rx-ok { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-.anim-ardoise-list .ardoise-rx-wait { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-.anim-ardoise-list .ardoise-rx-off { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-.anim-ardoise-list .ardoise-rx-unconf { background: #0f172a; color: #94a3b8; }
+/* Icône de réception à gauche du texte (colonne fixe, maquette anim receipt_icon) */
+.anim-ardoise-body { flex-wrap: nowrap; gap: 0.45rem; min-height: 1.9rem; }
+.anim-ardoise-list .ardoise-receipt-icon { flex: 0 0 1.3rem; width: 1.3rem; font-size: 1.05rem; }
+.anim-ardoise-list .ardoise-receipt-icon.ok { color: #22c55e; }
+.anim-ardoise-list .ardoise-receipt-icon.wait { color: #facc15; }
+.anim-ardoise-list .ardoise-receipt-icon.off { color: #fb923c; }
+.anim-ardoise-list .ardoise-receipt-icon.unconfirmed { color: #94a3b8; opacity: 0.55; }
+.anim-ardoise-text.unconfirmed { color: #94a3b8; }
+.anim-ardoise-head .ardoise-legend { margin-left: auto; display: flex; gap: 0.7rem; font-size: 0.72rem; color: #94a3b8; }
+.anim-ardoise-row.st-wait { border-color: #facc15; }
+.anim-ardoise-row.st-off { border-color: #fb923c; }
+.anim-ardoise-head .ardoise-rcounter { background: rgba(250, 204, 21, 0.15); color: #facc15; }
+.anim-ardoise-head .ardoise-rcounter.complete { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.anim-ardoise-head .ardoise-rcounter.live { background: #334155; color: #94a3b8; }

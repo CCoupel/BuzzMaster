@@ -145,16 +145,6 @@ export function ArdoiseReceiptLegend({ className = '' }) {
   )
 }
 
-/** Pastille de réception d'une équipe (✓ reçue / ⏳ en attente / ⚠ hors ligne / non confirmée). */
-export function ArdoiseReceiptChip({ status, revealed, className = '' }) {
-  let kind, label
-  if (revealed && status !== 'ok') { kind = 'unconf'; label = 'non confirmée' }
-  else if (status === 'ok') { kind = 'ok'; label = '✓ reçue' }
-  else if (status === 'off') { kind = 'off'; label = '⚠ hors ligne' }
-  else { kind = 'wait'; label = '⏳ en attente' }
-  return <span className={`ardoise-rx ardoise-rx-${kind} ${className}`.trim()}>{label}</span>
-}
-
 /** Compteur « n/N reçues » (gris « Saisie en cours » pendant STARTED). */
 export function ArdoiseReceiptCounter({ receipt, live, className = '' }) {
   if (live) {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
-import ArdoiseRevealGate, { ArdoiseReceiptChip, ArdoiseReceiptCounter } from './ArdoiseRevealGate'
+import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptCounter } from './ArdoiseRevealGate'
 import AnimArdoiseList from './AnimArdoiseList'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 
@@ -38,22 +38,30 @@ describe('ArdoiseRevealGate', () => {
     expect(onForce).toHaveBeenCalledTimes(1)
   })
 
-  it('pastilles et compteur', () => {
+  it('icônes de réception (title + aria-label) et compteur', () => {
     const { container } = render(
       <>
-        <ArdoiseReceiptChip status="ok" />
-        <ArdoiseReceiptChip status="wait" />
-        <ArdoiseReceiptChip status="off" />
-        <ArdoiseReceiptChip status="wait" revealed />
+        <ArdoiseReceiptIcon status="ok" />
+        <ArdoiseReceiptIcon status="wait" />
+        <ArdoiseReceiptIcon status="off" />
+        <ArdoiseReceiptIcon status="wait" revealed />
+        <ArdoiseReceiptIcon />
         <ArdoiseReceiptCounter receipt={{ complete: false, receivedCount: 7, total: 10 }} />
         <ArdoiseReceiptCounter receipt={{ complete: true, receivedCount: 10, total: 10 }} />
         <ArdoiseReceiptCounter receipt={{ complete: false, receivedCount: 0, total: 10 }} live />
       </>
     )
+    const icons = [...container.querySelectorAll('.ardoise-receipt-icon')]
+    expect(icons).toHaveLength(5)
+    expect(icons.map((i) => i.textContent)).toEqual(['✓', '⏳', '⚠', '⏳', ''])
+    expect(icons[0].getAttribute('aria-label')).toBe('Réponse reçue')
+    expect(icons[0].getAttribute('title')).toBe('Réponse reçue')
+    expect(icons[2].getAttribute('aria-label')).toMatch(/hors ligne/)
+    expect(icons[3].className).toMatch(/unconfirmed/)
+    expect(icons[3].getAttribute('aria-label')).toMatch(/Non confirmée/)
+    expect(icons[4].getAttribute('aria-hidden')).toBe('true') // colonne réservée, vide
     const t = container.textContent
-    for (const s of ['✓ reçue', '⏳ en attente', '⚠ hors ligne', 'non confirmée', '7/10 reçues', '10/10 reçues', 'Saisie en cours']) {
-      expect(t).toContain(s)
-    }
+    for (const s of ['7/10 reçues', '10/10 reçues', 'Saisie en cours']) expect(t).toContain(s)
   })
 })
 
@@ -74,21 +82,24 @@ describe('AnimArdoiseList — réception (#246)', () => {
   )
 
   it('après STOP : 1/2 reçues, pastilles reçue / hors ligne', () => {
-    const t = render1('STOPPED').container.textContent
-    expect(t).toContain('1/2 reçues')
-    expect(t).toContain('✓ reçue')
-    expect(t).toContain('⚠ hors ligne')
+    const { container } = render1('STOPPED')
+    expect(container.textContent).toContain('1/2 reçues')
+    const labels = [...container.querySelectorAll('.ardoise-receipt-icon')].map((i) => i.getAttribute('aria-label'))
+    expect(labels[0]).toBe('Réponse reçue')
+    expect(labels[1]).toMatch(/hors ligne/)
   })
 
   it('pendant la question : « Saisie en cours », aucune pastille', () => {
     const t = render1('STARTED').container.textContent
     expect(t).toContain('Saisie en cours')
-    expect(t).not.toMatch(/✓ reçue|hors ligne/)
+    expect(t).not.toMatch(/hors ligne/) // légende masquée
+    expect([...render1('STARTED').container.querySelectorAll('.ardoise-receipt-icon[role=img]')]).toHaveLength(0)
   })
 
   it('REVEALED : « non confirmée » pour l\'équipe non reçue seulement', () => {
-    const t = render1('REVEALED', true).container.textContent
-    expect(t.match(/non confirmée/g)).toHaveLength(1)
-    expect(t).toContain('✓ reçue')
+    const { container } = render1('REVEALED', true)
+    const labels = [...container.querySelectorAll('.ardoise-receipt-icon[role=img]')].map((i) => i.getAttribute('aria-label'))
+    expect(labels.filter((l) => /Non confirmée/.test(l))).toHaveLength(1)
+    expect(labels).toContain('Réponse reçue')
   })
 })
