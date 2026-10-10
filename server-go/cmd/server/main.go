@@ -3233,7 +3233,7 @@ func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender)
 	if ignoreAdminZeroPoints(senders, payload.Points) {
 		return
 	}
-	display := payload.Display == nil || *payload.Display
+	display := a.effectiveDisplay(senders, protocol.ActionBumperPoints, payload.Display)
 	newScore := a.engine.UpdateBumperScoreDisplay(payload.ID, payload.Points, display)
 	server.LogInfo(game.LogComponentEngine, "Bumper points: id=%s, points=%+d, newScore=%d",
 		payload.ID, payload.Points, newScore)
@@ -3314,6 +3314,27 @@ func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender)
 
 	a.broadcastUpdate()
 	a.broadcastAwardedTeams() // #170 — this credit may lock the team for other animateurs
+}
+
+// effectiveDisplay resolves the DISPLAY field of TEAM_POINTS / BUMPER_POINTS (#252
+// review): DISPLAY:false (hidden correction) is honoured ONLY for an admin sender.
+// From the animateur, or any caller without an admin sender, the field is ignored
+// (treated as visible: normal public effects and "already credited" lock) and a
+// WARN is journalised.
+func (a *App) effectiveDisplay(senders []updateSender, action string, requested *bool) bool {
+	if requested == nil || *requested {
+		return true
+	}
+	if len(senders) > 0 && senders[0].ClientType == server.ClientTypeAdmin {
+		return false
+	}
+	clientID, clientType := "", server.ClientType("")
+	if len(senders) > 0 {
+		clientID, clientType = senders[0].ClientID, senders[0].ClientType
+	}
+	server.LogWarn(game.LogComponentApp, "SCORE_DISPLAY_FALSE_IGNORED client=%s type=%s action=%s (DISPLAY:false is honoured for the admin only)",
+		clientID, logToken(string(clientType)), action)
+	return true
 }
 
 // ignoreAdminZeroPoints implements "POINTS = 0 ignored" (#252, contracts §TEAM_POINTS
@@ -3450,7 +3471,7 @@ func (a *App) handleTeamPoints(msg *protocol.Message, senders ...updateSender) {
 	if ignoreAdminZeroPoints(senders, payload.Points) {
 		return
 	}
-	display := payload.Display == nil || *payload.Display
+	display := a.effectiveDisplay(senders, protocol.ActionTeamPoints, payload.Display)
 	newScore := a.engine.UpdateTeamScoreDisplay(payload.Team, payload.Points, display)
 	server.LogInfo(game.LogComponentEngine, "Team points: team=%s, points=%+d, newScore=%d",
 		payload.Team, payload.Points, newScore)
