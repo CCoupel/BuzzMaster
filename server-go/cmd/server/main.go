@@ -3735,6 +3735,13 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 		return
 	}
 
+	// #246 length cap (contract "Longueur maximale du texte ARDOISE"): ignored
+	// whole, never truncated; the last valid answer stays.
+	if n := utf8.RuneCountInString(payload.Text); n > ardoiseMaxTextRunes {
+		server.LogWarn(game.LogComponentApp, "ARDOISE_INPUT_TOO_LONG bumper=%s client=%s len=%d", bumperID, clientID, n)
+		return
+	}
+
 	// #246 SEQ (diagnostic, contracts/websocket-actions.md ARDOISE_INPUT step 4):
 	// only evaluated for a message that would be applied (phase + type guards).
 	st := a.engine.GetState()
@@ -3811,7 +3818,7 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 		return
 	}
 	if n := utf8.RuneCountInString(p.Text); n > ardoiseMaxTextRunes {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s len=%d max=%d", bumperID, n, ardoiseMaxTextRunes)
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s client=%s len=%d question_id=%s", bumperID, clientID, n, logToken(p.QuestionID))
 		return
 	}
 	st := a.engine.GetState()

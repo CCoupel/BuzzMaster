@@ -74,3 +74,50 @@ func TestReview2_246_FinalTextLimitIsCountedInCharacters(t *testing.T) {
 		})
 	}
 }
+
+func TestReview2_246_InputTextLimitIgnoresTheWholeMessage(t *testing.T) {
+	cases := []struct {
+		name   string
+		text   string
+		accept bool
+	}{
+		{"2000 caractères", strings.Repeat("a", 2000), true},
+		{"2001 caractères", strings.Repeat("a", 2001), false},
+		{"2000 émoji (points de code)", strings.Repeat("😀", 2000), true},
+		{"2001 émoji", strings.Repeat("😀", 2001), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv246(t)
+			_, cid := e.dial(t, "/ws/player")
+			e.connect(t, cid, "Paul", e.paul)
+			e.typeAs(t, cid, e.paul, "VALIDE", map[string]interface{}{"SEQ": 1})
+
+			e.typeAs(t, cid, e.paul, tc.text, map[string]interface{}{"SEQ": 2})
+
+			text, _ := e.answers()
+			if tc.accept && text["Les Bleus"] != tc.text {
+				t.Fatalf("texte à la limite accepté en entier")
+			}
+			if !tc.accept {
+				if text["Les Bleus"] != "VALIDE" {
+					t.Fatalf("ignoré en entier, la dernière réponse valide reste : %d caractères enregistrés", len([]rune(text["Les Bleus"])))
+				}
+				if !e.hasLog(game.LogLevelWarn, "ARDOISE_INPUT_TOO_LONG") {
+					t.Errorf("WARN ARDOISE_INPUT_TOO_LONG attendu ; logs=%v", e.logLines(game.LogLevelWarn))
+				}
+			}
+		})
+	}
+}
+
+func TestReview2_246_EmptyInputRemainsValid(t *testing.T) {
+	e := newEnv246(t)
+	_, cid := e.dial(t, "/ws/player")
+	e.connect(t, cid, "Paul", e.paul)
+	e.typeAs(t, cid, e.paul, "A", nil)
+	e.typeAs(t, cid, e.paul, "", map[string]interface{}{"REASON": "clear"})
+	if text, _ := e.answers(); text["Les Bleus"] != "" {
+		t.Errorf("texte vide valide : %v", text)
+	}
+}
