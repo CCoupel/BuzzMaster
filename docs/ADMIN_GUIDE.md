@@ -218,7 +218,7 @@ d'un coup.
 - **Commutateur « Tenir compte des indices »** : visible seulement pour un QCM avec indices, quand au moins un indice a
   été révélé et que le montant est positif. Il est **activé par défaut**, et revient activé à chaque question ou phase.
   Un clic sur une réponse ou une saisie ne le change pas.
-  - Activé : chaque équipe ou joueur reçoit la base multipliée par son coefficient d'indices (1 pour un indice révélé, puis le coefficient de la question, 0,67 et 0,33 par défaut : `QCM_PENALTY_1` et `QCM_PENALTY_2`), avec au moins 1 point. Pour une équipe, le coefficient vient du meilleur joueur de l'équipe qui a la
+  - Activé : chaque équipe ou joueur reçoit la base multipliée par son coefficient d'indices : `QCM_PENALTY_1` (0,67 par défaut) pour un indice révélé, `QCM_PENALTY_2` (0,33 par défaut) pour deux indices ou plus. Résultat : au moins 1 point. Pour une équipe, le coefficient vient du meilleur joueur de l'équipe qui a la
     bonne couleur ; pour un joueur, des indices au moment de son buzz.
   - Désactivé : montant uniforme pour toute la sélection.
 - **Autres montants** : MEMORY (score des paires) et RAFALE (compteur de l'équipe) donnent un montant par équipe, tant que
