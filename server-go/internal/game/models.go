@@ -2,6 +2,8 @@ package game
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -624,7 +626,7 @@ type Question struct {
 	// integer -100..0, 0 = none (default). Absent / invalid reads as 0 (see
 	// NormalizeQCMWrongPenalty); never on a MEMOTION card; the server only stores
 	// and serves it (the admin client applies it).
-	QCMWrongPenalty        int           `json:"QCM_WRONG_PENALTY,omitempty"`
+	QCMWrongPenalty        WrongPenalty  `json:"QCM_WRONG_PENALTY,omitempty"`
 	MotionCards            []MotionCard  `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
 	MotionMode             string        `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
 	MotionConfig           *MotionConfig `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
@@ -1097,6 +1099,28 @@ func NormalizeQCMWrongPenalty(v int) int {
 		return 0
 	}
 	return v
+}
+
+// WrongPenalty is Question.QCMWrongPenalty: an int that DECODES TOLERANTLY. Any
+// value that is not a valid penalty (non-integer such as -2.5 or -5.0, a string,
+// null, out of -100..0) reads as 0 and NEVER makes the question fail to load
+// (#254 review: an invalid file must not make a question unplayable).
+type WrongPenalty int
+
+// UnmarshalJSON implements the tolerant decoding; it never returns an error.
+func (w *WrongPenalty) UnmarshalJSON(b []byte) error {
+	*w = WrongPenalty(ParseQCMWrongPenaltyRaw(b))
+	return nil
+}
+
+// ParseQCMWrongPenaltyRaw reads a raw JSON value as a QCM_WRONG_PENALTY: only a
+// plain JSON integer literal within -100..0 is valid, everything else is 0.
+func ParseQCMWrongPenaltyRaw(raw []byte) int {
+	n, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return 0
+	}
+	return NormalizeQCMWrongPenalty(n)
 }
 
 // DefaultPointsTarget returns the default POINTS_TARGET for a question type when

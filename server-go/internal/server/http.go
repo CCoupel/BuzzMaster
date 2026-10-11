@@ -916,10 +916,13 @@ func (h *HTTPServer) handleQuestions(w http.ResponseWriter, r *http.Request) {
 					q["POINTS_TARGET"] = string(game.DefaultPointsTarget(qType)) // #254: aligned with the award level table
 				}
 				// #254: an invalid stored QCM_WRONG_PENALTY reads as 0 (files are never rewritten).
-				if v, ok := q["QCM_WRONG_PENALTY"].(float64); ok {
-					if v != float64(int(v)) || v > 0 || v < -100 {
-						q["QCM_WRONG_PENALTY"] = 0
+				if _, present := q["QCM_WRONG_PENALTY"]; present {
+					// same tolerant rule as the game: only a plain integer -100..0 is valid
+					var raw struct {
+						P json.RawMessage `json:"QCM_WRONG_PENALTY"`
 					}
+					_ = json.Unmarshal(data, &raw)
+					q["QCM_WRONG_PENALTY"] = game.ParseQCMWrongPenaltyRaw(raw.P)
 				}
 				// Inject status from engine's questionStatuses map
 				qID, _ := q["ID"].(string)
