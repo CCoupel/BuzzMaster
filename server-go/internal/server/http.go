@@ -688,7 +688,26 @@ func (h *HTTPServer) handleQuestion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	filePath := filepath.Join(h.dataDir, r.URL.Path)
+	// #245 re-review: only ONE media file of a question may be deleted this way
+	// (/files/questions/<validID>/<file>). The questions root, a whole question folder
+	// (that is the DELETE action's job: lock, statuses, round context), question.json and
+	// everything else under /files are refused and nothing is removed.
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 4 || parts[0] != "files" || parts[1] != "questions" || !ValidQuestionID(parts[2]) ||
+		parts[3] == "" || parts[3] == "." || parts[3] == ".." || strings.ContainsAny(parts[3], `/\`) ||
+		parts[3] == "question.json" {
+		http.Error(w, "deletion not allowed", http.StatusBadRequest)
+		return
+	}
+	questionsDir := filepath.Join(h.dataDir, "files", "questions")
+	questionDir, err := SafeQuestionPath(questionsDir, parts[2])
+	if err != nil {
+		http.Error(w, "deletion not allowed", http.StatusBadRequest)
+		return
+	}
+	filePath := filepath.Join(questionDir, parts[3])
+	QuestionFilesMu.Lock()
+	defer QuestionFilesMu.Unlock()
 
 	if err := os.RemoveAll(filePath); err != nil {
 		http.Error(w, "Failed to delete", http.StatusInternalServerError)
@@ -954,6 +973,12 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// Get or generate question ID — allocation and directory creation are a
 	// single locked operation (T3.1/T3.2, contract ai-generation.md §5.1) so
 	// this can never race a concurrent upload or AI batch generation.
+	// #245 re-review: the client-supplied number becomes a directory name — it must be a valid
+	// question id (never "..", a separator, a space…); anything else is refused BEFORE any mkdir.
+	if number := r.FormValue("number"); number != "" && !ValidQuestionID(number) {
+		http.Error(w, "invalid question number", http.StatusBadRequest)
+		return
+	}
 	id, questionsDir, err := h.resolveQuestionDir(r.FormValue("number"))
 	if err != nil {
 		if errors.Is(err, ErrQuestionIDExhausted) {

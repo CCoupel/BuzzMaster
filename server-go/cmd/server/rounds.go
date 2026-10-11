@@ -418,14 +418,27 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 	layout = append([]placement{{roundID: "", ids: unassigned}}, layout...)
 
 	// ---- (2) rounds.json first: a failure aborts without any effect
-	oldRF := server.RoundsFile{Rounds: rf.Rounds, NextID: rf.NextID}
+	oldRoundsBytes, readErr := os.ReadFile(server.RoundsFilePath(qdir))
+	hadRoundsFile := readErr == nil
 	if err := server.SaveRoundsFile(qdir, newRF); err != nil {
 		releaseReserved()
 		server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: cannot write rounds.json: %v", err)
 		return refuse("WRITE_FAILED")
 	}
+	originals := map[string][]byte{} // question.json content before this message rewrote it
 	rollback := func(failed []string, why string) (protocol.RoundsUpdateResultPayload, string) {
-		_ = server.SaveRoundsFile(qdir, oldRF) // best effort: back to the previous rounds
+		// back to the exact previous state: rounds.json (or no file), every question.json
+		// already rewritten, and no entracte created by THIS message
+		if hadRoundsFile {
+			_ = os.WriteFile(server.RoundsFilePath(qdir), oldRoundsBytes, 0o644)
+		} else {
+			_ = os.Remove(server.RoundsFilePath(qdir))
+		}
+		for id, content := range originals {
+			if p, err := server.SafeQuestionPath(qdir, id); err == nil {
+				_ = os.WriteFile(filepath.Join(p, "question.json"), content, 0o644)
+			}
+		}
 		for id := range newEntractes {
 			if p, err := server.SafeQuestionPath(qdir, id); err == nil {
 				_ = os.RemoveAll(p) // only the entractes created by THIS message
@@ -433,7 +446,7 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 		}
 		res, line := refuse("WRITE_FAILED")
 		res.Questions = failed
-		server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: %s — rounds.json restored, nothing deleted", why)
+		server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: %s — everything restored, nothing deleted", why)
 		return res, line
 	}
 
@@ -461,6 +474,11 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 				updated["ROUND_ID"] = pl.roundID
 			}
 			updated["ORDER"] = pos
+			if qp, perr := server.SafeQuestionPath(qdir, id); perr == nil {
+				if orig, rerr := os.ReadFile(filepath.Join(qp, "question.json")); rerr == nil {
+					originals[id] = orig
+				}
+			}
 			if err := writeQuestionJSON(qdir, id, updated); err != nil {
 				server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: write question %s: %v", id, err)
 				failed = append(failed, id)
@@ -527,6 +545,9 @@ func (a *App) handleRoundsUpdate(clientID string, msg *protocol.Message) {
 		return
 	}
 	res, line := a.applyRoundsUpdate(req)
+	if res.Status == "REFUSED" && res.Reason == "WRITE_FAILED" {
+		server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE_ROLLBACK client=%q files=%s", clientID, logValue(res.Questions))
+	}
 	if res.Status == "REFUSED" {
 		server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE_REFUSED client=%q reason=%q questions=%s", clientID, res.Reason, logValue(res.Questions))
 		reply(res)

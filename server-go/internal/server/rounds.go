@@ -37,6 +37,13 @@ func (rf *RoundsFile) BumpNextID(roundID string) {
 // RoundsFilePath returns the rounds.json path inside a questions directory.
 func RoundsFilePath(questionsDir string) string { return filepath.Join(questionsDir, "rounds.json") }
 
+// lastCorruptRounds remembers the content already reported as corrupt: the WARN is emitted once
+// per corrupt state, not at every read (the file is re-read by every order computation).
+var (
+	corruptRoundsMu   sync.Mutex
+	lastCorruptRounds string
+)
+
 // ErrRoundsFileUnreadable is returned when rounds.json exists but cannot be parsed.
 var ErrRoundsFileUnreadable = errors.New("rounds.json unreadable")
 
@@ -58,12 +65,21 @@ func LoadRoundsFileChecked(questionsDir string) (RoundsFile, error) {
 		var parsed RoundsFile
 		if jerr := json.Unmarshal(data, &parsed); jerr != nil {
 			loadErr = ErrRoundsFileUnreadable
-			LogWarn(game.LogComponentApp, "rounds.json unreadable (%v): treated as no round, copy kept as rounds.json.corrupt", jerr)
-			corrupt := RoundsFilePath(questionsDir) + ".corrupt"
-			if _, statErr := os.Stat(corrupt); os.IsNotExist(statErr) {
-				_ = os.WriteFile(corrupt, data, 0o644)
+			corruptRoundsMu.Lock()
+			first := lastCorruptRounds != string(data)
+			lastCorruptRounds = string(data)
+			corruptRoundsMu.Unlock()
+			if first {
+				LogWarn(game.LogComponentApp, "ROUNDS_FILE_CORRUPT error=%q (treated as no round, copy kept as rounds.json.corrupt)", jerr.Error())
+				corrupt := RoundsFilePath(questionsDir) + ".corrupt"
+				if _, statErr := os.Stat(corrupt); os.IsNotExist(statErr) {
+					_ = os.WriteFile(corrupt, data, 0o644)
+				}
 			}
 		} else {
+			corruptRoundsMu.Lock()
+			lastCorruptRounds = ""
+			corruptRoundsMu.Unlock()
 			if parsed.Rounds != nil {
 				rf.Rounds = parsed.Rounds
 			}
@@ -126,27 +142,35 @@ func RoundGroupIndex(rounds []game.Round, roundID string) int {
 	return 0
 }
 
-// QuestionOrderValue returns the ORDER used to sort a question. Normalisation rules
-// (documented, mirrored by the JS in questionOrder.js):
+// QuestionOrderRank returns the ORDER used to sort a question and whether it HAS a rank.
+// Normalisation rules (contracts/models.md §Manches, mirrored by questionOrder.js):
 //   - ORDER a JSON number: truncated to an integer (negative values allowed);
 //   - ORDER a string: used only if the WHOLE trimmed string is an integer ("5" yes, "5abc" no);
-//   - ORDER absent, null, any other type or an invalid string: treated as ABSENT, i.e. the
-//     numeric value of the ID when it is numeric, else 0.
-func QuestionOrderValue(q map[string]interface{}) int {
+//   - ORDER absent, null, any other type or an invalid string: fall back on the numeric value
+//     of the ID when the ID is entirely numeric;
+//   - non-numeric ID without a valid ORDER: NO rank (ok=false): the question sorts AFTER every
+//     ranked question of its group.
+func QuestionOrderRank(q map[string]interface{}) (int, bool) {
 	switch v := q["ORDER"].(type) {
 	case float64:
-		return int(v)
+		return int(v), true
 	case string:
 		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-			return n
+			return n, true
 		}
 	}
 	if id, _ := q["ID"].(string); id != "" {
 		if n, err := strconv.Atoi(id); err == nil {
-			return n
+			return n, true
 		}
 	}
-	return 0
+	return 0, false
+}
+
+// QuestionOrderValue is QuestionOrderRank without the flag (0 for an unranked question).
+func QuestionOrderValue(q map[string]interface{}) int {
+	n, _ := QuestionOrderRank(q)
+	return n
 }
 
 // validQuestionID is the shape of a question identifier: a directory name made of letters,
@@ -175,7 +199,8 @@ func SafeQuestionPath(questionsDir, id string) (string, error) {
 type OrderedQuestion struct {
 	ID      string
 	Order   int
-	Group   int // 0 = Sans manche, 1.. = round rank
+	Ranked  bool // false: non-numeric ID without a valid ORDER (sorts after the ranked ones)
+	Group   int  // 0 = Sans manche, 1.. = round rank
 	RoundID string
 	Type    string
 	Data    map[string]interface{}
@@ -197,14 +222,18 @@ func OrderQuestions(raw []map[string]interface{}, rounds []game.Round) []Ordered
 		if g == 0 {
 			rid = ""
 		}
-		out = append(out, OrderedQuestion{ID: id, Order: QuestionOrderValue(q), Group: g, RoundID: rid, Type: typ, Data: q})
+		order, ranked := QuestionOrderRank(q)
+		out = append(out, OrderedQuestion{ID: id, Order: order, Ranked: ranked, Group: g, RoundID: rid, Type: typ, Data: q})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.Group != b.Group {
 			return a.Group < b.Group
 		}
-		if a.Order != b.Order {
+		if a.Ranked != b.Ranked {
+			return a.Ranked // ranked questions first; unranked ones come after
+		}
+		if a.Ranked && a.Order != b.Order {
 			return a.Order < b.Order
 		}
 		// tie-break: numeric IDs first (by value), then the others (lexicographic)
@@ -252,7 +281,7 @@ func ReadQuestionMapsChecked(questionsDir string) ([]map[string]interface{}, []s
 		}
 		if !ValidQuestionID(name) {
 			anomalies = append(anomalies, name)
-			LogWarn(game.LogComponentApp, "question directory %q has an invalid name: ignored", name)
+			LogWarn(game.LogComponentApp, "QUESTION_STORE_ANOMALY dir=%q id=%q (invalid directory name, ignored)", name, name)
 			continue
 		}
 		var q map[string]interface{}
@@ -261,7 +290,7 @@ func ReadQuestionMapsChecked(questionsDir string) ([]map[string]interface{}, []s
 		}
 		if id, _ := q["ID"].(string); id != "" && id != name {
 			anomalies = append(anomalies, name)
-			LogWarn(game.LogComponentApp, "question %q: question.json declares ID %q — the directory name wins", name, id)
+			LogWarn(game.LogComponentApp, "QUESTION_STORE_ANOMALY dir=%q id=%q (question.json declares another ID, the directory name wins)", name, id)
 		}
 		q["ID"] = name
 		out = append(out, q)
@@ -274,7 +303,7 @@ func ReadQuestionMapsChecked(questionsDir string) ([]map[string]interface{}, []s
 func NextOrderInGroup(ordered []OrderedQuestion, group int) int {
 	next, seen := 0, false
 	for _, q := range ordered {
-		if q.Group == group && (!seen || q.Order+1 > next) {
+		if q.Group == group && q.Ranked && (!seen || q.Order+1 > next) {
 			next, seen = q.Order+1, true
 		}
 	}
