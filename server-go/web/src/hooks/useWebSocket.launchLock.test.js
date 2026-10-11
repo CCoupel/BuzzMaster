@@ -52,7 +52,13 @@ describe('useWebSocket — verrou « Lancer la partie » (#253)', () => {
   it('identifiant de connexion retenu dès qu\'un message porte CLIENT_ID', () => {
     const { result } = renderHook(() => useWebSocket('/ws/admin'))
     expect(result.current.connectionId).toBeNull()
-    msg('HELLO', { CLIENT_ID: 'conn-42' })
+    msg('HELLO_ACK', { CLIENT_ID: 'conn-42' })
     expect(result.current.connectionId).toBe('conn-42')
+    // nouvelle valeur à chaque reconnexion (HELLO_ACK suivant)
+    msg('HELLO_ACK', { CLIENT_ID: 'conn-43' })
+    expect(result.current.connectionId).toBe('conn-43')
+    // un CLIENT_ID dans un autre message n'est pas pris en compte
+    msg('UPDATE', { CLIENT_ID: 'autre', GAME: { PHASE: 'STOPPED' } })
+    expect(result.current.connectionId).toBe('conn-43')
   })
 })

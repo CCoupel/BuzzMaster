@@ -427,11 +427,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       })
     }
 
-    // #253 : le serveur transmet l'identifiant de la connexion (champ CLIENT_ID) ; on le retient dès
-    // qu'un message le porte.
-    if (typeof MSG?.CLIENT_ID === 'string' && MSG.CLIENT_ID) setConnectionId(MSG.CLIENT_ID)
-
     switch (ACTION) {
+      case 'HELLO_ACK':
+        // #253 (contrat §HELLO_ACK) : identifiant OPAQUE de CETTE connexion (admin/anim), envoyé en
+        // premier à chaque HELLO, avant l'état initial ; nouvelle valeur à chaque reconnexion. Sert
+        // seulement à se reconnaître propriétaire de LAUNCH_LOCK.OWNER (comparaison de chaînes).
+        if (typeof MSG?.CLIENT_ID === 'string' && MSG.CLIENT_ID) setConnectionId(MSG.CLIENT_ID)
+        break
+
       case 'LAUNCH_LOCK_REFUSED':
         setLaunchLockRefused({ reason: MSG?.REASON })
         break
