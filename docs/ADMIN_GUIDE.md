@@ -233,7 +233,8 @@ d'un coup.
   - **« Appliquer les pénalités (N) »**, en rouge, si le montant est négatif, ou nul après un clic sur une mauvaise réponse.
   - Désactivé quand N = 0, pendant l'envoi, ou quand le montant est 0. Un lot à 0 n'est jamais envoyé.
 - **Clic sur une réponse QCM** :
-  - **Bonne réponse** : sélectionne les équipes ou joueurs qui ont donné cette réponse, hors ceux déjà crédités. Le champ
+  - **Bonne réponse** : sélectionne les équipes ou joueurs qui ont **réellement répondu** à la question (#255 : une couleur
+    assignée sans réponse ne suffit plus), hors ceux déjà crédités. Le champ
     reprend la base.
   - **Mauvaise réponse** : désélectionne tout, puis sélectionne les équipes ou joueurs de cette réponse. Le champ prend la
     **pénalité de la question**.
