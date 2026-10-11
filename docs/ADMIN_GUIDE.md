@@ -2657,8 +2657,9 @@ journalctl -u buzzcontrol -n 50
   Décochez-la pour une manche sans entractes. Ces entractes se modifient, se déplacent et se suppriment comme toute entracte.
 - Les manches se **replient** et se **déplient**. Le repli est mémorisé par navigateur. « Tout replier » ferme toutes les manches.
 - Réordonnez les manches et les questions avec ▲▼, « Déplacer vers… », ou par glisser-déposer. Renommer une manche ne renomme pas ses entractes.
-- **« Sans manche »** est toujours en premier. Il contient les questions qui n'appartiennent à aucune manche, y compris celles créées avec « + Nouvelle question ».
-- « + Question » dans une manche ajoute la question à la fin de cette manche.
+- **« Sans manche »** est toujours en premier. Il contient les questions qui n'appartiennent à aucune manche.
+- Une question créée avec le formulaire, champ « Manche » laissé sur « Sans manche », est ajoutée à la fin de « Sans manche ».
+- « + Question », en pied de chaque manche, ajoute la question à la fin de cette manche.
 
 ### Supprimer une manche
 
@@ -2682,8 +2683,7 @@ des questions à supprimer, pendant la préparation, la lecture, le compte à re
 ### Sauvegarde et restauration
 
 Le fichier `rounds.json` (liste des manches) est dans le dossier des questions. La sauvegarde « questions » l'emporte donc.
-Si `rounds.json` est illisible, le serveur en garde une copie `rounds.json.corrupt`, refuse les modifications de manches et
-continue de servir les manches lisibles. Restaurez une sauvegarde ou corrigez le fichier pour reprendre.
+Si `rounds.json` est illisible, le serveur le traite comme « aucune manche » (ordre sans manches), en garde une copie `rounds.json.corrupt` et refuse toute modification de manches (`ROUNDS_FILE_UNREADABLE`) ; restaurez une sauvegarde ou corrigez le fichier.
 
 Les questions créées avant les manches restent « Sans manche » : aucune conversion automatique n'est faite.
 
