@@ -572,7 +572,7 @@ de la partie en cours — pas une section globale de réglages.
 - **LED et ambiance** : à chaque `NEW_GAME` appliqué, quelles que soient les options.
 - **Joueurs purgés** : leurs connexions sont déliées dans le hub.
 - **`SCORE_CHANGE`** (#252) : remis à zéro (`SEQ` = 0) à chaque NEW_GAME, comme au démarrage.
-- **Verrou de lancement** (#253) : la popup pose `LAUNCH_LOCK` au nom de son poste. Pendant le verrou, les actions de conduite, de points et d'équipes sont suspendues pour tous les postes. Le `NEW_GAME` du propriétaire le libère après application. Un `NEW_GAME` d'une autre connexion est refusé (`LAUNCH_IN_PROGRESS`). Libération aussi à l'annulation, à la déconnexion, ou après 45 s sans renouvellement.
+- **Verrou de lancement** (#253) : la popup pose `LAUNCH_LOCK` au nom de son poste. Pendant le verrou, les actions de conduite, de points et d'équipes sont suspendues pour tous les postes. Le `NEW_GAME` du propriétaire le libère au moment où il est appliqué, avant la remise à zéro, dans le même traitement. Un `NEW_GAME` d'une autre connexion est refusé (`LAUNCH_IN_PROGRESS`). Libération aussi à l'annulation, à la déconnexion, ou après 45 s sans renouvellement.
 - **Entracte** : `NEW_GAME` est refusé (`NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }`) ; sortir de l'entracte d'abord.
 - Contrat : `contracts/websocket-actions.md` §NEW_GAME et §NEW_GAME_REFUSED.
 
