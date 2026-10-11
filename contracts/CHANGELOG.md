@@ -2,6 +2,16 @@
 
 ---
 
+## [20261012] — Verrou de lancement : actions suspendues complétées (#253, v11.2, revue de code)
+
+- **[CHANGED]** `websocket-actions.md` §LAUNCH_LOCK « Actions suspendues » :
+  - **ajout** de `POINTS`, `RAZ`, `SHOW_QR_CODE`, `HIDE_QR_CODE`, `RESET` : refusées avec `ACTION_REFUSED{LAUNCH_IN_PROGRESS}` pendant le verrou ;
+  - `SET_VIRTUAL_PLAYER_LIMIT` et `REBOOT` (sans effet) classés **toujours permises** ;
+  - règle de classement exhaustif des actions entrantes.
+- Aucune BREAKING : changement limité à la durée d'ouverture de la popup.
+
+---
+
 ## [20261011] — Bonne réponse QCM : base du barème et commutateur « Tenir compte des indices » (#254, v11.2, décision utilisateur)
 
 - **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH « Montant » et « QCM : clic sur une réponse » :

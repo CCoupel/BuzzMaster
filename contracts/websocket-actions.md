@@ -818,12 +818,15 @@ Tant que la popup « Lancer la partie » est ouverte sur un poste admin, **le se
 #### Actions suspendues pendant le verrou
 Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }` ciblé et `WARN ACTION_REFUSED_LAUNCH` :
 - **Conduite** : `READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, `MEMORY_SET_TEAMS`, `MEMOTION_SET_TEAMS`, `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE`, `RAFALE_VALIDATE`, `RAFALE_INVALIDATE`, `RAFALE_SET_TEAMS`, `FLIP_MEMORY_CARD` (venant de l'admin, de l'anim ou de la TV).
-- **Points** : `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`, `BUMPER_POINTS_BATCH`, `SET_CREDIT_POINTS`.
+- **Points** : `POINTS` (crédit joueur historique), `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`, `BUMPER_POINTS_BATCH`, `SET_CREDIT_POINTS`, `RAZ` (remise à zéro des scores) *(ajout revue #253 : `POINTS`, `RAZ`)*.
+- **Phases et clients** *(ajout revue #253)* : `SHOW_QR_CODE`, `HIDE_QR_CODE` (forcent les phases `ENROLL`/`STOPPED`), `RESET` (réinitialise tous les écrans et relance `HELLO`).
 - **Équipes et joueurs** : `UPDATE`/`FULL` entrants, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
 - `NEW_GAME` venant d'une connexion **autre** que le propriétaire (`REASON: "LAUNCH_IN_PROGRESS"` via `NEW_GAME_REFUSED`).
 
+> **Classement exhaustif** *(revue #253)* : ces deux listes couvrent **toutes** les actions entrantes de `handleWebMessage`. Toute action ajoutée plus tard doit être classée ici, dans le même commit que son contrat. À défaut, elle est **permise**, et le contrôle d'accès reste à la charge de la revue. Les routes HTTP d'administration ne sont pas couvertes par le verrou (hors périmètre).
+
 #### Toujours permises
-`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`), réglages, journaux. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
+`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`), réglages (`SET_VIRTUAL_PLAYER_LIMIT` : plafond d'inscription, sans effet sur la phase ni les scores), `REBOOT` (journalisé seulement, sans effet), journaux. Protocole buzzer (`/ws/buzzer`) : `OTA_PROGRESS`, `ACK`. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
 
 #### Retour visuel
 Les clients `admin` et `anim` lisent `GameState.LAUNCH_LOCK` : hors du poste propriétaire, un bandeau « Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu suspendues » s'affiche et les commandes de jeu sont désactivées (maquette `admin_new_game__launch_overlay`). TV et VJoueur : aucun changement.
