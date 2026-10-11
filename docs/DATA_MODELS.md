@@ -100,6 +100,29 @@ interface Team {
   - Toujours sérialisée, `""` compris (pas d'`omitempty`).
   - Une sauvegarde ou un fichier de bumpers sans la clé se charge avec `""`, sans migration.
 
+## Champs retirés ou neutralisés pour les tablettes (v11.2, #258)
+
+Source : `contracts/vplayer-payload-filter.md` §7.5 (liste exhaustive, référence du test de non-régression).
+
+**Retirés** (clé absente) :
+- `GAME.QUESTION.QCM_CORRECT`, `ANSWER`, `MEDIA_ANSWER` : avant `REVEALED` ;
+- `GAME.QUESTION.EXPLANATION` : toujours ;
+- `MOTION_CARDS[i]` et `MEMOTION_ACTIVE.STATE` : `ANSWER_TEXT`, `ANSWER_IMAGE`, `ANSWER`, `QCM_CORRECT`, tant que la carte n'est pas révélée ;
+- `ARDOISE_ANSWERS`, `LAUNCH_LOCK` : toujours ;
+- `QUIZ_OBJECTIVES`, `ENTRACTE_CONFIG_SAVED` : toujours ;
+- `bumpers[*].FIRMWARE_VERSION`, `IS_OUTDATED`, `OTA_STATUS`, `OTA_PERCENT`, `ACK_PENDING` : toujours.
+
+**Neutralisés** (clé conservée, valeur `0` ou `""`) pour les autres équipes, pendant les réponses ouvertes :
+- `bumpers[x]` : `TIME`, `BUTTON`, `STATUS`, `ANSWER_COLOR`, `ANSWERED_COLOR`, `HINTS_AT_BUZZ` ;
+- `teams[t]` : `TIME`, `BUMPER`, `STATUS`.
+
+**Conservés** : `NAME`, `TEAM`, `SCORE`, `CONNECTED`, `CONN_STATE`, `IS_VIRTUAL`, `IS_VPLAYER`, `READY` ; les champs du destinataire et de ses coéquipiers ;
+`teams[*]` : `NAME`, `COLOR`, `SCORE`, `MEMBERS` ; `QCM_ANSWERS` (les choix, pas la bonne réponse) ; les états MEMORY, MEMOTION et RAFALE ;
+scores, classements, `SCORE_CHANGE`, `REMOTE`, `ENTRACTE*`, `ROUNDS`, `ROUND_CONTEXT`.
+
+**Règle** : toute nouvelle clé qui porte une réponse, une bonne réponse, un média de réponse ou une note animateur doit être
+ajoutée à la liste retirée ou neutralisée, dans le même commit que son contrat.
+
 ## Palette d'équipes — v5.7.25, #113
 
 16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
