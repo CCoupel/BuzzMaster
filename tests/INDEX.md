@@ -66,3 +66,8 @@
 | tests/procedures/launch-lock-253.md | manual | admin-game, anim, tv, vplayer | #253 procédure manuelle (utilisateur uniquement) | feature | |
 | server-go/cmd/server/bumper_points_batch_254_test.go | integration | scores, game-engine, websocket, sound, lighting | #254 BUMPER_POINTS_BATCH : lot valide, refus global atomique, déjà crédité, correction cachée, effets groupés, AWARDED_TEAMS.PLAYERS, verrou #253, admin seul | regression | critical |
 | server-go/internal/server/question_254_test.go | unit | questions | #254 QCM_WRONG_PENALTY (bornes, QCM seul, non réécrit) et défaut POINTS_TARGET au chargement | regression | critical |
+| server-go/web/src/pages/GamePage.award-compact.254.test.jsx | unit | admin-game, scores | #254 bloc compact, niveau équipe/joueur, clic QCM et pénalité, base du barème, commutateur indices, résultats | regression | critical |
+| server-go/web/src/utils/pointsAward.254.test.js | unit | scores | #254 resolveAwardLevel, useHints, pénalité uniforme, coefficient joueur | regression | critical |
+| server-go/web/src/hooks/useWebSocket.bumper-batch.254.test.js | unit | websocket | #254 bumperPointsBatch, BUMPER_POINTS_BATCH_RESULT, AWARDED_TEAMS.PLAYERS | regression |  |
+| server-go/web/src/pages/QuestionsPage.wrong-penalty.254.test.jsx | unit | questions | #254 éditeur : champ Pénalité mauvaise réponse (QCM seul, 0 défaut, bornes, envoi qcm_wrong_penalty) | regression | critical |
+| tests/procedures/award-level-254.md | manual | admin-game, scores, anim, tv | #254 procédure manuelle (utilisateur uniquement) | feature |  |

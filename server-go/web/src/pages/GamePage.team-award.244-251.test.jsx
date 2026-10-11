@@ -5,7 +5,7 @@ import { useGame } from '../hooks/GameContext'
 
 // #244 + #251 (v11.2, lot V2-2) — attribution groupée après le REVEAL, selon la maquette VALIDÉE
 // admin_game_team_award__selection : une case par carte d'équipe, barre « Points par équipe » (−, saisie, +),
-// « Tout sélectionner / désélectionner », bouton « Donner les points (N) » / « Retirer les points (N) » (rouge si
+// « Tout sélectionner / désélectionner », bouton « Attribuer les points (N) » / « Appliquer les pénalités (N) » (rouge si
 // négatif, désactivé à N = 0), QCM : les 4 réponses cliquables (bonne → sélection + points ; mauvaise → pénalité −1),
 // équipes déjà créditées grisées (« ✓ déjà créditée ±N »). Contrat : websocket-actions.md §TEAM_POINTS_BATCH.
 // Scénarios front 11 à 16 du plan (_work/reports/planner-20261011-174500.md §4). Boîte noire par libellés / rôles ARIA.
@@ -57,7 +57,7 @@ const TEAMS = Object.fromEntries(TEAM_ROWS.map(([n], i) => [n, { NAME: n, SCORE:
 const bumpersFor = (hintsByTeam = {}) => Object.fromEntries(TEAM_ROWS.map(([n, color], i) => [`vj${i}`, {
   NAME: `VJ${i}`, TEAM: n, IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true, SCORE: 0, ANSWER_COLOR: color || '', HINTS_AT_BUZZ: hintsByTeam[n] || 0,
 }]))
-const QCM = { ID: '9', TYPE: 'QCM', QUESTION: 'Quel fleuve traverse Paris ?', ANSWER: 'La Seine', POINTS: '3', QCM_ANSWERS: ANSWERS, QCM_CORRECT: 'GREEN', QCM_HINTS_ENABLED: false, STATUS: 'REVEALED' }
+const QCM = { ID: '9', TYPE: 'QCM', QUESTION: 'Quel fleuve traverse Paris ?', ANSWER: 'La Seine', POINTS: '3', QCM_ANSWERS: ANSWERS, QCM_CORRECT: 'GREEN', QCM_HINTS_ENABLED: false, QCM_WRONG_PENALTY: -1, STATUS: 'REVEALED' }
 const ARDOISE = { ID: '10', TYPE: 'ARDOISE', QUESTION: 'Capitale ?', ANSWER: 'Paris', POINTS: '2', ARDOISE_KEYBOARD_TYPE: 'AZERTY', STATUS: 'REVEALED' }
 
 const mk = (over = {}) => {
@@ -95,9 +95,10 @@ const show = (over) => {
 }
 const box = (name) => screen.getByRole('checkbox', { name: `Sélectionner ${name}` })
 const queryBox = (name) => screen.queryByRole('checkbox', { name: `Sélectionner ${name}` })
-const give = () => screen.getByRole('button', { name: /^(Donner|Retirer) les points \(\d+\)$/ })
-const queryGive = () => screen.queryByRole('button', { name: /^(Donner|Retirer) les points \(\d+\)$/ })
-const amountInput = () => screen.getByLabelText('Points par équipe')
+const give = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
+const queryGive = () => screen.queryByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
+// #254 : plus de montant propre au bloc — le montant est le champ « Points » de la page
+const amountInput = () => screen.getAllByLabelText('Points').find((el) => el.tagName === 'INPUT' && el.type === 'number')
 const answerBtn = (label) => screen.getByRole('button', { name: new RegExp(label) })
 const checked = () => TEAM_ROWS.map(([n]) => n).filter((n) => queryBox(n)?.checked)
 
@@ -108,14 +109,14 @@ describe('Attribution groupée — visibilité (#244/#251, scénario 11)', () =>
     show({ gameState: { phase, question: { ...QCM, STATUS: phase } } })
     expect(queryBox('Les Bleus')).toBeNull()
     expect(queryGive()).toBeNull()
-    expect(screen.queryByLabelText('Points par équipe')).toBeNull()
+    expect(screen.queryByLabelText('Points par équipe')).toBeNull() // #254 : aucun montant propre au bloc
     expect(screen.queryByRole('button', { name: /La Seine/ })).toBeNull()
   })
 
-  it('après le REVEAL : une case par carte d’équipe, la barre et le bouton « Donner les points (0) » désactivé', () => {
+  it('après le REVEAL : une case par carte d’équipe, la barre et le bouton « Attribuer les points (0) » désactivé', () => {
     show()
     for (const [n] of TEAM_ROWS) expect(box(n).checked).toBe(false)
-    expect(give().textContent).toBe('Donner les points (0)')
+    expect(give().textContent).toBe('Attribuer les points (0)')
     expect(give().disabled).toBe(true)
     expect(amountInput().value).toBe('3') // B = points de la question
   })
@@ -137,18 +138,18 @@ describe('Attribution groupée — QCM : clic sur une réponse (scénario 12)', 
     fireEvent.click(answerBtn('La Seine'))
     expect(checked().sort()).toEqual(['Les Bleus', 'Les Roses', 'Les Rouges', 'Les Verts'])
     expect(amountInput().value).toBe('3')
-    expect(give().textContent).toBe('Donner les points (4)')
+    expect(give().textContent).toBe('Attribuer les points (4)')
     expect(give().className).not.toMatch(/neg/)
   })
 
-  it('Critical — mauvaise réponse : désélectionne tout, sélectionne ses équipes, pénalité −1, bouton « Retirer les points (N) » rouge', () => {
+  it('Critical — mauvaise réponse : désélectionne tout, sélectionne ses équipes, pénalité −1, bouton « Appliquer les pénalités (N) » rouge', () => {
     show()
     fireEvent.click(answerBtn('La Seine')) // d'abord la bonne
     fireEvent.click(answerBtn('La Loire'))
 
     expect(checked().sort()).toEqual(['Les Jaunes', 'Les Oranges'])
     expect(amountInput().value).toBe('-1')
-    expect(give().textContent).toBe('Retirer les points (2)')
+    expect(give().textContent).toBe('Appliquer les pénalités (2)')
     expect(give().className).toMatch(/neg/)
   })
 
@@ -157,7 +158,7 @@ describe('Attribution groupée — QCM : clic sur une réponse (scénario 12)', 
     fireEvent.click(answerBtn('La Seine'))
     expect(box('Les Gris').checked).toBe(false)
     fireEvent.click(box('Les Gris'))
-    expect(give().textContent).toBe('Donner les points (5)')
+    expect(give().textContent).toBe('Attribuer les points (5)')
   })
 })
 
@@ -168,22 +169,19 @@ describe('Attribution groupée — sélection manuelle et envoi (scénarios 13 e
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Tout sélectionner' }))
     expect(checked().length).toBe(8)
-    expect(give().textContent).toBe('Donner les points (8)')
+    expect(give().textContent).toBe('Attribuer les points (8)')
     fireEvent.click(screen.getByRole('button', { name: 'Tout désélectionner' }))
     expect(checked().length).toBe(0)
     expect(give().disabled).toBe(true)
   })
 
-  it('le montant se règle par −, + et la saisie ; un montant négatif bascule le bouton en « Retirer les points »', () => {
+  it('le montant est le champ « Points » de la page ; un montant négatif bascule le bouton en « Appliquer les pénalités »', () => {
     show()
     fireEvent.click(box('Les Bleus'))
-    fireEvent.click(screen.getByRole('button', { name: 'Augmenter' }))
-    expect(amountInput().value).toBe('4')
-    fireEvent.click(screen.getByRole('button', { name: 'Diminuer' }))
     fireEvent.change(amountInput(), { target: { value: '-2' } })
-    expect(give().textContent).toBe('Retirer les points (1)')
+    expect(give().textContent).toBe('Appliquer les pénalités (1)')
     fireEvent.change(amountInput(), { target: { value: '7' } })
-    expect(give().textContent).toBe('Donner les points (1)')
+    expect(give().textContent).toBe('Attribuer les points (1)')
   })
 
   it('Critical — le bouton envoie UN lot avec l’ID de la question et un montant par équipe sélectionnée', () => {
@@ -248,8 +246,8 @@ describe('Attribution groupée — montants par type (scénario 13)', () => {
     expect(game.teamPointsBatch.mock.calls[0][1]).toEqual([{ team: 'Les Bleus', points: 2 }])
   })
 
-  it('SPEEDY : cases seulement, montant = points de la question', () => {
-    const { game } = show({ gameState: { question: { ID: '11', TYPE: 'SPEEDY', QUESTION: 'Q', ANSWER: 'A', POINTS: '4', STATUS: 'REVEALED' } } })
+  it('SPEEDY réglé au niveau équipe : cases seulement, montant = points de la question', () => {
+    const { game } = show({ gameState: { question: { ID: '11', TYPE: 'SPEEDY', QUESTION: 'Q', ANSWER: 'A', POINTS: '4', POINTS_TARGET: 'TEAM', STATUS: 'REVEALED' } } })
     expect(screen.queryByRole('button', { name: /La Seine/ })).toBeNull()
     fireEvent.click(box('Les Rouges'))
     fireEvent.click(give())
@@ -272,14 +270,14 @@ describe('Attribution groupée — équipes déjà créditées (scénario 14)', 
     expect(checked().sort()).toEqual(['Les Roses', 'Les Verts']) // Bleus et Rouges déjà créditées : exclues
     fireEvent.click(screen.getByRole('button', { name: 'Tout sélectionner' }))
     expect(box('Les Bleus').checked).toBe(false)
-    expect(give().textContent).toBe('Donner les points (6)') // 8 équipes − 2 déjà créditées
+    expect(give().textContent).toBe('Attribuer les points (6)') // 8 équipes − 2 déjà créditées
   })
 })
 
 describe('Attribution groupée — résultat du serveur (scénario 15)', () => {
   beforeEach(() => { useGame.mockReset() })
 
-  it('lot appliqué : message « +3 points donnés à 4 équipes », sélection vidée', () => {
+  it('lot appliqué : message « Points attribués à 4 équipes » (maquette #254), sélection vidée', () => {
     const { game, rerender } = show()
     fireEvent.click(answerBtn('La Seine'))
     fireEvent.click(give())
@@ -288,7 +286,7 @@ describe('Attribution groupée — résultat du serveur (scénario 15)', () => {
     } }))
     rerender(<GamePage />)
 
-    expect(screen.getByText(/\+3 points donnés à 4 équipes/)).toBeTruthy()
+    expect(screen.getByText(/Points attribués à 4 équipes/)).toBeTruthy()
     expect(checked().length).toBe(0)
   })
 
@@ -331,6 +329,9 @@ describe('Attribution groupée — remise à zéro (scénario 16) et accessibili
     fireEvent.click(answerBtn('La Loire')) // pénalité −1, 2 équipes
     expect(amountInput().value).toBe('-1')
 
+    // nouvelle question comme en partie : sélection (STOPPED) puis REVEAL
+    useGame.mockReturnValue(mk({ gameState: { phase: 'STOPPED', question: { ...QCM, ID: '12', STATUS: 'STOPPED' } } }))
+    rerender(<GamePage />)
     useGame.mockReturnValue(mk({ gameState: { question: { ...QCM, ID: '12', STATUS: 'REVEALED' } } }))
     rerender(<GamePage />)
 
@@ -353,8 +354,6 @@ describe('Attribution groupée — remise à zéro (scénario 16) et accessibili
     for (const [n] of TEAM_ROWS) expect(box(n)).toBeTruthy()
     expect(screen.getByRole('group', { name: /Attribution des points/ })).toBeTruthy()
     expect(amountInput()).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Diminuer' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Augmenter' })).toBeTruthy()
   })
 
   it('non-régression : le clic sur une carte d’équipe reste libre (TEAM_POINTS unitaire) — setTeamPoints existe toujours', () => {
