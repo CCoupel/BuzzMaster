@@ -541,3 +541,29 @@ describe('Résultat du serveur : messages de la maquette (scénario 10, 16)', ()
   })
 })
 
+describe('Niveau joueur : équipe déjà créditée au niveau équipe (revue #254, scénario 7)', () => {
+  beforeEach(() => { useGame.mockReset() })
+  const LEVEL_PLAYER = { gameState: { question: QCM({ POINTS_TARGET: 'PLAYER' }) } }
+  const TEAM_CREDIT = { awardedTeams: { 'Les Bleus': { POINTS: 2, TIMESTAMP: 1, TEAM_LEVEL: true } } }
+
+  it('Critical — les joueurs d’une équipe créditée au niveau équipe sont grisés, non cochables, « ✓ équipe déjà créditée » ; « Tout sélectionner » les ignore', () => {
+    show({ ...LEVEL_PLAYER, ...TEAM_CREDIT })
+    expect(queryBox('Paul').disabled).toBe(true)
+    expect(queryBox('Paul').checked).toBe(false)
+    expect(screen.getByText(/✓ équipe déjà créditée/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Tout sélectionner' }))
+    expect(checkedOf(PLAYER_NAMES).sort()).toEqual(['Jade', 'Mamie', 'Vera'])
+  })
+
+  it('une équipe créditée seulement par ses joueurs (TEAM_LEVEL false) ne grise pas ses autres joueurs', () => {
+    show({ ...LEVEL_PLAYER, awardedTeams: { 'Les Bleus': { POINTS: 2, TIMESTAMP: 1, TEAM_LEVEL: false } }, awardedPlayers: { vj9: { POINTS: 2, TIMESTAMP: 1, TEAM: 'Les Bleus' } } })
+    expect(queryBox('Paul').disabled).toBe(false)
+  })
+
+  it('résultat : « N joueurs ignorés (équipe déjà créditée) » pour TEAM_ALREADY_AWARDED', () => {
+    const utils = show(LEVEL_PLAYER)
+    reshow(utils, utils.game, { bumperPointsBatchResult: { status: 'APPLIED', questionId: '9', applied: [{ id: 'vj1', points: 3 }], skipped: [{ id: 'vj0', reason: 'TEAM_ALREADY_AWARDED' }, { id: 'vj3', reason: 'TEAM_ALREADY_AWARDED' }], players: [] } })
+    expect(screen.getByText(/2 joueurs ignorés \(équipe déjà créditée\)/)).toBeTruthy()
+  })
+})
+

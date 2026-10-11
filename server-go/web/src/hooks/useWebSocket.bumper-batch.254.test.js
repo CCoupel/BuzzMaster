@@ -69,4 +69,13 @@ describe('useWebSocket — attribution groupée au niveau joueur (#254)', () => 
     act(() => { ws.simulateMessage({ ACTION: 'AWARDED_TEAMS', MSG: { QUESTION_ID: '8', TEAMS: [], PLAYERS: [{ ID: 'vj1', TEAM: 'A', POINTS: 2, TIMESTAMP: 7 }] } }) })
     expect(hook.result.current.awardedPlayers).toEqual({})
   })
+
+  it('AWARDED_TEAMS.TEAMS[].TEAM_LEVEL est conservé par équipe (true crédit d\'équipe, false crédits joueurs seulement)', () => {
+    const { hook, ws } = open()
+    act(() => { ws.simulateMessage(update('9')) })
+    act(() => { ws.simulateMessage({ ACTION: 'AWARDED_TEAMS', MSG: { QUESTION_ID: '9', TEAMS: [{ TEAM: 'A', POINTS: 2, TIMESTAMP: 1, TEAM_LEVEL: true }, { TEAM: 'B', POINTS: 1, TIMESTAMP: 2, TEAM_LEVEL: false }], PLAYERS: [] } }) })
+    expect(hook.result.current.awardedTeams.A.TEAM_LEVEL).toBe(true)
+    expect(hook.result.current.awardedTeams.B.TEAM_LEVEL).toBe(false)
+  })
 })
+
