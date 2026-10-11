@@ -12,7 +12,7 @@ const ANSWERS = [
  * sélectionne les équipes qui l'ont donnée et règle le montant (décidé par l'appelant).
  * `teamCounts[key]` = nombre d'équipes ayant donné cette réponse.
  */
-export default function QcmAnswerPicker({ question, teamCounts, picked, onPick }) {
+export default function QcmAnswerPicker({ question, teamCounts, unit = 'équipe', picked, onPick }) {
   const answers = question?.QCM_ANSWERS || {}
   return (
     <div>
@@ -24,19 +24,19 @@ export default function QcmAnswerPicker({ question, teamCounts, picked, onPick }
             <button
               key={a.key}
               type="button"
-              className={`qcm-picker-answer${correct ? ' correct' : ''}${picked === a.key ? ' picked' : ''}`}
-              title={`Sélectionner les ${n} équipe(s) ayant répondu « ${answers[a.key]} »`}
+              className={`qcm-picker-answer${correct ? ' correct' : ''}${picked === a.key ? ` picked${a.key !== question?.QCM_CORRECT ? ' wrong' : ''}` : ''}`}
+              title={`Sélectionner les ${n} ${unit}(s) ayant répondu « ${answers[a.key]} »`}
               aria-pressed={picked === a.key}
               onClick={() => onPick(a.key)}
             >
               <span className="qcm-picker-sw" style={{ background: a.color }} aria-hidden="true" />
               <span className="qcm-picker-txt">{answers[a.key]}{correct && <span className="qcm-picker-ok"> ✓ bonne réponse</span>}</span>
-              <span className="qcm-picker-n">{n} équipe{n > 1 ? 's' : ''}</span>
+              <span className="qcm-picker-n">{n} {unit}{n > 1 ? 's' : ''}</span>
             </button>
           )
         })}
       </div>
-      <p className="qcm-picker-hint">Cliquez une réponse pour sélectionner les équipes qui l'ont donnée.</p>
+      <p className="qcm-picker-hint">Cliquez une réponse pour sélectionner les {unit}s qui l'ont donnée.</p>
     </div>
   )
 }

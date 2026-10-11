@@ -9,3 +9,4 @@
 .qcm-picker-answer.correct { border-color: #16a34a; background: #f0fdf4; }
 .qcm-picker-answer.picked { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.35); }
 .qcm-picker-hint { font-size: 0.76rem; color: #6b7280; margin: 0.45rem 0 0; }
+.qcm-picker-answer.picked.wrong { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35); }

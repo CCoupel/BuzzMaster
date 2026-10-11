@@ -396,6 +396,9 @@ export default function TeamCard({
   onSelectChange = null,
   awardedInfo = null, // { POINTS } si l'équipe est dans AWARDED_TEAMS
   awardPreview = null, // montant prévu (équipe sélectionnée)
+  // #254 — attribution au niveau JOUEUR : cases sur les lignes de joueurs (pas de case d'équipe).
+  // { selected(mac), onChange(mac, checked), awarded(mac) → {POINTS}|null, preview(mac) → number|null }
+  playerAward = null,
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [otaBuzzer, setOtaBuzzer] = useState(null) // buzzer object for OTA modal
@@ -649,6 +652,18 @@ export default function TeamCard({
                 onClick={handleBuzzerClick}
               >
                 <div className="buzzer-info" style={{ flexWrap: 'wrap' }}>
+                  {playerAward && (
+                    <input
+                      type="checkbox"
+                      className="player-select-checkbox"
+                      checked={playerAward.selected(buzzer.mac) && !playerAward.awarded(buzzer.mac)}
+                      disabled={!!playerAward.awarded(buzzer.mac)}
+                      onChange={(e) => playerAward.onChange(buzzer.mac, e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Sélectionner ${buzzer.name || buzzer.mac}`}
+                      title={playerAward.awarded(buzzer.mac) ? 'Déjà crédité pour cette question' : undefined}
+                    />
+                  )}
                   {buzzer.isVPlayer ? (
                     <div className="buzzer-vplayer-multicolor">
                       <svg className="vplayer-multicolor-badge" viewBox="0 0 24 24">
@@ -722,6 +737,16 @@ export default function TeamCard({
                   )}
                 </div>
                 <div className="buzzer-right">
+                  {playerAward && playerAward.awarded(buzzer.mac) && (
+                    <span className="award-done-chip">
+                      ✓ déjà crédité {playerAward.awarded(buzzer.mac).POINTS > 0 ? '+' : ''}{playerAward.awarded(buzzer.mac).POINTS}
+                    </span>
+                  )}
+                  {playerAward && !playerAward.awarded(buzzer.mac) && playerAward.selected(buzzer.mac) && playerAward.preview(buzzer.mac) !== null && (
+                    <span className={`award-preview${playerAward.preview(buzzer.mac) < 0 ? ' neg' : ''}`}>
+                      {playerAward.preview(buzzer.mac) > 0 ? '+' : ''}{playerAward.preview(buzzer.mac)}
+                    </span>
+                  )}
                   {buzzer.timestamp && gameTime && (
                     <span className="buzzer-time">
                       {((buzzer.timestamp - gameTime) / 1000000).toFixed(3)}s
