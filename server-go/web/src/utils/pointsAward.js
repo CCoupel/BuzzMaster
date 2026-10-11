@@ -167,7 +167,36 @@ export function calcRafaleTeamAward(question, basePoints, counter) {
  * @returns {'TEAM'|'PLAYER'}
  */
 export function resolvePointsTarget(question) {
-  return question?.POINTS_TARGET === 'TEAM' ? 'TEAM' : 'PLAYER'
+  return resolveAwardLevel(question)
+}
+
+/**
+ * Niveau d'attribution d'une question — équipe ou joueur (#254, contrat
+ * websocket-actions.md §TEAM_POINTS_BATCH « Niveau d'attribution »). Fonction UNIQUE : l'attribution
+ * groupée, le clic unitaire et l'anim s'y réfèrent.
+ *   SPEEDY            : POINTS_TARGET, défaut PLAYER
+ *   QCM, ARDOISE      : POINTS_TARGET, défaut TEAM
+ *   MEMORY, MEMOTION, RAFALE : toujours TEAM (le réglage d'un ancien fichier est ignoré)
+ *   autre type / absent : POINTS_TARGET, défaut PLAYER (jamais servi : le serveur normalise le type)
+ *
+ * @param {object|null} question
+ * @returns {'TEAM'|'PLAYER'}
+ */
+export function resolveAwardLevel(question) {
+  const type = question?.TYPE
+  if (type === 'MEMORY' || type === 'MEMOTION' || type === 'RAFALE') return 'TEAM'
+  const target = question?.POINTS_TARGET
+  if (target === 'TEAM' || target === 'PLAYER') return target
+  // QCM, ARDOISE : TEAM ; SPEEDY (et tout type inconnu / absent, jamais servi par le serveur) : PLAYER
+  return type === 'QCM' || type === 'ARDOISE' ? 'TEAM' : 'PLAYER'
+}
+
+/**
+ * Nombre d'indices à appliquer à un JOUEUR : celui figé à son buzz (`HINTS_AT_BUZZ`) s'il a buzzé,
+ * sinon les indices actuellement révélés (repli, #254).
+ */
+export function playerHintsCount(bumper, invalidatedCount) {
+  return bumper?.TIME > 0 ? (bumper.HINTS_AT_BUZZ || 0) : (invalidatedCount || 0)
 }
 
 /**
@@ -207,7 +236,9 @@ export function resolvePointsAward(question, basePoints, ctx = {}) {
   if (question?.TYPE === 'MEMORY' && ctx.memory) {
     const memory = calcMemoryScore(question, ctx.memory.matchedPairs || 0, ctx.memory.errors || 0)
     if (memory) amount = memory.score
-  } else if (question?.TYPE === 'QCM' && question?.QCM_HINTS_ENABLED) {
+  } else if (question?.TYPE === 'QCM' && question?.QCM_HINTS_ENABLED && basePoints > 0 && ctx.useHints !== false) {
+    // #254 : un montant négatif (pénalité) est TOUJOURS uniforme ; `ctx.useHints === false`
+    // (commutateur « Tenir compte des indices » désactivé) → montant uniforme.
     const penalty = calcQcmPenaltyForHints(question, basePoints, ctx.hintsAtBuzz || 0)
     if (penalty) amount = penalty.effectivePoints
   }
@@ -248,9 +279,17 @@ export function resolvePointsAward(question, basePoints, ctx = {}) {
  *   l'affichage (ex: n'ajouter une équipe à une liste "a la bonne réponse"
  *   que si `hasCorrectAnswer` est vrai)
  */
-export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount) {
+export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount, useHints = true) {
   const correctColor = question?.QCM_CORRECT
   let best = null
+  // #254 : montant uniforme (pénalité, ou commutateur « Tenir compte des indices » désactivé) —
+  // hasCorrectAnswer reste calculé pour l'affichage.
+  if (!useHints || !(basePoints > 0)) {
+    const hasCorrectAnswer = !!correctColor && (teamBumpers || []).some(
+      (b) => b && b.TIME && b.ANSWER_COLOR === correctColor
+    )
+    return { amount: basePoints, hasCorrectAnswer }
+  }
 
   if (correctColor) {
     ;(teamBumpers || []).forEach(bumper => {
@@ -292,12 +331,15 @@ export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedC
  * @param {Object<string,number>} [p.memoryTeamErrors] - gameState.MEMORY_TEAM_ERRORS
  * @param {Object<string,number>} [p.rafaleCounters] - gameState.RAFALE_TEAM_COUNTERS
  * @param {Object<string,number>} [p.rafaleBest] - gameState.RAFALE_TEAM_BEST
+ * @param {boolean} [p.useHints] - QCM : false = montant uniforme (commutateur « Tenir compte des indices » désactivé, #254)
  * @returns {number}
  */
 export function defaultTeamAward({
   question, teamName, basePoints, teamBumpers, invalidatedCount = 0, memorySoloScore = null,
-  memoryTeamPairs, memoryTeamErrors, rafaleCounters, rafaleBest,
+  memoryTeamPairs, memoryTeamErrors, rafaleCounters, rafaleBest, useHints = true,
 }) {
+  // #254 : montant négatif (pénalité) = uniforme, quel que soit le type
+  if (!(basePoints > 0)) return basePoints
   let amount = basePoints
   if (question?.TYPE === 'MEMORY' && question?.MEMORY_MODE !== 'SOLO' && memoryTeamPairs?.[teamName] !== undefined) {
     const teamScore = calcMemoryScore(question, memoryTeamPairs[teamName] || 0, memoryTeamErrors?.[teamName] || 0)
@@ -305,7 +347,7 @@ export function defaultTeamAward({
   } else if (memorySoloScore) {
     amount = memorySoloScore.score
   } else if (question?.TYPE === 'QCM' && question?.QCM_HINTS_ENABLED) {
-    amount = calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount).amount
+    amount = calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount, useHints).amount
   } else if (question?.TYPE === 'RAFALE') {
     const counter = rafaleCounterForTeam(question, teamName, rafaleCounters, rafaleBest)
     const award = calcRafaleTeamAward(question, basePoints, counter)

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   defaultTeamAward,
+  resolveAwardLevel,
+  playerHintsCount,
   calcQcmPenaltyForHints,
   calcQcmPenalty,
   calcQcmTeamAward,
@@ -181,10 +183,16 @@ describe('resolvePointsTarget', () => {
     expect(resolvePointsTarget({ POINTS_TARGET: 'TEAM' })).toBe('TEAM')
   })
 
-  it('retourne PLAYER par défaut (absent, PLAYER, ou toute autre valeur)', () => {
+  it('retourne PLAYER par défaut pour un type sans règle (absent, SPEEDY, question absente)', () => {
     expect(resolvePointsTarget({})).toBe('PLAYER')
     expect(resolvePointsTarget({ POINTS_TARGET: 'PLAYER' })).toBe('PLAYER')
     expect(resolvePointsTarget(null)).toBe('PLAYER')
+  })
+
+  it('#254 : même règle que resolveAwardLevel (QCM / ARDOISE sans réglage = TEAM)', () => {
+    expect(resolvePointsTarget({ TYPE: 'QCM' })).toBe('TEAM')
+    expect(resolvePointsTarget({ TYPE: 'ARDOISE' })).toBe('TEAM')
+    expect(resolvePointsTarget({ TYPE: 'MEMORY', POINTS_TARGET: 'PLAYER' })).toBe('TEAM')
   })
 })
 
@@ -212,9 +220,9 @@ describe('resolvePointsAward — SPEEDY (question par défaut, sans QCM ni MEMOR
 describe('resolvePointsAward — QCM', () => {
   const qcmQuestion = { TYPE: 'QCM', QCM_HINTS_ENABLED: true }
 
-  it('applique la pénalité par joueur (hintsAtBuzz) au montant, cible joueur', () => {
+  it('applique la pénalité par joueur (hintsAtBuzz) au montant (QCM sans réglage : cible équipe, #254)', () => {
     const result = resolvePointsAward(qcmQuestion, 10, { hintsAtBuzz: 1 })
-    expect(result).toEqual({ amount: 7, target: 'PLAYER' })
+    expect(result).toEqual({ amount: 7, target: 'TEAM' })
   })
 
   it('QCM + POINTS_TARGET TEAM : pénalité appliquée, créditée à l\'équipe', () => {
@@ -225,7 +233,7 @@ describe('resolvePointsAward — QCM', () => {
 
   it('QCM sans indices activés : montant de base tel quel', () => {
     const result = resolvePointsAward({ TYPE: 'QCM', QCM_HINTS_ENABLED: false }, 10, { hintsAtBuzz: 2 })
-    expect(result).toEqual({ amount: 10, target: 'PLAYER' })
+    expect(result).toEqual({ amount: 10, target: 'TEAM' })
   })
 })
 
@@ -236,9 +244,9 @@ describe('resolvePointsAward — MEMORY', () => {
     MEMORY_CONFIG: { POINTS_PER_PAIR: 10, ERROR_PENALTY: 2, COMPLETION_BONUS: 5 },
   }
 
-  it('utilise le score MEMORY calculé, cible joueur par défaut', () => {
+  it('utilise le score MEMORY calculé, cible équipe (toujours, #254)', () => {
     const result = resolvePointsAward(memoryQuestion, 999, { memory: { matchedPairs: 2, errors: 0 } })
-    expect(result).toEqual({ amount: 20, target: 'PLAYER' })
+    expect(result).toEqual({ amount: 20, target: 'TEAM' })
   })
 
   it('MEMORY + POINTS_TARGET TEAM : score MEMORY crédité à l\'équipe', () => {
@@ -249,7 +257,7 @@ describe('resolvePointsAward — MEMORY', () => {
 
   it('MEMORY sans contexte memory fourni : replie sur le montant de base', () => {
     const result = resolvePointsAward(memoryQuestion, 8, {})
-    expect(result).toEqual({ amount: 8, target: 'PLAYER' })
+    expect(result).toEqual({ amount: 8, target: 'TEAM' })
   })
 })
 
@@ -413,5 +421,60 @@ describe('defaultTeamAward (#244/#251) — règle unique du clic équipe et du l
     const q = { TYPE: 'QCM', QCM_CORRECT: 'GREEN', QCM_HINTS_ENABLED: true, QCM_PENALTY_1: 0.5, QCM_PENALTY_2: 0.25 }
     const bumpers = [{ TIME: 1, ANSWER_COLOR: 'GREEN', HINTS_AT_BUZZ: 1 }]
     expect(defaultTeamAward({ ...base, basePoints: 4, question: q, teamBumpers: bumpers })).toBe(2)
+  })
+})
+
+describe('resolveAwardLevel (#254) — niveau d\'attribution', () => {
+  it.each([
+    ['SPEEDY', undefined, 'PLAYER'], ['SPEEDY', 'TEAM', 'TEAM'], ['SPEEDY', 'PLAYER', 'PLAYER'],
+    ['QCM', undefined, 'TEAM'], ['QCM', 'PLAYER', 'PLAYER'], ['QCM', 'TEAM', 'TEAM'],
+    ['ARDOISE', undefined, 'TEAM'], ['ARDOISE', 'PLAYER', 'PLAYER'],
+    ['MEMORY', undefined, 'TEAM'], ['MEMORY', 'PLAYER', 'TEAM'],
+    ['MEMOTION', 'PLAYER', 'TEAM'], ['RAFALE', 'PLAYER', 'TEAM'], ['RAFALE', undefined, 'TEAM'],
+  ])('%s + POINTS_TARGET %s → %s', (TYPE, POINTS_TARGET, expected) => {
+    expect(resolveAwardLevel({ TYPE, POINTS_TARGET })).toBe(expected)
+  })
+})
+
+describe('commutateur « Tenir compte des indices » et pénalités (#254)', () => {
+  const q = { TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'GREEN', QCM_PENALTY_1: 0.67, QCM_PENALTY_2: 0.33 }
+  const buzzers = [{ TIME: 1, ANSWER_COLOR: 'GREEN', HINTS_AT_BUZZ: 1 }]
+
+  it('équipe : activé → base × coefficient du buzz ; désactivé → uniforme', () => {
+    expect(calcQcmTeamAward(q, 3, buzzers, 2, true).amount).toBe(2)
+    expect(calcQcmTeamAward(q, 3, buzzers, 2, false).amount).toBe(3)
+    expect(calcQcmTeamAward(q, 3, buzzers, 2, false).hasCorrectAnswer).toBe(true)
+  })
+
+  it('arrondis : base 1 avec 2 indices → 1 (au moins 1 point) ; base 5 → 5 / 3 / 2', () => {
+    const at = (n, base) => calcQcmTeamAward(q, base, [{ TIME: 1, ANSWER_COLOR: 'GREEN', HINTS_AT_BUZZ: n }], 0).amount
+    expect(at(2, 1)).toBe(1)
+    expect([at(0, 5), at(1, 5), at(2, 5)]).toEqual([5, 3, 2])
+  })
+
+  it('pénalité (montant ≤ 0) : toujours uniforme, indices sans effet (équipe et joueur)', () => {
+    for (const hints of [0, 1, 2]) {
+      expect(calcQcmTeamAward(q, -2, [{ TIME: 1, ANSWER_COLOR: 'GREEN', HINTS_AT_BUZZ: hints }], hints).amount).toBe(-2)
+      expect(resolvePointsAward(q, -2, { hintsAtBuzz: hints }).amount).toBe(-2)
+      expect(defaultTeamAward({ question: q, teamName: 'A', basePoints: -2, teamBumpers: [{ TIME: 1, ANSWER_COLOR: 'GREEN', HINTS_AT_BUZZ: hints }], invalidatedCount: hints })).toBe(-2)
+    }
+    expect(defaultTeamAward({ question: q, teamName: 'A', basePoints: 0, teamBumpers: [] })).toBe(0)
+  })
+
+  it('joueur : useHints false → uniforme ; activé → coefficient de ses indices', () => {
+    expect(resolvePointsAward(q, 3, { hintsAtBuzz: 2 }).amount).toBe(1)
+    expect(resolvePointsAward(q, 3, { hintsAtBuzz: 2, useHints: false }).amount).toBe(3)
+  })
+
+  it('defaultTeamAward : useHints false → uniforme (équipe), RAFALE / MEMORY inchangés', () => {
+    expect(defaultTeamAward({ question: q, teamName: 'A', basePoints: 3, teamBumpers: buzzers, invalidatedCount: 2, useHints: false })).toBe(3)
+    expect(defaultTeamAward({ question: q, teamName: 'A', basePoints: 3, teamBumpers: buzzers, invalidatedCount: 2 })).toBe(2)
+    expect(defaultTeamAward({ question: { TYPE: 'RAFALE' }, teamName: 'A', basePoints: 2, rafaleCounters: { A: 3 }, useHints: false })).toBe(6)
+  })
+
+  it('playerHintsCount : HINTS_AT_BUZZ s\'il a buzzé, sinon les indices actuellement révélés', () => {
+    expect(playerHintsCount({ TIME: 5, HINTS_AT_BUZZ: 1 }, 2)).toBe(1)
+    expect(playerHintsCount({ TIME: 0, HINTS_AT_BUZZ: 1 }, 2)).toBe(2)
+    expect(playerHintsCount(undefined, 0)).toBe(0)
   })
 })
