@@ -172,6 +172,19 @@ Le drapeau `TEAMS_LOCKED` suit la question, pas la phase :
 
 Contrats : `contracts/game-state.md` §`TEAMS_LOCKED`, `contracts/websocket-actions.md` §UPDATE.
 
+## Fenêtre « déjà crédité » — GameTime (v11.2, #256)
+
+`GameTime` (horodatage µs) borne les crédits de la question courante qui comptent comme « déjà créditée ». Un crédit
+`POINTS_AWARDED` compte seulement s'il a un horodatage ≥ `GameTime` et concerne la question courante.
+
+`GameTime` est posé à :
+- la **création du moteur** (démarrage du serveur) : l'historique rechargé n'est compté pour aucune question tant qu'elle
+  n'a pas été sélectionnée ou lancée ;
+- **`Ready()`** (sélection de la question, `PREPARE`) : une question rejouée ne retient plus les crédits de la manche précédente ;
+- **`actualStart()`** et **`StartImmediate()`** (START) : la fenêtre repart du départ réel.
+
+`NEW_GAME` (`InitGameWith`) ne réécrit pas `GameTime` : la prochaine sélection le remet.
+
 ## Type de jeu RAFALE (v8.0.0, #16)
 
 ### Vue d'ensemble
