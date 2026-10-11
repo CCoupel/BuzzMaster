@@ -202,29 +202,60 @@ Score total equipe = TeamPoints + sum(scores joueurs)
 { "ACTION": "BUMPER_POINTS", "MSG": { "ID": "AA:BB:CC:DD:EE:FF", "POINTS": 5 } }
 ```
 
-### Attribution groupée après REVEAL (v11.2, #244/#251)
+### Attribuer les points après REVEAL (v11.2, #244/#251, #254)
 
-Une fois la réponse révélée, la page de jeu (`/admin`) permet d'attribuer des points à plusieurs équipes d'un coup.
+Une fois la réponse révélée, la page de jeu (`/admin`) attribue les points à plusieurs équipes ou à plusieurs joueurs
+d'un coup.
 
-- **Cases à cocher** : chaque carte d'équipe a une case. Une équipe déjà créditée pour la question est grisée, avec
-  la mention « ✓ déjà créditée » et son montant. Elle ne peut pas être recochée.
-- **Barre d'attribution** : un champ « Points par équipe » (− / + et saisie), « Tout sélectionner » et « Tout
-  désélectionner ». Le bouton **« Donner les points (N) »** indique le nombre d'équipes sélectionnées. Si le montant
-  est négatif, il devient **« Retirer les points (N) »**, en rouge. Il est désactivé à N = 0. Si le lot est bloqué (montant nul, ou hors de −999 à 999), la raison s'affiche sous la barre : « Montant nul ou invalide pour : … » ou « Le montant doit être compris entre −999 et 999 ».
-- **Clic sur une réponse QCM** : sélectionne les équipes ayant donné cette réponse et règle le montant. Bonne réponse
-  → points de la question. Mauvaise réponse → **−1** (pénalité par défaut). Modifier le montant à la main garde la
-  sélection.
-- **Montant par équipe** : tant que le montant n'a pas été modifié à la main et qu'il est positif, chaque équipe
-  reçoit le montant de sa propre règle (MEMORY : score des paires ; QCM avec indices : pénalité d'indices ; RAFALE :
-  compteur de l'équipe). Un montant modifié à la main, ou négatif, est appliqué uniforme à toutes les équipes
-  sélectionnées.
-- **Une équipe dans plusieurs réponses** : si ses joueurs ont répondu des couleurs différentes, elle figure dans
-  plusieurs réponses QCM. Le **dernier clic** décide alors du montant. Vérifiez-le avant d'attribuer.
-- **Double crédit impossible** : une équipe déjà créditée pour la question est ignorée par le serveur
-  (`ALREADY_AWARDED`). Un double clic sur « Donner les points » n'attribue donc rien deux fois.
-- **Messages de résultat** : « ✓ +N points donnés à M équipes. » (ou « retirés » si négatif), suivi de « K équipe(s)
-  déjà créditée(s) ignorée(s). ». En cas de refus : « Attribution refusée : la réponse n’est pas révélée » ou « la
-  question a changé ».
+- **Niveau selon le type de question** :
+  - **Équipe** : cases à cocher dans l'en-tête de chaque carte d'équipe. Pour MEMORY, MEMOTION et RAFALE, toujours.
+    Pour QCM et ARDOISE, selon le réglage « Points : équipe / joueur » de la question (défaut : équipe).
+  - **Joueur** : cases à cocher sur les lignes de joueurs des cartes. Pour SPEEDY, selon le même réglage (défaut : joueur).
+  - Une ancienne question ARDOISE sans réglage crédite désormais **l'équipe** (auparavant le joueur).
+- **Champ « Points »** : le montant vient du champ « Points » de la page, en tête de la colonne Équipes. Il est éditable
+  après le REVEAL. Sa **base** est la valeur qu'il a à l'entrée en REVEALED. Une modification faite après le REVEAL est
+  « modifiée à la main ».
+- **Commutateur « Tenir compte des indices »** : visible seulement pour un QCM avec indices, quand au moins un indice a
+  été révélé et que le montant est positif. Il est **activé par défaut**, et revient activé à chaque question ou phase.
+  Un clic sur une réponse ou une saisie ne le change pas.
+  - Activé : chaque équipe ou joueur reçoit la base multipliée par son coefficient d'indices (1, 0,67 ou 0,33 selon le nombre
+    d'indices révélés), avec au moins 1 point. Pour une équipe, le coefficient vient du meilleur joueur de l'équipe qui a la
+    bonne couleur ; pour un joueur, des indices au moment de son buzz.
+  - Désactivé : montant uniforme pour toute la sélection.
+- **Autres montants** : MEMORY (score des paires) et RAFALE (compteur de l'équipe) donnent un montant par équipe, tant que
+  le champ n'est pas modifié à la main. SPEEDY, ARDOISE, MEMOTION, et un QCM sans indice révélé donnent la valeur du champ.
+- **Montant négatif** : uniforme, quel que soit le commutateur. **Les indices n'ont aucun effet sur une pénalité** : une
+  mauvaise réponse est pénalisée de la même façon, avant ou après un indice.
+- **Ligne 1 du bloc** : elle indique la source du montant. Exemples : « barème de la question, ajusté selon les indices de
+  chaque équipe » (commutateur activé), « montant uniforme » (désactivé), « montant saisi, ajusté selon les indices de chaque
+  équipe » (valeur saisie à la main), « mauvaise réponse : pénalité de la question, uniforme (indices sans effet) ».
+- **Ligne 2** : « Tout sélectionner » et « Tout désélectionner » (icônes), puis le bouton d'attribution.
+  - **« Attribuer les points (N) »** si le montant est positif.
+  - **« Appliquer les pénalités (N) »**, en rouge, si le montant est négatif, ou nul après un clic sur une mauvaise réponse.
+  - Désactivé quand N = 0, pendant l'envoi, ou quand le montant est 0. Un lot à 0 n'est jamais envoyé.
+- **Clic sur une réponse QCM** :
+  - **Bonne réponse** : sélectionne les équipes ou joueurs qui ont donné cette réponse, hors ceux déjà crédités. Le champ
+    reprend la base.
+  - **Mauvaise réponse** : désélectionne tout, puis sélectionne les équipes ou joueurs de cette réponse. Le champ prend la
+    **pénalité de la question**.
+  - Si la question n'a **pas de pénalité** (0), le champ passe à 0 et le bouton est désactivé avec la raison « Aucune
+    pénalité définie pour cette question ». Une valeur saisie à la main réactive le bouton.
+- **Pénalité de la question** : se règle dans l'éditeur de question QCM, champ « Pénalité mauvaise réponse ». Il accepte 0
+  à 100, le signe − étant appliqué. **0 = aucune pénalité** (valeur par défaut). Les anciennes questions valent 0.
+- **Une équipe dans plusieurs réponses** : si ses joueurs ont répondu des couleurs différentes, elle figure dans plusieurs
+  réponses QCM. Le **dernier clic** décide alors du montant. Vérifiez-le avant d'attribuer.
+- **Déjà créditée** : une équipe ou un joueur déjà crédité pour la question est grisé (« ✓ déjà créditée »). Un joueur d'une
+  équipe créditée au niveau équipe est grisé (« ✓ équipe déjà créditée »). Le serveur ignore ces cas, donc il n'y a pas de
+  double crédit.
+- **Résultat** : « K joueur(s) ignoré(s) (équipe déjà créditée) » pour un lot joueurs, et « K équipe(s) déjà créditée(s)
+  ignorée(s) » pour un lot équipes.
+- **Tablettes de l'animateur** : l'admin n'envoie jamais de valeur nulle ou négative pour le champ « Points ». Le bouton de
+  crédit des tablettes garde donc la dernière valeur positive.
+- **Limites** :
+  - Le montant d'une correction (−999 à 999) est contrôlé par l'interface. Le serveur ne vérifie pas cette borne sur les
+    attributions unitaires.
+  - Le commutateur est un état de la page : il n'est pas enregistré.
+
 - **Garde de 8 s** : sans réponse du serveur, le bouton se réactive avec « Pas de réponse du serveur — réessayez. ».
   Si la réponse arrive ensuite, elle est traitée normalement (résultat affiché, sélection réinitialisée si acceptée).
 - Si la connexion est perdue au moment de l'envoi : « Connexion perdue — réessayez. ».
