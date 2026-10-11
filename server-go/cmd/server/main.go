@@ -129,6 +129,9 @@ type App struct {
 	// bumperLEDState tracks the last LED_SET payload sent to each buzzer (by MAC).
 	// Used by resendLEDOnReconnect to restore LED state when a buzzer reconnects.
 	bumperLEDState map[string]protocol.LEDSetPayload
+	// ledStateMu guards bumperLEDState: sendLEDSet runs from several goroutines
+	// (handlers, the comet restore timers, the ACK retry callback).
+	ledStateMu sync.RWMutex
 
 	// bumperBuzzState tracks the BuzzState (NONE/MOI/EQUIPE/AUTRE) for each buzzer
 	// within the current question round. Reset on READY/PREPARE; updated on each buzz.
@@ -528,7 +531,10 @@ func (a *App) init() {
 		// Resend the LED payload with the ORIGINAL msgID so the buzzer can confirm the right entry.
 		// Never call sendLEDSet() here — that generates a new msgID, leaving the original entry
 		// permanently unconfirmable and cascading into AckMaxRetries² slots at most.
-		if payload, ok := a.bumperLEDState[mac]; ok {
+		a.ledStateMu.RLock()
+		payload, ok := a.bumperLEDState[mac]
+		a.ledStateMu.RUnlock()
+		if ok {
 			msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
 			if err != nil {
 				server.LogError(game.LogComponentApp, "AckManager retry: failed to create LED_SET for %s: %v", mac, err)
@@ -5325,7 +5331,9 @@ func (a *App) teamNameToRGB(teamName string) [3]int {
 // sendLEDSet sends a LED_SET message to a specific buzzer and stores the state for reconnect.
 // A MSG_ID is attached so the buzzer can ACK receipt (v3.8.0 ACK protocol).
 func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
+	a.ledStateMu.Lock()
 	a.bumperLEDState[mac] = payload
+	a.ledStateMu.Unlock()
 	if !a.buzzerHub.IsClientConnected(mac) {
 		// #109 Phase 2 (D4): a LED_SET that should have reached this buzzer while
 		// it's disconnected counts as a lost message (orange -> red).
@@ -5385,7 +5393,9 @@ func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) {
 
 // resendLEDOnReconnect re-sends the last known LED state to a buzzer that just reconnected (HELLO).
 func (a *App) resendLEDOnReconnect(mac string) {
+	a.ledStateMu.RLock()
 	payload, ok := a.bumperLEDState[mac]
+	a.ledStateMu.RUnlock()
 	if !ok {
 		// No stored state — derive from current game state
 		a.sendLEDSetForBuzzer(mac)
