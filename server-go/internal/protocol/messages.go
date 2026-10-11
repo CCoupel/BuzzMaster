@@ -389,6 +389,7 @@ type AwardedTeamEntry struct {
 	Team      string `json:"TEAM"`
 	Points    int    `json:"POINTS"`
 	Timestamp int64  `json:"TIMESTAMP"`
+	TeamLevel bool   `json:"TEAM_LEVEL"` // v11.2, #254: at least one TEAM-level credit (always present)
 }
 
 // RegieMessagePayload for REGIE_MESSAGE (v6.4.x, #167 — contracts/

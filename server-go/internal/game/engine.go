@@ -8416,6 +8416,9 @@ type AwardedTeam struct {
 	Team      string
 	Points    int   // sum of its credits for the question
 	Timestamp int64 // µs of its first credit
+	// TeamLevel (v11.2, #254): the team received at least one TEAM-level credit
+	// (WINNER_TYPE TEAM), as opposed to being credited only through its players.
+	TeamLevel bool
 }
 
 // awardedTeamsUnsafe is THE "already credited" rule (AWARDED_TEAMS, grouped
@@ -8446,10 +8449,13 @@ func (e *Engine) awardedTeamsUnsafe(questionID string) []AwardedTeam {
 		}
 		if k, ok := index[ev.TeamName]; ok {
 			out[k].Points += ev.Points
+			if ev.WinnerType == "TEAM" {
+				out[k].TeamLevel = true
+			}
 			continue
 		}
 		index[ev.TeamName] = len(out)
-		out = append(out, AwardedTeam{Team: ev.TeamName, Points: ev.Points, Timestamp: ev.Timestamp})
+		out = append(out, AwardedTeam{Team: ev.TeamName, Points: ev.Points, Timestamp: ev.Timestamp, TeamLevel: ev.WinnerType == "TEAM"})
 	}
 	return out
 }
@@ -8702,6 +8708,12 @@ type BumperPointsEntry struct {
 	Invalid bool
 }
 
+// PlayerSkip is a player ignored by a grouped player award.
+type PlayerSkip struct {
+	ID     string
+	Reason string
+}
+
 // BumperPointsBatchResult is the outcome of ApplyBumperPointsBatch.
 type BumperPointsBatchResult struct {
 	Status       string // "APPLIED" | "REFUSED"
@@ -8709,7 +8721,7 @@ type BumperPointsBatchResult struct {
 	Unknown      []string
 	Applied      []BumperPointsEntry
 	AppliedTeams map[string]string // bumper ID -> team of the credited players
-	Skipped      []TeamPointsSkip  // Team field carries the bumper ID
+	Skipped      []PlayerSkip
 }
 
 // AwardedPlayer is a player credited individually for the current question.
@@ -8814,15 +8826,26 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 	for _, ap := range e.awardedPlayersUnsafe(questionID) {
 		already[ap.ID] = true
 	}
+	teamLevel := map[string]bool{} // teams credited at TEAM level (#254 review hardening)
+	for _, at := range e.awardedTeamsUnsafe(questionID) {
+		if at.TeamLevel {
+			teamLevel[at.Team] = true
+		}
+	}
 	q := e.state.Question
 	var teams []string
 	teamSeen := map[string]bool{}
 	for _, en := range entries {
 		if already[en.ID] {
-			res.Skipped = append(res.Skipped, TeamPointsSkip{Team: en.ID, Reason: "ALREADY_AWARDED"})
+			res.Skipped = append(res.Skipped, PlayerSkip{ID: en.ID, Reason: "ALREADY_AWARDED"})
 			continue
 		}
 		b := e.data.Bumpers[en.ID]
+		if b.Team != "" && teamLevel[b.Team] {
+			// the player's team was already credited as a team: no double credit across levels
+			res.Skipped = append(res.Skipped, PlayerSkip{ID: en.ID, Reason: "TEAM_ALREADY_AWARDED"})
+			continue
+		}
 		b.Score += en.Points
 		var teamColor []int
 		if b.Team != "" {

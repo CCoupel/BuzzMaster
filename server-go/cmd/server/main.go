@@ -2363,7 +2363,7 @@ func (a *App) loadQuestion(id string) *game.Question {
 	}
 	// #254: QCM_WRONG_PENALTY is a QCM-only field; absent / invalid = 0.
 	if q.Type == game.QuestionTypeQCM {
-		q.QCMWrongPenalty = game.NormalizeQCMWrongPenalty(q.QCMWrongPenalty)
+		q.QCMWrongPenalty = game.WrongPenalty(game.NormalizeQCMWrongPenalty(int(q.QCMWrongPenalty))) // tolerant decoding already applied; defensive
 	} else {
 		q.QCMWrongPenalty = 0
 	}
@@ -3531,11 +3531,7 @@ func (a *App) handleBumperPointsBatch(clientID string, msg *protocol.Message) {
 	if state.Question != nil {
 		meta.Name, meta.ImageURL, meta.Color = a.httpServer.ResolveCategoryMeta(string(state.Question.Category))
 	}
-	display := p.Display == nil || *p.Display
-	if !display {
-		// DISPLAY:false is honoured for the admin only; this action is admin-only already.
-		display = false
-	}
+	display := p.Display == nil || *p.Display // DISPLAY:false: this action is admin-only already
 	res := a.engine.ApplyBumperPointsBatch(p.QuestionID, entries, meta, display)
 	if res.Status == "REFUSED" {
 		refuse(res.Reason, res.Unknown)
@@ -3549,8 +3545,8 @@ func (a *App) handleBumperPointsBatch(clientID string, msg *protocol.Message) {
 		applied = append(applied, fmt.Sprintf("%q:%+d", en.ID, en.Points))
 	}
 	for _, sk := range res.Skipped {
-		out.Skipped = append(out.Skipped, protocol.BumperPointsBatchSkip{ID: sk.Team, Reason: sk.Reason})
-		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.Team, sk.Reason))
+		out.Skipped = append(out.Skipped, protocol.BumperPointsBatchSkip{ID: sk.ID, Reason: sk.Reason})
+		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.ID, sk.Reason))
 	}
 	server.LogInfo(game.LogComponentApp, "BUMPER_POINTS_BATCH client=%q question=%q applied=[%s] skipped=[%s]",
 		clientID, p.QuestionID, strings.Join(applied, ","), strings.Join(skipped, ","))
@@ -7152,7 +7148,7 @@ func (a *App) getAwardedTeamsPayload() *protocol.AwardedTeamsPayload {
 	questionID, awarded := a.engine.AwardedTeams()
 	teams := make([]protocol.AwardedTeamEntry, 0, len(awarded))
 	for _, t := range awarded {
-		teams = append(teams, protocol.AwardedTeamEntry{Team: t.Team, Points: t.Points, Timestamp: t.Timestamp})
+		teams = append(teams, protocol.AwardedTeamEntry{Team: t.Team, Points: t.Points, Timestamp: t.Timestamp, TeamLevel: t.TeamLevel})
 	}
 	players := make([]protocol.AwardedPlayerEntry, 0)
 	for _, p := range a.engine.AwardedPlayers() {
