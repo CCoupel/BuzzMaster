@@ -100,6 +100,27 @@ interface Team {
   - Toujours sérialisée, `""` compris (pas d'`omitempty`).
   - Une sauvegarde ou un fichier de bumpers sans la clé se charge avec `""`, sans migration.
 
+## Manches — rounds.json, ROUND_ID, ORDER (v11.2, #245)
+
+Source : `contracts/models.md` §Manches.
+
+- **`Round`** : `{ ID: "r1", NAME: "…" }`. `ID` attribué par le serveur, jamais réutilisé. `NAME` : 1 à 60 caractères après
+  suppression des espaces de bord ; doublons autorisés.
+- **`data/files/questions/rounds.json`** : `{ "ROUNDS": Round[], "NEXT_ID": number }`. Il vit dans le dossier des questions.
+  Absent = aucune manche. `loadQuestions` ne lit que les sous-dossiers, donc ce fichier n'est jamais pris pour une question.
+- **`question.json`** : `ROUND_ID`. Absent, `""` ou inconnu (manche supprimée, restauration partielle) = « Sans manche ».
+  Aucune migration : les fichiers existants restent sans `ROUND_ID`.
+- **Ordre** : 1. « Sans manche » en premier ; 2. les manches dans l'ordre de `ROUNDS` ; 3. `ORDER` croissant, puis `ID`.
+  Même règle en JS (`questionOrder.js`) et en Go (`getNextQuestionPayload`), avec un test de parité.
+- **Normalisation de `ORDER`** : nombre JSON → partie entière (troncature) ; chaîne entièrement entière (`"5"`, espaces de bord permis)
+  → cet entier ; `"5abc"`, `"7.9"` ou absent/`null` → repli sur la valeur de l'`ID` si elle est entièrement numérique ; `ID` non numérique
+  sans `ORDER` valide → pas de repli, placé après les questions qui ont un rang.
+- **Égalité** : `ID` numériques d'abord, par valeur croissante, puis les autres par ordre lexicographique.
+- **Question de la manche** : `ORDER` = position dans son groupe (0-based), réécrit par `ROUNDS_UPDATE`.
+- **Repli d'affichage** (manches repliées) : préférence locale du navigateur (`localStorage`), jamais envoyée au serveur.
+- **`ROUND_CONTEXT`** (`GameState`) : `{ ROUND_ID, ROUND_INDEX, ROUND_COUNT, POSITION, TOTAL, FIRST_OF_ROUND }`, calculé par le serveur à
+  chaque `READY`, après `ROUNDS_UPDATE`, `DELETE` et `NEW_GAME`.
+
 ## Champs retirés ou neutralisés pour les tablettes (v11.2, #258)
 
 Source : `contracts/vplayer-payload-filter.md` §7.5 (liste exhaustive, référence du test de non-régression).
