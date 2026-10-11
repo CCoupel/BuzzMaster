@@ -8708,8 +8708,8 @@ type BumperPointsEntry struct {
 	Invalid bool
 }
 
-// PlayerSkip is a player ignored by a grouped player award.
-type PlayerSkip struct {
+// BumperSkip is a player ignored by a grouped player award.
+type BumperSkip struct {
 	ID     string
 	Reason string
 }
@@ -8721,7 +8721,7 @@ type BumperPointsBatchResult struct {
 	Unknown      []string
 	Applied      []BumperPointsEntry
 	AppliedTeams map[string]string // bumper ID -> team of the credited players
-	Skipped      []PlayerSkip
+	Skipped      []BumperSkip
 }
 
 // AwardedPlayer is a player credited individually for the current question.
@@ -8837,13 +8837,13 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 	teamSeen := map[string]bool{}
 	for _, en := range entries {
 		if already[en.ID] {
-			res.Skipped = append(res.Skipped, PlayerSkip{ID: en.ID, Reason: "ALREADY_AWARDED"})
+			res.Skipped = append(res.Skipped, BumperSkip{ID: en.ID, Reason: "ALREADY_AWARDED"})
 			continue
 		}
 		b := e.data.Bumpers[en.ID]
 		if b.Team != "" && teamLevel[b.Team] {
 			// the player's team was already credited as a team: no double credit across levels
-			res.Skipped = append(res.Skipped, PlayerSkip{ID: en.ID, Reason: "TEAM_ALREADY_AWARDED"})
+			res.Skipped = append(res.Skipped, BumperSkip{ID: en.ID, Reason: "TEAM_ALREADY_AWARDED"})
 			continue
 		}
 		b.Score += en.Points
