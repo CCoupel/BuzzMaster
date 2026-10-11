@@ -817,3 +817,34 @@ func TestLaunchLock253_OwnerIsTheSameStringAsTheHelloAckClientID(t *testing.T) {
 		t.Errorf("LAUNCH_LOCK.OWNER (%q) == HELLO_ACK.CLIENT_ID (%q) : c'est ainsi que le client se reconnaît propriétaire", e.lock().Owner, p.ClientID)
 	}
 }
+
+func TestLaunchLock253_Critical_ReconnectionGivesANewConnectionIDAndTheOldLockIsReleased(t *testing.T) {
+	e := helloEnv253(t)
+	e.openLock(t, e.admin1)
+	if !e.waitLock(func(l lockState253) bool { return l.Active && l.Owner == e.admin1 }) {
+		t.Fatal("précondition : verrou posé au nom de la 1re connexion")
+	}
+
+	e.a1.Close() // coupure / rechargement du poste propriétaire
+	if !e.waitLock(func(l lockState253) bool { return !l.Active }) {
+		t.Fatal("l'ancien verrou est levé par la déconnexion")
+	}
+
+	nc, newID := e.dial(t, "/ws/admin")
+	startTap253(nc)
+	e.send(t, newID, "admin", "HELLO", map[string]interface{}{})
+	m, ok := waitFrame253(nc, "HELLO_ACK", nil)
+	if !ok {
+		t.Fatal("HELLO_ACK attendu sur la nouvelle connexion")
+	}
+	var p struct {
+		ClientID string `json:"CLIENT_ID"`
+	}
+	_ = json.Unmarshal(m, &p)
+	if p.ClientID != newID || newID == e.admin1 {
+		t.Errorf("nouvel identifiant par connexion : ancien %q, nouveau %q, reçu %q", e.admin1, newID, p.ClientID)
+	}
+	if l := e.lock(); l.Active || l.Owner == p.ClientID {
+		t.Errorf("la nouvelle connexion n'hérite pas de l'ancien verrou : %+v", l)
+	}
+}
