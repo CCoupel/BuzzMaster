@@ -26,3 +26,13 @@
 - La ligne 1 du bloc est liée au commutateur. Activé : « barème de la question, par équipe » ; avec une valeur saisie à la main : « montant saisi, ajusté selon les indices de chaque équipe ». Désactivé : montant uniforme. _(v11.2.0, #254)_
 - La pénalité de mauvaise réponse est toujours uniforme : le commutateur est masqué et les indices sont sans effet. _(v11.2.0, #254)_
 
+## admin_questions_list
+- « Sans manche » se joue en premier. _(v11.2.0, rounds_entractes_delete_choice, #245)_
+- Supprimer une manche ouvre une fenêtre Conserver / Supprimer aussi / Annuler : les entractes suivent le même sort que les questions. _(v11.2.0, rounds_entractes_delete_choice, #245)_
+- Le repli des manches est mémorisé par navigateur. _(v11.2.0, rounds_entractes_delete_choice, #245)_
+
+## game_round_indicator
+- Une entracte est proposée par « à suivre » comme toute entrée. _(v11.2.0, admin_anim_tv_next_entracte, #245)_
+- L'anim peut terminer une entracte ; déclencher une entracte manuelle reste réservé à l'admin. _(v11.2.0, admin_anim_tv_next_entracte, #245)_
+- Les compteurs de manche ne comptent pas les entractes ; le compteur global de l'anim les compte. _(v11.2.0, admin_anim_tv_next_entracte, #245)_
+

@@ -1,0 +1,158 @@
+<!--
+mockup:
+  composant: game_round_indicator
+  feature: admin_anim_tv_next_entracte
+  version: 11.2.0
+  type: ui
+  issue: "#245"
+  validee_le: 2026-10-11
+  complete: [docs/mockup/v11.2/ui/admin_questions_list__rounds_entractes_delete_choice.html, docs/mockups/entracte-programme-214.html]
+  remplace: [docs/mockup/v11.2/ui/game_round_indicator__admin_anim_tv_entractes.html]
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suivant et entractes</title>
+<style>
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827;
+          --primary:#4f46e5; --primary-50:#eef2ff; --ok:#16a34a; --amber:#b45309; --amberbg:#fef3c7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:200; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; align-items:center; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1200px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; }
+  .grid { max-width:1200px; margin:0 auto 2rem; padding:0 1rem; display:grid; grid-template-columns:330px 300px 1fr; gap:1rem; align-items:start; }
+  @media (max-width: 1000px) { .grid { grid-template-columns:1fr; } }
+  .cap { font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--gray-500); margin:0 0 .35rem; }
+  .panel { background:#fff; border-radius:.75rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:.7rem; }
+  /* admin */
+  .next { display:flex; align-items:center; gap:.4rem; font-size:.8rem; padding:.4rem .5rem; border-radius:.45rem; background:var(--primary-50); color:var(--primary); font-weight:700; margin-bottom:.5rem; }
+  .next.entn { background:#f3e8ff; color:#7e22ce; }
+  .next .nr { margin-left:auto; font-size:.68rem; font-weight:800; color:var(--amber); background:var(--amberbg); padding:.1rem .4rem; border-radius:999px; }
+  .rh { display:flex; align-items:center; gap:.35rem; font-size:.74rem; font-weight:800; color:var(--gray-700); padding:.35rem .3rem; border-bottom:1px solid var(--gray-200); margin-top:.35rem; }
+  .rh .cnt { margin-left:auto; font-weight:600; color:var(--gray-500); }
+  .rh.cur { color:var(--primary); }
+  .rh button { border:0; background:transparent; cursor:pointer; font-size:.8rem; color:inherit; width:1.6rem; height:1.6rem; }
+  .q { display:flex; gap:.4rem; align-items:center; font-size:.78rem; padding:.3rem .35rem; border-radius:.35rem; }
+  .q.played { color:var(--gray-300); } .q.cur { background:var(--primary-50); color:var(--primary); font-weight:700; }
+  .q .id { font-weight:800; min-width:1.8rem; }
+  .hidden { display:none; }
+  /* anim */
+  .anim { background:#0f172a; color:#e2e8f0; border-radius:.9rem; padding:.8rem; }
+  .ahead { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.6rem; }
+  .achip { font-size:.72rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:#1e293b; color:#cbd5e1; }
+  .achip.round { background:#312e81; color:#e0e7ff; }
+  .aq { font-size:.95rem; font-weight:700; margin:.3rem 0 .8rem; }
+  .anext { width:100%; border:0; border-radius:.7rem; padding:.85rem; font-size:1rem; font-weight:800; background:#4f46e5; color:#fff; min-height:3.2rem; }
+  .anext.newround { background:linear-gradient(135deg,#f59e0b,#d97706); }
+  .anext.ent { background:linear-gradient(135deg,#a855f7,#7e22ce); }
+  .anext.endent { background:#e2e8f0; color:#0f172a; border:2px solid #a855f7; }
+  .q.ent { color:#86198f; font-style:italic; }
+  .tv .panel-ent { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:3%; background:linear-gradient(135deg,#4c1d95,#1e1b4b); }
+  .tv .panel-ent.show { display:flex; }
+  .anext small { display:block; font-size:.75rem; font-weight:600; opacity:.9; }
+  /* TV 16:9 static */
+  .tv { aspect-ratio:16/9; width:100%; background:radial-gradient(circle at 30% 20%,#312e81,#0f172a 70%); border-radius:.6rem; position:relative; overflow:hidden; color:#fff; }
+  .tv .badge { position:absolute; top:3%; left:2.5%; font-size:clamp(.6rem,1.6vw,1rem); font-weight:800; padding:.35em .9em; border-radius:999px; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.25); letter-spacing:.02em; }
+  .tv .cat { position:absolute; top:3%; right:2.5%; font-size:clamp(.55rem,1.4vw,.9rem); opacity:.8; }
+  .tv .center { position:absolute; inset:18% 8% 18% 8%; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:4%; }
+  .tv .big { font-size:clamp(1rem,3.4vw,2.4rem); font-weight:900; }
+  .tv .sub { font-size:clamp(.7rem,1.8vw,1.2rem); opacity:.85; }
+  .tv .rtitle { font-size:clamp(.7rem,1.8vw,1.2rem); font-weight:800; text-transform:uppercase; letter-spacing:.12em; color:#fcd34d; }
+  .note { font-size:.74rem; color:var(--gray-500); margin-top:.4rem; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — état :</strong>
+  <label><input type="radio" name="st" value="mid" checked> En cours de manche</label>
+  <label><input type="radio" name="st" value="last"> Dernière question : la suivante est l'entracte de fin</label>
+  <label><input type="radio" name="st" value="endent"> Entracte de fin en cours</label>
+  <label><input type="radio" name="st" value="afterend"> Entracte de fin terminée : la suivante est le début de la manche suivante</label>
+  <label><input type="radio" name="st" value="ent"> Entracte de début en cours</label>
+  <label><input type="radio" name="st" value="first"> Première question de la manche</label>
+  <label><input type="radio" name="st" value="none"> Quiz sans manche</label>
+</div>
+<p class="mock-note">(g‴) <b>Révision de (g″) validée</b> : <b>une entracte est un type de jeu comme un autre</b> (décision utilisateur).</p>
+<ul class="mock-note" style="margin-top:0">
+  <li><b>« À suivre » (admin) et « suivant » (anim) proposent les entractes</b> : de manche, programmées, toutes. Bouton violet <b>« Lancer l'entracte : … »</b>, qui suit le cycle habituel préparation → prêt → départ.</li>
+  <li>Pendant l'entracte, l'anim a un bouton <b>« Terminer l'entracte »</b>. Il met fin au panneau et à l'entrée, puis « suivant » reprend. L'anim peut ainsi enchaîner seule tout le déroulé.</li>
+  <li>L'anim ne peut toujours pas <i>déclencher</i> une entracte manuelle ; ce bouton reste dans la barre admin.</li>
+  <li>La règle « ignorée par le calcul du à suivre » de la maquette #214 (§04) est abrogée ; c'est le seul point de cette maquette remplacé.</li>
+</ul>
+<p class="mock-note"><b>TV inchangée</b> : panneau d'entracte habituel, titre de manche sur la première question. <b>Inchangé</b> par rapport à (g″) : « Sans manche » en premier, pastilles, titres de manche, compteurs sans entractes.</p>
+<div class="grid">
+  <div><p class="cap">Admin — page de jeu</p><div class="panel"><div class="next" id="aNext"></div><div id="aList"></div></div></div>
+  <div><p class="cap">Anim — tablette</p><div class="anim"><div class="ahead" id="anHead"></div><div class="aq" id="anQ"></div><button class="anext" id="anNext"></button></div></div>
+  <div><p class="cap">TV — écran d'attente (READY)</p><div class="tv"><span class="badge" id="tvBadge"></span><span class="cat" id="tvCat"></span><div class="center"><div class="rtitle" id="tvRound"></div><div class="big" id="tvBig"></div><div class="sub" id="tvSub"></div></div><div class="panel-ent" id="tvEnt"><div class="rtitle">Entracte</div><div class="big" id="tvEntT"></div><div class="sub" id="tvEntS"></div></div></div>
+    <p class="note">Taille du texte en unités d'écran, rien ne déborde (TV statique).</p></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const R = [ {name:'Échauffement', qs:[12,2,1,4]}, {name:'Culture générale', qs:[3,7,13,8,10]}, {name:'Finale cinéma', qs:[6,9,14]} ];
+const UN = [5,11];
+const TXT = {1:'Rugby à XV ?',2:'Fleuve de Paris ?',3:'Prise de la Bastille ?',4:'Capitale de l\'Australie ?',5:'Drapeaux d\'Europe',6:'Les Dents de la mer ?',7:'Le Roi-Soleil ?',8:'Entracte',9:'Mémo-émotions cinéma',10:'Premier homme sur la Lune ?',11:'Joueurs de foot ?',12:'Plus long fleuve ?',13:'La Joconde ?',14:'Oscar 1998 ?'};
+const CAT = {1:'Sport',2:'Géographie',3:'Histoire',4:'Géographie',5:'Géographie',6:'Cinéma',7:'Histoire',8:'',9:'Cinéma',10:'Histoire',11:'Sport',12:'Géographie',13:'Histoire',14:'Cinéma'};
+let OPTB = true; // entractes automatiques présentes dans chaque manche
+const ENT = {};
+const order = () => UN.map(q => ({ q, ri:-1 })).concat(R.flatMap((r, i) => (OPTB ? [{ q:'o' + i, ri:i, role:'OPEN' }] : []).concat(r.qs.map(q => ({ q, ri:i }))).concat(OPTB ? [{ q:'c' + i, ri:i, role:'CLOSE' }] : [])));
+const label = x => x.q === 8 ? '🎬 Entracte (programmée)' : x.role ? (x.role === 'OPEN' ? '🎬 Début de la manche ' : '🎬 Fin de la manche ') + R[x.ri].name : '#' + x.q + ' ' + TXT[x.q];
+let folded = {};
+function render(v) {
+  const rounds = v !== 'none';
+  const cur = { mid:13, last:10, first:6, un:5, none:13, ent:'o2', endent:'c1', afterend:'c1' }[v];
+  const seq = rounds ? order() : Object.keys(TXT).map(Number).sort((a, b) => a - b).map(q => ({ q, ri:-1 }));
+  const ci = seq.findIndex(x => x.q === cur);
+  let ni = ci + 1; // v11.2 : aucune ENTRACTE n'est sautée // ENTRACTE ordinaire sautée par « à suivre » (règle actuelle) ; entractes de manche (option B) proposées
+  const c = seq[ci], n = seq[ni];
+  const rname = ri => ri === -1 ? 'Sans manche' : 'Manche ' + (ri + 1) + ' · ' + R[ri].name;
+  const newRound = rounds && n && n.ri !== c.ri;
+  const nIsEnt = n && (n.role || n.q === 8);
+  const ended = v === 'afterend';
+  // admin
+  $('aNext').className = 'next' + (nIsEnt ? ' entn' : '');
+  $('aNext').innerHTML = n ? 'À suivre : ' + label(n) + (newRound ? '<span class="nr">→ ' + rname(n.ri) + '</span>' : '') : 'Fin du quiz';
+  const played = new Set(seq.slice(0, ci + (v === 'afterend' ? 1 : 0)).map(x => x.q));
+  const row = q => '<div class="q' + (q === cur ? ' cur' : played.has(q) ? ' played' : '') + '"><span class="id">#' + q + '</span>' + TXT[q] + '</div>';
+  const erow = (k, ri, role) => '<div class="q ent' + (k === cur ? ' cur' : played.has(k) ? ' played' : '') + '" title="Entracte : cliquer pour la lancer">' + (role === 'OPEN' ? '🎬 Début de la manche ' : '🎬 Fin de la manche ') + R[ri].name + '</div>';
+  if (!rounds) $('aList').innerHTML = seq.map(x => row(x.q)).join('');
+  else {
+    const groups = [{ k:'un', title:'Sans manche', qs:UN, ri:-1 }].concat(R.map((r, i) => ({ k:'r' + i, title:rname(i), qs:r.qs, ri:i })));
+    $('aList').innerHTML = groups.map(g => {
+      const done = g.qs.filter(q => played.has(q)).length;
+      return '<div class="rh' + (g.ri === c.ri ? ' cur' : '') + '"><button data-f="' + g.k + '" aria-label="Replier">' + (folded[g.k] ? '▸' : '▾') + '</button>' + g.title + '<span class="cnt">' + done + '/' + g.qs.length + ' jouées</span></div>' +
+        '<div class="' + (folded[g.k] ? 'hidden' : '') + '">' + (OPTB && g.ri !== -1 ? erow('o' + g.ri, g.ri, 'OPEN') : '') + g.qs.map(row).join('') + (OPTB && g.ri !== -1 ? erow('c' + g.ri, g.ri, 'CLOSE') : '') + '</div>';
+    }).join('');
+    document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { folded[b.dataset.f] = !folded[b.dataset.f]; render(v); });
+  }
+  // anim
+  const grp = seq.filter(x => x.ri === c.ri && !x.role && x.q !== 8);
+  const pos = c.role ? 0 : grp.findIndex(x => x.q === cur) + 1, tot = grp.length;
+  const inEnt = c.role && !ended;
+  if (c.role) { $('anHead').innerHTML = '<span class="achip round">Manche ' + (c.ri + 1) + '/' + R.length + ' · ' + R[c.ri].name + '</span><span class="achip">' + (inEnt ? '🎬 Entracte en cours' : '✓ Entracte terminée') + '</span>'; } else
+  $('anHead').innerHTML = (rounds && c.ri !== -1 ? '<span class="achip round">Manche ' + (c.ri + 1) + '/' + R.length + ' · ' + R[c.ri].name + (pos ? ' · ' + pos + '/' + tot : ' · entracte') + '</span>' : (rounds ? '<span class="achip">Sans manche · ' + pos + '/' + tot + '</span>' : '')) +
+    '<span class="achip">' + (CAT[cur] || (c.role ? 'Entracte' : '—')) + '</span>';
+  $('anQ').textContent = c.role ? label(c) : '#' + cur + ' · ' + TXT[cur];
+  const nb = $('anNext');
+  nb.className = 'anext' + (inEnt ? ' endent' : nIsEnt ? ' ent' : newRound ? ' newround' : '');
+  nb.style.display = '';
+  nb.innerHTML = inEnt ? 'Terminer l\'entracte<small>' + label(c) + ' — retour au déroulé</small>' : !n ? 'Fin du quiz' : nIsEnt ? 'Lancer l\'entracte<small>' + label(n) + '</small>' : newRound ? 'Manche suivante : ' + (n.ri === -1 ? 'Sans manche' : R[n.ri].name) + '<small>' + label(n) + '</small>' : 'Question suivante<small>' + label(n) + '</small>';
+  // TV
+  const prevReal = seq.slice(0, ci).filter(x => !x.role && x.q !== 8).pop();
+  const firstOfRound = rounds && c.ri !== -1 && !c.role && (!prevReal || prevReal.ri !== c.ri);
+  $('tvBadge').style.display = rounds && c.ri !== -1 ? '' : 'none';
+  $('tvBadge').textContent = rounds && c.ri !== -1 ? 'Manche ' + (c.ri + 1) + ' · ' + R[c.ri].name : '';
+  $('tvEnt').classList.toggle('show', !!inEnt); $('tvEntT').textContent = c.role ? (c.role === 'OPEN' ? 'Début de la manche ' : 'Fin de la manche ') + R[c.ri].name : ''; $('tvEntS').textContent = c.role ? '(titre et sous-titre modifiables, comme toute entracte)' : '';
+  $('tvCat').textContent = CAT[cur] ? 'Catégorie : ' + CAT[cur] : '';
+  $('tvRound').textContent = firstOfRound ? 'Manche ' + (c.ri + 1) + ' — ' + R[c.ri].name : '';
+  $('tvBig').textContent = CAT[cur] || 'Question';
+  $('tvSub').textContent = 'Préparez-vous…';
+}
+document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => { folded = {}; render(e.target.value); }));
+
+render('mid');
+</script>
+</body>
+</html>
