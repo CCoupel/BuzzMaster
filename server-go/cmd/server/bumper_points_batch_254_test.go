@@ -172,26 +172,29 @@ func many254(e *env244, n int) []pentry254 {
 	return out
 }
 
+func valid254(e *env244) []pentry254 {
+	p, b, m := e.threePlayers()
+	return []pentry254{{p, 3}, {b, 2}, {m, 1}}
+}
+
 func TestBumperPointsBatch254_Critical_AnyValidationErrorRefusesTheWholeBatchAndChangesNothing(t *testing.T) {
-	e0 := newEnv244(t)
-	paul, buzz, mamie := e0.threePlayers()
-	valid := func() []pentry254 { return []pentry254{{paul, 3}, {buzz, 2}, {mamie, 1}} }
+	// Les identifiants des VJoueurs sont horodatés : ils sont recalculés dans CHAQUE environnement (jamais réutilisés).
 	cases := []struct {
 		name    string
 		prep    func(e *env244)
 		qid     string
-		entries func() []pentry254
+		entries func(e *env244) []pentry254
 		reason  string
 	}{
-		{"hors REVEALED", func(e *env244) { e.app.engine.SetPhase(game.PhaseStarted) }, qid244, valid, "NOT_REVEALED"},
-		{"autre question", nil, "autre", valid, "QUESTION_MISMATCH"},
-		{"vide", nil, qid244, func() []pentry254 { return nil }, "INVALID_ENTRIES"},
-		{"doublon", nil, qid244, func() []pentry254 { return []pentry254{{paul, 1}, {paul, 2}} }, "INVALID_ENTRIES"},
-		{"65 entrées", nil, qid244, func() []pentry254 { return many254(nil, 65) }, "INVALID_ENTRIES"},
-		{"montant nul", nil, qid244, func() []pentry254 { return []pentry254{{paul, 3}, {buzz, 0}} }, "INVALID_POINTS"},
-		{"montant décimal", nil, qid244, func() []pentry254 { return []pentry254{{paul, 1.5}} }, "INVALID_POINTS"},
-		{"montant 1000", nil, qid244, func() []pentry254 { return []pentry254{{paul, 1000}} }, "INVALID_POINTS"},
-		{"joueur inconnu", nil, qid244, func() []pentry254 { return []pentry254{{paul, 3}, {"ZZ:ZZ", 2}} }, "UNKNOWN_PLAYER"},
+		{"hors REVEALED", func(e *env244) { e.app.engine.SetPhase(game.PhaseStarted) }, qid244, valid254, "NOT_REVEALED"},
+		{"autre question", nil, "autre", valid254, "QUESTION_MISMATCH"},
+		{"vide", nil, qid244, func(*env244) []pentry254 { return nil }, "INVALID_ENTRIES"},
+		{"doublon", nil, qid244, func(e *env244) []pentry254 { p, _, _ := e.threePlayers(); return []pentry254{{p, 1}, {p, 2}} }, "INVALID_ENTRIES"},
+		{"65 entrées", nil, qid244, func(e *env244) []pentry254 { return many254(e, 65) }, "INVALID_ENTRIES"},
+		{"montant nul", nil, qid244, func(e *env244) []pentry254 { p, b, _ := e.threePlayers(); return []pentry254{{p, 3}, {b, 0}} }, "INVALID_POINTS"},
+		{"montant décimal", nil, qid244, func(e *env244) []pentry254 { p, _, _ := e.threePlayers(); return []pentry254{{p, 1.5}} }, "INVALID_POINTS"},
+		{"montant 1000", nil, qid244, func(e *env244) []pentry254 { p, _, _ := e.threePlayers(); return []pentry254{{p, 1000}} }, "INVALID_POINTS"},
+		{"joueur inconnu", nil, qid244, func(e *env244) []pentry254 { p, _, _ := e.threePlayers(); return []pentry254{{p, 3}, {"ZZ:ZZ", 2}} }, "UNKNOWN_PLAYER"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -201,7 +204,7 @@ func TestBumperPointsBatch254_Critical_AnyValidationErrorRefusesTheWholeBatchAnd
 			}
 			beforeScores, beforePlayers, beforeHist := e.scores(), e.playerScores(), e.historyLen()
 
-			e.bbatch(t, c.qid, c.entries(), nil)
+			e.bbatch(t, c.qid, c.entries(e), nil)
 
 			r := e.bresult(t)
 			if r.Status != "REFUSED" || r.Reason != c.reason {
