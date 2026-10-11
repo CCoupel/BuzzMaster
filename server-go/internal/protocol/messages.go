@@ -1483,41 +1483,52 @@ func FilterVPlayerAnswers(raw map[string]interface{}, recipientID, phase string)
 //   - answers open (PREPARE..PAUSED): other teams' bumpers lose TIME, BUTTON, STATUS,
 //     ANSWER_COLOR, ANSWERED_COLOR, HINTS_AT_BUZZ (neutral values, keys kept) and other
 //     teams lose TIME, BUMPER, STATUS; own bumper and team-mates stay intact;
-//   - QUESTION.QCM_CORRECT and QUESTION.ANSWER are removed in every phase but REVEALED
-//     (MEMOTION cards: per card, until the card is REVEALED).
+//   - QUESTION.QCM_CORRECT, ANSWER and MEDIA_ANSWER are removed in every phase but REVEALED;
+//     MEMOTION cards (and MEMOTION_ACTIVE.STATE): ANSWER_TEXT/ANSWER_IMAGE/ANSWER/QCM_CORRECT
+//     per card until it is REVEALED or DONE; QUESTION.EXPLANATION (animateur note) in every phase.
 func filterVPlayerAnswers(raw map[string]interface{}, recipientID, phase string) {
 	game, _ := raw["GAME"].(map[string]interface{})
 	if phase == "" && game != nil {
 		phase, _ = game["PHASE"].(string)
 	}
 
-	if game != nil && phase != "REVEALED" {
+	if game != nil {
+		answerKeys := []string{"QCM_CORRECT", "ANSWER", "ANSWER_TEXT", "ANSWER_IMAGE"}
+		revealedCard := func(id string) bool {
+			states, _ := game["MEMOTION_CARD_STATES"].(map[string]interface{})
+			st, _ := states[id].(string)
+			return st == "REVEALED" || st == "DONE"
+		}
 		if q, ok := game["QUESTION"].(map[string]interface{}); ok {
-			delete(q, "QCM_CORRECT")
-			delete(q, "ANSWER")
-			if cards, ok := q["MOTION_CARDS"].([]interface{}); ok {
-				states, _ := game["MEMOTION_CARD_STATES"].(map[string]interface{})
-				for _, c := range cards {
-					card, ok := c.(map[string]interface{})
-					if !ok {
-						continue
+			delete(q, "EXPLANATION") // animateur's note (#168): never on a tablette, any phase
+			if phase != "REVEALED" {
+				delete(q, "QCM_CORRECT")
+				delete(q, "ANSWER")
+				delete(q, "MEDIA_ANSWER")
+				if cards, ok := q["MOTION_CARDS"].([]interface{}); ok {
+					for _, c := range cards {
+						card, ok := c.(map[string]interface{})
+						if !ok {
+							continue
+						}
+						if id, _ := card["ID"].(string); revealedCard(id) {
+							continue
+						}
+						for _, k := range answerKeys {
+							delete(card, k)
+						}
 					}
-					id, _ := card["ID"].(string)
-					if st, _ := states[id].(string); st == "REVEALED" {
-						continue
-					}
-					delete(card, "QCM_CORRECT")
-					delete(card, "ANSWER")
 				}
 			}
 		}
-		if active, ok := game["MEMOTION_ACTIVE"].(map[string]interface{}); ok {
-			if st, ok := active["STATE"].(map[string]interface{}); ok {
-				cardID, _ := active["CARD_ID"].(string)
-				states, _ := game["MEMOTION_CARD_STATES"].(map[string]interface{})
-				if cs, _ := states[cardID].(string); cs != "REVEALED" {
-					delete(st, "QCM_CORRECT")
-					delete(st, "ANSWER")
+		if phase != "REVEALED" {
+			if active, ok := game["MEMOTION_ACTIVE"].(map[string]interface{}); ok {
+				if st, ok := active["STATE"].(map[string]interface{}); ok {
+					if cardID, _ := active["CARD_ID"].(string); !revealedCard(cardID) {
+						for _, k := range answerKeys {
+							delete(st, k)
+						}
+					}
 				}
 			}
 		}
