@@ -2,6 +2,34 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] — v11.2 — Manches de questions et entractes de manche (#245)
+
+### Added
+
+- **Manches de questions (#245)** — Les questions se regroupent en manches, repliables (préférence par navigateur) et réordonnables. Groupe « Sans manche » en premier. Une question est rattachée à une manche par son champ `ROUND_ID`. Sans manche créée, l'éditeur reste identique à v11.1.
+- **Création de manche avec deux entractes (#245)** — La création crée par défaut deux entractes standard, « Début de la manche <NOM> » en tête et « Fin de la manche <NOM> » en fin de manche. La case peut être décochée. Ce sont des entractes ordinaires, modifiables et supprimables.
+- **Suppression de manche avec choix (#245)** — Une fenêtre propose Conserver (les questions, entractes compris, passent en fin de « Sans manche ») ou Supprimer aussi (elles sont supprimées). Une manche vide ne propose que « Supprimer la manche ».
+- **Manches en jeu (#245)** — Titre de manche sur la TV pendant le READY de sa première question ; pastille de manche sur la TV ; pastille « Manche n/m · nom · p/q » sur l'anim. L'indicateur d'entracte est « 🎬 Entracte en cours » sur l'anim.
+- **Sauvegarde des manches (#245)** — `rounds.json` est dans le dossier des questions, donc emporté par la sauvegarde « questions ».
+
+### Changed
+
+- **⚠️ « à suivre » propose les entractes (#245)** — « Question suivante » et « À suivre » proposent désormais toutes les entractes, y compris les entractes de manche. Avant, elles étaient sautées.
+- **⚠️ L'animateur peut terminer une entracte (#245)** — Il peut la terminer (« Terminer l'entracte ») mais jamais la déclencher manuellement : `ENTRACTE_SET{ACTIVE:true}` venant de l'anim est refusé (`WARN ENTRACTE_SET_ANIM_ACTIVATE_REFUSED`). « Lancer l'entracte » envoie le READY de l'entrée, comme toute entrée du déroulé.
+- **⚠️ Ordre de jeu (#245)** — « Sans manche » en premier, puis les manches dans leur ordre, puis `ORDER`, puis `ID`. La même règle est implémentée côté JS et côté Go, avec un test de parité.
+
+### Security
+
+- **Identité des questions (#245)** — Une question est identifiée par le nom de son dossier. Un `question.json` dont `ID` diffère du dossier fait refuser toute modification des manches (`INCONSISTENT_STORE`).
+- **Chemins validés (#245)** — Aucun chemin n'est construit à partir d'un ID non validé.
+- **`DELETE /files/...` restreint aux médias de question (#245)** — Il ne peut plus supprimer que les médias d'une question.
+- **`POST /questions` valide `number` (#245)** — Un numéro invalide est rejeté.
+
+### Fixed
+
+- **`ROUNDS_UPDATE` atomique (#245)** — Un échec d'écriture disque pendant l'application restaure `rounds.json`, supprime les entractes créées, ne supprime rien et renvoie `WRITE_FAILED`. Les refus sont globaux : rien n'est appliqué.
+- **`rounds.json` illisible (#245)** — Le serveur en garde une copie `rounds.json.corrupt`, refuse les modifications de manches, et continue de servir les manches lisibles.
+
 ## [Unreleased] — v11.2 — Tablettes : réponses des autres équipes filtrées (#258)
 
 ### Security
