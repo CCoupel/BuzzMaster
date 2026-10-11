@@ -52,10 +52,11 @@ export function shuffleArray(array) {
  * `rounds` ; (3) dans chaque groupe, par ORDER croissant puis par ID numérique. Une question dont `ROUND_ID` est absent,
  * vide ou inconnu est « Sans manche ». Sans aucune manche, l'ordre est identique à `sortQuestionsByOrder` (v11.1).
  */
-/** Nombre fini si `v` est un nombre, ou une chaîne ENTIÈREMENT numérique ("7") ; sinon null (Number strict, pas de parseInt). */
+/** Nombre fini si `v` est un nombre (les ORDER non entiers sont tronqués plus bas), ou une chaîne en entier décimal ("7") ; sinon null. */
 function strictNumber(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
-  if (typeof v === 'string' && v.trim() !== '') {
+  // Chaîne : entier décimal seulement (parité Go) — "7" oui ; "7.9", "1e2", "0x10", "5abc" non.
+  if (typeof v === 'string' && /^\s*[+-]?\d+\s*$/.test(v)) {
     const n = Number(v)
     return Number.isFinite(n) ? n : null
   }

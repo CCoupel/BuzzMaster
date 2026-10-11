@@ -69,3 +69,17 @@ describe('ORDER non entier tronqué (#245, parité Go)', () => {
     expect(sortQuestionsByRounds(m, []).map(x => x.ID)).toEqual(['9', '10', '8'])
   })
 })
+
+describe('chaînes ORDER / ID : entier décimal seulement (#245, parité Go)', () => {
+  it('"7.9", "1e2", "0x10", "5abc" sont invalides (repli sur l’ID) ; " +7 " et "7" valides', () => {
+    const m = Object.fromEntries([
+      q(50, { ORDER: '7.9' }), q(51, { ORDER: '1e2' }), q(52, { ORDER: '0x10' }), q(53, { ORDER: '5abc' }), q(70, { ORDER: ' +7 ' }), q(71, { ORDER: '7' }),
+    ])
+    // invalides → ID (50, 51, 52, 53) ; valides → 7 (70 puis 71 par ID)
+    expect(sortQuestionsByRounds(m, []).map(x => x.ID)).toEqual(['70', '71', '50', '51', '52', '53'])
+  })
+  it('ID chaîne non décimal ("1e2", "0x10") : non numérique (après les autres)', () => {
+    const m = { a: { ID: '1e2' }, b: { ID: '0x10' }, c: { ID: '5' } }
+    expect(sortQuestionsByRounds(m, []).map(x => x.ID)).toEqual(['5', '0x10', '1e2'])
+  })
+})
