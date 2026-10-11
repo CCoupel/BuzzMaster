@@ -99,6 +99,14 @@ type Page =
   - Les joueurs (`bumpers[*].TEAM`) sont déplacés par le message de renommage lui-même. `MEMOTION_ACTIVE.STATE` ne contient aucune clé d'équipe : rien à reporter.
   - Tout nouveau champ indexé par équipe ajouté à `GameState` **doit** rejoindre cette liste (revue).
 
+## `LAUNCH_LOCK` — popup « Lancer la partie » ouverte (v11.2, #253)
+
+| Propriété | Type | Défaut | Notes |
+|-----------|------|--------|-------|
+| LAUNCH_LOCK | `{ ACTIVE: boolean, OWNER: string, SINCE: number, EXPIRES_AT: number }` | `{ACTIVE: false, OWNER: "", SINCE: 0, EXPIRES_AT: 0}` | **Toujours sérialisé**. `OWNER` = identifiant de la connexion admin propriétaire (le client se reconnaît par l'identifiant reçu à sa connexion) ; `SINCE`, `EXPIRES_AT` en millisecondes epoch. Diffusé aux clients `admin` et `anim`. Retiré des charges TV et VJoueur (aucun usage). Non persisté ; `ACTIVE: false` au démarrage du serveur |
+
+Règles complètes : `contracts/websocket-actions.md` §LAUNCH_LOCK.
+
 ## `SCORE_CHANGE` — dernière modification de score (v11.2, #252)
 
 | Propriété | Type | Défaut | Notes |

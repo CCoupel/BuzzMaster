@@ -35,6 +35,7 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
 | BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
 | **TEAM_POINTS_BATCH** | ✅ | ❌ | ❌ | ❌ **(v11.2, #244/#251 — admin seulement)** |
+| **LAUNCH_LOCK** | ✅ | ❌ | ❌ | ❌ **(v11.2, #253 — admin seulement)** |
 | **QUESTION_SOUND** | ✅ | ❌ | ❌ | ✅ **(v11.1, #219)** |
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
 | **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
@@ -679,7 +680,53 @@ Ordre d'application côté serveur : contrôle de la combinaison interdite → m
 - **Double validation** : la popup désactive son bouton dès l'envoi ; côté serveur, un second `NEW_GAME` est simplement rejoué (il n'y a plus rien à purger), sans erreur.
 - **Journal** : `WARN NEW_GAME_PURGE client=… options=… players_removed=N teams_removed=N scores_reset=bool questions_reset=bool phase_before=… question_before=…` (`contracts/logging.md`), écrit sur disque, y compris quand aucune option n'est cochée.
 
-#### NEW_GAME_REFUSED ✨ (v11.2, #243)
+#### LAUNCH_LOCK ✨ (v11.2, #253) — verrou de la popup « Lancer la partie »
+
+Tant que la popup « Lancer la partie » est ouverte sur un poste admin, **le serveur suspend les actions de conduite de jeu**, quel que soit le client (admin, 2ᵉ admin, anim).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` (`admin`) |
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| STATE | string | ✅ | `OPEN` (ouverture, puis renouvellement) ou `CLOSE` (fermeture) |
+
+#### Cycle de vie
+- **Ouverture** : à l'ouverture de la popup, le client envoie `OPEN`. Le serveur pose le verrou **au nom de cette connexion** (le « propriétaire ») et diffuse `GameState.LAUNCH_LOCK` (`contracts/game-state.md`). La popup ne s'affiche qu'à réception de l'état verrouillé à son nom (au plus 1 s d'attente, puis message d'erreur).
+- **Renouvellement** : tant que la popup est ouverte, le propriétaire renvoie `OPEN` **toutes les 15 s**.
+- **Libération** — la première de ces conditions lève le verrou et le rediffuse :
+  1. `CLOSE` du propriétaire (« Annuler », touche Échap, fermeture après succès) ;
+  2. `NEW_GAME` **appliqué** (envoyé par le propriétaire) ;
+  3. **déconnexion** de la connexion propriétaire (onglet fermé, rechargement, coupure) ;
+  4. **expiration de sécurité** : **45 s sans renouvellement** (popup oubliée, onglet gelé).
+  Les cas 3 et 4 sont journalisés en WARN. Le client propriétaire qui découvre l'expiration (état reçu) ferme la popup avec le message « La fenêtre a expiré, rouvrez-la ».
+- **Refus d'ouverture** (`LAUNCH_LOCK_REFUSED` à l'émetteur, rien ne change) : verrou déjà tenu par **une autre** connexion (`LOCKED_BY_OTHER`) ; **entracte active** (`ENTRACTE_ACTIVE`, même règle que `NEW_GAME`). Un `OPEN` du propriétaire en cours = renouvellement, jamais refusé.
+- `CLOSE` d'un non-propriétaire : ignoré (journal INFO).
+
+#### Actions suspendues pendant le verrou
+Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }` ciblé et `WARN ACTION_REFUSED_LAUNCH` :
+- **Conduite** : `READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, `MEMORY_SET_TEAMS`, `MEMOTION_SET_TEAMS`, `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE`, `RAFALE_VALIDATE`, `RAFALE_INVALIDATE`, `RAFALE_SET_TEAMS`, `FLIP_MEMORY_CARD` (venant de l'admin, de l'anim ou de la TV).
+- **Points** : `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH` (et l'action groupée par joueurs de #254), `SET_CREDIT_POINTS`.
+- **Équipes et joueurs** : `UPDATE`/`FULL` entrants, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
+- `NEW_GAME` venant d'une connexion **autre** que le propriétaire (`REASON: "LAUNCH_IN_PROGRESS"` via `NEW_GAME_REFUSED`).
+
+#### Toujours permises
+`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`), réglages, journaux. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
+
+#### Retour visuel
+Les clients `admin` et `anim` lisent `GameState.LAUNCH_LOCK` : hors du poste propriétaire, un bandeau « Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu suspendues » s'affiche et les commandes de jeu sont désactivées (maquette `admin_new_game__launch_overlay`). TV et VJoueur : aucun changement.
+
+#### LAUNCH_LOCK_REFUSED / ACTION_REFUSED ✨ (v11.2, #253)
+
+| Action | Champs |
+|--------|--------|
+| `LAUNCH_LOCK_REFUSED` (ciblé) | `REASON` : `LOCKED_BY_OTHER` \| `ENTRACTE_ACTIVE` |
+| `ACTION_REFUSED` (ciblé) | `ACTION` (action refusée), `REASON` : `LAUNCH_IN_PROGRESS` |
+
+---
+
+### NEW_GAME_REFUSED ✨ (v11.2, #243)
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -687,7 +734,7 @@ Ordre d'application côté serveur : contrôle de la combinaison interdite → m
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| REASON | string | `PLAYERS_REQUIRE_SCORES` (`PURGE_PLAYERS = true` avec `PURGE_SCORES = false`) ou `ENTRACTE_ACTIVE` (entracte en cours) |
+| REASON | string | `PLAYERS_REQUIRE_SCORES` (`PURGE_PLAYERS = true` avec `PURGE_SCORES = false`), `ENTRACTE_ACTIVE` (entracte en cours) ou `LAUNCH_IN_PROGRESS` *(v11.2, #253)* (verrou de lancement tenu par une autre connexion) |
 
 ```json
 { "ACTION": "NEW_GAME_REFUSED", "MSG": { "REASON": "PLAYERS_REQUIRE_SCORES" } }

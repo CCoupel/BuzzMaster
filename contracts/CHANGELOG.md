@@ -2,6 +2,19 @@
 
 ---
 
+## [20261011] — « Lancer la partie » : verrou serveur pendant la popup (#253, v11.2, retours QUALIF 11.2.0.5)
+
+> Décisions utilisateur : « Lancer la partie » passe dans le menu « Préparation » ; tant que la popup est ouverte, les actions de jeu sont refusées **par le serveur** pour tous les clients ; la popup couvre toute la page.
+
+- **[NEW]** `websocket-actions.md` §LAUNCH_LOCK — `OPEN`/`CLOSE` par l'admin, renouvellement toutes les 15 s, levée sur fermeture, NEW_GAME appliqué, déconnexion du propriétaire ou **expiration 45 s** ; refus d'ouverture `LOCKED_BY_OTHER` / `ENTRACTE_ACTIVE` ; liste fermée des actions suspendues et des actions toujours permises (les actions des joueurs restent permises).
+- **[NEW]** `websocket-actions.md` — `LAUNCH_LOCK_REFUSED`, `ACTION_REFUSED` (ciblés).
+- **[CHANGED]** `websocket-actions.md` §NEW_GAME_REFUSED — motif `LAUNCH_IN_PROGRESS` (NEW_GAME d'une autre connexion que le propriétaire du verrou).
+- **[NEW]** `game-state.md` §`LAUNCH_LOCK` — toujours sérialisé, diffusé à l'admin et à l'anim.
+- **[NEW]** `logging.md` §3.2 sexies.
+- Aucune BREAKING : sans popup ouverte, rien ne change.
+
+---
+
 ## [20261011] — Points libres et correction cachée (#252, v11.2)
 
 > Décisions utilisateur : montant libre de −999 à 999 pour les équipes et les joueurs ; interrupteur « Afficher sur la TV » (activé par défaut) ; désactivé = rien d'animé, sur aucun canal ; classement à jour sans animation.

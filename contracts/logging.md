@@ -99,6 +99,15 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `SCORE_CORRECTION_HIDDEN` | WARN | `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` avec `DISPLAY: false` **honoré** (émetteur admin) | `client`, `action`, `targets` (équipe ou joueur : montant), `question` |
 | `SCORE_CORRECTION_HIDDEN_REFUSED` | WARN | `DISPLAY: false` reçu d'un émetteur non admin → ignoré, attribution traitée comme visible | `client`, `type` (`anim`, `internal`…), `action`, `targets`, `question` — valeurs texte entre guillemets (`%q`) |
 
+### 3.2 sexies Verrou de lancement (v11.2, #253)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `LAUNCH_LOCK_OPENED` | INFO | Verrou posé | `client` |
+| `LAUNCH_LOCK_RELEASED` | INFO / **WARN** | Verrou levé ; WARN si `reason` = `disconnect` ou `expired` | `client`, `reason` (`close`/`new_game`/`disconnect`/`expired`), `held_ms` |
+| `LAUNCH_LOCK_REFUSED` | WARN | Ouverture refusée | `client`, `reason` |
+| `ACTION_REFUSED_LAUNCH` | WARN | Action suspendue par le verrou | `client`, `type`, `action` |
+
 ### 3.3 Diffusion
 
 | Événement | Niveau | Quand | Champs |
