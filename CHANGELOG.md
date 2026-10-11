@@ -2,6 +2,15 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] — v11.2 — Tablettes : réponses des autres équipes filtrées (#258)
+
+### Security
+
+- **Les tablettes ne reçoivent plus les réponses des autres équipes pendant les réponses ouvertes (#258)** — De `PREPARE` à `PAUSED`, une tablette ne reçoit plus les temps, couleurs répondues, boutons ni états des autres équipes : valeurs neutres, clés conservées. Les coéquipiers restent visibles. À partir de `STOPPED`, rien ne change.
+- **La bonne réponse n'est transmise qu'au REVEAL (#258)** — `QCM_CORRECT`, `ANSWER` et `MEDIA_ANSWER` sont retirés des tablettes avant `REVEALED`. Pour les cartes MEMOTION, la réponse d'une carte n'est transmise qu'une fois la carte révélée (ou terminée). L'état initial d'une tablette (`HELLO`) applique le même filtrage, et retire `ARDOISE_ANSWERS` et `LAUNCH_LOCK`.
+- **Note animateur jamais envoyée aux tablettes (#258)** — `EXPLANATION` est réservée à l'animateur.
+- **Limite connue** : le filtre ne couvre que le flux `/ws/player`. `/questions`, `/files/`, `/ws/logs` et les connexions `/ws/tv`, `/ws/anim` et `/ws/admin` restent non authentifiés (issue #259).
+
 ## [Unreleased] — v11.2 — Corrections #255 et #256
 
 ### Fixed
