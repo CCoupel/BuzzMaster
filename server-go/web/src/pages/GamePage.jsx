@@ -922,8 +922,8 @@ export default function GamePage() {
             >
               <span className="nq-label">
                 {nextUnplayedQuestion.TYPE === 'ENTRACTE'
-                  ? `à suivre : 🎬 ${nextUnplayedQuestion.QUESTION || 'Entracte'}`
-                  : `à suivre : #${nextUnplayedQuestion.ID}`}
+                  ? `À suivre : 🎬 ${nextUnplayedQuestion.QUESTION || 'Entracte'}`
+                  : `À suivre : #${nextUnplayedQuestion.ID}`}
               </span>
               {nextRoundLabel && <span className="nq-newround">→ {nextRoundLabel}</span>}
               {/* 🔴 Retour QUALIF v9.0.0.4 (point A+6, cosmétique) — depuis

@@ -102,13 +102,13 @@ describe('GamePage — manches (#245, lot V3-3)', () => {
 
   it('Critical — « à suivre » PROPOSE une ENTRACTE (plus de saut) : « 🎬 titre », style violet', () => {
     show()
-    expect(nextBtn().textContent).toMatch(/à suivre : 🎬 Fin de la manche Échauffement/)
+    expect(nextBtn().textContent).toMatch(/À suivre : 🎬 Fin de la manche Échauffement/)
     expect(nextBtn().className).toMatch(/nq-entracte/)
   })
 
   it('Critical — la question suivante est dans une autre manche : « → Manche 2 · Finale »', () => {
     show({ gameState: { question: QUESTIONS[2] } })
-    expect(nextBtn().textContent).toMatch(/à suivre : #3/)
+    expect(nextBtn().textContent).toMatch(/À suivre : #3/)
     expect(nextBtn().textContent).toMatch(/→ Manche 2 · Finale/)
   })
 

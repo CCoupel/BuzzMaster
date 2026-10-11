@@ -8,7 +8,7 @@ const base = { ID: '7', TYPE: 'QCM', QUESTION: 'Fleuve ?', POINTS: '3', TIME: '3
 describe('AnimNextButton — manches et entractes (#245)', () => {
   it('question ordinaire : « À suivre » inchangé', () => {
     const { container } = render(<AnimNextButton phase="REVEALED" question={{ ID: '1' }} nextQuestion={base} onSelectNext={() => {}} />)
-    expect(screen.getByText('À suivre')).toBeTruthy()
+    expect(screen.getByText('Question suivante')).toBeTruthy()
     expect(container.querySelector('.anim-next-btn-newround')).toBeNull()
     expect(container.querySelector('.anim-next-btn-entracte')).toBeNull()
   })
@@ -43,7 +43,7 @@ describe('AnimNextButton — manches et entractes (#245)', () => {
     fireEvent.click(btn)
     expect(onEndEntracte).toHaveBeenCalledTimes(1)
     expect(onSelectNext).not.toHaveBeenCalled()
-    expect(screen.queryByText('À suivre')).toBeNull()
+    expect(screen.queryByText('Question suivante')).toBeNull()
   })
 
   it('bouton inerte (phase en cours) : aucune variante colorée', () => {

@@ -56,7 +56,7 @@ export default function AnimNextButton({ nextQuestion, phase, question, onSelect
   const variant = state === 'inert' ? '' : nextIsEntracte ? ' anim-next-btn-entracte' : nextIsNewRound ? ' anim-next-btn-newround' : ''
   const label = nextIsEntracte ? "Lancer l'entracte"
     : nextIsNewRound ? `Manche suivante : ${nextQuestion.ROUND_NAME || 'Sans manche'}`
-    : 'À suivre'
+    : 'Question suivante'
 
   const handleClick = () => {
     if (state === 'inert') return
