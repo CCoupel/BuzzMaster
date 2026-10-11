@@ -2648,6 +2648,45 @@ journalctl -u buzzcontrol -n 50
 
 ---
 
+## Manches de questions et entractes (v11.2, #245)
+
+### Créer et organiser les manches
+
+- Dans l'éditeur de questions, une **manche** regroupe des questions. Créez-la avec un nom (1 à 60 caractères). La case
+  **entractes** est cochée par défaut : elle crée deux entractes, « Début de la manche <NOM> » et « Fin de la manche <NOM> ».
+  Décochez-la pour une manche sans entractes. Ces entractes se modifient, se déplacent et se suppriment comme toute entracte.
+- Les manches se **replient** et se **déplient**. Le repli est mémorisé par navigateur. « Tout replier » ferme toutes les manches.
+- Réordonnez les manches et les questions avec ▲▼, « Déplacer vers… », ou par glisser-déposer. Renommer une manche ne renomme pas ses entractes.
+- **« Sans manche »** est toujours en premier. Il contient les questions qui n'appartiennent à aucune manche, y compris celles créées avec « + Nouvelle question ».
+- « + Question » dans une manche ajoute la question à la fin de cette manche.
+
+### Supprimer une manche
+
+Une fenêtre propose deux choix :
+- **Conserver** : les questions de la manche, entractes comprises, passent en fin de « Sans manche ». C'est le choix initial (focus).
+- **Supprimer aussi** : les questions de la manche, entractes comprises, sont supprimées définitivement, avec leurs médias.
+
+Pour une manche vide, seul « Supprimer la manche » est proposé. « Supprimer aussi » est refusé si la question en cours fait partie
+des questions à supprimer, pendant la préparation, la lecture, le compte à rebours, la question en cours ou la pause.
+
+### Jouer les manches
+
+- Les questions se jouent dans l'ordre : « Sans manche » d'abord, puis les manches, puis leur ordre interne.
+- « À suivre » propose **toutes les entractes**, y compris celles de manche.
+- Sur l'écran de l'animateur, « Manche suivante : nom » apparaît quand la question suivante ouvre une autre manche.
+  « Lancer l'entracte » sélectionne l'entracte comme toute entrée du déroulé. « Terminer l'entracte » la termine.
+- **L'animateur ne peut pas déclencher une entracte manuelle** : ce geste reste réservé à l'admin. Il peut seulement la terminer.
+- Sur la TV, un titre de manche s'affiche pendant la phase « prêt » de la première question d'une manche, et une pastille indique la manche.
+  Une entracte n'affiche pas de pastille.
+
+### Sauvegarde et restauration
+
+Le fichier `rounds.json` (liste des manches) est dans le dossier des questions. La sauvegarde « questions » l'emporte donc.
+Si `rounds.json` est illisible, le serveur en garde une copie `rounds.json.corrupt`, refuse les modifications de manches et
+continue de servir les manches lisibles. Restaurez une sauvegarde ou corrigez le fichier pour reprendre.
+
+Les questions créées avant les manches restent « Sans manche » : aucune conversion automatique n'est faite.
+
 ## Son Attaché à une Question (v11.1.0, #219)
 
 En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un **son personnel à une question individuelle** (types SPEEDY, QCM, ARDOISE uniquement). Ce son joue au lancement de la question et peut configurer le chronomètre de réponse.
