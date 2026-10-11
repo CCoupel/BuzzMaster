@@ -68,6 +68,15 @@ interface Team {
   `false` = correction cachée, enregistrée pour l'audit. Une correction cachée **n'est pas** comptée dans la règle
   « déjà créditée » (`AWARDED_TEAMS`).
 
+## LAUNCH_LOCK — verrou de la popup « Lancer la partie » (v11.2, #253)
+
+- **`GameState.LAUNCH_LOCK`** : `{ ACTIVE: boolean, OWNER: string, SINCE: number, EXPIRES_AT: number }`, toujours
+  sérialisé. Défaut `{ACTIVE: false, OWNER: "", SINCE: 0, EXPIRES_AT: 0}`.
+- `OWNER` = `CLIENT_ID` de la connexion propriétaire, reçu dans `HELLO_ACK`. `SINCE` et `EXPIRES_AT` sont en
+  millisecondes epoch.
+- Diffusé aux clients `admin` et `anim` seulement, retiré des charges TV et VJoueur.
+- Non persisté : faux au démarrage.
+
 ## Palette d'équipes — v5.7.25, #113
 
 16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
