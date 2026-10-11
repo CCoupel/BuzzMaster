@@ -760,7 +760,7 @@ Maquettes validées : `docs/mockup/v11.2/ui/admin_questions_list__rounds_entract
 - Groupes de manches repliables ; l'état replié est mémorisé par navigateur (`localStorage` `buzz.rounds.collapsed`) ; bouton « Tout replier ».
 - Réordonner : ▲▼, « Déplacer vers… », glisser-déposer (questions et manches). Le glisser-déposer HTML5 n'est pas testé en navigateur réel.
 - Création de manche : nom et case « entractes » cochée (crée « Début / Fin de la manche »).
-- « + Question » dans une manche ajoute à la fin de cette manche ; « + Nouvelle question » ajoute à la fin de « Sans manche ».
+- « + Question », en pied de chaque manche (`RoundGroup.jsx`), ajoute à la fin de cette manche. Une question créée avec le formulaire « Nouvelle Question », champ « Manche » laissé sur « Sans manche » (visible seulement s'il existe des manches), est ajoutée à la fin de « Sans manche ».
 - Changer la manche d'une question existante (champ « Manche ») envoie `ROUNDS_UPDATE` après enregistrement. L'affichage est optimiste jusqu'à la confirmation du serveur.
 - Suppression : fenêtre `RoundDeleteDialog` avec le focus sur « Conserver », Échap ferme, Tab reste dans la fenêtre. Choix : Conserver (`KEEP`) ou Supprimer aussi (`DELETE`). Pour une manche vide, seul « Supprimer la manche » est proposé (`KEEP`).
 - Sans manche, le glisser-déposer et « Mélanger » restent sur `REORDER_QUESTIONS` (comportement v11.1). Avec des manches, ils passent par `ROUNDS_UPDATE`, et le mélange se fait dans chaque groupe.
@@ -773,7 +773,7 @@ Les entractes sont en italique et se lancent par clic.
 « Lancer l'entracte » (violet) ; pendant une entracte, « 🎬 Entracte en cours » et « Terminer l'entracte » (`ENTRACTE_SET{ACTIVE:false}`, jamais `true`).
 Pastille « Manche 2/3 · nom · 3/5 » (« · entracte » si la position vaut 0 ; « Sans manche · 2/4 » sans manche).
 
-**TV (`PlayerDisplay.jsx`)** : pastille `tv-round-pill` si `ROUND_INDEX > 0` ; titre `tv-round-title` pendant le READY de la première question d'une manche (`FIRST_OF_ROUND`).
+**TV (`PlayerDisplay.jsx`)** : pastille `tv-round-pill` si `ROUND_INDEX > 0` ; titre `tv-round-title` pendant le READY de la première question d'une manche (`FIRST_OF_ROUND`), dans la bande du chrono (`top: 6.2vh`, `max-width: 32vw`, à gauche, sous la pastille), et non plus centré à 12vh, hors de la zone question.
 Positions absolues, `overflow: hidden`, ellipsis : la TV reste statique, sans défilement. Pas de pastille sur le VJoueur, ni pour une entracte.
 Le rendu sur une vraie TV 16:9 reste à valider à l'œil.
 
