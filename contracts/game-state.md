@@ -103,7 +103,7 @@ type Page =
 
 | Propriété | Type | Défaut | Notes |
 |-----------|------|--------|-------|
-| LAUNCH_LOCK | `{ ACTIVE: boolean, OWNER: string, SINCE: number, EXPIRES_AT: number }` | `{ACTIVE: false, OWNER: "", SINCE: 0, EXPIRES_AT: 0}` | **Toujours sérialisé**. `OWNER` = identifiant de la connexion admin propriétaire (le client se reconnaît par l'identifiant reçu à sa connexion) ; `SINCE`, `EXPIRES_AT` en millisecondes epoch. Diffusé aux clients `admin` et `anim`. Retiré des charges TV et VJoueur (aucun usage). Non persisté ; `ACTIVE: false` au démarrage du serveur |
+| LAUNCH_LOCK | `{ ACTIVE: boolean, OWNER: string, SINCE: number, EXPIRES_AT: number }` | `{ACTIVE: false, OWNER: "", SINCE: 0, EXPIRES_AT: 0}` | **Toujours sérialisé**. `OWNER` = `CLIENT_ID` de la connexion admin propriétaire, reçu par chaque client admin/anim dans `HELLO_ACK` (`websocket-actions.md` §HELLO) ; le client se reconnaît par `OWNER === CLIENT_ID` ; `SINCE`, `EXPIRES_AT` en millisecondes epoch. Diffusé aux clients `admin` et `anim`. Retiré des charges TV et VJoueur (aucun usage). Non persisté ; `ACTIVE: false` au démarrage du serveur |
 
 Règles complètes : `contracts/websocket-actions.md` §LAUNCH_LOCK.
 

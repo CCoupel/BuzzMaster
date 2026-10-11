@@ -2,6 +2,14 @@
 
 ---
 
+## [20261011] — Identifiant de connexion `HELLO_ACK.CLIENT_ID` (#253, v11.2, précision du contrat)
+
+- **[NEW]** `websocket-actions.md` §HELLO — `HELLO_ACK { CLIENT_ID }` (Server → Client), envoyé à chaque `HELLO` d'un client **admin ou anim** seulement, avant l'`UPDATE` initial ; `CLIENT_ID` = identifiant opaque de la connexion WebSocket (ID du hub), nouveau à chaque reconnexion.
+- **[CHANGED]** `websocket-actions.md` §LAUNCH_LOCK, `game-state.md` §`LAUNCH_LOCK` — `OWNER` = ce même `CLIENT_ID` ; propriétaire si `OWNER === CLIENT_ID`.
+- Aucune BREAKING : action nouvelle ignorée par les clients antérieurs ; jamais envoyée aux TV, VJoueurs ni buzzers.
+
+---
+
 ## [20261011] — Champ « Pénalité mauvaise réponse » des questions QCM (#254, v11.2)
 
 > Décision utilisateur : ajouter le champ maintenant ; le clic sur une mauvaise réponse QCM met cette pénalité dans le champ « Points ».

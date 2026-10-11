@@ -206,6 +206,25 @@ Aucun payload requis.
 }
 ```
 
+#### HELLO_ACK ✨ (v11.2, #253) — identifiant de connexion
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server → Client` (ciblé, émetteur du `HELLO`) |
+| Cible | clients **`admin` et `anim` seulement** — jamais TV, VJoueur ni buzzer |
+| Trigger | chaque `HELLO` d'un client admin ou anim. Envoyé **en premier** dans `sendStateToClient`, **avant** l'`UPDATE` initial : quand l'état arrive, le client connaît déjà son identifiant |
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| CLIENT_ID | string | Identifiant **de cette connexion WebSocket** = l'ID du client dans le hub (`WebSocketClient.ID`, aujourd'hui `r.RemoteAddr`). **Chaîne opaque** : le client ne l'interprète jamais, il la compare seulement. Unique par connexion ; **nouvelle valeur à chaque reconnexion** (le client remplace la valeur mémorisée à chaque `HELLO_ACK`) |
+
+```json
+{ "ACTION": "HELLO_ACK", "MSG": { "CLIENT_ID": "192.168.1.20:53124" } }
+```
+
+- Usage : `GameState.LAUNCH_LOCK.OWNER` porte **la même chaîne**. Le client est propriétaire du verrou si `LAUNCH_LOCK.ACTIVE && LAUNCH_LOCK.OWNER === CLIENT_ID`.
+- Un client antérieur ignore l'action inconnue (aucun effet).
+
 ---
 
 ### SET_CLIENT_TYPE
@@ -771,6 +790,8 @@ Tant que la popup « Lancer la partie » est ouverte sur un poste admin, **le se
   Les cas 3 et 4 sont journalisés en WARN. Le client propriétaire qui découvre l'expiration (état reçu) ferme la popup avec le message « La fenêtre a expiré, rouvrez-la ».
 - **Refus d'ouverture** (`LAUNCH_LOCK_REFUSED` à l'émetteur, rien ne change) : verrou déjà tenu par **une autre** connexion (`LOCKED_BY_OTHER`) ; **entracte active** (`ENTRACTE_ACTIVE`, même règle que `NEW_GAME`). Un `OPEN` du propriétaire en cours = renouvellement, jamais refusé.
 - `CLOSE` d'un non-propriétaire : ignoré (journal INFO).
+
+- **Identité du propriétaire** : `OWNER` = `CLIENT_ID` de la connexion qui a envoyé `OPEN`, tel que reçu par ce client dans **`HELLO_ACK`** (§HELLO). Le client se reconnaît par `LAUNCH_LOCK.OWNER === CLIENT_ID`. Après une reconnexion, l'ancien verrou a été levé par la déconnexion (cas 3) ; le nouvel identifiant ne peut donc pas hériter du verrou.
 
 #### Actions suspendues pendant le verrou
 Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }` ciblé et `WARN ACTION_REFUSED_LAUNCH` :
