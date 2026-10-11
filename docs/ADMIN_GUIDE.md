@@ -367,11 +367,11 @@ compris le poste qui a ouvert la popup :
 
 - **Conduite** : START, STOP, PAUSE, CONTINUE, REVEAL, sélection de question, actions MEMORY, MEMOTION et RAFALE, et le son.
 - **Points** : tous les crédits (équipe, joueur, lot), la remise à zéro des scores (`RAZ`).
-- **Phases** : affichage et masquage du QR code, réinitialisation des écrans (`RESET`).
+- **Phases** : affichage et masquage du QR code, rechargement des écrans (`RESET`).
 - **Équipes et joueurs** : modification de la liste, suppression ou libération d'un joueur.
 
-Ne sont **pas** suspendus : le lancement lui-même (poste propriétaire), la modification des questions, les réglages,
-et les actions des joueurs (buzz, réponses ARDOISE).
+Ne sont **pas** suspendus : le lancement lui-même (poste propriétaire), la modification des questions, les réglages (dont la limite de VJoueurs,
+`SET_VIRTUAL_PLAYER_LIMIT`, et `REBOOT`, qui est seulement journalisé), et les actions des joueurs (buzz, réponses ARDOISE).
 
 - **Autres postes** : un bandeau « 🔒 Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu
   suspendues. » apparaît, et les commandes de jeu sont désactivées avec le motif.
