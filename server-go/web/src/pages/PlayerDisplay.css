@@ -3831,19 +3831,22 @@
   pointer-events: none;
 }
 .tv-round-title {
+  /* Bande du chrono (0–10vh, .zone-timer) côté gauche, sous la pastille : jamais dans la zone question (≥ 10vh),
+     quel que soit le type de question ; le chrono reste au centre. */
   position: absolute;
-  top: 12vh;
-  left: 5vw;
-  right: 5vw;
+  top: 6.2vh;
+  left: 1.5vw;
   z-index: 6;
+  max-width: 32vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: center;
-  font-size: 3.4vh;
+  text-align: left;
+  font-size: 2.4vh;
+  line-height: 3vh;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   color: #fcd34d;
   pointer-events: none;
 }
