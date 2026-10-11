@@ -1574,6 +1574,33 @@ Source : `contracts/ws-payload-serialization.md` (ligne `ANSWERED_COLOR`).
 - Tolérée côté **buzzer** (le firmware BuzzClick ne la lit pas).
 - Un client antérieur ignore la clé.
 
+## Filtrage des réponses pour les tablettes — `/ws/player` (v11.2, #258)
+
+Source de vérité : `contracts/vplayer-payload-filter.md` §7 (règle), §7.3 (implémentation), §7.5 (liste exhaustive A/B/C).
+Fonction : `filterVPlayerAnswers(payload, recipientID, phase)` (package `protocol`), appliquée en dernière étape de sérialisation.
+
+**Destinataire** : le joueur lié à la connexion (`PlayerID`). Son équipe : `bumpers[PlayerID].TEAM`. Une connexion non liée
+n'a aucune équipe propre : tous les bumpers et toutes les équipes sont neutralisés pendant les réponses ouvertes.
+
+| Donnée | Phases filtrées | Traitement pour la tablette |
+|---|---|---|
+| `bumpers` d'une autre équipe : `TIME`, `BUTTON`, `STATUS`, `ANSWER_COLOR`, `ANSWERED_COLOR`, `HINTS_AT_BUZZ` | réponses ouvertes : `PREPARE`, `READY`, `COUNTDOWN`, `STARTED`, `PAUSED` | valeurs neutres (`0`, `""`), clés conservées |
+| `teams` d'une autre équipe : `TIME`, `BUMPER`, `STATUS` | mêmes phases | valeurs neutres |
+| `QUESTION.QCM_CORRECT`, `QUESTION.ANSWER`, `QUESTION.MEDIA_ANSWER` | toutes sauf `REVEALED` | clés retirées |
+| Cartes MEMOTION : `ANSWER_TEXT`, `ANSWER_IMAGE`, `ANSWER`, `QCM_CORRECT` | tant que la carte n'est pas `REVEALED` ou `DONE` | clés retirées |
+| `QUESTION.EXPLANATION` (note animateur) | toutes | clé retirée |
+
+- **Visible** : son propre bumper, ceux de ses coéquipiers, son équipe, les scores, les classements, les noms.
+- **À partir de `STOPPED`** : les champs de réponse des autres équipes sont transmis, comme avant.
+- **Bonne réponse** : transmise avec l'`UPDATE` de la transition `REVEALED`.
+- **Chemins couverts** : `UPDATE` par destinataire pendant les phases filtrées, `SerializeForVPlayer`, les actions diffusées par type
+  (`START`, `STOP`, `PAUSE`, `CONTINUE`, `UPDATE_TIMER`, `REMOTE`, `BUMPER`, `HELLO`), et l'état initial (`sendStateToClient`).
+  Les messages que le client n'enregistre pas (`START`, `STOP`, `PAUSE`, `CONTINUE`, `UPDATE_TIMER`) sont sérialisés une fois pour toutes les tablettes.
+- **Hors périmètre** : TV et anim inchangés. Buzzers physiques : payload minimal.
+- **Coût** : banc `vplayer_fanout_bench_test.go`, 20 tablettes en `STARTED` : 1,56 ms par `UPDATE` après la revue (2,43 ms avant
+  le décodage unique par fan-out ; trame partagée de référence : 0,20 ms) (`qa-20261011-145800`).
+- **Limite** : `/questions`, `/files/`, `/ws/logs` et les connexions `/ws/tv`, `/ws/anim`, `/ws/admin` ne sont pas filtrés (issue #259).
+
 ## Sérialiseurs et Filtrage par Type de Client (v6.5.2, #128)
 
 ### Listes de Filtrage
