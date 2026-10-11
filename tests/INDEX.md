@@ -96,3 +96,4 @@
 | server-go/web/src/pages/AnimPage.rounds.245.test.jsx | unit | anim | #245 anim : pastille de manche, Manche suivante, Lancer/Terminer l entracte, aucun déclenchement manuel | regression | critical |
 | server-go/web/src/pages/PlayerDisplay.rounds.245.test.jsx | unit | tv | #245 TV : pastille et titre de manche, rien sans manche, TV statique (CSS) | regression | critical |
 | tests/procedures/rounds-245.md | manual | questions, admin-game, anim, tv | #245 procédure manuelle (utilisateur seul) | feature | |
+| server-go/internal/server/rounds_backup_ai_245_test.go | unit | backup, questions | #245 sauvegarde questions emporte rounds.json, restauration le recharge dans GameState.ROUNDS ; questions IA sans ROUND_ID, fin de Sans manche | regression | critical |

@@ -148,3 +148,19 @@ describe('AnimPage — « Terminer l\'entracte » (#245, scénarios 34, 36, 39)'
     }
   })
 })
+
+describe('AnimPage — libellé du bouton « suivant » selon la maquette (g‴) (#245, scénario 39)', () => {
+  it('Critical — suivante ordinaire dans la même manche : « Question suivante » (libellé de la maquette), sous-libellé = la question', () => {
+    const { g } = mount({}, { nextQuestion: { ID: '10', TYPE: 'SPEEDY', QUESTION: 'Quel fleuve ?', ROUND_ID: 'r2', ROUND_NAME: 'Deux', NEW_ROUND: false } })
+    const btn = screen.getByRole('button', { name: /Question suivante/ })
+    expect(btn.textContent).toMatch(/Quel fleuve/)
+    fireEvent.click(btn)
+    expect(g.selectQuestion).toHaveBeenCalledWith('10')
+  })
+
+  it('« Fin du quiz » quand il n’y a plus de suivante', () => {
+    mount({}, { nextQuestion: null })
+    expect(screen.getByRole('button', { name: /Fin du quiz|fin du quiz/i })).toBeTruthy()
+  })
+})
+
