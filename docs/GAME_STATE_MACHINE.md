@@ -172,6 +172,17 @@ Le drapeau `TEAMS_LOCKED` suit la question, pas la phase :
 
 Contrats : `contracts/game-state.md` §`TEAMS_LOCKED`, `contracts/websocket-actions.md` §UPDATE.
 
+## Manches et entractes de manche (v11.2, #245)
+
+- **Déroulé** : la règle de parcours est celle de `NEXT_QUESTION` (`contracts/websocket-actions.md`). Une entrée `ENTRACTE` est
+  une entrée comme une autre : « à suivre » la propose, qu'elle soit manuelle, programmée ou une entracte automatique de manche.
+- **`ROUND_CONTEXT`** (position de la question courante dans les manches) : calculé à `READY`, après `ROUNDS_UPDATE`, `DELETE` et `NEW_GAME`.
+  `FIRST_OF_ROUND` sert au titre de manche affiché sur la TV en READY.
+- **Entracte** : `ENTRACTE_SET{ACTIVE:true}` reste réservé à l'admin (manuel). L'anim peut seulement terminer l'entracte
+  (`ENTRACTE_SET{ACTIVE:false}`), ce qui n'est jamais bloqué, même pendant `LAUNCH_LOCK`.
+- **Suppression pendant le jeu** : `ROUNDS_UPDATE{DELETED_ROUNDS{DELETE}}` est refusé (`QUESTION_IN_PROGRESS`) si la question courante
+  est concernée et que la phase est `PREPARE`, `READY`, `COUNTDOWN`, `STARTED` ou `PAUSED`. Au repos (`STOPPED`, `REVEALED`, `NEW_GAME`), la suppression est permise. `KEEP` n'est jamais concerné.
+
 ## Fenêtre « déjà crédité » — GameTime (v11.2, #256)
 
 `GameTime` (horodatage µs) borne les crédits de la question courante qui comptent comme « déjà créditée ». Un crédit
