@@ -225,7 +225,7 @@ export default function ScoresPage() {
       </header>
       {!tvDisplay && (
         <div className="hidden-banner" role="status">
-          🔇 Correction cachée : les points sont enregistrés sans animation, sans son ni LED. Le classement de la TV se mettra à jour au prochain affichage normal.
+          🔇 Correction cachée : les points sont enregistrés sans animation, sans son ni LED. Le classement de la TV est mis à jour sans animation.
         </div>
       )}
 

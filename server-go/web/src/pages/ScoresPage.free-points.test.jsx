@@ -91,7 +91,7 @@ describe('ScoresPage — montant libre et affichage TV (#252)', () => {
     expect(screen.queryByText(/Correction cachée : les points sont enregistrés/)).toBeNull()
     fireEvent.click(sw)
     expect(sw.getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByText(/Correction cachée : les points sont enregistrés sans animation, sans son ni LED/)).toBeTruthy()
+    expect(screen.getByText(/Correction cachée : les points sont enregistrés sans animation, sans son ni LED\. Le classement de la TV est mis à jour sans animation\./)).toBeTruthy()
     expect(addBtns()[0].textContent).toBe('+1🔇')
     expect(addBtns()[0].getAttribute('title')).toMatch(/sans affichage TV/)
     fireEvent.click(addBtns()[0])
