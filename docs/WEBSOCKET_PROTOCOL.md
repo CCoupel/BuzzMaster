@@ -1382,6 +1382,44 @@ Contrat détaillé : `contracts/websocket-actions.md` §TEAM_POINTS_BATCH.
 
 La régie (`TEAM_POINTS` par carte d'équipe) n'est pas contrainte par le verrou « déjà créditée ».
 
+## Verrou de lancement — LAUNCH_LOCK (v11.2, #253)
+
+Source de vérité : `contracts/websocket-actions.md` §LAUNCH_LOCK, §HELLO_ACK, §ACTION_REFUSED ; `contracts/game-state.md`
+§`LAUNCH_LOCK`.
+
+Message admin → serveur, envoyé à l'ouverture (`OPEN`) et toutes les 15 s, puis à la fermeture (`CLOSE`) :
+
+```json
+{ "ACTION": "LAUNCH_LOCK", "MSG": { "STATE": "OPEN" } }
+```
+
+- **Pose** : le verrou est posé au nom de la **connexion** qui envoie `OPEN` (le propriétaire). `OWNER` = son `CLIENT_ID`.
+- **Refus** (`LAUNCH_LOCK_REFUSED`, ciblé, rien ne change) : `LOCKED_BY_OTHER` (verrou tenu par une autre connexion) ou
+  `ENTRACTE_ACTIVE`. Un `OPEN` du propriétaire est toujours un renouvellement.
+- **Libération** : `CLOSE` du propriétaire ; `NEW_GAME` appliqué du propriétaire ; déconnexion de la connexion ;
+  expiration à **45 s** sans renouvellement. Les deux derniers cas sont journalisés en WARN
+  (`LAUNCH_LOCK_RELEASED reason="disconnect"` ou `reason="expired"`).
+- **Diffusion** : `GameState.LAUNCH_LOCK` aux clients `admin` et `anim` seulement. Absent des charges TV et VJoueur.
+- **Actions suspendues** pour tout émetteur, propriétaire compris : `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }`
+  ciblé, journal `WARN ACTION_REFUSED_LAUNCH`. Liste : conduite (`READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`,
+  `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, actions MEMORY, MEMOTION, RAFALE, `FLIP_MEMORY_CARD`) ; points (`POINTS`,
+  `TEAM_POINTS`, `BUMPER_POINTS`, lots, `SET_CREDIT_POINTS`, `RAZ`) ; `SHOW_QR_CODE`, `HIDE_QR_CODE`, `RESET` ;
+  `UPDATE`/`FULL`, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
+- **Toujours permises** : `LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`,
+  `SET_VIRTUAL_PLAYER_LIMIT`, `REBOOT`, édition des questions, réglages, et les actions des joueurs.
+- **`NEW_GAME`** d'une autre connexion : `NEW_GAME_REFUSED { REASON: "LAUNCH_IN_PROGRESS" }`.
+
+### HELLO_ACK (admin et anim seulement, v11.2 #253)
+
+Envoyé en premier à chaque `HELLO` d'un poste admin ou anim, avant l'`UPDATE` initial. Il donne l'identifiant de la connexion,
+que le client compare à `LAUNCH_LOCK.OWNER` pour se reconnaître.
+
+```json
+{ "ACTION": "HELLO_ACK", "MSG": { "CLIENT_ID": "192.168.1.20:53124" } }
+```
+
+`CLIENT_ID` est une chaîne opaque, unique par connexion, nouvelle à chaque reconnexion.
+
 ## Action NEW_GAME — options de purge (v11.2, #243)
 
 Envoyée par `admin` (bouton « LANCER LA PARTIE »). Contrat détaillé : `contracts/websocket-actions.md` §NEW_GAME.
