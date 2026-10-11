@@ -1024,6 +1024,8 @@ func TestHTTPServer_DeleteFile(t *testing.T) {
 	os.MkdirAll(questionDir, 0755)
 	testFile := filepath.Join(questionDir, "media.png")
 	os.WriteFile(testFile, []byte("delete me"), 0644)
+	questionJSON := filepath.Join(questionDir, "question.json")
+	os.WriteFile(questionJSON, []byte(`{"ID":"5"}`), 0644)
 
 	req := httptest.NewRequest("DELETE", "/files/questions/5/media.png", nil)
 	w := httptest.NewRecorder()
@@ -1037,6 +1039,10 @@ func TestHTTPServer_DeleteFile(t *testing.T) {
 	// Verify file was deleted
 	if _, err := os.Stat(testFile); !os.IsNotExist(err) {
 		t.Error("File should have been deleted")
+	}
+	// the question itself is untouched
+	if _, err := os.Stat(questionJSON); err != nil {
+		t.Errorf("question.json must stay intact: %v", err)
 	}
 }
 
