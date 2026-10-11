@@ -499,8 +499,8 @@ func TestVPlayerAnswers258_MemotionCardAnswerTextAndImageNeverReachATabletBefore
 func TestVPlayerAnswers258_Critical_AfterPlayerConnectATargetedUpdateGivesTheTabletItsTeamData(t *testing.T) {
 	e := newEnv258(t)
 	e.startQCM()
-	e.app.engine.ProcessButtonPress(e.jadeID, time.Now().UnixMicro(), "A")     // Jade (équipe A) a répondu RED
-	e.app.engine.ProcessButtonPress(e.mamieID, time.Now().UnixMicro(), "B")    // Mamie (équipe B) aussi (GREEN)
+	e.app.engine.ProcessButtonPress(e.jadeID, time.Now().UnixMicro(), "A")  // Jade (équipe A) a répondu RED
+	e.app.engine.ProcessButtonPress(e.mamieID, time.Now().UnixMicro(), "B") // Mamie (équipe B) aussi (GREEN)
 	e.app.broadcastUpdate()
 	time.Sleep(150 * time.Millisecond)
 
