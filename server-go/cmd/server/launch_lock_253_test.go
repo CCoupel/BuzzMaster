@@ -358,6 +358,8 @@ var adminSuspended253 = []string{
 	"RAFALE_VALIDATE", "RAFALE_INVALIDATE", "RAFALE_SET_TEAMS",
 	"TEAM_POINTS", "BUMPER_POINTS", "TEAM_POINTS_BATCH", "SET_CREDIT_POINTS",
 	"UPDATE", "FULL", "DELETE_BUMPER", "RELEASE_BUMPER_NAME",
+	// ajouts de la revue #253 (contrat 03d4ee3e) : crédit joueur historique, remise à zéro des scores, phases forcées, RESET des écrans
+	"POINTS", "RAZ", "SHOW_QR_CODE", "HIDE_QR_CODE", "RESET",
 }
 
 var animSuspended253 = []string{
@@ -392,6 +394,8 @@ func (e *env253) payload253(action string) interface{} {
 			bumpers[id] = c
 		}
 		return map[string]interface{}{"teams": teamsMapOf243(st), "bumpers": bumpers}
+	case "POINTS":
+		return map[string]interface{}{"ID": e.paul, "POINTS": 7}
 	case "DELETE_BUMPER":
 		return map[string]interface{}{"ID": e.paul}
 	case "RELEASE_BUMPER_NAME":
