@@ -218,8 +218,7 @@ d'un coup.
 - **Commutateur « Tenir compte des indices »** : visible seulement pour un QCM avec indices, quand au moins un indice a
   été révélé et que le montant est positif. Il est **activé par défaut**, et revient activé à chaque question ou phase.
   Un clic sur une réponse ou une saisie ne le change pas.
-  - Activé : chaque équipe ou joueur reçoit la base multipliée par son coefficient d'indices (1, 0,67 ou 0,33 selon le nombre
-    d'indices révélés), avec au moins 1 point. Pour une équipe, le coefficient vient du meilleur joueur de l'équipe qui a la
+  - Activé : chaque équipe ou joueur reçoit la base multipliée par son coefficient d'indices (1 pour un indice révélé, puis le coefficient de la question, 0,67 et 0,33 par défaut : `QCM_PENALTY_1` et `QCM_PENALTY_2`), avec au moins 1 point. Pour une équipe, le coefficient vient du meilleur joueur de l'équipe qui a la
     bonne couleur ; pour un joueur, des indices au moment de son buzz.
   - Désactivé : montant uniforme pour toute la sélection.
 - **Autres montants** : MEMORY (score des paires) et RAFALE (compteur de l'équipe) donnent un montant par équipe, tant que
@@ -244,11 +243,11 @@ d'un coup.
   à 100, le signe − étant appliqué. **0 = aucune pénalité** (valeur par défaut). Les anciennes questions valent 0.
 - **Une équipe dans plusieurs réponses** : si ses joueurs ont répondu des couleurs différentes, elle figure dans plusieurs
   réponses QCM. Le **dernier clic** décide alors du montant. Vérifiez-le avant d'attribuer.
-- **Déjà créditée** : une équipe ou un joueur déjà crédité pour la question est grisé (« ✓ déjà créditée »). Un joueur d'une
-  équipe créditée au niveau équipe est grisé (« ✓ équipe déjà créditée »). Le serveur ignore ces cas, donc il n'y a pas de
+- **Déjà créditée** : une équipe déjà créditée est grisée (« ✓ déjà créditée »). Un joueur déjà crédité à titre individuel
+  affiche « ✓ déjà crédité », avec son montant. Un joueur d'une équipe créditée au niveau équipe est grisé (« ✓ équipe déjà créditée »). Le serveur ignore ces cas, donc il n'y a pas de
   double crédit.
-- **Résultat** : « K joueur(s) ignoré(s) (équipe déjà créditée) » pour un lot joueurs, et « K équipe(s) déjà créditée(s)
-  ignorée(s) » pour un lot équipes.
+- **Résultat** : « K joueur(s) déjà crédité(s) ignoré(s). » (`ALREADY_AWARDED`) ou « K joueur(s) ignoré(s) (équipe déjà créditée) »
+  (`TEAM_ALREADY_AWARDED`) pour un lot joueurs, et « K équipe(s) déjà créditée(s) ignorée(s) » pour un lot équipes.
 - **Tablettes de l'animateur** : l'admin n'envoie jamais de valeur nulle ou négative pour le champ « Points ». Le bouton de
   crédit des tablettes garde donc la dernière valeur positive.
 - **Limites** :
