@@ -11,7 +11,7 @@
   - champ de question `ROUND_ID` ;
   - règle d'ordre unique : manches, puis « Sans manche », puis `ORDER` ;
   - **aucune migration** : sans manche, l'ordre est identique à v11.1.
-- **[NEW]** `game-state.md` — `GameState.ROUNDS` (toujours sérialisé, tous clients web).
+- **[NEW]** `game-state.md` — `GameState.ROUNDS` et `GameState.ROUND_CONTEXT` (place de la question courante : manche, rang, premier de manche ; calculé par le serveur pour la TV et l'anim). Toujours sérialisés, tous clients web.
 - **[NEW]** `websocket-actions.md` §ROUNDS_UPDATE / ROUNDS_UPDATE_RESULT (admin seulement) : structure complète en une action, refus global, une question n'est jamais supprimée ; allow-list ; permise pendant `LAUNCH_LOCK`.
 - **[CHANGED]** `websocket-actions.md` §NEXT_QUESTION — `ROUND_ID`, `ROUND_NAME`, `NEW_ROUND` (additifs). §REORDER_QUESTIONS — conservée pour la compatibilité.
 - **[CHANGED]** `models.md` Question — `ORDER` = position dans la manche.
