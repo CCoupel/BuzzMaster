@@ -20,3 +20,9 @@
 
 ## admin_scores
 - Le bandeau « Correction cachée » dit que le classement de la TV est mis à jour sans animation (décision utilisateur 2026-10-11). L'ancien libellé de la maquette (« … se mettra à jour au prochain affichage normal ») est périmé. _(v11.2.0, free_points_tv_toggle, #252)_
+
+## admin_game_award
+- Le commutateur « Tenir compte des indices » n'apparaît que s'il y a eu des indices (QCM avec indices activés, au moins un indice révélé, montant > 0). Il est activé par défaut, remis à activé à chaque question ou phase, et n'est modifié ni par les clics sur les réponses ni par la saisie. _(v11.2.0, compact_block_hints_toggle / team_or_player_level_hints_toggle, #254)_
+- La ligne 1 du bloc est liée au commutateur. Activé : « barème de la question, par équipe » ; avec une valeur saisie à la main : « montant saisi, ajusté selon les indices de chaque équipe ». Désactivé : montant uniforme. _(v11.2.0, #254)_
+- La pénalité de mauvaise réponse est toujours uniforme : le commutateur est masqué et les indices sont sans effet. _(v11.2.0, #254)_
+
