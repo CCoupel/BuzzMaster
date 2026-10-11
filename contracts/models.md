@@ -216,6 +216,10 @@ type QuestionType = "NORMAL" | "QCM" | "MEMORY" | "MEMOTION"
 type MotionSubPhase = "" | "MEMORIZE" | "GRID" | "SELECTED" | "QUESTION" | "REVEAL"
 
 type PointsTarget = "PLAYER" | "TEAM"
+// v11.2 (#254) — niveau d'attribution : SPEEDY, QCM, ARDOISE suivent POINTS_TARGET ;
+// MEMORY, MEMOTION, RAFALE toujours "TEAM" (champ ignoré). Défaut serveur si absent :
+// "PLAYER" pour SPEEDY, "TEAM" pour tous les autres types (ARDOISE passe de PLAYER à TEAM).
+// Règle unique côté client : resolveAwardLevel / resolvePointsTarget (utils/pointsAward.js).
 
 type QuestionStatus = "AVAILABLE" | "STARTED" | "STOPPED" | "REVEALED"
 

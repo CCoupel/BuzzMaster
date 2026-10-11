@@ -35,6 +35,7 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
 | BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
 | **TEAM_POINTS_BATCH** | ✅ | ❌ | ❌ | ❌ **(v11.2, #244/#251 — admin seulement)** |
+| **BUMPER_POINTS_BATCH** | ✅ | ❌ | ❌ | ❌ **(v11.2, #254 — admin seulement)** |
 | **LAUNCH_LOCK** | ✅ | ❌ | ❌ | ❌ **(v11.2, #253 — admin seulement)** |
 | **QUESTION_SOUND** | ✅ | ❌ | ❌ | ✅ **(v11.1, #219)** |
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
@@ -491,7 +492,7 @@ Avec `DISPLAY: false` :
 
 ### TEAM_POINTS_BATCH ✨ (v11.2, #244/#251)
 
-Attribue des points à **plusieurs équipes en une action** (bouton admin « Donner les points (N) » / « Retirer les points (N) », maquette `docs/mockup/v11.2/ui/admin_game_team_award__selection.html`). `TEAM_POINTS` reste inchangé pour le crédit équipe par équipe.
+Attribue des points à **plusieurs équipes en une action** (bouton admin « Attribuer les points (N) » / « Appliquer les pénalités (N) », *v11.2 #254* ; maquettes `admin_game_award__compact_block` et `admin_game_award__team_or_player_level`, qui remplacent `docs/mockup/v11.2/ui/admin_game_team_award__selection.html`). `TEAM_POINTS` reste inchangé pour le crédit équipe par équipe. Utilisée quand la question est **au niveau équipe** (§« Niveau d'attribution ») ; au niveau joueur, c'est `BUMPER_POINTS_BATCH`.
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -519,11 +520,37 @@ Attribue des points à **plusieurs équipes en une action** (bouton admin « Don
 - **La régie n'est pas contrainte** (§AWARDED_TEAMS) : un clic sur une carte d'équipe (`TEAM_POINTS`) peut toujours recréditer une équipe ; **seule l'attribution groupée** respecte le verrou « déjà créditée ».
 - **Double clic** : le client désactive le bouton jusqu'à la réponse ; un second lot identique est appliqué avec toutes ses équipes `SKIPPED` (`ALREADY_AWARDED`), donc sans double crédit.
 
-#### Montants par défaut (client — barème par type, maquette validée)
-- Le champ « Points par équipe » contient un **montant de base B** : à l'entrée en `REVEALED`, B = points de la question (`pointsInput`) ; clic sur la **bonne réponse** QCM → sélection des équipes ayant donné cette réponse et B = points de la question ; clic sur une **mauvaise réponse** → désélection de toutes les équipes, sélection de celles de cette réponse, B = **−1** (pénalité par défaut).
-- **Montant par équipe tant que B n'a pas été modifié à la main et que B > 0** = la règle actuelle du clic sur la carte d'équipe, **extraite dans une fonction partagée** (`utils/pointsAward.js`) : MEMORY multi-équipes → score des paires de l'équipe ; QCM avec indices → `calcQcmTeamAward` (pénalité d'indices de l'équipe) ; RAFALE → `calcRafaleTeamAward` (compteur de l'équipe) ; sinon B (SPEEDY, ARDOISE, QCM sans indices, MEMORY solo, MEMOTION…). Aperçu affiché sur chaque carte sélectionnée.
-- **B modifié à la main, ou B < 0** : **montant uniforme B** pour toutes les équipes sélectionnées.
-- « Équipe d'une réponse » QCM : équipe dont au moins un joueur a `ANSWER_COLOR` = la couleur de la réponse (`bumpers[*].ANSWER_COLOR`, fixé par `ProcessButtonPress`).
+#### Niveau d'attribution : équipe ou joueur ✨ (v11.2, #254, décision utilisateur)
+Le client choisit l'action groupée selon le **niveau** de la question, calculé par une **fonction unique** `resolveAwardLevel(question)` (`utils/pointsAward.js`) :
+
+| Type | Niveau | Défaut si `POINTS_TARGET` absent |
+|------|--------|----------------------------------|
+| **SPEEDY** | réglage « Points : équipe / joueur » de la question (`POINTS_TARGET`) | `PLAYER` |
+| **QCM** | `POINTS_TARGET` | `TEAM` |
+| **ARDOISE** | `POINTS_TARGET` | `TEAM` |
+| **MEMORY**, **MEMOTION**, **RAFALE** | **toujours `TEAM`** (le réglage, s'il existe dans un ancien fichier, est ignoré) | — |
+
+- Niveau `TEAM` → cases à cocher dans l'**en-tête des cartes d'équipe** → `TEAM_POINTS_BATCH`.
+- Niveau `PLAYER` → cases à cocher sur les **lignes de joueurs** des cartes d'équipe (pas de case d'équipe) → `BUMPER_POINTS_BATCH`.
+- **Défaut serveur au chargement des questions** (`internal/server/http.go`, `POINTS_TARGET` absent) : aligné sur ce tableau — `TEAM` pour QCM, ARDOISE, MEMORY, MEMOTION, RAFALE ; `PLAYER` pour SPEEDY. `[CHANGED]` : une ancienne question ARDOISE **sans** le champ passe de `PLAYER` à `TEAM` (l'éditeur proposait déjà `TEAM` par défaut). Une valeur enregistrée dans le fichier est toujours respectée pour SPEEDY, QCM et ARDOISE.
+- `resolvePointsTarget` (clic unitaire sur un joueur, anim) applique **la même règle** (une seule source) : MEMORY, MEMOTION et RAFALE créditent l'équipe.
+
+#### Montant : champ « Points » de la page ✨ (v11.2, #254 — remplace le montant B de #244/#251)
+- **Le bloc d'attribution n'a plus de montant propre.** Le montant de base est le **champ « Points » de la page** (`pointsInput`), déjà présent au-dessus des équipes. À l'entrée en `REVEALED` : points de la question (comportement actuel du champ).
+- **Montant par équipe ou par joueur, tant que le champ n'a pas été modifié à la main et qu'il est > 0** = la règle actuelle du clic unitaire, **une seule source** (`utils/pointsAward.js`) : équipe → `defaultTeamAward` (MEMORY multi-équipes : score des paires ; QCM avec indices : `calcQcmTeamAward` ; RAFALE : `calcRafaleTeamAward` ; sinon le champ) ; joueur → `resolvePointsAward` (QCM avec indices : pénalité d'indices **du joueur** au moment du buzz ; sinon le champ). Aperçu affiché sur chaque ligne sélectionnée.
+- **Champ modifié à la main, ou négatif** : **montant uniforme** = valeur du champ pour toute la sélection.
+- **Libellé du bouton** : « **Attribuer les points (N)** » si le montant est positif ; « **Appliquer les pénalités (N)** » (rouge) si le montant est négatif. N = nombre d'équipes ou de joueurs sélectionnés. Bouton désactivé à N = 0 ou pendant l'envoi.
+- **Sélectionner / désélectionner tout** : deux **icônes** sur la **même ligne** que le bouton, avec nom accessible (`aria-label` et `title` : « Tout sélectionner », « Tout désélectionner »). Le bloc tient sur **2 lignes** : (1) titre et source du montant, (2) icônes + bouton.
+
+#### QCM : clic sur une réponse ✨ (v11.2, #254)
+- **Bonne réponse** : la sélection devient l'ensemble des équipes (niveau `TEAM`) ou des joueurs (niveau `PLAYER`) ayant donné cette réponse, hors déjà crédités ; le champ « Points » reprend les **points de la question** ; bouton « Attribuer les points (N) ».
+- **Mauvaise réponse** : désélection de tout, puis sélection des équipes ou joueurs de cette réponse, hors déjà crédités ; le champ « Points » prend la **pénalité de la question, en négatif** ; bouton « Appliquer les pénalités (N) ».
+- **Pénalité de la question** : **v11.1 ne définit aucune pénalité de mauvaise réponse pour un QCM.** `QCM_PENALTY_1`/`QCM_PENALTY_2` sont des **coefficients d'indices** (ex. 0,67 / 0,33 des points), pas une pénalité ; `MEMORY_CONFIG.ERROR_PENALTY` ne concerne que MEMORY. **Défaut appliqué : −1** (le plus sûr : la plus petite pénalité non nulle, déjà la valeur de la maquette validée #244/#251, toujours modifiable dans le champ avant le clic). *Champ de question facultatif « pénalité de mauvaise réponse » : proposé, non contracté tant qu'il n'est pas validé par l'utilisateur.*
+- Le titre « Attribuer les points (N) » revient après un clic sur la **bonne** réponse ou à un **changement de question** (le champ reprend alors les points de la question).
+- « Équipe d'une réponse » : équipe dont au moins un joueur a `ANSWER_COLOR` = la couleur de la réponse. « Joueur d'une réponse » : joueur dont `ANSWER_COLOR` = la couleur (`bumpers[*].ANSWER_COLOR`, fixé par `ProcessButtonPress`).
+
+#### Montant négatif et tablettes de l'anim (`SET_CREDIT_POINTS`) ⚠️
+Le champ « Points » est aujourd'hui poussé à l'anim (`SET_CREDIT_POINTS` → `CREDIT_POINTS`). **Le client admin n'envoie jamais `SET_CREDIT_POINTS` avec une valeur ≤ 0** : quand le champ prend une pénalité, l'anim garde la dernière valeur positive. Sinon, le bouton de crédit des tablettes retirerait des points au lieu d'en donner.
 
 #### TEAM_POINTS_BATCH_RESULT ✨ (v11.2)
 
@@ -562,6 +589,47 @@ Modifie le score d'un joueur.
 | ID | string | ✅ | MAC du bumper |
 | POINTS | int | ✅ | Points à ajouter (peut être négatif) |
 | DISPLAY | boolean | ⬜ | *(v11.2, #252)* même règle que `TEAM_POINTS` §« Affichage public » : `false` honoré **seulement pour l'admin** (sinon ignoré + `WARN SCORE_CORRECTION_HIDDEN_REFUSED`) ; `POINTS = 0` ignoré seulement si l'émetteur est l'admin |
+
+---
+
+### BUMPER_POINTS_BATCH ✨ (v11.2, #254)
+
+Attribution groupée **au niveau joueur** (question de niveau `PLAYER`, §TEAM_POINTS_BATCH « Niveau d'attribution »). **Symétrique de `TEAM_POINTS_BATCH`** : mêmes règles sauf ce qui suit.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` (`admin` seulement) |
+| Phase | **`REVEALED` uniquement** |
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| QUESTION_ID | string | ✅ | Question affichée au moment du clic |
+| ENTRIES | array | ✅ | 1 à 64 entrées, **joueurs distincts** |
+| ENTRIES[].ID | string | ✅ | MAC du bumper (ou ID du VJoueur) |
+| ENTRIES[].POINTS | int | ✅ | Entier non nul de −999 à 999 |
+| DISPLAY | boolean | ⬜ | Même règle que `TEAM_POINTS_BATCH` (`false` = aucun effet public, admin seulement) |
+
+1. **Refus global** (`BUMPER_POINTS_BATCH_RESULT{STATUS:"REFUSED"}`, `WARN BUMPER_POINTS_BATCH_REFUSED`) : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, **`UNKNOWN_PLAYER`** (joueur supprimé entre la sélection et le clic ; `PLAYERS` = IDs inconnus).
+2. Sous **un seul verrou moteur** : chaque joueur **déjà crédité pour la question** (présent dans `AWARDED_TEAMS.PLAYERS`, même règle que les équipes) est ignoré (`SKIPPED`, `ALREADY_AWARDED`) ; les autres sont crédités exactement comme `BUMPER_POINTS` (score du joueur, score de l'équipe recalculé), avec **une entrée `POINTS_AWARDED` par joueur** (`WINNER_TYPE: "PLAYER"`, `WINNER_ID` = ID du joueur, `TEAM_NAME` = son équipe).
+3. **Effets publics groupés** (si `DISPLAY` ≠ `false`), une fois pour le lot, comme `TEAM_POINTS_BATCH` point 4, **par équipe des joueurs crédités positivement** : un son, une comète par équipe concernée, une pulsation unique, un seul flash (équipe du plus fort montant positif). Aucun effet pour les négatifs.
+4. Diffusions : `UPDATE`, `SCORE_CHANGE` (`PLAYERS` et `TEAMS` concernés), `AWARDED_TEAMS`. Réponse ciblée `BUMPER_POINTS_BATCH_RESULT`. Journal `INFO BUMPER_POINTS_BATCH`.
+5. Le clic unitaire sur un joueur (`BUMPER_POINTS`) reste **libre** (la régie n'est pas contrainte).
+
+#### BUMPER_POINTS_BATCH_RESULT ✨ (v11.2, #254)
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| STATUS | string | `APPLIED` ou `REFUSED` |
+| REASON | string | Si `REFUSED` : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, `UNKNOWN_PLAYER` |
+| QUESTION_ID | string | Question concernée |
+| APPLIED | array | `[{ID, POINTS}]` |
+| SKIPPED | array | `[{ID, REASON}]` — `ALREADY_AWARDED` |
+| PLAYERS | string[] | Si `UNKNOWN_PLAYER` : IDs inconnus (`[]` sinon) |
+
+```json
+{ "ACTION": "BUMPER_POINTS_BATCH", "MSG": { "QUESTION_ID": "12", "ENTRIES": [ {"ID": "AA:BB:CC:01", "POINTS": 2}, {"ID": "AA:BB:CC:07", "POINTS": 2} ] } }
+{ "ACTION": "BUMPER_POINTS_BATCH_RESULT", "MSG": { "STATUS": "APPLIED", "QUESTION_ID": "12", "APPLIED": [ {"ID": "AA:BB:CC:01", "POINTS": 2} ], "SKIPPED": [ {"ID": "AA:BB:CC:07", "REASON": "ALREADY_AWARDED"} ], "PLAYERS": [] } }
+```
 
 ---
 
@@ -707,7 +775,7 @@ Tant que la popup « Lancer la partie » est ouverte sur un poste admin, **le se
 #### Actions suspendues pendant le verrou
 Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }` ciblé et `WARN ACTION_REFUSED_LAUNCH` :
 - **Conduite** : `READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, `MEMORY_SET_TEAMS`, `MEMOTION_SET_TEAMS`, `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE`, `RAFALE_VALIDATE`, `RAFALE_INVALIDATE`, `RAFALE_SET_TEAMS`, `FLIP_MEMORY_CARD` (venant de l'admin, de l'anim ou de la TV).
-- **Points** : `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH` (et l'action groupée par joueurs de #254), `SET_CREDIT_POINTS`.
+- **Points** : `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`, `BUMPER_POINTS_BATCH`, `SET_CREDIT_POINTS`.
 - **Équipes et joueurs** : `UPDATE`/`FULL` entrants, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
 - `NEW_GAME` venant d'une connexion **autre** que le propriétaire (`REASON: "LAUNCH_IN_PROGRESS"` via `NEW_GAME_REFUSED`).
 
@@ -1358,7 +1426,7 @@ la même équipe — que le premier vienne d'une autre tablette ou de la régie.
 | Direction | `Server→Client` |
 | Cible | `ClientTypeAnim` **et `ClientTypeAdmin`** *(v11.2, #244/#251 — `[CHANGED]` additif : l'admin s'en sert pour griser les équipes déjà créditées dans l'attribution groupée)*. La régie reste **sans restriction** pour le crédit équipe par équipe (§"La régie n'est pas contrainte") |
 | Règle « déjà créditée » | *(v11.2, #252)* Le calcul (`Engine.AwardedTeams`, `getAwardedTeamsPayload`) ne retient que les événements `POINTS_AWARDED` de la question courante, depuis son départ, **avec `DISPLAY` ≠ `false`** (absent = compté) et postérieurs au dernier `TEAM_DELETED` de l'équipe (#249). Un crédit à **0 point enregistré** (geste de l'anim, #170) **compte** : c'est un verrou valide ; un `POINTS = 0` de l'admin n'est jamais enregistré, donc ne verrouille rien. Les corrections cachées sont ignorées. Même règle pour le grisage de l'admin et le saut `ALREADY_AWARDED` de `TEAM_POINTS_BATCH` |
-| Trigger | `TEAM_POINTS`, `BUMPER_POINTS` et **`TEAM_POINTS_BATCH`** traités (quelle qu'en soit l'origine) ; `READY` (changement de question) ; `NEW_GAME` ; `RAZ` ; suppression/renommage d'équipe (#249) ; HELLO d'un client animateur **ou admin** (état initial) |
+| Trigger | `TEAM_POINTS`, `BUMPER_POINTS`, **`TEAM_POINTS_BATCH`** et **`BUMPER_POINTS_BATCH`** traités (quelle qu'en soit l'origine) ; `READY` (changement de question) ; `NEW_GAME` ; `RAZ` ; suppression/renommage d'équipe (#249) ; HELLO d'un client animateur **ou admin** (état initial) |
 
 #### Payload
 
@@ -1369,6 +1437,11 @@ la même équipe — que le premier vienne d'une autre tablette ou de la régie.
 | TEAMS[].TEAM | string | Nom de l'équipe |
 | TEAMS[].POINTS | int | **Somme** des points attribués à cette équipe pour la question courante (une équipe peut être créditée deux fois depuis la régie — voir ci-dessous) |
 | TEAMS[].TIMESTAMP | int64 | Horodatage µs du **premier** crédit de cette équipe pour la question courante |
+| PLAYERS | array | ✨ *(v11.2, #254)* Une entrée par **joueur crédité individuellement** (`POINTS_AWARDED` avec `WINNER_TYPE = "PLAYER"`) pour la question courante, ordre chronologique ; **mêmes règles** que `TEAMS` (`DISPLAY ≠ false`, depuis le départ de la question, 0 point de l'anim = verrou valide, après le dernier `TEAM_DELETED` de son équipe). `[]` jamais `null`. Sert au grisage des lignes de joueurs et au saut `ALREADY_AWARDED` de `BUMPER_POINTS_BATCH` |
+| PLAYERS[].ID | string | ID du joueur (`WINNER_ID`) |
+| PLAYERS[].TEAM | string | Équipe du joueur au moment du crédit |
+| PLAYERS[].POINTS | int | Somme des points individuels pour la question |
+| PLAYERS[].TIMESTAMP | int64 | Premier crédit µs |
 
 Tableau **vide** (`[]`, jamais `null`) quand aucune équipe n'a encore été créditée — discipline
 projet, un client qui itère ne doit jamais tomber sur `null`.

@@ -2,6 +2,20 @@
 
 ---
 
+## [20261011] — Attribution groupée au niveau équipe ou joueur, bloc compact (#254, v11.2, retours QUALIF 11.2.0.5)
+
+> Décisions utilisateur : SPEEDY, QCM, ARDOISE suivent le réglage « Points : équipe / joueur » de la question (défauts QCM = équipe, SPEEDY = joueur, ARDOISE = équipe) ; MEMORY, MEMOTION, RAFALE toujours au niveau équipe ; le montant est le champ « Points » de la page ; mauvaise réponse QCM = pénalité de la question en négatif, bouton « Appliquer les pénalités (N) » ; « Attribuer les points (N) » sinon.
+
+- **[NEW]** `websocket-actions.md` §BUMPER_POINTS_BATCH, §BUMPER_POINTS_BATCH_RESULT — lot par joueurs (admin, `REVEALED`), symétrique de `TEAM_POINTS_BATCH` ; allow-list (admin seulement).
+- **[CHANGED]** `websocket-actions.md` §AWARDED_TEAMS — liste additive `PLAYERS` (joueurs crédités individuellement, mêmes règles que `TEAMS`).
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH — sections « Niveau d'attribution », « Montant : champ Points de la page » (le montant B du bloc disparaît), « QCM : clic sur une réponse » (pénalité : **aucun champ de pénalité QCM n'existe → −1 par défaut, signalé**), libellés « Attribuer les points (N) » / « Appliquer les pénalités (N) », icônes Tout sélectionner / Tout désélectionner ; l'admin n'envoie jamais `SET_CREDIT_POINTS` ≤ 0.
+- **[CHANGED]** `models.md` `PointsTarget` — défaut serveur au chargement : `TEAM` pour tous les types sauf SPEEDY. **Comportement modifié** : une ancienne question ARDOISE **sans** `POINTS_TARGET` crédite désormais l'équipe (au lieu du joueur) ; MEMORY, MEMOTION, RAFALE créditent toujours l'équipe. Aucun changement de format.
+- **[CHANGED]** `websocket-actions.md` §LAUNCH_LOCK — `BUMPER_POINTS_BATCH` dans les actions suspendues.
+- **[NEW]** `logging.md` §3.2 quater — `BUMPER_POINTS_BATCH`, `BUMPER_POINTS_BATCH_REFUSED`.
+- Aucune BREAKING de protocole (actions et champs additifs).
+
+---
+
 ## [20261011] — « Lancer la partie » : verrou serveur pendant la popup (#253, v11.2, retours QUALIF 11.2.0.5)
 
 > Décisions utilisateur : « Lancer la partie » passe dans le menu « Préparation » ; tant que la popup est ouverte, les actions de jeu sont refusées **par le serveur** pour tous les clients ; la popup couvre toute la page.

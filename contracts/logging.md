@@ -91,6 +91,8 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 |-----------|--------|-------|--------|
 | `TEAM_POINTS_BATCH` | INFO | Lot appliqué (non écrit sur disque par défaut) | `client`, `question`, `applied` (équipe:montant), `skipped` (équipe:motif) |
 | `TEAM_POINTS_BATCH_REFUSED` | WARN | Lot refusé | `client`, `question`, `reason`, `teams` |
+| `BUMPER_POINTS_BATCH` | INFO | Lot joueurs appliqué (v11.2, #254) | `client`, `question`, `applied` (joueur:montant), `skipped` (joueur:motif) |
+| `BUMPER_POINTS_BATCH_REFUSED` | WARN | Lot joueurs refusé (v11.2, #254) | `client`, `question`, `reason`, `players` |
 
 ### 3.2 quinquies Corrections de score (v11.2, #252)
 
