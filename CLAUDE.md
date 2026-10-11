@@ -219,6 +219,14 @@ SendMessage({
 - Une issue n'est **jamais** fermée automatiquement (ni CI verte, ni QA) : la fermeture est une validation manuelle explicite de l'utilisateur. Si elle n'est pas validée, label `EN COURS`.
 - Table complète : `.claude/commands/context/CDP_WORKFLOWS.template.md`, section « Labels GitHub — Suivi de Phase ».
 
+## Branche courante et worktrees
+
+- La **branche courante du dépôt principal** est définie et changée **uniquement par le teamleader** (via l'utilisateur ou `/milestone`). Pendant un cycle, c'est `milestone/<version>`.
+- Les agents **commitent sur la branche courante**, avec des fichiers explicites (`git add <fichiers>`, jamais `git add -A`), et ne la changent **jamais**. Interdits dans le dépôt principal : `checkout`, `switch`, `reset --hard`, `clean`, `rebase`, `merge`, `stash`, détachement de HEAD.
+- Tout travail sur un autre état du code (red check, comparaison, reproduction) se fait dans un **`git worktree` jetable**, par **chemin absolu** (`git -C <worktree> …`, jamais `cd ../..`), supprimé ensuite. Avant chaque commande destructive, vérifier que le chemin n'est pas le dépôt principal.
+- Un agent qui constate que la branche courante a changé s'arrête et prévient le teamleader (`BLOQUE`).
+- Incident de référence : QA #253, 2026-10-11 (HEAD détaché quelques minutes, aucun commit perdu).
+
 ## Agents Disponibles
 
 | Nom | Rôle | Fichier | Spawn |
