@@ -2,6 +2,18 @@
 
 ---
 
+## [20261012] — Tablettes : plus de réponses des autres équipes ni de bonne réponse avant l'heure (#258, v11.2)
+
+- **[CHANGED]** `vplayer-payload-filter.md` §7 (nouveau) :
+  - pendant `PREPARE`/`READY`/`COUNTDOWN`/`STARTED`/`PAUSED`, les champs de réponse et de temps des bumpers et équipes **des autres équipes** sont neutralisés pour chaque tablette, alors que ses coéquipiers et elle-même restent intacts ;
+  - `QUESTION.QCM_CORRECT`/`ANSWER` sont retirés des charges tablette jusqu'à `REVEALED` ;
+  - tous les chemins sont concernés, état initial `HELLO` compris (qui applique aussi désormais les retraits du §6) ;
+  - une seule fonction de filtrage, par forme.
+- §6 : le risque « réponses des autres équipes » est marqué fermé.
+- Aucune BREAKING : mêmes clés (valeurs neutres) ; aucun affichage tablette ne change.
+
+---
+
 ## [20261012] — `ANSWERED_COLOR` : réponse QCM donnée à la question courante (#255, v11.2)
 
 > Décision utilisateur : champ serveur additif ; `ANSWER_COLOR` garde son sens (couleur assignée / dernière pressée).

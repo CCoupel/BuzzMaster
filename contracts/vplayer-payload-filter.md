@@ -272,7 +272,7 @@ propre sérialiseur sur le chemin générique — `serializeForClientType` le ro
 
 ### `bumpers[*].ANSWERED_COLOR` (v11.2, #255) — pas de retrait
 
-Le VJoueur reçoit `ANSWERED_COLOR` comme `ANSWER_COLOR`. Son écran affiche les réponses par équipe en STOPPED/REVEALED (`PlayerDisplay`). **Aucune exposition nouvelle** : depuis toujours, `ANSWER_COLOR` prend la couleur pressée au buzz et circule déjà vers les VJoueurs. Le risque qu'une tablette lise, avant le STOP, la réponse d'une autre équipe dans les outils du navigateur **préexiste** à #255. Il reste ouvert, comme `ARDOISE_ANSWERS` vers la TV (§« Risque résiduel assumé »). Le fermer imposerait un filtrage dépendant de la phase et du destinataire. Ce serait une issue séparée.
+Le VJoueur reçoit `ANSWERED_COLOR` comme `ANSWER_COLOR`. Son écran affiche les réponses par équipe en STOPPED/REVEALED (`PlayerDisplay`). **Aucune exposition nouvelle** : depuis toujours, `ANSWER_COLOR` prend la couleur pressée au buzz et circule déjà vers les VJoueurs. Le risque qu'une tablette lise, avant le STOP, la réponse d'une autre équipe dans les outils du navigateur **préexiste** à #255. Il reste ouvert, comme `ARDOISE_ANSWERS` vers la TV (§« Risque résiduel assumé »). **Fermé par #258 (v11.2), §7.**
 
 ### Trois sites, une seule liste
 
@@ -293,3 +293,44 @@ sans objet dans une application qui n'a pas d'authentification.
 
 Ce qui est fermé, et qui était l'objet de #128 : le chemin **par défaut**, celui qu'un joueur
 emprunte sans rien chercher — les outils de développement sur sa propre page.
+
+
+---
+
+## 7. Réponses des autres équipes et bonne réponse : filtrage par phase et par destinataire (#258, v11.2)
+
+> Revue #255/#256 (mineur 1), issue #258. Ferme le risque laissé ouvert au §6 pour les tablettes, plus une fuite plus grave relevée à l'audit : **la bonne réponse** (`QUESTION.QCM_CORRECT`, `QUESTION.ANSWER`) atteint les tablettes **avant le REVEAL**.
+
+### 7.1 Règle
+
+S'applique à **tout** message envoyé à un client `ClientTypeVPlayer` qui contient `GAME`, `bumpers` ou `teams`, quel que soit le chemin (§7.3). *Destinataire* = joueur lié à la connexion (`PlayerID`) ; *son équipe* = `bumpers[PlayerID].TEAM`.
+
+| Données | Phases filtrées | Traitement pour la tablette |
+|---|---|---|
+| `bumpers[x]` d'un joueur d'une **autre équipe** que le destinataire : `TIME`, `BUTTON`, `STATUS`, `ANSWER_COLOR`, `ANSWERED_COLOR`, `HINTS_AT_BUZZ` | **réponses ouvertes** : `PREPARE`, `READY`, `COUNTDOWN`, `STARTED`, `PAUSED` | valeurs **neutres** (`0`, `""`) ; clés conservées. Les autres champs (`NAME`, `TEAM`, `SCORE`, `CONNECTED`, `CONN_STATE`, …) restent intacts |
+| `teams[t]` d'une **autre équipe** : `TIME`, `BUMPER`, `STATUS` | mêmes phases | valeurs neutres, clés conservées |
+| `GAME.QUESTION.QCM_CORRECT`, `GAME.QUESTION.ANSWER` | **toutes sauf `REVEALED`** | clés **retirées** |
+
+- **Ce qui reste visible pour la tablette** : son propre bumper et **ceux de ses coéquipiers** (même équipe : aucun intérêt à tricher), son équipe, les scores et classements, les noms.
+- **À partir de `STOPPED`** : plus personne ne peut répondre. Les champs de réponse des autres équipes sont transmis normalement, et les badges des réponses par équipe s'affichent toujours en `STOPPED`/`REVEALED`, sans changement visible.
+- **Bonne réponse** : jusqu'au `REVEALED` exclu, puis transmise normalement. L'`UPDATE` de la transition `REVEALED` la porte.
+- **Connexion non liée** (avant `PLAYER_CONNECT`, ou `PlayerID` inconnu) : aucune équipe propre, donc **tous** les bumpers et toutes les équipes sont neutralisés pendant les réponses ouvertes.
+- **ARDOISE** (`ARDOISE_ANSWERS`, déjà retiré du VJoueur, §6), MEMORY, MEMOTION et RAFALE (tableaux de scores publics) : inchangés. Le chemin `HELLO` (§7.3) doit **aussi** appliquer les retraits du §6 (`VPlayerOnlyGameFields`), ce qui n'est pas le cas aujourd'hui.
+- **MEMOTION** : la bonne réponse d'une carte QCM active (`MOTION_ACTIVE`), si elle est transmise, suit la même règle que `QUESTION.QCM_CORRECT` (à vérifier à l'implémentation ; test existant `memotion_qcm_card_no_vplayer_answer_185`).
+
+### 7.2 Hors périmètre
+- **TV, anim** : inchangés. La TV reçoit toujours ces champs (risque résiduel §6 inchangé : `/tv` ouvert sur un téléphone). L'anim a besoin de la bonne réponse (floutée, #166).
+- **Buzzers physiques** : payload minimal, non concernés.
+
+### 7.3 Implémentation contrainte
+- **Une seule fonction** `filterVPlayerAnswers(payload, recipientID, phase)` (package `protocol`), appliquée en **dernière étape** de sérialisation de chaque message destiné à une tablette. Elle prend la `phase` du `GAME` du message (sinon la phase courante) et opère **par forme** (présence de `GAME.QUESTION`, `bumpers`, `teams`), jamais par nom d'action (même principe qu'au §6).
+- **Chemins à couvrir**, tous :
+  - fan-out `UPDATE` (`broadcastUpdateToVPlayers` / `buildVPlayerPayloads`, à rendre **par destinataire** dans toutes les phases filtrées, pas seulement PREPARE/READY) ;
+  - `broadcastUpdateToPlayer` / `SerializeForVPlayer` ;
+  - actions diffusées par type (`BroadcastToTypes` → `serializeForClientType` : `START`, `STOP`, `PAUSE`, `CONTINUE`, `UPDATE_TIMER`, `REMOTE`, `BUMPER`, `HELLO` diffusé…) ;
+  - état initial `sendStateToClient` (aujourd'hui `SerializeForWebClient` pour la tablette : à remplacer par le sérialiseur VJoueur filtré).
+- **Par destinataire ou partagé** : un message dont le client **enregistre** `bumpers`/`teams` (`UPDATE`, `BUMPER`, `REMOTE`, état initial) est sérialisé **par destinataire**. Un message dont le client **ignore** ces nœuds (`START`, `STOP`, `PAUSE`, `CONTINUE`, `UPDATE_TIMER`, `useWebSocket.js`) peut être sérialisé une fois pour toutes les tablettes, avec `recipientID = ""` (tout neutraliser). Un test vérifie que le client ignore bien ces nœuds.
+- **Coût** : sérialisation par tablette des `UPDATE` pendant les réponses ouvertes. `UPDATE_TIMER` (1 par seconde) reste partagé. Contrôle par le banc existant `vplayer_fanout_bench_test.go`.
+
+### 7.4 Compatibilité
+Aucun changement de format : mêmes clés, valeurs neutres, et seules `QCM_CORRECT`/`ANSWER` sont absentes avant le REVEAL. La tablette n'affiche rien de nouveau ni de moins (aucune vue tablette n'utilise ces champs des autres équipes avant `STOPPED`, ni la bonne réponse avant `REVEALED`). Un client antérieur continue de fonctionner.
