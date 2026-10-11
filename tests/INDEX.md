@@ -72,3 +72,5 @@
 | server-go/web/src/pages/QuestionsPage.wrong-penalty.254.test.jsx | unit | questions | #254 éditeur : champ Pénalité mauvaise réponse (QCM seul, 0 défaut, bornes, envoi qcm_wrong_penalty) | regression | critical |
 | tests/procedures/award-level-254.md | manual | admin-game, scores, anim, tv | #254 procédure manuelle (utilisateur uniquement) | feature |  |
 | server-go/cmd/server/set_credit_points_254_test.go | integration | scores, anim, websocket | #254 SET_CREDIT_POINTS ≤ 0 ignoré (garde serveur) : l anim garde la dernière valeur positive | regression | critical |
+| server-go/web/src/pages/GamePage.qcm-no-answer.255.test.jsx | unit | admin-game, scores | #255 sélecteur QCM : seuls les joueurs avec TIME > 0 sont comptés/sélectionnés (équipe et joueur), question suivante, non-régression | regression | critical |
+| tests/procedures/qcm-no-answer-255.md | manual | admin-game | #255 procédure manuelle (utilisateur seul) | regression | |
