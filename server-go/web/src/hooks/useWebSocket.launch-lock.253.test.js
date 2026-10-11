@@ -70,10 +70,17 @@ describe('useWebSocket — verrou de lancement (#253)', () => {
     expect(hook.result.current.gameState.LAUNCH_LOCK).toEqual({ ACTIVE: true, OWNER: 'c-1', SINCE: 10, EXPIRES_AT: 45010 })
   })
 
-  it('Critical — l’identifiant de connexion reçu du serveur (HELLO.CLIENT_ID) est exposé : il sert à se reconnaître propriétaire', () => {
+  it('Critical — HELLO_ACK.CLIENT_ID est exposé comme connectionId (pour se reconnaître propriétaire) ; une reconnexion le remplace', () => {
     const { hook, ws } = open()
     expect(hook.result.current.connectionId).toBeNull()
-    act(() => { ws.simulateMessage({ ACTION: 'HELLO', MSG: { CLIENT_ID: 'conn-7' } }) })
-    expect(hook.result.current.connectionId).toBe('conn-7')
+    act(() => { ws.simulateMessage({ ACTION: 'HELLO_ACK', MSG: { CLIENT_ID: '192.168.1.20:53124' } }) })
+    expect(hook.result.current.connectionId).toBe('192.168.1.20:53124')
+    act(() => { ws.simulateMessage({ ACTION: 'HELLO_ACK', MSG: { CLIENT_ID: '192.168.1.20:53999' } }) })
+    expect(hook.result.current.connectionId).toBe('192.168.1.20:53999')
+  })
+
+  it('le client envoie HELLO à l’ouverture (déclencheur du HELLO_ACK)', () => {
+    const { ws } = open()
+    expect(sentOf(ws, 'HELLO').length).toBeGreaterThan(0)
   })
 })

@@ -62,3 +62,5 @@
 | server-go/web/src/pages/AnimPage.launch-lock.253.test.jsx | unit | anim | #253 anim : bandeau de verrou, conduite suspendue | regression | critical |
 | server-go/web/src/pages/GamePage.launch-lock.253.test.jsx | unit | admin-game | #253 page de jeu : plus de bouton de lancement, commandes grisées si popup ailleurs | regression | critical |
 | server-go/web/src/pages/BackstagePage.no-launch.253.test.jsx | unit | admin-game | #253 Backstage : plus de bouton de lancement | regression | critical |
+| server-go/cmd/server/launch_lock_expiry_253_test.go | integration | websocket, game-engine, admin-game | #253 expiration de sécurité (TTL injecté game.LaunchLockTTL), renouvellement, diffusion, minuteur annulé par NEW_GAME | regression | critical |
+| tests/procedures/launch-lock-253.md | manual | admin-game, anim, tv, vplayer | #253 procédure manuelle (utilisateur uniquement) | feature | |

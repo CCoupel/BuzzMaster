@@ -12,9 +12,11 @@ package main
 import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
+	"buzzcontrol/internal/server"
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,14 +33,42 @@ type env253 struct {
 
 // newEnv253 : deux équipes, un VJoueur lié par équipe, question ARDOISE en cours (STARTED) ou révélée (revealed),
 // deux postes admin, une tablette anim, un écran TV.
-func newEnv253(t *testing.T, revealed bool) *env253 {
+func newEnv253(t *testing.T, revealed bool) *env253 { return buildEnv253(t, revealed, false) }
+
+// helloEnv253 : comme newEnv253 mais avec un serveur HTTP (sendStateToClient — rejeu d'état au HELLO — lit l'image de
+// question par défaut via lui). Il doit exister AVANT le démarrage du serveur de test (NewHTTPServer écrit un global).
+func helloEnv253(t *testing.T) *env253 { return buildEnv253(t, true, true) }
+
+func buildEnv253(t *testing.T, revealed, withHTTP bool) *env253 {
 	t.Helper()
-	e := newEnv249(t, true)
+	app := newBroadcast127TestApp(t)
+	serverSetGlobalLogger249(t, app)
+	if withHTTP {
+		app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+	}
+	app.engine.SetPhase(game.PhaseEnroll)
+	app.engine.SetTeams(map[string]*game.Team{
+		"Les Bleus":  {Name: "Les Bleus", Color: []int{0, 0, 255}},
+		"Les Rouges": {Name: "Les Rouges", Color: []int{255, 0, 0}},
+	})
+	paul := setupVirtualPlayer(t, app, "Paul", "Les Bleus")
+	mamie := setupVirtualPlayer(t, app, "Mamie", "Les Rouges")
+	app.engine.SetPhase(game.PhaseStopped)
+	app.engine.Ready("", &game.Question{ID: "q-ardoise", Type: game.QuestionTypeArdoise})
+	app.engine.SetPhase(game.PhaseStarted)
+	e := &env246{app: app, base: startAnimAllowlistTestServer(t, app), paul: paul, mamie: mamie}
+
+	// câblé par setupCallbacks en production (setupCallbacks consomme hub.Incoming : inutilisable ici) :
+	// libère le verrou du propriétaire à la fermeture de sa connexion.
+	app.wsHub.SetOnClientClosed(app.onClientClosed)
 	a1, id1 := e.dial(t, "/ws/admin")
 	a2, id2 := e.dial(t, "/ws/admin")
 	an, ida := e.dial(t, "/ws/anim")
 	tv, idt := e.dial(t, "/ws/tv")
 	pc, pid := e.dial(t, "/ws/player")
+	for _, c := range []*websocket.Conn{a1, a2, an, tv, pc} {
+		startTap253(c)
+	}
 	e.connect(t, pid, "Paul", e.paul)
 	if revealed {
 		e.app.engine.Stop()
@@ -113,47 +143,106 @@ func (e *env253) teamScore(team string) int {
 	return raw.Teams[team].Score
 }
 
-// readRefused lit les trames de conn jusqu'à ACTION_REFUSED pour `action` ; ok=false si absent après 2 s.
-func readRefused253(conn *websocket.Conn, action string) (reason string, ok bool) {
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		conn.SetReadDeadline(deadline)
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			return "", false
-		}
-		var env struct {
-			Action string          `json:"ACTION"`
-			Msg    json.RawMessage `json:"MSG"`
-		}
-		if json.Unmarshal(data, &env) != nil || env.Action != "ACTION_REFUSED" {
-			continue
-		}
-		var m struct {
-			Action string `json:"ACTION"`
-			Reason string `json:"REASON"`
-		}
-		_ = json.Unmarshal(env.Msg, &m)
-		if m.Action == action {
-			return m.Reason, true
-		}
-	}
-	return "", false
+// tap253 lit une connexion en continu dans une goroutine (une lecture expirée rend la connexion gorilla inutilisable :
+// on ne lit donc jamais avec échéance). Les trames sont consommées par curseur.
+type tap253 struct {
+	mu     sync.Mutex
+	frames []string
+	cursor int
 }
 
-// countRaw253 : trames reçues dans la fenêtre dont l'ACTION vaut `action` (compte) et dont le texte contient `needle`.
-func collectRaw253(conn *websocket.Conn, window time.Duration) []string {
-	var frames []string
-	deadline := time.Now().Add(window)
-	for time.Now().Before(deadline) {
-		conn.SetReadDeadline(deadline)
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			break
+var taps253 sync.Map // *websocket.Conn → *tap253
+
+func startTap253(conn *websocket.Conn) {
+	tp := &tap253{}
+	taps253.Store(conn, tp)
+	go func() {
+		for {
+			_, data, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			tp.mu.Lock()
+			tp.frames = append(tp.frames, string(data))
+			tp.mu.Unlock()
 		}
-		frames = append(frames, string(data))
+	}()
+}
+
+func tapOf253(conn *websocket.Conn) *tap253 {
+	v, _ := taps253.Load(conn)
+	tp, _ := v.(*tap253)
+	return tp
+}
+
+// take retourne (et consomme) les trames reçues depuis le dernier appel.
+func (tp *tap253) take() []string {
+	tp.mu.Lock()
+	defer tp.mu.Unlock()
+	out := append([]string(nil), tp.frames[tp.cursor:]...)
+	tp.cursor = len(tp.frames)
+	return out
+}
+
+func envelope253(frame string) (action string, msg json.RawMessage) {
+	var env struct {
+		Action string          `json:"ACTION"`
+		Msg    json.RawMessage `json:"MSG"`
 	}
-	return frames
+	if json.Unmarshal([]byte(frame), &env) != nil {
+		return "", nil
+	}
+	return env.Action, env.Msg
+}
+
+// waitFrame253 attend (≤ 2 s) une trame d'ACTION `action` vérifiant `match` ; les trames lues sont consommées.
+func waitFrame253(conn *websocket.Conn, action string, match func(json.RawMessage) bool) (json.RawMessage, bool) {
+	tp := tapOf253(conn)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, f := range tp.take() {
+			if a, m := envelope253(f); a == action && (match == nil || match(m)) {
+				return m, true
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return nil, false
+}
+
+// readRefused253 : ACTION_REFUSED pour `action` ; ok=false si absent après 2 s.
+func readRefused253(conn *websocket.Conn, action string) (reason string, ok bool) {
+	m, found := waitFrame253(conn, "ACTION_REFUSED", func(m json.RawMessage) bool {
+		var p struct {
+			Action string `json:"ACTION"`
+		}
+		_ = json.Unmarshal(m, &p)
+		return p.Action == action
+	})
+	if !found {
+		return "", false
+	}
+	var p struct {
+		Reason string `json:"REASON"`
+	}
+	_ = json.Unmarshal(m, &p)
+	return p.Reason, true
+}
+
+// waitAction253 : message MSG de la première trame d'ACTION `action` (échec du test si absente).
+func waitAction253(t *testing.T, conn *websocket.Conn, action string) json.RawMessage {
+	t.Helper()
+	m, ok := waitFrame253(conn, action, nil)
+	if !ok {
+		t.Fatalf("action %s attendue sur la connexion, rien reçu en 2 s", action)
+	}
+	return m
+}
+
+// collectRaw253 : attend `window` puis retourne (et consomme) les trames reçues depuis le dernier appel.
+func collectRaw253(conn *websocket.Conn, window time.Duration) []string {
+	time.Sleep(window)
+	return tapOf253(conn).take()
 }
 
 func anyContains253(frames []string, needle string) bool {
@@ -267,7 +356,7 @@ var adminSuspended253 = []string{
 	"READY", "FORCE_READY", "START", "STOP", "PAUSE", "CONTINUE", "REVEAL", "REMOTE", "QUESTION_SOUND", "ENTRACTE_SET",
 	"MEMORY_SET_TEAMS", "MEMOTION_SET_TEAMS", "MEMOTION_FLIP", "MEMOTION_STOP_TIMER", "MEMOTION_REVEAL", "MEMOTION_DONE",
 	"RAFALE_VALIDATE", "RAFALE_INVALIDATE", "RAFALE_SET_TEAMS",
-	"TEAM_POINTS", "BUMPER_POINTS", "TEAM_POINTS_BATCH", "BUMPER_POINTS_BATCH", "SET_CREDIT_POINTS",
+	"TEAM_POINTS", "BUMPER_POINTS", "TEAM_POINTS_BATCH", "SET_CREDIT_POINTS",
 	"UPDATE", "FULL", "DELETE_BUMPER", "RELEASE_BUMPER_NAME",
 }
 
@@ -477,7 +566,7 @@ func TestLaunchLock253_Critical_NewGameFromAnotherAdminIsRefusedWithTheLaunchRea
 
 	e.send(t, e.admin2, "admin", protocol.ActionNewGame, map[string]interface{}{"PURGE_SCORES": true})
 
-	raw := readActionMatchingWithin(t, e.a2, "NEW_GAME_REFUSED", 2*time.Second)
+	raw := waitAction253(t, e.a2, "NEW_GAME_REFUSED")
 	var refused struct {
 		Reason string `json:"REASON"`
 	}
@@ -503,7 +592,7 @@ func TestLaunchLock253_OpenByASecondAdminIsRefusedLockedByOther(t *testing.T) {
 
 	e.openLock(t, e.admin2)
 
-	raw := readActionMatchingWithin(t, e.a2, "LAUNCH_LOCK_REFUSED", 2*time.Second)
+	raw := waitAction253(t, e.a2, "LAUNCH_LOCK_REFUSED")
 	var refused struct {
 		Reason string `json:"REASON"`
 	}
@@ -529,7 +618,7 @@ func TestLaunchLock253_OpenDuringAnEntracteIsRefused(t *testing.T) {
 	}
 	e.openLock(t, e.admin1)
 
-	raw := readActionMatchingWithin(t, e.a1, "LAUNCH_LOCK_REFUSED", 2*time.Second)
+	raw := waitAction253(t, e.a1, "LAUNCH_LOCK_REFUSED")
 	var refused struct {
 		Reason string `json:"REASON"`
 	}
@@ -586,8 +675,8 @@ func TestLaunchLock253_CloseByTheOwnerReleasesTheLock(t *testing.T) {
 	if !e.hasLog(game.LogLevelInfo, "LAUNCH_LOCK_RELEASED", "close", "held_ms") {
 		t.Errorf("INFO LAUNCH_LOCK_RELEASED reason=close held_ms=… ; logs=%v", e.logLines(game.LogLevelInfo))
 	}
-	if e.hasLog(game.LogLevelWarn, "LAUNCH_LOCK_RELEASED") {
-		t.Error("une fermeture normale n'est pas un WARN")
+	if e.hasLog(game.LogLevelWarn, "LAUNCH_LOCK_RELEASED", e.admin1) { // filtré sur CE propriétaire : une libération tardive d'un test précédent peut écrire dans le logger global
+		t.Errorf("une fermeture normale n est pas un WARN ; warns=%v", e.logLines(game.LogLevelWarn))
 	}
 }
 
@@ -636,5 +725,95 @@ func TestLaunchLock253_DisconnectOfAnotherStationLeavesTheLockInPlace(t *testing
 
 	if l := e.lock(); !l.Active || l.Owner != e.admin1 {
 		t.Errorf("seule la déconnexion du propriétaire lève le verrou : %+v", l)
+	}
+}
+
+// BUMPER_POINTS_BATCH (#254) est aussi suspendue (contrat §LAUNCH_LOCK, e2098e70 + b5121933) : testée à part car son
+// ouverture dans l'allow-list admin relève du lot #254 (sans elle l'action est rejetée avant le verrou).
+func TestLaunchLock253_BumperPointsBatchIsSuspendedToo(t *testing.T) {
+	e := newEnv253(t, true)
+	e.openLock(t, e.admin1)
+	e.waitLock(func(l lockState253) bool { return l.Active })
+	e.send(t, e.admin2, "admin", "BUMPER_POINTS_BATCH", e.payload253("BUMPER_POINTS_BATCH"))
+	if reason, ok := readRefused253(e.a2, "BUMPER_POINTS_BATCH"); !ok || reason != "LAUNCH_IN_PROGRESS" {
+		t.Errorf("BUMPER_POINTS_BATCH sous verrou : ACTION_REFUSED LAUNCH_IN_PROGRESS attendu (obtenu %q, ok=%v)", reason, ok)
+	}
+}
+
+// --- HELLO_ACK : identifiant de connexion (contrat §HELLO_ACK) -------------------------------------------------------------
+
+func TestLaunchLock253_Critical_HelloAckGivesEachAdminAndAnimItsConnectionIDBeforeTheInitialState(t *testing.T) {
+	e := helloEnv253(t)
+	for _, c := range []struct {
+		name, id, ctype string
+		conn            *websocket.Conn
+	}{{"admin", e.admin2, "admin", e.a2}, {"anim", e.anim, "anim", e.an}} {
+		collectRaw253(c.conn, 100*time.Millisecond) // purge des trames de connexion
+		e.send(t, c.id, c.ctype, "HELLO", map[string]interface{}{})
+		time.Sleep(300 * time.Millisecond)
+
+		frames := tapOf253(c.conn).take()
+		ackAt, updateAt := -1, -1
+		for i, f := range frames {
+			switch a, m := envelope253(f); a {
+			case "HELLO_ACK":
+				var p struct {
+					ClientID string `json:"CLIENT_ID"`
+				}
+				_ = json.Unmarshal(m, &p)
+				if p.ClientID != c.id {
+					t.Errorf("%s : CLIENT_ID = %q, identifiant de connexion du hub = %q", c.name, p.ClientID, c.id)
+				}
+				if ackAt < 0 {
+					ackAt = i
+				}
+			case "UPDATE":
+				if updateAt < 0 {
+					updateAt = i
+				}
+			}
+		}
+		if ackAt < 0 {
+			t.Errorf("%s : HELLO_ACK attendu en réponse à HELLO", c.name)
+		} else if updateAt >= 0 && ackAt > updateAt {
+			t.Errorf("%s : HELLO_ACK doit précéder l'UPDATE initial (ack #%d, update #%d)", c.name, ackAt, updateAt)
+		}
+	}
+}
+
+func TestLaunchLock253_HelloAckIsNeverSentToTvPlayerOrToAnotherStation(t *testing.T) {
+	e := helloEnv253(t)
+	for _, c := range []*websocket.Conn{e.a1, e.a2, e.an, e.tvc, e.paulConn} {
+		collectRaw253(c, 50*time.Millisecond)
+	}
+	e.send(t, e.tv, "tv", "HELLO", map[string]interface{}{})
+	e.send(t, e.paulCID, "vplayer", "HELLO", map[string]interface{}{})
+	e.send(t, e.admin2, "admin", "HELLO", map[string]interface{}{})
+	time.Sleep(300 * time.Millisecond)
+
+	if countAction253(tapOf253(e.tvc).take(), "HELLO_ACK") != 0 || countAction253(tapOf253(e.paulConn).take(), "HELLO_ACK") != 0 {
+		t.Error("jamais de HELLO_ACK vers la TV ni vers un VJoueur")
+	}
+	if countAction253(tapOf253(e.a1).take(), "HELLO_ACK") != 0 || countAction253(tapOf253(e.an).take(), "HELLO_ACK") != 0 {
+		t.Error("HELLO_ACK est ciblé sur l'émetteur du HELLO")
+	}
+}
+
+func TestLaunchLock253_OwnerIsTheSameStringAsTheHelloAckClientID(t *testing.T) {
+	e := helloEnv253(t)
+	collectRaw253(e.a1, 50*time.Millisecond)
+	e.send(t, e.admin1, "admin", "HELLO", map[string]interface{}{})
+	m, ok := waitFrame253(e.a1, "HELLO_ACK", nil)
+	if !ok {
+		t.Fatal("HELLO_ACK attendu")
+	}
+	var p struct {
+		ClientID string `json:"CLIENT_ID"`
+	}
+	_ = json.Unmarshal(m, &p)
+	e.openLock(t, e.admin1)
+	e.waitLock(func(l lockState253) bool { return l.Active })
+	if p.ClientID == "" || e.lock().Owner != p.ClientID {
+		t.Errorf("LAUNCH_LOCK.OWNER (%q) == HELLO_ACK.CLIENT_ID (%q) : c'est ainsi que le client se reconnaît propriétaire", e.lock().Owner, p.ClientID)
 	}
 }
