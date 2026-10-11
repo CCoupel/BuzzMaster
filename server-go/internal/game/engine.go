@@ -417,6 +417,7 @@ func NewEngine() *Engine {
 			// until it is selected or started (GameTime used to stay 0 = whole history).
 			GameTime:   time.Now().UnixMicro(),
 			LaunchLock: LaunchLock{},
+			Rounds:     []Round{},
 			// RAFALE (v8.0.0, #107): initialize empty (not nil) so JSON
 			// serializes []/{} (not null) — same "no omitempty" discipline
 			// as MEMOTION/ARDOISE above (contracts/rafale.md §4).

@@ -35,13 +35,28 @@ func (a *App) reloadRounds() {
 	a.engine.SetRounds(server.LoadRoundsFile(a.questionsDirPath()).Rounds)
 }
 
+// currentRounds returns the rounds as stored in rounds.json (the source of truth, read fresh:
+// an edit of the file — restore, tests — is seen at once) and keeps GameState.ROUNDS in step.
+func (a *App) currentRounds() []game.Round {
+	rounds := server.LoadRoundsFile(a.questionsDirPath()).Rounds
+	have := a.engine.GetRounds()
+	same := len(have) == len(rounds)
+	for i := 0; same && i < len(rounds); i++ {
+		same = have[i] == rounds[i]
+	}
+	if !same {
+		a.engine.SetRounds(rounds)
+	}
+	return rounds
+}
+
 // orderedQuestions returns the questions of the quiz in THE play order (rounds + ORDER).
 func (a *App) orderedQuestions() []server.OrderedQuestion {
 	raw := make([]map[string]interface{}, 0)
 	for _, q := range a.loadQuestions() {
 		raw = append(raw, q)
 	}
-	return server.OrderQuestions(raw, a.engine.GetRounds())
+	return server.OrderQuestions(raw, a.currentRounds())
 }
 
 // computeRoundContext derives GameState.ROUND_CONTEXT for the question currentID
@@ -91,7 +106,7 @@ func (a *App) refreshRoundContext() {
 	if st.Question != nil {
 		id = st.Question.ID
 	}
-	a.engine.SetRoundContext(computeRoundContext(a.orderedQuestions(), a.engine.GetRounds(), id))
+	a.engine.SetRoundContext(computeRoundContext(a.orderedQuestions(), a.currentRounds(), id))
 }
 
 // questionNumericIDs lists the numeric directory names taken in the questions directory.

@@ -347,6 +347,11 @@ type NextQuestionPayload struct {
 	Time            int    `json:"TIME"`
 	CurrentPosition int    `json:"CURRENT_POSITION"`
 	TotalQuestions  int    `json:"TOTAL_QUESTIONS"`
+	// v11.2, #245: round of the NEXT question ("" = Sans manche), its name, and whether it opens
+	// another round than the current question. Always present.
+	RoundID   string `json:"ROUND_ID"`
+	RoundName string `json:"ROUND_NAME"`
+	NewRound  bool   `json:"NEW_ROUND"`
 }
 
 // CreditPointsPayload is shared by both directions of the code review

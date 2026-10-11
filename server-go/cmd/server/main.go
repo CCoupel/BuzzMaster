@@ -1646,7 +1646,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleHideQRCode()
 
 	case protocol.ActionEntracteSet:
-		a.handleEntracteSet(msg)
+		a.handleEntracteSet(msg, updateSender{incoming.ClientID, clientType})
 
 	case protocol.ActionUpdateEntracteConfig:
 		a.handleUpdateEntracteConfig(msg)
@@ -2313,7 +2313,13 @@ func (a *App) handleReady(msg *protocol.Message) {
 	}
 
 	a.logger.Info(game.LogComponentEngine, "READY question=%s", payload.Question)
+	// #245: ROUND_CONTEXT of the question being selected, set BEFORE Ready() so that the
+	// UPDATE its state change broadcasts already carries it.
+	a.engine.SetRoundContext(computeRoundContext(a.orderedQuestions(), a.currentRounds(), payload.Question))
 	a.engine.Ready(payload.Question, question)
+	if st := a.engine.GetState(); st.Question == nil || st.Question.ID != payload.Question {
+		a.refreshRoundContext() // Ready() refused or selected another question: keep the context truthful
+	}
 	a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
 	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
 	// question selection is one of the "quatre moments" — Ready() just
@@ -2470,6 +2476,7 @@ func (a *App) handleDelete(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentApp, "Deleted question: %s (path: %s)", payload.ID, questionPath)
 	}
 
+	a.refreshRoundContext() // #245: positions / totals of the rounds changed
 	// Broadcast updated questions list (like ESP32: sendQuestions())
 	a.broadcastQuestions()
 	a.broadcastNextQuestion() // #155/#156 B5 — a deleted question may have been "next"
@@ -3740,10 +3747,20 @@ func (a *App) handleHideQRCode() {
 // logged by the engine itself and produces no broadcast, matching the
 // existing allow-list rejection convention (contract: "ne renvoie rien au
 // client").
-func (a *App) handleEntracteSet(msg *protocol.Message) {
+func (a *App) handleEntracteSet(msg *protocol.Message, senders ...updateSender) {
 	var payload protocol.EntracteSetPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Error parsing ENTRACTE_SET payload: %v", err)
+		return
+	}
+
+	var sender updateSender
+	if len(senders) > 0 {
+		sender = senders[0]
+	}
+	// #245: the animateur may END an entracte but never start one (admin only).
+	if payload.Active && sender.ClientType == server.ClientTypeAnim {
+		server.LogWarn(game.LogComponentApp, "ENTRACTE_SET_ANIM_ACTIVATE_REFUSED client=%q", sender.ClientID)
 		return
 	}
 
@@ -3769,6 +3786,11 @@ func (a *App) handleEntracteSet(msg *protocol.Message) {
 		a.ambiance().NotifyState()
 		a.notifySound(audio.CueEntracteFin)
 		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
+		programmed := false
+		if st := a.engine.GetState(); st.Question != nil && st.Question.Type == game.QuestionTypeEntracte {
+			programmed = true
+		}
+		server.LogInfo(game.LogComponentApp, "ENTRACTE_ENDED client=%q type=%q programmed=%v", sender.ClientID, string(sender.ClientType), programmed)
 	}
 
 	a.broadcastUpdate()
@@ -4333,7 +4355,7 @@ var suspendedDuringLaunch = map[string]bool{
 	protocol.ActionReady: true, protocol.ActionForceReady: true, protocol.ActionStart: true,
 	protocol.ActionStop: true, protocol.ActionPause: true, protocol.ActionContinue: true,
 	protocol.ActionReveal: true, protocol.ActionRemote: true, protocol.ActionQuestionSound: true,
-	protocol.ActionEntracteSet: true, protocol.ActionMemorySetTeams: true, protocol.ActionMotionSetTeams: true,
+	protocol.ActionMemorySetTeams: true, protocol.ActionMotionSetTeams: true,
 	protocol.ActionMotionSelect: true, protocol.ActionMotionFlip: true, protocol.ActionMotionStopTimer: true,
 	protocol.ActionMotionReveal: true, protocol.ActionMotionDone: true, protocol.ActionRafaleValidate: true,
 	protocol.ActionRafaleInvalidate: true, protocol.ActionRafaleSetTeams: true, protocol.ActionFlipMemoryCard: true,
@@ -4364,6 +4386,19 @@ func (a *App) launchGate(clientID string, clientType server.ClientType, msg *pro
 		}
 		server.LogWarn(game.LogComponentApp, "ACTION_REFUSED_LAUNCH client=%q type=%q action=%q", clientID, string(clientType), msg.Action)
 		if rm, err := protocol.NewMessage(protocol.ActionNewGameRefused, protocol.NewGameRefusedPayload{Reason: "LAUNCH_IN_PROGRESS"}); err == nil {
+			a.wsHub.SendToClient(clientID, rm)
+		}
+		return true
+	case msg.Action == protocol.ActionEntracteSet:
+		// Only ENTRACTE_SET{ACTIVE:true} is game conduct; leaving an entracte is never blocked (#245).
+		var p struct {
+			Active *bool `json:"ACTIVE"`
+		}
+		if json.Unmarshal(msg.Msg, &p) == nil && p.Active != nil && !*p.Active {
+			return false // only an explicit ACTIVE:false (leaving the entracte) is allowed
+		}
+		server.LogWarn(game.LogComponentApp, "ACTION_REFUSED_LAUNCH client=%q type=%q action=%q", clientID, string(clientType), msg.Action)
+		if rm, err := protocol.NewMessage(protocol.ActionActionRefused, protocol.ActionRefusedPayload{Action: msg.Action, Reason: "LAUNCH_IN_PROGRESS"}); err == nil {
 			a.wsHub.SendToClient(clientID, rm)
 		}
 		return true
@@ -6974,41 +7009,22 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 		currentID = state.Question.ID
 	}
 
-	type sortableQuestion struct {
-		id    string
-		order int
-		data  map[string]interface{}
+	// #245: THE play order (group "Sans manche" first, then the rounds, then ORDER / ID),
+	// and — v11.2 — ENTRACTE entries are no longer skipped: "à suivre" proposes them.
+	rounds := a.currentRounds()
+	raw := make([]map[string]interface{}, 0)
+	for _, q := range a.loadQuestions() {
+		raw = append(raw, q)
 	}
-
-	raw := a.loadQuestions()
-	sorted := make([]sortableQuestion, 0, len(raw))
-	for _, q := range raw {
-		id, ok := q["ID"].(string)
-		if !ok || id == "" {
-			continue // sortQuestionsByOrder filters out entries with no ID
-		}
-		order := 0
-		if orderRaw, present := q["ORDER"]; present {
-			switch v := orderRaw.(type) {
-			case float64:
-				order = int(v)
-			case string:
-				if n, err := strconv.Atoi(v); err == nil {
-					order = n
-				}
-			}
-		} else if n, err := strconv.Atoi(id); err == nil {
-			order = n
-		}
-		sorted = append(sorted, sortableQuestion{id: id, order: order, data: q})
-	}
-	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].order < sorted[j].order })
+	sorted := server.OrderQuestions(raw, rounds)
 
 	currentIndex := -1
+	currentRound := ""
 	if currentID != "" {
 		for i, sq := range sorted {
-			if sq.id == currentID {
+			if sq.ID == currentID {
 				currentIndex = i
+				currentRound = sq.RoundID
 				break
 			}
 		}
@@ -7021,24 +7037,23 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 	totalQuestions := len(sorted)
 
 	for i := currentIndex + 1; i < len(sorted); i++ {
-		status := string(a.engine.GetQuestionStatus(sorted[i].id))
+		status := string(a.engine.GetQuestionStatus(sorted[i].ID))
 		if nextQuestionExcludedStatuses[status] {
 			continue
 		}
-		q := sorted[i].data
-		// #214: an ENTRACTE entry is a pause, not "the next question" — never
-		// shown as the à-suivre preview (contract game-state.md §"Second
-		// déclencheur", "score, palmarès, à suivre"). Parity requirement
-		// with GamePage.jsx's own nextUnplayedQuestion (this function's own
-		// doc comment above) — dev-frontend mirrors the same exclusion
-		// client-side.
-		if qType, _ := q["TYPE"].(string); qType == string(game.QuestionTypeEntracte) {
-			continue
-		}
+		q := sorted[i].Data
 		payload := &protocol.NextQuestionPayload{
-			ID:              sorted[i].id,
+			ID:              sorted[i].ID,
 			CurrentPosition: currentPosition,
 			TotalQuestions:  totalQuestions,
+			RoundID:         sorted[i].RoundID,
+			NewRound:        sorted[i].RoundID != currentRound,
+		}
+		for _, r := range rounds {
+			if r.ID == sorted[i].RoundID {
+				payload.RoundName = r.Name
+				break
+			}
 		}
 		if v, ok := q["QUESTION"].(string); ok {
 			payload.Question = v

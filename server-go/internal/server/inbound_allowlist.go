@@ -110,7 +110,7 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// the "conduite en direct" block above. A pause engages the whole room,
 	// not just the round in progress; the animateur sees it (filter +
 	// indicator) but cannot trigger or lift it.
-	protocol.ActionEntracteSet: {ClientTypeAdmin},
+	protocol.ActionEntracteSet: {ClientTypeAdmin, ClientTypeAnim}, // v11.2, #245: anim may END an entracte (ACTIVE:true refused in the handler)
 	// UPDATE_ENTRACTE_CONFIG (v6.5.2, #119, C1, contracts/websocket-actions.md
 	// §"UPDATE_ENTRACTE_CONFIG"): saves the panel configuration from the Quiz
 	// page — admin only, same reasoning as ENTRACTE_SET above.
