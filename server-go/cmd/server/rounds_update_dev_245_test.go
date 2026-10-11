@@ -1,6 +1,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"encoding/json"
@@ -102,5 +103,114 @@ func TestRoundsUpdate_CreateKeepDeleteAndRefusals(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "1")); !os.IsNotExist(err) {
 		t.Error("le dossier de la question supprimée a disparu")
+	}
+}
+
+// --- review #245 : identité = dossier, chemins sûrs, fichier illisible, question en cours ---------------------------------
+
+func TestRoundsUpdate_FolderNameIsTheIdentityAndAnomaliesRefuseTheWholeUpdate(t *testing.T) {
+	app := newAwardedTeamsTriggerTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", nil, nil)
+	writeQuestionFile(t, dir, "2", nil, nil)
+	// folder "2" claims to be question "1": the content never decides the identity
+	q := questionFile245(t, dir, "2")
+	q["ID"] = "1"
+	data, _ := json.Marshal(q)
+	if err := os.WriteFile(filepath.Join(dir, "2", "question.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, _ := app.applyRoundsUpdate(roundsReq245(t, `{"ROUNDS":[{"NAME":"A","QUESTIONS":["1"],"ENTRACTES":false}],"UNASSIGNED":["2"],"DELETED_ROUNDS":[]}`))
+	if res.Status != "REFUSED" || res.Reason != "INCONSISTENT_STORE" || len(res.Questions) != 1 || res.Questions[0] != "2" {
+		t.Fatalf("ID ≠ dossier : refus global attendu, obtenu %+v", res)
+	}
+	if rf := server.LoadRoundsFile(dir); len(rf.Rounds) != 0 {
+		t.Error("rien n'est écrit")
+	}
+	for _, id := range []string{"1", "2"} {
+		if _, err := os.Stat(filepath.Join(dir, id, "question.json")); err != nil {
+			t.Errorf("la question %s est intacte : %v", id, err)
+		}
+	}
+}
+
+func TestRoundsUpdate_PathTraversalIdsNeverReachAFileOperation(t *testing.T) {
+	app := newAwardedTeamsTriggerTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", nil, nil)
+	outside := filepath.Join(filepath.Dir(dir), "precious")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, evil := range []string{"../precious", "../..", "..", ".", "a/b", "1/../..", ""} {
+		raw := `{"ROUNDS":[{"NAME":"A","QUESTIONS":["1","` + evil + `"],"ENTRACTES":false}],"UNASSIGNED":[]}`
+		res, _ := app.applyRoundsUpdate(roundsReq245(t, raw))
+		if res.Status != "REFUSED" {
+			t.Errorf("id %q : refus attendu, obtenu %+v", evil, res)
+		}
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatal("le dossier hors du répertoire des questions doit rester intact")
+	}
+	if _, err := server.SafeQuestionPath(dir, "../precious"); err == nil {
+		t.Error("SafeQuestionPath doit refuser une sortie du répertoire")
+	}
+}
+
+func TestRoundsUpdate_UnreadableRoundsFileRefusesAndKeepsACopy(t *testing.T) {
+	app := newAwardedTeamsTriggerTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", nil, nil)
+	if err := os.WriteFile(server.RoundsFilePath(dir), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, _ := app.applyRoundsUpdate(roundsReq245(t, `{"ROUNDS":[],"UNASSIGNED":["1"]}`))
+
+	if res.Status != "REFUSED" || res.Reason != "ROUNDS_FILE_UNREADABLE" {
+		t.Fatalf("rounds.json illisible : %+v", res)
+	}
+	if b, err := os.ReadFile(server.RoundsFilePath(dir) + ".corrupt"); err != nil || string(b) != "{not json" {
+		t.Errorf("copie .corrupt attendue : %v %q", err, b)
+	}
+}
+
+func TestRoundsUpdate_NextIDNeverReusesARoundIDSeenInAQuestion(t *testing.T) {
+	app := newAwardedTeamsTriggerTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", nil, map[string]interface{}{"ROUND_ID": "r7"}) // orphan: round r7 is gone
+	res, _ := app.applyRoundsUpdate(roundsReq245(t, `{"ROUNDS":[{"NAME":"Nouvelle","QUESTIONS":["1"],"ENTRACTES":false}],"UNASSIGNED":[]}`))
+	if res.Status != "APPLIED" || res.Rounds[0].ID != "r8" {
+		t.Fatalf("l'identifiant r7 vu dans une question n'est jamais réutilisé : %+v", res)
+	}
+}
+
+func TestRoundsUpdate_DeletingTheQuestionInProgressIsRefused(t *testing.T) {
+	app := newAwardedTeamsTriggerTestApp(t)
+	dir := app.config.Storage.QuestionsDir
+	writeQuestionFile(t, dir, "1", nil, nil)
+	writeQuestionFile(t, dir, "2", nil, nil)
+	res, _ := app.applyRoundsUpdate(roundsReq245(t, `{"ROUNDS":[{"NAME":"A","QUESTIONS":["1"],"ENTRACTES":false}],"UNASSIGNED":["2"]}`))
+	if res.Status != "APPLIED" {
+		t.Fatal(res)
+	}
+	app.engine.SetPhase(game.PhaseStopped)
+	app.engine.Ready("", &game.Question{ID: "1", Type: game.QuestionTypeSpeedy})
+	app.engine.SetPhase(game.PhaseStarted)
+
+	res, _ = app.applyRoundsUpdate(roundsReq245(t, `{"ROUNDS":[],"UNASSIGNED":["2"],"DELETED_ROUNDS":[{"ID":"r1","QUESTIONS":"DELETE"}]}`))
+
+	if res.Status != "REFUSED" || res.Reason != "QUESTION_IN_PROGRESS" {
+		t.Fatalf("question en cours : %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "1", "question.json")); err != nil {
+		t.Error("la question en cours n'est pas supprimée")
+	}
+	// at rest the same deletion goes through
+	app.engine.SetPhase(game.PhaseStopped)
+	res, _ = app.applyRoundsUpdate(roundsReq245(t, `{"ROUNDS":[],"UNASSIGNED":["2"],"DELETED_ROUNDS":[{"ID":"r1","QUESTIONS":"DELETE"}]}`))
+	if res.Status != "APPLIED" || len(res.DeletedQuestions) != 1 {
+		t.Fatalf("hors question en cours : %+v", res)
 	}
 }

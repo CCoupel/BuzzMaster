@@ -8947,3 +8947,16 @@ func (e *Engine) SetRoundContext(c RoundContext) {
 	e.state.RoundContext = c
 	e.mu.Unlock()
 }
+
+// ForgetQuestionStatuses drops the stored status of deleted questions (#245 review) and persists.
+func (e *Engine) ForgetQuestionStatuses(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	e.mu.Lock()
+	for _, id := range ids {
+		delete(e.questionStatuses, id)
+	}
+	e.mu.Unlock()
+	safeGo("SaveStatuses", e.SaveStatuses)
+}

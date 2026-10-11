@@ -144,13 +144,27 @@ func allocateQuestionDir(dir string) (string, string, error) {
 	return "", "", fmt.Errorf("question ids exhausted")
 }
 
-// writeQuestionJSON writes question.json (indented, like REORDER_QUESTIONS).
-func writeQuestionJSON(dir string, q map[string]interface{}) error {
+// writeQuestionJSON writes question.json of the question id inside qdir (indented, like
+// REORDER_QUESTIONS), after validating the id and that the path stays inside qdir.
+func writeQuestionJSON(qdir, id string, q map[string]interface{}) error {
+	dir, err := server.SafeQuestionPath(qdir, id)
+	if err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(q, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "question.json"), data, 0o644)
+}
+
+// cloneQuestion shallow-copies a question map (the originals are kept for comparison).
+func cloneQuestion(q map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(q))
+	for k, v := range q {
+		out[k] = v
+	}
+	return out
 }
 
 // newAutoEntracte builds a standard ENTRACTE question (#214) for a round boundary.
@@ -176,25 +190,43 @@ func roundResult(status, reason string) protocol.RoundsUpdateResultPayload {
 
 // applyRoundsUpdate validates the WHOLE request, then applies it (contracts §ROUNDS_UPDATE).
 // It returns the RESULT payload and the journal line.
+//
+// Order of effects (#245 review M2, "never lose a question"): (1) reserve the ids of the
+// automatic entractes (refusal BEFORE any effect), (2) write rounds.json (failure = abort
+// without effect), (3) rewrite the question.json files collecting the errors, (4) write the
+// entractes, (5) delete the question folders LAST (a stop on the way leaves extra questions,
+// never a loss), (6) SetRounds and APPLIED only on success; any failure before (5) restores
+// rounds.json, deletes nothing, leaves the memory state untouched and answers WRITE_FAILED.
 func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.RoundsUpdateResultPayload, string) {
 	qdir := a.questionsDirPath()
 	server.QuestionFilesMu.Lock()
 	defer server.QuestionFilesMu.Unlock()
 
-	rf := server.LoadRoundsFile(qdir)
+	rf, rfErr := server.LoadRoundsFileChecked(qdir)
+	files, anomalies := server.ReadQuestionMapsChecked(qdir)
 	existingRounds := map[string]game.Round{}
 	for _, r := range rf.Rounds {
 		existingRounds[r.ID] = r
 	}
-	files := server.ReadQuestionMaps(qdir)
 	byID := map[string]map[string]interface{}{}
 	for _, q := range files {
-		id, _ := q["ID"].(string)
+		id, _ := q["ID"].(string) // = directory name (ReadQuestionMapsChecked)
 		byID[id] = q
+		if rid, _ := q["ROUND_ID"].(string); rid != "" {
+			rf.BumpNextID(rid) // an id seen in a question is never reused
+		}
 	}
 
 	refuse := func(reason string) (protocol.RoundsUpdateResultPayload, string) {
 		return roundResult("REFUSED", reason), reason
+	}
+	if rfErr != nil {
+		return refuse("ROUNDS_FILE_UNREADABLE")
+	}
+	if len(anomalies) > 0 {
+		res, line := refuse("INCONSISTENT_STORE")
+		res.Questions = anomalies
+		return res, line
 	}
 
 	// ---- validation (nothing is written before every check passed)
@@ -270,7 +302,8 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 	}
 	var unknown []string
 	for id := range cited {
-		if _, ok := byID[id]; !ok {
+		// an id that is not a valid folder name is unknown by construction (never reaches a path)
+		if _, ok := byID[id]; !ok || !server.ValidQuestionID(id) {
 			unknown = append(unknown, id)
 		}
 	}
@@ -297,45 +330,58 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 		res.Questions = incomplete
 		return res, line
 	}
-	wantEntractes := 0
-	for _, r := range req.Rounds {
-		if r.ID == "" && (r.Entractes == nil || *r.Entractes) {
-			wantEntractes += 2
-		}
-	}
-	if wantEntractes > 0 {
-		free := 0
-		taken := takenQuestionIDs(qdir)
-		for i := 1; i < 1000; i++ {
-			if !taken[i] {
-				free++
-			}
-		}
-		if wantEntractes > free {
-			return refuse("QUESTION_ID_EXHAUSTED")
-		}
-	}
 
-	// ---- application
-	ordered := server.OrderQuestions(files, rf.Rounds) // play order, for KEEP / DELETE sets
-	var deletedQuestions []string
-	var keptToUnassigned []string
+	// Questions that this message would delete (DELETE decision, not cited).
+	ordered := server.OrderQuestions(files, rf.Rounds)
+	var toDelete, keptToUnassigned []string
 	for _, oq := range ordered {
 		if cited[oq.ID] {
 			continue
 		}
 		switch deleted[oq.RoundID] {
 		case "DELETE":
-			if err := os.RemoveAll(filepath.Join(qdir, oq.ID)); err != nil {
-				server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: failed to delete question %s: %v", oq.ID, err)
-			}
-			delete(byID, oq.ID)
-			deletedQuestions = append(deletedQuestions, oq.ID)
+			toDelete = append(toDelete, oq.ID)
 		case "KEEP":
 			keptToUnassigned = append(keptToUnassigned, oq.ID)
 		}
 	}
+	// Never delete the question being played (selected and not at rest).
+	if st := a.engine.GetState(); st.Question != nil {
+		switch st.Phase {
+		case game.PhasePrepare, game.PhaseReady, game.PhaseCountdown, game.PhaseStarted, game.PhasePaused:
+			for _, id := range toDelete {
+				if id == st.Question.ID {
+					res, line := refuse("QUESTION_IN_PROGRESS")
+					res.Questions = []string{id}
+					return res, line
+				}
+			}
+		}
+	}
 
+	// ---- (1) reserve the entracte ids BEFORE any effect
+	wantEntractes := 0
+	for _, r := range req.Rounds {
+		if r.ID == "" && (r.Entractes == nil || *r.Entractes) {
+			wantEntractes += 2
+		}
+	}
+	var reservedIDs, reservedDirs []string
+	releaseReserved := func() {
+		for _, d := range reservedDirs {
+			_ = os.Remove(d) // still empty: only a mkdir was done
+		}
+	}
+	for i := 0; i < wantEntractes; i++ {
+		id, dir, err := allocateQuestionDir(qdir)
+		if err != nil {
+			releaseReserved()
+			return refuse("QUESTION_ID_EXHAUSTED")
+		}
+		reservedIDs, reservedDirs = append(reservedIDs, id), append(reservedDirs, dir)
+	}
+
+	// ---- build the plan (no I/O yet)
 	newRF := server.RoundsFile{Rounds: make([]game.Round, 0, len(req.Rounds)), NextID: rf.NextID}
 	result := roundResult("APPLIED", "")
 	type placement struct {
@@ -343,7 +389,9 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 		ids     []string
 	}
 	var layout []placement
+	newEntractes := map[string]map[string]interface{}{} // id -> content
 	created := 0
+	nextReserved := 0
 	for _, r := range req.Rounds {
 		id := r.ID
 		ids := append([]string{}, r.Questions...)
@@ -352,23 +400,12 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 			newRF.NextID++
 			created++
 			if r.Entractes == nil || *r.Entractes {
-				startID, startDir, err1 := allocateQuestionDir(qdir)
-				endID, endDir, err2 := allocateQuestionDir(qdir)
-				if err1 != nil || err2 != nil {
-					server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: cannot allocate entracte ids: %v %v", err1, err2)
-					return refuse("QUESTION_ID_EXHAUSTED")
-				}
+				startID, endID := reservedIDs[nextReserved], reservedIDs[nextReserved+1]
+				nextReserved += 2
 				start := a.newAutoEntracte(startID, "Début de la manche "+r.Name)
 				end := a.newAutoEntracte(endID, "Fin de la manche "+r.Name)
 				start["ROUND_ID"], end["ROUND_ID"] = id, id
-				start["ORDER"], end["ORDER"] = 0, len(ids)+1
-				if err := writeQuestionJSON(startDir, start); err != nil {
-					server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: write entracte %s: %v", startID, err)
-				}
-				if err := writeQuestionJSON(endDir, end); err != nil {
-					server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: write entracte %s: %v", endID, err)
-				}
-				byID[startID], byID[endID] = start, end
+				newEntractes[startID], newEntractes[endID] = start, end
 				ids = append([]string{startID}, ids...)
 				ids = append(ids, endID)
 				result.CreatedEntractes = append(result.CreatedEntractes, protocol.RoundsCreatedEntractes{RoundID: id, StartID: startID, EndID: endID})
@@ -380,42 +417,99 @@ func (a *App) applyRoundsUpdate(req protocol.RoundsUpdatePayload) (protocol.Roun
 	unassigned := append(append([]string{}, req.Unassigned...), keptToUnassigned...)
 	layout = append([]placement{{roundID: "", ids: unassigned}}, layout...)
 
+	// ---- (2) rounds.json first: a failure aborts without any effect
+	oldRF := server.RoundsFile{Rounds: rf.Rounds, NextID: rf.NextID}
 	if err := server.SaveRoundsFile(qdir, newRF); err != nil {
+		releaseReserved()
 		server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: cannot write rounds.json: %v", err)
+		return refuse("WRITE_FAILED")
 	}
+	rollback := func(failed []string, why string) (protocol.RoundsUpdateResultPayload, string) {
+		_ = server.SaveRoundsFile(qdir, oldRF) // best effort: back to the previous rounds
+		for id := range newEntractes {
+			if p, err := server.SafeQuestionPath(qdir, id); err == nil {
+				_ = os.RemoveAll(p) // only the entractes created by THIS message
+			}
+		}
+		res, line := refuse("WRITE_FAILED")
+		res.Questions = failed
+		server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: %s — rounds.json restored, nothing deleted", why)
+		return res, line
+	}
+
+	// ---- (3) question.json rewrites, errors collected (only files that change)
+	var failed []string
 	moved := 0
 	for _, pl := range layout {
 		for pos, id := range pl.ids {
+			if _, isNew := newEntractes[id]; isNew {
+				continue // written in (4)
+			}
 			q := byID[id]
 			if q == nil {
 				continue
 			}
 			curRound, _ := q["ROUND_ID"].(string)
-			curOrder := server.QuestionOrderValue(q)
 			_, hasOrder := q["ORDER"]
-			if curRound == pl.roundID && hasOrder && curOrder == pos {
+			if curRound == pl.roundID && hasOrder && server.QuestionOrderValue(q) == pos {
 				continue // unchanged: file left alone
 			}
+			updated := cloneQuestion(q)
 			if pl.roundID == "" {
-				delete(q, "ROUND_ID")
+				delete(updated, "ROUND_ID")
 			} else {
-				q["ROUND_ID"] = pl.roundID
+				updated["ROUND_ID"] = pl.roundID
 			}
-			q["ORDER"] = pos
-			if err := writeQuestionJSON(filepath.Join(qdir, id), q); err != nil {
+			updated["ORDER"] = pos
+			if err := writeQuestionJSON(qdir, id, updated); err != nil {
 				server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: write question %s: %v", id, err)
+				failed = append(failed, id)
+				continue
 			}
 			if curRound != pl.roundID {
 				moved++
 			}
 		}
 	}
+	// ---- (4) the automatic entractes
+	for _, pl := range layout {
+		for pos, id := range pl.ids {
+			content, isNew := newEntractes[id]
+			if !isNew {
+				continue
+			}
+			content["ORDER"] = pos
+			if err := writeQuestionJSON(qdir, id, content); err != nil {
+				server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: write entracte %s: %v", id, err)
+				failed = append(failed, id)
+			}
+		}
+	}
+	if len(failed) > 0 {
+		sort.Strings(failed)
+		return rollback(failed, fmt.Sprintf("%d file(s) not written", len(failed)))
+	}
 
+	// ---- (5) deletions LAST; only what really disappeared is reported
+	for _, id := range toDelete {
+		p, err := server.SafeQuestionPath(qdir, id)
+		if err != nil {
+			server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: refusing to delete %q: %v", id, err)
+			continue
+		}
+		if err := os.RemoveAll(p); err != nil {
+			server.LogError(game.LogComponentApp, "ROUNDS_UPDATE: failed to delete question %s: %v", id, err)
+			continue
+		}
+		result.DeletedQuestions = append(result.DeletedQuestions, id)
+	}
+	a.engine.ForgetQuestionStatuses(result.DeletedQuestions)
+
+	// ---- (6) memory state and answer
 	a.engine.SetRounds(newRF.Rounds)
 	result.Rounds = append([]game.Round{}, newRF.Rounds...)
-	result.DeletedQuestions = append(result.DeletedQuestions, deletedQuestions...)
 	line := fmt.Sprintf("rounds=%d created=%d deleted_rounds=%d entractes=%d moved=%d deleted_questions=%d",
-		len(newRF.Rounds), created, len(req.DeletedRounds), len(result.CreatedEntractes), moved, len(deletedQuestions))
+		len(newRF.Rounds), created, len(req.DeletedRounds), len(result.CreatedEntractes), moved, len(result.DeletedQuestions))
 	return result, line
 }
 
