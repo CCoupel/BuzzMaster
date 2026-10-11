@@ -66,6 +66,10 @@ func twa227WireSound(t *testing.T) (*App, *audio.FakeOutput) {
 	app.config.Storage.QuestionsDir = t.TempDir()
 	app.config.Sound.Enabled = true
 	t.Cleanup(func() { app.config.Sound.Enabled = false })
+	// #257/#233: registered AFTER the config reset so it runs BEFORE it (LIFO): the engine
+	// timers started by the test (StartImmediate, countdown) are stopped first, so no leftover
+	// goroutine reads the shared config while the next test rewrites it.
+	t.Cleanup(func() { app.engine.Stop() })
 	app.setupCallbacks()
 
 	fake := audio.NewFakeOutput()
