@@ -2,6 +2,25 @@
 
 ---
 
+## [20261012] — Manches : regroupement et ordre des questions (#245, v11.2, cadrage)
+
+> Défauts de cadrage, à confirmer par l'utilisateur, en même temps que les maquettes (rapport planner) : « Sans manche » en dernier ; repli des manches mémorisé par navigateur ; questions générées par l'IA dans « Sans manche ».
+
+- **[NEW]** `models.md` §Manches :
+  - `Round {ID, NAME}` stocké dans `data/files/questions/rounds.json` (il voyage avec la sauvegarde des questions) ;
+  - champ de question `ROUND_ID` ;
+  - règle d'ordre unique : manches, puis « Sans manche », puis `ORDER` ;
+  - **aucune migration** : sans manche, l'ordre est identique à v11.1.
+- **[NEW]** `game-state.md` — `GameState.ROUNDS` (toujours sérialisé, tous clients web).
+- **[NEW]** `websocket-actions.md` §ROUNDS_UPDATE / ROUNDS_UPDATE_RESULT (admin seulement) : structure complète en une action, refus global, une question n'est jamais supprimée ; allow-list ; permise pendant `LAUNCH_LOCK`.
+- **[CHANGED]** `websocket-actions.md` §NEXT_QUESTION — `ROUND_ID`, `ROUND_NAME`, `NEW_ROUND` (additifs). §REORDER_QUESTIONS — conservée pour la compatibilité.
+- **[CHANGED]** `models.md` Question — `ORDER` = position dans la manche.
+- **[CHANGED]** `http-endpoints.md` — `round_id` à la création, `ROUND_ID` conservé à la modification ; sauvegarde et IA.
+- **[NEW]** `logging.md` §3.2 septies.
+- Aucune BREAKING.
+
+---
+
 ## [20261012] — Tablettes : plus de réponses des autres équipes ni de bonne réponse avant l'heure (#258, v11.2)
 
 - **[CHANGED]** `vplayer-payload-filter.md` §7 (nouveau) :

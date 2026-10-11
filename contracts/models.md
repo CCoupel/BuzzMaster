@@ -191,7 +191,8 @@ interface Question {
   TIME: number           // Durée en secondes
   CATEGORY?: string
   POINTS_TARGET: PointsTarget
-  ORDER: number          // Position dans la liste
+  ORDER: number          // Position dans la liste (à l'intérieur de sa manche depuis v11.2, #245)
+  ROUND_ID?: string      // v11.2 (#245) — manche de la question ; absent, "" ou inconnu = « Sans manche »
   STATUS: QuestionStatus
   MEDIA?: string         // URL image question
   MEDIA_ANSWER?: string  // URL image réponse
@@ -566,3 +567,27 @@ Valeurs valides pour `TYPE` :
 | `"MEMORY"` | Jeu de mémoire |
 | `"MEMOTION"` | Grille de cartes animées |
 | `"ARDOISE"` | ✨ Saisie libre via clavier virtuel (v5.6.0) |
+
+
+---
+
+## Manches (`ROUNDS`) ✨ (v11.2, #245)
+
+Regroupement des questions du quiz en **manches** ordonnées. Défauts proposés au cadrage (à confirmer, rapport planner) marqués *(défaut)*.
+
+```typescript
+interface Round {
+  ID: string    // "r1", "r2"… attribué par le serveur, jamais réutilisé dans le fichier
+  NAME: string  // 1 à 60 caractères après suppression des espaces de bord ; doublons autorisés
+}
+```
+
+- **Stockage** : `data/files/questions/rounds.json` = `{ "ROUNDS": Round[], "NEXT_ID": number }`. Le fichier vit **dans le dossier des questions**, qu'une sauvegarde « questions » (`/backup-select?questions=true`) emporte déjà. `loadQuestions` ne lit que les sous-dossiers : le fichier n'est pas pris pour une question. Absent = **aucune manche**.
+- **Rattachement** : champ `ROUND_ID` de chaque `question.json`. Absent, `""` ou ID inconnu (manche supprimée, restauration partielle) → **« Sans manche »**. **Migration : aucune.** Les 85 fichiers existants restent sans `ROUND_ID`, et l'éditeur se présente comme aujourd'hui tant qu'aucune manche n'est créée.
+- **Ordre de jeu et d'affichage** (règle **unique**, implémentée deux fois avec un test de parité : `web/src/utils/questionOrder.js` et `getNextQuestionPayload` côté Go) :
+  1. les manches dans l'ordre de `ROUNDS` ;
+  2. puis le groupe **« Sans manche » en dernier** *(défaut)* ;
+  3. dans chaque groupe, par `ORDER` croissant, puis par `ID` numérique (règle actuelle).
+  - Sans aucune manche, l'ordre est **identique** à v11.1.
+- **Types** : `ROUND_ID` est un champ commun à tous les types de question (ENTRACTE compris). Ce n'est pas un `OwnedField` ; il n'existe pas sur une carte MEMOTION.
+- **Repli** : l'état « déplié / replié » des manches dans l'éditeur est une **préférence d'affichage locale** au navigateur (`localStorage`) *(défaut)*. Elle n'est jamais envoyée au serveur.

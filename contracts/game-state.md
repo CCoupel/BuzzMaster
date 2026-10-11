@@ -458,6 +458,12 @@ const ardoiseAnswers = gameState.ARDOISE_ANSWERS || {}
 
 ---
 
+## Manches (`ROUNDS`) ✨ (v11.2, #245)
+
+| Champ | Type | Défaut | Description |
+|-------|------|--------|-------------|
+| ROUNDS | `Round[]` (`models.md` §Manches) | `[]` | Liste **ordonnée** des manches du quiz (`ID`, `NAME`). **Toujours sérialisé**, `[]` jamais `null`. Diffusé à **tous** les clients web (admin, anim, TV, VJoueur) : il ne contient aucune donnée sensible et sert au tri et à l'indicateur de manche. La manche de la question courante se lit par `QUESTION.ROUND_ID` ; absent ou inconnu = « Sans manche ». Rechargé depuis `rounds.json` au démarrage et après chaque `ROUNDS_UPDATE` |
+
 ## Métadonnées Quiz (`QUIZ_*`)
 
 Diffusées dans `GameState`, éditées via `UPDATE_QUIZ_META`. `QUIZ_OBJECTIVES` n'est **jamais**

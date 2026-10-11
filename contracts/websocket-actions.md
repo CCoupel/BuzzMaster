@@ -40,6 +40,7 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | **QUESTION_SOUND** | ✅ | ❌ | ❌ | ✅ **(v11.1, #219)** |
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
 | **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
+| **ROUNDS_UPDATE** | ✅ | ❌ | ❌ | ❌ **(v11.2, #245 — admin seulement)** |
 | **REGIE_MESSAGE_SEND** | ✅ | ❌ | ❌ | ❌ **(v6.4.x, #167)** |
 | **REGIE_MESSAGE_CLEAR** | ✅ | ❌ | ❌ | ✅ **(v6.4.x, #167)** |
 | BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
@@ -830,7 +831,7 @@ Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFU
 > **Classement exhaustif** *(revue #253)* : ces deux listes couvrent **toutes** les actions entrantes de `handleWebMessage`. Toute action ajoutée plus tard doit être classée ici, dans le même commit que son contrat. À défaut, elle est **permise**, et le contrôle d'accès reste à la charge de la revue. Les routes HTTP d'administration ne sont pas couvertes par le verrou (hors périmètre).
 
 #### Toujours permises
-`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`), réglages (`SET_VIRTUAL_PLAYER_LIMIT` : plafond d'inscription, sans effet sur la phase ni les scores), `REBOOT` (journalisé seulement, sans effet), journaux. Protocole buzzer (`/ws/buzzer`) : `OTA_PROGRESS`, `ACK`. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
+`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`, `ROUNDS_UPDATE`), réglages (`SET_VIRTUAL_PLAYER_LIMIT` : plafond d'inscription, sans effet sur la phase ni les scores), `REBOOT` (journalisé seulement, sans effet), journaux. Protocole buzzer (`/ws/buzzer`) : `OTA_PROGRESS`, `ACK`. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
 
 #### Retour visuel
 Les clients `admin` et `anim` lisent `GameState.LAUNCH_LOCK` : hors du poste propriétaire, un bandeau « Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu suspendues » s'affiche et les commandes de jeu sont désactivées (maquette `admin_new_game__launch_overlay`). TV et VJoueur : aucun changement.
@@ -883,6 +884,46 @@ Réordonne les questions.
     "ORDER": ["3", "1", "5", "2", "4"]
   }
 }
+```
+
+> *(v11.2, #245)* Conservée pour la compatibilité : elle réécrit `ORDER` sans toucher `ROUND_ID`. L'éditeur v11.2 utilise **`ROUNDS_UPDATE`**, qui fixe à la fois les manches, leur ordre, la manche de chaque question et l'ordre interne.
+
+### ROUNDS_UPDATE ✨ (v11.2, #245)
+
+Fixe **en une action** la structure complète : liste ordonnée des manches, questions de chaque manche dans l'ordre, questions « Sans manche ». Elle couvre la création, le renommage, la suppression et le réordonnancement des manches, ainsi que le déplacement de questions dans une manche ou entre manches.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Client→Server` (`admin` seulement) |
+| Phases | toutes (édition du quiz ; permise pendant `LAUNCH_LOCK`) |
+
+| Champ | Type | Obligatoire | Description |
+|-------|------|-------------|-------------|
+| ROUNDS | array | ✅ | Manches dans l'ordre voulu, 0 à 50 |
+| ROUNDS[].ID | string | ⬜ | ID existant ; **absent ou `""` = nouvelle manche**, ID attribué par le serveur |
+| ROUNDS[].NAME | string | ✅ | 1 à 60 caractères après suppression des espaces de bord |
+| ROUNDS[].QUESTIONS | []string | ✅ | IDs des questions de la manche, dans l'ordre (peut être vide) |
+| UNASSIGNED | []string | ✅ | IDs « Sans manche », dans l'ordre |
+
+**Validation (refus global, rien appliqué)** → `ROUNDS_UPDATE_RESULT{STATUS:"REFUSED", REASON}` à l'émetteur et `WARN ROUNDS_UPDATE_REFUSED` :
+- `INVALID_NAME` : nom vide ou de plus de 60 caractères ;
+- `TOO_MANY_ROUNDS` : plus de 50 manches ;
+- `UNKNOWN_ROUND` : ID fourni mais inconnu ;
+- `DUPLICATE_QUESTION` : une question citée deux fois ;
+- `UNKNOWN_QUESTION` : ID de question inexistant sur le disque (`QUESTIONS` = liste) ;
+- `INCOMPLETE` : une question existante n'est citée nulle part (`QUESTIONS` = liste ; protège d'un client dont la liste est périmée).
+
+**Application** :
+1. Écrit `rounds.json` : manches dans l'ordre, nouvelles manches numérotées depuis `NEXT_ID`. Une manche **absente** de `ROUNDS` est **supprimée** ; ses questions sont celles que le client place dans `UNASSIGNED` ou dans d'autres manches.
+2. **Une question n'est jamais supprimée** par cette action.
+3. Pour chaque question : `ROUND_ID` (retiré si « Sans manche ») et `ORDER` = position **dans son groupe** (0-based). **Seuls les fichiers qui changent sont réécrits.**
+4. Diffuse `UPDATE` (`GameState.ROUNDS`), `QUESTIONS` (admin) et `NEXT_QUESTION` (anim). Répond `ROUNDS_UPDATE_RESULT{STATUS:"APPLIED", ROUNDS:[{ID,NAME}]}` à l'émetteur, qui y trouve les IDs attribués. Journal `INFO ROUNDS_UPDATE` (manches créées, renommées, supprimées ; nombre de questions déplacées).
+
+**Concurrence** : dernier écrit gagnant (comme `REORDER_QUESTIONS`). Le refus `INCOMPLETE` évite qu'un poste à la liste périmée fasse disparaître une question d'une manche.
+
+```json
+{ "ACTION": "ROUNDS_UPDATE", "MSG": { "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement", "QUESTIONS": ["3", "1"]}, {"NAME": "Manche finale", "QUESTIONS": ["5"]} ], "UNASSIGNED": ["2", "4"] } }
+{ "ACTION": "ROUNDS_UPDATE_RESULT", "MSG": { "STATUS": "APPLIED", "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement"}, {"ID": "r2", "NAME": "Manche finale"} ] } }
 ```
 
 ---
@@ -1288,7 +1329,7 @@ Indique à l'interface animateur la prochaine question jouable, pour permettre l
 |-----------|--------|
 | Direction | `Server→Client` |
 | Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)`. Aucun autre type de client ne reçoit cette action |
-| Trigger | HELLO d'un client animateur (état initial) ; `READY` (sélection/enchaînement de question) ; `STOP` ; `REVEAL` ; `NEW_GAME` ; `REORDER_QUESTIONS` ; `DELETE` (suppression d'une question) |
+| Trigger | HELLO d'un client animateur (état initial) ; `READY` (sélection/enchaînement de question) ; `STOP` ; `REVEAL` ; `NEW_GAME` ; `REORDER_QUESTIONS` ; **`ROUNDS_UPDATE`** (v11.2) ; `DELETE` (suppression d'une question) |
 
 #### Payload
 
@@ -1302,6 +1343,9 @@ Indique à l'interface animateur la prochaine question jouable, pour permettre l
 | TIME | int | Durée en secondes |
 | CURRENT_POSITION | int | **v6.2.x (#166)** — rang de la question **courante** dans la liste triée (1-based). `0` si aucune question courante, ou si la question courante ne figure plus dans la liste (supprimée du disque mais toujours courante côté moteur — même cas de repli que la règle §3 ci-dessous) |
 | TOTAL_QUESTIONS | int | **v6.2.x (#166)** — nombre total de questions du quiz (longueur de la liste triée), indépendamment de leur statut |
+| ROUND_ID | string | *(v11.2, #245)* Manche de la question **suivante** (`""` = Sans manche). Toujours présent |
+| ROUND_NAME | string | *(v11.2, #245)* Son nom (`""` si Sans manche) |
+| NEW_ROUND | boolean | *(v11.2, #245)* `true` si la question suivante ouvre une **autre manche** que la question courante (changement de manche à annoncer) |
 
 Les champs de la **question suivante** (`ID`, `QUESTION`, `CATEGORY`, `TYPE`, `POINTS`, `TIME`)
 sont tous absents/zéro-valeur si plus aucune question n'est jouable — fin de partie ou toutes les

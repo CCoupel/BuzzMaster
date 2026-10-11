@@ -101,6 +101,13 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `SCORE_CORRECTION_HIDDEN` | WARN | `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` avec `DISPLAY: false` **honoré** (émetteur admin) | `client`, `action`, `targets` (équipe ou joueur : montant), `question` |
 | `SCORE_CORRECTION_HIDDEN_REFUSED` | WARN | `DISPLAY: false` reçu d'un émetteur non admin → ignoré, attribution traitée comme visible | `client`, `type` (`anim`, `internal`…), `action`, `targets`, `question` — valeurs texte entre guillemets (`%q`) |
 
+### 3.2 septies Manches (v11.2, #245)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `ROUNDS_UPDATE` | INFO | Structure appliquée | `client`, `created`, `renamed`, `deleted`, `moved` (nombre de questions) |
+| `ROUNDS_UPDATE_REFUSED` | WARN | Refus | `client`, `reason`, `questions` |
+
 ### 3.2 sexies Verrou de lancement (v11.2, #253)
 
 | Événement | Niveau | Quand | Champs |

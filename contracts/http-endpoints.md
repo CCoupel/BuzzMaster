@@ -63,6 +63,7 @@ Crée ou met à jour une question.
 | time | int | ❌ | Durée en secondes (défaut: 30) |
 | category | string | ❌ | Catégorie |
 | points_target | string | ❌ | `PLAYER` ou `TEAM` |
+| round_id | string | ❌ | *(v11.2, #245)* Manche d'une **nouvelle** question (bouton « + Question » d'une manche). Ignoré si l'ID est inconnu. **À la modification d'une question existante, `ROUND_ID` est conservé tel quel** (même piège de reconstruction que `ORDER`, `MEDIA`, `SOUND`) : seul `ROUNDS_UPDATE` change la manche d'une question existante |
 | explanation | string | ❌ | **v6.4.x (#168)** — note d'explication/justification, visible de l'animateur seul. Texte libre, longueur non bornée. Écrit dans `EXPLANATION` ; **champ absent ou vide = note effacée** (voir note ci-dessous) |
 | file | file | ❌ | Image question |
 | file_answer | file | ❌ | Image réponse |
@@ -1112,3 +1113,11 @@ Réconcilie aussi `data/files/sounds/sounds.json` (manifeste, `internal/audio/sy
 après l'écriture — voir `contracts/sound.md` §7. Dans l'interface (maquette révision 4), une
 confirmation nomme explicitement combien de sons personnalisés seront écrasés avant l'action —
 comportement d'interface, hors périmètre de ce contrat HTTP.
+
+
+---
+
+### Manches et sauvegarde (v11.2, #245)
+- `GET /questions` : chaque question porte son `ROUND_ID` éventuel. La liste des manches est dans `GameState.ROUNDS`.
+- **Sauvegarde / restauration** : `data/files/questions/rounds.json` fait partie de `files/questions`, donc il est sauvegardé et restauré **avec les questions**. Une restauration remplace les manches comme elle remplace les questions. Une question qui cite une manche absente tombe dans « Sans manche ».
+- **Génération IA** (`ai-generation.md` §5.2) : les questions générées n'ont pas de `ROUND_ID`. Elles arrivent dans « Sans manche », en fin de liste *(défaut, inchangé)*.
