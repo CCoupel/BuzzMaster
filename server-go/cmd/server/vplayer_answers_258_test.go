@@ -375,3 +375,153 @@ func TestVPlayerAnswers258_MemotionQCMCardRightAnswerDoesNotReachATabletBeforeIt
 		t.Error("l'admin reçoit toujours la bonne réponse (inchangé)")
 	}
 }
+
+// --- Complément revue #258 (M1 + mineur 2) : médias de réponse avant révélation, UPDATE ciblé après PLAYER_CONNECT ----------------
+
+// keyPaths258 : chemins JSON (a.b.c) où apparaît la clé `key`, dans tout le document.
+func keyPaths258(v interface{}, key, path string, out *[]string) {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		for k, c := range x {
+			p := path + "." + k
+			if k == key {
+				*out = append(*out, p)
+			}
+			keyPaths258(c, key, p, out)
+		}
+	case []interface{}:
+		for i, c := range x {
+			keyPaths258(c, key, fmt.Sprintf("%s[%d]", path, i), out)
+		}
+	}
+}
+
+func framesWithKey258(frames []string, key string) []string {
+	var hits []string
+	for i, raw := range frames {
+		var doc interface{}
+		if json.Unmarshal([]byte(raw), &doc) != nil {
+			continue
+		}
+		var paths []string
+		keyPaths258(doc, key, "", &paths)
+		for _, p := range paths {
+			hits = append(hits, fmt.Sprintf("trame %d : %s", i, p))
+		}
+	}
+	return hits
+}
+
+func qcmWithAnswerMedia258() *game.Question {
+	q := qcm258()
+	q.MediaAnswer = "answer-media.png"
+	return q
+}
+
+func TestVPlayerAnswers258_Critical_AnswerMediaNeverReachesATabletBeforeRevealedButStaysForTVAndAnim(t *testing.T) {
+	e := newEnv258(t)
+
+	open := e.stage(func() {
+		e.app.engine.SetPhase(game.PhaseStopped)
+		e.app.engine.Ready("", qcmWithAnswerMedia258())
+		e.app.engine.StartImmediate(30)
+		e.app.broadcastUpdate()
+		e.push("START")
+		e.app.engine.Stop()
+		e.app.broadcastUpdate()
+		e.push("STOP")
+	})
+	for _, name := range []string{"A1", "A2", "B", "unbound"} {
+		if hits := framesWithKey258(open[name], "MEDIA_ANSWER"); len(hits) != 0 {
+			t.Errorf("%s : MEDIA_ANSWER (média de la réponse) ne doit pas atteindre une tablette avant REVEALED : %v", name, hits[:min(3, len(hits))])
+		}
+	}
+	for _, who := range []string{"tv", "anim", "admin"} {
+		if len(framesWithKey258(open[who], "MEDIA_ANSWER")) == 0 {
+			t.Errorf("%s : MEDIA_ANSWER reste transmis (TV publique, anim, admin : inchangés)", who)
+		}
+	}
+
+	revealed := e.stage(func() {
+		e.app.engine.Reveal()
+		e.app.broadcastUpdate()
+	})
+	for _, name := range []string{"A1", "B"} {
+		if len(framesWithKey258(revealed[name], "MEDIA_ANSWER")) == 0 {
+			t.Errorf("%s : à REVEALED la trame porte MEDIA_ANSWER", name)
+		}
+	}
+}
+
+func TestVPlayerAnswers258_MemotionCardAnswerTextAndImageNeverReachATabletBeforeRevealed(t *testing.T) {
+	e := newEnv258(t)
+	card := game.MotionCard{ID: "mc-1", RectoTheme: "Capitales", Difficulty: 1, Type: game.QuestionTypeSpeedy,
+		QuestionText: "Capitale de la France ?", AnswerText: "Paris-secret", AnswerImage: "secret-answer.png"}
+	memotion := func() *game.Question {
+		return &game.Question{ID: "mq1", Type: game.QuestionTypeMemotion, MotionCards: []game.MotionCard{card}, MotionMode: "SOLO"}
+	}
+
+	open := e.stage(func() {
+		e.app.engine.SetPhase(game.PhaseStopped)
+		e.app.engine.Ready("", memotion())
+		e.app.engine.SetPhase(game.PhaseStarted)
+		e.app.engine.InitMotionState()
+		_ = e.app.engine.SelectMotionCard("mc-1")
+		_ = e.app.engine.FlipMotionCard()
+		e.app.broadcastUpdate()
+		e.push("MEMOTION_FLIP")
+		e.app.engine.Stop()
+		e.app.broadcastUpdate()
+	})
+	for _, name := range []string{"A1", "A2", "B", "unbound"} {
+		all := strings.Join(open[name], "")
+		for _, secret := range []string{"Paris-secret", "secret-answer.png"} {
+			if strings.Contains(all, secret) {
+				t.Errorf("%s : %q (ANSWER_TEXT / ANSWER_IMAGE de la carte, ou MEMOTION_ACTIVE.STATE) ne doit pas atteindre une tablette avant REVEALED", name, secret)
+			}
+		}
+	}
+	for _, who := range []string{"tv", "admin"} {
+		if !strings.Contains(strings.Join(open[who], ""), "Paris-secret") {
+			t.Errorf("%s : la réponse de la carte reste transmise (inchangé)", who)
+		}
+	}
+
+	revealed := e.stage(func() {
+		e.app.engine.Reveal()
+		e.app.broadcastUpdate()
+	})
+	if !strings.Contains(strings.Join(revealed["A1"], ""), "Paris-secret") {
+		t.Error("à REVEALED la trame tablette porte la réponse de la carte (ANSWER_TEXT)")
+	}
+}
+
+func TestVPlayerAnswers258_Critical_AfterPlayerConnectATargetedUpdateGivesTheTabletItsTeamData(t *testing.T) {
+	e := newEnv258(t)
+	e.startQCM()
+	e.app.engine.ProcessButtonPress(e.jadeID, time.Now().UnixMicro(), "A")     // Jade (équipe A) a répondu RED
+	e.app.engine.ProcessButtonPress(e.mamieID, time.Now().UnixMicro(), "B")    // Mamie (équipe B) aussi (GREEN)
+	e.app.broadcastUpdate()
+	time.Sleep(150 * time.Millisecond)
+
+	// une NOUVELLE connexion non liée, puis PLAYER_CONNECT de Jade : état initial neutre, puis UPDATE ciblé par destinataire
+	conn, id := e.dial(t, "/ws/player")
+	startTap253(conn)
+	e.send(t, id, "vplayer", "HELLO", map[string]interface{}{})
+	time.Sleep(300 * time.Millisecond)
+	before := tapOf253(conn).take()
+	if seen258(before, e.jadeID, "ANSWERED_COLOR", "RED") {
+		t.Fatal("précondition : avant PLAYER_CONNECT la connexion non liée ne voit pas la réponse de Jade")
+	}
+
+	e.connect(t, id, "Jade", e.jadeID)
+	time.Sleep(450 * time.Millisecond)
+	after := tapOf253(conn).take()
+
+	if !seen258(after, e.jadeID, "ANSWERED_COLOR", "RED") {
+		t.Error("après PLAYER_CONNECT, un UPDATE ciblé rend à la tablette les données de son équipe (Jade voit sa propre réponse)")
+	}
+	if l := leaks258(after, teamA258, "STARTED"); len(l) != 0 {
+		t.Errorf("et l'autre équipe reste neutralisée : %v", l[:min(3, len(l))])
+	}
+}
