@@ -1349,9 +1349,49 @@ Source de vérité : `contracts/websocket-actions.md` §TEAM_POINTS, §BUMPER_PO
 { "SCORE_CHANGE": { "SEQ": 14, "DISPLAY": false, "TEAMS": ["Les Bleus"], "PLAYERS": [] } }
 ```
 
+## Attribution au niveau joueur — BUMPER_POINTS_BATCH (v11.2, #254)
+
+Source de vérité : `contracts/websocket-actions.md` §BUMPER_POINTS_BATCH, §BUMPER_POINTS_BATCH_RESULT, §AWARDED_TEAMS,
+§TEAM_POINTS_BATCH « Niveau d'attribution ».
+
+Le niveau d'une question est calculé par `resolveAwardLevel` (`utils/pointsAward.js`) : **équipe** (`TEAM_POINTS_BATCH`) ou
+**joueur** (`BUMPER_POINTS_BATCH`). SPEEDY suit le réglage « Points : équipe / joueur » (défaut joueur) ; QCM et ARDOISE
+suivent le même réglage (défaut équipe) ; MEMORY, MEMOTION et RAFALE sont toujours au niveau équipe.
+
+```json
+{ "ACTION": "BUMPER_POINTS_BATCH", "MSG": { "QUESTION_ID": "12", "ENTRIES": [ {"ID": "AA:BB:CC:01", "POINTS": 2}, {"ID": "AA:BB:CC:07", "POINTS": 1} ] } }
+```
+
+- **Payload** : `QUESTION_ID`, `ENTRIES` (1 à 64 joueurs distincts, `ID` = MAC du bumper ou ID du VJoueur, `POINTS` = entier
+  non nul de −999 à 999), `DISPLAY` (même règle que `TEAM_POINTS_BATCH`, admin seulement).
+- **Montants calculés côté client** (coefficient d'indices, commutateur « Tenir compte des indices »). Le serveur ne recalcule
+  rien et ne vérifie que les bornes. Aucun paramètre serveur pour les indices.
+- **Refus global** (`BUMPER_POINTS_BATCH_RESULT { STATUS: "REFUSED" }`, rien n'est appliqué) : `NOT_REVEALED`,
+  `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, `UNKNOWN_PLAYER` (`PLAYERS` = IDs inconnus). Journal
+  `WARN BUMPER_POINTS_BATCH_REFUSED`.
+- **Joueur ignoré** (`SKIPPED`), sous un seul verrou :
+  - `ALREADY_AWARDED` : joueur déjà crédité à titre individuel (présent dans `AWARDED_TEAMS.PLAYERS`) ;
+  - `TEAM_ALREADY_AWARDED` : son équipe a déjà reçu un crédit **d'équipe** pour la question. Un crédit joueur rend son équipe
+    « déjà créditée » pour `TEAM_POINTS_BATCH`, et la règle inverse s'applique ici.
+- **Réponse ciblée** : `BUMPER_POINTS_BATCH_RESULT`, avec `APPLIED` (`[{ID, POINTS}]`) et `SKIPPED` (`[{ID, REASON}]`).
+- **Diffusions** : `UPDATE`, `SCORE_CHANGE` (`PLAYERS` et `TEAMS` concernés), `AWARDED_TEAMS`. Journal `INFO BUMPER_POINTS_BATCH`.
+- Le clic unitaire sur un joueur (`BUMPER_POINTS`) reste libre.
+- **Suspension** : `BUMPER_POINTS_BATCH` est suspendu pendant le verrou de lancement (#253).
+
+### AWARDED_TEAMS — `PLAYERS` et `TEAMS[].TEAM_LEVEL` (v11.2, #254)
+
+- `PLAYERS` : une entrée par joueur crédité individuellement (`{ID, TEAM, POINTS, TIMESTAMP}`), mêmes règles que `TEAMS`.
+- `TEAMS[].TEAM_LEVEL` : `true` si l'équipe a reçu au moins un crédit d'équipe pour la question. Toujours présent.
+- Envoyé à l'admin et à l'animateur.
+
+### SET_CREDIT_POINTS ≤ 0 (v11.2, #254)
+
+Le client admin n'envoie jamais `SET_CREDIT_POINTS` avec une valeur nulle ou négative. Le serveur ignore une telle valeur
+(journal INFO). Les tablettes de l'animateur gardent ainsi la dernière valeur positive.
+
 ## Action TEAM_POINTS_BATCH — attribution groupée (v11.2, #244/#251)
 
-Envoyée par `admin` (« Donner les points (N) » / « Retirer les points (N) »), **en phase `REVEALED` uniquement**.
+Envoyée par `admin` (« Attribuer les points (N) » / « Appliquer les pénalités (N) », #254), **en phase `REVEALED` uniquement**. Utilisée quand la question est au niveau équipe ; au niveau joueur, c'est `BUMPER_POINTS_BATCH`.
 Contrat détaillé : `contracts/websocket-actions.md` §TEAM_POINTS_BATCH.
 
 ```json
