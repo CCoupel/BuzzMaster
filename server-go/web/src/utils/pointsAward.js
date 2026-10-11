@@ -247,6 +247,27 @@ export function resolvePointsAward(question, basePoints, ctx = {}) {
 }
 
 /**
+ * #255 — couleur RÉPONDUE par un joueur à la question QCM courante, '' sinon. Source : `ANSWERED_COLOR`
+ * (serveur, contrat models.md §Bumper) si la clé existe ; sinon repli (serveur antérieur) : `ANSWER_COLOR`
+ * seulement si un buzz est enregistré (`TIME > 0`). `ANSWER_COLOR` seule est une couleur assignée / dernière
+ * pressée : elle survit d'une question à l'autre.
+ */
+export function answeredColor(b) {
+  if (!b) return ''
+  if (Object.prototype.hasOwnProperty.call(b, 'ANSWERED_COLOR')) return b.ANSWERED_COLOR || ''
+  return b.TIME > 0 ? (b.ANSWER_COLOR || '') : ''
+}
+
+/**
+ * #255 — un joueur « a répondu » à un QCM seulement s'il a une équipe ET une réponse donnée à la question
+ * courante (`answeredColor`). `ANSWER_COLOR` seule ne suffit pas : le serveur l'assigne au joueur physique avant toute
+ * question et ne l'efface pas entre deux questions.
+ */
+export function hasAnswered(b) {
+  return !!(b && b.TEAM && answeredColor(b))
+}
+
+/**
  * Montant de crédit QCM au niveau ÉQUIPE — mutualise la règle restée locale
  * à GamePage.jsx (`qcmTeamAcquiredPoints` 272-290 et le repli du clic sur
  * carte d'équipe 1072-1078) avant #157 : une équipe = un buzzer retenu par
@@ -279,15 +300,6 @@ export function resolvePointsAward(question, basePoints, ctx = {}) {
  *   l'affichage (ex: n'ajouter une équipe à une liste "a la bonne réponse"
  *   que si `hasCorrectAnswer` est vrai)
  */
-/**
- * #255 — un joueur « a répondu » à un QCM seulement s'il a une équipe, une couleur de réponse ET un buzz
- * enregistré pour la question (`TIME > 0`, remis à 0 à chaque question). `ANSWER_COLOR` seule ne suffit pas :
- * le serveur l'assigne au joueur physique avant toute question et ne l'efface pas entre deux questions.
- */
-export function hasAnswered(b) {
-  return !!(b && b.TEAM && b.ANSWER_COLOR && b.TIME > 0)
-}
-
 export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount, useHints = true) {
   const correctColor = question?.QCM_CORRECT
   let best = null
@@ -295,14 +307,14 @@ export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedC
   // hasCorrectAnswer reste calculé pour l'affichage.
   if (!useHints || !(basePoints > 0)) {
     const hasCorrectAnswer = !!correctColor && (teamBumpers || []).some(
-      (b) => b && b.TIME && b.ANSWER_COLOR === correctColor
+      (b) => b && answeredColor(b) === correctColor
     )
     return { amount: basePoints, hasCorrectAnswer }
   }
 
   if (correctColor) {
     ;(teamBumpers || []).forEach(bumper => {
-      if (!bumper || !bumper.TIME || bumper.ANSWER_COLOR !== correctColor) return
+      if (!bumper || answeredColor(bumper) !== correctColor) return
       const hints = bumper.HINTS_AT_BUZZ || 0
       const penalty = calcQcmPenaltyForHints(question, basePoints, hints)
       const pts = penalty ? penalty.effectivePoints : basePoints

@@ -13,6 +13,7 @@ import EntractePanel from '../components/EntractePanel'
 import RafaleTimers from '../components/RafaleTimers'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
+import { answeredColor } from '../utils/pointsAward'
 import { escapeWifiString } from '../utils/wifiUtils'
 import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils/memoryGrid'
 import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
@@ -880,11 +881,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }
 
     // Group bumpers by team, keeping only those who buzzed
-    // Use ANSWER_COLOR (the player's assigned QCM color) to determine their answer
+    // #255 : answeredColor() = réponse réellement donnée (ANSWERED_COLOR, repli TIME > 0 && ANSWER_COLOR)
     const teamBuzzes = {}
     Object.entries(bumpers).forEach(([mac, bumper]) => {
-      if (bumper.TIME && bumper.TIME > 0 && bumper.ANSWER_COLOR && bumper.TEAM) {
-        const qcmColor = bumper.ANSWER_COLOR // Already in RED/GREEN/YELLOW/BLUE format
+      if (bumper.TIME && bumper.TIME > 0 && answeredColor(bumper) && bumper.TEAM) {
+        const qcmColor = answeredColor(bumper) // RED/GREEN/YELLOW/BLUE
         if (qcmColor && !teamBuzzes[bumper.TEAM]) {
           // Use first buzzer from each team
           teamBuzzes[bumper.TEAM] = {

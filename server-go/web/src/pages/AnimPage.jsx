@@ -7,7 +7,7 @@ import useDoubleTap from '../hooks/useDoubleTap'
 import { categoryMeta } from '../utils/categoryUtils'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter, getRankBadge, formatReactionTime } from '../utils/buzzOrder'
 import { sortArdoiseEntries } from '../utils/ardoiseOrder'
-import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward } from '../utils/pointsAward'
+import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward, answeredColor } from '../utils/pointsAward'
 import { isRevealed } from '../utils/phaseRules'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import { LaunchLockBanner, useLaunchLock } from '../components/LaunchGameHost'
@@ -637,12 +637,13 @@ export default function AnimPage() {
   const getTeamQcmAnswer = (teamName) => {
     if (gameState.question?.TYPE !== 'QCM') return null
     const buzzedBumper = (bumpersByTeam[teamName] || []).find(b => (b.TIME ?? 0) > 0)
-    if (!buzzedBumper?.ANSWER_COLOR) return null
-    const colorInfo = QCM_COLORS[buzzedBumper.ANSWER_COLOR] || null
+    const answered = answeredColor(buzzedBumper) // #255 : réponse donnée, pas la couleur assignée
+    if (!answered) return null
+    const colorInfo = QCM_COLORS[answered] || null
     return {
       colorInfo,
       playerName: buzzedBumper.NAME || '',
-      isCorrect: buzzedBumper.ANSWER_COLOR === gameState.question?.QCM_CORRECT,
+      isCorrect: answered === gameState.question?.QCM_CORRECT,
     }
   }
 
