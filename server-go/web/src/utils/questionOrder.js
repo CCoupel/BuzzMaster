@@ -52,11 +52,38 @@ export function shuffleArray(array) {
  * `rounds` ; (3) dans chaque groupe, par ORDER croissant puis par ID numérique. Une question dont `ROUND_ID` est absent,
  * vide ou inconnu est « Sans manche ». Sans aucune manche, l'ordre est identique à `sortQuestionsByOrder` (v11.1).
  */
+/** Nombre fini si `v` est un nombre, ou une chaîne ENTIÈREMENT numérique ("7") ; sinon null (Number strict, pas de parseInt). */
+function strictNumber(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  return null
+}
+
+/**
+ * ORDER effectif (parité avec le Go) : un ORDER entier ou chaîne entièrement numérique est pris tel quel ; absent,
+ * null ou invalide ("5abc") = repli sur l'ID numérique ; un ID non numérique n'a pas de repli (sans ORDER valide il
+ * passe après les autres du groupe).
+ */
+function effectiveOrder(q) {
+  const o = strictNumber(q.ORDER)
+  if (o !== null) return o
+  const id = strictNumber(q.ID)
+  return id !== null ? id : Infinity
+}
+
 function compareInGroup(a, b) {
-  const orderA = a.ORDER !== undefined && a.ORDER !== null ? parseInt(a.ORDER) : parseInt(a.ID)
-  const orderB = b.ORDER !== undefined && b.ORDER !== null ? parseInt(b.ORDER) : parseInt(b.ID)
-  if (orderA !== orderB) return orderA - orderB
-  return parseInt(a.ID) - parseInt(b.ID)
+  const oa = effectiveOrder(a)
+  const ob = effectiveOrder(b)
+  if (oa !== ob) return oa < ob ? -1 : 1
+  const ia = strictNumber(a.ID)
+  const ib = strictNumber(b.ID)
+  if (ia !== null && ib !== null) return ia - ib
+  if (ia !== null) return -1
+  if (ib !== null) return 1
+  return String(a.ID) < String(b.ID) ? -1 : String(a.ID) > String(b.ID) ? 1 : 0
 }
 
 /**
