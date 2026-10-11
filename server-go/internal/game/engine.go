@@ -267,10 +267,11 @@ type Engine struct {
 	// control copy of the ARDOISE texts, maintained ONLY by the authorised write
 	// paths (SetArdoiseAnswer, Ready, NEW_GAME/InitGame; ARDOISE_FINAL in Batch 2).
 	// Any difference with state.ArdoiseAnswers at a checkpoint is a rogue write.
-	ardoiseControlMu sync.Mutex
-	launchLockTimer  *time.Timer // #253
-	launchLockGen    int
-	ardoiseControl   map[string]string
+	ardoiseControlMu   sync.Mutex
+	launchLockTimer    *time.Timer // #253
+	launchLockGen      int
+	launchLockOnExpire func(LaunchLockReleased) // last OPEN's expiry callback (#253)
+	ardoiseControl     map[string]string
 
 	// Callbacks
 	//
@@ -8589,10 +8590,24 @@ type LaunchLockReleased struct {
 // OpenLaunchLock takes or renews the lock for owner. reason is "" on success,
 // else LOCKED_BY_OTHER or ENTRACTE_ACTIVE. An OPEN of the current owner is a
 // renewal and is never refused. onExpire is called (outside the lock) if the lock
-// expires by itself.
+// expires by itself, and — for a lock found already past its deadline — right away
+// (journal + broadcast of the expiry the timer had not delivered yet).
+//
+// ExpiresAt is WALL-CLOCK milliseconds (what the clients read); the monotonic
+// time.AfterFunc below is the safety net that actually releases the lock. A reader
+// never releases lazily: it only treats a past-deadline lock as inactive
+// (launchLockActiveUnsafe), so the release, its broadcast and its journal stay the
+// single responsibility of the timer or of the next OPEN.
 func (e *Engine) OpenLaunchLock(owner string, onExpire func(LaunchLockReleased)) (renewed bool, reason string) {
 	e.mu.Lock()
-	e.expireLaunchLockUnsafe(time.Now()) // a stale lock never blocks
+	now := time.Now()
+	var staleRel *LaunchLockReleased
+	var staleCb func(LaunchLockReleased)
+	if ll := e.state.LaunchLock; ll.Active && now.UnixMilli() >= ll.ExpiresAt {
+		// Past its deadline but the timer has not fired yet: expire it now.
+		rel := e.releaseLaunchLockUnsafe("expired")
+		staleRel, staleCb = &rel, e.launchLockOnExpire
+	}
 	ll := &e.state.LaunchLock
 	if ll.Active && ll.Owner == owner {
 		renewed = true
@@ -8601,19 +8616,23 @@ func (e *Engine) OpenLaunchLock(owner string, onExpire func(LaunchLockReleased))
 		return false, "LOCKED_BY_OTHER"
 	} else if e.state.Entracte {
 		e.mu.Unlock()
+		if staleRel != nil && staleCb != nil {
+			staleCb(*staleRel)
+		}
 		return false, "ENTRACTE_ACTIVE"
 	}
-	now := time.Now()
 	if !renewed {
 		ll.Active, ll.Owner, ll.Since = true, owner, now.UnixMilli()
 	}
 	ll.ExpiresAt = now.Add(LaunchLockTTL).UnixMilli()
+	e.launchLockOnExpire = onExpire
 	e.launchLockGen++
 	gen := e.launchLockGen
 	if e.launchLockTimer != nil {
 		e.launchLockTimer.Stop()
 	}
 	e.launchLockTimer = time.AfterFunc(LaunchLockTTL, func() {
+		defer recoverBackgroundPanic("launch lock expiry")
 		e.mu.Lock()
 		if e.launchLockGen != gen || !e.state.LaunchLock.Active {
 			e.mu.Unlock()
@@ -8626,6 +8645,9 @@ func (e *Engine) OpenLaunchLock(owner string, onExpire func(LaunchLockReleased))
 		}
 	})
 	e.mu.Unlock()
+	if staleRel != nil && staleCb != nil {
+		staleCb(*staleRel)
+	}
 	return renewed, ""
 }
 
@@ -8642,12 +8664,11 @@ func (e *Engine) releaseLaunchLockUnsafe(reason string) LaunchLockReleased {
 	return rel
 }
 
-// expireLaunchLockUnsafe lazily releases a lock whose deadline has passed.
-func (e *Engine) expireLaunchLockUnsafe(now time.Time) {
+// launchLockActiveUnsafe reports whether the lock is held AND not past its
+// wall-clock deadline. It never mutates (caller holds e.mu, read or write).
+func (e *Engine) launchLockActiveUnsafe(now time.Time) bool {
 	ll := e.state.LaunchLock
-	if ll.Active && now.UnixMilli() >= ll.ExpiresAt {
-		e.releaseLaunchLockUnsafe("expired") // the timer's own release is the one journalled
-	}
+	return ll.Active && now.UnixMilli() < ll.ExpiresAt
 }
 
 // CloseLaunchLock releases the lock if owner holds it. released is false when
@@ -8661,12 +8682,12 @@ func (e *Engine) CloseLaunchLock(owner, reason string) (LaunchLockReleased, bool
 	return e.releaseLaunchLockUnsafe(reason), true
 }
 
-// LaunchLockOwner returns the current owner ("" if none; a stale lock is released first).
+// LaunchLockOwner returns the current owner ("" if none or past its deadline).
+// Read-only (RLock): called for every inbound message, it never releases.
 func (e *Engine) LaunchLockOwner() string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.expireLaunchLockUnsafe(time.Now())
-	if !e.state.LaunchLock.Active {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if !e.launchLockActiveUnsafe(time.Now()) {
 		return ""
 	}
 	return e.state.LaunchLock.Owner

@@ -4336,6 +4336,10 @@ var suspendedDuringLaunch = map[string]bool{
 	// teams and players
 	protocol.ActionUpdate: true, protocol.ActionFull: true, protocol.ActionDeleteBumper: true,
 	protocol.ActionReleaseBumperName: true,
+	// contract 03d4ee3e: score/state resets and QR display are suspended too
+	// (SET_VIRTUAL_PLAYER_LIMIT and REBOOT stay allowed)
+	protocol.ActionPoints: true, protocol.ActionRAZ: true, protocol.ActionShowQRCode: true,
+	protocol.ActionHideQRCode: true, protocol.ActionReset: true,
 }
 
 // launchGate refuses, with a targeted answer, the actions suspended while the
