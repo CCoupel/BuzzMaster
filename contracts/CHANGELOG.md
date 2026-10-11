@@ -2,6 +2,19 @@
 
 ---
 
+## [20261012] — « Suivant » propose les entractes ; l'anim peut terminer une entracte (#245, v11.2, décision utilisateur)
+
+> « Une entracte est un type de jeu comme un autre. »
+
+- **[CHANGED — comportement]** `websocket-actions.md` §NEXT_QUESTION, `game-state.md` §« Score, palmarès, à suivre » : la règle #214 « ENTRACTE exclue du à suivre » est **abrogée**. `NEXT_QUESTION` et `nextUnplayedQuestion` (parité JS/Go) proposent toute ENTRACTE (manuelle, programmée, de manche). `CURRENT_POSITION`/`TOTAL_QUESTIONS` inchangés.
+- **[CHANGED — allow-list]** `ENTRACTE_SET` ouvert à l'**anim** pour `ACTIVE:false` seulement (terminer une entracte, programmée ou manuelle). `ACTIVE:true` de l'anim est refusé (WARN). §ENTRACTE_SET : exclusion #119 amendée.
+- **[CHANGED]** §LAUNCH_LOCK : `ENTRACTE_SET{ACTIVE:false}` toujours permis ; `ACTIVE:true` reste suspendu.
+- **[NEW]** `logging.md` : `ENTRACTE_SET_ANIM_ACTIVATE_REFUSED`, `ENTRACTE_ENDED`.
+- `models.md` §Manches aligné.
+- **Pas de rupture de protocole.** Changement **visible** : l'opérateur se voit proposer les entractes dans « à suivre ».
+
+---
+
 ## [20261012] — Manches : entractes automatiques et suppression avec choix (#245, v11.2, décisions utilisateur)
 
 - **[CHANGED]** `websocket-actions.md` §ROUNDS_UPDATE :

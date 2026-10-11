@@ -41,6 +41,7 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
 | **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
 | **ROUNDS_UPDATE** | ✅ | ❌ | ❌ | ❌ **(v11.2, #245 — admin seulement)** |
+| **ENTRACTE_SET** | ✅ | ❌ | ❌ | ✅ **`ACTIVE:false` seulement** (v11.2, #245 — décision utilisateur : l'anim doit pouvoir terminer une entracte ; `ACTIVE:true` venant de l'anim est refusé, `WARN ENTRACTE_SET_ANIM_ACTIVATE_REFUSED`, rien n'est envoyé) |
 | **REGIE_MESSAGE_SEND** | ✅ | ❌ | ❌ | ❌ **(v6.4.x, #167)** |
 | **REGIE_MESSAGE_CLEAR** | ✅ | ❌ | ❌ | ✅ **(v6.4.x, #167)** |
 | BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
@@ -822,7 +823,7 @@ Tant que la popup « Lancer la partie » est ouverte sur un poste admin, **le se
 
 #### Actions suspendues pendant le verrou
 Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }` ciblé et `WARN ACTION_REFUSED_LAUNCH` :
-- **Conduite** : `READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, `MEMORY_SET_TEAMS`, `MEMOTION_SET_TEAMS`, `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE`, `RAFALE_VALIDATE`, `RAFALE_INVALIDATE`, `RAFALE_SET_TEAMS`, `FLIP_MEMORY_CARD` (venant de l'admin, de l'anim ou de la TV).
+- **Conduite** : `READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET{ACTIVE:true}`, `MEMORY_SET_TEAMS`, `MEMOTION_SET_TEAMS`, `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE`, `RAFALE_VALIDATE`, `RAFALE_INVALIDATE`, `RAFALE_SET_TEAMS`, `FLIP_MEMORY_CARD` (venant de l'admin, de l'anim ou de la TV).
 - **Points** : `POINTS` (crédit joueur historique), `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`, `BUMPER_POINTS_BATCH`, `SET_CREDIT_POINTS`, `RAZ` (remise à zéro des scores) *(ajout revue #253 : `POINTS`, `RAZ`)*.
 - **Phases et clients** *(ajout revue #253)* : `SHOW_QR_CODE`, `HIDE_QR_CODE` (forcent les phases `ENROLL`/`STOPPED`), `RESET` (réinitialise tous les écrans et relance `HELLO`).
 - **Équipes et joueurs** : `UPDATE`/`FULL` entrants, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
@@ -831,7 +832,7 @@ Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFU
 > **Classement exhaustif** *(revue #253)* : ces deux listes couvrent **toutes** les actions entrantes de `handleWebMessage`. Toute action ajoutée plus tard doit être classée ici, dans le même commit que son contrat. À défaut, elle est **permise**, et le contrôle d'accès reste à la charge de la revue. Les routes HTTP d'administration ne sont pas couvertes par le verrou (hors périmètre).
 
 #### Toujours permises
-`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`, `ROUNDS_UPDATE`), réglages (`SET_VIRTUAL_PLAYER_LIMIT` : plafond d'inscription, sans effet sur la phase ni les scores), `REBOOT` (journalisé seulement, sans effet), journaux. Protocole buzzer (`/ws/buzzer`) : `OTA_PROGRESS`, `ACK`. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
+`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `ENTRACTE_SET{ACTIVE:false}` *(v11.2, #245 : sortir d'une entracte n'est jamais bloqué)*, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`, `ROUNDS_UPDATE`), réglages (`SET_VIRTUAL_PLAYER_LIMIT` : plafond d'inscription, sans effet sur la phase ni les scores), `REBOOT` (journalisé seulement, sans effet), journaux. Protocole buzzer (`/ws/buzzer`) : `OTA_PROGRESS`, `ACK`. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
 
 #### Retour visuel
 Les clients `admin` et `anim` lisent `GameState.LAUNCH_LOCK` : hors du poste propriétaire, un bandeau « Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu suspendues » s'affiche et les commandes de jeu sont désactivées (maquette `admin_new_game__launch_overlay`). TV et VJoueur : aucun changement.
@@ -915,7 +916,7 @@ Fixe **en une action** la structure complète : liste ordonnée des manches, que
   - **Fin** : même chose avec « Fin de la manche <NOM> », placée **à la fin**.
   - Autres champs : valeurs par défaut d'une nouvelle ENTRACTE de l'éditeur (`PANEL_SIZE`, `ANIM_*` de la config globale, sans image).
 - IDs attribués comme toute création (`resolveQuestionDir`).
-- Ensuite ce sont des ENTRACTE ordinaires : modifiables (titre, sous-titre, image), déplaçables, supprimables, jouées et sautées par « à suivre » **exactement** comme toute ENTRACTE (§NEXT_QUESTION, règle #214 inchangée). **Renommer la manche ne les renomme pas.**
+- Ensuite ce sont des ENTRACTE ordinaires : modifiables (titre, sous-titre, image), déplaçables, supprimables, jouées et proposées par « à suivre » **exactement** comme toute ENTRACTE (§NEXT_QUESTION, v11.2 : les ENTRACTE ne sont plus sautées). **Renommer la manche ne les renomme pas.**
 - Plus de 997 questions (IDs épuisés) : refus `QUESTION_ID_EXHAUSTED`, rien n'est appliqué.
 
 **Validation (refus global, rien appliqué)** → `ROUNDS_UPDATE_RESULT{STATUS:"REFUSED", REASON}` à l'émetteur et `WARN ROUNDS_UPDATE_REFUSED` :
@@ -1360,6 +1361,8 @@ Indique à l'interface animateur la prochaine question jouable, pour permettre l
 | Direction | `Server→Client` |
 | Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)`. Aucun autre type de client ne reçoit cette action |
 | Trigger | HELLO d'un client animateur (état initial) ; `READY` (sélection/enchaînement de question) ; `STOP` ; `REVEAL` ; `NEW_GAME` ; `REORDER_QUESTIONS` ; **`ROUNDS_UPDATE`** (v11.2) ; `DELETE` (suppression d'une question) |
+
+> **v11.2 (#245, décision utilisateur) — les ENTRACTE ne sont plus sautées.** Une entrée `ENTRACTE` est un type de jeu comme un autre : si elle est la prochaine entrée jouable du déroulé, `NEXT_QUESTION` la **propose** (`TYPE: "ENTRACTE"`, `QUESTION` = son libellé). Cela vaut pour toutes les ENTRACTE (manuelles de l'éditeur, programmées, entractes automatiques de manche). La règle #214 « exclue du à suivre » (maquette `docs/mockups/entracte-programme-214.html` §04, `game-state.md` §« Score, palmarès, à suivre ») est **abrogée**. Parité obligatoire avec `GamePage.jsx` `nextUnplayedQuestion`. Les statuts déjà joués (`STOPPED`, `REVEALED`, `PLAYED`) restent sautés, ENTRACTE comprises. `CURRENT_POSITION`/`TOTAL_QUESTIONS` sont **inchangés** : ils comptaient déjà les ENTRACTE comme positions du déroulé (commit `2892e77f`). Le libellé « Question suivante » / « Lancer l'entracte » se choisit côté client selon `TYPE`.
 
 #### Payload
 
@@ -2406,7 +2409,9 @@ Active ou désactive le **mode entracte** (pause globale).
 | Désactivation | Acceptée depuis **toute** phase |
 | Effet | `GameState.ENTRACTE` ← `ACTIVE`, extinction/restauration des LEDs, `UPDATE` diffusé aux 5 types |
 
-**`anim` est délibérément exclu.** L'interface animateur voit l'entracte (filtre + indicateur) mais
+> **Amendé en v11.2 (#245, décision utilisateur)** : l'anim peut désormais **terminer** une entracte (`ACTIVE:false`), qu'elle soit programmée (entrée du déroulé) ou manuelle, avec le bouton « Terminer l'entracte » de sa tablette. Ainsi l'anim enchaîne seule un déroulé complet. Le **déclenchement manuel** (`ACTIVE:true`) reste réservé à l'admin. Le texte ci-dessous décrit la règle d'origine (#119) pour l'activation.
+
+**`anim` est délibérément exclu** *(activation, #119)*. L'interface animateur voit l'entracte (filtre + indicateur) mais
 ne peut ni le déclencher ni le lever — « contrôle réservé à l'admin ». C'est une exception assumée au
 bloc « conduite en direct » (#155/#156), où `anim` partage pourtant START/STOP/PAUSE/REVEAL : une
 pause engage toute la salle, pas seulement la manche en cours.

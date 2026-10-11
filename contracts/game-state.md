@@ -967,10 +967,7 @@ physique pendant `STARTED`, un chemin distinct de `handleWebMessage`).
 mécanisme de score n'est câblé pour ce type (pas de buzz, pas d'équipe, aucune action
 `TEAM_POINTS`/`MOTION_DONE` équivalente). Le palmarès (`GET /palmares`) n'agrège que les événements
 d'historique `POINTS_AWARDED` — l'exclusion est donc **automatique**, pas une liste noire à
-maintenir. Le **« à suivre »** (`NEXT_QUESTION`, `contracts/websocket-actions.md`) exclut
-explicitement `TYPE == "ENTRACTE"` de la recherche de la prochaine question jouable
-(`getNextQuestionPayload`, `cmd/server/main.go`) — parité requise avec `GamePage.jsx`
-`nextUnplayedQuestion` (volet frontend, même exclusion à porter côté client).
+maintenir. ~~Le « à suivre » exclut explicitement `TYPE == "ENTRACTE"`~~ **Abrogé en v11.2 (#245, décision utilisateur)** : le « à suivre » (`NEXT_QUESTION`, `getNextQuestionPayload`, et `GamePage.jsx` `nextUnplayedQuestion` en parité) **propose** une entrée `ENTRACTE` comme toute autre entrée du déroulé (`websocket-actions.md` §NEXT_QUESTION). L'anim la lance par « suivant » (`READY` → `START`, cycle standard) et la termine par « Terminer l'entracte » (`ENTRACTE_SET{ACTIVE:false}`, désormais permis à l'anim, ce qui met aussi fin à la question, comportement retenu ci-dessus). Score et palmarès : inchangés (jamais de point).
 
 **Non-nestable** (décision utilisateur) : `NestableInMotionCard: false` dans le registre
 (`contracts/question-types.md` §7) — une pause n'a pas de sens comme carte d'une grille MEMOTION.

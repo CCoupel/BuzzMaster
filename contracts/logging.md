@@ -107,6 +107,8 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 |-----------|--------|-------|--------|
 | `ROUNDS_UPDATE` | INFO | Structure appliquée | `client`, `created`, `renamed`, `deleted` (manche:KEEP/DELETE), `entractes_created`, `moved`, `questions_deleted` (IDs) |
 | `ROUNDS_UPDATE_REFUSED` | WARN | Refus | `client`, `reason`, `questions` |
+| `ENTRACTE_SET_ANIM_ACTIVATE_REFUSED` | WARN | `ENTRACTE_SET{ACTIVE:true}` reçu de l'anim (activation réservée à l'admin) | `client` |
+| `ENTRACTE_ENDED` | INFO | Entracte terminée | `client`, `type` (`admin`/`anim`), `programmed` (true si question ENTRACTE) |
 
 ### 3.2 sexies Verrou de lancement (v11.2, #253)
 
