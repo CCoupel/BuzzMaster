@@ -9,6 +9,7 @@ import './RoundGroup.css'
 export default function RoundGroup({
   unassigned = false,
   title,
+  name,
   index = 0,
   total = 0,
   countText,
@@ -42,7 +43,7 @@ export default function RoundGroup({
   return (
     <section
       className={`round-group${unassigned ? ' unassigned' : ''}${collapsed ? ' collapsed' : ''}${dragOver ? ' dragover' : ''}`}
-      aria-label={unassigned ? 'Sans manche' : title}
+      aria-label={unassigned ? 'Sans manche' : (name || title)}
     >
       <div className="round-head" {...(headDrag?.drop || {})}>
         {unassigned ? (
@@ -115,7 +116,7 @@ export default function RoundGroup({
           {children}
           {isEmpty && emptyText ? <div className="round-empty">{emptyText}</div> : null}
           {!unassigned && !isNew && (
-            <button type="button" className="round-add-q" aria-label={`Ajouter une question à ${title}`} onClick={onAddQuestion}>+ Question</button>
+            <button type="button" className="round-add-q" aria-label={`Ajouter une question à ${name || title}`} onClick={onAddQuestion}>+ Question</button>
           )}
         </div>
       )}

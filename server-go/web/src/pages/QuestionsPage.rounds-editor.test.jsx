@@ -85,7 +85,7 @@ const mk = (over = {}) => ({
 })
 const show = (over = {}) => { const g = mk(over); useGame.mockReturnValue(g); return { g, ...render(<QuestionsPage />) } }
 const lastPayload = (g) => g.roundsUpdate.mock.calls.at(-1)[0]
-const group = (name) => screen.getByRole('region', { name })
+const group = (name) => screen.getByRole('region', { name: name.replace(/^Manche \d+ · /, '') })
 const titles = () => screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
 
 const createStorageMock = () => {
@@ -115,7 +115,7 @@ describe('Éditeur — sans manche (comme v11.1)', () => {
 describe('Éditeur — groupes', () => {
   it('Critical — « Sans manche » en premier, puis les manches dans l’ordre ; compteurs « questions + entractes »', () => {
     show()
-    expect(titles()).toEqual(['Sans manche', 'Manche 1 · Échauffement', 'Manche 2 · Finale'])
+    expect(titles()).toEqual(['Sans manche', 'Échauffement', 'Finale'])
     expect(group('Manche 1 · Échauffement').textContent).toMatch(/2 questions \+ 1 entracte/)
     expect(group('Sans manche').textContent).toMatch(/2 questions/)
     expect(within(group('Sans manche')).getByTestId('qcard-5')).toBeTruthy()

@@ -2064,6 +2064,7 @@ export default function QuestionsPage() {
                       const editing = roundEdit && !roundEdit.isNew && roundEdit.key === r.id
                       return renderGroup(key, r.questions, {
                         title: groupLabel(r, i),
+                        name: r.name,
                         index: i,
                         total: struct.rounds.length,
                         editing: !!editing,
