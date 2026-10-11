@@ -516,6 +516,7 @@ func TestLaunchLock253_PlayersAndAuxiliaryActionsStayAccepted(t *testing.T) {
 
 	e.send(t, e.paulCID, "vplayer", protocol.ActionArdoiseInput, map[string]interface{}{"TEXT": "LYON"})
 	e.send(t, e.paulCID, "vplayer", "VPLAYER_QCM_ANSWER", map[string]interface{}{"ANSWER": "A"})
+	e.send(t, e.admin2, "admin", "SET_VIRTUAL_PLAYER_LIMIT", map[string]interface{}{"LIMIT": 12}) // reste acceptée (contrat 03d4ee3e)
 	e.send(t, e.paulCID, "vplayer", "PONG", map[string]interface{}{})
 	e.send(t, e.paulCID, "vplayer", "BUTTON", map[string]interface{}{})
 	e.send(t, e.paulCID, "vplayer", "CLIENT_TRACE", map[string]interface{}{"KIND": "VISIBILITY"})
