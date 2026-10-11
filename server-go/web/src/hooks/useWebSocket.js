@@ -90,6 +90,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // #252 (v11.2) — dernière modification de score : un nouveau SEQ avec DISPLAY=false est une
     // correction cachée (les écrans prennent les scores comme référence SANS animation).
     SCORE_CHANGE: { SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: [] },
+    // #253 (v11.2) — verrou de la popup « Lancer la partie » : tant que ACTIVE, le serveur suspend les
+    // actions de jeu ; OWNER = identifiant de la connexion admin propriétaire.
+    LAUNCH_LOCK: { ACTIVE: false, OWNER: '', SINCE: 0, EXPIRES_AT: 0 },
     // ENTRACTE_CONFIG — configuration DIFFUSÉE au panneau (gelée pendant une
     // pause active, corrections C4). entracteConfigSaved (ci-dessous) est la
     // configuration ENREGISTRÉE, toujours à jour, admin-only — c'est elle que
@@ -220,6 +223,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // #244/#251 — dernier TEAM_POINTS_BATCH_RESULT (ciblé, émetteur) : { status, reason, questionId,
   // applied: [{team, points}], skipped: [{team, reason}], teams: string[] } | null
   const [teamPointsBatchResult, setTeamPointsBatchResult] = useState(null)
+  // #253 — identifiant de CETTE connexion (pour se reconnaître propriétaire de LAUNCH_LOCK.OWNER),
+  // dernier LAUNCH_LOCK_REFUSED { reason } et dernier ACTION_REFUSED { action, reason, at }.
+  const [connectionId, setConnectionId] = useState(null)
+  const [launchLockRefused, setLaunchLockRefused] = useState(null)
+  const [actionRefused, setActionRefused] = useState(null)
   // #246 (F-STOP) — accusé ciblé du texte final ARDOISE (tablette) : { questionId,
   // hash } | null, nouvel objet à chaque accusé ; et dernier REVEAL_REFUSED
   // (admin/anim) : { reason, pending: [{team, offline}] } | null.
@@ -419,7 +427,19 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       })
     }
 
+    // #253 : le serveur transmet l'identifiant de la connexion (champ CLIENT_ID) ; on le retient dès
+    // qu'un message le porte.
+    if (typeof MSG?.CLIENT_ID === 'string' && MSG.CLIENT_ID) setConnectionId(MSG.CLIENT_ID)
+
     switch (ACTION) {
+      case 'LAUNCH_LOCK_REFUSED':
+        setLaunchLockRefused({ reason: MSG?.REASON })
+        break
+
+      case 'ACTION_REFUSED':
+        setActionRefused({ action: MSG?.ACTION, reason: MSG?.REASON, at: Date.now() })
+        break
+
       case 'UPDATE':
         if (MSG?.GAME) {
           trackArdoiseCleared(MSG.GAME)
@@ -489,6 +509,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             entracte: MSG.GAME.ENTRACTE ?? prev.entracte,
             TEAMS_LOCKED: MSG.GAME.TEAMS_LOCKED ?? prev.TEAMS_LOCKED,
             SCORE_CHANGE: MSG.GAME.SCORE_CHANGE ?? prev.SCORE_CHANGE,
+            LAUNCH_LOCK: MSG.GAME.LAUNCH_LOCK ?? prev.LAUNCH_LOCK,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
             // ENTRACTE_CONFIG_SAVED (corrections C4) — diffusion restreinte à
             // l'admin (AdminOnlyGameFields), même repli que QUIZ_OBJECTIVES :
@@ -1269,6 +1290,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setTeamPointsBatchResult(null)
   }, [])
 
+  // #253 — verrou de la popup « Lancer la partie » : state = 'OPEN' (ouverture puis renouvellement
+  // toutes les 15 s) | 'CLOSE'. Retourne le booléen de sendMessage.
+  const launchLock = useCallback((state) => sendMessage('LAUNCH_LOCK', { STATE: state }), [sendMessage])
+  const clearLaunchLockRefused = useCallback(() => setLaunchLockRefused(null), [])
+  const clearActionRefused = useCallback(() => setActionRefused(null), [])
+
   const clearNewGameRefused = useCallback(() => {
     setNewGameRefused(null)
   }, [])
@@ -1465,6 +1492,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clearTeamsUpdateRefused,
     newGameRefused,
     clearNewGameRefused,
+    launchLock,
+    launchLockRefused,
+    clearLaunchLockRefused,
+    actionRefused,
+    clearActionRefused,
+    connectionId,
     teamPointsBatch,
     teamPointsBatchResult,
     clearTeamPointsBatchResult,
