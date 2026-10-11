@@ -64,3 +64,5 @@
 | server-go/web/src/pages/BackstagePage.no-launch.253.test.jsx | unit | admin-game | #253 Backstage : plus de bouton de lancement | regression | critical |
 | server-go/cmd/server/launch_lock_expiry_253_test.go | integration | websocket, game-engine, admin-game | #253 expiration de sécurité (TTL injecté game.LaunchLockTTL), renouvellement, diffusion, minuteur annulé par NEW_GAME | regression | critical |
 | tests/procedures/launch-lock-253.md | manual | admin-game, anim, tv, vplayer | #253 procédure manuelle (utilisateur uniquement) | feature | |
+| server-go/cmd/server/bumper_points_batch_254_test.go | integration | scores, game-engine, websocket, sound, lighting | #254 BUMPER_POINTS_BATCH : lot valide, refus global atomique, déjà crédité, correction cachée, effets groupés, AWARDED_TEAMS.PLAYERS, verrou #253, admin seul | regression | critical |
+| server-go/internal/server/question_254_test.go | unit | questions | #254 QCM_WRONG_PENALTY (bornes, QCM seul, non réécrit) et défaut POINTS_TARGET au chargement | regression | critical |
