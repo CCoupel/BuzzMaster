@@ -2,6 +2,18 @@
 
 ---
 
+## [20261011] — Bonne réponse QCM : base du barème et commutateur « Tenir compte des indices » (#254, v11.2, décision utilisateur)
+
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH « Montant » et « QCM : clic sur une réponse » :
+  - base = champ « Points » à l'entrée en `REVEALED`, retrouvée au clic sur la bonne réponse et à la nouvelle question ;
+  - « modifié à la main » = après le REVEAL ;
+  - **commutateur « Tenir compte des indices »** (QCM avec indices, au moins un révélé, montant positif ; activé par défaut, remis à chaque question). Activé : valeur × coefficient d'indices au buzz, au moins 1 point. Désactivé : montant uniforme. Pénalité toujours uniforme ;
+  - libellé de la ligne 1 lié au commutateur.
+- **[CHANGED]** §BUMPER_POINTS_BATCH — montants par joueur calculés côté client avec le même commutateur.
+- Protocole **inchangé** : montants calculés côté client et envoyés par entrée, sans paramètre serveur. Aucune BREAKING.
+
+---
+
 ## [20261011] — Pénalité QCM et indices (#254, v11.2, décision utilisateur option A)
 
 - **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH « Montant » et « QCM : clic sur une réponse », `question-types.md` (`QCM_WRONG_PENALTY`) — précision : les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse (réponse éliminée comprise) ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic. Comportement déjà contracté (montant négatif uniforme), désormais explicite.

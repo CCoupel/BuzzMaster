@@ -555,19 +555,39 @@ Le client choisit l'action groupée selon le **niveau** de la question, calculé
 - `resolvePointsTarget` (clic unitaire sur un joueur, anim) applique **la même règle** (une seule source) : MEMORY, MEMOTION et RAFALE créditent l'équipe.
 
 #### Montant : champ « Points » de la page ✨ (v11.2, #254 — remplace le montant B de #244/#251)
-- **Le bloc d'attribution n'a plus de montant propre.** Le montant de base est le **champ « Points » de la page** (`pointsInput`), déjà présent au-dessus des équipes. À l'entrée en `REVEALED` : points de la question (comportement actuel du champ).
-- **Montant par équipe ou par joueur, tant que le champ n'a pas été modifié à la main et qu'il est > 0** = la règle actuelle du clic unitaire, **une seule source** (`utils/pointsAward.js`) : équipe → `defaultTeamAward` (MEMORY multi-équipes : score des paires ; QCM avec indices : `calcQcmTeamAward` ; RAFALE : `calcRafaleTeamAward` ; sinon le champ) ; joueur → `resolvePointsAward` (QCM avec indices : pénalité d'indices **du joueur** au moment du buzz ; sinon le champ). Aperçu affiché sur chaque ligne sélectionnée.
-- **Champ modifié à la main, ou négatif** : **montant uniforme** = valeur du champ pour toute la sélection. Les coefficients d'indices (`QCM_PENALTY_1/2`) ne s'appliquent qu'aux montants positifs : **Les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse** *(décision utilisateur, option A)* : même pénalité que la réponse ait été donnée avant ou après la révélation d'indices, y compris pour une réponse éliminée par un indice ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic.
+- **Le bloc d'attribution n'a plus de montant propre.** Le montant vient du **champ « Points » de la page** (`pointsInput`), déjà présent au-dessus des équipes.
+- **Base du barème** *(décision utilisateur)* = **valeur du champ « Points » à l'entrée en `REVEALED`**. Elle comprend un éventuel réglage de la régie avant le REVEAL (manche bonus). Le clic sur la **bonne réponse** et le changement de question **reviennent à cette base** (et non à `QUESTION.POINTS`). « **Modifié à la main** » = champ modifié **après** l'entrée en `REVEALED` ; cet état est effacé par un clic sur la bonne réponse.
+- **Commutateur « Tenir compte des indices »** ✨ *(décision utilisateur)* :
+  - **Visible** seulement si la question est un **QCM avec `QCM_HINTS_ENABLED`**, qu'**au moins un indice a été révélé** (`QCM_INVALIDATED` non vide) et que le montant du champ est **positif**. Masqué sinon : une pénalité est toujours uniforme (option A).
+  - **Activé par défaut**, remis à activé à chaque **changement de question** ou de phase. Un clic sur une réponse ou une modification du champ **ne le change pas**. État local de la page admin, non transmis.
+  - **Activé** : chaque entrée reçoit `max(1, round(V × coef))`, où V = valeur du champ (base ou valeur saisie à la main) et coef = 1, `QCM_PENALTY_1` (défaut 0,67) ou `QCM_PENALTY_2` (défaut 0,33). Coef selon le nombre d'indices révélés :
+    - **équipe** : au buzz du joueur de l'équipe qui a la bonne couleur (meilleur montant s'il y en a plusieurs, `calcQcmTeamAward`) ; sinon, indices **actuellement** révélés (repli actuel) ;
+    - **joueur** : `HINTS_AT_BUZZ` du joueur s'il a buzzé ; sinon, indices actuellement révélés.
+  - **Désactivé** : **montant uniforme** V pour toute la sélection.
+  - **Même commutateur aux niveaux équipe et joueur.** Même calcul pour le clic unitaire sur une carte (`defaultTeamAward` / `resolvePointsAward`, une seule source dans `utils/pointsAward.js`, avec un paramètre `useHints`).
+- **Autres types** (inchangé) : MEMORY multi-équipes (score des paires), RAFALE (`calcRafaleTeamAward`) → montant **par équipe** tant que le champ n'a pas été modifié à la main ; modifié à la main → montant uniforme. SPEEDY, ARDOISE, QCM sans indices révélés, MEMOTION → valeur du champ. Aperçu affiché sur chaque carte ou ligne sélectionnée : c'est exactement le montant envoyé.
+- **Négatif** : **montant uniforme** = valeur du champ, quel que soit le commutateur. **Les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse** *(décision utilisateur, option A)* : même pénalité que la réponse ait été donnée avant ou après la révélation d'indices, y compris pour une réponse éliminée par un indice ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic.
+- **Ligne 1 du bloc : source du montant**, liée au commutateur :
+
+  | Cas | Libellé |
+  |-----|---------|
+  | Commutateur visible et activé | « barème de la question, ajusté selon les indices de chaque équipe » (« … de chaque joueur » au niveau joueur) ; valeur saisie à la main : « montant saisi, ajusté selon les indices de chaque équipe/joueur » |
+  | Commutateur visible et désactivé | « montant uniforme » |
+  | MEMORY multi-équipes, RAFALE | « barème de la question, par équipe » ; modifié à la main : « modifié à la main, montant uniforme » |
+  | Mauvaise réponse | « mauvaise réponse : pénalité de la question, uniforme (indices sans effet) » ; sans pénalité : « mauvaise réponse : aucune pénalité définie » |
+  | Autres | « points de la question » ; modifié à la main : « modifié à la main, montant uniforme » |
+
+- **Calcul côté client, pas de paramètre serveur** *(choix du planner)* : le lot transporte déjà **un montant par entrée** (`ENTRIES[].POINTS`). Le client calcule chaque montant avec la règle unique de `utils/pointsAward.js`, déjà partagée avec le clic unitaire et l'anim, et envoie exactement l'aperçu affiché. Le serveur **ne recalcule rien** et se limite à valider les bornes. Un paramètre serveur (`USE_HINTS`) obligerait à recopier la règle en Go : deux sources qui peuvent diverger, et un aperçu qui ne correspond plus au crédit. L'émetteur est l'admin, de confiance. **Aucun changement** de `TEAM_POINTS_BATCH` ni de `BUMPER_POINTS_BATCH`.
 - **Libellé du bouton** : « **Attribuer les points (N)** » si le montant est positif ; « **Appliquer les pénalités (N)** » (rouge) si le montant est négatif, **ou nul après un clic sur une mauvaise réponse** (§QCM). N = nombre d'équipes ou de joueurs sélectionnés. Bouton désactivé à N = 0, pendant l'envoi, ou si le montant est 0 (aucun lot n'est jamais envoyé avec 0 : `INVALID_POINTS`).
 - **Sélectionner / désélectionner tout** : deux **icônes** sur la **même ligne** que le bouton, avec nom accessible (`aria-label` et `title` : « Tout sélectionner », « Tout désélectionner »). Le bloc tient sur **2 lignes** : (1) titre et source du montant, (2) icônes + bouton.
 
 #### QCM : clic sur une réponse ✨ (v11.2, #254)
-- **Bonne réponse** : la sélection devient l'ensemble des équipes (niveau `TEAM`) ou des joueurs (niveau `PLAYER`) ayant donné cette réponse, hors déjà crédités ; le champ « Points » reprend les **points de la question** ; bouton « Attribuer les points (N) ».
+- **Bonne réponse** : la sélection devient l'ensemble des équipes (niveau `TEAM`) ou des joueurs (niveau `PLAYER`) ayant donné cette réponse, hors déjà crédités ; le champ « Points » reprend la **base** (valeur à l'entrée en `REVEALED`, §Montant) ; le commutateur « Tenir compte des indices » garde son état ; bouton « Attribuer les points (N) ».
 - **Mauvaise réponse** : désélection de tout, puis sélection des équipes ou joueurs de cette réponse, hors déjà crédités ; le champ « Points » prend la **pénalité de la question** ; bouton « Appliquer les pénalités (N) ».
 - **Mauvaise réponse d'une question sans pénalité** (`QCM_WRONG_PENALTY` = 0, absent ou invalide) : même sélection ; le champ « Points » **passe à 0** (jamais laissé aux points de la question : le bouton donnerait sinon des points aux équipes qui se sont trompées) ; bouton « Appliquer les pénalités (N) » **désactivé**, avec la raison visible sous le bouton : « **Aucune pénalité définie pour cette question** ». La régie reste libre : une valeur saisie à la main dans le champ réactive le bouton (négative → « Appliquer les pénalités », positive → « Attribuer les points »). Le 0 n'est pas poussé aux tablettes (règle `SET_CREDIT_POINTS` ≤ 0).
 - **Pénalité de la question** *(décision utilisateur : champ ajouté en v11.2)* : **`QUESTION.QCM_WRONG_PENALTY`** (entier de −100 à 0, `models.md` §Question). **0 = aucune pénalité, valeur par défaut** *(décision utilisateur)* ; absent ou hors bornes (anciennes questions, sans réécriture des fichiers) → **0**. Ne pas confondre avec `QCM_PENALTY_1`/`QCM_PENALTY_2`, qui sont des **coefficients d'indices** (0,67 / 0,33 des points). La valeur reste modifiable dans le champ « Points » avant le clic.
 - **Les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse** *(décision utilisateur, option A)* : même pénalité que la réponse ait été donnée avant ou après la révélation d'indices, y compris pour une réponse éliminée par un indice ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic.
-- Le titre « Attribuer les points (N) » revient après un clic sur la **bonne** réponse ou à un **changement de question** (le champ reprend alors les points de la question).
+- Le titre « Attribuer les points (N) » revient après un clic sur la **bonne** réponse ou à un **changement de question** (le champ reprend alors la base, §Montant).
 - « Équipe d'une réponse » : équipe dont au moins un joueur a `ANSWER_COLOR` = la couleur de la réponse. « Joueur d'une réponse » : joueur dont `ANSWER_COLOR` = la couleur (`bumpers[*].ANSWER_COLOR`, fixé par `ProcessButtonPress`).
 
 #### Montant négatif et tablettes de l'anim (`SET_CREDIT_POINTS`) ⚠️
@@ -615,7 +635,7 @@ Modifie le score d'un joueur.
 
 ### BUMPER_POINTS_BATCH ✨ (v11.2, #254)
 
-Attribution groupée **au niveau joueur** (question de niveau `PLAYER`, §TEAM_POINTS_BATCH « Niveau d'attribution »). **Symétrique de `TEAM_POINTS_BATCH`** : mêmes règles sauf ce qui suit.
+Attribution groupée **au niveau joueur** (question de niveau `PLAYER`, §TEAM_POINTS_BATCH « Niveau d'attribution »). **Symétrique de `TEAM_POINTS_BATCH`** : mêmes règles sauf ce qui suit. Montants par joueur calculés **côté client** (§TEAM_POINTS_BATCH « Montant », commutateur « Tenir compte des indices » au coefficient du joueur) ; le serveur ne recalcule rien.
 
 | Propriété | Valeur |
 |-----------|--------|
