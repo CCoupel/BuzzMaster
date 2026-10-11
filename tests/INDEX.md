@@ -55,3 +55,4 @@
 | server-go/web/src/pages/HistoryPage.hidden-correction.252.test.jsx | unit | scores | #252 Historique : marque 🔇 des corrections cachées | regression | |
 | server-go/web/src/hooks/useWebSocket.display.252.test.js | unit | websocket | #252 DISPLAY envoyé seulement si caché ; SCORE_CHANGE suit l'UPDATE | regression | |
 | tests/procedures/scores-252.md | manual | scores, tv, vplayer | #252 procédure manuelle (utilisateur uniquement) | feature | |
+| server-go/cmd/server/launch_lock_253_test.go | integration | websocket, game-engine, admin-game, anim | #253 verrou LAUNCH_LOCK : pose/propriétaire, refus ACTION_REFUSED pour admin/2e admin/anim, joueurs permis, NEW_GAME propriétaire vs autre, refus d'ouverture, renouvellement, CLOSE, déconnexion | regression | critical |
