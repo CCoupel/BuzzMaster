@@ -525,3 +525,64 @@ func TestVPlayerAnswers258_Critical_AfterPlayerConnectATargetedUpdateGivesTheTab
 		t.Errorf("et l'autre équipe reste neutralisée : %v", l[:min(3, len(l))])
 	}
 }
+
+// Liste exhaustive §7.5 A : la note animateur (EXPLANATION) n'atteint JAMAIS une tablette, même à REVEALED ; l'anim la garde.
+func TestVPlayerAnswers258_ExplanationNeverReachesATabletInAnyPhaseButStaysForAnim(t *testing.T) {
+	e := newEnv258(t)
+	q := qcm258()
+	q.Explanation = "Note secrète de l'animateur"
+
+	frames := e.stage(func() {
+		e.app.engine.SetPhase(game.PhaseStopped)
+		e.app.engine.Ready("", q)
+		e.app.engine.StartImmediate(30)
+		e.app.broadcastUpdate()
+		e.app.engine.Stop()
+		e.app.broadcastUpdate()
+		e.app.engine.Reveal()
+		e.app.broadcastUpdate()
+	})
+	for _, name := range []string{"A1", "A2", "B", "unbound"} {
+		if strings.Contains(strings.Join(frames[name], ""), "Note secrète") {
+			t.Errorf("%s : GAME.QUESTION.EXPLANATION (note animateur) ne doit jamais atteindre une tablette", name)
+		}
+	}
+	if !strings.Contains(strings.Join(frames["anim"], ""), "Note secrète") {
+		t.Error("l'anim garde la note (inchangé)")
+	}
+}
+
+// Liste exhaustive §7.5 A : clés de réponse des cartes MEMOTION non révélées (ANSWER, QCM_CORRECT comprises) absentes, par chemin JSON.
+func TestVPlayerAnswers258_UnrevealedMemotionCardsCarryNoAnswerKeysToATablet(t *testing.T) {
+	e := newEnv258(t)
+	cards := []game.MotionCard{
+		{ID: "mc-1", RectoTheme: "A", Difficulty: 1, Type: game.QuestionTypeQCM, QuestionText: "Q1 ?", AnswerText: "reponse-1", AnswerImage: "r1.png",
+			TypedContent: game.TypedContent{QCMAnswers: &game.QCMAnswers{Red: "a", Green: "b", Yellow: "c", Blue: "d"}, QCMCorrect: "RED"}},
+		{ID: "mc-2", RectoTheme: "B", Difficulty: 2, Type: game.QuestionTypeSpeedy, QuestionText: "Q2 ?", AnswerText: "reponse-2", AnswerImage: "r2.png"},
+	}
+	frames := e.stage(func() {
+		e.app.engine.SetPhase(game.PhaseStopped)
+		e.app.engine.Ready("", &game.Question{ID: "mq1", Type: game.QuestionTypeMemotion, MotionCards: cards, MotionMode: "SOLO"})
+		e.app.engine.SetPhase(game.PhaseStarted)
+		e.app.engine.InitMotionState()
+		e.app.broadcastUpdate()
+		e.push("START")
+	})
+	for _, name := range []string{"A1", "B", "unbound"} {
+		for _, key := range []string{"ANSWER_TEXT", "ANSWER_IMAGE", "ANSWER", "QCM_CORRECT"} {
+			var hits []string
+			for _, h := range framesWithKey258(frames[name], key) {
+				if strings.Contains(h, "MOTION_CARDS") || strings.Contains(h, "MEMOTION_ACTIVE") {
+					hits = append(hits, h)
+				}
+			}
+			if len(hits) != 0 {
+				t.Errorf("%s : clé %s présente dans une carte non révélée : %v", name, key, hits[:min(2, len(hits))])
+			}
+		}
+		// le reste de la carte reste visible (liste C)
+		if !strings.Contains(strings.Join(frames[name], ""), "Q1 ?") {
+			t.Errorf("%s : QUESTION_TEXT des cartes reste transmis (liste C)", name)
+		}
+	}
+}
