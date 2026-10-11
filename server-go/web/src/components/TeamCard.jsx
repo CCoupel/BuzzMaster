@@ -656,12 +656,12 @@ export default function TeamCard({
                     <input
                       type="checkbox"
                       className="player-select-checkbox"
-                      checked={playerAward.selected(buzzer.mac) && !playerAward.awarded(buzzer.mac)}
-                      disabled={!!playerAward.awarded(buzzer.mac)}
+                      checked={playerAward.selected(buzzer.mac) && !playerAward.awarded(buzzer.mac) && !playerAward.teamAwarded}
+                      disabled={!!playerAward.awarded(buzzer.mac) || !!playerAward.teamAwarded}
                       onChange={(e) => playerAward.onChange(buzzer.mac, e.target.checked)}
                       onClick={(e) => e.stopPropagation()}
                       aria-label={`Sélectionner ${buzzer.name || buzzer.mac}`}
-                      title={playerAward.awarded(buzzer.mac) ? 'Déjà crédité pour cette question' : undefined}
+                      title={playerAward.awarded(buzzer.mac) ? 'Déjà crédité pour cette question' : (playerAward.teamAwarded ? 'Équipe déjà créditée pour cette question' : undefined)}
                     />
                   )}
                   {buzzer.isVPlayer ? (
@@ -742,7 +742,10 @@ export default function TeamCard({
                       ✓ déjà crédité {playerAward.awarded(buzzer.mac).POINTS > 0 ? '+' : ''}{playerAward.awarded(buzzer.mac).POINTS}
                     </span>
                   )}
-                  {playerAward && !playerAward.awarded(buzzer.mac) && playerAward.selected(buzzer.mac) && playerAward.preview(buzzer.mac) !== null && (
+                  {playerAward && !playerAward.awarded(buzzer.mac) && playerAward.teamAwarded && (
+                    <span className="award-done-chip">✓ équipe déjà créditée</span>
+                  )}
+                  {playerAward && !playerAward.awarded(buzzer.mac) && !playerAward.teamAwarded && playerAward.selected(buzzer.mac) && playerAward.preview(buzzer.mac) !== null && (
                     <span className={`award-preview${playerAward.preview(buzzer.mac) < 0 ? ' neg' : ''}`}>
                       {playerAward.preview(buzzer.mac) > 0 ? '+' : ''}{playerAward.preview(buzzer.mac)}
                     </span>

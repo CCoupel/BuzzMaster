@@ -525,7 +525,10 @@ export default function GamePage() {
 
   // Unités sélectionnables = pas encore créditées pour cette question (AWARDED_TEAMS / .PLAYERS).
   const awardableTeams = displayTeams.filter(t => !(t.name in awardedTeams))
-  const awardablePlayers = displayTeams.flatMap(t => t.buzzers.map(b => b.mac)).filter(mac => !(mac in awardedPlayers))
+  // #254 : un joueur d'une équipe déjà créditée AU NIVEAU ÉQUIPE (AWARDED_TEAMS.TEAMS[].TEAM_LEVEL) est grisé
+  // comme un joueur déjà crédité (le serveur l'ignorerait : TEAM_ALREADY_AWARDED).
+  const teamLevelCredited = (teamName) => awardedTeams[teamName]?.TEAM_LEVEL === true
+  const awardablePlayers = displayTeams.flatMap(t => (teamLevelCredited(t.name) ? [] : t.buzzers.map(b => b.mac))).filter(mac => !(mac in awardedPlayers))
   const awardableKeys = isPlayerLevel ? awardablePlayers : awardableTeams.map(t => t.name)
   const awardEntries = awardableKeys
     .filter(key => awardSelected.has(key))
@@ -590,7 +593,7 @@ export default function GamePage() {
   })()
   const pickQcmAnswer = (color) => {
     const correct = color === gameState.question?.QCM_CORRECT
-    const keys = [...(qcmUnitsByColor[color] || [])].filter(k => !(k in (isPlayerLevel ? awardedPlayers : awardedTeams)))
+    const keys = [...(qcmUnitsByColor[color] || [])].filter(k => (isPlayerLevel ? awardablePlayers.includes(k) : !(k in awardedTeams)))
     setAwardSelected(new Set(keys)) // désélectionne d'abord tout, puis sélectionne celles de cette réponse
     setAwardManual(false)
     setAwardWrong(!correct)
@@ -645,11 +648,13 @@ export default function GamePage() {
       if (n === 0) text = `Aucun${unit === 'équipe' ? 'e' : ''} ${unit} crédité${unit === 'équipe' ? 'e' : ''}.`
       else if (amounts.length === 1 && amounts[0] < 0) text = `✓ Pénalité ${String(amounts[0]).replace('-', '−')} appliquée à ${n} ${unit}${plural}.`
       else text = `✓ Points attribués à ${n} ${unit}${plural}.`
-      const k = r.skipped.length
+      const kTeam = r.skipped.filter(s => s.reason === 'TEAM_ALREADY_AWARDED').length
+      const k = r.skipped.length - kTeam
       if (k > 0) {
         const fem = unit === 'équipe' ? 'e' : ''
         text += ` ${k} ${unit}${k > 1 ? 's' : ''} déjà crédité${fem}${k > 1 ? 's' : ''} ignoré${fem}${k > 1 ? 's' : ''}.`
       }
+      if (kTeam > 0) text += ` ${kTeam} joueur${kTeam > 1 ? 's' : ''} ignoré${kTeam > 1 ? 's' : ''} (équipe déjà créditée).`
       setAwardToast({ kind: 'ok', text })
       setAwardSelected(new Set())
       setPickedColor(null)
@@ -1866,6 +1871,7 @@ export default function GamePage() {
                     selected: (mac) => awardSelected.has(mac),
                     onChange: toggleAwardKey,
                     awarded: (mac) => (mac in awardedPlayers ? awardedPlayers[mac] : null),
+                    teamAwarded: teamLevelCredited(team.name),
                     preview: (mac) => (awardSelected.has(mac) ? awardPlayerAmount(mac) : null),
                   } : null}
                   onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}

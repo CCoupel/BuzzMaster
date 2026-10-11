@@ -687,7 +687,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         const map = {}
         ;(MSG?.TEAMS || []).forEach((entry) => {
           if (!entry?.TEAM) return
-          map[entry.TEAM] = { POINTS: entry.POINTS, TIMESTAMP: entry.TIMESTAMP }
+          map[entry.TEAM] = { POINTS: entry.POINTS, TIMESTAMP: entry.TIMESTAMP, ...(entry.TEAM_LEVEL !== undefined ? { TEAM_LEVEL: entry.TEAM_LEVEL === true } : {}) }
         })
         // Tableau vide ([]) -> map vide ({}) : c'est la réinitialisation
         // "payload vide" demandée par F1, sans cas particulier à écrire.
