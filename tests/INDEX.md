@@ -80,3 +80,7 @@
 | server-go/web/src/pages/PlayerDisplay.answered-color.255.test.jsx | unit | tv | #255 TV : badges QCM selon ANSWERED_COLOR | regression | |
 | server-go/web/src/pages/AnimPage.answered-color.255.test.jsx | unit | anim | #255 anim : réponse QCM selon ANSWERED_COLOR | regression | |
 | server-go/cmd/server/awarded_replay_256_test.go | integration | scores, websocket | #256 question rejouée : AWARDED_TEAMS vide à Ready, manche 2 non héritée | regression | critical |
+| server-go/internal/protocol/vplayer_answers_258_test.go | unit | vplayer, websocket | #258 filtrage des réponses des autres équipes et de la bonne réponse (sérialiseurs), par phase et destinataire | regression | critical |
+| server-go/cmd/server/vplayer_answers_258_test.go | integration | vplayer, websocket, game-engine | #258 espion sur toutes les trames des tablettes (QCM, SPEEDY, HELLO, MEMOTION) ; TV/anim inchangées | regression | critical |
+| server-go/web/src/hooks/useWebSocket.vplayer-filter.258.test.js | unit | vplayer, websocket | #258 START/STOP/PAUSE/CONTINUE/UPDATE_TIMER n écrasent pas bumpers/teams | regression | |
+| tests/procedures/vplayer-answers-hidden-258.md | manual | vplayer | #258 procédure manuelle (utilisateur seul) | regression | |
