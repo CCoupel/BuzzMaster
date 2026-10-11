@@ -1014,16 +1014,18 @@ func TestHTTPServer_ListFiles(t *testing.T) {
 	}
 }
 
+// #245 (re-revue, sécurité) : DELETE /files/... ne supprime plus que le MÉDIA d'une question (/files/questions/<id>/<fichier>) ;
+// la règle précédente (n'importe quel fichier sous /files) est abrogée — voir rounds_http_hardening_245_test.go pour les refus.
 func TestHTTPServer_DeleteFile(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
-	// Create a file to delete
-	filesDir := filepath.Join(dataDir, "files")
-	os.MkdirAll(filesDir, 0755)
-	testFile := filepath.Join(filesDir, "to-delete.txt")
+	// Create a question media file to delete
+	questionDir := filepath.Join(dataDir, "files", "questions", "5")
+	os.MkdirAll(questionDir, 0755)
+	testFile := filepath.Join(questionDir, "media.png")
 	os.WriteFile(testFile, []byte("delete me"), 0644)
 
-	req := httptest.NewRequest("DELETE", "/files/to-delete.txt", nil)
+	req := httptest.NewRequest("DELETE", "/files/questions/5/media.png", nil)
 	w := httptest.NewRecorder()
 
 	server.mux.ServeHTTP(w, req)
