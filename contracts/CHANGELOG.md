@@ -2,6 +2,15 @@
 
 ---
 
+## [20261012] — Manches : « Sans manche » en premier (#245, v11.2, décisions utilisateur)
+
+- **[CHANGED]** `models.md` §Manches — ordre de jeu : groupe **« Sans manche » en premier**, puis les manches. Les questions créées hors manche ou générées par l'IA vont à la fin de « Sans manche » (`ORDER` = max du groupe + 1) ; repli par navigateur confirmé.
+- **[CHANGED]** `http-endpoints.md` — génération IA : fin du groupe « Sans manche », en tête de liste.
+- **[CHANGED]** `game-state.md` §`ROUND_CONTEXT` — `POSITION`/`TOTAL` sans les ENTRACTE.
+- Toujours aucune migration : sans manche, l'ordre reste identique à v11.1. Entractes de début et de fin de manche : en cours d'arbitrage (rapport planner), pas encore au contrat.
+
+---
+
 ## [20261012] — Manches : regroupement et ordre des questions (#245, v11.2, cadrage)
 
 > Défauts de cadrage, à confirmer par l'utilisateur, en même temps que les maquettes (rapport planner) : « Sans manche » en dernier ; repli des manches mémorisé par navigateur ; questions générées par l'IA dans « Sans manche ».

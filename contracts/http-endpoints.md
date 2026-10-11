@@ -1120,4 +1120,4 @@ comportement d'interface, hors périmètre de ce contrat HTTP.
 ### Manches et sauvegarde (v11.2, #245)
 - `GET /questions` : chaque question porte son `ROUND_ID` éventuel. La liste des manches est dans `GameState.ROUNDS`.
 - **Sauvegarde / restauration** : `data/files/questions/rounds.json` fait partie de `files/questions`, donc il est sauvegardé et restauré **avec les questions**. Une restauration remplace les manches comme elle remplace les questions. Une question qui cite une manche absente tombe dans « Sans manche ».
-- **Génération IA** (`ai-generation.md` §5.2) : les questions générées n'ont pas de `ROUND_ID`. Elles arrivent dans « Sans manche », en fin de liste *(défaut, inchangé)*.
+- **Génération IA** (`ai-generation.md` §5.2) : les questions générées n'ont pas de `ROUND_ID`. Elles arrivent **à la fin du groupe « Sans manche »**, qui est **en tête** de la liste *(décision utilisateur)*. `ORDER` = plus grand `ORDER` de ce groupe + 1, comme aujourd'hui.
