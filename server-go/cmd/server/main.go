@@ -4973,29 +4973,33 @@ func buildVPlayerOpenPhasePayloads(msg *protocol.Message, envelope map[string]js
 		return nil, false
 	}
 
-	payloads := make(map[string][]byte, len(recipients))
-	for _, r := range recipients {
-		var bumpers, teams interface{}
-		if json.Unmarshal(envelope["bumpers"], &bumpers) != nil {
-			return nil, false
-		}
-		bm, ok := bumpers.(map[string]interface{})
-		if !ok {
-			return nil, false
-		}
-		if _, present := bm[r.PlayerID]; !present {
-			continue // evicted since GetGameJSON(): SendRawToVPlayers falls back to the shared frame
-		}
-		for _, b := range bm {
-			if bumper, ok := b.(map[string]interface{}); ok {
-				for _, field := range protocol.AdminOnlyBumperFields {
-					delete(bumper, field)
-				}
+	// bumpers / teams decoded ONCE (admin-only bumper fields stripped once); each
+	// recipient works on a deep copy it is free to neutralise in place.
+	var bumpersAny, teamsAny interface{}
+	if json.Unmarshal(envelope["bumpers"], &bumpersAny) != nil {
+		return nil, false
+	}
+	baseBumpers, ok := bumpersAny.(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+	for _, b := range baseBumpers {
+		if bumper, ok := b.(map[string]interface{}); ok {
+			for _, field := range protocol.AdminOnlyBumperFields {
+				delete(bumper, field)
 			}
 		}
-		root := map[string]interface{}{"bumpers": bumpers}
-		if envelope["teams"] != nil && json.Unmarshal(envelope["teams"], &teams) == nil {
-			root["teams"] = teams
+	}
+	hasTeams := envelope["teams"] != nil && json.Unmarshal(envelope["teams"], &teamsAny) == nil
+
+	payloads := make(map[string][]byte, len(recipients))
+	for _, r := range recipients {
+		if _, present := baseBumpers[r.PlayerID]; !present {
+			continue // evicted since GetGameJSON(): SendRawToVPlayers falls back to the shared frame
+		}
+		root := map[string]interface{}{"bumpers": deepCopyJSON(baseBumpers)}
+		if hasTeams {
+			root["teams"] = deepCopyJSON(teamsAny)
 		}
 		protocol.FilterVPlayerAnswers(root, r.PlayerID, phase)
 		bumpersRaw, err1 := json.Marshal(root["bumpers"])
@@ -5020,6 +5024,26 @@ func buildVPlayerOpenPhasePayloads(msg *protocol.Message, envelope map[string]js
 		payloads[r.PlayerID] = buf
 	}
 	return payloads, true
+}
+
+// deepCopyJSON copies a decoded JSON tree (maps, slices, scalars).
+func deepCopyJSON(v interface{}) interface{} {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(x))
+		for k, e := range x {
+			out[k] = deepCopyJSON(e)
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(x))
+		for i, e := range x {
+			out[i] = deepCopyJSON(e)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 // stripVPlayerHiddenGameFields returns a copy of the "GAME" node JSON with
