@@ -890,7 +890,7 @@ Réordonne les questions.
 
 ### ROUNDS_UPDATE ✨ (v11.2, #245)
 
-Fixe **en une action** la structure complète : liste ordonnée des manches, questions de chaque manche dans l'ordre, questions « Sans manche ». Elle couvre la création, le renommage, la suppression et le réordonnancement des manches, ainsi que le déplacement de questions dans une manche ou entre manches.
+Fixe **en une action** la structure complète : liste ordonnée des manches, questions de chaque manche dans l'ordre, questions « Sans manche ». Elle couvre la création (avec ses entractes automatiques), le renommage, la suppression (avec le choix du sort de ses questions) et le réordonnancement des manches, ainsi que le déplacement de questions dans une manche ou entre manches.
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -899,31 +899,61 @@ Fixe **en une action** la structure complète : liste ordonnée des manches, que
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| ROUNDS | array | ✅ | Manches dans l'ordre voulu, 0 à 50 |
+| ROUNDS | array | ✅ | Manches **conservées ou créées**, dans l'ordre voulu, 0 à 50 |
 | ROUNDS[].ID | string | ⬜ | ID existant ; **absent ou `""` = nouvelle manche**, ID attribué par le serveur |
 | ROUNDS[].NAME | string | ✅ | 1 à 60 caractères après suppression des espaces de bord |
 | ROUNDS[].QUESTIONS | []string | ✅ | IDs des questions de la manche, dans l'ordre (peut être vide) |
+| ROUNDS[].ENTRACTES | boolean | ⬜ | **Nouvelle manche seulement** (ignoré pour une manche existante) : créer les deux entractes automatiques (ci-dessous). **Absent = `true`** *(décision utilisateur : création automatique par défaut)* |
 | UNASSIGNED | []string | ✅ | IDs « Sans manche », dans l'ordre |
+| DELETED_ROUNDS | array | ⬜ | Manches **supprimées** par ce message, avec le choix fait dans la fenêtre de suppression |
+| DELETED_ROUNDS[].ID | string | ✅ | ID d'une manche existante |
+| DELETED_ROUNDS[].QUESTIONS | string | ✅ | `"KEEP"` : ses questions passent à la **fin du groupe « Sans manche »** (lui-même en tête), dans leur ordre. `"DELETE"` : ses questions sont **supprimées définitivement**, dossier et médias, comme `DELETE` |
+
+**Entractes automatiques à la création d'une manche** (`ENTRACTES` absent ou `true`) :
+- Le serveur crée **deux questions `ENTRACTE` standard** (#214). Aucun champ particulier : rien ne les distingue d'une ENTRACTE créée à la main.
+  - **Début** : `QUESTION` et `ENTRACTE_CONFIG.TITLE` = « Début de la manche <NOM> », `SUBTITLE` = `""`, placée **en tête** de la manche.
+  - **Fin** : même chose avec « Fin de la manche <NOM> », placée **à la fin**.
+  - Autres champs : valeurs par défaut d'une nouvelle ENTRACTE de l'éditeur (`PANEL_SIZE`, `ANIM_*` de la config globale, sans image).
+- IDs attribués comme toute création (`resolveQuestionDir`).
+- Ensuite ce sont des ENTRACTE ordinaires : modifiables (titre, sous-titre, image), déplaçables, supprimables, jouées et sautées par « à suivre » **exactement** comme toute ENTRACTE (§NEXT_QUESTION, règle #214 inchangée). **Renommer la manche ne les renomme pas.**
+- Plus de 997 questions (IDs épuisés) : refus `QUESTION_ID_EXHAUSTED`, rien n'est appliqué.
 
 **Validation (refus global, rien appliqué)** → `ROUNDS_UPDATE_RESULT{STATUS:"REFUSED", REASON}` à l'émetteur et `WARN ROUNDS_UPDATE_REFUSED` :
 - `INVALID_NAME` : nom vide ou de plus de 60 caractères ;
 - `TOO_MANY_ROUNDS` : plus de 50 manches ;
-- `UNKNOWN_ROUND` : ID fourni mais inconnu ;
+- `UNKNOWN_ROUND` : ID fourni (dans `ROUNDS` ou `DELETED_ROUNDS`) mais inconnu ;
+- `INVALID_DECISION` : `DELETED_ROUNDS[].QUESTIONS` ∉ {`KEEP`, `DELETE`}, ou manche à la fois dans `ROUNDS` et dans `DELETED_ROUNDS` ;
+- `MISSING_ROUND_DECISION` : une manche existante n'est ni dans `ROUNDS` ni dans `DELETED_ROUNDS` (`ROUNDS` = liste). Une manche n'est jamais supprimée sans choix explicite ;
 - `DUPLICATE_QUESTION` : une question citée deux fois ;
 - `UNKNOWN_QUESTION` : ID de question inexistant sur le disque (`QUESTIONS` = liste) ;
-- `INCOMPLETE` : une question existante n'est citée nulle part (`QUESTIONS` = liste ; protège d'un client dont la liste est périmée).
+- `INCOMPLETE` : une question existante n'est ni citée dans `ROUNDS`/`UNASSIGNED`, ni membre (selon son `ROUND_ID` actuel) d'une manche de `DELETED_ROUNDS` (`QUESTIONS` = liste ; protège d'un client dont la liste est périmée) ;
+- `QUESTION_ID_EXHAUSTED` : voir ci-dessus.
 
-**Application** :
-1. Écrit `rounds.json` : manches dans l'ordre, nouvelles manches numérotées depuis `NEXT_ID`. Une manche **absente** de `ROUNDS` est **supprimée** ; ses questions sont celles que le client place dans `UNASSIGNED` ou dans d'autres manches.
-2. **Une question n'est jamais supprimée** par cette action.
-3. Pour chaque question : `ROUND_ID` (retiré si « Sans manche ») et `ORDER` = position **dans son groupe** (0-based). **Seuls les fichiers qui changent sont réécrits.**
-4. Diffuse `UPDATE` (`GameState.ROUNDS`), `QUESTIONS` (admin) et `NEXT_QUESTION` (anim). Répond `ROUNDS_UPDATE_RESULT{STATUS:"APPLIED", ROUNDS:[{ID,NAME}]}` à l'émetteur, qui y trouve les IDs attribués. Journal `INFO ROUNDS_UPDATE` (manches créées, renommées, supprimées ; nombre de questions déplacées).
+Les questions d'une manche supprimée **ne sont pas** citées par le client : le serveur les retrouve par leur `ROUND_ID` actuel.
 
-**Concurrence** : dernier écrit gagnant (comme `REORDER_QUESTIONS`). Le refus `INCOMPLETE` évite qu'un poste à la liste périmée fasse disparaître une question d'une manche.
+**Application** (sous un seul verrou des fichiers de questions) :
+1. **Suppressions** (`DELETE`) : dossiers supprimés comme `DELETE`. Même règle que `DELETE` pour la question courante : aucune protection supplémentaire.
+2. **`KEEP`** : les questions des manches supprimées sont ajoutées à la fin de « Sans manche », dans leur ordre d'origine. Les deux entractes automatiques suivent **le même sort** que les autres questions de la manche (aucune règle particulière).
+3. **Nouvelles manches** : IDs depuis `NEXT_ID`, entractes automatiques créées si demandé.
+4. Écrit `rounds.json` (manches dans l'ordre).
+5. Pour chaque question restante : `ROUND_ID` (retiré si « Sans manche ») et `ORDER` = position **dans son groupe** (0-based). **Seuls les fichiers qui changent sont réécrits.**
+6. Diffuse `UPDATE` (`GameState.ROUNDS`, `ROUND_CONTEXT`), `QUESTIONS` (admin) et `NEXT_QUESTION` (anim).
+7. Répond à l'émetteur :
+
+   ```
+   ROUNDS_UPDATE_RESULT{STATUS:"APPLIED",
+     ROUNDS:[{ID, NAME}],
+     CREATED_ENTRACTES:[{ROUND_ID, START_ID, END_ID}],
+     DELETED_QUESTIONS:[ids]}
+   ```
+
+   Journal `INFO ROUNDS_UPDATE` : manches créées, renommées, supprimées avec leur choix ; entractes créées ; questions déplacées et supprimées.
+
+**Concurrence** : dernier écrit gagnant (comme `REORDER_QUESTIONS`). `INCOMPLETE` et `MISSING_ROUND_DECISION` évitent qu'un poste à la liste périmée fasse disparaître une question ou une manche.
 
 ```json
-{ "ACTION": "ROUNDS_UPDATE", "MSG": { "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement", "QUESTIONS": ["3", "1"]}, {"NAME": "Manche finale", "QUESTIONS": ["5"]} ], "UNASSIGNED": ["2", "4"] } }
-{ "ACTION": "ROUNDS_UPDATE_RESULT", "MSG": { "STATUS": "APPLIED", "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement"}, {"ID": "r2", "NAME": "Manche finale"} ] } }
+{ "ACTION": "ROUNDS_UPDATE", "MSG": { "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement", "QUESTIONS": ["3", "1"]}, {"NAME": "Manche finale", "QUESTIONS": ["5"], "ENTRACTES": true} ], "UNASSIGNED": ["2", "4"], "DELETED_ROUNDS": [ {"ID": "r2", "QUESTIONS": "KEEP"} ] } }
+{ "ACTION": "ROUNDS_UPDATE_RESULT", "MSG": { "STATUS": "APPLIED", "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement"}, {"ID": "r3", "NAME": "Manche finale"} ], "CREATED_ENTRACTES": [ {"ROUND_ID": "r3", "START_ID": "86", "END_ID": "87"} ], "DELETED_QUESTIONS": [] } }
 ```
 
 ---

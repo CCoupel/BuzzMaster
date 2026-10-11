@@ -2,6 +2,21 @@
 
 ---
 
+## [20261012] — Manches : entractes automatiques et suppression avec choix (#245, v11.2, décisions utilisateur)
+
+- **[CHANGED]** `websocket-actions.md` §ROUNDS_UPDATE :
+  - `ROUNDS[].ENTRACTES` (nouvelle manche, absent = `true`) : le serveur crée deux **ENTRACTE standard**, « Début de la manche … » en tête et « Fin de la manche … » à la fin, sans marqueur ni règle particulière ;
+  - `DELETED_ROUNDS[{ID, QUESTIONS: KEEP|DELETE}]` : choix de la fenêtre de suppression. `KEEP` → fin de « Sans manche » ; `DELETE` → questions supprimées (comme `DELETE`). Les entractes suivent le sort des autres questions ;
+  - nouveaux refus `INVALID_DECISION`, `MISSING_ROUND_DECISION`, `QUESTION_ID_EXHAUSTED` ;
+  - résultat : `CREATED_ENTRACTES`, `DELETED_QUESTIONS` ;
+  - remplace « une manche absente de `ROUNDS` est supprimée » et « une question n'est jamais supprimée ».
+- **[CHANGED]** `game-state.md` §`ROUND_CONTEXT` — `FIRST_OF_ROUND` = première entrée **non-ENTRACTE** de la manche.
+- **[CHANGED]** `models.md` §Manches, `logging.md` §3.2 septies.
+- « À suivre » inchangé : les ENTRACTE restent sautées (#214).
+- Aucune BREAKING (champs additifs ; `ROUNDS_UPDATE` pas encore livré).
+
+---
+
 ## [20261012] — Tablettes : médias de réponse et note animateur retirés (#258, v11.2, revue M1)
 
 - **[CHANGED]** `vplayer-payload-filter.md` §7 :
