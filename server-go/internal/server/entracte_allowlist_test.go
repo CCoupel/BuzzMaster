@@ -35,6 +35,8 @@ var entracteExpectedAllowed = map[string]bool{
 	protocol.ActionClientTrace:           true,  // #246 diagnostic: accepted in every phase (arbitrage teamleader)
 	protocol.ActionArdoiseFinal:          false, // #246 B-STOP
 	protocol.ActionTeamPointsBatch:       false, // #244/#251 grouped award: default-deny during entracte
+	protocol.ActionBumperPointsBatch:     false, // #254 reserved
+	protocol.ActionLaunchLock:            false, // #253: handled by a dedicated pre-gate in handleWebMessage, not by this list
 	protocol.ActionReady:                 false,
 	protocol.ActionStart:                 false,
 	protocol.ActionStop:                  false,

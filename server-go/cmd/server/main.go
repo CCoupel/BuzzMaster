@@ -864,7 +864,7 @@ func (a *App) setupCallbacks() {
 	// WebSocket closes. Extracted as a named method (rather than inlined here) so it can be
 	// unit-tested directly — see onPlayerDisconnected below.
 	a.wsHub.OnPlayerDisconnected = a.onPlayerDisconnected
-	a.wsHub.SetOnClientClosed(a.forgetClientDiag)
+	a.wsHub.SetOnClientClosed(a.onClientClosed)
 
 	// Handle new log entries - broadcast to logs WebSocket clients
 	a.logger.SetOnNewEntry(func(entry game.LogEntry) {
@@ -1410,7 +1410,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		}
 		return
 	}
-	if a.engine.IsEntracte() && !server.IsActionAllowedDuringEntracte(msg.Action) {
+	if a.engine.IsEntracte() && msg.Action != protocol.ActionLaunchLock && !server.IsActionAllowedDuringEntracte(msg.Action) {
 		a.logger.Warn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): blocked during ENTRACTE", msg.Action, incoming.ClientID, incoming.ClientType)
 		return
 	}
@@ -1433,7 +1433,15 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		}
 	}
 
+	// #253: suspended while the "Lancer la partie" popup is open (any sender).
+	if a.launchGate(incoming.ClientID, clientType, msg) {
+		return
+	}
+
 	switch msg.Action {
+	case protocol.ActionLaunchLock:
+		a.handleLaunchLock(incoming.ClientID, msg)
+
 	case protocol.ActionHello:
 		// Send state directly to the connecting client (not broadcast - avoids race condition)
 		a.sendStateToClient(incoming.ClientID, clientType)
@@ -2033,6 +2041,9 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 	}
 
 	a.logger.Info(game.LogComponentEngine, "NEW_GAME options=%s", newGameOptionsLog(opts))
+	if rel, ok := a.engine.CloseLaunchLock(clientID, "new_game"); ok { // applied NEW_GAME of the owner lifts the lock
+		a.logLaunchLockReleased(clientID, rel)
+	}
 	res := a.engine.InitGameWith(opts) // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
 	a.questionSound().Stop()           // the question sound ends with the question
 	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
@@ -4184,6 +4195,108 @@ type ardoiseSeqState struct {
 	last     int
 }
 
+// onClientClosed runs when any web connection closes: drops its diagnostic state
+// and releases the "Lancer la partie" lock if this connection owned it (#253).
+func (a *App) onClientClosed(clientID string) {
+	a.forgetClientDiag(clientID)
+	if rel, ok := a.engine.CloseLaunchLock(clientID, "disconnect"); ok {
+		a.logLaunchLockReleased(clientID, rel)
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
+	}
+}
+
+func (a *App) logLaunchLockReleased(clientID string, rel game.LaunchLockReleased) {
+	if rel.Reason == "disconnect" || rel.Reason == "expired" {
+		server.LogWarn(game.LogComponentApp, "LAUNCH_LOCK_RELEASED client=%q reason=%q held_ms=%d", rel.Owner, rel.Reason, rel.HeldMs)
+		return
+	}
+	server.LogInfo(game.LogComponentApp, "LAUNCH_LOCK_RELEASED client=%q reason=%q held_ms=%d", rel.Owner, rel.Reason, rel.HeldMs)
+}
+
+// suspendedDuringLaunch lists the actions refused for EVERY sender while the
+// launch lock is held (contracts/websocket-actions.md §LAUNCH_LOCK).
+var suspendedDuringLaunch = map[string]bool{
+	// conduct
+	protocol.ActionReady: true, protocol.ActionForceReady: true, protocol.ActionStart: true,
+	protocol.ActionStop: true, protocol.ActionPause: true, protocol.ActionContinue: true,
+	protocol.ActionReveal: true, protocol.ActionRemote: true, protocol.ActionQuestionSound: true,
+	protocol.ActionEntracteSet: true, protocol.ActionMemorySetTeams: true, protocol.ActionMotionSetTeams: true,
+	protocol.ActionMotionSelect: true, protocol.ActionMotionFlip: true, protocol.ActionMotionStopTimer: true,
+	protocol.ActionMotionReveal: true, protocol.ActionMotionDone: true, protocol.ActionRafaleValidate: true,
+	protocol.ActionRafaleInvalidate: true, protocol.ActionRafaleSetTeams: true, protocol.ActionFlipMemoryCard: true,
+	// points
+	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
+	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,
+	// teams and players
+	protocol.ActionUpdate: true, protocol.ActionFull: true, protocol.ActionDeleteBumper: true,
+	protocol.ActionReleaseBumperName: true,
+}
+
+// launchGate refuses, with a targeted answer, the actions suspended while the
+// "Lancer la partie" popup is open. It returns true when the message was handled
+// (refused) and must not be dispatched (#253).
+func (a *App) launchGate(clientID string, clientType server.ClientType, msg *protocol.Message) bool {
+	owner := a.engine.LaunchLockOwner()
+	if owner == "" {
+		return false
+	}
+	switch {
+	case msg.Action == protocol.ActionNewGame:
+		if clientID == owner {
+			return false
+		}
+		server.LogWarn(game.LogComponentApp, "ACTION_REFUSED_LAUNCH client=%q type=%q action=%q", clientID, string(clientType), msg.Action)
+		if rm, err := protocol.NewMessage(protocol.ActionNewGameRefused, protocol.NewGameRefusedPayload{Reason: "LAUNCH_IN_PROGRESS"}); err == nil {
+			a.wsHub.SendToClient(clientID, rm)
+		}
+		return true
+	case suspendedDuringLaunch[msg.Action]:
+		// A tablette's own flip is a player action, not game conduct.
+		if msg.Action == protocol.ActionFlipMemoryCard && clientType == server.ClientTypeVPlayer {
+			return false
+		}
+		server.LogWarn(game.LogComponentApp, "ACTION_REFUSED_LAUNCH client=%q type=%q action=%q", clientID, string(clientType), msg.Action)
+		if rm, err := protocol.NewMessage(protocol.ActionActionRefused, protocol.ActionRefusedPayload{Action: msg.Action, Reason: "LAUNCH_IN_PROGRESS"}); err == nil {
+			a.wsHub.SendToClient(clientID, rm)
+		}
+		return true
+	}
+	return false
+}
+
+// handleLaunchLock processes LAUNCH_LOCK {STATE: OPEN|CLOSE} from an admin (#253).
+func (a *App) handleLaunchLock(clientID string, msg *protocol.Message) {
+	var p protocol.LaunchLockPayload
+	if err := json.Unmarshal(msg.Msg, &p); err != nil {
+		return
+	}
+	switch p.State {
+	case "OPEN":
+		renewed, reason := a.engine.OpenLaunchLock(clientID, func(rel game.LaunchLockReleased) {
+			a.logLaunchLockReleased(clientID, rel)
+			a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
+		})
+		if reason != "" {
+			server.LogWarn(game.LogComponentApp, "LAUNCH_LOCK_REFUSED client=%q reason=%q", clientID, reason)
+			if rm, err := protocol.NewMessage(protocol.ActionLaunchLockRefused, protocol.LaunchLockRefusedPayload{Reason: reason}); err == nil {
+				a.wsHub.SendToClient(clientID, rm)
+			}
+			return
+		}
+		if !renewed {
+			server.LogInfo(game.LogComponentApp, "LAUNCH_LOCK_OPENED client=%q", clientID)
+		}
+		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
+	case "CLOSE":
+		if rel, ok := a.engine.CloseLaunchLock(clientID, "close"); ok {
+			a.logLaunchLockReleased(clientID, rel)
+			a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
+		} else {
+			server.LogInfo(game.LogComponentApp, "LAUNCH_LOCK close ignored (not the owner) client=%q", clientID)
+		}
+	}
+}
+
 // forgetClientDiag drops the per-connection diagnostic state of a closed
 // connection (#246 review mineur 1).
 func (a *App) forgetClientDiag(clientID string) {
@@ -4467,10 +4580,15 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 	// reduced path (broadcastUpdateToVPlayers -> buildVPlayerPayloads) is
 	// untouched by this, it strips its own extra field list separately
 	// (stripVPlayerHiddenGameFields, below).
-	var dataWeb []byte
+	var dataWeb, dataTV []byte
 	if targetTV || targetAnim {
 		if data, err := msg.SerializeForWebClient(); err == nil {
 			dataWeb = data
+		}
+	}
+	if targetTV {
+		if data, err := msg.SerializeForTV(); err == nil { // #253: no LAUNCH_LOCK on the TV
+			dataTV = data
 		}
 	}
 	var dataVPlayer []byte
@@ -4479,8 +4597,8 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 			dataVPlayer = data
 		}
 	}
-	if targetTV && dataWeb != nil {
-		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeTV)
+	if targetTV && dataTV != nil {
+		a.wsHub.BroadcastRawToTypes(dataTV, server.ClientTypeTV)
 	}
 	if targetVPlayer && dataVPlayer != nil {
 		a.broadcastUpdateToVPlayers(msg, dataVPlayer)
@@ -6275,6 +6393,14 @@ func (a *App) broadcastQuestions() {
 func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	server.LogDebug(game.LogComponentWebSocket, "Sending state to client: %s (type=%s)", clientID, clientType)
 
+	// #253: HELLO_ACK first (admin and anim only): the client learns its own
+	// connection ID before the state, to recognise itself as LAUNCH_LOCK owner.
+	if clientType == server.ClientTypeAdmin || clientType == server.ClientTypeAnim {
+		if ack, err := protocol.NewMessage(protocol.ActionHelloAck, protocol.HelloAckPayload{ClientID: clientID}); err == nil {
+			a.wsHub.SendToClient(clientID, ack)
+		}
+	}
+
 	// Send UPDATE with game state — serialized per clientType (#154 E1),
 	// mirroring broadcastUpdateTo's existing Admin/TV+VPlayer split. Note:
 	// unlike broadcastUpdateTo's VPlayer path in PREPARE/READY, this never
@@ -6289,6 +6415,8 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	var err error
 	if clientType == server.ClientTypeAdmin {
 		updateData, err = updateMsg.SerializeForAdmin()
+	} else if clientType == server.ClientTypeTV {
+		updateData, err = updateMsg.SerializeForTV()
 	} else {
 		updateData, err = updateMsg.SerializeForWebClient()
 	}

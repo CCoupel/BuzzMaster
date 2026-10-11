@@ -73,6 +73,11 @@ const (
 	ActionNewGameRefused        = "NEW_GAME_REFUSED"         // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
 	ActionTeamPointsBatch       = "TEAM_POINTS_BATCH"        // Client → Server (admin): grouped team award (v11.2, #244/#251)
 	ActionTeamPointsBatchResult = "TEAM_POINTS_BATCH_RESULT" // Server → sender: outcome of the grouped award (v11.2)
+	ActionBumperPointsBatch     = "BUMPER_POINTS_BATCH"      // Admin → Server: grouped player award (#254, handler to come; listed now so #253 can suspend it)
+	ActionHelloAck              = "HELLO_ACK"                // Server → admin/anim (targeted): this connection's own ID (v11.2, #253)
+	ActionLaunchLock            = "LAUNCH_LOCK"              // Admin → Server: popup "Lancer la partie" open/close/renew (v11.2, #253)
+	ActionLaunchLockRefused     = "LAUNCH_LOCK_REFUSED"      // Server → sender: opening refused (v11.2, #253)
+	ActionActionRefused         = "ACTION_REFUSED"           // Server → sender: action suspended by LAUNCH_LOCK (v11.2, #253)
 	ActionRevealRefused         = "REVEAL_REFUSED"           // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
 	ActionClientTrace           = "CLIENT_TRACE"             // Client → Server: diagnostic trace (v11.2, #246)
 	ActionArdoiseInput          = "ARDOISE_INPUT"            // VPlayer → Server: free-text answer update (throttled)
@@ -815,6 +820,27 @@ type TeamPointsBatchResultPayload struct {
 	Teams      []string                 `json:"TEAMS"`
 }
 
+// HelloAckPayload for HELLO_ACK (v11.2, #253).
+type HelloAckPayload struct {
+	ClientID string `json:"CLIENT_ID"`
+}
+
+// LaunchLockPayload for LAUNCH_LOCK: STATE is OPEN (open, then renew) or CLOSE.
+type LaunchLockPayload struct {
+	State string `json:"STATE"`
+}
+
+// LaunchLockRefusedPayload for LAUNCH_LOCK_REFUSED.
+type LaunchLockRefusedPayload struct {
+	Reason string `json:"REASON"` // LOCKED_BY_OTHER | ENTRACTE_ACTIVE
+}
+
+// ActionRefusedPayload for ACTION_REFUSED.
+type ActionRefusedPayload struct {
+	Action string `json:"ACTION"`
+	Reason string `json:"REASON"` // LAUNCH_IN_PROGRESS
+}
+
 // RevealPayload for REVEAL (v11.2, #246): FORCE reveals despite pending ARDOISE answers.
 type RevealPayload struct {
 	Force bool `json:"FORCE"`
@@ -1062,6 +1088,18 @@ var AdminOnlyGameFields = []string{
 // sites below (D2/§6 "un site oublié laisse la fuite ouverte").
 var VPlayerOnlyGameFields = []string{
 	"ARDOISE_ANSWERS",
+	"LAUNCH_LOCK", // #253: no use on a tablet
+}
+
+// TVOnlyGameFields lists GAME fields stripped from the TV path only (anim keeps
+// them): LAUNCH_LOCK is for admin and anim banners (#253).
+var TVOnlyGameFields = []string{
+	"LAUNCH_LOCK",
+}
+
+// SerializeForTV is SerializeForWebClient() plus TVOnlyGameFields stripped.
+func (m *Message) SerializeForTV() ([]byte, error) {
+	return m.serializeFiltered(TVOnlyGameFields)
 }
 
 // serializeFiltered is the shared implementation behind SerializeForWebClient

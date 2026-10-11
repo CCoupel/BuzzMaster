@@ -268,6 +268,8 @@ type Engine struct {
 	// paths (SetArdoiseAnswer, Ready, NEW_GAME/InitGame; ARDOISE_FINAL in Batch 2).
 	// Any difference with state.ArdoiseAnswers at a checkpoint is a rogue write.
 	ardoiseControlMu sync.Mutex
+	launchLockTimer  *time.Timer // #253
+	launchLockGen    int
 	ardoiseControl   map[string]string
 
 	// Callbacks
@@ -410,6 +412,7 @@ func NewEngine() *Engine {
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
 			ScoreChange:    DefaultScoreChange(),
+			LaunchLock:     LaunchLock{},
 			// RAFALE (v8.0.0, #107): initialize empty (not nil) so JSON
 			// serializes []/{} (not null) — same "no omitempty" discipline
 			// as MEMOTION/ARDOISE above (contracts/rafale.md §4).
@@ -8565,4 +8568,106 @@ func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEnt
 		safeGo("SaveHistory", e.SaveHistory)
 	}
 	return res
+}
+
+// --- LAUNCH_LOCK (v11.2, #253) -------------------------------------------------
+
+// LaunchLockRenewEvery and LaunchLockTTL are the contract values (renewal 15 s,
+// safety expiry 45 s); variables so that tests can shorten them.
+var (
+	LaunchLockRenewEvery = 15 * time.Second
+	LaunchLockTTL        = 45 * time.Second
+)
+
+// LaunchLockReleased describes a released lock (for the caller's journal).
+type LaunchLockReleased struct {
+	Owner  string
+	HeldMs int64
+	Reason string // close | new_game | disconnect | expired
+}
+
+// OpenLaunchLock takes or renews the lock for owner. reason is "" on success,
+// else LOCKED_BY_OTHER or ENTRACTE_ACTIVE. An OPEN of the current owner is a
+// renewal and is never refused. onExpire is called (outside the lock) if the lock
+// expires by itself.
+func (e *Engine) OpenLaunchLock(owner string, onExpire func(LaunchLockReleased)) (renewed bool, reason string) {
+	e.mu.Lock()
+	e.expireLaunchLockUnsafe(time.Now()) // a stale lock never blocks
+	ll := &e.state.LaunchLock
+	if ll.Active && ll.Owner == owner {
+		renewed = true
+	} else if ll.Active {
+		e.mu.Unlock()
+		return false, "LOCKED_BY_OTHER"
+	} else if e.state.Entracte {
+		e.mu.Unlock()
+		return false, "ENTRACTE_ACTIVE"
+	}
+	now := time.Now()
+	if !renewed {
+		ll.Active, ll.Owner, ll.Since = true, owner, now.UnixMilli()
+	}
+	ll.ExpiresAt = now.Add(LaunchLockTTL).UnixMilli()
+	e.launchLockGen++
+	gen := e.launchLockGen
+	if e.launchLockTimer != nil {
+		e.launchLockTimer.Stop()
+	}
+	e.launchLockTimer = time.AfterFunc(LaunchLockTTL, func() {
+		e.mu.Lock()
+		if e.launchLockGen != gen || !e.state.LaunchLock.Active {
+			e.mu.Unlock()
+			return
+		}
+		rel := e.releaseLaunchLockUnsafe("expired")
+		e.mu.Unlock()
+		if onExpire != nil {
+			onExpire(rel)
+		}
+	})
+	e.mu.Unlock()
+	return renewed, ""
+}
+
+// releaseLaunchLockUnsafe clears the lock (caller holds e.mu, lock is active).
+func (e *Engine) releaseLaunchLockUnsafe(reason string) LaunchLockReleased {
+	ll := e.state.LaunchLock
+	rel := LaunchLockReleased{Owner: ll.Owner, HeldMs: time.Now().UnixMilli() - ll.Since, Reason: reason}
+	e.state.LaunchLock = LaunchLock{}
+	e.launchLockGen++
+	if e.launchLockTimer != nil {
+		e.launchLockTimer.Stop()
+		e.launchLockTimer = nil
+	}
+	return rel
+}
+
+// expireLaunchLockUnsafe lazily releases a lock whose deadline has passed.
+func (e *Engine) expireLaunchLockUnsafe(now time.Time) {
+	ll := e.state.LaunchLock
+	if ll.Active && now.UnixMilli() >= ll.ExpiresAt {
+		e.releaseLaunchLockUnsafe("expired") // the timer's own release is the one journalled
+	}
+}
+
+// CloseLaunchLock releases the lock if owner holds it. released is false when
+// there is no lock or another connection owns it.
+func (e *Engine) CloseLaunchLock(owner, reason string) (LaunchLockReleased, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.state.LaunchLock.Active || e.state.LaunchLock.Owner != owner {
+		return LaunchLockReleased{}, false
+	}
+	return e.releaseLaunchLockUnsafe(reason), true
+}
+
+// LaunchLockOwner returns the current owner ("" if none; a stale lock is released first).
+func (e *Engine) LaunchLockOwner() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.expireLaunchLockUnsafe(time.Now())
+	if !e.state.LaunchLock.Active {
+		return ""
+	}
+	return e.state.LaunchLock.Owner
 }

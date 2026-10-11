@@ -768,10 +768,14 @@ type GameState struct {
 	TeamsLocked bool `json:"TEAMS_LOCKED"`
 	// ScoreChange (v11.2, #252): marker of the last score modification, so the
 	// screens animate nothing on a hidden correction. Always serialised.
-	ScoreChange        ScoreChange `json:"SCORE_CHANGE"`
-	VirtualPlayerLimit int         `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
-	EnrollmentActive   bool        `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
-	ShowQRCode         bool        `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
+	ScoreChange ScoreChange `json:"SCORE_CHANGE"`
+	// LaunchLock (v11.2, #253): the "Lancer la partie" popup is open on an admin
+	// connection; game conduct is suspended for every client meanwhile. Always
+	// serialised, not persisted.
+	LaunchLock         LaunchLock `json:"LAUNCH_LOCK"`
+	VirtualPlayerLimit int        `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
+	EnrollmentActive   bool       `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
+	ShowQRCode         bool       `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
 	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
 	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
 	// NOT persisted (state_persistence.go excludes it explicitly, alongside
@@ -1033,6 +1037,15 @@ type ScoreChange struct {
 	Display bool     `json:"DISPLAY"`
 	Teams   []string `json:"TEAMS"`
 	Players []string `json:"PLAYERS"`
+}
+
+// LaunchLock is GameState.LAUNCH_LOCK (contracts/game-state.md §LAUNCH_LOCK).
+// Owner is the owning connection ID; Since/ExpiresAt are milliseconds since epoch.
+type LaunchLock struct {
+	Active    bool   `json:"ACTIVE"`
+	Owner     string `json:"OWNER"`
+	Since     int64  `json:"SINCE"`
+	ExpiresAt int64  `json:"EXPIRES_AT"`
 }
 
 // DefaultScoreChange is the initial / post-NEW_GAME value.
