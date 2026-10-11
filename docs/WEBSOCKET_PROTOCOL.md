@@ -1566,6 +1566,14 @@ quasi-totalité des actions qui sont refusées (C4, gel de config).
 
 ---
 
+## Clé ANSWERED_COLOR des bumpers (v11.2, #255)
+
+Source : `contracts/ws-payload-serialization.md` (ligne `ANSWERED_COLOR`).
+
+- Clé `ANSWERED_COLOR` présente dans les `bumpers` envoyés aux clients **admin**, **TV**, **anim** et **VJoueur**.
+- Tolérée côté **buzzer** (le firmware BuzzClick ne la lit pas).
+- Un client antérieur ignore la clé.
+
 ## Sérialiseurs et Filtrage par Type de Client (v6.5.2, #128)
 
 ### Listes de Filtrage
