@@ -84,3 +84,7 @@
 | server-go/cmd/server/vplayer_answers_258_test.go | integration | vplayer, websocket, game-engine | #258 espion sur toutes les trames des tablettes (QCM, SPEEDY, HELLO, MEMOTION) ; TV/anim inchangées | regression | critical |
 | server-go/web/src/hooks/useWebSocket.vplayer-filter.258.test.js | unit | vplayer, websocket | #258 START/STOP/PAUSE/CONTINUE/UPDATE_TIMER n écrasent pas bumpers/teams | regression | |
 | tests/procedures/vplayer-answers-hidden-258.md | manual | vplayer | #258 procédure manuelle (utilisateur seul) | regression | |
+| server-go/cmd/server/rounds_update_245_test.go | integration | questions, websocket, game-engine | #245 ROUNDS_UPDATE : valide, fichiers modifiés seulement, refus atomiques, entractes automatiques, KEEP/DELETE, IDs épuisés, allow-list, LAUNCH_LOCK | regression | critical |
+| server-go/cmd/server/rounds_order_245_test.go | integration | questions, game-engine, websocket | #245 ordre de jeu à deux niveaux, NEXT_QUESTION (entractes proposées, NEW_ROUND), ROUND_CONTEXT, sans manche = v11.1, parité (fixture partagée tests/fixtures/rounds_order_245.json) | regression | critical |
+| server-go/cmd/server/rounds_entracte_245_test.go | integration | anim, game-engine, websocket | #245 l anim lance et termine les entractes (déroulé complet piloté par l anim seule), ACTIVE:true refusé, LAUNCH_LOCK | regression | critical |
+| server-go/internal/server/rounds_245_test.go | unit | questions | #245 formulaire : round_id à la création, ROUND_ID conservé à la modification | regression | |

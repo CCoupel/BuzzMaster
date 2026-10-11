@@ -1,0 +1,18 @@
+{
+  "_comment": "#245 scénario 12 — fixture PARTAGÉE de parité JS / Go. EXPECTED_ORDER est écrit à la main, indépendamment des deux implémentations : « Sans manche » en premier (ORDER puis ID numérique, ORDER absent = ID, manche inconnue = Sans manche), puis les manches dans l'ordre de ROUNDS.",
+  "ROUNDS": [{"ID": "r1", "NAME": "Un"}, {"ID": "r2", "NAME": "Deux"}],
+  "QUESTIONS": [
+    {"ID": "10", "TYPE": "SPEEDY", "ORDER": 5},
+    {"ID": "11", "TYPE": "QCM", "ORDER": 5},
+    {"ID": "12", "TYPE": "SPEEDY", "ORDER": 0},
+    {"ID": "20", "TYPE": "SPEEDY", "ORDER": 3, "ROUND_ID": "r2"},
+    {"ID": "21", "TYPE": "ENTRACTE", "ORDER": 0, "ROUND_ID": "r2"},
+    {"ID": "22", "TYPE": "SPEEDY", "ORDER": 1, "ROUND_ID": "r2"},
+    {"ID": "30", "TYPE": "SPEEDY", "ORDER": 2, "ROUND_ID": "r1"},
+    {"ID": "31", "TYPE": "SPEEDY", "ORDER": 1, "ROUND_ID": "r1"},
+    {"ID": "32", "TYPE": "ENTRACTE", "ORDER": 9, "ROUND_ID": "r1"},
+    {"ID": "40", "TYPE": "SPEEDY", "ORDER": 1, "ROUND_ID": "r9"},
+    {"ID": "41", "TYPE": "SPEEDY"}
+  ],
+  "EXPECTED_ORDER": ["12", "40", "10", "11", "41", "31", "30", "32", "21", "22", "20"]
+}
