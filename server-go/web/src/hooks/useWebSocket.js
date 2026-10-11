@@ -93,6 +93,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // #253 (v11.2) — verrou de la popup « Lancer la partie » : tant que ACTIVE, le serveur suspend les
     // actions de jeu ; OWNER = identifiant de la connexion admin propriétaire.
     LAUNCH_LOCK: { ACTIVE: false, OWNER: '', SINCE: 0, EXPIRES_AT: 0 },
+    // #245 (v11.2) — manches du quiz (liste ordonnée {ID, NAME}, diffusée à tous les clients) et place de la
+    // question courante dans ses manches (calculée par le serveur ; la TV n'a pas la liste des questions).
+    ROUNDS: [],
+    ROUND_CONTEXT: { ROUND_ID: '', ROUND_INDEX: 0, ROUND_COUNT: 0, POSITION: 0, TOTAL: 0, FIRST_OF_ROUND: false },
     // ENTRACTE_CONFIG — configuration DIFFUSÉE au panneau (gelée pendant une
     // pause active, corrections C4). entracteConfigSaved (ci-dessous) est la
     // configuration ENREGISTRÉE, toujours à jour, admin-only — c'est elle que
@@ -226,6 +230,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // #244/#251 — dernier TEAM_POINTS_BATCH_RESULT (ciblé, émetteur) : { status, reason, questionId,
   // applied: [{team, points}], skipped: [{team, reason}], teams: string[] } | null
   const [teamPointsBatchResult, setTeamPointsBatchResult] = useState(null)
+  // #245 — dernier ROUNDS_UPDATE_RESULT (ciblé, émetteur) : { status, reason, rounds: [{id, name}],
+  // createdEntractes: [{roundId, startId, endId}], deletedQuestions: string[], questions: string[] } | null
+  const [roundsUpdateResult, setRoundsUpdateResult] = useState(null)
   // #254 — dernier BUMPER_POINTS_BATCH_RESULT : { status, reason, questionId, applied: [{id, points}],
   // skipped: [{id, reason}], players: string[] } | null
   const [bumperPointsBatchResult, setBumperPointsBatchResult] = useState(null)
@@ -519,6 +526,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             TEAMS_LOCKED: MSG.GAME.TEAMS_LOCKED ?? prev.TEAMS_LOCKED,
             SCORE_CHANGE: MSG.GAME.SCORE_CHANGE ?? prev.SCORE_CHANGE,
             LAUNCH_LOCK: MSG.GAME.LAUNCH_LOCK ?? prev.LAUNCH_LOCK,
+            ROUNDS: MSG.GAME.ROUNDS ?? prev.ROUNDS,
+            ROUND_CONTEXT: MSG.GAME.ROUND_CONTEXT ?? prev.ROUND_CONTEXT,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
             // ENTRACTE_CONFIG_SAVED (corrections C4) — diffusion restreinte à
             // l'admin (AdminOnlyGameFields), même repli que QUIZ_OBJECTIVES :
@@ -837,6 +846,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
           applied: (MSG?.APPLIED || []).map((e) => ({ team: e.TEAM, points: e.POINTS })),
           skipped: (MSG?.SKIPPED || []).map((e) => ({ team: e.TEAM, reason: e.REASON })),
           teams: MSG?.TEAMS || [],
+        })
+        break
+
+      case 'ROUNDS_UPDATE_RESULT':
+        setRoundsUpdateResult({
+          status: MSG?.STATUS,
+          reason: MSG?.REASON,
+          rounds: (MSG?.ROUNDS || []).map((r) => ({ id: r.ID, name: r.NAME })),
+          createdEntractes: (MSG?.CREATED_ENTRACTES || []).map((c) => ({ roundId: c.ROUND_ID, startId: c.START_ID, endId: c.END_ID })),
+          deletedQuestions: MSG?.DELETED_QUESTIONS || [],
+          questions: MSG?.QUESTIONS || [],
         })
         break
 
@@ -1324,6 +1344,26 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setBumperPointsBatchResult(null)
   }, [])
 
+  // #245 — structure complète des manches (contrat §ROUNDS_UPDATE) ; admin seulement. `payload` =
+  // { rounds: [{id?, name, questions, entractes?}], unassigned: string[], deletedRounds?: [{id, questions}] }.
+  // Retourne le booléen de sendMessage (false : WebSocket fermée, rien n'est parti).
+  const roundsUpdate = useCallback((payload) => {
+    const msg = {
+      ROUNDS: (payload.rounds || []).map((r) => ({
+        ...(r.id ? { ID: r.id } : {}),
+        NAME: r.name,
+        QUESTIONS: (r.questions || []).map(String),
+        ...(r.entractes !== undefined ? { ENTRACTES: !!r.entractes } : {}),
+      })),
+      UNASSIGNED: (payload.unassigned || []).map(String),
+    }
+    if (payload.deletedRounds?.length) {
+      msg.DELETED_ROUNDS = payload.deletedRounds.map((d) => ({ ID: d.id, QUESTIONS: d.questions }))
+    }
+    return sendMessage('ROUNDS_UPDATE', msg)
+  }, [sendMessage])
+  const clearRoundsUpdateResult = useCallback(() => setRoundsUpdateResult(null), [])
+
   const clearTeamPointsBatchResult = useCallback(() => {
     setTeamPointsBatchResult(null)
   }, [])
@@ -1542,6 +1582,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     connectionId,
     teamPointsBatch,
     teamPointsBatchResult,
+    roundsUpdate,
+    roundsUpdateResult,
+    clearRoundsUpdateResult,
     clearTeamPointsBatchResult,
     // ARDOISE garde-fous au STOP (#246)
     ardoiseFinalAck,

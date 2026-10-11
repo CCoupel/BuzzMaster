@@ -45,3 +45,49 @@ export function shuffleArray(array) {
   }
   return result
 }
+
+/**
+ * #245 (v11.2) — ordre de jeu et d'affichage à DEUX niveaux, règle unique du contrat (models.md §Manches) écrite aussi
+ * côté Go (`getNextQuestionPayload`) : (1) le groupe « Sans manche » EN PREMIER ; (2) puis les manches dans l'ordre de
+ * `rounds` ; (3) dans chaque groupe, par ORDER croissant puis par ID numérique. Une question dont `ROUND_ID` est absent,
+ * vide ou inconnu est « Sans manche ». Sans aucune manche, l'ordre est identique à `sortQuestionsByOrder` (v11.1).
+ */
+function compareInGroup(a, b) {
+  const orderA = a.ORDER !== undefined && a.ORDER !== null ? parseInt(a.ORDER) : parseInt(a.ID)
+  const orderB = b.ORDER !== undefined && b.ORDER !== null ? parseInt(b.ORDER) : parseInt(b.ID)
+  if (orderA !== orderB) return orderA - orderB
+  return parseInt(a.ID) - parseInt(b.ID)
+}
+
+/**
+ * Répartit les questions en groupes ordonnés.
+ * @returns {{ unassigned: object[], rounds: Array<{ID: string, NAME: string, questions: object[]}> }}
+ */
+export function groupQuestionsByRound(questionsById, rounds) {
+  const list = Array.isArray(rounds) ? rounds : []
+  const known = new Set(list.map(r => r.ID))
+  const unassigned = []
+  const byRound = new Map(list.map(r => [r.ID, []]))
+  Object.values(questionsById || {})
+    .filter(q => q && q.ID)
+    .forEach(q => {
+      if (q.ROUND_ID && known.has(q.ROUND_ID)) byRound.get(q.ROUND_ID).push(q)
+      else unassigned.push(q)
+    })
+  return {
+    unassigned: unassigned.sort(compareInGroup),
+    rounds: list.map(r => ({ ID: r.ID, NAME: r.NAME, questions: byRound.get(r.ID).sort(compareInGroup) })),
+  }
+}
+
+/** Liste à plat dans l'ordre de jeu : « Sans manche », puis chaque manche. */
+export function sortQuestionsByRounds(questionsById, rounds) {
+  const g = groupQuestionsByRound(questionsById, rounds)
+  return [...g.unassigned, ...g.rounds.flatMap(r => r.questions)]
+}
+
+/** Nombre de questions réelles et d'entractes d'une liste (les ENTRACTE ne comptent pas comme questions). */
+export function countEntries(questions) {
+  const entractes = questions.filter(q => q.TYPE === 'ENTRACTE').length
+  return { questions: questions.length - entractes, entractes }
+}
