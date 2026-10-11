@@ -1574,6 +1574,46 @@ Source : `contracts/ws-payload-serialization.md` (ligne `ANSWERED_COLOR`).
 - Tolérée côté **buzzer** (le firmware BuzzClick ne la lit pas).
 - Un client antérieur ignore la clé.
 
+## Manches — ROUNDS_UPDATE, NEXT_QUESTION, ENTRACTE_SET (v11.2, #245)
+
+Source de vérité : `contracts/websocket-actions.md` §ROUNDS_UPDATE, §NEXT_QUESTION, §ENTRACTE_SET ; `contracts/models.md` §Manches ;
+`contracts/game-state.md` §Manches (`ROUND_CONTEXT`).
+
+### ROUNDS_UPDATE (admin seulement, toutes phases, permise pendant le verrou de lancement)
+
+Fixe en une action la structure complète : manches (ordre, noms, questions), questions « Sans manche », suppressions.
+
+```json
+{ "ACTION": "ROUNDS_UPDATE", "MSG": { "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement", "QUESTIONS": ["3", "1"]}, {"NAME": "Manche finale", "QUESTIONS": ["7"], "ENTRACTES": true} ], "UNASSIGNED": ["9"], "DELETED_ROUNDS": [ {"ID": "r2", "QUESTIONS": "KEEP"} ] } }
+```
+
+- `ROUNDS[].ID` : absent ou `""` = nouvelle manche (ID attribué par le serveur, jamais réutilisé). `ENTRACTES` (nouvelle manche seulement,
+  absent = `true`) crée les deux entractes automatiques « Début/Fin de la manche <NOM> ».
+- `DELETED_ROUNDS[].QUESTIONS` : `"KEEP"` (questions en fin de « Sans manche ») ou `"DELETE"` (supprimées définitivement).
+- **Refus global** (`ROUNDS_UPDATE_RESULT { STATUS: "REFUSED", REASON }`, rien n'est appliqué, `WARN ROUNDS_UPDATE_REFUSED`) :
+  `INVALID_NAME`, `TOO_MANY_ROUNDS` (plus de 50), `UNKNOWN_ROUND`, `INVALID_DECISION`, `MISSING_ROUND_DECISION`,
+  `DUPLICATE_QUESTION`, `UNKNOWN_QUESTION`, `INCOMPLETE`, `QUESTION_ID_EXHAUSTED` (plus de 997 questions),
+  `INCONSISTENT_STORE`, `ROUNDS_FILE_UNREADABLE`, `QUESTION_IN_PROGRESS` (suppression de la question courante hors repos), `WRITE_FAILED`.
+- **Identité** : le nom du dossier `data/files/questions/<ID>/`. Aucun chemin n'est construit à partir d'un ID non validé.
+- **Ordre des effets** : validation complète ; réservation des IDs ; écriture de `rounds.json` (échec : `WRITE_FAILED`) ;
+  réécriture des `question.json` modifiés, puis création des entractes ; **suppressions en dernier** ; mise à jour de l'état et
+  diffusions seulement en cas de succès.
+- **Diffusions** : `UPDATE` (`ROUNDS`, `ROUND_CONTEXT`), `QUESTIONS` (admin), `NEXT_QUESTION` (anim).
+- **Résultat** : `ROUNDS_UPDATE_RESULT { STATUS: "APPLIED", ROUNDS: [{ID, NAME}], CREATED_ENTRACTES: [{ROUND_ID, START_ID, END_ID}], DELETED_QUESTIONS: [ids] }`.
+
+### NEXT_QUESTION étendu (anim)
+
+- **Les ENTRACTE ne sont plus sautées** : `NEXT_QUESTION` propose une entrée `ENTRACTE` (`TYPE: "ENTRACTE"`, `QUESTION` = son libellé),
+  pour toutes les entractes (manuelles, programmées, de manche).
+- Champs ajoutés : `ROUND_ID` (manche de la suivante, `""` = Sans manche), `ROUND_NAME`, `NEW_ROUND` (`true` si la suivante ouvre une autre manche).
+- Diffusé aussi après `ROUNDS_UPDATE`, `REORDER_QUESTIONS` et `DELETE`.
+
+### ENTRACTE_SET (anim : arrêt seulement)
+
+- L'anim peut envoyer `ENTRACTE_SET{ACTIVE:false}` (terminer une entracte) : toujours permis, même pendant le verrou de lancement.
+- `ENTRACTE_SET{ACTIVE:true}` venant de l'anim est refusé (`WARN ENTRACTE_SET_ANIM_ACTIVATE_REFUSED`, rien n'est modifié).
+  Le déclenchement manuel reste réservé à l'admin.
+
 ## Filtrage des réponses pour les tablettes — `/ws/player` (v11.2, #258)
 
 Source de vérité : `contracts/vplayer-payload-filter.md` §7 (règle), §7.3 (implémentation), §7.5 (liste exhaustive A/B/C).
