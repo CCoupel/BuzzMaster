@@ -72,9 +72,11 @@ type Bumper struct {
 	Protocol    string      `json:"PROTOCOL,omitempty"` // Connection protocol: "TCP" or "WebSocket" (empty = TCP for backward compat)
 	Ready       bool        `json:"READY,omitempty"`
 	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
-	HintsAtBuzz int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
-	IsVirtual   bool        `json:"IS_VIRTUAL,omitempty"`    // True for virtual players (mobile app)
-	IsVPlayer   bool        `json:"IS_VPLAYER,omitempty"`    // True for VPlayer (can answer all QCM colors)
+	// AnsweredColor (v11.2, #255): the QCM colour ANSWERED to the current question, "" otherwise. Always serialised (no omitempty); reset wherever Time is reset (invariant: != "" implies Time > 0).
+	AnsweredColor AnswerColor `json:"ANSWERED_COLOR"`
+	HintsAtBuzz   int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
+	IsVirtual     bool        `json:"IS_VIRTUAL,omitempty"`    // True for virtual players (mobile app)
+	IsVPlayer     bool        `json:"IS_VPLAYER,omitempty"`    // True for VPlayer (can answer all QCM colors)
 	// OTA firmware update fields (added in v3.1.0)
 	FirmwareVersion string `json:"FIRMWARE_VERSION,omitempty"` // BuzzClick firmware version reported via HELLO
 	IsOutdated      bool   `json:"IS_OUTDATED,omitempty"`      // True if firmware is older than server-stored firmware

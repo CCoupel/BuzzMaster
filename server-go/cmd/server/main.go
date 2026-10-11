@@ -5596,7 +5596,7 @@ func (a *App) sendLEDSetForBuzzerQCMReveal(mac string, bumper *game.Bumper, stat
 	if state.Question != nil {
 		correctAnswer = state.Question.QCMCorrect
 	}
-	myAnswerCorrect := correctAnswer != "" && string(bumper.AnswerColor) == correctAnswer
+	myAnswerCorrect := correctAnswer != "" && string(bumper.AnsweredColor) == correctAnswer // #255: answered, not assigned
 
 	if !myAnswerCorrect {
 		// Wrong answer (or no correct defined): DIM 25%

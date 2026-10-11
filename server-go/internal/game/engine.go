@@ -1353,6 +1353,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 		bumper.Button = ""
 		bumper.Status = ""
 		bumper.Ready = false
@@ -2237,6 +2238,7 @@ func (e *Engine) actualStart() {
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 		bumper.Button = ""
 		bumper.Status = ""
 		bumper.HintsAtBuzz = 0
@@ -2321,6 +2323,7 @@ func (e *Engine) StartImmediate(delay int) {
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 		bumper.Button = ""
 		bumper.Status = ""
 		bumper.HintsAtBuzz = 0
@@ -3688,6 +3691,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		}
 		if color, ok := buttonToColor[button]; ok {
 			bumper.AnswerColor = color
+			bumper.AnsweredColor = color // #255: answer to the CURRENT question
 		}
 	}
 
@@ -3998,6 +4002,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 			if bumper != nil {
 				bumper.Score = 0
 				bumper.Time = 0
+				bumper.AnsweredColor = "" // #255
 			}
 		}
 		for _, team := range e.data.Teams {
@@ -4157,6 +4162,7 @@ func (e *Engine) RAZScores() {
 	for _, bumper := range e.data.Bumpers {
 		bumper.Score = 0
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 	}
 
 	for _, team := range e.data.Teams {

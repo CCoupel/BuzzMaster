@@ -376,7 +376,7 @@ func (a *App) ambianceCorrectTeams(state game.GameState) []string {
 		if b == nil || b.Time <= 0 || b.Team == "" {
 			continue
 		}
-		if string(b.AnswerColor) == state.Question.QCMCorrect {
+		if string(b.AnsweredColor) == state.Question.QCMCorrect { // #255: answered, not assigned
 			hits = append(hits, hit{b.Team, b.Time})
 		}
 	}

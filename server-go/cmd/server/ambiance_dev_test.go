@@ -84,6 +84,9 @@ func TestDevAmbianceDerivationTable(t *testing.T) {
 		for _, p := range presses {
 			bumpers[p.mac].Time = p.at
 			bumpers[p.mac].AnswerColor = p.answer
+			if p.at > 0 { // #255: an ANSWER is a press with Time > 0
+				bumpers[p.mac].AnsweredColor = p.answer
+			}
 		}
 		app.engine.SetBumpers(bumpers)
 		app.engine.SetPhase(phase)
