@@ -2,6 +2,14 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] — v11.2 — Corrections #255 et #256
+
+### Fixed
+
+- **Sélecteur de réponses QCM : seules les équipes ou joueurs ayant répondu (#255)** — Un clic sur une réponse QCM ne sélectionnait pas seulement les équipes ayant buzzé : toute équipe ayant une couleur assignée était concernée. Le sélecteur ne compte et ne sélectionne désormais que les équipes ou joueurs ayant réellement répondu à la question courante.
+- **Nouveau champ `ANSWERED_COLOR` (#255)** — Sur chaque bumper, couleur de la réponse donnée à la question QCM courante, remise à `""` à chaque question. `ANSWER_COLOR` garde son sens (couleur assignée, ou dernière couleur pressée). Les LED et l'ambiance de révélation se basent sur `ANSWERED_COLOR`. Une sauvegarde sans la clé se charge avec `""`.
+- **Crédits de la manche précédente (#256)** — Entre la sélection d'une question rejouée et son START, les crédits de la manche précédente n'étaient plus comptés « déjà crédité ». Après un redémarrage, l'historique rechargé ne compte plus pour une question tant qu'elle n'est pas sélectionnée ou lancée.
+
 ## [Unreleased] — v11.2 lot A — Fiabilisation ARDOISE, identité des joueurs virtuels, journalisation persistante (#246)
 
 > Retour terrain de la semaine bleue 2026 : le texte ARDOISE d'une équipe a disparu de l'admin et de la TV alors qu'il restait affiché sur la tablette ; des tablettes ont changé de nom sans action du joueur. Ce lot corrige les mécanismes identifiés et rend les incidents de ce type traçables.
