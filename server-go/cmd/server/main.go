@@ -4832,8 +4832,17 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 	var phaseProbe struct {
 		Phase string `json:"PHASE"`
 	}
-	if err := json.Unmarshal(envelope["GAME"], &phaseProbe); err != nil ||
-		(phaseProbe.Phase != string(game.PhasePrepare) && phaseProbe.Phase != string(game.PhaseReady)) {
+	if err := json.Unmarshal(envelope["GAME"], &phaseProbe); err != nil {
+		return nil, false
+	}
+	// #258: COUNTDOWN / STARTED / PAUSED are "answers open" phases too: each tablette
+	// gets its OWN frame (own team intact, other teams neutralised), built by the
+	// reference serializer. STOPPED and later keep the shared frame (fallback).
+	switch phaseProbe.Phase {
+	case string(game.PhaseCountdown), string(game.PhaseStarted), string(game.PhasePaused):
+		return buildVPlayerOpenPhasePayloads(msg, envelope, phaseProbe.Phase, recipients)
+	case string(game.PhasePrepare), string(game.PhaseReady):
+	default:
 		return nil, false
 	}
 
@@ -4884,6 +4893,25 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 		return nil, false
 	}
 	teamsRaw := envelope["teams"]
+	// #258: shared parts of the PREPARE/READY frame go through the same single filter,
+	// once per fan-out (recipient "": every team's answer/time fields neutral — they are
+	// zero after Ready() anyway; QUESTION.QCM_CORRECT / ANSWER removed).
+	var gameNode, teamsNode interface{}
+	if json.Unmarshal(gameRaw, &gameNode) == nil {
+		root := map[string]interface{}{"GAME": gameNode}
+		if teamsRaw != nil && json.Unmarshal(teamsRaw, &teamsNode) == nil {
+			root["teams"] = teamsNode
+		}
+		protocol.FilterVPlayerAnswers(root, "", phaseProbe.Phase)
+		if g, err := json.Marshal(root["GAME"]); err == nil {
+			gameRaw = g
+		}
+		if _, ok := root["teams"]; ok {
+			if t, err := json.Marshal(root["teams"]); err == nil {
+				teamsRaw = t
+			}
+		}
+	}
 
 	payloads := make(map[string][]byte, len(recipients))
 	for _, r := range recipients {
@@ -4911,6 +4939,86 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 		payloads[r.PlayerID] = buildVPlayerMessageBytes(actionJSON, versionJSON, gameRaw, teamsRaw, playerIDJSON, strippedBumper)
 	}
 
+	return payloads, true
+}
+
+// buildVPlayerOpenPhasePayloads builds the per-recipient frames of an UPDATE sent while
+// answers are open (COUNTDOWN / STARTED / PAUSED, #258): GAME is filtered and
+// serialised ONCE (QCM_CORRECT/ANSWER removed, admin/vplayer-hidden fields stripped);
+// bumpers and teams — small — are decoded, filtered for the recipient
+// (protocol.FilterVPlayerAnswers: own team intact, other teams neutral) and
+// serialised per tablette. Frame layout is the one of buildVPlayerMessageBytes.
+func buildVPlayerOpenPhasePayloads(msg *protocol.Message, envelope map[string]json.RawMessage, phase string, recipients []server.VPlayerRecipient) (map[string][]byte, bool) {
+	actionJSON, err := json.Marshal(msg.Action)
+	if err != nil {
+		return nil, false
+	}
+	var versionJSON []byte
+	if msg.Version != "" {
+		if versionJSON, err = json.Marshal(msg.Version); err != nil {
+			return nil, false
+		}
+	}
+	gameRaw, err := stripVPlayerHiddenGameFields(envelope["GAME"])
+	if err != nil {
+		return nil, false
+	}
+	var gameNode interface{}
+	if json.Unmarshal(gameRaw, &gameNode) != nil {
+		return nil, false
+	}
+	gameRoot := map[string]interface{}{"GAME": gameNode}
+	protocol.FilterVPlayerAnswers(gameRoot, "", phase)
+	if gameRaw, err = json.Marshal(gameRoot["GAME"]); err != nil {
+		return nil, false
+	}
+
+	payloads := make(map[string][]byte, len(recipients))
+	for _, r := range recipients {
+		var bumpers, teams interface{}
+		if json.Unmarshal(envelope["bumpers"], &bumpers) != nil {
+			return nil, false
+		}
+		bm, ok := bumpers.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		if _, present := bm[r.PlayerID]; !present {
+			continue // evicted since GetGameJSON(): SendRawToVPlayers falls back to the shared frame
+		}
+		for _, b := range bm {
+			if bumper, ok := b.(map[string]interface{}); ok {
+				for _, field := range protocol.AdminOnlyBumperFields {
+					delete(bumper, field)
+				}
+			}
+		}
+		root := map[string]interface{}{"bumpers": bumpers}
+		if envelope["teams"] != nil && json.Unmarshal(envelope["teams"], &teams) == nil {
+			root["teams"] = teams
+		}
+		protocol.FilterVPlayerAnswers(root, r.PlayerID, phase)
+		bumpersRaw, err1 := json.Marshal(root["bumpers"])
+		teamsRaw, err2 := json.Marshal(root["teams"])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		buf := make([]byte, 0, len(gameRaw)+len(bumpersRaw)+len(teamsRaw)+len(actionJSON)+len(versionJSON)+64)
+		buf = append(buf, `{"ACTION":`...)
+		buf = append(buf, actionJSON...)
+		if len(versionJSON) > 0 {
+			buf = append(buf, `,"VERSION":`...)
+			buf = append(buf, versionJSON...)
+		}
+		buf = append(buf, `,"MSG":{"GAME":`...)
+		buf = append(buf, gameRaw...)
+		buf = append(buf, `,"bumpers":`...)
+		buf = append(buf, bumpersRaw...)
+		buf = append(buf, `,"teams":`...)
+		buf = append(buf, teamsRaw...)
+		buf = append(buf, `}}`...)
+		payloads[r.PlayerID] = buf
+	}
 	return payloads, true
 }
 
@@ -6533,6 +6641,12 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		updateData, err = updateMsg.SerializeForAdmin()
 	} else if clientType == server.ClientTypeTV {
 		updateData, err = updateMsg.SerializeForTV()
+	} else if clientType == server.ClientTypeVPlayer {
+		// #258: the initial state of a tablette goes through the VJoueur serializer
+		// (filtered per recipient; unbound connection = everything neutral). It also
+		// applies the §6 removals (ARDOISE_ANSWERS, LAUNCH_LOCK) the old path missed.
+		playerID, _ := a.wsHub.GetClientPlayerID(clientID)
+		updateData, err = updateMsg.SerializeForVPlayer(playerID)
 	} else {
 		updateData, err = updateMsg.SerializeForWebClient()
 	}

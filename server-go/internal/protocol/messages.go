@@ -1167,6 +1167,13 @@ func (m *Message) SerializeForTV() ([]byte, error) {
 //   - "teams"   → map[name]*Team   (not "TEAMS"   / slice)
 //   - "GAME"    → GameState node
 func (m *Message) serializeFiltered(extraGameFields []string) ([]byte, error) {
+	return m.serializeFilteredFor(extraGameFields, false, "")
+}
+
+// serializeFilteredFor is serializeFiltered plus, for a tablette (vplayer), the
+// #258 answer filter (filterVPlayerAnswers) applied as the LAST step, with
+// recipientID = the bound player ("" = unbound / shared frame: everything neutral).
+func (m *Message) serializeFilteredFor(extraGameFields []string, vplayer bool, recipientID string) ([]byte, error) {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(m.Msg, &raw); err != nil {
 		// Not a GameData-shaped payload (or MSG isn't even an object, e.g.
@@ -1203,6 +1210,9 @@ func (m *Message) serializeFiltered(extraGameFields []string) ([]byte, error) {
 	}
 	// "config" is a server-side key not needed by TV/VPlayer/anim clients
 	delete(raw, "config")
+	if vplayer {
+		filterVPlayerAnswers(raw, recipientID, "")
+	}
 
 	stripped, err := json.Marshal(raw)
 	if err != nil {
@@ -1239,7 +1249,7 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 // PREPARE/READY, or an unidentified player) — an update must never be
 // silently dropped or narrower than this.
 func (m *Message) SerializeForVPlayerCommon() ([]byte, error) {
-	return m.serializeFiltered(VPlayerOnlyGameFields)
+	return m.serializeFilteredFor(VPlayerOnlyGameFields, true, "")
 }
 
 // vplayerReducedPhases are the GAME.PHASE values during which a VPlayer's own
@@ -1306,7 +1316,8 @@ func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 	}
 	phase, _ := gameNode["PHASE"].(string)
 	if !vplayerReducedPhases[phase] {
-		return m.SerializeForVPlayerCommon()
+		// #258: per-recipient frame (own team intact, other teams neutral while answers are open)
+		return m.serializeFilteredFor(VPlayerOnlyGameFields, true, playerID)
 	}
 
 	bumpers, ok := raw["bumpers"].(map[string]interface{})
@@ -1328,6 +1339,7 @@ func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 	raw["bumpers"] = map[string]interface{}{playerID: own}
 	// "config" is a server-side key not needed by VPlayer clients (same as SerializeForWebClient)
 	delete(raw, "config")
+	filterVPlayerAnswers(raw, playerID, phase) // #258
 
 	stripped, err := json.Marshal(raw)
 	if err != nil {
@@ -1446,4 +1458,120 @@ func (m *Message) ParseHelloPayload() (*HelloPayload, error) {
 		return nil, err
 	}
 	return &payload, nil
+}
+
+// --- #258: answers of the other teams and the right answer, filtered per phase and recipient
+
+// vplayerOpenAnswerPhases are the phases during which answers are still open: the
+// answer/time fields of the OTHER teams must not reach a tablette.
+var vplayerOpenAnswerPhases = map[string]bool{"PREPARE": true, "READY": true, "COUNTDOWN": true, "STARTED": true, "PAUSED": true}
+
+// FilterVPlayerAnswers is the exported entry of filterVPlayerAnswers (used by the
+// fan-out in cmd/server).
+func FilterVPlayerAnswers(raw map[string]interface{}, recipientID, phase string) {
+	filterVPlayerAnswers(raw, recipientID, phase)
+}
+
+// filterVPlayerAnswers is THE single filter of contracts/vplayer-payload-filter.md §7,
+// applied by SHAPE (GAME / bumpers / teams present), never by action name, as the
+// last serialisation step of every frame destined to a tablette. raw is the decoded
+// MSG ({GAME, bumpers, teams}); it is modified in place. recipientID is the bound
+// player ("" = shared frame or unbound connection: nothing is "own", everything is
+// neutralised while answers are open); phase "" reads GAME.PHASE (an unknown phase
+// counts as open, i.e. the safe side).
+//
+//   - answers open (PREPARE..PAUSED): other teams' bumpers lose TIME, BUTTON, STATUS,
+//     ANSWER_COLOR, ANSWERED_COLOR, HINTS_AT_BUZZ (neutral values, keys kept) and other
+//     teams lose TIME, BUMPER, STATUS; own bumper and team-mates stay intact;
+//   - QUESTION.QCM_CORRECT and QUESTION.ANSWER are removed in every phase but REVEALED
+//     (MEMOTION cards: per card, until the card is REVEALED).
+func filterVPlayerAnswers(raw map[string]interface{}, recipientID, phase string) {
+	game, _ := raw["GAME"].(map[string]interface{})
+	if phase == "" && game != nil {
+		phase, _ = game["PHASE"].(string)
+	}
+
+	if game != nil && phase != "REVEALED" {
+		if q, ok := game["QUESTION"].(map[string]interface{}); ok {
+			delete(q, "QCM_CORRECT")
+			delete(q, "ANSWER")
+			if cards, ok := q["MOTION_CARDS"].([]interface{}); ok {
+				states, _ := game["MEMOTION_CARD_STATES"].(map[string]interface{})
+				for _, c := range cards {
+					card, ok := c.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					id, _ := card["ID"].(string)
+					if st, _ := states[id].(string); st == "REVEALED" {
+						continue
+					}
+					delete(card, "QCM_CORRECT")
+					delete(card, "ANSWER")
+				}
+			}
+		}
+		if active, ok := game["MEMOTION_ACTIVE"].(map[string]interface{}); ok {
+			if st, ok := active["STATE"].(map[string]interface{}); ok {
+				cardID, _ := active["CARD_ID"].(string)
+				states, _ := game["MEMOTION_CARD_STATES"].(map[string]interface{})
+				if cs, _ := states[cardID].(string); cs != "REVEALED" {
+					delete(st, "QCM_CORRECT")
+					delete(st, "ANSWER")
+				}
+			}
+		}
+	}
+
+	if phase != "" && !vplayerOpenAnswerPhases[phase] {
+		return // STOPPED / REVEALED / NEW_GAME ...: answers are closed, transmitted as is
+	}
+
+	bumpers, _ := raw["bumpers"].(map[string]interface{})
+	ownTeam := ""
+	if recipientID != "" {
+		if own, ok := bumpers[recipientID].(map[string]interface{}); ok {
+			ownTeam, _ = own["TEAM"].(string)
+		}
+	}
+	for id, b := range bumpers {
+		bumper, ok := b.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if recipientID != "" && ownTeam != "" {
+			if id == recipientID {
+				continue
+			}
+			if team, _ := bumper["TEAM"].(string); team == ownTeam {
+				continue
+			}
+		} else if recipientID != "" && id == recipientID {
+			continue // the recipient's own bumper, even without a team
+		}
+		neutralise(bumper, "TIME", float64(0))
+		neutralise(bumper, "HINTS_AT_BUZZ", float64(0))
+		neutralise(bumper, "BUTTON", "")
+		neutralise(bumper, "STATUS", "")
+		neutralise(bumper, "ANSWER_COLOR", "")
+		neutralise(bumper, "ANSWERED_COLOR", "")
+	}
+	teams, _ := raw["teams"].(map[string]interface{})
+	for name, t := range teams {
+		team, ok := t.(map[string]interface{})
+		if !ok || (recipientID != "" && ownTeam != "" && name == ownTeam) {
+			continue
+		}
+		neutralise(team, "TIME", float64(0))
+		neutralise(team, "BUMPER", "")
+		neutralise(team, "STATUS", "")
+	}
+}
+
+// neutralise sets key to its neutral value only if the key is present (keys are kept,
+// none is ever added).
+func neutralise(m map[string]interface{}, key string, neutral interface{}) {
+	if _, ok := m[key]; ok {
+		m[key] = neutral
+	}
 }
