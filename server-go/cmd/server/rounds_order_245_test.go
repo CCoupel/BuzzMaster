@@ -129,8 +129,8 @@ func TestRoundsOrder245_NewRoundIsTrueWhenTheNextEntryOpensAnotherRound(t *testi
 	e := newEnv245(t)
 	e.installFixture(t, f)
 
-	if _, rid, nr, _, _ := e.nextAfter(t, "61"); rid != "r1" || !nr { // dernier de « Sans manche » → 31 (manche r1)
-		t.Errorf("61 → 31 : ROUND_ID r1, NEW_ROUND true : %q %v", rid, nr)
+	if _, rid, nr, _, _ := e.nextAfter(t, "zeta"); rid != "r1" || !nr { // dernier de « Sans manche » → 31 (manche r1)
+		t.Errorf("zeta → 31 : ROUND_ID r1, NEW_ROUND true : %q %v", rid, nr)
 	}
 	if _, rid, nr, _, _ := e.nextAfter(t, "31"); rid != "r1" || nr { // même manche
 		t.Errorf("31 → 30 : même manche, NEW_ROUND false : %q %v", rid, nr)

@@ -1,5 +1,5 @@
 {
-  "_comment": "#245 scénario 12 + mineur 5 — fixture PARTAGÉE de parité JS / Go. EXPECTED_ORDER est écrit à la main, indépendamment des deux implémentations : « Sans manche » en premier (ORDER puis ID numérique ; manche inconnue = Sans manche), puis les manches dans l'ordre de ROUNDS. Règle de l'ORDER effectif (alignée sur le contrat) : un ORDER entier, ou une chaîne ENTIÈREMENT numérique (\"7\"), est pris tel quel ; absent, null ou chaîne invalide (\"5abc\") = repli sur l'ID numérique (60, 61, 41) ; un ID non numérique (\"alpha\") n'a pas de repli, son ORDER explicite (2) s'applique.",
+  "_comment": "#245 scénario 12 + mineur 5 — fixture PARTAGÉE de parité JS / Go. EXPECTED_ORDER est écrit à la main, indépendamment des deux implémentations : « Sans manche » en premier (ORDER puis ID numérique ; manche inconnue = Sans manche), puis les manches dans l'ordre de ROUNDS. Règle de l'ORDER effectif (alignée sur le contrat) : un ORDER entier, ou une chaîne ENTIÈREMENT numérique (\"7\"), est pris tel quel ; absent, null ou chaîne invalide (\"5abc\") = repli sur l'ID numérique (60, 61, 41) ; un ID non numérique (\"alpha\") n'a pas de repli, son ORDER explicite (2) s'applique. Compléments (re-revue) : ORDER non entier TRONQUÉ (1.5 et 1.9 → 1, donc après 40 qui vaut 1, départagés par l'ID numérique) ; un ID non numérique SANS ORDER valide (\"zeta\") n'a aucun repli : il vient APRÈS toutes les autres entrées de son groupe.",
   "ROUNDS": [
     {
       "ID": "r1",
@@ -91,11 +91,27 @@
       "ID": "alpha",
       "TYPE": "SPEEDY",
       "ORDER": 2
+    },
+    {
+      "ID": "63",
+      "TYPE": "SPEEDY",
+      "ORDER": 1.5
+    },
+    {
+      "ID": "64",
+      "TYPE": "SPEEDY",
+      "ORDER": 1.9
+    },
+    {
+      "ID": "zeta",
+      "TYPE": "SPEEDY"
     }
   ],
   "EXPECTED_ORDER": [
     "12",
     "40",
+    "63",
+    "64",
     "alpha",
     "10",
     "11",
@@ -103,6 +119,7 @@
     "41",
     "60",
     "61",
+    "zeta",
     "31",
     "30",
     "32",

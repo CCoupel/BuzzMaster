@@ -410,3 +410,64 @@ func corruptCopies245(t *testing.T, dir string) []string {
 	}
 	return out
 }
+
+// =============================== re-revue — rollback complet et WARN unique ===============================
+
+func TestRoundsHardening245_Critical_Rollback_QuestionFilesAlreadyRewrittenGetTheirOriginalContentBack(t *testing.T) {
+	e, root := newEnv245Sandboxed(t)
+	ids := []string{"1", "2", "3", "4", "5", "6", "7", "8", "99"} // 99 est traitée en dernier si l'ordre est celui des IDs
+	for i, id := range ids {
+		e.writeQ(t, id, i, "", "")
+	}
+	// 99 ne peut plus être réécrite : l'échec survient APRÈS la réécriture des autres
+	qd := filepath.Join(e.dir, "99")
+	if err := os.Chmod(filepath.Join(qd, "question.json"), 0o444); err != nil {
+		t.Skip("chmod indisponible")
+	}
+	if !readOnlyDir245(t, qd) {
+		t.Skip("le système de fichiers n'applique pas les droits : injection d'échec impossible ici")
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(qd, "question.json"), 0o644) })
+	before := treeSnapshot245(t, root)
+
+	e.update(t, e.admin1, []roundSpec245{{Name: "Tout", Questions: ids, Entractes: boolp(false)}}, []string{}, nil)
+
+	r := e.result(t)
+	if r.Status == "APPLIED" {
+		t.Fatalf("un échec d'écriture n'est jamais APPLIED : %+v", r)
+	}
+	_ = os.Chmod(qd, 0o755)
+	if ok, why := sameTree245(before, treeSnapshot245(t, root)); !ok {
+		t.Errorf("après l'échec, les question.json déjà réécrites retrouvent leur contenu d'origine, rounds.json n'apparaît pas (%s)", why)
+	}
+}
+
+func TestRoundsHardening245_Minor1b_UnreadableRoundsJsonWarnsOncePerCorruptState(t *testing.T) {
+	e, _ := newEnv245Sandboxed(t)
+	e.base(t)
+	if err := os.WriteFile(filepath.Join(e.dir, "rounds.json"), []byte(`{"ROUNDS": [ {not json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// de nombreux calculs relisent rounds.json (READY, NEXT_QUESTION, ROUNDS_UPDATE refusé…)
+	for i := 0; i < 5; i++ {
+		_ = e.app.getNextQuestionPayload()
+		e.app.engine.SetPhase(game.PhaseStopped)
+		e.send(t, e.admin1, "admin", "READY", map[string]interface{}{"QUESTION": "1"})
+	}
+	e.update(t, e.admin1, nil, []string{"1", "2", "3", "4"}, nil)
+	_ = e.result(t)
+	e.update(t, e.admin1, nil, []string{"1", "2", "3", "4"}, nil)
+	_ = e.result(t)
+
+	n := 0
+	for _, l := range e.logLines(game.LogLevelWarn) {
+		low := strings.ToLower(l)
+		if strings.Contains(low, "rounds.json") && (strings.Contains(low, "unreadable") || strings.Contains(low, "illisible") || strings.Contains(low, "corrupt")) {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("le WARN « rounds.json illisible » est émis UNE seule fois par état corrompu (pas à chaque lecture) : %d fois", n)
+	}
+}

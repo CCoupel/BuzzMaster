@@ -160,7 +160,7 @@ describe('Page de jeu — « À suivre » (#245, scénarios 33 et 39)', () => {
   })
 
   it('« Sans manche » → première manche : « → Manche 1 · Un »', () => {
-    show('61') // dernière entrée de « Sans manche » dans la fixture étendue
+    show('zeta') // dernière entrée de « Sans manche » dans la fixture étendue
     expect(nextBtn().textContent).toMatch(/→ Manche 1 · Un/)
   })
 
