@@ -413,7 +413,10 @@ func NewEngine() *Engine {
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
 			ScoreChange:    DefaultScoreChange(),
-			LaunchLock:     LaunchLock{},
+			// #256: after a restart the reloaded history must not count for any question
+			// until it is selected or started (GameTime used to stay 0 = whole history).
+			GameTime:   time.Now().UnixMicro(),
+			LaunchLock: LaunchLock{},
 			// RAFALE (v8.0.0, #107): initialize empty (not nil) so JSON
 			// serializes []/{} (not null) — same "no omitempty" discipline
 			// as MEMOTION/ARDOISE above (contracts/rafale.md §4).
@@ -1235,6 +1238,10 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 	// #249: the team roster is locked from question selection until REVEALED.
 	e.state.TeamsLocked = true
+	// #256: the "already credited" window opens at the SELECTION of the question (it
+	// used to open at START only, so a replayed question showed the previous round's
+	// credits between Ready and START).
+	e.state.GameTime = time.Now().UnixMicro()
 
 	// Check if this is a NEW question (different from current)
 	isNewQuestion := e.state.Question == nil || e.state.Question.ID != questionID
