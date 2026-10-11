@@ -55,7 +55,7 @@ const TEAM_ROWS = [
 ]
 const TEAMS = Object.fromEntries(TEAM_ROWS.map(([n], i) => [n, { NAME: n, SCORE: 10 + i, COLOR: [20 * i, 80, 160] }]))
 const bumpersFor = (hintsByTeam = {}) => Object.fromEntries(TEAM_ROWS.map(([n, color], i) => [`vj${i}`, {
-  NAME: `VJ${i}`, TEAM: n, IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true, SCORE: 0, ANSWER_COLOR: color || '', HINTS_AT_BUZZ: hintsByTeam[n] || 0,
+  NAME: `VJ${i}`, TEAM: n, IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true, SCORE: 0, ANSWER_COLOR: color || '', TIME: color ? 1000 + i : 0, /* #255 : TIME > 0 = a répondu */ HINTS_AT_BUZZ: hintsByTeam[n] || 0,
 }]))
 const QCM = { ID: '9', TYPE: 'QCM', QUESTION: 'Quel fleuve traverse Paris ?', ANSWER: 'La Seine', POINTS: '3', QCM_ANSWERS: ANSWERS, QCM_CORRECT: 'GREEN', QCM_HINTS_ENABLED: false, QCM_WRONG_PENALTY: -1, STATUS: 'REVEALED' }
 const ARDOISE = { ID: '10', TYPE: 'ARDOISE', QUESTION: 'Capitale ?', ANSWER: 'Paris', POINTS: '2', ARDOISE_KEYBOARD_TYPE: 'AZERTY', STATUS: 'REVEALED' }
