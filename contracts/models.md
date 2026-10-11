@@ -199,10 +199,11 @@ interface Question {
   QCM_HINT_THRESHOLD_2?: number
   QCM_PENALTY_1?: number
   QCM_PENALTY_2?: number
-  QCM_WRONG_PENALTY?: number // v11.2 (#254) — pénalité de mauvaise réponse, entier NÉGATIF de -100 à -1.
+  QCM_WRONG_PENALTY?: number // v11.2 (#254) — pénalité de mauvaise réponse, entier de -100 à 0.
+                             // 0 = AUCUNE pénalité (défaut, décision utilisateur) ; -N = pénalité de N points.
                              // Question QCM uniquement (jamais sur une carte MEMOTION, pas dans OwnedFields).
-                             // Absent (anciennes questions : aucune réécriture des fichiers), 0, positif ou hors
-                             // bornes → valeur effective -1. Lu par l'admin au clic sur une mauvaise réponse QCM
+                             // Absent (anciennes questions : aucune réécriture des 85 fichiers), positif ou hors
+                             // bornes → valeur effective 0. Lu par l'admin au clic sur une mauvaise réponse QCM
                              // (websocket-actions.md §TEAM_POINTS_BATCH « QCM : clic sur une réponse »).
                              // Pas d'effet serveur sur le jeu : le serveur ne fait que l'enregistrer et le servir.
 

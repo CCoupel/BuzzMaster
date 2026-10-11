@@ -2,6 +2,14 @@
 
 ---
 
+## [20261011] — Pénalité QCM : défaut 0 = aucune pénalité (#254, v11.2, correction utilisateur)
+
+- **[CHANGED]** `models.md`, `game-state.md`, `http-endpoints.md` — `QCM_WRONG_PENALTY` : bornes **−100 à 0**, **0 = aucune pénalité, valeur par défaut** ; absent ou invalide → 0 (remplace −1). Migration : aucune réécriture des fichiers.
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH « QCM : clic sur une réponse » — mauvaise réponse sans pénalité : sélection faite, champ « Points » à 0, bouton « Appliquer les pénalités (N) » désactivé avec la raison « Aucune pénalité définie pour cette question » ; une saisie manuelle le réactive.
+- Aucune BREAKING.
+
+---
+
 ## [20261011] — Identifiant de connexion `HELLO_ACK.CLIENT_ID` (#253, v11.2, précision du contrat)
 
 - **[NEW]** `websocket-actions.md` §HELLO — `HELLO_ACK { CLIENT_ID }` (Server → Client), envoyé à chaque `HELLO` d'un client **admin ou anim** seulement, avant l'`UPDATE` initial ; `CLIENT_ID` = identifiant opaque de la connexion WebSocket (ID du hub), nouveau à chaque reconnexion.
