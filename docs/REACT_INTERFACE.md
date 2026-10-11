@@ -766,7 +766,7 @@ Maquettes validées : `docs/mockup/v11.2/ui/admin_game_award__compact_block_hint
   pour un QCM avec indices révélés et un montant positif. Activé par défaut ; réarmé à chaque question ou phase.
 - **`QcmAnswerPicker`** : un clic sur une réponse sélectionne les équipes ou joueurs de cette réponse (hors déjà crédités). Le
   champ reprend la base (bonne réponse) ou la pénalité de la question (mauvaise réponse).
-- **Grisage** : une équipe créditée est grisée « ✓ déjà créditée ». Les joueurs d'une équipe créditée au niveau équipe sont
+- **Grisage** : une équipe créditée est grisée « ✓ déjà créditée ». Un joueur crédité à titre individuel affiche « ✓ déjà crédité ±N » (`TeamCard`). Les joueurs d'une équipe créditée au niveau équipe sont
   grisés « ✓ équipe déjà créditée ». Le résultat d'un lot joueurs indique « N joueurs ignorés (équipe déjà créditée) ».
 - **Éditeur de question QCM** : champ « Pénalité mauvaise réponse ». Saisie de 0 à 100, le signe − est appliqué (valeur stockée
   entre −100 et 0). 0 = aucune pénalité, valeur par défaut. Le champ n'apparaît que pour les QCM (et pas pour MEMOTION).
@@ -778,8 +778,8 @@ après le REVEAL. La variante animateur n'est pas livrée en v11.2.
 
 | Composant | Rôle |
 |-----------|------|
-| `TeamAwardBar` (`components/TeamAwardBar.jsx`) | Montant par équipe (−, saisie, +), source du montant, « Tout sélectionner / Tout désélectionner », bouton « Attribuer les points (N) » (« Appliquer les pénalités (N) », rouge, si négatif ou nul après une mauvaise réponse). Désactivé à N = 0 et pendant l'envoi. motif de blocage affiché sous la barre (`role="status"`, classe `award-blocked`), montant borné à ±999 (`AWARD_LIMIT`) |
-| `QcmAnswerPicker` (`components/QcmAnswerPicker.jsx`) | Les quatre réponses QCM cliquables ; `teamCounts[clé]` = nombre d'équipes ayant donné la réponse. Marque « ✓ bonne réponse » |
+| `TeamAwardBar` (`components/TeamAwardBar.jsx`) | Aucun champ de montant : le montant est le champ « Points » de la page. Ligne 1 : N sélectionnés et source du montant, commutateur « Indices » s'il est visible ; ligne 2 : icônes « Tout sélectionner / Tout désélectionner » et bouton « Attribuer les points (N) » (« Appliquer les pénalités (N) », rouge, si négatif ou nul après une mauvaise réponse). Désactivé à N = 0 et pendant l'envoi. Raison de blocage affichée en texte sous le bloc (`role="status"`, classe `award-reason`). Le montant est borné à ±999 (`AWARD_LIMIT`) |
+| `QcmAnswerPicker` (`components/QcmAnswerPicker.jsx`) | Les quatre réponses QCM cliquables ; `teamCounts[clé]` = nombre d'équipes ayant donné la réponse, ou de joueurs au niveau joueur (prop `unit`). Marque « ✓ bonne réponse » |
 | `TeamCard` (`components/TeamCard.jsx`) | Case à cocher (`selectable`, `selected`) ; `awardedInfo` = `{POINTS}` si l'équipe est dans `AWARDED_TEAMS` : case désactivée, classe `award-done`, mention « ✓ déjà créditée ±N » |
 
 Logique dans `GamePage.jsx` :
