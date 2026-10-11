@@ -69,7 +69,7 @@ function strictNumber(v) {
  */
 function effectiveOrder(q) {
   const o = strictNumber(q.ORDER)
-  if (o !== null) return o
+  if (o !== null) return Math.trunc(o) // ORDER non entier (1.5, 1.9) : tronqué, comme le Go
   const id = strictNumber(q.ID)
   return id !== null ? id : Infinity
 }

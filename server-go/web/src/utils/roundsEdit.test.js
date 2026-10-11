@@ -62,3 +62,10 @@ describe('gestes purs (#245)', () => {
     expect(d.deletedRounds).toEqual([{ id: 'r1', questions: 'DELETE' }])
   })
 })
+
+describe('ORDER non entier tronqué (#245, parité Go)', () => {
+  it('1.9 est traité comme 1 (puis départagé par l’ID), 1.5 comme 1', () => {
+    const m = Object.fromEntries([q(10, { ORDER: 1.9 }), q(9, { ORDER: 1.5 }), q(8, { ORDER: 2 })])
+    expect(sortQuestionsByRounds(m, []).map(x => x.ID)).toEqual(['9', '10', '8'])
+  })
+})
