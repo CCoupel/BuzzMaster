@@ -55,6 +55,8 @@ const here = dirname(fileURLToPath(import.meta.url))
 const fixture = JSON.parse(readFileSync(resolve(here, '../../../tests/fixtures/rounds_order_245.json'), 'utf8'))
 const withText = (q) => ({ QUESTION: q.TYPE === 'ENTRACTE' ? `Pause ${q.ID}` : `Question ${q.ID}`, ANSWER: 'a', POINTS: '1', TIME: '30', STATUS: 'AVAILABLE', CATEGORY: 'CULTURE', ...q })
 const QUESTIONS = Object.fromEntries(fixture.QUESTIONS.map((q) => [q.ID, withText(q)]))
+// sans manche (v11.1) : seules les questions à ORDER entier et ID numérique ont un ordre v11.1 défini
+const V111_IDS = ['10', '11', '12', '20', '21', '22', '30', '31', '32', '40', '41']
 
 const mk = (currentId, over = {}) => {
   const { statuses = {}, rounds = fixture.ROUNDS, phase = 'STOPPED' } = over
@@ -99,10 +101,13 @@ describe('Page de jeu — liste en manches (#245, scénario 18)', () => {
   })
 
   it('Critical — sans manche : liste identique à v11.1, aucun titre de manche', () => {
-    show('12', { noRounds: true })
+    game = mk('12', { noRounds: true })
+    Object.keys(game.questions).forEach((id) => { if (!V111_IDS.includes(id)) delete game.questions[id] })
+    useGame.mockReturnValue(game)
+    render(<GamePage />)
     expect(document.querySelector('.game-round-title')).toBeNull()
     const order = [...document.querySelectorAll('[data-testid^="question-card-"]')].map((n) => n.getAttribute('data-testid').replace('question-card-', ''))
-    expect(order).toEqual(['10', '11', '12', '20', '21', '22', '30', '31', '32', '40', '41'].sort((a, b) => {
+    expect(order).toEqual([...V111_IDS].sort((a, b) => {
       const oa = QUESTIONS[a].ORDER ?? Number(a), ob = QUESTIONS[b].ORDER ?? Number(b)
       return oa - ob || Number(a) - Number(b)
     }))

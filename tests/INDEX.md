@@ -97,3 +97,4 @@
 | server-go/web/src/pages/PlayerDisplay.rounds.245.test.jsx | unit | tv | #245 TV : pastille et titre de manche, rien sans manche, TV statique (CSS) | regression | critical |
 | tests/procedures/rounds-245.md | manual | questions, admin-game, anim, tv | #245 procédure manuelle (utilisateur seul) | feature | |
 | server-go/internal/server/rounds_backup_ai_245_test.go | unit | backup, questions | #245 sauvegarde questions emporte rounds.json, restauration le recharge dans GameState.ROUNDS ; questions IA sans ROUND_ID, fin de Sans manche | regression | critical |
+| server-go/cmd/server/rounds_hardening_245_test.go | integration | questions, game-engine | #245 revue : identité = nom du dossier (ID forgé, ../.., doublons), application sans effet partiel (échec d écriture, épuisement d IDs, DELETED_QUESTIONS exact), rounds.json illisible, manche de la question en cours, statuts purgés | regression | critical |
