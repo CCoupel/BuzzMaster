@@ -1401,8 +1401,8 @@ Message admin → serveur, envoyé à l'ouverture (`OPEN`) et toutes les 15 s, p
   (`LAUNCH_LOCK_RELEASED reason="disconnect"` ou `reason="expired"`).
 - **Diffusion** : `GameState.LAUNCH_LOCK` aux clients `admin` et `anim` seulement. Absent des charges TV et VJoueur.
 - **Actions suspendues** pour tout émetteur, propriétaire compris : `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }`
-  ciblé, journal `WARN ACTION_REFUSED_LAUNCH`. Liste : conduite (`READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`,
-  `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, actions MEMORY, MEMOTION, RAFALE, `FLIP_MEMORY_CARD`) ; points (`POINTS`,
+  ciblé, journal `WARN ACTION_REFUSED_LAUNCH`. Liste : conduite (`READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`,
+  `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, actions MEMORY, MEMOTION, RAFALE, `FLIP_MEMORY_CARD` hors tablettes : le retournement émis par une tablette est une action joueur, permise) ; points (`POINTS`,
   `TEAM_POINTS`, `BUMPER_POINTS`, lots, `SET_CREDIT_POINTS`, `RAZ`) ; `SHOW_QR_CODE`, `HIDE_QR_CODE`, `RESET` ;
   `UPDATE`/`FULL`, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
 - **Toujours permises** : `LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`,
@@ -1418,11 +1418,11 @@ que le client compare à `LAUNCH_LOCK.OWNER` pour se reconnaître.
 { "ACTION": "HELLO_ACK", "MSG": { "CLIENT_ID": "192.168.1.20:53124" } }
 ```
 
-`CLIENT_ID` est une chaîne opaque, unique par connexion, nouvelle à chaque reconnexion.
+`CLIENT_ID` identifie la connexion : c'est l'adresse distante `IP:port` (`WebSocketClient.ID`, `r.RemoteAddr`). Le client le compare sans l'interpréter. Il est unique par connexion et change à chaque reconnexion. Conséquence : `LAUNCH_LOCK.OWNER`, reçu par les postes admin et anim, expose l'adresse du poste propriétaire.
 
 ## Action NEW_GAME — options de purge (v11.2, #243)
 
-Envoyée par `admin` (bouton « LANCER LA PARTIE »). Contrat détaillé : `contracts/websocket-actions.md` §NEW_GAME.
+Envoyée par `admin` depuis l'entrée « 🚀 Lancer la partie » du menu Préparation (popup à quatre options, #253). Contrat détaillé : `contracts/websocket-actions.md` §NEW_GAME.
 
 ```json
 { "ACTION": "NEW_GAME", "MSG": { "PURGE_SCORES": true, "PURGE_PLAYERS": false, "PURGE_TEAMS": false, "RESET_QUESTIONS": true } }
