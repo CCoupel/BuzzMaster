@@ -187,6 +187,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // du crédit (AnimCreditControl, F2) : JAMAIS d'anticipation locale du
   // clic ici, uniquement ce que le serveur confirme.
   const [awardedTeams, setAwardedTeams] = useState({})
+  // #254 — joueurs déjà crédités individuellement pour la question courante, indexé par ID de joueur :
+  // { [id]: { POINTS, TIMESTAMP, TEAM } } (AWARDED_TEAMS.PLAYERS, contrat §AWARDED_TEAMS)
+  const [awardedPlayers, setAwardedPlayers] = useState({})
   // #155/#156 (MAJEUR-1, revue de code) — montant de base courant que
   // l'animateur créditera, rediffusé par le serveur via CREDIT_POINTS
   // (contrepartie de SET_CREDIT_POINTS émis par /admin). Remplace la lecture
@@ -223,6 +226,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // #244/#251 — dernier TEAM_POINTS_BATCH_RESULT (ciblé, émetteur) : { status, reason, questionId,
   // applied: [{team, points}], skipped: [{team, reason}], teams: string[] } | null
   const [teamPointsBatchResult, setTeamPointsBatchResult] = useState(null)
+  // #254 — dernier BUMPER_POINTS_BATCH_RESULT : { status, reason, questionId, applied: [{id, points}],
+  // skipped: [{id, reason}], players: string[] } | null
+  const [bumperPointsBatchResult, setBumperPointsBatchResult] = useState(null)
   // #253 — identifiant de CETTE connexion (pour se reconnaître propriétaire de LAUNCH_LOCK.OWNER),
   // dernier LAUNCH_LOCK_REFUSED { reason } et dernier ACTION_REFUSED { action, reason, at }.
   const [connectionId, setConnectionId] = useState(null)
@@ -686,6 +692,12 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // Tableau vide ([]) -> map vide ({}) : c'est la réinitialisation
         // "payload vide" demandée par F1, sans cas particulier à écrire.
         setAwardedTeams(map)
+        const players = {}
+        ;(MSG?.PLAYERS || []).forEach((entry) => {
+          if (!entry?.ID) return
+          players[entry.ID] = { POINTS: entry.POINTS, TIMESTAMP: entry.TIMESTAMP, TEAM: entry.TEAM }
+        })
+        setAwardedPlayers(players)
         break
       }
 
@@ -825,6 +837,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
           applied: (MSG?.APPLIED || []).map((e) => ({ team: e.TEAM, points: e.POINTS })),
           skipped: (MSG?.SKIPPED || []).map((e) => ({ team: e.TEAM, reason: e.REASON })),
           teams: MSG?.TEAMS || [],
+        })
+        break
+
+      case 'BUMPER_POINTS_BATCH_RESULT':
+        setBumperPointsBatchResult({
+          status: MSG?.STATUS,
+          reason: MSG?.REASON,
+          questionId: MSG?.QUESTION_ID,
+          applied: (MSG?.APPLIED || []).map((e) => ({ id: e.ID, points: e.POINTS })),
+          skipped: (MSG?.SKIPPED || []).map((e) => ({ id: e.ID, reason: e.REASON })),
+          players: MSG?.PLAYERS || [],
         })
         break
 
@@ -1289,6 +1312,18 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     })
   }, [sendMessage])
 
+  // #254 — attribution groupée au niveau JOUEUR. `entries` = [{ id, points }].
+  const bumperPointsBatch = useCallback((questionId, entries) => {
+    return sendMessage('BUMPER_POINTS_BATCH', {
+      QUESTION_ID: String(questionId ?? ''),
+      ENTRIES: entries.map((e) => ({ ID: e.id, POINTS: e.points })),
+    })
+  }, [sendMessage])
+
+  const clearBumperPointsBatchResult = useCallback(() => {
+    setBumperPointsBatchResult(null)
+  }, [])
+
   const clearTeamPointsBatchResult = useCallback(() => {
     setTeamPointsBatchResult(null)
   }, [])
@@ -1437,6 +1472,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     nextQuestion,
     questionPosition,
     awardedTeams,
+    awardedPlayers,
+    bumperPointsBatch,
+    bumperPointsBatchResult,
+    clearBumperPointsBatchResult,
     creditPoints,
     regieMessage,
     // RAFALE (v8.0.0, #16/#107)
