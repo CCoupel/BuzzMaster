@@ -2,6 +2,14 @@
 
 ---
 
+## [20261012] — Pas de double crédit entre niveaux équipe et joueur (#254, v11.2, revue de code)
+
+- **[CHANGED]** `websocket-actions.md` §BUMPER_POINTS_BATCH — un joueur dont l'équipe a déjà reçu un crédit **d'équipe** pour la question est ignoré (`SKIPPED`, motif **`TEAM_ALREADY_AWARDED`**), symétrique de la règle existante (un crédit joueur rend son équipe « déjà créditée » pour le lot équipe).
+- **[CHANGED]** `websocket-actions.md` §AWARDED_TEAMS — champ additif `TEAMS[].TEAM_LEVEL` (crédit d'équipe reçu), toujours présent ; l'admin grise au niveau joueur les joueurs d'une équipe créditée au niveau équipe.
+- Aucune BREAKING (motif et champ additifs ; clic unitaire inchangé, toujours libre).
+
+---
+
 ## [20261012] — Verrou de lancement : actions suspendues complétées (#253, v11.2, revue de code)
 
 - **[CHANGED]** `websocket-actions.md` §LAUNCH_LOCK « Actions suspendues » :

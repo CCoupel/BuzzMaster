@@ -651,7 +651,11 @@ Attribution groupée **au niveau joueur** (question de niveau `PLAYER`, §TEAM_P
 | DISPLAY | boolean | ⬜ | Même règle que `TEAM_POINTS_BATCH` (`false` = aucun effet public, admin seulement) |
 
 1. **Refus global** (`BUMPER_POINTS_BATCH_RESULT{STATUS:"REFUSED"}`, `WARN BUMPER_POINTS_BATCH_REFUSED`) : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, **`UNKNOWN_PLAYER`** (joueur supprimé entre la sélection et le clic ; `PLAYERS` = IDs inconnus).
-2. Sous **un seul verrou moteur** : chaque joueur **déjà crédité pour la question** (présent dans `AWARDED_TEAMS.PLAYERS`, même règle que les équipes) est ignoré (`SKIPPED`, `ALREADY_AWARDED`) ; les autres sont crédités exactement comme `BUMPER_POINTS` (score du joueur, score de l'équipe recalculé), avec **une entrée `POINTS_AWARDED` par joueur** (`WINNER_TYPE: "PLAYER"`, `WINNER_ID` = ID du joueur, `TEAM_NAME` = son équipe).
+2. Sous **un seul verrou moteur**, un joueur est ignoré (`SKIPPED`, `ALREADY_AWARDED`) s'il est **déjà crédité pour la question** :
+   - **à titre individuel** : il est présent dans `AWARDED_TEAMS.PLAYERS` (même règle que les équipes) ;
+   - **ou au niveau équipe** *(revue #254, durcissement)* : son équipe a reçu un crédit **d'équipe** pour la question, c'est-à-dire un `POINTS_AWARDED` avec `WINNER_TYPE = "TEAM"` (mêmes filtres : depuis le départ de la question, `DISPLAY ≠ false`, après le dernier `TEAM_DELETED`, 0 point de l'anim compris). Le motif de ce second cas est **`TEAM_ALREADY_AWARDED`**. C'est le pendant de la règle inverse déjà en place : un crédit joueur rend son équipe « déjà créditée » pour `TEAM_POINTS_BATCH`. Ainsi, aucun joueur n'est crédité deux fois par les deux niveaux, quel que soit l'ordre (clic unitaire sur l'équipe, lot équipe, anim). Les crédits **individuels** d'autres joueurs de la même équipe ne bloquent pas : au niveau joueur, plusieurs joueurs d'une équipe peuvent être crédités.
+
+   Les joueurs restants sont crédités exactement comme `BUMPER_POINTS` (score du joueur, score de l'équipe recalculé), avec **une entrée `POINTS_AWARDED` par joueur** (`WINNER_TYPE: "PLAYER"`, `WINNER_ID` = ID du joueur, `TEAM_NAME` = son équipe).
 3. **Effets publics groupés** (si `DISPLAY` ≠ `false`), une fois pour le lot, comme `TEAM_POINTS_BATCH` point 4, **par équipe des joueurs crédités positivement** : un son, une comète par équipe concernée, une pulsation unique, un seul flash (équipe du plus fort montant positif). Aucun effet pour les négatifs.
 4. Diffusions : `UPDATE`, `SCORE_CHANGE` (`PLAYERS` et `TEAMS` concernés), `AWARDED_TEAMS`. Réponse ciblée `BUMPER_POINTS_BATCH_RESULT`. Journal `INFO BUMPER_POINTS_BATCH`.
 5. Le clic unitaire sur un joueur (`BUMPER_POINTS`) reste **libre** (la régie n'est pas contrainte).
@@ -664,7 +668,7 @@ Attribution groupée **au niveau joueur** (question de niveau `PLAYER`, §TEAM_P
 | REASON | string | Si `REFUSED` : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, `UNKNOWN_PLAYER` |
 | QUESTION_ID | string | Question concernée |
 | APPLIED | array | `[{ID, POINTS}]` |
-| SKIPPED | array | `[{ID, REASON}]` — `ALREADY_AWARDED` |
+| SKIPPED | array | `[{ID, REASON}]` — `ALREADY_AWARDED` (joueur crédité individuellement) ou `TEAM_ALREADY_AWARDED` (équipe créditée au niveau équipe) |
 | PLAYERS | string[] | Si `UNKNOWN_PLAYER` : IDs inconnus (`[]` sinon) |
 
 ```json
@@ -1483,6 +1487,7 @@ la même équipe — que le premier vienne d'une autre tablette ou de la régie.
 | TEAMS[].TEAM | string | Nom de l'équipe |
 | TEAMS[].POINTS | int | **Somme** des points attribués à cette équipe pour la question courante (une équipe peut être créditée deux fois depuis la régie — voir ci-dessous) |
 | TEAMS[].TIMESTAMP | int64 | Horodatage µs du **premier** crédit de cette équipe pour la question courante |
+| TEAMS[].TEAM_LEVEL | boolean | ✨ *(v11.2, #254, additif)* `true` si l'équipe a reçu **au moins un crédit d'équipe** (`WINNER_TYPE = "TEAM"`) pour la question, `false` si elle n'est créditée que par ses joueurs. L'admin s'en sert au niveau joueur pour griser les lignes des joueurs de cette équipe (« ✓ équipe déjà créditée ») ; le serveur s'en sert pour le saut `TEAM_ALREADY_AWARDED` de `BUMPER_POINTS_BATCH`. Toujours présent |
 | PLAYERS | array | ✨ *(v11.2, #254)* Une entrée par **joueur crédité individuellement** (`POINTS_AWARDED` avec `WINNER_TYPE = "PLAYER"`) pour la question courante, ordre chronologique ; **mêmes règles** que `TEAMS` (`DISPLAY ≠ false`, depuis le départ de la question, 0 point de l'anim = verrou valide, après le dernier `TEAM_DELETED` de son équipe). `[]` jamais `null`. Sert au grisage des lignes de joueurs et au saut `ALREADY_AWARDED` de `BUMPER_POINTS_BATCH` |
 | PLAYERS[].ID | string | ID du joueur (`WINNER_ID`) |
 | PLAYERS[].TEAM | string | Équipe du joueur au moment du crédit |
