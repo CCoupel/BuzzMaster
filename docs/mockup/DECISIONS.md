@@ -17,3 +17,6 @@
 ## admin_new_game
 - Cocher « Joueurs des tablettes » coche et verrouille « Scores » : on ne peut pas supprimer les joueurs en gardant les scores. _(v11.2.0, purge_popup_details, #243, D2)_
 - L'option « Questions » (remettre toutes les questions à jouer) est cochée par défaut ; décochée, les questions déjà jouées le restent. _(v11.2.0, purge_popup_details, #243, D1)_
+
+## admin_scores
+- Le bandeau « Correction cachée » dit que le classement de la TV est mis à jour sans animation (décision utilisateur 2026-10-11). L'ancien libellé de la maquette (« … se mettra à jour au prochain affichage normal ») est périmé. _(v11.2.0, free_points_tv_toggle, #252)_

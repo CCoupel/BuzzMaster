@@ -239,7 +239,7 @@ Une fois la réponse révélée, la page de jeu (`/admin`) permet d'attribuer de
   Désactivé, l'attribution est une **correction cachée** :
   - Rien n'est animé, ni son, ni LED, sur aucun écran (TV, tablettes, animateur).
   - Le classement change sans animation.
-  - Une bannière « 🔇 Correction cachée » rappelle le mode.
+  - Une bannière rappelle le mode : « 🔇 Correction cachée : les points sont enregistrés sans animation, sans son ni LED. Le classement de la TV est mis à jour sans animation. » (libellé validé le 2026-10-11).
   - Une marque 🔇 apparaît sur les boutons, dans « Dernières attributions » (5 plus récentes) et dans la page Historique.
 - **Effet sur « déjà créditée »** : une correction cachée ne grise pas l'équipe. Elle n'empêche pas un crédit normal
   pour la même question, ni une attribution groupée (#244/#251).
