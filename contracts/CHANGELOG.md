@@ -2,6 +2,26 @@
 
 ---
 
+## [20261012] — `ANSWERED_COLOR` : réponse QCM donnée à la question courante (#255, v11.2)
+
+> Décision utilisateur : champ serveur additif ; `ANSWER_COLOR` garde son sens (couleur assignée / dernière pressée).
+
+- **[NEW]** `models.md` §Bumper — `ANSWERED_COLOR` :
+  - écrit au buzz QCM enregistré ;
+  - remis à `""` partout où `TIME` est remis à 0 (dont `Ready()`) ; invariant `ANSWERED_COLOR ≠ ""` ⇒ `TIME > 0` ;
+  - toujours sérialisé.
+- **[CHANGED]** `models.md` — `ANSWER_COLOR` précisé : ne signifie pas « a répondu ».
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH — « équipe / joueur d'une réponse » lit `ANSWERED_COLOR` (repli `TIME > 0 && ANSWER_COLOR` si la clé manque).
+- **[CHANGED]** `ws-payload-serialization.md` — ligne `ANSWERED_COLOR` : admin, TV, anim, VJoueur ; buzzer toléré. `vplayer-payload-filter.md` : pas de retrait, risque préexistant documenté.
+- Compatibilité :
+  - clients antérieurs : clé ignorée ;
+  - sauvegardes : clé absente = `""`, sans migration ;
+  - firmware : non concerné.
+
+  Aucune BREAKING.
+
+---
+
 ## [20261012] — Pas de double crédit entre niveaux équipe et joueur (#254, v11.2, revue de code)
 
 - **[CHANGED]** `websocket-actions.md` §BUMPER_POINTS_BATCH — un joueur dont l'équipe a déjà reçu un crédit **d'équipe** pour la question est ignoré (`SKIPPED`, motif **`TEAM_ALREADY_AWARDED`**), symétrique de la règle existante (un crédit joueur rend son équipe « déjà créditée » pour le lot équipe).

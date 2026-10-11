@@ -115,7 +115,8 @@ interface Bumper {
   VERSION: string        // Version firmware buzzer
   IP: string             // Adresse IP du buzzer
   READY: boolean         // true si prêt (PONG reçu)
-  ANSWER_COLOR: AnswerColor  // Couleur QCM assignée
+  ANSWER_COLOR: AnswerColor  // Couleur QCM assignée, ou dernière couleur pressée (LED, TeamCard) — NE signifie PAS « a répondu à la question courante »
+  ANSWERED_COLOR: AnswerColor // v11.2 (#255) — couleur RÉPONDUE à la question QCM courante, "" sinon. Toujours sérialisé (pas d'omitempty)
   HINTS_AT_BUZZ: number  // Indices donnés au moment du buzz (QCM)
   IS_VIRTUAL: boolean    // true = VPlayer (smartphone)
   CONNECTED: boolean     // true si le buzzer/VJoueur est actuellement connecté (WebSocket)
@@ -146,6 +147,7 @@ type ConnState = "" | "orange" | "red" | "green"
     "IP": "192.168.4.10",
     "READY": true,
     "ANSWER_COLOR": "GREEN",
+    "ANSWERED_COLOR": "GREEN",
     "HINTS_AT_BUZZ": 1,
     "IS_VIRTUAL": false
   }
@@ -165,7 +167,13 @@ type ConnState = "" | "orange" | "red" | "green"
   les bumpers participants (`TEAM != ""`) portent un état visible** — un bumper non assigné reste
   toujours à `""`. Piloté côté serveur par `engine.TransitionConn(bumperID, event)` avec
   `event ∈ {DISCONNECT, RECONNECT, MESSAGE_LOST, DELIVERY_CONFIRMED}`.
-- `ANSWER_COLOR` = Couleur du bouton pour mode QCM
+- `ANSWER_COLOR` = Couleur du bouton pour mode QCM : **couleur assignée** au joueur physique à l'affectation (`AssignVirtualPlayer`), écrasée par la couleur pressée au buzz QCM, **jamais remise à zéro**. Sert à la couleur des LED et de la `TeamCard`. **Ne pas l'utiliser pour savoir si un joueur a répondu** : elle survit d'une question à l'autre (#255).
+- `ANSWERED_COLOR` ✨ *(v11.2, #255, additif)* = **réponse donnée à la question courante** :
+  - **Écrit** par `ProcessButtonPress` lors d'un buzz enregistré sur une question **QCM** (couleur du bouton A→RED, B→GREEN, C→YELLOW, D→BLUE), donc aussi pour un VJoueur (`VPLAYER_QCM_ANSWER` passe par le même enregistrement). Jamais écrit pour un autre type de question, ni pour un buzz ignoré (équipe ayant déjà buzzé, buzzer physique d'une équipe qui a un VJoueur).
+  - **Remis à `""`** partout où `TIME` est remis à 0 : `Ready()` de chaque question, et les autres remises à zéro de `TIME` du moteur (même instruction, même verrou). **Invariant** : `ANSWERED_COLOR ≠ ""` ⇒ `TIME > 0` et question courante de type QCM.
+  - **Toujours sérialisé**, `""` compris (pas d'`omitempty`), sur tous les chemins qui transportent `bumpers` (tableau `ws-payload-serialization.md`).
+  - **Compatibilité** : un client antérieur ignore la clé. Une sauvegarde ou un fichier de bumpers sans la clé se charge avec `""`, sans migration ; au redémarrage, la valeur suit le même cycle de vie que `TIME`. Le firmware BuzzClick ne lit pas le champ.
+  - **Lecteurs** (« équipe / joueur ayant donné la réponse ») : règle « équipe d'une réponse » (`websocket-actions.md` §TEAM_POINTS_BATCH), compteurs et présélection QCM de l'admin, `calcQcmTeamAward`, badges des réponses par équipe à la TV et au VJoueur (STOPPED/REVEALED), réponse affichée sur `/anim`, détection serveur des équipes ayant la bonne réponse (ambiance, LED « ma réponse est correcte »). `ANSWER_COLOR` reste la source pour la **couleur** (LED, `answerColorToRGB`, `TeamCard`) et pour `PLAYER_COLOR` de l'historique (inchangé).
 - `HINTS_AT_BUZZ` = Nombre d'indices donnés au moment du buzz (pénalité individuelle)
 - `IS_VIRTUAL` = Distingue buzzers physiques et VPlayers smartphone
 

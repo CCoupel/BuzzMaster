@@ -270,6 +270,10 @@ Conséquence : le VJoueur ne partage plus sa charge utile avec la TV et l'animat
 propre sérialiseur sur le chemin générique — `serializeForClientType` le routait jusqu'ici vers
 `SerializeForWebClient`, comme la TV.
 
+### `bumpers[*].ANSWERED_COLOR` (v11.2, #255) — pas de retrait
+
+Le VJoueur reçoit `ANSWERED_COLOR` comme `ANSWER_COLOR`. Son écran affiche les réponses par équipe en STOPPED/REVEALED (`PlayerDisplay`). **Aucune exposition nouvelle** : depuis toujours, `ANSWER_COLOR` prend la couleur pressée au buzz et circule déjà vers les VJoueurs. Le risque qu'une tablette lise, avant le STOP, la réponse d'une autre équipe dans les outils du navigateur **préexiste** à #255. Il reste ouvert, comme `ARDOISE_ANSWERS` vers la TV (§« Risque résiduel assumé »). Le fermer imposerait un filtrage dépendant de la phase et du destinataire. Ce serait une issue séparée.
+
 ### Trois sites, une seule liste
 
 Le retrait des champs `GAME` est ré-implémenté sur **trois** chemins — `SerializeForWebClient`,
