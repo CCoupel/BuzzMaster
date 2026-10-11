@@ -751,6 +751,32 @@ Maquette validée : `docs/mockup/v11.2/ui/admin_scores__free_points_tv_toggle.ht
 - Même `SEQ` rediffusé : aucun effet. Sans `SCORE_CHANGE` (ancien serveur) : comportement actuel.
 - Aucune modification de mise en page : la TV reste statique.
 
+## Éditeur de manches, jeu et anim (v11.2, #245)
+
+Maquettes validées : `docs/mockup/v11.2/ui/admin_questions_list__rounds_entractes_delete_choice.html` (éditeur) et
+`docs/mockup/v11.2/ui/game_round_indicator__admin_anim_tv_next_entracte.html` (jeu, anim, TV).
+
+**Éditeur (`QuestionsPage.jsx`, `RoundGroup.jsx`, `RoundDeleteDialog.jsx`, `utils/questionOrder.js`, `utils/roundsEdit.js`)** :
+- Groupes de manches repliables ; l'état replié est mémorisé par navigateur (`localStorage` `buzz.rounds.collapsed`) ; bouton « Tout replier ».
+- Réordonner : ▲▼, « Déplacer vers… », glisser-déposer (questions et manches). Le glisser-déposer HTML5 n'est pas testé en navigateur réel.
+- Création de manche : nom et case « entractes » cochée (crée « Début / Fin de la manche »).
+- « + Question » dans une manche ajoute à la fin de cette manche ; « + Nouvelle question » ajoute à la fin de « Sans manche ».
+- Changer la manche d'une question existante (champ « Manche ») envoie `ROUNDS_UPDATE` après enregistrement. L'affichage est optimiste jusqu'à la confirmation du serveur.
+- Suppression : fenêtre `RoundDeleteDialog` avec le focus sur « Conserver », Échap ferme, Tab reste dans la fenêtre. Choix : Conserver (`KEEP`) ou Supprimer aussi (`DELETE`). Pour une manche vide, seul « Supprimer la manche » est proposé (`KEEP`).
+- Sans manche, le glisser-déposer et « Mélanger » restent sur `REORDER_QUESTIONS` (comportement v11.1). Avec des manches, ils passent par `ROUNDS_UPDATE`, et le mélange se fait dans chaque groupe.
+
+**Admin, page de jeu (`GamePage.jsx`)** : « À suivre : #id texte » pour une question, « À suivre : 🎬 titre » (violet) pour une entracte,
+pastille « → Manche i · nom » si la suivante ouvre une autre manche, « Fin du quiz » sans bouton. Les titres de manche sont repliables, avec « n/m jouées ».
+Les entractes sont en italique et se lancent par clic.
+
+**Anim (`AnimNextButton`, `AnimPage`, `AnimConductPanel`)** : « Question suivante » + #id texte ; « Manche suivante : nom » (orange, quand `NEW_ROUND`) ;
+« Lancer l'entracte » (violet) ; pendant une entracte, « 🎬 Entracte en cours » et « Terminer l'entracte » (`ENTRACTE_SET{ACTIVE:false}`, jamais `true`).
+Pastille « Manche 2/3 · nom · 3/5 » (« · entracte » si la position vaut 0 ; « Sans manche · 2/4 » sans manche).
+
+**TV (`PlayerDisplay.jsx`)** : pastille `tv-round-pill` si `ROUND_INDEX > 0` ; titre `tv-round-title` pendant le READY de la première question d'une manche (`FIRST_OF_ROUND`).
+Positions absolues, `overflow: hidden`, ellipsis : la TV reste statique, sans défilement. Pas de pastille sur le VJoueur, ni pour une entracte.
+Le rendu sur une vraie TV 16:9 reste à valider à l'œil.
+
 ## Bloc d'attribution compact et niveau joueur (v11.2, #254)
 
 Maquettes validées : `docs/mockup/v11.2/ui/admin_game_award__compact_block_hints_toggle.html` (remplace
