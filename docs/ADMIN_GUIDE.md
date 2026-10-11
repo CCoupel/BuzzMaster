@@ -360,6 +360,36 @@ dans **`data/config/teams.json.bak`**.
 
 La page Historique n'affiche pas les suppressions d'équipe (`TEAM_DELETED`). Elles restent dans `history.json`.
 
+#### Verrou de la popup « Lancer la partie » (v11.2, #253)
+
+Tant que la popup est ouverte sur un poste admin, **les actions de jeu sont suspendues pour tous les postes**, y
+compris le poste qui a ouvert la popup :
+
+- **Conduite** : START, STOP, PAUSE, CONTINUE, REVEAL, sélection de question, actions MEMORY, MEMOTION et RAFALE, et le son.
+- **Points** : tous les crédits (équipe, joueur, lot), la remise à zéro des scores (`RAZ`).
+- **Phases** : affichage et masquage du QR code, réinitialisation des écrans (`RESET`).
+- **Équipes et joueurs** : modification de la liste, suppression ou libération d'un joueur.
+
+Ne sont **pas** suspendus : le lancement lui-même (poste propriétaire), la modification des questions, les réglages,
+et les actions des joueurs (buzz, réponses ARDOISE).
+
+- **Autres postes** : un bandeau « 🔒 Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu
+  suspendues. » apparaît, et les commandes de jeu sont désactivées avec le motif.
+- **Renouvellement** : le poste propriétaire renouvelle le verrou toutes les 15 s.
+- **Libération** : la popup est annulée (« Annuler », Échap), le lancement réussit, le poste se déconnecte (onglet
+  fermé, rechargement, coupure), ou 45 s passent sans renouvellement.
+- **Refus d'ouverture** : si une autre fenêtre « Lancer la partie » est déjà ouverte, ou si une entracte est active,
+  la popup ne s'ouvre pas. Le message dit pourquoi. Si le verrou est tenu sur un autre poste, l'entrée du menu est
+  grisée avec une infobulle.
+
+**Si un poste reste bloqué** (commandes désactivées sur les autres postes) :
+1. Fermer la popup sur le poste qui l'a ouverte, ou fermer son onglet : le verrou tombe immédiatement.
+2. Sinon, attendre 45 s au plus : le verrou expire seul après la coupure ou l'abandon de la popup.
+3. Ne pas rouvrir la popup sur deux postes à la fois : la deuxième est refusée.
+
+Si la popup était restée ouverte pendant une coupure, elle affiche « La fenêtre a expiré (plus de 45 s sans signe de vie
+de ce poste) : rouvrez « Lancer la partie » » et le bouton de lancement est désactivé.
+
 ### Équipes et lancement de partie
 
 L'option **Équipes** du lancement supprime toutes les équipes, par le même chemin que la suppression d'une
@@ -441,7 +471,7 @@ Pour supprimer un joueur virtuel :
 
 #### Relancer une partie : « Lancer la partie » (v11.2, #243)
 
-Le bouton **« LANCER LA PARTIE »** (page de jeu et Backstage) remplace « NOUVELLE PARTIE ». Il ouvre une popup
+L'entrée **« 🚀 Lancer la partie »** du menu **Préparation** (#253) remplace « NOUVELLE PARTIE ». Elle est disponible dans toutes les phases. Elle ouvre une popup
 où vous choisissez ce qui est effacé avant de commencer. **Rien n'est effacé sans confirmation.**
 
 | Option | Par défaut | Effet |
