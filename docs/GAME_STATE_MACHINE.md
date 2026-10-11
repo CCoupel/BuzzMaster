@@ -547,7 +547,7 @@ de la partie en cours — pas une section globale de réglages.
 
 ## Phase NEW_GAME (v4.0.1 / v4.0.4)
 
-**Phase NEW_GAME** : état transitoire déclenché par le bouton « LANCER LA PARTIE » (admin, v11.2 : depuis toutes les phases, voir ci-dessous).
+**Phase NEW_GAME** : état transitoire déclenché par l'entrée « 🚀 Lancer la partie » du menu Préparation (admin, #253 ; v11.2 : depuis toutes les phases, voir ci-dessous).
 - Reset selon les options (v11.2, #243). Sans option (clients antérieurs) : scores teams + joueurs à 0, historique vide, tous statuts questions → AVAILABLE, question sélectionnée → nil
 - Transition : `NEW_GAME → PREPARE` automatique à la sélection de la première question
 - TV (`/tv`) : affiche l'écran "NOUVELLE PARTIE À VENIR" avec métadonnées du quiz
@@ -572,6 +572,7 @@ de la partie en cours — pas une section globale de réglages.
 - **LED et ambiance** : à chaque `NEW_GAME` appliqué, quelles que soient les options.
 - **Joueurs purgés** : leurs connexions sont déliées dans le hub.
 - **`SCORE_CHANGE`** (#252) : remis à zéro (`SEQ` = 0) à chaque NEW_GAME, comme au démarrage.
+- **Verrou de lancement** (#253) : la popup pose `LAUNCH_LOCK` au nom de son poste. Pendant le verrou, les actions de conduite, de points et d'équipes sont suspendues pour tous les postes. Le `NEW_GAME` du propriétaire le libère après application. Un `NEW_GAME` d'une autre connexion est refusé (`LAUNCH_IN_PROGRESS`). Libération aussi à l'annulation, à la déconnexion, ou après 45 s sans renouvellement.
 - **Entracte** : `NEW_GAME` est refusé (`NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }`) ; sortir de l'entracte d'abord.
 - Contrat : `contracts/websocket-actions.md` §NEW_GAME et §NEW_GAME_REFUSED.
 
