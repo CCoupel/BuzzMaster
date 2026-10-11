@@ -1374,6 +1374,12 @@ suivent le même réglage (défaut équipe) ; MEMORY, MEMOTION et RAFALE sont to
   - `TEAM_ALREADY_AWARDED` : son équipe a déjà reçu un crédit **d'équipe** pour la question. Un crédit joueur rend son équipe
     « déjà créditée » pour `TEAM_POINTS_BATCH`, et la règle inverse s'applique ici.
 - **Réponse ciblée** : `BUMPER_POINTS_BATCH_RESULT`, avec `APPLIED` (`[{ID, POINTS}]`) et `SKIPPED` (`[{ID, REASON}]`).
+
+```json
+{ "ACTION": "BUMPER_POINTS_BATCH_RESULT", "MSG": { "STATUS": "APPLIED", "QUESTION_ID": "12", "APPLIED": [ {"ID": "AA:BB:CC:01", "POINTS": 2} ], "SKIPPED": [ {"ID": "AA:BB:CC:07", "REASON": "ALREADY_AWARDED"}, {"ID": "AA:BB:CC:09", "REASON": "TEAM_ALREADY_AWARDED"} ], "PLAYERS": [] } }
+```
+
+`ALREADY_AWARDED` : joueur déjà crédité à titre individuel. `TEAM_ALREADY_AWARDED` : son équipe a déjà reçu un crédit d'équipe.
 - **Diffusions** : `UPDATE`, `SCORE_CHANGE` (`PLAYERS` et `TEAMS` concernés), `AWARDED_TEAMS`. Journal `INFO BUMPER_POINTS_BATCH`.
 - Le clic unitaire sur un joueur (`BUMPER_POINTS`) reste libre.
 - **Suspension** : `BUMPER_POINTS_BATCH` est suspendu pendant le verrou de lancement (#253).
