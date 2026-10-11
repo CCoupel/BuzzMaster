@@ -77,6 +77,16 @@ interface Team {
 - Diffusé aux clients `admin` et `anim` seulement, retiré des charges TV et VJoueur.
 - Non persisté : faux au démarrage.
 
+## Niveau d'attribution et QCM_WRONG_PENALTY — v11.2 (#254)
+
+- **`Question.POINTS_TARGET`** (`TEAM` ou `PLAYER`) : défaut au chargement (`game.DefaultPointsTarget`). `TEAM` pour QCM,
+  ARDOISE, MEMORY, MEMOTION et RAFALE ; `PLAYER` pour SPEEDY. Une valeur enregistrée est respectée pour SPEEDY, QCM et ARDOISE.
+  **Changement** : une ancienne question ARDOISE sans `POINTS_TARGET` passe de `PLAYER` à `TEAM`.
+- **`Question.QCM_WRONG_PENALTY`** (question QCM seulement) : entier de −100 à 0, **0 = aucune pénalité** (défaut). Absent,
+  invalide ou non entier → 0, sans faire échouer le chargement de la question. Aucune réécriture des fichiers existants.
+  Ce n'est **pas** un coefficient d'indices : `QCM_PENALTY_1` (0,67) et `QCM_PENALTY_2` (0,33) sont les coefficients.
+- **`AWARDED_TEAMS.PLAYERS`** et **`TEAMS[].TEAM_LEVEL`** : voir `docs/WEBSOCKET_PROTOCOL.md`.
+
 ## Palette d'équipes — v5.7.25, #113
 
 16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
