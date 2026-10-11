@@ -86,9 +86,35 @@ func TestHandlePlayerConnect_NoRelease_StillRejected(t *testing.T) {
 	// No RELEASE_BUMPER_NAME was ever sent — the #109 guarantee must hold.
 	app.handlePlayerConnect(clientID, playerConnectMsg(t, "Emma", ""))
 
-	// #257: read UNTIL the awaited action (a HEARTBEAT / UPDATE may legitimately precede it on a
-	// loaded machine) instead of asserting on the very first frame received.
-	rawMsg := readActionMatchingWithin(t, conn, protocol.ActionPlayerRejected, 10*time.Second)
+	// #257: read in a loop; HEARTBEAT / UPDATE may legitimately precede the answer on a loaded
+	// machine and are ignored, but an acceptance (PLAYER_CONNECTED) is an immediate failure —
+	// the "no release, no reattachment" guarantee (#109) must not weaken.
+	var rawMsg json.RawMessage
+	deadline := time.Now().Add(10 * time.Second)
+	for rawMsg == nil {
+		if !time.Now().Before(deadline) {
+			t.Fatal("timed out waiting for PLAYER_REJECTED")
+		}
+		conn.SetReadDeadline(deadline)
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("expected %s, got error: %v", protocol.ActionPlayerRejected, err)
+		}
+		var env struct {
+			Action string          `json:"ACTION"`
+			Msg    json.RawMessage `json:"MSG"`
+		}
+		if json.Unmarshal(data, &env) != nil {
+			continue
+		}
+		switch env.Action {
+		case protocol.ActionPlayerRejected:
+			rawMsg = env.Msg
+		case protocol.ActionPlayerConnected:
+			t.Fatalf("player was accepted without a release (%s): the #109 guarantee is broken", env.Action)
+		}
+		// anything else (HEARTBEAT, UPDATE, ...) is ignored
+	}
 	var payload protocol.PlayerRejectedPayload
 	if err := json.Unmarshal(rawMsg, &payload); err != nil {
 		t.Fatalf("failed to unmarshal PLAYER_REJECTED payload: %v", err)

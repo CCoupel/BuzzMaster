@@ -109,6 +109,14 @@ func tw219qSetSoundEnabledFor(app *App, enabled bool) {
 	app.qsound.soundEnabled = func() bool { return enabled }
 }
 
+// tw257CancelWatchdog cancels the adapter's watchdog goroutine, if one is armed, so it does not
+// outlive the test (#257 review, reserve 2).
+func tw257CancelWatchdog(app *App) {
+	app.qsound.mu.Lock()
+	app.qsound.cancelWatchdogLocked()
+	app.qsound.mu.Unlock()
+}
+
 // tw219qDeferredApp builds a minimal App (newTestApp) whose engine has
 // genuinely reached PhaseStarted in DEFERRED mode for a SPEEDY question
 // carrying a sound — via the REAL Start()+countdown, never StartImmediate
@@ -118,6 +126,7 @@ func tw219qDeferredApp(t *testing.T, player audio.MediaPlayer) (*App, *game.Ques
 	app := newTestApp(t)
 	app.qsound = &questionSoundAdapter{app: app, player: player}
 	t.Cleanup(func() { app.engine.Stop() }) // stops the engine timers / countdown goroutines (#257)
+	t.Cleanup(func() { tw257CancelWatchdog(app) })
 
 	q := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x",
 		Sound: "/question/q1/sound_1234.wav", SoundTimerDelayed: true}

@@ -70,6 +70,11 @@ func twa227WireSound(t *testing.T) (*App, *audio.FakeOutput) {
 	// timers started by the test (StartImmediate, countdown) are stopped first, so no leftover
 	// goroutine reads the shared config while the next test rewrites it.
 	t.Cleanup(func() { app.engine.Stop() })
+	t.Cleanup(func() {
+		if app.qsound != nil {
+			tw257CancelWatchdog(app)
+		}
+	})
 	app.setupCallbacks()
 
 	fake := audio.NewFakeOutput()
