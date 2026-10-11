@@ -279,6 +279,15 @@ export function resolvePointsAward(question, basePoints, ctx = {}) {
  *   l'affichage (ex: n'ajouter une équipe à une liste "a la bonne réponse"
  *   que si `hasCorrectAnswer` est vrai)
  */
+/**
+ * #255 — un joueur « a répondu » à un QCM seulement s'il a une équipe, une couleur de réponse ET un buzz
+ * enregistré pour la question (`TIME > 0`, remis à 0 à chaque question). `ANSWER_COLOR` seule ne suffit pas :
+ * le serveur l'assigne au joueur physique avant toute question et ne l'efface pas entre deux questions.
+ */
+export function hasAnswered(b) {
+  return !!(b && b.TEAM && b.ANSWER_COLOR && b.TIME > 0)
+}
+
 export function calcQcmTeamAward(question, basePoints, teamBumpers, invalidatedCount, useHints = true) {
   const correctColor = question?.QCM_CORRECT
   let best = null

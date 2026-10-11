@@ -29,6 +29,7 @@ import {
   defaultTeamAward,
   resolveAwardLevel,
   playerHintsCount,
+  hasAnswered,
 } from '../utils/pointsAward'
 import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
@@ -580,7 +581,7 @@ export default function GamePage() {
   const qcmUnitsByColor = useMemo(() => {
     const byColor = {}
     Object.entries(bumpers).forEach(([mac, b]) => {
-      if (!b.TEAM || !b.ANSWER_COLOR) return
+      if (!hasAnswered(b)) return // #255 : couleur assignée sans buzz ≠ réponse
       if (!byColor[b.ANSWER_COLOR]) byColor[b.ANSWER_COLOR] = new Set()
       byColor[b.ANSWER_COLOR].add(isPlayerLevel ? mac : b.TEAM)
     })

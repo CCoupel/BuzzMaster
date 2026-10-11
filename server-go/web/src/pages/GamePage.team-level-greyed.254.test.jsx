@@ -142,3 +142,22 @@ describe('Niveau joueur — équipe déjà créditée au niveau équipe', () => 
     expect(screen.getByText(/2 joueurs ignorés \(équipe déjà créditée\)/)).toBeTruthy()
   })
 })
+
+// #255 — la couleur assignée sans buzz n'est pas une réponse
+describe('QCM : équipes sans réponse non comptées (#255)', () => {
+  beforeEach(() => { useGame.mockReset() })
+  it('Critical — ANSWER_COLOR assignée mais TIME 0 : compteur 0 et aucune sélection au clic', () => {
+    const noBuzz = Object.fromEntries(Object.entries(bumpers()).map(([k, b]) => [k, { ...b, TIME: 0 }]))
+    show({ bumpers: noBuzz })
+    fireEvent.click(answerBtn('La Seine'))
+    expect(checkedOf(TEAM_NAMES)).toEqual([])
+    expect(screen.queryByText(/(^|[^0-9])[1-9]\d* équipes?/)).toBeNull()
+  })
+  it('seules les équipes ayant buzzé sont comptées', () => {
+    const b = bumpers()
+    b.vj0 = { ...b.vj0, TIME: 0 }
+    show({ bumpers: b })
+    fireEvent.click(answerBtn('La Seine'))
+    expect(checkedOf(TEAM_NAMES).sort()).toEqual(['Les Rouges', 'Les Verts'])
+  })
+})
