@@ -2,6 +2,13 @@
 
 ---
 
+## [20261011] — Pénalité QCM et indices (#254, v11.2, décision utilisateur option A)
+
+- **[CHANGED]** `websocket-actions.md` §TEAM_POINTS_BATCH « Montant » et « QCM : clic sur une réponse », `question-types.md` (`QCM_WRONG_PENALTY`) — précision : les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse (réponse éliminée comprise) ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic. Comportement déjà contracté (montant négatif uniforme), désormais explicite.
+- Aucune BREAKING.
+
+---
+
 ## [20261011] — Pénalité QCM : défaut 0 = aucune pénalité (#254, v11.2, correction utilisateur)
 
 - **[CHANGED]** `models.md`, `game-state.md`, `http-endpoints.md` — `QCM_WRONG_PENALTY` : bornes **−100 à 0**, **0 = aucune pénalité, valeur par défaut** ; absent ou invalide → 0 (remplace −1). Migration : aucune réécriture des fichiers.

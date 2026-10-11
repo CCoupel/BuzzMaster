@@ -161,7 +161,7 @@ d'une carte, relevée dans `QuestionsPage.jsx` (`formData` initial et `handleAdd
 | `QCM` | `QCM_HINT_THRESHOLD_1/2` | **`0.25` / `0.125`** | s'écarte de ces valeurs |
 | `QCM` | `QCM_PENALTY_1/2` | **`0.67` / `0.33`** | s'écarte de ces valeurs |
 
-> *(v11.2, #254)* `QCM_WRONG_PENALTY` est un champ de **question hôte QCM seulement** : il n'est **pas** dans `OwnedFields`, n'existe pas sur une carte MEMOTION et n'intervient dans aucun verrou de sélecteur de type.
+> *(v11.2, #254)* `QCM_WRONG_PENALTY` est un champ de **question hôte QCM seulement** : il n'est **pas** dans `OwnedFields`, n'existe pas sur une carte MEMOTION et n'intervient dans aucun verrou de sélecteur de type. **Les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse** *(décision utilisateur, option A)* : même pénalité que la réponse ait été donnée avant ou après la révélation d'indices, y compris pour une réponse éliminée par un indice ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic.
 | `MEMORY` *(v7.1.0)* | `MEMORY_PAIRS` | **liste de paires vides** | **au moins une paire porte du contenu** — un `TEXT` ou une `IMAGE` sur l'une de ses deux faces |
 | `MEMORY` *(v7.1.0)* | `MEMORY_MODE` | **`"SOLO"`** | s'écarte de cette valeur |
 | `MEMORY` *(v7.1.0)* | `MEMORY_CONFIG` | **8 réglages non vides** | l'un d'eux s'écarte de son défaut |
