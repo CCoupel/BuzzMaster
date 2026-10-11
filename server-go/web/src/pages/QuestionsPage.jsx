@@ -78,6 +78,8 @@ export default function QuestionsPage() {
     qcmHintThreshold2: 0.125, // Second hint at 12.5% of time remaining
     qcmPenalty1: 0.67, // Points multiplier after 1 hint (67%)
     qcmPenalty2: 0.33, // Points multiplier after 2 hints (33%)
+    qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+    qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
     // Memory game fields
     memoryMode: 'SOLO', // SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE
     memoryPairs: [
@@ -141,6 +143,8 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
         // DOIVENT rester synchronisées avec utils/motionCardLock.js
         // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
@@ -175,6 +179,8 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -526,6 +532,12 @@ export default function QuestionsPage() {
     setShuffleToast({ message: `✓ Ordre mélangé — ${count} question${count > 1 ? 's' : ''}`, type: 'success' })
   }
 
+  // #254 — pénalité de mauvaise réponse QCM : entier de 0 à 100 (la saisie est positive, le signe « − » est fixe)
+  const isWrongPenaltyValid = (v) => /^\d+$/.test(String(v ?? '')) && Number(v) >= 0 && Number(v) <= 100
+  const handleWrongPenaltyChange = (value) => {
+    setFormData(prev => ({ ...prev, qcmWrongPenalty: value, qcmWrongPenaltyDefault: false }))
+  }
+
   const handleInputChange = (field, value) => {
     setFormData(prev => {
       const updates = { [field]: value }
@@ -681,6 +693,8 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
         // DOIVENT rester synchronisées avec utils/motionCardLock.js
         // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
@@ -715,6 +729,8 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -821,6 +837,10 @@ export default function QuestionsPage() {
       qcmHintThreshold2: question.QCM_HINT_THRESHOLD_2 || 0.125,
       qcmPenalty1: question.QCM_PENALTY_1 || 0.67,
       qcmPenalty2: question.QCM_PENALTY_2 || 0.33,
+      // #254 : QCM_WRONG_PENALTY entier de −100 à 0 → saisie positive ; absent / hors bornes → 0 « par défaut »
+      qcmWrongPenalty: Number.isInteger(question.QCM_WRONG_PENALTY) && question.QCM_WRONG_PENALTY >= -100 && question.QCM_WRONG_PENALTY <= 0
+        ? String(-question.QCM_WRONG_PENALTY) : '0',
+      qcmWrongPenaltyDefault: !(Number.isInteger(question.QCM_WRONG_PENALTY) && question.QCM_WRONG_PENALTY >= -100 && question.QCM_WRONG_PENALTY <= 0),
       memoryMode: question.MEMORY_MODE || 'SOLO',
       memoryPairs,
       memoryConfig,
@@ -900,6 +920,8 @@ export default function QuestionsPage() {
       qcmHintThreshold2: 0.125,
       qcmPenalty1: 0.67,
       qcmPenalty2: 0.33,
+      qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+      qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
       memoryMode: 'SOLO',
       memoryPairs: [
         { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
@@ -926,6 +948,8 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
         // DOIVENT rester synchronisées avec utils/motionCardLock.js
         // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
@@ -960,6 +984,8 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -1118,6 +1144,8 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
+        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
+        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY, useState initial (mc-1).
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -1271,6 +1299,7 @@ export default function QuestionsPage() {
     if (formData.type === 'SPEEDY' && !formData.answer) return
     if (formData.type === 'ARDOISE' && !formData.answer) return
     if (formData.type === 'QCM' && (!formData.qcmCorrect || !formData.qcmAnswers[formData.qcmCorrect])) return
+    if (formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) return // #254
     if (formData.type === 'MEMORY') {
       // Validate at least 2 pairs with all cards filled
       const validPairs = formData.memoryPairs.filter(pair => {
@@ -1328,6 +1357,9 @@ export default function QuestionsPage() {
       // The answer field contains the correct answer text for display
       data.append('answer', formData.qcmAnswers[formData.qcmCorrect])
       // QCM hints enabled flag and thresholds
+      // #254 : pénalité de mauvaise réponse, saisie 0 à 100 → enregistrée en négatif (0 = aucune pénalité).
+      // Distincte des coefficients d'indices (qcm_penalty_1/2) ci-dessous.
+      data.append('qcm_wrong_penalty', String(-Number(formData.qcmWrongPenalty)).replace('-0', '0'))
       data.append('qcm_hints_enabled', formData.qcmHintsEnabled ? 'true' : 'false')
       if (formData.qcmHintsEnabled) {
         data.append('qcm_hint_threshold_1', formData.qcmHintThreshold1.toString())
@@ -2981,6 +3013,46 @@ export default function QuestionsPage() {
                       />
                     </div>
                   )}
+                  {/* #254 — Pénalité mauvaise réponse : QCM seulement (jamais sur les cartes MEMOTION),
+                      maquette admin_question_editor__qcm_wrong_penalty_default0. Saisie 0 à 100 après un « − »
+                      fixe, enregistrée en négatif ; 0 = aucune pénalité = défaut. */}
+                  {formData.type === 'QCM' && (
+                    <div className="form-group penalty-group">
+                      <span className="penalty-tag">NOUVEAU</span>
+                      <label htmlFor="wrong-penalty-input">
+                        Pénalité mauvaise réponse
+                        {formData.qcmWrongPenaltyDefault && isWrongPenaltyValid(formData.qcmWrongPenalty) && (
+                          <span className="penalty-default-chip">par défaut</span>
+                        )}
+                      </label>
+                      <div className={`penalty-input${isWrongPenaltyValid(formData.qcmWrongPenalty) ? '' : ' invalid'}`}>
+                        <span className="penalty-minus" aria-hidden="true">−</span>
+                        <input
+                          id="wrong-penalty-input"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={formData.qcmWrongPenalty}
+                          onChange={(e) => handleWrongPenaltyChange(e.target.value)}
+                          aria-invalid={!isWrongPenaltyValid(formData.qcmWrongPenalty)}
+                          aria-describedby="wrong-penalty-help wrong-penalty-err"
+                        />
+                      </div>
+                      {!isWrongPenaltyValid(formData.qcmWrongPenalty) && (
+                        <p className="penalty-err" id="wrong-penalty-err" role="alert">Entier de 0 à 100 (0 = aucune pénalité).</p>
+                      )}
+                      <p className="penalty-effect" id="wrong-penalty-help">
+                        {isWrongPenaltyValid(formData.qcmWrongPenalty) && (
+                          <>
+                            {Number(formData.qcmWrongPenalty) === 0
+                              ? 'Aucune pénalité. En jeu, un clic sur une mauvaise réponse sélectionne ses équipes sans retirer de points.'
+                              : `En jeu, un clic sur une mauvaise réponse met −${Number(formData.qcmWrongPenalty)} dans « Points » : « Appliquer les pénalités (N) ».`}
+                            {formData.qcmWrongPenaltyDefault ? ' Question sans réglage : aucune pénalité.' : ''}
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  )}
                   {formData.type !== 'MEMOTION' && (
                     <div className="form-group">
                       <label htmlFor="time-input">Temps (s)</label>
@@ -3176,6 +3248,8 @@ export default function QuestionsPage() {
                   variant={editingId ? 'primary' : 'fun'}
                   size="lg"
                   loading={isUploading}
+                  disabled={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)}
+                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : undefined}
                   className="submit-btn"
                 >
                   {editingId ? 'Modifier' : 'Ajouter'}
