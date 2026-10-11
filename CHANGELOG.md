@@ -28,7 +28,7 @@ Historique des versions du projet BuzzControl.
 ### Fixed
 
 - **`ROUNDS_UPDATE` atomique (#245)** — Un échec d'écriture disque pendant l'application restaure `rounds.json`, supprime les entractes créées, ne supprime rien et renvoie `WRITE_FAILED`. Les refus sont globaux : rien n'est appliqué.
-- **`rounds.json` illisible (#245)** — Le serveur en garde une copie `rounds.json.corrupt`, refuse les modifications de manches, et continue de servir les manches lisibles.
+- **`rounds.json` illisible (#245)** — Le serveur le traite comme « aucune manche » (ordre sans manches), en garde une copie `rounds.json.corrupt` et refuse toute modification de manches (`ROUNDS_FILE_UNREADABLE`) ; restaurez une sauvegarde ou corrigez le fichier.
 
 ## [Unreleased] — v11.2 — Tablettes : réponses des autres équipes filtrées (#258)
 
