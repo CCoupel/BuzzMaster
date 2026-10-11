@@ -309,7 +309,10 @@ S'applique à **tout** message envoyé à un client `ClientTypeVPlayer` qui cont
 |---|---|---|
 | `bumpers[x]` d'un joueur d'une **autre équipe** que le destinataire : `TIME`, `BUTTON`, `STATUS`, `ANSWER_COLOR`, `ANSWERED_COLOR`, `HINTS_AT_BUZZ` | **réponses ouvertes** : `PREPARE`, `READY`, `COUNTDOWN`, `STARTED`, `PAUSED` | valeurs **neutres** (`0`, `""`) ; clés conservées. Les autres champs (`NAME`, `TEAM`, `SCORE`, `CONNECTED`, `CONN_STATE`, …) restent intacts |
 | `teams[t]` d'une **autre équipe** : `TIME`, `BUMPER`, `STATUS` | mêmes phases | valeurs neutres, clés conservées |
-| `GAME.QUESTION.QCM_CORRECT`, `GAME.QUESTION.ANSWER` | **toutes sauf `REVEALED`** | clés **retirées** |
+| `GAME.QUESTION.QCM_CORRECT`, `GAME.QUESTION.ANSWER`, **`GAME.QUESTION.MEDIA_ANSWER`** *(revue M1)* | **toutes sauf `REVEALED`** | clés **retirées** |
+| Cartes MEMOTION (`GAME.QUESTION.MOTION_CARDS[*]`) : `ANSWER_TEXT`, `ANSWER_IMAGE`, `ANSWER`, `QCM_CORRECT` *(revue M1)* | tant que **la carte** n'est pas révélée, carte par carte | clés **retirées** ; voir §7.5 |
+| `GAME.MEMOTION_ACTIVE.STATE` : mêmes clés de réponse | tant que la carte active n'est pas révélée | clés **retirées** |
+| `GAME.QUESTION.EXPLANATION` (note animateur, #168) *(revue M1, audit)* | **toutes** | clé **retirée** (réservée à l'anim) |
 
 - **Ce qui reste visible pour la tablette** : son propre bumper et **ceux de ses coéquipiers** (même équipe : aucun intérêt à tricher), son équipe, les scores et classements, les noms.
 - **À partir de `STOPPED`** : plus personne ne peut répondre. Les champs de réponse des autres équipes sont transmis normalement, et les badges des réponses par équipe s'affichent toujours en `STOPPED`/`REVEALED`, sans changement visible.
@@ -334,3 +337,41 @@ S'applique à **tout** message envoyé à un client `ClientTypeVPlayer` qui cont
 
 ### 7.4 Compatibilité
 Aucun changement de format : mêmes clés, valeurs neutres, et seules `QCM_CORRECT`/`ANSWER` sont absentes avant le REVEAL. La tablette n'affiche rien de nouveau ni de moins (aucune vue tablette n'utilise ces champs des autres équipes avant `STOPPED`, ni la bonne réponse avant `REVEALED`). Un client antérieur continue de fonctionner.
+
+### 7.5 Liste exhaustive (revue #258, M1 et mineur 3) — référence du test de non-régression
+
+Définitions :
+- **Réponses ouvertes** : phases `PREPARE`, `READY`, `COUNTDOWN`, `STARTED`, `PAUSED`.
+- **Carte révélée** : `GAME.MEMOTION_CARD_STATES[id]` ∈ `{REVEALED, DONE}`, ou phase `REVEALED`.
+- **Autre équipe** : `TEAM` différent de celui du destinataire. Pour une connexion non liée, toutes les équipes.
+
+**A. Retirées (clé absente)**
+| Champ | Condition de retrait |
+|---|---|
+| `GAME.QUESTION.QCM_CORRECT` | phase ≠ `REVEALED` |
+| `GAME.QUESTION.ANSWER` | phase ≠ `REVEALED` |
+| `GAME.QUESTION.MEDIA_ANSWER` | phase ≠ `REVEALED` |
+| `GAME.QUESTION.EXPLANATION` | toujours |
+| `GAME.QUESTION.MOTION_CARDS[i].ANSWER_TEXT` / `.ANSWER_IMAGE` / `.ANSWER` / `.QCM_CORRECT` | carte `i` non révélée |
+| `GAME.MEMOTION_ACTIVE.STATE.ANSWER_TEXT` / `.ANSWER_IMAGE` / `.ANSWER` / `.QCM_CORRECT` | carte active (`CARD_ID`) non révélée |
+| `GAME.ARDOISE_ANSWERS`, `GAME.LAUNCH_LOCK` (`VPlayerOnlyGameFields`, §6) | toujours |
+| `GAME.QUIZ_OBJECTIVES`, `GAME.ENTRACTE_CONFIG_SAVED` (`AdminOnlyGameFields`) | toujours |
+| `bumpers[*].FIRMWARE_VERSION` / `IS_OUTDATED` / `OTA_STATUS` / `OTA_PERCENT` / `ACK_PENDING` (`AdminOnlyBumperFields`) | toujours |
+
+**B. Neutralisées (clé conservée, valeur `0` / `""`)**
+| Champ | Condition |
+|---|---|
+| `bumpers[x].TIME`, `BUTTON`, `STATUS`, `ANSWER_COLOR`, `ANSWERED_COLOR`, `HINTS_AT_BUZZ` | `x` d'une autre équipe, réponses ouvertes |
+| `teams[t].TIME`, `BUMPER`, `STATUS` | `t` autre équipe, réponses ouvertes |
+
+**C. Conservés tels quels.** Tout le reste, notamment :
+- `bumpers[*]` : `NAME`, `TEAM`, `SCORE`, `CONNECTED`, `CONN_STATE`, `IS_VIRTUAL`, `IS_VPLAYER`, `READY` ;
+- les champs du destinataire et de ses coéquipiers ;
+- `teams[*]` : `NAME`, `COLOR`, `SCORE`, `MEMBERS` ;
+- `GAME.QUESTION` hors champs ci-dessus : texte, type, `QCM_ANSWERS` (les choix, pas la bonne), `MEDIA`, `SOUND`, catégorie, points, temps, `QCM_INVALIDATED` ;
+- cartes MEMOTION : `RECTO_*`, `QUESTION_TEXT`, `QUESTION_IMAGE`, `DIFFICULTY`, `TYPE`, `QCM_ANSWERS` ;
+- états MEMORY, MEMOTION, RAFALE (tableaux publics) ;
+- scores, classements, `SCORE_CHANGE`, `REMOTE`, `ENTRACTE*` diffusés, `ROUNDS`/`ROUND_CONTEXT`.
+
+- **Toute nouvelle clé** portant une réponse, une bonne réponse, un média de réponse ou une note animateur doit être ajoutée à A ou B, **dans le même commit que son contrat**. Le test de non-régression parcourt **toutes** les clés de A et B, sur tous les chemins du §7.3.
+- **Hors périmètre** : les sources non filtrées hors `/ws/player` (`GET /questions`, `/files/`, `/ws/logs`, connexion à `/ws/tv` ou `/ws/anim`) font l'objet de l'issue de sécurité **#259**. Le filtre §7 protège le flux de l'interface joueur, pas un participant décidé.

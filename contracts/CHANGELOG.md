@@ -2,6 +2,18 @@
 
 ---
 
+## [20261012] — Tablettes : médias de réponse et note animateur retirés (#258, v11.2, revue M1)
+
+- **[CHANGED]** `vplayer-payload-filter.md` §7 :
+  - `QUESTION.MEDIA_ANSWER` retiré hors `REVEALED` ;
+  - cartes MEMOTION et `MEMOTION_ACTIVE.STATE` : `ANSWER_TEXT`, `ANSWER_IMAGE` (plus `ANSWER`, `QCM_CORRECT`) retirés tant que la carte n'est pas révélée (`REVEALED`/`DONE`) ;
+  - `QUESTION.EXPLANATION` (note animateur) toujours retiré pour les tablettes ;
+  - nouveau **§7.5, liste exhaustive** des champs retirés, neutralisés et conservés, référence du test de non-régression ;
+  - #259 cité pour les sources non filtrées.
+- Aucune BREAKING : la tablette n'affiche ces champs qu'au REVEAL, et jamais la note animateur.
+
+---
+
 ## [20261012] — Manches : « Sans manche » en premier (#245, v11.2, décisions utilisateur)
 
 - **[CHANGED]** `models.md` §Manches — ordre de jeu : groupe **« Sans manche » en premier**, puis les manches. Les questions créées hors manche ou générées par l'IA vont à la fin de « Sans manche » (`ORDER` = max du groupe + 1) ; repli par navigateur confirmé.
