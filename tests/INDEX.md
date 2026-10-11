@@ -88,3 +88,7 @@
 | server-go/cmd/server/rounds_order_245_test.go | integration | questions, game-engine, websocket | #245 ordre de jeu à deux niveaux, NEXT_QUESTION (entractes proposées, NEW_ROUND), ROUND_CONTEXT, sans manche = v11.1, parité (fixture partagée tests/fixtures/rounds_order_245.json) | regression | critical |
 | server-go/cmd/server/rounds_entracte_245_test.go | integration | anim, game-engine, websocket | #245 l anim lance et termine les entractes (déroulé complet piloté par l anim seule), ACTIVE:true refusé, LAUNCH_LOCK | regression | critical |
 | server-go/internal/server/rounds_245_test.go | unit | questions | #245 formulaire : round_id à la création, ROUND_ID conservé à la modification | regression | |
+| server-go/web/src/pages/QuestionsPage.rounds.245.test.jsx | unit | questions | #245 éditeur en manches (f″) : sans manche = v11.1, création + case entractes, ▲▼, Déplacer vers…, repli, filtre x / y, + Question, fenêtre de suppression KEEP/DELETE | regression | critical |
+| server-go/web/src/utils/roundsEdit.245.test.js | unit | questions | #245 gestes de l éditeur : structure complète conservée (INCOMPLETE), KEEP/DELETE | regression | critical |
+| server-go/web/src/utils/questionOrder.parity.245.test.js | unit | questions | #245 parité JS/Go de l ordre de jeu (fixture partagée) | regression | critical |
+| server-go/web/src/hooks/useWebSocket.rounds.245.test.js | unit | websocket | #245 roundsUpdate, ROUNDS_UPDATE_RESULT, ROUNDS/ROUND_CONTEXT | regression | |
