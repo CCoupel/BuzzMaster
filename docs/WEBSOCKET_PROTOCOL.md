@@ -1579,7 +1579,7 @@ Source : `contracts/ws-payload-serialization.md` (ligne `ANSWERED_COLOR`).
 Source de vérité : `contracts/websocket-actions.md` §ROUNDS_UPDATE, §NEXT_QUESTION, §ENTRACTE_SET ; `contracts/models.md` §Manches ;
 `contracts/game-state.md` §Manches (`ROUND_CONTEXT`).
 
-### ROUNDS_UPDATE (admin seulement, toutes phases, permise pendant le verrou de lancement)
+### ROUNDS_UPDATE (admin seulement, toutes phases sauf pendant une entracte active)
 
 Fixe en une action la structure complète : manches (ordre, noms, questions), questions « Sans manche », suppressions.
 
@@ -1592,7 +1592,7 @@ Fixe en une action la structure complète : manches (ordre, noms, questions), qu
 - `DELETED_ROUNDS[].QUESTIONS` : `"KEEP"` (questions en fin de « Sans manche ») ou `"DELETE"` (supprimées définitivement).
 - **Refus global** (`ROUNDS_UPDATE_RESULT { STATUS: "REFUSED", REASON }`, rien n'est appliqué, `WARN ROUNDS_UPDATE_REFUSED`) :
   `INVALID_NAME`, `TOO_MANY_ROUNDS` (plus de 50), `UNKNOWN_ROUND`, `INVALID_DECISION`, `MISSING_ROUND_DECISION`,
-  `DUPLICATE_QUESTION`, `UNKNOWN_QUESTION`, `INCOMPLETE`, `QUESTION_ID_EXHAUSTED` (plus de 997 questions),
+  `DUPLICATE_QUESTION`, `UNKNOWN_QUESTION`, `INCOMPLETE`, `QUESTION_ID_EXHAUSTED` (plus assez d'identifiants libres, de 1 à 999, pour créer les entractes demandées),
   `INCONSISTENT_STORE`, `ROUNDS_FILE_UNREADABLE`, `QUESTION_IN_PROGRESS` (suppression de la question courante hors repos), `WRITE_FAILED`.
 - **Identité** : le nom du dossier `data/files/questions/<ID>/`. Aucun chemin n'est construit à partir d'un ID non validé.
 - **Ordre des effets** : validation complète ; réservation des IDs ; écriture de `rounds.json` (échec : `WRITE_FAILED`) ;
