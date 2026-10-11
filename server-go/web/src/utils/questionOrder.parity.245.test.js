@@ -18,7 +18,7 @@ describe('questionOrder — parité avec le Go (fixture partagée)', () => {
 
   it('« Sans manche » en premier ; ROUND_ID inconnu = Sans manche ; ORDER absent / null / invalide ("5abc") = ID ; ORDER décimal tronqué (1.5, 1.9) ; ID non numérique sans ORDER en fin de groupe ; "7" numérique accepté ; ID non numérique ; égalité d’ORDER tranchée par l’ID numérique', () => {
     const g = groupQuestionsByRound(byId, fixture.ROUNDS)
-    expect(g.unassigned.map((q) => q.ID)).toEqual(['65', '12', '40', '63', '64', 'alpha', '10', '11', '62', '9', '41', '60', '61', 'abc', 'b', 'zeta'])
+    expect(g.unassigned.map((q) => q.ID)).toEqual(['65', '12', '40', '63', '64', 'alpha', '10', '11', '62', '9', '41', '60', '61', '66', '0x10', 'abc', 'b', 'zeta'])
     expect(g.rounds.map((r) => [r.ID, r.questions.map((q) => q.ID)])).toEqual([['r1', ['31', '30', '32']], ['r2', ['21', '22', '20']]])
   })
 
