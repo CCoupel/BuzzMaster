@@ -262,7 +262,7 @@ export function LaunchGamePopup({
       counts={counts}
       phase={phase}
       sent={sent}
-      expired={expired}
+      expired={expired && !sent}
       refusedReason={refused?.reason ?? null}
       notice={notice}
       onClose={close}

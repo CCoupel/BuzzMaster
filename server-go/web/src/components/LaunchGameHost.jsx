@@ -58,6 +58,11 @@ export default function LaunchGameHost({ children }) {
   const [expired, setExpired] = useState(false)
   const [toast, setToast] = useState(null)
   const openerRef = useRef(null)
+  const closingRef = useRef(false) // CLOSE déjà envoyé pour ce verrou (évite un doublon)
+  const openRef = useRef(false)
+  const launchLockRef = useRef(launchLock)
+  openRef.current = open
+  launchLockRef.current = launchLock
 
   // ── Toast (haut droite) ────────────────────────────────────────────────
   useEffect(() => {
@@ -111,6 +116,7 @@ export default function LaunchGameHost({ children }) {
 
   // ── Fermeture : CLOSE (Annuler, Échap, succès) et pagehide ──────────────────────────────
   const close = useCallback(() => {
+    closingRef.current = true
     launchLock?.('CLOSE')
     setOpen(false)
     setWaiting(false)
@@ -123,6 +129,21 @@ export default function LaunchGameHost({ children }) {
     window.addEventListener('pagehide', onHide)
     return () => window.removeEventListener('pagehide', onHide)
   }, [open, launchLock])
+
+  // ── Verrou orphelin : pris à notre nom après l'expiration de l'attente d'ouverture (1 s) ──
+  // → aucune popup à afficher, on le libère tout de suite au lieu d'attendre l'expiration serveur.
+  useEffect(() => {
+    if (!isOwner) { closingRef.current = false; return }
+    if (!open && !waiting && !closingRef.current) {
+      closingRef.current = true
+      launchLock?.('CLOSE')
+    }
+  }, [isOwner, open, waiting, launchLock])
+
+  // ── Démontage de l'hôte (changement de route SPA) popup ouverte → CLOSE ─────────────────
+  useEffect(() => () => {
+    if (openRef.current) launchLockRef.current?.('CLOSE')
+  }, [])
 
   // ── Refus serveur ──────────────────────────────────────────────────────────────────────
   useEffect(() => {

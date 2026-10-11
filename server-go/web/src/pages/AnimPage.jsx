@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import NoSleep from 'nosleep.js'
 import { useGame } from '../hooks/GameContext'
@@ -11,6 +11,7 @@ import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounte
 import { isRevealed } from '../utils/phaseRules'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import { LaunchLockBanner, useLaunchLock } from '../components/LaunchGameHost'
+import '../components/LaunchGameHost.css' // .launch-toast (l'hôte n'est pas monté sur /anim)
 import { prepareWaitReasons } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
@@ -227,6 +228,16 @@ export default function AnimPage() {
   // `gameState.phase === 'REVEALED'` répété à trois endroits avant #166.
   const revealed = isRevealed(gameState.phase)
   const { lockedByOther: launchLocked } = useLaunchLock() // #253
+  // #253 — l'hôte du verrou n'existe pas sur /anim : toast local pour un ACTION_REFUSED (action suspendue).
+  const { actionRefused, clearActionRefused } = useGame()
+  const [refusedToast, setRefusedToast] = useState(false)
+  useEffect(() => {
+    if (!actionRefused) return undefined
+    setRefusedToast(true)
+    clearActionRefused?.()
+    const id = setTimeout(() => setRefusedToast(false), 6000)
+    return () => clearTimeout(id)
+  }, [actionRefused, clearActionRefused])
   // #171/F2 — badge de phase déplacé de la colonne chrono vers la ligne
   // réponse (voir utils/phaseBadge.js).
   const phaseBadge = getPhaseBadge(gameState.phase)
@@ -653,6 +664,9 @@ export default function AnimPage() {
       <LaunchLockBanner className="anim">
         🔒 Lancement d'une nouvelle partie en cours sur le poste régie : conduite suspendue.
       </LaunchLockBanner>
+      {refusedToast && (
+        <div className="launch-toast" role="alert">Action suspendue : lancement d’une nouvelle partie en cours.</div>
+      )}
       <AnimatePresence>
         {entracteActive && (
           <motion.div
