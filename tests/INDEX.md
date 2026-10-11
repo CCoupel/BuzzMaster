@@ -92,3 +92,7 @@
 | server-go/web/src/utils/roundsEdit.245.test.js | unit | questions | #245 gestes de l éditeur : structure complète conservée (INCOMPLETE), KEEP/DELETE | regression | critical |
 | server-go/web/src/utils/questionOrder.parity.245.test.js | unit | questions | #245 parité JS/Go de l ordre de jeu (fixture partagée) | regression | critical |
 | server-go/web/src/hooks/useWebSocket.rounds.245.test.js | unit | websocket | #245 roundsUpdate, ROUNDS_UPDATE_RESULT, ROUNDS/ROUND_CONTEXT | regression | |
+| server-go/web/src/pages/GamePage.rounds.245.test.jsx | unit | admin-game | #245 page de jeu : titres de manche, À suivre propose les entractes, parité avec l ordre serveur (fixture partagée) | regression | critical |
+| server-go/web/src/pages/AnimPage.rounds.245.test.jsx | unit | anim | #245 anim : pastille de manche, Manche suivante, Lancer/Terminer l entracte, aucun déclenchement manuel | regression | critical |
+| server-go/web/src/pages/PlayerDisplay.rounds.245.test.jsx | unit | tv | #245 TV : pastille et titre de manche, rien sans manche, TV statique (CSS) | regression | critical |
+| tests/procedures/rounds-245.md | manual | questions, admin-game, anim, tv | #245 procédure manuelle (utilisateur seul) | feature | |
