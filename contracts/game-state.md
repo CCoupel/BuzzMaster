@@ -174,6 +174,7 @@ type QuestionStatus =
 | `QCM_HINT_THRESHOLD_2` | float64 | % temps pour 2e indice (défaut: 0.125) |
 | `QCM_PENALTY_1` | float64 | Multiplicateur après 1 indice (défaut: 0.67) |
 | `QCM_PENALTY_2` | float64 | Multiplicateur après 2 indices (défaut: 0.33) |
+| `QCM_WRONG_PENALTY` | int | *(v11.2, #254)* Pénalité de mauvaise réponse, de −100 à −1 ; absente = −1 (`models.md`). Admin seulement en usage ; présente dans `QUESTION` comme les autres champs QCM |
 
 ---
 

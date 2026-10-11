@@ -2,6 +2,17 @@
 
 ---
 
+## [20261011] — Champ « Pénalité mauvaise réponse » des questions QCM (#254, v11.2)
+
+> Décision utilisateur : ajouter le champ maintenant ; le clic sur une mauvaise réponse QCM met cette pénalité dans le champ « Points ».
+
+- **[NEW]** `models.md` §Question — `QCM_WRONG_PENALTY` (entier de −100 à −1, question QCM seulement) ; absent, nul ou hors bornes → −1. **Migration : aucune** (les fichiers existants ne sont pas réécrits ; le champ apparaît à la prochaine sauvegarde depuis l'éditeur).
+- **[NEW]** `http-endpoints.md` — champ de formulaire `qcm_wrong_penalty` (ignoré s'il est invalide ou si le type n'est pas QCM).
+- **[CHANGED]** `game-state.md` §QCM, `question-types.md` (hors `OwnedFields`), `websocket-actions.md` §TEAM_POINTS_BATCH « QCM : clic sur une réponse » (lit le champ, −1 par défaut).
+- Aucune BREAKING : champ facultatif, ignoré par les clients antérieurs.
+
+---
+
 ## [20261011] — Attribution groupée au niveau équipe ou joueur, bloc compact (#254, v11.2, retours QUALIF 11.2.0.5)
 
 > Décisions utilisateur : SPEEDY, QCM, ARDOISE suivent le réglage « Points : équipe / joueur » de la question (défauts QCM = équipe, SPEEDY = joueur, ARDOISE = équipe) ; MEMORY, MEMOTION, RAFALE toujours au niveau équipe ; le montant est le champ « Points » de la page ; mauvaise réponse QCM = pénalité de la question en négatif, bouton « Appliquer les pénalités (N) » ; « Attribuer les points (N) » sinon.

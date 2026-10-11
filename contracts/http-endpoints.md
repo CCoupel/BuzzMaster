@@ -109,6 +109,7 @@ Crée ou met à jour une question.
 | qcm_hint_threshold_2 | float | Seuil indice 2 (défaut: 0.125) |
 | qcm_penalty_1 | float | Pénalité après 1 indice |
 | qcm_penalty_2 | float | Pénalité après 2 indices |
+| qcm_wrong_penalty | int | *(v11.2, #254)* Pénalité de mauvaise réponse, entier de −100 à −1. Enregistrée en `QCM_WRONG_PENALTY` seulement pour `type = QCM` et si valide ; absente ou invalide → champ **non écrit** (valeur effective −1), sans erreur (même tolérance que `qcm_penalty_1/2`) |
 
 **Champs MEMORY additionnels :**
 
