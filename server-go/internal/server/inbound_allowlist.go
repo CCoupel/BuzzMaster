@@ -63,6 +63,8 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionTeamPointsBatch: {ClientTypeAdmin},
 	// LAUNCH_LOCK (v11.2, #253): the "Lancer la partie" popup lock, admin only.
 	protocol.ActionLaunchLock: {ClientTypeAdmin},
+	// ROUNDS_UPDATE (v11.2, #245): rounds structure, admin only.
+	protocol.ActionRoundsUpdate: {ClientTypeAdmin},
 	// BUMPER_POINTS_BATCH (#254): reserved, admin only; no handler yet.
 	protocol.ActionBumperPointsBatch: {ClientTypeAdmin},
 	// RAFALE_VALIDATE/INVALIDATE (v8.0.0, #107, contract rafale.md §5.1):

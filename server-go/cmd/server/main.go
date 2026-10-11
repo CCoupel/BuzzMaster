@@ -289,6 +289,8 @@ func main() {
 	app.init()
 	app.httpServer.SetPortSource(portSource) // #220 — see resolvePortSource's doc comment
 
+	app.reloadRounds() // #245: rounds.json -> GameState.ROUNDS
+
 	// Try to load saved teams and bumpers from disk
 	teamsLoaded := app.engine.LoadTeams() == nil && len(app.engine.GetTeamsAndBumpers().Teams) > 0
 	bumpersLoaded := app.engine.LoadBumpers() == nil && len(app.engine.GetTeamsAndBumpers().Bumpers) > 0
@@ -1562,6 +1564,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 
 	case protocol.ActionTeamPointsBatch:
 		a.handleTeamPointsBatch(incoming.ClientID, msg)
+
+	case protocol.ActionRoundsUpdate:
+		a.handleRoundsUpdate(incoming.ClientID, msg)
 
 	case protocol.ActionBumperPointsBatch:
 		a.handleBumperPointsBatch(incoming.ClientID, msg)

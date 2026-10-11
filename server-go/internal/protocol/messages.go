@@ -76,6 +76,8 @@ const (
 	ActionBumperPointsBatch       = "BUMPER_POINTS_BATCH"        // Admin → Server: grouped player award (v11.2, #254)
 	ActionBumperPointsBatchResult = "BUMPER_POINTS_BATCH_RESULT" // Server → sender: outcome of the grouped player award (v11.2, #254)
 	ActionHelloAck                = "HELLO_ACK"                  // Server → admin/anim (targeted): this connection's own ID (v11.2, #253)
+	ActionRoundsUpdate            = "ROUNDS_UPDATE"              // Admin → Server: whole rounds structure (v11.2, #245)
+	ActionRoundsUpdateResult      = "ROUNDS_UPDATE_RESULT"       // Server → sender: outcome (v11.2, #245)
 	ActionLaunchLock              = "LAUNCH_LOCK"                // Admin → Server: popup "Lancer la partie" open/close/renew (v11.2, #253)
 	ActionLaunchLockRefused       = "LAUNCH_LOCK_REFUSED"        // Server → sender: opening refused (v11.2, #253)
 	ActionActionRefused           = "ACTION_REFUSED"             // Server → sender: action suspended by LAUNCH_LOCK (v11.2, #253)
@@ -862,6 +864,39 @@ type TeamPointsBatchResultPayload struct {
 // HelloAckPayload for HELLO_ACK (v11.2, #253).
 type HelloAckPayload struct {
 	ClientID string `json:"CLIENT_ID"`
+}
+
+// RoundsUpdatePayload for ROUNDS_UPDATE (v11.2, #245): the complete structure.
+type RoundsUpdatePayload struct {
+	Rounds []struct {
+		ID        string   `json:"ID"`
+		Name      string   `json:"NAME"`
+		Questions []string `json:"QUESTIONS"`
+		Entractes *bool    `json:"ENTRACTES,omitempty"` // new round only; absent = true
+	} `json:"ROUNDS"`
+	Unassigned    []string `json:"UNASSIGNED"`
+	DeletedRounds []struct {
+		ID        string `json:"ID"`
+		Questions string `json:"QUESTIONS"` // KEEP | DELETE
+	} `json:"DELETED_ROUNDS,omitempty"`
+}
+
+// RoundsCreatedEntractes lists the automatic ENTRACTE of a new round.
+type RoundsCreatedEntractes struct {
+	RoundID string `json:"ROUND_ID"`
+	StartID string `json:"START_ID"`
+	EndID   string `json:"END_ID"`
+}
+
+// RoundsUpdateResultPayload for ROUNDS_UPDATE_RESULT (targeted to the sender). Arrays are
+// never null.
+type RoundsUpdateResultPayload struct {
+	Status           string                   `json:"STATUS"` // APPLIED | REFUSED
+	Reason           string                   `json:"REASON,omitempty"`
+	Rounds           []game.Round             `json:"ROUNDS"`
+	Questions        []string                 `json:"QUESTIONS"`
+	CreatedEntractes []RoundsCreatedEntractes `json:"CREATED_ENTRACTES"`
+	DeletedQuestions []string                 `json:"DELETED_QUESTIONS"`
 }
 
 // LaunchLockPayload for LAUNCH_LOCK: STATE is OPEN (open, then renew) or CLOSE.
