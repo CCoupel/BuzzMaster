@@ -774,11 +774,34 @@ Logique dans `GamePage.jsx` :
   sélection retire les équipes inconnues. Autres refus : « Attribution refusée : … ».
 - `awardedTeams` vient de `AWARDED_TEAMS`, reçu désormais aussi par `/admin` (#244/#251).
 
+## Menu Préparation, LaunchGameHost et verrou (v11.2, #253)
+
+- **Entrée « 🚀 Lancer la partie »** dans le groupe Préparation (`NavGroupMenu.jsx`, `Navbar.jsx`) : en ligne sur les
+  grands écrans, dans le menu unique sur les écrans étroits. Toutes phases. Si la popup est ouverte sur un autre poste :
+  `aria-disabled` et infobulle « Popup … déjà ouverte sur un autre poste » (`LOCKED_BY_OTHER_TITLE`).
+- **`LaunchGameHost`** (`components/LaunchGameHost.jsx`), monté sur les routes admin (`App.jsx`) :
+  - **Ouverture** : envoie `LAUNCH_LOCK OPEN`, puis attend au plus 1 s que `LAUNCH_LOCK.OWNER` égale sa connexion
+    (`connectionId`, lu dans `MSG.CLIENT_ID` de `HELLO_ACK`). Sans confirmation sous 1 s, la popup ne s'ouvre pas et affiche un message d'erreur.
+  - **Popup** : rendue par portail sur `document.body` (plein écran). Renouvellement `OPEN` toutes les 15 s.
+  - **Fermeture** : `CLOSE` à l'annulation, à Échap, après un lancement réussi, et au démontage (`pagehide`).
+  - **Verrou perdu popup ouverte** : message « La fenêtre a expiré (plus de 45 s sans signe de vie de ce poste) :
+    rouvrez « Lancer la partie » », confirmation désactivée.
+  - **Entracte** : message « Impossible pendant une entracte : sortez d'abord de l'entracte. » (barre, haut droite) ;
+    aucun `OPEN` envoyé.
+  - **Refus serveur** (`LAUNCH_LOCK_REFUSED`, `NEW_GAME_REFUSED`) : textes de `LaunchGameDialog.jsx` :
+    « Lancement refusé par le serveur : impossible pendant une entracte. Sortez d'abord de l'entracte. » (`ENTRACTE_ACTIVE`) ;
+    « Lancement refusé par le serveur : une autre fenêtre « Lancer la partie » est ouverte sur un autre poste. » (`LAUNCH_IN_PROGRESS`).
+- **Autres postes** : bandeau « 🔒 Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu
+  suspendues. » sous la barre admin. Page de jeu : START, STOP, PAUSE, REPONSE, sélection de question, clics sur les
+  équipes et les joueurs, et boutons d'attribution désactivés avec le motif.
+- **Anim** : bandeau équivalent, gestes de conduite de la première ligne éteints (« suspendu »), et toast local sur
+  `ACTION_REFUSED` (`AnimPage`).
+- **TV et VJoueur** : aucun changement.
+
 ## LaunchGameDialog — popup « Lancer la partie » (v11.2, #243)
 
 Maquette validée : `docs/mockup/v11.2/ui/admin_new_game__purge_popup_details.html`. Composant
-`components/LaunchGameDialog.jsx` (CSS `LaunchGameDialog.css`), partagé par la page de jeu (`GamePage`) et le
-Backstage.
+`components/LaunchGameDialog.jsx` (CSS `LaunchGameDialog.css`), monté par `LaunchGameHost` (#253) : plus de bouton sur la page de jeu ni sur le Backstage.
 
 - Quatre cases : **Scores** et **Questions** cochées par défaut ; **Joueurs des tablettes** et **Équipes**
   décochées.
@@ -1601,7 +1624,7 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 
 **Décisions d'architecture** :
 - Label "Questions" → "Quiz" (v4.0.1) — scope élargi (métadonnées + fonds + questions)
-- Bouton « LANCER LA PARTIE » (v11.2, #243) ouvre `LaunchGameDialog` et envoie `NEW_GAME` avec options (anciennement « NOUVELLE PARTIE », reset complet depuis STOPPED uniquement)
+- Entrée « 🚀 Lancer la partie » du menu Préparation (v11.2, #253) ouvre `LaunchGameDialog` et envoie `NEW_GAME` avec options (anciennement « NOUVELLE PARTIE », reset complet depuis STOPPED uniquement)
 - Métadonnées quiz dans Zone Quiz (centralisées), pas sur GamePage
 
 **Fichiers clés** :
