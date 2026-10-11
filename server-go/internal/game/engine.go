@@ -8671,3 +8671,193 @@ func (e *Engine) LaunchLockOwner() string {
 	}
 	return e.state.LaunchLock.Owner
 }
+
+// --- BUMPER_POINTS_BATCH (v11.2, #254) ----------------------------------------
+
+// BumperPointsEntry is one player of a grouped award.
+type BumperPointsEntry struct {
+	ID      string
+	Points  int
+	Invalid bool
+}
+
+// BumperPointsBatchResult is the outcome of ApplyBumperPointsBatch.
+type BumperPointsBatchResult struct {
+	Status       string // "APPLIED" | "REFUSED"
+	Reason       string
+	Unknown      []string
+	Applied      []BumperPointsEntry
+	AppliedTeams map[string]string // bumper ID -> team of the credited players
+	Skipped      []TeamPointsSkip  // Team field carries the bumper ID
+}
+
+// AwardedPlayer is a player credited individually for the current question.
+type AwardedPlayer struct {
+	ID        string
+	Team      string
+	Points    int
+	Timestamp int64
+}
+
+// awardedPlayersUnsafe is the per-player "already credited" rule, same filters as
+// awardedTeamsUnsafe (question, GameTime, hidden corrections ignored, credits before
+// the team's last TEAM_DELETED ignored) over WINNER_TYPE = PLAYER events.
+func (e *Engine) awardedPlayersUnsafe(questionID string) []AwardedPlayer {
+	out := []AwardedPlayer{}
+	if questionID == "" {
+		return out
+	}
+	lastDeleted := map[string]int{}
+	for i, ev := range e.history {
+		if ev.EventType == "TEAM_DELETED" {
+			lastDeleted[ev.TeamName] = i
+		}
+	}
+	index := map[string]int{}
+	for i, ev := range e.history {
+		if ev.EventType != "POINTS_AWARDED" || ev.WinnerType != "PLAYER" || ev.QuestionID != questionID || ev.Timestamp < e.state.GameTime {
+			continue
+		}
+		if ev.Display != nil && !*ev.Display {
+			continue
+		}
+		if d, ok := lastDeleted[ev.TeamName]; ok && i < d {
+			continue
+		}
+		if k, ok := index[ev.WinnerID]; ok {
+			out[k].Points += ev.Points
+			continue
+		}
+		index[ev.WinnerID] = len(out)
+		out = append(out, AwardedPlayer{ID: ev.WinnerID, Team: ev.TeamName, Points: ev.Points, Timestamp: ev.Timestamp})
+	}
+	return out
+}
+
+// AwardedPlayers returns the players credited individually for the current question.
+func (e *Engine) AwardedPlayers() []AwardedPlayer {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	qid := ""
+	if e.state.Question != nil {
+		qid = e.state.Question.ID
+	}
+	return e.awardedPlayersUnsafe(qid)
+}
+
+// ApplyBumperPointsBatch is the player-level twin of ApplyTeamPointsBatch: full
+// validation before any effect (NOT_REVEALED, QUESTION_MISMATCH, INVALID_ENTRIES,
+// INVALID_POINTS, UNKNOWN_PLAYER), then one engine lock: already-credited players
+// skipped, the others get Score += points (team score recomputed) and one
+// POINTS_AWARDED entry each (WINNER_TYPE PLAYER).
+func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPointsEntry, meta CategoryMeta, display bool) BumperPointsBatchResult {
+	e.mu.Lock()
+	refuse := func(reason string) BumperPointsBatchResult {
+		e.mu.Unlock()
+		return BumperPointsBatchResult{Status: "REFUSED", Reason: reason}
+	}
+	if e.state.Phase != PhaseRevealed {
+		return refuse("NOT_REVEALED")
+	}
+	if e.state.Question == nil || e.state.Question.ID != questionID {
+		return refuse("QUESTION_MISMATCH")
+	}
+	if len(entries) == 0 || len(entries) > teamPointsBatchMaxEntries {
+		return refuse("INVALID_ENTRIES")
+	}
+	seen := map[string]bool{}
+	for _, en := range entries {
+		if en.ID == "" || seen[en.ID] {
+			return refuse("INVALID_ENTRIES")
+		}
+		seen[en.ID] = true
+	}
+	for _, en := range entries {
+		if en.Invalid || en.Points == 0 || en.Points < -teamPointsBatchMaxPoints || en.Points > teamPointsBatchMaxPoints {
+			return refuse("INVALID_POINTS")
+		}
+	}
+	var unknown []string
+	for _, en := range entries {
+		if b, ok := e.data.Bumpers[en.ID]; !ok || b == nil {
+			unknown = append(unknown, en.ID)
+		}
+	}
+	if len(unknown) > 0 {
+		e.mu.Unlock()
+		return BumperPointsBatchResult{Status: "REFUSED", Reason: "UNKNOWN_PLAYER", Unknown: unknown}
+	}
+
+	res := BumperPointsBatchResult{Status: "APPLIED", AppliedTeams: map[string]string{}}
+	already := map[string]bool{}
+	for _, ap := range e.awardedPlayersUnsafe(questionID) {
+		already[ap.ID] = true
+	}
+	q := e.state.Question
+	var teams []string
+	teamSeen := map[string]bool{}
+	for _, en := range entries {
+		if already[en.ID] {
+			res.Skipped = append(res.Skipped, TeamPointsSkip{Team: en.ID, Reason: "ALREADY_AWARDED"})
+			continue
+		}
+		b := e.data.Bumpers[en.ID]
+		b.Score += en.Points
+		var teamColor []int
+		if b.Team != "" {
+			e.recalculateTeamScoreUnsafe(b.Team)
+			if t := e.data.Teams[b.Team]; t != nil {
+				teamColor = t.Color
+			}
+			if !teamSeen[b.Team] {
+				teamSeen[b.Team] = true
+				teams = append(teams, b.Team)
+			}
+		}
+		name := b.Name
+		if name == "" {
+			name = en.ID
+		}
+		var displayFlag *bool
+		if !display {
+			f := false
+			displayFlag = &f
+		}
+		e.history = append(e.history, GameEvent{
+			Display:             displayFlag,
+			Timestamp:           time.Now().UnixMicro(),
+			QuestionID:          q.ID,
+			QuestionText:        q.Question,
+			QuestionCategory:    string(q.Category),
+			CategoryDisplayName: meta.Name,
+			CategoryImageURL:    meta.ImageURL,
+			CategoryColor:       meta.Color,
+			EventType:           "POINTS_AWARDED",
+			WinnerID:            en.ID,
+			WinnerName:          name,
+			WinnerType:          "PLAYER",
+			TeamName:            b.Team,
+			TeamColor:           teamColor,
+			PlayerName:          name,
+			PlayerColor:         string(b.AnswerColor),
+			Points:              en.Points,
+		})
+		res.Applied = append(res.Applied, en)
+		res.AppliedTeams[en.ID] = b.Team
+	}
+	if len(res.Applied) > 0 {
+		players := make([]string, 0, len(res.Applied))
+		for _, en := range res.Applied {
+			players = append(players, en.ID)
+		}
+		e.recordScoreChangeUnsafe(display, teams, players)
+	}
+	e.mu.Unlock()
+
+	if len(res.Applied) > 0 {
+		safeGo("SaveBumpers", e.SaveBumpers)
+		safeGo("SaveTeams", e.SaveTeams)
+		safeGo("SaveHistory", e.SaveHistory)
+	}
+	return res
+}

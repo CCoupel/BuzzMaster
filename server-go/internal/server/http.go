@@ -913,10 +913,12 @@ func (h *HTTPServer) handleQuestions(w http.ResponseWriter, r *http.Request) {
 				// Set default POINTS_TARGET if not present
 				if _, ok := q["POINTS_TARGET"]; !ok {
 					qType, _ := q["TYPE"].(string)
-					if qType == "QCM" {
-						q["POINTS_TARGET"] = "TEAM"
-					} else {
-						q["POINTS_TARGET"] = "PLAYER"
+					q["POINTS_TARGET"] = string(game.DefaultPointsTarget(qType)) // #254: aligned with the award level table
+				}
+				// #254: an invalid stored QCM_WRONG_PENALTY reads as 0 (files are never rewritten).
+				if v, ok := q["QCM_WRONG_PENALTY"].(float64); ok {
+					if v != float64(int(v)) || v > 0 || v < -100 {
+						q["QCM_WRONG_PENALTY"] = 0
 					}
 				}
 				// Inject status from engine's questionStatuses map
@@ -1090,6 +1092,13 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		if p2Str := r.FormValue("qcm_penalty_2"); p2Str != "" {
 			if p2, err := strconv.ParseFloat(p2Str, 64); err == nil && p2 > 0 && p2 <= 1 {
 				question["QCM_PENALTY_2"] = p2
+			}
+		}
+		// #254: wrong-answer penalty, integer -100..0 (0 written as is); absent or
+		// invalid -> field not written (effective 0), no error.
+		if wpStr := r.FormValue("qcm_wrong_penalty"); wpStr != "" {
+			if wp, err := strconv.Atoi(strings.TrimSpace(wpStr)); err == nil && wp <= 0 && wp >= -100 {
+				question["QCM_WRONG_PENALTY"] = wp
 			}
 		}
 	}

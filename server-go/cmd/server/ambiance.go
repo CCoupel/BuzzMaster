@@ -85,11 +85,12 @@ var ambianceSiteRegistry = map[ambianceSite]ambianceDecision{
 	{"onPhaseStarted", "sendLEDSetAllEntracteOff"}:    {ambianceNotifyState, "ENTRACTE programmée (#214) — actualStart()/StartImmediate()→STARTED, symétrie avec handleEntracteSet (T2.1, contract §10.5)"},
 
 	// --- Event layer: pulses (NotifyPulse KindScore, 4800 ms) ---
-	{"handlePoints", "sendLEDSetComet"}:          {ambianceNotifyPulse, "points awarded — credited team"},
-	{"handleBumperPoints", "sendLEDSetComet"}:    {ambianceNotifyPulse, "bumper points — credited team"},
-	{"handleTeamPoints", "sendLEDSetComet"}:      {ambianceNotifyPulse, "team points — credited team"},
-	{"handleMotionDone", "sendLEDSetComet"}:      {ambianceNotifyPulse, "MEMOTION winner — winning team"},
-	{"handleTeamPointsBatch", "sendLEDSetComet"}: {ambianceNotifyPulse, "grouped team award (#244/#251) — one pulse for the credited teams"},
+	{"handlePoints", "sendLEDSetComet"}:            {ambianceNotifyPulse, "points awarded — credited team"},
+	{"handleBumperPoints", "sendLEDSetComet"}:      {ambianceNotifyPulse, "bumper points — credited team"},
+	{"handleTeamPoints", "sendLEDSetComet"}:        {ambianceNotifyPulse, "team points — credited team"},
+	{"handleMotionDone", "sendLEDSetComet"}:        {ambianceNotifyPulse, "MEMOTION winner — winning team"},
+	{"handleBumperPointsBatch", "sendLEDSetComet"}: {ambianceNotifyPulse, "grouped player award (#254) — one pulse for the teams of the credited players"},
+	{"handleTeamPointsBatch", "sendLEDSetComet"}:   {ambianceNotifyPulse, "grouped team award (#244/#251) — one pulse for the credited teams"},
 
 	// --- Deliberately no ambiance (contract §6.1) ---
 	{"resendLEDOnReconnect", "sendLEDSetForBuzzer"}: {ambianceNoAmbiance, "resync of ONE reconnecting device; nothing changed in the game"},

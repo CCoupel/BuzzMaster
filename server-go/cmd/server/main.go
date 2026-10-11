@@ -1557,6 +1557,9 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionTeamPointsBatch:
 		a.handleTeamPointsBatch(incoming.ClientID, msg)
 
+	case protocol.ActionBumperPointsBatch:
+		a.handleBumperPointsBatch(incoming.ClientID, msg)
+
 	case protocol.ActionBumperPoints:
 		a.handleBumperPoints(msg, updateSender{incoming.ClientID, clientType})
 
@@ -2350,11 +2353,13 @@ func (a *App) loadQuestion(id string) *game.Question {
 
 	// Set default POINTS_TARGET if not present
 	if q.PointsTarget == "" {
-		if q.Type == game.QuestionTypeQCM {
-			q.PointsTarget = game.PointsTargetTeam
-		} else {
-			q.PointsTarget = game.PointsTargetPlayer
-		}
+		q.PointsTarget = game.DefaultPointsTarget(string(q.Type))
+	}
+	// #254: QCM_WRONG_PENALTY is a QCM-only field; absent / invalid = 0.
+	if q.Type == game.QuestionTypeQCM {
+		q.QCMWrongPenalty = game.NormalizeQCMWrongPenalty(q.QCMWrongPenalty)
+	} else {
+		q.QCMWrongPenalty = 0
 	}
 
 	return &q
@@ -3467,6 +3472,107 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 		}
 		if len(positive) > 0 {
 			a.ambiance().NotifyPulse(lighting.KindScore, positive, best, lighting.ScorePulseDuration)
+			a.notifySound(audio.CueGagne)
+			a.startScoreFlash(bestTeam, best)
+		}
+	}
+
+	reply(out)
+	if len(res.Applied) > 0 {
+		a.broadcastUpdate()
+		a.broadcastAwardedTeams()
+	}
+}
+
+// handleBumperPointsBatch applies a grouped player-level award (#254): the twin of
+// handleTeamPointsBatch (validation first, one atomic block, grouped public effects).
+func (a *App) handleBumperPointsBatch(clientID string, msg *protocol.Message) {
+	var p protocol.BumperPointsBatchPayload
+	reply := func(res protocol.BumperPointsBatchResultPayload) {
+		if clientID == "" {
+			return
+		}
+		if res.Applied == nil {
+			res.Applied = []protocol.BumperPointsBatchEntry{}
+		}
+		if res.Skipped == nil {
+			res.Skipped = []protocol.BumperPointsBatchSkip{}
+		}
+		if res.Players == nil {
+			res.Players = []string{}
+		}
+		if rm, err := protocol.NewMessage(protocol.ActionBumperPointsBatchResult, res); err == nil {
+			a.wsHub.SendToClient(clientID, rm)
+		}
+	}
+	refuse := func(reason string, players []string) {
+		server.LogWarn(game.LogComponentApp, "BUMPER_POINTS_BATCH_REFUSED client=%q question=%q reason=%q players=%s",
+			clientID, p.QuestionID, reason, logValue(players))
+		reply(protocol.BumperPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Players: players})
+	}
+	if err := json.Unmarshal(msg.Msg, &p); err != nil {
+		refuse("INVALID_ENTRIES", nil)
+		return
+	}
+	entries := make([]game.BumperPointsEntry, 0, len(p.Entries))
+	for _, en := range p.Entries {
+		var n float64
+		valid := json.Unmarshal(en.Points, &n) == nil && n == math.Trunc(n) && math.Abs(n) <= 1e9
+		entries = append(entries, game.BumperPointsEntry{ID: en.ID, Points: int(n), Invalid: !valid})
+	}
+	state := a.engine.GetState()
+	var meta game.CategoryMeta
+	if state.Question != nil {
+		meta.Name, meta.ImageURL, meta.Color = a.httpServer.ResolveCategoryMeta(string(state.Question.Category))
+	}
+	display := p.Display == nil || *p.Display
+	if !display {
+		// DISPLAY:false is honoured for the admin only; this action is admin-only already.
+		display = false
+	}
+	res := a.engine.ApplyBumperPointsBatch(p.QuestionID, entries, meta, display)
+	if res.Status == "REFUSED" {
+		refuse(res.Reason, res.Unknown)
+		return
+	}
+
+	out := protocol.BumperPointsBatchResultPayload{Status: "APPLIED", QuestionID: p.QuestionID}
+	applied, skipped := make([]string, 0, len(res.Applied)), make([]string, 0, len(res.Skipped))
+	for _, en := range res.Applied {
+		out.Applied = append(out.Applied, protocol.BumperPointsBatchEntry{ID: en.ID, Points: en.Points})
+		applied = append(applied, fmt.Sprintf("%q:%+d", en.ID, en.Points))
+	}
+	for _, sk := range res.Skipped {
+		out.Skipped = append(out.Skipped, protocol.BumperPointsBatchSkip{ID: sk.Team, Reason: sk.Reason})
+		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.Team, sk.Reason))
+	}
+	server.LogInfo(game.LogComponentApp, "BUMPER_POINTS_BATCH client=%q question=%q applied=[%s] skipped=[%s]",
+		clientID, p.QuestionID, strings.Join(applied, ","), strings.Join(skipped, ","))
+	if !display {
+		a.logHiddenCorrection([]updateSender{{ClientID: clientID}}, protocol.ActionBumperPointsBatch, strings.Join(applied, ","))
+	}
+
+	// Grouped public effects, once, per team of the players credited positively.
+	if display {
+		var teams []string
+		seen := map[string]bool{}
+		best, bestTeam := 0, ""
+		for _, en := range res.Applied {
+			team := res.AppliedTeams[en.ID]
+			if en.Points <= 0 || team == "" {
+				continue
+			}
+			if !seen[team] {
+				seen[team] = true
+				teams = append(teams, team)
+				a.sendLEDSetComet(team)
+			}
+			if en.Points > best {
+				best, bestTeam = en.Points, team
+			}
+		}
+		if len(teams) > 0 {
+			a.ambiance().NotifyPulse(lighting.KindScore, teams, best, lighting.ScorePulseDuration)
 			a.notifySound(audio.CueGagne)
 			a.startScoreFlash(bestTeam, best)
 		}
@@ -6882,6 +6988,13 @@ func (a *App) handleSetCreditPoints(msg *protocol.Message) {
 		server.LogError(game.LogComponentApp, "Failed to parse SET_CREDIT_POINTS: %v", err)
 		return
 	}
+	// #254: a zero or negative amount (penalty) is never pushed to the animateur's
+	// tablets, which keep the last positive value (else their credit button would
+	// take points away instead of giving them).
+	if payload.Points <= 0 {
+		server.LogInfo(game.LogComponentApp, "SET_CREDIT_POINTS ignored: non-positive amount %d (tablets keep the last positive value)", payload.Points)
+		return
+	}
 	a.currentCreditPoints = payload.Points
 	a.broadcastCreditPoints()
 }
@@ -7027,7 +7140,11 @@ func (a *App) getAwardedTeamsPayload() *protocol.AwardedTeamsPayload {
 	for _, t := range awarded {
 		teams = append(teams, protocol.AwardedTeamEntry{Team: t.Team, Points: t.Points, Timestamp: t.Timestamp})
 	}
-	return &protocol.AwardedTeamsPayload{QuestionID: questionID, Teams: teams}
+	players := make([]protocol.AwardedPlayerEntry, 0)
+	for _, p := range a.engine.AwardedPlayers() {
+		players = append(players, protocol.AwardedPlayerEntry{ID: p.ID, Team: p.Team, Points: p.Points, Timestamp: p.Timestamp})
+	}
+	return &protocol.AwardedTeamsPayload{QuestionID: questionID, Teams: teams, Players: players}
 }
 
 // buildAwardedTeamsMessage serializes getAwardedTeamsPayload's result into a

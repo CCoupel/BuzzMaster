@@ -614,22 +614,27 @@ type RafaleCurrent struct {
 // makes this the field that's actually serialized/deserialized for Question;
 // TypedContent.Answer never fires here — see TypedContent's doc comment.
 type Question struct {
-	ID                     string           `json:"ID"`
-	Question               string           `json:"QUESTION"`
-	Answer                 string           `json:"ANSWER"`                             // For normal questions
-	Type                   QuestionType     `json:"TYPE,omitempty"`                     // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
-	Category               QuestionCategory `json:"CATEGORY,omitempty"`                 // Question category
-	PointsTarget           PointsTarget     `json:"POINTS_TARGET,omitempty"`            // "PLAYER" or "TEAM" (default based on type)
-	MotionCards            []MotionCard     `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
-	MotionMode             string           `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
-	MotionConfig           *MotionConfig    `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
-	MotionMemorizeDuration int              `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
-	Points                 string           `json:"POINTS"`                             // String to match JSON format
-	Time                   string           `json:"TIME"`                               // String to match JSON format
-	Order                  int              `json:"ORDER,omitempty"`                    // Display order (for drag and drop)
-	Media                  string           `json:"MEDIA,omitempty"`                    // Question media (shown during game)
-	MediaAnswer            string           `json:"MEDIA_ANSWER,omitempty"`             // Answer media (shown during REVEAL)
-	Explanation            string           `json:"EXPLANATION,omitempty"`              // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
+	ID           string           `json:"ID"`
+	Question     string           `json:"QUESTION"`
+	Answer       string           `json:"ANSWER"`                  // For normal questions
+	Type         QuestionType     `json:"TYPE,omitempty"`          // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
+	Category     QuestionCategory `json:"CATEGORY,omitempty"`      // Question category
+	PointsTarget PointsTarget     `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
+	// QCMWrongPenalty (v11.2, #254): wrong-answer penalty of a host QCM question,
+	// integer -100..0, 0 = none (default). Absent / invalid reads as 0 (see
+	// NormalizeQCMWrongPenalty); never on a MEMOTION card; the server only stores
+	// and serves it (the admin client applies it).
+	QCMWrongPenalty        int           `json:"QCM_WRONG_PENALTY,omitempty"`
+	MotionCards            []MotionCard  `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
+	MotionMode             string        `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
+	MotionConfig           *MotionConfig `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
+	MotionMemorizeDuration int           `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
+	Points                 string        `json:"POINTS"`                             // String to match JSON format
+	Time                   string        `json:"TIME"`                               // String to match JSON format
+	Order                  int           `json:"ORDER,omitempty"`                    // Display order (for drag and drop)
+	Media                  string        `json:"MEDIA,omitempty"`                    // Question media (shown during game)
+	MediaAnswer            string        `json:"MEDIA_ANSWER,omitempty"`             // Answer media (shown during REVEAL)
+	Explanation            string        `json:"EXPLANATION,omitempty"`              // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
 	// Sound (v11.1, #219, contracts/sound.md §10) — a LONG media, distinct
 	// from the cues bruitage catalogue, attached to the question and played
 	// on START via a fully asynchronous second audio path
@@ -1083,4 +1088,24 @@ type GameEvent struct {
 	// The event itself stays a single row — only /api/palmares (http.go,
 	// handlePalmares) fans it out across categories at aggregation time.
 	CategoryBreakdown map[string]int `json:"CATEGORY_BREAKDOWN,omitempty"`
+}
+
+// NormalizeQCMWrongPenalty returns v if it is a valid QCM_WRONG_PENALTY
+// (-100..0), else 0 (#254: absent or invalid = no penalty).
+func NormalizeQCMWrongPenalty(v int) int {
+	if v > 0 || v < -100 {
+		return 0
+	}
+	return v
+}
+
+// DefaultPointsTarget returns the default POINTS_TARGET for a question type when
+// the stored question has none (#254): TEAM for QCM, ARDOISE, MEMORY, MEMOTION and
+// RAFALE, PLAYER for SPEEDY (and legacy NORMAL / unknown).
+func DefaultPointsTarget(t string) PointsTarget {
+	switch t {
+	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE":
+		return PointsTargetTeam
+	}
+	return PointsTargetPlayer
 }

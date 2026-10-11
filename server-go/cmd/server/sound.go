@@ -62,11 +62,12 @@ type soundDecision struct {
 // cmd/server/sound_sites_test.go — on purpose: one forgotten entry means
 // either a stale registry or an unreviewed new sound site.
 var soundSiteRegistry = map[soundSite]soundDecision{
-	{Func: "handlePoints"}:          {"points awarded — credited team (CueGagne)"},
-	{Func: "handleBumperPoints"}:    {"bumper points (CueGagne)"},
-	{Func: "handleTeamPoints"}:      {"team points (CueGagne)"},
-	{Func: "handleTeamPointsBatch"}: {"grouped team award (CueGagne once for the batch, #244/#251)"},
-	{Func: "handleMotionDone"}:      {"MEMOTION winner (CueGagne) — the auto-stop branch carries no cue"},
+	{Func: "handlePoints"}:            {"points awarded — credited team (CueGagne)"},
+	{Func: "handleBumperPoints"}:      {"bumper points (CueGagne)"},
+	{Func: "handleTeamPoints"}:        {"team points (CueGagne)"},
+	{Func: "handleBumperPointsBatch"}: {"grouped player award (CueGagne once for the batch, #254)"},
+	{Func: "handleTeamPointsBatch"}:   {"grouped team award (CueGagne once for the batch, #244/#251)"},
+	{Func: "handleMotionDone"}:        {"MEMOTION winner (CueGagne) — the auto-stop branch carries no cue"},
 	{Func: "handleFlipMemoryCard"}: {"flip-back branch only (CuePerdu) — match/complete branches carry no cue; " +
 		"same per-function collapsing limit as contract lighting.md §6.3/§7, cannot be narrowed further by this test"},
 	{Func: "broadcastReveal"}: {"answer revealed (CueReveal)"},

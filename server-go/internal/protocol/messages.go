@@ -67,20 +67,21 @@ const (
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
-	ActionArdoiseFinal          = "ARDOISE_FINAL"            // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
-	ActionArdoiseFinalAck       = "ARDOISE_FINAL_ACK"        // Server → VPlayer (targeted): final received (v11.2, #246)
-	ActionTeamsUpdateRefused    = "TEAMS_UPDATE_REFUSED"     // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
-	ActionNewGameRefused        = "NEW_GAME_REFUSED"         // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
-	ActionTeamPointsBatch       = "TEAM_POINTS_BATCH"        // Client → Server (admin): grouped team award (v11.2, #244/#251)
-	ActionTeamPointsBatchResult = "TEAM_POINTS_BATCH_RESULT" // Server → sender: outcome of the grouped award (v11.2)
-	ActionBumperPointsBatch     = "BUMPER_POINTS_BATCH"      // Admin → Server: grouped player award (#254, handler to come; listed now so #253 can suspend it)
-	ActionHelloAck              = "HELLO_ACK"                // Server → admin/anim (targeted): this connection's own ID (v11.2, #253)
-	ActionLaunchLock            = "LAUNCH_LOCK"              // Admin → Server: popup "Lancer la partie" open/close/renew (v11.2, #253)
-	ActionLaunchLockRefused     = "LAUNCH_LOCK_REFUSED"      // Server → sender: opening refused (v11.2, #253)
-	ActionActionRefused         = "ACTION_REFUSED"           // Server → sender: action suspended by LAUNCH_LOCK (v11.2, #253)
-	ActionRevealRefused         = "REVEAL_REFUSED"           // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
-	ActionClientTrace           = "CLIENT_TRACE"             // Client → Server: diagnostic trace (v11.2, #246)
-	ActionArdoiseInput          = "ARDOISE_INPUT"            // VPlayer → Server: free-text answer update (throttled)
+	ActionArdoiseFinal            = "ARDOISE_FINAL"              // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
+	ActionArdoiseFinalAck         = "ARDOISE_FINAL_ACK"          // Server → VPlayer (targeted): final received (v11.2, #246)
+	ActionTeamsUpdateRefused      = "TEAMS_UPDATE_REFUSED"       // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
+	ActionNewGameRefused          = "NEW_GAME_REFUSED"           // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
+	ActionTeamPointsBatch         = "TEAM_POINTS_BATCH"          // Client → Server (admin): grouped team award (v11.2, #244/#251)
+	ActionTeamPointsBatchResult   = "TEAM_POINTS_BATCH_RESULT"   // Server → sender: outcome of the grouped award (v11.2)
+	ActionBumperPointsBatch       = "BUMPER_POINTS_BATCH"        // Admin → Server: grouped player award (v11.2, #254)
+	ActionBumperPointsBatchResult = "BUMPER_POINTS_BATCH_RESULT" // Server → sender: outcome of the grouped player award (v11.2, #254)
+	ActionHelloAck                = "HELLO_ACK"                  // Server → admin/anim (targeted): this connection's own ID (v11.2, #253)
+	ActionLaunchLock              = "LAUNCH_LOCK"                // Admin → Server: popup "Lancer la partie" open/close/renew (v11.2, #253)
+	ActionLaunchLockRefused       = "LAUNCH_LOCK_REFUSED"        // Server → sender: opening refused (v11.2, #253)
+	ActionActionRefused           = "ACTION_REFUSED"             // Server → sender: action suspended by LAUNCH_LOCK (v11.2, #253)
+	ActionRevealRefused           = "REVEAL_REFUSED"             // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
+	ActionClientTrace             = "CLIENT_TRACE"               // Client → Server: diagnostic trace (v11.2, #246)
+	ActionArdoiseInput            = "ARDOISE_INPUT"              // VPlayer → Server: free-text answer update (throttled)
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
 	ActionLogEntry   = "LOG_ENTRY"
@@ -364,8 +365,17 @@ type CreditPointsPayload struct {
 // (no omitempty on either field — project-wide GameState convention,
 // CLAUDE.md).
 type AwardedTeamsPayload struct {
-	QuestionID string             `json:"QUESTION_ID"`
-	Teams      []AwardedTeamEntry `json:"TEAMS"`
+	QuestionID string               `json:"QUESTION_ID"`
+	Teams      []AwardedTeamEntry   `json:"TEAMS"`
+	Players    []AwardedPlayerEntry `json:"PLAYERS"` // v11.2, #254: players credited individually ([] never null)
+}
+
+// AwardedPlayerEntry is one player credited individually for the current question.
+type AwardedPlayerEntry struct {
+	ID        string `json:"ID"`
+	Team      string `json:"TEAM"`
+	Points    int    `json:"POINTS"`
+	Timestamp int64  `json:"TIMESTAMP"`
 }
 
 // AwardedTeamEntry is one team already credited for the current question
@@ -798,6 +808,34 @@ type TeamPointsBatchPayload struct {
 		Points json.RawMessage `json:"POINTS"`
 	} `json:"ENTRIES"`
 	Display *bool `json:"DISPLAY,omitempty"` // reserved for #252
+}
+
+// BumperPointsBatchPayload for BUMPER_POINTS_BATCH (v11.2, #254).
+type BumperPointsBatchPayload struct {
+	QuestionID string `json:"QUESTION_ID"`
+	Entries    []struct {
+		ID     string          `json:"ID"`
+		Points json.RawMessage `json:"POINTS"`
+	} `json:"ENTRIES"`
+	Display *bool `json:"DISPLAY,omitempty"`
+}
+
+// BumperPointsBatchResultPayload for BUMPER_POINTS_BATCH_RESULT (targeted to the sender).
+type BumperPointsBatchResultPayload struct {
+	Status     string                   `json:"STATUS"`
+	Reason     string                   `json:"REASON,omitempty"`
+	QuestionID string                   `json:"QUESTION_ID"`
+	Applied    []BumperPointsBatchEntry `json:"APPLIED"`
+	Skipped    []BumperPointsBatchSkip  `json:"SKIPPED"`
+	Players    []string                 `json:"PLAYERS"`
+}
+type BumperPointsBatchEntry struct {
+	ID     string `json:"ID"`
+	Points int    `json:"POINTS"`
+}
+type BumperPointsBatchSkip struct {
+	ID     string `json:"ID"`
+	Reason string `json:"REASON"`
 }
 
 // TeamPointsBatchApplied / Skipped are the RESULT array items.
