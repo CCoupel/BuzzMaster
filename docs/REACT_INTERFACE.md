@@ -783,14 +783,14 @@ Logique dans `GamePage.jsx` :
   - **Ouverture** : envoie `LAUNCH_LOCK OPEN`, puis attend au plus 1 s que `LAUNCH_LOCK.OWNER` égale sa connexion
     (`connectionId`, lu dans `MSG.CLIENT_ID` de `HELLO_ACK`). Sans confirmation sous 1 s, la popup ne s'ouvre pas et affiche un message d'erreur.
   - **Popup** : rendue par portail sur `document.body` (plein écran). Renouvellement `OPEN` toutes les 15 s.
-  - **Fermeture** : `CLOSE` à l'annulation, à Échap, après un lancement réussi, et au démontage (`pagehide`).
+  - **Fermeture** : `CLOSE` à l'annulation, à Échap, après un lancement réussi, à `pagehide` (fermeture ou navigation), et au démontage de l'hôte (changement de route). Un verrou orphelin (verrou à notre nom sans popup ouverte, p. ex. réponse arrivée après l'attente de 1 s) est aussi fermé.
   - **Verrou perdu popup ouverte** : message « La fenêtre a expiré (plus de 45 s sans signe de vie de ce poste) :
     rouvrez « Lancer la partie » », confirmation désactivée.
   - **Entracte** : message « Impossible pendant une entracte : sortez d'abord de l'entracte. » (barre, haut droite) ;
     aucun `OPEN` envoyé.
   - **Refus serveur** (`LAUNCH_LOCK_REFUSED`, `NEW_GAME_REFUSED`) : textes de `LaunchGameDialog.jsx` :
     « Lancement refusé par le serveur : impossible pendant une entracte. Sortez d'abord de l'entracte. » (`ENTRACTE_ACTIVE`) ;
-    « Lancement refusé par le serveur : une autre fenêtre « Lancer la partie » est ouverte sur un autre poste. » (`LAUNCH_IN_PROGRESS`).
+    « Lancement refusé par le serveur : une autre fenêtre « Lancer la partie » est ouverte sur un autre poste. » (`LAUNCH_IN_PROGRESS`) ; « Lancement refusé : supprimer les joueurs des tablettes exige de remettre les scores à zéro. » (`PLAYERS_REQUIRE_SCORES`). Le verrou tenu ailleurs (`LOCKED_BY_OTHER`) affiche un toast de l'hôte : « Une fenêtre « Lancer la partie » est déjà ouverte sur un autre poste. ».
 - **Autres postes** : bandeau « 🔒 Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu
   suspendues. » sous la barre admin. Page de jeu : START, STOP, PAUSE, REPONSE, sélection de question, clics sur les
   équipes et les joueurs, et boutons d'attribution désactivés avec le motif.
@@ -1608,7 +1608,7 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 **Pages admin** :
 | Route | Fonctionnalités |
 |-------|-----------------|
-| `/admin/game` | Contrôle jeu, équipes, timer — bouton "NOUVELLE PARTIE" en phase STOPPED |
+| `/admin/game` | Contrôle jeu, équipes, timer — lancement de partie dans le menu Préparation (#253) |
 | `/admin/quiz` | Zone Quiz (Nom/Thème/Notes) + Zone Ambiance (fonds d'écran) + Zone Questions (CRUD) |
 | `/admin/config` | Paramètres serveur, effet néon, WiFi defaults + SSID2, OTA firmware |
 | `/admin/backup` | Sauvegarde, restauration, réinitialisation |
@@ -1628,7 +1628,7 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 - Métadonnées quiz dans Zone Quiz (centralisées), pas sur GamePage
 
 **Fichiers clés** :
-- `GamePage.jsx` : bouton NOUVELLE PARTIE + panneaux MEMOTION GRID/SELECTED/QUESTION/REVEAL
+- `GamePage.jsx` : panneaux MEMOTION GRID/SELECTED/QUESTION/REVEAL
 - `QuestionsPage.jsx` : 3 zones Quiz/Ambiance/Questions + éditeur MEMOTION
 - `PlayerDisplay.jsx` : TV toutes phases (STATIQUE) — NEW_GAME, jeu normal, MEMOTION
 - `GameContext.jsx` : GameProvider prop `endpoint`, routing WS
