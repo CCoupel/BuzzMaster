@@ -5,6 +5,7 @@ import (
 	"buzzcontrol/internal/protocol"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -85,10 +86,9 @@ func TestHandlePlayerConnect_NoRelease_StillRejected(t *testing.T) {
 	// No RELEASE_BUMPER_NAME was ever sent — the #109 guarantee must hold.
 	app.handlePlayerConnect(clientID, playerConnectMsg(t, "Emma", ""))
 
-	action, rawMsg := readAction(t, conn)
-	if action != protocol.ActionPlayerRejected {
-		t.Fatalf("expected %s, got %q", protocol.ActionPlayerRejected, action)
-	}
+	// #257: read UNTIL the awaited action (a HEARTBEAT / UPDATE may legitimately precede it on a
+	// loaded machine) instead of asserting on the very first frame received.
+	rawMsg := readActionMatchingWithin(t, conn, protocol.ActionPlayerRejected, 10*time.Second)
 	var payload protocol.PlayerRejectedPayload
 	if err := json.Unmarshal(rawMsg, &payload); err != nil {
 		t.Fatalf("failed to unmarshal PLAYER_REJECTED payload: %v", err)
