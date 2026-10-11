@@ -1074,6 +1074,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // active) — jamais entracteConfigSaved.
   const entracteTransitionStyle = { '--ep-transition': `${gameState.entracteConfig?.TRANSITION_MS ?? 2000}ms` }
 
+  // #245 (v11.2, maquette (g‴)) — manche de la question courante, calculée par le serveur (ROUND_CONTEXT : la TV
+  // n'a pas la liste des questions). Pastille du nom si ROUND_INDEX > 0 ; titre de manche sur l'écran d'attente de
+  // la PREMIÈRE question de la manche (FIRST_OF_ROUND). Rien sans manche. Écran STATIQUE : positions absolues en
+  // unités d'écran, texte tronqué, aucun défilement.
+  const roundCtx = gameState.ROUND_CONTEXT
+  const currentRoundName = roundCtx?.ROUND_INDEX > 0
+    ? ((gameState.ROUNDS || []).find(r => r.ID === roundCtx.ROUND_ID)?.NAME || '')
+    : ''
+  const showRoundPill = !isVPlayer && !!currentRoundName && !!gameState.question && gameState.question.TYPE !== 'ENTRACTE'
+    && isShowingGame && ['PREPARE', 'READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
+  const showRoundTitle = showRoundPill && gameState.phase === 'READY' && roundCtx.FIRST_OF_ROUND === true
+
   return (
     <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
       {/* TV fullscreen fallback button — only if auto-fullscreen failed and not admin preview.
@@ -1091,6 +1103,12 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
         className={`entracte-content${entracteActiveHere ? ' entracte-dim' : ''}`}
         style={entracteTransitionStyle}
       >
+      {showRoundPill && (
+        <span className="tv-round-pill" data-testid="tv-round-pill">Manche {roundCtx.ROUND_INDEX} · {currentRoundName}</span>
+      )}
+      {showRoundTitle && (
+        <div className="tv-round-title" data-testid="tv-round-title">Manche {roundCtx.ROUND_INDEX} — {currentRoundName}</div>
+      )}
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">

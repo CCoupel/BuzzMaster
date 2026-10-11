@@ -134,6 +134,7 @@ export default function AnimPage() {
     bumpers,
     nextQuestion,
     questionPosition,
+    setEntracte,
     awardedTeams,
     creditPoints,
     // RAFALE (v8.0.0, #16/#107, contrat rafale.md §5.1/§5.2)
@@ -652,6 +653,19 @@ export default function AnimPage() {
   // net. .anim-page reste elle-même non filtrée (grille à placement
   // explicite, F7) — la classe est appliquée à chacune de ses 4 zones.
   const entracteActive = !!gameState.entracte
+  // #245 (maquette (g‴)) — pastille de manche : « Manche 2/3 · nom · 3/5 » (POSITION 0 = une entracte : « · entracte »),
+  // « Sans manche · 2/4 » pour une question hors manche quand le quiz en compte ; rien sans manche. Les
+  // positions viennent du serveur (ROUND_CONTEXT) et ne comptent pas les entractes.
+  const roundCtx = gameState.ROUND_CONTEXT
+  const roundChip = (() => {
+    if (!question || !roundCtx || !(roundCtx.ROUND_COUNT > 0)) return ''
+    const pos = roundCtx.POSITION > 0 ? ` · ${roundCtx.POSITION}/${roundCtx.TOTAL}` : ''
+    if (roundCtx.ROUND_INDEX > 0) {
+      const name = (gameState.ROUNDS || []).find(r => r.ID === roundCtx.ROUND_ID)?.NAME || ''
+      return `Manche ${roundCtx.ROUND_INDEX}/${roundCtx.ROUND_COUNT}${name ? ` · ${name}` : ''}${roundCtx.POSITION > 0 ? pos : ' · entracte'}`
+    }
+    return roundCtx.POSITION > 0 ? `Sans manche${pos}` : ''
+  })()
   const entracteDim = entracteActive ? ' entracte-dim' : ''
   // Transition progressive (#119, C3) — posée une seule fois sur .anim-page,
   // héritée par les 4 zones (.anim-zone la consomme, styles/entracte.css) —
@@ -679,7 +693,7 @@ export default function AnimPage() {
             exit={{ opacity: 0 }}
             transition={{ duration: Math.max(0, Number(entracteTransitionMs)) / 1000 }}
           >
-            ⏸ Entracte en cours — contrôle réservé à l'admin
+            🎬 Entracte en cours
           </motion.div>
         )}
       </AnimatePresence>
@@ -763,6 +777,9 @@ export default function AnimPage() {
                       autres chips (auparavant en retrait, seule occurrence
                       sur la page désormais — l'ancien affichage subdued a
                       disparu, pas de doublon). */}
+                  {roundChip && (
+                    <span className="anim-chip anim-chip-round">{roundChip}</span>
+                  )}
                   {questionPosition.total > 0 && (
                     <span className="anim-chip anim-chip-count">
                       {questionPosition.position}
@@ -858,6 +875,8 @@ export default function AnimPage() {
           revealed={revealed}
           hostContext={hostContext}
           nextQuestion={nextQuestion}
+          entracteActive={entracteActive}
+          onEndEntracte={() => setEntracte?.(false)}
           onStart={handleStart}
           onPause={pauseGame}
           onContinue={continueGame}

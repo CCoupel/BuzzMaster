@@ -3809,3 +3809,41 @@
   color: var(--text-secondary, #cbd5e1);
   font-weight: 700;
 }
+
+/* #245 — manche sur la TV (maquette (g‴)) : TV STATIQUE, unités d'écran, rien ne défile ni ne déborde */
+.tv-round-pill {
+  position: absolute;
+  top: 1.5vh;
+  left: 1.5vw;
+  z-index: 6;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.5vh 1.2vw;
+  border-radius: 999px;
+  font-size: 2.2vh;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+.tv-round-title {
+  position: absolute;
+  top: 12vh;
+  left: 5vw;
+  right: 5vw;
+  z-index: 6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 3.4vh;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #fcd34d;
+  pointer-events: none;
+}

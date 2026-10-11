@@ -177,6 +177,8 @@ export default function AnimConductPanel({
   revealed,
   hostContext,
   nextQuestion,
+  entracteActive = false,
+  onEndEntracte,
   onStart,
   onPause,
   onContinue,
@@ -483,7 +485,7 @@ export default function AnimConductPanel({
 
       {/* L5 — "à suivre" (#171/F3, déplacé de juste après L1 vers cette
           dernière position ; composant lui-même inchangé). */}
-      <AnimNextButton phase={phase} question={question} nextQuestion={nextQuestion} onSelectNext={onSelectNext} />
+      <AnimNextButton phase={phase} question={question} nextQuestion={nextQuestion} onSelectNext={onSelectNext} entracteActive={entracteActive} onEndEntracte={onEndEntracte} />
     </div>
   )
 }

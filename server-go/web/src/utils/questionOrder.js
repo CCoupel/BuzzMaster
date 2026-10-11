@@ -91,3 +91,12 @@ export function countEntries(questions) {
   const entractes = questions.filter(q => q.TYPE === 'ENTRACTE').length
   return { questions: questions.length - entractes, entractes }
 }
+
+/**
+ * #245 — rang 0-based de la manche d'une question dans `rounds`, ou -1 (« Sans manche » : ROUND_ID absent, vide
+ * ou inconnu).
+ */
+export function roundIndexOf(question, rounds) {
+  if (!question?.ROUND_ID || !Array.isArray(rounds)) return -1
+  return rounds.findIndex(r => r.ID === question.ROUND_ID)
+}

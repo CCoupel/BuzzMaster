@@ -1542,3 +1542,13 @@
 .ardoise-answer-text { flex: 1; }
 .ardoise-answer-text.unconfirmed { color: var(--gray-500, #6b7280); }
 .ardoise-answer-text-row .ardoise-points-btn { margin-left: auto; }
+
+/* #245 — « à suivre » d'une entracte (violet) et changement de manche (maquette (g‴)) */
+.next-question-btn.nq-entracte { background: #7e22ce; }
+.nq-newround { flex-shrink: 0; font-size: 0.65rem; font-weight: 800; color: #b45309; background: #fef3c7; padding: 1px 6px; border-radius: 999px; }
+/* #245 — titres de manche de la liste de jeu */
+.game-round-head { display: flex; align-items: center; gap: 0.35rem; font-size: 0.74rem; font-weight: 800; color: var(--gray-700, #374151); padding: 0.35rem 0.3rem; border-bottom: 1px solid var(--gray-200, #e5e7eb); margin-top: 0.35rem; }
+.game-round-head.current { color: var(--primary-600, #4f46e5); }
+.game-round-count { margin-left: auto; font-weight: 600; color: var(--gray-500, #6b7280); }
+.game-round-toggle { border: 0; background: transparent; cursor: pointer; font-size: 0.8rem; color: inherit; width: 1.8rem; height: 1.8rem; }
+.game-entracte-row { font-style: italic; }

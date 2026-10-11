@@ -5,7 +5,7 @@ import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
-import { sortQuestionsByOrder } from '../utils/questionOrder'
+import { sortQuestionsByOrder, sortQuestionsByRounds, roundIndexOf, countEntries } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
@@ -282,7 +282,15 @@ export default function GamePage() {
   // tri était dupliqué à l'identique dans les deux pages ; toute évolution
   // (dont "Mélanger les questions") devait d'abord passer par cette
   // mutualisation pour ne pas diverger entre les deux.
-  const sortedQuestions = useMemo(() => sortQuestionsByOrder(questions), [questions])
+  // #245 — manches : « Sans manche » en premier, puis les manches dans l'ordre (parité avec getNextQuestionPayload) ;
+  // sans manche, ordre v11.1 inchangé.
+  const rounds = useMemo(() => (Array.isArray(gameState.ROUNDS) ? gameState.ROUNDS : []), [gameState.ROUNDS])
+  const sortedQuestions = useMemo(
+    () => (rounds.length > 0 ? sortQuestionsByRounds(questions, rounds) : sortQuestionsByOrder(questions)),
+    [questions, rounds]
+  )
+  // Manches repliées dans la liste (préférence d'affichage de cette page, non mémorisée).
+  const [foldedRounds, setFoldedRounds] = useState({})
 
   // Custom categories from API (#95)
   const { categories: apiCategories } = useCategories()
@@ -299,16 +307,21 @@ export default function GamePage() {
     const currentIndex = sortedQuestions.findIndex(q => q.ID === currentId)
     for (let i = currentIndex + 1; i < sortedQuestions.length; i++) {
       const q = sortedQuestions[i]
-      // ENTRACTE (#214) — exclue du "à suivre" (maquette entracte-programme-
-      // 214.html §04, "pas une question à score" ; critère d'acceptation
-      // frontend) : une pause programmée n'est pas ce que "Question
-      // suivante" doit annoncer, on continue vers la vraie prochaine
-      // question du déroulé.
-      if (q.TYPE === 'ENTRACTE') continue
+      // #245 (v11.2, décision utilisateur) : une ENTRACTE est un type de jeu comme un autre, le "à suivre" la
+      // PROPOSE (la règle #214 « exclue du à suivre » est abrogée). Parité avec getNextQuestionPayload.
       if (!['STOPPED', 'REVEALED', 'PLAYED'].includes(q.STATUS)) return q
     }
     return null
   }, [sortedQuestions, gameState.phase, gameState.question])
+
+  // #245 — « → Manche 2 · nom » : la question suivante ouvre une AUTRE manche que la question courante.
+  const nextRoundLabel = useMemo(() => {
+    if (!nextUnplayedQuestion || rounds.length === 0) return ''
+    const cur = roundIndexOf(gameState.question, rounds)
+    const nxt = roundIndexOf(nextUnplayedQuestion, rounds)
+    if (cur === nxt) return ''
+    return nxt === -1 ? 'Sans manche' : `Manche ${nxt + 1} · ${rounds[nxt].NAME}`
+  }, [nextUnplayedQuestion, rounds, gameState.question])
 
   // MEMOTION: selected card data (from MOTION_CARDS array matching MEMOTION_SELECTED)
   const selectedMotionCard = useMemo(() => {
@@ -902,12 +915,17 @@ export default function GamePage() {
               Préparation de la barre de navigation (LaunchGameHost). */}
           {nextUnplayedQuestion && (
             <button
-              className="next-question-btn"
+              className={`next-question-btn${nextUnplayedQuestion.TYPE === 'ENTRACTE' ? ' nq-entracte' : ''}`}
               onClick={() => handleQuestionSelect(nextUnplayedQuestion)}
               title={`Aller à la question #${nextUnplayedQuestion.ID}`}
               style={!canSelectQuestion ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
             >
-              <span className="nq-label">à suivre : #{nextUnplayedQuestion.ID}</span>
+              <span className="nq-label">
+                {nextUnplayedQuestion.TYPE === 'ENTRACTE'
+                  ? `à suivre : 🎬 ${nextUnplayedQuestion.QUESTION || 'Entracte'}`
+                  : `à suivre : #${nextUnplayedQuestion.ID}`}
+              </span>
+              {nextRoundLabel && <span className="nq-newround">→ {nextRoundLabel}</span>}
               {/* 🔴 Retour QUALIF v9.0.0.4 (point A+6, cosmétique) — depuis
                   #216 une manche RAFALE porte une LISTE de catégories,
                   CATEGORY (singulier) est vide : cette pastille disparaissait
@@ -1295,25 +1313,60 @@ export default function GamePage() {
         )}
 
         <div className="questions-list">
-          {filteredQuestions.map((question) => {
-            const isCurrentQuestion = gameState.question?.ID === question.ID
-            const isUnplayed = !['STOPPED', 'REVEALED', 'PLAYED'].includes(question.STATUS)
-            const dimmed = !isCurrentQuestion && isUnplayed && !canSelectQuestion
-            return (
-              <div key={question.ID} style={dimmed ? { opacity: 0.5 } : undefined}>
-                <QuestionCard
-                  question={question}
-                  selected={isCurrentQuestion}
-                  compact
-                  showStatus
-                  showTarget
-                  customCategories={customCategories}
-                  canSelect={canSelectQuestion}
-                  onClick={handleQuestionSelect}
-                />
-              </div>
-            )
-          })}
+          {(() => {
+            const renderCard = (question) => {
+              const isCurrentQuestion = gameState.question?.ID === question.ID
+              const isUnplayed = !['STOPPED', 'REVEALED', 'PLAYED'].includes(question.STATUS)
+              const dimmed = !isCurrentQuestion && isUnplayed && !canSelectQuestion
+              const isEntracte = question.TYPE === 'ENTRACTE'
+              return (
+                <div
+                  key={question.ID}
+                  className={isEntracte ? 'game-entracte-row' : undefined}
+                  title={isEntracte ? 'Entracte : cliquer pour la lancer' : undefined}
+                  style={dimmed ? { opacity: 0.5 } : undefined}
+                >
+                  <QuestionCard
+                    question={question}
+                    selected={isCurrentQuestion}
+                    compact
+                    showStatus
+                    showTarget
+                    customCategories={customCategories}
+                    canSelect={canSelectQuestion}
+                    onClick={handleQuestionSelect}
+                  />
+                </div>
+              )
+            }
+            if (rounds.length === 0) return filteredQuestions.map(renderCard)
+            // #245 — titres de manche repliables ; « n/m jouées » compte les questions (entractes exclues).
+            const groups = [{ key: 'un', title: 'Sans manche', idx: -1 }, ...rounds.map((r, i) => ({ key: r.ID, title: `Manche ${i + 1} · ${r.NAME}`, idx: i }))]
+              .map(g => ({ ...g, items: filteredQuestions.filter(q => roundIndexOf(q, rounds) === g.idx) }))
+              .filter(g => g.items.length > 0)
+            const curIdx = gameState.question ? roundIndexOf(gameState.question, rounds) : null
+            return groups.map(g => {
+              const real = countEntries(g.items).questions
+              const done = g.items.filter(q => q.TYPE !== 'ENTRACTE' && ['STOPPED', 'REVEALED', 'PLAYED'].includes(q.STATUS)).length
+              const folded = !!foldedRounds[g.key]
+              return (
+                <div key={g.key} className="game-round-group">
+                  <div className={`game-round-head${curIdx === g.idx ? ' current' : ''}`}>
+                    <button
+                      type="button"
+                      className="game-round-toggle"
+                      aria-expanded={!folded}
+                      aria-label={folded ? `Déplier ${g.title}` : `Replier ${g.title}`}
+                      onClick={() => setFoldedRounds(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
+                    >{folded ? '▸' : '▾'}</button>
+                    <span className="game-round-title">{g.title}</span>
+                    <span className="game-round-count">{done}/{real} jouées</span>
+                  </div>
+                  {!folded && g.items.map(renderCard)}
+                </div>
+              )
+            })
+          })()}
           {filteredQuestions.length === 0 && selectedCategories.size > 0 && (
             <div className="category-filter-empty">
               Aucune question dans cette categorie.
