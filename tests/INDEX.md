@@ -76,3 +76,7 @@
 | tests/procedures/qcm-no-answer-255.md | manual | admin-game | #255 procédure manuelle (utilisateur seul) | regression | |
 | server-go/internal/game/answered_color_255_test.go | unit | game-engine | #255 ANSWERED_COLOR : écrite au buzz QCM enregistré, remise à zéro par tous les chemins qui remettent TIME à 0 (invariant), ANSWER_COLOR inchangée | regression | critical |
 | server-go/cmd/server/answered_color_255_test.go | integration | websocket, lighting, game-engine | #255 ANSWERED_COLOR sérialisée vers admin/TV/anim/VJoueur, ambiance et LED selon la réponse effective | regression | critical |
+| server-go/web/src/pages/GamePage.answered-color.255.test.jsx | unit | admin-game, scores | #255 admin lit ANSWERED_COLOR (compteurs/sélection/montants), repli sans la clé, couleur assignée conservée | regression | critical |
+| server-go/web/src/pages/PlayerDisplay.answered-color.255.test.jsx | unit | tv | #255 TV : badges QCM selon ANSWERED_COLOR | regression | |
+| server-go/web/src/pages/AnimPage.answered-color.255.test.jsx | unit | anim | #255 anim : réponse QCM selon ANSWERED_COLOR | regression | |
+| server-go/cmd/server/awarded_replay_256_test.go | integration | scores, websocket | #256 question rejouée : AWARDED_TEAMS vide à Ready, manche 2 non héritée | regression | critical |
