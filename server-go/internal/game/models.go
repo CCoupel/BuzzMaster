@@ -781,10 +781,15 @@ type GameState struct {
 	// LaunchLock (v11.2, #253): the "Lancer la partie" popup is open on an admin
 	// connection; game conduct is suspended for every client meanwhile. Always
 	// serialised, not persisted.
-	LaunchLock         LaunchLock `json:"LAUNCH_LOCK"`
-	VirtualPlayerLimit int        `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
-	EnrollmentActive   bool       `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
-	ShowQRCode         bool       `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
+	LaunchLock LaunchLock `json:"LAUNCH_LOCK"`
+	// Rounds (v11.2, #245): ordered list of the quiz rounds (ID, NAME), always serialised
+	// ([] never null), loaded from rounds.json. RoundContext: place of the CURRENT question in
+	// the rounds, computed by the server (TV has no question list).
+	Rounds             []Round      `json:"ROUNDS"`
+	RoundContext       RoundContext `json:"ROUND_CONTEXT"`
+	VirtualPlayerLimit int          `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
+	EnrollmentActive   bool         `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
+	ShowQRCode         bool         `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
 	// ENTRACTE (v6.5.2, #119) — global pause mode, independent of the question
 	// cycle. Same nature as ShowQRCode just above: an ephemeral display flag,
 	// NOT persisted (state_persistence.go excludes it explicitly, alongside
@@ -1055,6 +1060,23 @@ type LaunchLock struct {
 	Owner     string `json:"OWNER"`
 	Since     int64  `json:"SINCE"`
 	ExpiresAt int64  `json:"EXPIRES_AT"`
+}
+
+// Round is a quiz round (contracts/models.md §Manches).
+type Round struct {
+	ID   string `json:"ID"`
+	Name string `json:"NAME"`
+}
+
+// RoundContext is GameState.ROUND_CONTEXT (contracts/game-state.md): all zero when there is
+// no round.
+type RoundContext struct {
+	RoundID      string `json:"ROUND_ID"`
+	RoundIndex   int    `json:"ROUND_INDEX"`
+	RoundCount   int    `json:"ROUND_COUNT"`
+	Position     int    `json:"POSITION"`
+	Total        int    `json:"TOTAL"`
+	FirstOfRound bool   `json:"FIRST_OF_ROUND"`
 }
 
 // DefaultScoreChange is the initial / post-NEW_GAME value.

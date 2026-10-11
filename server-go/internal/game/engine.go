@@ -4025,6 +4025,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	// 6. always: no current question, game-type states back to zero.
 	e.state.TeamsLocked = false                // #249
 	e.state.ScoreChange = DefaultScoreChange() // #252
+	e.state.RoundContext = RoundContext{}      // #245: no current question
 	e.state.Question = nil
 	e.state.Phase = PhaseNewGame
 	e.questionEverStarted = false
@@ -8917,4 +8918,31 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 		safeGo("SaveHistory", e.SaveHistory)
 	}
 	return res
+}
+
+// --- Rounds (v11.2, #245) ---------------------------------------------------------
+
+// SetRounds replaces the ordered list of rounds exposed in GameState.ROUNDS (copy; never nil).
+func (e *Engine) SetRounds(rounds []Round) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	cp := make([]Round, len(rounds))
+	copy(cp, rounds)
+	e.state.Rounds = cp
+}
+
+// GetRounds returns a copy of GameState.ROUNDS.
+func (e *Engine) GetRounds() []Round {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	cp := make([]Round, len(e.state.Rounds))
+	copy(cp, e.state.Rounds)
+	return cp
+}
+
+// SetRoundContext stores GameState.ROUND_CONTEXT (computed by the server from the question list).
+func (e *Engine) SetRoundContext(c RoundContext) {
+	e.mu.Lock()
+	e.state.RoundContext = c
+	e.mu.Unlock()
 }

@@ -991,6 +991,30 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	if order, ok := existingQuestion["ORDER"]; ok {
 		question["ORDER"] = order
 	}
+	// #245: ROUND_ID is preserved on edit (same reconstruction trap as ORDER/MEDIA/SOUND);
+	// only ROUNDS_UPDATE moves a question to another round.
+	if rid, ok := existingQuestion["ROUND_ID"].(string); ok && rid != "" {
+		question["ROUND_ID"] = rid
+	}
+	// #245: a NEW question (nothing on disk yet) joins the round of its optional round_id
+	// (unknown ID ignored = "Sans manche") and takes the ORDER that places it at the END of
+	// its group; a new question without round_id goes to the end of "Sans manche".
+	if len(existingQuestion) == 0 {
+		qdir := filepath.Join(h.dataDir, "files", "questions")
+		QuestionFilesMu.Lock()
+		rounds := LoadRoundsFile(qdir).Rounds
+		group := 0
+		if rid := strings.TrimSpace(r.FormValue("round_id")); rid != "" {
+			if g := RoundGroupIndex(rounds, rid); g > 0 {
+				group = g
+				question["ROUND_ID"] = rid
+			}
+		}
+		if _, hasOrder := question["ORDER"]; !hasOrder {
+			question["ORDER"] = NextOrderInGroup(OrderQuestions(ReadQuestionMaps(qdir), rounds), group)
+		}
+		QuestionFilesMu.Unlock()
+	}
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — SAME
 	// preservation trap as MEDIA/MEDIA_ANSWER above (R3, precedent
@@ -3651,6 +3675,9 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 
 	if detected["questions"] {
 		restoredMap["questions"] = true
+		// #245: rounds.json travels with the questions; reload the rounds it brought
+		// (absent file = no round). Questions citing an absent round fall in "Sans manche".
+		h.engine.SetRounds(LoadRoundsFile(filepath.Join(h.dataDir, "files", "questions")).Rounds)
 		// Also load question statuses
 		if err := h.engine.LoadStatuses(); err == nil {
 			log.Printf("[HTTP] Restore: Question statuses loaded into engine")
