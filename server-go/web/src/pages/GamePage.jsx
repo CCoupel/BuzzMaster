@@ -31,8 +31,8 @@ import {
 import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import Button from '../components/Button'
-import LaunchGameButton from '../components/LaunchGameDialog'
 import TeamAwardBar, { AWARD_LIMIT } from '../components/TeamAwardBar'
+import { useLaunchLock } from '../components/LaunchGameHost'
 import QcmAnswerPicker from '../components/QcmAnswerPicker'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
@@ -89,9 +89,6 @@ export default function GamePage() {
     rafaleAnswer,
     rafaleValidate,
     rafaleInvalidate,
-    newGame,
-    newGameRefused,
-    clearNewGameRefused,
     awardedTeams = {},
     teamPointsBatch,
     teamPointsBatchResult,
@@ -99,6 +96,10 @@ export default function GamePage() {
     // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
     questionSound,
   } = useGame()
+  // #253 — popup « Lancer la partie » ouverte sur un AUTRE poste : le serveur suspend les actions de
+  // jeu ; on désactive les commandes ici avec le motif (bandeau global sous la barre de navigation).
+  const { lockedByOther: launchLocked } = useLaunchLock()
+  const LAUNCH_LOCK_REASON = 'Lancement d’une nouvelle partie en cours sur un autre poste : action suspendue'
 
   const [timeInput, setTimeInput] = useState(30)
   const [pointsInput, setPointsInput] = useState(1)
@@ -361,6 +362,7 @@ export default function GamePage() {
   }
 
   const handleQuestionSelect = (question, ctrlKey = false) => {
+    if (launchLocked) return
     if (['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'NEW_GAME'].includes(gameState.phase)) {
       if (ctrlKey) {
         // Ctrl+click: select and force to READY (debug)
@@ -519,7 +521,7 @@ export default function GamePage() {
   }
 
   const giveAwardPoints = () => {
-    if (awardEntries.length === 0 || awardBlockedReason || awardSending) return
+    if (launchLocked || awardEntries.length === 0 || awardBlockedReason || awardSending) return
     setAwardToast(null)
     const sent = teamPointsBatch?.(gameState.question?.ID, awardEntries)
     if (sent === false) {
@@ -572,6 +574,7 @@ export default function GamePage() {
   }, [teamPointsBatchResult]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
+    if (launchLocked) return
     if (ctrlKey && gameState.phase === 'PREPARE') {
       // Ctrl+click in PREPARE: simulate PONG response (debug)
       simulatePong(bumperMac)
@@ -791,20 +794,8 @@ export default function GamePage() {
             {gameState.phase === 'ENROLL' && <span className="phase-badge phase-enroll">INSCRIPTION</span>}
             {gameState.phase === 'NEW_GAME' && <span className="phase-badge phase-new-game">NOUVELLE PARTIE</span>}
           </div>
-          {/* #215 (AC9) — NOUVELLE PARTIE reste accessible depuis /admin, en
-              plus de /admin/backstage (QuizMetaForm) : l'animateur ne doit
-              pas changer de page en pleine soirée pour relancer. */}
-          {/* #243 : « LANCER LA PARTIE » + popup de purge à 4 cases (remplace « NOUVELLE PARTIE ») */}
-          <LaunchGameButton
-            className="new-game-btn"
-            onLaunch={newGame}
-            teams={teams}
-            bumpers={bumpers}
-            questions={questions}
-            phase={gameState.phase}
-            refused={newGameRefused}
-            onClearRefused={clearNewGameRefused}
-          />
+          {/* #253 : « Lancer la partie » a quitté cet en-tête — une seule entrée, dans le menu
+              Préparation de la barre de navigation (LaunchGameHost). */}
           {nextUnplayedQuestion && (
             <button
               className="next-question-btn"
@@ -1593,13 +1584,15 @@ export default function GamePage() {
                 size="lg"
                 onClick={handleStartStop}
                 title={
-                  rafaleTeamsBlocked && !isPlaying
+                  launchLocked
+                    ? LAUNCH_LOCK_REASON
+                    : rafaleTeamsBlocked && !isPlaying
                     ? 'Selectionnez au moins une equipe participante avant de demarrer — contrat §5.1'
                     : rafaleBlocked && !isPlaying
                       ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2'
                       : undefined
                 }
-                disabled={!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked)}
+                disabled={launchLocked || (!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked))}
               >
                 {isPlaying ? 'STOP' : 'START'}
               </Button>
@@ -1608,7 +1601,8 @@ export default function GamePage() {
                 variant={gameState.phase === 'PAUSED' ? 'primary' : 'warning'}
                 size="lg"
                 onClick={handlePauseContinue}
-                disabled={!isPlaying}
+                disabled={launchLocked || !isPlaying}
+                title={launchLocked ? LAUNCH_LOCK_REASON : undefined}
               >
                 {gameState.phase === 'PAUSED' ? 'CONTINUER' : 'PAUSE'}
               </Button>
@@ -1641,8 +1635,8 @@ export default function GamePage() {
               variant="secondary"
               size="md"
               onClick={() => revealAnswer()}
-              disabled={!canReveal || ardoiseBlocked}
-              title={ardoiseBlocked ? `En attente de ${ardoiseReceipt.pending.length} réponse(s)` : undefined}
+              disabled={launchLocked || !canReveal || ardoiseBlocked}
+              title={launchLocked ? LAUNCH_LOCK_REASON : ardoiseBlocked ? `En attente de ${ardoiseReceipt.pending.length} réponse(s)` : undefined}
             >
               REPONSE
             </Button>
@@ -1671,7 +1665,7 @@ export default function GamePage() {
                   source={awardSource}
                   count={awardEntries.length}
                   sending={awardSending}
-                  blockedReason={awardBlockedReason}
+                  blockedReason={launchLocked ? LAUNCH_LOCK_REASON : awardBlockedReason}
                   onAmountChange={changeAwardAmount}
                   onSelectAll={() => { setPickedColor(null); setAwardSelected(new Set(awardableTeams.map(t => t.name))) }}
                   onSelectNone={() => { setPickedColor(null); setAwardSelected(new Set()) }}
@@ -1742,7 +1736,7 @@ export default function GamePage() {
                       : null,
                   } : null}
                   onTeamClick={(teamName) => {
-                    if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
+                    if (!launchLocked && ['STOPPED', 'REVEALED'].includes(gameState.phase)) {
                       // #244/#251 : règle unique `defaultTeamAward` (utils/pointsAward.js),
                       // partagée avec l'attribution groupée « Donner les points (N) ».
                       const pointsToAward = teamDefaultAward(teamName, pointsInput)

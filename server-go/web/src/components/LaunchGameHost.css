@@ -1,0 +1,5 @@
+/* #253 — verrou « Lancer la partie » : bandeau des autres postes et message d'entracte
+   (maquettes admin_navbar__launch_game_entry, admin_new_game__launch_overlay) */
+.launch-lock-banner { background: #fef3c7; color: #b45309; font-size: 0.85rem; font-weight: 600; padding: 0.5rem 1rem; }
+.launch-lock-banner.anim { background: rgba(250, 204, 21, 0.15); color: #facc15; border-radius: 0.5rem; padding: 0.5rem 0.7rem; font-weight: 700; font-size: 0.88rem; }
+.launch-toast { position: fixed; top: 4.2rem; right: 1rem; z-index: 1100; max-width: 340px; padding: 0.6rem 0.8rem; border-radius: 0.55rem; background: #fee2e2; color: #b91c1c; font-size: 0.85rem; font-weight: 600; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); }

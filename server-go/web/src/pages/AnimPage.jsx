@@ -10,6 +10,7 @@ import { sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward } from '../utils/pointsAward'
 import { isRevealed } from '../utils/phaseRules'
 import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
+import { LaunchLockBanner, useLaunchLock } from '../components/LaunchGameHost'
 import { prepareWaitReasons } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
@@ -225,6 +226,7 @@ export default function AnimPage() {
   // seule source : phaseRules.isRevealed. Remplace l'inline
   // `gameState.phase === 'REVEALED'` répété à trois endroits avant #166.
   const revealed = isRevealed(gameState.phase)
+  const { lockedByOther: launchLocked } = useLaunchLock() // #253
   // #171/F2 — badge de phase déplacé de la colonne chrono vers la ligne
   // réponse (voir utils/phaseBadge.js).
   const phaseBadge = getPhaseBadge(gameState.phase)
@@ -647,6 +649,10 @@ export default function AnimPage() {
 
   return (
     <div className="anim-page" style={{ '--ep-transition': `${entracteTransitionMs}ms` }}>
+      {/* #253 — popup « Lancer la partie » ouverte sur le poste régie : conduite suspendue */}
+      <LaunchLockBanner className="anim">
+        🔒 Lancement d'une nouvelle partie en cours sur le poste régie : conduite suspendue.
+      </LaunchLockBanner>
       <AnimatePresence>
         {entracteActive && (
           <motion.div
@@ -842,6 +848,7 @@ export default function AnimPage() {
           onContinue={continueGame}
           onStop={stopGame}
           onReveal={() => revealAnswer()}
+          launchLocked={launchLocked}
           ardoiseGate={{
             blocked: ardoiseBlocked,
             pending: ardoiseGatePending,

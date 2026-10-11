@@ -47,7 +47,9 @@ function buildL1(phase, question, handlers) {
 // passé en prop. Vient remplacer le repli générique "indispo." pour le
 // bouton LANCER en PREPARE — même emplacement, même style, aucun nouveau
 // badge ni CSS (#166).
-function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked) {
+function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked, launchLocked) {
+  // #253 : popup « Lancer la partie » ouverte sur le poste régie → conduite suspendue
+  if (launchLocked) return 'suspendu'
   // #246 : RÉPONSE bloquée par la garde ARDOISE (réponses finales manquantes)
   if (key === 'reveal' && ardoiseBlocked) return 'en attente'
   if (state === 'go') return key === 'continue' ? 'reprise' : 'attendu'
@@ -203,13 +205,14 @@ export default function AnimConductPanel({
   soundState = 'IDLE',
   onQuestionSound,
   ardoiseGate = null,
+  launchLocked = false, // #253 : conduite suspendue (verrou « Lancer la partie » d'un autre poste)
 }) {
   // #246 (F-STOP) — garde de REVEAL ARDOISE (calculée par AnimPage, règle
   // commune avec /admin) : RÉPONSE passe 'off' tant qu'une équipe attendue
   // n'a pas transmis son texte final.
   const ardoiseBlocked = !!ardoiseGate?.blocked
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
-    .map((btn) => (btn.key === 'reveal' && ardoiseBlocked ? { ...btn, state: 'off' } : btn))
+    .map((btn) => (launchLocked || (btn.key === 'reveal' && ardoiseBlocked) ? { ...btn, state: 'off' } : btn))
   const isQcm = question?.TYPE === 'QCM'
   const isMemory = question?.TYPE === 'MEMORY'
   // #160/F7 — premier mode à occuper L2 (ex-vide, #166/E4). GRID/MEMORIZE
@@ -356,7 +359,7 @@ export default function AnimConductPanel({
             onClick={btn.state === 'off' ? undefined : btn.onClick}
           >
             {btn.label}
-            <span className="anim-conduct-btn-sub">{buttonSubLabel(btn.key, btn.state, phase, waitReason, ardoiseBlocked)}</span>
+            <span className="anim-conduct-btn-sub">{buttonSubLabel(btn.key, btn.state, phase, waitReason, ardoiseBlocked, launchLocked)}</span>
           </button>
         ))}
       </div>

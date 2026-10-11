@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import Button from './Button'
-import LaunchGameButton from './LaunchGameDialog'
 import Card, { CardHeader, CardBody } from './Card'
 
 // Énumérations partagées avec la modale IA et le contrat backend
@@ -15,15 +14,14 @@ export const QUIZ_LANGUAGES = ['Français', 'Anglais', 'Espagnol']
  * QuestionsPage.jsx où il vivait historiquement dans la "Zone 1").
  *
  * Formulaire des métadonnées de la partie (nom/thème/publics/difficultés/
- * langue/objectif/notes) + bouton NOUVELLE PARTIE — action dédiée
+ * langue/objectif/notes) — action dédiée
  * UPDATE_QUIZ_META (contract game-state.md "Métadonnées Quiz"), aucun champ
  * partagé avec EntracteConfigForm/BackgroundsManager.
  *
- * `onNewGame` reste optionnel : GamePage (#215 AC9) rend aussi son propre
- * déclencheur NOUVELLE PARTIE directement depuis `useGame().newGame`, sans
- * passer par ce composant.
+ * #253 : « Lancer la partie » a quitté cette page (une seule entrée, dans le menu
+ * Préparation de la barre de navigation).
  */
-export default function QuizMetaForm({ gameState, sendMessage, onNewGame, launchContext }) {
+export default function QuizMetaForm({ gameState, sendMessage }) {
   const [quizName, setQuizName] = useState(gameState.quizName || '')
   const [quizTheme, setQuizTheme] = useState(gameState.quizTheme || '')
   const [quizNotes, setQuizNotes] = useState(gameState.quizNotes || '')
@@ -86,17 +84,6 @@ export default function QuizMetaForm({ gameState, sendMessage, onNewGame, launch
         <CardHeader>
           <div className="section-header">
             <h3 className="section-title">Quiz</h3>
-            {onNewGame && (
-              <LaunchGameButton
-                onLaunch={onNewGame}
-                teams={launchContext?.teams}
-                bumpers={launchContext?.bumpers}
-                questions={launchContext?.questions}
-                phase={gameState?.phase}
-                refused={launchContext?.refused}
-                onClearRefused={launchContext?.onClearRefused}
-              />
-            )}
           </div>
         </CardHeader>
         <CardBody>

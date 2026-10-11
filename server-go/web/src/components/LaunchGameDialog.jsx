@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Button from './Button'
 import './LaunchGameDialog.css'
 
 // #243 (v11.2) — bouton « LANCER LA PARTIE » + popup de purge à 4 cases
@@ -13,7 +12,8 @@ const PLAYED_STATUSES = ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED']
 
 const REFUSAL_MESSAGES = {
   PLAYERS_REQUIRE_SCORES: 'Lancement refusé : supprimer les joueurs des tablettes exige de remettre les scores à zéro.',
-  ENTRACTE_ACTIVE: "Impossible pendant une entracte : sortez d'abord de l'entracte",
+  ENTRACTE_ACTIVE: "Lancement refusé par le serveur : impossible pendant une entracte. Sortez d'abord de l'entracte.",
+  LAUNCH_IN_PROGRESS: 'Lancement refusé par le serveur : une autre fenêtre « Lancer la partie » est ouverte sur un autre poste.',
 }
 
 // Sans réponse du serveur après l'envoi : la popup se débloque (pas de modale figée).
@@ -34,13 +34,13 @@ export function getLaunchCounts(teams, bumpers, questions) {
   }
 }
 
-function Option({ id, checked, locked, danger, onChange, title, count, description, lockNote, inputRef }) {
+function Option({ id, checked, locked, danger, busy = false, onChange, title, count, description, lockNote, inputRef }) {
   return (
     <label
       className={`lg-opt${danger ? ' danger' : ''}${checked ? ' checked' : ''}${locked ? ' locked' : ''}`}
       htmlFor={id}
     >
-      <input id={id} type="checkbox" checked={checked} disabled={locked} onChange={onChange} ref={inputRef} />
+      <input id={id} type="checkbox" checked={checked} disabled={locked || busy} onChange={onChange} ref={inputRef} />
       <div>
         <div className="lg-t">{title} <span className="lg-count">{count}</span></div>
         <div className="lg-d">{description}</div>
@@ -59,7 +59,7 @@ function Option({ id, checked, locked, danger, onChange, title, count, descripti
  * @param {boolean} props.sent - le NEW_GAME est parti : confirmation désactivée (pas de double envoi)
  * @param {string|null} [props.refusedReason] - NEW_GAME_REFUSED reçu : message, la popup reste ouverte
  */
-export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refusedReason, notice }) {
+export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refusedReason, notice, expired = false }) {
   const [scores, setScores] = useState(true)
   const [questions, setQuestions] = useState(true)
   const [players, setPlayers] = useState(false)
@@ -125,7 +125,7 @@ export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refu
         </p>
 
         <Option
-          id="lg-scores" inputRef={firstRef}
+          id="lg-scores" busy={sent} inputRef={firstRef}
           checked={scoresChecked} locked={players}
           onChange={(e) => setScores(e.target.checked)}
           title="Scores" count={`(${counts.teams} équipes, ${counts.players} joueurs)`}
@@ -133,19 +133,19 @@ export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refu
           lockNote="🔒 Obligatoire quand les joueurs des tablettes sont supprimés : leurs points ne peuvent pas être conservés sans eux."
         />
         <Option
-          id="lg-questions" checked={questions}
+          id="lg-questions" busy={sent} checked={questions}
           onChange={(e) => setQuestions(e.target.checked)}
           title="Questions" count={`(${counts.played} jouées sur ${counts.questions})`}
           description="Remet toutes les questions « à jouer ». Décoché : les questions déjà jouées restent marquées jouées."
         />
         <Option
-          id="lg-players" danger checked={players}
+          id="lg-players" danger busy={sent} checked={players}
           onChange={(e) => setPlayers(e.target.checked)}
           title="Joueurs des tablettes" count={`(${counts.vplayers} inscrits, ${counts.vplayersConnected} connectés)`}
           description="Supprime tous les joueurs inscrits sur tablette : ils devront se réinscrire (comportement de l'ancien bouton « Nouvelle partie »). Les buzzers physiques ne sont pas concernés."
         />
         <Option
-          id="lg-teams" danger checked={teams}
+          id="lg-teams" danger busy={sent} checked={teams}
           onChange={(e) => setTeams(e.target.checked)}
           title="Équipes" count={`(${counts.teams})`}
           description={<>Supprime toutes les équipes. Les joueurs conservés (buzzers et tablettes) restent inscrits mais <b>sans équipe</b> : il faudra recréer les équipes et y affecter les joueurs.</>}
@@ -162,7 +162,13 @@ export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refu
             {REFUSAL_MESSAGES[refusedReason] || 'Lancement refusé par le serveur.'}
           </div>
         )}
-        {notice && !refusedReason && <div className="lg-warn" role="alert">{notice}</div>}
+        {sent && <div className="lg-sending" role="status">⏳ Lancement de la partie…</div>}
+        {expired && (
+          <div className="lg-warn" role="alert">
+            La fenêtre a expiré (plus de 45 s sans signe de vie de ce poste) : rouvrez « Lancer la partie ».
+          </div>
+        )}
+        {notice && !refusedReason && !expired && <div className="lg-warn" role="alert">{notice}</div>}
 
         <div className="lg-actions">
           <button type="button" className="lg-btn lg-btn-secondary" onClick={onClose} disabled={sent}>Annuler</button>
@@ -170,7 +176,7 @@ export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refu
             type="button"
             className={`lg-btn ${destructive.length ? 'lg-btn-danger' : 'lg-btn-primary'}`}
             onClick={confirm}
-            disabled={sent}
+            disabled={sent || expired}
           >
             {nothing ? 'Lancer sans rien effacer' : 'Lancer la partie'}
           </button>
@@ -181,18 +187,17 @@ export function LaunchGameDialog({ onConfirm, onClose, counts, phase, sent, refu
 }
 
 /**
- * Bouton « LANCER LA PARTIE » + popup. `onLaunch(options)` envoie NEW_GAME.
- * La popup se ferme quand la phase passe à NEW_GAME après l'envoi ; un refus
- * serveur (`refused`) la laisse ouverte avec le message.
+ * Popup « Lancer la partie » (rendue en portail à la racine par LaunchGameHost, #253). Contrôlée
+ * par le parent : elle est affichée tant qu'elle est montée. `onLaunch(options)` envoie NEW_GAME
+ * (retourne false si rien n'est parti) ; `onClose` ferme (et libère le verrou côté hôte).
+ * La popup se ferme d'elle-même quand la phase passe à NEW_GAME après l'envoi ; un refus serveur
+ * (`refused`) la laisse ouverte avec le message ; `expired` (verrou expiré) la bloque avec le message.
  */
-export default function LaunchGameButton({
-  onLaunch, teams, bumpers, questions, phase, refused, onClearRefused,
-  variant = 'fun', size = 'sm', className = '',
+export function LaunchGamePopup({
+  onLaunch, onClose, teams, bumpers, questions, phase, refused, onClearRefused, expired = false,
 }) {
-  const [open, setOpen] = useState(false)
   const [sent, setSent] = useState(false)
   const [notice, setNotice] = useState(null) // échec d'envoi / pas de réponse
-  const openerRef = useRef(null)
   // Contexte à l'envoi : un NEW_GAME n'est « observé » que par un CHANGEMENT d'état
   // (phase vers NEW_GAME, ou — si la phase vaut déjà NEW_GAME — renouvellement des
   // données diffusées après la purge), jamais parce que la phase vaut déjà NEW_GAME.
@@ -200,46 +205,44 @@ export default function LaunchGameButton({
   const counts = useMemo(() => getLaunchCounts(teams, bumpers, questions), [teams, bumpers, questions])
 
   const close = () => {
-    setOpen(false)
     setSent(false)
     setNotice(null)
     sentCtxRef.current = null
     onClearRefused?.()
-    openerRef.current?.focus?.()
+    onClose?.()
   }
 
   // Refus serveur : la popup reste ouverte, on peut corriger et relancer.
   useEffect(() => {
-    if (refused && open) {
+    if (refused) {
       setSent(false)
       sentCtxRef.current = null // refus : plus rien à observer pour cet envoi
     }
-  }, [refused, open])
+  }, [refused])
 
   // Lancement observé : changement de phase vers NEW_GAME, ou renouvellement des
-  // données quand la phase valait déjà NEW_GAME à l'envoi → fermeture.
+  // données quand la phase valait déjà NEW_GAME à l'envoi → fermeture. Tant que la popup est
+  // ouverte après un envoi EFFECTIF (contexte mémorisé), y compris si la garde de 5 s l'a déjà
+  // débloquée : une réponse tardive doit la fermer (sinon un second « Lancer » rejouerait un NEW_GAME).
   useEffect(() => {
-    // Tant que la popup est ouverte après un envoi EFFECTIF (contexte mémorisé), y compris
-    // si la garde de 5 s l'a déjà débloquée : une réponse tardive doit la fermer (sinon un
-    // second « Lancer » rejouerait un NEW_GAME).
     const ctx = sentCtxRef.current
-    if (!open || !ctx) return
+    if (!ctx) return
     const phaseChanged = phase === 'NEW_GAME' && ctx.phase !== 'NEW_GAME'
     const dataRenewed = ctx.phase === 'NEW_GAME' && phase === 'NEW_GAME'
       && (teams !== ctx.teams || bumpers !== ctx.bumpers || questions !== ctx.questions)
     if (phaseChanged || dataRenewed) close()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, teams, bumpers, questions, open])
+  }, [phase, teams, bumpers, questions])
 
   // Minuterie de garde : NEW_GAME ignoré / jamais confirmé → la popup se débloque.
   useEffect(() => {
-    if (!open || !sent) return
+    if (!sent) return
     const id = setTimeout(() => {
       setSent(false)
       setNotice('Pas de réponse du serveur — réessayez.')
     }, NO_RESPONSE_DELAY_MS)
     return () => clearTimeout(id)
-  }, [open, sent])
+  }, [sent])
 
   const confirm = (opts) => {
     onClearRefused?.()
@@ -255,27 +258,15 @@ export default function LaunchGameButton({
   }
 
   return (
-    <>
-      <Button
-        variant={variant}
-        size={size}
-        className={className}
-        onClick={(e) => { openerRef.current = e.currentTarget; onClearRefused?.(); setOpen(true) }}
-        title="Préparer une nouvelle partie : choisir ce qu'il faut effacer"
-      >
-        LANCER LA PARTIE
-      </Button>
-      {open && (
-        <LaunchGameDialog
-          counts={counts}
-          phase={phase}
-          sent={sent}
-          refusedReason={refused?.reason ?? null}
-          notice={notice}
-          onClose={close}
-          onConfirm={confirm}
-        />
-      )}
-    </>
+    <LaunchGameDialog
+      counts={counts}
+      phase={phase}
+      sent={sent}
+      expired={expired}
+      refusedReason={refused?.reason ?? null}
+      notice={notice}
+      onClose={close}
+      onConfirm={confirm}
+    />
   )
 }

@@ -33,7 +33,7 @@ const TABS = [
  * /new-game-backgrounds) — critère de propreté du refactor (maquette §04).
  */
 export default function BackstagePage() {
-  const { gameState, sendMessage, newGame, teams, bumpers, questions, newGameRefused, clearNewGameRefused } = useGame()
+  const { gameState, sendMessage } = useGame()
   const [activeTab, setActiveTab] = useState('quiz')
 
   return (
@@ -60,12 +60,7 @@ export default function BackstagePage() {
       </div>
 
       {activeTab === 'quiz' && (
-        <QuizMetaForm
-          gameState={gameState}
-          sendMessage={sendMessage}
-          onNewGame={newGame}
-          launchContext={{ teams, bumpers, questions, refused: newGameRefused, onClearRefused: clearNewGameRefused }}
-        />
+        <QuizMetaForm gameState={gameState} sendMessage={sendMessage} />
       )}
 
       {activeTab === 'entracte' && (

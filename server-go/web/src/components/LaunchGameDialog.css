@@ -22,3 +22,5 @@
 .lg-btn-secondary { background: #e5e7eb; color: #111827; }
 .lg-btn-primary { background: #4f46e5; color: #fff; }
 .lg-btn-danger { background: #dc2626; color: #fff; }
+
+.lg-sending { margin-top: 0.5rem; font-size: 0.82rem; color: #374151; }

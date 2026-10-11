@@ -95,22 +95,10 @@ describe('GamePage — bouton NOUVELLE PARTIE (#215 AC9)', () => {
     vi.clearAllMocks()
   })
 
-  it('le bouton LANCER LA PARTIE est présent sur /admin (GamePage), sans passer par Backstage (#243)', () => {
+  it('#253 : plus de bouton « Lancer la partie » / « Nouvelle partie » sur la page de jeu (entrée du menu Préparation)', () => {
     useGame.mockReturnValue(makeGameMock())
     render(<GamePage />)
-    expect(screen.getByText('LANCER LA PARTIE')).toBeInTheDocument()
-  })
-
-  it('LANCER LA PARTIE ouvre la popup ; la confirmation appelle useGame().newGame directement avec les options (#243)', () => {
-    const newGame = vi.fn()
-    useGame.mockReturnValue(makeGameMock({ newGame }))
-    render(<GamePage />)
-
-    fireEvent.click(screen.getByText('LANCER LA PARTIE'))
-    expect(newGame).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Lancer la partie' }))
-
-    expect(newGame).toHaveBeenCalledTimes(1)
-    expect(newGame).toHaveBeenCalledWith({ purgeScores: true, purgePlayers: false, purgeTeams: false, resetQuestions: true })
+    expect(screen.queryByText('LANCER LA PARTIE')).toBeNull()
+    expect(screen.queryByText('NOUVELLE PARTIE')).toBeNull()
   })
 })
