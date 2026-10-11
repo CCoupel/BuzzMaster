@@ -87,6 +87,19 @@ interface Team {
   Ce n'est **pas** un coefficient d'indices : `QCM_PENALTY_1` (0,67) et `QCM_PENALTY_2` (0,33) sont les coefficients.
 - **`AWARDED_TEAMS.PLAYERS`** et **`TEAMS[].TEAM_LEVEL`** : voir `docs/WEBSOCKET_PROTOCOL.md`.
 
+## Bumper — ANSWERED_COLOR et ANSWER_COLOR (v11.2, #255)
+
+- **`ANSWER_COLOR`** : couleur **assignée** au joueur physique à l'affectation, écrasée par la couleur pressée au buzz QCM,
+  jamais remise à zéro. Sert à la couleur des LED, de la `TeamCard` et de `PLAYER_COLOR` dans l'historique. **Ne dit pas si le
+  joueur a répondu** : elle survit d'une question à l'autre.
+- **`ANSWERED_COLOR`** : couleur de la réponse donnée à la **question courante**, `""` sinon.
+  - Écrite au buzz QCM enregistré (`ProcessButtonPress`), pour un joueur physique comme pour un VJoueur. Jamais pour un autre type
+    de question, ni pour un buzz ignoré.
+  - Remise à `""` partout où `TIME` est remis à zéro (dont `Ready()`).
+  - **Invariant** : `ANSWERED_COLOR ≠ ""` ⇒ `TIME > 0` et question courante de type QCM.
+  - Toujours sérialisée, `""` compris (pas d'`omitempty`).
+  - Une sauvegarde ou un fichier de bumpers sans la clé se charge avec `""`, sans migration.
+
 ## Palette d'équipes — v5.7.25, #113
 
 16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
@@ -144,6 +157,7 @@ interface Team {
       "STATUS": "READY|PAUSE",
       "VERSION": "1.0.0",
       "ANSWER_COLOR": "RED|GREEN|YELLOW|BLUE",
+      "ANSWERED_COLOR": "RED|GREEN|YELLOW|BLUE|\"\"",
       "HINTS_AT_BUZZ": 0,
       "IS_VIRTUAL": false,
       "CONNECTED": true,
