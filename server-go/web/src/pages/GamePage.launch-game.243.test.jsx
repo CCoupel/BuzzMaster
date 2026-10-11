@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, within, act } from '@testing-library/react'
-import GamePage from './GamePage'
+import LaunchGameHost, { useLaunchGame } from '../components/LaunchGameHost'
 import { useGame } from '../hooks/GameContext'
 
 // #243 (v11.2, lot V2-1) — bouton « LANCER LA PARTIE » + popup de purge, selon la maquette VALIDÉE
 // admin_new_game__purge_popup_details (D1 : option « Questions », D2 : « Joueurs des tablettes » coche et
-// verrouille « Scores »). Contrats : websocket-actions.md §NEW_GAME / §NEW_GAME_REFUSED.
+// verrouille « Scores »). #253 : le bouton a quitté la page de jeu (entrée du menu Préparation, popup en portail
+// pilotée par LaunchGameHost) ; ce fichier garde les tests de CONTENU de la popup, déclenchée par un bouton de test
+// branché sur useLaunchGame().openLaunch (changement CHANGED du contrat #253). Contrats : websocket-actions.md §NEW_GAME / §NEW_GAME_REFUSED.
 // Boîte noire par libellés de la maquette et rôles ARIA.
 
 vi.mock('../hooks/GameContext', () => ({
@@ -50,6 +52,13 @@ vi.mock('../components/Button', () => ({
 
 vi.mock('./GamePage.css', () => ({}))
 
+// #253 : stand-in de la page — le point d'entrée réel est l'entrée « Lancer la partie » du menu Préparation.
+function OpenButton() {
+  const { openLaunch } = useLaunchGame()
+  return <button onClick={openLaunch}>LANCER LA PARTIE</button>
+}
+const GamePage = () => <LaunchGameHost><OpenButton /></LaunchGameHost>
+
 
 const TEAMS = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`Équipe ${i + 1}`, { NAME: `Équipe ${i + 1}`, SCORE: 0, COLOR: [10 * i, 50, 90] }]))
 const BUMPERS = {
@@ -59,12 +68,12 @@ const BUMPERS = {
 }
 const QUESTIONS = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`${i + 1}`, { ID: `${i + 1}`, STATUS: i < 12 ? 'REVEALED' : 'AVAILABLE', ORDER: i + 1 }]))
 
-const mk = (over = {}) => ({
-  gameState: { phase: 'REVEALED', question: { ID: '2', STATUS: 'REVEALED' }, remote: 'GAME', timer: 0, totalTime: 30, MEMORY_PARTICIPATING_TEAMS: [], ...(over.gameState || {}) },
+const mk = ({ gameState: _gs, ...over } = {}, gsOver = _gs) => ({
+  gameState: { LAUNCH_LOCK: { ACTIVE: true, OWNER: 'me', SINCE: 1, EXPIRES_AT: 46000 }, phase: 'REVEALED', question: { ID: '2', STATUS: 'REVEALED' }, remote: 'GAME', timer: 0, totalTime: 30, MEMORY_PARTICIPATING_TEAMS: [], ...(gsOver || {}) },
   teams: TEAMS, bumpers: BUMPERS, questions: QUESTIONS,
   startGame: vi.fn(), stopGame: vi.fn(), pauseGame: vi.fn(), continueGame: vi.fn(), revealAnswer: vi.fn(), selectQuestion: vi.fn(),
   setRemoteDisplay: vi.fn(), setBumperPoints: vi.fn(), setTeamPoints: vi.fn(), forceReady: vi.fn(), simulateButton: vi.fn(), simulatePong: vi.fn(),
-  sendMessage: vi.fn(), newGame: vi.fn(), newGameRefused: null, clearNewGameRefused: vi.fn(),
+  sendMessage: vi.fn(), connectionId: 'me', launchLock: vi.fn(() => true), clearLaunchLockRefused: vi.fn(), newGame: vi.fn(), newGameRefused: null, clearNewGameRefused: vi.fn(),
   ...over,
 })
 const open = (over) => {
@@ -286,14 +295,14 @@ describe('Popup « Lancer la partie » — robustesse (revue #243)', () => {
     expect(within(d).getByRole('button', { name: 'Annuler' }).disabled).toBe(false)
   })
 
-  it('(h) NEW_GAME_REFUSED { ENTRACTE_ACTIVE } : message « Impossible pendant une entracte », popup ouverte, boutons actifs', () => {
+  it('(h) NEW_GAME_REFUSED { ENTRACTE_ACTIVE } : message « Lancement refusé… impossible pendant une entracte » (libellé de la maquette #253), popup ouverte, boutons actifs', () => {
     const { game, rerender, dlg } = open({ newGame: vi.fn(() => true) })
     fireEvent.click(goBtn(dlg))
     useGame.mockReturnValue(mk({ newGame: game.newGame, newGameRefused: { reason: 'ENTRACTE_ACTIVE' } }))
     rerender(<GamePage />)
 
     const d = screen.getByRole('dialog')
-    expect(within(d).getAllByRole('alert').map((a) => a.textContent).join(' ')).toMatch(/Impossible pendant une entracte : sortez d'abord de l'entracte/)
+    expect(within(d).getAllByRole('alert').map((a) => a.textContent).join(' ')).toMatch(/Lancement refusé par le serveur : impossible pendant une entracte\. Sortez d'abord de l'entracte/)
     expect(goBtn(d).disabled).toBe(false)
   })
 

@@ -56,3 +56,9 @@
 | server-go/web/src/hooks/useWebSocket.display.252.test.js | unit | websocket | #252 DISPLAY envoyé seulement si caché ; SCORE_CHANGE suit l'UPDATE | regression | |
 | tests/procedures/scores-252.md | manual | scores, tv, vplayer | #252 procédure manuelle (utilisateur uniquement) | feature | |
 | server-go/cmd/server/launch_lock_253_test.go | integration | websocket, game-engine, admin-game, anim | #253 verrou LAUNCH_LOCK : pose/propriétaire, refus ACTION_REFUSED pour admin/2e admin/anim, joueurs permis, NEW_GAME propriétaire vs autre, refus d'ouverture, renouvellement, CLOSE, déconnexion | regression | critical |
+| server-go/web/src/components/Navbar.launch-entry.253.test.jsx | unit | admin-game | #253 entrée « Lancer la partie » du menu Préparation (large/étroit), entracte, grisée si popup ailleurs | regression | critical |
+| server-go/web/src/components/LaunchGameHost.overlay.253.test.jsx | unit | admin-game | #253 popup en portail à la racine (hors prévisualisation TV), plein écran, cycle OPEN/15 s/CLOSE, expiration, accessibilité, bandeau | regression | critical |
+| server-go/web/src/hooks/useWebSocket.launch-lock.253.test.js | unit | websocket | #253 launchLock OPEN/CLOSE, LAUNCH_LOCK_REFUSED, ACTION_REFUSED, HELLO.CLIENT_ID | regression |  |
+| server-go/web/src/pages/AnimPage.launch-lock.253.test.jsx | unit | anim | #253 anim : bandeau de verrou, conduite suspendue | regression | critical |
+| server-go/web/src/pages/GamePage.launch-lock.253.test.jsx | unit | admin-game | #253 page de jeu : plus de bouton de lancement, commandes grisées si popup ailleurs | regression | critical |
+| server-go/web/src/pages/BackstagePage.no-launch.253.test.jsx | unit | admin-game | #253 Backstage : plus de bouton de lancement | regression | critical |
