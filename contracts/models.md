@@ -587,7 +587,14 @@ interface Round {
 - **Ordre de jeu et d'affichage** (règle **unique**, implémentée deux fois avec un test de parité : `web/src/utils/questionOrder.js` et `getNextQuestionPayload` côté Go) :
   1. le groupe **« Sans manche » en premier** *(décision utilisateur)* ;
   2. puis les manches dans l'ordre de `ROUNDS` ;
-  3. dans chaque groupe, par `ORDER` croissant, puis par `ID` numérique (règle actuelle).
+  3. dans chaque groupe, par `ORDER` croissant, puis par `ID` (règle actuelle, précisée ci-dessous).
+  - **Normalisation de `ORDER`** *(revue #245 ; même règle en Go et en JS, test de parité)* :
+    - nombre JSON → sa partie entière (troncature ; négatif permis) ;
+    - chaîne dont **tout** le contenu (espaces de bord retirés) est un entier (`"5"`) → cet entier ; `"5abc"` n'est pas un entier ;
+    - **absent, `null`, autre type ou chaîne invalide** → repli sur la **valeur numérique de l'`ID`** si l'`ID` est entièrement numérique ;
+    - `ID` **non numérique** sans `ORDER` valide : **pas de repli**, la question se place **après** toutes les questions du groupe qui ont un rang (`ORDER` valide ou `ID` numérique).
+  - **Égalité** de rang dans un groupe : `ID` numériques d'abord, par valeur croissante, puis les autres `ID` dans l'ordre lexicographique. C'est un ordre total et stable.
+- **Identité** : une question est identifiée par le **nom de son dossier** ; le champ `ID` de son `question.json` doit lui être égal (`websocket-actions.md` §ROUNDS_UPDATE, `INCONSISTENT_STORE`).
   - **Ajouts** : une question créée par « + Nouvelle question » (sans `round_id`) ou par la génération IA est placée **à la fin du groupe « Sans manche »**, qui reste en tête. Une question créée par « + Question » d'une manche est placée à la fin de cette manche. Le serveur fixe `ORDER` = plus grand `ORDER` du groupe + 1 à la création.
   - Sans aucune manche, l'ordre est **identique** à v11.1.
 - **Entractes de début et de fin de manche** *(décision utilisateur : « reste simple »)* : à la création d'une manche, le serveur crée par défaut deux questions **`ENTRACTE` standard**, « Début de la manche <NOM> » en tête et « Fin de la manche <NOM> » à la fin (`websocket-actions.md` §ROUNDS_UPDATE). **Aucun marqueur, aucun champ, aucune règle de jeu nouvelle** : elles se modifient, se déplacent, se suppriment et se jouent comme toute ENTRACTE (#214) ; « à suivre » les **propose** comme toute entrée du déroulé (v11.2, règle de saut abrogée).

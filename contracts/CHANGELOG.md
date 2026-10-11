@@ -2,6 +2,24 @@
 
 ---
 
+## [20261013] — `ROUNDS_UPDATE` : refus de sûreté, ordre des effets, normalisation de `ORDER` (#245, v11.2, revue de code M1/M2)
+
+- **[CHANGED]** `websocket-actions.md` §ROUNDS_UPDATE :
+  - quatre refus additifs : `INCONSISTENT_STORE`, `ROUNDS_FILE_UNREADABLE` (copie `.corrupt`), `QUESTION_IN_PROGRESS` et `WRITE_FAILED` (restauration ; rien de supprimé ; mémoire inchangée) ;
+  - `QUESTION_IN_PROGRESS` **amende** la règle « aucune protection supplémentaire pour la question courante » ;
+  - **ordre réel des effets** : réservation des IDs, `rounds.json`, `question.json`, entractes, suppressions en dernier ;
+  - identité d'une question = nom du dossier ;
+  - `NEXT_ID` jamais réutilisé ;
+  - verrou partagé avec `REORDER_QUESTIONS`, `DELETE` et l'édition.
+- **[CHANGED]** `models.md` §Manches :
+  - normalisation de `ORDER` : entier ou chaîne entièrement entière ; sinon repli sur l'ID numérique ; ID non numérique sans `ORDER` → après les autres ;
+  - départage par ID numérique puis par texte ;
+  - identité = nom du dossier.
+- **[NEW]** `logging.md` §3.2 septies : `QUESTION_STORE_ANOMALY`, `ROUNDS_FILE_CORRUPT`, `ROUNDS_UPDATE_ROLLBACK`.
+- Aucune BREAKING (`ROUNDS_UPDATE` pas encore livré).
+
+---
+
 ## [20261012] — « Suivant » propose les entractes ; l'anim peut terminer une entracte (#245, v11.2, décision utilisateur)
 
 > « Une entracte est un type de jeu comme un autre. »

@@ -106,7 +106,10 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | Événement | Niveau | Quand | Champs |
 |-----------|--------|-------|--------|
 | `ROUNDS_UPDATE` | INFO | Structure appliquée | `client`, `created`, `renamed`, `deleted` (manche:KEEP/DELETE), `entractes_created`, `moved`, `questions_deleted` (IDs) |
-| `ROUNDS_UPDATE_REFUSED` | WARN | Refus | `client`, `reason`, `questions` |
+| `ROUNDS_UPDATE_REFUSED` | WARN | Refus (dont `INCONSISTENT_STORE`, `ROUNDS_FILE_UNREADABLE`, `QUESTION_IN_PROGRESS`, `WRITE_FAILED`) | `client`, `reason`, `questions` |
+| `QUESTION_STORE_ANOMALY` | WARN | Dossier au nom invalide, ou `ID` de `question.json` ≠ nom du dossier (à la lecture) | `dir`, `id` |
+| `ROUNDS_FILE_CORRUPT` | WARN | `rounds.json` illisible ; copie `rounds.json.corrupt` créée (une fois) | `error` |
+| `ROUNDS_UPDATE_ROLLBACK` | WARN | Échec d'écriture, restauration effectuée | `client`, `files` |
 | `ENTRACTE_SET_ANIM_ACTIVATE_REFUSED` | WARN | `ENTRACTE_SET{ACTIVE:true}` reçu de l'anim (activation réservée à l'admin) | `client` |
 | `ENTRACTE_ENDED` | INFO | Entracte terminée | `client`, `type` (`admin`/`anim`), `programmed` (true si question ENTRACTE) |
 

@@ -901,7 +901,7 @@ Fixe **en une action** la structure complète : liste ordonnée des manches, que
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
 | ROUNDS | array | ✅ | Manches **conservées ou créées**, dans l'ordre voulu, 0 à 50 |
-| ROUNDS[].ID | string | ⬜ | ID existant ; **absent ou `""` = nouvelle manche**, ID attribué par le serveur |
+| ROUNDS[].ID | string | ⬜ | ID existant ; **absent ou `""` = nouvelle manche**, ID attribué par le serveur (`NEXT_ID` toujours supérieur à tout `rN` de `rounds.json` **et** à tout `ROUND_ID` présent dans les questions : jamais de réutilisation) |
 | ROUNDS[].NAME | string | ✅ | 1 à 60 caractères après suppression des espaces de bord |
 | ROUNDS[].QUESTIONS | []string | ✅ | IDs des questions de la manche, dans l'ordre (peut être vide) |
 | ROUNDS[].ENTRACTES | boolean | ⬜ | **Nouvelle manche seulement** (ignoré pour une manche existante) : créer les deux entractes automatiques (ci-dessous). **Absent = `true`** *(décision utilisateur : création automatique par défaut)* |
@@ -929,11 +929,17 @@ Fixe **en une action** la structure complète : liste ordonnée des manches, que
 - `UNKNOWN_QUESTION` : ID de question inexistant sur le disque (`QUESTIONS` = liste) ;
 - `INCOMPLETE` : une question existante n'est ni citée dans `ROUNDS`/`UNASSIGNED`, ni membre (selon son `ROUND_ID` actuel) d'une manche de `DELETED_ROUNDS` (`QUESTIONS` = liste ; protège d'un client dont la liste est périmée) ;
 - `QUESTION_ID_EXHAUSTED` : voir ci-dessus.
+- `INCONSISTENT_STORE` *(revue #245, M1)* : le dossier des questions est incohérent. Un `question.json` porte un `ID` différent du nom de son dossier, ou un dossier a un nom invalide (hors `^[A-Za-z0-9_-]{1,64}$`). `QUESTIONS` = dossiers fautifs, `WARN` par anomalie. **Refus global** tant que l'anomalie n'est pas corrigée sur le disque.
+- `ROUNDS_FILE_UNREADABLE` *(revue #245)* : `rounds.json` existe mais n'est pas lisible (JSON invalide). Le serveur en garde une copie `rounds.json.corrupt` (une seule fois, WARN) et refuse toute modification des manches jusqu'à correction ou restauration. Il continue de servir les manches lisibles, ou aucune, au jeu.
+- `QUESTION_IN_PROGRESS` *(revue #245 ; **amende** la règle « aucune protection » du point 1 de l'application)* : `DELETED_ROUNDS{DELETE}` viserait la **question courante** alors que la phase est `PREPARE`, `READY`, `COUNTDOWN`, `STARTED` ou `PAUSED`. `QUESTIONS` = questions concernées. Au repos (`STOPPED`, `REVEALED`, `NEW_GAME`, pas de question), la suppression est permise. `KEEP` n'est jamais concerné.
+- `WRITE_FAILED` *(revue #245, M2)* : échec d'écriture disque **pendant l'application**. Voir « Ordre des effets ». `QUESTIONS` = fichiers non écrits ou non restaurés.
+
+**Identité d'une question** : c'est le **nom de son dossier** (`data/files/questions/<ID>/`). Le champ `ID` du `question.json` doit lui être égal (sinon `INCONSISTENT_STORE`). Un ID cité par le client qui n'est pas un nom de dossier valide **et** existant donne `UNKNOWN_QUESTION`. Aucun chemin n'est construit à partir d'un ID non validé (protection contre `..`, `/`, `.`).
 
 Les questions d'une manche supprimée **ne sont pas** citées par le client : le serveur les retrouve par leur `ROUND_ID` actuel.
 
-**Application** (sous un seul verrou des fichiers de questions) :
-1. **Suppressions** (`DELETE`) : dossiers supprimés comme `DELETE`. Même règle que `DELETE` pour la question courante : aucune protection supplémentaire.
+**Application** (sous un seul verrou des fichiers de questions, partagé avec `REORDER_QUESTIONS`, `DELETE` et l'édition/création de question) :
+1. **Suppressions** (`DELETE`) : dossiers supprimés comme `DELETE`, **sauf la question courante en cours de jeu** (refus `QUESTION_IN_PROGRESS` ci-dessus). Leurs statuts de question sont purgés.
 2. **`KEEP`** : les questions des manches supprimées sont ajoutées à la fin de « Sans manche », dans leur ordre d'origine. Les deux entractes automatiques suivent **le même sort** que les autres questions de la manche (aucune règle particulière).
 3. **Nouvelles manches** : IDs depuis `NEXT_ID`, entractes automatiques créées si demandé.
 4. Écrit `rounds.json` (manches dans l'ordre).
@@ -947,6 +953,21 @@ Les questions d'une manche supprimée **ne sont pas** citées par le client : le
      CREATED_ENTRACTES:[{ROUND_ID, START_ID, END_ID}],
      DELETED_QUESTIONS:[ids]}
    ```
+
+   **Ordre des effets** *(revue #245, M2 — l'ordre de la liste ci-dessus est logique, celui-ci est l'ordre réel)* :
+   1. validation **complète** (tous les refus ci-dessus) ;
+   2. **réservation des IDs** des entractes à créer. Si c'est impossible : `QUESTION_ID_EXHAUSTED`, réservations relâchées, rien d'écrit ;
+   3. écriture de **`rounds.json`**. En cas d'échec : abandon et `WRITE_FAILED` ;
+   4. réécriture des **`question.json`** modifiés (`ROUND_ID`, `ORDER`), puis écriture des **entractes** créées ;
+   5. **suppressions en dernier** ;
+   6. mise à jour de l'état en mémoire (`ROUNDS`), diffusions et `APPLIED` **seulement en cas de succès**.
+
+   **Échec avant l'étape 5** :
+   - `rounds.json` est restauré, les entractes créées par ce message sont supprimées, **rien n'est supprimé**, la mémoire est inchangée ;
+   - réponse `WRITE_FAILED` avec `QUESTIONS` = fichiers en échec ;
+   - un `question.json` déjà réécrit peut garder un `ROUND_ID` de manche absente : il tombe dans « Sans manche », sans perte (règle « ID inconnu »).
+
+   `DELETED_QUESTIONS` ne contient que les dossiers **réellement** supprimés.
 
    Journal `INFO ROUNDS_UPDATE` : manches créées, renommées, supprimées avec leur choix ; entractes créées ; questions déplacées et supprimées.
 
