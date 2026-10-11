@@ -2461,7 +2461,13 @@ func (a *App) handleDelete(msg *protocol.Message) {
 	if questionsDir == "" {
 		questionsDir = "./data/files/questions"
 	}
-	questionPath := filepath.Join(questionsDir, payload.ID)
+	questionPath, pathErr := server.SafeQuestionPath(questionsDir, payload.ID)
+	if pathErr != nil {
+		server.LogWarn(game.LogComponentApp, "DELETE: refused: %v", pathErr)
+		return
+	}
+	server.QuestionFilesMu.Lock()
+	defer server.QuestionFilesMu.Unlock()
 
 	server.LogInfo(game.LogComponentApp, "DELETE question: path=%s", questionPath)
 
@@ -2618,9 +2624,18 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 		questionsDir = "./data/files/questions"
 	}
 
+	// #245 review (mineur 3): one critical section against ROUNDS_UPDATE / uploads / DELETE.
+	server.QuestionFilesMu.Lock()
+	defer server.QuestionFilesMu.Unlock()
+
 	// Update ORDER field in each question.json
 	for order, questionID := range payload.Order {
-		questionFile := filepath.Join(questionsDir, questionID, "question.json")
+		questionDir, pathErr := server.SafeQuestionPath(questionsDir, questionID)
+		if pathErr != nil {
+			server.LogWarn(game.LogComponentApp, "REORDER: ignoring invalid question id %q: %v", questionID, pathErr)
+			continue
+		}
+		questionFile := filepath.Join(questionDir, "question.json")
 
 		// Read existing question
 		data, err := os.ReadFile(questionFile)

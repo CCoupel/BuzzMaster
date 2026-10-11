@@ -964,6 +964,11 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// #245 review (mineur 3): the whole read-existing → rewrite of question.json is one critical
+	// section against ROUNDS_UPDATE / REORDER_QUESTIONS / DELETE (no lost ROUND_ID / ORDER).
+	QuestionFilesMu.Lock()
+	defer QuestionFilesMu.Unlock()
+
 	// Load existing question to preserve media if not updated
 	existingQuestion := make(map[string]interface{})
 	existingPath := filepath.Join(questionsDir, "question.json")
@@ -1001,7 +1006,6 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// its group; a new question without round_id goes to the end of "Sans manche".
 	if len(existingQuestion) == 0 {
 		qdir := filepath.Join(h.dataDir, "files", "questions")
-		QuestionFilesMu.Lock()
 		rounds := LoadRoundsFile(qdir).Rounds
 		group := 0
 		if rid := strings.TrimSpace(r.FormValue("round_id")); rid != "" {
@@ -1013,7 +1017,6 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		if _, hasOrder := question["ORDER"]; !hasOrder {
 			question["ORDER"] = NextOrderInGroup(OrderQuestions(ReadQuestionMaps(qdir), rounds), group)
 		}
-		QuestionFilesMu.Unlock()
 	}
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — SAME
