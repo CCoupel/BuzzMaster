@@ -61,6 +61,7 @@ func TestDNSServer_Start_UsesConfiguredPort(t *testing.T) {
 			t.Fatalf("unexpected DNS answer: %v", resp.Answer)
 		}
 		lastErr = exErr
+		time.Sleep(20 * time.Millisecond) // a tight retry loop competes with the server's bind goroutine on 2 vCPUs (#263 review)
 	}
 	t.Errorf("DNSServer never answered on port %d — Start() is not honoring d.port (still hardcoded to :53?); last error: %v", port, lastErr)
 }
