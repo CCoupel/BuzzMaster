@@ -350,6 +350,55 @@ describe.each(Object.keys(HOSTS))('VPlayerPage — retournement %s avec accusé 
     expect(m.text()).not.toMatch(MSG.failAny)
   })
 
+  // Revue 5b (mineurs) — test négatif du repli sans accusé, effacement du refus à 6 s, absence de course.
+  it('repli sans accusé : une AUTRE paire trouvée ne valide PAS le geste en cours (attente et renvois continuent)', async () => {
+    const m = await mountBound()
+    await m.tap(0)
+    const first = m.flips()[0]
+    const pairId = Number(String(first.CARD_ID).split('-')[0])
+    const otherPair = pairId === 1 ? 2 : 1
+    await m.apply({ flipped: [], matched: [otherPair] }) // une paire différente apparaît dans les paires trouvées
+    expect(m.text()).toMatch(MSG.pending)
+    expect(m.text()).not.toMatch(MSG.failAny)
+    await m.advance(CADENCE + 100)
+    expect(m.flips().length).toBeGreaterThan(1) // le geste n'a pas été pris pour vu : le renvoi a lieu
+    expect(new Set(m.flips().map((f) => f.FLIP_ID)).size).toBe(1)
+  })
+
+  it('refus (NOT_TURN) : le ✕ reste affiché avant 6 s puis s\'efface tout seul', async () => {
+    const m = await mountBound()
+    await m.tap()
+    await m.apply({ ack: ackOf(m.flips()[0], 'IGNORED', 'NOT_TURN') })
+    expect(m.text()).toMatch(MSG.notTurn)
+    await m.advance(5800)
+    expect(m.text()).toMatch(MSG.notTurn) // pas avant 6 s
+    await m.advance(400)
+    expect(m.text()).not.toMatch(MSG.failAny)
+    expect(m.view.container.querySelector('.vplayer-ack-pill')?.textContent ?? '').not.toMatch(MSG.failAny)
+    const n = m.flips().length
+    await m.advance(CADENCE * 5)
+    expect(m.flips().length).toBe(n) // l'effacement n'entraîne aucun renvoi
+  })
+
+  it('Critical — pas de course : un nouveau geste lancé 3 s après un refus n\'est PAS effacé par le minuteur de 6 s du refus', async () => {
+    const m = await mountBound()
+    await m.tap(0)
+    const first = m.flips()[0]
+    await m.apply({ ack: ackOf(first, 'IGNORED', 'NOT_FLIPPABLE') })
+    expect(m.text()).toMatch(MSG.failAny)
+    await m.advance(3000)
+    await m.tap(1) // nouveau geste ; l'ancien accusé (autre FLIP_ID) reste dans le contexte
+    const f = m.flips()
+    expect(f).toHaveLength(2)
+    expect(f[1].FLIP_ID).not.toBe(first.FLIP_ID)
+    expect(m.text()).toMatch(MSG.pending)
+    await m.advance(3500) // t = 6,5 s depuis le refus : le minuteur du refus aurait déjà frappé
+    expect(m.text()).toMatch(MSG.pending) // le geste en cours est intact
+    expect(m.text()).not.toMatch(MSG.failAny)
+    expect(m.flips().every((x) => x.FLIP_ID === f[1].FLIP_ID || x.FLIP_ID === first.FLIP_ID)).toBe(true)
+    expect(m.flips().length).toBeGreaterThanOrEqual(2)
+  })
+
   it('Critical — hors tour (dérogation du 2026-08-24) : envoi SANS FLIP_ID, aucune pastille', async () => {
     const m = await mountBound({ mainTeam: 'Les Rouges' })
     await m.tap()
