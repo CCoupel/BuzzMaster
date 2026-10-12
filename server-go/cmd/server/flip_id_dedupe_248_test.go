@@ -167,10 +167,22 @@ func waitFlipBack248(t *testing.T, r *room247, signal chan struct{}) map[string]
 					Msg struct {
 						Game struct {
 							Flipped []string `json:"MEMORY_FLIPPED_CARDS"`
+							Active  *struct {
+								State struct {
+									Flipped []string `json:"MEMORY_FLIPPED_CARDS"`
+								} `json:"STATE"`
+							} `json:"MEMOTION_ACTIVE"`
 						} `json:"GAME"`
 					} `json:"MSG"`
 				}
-				if json.Unmarshal(f.Raw, &env) == nil && len(env.Msg.Game.Flipped) == 0 {
+				if json.Unmarshal(f.Raw, &env) != nil {
+					continue
+				}
+				motionFlipped := 0
+				if env.Msg.Game.Active != nil {
+					motionFlipped = len(env.Msg.Game.Active.State.Flipped)
+				}
+				if len(env.Msg.Game.Flipped) == 0 && motionFlipped == 0 {
 					done = true
 				}
 			case <-deadline:
