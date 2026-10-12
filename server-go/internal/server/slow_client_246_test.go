@@ -24,9 +24,22 @@ func newHub246(t *testing.T, ct ClientType) (*WebSocketHub, *BroadcastLogger, st
 	t.Cleanup(func() { SetGlobalLogger(nil) })
 	hub := NewWebSocketHub()
 	go hub.Run()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hub.HandleConnectionWithType(w, r, ct)
 	}))
+	// #263: a small kernel send buffer on the server side makes a client that never reads block
+	// the writer after a couple of messages. With the default (auto-tuned, up to several MB) buffer,
+	// filling the 256-message queue within the 3 s write deadline depends on machine speed: on a
+	// loaded runner the write deadline (CLIENT_WRITE_TIMEOUT) fired first and the client was dropped
+	// before CLIENT_EVICTED_SLOW could ever be logged.
+	srv.Config.ConnState = func(c net.Conn, st http.ConnState) {
+		if st == http.StateNew {
+			if tc, ok := c.(*net.TCPConn); ok {
+				_ = tc.SetWriteBuffer(4096)
+			}
+		}
+	}
+	srv.Start()
 	t.Cleanup(srv.Close)
 	return hub, bl, "ws" + strings.TrimPrefix(srv.URL, "http")
 }
@@ -79,19 +92,29 @@ func dialStalled246(t *testing.T, url string) *websocket.Conn {
 func TestSlowClient246_FullSendQueueEvictsAndIsLogged(t *testing.T) {
 	hub, bl, url := newHub246(t, ClientTypeAdmin)
 	dialStalled246(t, url)
-	if !waitFor246(2*time.Second, func() bool { return hub.ClientCount() == 1 }) {
+	if !waitFor246(15*time.Second, func() bool { return hub.ClientCount() == 1 }) {
 		t.Fatal("précondition : le client doit être enregistré")
 	}
-	big, err := protocol.NewMessage("UPDATE", map[string]string{"X": strings.Repeat("x", 64*1024)})
+	// #263: 16 KB is enough to block the writer (tiny kernel buffers, see newHub246) and keeps each
+	// broadcast cheap, so the 256-message queue fills well inside the 3 s write deadline even on a
+	// loaded CPU-starved runner.
+	big, err := protocol.NewMessage("UPDATE", map[string]string{"X": strings.Repeat("x", 16*1024)})
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// #263: broadcast until the eviction is observed or a generous deadline passes (instead of a
+	// fixed 3000 iterations: on a loaded runner the writer goroutine can drain into the kernel
+	// buffers long enough for 3000 broadcasts to never fill the queue).
 	evicted := false
-	for i := 0; i < 3000 && !evicted; i++ {
+	evictDeadline := time.Now().Add(30 * time.Second)
+	for i := 0; !evicted && time.Now().Before(evictDeadline); i++ {
 		hub.BroadcastToTypes(big, ClientTypeAdmin)
-		evicted = logHas246(bl, "CLIENT_EVICTED_SLOW")
+		if i%8 == 7 { // GetHistory copies the whole log: do not pay for it on every message
+			evicted = logHas246(bl, "CLIENT_EVICTED_SLOW")
+		}
 	}
+	evicted = evicted || waitFor246(5*time.Second, func() bool { return logHas246(bl, "CLIENT_EVICTED_SLOW") })
 
 	if !evicted {
 		t.Fatal("un client qui ne lit plus doit être coupé et journalisé CLIENT_EVICTED_SLOW")
@@ -99,7 +122,7 @@ func TestSlowClient246_FullSendQueueEvictsAndIsLogged(t *testing.T) {
 	if !logHas246(bl, "CLIENT_EVICTED_SLOW", "client=", "type=admin", "queue=") {
 		t.Errorf("l'événement doit porter client, type et queue ; logs=%v", bl.GetRecent(5))
 	}
-	if !waitFor246(2*time.Second, func() bool { return hub.ClientCount() == 0 }) {
+	if !waitFor246(15*time.Second, func() bool { return hub.ClientCount() == 0 }) {
 		t.Errorf("le client lent doit être retiré du hub (%d restant)", hub.ClientCount())
 	}
 }
@@ -110,14 +133,15 @@ func TestSlowClient246_BlockedWriteBeyondItsDeadlineIsLoggedAsWriteTimeout(t *te
 	}
 	hub, bl, url := newHub246(t, ClientTypeAdmin)
 	dialStalled246(t, url)
-	waitFor246(2*time.Second, func() bool { return hub.ClientCount() == 1 })
-	big, _ := protocol.NewMessage("UPDATE", map[string]string{"X": strings.Repeat("x", 64*1024)})
+	waitFor246(15*time.Second, func() bool { return hub.ClientCount() == 1 })
+	big, _ := protocol.NewMessage("UPDATE", map[string]string{"X": strings.Repeat("x", 16*1024)})
 
-	for i := 0; i < 3000 && !logHas246(bl, "CLIENT_EVICTED_SLOW"); i++ {
+	blockDeadline := time.Now().Add(30 * time.Second)
+	for !logHas246(bl, "CLIENT_EVICTED_SLOW") && time.Now().Before(blockDeadline) {
 		hub.BroadcastToTypes(big, ClientTypeAdmin) // l'écriture bloquée de writePump atteint son délai de 3 s
 	}
 
-	if !waitFor246(6*time.Second, func() bool { return logHas246(bl, "CLIENT_WRITE_TIMEOUT", "client=", "type=admin") }) {
+	if !waitFor246(20*time.Second, func() bool { return logHas246(bl, "CLIENT_WRITE_TIMEOUT", "client=", "type=admin") }) {
 		t.Fatalf("une écriture bloquée au-delà de 3 s doit journaliser CLIENT_WRITE_TIMEOUT ; logs=%v", bl.GetRecent(10))
 	}
 }
@@ -136,7 +160,7 @@ func TestSlowClient246_HealthyClientIsNeverEvicted(t *testing.T) {
 			}
 		}
 	}()
-	waitFor246(2*time.Second, func() bool { return hub.ClientCount() == 1 })
+	waitFor246(15*time.Second, func() bool { return hub.ClientCount() == 1 })
 	msg, _ := protocol.NewMessage("UPDATE", map[string]string{"X": strings.Repeat("x", 4096)})
 
 	for i := 0; i < 500; i++ {
@@ -166,7 +190,7 @@ func TestIncomingDropped246_FullInboundQueueIsLoggedWithTheAction(t *testing.T) 
 		}
 	}
 
-	if !waitFor246(3*time.Second, func() bool { return logHas246(bl, "INCOMING_DROPPED", "client=", "type=vplayer", "action=PONG") }) {
+	if !waitFor246(15*time.Second, func() bool { return logHas246(bl, "INCOMING_DROPPED", "client=", "type=vplayer", "action=PONG") }) {
 		t.Fatalf("file d'entrée pleine : INCOMING_DROPPED client/type/action attendu ; logs=%v", bl.GetRecent(5))
 	}
 }
