@@ -157,7 +157,7 @@ go tool cover -html=coverage.out -o coverage.html
 
 | Component | Version |
 |-----------|---------|
-| Go | 1.21+ |
+| Go | 1.26.9+ |
 | gorilla/websocket | v1.5+ |
 | ESP32-C3 SDK | ESP-IDF 5.x |
 | Chrome (Web Serial) | 89+ |
