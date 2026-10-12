@@ -36,7 +36,8 @@ func TestFlipID248_MemoryPurgedWhenTheBumperIsDeleted(t *testing.T) {
 	if r.app.engine.GetBumper(r.ids["p1"]) != nil {
 		t.Fatal("précondition : le bumper p1 doit être supprimé")
 	}
-	// le joueur revient avec le MÊME identifiant (même équipe) ; la carte est remise face cachée
+	// le joueur revient avec le MÊME identifiant (même équipe, et la main reste à TeamA : on n'appelle surtout pas
+	// ClearMemoryFlippedCards, qui ferait passer la main à TeamB et produirait un NOT_TURN sans rapport avec la purge)
 	tb := r.app.engine.GetTeamsAndBumpers()
 	bumpers := map[string]*game.Bumper{}
 	for id, b := range tb.Bumpers {
@@ -44,13 +45,20 @@ func TestFlipID248_MemoryPurgedWhenTheBumperIsDeleted(t *testing.T) {
 	}
 	bumpers[r.ids["p1"]] = &game.Bumper{Name: "P1", Team: "TeamA", IsVirtual: true, IsVPlayer: true, Connected: true}
 	r.app.engine.SetBumpers(bumpers)
-	r.app.engine.ClearMemoryFlippedCards()
 	r.observe(t)
 
+	// La carte 1-1 est toujours face visible. Mémoire INTACTE => APPLIED + DUPLICATE=true (réponse rejouée).
+	// Mémoire PURGÉE => geste neuf, évalué : carte déjà visible => IGNORED NOT_FLIPPABLE + DUPLICATE=false.
 	r.flip(t, "p1", "1-1", "f-del", nil)
 	acks := acksOf248(r.observe(t)["p1"])
-	if len(acks) != 1 || acks[0].Duplicate || acks[0].Status != "APPLIED" {
-		t.Errorf("après suppression du bumper, le FLIP_ID est évalué comme neuf : attendu APPLIED DUPLICATE=false, a %+v", acks)
+	if len(acks) != 1 {
+		t.Fatalf("attendu 1 ACK, a %+v", acks)
+	}
+	if acks[0].Duplicate || acks[0].Status == "APPLIED" {
+		t.Errorf("la mémoire du bumper supprimé doit être purgée : le FLIP_ID est évalué comme neuf, pas rejoué (a %+v)", acks[0])
+	}
+	if acks[0].Status != "IGNORED" || acks[0].Reason != "NOT_FLIPPABLE" {
+		t.Errorf("évalué comme neuf, le geste est refusé (carte déjà visible) : attendu IGNORED NOT_FLIPPABLE, a %+v", acks[0])
 	}
 }
 

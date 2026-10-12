@@ -141,8 +141,8 @@ func flipBackSignal248(t *testing.T) chan struct{} {
 	return ch
 }
 
-// waitFlipBack248 attend le retour face cachée PUIS l'UPDATE qu'il diffuse (lu sur toutes les connexions, pour
-// qu'il ne pollue pas l'observation suivante).
+// waitFlipBack248 attend le retour face cachée PUIS les UPDATE qu'il diffuse (lus sur toutes les connexions, pour
+// qu'ils ne polluent pas l'observation suivante). Retourne toutes les trames consommées.
 func waitFlipBack248(t *testing.T, r *room247, signal chan struct{}) map[string][]frame247 {
 	t.Helper()
 	consumed := map[string][]frame247{}
@@ -188,6 +188,16 @@ func waitFlipBack248(t *testing.T, r *room247, signal chan struct{}) map[string]
 			case <-deadline:
 				t.Fatalf("%s : UPDATE du retour face cachée non reçu", name)
 			}
+		}
+	}
+	// Le retour face cachée diffuse AUSSI un second UPDATE juste après le premier (comportement historique, antérieur à
+	// FLIP_ID : goroutine de retour = broadcastUpdate puis sendLEDSetAllBuzzers, vérifié sur 81e8fba3 où l'admin reçoit
+	// 2 UPDATE « cartes vides »). On ne peut pas détecter la fin de cette goroutine par un événement ; deux allers-retours
+	// d'un message témoin (le second UPDATE est émis quelques microsecondes après le premier) la laissent s'éteindre
+	// avant la fenêtre d'observation du test, sans masquer de diffusion ULTÉRIEURE (un renvoi fautif viendrait après).
+	for i := 0; i < 2; i++ {
+		for name, fs := range r.observe(t) {
+			consumed[name] = append(consumed[name], fs...)
 		}
 	}
 	return consumed
