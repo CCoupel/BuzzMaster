@@ -101,3 +101,7 @@
 | server-go/internal/server/rounds_http_hardening_245_test.go | unit | questions, security | #245 re-revue : POST /questions number forgé/invalide refusé sans dossier créé, DELETE /files racine/hors question refusé, média légitime accepté, statuts purgés | regression | critical |
 | server-go/internal/server/broadcaster_stop_261_test.go (+ server-go/cmd/server/shutdown_double_stop_261_test.go) | integration | broadcaster, shutdown | #261 double arrêt (Stop() du broadcaster et (*App).stop() deux fois) sans panic « close of closed channel » | regression | critical |
 | tests/procedures/bugfix-shutdown-double-stop-261.md | manual | shutdown | #261 /shutdown : pas de panic, code de sortie 0 | regression | |
+| server-go/web/src/pages/AnimPage.memotion-reveal.189.test.jsx | unit | anim | #189 zone réponse /anim « révélée » pendant une carte MEMOTION en REVEAL (phase STARTED) ; non-régression question classique | regression | |
+| server-go/web/src/components/Navbar.a11y.242.test.jsx | unit | navbar | #242 nom accessible du bouton d'entracte contient le libellé visible (REPRISE/ENTRACTE) ; aucun div[aria-label] sans rôle dans les menus | regression | |
+| tests/procedures/bugfix-anim-memotion-reveal-189.md | manual | anim | #189 procédure manuelle | regression | |
+| tests/procedures/bugfix-navbar-a11y-242.md | manual | navbar | #242 procédure manuelle | regression | |
