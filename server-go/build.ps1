@@ -23,13 +23,15 @@ Write-Host "Version: $version" -ForegroundColor Cyan
 
 # Step 3: Generate Windows PE metadata (.syso) via goversioninfo
 Write-Host "`n[3/4] Generating Windows PE metadata..." -ForegroundColor Yellow
-$goversioninfo = Get-Command goversioninfo -ErrorAction SilentlyContinue
-if (-not $goversioninfo) {
-    Write-Host "Installing goversioninfo..." -ForegroundColor Yellow
-    go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
-}
+# Always (re)install the pinned version: an older goversioninfo (< 1.7.0) produces a .syso that the
+# Go 1.26 linker rejects ("unknown relocation type 7"). Same version as .github/workflows/release.yml.
+Write-Host "Installing goversioninfo v1.7.0..." -ForegroundColor Yellow
+go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.7.0
+$goBin = (go env GOBIN)
+if (-not $goBin) { $goBin = Join-Path (go env GOPATH) "bin" }
+$goversioninfo = Join-Path $goBin "goversioninfo"
 Push-Location cmd/server
-goversioninfo -o resource_windows_amd64.syso
+& $goversioninfo -o resource_windows_amd64.syso
 if ($LASTEXITCODE -ne 0) {
     Write-Host "goversioninfo failed! Continuing without Windows metadata." -ForegroundColor Yellow
 }

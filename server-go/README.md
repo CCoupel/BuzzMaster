@@ -4,7 +4,7 @@ Server Go pour le systeme de buzzers BuzzControl. Compatible avec les buzzers Bu
 
 ## Prerequis
 
-- Go 1.21+
+- Go 1.26.9+
 - Make (optionnel)
 
 ## Installation
