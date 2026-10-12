@@ -16,6 +16,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // Un seul appui par question (le premier) ; un échec ne propose jamais de réessayer.
 export const ACKED_SEND_INTERVAL_MS = 4000
 export const ACKED_SEND_MAX = 30
+// Un refus du serveur (ex. NOT_TURN) s'efface de lui-même : ce n'est pas un état « question terminée ».
+export const REFUSAL_CLEAR_MS = 6000
 
 /**
  * @param {Object} o
@@ -107,6 +109,13 @@ export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, 
     }
     if (phase === 'PREPARE' && recRef.current) clear()
   }, [status, acked, teamServed, refused, questionId, phase, clear, setSt])
+
+  // Un refus explicite s'efface après un court délai (la pastille ✕ ne reste pas jusqu'au geste suivant).
+  useEffect(() => {
+    if (status !== 'failed' || !failReason) return undefined
+    const t = setTimeout(clear, REFUSAL_CLEAR_MS)
+    return () => clearTimeout(t)
+  }, [status, failReason, clear])
 
   // Renvoi : reliaison, reprise en STARTED.
   useEffect(() => { attempt(true) }, [bound, connStatus, phase, attempt])

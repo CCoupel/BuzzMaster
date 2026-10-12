@@ -3823,3 +3823,7 @@
 .memory-card.vplayer-pending-failed, .memotion-tv-memory-card.vplayer-pending-failed { outline-color: rgba(239, 68, 68, 0.8); animation: vplayer-card-shake 0.4s 2; }
 .memory-card.vplayer-pending-failed::after, .memotion-tv-memory-card.vplayer-pending-failed::after { content: '✕'; }
 @keyframes vplayer-card-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-card.vplayer-pending-failed, .memotion-tv-memory-card.vplayer-pending-failed { animation: none; }
+}

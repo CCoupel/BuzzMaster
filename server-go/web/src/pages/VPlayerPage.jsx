@@ -9,6 +9,8 @@ import ArdoiseKeyboard from '../components/ArdoiseKeyboard'
 import NoSleep from 'nosleep.js'
 import { REJECTION_MESSAGES, DEFAULT_REJECTION_MESSAGE, REDIRECT_MESSAGES, DEFAULT_REDIRECT_MESSAGE } from '../utils/playerConnectMessages'
 import { fnv1a } from '../utils/fnv1a'
+import { resolveHostContext } from '../utils/hostContext'
+import { getTypeState } from '../utils/typeState'
 import {
   clearOwnVPlayerSession, getStoredVPlayerId, isStaleVPlayerSession,
   saveArdoiseDraft, loadArdoiseDraft, clearArdoiseDraft,
@@ -214,8 +216,13 @@ export default function VPlayerPage() {
   const qType = gameState.question?.TYPE
   const isFlipQuestion = qType === 'MEMORY' || qType === 'MEMOTION'
   const flipAck = flipMemoryCardAck && flipIdRef.current && flipMemoryCardAck.flipId === flipIdRef.current ? flipMemoryCardAck : null
-  const flippedIds = qType === 'MEMORY' ? gameState.memoryFlippedCards : gameState.MEMOTION_ACTIVE?.STATE?.MEMORY_FLIPPED_CARDS
-  const flipSeen = isFlipQuestion && !!flipCardRef.current && Array.isArray(flippedIds) && flippedIds.includes(flipCardRef.current)
+  // Repli sans accusé : état MEMORY lu par l'accesseur unique (comme PlayerDisplay) ; la carte est vue
+  // retournée, OU sa paire est trouvée (le moteur vide les retournées dès qu'une paire est trouvée).
+  const flipMemoryState = isFlipQuestion ? getTypeState(gameState, resolveHostContext(gameState)).memory : null
+  const flipPairId = flipCardRef.current ? String(flipCardRef.current).split('-')[0] : null
+  const flipSeen = !!flipMemoryState && !!flipCardRef.current && (
+    (flipMemoryState.flippedCards || []).includes(flipCardRef.current)
+    || (flipPairId !== null && (flipMemoryState.matchedPairs || []).some((p) => String(p) === flipPairId)))
   const ackedSend = useAckedSend({
     sendBound,
     connStatus: status,
