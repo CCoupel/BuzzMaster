@@ -379,6 +379,7 @@ describe('PlayerDisplay — fix régression classement Joueurs pendant PREPARE/R
 // ---------------------------------------------------------------------------
 
 describe('PlayerDisplay — célébration de score indépendante du gating (#127, non-régression)', () => {
+  afterEach(() => { vi.useRealTimers() }) // #265 : ne pas laisser fuiter les fake timers si une assertion échoue
   it('isVPlayer=true, remote=GAME : la célébration "+X pts" se déclenche toujours quand une équipe marque', () => {
     vi.useFakeTimers() // #265 : la carte de la tablette apparaît à l'arrivée de la fusée (≈ 0,9 s)
     const { rerender } = renderVPlayer({

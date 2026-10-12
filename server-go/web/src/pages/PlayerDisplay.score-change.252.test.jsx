@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, act } from '@testing-library/react'
-import confetti from 'canvas-confetti'
 import PlayerDisplay from './PlayerDisplay'
 
 // #252 (v11.2, lot V2-3) — écrans TV / VJoueur : une hausse de score accompagnée de SCORE_CHANGE.DISPLAY = false
@@ -90,8 +89,11 @@ function mount(over, isVPlayer = false) {
 // #265 : « +X pts » = carte d'arrivée de la fusée ; update() laisse passer 1 s simulée (carte alors visible).
 const pointsValues = (c) => [...c.querySelectorAll('.tv-award-card .tv-award-pts')].map((e) => e.textContent)
 const settle = () => act(() => { vi.advanceTimersByTime(1000) })
+// #265 : l'absence d'animation se vérifie sur toute la durée d'une annonce (un lot différé ne doit pas apparaître plus tard).
+const settleFully = () => act(() => { vi.advanceTimersByTime(12000) })
 
 describe('PlayerDisplay — SCORE_CHANGE : hausse visible = comportement actuel (#252)', () => {
+  afterEach(() => { vi.useRealTimers() })
   beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); document.documentElement.requestFullscreen = vi.fn().mockResolvedValue(undefined) })
 
   it('Critical — hausse avec DISPLAY:true : « +X pts » et célébration', () => {
@@ -112,15 +114,17 @@ describe('PlayerDisplay — SCORE_CHANGE : hausse visible = comportement actuel 
 })
 
 describe('PlayerDisplay — correction cachée (SCORE_CHANGE.DISPLAY = false) (#252)', () => {
+  afterEach(() => { vi.useRealTimers() })
   beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); document.documentElement.requestFullscreen = vi.fn().mockResolvedValue(undefined) })
 
   it('Critical — hausse cachée : AUCUN « +X pts », AUCUN confetti, mais le score est bien à jour', () => {
     const m = mount({ teams: mkTeams(10, 5) })
     m.update({ teams: mkTeams(13, 5), scoreChange: sc(1, false, ['Les Bleus']) })
 
+    settleFully()
     expect(pointsValues(m.container)).toEqual([])
-    expect(confetti).not.toHaveBeenCalled()
     expect(m.container.querySelector('.tv-award-card')).toBeNull()
+    expect(m.container.querySelector('.tv-award-layer')).toBeNull()
   })
 
   it('Critical — la hausse visible suivante n’anime QUE sa propre différence (pas celle de la correction cachée)', () => {
@@ -135,8 +139,9 @@ describe('PlayerDisplay — correction cachée (SCORE_CHANGE.DISPLAY = false) (#
     const m = mount({ teams: mkTeams(10, 5) })
     m.update({ teams: mkTeams(13, 5), scoreChange: sc(1, false, ['Les Bleus']) })
     m.update({ teams: mkTeams(13, 5), scoreChange: sc(1, false, ['Les Bleus']) }) // même SEQ rediffusé
+    settleFully()
     expect(pointsValues(m.container)).toEqual([])
-    expect(confetti).not.toHaveBeenCalled()
+    expect(m.container.querySelector('.tv-award-layer')).toBeNull()
   })
 
   it('une correction cachée ne couvre que les équipes listées : une autre équipe qui monte reste animée', () => {
@@ -170,7 +175,8 @@ describe('PlayerDisplay — correction cachée (SCORE_CHANGE.DISPLAY = false) (#
   it('VJoueur (tablette) : même règle — hausse cachée sans « +X pts » ni confettis', () => {
     const m = mount({ teams: mkTeams(10, 5) }, true)
     m.update({ teams: mkTeams(13, 5), scoreChange: sc(1, false, ['Les Bleus']) })
+    settleFully()
     expect(pointsValues(m.container)).toEqual([])
-    expect(confetti).not.toHaveBeenCalled()
+    expect(m.container.querySelector('.tv-award-layer')).toBeNull()
   })
 })
