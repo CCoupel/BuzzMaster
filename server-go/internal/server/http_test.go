@@ -29,6 +29,14 @@ func setupTestHTTPServer(t *testing.T) (*HTTPServer, string) {
 	// same pattern as internal/config/config_merge_test.go.
 	t.Chdir(t.TempDir())
 
+	// #188 — globalAIJobRegistry est un singleton de processus : un job IA
+	// encore RUNNING à la fin d'un test ferait répondre 409 au test suivant.
+	// On part d'un registre au repos, et on le draine à la fin du test. Ce
+	// cleanup est enregistré en premier donc exécuté en dernier : les mocks
+	// amont (enregistrés ensuite) sont déjà fermés, le job termine vite.
+	drainAIJobRegistry(t)
+	t.Cleanup(func() { drainAIJobRegistry(t) })
+
 	// Initialize config - use same temp dir for both DataDir and QuestionsDir
 	dataDir := t.TempDir()
 
