@@ -38,6 +38,8 @@ var Version = "dev"
 
 // App holds all server components
 type App struct {
+	stopMu      sync.Mutex // #261: serialises stop() — /shutdown hook and main() both call it
+	stopped     bool
 	config      *config.Config
 	engine      *game.Engine
 	udpBcast    *server.UDPBroadcaster
@@ -1234,6 +1236,16 @@ func (a *App) start() error {
 }
 
 func (a *App) stop() {
+	// #261: /shutdown (OnShutdown hook) cancels a.ctx, waking main() which calls
+	// stop() again concurrently. The mutex makes the second caller wait for the
+	// first to finish, then return without re-running the teardown.
+	a.stopMu.Lock()
+	defer a.stopMu.Unlock()
+	if a.stopped {
+		return
+	}
+	a.stopped = true
+
 	// #208 (T2.3, contract §10.4): extinction totale des ampoules Hue et des
 	// LED buzzers, AVANT a.cancelCtx() — a.ctx porte le client HTTP vers le
 	// pont ET les hubs WebSocket buzzers, donc une extinction émise après
