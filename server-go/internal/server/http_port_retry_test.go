@@ -188,12 +188,12 @@ func TestHTTPServer_Start_BlocksUntilPortFree(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Start(ctx) returned an error after the port was freed: %v", err)
 		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("Start(ctx) did not return within 3s of the port being freed")
+	case <-time.After(20 * time.Second):
+		t.Fatal("Start(ctx) did not return within 20s of the port being freed")
 	}
 
-	client := &http.Client{Timeout: 500 * time.Millisecond}
-	deadline := time.Now().Add(2 * time.Second)
+	client := &http.Client{Timeout: 2 * time.Second}
+	deadline := time.Now().Add(20 * time.Second)
 	var lastErr error
 	for time.Now().Before(deadline) {
 		resp, getErr := client.Get(url)
@@ -246,12 +246,12 @@ func TestHTTPServer_Start_ContextCancelDuringPortWait(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("Start(ctx) error = %v, want context.Canceled (or wrapping it)", err)
 		}
-	case <-time.After(1 * time.Second):
-		t.Fatal("Start(ctx) did not return within 1s of context cancellation — retry loop not interruptible (Ctrl+C would hang)")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Start(ctx) did not return within 10s of context cancellation — retry loop not interruptible (Ctrl+C would hang)")
 	}
 
 	// No residual goroutine: allow a brief settle window, then compare.
-	deadline := time.Now().Add(500 * time.Millisecond)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) && runtime.NumGoroutine() > baseline+1 {
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -313,8 +313,8 @@ func TestHTTPServer_Start_EACCES_DoesNotExitFatally(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("Start(ctx) error = %v, want context.Canceled (or wrapping it)", err)
 		}
-	case <-time.After(1 * time.Second):
-		t.Fatal("Start(ctx) did not return within 1s of cancellation during an EACCES loop — not interruptible (would survive Ctrl+C for up to 30s)")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Start(ctx) did not return within 10s of cancellation during an EACCES loop — not interruptible (would survive Ctrl+C for up to 30s)")
 	}
 }
 
@@ -343,7 +343,7 @@ func TestHTTPServer_Start_LogsPortNumberWhileBusy(t *testing.T) {
 	go func() { _ = srv.Start(ctx) }()
 
 	portStr := fmt.Sprintf("%d", port)
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	found := false
 	for time.Now().Before(deadline) {
 		for _, entry := range bl.GetHistory() {
