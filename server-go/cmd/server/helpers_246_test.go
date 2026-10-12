@@ -138,10 +138,10 @@ func (e *env246) countLog(level game.LogLevel, part string) int {
 	return n
 }
 
-// waitLog attend (≤ 2 s) qu'une entrée de niveau `level` contienne `part`.
+// waitLog attend (≤ eventDeadline264) qu'une entrée de niveau `level` contienne `part`.
 func (e *env246) waitLog(t *testing.T, level game.LogLevel, part string) bool {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(eventDeadline264) // #264
 	for time.Now().Before(deadline) {
 		if e.hasLog(level, part) {
 			return true
