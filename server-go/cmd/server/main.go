@@ -2812,40 +2812,83 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 
 	cardScoped := payload.MotionCardID != ""
 
-	// #187 contract §9.2 — card-scope invariant, refused explicitly.
-	if cardScoped {
-		if err := a.engine.ValidateCardScope(payload.MotionCardID); err != nil {
-			server.LogWarn(game.LogComponentEngine, "FLIP_MEMORY_CARD rejected: %v (motionCardId=%s)", err, payload.MotionCardID)
-			return
+	// #248: a FLIP_ID from a resolved vplayer makes this an idempotent gesture
+	// (dedupe → checks → flip → ACK, all decided atomically in the engine).
+	// Without a (valid) FLIP_ID, or from tv/anim, the legacy path below is
+	// strictly unchanged.
+	flipID := payload.FlipID
+	if flipID != "" && !validFlipID(flipID) {
+		server.LogWarn(game.LogComponentApp, "FLIP_ID_INVALID client=%s type=%s len=%d", clientID, clientType, len(flipID))
+		flipID = ""
+	}
+	var flipBumper *game.Bumper
+	flipBumperID := ""
+	if flipID != "" && clientType == server.ClientTypeVPlayer {
+		for _, cand := range []string{payload.ID, msg.ID, clientID} { // same 3 passes as resolveFlipMemoryCardBumper
+			if cand == "" {
+				continue
+			}
+			if b := a.engine.GetBumper(cand); b != nil {
+				flipBumper, flipBumperID = b, cand
+				break
+			}
 		}
 	}
-
-	// #187 contract §9.2 dérogation — server becomes sole authority on the
-	// turn, but ONLY for vplayer. tv (régie iframe preview / public screen
-	// click) and anim (the animateur, playing for the table) have no team
-	// and must keep working unconditionally, exactly as before.
-	if clientType == server.ClientTypeVPlayer {
-		state := a.engine.GetState()
-		activeTeam := state.MemoryCurrentTeam
-		if cardScoped {
-			activeTeam = state.MotionCurrentTeam
-		}
-		bumper := a.resolveFlipMemoryCardBumper(payload.ID, msg.ID, clientID)
-		if bumper == nil || bumper.Team == "" || activeTeam == "" || bumper.Team != activeTeam {
-			server.LogDebug(game.LogComponentApp, "FLIP_MEMORY_CARD ignored: not this VPlayer's turn (client=%s, cardScoped=%v)", clientID, cardScoped)
-			return
-		}
-	}
-
-	server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s motionCardId=%s", payload.CardID, payload.MotionCardID)
 
 	var isMatch, shouldFlipBack bool
 	var flipDelay int
 	var isComplete bool
-	if cardScoped {
-		isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMotionMemoryCard(payload.MotionCardID, payload.CardID)
+	if flipBumper != nil {
+		res := a.engine.FlipCardGesture(game.FlipGesture{
+			BumperID: flipBumperID, Team: flipBumper.Team,
+			FlipID: flipID, CardID: payload.CardID, MotionCardID: payload.MotionCardID,
+		})
+		a.logFlipGesture(clientID, flipBumperID, res)
+		if ack, err := protocol.NewMessage(protocol.ActionFlipMemoryCardAck, flipAckPayload(res)); err == nil {
+			a.wsHub.SendToClient(clientID, ack)
+		}
+		if !res.Applied || res.Duplicate {
+			// Duplicate or ignored gesture: the ACK and a targeted UPDATE only,
+			// never a general broadcast, PAUSE or LED change.
+			a.broadcastUpdateToPlayer(flipBumperID)
+			return
+		}
+		isMatch, shouldFlipBack, flipDelay, isComplete = res.IsMatch, res.ShouldFlipBack, res.FlipDelay, res.IsComplete
+		defer a.broadcastUpdateToPlayer(flipBumperID) // the ACK is followed by the targeted UPDATE
 	} else {
-		isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMemoryCard(payload.CardID)
+		// #187 contract §9.2 — card-scope invariant, refused explicitly.
+		if cardScoped {
+			if err := a.engine.ValidateCardScope(payload.MotionCardID); err != nil {
+				server.LogWarn(game.LogComponentEngine, "FLIP_MEMORY_CARD rejected: %v (motionCardId=%s)", err, payload.MotionCardID)
+				return
+			}
+		}
+
+		// #187 contract §9.2 dérogation — server becomes sole authority on the
+		// turn, but ONLY for vplayer. tv (régie iframe preview / public screen
+		// click) and anim (the animateur, playing for the table) have no team
+		// and must keep working unconditionally, exactly as before.
+		if clientType == server.ClientTypeVPlayer {
+			state := a.engine.GetState()
+			activeTeam := state.MemoryCurrentTeam
+			if cardScoped {
+				activeTeam = state.MotionCurrentTeam
+			}
+			bumper := a.resolveFlipMemoryCardBumper(payload.ID, msg.ID, clientID)
+			if bumper == nil || bumper.Team == "" || activeTeam == "" || bumper.Team != activeTeam {
+				server.LogDebug(game.LogComponentApp, "FLIP_MEMORY_CARD ignored: not this VPlayer's turn (client=%s, cardScoped=%v)", clientID, cardScoped)
+				return
+			}
+		}
+
+		server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s motionCardId=%s", payload.CardID, payload.MotionCardID)
+
+		if cardScoped {
+			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMotionMemoryCard(payload.MotionCardID, payload.CardID)
+		} else {
+			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMemoryCard(payload.CardID)
+		}
+
 	}
 
 	// Broadcast updated game state to all clients
@@ -8463,5 +8506,53 @@ func checkBonjourSupport() {
 	} else {
 		log.Println("[mDNS] âš  Bonjour service status unknown")
 		log.Printf("[mDNS]   â†’ Output: %s", strings.TrimSpace(outputStr))
+	}
+}
+
+// validFlipID reports whether id is a well-formed FLIP_ID: 1–64 characters of
+// [A-Za-z0-9_-] (contract websocket-actions.md §"Idempotence — FLIP_ID").
+func validFlipID(id string) bool {
+	if len(id) < 1 || len(id) > 64 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// flipAckPayload builds the FLIP_MEMORY_CARD_ACK payload from a gesture result.
+func flipAckPayload(res game.FlipGestureResult) protocol.FlipMemoryCardAckPayload {
+	status := "IGNORED"
+	if res.Applied {
+		status = "APPLIED"
+	}
+	return protocol.FlipMemoryCardAckPayload{
+		FlipID: res.FlipID, CardID: res.CardID, MotionCardID: res.MotionCardID,
+		Status: status, Reason: res.Reason, Duplicate: res.Duplicate,
+	}
+}
+
+// logFlipGesture writes the FLIP_DUPLICATE / FLIP_IGNORED events of
+// contracts/logging.md (an APPLIED first send has no dedicated event; the
+// existing FLIP_MEMORY_CARD trace stays the legacy path's).
+func (a *App) logFlipGesture(clientID, playerID string, res game.FlipGestureResult) {
+	status := "IGNORED"
+	if res.Applied {
+		status = "APPLIED"
+	}
+	if res.ScopeError != "" {
+		server.LogWarn(game.LogComponentEngine, "FLIP_MEMORY_CARD rejected: %s (motionCardId=%s)", res.ScopeError, res.MotionCardID)
+	}
+	switch {
+	case res.Duplicate:
+		server.LogInfo(game.LogComponentApp, "FLIP_DUPLICATE client=%s player_id=%s flip_id=%s card=%s motion_card=%s status=%s reason=%s",
+			clientID, playerID, res.FlipID, res.CardID, res.MotionCardID, status, res.Reason)
+	case !res.Applied:
+		server.LogInfo(game.LogComponentApp, "FLIP_IGNORED client=%s player_id=%s flip_id=%s card=%s motion_card=%s reason=%s",
+			clientID, playerID, res.FlipID, res.CardID, res.MotionCardID, res.Reason)
 	}
 }

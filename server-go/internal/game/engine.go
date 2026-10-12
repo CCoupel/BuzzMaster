@@ -114,6 +114,7 @@ func callTestInjectPanic(site string) {
 // Engine manages the game state and logic
 type Engine struct {
 	state            GameState
+	flipMemo         map[string][]flipMemoEntry // #248: recent FLIP_IDs per bumper (flip_gesture.go)
 	data             *TeamsAndBumpers
 	questionStatuses map[string]QuestionStatus // Track question statuses across selections
 	history          []GameEvent
@@ -1202,6 +1203,7 @@ func (e *Engine) DeleteBumper(id string) *Bumper {
 	}
 	deletedTeam := deleted.Team
 	delete(e.data.Bumpers, id)
+	delete(e.flipMemo, id) // #248: the bumper's FLIP_ID memory goes with it
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
 
 	newPhase := GamePhase("")
@@ -1324,7 +1326,8 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		(e.state.Question.Type == QuestionTypeMemory || e.state.Question.Type == QuestionTypeMemotion)
 
 	e.state.Phase = PhasePrepare
-	e.forceGamePageUnsafe() // #240 — question selection
+	e.purgeFlipMemoryUnsafe() // #248: question (re)selected
+	e.forceGamePageUnsafe()   // #240 — question selection
 	e.state.Question = question
 	e.setQuestionStatus(StatusPrepare)
 	// The question being (re)loaded here — new or replayed — has not
@@ -1827,6 +1830,7 @@ func (e *Engine) reevaluatePrepareReadyUnsafe() GamePhase {
 	case PhaseReady:
 		if !participantsConform(e.state.Question, &e.state) {
 			e.state.Phase = PhasePrepare
+			e.purgeFlipMemoryUnsafe() // #248: back to PREPARE
 			e.setQuestionStatus(StatusPrepare)
 			log.Printf("[Engine] Participants no longer conform, reverting READY -> PREPARE")
 			return PhasePrepare
@@ -3980,6 +3984,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 		}
 	}
 	e.stopAllTimersUnsafe()
+	e.purgeFlipMemoryUnsafe() // #248: NEW_GAME
 
 	// 2. PURGE_TEAMS: same path as a team deletion (#249); surviving players
 	// become team-less.
@@ -5697,25 +5702,38 @@ func (e *Engine) RafaleInvalidateCard(cardID string) error {
 func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack bool, flipDelay int, isComplete bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMemoryCardUnsafe(cardID, false, "")
+	return
+}
 
+// flipMemoryCardUnsafe is FlipMemoryCard's body (#248): same logic, plus the
+// refusal reason (FlipReason*, "" when the card was flipped) and an optional
+// turn check done under the SAME lock as the flip (enforceTurn: the emitting
+// team must be MemoryCurrentTeam). Caller holds e.mu.
+func (e *Engine) flipMemoryCardUnsafe(cardID string, enforceTurn bool, team string) (isMatch bool, shouldFlipBack bool, flipDelay int, isComplete bool, refusal string) {
 	// Only allow flipping during STARTED phase
 	if e.state.Phase != PhaseStarted {
 		log.Printf("[Engine] Memory flip ignored: game not in STARTED phase (current: %s)", e.state.Phase)
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
+	}
+
+	// #248: turn check under the same lock as the flip (FLIP_ID gestures only).
+	if enforceTurn && (team == "" || e.state.MemoryCurrentTeam == "" || team != e.state.MemoryCurrentTeam) {
+		return false, false, 0, false, FlipReasonNotTurn
 	}
 
 	// Extract pair ID from card ID (format: "pairID-cardNum", e.g., "1-1", "2-2")
 	pairID := e.extractPairID(cardID)
 	if pairID == 0 {
 		log.Printf("[Engine] Memory flip ignored: invalid card ID format: %s", cardID)
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	// Check if this pair is already matched
 	for _, matchedPairID := range e.state.MemoryMatchedPairs {
 		if matchedPairID == pairID {
 			log.Printf("[Engine] Memory flip ignored: pair %d already matched", pairID)
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 
@@ -5723,14 +5741,14 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 	for _, id := range e.state.MemoryFlippedCards {
 		if id == cardID {
 			log.Printf("[Engine] Memory flip ignored: card %s already flipped", cardID)
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 
 	// Don't allow more than 2 cards to be flipped at once
 	if len(e.state.MemoryFlippedCards) >= 2 {
 		log.Printf("[Engine] Memory flip ignored: already 2 cards flipped")
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	// Add card to flipped cards
@@ -5739,7 +5757,7 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 
 	// If only 1 card flipped, just wait for second card
 	if len(e.state.MemoryFlippedCards) == 1 {
-		return false, false, 0, false
+		return false, false, 0, false, ""
 	}
 
 	// Two cards are now flipped - check if they match
@@ -5797,7 +5815,7 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 		// Mode TANT_QUE_JE_GAGNE: team keeps playing, no rotation
 
 		log.Printf("[Engine] Memory MATCH! Pair %d found. Total matched: %d/%d. Complete: %v", firstPairID, len(e.state.MemoryMatchedPairs), totalPairs, isComplete)
-		return true, false, 0, isComplete
+		return true, false, 0, isComplete, ""
 	}
 
 	// No match - increment error counter, caller should schedule flip-back after delay
@@ -5812,7 +5830,7 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 	// This ensures players see which team made the error before the turn changes
 
 	log.Printf("[Engine] Memory NO MATCH (error #%d). Cards %s and %s will flip back after %dms", e.state.MemoryErrors, firstCardID, secondCardID, flipDelay)
-	return false, true, flipDelay, false
+	return false, true, flipDelay, false, ""
 }
 
 // extractPairID extracts the pair ID from a card ID (format: "pairID-cardNum")
@@ -7993,16 +8011,22 @@ func (e *Engine) ValidateCardScope(motionCardID string) error {
 func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMotionMemoryCardUnsafe(motionCardID, cardID, false, "")
+	return
+}
 
+// flipMotionMemoryCardUnsafe is FlipMotionMemoryCard's body (#248), see
+// flipMemoryCardUnsafe. The turn is MotionCurrentTeam. Caller holds e.mu.
+func (e *Engine) flipMotionMemoryCardUnsafe(motionCardID, cardID string, enforceTurn bool, team string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete bool, refusal string) {
 	if e.state.Phase != PhaseStarted {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	// Playable per contract §4's HostContext table: MOTION_SUBPHASE==QUESTION.
 	if e.state.MotionSubPhase != MotionSubPhaseQuestion {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	if motionCardID == "" || e.state.MotionSelected != motionCardID {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	// #187 cycle 4, B3 — MotionSubPhase alone isn't enough to gate a flip:
 	// it stays QUESTION even after this card's own timer has expired (the
@@ -8010,40 +8034,45 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 	// closed round refuses further flips regardless of sub-phase, until an
 	// explicit MEMOTION_REVEAL/next SelectMotionCard reopens one.
 	if e.motionCardRoundClosed {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	card := e.activeMotionCardUnsafe()
 	if card == nil || card.EffectiveType() != QuestionTypeMemory {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
+	}
+
+	// #248: turn check under the same lock as the flip (FLIP_ID gestures only).
+	if enforceTurn && (team == "" || e.state.MotionCurrentTeam == "" || team != e.state.MotionCurrentTeam) {
+		return false, false, 0, false, FlipReasonNotTurn
 	}
 
 	pairID := e.extractPairID(cardID)
 	if pairID == 0 {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	matched := motionActiveMemoryMatchedPairs(e.state.MotionActive.State)
 	for _, m := range matched {
 		if m == pairID {
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 
 	flipped := motionActiveMemoryFlippedCards(e.state.MotionActive.State)
 	for _, id := range flipped {
 		if id == cardID {
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 	if len(flipped) >= 2 {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	flipped = append(flipped, cardID)
 	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = flipped
 
 	if len(flipped) == 1 {
-		return false, false, 0, false
+		return false, false, 0, false, ""
 	}
 
 	firstCardID := flipped[0]
@@ -8069,7 +8098,7 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 
 		log.Printf("[Engine] MEMOTION memory card MATCH! cardId=%s pair %d found. Total matched: %d/%d. Complete: %v",
 			motionCardID, firstPairID, len(matched), totalPairs, isComplete)
-		return true, false, 0, isComplete
+		return true, false, 0, isComplete, ""
 	}
 
 	errs := motionActiveMemoryErrors(e.state.MotionActive.State)
@@ -8077,7 +8106,7 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 
 	log.Printf("[Engine] MEMOTION memory card NO MATCH (error #%d, cardId=%s). Cards %s and %s will flip back after %dms",
 		errs+1, motionCardID, firstCardID, secondCardID, flipDelay)
-	return false, true, flipDelay, false
+	return false, true, flipDelay, false, ""
 }
 
 // ClearMotionMemoryFlippedCards resets the flipped-cards slot of a MEMOTION
