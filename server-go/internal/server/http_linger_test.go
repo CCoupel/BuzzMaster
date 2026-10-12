@@ -11,6 +11,7 @@ package server
 // connection is torn down immediately without entering TIME_WAIT.
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -21,9 +22,16 @@ import (
 
 // TestLingerListener_SetsLinger verifies that lingerListener wraps Accept()
 // and returns a connection on which SetLinger(0) has been applied.
-// We cannot inspect the linger value via the standard net.Conn interface, so
-// we confirm indirectly: the wrapped listener must still deliver a working
-// connection accepted from a real TCP dial.
+//
+// The linger value is not readable through net.Conn, so it is proven by its
+// observable effect: closing a SO_LINGER(0) connection sends a RST, so the
+// peer's Read fails with a reset error instead of returning io.EOF (FIN).
+//
+// #262: the server side must NOT close before the client's net.Dial has
+// returned. On loopback the handshake completes in the kernel before Accept;
+// a RST (linger 0 + Close) arriving before Dial reads SO_ERROR makes Dial
+// itself fail with ECONNRESET. Hence the server holds the accepted connection
+// until the client signals that Dial is over.
 func TestLingerListener_SetsLinger(t *testing.T) {
 	// Base listener on an ephemeral port.
 	base, err := net.Listen("tcp", "127.0.0.1:0")
@@ -34,7 +42,7 @@ func TestLingerListener_SetsLinger(t *testing.T) {
 
 	ll := &lingerListener{base}
 
-	// Dial the listener and accept.
+	dialed := make(chan struct{}) // closed once the client's Dial has returned
 	done := make(chan error, 1)
 	go func() {
 		conn, err := ll.Accept()
@@ -42,11 +50,13 @@ func TestLingerListener_SetsLinger(t *testing.T) {
 			done <- err
 			return
 		}
-		conn.Close()
+		<-dialed
+		conn.Close() // linger 0 -> RST
 		done <- nil
 	}()
 
 	client, err := net.Dial("tcp", base.Addr().String())
+	close(dialed)
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
@@ -54,6 +64,15 @@ func TestLingerListener_SetsLinger(t *testing.T) {
 
 	if err := <-done; err != nil {
 		t.Fatalf("lingerListener.Accept() returned error: %v", err)
+	}
+
+	client.SetReadDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+	_, err = client.Read(make([]byte, 1))
+	if err == nil || errors.Is(err, io.EOF) {
+		t.Fatalf("expected a connection reset (RST from SO_LINGER=0), got %v", err)
+	}
+	if ne, ok := err.(net.Error); ok && ne.Timeout() {
+		t.Fatalf("no RST received before the deadline: %v", err)
 	}
 }
 
