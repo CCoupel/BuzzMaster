@@ -105,3 +105,6 @@
 | server-go/web/src/components/Navbar.a11y.242.test.jsx | unit | navbar | #242 nom accessible du bouton d'entracte contient le libellé visible (REPRISE/ENTRACTE) ; aucun div[aria-label] sans rôle dans les menus | regression | |
 | tests/procedures/bugfix-anim-memotion-reveal-189.md | manual | anim | #189 procédure manuelle | regression | |
 | tests/procedures/bugfix-navbar-a11y-242.md | manual | navbar | #242 procédure manuelle | regression | |
+| server-go/internal/game/engine_ardoise_buzz_247_test.go | unit | game-engine | #247 appui physique refusé en ARDOISE (Time, Status, OnBuzzerPress, phase) ; SPEEDY toujours accepté | regression | critical |
+| server-go/cmd/server/ghost_pause_247_test.go | integration | websocket, game-engine | #247 aucun PAUSE diffusé pour un appui refusé (ARDOISE, MEMORY, bumper/équipe déjà buzzés, QCM physique avec VPlayer, renvoi QCM) ; exactement un PAUSE pour un appui accepté (3 handlers) | regression | critical |
+| tests/procedures/bugfix-ghost-pause-247.md | manual | game-engine, anim | #247 procédure manuelle (buzzer physique en ARDOISE, tablette non figée) | regression | |
