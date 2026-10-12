@@ -1,0 +1,44 @@
+/* #245 — groupes de manches de l'éditeur (maquette (f″) admin_questions_list__rounds_entractes_delete_choice) */
+.round-group { border: 1px solid var(--gray-200, #e5e7eb); border-radius: 0.6rem; margin-bottom: 0.55rem; background: #fff; }
+.round-group.unassigned { border-style: dashed; }
+.round-group.dragover { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.3); }
+.round-head { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.5rem; background: var(--gray-50, #f9fafb); border-radius: 0.6rem 0.6rem 0 0; flex-wrap: wrap; }
+.round-group.collapsed .round-head { border-radius: 0.6rem; }
+.round-handle { cursor: grab; color: var(--gray-500, #6b7280); font-size: 1rem; padding: 0 0.15rem; user-select: none; }
+.round-handle-spacer { width: 1.3rem; }
+.round-toggle { border: 0; background: transparent; font-size: 0.9rem; width: 2rem; height: 2rem; cursor: pointer; color: var(--gray-700, #374151); border-radius: 0.35rem; }
+.round-name { font-weight: 800; font-size: 0.9rem; flex: 1; min-width: 8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.round-name-input { font: inherit; font-weight: 700; width: 100%; padding: 0.25rem 0.4rem; border: 1px solid var(--primary-500, #4f46e5); border-radius: 0.35rem; }
+.round-name-input[aria-invalid='true'] { border-color: var(--red, #dc2626); }
+.round-cb { display: flex; gap: 0.3rem; align-items: center; font-size: 0.74rem; font-weight: 600; color: var(--gray-700, #374151); white-space: nowrap; }
+.round-count { font-size: 0.72rem; color: var(--gray-500, #6b7280); white-space: nowrap; }
+.round-types { font-size: 0.7rem; color: var(--gray-500, #6b7280); white-space: nowrap; }
+.round-ibtn { border: 1px solid transparent; background: transparent; width: 2.2rem; height: 2.2rem; border-radius: 0.4rem; cursor: pointer; color: var(--gray-700, #374151); font-size: 0.9rem; }
+.round-ibtn:hover { background: var(--gray-200, #e5e7eb); }
+.round-ibtn:disabled { opacity: 0.3; cursor: not-allowed; }
+.round-body { padding: 0.35rem 0.5rem 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.round-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--space-4, 1rem); }
+.round-card-cell { position: relative; min-width: 0; }
+.round-move { position: absolute; right: 0.4rem; bottom: 0.4rem; z-index: 5; }
+.round-move .round-ibtn { width: 2rem; height: 2rem; background: rgba(255, 255, 255, 0.9); border-color: var(--gray-200, #e5e7eb); }
+.round-menu { position: absolute; right: 0; bottom: 2.2rem; z-index: 20; background: #fff; border: 1px solid var(--gray-200, #e5e7eb); border-radius: 0.5rem; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); min-width: 200px; padding: 0.3rem; }
+.round-menu-label { font-size: 0.68rem; color: var(--gray-500, #6b7280); text-transform: uppercase; padding: 0.25rem 0.55rem; }
+.round-menu-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 0.45rem 0.55rem; border-radius: 0.35rem; font: inherit; font-size: 0.82rem; cursor: pointer; }
+.round-menu-item:hover:not(:disabled) { background: var(--gray-100, #f3f4f6); }
+.round-menu-item:disabled { color: var(--gray-300, #d1d5db); cursor: default; }
+.round-empty { font-size: 0.78rem; color: var(--gray-500, #6b7280); padding: 0.4rem 0.2rem; font-style: italic; }
+.round-add-q { align-self: flex-start; font-size: 0.78rem; border: 1px solid var(--gray-300, #d1d5db); background: #fff; border-radius: 0.45rem; padding: 0.4rem 0.65rem; min-height: 2.2rem; cursor: pointer; color: var(--gray-700, #374151); }
+.round-toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.6rem; }
+.round-btn { border: 1px solid var(--gray-300, #d1d5db); background: #fff; border-radius: 0.45rem; padding: 0.4rem 0.65rem; font: inherit; font-size: 0.8rem; cursor: pointer; color: var(--gray-700, #374151); min-height: 2.2rem; }
+
+.round-modal { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); display: flex; align-items: center; justify-content: center; z-index: 1200; padding: 16px; }
+.round-modal-box { background: #fff; border-radius: 0.8rem; max-width: 440px; width: 100%; padding: 1rem; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3); }
+.round-modal-box h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.round-modal-box p { margin: 0 0 0.7rem; font-size: 0.85rem; color: var(--gray-700, #374151); }
+.round-choice { display: block; width: 100%; text-align: left; border: 2px solid var(--gray-200, #e5e7eb); background: #fff; border-radius: 0.6rem; padding: 0.6rem 0.7rem; margin-bottom: 0.5rem; font: inherit; cursor: pointer; min-height: 3rem; }
+.round-choice b { display: block; font-size: 0.9rem; }
+.round-choice span { font-size: 0.78rem; color: var(--gray-500, #6b7280); }
+.round-choice:hover, .round-choice:focus { border-color: var(--primary-500, #4f46e5); outline: none; }
+.round-choice.danger b { color: var(--red, #dc2626); }
+.round-choice.danger:hover, .round-choice.danger:focus { border-color: var(--red, #dc2626); background: #fff5f5; }
+.round-modal-actions { text-align: right; }

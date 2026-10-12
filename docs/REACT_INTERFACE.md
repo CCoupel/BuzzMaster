@@ -667,6 +667,239 @@ extension Chrome interactive non requise pour une mesure programmatique), levant
 précédemment ouverte sur cette résolution pour la zone conduite — les autres réserves de la série
 (flou/QCM_HINT/confirmation pixel/etc., qui nécessitent un œil humain) restent, elles, ouvertes.
 
+## ARDOISE v11.2 — accusés, garde REVEAL et écrans joueur (#246)
+
+Maquettes validées : `docs/mockup/v11.2/ui/` (index : `docs/mockup/INDEX.md`). Contraintes durables :
+`docs/mockup/DECISIONS.md`.
+
+### Règle de réception partagée — `utils/ardoiseReceipt.js`
+
+Une seule règle, utilisée par `/admin` et `/anim` : équipes attendues (au moins un VJoueur), équipes
+hors ligne (tous leurs VJoueurs déconnectés), équipes reçues (`RECEIVED = true`). Ne pas recalculer
+ailleurs.
+
+### `ArdoiseRevealGate` (`components/ArdoiseRevealGate.jsx`)
+
+Motif d'attente, compteur `n/N reçues` (gris « Saisie en cours » pendant `STARTED`), légende des icônes hors
+`STARTED`. L'icône de réception par équipe est `ArdoiseReceiptIcon` (même fichier, à gauche du texte) :
+✓ vert reçue, ⏳ en attente, ⚠ orange hors ligne, glyphe grisé « non confirmée » après un REVEAL forcé
+(`title` et `aria-label` portent le libellé), bouton **« Révéler quand même… »**. Le bouton ouvre une confirmation (`role="dialog"`,
+« Attendre » / « Révéler quand même »). Seule la confirmation envoie `REVEAL {FORCE: true}`.
+Utilisé par `GamePage` (zone ARDOISE, aussi en PAUSED) et `AnimConductPanel` (RÉPONSE en `off`
+avec sous-libellé « en attente »). `AnimArdoiseList` affiche les mêmes icônes et la légende à côté du
+compteur.
+
+- Garde active dès que `phase` vaut `STOPPED` ou `PAUSED`, sans dépendre de `question.STATUS`.
+- `REVEAL_REFUSED` reçu : le motif s'affiche et « Révéler quand même… » est proposé (cas de course).
+- « non confirmée » : glyphe grisé sur l'icône d'une équipe révélée sans accusé (libellé dans l'infobulle).
+
+### Hook `useWebSocket.js` (v11.2)
+
+| Export | Rôle |
+|--------|------|
+| `sendClientTrace(kind, extra)` | Émet un `CLIENT_TRACE` (diagnostic, hors état du jeu) |
+| `ardoiseFinalAck {questionId, hash}` | Accusé de réception pour la tablette |
+| `revealRefused {reason, pending}` + `clearRevealRefused` | Refus de garde |
+| `revealAnswer(force)` | `FORCE` envoyé seulement si `force === true` strict |
+
+### Tablette — `VPlayerPage.jsx` et `ArdoiseKeyboard.jsx`
+
+- Saisie : envoi immédiat du premier caractère, puis au plus une fois toutes les **200 ms**, avec le
+  dernier état toujours envoyé. Annulé au démontage.
+- Sortie de `STARTED` : `ARDOISE_FINAL` avec le texte affiché au gel du clavier, renvoi chaque seconde
+  jusqu'à l'accusé valide, au plus 30 envois par liaison. Une page montée après le STOP
+  n'envoie aucun final (même si elle réaffiche son brouillon). Une page montée en cours de question, sans texte restauré, sans saisie et sans avoir vu le départ de la question, n'en envoie pas non plus : l'animateur doit forcer.
+- Brouillon : `utils/vplayerSession.js` (`vplayer_ardoise_draft` en `sessionStorage`, propre à l'onglet).
+  Restauré au rechargement tant que la question ne change pas, effacé au changement de question ou
+  NEW_GAME.
+- `ArdoiseKeyboard` reçoit une prop `overlay {tone, prefix, spin, text}` décidée par la page. Clavier
+  verrouillé et vide : « Aucune réponse ». Au-delà de 2 000 caractères, les touches qui ajoutent un
+  caractère sont inactives ; ⌫ et ✕ restent actifs.
+- Messages d'état (maquette `vplayer_ardoise_keyboard__final_ack`) : « Envoi de votre réponse… »,
+  « ✓ Réponse reçue », « ✓ Reçu — aucune réponse écrite », « ⚠ Connexion perdue — … », « ⏸ Jeu en pause ».
+  Aucune invitation à continuer ou à écrire hors saisie.
+- Empreinte : `utils/fnv1a.js` (FNV-1a 32 bits, UTF-8). Doit reproduire les vecteurs de
+  `contracts/websocket-actions.md`.
+- Pull-to-refresh : désactivé sur la page joueur uniquement (`VPlayerPage.css`,
+  `overscroll-behavior-y: none`).
+
+### Écrans de session joueur (v11.2)
+
+| Écran | `data-testid` | Déclencheur | Comportement |
+|-------|---------------|-------------|--------------|
+| Onglet périmé | `vplayer-stale-tab` | Session stockée ≠ l'ID de cet onglet | Aucune émission. « …Fermez cet onglet et utilisez l'autre. » |
+| Session ouverte ailleurs | `vplayer-duplicate-session` | `PLAYER_EVICTED DUPLICATE_SESSION` | Rien effacé. Bouton « Reprendre ici » (renvoie `PLAYER_CONNECT`) |
+
+`clearOwnVPlayerSession(ownId)` n'efface `vplayer_*` que si l'ID stocké est celui de l'onglet. Le
+repli par nom a été supprimé (`VPlayerPage`, `EnrollPage`).
+
+## ScoresPage et correction cachée — TV et tablettes (v11.2, #252)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_scores__free_points_tv_toggle.html`.
+
+**`pages/ScoresPage.jsx` (admin)** :
+- `FREE_LIMIT = 999`, `FREE_ERROR = 'Entier de −999 à 999'` (`role="alert"`). `parseFreeAmount` refuse 0 et les valeurs hors bornes.
+- Interrupteur `role="switch"` + `aria-checked`, libellé « 📺 Afficher sur la TV » : **état de page**, `true` à chaque montage (non sauvegardé).
+- Marque `silent-mark` (🔇) sur les boutons ; section « Dernières attributions » (5 entrées, même source que `/history`) avec « 0 pt » pour un crédit nul.
+- Le hook n'envoie `DISPLAY` que si `options.display === false`. La page de jeu n'envoie jamais `DISPLAY`.
+
+**`pages/PlayerDisplay.jsx` (TV) et VJoueur** :
+- `hiddenScoreChange(key)` compare `GameState.SCORE_CHANGE.SEQ` au dernier `SEQ` traité **par effet** (`ranking`,
+  `players`, `celebration`).
+- Un nouveau `SEQ` avec `DISPLAY === false` supprime la surbrillance, la montée de rang, le « +X pts » et la célébration.
+  La référence des scores est mise à jour, donc la hausse visible suivante n'anime que sa propre différence.
+- Même `SEQ` rediffusé : aucun effet. Sans `SCORE_CHANGE` (ancien serveur) : comportement actuel.
+- Aucune modification de mise en page : la TV reste statique.
+
+## Éditeur de manches, jeu et anim (v11.2, #245)
+
+Maquettes validées : `docs/mockup/v11.2/ui/admin_questions_list__rounds_entractes_delete_choice.html` (éditeur) et
+`docs/mockup/v11.2/ui/game_round_indicator__admin_anim_tv_next_entracte.html` (jeu, anim, TV).
+
+**Éditeur (`QuestionsPage.jsx`, `RoundGroup.jsx`, `RoundDeleteDialog.jsx`, `utils/questionOrder.js`, `utils/roundsEdit.js`)** :
+- Groupes de manches repliables ; l'état replié est mémorisé par navigateur (`localStorage` `buzz.rounds.collapsed`) ; bouton « Tout replier ».
+- Réordonner : ▲▼, « Déplacer vers… », glisser-déposer (questions et manches). Le glisser-déposer HTML5 n'est pas testé en navigateur réel.
+- Création de manche : nom et case « entractes » cochée (crée « Début / Fin de la manche »).
+- « + Question », en pied de chaque manche (`RoundGroup.jsx`), ajoute à la fin de cette manche. Une question créée avec le formulaire « Nouvelle Question », champ « Manche » laissé sur « Sans manche » (visible seulement s'il existe des manches), est ajoutée à la fin de « Sans manche ».
+- Changer la manche d'une question existante (champ « Manche ») envoie `ROUNDS_UPDATE` après enregistrement. L'affichage est optimiste jusqu'à la confirmation du serveur.
+- Suppression : fenêtre `RoundDeleteDialog` avec le focus sur « Conserver », Échap ferme, Tab reste dans la fenêtre. Choix : Conserver (`KEEP`) ou Supprimer aussi (`DELETE`). Pour une manche vide, seul « Supprimer la manche » est proposé (`KEEP`).
+- Sans manche, le glisser-déposer et « Mélanger » restent sur `REORDER_QUESTIONS` (comportement v11.1). Avec des manches, ils passent par `ROUNDS_UPDATE`, et le mélange se fait dans chaque groupe.
+
+**Admin, page de jeu (`GamePage.jsx`)** : « À suivre : #id texte » pour une question, « À suivre : 🎬 titre » (violet) pour une entracte,
+pastille « → Manche i · nom » si la suivante ouvre une autre manche, « Fin du quiz » sans bouton. Les titres de manche sont repliables, avec « n/m jouées ».
+Les entractes sont en italique et se lancent par clic.
+
+**Anim (`AnimNextButton`, `AnimPage`, `AnimConductPanel`)** : « Question suivante » + #id texte ; « Manche suivante : nom » (orange, quand `NEW_ROUND`) ;
+« Lancer l'entracte » (violet) ; pendant une entracte, « 🎬 Entracte en cours » et « Terminer l'entracte » (`ENTRACTE_SET{ACTIVE:false}`, jamais `true`).
+Pastille « Manche 2/3 · nom · 3/5 » (« · entracte » si la position vaut 0 ; « Sans manche · 2/4 » sans manche).
+
+**TV (`PlayerDisplay.jsx`)** : pastille `tv-round-pill` si `ROUND_INDEX > 0` ; titre `tv-round-title` pendant le READY de la première question d'une manche (`FIRST_OF_ROUND`), dans la bande du chrono (`top: 6.2vh`, `max-width: 32vw`, à gauche, sous la pastille), et non plus centré à 12vh, hors de la zone question.
+Positions absolues, `overflow: hidden`, ellipsis : la TV reste statique, sans défilement. Pas de pastille sur le VJoueur, ni pour une entracte.
+Le rendu sur une vraie TV 16:9 reste à valider à l'œil.
+
+## Bloc d'attribution compact et niveau joueur (v11.2, #254)
+
+Maquettes validées : `docs/mockup/v11.2/ui/admin_game_award__compact_block_hints_toggle.html` (remplace
+`compact_block_penalty`) et `docs/mockup/v11.2/ui/admin_game_award__team_or_player_level_hints_toggle.html`.
+
+- **Niveau** : `resolveAwardLevel(question)` (`utils/pointsAward.js`) donne `TEAM` ou `PLAYER`. Niveau équipe : cases dans
+  l'en-tête des cartes, lot `TEAM_POINTS_BATCH`. Niveau joueur : cases sur les lignes de joueurs, lot `BUMPER_POINTS_BATCH`.
+- **Champ « Points »** : unifié, en tête de la colonne Équipes, éditable en REVEALED. Il n'y a plus de montant propre au bloc.
+- **`TeamAwardBar`** : ligne 1 = source du montant ; ligne 2 = « Tout sélectionner / Tout désélectionner » (icônes, `aria-label`)
+  et le bouton. Le libellé du bouton dépend du montant : « Attribuer les points (N) » ou « Appliquer les pénalités (N) »
+  (rouge). Une raison de blocage s'affiche sous le bouton (ex. « Aucune pénalité définie pour cette question »).
+- **Commutateur « Tenir compte des indices »** : `role="switch"`, nom accessible « Tenir compte des indices ». Visible seulement
+  pour un QCM avec indices révélés et un montant positif. Activé par défaut ; réarmé à chaque question ou phase.
+- **`QcmAnswerPicker`** : un clic sur une réponse sélectionne les équipes ou joueurs de cette réponse (hors déjà crédités). Le
+  champ reprend la base (bonne réponse) ou la pénalité de la question (mauvaise réponse).
+- **Grisage** : une équipe créditée est grisée « ✓ déjà créditée ». Un joueur crédité à titre individuel affiche « ✓ déjà crédité ±N » (`TeamCard`). Les joueurs d'une équipe créditée au niveau équipe sont
+  grisés « ✓ équipe déjà créditée ». Le résultat d'un lot joueurs indique « N joueurs ignorés (équipe déjà créditée) ».
+- **Éditeur de question QCM** : champ « Pénalité mauvaise réponse ». Saisie de 0 à 100, le signe − est appliqué (valeur stockée
+  entre −100 et 0). 0 = aucune pénalité, valeur par défaut. Le champ n'apparaît que pour les QCM (et pas pour MEMOTION).
+
+## Attribution groupée — TeamAwardBar, QcmAnswerPicker, TeamCard (v11.2, #244/#251)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_game_team_award__selection.html`. Affichée sur `/admin` (`GamePage`)
+après le REVEAL. La variante animateur n'est pas livrée en v11.2.
+
+| Composant | Rôle |
+|-----------|------|
+| `TeamAwardBar` (`components/TeamAwardBar.jsx`) | Aucun champ de montant : le montant est le champ « Points » de la page. Ligne 1 : N sélectionnés et source du montant, commutateur « Indices » s'il est visible ; ligne 2 : icônes « Tout sélectionner / Tout désélectionner » et bouton « Attribuer les points (N) » (« Appliquer les pénalités (N) », rouge, si négatif ou nul après une mauvaise réponse). Désactivé à N = 0 et pendant l'envoi. Raison de blocage affichée en texte sous le bloc (`role="status"`, classe `award-reason`). Le montant est borné à ±999 (`AWARD_LIMIT`) |
+| `QcmAnswerPicker` (`components/QcmAnswerPicker.jsx`) | Les quatre réponses QCM cliquables ; `teamCounts[clé]` = nombre d'équipes ayant donné la réponse, ou de joueurs au niveau joueur (prop `unit`). Marque « ✓ bonne réponse » |
+| `TeamCard` (`components/TeamCard.jsx`) | Case à cocher (`selectable`, `selected`) ; `awardedInfo` = `{POINTS}` si l'équipe est dans `AWARDED_TEAMS` : case désactivée, classe `award-done`, mention « ✓ déjà créditée ±N » |
+
+Logique dans `GamePage.jsx` :
+- `pickQcmAnswer(color)` : sélection = équipes de cette réponse **hors `awardedTeams`** ; montant = points de la
+  question (bonne réponse) ou −1 (mauvaise) ; `awardSource` le dit à l'animateur.
+- `changeAwardAmount` : modifie le montant et passe `awardEdited` à vrai, sans changer la sélection.
+- `giveAwardPoints()` : appelle `teamPointsBatch(QUESTION.ID, entries)` (`useWebSocket.js`). Si la WebSocket est
+  fermée, « Connexion perdue — réessayez. ». Garde de **8 s** (`awardGuardRef`) : sans réponse, le bouton se
+  réactive avec « Pas de réponse du serveur — réessayez. ».
+- Réducteur `teamPointsBatchResult` (`TEAM_POINTS_BATCH_RESULT`) : le résultat est traité **à son arrivée, même
+  après la garde** (il annule la garde). Accepté : toast « ✓ … », sélection vidée. Refusé `UNKNOWN_TEAM` : la
+  sélection retire les équipes inconnues. Autres refus : « Attribution refusée : … ».
+- `awardedTeams` vient de `AWARDED_TEAMS`, reçu désormais aussi par `/admin` (#244/#251).
+
+## Menu Préparation, LaunchGameHost et verrou (v11.2, #253)
+
+- **Entrée « 🚀 Lancer la partie »** dans le groupe Préparation (`NavGroupMenu.jsx`, `Navbar.jsx`) : en ligne sur les
+  grands écrans, dans le menu unique sur les écrans étroits. Toutes phases. Si la popup est ouverte sur un autre poste :
+  `aria-disabled` et infobulle « Popup … déjà ouverte sur un autre poste » (`LOCKED_BY_OTHER_TITLE`).
+- **`LaunchGameHost`** (`components/LaunchGameHost.jsx`), monté sur les routes admin (`App.jsx`) :
+  - **Ouverture** : envoie `LAUNCH_LOCK OPEN`, puis attend au plus 1 s que `LAUNCH_LOCK.OWNER` égale sa connexion
+    (`connectionId`, lu dans `MSG.CLIENT_ID` de `HELLO_ACK`). Sans confirmation sous 1 s, la popup ne s'ouvre pas et affiche un message d'erreur.
+  - **Popup** : rendue par portail sur `document.body` (plein écran). Renouvellement `OPEN` toutes les 15 s.
+  - **Fermeture** : `CLOSE` à l'annulation, à Échap, après un lancement réussi, à `pagehide` (fermeture ou navigation), et au démontage de l'hôte (changement de route). Un verrou orphelin (verrou à notre nom sans popup ouverte, p. ex. réponse arrivée après l'attente de 1 s) est aussi fermé.
+  - **Verrou perdu popup ouverte** : message « La fenêtre a expiré (plus de 45 s sans signe de vie de ce poste) :
+    rouvrez « Lancer la partie » », confirmation désactivée.
+  - **Entracte** : message « Impossible pendant une entracte : sortez d'abord de l'entracte. » (barre, haut droite) ;
+    aucun `OPEN` envoyé.
+  - **Refus serveur** (`LAUNCH_LOCK_REFUSED`, `NEW_GAME_REFUSED`) : textes de `LaunchGameDialog.jsx` :
+    « Lancement refusé par le serveur : impossible pendant une entracte. Sortez d'abord de l'entracte. » (`ENTRACTE_ACTIVE`) ;
+    « Lancement refusé par le serveur : une autre fenêtre « Lancer la partie » est ouverte sur un autre poste. » (`LAUNCH_IN_PROGRESS`) ; « Lancement refusé : supprimer les joueurs des tablettes exige de remettre les scores à zéro. » (`PLAYERS_REQUIRE_SCORES`). Le verrou tenu ailleurs (`LOCKED_BY_OTHER`) affiche un toast de l'hôte : « Une fenêtre « Lancer la partie » est déjà ouverte sur un autre poste. ».
+- **Autres postes** : bandeau « 🔒 Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu
+  suspendues. » sous la barre admin. Page de jeu : START, STOP, PAUSE, REPONSE, sélection de question, clics sur les
+  équipes et les joueurs, et boutons d'attribution désactivés avec le motif.
+- **Anim** : bandeau équivalent, gestes de conduite de la première ligne éteints (« suspendu »), et toast local sur
+  `ACTION_REFUSED` (`AnimPage`).
+- **TV et VJoueur** : aucun changement.
+
+## LaunchGameDialog — popup « Lancer la partie » (v11.2, #243)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_new_game__purge_popup_details.html`. Composant
+`components/LaunchGameDialog.jsx` (CSS `LaunchGameDialog.css`), monté par `LaunchGameHost` (#253) : plus de bouton sur la page de jeu ni sur le Backstage.
+
+- Quatre cases : **Scores** et **Questions** cochées par défaut ; **Joueurs des tablettes** et **Équipes**
+  décochées.
+- « Joueurs des tablettes » coche et verrouille « Scores » (`disabled`, note explicative).
+- Compteurs affichés depuis l'état reçu (`getLaunchCounts`) : équipes, joueurs, joueurs de tablette connectés,
+  questions jouées sur le total.
+- Bouton : « Lancer la partie », ou « Lancer sans rien effacer » si aucune case n'est cochée. Envoi désactivé
+  (`sent`) après le premier clic.
+- Avertissements : « Dans tous les cas : la question en cours s'arrête. » et, si une question tourne, « ⚠ Une
+  question est en cours : elle sera interrompue. ».
+- `NEW_GAME_REFUSED` (`newGameRefused`, réducteur de `useWebSocket.js`) : la popup reste ouverte et affiche le
+  motif : `PLAYERS_REQUIRE_SCORES` (« Lancement refusé : supprimer les joueurs des tablettes exige de remettre les
+  scores à zéro. ») ou `ENTRACTE_ACTIVE` (« Impossible pendant une entracte : sortez d'abord de l'entracte »).
+- **Garde de 5 s** (`NO_RESPONSE_DELAY_MS`) : sans confirmation, la popup se débloque et affiche « Pas de réponse du
+  serveur — réessayez. ». Si la WebSocket est fermée à l'envoi : « Connexion perdue — réessayez. ».
+- **Fermeture** : la popup se ferme sur le lancement observé (phase passée à `NEW_GAME`, ou données renouvelées si la
+  phase valait déjà `NEW_GAME` à l'envoi). Une réponse **tardive**, arrivée après la garde de 5 s, ferme aussi la popup :
+  un second « Lancer » ne rejoue pas un `NEW_GAME`.
+- Joueurs des tablettes : libellé « N inscrits, M connectés » (compteurs `vplayers` et `vplayersConnected`).
+- `newGame(options)` (`useWebSocket.js`) envoie toujours les quatre champs.
+
+## Page Équipes — verrou pendant une question (v11.2, #249)
+
+Maquette validée : `docs/mockup/v11.2/ui/admin_teams__lock_during_question.html`.
+
+- `TeamsPage` : quand `gameState.TEAMS_LOCKED` est vrai, le champ de nom et le bouton ✕ sont `disabled`,
+  avec une infobulle (`title`, `aria-describedby`) et un bandeau `role="status"` ; une icône 🔒 apparaît sur
+  l'équipe. La garde reste aussi dans `handleRenameTeam` et `handleDeleteTeam`.
+- Renommage : `handleRenameTeam` envoie `{ ...teams[ancienne], NAME: nouvelle }` sous la nouvelle clé.
+- Refus (`TEAMS_UPDATE_REFUSED`, réducteur `teamsUpdateRefused` + `clearTeamsUpdateRefused`) : message
+  `role="alert"` « Renommage refusé : une question est en cours. » (ou « Suppression refusée… »). Les champs sont
+  remontés au nom d'origine.
+- Identité d'équipe pour l'ARDOISE : `utils/ardoiseOrder.js` lit `team.name` (la clé) avant `team.NAME`.
+
+## Grille ARDOISE adaptative — TV, REVEAL (v11.2, #250)
+
+Maquette validée : `docs/mockup/v11.2/ui/tv_ardoise_reveal__adaptive_grid.html`. Implémentée dans
+`PlayerDisplay.jsx` (`.ardoise-*`) et `utils/ardoiseTvLayout.js`. Plus de plafond à 8 équipes : toutes les
+équipes sont affichées, sans défilement.
+
+| Équipes | Rangées | Colonnes | Lignes de réponse |
+|---------|---------|----------|-------------------|
+| 1 à 5 | 1 | N | 2 |
+| 6 à 12 | 2 | ⌈N/2⌉ | 2 |
+| 13 à 16 | 2 | ⌈N/2⌉ | 1 |
+| 17 et plus | 3 | ⌈N/3⌉ | 1 |
+
+- Grille : `overflow: hidden`, `minmax(0, 1fr)`, `min-height: 0`. Variables `--cols`, `--rows`, `--lines`,
+  `--fh`, `--fa` posées sur la grille. Polices proportionnelles à la largeur d'une carte.
+- Réponse coupée par `-webkit-line-clamp: var(--lines)` (« … »). Le texte complet reste dans `title`.
+- `-webkit-box` remplace le centrage flex : la réponse est en haut de la carte, comme dans la maquette.
+
 ## Layout GamePage (Admin) - v2.12.0
 
 Layout avec timer pleine largeur + 3 colonnes harmonisées :
@@ -911,6 +1144,10 @@ Page d'historique des événements de jeu :
   - Boutons "Tout ouvrir" / "Tout fermer"
   - **Vue réduite** : Résumé des points par équipe et par joueur (badges colorés)
   - **Vue détaillée** : Tableau avec Heure, Équipe, Joueur, Temps, Points
+
+**Note v11.2 (#249)** : `TEAM_DELETED` (événement d'audit de suppression d'équipe) est filtré au chargement
+(`HistoryPage.jsx`) : pas de groupe « Question #unknown », pas de ligne à 0 point, pas de compteur. L'événement
+reste dans `history.json` et dans la réponse de `GET /history`.
 
 ### Logs Page (v2.42.0)
 
@@ -1417,7 +1654,7 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 **Pages admin** :
 | Route | Fonctionnalités |
 |-------|-----------------|
-| `/admin/game` | Contrôle jeu, équipes, timer — bouton "NOUVELLE PARTIE" en phase STOPPED |
+| `/admin/game` | Contrôle jeu, équipes, timer — lancement de partie dans le menu Préparation (#253) |
 | `/admin/quiz` | Zone Quiz (Nom/Thème/Notes) + Zone Ambiance (fonds d'écran) + Zone Questions (CRUD) |
 | `/admin/config` | Paramètres serveur, effet néon, WiFi defaults + SSID2, OTA firmware |
 | `/admin/backup` | Sauvegarde, restauration, réinitialisation |
@@ -1433,11 +1670,11 @@ Fichiers modifiés : `web/src/pages/QuestionsPage.jsx`, `web/src/pages/Questions
 
 **Décisions d'architecture** :
 - Label "Questions" → "Quiz" (v4.0.1) — scope élargi (métadonnées + fonds + questions)
-- Bouton "NOUVELLE PARTIE" déclenche `NEW_GAME` avec reset complet depuis STOPPED uniquement
+- Entrée « 🚀 Lancer la partie » du menu Préparation (v11.2, #253) ouvre `LaunchGameDialog` et envoie `NEW_GAME` avec options (anciennement « NOUVELLE PARTIE », reset complet depuis STOPPED uniquement)
 - Métadonnées quiz dans Zone Quiz (centralisées), pas sur GamePage
 
 **Fichiers clés** :
-- `GamePage.jsx` : bouton NOUVELLE PARTIE + panneaux MEMOTION GRID/SELECTED/QUESTION/REVEAL
+- `GamePage.jsx` : panneaux MEMOTION GRID/SELECTED/QUESTION/REVEAL
 - `QuestionsPage.jsx` : 3 zones Quiz/Ambiance/Questions + éditeur MEMOTION
 - `PlayerDisplay.jsx` : TV toutes phases (STATIQUE) — NEW_GAME, jeu normal, MEMOTION
 - `GameContext.jsx` : GameProvider prop `endpoint`, routing WS

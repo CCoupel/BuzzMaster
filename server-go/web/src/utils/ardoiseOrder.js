@@ -39,7 +39,8 @@ export function sortArdoiseEntries(teams, ardoiseAnswers) {
   const answered = []
   const unanswered = []
   teams.forEach((team, idx) => {
-    const teamName = team.NAME || team.name
+    // #249 : identité = clé — `name` (clé de la map teams) avant `NAME`
+    const teamName = team.name || team.NAME
     const answer = answers[teamName]
     if (answer) {
       const orderKey = answer.STARTED_AT > 0 ? answer.STARTED_AT : answer.SUBMITTED_AT

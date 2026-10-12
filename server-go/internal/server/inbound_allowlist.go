@@ -39,6 +39,9 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// ClientTypeAnim added v6.2.0 (#155) — interface animateur.
 	protocol.ActionHello: {ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim},
 
+	// CLIENT_TRACE (v11.2, #246): diagnostic only, no effect on the game.
+	protocol.ActionClientTrace: {ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim},
+
 	// --- Conduite en direct — admin + anim (v6.2.0, #155/#156) --------
 	// Exact périmètre acté for the interface animateur (cadrage
 	// _work/reports/plan-20260812-141735.md §1, plan B3
@@ -56,6 +59,14 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionReveal:       {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionBumperPoints: {ClientTypeAdmin, ClientTypeAnim},
 	protocol.ActionTeamPoints:   {ClientTypeAdmin, ClientTypeAnim},
+	// TEAM_POINTS_BATCH (v11.2, #244/#251): admin only; the anim keeps the unit TEAM_POINTS.
+	protocol.ActionTeamPointsBatch: {ClientTypeAdmin},
+	// LAUNCH_LOCK (v11.2, #253): the "Lancer la partie" popup lock, admin only.
+	protocol.ActionLaunchLock: {ClientTypeAdmin},
+	// ROUNDS_UPDATE (v11.2, #245): rounds structure, admin only.
+	protocol.ActionRoundsUpdate: {ClientTypeAdmin},
+	// BUMPER_POINTS_BATCH (#254): reserved, admin only; no handler yet.
+	protocol.ActionBumperPointsBatch: {ClientTypeAdmin},
 	// RAFALE_VALIDATE/INVALIDATE (v8.0.0, #107, contract rafale.md §5.1):
 	// judging the current question's answer is "conduite en direct", same
 	// périmètre as REVEAL/BUMPER_POINTS/TEAM_POINTS above.
@@ -99,7 +110,7 @@ var inboundActionAllowlist = map[string][]ClientType{
 	// the "conduite en direct" block above. A pause engages the whole room,
 	// not just the round in progress; the animateur sees it (filter +
 	// indicator) but cannot trigger or lift it.
-	protocol.ActionEntracteSet: {ClientTypeAdmin},
+	protocol.ActionEntracteSet: {ClientTypeAdmin, ClientTypeAnim}, // v11.2, #245: anim may END an entracte (ACTIVE:true refused in the handler)
 	// UPDATE_ENTRACTE_CONFIG (v6.5.2, #119, C1, contracts/websocket-actions.md
 	// §"UPDATE_ENTRACTE_CONFIG"): saves the panel configuration from the Quiz
 	// page — admin only, same reasoning as ENTRACTE_SET above.
@@ -213,6 +224,7 @@ var inboundActionAllowlist = map[string][]ClientType{
 	protocol.ActionPlayerConnect:    {ClientTypeVPlayer},
 	protocol.ActionVPlayerQCMAnswer: {ClientTypeVPlayer},
 	protocol.ActionArdoiseInput:     {ClientTypeVPlayer},
+	protocol.ActionArdoiseFinal:     {ClientTypeVPlayer}, // v11.2, #246
 }
 
 // IsActionAllowed reports whether clientType may send action, per
@@ -319,6 +331,7 @@ var entracteAllowedActions = map[string]bool{
 	protocol.ActionRegieMessageClear:    true,
 	protocol.ActionUpdateEntracteConfig: true,
 	protocol.ActionPong:                 true,
+	protocol.ActionClientTrace:          true, // diagnostic: accepted in every phase (#246 arbitrage)
 }
 
 // IsActionAllowedDuringEntracte reports whether action may proceed while

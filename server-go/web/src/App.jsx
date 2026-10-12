@@ -2,6 +2,7 @@ import React from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { GameProvider, useGame } from './hooks/GameContext'
 import Navbar from './components/Navbar'
+import LaunchGameHost, { LaunchLockBanner } from './components/LaunchGameHost'
 import RegieMessageBar from './components/RegieMessageBar'
 import GamePage from './pages/GamePage'
 import ScoresPage from './pages/ScoresPage'
@@ -56,9 +57,11 @@ function AppContent() {
   const isAdminRoute = location.pathname.startsWith('/admin')
   const hideNavbar = !isAdminRoute
 
-  return (
+  const page = (
     <div className="app">
       {!hideNavbar && <Navbar connectionStatus={status} clientCounts={clientCounts} serverVersion={version} bumpers={bumpers} />}
+      {/* #253 — bandeau « verrou actif » quand la popup « Lancer la partie » est ouverte sur un AUTRE poste */}
+      {!hideNavbar && <LaunchLockBanner />}
       <main className={`main-content ${hideNavbar ? 'fullscreen' : ''}`}>
         <Routes>
           {/* Player enrollment page — connected via GameProvider endpoint="/ws/player" */}
@@ -101,6 +104,9 @@ function AppContent() {
       {isAdminRoute && <RegieMessageBar />}
     </div>
   )
+
+  // #253 — l'hôte (entrée de menu, popup en portail, verrou) n'existe que sur les pages admin.
+  return isAdminRoute ? <LaunchGameHost>{page}</LaunchGameHost> : page
 }
 
 export default function App() {

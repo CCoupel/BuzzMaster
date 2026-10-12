@@ -133,12 +133,13 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true } },
       gameState: { phase: 'STARTED', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: true },
     }))
     rerender(<VPlayerPage />)
 
-    expect(mock.sendMessage).toHaveBeenCalledTimes(1)
+    expect(mock.sendMessage.mock.calls.filter(([a]) => a === 'BUTTON')).toHaveLength(1)
     // Strictly identical to a normal buzz — no client timestamp field added.
     expect(mock.sendMessage).toHaveBeenCalledWith('BUTTON', { ID: BUMPER_ID, button: 'A' })
   })
@@ -158,11 +159,12 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true } },
     }))
     rerender(<VPlayerPage />)
 
-    expect(mock.sendMessage).toHaveBeenCalledTimes(1)
+    expect(mock.sendMessage.mock.calls.filter(([a]) => a === 'BUTTON')).toHaveLength(1)
   })
 
   it('déclencheur (a) : passage observé en PREPARE (même question rejouée) vide la file SANS envoi', async () => {
@@ -180,6 +182,7 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: false } },
       gameState: { phase: 'STARTED', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: true },
     }))
@@ -191,6 +194,7 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: false } },
       gameState: { phase: 'PREPARE', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: true },
     }))
@@ -253,6 +257,7 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true } },
       gameState: { phase: 'REVEALED', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: true },
     }))
@@ -271,10 +276,11 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true } },
     }))
     rerender(<VPlayerPage />)
-    expect(mock.sendMessage).toHaveBeenCalledTimes(1)
+    expect(mock.sendMessage.mock.calls.filter(([a]) => a === 'BUTTON')).toHaveLength(1)
 
     // Further re-renders (e.g. an unrelated game-state update) must not
     // resend the already-flushed buzz. Another fresh `bumpers` reference,
@@ -282,10 +288,11 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: true } },
       gameState: { phase: 'STARTED', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: false },
     }))
     rerender(<VPlayerPage />)
-    expect(mock.sendMessage).toHaveBeenCalledTimes(1)
+    expect(mock.sendMessage.mock.calls.filter(([a]) => a === 'BUTTON')).toHaveLength(1)
   })
 })

@@ -1098,28 +1098,17 @@ func writeGenerateError(w http.ResponseWriter, httpStatus int, code, message str
 // returns the highest value found (0 if none/unset) — the base for
 // ORDER = max+1+i on generated questions (contract §5.2).
 func (h *HTTPServer) maxQuestionOrder() int {
+	// #245: generated questions go to the END of the "Sans manche" group, so the base is the
+	// highest ORDER of THAT group (with no round at all, the whole quiz — unchanged).
 	questionsDir := filepath.Join(h.dataDir, "files", "questions")
-	entries, err := os.ReadDir(questionsDir)
-	if err != nil {
+	QuestionFilesMu.Lock()
+	defer QuestionFilesMu.Unlock()
+	rounds := LoadRoundsFile(questionsDir).Rounds
+	next := NextOrderInGroup(OrderQuestions(ReadQuestionMaps(questionsDir), rounds), 0)
+	if next <= 0 {
 		return 0
 	}
-	max := 0
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(questionsDir, entry.Name(), "question.json"))
-		if err != nil {
-			continue
-		}
-		var q struct {
-			Order int `json:"ORDER"`
-		}
-		if json.Unmarshal(data, &q) == nil && q.Order > max {
-			max = q.Order
-		}
-	}
-	return max
+	return next - 1
 }
 
 // generateAcceptedBody is the 202 response body (contract

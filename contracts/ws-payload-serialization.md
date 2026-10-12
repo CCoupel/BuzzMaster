@@ -58,6 +58,7 @@ Les besoins TV et VPlayer sont donc identiques côté messages.
 | `teams[*].NAME / COLOR / SCORE / STATUS` | ✅ | ✅ | ✅ (toutes équipes) |
 | `teams[*].MEMBERS` | ✅ | ✅ | ❌ |
 | `bumpers[*].ID / NAME / TEAM / CONNECTED / IS_VIRTUAL / TIME / ANSWER_COLOR` | ✅ | ✅ | ✅ (tous buzzers) |
+| `bumpers[*].ANSWERED_COLOR` (**v11.2, #255**) | ✅ | ✅ (TV, anim et VJoueur, mêmes chemins que `ANSWER_COLOR` ; toujours présent, `""` compris) | Toléré s'il est recopié avec le bumper ; non requis (le firmware ne le lit pas) |
 | `bumpers[*].FIRMWARE_VERSION` | ✅ | ❌ | ❌ |
 | `bumpers[*].IS_OUTDATED / OTA_STATUS` | ✅ | ❌ | ❌ |
 | `bumpers[*].ACK_PENDING` | ✅ | ❌ | ❌ |

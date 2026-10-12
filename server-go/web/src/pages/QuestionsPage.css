@@ -1942,3 +1942,14 @@
   margin: 0;
   line-height: 1.5;
 }
+
+/* #254 — champ « Pénalité mauvaise réponse » (maquette admin_question_editor__qcm_wrong_penalty_default0) */
+.penalty-group { border: 2px solid #7c3aed; background: #f5f3ff; border-radius: 0.55rem; padding: 0.45rem 0.55rem 0.55rem; position: relative; }
+.penalty-tag { position: absolute; top: -0.6rem; right: 0.5rem; background: #7c3aed; color: #fff; font-size: 0.62rem; font-weight: 800; padding: 0.05rem 0.4rem; border-radius: 999px; }
+.penalty-default-chip { display: inline-block; font-size: 0.7rem; font-weight: 700; color: #374151; background: #e5e7eb; border-radius: 999px; padding: 0.05rem 0.45rem; margin-left: 0.3rem; }
+.penalty-input { display: flex; align-items: center; border: 1px solid #d1d5db; border-radius: 0.45rem; background: #fff; overflow: hidden; }
+.penalty-minus { padding: 0 0.1rem 0 0.55rem; font-weight: 800; color: #dc2626; }
+.penalty-input input { border: 0; padding: 0.5rem 0.4rem; color: #dc2626; font-weight: 800; width: 100%; }
+.penalty-input.invalid { border-color: #dc2626; box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15); }
+.penalty-err { font-size: 0.74rem; color: #dc2626; font-weight: 700; margin: 0.3rem 0 0; }
+.penalty-effect { margin: 0.35rem 0 0; font-size: 0.74rem; color: #374151; }

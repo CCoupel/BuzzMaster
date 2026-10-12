@@ -389,6 +389,16 @@ export default function TeamCard({
   memoryStats = null, // { pairs, errors, totalPairs, pointsPerPair, errorPenalty, completionBonus }
   questionType = null, // Question type (QCM, NORMAL, MEMORY)
   rafaleStats = null, // { counter, suggestedPoints } — v8.0.0, #16/#199, contrat rafale.md §6
+  // #244/#251 — attribution groupée (après REVEAL) : case à cocher, grisage « déjà créditée »,
+  // aperçu du montant. `selectable` faux hors REVEALED → rien de tout cela n'est rendu.
+  selectable = false,
+  selected = false,
+  onSelectChange = null,
+  awardedInfo = null, // { POINTS } si l'équipe est dans AWARDED_TEAMS
+  awardPreview = null, // montant prévu (équipe sélectionnée)
+  // #254 — attribution au niveau JOUEUR : cases sur les lignes de joueurs (pas de case d'équipe).
+  // { selected(mac), onChange(mac, checked), awarded(mac) → {POINTS}|null, preview(mac) → number|null }
+  playerAward = null,
 }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [otaBuzzer, setOtaBuzzer] = useState(null) // buzzer object for OTA modal
@@ -473,7 +483,7 @@ export default function TeamCard({
     <motion.div
       layoutId={`team-${name}`}
       layout
-      className={`team-card ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${isWaitingForBuzz ? 'waiting-buzz' : ''} ${className}`}
+      className={`team-card ${selectable && selected ? 'award-selected' : ''} ${selectable && awardedInfo ? 'award-done' : ''} ${active ? 'active' : ''} ${ready ? 'ready' : ''} ${isWaiting ? 'waiting' : ''} ${isWaitingForBuzz ? 'waiting-buzz' : ''} ${className}`}
       style={{ '--team-color': rgbColor, zIndex: active ? 10 : 1 }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -485,6 +495,18 @@ export default function TeamCard({
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
       >
+        {selectable && (
+          <input
+            type="checkbox"
+            className="team-select-checkbox"
+            checked={selected && !awardedInfo}
+            disabled={!!awardedInfo}
+            onChange={(e) => onSelectChange?.(name, e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Sélectionner ${name}`}
+            title={awardedInfo ? 'Déjà créditée pour cette question' : undefined}
+          />
+        )}
         <div className="team-color-indicator" />
         <div className="team-header-content">
           {rankBadge && <span className="rank-badge">{rankBadge}</span>}
@@ -552,6 +574,16 @@ export default function TeamCard({
         >
           {score} Pts
         </motion.span>
+        {selectable && awardedInfo && (
+          <span className="award-done-chip">
+            ✓ déjà créditée {awardedInfo.POINTS > 0 ? '+' : ''}{awardedInfo.POINTS}
+          </span>
+        )}
+        {selectable && !awardedInfo && selected && awardPreview !== null && (
+          <span className={`award-preview${awardPreview < 0 ? ' neg' : ''}`}>
+            {awardPreview > 0 ? '+' : ''}{awardPreview}
+          </span>
+        )}
         {/* Score decomposition tooltip */}
         {showTooltip && (teamPoints > 0 || bumperTotal > 0) && (
           <div className="score-tooltip">
@@ -620,6 +652,18 @@ export default function TeamCard({
                 onClick={handleBuzzerClick}
               >
                 <div className="buzzer-info" style={{ flexWrap: 'wrap' }}>
+                  {playerAward && (
+                    <input
+                      type="checkbox"
+                      className="player-select-checkbox"
+                      checked={playerAward.selected(buzzer.mac) && !playerAward.awarded(buzzer.mac) && !playerAward.teamAwarded}
+                      disabled={!!playerAward.awarded(buzzer.mac) || !!playerAward.teamAwarded}
+                      onChange={(e) => playerAward.onChange(buzzer.mac, e.target.checked)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Sélectionner ${buzzer.name || buzzer.mac}`}
+                      title={playerAward.awarded(buzzer.mac) ? 'Déjà crédité pour cette question' : (playerAward.teamAwarded ? 'Équipe déjà créditée pour cette question' : undefined)}
+                    />
+                  )}
                   {buzzer.isVPlayer ? (
                     <div className="buzzer-vplayer-multicolor">
                       <svg className="vplayer-multicolor-badge" viewBox="0 0 24 24">
@@ -693,6 +737,19 @@ export default function TeamCard({
                   )}
                 </div>
                 <div className="buzzer-right">
+                  {playerAward && playerAward.awarded(buzzer.mac) && (
+                    <span className="award-done-chip">
+                      ✓ déjà crédité {playerAward.awarded(buzzer.mac).POINTS > 0 ? '+' : ''}{playerAward.awarded(buzzer.mac).POINTS}
+                    </span>
+                  )}
+                  {playerAward && !playerAward.awarded(buzzer.mac) && playerAward.teamAwarded && (
+                    <span className="award-done-chip">✓ équipe déjà créditée</span>
+                  )}
+                  {playerAward && !playerAward.awarded(buzzer.mac) && !playerAward.teamAwarded && playerAward.selected(buzzer.mac) && playerAward.preview(buzzer.mac) !== null && (
+                    <span className={`award-preview${playerAward.preview(buzzer.mac) < 0 ? ' neg' : ''}`}>
+                      {playerAward.preview(buzzer.mac) > 0 ? '+' : ''}{playerAward.preview(buzzer.mac)}
+                    </span>
+                  )}
                   {buzzer.timestamp && gameTime && (
                     <span className="buzzer-time">
                       {((buzzer.timestamp - gameTime) / 1000000).toFixed(3)}s

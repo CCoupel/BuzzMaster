@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
 import Button from '../components/Button'
@@ -111,8 +111,18 @@ function ReclaimConfirmModal({ bumper, enrollmentActive, onRelease, onDelete, on
   )
 }
 
+// #249 — infobulle des champs verrouillés (maquette admin_teams__lock_during_question)
+const TEAMS_LOCKED_HINT = 'Pendant une question, on ne peut ni renommer ni supprimer une équipe. Réessayez après la révélation de la réponse.'
+
 export default function TeamsPage() {
-  const { teams, bumpers, gameState, updateConfig, showQRCode, hideQRCode, setVirtualPlayerLimit, deleteBumper, releaseBumperName } = useGame()
+  const { teams, bumpers, gameState, updateConfig, showQRCode, hideQRCode, setVirtualPlayerLimit, deleteBumper, releaseBumperName, teamsUpdateRefused, clearTeamsUpdateRefused } = useGame()
+  // #249 — liste des équipes verrouillée pendant une question (de la sélection
+  // jusqu'à la révélation) : ni renommage ni suppression ; ajout, couleur et
+  // affectation des joueurs restent possibles.
+  const teamsLocked = gameState?.TEAMS_LOCKED === true
+  const [refusal, setRefusal] = useState(null) // { kind: 'rename'|'delete', teams: string[] }
+  const [renameEpoch, setRenameEpoch] = useState(0) // remonte les champs : le nom d'origine revient
+  const lastTeamActionRef = useRef('rename')
   const [newTeamName, setNewTeamName] = useState('')
   const [draggedBumper, setDraggedBumper] = useState(null)
   const [dragOverTarget, setDragOverTarget] = useState(null)
@@ -227,7 +237,9 @@ export default function TeamsPage() {
   }
 
   const handleDeleteTeam = (teamName) => {
+    if (teamsLocked) return
     if (!window.confirm(`Supprimer l'equipe "${teamName}" ?`)) return
+    lastTeamActionRef.current = 'delete'
     const newTeams = { ...teams }
     delete newTeams[teamName]
     // Unassign bumpers from this team
@@ -241,13 +253,16 @@ export default function TeamsPage() {
   }
 
   const handleRenameTeam = (oldName, newName) => {
+    if (teamsLocked) return
     if (!newName.trim() || newName === oldName) return
     if (teams[newName]) {
       alert('Une equipe avec ce nom existe deja')
       return
     }
+    lastTeamActionRef.current = 'rename'
     const newTeams = { ...teams }
-    newTeams[newName] = newTeams[oldName]
+    // #249 : identité = clé — NAME suit la nouvelle clé (le serveur le réécrit de toute façon)
+    newTeams[newName] = { ...newTeams[oldName], NAME: newName }
     delete newTeams[oldName]
     // Update bumpers with new team name
     const newBumpers = { ...bumpers }
@@ -258,6 +273,26 @@ export default function TeamsPage() {
     })
     updateConfig({ teams: newTeams, bumpers: newBumpers })
   }
+
+  // #249 — TEAMS_UPDATE_REFUSED (course : renommage/suppression envoyé juste avant
+  // le verrou) : message d'erreur, et le nom d'origine revient (l'état renvoyé
+  // par le serveur fait foi — on remonte les champs non contrôlés).
+  useEffect(() => {
+    if (!teamsUpdateRefused) return
+    setRefusal({ kind: lastTeamActionRef.current, teams: teamsUpdateRefused.teams || [] })
+    setRenameEpoch((n) => n + 1)
+    clearTeamsUpdateRefused?.()
+  }, [teamsUpdateRefused, clearTeamsUpdateRefused])
+
+  // Le message disparaît tout seul, ou dès que le verrou est levé.
+  useEffect(() => {
+    if (!refusal) return
+    const id = setTimeout(() => setRefusal(null), 10000)
+    return () => clearTimeout(id)
+  }, [refusal])
+  useEffect(() => {
+    if (!teamsLocked) setRefusal(null)
+  }, [teamsLocked])
 
   // Drag and Drop handlers
   const handleDragStart = (e, mac) => {
@@ -314,6 +349,19 @@ export default function TeamsPage() {
         <h1 className="page-title">Equipes & Joueurs</h1>
         <p className="page-subtitle">Glissez-deposez les joueurs pour les assigner aux equipes</p>
       </header>
+
+      {teamsLocked && (
+        <div className="teams-lock-banner" id="teams-lock-banner" role="status">
+          🔒 Une question est en cours : renommer ou supprimer une équipe sera possible après la révélation de la réponse.
+        </div>
+      )}
+      {refusal && (
+        <div className="teams-refused-toast" role="alert">
+          {refusal.kind === 'delete' ? 'Suppression refusée' : 'Renommage refusé'} : une question est en cours.{' '}
+          {refusal.teams.map((t) => `« ${t} »`).join(', ')}{' '}
+          {refusal.teams.length > 1 ? 'n’ont' : 'n’a'} pas été {refusal.kind === 'delete' ? (refusal.teams.length > 1 ? 'supprimées' : 'supprimée') : (refusal.teams.length > 1 ? 'renommées' : 'renommée')}.
+        </div>
+      )}
 
       <div className="teams-layout">
         {/* Teams Section */}
@@ -372,10 +420,16 @@ export default function TeamsPage() {
                           {name.charAt(0).toUpperCase()}
                         </div>
                         <div className="team-info">
+                          {teamsLocked && <span className="team-lock-icon" aria-hidden="true">🔒</span>}
                           <input
                             type="text"
+                            key={`${name}-${renameEpoch}`}
                             defaultValue={name}
                             className="team-name-input"
+                            aria-label={`Nom de l'équipe ${name}`}
+                            disabled={teamsLocked}
+                            title={teamsLocked ? TEAMS_LOCKED_HINT : "Renommer l'équipe"}
+                            aria-describedby={teamsLocked ? 'teams-lock-banner' : undefined}
                             onBlur={(e) => handleRenameTeam(name, e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -390,7 +444,9 @@ export default function TeamsPage() {
                         <button
                           className="team-delete-btn"
                           onClick={() => handleDeleteTeam(name)}
-                          title="Supprimer l'equipe"
+                          disabled={teamsLocked}
+                          title={teamsLocked ? TEAMS_LOCKED_HINT : "Supprimer l'equipe"}
+                          aria-label={`Supprimer ${name}`}
                         >
                           ×
                         </button>

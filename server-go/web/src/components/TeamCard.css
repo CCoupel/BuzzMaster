@@ -1051,3 +1051,18 @@
 /* =========================================
    Disconnection warning badge (inline, per-buzzer row)
    ========================================= */
+
+/* #244/#251 — sélection pour l'attribution groupée (maquette admin_game_team_award__selection) */
+.team-select-checkbox { width: 1.15rem; height: 1.15rem; flex: 0 0 auto; cursor: pointer; accent-color: #4f46e5; }
+.team-select-checkbox:disabled { cursor: not-allowed; opacity: 0.6; }
+.team-card.award-selected { box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.35); }
+.team-card.award-done .team-name { opacity: 0.7; }
+.award-done-chip { margin-left: auto; font-size: 0.72rem; font-weight: 800; color: #16a34a; background: #dcfce7; padding: 0.08rem 0.45rem; border-radius: 999px; white-space: nowrap; }
+.award-preview { margin-left: auto; font-size: 0.74rem; font-weight: 800; color: #4f46e5; white-space: nowrap; }
+.award-preview.neg { color: #dc2626; }
+
+/* #254 — cases sur les lignes de joueurs (niveau joueur) */
+.player-select-checkbox { width: 1.05rem; height: 1.05rem; flex: 0 0 auto; cursor: pointer; accent-color: #4f46e5; }
+.player-select-checkbox:disabled { cursor: not-allowed; opacity: 0.6; }
+.buzzer-mini .award-done-chip { margin-left: 0; margin-right: 0.4rem; }
+.buzzer-mini .award-preview { margin-left: 0; margin-right: 0.4rem; }

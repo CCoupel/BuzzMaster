@@ -1,0 +1,26 @@
+/* #243 — popup « Lancer la partie » (maquette validée admin_new_game__purge_popup_details) */
+.lg-backdrop { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+.lg-modal { background: #fff; color: #111827; border-radius: 0.9rem; width: 100%; max-width: 480px; max-height: 100%; overflow-y: auto; padding: 1.2rem 1.3rem 1rem; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25); }
+.lg-modal h3 { margin: 0 0 0.25rem; font-size: 1.15rem; }
+.lg-sub { margin: 0 0 0.9rem; color: #374151; font-size: 0.88rem; }
+.lg-opt { display: flex; gap: 0.7rem; align-items: flex-start; padding: 0.65rem 0.7rem; border: 1px solid #e5e7eb; border-radius: 0.6rem; margin-bottom: 0.5rem; cursor: pointer; }
+.lg-opt:hover { background: #f9fafb; }
+.lg-opt input { width: 1.15rem; height: 1.15rem; margin-top: 0.1rem; accent-color: #4f46e5; flex: 0 0 auto; }
+.lg-t { font-weight: 700; font-size: 0.92rem; }
+.lg-d { font-size: 0.8rem; color: #6b7280; margin-top: 0.1rem; line-height: 1.35; }
+.lg-opt.checked.danger { border-color: #fca5a5; background: #fff7f7; }
+.lg-count { font-weight: 600; color: #374151; }
+.lg-opt.locked { cursor: not-allowed; background: #f9fafb; }
+.lg-opt.locked input { cursor: not-allowed; }
+.lg-lock-note { font-size: 0.78rem; color: #374151; margin-top: 0.25rem; }
+.lg-warn { margin: 0.4rem 0 0.2rem; padding: 0.5rem 0.65rem; border-radius: 0.5rem; background: #fee2e2; color: #b91c1c; font-size: 0.82rem; line-height: 1.35; }
+.lg-keep { margin: 0.4rem 0 0.2rem; font-size: 0.8rem; color: #6b7280; }
+.lg-busy { margin: 0.4rem 0 0.2rem; padding: 0.5rem 0.65rem; border-radius: 0.5rem; background: #fef3c7; color: #b45309; font-size: 0.82rem; }
+.lg-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.9rem; }
+.lg-btn { border: 0; border-radius: 0.5rem; padding: 0.5rem 0.95rem; font-weight: 800; font-size: 0.85rem; cursor: pointer; }
+.lg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.lg-btn-secondary { background: #e5e7eb; color: #111827; }
+.lg-btn-primary { background: #4f46e5; color: #fff; }
+.lg-btn-danger { background: #dc2626; color: #fff; }
+
+.lg-sending { margin-top: 0.5rem; font-size: 0.82rem; color: #374151; }

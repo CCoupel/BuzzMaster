@@ -80,7 +80,8 @@ const makeGameMock = (overrides = {}) => ({
   },
   teams: {},
   status: 'connected',
-  playerConnectStatus: null,
+  // #246 : connexion liée (PLAYER_CONNECTED reçu)
+  playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
   clearPlayerConnectStatus: vi.fn(),
   playerEvictedStatus: null,
   clearPlayerEvictedStatus: vi.fn(),

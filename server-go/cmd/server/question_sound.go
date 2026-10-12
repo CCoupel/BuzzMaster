@@ -54,6 +54,11 @@ type questionSoundAdapter struct {
 	mu             sync.Mutex
 	watchdogCancel context.CancelFunc // cancels the CURRENT watchdog goroutine, if any
 
+	// soundEnabled reports the master "sound on" switch. nil = production default
+	// (config.Get().Sound.Enabled); tests inject their own so they never touch the
+	// process-wide config singleton (#257/#233).
+	soundEnabled func() bool
+
 	// validationMu/validationCache back questionSoundAvailability's file
 	// cache (contract sound.md §10.8.3) — a SEPARATE mutex from mu above:
 	// this cache is read/written far more often (every PONG, §10.8.7) and
@@ -74,6 +79,14 @@ type soundValidationEntry struct {
 	size    int64
 	ok      bool
 	reason  string
+}
+
+// enabled reports the master sound switch (injected in tests, config otherwise).
+func (qs *questionSoundAdapter) enabled() bool {
+	if qs.soundEnabled != nil {
+		return qs.soundEnabled()
+	}
+	return config.Get().Sound.Enabled
 }
 
 // setupQuestionSound builds the question-sound adapter — mirrors
@@ -180,7 +193,7 @@ func (qs *questionSoundAdapter) questionSoundAvailability(q *game.Question) (ok 
 	if qs == nil || q == nil || q.Sound == "" {
 		return true, ""
 	}
-	if !config.Get().Sound.Enabled {
+	if !qs.enabled() {
 		return false, "DISABLED"
 	}
 	if audio.IsNeutralMedia(qs.player) {

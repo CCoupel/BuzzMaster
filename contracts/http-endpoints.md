@@ -63,6 +63,7 @@ Crée ou met à jour une question.
 | time | int | ❌ | Durée en secondes (défaut: 30) |
 | category | string | ❌ | Catégorie |
 | points_target | string | ❌ | `PLAYER` ou `TEAM` |
+| round_id | string | ❌ | *(v11.2, #245)* Manche d'une **nouvelle** question (bouton « + Question » d'une manche). Ignoré si l'ID est inconnu. **À la modification d'une question existante, `ROUND_ID` est conservé tel quel** (même piège de reconstruction que `ORDER`, `MEDIA`, `SOUND`) : seul `ROUNDS_UPDATE` change la manche d'une question existante |
 | explanation | string | ❌ | **v6.4.x (#168)** — note d'explication/justification, visible de l'animateur seul. Texte libre, longueur non bornée. Écrit dans `EXPLANATION` ; **champ absent ou vide = note effacée** (voir note ci-dessous) |
 | file | file | ❌ | Image question |
 | file_answer | file | ❌ | Image réponse |
@@ -109,6 +110,7 @@ Crée ou met à jour une question.
 | qcm_hint_threshold_2 | float | Seuil indice 2 (défaut: 0.125) |
 | qcm_penalty_1 | float | Pénalité après 1 indice |
 | qcm_penalty_2 | float | Pénalité après 2 indices |
+| qcm_wrong_penalty | int | *(v11.2, #254)* Pénalité de mauvaise réponse, entier de −100 à 0 (0 = aucune). Enregistrée en `QCM_WRONG_PENALTY` seulement pour `type = QCM` et si valide (0 compris, écrit tel quel) ; absente ou invalide → champ **non écrit** (valeur effective 0), sans erreur (même tolérance que `qcm_penalty_1/2`) |
 
 **Champs MEMORY additionnels :**
 
@@ -1111,3 +1113,11 @@ Réconcilie aussi `data/files/sounds/sounds.json` (manifeste, `internal/audio/sy
 après l'écriture — voir `contracts/sound.md` §7. Dans l'interface (maquette révision 4), une
 confirmation nomme explicitement combien de sons personnalisés seront écrasés avant l'action —
 comportement d'interface, hors périmètre de ce contrat HTTP.
+
+
+---
+
+### Manches et sauvegarde (v11.2, #245)
+- `GET /questions` : chaque question porte son `ROUND_ID` éventuel. La liste des manches est dans `GameState.ROUNDS`.
+- **Sauvegarde / restauration** : `data/files/questions/rounds.json` fait partie de `files/questions`, donc il est sauvegardé et restauré **avec les questions**. Une restauration remplace les manches comme elle remplace les questions. Une question qui cite une manche absente tombe dans « Sans manche ».
+- **Génération IA** (`ai-generation.md` §5.2) : les questions générées n'ont pas de `ROUND_ID`. Elles arrivent **à la fin du groupe « Sans manche »**, qui est **en tête** de la liste *(décision utilisateur)*. `ORDER` = plus grand `ORDER` de ce groupe + 1, comme aujourd'hui.

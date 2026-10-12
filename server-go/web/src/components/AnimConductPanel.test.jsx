@@ -472,9 +472,9 @@ describe('AnimConductPanel — "À suivre", câblage (#171/F3)', () => {
       nextQuestion: { ID: '9', TYPE: 'SPEEDY', QUESTION: 'Q ?', POINTS: '5', TIME: '15' },
     })
     render(<AnimConductPanel {...props} />)
-    expect(screen.getByText('À suivre')).toBeInTheDocument()
+    expect(screen.getByText('Question suivante')).toBeInTheDocument()
     expect(screen.getByText('#9 SPEEDY: Q ?')).toBeInTheDocument()
-    screen.getByText('À suivre').closest('button').click()
+    screen.getByText('Question suivante').closest('button').click()
     expect(props.onSelectNext).toHaveBeenCalledWith('9')
   })
 })

@@ -173,7 +173,7 @@ describe('EnrollPage — recherche du bumper existant par ID (#120, F2)', () => 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/player'))
   })
 
-  it('retombe sur la recherche par nom quand aucun vplayer_id n\'est stocké (session antérieure à #120)', async () => {
+  it("#246 : sans vplayer_id stocké, AUCUNE recherche par nom — pas de navigation vers /player", async () => {
     localStorage.setItem('vplayer_name', 'Alice')
     // No vplayer_id.
 
@@ -184,7 +184,8 @@ describe('EnrollPage — recherche du bumper existant par ID (#120, F2)', () => 
     }))
     render(<EnrollPage />)
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/player'))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(mockNavigate).not.toHaveBeenCalledWith('/player')
   })
 
   it('ne renvoie plus le formulaire quand le roster est chargé mais ne contient pas encore notre ID (ferme la course, comme VPlayerPage)', async () => {

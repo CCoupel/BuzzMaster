@@ -84,6 +84,19 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     showQRCode: false, // Whether QR code should be displayed on TV
     // ENTRACTE (v6.5.2, #119) — pause globale, même nature éphémère que showQRCode.
     entracte: false, // true for the whole duration of the pause
+    // #249 (v11.2) — liste des équipes verrouillée pendant une question : ni renommage
+    // ni suppression (le serveur refuse). Toujours sérialisé côté serveur.
+    TEAMS_LOCKED: false,
+    // #252 (v11.2) — dernière modification de score : un nouveau SEQ avec DISPLAY=false est une
+    // correction cachée (les écrans prennent les scores comme référence SANS animation).
+    SCORE_CHANGE: { SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: [] },
+    // #253 (v11.2) — verrou de la popup « Lancer la partie » : tant que ACTIVE, le serveur suspend les
+    // actions de jeu ; OWNER = identifiant de la connexion admin propriétaire.
+    LAUNCH_LOCK: { ACTIVE: false, OWNER: '', SINCE: 0, EXPIRES_AT: 0 },
+    // #245 (v11.2) — manches du quiz (liste ordonnée {ID, NAME}, diffusée à tous les clients) et place de la
+    // question courante dans ses manches (calculée par le serveur ; la TV n'a pas la liste des questions).
+    ROUNDS: [],
+    ROUND_CONTEXT: { ROUND_ID: '', ROUND_INDEX: 0, ROUND_COUNT: 0, POSITION: 0, TOTAL: 0, FIRST_OF_ROUND: false },
     // ENTRACTE_CONFIG — configuration DIFFUSÉE au panneau (gelée pendant une
     // pause active, corrections C4). entracteConfigSaved (ci-dessous) est la
     // configuration ENREGISTRÉE, toujours à jour, admin-only — c'est elle que
@@ -172,12 +185,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [questionPosition, setQuestionPosition] = useState({ position: 0, total: 0 })
   // #170 (F1) — équipes déjà créditées pour la question COURANTE, indexé
   // par nom d'équipe pour accès direct (contracts/websocket-actions.md
-  // §AWARDED_TEAMS). Exclusif à /ws/anim, comme nextQuestion/creditPoints —
-  // reste vide ({}) sur les autres endpoints (jamais diffusé par le
-  // serveur ailleurs que ClientTypeAnim). Source de vérité du verrouillage
+  // §AWARDED_TEAMS). Reçu par /ws/anim ET /ws/admin (v11.2, #244/#251 : l'admin
+  // s'en sert pour griser les équipes déjà créditées) — reste vide ({}) sur
+  // les autres endpoints (TV, VPlayer). Source de vérité du verrouillage
   // du crédit (AnimCreditControl, F2) : JAMAIS d'anticipation locale du
   // clic ici, uniquement ce que le serveur confirme.
   const [awardedTeams, setAwardedTeams] = useState({})
+  // #254 — joueurs déjà crédités individuellement pour la question courante, indexé par ID de joueur :
+  // { [id]: { POINTS, TIMESTAMP, TEAM } } (AWARDED_TEAMS.PLAYERS, contrat §AWARDED_TEAMS)
+  const [awardedPlayers, setAwardedPlayers] = useState({})
   // #155/#156 (MAJEUR-1, revue de code) — montant de base courant que
   // l'animateur créditera, rediffusé par le serveur via CREDIT_POINTS
   // (contrepartie de SET_CREDIT_POINTS émis par /admin). Remplace la lecture
@@ -206,6 +222,30 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // détection par balayage de roster, qui ne pouvait pas distinguer "bumper
   // supprimé" de "bumper pas encore reçu" pendant la fenêtre d'enrôlement.
   const [playerEvictedStatus, setPlayerEvictedStatus] = useState(null)
+  // #249 — dernier TEAMS_UPDATE_REFUSED (ciblé, émetteur du UPDATE refusé) :
+  // { reason, teams: string[] } | null. L'état renvoyé par le serveur fait foi.
+  const [teamsUpdateRefused, setTeamsUpdateRefused] = useState(null)
+  // #243 — dernier NEW_GAME_REFUSED (ciblé, émetteur) : { reason } | null
+  const [newGameRefused, setNewGameRefused] = useState(null)
+  // #244/#251 — dernier TEAM_POINTS_BATCH_RESULT (ciblé, émetteur) : { status, reason, questionId,
+  // applied: [{team, points}], skipped: [{team, reason}], teams: string[] } | null
+  const [teamPointsBatchResult, setTeamPointsBatchResult] = useState(null)
+  // #245 — dernier ROUNDS_UPDATE_RESULT (ciblé, émetteur) : { status, reason, rounds: [{id, name}],
+  // createdEntractes: [{roundId, startId, endId}], deletedQuestions: string[], questions: string[] } | null
+  const [roundsUpdateResult, setRoundsUpdateResult] = useState(null)
+  // #254 — dernier BUMPER_POINTS_BATCH_RESULT : { status, reason, questionId, applied: [{id, points}],
+  // skipped: [{id, reason}], players: string[] } | null
+  const [bumperPointsBatchResult, setBumperPointsBatchResult] = useState(null)
+  // #253 — identifiant de CETTE connexion (pour se reconnaître propriétaire de LAUNCH_LOCK.OWNER),
+  // dernier LAUNCH_LOCK_REFUSED { reason } et dernier ACTION_REFUSED { action, reason, at }.
+  const [connectionId, setConnectionId] = useState(null)
+  const [launchLockRefused, setLaunchLockRefused] = useState(null)
+  const [actionRefused, setActionRefused] = useState(null)
+  // #246 (F-STOP) — accusé ciblé du texte final ARDOISE (tablette) : { questionId,
+  // hash } | null, nouvel objet à chaque accusé ; et dernier REVEAL_REFUSED
+  // (admin/anim) : { reason, pending: [{team, offline}] } | null.
+  const [ardoiseFinalAck, setArdoiseFinalAck] = useState(null)
+  const [revealRefused, setRevealRefused] = useState(null)
   const [logs, setLogs] = useState([])
   const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
   // #137 — état du job de génération IA en tâche de fond (un seul job global,
@@ -224,6 +264,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [regieMessage, setRegieMessage] = useState({ ACTIVE: false, TEXT: '', SENT_AT: 0, CLEARED_BY: '' })
 
   const wsRef = useRef(null)
+  // #246 (F-LOG) — diagnostic : endpoint courant (lu par handleMessage, mémoïsé
+  // une fois), envois abandonnés pendant une coupure, instant de la coupure,
+  // dernière longueur de texte ARDOISE vue par équipe (admin/anim).
+  const endpointRef = useRef(endpoint)
+  endpointRef.current = endpoint
+  const droppedSendsRef = useRef(0)
+  const downAtRef = useRef(null)
+  const ardoiseSeenRef = useRef({ qid: undefined, lens: {} })
   const logCallbackRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   // #118 (F1, R6) — instant du dernier message reçu (n'importe lequel,
@@ -255,11 +303,20 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       lastMessageAtRef.current = Date.now()
       setStatus('connected')
       sendMessage('HELLO', {})
+      // #246 : fin d'une coupure → durée + envois abandonnés pendant celle-ci.
+      if (downAtRef.current !== null) {
+        const downMs = Date.now() - downAtRef.current
+        const dropped = droppedSendsRef.current
+        downAtRef.current = null
+        droppedSendsRef.current = 0
+        sendClientTrace('WS_GAP', { DETAIL: { DOWN_MS: downMs, DROPPED_SENDS: dropped } })
+      }
     }
 
     ws.onclose = () => {
       setStatus('disconnected')
       wsRef.current = null
+      if (downAtRef.current === null) downAtRef.current = Date.now()
       // #118 (F5) — dispersion : évite que tous les VJoueurs ne se
       // reconnectent en cadence après une coupure collective.
       reconnectTimeoutRef.current = setTimeout(connect, nextReconnectDelay())
@@ -304,6 +361,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       // Déjà fermé ou fermeture en cours — sans effet sur la suite.
     }
     wsRef.current = null
+    if (downAtRef.current === null) downAtRef.current = Date.now()
     setStatus('disconnected')
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
     reconnectTimeoutRef.current = setTimeout(connect, nextReconnectDelay())
@@ -344,6 +402,29 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     currentQuestionIdRef.current = gameState.question?.ID ?? null
   }, [gameState.question?.ID])
 
+  // #246 (F-LOG) — admin/anim : le texte d'une équipe est passé de non vide à
+  // vide (ou a disparu) dans l'état reçu, pour la MÊME question. Sert à
+  // départager « effacé côté serveur » de « problème d'affichage ». Les remises
+  // à zéro légitimes (nouvelle question, PREPARE, NEW_GAME) ne sont pas tracées.
+  const trackArdoiseCleared = (game) => {
+    if (game.ARDOISE_ANSWERS === undefined) return
+    if (!['/ws/admin', '/ws', '/ws/anim'].includes(endpointRef.current)) return
+    const answers = game.ARDOISE_ANSWERS || {}
+    const qid = game.QUESTION?.ID ?? currentQuestionIdRef.current
+    const seen = ardoiseSeenRef.current
+    const legitReset = seen.qid !== qid || game.PHASE === 'PREPARE' || game.PHASE === 'NEW_GAME'
+    if (!legitReset) {
+      for (const [team, prevLen] of Object.entries(seen.lens)) {
+        if (prevLen > 0 && (answers[team]?.TEXT ?? '').length === 0) {
+          sendClientTrace('ARDOISE_CLEARED_SEEN', { TEAM: team, PREV_LEN: prevLen, CAUSE_ACTION: 'UPDATE' })
+        }
+      }
+    }
+    const lens = {}
+    for (const [team, a] of Object.entries(answers)) lens[team] = (a?.TEXT ?? '').length
+    ardoiseSeenRef.current = { qid, lens }
+  }
+
   const handleMessage = useCallback((data) => {
     const { ACTION, MSG, FSINFO, VERSION } = data
     console.log('[WS] Received:', ACTION, MSG)
@@ -360,8 +441,24 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     }
 
     switch (ACTION) {
+      case 'HELLO_ACK':
+        // #253 (contrat §HELLO_ACK) : identifiant OPAQUE de CETTE connexion (admin/anim), envoyé en
+        // premier à chaque HELLO, avant l'état initial ; nouvelle valeur à chaque reconnexion. Sert
+        // seulement à se reconnaître propriétaire de LAUNCH_LOCK.OWNER (comparaison de chaînes).
+        if (typeof MSG?.CLIENT_ID === 'string' && MSG.CLIENT_ID) setConnectionId(MSG.CLIENT_ID)
+        break
+
+      case 'LAUNCH_LOCK_REFUSED':
+        setLaunchLockRefused({ reason: MSG?.REASON })
+        break
+
+      case 'ACTION_REFUSED':
+        setActionRefused({ action: MSG?.ACTION, reason: MSG?.REASON, at: Date.now() })
+        break
+
       case 'UPDATE':
         if (MSG?.GAME) {
+          trackArdoiseCleared(MSG.GAME)
           setGameState(prev => ({
             ...prev,
             phase: MSG.GAME.PHASE || prev.phase,
@@ -426,6 +523,11 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             // ENTRACTE (v6.5.2, #119) — jamais omitempty côté serveur (contrat game-state.md),
             // mais on garde le repli sur prev pour un client plus ancien / un message partiel.
             entracte: MSG.GAME.ENTRACTE ?? prev.entracte,
+            TEAMS_LOCKED: MSG.GAME.TEAMS_LOCKED ?? prev.TEAMS_LOCKED,
+            SCORE_CHANGE: MSG.GAME.SCORE_CHANGE ?? prev.SCORE_CHANGE,
+            LAUNCH_LOCK: MSG.GAME.LAUNCH_LOCK ?? prev.LAUNCH_LOCK,
+            ROUNDS: MSG.GAME.ROUNDS ?? prev.ROUNDS,
+            ROUND_CONTEXT: MSG.GAME.ROUND_CONTEXT ?? prev.ROUND_CONTEXT,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
             // ENTRACTE_CONFIG_SAVED (corrections C4) — diffusion restreinte à
             // l'admin (AdminOnlyGameFields), même repli que QUIZ_OBJECTIVES :
@@ -594,11 +696,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         const map = {}
         ;(MSG?.TEAMS || []).forEach((entry) => {
           if (!entry?.TEAM) return
-          map[entry.TEAM] = { POINTS: entry.POINTS, TIMESTAMP: entry.TIMESTAMP }
+          map[entry.TEAM] = { POINTS: entry.POINTS, TIMESTAMP: entry.TIMESTAMP, ...(entry.TEAM_LEVEL !== undefined ? { TEAM_LEVEL: entry.TEAM_LEVEL === true } : {}) }
         })
         // Tableau vide ([]) -> map vide ({}) : c'est la réinitialisation
         // "payload vide" demandée par F1, sans cas particulier à écrire.
         setAwardedTeams(map)
+        const players = {}
+        ;(MSG?.PLAYERS || []).forEach((entry) => {
+          if (!entry?.ID) return
+          players[entry.ID] = { POINTS: entry.POINTS, TIMESTAMP: entry.TIMESTAMP, TEAM: entry.TEAM }
+        })
+        setAwardedPlayers(players)
         break
       }
 
@@ -730,6 +838,47 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // Player successfully enrolled - state will be updated via UPDATE message
         break
 
+      case 'TEAM_POINTS_BATCH_RESULT':
+        setTeamPointsBatchResult({
+          status: MSG?.STATUS,
+          reason: MSG?.REASON,
+          questionId: MSG?.QUESTION_ID,
+          applied: (MSG?.APPLIED || []).map((e) => ({ team: e.TEAM, points: e.POINTS })),
+          skipped: (MSG?.SKIPPED || []).map((e) => ({ team: e.TEAM, reason: e.REASON })),
+          teams: MSG?.TEAMS || [],
+        })
+        break
+
+      case 'ROUNDS_UPDATE_RESULT':
+        setRoundsUpdateResult({
+          status: MSG?.STATUS,
+          reason: MSG?.REASON,
+          rounds: (MSG?.ROUNDS || []).map((r) => ({ id: r.ID, name: r.NAME })),
+          createdEntractes: (MSG?.CREATED_ENTRACTES || []).map((c) => ({ roundId: c.ROUND_ID, startId: c.START_ID, endId: c.END_ID })),
+          deletedQuestions: MSG?.DELETED_QUESTIONS || [],
+          questions: MSG?.QUESTIONS || [],
+        })
+        break
+
+      case 'BUMPER_POINTS_BATCH_RESULT':
+        setBumperPointsBatchResult({
+          status: MSG?.STATUS,
+          reason: MSG?.REASON,
+          questionId: MSG?.QUESTION_ID,
+          applied: (MSG?.APPLIED || []).map((e) => ({ id: e.ID, points: e.POINTS })),
+          skipped: (MSG?.SKIPPED || []).map((e) => ({ id: e.ID, reason: e.REASON })),
+          players: MSG?.PLAYERS || [],
+        })
+        break
+
+      case 'NEW_GAME_REFUSED':
+        setNewGameRefused({ reason: MSG?.REASON })
+        break
+
+      case 'TEAMS_UPDATE_REFUSED':
+        setTeamsUpdateRefused({ reason: MSG?.REASON, teams: MSG?.TEAMS || [] })
+        break
+
       case 'PLAYER_REJECTED':
         console.log('[WS] PLAYER_REJECTED:', MSG?.REASON)
         setPlayerConnectStatus({ status: 'rejected', reason: MSG?.REASON })
@@ -741,6 +890,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         // d'un bumper dans un roster, cette action fait autorité à elle seule.
         console.log('[WS] PLAYER_EVICTED:', MSG?.REASON)
         setPlayerEvictedStatus({ reason: MSG?.REASON })
+        break
+
+      case 'ARDOISE_FINAL_ACK':
+        setArdoiseFinalAck({ questionId: MSG?.QUESTION_ID, hash: MSG?.HASH })
+        break
+
+      case 'REVEAL_REFUSED':
+        setRevealRefused({
+          reason: MSG?.REASON,
+          pending: (MSG?.PENDING || []).map((p) => ({ team: p.TEAM, offline: !!p.OFFLINE })),
+        })
         break
 
       case 'PLAYER_ASSIGNED':
@@ -890,9 +1050,19 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       return true
     } else {
       console.error('WebSocket is not connected')
+      // #246 : envoi abandonné pendant une coupure (hors traces elles-mêmes) —
+      // rapporté dans `WS_GAP.DETAIL.DROPPED_SENDS` à la reconnexion.
+      if (action !== 'CLIENT_TRACE') droppedSendsRef.current += 1
       return false
     }
   }, [])
+
+  // #246 (F-LOG) — trace de diagnostic vers le journal serveur
+  // (contracts/websocket-actions.md §CLIENT_TRACE). Sans effet sur le jeu ;
+  // jamais comptée comme envoi abandonné.
+  const sendClientTrace = useCallback((kind, extra = {}) => {
+    return sendMessage('CLIENT_TRACE', { KIND: kind, AT: Date.now(), ...extra })
+  }, [sendMessage])
 
   // Game actions
   const startGame = useCallback((delay, points) => {
@@ -911,8 +1081,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('CONTINUE', {})
   }, [sendMessage])
 
-  const revealAnswer = useCallback(() => {
-    sendMessage('REVEAL', {})
+  const revealAnswer = useCallback((force) => {
+    // #246 : `force === true` strict (jamais un événement de clic passé tel quel)
+    sendMessage('REVEAL', force === true ? { FORCE: true } : {})
   }, [sendMessage])
 
   const selectQuestion = useCallback((questionId) => {
@@ -931,12 +1102,18 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('DELETE', { ID: questionId })
   }, [sendMessage])
 
-  const setBumperPoints = useCallback((bumperMac, points) => {
-    sendMessage('BUMPER_POINTS', { ID: bumperMac, POINTS: points })
+  // #252 : `options.display === false` = correction cachée (champ DISPLAY:false, aucun effet
+  // public). Absent / autre = comportement v11.1 (aucun champ DISPLAY envoyé).
+  const setBumperPoints = useCallback((bumperMac, points, options) => {
+    const msg = { ID: bumperMac, POINTS: points }
+    if (options?.display === false) msg.DISPLAY = false
+    return sendMessage('BUMPER_POINTS', msg)
   }, [sendMessage])
 
-  const setTeamPoints = useCallback((teamName, points) => {
-    sendMessage('TEAM_POINTS', { TEAM: teamName, POINTS: points })
+  const setTeamPoints = useCallback((teamName, points, options) => {
+    const msg = { TEAM: teamName, POINTS: points }
+    if (options?.display === false) msg.DISPLAY = false
+    return sendMessage('TEAM_POINTS', msg)
   }, [sendMessage])
 
   // #219 (v11.1) — un des trois gestes de conduite sur le média sonore de la
@@ -1146,9 +1323,80 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     setPlayerEvictedStatus(null)
   }, [])
 
+  // #244/#251 — attribution groupée après le REVEAL. `entries` = [{ team, points }] ; retourne le
+  // booléen de sendMessage (false : WebSocket fermée, rien n'est parti).
+  const teamPointsBatch = useCallback((questionId, entries) => {
+    return sendMessage('TEAM_POINTS_BATCH', {
+      QUESTION_ID: String(questionId ?? ''),
+      ENTRIES: entries.map((e) => ({ TEAM: e.team, POINTS: e.points })),
+    })
+  }, [sendMessage])
+
+  // #254 — attribution groupée au niveau JOUEUR. `entries` = [{ id, points }].
+  const bumperPointsBatch = useCallback((questionId, entries) => {
+    return sendMessage('BUMPER_POINTS_BATCH', {
+      QUESTION_ID: String(questionId ?? ''),
+      ENTRIES: entries.map((e) => ({ ID: e.id, POINTS: e.points })),
+    })
+  }, [sendMessage])
+
+  const clearBumperPointsBatchResult = useCallback(() => {
+    setBumperPointsBatchResult(null)
+  }, [])
+
+  // #245 — structure complète des manches (contrat §ROUNDS_UPDATE) ; admin seulement. `payload` =
+  // { rounds: [{id?, name, questions, entractes?}], unassigned: string[], deletedRounds?: [{id, questions}] }.
+  // Retourne le booléen de sendMessage (false : WebSocket fermée, rien n'est parti).
+  const roundsUpdate = useCallback((payload) => {
+    const msg = {
+      ROUNDS: (payload.rounds || []).map((r) => ({
+        ...(r.id ? { ID: r.id } : {}),
+        NAME: r.name,
+        QUESTIONS: (r.questions || []).map(String),
+        ...(r.entractes !== undefined ? { ENTRACTES: !!r.entractes } : {}),
+      })),
+      UNASSIGNED: (payload.unassigned || []).map(String),
+    }
+    if (payload.deletedRounds?.length) {
+      msg.DELETED_ROUNDS = payload.deletedRounds.map((d) => ({ ID: d.id, QUESTIONS: d.questions }))
+    }
+    return sendMessage('ROUNDS_UPDATE', msg)
+  }, [sendMessage])
+  const clearRoundsUpdateResult = useCallback(() => setRoundsUpdateResult(null), [])
+
+  const clearTeamPointsBatchResult = useCallback(() => {
+    setTeamPointsBatchResult(null)
+  }, [])
+
+  // #253 — verrou de la popup « Lancer la partie » : state = 'OPEN' (ouverture puis renouvellement
+  // toutes les 15 s) | 'CLOSE'. Retourne le booléen de sendMessage.
+  const launchLock = useCallback((state) => sendMessage('LAUNCH_LOCK', { STATE: state }), [sendMessage])
+  const clearLaunchLockRefused = useCallback(() => setLaunchLockRefused(null), [])
+  const clearActionRefused = useCallback(() => setActionRefused(null), [])
+
+  const clearNewGameRefused = useCallback(() => {
+    setNewGameRefused(null)
+  }, [])
+
+  const clearTeamsUpdateRefused = useCallback(() => {
+    setTeamsUpdateRefused(null)
+  }, [])
+
   // New game: trigger full reset and transition to NEW_GAME phase
-  const newGame = useCallback(() => {
-    sendMessage('NEW_GAME', {})
+  // #243 (v11.2) : `options` = { purgeScores, purgePlayers, purgeTeams, resetQuestions } (popup
+  // « Lancer la partie ») → les QUATRE champs sont toujours envoyés. Sans options (ou avec un
+  // événement de clic), payload vide = comportement v11.1 inchangé côté serveur.
+  const newGame = useCallback((options) => {
+    if (options && typeof options.purgeScores === 'boolean') {
+      return sendMessage('NEW_GAME', {
+        PURGE_SCORES: options.purgeScores,
+        PURGE_PLAYERS: !!options.purgePlayers,
+        PURGE_TEAMS: !!options.purgeTeams,
+        RESET_QUESTIONS: !!options.resetQuestions,
+      })
+    }
+    // Retourne true si le message est effectivement parti (false : WebSocket fermée)
+    return sendMessage('NEW_GAME', {})
   }, [sendMessage])
 
   // Quiz metadata: update name, theme, notes, populations, difficulties,
@@ -1192,10 +1440,43 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     sendMessage('UNSUBSCRIBE_LOGS', {})
   }, [sendMessage])
 
+  const clearRevealRefused = useCallback(() => setRevealRefused(null), [])
+
   // Logs: Clear local logs state
   const clearLogs = useCallback(() => {
     setLogs([])
   }, [])
+
+  // #246 (F-LOG) — traces de cycle de vie de la page : visibilité, bfcache,
+  // gel/reprise. Elles prouvent (ou excluent) un onglet endormi par le
+  // navigateur au moment d'une perte de saisie.
+  useEffect(() => {
+    let hiddenAt = document.visibilityState === 'hidden' ? Date.now() : null
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        sendClientTrace('VISIBILITY', { DETAIL: { STATE: 'hidden' } })
+      } else {
+        sendClientTrace('VISIBILITY', {
+          DETAIL: { STATE: 'visible', HIDDEN_MS: hiddenAt ? Date.now() - hiddenAt : 0 },
+        })
+        hiddenAt = null
+      }
+    }
+    const onPageShow = (e) => sendClientTrace('PAGESHOW', { DETAIL: { PERSISTED: !!e.persisted } })
+    const onFreeze = () => sendClientTrace('FREEZE')
+    const onResume = () => sendClientTrace('RESUME')
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pageshow', onPageShow)
+    document.addEventListener('freeze', onFreeze)
+    document.addEventListener('resume', onResume)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pageshow', onPageShow)
+      document.removeEventListener('freeze', onFreeze)
+      document.removeEventListener('resume', onResume)
+    }
+  }, [sendClientTrace])
 
   useEffect(() => {
     connect()
@@ -1231,6 +1512,10 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     nextQuestion,
     questionPosition,
     awardedTeams,
+    awardedPlayers,
+    bumperPointsBatch,
+    bumperPointsBatchResult,
+    clearBumperPointsBatchResult,
     creditPoints,
     regieMessage,
     // RAFALE (v8.0.0, #16/#107)
@@ -1240,6 +1525,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     rafaleSetTeams,
     // Actions
     sendMessage,
+    sendClientTrace,
     startGame,
     stopGame,
     pauseGame,
@@ -1284,6 +1570,26 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clearPlayerConnectStatus,
     playerEvictedStatus,
     clearPlayerEvictedStatus,
+    teamsUpdateRefused,
+    clearTeamsUpdateRefused,
+    newGameRefused,
+    clearNewGameRefused,
+    launchLock,
+    launchLockRefused,
+    clearLaunchLockRefused,
+    actionRefused,
+    clearActionRefused,
+    connectionId,
+    teamPointsBatch,
+    teamPointsBatchResult,
+    roundsUpdate,
+    roundsUpdateResult,
+    clearRoundsUpdateResult,
+    clearTeamPointsBatchResult,
+    // ARDOISE garde-fous au STOP (#246)
+    ardoiseFinalAck,
+    revealRefused,
+    clearRevealRefused,
     // Logs
     logs,
     subscribeLogs,

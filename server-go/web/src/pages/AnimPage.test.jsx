@@ -1113,7 +1113,7 @@ describe('AnimPage — câblage du crédit synchronisé vers AnimCreditControl (
     useGame.mockReturnValue(makeGameMock({
       gameState: {
         phase: 'STOPPED',
-        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED' },
+        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED', POINTS_TARGET: 'PLAYER' },
       },
       creditPoints: 10,
       teams: { 'Les Rouges': { COLOR: [255, 0, 0], SCORE: 0 } },
@@ -1143,7 +1143,7 @@ describe('AnimPage — crédit QCM par équipe (#157/T3)', () => {
     return makeGameMock({
       gameState: {
         phase,
-        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED', POINTS: '10' },
+        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED', POINTS: '10', POINTS_TARGET: 'PLAYER' }, // #254 : QCM sans réglage = TEAM ; ces tests visent le crédit par joueur
         ...gameStateOverrides,
       },
       creditPoints: 10,
@@ -1365,7 +1365,7 @@ describe('AnimPage — crédit QCM par équipe, compléments (#157/T3)', () => {
     const props = makeGameMock({
       gameState: {
         phase: 'STOPPED',
-        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED', POINTS: '10' },
+        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED', POINTS: '10', POINTS_TARGET: 'PLAYER' },
         qcmInvalidated: ['GREEN', 'YELLOW'], // 2 indices courants -> pénalité 0.33 pour le repli
       },
       creditPoints: 10,
@@ -1424,7 +1424,7 @@ describe('AnimPage — crédit QCM par équipe, compléments (#157/T3)', () => {
     const props = makeGameMock({
       gameState: {
         phase: 'STOPPED',
-        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED' },
+        question: { ID: '1', TYPE: 'QCM', QCM_HINTS_ENABLED: true, QCM_CORRECT: 'RED', POINTS_TARGET: 'PLAYER' },
         qcmInvalidated: [],
       },
       creditPoints: 10,
