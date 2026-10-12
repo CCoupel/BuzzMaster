@@ -2,6 +2,15 @@
 
 ---
 
+## [20261012] — `SCORE_CHANGE.GAINS` : gains par équipe de la dernière modification de score (#265, v11.2.1)
+
+- **[NEW]** (ajout, ADDED) `game-state.md` §`SCORE_CHANGE.GAINS` : `GAINS: {TEAM, POINTS}[]`, toujours sérialisé (`[]` par défaut, jamais `null`). Variation nette par équipe, une entrée par équipe dans l'ordre de première apparition, écrite dans la même section critique que les scores et `SEQ`. Renseigné aussi avec `DISPLAY = false`. Remis à `[]` au démarrage et sur `NEW_GAME`.
+- **[CHANGED — précision]** `game-state.md` §`SCORE_CHANGE` : `BUMPER_POINTS_BATCH` incrémente `SEQ` (déjà le cas dans le code) ; il est maintenant listé explicitement.
+- Règles d'écran : TV en lots de 6 dans l'ordre de `GAINS` ; VJoueur calé sur le lot de son équipe ; premier `SEQ` d'une connexion pris comme référence sans animation ; crédits automatiques inchangés (comparaison des scores, équipes triées par nom).
+- Aucune BREAKING : champ additif, ignoré par les anciens clients.
+
+---
+
 ## [20261013] — `ROUNDS_UPDATE` : refus de sûreté, ordre des effets, normalisation de `ORDER` (#245, v11.2, revue de code M1/M2)
 
 - **[CHANGED]** `websocket-actions.md` §ROUNDS_UPDATE :
