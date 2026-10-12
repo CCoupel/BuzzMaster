@@ -21,7 +21,7 @@ Ce document décrit le workflow de développement pour BuzzControl.
 
 ### Prérequis
 
-- [ ] Go 1.21+
+- [ ] Go 1.26.9+
 - [ ] Node.js 18+
 - [ ] Git
 - [ ] Éditeur (VS Code recommandé)
