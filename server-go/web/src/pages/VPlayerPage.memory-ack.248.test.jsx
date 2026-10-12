@@ -47,7 +47,7 @@ const HOSTS = {
     gameState: (st) => ({
       phase: st.phase,
       question: { ID: st.qid, TYPE: 'MEMORY', MEMORY_PAIRS: PAIRS, MEMORY_CONFIG: {} },
-      MEMORY_CURRENT_TEAM: st.mainTeam, memoryFlippedCards: [], memoryMatchedPairs: [],
+      MEMORY_CURRENT_TEAM: st.mainTeam, memoryFlippedCards: st.flipped || [], memoryMatchedPairs: st.matched || [],
     }),
     cards: (c) => [...c.querySelectorAll('.memory-card:not(.flipped)')],
   },
@@ -59,7 +59,7 @@ const HOSTS = {
       question: { ID: st.qid, TYPE: 'MEMOTION', MOTION_CARDS: [MOTION_CARD], MOTION_CONFIG: { POINTS_1_STAR: 1, POINTS_2_STAR: 3, POINTS_3_STAR: 5 } },
       MEMOTION_SUBPHASE: 'QUESTION', MEMOTION_SELECTED: 'card-3', MEMOTION_CARD_STATES: { 'card-3': 'ACTIVE' }, MEMOTION_CARD_TEAMS: {},
       MEMOTION_CURRENT_TEAM: st.mainTeam, MEMOTION_CURRENT_TEAM_COLOR: [0, 0, 255], MEMOTION_PARTICIPATING_TEAMS: ['Les Bleus', 'Les Rouges'],
-      MEMOTION_ACTIVE: { CARD_ID: 'card-3', TYPE: 'MEMORY', STATE: { MEMORY_FLIPPED_CARDS: [], MEMORY_MATCHED_PAIRS: [], MEMORY_ERRORS: 0 } },
+      MEMOTION_ACTIVE: { CARD_ID: 'card-3', TYPE: 'MEMORY', STATE: { MEMORY_FLIPPED_CARDS: st.flipped || [], MEMORY_MATCHED_PAIRS: st.matched || [], MEMORY_ERRORS: 0 } },
     }),
     cards: (c) => [...c.querySelectorAll('.memotion-tv-memory-card:not(.up)')],
   },
@@ -146,7 +146,9 @@ describe.each(Object.keys(HOSTS))('VPlayerPage — retournement %s avec accusé 
     expect(m.text()).toMatch(MSG.pending)
     // pas de « ✓ » de confirmation avant l'accusé : on regarde la pastille d'état (la grille MEMOTION
     // existante porte, elle, un « ✓ » sur la face cachée d'une carte DONE, sans rapport avec l'accusé)
-    expect(m.view.container.querySelector('.vplayer-ack-pill')?.textContent ?? '').not.toMatch(/✓/)
+    const pill = m.view.container.querySelector('.vplayer-ack-pill')
+    expect(pill, 'la pastille d\'attente doit être présente').not.toBeNull()
+    expect(pill.textContent).not.toMatch(/✓/)
   })
 
   it('Critical — accusé APPLIED : plus de pastille, plus aucun renvoi (la carte suit l\'état reçu)', async () => {
@@ -303,6 +305,49 @@ describe.each(Object.keys(HOSTS))('VPlayerPage — retournement %s avec accusé 
     await m.apply({ phase: 'PREPARE', qid: 'qm3' })
     expect(m.text()).not.toMatch(MSG.failAny)
     expect(m.text()).not.toMatch(MSG.pending)
+  })
+
+  // Repli « ancien serveur » (aucun FLIP_MEMORY_CARD_ACK) : le moteur, sur BONNE paire, ajoute la paire aux paires
+  // trouvées et VIDE aussitôt les cartes retournées — la 2ᵉ carte n'apparaît donc jamais « retournée ». Le geste doit
+  // quand même être reconnu comme vu (revue 5b, majeur).
+  it('Critical — repli sans accusé : 2ᵉ carte d\'une BONNE paire (paire trouvée, retournées vidées) = geste vu, ni verrou, ni 30 renvois, ni faux « ✕ »', async () => {
+    const m = await mountBound()
+    await m.tap(0)
+    const first = m.flips()[0]
+    const pairId = Number(String(first.CARD_ID).split('-')[0])
+    expect(Number.isFinite(pairId)).toBe(true)
+    await m.apply({ flipped: [], matched: [pairId] }) // le serveur n'envoie AUCUN accusé
+    await m.advance(CADENCE * (CAP + 5))
+    expect(m.flips()).toHaveLength(1) // aucun renvoi
+    expect(m.text()).not.toMatch(MSG.failAny)
+    expect(m.text()).not.toMatch(MSG.pending)
+    expect(m.view.container.querySelector('.vplayer-ack-pill')?.textContent ?? '').not.toMatch(MSG.failAny)
+  })
+
+  it('Critical — repli sans accusé, bonne paire : la grille n\'est pas verrouillée, un geste suivant part avec un NOUVEAU FLIP_ID', async () => {
+    const m = await mountBound()
+    await m.tap(0)
+    const first = m.flips()[0]
+    const pairId = Number(String(first.CARD_ID).split('-')[0])
+    await m.apply({ flipped: [], matched: [pairId] })
+    await m.advance(CADENCE)
+    await m.tap(0) // une carte de l'autre paire, encore face cachée
+    const f = m.flips()
+    expect(f.length).toBeGreaterThanOrEqual(2)
+    const second = f[f.length - 1]
+    expect(second.FLIP_ID, 'le geste suivant doit porter un FLIP_ID').toBeTruthy()
+    expect(second.FLIP_ID).not.toBe(first.FLIP_ID)
+    expect(Number(String(second.CARD_ID).split('-')[0])).not.toBe(pairId)
+  })
+
+  it('repli sans accusé, 1ʳᵉ carte d\'une paire (carte listée comme retournée) : reconnue comme vue (non-régression)', async () => {
+    const m = await mountBound()
+    await m.tap(0)
+    const first = m.flips()[0]
+    await m.apply({ flipped: [first.CARD_ID], matched: [] })
+    await m.advance(CADENCE * 5)
+    expect(m.flips()).toHaveLength(1)
+    expect(m.text()).not.toMatch(MSG.failAny)
   })
 
   it('Critical — hors tour (dérogation du 2026-08-24) : envoi SANS FLIP_ID, aucune pastille', async () => {

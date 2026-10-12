@@ -126,3 +126,4 @@
 | server-go/web/src/hooks/useWebSocket.flipAck.248.test.js | unit | websocket, vplayer | #248 lot 5b flipMemoryCard avec FLIP_ID (même identifiant au renvoi), réception FLIP_MEMORY_CARD_ACK (APPLIED/IGNORED, DUPLICATE) | regression | critical |
 | server-go/web/src/pages/VPlayerPage.memory-ack.248.test.jsx | unit | vplayer | #248 lot 5b retournement MEMORY et carte MEMOTION avec accusé : FLIP_ID, pastilles, renvoi même FLIP_ID, plafond 30, IGNORED/DUPLICATE, purge, hors tour sans FLIP_ID | regression | critical |
 | tests/procedures/vplayer-memory-ack-248.md | manual | vplayer | #248 lot 5b procédure manuelle : coupure WiFi pendant une paire ratée, main passée, pause | regression | |
+| server-go/web/src/pages/VPlayerPage.memory-ack-reduced-motion.248.test.js | unit | vplayer | #248 lot 5b la secousse de la carte refusée est neutralisée sous prefers-reduced-motion (lecture du CSS) | regression | |
