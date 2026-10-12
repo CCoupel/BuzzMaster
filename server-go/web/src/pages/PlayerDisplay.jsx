@@ -217,7 +217,7 @@ function RafaleDifficultyPastilles({ difficulties }) {
 }
 
 export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false, vplayerPending = null }) {
-  const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard } = useGame()
+  const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard, status: connectionStatus } = useGame()
   const { categories: apiCategories } = useCategories()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
@@ -482,6 +482,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     enabled: !['SCORE', 'PLAYERS', 'PALMARES'].includes(gameState.remote),
     ownTeam: teamName,
     isVPlayer,
+    connectionStatus,
   })
 
   // Background index is now server-synchronized via gameState.currentBackgroundIndex

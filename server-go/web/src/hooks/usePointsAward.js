@@ -44,9 +44,12 @@ function diffGains(prev, scores) {
  * @returns {Array} lots affichés : { id, index, count, durationMs, own, cards: [{ key, team, points, color,
  *   stage: 'wait'|'flying'|'in'|'out', end:{x,y}, start:{x,y}, ctrl:{x,y} }] }
  */
-export function usePointsAward({ scoreChange, teams, enabled, ownTeam, isVPlayer }) {
+export function usePointsAward({ scoreChange, teams, enabled, ownTeam, isVPlayer, connectionStatus }) {
   const [lots, setLots] = useState([])
-  const seqRef = useRef(null) // null = aucun état de référence reçu
+  // La référence (SEQ + scores) est le premier état NON VIDE reçu par la connexion : l'état initial du
+  // contexte (SEQ 0, aucune équipe) n'en est pas un ; elle est reposée à chaque reconnexion WebSocket.
+  const refReadyRef = useRef(false)
+  const seqRef = useRef(null)
   const prevScoresRef = useRef(null)
   const busyRef = useRef(0)
   const timersRef = useRef(new Set())
@@ -101,10 +104,11 @@ export function usePointsAward({ scoreChange, teams, enabled, ownTeam, isVPlayer
     const scores = scoresOf(teams)
     const prev = prevScoresRef.current
     prevScoresRef.current = scores
-    const first = seqRef.current === null
+    const first = !refReadyRef.current
+    if (first && Object.keys(scores).length > 0) refReadyRef.current = true
     const isNewSeq = !first && seq !== seqRef.current
     seqRef.current = seq
-    if (first || !prev || !enabled) return // premier état d'une connexion : référence sans animer
+    if (first || !prev || !enabled) return // premier état (non vide) de la connexion : référence sans animer
 
     let gains
     if (isNewSeq) {
@@ -137,6 +141,12 @@ export function usePointsAward({ scoreChange, teams, enabled, ownTeam, isVPlayer
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoreChange, teams])
+
+  // Reconnexion WebSocket : le premier état de la nouvelle connexion sert de référence, sans animer
+  // (le serveur peut avoir un SEQ plus grand). Statut absent = non géré (tests), traité comme connecté.
+  useEffect(() => {
+    if (typeof connectionStatus === 'string' && connectionStatus !== 'connected') refReadyRef.current = false
+  }, [connectionStatus])
 
   // Changement de vue : la file est vidée.
   useEffect(() => { if (!enabled) clearAll() }, [enabled]) // eslint-disable-line react-hooks/exhaustive-deps
