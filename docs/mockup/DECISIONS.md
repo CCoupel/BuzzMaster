@@ -36,3 +36,18 @@
 - L'anim peut terminer une entracte ; déclencher une entracte manuelle reste réservé à l'admin. _(v11.2.0, admin_anim_tv_next_entracte, #245)_
 - Les compteurs de manche ne comptent pas les entractes ; le compteur global de l'anim les compte. _(v11.2.0, admin_anim_tv_next_entracte, #245)_
 
+## tv_points_award
+- Lots de 6 équipes au plus, grille d'arrivée 3 × 2 sans recouvrement. _(v11.2.1, multi_team, #265, 2026-10-12)_
+- Accélération complète au-delà de 3 lots. _(v11.2.1, multi_team, #265, 2026-10-12)_
+- Noms d'équipe tronqués par « … ». _(v11.2.1, multi_team, #265, 2026-10-12)_
+
+## vplayer_points_award
+- Seul le gain de l'équipe du joueur est affiché. _(v11.2.1, own_team, #265, 2026-10-12)_
+- L'animation est calée sur le lot de la TV. _(v11.2.1, own_team, #265, 2026-10-12)_
+
+## vplayer_qcm_answer
+- « ✓ » seulement après accusé du serveur. _(v11.2.1, ack, #248, 2026-10-12)_
+- Aucune invitation à réessayer. _(v11.2.1, ack, #248, 2026-10-12)_
+- État « équipe déjà servie » présent. _(v11.2.1, ack, #248, 2026-10-12)_
+- Renvoi toutes les 4 s, plafond de 30 envois. _(v11.2.1, ack, #248, 2026-10-12)_
+

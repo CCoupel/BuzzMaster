@@ -1,0 +1,154 @@
+<!--
+mockup:
+  composant: vplayer_points_award
+  feature: own_team
+  version: 11.2.1
+  type: ui
+  issue: "#265"
+  validee_le: 2026-10-12
+  complete: ["v11.2.1/ui/tv_points_award__multi_team.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablette — gain de sa propre équipe seulement (#265)</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#0b1020; color:#fff; }
+  .mock-bar { position:sticky; top:0; z-index:500; background:#020617; color:#cbd5e1; padding:.6rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem .9rem; align-items:center; font-size:.82rem; border-bottom:1px solid #1e293b; }
+  .mock-bar strong { color:#fff; }
+  .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-bar button { background:#6366f1; color:#fff; border:0; border-radius:.4rem; padding:.3rem .8rem; font-weight:700; cursor:pointer; }
+  .mock-note { max-width:900px; margin:.7rem auto; padding:0 1rem; font-size:.8rem; color:#94a3b8; line-height:1.45; }
+  .mock-note b { color:#e2e8f0; }
+  .status { color:#fde68a; }
+  /* cadre tablette 4:3 paysage (même cadre que vplayer_ardoise_keyboard__final_ack) */
+  .device { position:relative; width:min(900px, calc(100vw - 2rem)); aspect-ratio:4/3; margin:0 auto 1.2rem; border-radius:1.4rem; border:10px solid #1f2937; overflow:hidden;
+            background:linear-gradient(160deg,#1e1b4b,#312e81 55%,#4338ca); container-type:size; }
+  .player-head { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:.6rem; padding:.7rem 1rem; font-weight:700; z-index:3; }
+  .dot { width:.8rem; height:.8rem; border-radius:50%; background:#22c55e; }
+  .team { font-size:.85rem; color:#c7d2fe; font-weight:600; }
+  .conn { margin-left:auto; font-size:.75rem; padding:.15rem .55rem; border-radius:999px; background:rgba(34,197,94,.2); color:#86efac; }
+  /* vue de jeu existante (inchangée) */
+  .question { position:absolute; top:14%; left:6%; right:6%; text-align:center; font-size:clamp(1rem,3vw,1.6rem); font-weight:700; }
+  .grid { position:absolute; left:8%; right:8%; top:32%; display:grid; grid-template-columns:1fr 1fr; gap:3cqh 2cqw; }
+  .ans { display:flex; align-items:center; gap:.8rem; padding:2.4cqh 1.2rem; border-radius:1rem; font-weight:700; font-size:clamp(.9rem,2.4vw,1.2rem); }
+  .ans .l { font-size:1.6em; font-weight:900; }
+  .ans.wrong { filter:grayscale(50%); opacity:.75; }
+  .ans.correct { box-shadow:0 0 30px currentColor; border:3px solid #fff; }
+  .a { background:#dc2626; } .b { background:#16a34a; color:#fff; } .c { background:#ca8a04; } .d { background:#2563eb; }
+  /* couche animation */
+  .fw { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:4; }
+  .rocket { position:absolute; width:2.4cqh; height:2.4cqh; margin:-1.2cqh 0 0 -1.2cqh; border-radius:50%; background:var(--c); box-shadow:0 0 2cqh .6cqh var(--c); }
+  .trail { position:absolute; width:1.2cqh; height:1.2cqh; margin:-.6cqh 0 0 -.6cqh; border-radius:50%; background:var(--c); opacity:.7; transition:opacity .45s, transform .45s; }
+  .spark { position:absolute; width:1.6cqh; height:1.6cqh; margin:-.8cqh 0 0 -.8cqh; border-radius:50%; background:var(--c); }
+  .award { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) scale(.2); opacity:0; max-width:70cqw;
+           display:flex; flex-direction:column; align-items:center; gap:1cqh; padding:3cqh 4cqw; border-radius:3cqh;
+           background:rgba(2,6,23,.82); border:.8cqh solid var(--c); box-shadow:0 0 6cqh var(--c); }
+  .award .t { max-width:100%; font-size:5.4cqh; font-weight:800; color:var(--c); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .award .p { font-size:11cqh; font-weight:900; color:#4ade80; text-shadow:0 0 4cqh #22c55e; line-height:1; }
+  .award .s { font-size:2.8cqh; color:#cbd5e1; }
+  .award.zoom { animation: zoomIn 320ms cubic-bezier(.2,1.6,.4,1) forwards; }
+  .award.calm { animation: calmIn 320ms ease-out forwards; }
+  .award.out { animation: fadeOut 450ms ease-in forwards; }
+  @keyframes zoomIn { 0% { opacity:0; transform:translate(-50%,-50%) scale(.2); } 70% { opacity:1; transform:translate(-50%,-50%) scale(1.15); } 100% { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+  @keyframes calmIn { from { opacity:0; transform:translate(-50%,-50%) scale(1); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+  @keyframes fadeOut { from { opacity:1; transform:translate(-50%,-50%) scale(1); } to { opacity:0; transform:translate(-50%,-50%) scale(.85); } }
+  .none { position:absolute; left:50%; bottom:5%; transform:translateX(-50%); font-size:.8rem; color:#fde68a; background:rgba(2,6,23,.75); padding:.3rem .8rem; border-radius:999px; border:1px dashed #fde68a; z-index:5; display:none; }
+  .rules { max-width:900px; margin:0 auto 2rem; padding:0 1rem; font-size:.8rem; color:#94a3b8; line-height:1.5; }
+  .rules li { margin:.15rem 0; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — attribution reçue :</strong>
+  <label><input type="radio" name="sc" value="own" checked> Mon équipe gagne +3 (seule)</label>
+  <label><input type="radio" name="sc" value="ownBatch"> Mon équipe +5, dans une attribution à 12 équipes (lot 2/2 à la TV)</label>
+  <label><input type="radio" name="sc" value="others"> Seules d'autres équipes gagnent</label>
+  <label><input type="radio" name="sc" value="hidden"> Correction cachée (#252) sur mon équipe</label>
+  <button id="play">▶ Rejouer</button>
+  <label><input type="checkbox" id="reduced"> prefers-reduced-motion (simulé)</label>
+  <span class="status" id="status"></span>
+</div>
+<p class="mock-note">Page joueur (<b>/player</b>) sur tablette, vue de jeu existante <b>inchangée</b> (ici une QCM révélée). La tablette n'anime <b>que le gain de l'équipe du joueur</b> : une seule fusée à la couleur de l'équipe, qui part d'un point aléatoire du bas de l'écran, puis un zoom au centre avec « +X pts ». Les gains des autres équipes n'animent rien sur la tablette (fin de la célébration involontaire actuelle, qui rejouait sur la tablette l'animation de la TV pour n'importe quelle équipe).</p>
+
+<div class="device" id="dev">
+  <div class="player-head"><span class="dot"></span>Paul <span class="team">· Les Bleus</span><span class="conn">● connecté</span></div>
+  <div class="question">Quel est le plus long fleuve de France ?</div>
+  <div class="grid">
+    <div class="ans a wrong"><span class="l">A</span>La Seine</div>
+    <div class="ans b correct"><span class="l">B</span>La Loire</div>
+    <div class="ans c wrong"><span class="l">C</span>Le Rhône</div>
+    <div class="ans d wrong"><span class="l">D</span>La Garonne</div>
+  </div>
+  <div class="fw" id="fw"></div>
+  <div class="none" id="none">Aucune animation sur cette tablette</div>
+</div>
+
+<div class="rules">
+  <ul>
+    <li><b>Déclencheur</b> : hausse du score de l'équipe du joueur (TEAM du bumper du VJoueur) dans une mise à jour. Une baisse, une correction cachée (#252) ou un joueur sans équipe : rien.</li>
+    <li><b>Moment</b> : <b>calé sur le lot de la TV</b>. La tablette calcule, avec la même fonction pure que la TV et la même entrée (<code>SCORE_CHANGE.GAINS</code>), le lot qui contient son équipe, et joue son animation au début de ce lot (délai = somme des durées des lots précédents, plus la file d'attente éventuelle). Pendant l'attente, rien n'est affiché sur la tablette.</li>
+    <li><b>Durée</b> : celle du lot TV qui contient l'équipe : 3,2 s au rythme normal, 1,76 s à partir du 4ᵉ lot (vol 28 %, zoom 10 %, lecture jusqu'à 86 %, fondu 14 %).</li>
+    <li><b>Position</b> : départ à x aléatoire entre 10 et 90 % du bas ; arrivée et zoom au centre de l'écran (une seule carte : aucune collision possible), carte au plus 70 % de la largeur, nom sur une ligne avec points de suspension.</li>
+    <li><b>Étincelles</b> : couleur de l'équipe, blanc, or (couleurs des confettis actuels), contenues dans l'écran.</li>
+    <li><b>prefers-reduced-motion</b> : ni fusée ni étincelles, la carte apparaît en fondu au centre puis disparaît, même durée.</li>
+    <li>L'animation passe <b>au-dessus</b> de la vue de jeu sans la bloquer (aucun clic intercepté) et ne remplace aucun overlay existant (buzz, ARDOISE, entracte).</li>
+  </ul>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fw = $('fw'); let timers = [], rafs = [];
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const MY = ['Les Bleus', '#3b82f6'];
+function stop() { timers.forEach(clearTimeout); rafs.forEach(cancelAnimationFrame); timers = []; rafs = []; fw.innerHTML = ''; $('none').style.display = 'none'; }
+function play() {
+  stop();
+  const sc = document.querySelector('input[name=sc]:checked').value, reduced = $('reduced').checked;
+  if (sc === 'others' || sc === 'hidden') { $('none').style.display = 'block'; $('status').textContent = sc === 'others' ? '7 autres équipes ont gagné — rien ici' : 'correction cachée — rien ici'; return; }
+  const pts = sc === 'own' ? 3 : 5, L = 3200, color = MY[1];
+  const wait = sc === 'ownBatch' ? 3200 : 0;
+  $('status').textContent = sc === 'ownBatch' ? 'attribution à 12 équipes : « Les Bleus » est dans le lot 2/2 de la TV — départ dans 3,2 s, rien affiché d\'ici là' : '';
+  const card = document.createElement('div'); card.className = 'award'; card.style.setProperty('--c', color);
+  card.innerHTML = '<span class="t"></span><span class="p"></span><span class="s">pour votre équipe</span>';
+  card.querySelector('.t').textContent = MY[0]; card.querySelector('.p').textContent = '+' + pts + ' pts';
+  const end = { x: 50, y: 50 };
+  const show = () => { fw.appendChild(card); card.classList.add(reduced ? 'calm' : 'zoom'); };
+  const run = () => {
+  if (reduced) show(); else {
+    const start = { x: rnd(10, 90), y: 100 }, ctrl = { x: clamp(50 + rnd(-25, 25), 5, 95), y: rnd(20, 40) };
+    const r = document.createElement('div'); r.className = 'rocket'; r.style.setProperty('--c', color); fw.appendChild(r);
+    const t0 = performance.now(); let lt = 0;
+    const step = now => {
+      const k = Math.min(1, (now - t0) / (L * .28)), e = 1 - Math.pow(1 - k, 2);
+      const x = (1 - e) ** 2 * start.x + 2 * (1 - e) * e * ctrl.x + e * e * end.x, y = (1 - e) ** 2 * start.y + 2 * (1 - e) * e * ctrl.y + e * e * end.y;
+      r.style.left = x + '%'; r.style.top = y + '%';
+      if (now - lt > 35) { lt = now; const t = document.createElement('div'); t.className = 'trail'; t.style.setProperty('--c', color); t.style.left = x + '%'; t.style.top = y + '%'; fw.appendChild(t);
+        requestAnimationFrame(() => { t.style.opacity = 0; t.style.transform = 'scale(.3)'; }); timers.push(setTimeout(() => t.remove(), 500)); }
+      if (k < 1) { rafs.push(requestAnimationFrame(step)); return; }
+      r.remove(); show();
+      [color, '#ffffff', '#ffd700'].forEach((c, ci) => { for (let i = 0; i < 8; i++) {
+        const s = document.createElement('div'); s.className = 'spark'; s.style.setProperty('--c', c); fw.appendChild(s);
+        const a = ((i * 3 + ci) / 24) * Math.PI * 2, d = rnd(18, 30);
+        s.animate([{ left: '50%', top: '50%', opacity: 1 }, { left: clamp(50 + Math.cos(a) * d * .75, 2, 98) + '%', top: clamp(50 + Math.sin(a) * d, 2, 98) + '%', opacity: 0 }], { duration: 1000, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'forwards' });
+        timers.push(setTimeout(() => s.remove(), 1050)); } });
+    };
+    rafs.push(requestAnimationFrame(step));
+  }
+  timers.push(setTimeout(() => { card.classList.remove('zoom', 'calm'); card.classList.add('out'); }, L * .86));
+  timers.push(setTimeout(() => card.remove(), L));
+  };
+  timers.push(setTimeout(run, wait));
+}
+document.querySelectorAll('input[name=sc]').forEach(r => r.addEventListener('change', play));
+$('reduced').addEventListener('change', play); $('play').addEventListener('click', play);
+if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) $('reduced').checked = true;
+play();
+</script>
+</body>
+</html>
