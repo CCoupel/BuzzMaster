@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -153,19 +154,27 @@ func TestSlowClient246_HealthyClientIsNeverEvicted(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
+	var received atomic.Int64
 	go func() {
 		for {
 			if _, _, err := c.ReadMessage(); err != nil {
 				return
 			}
+			received.Add(1)
 		}
 	}()
 	waitFor246(15*time.Second, func() bool { return hub.ClientCount() == 1 })
 	msg, _ := protocol.NewMessage("UPDATE", map[string]string{"X": strings.Repeat("x", 4096)})
 
-	for i := 0; i < 500; i++ {
+	// #263 (review): flow control instead of a fixed 1 ms pace. A reader that is merely slow to be
+	// scheduled (loaded runner) must not be mistaken for a client that never reads: never let more
+	// than ~100 messages (well under the 256-message queue) pile up unread.
+	const total, maxUnread = 500, 100
+	for i := 0; i < total; i++ {
+		if !waitFor246(30*time.Second, func() bool { return int64(i)-received.Load() <= maxUnread }) {
+			t.Fatalf("le client lecteur ne consomme plus (envoyés=%d, reçus=%d)", i, received.Load())
+		}
 		hub.BroadcastToTypes(msg, ClientTypeAdmin)
-		time.Sleep(time.Millisecond)
 	}
 
 	if logHas246(bl, "CLIENT_EVICTED_SLOW") || hub.ClientCount() != 1 {
