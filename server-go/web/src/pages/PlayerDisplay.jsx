@@ -216,7 +216,7 @@ function RafaleDifficultyPastilles({ difficulties }) {
   )
 }
 
-export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false, vplayerPending = null }) {
+export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false, vplayerPending = null, onFlipCard = null }) {
   const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard, status: connectionStatus } = useGame()
   const { categories: apiCategories } = useCategories()
   const [previousRanking, setPreviousRanking] = useState({})
@@ -1856,7 +1856,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 3: Media or "PREPAREZ-VOUS" message or COUNTDOWN */}
                 <div
-                  className={`zone-media${vplayerPending ? ' vplayer-pending-pressed' : ''}`}
+                  className={`zone-media${vplayerPending && !vplayerPending.cardId ? ' vplayer-pending-pressed' : ''}`}
                   onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
                   style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
                 >
@@ -2185,11 +2185,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       return (
                         <motion.div
                           key={cardData.id}
-                          className={`memory-card ${isFlipped ? 'flipped' : ''} ${showMatchedStyle ? 'matched' : ''} ${isJustMatched ? 'just-matched' : ''}`}
+                          className={`memory-card ${isFlipped ? 'flipped' : ''} ${showMatchedStyle ? 'matched' : ''} ${isJustMatched ? 'just-matched' : ''}${vplayerPending?.cardId === cardData.id ? (vplayerPending.status === 'failed' ? ' vplayer-pending-card vplayer-pending-failed' : ' vplayer-pending-card') : ''}`}
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: index * 0.05, duration: 0.3 }}
-                          onClick={() => canClick && flipMemoryCard(cardData.id, undefined, playerId)}
+                          onClick={() => canClick && (onFlipCard ? onFlipCard(cardData.id, undefined) : flipMemoryCard(cardData.id, undefined, playerId))}
                           style={{
                             cursor: canClick ? 'pointer' : 'default',
                             '--matched-team-color': teamColor
@@ -2404,9 +2404,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       <button
                         key={cardData.id}
                         type="button"
-                        className={`memotion-tv-memory-card ${isMatched ? 'matched' : ''} ${cardRevealed ? 'up' : 'down'}`}
+                        className={`memotion-tv-memory-card ${isMatched ? 'matched' : ''} ${cardRevealed ? 'up' : 'down'}${vplayerPending?.cardId === cardData.id ? (vplayerPending.status === 'failed' ? ' vplayer-pending-card vplayer-pending-failed' : ' vplayer-pending-card') : ''}`}
                         disabled={!canClick}
-                        onClick={() => canClick && flipMemoryCard(cardData.id, cardHostContext.cardId, playerId)}
+                        onClick={() => canClick && (onFlipCard ? onFlipCard(cardData.id, cardHostContext.cardId) : flipMemoryCard(cardData.id, cardHostContext.cardId, playerId))}
                         aria-label={cardRevealed ? undefined : `Carte ${cardLetter}, face cachée`}
                       >
                         {cardRevealed ? (
@@ -2968,7 +2968,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 3: Media - shows MEDIA_ANSWER during REVEAL if available - ALWAYS clickable for VPlayer buzz */}
                 <div
-                  className={`zone-media${vplayerPending ? ' vplayer-pending-pressed' : ''}`}
+                  className={`zone-media${vplayerPending && !vplayerPending.cardId ? ' vplayer-pending-pressed' : ''}`}
                   onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
                   style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
                 >

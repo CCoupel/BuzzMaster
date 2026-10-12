@@ -245,6 +245,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // hash } | null, nouvel objet à chaque accusé ; et dernier REVEAL_REFUSED
   // (admin/anim) : { reason, pending: [{team, offline}] } | null.
   const [ardoiseFinalAck, setArdoiseFinalAck] = useState(null)
+  // #248 (lot 5b) — dernier FLIP_MEMORY_CARD_ACK reçu : { flipId, cardId, motionCardId, status, reason, duplicate }
+  const [flipMemoryCardAck, setFlipMemoryCardAck] = useState(null)
   const [revealRefused, setRevealRefused] = useState(null)
   const [logs, setLogs] = useState([])
   const [firmwareInfo, setFirmwareInfo] = useState(null) // { VERSION, FILENAME, SIZE, EXISTS }
@@ -896,6 +898,17 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         setArdoiseFinalAck({ questionId: MSG?.QUESTION_ID, hash: MSG?.HASH })
         break
 
+      case 'FLIP_MEMORY_CARD_ACK':
+        setFlipMemoryCardAck({
+          flipId: MSG?.FLIP_ID,
+          cardId: MSG?.CARD_ID,
+          motionCardId: MSG?.MOTION_CARD_ID ?? '',
+          status: MSG?.STATUS,
+          reason: MSG?.REASON ?? '',
+          duplicate: !!MSG?.DUPLICATE,
+        })
+        break
+
       case 'REVEAL_REFUSED':
         setRevealRefused({
           reason: MSG?.REASON,
@@ -1194,10 +1207,14 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // (VPlayerPage.jsx via PlayerDisplay.jsx, prop `playerId`) — absent pour
   // tv/anim, qui n'ont pas de bumper et pour qui le serveur ne vérifie de
   // toute façon aucun tour (clientType != vplayer).
-  const flipMemoryCard = useCallback((cardId, motionCardId, playerId) => {
+  // #248 (lot 5b) — `flipId` optionnel : identifiant unique par geste (1-64 [A-Za-z0-9_-]), identique à
+  // chaque renvoi ; rend le retournement idempotent et déclenche FLIP_MEMORY_CARD_ACK. Absent/vide ⇒
+  // aucune clé FLIP_ID (comportement inchangé : tv, anim, geste hors tour, ancien serveur).
+  const flipMemoryCard = useCallback((cardId, motionCardId, playerId, flipId) => {
     const msg = { CARD_ID: cardId }
     if (motionCardId) msg.MOTION_CARD_ID = motionCardId
     if (playerId) msg.ID = playerId
+    if (flipId) msg.FLIP_ID = flipId
     sendMessage('FLIP_MEMORY_CARD', msg)
   }, [sendMessage])
 
@@ -1588,6 +1605,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     clearTeamPointsBatchResult,
     // ARDOISE garde-fous au STOP (#246)
     ardoiseFinalAck,
+    flipMemoryCardAck,
     revealRefused,
     clearRevealRefused,
     // Logs

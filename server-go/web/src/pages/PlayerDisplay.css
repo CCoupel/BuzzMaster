@@ -3816,3 +3816,10 @@
 .qcm-answer-item.vplayer-pending-chosen::after { content: '⏳'; position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); font-size: 1.4em; }
 .qcm-answer-item.vplayer-pending-chosen.vplayer-pending-failed::after { content: '✕'; }
 .zone-media.vplayer-pending-pressed { opacity: 0.75; transform: translateY(2px); }
+
+/* #248 lot 5b — carte MEMORY/MEMOTION en attente d'accusé (tablette) : contour jaune + ⏳, tremble si échec. */
+.memory-card.vplayer-pending-card, .memotion-tv-memory-card.vplayer-pending-card { outline: 4px solid #fde68a; outline-offset: 3px; position: relative; }
+.memory-card.vplayer-pending-card::after, .memotion-tv-memory-card.vplayer-pending-card::after { content: '⏳'; position: absolute; right: 0.3rem; top: 0.3rem; font-size: 2.6vh; }
+.memory-card.vplayer-pending-failed, .memotion-tv-memory-card.vplayer-pending-failed { outline-color: rgba(239, 68, 68, 0.8); animation: vplayer-card-shake 0.4s 2; }
+.memory-card.vplayer-pending-failed::after, .memotion-tv-memory-card.vplayer-pending-failed::after { content: '✕'; }
+@keyframes vplayer-card-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }

@@ -26,15 +26,21 @@ export const ACKED_SEND_MAX = 30
  * @param {string|null} o.questionId question courante
  * @param {boolean}  o.acked       accusé reçu pour ce joueur
  * @param {boolean}  o.teamServed  l'équipe a déjà été servie
+ * @param {string|null} [o.refused] motif de refus reçu du serveur (ex. 'NOT_TURN', lot 5b) : fait passer
+ *                                   l'envoi en cours en `failed` sans renvoi ; ignoré au repos
+ * start(action, payload, gestureKey?) : avec une clé de geste (retournement MEMORY/MEMOTION : plusieurs gestes
+ * par question), un envoi par (question, clé) et un nouveau geste est accepté une fois le précédent terminé ;
+ * sans clé : un seul appui par question (lots 5a, inchangé).
  */
-export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, acked, teamServed }) {
+export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, acked, teamServed, refused = null }) {
+  const [failReason, setFailReason] = useState(null)
   const [status, setStatus] = useState('idle')
   const [resending, setResending] = useState(false)
   const recRef = useRef(null) // { action, payload, qid, sends }
   const statusRef = useRef('idle')
   const timerRef = useRef(null)
   const live = useRef({})
-  live.current = { sendBound, connStatus, bound, phase, questionId, acked, teamServed }
+  live.current = { sendBound, connStatus, bound, phase, questionId, acked, teamServed, refused }
 
   const setSt = useCallback((s) => { statusRef.current = s; setStatus(s) }, [])
 
@@ -58,11 +64,18 @@ export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, 
     timerRef.current = setInterval(() => attempt(false), ACKED_SEND_INTERVAL_MS)
   }, [setSt])
 
-  const start = useCallback((action, payload) => {
+  const start = useCallback((action, payload, gestureKey) => {
     const l = live.current
-    if (recRef.current && recRef.current.qid === l.questionId) return false // un seul appui par question
+    const rec = recRef.current
+    if (rec && rec.qid === l.questionId) {
+      // sans clé : un seul appui par question ; avec clé : un geste = une clé, et le geste suivant
+      // n'est accepté qu'une fois le précédent terminé (accusé, refus ou échec)
+      if (rec.key === gestureKey) return false
+      if (statusRef.current === 'sending') return false
+    }
     stopTimer()
-    recRef.current = { action, payload, qid: l.questionId, sends: 0 }
+    recRef.current = { action, payload, qid: l.questionId, sends: 0, key: gestureKey }
+    setFailReason(null)
     setResending(false)
     setSt('sending')
     timerRef.current = setInterval(() => attempt(false), ACKED_SEND_INTERVAL_MS)
@@ -74,6 +87,7 @@ export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, 
     stopTimer()
     recRef.current = null
     setResending(false)
+    setFailReason(null)
     setSt('idle')
   }, [setSt])
 
@@ -83,6 +97,7 @@ export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, 
     if (!rec) return
     const s = statusRef.current
     if (s === 'sending') {
+      if (refused) { stopTimer(); setFailReason(refused); setSt('failed'); return }
       if (acked) { stopTimer(); setSt('acked'); return }
       if (teamServed) { stopTimer(); setSt('served'); return }
       const stale = rec.qid !== questionId || !(phase === 'STARTED' || phase === 'PAUSED')
@@ -91,7 +106,7 @@ export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, 
       if (rec.qid !== questionId) clear()
     }
     if (phase === 'PREPARE' && recRef.current) clear()
-  }, [status, acked, teamServed, questionId, phase, clear, setSt])
+  }, [status, acked, teamServed, refused, questionId, phase, clear, setSt])
 
   // Renvoi : reliaison, reprise en STARTED.
   useEffect(() => { attempt(true) }, [bound, connStatus, phase, attempt])
@@ -107,5 +122,5 @@ export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, 
 
   useEffect(() => stopTimer, [])
 
-  return { status, resending, start, clear }
+  return { status, resending, failReason, start, clear }
 }

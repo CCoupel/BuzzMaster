@@ -144,7 +144,9 @@ describe.each(Object.keys(HOSTS))('VPlayerPage — retournement %s avec accusé 
     expect(f[0].FLIP_ID).toMatch(FLIP_ID_RE)
     if (H.motionCardId) expect(f[0].MOTION_CARD_ID).toBe(H.motionCardId)
     expect(m.text()).toMatch(MSG.pending)
-    expect(m.text()).not.toMatch(/✓/)
+    // pas de « ✓ » de confirmation avant l'accusé : on regarde la pastille d'état (la grille MEMOTION
+    // existante porte, elle, un « ✓ » sur la face cachée d'une carte DONE, sans rapport avec l'accusé)
+    expect(m.view.container.querySelector('.vplayer-ack-pill')?.textContent ?? '').not.toMatch(/✓/)
   })
 
   it('Critical — accusé APPLIED : plus de pastille, plus aucun renvoi (la carte suit l\'état reçu)', async () => {

@@ -50,6 +50,7 @@ export default function VPlayerPage() {
     playerEvictedStatus, clearPlayerEvictedStatus,
     sendClientTrace,
     ardoiseFinalAck,
+    flipMemoryCard, flipMemoryCardAck,
   } = useGame()
 
   const [playerSession, setPlayerSession] = useState(null)
@@ -204,16 +205,26 @@ export default function VPlayerPage() {
     return sendMessage(action, payload)
   }, [sendMessage])
 
-  // #248 — accusé de réception de la réponse QCM / du buzz SPEEDY.
+  // #248 — accusé de réception de la réponse QCM / du buzz SPEEDY / du retournement MEMORY-MEMOTION.
   const pendingColorRef = useRef(null) // couleur QCM choisie, mise en avant pendant l'attente
+  // Lot 5b — retournement : un FLIP_ID neuf par geste (identique à chaque renvoi) ; l'accusé est celui qui
+  // porte ce FLIP_ID. Repli sans accusé du serveur (ancien serveur) : la carte vue retournée dans l'état reçu.
+  const flipIdRef = useRef(null)
+  const flipCardRef = useRef(null)
+  const qType = gameState.question?.TYPE
+  const isFlipQuestion = qType === 'MEMORY' || qType === 'MEMOTION'
+  const flipAck = flipMemoryCardAck && flipIdRef.current && flipMemoryCardAck.flipId === flipIdRef.current ? flipMemoryCardAck : null
+  const flippedIds = qType === 'MEMORY' ? gameState.memoryFlippedCards : gameState.MEMOTION_ACTIVE?.STATE?.MEMORY_FLIPPED_CARDS
+  const flipSeen = isFlipQuestion && !!flipCardRef.current && Array.isArray(flippedIds) && flippedIds.includes(flipCardRef.current)
   const ackedSend = useAckedSend({
     sendBound,
     connStatus: status,
     bound,
     phase: gameState.phase,
     questionId: gameState.question?.ID ?? null,
-    acked: !!bumper && bumper.TIME > 0,
-    teamServed: !!team && team.TIME > 0 && !(bumper && bumper.TIME > 0),
+    acked: isFlipQuestion ? (flipAck?.status === 'APPLIED' || flipSeen) : (!!bumper && bumper.TIME > 0),
+    teamServed: isFlipQuestion ? false : (!!team && team.TIME > 0 && !(bumper && bumper.TIME > 0)),
+    refused: isFlipQuestion && flipAck?.status === 'IGNORED' ? (flipAck.reason || 'IGNORED') : null,
   })
 
   // Find bumper by ID in bumpers list (#120 F2, #246 : sans repli par nom).
@@ -827,6 +838,26 @@ export default function VPlayerPage() {
     }
   }
 
+  // #248 (lot 5b) — retournement d'une carte MEMORY / MEMOTION par la tablette. Seule l'équipe qui a la main
+  // lance le parcours avec accusé (FLIP_ID, attente, renvoi) ; un tap hors tour part SANS FLIP_ID et reste
+  // ignoré en silence par le serveur (décision du 2026-08-24). Un seul geste en attente à la fois.
+  const handleFlipCard = (cardId, motionCardId) => {
+    if (!bumper || !bumper.id) return
+    const mainTeam = qType === 'MEMOTION' ? gameState.MEMOTION_CURRENT_TEAM : gameState.MEMORY_CURRENT_TEAM
+    if (!team?.NAME || mainTeam !== team.NAME) {
+      flipMemoryCard(cardId, motionCardId, bumper.id)
+      return
+    }
+    if (ackedSend.status === 'sending') return
+    const flipId = `f-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    const payload = { CARD_ID: cardId, ID: bumper.id, FLIP_ID: flipId }
+    if (motionCardId) payload.MOTION_CARD_ID = motionCardId
+    if (ackedSend.start('FLIP_MEMORY_CARD', payload, flipId)) {
+      flipIdRef.current = flipId
+      flipCardRef.current = cardId
+    }
+  }
+
   // #246 — « Reprendre ici » : cette connexion redevient la connexion liée
   // (l'autre onglet/appareil recevra à son tour DUPLICATE_SESSION).
   const handleResume = useCallback(() => {
@@ -911,14 +942,17 @@ export default function VPlayerPage() {
   // du buzz SPEEDY, même vocabulaire que l'ARDOISE (#246). « ✓ » seulement après
   // l'accusé du serveur ; jamais d'invitation à réessayer.
   let ackPill = null
-  if (ackedSend.status !== 'idle') {
-    const W = isQcmQuestion
-      ? { noun: 'réponse', sent: 'envoyée', recv: '✓ Réponse reçue', failTx: '✕ Réponse non reçue — la question est terminée', team: 'ℹ Votre équipe a déjà répondu', sending: 'Envoi de votre réponse…', resend: 'Renvoi de votre réponse…', paused: 'envoi de votre réponse…' }
-      : { noun: 'buzz', sent: 'envoyé', recv: '✓ Buzz reçu', failTx: '✕ Buzz non reçu — la question est terminée', team: 'ℹ Votre équipe a déjà buzzé', sending: 'Envoi de votre buzz…', resend: 'Renvoi de votre buzz…', paused: 'envoi de votre buzz…' }
+  if (ackedSend.status !== 'idle' && !(isFlipQuestion && ackedSend.status === 'acked')) {
+    // MEMORY/MEMOTION : pas de pastille « reçu » (maquette : la carte se retourne d'elle-même)
+    const W = isFlipQuestion
+      ? { lost: '⚠ Connexion perdue — la carte sera retournée dès le retour du réseau', failTx: ackedSend.failReason === 'NOT_TURN' ? '✕ Carte non retournée — ce n’est plus votre tour' : '✕ Carte non retournée', sending: 'Retournement de la carte…', resend: 'Renvoi du retournement…', paused: 'retournement en attente…' }
+      : isQcmQuestion
+      ? { lost: '⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau', recv: '✓ Réponse reçue', failTx: '✕ Réponse non reçue — la question est terminée', team: 'ℹ Votre équipe a déjà répondu', sending: 'Envoi de votre réponse…', resend: 'Renvoi de votre réponse…', paused: 'envoi de votre réponse…' }
+      : { lost: '⚠ Connexion perdue — votre buzz sera envoyé dès le retour du réseau', recv: '✓ Buzz reçu', failTx: '✕ Buzz non reçu — la question est terminée', team: 'ℹ Votre équipe a déjà buzzé', sending: 'Envoi de votre buzz…', resend: 'Renvoi de votre buzz…', paused: 'envoi de votre buzz…' }
     if (ackedSend.status === 'acked') ackPill = { tone: 'ok', text: W.recv }
     else if (ackedSend.status === 'served') ackPill = { tone: 'info', text: W.team }
     else if (ackedSend.status === 'failed') ackPill = { tone: 'fail', text: W.failTx }
-    else if (status !== 'connected') ackPill = { tone: 'off', text: `⚠ Connexion perdue — votre ${W.noun} sera ${W.sent} dès le retour du réseau` }
+    else if (status !== 'connected') ackPill = { tone: 'off', text: W.lost }
     else if (gameState.phase === 'PAUSED') ackPill = { tone: 'pause', prefix: '⏸ Jeu en pause · ', spin: true, text: W.paused }
     else ackPill = { tone: 'sending', spin: true, text: ackedSend.resending ? W.resend : W.sending }
   }
@@ -1123,7 +1157,8 @@ export default function VPlayerPage() {
           onQCMAnswer={handleQCMAnswer}
           vplayerHasBuzzed={hasBuzzed}
           vplayerPending={ackedSend.status === 'sending' || ackedSend.status === 'failed'
-            ? { status: ackedSend.status, color: pendingColorRef.current } : null}
+            ? { status: ackedSend.status, color: pendingColorRef.current, cardId: isFlipQuestion ? flipCardRef.current : undefined } : null}
+          onFlipCard={handleFlipCard}
         />
       </div>
 
