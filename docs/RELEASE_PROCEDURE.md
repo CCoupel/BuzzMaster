@@ -326,6 +326,31 @@ EOF
 
 ---
 
+### 9bis. Validation CI sur le commit exact (obligatoire avant merge et tag)
+
+> **Décision de l'utilisateur (2026-10-12)** : aucun merge dans `main` et aucun tag tant que la CI n'a pas validé le commit exact à publier.
+> Contexte : trois échecs de la CI de release de 11.2.0 (govulncheck, `TestLingerListener_SetsLinger`, `TestDNSServer_Start_UsesConfiguredPort`)
+> n'ont été découverts qu'après le tag.
+
+Avant de merger dans `main` et de créer le tag, vérifier :
+
+1. **Run vert de `test-branch.yml` sur le commit exact** : le workflow se déclenche au push de `milestone/**` ou à la main
+   (`gh workflow run test-branch.yml --ref <branche>`). Il doit être vert pour le SHA à publier :
+   ```bash
+   gh run list --workflow test-branch.yml --commit <sha>
+   ```
+   Il exécute les mêmes étapes que le job « Test (race) » de `release.yml`, sans rien publier.
+2. **`govulncheck` propre juste avant le tag** : le même audit que `release.yml` (`govulncheck@latest`, `govulncheck ./...`, toolchain de la CI),
+   en plus de la QA.
+3. **En cas d'échec** : analyser, corriger sur la branche, relancer le run. **Aucun merge dans `main` et aucun tag** tant que ce run n'est pas vert.
+   Un tag ne sert jamais de test.
+
+Rappels :
+- Les tests de timing se valident dans les conditions du runner (2 CPU, `-race`, paquet entier) : `test-branch.yml` est le juge.
+- Tout changement de `release.yml` doit être reflété dans `test-branch.yml` (même version de Go, mêmes étapes).
+
+---
+
 ### 10. Push des Commits
 
 ```bash
@@ -485,6 +510,7 @@ curl -s http://localhost/version
 [ ] 7.  Backlog mis à jour
 [ ] 8.  Documentation utilisateur mise à jour (si nécessaire)
 [ ] 9.  Changements commités
+[ ] 10bis. Run vert de test-branch.yml sur le commit exact + govulncheck propre (avant merge et tag)
 [ ] 10. Commits poussés
 [ ] 11. Tag créé et poussé (déclenche CI)
 [ ] 12. 🤖 CI surveillée par Claude (6 jobs verts ✅ : checking, testing, compiling-firmware,

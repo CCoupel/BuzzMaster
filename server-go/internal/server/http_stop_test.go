@@ -76,9 +76,9 @@ func newStopTestServer(t *testing.T) (*HTTPServer, int) {
 	}
 
 	// Poll until the server is ready (GET /version returns 200).
-	client := &http.Client{Timeout: 300 * time.Millisecond}
+	client := &http.Client{Timeout: 2 * time.Second}
 	versionURL := fmt.Sprintf("http://127.0.0.1:%d/version", port)
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	ready := false
 	for time.Now().Before(deadline) {
 		resp, err := client.Get(versionURL)
@@ -92,7 +92,7 @@ func newStopTestServer(t *testing.T) (*HTTPServer, int) {
 		time.Sleep(30 * time.Millisecond)
 	}
 	if !ready {
-		t.Fatal("newStopTestServer: server did not become ready within 3 s")
+		t.Fatal("newStopTestServer: server did not become ready within 20 s")
 	}
 
 	return srv, port
@@ -213,9 +213,9 @@ func TestHTTPServerStop_GracefulDrain(t *testing.T) {
 	}
 
 	// Wait for server to be ready.
-	readyClient := &http.Client{Timeout: 300 * time.Millisecond}
+	readyClient := &http.Client{Timeout: 2 * time.Second}
 	versionURL := fmt.Sprintf("http://127.0.0.1:%d/version", port)
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		resp, err := readyClient.Get(versionURL)
 		if err == nil {
@@ -251,8 +251,8 @@ func TestHTTPServerStop_GracefulDrain(t *testing.T) {
 	select {
 	case <-handlerStarted:
 		// good — request is in flight
-	case <-time.After(2 * time.Second):
-		t.Fatal("slow handler did not start within 2 s")
+	case <-time.After(15 * time.Second):
+		t.Fatal("slow handler did not start within 15 s")
 	}
 
 	// Call Stop() while the 100 ms handler is still sleeping.

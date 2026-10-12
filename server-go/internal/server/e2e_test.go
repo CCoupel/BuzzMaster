@@ -55,8 +55,11 @@ func TestE2E_WebSocketClient(t *testing.T) {
 	}
 	defer ws.Close()
 
-	// Wait for connection to register
-	time.Sleep(100 * time.Millisecond)
+	// Wait for connection to register (observable event, generous deadline)
+	regDeadline := time.Now().Add(15 * time.Second)
+	for wsHub.ClientCount() != 1 && time.Now().Before(regDeadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Verify client count
 	if wsHub.ClientCount() != 1 {
@@ -73,7 +76,7 @@ func TestE2E_WebSocketClient(t *testing.T) {
 		if incoming.Data.Action != protocol.ActionHello {
 			t.Errorf("Expected HELLO, got %s", incoming.Data.Action)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		t.Error("Timeout waiting for WebSocket message")
 	}
 
@@ -82,7 +85,7 @@ func TestE2E_WebSocketClient(t *testing.T) {
 	wsHub.Broadcast(msg)
 
 	// Client should receive
-	ws.SetReadDeadline(time.Now().Add(2 * time.Second))
+	ws.SetReadDeadline(time.Now().Add(15 * time.Second))
 	_, data, err := ws.ReadMessage()
 	if err != nil {
 		t.Fatalf("Failed to read broadcast: %v", err)

@@ -17,6 +17,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 // TestDNSServer_Start_UsesConfiguredPort verifies that DNSServer.Start()
@@ -37,23 +39,31 @@ func TestDNSServer_Start_UsesConfiguredPort(t *testing.T) {
 	}
 	defer d.Stop()
 
-	// Poll: the configured port must become unavailable (the DNS server is
-	// holding it). If the implementation still hardcodes ":53", this port
-	// stays free and the rebind below keeps succeeding, failing the test.
-	deadline := time.Now().Add(2 * time.Second)
-	bound := false
+	// #263: observe the server by asking it a question, never by trying to bind
+	// the port ourselves. The old probe (ListenPacket on the same port) could
+	// win the race against the server's own bind (started in a goroutine): the
+	// server then failed once with "address already in use" and never retried,
+	// so the port stayed free forever (CI run 38239127708). A DNS answer from
+	// 127.0.0.1:<port> proves that the server listens on d.port (and not on a
+	// hardcoded :53). Generous overall deadline: the bind goroutine may be
+	// scheduled late on a loaded 2-vCPU runner.
+	c := &dns.Client{Net: "udp", Timeout: time.Second}
+	q := new(dns.Msg)
+	q.SetQuestion("buzzcontrol.local.", dns.TypeA)
+	deadline := time.Now().Add(20 * time.Second)
+	var lastErr error
 	for time.Now().Before(deadline) {
-		ln, rebindErr := net.ListenPacket("udp", fmt.Sprintf("127.0.0.1:%d", port))
-		if rebindErr != nil {
-			bound = true
-			break
+		resp, _, exErr := c.Exchange(q, fmt.Sprintf("127.0.0.1:%d", port))
+		if exErr == nil && len(resp.Answer) == 1 {
+			if a, ok := resp.Answer[0].(*dns.A); ok && a.A.Equal(net.ParseIP("127.0.0.1")) {
+				return
+			}
+			t.Fatalf("unexpected DNS answer: %v", resp.Answer)
 		}
-		ln.Close()
-		time.Sleep(30 * time.Millisecond)
+		lastErr = exErr
+		time.Sleep(20 * time.Millisecond) // a tight retry loop competes with the server's bind goroutine on 2 vCPUs (#263 review)
 	}
-	if !bound {
-		t.Errorf("port %d never became occupied by DNSServer — Start() is not honoring d.port (still hardcoded to :53?)", port)
-	}
+	t.Errorf("DNSServer never answered on port %d — Start() is not honoring d.port (still hardcoded to :53?); last error: %v", port, lastErr)
 }
 
 // TestDNSServer_Start_FailureIsVisible verifies that a DNS bind failure is
@@ -82,7 +92,7 @@ func TestDNSServer_Start_FailureIsVisible(t *testing.T) {
 	_ = d.Start()
 	defer d.Stop()
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(20 * time.Second)
 	found := false
 	for time.Now().Before(deadline) {
 		for _, entry := range bl.GetHistory() {
