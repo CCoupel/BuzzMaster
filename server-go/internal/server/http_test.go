@@ -1837,14 +1837,16 @@ func TestHTTPServer_APIBuzzerStatus_EmptyMAC(t *testing.T) {
 
 	server.mux.ServeHTTP(w, req)
 
-	// Accept 301 (path cleanup redirect), 400 (bad request), or 404 (not found)
+	// Accept a path-cleanup redirect (301 up to Go 1.25, 307 since Go 1.26), 400 (bad request),
+	// or 404 (not found)
 	validCodes := map[int]bool{
-		http.StatusMovedPermanently: true,
+		http.StatusMovedPermanently:  true,
+		http.StatusTemporaryRedirect: true,
 		http.StatusBadRequest:       true,
 		http.StatusNotFound:         true,
 	}
 	if !validCodes[w.Code] {
-		t.Errorf("Expected status 301, 400, or 404 for empty MAC, got %d", w.Code)
+		t.Errorf("Expected status 301/307, 400, or 404 for empty MAC, got %d", w.Code)
 	}
 }
 
