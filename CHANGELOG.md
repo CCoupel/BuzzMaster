@@ -2,6 +2,29 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.2.1] - non publié — Milestone v11.2.1 : accusés des réponses tablette, attribution de points multi-équipes, corrections
+
+> Brouillon (DOC DRAFT). Date et numéro de version définitifs à fixer en DOC FINALIZE.
+
+### Added
+
+- **Accusé des réponses tablette (#248)** — Une réponse QCM, un buzz SPEEDY ou un retournement de carte MEMORY/MEMOTION n'est affiché « envoyé » qu'après accusé du serveur. Sans accusé, la réponse est renvoyée à la reconnexion, au retour au premier plan et toutes les 4 s, jusqu'à 30 envois. Si l'équipe a déjà été servie, la tablette l'indique.
+- **Attribution de points multi-équipes en lots (#265)** — Sur la TV, l'attribution groupée se déroule par lots de 6 équipes au plus, dans une grille d'arrivée 3 × 2. La tablette n'affiche que le gain de sa propre équipe, au moment où son lot passe sur la TV.
+
+### Changed
+
+- **Attribution groupée (#265)** — Les animations des équipes ne se superposent plus ; l'accélération est complète à partir du 4ᵉ lot, et les noms trop longs sont tronqués par « … ».
+
+### Fixed
+
+- **Arrêt par `/shutdown` (#261)** — Plus de `panic: close of closed channel` à l'arrêt du serveur ; le code de sortie est nul.
+- **PAUSE fantôme sur appui refusé (#247)** — Un appui buzzer refusé ne diffuse plus de `PAUSE` (ni à l'admin, ni aux écrans). Un appui pendant une ARDOISE est refusé. Un buzz SPEEDY refusé renvoie à la tablette son état serveur.
+- **Zone de réponse de l'animateur en MEMOTION (#189)** — La zone de réponse de l'animateur se révèle correctement pendant la sous-phase REVEAL d'une carte MEMOTION.
+- **Accessibilité de la navbar (#242)** — Le nom accessible du bouton « REPRISE » contient son libellé visible ; le menu déroulant a un rôle de groupe.
+- **Tests instables (#188, #264)** — Stabilisation de tests Go sans impact sur les joueurs.
+
+---
+
 ## [11.2.0] - 2026-10-12 — Milestone v11.2 : fiabilisation ARDOISE, manches et entractes, attribution groupée, filtrage des tablettes, tests stables
 
 ### Tests Go stabilisés (#257, #233)

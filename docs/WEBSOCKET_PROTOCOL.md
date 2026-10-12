@@ -1349,6 +1349,38 @@ Source de vérité : `contracts/websocket-actions.md` §TEAM_POINTS, §BUMPER_PO
 { "SCORE_CHANGE": { "SEQ": 14, "DISPLAY": false, "TEAMS": ["Les Bleus"], "PLAYERS": [] } }
 ```
 
+### SCORE_CHANGE.GAINS — gains par équipe (v11.2.1, #265)
+
+- Ajout de `GAINS: {TEAM, POINTS}[]` dans `SCORE_CHANGE` : variation nette par équipe pour la modification de même `SEQ`.
+  Champ additif ; les anciens clients l'ignorent.
+- Écrit dans la même section critique que `SEQ`, `TEAMS` et `PLAYERS`, pour `TEAM_POINTS`, `BUMPER_POINTS`,
+  `TEAM_POINTS_BATCH` et `BUMPER_POINTS_BATCH`. Les crédits automatiques du moteur ne le modifient pas.
+- Règles complètes (ordre, cas limites, lecture par TV et tablette) : `contracts/game-state.md` §`SCORE_CHANGE.GAINS`.
+
+```json
+{ "SCORE_CHANGE": { "SEQ": 15, "DISPLAY": true, "TEAMS": ["Les Rouges", "Les Bleus"], "PLAYERS": ["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02", "AA:BB:CC:DD:EE:07"],
+  "GAINS": [ { "TEAM": "Les Rouges", "POINTS": 4 }, { "TEAM": "Les Bleus", "POINTS": 2 } ] } }
+```
+
+## Retournement MEMORY/MEMOTION idempotent — FLIP_ID et FLIP_MEMORY_CARD_ACK (v11.2.1, #248)
+
+- `FLIP_MEMORY_CARD` accepte un champ optionnel `FLIP_ID` (1–64 caractères `[A-Za-z0-9_-]`), créé par la tablette à
+  chaque nouveau geste et réutilisé pour ses renvois. Honoré uniquement pour un `vplayer` résolu.
+- Le serveur déduplique par bumper (16 identifiants mémorisés, non persistés) et répond par la nouvelle action
+  serveur → émetteur **`FLIP_MEMORY_CARD_ACK`** (`STATUS`: `APPLIED` | `IGNORED`, `REASON`, `DUPLICATE`), suivie d'un
+  `UPDATE` ciblé. Un doublon ou un geste ignoré ne déclenche aucune diffusion générale.
+- Sans `FLIP_ID` : comportement inchangé, aucun accusé.
+- Source de vérité : `contracts/websocket-actions.md` §`FLIP_MEMORY_CARD` (§« Idempotence — `FLIP_ID` ») et §`FLIP_MEMORY_CARD_ACK` ;
+  journal : `contracts/logging.md` §3.2 octies.
+
+## Écho ciblé d'un buzz SPEEDY refusé (v11.2.1, #247)
+
+- Un buzz SPEEDY refusé par le moteur ne produit plus de `PAUSE` ni de mise à jour générale. Si l'émetteur est un
+  VJoueur résolu, il reçoit seulement un `UPDATE` ciblé (son état serveur). Un bumper physique reste silencieux.
+- Un appui buzzer n'est accepté (et ne diffuse de `PAUSE`) que s'il est enregistré ; un appui pendant une question
+  ARDOISE est refusé.
+- L'écho ciblé du QCM refusé existait déjà (`handleVPlayerQCMAnswer`) et est couvert par un test de non-régression.
+
 ## Attribution au niveau joueur — BUMPER_POINTS_BATCH (v11.2, #254)
 
 Source de vérité : `contracts/websocket-actions.md` §BUMPER_POINTS_BATCH, §BUMPER_POINTS_BATCH_RESULT, §AWARDED_TEAMS,
