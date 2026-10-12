@@ -91,8 +91,8 @@ describe('VPlayerPage — reconnexion auto renvoie l\'ID stocké', () => {
     expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice', ID: 'vjoueur_alice_123' })
   })
 
-  it("#246 : sans vplayer_id, aucune liaison par nom — aucun PLAYER_CONNECT, retour à l'inscription", async () => {
-    // No vplayer_id in localStorage — plus de repli par nom.
+  it("renvoie NAME seul (pas de clé ID) quand vplayer_id est absent", async () => {
+    // No vplayer_id in localStorage — never connected from this device before.
     const mock = makeGameMock()
     useGame.mockReturnValue(mock)
 
@@ -102,12 +102,12 @@ describe('VPlayerPage — reconnexion auto renvoie l\'ID stocké', () => {
       vi.advanceTimersByTime(2000)
     })
 
-    expect(mock.sendMessage).not.toHaveBeenCalledWith('PLAYER_CONNECT', expect.anything())
-    expect(mockNavigate).toHaveBeenCalledWith('/')
+    expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice' })
+    const [, payload] = mock.sendMessage.mock.calls[0]
+    expect(payload).not.toHaveProperty('ID')
   })
 
-  it('#246 : envoie PLAYER_CONNECT {NAME, ID} même si le bumper est déjà CONNECTED=true (liaison de la connexion)', async () => {
-    localStorage.setItem('vplayer_id', 'vjoueur_alice_123')
+  it('ne tente pas de reconnexion si le bumper est déjà retrouvé par nom ET connecté (CONNECTED=true)', async () => {
     const mock = makeGameMock({
       bumpers: { vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: '', CONNECTED: true } },
     })
@@ -119,7 +119,7 @@ describe('VPlayerPage — reconnexion auto renvoie l\'ID stocké', () => {
       vi.advanceTimersByTime(2000)
     })
 
-    expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice', ID: 'vjoueur_alice_123' })
+    expect(mock.sendMessage).not.toHaveBeenCalledWith('PLAYER_CONNECT', expect.anything())
   })
 
   // Régression (#109, _work/reports/dev-frontend-20260726-091500-conn-state-verify.md) :
@@ -147,7 +147,6 @@ describe('VPlayerPage — reconnexion auto renvoie l\'ID stocké', () => {
   })
 
   it('tente bien la reconnexion si le bumper est retrouvé par nom mais CONNECTED est absent (firmware/état pré-fix)', async () => {
-    localStorage.setItem('vplayer_id', 'vjoueur_alice_123')
     const mock = makeGameMock({
       bumpers: { vjoueur_alice_123: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'red' } },
     })
@@ -159,7 +158,7 @@ describe('VPlayerPage — reconnexion auto renvoie l\'ID stocké', () => {
       vi.advanceTimersByTime(2000)
     })
 
-    expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice', ID: 'vjoueur_alice_123' })
+    expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice' })
   })
 })
 
@@ -247,7 +246,6 @@ describe('VPlayerPage — couleur du badge VJoueur = couleur d\'équipe (#112)',
     vi.stubGlobal('localStorage', createLocalStorageMock())
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')
-    localStorage.setItem('vplayer_id', 'vjoueur_alice_123') // #246 : identité par ID uniquement
     useGame.mockReset()
     PlayerDisplay.mockClear()
   })
@@ -426,7 +424,6 @@ describe('VPlayerPage — playerId transmis à PlayerDisplay (#187, régression 
     vi.stubGlobal('localStorage', createLocalStorageMock())
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')
-    localStorage.setItem('vplayer_id', 'vjoueur_alice_123') // #246 : identité par ID uniquement
     useGame.mockReset()
     PlayerDisplay.mockClear()
   })

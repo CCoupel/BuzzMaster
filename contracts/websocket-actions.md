@@ -2,7 +2,7 @@
 
 > **Endpoint** : `/ws`
 > **Format** : JSON
-> **Dernière mise à jour** : 2026-10-10 (#246, v11.2 — fiabilisation ARDOISE : liaison connexion ↔ bumper, `ARDOISE_FINAL`/`ARDOISE_FINAL_ACK`, garde de `REVEAL` + `REVEAL_REFUSED`, `CLIENT_TRACE`, motif `DUPLICATE_SESSION`)
+> **Dernière mise à jour** : 2026-08-13 (#155/#156 — allow-list animateur, action NEXT_QUESTION, v6.2.0)
 
 ---
 
@@ -34,14 +34,9 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | HELLO | ✅ | ✅ | ✅ | ✅ |
 | START, STOP, PAUSE, CONTINUE, REVEAL, READY | ✅ | ❌ | ❌ | ✅ |
 | BUMPER_POINTS, TEAM_POINTS | ✅ | ❌ | ❌ | ✅ |
-| **TEAM_POINTS_BATCH** | ✅ | ❌ | ❌ | ❌ **(v11.2, #244/#251 — admin seulement)** |
-| **BUMPER_POINTS_BATCH** | ✅ | ❌ | ❌ | ❌ **(v11.2, #254 — admin seulement)** |
-| **LAUNCH_LOCK** | ✅ | ❌ | ❌ | ❌ **(v11.2, #253 — admin seulement)** |
 | **QUESTION_SOUND** | ✅ | ❌ | ❌ | ✅ **(v11.1, #219)** |
 | FULL, UPDATE, POINTS, RAZ, REMOTE, DELETE, DELETE_BUMPER, RELEASE_BUMPER_NAME, RESET, REBOOT, REORDER_QUESTIONS, FORCE_READY, MEMORY_SET_TEAMS, MEMOTION_SET_TEAMS, SHOW_QR_CODE, HIDE_QR_CODE, SET_VIRTUAL_PLAYER_LIMIT, NEW_GAME, UPDATE_QUIZ_META, CANCEL_AI_GENERATION | ✅ | ❌ | ❌ | ❌ |
 | **SET_CREDIT_POINTS** | ✅ | ❌ | ❌ | ❌ |
-| **ROUNDS_UPDATE** | ✅ | ❌ | ❌ | ❌ **(v11.2, #245 — admin seulement)** |
-| **ENTRACTE_SET** | ✅ | ❌ | ❌ | ✅ **`ACTIVE:false` seulement** (v11.2, #245 — décision utilisateur : l'anim doit pouvoir terminer une entracte ; `ACTIVE:true` venant de l'anim est refusé, `WARN ENTRACTE_SET_ANIM_ACTIVATE_REFUSED`, rien n'est envoyé) |
 | **REGIE_MESSAGE_SEND** | ✅ | ❌ | ❌ | ❌ **(v6.4.x, #167)** |
 | **REGIE_MESSAGE_CLEAR** | ✅ | ❌ | ❌ | ✅ **(v6.4.x, #167)** |
 | BUTTON, PONG | ✅ | ❌ | ✅ | ❌ |
@@ -49,8 +44,6 @@ fait **exclusivement par de nouvelles entrées dans la map** — aucun changemen
 | MEMOTION_SELECT | ❌ | ✅ | ❌ | ✅ **(v6.2.x, #160)** |
 | MEMOTION_FLIP, MEMOTION_STOP_TIMER, MEMOTION_REVEAL, MEMOTION_DONE | ✅ | ❌ | ❌ | ✅ **(v6.2.x, #160)** |
 | PLAYER_CONNECT, VPLAYER_QCM_ANSWER, ARDOISE_INPUT | ❌ | ❌ | ✅ | ❌ |
-| **ARDOISE_FINAL** | ❌ | ❌ | ✅ | ❌ **(v11.2, #246)** |
-| **CLIENT_TRACE** | ✅ | ✅ | ✅ | ✅ **(v11.2, #246 — diagnostic uniquement)** |
 
 Notes :
 - **SET_CREDIT_POINTS** (v6.2.0, code review MAJEUR-1 sur #155/#156, voir §"Animateur" ci-dessous)
@@ -208,25 +201,6 @@ Aucun payload requis.
 }
 ```
 
-#### HELLO_ACK ✨ (v11.2, #253) — identifiant de connexion
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Server → Client` (ciblé, émetteur du `HELLO`) |
-| Cible | clients **`admin` et `anim` seulement** — jamais TV, VJoueur ni buzzer |
-| Trigger | chaque `HELLO` d'un client admin ou anim. Envoyé **en premier** dans `sendStateToClient`, **avant** l'`UPDATE` initial : quand l'état arrive, le client connaît déjà son identifiant |
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| CLIENT_ID | string | Identifiant **de cette connexion WebSocket** = l'ID du client dans le hub (`WebSocketClient.ID`, aujourd'hui `r.RemoteAddr`). **Chaîne opaque** : le client ne l'interprète jamais, il la compare seulement. Unique par connexion ; **nouvelle valeur à chaque reconnexion** (le client remplace la valeur mémorisée à chaque `HELLO_ACK`) |
-
-```json
-{ "ACTION": "HELLO_ACK", "MSG": { "CLIENT_ID": "192.168.1.20:53124" } }
-```
-
-- Usage : `GameState.LAUNCH_LOCK.OWNER` porte **la même chaîne**. Le client est propriétaire du verrou si `LAUNCH_LOCK.ACTIVE && LAUNCH_LOCK.OWNER === CLIENT_ID`.
-- Un client antérieur ignore l'action inconnue (aucun effet).
-
 ---
 
 ### SET_CLIENT_TYPE
@@ -379,33 +353,12 @@ Affiche la réponse.
 
 | Propriété | Valeur |
 |-----------|--------|
-| Direction | `Client→Server` (`admin`, `anim`) |
-| Phase     | STOPPED (ou PAUSED, comportement existant de `engine.Reveal()`) |
+| Direction | `Client→Server` |
+| Phase     | STOPPED |
 
 #### Payload
 
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| FORCE | boolean | ⬜ *(v11.2, #246)* | `true` = révéler malgré des réponses ARDOISE non reçues (bouton « Révéler quand même », après confirmation). Absent ou `false` = comportement par défaut ci-dessous. Ignoré hors question ARDOISE. |
-
-#### Garde ARDOISE (v11.2, #246) — `[CHANGED]` comportement
-
-Pour une question `TYPE = "ARDOISE"`, sans `FORCE: true`, le serveur **refuse** le REVEAL tant
-qu'une **équipe attendue** n'a pas `ARDOISE_ANSWERS[équipe].RECEIVED = true` — **y compris si sa
-tablette est hors ligne** (décision utilisateur). Le refus ne change pas la phase et répond
-`REVEAL_REFUSED` **à l'émetteur seul**.
-
-- **Équipe attendue** : toute clé de `teams` ayant au moins un bumper `IS_VPLAYER = true` avec
-  `TEAM` = cette clé. Même règle côté serveur (garde) et côté interfaces (coches, compteur).
-- **Hors ligne** (information d'affichage, ne lève pas la garde) : tous les VJoueurs de l'équipe
-  ont `CONNECTED = false`.
-- `FORCE: true` révèle immédiatement ; le serveur journalise `WARN ARDOISE_REVEAL_FORCED`
-  (`contracts/logging.md`) avec la liste des équipes non reçues. Ces équipes gardent au REVEAL le
-  dernier texte reçu pendant `STARTED`, avec `RECEIVED = false`.
-- Hors ARDOISE : comportement inchangé, `FORCE` ignoré.
-- Un client antérieur (sans `FORCE`) voit ses REVEAL ARDOISE refusés tant que les réponses ne sont
-  pas reçues : **changement de comportement signalé** (CHANGELOG [20261010]). Admin et anim sont
-  livrés dans la même version que le serveur.
+Aucun.
 
 ---
 
@@ -492,128 +445,6 @@ Modifie le score d'une équipe.
 |-------|------|-------------|-------------|
 | TEAM | string | ✅ | Nom de l'équipe |
 | POINTS | int | ✅ | Points à ajouter (peut être négatif) |
-| DISPLAY | boolean | ⬜ | *(v11.2, #252)* `false` = correction cachée, voir ci-dessous ; absent = `true` |
-
-#### Affichage public — champ `DISPLAY` (v11.2, #252) — `[CHANGED]` additif
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| DISPLAY | boolean | ⬜ | `true` ou **absent** = comportement actuel (effets publics). `false` = **correction cachée** : **aucun effet animé, sur aucun canal**. **Honoré uniquement si l'émetteur est un client `admin`** (voir ci-dessous) |
-
-> **Réservé à l'admin** *(décision CDP, revue #252)* : `DISPLAY: false` envoyé par **tout autre émetteur** (anim, appelant interne) est **ignoré** : l'attribution est traitée comme **visible** (effets publics, comptée dans « déjà créditée ») et le serveur journalise `WARN SCORE_CORRECTION_HIDDEN_REFUSED`. Sans cette règle, l'anim (qui partage `TEAM_POINTS`/`BUMPER_POINTS` avec l'admin, §allow-list) pourrait contourner le verrou « déjà créditée » de #170 par une correction cachée. `TEAM_POINTS_BATCH` est déjà réservé à l'admin.
-
-Avec `DISPLAY: false` :
-- **Serveur** : ni comète LED, ni pulsation d'ambiance (`NotifyPulse`), ni son « gagné » (`CueGagne`), ni flash de score lumineux (`startScoreFlash`). Ces effets n'existent déjà que pour un montant positif.
-- **Écrans (TV, VJoueur, anim)** : le score est mis à jour dans l'`UPDATE` (classement cohérent), mais **sans aucune animation** : ni « +X pts » flottant, ni célébration, ni surbrillance ou montée de rang. Les écrans le savent grâce à `GameState.SCORE_CHANGE` (`contracts/game-state.md`).
-- **Historique** : l'entrée `POINTS_AWARDED` est enregistrée normalement, avec `DISPLAY: false` (piste d'audit ; la page Historique de l'admin la marque « 🔇 correction cachée »). **Elle ne compte PAS dans `AWARDED_TEAMS`** *(décision utilisateur)* : une correction cachée modifie le score sans rendre l'équipe « déjà créditée » ; l'équipe peut ensuite recevoir normalement les points de la question, y compris par `TEAM_POINTS_BATCH`.
-- **Journal** : `WARN SCORE_CORRECTION_HIDDEN` (`contracts/logging.md`).
-- **Montant** : la page Scores impose un entier non nul de −999 à 999 (prédéfini ou saisie libre). Le serveur ne change pas sa validation de `TEAM_POINTS`/`BUMPER_POINTS` (rétrocompatibilité), sauf **`POINTS = 0` envoyé par un client `admin`**, désormais **ignoré** (ni entrée d'historique, ni `UPDATE`, ni `SCORE_CHANGE.SEQ`). *(Décision CDP)* **Un `POINTS = 0` venant de l'anim ou d'un appelant interne reste enregistré** comme aujourd'hui : c'est le geste « 0 pt » de #170 (refus de l'animateur), un **verrou valide** (§AWARDED_TEAMS « ⚠️ `POINTS` peut valoir `0` »). `TEAM_POINTS_BATCH` interdit déjà 0.
-
----
-
-### TEAM_POINTS_BATCH ✨ (v11.2, #244/#251)
-
-Attribue des points à **plusieurs équipes en une action** (bouton admin « Attribuer les points (N) » / « Appliquer les pénalités (N) », *v11.2 #254* ; maquettes `admin_game_award__compact_block` et `admin_game_award__team_or_player_level`, qui remplacent `docs/mockup/v11.2/ui/admin_game_team_award__selection.html`). `TEAM_POINTS` reste inchangé pour le crédit équipe par équipe. Utilisée quand la question est **au niveau équipe** (§« Niveau d'attribution ») ; au niveau joueur, c'est `BUMPER_POINTS_BATCH`.
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Client→Server` (`admin` seulement en v11.2) |
-| Phase | **`REVEALED` uniquement** |
-
-#### Payload
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| QUESTION_ID | string | ✅ | `QUESTION.ID` affiché par l'admin au moment du clic |
-| ENTRIES | array | ✅ | 1 à 64 entrées, une par équipe sélectionnée, **équipes distinctes** |
-| ENTRIES[].TEAM | string | ✅ | Clé de l'équipe (identité = clé, #249) |
-| ENTRIES[].POINTS | int | ✅ | Montant pour cette équipe, entier non nul de −999 à 999 (le montant peut varier d'une équipe à l'autre : barème du type, §Montants) |
-| DISPLAY | boolean | ⬜ | *(branché par #252)* même règle que `TEAM_POINTS` §« Affichage public » : `false` = aucun effet public groupé (point 4) et `SCORE_CHANGE.DISPLAY = false` ; absent = `true` |
-
-#### Validation et atomicité
-1. **Refus global** (rien appliqué, `TEAM_POINTS_BATCH_RESULT` avec `STATUS: "REFUSED"`, `WARN TEAM_POINTS_BATCH_REFUSED`) si : phase ≠ `REVEALED` (`NOT_REVEALED`) ; `QUESTION_ID` ≠ question courante (`QUESTION_MISMATCH`) ; `ENTRIES` vide, trop longue ou avec une équipe en double (`INVALID_ENTRIES`) ; un montant nul, non entier ou hors bornes (`INVALID_POINTS`) ; **une équipe inconnue** — renommée ou supprimée entre la sélection et le clic, #249 (`UNKNOWN_TEAM`, avec `TEAMS` = clés inconnues).
-2. Sinon, sous **un seul verrou moteur** : chaque équipe **déjà créditée pour la question** (présente dans `AWARDED_TEAMS`, règle `TEAM_DELETED` de #249 comprise) est **ignorée** (`SKIPPED`, motif `ALREADY_AWARDED`) ; les autres sont créditées. Le lot est appliqué d'un bloc : les clients ne voient jamais un état intermédiaire.
-3. Pour chaque équipe créditée : `TEAM_POINTS += POINTS` (points d'équipe, comme `TEAM_POINTS`), recalcul du score, **une entrée `POINTS_AWARDED` par équipe** dans l'historique (mêmes champs que `TEAM_POINTS` : question, catégorie, etc.), persistance (`teams.json`, historique).
-4. **Effets publics groupés** (si `DISPLAY` ≠ `false`), **une seule fois pour le lot** : un son « gagné » si au moins un montant est positif ; une comète LED par équipe créditée positivement ; une pulsation d'ambiance unique (`NotifyPulse(KindScore, [équipes créditées positivement], …)`) ; **un seul** flash de score lumineux (`startScoreFlash`), pour l'équipe au plus fort montant positif (en cas d'égalité, la première dans `ENTRIES`). Aucun effet pour les montants négatifs (comme `TEAM_POINTS`).
-5. Diffusions : `UPDATE` (scores), `AWARDED_TEAMS` (admin et anim).
-6. Réponse **à l'émetteur seul** : `TEAM_POINTS_BATCH_RESULT`. Journal : `INFO TEAM_POINTS_BATCH` (équipes, montants, ignorées).
-
-- **La régie n'est pas contrainte** (§AWARDED_TEAMS) : un clic sur une carte d'équipe (`TEAM_POINTS`) peut toujours recréditer une équipe ; **seule l'attribution groupée** respecte le verrou « déjà créditée ».
-- **Double clic** : le client désactive le bouton jusqu'à la réponse ; un second lot identique est appliqué avec toutes ses équipes `SKIPPED` (`ALREADY_AWARDED`), donc sans double crédit.
-
-#### Niveau d'attribution : équipe ou joueur ✨ (v11.2, #254, décision utilisateur)
-Le client choisit l'action groupée selon le **niveau** de la question, calculé par une **fonction unique** `resolveAwardLevel(question)` (`utils/pointsAward.js`) :
-
-| Type | Niveau | Défaut si `POINTS_TARGET` absent |
-|------|--------|----------------------------------|
-| **SPEEDY** | réglage « Points : équipe / joueur » de la question (`POINTS_TARGET`) | `PLAYER` |
-| **QCM** | `POINTS_TARGET` | `TEAM` |
-| **ARDOISE** | `POINTS_TARGET` | `TEAM` |
-| **MEMORY**, **MEMOTION**, **RAFALE** | **toujours `TEAM`** (le réglage, s'il existe dans un ancien fichier, est ignoré) | — |
-
-- Niveau `TEAM` → cases à cocher dans l'**en-tête des cartes d'équipe** → `TEAM_POINTS_BATCH`.
-- Niveau `PLAYER` → cases à cocher sur les **lignes de joueurs** des cartes d'équipe (pas de case d'équipe) → `BUMPER_POINTS_BATCH`.
-- **Défaut serveur au chargement des questions** (`internal/server/http.go`, `POINTS_TARGET` absent) : aligné sur ce tableau — `TEAM` pour QCM, ARDOISE, MEMORY, MEMOTION, RAFALE ; `PLAYER` pour SPEEDY. `[CHANGED]` : une ancienne question ARDOISE **sans** le champ passe de `PLAYER` à `TEAM` (l'éditeur proposait déjà `TEAM` par défaut). Une valeur enregistrée dans le fichier est toujours respectée pour SPEEDY, QCM et ARDOISE.
-- `resolvePointsTarget` (clic unitaire sur un joueur, anim) applique **la même règle** (une seule source) : MEMORY, MEMOTION et RAFALE créditent l'équipe.
-
-#### Montant : champ « Points » de la page ✨ (v11.2, #254 — remplace le montant B de #244/#251)
-- **Le bloc d'attribution n'a plus de montant propre.** Le montant vient du **champ « Points » de la page** (`pointsInput`), déjà présent au-dessus des équipes.
-- **Base du barème** *(décision utilisateur)* = **valeur du champ « Points » à l'entrée en `REVEALED`**. Elle comprend un éventuel réglage de la régie avant le REVEAL (manche bonus). Le clic sur la **bonne réponse** et le changement de question **reviennent à cette base** (et non à `QUESTION.POINTS`). « **Modifié à la main** » = champ modifié **après** l'entrée en `REVEALED` ; cet état est effacé par un clic sur la bonne réponse.
-- **Commutateur « Tenir compte des indices »** ✨ *(décision utilisateur)* :
-  - **Visible** seulement si la question est un **QCM avec `QCM_HINTS_ENABLED`**, qu'**au moins un indice a été révélé** (`QCM_INVALIDATED` non vide) et que le montant du champ est **positif**. Masqué sinon : une pénalité est toujours uniforme (option A).
-  - **Activé par défaut**, remis à activé à chaque **changement de question** ou de phase. Un clic sur une réponse ou une modification du champ **ne le change pas**. État local de la page admin, non transmis.
-  - **Activé** : chaque entrée reçoit `max(1, round(V × coef))`, où V = valeur du champ (base ou valeur saisie à la main) et coef = 1, `QCM_PENALTY_1` (défaut 0,67) ou `QCM_PENALTY_2` (défaut 0,33). Coef selon le nombre d'indices révélés :
-    - **équipe** : au buzz du joueur de l'équipe qui a la bonne couleur (meilleur montant s'il y en a plusieurs, `calcQcmTeamAward`) ; sinon, indices **actuellement** révélés (repli actuel) ;
-    - **joueur** : `HINTS_AT_BUZZ` du joueur s'il a buzzé ; sinon, indices actuellement révélés.
-  - **Désactivé** : **montant uniforme** V pour toute la sélection.
-  - **Même commutateur aux niveaux équipe et joueur.** Même calcul pour le clic unitaire sur une carte (`defaultTeamAward` / `resolvePointsAward`, une seule source dans `utils/pointsAward.js`, avec un paramètre `useHints`).
-- **Autres types** (inchangé) : MEMORY multi-équipes (score des paires), RAFALE (`calcRafaleTeamAward`) → montant **par équipe** tant que le champ n'a pas été modifié à la main ; modifié à la main → montant uniforme. SPEEDY, ARDOISE, QCM sans indices révélés, MEMOTION → valeur du champ. Aperçu affiché sur chaque carte ou ligne sélectionnée : c'est exactement le montant envoyé.
-- **Négatif** : **montant uniforme** = valeur du champ, quel que soit le commutateur. **Les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse** *(décision utilisateur, option A)* : même pénalité que la réponse ait été donnée avant ou après la révélation d'indices, y compris pour une réponse éliminée par un indice ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic.
-- **Ligne 1 du bloc : source du montant**, liée au commutateur :
-
-  | Cas | Libellé |
-  |-----|---------|
-  | Commutateur visible et activé | « barème de la question, ajusté selon les indices de chaque équipe » (« … de chaque joueur » au niveau joueur) ; valeur saisie à la main : « montant saisi, ajusté selon les indices de chaque équipe/joueur » |
-  | Commutateur visible et désactivé | « montant uniforme » |
-  | MEMORY multi-équipes, RAFALE | « barème de la question, par équipe » ; modifié à la main : « modifié à la main, montant uniforme » |
-  | Mauvaise réponse | « mauvaise réponse : pénalité de la question, uniforme (indices sans effet) » ; sans pénalité : « mauvaise réponse : aucune pénalité définie » |
-  | Autres | « points de la question » ; modifié à la main : « modifié à la main, montant uniforme » |
-
-- **Calcul côté client, pas de paramètre serveur** *(choix du planner)* : le lot transporte déjà **un montant par entrée** (`ENTRIES[].POINTS`). Le client calcule chaque montant avec la règle unique de `utils/pointsAward.js`, déjà partagée avec le clic unitaire et l'anim, et envoie exactement l'aperçu affiché. Le serveur **ne recalcule rien** et se limite à valider les bornes. Un paramètre serveur (`USE_HINTS`) obligerait à recopier la règle en Go : deux sources qui peuvent diverger, et un aperçu qui ne correspond plus au crédit. L'émetteur est l'admin, de confiance. **Aucun changement** de `TEAM_POINTS_BATCH` ni de `BUMPER_POINTS_BATCH`.
-- **Libellé du bouton** : « **Attribuer les points (N)** » si le montant est positif ; « **Appliquer les pénalités (N)** » (rouge) si le montant est négatif, **ou nul après un clic sur une mauvaise réponse** (§QCM). N = nombre d'équipes ou de joueurs sélectionnés. Bouton désactivé à N = 0, pendant l'envoi, ou si le montant est 0 (aucun lot n'est jamais envoyé avec 0 : `INVALID_POINTS`).
-- **Sélectionner / désélectionner tout** : deux **icônes** sur la **même ligne** que le bouton, avec nom accessible (`aria-label` et `title` : « Tout sélectionner », « Tout désélectionner »). Le bloc tient sur **2 lignes** : (1) titre et source du montant, (2) icônes + bouton.
-
-#### QCM : clic sur une réponse ✨ (v11.2, #254)
-- **Bonne réponse** : la sélection devient l'ensemble des équipes (niveau `TEAM`) ou des joueurs (niveau `PLAYER`) ayant donné cette réponse, hors déjà crédités ; le champ « Points » reprend la **base** (valeur à l'entrée en `REVEALED`, §Montant) ; le commutateur « Tenir compte des indices » garde son état ; bouton « Attribuer les points (N) ».
-- **Mauvaise réponse** : désélection de tout, puis sélection des équipes ou joueurs de cette réponse, hors déjà crédités ; le champ « Points » prend la **pénalité de la question** ; bouton « Appliquer les pénalités (N) ».
-- **Mauvaise réponse d'une question sans pénalité** (`QCM_WRONG_PENALTY` = 0, absent ou invalide) : même sélection ; le champ « Points » **passe à 0** (jamais laissé aux points de la question : le bouton donnerait sinon des points aux équipes qui se sont trompées) ; bouton « Appliquer les pénalités (N) » **désactivé**, avec la raison visible sous le bouton : « **Aucune pénalité définie pour cette question** ». La régie reste libre : une valeur saisie à la main dans le champ réactive le bouton (négative → « Appliquer les pénalités », positive → « Attribuer les points »). Le 0 n'est pas poussé aux tablettes (règle `SET_CREDIT_POINTS` ≤ 0).
-- **Pénalité de la question** *(décision utilisateur : champ ajouté en v11.2)* : **`QUESTION.QCM_WRONG_PENALTY`** (entier de −100 à 0, `models.md` §Question). **0 = aucune pénalité, valeur par défaut** *(décision utilisateur)* ; absent ou hors bornes (anciennes questions, sans réécriture des fichiers) → **0**. Ne pas confondre avec `QCM_PENALTY_1`/`QCM_PENALTY_2`, qui sont des **coefficients d'indices** (0,67 / 0,33 des points). La valeur reste modifiable dans le champ « Points » avant le clic.
-- **Les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse** *(décision utilisateur, option A)* : même pénalité que la réponse ait été donnée avant ou après la révélation d'indices, y compris pour une réponse éliminée par un indice ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic.
-- Le titre « Attribuer les points (N) » revient après un clic sur la **bonne** réponse ou à un **changement de question** (le champ reprend alors la base, §Montant).
-- « Équipe d'une réponse » : équipe dont au moins un joueur a **`ANSWERED_COLOR`** = la couleur de la réponse. « Joueur d'une réponse » : joueur dont `ANSWERED_COLOR` = la couleur. *(#255 : `ANSWERED_COLOR`, réponse à la question courante, remplace `ANSWER_COLOR`, qui garde la couleur assignée d'une question à l'autre et comptait des équipes qui n'avaient pas répondu ; `models.md` §Bumper.)* Repli d'un client face à un serveur antérieur (clé absente) : `TIME > 0 && ANSWER_COLOR`.
-
-#### Montant négatif et tablettes de l'anim (`SET_CREDIT_POINTS`) ⚠️
-Le champ « Points » est aujourd'hui poussé à l'anim (`SET_CREDIT_POINTS` → `CREDIT_POINTS`). **Le client admin n'envoie jamais `SET_CREDIT_POINTS` avec une valeur ≤ 0** : quand le champ prend une pénalité, l'anim garde la dernière valeur positive. Sinon, le bouton de crédit des tablettes retirerait des points au lieu d'en donner.
-
-#### TEAM_POINTS_BATCH_RESULT ✨ (v11.2)
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Server → Client` (ciblé, émetteur) |
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| STATUS | string | `APPLIED` (au moins une équipe créditée ou toutes ignorées) ou `REFUSED` |
-| REASON | string | Si `REFUSED` : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, `UNKNOWN_TEAM` |
-| QUESTION_ID | string | Question concernée |
-| APPLIED | array | `[{TEAM, POINTS}]` équipes créditées |
-| SKIPPED | array | `[{TEAM, REASON}]` — `ALREADY_AWARDED` |
-| TEAMS | string[] | Si `UNKNOWN_TEAM` : clés inconnues |
-
-```json
-{ "ACTION": "TEAM_POINTS_BATCH", "MSG": { "QUESTION_ID": "9", "ENTRIES": [ {"TEAM": "Les Bleus", "POINTS": 3}, {"TEAM": "Les Rouges", "POINTS": 2} ] } }
-{ "ACTION": "TEAM_POINTS_BATCH_RESULT", "MSG": { "STATUS": "APPLIED", "QUESTION_ID": "9", "APPLIED": [ {"TEAM": "Les Bleus", "POINTS": 3} ], "SKIPPED": [ {"TEAM": "Les Rouges", "REASON": "ALREADY_AWARDED"} ], "TEAMS": [] } }
-```
 
 ---
 
@@ -630,92 +461,24 @@ Modifie le score d'un joueur.
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
 | ID | string | ✅ | MAC du bumper |
-| POINTS | int | ✅ | Points à ajouter (peut être négatif) |
-| DISPLAY | boolean | ⬜ | *(v11.2, #252)* même règle que `TEAM_POINTS` §« Affichage public » : `false` honoré **seulement pour l'admin** (sinon ignoré + `WARN SCORE_CORRECTION_HIDDEN_REFUSED`) ; `POINTS = 0` ignoré seulement si l'émetteur est l'admin |
-
----
-
-### BUMPER_POINTS_BATCH ✨ (v11.2, #254)
-
-Attribution groupée **au niveau joueur** (question de niveau `PLAYER`, §TEAM_POINTS_BATCH « Niveau d'attribution »). **Symétrique de `TEAM_POINTS_BATCH`** : mêmes règles sauf ce qui suit. Montants par joueur calculés **côté client** (§TEAM_POINTS_BATCH « Montant », commutateur « Tenir compte des indices » au coefficient du joueur) ; le serveur ne recalcule rien.
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Client→Server` (`admin` seulement) |
-| Phase | **`REVEALED` uniquement** |
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| QUESTION_ID | string | ✅ | Question affichée au moment du clic |
-| ENTRIES | array | ✅ | 1 à 64 entrées, **joueurs distincts** |
-| ENTRIES[].ID | string | ✅ | MAC du bumper (ou ID du VJoueur) |
-| ENTRIES[].POINTS | int | ✅ | Entier non nul de −999 à 999 |
-| DISPLAY | boolean | ⬜ | Même règle que `TEAM_POINTS_BATCH` (`false` = aucun effet public, admin seulement) |
-
-1. **Refus global** (`BUMPER_POINTS_BATCH_RESULT{STATUS:"REFUSED"}`, `WARN BUMPER_POINTS_BATCH_REFUSED`) : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, **`UNKNOWN_PLAYER`** (joueur supprimé entre la sélection et le clic ; `PLAYERS` = IDs inconnus).
-2. Sous **un seul verrou moteur**, un joueur est ignoré (`SKIPPED`, `ALREADY_AWARDED`) s'il est **déjà crédité pour la question** :
-   - **à titre individuel** : il est présent dans `AWARDED_TEAMS.PLAYERS` (même règle que les équipes) ;
-   - **ou au niveau équipe** *(revue #254, durcissement)* : son équipe a reçu un crédit **d'équipe** pour la question, c'est-à-dire un `POINTS_AWARDED` avec `WINNER_TYPE = "TEAM"` (mêmes filtres : depuis le départ de la question, `DISPLAY ≠ false`, après le dernier `TEAM_DELETED`, 0 point de l'anim compris). Le motif de ce second cas est **`TEAM_ALREADY_AWARDED`**. C'est le pendant de la règle inverse déjà en place : un crédit joueur rend son équipe « déjà créditée » pour `TEAM_POINTS_BATCH`. Ainsi, aucun joueur n'est crédité deux fois par les deux niveaux, quel que soit l'ordre (clic unitaire sur l'équipe, lot équipe, anim). Les crédits **individuels** d'autres joueurs de la même équipe ne bloquent pas : au niveau joueur, plusieurs joueurs d'une équipe peuvent être crédités.
-
-   Les joueurs restants sont crédités exactement comme `BUMPER_POINTS` (score du joueur, score de l'équipe recalculé), avec **une entrée `POINTS_AWARDED` par joueur** (`WINNER_TYPE: "PLAYER"`, `WINNER_ID` = ID du joueur, `TEAM_NAME` = son équipe).
-3. **Effets publics groupés** (si `DISPLAY` ≠ `false`), une fois pour le lot, comme `TEAM_POINTS_BATCH` point 4, **par équipe des joueurs crédités positivement** : un son, une comète par équipe concernée, une pulsation unique, un seul flash (équipe du plus fort montant positif). Aucun effet pour les négatifs.
-4. Diffusions : `UPDATE`, `SCORE_CHANGE` (`PLAYERS` et `TEAMS` concernés), `AWARDED_TEAMS`. Réponse ciblée `BUMPER_POINTS_BATCH_RESULT`. Journal `INFO BUMPER_POINTS_BATCH`.
-5. Le clic unitaire sur un joueur (`BUMPER_POINTS`) reste **libre** (la régie n'est pas contrainte).
-
-#### BUMPER_POINTS_BATCH_RESULT ✨ (v11.2, #254)
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| STATUS | string | `APPLIED` ou `REFUSED` |
-| REASON | string | Si `REFUSED` : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, `UNKNOWN_PLAYER` |
-| QUESTION_ID | string | Question concernée |
-| APPLIED | array | `[{ID, POINTS}]` |
-| SKIPPED | array | `[{ID, REASON}]` — `ALREADY_AWARDED` (joueur crédité individuellement) ou `TEAM_ALREADY_AWARDED` (équipe créditée au niveau équipe) |
-| PLAYERS | string[] | Si `UNKNOWN_PLAYER` : IDs inconnus (`[]` sinon) |
-
-```json
-{ "ACTION": "BUMPER_POINTS_BATCH", "MSG": { "QUESTION_ID": "12", "ENTRIES": [ {"ID": "AA:BB:CC:01", "POINTS": 2}, {"ID": "AA:BB:CC:07", "POINTS": 2} ] } }
-{ "ACTION": "BUMPER_POINTS_BATCH_RESULT", "MSG": { "STATUS": "APPLIED", "QUESTION_ID": "12", "APPLIED": [ {"ID": "AA:BB:CC:01", "POINTS": 2} ], "SKIPPED": [ {"ID": "AA:BB:CC:07", "REASON": "ALREADY_AWARDED"} ], "PLAYERS": [] } }
-```
+| POINTS | int | ✅ | Points à ajouter |
 
 ---
 
 ### UPDATE
 
-Met à jour les équipes/joueurs (page Équipes, page Configuration). Même traitement que `FULL` entrant (`handleFullUpdate`).
+Met à jour les équipes/joueurs.
 
 | Propriété | Valeur |
 |-----------|--------|
-| Direction | `Client→Server` (`admin`) |
+| Direction | `Client→Server` |
 
 #### Payload
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| teams | object | ❌ | Map des équipes (clé = identité de l'équipe, `NAME` réécrit = clé côté serveur, v11.2 #249) |
+| teams | object | ❌ | Map des équipes |
 | bumpers | object | ❌ | Map des joueurs |
-
-#### Renommage et suppression d'équipe (v11.2, #249) — `[CHANGED]`
-
-- Le client renomme une équipe en envoyant la map `teams` où **l'ancienne clé a disparu** et la **nouvelle clé** porte l'objet équipe, **avec `NAME` = nouvelle clé**, et les `bumpers` dont `TEAM` passe à la nouvelle clé (`TeamsPage.handleRenameTeam`). Le serveur réécrit de toute façon `NAME` = clé.
-- **Pendant une question (`TEAMS_LOCKED = true`)** : un `UPDATE`/`FULL` dont la map `teams` **retire une clé existante** (renommage ou suppression) est **refusé en entier**, rien n'est appliqué (ni équipes ni joueurs). Le serveur répond `TEAMS_UPDATE_REFUSED` **à l'émetteur seul**, journalise `WARN TEAMS_CHANGE_REFUSED`, puis renvoie l'état complet à l'émetteur, qui réaffiche les équipes inchangées. Un message qui ne retire aucune clé (ajout d'équipe, couleur, affectation de joueurs) est appliqué normalement.
-- **Hors question, y compris en `REVEALED`** : le renommage est appliqué, et le serveur **reporte** sous la nouvelle clé tous les états indexés par nom d'équipe (liste : `game-state.md` §`TEAMS_LOCKED`), y compris l'**historique des points**, ce qui conserve le verrou « déjà créditée » (`AWARDED_TEAMS`) de la question révélée. Il journalise `INFO TEAM_RENAMED old=… new=…`. Un renommage est reconnu quand une clé disparaît et qu'une nouvelle apparaît **dans le même message**, avec les mêmes joueurs (`bumpers` dont `TEAM` passe de l'une à l'autre). Sinon, c'est une suppression suivie d'un ajout : les **états de jeu** de l'équipe supprimée (liste `game-state.md` §`TEAMS_LOCKED`, **historique excepté**) sont effacés. **L'historique des points est conservé** (piste d'audit), et le serveur y ajoute un événement `TEAM_DELETED` (`TEAM_NAME`, `TIMESTAMP`). **`AWARDED_TEAMS` ignore les `POINTS_AWARDED` d'une équipe antérieurs à son dernier `TEAM_DELETED`** : une équipe recréée plus tard sous le même nom n'hérite jamais du verrou « déjà créditée » de l'ancienne. *(précisé 2026-10-11, question dev-backend)*
-- Un client antérieur (sans `TEAMS_LOCKED`) voit simplement son renommage refusé pendant une question : changement de comportement **signalé**, livré avec la page Équipes de la même version.
-
-#### TEAMS_UPDATE_REFUSED ✨ (v11.2, #249)
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Server → Client` (ciblé, émetteur du `UPDATE`/`FULL` refusé) |
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| REASON | string | `TEAMS_LOCKED_DURING_QUESTION` |
-| TEAMS | string[] | Clés d'équipe que le message tentait de retirer (renommer ou supprimer) |
-
-```json
-{ "ACTION": "TEAMS_UPDATE_REFUSED", "MSG": { "REASON": "TEAMS_LOCKED_DURING_QUESTION", "TEAMS": ["Les Bleus"] } }
-```
 
 ---
 
@@ -749,119 +512,6 @@ Supprime une question.
 
 ---
 
-### NEW_GAME (v4.0 · options de purge v11.2, #243)
-
-Relance une partie (bouton admin « LANCER LA PARTIE », popup de purge — maquette `docs/mockup/v11.2/ui/admin_new_game__purge_popup_details.html`, qui remplace `admin_new_game__purge_popup.html`).
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Client→Server` (`admin`) |
-| Phase | Toutes (y compris pendant une question : elle est interrompue) |
-
-#### Payload *(v11.2 — `[CHANGED]` additif)*
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| PURGE_SCORES | boolean | ⬜ | Remettre à 0 les scores (équipes et joueurs) et effacer l'historique des points |
-| PURGE_PLAYERS | boolean | ⬜ | Supprimer tous les **joueurs des tablettes** (VJoueurs) |
-| PURGE_TEAMS | boolean | ⬜ | Supprimer **toutes les équipes** ; les joueurs conservés deviennent **sans équipe** |
-| RESET_QUESTIONS | boolean | ⬜ | Remettre **toutes les questions « à jouer »** (statuts effacés) et le réservoir RAFALE à zéro ; `false` = les questions déjà jouées le restent |
-
-- **Payload vide ou sans aucun de ces champs** (clients et scripts antérieurs) = **comportement v11.1 inchangé** : `PURGE_SCORES = true`, `PURGE_PLAYERS = true`, `PURGE_TEAMS = false`, `RESET_QUESTIONS = true`.
-- **Dès qu'un champ est présent**, les champs absents valent `false`. Le nouveau client envoie toujours les quatre.
-- **Entracte active** *(décision CDP, revue #243)* : un `NEW_GAME` reçu pendant une entracte (`GameState.ENTRACTE = true`) est **refusé** : rien n'est appliqué, `NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }` est envoyé à l'émetteur seul, `WARN NEW_GAME_REFUSED`. `NEW_GAME` reste **hors** de la liste d'autorisation de l'entracte (§« Actions refusées pendant l'entracte ») : il faut d'abord sortir de l'entracte. Avant v11.2, le message était ignoré sans réponse et la popup restait figée.
-- **Combinaison interdite** *(décision utilisateur D2)* : `PURGE_PLAYERS = true` avec `PURGE_SCORES = false` → **refus**, rien n'est appliqué (ni arrêt des minuteurs, ni remise à zéro), `NEW_GAME_REFUSED` envoyé à l'émetteur seul, `WARN NEW_GAME_REFUSED`. Le client empêche déjà ce choix (case « Scores » cochée et verrouillée dès que « Joueurs des tablettes » est cochée).
-
-#### Effets — toujours, quelles que soient les options (« relancer la partie »)
-1. **Garantie défensive : tous les minuteurs du moteur sont arrêtés** (chrono de question, décompte, chrono RAFALE classique et de carte, minuteurs MEMOTION de carte et de mémorisation, **chrono différé à la fin du son** de #219, remis à zéro comme dans `Ready()`), le **son de question est arrêté** (`QUESTION_SOUND_STATE` revient à l'état de repos), sans repasser par `STOPPED`. *(Constat v11.1, par lecture du code : les ticks des minuteurs sont déjà sans effet hors `STARTED`/`COUNTDOWN`, et aucun retour à `STOPPED` n'est reproduit, sauf une course de quelques millisecondes sur le tout dernier tick. En revanche, NEW_GAME n'arrêtait **ni le son de question ni le chrono différé** : le son continuait après la remise à zéro et, à sa fin, pouvait relancer un chrono inerte. Cette garantie couvre ces cas et la course.)*
-2. Phase `NEW_GAME`, plus de question courante, états de jeu propres aux types (ARDOISE, MEMORY, MEMOTION, RAFALE) remis à zéro, `TEAMS_LOCKED = false`. *(Les statuts des questions ne sont plus remis à zéro systématiquement : option `RESET_QUESTIONS`.)*
-3. Diffusions existantes : `QUESTIONS`, `UPDATE`, `ENROLLMENT_UPDATE`, `NEXT_QUESTION`, `CREDIT_POINTS`, `AWARDED_TEAMS`.
-4. **Lumières, à chaque NEW_GAME appliqué, quelles que soient les options** *(revue #243)* : `LED_SET` à tous les buzzers (état de repos ; « sans équipe » si `PURGE_TEAMS`) et notification d'état de l'ambiance (`NotifyState`).
-
-#### Effets par option
-
-| Option | Effet | Persistance |
-|--------|-------|-------------|
-| `PURGE_SCORES` | `SCORE`, `TEAM_POINTS`, `TIME` des équipes et `SCORE`, `TIME` de tous les joueurs (buzzers et tablettes conservés) à 0 ; **historique des points effacé** (verrous « déjà créditée » libérés) | `history`, `teams.json`, `bumpers.json` |
-| `PURGE_SCORES` absent/`false` | Scores et historique **conservés** (les crédits des parties précédentes restent dans l'historique ; `AWARDED_TEAMS` ne regarde que la question en cours depuis son départ, donc aucun verrou hérité) | — |
-| `PURGE_PLAYERS` (exige `PURGE_SCORES`) | Tous les VJoueurs supprimés ; chacun reçoit `PLAYER_EVICTED { REASON: "GAME_RESET" }` (et le registre d'éviction le retient pour un retour hors ligne) ; ils devront se réinscrire. **Les connexions liées à ces joueurs sont déliées dans le hub** (invariant #246 : une connexion liée désigne toujours un joueur existant ; leurs actions joueur sont ensuite refusées comme non liées). **Buzzers physiques jamais supprimés** | `bumpers.json` |
-| `RESET_QUESTIONS` | Statuts de toutes les questions effacés (toutes « à jouer ») ; réservoir RAFALE (`rafale_used.json`) remis à zéro ; diffusion `QUESTIONS` | statuts, `rafale_used.json` |
-| `RESET_QUESTIONS` absent/`false` | Statuts et réservoir RAFALE **conservés** : les questions jouées restent marquées jouées ; la « question suivante » reprend après la dernière jouée. **Question courante interrompue par le NEW_GAME** *(revue #243)* : sélectionnée mais jamais lancée (`PREPARE`, `READY`, `COUNTDOWN`) → `AVAILABLE` (jamais jouée) ; lancée (`STARTED`, `PAUSED`) → `STOPPED` (jouée, interrompue) ; déjà `STOPPED`/`REVEALED` → statut inchangé | statuts |
-| `PURGE_TEAMS` | Toutes les équipes supprimées, une par une par le même chemin que la suppression d'équipe de #249 (`PurgeTeamState` : états de jeu effacés, événement `TEAM_DELETED` dans l'historique, pas d'héritage du verrou). **Tous les joueurs conservés** (buzzers physiques, et VJoueurs si `PURGE_PLAYERS` est `false`) passent à `TEAM = ""` : les buzzers repassent en LED « sans équipe » (`LED_SET` à tous les buzzers), les tablettes restent liées (#246) et affichent l'attente d'affectation. Les scores des joueurs suivent `PURGE_SCORES` | `teams.json` (vide), `bumpers.json` |
-| aucune option cochée (les quatre à `false`) | Seuls les effets « toujours » s'appliquent (« Lancer sans rien effacer ») | — |
-
-Ordre d'application côté serveur : contrôle de la combinaison interdite → minuteurs → `PURGE_TEAMS` → `PURGE_PLAYERS` → `PURGE_SCORES` → `RESET_QUESTIONS` → remise à zéro « toujours ». Un seul verrou moteur pour l'ensemble (atomique vu des clients).
-
-- **Double validation** : la popup désactive son bouton dès l'envoi ; côté serveur, un second `NEW_GAME` est simplement rejoué (il n'y a plus rien à purger), sans erreur.
-- **Journal** : `WARN NEW_GAME_PURGE client=… options=… players_removed=N teams_removed=N scores_reset=bool questions_reset=bool phase_before=… question_before=…` (`contracts/logging.md`), écrit sur disque, y compris quand aucune option n'est cochée.
-
-#### LAUNCH_LOCK ✨ (v11.2, #253) — verrou de la popup « Lancer la partie »
-
-Tant que la popup « Lancer la partie » est ouverte sur un poste admin, **le serveur suspend les actions de conduite de jeu**, quel que soit le client (admin, 2ᵉ admin, anim).
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Client→Server` (`admin`) |
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| STATE | string | ✅ | `OPEN` (ouverture, puis renouvellement) ou `CLOSE` (fermeture) |
-
-#### Cycle de vie
-- **Ouverture** : à l'ouverture de la popup, le client envoie `OPEN`. Le serveur pose le verrou **au nom de cette connexion** (le « propriétaire ») et diffuse `GameState.LAUNCH_LOCK` (`contracts/game-state.md`). La popup ne s'affiche qu'à réception de l'état verrouillé à son nom (au plus 1 s d'attente, puis message d'erreur).
-- **Renouvellement** : tant que la popup est ouverte, le propriétaire renvoie `OPEN` **toutes les 15 s**.
-- **Libération** — la première de ces conditions lève le verrou et le rediffuse :
-  1. `CLOSE` du propriétaire (« Annuler », touche Échap, fermeture après succès) ;
-  2. `NEW_GAME` **appliqué** (envoyé par le propriétaire) ;
-  3. **déconnexion** de la connexion propriétaire (onglet fermé, rechargement, coupure) ;
-  4. **expiration de sécurité** : **45 s sans renouvellement** (popup oubliée, onglet gelé).
-  Les cas 3 et 4 sont journalisés en WARN. Le client propriétaire qui découvre l'expiration (état reçu) ferme la popup avec le message « La fenêtre a expiré, rouvrez-la ».
-- **Refus d'ouverture** (`LAUNCH_LOCK_REFUSED` à l'émetteur, rien ne change) : verrou déjà tenu par **une autre** connexion (`LOCKED_BY_OTHER`) ; **entracte active** (`ENTRACTE_ACTIVE`, même règle que `NEW_GAME`). Un `OPEN` du propriétaire en cours = renouvellement, jamais refusé.
-- `CLOSE` d'un non-propriétaire : ignoré (journal INFO).
-
-- **Identité du propriétaire** : `OWNER` = `CLIENT_ID` de la connexion qui a envoyé `OPEN`, tel que reçu par ce client dans **`HELLO_ACK`** (§HELLO). Le client se reconnaît par `LAUNCH_LOCK.OWNER === CLIENT_ID`. Après une reconnexion, l'ancien verrou a été levé par la déconnexion (cas 3) ; le nouvel identifiant ne peut donc pas hériter du verrou.
-
-#### Actions suspendues pendant le verrou
-Refusées pour **tout** émetteur, y compris le propriétaire, avec `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }` ciblé et `WARN ACTION_REFUSED_LAUNCH` :
-- **Conduite** : `READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET{ACTIVE:true}`, `MEMORY_SET_TEAMS`, `MEMOTION_SET_TEAMS`, `MEMOTION_SELECT`, `MEMOTION_FLIP`, `MEMOTION_STOP_TIMER`, `MEMOTION_REVEAL`, `MEMOTION_DONE`, `RAFALE_VALIDATE`, `RAFALE_INVALIDATE`, `RAFALE_SET_TEAMS`, `FLIP_MEMORY_CARD` (venant de l'admin, de l'anim ou de la TV).
-- **Points** : `POINTS` (crédit joueur historique), `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`, `BUMPER_POINTS_BATCH`, `SET_CREDIT_POINTS`, `RAZ` (remise à zéro des scores) *(ajout revue #253 : `POINTS`, `RAZ`)*.
-- **Phases et clients** *(ajout revue #253)* : `SHOW_QR_CODE`, `HIDE_QR_CODE` (forcent les phases `ENROLL`/`STOPPED`), `RESET` (réinitialise tous les écrans et relance `HELLO`).
-- **Équipes et joueurs** : `UPDATE`/`FULL` entrants, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
-- `NEW_GAME` venant d'une connexion **autre** que le propriétaire (`REASON: "LAUNCH_IN_PROGRESS"` via `NEW_GAME_REFUSED`).
-
-> **Classement exhaustif** *(revue #253)* : ces deux listes couvrent **toutes** les actions entrantes de `handleWebMessage`. Toute action ajoutée plus tard doit être classée ici, dans le même commit que son contrat. À défaut, elle est **permise**, et le contrôle d'accès reste à la charge de la revue. Les routes HTTP d'administration ne sont pas couvertes par le verrou (hors périmètre).
-
-#### Toujours permises
-`LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `ENTRACTE_SET{ACTIVE:false}` *(v11.2, #245 : sortir d'une entracte n'est jamais bloqué)*, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`, `REGIE_MESSAGE_SEND`/`CLEAR`, `UPDATE_ENTRACTE_CONFIG`, `UPDATE_QUIZ_META`, édition de questions (`DELETE`, `REORDER_QUESTIONS`, `ROUNDS_UPDATE`), réglages (`SET_VIRTUAL_PLAYER_LIMIT` : plafond d'inscription, sans effet sur la phase ni les scores), `REBOOT` (journalisé seulement, sans effet), journaux. Protocole buzzer (`/ws/buzzer`) : `OTA_PROGRESS`, `ACK`. **Actions des joueurs** : `PLAYER_CONNECT`, `PONG`, `BUTTON` d'un buzzer ou d'un VJoueur, `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`. Elles ne changent pas le déroulé, et la relance de partie les remettra à zéro.
-
-#### Retour visuel
-Les clients `admin` et `anim` lisent `GameState.LAUNCH_LOCK` : hors du poste propriétaire, un bandeau « Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu suspendues » s'affiche et les commandes de jeu sont désactivées (maquette `admin_new_game__launch_overlay`). TV et VJoueur : aucun changement.
-
-#### LAUNCH_LOCK_REFUSED / ACTION_REFUSED ✨ (v11.2, #253)
-
-| Action | Champs |
-|--------|--------|
-| `LAUNCH_LOCK_REFUSED` (ciblé) | `REASON` : `LOCKED_BY_OTHER` \| `ENTRACTE_ACTIVE` |
-| `ACTION_REFUSED` (ciblé) | `ACTION` (action refusée), `REASON` : `LAUNCH_IN_PROGRESS` |
-
----
-
-### NEW_GAME_REFUSED ✨ (v11.2, #243)
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Server → Client` (ciblé, émetteur du `NEW_GAME` refusé) |
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| REASON | string | `PLAYERS_REQUIRE_SCORES` (`PURGE_PLAYERS = true` avec `PURGE_SCORES = false`), `ENTRACTE_ACTIVE` (entracte en cours) ou `LAUNCH_IN_PROGRESS` *(v11.2, #253)* (verrou de lancement tenu par une autre connexion) |
-
-```json
-{ "ACTION": "NEW_GAME_REFUSED", "MSG": { "REASON": "PLAYERS_REQUIRE_SCORES" } }
-```
-
----
-
 ### REORDER_QUESTIONS
 
 Réordonne les questions.
@@ -885,97 +535,6 @@ Réordonne les questions.
     "ORDER": ["3", "1", "5", "2", "4"]
   }
 }
-```
-
-> *(v11.2, #245)* Conservée pour la compatibilité : elle réécrit `ORDER` sans toucher `ROUND_ID`. L'éditeur v11.2 utilise **`ROUNDS_UPDATE`**, qui fixe à la fois les manches, leur ordre, la manche de chaque question et l'ordre interne.
-
-### ROUNDS_UPDATE ✨ (v11.2, #245)
-
-Fixe **en une action** la structure complète : liste ordonnée des manches, questions de chaque manche dans l'ordre, questions « Sans manche ». Elle couvre la création (avec ses entractes automatiques), le renommage, la suppression (avec le choix du sort de ses questions) et le réordonnancement des manches, ainsi que le déplacement de questions dans une manche ou entre manches.
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Client→Server` (`admin` seulement) |
-| Phases | toutes (édition du quiz ; permise pendant `LAUNCH_LOCK`) |
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| ROUNDS | array | ✅ | Manches **conservées ou créées**, dans l'ordre voulu, 0 à 50 |
-| ROUNDS[].ID | string | ⬜ | ID existant ; **absent ou `""` = nouvelle manche**, ID attribué par le serveur (`NEXT_ID` toujours supérieur à tout `rN` de `rounds.json` **et** à tout `ROUND_ID` présent dans les questions : jamais de réutilisation) |
-| ROUNDS[].NAME | string | ✅ | 1 à 60 caractères après suppression des espaces de bord |
-| ROUNDS[].QUESTIONS | []string | ✅ | IDs des questions de la manche, dans l'ordre (peut être vide) |
-| ROUNDS[].ENTRACTES | boolean | ⬜ | **Nouvelle manche seulement** (ignoré pour une manche existante) : créer les deux entractes automatiques (ci-dessous). **Absent = `true`** *(décision utilisateur : création automatique par défaut)* |
-| UNASSIGNED | []string | ✅ | IDs « Sans manche », dans l'ordre |
-| DELETED_ROUNDS | array | ⬜ | Manches **supprimées** par ce message, avec le choix fait dans la fenêtre de suppression |
-| DELETED_ROUNDS[].ID | string | ✅ | ID d'une manche existante |
-| DELETED_ROUNDS[].QUESTIONS | string | ✅ | `"KEEP"` : ses questions passent à la **fin du groupe « Sans manche »** (lui-même en tête), dans leur ordre. `"DELETE"` : ses questions sont **supprimées définitivement**, dossier et médias, comme `DELETE` |
-
-**Entractes automatiques à la création d'une manche** (`ENTRACTES` absent ou `true`) :
-- Le serveur crée **deux questions `ENTRACTE` standard** (#214). Aucun champ particulier : rien ne les distingue d'une ENTRACTE créée à la main.
-  - **Début** : `QUESTION` et `ENTRACTE_CONFIG.TITLE` = « Début de la manche <NOM> », `SUBTITLE` = `""`, placée **en tête** de la manche.
-  - **Fin** : même chose avec « Fin de la manche <NOM> », placée **à la fin**.
-  - Autres champs : valeurs par défaut d'une nouvelle ENTRACTE de l'éditeur (`PANEL_SIZE`, `ANIM_*` de la config globale, sans image).
-- IDs attribués comme toute création (`resolveQuestionDir`).
-- Ensuite ce sont des ENTRACTE ordinaires : modifiables (titre, sous-titre, image), déplaçables, supprimables, jouées et proposées par « à suivre » **exactement** comme toute ENTRACTE (§NEXT_QUESTION, v11.2 : les ENTRACTE ne sont plus sautées). **Renommer la manche ne les renomme pas.**
-- Plus de 997 questions (IDs épuisés) : refus `QUESTION_ID_EXHAUSTED`, rien n'est appliqué.
-
-**Validation (refus global, rien appliqué)** → `ROUNDS_UPDATE_RESULT{STATUS:"REFUSED", REASON}` à l'émetteur et `WARN ROUNDS_UPDATE_REFUSED` :
-- `INVALID_NAME` : nom vide ou de plus de 60 caractères ;
-- `TOO_MANY_ROUNDS` : plus de 50 manches ;
-- `UNKNOWN_ROUND` : ID fourni (dans `ROUNDS` ou `DELETED_ROUNDS`) mais inconnu ;
-- `INVALID_DECISION` : `DELETED_ROUNDS[].QUESTIONS` ∉ {`KEEP`, `DELETE`}, ou manche à la fois dans `ROUNDS` et dans `DELETED_ROUNDS` ;
-- `MISSING_ROUND_DECISION` : une manche existante n'est ni dans `ROUNDS` ni dans `DELETED_ROUNDS` (`ROUNDS` = liste). Une manche n'est jamais supprimée sans choix explicite ;
-- `DUPLICATE_QUESTION` : une question citée deux fois ;
-- `UNKNOWN_QUESTION` : ID de question inexistant sur le disque (`QUESTIONS` = liste) ;
-- `INCOMPLETE` : une question existante n'est ni citée dans `ROUNDS`/`UNASSIGNED`, ni membre (selon son `ROUND_ID` actuel) d'une manche de `DELETED_ROUNDS` (`QUESTIONS` = liste ; protège d'un client dont la liste est périmée) ;
-- `QUESTION_ID_EXHAUSTED` : voir ci-dessus.
-- `INCONSISTENT_STORE` *(revue #245, M1)* : le dossier des questions est incohérent. Un `question.json` porte un `ID` différent du nom de son dossier, ou un dossier a un nom invalide (hors `^[A-Za-z0-9_-]{1,64}$`). `QUESTIONS` = dossiers fautifs, `WARN` par anomalie. **Refus global** tant que l'anomalie n'est pas corrigée sur le disque.
-- `ROUNDS_FILE_UNREADABLE` *(revue #245)* : `rounds.json` existe mais n'est pas lisible (JSON invalide). Le serveur en garde une copie `rounds.json.corrupt` (une seule fois, WARN) et refuse toute modification des manches jusqu'à correction ou restauration. Il continue de servir les manches lisibles, ou aucune, au jeu.
-- `QUESTION_IN_PROGRESS` *(revue #245 ; **amende** la règle « aucune protection » du point 1 de l'application)* : `DELETED_ROUNDS{DELETE}` viserait la **question courante** alors que la phase est `PREPARE`, `READY`, `COUNTDOWN`, `STARTED` ou `PAUSED`. `QUESTIONS` = questions concernées. Au repos (`STOPPED`, `REVEALED`, `NEW_GAME`, pas de question), la suppression est permise. `KEEP` n'est jamais concerné.
-- `WRITE_FAILED` *(revue #245, M2)* : échec d'écriture disque **pendant l'application**. Voir « Ordre des effets ». `QUESTIONS` = fichiers non écrits ou non restaurés.
-
-**Identité d'une question** : c'est le **nom de son dossier** (`data/files/questions/<ID>/`). Le champ `ID` du `question.json` doit lui être égal (sinon `INCONSISTENT_STORE`). Un ID cité par le client qui n'est pas un nom de dossier valide **et** existant donne `UNKNOWN_QUESTION`. Aucun chemin n'est construit à partir d'un ID non validé (protection contre `..`, `/`, `.`).
-
-Les questions d'une manche supprimée **ne sont pas** citées par le client : le serveur les retrouve par leur `ROUND_ID` actuel.
-
-**Application** (sous un seul verrou des fichiers de questions, partagé avec `REORDER_QUESTIONS`, `DELETE` et l'édition/création de question) :
-1. **Suppressions** (`DELETE`) : dossiers supprimés comme `DELETE`, **sauf la question courante en cours de jeu** (refus `QUESTION_IN_PROGRESS` ci-dessus). Leurs statuts de question sont purgés.
-2. **`KEEP`** : les questions des manches supprimées sont ajoutées à la fin de « Sans manche », dans leur ordre d'origine. Les deux entractes automatiques suivent **le même sort** que les autres questions de la manche (aucune règle particulière).
-3. **Nouvelles manches** : IDs depuis `NEXT_ID`, entractes automatiques créées si demandé.
-4. Écrit `rounds.json` (manches dans l'ordre).
-5. Pour chaque question restante : `ROUND_ID` (retiré si « Sans manche ») et `ORDER` = position **dans son groupe** (0-based). **Seuls les fichiers qui changent sont réécrits.**
-6. Diffuse `UPDATE` (`GameState.ROUNDS`, `ROUND_CONTEXT`), `QUESTIONS` (admin) et `NEXT_QUESTION` (anim).
-7. Répond à l'émetteur :
-
-   ```
-   ROUNDS_UPDATE_RESULT{STATUS:"APPLIED",
-     ROUNDS:[{ID, NAME}],
-     CREATED_ENTRACTES:[{ROUND_ID, START_ID, END_ID}],
-     DELETED_QUESTIONS:[ids]}
-   ```
-
-   **Ordre des effets** *(revue #245, M2 — l'ordre de la liste ci-dessus est logique, celui-ci est l'ordre réel)* :
-   1. validation **complète** (tous les refus ci-dessus) ;
-   2. **réservation des IDs** des entractes à créer. Si c'est impossible : `QUESTION_ID_EXHAUSTED`, réservations relâchées, rien d'écrit ;
-   3. écriture de **`rounds.json`**. En cas d'échec : abandon et `WRITE_FAILED` ;
-   4. réécriture des **`question.json`** modifiés (`ROUND_ID`, `ORDER`), puis écriture des **entractes** créées ;
-   5. **suppressions en dernier** ;
-   6. mise à jour de l'état en mémoire (`ROUNDS`), diffusions et `APPLIED` **seulement en cas de succès**.
-
-   **Échec avant l'étape 5** :
-   - `rounds.json` est restauré, les entractes créées par ce message sont supprimées, **rien n'est supprimé**, la mémoire est inchangée ;
-   - réponse `WRITE_FAILED` avec `QUESTIONS` = fichiers en échec ;
-   - un `question.json` déjà réécrit peut garder un `ROUND_ID` de manche absente : il tombe dans « Sans manche », sans perte (règle « ID inconnu »).
-
-   `DELETED_QUESTIONS` ne contient que les dossiers **réellement** supprimés.
-
-   Journal `INFO ROUNDS_UPDATE` : manches créées, renommées, supprimées avec leur choix ; entractes créées ; questions déplacées et supprimées.
-
-**Concurrence** : dernier écrit gagnant (comme `REORDER_QUESTIONS`). `INCOMPLETE` et `MISSING_ROUND_DECISION` évitent qu'un poste à la liste périmée fasse disparaître une question ou une manche.
-
-```json
-{ "ACTION": "ROUNDS_UPDATE", "MSG": { "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement", "QUESTIONS": ["3", "1"]}, {"NAME": "Manche finale", "QUESTIONS": ["5"], "ENTRACTES": true} ], "UNASSIGNED": ["2", "4"], "DELETED_ROUNDS": [ {"ID": "r2", "QUESTIONS": "KEEP"} ] } }
-{ "ACTION": "ROUNDS_UPDATE_RESULT", "MSG": { "STATUS": "APPLIED", "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement"}, {"ID": "r3", "NAME": "Manche finale"} ], "CREATED_ENTRACTES": [ {"ROUND_ID": "r3", "START_ID": "86", "END_ID": "87"} ], "DELETED_QUESTIONS": [] } }
 ```
 
 ---
@@ -1234,37 +793,10 @@ Demande d'inscription ou de reconnexion VPlayer.
 
 | # | Situation | Décision |
 |---|---|---|
-| 1 | `ID` fourni et résout un bumper `IsVirtual` existant | Reconnexion — réutilise le bumper (badge → `green`), pas d'ambiguïté possible. **v11.2 (#246) `[CHANGED]` : le `NAME` envoyé ne modifie plus le nom du bumper** (avant : le nom était remplacé par celui du client, sans contrôle d'unicité — un onglet périmé renommait ainsi le joueur actuel avec un nom d'une ancienne partie). Si `NAME` ≠ nom du bumper : `WARN VPLAYER_NAME_MISMATCH`, et `PLAYER_CONNECTED.NAME` renvoie le nom **serveur**, que le client adopte. |
+| 1 | `ID` fourni et résout un bumper `IsVirtual` existant | Reconnexion — réutilise le bumper (badge → `green`), pas d'ambiguïté possible |
 | 2 | `ID` fourni mais introuvable (supprimé par l'admin, périmé, ...) | Traité comme si aucun ID n'était fourni → cas 3/4 |
 | 3 | Pas d'`ID` (ou introuvable), nom déjà pris par un autre VJoueur (connecté **ou** déconnecté) | **`PLAYER_REJECTED { REASON: "NAME_TAKEN" }`** — jamais de fusion/remplacement |
 | 4 | Pas d'`ID` (ou introuvable), nom libre | Nouvel enrôlement — un nouveau bumper est créé, son ID est renvoyé dans `PLAYER_CONNECTED.ID` |
-
-#### Liaison connexion ↔ bumper (v11.2, #246) — `[CHANGED]`
-
-- Un `PLAYER_CONNECT` accepté **lie la connexion WebSocket émettrice** à ce bumper
-  (`WebSocketHub.SetClientPlayerID`, existant).
-- **Le client VJoueur DOIT envoyer `PLAYER_CONNECT {NAME, ID}` à CHAQUE ouverture de sa WebSocket**
-  dès qu'il connaît son ID — y compris quand le bumper est déjà trouvé `CONNECTED` dans l'état reçu
-  (avant v11.2 il s'en dispensait, sa connexion restait alors non liée).
-- **Une seule connexion liée par bumper** : la plus récente l'emporte. L'ancienne reçoit
-  `PLAYER_EVICTED { REASON: "DUPLICATE_SESSION" }` et est déliée (`WARN VPLAYER_DUPLICATE_SESSION`).
-- **Actions joueur liées** : `ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`, `BUTTON`,
-  `FLIP_MEMORY_CARD` **émises par un client `vplayer`** sont **refusées** (ignorées, sans réponse)
-  si la connexion n'est liée à aucun bumper (`WARN PLAYER_ACTION_UNBOUND`) ou si leur `ID` ≠ bumper
-  lié (`WARN PLAYER_FOREIGN_ID`). Les simulations `BUTTON`/`PONG` de l'admin et les actions TV/anim
-  ne sont pas concernées.
-- Le client met ses actions joueur en attente jusqu'au `PLAYER_CONNECTED` de la connexion courante,
-  puis les envoie (pour ARDOISE : texte complet courant).
-- **Le nom n'identifie jamais un joueur côté client** : un client sans ID mémorisé ne se lie pas à
-  un bumper par son nom (suppression du repli par nom de la page joueur et de la page
-  d'inscription) — il repasse par l'enrôlement ou la demande de place (#122).
-- **Unicité des noms de VJoueurs** (comparaison sans casse, espaces retirés) : aucune action serveur
-  ne produit deux VJoueurs de même nom. Pour une liste reçue par `UPDATE`/`FULL` (admin) :
-  un renommage d'un VJoueur **existant** vers un nom déjà porté par un autre VJoueur est ignoré
-  (le bumper garde son nom actuel) ; une entrée de VJoueur **absente du moteur** dont le nom est
-  déjà pris est **retirée** de la liste appliquée. Dans les deux cas : `WARN VPLAYER_DUPLICATE_NAME`,
-  puis l'état est rediffusé. Les buzzers physiques ne sont pas concernés. *(précisé après revue,
-  commit 3abe5f0d)*
 
 > **Important** : l'identité d'un VJoueur repose désormais **uniquement sur l'ID**, jamais sur le
 > nom seul. Un client doit conserver l'`ID` reçu (ex. `localStorage`) et le renvoyer à chaque
@@ -1323,21 +855,12 @@ renvois silencieux à la page d'inscription pendant la fenêtre d'enrôlement.
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| REASON | string | `PLAYER_REMOVED` (fiche supprimée par l'animateur), `GAME_RESET` (roster VJoueur purgé par `InitGame` sur NEW_GAME), ou **`DUPLICATE_SESSION`** *(v11.2, #246)* : une connexion plus récente s'est liée au même bumper (autre onglet ou autre appareil) |
+| REASON | string | `PLAYER_REMOVED` (fiche supprimée par l'animateur) ou `GAME_RESET` (roster VJoueur purgé par `InitGame` sur NEW_GAME) |
 
 #### Règles
 
 - Le client qui reçoit `PLAYER_EVICTED` efface sa session locale (`vplayer_name`,
-  `vplayer_session`, `vplayer_id`) et retourne à la page d'inscription **en affichant le motif** —
-  **sauf `DUPLICATE_SESSION`** *(v11.2)* : la session est toujours valide (portée par l'autre
-  connexion). Le client **n'efface rien**, cesse d'émettre et affiche « Cette session est ouverte
-  ailleurs » avec un bouton « Reprendre ici » (renvoie `PLAYER_CONNECT`).
-- **Règle générale v11.2 (#246)** : un client n'efface les clés `vplayer_*` du `localStorage` que si
-  `vplayer_id` stocké = **son propre** ID de session (ou est absent). Le `localStorage` est partagé
-  par tous les onglets du navigateur ; avant v11.2, un onglet périmé effaçait la session de l'onglet
-  actif. Un onglet qui constate que `vplayer_id` stocké ≠ son ID de session (au montage, à la
-  reconnexion ou sur l'événement `storage`) se déclare **périmé** : il cesse toute émission, n'envoie
-  pas de `PLAYER_CONNECT` et affiche « Session ouverte dans un autre onglet ».
+  `vplayer_session`, `vplayer_id`) et retourne à la page d'inscription **en affichant le motif**.
 - L'absence d'un bumper dans une mise à jour de roster n'est **jamais** à elle seule un motif de
   renvoi : seul `PLAYER_EVICTED` fait autorité. C'est la règle qui ferme la course de #120.
 - Un client qui ignore cette action (version antérieure) conserve le comportement précédent —
@@ -1381,9 +904,7 @@ Indique à l'interface animateur la prochaine question jouable, pour permettre l
 |-----------|--------|
 | Direction | `Server→Client` |
 | Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)`. Aucun autre type de client ne reçoit cette action |
-| Trigger | HELLO d'un client animateur (état initial) ; `READY` (sélection/enchaînement de question) ; `STOP` ; `REVEAL` ; `NEW_GAME` ; `REORDER_QUESTIONS` ; **`ROUNDS_UPDATE`** (v11.2) ; `DELETE` (suppression d'une question) |
-
-> **v11.2 (#245, décision utilisateur) — les ENTRACTE ne sont plus sautées.** Une entrée `ENTRACTE` est un type de jeu comme un autre : si elle est la prochaine entrée jouable du déroulé, `NEXT_QUESTION` la **propose** (`TYPE: "ENTRACTE"`, `QUESTION` = son libellé). Cela vaut pour toutes les ENTRACTE (manuelles de l'éditeur, programmées, entractes automatiques de manche). La règle #214 « exclue du à suivre » (maquette `docs/mockups/entracte-programme-214.html` §04, `game-state.md` §« Score, palmarès, à suivre ») est **abrogée**. Parité obligatoire avec `GamePage.jsx` `nextUnplayedQuestion`. Les statuts déjà joués (`STOPPED`, `REVEALED`, `PLAYED`) restent sautés, ENTRACTE comprises. `CURRENT_POSITION`/`TOTAL_QUESTIONS` sont **inchangés** : ils comptaient déjà les ENTRACTE comme positions du déroulé (commit `2892e77f`). Le libellé « Question suivante » / « Lancer l'entracte » se choisit côté client selon `TYPE`.
+| Trigger | HELLO d'un client animateur (état initial) ; `READY` (sélection/enchaînement de question) ; `STOP` ; `REVEAL` ; `NEW_GAME` ; `REORDER_QUESTIONS` ; `DELETE` (suppression d'une question) |
 
 #### Payload
 
@@ -1397,9 +918,6 @@ Indique à l'interface animateur la prochaine question jouable, pour permettre l
 | TIME | int | Durée en secondes |
 | CURRENT_POSITION | int | **v6.2.x (#166)** — rang de la question **courante** dans la liste triée (1-based). `0` si aucune question courante, ou si la question courante ne figure plus dans la liste (supprimée du disque mais toujours courante côté moteur — même cas de repli que la règle §3 ci-dessous) |
 | TOTAL_QUESTIONS | int | **v6.2.x (#166)** — nombre total de questions du quiz (longueur de la liste triée), indépendamment de leur statut |
-| ROUND_ID | string | *(v11.2, #245)* Manche de la question **suivante** (`""` = Sans manche). Toujours présent |
-| ROUND_NAME | string | *(v11.2, #245)* Son nom (`""` si Sans manche) |
-| NEW_ROUND | boolean | *(v11.2, #245)* `true` si la question suivante ouvre une **autre manche** que la question courante (changement de manche à annoncer) |
 
 Les champs de la **question suivante** (`ID`, `QUESTION`, `CATEGORY`, `TYPE`, `POINTS`, `TIME`)
 sont tous absents/zéro-valeur si plus aucune question n'est jouable — fin de partie ou toutes les
@@ -1572,9 +1090,8 @@ la même équipe — que le premier vienne d'une autre tablette ou de la régie.
 | Propriété | Valeur |
 |-----------|--------|
 | Direction | `Server→Client` |
-| Cible | `ClientTypeAnim` **et `ClientTypeAdmin`** *(v11.2, #244/#251 — `[CHANGED]` additif : l'admin s'en sert pour griser les équipes déjà créditées dans l'attribution groupée)*. La régie reste **sans restriction** pour le crédit équipe par équipe (§"La régie n'est pas contrainte") |
-| Règle « déjà créditée » | *(v11.2, #252)* Le calcul (`Engine.AwardedTeams`, `getAwardedTeamsPayload`) ne retient que les événements `POINTS_AWARDED` de la question courante, depuis son départ, **avec `DISPLAY` ≠ `false`** (absent = compté) et postérieurs au dernier `TEAM_DELETED` de l'équipe (#249). Un crédit à **0 point enregistré** (geste de l'anim, #170) **compte** : c'est un verrou valide ; un `POINTS = 0` de l'admin n'est jamais enregistré, donc ne verrouille rien. Les corrections cachées sont ignorées. Même règle pour le grisage de l'admin et le saut `ALREADY_AWARDED` de `TEAM_POINTS_BATCH` |
-| Trigger | `TEAM_POINTS`, `BUMPER_POINTS`, **`TEAM_POINTS_BATCH`** et **`BUMPER_POINTS_BATCH`** traités (quelle qu'en soit l'origine) ; `READY` (changement de question) ; `NEW_GAME` ; `RAZ` ; suppression/renommage d'équipe (#249) ; HELLO d'un client animateur **ou admin** (état initial) |
+| Cible | `ClientTypeAnim` **exclusivement** — `BroadcastToTypes(msg, ClientTypeAnim)`, comme `NEXT_QUESTION` et `CREDIT_POINTS`. La régie n'est pas destinataire : elle reste sans restriction (voir §"La régie n'est pas contrainte") |
+| Trigger | `TEAM_POINTS` et `BUMPER_POINTS` traités (quelle qu'en soit l'origine, `/admin` ou `/anim`) ; `READY` (changement de question) ; `NEW_GAME` ; `RAZ` ; HELLO d'un client animateur (état initial) |
 
 #### Payload
 
@@ -1585,12 +1102,6 @@ la même équipe — que le premier vienne d'une autre tablette ou de la régie.
 | TEAMS[].TEAM | string | Nom de l'équipe |
 | TEAMS[].POINTS | int | **Somme** des points attribués à cette équipe pour la question courante (une équipe peut être créditée deux fois depuis la régie — voir ci-dessous) |
 | TEAMS[].TIMESTAMP | int64 | Horodatage µs du **premier** crédit de cette équipe pour la question courante |
-| TEAMS[].TEAM_LEVEL | boolean | ✨ *(v11.2, #254, additif)* `true` si l'équipe a reçu **au moins un crédit d'équipe** (`WINNER_TYPE = "TEAM"`) pour la question, `false` si elle n'est créditée que par ses joueurs. L'admin s'en sert au niveau joueur pour griser les lignes des joueurs de cette équipe (« ✓ équipe déjà créditée ») ; le serveur s'en sert pour le saut `TEAM_ALREADY_AWARDED` de `BUMPER_POINTS_BATCH`. Toujours présent |
-| PLAYERS | array | ✨ *(v11.2, #254)* Une entrée par **joueur crédité individuellement** (`POINTS_AWARDED` avec `WINNER_TYPE = "PLAYER"`) pour la question courante, ordre chronologique ; **mêmes règles** que `TEAMS` (`DISPLAY ≠ false`, depuis le départ de la question, 0 point de l'anim = verrou valide, après le dernier `TEAM_DELETED` de son équipe). `[]` jamais `null`. Sert au grisage des lignes de joueurs et au saut `ALREADY_AWARDED` de `BUMPER_POINTS_BATCH` |
-| PLAYERS[].ID | string | ID du joueur (`WINNER_ID`) |
-| PLAYERS[].TEAM | string | Équipe du joueur au moment du crédit |
-| PLAYERS[].POINTS | int | Somme des points individuels pour la question |
-| PLAYERS[].TIMESTAMP | int64 | Premier crédit µs |
 
 Tableau **vide** (`[]`, jamais `null`) quand aucune équipe n'a encore été créditée — discipline
 projet, un client qui itère ne doit jamais tomber sur `null`.
@@ -2135,9 +1646,7 @@ Définit la limite de VPlayers.
 ### ARDOISE_INPUT ✨ (v5.6.0)
 
 Mise à jour de la réponse texte d'une équipe pour une question ARDOISE.
-Envoyé par le VPlayer (1ᵉʳ caractère immédiat, puis debounce ~200 ms). **v11.2 (#246)** : à la
-réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), plus par
-`ARDOISE_INPUT` (qui était rejeté par la garde de phase).
+Envoyé par le VPlayer (throttlé ~200ms). Envoi forcé sur réception STOP/PAUSE.
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -2150,10 +1659,8 @@ réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), 
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| TEXT | string | ✅ | Texte complet saisi (pas un delta). **≤ 2 000 caractères** *(v11.2, #246 — voir « Longueur maximale du texte ARDOISE » ci-dessous)* |
-| ID | string | ⬜ | Bumper ID de l'émetteur, première passe de la résolution 3 passes `payload.ID → msg.ID → clientID` (`handleArdoiseInput`). Présent dans `ArdoiseInputPayload` depuis v5.6.0 mais **omis de ce tableau jusqu'en v7.1.0** — documentation rattrapée, aucun changement de comportement. **v11.2 : doit être égal au bumper lié à la connexion** (voir « Liaison connexion ↔ bumper ») |
-| SEQ | integer | ⬜ *(v11.2, #246)* | Compteur d'envoi ≥ 1, croissant **par question et par connexion** (remis à 1 à chaque nouvelle question et à chaque **nouvelle liaison** de la connexion). Côté serveur, le dernier `SEQ` mémorisé pour une connexion est effacé à chaque `PLAYER_CONNECT` accepté (liaison ou re-liaison) et à la fermeture de la connexion. Côté client, le compteur repart à 0 **uniquement sur la transition non lié → lié** : un second `PLAYER_CONNECTED` sur la même connexion (renvoi de sécurité) ne le remet pas à zéro. *(précisé après revue, commit 3abe5f0d / 9aa8a1d3)* **Diagnostic** : sert à journaliser les trous (`ARDOISE_SEQ_GAP`) et les messages périmés (`ARDOISE_SEQ_STALE`, même connexion, `SEQ` ≤ dernier reçu → message ignoré). Absent = pas de contrôle. |
-| REASON | string | ⬜ *(v11.2, #246)* | Motif de l'envoi, **diagnostic uniquement** : `key` (frappe), `clear` (✕ « Effacer tout »), `backspace_empty` (⌫ jusqu'au vide), `resend` (renvoi après liaison de la connexion), `visible` (retour au premier plan). Journalisé avec `ARDOISE_CLEARED`. |
+| TEXT | string | ✅ | Texte complet saisi (pas un delta) |
+| ID | string | ⬜ | Bumper ID de l'émetteur, première passe de la résolution 3 passes `payload.ID → msg.ID → clientID` (`handleArdoiseInput`). Présent dans `ArdoiseInputPayload` depuis v5.6.0 mais **omis de ce tableau jusqu'en v7.1.0** — documentation rattrapée, aucun changement de comportement |
 
 #### Exemple
 
@@ -2161,167 +1668,20 @@ réception de STOP/PAUSE, le texte final part par `ARDOISE_FINAL` (ci-dessous), 
 {
   "ACTION": "ARDOISE_INPUT",
   "MSG": {
-    "ID": "vjoueur_Paul_20261006_140000",
-    "TEXT": "Paris",
-    "SEQ": 7,
-    "REASON": "key"
+    "TEXT": "Paris"
   }
 }
 ```
 
 #### Comportement serveur
 
-1. **Liaison (v11.2)** : ignoré + `WARN` si la connexion n'est pas liée ou si `ID` ≠ bumper lié
-1 bis. **Longueur (v11.2)** : `TEXT` de plus de 2 000 caractères → **message ignoré en entier** (aucune troncature), `WARN ARDOISE_INPUT_TOO_LONG` ; la réponse enregistrée reste la dernière valide
-2. **Guard phase** : ignore silencieusement si `phase ≠ STARTED`
-3. **Guard type** : ignore silencieusement si `question.TYPE ≠ "ARDOISE"`
-4. **SEQ (v11.2)** : même connexion et `SEQ` ≤ dernier appliqué → ignoré + `WARN ARDOISE_SEQ_STALE` ; trou → `WARN ARDOISE_SEQ_GAP` puis appliqué
-5. **Résolution équipe** : bumper lié → `bumper.Team` (clé de l'équipe)
-6. Mise à jour `GameState.ARDOISE_ANSWERS[teamName]` (`TEXT`, `SUBMITTED_AT`, `STARTED_AT` figé au 1ᵉʳ texte non vide ; `RECEIVED` inchangé)
-7. Texte précédent non vide → `""` : `WARN ARDOISE_CLEARED` (équipe, bumper, client, âge de connexion, longueur précédente, `SEQ`, `REASON`)
-8. Diffusion `UPDATE` **coalescée** (≤ 1 / 150 ms) vers **admin + anim** (#129/#158 — la TV le reçoit aux changements de phase, le VJoueur jamais, #128). La ligne `INFO` par frappe passe au niveau `DEBUG` (v11.2).
+1. **Guard phase** : ignore silencieusement si `phase ≠ STARTED`
+2. **Guard type** : ignore silencieusement si `question.TYPE ≠ "ARDOISE"`
+3. **Résolution équipe** : `clientID → bumper → bumper.Team` (protocole natif, aucun champ TEAM dans le payload)
+4. Mise à jour `GameState.ARDOISE_ANSWERS[teamName] = { TEXT, SUBMITTED_AT }`
+5. Broadcast `UPDATE` immédiat vers admin/TV
 
 **Fire-and-forget** : aucune réponse du serveur vers le VPlayer.
-
----
-
-### Longueur maximale du texte ARDOISE (v11.2, #246) — `[CHANGED]`
-
-- **Limite** : `TEXT` (`ARDOISE_INPUT` et `ARDOISE_FINAL`) ≤ **2 000 caractères**, comptés en **points de code Unicode** (Go : `utf8.RuneCountInString` ; JS : `[...text].length`, **pas** `text.length` qui compte des unités UTF-16). Un texte vide est valide. En UTF-8, 2 000 caractères font au plus 8 000 octets, sous la limite de lecture WebSocket (64 Ko).
-- **Pourquoi 2 000** : aucun plafond n'existait (ni clavier, ni serveur) ; une réponse ARDOISE réelle tient en quelques dizaines de caractères. La limite protège la diffusion (texte répété dans chaque `UPDATE` vers admin et anim, 10 équipes) sans gêner aucun usage.
-- **Clavier de la tablette** (`ArdoiseKeyboard`) : à 2 000 caractères, les touches qui ajoutent un caractère (lettres, chiffres, `.`, espace) **n'ont plus d'effet** ; ⌫ et ✕ restent actifs. Aucun autre changement visuel n'est exigé.
-- **Serveur, `ARDOISE_INPUT` trop long** : **ignoré en entier**, jamais tronqué ; `WARN ARDOISE_INPUT_TOO_LONG` (`contracts/logging.md`). *Justification* : tronquer enregistrerait un texte qu'aucune tablette n'affiche, sans que personne le sache. L'empreinte du texte final ne correspondrait plus, et l'admin verrait une réponse différente de la tablette. En l'ignorant, on garde la dernière réponse valide, qui est exactement ce que la tablette affichait avant le dépassement. Ce cas ne peut venir que d'un client défaillant ou modifié, puisque le clavier bloque la saisie.
-- **Serveur, `ARDOISE_FINAL` trop long** : **refusé**, `WARN ARDOISE_FINAL_TOO_LONG`, **pas d'accusé**, `RECEIVED` inchangé. L'équipe reste « en attente » ; seul le forçage permet le REVEAL.
-
----
-
-### ARDOISE_FINAL ✨ (v11.2, #246)
-
-Texte **final** d'une tablette pour la question ARDOISE courante, envoyé à la sortie de `STARTED`.
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `VPlayer → Server` (connexion liée, voir « Liaison connexion ↔ bumper ») |
-| Déclencheur | Réception de `STOP` ou `PAUSE` pendant une question ARDOISE ; renvois selon la **règle de renvoi** ci-dessous |
-| Phase acceptée | `STOPPED` ou `PAUSED`, question courante |
-
-#### Payload
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| ID | string | ✅ | Bumper lié à la connexion |
-| QUESTION_ID | string | ✅ | `QUESTION.ID` de la question courante — un final d'une autre question est ignoré (`WARN ARDOISE_FINAL_STALE`) |
-| TEXT | string | ✅ | Texte complet **au moment du gel du clavier**, debounce en attente inclus. `""` autorisé (« rien écrit »). ≤ 2 000 caractères (au-delà : refusé, voir ci-dessus) |
-| HASH | string | ✅ | Empreinte FNV-1a 32 bits du texte encodé en **UTF-8**, 8 caractères hexadécimaux minuscules (contrôle d'intégrité, pas une sécurité) |
-| SEQ | integer | ⬜ | Même compteur que `ARDOISE_INPUT` (diagnostic) |
-
-Vecteurs de test (Go et JS doivent produire exactement ces valeurs) :
-
-| TEXT | HASH |
-|------|------|
-| `""` | `811c9dc5` |
-| `"a"` | `e40c292c` |
-| `"Paris"` | `246f9d40` |
-| `"PARIS EN FRANCE"` | `066a01e6` |
-| `"Équipe à côté"` | `c3ff86c2` |
-| `"  espaces  "` | `1e009bcf` |
-
-#### Règle de renvoi (tablette) *(v11.2, #246)*
-
-- La tablette **ne renvoie le final que tant que** la phase reçue est `STOPPED` ou `PAUSED` **et** que `QUESTION.ID` est celui du final (`QUESTION_ID`). Dès que la phase ou la question change (CONTINUE, REVEAL, nouvelle question, NEW_GAME), les renvois s'arrêtent immédiatement.
-- Cadence : un envoi au gel du clavier, puis **un renvoi par seconde** tant qu'aucun `ARDOISE_FINAL_ACK` valide n'est reçu.
-- **Au plus 30 envois** (premier envoi compris) par **liaison de connexion**. Les envois déclenchés par une nouvelle liaison ou par le retour au premier plan (`visibilitychange` → visible) comptent dans ces 30. Le compteur repart à 0 à chaque nouvelle liaison (reconnexion), et à chaque nouveau gel du clavier (nouvelle sortie de `STARTED` après un `CONTINUE`).
-- Après 30 envois sans accusé : arrêt des renvois et `CLIENT_TRACE { KIND: "ARDOISE_FINAL_GIVEUP" }` (une fois par cycle). L'overlay garde la variante « ⚠ » de la maquette validée (`vplayer_ardoise_keyboard__final_ack`, état « connexion perdue »). Côté régie, l'équipe reste « en attente » et le forçage reste possible. Une reconnexion ultérieure relance un cycle de 30.
-- Un envoi abandonné parce que la WebSocket n'est pas ouverte compte aussi, ce qui garde la tablette bornée même hors ligne.
-
-#### Comportement serveur
-
-1. Liaison vérifiée (comme `ARDOISE_INPUT`) ; `TEXT` ≤ 2 000 caractères (sinon `ARDOISE_FINAL_TOO_LONG`, sans accusé) ; phase `STOPPED`/`PAUSED` ; `TYPE = ARDOISE` ; `QUESTION_ID` = question courante ; sinon ignoré + `WARN`.
-2. Le serveur recalcule le hash de `TEXT` ; s'il diffère de `HASH` → ignoré + `WARN ARDOISE_FINAL_HASH_MISMATCH` (pas d'accusé : la tablette renverra).
-3. Écrit `ARDOISE_ANSWERS[équipe] = { TEXT, STARTED_AT (inchangé ; fixé si c'était le 1ᵉʳ texte non vide), SUBMITTED_AT = maintenant, RECEIVED = true, RECEIVED_HASH = HASH }`. Idempotent : même hash déjà reçu → pas de réécriture.
-4. Répond `ARDOISE_FINAL_ACK` **à cette connexion seule**.
-5. Diffuse `UPDATE` **immédiatement** (non coalescé) vers admin + anim (coches « reçu »). Si c'était la dernière équipe attendue, le bouton REVEAL se débloque côté interfaces.
-6. Plusieurs VJoueurs dans une même équipe (avant le lot B « titulaire ») : le dernier final reçu fait foi ; `RECEIVED` passe à `true` dès le premier.
-
-```json
-{ "ACTION": "ARDOISE_FINAL", "MSG": { "ID": "vjoueur_Paul_20261006_140000", "QUESTION_ID": "42", "TEXT": "Paris", "HASH": "246f9d40", "SEQ": 12 } }
-```
-
----
-
-### ARDOISE_FINAL_ACK ✨ (v11.2, #246)
-
-Accusé de réception du texte final, **ciblé** sur la connexion émettrice (jamais diffusé, ne
-contient jamais de texte — confidentialité #128).
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Server → VPlayer` (ciblé) |
-
-#### Payload
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| QUESTION_ID | string | Question concernée |
-| HASH | string | Hash enregistré par le serveur |
-
-Côté tablette : accusé valide = même `QUESTION_ID` **et** même `HASH` que le dernier final envoyé →
-affichage « ✓ Réponse reçue », arrêt des renvois. Sinon : ignoré, renvoi au tick suivant.
-
----
-
-### REVEAL_REFUSED ✨ (v11.2, #246)
-
-Réponse **à l'émetteur seul** (admin ou anim) d'un `REVEAL` refusé par la garde ARDOISE.
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Server → Client` (ciblé, `admin`/`anim`) |
-
-#### Payload
-
-| Champ | Type | Description |
-|-------|------|-------------|
-| REASON | string | `ARDOISE_PENDING` |
-| PENDING | array | `[{ "TEAM": string, "OFFLINE": boolean }]` — équipes attendues sans `RECEIVED` |
-
-Les interfaces calculent déjà l'attente depuis l'état (coches, bouton désactivé) ; `REVEAL_REFUSED`
-couvre la course (réception tardive de l'état) : l'interface affiche le motif et propose
-« Révéler quand même ».
-
-```json
-{ "ACTION": "REVEAL_REFUSED", "MSG": { "REASON": "ARDOISE_PENDING", "PENDING": [ { "TEAM": "Les Verts", "OFFLINE": true } ] } }
-```
-
----
-
-### CLIENT_TRACE ✨ (v11.2, #246) — diagnostic
-
-Événement de diagnostic envoyé par un client, journalisé par le serveur (fichier persistant,
-`contracts/logging.md`). **Aucun effet sur l'état du jeu.**
-
-| Propriété | Valeur |
-|-----------|--------|
-| Direction | `Client → Server` (`admin`, `tv`, `vplayer`, `anim`) |
-| Limites | ≤ 10 messages/s **par connexion** (au-delà : ignorés, au plus un `WARN CLIENT_TRACE_THROTTLED client=… type=…` par minute et par connexion) **et** ≤ 50 messages/s **toutes connexions confondues** (au-delà : ignorés, au plus un `WARN CLIENT_TRACE_THROTTLED scope=global` par minute) ; payload ≤ 1 Ko *(plafond global ajouté après revue, commit 3abe5f0d)* |
-| Phases | **Toutes**, y compris pendant l'**entracte** (`GameState.ENTRACTE = true`) : le diagnostic ne dépend pas de la phase de jeu. `CLIENT_TRACE` figure dans la liste d'autorisation de l'entracte (§« Actions refusées pendant l'entracte ») *(arbitrage v11.2, #246)* |
-
-#### Payload
-
-| Champ | Type | Obligatoire | Description |
-|-------|------|-------------|-------------|
-| KIND | string | ✅ | `ARDOISE_CLEARED_SEEN` (admin/anim : le texte d'une équipe est passé de non vide à vide ou a disparu dans l'état reçu, même question), `VISIBILITY` (`DETAIL.STATE` = `hidden`/`visible`, `DETAIL.HIDDEN_MS`), `PAGESHOW` (`DETAIL.PERSISTED` = restauration bfcache), `FREEZE` / `RESUME` (tous clients : événements `freeze`/`resume` de la page, Chrome ; **sans `DETAIL`**, seuls `KIND` et `AT` sont envoyés), `WS_GAP` (`DETAIL.DOWN_MS`, `DETAIL.DROPPED_SENDS` = envois abandonnés pendant la coupure), `STALE_TAB` (`vplayer` : onglet déclaré périmé ; `DETAIL.OWN_ID`, `DETAIL.STORED_ID`), `DUPLICATE_SESSION` (`vplayer` : éviction reçue ; `DETAIL.OWN_ID`), **`ARDOISE_FINAL_GIVEUP`** *(v11.2, #246)* (`vplayer` : 30 envois de `ARDOISE_FINAL` sans accusé valide sur la liaison courante, renvois arrêtés — voir §ARDOISE_FINAL « Règle de renvoi » ; `DETAIL.QUESTION_ID`, `DETAIL.SENDS` = nombre d'envois effectués). |
-| AT | integer | ✅ | Horodatage client, millisecondes epoch |
-| TEAM | string | ⬜ | Pour `ARDOISE_CLEARED_SEEN` |
-| PREV_LEN | integer | ⬜ | Pour `ARDOISE_CLEARED_SEEN` : longueur du texte précédent |
-| CAUSE_ACTION | string | ⬜ | Pour `ARDOISE_CLEARED_SEEN` : action du message qui a provoqué la remise à vide |
-| DETAIL | object | ⬜ | Détails propres au `KIND` (clés listées ci-dessus) |
-
-**Journalisation** : une trace produit **une seule ligne** de journal. `KIND`, `CAUSE_ACTION`, l'identifiant du joueur et les clés et valeurs de `DETAIL` sont écrits tels quels s'ils ne contiennent que `[A-Za-z0-9_.:-]`, sinon entre guillemets avec échappement ; une valeur de `DETAIL` non scalaire est re-sérialisée en JSON puis mise entre guillemets ; tout retour à la ligne résiduel est remplacé avant l'écriture sur disque. Un client ne peut donc pas injecter de fausse ligne dans le journal. *(commit 3abe5f0d)*
-
-```json
-{ "ACTION": "CLIENT_TRACE", "MSG": { "KIND": "ARDOISE_CLEARED_SEEN", "AT": 1791627000123, "TEAM": "Les Verts", "PREV_LEN": 14, "CAUSE_ACTION": "UPDATE" } }
-```
 
 ---
 
@@ -2430,9 +1790,7 @@ Active ou désactive le **mode entracte** (pause globale).
 | Désactivation | Acceptée depuis **toute** phase |
 | Effet | `GameState.ENTRACTE` ← `ACTIVE`, extinction/restauration des LEDs, `UPDATE` diffusé aux 5 types |
 
-> **Amendé en v11.2 (#245, décision utilisateur)** : l'anim peut désormais **terminer** une entracte (`ACTIVE:false`), qu'elle soit programmée (entrée du déroulé) ou manuelle, avec le bouton « Terminer l'entracte » de sa tablette. Ainsi l'anim enchaîne seule un déroulé complet. Le **déclenchement manuel** (`ACTIVE:true`) reste réservé à l'admin. Le texte ci-dessous décrit la règle d'origine (#119) pour l'activation.
-
-**`anim` est délibérément exclu** *(activation, #119)*. L'interface animateur voit l'entracte (filtre + indicateur) mais
+**`anim` est délibérément exclu.** L'interface animateur voit l'entracte (filtre + indicateur) mais
 ne peut ni le déclencher ni le lever — « contrôle réservé à l'admin ». C'est une exception assumée au
 bloc « conduite en direct » (#155/#156), où `anim` partage pourtant START/STOP/PAUSE/REVEAL : une
 pause engage toute la salle, pas seulement la manche en cours.
@@ -2578,7 +1936,6 @@ n'atteint jamais son handler.
 | `REGIE_MESSAGE_SEND`, `REGIE_MESSAGE_CLEAR` | La régie prévient les animateurs — c'est précisément le moment utile |
 | `UPDATE_ENTRACTE_CONFIG` | Préparer le panneau de la **prochaine** pause pendant celle en cours. Sans effet sur le panneau diffusé (gel, voir ci-dessus) |
 | `PONG` | Inoffensif (aucune transition n'en dépend hors `PREPARE`) et évite de faire croire un buzzer muet |
-| `CLIENT_TRACE` *(v11.2, #246)* | Diagnostic pur, sans effet sur l'état du jeu : une coupure ou une mise en veille pendant la pause doit rester traçable |
 
 Tout le reste — `READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`, `REMOTE`, `NEW_GAME`,
 `RAZ`, `SHOW_QR_CODE`, `UPDATE_QUIZ_META`, crédits de points, actions MEMORY/MEMOTION/ARDOISE… —

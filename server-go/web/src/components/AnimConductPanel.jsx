@@ -9,7 +9,6 @@ import {
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { getMotionCardPoints, computeStarsProrataPoints } from '../utils/motionGrid'
 import AnimNextButton from './AnimNextButton'
-import ArdoiseRevealGate from './ArdoiseRevealGate'
 import AnimQcmOptions from './AnimQcmOptions'
 import AnimMemoryGrid from './AnimMemoryGrid'
 import AnimMotionGrid from './AnimMotionGrid'
@@ -47,11 +46,7 @@ function buildL1(phase, question, handlers) {
 // passé en prop. Vient remplacer le repli générique "indispo." pour le
 // bouton LANCER en PREPARE — même emplacement, même style, aucun nouveau
 // badge ni CSS (#166).
-function buttonSubLabel(key, state, phase, waitReason, ardoiseBlocked, launchLocked) {
-  // #253 : popup « Lancer la partie » ouverte sur le poste régie → conduite suspendue
-  if (launchLocked) return 'suspendu'
-  // #246 : RÉPONSE bloquée par la garde ARDOISE (réponses finales manquantes)
-  if (key === 'reveal' && ardoiseBlocked) return 'en attente'
+function buttonSubLabel(key, state, phase, waitReason) {
   if (state === 'go') return key === 'continue' ? 'reprise' : 'attendu'
   if (state === 'optional') return 'optionnel'
   if (state === 'danger') return 'arrête'
@@ -177,8 +172,6 @@ export default function AnimConductPanel({
   revealed,
   hostContext,
   nextQuestion,
-  entracteActive = false,
-  onEndEntracte,
   onStart,
   onPause,
   onContinue,
@@ -206,15 +199,8 @@ export default function AnimConductPanel({
   onCardRafaleInvalidate,
   soundState = 'IDLE',
   onQuestionSound,
-  ardoiseGate = null,
-  launchLocked = false, // #253 : conduite suspendue (verrou « Lancer la partie » d'un autre poste)
 }) {
-  // #246 (F-STOP) — garde de REVEAL ARDOISE (calculée par AnimPage, règle
-  // commune avec /admin) : RÉPONSE passe 'off' tant qu'une équipe attendue
-  // n'a pas transmis son texte final.
-  const ardoiseBlocked = !!ardoiseGate?.blocked
   const l1 = buildL1(phase, question, { onStart, onPause, onContinue, onStop, onReveal })
-    .map((btn) => (launchLocked || (btn.key === 'reveal' && ardoiseBlocked) ? { ...btn, state: 'off' } : btn))
   const isQcm = question?.TYPE === 'QCM'
   const isMemory = question?.TYPE === 'MEMORY'
   // #160/F7 — premier mode à occuper L2 (ex-vide, #166/E4). GRID/MEMORIZE
@@ -361,17 +347,10 @@ export default function AnimConductPanel({
             onClick={btn.state === 'off' ? undefined : btn.onClick}
           >
             {btn.label}
-            <span className="anim-conduct-btn-sub">{buttonSubLabel(btn.key, btn.state, phase, waitReason, ardoiseBlocked, launchLocked)}</span>
+            <span className="anim-conduct-btn-sub">{buttonSubLabel(btn.key, btn.state, phase, waitReason)}</span>
           </button>
         ))}
       </div>
-
-      {/* #246 — motif d'attente + « Révéler quand même… » (maquette anim) */}
-      {ardoiseGate?.pending?.length > 0 && (
-        <div className="anim-conduct-ardoise-gate">
-          <ArdoiseRevealGate variant="anim" pending={ardoiseGate.pending} onForce={ardoiseGate.onForce} />
-        </div>
-      )}
 
       {/* #171/F3 — bloc central unique, seul endroit qui peut défiler
           (flex:1, min-height:0, overflow-y:auto — AnimConductPanel.css).
@@ -485,7 +464,7 @@ export default function AnimConductPanel({
 
       {/* L5 — "à suivre" (#171/F3, déplacé de juste après L1 vers cette
           dernière position ; composant lui-même inchangé). */}
-      <AnimNextButton phase={phase} question={question} nextQuestion={nextQuestion} onSelectNext={onSelectNext} entracteActive={entracteActive} onEndEntracte={onEndEntracte} />
+      <AnimNextButton phase={phase} question={question} nextQuestion={nextQuestion} onSelectNext={onSelectNext} />
     </div>
   )
 }

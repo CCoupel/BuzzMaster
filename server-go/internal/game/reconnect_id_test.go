@@ -88,7 +88,7 @@ func TestReconnectOrCreateVirtualPlayer_Case1_IDFound_Reconnects(t *testing.T) {
 // TestReconnectOrCreateVirtualPlayer_Case1_NameRefreshed verifies that a
 // changed display name is refreshed on ID-based reconnection (the ID stays
 // authoritative for identity; NAME is just cosmetic).
-func TestReconnectOrCreateVirtualPlayer_Case1_NameNotRenamed(t *testing.T) {
+func TestReconnectOrCreateVirtualPlayer_Case1_NameRefreshed(t *testing.T) {
 	e := NewEngine()
 	e.SetPhase(PhaseEnroll)
 
@@ -104,9 +104,8 @@ func TestReconnectOrCreateVirtualPlayer_Case1_NameNotRenamed(t *testing.T) {
 	if !reconnected {
 		t.Errorf("expected reconnected=true")
 	}
-	// #246 (v11.2): case 1 no longer renames — the server-side name is authoritative.
-	if bumper.Name != "Alice" {
-		t.Errorf("expected name to stay 'Alice' (no rename on reconnection, #246), got %q", bumper.Name)
+	if bumper.Name != "AliceNouveauPseudo" {
+		t.Errorf("expected name to be refreshed to 'AliceNouveauPseudo', got %q", bumper.Name)
 	}
 }
 

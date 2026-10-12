@@ -84,9 +84,6 @@ func TestDevAmbianceDerivationTable(t *testing.T) {
 		for _, p := range presses {
 			bumpers[p.mac].Time = p.at
 			bumpers[p.mac].AnswerColor = p.answer
-			if p.at > 0 { // #255: an ANSWER is a press with Time > 0
-				bumpers[p.mac].AnsweredColor = p.answer
-			}
 		}
 		app.engine.SetBumpers(bumpers)
 		app.engine.SetPhase(phase)
@@ -413,12 +410,8 @@ func TestDevAmbianceRegistryShape(t *testing.T) {
 	// contract §10.5) and the T2.3 (#208) shutdown extinction site
 	// (stop → sendLEDSetAllEntracteOff, contract §10.4) — 16 state / 4 pulse / 5 none.
 	// handleFlipMemoryCard calls sendLEDSetAllBuzzers three times.
-	// #243: handleNewGame (PURGE_TEAMS → buzzers back to the no-team LED) adds one
-	// state site — 17 state / 4 pulse / 5 none.
-	// #244/#251: handleTeamPointsBatch adds one pulse site — 17 / 5 / 5.
-	// #254: handleBumperPointsBatch adds one pulse site — 17 / 6 / 5.
-	if state != 17 || pulse != 6 || none != 5 {
-		t.Fatalf("registry = %d state / %d pulse / %d none, want 17 / 6 / 5", state, pulse, none)
+	if state != 16 || pulse != 4 || none != 5 {
+		t.Fatalf("registry = %d state / %d pulse / %d none, want 16 / 4 / 5", state, pulse, none)
 	}
 }
 

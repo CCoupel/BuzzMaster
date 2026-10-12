@@ -13,14 +13,12 @@ import EntractePanel from '../components/EntractePanel'
 import RafaleTimers from '../components/RafaleTimers'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
-import { answeredColor } from '../utils/pointsAward'
 import { escapeWifiString } from '../utils/wifiUtils'
 import { buildMemoryCards, getMemoryGridCols, getMemoryGridRows } from '../utils/memoryGrid'
 import { getMotionGridCols, getMotionGridRows, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
-import { getArdoiseTvLayout } from '../utils/ardoiseTvLayout'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
@@ -399,21 +397,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     return ranked
   }, [bumpers, teams, isVPlayer, gameState.remote, gameState.phase])
 
-  // #252 (v11.2) — SCORE_CHANGE (contrat game-state.md) : un UPDATE qui apporte un nouveau
-  // SEQ avec DISPLAY = false est une CORRECTION CACHÉE : les nouveaux scores sont pris comme
-  // référence SANS animation (ni « +X pts », ni célébration, ni surbrillance, ni montée de rang).
-  // Chaque effet de détection garde son propre dernier SEQ traité : `hiddenScoreChange` rend les
-  // équipes/joueurs listés quand le SEQ est nouveau ET caché, sinon null (comportement actuel).
-  const scoreChangeSeqRefs = useRef({ ranking: 0, players: 0, celebration: 0 })
-  const hiddenScoreChange = (key) => {
-    const sc = gameState.SCORE_CHANGE
-    const seq = sc?.SEQ ?? 0
-    const isNew = seq !== scoreChangeSeqRefs.current[key]
-    scoreChangeSeqRefs.current[key] = seq
-    if (!isNew || !sc || sc.DISPLAY !== false) return null
-    return { teams: new Set(sc.TEAMS || []), players: new Set(sc.PLAYERS || []) }
-  }
-
   // Detect team ranking changes
   // #127 — gardé aligné sur le gating de sortedTeams ci-dessus : sans ce retour
   // anticipé, un VJoueur hors vue SCORE ré-exécuterait quand même setPreviousRanking
@@ -423,7 +406,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     if (isVPlayer && gameState.remote !== 'SCORE') return
     const currentRanking = {}
     const changes = {}
-    const hidden = hiddenScoreChange('ranking')
 
     sortedTeams.forEach((team, index) => {
       currentRanking[team.name] = { position: index, score: team.score }
@@ -438,9 +420,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       }
     })
 
-    // Correction cachée : référence mise à jour, aucune surbrillance ni montée de rang
-    // (y compris pour les équipes dépassées à cause d'elle).
-    if (!hidden && Object.keys(changes).length > 0) {
+    if (Object.keys(changes).length > 0) {
       setChangedTeams(changes)
       setTimeout(() => setChangedTeams({}), 2000)
     }
@@ -453,7 +433,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     if (isVPlayer && gameState.remote !== 'PLAYERS') return
     const currentScores = {}
     const changes = {}
-    const hidden = hiddenScoreChange('players')
 
     sortedPlayers.forEach((player) => {
       currentScores[player.mac] = player.score
@@ -464,7 +443,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       }
     })
 
-    if (!hidden && Object.keys(changes).length > 0) {
+    if (Object.keys(changes).length > 0) {
       setChangedPlayers(changes)
       setTimeout(() => setChangedPlayers({}), 2000)
     }
@@ -484,16 +463,13 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   useEffect(() => {
     const previous = previousTeamScoresRef.current
     const currentScores = {}
-    const hidden = hiddenScoreChange('celebration')
 
     Object.entries(teams).forEach(([name, data]) => {
       const score = data.SCORE || 0
       currentScores[name] = score
 
       const prevScore = previous[name]
-      // #252 : une hausse listée par une correction cachée n'anime rien (la référence est
-      // mise à jour ; la prochaine hausse visible n'anime que sa propre différence).
-      if (prevScore !== undefined && score > prevScore && !hidden?.teams.has(name)) {
+      if (prevScore !== undefined && score > prevScore) {
         setPointsAnimation({
           name,
           points: score - prevScore,
@@ -881,11 +857,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     }
 
     // Group bumpers by team, keeping only those who buzzed
-    // #255 : answeredColor() = réponse réellement donnée (ANSWERED_COLOR, repli TIME > 0 && ANSWER_COLOR)
+    // Use ANSWER_COLOR (the player's assigned QCM color) to determine their answer
     const teamBuzzes = {}
     Object.entries(bumpers).forEach(([mac, bumper]) => {
-      if (bumper.TIME && bumper.TIME > 0 && answeredColor(bumper) && bumper.TEAM) {
-        const qcmColor = answeredColor(bumper) // RED/GREEN/YELLOW/BLUE
+      if (bumper.TIME && bumper.TIME > 0 && bumper.ANSWER_COLOR && bumper.TEAM) {
+        const qcmColor = bumper.ANSWER_COLOR // Already in RED/GREEN/YELLOW/BLUE format
         if (qcmColor && !teamBuzzes[bumper.TEAM]) {
           // Use first buzzer from each team
           teamBuzzes[bumper.TEAM] = {
@@ -1074,18 +1050,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
   // active) — jamais entracteConfigSaved.
   const entracteTransitionStyle = { '--ep-transition': `${gameState.entracteConfig?.TRANSITION_MS ?? 2000}ms` }
 
-  // #245 (v11.2, maquette (g‴)) — manche de la question courante, calculée par le serveur (ROUND_CONTEXT : la TV
-  // n'a pas la liste des questions). Pastille du nom si ROUND_INDEX > 0 ; titre de manche sur l'écran d'attente de
-  // la PREMIÈRE question de la manche (FIRST_OF_ROUND). Rien sans manche. Écran STATIQUE : positions absolues en
-  // unités d'écran, texte tronqué, aucun défilement.
-  const roundCtx = gameState.ROUND_CONTEXT
-  const currentRoundName = roundCtx?.ROUND_INDEX > 0
-    ? ((gameState.ROUNDS || []).find(r => r.ID === roundCtx.ROUND_ID)?.NAME || '')
-    : ''
-  const showRoundPill = !isVPlayer && !!currentRoundName && !!gameState.question && gameState.question.TYPE !== 'ENTRACTE'
-    && isShowingGame && ['PREPARE', 'READY', 'COUNTDOWN', 'STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase)
-  const showRoundTitle = showRoundPill && gameState.phase === 'READY' && roundCtx.FIRST_OF_ROUND === true
-
   return (
     <div className={`player-display ${showNeon ? `neon-border ${neonModeClass}` : ''}`} style={neonStyle}>
       {/* TV fullscreen fallback button — only if auto-fullscreen failed and not admin preview.
@@ -1103,12 +1067,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
         className={`entracte-content${entracteActiveHere ? ' entracte-dim' : ''}`}
         style={entracteTransitionStyle}
       >
-      {showRoundPill && (
-        <span className="tv-round-pill" data-testid="tv-round-pill">Manche {roundCtx.ROUND_INDEX} · {currentRoundName}</span>
-      )}
-      {showRoundTitle && (
-        <div className="tv-round-title" data-testid="tv-round-title">Manche {roundCtx.ROUND_INDEX} — {currentRoundName}</div>
-      )}
       {/* Background Images with Crossfade */}
       <div className="background-container">
         <AnimatePresence mode="sync">
@@ -3101,32 +3059,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                     </motion.div>
                   </div>
 
-                  {/* Sub-zone 2/2 — team cards grid (only VJoueur teams, ALL shown, static).
-                      #250 : plus de plafond à 8 ; grille adaptative (utils/ardoiseTvLayout.js),
-                      jamais de défilement. Équipe résolue par la CLÉ de `teams` (#249). */}
+                  {/* Sub-zone 2/2 — team cards grid (only VJoueur teams, max 8, static) */}
                   <div className="ardoise-footer-bottom">
-                    {(() => {
-                      const ardoiseTeams = Object.entries(teams)
-                        .filter(([key]) => Object.values(bumpers).some(b => b.IS_VPLAYER && b.TEAM === key))
-                      const L = getArdoiseTvLayout(ardoiseTeams.length)
-                      return (
-                    <div
-                      className="ardoise-teams-grid"
-                      style={{
-                        '--cols': L.cols,
-                        '--rows': L.rows,
-                        '--lines': L.lines,
-                        '--fh': L.headerFont.toFixed(4),
-                        '--fa': L.answerFont.toFixed(4),
-                      }}
-                    >
-                      {ardoiseTeams
-                        .map(([teamKey, team], idx) => {
-                          const answer = (gameState.ARDOISE_ANSWERS || {})[teamKey]
+                    <div className="ardoise-teams-grid">
+                      {Object.values(teams)
+                        .filter(team => Object.values(bumpers).some(b => b.IS_VPLAYER && b.TEAM === team.NAME))
+                        .slice(0, 8)
+                        .map((team, idx) => {
+                          const answer = (gameState.ARDOISE_ANSWERS || {})[team.NAME]
                           const teamColor = getRgbColor(team.COLOR)
                           return (
                             <motion.div
-                              key={teamKey}
+                              key={team.NAME}
                               className={`ardoise-team-card ${answer ? 'has-answer' : 'no-answer'}`}
                               initial={{ opacity: 0, y: 15 }}
                               animate={{ opacity: 1, y: 0 }}
@@ -3136,7 +3080,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                                 className="ardoise-team-card-header"
                                 style={{ backgroundColor: teamColor }}
                               >
-                                {teamKey}
+                                {team.NAME}
                               </div>
                               <div className="ardoise-team-card-answer">
                                 {answer?.TEXT || '—'}
@@ -3145,8 +3089,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                           )
                         })}
                     </div>
-                      )
-                    })()}
                   </div>
                 </motion.div>
               </div>

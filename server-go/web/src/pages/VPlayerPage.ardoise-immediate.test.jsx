@@ -80,9 +80,7 @@ const makeGameMock = (overrides = {}) => ({
   },
   teams: { 'Équipe A': { NAME: 'Équipe A', COLOR: [255, 0, 0] } },
   status: 'connected',
-  // #246 : connexion liée à son bumper (PLAYER_CONNECTED reçu) — sans cela les
-  // actions joueur sont mises en attente.
-  playerConnectStatus: { status: 'connected', id: 'vjoueur_alice', name: 'Alice' },
+  playerConnectStatus: null,
   clearPlayerConnectStatus: vi.fn(),
   ...overrides,
 })
@@ -95,10 +93,8 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubGlobal('localStorage', createLocalStorageMock())
-    vi.stubGlobal('sessionStorage', createLocalStorageMock()) // #246 : brouillon de saisie propre à chaque test
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')
-    localStorage.setItem('vplayer_id', 'vjoueur_alice')
     useGame.mockReset()
   })
 
@@ -119,7 +115,7 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     })
 
     // Sent right away — no timer advance needed at all.
-    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', expect.objectContaining({ TEXT: 'P', ID: 'vjoueur_alice' }))
+    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', { TEXT: 'P', ID: 'vjoueur_alice' })
     expect(mock.sendMessage).toHaveBeenCalledTimes(1)
   })
 
@@ -148,7 +144,7 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
       vi.advanceTimersByTime(1)
     })
     expect(mock.sendMessage).toHaveBeenCalledTimes(2)
-    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'Pa', ID: 'vjoueur_alice' }))
+    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', { TEXT: 'Pa', ID: 'vjoueur_alice' })
   })
 
   it("régression cause racine #3 : une rafale de frappes SANS PAUSE n'envoie qu'un seul message immédiat sur le premier caractère, pas un par lettre", async () => {
@@ -168,48 +164,17 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
       })
     }
 
-    // #246 — throttle (leading + trailing) : le premier caractère part tout de
-    // suite, puis un état intermédiaire est envoyé pendant la frappe continue
-    // (un debounce pur n'envoyait RIEN tant que la frappe ne s'arrêtait pas),
-    // jamais un message par lettre.
-    expect(mock.sendMessage).toHaveBeenNthCalledWith(1, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'P', ID: 'vjoueur_alice' }))
-    const duringBurst = mock.sendMessage.mock.calls.length
-    expect(duringBurst).toBeGreaterThanOrEqual(2)
-    // Borne de cadence (aucune rafale) : durée 250 ms → au plus 250/200 + 1 envois arrondis au-dessus.
-    expect(duringBurst).toBeLessThanOrEqual(Math.ceil(250 / 200) + 1)
-    expect(duringBurst).toBeLessThan(burst.length)
+    // Only the very first keystroke was sent synchronously; the rest are still
+    // pending in the debounce timer (no pause long enough for it to fire).
+    expect(mock.sendMessage).toHaveBeenCalledTimes(1)
+    expect(mock.sendMessage).toHaveBeenCalledWith('ARDOISE_INPUT', { TEXT: 'P', ID: 'vjoueur_alice' })
 
-    // Le DERNIER état est toujours envoyé (trailing).
+    // Once the team finally pauses, the debounce flushes the latest full text.
     await act(async () => {
       vi.advanceTimersByTime(200)
     })
-    const last = mock.sendMessage.mock.calls.at(-1)
-    expect(last[0]).toBe('ARDOISE_INPUT')
-    expect(last[1]).toEqual(expect.objectContaining({ TEXT: 'Paris', ID: 'vjoueur_alice' }))
-  })
-
-  it("#246 — cadence bornée : une frappe continue de 2 s (une touche toutes les 50 ms) envoie au plus durée/200 ms + 1 messages (≤ 5/s), au moins 5, et le dernier état est le texte courant", async () => {
-    const mock = makeGameMock()
-    useGame.mockReturnValue(mock)
-    const { getByTestId } = render(<VPlayerPage />)
-    const input = getByTestId('ardoise-input')
-
-    const total = 40
-    const full = 'x'.repeat(total)
-    for (let i = 1; i <= total; i++) {
-      await act(async () => {
-        typeChar(input, full.slice(0, i))
-        vi.advanceTimersByTime(50)
-      })
-    }
-    const durationMs = total * 50
-    const during = mock.sendMessage.mock.calls.filter((c) => c[0] === 'ARDOISE_INPUT').length
-    expect(during).toBeGreaterThanOrEqual(5)
-    expect(during).toBeLessThanOrEqual(Math.floor(durationMs / 200) + 1)
-
-    await act(async () => { vi.advanceTimersByTime(250) })
-    const last = mock.sendMessage.mock.calls.filter((c) => c[0] === 'ARDOISE_INPUT').at(-1)
-    expect(last[1]).toEqual(expect.objectContaining({ TEXT: full }))
+    expect(mock.sendMessage).toHaveBeenCalledTimes(2)
+    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', { TEXT: 'Paris', ID: 'vjoueur_alice' })
   })
 
   it('le mécanisme se réarme au changement de question : la question suivante envoie de nouveau son premier caractère immédiatement', async () => {
@@ -245,6 +210,6 @@ describe('VPlayerPage — ARDOISE : premier caractère envoyé immédiatement (#
     // Second call overall, but it's the FIRST (immediate) send for question aq2 —
     // proves ardoiseFirstSentRef was rearmed by the question-ID change.
     expect(mock.sendMessage).toHaveBeenCalledTimes(2)
-    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', expect.objectContaining({ TEXT: 'L', ID: 'vjoueur_alice' }))
+    expect(mock.sendMessage).toHaveBeenNthCalledWith(2, 'ARDOISE_INPUT', { TEXT: 'L', ID: 'vjoueur_alice' })
   })
 })

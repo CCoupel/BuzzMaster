@@ -33,7 +33,7 @@ const TABS = [
  * /new-game-backgrounds) — critère de propreté du refactor (maquette §04).
  */
 export default function BackstagePage() {
-  const { gameState, sendMessage } = useGame()
+  const { gameState, sendMessage, newGame } = useGame()
   const [activeTab, setActiveTab] = useState('quiz')
 
   return (
@@ -60,7 +60,7 @@ export default function BackstagePage() {
       </div>
 
       {activeTab === 'quiz' && (
-        <QuizMetaForm gameState={gameState} sendMessage={sendMessage} />
+        <QuizMetaForm gameState={gameState} sendMessage={sendMessage} onNewGame={newGame} />
       )}
 
       {activeTab === 'entracte' && (

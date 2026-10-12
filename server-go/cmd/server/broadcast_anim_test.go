@@ -6,7 +6,6 @@ import (
 	"buzzcontrol/internal/server"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -84,11 +83,8 @@ func TestBroadcastUpdateTo_Anim_ReceivesWebClientPayload(t *testing.T) {
 	app.broadcastUpdateTo(server.ClientTypeAnim, server.ClientTypeTV)
 	_, animRaw := readActionMatching(t, anim, protocol.ActionUpdate)
 	_, tvRaw := readActionMatching(t, tv, protocol.ActionUpdate)
-	// #253: the TV payload no longer carries GAME.LAUNCH_LOCK (admin/anim banner
-	// only); apart from that key the two frames stay byte-identical (#162).
-	animSansLock := strings.Replace(animRaw, `"LAUNCH_LOCK":{"ACTIVE":false,"EXPIRES_AT":0,"OWNER":"","SINCE":0},`, "", 1)
-	if animSansLock != tvRaw {
-		t.Errorf("#162: anim and TV must receive byte-identical UPDATE frames (same dataWeb, LAUNCH_LOCK excepted) — anim: %s\ntv: %s", animRaw, tvRaw)
+	if animRaw != tvRaw {
+		t.Errorf("#162: anim and TV must receive byte-identical UPDATE frames (same dataWeb) — anim: %s\ntv: %s", animRaw, tvRaw)
 	}
 }
 

@@ -128,7 +128,7 @@ describe('VPlayerPage — F2 : PLAYER_CONNECT immédiat à la reconnexion (#118,
     expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice', ID: 'vjoueur_alice_1' })
   })
 
-  it("#246 : session sans ID → aucune liaison par nom, aucun PLAYER_CONNECT, retour à l'inscription", async () => {
+  it('non-régression : premier enrôlement sans ID conserve le comportement #109 (attente de 2s)', async () => {
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')
     // No vplayer_id — never enrolled from this device before.
@@ -137,8 +137,14 @@ describe('VPlayerPage — F2 : PLAYER_CONNECT immédiat à la reconnexion (#118,
     useGame.mockReturnValue(mock)
     render(<VPlayerPage />)
 
-    await act(async () => { vi.advanceTimersByTime(3000) })
+    await act(async () => {})
     expect(mock.sendMessage).not.toHaveBeenCalledWith('PLAYER_CONNECT', expect.anything())
+
+    await act(async () => { vi.advanceTimersByTime(1999) })
+    expect(mock.sendMessage).not.toHaveBeenCalledWith('PLAYER_CONNECT', expect.anything())
+
+    await act(async () => { vi.advanceTimersByTime(2) })
+    expect(mock.sendMessage).toHaveBeenCalledWith('PLAYER_CONNECT', { NAME: 'Alice' })
   })
 })
 

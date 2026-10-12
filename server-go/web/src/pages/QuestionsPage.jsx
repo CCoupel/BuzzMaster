@@ -5,11 +5,7 @@ import { useGame } from '../hooks/GameContext'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES } from '../utils/categoryUtils'
-import { sortQuestionsByOrder, shuffleArray, sortQuestionsByRounds, countEntries } from '../utils/questionOrder'
-import {
-  structureFrom, moveQuestion, moveRound, renameRound, addRound, deleteRound, toRoundsUpdatePayload, typesSummary,
-  cleanRoundName, UNASSIGNED_KEY, roundKey,
-} from '../utils/roundsEdit'
+import { sortQuestionsByOrder, shuffleArray } from '../utils/questionOrder'
 import { QUESTION_TYPES } from '../utils/questionTypeMeta'
 import { isMotionCardTypeLocked, motionCardLockReason } from '../utils/motionCardLock'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
@@ -26,8 +22,6 @@ import MotionCardMemoryEditor from '../components/MotionCardMemoryEditor'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
-import RoundGroup from '../components/RoundGroup'
-import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RafalePage from './RafalePage'
 import './QuestionsPage.css'
 import './ConfigPage.css'
@@ -52,7 +46,7 @@ function formatSoundDuration(seconds) {
 }
 
 export default function QuestionsPage() {
-  const { questions, fsInfo, deleteQuestion, sendMessage, gameState, aiJob, cancelAiGeneration, roundsUpdate, roundsUpdateResult, clearRoundsUpdateResult } = useGame()
+  const { questions, fsInfo, deleteQuestion, sendMessage, gameState, aiJob, cancelAiGeneration } = useGame()
   const navigate = useNavigate()
   // #215 — 2 onglets (Questions/Rafale). `/admin/rafale` redirige désormais
   // vers `/admin/quiz?tab=rafale` (App.jsx) pour préserver les favoris —
@@ -84,8 +78,6 @@ export default function QuestionsPage() {
     qcmHintThreshold2: 0.125, // Second hint at 12.5% of time remaining
     qcmPenalty1: 0.67, // Points multiplier after 1 hint (67%)
     qcmPenalty2: 0.33, // Points multiplier after 2 hints (33%)
-    qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-    qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
     // Memory game fields
     memoryMode: 'SOLO', // SOLO, CHACUN_SON_TOUR, TANT_QUE_JE_GAGNE
     memoryPairs: [
@@ -149,8 +141,6 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
-        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
         // DOIVENT rester synchronisées avec utils/motionCardLock.js
         // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
@@ -185,8 +175,6 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
-        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -393,11 +381,7 @@ export default function QuestionsPage() {
   // plus bas).
   const [shuffleOverrideOrder, setShuffleOverrideOrder] = useState(null) // string[] | null
 
-  // #245 — manches du quiz (GameState.ROUNDS) : avec au moins une manche, l'ordre est à deux niveaux
-  // (« Sans manche » en premier, puis les manches, puis ORDER) ; sans manche, ordre v11.1 inchangé.
-  const rounds = useMemo(() => (Array.isArray(gameState?.ROUNDS) ? gameState.ROUNDS : []), [gameState?.ROUNDS])
   const sortedQuestions = useMemo(() => {
-    if (rounds.length > 0) return sortQuestionsByRounds(questions, rounds)
     const naturalOrder = sortQuestionsByOrder(questions)
     if (!shuffleOverrideOrder) return naturalOrder
     const byId = new Map(naturalOrder.map(q => [q.ID, q]))
@@ -406,7 +390,7 @@ export default function QuestionsPage() {
     // temps par exemple) reste visible, ajoutée à la suite.
     const missing = naturalOrder.filter(q => !shuffleOverrideOrder.includes(q.ID))
     return [...ordered, ...missing]
-  }, [questions, shuffleOverrideOrder, rounds])
+  }, [questions, shuffleOverrideOrder])
 
   // Referme l'override optimiste dès que l'ordre réel (issu de la diffusion
   // REORDER_QUESTIONS) coïncide avec celui qu'on affichait déjà — ou après un
@@ -444,143 +428,6 @@ export default function QuestionsPage() {
     }
   }, [soundObjectUrl])
 
-  // ── #245 — éditeur de manches (maquette (f″)) ────────────────────────────────────────────────
-  // Structure serveur (IDs) et structure OPTIMISTE affichée dès le geste, jusqu'à ce que le serveur la reflète
-  // (ou 5 s, ou refus). Chaque geste envoie un ROUNDS_UPDATE COMPLET (sinon `INCOMPLETE`).
-  const serverStruct = useMemo(() => structureFrom(questions, rounds), [questions, rounds])
-  const [pendingStruct, setPendingStruct] = useState(null)
-  const struct = pendingStruct || serverStruct
-  const [roundsToast, setRoundsToast] = useState(null)
-  const [roundEdit, setRoundEdit] = useState(null) // { key, isNew }
-  const [nameDraft, setNameDraft] = useState('')
-  const [withEntractes, setWithEntractes] = useState(true)
-  const [draftRound, setDraftRound] = useState(false) // nouvelle manche en cours de saisie (pas encore envoyée)
-  const [deletingRound, setDeletingRound] = useState(null) // id de la manche dont la suppression est demandée
-  const [moveMenu, setMoveMenu] = useState(null) // id de la question dont le menu « Déplacer vers… » est ouvert
-  const [dragRound, setDragRound] = useState(null) // indice de la manche glissée
-  const [dragOverKey, setDragOverKey] = useState(null)
-  const [formRoundId, setFormRoundId] = useState('') // champ « Manche » du formulaire
-  const [originalRoundId, setOriginalRoundId] = useState('')
-  const deleteOpenerRef = useRef(null)
-  // Repli des manches : préférence d'affichage LOCALE au navigateur (jamais envoyée au serveur).
-  const COLLAPSE_KEY = 'buzz.rounds.collapsed'
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') || {} } catch { return {} }
-  })
-  const saveCollapsed = (next) => {
-    setCollapsed(next)
-    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next)) } catch { /* stockage indisponible */ }
-  }
-  const showGroups = rounds.length > 0 || !!pendingStruct || draftRound
-
-  useEffect(() => {
-    if (roundsToast) {
-      const id = setTimeout(() => setRoundsToast(null), 4000)
-      return () => clearTimeout(id)
-    }
-  }, [roundsToast])
-
-  // Referme l'affichage optimiste quand le serveur reflète la structure envoyée (noms + contenu, IDs de
-  // nouvelles manches ignorés), ou après 5 s.
-  const shape = (st) => JSON.stringify([st.unassigned, st.rounds.map(r => [r.name, r.questions])])
-  useEffect(() => {
-    if (!pendingStruct) return undefined
-    if (shape(serverStruct) === shape(pendingStruct)) { setPendingStruct(null); return undefined }
-    const id = setTimeout(() => setPendingStruct(null), 5000)
-    return () => clearTimeout(id)
-  }, [serverStruct, pendingStruct])
-
-  useEffect(() => {
-    if (!roundsUpdateResult) return
-    if (roundsUpdateResult.status === 'REFUSED') {
-      setPendingStruct(null)
-      const msg = {
-        INVALID_NAME: 'Nom de manche invalide (1 à 60 caractères).',
-        TOO_MANY_ROUNDS: 'Trop de manches (50 au maximum).',
-        QUESTION_ID_EXHAUSTED: 'Plus d’identifiant de question disponible : les entractes n’ont pas pu être créées.',
-      }[roundsUpdateResult.reason] || 'Les manches ont changé sur un autre poste : la liste est rechargée, réessayez.'
-      setRoundsToast({ message: `Erreur : ${msg}`, type: 'error' })
-    }
-    clearRoundsUpdateResult?.()
-  }, [roundsUpdateResult, clearRoundsUpdateResult])
-
-  // Envoie la structure complète et l'affiche tout de suite ; retourne false si la connexion est perdue.
-  const applyStruct = (next, successMessage) => {
-    const sent = roundsUpdate?.(toRoundsUpdatePayload(next))
-    if (!sent) {
-      setRoundsToast({ message: 'Erreur : connexion perdue, la modification n’a pas été envoyée.', type: 'error' })
-      return false
-    }
-    setPendingStruct(next)
-    if (successMessage) setRoundsToast({ message: successMessage, type: 'success' })
-    return true
-  }
-
-  const groupLabel = (r, i) => `Manche ${i + 1} · ${r.name}`
-  const groupKeyAt = (i) => roundKey(struct.rounds[i], i)
-  const questionGroupKey = (qid) => {
-    if (struct.unassigned.includes(String(qid))) return UNASSIGNED_KEY
-    const i = struct.rounds.findIndex(r => r.questions.includes(String(qid)))
-    return i >= 0 ? groupKeyAt(i) : UNASSIGNED_KEY
-  }
-  const allGroupKeys = () => [UNASSIGNED_KEY, ...struct.rounds.map((r, i) => roundKey(r, i))]
-  const toggleGroup = (key) => saveCollapsed({ ...collapsed, [key]: !collapsed[key] })
-  const toggleAll = () => {
-    const all = allGroupKeys().every(k => collapsed[k])
-    const next = {}
-    allGroupKeys().forEach(k => { next[k] = !all })
-    saveCollapsed(next)
-  }
-
-  const startNewRound = () => {
-    setDraftRound(true)
-    setRoundEdit({ key: 'draft', isNew: true })
-    setNameDraft('')
-    setWithEntractes(true)
-  }
-  const startRename = (r) => {
-    setDraftRound(false)
-    setRoundEdit({ key: r.id, isNew: false })
-    setNameDraft(r.name)
-  }
-  const cancelEdit = () => { setRoundEdit(null); setDraftRound(false); setNameDraft('') }
-  const validateName = () => {
-    const name = cleanRoundName(nameDraft)
-    if (!name || !roundEdit) return
-    if (roundEdit.isNew) {
-      if (applyStruct(addRound(struct, name, withEntractes), `✓ Manche « ${name} » créée${withEntractes ? ', avec ses entractes de début et de fin' : ''}.`)) cancelEdit()
-    } else if (applyStruct(renameRound(struct, roundEdit.key, name))) {
-      cancelEdit()
-    }
-  }
-  const moveRoundBy = (i, delta) => {
-    const next = moveRound(struct, i, i + delta)
-    if (next !== struct) applyStruct(next)
-  }
-  const moveQuestionTo = (qid, toKey, beforeId = null, toast = true) => {
-    const next = moveQuestion(struct, qid, toKey, beforeId)
-    if (next === struct) return
-    applyStruct(next, toast ? `✓ Question #${qid} déplacée.` : null)
-  }
-  const roundOf = (id) => struct.rounds.find(r => r.id === id)
-  const deletingInfo = (() => {
-    const r = deletingRound && roundOf(deletingRound)
-    if (!r) return null
-    const c = countEntries(r.questions.map(id => questions[id]).filter(Boolean))
-    return { round: r, ...c }
-  })()
-  const confirmDeleteRound = (choice) => {
-    const info = deletingInfo
-    if (!info) return
-    const n = info.questions + info.entractes
-    const next = deleteRound(struct, info.round.id, choice)
-    setDeletingRound(null)
-    applyStruct(next, choice === 'DELETE'
-      ? `✓ Manche et ${n} entrée${n > 1 ? 's' : ''} supprimées.`
-      : `✓ Manche supprimée, ${n} entrée${n > 1 ? 's' : ''} ajoutée${n > 1 ? 's' : ''} à la fin de « Sans manche ».`)
-    deleteOpenerRef.current?.focus?.()
-  }
-
   // Category filter (shared hook) — passes custom categories for filter support
   const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions, customCategories)
 
@@ -611,15 +458,6 @@ export default function QuestionsPage() {
   const handleDrop = async (e, targetId) => {
     e.preventDefault()
     const sourceId = draggedId
-    // #245 — avec des manches : déplacement vers le groupe de la carte visée, avant elle (ROUNDS_UPDATE complet).
-    if (showGroups && sourceId && sourceId !== targetId) {
-      e.stopPropagation()
-      moveQuestionTo(sourceId, questionGroupKey(targetId), targetId, false)
-      setDraggedId(null)
-      setDragOverId(null)
-      setDragOverKey(null)
-      return
-    }
 
     if (!sourceId || sourceId === targetId) {
       setDraggedId(null)
@@ -670,18 +508,6 @@ export default function QuestionsPage() {
     }
     if (!window.confirm(messageParts.join('\n\n'))) return
 
-    // #245 — avec des manches, le mélange se fait À L'INTÉRIEUR de chaque groupe (la structure est conservée).
-    if (showGroups) {
-      const next = {
-        ...struct,
-        unassigned: shuffleArray(struct.unassigned),
-        rounds: struct.rounds.map(r => ({ ...r, questions: shuffleArray(r.questions) })),
-      }
-      if (applyStruct(next)) {
-        setShuffleToast({ message: `✓ Ordre mélangé — ${count} question${count > 1 ? 's' : ''}`, type: 'success' })
-      }
-      return
-    }
     const previousOrder = sortedQuestions.map(q => q.ID)
     const newOrder = shuffleArray(previousOrder)
 
@@ -698,12 +524,6 @@ export default function QuestionsPage() {
       return
     }
     setShuffleToast({ message: `✓ Ordre mélangé — ${count} question${count > 1 ? 's' : ''}`, type: 'success' })
-  }
-
-  // #254 — pénalité de mauvaise réponse QCM : entier de 0 à 100 (la saisie est positive, le signe « − » est fixe)
-  const isWrongPenaltyValid = (v) => /^\d+$/.test(String(v ?? '')) && Number(v) >= 0 && Number(v) <= 100
-  const handleWrongPenaltyChange = (value) => {
-    setFormData(prev => ({ ...prev, qcmWrongPenalty: value, qcmWrongPenaltyDefault: false }))
   }
 
   const handleInputChange = (field, value) => {
@@ -801,10 +621,6 @@ export default function QuestionsPage() {
 
   const handleQuestionClick = (question) => {
     setEditingId(question.ID)
-    // #245 — champ « Manche » : manche actuelle de la question (inconnue / absente = « Sans manche »).
-    const currentRound = rounds.some(r => r.ID === question.ROUND_ID) ? question.ROUND_ID : ''
-    setFormRoundId(currentRound)
-    setOriginalRoundId(currentRound)
     const qType = question.TYPE || 'SPEEDY'
     // Default pointsTarget based on type if not set
     const defaultTarget = (qType === 'QCM' || qType === 'MEMORY' || qType === 'ARDOISE' || qType === 'RAFALE') ? 'TEAM' : 'PLAYER'
@@ -865,8 +681,6 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
-        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
         // DOIVENT rester synchronisées avec utils/motionCardLock.js
         // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
@@ -901,8 +715,6 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
-        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -1009,10 +821,6 @@ export default function QuestionsPage() {
       qcmHintThreshold2: question.QCM_HINT_THRESHOLD_2 || 0.125,
       qcmPenalty1: question.QCM_PENALTY_1 || 0.67,
       qcmPenalty2: question.QCM_PENALTY_2 || 0.33,
-      // #254 : QCM_WRONG_PENALTY entier de −100 à 0 → saisie positive ; absent / hors bornes → 0 « par défaut »
-      qcmWrongPenalty: Number.isInteger(question.QCM_WRONG_PENALTY) && question.QCM_WRONG_PENALTY >= -100 && question.QCM_WRONG_PENALTY <= 0
-        ? String(-question.QCM_WRONG_PENALTY) : '0',
-      qcmWrongPenaltyDefault: !(Number.isInteger(question.QCM_WRONG_PENALTY) && question.QCM_WRONG_PENALTY >= -100 && question.QCM_WRONG_PENALTY <= 0),
       memoryMode: question.MEMORY_MODE || 'SOLO',
       memoryPairs,
       memoryConfig,
@@ -1079,8 +887,6 @@ export default function QuestionsPage() {
 
   const handleNewQuestion = () => {
     setEditingId(null)
-    setFormRoundId('')
-    setOriginalRoundId('')
     setFormData({
       question: '',
       answer: '',
@@ -1094,8 +900,6 @@ export default function QuestionsPage() {
       qcmHintThreshold2: 0.125,
       qcmPenalty1: 0.67,
       qcmPenalty2: 0.33,
-      qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-      qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
       memoryMode: 'SOLO',
       memoryPairs: [
         { id: 1, card1: { text: '', image: null, isImage: false }, card2: { text: '', image: null, isImage: false } },
@@ -1122,8 +926,6 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
-        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
         // DOIVENT rester synchronisées avec utils/motionCardLock.js
         // MEMORY_MODE_CREATION_VALUE/MEMORY_CONFIG_CREATION_VALUES).
@@ -1158,8 +960,6 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
-        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -1318,8 +1118,6 @@ export default function QuestionsPage() {
         qcmHintThreshold2: 0.125,
         qcmPenalty1: 0.67,
         qcmPenalty2: 0.33,
-        qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
-        qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY, useState initial (mc-1).
         memoryMode: 'SOLO',
         memoryPairs: [
@@ -1473,7 +1271,6 @@ export default function QuestionsPage() {
     if (formData.type === 'SPEEDY' && !formData.answer) return
     if (formData.type === 'ARDOISE' && !formData.answer) return
     if (formData.type === 'QCM' && (!formData.qcmCorrect || !formData.qcmAnswers[formData.qcmCorrect])) return
-    if (formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)) return // #254
     if (formData.type === 'MEMORY') {
       // Validate at least 2 pairs with all cards filled
       const validPairs = formData.memoryPairs.filter(pair => {
@@ -1501,9 +1298,6 @@ export default function QuestionsPage() {
     setIsUploading(true)
 
     const data = new FormData()
-    // #245 — manche d'une NOUVELLE question (« + Question » d'une manche ou liste « Manche ») ; à la modification,
-    // ROUND_ID est conservé par le serveur : un changement de manche passe par ROUNDS_UPDATE (après l'enregistrement).
-    if (!editingId && formRoundId) data.append('round_id', formRoundId)
     if (editingId) {
       data.append('number', editingId)
     }
@@ -1534,9 +1328,6 @@ export default function QuestionsPage() {
       // The answer field contains the correct answer text for display
       data.append('answer', formData.qcmAnswers[formData.qcmCorrect])
       // QCM hints enabled flag and thresholds
-      // #254 : pénalité de mauvaise réponse, saisie 0 à 100 → enregistrée en négatif (0 = aucune pénalité).
-      // Distincte des coefficients d'indices (qcm_penalty_1/2) ci-dessous.
-      data.append('qcm_wrong_penalty', String(-Number(formData.qcmWrongPenalty)).replace('-0', '0'))
       data.append('qcm_hints_enabled', formData.qcmHintsEnabled ? 'true' : 'false')
       if (formData.qcmHintsEnabled) {
         data.append('qcm_hint_threshold_1', formData.qcmHintThreshold1.toString())
@@ -1808,12 +1599,6 @@ export default function QuestionsPage() {
         if (warning) {
           setSoundToast({ message: warning, type: 'warning' })
         }
-        // #245 — changement de manche d'une question existante : à la fin de la manche choisie.
-        if (editingId && formRoundId !== originalRoundId) {
-          const wanted = formRoundId || UNASSIGNED_KEY
-          const key = wanted === UNASSIGNED_KEY ? UNASSIGNED_KEY : (struct.rounds.find(r => r.id === wanted) ? wanted : UNASSIGNED_KEY)
-          moveQuestionTo(String(editingId), key, null, false)
-        }
         handleNewQuestion()
       } else {
         // #219 — refus nommé (CA2) : le corps HTTP 400/413 est le message
@@ -1932,19 +1717,7 @@ export default function QuestionsPage() {
       <div className="questions-shuffle-toolbar">
         <span className="questions-shuffle-toolbar-count">
           {sortedQuestions.length} question{sortedQuestions.length > 1 ? 's' : ''}
-          {showGroups && (() => {
-            const c = countEntries(sortedQuestions)
-            return ` — ${c.questions} question${c.questions > 1 ? 's' : ''}${c.entractes ? ` + ${c.entractes} entracte${c.entractes > 1 ? 's' : ''}` : ''} · ${struct.rounds.length} manche${struct.rounds.length > 1 ? 's' : ''}`
-          })()}
         </span>
-        <Button variant="secondary" size="sm" onClick={startNewRound} disabled={draftRound || struct.rounds.length >= 50}>
-          + Nouvelle manche
-        </Button>
-        {showGroups && struct.rounds.length > 0 && (
-          <Button variant="secondary" size="sm" onClick={toggleAll} title="Replier ou déplier toutes les manches">
-            ⇕ Tout replier
-          </Button>
-        )}
         <Button
           variant="secondary"
           size="sm"
@@ -1960,176 +1733,6 @@ export default function QuestionsPage() {
       <div className="questions-layout">
         {/* Questions List */}
         <section className="questions-list-section">
-          {roundsToast && (
-            <div className={`wifi-toast wifi-toast-${roundsToast.type}`} role="status">{roundsToast.message}</div>
-          )}
-          {showGroups ? (
-            <div className="rounds-list">
-              {(() => {
-                const filterActive = selectedCategories.size > 0
-                const shownIds = new Set(filteredQuestions.map(q => String(q.ID)))
-                const renderGroup = (groupKey, ids, groupProps) => {
-                  const all = ids.map(id => questions[id]).filter(Boolean)
-                  const shown = filterActive ? all.filter(q => shownIds.has(String(q.ID))) : all
-                  const c = countEntries(all)
-                  const shownCount = countEntries(shown).questions
-                  const countText = `${filterActive ? `${shownCount} / ` : ''}${c.questions} question${c.questions > 1 ? 's' : ''}${c.entractes ? ` + ${c.entractes} entracte${c.entractes > 1 ? 's' : ''}` : ''}`
-                  return (
-                    <RoundGroup
-                      key={groupKey}
-                      {...groupProps}
-                      countText={countText}
-                      typesText={typesSummary(all)}
-                      collapsed={!!collapsed[groupKey]}
-                      onToggle={() => toggleGroup(groupKey)}
-                      dragOver={dragOverKey === groupKey}
-                      isEmpty={shown.length === 0}
-                      emptyText={groupProps.unassigned
-                        ? 'Aucune question sans manche.'
-                        : filterActive && all.length > 0 ? 'Aucune question de cette catégorie.' : 'Manche vide : glissez des questions ici, ou « + Question ».'}
-                      bodyDrag={{
-                        onDragOver: (e) => { if (draggedId) { e.preventDefault(); setDragOverKey(groupKey) } },
-                        onDragLeave: () => setDragOverKey(null),
-                        onDrop: (e) => {
-                          if (!draggedId) return
-                          e.preventDefault()
-                          moveQuestionTo(draggedId, groupKey, null, false)
-                          setDraggedId(null); setDragOverId(null); setDragOverKey(null)
-                        },
-                      }}
-                    >
-                      {shown.length > 0 && (
-                        <div className="round-cards">
-                          <AnimatePresence>
-                            {shown.map((question, index) => (
-                              <div className="round-card-cell" key={question.ID}>
-                                <QuestionCard
-                                  question={question}
-                                  selected={editingId === question.ID}
-                                  draggable
-                                  showDelete
-                                  customCategories={customCategories}
-                                  onClick={() => handleQuestionClick(question)}
-                                  onDelete={handleDeleteQuestion}
-                                  dragHandlers={{
-                                    index,
-                                    isDragging: draggedId === question.ID,
-                                    isDragOver: dragOverId === question.ID,
-                                    onDragStart: (e) => handleDragStart(e, question.ID),
-                                    onDragOver: (e) => handleDragOver(e, question.ID),
-                                    onDragLeave: handleDragLeave,
-                                    onDragEnd: handleDragEnd,
-                                    onDrop: (e) => handleDrop(e, question.ID),
-                                  }}
-                                />
-                                <div className="round-move">
-                                  <button
-                                    type="button"
-                                    className="round-ibtn"
-                                    aria-label={`Déplacer la question ${question.ID} vers une autre manche`}
-                                    aria-haspopup="menu"
-                                    aria-expanded={moveMenu === question.ID}
-                                    title="Déplacer vers…"
-                                    onClick={(e) => { e.stopPropagation(); setMoveMenu(moveMenu === question.ID ? null : question.ID) }}
-                                  >⇄</button>
-                                  {moveMenu === question.ID && (
-                                    <div className="round-menu" role="menu" onKeyDown={(e) => { if (e.key === 'Escape') setMoveMenu(null) }}>
-                                      <div className="round-menu-label">Déplacer vers</div>
-                                      {[{ k: UNASSIGNED_KEY, name: 'Sans manche' }, ...struct.rounds.map((r, ri) => ({ k: roundKey(r, ri), name: groupLabel(r, ri) }))].map(g => (
-                                        <button
-                                          key={g.k}
-                                          type="button"
-                                          role="menuitem"
-                                          className="round-menu-item"
-                                          disabled={g.k === groupKey}
-                                          onClick={() => { setMoveMenu(null); moveQuestionTo(String(question.ID), g.k) }}
-                                        >{g.name}{g.k === groupKey ? ' (actuelle)' : ''}</button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                    </RoundGroup>
-                  )
-                }
-                return (
-                  <>
-                    {renderGroup(UNASSIGNED_KEY, struct.unassigned, { unassigned: true, title: 'Sans manche' })}
-                    {struct.rounds.map((r, i) => {
-                      const key = roundKey(r, i)
-                      const editing = roundEdit && !roundEdit.isNew && roundEdit.key === r.id
-                      return renderGroup(key, r.questions, {
-                        title: groupLabel(r, i),
-                        name: r.name,
-                        index: i,
-                        total: struct.rounds.length,
-                        editing: !!editing,
-                        nameDraft,
-                        onNameChange: setNameDraft,
-                        onNameValidate: validateName,
-                        onNameCancel: cancelEdit,
-                        onUp: () => moveRoundBy(i, -1),
-                        onDown: () => moveRoundBy(i, 1),
-                        onRename: () => startRename(r),
-                        onDelete: (e) => { deleteOpenerRef.current = e?.currentTarget || document.activeElement; setDeletingRound(r.id) },
-                        onAddQuestion: () => {
-                          handleNewQuestion()
-                          setFormRoundId(r.id || '')
-                          document.getElementById('question-input')?.focus?.()
-                        },
-                        headDrag: {
-                          handle: { onDragStart: (e) => { setDragRound(i); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', `round:${i}`) }, onDragEnd: () => { setDragRound(null); setDragOverKey(null) } },
-                          drop: {
-                            onDragOver: (e) => { if (dragRound !== null) { e.preventDefault(); setDragOverKey(key) } },
-                            onDragLeave: () => setDragOverKey(null),
-                            onDrop: (e) => {
-                              if (dragRound === null) return
-                              e.preventDefault()
-                              const from = dragRound
-                              setDragRound(null); setDragOverKey(null)
-                              const next = moveRound(struct, from, i)
-                              if (next !== struct) applyStruct(next)
-                            },
-                          },
-                        },
-                      })
-                    })}
-                    {draftRound && (
-                      <RoundGroup
-                        key="draft-round"
-                        title=""
-                        index={struct.rounds.length}
-                        total={struct.rounds.length + 1}
-                        countText="0 question"
-                        editing
-                        isNew
-                        nameDraft={nameDraft}
-                        onNameChange={setNameDraft}
-                        onNameValidate={validateName}
-                        onNameCancel={cancelEdit}
-                        withEntractes={withEntractes}
-                        onWithEntractesChange={setWithEntractes}
-                      />
-                    )}
-                  </>
-                )
-              })()}
-              {deletingInfo && (
-                <RoundDeleteDialog
-                  name={deletingInfo.round.name}
-                  questions={deletingInfo.questions}
-                  entractes={deletingInfo.entractes}
-                  onKeep={() => confirmDeleteRound('KEEP')}
-                  onDelete={() => confirmDeleteRound('DELETE')}
-                  onCancel={() => { setDeletingRound(null); deleteOpenerRef.current?.focus?.() }}
-                />
-              )}
-            </div>
-          ) : (
           <div className="questions-grid">
             <AnimatePresence>
               {filteredQuestions.map((question, index) => (
@@ -2161,7 +1764,6 @@ export default function QuestionsPage() {
               </div>
             )}
           </div>
-          )}
         </section>
 
         {/* Sidebar */}
@@ -2214,21 +1816,6 @@ export default function QuestionsPage() {
                     required
                   />
                 </div>
-
-                {/* #245 — champ « Manche » (maquette (f″)) : seulement s'il existe des manches ; seul ajout du formulaire.
-                    Nouvelle question : envoyé en `round_id`. Question existante : le changement de manche part en
-                    ROUNDS_UPDATE à l'enregistrement (fin de la manche choisie). */}
-                {rounds.length > 0 && (
-                  <div className="form-group">
-                    <label htmlFor="round-select">Manche</label>
-                    <select id="round-select" value={formRoundId} onChange={(e) => setFormRoundId(e.target.value)}>
-                      <option value="">Sans manche</option>
-                      {rounds.map((r, i) => (
-                        <option key={r.ID} value={r.ID}>{`Manche ${i + 1} · ${r.NAME}`}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
                 {/* Question Type Selector — généré depuis la table unique
                     utils/questionTypeMeta.js (#183/A-F2).
@@ -3394,46 +2981,6 @@ export default function QuestionsPage() {
                       />
                     </div>
                   )}
-                  {/* #254 — Pénalité mauvaise réponse : QCM seulement (jamais sur les cartes MEMOTION),
-                      maquette admin_question_editor__qcm_wrong_penalty_default0. Saisie 0 à 100 après un « − »
-                      fixe, enregistrée en négatif ; 0 = aucune pénalité = défaut. */}
-                  {formData.type === 'QCM' && (
-                    <div className="form-group penalty-group">
-                      <span className="penalty-tag">NOUVEAU</span>
-                      <label htmlFor="wrong-penalty-input">
-                        Pénalité mauvaise réponse
-                        {formData.qcmWrongPenaltyDefault && isWrongPenaltyValid(formData.qcmWrongPenalty) && (
-                          <span className="penalty-default-chip">par défaut</span>
-                        )}
-                      </label>
-                      <div className={`penalty-input${isWrongPenaltyValid(formData.qcmWrongPenalty) ? '' : ' invalid'}`}>
-                        <span className="penalty-minus" aria-hidden="true">−</span>
-                        <input
-                          id="wrong-penalty-input"
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={formData.qcmWrongPenalty}
-                          onChange={(e) => handleWrongPenaltyChange(e.target.value)}
-                          aria-invalid={!isWrongPenaltyValid(formData.qcmWrongPenalty)}
-                          aria-describedby="wrong-penalty-help wrong-penalty-err"
-                        />
-                      </div>
-                      {!isWrongPenaltyValid(formData.qcmWrongPenalty) && (
-                        <p className="penalty-err" id="wrong-penalty-err" role="alert">Entier de 0 à 100 (0 = aucune pénalité).</p>
-                      )}
-                      <p className="penalty-effect" id="wrong-penalty-help">
-                        {isWrongPenaltyValid(formData.qcmWrongPenalty) && (
-                          <>
-                            {Number(formData.qcmWrongPenalty) === 0
-                              ? 'Aucune pénalité. En jeu, un clic sur une mauvaise réponse sélectionne ses équipes sans retirer de points.'
-                              : `En jeu, un clic sur une mauvaise réponse met −${Number(formData.qcmWrongPenalty)} dans « Points » : « Appliquer les pénalités (N) ».`}
-                            {formData.qcmWrongPenaltyDefault ? ' Question sans réglage : aucune pénalité.' : ''}
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  )}
                   {formData.type !== 'MEMOTION' && (
                     <div className="form-group">
                       <label htmlFor="time-input">Temps (s)</label>
@@ -3629,8 +3176,6 @@ export default function QuestionsPage() {
                   variant={editingId ? 'primary' : 'fun'}
                   size="lg"
                   loading={isUploading}
-                  disabled={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty)}
-                  title={formData.type === 'QCM' && !isWrongPenaltyValid(formData.qcmWrongPenalty) ? 'Corrigez la pénalité de mauvaise réponse' : undefined}
                   className="submit-btn"
                 >
                   {editingId ? 'Modifier' : 'Ajouter'}

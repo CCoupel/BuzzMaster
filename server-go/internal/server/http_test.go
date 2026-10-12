@@ -1014,20 +1014,16 @@ func TestHTTPServer_ListFiles(t *testing.T) {
 	}
 }
 
-// #245 (re-revue, sécurité) : DELETE /files/... ne supprime plus que le MÉDIA d'une question (/files/questions/<id>/<fichier>) ;
-// la règle précédente (n'importe quel fichier sous /files) est abrogée — voir rounds_http_hardening_245_test.go pour les refus.
 func TestHTTPServer_DeleteFile(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
-	// Create a question media file to delete
-	questionDir := filepath.Join(dataDir, "files", "questions", "5")
-	os.MkdirAll(questionDir, 0755)
-	testFile := filepath.Join(questionDir, "media.png")
+	// Create a file to delete
+	filesDir := filepath.Join(dataDir, "files")
+	os.MkdirAll(filesDir, 0755)
+	testFile := filepath.Join(filesDir, "to-delete.txt")
 	os.WriteFile(testFile, []byte("delete me"), 0644)
-	questionJSON := filepath.Join(questionDir, "question.json")
-	os.WriteFile(questionJSON, []byte(`{"ID":"5"}`), 0644)
 
-	req := httptest.NewRequest("DELETE", "/files/questions/5/media.png", nil)
+	req := httptest.NewRequest("DELETE", "/files/to-delete.txt", nil)
 	w := httptest.NewRecorder()
 
 	server.mux.ServeHTTP(w, req)
@@ -1039,10 +1035,6 @@ func TestHTTPServer_DeleteFile(t *testing.T) {
 	// Verify file was deleted
 	if _, err := os.Stat(testFile); !os.IsNotExist(err) {
 		t.Error("File should have been deleted")
-	}
-	// the question itself is untouched
-	if _, err := os.Stat(questionJSON); err != nil {
-		t.Errorf("question.json must stay intact: %v", err)
 	}
 }
 

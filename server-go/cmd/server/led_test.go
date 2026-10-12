@@ -222,8 +222,8 @@ func TestLEDSet_RevealQCM_FirstBuzz(t *testing.T) {
 
 	// Set up bumpers: Team A buzzed first (correct GREEN), Team B buzzed (wrong RED), Team C no buzz
 	app.engine.SetBumpers(map[string]*game.Bumper{
-		"AA:BB:CC:DD:EE:01": {Team: "TeamA", AnswerColor: game.AnswerColorGreen, AnsweredColor: game.AnswerColorGreen, Time: 1000},
-		"AA:BB:CC:DD:EE:02": {Team: "TeamB", AnswerColor: game.AnswerColorRed, AnsweredColor: game.AnswerColorRed, Time: 2000},
+		"AA:BB:CC:DD:EE:01": {Team: "TeamA", AnswerColor: game.AnswerColorGreen, Time: 1000},
+		"AA:BB:CC:DD:EE:02": {Team: "TeamB", AnswerColor: game.AnswerColorRed, Time: 2000},
 		"AA:BB:CC:DD:EE:03": {Team: "TeamC", AnswerColor: game.AnswerColorBlue},
 	})
 
@@ -287,8 +287,8 @@ func TestLEDSet_RevealQCM_CorrectNotFirst(t *testing.T) {
 
 	// TeamA buzzed first (wrong RED), TeamB buzzed second (correct GREEN)
 	app.engine.SetBumpers(map[string]*game.Bumper{
-		"AA:BB:CC:DD:EE:01": {Team: "TeamA", AnswerColor: game.AnswerColorRed, AnsweredColor: game.AnswerColorRed, Time: 1000},
-		"AA:BB:CC:DD:EE:02": {Team: "TeamB", AnswerColor: game.AnswerColorGreen, AnsweredColor: game.AnswerColorGreen, Time: 2000},
+		"AA:BB:CC:DD:EE:01": {Team: "TeamA", AnswerColor: game.AnswerColorRed, Time: 1000},
+		"AA:BB:CC:DD:EE:02": {Team: "TeamB", AnswerColor: game.AnswerColorGreen, Time: 2000},
 	})
 	app.bumperBuzzState["AA:BB:CC:DD:EE:01"] = game.BuzzStateMoi
 	app.bumperBuzzState["AA:BB:CC:DD:EE:02"] = game.BuzzStateMoi

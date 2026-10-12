@@ -14,7 +14,6 @@ import { useGame } from '../hooks/GameContext'
 import { canToggleEntracte } from '../utils/phaseRules'
 import Button from './Button'
 import NavGroupMenu, { useMenuTrigger } from './NavGroupMenu'
-import { useLaunchGame } from './LaunchGameHost'
 import useMediaQuery from '../hooks/useMediaQuery'
 import './Navbar.css'
 import '../styles/entracte.css'
@@ -55,7 +54,6 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // aucune conséquence de sécurité. Règle de phase inchangée, seul son point
   // d'usage déménage (utils/phaseRules.js).
   const { gameState, setEntracte } = useGame()
-  const { openLaunch, lockedByOther } = useLaunchGame() // #253 : entrée « Lancer la partie »
   const entracteActive = !!gameState.entracte
   const canEntracteToggle = canToggleEntracte(gameState.phase, entracteActive)
   const handleToggleEntracte = () => {
@@ -483,8 +481,6 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
           pathname={location.pathname}
           openMenu={openMenu}
           setOpenMenu={setOpenMenu}
-          onLaunch={openLaunch}
-          lockedByOther={lockedByOther}
         />
       </div>
 

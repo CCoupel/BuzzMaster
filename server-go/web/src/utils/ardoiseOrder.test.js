@@ -114,12 +114,3 @@ describe('sortArdoiseEntries', () => {
     entries.forEach(e => expect(e.answer).toBeNull())
   })
 })
-
-describe('sortArdoiseEntries — identité = clé (#249)', () => {
-  it('utilise team.name (clé de la map teams) avant team.NAME, même si NAME est obsolète', () => {
-    const teams = [{ name: 'Les Verts', NAME: 'Ancien nom' }]
-    const entries = sortArdoiseEntries(teams, { 'Les Verts': { TEXT: 'X', STARTED_AT: 1, SUBMITTED_AT: 2 } })
-    expect(entries[0].teamName).toBe('Les Verts')
-    expect(entries[0].answer.TEXT).toBe('X')
-  })
-})

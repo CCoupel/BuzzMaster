@@ -67,23 +67,7 @@ const (
 	// VPlayer QCM actions
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
-	ActionArdoiseFinal            = "ARDOISE_FINAL"              // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
-	ActionArdoiseFinalAck         = "ARDOISE_FINAL_ACK"          // Server → VPlayer (targeted): final received (v11.2, #246)
-	ActionTeamsUpdateRefused      = "TEAMS_UPDATE_REFUSED"       // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
-	ActionNewGameRefused          = "NEW_GAME_REFUSED"           // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
-	ActionTeamPointsBatch         = "TEAM_POINTS_BATCH"          // Client → Server (admin): grouped team award (v11.2, #244/#251)
-	ActionTeamPointsBatchResult   = "TEAM_POINTS_BATCH_RESULT"   // Server → sender: outcome of the grouped award (v11.2)
-	ActionBumperPointsBatch       = "BUMPER_POINTS_BATCH"        // Admin → Server: grouped player award (v11.2, #254)
-	ActionBumperPointsBatchResult = "BUMPER_POINTS_BATCH_RESULT" // Server → sender: outcome of the grouped player award (v11.2, #254)
-	ActionHelloAck                = "HELLO_ACK"                  // Server → admin/anim (targeted): this connection's own ID (v11.2, #253)
-	ActionRoundsUpdate            = "ROUNDS_UPDATE"              // Admin → Server: whole rounds structure (v11.2, #245)
-	ActionRoundsUpdateResult      = "ROUNDS_UPDATE_RESULT"       // Server → sender: outcome (v11.2, #245)
-	ActionLaunchLock              = "LAUNCH_LOCK"                // Admin → Server: popup "Lancer la partie" open/close/renew (v11.2, #253)
-	ActionLaunchLockRefused       = "LAUNCH_LOCK_REFUSED"        // Server → sender: opening refused (v11.2, #253)
-	ActionActionRefused           = "ACTION_REFUSED"             // Server → sender: action suspended by LAUNCH_LOCK (v11.2, #253)
-	ActionRevealRefused           = "REVEAL_REFUSED"             // Server → admin/anim (targeted): REVEAL refused by the ARDOISE guard (v11.2, #246)
-	ActionClientTrace             = "CLIENT_TRACE"               // Client → Server: diagnostic trace (v11.2, #246)
-	ActionArdoiseInput            = "ARDOISE_INPUT"              // VPlayer → Server: free-text answer update (throttled)
+	ActionArdoiseInput = "ARDOISE_INPUT" // VPlayer → Server: free-text answer update (throttled)
 	// Log actions (via dedicated /ws/logs WebSocket)
 	ActionLogHistory = "LOG_HISTORY"
 	ActionLogEntry   = "LOG_ENTRY"
@@ -243,12 +227,7 @@ type IncomingMessage struct {
 	// allow-list (contracts/websocket-actions.md) treats an empty/unrecognized
 	// ClientType as matching no entry, i.e. default-deny, not default-admin.
 	ClientType string
-	// BoundPlayerID is the bumper ID the connection was bound to when the
-	// message was READ (#246). Used only when the connection has already closed
-	// by the time the message is dispatched (last message before a disconnect),
-	// so that it is not mistaken for an unbound connection. Empty otherwise.
-	BoundPlayerID string
-	Timestamp     time.Time
+	Timestamp  time.Time
 }
 
 // ButtonPayload for BUTTON action
@@ -302,16 +281,14 @@ type ReleaseBumperNamePayload struct {
 
 // BumperPointsPayload for BUMPER_POINTS action
 type BumperPointsPayload struct {
-	ID      string `json:"ID"`
-	Points  int    `json:"POINTS"`
-	Display *bool  `json:"DISPLAY,omitempty"` // v11.2, #252: false = hidden correction
+	ID     string `json:"ID"`
+	Points int    `json:"POINTS"`
 }
 
 // TeamPointsPayload for TEAM_POINTS action
 type TeamPointsPayload struct {
-	Team    string `json:"TEAM"`
-	Points  int    `json:"POINTS"`
-	Display *bool  `json:"DISPLAY,omitempty"` // v11.2, #252: false = hidden correction
+	Team   string `json:"TEAM"`
+	Points int    `json:"POINTS"`
 }
 
 // ClientsPayload for CLIENTS action (client count broadcast)
@@ -347,11 +324,6 @@ type NextQuestionPayload struct {
 	Time            int    `json:"TIME"`
 	CurrentPosition int    `json:"CURRENT_POSITION"`
 	TotalQuestions  int    `json:"TOTAL_QUESTIONS"`
-	// v11.2, #245: round of the NEXT question ("" = Sans manche), its name, and whether it opens
-	// another round than the current question. Always present.
-	RoundID   string `json:"ROUND_ID"`
-	RoundName string `json:"ROUND_NAME"`
-	NewRound  bool   `json:"NEW_ROUND"`
 }
 
 // CreditPointsPayload is shared by both directions of the code review
@@ -372,17 +344,8 @@ type CreditPointsPayload struct {
 // (no omitempty on either field — project-wide GameState convention,
 // CLAUDE.md).
 type AwardedTeamsPayload struct {
-	QuestionID string               `json:"QUESTION_ID"`
-	Teams      []AwardedTeamEntry   `json:"TEAMS"`
-	Players    []AwardedPlayerEntry `json:"PLAYERS"` // v11.2, #254: players credited individually ([] never null)
-}
-
-// AwardedPlayerEntry is one player credited individually for the current question.
-type AwardedPlayerEntry struct {
-	ID        string `json:"ID"`
-	Team      string `json:"TEAM"`
-	Points    int    `json:"POINTS"`
-	Timestamp int64  `json:"TIMESTAMP"`
+	QuestionID string             `json:"QUESTION_ID"`
+	Teams      []AwardedTeamEntry `json:"TEAMS"`
 }
 
 // AwardedTeamEntry is one team already credited for the current question
@@ -396,7 +359,6 @@ type AwardedTeamEntry struct {
 	Team      string `json:"TEAM"`
 	Points    int    `json:"POINTS"`
 	Timestamp int64  `json:"TIMESTAMP"`
-	TeamLevel bool   `json:"TEAM_LEVEL"` // v11.2, #254: at least one TEAM-level credit (always present)
 }
 
 // RegieMessagePayload for REGIE_MESSAGE (v6.4.x, #167 — contracts/
@@ -766,186 +728,6 @@ type VPlayerQCMAnswerPayload struct {
 type ArdoiseInputPayload struct {
 	ID   string `json:"ID,omitempty"` // Bumper ID (VPlayer MAC) — explicit, same as VPLAYER_QCM_ANSWER
 	Text string `json:"TEXT"`         // Current answer text (full content, not delta)
-	// v11.2 (#246) — diagnostic only (contracts/websocket-actions.md ARDOISE_INPUT).
-	Seq    int    `json:"SEQ,omitempty"`    // per question & per connection counter, >= 1
-	Reason string `json:"REASON,omitempty"` // key | clear | backspace_empty | resend | visible
-}
-
-// ArdoiseFinalPayload for ARDOISE_FINAL (v11.2, #246).
-type ArdoiseFinalPayload struct {
-	ID         string `json:"ID"`
-	QuestionID string `json:"QUESTION_ID"`
-	Text       string `json:"TEXT"`
-	Hash       string `json:"HASH"`
-	Seq        int    `json:"SEQ,omitempty"`
-}
-
-// ArdoiseFinalAckPayload for ARDOISE_FINAL_ACK — never carries text (#128).
-type ArdoiseFinalAckPayload struct {
-	QuestionID string `json:"QUESTION_ID"`
-	Hash       string `json:"HASH"`
-}
-
-// TeamsUpdateRefusedPayload for TEAMS_UPDATE_REFUSED (v11.2, #249).
-type TeamsUpdateRefusedPayload struct {
-	Reason string   `json:"REASON"`
-	Teams  []string `json:"TEAMS"`
-}
-
-// NewGamePayload for NEW_GAME (v11.2, #243). Pointers tell "absent" from false:
-// no field at all = v11.1 behaviour; as soon as one field is present the absent
-// ones are false.
-type NewGamePayload struct {
-	PurgeScores    *bool `json:"PURGE_SCORES,omitempty"`
-	PurgePlayers   *bool `json:"PURGE_PLAYERS,omitempty"`
-	PurgeTeams     *bool `json:"PURGE_TEAMS,omitempty"`
-	ResetQuestions *bool `json:"RESET_QUESTIONS,omitempty"`
-}
-
-// NewGameRefusedPayload for NEW_GAME_REFUSED (targeted to the sender).
-type NewGameRefusedPayload struct {
-	Reason string `json:"REASON"`
-}
-
-// TeamPointsBatchPayload for TEAM_POINTS_BATCH (v11.2, #244/#251). Entry points are
-// raw JSON numbers so a non-integer can be refused as INVALID_POINTS.
-type TeamPointsBatchPayload struct {
-	QuestionID string `json:"QUESTION_ID"`
-	Entries    []struct {
-		Team   string          `json:"TEAM"`
-		Points json.RawMessage `json:"POINTS"`
-	} `json:"ENTRIES"`
-	Display *bool `json:"DISPLAY,omitempty"` // reserved for #252
-}
-
-// BumperPointsBatchPayload for BUMPER_POINTS_BATCH (v11.2, #254).
-type BumperPointsBatchPayload struct {
-	QuestionID string `json:"QUESTION_ID"`
-	Entries    []struct {
-		ID     string          `json:"ID"`
-		Points json.RawMessage `json:"POINTS"`
-	} `json:"ENTRIES"`
-	Display *bool `json:"DISPLAY,omitempty"`
-}
-
-// BumperPointsBatchResultPayload for BUMPER_POINTS_BATCH_RESULT (targeted to the sender).
-type BumperPointsBatchResultPayload struct {
-	Status     string                   `json:"STATUS"`
-	Reason     string                   `json:"REASON,omitempty"`
-	QuestionID string                   `json:"QUESTION_ID"`
-	Applied    []BumperPointsBatchEntry `json:"APPLIED"`
-	Skipped    []BumperPointsBatchSkip  `json:"SKIPPED"`
-	Players    []string                 `json:"PLAYERS"`
-}
-type BumperPointsBatchEntry struct {
-	ID     string `json:"ID"`
-	Points int    `json:"POINTS"`
-}
-type BumperPointsBatchSkip struct {
-	ID     string `json:"ID"`
-	Reason string `json:"REASON"`
-}
-
-// TeamPointsBatchApplied / Skipped are the RESULT array items.
-type TeamPointsBatchApplied struct {
-	Team   string `json:"TEAM"`
-	Points int    `json:"POINTS"`
-}
-type TeamPointsBatchSkipped struct {
-	Team   string `json:"TEAM"`
-	Reason string `json:"REASON"`
-}
-
-// TeamPointsBatchResultPayload for TEAM_POINTS_BATCH_RESULT (targeted to the sender).
-type TeamPointsBatchResultPayload struct {
-	Status     string                   `json:"STATUS"`
-	Reason     string                   `json:"REASON,omitempty"`
-	QuestionID string                   `json:"QUESTION_ID"`
-	Applied    []TeamPointsBatchApplied `json:"APPLIED"`
-	Skipped    []TeamPointsBatchSkipped `json:"SKIPPED"`
-	Teams      []string                 `json:"TEAMS"`
-}
-
-// HelloAckPayload for HELLO_ACK (v11.2, #253).
-type HelloAckPayload struct {
-	ClientID string `json:"CLIENT_ID"`
-}
-
-// RoundsUpdatePayload for ROUNDS_UPDATE (v11.2, #245): the complete structure.
-type RoundsUpdatePayload struct {
-	Rounds []struct {
-		ID        string   `json:"ID"`
-		Name      string   `json:"NAME"`
-		Questions []string `json:"QUESTIONS"`
-		Entractes *bool    `json:"ENTRACTES,omitempty"` // new round only; absent = true
-	} `json:"ROUNDS"`
-	Unassigned    []string `json:"UNASSIGNED"`
-	DeletedRounds []struct {
-		ID        string `json:"ID"`
-		Questions string `json:"QUESTIONS"` // KEEP | DELETE
-	} `json:"DELETED_ROUNDS,omitempty"`
-}
-
-// RoundsCreatedEntractes lists the automatic ENTRACTE of a new round.
-type RoundsCreatedEntractes struct {
-	RoundID string `json:"ROUND_ID"`
-	StartID string `json:"START_ID"`
-	EndID   string `json:"END_ID"`
-}
-
-// RoundsUpdateResultPayload for ROUNDS_UPDATE_RESULT (targeted to the sender). Arrays are
-// never null.
-type RoundsUpdateResultPayload struct {
-	Status           string                   `json:"STATUS"` // APPLIED | REFUSED
-	Reason           string                   `json:"REASON,omitempty"`
-	Rounds           []game.Round             `json:"ROUNDS"`
-	Questions        []string                 `json:"QUESTIONS"`
-	CreatedEntractes []RoundsCreatedEntractes `json:"CREATED_ENTRACTES"`
-	DeletedQuestions []string                 `json:"DELETED_QUESTIONS"`
-}
-
-// LaunchLockPayload for LAUNCH_LOCK: STATE is OPEN (open, then renew) or CLOSE.
-type LaunchLockPayload struct {
-	State string `json:"STATE"`
-}
-
-// LaunchLockRefusedPayload for LAUNCH_LOCK_REFUSED.
-type LaunchLockRefusedPayload struct {
-	Reason string `json:"REASON"` // LOCKED_BY_OTHER | ENTRACTE_ACTIVE
-}
-
-// ActionRefusedPayload for ACTION_REFUSED.
-type ActionRefusedPayload struct {
-	Action string `json:"ACTION"`
-	Reason string `json:"REASON"` // LAUNCH_IN_PROGRESS
-}
-
-// RevealPayload for REVEAL (v11.2, #246): FORCE reveals despite pending ARDOISE answers.
-type RevealPayload struct {
-	Force bool `json:"FORCE"`
-}
-
-// RevealRefusedPendingTeam is one entry of REVEAL_REFUSED.PENDING.
-type RevealRefusedPendingTeam struct {
-	Team    string `json:"TEAM"`
-	Offline bool   `json:"OFFLINE"`
-}
-
-// RevealRefusedPayload for REVEAL_REFUSED (targeted to the sender).
-type RevealRefusedPayload struct {
-	Reason  string                     `json:"REASON"`
-	Pending []RevealRefusedPendingTeam `json:"PENDING"`
-}
-
-// ClientTracePayload for CLIENT_TRACE (v11.2, #246): client diagnostic event,
-// journalised by the server, no effect on game state.
-type ClientTracePayload struct {
-	Kind        string                 `json:"KIND"`
-	At          int64                  `json:"AT"`
-	Team        string                 `json:"TEAM,omitempty"`
-	PrevLen     int                    `json:"PREV_LEN,omitempty"`
-	CauseAction string                 `json:"CAUSE_ACTION,omitempty"`
-	Detail      map[string]interface{} `json:"DETAIL,omitempty"`
 }
 
 // LogHistoryPayload for LOG_HISTORY action (send log history to client)
@@ -1167,18 +949,6 @@ var AdminOnlyGameFields = []string{
 // sites below (D2/§6 "un site oublié laisse la fuite ouverte").
 var VPlayerOnlyGameFields = []string{
 	"ARDOISE_ANSWERS",
-	"LAUNCH_LOCK", // #253: no use on a tablet
-}
-
-// TVOnlyGameFields lists GAME fields stripped from the TV path only (anim keeps
-// them): LAUNCH_LOCK is for admin and anim banners (#253).
-var TVOnlyGameFields = []string{
-	"LAUNCH_LOCK",
-}
-
-// SerializeForTV is SerializeForWebClient() plus TVOnlyGameFields stripped.
-func (m *Message) SerializeForTV() ([]byte, error) {
-	return m.serializeFiltered(TVOnlyGameFields)
 }
 
 // serializeFiltered is the shared implementation behind SerializeForWebClient
@@ -1207,13 +977,6 @@ func (m *Message) SerializeForTV() ([]byte, error) {
 //   - "teams"   → map[name]*Team   (not "TEAMS"   / slice)
 //   - "GAME"    → GameState node
 func (m *Message) serializeFiltered(extraGameFields []string) ([]byte, error) {
-	return m.serializeFilteredFor(extraGameFields, false, "")
-}
-
-// serializeFilteredFor is serializeFiltered plus, for a tablette (vplayer), the
-// #258 answer filter (filterVPlayerAnswers) applied as the LAST step, with
-// recipientID = the bound player ("" = unbound / shared frame: everything neutral).
-func (m *Message) serializeFilteredFor(extraGameFields []string, vplayer bool, recipientID string) ([]byte, error) {
 	var raw map[string]interface{}
 	if err := json.Unmarshal(m.Msg, &raw); err != nil {
 		// Not a GameData-shaped payload (or MSG isn't even an object, e.g.
@@ -1250,9 +1013,6 @@ func (m *Message) serializeFilteredFor(extraGameFields []string, vplayer bool, r
 	}
 	// "config" is a server-side key not needed by TV/VPlayer/anim clients
 	delete(raw, "config")
-	if vplayer {
-		filterVPlayerAnswers(raw, recipientID, "")
-	}
 
 	stripped, err := json.Marshal(raw)
 	if err != nil {
@@ -1289,7 +1049,7 @@ func (m *Message) SerializeForWebClient() ([]byte, error) {
 // PREPARE/READY, or an unidentified player) — an update must never be
 // silently dropped or narrower than this.
 func (m *Message) SerializeForVPlayerCommon() ([]byte, error) {
-	return m.serializeFilteredFor(VPlayerOnlyGameFields, true, "")
+	return m.serializeFiltered(VPlayerOnlyGameFields)
 }
 
 // vplayerReducedPhases are the GAME.PHASE values during which a VPlayer's own
@@ -1356,8 +1116,7 @@ func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 	}
 	phase, _ := gameNode["PHASE"].(string)
 	if !vplayerReducedPhases[phase] {
-		// #258: per-recipient frame (own team intact, other teams neutral while answers are open)
-		return m.serializeFilteredFor(VPlayerOnlyGameFields, true, playerID)
+		return m.SerializeForVPlayerCommon()
 	}
 
 	bumpers, ok := raw["bumpers"].(map[string]interface{})
@@ -1379,7 +1138,6 @@ func (m *Message) SerializeForVPlayer(playerID string) ([]byte, error) {
 	raw["bumpers"] = map[string]interface{}{playerID: own}
 	// "config" is a server-side key not needed by VPlayer clients (same as SerializeForWebClient)
 	delete(raw, "config")
-	filterVPlayerAnswers(raw, playerID, phase) // #258
 
 	stripped, err := json.Marshal(raw)
 	if err != nil {
@@ -1498,131 +1256,4 @@ func (m *Message) ParseHelloPayload() (*HelloPayload, error) {
 		return nil, err
 	}
 	return &payload, nil
-}
-
-// --- #258: answers of the other teams and the right answer, filtered per phase and recipient
-
-// vplayerOpenAnswerPhases are the phases during which answers are still open: the
-// answer/time fields of the OTHER teams must not reach a tablette.
-var vplayerOpenAnswerPhases = map[string]bool{"PREPARE": true, "READY": true, "COUNTDOWN": true, "STARTED": true, "PAUSED": true}
-
-// FilterVPlayerAnswers is the exported entry of filterVPlayerAnswers (used by the
-// fan-out in cmd/server).
-func FilterVPlayerAnswers(raw map[string]interface{}, recipientID, phase string) {
-	filterVPlayerAnswers(raw, recipientID, phase)
-}
-
-// filterVPlayerAnswers is THE single filter of contracts/vplayer-payload-filter.md §7,
-// applied by SHAPE (GAME / bumpers / teams present), never by action name, as the
-// last serialisation step of every frame destined to a tablette. raw is the decoded
-// MSG ({GAME, bumpers, teams}); it is modified in place. recipientID is the bound
-// player ("" = shared frame or unbound connection: nothing is "own", everything is
-// neutralised while answers are open); phase "" reads GAME.PHASE (an unknown phase
-// counts as open, i.e. the safe side).
-//
-//   - answers open (PREPARE..PAUSED): other teams' bumpers lose TIME, BUTTON, STATUS,
-//     ANSWER_COLOR, ANSWERED_COLOR, HINTS_AT_BUZZ (neutral values, keys kept) and other
-//     teams lose TIME, BUMPER, STATUS; own bumper and team-mates stay intact;
-//   - QUESTION.QCM_CORRECT, ANSWER and MEDIA_ANSWER are removed in every phase but REVEALED;
-//     MEMOTION cards (and MEMOTION_ACTIVE.STATE): ANSWER_TEXT/ANSWER_IMAGE/ANSWER/QCM_CORRECT
-//     per card until it is REVEALED or DONE; QUESTION.EXPLANATION (animateur note) in every phase.
-func filterVPlayerAnswers(raw map[string]interface{}, recipientID, phase string) {
-	game, _ := raw["GAME"].(map[string]interface{})
-	if phase == "" && game != nil {
-		phase, _ = game["PHASE"].(string)
-	}
-
-	if game != nil {
-		answerKeys := []string{"QCM_CORRECT", "ANSWER", "ANSWER_TEXT", "ANSWER_IMAGE"}
-		revealedCard := func(id string) bool {
-			states, _ := game["MEMOTION_CARD_STATES"].(map[string]interface{})
-			st, _ := states[id].(string)
-			return st == "REVEALED" || st == "DONE"
-		}
-		if q, ok := game["QUESTION"].(map[string]interface{}); ok {
-			delete(q, "EXPLANATION") // animateur's note (#168): never on a tablette, any phase
-			if phase != "REVEALED" {
-				delete(q, "QCM_CORRECT")
-				delete(q, "ANSWER")
-				delete(q, "MEDIA_ANSWER")
-				if cards, ok := q["MOTION_CARDS"].([]interface{}); ok {
-					for _, c := range cards {
-						card, ok := c.(map[string]interface{})
-						if !ok {
-							continue
-						}
-						if id, _ := card["ID"].(string); revealedCard(id) {
-							continue
-						}
-						for _, k := range answerKeys {
-							delete(card, k)
-						}
-					}
-				}
-			}
-		}
-		if phase != "REVEALED" {
-			if active, ok := game["MEMOTION_ACTIVE"].(map[string]interface{}); ok {
-				if st, ok := active["STATE"].(map[string]interface{}); ok {
-					if cardID, _ := active["CARD_ID"].(string); !revealedCard(cardID) {
-						for _, k := range answerKeys {
-							delete(st, k)
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if phase != "" && !vplayerOpenAnswerPhases[phase] {
-		return // STOPPED / REVEALED / NEW_GAME ...: answers are closed, transmitted as is
-	}
-
-	bumpers, _ := raw["bumpers"].(map[string]interface{})
-	ownTeam := ""
-	if recipientID != "" {
-		if own, ok := bumpers[recipientID].(map[string]interface{}); ok {
-			ownTeam, _ = own["TEAM"].(string)
-		}
-	}
-	for id, b := range bumpers {
-		bumper, ok := b.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if recipientID != "" && ownTeam != "" {
-			if id == recipientID {
-				continue
-			}
-			if team, _ := bumper["TEAM"].(string); team == ownTeam {
-				continue
-			}
-		} else if recipientID != "" && id == recipientID {
-			continue // the recipient's own bumper, even without a team
-		}
-		neutralise(bumper, "TIME", float64(0))
-		neutralise(bumper, "HINTS_AT_BUZZ", float64(0))
-		neutralise(bumper, "BUTTON", "")
-		neutralise(bumper, "STATUS", "")
-		neutralise(bumper, "ANSWER_COLOR", "")
-		neutralise(bumper, "ANSWERED_COLOR", "")
-	}
-	teams, _ := raw["teams"].(map[string]interface{})
-	for name, t := range teams {
-		team, ok := t.(map[string]interface{})
-		if !ok || (recipientID != "" && ownTeam != "" && name == ownTeam) {
-			continue
-		}
-		neutralise(team, "TIME", float64(0))
-		neutralise(team, "BUMPER", "")
-		neutralise(team, "STATUS", "")
-	}
-}
-
-// neutralise sets key to its neutral value only if the key is present (keys are kept,
-// none is ever added).
-func neutralise(m map[string]interface{}, key string, neutral interface{}) {
-	if _, ok := m[key]; ok {
-		m[key] = neutral
-	}
 }

@@ -194,7 +194,3 @@ TEMPLATE_claude/
 _work/
 .claude/worktrees/
 build/
-
-# Journaux persistants du serveur (#246)
-data/logs/
-server-go/data/logs/

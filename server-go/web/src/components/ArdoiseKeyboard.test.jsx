@@ -31,7 +31,6 @@ const renderKeyboard = (props = {}) =>
       value={props.value ?? ''}
       onChange={props.onChange ?? vi.fn()}
       disabled={props.disabled ?? false}
-      overlay={props.overlay}
     />
   )
 
@@ -99,7 +98,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
 
     // Press 'L'
     fireEvent.click(screen.getByText('L'))
-    expect(onChange).toHaveBeenCalledWith('HELL', 'key')
+    expect(onChange).toHaveBeenCalledWith('HELL')
   })
 
   it('appelle onChange avec texte + espace quand SPACE est pressée', () => {
@@ -107,7 +106,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', onChange })
 
     fireEvent.click(screen.getByText('␣'))
-    expect(onChange).toHaveBeenCalledWith('HELLO ', 'key')
+    expect(onChange).toHaveBeenCalledWith('HELLO ')
   })
 
   it('BACKSPACE appelle onChange en supprimant le dernier caractère', () => {
@@ -115,7 +114,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', onChange })
 
     fireEvent.click(screen.getByText('⌫'))
-    expect(onChange).toHaveBeenCalledWith('HELL', 'key')
+    expect(onChange).toHaveBeenCalledWith('HELL')
   })
 
   it('BACKSPACE sur texte vide appelle onChange avec une chaîne vide', () => {
@@ -123,7 +122,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: '', onChange })
 
     fireEvent.click(screen.getByText('⌫'))
-    expect(onChange).toHaveBeenCalledWith('', 'key')
+    expect(onChange).toHaveBeenCalledWith('')
   })
 
   it('affiche la valeur courante dans la zone de texte', () => {
@@ -155,7 +154,7 @@ describe('ArdoiseKeyboard — frappe et affichage texte', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: 'BUZZ', onChange })
 
     fireEvent.click(screen.getByTitle('Effacer tout'))
-    expect(onChange).toHaveBeenCalledWith('', 'clear')
+    expect(onChange).toHaveBeenCalledWith('')
   })
 })
 
@@ -180,28 +179,22 @@ describe('ArdoiseKeyboard — prop disabled', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('affiche l\'overlay fourni quand disabled=true (#246 : décidé par la page, d\'après l\'accusé)', () => {
-    const { container } = renderKeyboard({
-      keyboardType: 'AZERTY', value: 'HELLO', disabled: true,
-      overlay: { tone: 'ok', text: '✓ Réponse reçue' },
-    })
+  it('affiche l\'overlay quand disabled=true', () => {
+    const { container } = renderKeyboard({ keyboardType: 'AZERTY', value: '', disabled: true })
 
     expect(container.querySelector('.ardoise-keyboard-overlay')).not.toBeNull()
-    expect(screen.getByText('✓ Réponse reçue')).toBeInTheDocument()
   })
 
-  it('#246 : plus de « ✓ Réponse envoyée » affiché sans preuve — aucun overlay sans prop overlay', () => {
-    const { container } = renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', disabled: true })
+  it('overlay affiche "✓ Réponse envoyée" quand disabled=true et valeur non vide', () => {
+    renderKeyboard({ keyboardType: 'AZERTY', value: 'HELLO', disabled: true })
 
-    expect(container.querySelector('.ardoise-keyboard-overlay')).toBeNull()
-    expect(screen.queryByText('✓ Réponse envoyée')).toBeNull()
+    expect(screen.getByText('✓ Réponse envoyée')).toBeInTheDocument()
   })
 
-  it('#246 : verrouillé et vide → texte indicatif « Aucune réponse » (jamais « Votre réponse… »)', () => {
+  it('overlay affiche "⏳ En attente…" quand disabled=true et valeur vide', () => {
     renderKeyboard({ keyboardType: 'AZERTY', value: '', disabled: true })
 
-    expect(screen.getByText('Aucune réponse')).toBeInTheDocument()
-    expect(screen.queryByText('Votre réponse…')).toBeNull()
+    expect(screen.getByText('⏳ En attente…')).toBeInTheDocument()
   })
 
   it('masque le bouton Effacer tout quand disabled=true même si valeur non vide', () => {
@@ -220,44 +213,5 @@ describe('ArdoiseKeyboard — prop disabled', () => {
     const { container } = renderKeyboard({ keyboardType: 'AZERTY', value: '', disabled: true })
 
     expect(container.querySelector('.ardoise-keyboard.disabled')).not.toBeNull()
-  })
-})
-
-describe('ArdoiseKeyboard — motif de l\'envoi (#246, F-LOG)', () => {
-  it('⌫ qui vide le champ → reason backspace_empty', () => {
-    const onChange = vi.fn()
-    renderKeyboard({ keyboardType: 'AZERTY', value: 'A', onChange })
-    fireEvent.click(screen.getByText('⌫'))
-    expect(onChange).toHaveBeenCalledWith('', 'backspace_empty')
-  })
-
-  it('⌫ qui laisse du texte → reason key', () => {
-    const onChange = vi.fn()
-    renderKeyboard({ keyboardType: 'AZERTY', value: 'AB', onChange })
-    fireEvent.click(screen.getByText('⌫'))
-    expect(onChange).toHaveBeenCalledWith('A', 'key')
-  })
-})
-
-describe('ArdoiseKeyboard — plafond de saisie (#246)', () => {
-  it('refuse toute saisie au-delà de 2000 caractères mais autorise ⌫', () => {
-    const onChange = vi.fn()
-    renderKeyboard({ keyboardType: 'AZERTY', value: 'A'.repeat(2000), onChange })
-    fireEvent.click(screen.getByText('Z'))
-    fireEvent.click(screen.getByText('␣'))
-    expect(onChange).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByText('⌫'))
-    expect(onChange).toHaveBeenCalledWith('A'.repeat(1999), 'key')
-  })
-
-  it('compte en points de code Unicode, pas en unités UTF-16 (émoji = 1 caractère)', () => {
-    const onChange = vi.fn()
-    renderKeyboard({ keyboardType: 'AZERTY', value: '😀'.repeat(1999), onChange })
-    fireEvent.click(screen.getByText('Z'))
-    expect(onChange).toHaveBeenCalledTimes(1)
-    onChange.mockClear()
-    renderKeyboard({ keyboardType: 'AZERTY', value: '😀'.repeat(2000), onChange })
-    fireEvent.click(screen.getAllByText('Z')[1])
-    expect(onChange).not.toHaveBeenCalled()
   })
 })

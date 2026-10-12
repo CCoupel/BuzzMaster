@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"unicode/utf8"
 )
 
 // Version is set at build time via -ldflags="-X main.Version=X.Y.Z"
@@ -129,9 +128,6 @@ type App struct {
 	// bumperLEDState tracks the last LED_SET payload sent to each buzzer (by MAC).
 	// Used by resendLEDOnReconnect to restore LED state when a buzzer reconnects.
 	bumperLEDState map[string]protocol.LEDSetPayload
-	// ledStateMu guards bumperLEDState: sendLEDSet runs from several goroutines
-	// (handlers, the comet restore timers, the ACK retry callback).
-	ledStateMu sync.RWMutex
 
 	// bumperBuzzState tracks the BuzzState (NONE/MOI/EQUIPE/AUTRE) for each buzzer
 	// within the current question round. Reset on READY/PREPARE; updated on each buzz.
@@ -142,13 +138,6 @@ type App struct {
 	// broadcast_coalescer.go. Flushed immediately on every phase change
 	// (OnStateChange) and stopped on server shutdown (a.stop()).
 	ardoiseCoalescer *BroadcastCoalescer
-
-	// #246 diagnostic state: per-connection ARDOISE SEQ tracking and
-	// CLIENT_TRACE rate limiting.
-	diagMu      sync.Mutex
-	ardoiseSq   map[string]*ardoiseSeqState
-	traceLim    map[string]*traceLimiter
-	traceGlobal traceLimiter
 
 	// currentCreditPoints is the animateur's live-synced base credit amount
 	// (code review MAJEUR-1, #155/#156 — contracts/websocket-actions.md
@@ -288,8 +277,6 @@ func main() {
 	// Initialize components
 	app.init()
 	app.httpServer.SetPortSource(portSource) // #220 — see resolvePortSource's doc comment
-
-	app.reloadRounds() // #245: rounds.json -> GameState.ROUNDS
 
 	// Try to load saved teams and bumpers from disk
 	teamsLoaded := app.engine.LoadTeams() == nil && len(app.engine.GetTeamsAndBumpers().Teams) > 0
@@ -488,10 +475,6 @@ func (a *App) init() {
 	// Initialize global logger (singleton)
 	a.logger = server.InitLogger(1000)
 	a.logger.SetDebugEnabled(a.config.Server.Debug)
-	// #246: persistent log file (contracts/logging.md §1). Never fatal.
-	if err := a.logger.SetFileOutput(a.config.Logging); err != nil {
-		a.logger.Warn(game.LogComponentApp, "log file unavailable (%v) — logging to memory/stdout only", err)
-	}
 
 	// UDP broadcaster
 	a.udpBcast = server.NewUDPBroadcaster()
@@ -533,10 +516,7 @@ func (a *App) init() {
 		// Resend the LED payload with the ORIGINAL msgID so the buzzer can confirm the right entry.
 		// Never call sendLEDSet() here — that generates a new msgID, leaving the original entry
 		// permanently unconfirmable and cascading into AckMaxRetries² slots at most.
-		a.ledStateMu.RLock()
-		payload, ok := a.bumperLEDState[mac]
-		a.ledStateMu.RUnlock()
-		if ok {
+		if payload, ok := a.bumperLEDState[mac]; ok {
 			msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
 			if err != nil {
 				server.LogError(game.LogComponentApp, "AckManager retry: failed to create LED_SET for %s: %v", mac, err)
@@ -872,7 +852,6 @@ func (a *App) setupCallbacks() {
 	// WebSocket closes. Extracted as a named method (rather than inlined here) so it can be
 	// unit-tested directly — see onPlayerDisconnected below.
 	a.wsHub.OnPlayerDisconnected = a.onPlayerDisconnected
-	a.wsHub.SetOnClientClosed(a.onClientClosed)
 
 	// Handle new log entries - broadcast to logs WebSocket clients
 	a.logger.SetOnNewEntry(func(entry game.LogEntry) {
@@ -1408,17 +1387,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	// it — the logs must distinguish "wrong client type" from "blocked by
 	// entracte" as two different rejection reasons. A CSS filter doesn't stop
 	// a click; this does.
-	if a.engine.IsEntracte() && msg.Action == protocol.ActionNewGame {
-		// #243 (review): refused with an answer instead of silently ignored; the
-		// action stays OUTSIDE the entracte allow-list (nothing is executed).
-		opts := parseNewGameOptions(msg.Msg)
-		server.LogWarn(game.LogComponentApp, "NEW_GAME_REFUSED client=%s options=%s reason=ENTRACTE_ACTIVE", incoming.ClientID, newGameOptionsLog(opts))
-		if rm, err := protocol.NewMessage(protocol.ActionNewGameRefused, protocol.NewGameRefusedPayload{Reason: "ENTRACTE_ACTIVE"}); err == nil {
-			a.wsHub.SendToClient(incoming.ClientID, rm)
-		}
-		return
-	}
-	if a.engine.IsEntracte() && msg.Action != protocol.ActionLaunchLock && !server.IsActionAllowedDuringEntracte(msg.Action) {
+	if a.engine.IsEntracte() && !server.IsActionAllowedDuringEntracte(msg.Action) {
 		a.logger.Warn(game.LogComponentWebSocket, "Rejected action %s from client %s (type=%q): blocked during ENTRACTE", msg.Action, incoming.ClientID, incoming.ClientType)
 		return
 	}
@@ -1433,32 +1402,16 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.logger.Info(game.LogComponentWebSocket, "Action %s déclenchée depuis l'interface animateur (client %s)", msg.Action, incoming.ClientID)
 	}
 
-	// #246 B-ID — a vplayer connection may only act as the bumper it is bound to
-	// (PLAYER_CONNECT). Admin simulations and tv/anim actions are not concerned.
-	if clientType == server.ClientTypeVPlayer && isBoundPlayerAction(msg.Action) {
-		if !a.checkPlayerBinding(incoming.ClientID, incoming.BoundPlayerID, msg) {
-			return
-		}
-	}
-
-	// #253: suspended while the "Lancer la partie" popup is open (any sender).
-	if a.launchGate(incoming.ClientID, clientType, msg) {
-		return
-	}
-
 	switch msg.Action {
-	case protocol.ActionLaunchLock:
-		a.handleLaunchLock(incoming.ClientID, msg)
-
 	case protocol.ActionHello:
 		// Send state directly to the connecting client (not broadcast - avoids race condition)
 		a.sendStateToClient(incoming.ClientID, clientType)
 
 	case protocol.ActionFull:
-		a.handleFullUpdate(msg, updateSender{incoming.ClientID, clientType})
+		a.handleFullUpdate(msg)
 
 	case protocol.ActionUpdate:
-		a.handleUpdate(msg, updateSender{incoming.ClientID, clientType})
+		a.handleUpdate(msg)
 
 	case protocol.ActionPoints:
 		a.handlePoints(msg)
@@ -1511,27 +1464,6 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		}
 
 	case protocol.ActionReveal:
-		// #246 garde ARDOISE : refus tant qu'une équipe attendue n'a pas son texte final.
-		var revealPayload protocol.RevealPayload
-		if len(msg.Msg) > 0 {
-			_ = json.Unmarshal(msg.Msg, &revealPayload)
-		}
-		if pending := a.engine.ArdoisePendingTeams(); len(pending) > 0 {
-			desc := make([]string, 0, len(pending))
-			refused := protocol.RevealRefusedPayload{Reason: "ARDOISE_PENDING", Pending: []protocol.RevealRefusedPendingTeam{}}
-			for _, p := range pending {
-				desc = append(desc, fmt.Sprintf("%q(offline=%v)", p.Team, p.Offline))
-				refused.Pending = append(refused.Pending, protocol.RevealRefusedPendingTeam{Team: p.Team, Offline: p.Offline})
-			}
-			if !revealPayload.Force {
-				server.LogWarn(game.LogComponentApp, "ARDOISE_REVEAL_REFUSED client=%s type=%s pending=[%s]", incoming.ClientID, clientType, strings.Join(desc, ","))
-				if rm, err := protocol.NewMessage(protocol.ActionRevealRefused, refused); err == nil {
-					a.wsHub.SendToClient(incoming.ClientID, rm)
-				}
-				break
-			}
-			server.LogWarn(game.LogComponentApp, "ARDOISE_REVEAL_FORCED client=%s type=%s pending=[%s]", incoming.ClientID, clientType, strings.Join(desc, ","))
-		}
 		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
 		answer := a.engine.Reveal()
 		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11
@@ -1562,20 +1494,11 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionReboot:
 		server.LogInfo(game.LogComponentApp, "Reboot requested from web client")
 
-	case protocol.ActionTeamPointsBatch:
-		a.handleTeamPointsBatch(incoming.ClientID, msg)
-
-	case protocol.ActionRoundsUpdate:
-		a.handleRoundsUpdate(incoming.ClientID, msg)
-
-	case protocol.ActionBumperPointsBatch:
-		a.handleBumperPointsBatch(incoming.ClientID, msg)
-
 	case protocol.ActionBumperPoints:
-		a.handleBumperPoints(msg, updateSender{incoming.ClientID, clientType})
+		a.handleBumperPoints(msg)
 
 	case protocol.ActionTeamPoints:
-		a.handleTeamPoints(msg, updateSender{incoming.ClientID, clientType})
+		a.handleTeamPoints(msg)
 
 	case protocol.ActionSetCreditPoints:
 		a.handleSetCreditPoints(msg)
@@ -1646,7 +1569,7 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		a.handleHideQRCode()
 
 	case protocol.ActionEntracteSet:
-		a.handleEntracteSet(msg, updateSender{incoming.ClientID, clientType})
+		a.handleEntracteSet(msg)
 
 	case protocol.ActionUpdateEntracteConfig:
 		a.handleUpdateEntracteConfig(msg)
@@ -1663,14 +1586,35 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionArdoiseInput:
 		a.handleArdoiseInput(incoming.ClientID, msg)
 
-	case protocol.ActionArdoiseFinal:
-		a.handleArdoiseFinal(incoming.ClientID, msg)
-
-	case protocol.ActionClientTrace:
-		a.handleClientTrace(incoming.ClientID, clientType, msg)
-
 	case protocol.ActionNewGame:
-		a.handleNewGame(incoming.ClientID, msg)
+		a.logger.Info(game.LogComponentEngine, "NEW_GAME — reset scores, history, statuses")
+		purgedPlayerIDs := a.engine.InitGame()
+		// #123 B3 — a fresh game invalidates any eviction context left over
+		// from before it (e.g. an individual PLAYER_REMOVED from a prior game
+		// session), so clear the registry first. Fresh GAME_RESET entries for
+		// THIS purge are recorded right after, so a player who was offline at
+		// the moment of the purge still learns the true reason on return.
+		a.evictionRegistry.Reset()
+		// #120 — Notify each purged VJoueur individually, BEFORE the general
+		// broadcasts below, so its client learns the authoritative reason first
+		// instead of deducing removal from the roster it's about to receive via
+		// broadcastUpdate (same ordering rule as handleDeleteBumper).
+		if len(purgedPlayerIDs) > 0 {
+			evictedPayload := protocol.PlayerEvictedPayload{Reason: "GAME_RESET"}
+			evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, evictedPayload)
+			for _, playerID := range purgedPlayerIDs {
+				a.wsHub.SendToPlayerID(playerID, evictedMsg)
+				a.evictionRegistry.Record(playerID, "GAME_RESET")
+			}
+		}
+		a.broadcastQuestions() // push refreshed AVAILABLE statuses to all clients
+		a.broadcastUpdate()
+		// InitGame purges the whole VJoueur roster (fix R1 follow-up) — refresh
+		// the enrollment counter so clients don't show a stale VirtualPlayerCount.
+		a.broadcastEnrollmentUpdate()
+		a.broadcastNextQuestion()           // #155/#156 B5 — no current question after NEW_GAME, clears anim's preview
+		a.resetCreditPointsForQuestion(nil) // code review MAJEUR-1 — no current question, nothing to credit
+		a.broadcastAwardedTeams()           // #170 — InitGame resets history, every lock is released
 
 	case protocol.ActionUpdateQuizMeta:
 		var payload protocol.QuizMetaPayload
@@ -2011,102 +1955,7 @@ func (a *App) notifyEvictedVirtualPlayers(newBumpers map[string]*game.Bumper) {
 	}
 }
 
-// parseNewGameOptions applies the NEW_GAME defaults rule (#243): no recognised
-// field at all = v11.1 behaviour; otherwise absent fields are false.
-func parseNewGameOptions(raw json.RawMessage) game.NewGameOptions {
-	var p protocol.NewGamePayload
-	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &p)
-	}
-	if p.PurgeScores == nil && p.PurgePlayers == nil && p.PurgeTeams == nil && p.ResetQuestions == nil {
-		return game.DefaultNewGameOptions()
-	}
-	val := func(b *bool) bool { return b != nil && *b }
-	return game.NewGameOptions{
-		PurgeScores: val(p.PurgeScores), PurgePlayers: val(p.PurgePlayers),
-		PurgeTeams: val(p.PurgeTeams), ResetQuestions: val(p.ResetQuestions),
-	}
-}
-
-func newGameOptionsLog(o game.NewGameOptions) string {
-	var on []string
-	for _, kv := range []struct {
-		name string
-		v    bool
-	}{{"scores", o.PurgeScores}, {"players", o.PurgePlayers}, {"teams", o.PurgeTeams}, {"questions", o.ResetQuestions}} {
-		if kv.v {
-			on = append(on, kv.name)
-		}
-	}
-	return "[" + strings.Join(on, ",") + "]"
-}
-
-// handleNewGame runs NEW_GAME with its optional purges (#243).
-func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
-	opts := parseNewGameOptions(msg.Msg)
-
-	// Forbidden combination: players purged without scores. Nothing is applied.
-	if opts.PurgePlayers && !opts.PurgeScores {
-		server.LogWarn(game.LogComponentApp, "NEW_GAME_REFUSED client=%s options=%s reason=PLAYERS_REQUIRE_SCORES", clientID, newGameOptionsLog(opts))
-		if rm, err := protocol.NewMessage(protocol.ActionNewGameRefused, protocol.NewGameRefusedPayload{Reason: "PLAYERS_REQUIRE_SCORES"}); err == nil && clientID != "" {
-			a.wsHub.SendToClient(clientID, rm)
-		}
-		return
-	}
-
-	a.logger.Info(game.LogComponentEngine, "NEW_GAME options=%s", newGameOptionsLog(opts))
-	if rel, ok := a.engine.CloseLaunchLock(clientID, "new_game"); ok { // applied NEW_GAME of the owner lifts the lock
-		a.logLaunchLockReleased(clientID, rel)
-	}
-	res := a.engine.InitGameWith(opts) // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
-	a.questionSound().Stop()           // the question sound ends with the question
-	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
-		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, logToken(res.QuestionBefore))
-
-	// #123 B3 — a fresh game invalidates any eviction context left over from
-	// before it, so clear the registry first; fresh GAME_RESET entries follow.
-	a.evictionRegistry.Reset()
-	// #120 — notify each purged VJoueur individually BEFORE the general
-	// broadcasts, so it learns the authoritative reason first.
-	if len(res.PurgedPlayerIDs) > 0 {
-		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "GAME_RESET"})
-		for _, playerID := range res.PurgedPlayerIDs {
-			a.wsHub.SendToPlayerID(playerID, evictedMsg)
-			a.evictionRegistry.Record(playerID, "GAME_RESET")
-		}
-	}
-	// Purged VJoueurs were just told (PLAYER_EVICTED); now unbind their
-	// connections so they can no longer act for a bumper that is gone (#246 invariant).
-	for _, playerID := range res.PurgedPlayerIDs {
-		a.wsHub.UnbindPlayerID(playerID)
-	}
-	a.broadcastQuestions() // refreshed AVAILABLE statuses
-	a.broadcastUpdate()
-	a.broadcastEnrollmentUpdate()
-	a.broadcastNextQuestion()
-	a.resetCreditPointsForQuestion(nil)
-	a.broadcastAwardedTeams()
-	// Every applied NEW_GAME: LED state and room ambiance follow the reset.
-	a.sendLEDSetAllBuzzers()
-	a.ambiance().NotifyState()
-	if opts.PurgeTeams {
-		a.updateBroadcasterFrequency()
-	}
-}
-
-// updateSender identifies the client behind an UPDATE/FULL (optional: internal
-// callers and legacy tests pass none; a refusal is then only logged).
-type updateSender struct {
-	ClientID   string
-	ClientType server.ClientType
-}
-
-func (a *App) handleFullUpdate(msg *protocol.Message, senders ...updateSender) {
-	var sender updateSender
-	if len(senders) > 0 {
-		sender = senders[0]
-	}
-	clientID, clientType := sender.ClientID, sender.ClientType
+func (a *App) handleFullUpdate(msg *protocol.Message) {
 	var data struct {
 		Teams   map[string]*game.Team   `json:"teams"`
 		Bumpers map[string]*game.Bumper `json:"bumpers"`
@@ -2119,63 +1968,13 @@ func (a *App) handleFullUpdate(msg *protocol.Message, senders ...updateSender) {
 
 	// Only update if data is provided (don't overwrite with nil)
 	if data.Teams != nil {
-		// #249: current roster, to detect removed keys (rename or deletion).
-		before := a.engine.GetTeamsAndBumpersSnapshot()
-		var removed, added []string
-		for k := range before.Teams {
-			if _, ok := data.Teams[k]; !ok {
-				removed = append(removed, k)
-			}
-		}
-		for k := range data.Teams {
-			if _, ok := before.Teams[k]; !ok {
-				added = append(added, k)
-			}
-		}
-		sort.Strings(removed)
-		sort.Strings(added)
-
-		if len(removed) > 0 && a.engine.TeamsLocked() {
-			// Atomic refusal: neither teams nor bumpers are applied.
-			st := a.engine.GetState()
-			qid := ""
-			if st.Question != nil {
-				qid = st.Question.ID
-			}
-			server.LogWarn(game.LogComponentApp, "TEAMS_CHANGE_REFUSED client=%s teams=%s phase=%s question=%s",
-				clientID, logValue(removed), st.Phase, logToken(qid))
-			if clientID != "" {
-				if rm, err := protocol.NewMessage(protocol.ActionTeamsUpdateRefused, protocol.TeamsUpdateRefusedPayload{Reason: "TEAMS_LOCKED_DURING_QUESTION", Teams: removed}); err == nil {
-					a.wsHub.SendToClient(clientID, rm)
-				}
-				a.sendStateToClient(clientID, clientType)
-			}
-			return
-		}
-
-		renames := detectTeamRenames(before, removed, added, data.Bumpers)
 		a.engine.SetTeams(data.Teams)
-		renamedOld := map[string]bool{}
-		for oldKey, newKey := range renames {
-			renamedOld[oldKey] = true
-			a.engine.RenameTeamState(oldKey, newKey)
-		}
-		for _, r := range removed {
-			if !renamedOld[r] {
-				a.engine.PurgeTeamState(r)
-			}
-		}
-		if len(renames) > 0 || len(removed) > 0 {
-			// #249: credits may have moved (rename) or been invalidated (TEAM_DELETED).
-			defer a.broadcastAwardedTeams()
-		}
 	}
 	if data.Bumpers != nil {
 		// #123 B1 — notify BEFORE replacing the roster, same ordering rule as
 		// handleDeleteBumper: the client must learn the authoritative reason
 		// before it receives an UPDATE broadcast that no longer contains it.
 		a.notifyEvictedVirtualPlayers(data.Bumpers)
-		a.enforceUniqueVirtualNames(data.Bumpers)
 		a.engine.SetBumpers(data.Bumpers)
 		// Bumpers were replaced — recompute broadcaster frequency.
 		a.updateBroadcasterFrequency()
@@ -2186,87 +1985,9 @@ func (a *App) handleFullUpdate(msg *protocol.Message, senders ...updateSender) {
 	a.ambiance().NotifyState()
 }
 
-// detectTeamRenames recognises renames in a teams update (#249): a removed key r
-// and a new key a, in the same message, with the players of r now assigned to a
-// (bumpers whose TEAM moves from r to a). A removed team without players cannot
-// be matched and is treated as a deletion followed by an addition.
-func detectTeamRenames(before game.TeamsAndBumpers, removed, added []string, newBumpers map[string]*game.Bumper) map[string]string {
-	renames := map[string]string{}
-	if len(removed) == 0 || len(added) == 0 || newBumpers == nil {
-		return renames
-	}
-	isAdded := map[string]bool{}
-	for _, a := range added {
-		isAdded[a] = true
-	}
-	taken := map[string]bool{}
-	for _, r := range removed {
-		target, n := "", 0
-		consistent := true
-		for id, ob := range before.Bumpers {
-			if ob == nil || ob.Team != r {
-				continue
-			}
-			n++
-			nb := newBumpers[id]
-			if nb == nil || !isAdded[nb.Team] || (target != "" && nb.Team != target) {
-				consistent = false
-				break
-			}
-			target = nb.Team
-		}
-		if consistent && n > 0 && !taken[target] {
-			renames[r] = target
-			taken[target] = true
-		}
-	}
-	return renames
-}
-
-// enforceUniqueVirtualNames keeps VJoueur names unique (case-insensitive, trimmed)
-// when the admin replaces the roster (#246 B-ID). A VJoueur whose incoming name is
-// already held by another VJoueur gets its current server-side name back; the
-// holder is the bumper keeping its name unchanged (or the first one in ID order).
-func (a *App) enforceUniqueVirtualNames(incoming map[string]*game.Bumper) {
-	norm := func(n string) string { return strings.ToLower(strings.TrimSpace(n)) }
-	ids := make([]string, 0, len(incoming))
-	for id, b := range incoming {
-		if b != nil && b.IsVirtual {
-			ids = append(ids, id)
-		}
-	}
-	sort.Strings(ids)
-	holders := make(map[string]string)
-	var changed []string
-	for _, id := range ids {
-		cur := a.engine.GetBumper(id)
-		if cur != nil && norm(cur.Name) == norm(incoming[id].Name) {
-			if _, taken := holders[norm(incoming[id].Name)]; !taken {
-				holders[norm(incoming[id].Name)] = id
-			}
-		} else {
-			changed = append(changed, id)
-		}
-	}
-	for _, id := range changed {
-		key := norm(incoming[id].Name)
-		if holder, taken := holders[key]; taken {
-			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_DUPLICATE_NAME id=%s name=%q holder_id=%s", id, incoming[id].Name, holder)
-			if cur := a.engine.GetBumper(id); cur != nil {
-				incoming[id].Name = cur.Name
-			} else {
-				// New VJoueur entry whose name is already taken: rejected.
-				delete(incoming, id)
-			}
-			continue
-		}
-		holders[key] = id
-	}
-}
-
-func (a *App) handleUpdate(msg *protocol.Message, senders ...updateSender) {
+func (a *App) handleUpdate(msg *protocol.Message) {
 	// Similar to FULL but partial update
-	a.handleFullUpdate(msg, senders...)
+	a.handleFullUpdate(msg)
 }
 
 func (a *App) handlePoints(msg *protocol.Message) {
@@ -2313,13 +2034,7 @@ func (a *App) handleReady(msg *protocol.Message) {
 	}
 
 	a.logger.Info(game.LogComponentEngine, "READY question=%s", payload.Question)
-	// #245: ROUND_CONTEXT of the question being selected, set BEFORE Ready() so that the
-	// UPDATE its state change broadcasts already carries it.
-	a.engine.SetRoundContext(computeRoundContext(a.orderedQuestions(), a.currentRounds(), payload.Question))
 	a.engine.Ready(payload.Question, question)
-	if st := a.engine.GetState(); st.Question == nil || st.Question.ID != payload.Question {
-		a.refreshRoundContext() // Ready() refused or selected another question: keep the context truthful
-	}
 	a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
 	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
 	// question selection is one of the "quatre moments" — Ready() just
@@ -2370,13 +2085,11 @@ func (a *App) loadQuestion(id string) *game.Question {
 
 	// Set default POINTS_TARGET if not present
 	if q.PointsTarget == "" {
-		q.PointsTarget = game.DefaultPointsTarget(string(q.Type))
-	}
-	// #254: QCM_WRONG_PENALTY is a QCM-only field; absent / invalid = 0.
-	if q.Type == game.QuestionTypeQCM {
-		q.QCMWrongPenalty = game.WrongPenalty(game.NormalizeQCMWrongPenalty(int(q.QCMWrongPenalty))) // tolerant decoding already applied; defensive
-	} else {
-		q.QCMWrongPenalty = 0
+		if q.Type == game.QuestionTypeQCM {
+			q.PointsTarget = game.PointsTargetTeam
+		} else {
+			q.PointsTarget = game.PointsTargetPlayer
+		}
 	}
 
 	return &q
@@ -2461,13 +2174,7 @@ func (a *App) handleDelete(msg *protocol.Message) {
 	if questionsDir == "" {
 		questionsDir = "./data/files/questions"
 	}
-	questionPath, pathErr := server.SafeQuestionPath(questionsDir, payload.ID)
-	if pathErr != nil {
-		server.LogWarn(game.LogComponentApp, "DELETE: refused: %v", pathErr)
-		return
-	}
-	server.QuestionFilesMu.Lock()
-	defer server.QuestionFilesMu.Unlock()
+	questionPath := filepath.Join(questionsDir, payload.ID)
 
 	server.LogInfo(game.LogComponentApp, "DELETE question: path=%s", questionPath)
 
@@ -2482,7 +2189,6 @@ func (a *App) handleDelete(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentApp, "Deleted question: %s (path: %s)", payload.ID, questionPath)
 	}
 
-	a.refreshRoundContext() // #245: positions / totals of the rounds changed
 	// Broadcast updated questions list (like ESP32: sendQuestions())
 	a.broadcastQuestions()
 	a.broadcastNextQuestion() // #155/#156 B5 — a deleted question may have been "next"
@@ -2624,18 +2330,9 @@ func (a *App) handleReorderQuestions(msg *protocol.Message) {
 		questionsDir = "./data/files/questions"
 	}
 
-	// #245 review (mineur 3): one critical section against ROUNDS_UPDATE / uploads / DELETE.
-	server.QuestionFilesMu.Lock()
-	defer server.QuestionFilesMu.Unlock()
-
 	// Update ORDER field in each question.json
 	for order, questionID := range payload.Order {
-		questionDir, pathErr := server.SafeQuestionPath(questionsDir, questionID)
-		if pathErr != nil {
-			server.LogWarn(game.LogComponentApp, "REORDER: ignoring invalid question id %q: %v", questionID, pathErr)
-			continue
-		}
-		questionFile := filepath.Join(questionDir, "question.json")
+		questionFile := filepath.Join(questionsDir, questionID, "question.json")
 
 		// Read existing question
 		data, err := os.ReadFile(questionFile)
@@ -3272,27 +2969,19 @@ func (a *App) handleRafaleSetTeams(msg *protocol.Message) {
 	a.broadcastUpdate()
 }
 
-func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender) {
+func (a *App) handleBumperPoints(msg *protocol.Message) {
 	var payload protocol.BumperPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to parse BUMPER_POINTS: %v", err)
 		return
 	}
 
-	if ignoreAdminZeroPoints(senders, payload.Points) {
-		return
-	}
-	display := a.effectiveDisplay(senders, protocol.ActionBumperPoints, fmt.Sprintf("%q:%+d", payload.ID, payload.Points), payload.Display)
-	newScore := a.engine.UpdateBumperScoreDisplay(payload.ID, payload.Points, display)
+	newScore := a.engine.UpdateBumperScore(payload.ID, payload.Points)
 	server.LogInfo(game.LogComponentEngine, "Bumper points: id=%s, points=%+d, newScore=%d",
 		payload.ID, payload.Points, newScore)
-	if !display {
-		a.logHiddenCorrection(senders, protocol.ActionBumperPoints, fmt.Sprintf("%q:%+d", payload.ID, payload.Points))
-	}
 
-	// Send COMET LED effect to the team that received points (if points > 0).
-	// DISPLAY:false (#252) = hidden correction: no public effect on any channel.
-	if display && payload.Points > 0 {
+	// Send COMET LED effect to the team that received points (if points > 0)
+	if payload.Points > 0 {
 		teamID := ""
 		if b := a.engine.GetBumper(payload.ID); b != nil {
 			teamID = b.Team
@@ -3357,7 +3046,6 @@ func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender)
 		PlayerColor:         playerColor,
 		Points:              payload.Points,
 		CategoryBreakdown:   categoryBreakdown,
-		Display:             hiddenFlag(display),
 	}
 	a.engine.AddGameEvent(event)
 
@@ -3365,276 +3053,19 @@ func (a *App) handleBumperPoints(msg *protocol.Message, senders ...updateSender)
 	a.broadcastAwardedTeams() // #170 — this credit may lock the team for other animateurs
 }
 
-// effectiveDisplay resolves the DISPLAY field of TEAM_POINTS / BUMPER_POINTS (#252
-// review): DISPLAY:false (hidden correction) is honoured ONLY for an admin sender.
-// From the animateur, or any caller without an admin sender, the field is ignored
-// (treated as visible: normal public effects and "already credited" lock) and a
-// WARN is journalised.
-func (a *App) effectiveDisplay(senders []updateSender, action, targets string, requested *bool) bool {
-	if requested == nil || *requested {
-		return true
-	}
-	if len(senders) > 0 && senders[0].ClientType == server.ClientTypeAdmin {
-		return false
-	}
-	clientID, clientType := "", "internal"
-	if len(senders) > 0 {
-		clientID = senders[0].ClientID
-		if senders[0].ClientType != "" {
-			clientType = string(senders[0].ClientType)
-		}
-	}
-	question := ""
-	if st := a.engine.GetState(); st.Question != nil {
-		question = st.Question.ID
-	}
-	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN_REFUSED client=%q type=%q action=%q targets=[%s] question=%q",
-		clientID, clientType, action, targets, question)
-	return true
-}
-
-// ignoreAdminZeroPoints implements "POINTS = 0 ignored" (#252, contracts §TEAM_POINTS
-// "Montant") for the ADMIN's Scores page only: a zero amount from the admin changes
-// nothing, writes no history entry and triggers no UPDATE. The animateur's "0 pt"
-// refusal gesture (#170, a valid "already credited" lock) is deliberately kept: it
-// comes from /anim (or from internal callers without a sender).
-func ignoreAdminZeroPoints(senders []updateSender, points int) bool {
-	return points == 0 && len(senders) > 0 && senders[0].ClientType == server.ClientTypeAdmin
-}
-
-// hiddenFlag returns the GameEvent.Display value: nil when shown, &false when hidden.
-func hiddenFlag(display bool) *bool {
-	if display {
-		return nil
-	}
-	f := false
-	return &f
-}
-
-// logHiddenCorrection journals a DISPLAY:false score change (#252), values quoted.
-func (a *App) logHiddenCorrection(senders []updateSender, action, targets string) {
-	clientID := ""
-	if len(senders) > 0 {
-		clientID = senders[0].ClientID
-	}
-	question := ""
-	if st := a.engine.GetState(); st.Question != nil {
-		question = st.Question.ID
-	}
-	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN client=%s action=%s targets=[%s] question=%s", clientID, action, targets, logToken(question))
-}
-
-// handleTeamPointsBatch applies a grouped team award (#244/#251): complete
-// validation first, one atomic block, grouped public effects, result to the sender.
-func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
-	var p protocol.TeamPointsBatchPayload
-	reply := func(res protocol.TeamPointsBatchResultPayload) {
-		if clientID == "" {
-			return
-		}
-		if res.Applied == nil {
-			res.Applied = []protocol.TeamPointsBatchApplied{}
-		}
-		if res.Skipped == nil {
-			res.Skipped = []protocol.TeamPointsBatchSkipped{}
-		}
-		if res.Teams == nil {
-			res.Teams = []string{}
-		}
-		if rm, err := protocol.NewMessage(protocol.ActionTeamPointsBatchResult, res); err == nil {
-			a.wsHub.SendToClient(clientID, rm)
-		}
-	}
-	refuse := func(reason string, teams []string) {
-		server.LogWarn(game.LogComponentApp, "TEAM_POINTS_BATCH_REFUSED client=%s question=%s reason=%s teams=%s",
-			clientID, logToken(p.QuestionID), reason, logValue(teams))
-		reply(protocol.TeamPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Teams: teams})
-	}
-	if err := json.Unmarshal(msg.Msg, &p); err != nil {
-		refuse("INVALID_ENTRIES", nil)
-		return
-	}
-
-	entries := make([]game.TeamPointsEntry, 0, len(p.Entries))
-	for _, en := range p.Entries {
-		var n float64
-		valid := json.Unmarshal(en.Points, &n) == nil && n == math.Trunc(n) && math.Abs(n) <= 1e9
-		entries = append(entries, game.TeamPointsEntry{Team: en.Team, Points: int(n), Invalid: !valid})
-	}
-
-	state := a.engine.GetState()
-	var meta game.CategoryMeta
-	if state.Question != nil {
-		meta.Name, meta.ImageURL, meta.Color = a.httpServer.ResolveCategoryMeta(string(state.Question.Category))
-	}
-	batchDisplay := p.Display == nil || *p.Display
-	res := a.engine.ApplyTeamPointsBatch(p.QuestionID, entries, meta, batchDisplay)
-	if res.Status == "REFUSED" {
-		refuse(res.Reason, res.Unknown)
-		return
-	}
-
-	out := protocol.TeamPointsBatchResultPayload{Status: "APPLIED", QuestionID: p.QuestionID}
-	applied, skipped := make([]string, 0, len(res.Applied)), make([]string, 0, len(res.Skipped))
-	for _, en := range res.Applied {
-		out.Applied = append(out.Applied, protocol.TeamPointsBatchApplied{Team: en.Team, Points: en.Points})
-		applied = append(applied, fmt.Sprintf("%q:%+d", en.Team, en.Points))
-	}
-	for _, sk := range res.Skipped {
-		out.Skipped = append(out.Skipped, protocol.TeamPointsBatchSkipped{Team: sk.Team, Reason: sk.Reason})
-		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.Team, sk.Reason))
-	}
-	server.LogInfo(game.LogComponentApp, "TEAM_POINTS_BATCH client=%s question=%s applied=[%s] skipped=[%s]",
-		clientID, logToken(p.QuestionID), strings.Join(applied, ","), strings.Join(skipped, ","))
-
-	if !batchDisplay {
-		a.logHiddenCorrection([]updateSender{{ClientID: clientID}}, protocol.ActionTeamPointsBatch, strings.Join(applied, ","))
-	}
-	// Grouped public effects, once for the whole batch; DISPLAY:false (#252) = none.
-	if batchDisplay {
-		var positive []string
-		best, bestTeam := 0, ""
-		for _, en := range res.Applied {
-			if en.Points > 0 {
-				positive = append(positive, en.Team)
-				a.sendLEDSetComet(en.Team)
-				if en.Points > best { // strict: first of the ties wins
-					best, bestTeam = en.Points, en.Team
-				}
-			}
-		}
-		if len(positive) > 0 {
-			a.ambiance().NotifyPulse(lighting.KindScore, positive, best, lighting.ScorePulseDuration)
-			a.notifySound(audio.CueGagne)
-			a.startScoreFlash(bestTeam, best)
-		}
-	}
-
-	reply(out)
-	if len(res.Applied) > 0 {
-		a.broadcastUpdate()
-		a.broadcastAwardedTeams()
-	}
-}
-
-// handleBumperPointsBatch applies a grouped player-level award (#254): the twin of
-// handleTeamPointsBatch (validation first, one atomic block, grouped public effects).
-func (a *App) handleBumperPointsBatch(clientID string, msg *protocol.Message) {
-	var p protocol.BumperPointsBatchPayload
-	reply := func(res protocol.BumperPointsBatchResultPayload) {
-		if clientID == "" {
-			return
-		}
-		if res.Applied == nil {
-			res.Applied = []protocol.BumperPointsBatchEntry{}
-		}
-		if res.Skipped == nil {
-			res.Skipped = []protocol.BumperPointsBatchSkip{}
-		}
-		if res.Players == nil {
-			res.Players = []string{}
-		}
-		if rm, err := protocol.NewMessage(protocol.ActionBumperPointsBatchResult, res); err == nil {
-			a.wsHub.SendToClient(clientID, rm)
-		}
-	}
-	refuse := func(reason string, players []string) {
-		server.LogWarn(game.LogComponentApp, "BUMPER_POINTS_BATCH_REFUSED client=%q question=%q reason=%q players=%s",
-			clientID, p.QuestionID, reason, logValue(players))
-		reply(protocol.BumperPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Players: players})
-	}
-	if err := json.Unmarshal(msg.Msg, &p); err != nil {
-		refuse("INVALID_ENTRIES", nil)
-		return
-	}
-	entries := make([]game.BumperPointsEntry, 0, len(p.Entries))
-	for _, en := range p.Entries {
-		var n float64
-		valid := json.Unmarshal(en.Points, &n) == nil && n == math.Trunc(n) && math.Abs(n) <= 1e9
-		entries = append(entries, game.BumperPointsEntry{ID: en.ID, Points: int(n), Invalid: !valid})
-	}
-	state := a.engine.GetState()
-	var meta game.CategoryMeta
-	if state.Question != nil {
-		meta.Name, meta.ImageURL, meta.Color = a.httpServer.ResolveCategoryMeta(string(state.Question.Category))
-	}
-	display := p.Display == nil || *p.Display // DISPLAY:false: this action is admin-only already
-	res := a.engine.ApplyBumperPointsBatch(p.QuestionID, entries, meta, display)
-	if res.Status == "REFUSED" {
-		refuse(res.Reason, res.Unknown)
-		return
-	}
-
-	out := protocol.BumperPointsBatchResultPayload{Status: "APPLIED", QuestionID: p.QuestionID}
-	applied, skipped := make([]string, 0, len(res.Applied)), make([]string, 0, len(res.Skipped))
-	for _, en := range res.Applied {
-		out.Applied = append(out.Applied, protocol.BumperPointsBatchEntry{ID: en.ID, Points: en.Points})
-		applied = append(applied, fmt.Sprintf("%q:%+d", en.ID, en.Points))
-	}
-	for _, sk := range res.Skipped {
-		out.Skipped = append(out.Skipped, protocol.BumperPointsBatchSkip{ID: sk.ID, Reason: sk.Reason})
-		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.ID, sk.Reason))
-	}
-	server.LogInfo(game.LogComponentApp, "BUMPER_POINTS_BATCH client=%q question=%q applied=[%s] skipped=[%s]",
-		clientID, p.QuestionID, strings.Join(applied, ","), strings.Join(skipped, ","))
-	if !display {
-		a.logHiddenCorrection([]updateSender{{ClientID: clientID}}, protocol.ActionBumperPointsBatch, strings.Join(applied, ","))
-	}
-
-	// Grouped public effects, once, per team of the players credited positively.
-	if display {
-		var teams []string
-		seen := map[string]bool{}
-		best, bestTeam := 0, ""
-		for _, en := range res.Applied {
-			team := res.AppliedTeams[en.ID]
-			if en.Points <= 0 || team == "" {
-				continue
-			}
-			if !seen[team] {
-				seen[team] = true
-				teams = append(teams, team)
-				a.sendLEDSetComet(team)
-			}
-			if en.Points > best {
-				best, bestTeam = en.Points, team
-			}
-		}
-		if len(teams) > 0 {
-			a.ambiance().NotifyPulse(lighting.KindScore, teams, best, lighting.ScorePulseDuration)
-			a.notifySound(audio.CueGagne)
-			a.startScoreFlash(bestTeam, best)
-		}
-	}
-
-	reply(out)
-	if len(res.Applied) > 0 {
-		a.broadcastUpdate()
-		a.broadcastAwardedTeams()
-	}
-}
-
-func (a *App) handleTeamPoints(msg *protocol.Message, senders ...updateSender) {
+func (a *App) handleTeamPoints(msg *protocol.Message) {
 	var payload protocol.TeamPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to parse TEAM_POINTS: %v", err)
 		return
 	}
 
-	if ignoreAdminZeroPoints(senders, payload.Points) {
-		return
-	}
-	display := a.effectiveDisplay(senders, protocol.ActionTeamPoints, fmt.Sprintf("%q:%+d", payload.Team, payload.Points), payload.Display)
-	newScore := a.engine.UpdateTeamScoreDisplay(payload.Team, payload.Points, display)
+	newScore := a.engine.UpdateTeamScore(payload.Team, payload.Points)
 	server.LogInfo(game.LogComponentEngine, "Team points: team=%s, points=%+d, newScore=%d",
 		payload.Team, payload.Points, newScore)
-	if !display {
-		a.logHiddenCorrection(senders, protocol.ActionTeamPoints, fmt.Sprintf("%q:%+d", payload.Team, payload.Points))
-	}
 
-	// Send COMET LED effect to the team that received points (if points > 0).
-	// DISPLAY:false (#252) = hidden correction: no public effect on any channel.
-	if display && payload.Points > 0 {
+	// Send COMET LED effect to the team that received points (if points > 0)
+	if payload.Points > 0 {
 		a.sendLEDSetComet(payload.Team)
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.Team}, payload.Points, lighting.ScorePulseDuration)
 		a.notifySound(audio.CueGagne)
@@ -3678,7 +3109,6 @@ func (a *App) handleTeamPoints(msg *protocol.Message, senders ...updateSender) {
 		TeamColor:           teamColor,
 		Points:              payload.Points,
 		CategoryBreakdown:   categoryBreakdown,
-		Display:             hiddenFlag(display),
 	}
 	a.engine.AddGameEvent(event)
 
@@ -3762,20 +3192,10 @@ func (a *App) handleHideQRCode() {
 // logged by the engine itself and produces no broadcast, matching the
 // existing allow-list rejection convention (contract: "ne renvoie rien au
 // client").
-func (a *App) handleEntracteSet(msg *protocol.Message, senders ...updateSender) {
+func (a *App) handleEntracteSet(msg *protocol.Message) {
 	var payload protocol.EntracteSetPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Error parsing ENTRACTE_SET payload: %v", err)
-		return
-	}
-
-	var sender updateSender
-	if len(senders) > 0 {
-		sender = senders[0]
-	}
-	// #245: the animateur may END an entracte but never start one (admin only).
-	if payload.Active && sender.ClientType == server.ClientTypeAnim {
-		server.LogWarn(game.LogComponentApp, "ENTRACTE_SET_ANIM_ACTIVATE_REFUSED client=%q", sender.ClientID)
 		return
 	}
 
@@ -3801,11 +3221,6 @@ func (a *App) handleEntracteSet(msg *protocol.Message, senders ...updateSender) 
 		a.ambiance().NotifyState()
 		a.notifySound(audio.CueEntracteFin)
 		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
-		programmed := false
-		if st := a.engine.GetState(); st.Question != nil && st.Question.Type == game.QuestionTypeEntracte {
-			programmed = true
-		}
-		server.LogInfo(game.LogComponentApp, "ENTRACTE_ENDED client=%q type=%q programmed=%v", sender.ClientID, string(sender.ClientType), programmed)
 	}
 
 	a.broadcastUpdate()
@@ -3920,52 +3335,6 @@ func (a *App) handleSetVirtualPlayerLimit(msg *protocol.Message) {
 	a.broadcastEnrollmentUpdate()
 }
 
-// isBoundPlayerAction lists the player actions that require a connection bound
-// to a bumper (#246 B-ID). ARDOISE_FINAL joins in Batch 2.
-func isBoundPlayerAction(action string) bool {
-	switch action {
-	case protocol.ActionArdoiseInput, protocol.ActionArdoiseFinal, protocol.ActionVPlayerQCMAnswer,
-		protocol.ActionButton, protocol.ActionFlipMemoryCard:
-		return true
-	}
-	return false
-}
-
-// checkPlayerBinding verifies that the vplayer connection clientID is bound to a
-// bumper and that the message does not claim another identity (#246 B-ID,
-// contracts/websocket-actions.md "Liaison connexion ↔ bumper"). On success the
-// bound ID is written to msg.ID so the handlers' 3-pass resolution
-// (payload.ID → msg.ID → clientID) lands on the bound bumper even when the
-// payload carries no ID. Refusals are silent for the client and logged WARN.
-func (a *App) checkPlayerBinding(clientID, readTimeBoundID string, msg *protocol.Message) bool {
-	boundID, connected := a.wsHub.ClientBinding(clientID)
-	if !connected {
-		// The connection closed between the read and the dispatch (last message
-		// before a disconnect): trust the binding observed at read time.
-		boundID = readTimeBoundID
-	}
-	if boundID == "" {
-		var p struct {
-			ID string `json:"ID"`
-		}
-		_ = json.Unmarshal(msg.Msg, &p)
-		server.LogWarn(game.LogComponentWebSocket, "PLAYER_ACTION_UNBOUND action=%s client=%s payload_id=%q", msg.Action, clientID, p.ID)
-		return false
-	}
-	var p struct {
-		ID string `json:"ID"`
-	}
-	_ = json.Unmarshal(msg.Msg, &p)
-	for _, claimed := range []string{p.ID, msg.ID} {
-		if claimed != "" && claimed != boundID {
-			server.LogWarn(game.LogComponentWebSocket, "PLAYER_FOREIGN_ID action=%s client=%s bound_id=%q payload_id=%q", msg.Action, clientID, boundID, claimed)
-			return false
-		}
-	}
-	msg.ID = boundID
-	return true
-}
-
 func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	var payload protocol.PlayerConnectPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
@@ -4016,13 +3385,6 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	// PLAYER_CONNECTED — empty on first enrollment), not the name: a name match
 	// with no resolvable ID is REJECTED (NAME_TAKEN), never merged/replaced —
 	// see engine.ReconnectOrCreateVirtualPlayer for the full decision matrix.
-	if payload.ID != "" {
-		if existing := a.engine.GetBumper(payload.ID); existing != nil && existing.IsVirtual &&
-			strings.TrimSpace(existing.Name) != playerName {
-			// #246: case 1 no longer renames; the server name stays authoritative.
-			server.LogWarn(game.LogComponentWebSocket, "VPLAYER_NAME_MISMATCH id=%s server_name=%q client_name=%q client=%s", payload.ID, existing.Name, playerName, clientID)
-		}
-	}
 	bumperID, bumper, reconnected, err := a.engine.ReconnectOrCreateVirtualPlayer(payload.ID, playerName)
 	if err != nil {
 		// Send rejection to this client only
@@ -4052,16 +3414,7 @@ func (a *App) handlePlayerConnect(clientID string, msg *protocol.Message) {
 	a.wsHub.SendToClient(clientID, connectedMsg)
 
 	// Link this WS client to its VJoueur bumper ID (used by OnPlayerDisconnected / anti-zombie guard)
-	// #246 B-ID: one bound connection per bumper — the most recent wins, the
-	// older one is told (DUPLICATE_SESSION) and unbound.
-	a.diagMu.Lock()
-	delete(a.ardoiseSq, clientID) // #246 review MAJEUR-2: SEQ restarts at 1 on every (re)binding
-	a.diagMu.Unlock()
-	for _, oldClient := range a.wsHub.BindClientPlayerID(clientID, bumperID) {
-		server.LogWarn(game.LogComponentWebSocket, "VPLAYER_DUPLICATE_SESSION id=%s old_client=%s new_client=%s", bumperID, oldClient, clientID)
-		evictedMsg, _ := protocol.NewMessage(protocol.ActionPlayerEvicted, protocol.PlayerEvictedPayload{Reason: "DUPLICATE_SESSION"})
-		a.wsHub.SendToClient(oldClient, evictedMsg)
-	}
+	a.wsHub.SetClientPlayerID(clientID, bumperID)
 
 	if reconnected {
 		server.LogInfo(game.LogComponentWebSocket, "PLAYER_CONNECT: reconnecting existing player: id=%s, name=%s", bumperID, bumper.Name)
@@ -4230,47 +3583,13 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 		return
 	}
 
-	// #246 length cap (contract "Longueur maximale du texte ARDOISE"): ignored
-	// whole, never truncated; the last valid answer stays.
-	if n := utf8.RuneCountInString(payload.Text); n > ardoiseMaxTextRunes {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_INPUT_TOO_LONG bumper=%s client=%s len=%d", bumperID, clientID, n)
-		return
-	}
-
-	// #246 SEQ (diagnostic, contracts/websocket-actions.md ARDOISE_INPUT step 4):
-	// only evaluated for a message that would be applied (phase + type guards).
-	st := a.engine.GetState()
-	phase := st.Phase
-	questionID := ""
-	if st.Question != nil {
-		questionID = st.Question.ID
-	}
-	acceptable := phase == game.PhaseStarted && st.Question != nil && st.Question.Type == game.QuestionTypeArdoise
-	if acceptable && payload.Seq > 0 {
-		if !a.checkArdoiseSeq(clientID, bumperID, questionID, payload.Seq) {
-			return
-		}
-	}
-
-	prevText := a.engine.GetArdoiseText(teamName)
-
 	// SetArdoiseAnswer applies phase + type guards and returns false if conditions not met
 	if !a.engine.SetArdoiseAnswer(teamName, payload.Text) {
 		server.LogWarn(game.LogComponentApp, "ARDOISE_INPUT: ignored (phase=%s or question type mismatch)", a.engine.GetPhase())
 		return
 	}
 
-	// #246: the per-keystroke line is DEBUG (it flooded the 1000-entry buffer).
-	server.LogDebug(game.LogComponentApp, "ARDOISE_INPUT: team=%s text=%q (from client %s)", teamName, payload.Text, clientID)
-
-	if prevText != "" && payload.Text == "" {
-		connAge := int64(-1)
-		if ms, ok := a.wsHub.ClientAgeMs(clientID); ok {
-			connAge = ms
-		}
-		server.LogWarn(game.LogComponentApp, "ARDOISE_CLEARED team=%q bumper=%s client=%s conn_age_ms=%d prev_len=%d seq=%d reason=%s question=%q phase=%s",
-			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, logToken(payload.Reason), questionID, phase)
-	}
+	server.LogInfo(game.LogComponentApp, "ARDOISE_INPUT: team=%s text=%q (from client %s)", teamName, payload.Text, clientID)
 
 	// #129 T1.5: admin only — so admin sees answers build up in real-time.
 	// TV excluded: PlayerDisplay.jsx:2427 only renders ARDOISE_ANSWERS in
@@ -4291,334 +3610,6 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 	// payload). Flushed immediately on every phase change (OnStateChange) so
 	// the last keystrokes before REVEAL are never held back — CA5/CA6.
 	a.ardoiseCoalescer.Trigger()
-}
-
-// ardoiseMaxTextRunes caps ARDOISE_INPUT.TEXT / ARDOISE_FINAL.TEXT, counted in
-// characters (runes), not bytes (#246 review Batch 2, mineur B).
-const ardoiseMaxTextRunes = 2000
-
-// handleArdoiseFinal processes the final ARDOISE text of a bound tablette
-// (v11.2, #246): validates, records, acknowledges ONLY the sender (no text) and
-// pushes an immediate (non-coalesced) UPDATE to admin + anim.
-func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
-	var p protocol.ArdoiseFinalPayload
-	if err := json.Unmarshal(msg.Msg, &p); err != nil {
-		server.LogError(game.LogComponentApp, "ARDOISE_FINAL: error parsing payload: %v", err)
-		return
-	}
-	bumperID := msg.ID // set to the bound bumper by checkPlayerBinding
-	bumper := a.engine.GetBumper(bumperID)
-	if bumper == nil || bumper.Team == "" {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL: bumper %q unknown or without team (client %s)", bumperID, clientID)
-		return
-	}
-	if n := utf8.RuneCountInString(p.Text); n > ardoiseMaxTextRunes {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s client=%s len=%d question_id=%s", bumperID, clientID, n, logToken(p.QuestionID))
-		return
-	}
-	st := a.engine.GetState()
-	currentQ := ""
-	if st.Question != nil {
-		currentQ = st.Question.ID
-	}
-	switch a.engine.SetArdoiseFinal(bumper.Team, p.QuestionID, p.Text, p.Hash) {
-	case game.ArdoiseFinalStale:
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_STALE bumper=%s question_id=%q current_question=%q phase=%s", bumperID, p.QuestionID, currentQ, st.Phase)
-		return
-	case game.ArdoiseFinalHashMismatch:
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, logToken(p.Hash), game.ArdoiseHash(p.Text), len(p.Text))
-		return
-	case game.ArdoiseFinalAccepted:
-		server.LogInfo(game.LogComponentApp, "ARDOISE_FINAL_RECEIVED team=%q bumper=%s hash=%s len=%d", bumper.Team, bumperID, p.Hash, len(p.Text))
-		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
-	}
-	// Accepted or duplicate: acknowledge the sender only, never with text (#128).
-	if ack, err := protocol.NewMessage(protocol.ActionArdoiseFinalAck, protocol.ArdoiseFinalAckPayload{QuestionID: p.QuestionID, Hash: p.Hash}); err == nil {
-		a.wsHub.SendToClient(clientID, ack)
-	}
-}
-
-// ardoiseSeqState tracks the last applied ARDOISE_INPUT SEQ for one connection
-// and one question (#246).
-type ardoiseSeqState struct {
-	question string
-	last     int
-}
-
-// onClientClosed runs when any web connection closes: drops its diagnostic state
-// and releases the "Lancer la partie" lock if this connection owned it (#253).
-func (a *App) onClientClosed(clientID string) {
-	a.forgetClientDiag(clientID)
-	if rel, ok := a.engine.CloseLaunchLock(clientID, "disconnect"); ok {
-		a.logLaunchLockReleased(clientID, rel)
-		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
-	}
-}
-
-func (a *App) logLaunchLockReleased(clientID string, rel game.LaunchLockReleased) {
-	if rel.Reason == "disconnect" || rel.Reason == "expired" {
-		server.LogWarn(game.LogComponentApp, "LAUNCH_LOCK_RELEASED client=%q reason=%q held_ms=%d", rel.Owner, rel.Reason, rel.HeldMs)
-		return
-	}
-	server.LogInfo(game.LogComponentApp, "LAUNCH_LOCK_RELEASED client=%q reason=%q held_ms=%d", rel.Owner, rel.Reason, rel.HeldMs)
-}
-
-// suspendedDuringLaunch lists the actions refused for EVERY sender while the
-// launch lock is held (contracts/websocket-actions.md §LAUNCH_LOCK).
-var suspendedDuringLaunch = map[string]bool{
-	// conduct
-	protocol.ActionReady: true, protocol.ActionForceReady: true, protocol.ActionStart: true,
-	protocol.ActionStop: true, protocol.ActionPause: true, protocol.ActionContinue: true,
-	protocol.ActionReveal: true, protocol.ActionRemote: true, protocol.ActionQuestionSound: true,
-	protocol.ActionMemorySetTeams: true, protocol.ActionMotionSetTeams: true,
-	protocol.ActionMotionSelect: true, protocol.ActionMotionFlip: true, protocol.ActionMotionStopTimer: true,
-	protocol.ActionMotionReveal: true, protocol.ActionMotionDone: true, protocol.ActionRafaleValidate: true,
-	protocol.ActionRafaleInvalidate: true, protocol.ActionRafaleSetTeams: true, protocol.ActionFlipMemoryCard: true,
-	// points
-	protocol.ActionTeamPoints: true, protocol.ActionBumperPoints: true, protocol.ActionTeamPointsBatch: true,
-	protocol.ActionBumperPointsBatch: true, protocol.ActionSetCreditPoints: true,
-	// teams and players
-	protocol.ActionUpdate: true, protocol.ActionFull: true, protocol.ActionDeleteBumper: true,
-	protocol.ActionReleaseBumperName: true,
-	// contract 03d4ee3e: score/state resets and QR display are suspended too
-	// (SET_VIRTUAL_PLAYER_LIMIT and REBOOT stay allowed)
-	protocol.ActionPoints: true, protocol.ActionRAZ: true, protocol.ActionShowQRCode: true,
-	protocol.ActionHideQRCode: true, protocol.ActionReset: true,
-}
-
-// launchGate refuses, with a targeted answer, the actions suspended while the
-// "Lancer la partie" popup is open. It returns true when the message was handled
-// (refused) and must not be dispatched (#253).
-func (a *App) launchGate(clientID string, clientType server.ClientType, msg *protocol.Message) bool {
-	owner := a.engine.LaunchLockOwner()
-	if owner == "" {
-		return false
-	}
-	switch {
-	case msg.Action == protocol.ActionNewGame:
-		if clientID == owner {
-			return false
-		}
-		server.LogWarn(game.LogComponentApp, "ACTION_REFUSED_LAUNCH client=%q type=%q action=%q", clientID, string(clientType), msg.Action)
-		if rm, err := protocol.NewMessage(protocol.ActionNewGameRefused, protocol.NewGameRefusedPayload{Reason: "LAUNCH_IN_PROGRESS"}); err == nil {
-			a.wsHub.SendToClient(clientID, rm)
-		}
-		return true
-	case msg.Action == protocol.ActionEntracteSet:
-		// Only ENTRACTE_SET{ACTIVE:true} is game conduct; leaving an entracte is never blocked (#245).
-		var p struct {
-			Active *bool `json:"ACTIVE"`
-		}
-		if json.Unmarshal(msg.Msg, &p) == nil && p.Active != nil && !*p.Active {
-			return false // only an explicit ACTIVE:false (leaving the entracte) is allowed
-		}
-		server.LogWarn(game.LogComponentApp, "ACTION_REFUSED_LAUNCH client=%q type=%q action=%q", clientID, string(clientType), msg.Action)
-		if rm, err := protocol.NewMessage(protocol.ActionActionRefused, protocol.ActionRefusedPayload{Action: msg.Action, Reason: "LAUNCH_IN_PROGRESS"}); err == nil {
-			a.wsHub.SendToClient(clientID, rm)
-		}
-		return true
-	case suspendedDuringLaunch[msg.Action]:
-		// A tablette's own flip is a player action, not game conduct.
-		if msg.Action == protocol.ActionFlipMemoryCard && clientType == server.ClientTypeVPlayer {
-			return false
-		}
-		server.LogWarn(game.LogComponentApp, "ACTION_REFUSED_LAUNCH client=%q type=%q action=%q", clientID, string(clientType), msg.Action)
-		if rm, err := protocol.NewMessage(protocol.ActionActionRefused, protocol.ActionRefusedPayload{Action: msg.Action, Reason: "LAUNCH_IN_PROGRESS"}); err == nil {
-			a.wsHub.SendToClient(clientID, rm)
-		}
-		return true
-	}
-	return false
-}
-
-// handleLaunchLock processes LAUNCH_LOCK {STATE: OPEN|CLOSE} from an admin (#253).
-func (a *App) handleLaunchLock(clientID string, msg *protocol.Message) {
-	var p protocol.LaunchLockPayload
-	if err := json.Unmarshal(msg.Msg, &p); err != nil {
-		return
-	}
-	switch p.State {
-	case "OPEN":
-		renewed, reason := a.engine.OpenLaunchLock(clientID, func(rel game.LaunchLockReleased) {
-			a.logLaunchLockReleased(clientID, rel)
-			a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
-		})
-		if reason != "" {
-			server.LogWarn(game.LogComponentApp, "LAUNCH_LOCK_REFUSED client=%q reason=%q", clientID, reason)
-			if rm, err := protocol.NewMessage(protocol.ActionLaunchLockRefused, protocol.LaunchLockRefusedPayload{Reason: reason}); err == nil {
-				a.wsHub.SendToClient(clientID, rm)
-			}
-			return
-		}
-		if !renewed {
-			server.LogInfo(game.LogComponentApp, "LAUNCH_LOCK_OPENED client=%q", clientID)
-		}
-		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
-	case "CLOSE":
-		if rel, ok := a.engine.CloseLaunchLock(clientID, "close"); ok {
-			a.logLaunchLockReleased(clientID, rel)
-			a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
-		} else {
-			server.LogInfo(game.LogComponentApp, "LAUNCH_LOCK close ignored (not the owner) client=%q", clientID)
-		}
-	}
-}
-
-// forgetClientDiag drops the per-connection diagnostic state of a closed
-// connection (#246 review mineur 1).
-func (a *App) forgetClientDiag(clientID string) {
-	a.diagMu.Lock()
-	delete(a.ardoiseSq, clientID)
-	delete(a.traceLim, clientID)
-	a.diagMu.Unlock()
-}
-
-// checkArdoiseSeq returns false when the message is stale (SEQ <= last applied,
-// same connection and question) and must be ignored; a gap is only logged.
-func (a *App) checkArdoiseSeq(clientID, bumperID, questionID string, seq int) bool {
-	a.diagMu.Lock()
-	defer a.diagMu.Unlock()
-	if a.ardoiseSq == nil {
-		a.ardoiseSq = make(map[string]*ardoiseSeqState)
-	}
-	st := a.ardoiseSq[clientID]
-	if st == nil || st.question != questionID {
-		st = &ardoiseSeqState{question: questionID}
-		a.ardoiseSq[clientID] = st
-	}
-	if seq <= st.last {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_STALE bumper=%s client=%s last=%d got=%d", bumperID, clientID, st.last, seq)
-		return false
-	}
-	if seq != st.last+1 {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_GAP bumper=%s client=%s expected=%d got=%d", bumperID, clientID, st.last+1, seq)
-	}
-	st.last = seq
-	return true
-}
-
-// traceLimiter caps CLIENT_TRACE at 10 messages/s per connection and emits one
-// CLIENT_TRACE_THROTTLED warning per minute (#246).
-type traceLimiter struct {
-	windowStart time.Time
-	count       int
-	lastWarn    time.Time
-}
-
-const (
-	clientTraceMaxPerSecond       = 10
-	clientTraceGlobalMaxPerSecond = 50
-	clientTraceMaxBytes           = 1024
-)
-
-// logToken renders a client-supplied string for a log line: bare when it is a
-// harmless token, quoted (%q, control characters escaped) otherwise, so a
-// client can never inject a forged log line (#246 review MAJEUR-1).
-func logToken(s string) string {
-	if s == "" {
-		return `""`
-	}
-	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == ':' || r == '-') {
-			return fmt.Sprintf("%q", s)
-		}
-	}
-	return s
-}
-
-// logValue renders a CLIENT_TRACE DETAIL value: scalars through logToken /
-// number / bool formatting, anything else re-serialised as quoted JSON.
-func logValue(v interface{}) string {
-	switch x := v.(type) {
-	case string:
-		return logToken(x)
-	case bool, float64, int, int64, nil:
-		return fmt.Sprint(x)
-	default:
-		b, _ := json.Marshal(x)
-		return fmt.Sprintf("%q", string(b))
-	}
-}
-
-// handleClientTrace journalises a client diagnostic event. No game effect.
-func (a *App) handleClientTrace(clientID string, clientType server.ClientType, msg *protocol.Message) {
-	if len(msg.Msg) > clientTraceMaxBytes {
-		return
-	}
-	a.diagMu.Lock()
-	if a.traceLim == nil {
-		a.traceLim = make(map[string]*traceLimiter)
-	}
-	lim := a.traceLim[clientID]
-	if lim == nil {
-		lim = &traceLimiter{}
-		a.traceLim[clientID] = lim
-	}
-	now := time.Now()
-	if now.Sub(lim.windowStart) >= time.Second {
-		lim.windowStart, lim.count = now, 0
-	}
-	lim.count++
-	over := lim.count > clientTraceMaxPerSecond
-	warn := over && now.Sub(lim.lastWarn) >= time.Minute
-	if warn {
-		lim.lastWarn = now
-	}
-	// Global ceiling, all connections together (#246 review mineur 5).
-	globalOver, globalWarn := false, false
-	if !over {
-		if now.Sub(a.traceGlobal.windowStart) >= time.Second {
-			a.traceGlobal.windowStart, a.traceGlobal.count = now, 0
-		}
-		a.traceGlobal.count++
-		if a.traceGlobal.count > clientTraceGlobalMaxPerSecond {
-			globalOver = true
-			if now.Sub(a.traceGlobal.lastWarn) >= time.Minute {
-				a.traceGlobal.lastWarn = now
-				globalWarn = true
-			}
-		}
-	}
-	a.diagMu.Unlock()
-	if globalOver {
-		if globalWarn {
-			server.LogWarn(game.LogComponentWebSocket, "CLIENT_TRACE_THROTTLED scope=global limit=%d/s", clientTraceGlobalMaxPerSecond)
-		}
-		return
-	}
-	if over {
-		if warn {
-			server.LogWarn(game.LogComponentWebSocket, "CLIENT_TRACE_THROTTLED client=%s type=%s", clientID, clientType)
-		}
-		return
-	}
-
-	var p protocol.ClientTracePayload
-	if err := json.Unmarshal(msg.Msg, &p); err != nil || p.Kind == "" {
-		return
-	}
-	playerID, _ := a.wsHub.GetClientPlayerID(clientID)
-	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, logToken(playerID), logToken(p.Kind), p.At)
-	if p.Team != "" {
-		line += fmt.Sprintf(" team=%q", p.Team)
-	}
-	if p.PrevLen != 0 {
-		line += fmt.Sprintf(" prev_len=%d", p.PrevLen)
-	}
-	if p.CauseAction != "" {
-		line += fmt.Sprintf(" cause_action=%s", logToken(p.CauseAction))
-	}
-	if len(p.Detail) > 0 {
-		keys := make([]string, 0, len(p.Detail))
-		for k := range p.Detail {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			line += fmt.Sprintf(" detail.%s=%s", logToken(k), logValue(p.Detail[k]))
-		}
-	}
-	server.LogWarn(game.LogComponentWebSocket, "%s", line)
 }
 
 // ardoiseCoalesceWindow is the ≤150ms ceiling #129 T2.1/CA5 sets on how long
@@ -4747,15 +3738,10 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 	// reduced path (broadcastUpdateToVPlayers -> buildVPlayerPayloads) is
 	// untouched by this, it strips its own extra field list separately
 	// (stripVPlayerHiddenGameFields, below).
-	var dataWeb, dataTV []byte
+	var dataWeb []byte
 	if targetTV || targetAnim {
 		if data, err := msg.SerializeForWebClient(); err == nil {
 			dataWeb = data
-		}
-	}
-	if targetTV {
-		if data, err := msg.SerializeForTV(); err == nil { // #253: no LAUNCH_LOCK on the TV
-			dataTV = data
 		}
 	}
 	var dataVPlayer []byte
@@ -4764,8 +3750,8 @@ func (a *App) broadcastUpdateTo(types ...server.ClientType) {
 			dataVPlayer = data
 		}
 	}
-	if targetTV && dataTV != nil {
-		a.wsHub.BroadcastRawToTypes(dataTV, server.ClientTypeTV)
+	if targetTV && dataWeb != nil {
+		a.wsHub.BroadcastRawToTypes(dataWeb, server.ClientTypeTV)
 	}
 	if targetVPlayer && dataVPlayer != nil {
 		a.broadcastUpdateToVPlayers(msg, dataVPlayer)
@@ -4887,17 +3873,8 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 	var phaseProbe struct {
 		Phase string `json:"PHASE"`
 	}
-	if err := json.Unmarshal(envelope["GAME"], &phaseProbe); err != nil {
-		return nil, false
-	}
-	// #258: COUNTDOWN / STARTED / PAUSED are "answers open" phases too: each tablette
-	// gets its OWN frame (own team intact, other teams neutralised), built by the
-	// reference serializer. STOPPED and later keep the shared frame (fallback).
-	switch phaseProbe.Phase {
-	case string(game.PhaseCountdown), string(game.PhaseStarted), string(game.PhasePaused):
-		return buildVPlayerOpenPhasePayloads(msg, envelope, phaseProbe.Phase, recipients)
-	case string(game.PhasePrepare), string(game.PhaseReady):
-	default:
+	if err := json.Unmarshal(envelope["GAME"], &phaseProbe); err != nil ||
+		(phaseProbe.Phase != string(game.PhasePrepare) && phaseProbe.Phase != string(game.PhaseReady)) {
 		return nil, false
 	}
 
@@ -4948,25 +3925,6 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 		return nil, false
 	}
 	teamsRaw := envelope["teams"]
-	// #258: shared parts of the PREPARE/READY frame go through the same single filter,
-	// once per fan-out (recipient "": every team's answer/time fields neutral — they are
-	// zero after Ready() anyway; QUESTION.QCM_CORRECT / ANSWER removed).
-	var gameNode, teamsNode interface{}
-	if json.Unmarshal(gameRaw, &gameNode) == nil {
-		root := map[string]interface{}{"GAME": gameNode}
-		if teamsRaw != nil && json.Unmarshal(teamsRaw, &teamsNode) == nil {
-			root["teams"] = teamsNode
-		}
-		protocol.FilterVPlayerAnswers(root, "", phaseProbe.Phase)
-		if g, err := json.Marshal(root["GAME"]); err == nil {
-			gameRaw = g
-		}
-		if _, ok := root["teams"]; ok {
-			if t, err := json.Marshal(root["teams"]); err == nil {
-				teamsRaw = t
-			}
-		}
-	}
 
 	payloads := make(map[string][]byte, len(recipients))
 	for _, r := range recipients {
@@ -4995,110 +3953,6 @@ func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerReci
 	}
 
 	return payloads, true
-}
-
-// buildVPlayerOpenPhasePayloads builds the per-recipient frames of an UPDATE sent while
-// answers are open (COUNTDOWN / STARTED / PAUSED, #258): GAME is filtered and
-// serialised ONCE (QCM_CORRECT/ANSWER removed, admin/vplayer-hidden fields stripped);
-// bumpers and teams — small — are decoded, filtered for the recipient
-// (protocol.FilterVPlayerAnswers: own team intact, other teams neutral) and
-// serialised per tablette. Frame layout is the one of buildVPlayerMessageBytes.
-func buildVPlayerOpenPhasePayloads(msg *protocol.Message, envelope map[string]json.RawMessage, phase string, recipients []server.VPlayerRecipient) (map[string][]byte, bool) {
-	actionJSON, err := json.Marshal(msg.Action)
-	if err != nil {
-		return nil, false
-	}
-	var versionJSON []byte
-	if msg.Version != "" {
-		if versionJSON, err = json.Marshal(msg.Version); err != nil {
-			return nil, false
-		}
-	}
-	gameRaw, err := stripVPlayerHiddenGameFields(envelope["GAME"])
-	if err != nil {
-		return nil, false
-	}
-	var gameNode interface{}
-	if json.Unmarshal(gameRaw, &gameNode) != nil {
-		return nil, false
-	}
-	gameRoot := map[string]interface{}{"GAME": gameNode}
-	protocol.FilterVPlayerAnswers(gameRoot, "", phase)
-	if gameRaw, err = json.Marshal(gameRoot["GAME"]); err != nil {
-		return nil, false
-	}
-
-	// bumpers / teams decoded ONCE (admin-only bumper fields stripped once); each
-	// recipient works on a deep copy it is free to neutralise in place.
-	var bumpersAny, teamsAny interface{}
-	if json.Unmarshal(envelope["bumpers"], &bumpersAny) != nil {
-		return nil, false
-	}
-	baseBumpers, ok := bumpersAny.(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-	for _, b := range baseBumpers {
-		if bumper, ok := b.(map[string]interface{}); ok {
-			for _, field := range protocol.AdminOnlyBumperFields {
-				delete(bumper, field)
-			}
-		}
-	}
-	hasTeams := envelope["teams"] != nil && json.Unmarshal(envelope["teams"], &teamsAny) == nil
-
-	payloads := make(map[string][]byte, len(recipients))
-	for _, r := range recipients {
-		if _, present := baseBumpers[r.PlayerID]; !present {
-			continue // evicted since GetGameJSON(): SendRawToVPlayers falls back to the shared frame
-		}
-		root := map[string]interface{}{"bumpers": deepCopyJSON(baseBumpers)}
-		if hasTeams {
-			root["teams"] = deepCopyJSON(teamsAny)
-		}
-		protocol.FilterVPlayerAnswers(root, r.PlayerID, phase)
-		bumpersRaw, err1 := json.Marshal(root["bumpers"])
-		teamsRaw, err2 := json.Marshal(root["teams"])
-		if err1 != nil || err2 != nil {
-			continue
-		}
-		buf := make([]byte, 0, len(gameRaw)+len(bumpersRaw)+len(teamsRaw)+len(actionJSON)+len(versionJSON)+64)
-		buf = append(buf, `{"ACTION":`...)
-		buf = append(buf, actionJSON...)
-		if len(versionJSON) > 0 {
-			buf = append(buf, `,"VERSION":`...)
-			buf = append(buf, versionJSON...)
-		}
-		buf = append(buf, `,"MSG":{"GAME":`...)
-		buf = append(buf, gameRaw...)
-		buf = append(buf, `,"bumpers":`...)
-		buf = append(buf, bumpersRaw...)
-		buf = append(buf, `,"teams":`...)
-		buf = append(buf, teamsRaw...)
-		buf = append(buf, `}}`...)
-		payloads[r.PlayerID] = buf
-	}
-	return payloads, true
-}
-
-// deepCopyJSON copies a decoded JSON tree (maps, slices, scalars).
-func deepCopyJSON(v interface{}) interface{} {
-	switch x := v.(type) {
-	case map[string]interface{}:
-		out := make(map[string]interface{}, len(x))
-		for k, e := range x {
-			out[k] = deepCopyJSON(e)
-		}
-		return out
-	case []interface{}:
-		out := make([]interface{}, len(x))
-		for i, e := range x {
-			out[i] = deepCopyJSON(e)
-		}
-		return out
-	default:
-		return v
-	}
 }
 
 // stripVPlayerHiddenGameFields returns a copy of the "GAME" node JSON with
@@ -5514,9 +4368,7 @@ func (a *App) teamNameToRGB(teamName string) [3]int {
 // sendLEDSet sends a LED_SET message to a specific buzzer and stores the state for reconnect.
 // A MSG_ID is attached so the buzzer can ACK receipt (v3.8.0 ACK protocol).
 func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
-	a.ledStateMu.Lock()
 	a.bumperLEDState[mac] = payload
-	a.ledStateMu.Unlock()
 	if !a.buzzerHub.IsClientConnected(mac) {
 		// #109 Phase 2 (D4): a LED_SET that should have reached this buzzer while
 		// it's disconnected counts as a lost message (orange -> red).
@@ -5576,9 +4428,7 @@ func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) {
 
 // resendLEDOnReconnect re-sends the last known LED state to a buzzer that just reconnected (HELLO).
 func (a *App) resendLEDOnReconnect(mac string) {
-	a.ledStateMu.RLock()
 	payload, ok := a.bumperLEDState[mac]
-	a.ledStateMu.RUnlock()
 	if !ok {
 		// No stored state — derive from current game state
 		a.sendLEDSetForBuzzer(mac)
@@ -5783,7 +4633,7 @@ func (a *App) sendLEDSetForBuzzerQCMReveal(mac string, bumper *game.Bumper, stat
 	if state.Question != nil {
 		correctAnswer = state.Question.QCMCorrect
 	}
-	myAnswerCorrect := correctAnswer != "" && string(bumper.AnsweredColor) == correctAnswer // #255: answered, not assigned
+	myAnswerCorrect := correctAnswer != "" && string(bumper.AnswerColor) == correctAnswer
 
 	if !myAnswerCorrect {
 		// Wrong answer (or no correct defined): DIM 25%
@@ -6696,14 +5546,6 @@ func (a *App) broadcastQuestions() {
 func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	server.LogDebug(game.LogComponentWebSocket, "Sending state to client: %s (type=%s)", clientID, clientType)
 
-	// #253: HELLO_ACK first (admin and anim only): the client learns its own
-	// connection ID before the state, to recognise itself as LAUNCH_LOCK owner.
-	if clientType == server.ClientTypeAdmin || clientType == server.ClientTypeAnim {
-		if ack, err := protocol.NewMessage(protocol.ActionHelloAck, protocol.HelloAckPayload{ClientID: clientID}); err == nil {
-			a.wsHub.SendToClient(clientID, ack)
-		}
-	}
-
 	// Send UPDATE with game state — serialized per clientType (#154 E1),
 	// mirroring broadcastUpdateTo's existing Admin/TV+VPlayer split. Note:
 	// unlike broadcastUpdateTo's VPlayer path in PREPARE/READY, this never
@@ -6718,14 +5560,6 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 	var err error
 	if clientType == server.ClientTypeAdmin {
 		updateData, err = updateMsg.SerializeForAdmin()
-	} else if clientType == server.ClientTypeTV {
-		updateData, err = updateMsg.SerializeForTV()
-	} else if clientType == server.ClientTypeVPlayer {
-		// #258: the initial state of a tablette goes through the VJoueur serializer
-		// (filtered per recipient; unbound connection = everything neutral). It also
-		// applies the §6 removals (ARDOISE_ANSWERS, LAUNCH_LOCK) the old path missed.
-		playerID, _ := a.wsHub.GetClientPlayerID(clientID)
-		updateData, err = updateMsg.SerializeForVPlayer(playerID)
 	} else {
 		updateData, err = updateMsg.SerializeForWebClient()
 	}
@@ -6733,12 +5567,6 @@ func (a *App) sendStateToClient(clientID string, clientType server.ClientType) {
 		server.LogError(game.LogComponentWebSocket, "sendStateToClient: failed to serialize UPDATE for %s: %v", clientID, err)
 	} else {
 		a.wsHub.SendRawToClient(clientID, updateData)
-	}
-
-	// v11.2 (#244/#251): the admin learns the already-credited teams at HELLO
-	// (sent early: the rest of the admin block depends on more wiring).
-	if clientType == server.ClientTypeAdmin {
-		a.wsHub.SendToClient(clientID, a.buildAwardedTeamsMessage())
 	}
 
 	// Send QUESTIONS with statuses — admin only (#155/#156 B4).
@@ -7024,22 +5852,41 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 		currentID = state.Question.ID
 	}
 
-	// #245: THE play order (group "Sans manche" first, then the rounds, then ORDER / ID),
-	// and — v11.2 — ENTRACTE entries are no longer skipped: "à suivre" proposes them.
-	rounds := a.currentRounds()
-	raw := make([]map[string]interface{}, 0)
-	for _, q := range a.loadQuestions() {
-		raw = append(raw, q)
+	type sortableQuestion struct {
+		id    string
+		order int
+		data  map[string]interface{}
 	}
-	sorted := server.OrderQuestions(raw, rounds)
+
+	raw := a.loadQuestions()
+	sorted := make([]sortableQuestion, 0, len(raw))
+	for _, q := range raw {
+		id, ok := q["ID"].(string)
+		if !ok || id == "" {
+			continue // sortQuestionsByOrder filters out entries with no ID
+		}
+		order := 0
+		if orderRaw, present := q["ORDER"]; present {
+			switch v := orderRaw.(type) {
+			case float64:
+				order = int(v)
+			case string:
+				if n, err := strconv.Atoi(v); err == nil {
+					order = n
+				}
+			}
+		} else if n, err := strconv.Atoi(id); err == nil {
+			order = n
+		}
+		sorted = append(sorted, sortableQuestion{id: id, order: order, data: q})
+	}
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].order < sorted[j].order })
 
 	currentIndex := -1
-	currentRound := ""
 	if currentID != "" {
 		for i, sq := range sorted {
-			if sq.ID == currentID {
+			if sq.id == currentID {
 				currentIndex = i
-				currentRound = sq.RoundID
 				break
 			}
 		}
@@ -7052,23 +5899,24 @@ func (a *App) getNextQuestionPayload() *protocol.NextQuestionPayload {
 	totalQuestions := len(sorted)
 
 	for i := currentIndex + 1; i < len(sorted); i++ {
-		status := string(a.engine.GetQuestionStatus(sorted[i].ID))
+		status := string(a.engine.GetQuestionStatus(sorted[i].id))
 		if nextQuestionExcludedStatuses[status] {
 			continue
 		}
-		q := sorted[i].Data
+		q := sorted[i].data
+		// #214: an ENTRACTE entry is a pause, not "the next question" — never
+		// shown as the à-suivre preview (contract game-state.md §"Second
+		// déclencheur", "score, palmarès, à suivre"). Parity requirement
+		// with GamePage.jsx's own nextUnplayedQuestion (this function's own
+		// doc comment above) — dev-frontend mirrors the same exclusion
+		// client-side.
+		if qType, _ := q["TYPE"].(string); qType == string(game.QuestionTypeEntracte) {
+			continue
+		}
 		payload := &protocol.NextQuestionPayload{
-			ID:              sorted[i].ID,
+			ID:              sorted[i].id,
 			CurrentPosition: currentPosition,
 			TotalQuestions:  totalQuestions,
-			RoundID:         sorted[i].RoundID,
-			NewRound:        sorted[i].RoundID != currentRound,
-		}
-		for _, r := range rounds {
-			if r.ID == sorted[i].RoundID {
-				payload.RoundName = r.Name
-				break
-			}
 		}
 		if v, ok := q["QUESTION"].(string); ok {
 			payload.Question = v
@@ -7169,13 +6017,6 @@ func (a *App) handleSetCreditPoints(msg *protocol.Message) {
 	var payload protocol.CreditPointsPayload
 	if err := json.Unmarshal(msg.Msg, &payload); err != nil {
 		server.LogError(game.LogComponentApp, "Failed to parse SET_CREDIT_POINTS: %v", err)
-		return
-	}
-	// #254: a zero or negative amount (penalty) is never pushed to the animateur's
-	// tablets, which keep the last positive value (else their credit button would
-	// take points away instead of giving them).
-	if payload.Points <= 0 {
-		server.LogInfo(game.LogComponentApp, "SET_CREDIT_POINTS ignored: non-positive amount %d (tablets keep the last positive value)", payload.Points)
 		return
 	}
 	a.currentCreditPoints = payload.Points
@@ -7317,17 +6158,33 @@ func (a *App) handleRegieMessageClear(clientType server.ClientType) {
 //   - A zero-point event still produces (or adds to) an entry: a "0 pt"
 //     refusal is a real credit for locking purposes, never filtered out.
 func (a *App) getAwardedTeamsPayload() *protocol.AwardedTeamsPayload {
-	// One rule only: Engine.AwardedTeams (also used by the grouped award, #244/#251).
-	questionID, awarded := a.engine.AwardedTeams()
-	teams := make([]protocol.AwardedTeamEntry, 0, len(awarded))
-	for _, t := range awarded {
-		teams = append(teams, protocol.AwardedTeamEntry{Team: t.Team, Points: t.Points, Timestamp: t.Timestamp, TeamLevel: t.TeamLevel})
+	state := a.engine.GetState()
+	questionID := ""
+	if state.Question != nil {
+		questionID = state.Question.ID
 	}
-	players := make([]protocol.AwardedPlayerEntry, 0)
-	for _, p := range a.engine.AwardedPlayers() {
-		players = append(players, protocol.AwardedPlayerEntry{ID: p.ID, Team: p.Team, Points: p.Points, Timestamp: p.Timestamp})
+
+	teams := make([]protocol.AwardedTeamEntry, 0)
+	if questionID != "" {
+		index := make(map[string]int, 4) // TeamName -> its slot in teams
+		for _, event := range a.engine.GetHistory() {
+			if event.EventType != "POINTS_AWARDED" || event.QuestionID != questionID || event.Timestamp < state.GameTime {
+				continue
+			}
+			if i, ok := index[event.TeamName]; ok {
+				teams[i].Points += event.Points
+				continue
+			}
+			index[event.TeamName] = len(teams)
+			teams = append(teams, protocol.AwardedTeamEntry{
+				Team:      event.TeamName,
+				Points:    event.Points,
+				Timestamp: event.Timestamp,
+			})
+		}
 	}
-	return &protocol.AwardedTeamsPayload{QuestionID: questionID, Teams: teams, Players: players}
+
+	return &protocol.AwardedTeamsPayload{QuestionID: questionID, Teams: teams}
 }
 
 // buildAwardedTeamsMessage serializes getAwardedTeamsPayload's result into a
@@ -7347,8 +6204,7 @@ func (a *App) buildAwardedTeamsMessage() *protocol.Message {
 // history scan on every timer tick (same discipline, same reason, as
 // NEXT_QUESTION's own loadQuestions() restriction).
 func (a *App) broadcastAwardedTeams() {
-	// v11.2 (#244/#251): the admin also receives it (greys out already-credited teams).
-	a.wsHub.BroadcastToTypes(a.buildAwardedTeamsMessage(), server.ClientTypeAnim, server.ClientTypeAdmin)
+	a.wsHub.BroadcastToTypes(a.buildAwardedTeamsMessage(), server.ClientTypeAnim)
 }
 
 // startupPage describes one browser tab opened automatically at server startup.

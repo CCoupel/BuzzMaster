@@ -100,11 +100,11 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux
 - `server-go/internal/server/ack_manager.go` — registre ACK (v3.8.0)
 
 **Frontend React** :
-- `server-go/web/src/pages/GamePage.jsx` — contrôle admin jeu en cours
-- `server-go/web/src/pages/PlayerDisplay.jsx` — affichage TV (STATIQUE)
-- `server-go/web/src/pages/QuestionsPage.jsx` — éditeur Quiz/MEMOTION
-- `server-go/web/src/hooks/GameContext.jsx` — GameProvider + routing endpoint WS
-- `server-go/web/src/hooks/useWebSocket.js` — hook WebSocket avec paramètre `endpoint`
+- `web/src/pages/GamePage.jsx` — contrôle admin jeu en cours
+- `web/src/pages/PlayerDisplay.jsx` — affichage TV (STATIQUE)
+- `web/src/pages/QuestionsPage.jsx` — éditeur Quiz/MEMOTION
+- `web/src/hooks/GameContext.jsx` — GameProvider + routing endpoint WS
+- `web/src/hooks/useWebSocket.js` — hook WebSocket avec paramètre `endpoint`
 
 **Firmware BuzzClick** :
 - `src/BuzzClick/click_MAIN.cpp` — setup + loop
@@ -210,22 +210,6 @@ SendMessage({
 ```
 
 <!-- END TEAMLEADER_PROTOCOL -->
-
-## Suivi des états des issues
-
-- À **chaque** changement de phase d'un workflow, le teamleader met à jour les labels de **toutes** les issues suivies **avant** d'envoyer l'ordre suivant.
-- Transitions : dev → `EN COURS` (retirer PLANNING, EN REVIEW, EN QA, DONE) ; revue → `EN REVIEW` ; QA en parallèle → `EN QA` en gardant `EN REVIEW` ; QA validée et revue approuvée → `DONE` (retirer EN QA, EN REVIEW, EN COURS) ; retour en dev → `EN COURS` (retirer EN REVIEW, EN QA). Bugfix : pas de `PLANNING`.
-- Commande : `gh issue edit <n> --add-label "<L>" --remove-label "<L1>" --remove-label "<L2>"` (l'outil MCP `issue_write` n'est pas disponible).
-- Une issue n'est **jamais** fermée automatiquement (ni CI verte, ni QA) : la fermeture est une validation manuelle explicite de l'utilisateur. Si elle n'est pas validée, label `EN COURS`.
-- Table complète : `.claude/commands/context/CDP_WORKFLOWS.template.md`, section « Labels GitHub — Suivi de Phase ».
-
-## Branche courante et worktrees
-
-- La **branche courante du dépôt principal** est définie et changée **uniquement par le teamleader** (via l'utilisateur ou `/milestone`). Pendant un cycle, c'est `milestone/<version>`.
-- Les agents **commitent sur la branche courante**, avec des fichiers explicites (`git add <fichiers>`, jamais `git add -A`), et ne la changent **jamais**. Interdits dans le dépôt principal : `checkout`, `switch`, `reset --hard`, `clean`, `rebase`, `merge`, `stash`, détachement de HEAD.
-- Tout travail sur un autre état du code (red check, comparaison, reproduction) se fait dans un **`git worktree` jetable**, par **chemin absolu** (`git -C <worktree> …`, jamais `cd ../..`), supprimé ensuite. Avant chaque commande destructive, vérifier que le chemin n'est pas le dépôt principal.
-- Un agent qui constate que la branche courante a changé s'arrête et prévient le teamleader (`BLOQUE`).
-- Incident de référence : QA #253, 2026-10-11 (HEAD détaché quelques minutes, aucun commit perdu).
 
 ## Agents Disponibles
 

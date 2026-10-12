@@ -81,43 +81,6 @@ type Page =
 
 ---
 
-## `TEAMS_LOCKED` — liste des équipes verrouillée pendant une question (v11.2, #249)
-
-| Propriété | Type | Défaut | Notes |
-|-----------|------|--------|-------|
-| TEAMS_LOCKED | `boolean` | `false` | **Toujours sérialisé** (règle projet, pas d'`omitempty`). Diffusé à tous les clients web |
-
-- `true` **de la sélection d'une question** (`Ready()`, entrée en `PREPARE`) **jusqu'à la révélation de sa réponse** (`REVEALED`), à `false` en `REVEALED`, sur `NEW_GAME`/`InitGame` et au démarrage du serveur. Valeur tenue par un drapeau du moteur, **pas** déduite de la phase : `STOPPED` est aussi la phase de repos (démarrage du serveur, fin d'inscription).
-- Une question qui ne passe jamais par `REVEALED` (abandonnée) garde le verrou jusqu'à la sélection suivante, qui le repose, ou jusqu'à `NEW_GAME`.
-- Effet : tant qu'il vaut `true`, **aucune équipe existante ne peut être renommée ni supprimée** (refus serveur, `websocket-actions.md` §UPDATE) ; ajouter une équipe, changer sa couleur, affecter ou déplacer un joueur restent permis.
-- Raison : de nombreux états sont indexés par le **nom (clé) d'équipe**. **Liste fermée** (v11.2), reportée en entier sur la nouvelle clé lors d'un renommage permis (hors verrou, `REVEALED` compris) :
-  - **Maps dont la clé est l'équipe** : `ARDOISE_ANSWERS`, `MEMORY_TEAM_PAIRS`, `MEMORY_TEAM_ERRORS`, `RAFALE_TEAM_COUNTERS`, `RAFALE_TEAM_CATEGORY_COUNTERS`, `RAFALE_TEAM_BEST`, `RAFALE_TEAM_STREAK`, `RAFALE_TEAM_ERRORS`.
-  - **Maps dont la valeur est l'équipe** : `MEMORY_PAIR_OWNERS` (paire → équipe), `MEMOTION_CARD_TEAMS` (carte → équipe gagnante).
-  - **Listes d'équipes** : `MEMORY_PARTICIPATING_TEAMS`, `MEMOTION_PARTICIPATING_TEAMS`, `RAFALE_PARTICIPATING_TEAMS`.
-  - **Équipe courante** : `MEMORY_CURRENT_TEAM`, `MEMOTION_CURRENT_TEAM`, `RAFALE_CURRENT_TEAM` (les `*_CURRENT_TEAM_COLOR` ne changent pas).
-  - **Historique des points** (`GameEvent.TEAM_NAME`, toutes les entrées) : source d'`AWARDED_TEAMS`, ce qui conserve le verrou « déjà créditée » de la question révélée. **Exception — suppression d'équipe** : l'historique n'est ni effacé ni reporté ; un événement `TEAM_DELETED` y est ajouté et `AWARDED_TEAMS` ne compte pour une équipe que les points postérieurs à son dernier `TEAM_DELETED` (`websocket-actions.md` §UPDATE).
-  - Les joueurs (`bumpers[*].TEAM`) sont déplacés par le message de renommage lui-même. `MEMOTION_ACTIVE.STATE` ne contient aucune clé d'équipe : rien à reporter.
-  - Tout nouveau champ indexé par équipe ajouté à `GameState` **doit** rejoindre cette liste (revue).
-
-## `LAUNCH_LOCK` — popup « Lancer la partie » ouverte (v11.2, #253)
-
-| Propriété | Type | Défaut | Notes |
-|-----------|------|--------|-------|
-| LAUNCH_LOCK | `{ ACTIVE: boolean, OWNER: string, SINCE: number, EXPIRES_AT: number }` | `{ACTIVE: false, OWNER: "", SINCE: 0, EXPIRES_AT: 0}` | **Toujours sérialisé**. `OWNER` = `CLIENT_ID` de la connexion admin propriétaire, reçu par chaque client admin/anim dans `HELLO_ACK` (`websocket-actions.md` §HELLO) ; le client se reconnaît par `OWNER === CLIENT_ID` ; `SINCE`, `EXPIRES_AT` en millisecondes epoch. Diffusé aux clients `admin` et `anim`. Retiré des charges TV et VJoueur (aucun usage). Non persisté ; `ACTIVE: false` au démarrage du serveur |
-
-Règles complètes : `contracts/websocket-actions.md` §LAUNCH_LOCK.
-
-## `SCORE_CHANGE` — dernière modification de score (v11.2, #252)
-
-| Propriété | Type | Défaut | Notes |
-|-----------|------|--------|-------|
-| SCORE_CHANGE | `{ SEQ: number, DISPLAY: boolean, TEAMS: string[], PLAYERS: string[] }` | `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: []}` | **Toujours sérialisé**, listes jamais `null`. Diffusé à tous les clients web |
-
-- `SCORE_CHANGE` décrit la **dernière modification de score MANUELLE** (actions `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`). Les crédits **automatiques** du moteur (`UpdateScore`, par exemple MEMORY ou attribution automatique d'un type de jeu) **ne l'incrémentent pas** : leurs hausses de score restent animées comme aujourd'hui.
-- Mis à jour **à chaque** `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` appliqué : `SEQ` augmente de 1, `DISPLAY` = valeur de l'action (absent = `true`), `TEAMS` = équipes dont le score change, `PLAYERS` = joueurs (ID de bumper) dont le score change. Non persisté ; remis à zéro au démarrage et sur `NEW_GAME`.
-- **Règle d'affichage des écrans (TV, VJoueur, anim)** : quand un `UPDATE` apporte un nouveau `SCORE_CHANGE.SEQ` avec `DISPLAY = false`, les nouveaux scores des équipes et joueurs listés sont **pris comme référence sans animation**. Pas de « +X pts », pas de célébration, pas de surbrillance ni de montée de rang ; les chiffres du classement changent simplement. Avec `DISPLAY = true`, le comportement actuel est conservé.
-- Si un même `UPDATE` cumule une modification cachée et une visible (rare), seule la dernière (`SEQ` le plus grand) fait foi pour les équipes et joueurs qu'elle liste.
-
 ## Question en cours
 
 ```typescript
@@ -174,7 +137,6 @@ type QuestionStatus =
 | `QCM_HINT_THRESHOLD_2` | float64 | % temps pour 2e indice (défaut: 0.125) |
 | `QCM_PENALTY_1` | float64 | Multiplicateur après 1 indice (défaut: 0.67) |
 | `QCM_PENALTY_2` | float64 | Multiplicateur après 2 indices (défaut: 0.33) |
-| `QCM_WRONG_PENALTY` | int | *(v11.2, #254)* Pénalité de mauvaise réponse, de −100 à 0 ; **0 = aucune pénalité** ; absente ou invalide = 0 (`models.md`). Admin seulement en usage ; présente dans `QUESTION` comme les autres champs QCM |
 
 ---
 
@@ -402,25 +364,16 @@ Réponses texte libres des équipes pour les questions de type `ARDOISE`.
 
 ```typescript
 interface ArdoiseAnswer {
-  TEXT: string          // Texte saisi par l'équipe (complet, pas un delta)
-  STARTED_AT: number    // µs — 1er texte non vide reçu pour cette question (figé, #117 ; documenté dans models.md)
-  SUBMITTED_AT: number  // µs — dernière modification
-  RECEIVED: boolean     // v11.2 (#246) — texte FINAL reçu et accusé (ARDOISE_FINAL) ; false pendant STARTED
-  RECEIVED_HASH: string // v11.2 (#246) — FNV-1a 32 bits (hex, 8 car.) du texte final reçu ; "" tant que RECEIVED = false
+  TEXT: string         // Texte saisi par l'équipe
+  SUBMITTED_AT: number // Timestamp microsecondes (dernière mise à jour)
 }
 ```
-
-> **v11.2 (#246) — `[CHANGED]` additif** : `RECEIVED` et `RECEIVED_HASH` sont **toujours
-> sérialisés** (pas d'`omitempty`, règle projet). Un client antérieur les ignore.
 
 **Règles** :
 - Reset à `{}` à chaque nouvelle question (`Ready()`)
 - Reset à `{}` sur `InitGame()` (NEW_GAME)
-- Mise à jour en temps réel via `ARDOISE_INPUT` (diffusion `UPDATE` coalescée ≤ 150 ms vers admin + anim, #129/#158)
+- Mise à jour en temps réel via `ARDOISE_INPUT` (broadcast UPDATE immédiat)
 - `SUBMITTED_AT` = timestamp microsecondes de la dernière modification
-- **v11.2** : `RECEIVED = true` uniquement par `ARDOISE_FINAL` (phase `STOPPED`/`PAUSED`, hash vérifié) ; remis à `false` pour **toutes** les équipes au `CONTINUE` (retour en `STARTED`). `ARDOISE_INPUT` ne le modifie jamais.
-- **v11.2 — garde de REVEAL** (`websocket-actions.md` §REVEAL) : sans `FORCE`, REVEAL refusé tant qu'une **équipe attendue** (≥ 1 bumper `IS_VPLAYER` avec `TEAM` = sa clé) n'a pas `RECEIVED = true`, tablette hors ligne comprise. Une équipe attendue sans entrée dans la map compte comme non reçue.
-- **v11.2 — invariant serveur** : `ARDOISE_ANSWERS` ne change que par `ARDOISE_INPUT`, `ARDOISE_FINAL`, `Ready()` ou NEW_GAME. Toute autre différence détectée → `ERROR ARDOISE_STATE_DIVERGED` (`contracts/logging.md`).
 
 ---
 
@@ -457,13 +410,6 @@ const ardoiseAnswers = gameState.ARDOISE_ANSWERS || {}
 ```
 
 ---
-
-## Manches (`ROUNDS`) ✨ (v11.2, #245)
-
-| Champ | Type | Défaut | Description |
-|-------|------|--------|-------------|
-| ROUNDS | `Round[]` (`models.md` §Manches) | `[]` | Liste **ordonnée** des manches du quiz (`ID`, `NAME`). **Toujours sérialisé**, `[]` jamais `null`. Diffusé à **tous** les clients web (admin, anim, TV, VJoueur) : il ne contient aucune donnée sensible et sert au tri et à l'indicateur de manche. La manche de la question courante se lit par `QUESTION.ROUND_ID` ; absent ou inconnu = « Sans manche ». Rechargé depuis `rounds.json` au démarrage et après chaque `ROUNDS_UPDATE` |
-| ROUND_CONTEXT | `{ ROUND_ID: string, ROUND_INDEX: number, ROUND_COUNT: number, POSITION: number, TOTAL: number, FIRST_OF_ROUND: boolean }` | `{ROUND_ID:"", ROUND_INDEX:0, ROUND_COUNT:0, POSITION:0, TOTAL:0, FIRST_OF_ROUND:false}` | Place de la **question courante** dans les manches, **calculée par le serveur** à chaque `READY` (et après `ROUNDS_UPDATE`, `DELETE`, `NEW_GAME`). La TV n'a pas la liste des questions, d'où ce champ. Sémantique des champs :<ul><li>`ROUND_INDEX` : rang 1-based de la manche, `0` = « Sans manche » ou aucune manche ;</li><li>`ROUND_COUNT` : nombre de manches ;</li><li>`POSITION` / `TOTAL` : rang 1-based de la question et nombre de questions dans son groupe, même tri que `NEXT_QUESTION`, **sans compter les entrées ENTRACTE** (`POSITION = 0` quand la question courante est une ENTRACTE) ;</li><li>`FIRST_OF_ROUND` : `true` pour la **première entrée non-ENTRACTE** de sa manche dans l'ordre de jeu, `false` pour toutes les autres et pour toute ENTRACTE. Le titre de manche de l'écran d'attente TV s'affiche ainsi sur la première question, qu'il y ait ou non une entracte de début avant elle ; une ENTRACTE affiche déjà son propre panneau.</li></ul>**Toujours sérialisé**, tous clients web. Tout à zéro si `ROUNDS` est vide : aucun indicateur ne s'affiche |
 
 ## Métadonnées Quiz (`QUIZ_*`)
 
@@ -967,7 +913,10 @@ physique pendant `STARTED`, un chemin distinct de `handleWebMessage`).
 mécanisme de score n'est câblé pour ce type (pas de buzz, pas d'équipe, aucune action
 `TEAM_POINTS`/`MOTION_DONE` équivalente). Le palmarès (`GET /palmares`) n'agrège que les événements
 d'historique `POINTS_AWARDED` — l'exclusion est donc **automatique**, pas une liste noire à
-maintenir. ~~Le « à suivre » exclut explicitement `TYPE == "ENTRACTE"`~~ **Abrogé en v11.2 (#245, décision utilisateur)** : le « à suivre » (`NEXT_QUESTION`, `getNextQuestionPayload`, et `GamePage.jsx` `nextUnplayedQuestion` en parité) **propose** une entrée `ENTRACTE` comme toute autre entrée du déroulé (`websocket-actions.md` §NEXT_QUESTION). L'anim la lance par « suivant » (`READY` → `START`, cycle standard) et la termine par « Terminer l'entracte » (`ENTRACTE_SET{ACTIVE:false}`, désormais permis à l'anim, ce qui met aussi fin à la question, comportement retenu ci-dessus). Score et palmarès : inchangés (jamais de point).
+maintenir. Le **« à suivre »** (`NEXT_QUESTION`, `contracts/websocket-actions.md`) exclut
+explicitement `TYPE == "ENTRACTE"` de la recherche de la prochaine question jouable
+(`getNextQuestionPayload`, `cmd/server/main.go`) — parité requise avec `GamePage.jsx`
+`nextUnplayedQuestion` (volet frontend, même exclusion à porter côté client).
 
 **Non-nestable** (décision utilisateur) : `NestableInMotionCard: false` dans le registre
 (`contracts/question-types.md` §7) — une pause n'a pas de sens comme carte d'une grille MEMOTION.

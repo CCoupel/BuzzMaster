@@ -688,26 +688,7 @@ func (h *HTTPServer) handleQuestion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTPServer) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
-	// #245 re-review: only ONE media file of a question may be deleted this way
-	// (/files/questions/<validID>/<file>). The questions root, a whole question folder
-	// (that is the DELETE action's job: lock, statuses, round context), question.json and
-	// everything else under /files are refused and nothing is removed.
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) != 4 || parts[0] != "files" || parts[1] != "questions" || !ValidQuestionID(parts[2]) ||
-		parts[3] == "" || parts[3] == "." || parts[3] == ".." || strings.ContainsAny(parts[3], `/\`) ||
-		parts[3] == "question.json" {
-		http.Error(w, "deletion not allowed", http.StatusBadRequest)
-		return
-	}
-	questionsDir := filepath.Join(h.dataDir, "files", "questions")
-	questionDir, err := SafeQuestionPath(questionsDir, parts[2])
-	if err != nil {
-		http.Error(w, "deletion not allowed", http.StatusBadRequest)
-		return
-	}
-	filePath := filepath.Join(questionDir, parts[3])
-	QuestionFilesMu.Lock()
-	defer QuestionFilesMu.Unlock()
+	filePath := filepath.Join(h.dataDir, r.URL.Path)
 
 	if err := os.RemoveAll(filePath); err != nil {
 		http.Error(w, "Failed to delete", http.StatusInternalServerError)
@@ -932,16 +913,11 @@ func (h *HTTPServer) handleQuestions(w http.ResponseWriter, r *http.Request) {
 				// Set default POINTS_TARGET if not present
 				if _, ok := q["POINTS_TARGET"]; !ok {
 					qType, _ := q["TYPE"].(string)
-					q["POINTS_TARGET"] = string(game.DefaultPointsTarget(qType)) // #254: aligned with the award level table
-				}
-				// #254: an invalid stored QCM_WRONG_PENALTY reads as 0 (files are never rewritten).
-				if _, present := q["QCM_WRONG_PENALTY"]; present {
-					// same tolerant rule as the game: only a plain integer -100..0 is valid
-					var raw struct {
-						P json.RawMessage `json:"QCM_WRONG_PENALTY"`
+					if qType == "QCM" {
+						q["POINTS_TARGET"] = "TEAM"
+					} else {
+						q["POINTS_TARGET"] = "PLAYER"
 					}
-					_ = json.Unmarshal(data, &raw)
-					q["QCM_WRONG_PENALTY"] = game.ParseQCMWrongPenaltyRaw(raw.P)
 				}
 				// Inject status from engine's questionStatuses map
 				qID, _ := q["ID"].(string)
@@ -973,12 +949,6 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// Get or generate question ID — allocation and directory creation are a
 	// single locked operation (T3.1/T3.2, contract ai-generation.md §5.1) so
 	// this can never race a concurrent upload or AI batch generation.
-	// #245 re-review: the client-supplied number becomes a directory name — it must be a valid
-	// question id (never "..", a separator, a space…); anything else is refused BEFORE any mkdir.
-	if number := r.FormValue("number"); number != "" && !ValidQuestionID(number) {
-		http.Error(w, "invalid question number", http.StatusBadRequest)
-		return
-	}
 	id, questionsDir, err := h.resolveQuestionDir(r.FormValue("number"))
 	if err != nil {
 		if errors.Is(err, ErrQuestionIDExhausted) {
@@ -988,11 +958,6 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 		return
 	}
-
-	// #245 review (mineur 3): the whole read-existing → rewrite of question.json is one critical
-	// section against ROUNDS_UPDATE / REORDER_QUESTIONS / DELETE (no lost ROUND_ID / ORDER).
-	QuestionFilesMu.Lock()
-	defer QuestionFilesMu.Unlock()
 
 	// Load existing question to preserve media if not updated
 	existingQuestion := make(map[string]interface{})
@@ -1020,28 +985,6 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// Preserve ORDER if exists
 	if order, ok := existingQuestion["ORDER"]; ok {
 		question["ORDER"] = order
-	}
-	// #245: ROUND_ID is preserved on edit (same reconstruction trap as ORDER/MEDIA/SOUND);
-	// only ROUNDS_UPDATE moves a question to another round.
-	if rid, ok := existingQuestion["ROUND_ID"].(string); ok && rid != "" {
-		question["ROUND_ID"] = rid
-	}
-	// #245: a NEW question (nothing on disk yet) joins the round of its optional round_id
-	// (unknown ID ignored = "Sans manche") and takes the ORDER that places it at the END of
-	// its group; a new question without round_id goes to the end of "Sans manche".
-	if len(existingQuestion) == 0 {
-		qdir := filepath.Join(h.dataDir, "files", "questions")
-		rounds := LoadRoundsFile(qdir).Rounds
-		group := 0
-		if rid := strings.TrimSpace(r.FormValue("round_id")); rid != "" {
-			if g := RoundGroupIndex(rounds, rid); g > 0 {
-				group = g
-				question["ROUND_ID"] = rid
-			}
-		}
-		if _, hasOrder := question["ORDER"]; !hasOrder {
-			question["ORDER"] = NextOrderInGroup(OrderQuestions(ReadQuestionMaps(qdir), rounds), group)
-		}
 	}
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — SAME
@@ -1147,13 +1090,6 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		if p2Str := r.FormValue("qcm_penalty_2"); p2Str != "" {
 			if p2, err := strconv.ParseFloat(p2Str, 64); err == nil && p2 > 0 && p2 <= 1 {
 				question["QCM_PENALTY_2"] = p2
-			}
-		}
-		// #254: wrong-answer penalty, integer -100..0 (0 written as is); absent or
-		// invalid -> field not written (effective 0), no error.
-		if wpStr := r.FormValue("qcm_wrong_penalty"); wpStr != "" {
-			if wp, err := strconv.Atoi(strings.TrimSpace(wpStr)); err == nil && wp <= 0 && wp >= -100 {
-				question["QCM_WRONG_PENALTY"] = wp
 			}
 		}
 	}
@@ -3703,9 +3639,6 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 
 	if detected["questions"] {
 		restoredMap["questions"] = true
-		// #245: rounds.json travels with the questions; reload the rounds it brought
-		// (absent file = no round). Questions citing an absent round fall in "Sans manche".
-		h.engine.SetRounds(LoadRoundsFile(filepath.Join(h.dataDir, "files", "questions")).Rounds)
 		// Also load question statuses
 		if err := h.engine.LoadStatuses(); err == nil {
 			log.Printf("[HTTP] Restore: Question statuses loaded into engine")

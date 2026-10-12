@@ -150,52 +150,6 @@ Si la sélection des participants cesse d'être conforme **alors que la phase es
 - **Comportement** : le motif d'attente est affiché à la régie et sur la tablette animateur (`#172 Bloc C`)
 - **Remise en conformité** : dès que la sélection redevient valide, repasse automatiquement en `READY` sans geste supplémentaire
 
-### Verrou des équipes pendant une question (v11.2, #249)
-
-Le drapeau `TEAMS_LOCKED` suit la question, pas la phase :
-
-| Moment | `TEAMS_LOCKED` |
-|--------|----------------|
-| Démarrage du serveur | `false` |
-| `Ready()` (sélection d'une question, `PREPARE`) | `true` |
-| `STARTED`, `PAUSED`, `STOPPED` de cette question | `true` |
-| `Reveal()` (`REVEALED`) | `false` |
-| `NEW_GAME` / `InitGame` | `false` |
-
-- Une question abandonnée (jamais révélée, sélectionnée par erreur en `PREPARE`/`READY`) garde le verrou
-  jusqu'à la sélection suivante ou jusqu'à `NEW_GAME`. Depuis `PREPARE`/`READY`, `REVEALED` n'est pas
-  atteignable.
-- Verrou actif : renommage et suppression d'équipe refusés (`TEAMS_UPDATE_REFUSED`). Ajout, couleur et
-  affectation de joueurs restent permis.
-- Hors verrou : renommage reporté sous la nouvelle clé ; suppression = effacement des états de jeu de
-  l'équipe, historique conservé avec `TEAM_DELETED`.
-
-Contrats : `contracts/game-state.md` §`TEAMS_LOCKED`, `contracts/websocket-actions.md` §UPDATE.
-
-## Manches et entractes de manche (v11.2, #245)
-
-- **Déroulé** : la règle de parcours est celle de `NEXT_QUESTION` (`contracts/websocket-actions.md`). Une entrée `ENTRACTE` est
-  une entrée comme une autre : « à suivre » la propose, qu'elle soit manuelle, programmée ou une entracte automatique de manche.
-- **`ROUND_CONTEXT`** (position de la question courante dans les manches) : calculé à `READY`, après `ROUNDS_UPDATE`, `DELETE` et `NEW_GAME`.
-  `FIRST_OF_ROUND` sert au titre de manche affiché sur la TV en READY.
-- **Entracte** : `ENTRACTE_SET{ACTIVE:true}` reste réservé à l'admin (manuel). L'anim peut seulement terminer l'entracte
-  (`ENTRACTE_SET{ACTIVE:false}`), ce qui n'est jamais bloqué, même pendant `LAUNCH_LOCK`.
-- **Suppression pendant le jeu** : `ROUNDS_UPDATE{DELETED_ROUNDS{DELETE}}` est refusé (`QUESTION_IN_PROGRESS`) si la question courante
-  est concernée et que la phase est `PREPARE`, `READY`, `COUNTDOWN`, `STARTED` ou `PAUSED`. Au repos (`STOPPED`, `REVEALED`, `NEW_GAME`), la suppression est permise. `KEEP` n'est jamais concerné.
-
-## Fenêtre « déjà crédité » — GameTime (v11.2, #256)
-
-`GameTime` (horodatage µs) borne les crédits de la question courante qui comptent comme « déjà créditée ». Un crédit
-`POINTS_AWARDED` compte seulement s'il a un horodatage ≥ `GameTime` et concerne la question courante.
-
-`GameTime` est posé à :
-- la **création du moteur** (démarrage du serveur) : l'historique rechargé n'est compté pour aucune question tant qu'elle
-  n'a pas été sélectionnée ou lancée ;
-- **`Ready()`** (sélection de la question, `PREPARE`) : une question rejouée ne retient plus les crédits de la manche précédente ;
-- **`actualStart()`** et **`StartImmediate()`** (START) : la fenêtre repart du départ réel.
-
-`NEW_GAME` (`InitGameWith`) ne réécrit pas `GameTime` : la prochaine sélection le remet.
-
 ## Type de jeu RAFALE (v8.0.0, #16)
 
 ### Vue d'ensemble
@@ -571,34 +525,10 @@ de la partie en cours — pas une section globale de réglages.
 
 ## Phase NEW_GAME (v4.0.1 / v4.0.4)
 
-**Phase NEW_GAME** : état transitoire déclenché par l'entrée « 🚀 Lancer la partie » du menu Préparation (admin, #253 ; v11.2 : depuis toutes les phases, voir ci-dessous).
-- Reset selon les options (v11.2, #243). Sans option (clients antérieurs) : scores teams + joueurs à 0, historique vide, tous statuts questions → AVAILABLE, question sélectionnée → nil
+**Phase NEW_GAME** : état transitoire déclenché par le bouton "NOUVELLE PARTIE" (admin, phase STOPPED uniquement).
+- Reset : scores teams + joueurs à 0, historique vide, tous statuts questions → AVAILABLE, question sélectionnée → nil
 - Transition : `NEW_GAME → PREPARE` automatique à la sélection de la première question
 - TV (`/tv`) : affiche l'écran "NOUVELLE PARTIE À VENIR" avec métadonnées du quiz
-
-### Options de purge au lancement (v11.2, #243)
-
-| Option | Effet |
-|--------|-------|
-| `PURGE_SCORES` | Scores des équipes et des joueurs à 0, historique des points effacé |
-| `RESET_QUESTIONS` | Toutes les questions « à jouer », réservoir RAFALE à zéro |
-| `PURGE_PLAYERS` | Joueurs des tablettes supprimés (exige `PURGE_SCORES`, sinon `NEW_GAME_REFUSED`) |
-| `PURGE_TEAMS` | Équipes supprimées (même chemin que #249), joueurs conservés sans équipe |
-
-- **Toujours**, quelles que soient les options : tous les minuteurs sont arrêtés, le son de question est arrêté,
-  la question en cours s'arrête, `TEAMS_LOCKED` revient à `false`. La phase passe à `NEW_GAME` sans repasser
-  par `STOPPED`.
-- Ordre d'application côté serveur, sous un seul verrou : minuteurs → `PURGE_TEAMS` → `PURGE_PLAYERS` →
-  `PURGE_SCORES` → `RESET_QUESTIONS` → remise à zéro des états de jeu.
-- **Statut de la question interrompue** (sans `RESET_QUESTIONS`) : `PREPARE`, `READY`, `COUNTDOWN` → `AVAILABLE` ;
-  `STARTED`, `PAUSED` → `STOPPED` (jouée, interrompue) ; `STOPPED`, `REVEALED` → inchangé.
-- **Son de question** : arrêté après la remise à zéro. Un tick de chrono en vol est ignoré après le `NEW_GAME`.
-- **LED et ambiance** : à chaque `NEW_GAME` appliqué, quelles que soient les options.
-- **Joueurs purgés** : leurs connexions sont déliées dans le hub.
-- **`SCORE_CHANGE`** (#252) : remis à zéro (`SEQ` = 0) à chaque NEW_GAME, comme au démarrage.
-- **Verrou de lancement** (#253) : la popup pose `LAUNCH_LOCK` au nom de son poste. Pendant le verrou, les actions de conduite, de points et d'équipes sont suspendues pour tous les postes. Le `NEW_GAME` du propriétaire le libère au moment où il est appliqué, avant la remise à zéro, dans le même traitement. Un `NEW_GAME` d'une autre connexion est refusé (`LAUNCH_IN_PROGRESS`). Libération aussi à l'annulation, à la déconnexion, ou après 45 s sans renouvellement.
-- **Entracte** : `NEW_GAME` est refusé (`NEW_GAME_REFUSED { REASON: "ENTRACTE_ACTIVE" }`) ; sortir de l'entracte d'abord.
-- Contrat : `contracts/websocket-actions.md` §NEW_GAME et §NEW_GAME_REFUSED.
 
 **Métadonnées de quiz** (v4.0.1) :
 - `quiz_name`, `quiz_theme`, `quiz_notes` — champs GameState, sans `omitempty`, persistés
@@ -686,35 +616,6 @@ type ArdoiseAnswer struct {
 Voir `WEBSOCKET_PROTOCOL.md` pour détails complets.
 
 ---
-
-### Garde REVEAL et accusés finaux (v11.2, #246)
-
-Pour une question ARDOISE, la transition vers `REVEAL` est **gardée** :
-
-- **Phases** : `STOPPED` (et `PAUSED`, comme `engine.Reveal()` existant). Les finals sont acceptés en
-  `STOPPED` ou `PAUSED`.
-- **Garde** : sans `FORCE: true`, le REVEAL est refusé tant qu'une équipe attendue n'a pas
-  `ARDOISE_ANSWERS[équipe].RECEIVED = true`. Une tablette hors ligne bloque aussi. Refus : la phase
-  reste inchangée, et l'émetteur reçoit `REVEAL_REFUSED`.
-- **Forçage** : `FORCE: true` révèle immédiatement. Les équipes manquantes gardent leur dernier texte,
-  avec `RECEIVED = false`. Un `WARN ARDOISE_REVEAL_FORCED` est journalisé.
-- **`CONTINUE`** (retour en `STARTED`) : `RECEIVED` repasse à `false` pour toutes les équipes.
-- **PAUSE** : les finals déjà reçus sont conservés.
-- **Invariant** : le **texte** (`TEXT`) de `ARDOISE_ANSWERS` ne change que par `ARDOISE_INPUT`, `ARDOISE_FINAL`,
-  `Ready()` ou NEW_GAME. Toute autre modification est journalisée en `ERROR ARDOISE_STATE_DIVERGED`.
-  (`CONTINUE` ne touche que `RECEIVED` / `RECEIVED_HASH`.)
-- Hors ARDOISE : la machine d'états est inchangée, `FORCE` est ignoré.
-
-Séquence type :
-
-```
-STARTED --STOP--> STOPPED  (tablettes envoient ARDOISE_FINAL, renvoi 1/s jusqu'à l'accusé)
-STOPPED --REVEAL (sans FORCE, équipe attendue non reçue)--> STOPPED  + REVEAL_REFUSED
-STOPPED --REVEAL (toutes reçues, ou FORCE: true)--> REVEALED
-PAUSED  --CONTINUE--> STARTED   (RECEIVED remis à false)
-```
-
-Contrats : `contracts/websocket-actions.md` §REVEAL, §ARDOISE_FINAL ; `contracts/game-state.md`.
 
 ## Type de jeu MEMOTION (v5.0.0 et v7.0.0)
 

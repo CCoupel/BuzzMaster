@@ -5,7 +5,7 @@ import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { categoryMeta } from '../utils/categoryUtils'
 import { getRgbColor } from '../utils/colorUtils'
-import { sortQuestionsByOrder, sortQuestionsByRounds, roundIndexOf, countEntries } from '../utils/questionOrder'
+import { sortQuestionsByOrder } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
 import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
@@ -26,18 +26,8 @@ import {
   resolvePointsAward,
   rafaleCounterForTeam,
   calcRafaleTeamAward,
-  defaultTeamAward,
-  resolveAwardLevel,
-  playerHintsCount,
-  hasAnswered,
-  answeredColor,
 } from '../utils/pointsAward'
-import ArdoiseRevealGate, { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from '../components/ArdoiseRevealGate'
-import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
 import Button from '../components/Button'
-import TeamAwardBar, { AWARD_LIMIT } from '../components/TeamAwardBar'
-import { useLaunchLock } from '../components/LaunchGameHost'
-import QcmAnswerPicker from '../components/QcmAnswerPicker'
 import Card from '../components/Card'
 import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
@@ -79,8 +69,6 @@ export default function GamePage() {
     pauseGame,
     continueGame,
     revealAnswer,
-    revealRefused,
-    clearRevealRefused,
     selectQuestion,
     setRemoteDisplay,
     setBumperPoints,
@@ -93,21 +81,10 @@ export default function GamePage() {
     rafaleAnswer,
     rafaleValidate,
     rafaleInvalidate,
-    awardedTeams = {},
-    awardedPlayers = {},
-    bumperPointsBatch,
-    bumperPointsBatchResult,
-    clearBumperPointsBatchResult,
-    teamPointsBatch,
-    teamPointsBatchResult,
-    clearTeamPointsBatchResult,
+    newGame,
     // Son de la question (v11.1, #219, contrat websocket-actions.md §QUESTION_SOUND)
     questionSound,
   } = useGame()
-  // #253 — popup « Lancer la partie » ouverte sur un AUTRE poste : le serveur suspend les actions de
-  // jeu ; on désactive les commandes ici avec le motif (bandeau global sous la barre de navigation).
-  const { lockedByOther: launchLocked } = useLaunchLock()
-  const LAUNCH_LOCK_REASON = 'Lancement d’une nouvelle partie en cours sur un autre poste : action suspendue'
 
   const [timeInput, setTimeInput] = useState(30)
   const [pointsInput, setPointsInput] = useState(1)
@@ -128,9 +105,6 @@ export default function GamePage() {
       isFirstPointsRender.current = false
       return
     }
-    // #254 : jamais de valeur nulle ou négative aux tablettes de l'animateur (un montant ≤ 0 y
-    // retirerait des points au lieu d'en donner) : l'anim garde la dernière valeur positive.
-    if (!(pointsInput > 0)) return undefined
     const timeoutId = setTimeout(() => {
       sendMessage('SET_CREDIT_POINTS', { POINTS: pointsInput })
     }, 400)
@@ -282,15 +256,7 @@ export default function GamePage() {
   // tri était dupliqué à l'identique dans les deux pages ; toute évolution
   // (dont "Mélanger les questions") devait d'abord passer par cette
   // mutualisation pour ne pas diverger entre les deux.
-  // #245 — manches : « Sans manche » en premier, puis les manches dans l'ordre (parité avec getNextQuestionPayload) ;
-  // sans manche, ordre v11.1 inchangé.
-  const rounds = useMemo(() => (Array.isArray(gameState.ROUNDS) ? gameState.ROUNDS : []), [gameState.ROUNDS])
-  const sortedQuestions = useMemo(
-    () => (rounds.length > 0 ? sortQuestionsByRounds(questions, rounds) : sortQuestionsByOrder(questions)),
-    [questions, rounds]
-  )
-  // Manches repliées dans la liste (préférence d'affichage de cette page, non mémorisée).
-  const [foldedRounds, setFoldedRounds] = useState({})
+  const sortedQuestions = useMemo(() => sortQuestionsByOrder(questions), [questions])
 
   // Custom categories from API (#95)
   const { categories: apiCategories } = useCategories()
@@ -307,21 +273,16 @@ export default function GamePage() {
     const currentIndex = sortedQuestions.findIndex(q => q.ID === currentId)
     for (let i = currentIndex + 1; i < sortedQuestions.length; i++) {
       const q = sortedQuestions[i]
-      // #245 (v11.2, décision utilisateur) : une ENTRACTE est un type de jeu comme un autre, le "à suivre" la
-      // PROPOSE (la règle #214 « exclue du à suivre » est abrogée). Parité avec getNextQuestionPayload.
+      // ENTRACTE (#214) — exclue du "à suivre" (maquette entracte-programme-
+      // 214.html §04, "pas une question à score" ; critère d'acceptation
+      // frontend) : une pause programmée n'est pas ce que "Question
+      // suivante" doit annoncer, on continue vers la vraie prochaine
+      // question du déroulé.
+      if (q.TYPE === 'ENTRACTE') continue
       if (!['STOPPED', 'REVEALED', 'PLAYED'].includes(q.STATUS)) return q
     }
     return null
   }, [sortedQuestions, gameState.phase, gameState.question])
-
-  // #245 — « → Manche 2 · nom » : la question suivante ouvre une AUTRE manche que la question courante.
-  const nextRoundLabel = useMemo(() => {
-    if (!nextUnplayedQuestion || rounds.length === 0) return ''
-    const cur = roundIndexOf(gameState.question, rounds)
-    const nxt = roundIndexOf(nextUnplayedQuestion, rounds)
-    if (cur === nxt) return ''
-    return nxt === -1 ? 'Sans manche' : `Manche ${nxt + 1} · ${rounds[nxt].NAME}`
-  }, [nextUnplayedQuestion, rounds, gameState.question])
 
   // MEMOTION: selected card data (from MOTION_CARDS array matching MEMOTION_SELECTED)
   const selectedMotionCard = useMemo(() => {
@@ -342,7 +303,6 @@ export default function GamePage() {
   // Calculate QCM penalty based on current invalidated count (used for UI display in score input)
   // Rule mutualized in utils/pointsAward.js (calcQcmPenalty).
   const qcmPenalty = useMemo(() => {
-    if (!(pointsInput > 0)) return null // #254 : pénalité / 0 — pas de coefficient d'indices
     return calcQcmPenalty(gameState.question, pointsInput, gameState.qcmInvalidated?.length || 0)
   }, [gameState.question, gameState.qcmInvalidated, pointsInput])
 
@@ -354,7 +314,7 @@ export default function GamePage() {
   // NOT included here, same as before — see handleBumperClick/onTeamClick
   // below, which fall back to `qcmPenalty` for those.
   const qcmTeamAcquiredPoints = useMemo(() => {
-    if (gameState.question?.TYPE !== 'QCM' || gameState.phase !== 'REVEALED' || !(pointsInput > 0)) return {}
+    if (gameState.question?.TYPE !== 'QCM' || gameState.phase !== 'REVEALED') return {}
     const bumpersByTeam = {}
     Object.values(bumpers).forEach(bumper => {
       if (!bumper.TEAM || !bumper.TIME || bumper.TIME === 0) return
@@ -387,7 +347,6 @@ export default function GamePage() {
   }
 
   const handleQuestionSelect = (question, ctrlKey = false) => {
-    if (launchLocked) return
     if (['STOPPED', 'REVEALED', 'PREPARE', 'READY', 'NEW_GAME'].includes(gameState.phase)) {
       if (ctrlKey) {
         // Ctrl+click: select and force to READY (debug)
@@ -453,244 +412,7 @@ export default function GamePage() {
     rafaleSetTeams(newSelection)
   }
 
-  // #244/#251 — montant par défaut d'une équipe (clic sur la carte ET lot groupé).
-  const teamDefaultAward = (teamName, basePoints, useHintsFlag = true) => defaultTeamAward({
-    useHints: useHintsFlag,
-    question: gameState.question,
-    teamName,
-    basePoints,
-    teamBumpers: Object.values(bumpers).filter(b => b.TEAM === teamName),
-    invalidatedCount: gameState.qcmInvalidated?.length || 0,
-    memorySoloScore: memoryScore,
-    memoryTeamPairs: gameState.MEMORY_TEAM_PAIRS,
-    memoryTeamErrors: gameState.MEMORY_TEAM_ERRORS,
-    rafaleCounters: gameState.RAFALE_TEAM_COUNTERS,
-    rafaleBest: gameState.RAFALE_TEAM_BEST,
-  })
-
-  // ─── #244/#251/#254 — attribution groupée après le REVEAL ──────────────────
-  // Cases à cocher au niveau ÉQUIPE ou JOUEUR (resolveAwardLevel), bloc compact 2 lignes, montant =
-  // champ « Points » de la page (pointsInput). Base du barème = valeur du champ à l'entrée en
-  // REVEALED ; « modifié à la main » = modifié après. Montant par entrée = règle unique de
-  // utils/pointsAward.js (clic unitaire et lot partagent la même source) ; un négatif est toujours
-  // uniforme (pénalité, indices sans effet).
-  const isRevealedPhase = gameState.phase === 'REVEALED'
-  const awardLevel = resolveAwardLevel(gameState.question)
-  const isPlayerLevel = awardLevel === 'PLAYER'
-  const [awardSelected, setAwardSelected] = useState(() => new Set())
-  const [awardManual, setAwardManual] = useState(false) // champ modifié à la main après l'entrée en REVEALED
-  const [awardWrong, setAwardWrong] = useState(false) // dernier clic = mauvaise réponse QCM
-  const [hintsOn, setHintsOn] = useState(true) // commutateur « Tenir compte des indices »
-  const [awardSending, setAwardSending] = useState(false)
-  const [awardToast, setAwardToast] = useState(null) // { kind: 'ok'|'error', text }
-  const [pickedColor, setPickedColor] = useState(null)
-  const awardGuardRef = useRef(null)
-  const awardBaseRef = useRef(pointsInput) // base du barème (champ « Points » à l'entrée en REVEALED)
-  const pointsInputRef = useRef(pointsInput)
-  pointsInputRef.current = pointsInput
-
-  // Sélection, commutateur et base remis à zéro à chaque changement de question ou de phase.
-  useEffect(() => {
-    if (gameState.phase === 'REVEALED') {
-      awardBaseRef.current = pointsInputRef.current > 0 ? pointsInputRef.current : awardBaseRef.current
-    } else if (pointsInputRef.current <= 0) {
-      // Le champ ne reste jamais sur une pénalité / 0 hors REVEALED (il sert aussi aux tablettes).
-      setPointsInput(awardBaseRef.current > 0 ? awardBaseRef.current : 1)
-    }
-    setAwardSelected(new Set())
-    setAwardManual(false)
-    setAwardWrong(false)
-    setHintsOn(true)
-    setAwardSending(false)
-    setAwardToast(null)
-    setPickedColor(null)
-    if (awardGuardRef.current) clearTimeout(awardGuardRef.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.question?.ID, gameState.phase])
-  useEffect(() => () => { if (awardGuardRef.current) clearTimeout(awardGuardRef.current) }, [])
-
-  // Champ « Points » modifié à la main (les deux saisies de la page passent ici).
-  const changePoints = (n) => {
-    setPointsInput(n)
-    if (isRevealedPhase) {
-      setAwardManual(true)
-      if (n !== 0) setAwardWrong(false)
-    }
-  }
-
-  const isQcmHints = gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED === true
-  const hintsToggleVisible = isRevealedPhase && isQcmHints
-    && (gameState.qcmInvalidated?.length || 0) >= 1 && pointsInput > 0
-  const useHints = hintsToggleVisible ? hintsOn : true
-  const questionType = gameState.question?.TYPE
-
-  const awardTeamAmount = (teamName) => {
-    if (pointsInput <= 0) return pointsInput
-    if (awardManual && (questionType === 'MEMORY' || questionType === 'RAFALE')) return pointsInput
-    return teamDefaultAward(teamName, pointsInput, useHints)
-  }
-  const awardPlayerAmount = (mac) => {
-    if (pointsInput <= 0) return pointsInput
-    return resolvePointsAward(gameState.question, pointsInput, {
-      hintsAtBuzz: playerHintsCount(bumpers[mac], gameState.qcmInvalidated?.length || 0),
-      memory: { matchedPairs: gameState.memoryMatchedPairs?.length || 0, errors: gameState.memoryErrors || 0 },
-      useHints,
-    }).amount
-  }
-
-  // Unités sélectionnables = pas encore créditées pour cette question (AWARDED_TEAMS / .PLAYERS).
-  const awardableTeams = displayTeams.filter(t => !(t.name in awardedTeams))
-  // #254 : un joueur d'une équipe déjà créditée AU NIVEAU ÉQUIPE (AWARDED_TEAMS.TEAMS[].TEAM_LEVEL) est grisé
-  // comme un joueur déjà crédité (le serveur l'ignorerait : TEAM_ALREADY_AWARDED).
-  const teamLevelCredited = (teamName) => awardedTeams[teamName]?.TEAM_LEVEL === true
-  const awardablePlayers = displayTeams.flatMap(t => (teamLevelCredited(t.name) ? [] : t.buzzers.map(b => b.mac))).filter(mac => !(mac in awardedPlayers))
-  const awardableKeys = isPlayerLevel ? awardablePlayers : awardableTeams.map(t => t.name)
-  const awardEntries = awardableKeys
-    .filter(key => awardSelected.has(key))
-    .map(key => (isPlayerLevel
-      ? { id: key, points: awardPlayerAmount(key) }
-      : { team: key, points: awardTeamAmount(key) }))
-  const awardKeyOf = (e) => (isPlayerLevel ? e.id : e.team)
-  const awardInvalid = awardEntries.filter(e => !Number.isInteger(e.points) || e.points === 0)
-  // Borne du contrat (±999) : sinon le serveur refuse tout le lot (INVALID_POINTS, message générique).
-  const awardOutOfBounds = awardEntries.some(e => Math.abs(e.points) > AWARD_LIMIT)
-  const noPenaltyDefined = pointsInput === 0 && awardWrong
-  const awardBlockedReason = launchLocked
-    ? LAUNCH_LOCK_REASON
-    : noPenaltyDefined
-      ? 'Aucune pénalité définie pour cette question'
-      : awardOutOfBounds
-        ? `Le montant doit être compris entre −${AWARD_LIMIT} et ${AWARD_LIMIT}`
-        : awardInvalid.length > 0 || (pointsInput === 0 && awardEntries.length > 0)
-          ? `Montant nul ou invalide pour : ${awardInvalid.map(e => (isPlayerLevel ? (bumpers[e.id]?.NAME || e.id) : e.team)).join(', ') || 'la sélection'}`
-          : null
-  const awardPenaltyMode = pointsInput < 0 || noPenaltyDefined
-  const awardUnitName = isPlayerLevel ? 'joueur' : 'équipe'
-
-  // Ligne 1 du bloc : source du montant, liée au commutateur et à l'état (contrat §Montant).
-  const awardSourceLabel = (() => {
-    if (pointsInput < 0) return awardWrong ? 'mauvaise réponse : pénalité de la question, uniforme (indices sans effet)' : 'montant uniforme'
-    if (pointsInput === 0) return awardWrong ? 'mauvaise réponse : aucune pénalité définie' : 'montant nul'
-    if (hintsToggleVisible) {
-      if (!hintsOn) return 'montant uniforme'
-      return awardManual
-        ? `montant saisi, ajusté selon les indices de chaque ${awardUnitName}`
-        : `barème de la question, ajusté selon les indices de chaque ${awardUnitName}`
-    }
-    if (questionType === 'RAFALE' || questionType === 'MEMORY') {
-      return awardManual ? 'modifié à la main, montant uniforme' : 'barème de la question, par équipe'
-    }
-    return awardManual ? 'modifié à la main, montant uniforme' : 'points de la question'
-  })()
-
-  const toggleAwardKey = (key, checked) => {
-    setPickedColor(null)
-    setAwardSelected(prev => {
-      const next = new Set(prev)
-      if (checked) next.add(key); else next.delete(key)
-      return next
-    })
-  }
-  // QCM : unité d'une réponse = équipe (au moins un joueur) ou joueur dont ANSWER_COLOR = la couleur.
-  const qcmUnitsByColor = useMemo(() => {
-    const byColor = {}
-    Object.entries(bumpers).forEach(([mac, b]) => {
-      if (!hasAnswered(b)) return // #255 : couleur assignée sans réponse ≠ réponse
-      const color = answeredColor(b)
-      if (!byColor[color]) byColor[color] = new Set()
-      byColor[color].add(isPlayerLevel ? mac : b.TEAM)
-    })
-    return byColor
-  }, [bumpers, isPlayerLevel])
-  // Pénalité de la question : QCM_WRONG_PENALTY entier de −100 à 0 ; absent / positif / hors bornes → 0.
-  const questionPenalty = (() => {
-    const p = gameState.question?.QCM_WRONG_PENALTY
-    return Number.isInteger(p) && p >= -100 && p <= 0 ? p : 0
-  })()
-  const pickQcmAnswer = (color) => {
-    const correct = color === gameState.question?.QCM_CORRECT
-    const keys = [...(qcmUnitsByColor[color] || [])].filter(k => (isPlayerLevel ? awardablePlayers.includes(k) : !(k in awardedTeams)))
-    setAwardSelected(new Set(keys)) // désélectionne d'abord tout, puis sélectionne celles de cette réponse
-    setAwardManual(false)
-    setAwardWrong(!correct)
-    setPointsInput(correct ? awardBaseRef.current : questionPenalty)
-    setPickedColor(color)
-  }
-
-  const giveAwardPoints = () => {
-    if (launchLocked || awardEntries.length === 0 || awardBlockedReason || awardSending) return
-    setAwardToast(null)
-    const sent = isPlayerLevel
-      ? bumperPointsBatch?.(gameState.question?.ID, awardEntries)
-      : teamPointsBatch?.(gameState.question?.ID, awardEntries)
-    if (sent === false) {
-      setAwardToast({ kind: 'error', text: 'Connexion perdue — réessayez.' })
-      return
-    }
-    setAwardSending(true)
-    // Garde : sans réponse du serveur, le bouton se réactive (pas de bouton figé).
-    if (awardGuardRef.current) clearTimeout(awardGuardRef.current)
-    awardGuardRef.current = setTimeout(() => {
-      setAwardSending(false)
-      setAwardToast({ kind: 'error', text: 'Pas de réponse du serveur — réessayez.' })
-    }, 8000)
-  }
-
-  // Résultat de l'attribution (TEAM_POINTS_BATCH_RESULT / BUMPER_POINTS_BATCH_RESULT, ciblés).
-  const handleBatchResult = (r, unit, unknownKeys, keyOf) => {
-    if (awardGuardRef.current) clearTimeout(awardGuardRef.current)
-    setAwardSending(false)
-    if (r.status === 'REFUSED') {
-      if (r.reason === 'UNKNOWN_TEAM' || r.reason === 'UNKNOWN_PLAYER') {
-        setAwardSelected(prev => new Set([...prev].filter(k => !unknownKeys.includes(k))))
-        setAwardToast({
-          kind: 'error',
-          text: unit === 'joueur'
-            ? 'Joueur introuvable (supprimé) : sélection mise à jour.'
-            : 'Équipe introuvable (renommée ou supprimée) : sélection mise à jour.',
-        })
-      } else {
-        const msg = {
-          NOT_REVEALED: 'la réponse n’est pas révélée',
-          QUESTION_MISMATCH: 'la question a changé',
-        }[r.reason] || 'montant ou sélection invalide'
-        setAwardToast({ kind: 'error', text: `Attribution refusée : ${msg}.` })
-      }
-    } else {
-      const n = r.applied.length
-      const plural = n > 1 ? 's' : ''
-      const amounts = [...new Set(r.applied.map(a => a.points))]
-      let text
-      if (n === 0) text = `Aucun${unit === 'équipe' ? 'e' : ''} ${unit} crédité${unit === 'équipe' ? 'e' : ''}.`
-      else if (amounts.length === 1 && amounts[0] < 0) text = `✓ Pénalité ${String(amounts[0]).replace('-', '−')} appliquée à ${n} ${unit}${plural}.`
-      else text = `✓ Points attribués à ${n} ${unit}${plural}.`
-      const kTeam = r.skipped.filter(s => s.reason === 'TEAM_ALREADY_AWARDED').length
-      const k = r.skipped.length - kTeam
-      if (k > 0) {
-        const fem = unit === 'équipe' ? 'e' : ''
-        text += ` ${k} ${unit}${k > 1 ? 's' : ''} déjà crédité${fem}${k > 1 ? 's' : ''} ignoré${fem}${k > 1 ? 's' : ''}.`
-      }
-      if (kTeam > 0) text += ` ${kTeam} joueur${kTeam > 1 ? 's' : ''} ignoré${kTeam > 1 ? 's' : ''} (équipe déjà créditée).`
-      setAwardToast({ kind: 'ok', text })
-      setAwardSelected(new Set())
-      setPickedColor(null)
-    }
-  }
-  useEffect(() => {
-    const r = teamPointsBatchResult
-    if (!r) return
-    handleBatchResult(r, 'équipe', r.teams || [])
-    clearTeamPointsBatchResult?.()
-  }, [teamPointsBatchResult]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const r = bumperPointsBatchResult
-    if (!r) return
-    handleBatchResult(r, 'joueur', r.players || [])
-    clearBumperPointsBatchResult?.()
-  }, [bumperPointsBatchResult]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleBumperClick = (bumperMac, ctrlKey = false) => {
-    if (launchLocked) return
     if (ctrlKey && gameState.phase === 'PREPARE') {
       // Ctrl+click in PREPARE: simulate PONG response (debug)
       simulatePong(bumperMac)
@@ -711,7 +433,6 @@ export default function GamePage() {
         const { amount, target } = resolvePointsAward(gameState.question, pointsInput, {
           hintsAtBuzz: bumper.HINTS_AT_BUZZ || 0,
           memory: { matchedPairs: gameState.memoryMatchedPairs?.length || 0, errors: gameState.memoryErrors || 0 },
-          useHints,
         })
         if (target === 'TEAM') {
           const teamName = bumper.TEAM
@@ -733,31 +454,6 @@ export default function GamePage() {
   const canReveal = canRevealRule(gameState.phase, gameState.question)
   // START button only active in READY phase
   const canStart = canStartRule(gameState.phase)
-
-  // #246 (F-STOP) — garde de REVEAL ARDOISE : règle commune admin + anim
-  // (utils/ardoiseReceipt.js). REPONSE reste désactivé tant qu'une équipe
-  // attendue n'a pas transmis son texte final (tablette hors ligne comprise) ;
-  // « Révéler quand même… » (confirmation) envoie REVEAL {FORCE: true}.
-  const isArdoiseQuestion = gameState.question?.TYPE === 'ARDOISE'
-  const ardoiseReceipt = useMemo(
-    () => getArdoiseReceipt(teams, bumpers, gameState.ARDOISE_ANSWERS),
-    [teams, bumpers, gameState.ARDOISE_ANSWERS]
-  )
-  // Garde active dès l'arrêt (STOPPED/PAUSED) : le motif s'affiche même avant que
-  // `canReveal` (STATUS de la question) ne soit propagé.
-  const ardoiseGateActive = isArdoiseQuestion && (gameState.phase === 'STOPPED' || gameState.phase === 'PAUSED')
-  const ardoiseBlocked = ardoiseGateActive && !ardoiseReceipt.complete
-  // Course (état reçu en retard) : REVEAL_REFUSED porte la liste à jour.
-  const ardoiseGatePending = ardoiseBlocked
-    ? ardoiseReceipt.pending
-    : (ardoiseGateActive && revealRefused?.pending?.length ? revealRefused.pending : [])
-  // Un nouvel état de réponses rend le refus obsolète (les coches font foi).
-  useEffect(() => {
-    clearRevealRefused?.()
-  }, [gameState.ARDOISE_ANSWERS, clearRevealRefused])
-  useEffect(() => {
-    if (revealRefused && gameState.phase !== 'STOPPED' && gameState.phase !== 'PAUSED') clearRevealRefused?.()
-  }, [gameState.phase, revealRefused, clearRevealRefused])
 
   // RAFALE (v8.0.0, #16/#107, contrat rafale.md §7.2, tâche 26) — pool
   // vide pour le filtre de la manche sélectionnée = démarrage REFUSÉ.
@@ -911,21 +607,26 @@ export default function GamePage() {
             {gameState.phase === 'ENROLL' && <span className="phase-badge phase-enroll">INSCRIPTION</span>}
             {gameState.phase === 'NEW_GAME' && <span className="phase-badge phase-new-game">NOUVELLE PARTIE</span>}
           </div>
-          {/* #253 : « Lancer la partie » a quitté cet en-tête — une seule entrée, dans le menu
-              Préparation de la barre de navigation (LaunchGameHost). */}
+          {/* #215 (AC9) — NOUVELLE PARTIE reste accessible depuis /admin, en
+              plus de /admin/backstage (QuizMetaForm) : l'animateur ne doit
+              pas changer de page en pleine soirée pour relancer. */}
+          <Button
+            variant="fun"
+            size="sm"
+            className="new-game-btn"
+            onClick={newGame}
+            title="Réinitialiser le jeu et préparer une nouvelle partie"
+          >
+            NOUVELLE PARTIE
+          </Button>
           {nextUnplayedQuestion && (
             <button
-              className={`next-question-btn${nextUnplayedQuestion.TYPE === 'ENTRACTE' ? ' nq-entracte' : ''}`}
+              className="next-question-btn"
               onClick={() => handleQuestionSelect(nextUnplayedQuestion)}
               title={`Aller à la question #${nextUnplayedQuestion.ID}`}
               style={!canSelectQuestion ? { opacity: 0.5, pointerEvents: 'none' } : undefined}
             >
-              <span className="nq-label">
-                {nextUnplayedQuestion.TYPE === 'ENTRACTE'
-                  ? `À suivre : 🎬 ${nextUnplayedQuestion.QUESTION || 'Entracte'}`
-                  : `À suivre : #${nextUnplayedQuestion.ID}`}
-              </span>
-              {nextRoundLabel && <span className="nq-newround">→ {nextRoundLabel}</span>}
+              <span className="nq-label">à suivre : #{nextUnplayedQuestion.ID}</span>
               {/* 🔴 Retour QUALIF v9.0.0.4 (point A+6, cosmétique) — depuis
                   #216 une manche RAFALE porte une LISTE de catégories,
                   CATEGORY (singulier) est vide : cette pastille disparaissait
@@ -1203,28 +904,18 @@ export default function GamePage() {
 
         {/* ARDOISE — zone réponses équipes (pattern Memory team zone) */}
         {gameState.question?.TYPE === 'ARDOISE' &&
-         ['STARTED', 'PAUSED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
+         ['STARTED', 'STOPPED', 'REVEALED'].includes(gameState.phase) && (
           <div className="ardoise-team-zone">
-            <div className="ardoise-zone-head">
-              <div className="memory-selector-label">Réponses ARDOISE</div>
-              <ArdoiseReceiptCounter receipt={ardoiseReceipt} live={gameState.phase === 'STARTED'} />
-              {gameState.phase !== 'STARTED' && (
-                <ArdoiseReceiptLegend />
-              )}
-            </div>
+            <div className="memory-selector-label">Réponses ARDOISE</div>
             <div className="ardoise-answers-list">
               {sortedArdoiseEntries.map(({ team, teamName, answer }, rank) => {
                 const teamColor = getRgbColor(team.COLOR)
                 const defaultPts = calcArdoiseDefaultPoints(gameState.question, pointsInput)
                 const delayLabel = answer ? formatArdoiseDelay(answer, gameState.gameTime) : null
-                // #246 : état de réception (hors STARTED). Une équipe sans bumper
-                // VJoueur n'est pas « attendue » : aucune pastille.
-                const receiptStatus = gameState.phase !== 'STARTED' ? ardoiseReceipt.byTeam[teamName] : undefined
-                const receiptCls = gameState.phase === 'REVEALED' ? '' : receiptStatus === 'wait' ? 'st-pending' : receiptStatus === 'off' ? 'st-offline' : ''
                 return (
                   <div
                     key={teamName}
-                    className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'} ${rank === 0 && answer ? 'rank-first' : ''} ${receiptCls}`}
+                    className={`ardoise-answer-row ${answer ? 'has-answer' : 'no-answer'} ${rank === 0 && answer ? 'rank-first' : ''}`}
                   >
                     <div className="ardoise-answer-team-name">
                       {answer && <span className="ardoise-answer-rank">{rank + 1}</span>}
@@ -1233,8 +924,7 @@ export default function GamePage() {
                       {delayLabel && <span className="ardoise-answer-delay">{delayLabel}</span>}
                     </div>
                     <div className="ardoise-answer-text-row">
-                      <ArdoiseReceiptIcon status={receiptStatus} revealed={gameState.phase === 'REVEALED'} />
-                      <span className={`ardoise-answer-text ${answer ? 'has-answer' : 'no-answer'}${gameState.phase === 'REVEALED' && receiptStatus && receiptStatus !== 'ok' ? ' unconfirmed' : ''}`}>
+                      <span className={`ardoise-answer-text ${answer ? 'has-answer' : 'no-answer'}`}>
                         {answer?.TEXT || '—'}
                       </span>
                       {gameState.phase === 'REVEALED' && (
@@ -1313,60 +1003,25 @@ export default function GamePage() {
         )}
 
         <div className="questions-list">
-          {(() => {
-            const renderCard = (question) => {
-              const isCurrentQuestion = gameState.question?.ID === question.ID
-              const isUnplayed = !['STOPPED', 'REVEALED', 'PLAYED'].includes(question.STATUS)
-              const dimmed = !isCurrentQuestion && isUnplayed && !canSelectQuestion
-              const isEntracte = question.TYPE === 'ENTRACTE'
-              return (
-                <div
-                  key={question.ID}
-                  className={isEntracte ? 'game-entracte-row' : undefined}
-                  title={isEntracte ? 'Entracte : cliquer pour la lancer' : undefined}
-                  style={dimmed ? { opacity: 0.5 } : undefined}
-                >
-                  <QuestionCard
-                    question={question}
-                    selected={isCurrentQuestion}
-                    compact
-                    showStatus
-                    showTarget
-                    customCategories={customCategories}
-                    canSelect={canSelectQuestion}
-                    onClick={handleQuestionSelect}
-                  />
-                </div>
-              )
-            }
-            if (rounds.length === 0) return filteredQuestions.map(renderCard)
-            // #245 — titres de manche repliables ; « n/m jouées » compte les questions (entractes exclues).
-            const groups = [{ key: 'un', title: 'Sans manche', idx: -1 }, ...rounds.map((r, i) => ({ key: r.ID, title: `Manche ${i + 1} · ${r.NAME}`, idx: i }))]
-              .map(g => ({ ...g, items: filteredQuestions.filter(q => roundIndexOf(q, rounds) === g.idx) }))
-              .filter(g => g.items.length > 0)
-            const curIdx = gameState.question ? roundIndexOf(gameState.question, rounds) : null
-            return groups.map(g => {
-              const real = countEntries(g.items).questions
-              const done = g.items.filter(q => q.TYPE !== 'ENTRACTE' && ['STOPPED', 'REVEALED', 'PLAYED'].includes(q.STATUS)).length
-              const folded = !!foldedRounds[g.key]
-              return (
-                <div key={g.key} className="game-round-group">
-                  <div className={`game-round-head${curIdx === g.idx ? ' current' : ''}`}>
-                    <button
-                      type="button"
-                      className="game-round-toggle"
-                      aria-expanded={!folded}
-                      aria-label={folded ? `Déplier ${g.title}` : `Replier ${g.title}`}
-                      onClick={() => setFoldedRounds(prev => ({ ...prev, [g.key]: !prev[g.key] }))}
-                    >{folded ? '▸' : '▾'}</button>
-                    <span className="game-round-title">{g.title}</span>
-                    <span className="game-round-count">{done}/{real} jouées</span>
-                  </div>
-                  {!folded && g.items.map(renderCard)}
-                </div>
-              )
-            })
-          })()}
+          {filteredQuestions.map((question) => {
+            const isCurrentQuestion = gameState.question?.ID === question.ID
+            const isUnplayed = !['STOPPED', 'REVEALED', 'PLAYED'].includes(question.STATUS)
+            const dimmed = !isCurrentQuestion && isUnplayed && !canSelectQuestion
+            return (
+              <div key={question.ID} style={dimmed ? { opacity: 0.5 } : undefined}>
+                <QuestionCard
+                  question={question}
+                  selected={isCurrentQuestion}
+                  compact
+                  showStatus
+                  showTarget
+                  customCategories={customCategories}
+                  canSelect={canSelectQuestion}
+                  onClick={handleQuestionSelect}
+                />
+              </div>
+            )
+          })}
           {filteredQuestions.length === 0 && selectedCategories.size > 0 && (
             <div className="category-filter-empty">
               Aucune question dans cette categorie.
@@ -1390,6 +1045,44 @@ export default function GamePage() {
                 max="300"
                 disabled={isPlaying}
               />
+            </div>
+            <div className="input-group">
+              <label htmlFor="points-input">
+                Points
+                {qcmPenalty && (
+                  <span className="qcm-penalty-badge" title={`${qcmPenalty.invalidatedCount} indice(s) donne(s) - penalite ${100 - qcmPenalty.penaltyPercent}%`}>
+                    {qcmPenalty.penaltyPercent}%
+                  </span>
+                )}
+              </label>
+              {memoryScore ? (
+                <input
+                  id="points-input"
+                  type="number"
+                  value={memoryScore.score}
+                  readOnly
+                  className="memory-score-input"
+                  title={`${memoryScore.matchedPairs}×${memoryScore.pointsPerPair}${memoryScore.isComplete ? ` +${memoryScore.completionBonus}` : ''}${memoryScore.errors > 0 ? ` -${memoryScore.errors}×${memoryScore.errorPenalty}` : ''}`}
+                />
+              ) : qcmPenalty ? (
+                <input
+                  id="points-input"
+                  type="number"
+                  value={qcmPenalty.effectivePoints}
+                  readOnly
+                  className="qcm-penalty-input"
+                  title={`Base: ${pointsInput} pts × ${qcmPenalty.penaltyPercent}% = ${qcmPenalty.effectivePoints} pts`}
+                />
+              ) : (
+                <input
+                  id="points-input"
+                  type="number"
+                  value={pointsInput}
+                  onChange={(e) => setPointsInput(parseInt(e.target.value) || 1)}
+                  min="1"
+                  max="100"
+                />
+              )}
             </div>
           </div>
 
@@ -1703,15 +1396,13 @@ export default function GamePage() {
                 size="lg"
                 onClick={handleStartStop}
                 title={
-                  launchLocked
-                    ? LAUNCH_LOCK_REASON
-                    : rafaleTeamsBlocked && !isPlaying
+                  rafaleTeamsBlocked && !isPlaying
                     ? 'Selectionnez au moins une equipe participante avant de demarrer — contrat §5.1'
                     : rafaleBlocked && !isPlaying
                       ? 'Selectionnez une categorie et verifiez le pool RAFALE (disponibilite) avant de demarrer — contrat §7.2'
                       : undefined
                 }
-                disabled={launchLocked || (!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked))}
+                disabled={!isPlaying && (!canStart || rafaleBlocked || rafaleTeamsBlocked)}
               >
                 {isPlaying ? 'STOP' : 'START'}
               </Button>
@@ -1720,8 +1411,7 @@ export default function GamePage() {
                 variant={gameState.phase === 'PAUSED' ? 'primary' : 'warning'}
                 size="lg"
                 onClick={handlePauseContinue}
-                disabled={launchLocked || !isPlaying}
-                title={launchLocked ? LAUNCH_LOCK_REASON : undefined}
+                disabled={!isPlaying}
               >
                 {gameState.phase === 'PAUSED' ? 'CONTINUER' : 'PAUSE'}
               </Button>
@@ -1753,32 +1443,11 @@ export default function GamePage() {
             <Button
               variant="secondary"
               size="md"
-              onClick={() => revealAnswer()}
-              disabled={launchLocked || !canReveal || ardoiseBlocked}
-              title={launchLocked ? LAUNCH_LOCK_REASON : ardoiseBlocked ? `En attente de ${ardoiseReceipt.pending.length} réponse(s)` : undefined}
+              onClick={revealAnswer}
+              disabled={!canReveal}
             >
               REPONSE
             </Button>
-
-            {ardoiseGatePending.length > 0 && (
-              <ArdoiseRevealGate
-                variant="admin"
-                pending={ardoiseGatePending}
-                onForce={() => { clearRevealRefused?.(); revealAnswer(true) }}
-              />
-            )}
-
-            {/* #244/#251/#254 — réponses QCM cliquables après le REVEAL (le bloc d'attribution est en
-                tête de la colonne Équipes) */}
-            {isRevealedPhase && gameState.question?.TYPE === 'QCM' && (
-              <QcmAnswerPicker
-                question={gameState.question}
-                teamCounts={Object.fromEntries(Object.entries(qcmUnitsByColor).map(([c, set]) => [c, set.size]))}
-                unit={awardUnitName}
-                picked={pickedColor}
-                onPick={pickQcmAnswer}
-              />
-            )}
 
           </div>
         </Card>
@@ -1789,81 +1458,7 @@ export default function GamePage() {
       {/* Right Panel - Teams */}
       <div className="right-panel">
         <div className="teams-section">
-          <div className="teams-section-head">
-            <h2 className="section-title">Equipes</h2>
-            {/* #254 : le champ « Points » de la page, au-dessus des équipes (maquette admin_game_award) —
-                MÊME état que le champ de la colonne centrale (pointsInput) ; le montant de l'attribution
-                groupée en vient. */}
-            {/* #254 : LE champ « Points » de la page, au-dessus des équipes (maquette admin_game_award) —
-                déplacé ici depuis la colonne centrale : un seul champ, le montant de l'attribution
-                groupée en vient (pointsInput). Avant le REVEAL il garde ses variantes (score MEMORY /
-                indices QCM en lecture seule) ; après le REVEAL il est toujours modifiable (0 et
-                négatifs permis : pénalité). */}
-            <div className="teams-points-field">
-              <label htmlFor="points-input">
-                Points
-                {qcmPenalty && !isRevealedPhase && (
-                  <span className="qcm-penalty-badge" title={`${qcmPenalty.invalidatedCount} indice(s) donne(s) - penalite ${100 - qcmPenalty.penaltyPercent}%`}>
-                    {qcmPenalty.penaltyPercent}%
-                  </span>
-                )}
-              </label>
-              {!isRevealedPhase && memoryScore ? (
-                <input
-                  id="points-input"
-                  type="number"
-                  value={memoryScore.score}
-                  readOnly
-                  className="memory-score-input"
-                  title={`${memoryScore.matchedPairs}×${memoryScore.pointsPerPair}${memoryScore.isComplete ? ` +${memoryScore.completionBonus}` : ''}${memoryScore.errors > 0 ? ` -${memoryScore.errors}×${memoryScore.errorPenalty}` : ''}`}
-                />
-              ) : !isRevealedPhase && qcmPenalty ? (
-                <input
-                  id="points-input"
-                  type="number"
-                  value={qcmPenalty.effectivePoints}
-                  readOnly
-                  className="qcm-penalty-input"
-                  title={`Base: ${pointsInput} pts × ${qcmPenalty.penaltyPercent}% = ${qcmPenalty.effectivePoints} pts`}
-                />
-              ) : (
-                <span className={`teams-points-amount${pointsInput < 0 ? ' neg' : ''}`}>
-                  <button type="button" onClick={() => changePoints(pointsInput - 1)} aria-label="Diminuer les points">−</button>
-                  <input
-                    id="points-input"
-                    type="number"
-                    value={pointsInput}
-                    onChange={(e) => changePoints(isRevealedPhase
-                      ? (Number.parseInt(e.target.value, 10) || 0)
-                      : (parseInt(e.target.value) || 1))}
-                    {...(isRevealedPhase ? {} : { min: '1', max: '100' })}
-                  />
-                  <button type="button" onClick={() => changePoints(pointsInput + 1)} aria-label="Augmenter les points">+</button>
-                </span>
-              )}
-            </div>
-          </div>
-          {isRevealedPhase && (
-            <>
-              <TeamAwardBar
-                count={awardEntries.length}
-                unit={awardUnitName}
-                source={awardSourceLabel}
-                penaltyMode={awardPenaltyMode}
-                sending={awardSending}
-                blockedReason={awardBlockedReason}
-                hints={{ visible: hintsToggleVisible, on: hintsOn, onChange: setHintsOn }}
-                onSelectAll={() => { setPickedColor(null); setAwardSelected(new Set(awardableKeys)) }}
-                onSelectNone={() => { setPickedColor(null); setAwardSelected(new Set()) }}
-                onGive={giveAwardPoints}
-              />
-              {awardToast && (
-                <div className={`award-toast${awardToast.kind === 'error' ? ' error' : ''}`} role="status">
-                  {awardToast.text}
-                </div>
-              )}
-            </>
-          )}
+          <h2 className="section-title">Equipes</h2>
           <div className="teams-grid">
               {displayTeams.map((team, index) => (
                 <TeamCard
@@ -1911,25 +1506,56 @@ export default function GamePage() {
                       : null,
                   } : null}
                   onTeamClick={(teamName) => {
-                    if (!launchLocked && ['STOPPED', 'REVEALED'].includes(gameState.phase)) {
-                      // #244/#251 : règle unique `defaultTeamAward` (utils/pointsAward.js),
-                      // partagée avec l'attribution groupée « Donner les points (N) ».
-                      const pointsToAward = teamDefaultAward(teamName, pointsInput, useHints)
+                    if (['STOPPED', 'REVEALED'].includes(gameState.phase)) {
+                      // For Memory multi-team, calculate team-specific points
+                      // For QCM with hints, use penalty-adjusted points
+                      // Otherwise use pointsInput
+                      let pointsToAward = pointsInput
+                      if (gameState.question?.TYPE === 'MEMORY' &&
+                          gameState.question?.MEMORY_MODE !== 'SOLO' &&
+                          gameState.MEMORY_TEAM_PAIRS?.[teamName] !== undefined) {
+                        // Calculate team-specific Memory points — same rule as
+                        // solo (utils/pointsAward.js calcMemoryScore), only the
+                        // pairs/errors source differs (per-team vs global).
+                        const pairs = gameState.MEMORY_TEAM_PAIRS[teamName] || 0
+                        const errors = gameState.MEMORY_TEAM_ERRORS?.[teamName] || 0
+                        const teamMemoryScore = calcMemoryScore(gameState.question, pairs, errors)
+                        if (teamMemoryScore) pointsToAward = teamMemoryScore.score
+                      } else if (memoryScore) {
+                        // Solo Memory mode - use global score
+                        pointsToAward = memoryScore.score
+                      } else if (gameState.question?.TYPE === 'QCM' && gameState.question?.QCM_HINTS_ENABLED) {
+                        // QCM: rule mutualized in utils/pointsAward.js
+                        // (calcQcmTeamAward, #157/T1) — per-player penalty if
+                        // a correct buzzer exists for this team, else falls
+                        // back to the current-invalidated-count penalty.
+                        // #157 note: this now applies the same way in STOPPED
+                        // and REVEALED. Before this refactor, a STOPPED-phase
+                        // click always used the fallback, because
+                        // qcmTeamAcquiredPoints was gated to REVEALED only
+                        // (built for the acquired-points badge) and this
+                        // handler read it as a proxy for "team answered
+                        // correctly" — an accidental coupling between a
+                        // display gate and a credit decision, with no test
+                        // coverage either way. Unifying both consumers onto
+                        // calcQcmTeamAward removes that coupling.
+                        const teamBumperList = Object.values(bumpers).filter(b => b.TEAM === teamName)
+                        const award = calcQcmTeamAward(gameState.question, pointsInput, teamBumperList, gameState.qcmInvalidated?.length || 0)
+                        pointsToAward = award.amount
+                      } else if (gameState.question?.TYPE === 'RAFALE') {
+                        // RAFALE (v8.0.0, #16/#199, contrat rafale.md §6.2) —
+                        // suggestion pré-remplie par pointsInput (ajustable,
+                        // même mécanisme que QCM/MEMORY ci-dessus) ×
+                        // compteur retenu (RAFALE_TEAM_BEST en
+                        // MAILLON_FAIBLE, RAFALE_TEAM_COUNTERS sinon,
+                        // utils/pointsAward.js, mutualisé avec AnimPage.jsx).
+                        const counter = rafaleCounterForTeam(gameState.question, teamName, gameState.RAFALE_TEAM_COUNTERS, gameState.RAFALE_TEAM_BEST)
+                        const award = calcRafaleTeamAward(gameState.question, pointsInput, counter)
+                        if (award) pointsToAward = award.amount
+                      }
                       setTeamPoints(teamName, pointsToAward)
                     }
                   }}
-                  selectable={isRevealedPhase && !isPlayerLevel}
-                  selected={awardSelected.has(team.name)}
-                  onSelectChange={toggleAwardKey}
-                  awardedInfo={team.name in awardedTeams ? awardedTeams[team.name] : null}
-                  awardPreview={awardSelected.has(team.name) ? awardTeamAmount(team.name) : null}
-                  playerAward={isRevealedPhase && isPlayerLevel ? {
-                    selected: (mac) => awardSelected.has(mac),
-                    onChange: toggleAwardKey,
-                    awarded: (mac) => (mac in awardedPlayers ? awardedPlayers[mac] : null),
-                    teamAwarded: teamLevelCredited(team.name),
-                    preview: (mac) => (awardSelected.has(mac) ? awardPlayerAmount(mac) : null),
-                  } : null}
                   onPlayerClick={(bumperMac, ctrlKey) => handleBumperClick(bumperMac, ctrlKey)}
                   buzzers={team.buzzers.map(b => ({
                     ...b,

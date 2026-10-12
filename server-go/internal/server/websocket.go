@@ -4,8 +4,6 @@ import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"encoding/json"
-	"errors"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -47,8 +45,6 @@ type WebSocketClient struct {
 	Conn     *websocket.Conn
 	Send     chan []byte
 	Hub      *WebSocketHub
-
-	ConnectedAt time.Time // connection open time (#246 conn_age_ms diagnostics)
 }
 
 // WebSocketHub manages all WebSocket connections
@@ -73,10 +69,6 @@ type WebSocketHub struct {
 	// client whose PlayerID has been identified (SetClientPlayerID called after PLAYER_CONNECT).
 	// Mirrors BuzzerWebSocketHub.OnBuzzerDisconnected for physical buzzers.
 	OnPlayerDisconnected func(playerID string)
-
-	// OnClientClosed fires for every closed connection (any type), after it left
-	// the hub: used to drop per-connection diagnostic state (#246).
-	onClientClosed func(clientID string)
 
 	// OnClientRegistered fires whenever a client's type becomes known/changes
 	// — either at connection time (the dedicated /ws/admin, /ws/tv, /ws/player
@@ -143,12 +135,6 @@ func (h *WebSocketHub) Run() {
 			if clientType == ClientTypeVPlayer && playerID != "" && h.OnPlayerDisconnected != nil {
 				h.OnPlayerDisconnected(playerID)
 			}
-			h.mu.RLock()
-			closedHook := h.onClientClosed
-			h.mu.RUnlock()
-			if closedHook != nil {
-				closedHook(id)
-			}
 			h.notifyClientChange()
 
 		case message := <-h.broadcast:
@@ -161,7 +147,6 @@ func (h *WebSocketHub) Run() {
 					// Message sent successfully
 				default:
 					// Channel full or closed, mark for removal
-					LogWarn(game.LogComponentWebSocket, "CLIENT_EVICTED_SLOW client=%s type=%s queue=%d", client.ID, client.Type, len(client.Send))
 					close(client.Send)
 					toRemove = append(toRemove, client)
 				}
@@ -263,88 +248,6 @@ func (h *WebSocketHub) SetClientPlayerID(clientID, playerID string) {
 		}
 	}
 	h.mu.Unlock()
-}
-
-// BindClientPlayerID links clientID to playerID (#246 B-ID) and enforces "one
-// bound connection per bumper": any OTHER vplayer client currently bound to the
-// same playerID is unbound (its PlayerID cleared, so its later close does not
-// mark the bumper disconnected) and its client ID is returned in evicted so the
-// caller can notify it (PLAYER_EVICTED / DUPLICATE_SESSION). Atomic under h.mu.
-func (h *WebSocketHub) BindClientPlayerID(clientID, playerID string) (evicted []string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for client := range h.clients {
-		if client.ID != clientID && client.PlayerID == playerID && playerID != "" {
-			client.PlayerID = ""
-			evicted = append(evicted, client.ID)
-		}
-	}
-	for client := range h.clients {
-		if client.ID == clientID {
-			client.PlayerID = playerID
-			LogInfo(game.LogComponentWebSocket, "Client %s identified as PlayerID: %s", clientID, playerID)
-			break
-		}
-	}
-	return evicted
-}
-
-// SetOnClientClosed installs the closed-connection hook (race-safe, usable after Run started).
-func (h *WebSocketHub) SetOnClientClosed(f func(clientID string)) {
-	h.mu.Lock()
-	h.onClientClosed = f
-	h.mu.Unlock()
-}
-
-// PlayerIDSnapshot returns the bumper ID bound to this connection, read under the hub lock.
-func (c *WebSocketClient) PlayerIDSnapshot() string {
-	c.Hub.mu.RLock()
-	defer c.Hub.mu.RUnlock()
-	return c.PlayerID
-}
-
-// UnbindPlayerID clears the binding of every connection bound to playerID (#243:
-// a purged VJoueur's connection must not keep acting for a bumper that no longer
-// exists). Returns the affected client IDs.
-func (h *WebSocketHub) UnbindPlayerID(playerID string) (unbound []string) {
-	if playerID == "" {
-		return nil
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for client := range h.clients {
-		if client.PlayerID == playerID {
-			client.PlayerID = ""
-			unbound = append(unbound, client.ID)
-		}
-	}
-	return unbound
-}
-
-// ClientBinding returns the bumper ID bound to clientID and whether the
-// connection is still registered in the hub (#246).
-func (h *WebSocketHub) ClientBinding(clientID string) (playerID string, connected bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for client := range h.clients {
-		if client.ID == clientID {
-			return client.PlayerID, true
-		}
-	}
-	return "", false
-}
-
-// ClientAgeMs returns how long the connection clientID has been open (#246
-// ARDOISE_CLEARED conn_age_ms).
-func (h *WebSocketHub) ClientAgeMs(clientID string) (int64, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for client := range h.clients {
-		if client.ID == clientID {
-			return time.Since(client.ConnectedAt).Milliseconds(), true
-		}
-	}
-	return 0, false
 }
 
 // GetClientPlayerID returns the VJoueur bumper ID linked to clientID (via
@@ -547,8 +450,6 @@ func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.R
 		Conn: conn,
 		Send: make(chan []byte, 256),
 		Hub:  h,
-
-		ConnectedAt: time.Now(),
 	}
 
 	h.register <- client
@@ -613,7 +514,6 @@ func (h *WebSocketHub) BroadcastToTypes(msg *protocol.Message, types ...ClientTy
 		select {
 		case client.Send <- data:
 		default:
-			LogWarn(game.LogComponentWebSocket, "CLIENT_EVICTED_SLOW client=%s type=%s queue=%d", client.ID, client.Type, len(client.Send))
 			close(client.Send)
 			delete(h.clients, client)
 		}
@@ -686,7 +586,6 @@ func (h *WebSocketHub) BroadcastRawToTypes(data []byte, types ...ClientType) {
 		select {
 		case client.Send <- data:
 		default:
-			LogWarn(game.LogComponentWebSocket, "CLIENT_EVICTED_SLOW client=%s type=%s queue=%d", client.ID, client.Type, len(client.Send))
 			close(client.Send)
 			delete(h.clients, client)
 		}
@@ -754,7 +653,6 @@ func (h *WebSocketHub) SendRawToVPlayers(payloads map[string][]byte, fallback []
 		select {
 		case client.Send <- data:
 		default:
-			LogWarn(game.LogComponentWebSocket, "CLIENT_EVICTED_SLOW client=%s type=%s queue=%d", client.ID, client.Type, len(client.Send))
 			close(client.Send)
 			delete(h.clients, client)
 		}
@@ -853,12 +751,11 @@ func (c *WebSocketClient) readPump() {
 			ClientType: string(clientType),
 			Timestamp:  time.Now(),
 		}
-		incoming.BoundPlayerID = c.PlayerIDSnapshot()
 
 		select {
 		case c.Hub.Incoming <- incoming:
 		default:
-			LogWarn(game.LogComponentWebSocket, "INCOMING_DROPPED client=%s type=%s action=%s", c.ID, clientType, msg.Action)
+			LogWarn(game.LogComponentWebSocket, "Incoming channel full, dropping message")
 		}
 
 		if c.Hub.OnMessage != nil {
@@ -960,7 +857,6 @@ func (c *WebSocketClient) writePump() {
 
 			// Send message as a single WebSocket frame (not batched)
 			if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				c.logWriteTimeout(err)
 				return
 			}
 
@@ -969,7 +865,6 @@ func (c *WebSocketClient) writePump() {
 			for i := 0; i < n; i++ {
 				msg := <-c.Send
 				if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-					c.logWriteTimeout(err)
 					return
 				}
 			}
@@ -991,19 +886,9 @@ func (c *WebSocketClient) writePump() {
 			if heartbeatData != nil {
 				c.Conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
 				if err := c.Conn.WriteMessage(websocket.TextMessage, heartbeatData); err != nil {
-					c.logWriteTimeout(err)
 					return
 				}
 			}
 		}
-	}
-}
-
-// logWriteTimeout journals a write that exceeded its 3 s deadline (#246
-// CLIENT_WRITE_TIMEOUT).
-func (c *WebSocketClient) logWriteTimeout(err error) {
-	var ne net.Error
-	if errors.As(err, &ne) && ne.Timeout() {
-		LogWarn(game.LogComponentWebSocket, "CLIENT_WRITE_TIMEOUT client=%s type=%s", c.ID, c.TypeSnapshot())
 	}
 }

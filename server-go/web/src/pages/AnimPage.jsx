@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import NoSleep from 'nosleep.js'
 import { useGame } from '../hooks/GameContext'
@@ -7,11 +7,8 @@ import useDoubleTap from '../hooks/useDoubleTap'
 import { categoryMeta } from '../utils/categoryUtils'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter, getRankBadge, formatReactionTime } from '../utils/buzzOrder'
 import { sortArdoiseEntries } from '../utils/ardoiseOrder'
-import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward, answeredColor } from '../utils/pointsAward'
+import { resolvePointsAward, resolvePointsTarget, calcQcmTeamAward, rafaleCounterForTeam, calcRafaleTeamAward } from '../utils/pointsAward'
 import { isRevealed } from '../utils/phaseRules'
-import { getArdoiseReceipt } from '../utils/ardoiseReceipt'
-import { LaunchLockBanner, useLaunchLock } from '../components/LaunchGameHost'
-import '../components/LaunchGameHost.css' // .launch-toast (l'hôte n'est pas monté sur /anim)
 import { prepareWaitReasons } from '../utils/prepareWaitReason'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
@@ -134,7 +131,6 @@ export default function AnimPage() {
     bumpers,
     nextQuestion,
     questionPosition,
-    setEntracte,
     awardedTeams,
     creditPoints,
     // RAFALE (v8.0.0, #16/#107, contrat rafale.md §5.1/§5.2)
@@ -151,8 +147,6 @@ export default function AnimPage() {
     pauseGame,
     continueGame,
     revealAnswer,
-    revealRefused = null,
-    clearRevealRefused = () => {},
     selectQuestion,
     setTeamPoints,
     setBumperPoints,
@@ -228,17 +222,6 @@ export default function AnimPage() {
   // seule source : phaseRules.isRevealed. Remplace l'inline
   // `gameState.phase === 'REVEALED'` répété à trois endroits avant #166.
   const revealed = isRevealed(gameState.phase)
-  const { lockedByOther: launchLocked } = useLaunchLock() // #253
-  // #253 — l'hôte du verrou n'existe pas sur /anim : toast local pour un ACTION_REFUSED (action suspendue).
-  const { actionRefused, clearActionRefused } = useGame()
-  const [refusedToast, setRefusedToast] = useState(false)
-  useEffect(() => {
-    if (!actionRefused) return undefined
-    setRefusedToast(true)
-    clearActionRefused?.()
-    const id = setTimeout(() => setRefusedToast(false), 6000)
-    return () => clearTimeout(id)
-  }, [actionRefused, clearActionRefused])
   // #171/F2 — badge de phase déplacé de la colonne chrono vers la ligne
   // réponse (voir utils/phaseBadge.js).
   const phaseBadge = getPhaseBadge(gameState.phase)
@@ -517,23 +500,6 @@ export default function AnimPage() {
   // direct, sans résolution PLAYER/bumper via POINTS_TARGET).
   const handleArdoiseCredit = (teamName, points) => setTeamPoints(teamName, points)
 
-  // #246 (F-STOP) — garde de REVEAL ARDOISE, même règle que /admin
-  // (utils/ardoiseReceipt.js) : REPONSE désactivé tant qu'une équipe attendue
-  // n'a pas transmis son texte final ; forçage confirmé via AnimConductPanel.
-  const ardoiseReceipt = useMemo(
-    () => getArdoiseReceipt(teams, bumpers, gameState.ARDOISE_ANSWERS),
-    [teams, bumpers, gameState.ARDOISE_ANSWERS]
-  )
-  const ardoiseGateActive = isArdoise && (gameState.phase === 'STOPPED' || gameState.phase === 'PAUSED')
-  const ardoiseBlocked = ardoiseGateActive && !ardoiseReceipt.complete
-  const ardoiseGatePending = ardoiseBlocked
-    ? ardoiseReceipt.pending
-    : (ardoiseGateActive && revealRefused?.pending?.length ? revealRefused.pending : [])
-  useEffect(() => { clearRevealRefused() }, [gameState.ARDOISE_ANSWERS]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (revealRefused && gameState.phase !== 'STOPPED' && gameState.phase !== 'PAUSED') clearRevealRefused()
-  }, [gameState.phase, revealRefused]) // eslint-disable-line react-hooks/exhaustive-deps
-
   const showRankBadge = RANK_BADGE_PHASES.includes(gameState.phase)
   const showBuzzOrder = BUZZ_ORDER_PHASES.includes(gameState.phase)
   const creditEnabled = CREDIT_PHASES.includes(gameState.phase)
@@ -638,13 +604,12 @@ export default function AnimPage() {
   const getTeamQcmAnswer = (teamName) => {
     if (gameState.question?.TYPE !== 'QCM') return null
     const buzzedBumper = (bumpersByTeam[teamName] || []).find(b => (b.TIME ?? 0) > 0)
-    const answered = answeredColor(buzzedBumper) // #255 : réponse donnée, pas la couleur assignée
-    if (!answered) return null
-    const colorInfo = QCM_COLORS[answered] || null
+    if (!buzzedBumper?.ANSWER_COLOR) return null
+    const colorInfo = QCM_COLORS[buzzedBumper.ANSWER_COLOR] || null
     return {
       colorInfo,
       playerName: buzzedBumper.NAME || '',
-      isCorrect: answered === gameState.question?.QCM_CORRECT,
+      isCorrect: buzzedBumper.ANSWER_COLOR === gameState.question?.QCM_CORRECT,
     }
   }
 
@@ -653,19 +618,6 @@ export default function AnimPage() {
   // net. .anim-page reste elle-même non filtrée (grille à placement
   // explicite, F7) — la classe est appliquée à chacune de ses 4 zones.
   const entracteActive = !!gameState.entracte
-  // #245 (maquette (g‴)) — pastille de manche : « Manche 2/3 · nom · 3/5 » (POSITION 0 = une entracte : « · entracte »),
-  // « Sans manche · 2/4 » pour une question hors manche quand le quiz en compte ; rien sans manche. Les
-  // positions viennent du serveur (ROUND_CONTEXT) et ne comptent pas les entractes.
-  const roundCtx = gameState.ROUND_CONTEXT
-  const roundChip = (() => {
-    if (!question || !roundCtx || !(roundCtx.ROUND_COUNT > 0)) return ''
-    const pos = roundCtx.POSITION > 0 ? ` · ${roundCtx.POSITION}/${roundCtx.TOTAL}` : ''
-    if (roundCtx.ROUND_INDEX > 0) {
-      const name = (gameState.ROUNDS || []).find(r => r.ID === roundCtx.ROUND_ID)?.NAME || ''
-      return `Manche ${roundCtx.ROUND_INDEX}/${roundCtx.ROUND_COUNT}${name ? ` · ${name}` : ''}${roundCtx.POSITION > 0 ? pos : ' · entracte'}`
-    }
-    return roundCtx.POSITION > 0 ? `Sans manche${pos}` : ''
-  })()
   const entracteDim = entracteActive ? ' entracte-dim' : ''
   // Transition progressive (#119, C3) — posée une seule fois sur .anim-page,
   // héritée par les 4 zones (.anim-zone la consomme, styles/entracte.css) —
@@ -675,13 +627,6 @@ export default function AnimPage() {
 
   return (
     <div className="anim-page" style={{ '--ep-transition': `${entracteTransitionMs}ms` }}>
-      {/* #253 — popup « Lancer la partie » ouverte sur le poste régie : conduite suspendue */}
-      <LaunchLockBanner className="anim">
-        🔒 Lancement d'une nouvelle partie en cours sur le poste régie : conduite suspendue.
-      </LaunchLockBanner>
-      {refusedToast && (
-        <div className="launch-toast" role="alert">Action suspendue : lancement d’une nouvelle partie en cours.</div>
-      )}
       <AnimatePresence>
         {entracteActive && (
           <motion.div
@@ -693,7 +638,7 @@ export default function AnimPage() {
             exit={{ opacity: 0 }}
             transition={{ duration: Math.max(0, Number(entracteTransitionMs)) / 1000 }}
           >
-            🎬 Entracte en cours
+            ⏸ Entracte en cours — contrôle réservé à l'admin
           </motion.div>
         )}
       </AnimatePresence>
@@ -777,9 +722,6 @@ export default function AnimPage() {
                       autres chips (auparavant en retrait, seule occurrence
                       sur la page désormais — l'ancien affichage subdued a
                       disparu, pas de doublon). */}
-                  {roundChip && (
-                    <span className="anim-chip anim-chip-round">{roundChip}</span>
-                  )}
                   {questionPosition.total > 0 && (
                     <span className="anim-chip anim-chip-count">
                       {questionPosition.position}
@@ -875,19 +817,11 @@ export default function AnimPage() {
           revealed={revealed}
           hostContext={hostContext}
           nextQuestion={nextQuestion}
-          entracteActive={entracteActive}
-          onEndEntracte={() => setEntracte?.(false)}
           onStart={handleStart}
           onPause={pauseGame}
           onContinue={continueGame}
           onStop={stopGame}
-          onReveal={() => revealAnswer()}
-          launchLocked={launchLocked}
-          ardoiseGate={{
-            blocked: ardoiseBlocked,
-            pending: ardoiseGatePending,
-            onForce: () => { clearRevealRefused(); revealAnswer(true) },
-          }}
+          onReveal={revealAnswer}
           onSelectNext={selectQuestion}
           teams={teams}
           memory={{
@@ -981,8 +915,6 @@ export default function AnimPage() {
             revealed={revealed}
             awardedTeams={awardedTeams}
             onCredit={handleArdoiseCredit}
-            phase={gameState.phase}
-            receipt={ardoiseReceipt}
           />
         ) : displayTeams.map((team, index) => {
           const rank = index + 1

@@ -24,9 +24,7 @@ export default function HistoryPage() {
         const response = await fetch('/history')
         if (response.ok) {
           const data = await response.json()
-          // #249 : TEAM_DELETED est une ligne d'audit (journal), pas un événement de
-          // points : ni groupe « Question #unknown », ni ligne à 0 point, ni compteur.
-          setHistory((data || []).filter(e => e.EVENT_TYPE !== 'TEAM_DELETED'))
+          setHistory(data || [])
         }
       } catch (error) {
         console.error('Failed to fetch history:', error)
@@ -366,9 +364,6 @@ export default function HistoryPage() {
                                         <span className={`points-badge ${event.POINTS >= 0 ? 'positive' : 'negative'}`}>
                                           {event.POINTS >= 0 ? '+' : ''}{event.POINTS} pts
                                         </span>
-                                        {event.DISPLAY === false && (
-                                          <span className="hidden-correction-mark" title="Correction cachée : sans affichage TV" aria-label="Correction cachée"> 🔇</span>
-                                        )}
                                       </td>
                                     </motion.tr>
                                   )

@@ -249,7 +249,7 @@ func TestHandleWebMessage_AllowList_VPlayerCanButton(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), "vplayer-1")
+	learnClientID(t, app, vplayer)
 
 	// handleSimulatedButton reads ID from the MSG payload (not the
 	// ClientID) — VPlayerPage.jsx:429/560 sends exactly this shape

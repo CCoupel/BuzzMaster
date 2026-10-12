@@ -8,9 +8,9 @@ import { useCategories } from '../hooks/useCategories'
 // AnimPage — mode ENTRACTE (#119), tâches F7/T3 du plan
 // _work/reports/plan-entracte-119-20260820-140825.md.
 //
-// Contrat (révisé #245, v11.2, maquette (g‴)) : `anim` ne peut toujours pas DÉCLENCHER une entracte manuelle
-// (ENTRACTE_SET{ACTIVE:true} est réservé à l'admin) — aucun bouton de déclenchement ; elle peut en revanche la TERMINER
-// (ENTRACTE_SET{ACTIVE:false}) : bouton « Terminer l'entracte » présent pendant l'entracte seulement.
+// Contrat : `anim` n'a AUCUN droit de contrôle sur l'entracte (ENTRACTE_SET
+// est admin-only, contracts/websocket-actions.md) — cette page ne doit
+// exposer aucun bouton, seulement un indicateur textuel non filtré.
 //
 // Mêmes mocks de câblage que AnimPage.test.jsx (#166) : AnimConductPanel /
 // AnimAnswerZone / AnimArdoiseList ont leur propre couverture exhaustive
@@ -122,10 +122,10 @@ describe('AnimPage — indicateur "entracte en cours", aucun contrôle (T3)', ()
     expect(screen.queryByText(/Entracte en cours/i)).toBeNull()
   })
 
-  it('affiche l\'indicateur "Entracte en cours" quand entracte est true, non filtré', () => {
+  it('affiche l\'indicateur "Entracte en cours — contrôle réservé à l\'admin" quand entracte est true, non filtré', () => {
     useGame.mockReturnValue(makeGameMock({ gameState: { entracte: true } }))
     const { container } = render(<AnimPage />)
-    const indicator = screen.getByText(/Entracte en cours/i)
+    const indicator = screen.getByText(/Entracte en cours.*contrôle réservé à l.admin/i)
     expect(indicator).toBeInTheDocument()
     const dimNodes = container.querySelectorAll('.entracte-dim')
     // L'indicateur ne doit être descendant d'AUCUN nœud filtré.
@@ -134,13 +134,10 @@ describe('AnimPage — indicateur "entracte en cours", aucun contrôle (T3)', ()
     })
   })
 
-  it("n'expose AUCUN bouton de DÉCLENCHEMENT de l'entracte (admin uniquement) ; « Terminer l'entracte » est dans la conduite (stubée ici : AnimPage.rounds.245.test.jsx)", () => {
-    for (const entracte of [false, true]) {
-      useGame.mockReturnValue(makeGameMock({ gameState: { entracte }, setEntracte: vi.fn() }))
-      const { unmount } = render(<AnimPage />)
-      const entracteButtons = screen.queryAllByRole('button', { name: /ENTRACTE/i })
-      entracteButtons.forEach((b) => expect(b.textContent).toMatch(/Terminer l'entracte/i))
-      unmount()
-    }
+  it("n'expose AUCUN bouton de contrôle de l'entracte (admin uniquement, contracts/websocket-actions.md)", () => {
+    useGame.mockReturnValue(makeGameMock({ gameState: { entracte: true } }))
+    render(<AnimPage />)
+    const entracteButtons = screen.queryAllByRole('button', { name: /ENTRACTE/i })
+    expect(entracteButtons).toHaveLength(0)
   })
 })

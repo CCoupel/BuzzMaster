@@ -2,7 +2,6 @@ import { getRgbColor } from '../utils/colorUtils'
 import { formatArdoiseDelay } from '../utils/ardoiseOrder'
 import { calcArdoiseDefaultPoints } from '../utils/pointsAward'
 import AnimCreditControl from './AnimCreditControl'
-import { ArdoiseReceiptIcon, ArdoiseReceiptLegend, ArdoiseReceiptCounter } from './ArdoiseRevealGate'
 import './AnimArdoiseList.css'
 
 /**
@@ -41,19 +40,9 @@ import './AnimArdoiseList.css'
  * @param {Object} props.awardedTeams - awardedTeams (#170/F1), indexé par nom d'équipe
  * @param {(teamName: string, points: number) => void} props.onCredit
  */
-export default function AnimArdoiseList({ entries, question, gameTime, creditPoints, revealed, awardedTeams, onCredit, phase, receipt }) {
-  // #246 : pastilles de réception + compteur n/N (maquette anim validée) — seulement
-  // quand `receipt` est fourni par AnimPage ; sans lui, rendu inchangé.
-  const live = phase === 'STARTED'
+export default function AnimArdoiseList({ entries, question, gameTime, creditPoints, revealed, awardedTeams, onCredit }) {
   return (
     <div className="anim-ardoise-list">
-      {receipt && (
-        <div className="anim-ardoise-head">
-          <h2>Réponses</h2>
-          <ArdoiseReceiptCounter receipt={receipt} live={live} />
-          {!live && <ArdoiseReceiptLegend />}
-        </div>
-      )}
       {entries.map(({ team, teamName, answer }, index) => {
         const hasAnswer = !!answer
         const delayLabel = hasAnswer ? formatArdoiseDelay(answer, gameTime) : null
@@ -64,12 +53,9 @@ export default function AnimArdoiseList({ entries, question, gameTime, creditPoi
         // reste visible même si la phase avance ensuite (confirmation
         // persistante, pas une action qui disparaît).
         const showCredit = revealed || awarded
-        const receiptStatus = receipt && !live ? receipt.byTeam[teamName] : undefined
-        const receiptRowCls = revealed ? '' : receiptStatus === 'wait' ? ' st-wait' : receiptStatus === 'off' ? ' st-off' : ''
-        const unconfirmed = revealed && receiptStatus && receiptStatus !== 'ok'
 
         return (
-          <div key={teamName} className={`anim-ardoise-row ${hasAnswer ? 'has-answer' : 'no-answer'}${receiptRowCls}`}>
+          <div key={teamName} className={`anim-ardoise-row ${hasAnswer ? 'has-answer' : 'no-answer'}`}>
             <div className="anim-ardoise-row-header">
               {hasAnswer && <span className="anim-ardoise-rank">{index + 1}</span>}
               <span className="anim-ardoise-team-dot" style={{ background: teamColor }} />
@@ -78,18 +64,17 @@ export default function AnimArdoiseList({ entries, question, gameTime, creditPoi
               {!hasAnswer && <span className="anim-ardoise-no-answer-hint">Aucune copie</span>}
             </div>
             <div className="anim-ardoise-body">
-              {receipt && <ArdoiseReceiptIcon status={receiptStatus} revealed={revealed} />}
-              <span className={`anim-ardoise-text ${hasAnswer ? 'has-answer' : 'no-answer'}${unconfirmed ? ' unconfirmed' : ''}`}>
+              <span className={`anim-ardoise-text ${hasAnswer ? 'has-answer' : 'no-answer'}`}>
                 {answer?.TEXT || '—'}
               </span>
-              {showCredit ? (
+              {showCredit && (
                 <AnimCreditControl
                   team={teamName}
                   amount={amount}
                   awarded={awarded}
                   onCredit={(points) => onCredit(teamName, points)}
                 />
-              ) : null}
+              )}
             </div>
           </div>
         )

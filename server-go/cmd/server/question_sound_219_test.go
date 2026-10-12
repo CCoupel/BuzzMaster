@@ -101,22 +101,6 @@ func tw219qSetSoundEnabled(enabled bool) {
 	config.SetInstance(&config.Config{Sound: config.SoundConfig{Enabled: enabled}})
 }
 
-// tw219qSetSoundEnabledFor injects the "sound on" switch into THIS test's adapter (#257/#233):
-// the process-wide config singleton is never touched, so tests using it are independent of
-// each other and may run in parallel. Prefer it to tw219qSetSoundEnabled (kept for the files
-// that still rely on the singleton).
-func tw219qSetSoundEnabledFor(app *App, enabled bool) {
-	app.qsound.soundEnabled = func() bool { return enabled }
-}
-
-// tw257CancelWatchdog cancels the adapter's watchdog goroutine, if one is armed, so it does not
-// outlive the test (#257 review, reserve 2).
-func tw257CancelWatchdog(app *App) {
-	app.qsound.mu.Lock()
-	app.qsound.cancelWatchdogLocked()
-	app.qsound.mu.Unlock()
-}
-
 // tw219qDeferredApp builds a minimal App (newTestApp) whose engine has
 // genuinely reached PhaseStarted in DEFERRED mode for a SPEEDY question
 // carrying a sound — via the REAL Start()+countdown, never StartImmediate
@@ -125,8 +109,6 @@ func tw219qDeferredApp(t *testing.T, player audio.MediaPlayer) (*App, *game.Ques
 	t.Helper()
 	app := newTestApp(t)
 	app.qsound = &questionSoundAdapter{app: app, player: player}
-	t.Cleanup(func() { app.engine.Stop() }) // stops the engine timers / countdown goroutines (#257)
-	t.Cleanup(func() { tw257CancelWatchdog(app) })
 
 	q := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x",
 		Sound: "/question/q1/sound_1234.wav", SoundTimerDelayed: true}
@@ -202,7 +184,7 @@ func TestQuestionSoundAdapter_CA12_SoundDisabled_ReleasesImmediately(t *testing.
 	app, q := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, false)
+	tw219qSetSoundEnabled(false)
 	app.qsound.Start(q)
 
 	if fake.playCount() != 0 {
@@ -227,7 +209,7 @@ func TestQuestionSoundAdapter_CA12_NeutralPlayer_ReleasesImmediately(t *testing.
 	app, q := tw219qDeferredApp(t, neutral)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	app.qsound.Start(q)
 
 	if app.engine.GetState().AnswerTimerWaiting {
@@ -241,7 +223,7 @@ func TestQuestionSoundAdapter_CA12_UnreadableFile_ReleasesImmediately(t *testing
 	app, q := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	app.qsound.Start(q)
 
 	if fake.playCount() != 1 {
@@ -272,7 +254,7 @@ func TestQuestionSoundAdapter_SuccessfulPlay_WaitsForNaturalEnd(t *testing.T) {
 	app, q := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	app.qsound.Start(q)
 
 	if fake.playCount() != 1 {
@@ -308,7 +290,7 @@ func TestQuestionSoundAdapter_ManualStop_AlsoReleases_ThenIdempotent(t *testing.
 	app, q := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	app.qsound.Start(q)
 
 	app.qsound.Stop() // geste manuel "Stop"
@@ -339,7 +321,7 @@ func TestQuestionSoundAdapter_CA13_Rejouer_NeverReleasesTimer_OnSuccess(t *testi
 	app, _ := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	// Le "Rejouer" manuel (HandleCommand PLAY), PAS Start() — c'est
 	// exactement la voie releaseOnFailure=false de play().
 	app.qsound.HandleCommand(protocol.QuestionSoundCommandPlay)
@@ -358,7 +340,7 @@ func TestQuestionSoundAdapter_CA13_Rejouer_NeverReleasesTimer_OnFailure(t *testi
 	app, _ := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	app.qsound.HandleCommand(protocol.QuestionSoundCommandPlay)
 
 	if !app.engine.GetState().AnswerTimerWaiting {
@@ -399,7 +381,7 @@ func TestQuestionSoundAdapter_Watchdog_ReleasesAfterGraceIfNoSignalEver(t *testi
 	app, q := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	app.qsound.Start(q)
 	if !app.engine.GetState().AnswerTimerWaiting {
 		t.Fatal("setup invalide : le chronomètre devrait encore attendre juste après Start()")
@@ -421,7 +403,7 @@ func TestQuestionSoundAdapter_Watchdog_CancelledByStop(t *testing.T) {
 	app, q := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 
-	tw219qSetSoundEnabledFor(app, true)
+	tw219qSetSoundEnabled(true)
 	app.qsound.Start(q)
 	app.qsound.mu.Lock()
 	armed := app.qsound.watchdogCancel != nil
@@ -465,7 +447,7 @@ func TestOnPhaseStarted_QuestionSound_OnlyStartsOnRealStart(t *testing.T) {
 			app := newTestApp(t)
 			fake := &tw219qFakeMediaPlayer{}
 			app.qsound = &questionSoundAdapter{app: app, player: fake}
-			tw219qSetSoundEnabledFor(app, true)
+			tw219qSetSoundEnabled(true)
 			app.engine.Ready("q1", &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Sound: "/question/q1/sound_1.wav"})
 
 			app.onPhaseStarted(tt.previousPhase)

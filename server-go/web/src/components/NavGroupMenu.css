@@ -63,9 +63,3 @@
     display: none;
   }
 }
-
-/* #253 — entrée « Lancer la partie » du menu Préparation (maquette admin_navbar__launch_game_entry) */
-.navgroup-launch { background: linear-gradient(135deg, #ec4899, #8b5cf6); color: #fff; font-weight: 800; }
-.navgroup-launch[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
-.menu-launch { font-weight: 800; color: #7c3aed; width: 100%; background: none; border: 0; text-align: left; cursor: pointer; }
-.menu-launch[aria-disabled="true"] { color: #6b7280; cursor: not-allowed; }

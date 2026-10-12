@@ -38,12 +38,5 @@
     "anthropic_api_key_verified": false,
     "groq_api_key_verified": false
   },
-  "logging": {
-    "file_enabled": true,
-    "file_path": "./data/logs/buzzcontrol.log",
-    "file_min_level": "WARN",
-    "file_max_size_mb": 10,
-    "file_max_files": 5
-  },
-  "version": "11.2.0"
+  "version": "11.1.0"
 }

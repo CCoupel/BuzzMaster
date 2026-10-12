@@ -75,8 +75,3 @@
   opacity: 0.85;
   font-variant-numeric: tabular-nums;
 }
-
-/* #245 (maquette (g‴)) — entracte proposée (violet), changement de manche (orange), fin d'entracte (contour violet) */
-.anim-next-btn-entracte { background: linear-gradient(135deg, #a855f7, #7e22ce); color: #fff; }
-.anim-next-btn-newround { background: linear-gradient(135deg, #f59e0b, #d97706); color: #2a1500; }
-.anim-next-btn-endent { background: #e2e8f0; color: #0f172a; border-color: #a855f7; }

@@ -48,102 +48,6 @@ interface Team {
 - `BUMPER` = ID du premier joueur à buzzer
 - `READY` = true si l'équipe est prête (tous buzzers connectés)
 
-## Identité d'équipe et TEAMS_LOCKED — v11.2 (#249)
-
-- **Identité** : la clé de la map `teams` est l'identité de l'équipe. `Team.NAME` en est une copie, **toujours
-  égale à la clé** (corrigée à l'enregistrement et au chargement, `contracts/models.md` §Identité d'une équipe).
-- **`GameState.TEAMS_LOCKED`** : booléen, sans `omitempty`. Vrai de la sélection d'une question jusqu'à son
-  `REVEALED` (drapeau du moteur, pas déduit de la phase). Faux au démarrage.
-- **Report au renommage** : liste fermée des champs indexés par équipe, dans `contracts/game-state.md`
-  §`TEAMS_LOCKED` (`ARDOISE_ANSWERS`, `MEMORY_TEAM_*`, `RAFALE_TEAM_*`, `MEMORY_PAIR_OWNERS`,
-  `MEMOTION_CARD_TEAMS`, listes et équipes courantes, historique des points). Tout nouveau champ indexé par
-  équipe doit y être ajouté.
-
-## SCORE_CHANGE et DISPLAY d'historique — v11.2 (#252)
-
-- **`GameState.SCORE_CHANGE`** : `{SEQ, DISPLAY, TEAMS, PLAYERS}`, toujours sérialisé, listes jamais `null`. Défaut
-  `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: []}`. Décrit la **dernière modification manuelle** de score
-  (`contracts/game-state.md` §`SCORE_CHANGE`).
-- **`GameEvent.DISPLAY`** (historique `POINTS_AWARDED`) : `*bool`, `omitempty`. Absent = visible (anciens fichiers) ;
-  `false` = correction cachée, enregistrée pour l'audit. Une correction cachée **n'est pas** comptée dans la règle
-  « déjà créditée » (`AWARDED_TEAMS`).
-
-## LAUNCH_LOCK — verrou de la popup « Lancer la partie » (v11.2, #253)
-
-- **`GameState.LAUNCH_LOCK`** : `{ ACTIVE: boolean, OWNER: string, SINCE: number, EXPIRES_AT: number }`, toujours
-  sérialisé. Défaut `{ACTIVE: false, OWNER: "", SINCE: 0, EXPIRES_AT: 0}`.
-- `OWNER` = `CLIENT_ID` de la connexion propriétaire, reçu dans `HELLO_ACK`. `SINCE` et `EXPIRES_AT` sont en
-  millisecondes epoch.
-- Diffusé aux clients `admin` et `anim` seulement, retiré des charges TV et VJoueur.
-- Non persisté : faux au démarrage.
-
-## Niveau d'attribution et QCM_WRONG_PENALTY — v11.2 (#254)
-
-- **`Question.POINTS_TARGET`** (`TEAM` ou `PLAYER`) : défaut au chargement (`game.DefaultPointsTarget`). `TEAM` pour QCM,
-  ARDOISE, MEMORY, MEMOTION et RAFALE ; `PLAYER` pour SPEEDY. Une valeur enregistrée est respectée pour SPEEDY, QCM et ARDOISE.
-  **Changement** : une ancienne question ARDOISE sans `POINTS_TARGET` passe de `PLAYER` à `TEAM`.
-- **`Question.QCM_WRONG_PENALTY`** (question QCM seulement) : entier de −100 à 0, **0 = aucune pénalité** (défaut). Absent,
-  invalide ou non entier → 0, sans faire échouer le chargement de la question. Aucune réécriture des fichiers existants.
-  Ce n'est **pas** un coefficient d'indices : `QCM_PENALTY_1` (0,67) et `QCM_PENALTY_2` (0,33) sont les coefficients.
-- **`AWARDED_TEAMS.PLAYERS`** et **`TEAMS[].TEAM_LEVEL`** : voir `docs/WEBSOCKET_PROTOCOL.md`.
-
-## Bumper — ANSWERED_COLOR et ANSWER_COLOR (v11.2, #255)
-
-- **`ANSWER_COLOR`** : couleur **assignée** au joueur physique à l'affectation, écrasée par la couleur pressée au buzz QCM,
-  jamais remise à zéro. Sert à la couleur des LED, de la `TeamCard` et de `PLAYER_COLOR` dans l'historique. **Ne dit pas si le
-  joueur a répondu** : elle survit d'une question à l'autre.
-- **`ANSWERED_COLOR`** : couleur de la réponse donnée à la **question courante**, `""` sinon.
-  - Écrite au buzz QCM enregistré (`ProcessButtonPress`), pour un joueur physique comme pour un VJoueur. Jamais pour un autre type
-    de question, ni pour un buzz ignoré.
-  - Remise à `""` partout où `TIME` est remis à zéro (dont `Ready()`).
-  - **Invariant** : `ANSWERED_COLOR ≠ ""` ⇒ `TIME > 0` et question courante de type QCM.
-  - Toujours sérialisée, `""` compris (pas d'`omitempty`).
-  - Une sauvegarde ou un fichier de bumpers sans la clé se charge avec `""`, sans migration.
-
-## Manches — rounds.json, ROUND_ID, ORDER (v11.2, #245)
-
-Source : `contracts/models.md` §Manches.
-
-- **`Round`** : `{ ID: "r1", NAME: "…" }`. `ID` attribué par le serveur, jamais réutilisé. `NAME` : 1 à 60 caractères après
-  suppression des espaces de bord ; doublons autorisés.
-- **`data/files/questions/rounds.json`** : `{ "ROUNDS": Round[], "NEXT_ID": number }`. Il vit dans le dossier des questions.
-  Absent = aucune manche. `loadQuestions` ne lit que les sous-dossiers, donc ce fichier n'est jamais pris pour une question.
-- **`question.json`** : `ROUND_ID`. Absent, `""` ou inconnu (manche supprimée, restauration partielle) = « Sans manche ».
-  Aucune migration : les fichiers existants restent sans `ROUND_ID`.
-- **Ordre** : 1. « Sans manche » en premier ; 2. les manches dans l'ordre de `ROUNDS` ; 3. `ORDER` croissant, puis `ID`.
-  Même règle en JS (`questionOrder.js`) et en Go (`getNextQuestionPayload`), avec un test de parité.
-- **Normalisation de `ORDER`** : nombre JSON → partie entière (troncature) ; chaîne entièrement entière (`"5"`, espaces de bord permis)
-  → cet entier ; `"5abc"`, `"7.9"` ou absent/`null` → repli sur la valeur de l'`ID` si elle est entièrement numérique ; `ID` non numérique
-  sans `ORDER` valide → pas de repli, placé après les questions qui ont un rang.
-- **Égalité** : `ID` numériques d'abord, par valeur croissante, puis les autres par ordre lexicographique.
-- **Question de la manche** : `ORDER` = position dans son groupe (0-based), réécrit par `ROUNDS_UPDATE`.
-- **Repli d'affichage** (manches repliées) : préférence locale du navigateur (`localStorage`), jamais envoyée au serveur.
-- **`ROUND_CONTEXT`** (`GameState`) : `{ ROUND_ID, ROUND_INDEX, ROUND_COUNT, POSITION, TOTAL, FIRST_OF_ROUND }`, calculé par le serveur à
-  chaque `READY`, après `ROUNDS_UPDATE`, `DELETE` et `NEW_GAME`.
-
-## Champs retirés ou neutralisés pour les tablettes (v11.2, #258)
-
-Source : `contracts/vplayer-payload-filter.md` §7.5 (liste exhaustive, référence du test de non-régression).
-
-**Retirés** (clé absente) :
-- `GAME.QUESTION.QCM_CORRECT`, `ANSWER`, `MEDIA_ANSWER` : avant `REVEALED` ;
-- `GAME.QUESTION.EXPLANATION` : toujours ;
-- `MOTION_CARDS[i]` et `MEMOTION_ACTIVE.STATE` : `ANSWER_TEXT`, `ANSWER_IMAGE`, `ANSWER`, `QCM_CORRECT`, tant que la carte n'est pas révélée ;
-- `ARDOISE_ANSWERS`, `LAUNCH_LOCK` : toujours ;
-- `QUIZ_OBJECTIVES`, `ENTRACTE_CONFIG_SAVED` : toujours ;
-- `bumpers[*].FIRMWARE_VERSION`, `IS_OUTDATED`, `OTA_STATUS`, `OTA_PERCENT`, `ACK_PENDING` : toujours.
-
-**Neutralisés** (clé conservée, valeur `0` ou `""`) pour les autres équipes, pendant les réponses ouvertes :
-- `bumpers[x]` : `TIME`, `BUTTON`, `STATUS`, `ANSWER_COLOR`, `ANSWERED_COLOR`, `HINTS_AT_BUZZ` ;
-- `teams[t]` : `TIME`, `BUMPER`, `STATUS`.
-
-**Conservés** : `NAME`, `TEAM`, `SCORE`, `CONNECTED`, `CONN_STATE`, `IS_VIRTUAL`, `IS_VPLAYER`, `READY` ; les champs du destinataire et de ses coéquipiers ;
-`teams[*]` : `NAME`, `COLOR`, `SCORE`, `MEMBERS` ; `QCM_ANSWERS` (les choix, pas la bonne réponse) ; les états MEMORY, MEMOTION et RAFALE ;
-scores, classements, `SCORE_CHANGE`, `REMOTE`, `ENTRACTE*`, `ROUNDS`, `ROUND_CONTEXT`.
-
-**Règle** : toute nouvelle clé qui porte une réponse, une bonne réponse, un média de réponse ou une note animateur doit être
-ajoutée à la liste retirée ou neutralisée, dans le même commit que son contrat.
-
 ## Palette d'équipes — v5.7.25, #113
 
 16 couleurs = 8 teintes × 2 tons. Ton vif `S=100% L=55%`, ton profond `S=100% L=35%`.
@@ -201,7 +105,6 @@ ajoutée à la liste retirée ou neutralisée, dans le même commit que son cont
       "STATUS": "READY|PAUSE",
       "VERSION": "1.0.0",
       "ANSWER_COLOR": "RED|GREEN|YELLOW|BLUE",
-      "ANSWERED_COLOR": "RED|GREEN|YELLOW|BLUE|\"\"",
       "HINTS_AT_BUZZ": 0,
       "IS_VIRTUAL": false,
       "CONNECTED": true,
@@ -574,26 +477,6 @@ type ArdoiseAnswer struct {
 Voir `WEBSOCKET_PROTOCOL.md` pour comportement complet (throttling 200ms, flush STOP/PAUSE).
 
 ---
-
-### ArdoiseAnswer — RECEIVED / RECEIVED_HASH (v11.2, #246)
-
-Chaque entrée de `ARDOISE_ANSWERS[équipe]` porte désormais :
-
-| Champ | Type | Sérialisation | Rôle |
-|-------|------|---------------|------|
-| `TEXT` | string | toujours | Texte complet de l'équipe |
-| `STARTED_AT` | number (µs) | toujours | Premier texte non vide (figé) |
-| `SUBMITTED_AT` | number (µs) | toujours | Dernière modification |
-| `RECEIVED` | bool | toujours, sans `omitempty` | `true` uniquement après `ARDOISE_FINAL` accepté (phase STOPPED/PAUSED) |
-| `RECEIVED_HASH` | string | toujours | Empreinte FNV-1a 32 bits (8 hex) du texte final ; `""` tant que `RECEIVED = false` |
-
-- `ARDOISE_INPUT` ne modifie jamais `RECEIVED`.
-- `RECEIVED` repasse à `false` pour toutes les équipes au `CONTINUE`, et la map est recréée au
-  `READY` / NEW_GAME.
-- Un `ARDOISE_FINAL` qui apporte le premier texte non vide fixe `STARTED_AT`, comme un `ARDOISE_INPUT`.
-- Une équipe attendue (au moins un VJoueur) sans entrée dans la map compte comme **non reçue**.
-
-Contrats : `contracts/game-state.md` et `contracts/models.md`, section ArdoiseAnswer.
 
 ## GameState — Champs réseau (v5.7.0)
 

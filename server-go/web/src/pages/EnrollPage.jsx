@@ -77,15 +77,13 @@ export default function EnrollPage() {
     const savedName = localStorage.getItem('vplayer_name')
 
     if (savedName) {
-      // #246 — identité par ID uniquement : plus aucun repli par nom (un
-      // homonyme n'est jamais « moi »). Sans ID mémorisé, pas de session.
+      // #120 (F2) — identité par ID, repli sur le nom uniquement pour une
+      // session antérieure à cette version (pas de vplayer_id stocké) —
+      // repli transitoire, appelé à disparaître avec ces anciennes sessions.
       const savedId = localStorage.getItem('vplayer_id')
-      const existingBumper = savedId && bumpers[savedId]?.IS_VIRTUAL ? bumpers[savedId] : null
-
-      if (!savedId) {
-        setCheckingSession(false)
-        return
-      }
+      const existingBumper = savedId
+        ? (bumpers[savedId]?.IS_VIRTUAL ? bumpers[savedId] : null)
+        : Object.values(bumpers).find(b => b.IS_VIRTUAL && b.NAME === savedName)
 
       if (existingBumper) {
         // Player exists on server, go directly to game

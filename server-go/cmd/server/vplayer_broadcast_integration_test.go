@@ -168,40 +168,6 @@ func collectMessages(conn interface {
 	}
 }
 
-// collectMessagesUntil reads from conn until `want` messages of `action` have arrived (hard
-// limit `hardTimeout`: generous, only reached on a real failure), THEN keeps reading for a short
-// `quiet` window to catch any EXTRA message of that action. Unlike a fixed collection window it
-// does not depend on how loaded the machine is (#257): the expected messages are awaited, not
-// guessed. Like collectMessages, it ends on a read timeout (the conn must not be reused after).
-func collectMessagesUntil(conn interface {
-	SetReadDeadline(time.Time) error
-	ReadMessage() (int, []byte, error)
-}, action string, want int, hardTimeout, quiet time.Duration) []*protocol.Message {
-	var msgs []*protocol.Message
-	got := 0
-	deadline := time.Now().Add(hardTimeout)
-	for {
-		window := time.Until(deadline)
-		if got >= want {
-			window = quiet
-		}
-		if window <= 0 {
-			return msgs
-		}
-		conn.SetReadDeadline(time.Now().Add(window))
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			return msgs
-		}
-		if msg, perr := protocol.ParseSingle(data); perr == nil {
-			msgs = append(msgs, msg)
-			if msg.Action == action {
-				got++
-			}
-		}
-	}
-}
-
 func countMsgAction(msgs []*protocol.Message, action string) int {
 	n := 0
 	for _, m := range msgs {
@@ -289,11 +255,9 @@ func TestVPlayerBroadcastIntegration_PrepareToRevealSequence(t *testing.T) {
 			// (synchronous, no network round-trip) plus the READY transition's
 			// broadcasts to flush through the hub's buffered Send channel and
 			// the writePump goroutine onto the real loopback socket.
-			// #257: the expected UPDATE counts are AWAITED (hard limit 10 s), then a short quiet
-			// window catches any extra one — no fixed window to outrun on a loaded machine.
-			vpMsgs := collectMessagesUntil(vpConn, protocol.ActionUpdate, 2, 10*time.Second, 200*time.Millisecond)
-			adminMsgs := collectMessagesUntil(adminConn, protocol.ActionUpdate, n+3, 10*time.Second, 150*time.Millisecond)
-			tvMsgs := collectMessagesUntil(tvConn, protocol.ActionUpdate, 2, 10*time.Second, 150*time.Millisecond)
+			vpMsgs := collectMessages(vpConn, 500*time.Millisecond)
+			adminMsgs := collectMessages(adminConn, 100*time.Millisecond)
+			tvMsgs := collectMessages(tvConn, 100*time.Millisecond)
 
 			// --- CA1 — contracts/vplayer-payload-filter.md §1 -------------------
 			// "il en reçoit désormais exactement 2 (entrée en PREPARE, puis
@@ -367,7 +331,7 @@ func TestVPlayerBroadcastIntegration_PrepareToRevealSequence(t *testing.T) {
 			app.broadcastStart()
 			app.handleSimulatedButton(buildButtonMsg(t, ids[0]))
 
-			postBuzz := collectMessagesUntil(vpConn2, protocol.ActionUpdate, 1, 10*time.Second, 100*time.Millisecond)
+			postBuzz := collectMessages(vpConn2, 500*time.Millisecond)
 
 			// --- CA6 — invariant de restauration (contrat §2, maquette §4) -----
 			firstUpdate := firstMsgAction(postBuzz, protocol.ActionUpdate)

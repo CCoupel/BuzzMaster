@@ -202,88 +202,6 @@ Score total equipe = TeamPoints + sum(scores joueurs)
 { "ACTION": "BUMPER_POINTS", "MSG": { "ID": "AA:BB:CC:DD:EE:FF", "POINTS": 5 } }
 ```
 
-### Attribuer les points après REVEAL (v11.2, #244/#251, #254)
-
-Une fois la réponse révélée, la page de jeu (`/admin`) attribue les points à plusieurs équipes ou à plusieurs joueurs
-d'un coup.
-
-- **Niveau selon le type de question** :
-  - **Équipe** : cases à cocher dans l'en-tête de chaque carte d'équipe. Pour MEMORY, MEMOTION et RAFALE, toujours.
-    Pour QCM et ARDOISE, selon le réglage « Points : équipe / joueur » de la question (défaut : équipe).
-  - **Joueur** : cases à cocher sur les lignes de joueurs des cartes. Pour SPEEDY, selon le même réglage (défaut : joueur).
-  - Une ancienne question ARDOISE sans réglage crédite désormais **l'équipe** (auparavant le joueur).
-- **Champ « Points »** : le montant vient du champ « Points » de la page, en tête de la colonne Équipes. Il est éditable
-  après le REVEAL. Sa **base** est la valeur qu'il a à l'entrée en REVEALED. Une modification faite après le REVEAL est
-  « modifiée à la main ».
-- **Commutateur « Tenir compte des indices »** : visible seulement pour un QCM avec indices, quand au moins un indice a
-  été révélé et que le montant est positif. Il est **activé par défaut**, et revient activé à chaque question ou phase.
-  Un clic sur une réponse ou une saisie ne le change pas.
-  - Activé : chaque équipe ou joueur reçoit la base multipliée par son coefficient d'indices : `QCM_PENALTY_1` (0,67 par défaut) pour un indice révélé, `QCM_PENALTY_2` (0,33 par défaut) pour deux indices ou plus. Résultat : au moins 1 point. Pour une équipe, le coefficient vient du meilleur joueur de l'équipe qui a la
-    bonne couleur ; pour un joueur, des indices au moment de son buzz.
-  - Désactivé : montant uniforme pour toute la sélection.
-- **Autres montants** : MEMORY (score des paires) et RAFALE (compteur de l'équipe) donnent un montant par équipe, tant que
-  le champ n'est pas modifié à la main. SPEEDY, ARDOISE, MEMOTION, et un QCM sans indice révélé donnent la valeur du champ.
-- **Montant négatif** : uniforme, quel que soit le commutateur. **Les indices n'ont aucun effet sur une pénalité** : une
-  mauvaise réponse est pénalisée de la même façon, avant ou après un indice.
-- **Ligne 1 du bloc** : elle indique la source du montant. Exemples : « barème de la question, ajusté selon les indices de
-  chaque équipe » (commutateur activé), « montant uniforme » (désactivé), « montant saisi, ajusté selon les indices de chaque
-  équipe » (valeur saisie à la main), « mauvaise réponse : pénalité de la question, uniforme (indices sans effet) ».
-- **Ligne 2** : « Tout sélectionner » et « Tout désélectionner » (icônes), puis le bouton d'attribution.
-  - **« Attribuer les points (N) »** si le montant est positif.
-  - **« Appliquer les pénalités (N) »**, en rouge, si le montant est négatif, ou nul après un clic sur une mauvaise réponse.
-  - Désactivé quand N = 0, pendant l'envoi, ou quand le montant est 0. Un lot à 0 n'est jamais envoyé.
-- **Clic sur une réponse QCM** :
-  - **Bonne réponse** : sélectionne les équipes ou joueurs qui ont **réellement répondu** à la question (#255 : une couleur
-    assignée sans réponse ne suffit plus), hors ceux déjà crédités. Le champ
-    reprend la base.
-  - **Mauvaise réponse** : désélectionne tout, puis sélectionne les équipes ou joueurs de cette réponse. Le champ prend la
-    **pénalité de la question**.
-  - Si la question n'a **pas de pénalité** (0), le champ passe à 0 et le bouton est désactivé avec la raison « Aucune
-    pénalité définie pour cette question ». Une valeur saisie à la main réactive le bouton.
-- **Pénalité de la question** : se règle dans l'éditeur de question QCM, champ « Pénalité mauvaise réponse ». Il accepte 0
-  à 100, le signe − étant appliqué. **0 = aucune pénalité** (valeur par défaut). Les anciennes questions valent 0.
-- **Une équipe dans plusieurs réponses** : si ses joueurs ont répondu des couleurs différentes, elle figure dans plusieurs
-  réponses QCM. Le **dernier clic** décide alors du montant. Vérifiez-le avant d'attribuer.
-- **Déjà créditée** : une équipe déjà créditée est grisée (« ✓ déjà créditée »). Un joueur déjà crédité à titre individuel
-  affiche « ✓ déjà crédité », avec son montant. Un joueur d'une équipe créditée au niveau équipe est grisé (« ✓ équipe déjà créditée »). Le serveur ignore ces cas, donc il n'y a pas de
-  double crédit.
-- **Résultat** : « K joueur(s) déjà crédité(s) ignoré(s). » (`ALREADY_AWARDED`) ou « K joueur(s) ignoré(s) (équipe déjà créditée) »
-  (`TEAM_ALREADY_AWARDED`) pour un lot joueurs, et « K équipe(s) déjà créditée(s) ignorée(s) » pour un lot équipes.
-- **Tablettes de l'animateur** : l'admin n'envoie jamais de valeur nulle ou négative pour le champ « Points ». Le bouton de
-  crédit des tablettes garde donc la dernière valeur positive.
-- **Limites** :
-  - Le montant d'une correction (−999 à 999) est contrôlé par l'interface. Le serveur ne vérifie pas cette borne sur les
-    attributions unitaires.
-  - Le commutateur est un état de la page : il n'est pas enregistré.
-
-- **Garde de 8 s** : sans réponse du serveur, le bouton se réactive avec « Pas de réponse du serveur — réessayez. ».
-  Si la réponse arrive ensuite, elle est traitée normalement (résultat affiché, sélection réinitialisée si acceptée).
-- Si la connexion est perdue au moment de l'envoi : « Connexion perdue — réessayez. ».
-
-### Page Scores : montant libre et correction cachée (v11.2, #252)
-
-- **Montant libre** : entier de −999 à 999 (non nul), saisi à côté des présélections 1, 2, 5 et 10. Une saisie hors
-  bornes affiche « Entier de −999 à 999 » et désactive les boutons. Les présélections vident le champ libre.
-  Le signe se choisit avec − et +. Une valeur négative saisie revient au même.
-- **Équipes et joueurs** : le montant libre s'applique aux deux listes.
-- **Interrupteur « 📺 Afficher sur la TV »** : activé à **chaque ouverture** de la page (il n'est pas mémorisé).
-  Désactivé, l'attribution est une **correction cachée** :
-  - Rien n'est animé, ni son, ni LED, sur aucun écran (TV, tablettes, animateur).
-  - Le classement change sans animation.
-  - Une bannière rappelle le mode : « 🔇 Correction cachée : les points sont enregistrés sans animation, sans son ni LED. Le classement de la TV est mis à jour sans animation. » (libellé validé le 2026-10-11).
-  - Une marque 🔇 apparaît sur les boutons, dans « Dernières attributions » (5 plus récentes) et dans la page Historique.
-- **Effet sur « déjà créditée »** : une correction cachée ne grise pas l'équipe. Elle n'empêche pas un crédit normal
-  pour la même question, ni une attribution groupée (#244/#251).
-- **Clic à 0** : un clic admin à montant 0 n'est plus enregistré (ni historique, ni verrou pour l'animateur).
-  Le geste « 0 pt » de l'animateur reste enregistré et verrouille l'équipe.
-- **Animateur** : il ne peut pas cacher une correction. Un `DISPLAY: false` venant de `/anim` est ignoré et journalisé.
-
-**Limites** :
-- La borne −999 à 999 est contrôlée par l'interface, **pas par le serveur**.
-- Une vue TV qui ne tourne pas au moment de la correction cachée traite cette correction plus tard. Elle peut alors
-  retarder un changement de rang visible accumulé le même jour. Cas étroit : changement de vue juste après une
-  correction cachée.
-
 ### POINTS_TARGET sur les questions
 
 Chaque question definit a qui les points sont attribues :
@@ -337,96 +255,6 @@ L'historique est la **source de verite** pour les scores :
 - Garantit la coherence des donnees
 
 ---
-
-## Équipes : renommer et supprimer (v11.2, #249)
-
-### Pendant une question
-
-Dès qu'une question est sélectionnée, les équipes ne peuvent plus être renommées ni supprimées :
-le champ de nom et le bouton ✕ sont désactivés, avec un bandeau. Le serveur refuse aussi l'envoi. Ajouter
-une équipe, changer sa couleur et déplacer des joueurs restent possibles.
-
-Le verrou est levé au **REVEAL** de la question, ou par **« Nouvelle partie »**.
-
-**Limite** : une question sélectionnée par erreur (PREPARE ou READY) bloque donc renommage et suppression
-jusqu'à son REVEAL ou jusqu'à « Nouvelle partie ». Il n'existe pas encore d'action pour annuler la sélection.
-Pour débloquer sans tout remettre à zéro, il faut jouer la question puis la révéler.
-
-### Renommer une équipe (hors question)
-
-- Le nom affiché est la clé de l'équipe. Les réponses ARDOISE, les compteurs MEMORY et RAFALE, et l'historique
-  des points suivent le nouveau nom, y compris après le REVEAL.
-- **Limite** : si, dans le même envoi, vous supprimez l'équipe Y, ajoutez l'équipe X et déplacez **tous** les
-  joueurs de Y vers X, le serveur reconnaît un renommage Y → X. X hérite alors des états de Y (réponses
-  ARDOISE, crédits historiques). Vérifiez ce cas avant de l'enregistrer.
-- **Limite** : renommer une équipe vers le **nom d'une équipe déjà supprimée** (réutilisation du nom) peut faire
-  perdre le verrou « déjà créditée » de la question révélée pour l'équipe renommée : une double attribution
-  devient possible. Cas rare : évitez-le.
-- **Limite** : une équipe sans joueur ne peut pas être « renommée ». Elle est traitée comme supprimée puis
-  ajoutée : ses états de jeu sont effacés.
-
-### Supprimer une équipe (hors question)
-
-Les réponses et compteurs de jeu de l'équipe sont effacés. L'historique des points est conservé (piste d'audit).
-Une équipe recréée sous le même nom ne reprend pas les points déjà attribués à l'ancienne. Elle peut être créditée
-sur la question révélée.
-
-### Fichier `teams.json.bak` et normalisation au démarrage
-
-Au démarrage, le serveur vérifie que le nom de chaque équipe (`NAME`) est égal à sa clé. Si ce n'est pas le
-cas, il corrige le nom et réécrit `data/config/teams.json`. Avant cette réécriture, il copie le fichier d'origine
-dans **`data/config/teams.json.bak`**.
-
-- Le `.bak` est créé à la **première** normalisation seulement. S'il existe déjà, il n'est pas remplacé : il
-  garde la version d'avant la première correction.
-- Aucune copie si rien n'a été corrigé.
-- Le journal contient une ligne `WARN TEAM_NAME_NORMALIZED key="…" old_name="…" source=load` par équipe corrigée.
-
-**Si une normalisation vous surprend** :
-
-1. Lisez le journal (`WARN TEAM_NAME_NORMALIZED`) : il donne la clé et l'ancien nom.
-2. Comparez `teams.json.bak` et `teams.json` pour retrouver le nom d'origine.
-3. Ne remettez pas le `.bak` à la place de `teams.json` : au démarrage suivant, la même correction serait rejouée.
-4. Pour changer le nom d'une équipe, utilisez la page **Équipes** (hors question), pas le fichier.
-
-La page Historique n'affiche pas les suppressions d'équipe (`TEAM_DELETED`). Elles restent dans `history.json`.
-
-#### Verrou de la popup « Lancer la partie » (v11.2, #253)
-
-Tant que la popup est ouverte sur un poste admin, **les actions de jeu sont suspendues pour tous les postes**, y
-compris le poste qui a ouvert la popup :
-
-- **Conduite** : START, STOP, PAUSE, CONTINUE, REVEAL, sélection de question, actions MEMORY, MEMOTION et RAFALE, et le son.
-- **Points** : tous les crédits (équipe, joueur, lot), la remise à zéro des scores (`RAZ`).
-- **Phases** : affichage et masquage du QR code, rechargement des écrans (`RESET`).
-- **Équipes et joueurs** : modification de la liste, suppression ou libération d'un joueur.
-
-Ne sont **pas** suspendus : le lancement lui-même (poste propriétaire), la modification des questions, les réglages (dont la limite de VJoueurs,
-`SET_VIRTUAL_PLAYER_LIMIT`, et `REBOOT`, qui est seulement journalisé), et les actions des joueurs (buzz, réponses ARDOISE).
-
-- **Autres postes** : un bandeau « 🔒 Lancement d'une nouvelle partie en cours sur un autre poste : actions de jeu
-  suspendues. » apparaît, et les commandes de jeu sont désactivées avec le motif.
-- **Renouvellement** : le poste propriétaire renouvelle le verrou toutes les 15 s.
-- **Libération** : la popup est annulée (« Annuler », Échap), le lancement réussit, le poste se déconnecte (onglet
-  fermé, rechargement, coupure), ou 45 s passent sans renouvellement.
-- **Refus d'ouverture** : si une autre fenêtre « Lancer la partie » est déjà ouverte, ou si une entracte est active,
-  la popup ne s'ouvre pas. Le message dit pourquoi. Si le verrou est tenu sur un autre poste, l'entrée du menu est
-  grisée avec une infobulle.
-
-**Si un poste reste bloqué** (commandes désactivées sur les autres postes) :
-1. Fermer la popup sur le poste qui l'a ouverte, ou fermer son onglet : le verrou tombe immédiatement.
-2. Sinon, attendre 45 s au plus : le verrou expire seul après la coupure ou l'abandon de la popup.
-3. Ne pas rouvrir la popup sur deux postes à la fois : la deuxième est refusée.
-
-Si la popup était restée ouverte pendant une coupure, elle affiche « La fenêtre a expiré (plus de 45 s sans signe de vie
-de ce poste) : rouvrez « Lancer la partie » » et le bouton de lancement est désactivé.
-
-### Équipes et lancement de partie
-
-L'option **Équipes** du lancement supprime toutes les équipes, par le même chemin que la suppression d'une
-équipe (voir ci-dessus) : les états de jeu sont effacés et l'historique reçoit un événement `TEAM_DELETED`.
-Les joueurs conservés deviennent sans équipe : les buzzers repassent en LED « sans équipe », et les tablettes
-restent inscrites et attendent une affectation.
 
 ## Joueurs Virtuels (VPlayer)
 
@@ -500,40 +328,9 @@ Pour supprimer un joueur virtuel :
 
 **Comportement après suppression** : Le joueur est automatiquement déconnecté et redirigé vers la page d'inscription avec un bandeau explicite « Joueur supprimé ». Il peut immédiatement se réinscrire avec le même pseudo (v5.9.0+, #120).
 
-#### Relancer une partie : « Lancer la partie » (v11.2, #243)
+#### Réinitialisation d'une partie (NEW_GAME)
 
-L'entrée **« 🚀 Lancer la partie »** du menu **Préparation** (#253) remplace « NOUVELLE PARTIE ». Elle est disponible dans toutes les phases. Elle ouvre une popup
-où vous choisissez ce qui est effacé avant de commencer. **Rien n'est effacé sans confirmation.**
-
-| Option | Par défaut | Effet |
-|--------|------------|-------|
-| **Scores** | cochée | Remet à 0 les scores des équipes et des joueurs, et efface l'historique des points. Les verrous « déjà créditée » sont libérés. |
-| **Questions** | cochée | Remet toutes les questions « à jouer ». Décochée : les questions déjà jouées le restent. |
-| **Joueurs des tablettes** | décochée | Supprime les joueurs inscrits sur tablette. Ils reçoivent le motif « Partie réinitialisée » et doivent se réinscrire. Les buzzers physiques ne sont pas concernés. |
-| **Équipes** | décochée | Supprime toutes les équipes. Les joueurs conservés (buzzers et tablettes) restent inscrits, **sans équipe** : il faut recréer les équipes et y affecter les joueurs. |
-
-- **Combinaison refusée** : « Joueurs des tablettes » sans « Scores » est impossible. Cocher « Joueurs des
-  tablettes » coche et verrouille « Scores ». Si le serveur reçoit quand même cette combinaison, il refuse le
-  lancement (« Lancement refusé : supprimer les joueurs des tablettes exige de remettre les scores à zéro. »).
-- **Aucune option cochée** : le bouton devient « Lancer sans rien effacer ». La partie repart sans purge.
-- **Dans tous les cas**, la question en cours s'arrête et tous les minuteurs (question, décompte, son de question)
-  sont arrêtés. Si une question est en cours, la popup le signale.
-- **Changement par rapport à « Nouvelle partie »** : l'ancien bouton supprimait toujours les joueurs des
-  tablettes. Cette suppression est maintenant une option, décochée par défaut. Pour la retrouver, cochez
-  « Joueurs des tablettes ».
-- **Clients sans options** (anciens scripts) : un `NEW_GAME` sans option garde le comportement v11.1. Les
-  joueurs et les scores sont purgés, les équipes sont conservées, les questions repassent « à jouer ».
-- Le lancement est journalisé (`WARN NEW_GAME_PURGE`, avec le nombre de joueurs et d'équipes supprimés).
-- **Question en cours** : sans « Questions », la question interrompue repasse « à jouer » si elle n'a jamais été
-  lancée ; si elle était lancée (en cours ou en pause), elle est marquée jouée et interrompue. Une question déjà
-  STOPPED ou REVEALED garde son statut.
-- **Entracte** : « Lancer la partie » est refusé pendant une entracte, avec le message « Impossible pendant une
-  entracte : sortez d'abord de l'entracte ». Sortez de l'entracte, puis relancez.
-- **Pas de réponse** : si le serveur ne confirme pas le lancement sous 5 s, la popup affiche « Pas de réponse du
-  serveur — réessayez. » et redevient utilisable. Si la connexion est perdue au moment de l'envoi : « Connexion
-  perdue — réessayez. ». La popup se ferme seule quand le lancement est observé (la phase passe à NEW_GAME).
-- **LED et ambiance** : après tout lancement, les buzzers reprennent leur état de repos (« sans équipe » si
-  « Équipes » est coché), et l'ambiance est mise à jour.
+Lors d'une réinitialisation du jeu (`NEW_GAME`), tous les joueurs virtuels actuellement inscrits sont purgés du roster, même s'ils n'ont pas d'équipe assignée. Ils sont redirigés avec le motif « Partie réinitialisée » et restent libres de se réinscrire après l'ouverture d'une nouvelle phase d'inscriptions.
 
 #### Retrait d'un VJoueur — Réinscription vs. Suppression totale (v5.9.3+, étendu en v5.10.x #134)
 
@@ -646,48 +443,6 @@ Les joueurs virtuels **ne peuvent pas** buzzer sur les questions de type MEMORY 
 4. **Suppression prudente** : Ne supprimer un joueur que s'il ne participe plus
 
 ---
-
-## Réponses ARDOISE : attente, forçage et journal (v11.2, #246)
-
-### Attendre les tablettes avant de révéler
-
-En question ARDOISE, la réponse d'une équipe n'est considérée comme **définitive** qu'une fois confirmée par sa tablette, au STOP (ou à la PAUSE). Le texte s'affiche en direct pendant la question, mais le REVEAL attend la confirmation de chaque équipe. Dans `/admin` et `/anim` :
-
-- Une icône de réception à gauche du texte de chaque équipe (✓ reçue, ⏳ en attente, ⚠ hors ligne), et un
-  compteur `n/N reçues`. Une équipe est en attente tant que sa tablette n'a pas confirmé. Une tablette
-  hors ligne bloque aussi, et est signalée comme telle. La légende des icônes s'affiche hors `STARTED`.
-- **REPONSE** reste désactivée tant qu'une équipe est en attente.
-- Si une tablette a été rechargée **après** le STOP, elle n'envoie rien, même si elle réaffiche son texte :
-  son équipe reste « en attente ». Utiliser « Révéler quand même… » (ci-dessous). Même chose pour une
-  tablette rechargée ou rejointe en cours de question sur laquelle personne n'a rien écrit.
-- **« Révéler quand même… »** ouvre une confirmation (« Attendre » / « Révéler quand même »). Les
-  équipes non confirmées sont révélées avec leur dernier texte reçu ; leur icône passe en glyphe grisé,
-  avec le libellé « Non confirmée » dans l'infobulle.
-
-### Mise à jour : recharger les tablettes
-
-Après une mise à jour du serveur, recharger chaque tablette (page joueur). Une tablette restée sur
-l'ancienne version n'envoie pas la liaison attendue, et ses réponses sont refusées.
-
-Une tablette rechargée pendant la partie retrouve le texte qu'elle affichait, sauf si la question a
-changé entre-temps (le brouillon est conservé dans l'onglet).
-
-### Journal persistant
-
-Le serveur écrit les avertissements sur disque dans `data/logs/buzzcontrol.log` (niveau `WARN` par
-défaut). Le fichier tourne à 10 Mo, en gardant 5 fichiers : `buzzcontrol.log.1`, `.2`, …
-
-Réglages dans `server-go/config.json`, section `logging` (`file_enabled`, `file_path`,
-`file_min_level`, `file_max_size_mb`, `file_max_files`). Sans section `logging`, les valeurs par défaut
-s'appliquent.
-
-Pour une analyse après partie, chercher :
-
-```bash
-grep -E "ARDOISE_(CLEARED|STATE_DIVERGED|REVEAL_FORCED)|VPLAYER_DUPLICATE|PLAYER_(FOREIGN_ID|ACTION_UNBOUND)" data/logs/buzzcontrol.log
-```
-
-Le catalogue des événements et leur lecture sont dans `contracts/logging.md` (§3 et §4).
 
 ## Configuration Effet Neon
 
@@ -2647,45 +2402,6 @@ journalctl -u buzzcontrol -n 50
 ```
 
 ---
-
-## Manches de questions et entractes (v11.2, #245)
-
-### Créer et organiser les manches
-
-- Dans l'éditeur de questions, une **manche** regroupe des questions. Créez-la avec un nom (1 à 60 caractères). La case
-  **entractes** est cochée par défaut : elle crée deux entractes, « Début de la manche <NOM> » et « Fin de la manche <NOM> ».
-  Décochez-la pour une manche sans entractes. Ces entractes se modifient, se déplacent et se suppriment comme toute entracte.
-- Les manches se **replient** et se **déplient**. Le repli est mémorisé par navigateur. « Tout replier » ferme toutes les manches.
-- Réordonnez les manches et les questions avec ▲▼, « Déplacer vers… », ou par glisser-déposer. Renommer une manche ne renomme pas ses entractes.
-- **« Sans manche »** est toujours en premier. Il contient les questions qui n'appartiennent à aucune manche.
-- Une question créée avec le formulaire, champ « Manche » laissé sur « Sans manche », est ajoutée à la fin de « Sans manche ».
-- « + Question », en pied de chaque manche, ajoute la question à la fin de cette manche.
-
-### Supprimer une manche
-
-Une fenêtre propose deux choix :
-- **Conserver** : les questions de la manche, entractes comprises, passent en fin de « Sans manche ». C'est le choix initial (focus).
-- **Supprimer aussi** : les questions de la manche, entractes comprises, sont supprimées définitivement, avec leurs médias.
-
-Pour une manche vide, seul « Supprimer la manche » est proposé. « Supprimer aussi » est refusé si la question en cours fait partie
-des questions à supprimer, pendant la préparation, la lecture, le compte à rebours, la question en cours ou la pause.
-
-### Jouer les manches
-
-- Les questions se jouent dans l'ordre : « Sans manche » d'abord, puis les manches, puis leur ordre interne.
-- « À suivre » propose **toutes les entractes**, y compris celles de manche.
-- Sur l'écran de l'animateur, « Manche suivante : nom » apparaît quand la question suivante ouvre une autre manche.
-  « Lancer l'entracte » sélectionne l'entracte comme toute entrée du déroulé. « Terminer l'entracte » la termine.
-- **L'animateur ne peut pas déclencher une entracte manuelle** : ce geste reste réservé à l'admin. Il peut seulement la terminer.
-- Sur la TV, un titre de manche s'affiche pendant la phase « prêt » de la première question d'une manche, et une pastille indique la manche.
-  Une entracte n'affiche pas de pastille.
-
-### Sauvegarde et restauration
-
-Le fichier `rounds.json` (liste des manches) est dans le dossier des questions. La sauvegarde « questions » l'emporte donc.
-Si `rounds.json` est illisible, le serveur le traite comme « aucune manche » (ordre sans manches), en garde une copie `rounds.json.corrupt` et refuse toute modification de manches (`ROUNDS_FILE_UNREADABLE`) ; restaurez une sauvegarde ou corrigez le fichier.
-
-Les questions créées avant les manches restent « Sans manche » : aucune conversion automatique n'est faite.
 
 ## Son Attaché à une Question (v11.1.0, #219)
 
