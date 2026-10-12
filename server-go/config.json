@@ -45,5 +45,5 @@
     "file_max_size_mb": 10,
     "file_max_files": 5
   },
-  "version": "11.2.0.9"
+  "version": "11.2.0"
 }
