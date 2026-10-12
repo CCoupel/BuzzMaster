@@ -1051,6 +1051,39 @@ type ScoreChange struct {
 	Display bool     `json:"DISPLAY"`
 	Teams   []string `json:"TEAMS"`
 	Players []string `json:"PLAYERS"`
+	// Gains (v11.2.1, #265) : net score variation per team for this change, in
+	// order of first appearance. Always serialized ([] by default, never null,
+	// no omitempty — GameState rule).
+	Gains []TeamGain `json:"GAINS"`
+}
+
+// TeamGain is one SCORE_CHANGE.GAINS entry (#265): the net variation of a
+// team's score caused by the last manual score change.
+type TeamGain struct {
+	Team   string `json:"TEAM"`
+	Points int    `json:"POINTS"`
+}
+
+// gainsAcc accumulates per-team gains, one entry per team in order of first
+// appearance (#265). Teams with a zero net sum keep their entry.
+type gainsAcc struct {
+	list []TeamGain
+	idx  map[string]int
+}
+
+func (g *gainsAcc) add(team string, points int) {
+	if team == "" {
+		return
+	}
+	if g.idx == nil {
+		g.idx = map[string]int{}
+	}
+	if i, ok := g.idx[team]; ok {
+		g.list[i].Points += points
+		return
+	}
+	g.idx[team] = len(g.list)
+	g.list = append(g.list, TeamGain{Team: team, Points: points})
 }
 
 // LaunchLock is GameState.LAUNCH_LOCK (contracts/game-state.md §LAUNCH_LOCK).
@@ -1081,7 +1114,7 @@ type RoundContext struct {
 
 // DefaultScoreChange is the initial / post-NEW_GAME value.
 func DefaultScoreChange() ScoreChange {
-	return ScoreChange{Seq: 0, Display: true, Teams: []string{}, Players: []string{}}
+	return ScoreChange{Seq: 0, Display: true, Teams: []string{}, Players: []string{}, Gains: []TeamGain{}}
 }
 
 // GameEvent represents a game event for history tracking

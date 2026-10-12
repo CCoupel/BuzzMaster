@@ -3786,11 +3786,13 @@ func (e *Engine) UpdateBumperScoreDisplay(bumperID string, points int, display b
 
 	// Recalculate team score as sum of all bumpers in team
 	var changedTeams []string
+	var gains gainsAcc
 	if bumper.Team != "" {
 		e.recalculateTeamScoreUnsafe(bumper.Team)
 		changedTeams = []string{bumper.Team}
+		gains.add(bumper.Team, points) // #265
 	}
-	e.recordScoreChangeUnsafe(display, changedTeams, []string{bumperID})
+	e.recordScoreChangeUnsafe(display, changedTeams, []string{bumperID}, gains.list)
 
 	score := bumper.Score
 	e.mu.Unlock()
@@ -3808,14 +3810,18 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 }
 
 // recordScoreChangeUnsafe bumps SCORE_CHANGE (#252). Caller holds e.mu.
-func (e *Engine) recordScoreChangeUnsafe(display bool, teams, players []string) {
+func (e *Engine) recordScoreChangeUnsafe(display bool, teams, players []string, gains []TeamGain) {
 	if teams == nil {
 		teams = []string{}
 	}
 	if players == nil {
 		players = []string{}
 	}
-	e.state.ScoreChange = ScoreChange{Seq: e.state.ScoreChange.Seq + 1, Display: display, Teams: teams, Players: players}
+	if gains == nil {
+		gains = []TeamGain{}
+	}
+	// #265: GAINS is written with SEQ/TEAMS/PLAYERS and the scores, under e.mu.
+	e.state.ScoreChange = ScoreChange{Seq: e.state.ScoreChange.Seq + 1, Display: display, Teams: teams, Players: players, Gains: gains}
 }
 
 // UpdateTeamScoreDisplay is UpdateTeamScore plus the SCORE_CHANGE marker, set in
@@ -3838,7 +3844,7 @@ func (e *Engine) UpdateTeamScoreDisplay(teamName string, points int, display boo
 
 	// Recalculate total team score (TeamPoints + bumper scores)
 	e.recalculateTeamScoreUnsafe(teamName)
-	e.recordScoreChangeUnsafe(display, []string{teamName}, nil)
+	e.recordScoreChangeUnsafe(display, []string{teamName}, nil, []TeamGain{{Team: teamName, Points: points}}) // #265
 
 	score := team.Score
 	e.mu.Unlock()
@@ -8590,10 +8596,12 @@ func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEnt
 	}
 	if len(res.Applied) > 0 {
 		teams := make([]string, 0, len(res.Applied))
+		var gains gainsAcc
 		for _, en := range res.Applied {
 			teams = append(teams, en.Team)
+			gains.add(en.Team, en.Points) // #265
 		}
-		e.recordScoreChangeUnsafe(display, teams, nil)
+		e.recordScoreChangeUnsafe(display, teams, nil, gains.list)
 	}
 	e.mu.Unlock()
 
@@ -8861,6 +8869,7 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 	}
 	q := e.state.Question
 	var teams []string
+	var gains gainsAcc // #265
 	teamSeen := map[string]bool{}
 	for _, en := range entries {
 		if already[en.ID] {
@@ -8874,6 +8883,7 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 			continue
 		}
 		b.Score += en.Points
+		gains.add(b.Team, en.Points) // #265 (no entry for a player without team)
 		var teamColor []int
 		if b.Team != "" {
 			e.recalculateTeamScoreUnsafe(b.Team)
@@ -8921,7 +8931,7 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 		for _, en := range res.Applied {
 			players = append(players, en.ID)
 		}
-		e.recordScoreChangeUnsafe(display, teams, players)
+		e.recordScoreChangeUnsafe(display, teams, players, gains.list)
 	}
 	e.mu.Unlock()
 
