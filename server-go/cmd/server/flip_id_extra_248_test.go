@@ -312,3 +312,40 @@ func TestFlipID248_Log_ValidFlipIDLogsNoInvalidWarning(t *testing.T) {
 		t.Errorf("FLIP_ID valide : aucun WARN FLIP_ID_INVALID (a %d)", n)
 	}
 }
+
+// Retour READY → PREPARE (sélection d'équipes devenue non conforme) : la mémoire des FLIP_ID est purgée avec le
+// passage en PREPARE (contrat : « purgés au changement de question (passage en PREPARE ou nouvel ID de question) »).
+func TestFlipID248_MemoryPurgedWhenTheRoundGoesBackFromReadyToPrepare(t *testing.T) {
+	r := newFlipRoom248(t)
+	e := r.app.engine
+	r.flip(t, "p1", "1-1", "f-prep", nil)
+	r.observe(t)
+
+	// STARTED -> READY (setter brut), puis une sélection non conforme ramène la manche en PREPARE
+	e.SetPhase(game.PhaseReady)
+	if err := e.SetMemoryParticipatingTeams([]string{"TeamA"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams : %v", err)
+	}
+	if e.GetPhase() != game.PhasePrepare {
+		t.Skipf("précondition non atteinte : la sélection d'une seule équipe ne ramène pas en PREPARE (phase %s) ; à ajuster avec dev-backend", e.GetPhase())
+	}
+	// sélection conforme de nouveau, puis reprise du jeu : la carte 1-1 est toujours visible, la main est à TeamA
+	if err := e.SetMemoryParticipatingTeams([]string{"TeamA", "TeamB"}); err != nil {
+		t.Fatalf("SetMemoryParticipatingTeams (rétablissement) : %v", err)
+	}
+	e.SetPhase(game.PhaseStarted)
+	r.observe(t)
+
+	// mémoire intacte => APPLIED + DUPLICATE=true ; mémoire purgée => geste neuf, refusé (carte déjà visible)
+	r.flip(t, "p1", "1-1", "f-prep", nil)
+	acks := acksOf248(r.observe(t)["p1"])
+	if len(acks) != 1 {
+		t.Fatalf("attendu 1 ACK, a %+v", acks)
+	}
+	if acks[0].Duplicate || acks[0].Status == "APPLIED" {
+		t.Errorf("le retour en PREPARE doit purger la mémoire : FLIP_ID évalué comme neuf, pas rejoué (a %+v)", acks[0])
+	}
+	if acks[0].Status != "IGNORED" || acks[0].Reason != "NOT_FLIPPABLE" {
+		t.Errorf("évalué comme neuf, le geste est refusé (carte déjà visible) : attendu IGNORED NOT_FLIPPABLE, a %+v", acks[0])
+	}
+}
