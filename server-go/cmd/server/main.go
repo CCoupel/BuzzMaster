@@ -1908,7 +1908,14 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 
 	// Process in engine (same as real button press)
 	if !a.engine.ProcessButtonPress(payload.ID, timestamp, button) {
-		return // #247: refused press → no PAUSE, no state broadcast
+		// #247: refused press → no PAUSE, no admin/TV/anim/buzzer broadcast.
+		// A refused VPlayer gets its own state back (same targeted echo as
+		// handleVPlayerQCMAnswer) so a re-sent buzz after a lost ack (#248)
+		// still sees the server state. Non-VPlayer (physical MAC): silent.
+		if bumper := a.engine.GetBumper(payload.ID); bumper != nil && bumper.IsVPlayer {
+			a.broadcastUpdateToPlayer(payload.ID)
+		}
+		return
 	}
 
 	// Update BuzzState tracking after the engine has recorded the press
