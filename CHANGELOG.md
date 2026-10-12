@@ -8,14 +8,14 @@ Historique des versions du projet BuzzControl.
 
 ### Added
 
-- **Accusé des réponses tablette (#248)** — Une réponse QCM ou un buzz SPEEDY n'est confirmé (« ✓ Réponse reçue » / « ✓ Buzz reçu ») qu'après accusé du serveur. Cet accusé est l'état du joueur renvoyé par le serveur. Sans accusé, la tablette renvoie la réponse à la reconnexion, au retour au premier plan, à la reprise après pause et toutes les 4 s, jusqu'à 30 envois. Au-delà, l'échec est définitif (« ✕ … non reçue ») et la tablette n'invite pas à réessayer. Si l'équipe a déjà été servie, la tablette l'indique pour une réponse QCM ou un buzz SPEEDY.
-- **Retournement MEMORY/MEMOTION avec accusé (#248)** — Le retournement d'une carte envoie un identifiant de geste (`FLIP_ID`) et attend l'accusé dédié du serveur (`FLIP_MEMORY_CARD_ACK`) ; un renvoi du même geste ne retourne jamais la carte une seconde fois. Ce retournement n'affiche pas de pastille « reçu ». Il dépend du correctif #247 côté serveur.
+- **Accusé des réponses tablette (#248)** — Une réponse QCM ou un buzz SPEEDY n'est confirmé (« ✓ Réponse reçue » / « ✓ Buzz reçu ») qu'après accusé du serveur. Cet accusé est l'état du joueur renvoyé par le serveur. Sans accusé, la tablette renvoie la réponse à la reconnexion, au retour au premier plan, à la reprise après pause et toutes les 4 s, jusqu'à 30 envois. Au-delà, l'échec est définitif (« ✕ … non reçue ») et la tablette n'invite pas à réessayer. Si l'équipe a déjà été servie, la tablette l'indique pour une réponse QCM ou un buzz SPEEDY. Cet accusé n'est fiable qu'avec le correctif #247 côté serveur (ci-dessous).
+- **Retournement MEMORY/MEMOTION avec accusé (#248)** — Le retournement d'une carte envoie un identifiant de geste (`FLIP_ID`) et attend l'accusé dédié du serveur (`FLIP_MEMORY_CARD_ACK`) ; un renvoi du même geste ne retourne jamais la carte une seconde fois. Ce retournement n'affiche pas de pastille « reçu ».
 - **Protocole (#248, #265)** — `SCORE_CHANGE.GAINS` (variation par équipe, champ additif), `FLIP_MEMORY_CARD.FLIP_ID` (optionnel) et l'action serveur `FLIP_MEMORY_CARD_ACK`. Compatibilité : les anciens clients ignorent ces ajouts et gardent leur comportement.
 - **Attribution de points multi-équipes (#265)** — Sur la TV, l'attribution groupée passe par lots de 6 équipes au plus, dans une grille d'arrivée 3 × 2. Chaque lot est un feu d'artifice (une fusée par équipe, étincelles, zoom en fin de trajectoire) qui remplace le confetti unique et la bulle « +X pts ». La tablette n'affiche que le gain de sa propre équipe, au moment où son lot passe sur la TV, sans célébrer les autres équipes. `prefers-reduced-motion` remplace l'animation par un fondu. Une correction cachée n'anime rien. Au chargement ou à la reconnexion, le premier état sert de référence sans animation.
 
 ### Changed
 
-- **Attribution groupée (#265)** — Dans un lot, jusqu'à 6 cartes sont visibles en même temps, chacune dans sa case distincte, sans recouvrement ; les lots se suivent (3,2 s chacun). L'accélération est complète à partir du 4ᵉ lot, et les noms trop longs sont tronqués par « … ».
+- **Attribution groupée (#265)** — Dans un lot, jusqu'à 6 cartes sont visibles en même temps, chacune dans sa case distincte, sans recouvrement ; les lots se suivent (3,2 s chacun pour les 3 premiers lots ; à partir du 4ᵉ, l'accélération s'applique). L'accélération est complète à partir du 4ᵉ lot, et les noms trop longs sont tronqués par « … ».
 
 ### Fixed
 

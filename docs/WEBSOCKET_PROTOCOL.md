@@ -1374,7 +1374,6 @@ Source de vérité : `contracts/websocket-actions.md` §TEAM_POINTS, §BUMPER_PO
   et est ignoré en silence, comme avant (décision du 2026-08-24). Le `REASON` `NOT_TURN` n'apparaît donc que si la main
   passe pendant l'attente de l'accusé.
 - Sans `FLIP_ID` : comportement inchangé, aucun accusé.
-- Dépendance : l'accusé n'est fiable qu'avec le correctif #247 (un seul `PAUSE` sur appui accepté, pas de `PAUSE` sur refus).
 - Source de vérité : `contracts/websocket-actions.md` §`FLIP_MEMORY_CARD` (§« Idempotence — `FLIP_ID` ») et §`FLIP_MEMORY_CARD_ACK` ;
   journal : `contracts/logging.md` §3.2 octies.
 
