@@ -23,6 +23,12 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
   6. L'utilisateur transmet lui-même aux templates la spécification « script CI unique, workflow de pré-validation, barrière du deployer » : à suivre côté dépôt des templates.
 - **Environnements** : PROD = v11.2.0 ; QUALIF = 11.2.0.9.
 
+## Sync template v3.17.0 (2026-10-12)
+
+- **Template passé de v3.14.2 à v3.17.0** (commits locaux `65747c48` + `d32d9ddf`, aucun push). Nouveaux contextes `CDP_PHASES_{PLAN_DEV,RELEASE,REVIEW_QA}`, bloc `TEAMLEADER_PROTOCOL` à jour (section « Labels d'issues » : le teamleader fait poser les labels par `deployer`). `/context-audit` : seules des références mortes de ce fichier ont été retirées.
+- **Mod `milestone-panel`** (`.claude/skills/milestone-panel/`, gitignoré, copié depuis `TEMPLATE_claude/mods/`) : `session.start` sans garde, donc chaque session qui le charge ouvre le panneau et lance un timer `gh` toutes les 300 s. **Problème ouvert** : l'utilisateur veut qu'il ne se charge que pour le teamleader ; l'API de `session.start` ne distingue pas un teammate (seulement `cwd`, `surface`, `isInteractive`). Le hook `tool.call` doit rester ouvert aux teammates (les `gh issue edit` passent par `deployer`). La correction doit être reportée dans le dépôt du template, `.claude/skills/` étant régénéré à chaque sync.
+- **Prochain** : milestone v11.2.1 (aucune branche), commencer par #261 (panic `/shutdown`).
+
 ## Sync template v3.14.1 (2026-10-10)
 
 - **Template passé de v3.9.1 à v3.14.1** (commits locaux `42094004` + audit), aucun push. Aucune vraie customisation de commande perdue ; `init-project.md` pris au tag. Bloc `TEAMLEADER_PROTOCOL` de CLAUDE.md à jour : ordres > 3 lignes via `_work/tasks/*.md`, questions utilisateur toujours via `AskUserQuestion`.
