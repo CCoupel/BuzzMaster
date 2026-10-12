@@ -143,6 +143,18 @@ Historique des versions du projet BuzzControl.
 - **Manuelle** : à réaliser par l'utilisateur, procédure `tests/procedures/ardoise-246.md` (matériel réel, veille et bfcache, double onglet, création du fichier de log, rendu visuel des maquettes).
 - **Tests automatiques des évictions de diagnostic** : `CLIENT_EVICTED_SLOW` (client, type, taille de la file), `CLIENT_WRITE_TIMEOUT` et `INCOMING_DROPPED` sont couverts (`slow_client_246_test.go`, commit `d5bf6c8e`), y compris le contre-test d'un client qui lit.
 
+### Dépendances et toolchain Go — audit govulncheck (#260)
+
+#### Security
+
+- **Audit `govulncheck` corrigé (#260)** — Les vulnérabilités de la bibliothèque standard de Go 1.25.x et de dépendances sont corrigées : Go 1.25.14 → 1.26.9 ; `golang.org/x/net` v0.47.0 → v0.60.0 ; `gorilla/websocket` v1.5.1 → v1.5.3 ; `golang.org/x/sys` v0.48.0 (tiré par `x/net`).
+
+#### Changed
+
+- **⚠️ Toolchain Go 1.26.9 minimum pour compiler (#260)** — `go.mod` passe à `go 1.26.9`. `GOTOOLCHAIN=auto` télécharge la toolchain si nécessaire. La CI et `build.ps1` utilisent Go 1.26.
+- **Redirection de nettoyage de chemin en 307 (#260)** — Go 1.26 répond 307 au lieu de 301 pour la redirection de nettoyage de chemin du `ServeMux` (ex. `/api/buzzer//status`). Impact nul : BuzzClick n'appelle pas ces chemins, et les pages React et les tablettes ne sont pas concernées.
+- **`goversioninfo` v1.7.0 (#260)** — Installé en CI et dans `build.ps1` à chaque build. La v1.4.1 produit un `.syso` refusé par l'éditeur de liens de Go 1.26 sous Windows.
+
 ## [11.1.0] - 2026-09-25 — Média sonore (#219, #236, #237) + Navbar refactorisée (#238) + Logo BuzzControl (#239) + Forçage affichage TV (#240) [#241 doublon fermé]
 
 **Milestone #37 complète (7/7 issues : #219, #236, #237, #238, #239, #240, #241)** — Lot v11.1 : Son personnel par question pour SPEEDY, QCM, ARDOISE, chronomètre configurable (simultané ou différé) ; Navbar admin refactorisée (groupes, seuils responsifs, badge compteurs) ; nouveau logo BrandLogo ; affichage TV forcé sur le jeu au lancement d'une manche. #241 fermée comme doublon de #238. Validation manuelle complète sur QUALIF (build final v11.1.0.14).
