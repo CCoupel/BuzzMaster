@@ -1367,18 +1367,23 @@ Source de vérité : `contracts/websocket-actions.md` §TEAM_POINTS, §BUMPER_PO
 - `FLIP_MEMORY_CARD` accepte un champ optionnel `FLIP_ID` (1–64 caractères `[A-Za-z0-9_-]`), créé par la tablette à
   chaque nouveau geste et réutilisé pour ses renvois. Honoré uniquement pour un `vplayer` résolu.
 - Le serveur déduplique par bumper (16 identifiants mémorisés, non persistés) et répond par la nouvelle action
-  serveur → émetteur **`FLIP_MEMORY_CARD_ACK`** (`STATUS`: `APPLIED` | `IGNORED`, `REASON`, `DUPLICATE`), suivie d'un
-  `UPDATE` ciblé. Un doublon ou un geste ignoré ne déclenche aucune diffusion générale.
+  serveur → émetteur **`FLIP_MEMORY_CARD_ACK`** (`STATUS`: `APPLIED` | `IGNORED` ; `REASON`: `""` si appliqué, sinon
+  `NOT_TURN` | `NOT_FLIPPABLE` | `NOT_PLAYABLE` | `CARD_SCOPE` ; `DUPLICATE`), suivie d'un `UPDATE` ciblé. Un doublon
+  ou un geste ignoré ne déclenche aucune diffusion générale.
+- **Règle tablette** : `FLIP_ID` n'est envoyé que si l'équipe du joueur a la main. Un tap hors tour part sans `FLIP_ID`
+  et est ignoré en silence, comme avant (décision du 2026-08-24). Le `REASON` `NOT_TURN` n'apparaît donc que si la main
+  passe pendant l'attente de l'accusé.
 - Sans `FLIP_ID` : comportement inchangé, aucun accusé.
+- Dépendance : l'accusé n'est fiable qu'avec le correctif #247 (un seul `PAUSE` sur appui accepté, pas de `PAUSE` sur refus).
 - Source de vérité : `contracts/websocket-actions.md` §`FLIP_MEMORY_CARD` (§« Idempotence — `FLIP_ID` ») et §`FLIP_MEMORY_CARD_ACK` ;
   journal : `contracts/logging.md` §3.2 octies.
 
-## Écho ciblé d'un buzz SPEEDY refusé (v11.2.1, #247)
+## Écho ciblé d'un buzz VJoueur refusé (v11.2.1, #247)
 
-- Un buzz SPEEDY refusé par le moteur ne produit plus de `PAUSE` ni de mise à jour générale. Si l'émetteur est un
+- Un appui buzzer refusé par le moteur ne produit plus de `PAUSE` ni de mise à jour générale. Si l'émetteur est un
   VJoueur résolu, il reçoit seulement un `UPDATE` ciblé (son état serveur). Un bumper physique reste silencieux.
-- Un appui buzzer n'est accepté (et ne diffuse de `PAUSE`) que s'il est enregistré ; un appui pendant une question
-  ARDOISE est refusé.
+  Vaut pour tout buzz de VJoueur refusé passant par le chemin simulé, quel que soit le type de question buzzable.
+- Un appui accepté diffuse un seul `PAUSE` (plus de doublon). Un appui pendant une question ARDOISE est refusé.
 - L'écho ciblé du QCM refusé existait déjà (`handleVPlayerQCMAnswer`) et est couvert par un test de non-régression.
 
 ## Attribution au niveau joueur — BUMPER_POINTS_BATCH (v11.2, #254)
