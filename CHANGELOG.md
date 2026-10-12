@@ -2,6 +2,13 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] — v11.2 — Tests Go stabilisés (#257, #233)
+
+### Fixed
+
+- **Tests Go instables de `cmd/server` (#257, #233)** — Trois tests échouaient par intermittence sous `go test -race` : deux tests de l'adaptateur de son (`TestQuestionSoundAdapter_Watchdog_CancelledByStop`, `TestQuestionSoundAdapter_CA12_SoundDisabled_ReleasesImmediately`) qui partageaient le singleton de configuration avec des tests parallèles, et un test de la chaîne son (`TestSoundChain_MotionCardTimerExpiry_PlaysNoSound`) en course de données sur la configuration. Les tests lisent désormais jusqu'à l'action attendue, arrêtent leurs minuteurs en fin de test, et n'écrivent plus la configuration partagée pour l'état du son. Mesure : 4 échecs sur 20 exécutions avant, 0 sur 20 après.
+- **Seul changement de production (#233)** — L'adaptateur de son reçoit un champ injectable `soundEnabled`. Sans injection (toujours le cas en production), il lit la configuration comme avant : aucun effet de production.
+
 ## [Unreleased] — v11.2 — Manches de questions et entractes de manche (#245)
 
 ### Added
