@@ -91,7 +91,7 @@ export function useAckedSend({ sendBound, connStatus, bound, phase, questionId, 
       if (rec.qid !== questionId) clear()
     }
     if (phase === 'PREPARE' && recRef.current) clear()
-  }, [acked, teamServed, questionId, phase, clear, setSt])
+  }, [status, acked, teamServed, questionId, phase, clear, setSt])
 
   // Renvoi : reliaison, reprise en STARTED.
   useEffect(() => { attempt(true) }, [bound, connStatus, phase, attempt])
