@@ -216,6 +216,34 @@ sudo systemctl enable buzzcontrol
 - [ ] OTA update without bricking (Phase 3)
 - [ ] Configuration persistence across reboots
 
+## Tests Go : bonnes pratiques et tests instables (#257, #233)
+
+Issues de la stabilisation des tests de `cmd/server` (corrections `8b0e5ead`, `57fc653d`, `b8375d17`).
+
+### Règles pour écrire des tests Go
+
+- **Pas de `time.Sleep` pour attendre un événement.** Attendre par condition : lire les messages jusqu'à l'action attendue, avec un délai maximal (`readActionMatchingWithin`, `collectMessagesUntil`, 10 s).
+- **Lire jusqu'à l'action attendue, pas la première trame.** Une trame antérieure (`HEARTBEAT`, `UPDATE`) peut arriver avant. Si une trame interdite arrive (ex. `PLAYER_CONNECTED` quand on attend un rejet), le test échoue immédiatement.
+- **Arrêter les minuteurs en fin de test** avec `t.Cleanup` (ex. `engine.Stop()`, annulation du chien de garde de l'adaptateur de son). Les `defer` du test s'exécutent avant les cleanups enregistrés, donc un cleanup enregistré tôt s'exécute après eux.
+- **Ne pas modifier le singleton `config` dans des tests parallèles.** Utiliser une injection (ex. `soundEnabled` de l'adaptateur de son). Si un test doit appeler `config.SetInstance`, restaurer l'instance précédente par `t.Cleanup`.
+- **Pas de `t.Parallel()` sur un test qui utilise le singleton `config`.** Les tests parallèles s'exécutent après la phase séquentielle du paquet.
+
+### Durée et commandes
+
+- `go test -race ./...` (défaut) : rapide, à lancer à chaque modification.
+- `go test -race -count=20 -timeout 3h ./cmd/server` : plus de 10 minutes (environ 80 minutes pour l'ensemble des paquets avec `-count=20`). Le `-timeout` par défaut (10 min) fait échouer la série. Utilisez `-timeout 3h`.
+
+### Hypothèse non prouvée
+
+Deux tests (`TestHandlePlayerConnect_NoRelease_StillRejected`, `TestVPlayerBroadcastIntegration_PrepareToRevealSequence`) ont été vus rouges
+seulement dans la suite complète, sous charge machine. Ils n'ont jamais échoué en isolation. La cause « charge machine / ordre des messages »
+reste une **hypothèse non prouvée** : les corrections (attente par condition) rendent les tests robustes, sans l'avoir démontré.
+
+### Dette restante
+
+Une vingtaine de fichiers de test utilisent encore `config.SetInstance` (tous restaurent l'instance par `t.Cleanup`). Ils sont stables aujourd'hui,
+mais ne doivent pas devenir parallèles sans isolation préalable.
+
 ## Files Reference
 
 ### Critical Files to Port
