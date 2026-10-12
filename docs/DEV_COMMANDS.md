@@ -216,6 +216,38 @@ sudo systemctl enable buzzcontrol
 - [ ] OTA update without bricking (Phase 3)
 - [ ] Configuration persistence across reboots
 
+## Tests Go : bonnes pratiques et tests instables (#257, #233)
+
+Issues de la stabilisation des tests de `cmd/server` (corrections `8b0e5ead`, `57fc653d`, `b8375d17`).
+
+### Règles pour écrire des tests Go
+
+- **Pas de `time.Sleep` pour attendre un événement.** Attendre par condition : lire les messages jusqu'à l'action attendue, avec un délai maximal (`readActionMatchingWithin`, `collectMessagesUntil`, 10 s).
+- **Lire jusqu'à l'action attendue, pas la première trame.** Une trame antérieure (`HEARTBEAT`, `UPDATE`) peut arriver avant. Si une trame interdite arrive (ex. `PLAYER_CONNECTED` quand on attend un rejet), le test échoue immédiatement.
+- **Arrêter les minuteurs en fin de test** avec `t.Cleanup` (ex. `engine.Stop()`, annulation du chien de garde de l'adaptateur de son). Les `defer` du test s'exécutent d'abord ; ensuite, tous les `t.Cleanup` s'exécutent dans l'ordre inverse de leur enregistrement.
+- **Ne pas modifier le singleton `config` dans des tests parallèles.** Utiliser une injection (ex. `soundEnabled` de l'adaptateur de son). Si un test doit appeler `config.SetInstance`, restaurer l'instance précédente par `t.Cleanup`.
+- **Pas de `t.Parallel()` sur un test qui utilise le singleton `config`.** Les tests parallèles s'exécutent après la phase séquentielle du paquet.
+
+### Durée et commandes
+
+- `go test -race ./...` (défaut) : rapide, à lancer à chaque modification.
+- `go test -race -count=20 -timeout 3h ./cmd/server` : environ 80 minutes pour `cmd/server` seul avec `-count=20`.
+- La série `go test -race -count=20 -timeout 3h ./...` complète : environ 80 minutes aussi (paquets en parallèle).
+- Une exécution unique de `go test -race ./...` : environ 4 à 5 minutes.
+- Le `-timeout` par défaut (10 min) fait échouer les séries : utilisez `-timeout 3h`.
+
+### Hypothèse non prouvée
+
+Deux tests (`TestHandlePlayerConnect_NoRelease_StillRejected`, `TestVPlayerBroadcastIntegration_PrepareToRevealSequence`) ont été vus rouges
+seulement dans la suite complète, sous charge machine. Ils ne sont pas reproduits en 20 exécutions de `cmd/server` seul. La cause « charge machine / ordre des messages »
+reste une **hypothèse non prouvée** : les corrections (attente par condition) rendent les tests robustes, sans l'avoir démontré.
+
+### Dette restante
+
+22 fichiers de test utilisent encore `config.SetInstance`. Six n'ont aucun `t.Cleanup` : `internal/config/config_merge_test.go`, `internal/server/ai_generator_rafale_203_test.go`, `internal/server/ai_job_concurrency_test.go`, `internal/server/e2e_test.go`, `internal/server/http_lighting_config_test.go`, `internal/server/rafale_generate_endpoint_203_test.go`. Ils sont stables car séquentiels, et ne doivent pas devenir parallèles sans isolation préalable. Tout nouveau `SetInstance` doit restaurer l'instance précédente par `t.Cleanup`.
+
+Deux fichiers écrivent aussi le singleton sans le restaurer, via l'assistant `tw219qSetSoundEnabled` (`cmd/server/question_sound_219_test.go`, appel de `config.SetInstance`) : `cmd/server/sound_gate_dispatch_219_test.go` (7 appels) et `cmd/server/sound_gate_cache_219_test.go` (1 appel). Préférer `tw219qSetSoundEnabledFor`, qui injecte l'état du son dans l'adaptateur du test.
+
 ## Files Reference
 
 ### Critical Files to Port

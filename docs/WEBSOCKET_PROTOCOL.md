@@ -466,6 +466,119 @@ Couleurs disponibles : `green`, `red`, `blue`, `yellow`, `orange`, `white`.
 
 ---
 
+## Équipes : identité, verrou et renommage — UPDATE / FULL (v11.2, #249)
+
+Source de vérité : `contracts/websocket-actions.md` §UPDATE, §TEAMS_UPDATE_REFUSED et
+`contracts/game-state.md` §`TEAMS_LOCKED`.
+
+- La map `teams` est indexée par **clé**. `NAME` vaut toujours la clé : le serveur le réécrit à chaque
+  `UPDATE`/`FULL` (et au chargement de `teams.json`, avec `WARN TEAM_NAME_NORMALIZED`).
+- **Renommer = changer la clé.** Le client envoie la map où l'ancienne clé a disparu, la nouvelle clé
+  porte `NAME` = nouvelle clé, et les `bumpers` passent à la nouvelle `TEAM`.
+- **`TEAMS_LOCKED`** (`GameState`, toujours sérialisé) : `true` de la sélection d'une question
+  (`Ready()`) jusqu'à son `REVEALED`, sur `NEW_GAME` et au démarrage du serveur : `false`.
+- **Pendant le verrou**, un `UPDATE`/`FULL` qui retire une clé (renommage ou suppression) est refusé
+  **en entier**. Ajout d'équipe, couleur et affectation de joueurs restent permis.
+
+```json
+{ "ACTION": "TEAMS_UPDATE_REFUSED", "MSG": { "REASON": "TEAMS_LOCKED_DURING_QUESTION", "TEAMS": ["Les Bleus"] } }
+```
+
+Réponse **ciblée** à l'émetteur, suivie de l'état complet. Journal : `WARN TEAMS_CHANGE_REFUSED`.
+
+- **Hors verrou** (y compris `REVEALED`), un renommage est reconnu quand une clé disparaît et une nouvelle
+  apparaît **dans le même message**, avec les mêmes joueurs. Le serveur reporte sous la nouvelle clé la
+  liste fermée des états (`game-state.md` §`TEAMS_LOCKED`), historique compris. Journal : `INFO TEAM_RENAMED`.
+- Sinon, c'est une suppression suivie d'un ajout : les **états de jeu** de l'équipe supprimée sont effacés.
+  L'historique des points est conservé. Le serveur y ajoute un événement `TEAM_DELETED` (`TEAM_NAME`,
+  `TIMESTAMP`) **à la suppression uniquement**, jamais à un renommage.
+- `AWARDED_TEAMS` ignore les `POINTS_AWARDED` d'une équipe **antérieurs à son dernier `TEAM_DELETED`**. La
+  comparaison se fait sur l'**ordre de l'historique** (indice dans la liste), jamais sur les horodatages.
+  Une équipe recréée sous le même nom n'hérite donc pas du verrou « déjà créditée » de l'ancienne.
+
+## Liaison VJoueur, ARDOISE final et REVEAL gardé — v11.2 (#246)
+
+Source de vérité : `contracts/websocket-actions.md` (sections PLAYER_CONNECT, ARDOISE_INPUT,
+ARDOISE_FINAL, ARDOISE_FINAL_ACK, REVEAL, REVEAL_REFUSED, CLIENT_TRACE) et `contracts/logging.md`.
+
+### Liaison connexion ↔ bumper
+
+- Un `PLAYER_CONNECT {NAME, ID}` accepté **lie la connexion WebSocket** à ce bumper. Le client
+  VJoueur l'envoie à **chaque** ouverture de sa WebSocket, même si l'état reçu le montre déjà connecté.
+- Une seule connexion liée par bumper : la plus récente gagne. L'ancienne reçoit
+  `PLAYER_EVICTED { REASON: "DUPLICATE_SESSION" }` et est déliée (`WARN VPLAYER_DUPLICATE_SESSION`).
+- Actions joueur (`ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`, `BUTTON`, `FLIP_MEMORY_CARD`)
+  émises par un client `vplayer` : refusées sans réponse si la connexion n'est liée à rien
+  (`PLAYER_ACTION_UNBOUND`) ou si `ID` ≠ bumper lié (`PLAYER_FOREIGN_ID`).
+- Le nom n'identifie jamais un joueur côté client. Le `NAME` envoyé ne renomme plus le bumper ;
+  `PLAYER_CONNECTED.NAME` renvoie le nom serveur (`WARN VPLAYER_NAME_MISMATCH` si différent).
+- Noms de VJoueurs uniques (sans casse) : un renommage ou une entrée en doublon venant de
+  `UPDATE`/`FULL` est écarté (`WARN VPLAYER_DUPLICATE_NAME`).
+
+```json
+{ "ACTION": "PLAYER_EVICTED", "MSG": { "REASON": "DUPLICATE_SESSION" } }
+```
+
+### ARDOISE_INPUT — compléments v11.2
+
+Champs facultatifs : `SEQ` (compteur croissant par question et par connexion, `ARDOISE_SEQ_GAP` /
+`ARDOISE_SEQ_STALE` en diagnostic) et `REASON` (`key`, `clear`, `backspace_empty`, `resend`, `visible`).
+`TEXT` est limité à **2 000 caractères** (points de code Unicode). Au-delà, le message est **ignoré en
+entier** (`WARN ARDOISE_INPUT_TOO_LONG`), jamais tronqué.
+
+### ARDOISE_FINAL (VPlayer → Server)
+
+Envoyé à la sortie de `STARTED` (STOP ou PAUSE), pour la question ARDOISE courante.
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `ID` | string | Bumper lié à la connexion |
+| `QUESTION_ID` | string | Doit être la question courante, sinon `ARDOISE_FINAL_STALE` |
+| `TEXT` | string | Texte complet au gel du clavier, `""` autorisé, ≤ 2 000 caractères |
+| `HASH` | string | FNV-1a 32 bits du texte UTF-8, 8 caractères hexadécimaux minuscules |
+| `SEQ` | integer | Facultatif, même compteur que `ARDOISE_INPUT` |
+
+Le serveur recalcule le hash (divergence → `WARN ARDOISE_FINAL_HASH_MISMATCH`, pas d'accusé), écrit
+`ARDOISE_ANSWERS[équipe]` avec `RECEIVED = true` et `RECEIVED_HASH`, répond `ARDOISE_FINAL_ACK` à la
+seule connexion émettrice, puis diffuse `UPDATE` immédiatement vers admin et anim. Il est idempotent.
+
+Vecteurs de test FNV-1a (Go et JS doivent les reproduire) :
+
+| TEXT | HASH |
+|------|------|
+| `""` | `811c9dc5` |
+| `"a"` | `e40c292c` |
+| `"Paris"` | `246f9d40` |
+
+**Renvoi côté tablette** : un envoi au gel, puis un renvoi par seconde tant que l'accusé valide n'est
+pas reçu (même `QUESTION_ID` et même `HASH`). Au plus 30 envois par liaison. Les renvois s'arrêtent
+dès que la phase ou la question change.
+
+### ARDOISE_FINAL_ACK (Server → VPlayer, ciblé)
+
+Payload : `QUESTION_ID`, `HASH`. **Ne contient jamais le texte** (confidentialité, #128).
+
+### REVEAL — garde ARDOISE et FORCE (admin, anim)
+
+- Champ facultatif `FORCE` (booléen). Hors question ARDOISE, il est ignoré.
+- Sans `FORCE: true`, le REVEAL est **refusé** tant qu'une équipe attendue n'a pas `RECEIVED = true`.
+  Une équipe est attendue si elle a au moins un VJoueur. La tablette hors ligne compte comme non reçue.
+- Refus : la phase ne change pas, et l'émetteur seul reçoit `REVEAL_REFUSED`.
+- Avec `FORCE: true` : REVEAL immédiat, `WARN ARDOISE_REVEAL_FORCED` s'il manque des équipes. Ces
+  équipes gardent leur dernier texte reçu, avec `RECEIVED = false`.
+
+```json
+{ "ACTION": "REVEAL_REFUSED", "MSG": { "REASON": "ARDOISE_PENDING", "PENDING": [ { "TEAM": "Les Verts", "OFFLINE": true } ] } }
+```
+
+### CLIENT_TRACE (tous types de client, diagnostic)
+
+Aucun effet sur l'état du jeu. Accepté dans **toutes les phases**, entracte comprise. Limites : 10
+messages/s par connexion, 50/s pour l'ensemble des connexions, 1 Ko par message. Chaque trace produit
+une seule ligne de journal (`KIND`, `AT`, `TEAM`, `PREV_LEN`, `CAUSE_ACTION`, `DETAIL`). Les `KIND`
+sont `ARDOISE_CLEARED_SEEN`, `VISIBILITY`, `PAGESHOW`, `FREEZE`, `RESUME`, `WS_GAP`, `STALE_TAB`,
+`DUPLICATE_SESSION`, `ARDOISE_FINAL_GIVEUP` (émis quand la tablette abandonne le renvoi après 30 envois sans accusé).
+
 ## Keep-alive
 
 Le serveur envoie un **ping WebSocket natif** toutes les **30 secondes**. Si le buzzer ne repond pas avec un pong dans les **60 secondes**, la connexion est consideree comme perdue et le client est deconnecte.
@@ -990,8 +1103,8 @@ point :
 ### Endpoint
 
 - **Direction** : Server → Client
-- **Cible** : `ClientTypeAnim` **exclusivement** (`/ws/anim`), via `BroadcastToTypes(msg, ClientTypeAnim)` — comme `NEXT_QUESTION`. `/admin`, `/tv`, `/player` et `/buzzer` ne reçoivent jamais cette action.
-- **Trigger** : `TEAM_POINTS` et `BUMPER_POINTS` traités (origine `/admin` ou `/anim` indifféremment), `READY` (changement de question), `NEW_GAME`, `RAZ`, HELLO d'un client animateur (état initial)
+- **Cible** : `ClientTypeAnim` (`/ws/anim`) **et `ClientTypeAdmin`** (`/ws/admin`, v11.2 #244/#251), via `BroadcastToTypes` — comme `NEXT_QUESTION`. `/tv`, `/player` et `/buzzer` ne reçoivent jamais cette action.
+- **Trigger** : `TEAM_POINTS`, `BUMPER_POINTS` et `TEAM_POINTS_BATCH` traités (origine `/admin` ou `/anim` indifféremment), `READY` (changement de question), `NEW_GAME`, `RAZ`, HELLO d'un client animateur (état initial)
 
 Informe les interfaces animateur des équipes **déjà créditées pour la question en cours**. Sert
 deux besoins : confirmer à **tous** les animateurs qu'un crédit vient d'avoir lieu (équipe +
@@ -1194,6 +1307,201 @@ Action de diffusion serveur portant l'état complet du message.
 
 ---
 
+## Affichage public — DISPLAY et SCORE_CHANGE (v11.2, #252)
+
+Source de vérité : `contracts/websocket-actions.md` §TEAM_POINTS, §BUMPER_POINTS, §TEAM_POINTS_BATCH ;
+`contracts/game-state.md` §`SCORE_CHANGE` ; `contracts/logging.md` §3.2 quinquies.
+
+- **`DISPLAY`** (`TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`) : `true` ou absent = effets publics actuels.
+  `false` = **correction cachée**, sans effet animé sur aucun canal.
+- **Honoré seulement pour un émetteur `admin`.** Envoyé par l'animateur ou un appelant interne, il est ignoré :
+  l'attribution est visible et comptée « déjà créditée », et le serveur journalise
+  `WARN SCORE_CORRECTION_HIDDEN_REFUSED`.
+- **Avec `DISPLAY: false`** : ni comète LED, ni pulsation d'ambiance, ni son « gagné », ni flash de score. L'entrée
+  d'historique est enregistrée avec `DISPLAY: false`, mais **n'est pas comptée** dans `AWARDED_TEAMS`.
+  Journal : `WARN SCORE_CORRECTION_HIDDEN`.
+- **`POINTS = 0`** : un client `admin` qui envoie 0 voit son action ignorée (ni historique, ni `UPDATE`, ni
+  `SCORE_CHANGE.SEQ`). Un `POINTS = 0` de l'animateur ou d'un appelant interne reste enregistré : c'est le geste « 0 pt »
+  de #170, un verrou valide.
+- **Montant** : l'interface impose un entier non nul de −999 à 999. **Le serveur ne vérifie pas cette borne** (le
+  contrat de `TEAM_POINTS` et `BUMPER_POINTS` est inchangé).
+
+```json
+{ "ACTION": "BUMPER_POINTS", "MSG": { "ID": "AA:BB:CC:DD:EE:FF", "POINTS": -2, "DISPLAY": false } }
+```
+
+### SCORE_CHANGE (`GameState`, toujours sérialisé)
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `SEQ` | number | +1 à chaque `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` appliqué |
+| `DISPLAY` | bool | Visibilité de la dernière modification |
+| `TEAMS` | string[] | Équipes dont le score a changé |
+| `PLAYERS` | string[] | Joueurs (ID) dont le score a changé |
+
+- Non persisté. Remis à zéro au démarrage et sur `NEW_GAME`.
+- **Dernière modification manuelle uniquement** : les crédits automatiques du moteur (`UpdateScore`) ne l'incrémentent
+  pas, et leurs hausses restent animées.
+- Écrans TV, VJoueur et anim : un nouveau `SEQ` avec `DISPLAY: false` prend les nouveaux scores listés comme référence
+  **sans animation**. Avec `DISPLAY: true`, le comportement est inchangé.
+
+```json
+{ "SCORE_CHANGE": { "SEQ": 14, "DISPLAY": false, "TEAMS": ["Les Bleus"], "PLAYERS": [] } }
+```
+
+## Attribution au niveau joueur — BUMPER_POINTS_BATCH (v11.2, #254)
+
+Source de vérité : `contracts/websocket-actions.md` §BUMPER_POINTS_BATCH, §BUMPER_POINTS_BATCH_RESULT, §AWARDED_TEAMS,
+§TEAM_POINTS_BATCH « Niveau d'attribution ».
+
+Le niveau d'une question est calculé par `resolveAwardLevel` (`utils/pointsAward.js`) : **équipe** (`TEAM_POINTS_BATCH`) ou
+**joueur** (`BUMPER_POINTS_BATCH`). SPEEDY suit le réglage « Points : équipe / joueur » (défaut joueur) ; QCM et ARDOISE
+suivent le même réglage (défaut équipe) ; MEMORY, MEMOTION et RAFALE sont toujours au niveau équipe.
+
+```json
+{ "ACTION": "BUMPER_POINTS_BATCH", "MSG": { "QUESTION_ID": "12", "ENTRIES": [ {"ID": "AA:BB:CC:01", "POINTS": 2}, {"ID": "AA:BB:CC:07", "POINTS": 1} ] } }
+```
+
+- **Payload** : `QUESTION_ID`, `ENTRIES` (1 à 64 joueurs distincts, `ID` = MAC du bumper ou ID du VJoueur, `POINTS` = entier
+  non nul de −999 à 999), `DISPLAY` (même règle que `TEAM_POINTS_BATCH`, admin seulement).
+- **Montants calculés côté client** (coefficient d'indices, commutateur « Tenir compte des indices »). Le serveur ne recalcule
+  rien et ne vérifie que les bornes. Aucun paramètre serveur pour les indices.
+- **Refus global** (`BUMPER_POINTS_BATCH_RESULT { STATUS: "REFUSED" }`, rien n'est appliqué) : `NOT_REVEALED`,
+  `QUESTION_MISMATCH`, `INVALID_ENTRIES`, `INVALID_POINTS`, `UNKNOWN_PLAYER` (`PLAYERS` = IDs inconnus). Journal
+  `WARN BUMPER_POINTS_BATCH_REFUSED`.
+- **Joueur ignoré** (`SKIPPED`), sous un seul verrou :
+  - `ALREADY_AWARDED` : joueur déjà crédité à titre individuel (présent dans `AWARDED_TEAMS.PLAYERS`) ;
+  - `TEAM_ALREADY_AWARDED` : son équipe a déjà reçu un crédit **d'équipe** pour la question. Un crédit joueur rend son équipe
+    « déjà créditée » pour `TEAM_POINTS_BATCH`, et la règle inverse s'applique ici.
+- **Réponse ciblée** : `BUMPER_POINTS_BATCH_RESULT`, avec `APPLIED` (`[{ID, POINTS}]`) et `SKIPPED` (`[{ID, REASON}]`).
+
+```json
+{ "ACTION": "BUMPER_POINTS_BATCH_RESULT", "MSG": { "STATUS": "APPLIED", "QUESTION_ID": "12", "APPLIED": [ {"ID": "AA:BB:CC:01", "POINTS": 2} ], "SKIPPED": [ {"ID": "AA:BB:CC:07", "REASON": "ALREADY_AWARDED"}, {"ID": "AA:BB:CC:09", "REASON": "TEAM_ALREADY_AWARDED"} ], "PLAYERS": [] } }
+```
+
+`ALREADY_AWARDED` : joueur déjà crédité à titre individuel. `TEAM_ALREADY_AWARDED` : son équipe a déjà reçu un crédit d'équipe.
+- **Diffusions** : `UPDATE`, `SCORE_CHANGE` (`PLAYERS` et `TEAMS` concernés), `AWARDED_TEAMS`. Journal `INFO BUMPER_POINTS_BATCH`.
+- Le clic unitaire sur un joueur (`BUMPER_POINTS`) reste libre.
+- **Suspension** : `BUMPER_POINTS_BATCH` est suspendu pendant le verrou de lancement (#253).
+
+### AWARDED_TEAMS — `PLAYERS` et `TEAMS[].TEAM_LEVEL` (v11.2, #254)
+
+- `PLAYERS` : une entrée par joueur crédité individuellement (`{ID, TEAM, POINTS, TIMESTAMP}`), mêmes règles que `TEAMS`.
+- `TEAMS[].TEAM_LEVEL` : `true` si l'équipe a reçu au moins un crédit d'équipe pour la question. Toujours présent.
+- Envoyé à l'admin et à l'animateur.
+
+### SET_CREDIT_POINTS ≤ 0 (v11.2, #254)
+
+Le client admin n'envoie jamais `SET_CREDIT_POINTS` avec une valeur nulle ou négative. Le serveur ignore une telle valeur
+(journal INFO). Les tablettes de l'animateur gardent ainsi la dernière valeur positive.
+
+## Action TEAM_POINTS_BATCH — attribution groupée (v11.2, #244/#251)
+
+Envoyée par `admin` (« Attribuer les points (N) » / « Appliquer les pénalités (N) », #254), **en phase `REVEALED` uniquement**. Utilisée quand la question est au niveau équipe ; au niveau joueur, c'est `BUMPER_POINTS_BATCH`.
+Contrat détaillé : `contracts/websocket-actions.md` §TEAM_POINTS_BATCH.
+
+```json
+{ "ACTION": "TEAM_POINTS_BATCH", "MSG": { "QUESTION_ID": "9", "ENTRIES": [ {"TEAM": "Les Bleus", "POINTS": 3}, {"TEAM": "Les Rouges", "POINTS": 2} ] } }
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `QUESTION_ID` | string | Question affichée par l'admin au clic |
+| `ENTRIES` | array | 1 à 64 entrées, équipes distinctes. `TEAM` = clé d'équipe ; `POINTS` = entier non nul, de −999 à 999 |
+| `DISPLAY` | bool | **Réservé à #252** (« Afficher sur la TV »). Absent = `true`. Sans effet tant que #252 n'est pas livré |
+
+- **Refus global** (rien n'est appliqué) : `NOT_REVEALED`, `QUESTION_MISMATCH`, `INVALID_ENTRIES`,
+  `INVALID_POINTS`, ou `UNKNOWN_TEAM` (équipe renommée ou supprimée entre la sélection et le clic, `TEAMS` = clés
+  inconnues). Journal `WARN TEAM_POINTS_BATCH_REFUSED`.
+- **Lot appliqué d'un bloc** : une équipe déjà créditée pour la question (présente dans `AWARDED_TEAMS`) est
+  ignorée (`SKIPPED`, `ALREADY_AWARDED`). Les autres reçoivent `TEAM_POINTS += POINTS` et une entrée
+  `POINTS_AWARDED` par équipe.
+- **Effets publics groupés** (si `DISPLAY` ≠ `false`), une seule fois pour le lot : son « gagné » si un montant est
+  positif ; une comète LED par équipe créditée positivement ; une pulsation d'ambiance ; un seul flash de score pour
+  l'équipe au plus fort montant positif.
+- **Diffusions** : `UPDATE` (scores), `AWARDED_TEAMS` (admin et anim).
+- **Réponse à l'émetteur seul** : `TEAM_POINTS_BATCH_RESULT`.
+
+```json
+{ "ACTION": "TEAM_POINTS_BATCH_RESULT", "MSG": { "STATUS": "APPLIED", "QUESTION_ID": "9", "APPLIED": [ {"TEAM": "Les Bleus", "POINTS": 3} ], "SKIPPED": [ {"TEAM": "Les Rouges", "REASON": "ALREADY_AWARDED"} ], "TEAMS": [] } }
+```
+
+La régie (`TEAM_POINTS` par carte d'équipe) n'est pas contrainte par le verrou « déjà créditée ».
+
+## Verrou de lancement — LAUNCH_LOCK (v11.2, #253)
+
+Source de vérité : `contracts/websocket-actions.md` §LAUNCH_LOCK, §HELLO_ACK, §ACTION_REFUSED ; `contracts/game-state.md`
+§`LAUNCH_LOCK`.
+
+Message admin → serveur, envoyé à l'ouverture (`OPEN`) et toutes les 15 s, puis à la fermeture (`CLOSE`) :
+
+```json
+{ "ACTION": "LAUNCH_LOCK", "MSG": { "STATE": "OPEN" } }
+```
+
+- **Pose** : le verrou est posé au nom de la **connexion** qui envoie `OPEN` (le propriétaire). `OWNER` = son `CLIENT_ID`.
+- **Refus** (`LAUNCH_LOCK_REFUSED`, ciblé, rien ne change) : `LOCKED_BY_OTHER` (verrou tenu par une autre connexion) ou
+  `ENTRACTE_ACTIVE`. Un `OPEN` du propriétaire est toujours un renouvellement.
+- **Libération** : `CLOSE` du propriétaire ; `NEW_GAME` appliqué du propriétaire ; déconnexion de la connexion ;
+  expiration à **45 s** sans renouvellement. Les deux derniers cas sont journalisés en WARN
+  (`LAUNCH_LOCK_RELEASED reason="disconnect"` ou `reason="expired"`).
+- **Diffusion** : `GameState.LAUNCH_LOCK` aux clients `admin` et `anim` seulement. Absent des charges TV et VJoueur.
+- **Actions suspendues** pour tout émetteur, propriétaire compris : `ACTION_REFUSED { ACTION, REASON: "LAUNCH_IN_PROGRESS" }`
+  ciblé, journal `WARN ACTION_REFUSED_LAUNCH`. Liste : conduite (`READY`, `FORCE_READY`, `START`, `STOP`, `PAUSE`, `CONTINUE`, `REVEAL`,
+  `REMOTE`, `QUESTION_SOUND`, `ENTRACTE_SET`, actions MEMORY, MEMOTION, RAFALE, `FLIP_MEMORY_CARD` hors tablettes : le retournement émis par une tablette est une action joueur, permise) ; points (`POINTS`,
+  `TEAM_POINTS`, `BUMPER_POINTS`, lots, `SET_CREDIT_POINTS`, `RAZ`) ; `SHOW_QR_CODE`, `HIDE_QR_CODE`, `RESET` ;
+  `UPDATE`/`FULL`, `DELETE_BUMPER`, `RELEASE_BUMPER_NAME`.
+- **Toujours permises** : `LAUNCH_LOCK`, `NEW_GAME` du propriétaire, `HELLO`, `SET_CLIENT_TYPE`, `CLIENT_TRACE`,
+  `SET_VIRTUAL_PLAYER_LIMIT`, `REBOOT`, édition des questions, réglages, et les actions des joueurs.
+- **`NEW_GAME`** d'une autre connexion : `NEW_GAME_REFUSED { REASON: "LAUNCH_IN_PROGRESS" }`.
+
+### HELLO_ACK (admin et anim seulement, v11.2 #253)
+
+Envoyé en premier à chaque `HELLO` d'un poste admin ou anim, avant l'`UPDATE` initial. Il donne l'identifiant de la connexion,
+que le client compare à `LAUNCH_LOCK.OWNER` pour se reconnaître.
+
+```json
+{ "ACTION": "HELLO_ACK", "MSG": { "CLIENT_ID": "192.168.1.20:53124" } }
+```
+
+`CLIENT_ID` identifie la connexion : c'est l'adresse distante `IP:port` (`WebSocketClient.ID`, `r.RemoteAddr`). Le client le compare sans l'interpréter. Il est unique par connexion et change à chaque reconnexion. Conséquence : `LAUNCH_LOCK.OWNER`, reçu par les postes admin et anim, expose l'adresse du poste propriétaire.
+
+## Action NEW_GAME — options de purge (v11.2, #243)
+
+Envoyée par `admin` depuis l'entrée « 🚀 Lancer la partie » du menu Préparation (popup à quatre options, #253). Contrat détaillé : `contracts/websocket-actions.md` §NEW_GAME.
+
+```json
+{ "ACTION": "NEW_GAME", "MSG": { "PURGE_SCORES": true, "PURGE_PLAYERS": false, "PURGE_TEAMS": false, "RESET_QUESTIONS": true } }
+```
+
+| Champ | Type | Effet |
+|-------|------|-------|
+| `PURGE_SCORES` | bool | Scores à 0 et historique des points effacé |
+| `PURGE_PLAYERS` | bool | Joueurs des tablettes supprimés (`GAME_RESET`). Exige `PURGE_SCORES` |
+| `PURGE_TEAMS` | bool | Équipes supprimées (`TEAM_DELETED`), joueurs conservés sans équipe |
+| `RESET_QUESTIONS` | bool | Toutes les questions « à jouer » |
+
+- **Payload vide** (clients antérieurs) : comportement v11.1 (scores et joueurs purgés, équipes conservées,
+  questions remises à zéro).
+- **Dès qu'un champ est présent**, les champs absents valent `false`.
+- **Refus** (réponse ciblée `NEW_GAME_REFUSED`, rien n'est appliqué, `WARN NEW_GAME_REFUSED`) :
+  - `PLAYERS_REQUIRE_SCORES` : `PURGE_PLAYERS = true` avec `PURGE_SCORES = false`.
+  - `ENTRACTE_ACTIVE` : `NEW_GAME` reçu pendant une entracte. `NEW_GAME` n'est pas dans la liste
+    d'autorisation de l'entracte : il faut d'abord sortir de l'entracte. Avant v11.2, le message était ignoré
+    sans réponse et la popup restait figée.
+
+```json
+{ "ACTION": "NEW_GAME_REFUSED", "MSG": { "REASON": "PLAYERS_REQUIRE_SCORES" } }
+```
+
+- **Toujours** : arrêt de tous les minuteurs et du son de question, `TEAMS_LOCKED = false`, LED de repos
+  (`LED_SET` à tous les buzzers) et notification d'ambiance, à chaque `NEW_GAME` appliqué.
+- **Statut de la question interrompue** (sans `RESET_QUESTIONS`) : sélectionnée mais jamais lancée → `AVAILABLE` ;
+  lancée (`STARTED`, `PAUSED`) → `STOPPED` ; `STOPPED`/`REVEALED` → inchangé.
+- **Joueurs purgés** : les connexions liées à ces joueurs sont déliées dans le hub (une connexion liée désigne
+  toujours un joueur existant).
+- **Journal** : `WARN NEW_GAME_PURGE` (options, joueurs et équipes supprimés, phase et question avant le lancement).
+
 ## Action ENTRACTE_SET — Pause Globale (v6.5.2, #119)
 
 ### Action Entrante (Client → Server)
@@ -1257,6 +1565,81 @@ quasi-totalité des actions qui sont refusées (C4, gel de config).
   déclenché pendant le jeu — cas rare).
 
 ---
+
+## Clé ANSWERED_COLOR des bumpers (v11.2, #255)
+
+Source : `contracts/ws-payload-serialization.md` (ligne `ANSWERED_COLOR`).
+
+- Clé `ANSWERED_COLOR` présente dans les `bumpers` envoyés aux clients **admin**, **TV**, **anim** et **VJoueur**.
+- Tolérée côté **buzzer** (le firmware BuzzClick ne la lit pas).
+- Un client antérieur ignore la clé.
+
+## Manches — ROUNDS_UPDATE, NEXT_QUESTION, ENTRACTE_SET (v11.2, #245)
+
+Source de vérité : `contracts/websocket-actions.md` §ROUNDS_UPDATE, §NEXT_QUESTION, §ENTRACTE_SET ; `contracts/models.md` §Manches ;
+`contracts/game-state.md` §Manches (`ROUND_CONTEXT`).
+
+### ROUNDS_UPDATE (admin seulement, toutes phases sauf pendant une entracte active)
+
+Fixe en une action la structure complète : manches (ordre, noms, questions), questions « Sans manche », suppressions.
+
+```json
+{ "ACTION": "ROUNDS_UPDATE", "MSG": { "ROUNDS": [ {"ID": "r1", "NAME": "Échauffement", "QUESTIONS": ["3", "1"]}, {"NAME": "Manche finale", "QUESTIONS": ["7"], "ENTRACTES": true} ], "UNASSIGNED": ["9"], "DELETED_ROUNDS": [ {"ID": "r2", "QUESTIONS": "KEEP"} ] } }
+```
+
+- `ROUNDS[].ID` : absent ou `""` = nouvelle manche (ID attribué par le serveur, jamais réutilisé). `ENTRACTES` (nouvelle manche seulement,
+  absent = `true`) crée les deux entractes automatiques « Début/Fin de la manche <NOM> ».
+- `DELETED_ROUNDS[].QUESTIONS` : `"KEEP"` (questions en fin de « Sans manche ») ou `"DELETE"` (supprimées définitivement).
+- **Refus global** (`ROUNDS_UPDATE_RESULT { STATUS: "REFUSED", REASON }`, rien n'est appliqué, `WARN ROUNDS_UPDATE_REFUSED`) :
+  `INVALID_NAME`, `TOO_MANY_ROUNDS` (plus de 50), `UNKNOWN_ROUND`, `INVALID_DECISION`, `MISSING_ROUND_DECISION`,
+  `DUPLICATE_QUESTION`, `UNKNOWN_QUESTION`, `INCOMPLETE`, `QUESTION_ID_EXHAUSTED` (plus assez d'identifiants libres, de 1 à 999, pour créer les entractes demandées),
+  `INCONSISTENT_STORE`, `ROUNDS_FILE_UNREADABLE`, `QUESTION_IN_PROGRESS` (suppression de la question courante hors repos), `WRITE_FAILED`.
+- **Identité** : le nom du dossier `data/files/questions/<ID>/`. Aucun chemin n'est construit à partir d'un ID non validé.
+- **Ordre des effets** : validation complète ; réservation des IDs ; écriture de `rounds.json` (échec : `WRITE_FAILED`) ;
+  réécriture des `question.json` modifiés, puis création des entractes ; **suppressions en dernier** ; mise à jour de l'état et
+  diffusions seulement en cas de succès.
+- **Diffusions** : `UPDATE` (`ROUNDS`, `ROUND_CONTEXT`), `QUESTIONS` (admin), `NEXT_QUESTION` (anim).
+- **Résultat** : `ROUNDS_UPDATE_RESULT { STATUS: "APPLIED", ROUNDS: [{ID, NAME}], CREATED_ENTRACTES: [{ROUND_ID, START_ID, END_ID}], DELETED_QUESTIONS: [ids] }`.
+
+### NEXT_QUESTION étendu (anim)
+
+- **Les ENTRACTE ne sont plus sautées** : `NEXT_QUESTION` propose une entrée `ENTRACTE` (`TYPE: "ENTRACTE"`, `QUESTION` = son libellé),
+  pour toutes les entractes (manuelles, programmées, de manche).
+- Champs ajoutés : `ROUND_ID` (manche de la suivante, `""` = Sans manche), `ROUND_NAME`, `NEW_ROUND` (`true` si la suivante ouvre une autre manche).
+- Diffusé aussi après `ROUNDS_UPDATE`, `REORDER_QUESTIONS` et `DELETE`.
+
+### ENTRACTE_SET (anim : arrêt seulement)
+
+- L'anim peut envoyer `ENTRACTE_SET{ACTIVE:false}` (terminer une entracte) : toujours permis, même pendant le verrou de lancement.
+- `ENTRACTE_SET{ACTIVE:true}` venant de l'anim est refusé (`WARN ENTRACTE_SET_ANIM_ACTIVATE_REFUSED`, rien n'est modifié).
+  Le déclenchement manuel reste réservé à l'admin.
+
+## Filtrage des réponses pour les tablettes — `/ws/player` (v11.2, #258)
+
+Source de vérité : `contracts/vplayer-payload-filter.md` §7 (règle), §7.3 (implémentation), §7.5 (liste exhaustive A/B/C).
+Fonction : `filterVPlayerAnswers(payload, recipientID, phase)` (package `protocol`), appliquée en dernière étape de sérialisation.
+
+**Destinataire** : le joueur lié à la connexion (`PlayerID`). Son équipe : `bumpers[PlayerID].TEAM`. Une connexion non liée
+n'a aucune équipe propre : tous les bumpers et toutes les équipes sont neutralisés pendant les réponses ouvertes.
+
+| Donnée | Phases filtrées | Traitement pour la tablette |
+|---|---|---|
+| `bumpers` d'une autre équipe : `TIME`, `BUTTON`, `STATUS`, `ANSWER_COLOR`, `ANSWERED_COLOR`, `HINTS_AT_BUZZ` | réponses ouvertes : `PREPARE`, `READY`, `COUNTDOWN`, `STARTED`, `PAUSED` | valeurs neutres (`0`, `""`), clés conservées |
+| `teams` d'une autre équipe : `TIME`, `BUMPER`, `STATUS` | mêmes phases | valeurs neutres |
+| `QUESTION.QCM_CORRECT`, `QUESTION.ANSWER`, `QUESTION.MEDIA_ANSWER` | toutes sauf `REVEALED` | clés retirées |
+| Cartes MEMOTION : `ANSWER_TEXT`, `ANSWER_IMAGE`, `ANSWER`, `QCM_CORRECT` | tant que la carte n'est pas `REVEALED` ou `DONE` | clés retirées |
+| `QUESTION.EXPLANATION` (note animateur) | toutes | clé retirée |
+
+- **Visible** : son propre bumper, ceux de ses coéquipiers, son équipe, les scores, les classements, les noms.
+- **À partir de `STOPPED`** : les champs de réponse des autres équipes sont transmis, comme avant.
+- **Bonne réponse** : transmise avec l'`UPDATE` de la transition `REVEALED`.
+- **Chemins couverts** : `UPDATE` par destinataire pendant les phases filtrées, `SerializeForVPlayer`, les actions diffusées par type
+  (`START`, `STOP`, `PAUSE`, `CONTINUE`, `UPDATE_TIMER`, `REMOTE`, `BUMPER`, `HELLO`), et l'état initial (`sendStateToClient`).
+  Les messages que le client n'enregistre pas (`START`, `STOP`, `PAUSE`, `CONTINUE`, `UPDATE_TIMER`) sont sérialisés une fois pour toutes les tablettes.
+- **Hors périmètre** : TV et anim inchangés. Buzzers physiques : payload minimal.
+- **Coût** : banc `vplayer_fanout_bench_test.go`, 20 tablettes en `STARTED` : 1,56 ms par `UPDATE` après la revue (2,43 ms avant
+  le décodage unique par fan-out ; trame partagée de référence : 0,20 ms) (`qa-20261011-145800`).
+- **Limite** : `/questions`, `/files/`, `/ws/logs` et les connexions `/ws/tv`, `/ws/anim`, `/ws/admin` ne sont pas filtrés (issue #259).
 
 ## Sérialiseurs et Filtrage par Type de Client (v6.5.2, #128)
 

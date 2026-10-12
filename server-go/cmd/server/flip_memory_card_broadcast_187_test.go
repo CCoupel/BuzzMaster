@@ -57,7 +57,7 @@ func TestFlipMemoryCard_Turn_VPlayerOffActiveTeam_NoBroadcastToOtherClients(t *t
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	learnClientID(t, app, vplayer)
+	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), bumperID)
 	tv := dialWS(t, baseURL, "/ws/tv")
 	learnClientID(t, app, tv)
 	admin := dialWS(t, baseURL, "/ws/admin")
@@ -87,7 +87,7 @@ func TestFlipMemoryCard_CardScoped_VPlayerOffActiveTeam_NoBroadcastToOtherClient
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	learnClientID(t, app, vplayer)
+	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), bumperID)
 	tv := dialWS(t, baseURL, "/ws/tv")
 	learnClientID(t, app, tv)
 	admin := dialWS(t, baseURL, "/ws/admin")
@@ -121,7 +121,7 @@ func TestFlipMemoryCard_CardScoped_VPlayerOnActiveTeam_DoesBroadcast(t *testing.
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	learnClientID(t, app, vplayer)
+	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), bumperID)
 	tv := dialWS(t, baseURL, "/ws/tv")
 	learnClientID(t, app, tv)
 

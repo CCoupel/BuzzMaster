@@ -1,18 +1,39 @@
 package server
 
 import (
+	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
+
+func init() {
+	// The engine cannot import this package; it reports the ARDOISE invariant
+	// (#246) through this hook, routed to the global logger at ERROR level.
+	game.ArdoiseDivergenceReporter = func(msg string) {
+		LogError(game.LogComponentEngine, "%s", msg)
+	}
+	// #249 team events (TEAM_NAME_NORMALIZED, TEAM_RENAMED).
+	game.TeamEventReporter = func(level game.LogLevel, msg string) {
+		if level == game.LogLevelWarn {
+			LogWarn(game.LogComponentEngine, "%s", msg)
+		} else {
+			LogInfo(game.LogComponentEngine, "%s", msg)
+		}
+	}
+}
 
 // BroadcastLogger captures logs and broadcasts them to subscribed WebSocket clients
 type BroadcastLogger struct {
 	buffer      *LogBuffer
 	onNewEntry  func(entry game.LogEntry) // Callback when a new entry is added
 	debugEnabled bool
+	file        *fileSink // persistent log file (#246), nil when disabled
 }
 
 // NewBroadcastLogger creates a new BroadcastLogger with the specified buffer capacity
@@ -54,6 +75,11 @@ func (bl *BroadcastLogger) log(level game.LogLevel, component game.LogComponent,
 	// Notify callback if set
 	if bl.onNewEntry != nil {
 		bl.onNewEntry(entry)
+	}
+
+	// Persistent file (#246, contracts/logging.md §1)
+	if fs := bl.file; fs != nil {
+		fs.write(entry)
 	}
 
 	// Also log to standard logger with prefix
@@ -162,4 +188,145 @@ func LogError(component game.LogComponent, format string, args ...interface{}) {
 		message := fmt.Sprintf(format, args...)
 		log.Printf("[%s][ERROR] %s", component, message)
 	}
+}
+
+// --- Persistent log file (#246, contracts/logging.md §1) -------------------------
+
+func levelRank(l game.LogLevel) int {
+	switch l {
+	case game.LogLevelDebug:
+		return 0
+	case game.LogLevelInfo:
+		return 1
+	case game.LogLevelWarn:
+		return 2
+	case game.LogLevelError:
+		return 3
+	}
+	return 1
+}
+
+// fileSink writes entries at or above minLevel to a size-rotated file. Writes
+// are synchronous. A disk error never stops the logger: at most one stdout
+// ERROR per minute, entries keep flowing to memory.
+type fileSink struct {
+	mu       sync.Mutex
+	path     string
+	minLevel game.LogLevel
+	maxBytes int64
+	maxFiles int
+	f        *os.File
+	size     int64
+	lastErr  time.Time
+}
+
+func (fs *fileSink) reportErr(err error) {
+	if time.Since(fs.lastErr) >= time.Minute {
+		fs.lastErr = time.Now()
+		log.Printf("[Logger][ERROR] log file %s: %v (continuing in memory)", fs.path, err)
+	}
+}
+
+func (fs *fileSink) open() error {
+	if err := os.MkdirAll(filepath.Dir(fs.path), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(fs.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	st, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return err
+	}
+	fs.f, fs.size = f, st.Size()
+	return nil
+}
+
+func (fs *fileSink) rotate() error {
+	if fs.f != nil {
+		fs.f.Close()
+		fs.f = nil
+	}
+	// base, base.1 ... base.(maxFiles-1): drop the oldest, shift the others.
+	_ = os.Remove(fmt.Sprintf("%s.%d", fs.path, fs.maxFiles-1))
+	for i := fs.maxFiles - 2; i >= 1; i-- {
+		_ = os.Rename(fmt.Sprintf("%s.%d", fs.path, i), fmt.Sprintf("%s.%d", fs.path, i+1))
+	}
+	if fs.maxFiles > 1 {
+		_ = os.Rename(fs.path, fs.path+".1")
+	} else {
+		_ = os.Remove(fs.path)
+	}
+	return fs.open()
+}
+
+// singleLine guarantees one physical log line per entry (#246 review MAJEUR-1).
+func singleLine(m string) string {
+	return strings.NewReplacer("\r\n", `\n`, "\n", `\n`, "\r", `\n`).Replace(m)
+}
+
+func (fs *fileSink) write(entry game.LogEntry) {
+	if levelRank(entry.Level) < levelRank(fs.minLevel) {
+		return
+	}
+	line := fmt.Sprintf("%s [%s] [%s] %s\n",
+		time.UnixMilli(entry.Timestamp).Format("2006-01-02T15:04:05.000Z07:00"),
+		entry.Level, entry.Component, singleLine(entry.Message))
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	if fs.f == nil {
+		if err := fs.open(); err != nil {
+			fs.reportErr(err)
+			return
+		}
+	}
+	if fs.size > 0 && fs.size+int64(len(line)) > fs.maxBytes {
+		if err := fs.rotate(); err != nil {
+			fs.reportErr(err)
+			return
+		}
+	}
+	n, err := fs.f.WriteString(line)
+	fs.size += int64(n)
+	if err != nil {
+		fs.reportErr(err)
+	}
+}
+
+// SetFileOutput enables the persistent log file from the `logging` config
+// section. Disabled -> previous behaviour (memory + stdout). The returned error
+// (directory not creatable, ...) is informative only: the logger keeps working.
+func (bl *BroadcastLogger) SetFileOutput(cfg config.LoggingConfig) error {
+	if !cfg.FileEnabled {
+		bl.file = nil
+		return nil
+	}
+	d := config.DefaultLoggingConfig()
+	if cfg.FilePath == "" {
+		cfg.FilePath = d.FilePath
+	}
+	if cfg.FileMaxSizeMB <= 0 {
+		cfg.FileMaxSizeMB = d.FileMaxSizeMB
+	}
+	if cfg.FileMaxFiles <= 0 {
+		cfg.FileMaxFiles = d.FileMaxFiles
+	}
+	min := game.LogLevel(strings.ToUpper(cfg.FileMinLevel))
+	if levelRank(min) == 1 && min != game.LogLevelInfo {
+		min = game.LogLevelWarn
+	}
+	fs := &fileSink{
+		path: cfg.FilePath, minLevel: min,
+		maxBytes: int64(cfg.FileMaxSizeMB) * 1024 * 1024, maxFiles: cfg.FileMaxFiles,
+	}
+	bl.file = fs
+	fs.mu.Lock()
+	err := fs.open()
+	fs.mu.Unlock()
+	if err != nil {
+		fs.reportErr(err)
+	}
+	return err
 }

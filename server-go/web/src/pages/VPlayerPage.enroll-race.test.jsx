@@ -161,6 +161,7 @@ describe('VPlayerPage — la course d\'inscription est fermée (#120)', () => {
   it('F5 : affiche l\'état d\'attente (pas l\'écran de jeu) tant que le bumper est absent', async () => {
     localStorage.setItem('vplayer_name', 'Alice')
     localStorage.setItem('vplayer_session', '1234567890')
+    localStorage.setItem('vplayer_id', 'vjoueur_alice_1')
 
     useGame.mockReturnValue(makeGameMock({ bumpers: {} }))
     const { container } = render(<VPlayerPage />)

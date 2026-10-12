@@ -88,7 +88,7 @@ describe('AnimNextButton — fin du quiz (nextQuestion sans ID)', () => {
   it('affiche un libellé dédié ("Fin du quiz") au lieu du format habituel', () => {
     render(<AnimNextButton phase="REVEALED" question={null} nextQuestion={null} onSelectNext={() => {}} />)
     expect(screen.getByText('Fin du quiz')).toBeInTheDocument()
-    expect(screen.getByText('À suivre')).toBeInTheDocument()
+    expect(screen.getByText('Question suivante')).toBeInTheDocument()
   })
 
   it('ne rend pas de bloc points/délai en fin de quiz (rien à formater)', () => {

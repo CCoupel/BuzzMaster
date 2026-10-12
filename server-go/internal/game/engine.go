@@ -3,11 +3,14 @@ package game
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -260,6 +263,16 @@ type Engine struct {
 	timerDeferred bool
 	timerReleased bool
 
+	// ardoiseControl (#246, contracts/logging.md ARDOISE_STATE_DIVERGED) is the
+	// control copy of the ARDOISE texts, maintained ONLY by the authorised write
+	// paths (SetArdoiseAnswer, Ready, NEW_GAME/InitGame; ARDOISE_FINAL in Batch 2).
+	// Any difference with state.ArdoiseAnswers at a checkpoint is a rogue write.
+	ardoiseControlMu   sync.Mutex
+	launchLockTimer    *time.Timer // #253
+	launchLockGen      int
+	launchLockOnExpire func(LaunchLockReleased) // last OPEN's expiry callback (#253)
+	ardoiseControl     map[string]string
+
 	// Callbacks
 	//
 	// OnStateChange — concurrency contract (#121): invoked from every one of
@@ -399,6 +412,12 @@ func NewEngine() *Engine {
 			MotionActive:             MotionActive{State: map[string]interface{}{}},
 			// ARDOISE: initialize empty map so JSON serializes {} (not null)
 			ArdoiseAnswers: make(map[string]ArdoiseAnswer),
+			ScoreChange:    DefaultScoreChange(),
+			// #256: after a restart the reloaded history must not count for any question
+			// until it is selected or started (GameTime used to stay 0 = whole history).
+			GameTime:   time.Now().UnixMicro(),
+			LaunchLock: LaunchLock{},
+			Rounds:     []Round{},
 			// RAFALE (v8.0.0, #107): initialize empty (not nil) so JSON
 			// serializes []/{} (not null) — same "no omitempty" discipline
 			// as MEMOTION/ARDOISE above (contracts/rafale.md §4).
@@ -793,9 +812,81 @@ func (e *Engine) hostContextUnsafe() HostContext {
 // SetPhase sets the game phase
 func (e *Engine) SetPhase(phase GamePhase) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.state.Phase = phase
 	log.Printf("[Engine] Phase set to: %s", phase)
+	divs := e.ardoiseDivergencesUnsafe("SetPhase")
+	e.mu.Unlock()
+	reportArdoiseDivergences(divs)
+}
+
+// ArdoiseDivergenceReporter receives one formatted ARDOISE_STATE_DIVERGED line
+// per divergence (wired to the ERROR log by internal/server, which the engine
+// cannot import). #246.
+var ArdoiseDivergenceReporter func(msg string)
+
+func reportArdoiseDivergences(divs []string) {
+	if rep := ArdoiseDivergenceReporter; rep != nil {
+		for _, d := range divs {
+			rep(d)
+		}
+	}
+}
+
+// ardoiseDivergencesUnsafe compares state.ArdoiseAnswers with the control copy
+// (caller holds e.mu, read or write) and resyncs the copy so a divergence is
+// reported once.
+func (e *Engine) ardoiseDivergencesUnsafe(site string) []string {
+	e.ardoiseControlMu.Lock()
+	defer e.ardoiseControlMu.Unlock()
+	if e.ardoiseControl == nil {
+		e.ardoiseControl = map[string]string{}
+	}
+	qid := ""
+	if e.state.Question != nil {
+		qid = e.state.Question.ID
+	}
+	var out []string
+	report := func(team, expected, actual string) {
+		out = append(out, fmt.Sprintf("ARDOISE_STATE_DIVERGED team=%q expected=%q actual=%q site=%s phase=%s question=%q",
+			team, expected, actual, site, e.state.Phase, qid))
+	}
+	for team, a := range e.state.ArdoiseAnswers {
+		if exp := e.ardoiseControl[team]; exp != a.Text {
+			report(team, exp, a.Text)
+			e.ardoiseControl[team] = a.Text
+		}
+	}
+	for team, exp := range e.ardoiseControl {
+		if _, ok := e.state.ArdoiseAnswers[team]; !ok {
+			if exp != "" {
+				report(team, exp, "")
+			}
+			delete(e.ardoiseControl, team)
+		}
+	}
+	return out
+}
+
+// VerifyArdoiseInvariant checks the ARDOISE control copy (checkpoint: full-state
+// broadcast, phase change). site names the caller in the log line.
+func (e *Engine) VerifyArdoiseInvariant(site string) {
+	e.mu.RLock()
+	divs := e.ardoiseDivergencesUnsafe(site)
+	e.mu.RUnlock()
+	reportArdoiseDivergences(divs)
+}
+
+// GetArdoiseText returns the current ARDOISE text of a team ("" if none).
+func (e *Engine) GetArdoiseText(teamName string) string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.ArdoiseAnswers[teamName].Text
+}
+
+func (e *Engine) resetArdoiseControl() {
+	e.ardoiseControlMu.Lock()
+	e.ardoiseControl = map[string]string{}
+	e.ardoiseControlMu.Unlock()
 }
 
 // GetTeamsAndBumpers returns teams and bumpers data
@@ -994,14 +1085,11 @@ func (e *Engine) UpdateTeam(id string, team *Team) {
 // SetTeams sets all teams
 func (e *Engine) SetTeams(teams map[string]*Team) {
 	e.mu.Lock()
-	// Ensure team NAME field is populated from the map key
-	for teamID, team := range teams {
-		if team.Name == "" {
-			team.Name = teamID
-		}
-	}
+	// #249: the map key is the team identity; NAME is always rewritten to it.
+	reports := normalizeTeamNamesUnsafe(teams, "update")
 	e.data.Teams = teams
 	e.mu.Unlock()
+	reportTeamEvents(reports)
 
 	// Auto-save teams to disk. Synchronous (unlike the per-bumper hot paths, which
 	// stay async): SetTeams is a low-frequency bulk action (team roster edits), and
@@ -1149,6 +1237,13 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		return
 	}
 
+	// #249: the team roster is locked from question selection until REVEALED.
+	e.state.TeamsLocked = true
+	// #256: the "already credited" window opens at the SELECTION of the question (it
+	// used to open at START only, so a replayed question showed the previous round's
+	// credits between Ready and START).
+	e.state.GameTime = time.Now().UnixMicro()
+
 	// Check if this is a NEW question (different from current)
 	isNewQuestion := e.state.Question == nil || e.state.Question.ID != questionID
 
@@ -1259,6 +1354,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 		bumper.Button = ""
 		bumper.Status = ""
 		bumper.Ready = false
@@ -1312,6 +1408,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 
 		// Reset ARDOISE answers for new question (v5.6.0)
 		e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
+		e.resetArdoiseControl()
 	}
 
 	// Reset RAFALE state — v8.0.0, #107 originally (unconditional on
@@ -2142,6 +2239,7 @@ func (e *Engine) actualStart() {
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 		bumper.Button = ""
 		bumper.Status = ""
 		bumper.HintsAtBuzz = 0
@@ -2226,6 +2324,7 @@ func (e *Engine) StartImmediate(delay int) {
 	// Reset bumper times
 	for _, bumper := range e.data.Bumpers {
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 		bumper.Button = ""
 		bumper.Status = ""
 		bumper.HintsAtBuzz = 0
@@ -2319,6 +2418,12 @@ func (e *Engine) startTimer() {
 					}
 
 					if result.currentTime <= 0 {
+						// #243: a tick already in flight when NEW_GAME (or any reset)
+						// stopped this ticker must neither fire OnTimeUp nor put the
+						// phase back to STOPPED.
+						if !e.timerTickStillCurrent(ticker) {
+							return
+						}
 						// v11.0/#227: fire BEFORE e.Stop() — this is the only
 						// point that still knows this STOP is a timeout, not
 						// a manual regie STOP (contracts/lighting.md §2.5,
@@ -2326,7 +2431,10 @@ func (e *Engine) startTimer() {
 						if e.OnTimeUp != nil {
 							e.OnTimeUp()
 						}
-						e.Stop()
+						if hook := timeoutStopTestHook; hook != nil {
+							hook() // test injection point: a NEW_GAME landing right here
+						}
+						e.stopIfCurrent(ticker)
 					}
 				}()
 			case <-stopCh:
@@ -2334,6 +2442,39 @@ func (e *Engine) startTimer() {
 			}
 		}
 	}()
+}
+
+// timeoutStopTestHook, when set by a test in package game, runs between OnTimeUp
+// and the timeout Stop() to reproduce a NEW_GAME landing in that window (#243).
+var timeoutStopTestHook func()
+
+// stopIfCurrent is Stop() for the timer goroutine's timeout, made atomic with
+// the "still current" check: it stops the game only if ticker is still the live
+// question timer and the phase is still STARTED, under the same lock (#243).
+func (e *Engine) stopIfCurrent(ticker *time.Ticker) {
+	e.mu.Lock()
+	if e.timer != ticker || e.state.Phase != PhaseStarted {
+		e.mu.Unlock()
+		return
+	}
+	released := e.stopUnsafe()
+	callback := e.OnStateChange
+	e.mu.Unlock()
+
+	if released {
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+	if callback != nil {
+		callback(PhaseStopped)
+	}
+}
+
+// timerTickStillCurrent reports whether ticker is still the engine's live
+// question timer and the game is still STARTED (#243).
+func (e *Engine) timerTickStillCurrent(ticker *time.Ticker) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.timer == ticker && e.state.Phase == PhaseStarted
 }
 
 // timerTickResult carries the outcome of one locked timer-tick iteration
@@ -3336,6 +3477,11 @@ func (e *Engine) Continue() {
 
 	e.state.Phase = PhaseStarted
 	e.forceGamePageUnsafe() // #240 — CONTINUE after PAUSE (user Q4)
+	// #246: every team must send a fresh final text after the next STOP/PAUSE.
+	for team, a := range e.state.ArdoiseAnswers {
+		a.Received, a.ReceivedHash = false, ""
+		e.state.ArdoiseAnswers[team] = a
+	}
 
 	e.setQuestionStatus(StatusStarted)
 
@@ -3413,6 +3559,7 @@ func (e *Engine) Reveal() string {
 	e.resetDeferredTimerUnsafe()
 
 	e.state.Phase = PhaseRevealed
+	e.state.TeamsLocked = false // #249
 
 	var answer string
 	if e.state.Question != nil {
@@ -3545,6 +3692,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		}
 		if color, ok := buttonToColor[button]; ok {
 			bumper.AnswerColor = color
+			bumper.AnsweredColor = color // #255: answer to the CURRENT question
 		}
 	}
 
@@ -3606,6 +3754,11 @@ func (e *Engine) UpdateScore(bumperID string, points int) (bumperScore, teamScor
 
 // UpdateBumperScore updates the bumper score and recalculates team score
 func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
+	return e.UpdateBumperScoreDisplay(bumperID, points, true)
+}
+
+// UpdateBumperScoreDisplay is UpdateBumperScore plus the SCORE_CHANGE marker (#252).
+func (e *Engine) UpdateBumperScoreDisplay(bumperID string, points int, display bool) int {
 	e.mu.Lock()
 
 	bumper, ok := e.data.Bumpers[bumperID]
@@ -3620,9 +3773,12 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 		bumperID, points, bumper.Score)
 
 	// Recalculate team score as sum of all bumpers in team
+	var changedTeams []string
 	if bumper.Team != "" {
 		e.recalculateTeamScoreUnsafe(bumper.Team)
+		changedTeams = []string{bumper.Team}
 	}
+	e.recordScoreChangeUnsafe(display, changedTeams, []string{bumperID})
 
 	score := bumper.Score
 	e.mu.Unlock()
@@ -3636,6 +3792,24 @@ func (e *Engine) UpdateBumperScore(bumperID string, points int) int {
 
 // UpdateTeamScore adds points directly to team's own TeamPoints (not bumpers)
 func (e *Engine) UpdateTeamScore(teamName string, points int) int {
+	return e.UpdateTeamScoreDisplay(teamName, points, true)
+}
+
+// recordScoreChangeUnsafe bumps SCORE_CHANGE (#252). Caller holds e.mu.
+func (e *Engine) recordScoreChangeUnsafe(display bool, teams, players []string) {
+	if teams == nil {
+		teams = []string{}
+	}
+	if players == nil {
+		players = []string{}
+	}
+	e.state.ScoreChange = ScoreChange{Seq: e.state.ScoreChange.Seq + 1, Display: display, Teams: teams, Players: players}
+}
+
+// UpdateTeamScoreDisplay is UpdateTeamScore plus the SCORE_CHANGE marker, set in
+// the same critical section as the score (a concurrent UPDATE never shows the new
+// score without it).
+func (e *Engine) UpdateTeamScoreDisplay(teamName string, points int, display bool) int {
 	e.mu.Lock()
 
 	team, ok := e.data.Teams[teamName]
@@ -3652,6 +3826,7 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 
 	// Recalculate total team score (TeamPoints + bumper scores)
 	e.recalculateTeamScoreUnsafe(teamName)
+	e.recordScoreChangeUnsafe(display, []string{teamName}, nil)
 
 	score := team.Score
 	e.mu.Unlock()
@@ -3701,54 +3876,161 @@ func (e *Engine) RecalculateAllTeamScores() {
 // notification is the caller's responsibility (main.go), keeping the existing
 // engine/transport separation intact.
 func (e *Engine) InitGame() []string {
-	e.mu.Lock()
+	return e.InitGameWith(DefaultNewGameOptions()).PurgedPlayerIDs
+}
 
-	// Reset all bumper scores/times; purge VJoueurs entirely (fix R1 follow-up
-	// — product invariant: a new game always starts with a clean VJoueur
-	// roster, there is no such thing as a "legacy" VJoueur from a prior
-	// session). Physical buzzers are persistent hardware and are kept, just
-	// with their score/time reset like before.
-	var purgedVPlayerIDs []string
-	for id, bumper := range e.data.Bumpers {
-		if bumper.IsVirtual {
-			delete(e.data.Bumpers, id)
-			purgedVPlayerIDs = append(purgedVPlayerIDs, id)
-			continue
+// NewGameOptions are the optional purges of NEW_GAME (#243, contracts/
+// websocket-actions.md §NEW_GAME).
+type NewGameOptions struct {
+	PurgeScores    bool
+	PurgePlayers   bool
+	PurgeTeams     bool
+	ResetQuestions bool
+}
+
+// DefaultNewGameOptions is the v11.1 behaviour (no options sent): scores and
+// players purged, teams kept, questions back to "to play".
+func DefaultNewGameOptions() NewGameOptions {
+	return NewGameOptions{PurgeScores: true, PurgePlayers: true, PurgeTeams: false, ResetQuestions: true}
+}
+
+// NewGameResult reports what InitGameWith did (for the NEW_GAME_PURGE log and
+// the caller's notifications).
+type NewGameResult struct {
+	PurgedPlayerIDs []string
+	RemovedTeams    []string
+	PhaseBefore     GamePhase
+	QuestionBefore  string
+}
+
+// stopAllTimersUnsafe stops every engine timer WITHOUT touching the phase:
+// question timer, countdown, RAFALE question ticker (MEMOTION timers share the
+// main ticker). Caller holds e.mu.
+func (e *Engine) stopAllTimersUnsafe() {
+	if e.countdownStopCh != nil {
+		select {
+		case <-e.countdownStopCh:
+		default:
+			close(e.countdownStopCh)
 		}
-		bumper.Score = 0
-		bumper.Time = 0
+		e.countdownStopCh = nil
 	}
-	if len(purgedVPlayerIDs) > 0 {
-		e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
-		log.Printf("[Engine] InitGame: purged %d virtual player(s) — fresh VJoueur roster for the new game", len(purgedVPlayerIDs))
+	if e.countdownTimer != nil {
+		e.countdownTimer.Stop()
+		e.countdownTimer = nil
+	}
+	if e.stopCh != nil {
+		select {
+		case <-e.stopCh:
+		default:
+			close(e.stopCh)
+		}
+		e.stopCh = nil
+	}
+	if e.timer != nil {
+		e.timer.Stop()
+		e.timer = nil
+	}
+	e.stopRafaleQuestionTimerUnsafe()
+	e.resetDeferredTimerUnsafe()
+	e.state.CurrentTime = 0
+	e.state.CountdownTime = 0
+	e.state.SoundGateBypassed = false
+	e.state.QuestionSoundUnavailable = ""
+}
+
+// InitGameWith applies a (validated) NEW_GAME under ONE engine lock, in the
+// contract order: timers → PURGE_TEAMS → PURGE_PLAYERS → PURGE_SCORES →
+// RESET_QUESTIONS → always-reset (#243). The forbidden combination (players
+// without scores) must be refused by the caller BEFORE any call.
+func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
+	e.mu.Lock()
+	res := NewGameResult{PhaseBefore: e.state.Phase}
+	if e.state.Question != nil {
+		res.QuestionBefore = e.state.Question.ID
 	}
 
-	// Reset all team scores
-	for _, team := range e.data.Teams {
-		team.Score = 0
-		team.TeamPoints = 0
-		team.Time = 0
+	// 1. every timer stopped, phase untouched here (a tick must never put the
+	// phase back to STOPPED after the reset below). An interrupted running
+	// question keeps its "played" mark unless questions are reset.
+	if !opts.ResetQuestions && e.state.Question != nil {
+		switch e.state.Phase {
+		case PhasePrepare, PhaseReady, PhaseCountdown:
+			e.setQuestionStatus(StatusAvailable) // selected but never launched: not played
+		case PhaseStarted, PhasePaused:
+			e.setQuestionStatus(StatusStopped) // launched then interrupted: played
+		}
+	}
+	e.stopAllTimersUnsafe()
+
+	// 2. PURGE_TEAMS: same path as a team deletion (#249); surviving players
+	// become team-less.
+	if opts.PurgeTeams {
+		for name := range e.data.Teams {
+			res.RemovedTeams = append(res.RemovedTeams, name)
+		}
+		sort.Strings(res.RemovedTeams)
+		for _, name := range res.RemovedTeams {
+			e.purgeTeamStateUnsafe(name)
+		}
+		e.data.Teams = make(map[string]*Team)
+		for _, bumper := range e.data.Bumpers {
+			if bumper != nil && bumper.Team != "" {
+				oldTeam := bumper.Team
+				bumper.Team = ""
+				e.syncConnStateForTeamChangeUnsafe(bumper, oldTeam)
+			}
+		}
 	}
 
-	// Clear history
-	e.history = nil
+	// 3. PURGE_PLAYERS: every VJoueur removed (physical buzzers are kept).
+	if opts.PurgePlayers {
+		for id, bumper := range e.data.Bumpers {
+			if bumper != nil && bumper.IsVirtual {
+				delete(e.data.Bumpers, id)
+				res.PurgedPlayerIDs = append(res.PurgedPlayerIDs, id)
+			}
+		}
+		if len(res.PurgedPlayerIDs) > 0 {
+			e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
+			log.Printf("[Engine] InitGame: purged %d virtual player(s)", len(res.PurgedPlayerIDs))
+		}
+	}
 
-	// Reset all question statuses
-	e.questionStatuses = make(map[string]QuestionStatus)
+	// 4. PURGE_SCORES: scores, times and the points history.
+	if opts.PurgeScores {
+		for _, bumper := range e.data.Bumpers {
+			if bumper != nil {
+				bumper.Score = 0
+				bumper.Time = 0
+				bumper.AnsweredColor = "" // #255
+			}
+		}
+		for _, team := range e.data.Teams {
+			team.Score = 0
+			team.TeamPoints = 0
+			team.Time = 0
+		}
+		e.history = nil
+	}
 
-	// Clear current question so admin UI doesn't show a stale selection
+	// 5. RESET_QUESTIONS: statuses and the RAFALE "already used" reservoir.
+	// An outstanding RAFALE pre-fetch is always released (#202): the question
+	// it was drawn for is abandoned.
+	e.releaseRafaleNextUnsafe()
+	if opts.ResetQuestions {
+		e.questionStatuses = make(map[string]QuestionStatus)
+		e.rafaleUsed = make(map[string]bool)
+	}
+
+	// 6. always: no current question, game-type states back to zero.
+	e.state.TeamsLocked = false                // #249
+	e.state.ScoreChange = DefaultScoreChange() // #252
+	e.state.RoundContext = RoundContext{}      // #245: no current question
 	e.state.Question = nil
-
-	// Set phase to NEW_GAME
 	e.state.Phase = PhaseNewGame
-
-	// #200 cycle 5 — defensive: e.state.Question is nil now, so the next
-	// Ready() will treat isNewQuestion==true regardless anyway, making this
-	// moot in practice — reset here too so no stale `true` can ever leak
-	// across a NEW_GAME boundary (see questionEverStarted's own doc comment).
 	e.questionEverStarted = false
 
-	// Reset MEMOTION state completely
 	e.state.MotionSubPhase = ""
 	e.state.MotionSelected = ""
 	e.state.MotionCardStates = make(map[string]MotionCardState)
@@ -3758,27 +4040,16 @@ func (e *Engine) InitGame() []string {
 	e.state.MotionActive = MotionActive{State: map[string]interface{}{}}
 	e.state.MotionParticipatingTeams = []string{}
 
-	// Reset ARDOISE answers (v5.6.0)
 	e.state.ArdoiseAnswers = make(map[string]ArdoiseAnswer)
+	e.resetArdoiseControl()
 
-	// Release any outstanding RAFALE pre-fetch (#202, contract §13.4)
-	// BEFORE wiping rafaleUsed wholesale below — releaseRafaleNextUnsafe's
-	// own delete(rafaleUsed, id) becomes moot the instant the map is
-	// replaced, but e.rafaleNext ITSELF must still be nilled here, or a
-	// stale pointer from the previous game would be silently consumed by
-	// this new game's own first advance. Return value ignored: the
-	// unconditional safeGo("SaveRafaleUsed", ...) below already persists
-	// the (now-empty) map regardless of whether anything was "released".
-	e.releaseRafaleNextUnsafe()
+	e.state.MemoryCurrentTeam = ""
+	e.state.MemoryTeamPairs = map[string]int{}
+	e.state.MemoryTeamErrors = map[string]int{}
+	e.state.MemoryParticipatingTeams = []string{}
+	e.state.MemoryPairOwners = map[int]string{}
+	e.state.MemoryCurrentTeamColor = []int{}
 
-	// Reset RAFALE "already used" flags (#197, contract §3.2) — a fresh
-	// game must be able to draw the whole reservoir again. The reservoir
-	// itself (rafaleQuestions) is untouched: NEW_GAME resets game-play
-	// state, never the editor's question bank.
-	e.rafaleUsed = make(map[string]bool)
-
-	// Reset RAFALE ephemeral GameState fields (#107, contract §4) — same
-	// defense-in-depth as the MEMOTION/ARDOISE resets just above.
 	e.state.RafaleSubPhase = RafaleSubPhaseNone
 	e.state.RafaleCurrentQuestion = RafaleCurrent{}
 	e.state.RafaleQuestionTime = 0
@@ -3794,17 +4065,18 @@ func (e *Engine) InitGame() []string {
 	e.state.RafalePoolRemaining = 0
 	e.state.RafaleExhausted = false
 
-	log.Printf("[Engine] Game initialized: scores, history, question statuses reset")
+	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
+		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
 	e.mu.Unlock()
 
-	// Persist async
 	safeGo("SaveHistory", e.SaveHistory)
 	safeGo("SaveTeams", e.SaveTeams)
 	safeGo("SaveBumpers", e.SaveBumpers)
-	safeGo("SaveStatuses", e.SaveStatuses)
-	safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
-
-	return purgedVPlayerIDs
+	if opts.ResetQuestions {
+		safeGo("SaveStatuses", e.SaveStatuses)
+		safeGo("SaveRafaleUsed", e.SaveRafaleUsed)
+	}
+	return res
 }
 
 // SetQuizMeta sets the quiz metadata (name, theme, notes, and — since v6.0.0,
@@ -3892,6 +4164,7 @@ func (e *Engine) RAZScores() {
 	for _, bumper := range e.data.Bumpers {
 		bumper.Score = 0
 		bumper.Time = 0
+		bumper.AnsweredColor = "" // #255
 	}
 
 	for _, team := range e.data.Teams {
@@ -4081,6 +4354,8 @@ func (e *Engine) GetCurrentBackgroundDuration() int {
 // GetGameJSON returns game state as JSON
 func (e *Engine) GetGameJSON() json.RawMessage {
 	e.mu.RLock()
+	divs := e.ardoiseDivergencesUnsafe("GetGameJSON")
+	defer func() { reportArdoiseDivergences(divs) }()
 	defer e.mu.RUnlock()
 
 	bumpers := e.data.Bumpers
@@ -4412,34 +4687,59 @@ func (e *Engine) SaveTeams() error {
 	return nil
 }
 
-// LoadTeams loads teams from disk
+// LoadTeams loads teams from disk. #249: NAME is normalised to the map key and
+// teams.json is rewritten when anything had to be repaired.
 func (e *Engine) LoadTeams() error {
+	changed, reports, err := e.loadTeamsLocked()
+	if err != nil {
+		return err
+	}
+	reportTeamEvents(reports)
+	if changed {
+		if err := e.SaveTeams(); err != nil {
+			log.Printf("[Engine] LoadTeams: rewrite after normalisation failed: %v", err)
+		}
+	}
+	return nil
+}
+
+func (e *Engine) loadTeamsLocked() (bool, []teamEvent, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if e.teamsPath == "" {
-		return nil
+		return false, nil, nil
 	}
 
 	data, err := os.ReadFile(e.teamsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Printf("[Engine] No teams file found, starting fresh")
-			return nil
+			return false, nil, nil
 		}
 		log.Printf("[Engine] Failed to read teams: %v", err)
-		return err
+		return false, nil, err
 	}
 
 	var teams map[string]*Team
 	if err := json.Unmarshal(data, &teams); err != nil {
 		log.Printf("[Engine] Failed to parse teams: %v", err)
-		return err
+		return false, nil, err
 	}
 
+	reports := normalizeTeamNamesUnsafe(teams, "load")
+	if len(reports) > 0 {
+		// First repair: keep the original file once (never overwrite an earlier backup).
+		bak := e.teamsPath + ".bak"
+		if _, statErr := os.Stat(bak); os.IsNotExist(statErr) {
+			if werr := os.WriteFile(bak, data, 0644); werr != nil {
+				log.Printf("[Engine] LoadTeams: could not write %s: %v", bak, werr)
+			}
+		}
+	}
 	e.data.Teams = teams
 	log.Printf("[Engine] Teams loaded: %d teams from %s", len(teams), e.teamsPath)
-	return nil
+	return len(reports) > 0, reports, nil
 }
 
 // SaveBumpers persists bumpers to disk
@@ -5879,11 +6179,20 @@ func (e *Engine) SetArdoiseAnswer(teamName string, text string) bool {
 		startedAt = now
 	}
 
+	prev := e.state.ArdoiseAnswers[teamName]
 	e.state.ArdoiseAnswers[teamName] = ArdoiseAnswer{
-		Text:        text,
-		StartedAt:   startedAt,
-		SubmittedAt: now,
+		Text:         text,
+		StartedAt:    startedAt,
+		SubmittedAt:  now,
+		Received:     prev.Received,
+		ReceivedHash: prev.ReceivedHash,
 	}
+	e.ardoiseControlMu.Lock()
+	if e.ardoiseControl == nil {
+		e.ardoiseControl = map[string]string{}
+	}
+	e.ardoiseControl[teamName] = text
+	e.ardoiseControlMu.Unlock()
 	return true
 }
 
@@ -5982,9 +6291,8 @@ func (e *Engine) ReconnectOrCreateVirtualPlayer(id, name string) (string, *Bumpe
 	// Case 1: a resolvable ID is unambiguous — always a genuine reconnection.
 	if id != "" {
 		if bumper, ok := e.data.Bumpers[id]; ok && bumper != nil && bumper.IsVirtual {
-			if bumper.Name != normalized {
-				bumper.Name = normalized
-			}
+			// #246: the client-sent name never renames the bumper (a stale tab used
+			// to rename the current player). The server-side name is authoritative.
 			bumper.Connected = true
 			applyConnEventUnsafe(bumper, ConnEventReconnect)
 			// #122 B2/B3 — the player found their way back on their own: any
@@ -7775,4 +8083,880 @@ func (e *Engine) ClearMotionMemoryFlippedCards(motionCardID string) {
 	}
 	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = []string{}
 	log.Printf("[Engine] MEMOTION memory card flipped cards cleared (cardId=%s)", motionCardID)
+}
+
+// --- ARDOISE_FINAL / REVEAL guard (v11.2, #246) -----------------------------------
+
+// ArdoiseHash returns the FNV-1a 32-bit hash of text (UTF-8), 8 lowercase hex chars.
+func ArdoiseHash(text string) string {
+	h := fnv.New32a()
+	h.Write([]byte(text))
+	return fmt.Sprintf("%08x", h.Sum32())
+}
+
+// ArdoiseFinalResult is the outcome of SetArdoiseFinal.
+type ArdoiseFinalResult int
+
+const (
+	ArdoiseFinalStale        ArdoiseFinalResult = iota // wrong phase/type/question: ignored
+	ArdoiseFinalHashMismatch                           // hash differs from recomputed: ignored
+	ArdoiseFinalAccepted                               // written
+	ArdoiseFinalDuplicate                              // same hash already received: no rewrite
+)
+
+// SetArdoiseFinal records a team's final text (STOPPED/PAUSED, current ARDOISE
+// question). On acceptance it also feeds the ARDOISE_STATE_DIVERGED control copy.
+func (e *Engine) SetArdoiseFinal(teamName, questionID, text, hash string) ArdoiseFinalResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if (e.state.Phase != PhaseStopped && e.state.Phase != PhasePaused) ||
+		e.state.Question == nil || e.state.Question.Type != QuestionTypeArdoise ||
+		e.state.Question.ID != questionID {
+		return ArdoiseFinalStale
+	}
+	computed := ArdoiseHash(text)
+	if computed != hash {
+		return ArdoiseFinalHashMismatch
+	}
+	prev := e.state.ArdoiseAnswers[teamName]
+	if prev.Received && prev.ReceivedHash == hash {
+		return ArdoiseFinalDuplicate
+	}
+	now := time.Now().UnixMicro()
+	startedAt := prev.StartedAt
+	if startedAt == 0 && text != "" {
+		startedAt = now
+	}
+	e.state.ArdoiseAnswers[teamName] = ArdoiseAnswer{
+		Text: text, StartedAt: startedAt, SubmittedAt: now, Received: true, ReceivedHash: hash,
+	}
+	e.ardoiseControlMu.Lock()
+	if e.ardoiseControl == nil {
+		e.ardoiseControl = map[string]string{}
+	}
+	e.ardoiseControl[teamName] = text
+	e.ardoiseControlMu.Unlock()
+	return ArdoiseFinalAccepted
+}
+
+// ArdoisePendingTeam is an expected team whose final text has not been received.
+type ArdoisePendingTeam struct {
+	Team    string
+	Offline bool
+}
+
+// ArdoisePendingTeams returns the expected teams (key of teams with >= 1 bumper
+// IS_VPLAYER whose TEAM is that key) without RECEIVED, sorted by name. Offline =
+// all their VJoueurs are disconnected (display only, does not lift the guard).
+// Empty unless the current question is ARDOISE and the phase is STOPPED/PAUSED.
+func (e *Engine) ArdoisePendingTeams() []ArdoisePendingTeam {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if (e.state.Phase != PhaseStopped && e.state.Phase != PhasePaused) ||
+		e.state.Question == nil || e.state.Question.Type != QuestionTypeArdoise {
+		return nil
+	}
+	var out []ArdoisePendingTeam
+	for team := range e.data.Teams {
+		expected, online := false, false
+		for _, b := range e.data.Bumpers {
+			if b != nil && b.IsVPlayer && b.Team == team {
+				expected = true
+				if b.Connected {
+					online = true
+				}
+			}
+		}
+		if expected && !e.state.ArdoiseAnswers[team].Received {
+			out = append(out, ArdoisePendingTeam{Team: team, Offline: !online})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Team < out[j].Team })
+	return out
+}
+
+// --- Team identity = map key (v11.2, #249) ---------------------------------------
+
+// teamEvent is a log line produced under the engine lock and emitted after it.
+type teamEvent struct {
+	Level LogLevel
+	Msg   string
+}
+
+// TeamEventReporter receives #249 team events (wired to the logger by internal/server).
+var TeamEventReporter func(level LogLevel, msg string)
+
+func reportTeamEvents(evs []teamEvent) {
+	if rep := TeamEventReporter; rep != nil {
+		for _, ev := range evs {
+			rep(ev.Level, ev.Msg)
+		}
+	}
+}
+
+// normalizeTeamNamesUnsafe rewrites team.Name = key for every team and returns
+// one WARN TEAM_NAME_NORMALIZED event per correction (an empty NAME is filled
+// silently as before).
+func normalizeTeamNamesUnsafe(teams map[string]*Team, source string) []teamEvent {
+	var evs []teamEvent
+	keys := make([]string, 0, len(teams))
+	for k := range teams {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		team := teams[key]
+		if team == nil || team.Name == key {
+			continue
+		}
+		if team.Name != "" {
+			evs = append(evs, teamEvent{LogLevelWarn, fmt.Sprintf("TEAM_NAME_NORMALIZED key=%q old_name=%q source=%s", key, team.Name, source)})
+		}
+		team.Name = key
+	}
+	return evs
+}
+
+// TeamsLocked reports whether the team roster is locked (a question is selected
+// and not yet revealed).
+func (e *Engine) TeamsLocked() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.TeamsLocked
+}
+
+func moveKey[V any](m map[string]V, oldKey, newKey string) bool {
+	v, ok := m[oldKey]
+	if !ok {
+		return false
+	}
+	delete(m, oldKey)
+	m[newKey] = v
+	return true
+}
+
+func replaceInList(l []string, oldName, newName string) bool {
+	changed := false
+	for i, v := range l {
+		if v == oldName {
+			l[i] = newName
+			changed = true
+		}
+	}
+	return changed
+}
+
+// RenameTeamState carries every state indexed by team name from oldName to
+// newName (closed list: contracts/game-state.md §TEAMS_LOCKED) and the points
+// history. Returns the names of the states actually migrated.
+func (e *Engine) RenameTeamState(oldName, newName string) []string {
+	e.mu.Lock()
+	var migrated []string
+	st := &e.state
+	note := func(ok bool, name string) {
+		if ok {
+			migrated = append(migrated, name)
+		}
+	}
+	note(moveKey(st.ArdoiseAnswers, oldName, newName), "ARDOISE_ANSWERS")
+	e.ardoiseControlMu.Lock() // keep the ARDOISE_STATE_DIVERGED control copy in step
+	moveKey(e.ardoiseControl, oldName, newName)
+	e.ardoiseControlMu.Unlock()
+	note(moveKey(st.MemoryTeamPairs, oldName, newName), "MEMORY_TEAM_PAIRS")
+	note(moveKey(st.MemoryTeamErrors, oldName, newName), "MEMORY_TEAM_ERRORS")
+	note(moveKey(st.RafaleTeamCounters, oldName, newName), "RAFALE_TEAM_COUNTERS")
+	note(moveKey(st.RafaleTeamCategoryCounters, oldName, newName), "RAFALE_TEAM_CATEGORY_COUNTERS")
+	note(moveKey(st.RafaleTeamBest, oldName, newName), "RAFALE_TEAM_BEST")
+	note(moveKey(st.RafaleTeamStreak, oldName, newName), "RAFALE_TEAM_STREAK")
+	note(moveKey(st.RafaleTeamErrors, oldName, newName), "RAFALE_TEAM_ERRORS")
+	ownersChanged := false
+	for id, t := range st.MemoryPairOwners {
+		if t == oldName {
+			st.MemoryPairOwners[id] = newName
+			ownersChanged = true
+		}
+	}
+	note(ownersChanged, "MEMORY_PAIR_OWNERS")
+	cardsChanged := false
+	for id, t := range st.MotionCardTeams {
+		if t == oldName {
+			st.MotionCardTeams[id] = newName
+			cardsChanged = true
+		}
+	}
+	note(cardsChanged, "MEMOTION_CARD_TEAMS")
+	note(replaceInList(st.MemoryParticipatingTeams, oldName, newName), "MEMORY_PARTICIPATING_TEAMS")
+	note(replaceInList(st.MotionParticipatingTeams, oldName, newName), "MEMOTION_PARTICIPATING_TEAMS")
+	note(replaceInList(st.RafaleParticipatingTeams, oldName, newName), "RAFALE_PARTICIPATING_TEAMS")
+	if st.MemoryCurrentTeam == oldName {
+		st.MemoryCurrentTeam = newName
+		migrated = append(migrated, "MEMORY_CURRENT_TEAM")
+	}
+	if st.MotionCurrentTeam == oldName {
+		st.MotionCurrentTeam = newName
+		migrated = append(migrated, "MEMOTION_CURRENT_TEAM")
+	}
+	if st.RafaleCurrentTeam == oldName {
+		st.RafaleCurrentTeam = newName
+		migrated = append(migrated, "RAFALE_CURRENT_TEAM")
+	}
+	histChanged := false
+	for i := range e.history {
+		ev := &e.history[i]
+		if ev.TeamName == oldName {
+			ev.TeamName = newName
+			histChanged = true
+		}
+		if ev.WinnerType == "TEAM" {
+			if ev.WinnerID == oldName {
+				ev.WinnerID = newName
+				histChanged = true
+			}
+			if ev.WinnerName == oldName {
+				ev.WinnerName = newName
+				histChanged = true
+			}
+		}
+	}
+	note(histChanged, "HISTORY")
+	e.mu.Unlock()
+	if histChanged {
+		safeGo("SaveHistory", e.SaveHistory)
+	}
+	reportTeamEvents([]teamEvent{{LogLevelInfo, fmt.Sprintf("TEAM_RENAMED old=%q new=%q migrated=%s", oldName, newName, strings.Join(migrated, ","))}})
+	return migrated
+}
+
+// PurgeTeamState erases the per-team game state of a deleted team (outside the
+// lock). The points history is kept as an audit trail.
+func (e *Engine) PurgeTeamState(name string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.purgeTeamStateUnsafe(name)
+}
+
+// purgeTeamStateUnsafe is PurgeTeamState with e.mu already held (also used by
+// NEW_GAME with PURGE_TEAMS, #243).
+func (e *Engine) purgeTeamStateUnsafe(name string) {
+	st := &e.state
+	delete(st.ArdoiseAnswers, name)
+	delete(st.MemoryTeamPairs, name)
+	delete(st.MemoryTeamErrors, name)
+	delete(st.RafaleTeamCounters, name)
+	delete(st.RafaleTeamCategoryCounters, name)
+	delete(st.RafaleTeamBest, name)
+	delete(st.RafaleTeamStreak, name)
+	delete(st.RafaleTeamErrors, name)
+	for id, t := range st.MemoryPairOwners {
+		if t == name {
+			delete(st.MemoryPairOwners, id)
+		}
+	}
+	for id, t := range st.MotionCardTeams {
+		if t == name {
+			delete(st.MotionCardTeams, id)
+		}
+	}
+	drop := func(l []string) []string {
+		out := l[:0]
+		for _, v := range l {
+			if v != name {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	st.MemoryParticipatingTeams = drop(st.MemoryParticipatingTeams)
+	st.MotionParticipatingTeams = drop(st.MotionParticipatingTeams)
+	st.RafaleParticipatingTeams = drop(st.RafaleParticipatingTeams)
+	if st.MemoryCurrentTeam == name {
+		st.MemoryCurrentTeam = ""
+	}
+	if st.MotionCurrentTeam == name {
+		st.MotionCurrentTeam = ""
+	}
+	if st.RafaleCurrentTeam == name {
+		st.RafaleCurrentTeam = ""
+	}
+	e.ardoiseControlMu.Lock()
+	delete(e.ardoiseControl, name)
+	e.ardoiseControlMu.Unlock()
+	// History is kept (audit trail); a TEAM_DELETED marker stops a team re-created
+	// under the same name from inheriting the "already credited" lock (#249).
+	e.history = append(e.history, GameEvent{
+		Timestamp: time.Now().UnixMicro(),
+		EventType: "TEAM_DELETED",
+		TeamName:  name,
+	})
+	safeGo("SaveHistory", e.SaveHistory)
+}
+
+// --- TEAM_POINTS_BATCH (v11.2, #244/#251) -------------------------------------
+
+// TeamPointsEntry is one team of a grouped award. Invalid marks a POINTS value
+// that was not a valid integer in the request.
+type TeamPointsEntry struct {
+	Team    string
+	Points  int
+	Invalid bool
+}
+
+// TeamPointsSkip is a team ignored by a grouped award.
+type TeamPointsSkip struct {
+	Team   string
+	Reason string
+}
+
+// TeamPointsBatchResult is the outcome of ApplyTeamPointsBatch.
+type TeamPointsBatchResult struct {
+	Status  string // "APPLIED" | "REFUSED"
+	Reason  string // when REFUSED
+	Unknown []string
+	Applied []TeamPointsEntry
+	Skipped []TeamPointsSkip
+}
+
+// CategoryMeta is the resolved display meta of a question category (history entries).
+type CategoryMeta struct {
+	Name, ImageURL, Color string
+}
+
+const (
+	teamPointsBatchMaxEntries = 64
+	teamPointsBatchMaxPoints  = 999
+)
+
+// AwardedTeam is a team already credited for the current question.
+type AwardedTeam struct {
+	Team      string
+	Points    int   // sum of its credits for the question
+	Timestamp int64 // µs of its first credit
+	// TeamLevel (v11.2, #254): the team received at least one TEAM-level credit
+	// (WINNER_TYPE TEAM), as opposed to being credited only through its players.
+	TeamLevel bool
+}
+
+// awardedTeamsUnsafe is THE "already credited" rule (AWARDED_TEAMS, grouped
+// award): POINTS_AWARDED events of the question since GameTime, credits before
+// the team's last TEAM_DELETED ignored (#249), in chronological order of the
+// first credit, points summed. Caller holds e.mu (read or write).
+func (e *Engine) awardedTeamsUnsafe(questionID string) []AwardedTeam {
+	out := []AwardedTeam{}
+	if questionID == "" {
+		return out
+	}
+	lastDeleted := map[string]int{}
+	for i, ev := range e.history {
+		if ev.EventType == "TEAM_DELETED" {
+			lastDeleted[ev.TeamName] = i
+		}
+	}
+	index := map[string]int{}
+	for i, ev := range e.history {
+		if ev.EventType != "POINTS_AWARDED" || ev.QuestionID != questionID || ev.Timestamp < e.state.GameTime {
+			continue
+		}
+		if ev.Display != nil && !*ev.Display { // hidden correction (#252): not a credit
+			continue
+		}
+		if d, ok := lastDeleted[ev.TeamName]; ok && i < d {
+			continue
+		}
+		if k, ok := index[ev.TeamName]; ok {
+			out[k].Points += ev.Points
+			if ev.WinnerType == "TEAM" {
+				out[k].TeamLevel = true
+			}
+			continue
+		}
+		index[ev.TeamName] = len(out)
+		out = append(out, AwardedTeam{Team: ev.TeamName, Points: ev.Points, Timestamp: ev.Timestamp, TeamLevel: ev.WinnerType == "TEAM"})
+	}
+	return out
+}
+
+// AwardedTeams returns the teams already credited for the current question
+// (empty, never nil, when there is no current question).
+func (e *Engine) AwardedTeams() (questionID string, teams []AwardedTeam) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.state.Question != nil {
+		questionID = e.state.Question.ID
+	}
+	return questionID, e.awardedTeamsUnsafe(questionID)
+}
+
+func (e *Engine) awardedTeamSetUnsafe(questionID string) map[string]bool {
+	set := map[string]bool{}
+	for _, t := range e.awardedTeamsUnsafe(questionID) {
+		set[t.Team] = true
+	}
+	return set
+}
+
+// ApplyTeamPointsBatch validates a grouped team award completely BEFORE any
+// effect (global refusal otherwise), then applies it under ONE engine lock:
+// already-credited teams are skipped, the others get TeamPoints += points and a
+// POINTS_AWARDED history entry. Public effects are the caller's.
+func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEntry, meta CategoryMeta, display bool) TeamPointsBatchResult {
+	e.mu.Lock()
+	refuse := func(reason string) TeamPointsBatchResult {
+		e.mu.Unlock()
+		return TeamPointsBatchResult{Status: "REFUSED", Reason: reason}
+	}
+	if e.state.Phase != PhaseRevealed {
+		return refuse("NOT_REVEALED")
+	}
+	if e.state.Question == nil || e.state.Question.ID != questionID {
+		return refuse("QUESTION_MISMATCH")
+	}
+	if len(entries) == 0 || len(entries) > teamPointsBatchMaxEntries {
+		return refuse("INVALID_ENTRIES")
+	}
+	seen := map[string]bool{}
+	for _, en := range entries {
+		if en.Team == "" || seen[en.Team] {
+			return refuse("INVALID_ENTRIES")
+		}
+		seen[en.Team] = true
+	}
+	for _, en := range entries {
+		if en.Invalid || en.Points == 0 || en.Points < -teamPointsBatchMaxPoints || en.Points > teamPointsBatchMaxPoints {
+			return refuse("INVALID_POINTS")
+		}
+	}
+	var unknown []string
+	for _, en := range entries {
+		if _, ok := e.data.Teams[en.Team]; !ok {
+			unknown = append(unknown, en.Team)
+		}
+	}
+	if len(unknown) > 0 {
+		e.mu.Unlock()
+		return TeamPointsBatchResult{Status: "REFUSED", Reason: "UNKNOWN_TEAM", Unknown: unknown}
+	}
+
+	res := TeamPointsBatchResult{Status: "APPLIED"}
+	awarded := e.awardedTeamSetUnsafe(questionID)
+	q := e.state.Question
+	for _, en := range entries {
+		if awarded[en.Team] {
+			res.Skipped = append(res.Skipped, TeamPointsSkip{Team: en.Team, Reason: "ALREADY_AWARDED"})
+			continue
+		}
+		team := e.data.Teams[en.Team]
+		team.TeamPoints += en.Points
+		e.recalculateTeamScoreUnsafe(en.Team)
+		var breakdown map[string]int
+		if q.Type == QuestionTypeRafale {
+			breakdown = RafaleCategoryBreakdown(q, en.Points, e.state.RafaleTeamCategoryCounters[en.Team])
+		}
+		var displayFlag *bool
+		if !display {
+			f := false
+			displayFlag = &f
+		}
+		e.history = append(e.history, GameEvent{
+			Display:             displayFlag,
+			Timestamp:           time.Now().UnixMicro(),
+			QuestionID:          q.ID,
+			QuestionText:        q.Question,
+			QuestionCategory:    string(q.Category),
+			CategoryDisplayName: meta.Name,
+			CategoryImageURL:    meta.ImageURL,
+			CategoryColor:       meta.Color,
+			EventType:           "POINTS_AWARDED",
+			WinnerID:            en.Team,
+			WinnerName:          en.Team,
+			WinnerType:          "TEAM",
+			TeamName:            en.Team,
+			TeamColor:           team.Color,
+			Points:              en.Points,
+			CategoryBreakdown:   breakdown,
+		})
+		res.Applied = append(res.Applied, en)
+	}
+	if len(res.Applied) > 0 {
+		teams := make([]string, 0, len(res.Applied))
+		for _, en := range res.Applied {
+			teams = append(teams, en.Team)
+		}
+		e.recordScoreChangeUnsafe(display, teams, nil)
+	}
+	e.mu.Unlock()
+
+	if len(res.Applied) > 0 {
+		safeGo("SaveTeams", e.SaveTeams)
+		safeGo("SaveHistory", e.SaveHistory)
+	}
+	return res
+}
+
+// --- LAUNCH_LOCK (v11.2, #253) -------------------------------------------------
+
+// LaunchLockRenewEvery and LaunchLockTTL are the contract values (renewal 15 s,
+// safety expiry 45 s); variables so that tests can shorten them.
+var (
+	LaunchLockRenewEvery = 15 * time.Second
+	LaunchLockTTL        = 45 * time.Second
+)
+
+// LaunchLockReleased describes a released lock (for the caller's journal).
+type LaunchLockReleased struct {
+	Owner  string
+	HeldMs int64
+	Reason string // close | new_game | disconnect | expired
+}
+
+// OpenLaunchLock takes or renews the lock for owner. reason is "" on success,
+// else LOCKED_BY_OTHER or ENTRACTE_ACTIVE. An OPEN of the current owner is a
+// renewal and is never refused. onExpire is called (outside the lock) if the lock
+// expires by itself, and — for a lock found already past its deadline — right away
+// (journal + broadcast of the expiry the timer had not delivered yet).
+//
+// ExpiresAt is WALL-CLOCK milliseconds (what the clients read); the monotonic
+// time.AfterFunc below is the safety net that actually releases the lock. A reader
+// never releases lazily: it only treats a past-deadline lock as inactive
+// (launchLockActiveUnsafe), so the release, its broadcast and its journal stay the
+// single responsibility of the timer or of the next OPEN.
+func (e *Engine) OpenLaunchLock(owner string, onExpire func(LaunchLockReleased)) (renewed bool, reason string) {
+	e.mu.Lock()
+	now := time.Now()
+	var staleRel *LaunchLockReleased
+	var staleCb func(LaunchLockReleased)
+	if ll := e.state.LaunchLock; ll.Active && now.UnixMilli() >= ll.ExpiresAt {
+		// Past its deadline but the timer has not fired yet: expire it now.
+		rel := e.releaseLaunchLockUnsafe("expired")
+		staleRel, staleCb = &rel, e.launchLockOnExpire
+	}
+	ll := &e.state.LaunchLock
+	if ll.Active && ll.Owner == owner {
+		renewed = true
+	} else if ll.Active {
+		e.mu.Unlock()
+		return false, "LOCKED_BY_OTHER"
+	} else if e.state.Entracte {
+		e.mu.Unlock()
+		if staleRel != nil && staleCb != nil {
+			staleCb(*staleRel)
+		}
+		return false, "ENTRACTE_ACTIVE"
+	}
+	if !renewed {
+		ll.Active, ll.Owner, ll.Since = true, owner, now.UnixMilli()
+	}
+	ll.ExpiresAt = now.Add(LaunchLockTTL).UnixMilli()
+	e.launchLockOnExpire = onExpire
+	e.launchLockGen++
+	gen := e.launchLockGen
+	if e.launchLockTimer != nil {
+		e.launchLockTimer.Stop()
+	}
+	e.launchLockTimer = time.AfterFunc(LaunchLockTTL, func() {
+		defer recoverBackgroundPanic("launch lock expiry")
+		e.mu.Lock()
+		if e.launchLockGen != gen || !e.state.LaunchLock.Active {
+			e.mu.Unlock()
+			return
+		}
+		rel := e.releaseLaunchLockUnsafe("expired")
+		e.mu.Unlock()
+		if onExpire != nil {
+			onExpire(rel)
+		}
+	})
+	e.mu.Unlock()
+	if staleRel != nil && staleCb != nil {
+		staleCb(*staleRel)
+	}
+	return renewed, ""
+}
+
+// releaseLaunchLockUnsafe clears the lock (caller holds e.mu, lock is active).
+func (e *Engine) releaseLaunchLockUnsafe(reason string) LaunchLockReleased {
+	ll := e.state.LaunchLock
+	rel := LaunchLockReleased{Owner: ll.Owner, HeldMs: time.Now().UnixMilli() - ll.Since, Reason: reason}
+	e.state.LaunchLock = LaunchLock{}
+	e.launchLockGen++
+	if e.launchLockTimer != nil {
+		e.launchLockTimer.Stop()
+		e.launchLockTimer = nil
+	}
+	return rel
+}
+
+// launchLockActiveUnsafe reports whether the lock is held AND not past its
+// wall-clock deadline. It never mutates (caller holds e.mu, read or write).
+func (e *Engine) launchLockActiveUnsafe(now time.Time) bool {
+	ll := e.state.LaunchLock
+	return ll.Active && now.UnixMilli() < ll.ExpiresAt
+}
+
+// CloseLaunchLock releases the lock if owner holds it. released is false when
+// there is no lock or another connection owns it.
+func (e *Engine) CloseLaunchLock(owner, reason string) (LaunchLockReleased, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !e.state.LaunchLock.Active || e.state.LaunchLock.Owner != owner {
+		return LaunchLockReleased{}, false
+	}
+	return e.releaseLaunchLockUnsafe(reason), true
+}
+
+// LaunchLockOwner returns the current owner ("" if none or past its deadline).
+// Read-only (RLock): called for every inbound message, it never releases.
+func (e *Engine) LaunchLockOwner() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if !e.launchLockActiveUnsafe(time.Now()) {
+		return ""
+	}
+	return e.state.LaunchLock.Owner
+}
+
+// --- BUMPER_POINTS_BATCH (v11.2, #254) ----------------------------------------
+
+// BumperPointsEntry is one player of a grouped award.
+type BumperPointsEntry struct {
+	ID      string
+	Points  int
+	Invalid bool
+}
+
+// BumperSkip is a player ignored by a grouped player award.
+type BumperSkip struct {
+	ID     string
+	Reason string
+}
+
+// BumperPointsBatchResult is the outcome of ApplyBumperPointsBatch.
+type BumperPointsBatchResult struct {
+	Status       string // "APPLIED" | "REFUSED"
+	Reason       string
+	Unknown      []string
+	Applied      []BumperPointsEntry
+	AppliedTeams map[string]string // bumper ID -> team of the credited players
+	Skipped      []BumperSkip
+}
+
+// AwardedPlayer is a player credited individually for the current question.
+type AwardedPlayer struct {
+	ID        string
+	Team      string
+	Points    int
+	Timestamp int64
+}
+
+// awardedPlayersUnsafe is the per-player "already credited" rule, same filters as
+// awardedTeamsUnsafe (question, GameTime, hidden corrections ignored, credits before
+// the team's last TEAM_DELETED ignored) over WINNER_TYPE = PLAYER events.
+func (e *Engine) awardedPlayersUnsafe(questionID string) []AwardedPlayer {
+	out := []AwardedPlayer{}
+	if questionID == "" {
+		return out
+	}
+	lastDeleted := map[string]int{}
+	for i, ev := range e.history {
+		if ev.EventType == "TEAM_DELETED" {
+			lastDeleted[ev.TeamName] = i
+		}
+	}
+	index := map[string]int{}
+	for i, ev := range e.history {
+		if ev.EventType != "POINTS_AWARDED" || ev.WinnerType != "PLAYER" || ev.QuestionID != questionID || ev.Timestamp < e.state.GameTime {
+			continue
+		}
+		if ev.Display != nil && !*ev.Display {
+			continue
+		}
+		if d, ok := lastDeleted[ev.TeamName]; ok && i < d {
+			continue
+		}
+		if k, ok := index[ev.WinnerID]; ok {
+			out[k].Points += ev.Points
+			continue
+		}
+		index[ev.WinnerID] = len(out)
+		out = append(out, AwardedPlayer{ID: ev.WinnerID, Team: ev.TeamName, Points: ev.Points, Timestamp: ev.Timestamp})
+	}
+	return out
+}
+
+// AwardedPlayers returns the players credited individually for the current question.
+func (e *Engine) AwardedPlayers() []AwardedPlayer {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	qid := ""
+	if e.state.Question != nil {
+		qid = e.state.Question.ID
+	}
+	return e.awardedPlayersUnsafe(qid)
+}
+
+// ApplyBumperPointsBatch is the player-level twin of ApplyTeamPointsBatch: full
+// validation before any effect (NOT_REVEALED, QUESTION_MISMATCH, INVALID_ENTRIES,
+// INVALID_POINTS, UNKNOWN_PLAYER), then one engine lock: already-credited players
+// skipped, the others get Score += points (team score recomputed) and one
+// POINTS_AWARDED entry each (WINNER_TYPE PLAYER).
+func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPointsEntry, meta CategoryMeta, display bool) BumperPointsBatchResult {
+	e.mu.Lock()
+	refuse := func(reason string) BumperPointsBatchResult {
+		e.mu.Unlock()
+		return BumperPointsBatchResult{Status: "REFUSED", Reason: reason}
+	}
+	if e.state.Phase != PhaseRevealed {
+		return refuse("NOT_REVEALED")
+	}
+	if e.state.Question == nil || e.state.Question.ID != questionID {
+		return refuse("QUESTION_MISMATCH")
+	}
+	if len(entries) == 0 || len(entries) > teamPointsBatchMaxEntries {
+		return refuse("INVALID_ENTRIES")
+	}
+	seen := map[string]bool{}
+	for _, en := range entries {
+		if en.ID == "" || seen[en.ID] {
+			return refuse("INVALID_ENTRIES")
+		}
+		seen[en.ID] = true
+	}
+	for _, en := range entries {
+		if en.Invalid || en.Points == 0 || en.Points < -teamPointsBatchMaxPoints || en.Points > teamPointsBatchMaxPoints {
+			return refuse("INVALID_POINTS")
+		}
+	}
+	var unknown []string
+	for _, en := range entries {
+		if b, ok := e.data.Bumpers[en.ID]; !ok || b == nil {
+			unknown = append(unknown, en.ID)
+		}
+	}
+	if len(unknown) > 0 {
+		e.mu.Unlock()
+		return BumperPointsBatchResult{Status: "REFUSED", Reason: "UNKNOWN_PLAYER", Unknown: unknown}
+	}
+
+	res := BumperPointsBatchResult{Status: "APPLIED", AppliedTeams: map[string]string{}}
+	already := map[string]bool{}
+	for _, ap := range e.awardedPlayersUnsafe(questionID) {
+		already[ap.ID] = true
+	}
+	teamLevel := map[string]bool{} // teams credited at TEAM level (#254 review hardening)
+	for _, at := range e.awardedTeamsUnsafe(questionID) {
+		if at.TeamLevel {
+			teamLevel[at.Team] = true
+		}
+	}
+	q := e.state.Question
+	var teams []string
+	teamSeen := map[string]bool{}
+	for _, en := range entries {
+		if already[en.ID] {
+			res.Skipped = append(res.Skipped, BumperSkip{ID: en.ID, Reason: "ALREADY_AWARDED"})
+			continue
+		}
+		b := e.data.Bumpers[en.ID]
+		if b.Team != "" && teamLevel[b.Team] {
+			// the player's team was already credited as a team: no double credit across levels
+			res.Skipped = append(res.Skipped, BumperSkip{ID: en.ID, Reason: "TEAM_ALREADY_AWARDED"})
+			continue
+		}
+		b.Score += en.Points
+		var teamColor []int
+		if b.Team != "" {
+			e.recalculateTeamScoreUnsafe(b.Team)
+			if t := e.data.Teams[b.Team]; t != nil {
+				teamColor = t.Color
+			}
+			if !teamSeen[b.Team] {
+				teamSeen[b.Team] = true
+				teams = append(teams, b.Team)
+			}
+		}
+		name := b.Name
+		if name == "" {
+			name = en.ID
+		}
+		var displayFlag *bool
+		if !display {
+			f := false
+			displayFlag = &f
+		}
+		e.history = append(e.history, GameEvent{
+			Display:             displayFlag,
+			Timestamp:           time.Now().UnixMicro(),
+			QuestionID:          q.ID,
+			QuestionText:        q.Question,
+			QuestionCategory:    string(q.Category),
+			CategoryDisplayName: meta.Name,
+			CategoryImageURL:    meta.ImageURL,
+			CategoryColor:       meta.Color,
+			EventType:           "POINTS_AWARDED",
+			WinnerID:            en.ID,
+			WinnerName:          name,
+			WinnerType:          "PLAYER",
+			TeamName:            b.Team,
+			TeamColor:           teamColor,
+			PlayerName:          name,
+			PlayerColor:         string(b.AnswerColor),
+			Points:              en.Points,
+		})
+		res.Applied = append(res.Applied, en)
+		res.AppliedTeams[en.ID] = b.Team
+	}
+	if len(res.Applied) > 0 {
+		players := make([]string, 0, len(res.Applied))
+		for _, en := range res.Applied {
+			players = append(players, en.ID)
+		}
+		e.recordScoreChangeUnsafe(display, teams, players)
+	}
+	e.mu.Unlock()
+
+	if len(res.Applied) > 0 {
+		safeGo("SaveBumpers", e.SaveBumpers)
+		safeGo("SaveTeams", e.SaveTeams)
+		safeGo("SaveHistory", e.SaveHistory)
+	}
+	return res
+}
+
+// --- Rounds (v11.2, #245) ---------------------------------------------------------
+
+// SetRounds replaces the ordered list of rounds exposed in GameState.ROUNDS (copy; never nil).
+func (e *Engine) SetRounds(rounds []Round) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	cp := make([]Round, len(rounds))
+	copy(cp, rounds)
+	e.state.Rounds = cp
+}
+
+// GetRounds returns a copy of GameState.ROUNDS.
+func (e *Engine) GetRounds() []Round {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	cp := make([]Round, len(e.state.Rounds))
+	copy(cp, e.state.Rounds)
+	return cp
+}
+
+// SetRoundContext stores GameState.ROUND_CONTEXT (computed by the server from the question list).
+func (e *Engine) SetRoundContext(c RoundContext) {
+	e.mu.Lock()
+	e.state.RoundContext = c
+	e.mu.Unlock()
+}
+
+// ForgetQuestionStatuses drops the stored status of deleted questions (#245 review) and persists.
+func (e *Engine) ForgetQuestionStatuses(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	e.mu.Lock()
+	for _, id := range ids {
+		delete(e.questionStatuses, id)
+	}
+	e.mu.Unlock()
+	safeGo("SaveStatuses", e.SaveStatuses)
 }

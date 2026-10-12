@@ -40,7 +40,7 @@ func TestFlipMemoryCard_Turn_VPlayerOnActiveTeam_Applies(t *testing.T) {
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	learnClientID(t, app, vplayer)
+	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), bumperID)
 
 	sendAction(t, app, vplayer, protocol.ActionFlipMemoryCard, protocol.FlipMemoryCardPayload{CardID: "1-1", ID: bumperID})
 
@@ -71,7 +71,7 @@ func TestFlipMemoryCard_Turn_VPlayerOffActiveTeam_IgnoredSilently(t *testing.T) 
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	learnClientID(t, app, vplayer)
+	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), bumperID)
 
 	sendAction(t, app, vplayer, protocol.ActionFlipMemoryCard, protocol.FlipMemoryCardPayload{CardID: "1-1", ID: bumperID})
 
@@ -154,7 +154,7 @@ func TestFlipMemoryCard_CardScoped_VPlayerOnActiveTeam_Applies(t *testing.T) {
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	learnClientID(t, app, vplayer)
+	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), bumperID)
 
 	sendAction(t, app, vplayer, protocol.ActionFlipMemoryCard, protocol.FlipMemoryCardPayload{
 		CardID:    "1-1",
@@ -176,7 +176,7 @@ func TestFlipMemoryCard_CardScoped_VPlayerOffActiveTeam_IgnoredSilently(t *testi
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	vplayer := dialWS(t, baseURL, "/ws/player")
-	learnClientID(t, app, vplayer)
+	app.wsHub.SetClientPlayerID(learnClientID(t, app, vplayer), bumperID)
 
 	sendAction(t, app, vplayer, protocol.ActionFlipMemoryCard, protocol.FlipMemoryCardPayload{
 		CardID:    "1-1",

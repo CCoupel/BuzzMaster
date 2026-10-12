@@ -127,13 +127,9 @@ describe('QuizMetaForm — chips multi-sélection Publics/Difficultés (#137 Bat
     expect(payload.POPULATIONS).toHaveLength(2)
   })
 
-  it('NOUVELLE PARTIE : bouton rendu uniquement quand onNewGame est fourni, appelle le callback au clic (#215)', () => {
-    const onNewGame = vi.fn()
-    const { rerender } = render(<QuizMetaForm gameState={makeGameState()} sendMessage={vi.fn()} />)
+  it('#253 : plus de bouton « Lancer la partie » ni « Nouvelle partie » sur le Backstage (une seule entrée, dans le menu Préparation)', () => {
+    render(<QuizMetaForm gameState={makeGameState()} sendMessage={vi.fn()} />)
+    expect(screen.queryByText('LANCER LA PARTIE')).toBeNull()
     expect(screen.queryByText('NOUVELLE PARTIE')).toBeNull()
-
-    rerender(<QuizMetaForm gameState={makeGameState()} sendMessage={vi.fn()} onNewGame={onNewGame} />)
-    fireEvent.click(screen.getByText('NOUVELLE PARTIE'))
-    expect(onNewGame).toHaveBeenCalledTimes(1)
   })
 })

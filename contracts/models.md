@@ -9,7 +9,7 @@
 
 ```typescript
 interface Team {
-  NAME: string          // Nom de l'équipe
+  NAME: string          // Nom de l'équipe — v11.2 (#249) : TOUJOURS égal à la clé de la map `teams`
   COLOR: number[]       // Couleur RGB [R, G, B] (ex: [255, 26, 26])
   COLOR_NAME?: string   // Clé de palette (ex: "rouge", "bleu-profond") — voir Palette d'équipes
   SCORE: number         // Score total (calculé: TEAM_POINTS + somme joueurs)
@@ -22,6 +22,13 @@ interface Team {
 
 type TeamStatus = "READY" | "PAUSE"
 ```
+
+### Identité d'une équipe (v11.2, #249) — `[CHANGED]`
+
+- **L'identité d'une équipe est la clé de la map `teams`.** `NAME` en est une copie, **toujours égale à la clé** : le serveur la réécrit à chaque enregistrement (`SetTeams`, `UPDATE`/`FULL`) et au chargement de `teams.json` (`LoadTeams`). Tout écart corrigé est journalisé (`WARN TEAM_NAME_NORMALIZED key=… old_name=…`, `contracts/logging.md`) ; un `teams.json` existant est donc réparé au premier démarrage, puis réécrit.
+- Avant v11.2, renommer une équipe dans la page Équipes gardait l'ancien `NAME` sous la nouvelle clé : le serveur rangeait les réponses ARDOISE sous la clé, l'admin et la TV les cherchaient sous `NAME` (réponse introuvable).
+- Tous les clients identifient une équipe **par sa clé** (recherche dans `ARDOISE_ANSWERS`, comparaison avec `bumper.TEAM`, etc.). `NAME` ne sert qu'à l'affichage, et vaut la clé.
+- **Renommer une équipe = changer sa clé.** Règles de renommage et de suppression pendant une question : `contracts/websocket-actions.md` §UPDATE (client → serveur) et `contracts/game-state.md` §`TEAMS_LOCKED`.
 
 ### Exemple
 
@@ -108,7 +115,8 @@ interface Bumper {
   VERSION: string        // Version firmware buzzer
   IP: string             // Adresse IP du buzzer
   READY: boolean         // true si prêt (PONG reçu)
-  ANSWER_COLOR: AnswerColor  // Couleur QCM assignée
+  ANSWER_COLOR: AnswerColor  // Couleur QCM assignée, ou dernière couleur pressée (LED, TeamCard) — NE signifie PAS « a répondu à la question courante »
+  ANSWERED_COLOR: AnswerColor // v11.2 (#255) — couleur RÉPONDUE à la question QCM courante, "" sinon. Toujours sérialisé (pas d'omitempty)
   HINTS_AT_BUZZ: number  // Indices donnés au moment du buzz (QCM)
   IS_VIRTUAL: boolean    // true = VPlayer (smartphone)
   CONNECTED: boolean     // true si le buzzer/VJoueur est actuellement connecté (WebSocket)
@@ -139,6 +147,7 @@ type ConnState = "" | "orange" | "red" | "green"
     "IP": "192.168.4.10",
     "READY": true,
     "ANSWER_COLOR": "GREEN",
+    "ANSWERED_COLOR": "GREEN",
     "HINTS_AT_BUZZ": 1,
     "IS_VIRTUAL": false
   }
@@ -158,7 +167,13 @@ type ConnState = "" | "orange" | "red" | "green"
   les bumpers participants (`TEAM != ""`) portent un état visible** — un bumper non assigné reste
   toujours à `""`. Piloté côté serveur par `engine.TransitionConn(bumperID, event)` avec
   `event ∈ {DISCONNECT, RECONNECT, MESSAGE_LOST, DELIVERY_CONFIRMED}`.
-- `ANSWER_COLOR` = Couleur du bouton pour mode QCM
+- `ANSWER_COLOR` = Couleur du bouton pour mode QCM : **couleur assignée** au joueur physique à l'affectation (`AssignVirtualPlayer`), écrasée par la couleur pressée au buzz QCM, **jamais remise à zéro**. Sert à la couleur des LED et de la `TeamCard`. **Ne pas l'utiliser pour savoir si un joueur a répondu** : elle survit d'une question à l'autre (#255).
+- `ANSWERED_COLOR` ✨ *(v11.2, #255, additif)* = **réponse donnée à la question courante** :
+  - **Écrit** par `ProcessButtonPress` lors d'un buzz enregistré sur une question **QCM** (couleur du bouton A→RED, B→GREEN, C→YELLOW, D→BLUE), donc aussi pour un VJoueur (`VPLAYER_QCM_ANSWER` passe par le même enregistrement). Jamais écrit pour un autre type de question, ni pour un buzz ignoré (équipe ayant déjà buzzé, buzzer physique d'une équipe qui a un VJoueur).
+  - **Remis à `""`** partout où `TIME` est remis à 0 : `Ready()` de chaque question, et les autres remises à zéro de `TIME` du moteur (même instruction, même verrou). **Invariant** : `ANSWERED_COLOR ≠ ""` ⇒ `TIME > 0` et question courante de type QCM.
+  - **Toujours sérialisé**, `""` compris (pas d'`omitempty`), sur tous les chemins qui transportent `bumpers` (tableau `ws-payload-serialization.md`).
+  - **Compatibilité** : un client antérieur ignore la clé. Une sauvegarde ou un fichier de bumpers sans la clé se charge avec `""`, sans migration ; au redémarrage, la valeur suit le même cycle de vie que `TIME`. Le firmware BuzzClick ne lit pas le champ.
+  - **Lecteurs** (« équipe / joueur ayant donné la réponse ») : règle « équipe d'une réponse » (`websocket-actions.md` §TEAM_POINTS_BATCH), compteurs et présélection QCM de l'admin, `calcQcmTeamAward`, badges des réponses par équipe à la TV et au VJoueur (STOPPED/REVEALED), réponse affichée sur `/anim`, détection serveur des équipes ayant la bonne réponse (ambiance, LED « ma réponse est correcte »). `ANSWER_COLOR` reste la source pour la **couleur** (LED, `answerColorToRGB`, `TeamCard`) et pour `PLAYER_COLOR` de l'historique (inchangé).
 - `HINTS_AT_BUZZ` = Nombre d'indices donnés au moment du buzz (pénalité individuelle)
 - `IS_VIRTUAL` = Distingue buzzers physiques et VPlayers smartphone
 
@@ -176,7 +191,8 @@ interface Question {
   TIME: number           // Durée en secondes
   CATEGORY?: string
   POINTS_TARGET: PointsTarget
-  ORDER: number          // Position dans la liste
+  ORDER: number          // Position dans la liste (à l'intérieur de sa manche depuis v11.2, #245)
+  ROUND_ID?: string      // v11.2 (#245) — manche de la question ; absent, "" ou inconnu = « Sans manche »
   STATUS: QuestionStatus
   MEDIA?: string         // URL image question
   MEDIA_ANSWER?: string  // URL image réponse
@@ -192,6 +208,13 @@ interface Question {
   QCM_HINT_THRESHOLD_2?: number
   QCM_PENALTY_1?: number
   QCM_PENALTY_2?: number
+  QCM_WRONG_PENALTY?: number // v11.2 (#254) — pénalité de mauvaise réponse, entier de -100 à 0.
+                             // 0 = AUCUNE pénalité (défaut, décision utilisateur) ; -N = pénalité de N points.
+                             // Question QCM uniquement (jamais sur une carte MEMOTION, pas dans OwnedFields).
+                             // Absent (anciennes questions : aucune réécriture des 85 fichiers), positif ou hors
+                             // bornes → valeur effective 0. Lu par l'admin au clic sur une mauvaise réponse QCM
+                             // (websocket-actions.md §TEAM_POINTS_BATCH « QCM : clic sur une réponse »).
+                             // Pas d'effet serveur sur le jeu : le serveur ne fait que l'enregistrer et le servir.
 
   // Memory
   MEMORY_PAIRS?: MemoryPair[]
@@ -209,6 +232,10 @@ type QuestionType = "NORMAL" | "QCM" | "MEMORY" | "MEMOTION"
 type MotionSubPhase = "" | "MEMORIZE" | "GRID" | "SELECTED" | "QUESTION" | "REVEAL"
 
 type PointsTarget = "PLAYER" | "TEAM"
+// v11.2 (#254) — niveau d'attribution : SPEEDY, QCM, ARDOISE suivent POINTS_TARGET ;
+// MEMORY, MEMOTION, RAFALE toujours "TEAM" (champ ignoré). Défaut serveur si absent :
+// "PLAYER" pour SPEEDY, "TEAM" pour tous les autres types (ARDOISE passe de PLAYER à TEAM).
+// Règle unique côté client : resolveAwardLevel / resolvePointsTarget (utils/pointsAward.js).
 
 type QuestionStatus = "AVAILABLE" | "STARTED" | "STOPPED" | "REVEALED"
 
@@ -499,9 +526,11 @@ type KeyboardType = "AZERTY" | "NUMPAD"
 
 ```typescript
 interface ArdoiseAnswer {
-  TEXT: string         // Texte saisi par l'équipe (full content, pas delta)
-  STARTED_AT: number   // Timestamp en microsecondes du PREMIER caractère (figé, #117)
-  SUBMITTED_AT: number // Timestamp en microsecondes (dernière mise à jour)
+  TEXT: string          // Texte saisi par l'équipe (full content, pas delta)
+  STARTED_AT: number    // Timestamp en microsecondes du PREMIER caractère (figé, #117)
+  SUBMITTED_AT: number  // Timestamp en microsecondes (dernière mise à jour)
+  RECEIVED: boolean     // v11.2 (#246) — texte final reçu et accusé (ARDOISE_FINAL)
+  RECEIVED_HASH: string // v11.2 (#246) — hash FNV-1a 32 bits du texte final ("" si non reçu)
 }
 ```
 
@@ -513,6 +542,7 @@ non vide pour cette équipe et cette question.
 - Un effacement complet suivi d'une nouvelle saisie **ne réinitialise pas** `STARTED_AT` :
   l'ordre reflète le moment où l'équipe s'est lancée, pas celui de sa dernière version.
 - Remis à zéro avec le reste de `ARDOISE_ANSWERS` au changement de question.
+- **v11.2 (#246)** : un `ARDOISE_FINAL` qui apporte le premier texte non vide de l'équipe fixe `STARTED_AT` comme le ferait un `ARDOISE_INPUT`. Règles de `RECEIVED`/`RECEIVED_HASH` : `contracts/game-state.md` §ARDOISE_ANSWERS.
 - Référence de calcul du délai affiché : `GameState.TIME` (départ de la question), même
   convention que les temps de réaction au buzzer.
 - Vaut `0` pour une réponse enregistrée avant la v5.8.1 — le frontend doit alors se replier sur
@@ -537,3 +567,37 @@ Valeurs valides pour `TYPE` :
 | `"MEMORY"` | Jeu de mémoire |
 | `"MEMOTION"` | Grille de cartes animées |
 | `"ARDOISE"` | ✨ Saisie libre via clavier virtuel (v5.6.0) |
+
+
+---
+
+## Manches (`ROUNDS`) ✨ (v11.2, #245)
+
+Regroupement des questions du quiz en **manches** ordonnées. *(Décisions utilisateur du 2026-10-12 : « Sans manche » en premier, repli par navigateur, TV inchangée pour #258 ; maquettes (f)/(g) validées.)*
+
+```typescript
+interface Round {
+  ID: string    // "r1", "r2"… attribué par le serveur, jamais réutilisé dans le fichier
+  NAME: string  // 1 à 60 caractères après suppression des espaces de bord ; doublons autorisés
+}
+```
+
+- **Stockage** : `data/files/questions/rounds.json` = `{ "ROUNDS": Round[], "NEXT_ID": number }`. Le fichier vit **dans le dossier des questions**, qu'une sauvegarde « questions » (`/backup-select?questions=true`) emporte déjà. `loadQuestions` ne lit que les sous-dossiers : le fichier n'est pas pris pour une question. Absent = **aucune manche**.
+- **Rattachement** : champ `ROUND_ID` de chaque `question.json`. Absent, `""` ou ID inconnu (manche supprimée, restauration partielle) → **« Sans manche »**. **Migration : aucune.** Les 85 fichiers existants restent sans `ROUND_ID`, et l'éditeur se présente comme aujourd'hui tant qu'aucune manche n'est créée.
+- **Ordre de jeu et d'affichage** (règle **unique**, implémentée deux fois avec un test de parité : `web/src/utils/questionOrder.js` et `getNextQuestionPayload` côté Go) :
+  1. le groupe **« Sans manche » en premier** *(décision utilisateur)* ;
+  2. puis les manches dans l'ordre de `ROUNDS` ;
+  3. dans chaque groupe, par `ORDER` croissant, puis par `ID` (règle actuelle, précisée ci-dessous).
+  - **Normalisation de `ORDER`** *(revue #245 ; même règle en Go et en JS, test de parité)* :
+    - nombre JSON → sa partie entière (troncature ; négatif permis) ;
+    - chaîne dont **tout** le contenu (espaces de bord retirés) est un entier (`"5"`) → cet entier ; `"5abc"` n'est pas un entier ;
+    - **absent, `null`, autre type ou chaîne invalide** → repli sur la **valeur numérique de l'`ID`** si l'`ID` est entièrement numérique ;
+    - `ID` **non numérique** sans `ORDER` valide : **pas de repli**, la question se place **après** toutes les questions du groupe qui ont un rang (`ORDER` valide ou `ID` numérique).
+  - **Égalité** de rang dans un groupe : `ID` numériques d'abord, par valeur croissante, puis les autres `ID` dans l'ordre lexicographique. C'est un ordre total et stable.
+- **Identité** : une question est identifiée par le **nom de son dossier** ; le champ `ID` de son `question.json` doit lui être égal (`websocket-actions.md` §ROUNDS_UPDATE, `INCONSISTENT_STORE`).
+  - **Ajouts** : une question créée par « + Nouvelle question » (sans `round_id`) ou par la génération IA est placée **à la fin du groupe « Sans manche »**, qui reste en tête. Une question créée par « + Question » d'une manche est placée à la fin de cette manche. Le serveur fixe `ORDER` = plus grand `ORDER` du groupe + 1 à la création.
+  - Sans aucune manche, l'ordre est **identique** à v11.1.
+- **Entractes de début et de fin de manche** *(décision utilisateur : « reste simple »)* : à la création d'une manche, le serveur crée par défaut deux questions **`ENTRACTE` standard**, « Début de la manche <NOM> » en tête et « Fin de la manche <NOM> » à la fin (`websocket-actions.md` §ROUNDS_UPDATE). **Aucun marqueur, aucun champ, aucune règle de jeu nouvelle** : elles se modifient, se déplacent, se suppriment et se jouent comme toute ENTRACTE (#214) ; « à suivre » les **propose** comme toute entrée du déroulé (v11.2, règle de saut abrogée).
+- **Suppression d'une manche** : choix explicite `KEEP` (ses questions, entractes comprises, passent en fin de « Sans manche ») ou `DELETE` (ses questions, entractes comprises, sont supprimées).
+- **Types** : `ROUND_ID` est un champ commun à tous les types de question (ENTRACTE compris). Ce n'est pas un `OwnedField` ; il n'existe pas sur une carte MEMOTION.
+- **Repli** : l'état « déplié / replié » des manches dans l'éditeur est une **préférence d'affichage locale** au navigateur (`localStorage`) *(décision utilisateur)*. Elle n'est jamais envoyée au serveur.

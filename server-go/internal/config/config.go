@@ -24,7 +24,42 @@ type Config struct {
 	AI           AIConfig           `json:"ai"`
 	Lighting     LightingConfig     `json:"lighting"`
 	Sound        SoundConfig        `json:"sound"`
+	Logging      LoggingConfig      `json:"logging"`
 	Version      string             `json:"version"`
+}
+
+// LoggingConfig is the `logging` section (v11.2, #246 — contracts/logging.md §1):
+// persistent, rotating log file. An absent section (or absent keys) takes the
+// defaults below; an explicit `false` is kept (custom UnmarshalJSON).
+type LoggingConfig struct {
+	FileEnabled   bool   `json:"file_enabled"`
+	FilePath      string `json:"file_path"`
+	FileMinLevel  string `json:"file_min_level"`
+	FileMaxSizeMB int    `json:"file_max_size_mb"`
+	FileMaxFiles  int    `json:"file_max_files"`
+}
+
+// DefaultLoggingConfig returns the documented defaults.
+func DefaultLoggingConfig() LoggingConfig {
+	return LoggingConfig{
+		FileEnabled:   true,
+		FilePath:      "./data/logs/buzzcontrol.log",
+		FileMinLevel:  "WARN",
+		FileMaxSizeMB: 10,
+		FileMaxFiles:  5,
+	}
+}
+
+// UnmarshalJSON starts from the defaults so keys absent from a partial section
+// keep their default (notably file_enabled=true) while an explicit false stays false.
+func (l *LoggingConfig) UnmarshalJSON(b []byte) error {
+	type plain LoggingConfig
+	tmp := plain(DefaultLoggingConfig())
+	if err := json.Unmarshal(b, &tmp); err != nil {
+		return err
+	}
+	*l = LoggingConfig(tmp)
+	return nil
 }
 
 // LightingConfig is the `lighting` section (v10.0.0, #207 — contracts/
@@ -330,6 +365,20 @@ func ApplyDefaults(cfg *Config) {
 	}
 	if cfg.Storage.FilesDir == "" {
 		cfg.Storage.FilesDir = "./data/files"
+	}
+	// Logging (v11.2, #246): a wholly absent section leaves the zero value (no
+	// path) -> all defaults, file_enabled=true included.
+	if cfg.Logging.FilePath == "" {
+		cfg.Logging = DefaultLoggingConfig()
+	}
+	if cfg.Logging.FileMinLevel == "" {
+		cfg.Logging.FileMinLevel = "WARN"
+	}
+	if cfg.Logging.FileMaxSizeMB <= 0 {
+		cfg.Logging.FileMaxSizeMB = 10
+	}
+	if cfg.Logging.FileMaxFiles <= 0 {
+		cfg.Logging.FileMaxFiles = 5
 	}
 	if cfg.Version == "" {
 		cfg.Version = "2.46.1"

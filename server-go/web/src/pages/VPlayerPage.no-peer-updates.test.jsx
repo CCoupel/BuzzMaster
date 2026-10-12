@@ -93,7 +93,8 @@ describe('VPlayerPage — indifférence aux événements de pairs (#129, T4.2)',
     const bumpersBefore = {
       [MY_ID]: { NAME: 'Moi', TEAM: 'Équipe A', CONNECTED: true, IS_VIRTUAL: true, IS_VPLAYER: true },
     }
-    const mock = makeGameMock({ bumpers: bumpersBefore, teams })
+    // #246 : la connexion est liée (PLAYER_CONNECTED reçu) — plus de renvoi à 2 s.
+    const mock = makeGameMock({ bumpers: bumpersBefore, teams, playerConnectStatus: { status: 'connected', id: MY_ID, name: 'Moi' } })
     useGame.mockReturnValue(mock)
     const { rerender } = render(<VPlayerPage />)
     await act(async () => {})

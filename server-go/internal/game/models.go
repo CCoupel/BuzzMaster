@@ -2,6 +2,8 @@ package game
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -70,9 +72,11 @@ type Bumper struct {
 	Protocol    string      `json:"PROTOCOL,omitempty"` // Connection protocol: "TCP" or "WebSocket" (empty = TCP for backward compat)
 	Ready       bool        `json:"READY,omitempty"`
 	AnswerColor AnswerColor `json:"ANSWER_COLOR,omitempty"`
-	HintsAtBuzz int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
-	IsVirtual   bool        `json:"IS_VIRTUAL,omitempty"`    // True for virtual players (mobile app)
-	IsVPlayer   bool        `json:"IS_VPLAYER,omitempty"`    // True for VPlayer (can answer all QCM colors)
+	// AnsweredColor (v11.2, #255): the QCM colour ANSWERED to the current question, "" otherwise. Always serialised (no omitempty); reset wherever Time is reset (invariant: != "" implies Time > 0).
+	AnsweredColor AnswerColor `json:"ANSWERED_COLOR"`
+	HintsAtBuzz   int         `json:"HINTS_AT_BUZZ,omitempty"` // Number of QCM hints when player buzzed
+	IsVirtual     bool        `json:"IS_VIRTUAL,omitempty"`    // True for virtual players (mobile app)
+	IsVPlayer     bool        `json:"IS_VPLAYER,omitempty"`    // True for VPlayer (can answer all QCM colors)
 	// OTA firmware update fields (added in v3.1.0)
 	FirmwareVersion string `json:"FIRMWARE_VERSION,omitempty"` // BuzzClick firmware version reported via HELLO
 	IsOutdated      bool   `json:"IS_OUTDATED,omitempty"`      // True if firmware is older than server-stored firmware
@@ -181,6 +185,10 @@ type ArdoiseAnswer struct {
 	Text        string `json:"TEXT"`         // Current answer text
 	StartedAt   int64  `json:"STARTED_AT"`   // Timestamp in microseconds of the FIRST non-empty character (frozen, #117)
 	SubmittedAt int64  `json:"SUBMITTED_AT"` // Timestamp in microseconds (last update)
+	// v11.2 (#246) — always serialised (no omitempty): final text received and
+	// acknowledged (ARDOISE_FINAL), and its FNV-1a hash ("" while not received).
+	Received     bool   `json:"RECEIVED"`
+	ReceivedHash string `json:"RECEIVED_HASH"`
 }
 
 // PointsTarget represents who receives points for a question
@@ -610,22 +618,27 @@ type RafaleCurrent struct {
 // makes this the field that's actually serialized/deserialized for Question;
 // TypedContent.Answer never fires here — see TypedContent's doc comment.
 type Question struct {
-	ID                     string           `json:"ID"`
-	Question               string           `json:"QUESTION"`
-	Answer                 string           `json:"ANSWER"`                             // For normal questions
-	Type                   QuestionType     `json:"TYPE,omitempty"`                     // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
-	Category               QuestionCategory `json:"CATEGORY,omitempty"`                 // Question category
-	PointsTarget           PointsTarget     `json:"POINTS_TARGET,omitempty"`            // "PLAYER" or "TEAM" (default based on type)
-	MotionCards            []MotionCard     `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
-	MotionMode             string           `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
-	MotionConfig           *MotionConfig    `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
-	MotionMemorizeDuration int              `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
-	Points                 string           `json:"POINTS"`                             // String to match JSON format
-	Time                   string           `json:"TIME"`                               // String to match JSON format
-	Order                  int              `json:"ORDER,omitempty"`                    // Display order (for drag and drop)
-	Media                  string           `json:"MEDIA,omitempty"`                    // Question media (shown during game)
-	MediaAnswer            string           `json:"MEDIA_ANSWER,omitempty"`             // Answer media (shown during REVEAL)
-	Explanation            string           `json:"EXPLANATION,omitempty"`              // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
+	ID           string           `json:"ID"`
+	Question     string           `json:"QUESTION"`
+	Answer       string           `json:"ANSWER"`                  // For normal questions
+	Type         QuestionType     `json:"TYPE,omitempty"`          // "SPEEDY", "QCM", "MEMORY", "MEMOTION", "ARDOISE" (default SPEEDY)
+	Category     QuestionCategory `json:"CATEGORY,omitempty"`      // Question category
+	PointsTarget PointsTarget     `json:"POINTS_TARGET,omitempty"` // "PLAYER" or "TEAM" (default based on type)
+	// QCMWrongPenalty (v11.2, #254): wrong-answer penalty of a host QCM question,
+	// integer -100..0, 0 = none (default). Absent / invalid reads as 0 (see
+	// NormalizeQCMWrongPenalty); never on a MEMOTION card; the server only stores
+	// and serves it (the admin client applies it).
+	QCMWrongPenalty        WrongPenalty  `json:"QCM_WRONG_PENALTY,omitempty"`
+	MotionCards            []MotionCard  `json:"MOTION_CARDS,omitempty"`             // Cards for MEMOTION questions (v5.0.0)
+	MotionMode             string        `json:"MOTION_MODE,omitempty"`              // "SOLO", "CHACUN_SON_TOUR", "TANT_QUE_JE_GAGNE" (default SOLO)
+	MotionConfig           *MotionConfig `json:"MOTION_CONFIG,omitempty"`            // MEMOTION configuration (v5.0.x)
+	MotionMemorizeDuration int           `json:"MOTION_MEMORIZE_DURATION,omitempty"` // Seconds for MEMORIZE phase; 0 = standard mode (v5.5.0)
+	Points                 string        `json:"POINTS"`                             // String to match JSON format
+	Time                   string        `json:"TIME"`                               // String to match JSON format
+	Order                  int           `json:"ORDER,omitempty"`                    // Display order (for drag and drop)
+	Media                  string        `json:"MEDIA,omitempty"`                    // Question media (shown during game)
+	MediaAnswer            string        `json:"MEDIA_ANSWER,omitempty"`             // Answer media (shown during REVEAL)
+	Explanation            string        `json:"EXPLANATION,omitempty"`              // note animateur (v6.4.x, #168) — visible /anim only, never TV/player/admin
 	// Sound (v11.1, #219, contracts/sound.md §10) — a LONG media, distinct
 	// from the cues bruitage catalogue, attached to the question and played
 	// on START via a fully asynchronous second audio path
@@ -758,6 +771,22 @@ type GameState struct {
 	// it alongside the other Motion* fields).
 	MotionActive       MotionActive `json:"MEMOTION_ACTIVE"`
 	VirtualPlayerCount int          `json:"VIRTUAL_PLAYER_COUNT"` // Number of enrolled virtual players
+	// TeamsLocked (v11.2, #249): true from the selection of a question (Ready) until
+	// its answer is revealed; rename/delete of an existing team is refused meanwhile.
+	// Always serialised (no omitempty).
+	TeamsLocked bool `json:"TEAMS_LOCKED"`
+	// ScoreChange (v11.2, #252): marker of the last score modification, so the
+	// screens animate nothing on a hidden correction. Always serialised.
+	ScoreChange ScoreChange `json:"SCORE_CHANGE"`
+	// LaunchLock (v11.2, #253): the "Lancer la partie" popup is open on an admin
+	// connection; game conduct is suspended for every client meanwhile. Always
+	// serialised, not persisted.
+	LaunchLock LaunchLock `json:"LAUNCH_LOCK"`
+	// Rounds (v11.2, #245): ordered list of the quiz rounds (ID, NAME), always serialised
+	// ([] never null), loaded from rounds.json. RoundContext: place of the CURRENT question in
+	// the rounds, computed by the server (TV has no question list).
+	Rounds             []Round      `json:"ROUNDS"`
+	RoundContext       RoundContext `json:"ROUND_CONTEXT"`
 	VirtualPlayerLimit int          `json:"VIRTUAL_PLAYER_LIMIT"` // Maximum number of virtual players allowed
 	EnrollmentActive   bool         `json:"ENROLLMENT_ACTIVE"`    // Whether player enrollment is active
 	ShowQRCode         bool         `json:"SHOW_QR_CODE"`         // Whether to display QR code on TV
@@ -1016,6 +1045,45 @@ type LogEntry struct {
 	Message   string       `json:"message"`
 }
 
+// ScoreChange is GameState.SCORE_CHANGE (contracts/game-state.md §SCORE_CHANGE).
+type ScoreChange struct {
+	Seq     int      `json:"SEQ"`
+	Display bool     `json:"DISPLAY"`
+	Teams   []string `json:"TEAMS"`
+	Players []string `json:"PLAYERS"`
+}
+
+// LaunchLock is GameState.LAUNCH_LOCK (contracts/game-state.md §LAUNCH_LOCK).
+// Owner is the owning connection ID; Since/ExpiresAt are milliseconds since epoch.
+type LaunchLock struct {
+	Active    bool   `json:"ACTIVE"`
+	Owner     string `json:"OWNER"`
+	Since     int64  `json:"SINCE"`
+	ExpiresAt int64  `json:"EXPIRES_AT"`
+}
+
+// Round is a quiz round (contracts/models.md §Manches).
+type Round struct {
+	ID   string `json:"ID"`
+	Name string `json:"NAME"`
+}
+
+// RoundContext is GameState.ROUND_CONTEXT (contracts/game-state.md): all zero when there is
+// no round.
+type RoundContext struct {
+	RoundID      string `json:"ROUND_ID"`
+	RoundIndex   int    `json:"ROUND_INDEX"`
+	RoundCount   int    `json:"ROUND_COUNT"`
+	Position     int    `json:"POSITION"`
+	Total        int    `json:"TOTAL"`
+	FirstOfRound bool   `json:"FIRST_OF_ROUND"`
+}
+
+// DefaultScoreChange is the initial / post-NEW_GAME value.
+func DefaultScoreChange() ScoreChange {
+	return ScoreChange{Seq: 0, Display: true, Teams: []string{}, Players: []string{}}
+}
+
 // GameEvent represents a game event for history tracking
 type GameEvent struct {
 	Timestamp           int64  `json:"TIMESTAMP"`                    // Server timestamp in microseconds
@@ -1034,7 +1102,10 @@ type GameEvent struct {
 	PlayerName          string `json:"PLAYER_NAME,omitempty"`        // Player name (only if PLAYER)
 	PlayerColor         string `json:"PLAYER_COLOR,omitempty"`       // Player answer color (RED/GREEN/YELLOW/BLUE)
 	Points              int    `json:"POINTS"`                       // Points awarded
-	ReactionTime        int64  `json:"REACTION_TIME,omitempty"`      // Reaction time in microseconds
+	// Display (v11.2, #252): nil/true = shown; false = hidden correction (audit
+	// trail only, not counted as "already credited").
+	Display      *bool `json:"DISPLAY,omitempty"`
+	ReactionTime int64 `json:"REACTION_TIME,omitempty"` // Reaction time in microseconds
 	// CategoryBreakdown (v9.0.0, Lot A+1) — points-per-category split for a
 	// classic RAFALE round's award (game.RafaleCategoryBreakdown), whose
 	// values sum to EXACTLY Points. omitempty: absent for every non-RAFALE
@@ -1043,4 +1114,46 @@ type GameEvent struct {
 	// The event itself stays a single row — only /api/palmares (http.go,
 	// handlePalmares) fans it out across categories at aggregation time.
 	CategoryBreakdown map[string]int `json:"CATEGORY_BREAKDOWN,omitempty"`
+}
+
+// NormalizeQCMWrongPenalty returns v if it is a valid QCM_WRONG_PENALTY
+// (-100..0), else 0 (#254: absent or invalid = no penalty).
+func NormalizeQCMWrongPenalty(v int) int {
+	if v > 0 || v < -100 {
+		return 0
+	}
+	return v
+}
+
+// WrongPenalty is Question.QCMWrongPenalty: an int that DECODES TOLERANTLY. Any
+// value that is not a valid penalty (non-integer such as -2.5 or -5.0, a string,
+// null, out of -100..0) reads as 0 and NEVER makes the question fail to load
+// (#254 review: an invalid file must not make a question unplayable).
+type WrongPenalty int
+
+// UnmarshalJSON implements the tolerant decoding; it never returns an error.
+func (w *WrongPenalty) UnmarshalJSON(b []byte) error {
+	*w = WrongPenalty(ParseQCMWrongPenaltyRaw(b))
+	return nil
+}
+
+// ParseQCMWrongPenaltyRaw reads a raw JSON value as a QCM_WRONG_PENALTY: only a
+// plain JSON integer literal within -100..0 is valid, everything else is 0.
+func ParseQCMWrongPenaltyRaw(raw []byte) int {
+	n, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return 0
+	}
+	return NormalizeQCMWrongPenalty(n)
+}
+
+// DefaultPointsTarget returns the default POINTS_TARGET for a question type when
+// the stored question has none (#254): TEAM for QCM, ARDOISE, MEMORY, MEMOTION and
+// RAFALE, PLAYER for SPEEDY (and legacy NORMAL / unknown).
+func DefaultPointsTarget(t string) PointsTarget {
+	switch t {
+	case "QCM", "ARDOISE", "MEMORY", "MEMOTION", "RAFALE":
+		return PointsTargetTeam
+	}
+	return PointsTargetPlayer
 }

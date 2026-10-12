@@ -3471,7 +3471,7 @@
 
 /* Sub-zone 1/2 — correct answer (QUIZZ style) */
 .ardoise-footer-top {
-  flex: 1;
+  flex: 0 0 32%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3483,14 +3483,14 @@
 
 /* Sub-zone 2/2 — team cards grid */
 .ardoise-footer-bottom {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   min-height: 0;
   overflow: hidden;
-  padding: 0.5vh 1vw;
+  padding: 0.6vh 1vw;
 }
 
 /* Correct answer — supplemental overflow guard (inherits QUIZZ answer-text style) */
@@ -3501,35 +3501,37 @@
   max-width: 100%;
 }
 
-/* Team cards grid — auto-fill with rem-based minmax for consistent card width */
+/* #250 — grille ADAPTATIVE (maquette tv_ardoise_reveal__adaptive_grid) : colonnes,
+   lignes et tailles de police viennent de utils/ardoiseTvLayout.js via
+   --cols/--rows/--lines/--fh/--fa. TOUTES les équipes sont visibles, sans
+   défilement (TV statique : overflow hidden, unités viewport, min-height: 0). */
 .ardoise-teams-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: 1vh 1vw;
   width: 100%;
-  max-width: 90vw;
-  justify-items: center;
-  overflow: hidden;
+  height: 100%;
   min-height: 0;
-  margin: 0 auto;
+  overflow: hidden;
+  gap: 0.6vw;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows, 1), minmax(0, 1fr));
 }
 
 /* Individual team card */
 .ardoise-team-card {
   display: flex;
   flex-direction: column;
-  border-radius: 0.8vh;
-  overflow: hidden;
+  min-width: 0;
   min-height: 0;
-  min-width: 12rem;
-  max-width: 20rem;
-  width: 100%;
+  overflow: hidden;
+  border-radius: 0.6vw;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 /* Team name banner — uses team color as background */
 .ardoise-team-card-header {
-  padding: 0.5vh 1vw;
-  font-size: clamp(0.8rem, 1.6vh, 1.2rem);
+  padding: 0.25em 0.6em;
+  font-size: calc(var(--fh, 0.016) * 100vw);
   font-weight: 600;
   color: white;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -3538,24 +3540,26 @@
   text-overflow: ellipsis;
 }
 
-/* Team answer text */
+/* Team answer text — coupé avec « … » au-delà de --lines lignes */
 .ardoise-team-card-answer {
-  padding: 0.8vh 1vw;
-  font-size: clamp(1rem, 2vh, 1.6rem);
-  text-align: center;
-  background: rgba(255, 255, 255, 0.05);
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   min-height: 0;
+  text-align: center;
+  padding: 0.2em 0.5em;
+  font-size: calc(var(--fa, 0.026) * 100vw);
+  font-weight: 700;
+  line-height: 1.15;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--lines, 2);
+  overflow-wrap: anywhere;
 }
 
 .ardoise-team-card.no-answer .ardoise-team-card-answer {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.45);
+  font-style: italic;
+  font-weight: 500;
 }
 
 /* ------------------------------------------------------------------ */
@@ -3804,4 +3808,45 @@
   font-size: clamp(1.2rem, 4.5vh, 2.4rem);
   color: var(--text-secondary, #cbd5e1);
   font-weight: 700;
+}
+
+/* #245 — manche sur la TV (maquette (g‴)) : TV STATIQUE, unités d'écran, rien ne défile ni ne déborde */
+.tv-round-pill {
+  position: absolute;
+  top: 1.5vh;
+  left: 1.5vw;
+  z-index: 6;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.5vh 1.2vw;
+  border-radius: 999px;
+  font-size: 2.2vh;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+.tv-round-title {
+  /* Bande du chrono (0–10vh, .zone-timer) côté gauche, sous la pastille : jamais dans la zone question (≥ 10vh),
+     quel que soit le type de question ; le chrono reste au centre. */
+  position: absolute;
+  top: 6.2vh;
+  left: 1.5vw;
+  z-index: 6;
+  max-width: 32vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 2.4vh;
+  line-height: 3vh;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #fcd34d;
+  pointer-events: none;
 }

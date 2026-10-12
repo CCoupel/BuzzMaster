@@ -1,0 +1,240 @@
+<!--
+mockup:
+  composant: admin_game_award
+  feature: compact_block
+  version: 11.2.0
+  type: ui
+  issue: "#254"
+  validee_le: 2026-10-11
+  complete: []
+  remplace: [docs/mockup/v11.2/ui/admin_game_team_award__selection.html]
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attribution compacte (#254)</title>
+<style>
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827;
+          --primary:#4f46e5; --ok:#16a34a; --okbg:#dcfce7; --red:#dc2626; --redbg:#fee2e2; --amber:#b45309; --amberbg:#fef3c7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:200; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; align-items:center; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1180px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; }
+  .page { max-width:1180px; margin:0 auto 2rem; padding:0 1rem; display:grid; grid-template-columns: 1fr 380px; gap:1rem; }
+  @media (max-width: 900px) { .page { grid-template-columns:1fr; } }
+  .card { background:#fff; border-radius:.75rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:.9rem 1rem; }
+  .card h3 { margin:0 0 .5rem; font-size:.95rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .phase-badge { font-size:.7rem; font-weight:700; padding:.15rem .5rem; border-radius:999px; background:#6366f1; color:#fff; }
+  .lvl-badge { font-size:.7rem; font-weight:700; padding:.15rem .5rem; border-radius:999px; background:var(--gray-200); color:var(--gray-700); }
+  .q { font-size:.95rem; margin:.2rem 0 .7rem; }
+  .qcm-answers { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:.45rem; }
+  .qcm-answer { display:flex; align-items:center; gap:.55rem; padding:.5rem .65rem; border-radius:.6rem; border:2px solid var(--gray-200); background:#fff; cursor:pointer; text-align:left; font:inherit; }
+  .qcm-answer:hover { border-color:var(--gray-300); background:var(--gray-50); }
+  .qcm-answer .sw { width:1rem; height:1rem; border-radius:.25rem; flex:0 0 auto; }
+  .qcm-answer .txt { flex:1; font-weight:600; font-size:.88rem; }
+  .qcm-answer .n { font-size:.75rem; color:var(--gray-500); white-space:nowrap; }
+  .qcm-answer.correct { border-color:var(--ok); background:#f0fdf4; }
+  .qcm-answer.correct .txt::after { content:" ✓ bonne réponse"; color:var(--ok); font-size:.75rem; font-weight:800; }
+  .qcm-answer.picked { box-shadow:0 0 0 3px rgba(79,70,229,.35); }
+  .qcm-answer.picked.wrong { box-shadow:0 0 0 3px rgba(220,38,38,.35); }
+  .hint { font-size:.76rem; color:var(--gray-500); margin:.45rem 0 0; }
+  .unchanged { margin-top:.7rem; font-size:.78rem; color:var(--gray-500); border:1px dashed var(--gray-300); border-radius:.45rem; padding:.45rem .55rem; }
+  /* colonne Équipes */
+  .col-head { display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem; }
+  .col-head h3 { margin:0; font-size:.95rem; flex:1; }
+  .pts { display:flex; align-items:center; gap:.35rem; font-size:.8rem; font-weight:700; color:var(--gray-700); }
+  .amount { display:flex; align-items:center; border:1px solid var(--gray-300); border-radius:.45rem; overflow:hidden; background:#fff; }
+  .amount button { border:0; background:var(--gray-100); width:1.8rem; height:1.9rem; font-weight:800; cursor:pointer; }
+  .amount input { width:3.2rem; height:1.9rem; border:0; text-align:center; font-weight:800; font-size:.95rem; }
+  .amount.neg { border-color:var(--red); } .amount.neg input { color:var(--red); }
+  /* bloc compact 2 lignes */
+  .award { margin-bottom:.55rem; padding:.45rem .55rem; background:var(--gray-50); border:1px solid var(--gray-200); border-radius:.6rem; }
+  .award.neg { background:#fff5f5; border-color:#fecaca; }
+  .award-l1 { font-size:.74rem; color:var(--gray-500); display:flex; gap:.4rem; align-items:baseline; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .award-l1 b { color:var(--gray-700); }
+  .award-l2 { display:flex; align-items:center; gap:.35rem; margin-top:.35rem; }
+  .icon-btn { width:2rem; height:2rem; border:1px solid var(--gray-300); border-radius:.45rem; background:#fff; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; padding:0; color:var(--gray-700); }
+  .icon-btn:hover { background:var(--gray-100); }
+  .icon-btn svg { width:1.05rem; height:1.05rem; }
+  .give { flex:1; border:0; border-radius:.5rem; height:2rem; padding:0 .8rem; font-weight:800; font-size:.88rem; color:#fff; background:var(--primary); cursor:pointer; }
+  .give.neg { background:var(--red); }
+  .give:disabled { opacity:.4; cursor:not-allowed; }
+  .toast { display:none; margin:-.2rem 0 .55rem; padding:.4rem .55rem; border-radius:.45rem; background:var(--okbg); color:var(--ok); font-size:.8rem; font-weight:700; }
+  .toast.show { display:block; } .toast.neg { background:var(--redbg); color:var(--red); }
+  .teams { display:flex; flex-direction:column; gap:.45rem; }
+  .team-card { background:#fff; border-radius:.6rem; border:2px solid var(--gray-200); overflow:hidden; }
+  .team-card.selected { border-color:var(--primary); box-shadow:0 0 0 2px rgba(79,70,229,.2); }
+  .team-card.done { opacity:.6; }
+  .team-card-header { display:flex; align-items:center; gap:.5rem; padding:.42rem .6rem; color:#fff; }
+  .team-card-header input { width:1.15rem; height:1.15rem; accent-color:#fff; flex:0 0 auto; cursor:pointer; }
+  input:disabled { cursor:not-allowed; opacity:.6; }
+  .team-name { font-weight:800; font-size:.92rem; flex:1; }
+  .team-score { font-weight:800; font-size:.9rem; background:rgba(0,0,0,.18); padding:.05rem .5rem; border-radius:999px; }
+  .team-card-body { display:flex; align-items:center; gap:.5rem; padding:.32rem .6rem; font-size:.8rem; color:var(--gray-700); }
+  .player { display:flex; align-items:center; gap:.45rem; padding:.28rem .6rem; font-size:.8rem; color:var(--gray-700); border-top:1px solid var(--gray-100); }
+  .player.selected { background:#eef2ff; }
+  .player.done { opacity:.6; }
+  .player input { width:1.05rem; height:1.05rem; accent-color:var(--primary); cursor:pointer; flex:0 0 auto; }
+  .player .pn { font-weight:700; min-width:4.6rem; }
+  .player .pscore { color:var(--gray-500); font-size:.74rem; }
+  .dot { width:.7rem; height:.7rem; border-radius:50%; display:inline-block; flex:0 0 auto; }
+  .awarded { margin-left:auto; font-size:.72rem; font-weight:800; color:var(--ok); background:var(--okbg); padding:.08rem .45rem; border-radius:999px; white-space:nowrap; }
+  .awarded.neg { color:var(--red); background:var(--redbg); }
+  .preview { margin-left:auto; font-size:.76rem; font-weight:800; color:var(--primary); }
+  .preview.neg { color:var(--red); }
+  .live-note { font-size:.8rem; color:var(--gray-500); padding:.3rem .1rem .6rem; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — état :</strong>
+  <label><input type="radio" name="st" value="revealed" checked> QCM révélé (équipe), rien de sélectionné</label>
+  <label><input type="radio" name="st" value="good"> Clic sur la bonne réponse</label>
+  <label><input type="radio" name="st" value="bad"> Clic sur une mauvaise réponse</label>
+  <label><input type="radio" name="st" value="manual"> Sélection manuelle + champ Points modifié</label>
+  <label><input type="radio" name="st" value="given"> Après « Attribuer les points »</label>
+  <label><input type="radio" name="st" value="penalized"> Après « Appliquer les pénalités »</label>
+  <label><input type="radio" name="st" value="started"> Question en cours (avant REVEAL)</label>
+</div>
+<p class="mock-note">(c) <b>Bloc d'attribution compact, au niveau équipe.</b> Il remplace la barre de la maquette validée #244/#251 et tient sur <b>2 lignes</b> en tête de la colonne Équipes : (1) nombre de sélectionnés et source du montant ; (2) deux <b>icônes</b> « Tout sélectionner » / « Tout désélectionner » (nom accessible et infobulle) et le bouton. <b>La ligne de montant disparaît</b> : le montant est le champ <b>« Points »</b> de la page (en haut de la colonne). Bouton <b>« Attribuer les points (N) »</b> ; <b>« Appliquer les pénalités (N) »</b> en rouge si le montant est négatif. QCM : <b>bonne réponse</b> → ses équipes sélectionnées, champ Points = points de la question ; <b>mauvaise réponse</b> → ses équipes, champ Points = pénalité de la question en négatif. ⚠ Un QCM n'a aujourd'hui <b>aucune pénalité de mauvaise réponse définie</b> : <b>−1 par défaut</b>, modifiable dans le champ. Le titre « Attribuer les points » revient après un clic sur la bonne réponse ou une nouvelle question. <b>Inchangé</b> : cartes d'équipe, cases dans l'en-tête, aperçu par carte, grisage « déjà créditée », réponses QCM cliquables, rien avant le REVEAL.</p>
+
+<div class="page">
+  <section class="card">
+    <h3><span id="qtitle">Question 9 · QCM</span> <span class="phase-badge" id="phase">RÉPONSE</span> <span class="lvl-badge" id="lvl">Points : équipe</span></h3>
+    <p class="q" id="qtext">Quel fleuve traverse Paris ?</p>
+    <div class="qcm-answers" id="answers"></div>
+    <p class="hint" id="qhint"></p>
+    <div class="unchanged">Colonne centrale inchangée (chrono, START/STOP, RÉPONSE, zones ARDOISE/RAFALE/MEMORY). Le bloc d'attribution n'y figure plus : il est en tête de la colonne Équipes.</div>
+  </section>
+  <aside class="card">
+    <div class="col-head"><h3>Équipes</h3>
+      <span class="pts">Points <span class="amount" id="amount"><button id="minus" aria-label="Diminuer les points">−</button><input id="amt" type="number" value="3" aria-label="Points"><button id="plus" aria-label="Augmenter les points">+</button></span></span></div>
+    <div class="award" id="award">
+      <div class="award-l1" id="l1"></div>
+      <div class="award-l2">
+        <button class="icon-btn" id="all" aria-label="Tout sélectionner" title="Tout sélectionner"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/><path d="M6 10.5l3 3 5-6"/></svg></button>
+        <button class="icon-btn" id="none" aria-label="Tout désélectionner" title="Tout désélectionner"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/></svg></button>
+        <button class="give" id="give">Attribuer les points (0)</button>
+      </div>
+    </div>
+    <div class="toast" id="toast"></div>
+    <p class="live-note" id="live">Avant le REVEAL : ni cases à cocher ni bloc d'attribution (inchangé).</p>
+    <div class="teams" id="teams"></div>
+  </aside>
+</div>
+
+<script>
+const ANS = [ { k:'RED', c:'#dc2626', t:'La Loire' }, { k:'GREEN', c:'#16a34a', t:'La Seine' }, { k:'YELLOW', c:'#ca8a04', t:'Le Rhône' }, { k:'BLUE', c:'#2563eb', t:'La Garonne' } ];
+const CORRECT = 'GREEN';
+const TEAMS = [
+  { n:'Les Bleus', c:'#2563eb', s:12, players:[ {id:'b1', n:'Alice', a:'GREEN', h:0, s:7}, {id:'b2', n:'Bruno', a:'RED', h:0, s:5} ] },
+  { n:'Les Rouges', c:'#dc2626', s:9, players:[ {id:'r1', n:'Chloé', a:'GREEN', h:1, s:4}, {id:'r2', n:'David', a:'GREEN', h:0, s:5} ] },
+  { n:'Les Jaunes', c:'#ca8a04', s:15, players:[ {id:'j1', n:'Emma', a:'RED', h:0, s:9}, {id:'j2', n:'Félix', a:null, h:0, s:6} ] },
+  { n:'Les Verts', c:'#16a34a', s:6, players:[ {id:'v1', n:'Gaëlle', a:'BLUE', h:0, s:3}, {id:'v2', n:'Hugo', a:'GREEN', h:2, s:3} ] },
+  { n:'Les Violets', c:'#7c3aed', s:11, players:[ {id:'p1', n:'Inès', a:'BLUE', h:0, s:11} ] },
+];
+// réponse d'équipe (niveau équipe) : couleur du joueur qui a buzzé / répondu
+TEAMS.forEach(t => { const p = t.players.find(p => p.a === CORRECT) || t.players.find(p => p.a); t.a = p ? p.a : null; t.h = p ? p.h : 0; });
+const PEN = [1, .67, .33];
+const QPOINTS = 3, QPENALTY = null; // QCM v11.1 : aucune pénalité de mauvaise réponse définie → −1 par défaut
+const $ = id => document.getElementById(id);
+const ICON_ALL = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/><path d="M6 10.5l3 3 5-6"/></svg>';
+const ICON_NONE = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/></svg>';
+let S;
+function reset(o) {
+  S = Object.assign({ live:false, type:'QCM', level:'TEAM', sel:new Set(), amount:QPOINTS, manual:false, awarded:{}, picked:null, src:'points de la question', toast:null, forced:false }, o || {});
+}
+const isTeam = () => S.level === 'TEAM';
+const units = () => isTeam() ? TEAMS.map(t => ({ key:t.n, a:t.a, h:t.h })) : TEAMS.flatMap(t => t.players.map(p => ({ key:p.id, a:p.a, h:p.h })));
+function perUnit(u) {
+  if (S.manual || S.amount < 0) return S.amount;
+  if (S.type === 'QCM') return Math.round(S.amount * PEN[Math.min(u.h || 0, 2)]);
+  return S.amount;
+}
+function pick(k) {
+  S.picked = k;
+  S.sel = new Set(units().filter(u => u.a === k && !(u.key in S.awarded)).map(u => u.key));
+  S.manual = false;
+  if (k === CORRECT) { S.amount = QPOINTS; S.src = 'bonne réponse : points de la question'; }
+  else { S.amount = QPENALTY ? -QPENALTY : -1; S.src = QPENALTY ? 'mauvaise réponse : pénalité de la question' : 'mauvaise réponse : pénalité par défaut (aucune définie)'; }
+  S.toast = null; draw();
+}
+function draw() {
+  const live = S.live, qcm = S.type === 'QCM';
+  $('phase').textContent = live ? 'EN COURS' : 'RÉPONSE';
+  $('qtitle').textContent = S.qtitle || 'Question 9 · QCM';
+  $('qtext').textContent = S.qtext || 'Quel fleuve traverse Paris ?';
+  $('lvl').textContent = isTeam() ? (S.forced ? 'Points : équipe (imposé par le jeu)' : 'Points : équipe') : 'Points : joueur';
+  $('answers').style.display = qcm ? '' : 'none';
+  $('qhint').style.display = live || !qcm ? 'none' : '';
+  $('qhint').textContent = 'Cliquez une réponse pour sélectionner ' + (isTeam() ? 'les équipes' : 'les joueurs') + ' qui l\'ont donnée.';
+  $('award').style.display = live ? 'none' : '';
+  $('live').style.display = live ? '' : 'none';
+  $('answers').innerHTML = ANS.map(a => {
+    const n = units().filter(u => u.a === a.k).length, w = isTeam() ? 'équipe' : 'joueur';
+    return '<button class="qcm-answer' + (!live && a.k === CORRECT ? ' correct' : '') + (S.picked === a.k ? ' picked' + (a.k !== CORRECT ? ' wrong' : '') : '') + '" data-k="' + a.k + '" ' + (live ? 'disabled' : '') +
+      ' title="' + (live ? '' : 'Sélectionner les ' + n + ' ' + w + '(s) ayant répondu « ' + a.t + ' »') + '"><span class="sw" style="background:' + a.c + '"></span><span class="txt">' + a.t + '</span><span class="n">' + (live ? '' : n + ' ' + w + (n > 1 ? 's' : '')) + '</span></button>';
+  }).join('');
+  document.querySelectorAll('.qcm-answer').forEach(b => b.onclick = () => { if (!S.live) pick(b.dataset.k) });
+  const neg = S.amount < 0;
+  $('amt').value = S.amount; $('amount').classList.toggle('neg', neg);
+  $('award').classList.toggle('neg', neg);
+  $('l1').innerHTML = '<b>' + (isTeam() ? 'Équipes' : 'Joueurs') + ' sélectionnés : ' + S.sel.size + '</b> · montant = champ « Points » (' + S.src + ')';
+  const g = $('give'); g.textContent = (neg ? 'Appliquer les pénalités (' : 'Attribuer les points (') + S.sel.size + ')'; g.disabled = S.sel.size === 0; g.classList.toggle('neg', neg);
+  $('toast').className = 'toast' + (S.toast ? ' show' : '') + (S.toast && S.toast.neg ? ' neg' : ''); $('toast').textContent = S.toast ? S.toast.t : '';
+  $('teams').innerHTML = TEAMS.map(t => {
+    const tSel = isTeam() && S.sel.has(t.n), tDone = isTeam() && (t.n in S.awarded);
+    const chk = (live || !isTeam()) ? '' : '<input type="checkbox" ' + (tSel ? 'checked' : '') + (tDone ? ' disabled title="Déjà créditée pour cette question"' : '') + ' aria-label="Sélectionner ' + t.n + '" data-u="' + t.n + '">';
+    let body = '';
+    if (isTeam()) {
+      const ansTxt = t.a ? '<span class="dot" style="background:' + ANS.find(a => a.k === t.a).c + '"></span> ' + (qcm ? ANS.find(a => a.k === t.a).t : (S.teamAnswer || 'réponse')) + (t.h && qcm ? ' · ' + t.h + ' indice(s)' : '') : '<i>pas de réponse</i>';
+      let right = '';
+      if (tDone) { const d = S.awarded[t.n]; right = '<span class="awarded' + (d < 0 ? ' neg' : '') + '">✓ déjà créditée ' + (d > 0 ? '+' : '') + d + '</span>'; }
+      else if (tSel && !live) { const v = perUnit(t); right = '<span class="preview' + (v < 0 ? ' neg' : '') + '">' + (v > 0 ? '+' : '') + v + '</span>'; }
+      body = '<div class="team-card-body">' + ansTxt + right + '</div>' + t.players.map(p => '<div class="player"><span class="pn">' + p.n + '</span><span class="pscore">' + p.s + ' pts</span></div>').join('');
+    } else {
+      body = t.players.map(p => {
+        const pSel = S.sel.has(p.id), pDone = p.id in S.awarded;
+        const pc = live ? '' : '<input type="checkbox" ' + (pSel ? 'checked' : '') + (pDone ? ' disabled title="Déjà crédité pour cette question"' : '') + ' aria-label="Sélectionner ' + p.n + '" data-u="' + p.id + '">';
+        const ans = qcm ? (p.a ? '<span class="dot" style="background:' + ANS.find(a => a.k === p.a).c + '"></span>' + (p.h ? '<span class="pscore">' + p.h + ' ind.</span>' : '') : '<span class="pscore">—</span>') : (p.buzz ? '<span class="pscore">' + p.buzz + '</span>' : '');
+        let right = '';
+        if (pDone) { const d = S.awarded[p.id]; right = '<span class="awarded' + (d < 0 ? ' neg' : '') + '">✓ déjà crédité ' + (d > 0 ? '+' : '') + d + '</span>'; }
+        else if (pSel && !live) { const v = perUnit(p); right = '<span class="preview' + (v < 0 ? ' neg' : '') + '">' + (v > 0 ? '+' : '') + v + '</span>'; }
+        return '<div class="player' + (pSel ? ' selected' : '') + (pDone ? ' done' : '') + '">' + pc + '<span class="pn">' + p.n + '</span><span class="pscore">' + p.s + ' pts</span>' + ans + right + '</div>';
+      }).join('');
+    }
+    return '<div class="team-card' + (tSel ? ' selected' : '') + (tDone ? ' done' : '') + '"><div class="team-card-header" style="background:' + t.c + '">' + chk + '<span class="team-name">' + t.n + '</span><span class="team-score">' + t.s + '</span></div>' + body + '</div>';
+  }).join('');
+  document.querySelectorAll('#teams input[type=checkbox]').forEach(c => c.onchange = () => { c.checked ? S.sel.add(c.dataset.u) : S.sel.delete(c.dataset.u); S.picked = null; S.toast = null; draw(); });
+}
+function manual(v) { S.amount = v; S.manual = true; S.src = 'modifié à la main, montant uniforme'; if (S.amount === 0) S.amount = 0; draw(); }
+$('minus').onclick = () => manual(S.amount - 1);
+$('plus').onclick = () => manual(S.amount + 1);
+$('amt').onchange = e => manual(parseInt(e.target.value) || 0);
+$('all').onclick = () => { units().forEach(u => { if (!(u.key in S.awarded)) S.sel.add(u.key) }); S.picked = null; draw(); };
+$('none').onclick = () => { S.sel.clear(); S.picked = null; draw(); };
+$('give').onclick = () => {
+  const n = S.sel.size, neg = S.amount < 0, w = isTeam() ? (n > 1 ? 'équipes' : 'équipe') : (n > 1 ? 'joueurs' : 'joueur');
+  [...S.sel].forEach(k => S.awarded[k] = perUnit(units().find(u => u.key === k)));
+  S.toast = neg ? { t:'✓ Pénalité ' + S.amount + ' appliquée à ' + n + ' ' + w + '.', neg:true } : { t:'✓ Points attribués à ' + n + ' ' + w + '.' };
+  S.sel.clear(); S.picked = null; draw();
+};
+document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => render(e.target.value)));
+
+function render(st) {
+  reset({ live: st === 'started' });
+  if (st === 'good') return pick(CORRECT);
+  if (st === 'bad') return pick('RED');
+  if (st === 'manual') { S.sel = new Set(['Les Bleus', 'Les Jaunes']); S.amount = 5; S.manual = true; S.src = 'modifié à la main, montant uniforme'; }
+  if (st === 'given') { ['Les Bleus', 'Les Rouges', 'Les Verts'].forEach(n => S.awarded[n] = perUnit(TEAMS.find(t => t.n === n))); S.toast = { t:'✓ Points attribués à 3 équipes.' }; }
+  if (st === 'penalized') { ['Les Bleus', 'Les Rouges', 'Les Verts'].forEach(n => S.awarded[n] = perUnit(TEAMS.find(t => t.n === n))); S.awarded['Les Jaunes'] = -1; S.amount = -1; S.src = 'mauvaise réponse : pénalité par défaut (aucune définie)'; S.picked = 'RED'; S.toast = { t:'✓ Pénalité −1 appliquée à 1 équipe.', neg:true }; }
+  draw();
+}
+
+render('revealed');
+</script>
+</body>
+</html>

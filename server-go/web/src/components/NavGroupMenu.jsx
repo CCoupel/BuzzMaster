@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
+import { LAUNCH_TITLE, LOCKED_BY_OTHER_TITLE } from './LaunchGameHost'
 import './NavGroupMenu.css'
 
 // Ouverture au survol (délai de fermeture 150 ms) ET au clic/tap/clavier.
@@ -54,6 +55,29 @@ function MenuEntry({ item, to, active, onNavigate }) {
   )
 }
 
+// #253 — entrée « 🚀 Lancer la partie » du groupe Préparation : ouvre la popup en superposition.
+// Disponible dans toutes les phases ; grisée (aria-disabled, pas `disabled` : l'infobulle reste
+// lisible) quand la popup est déjà ouverte sur un autre poste.
+function LaunchEntry({ onLaunch, lockedByOther, variant, onNavigate }) {
+  const handle = () => {
+    if (lockedByOther) return
+    onNavigate?.()
+    onLaunch?.()
+  }
+  return (
+    <button
+      type="button"
+      className={variant === 'menu' ? 'menu-item menu-launch' : 'navgroup-button navgroup-launch'}
+      aria-disabled={lockedByOther}
+      title={lockedByOther ? LOCKED_BY_OTHER_TITLE : LAUNCH_TITLE}
+      onClick={handle}
+    >
+      <span className={variant === 'menu' ? 'menu-icon' : 'nav-icon'} aria-hidden="true">🚀</span>
+      <span className={variant === 'menu' ? 'menu-label' : 'navgroup-label'}>Lancer la partie</span>
+    </button>
+  )
+}
+
 function Dropdown({ children, label }) {
   return (
     <div className="navbar-menu-dropdown navgroup-dropdown" aria-label={label}>
@@ -70,7 +94,7 @@ function Dropdown({ children, label }) {
  */
 export default function NavGroupMenu({
   mode, prepItems, interfaceItems, renderNavLink, getFullPath, isActiveRoute, pathname,
-  openMenu, setOpenMenu,
+  openMenu, setOpenMenu, onLaunch, lockedByOther = false,
 }) {
   const prep = useMenuTrigger('prep', openMenu, setOpenMenu)
   const iface = useMenuTrigger('interface', openMenu, setOpenMenu)
@@ -90,6 +114,7 @@ export default function NavGroupMenu({
       <div className="nav-group nav-group-prep">
         <div className="nav-group-items">
           {prepItems.map(renderNavLink)}
+          {onLaunch && <LaunchEntry onLaunch={onLaunch} lockedByOther={lockedByOther} variant="nav" />}
         </div>
         <div className="navgroup-wrapper" {...iface.wrapperProps}>
           <button
@@ -129,6 +154,7 @@ export default function NavGroupMenu({
         {prep.isOpen && (
           <Dropdown label="Préparation">
             {prepEntries}
+            {onLaunch && <LaunchEntry onLaunch={onLaunch} lockedByOther={lockedByOther} variant="menu" onNavigate={close} />}
             <div className="menu-section-title">Interface</div>
             {ifaceEntries}
           </Dropdown>

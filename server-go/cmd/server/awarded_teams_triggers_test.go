@@ -210,10 +210,10 @@ func TestAwardedTeams_NeverFromGenericBroadcastPath(t *testing.T) {
 	}
 }
 
-// TestAwardedTeams_OnlyReachesAnim confirms AWARDED_TEAMS is never sent to
+// TestAwardedTeams_ReachesAdminAndAnimNeverTV confirms AWARDED_TEAMS is never sent to
 // admin/TV/VPlayer — contracts/websocket-endpoints.md exclusivity, same
 // pattern as TestBroadcastNextQuestion_OnlyReachesAnim.
-func TestAwardedTeams_OnlyReachesAnim(t *testing.T) {
+func TestAwardedTeams_ReachesAdminAndAnimNeverTV(t *testing.T) {
 	app := newAwardedTeamsTriggerTestApp(t)
 	dir := app.config.Storage.QuestionsDir
 	writeQuestionFile(t, dir, "1", 1, nil)
@@ -231,15 +231,9 @@ func TestAwardedTeams_OnlyReachesAnim(t *testing.T) {
 
 	readAwardedTeams(t, anim)
 
-	admin.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-	if _, data, err := admin.ReadMessage(); err == nil {
-		var envelope struct {
-			Action string `json:"ACTION"`
-		}
-		if json.Unmarshal(data, &envelope) == nil && envelope.Action == protocol.ActionAwardedTeams {
-			t.Error("admin must never receive AWARDED_TEAMS")
-		}
-	}
+	// v11.2 (#244/#251): the admin now receives AWARDED_TEAMS too (greys out
+	// already-credited teams in the grouped award). TV still never does.
+	readAwardedTeams(t, admin)
 	tv.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 	if _, data, err := tv.ReadMessage(); err == nil {
 		var envelope struct {
