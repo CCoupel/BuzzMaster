@@ -2019,6 +2019,7 @@ Retourne une carte Memory.
 > `VPLAYER_QCM_ANSWER` et `BUTTON`. Le champ reste `omitempty` au sens du schéma : c'est une
 > obligation d'usage pour ce `ClientType`, pas une contrainte de sérialisation.
 | MOTION_CARD_ID | string | ⬜ *(v7.1.0)* | Identité de la carte MEMOTION parente (`CardScope`, `question-types.md` §9). Absent hors manche MEMOTION ⇒ comportement actuel |
+| FLIP_ID | string | ⬜ *(v11.2.1, #248)* | Identifiant **unique par geste de retournement**, créé par la tablette (`vplayer`) et **identique à chaque renvoi** du même geste. Rend le retournement idempotent et déclenche l'accusé `FLIP_MEMORY_CARD_ACK`. Voir §« Idempotence — `FLIP_ID` » ci-dessous. Absent ⇒ comportement actuel |
 
 > **`ID` — ajouté en v7.1.0 (#187), additif et `omitempty`.** Il porte le bumper ID de l'émetteur,
 > nécessaire à la résolution 3 passes `payload.ID → msg.ID → clientID` qu'impose la vérification du
@@ -2113,6 +2114,95 @@ disparaît.
 > **Motif de la dérogation au refus explicite** : dans l'usage normal, un tap hors tour est un
 > geste de curiosité ou de réflexe, pas une tentative malveillante. Y répondre par une erreur
 > polluerait l'interface sans rien protéger. Décision utilisateur du 2026-08-24.
+
+#### Idempotence — `FLIP_ID` (v11.2.1, #248) — `[NEW]`
+
+**Problème corrigé** : une tablette qui n'a pas reçu l'accusé d'un retournement (coupure WiFi, lien mort) le renvoie
+(maquette `docs/mockup/v11.2.1/ui/vplayer_qcm_answer__ack.html`, flux MEMORY). Sans identifiant, le serveur ne peut
+pas distinguer un renvoi d'un nouveau geste. Si le premier envoi avait été traité et que la carte était revenue face
+cachée (paire ratée, `flipDelay`), le renvoi la retournerait **une seconde fois**, ce qui fausse la partie.
+
+**Format** : chaîne de 1 à 64 caractères `[A-Za-z0-9_-]` (UUID conseillé). Hors format, le champ est **traité comme
+absent** (comportement actuel, sans déduplication ni accusé) et journalisé `WARN FLIP_ID_INVALID`.
+
+**Portée** : honoré **uniquement pour un émetteur `vplayer`** dont le bumper est résolu (résolution 3 passes
+ci-dessus). Un `FLIP_ID` reçu de `tv` ou `anim` est ignoré (pas d'équipe, pas de renvoi automatique). L'unicité est
+garantie par le client ; le serveur indexe **par bumper**.
+
+**Règle serveur** (dans cet ordre, **sous un même verrou** qui couvre aussi le retournement, pour que deux copies
+concurrentes du même geste, par exemple l'ancienne et la nouvelle connexion, ne soient jamais traitées deux fois) :
+1. Résolution du bumper (inchangée).
+2. **Déduplication, avant toute autre vérification** : si ce `FLIP_ID` est déjà connu pour ce bumper, le serveur
+   **ne fait rien sur la grille** et renvoie à l'émetteur le **même** `FLIP_MEMORY_CARD_ACK` que la première fois
+   (`DUPLICATE: true`), puis un `UPDATE` ciblé (état courant). La déduplication passe **avant** la vérification du
+   tour : un renvoi d'un geste déjà appliqué reste `APPLIED` même si la main est passée entre-temps.
+3. Vérifications existantes (portée de carte, tour, phase, carte retournable), puis retournement.
+4. Le résultat est **mémorisé** pour ce `FLIP_ID`, puis l'accusé est envoyé à l'émetteur, suivi de l'`UPDATE` ciblé.
+   Le résultat d'un geste **ignoré** est mémorisé aussi : son renvoi donne toujours la même réponse (idempotence),
+   même si la situation a changé depuis.
+
+**Mémoire** : au plus **16** `FLIP_ID` par bumper (les plus anciens sont oubliés en premier), purgés au changement de
+question (passage en `PREPARE` ou nouvel `ID` de question), sur `NEW_GAME` et à la suppression du bumper. Non
+persistés : après un redémarrage du serveur, la mémoire est vide (la grille est de toute façon réinitialisée).
+16 suffit, puisque la tablette n'envoie un nouveau geste qu'après l'accusé du précédent (grille verrouillée pendant
+l'attente).
+
+**Diffusion** : un retournement appliqué produit les diffusions **actuelles** (UPDATE général, timers de
+retournement). Un doublon ou un geste ignoré ne produit **aucune** diffusion générale (ni `UPDATE` à tous, ni `PAUSE`,
+ni LED), seulement l'accusé et l'`UPDATE` ciblés vers l'émetteur.
+
+**Sans `FLIP_ID`** (anciens clients, `tv`, `anim`, tablette d'un ancien bundle) : comportement **strictement
+inchangé**, y compris l'ignore silencieux hors tour (décision du 2026-08-24) ; aucun accusé.
+
+**Règle client (tablette)** : un `FLIP_ID` neuf est créé à chaque **nouveau** geste, et le même est réutilisé pour
+tous ses renvois. Le parcours avec accusé (`FLIP_ID`, attente, renvoi) ne démarre que si l'équipe du joueur **a la
+main** dans l'état connu de la tablette. Un tap hors tour reste envoyé sans `FLIP_ID`, et donc ignoré en silence
+(dérogation du 2026-08-24 conservée). Le statut `NOT_TURN` n'apparaît donc que si la main est passée pendant
+l'attente de l'accusé.
+
+**Cas limites**
+| Cas | Résultat |
+|-----|----------|
+| Renvoi d'un geste déjà appliqué, carte revenue face cachée entre-temps (paire ratée) | Pas de second retournement ; `STATUS: APPLIED`, `DUPLICATE: true` |
+| Renvoi d'un geste déjà appliqué, la main est passée à une autre équipe | `APPLIED`, `DUPLICATE: true` (la déduplication passe avant le tour) |
+| Premier envoi reçu alors que l'équipe n'a plus la main | `IGNORED`, `REASON: NOT_TURN` ; ses renvois donnent la même réponse |
+| Carte non retournable (déjà face visible, paire trouvée, deux cartes déjà retournées) | `IGNORED`, `REASON: NOT_FLIPPABLE` |
+| Fin de question, phase ≠ STARTED, question ou carte MEMOTION terminée | `IGNORED`, `REASON: NOT_PLAYABLE` (la mémoire est purgée au changement de question : un renvoi après la purge est évalué comme un nouveau geste, et donc refusé pour la même raison) |
+| Portée de carte invalide (`CARD_SCOPE_*`) | Refus explicite actuel, inchangé, **plus** `IGNORED`, `REASON: CARD_SCOPE` dans l'accusé |
+| Reconnexion (nouvelle connexion, même bumper lié) | Même mémoire (indexée par bumper, pas par connexion) : le renvoi par la nouvelle connexion est dédupliqué |
+| Accusé perdu | La tablette renvoie le même `FLIP_ID` et reçoit le même accusé (`DUPLICATE: true`) |
+| Plus de 16 gestes sans accusé reçu | Impossible côté tablette conforme (un geste à la fois). Un client non conforme peut voir un très ancien `FLIP_ID` réévalué comme un nouveau geste ; c'est accepté |
+
+---
+
+### FLIP_MEMORY_CARD_ACK ✨ (v11.2.1, #248) — `[NEW]`
+
+Accusé de traitement d'un `FLIP_MEMORY_CARD` porteur d'un `FLIP_ID` valide.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` — **uniquement la connexion émettrice** (`vplayer`) |
+| Déclencheur | Tout `FLIP_MEMORY_CARD` avec `FLIP_ID` valide d'un `vplayer` résolu, premier envoi ou renvoi |
+| Suivi de | un `UPDATE` ciblé vers ce joueur (état courant, même sérialisation VJoueur que l'écho de `VPLAYER_QCM_ANSWER`) |
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| FLIP_ID | string | Repris de la demande |
+| CARD_ID | string | Repris de la demande (celle du **premier** envoi, pour un doublon) |
+| MOTION_CARD_ID | string | Repris de la demande, `""` hors carte MEMOTION — **toujours sérialisé** |
+| STATUS | `"APPLIED"` \| `"IGNORED"` | `APPLIED` = la carte a été retournée par ce geste |
+| REASON | `""` \| `"NOT_TURN"` \| `"NOT_FLIPPABLE"` \| `"NOT_PLAYABLE"` \| `"CARD_SCOPE"` | `""` si `APPLIED` — **toujours sérialisé** |
+| DUPLICATE | boolean | `true` si ce `FLIP_ID` avait déjà été traité (réponse mémorisée) |
+
+```json
+{ "ACTION": "FLIP_MEMORY_CARD_ACK", "MSG": { "FLIP_ID": "f-3b9c2e", "CARD_ID": "2-1", "MOTION_CARD_ID": "", "STATUS": "APPLIED", "REASON": "", "DUPLICATE": true } }
+```
+
+**Lecture par la tablette** : `APPLIED` → accusé (la carte suit l'état reçu, même si elle est déjà revenue face
+cachée) ; `IGNORED` + `NOT_TURN` → échec « ✕ Carte non retournée — ce n'est plus votre tour » ; autre `IGNORED` →
+échec « ✕ Carte non retournée » (maquette). Jamais d'invitation à réessayer. Les anciens clients reçoivent une action
+inconnue, qu'ils ignorent (journal console seulement). En pratique, ils ne la reçoivent jamais, puisqu'ils n'envoient
+pas de `FLIP_ID`.
 
 ---
 

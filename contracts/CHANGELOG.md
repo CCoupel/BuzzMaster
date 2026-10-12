@@ -2,6 +2,16 @@
 
 ---
 
+## [20261013] — `FLIP_MEMORY_CARD.FLIP_ID` : retournement MEMORY/MEMOTION idempotent avec accusé (#248, v11.2.1, lot 5b)
+
+- **[NEW]** (ajout, ADDED) `websocket-actions.md` §FLIP_MEMORY_CARD : champ optionnel `FLIP_ID` (1–64 `[A-Za-z0-9_-]`), honoré pour un `vplayer` résolu. Déduplication **par bumper**, **avant** la vérification du tour, sous le même verrou que le retournement : un renvoi ne retourne jamais la carte une seconde fois, même si elle est revenue face cachée. Mémoire de 16 `FLIP_ID` par bumper, purgée au changement de question, sur `NEW_GAME` et à la suppression du bumper ; non persistée.
+- **[NEW]** (ajout, ADDED) action `FLIP_MEMORY_CARD_ACK` (serveur → connexion émettrice) : `{FLIP_ID, CARD_ID, MOTION_CARD_ID, STATUS: APPLIED|IGNORED, REASON: ""|NOT_TURN|NOT_FLIPPABLE|NOT_PLAYABLE|CARD_SCOPE, DUPLICATE}`, toujours suivie d'un `UPDATE` ciblé. Un doublon ou un geste ignoré ne produit aucune diffusion générale.
+- **[NEW]** `logging.md` §3.2 octies : `FLIP_DUPLICATE`, `FLIP_IGNORED`, `FLIP_ID_INVALID`.
+- Règle client : `FLIP_ID` seulement si l'équipe du joueur a la main ; un tap hors tour reste silencieux (décision du 2026-08-24 conservée).
+- Aucune BREAKING : sans `FLIP_ID`, le comportement est strictement inchangé (anciens clients, `tv`, `anim`).
+
+---
+
 ## [20261012] — `SCORE_CHANGE.GAINS` : gains par équipe de la dernière modification de score (#265, v11.2.1)
 
 - **[NEW]** (ajout, ADDED) `game-state.md` §`SCORE_CHANGE.GAINS` : `GAINS: {TEAM, POINTS}[]`, toujours sérialisé (`[]` par défaut, jamais `null`). Variation nette par équipe, une entrée par équipe dans l'ordre de première apparition, écrite dans la même section critique que les scores et `SEQ`. Renseigné aussi avec `DISPLAY = false`. Remis à `[]` au démarrage et sur `NEW_GAME`.
