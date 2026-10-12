@@ -571,5 +571,5 @@ ls -lh releases/
 - Les exécutables portables embarquent le site web (pas besoin de fichiers séparés)
 - Le dossier `data/` est créé automatiquement à côté de l'exécutable
 - Sur Raspberry Pi, donner les droits d'exécution : `chmod +x buzzcontrol-linux-arm64`
-- Le workflow CI utilise Go 1.25 et Node.js 18
+- Le workflow CI utilise Go 1.26 et Node.js 18
 - Le firmware compilé (`buzzclick-vX.Y.Z-merged.bin`) est automatiquement embarqué dans le serveur pour les mises à jour OTA
