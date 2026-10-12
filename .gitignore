@@ -198,3 +198,5 @@ build/
 # Journaux persistants du serveur (#246)
 data/logs/
 server-go/data/logs/
+.claude/skills/milestone-panel/
+MARKETING/

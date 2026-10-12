@@ -210,6 +210,14 @@ for src in TEMPLATE_claude/commands/context/*.md; do
   cp "$src" "$dest"
   echo "  ✓ $dest"
 done
+
+# Mods Claude Code (panneau milestone…) : chargés automatiquement depuis .claude/skills/<mod>/.
+# Copie complète, générée — gitignorée comme le reste des fichiers template.
+for src in TEMPLATE_claude/mods/*/; do
+  dest=".claude/skills/$(basename $src)"
+  mkdir -p "$dest" && cp -r "$src". "$dest/"
+  echo "  ✓ $dest"
+done
 ```
 
 #### 5. Mettre a jour TEMPLATE_claude/.template-source.json et project-config.json
@@ -1000,6 +1008,7 @@ AskUserQuestion (`multiSelect: true`) : "Quels aspects securite sont importants 
     "test": "<TEST_CMD>",
     "lint": "<LINT_CMD>",
     "audit": "<AUDIT_CMD>",
+    "ci": "<CI_CMD : script unique de la CI, ex. scripts/ci.sh>",
     "typecheck": "<TYPECHECK_CMD>",
     "coverage": "<COVERAGE_CMD>",
     "test_fast": "<TEST_FAST_CMD>",
@@ -1037,6 +1046,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `commands.test` | Stack : `go test ./...` / `npm test` / `pytest` |
 | `commands.lint` | Stack : `golangci-lint run` / `npm run lint` / `ruff check .` |
 | `commands.audit` | Stack : `govulncheck ./...` / `npm audit` / `pip-audit` |
+| `commands.ci` | `CI_CMD` : **script unique** de la CI (defaut `scripts/ci.sh`, genere par l'etape "3. Workflow CI/CD" s'il n'existe pas) enchainant build, lint/vet, tests (+ detecteur de course si la stack en a un), `commands.audit`, build frontend. Appele par les workflows (release et pre-validation), `qa` et `deploy` — voir `agents/infra.md` §3bis C11 |
 | `commands.typecheck` | Frontend TS : `npm run typecheck` / `tsc --noEmit` — vide sinon |
 | `commands.coverage` | Stack : `go test -cover ./...` / `npm run test -- --coverage` / `pytest --cov` |
 | `marketing.site` | Defaut `"auto"` : un site marketing est attendu (branche `gh-pages`, uniquement — `MARKETING/` en est le worktree git, jamais un dossier de la branche de code) ; s'il n'existe pas, l'agent marketing declenche une initialisation (questions de cadrage + maquette). `false` = ordre direct de ne pas avoir de site (le CDP dispatche `PREPARE ... — SANS SITE`) |
@@ -1101,18 +1111,20 @@ Le CDP les connait via cette table et `agents.generic[]` (voir `agents/cdp.md`).
 ### 3. Workflow CI/CD
 
 Le pipeline de release n'est plus copie d'un modele : il est **audite s'il existe, genere sinon**, selon le
-contrat de `TEMPLATE_claude/agents/infra.md` section 3bis (exigences C1 a C10). Si l'utilisateur a repondu
+contrat de `TEMPLATE_claude/agents/infra.md` section 3bis (exigences C1 a C11). Si l'utilisateur a repondu
 « Aucun » a l'Etape 7, ne rien faire.
 
 1. **Detecter** : `.github/workflows/*.y*ml`, `.gitlab-ci.yml`.
-2. **Pipeline existant → audit** : evaluer C1-C10 (verdict `CONFORME` / `ECART` / `NON APPLICABLE`, fichier et ligne
+2. **Pipeline existant → audit** : evaluer C1-C11 (verdict `CONFORME` / `ECART` / `NON APPLICABLE`, fichier et ligne
    cites), afficher le tableau, puis AskUserQuestion :
    - Corriger les ecarts (Recommande) — patch minimal, diff affiche et valide avant ecriture
    - Garder tel quel — ecarts consignes dans le rapport final (un ecart C1/C5 reste signale comme bloquant
      pour le mode `rebuild-ci`)
    - Regenerer — remplace le pipeline apres sauvegarde (`.bak`)
    Ne jamais ecraser ni modifier sans reponse.
-3. **Aucun pipeline → generation** : composer le pipeline a partir de `project-config.json` (stack, livrables,
+3. **Aucun pipeline → generation** : ecrire d'abord le script `CI_CMD` (`commands.ci`, C11) s'il n'existe pas, puis
+   generer **deux workflows** qui n'y font que `run: $CI_CMD` : pre-validation `.github/workflows/ci-branch.yml`
+   (C10 : push `milestone/*` + `workflow_dispatch`, lecture seule, sans publier) et release. Composer le pipeline a partir de `project-config.json` (stack, livrables,
    `version_file`, `commands.*`) en suivant le contrat, l'afficher, le faire valider (AskUserQuestion :
    Ecrire / Modifier / Annuler), l'ecrire a `infrastructure.environments[].publish.pipeline`
    (par defaut `.github/workflows/release.yml`), puis le valider syntaxiquement (`actionlint` si present).
@@ -1633,8 +1645,24 @@ instance d'agent generique → Etape 5c puis "2bis. Agents generiques" uniquemen
 #### Etape d1c — Audit du pipeline CI/CD de release
 
 Appliquer l'etape "3. Workflow CI/CD" (sections Generation de la Configuration) en mode audit : detecter le
-pipeline, evaluer C1-C10 (`agents/infra.md` section 3bis), proposer corrections ou generation si absent. Ne rien
+pipeline, evaluer C1-C11 (`agents/infra.md` section 3bis), proposer corrections ou generation si absent. Ne rien
 modifier sans reponse de l'utilisateur ; ne pas re-poser l'Etape 7 si le systeme CI/CD est deja connu.
+
+**Migration CI_CMD / pre-validation (projet deja initialise)** — a faire si `commands.ci` est absent de
+`project-config.json` ou si C10/C11 sont en `ECART` :
+
+1. **Config** : ajouter `commands.ci` (cle absente des configs anterieures ; `project-config.json` est par
+   ailleurs conserve tel quel). Valeur proposee : `scripts/ci.sh` s'il existe, sinon ce chemin a creer.
+2. **Script `CI_CMD`** : s'il n'existe pas, le deriver des etapes du workflow de release existant
+   (build, vet/lint, tests, audit, build web — plus `commands.build/test/lint/audit`), l'afficher, puis
+   AskUserQuestion : Ecrire (Recommande) / Modifier / Passer. Ne rien ecrire sans reponse ; ne jamais
+   inventer une etape absente du workflow ni de la config.
+3. **Workflow de pre-validation** : s'il n'existe pas, generer `.github/workflows/ci-branch.yml` (C10 : push
+   `milestone/*` + `workflow_dispatch`, lecture seule, `run: $CI_CMD`), meme validation utilisateur.
+4. **Workflow de release existant** : proposer (jamais impose, diff affiche, sauvegarde `.bak`) de reduire
+   ses etapes de CI a `run: $CI_CMD` pour supprimer l'ecart local/CI ; « garder tel quel » est consigne dans
+   le rapport (ecart C11).
+5. **Fichier d'environnement `rebuild-ci`** : voir d1d (la barriere de pre-validation y vit).
 
 #### Etape d1a — Site marketing : worktree `gh-pages`
 
@@ -1699,6 +1727,7 @@ done
 > modifiés ici, même si leur source `TEMPLATE_claude/templates/environments/` a changé. C'est un
 > filet de sécurité (éviter qu'`agents/deploy.md` référence un fichier inexistant), pas une
 > synchronisation complète — limitation assumée, à signaler dans le rapport si applicable.
+> Seule exception : la migration de la barriere de pre-validation (`rebuild-ci`), ci-dessous.
 
 ```bash
 if jq -e '.infrastructure.environments' .claude/project-config.json >/dev/null 2>&1; then
@@ -1713,6 +1742,14 @@ if jq -e '.infrastructure.environments' .claude/project-config.json >/dev/null 2
   done
 fi
 ```
+
+**Exception — migration de la barriere de pre-validation** : pour chaque environnement `publish.mode =
+"rebuild-ci"`, si `publish.<env>.template.md` ne contient pas la section « BARRIERE » (`grep -q BARRIERE`),
+il date d'avant la pre-validation CI. AskUserQuestion : Regenerer depuis
+`TEMPLATE_claude/templates/environments/publish-rebuild-ci.md` (Recommande — ancien fichier sauvegarde en
+`.bak`, diff affiche, cibles/variables relues dans `project-config.json`) / Garder tel quel (ecart consigne
+au rapport : `deploy` applique alors seulement la regle generique de `agents/deploy.md`, sans commande de
+barriere). Jamais d'ecrasement sans reponse ; les autres modes (`promote`, etc.) ne sont pas concernes.
 
 Si `MISSING_ENV_FILES[]` non vide → exécuter pour ces seules entrées manquantes la génération
 décrite en section "3bis. Fichiers d'environnement" (Génération de la Configuration), puis
