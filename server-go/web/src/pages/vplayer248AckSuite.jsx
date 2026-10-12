@@ -83,7 +83,7 @@ export function defineAckSuite(flowName) {
     // État piloté par le test ; le spy `send` est conservé d'un rendu à l'autre.
     function mount() {
       const send = vi.fn(() => true)
-      const st = { phase: 'STARTED', status: 'connected', qid: 'q1', ownTime: 0, teamTime: 0, bindNonce: 0 }
+      const st = { phase: 'STARTED', status: 'connected', qid: 'q1', ownTime: 0, teamTime: 0, bumperConnected: true }
       let cur = null, key = ''
       useGame.mockImplementation(() => {
         const k = JSON.stringify(st)
@@ -92,7 +92,7 @@ export function defineAckSuite(flowName) {
             status: st.status,
             playerConnectStatus: BOUND(),
             gameState: { phase: st.phase, timer: 30, question: F.question(st.qid) },
-            bumpers: { [PAUL]: { NAME: 'Paul', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'Les Bleus', CONNECTED: true, TIME: st.ownTime } },
+            bumpers: { [PAUL]: { NAME: 'Paul', IS_VIRTUAL: true, IS_VPLAYER: true, TEAM: 'Les Bleus', CONNECTED: st.bumperConnected, TIME: st.ownTime } },
           })
           cur.teams = { 'Les Bleus': { NAME: 'Les Bleus', COLOR: [0, 0, 255], TIME: st.teamTime } }
           key = k
@@ -240,6 +240,24 @@ export function defineAckSuite(flowName) {
       const before = m.count()
       await m.advance(CADENCE_MS * 10)
       expect(m.count()).toBe(before)
+    })
+
+    it('Critical (défaut majeur de revue) — équipe DÉJÀ servie au moment de l\'appui : « ℹ équipe déjà … », jamais le faux « non reçue », même après 30 intervalles', async () => {
+      const m = await mountBound()
+      await m.apply({ teamTime: 999 }) // un coéquipier a répondu / buzzé avant ce joueur
+      await m.press()
+      await m.advance(CADENCE_MS * (CAP + 5))
+      expect(m.text()).toMatch(F.team)
+      expect(m.text()).not.toMatch(F.fail)
+      expect(m.count()).toBeLessThanOrEqual(1)
+    })
+
+    it('liaison confirmée mais bumper.CONNECTED = false (drapeau diffusé en retard) : le message part quand même (garde d\'envoi = liaison)', async () => {
+      const m = mount()
+      await m.apply({ bumperConnected: false })
+      await m.advance(100)
+      await m.press()
+      expect(sent(m.send, F.action)).toEqual([F.payload])
     })
 
     it('échec définitif : aucune invitation à réessayer ni à rejouer', async () => {

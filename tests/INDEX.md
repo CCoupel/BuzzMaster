@@ -112,3 +112,4 @@
 | server-go/web/src/pages/VPlayerPage.qcm-ack.248.test.jsx (+ vplayer248AckSuite.jsx) | unit | vplayer | #248 réponse QCM avec accusé : attente, ✓ après accusé, renvoi 4 s, plafond 30, coupure/reliaison, visibilité, pause, échec définitif, équipe déjà servie | regression | critical |
 | server-go/web/src/pages/VPlayerPage.speedy-ack.248.test.jsx (+ vplayer248AckSuite.jsx) | unit | vplayer | #248 buzz SPEEDY avec accusé : mêmes cas que le QCM (BUTTON, « Buzz reçu », « équipe déjà buzzé ») | regression | critical |
 | tests/procedures/vplayer-ack-248.md | manual | vplayer | #248 procédure manuelle : coupure WiFi réelle, QCM puis SPEEDY | regression | |
+| server-go/web/src/hooks/useAckedSend.test.js | unit | vplayer | #248 hook useAckedSend : états idle/sending/acked/served/failed, cadence 4 s, plafond 30, un appui par question, reliaison/visibilité/pause, équipe déjà servie à l'appui (défaut majeur de revue) | regression | critical |
