@@ -215,7 +215,7 @@ function RafaleDifficultyPastilles({ difficulties }) {
   )
 }
 
-export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
+export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false, vplayerPending = null }) {
   const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard } = useGame()
   const { categories: apiCategories } = useCategories()
   const [previousRanking, setPreviousRanking] = useState({})
@@ -1890,7 +1890,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 3: Media or "PREPAREZ-VOUS" message or COUNTDOWN */}
                 <div
-                  className="zone-media"
+                  className={`zone-media${vplayerPending ? ' vplayer-pending-pressed' : ''}`}
                   onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
                   style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
                 >
@@ -1956,12 +1956,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       const teamsOnThisAnswer = teamsByQcmAnswer[colorKey] || []
                       const showTeamBadges = ['STOPPED', 'REVEALED'].includes(gameState.phase) && teamsOnThisAnswer.length > 0
 
-                      const isClickable = onQCMAnswer && gameState.phase === 'STARTED' && !isInvalidated && !vplayerHasBuzzed
+                      const isClickable = onQCMAnswer && gameState.phase === 'STARTED' && !isInvalidated && !vplayerHasBuzzed && !vplayerPending
+                      // #248 — choix en attente d'accusé : grille verrouillée, choix mis en avant
+                      const pendingChosen = !!vplayerPending && vplayerPending.color === colorKey
+                      const pendingDim = !!vplayerPending && !pendingChosen
 
                       return (
                         <motion.div
                           key={colorKey}
-                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''} ${isClickable ? 'clickable' : ''}`}
+                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''} ${isClickable ? 'clickable' : ''} ${pendingChosen ? (vplayerPending.status === 'failed' ? 'vplayer-pending-chosen vplayer-pending-failed' : 'vplayer-pending-chosen') : ''} ${pendingDim ? 'vplayer-pending-dim' : ''}`}
                           style={{
                             backgroundColor: isInvalidated ? '#374151' : (showAnswer && !isCorrect ? '#4b5563' : colorData.color),
                             opacity: isInvalidated ? 0.35 : (showAnswer && !isCorrect ? 0.4 : 1),
@@ -2999,7 +3002,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 3: Media - shows MEDIA_ANSWER during REVEAL if available - ALWAYS clickable for VPlayer buzz */}
                 <div
-                  className="zone-media"
+                  className={`zone-media${vplayerPending ? ' vplayer-pending-pressed' : ''}`}
                   onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
                   style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
                 >

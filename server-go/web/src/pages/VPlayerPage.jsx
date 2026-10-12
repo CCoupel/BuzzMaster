@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useAckedSend } from '../hooks/useAckedSend'
 import { useNavigate } from 'react-router-dom'
 import { useGame } from '../hooks/GameContext'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -76,11 +77,6 @@ export default function VPlayerPage() {
   const [connectionBanner, setConnectionBanner] = useState(null)
   const hasConnectedOnceRef = useRef(false)
   const wasDisconnectedRef = useRef(false)
-  // #118 (F7) — appui buzzer mémorisé pendant une liaison morte : { questionId }
-  // ou `null`. Un seul appui retenu (le premier), en mémoire uniquement (pas
-  // de localStorage — un rechargement repart légitimement de zéro, et F1 est
-  // précisément ce qui rend ce rechargement inutile).
-  const pendingBuzzRef = useRef(null)
   // #246 (F-ID) — identité de CET onglet. `ownIdRef` = ID de la session en
   // mémoire (jamais relu depuis le localStorage courant, qui appartient au
   // dernier onglet ayant écrit). `bound` = la connexion WebSocket courante est
@@ -99,8 +95,6 @@ export default function VPlayerPage() {
   staleRef.current = stale
   supersededRef.current = superseded
   const noSleepRef = useRef(null)
-  // #246 : réponse QCM mémorisée tant que la connexion n'est pas liée.
-  const pendingQcmRef = useRef(null)
   // Ref to always have the latest bumper value in async callbacks (avoids stale closure)
   const bumperRef = useRef(null)
 
@@ -209,6 +203,18 @@ export default function VPlayerPage() {
     if (!boundRef.current || staleRef.current || supersededRef.current) return false
     return sendMessage(action, payload)
   }, [sendMessage])
+
+  // #248 — accusé de réception de la réponse QCM / du buzz SPEEDY.
+  const pendingColorRef = useRef(null) // couleur QCM choisie, mise en avant pendant l'attente
+  const ackedSend = useAckedSend({
+    sendBound,
+    connStatus: status,
+    bound,
+    phase: gameState.phase,
+    questionId: gameState.question?.ID ?? null,
+    acked: !!bumper && bumper.TIME > 0,
+    teamServed: !!team && team.TIME > 0 && !(bumper && bumper.TIME > 0),
+  })
 
   // Find bumper by ID in bumpers list (#120 F2, #246 : sans repli par nom).
   useEffect(() => {
@@ -492,60 +498,6 @@ export default function VPlayerPage() {
     // Send PONG - ID in payload for web clients (#246 : seulement connexion liée)
     sendBound('PONG', { ID: bumper.id })
   }, [gameState.phase, bumper, sendBound, bound])
-
-  // #118 (F7, déclencheur a) — passage observé en PREPARE : la question
-  // change, tout buzz mémorisé pour l'ancienne question est périmé. Vidage
-  // SANS envoi. Ne couvre que le cas où ce client est resté en ligne pendant
-  // le changement de question — voir le déclencheur (b) ci-dessous pour le
-  // cas complémentaire (hors ligne pendant tout le changement).
-  useEffect(() => {
-    if (gameState.phase !== 'PREPARE') return
-    if (pendingBuzzRef.current) {
-      console.log('[VPlayer] Buzz mémorisé abandonné (nouvelle question observée en PREPARE)')
-      pendingBuzzRef.current = null
-    }
-  }, [gameState.phase])
-
-  // #118 (F7, déclencheur b — le point de vigilance du plan) — validation de
-  // contexte au moment du vidage, déclenchée par la reconfirmation du bumper
-  // (bumper.CONNECTED redevenu true, cf. F2). C'est la garde qui couvre un
-  // client resté hors ligne pendant TOUT le changement de question : il n'a
-  // alors jamais observé PREPARE, donc le déclencheur (a) ne peut pas
-  // s'appliquer. Envoie le buzz mémorisé UNIQUEMENT si la question est
-  // toujours celle mémorisée ET si la phase est toujours STARTED ; sinon,
-  // abandon silencieux. Le buzz est consommé (pendingBuzzRef vidé) dans les
-  // deux cas — jamais rejoué.
-  useEffect(() => {
-    const pending = pendingBuzzRef.current
-    if (!pending) return
-    if (!bumper?.id || bumper.CONNECTED !== true) return // reconnexion pas encore confirmée
-    if (!bound) return // #246 : connexion pas encore liée à notre bumper
-
-    pendingBuzzRef.current = null
-
-    const sameQuestion = pending.questionId !== null && pending.questionId === (gameState.question?.ID ?? null)
-    const stillStarted = gameState.phase === 'STARTED'
-
-    if (!sameQuestion || !stillStarted) {
-      console.log('[VPlayer] Buzz mémorisé abandonné (contexte périmé après reconnexion : question ou phase différente)')
-      return
-    }
-
-    // Chemin identique à un buzz normal : résolution par payload.ID côté
-    // serveur, horodatage serveur fait foi — aucun horodatage client transmis.
-    console.log('[VPlayer] Envoi du buzz mémorisé après reconnexion:', bumper.id)
-    sendBound('BUTTON', { ID: bumper.id, button: 'A' })
-  }, [bumper, bound, gameState.phase, gameState.question?.ID, sendBound])
-
-  // #246 — envoi de la réponse QCM mémorisée à la liaison (si contexte inchangé).
-  useEffect(() => {
-    const pending = pendingQcmRef.current
-    if (!pending || !bound || !bumper?.id) return
-    pendingQcmRef.current = null
-    if (pending.questionId !== (gameState.question?.ID ?? null)) return
-    if (gameState.phase !== 'STARTED' || gameState.question?.TYPE !== 'QCM') return
-    sendBound('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: pending.color })
-  }, [bound, bumper, gameState.phase, gameState.question?.ID, gameState.question?.TYPE, sendBound])
 
   // ARDOISE: reset text on question change
   useEffect(() => {
@@ -854,22 +806,11 @@ export default function VPlayerPage() {
 
     activateNoSleep()
 
-    // #118 (F7) — arbitrage utilisateur : le buzzer reste actif pendant une
-    // coupure (jamais désactivé), mais l'appui ne peut pas atteindre le
-    // serveur. Le mémoriser au lieu de le perdre — un seul appui retenu, le
-    // premier de cette coupure (ProcessButtonPress côté serveur ne retient de
-    // toute façon que le premier appui d'un bumper pour une question donnée).
-    // Envoi différé et validation de contexte : voir les effets F7 ci-dessus.
-    if (status !== 'connected' || !boundRef.current) {
-      if (!pendingBuzzRef.current) {
-        pendingBuzzRef.current = { questionId: gameState.question?.ID ?? null }
-        console.log('[VPlayer] Buzz mémorisé pendant la coupure (question', gameState.question?.ID, ')')
-      }
-      return
-    }
-
-    console.log('[VPlayer] Buzzing:', bumper.id)
-    sendBound('BUTTON', { ID: bumper.id, button: 'A' })
+    // #248 — le buzz attend l'accusé du serveur (TIME > 0 sur son bumper) et se
+    // renvoie tant qu'il n'est pas venu ; pendant une coupure il est retenu et
+    // envoyé à la reliaison (un seul appui par question, contexte revalidé).
+    if (bumper.TIME > 0) return
+    ackedSend.start('BUTTON', { ID: bumper.id, button: 'A' })
   }
 
   const handleQCMAnswer = (color) => {
@@ -877,17 +818,13 @@ export default function VPlayerPage() {
     if (gameState.phase !== 'STARTED') return
     if (gameState.question?.TYPE !== 'QCM') return
 
-    console.log('[VPlayer] QCM answer:', color)
+    if (bumper.TIME > 0) return
 
-    // #246 : connexion pas (encore) liée → mémoriser la réponse, envoyée à la
-    // liaison si la question et la phase sont toujours les mêmes.
-    if (!boundRef.current) {
-      pendingQcmRef.current = { color, questionId: gameState.question?.ID ?? null }
-      return
+    // #248 — la réponse attend l'accusé du serveur (écho de son bumper, TIME > 0)
+    // et se renvoie tant qu'il n'est pas venu ; un seul choix par question.
+    if (ackedSend.start('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: color })) {
+      pendingColorRef.current = color
     }
-
-    // Send VPLAYER_QCM_ANSWER message - wait for server confirmation
-    sendBound('VPLAYER_QCM_ANSWER', { ID: bumper.id, ANSWER_COLOR: color })
   }
 
   // #246 — « Reprendre ici » : cette connexion redevient la connexion liée
@@ -969,6 +906,22 @@ export default function VPlayerPage() {
     }
   }
 
+
+  // #248 (maquette vplayer_qcm_answer__ack) — pastille d'état de la réponse QCM /
+  // du buzz SPEEDY, même vocabulaire que l'ARDOISE (#246). « ✓ » seulement après
+  // l'accusé du serveur ; jamais d'invitation à réessayer.
+  let ackPill = null
+  if (ackedSend.status !== 'idle') {
+    const W = isQcmQuestion
+      ? { noun: 'réponse', sent: 'envoyée', recv: '✓ Réponse reçue', failTx: '✕ Réponse non reçue — la question est terminée', team: 'ℹ Votre équipe a déjà répondu', sending: 'Envoi de votre réponse…', resend: 'Renvoi de votre réponse…', paused: 'envoi de votre réponse…' }
+      : { noun: 'buzz', sent: 'envoyé', recv: '✓ Buzz reçu', failTx: '✕ Buzz non reçu — la question est terminée', team: 'ℹ Votre équipe a déjà buzzé', sending: 'Envoi de votre buzz…', resend: 'Renvoi de votre buzz…', paused: 'envoi de votre buzz…' }
+    if (ackedSend.status === 'acked') ackPill = { tone: 'ok', text: W.recv }
+    else if (ackedSend.status === 'served') ackPill = { tone: 'info', text: W.team }
+    else if (ackedSend.status === 'failed') ackPill = { tone: 'fail', text: W.failTx }
+    else if (status !== 'connected') ackPill = { tone: 'off', text: `⚠ Connexion perdue — votre ${W.noun} sera ${W.sent} dès le retour du réseau` }
+    else if (gameState.phase === 'PAUSED') ackPill = { tone: 'pause', prefix: '⏸ Jeu en pause · ', spin: true, text: W.paused }
+    else ackPill = { tone: 'sending', spin: true, text: ackedSend.resending ? W.resend : W.sending }
+  }
 
   // #214 — pause PROGRAMMÉE : image de fond depuis Question.MEDIA (pas
   // IMAGE_IS_CUSTOM, réservé au déclencheur manuel) — voir le commentaire
@@ -1169,8 +1122,19 @@ export default function VPlayerPage() {
           onMediaClick={gameState.entracte ? undefined : handleBuzz}
           onQCMAnswer={handleQCMAnswer}
           vplayerHasBuzzed={hasBuzzed}
+          vplayerPending={ackedSend.status === 'sending' || ackedSend.status === 'failed'
+            ? { status: ackedSend.status, color: pendingColorRef.current } : null}
         />
       </div>
+
+      {ackPill && (
+        <div className={`vplayer-ack-pill ov-${ackPill.tone}`} role="status" data-testid="vplayer-ack-pill">
+          {ackPill.prefix}
+          {ackPill.spin && <span className="vplayer-ack-spin">⏳</span>}
+          {ackPill.spin ? ' ' : ''}
+          {ackPill.text}
+        </div>
+      )}
 
       {/* ARDOISE keyboard overlay — shown for all ARDOISE phases, active only during STARTED.
           Kept OUTSIDE .entracte-content: position:fixed, même piège que le bandeau de

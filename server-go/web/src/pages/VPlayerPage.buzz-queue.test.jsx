@@ -182,7 +182,8 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
-      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
+      // #248 : la liaison (bound) est désormais la garde d'envoi — tant qu'elle n'est pas rétablie, rien ne part
+      playerConnectStatus: null,
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: false } },
       gameState: { phase: 'STARTED', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: true },
     }))
@@ -194,7 +195,8 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
-      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
+      // #248 : la liaison (bound) est désormais la garde d'envoi — tant qu'elle n'est pas rétablie, rien ne part
+      playerConnectStatus: null,
       bumpers: { [BUMPER_ID]: { NAME: 'Alice', IS_VIRTUAL: true, IS_VPLAYER: true, CONNECTED: false } },
       gameState: { phase: 'PREPARE', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: true },
     }))
@@ -206,6 +208,7 @@ describe('VPlayerPage — file d\'attente du buzz pendant une coupure (#118, F7)
     useGame.mockReturnValue(makeGameMock({
       ...mock,
       status: 'connected',
+      playerConnectStatus: { status: 'connected', id: BUMPER_ID, name: 'Alice' },
       gameState: { phase: 'STARTED', question: { ID: 'q1', TYPE: 'NORMAL' }, enrollmentActive: true },
     }))
     rerender(<VPlayerPage />)

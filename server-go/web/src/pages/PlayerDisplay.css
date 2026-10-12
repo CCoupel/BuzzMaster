@@ -3850,3 +3850,10 @@
   color: #fcd34d;
   pointer-events: none;
 }
+
+/* #248 — choix en attente d'accusé (tablette) : grille verrouillée, choix mis en avant. */
+.qcm-answer-item.vplayer-pending-dim { opacity: 0.35 !important; filter: grayscale(40%); }
+.qcm-answer-item.vplayer-pending-chosen { position: relative; outline: 4px solid #fff; outline-offset: 3px; }
+.qcm-answer-item.vplayer-pending-chosen::after { content: '⏳'; position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); font-size: 1.4em; }
+.qcm-answer-item.vplayer-pending-chosen.vplayer-pending-failed::after { content: '✕'; }
+.zone-media.vplayer-pending-pressed { opacity: 0.75; transform: translateY(2px); }
