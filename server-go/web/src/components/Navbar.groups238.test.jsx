@@ -416,14 +416,14 @@ describe('#238 — ENTRACTE 🍿 / 🎬 et Éclairage : icône + nom accessible'
     expect(screen.getByRole('button', { name: /fin d.entracte/i })).toBe(btn())
   })
 
-  it('actif : libellé visible COURT « REPRISE » (pas « FIN D\'ENTRACTE »), aria-label « Fin d\'entracte » conservé', () => {
+  it('actif : libellé visible COURT « REPRISE » (pas « FIN D\'ENTRACTE »), aria-label « Reprise — fin d\'entracte »', () => {
     useGame.mockReturnValue(gameMock(true))
     renderNavbar()
     const label = btn().querySelector('.entracte-label')
     expect(label.textContent).toBe('REPRISE')
     expect(btn().textContent).toContain('🎬')
     expect(btn().textContent).not.toMatch(/FIN D.ENTRACTE/i)
-    expect(btn().getAttribute('aria-label')).toMatch(/^fin d.entracte$/i)
+    expect(btn().getAttribute('aria-label')).toMatch(/^reprise — fin d.entracte$/i)
   })
 
   it('protège la largeur : le libellé actif n\'est pas plus long que « ENTRACTE » (barre sur une rangée)', () => {

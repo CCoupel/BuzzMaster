@@ -80,7 +80,7 @@ function LaunchEntry({ onLaunch, lockedByOther, variant, onNavigate }) {
 
 function Dropdown({ children, label }) {
   return (
-    <div className="navbar-menu-dropdown navgroup-dropdown" aria-label={label}>
+    <div className="navbar-menu-dropdown navgroup-dropdown" role="group" aria-label={label}>
       {children}
     </div>
   )
