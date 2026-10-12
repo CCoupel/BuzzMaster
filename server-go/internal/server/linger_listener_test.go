@@ -40,9 +40,13 @@ func TestLingerListener_Accept_ReturnsValidConnection(t *testing.T) {
 	defer ll.Close()
 
 	// Dial in background; collect errors via channel.
+	// #262: the server side must not close (RST, linger 0) before the client's
+	// Dial has returned, otherwise Dial itself can fail with ECONNRESET on loopback.
+	dialed := make(chan struct{})
 	dialErr := make(chan error, 1)
 	go func() {
 		c, err := net.Dial("tcp", ll.Addr().String())
+		close(dialed)
 		if err != nil {
 			dialErr <- err
 			return
@@ -55,6 +59,7 @@ func TestLingerListener_Accept_ReturnsValidConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Accept() returned error: %v", err)
 	}
+	<-dialed
 	conn.Close()
 
 	if err := <-dialErr; err != nil {
@@ -97,6 +102,13 @@ func TestLingerListener_Accept_SetLinger0_NoTimeWait(t *testing.T) {
 		t.Fatalf("Accept(): %v", err)
 	}
 
+	// #262: wait for the client's Dial to return before closing, otherwise the RST
+	// can reach Dial itself (loopback handshake completes before Accept).
+	client, ok := <-clientReady
+	if !ok || client == nil {
+		t.Fatal("client Dial failed")
+	}
+
 	// Close server side first — with SO_LINGER(0) this sends RST, skipping
 	// the FIN/ACK → TIME_WAIT path.
 	serverConn.Close()
@@ -104,10 +116,8 @@ func TestLingerListener_Accept_SetLinger0_NoTimeWait(t *testing.T) {
 	// Close the listener.
 	ll.Close()
 
-	// Drain client side.
-	if c, ok := <-clientReady; ok && c != nil {
-		c.Close()
-	}
+	// Release the client side.
+	client.Close()
 
 	// Brief OS scheduling pause (not a sleep waiting for TIME_WAIT — just
 	// enough for the kernel to process the RST).
@@ -173,30 +183,38 @@ func TestLingerListener_MultipleAccepts(t *testing.T) {
 
 	const n = 3
 	dialDone := make(chan struct{}, n)
+	release := make(chan struct{}) // closed once every Accept is done (#262)
 
-	// Dial n clients.
+	// Dial n clients; each keeps its connection open until released, so the
+	// server-side RST (linger 0) can never hit a Dial still in progress.
 	for i := 0; i < n; i++ {
 		go func() {
 			c, err := net.Dial("tcp", ll.Addr().String())
+			dialDone <- struct{}{}
 			if err == nil {
+				<-release
 				c.Close()
 			}
-			dialDone <- struct{}{}
 		}()
 	}
 
 	// Accept all n — each must succeed without error.
+	var accepted []net.Conn
 	for i := 0; i < n; i++ {
 		conn, err := ll.Accept()
 		if err != nil {
 			t.Errorf("Accept() #%d returned error: %v", i+1, err)
 			continue
 		}
-		conn.Close()
+		accepted = append(accepted, conn)
 	}
 
-	// Drain dial goroutines.
+	// Wait for every client's Dial to return, then close the server side.
 	for i := 0; i < n; i++ {
 		<-dialDone
 	}
+	for _, c := range accepted {
+		c.Close()
+	}
+	close(release)
 }
