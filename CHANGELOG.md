@@ -2,16 +2,18 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased] — v11.2 — Tests Go stabilisés (#257, #233)
+## [11.2.0] - 2026-10-12 — Milestone v11.2 : fiabilisation ARDOISE, manches et entractes, attribution groupée, filtrage des tablettes, tests stables
 
-### Fixed
+### Tests Go stabilisés (#257, #233)
+
+#### Fixed
 
 - **Tests Go instables de `cmd/server` (#257, #233)** — Trois tests échouaient par intermittence sous `go test -race` : deux tests de l'adaptateur de son (`TestQuestionSoundAdapter_Watchdog_CancelledByStop`, `TestQuestionSoundAdapter_CA12_SoundDisabled_ReleasesImmediately`) qui partageaient le singleton de configuration avec des tests parallèles, et un test de la chaîne son (`TestSoundChain_MotionCardTimerExpiry_PlaysNoSound`) en course de données sur la configuration. Les trois tests sont corrigés par l'injection de l'état du son et l'arrêt des minuteurs en fin de test. Deux autres tests, vus rouges sous charge, lisent désormais jusqu'à l'action attendue. L'absence d'écriture de la configuration partagée ne vaut que pour les tests de l'adaptateur de son. Mesure : 4 échecs sur 20 exécutions avant, 0 sur 20 après.
 - **Seul changement de production (#233)** — L'adaptateur de son reçoit un champ injectable `soundEnabled`. Sans injection (toujours le cas en production), il lit la configuration comme avant : aucun effet de production.
 
-## [Unreleased] — v11.2 — Manches de questions et entractes de manche (#245)
+### Manches de questions et entractes de manche (#245)
 
-### Added
+#### Added
 
 - **Manches de questions (#245)** — Les questions se regroupent en manches, repliables (préférence par navigateur) et réordonnables. Groupe « Sans manche » en premier. Une question est rattachée à une manche par son champ `ROUND_ID`. Sans manche créée, l'éditeur reste identique à v11.1.
 - **Création de manche avec deux entractes (#245)** — La création crée par défaut deux entractes standard, « Début de la manche <NOM> » en tête et « Fin de la manche <NOM> » en fin de manche. La case peut être décochée. Ce sont des entractes ordinaires, modifiables et supprimables.
@@ -19,47 +21,47 @@ Historique des versions du projet BuzzControl.
 - **Manches en jeu (#245)** — Titre de manche sur la TV pendant le READY de sa première question ; pastille de manche sur la TV ; pastille « Manche n/m · nom · p/q » sur l'anim. L'indicateur d'entracte est « 🎬 Entracte en cours » sur l'anim.
 - **Sauvegarde des manches (#245)** — `rounds.json` est dans le dossier des questions, donc emporté par la sauvegarde « questions ».
 
-### Changed
+#### Changed
 
 - **⚠️ « à suivre » propose les entractes (#245)** — « Question suivante » et « À suivre » proposent désormais toutes les entractes, y compris les entractes de manche. Avant, elles étaient sautées.
 - **⚠️ L'animateur peut terminer une entracte (#245)** — Il peut la terminer (« Terminer l'entracte ») mais jamais la déclencher manuellement : `ENTRACTE_SET{ACTIVE:true}` venant de l'anim est refusé (`WARN ENTRACTE_SET_ANIM_ACTIVATE_REFUSED`). « Lancer l'entracte » envoie le READY de l'entrée, comme toute entrée du déroulé.
 - **⚠️ Ordre de jeu (#245)** — « Sans manche » en premier, puis les manches dans leur ordre, puis `ORDER`, puis `ID`. La même règle est implémentée côté JS et côté Go, avec un test de parité.
 
-### Security
+#### Security
 
 - **Identité des questions (#245)** — Une question est identifiée par le nom de son dossier. Un `question.json` dont `ID` diffère du dossier fait refuser toute modification des manches (`INCONSISTENT_STORE`).
 - **Chemins validés (#245)** — Aucun chemin n'est construit à partir d'un ID non validé.
 - **`DELETE /files/...` restreint aux médias de question (#245)** — Il ne peut plus supprimer que les médias d'une question.
 - **`POST /questions` valide `number` (#245)** — Un numéro invalide est rejeté.
 
-### Fixed
+#### Fixed
 
 - **`ROUNDS_UPDATE` atomique (#245)** — Un échec d'écriture disque pendant l'application restaure `rounds.json`, supprime les entractes créées, ne supprime rien et renvoie `WRITE_FAILED`. Les refus sont globaux : rien n'est appliqué.
 - **`rounds.json` illisible (#245)** — Le serveur le traite comme « aucune manche » (ordre sans manches), en garde une copie `rounds.json.corrupt` et refuse toute modification de manches (`ROUNDS_FILE_UNREADABLE`) ; restaurez une sauvegarde ou corrigez le fichier.
 
-## [Unreleased] — v11.2 — Tablettes : réponses des autres équipes filtrées (#258)
+### Tablettes : réponses des autres équipes filtrées (#258)
 
-### Security
+#### Security
 
 - **Les tablettes ne reçoivent plus les réponses des autres équipes pendant les réponses ouvertes (#258)** — De `PREPARE` à `PAUSED`, une tablette ne reçoit plus les temps, couleurs répondues, boutons ni états des autres équipes : valeurs neutres, clés conservées. Les coéquipiers restent visibles. À partir de `STOPPED`, rien ne change.
 - **La bonne réponse n'est transmise qu'au REVEAL (#258)** — `QCM_CORRECT`, `ANSWER` et `MEDIA_ANSWER` sont retirés des tablettes avant `REVEALED`. Pour les cartes MEMOTION, la réponse d'une carte n'est transmise qu'une fois la carte révélée (ou terminée). L'état initial d'une tablette (`HELLO`) applique le même filtrage, et retire `ARDOISE_ANSWERS` et `LAUNCH_LOCK`.
 - **Note animateur jamais envoyée aux tablettes (#258)** — `EXPLANATION` est réservée à l'animateur.
 - **Limite connue** : le filtre ne couvre que le flux `/ws/player`. `/questions`, `/files/`, `/ws/logs` et les connexions `/ws/tv`, `/ws/anim` et `/ws/admin` restent non authentifiés (issue #259).
 
-## [Unreleased] — v11.2 — Corrections #255 et #256
+### Corrections #255 et #256
 
-### Fixed
+#### Fixed
 
 - **Sélecteur de réponses QCM : seules les équipes ou joueurs ayant répondu (#255)** — Un clic sur une réponse QCM ne sélectionnait pas seulement les équipes ayant buzzé : toute équipe ayant une couleur assignée était concernée. Le sélecteur ne compte et ne sélectionne désormais que les équipes ou joueurs ayant réellement répondu à la question courante.
 - **Nouveau champ `ANSWERED_COLOR` (#255)** — Sur chaque bumper, couleur de la réponse donnée à la question QCM courante, remise à `""` à chaque question. `ANSWER_COLOR` garde son sens (couleur assignée, ou dernière couleur pressée). Les LED et l'ambiance de révélation se basent sur `ANSWERED_COLOR`. Une sauvegarde sans la clé se charge avec `""`.
 - **Crédits de la manche précédente (#256)** — Entre la sélection d'une question rejouée et son START, les crédits de la manche précédente n'étaient plus comptés « déjà crédité ». Après un redémarrage, l'historique rechargé ne compte plus pour une question tant qu'elle n'est pas sélectionnée ou lancée.
 
-## [Unreleased] — v11.2 lot A — Fiabilisation ARDOISE, identité des joueurs virtuels, journalisation persistante (#246)
+### Fiabilisation ARDOISE, identité des joueurs virtuels, journalisation persistante (#246)
 
 > Retour terrain de la semaine bleue 2026 : le texte ARDOISE d'une équipe a disparu de l'admin et de la TV alors qu'il restait affiché sur la tablette ; des tablettes ont changé de nom sans action du joueur. Ce lot corrige les mécanismes identifiés et rend les incidents de ce type traçables.
 > Contrats : `contracts/websocket-actions.md`, `contracts/game-state.md`, `contracts/models.md`, `contracts/logging.md`, entrée `[20261010]` de `contracts/CHANGELOG.md`.
 
-### ⚠️ Changements de comportement
+#### ⚠️ Changements de comportement
 
 - **REVEAL bloqué en ARDOISE** : tant qu'une équipe attendue n'a pas confirmé son texte final, le REVEAL est refusé (`REVEAL_REFUSED`), tablette hors ligne comprise. L'animateur ou l'admin peut forcer avec « Révéler quand même… » (confirmation demandée). Les équipes non confirmées sont révélées avec leur dernier texte reçu ; leur icône de réception passe en glyphe grisé (libellé « Non confirmée » dans l'infobulle).
 - **Tablettes à recharger après mise à jour** : admin et animateur sont livrés avec le serveur, mais une tablette ouverte sur l'ancien bundle n'envoie pas le nouveau message de liaison. Recharger chaque tablette après la mise à jour.
@@ -77,7 +79,7 @@ Historique des versions du projet BuzzControl.
 - **ARDOISE sans réglage de points : l'équipe est créditée (#254)** — ⚠️ Une ancienne question ARDOISE sans réglage « Points : équipe / joueur » crédite désormais l'**équipe** (auparavant le joueur). SPEEDY reste au niveau joueur. Les réglages déjà enregistrés sont respectés.
 - **`SET_CREDIT_POINTS` ≤ 0 ignoré (#254)** — ⚠️ L'admin n'envoie plus de montant nul ou négatif aux tablettes de l'animateur. Une pénalité ne retire pas les points affichés sur les tablettes : elles gardent la dernière valeur positive.
 
-### Added
+#### Added
 
 - **Entrée « 🚀 Lancer la partie » dans le menu Préparation (#253)** — Remplace les boutons de la page de jeu et du Backstage. Toutes phases. Grisée avec une infobulle quand la popup est déjà ouverte sur un autre poste.
 - **`LAUNCH_LOCK` et `HELLO_ACK` (#253)** — `GameState.LAUNCH_LOCK` (propriétaire, expiration) n'est lu que par admin et anim. `HELLO_ACK { CLIENT_ID }` indique à chaque poste son identifiant de connexion.
@@ -110,7 +112,7 @@ Historique des versions du projet BuzzControl.
 - **Correction cachée sans effet sur « déjà créditée » (#252)** — Une correction cachée ne grise pas l'équipe, et n'empêche ni un crédit normal ni une attribution groupée pour la même question.
 - **`SCORE_CHANGE` (#252)** — Marqueur de la dernière modification manuelle de score (numéro de séquence, visibilité, équipes et joueurs concernés), diffusé à tous les écrans web. Les TV et tablettes l'utilisent pour ne rien animer sur une correction cachée.
 
-### Changed
+#### Changed
 
 - **Liaison connexion ↔ joueur virtuel (#246)** — Le client envoie `PLAYER_CONNECT {NAME, ID}` à chaque ouverture de sa WebSocket. Les actions joueur (`ARDOISE_INPUT`, `ARDOISE_FINAL`, `VPLAYER_QCM_ANSWER`, `BUTTON`, `FLIP_MEMORY_CARD`) d'une connexion non liée, ou portant un autre `ID`, sont refusées. Les simulations de l'admin et les actions TV et animateur ne sont pas concernées.
 - **Identité des joueurs virtuels (#246)** — Le nom envoyé par le client ne renomme plus le joueur : le nom serveur fait foi. Plus de liaison par nom sur la page joueur ni sur la page d'inscription. Noms de joueurs virtuels uniques, sans tenir compte de la casse.
@@ -118,7 +120,7 @@ Historique des versions du projet BuzzControl.
 - **Texte ARDOISE restauré après rechargement (#246)** — Le brouillon en cours est conservé dans `sessionStorage` (propre à l'onglet) et réaffiché au rechargement tant que la question ne change pas.
 - **Envoi en direct pendant la frappe (#246)** — `ARDOISE_INPUT` part au plus toutes les 200 ms pendant la saisie, et le dernier état est toujours envoyé. Avant, un texte tapé sans pause de 200 ms n'était envoyé qu'au STOP, où le serveur le rejetait.
 
-### Fixed
+#### Fixed
 
 - **Texte ARDOISE vidé sur l'admin et la TV (#246)** — Mécanismes identifiés pouvant laisser un texte vide ou tronqué côté serveur : un `ARDOISE_INPUT` vide d'une connexion ou d'un onglet périmé pouvait écraser la réponse d'une équipe ; une ressaisie sans pause suivie du STOP n'était jamais reçue (scénario reproduit). Au STOP, le final est désormais le texte affiché sur la tablette, avec accusé de réception et garde REVEAL. La cause réelle de l'incident n'est pas établie (pas de journal disponible) ; l'explication de la ressaisie est la plus probable.
 - **Pull-to-refresh sur la page joueur (#246)** — Le rafraîchissement par glissement vers le bas est désactivé sur la page joueur uniquement. Non vérifié sur appareils réels : voir `tests/procedures/ardoise-246.md`.
@@ -135,7 +137,7 @@ Historique des versions du projet BuzzControl.
 - **Liste des équipes créditées rediffusée après renommage ou suppression (#249)** — `AWARDED_TEAMS` est rediffusé après tout renommage ou suppression d'équipe, pour que les interfaces ne gardent pas un verrou « déjà créditée » périmé.
 - **Page Historique : suppressions d'équipe masquées (#249)** — Les événements `TEAM_DELETED` sont des lignes d'audit : ils n'apparaissent plus dans un groupe « Question #unknown », ni comme ligne à 0 point, ni dans le compteur. Ils restent dans `history.json`.
 
-### Validation
+#### Validation
 
 - **Automatisée** : `go test -race ./...` vert (9 paquets), `go vet` propre, Vitest 2875/2875, build web OK. Non-régression des autres modes de jeu verte.
 - **Manuelle** : à réaliser par l'utilisateur, procédure `tests/procedures/ardoise-246.md` (matériel réel, veille et bfcache, double onglet, création du fichier de log, rendu visuel des maquettes).
