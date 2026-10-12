@@ -246,6 +246,8 @@ reste une **hypothèse non prouvée** : les corrections (attente par condition) 
 
 22 fichiers de test utilisent encore `config.SetInstance`. Six n'ont aucun `t.Cleanup` : `internal/config/config_merge_test.go`, `internal/server/ai_generator_rafale_203_test.go`, `internal/server/ai_job_concurrency_test.go`, `internal/server/e2e_test.go`, `internal/server/http_lighting_config_test.go`, `internal/server/rafale_generate_endpoint_203_test.go`. Ils sont stables car séquentiels, et ne doivent pas devenir parallèles sans isolation préalable. Tout nouveau `SetInstance` doit restaurer l'instance précédente par `t.Cleanup`.
 
+Deux fichiers écrivent aussi le singleton sans le restaurer, via l'assistant `tw219qSetSoundEnabled` (`cmd/server/question_sound_219_test.go`, appel de `config.SetInstance`) : `cmd/server/sound_gate_dispatch_219_test.go` (6 appels) et `cmd/server/sound_gate_cache_219_test.go` (1 appel). Préférer `tw219qSetSoundEnabledFor`, qui injecte l'état du son dans l'adaptateur du test.
+
 ## Files Reference
 
 ### Critical Files to Port
