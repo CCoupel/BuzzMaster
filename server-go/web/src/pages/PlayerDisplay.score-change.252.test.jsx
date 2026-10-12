@@ -84,10 +84,12 @@ function mount(over, isVPlayer = false) {
   const utils = render(<PlayerDisplay {...props} />)
   return {
     ...utils,
-    update: (next) => { useGame.mockReturnValue(mock(next)); act(() => { utils.rerender(<PlayerDisplay {...props} />) }) },
+    update: (next) => { useGame.mockReturnValue(mock(next)); act(() => { utils.rerender(<PlayerDisplay {...props} />) }); settle() },
   }
 }
-const pointsValues = (c) => [...c.querySelectorAll('.points-animation .points-value')].map((e) => e.textContent)
+// #265 : « +X pts » = carte d'arrivée de la fusée ; update() laisse passer 1 s simulée (carte alors visible).
+const pointsValues = (c) => [...c.querySelectorAll('.tv-award-card .tv-award-pts')].map((e) => e.textContent)
+const settle = () => act(() => { vi.advanceTimersByTime(1000) })
 
 describe('PlayerDisplay — SCORE_CHANGE : hausse visible = comportement actuel (#252)', () => {
   beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); document.documentElement.requestFullscreen = vi.fn().mockResolvedValue(undefined) })
@@ -95,8 +97,7 @@ describe('PlayerDisplay — SCORE_CHANGE : hausse visible = comportement actuel 
   it('Critical — hausse avec DISPLAY:true : « +X pts » et célébration', () => {
     const m = mount({ teams: mkTeams(10, 5) })
     m.update({ teams: mkTeams(13, 5), scoreChange: sc(1, true, ['Les Bleus']) })
-    expect(pointsValues(m.container)).toEqual(['+3 pts'])
-    expect(confetti).toHaveBeenCalled()
+    expect(pointsValues(m.container)).toEqual(['+3 pts']) // #265 : fusée + étincelles à la place du confetti
   })
 
   it('compatibilité : hausse SANS SCORE_CHANGE (serveur antérieur) = animée comme avant', () => {
@@ -105,6 +106,7 @@ describe('PlayerDisplay — SCORE_CHANGE : hausse visible = comportement actuel 
     delete next.gameState.SCORE_CHANGE
     useGame.mockReturnValue(next)
     act(() => { m.rerender(<PlayerDisplay />) })
+    settle()
     expect(pointsValues(m.container)).toEqual(['+4 pts'])
   })
 })
@@ -118,7 +120,7 @@ describe('PlayerDisplay — correction cachée (SCORE_CHANGE.DISPLAY = false) (#
 
     expect(pointsValues(m.container)).toEqual([])
     expect(confetti).not.toHaveBeenCalled()
-    expect(m.container.querySelector('.points-animation')).toBeNull()
+    expect(m.container.querySelector('.tv-award-card')).toBeNull()
   })
 
   it('Critical — la hausse visible suivante n’anime QUE sa propre différence (pas celle de la correction cachée)', () => {
@@ -127,7 +129,6 @@ describe('PlayerDisplay — correction cachée (SCORE_CHANGE.DISPLAY = false) (#
     m.update({ teams: mkTeams(15, 5), scoreChange: sc(2, true, ['Les Bleus']) })  // +2 visible
 
     expect(pointsValues(m.container)).toEqual(['+2 pts']) // jamais +5
-    expect(confetti).toHaveBeenCalledTimes(1)
   })
 
   it('un nouvel UPDATE qui ne change pas le SEQ (ex. tick du chrono) ne rejoue ni n’annule rien', () => {
