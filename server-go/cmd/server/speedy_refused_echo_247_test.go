@@ -35,6 +35,7 @@ type frame247 struct {
 type room247 struct {
 	app  *App
 	ids  map[string]string // p1, p2 (équipe A), p3 (équipe B), p4 (non-VJoueur : buzzer physique, équipe A)
+	cids map[string]string // identifiant de connexion (clientID) de chaque VJoueur p1..p3
 	msgs map[string]chan frame247
 	seq  int
 }
@@ -95,11 +96,12 @@ func newRoom247(t *testing.T) *room247 {
 	app.engine.Ready("q-speedy", &game.Question{ID: "q-speedy", Question: "?", Type: game.QuestionTypeSpeedy})
 	app.engine.SetPhase(game.PhaseStarted)
 
-	r := &room247{app: app, ids: ids, msgs: map[string]chan frame247{}}
+	r := &room247{app: app, ids: ids, cids: map[string]string{}, msgs: map[string]chan frame247{}}
 	for _, name := range []string{"p1", "p2", "p3"} {
 		conn := dialWS(t, srv.URL, "/ws/player")
 		cid := learnClientID(t, app, conn)
 		app.wsHub.SetClientPlayerID(cid, ids[name])
+		r.cids[name] = cid
 		r.start(name, conn)
 	}
 	for _, name := range []string{"admin", "tv", "anim"} {
