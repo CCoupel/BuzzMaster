@@ -1848,6 +1848,11 @@ func TestHTTPServer_APIBuzzerStatus_EmptyMAC(t *testing.T) {
 	if !validCodes[w.Code] {
 		t.Errorf("Expected status 301/307, 400, or 404 for empty MAC, got %d", w.Code)
 	}
+	if w.Code == http.StatusMovedPermanently || w.Code == http.StatusTemporaryRedirect {
+		if loc := w.Header().Get("Location"); loc != "/api/buzzer/status" {
+			t.Errorf("Expected redirect Location /api/buzzer/status, got %q", loc)
+		}
+	}
 }
 
 func TestHTTPServer_APIBuzzerStatus_MethodNotAllowed(t *testing.T) {
