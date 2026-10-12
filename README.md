@@ -173,7 +173,7 @@ cd web && npm install && cd ..
 
 | Composant | Technologie |
 |-----------|-------------|
-| Serveur | Go 1.21+ |
+| Serveur | Go 1.26.9+ |
 | Frontend | React 18 + Vite |
 | Buzzers | ESP32-C3 + Arduino |
 | Communication | WebSocket, TCP, UDP |
