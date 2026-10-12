@@ -3579,28 +3579,30 @@ func (e *Engine) Reveal() string {
 	return answer
 }
 
-// ProcessButtonPress handles a button press from a buzzer
-func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) {
+// ProcessButtonPress handles a button press from a buzzer. It returns true only
+// when the press was actually recorded (#247): callers broadcast PAUSE/state
+// updates on acceptance only.
+func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) (accepted bool) {
 	e.mu.Lock()
 
 	if e.state.Phase != PhaseStarted {
 		log.Printf("[Engine] Ignoring button press, game not started")
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for MEMORY questions - admin controls the game
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory {
 		log.Printf("[Engine] Ignoring buzz for MEMORY question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for MEMOTION questions - admin controls the card selection
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
 		log.Printf("[Engine] Ignoring buzz for MEMOTION question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for RAFALE questions (v8.0.0, #107, contract §8.1) — no
@@ -3613,7 +3615,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
 		log.Printf("[Engine] Ignoring buzz for RAFALE question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for ENTRACTE questions (v9.0.0, #214) — "ni buzzer"
@@ -3626,21 +3628,30 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeEntracte {
 		log.Printf("[Engine] Ignoring buzz for ENTRACTE question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
+	}
+
+	// Ignore buzz for ARDOISE questions (#247) — answers go through
+	// ARDOISE_INPUT/ARDOISE_FINAL; a physical press must neither be recorded
+	// (bumper.Time / team.Status) nor trigger a PAUSE.
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeArdoise {
+		log.Printf("[Engine] Ignoring buzz for ARDOISE question from %s", bumperID)
+		e.mu.Unlock()
+		return false
 	}
 
 	bumper, ok := e.data.Bumpers[bumperID]
 	if !ok {
 		log.Printf("[Engine] Unknown bumper: %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Check if bumper already pressed
 	if bumper.Time > 0 {
 		log.Printf("[Engine] Bumper %s already pressed", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	teamID := bumper.Team
@@ -3650,13 +3661,13 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		bumper.Button = button
 		bumper.Status = "PAUSE"
 		e.mu.Unlock()
-		return
+		return true
 	}
 
 	team, ok := e.data.Teams[teamID]
 	if !ok {
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Phase 3: QCM VPlayer invalidation logic
@@ -3666,7 +3677,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		if !bumper.IsVPlayer && e.teamHasVPlayerUnsafe(teamID) {
 			log.Printf("[Engine] Buzz ignored: team %s has VPlayer, physical bumper %s cannot buzz on QCM", teamID, bumperID)
 			e.mu.Unlock()
-			return
+			return false
 		}
 	}
 
@@ -3674,7 +3685,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if team.Time > 0 {
 		log.Printf("[Engine] Team %s already buzzed, ignoring bumper %s", teamID, bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Record the press for both bumper and team
@@ -3713,6 +3724,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if callback != nil {
 		callback(bumperID, teamID, pressTime, button)
 	}
+	return true
 }
 
 // teamHasVPlayerUnsafe checks if a team has at least one VPlayer (virtual player)

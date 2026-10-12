@@ -662,9 +662,10 @@ func (a *App) setupCallbacks() {
 	}
 
 	// Buzzer press
-	a.engine.OnBuzzerPress = func(bumperID, teamID string, pressTime int64, button string) {
-		a.broadcastPause(bumperID)
-	}
+	// #247: no OnBuzzerPress wiring — the PAUSE is broadcast ONCE by the three
+	// press handlers (handleButton, handleSimulatedButton,
+	// handleVPlayerQCMAnswer), after updateBuzzStates, and only when
+	// ProcessButtonPress reports the press as accepted.
 
 	// QCM hint (when a wrong answer is invalidated)
 	a.engine.OnQCMHint = func(invalidatedColor string, remainingAnswers int) {
@@ -1844,7 +1845,9 @@ func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int
 	server.LogInfo(game.LogComponentWebSocket, "BUTTON from %s: %s", clientID, payload.Button)
 
 	// Process in engine
-	a.engine.ProcessButtonPress(clientID, timestamp, payload.Button)
+	if !a.engine.ProcessButtonPress(clientID, timestamp, payload.Button) {
+		return // #247: refused press → no PAUSE, no state broadcast
+	}
 
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(clientID)
@@ -1904,7 +1907,9 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "Simulated BUTTON from %s: %s (time: %d)", payload.ID, button, timestamp)
 
 	// Process in engine (same as real button press)
-	a.engine.ProcessButtonPress(payload.ID, timestamp, button)
+	if !a.engine.ProcessButtonPress(payload.ID, timestamp, button) {
+		return // #247: refused press → no PAUSE, no state broadcast
+	}
 
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(payload.ID)
@@ -4182,7 +4187,14 @@ func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
 		bumperID, bumper.Name, payload.AnswerColor, button, timestamp)
 
 	// Process as a button press (same as physical buzzer or simulated button)
-	a.engine.ProcessButtonPress(bumperID, timestamp, button)
+	if !a.engine.ProcessButtonPress(bumperID, timestamp, button) {
+		// #247: refused answer (repeat, team already buzzed…) → no PAUSE, no
+		// admin/TV/anim/buzzer broadcast. Only the answering VPlayer gets its
+		// own state back (#129 per-player echo): a re-sent answer whose first
+		// ack was lost (#248) must still see the server state.
+		a.broadcastUpdateToPlayer(bumperID)
+		return
+	}
 
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(bumperID)
