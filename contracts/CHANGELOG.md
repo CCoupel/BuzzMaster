@@ -2,6 +2,16 @@
 
 ---
 
+## [20261013] — `GameState.NETWORK` : état réseau du serveur, alerte admin plein écran (#267, v11.2.2, LOT-2)
+
+- **[NEW]** (ajout, ADDED) `game-state.md` §`NETWORK` : `{ONLY_LOCALHOST, IPS[], IGNORED_INTERFACES[{NAME, IP}], CHECKED_AT}`, toujours sérialisé, non persisté, diffusé à tous les clients web, renvoyé au `HELLO`. Critère « sans réseau » = aucune IPv4 utilisable hors boucle locale, APIPA **et interfaces virtuelles connues** (liste best-effort documentée — décision utilisateur 2026-10-13). Watchdog 30 s inchangé ; diffusion seulement sur changement.
+- **[CHANGED — précision]** `NETWORK_ONLY_LOCALHOST` (v5.6.2, #96) devient un **miroir hérité** de `NETWORK.ONLY_LOCALHOST`. Constat : le client web ne l'a **jamais recopié** dans son état (`useWebSocket.js`) — le bandeau #96 ne s'est jamais affiché ; corrigé par #267 (overlay admin + bandeau replié).
+- **[NEW]** `logging.md` §3.2 nonies : `NETWORK_LOST` (WARN), `NETWORK_RESTORED`, `NETWORK_IPS_CHANGED` (INFO) ; remplacent la ligne INFO `Network state updated`.
+- Les heartbeats UDP et `resolveServerIP` gardent `server.GetServerIPs()` tel quel : le critère d'alerte est plus strict que la diffusion, jamais l'inverse.
+- Aucune BREAKING : champ additif, ancien booléen conservé.
+
+---
+
 ## [20261013] — `FLIP_MEMORY_CARD.FLIP_ID` : retournement MEMORY/MEMOTION idempotent avec accusé (#248, v11.2.1, lot 5b)
 
 - **[NEW]** (ajout, ADDED) `websocket-actions.md` §FLIP_MEMORY_CARD : champ optionnel `FLIP_ID` (1–64 `[A-Za-z0-9_-]`), honoré pour un `vplayer` résolu. Déduplication **par bumper**, **avant** la vérification du tour, sous le même verrou que le retournement : un renvoi ne retourne jamais la carte une seconde fois, même si elle est revenue face cachée. Mémoire de 16 `FLIP_ID` par bumper, purgée au changement de question, sur `NEW_GAME` et à la suppression du bumper ; non persistée.

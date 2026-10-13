@@ -175,6 +175,19 @@ est inchangé.
   "GAINS": [ { "TEAM": "Les Rouges", "POINTS": 4 }, { "TEAM": "Les Bleus", "POINTS": 2 } ] } }
 ```
 
+## `NETWORK` — état réseau du serveur (v11.2.2, #267)
+
+| Propriété | Type | Défaut | Notes |
+|-----------|------|--------|-------|
+| NETWORK | `{ ONLY_LOCALHOST: boolean, IPS: string[], IGNORED_INTERFACES: {NAME: string, IP: string}[], CHECKED_AT: number }` | `{ONLY_LOCALHOST: false, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0}` | **Toujours sérialisé**, listes jamais `null`. Diffusé à tous les clients web (seul l'admin l'affiche). Non persisté ; recalculé au démarrage. `CHECKED_AT` en millisecondes epoch |
+| NETWORK_ONLY_LOCALHOST | `boolean` | `false` | **Hérité (v5.6.2, #96)**, conservé en miroir exact de `NETWORK.ONLY_LOCALHOST` ; aucun nouveau lecteur ne doit s'y abonner |
+
+- **Critère « sans réseau »** (`ONLY_LOCALHOST = true`, décision utilisateur 2026-10-13) : aucune adresse IPv4 **utilisable** sur une interface UP, c'est-à-dire après exclusion de la boucle locale (`127/8`), des adresses APIPA (`169.254/16`) **et des interfaces virtuelles connues** (`IGNORED_INTERFACES`). Liste d'exclusion **best-effort, par nom d'interface, insensible à la casse** : Windows `vEthernet`, `Virtual`, `WSL`, `Hyper-V`, `VMware`, `VirtualBox`, `Loopback` ; Linux/macOS préfixes `docker`, `br-`, `veth`, `virbr`, `tun`, `tap`, `wg`, `lxc`, `vmnet`, `utun`. Une interface ignorée **avec** une IPv4 est listée dans `IGNORED_INTERFACES` (diagnostic affiché par l'overlay) ; elle n'empêche jamais `ONLY_LOCALHOST` de passer à `true`. La liste est documentée dans `docs/DATA_MODELS.md` et ne vise aucune exhaustivité.
+- **`IPS`** : adresses retenues (non ignorées), dans l'ordre de `net.Interfaces()`. **Ne change pas** la source des heartbeats UDP ni de `resolveServerIP` (`server.GetServerIPs()`, inchangée) : le critère d'alerte est plus strict que la diffusion, jamais l'inverse.
+- **Détection** : au démarrage (`init`) puis par le watchdog toutes les **30 s** (inchangé) ; diffusion (`UPDATE`) **seulement quand `ONLY_LOCALHOST` ou `IPS` change**. Renvoyé au `HELLO` (état complet) : un admin qui se connecte pendant la panne voit l'alerte immédiatement.
+- **Règle d'écran (admin uniquement, toutes les pages `/admin/*`)** : `ONLY_LOCALHOST = true` ⇒ overlay plein écran (`role="alertdialog"`) ; « Continuer quand même » le replie en **bandeau rouge persistant** jusqu'au retour du réseau ; toute **nouvelle** transition `false → true` rouvre l'overlay ; `true → false` retire overlay et bandeau et affiche un message bref « Réseau rétabli — <IP> ». TV, anim et tablette ignorent le champ. Maquette : `admin_network_overlay__no_network`.
+- Journal : `NETWORK_LOST` / `NETWORK_RESTORED` (`contracts/logging.md` §3.2 nonies).
+
 ## Question en cours
 
 ```typescript
@@ -674,7 +687,7 @@ clients connectés ni minuteur vivant ; noter que `Entracte`, l'état, est exclu
 `EntracteConfig`, le réglage, est persisté — deux champs voisins, deux cycles de vie opposés) ; `Delay` (minuteur du round courant, réaffecté à chaque
 `Start`/`Ready`/décompte MEMOTION — ce n'est pas un réglage, contrairement à
 `GameSettings.Game.DefaultDelay`, #150, qui lui est le vrai réglage stocké) ;
-`NetworkOnlyLocalhost` (recalculé au démarrage) ; `VirtualPlayerCount` (dérivé du nombre de
+`NetworkOnlyLocalhost` et `Network` (recalculés au démarrage, #267) ; `VirtualPlayerCount` (dérivé du nombre de
 buzzers réellement enrôlés) ; `Backgrounds`/`NewGameBackgrounds` (déjà persistés
 indépendamment dans `data/files/backgrounds/backgrounds.json`, chargés par `loadBackgrounds()`/
 `loadNewGameBackgrounds()` **avant** `LoadState()` dans la séquence de démarrage — les exclure

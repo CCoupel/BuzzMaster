@@ -130,6 +130,16 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `FLIP_IGNORED` | INFO | Premier envoi d'un `FLIP_ID` ignoré (`NOT_TURN`, `NOT_FLIPPABLE`, `NOT_PLAYABLE`, `CARD_SCOPE`) | `client`, `player_id`, `flip_id`, `card`, `motion_card`, `reason` |
 | `FLIP_ID_INVALID` | WARN | `FLIP_ID` hors format → traité comme absent | `client`, `type`, `len` |
 
+### 3.2 nonies Réseau du serveur (v11.2.2, #267)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `NETWORK_LOST` | WARN | Le watchdog (30 s) ou le démarrage constate `NETWORK.ONLY_LOCALHOST` `false → true` (aucune IPv4 utilisable) | `ips=[]`, `ignored` (liste `nom:ip`), `interval_s` |
+| `NETWORK_RESTORED` | INFO | `NETWORK.ONLY_LOCALHOST` `true → false` | `ips`, `ignored`, `lost_for_s` |
+| `NETWORK_IPS_CHANGED` | INFO | Les adresses retenues changent sans transition de `ONLY_LOCALHOST` | `ips`, `prev_ips` |
+
+Remplace la ligne INFO `Network state updated: NETWORK_ONLY_LOCALHOST=…` (v5.6.2). Un seul événement par transition : pas de ligne à chaque passage du watchdog.
+
 ### 3.3 Diffusion
 
 | Événement | Niveau | Quand | Champs |
