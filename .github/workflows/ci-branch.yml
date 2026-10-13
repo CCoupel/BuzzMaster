@@ -1,0 +1,42 @@
+name: CI (milestone branches)
+
+# Pre-validation CI (infra.md §3bis C10): runs only scripts/ci.sh (commands.ci), without
+# publishing or deploying. Its green verdict on the exact SHA gates issue closure and the
+# merge/tag barrier of PUBLISH PROD. release.yml runs the very same script before building.
+on:
+  push:
+    branches:
+      - 'milestone/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.26'
+  NODE_VERSION: '20'
+
+jobs:
+  testing:
+    name: 🧪 CI (scripts/ci.sh)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: server-go/web/package-lock.json
+
+      # commands.ci (project-config.json) — single CI script, same steps as local qa/deploy
+      - name: Run CI script
+        run: scripts/ci.sh

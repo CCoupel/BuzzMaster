@@ -31,7 +31,7 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 - **Livré en v11.2** : #243, #244, #245 (manches, entractes), #246, #249 à #258, #233/#257 (tests Go stabilisés), #260 (govulncheck : Go 1.26.9, x/net v0.60.0, gorilla/websocket v1.5.3), #262/#263 (tests fragiles sur le runner CI).
 - **À venir — milestone v11.2.1** (aucune branche créée) : #265 animation d'attribution de points à plusieurs équipes (cadrage et maquettes à faire) ; #264 et #188 tests instables ; #261 panic d'arrêt `close of closed channel` ; #247, #248, #189 bugs ; #242 a11y navbar. #259 (endpoints sans authentification) : milestone dédié ultérieur, non planifié.
 - **Leçons de release (permanentes)** :
-  1. Release PROD : `test-branch.yml` doit être vert sur le commit exact avant tout merge dans `main` et tout tag ; `govulncheck` propre avant le tag (`docs/RELEASE_PROCEDURE.md` §9bis, `.claude/agents/environments/publish.prod.md`, `.claude/agents/qa.md`). Un tag ne sert jamais de test.
+  1. Release PROD : `ci-branch.yml` doit être vert sur le commit exact avant tout merge dans `main` et tout tag ; `govulncheck` propre avant le tag (`docs/RELEASE_PROCEDURE.md` §9bis, `.claude/agents/environments/publish.prod.md`, `.claude/agents/qa.md`). Un tag ne sert jamais de test.
   2. Quatre tentatives pour 11.2.0 : govulncheck (Go 1.25.14), `TestLingerListener_SetsLinger`, `TestDNSServer_Start_UsesConfiguredPort`.
   3. Un revert de merge impose d'annuler le revert avant de re-merger.
   4. Go 1.26.9 minimum. `release.yml` ne publie que Windows, Linux arm64 et le firmware.

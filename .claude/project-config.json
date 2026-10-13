@@ -79,7 +79,8 @@
     "lint": "cd server-go && go vet ./...",
     "audit": "cd server-go && govulncheck ./...",
     "typecheck": "",
-    "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out"
+    "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
+    "ci": "scripts/ci.sh"
   },
   "extended_commands": {
     "repo_url": "https://github.com/CCoupel/BuzzMaster",
@@ -93,8 +94,8 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.17.2",
-    "commit": "33dcea226860f34eb414d8244faa937de131bf59"
+    "tag": "v3.18.6",
+    "commit": "7df2831148b4d548102c372184a52691b0f26098"
   },
   "docs": {
     "mockup_dir": "docs/mockup"

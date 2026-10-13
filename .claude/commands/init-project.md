@@ -1458,7 +1458,8 @@ Si `testing.regression_at_qa`, `testing.full_regression_at`, `testing.coverage_m
 Créer les labels de phase sur le repo GitHub (idempotent — `--force` met à jour si déjà existant) :
 
 ```bash
-gh label create "PLANNING"  --color "0075ca" --description "Issue en cours de planification" --force
+gh label create "PLANNING"  --color "0075ca" --description "Plan à élaborer ou à valider"      --force
+gh label create "PRET"      --color "bfdadc" --description "Plan validé, développement pas encore lancé" --force
 gh label create "EN COURS"  --color "e4e669" --description "Issue en cours de développement" --force
 gh label create "EN REVIEW" --color "d876e3" --description "Issue en cours de revue de code"  --force
 gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de tests QA"       --force
@@ -2373,7 +2374,8 @@ Puis appliquer la sous-section **"Memoire projet et squelettes lus au demarrage"
 S'assurer que les labels de suivi existent sur le repo (même commande que l'init, idempotent) :
 
 ```bash
-gh label create "PLANNING"  --color "0075ca" --description "Issue en cours de planification" --force
+gh label create "PLANNING"  --color "0075ca" --description "Plan à élaborer ou à valider"      --force
+gh label create "PRET"      --color "bfdadc" --description "Plan validé, développement pas encore lancé" --force
 gh label create "EN COURS"  --color "e4e669" --description "Issue en cours de développement" --force
 gh label create "EN REVIEW" --color "d876e3" --description "Issue en cours de revue de code"  --force
 gh label create "EN QA"     --color "f9d0c4" --description "Issue en cours de tests QA"       --force
@@ -2401,7 +2403,7 @@ Synchronisation terminee.
   Verification post-nettoyage       : N doublons residuels (dont N assumes), N liens casses, N orphelins (etape d5e)
   CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
   CLAUDE.md table Agents Disponibles : mis à jour (N lignes — documentation uniquement)
-  Labels GitHub                     : vérifiés (PLANNING, EN COURS, EN REVIEW, EN QA, DONE)
+  Labels GitHub                     : vérifiés (PLANNING, PRET, EN COURS, EN REVIEW, EN QA, DONE)
   Audit contexte (/context-audit)   : N corriges (Auto), N arbitres, N laisses (etape d7b)
   Schema infrastructure             : [convertit vers environments[] | deja a jour | inchange (refuse)]
 

@@ -12,9 +12,9 @@ description: "Adaptations projet BuzzControl pour PUBLISH PROD. Base generique :
 
 Avant **tout merge dans `main`** et **tout tag** :
 
-1. Un run **vert** de `test-branch.yml` sur le **commit exact** à publier :
+1. Un run **vert** de `ci-branch.yml` sur le **commit exact** à publier :
    ```bash
-   gh run list --workflow test-branch.yml --commit <sha>
+   gh run list --workflow ci-branch.yml --commit <sha>
    ```
 2. `govulncheck` propre juste avant le tag (même audit que `release.yml`).
 3. Si un run échoue : analyser, corriger sur la branche, relancer. **Ne jamais merger ni tagger** tant que le run n'est pas vert.
@@ -25,4 +25,4 @@ Sans ce run vert sur le SHA exact, l'ordre PUBLISH PROD est **bloqué** : le dep
 ## Rappel
 
 - La CI de release (`release.yml`) reconstruit depuis le tag : elle ne remplace pas la validation préalable.
-- Tout changement de `release.yml` doit être reflété dans `test-branch.yml` (même version de Go, mêmes étapes).
+- Tout changement de `release.yml` doit être reflété dans `ci-branch.yml` (même version de Go, mêmes étapes).

@@ -14,10 +14,10 @@ env:
 
 jobs:
   # ============================================
-  # STAGE 0: Testing (unit tests + race detector)
+  # STAGE 0: CI (scripts/ci.sh — build, tests -race, vet, govulncheck)
   # ============================================
   testing:
-    name: 🧪 Test (race)
+    name: 🧪 CI (scripts/ci.sh)
     runs-on: ubuntu-latest
     needs: checking
 
@@ -37,43 +37,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: server-go/web/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: server-go/web
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: server-go/web
-        run: npm run build
-
-      # server-go/web/embed.go declares `//go:embed all:dist`, and
-      # cmd/server/dist/ is gitignored — on a clean checkout the directory
-      # doesn't exist, so `go build`/`go test` fail at compile time before a
-      # single test runs (#153). Mirrors the compiling job's sequence above
-      # exactly rather than a stub dist/, since internal/server/
-      # fonts_route_test.go exercises the real embedded fonts.
-      - name: Copy dist for embedding
-        run: |
-          rm -rf server-go/cmd/server/dist
-          cp -r server-go/web/dist server-go/cmd/server/dist
-
-      - name: Run tests with race detector
-        working-directory: server-go
-        env:
-          CGO_ENABLED: 1
-        run: go test -race -timeout=20m ./...
-
-      # commands.lint (project-config.json)
-      - name: Lint (go vet)
-        working-directory: server-go
-        run: go vet ./...
-
-      # commands.audit (project-config.json) — blocking: a known vulnerability
-      # in a reachable dependency/stdlib fails the release before any publish.
-      - name: Audit (govulncheck)
-        working-directory: server-go
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+      # commands.ci (project-config.json) — the single CI script (infra.md §3bis C3/C11):
+      # frontend build + embed, go build, tests with race detector, go vet, govulncheck.
+      # Identical to ci-branch.yml and to what qa/deploy run locally — no CI-only step.
+      - name: Run CI script
+        run: scripts/ci.sh
 
   # ============================================
   # STAGE 1: Checking (extract version from tag + coherence check)
