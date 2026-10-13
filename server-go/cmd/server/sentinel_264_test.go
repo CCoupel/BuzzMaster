@@ -106,3 +106,17 @@ func assertNoAction264(t *testing.T, app *App, conn *websocket.Conn, action, why
 		t.Errorf("%s : %s ne doit pas être reçu (vu : %v)", why, action, actions)
 	}
 }
+
+// eventually264 (#271) : attend que cond devienne vraie — par ÉVÉNEMENT, échéance large, échec bruyant. Le pas
+// d'interrogation n'est pas une fenêtre d'observation : on sort dès que la condition est vraie. À réserver aux
+// effets asynchrones qu'aucun message WebSocket ne signale (son, ambiance) ; ne prouve pas une absence.
+func eventually264(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(eventDeadline264)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s : non atteint dans %v", what, eventDeadline264)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+}

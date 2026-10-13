@@ -428,7 +428,7 @@ func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *tes
 	if testing.Short() {
 		t.Skip("attend des minuteurs réels (≈ 6 s), exclu de la boucle rapide (-short)")
 	}
-	run := func(t *testing.T, name string, newGameAt func(e *env243)) {
+	run := func(t *testing.T, name string, newGameAt func(t *testing.T, e *env243, countdown, ticks <-chan struct{})) {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv243(t)
 			ticks := make(chan struct{}, 100)
@@ -438,11 +438,18 @@ func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *tes
 				default:
 				}
 			}
+			countdown := make(chan struct{}, 100)
+			e.app.engine.OnCountdownTick = func(ct int) {
+				select {
+				case countdown <- struct{}{}:
+				default:
+				}
+			}
 			e.app.engine.SetPhase(game.PhaseStopped)
 			e.app.engine.Ready("", &game.Question{ID: "q-timer", Type: game.QuestionTypeArdoise})
 			e.app.engine.SetPhase(game.PhaseReady)
 			e.app.engine.Start(2) // décompte 3 s puis chrono 2 s
-			newGameAt(e)
+			newGameAt(t, e, countdown, ticks)
 			for len(ticks) > 0 {
 				<-ticks
 			}
@@ -461,13 +468,21 @@ func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *tes
 			}
 		})
 	}
-	run(t, "pendant le décompte", func(e *env243) { time.Sleep(500 * time.Millisecond) })
-	run(t, "pendant le chrono (STARTED)", func(e *env243) {
-		deadline := time.Now().Add(5 * time.Second)
-		for e.app.engine.GetPhase() != game.PhaseStarted && time.Now().Before(deadline) {
-			time.Sleep(50 * time.Millisecond)
+	// #271 : on attend le tick du minuteur (événement, échéance large) au lieu d'une pause fixe.
+	waitTick := func(t *testing.T, what string, ch <-chan struct{}) {
+		t.Helper()
+		select {
+		case <-ch:
+		case <-time.After(eventDeadline264):
+			t.Fatalf("%s : aucun tick dans %v", what, eventDeadline264)
 		}
-		time.Sleep(300 * time.Millisecond)
+	}
+	run(t, "pendant le décompte", func(t *testing.T, e *env243, countdown, ticks <-chan struct{}) {
+		waitTick(t, "décompte", countdown)
+	})
+	run(t, "pendant le chrono (STARTED)", func(t *testing.T, e *env243, countdown, ticks <-chan struct{}) {
+		eventually264(t, "phase STARTED", func() bool { return e.app.engine.GetPhase() == game.PhaseStarted })
+		waitTick(t, "chrono", ticks)
 	})
 }
 
