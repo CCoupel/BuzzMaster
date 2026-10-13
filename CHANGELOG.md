@@ -6,7 +6,9 @@ Historique des versions du projet BuzzControl.
 
 ### Changed
 
-- **Dépendances web (#268)** — `react-router-dom` passe à 6.30.6 (routage de l'admin inchangé). Porte CI `npm audit --omit=dev --audit-level=high` **provisoire** (`scripts/ci.sh`, étape 6) : elle ne bloque que les vulnérabilités `high`. Deux `moderate` restent sur react-router, leur correctif n'existe qu'en 7.x (rupture, hors périmètre). Le périmètre complet et la migration vite/vitest sont reportés en #270.
+- **Dépendances web (#268)** — `react-router-dom` passe à 6.30.6 (routage de l'admin inchangé). Deux vulnérabilités `moderate` restent sur react-router : leur correctif n'existe qu'en 7.x (rupture, hors périmètre).
+- **Outillage web (#270)** — Migration vite 8.3.4, `@vitejs/plugin-react` 6.1.2, vitest 5.0.4 (et `@vitest/coverage-v8` 5.0.4), jsdom 30.1.2. **Node 22 est requis** pour le build et les tests web (jsdom 30 exige Node 22.22.2 ou plus) ; la CI passe en Node 22. Les commentaires CSS de `AmbiancePage.css` ne contiennent plus `*/` (refusé par lightningcss). Côté tests, les mocks de `/api/categories` sont ajustés, puisque vitest 5 remonte en erreur les exceptions de rendu ; aucun test n'est désactivé ni aucune assertion retirée.
+- **Porte npm audit complète (#270)** — `npm audit --audit-level=high` couvre désormais toutes les dépendances (production et développement) dans `scripts/ci.sh` (étape 6) et dans la procédure de release. Elle remplace la porte provisoire de #268, limitée à la production.
 
 ### Fixed
 

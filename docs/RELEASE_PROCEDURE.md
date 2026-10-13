@@ -332,7 +332,7 @@ Avant de merger dans `main` et de créer le tag, vérifier :
    ```
    Il exécute les mêmes étapes que le job « Test (race) » de `release.yml`, sans rien publier.
 2. **`govulncheck` et `npm audit` propres juste avant le tag** : `govulncheck` reprend le même audit que `release.yml` (`govulncheck@latest`, `govulncheck ./...`, toolchain de la CI) ;
-   `npm audit` reprend la porte de `scripts/ci.sh` (`cd web && npm audit --omit=dev --audit-level=high`). Cette porte npm est **provisoire** (#268) : elle ne couvre que les vulnérabilités `high` de production, le périmètre complet arrive avec #270. En plus de la QA.
+   `npm audit --audit-level=high` reprend la porte de `scripts/ci.sh` (étape 6, `cd web`, toutes dépendances, seuil `high`). En plus de la QA.
 3. **En cas d'échec** : analyser, corriger sur la branche, relancer le run. **Aucun merge dans `main` et aucun tag** tant que ce run n'est pas vert.
    Un tag ne sert jamais de test.
 
@@ -501,7 +501,7 @@ curl -s http://localhost/version
 [ ] 7.  Backlog mis à jour
 [ ] 8.  Documentation utilisateur mise à jour (si nécessaire)
 [ ] 9.  Changements commités
-[ ] 10bis. Run vert de ci-branch.yml sur le commit exact + govulncheck et npm audit propres (porte npm provisoire, avant merge et tag)
+[ ] 10bis. Run vert de ci-branch.yml sur le commit exact + govulncheck et npm audit propres (avant merge et tag)
 [ ] 10. Commits poussés
 [ ] 11. Tag créé et poussé (déclenche CI)
 [ ] 12. 🤖 CI surveillée par Claude (6 jobs verts ✅ : checking, testing, compiling-firmware,

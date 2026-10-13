@@ -313,6 +313,8 @@ Pipeline GitHub Actions (`.github/workflows/release.yml`) déclenché sur push `
    - Génère checksums SHA256 pour vérification intégrité
    - Publie la release GitHub
 
+**Frontend web (#270)** : les workflows CI (`ci-branch.yml`, `release.yml`) utilisent **Node 22** (`NODE_VERSION: '22'`, `setup-node` résout la dernière 22.x). Le build web repose sur vite 8 (bundler rolldown, CSS minifié par lightningcss). `scripts/ci.sh` étape 6 exécute `govulncheck ./...` puis `npm audit --audit-level=high` (toutes dépendances) dans `server-go/web`.
+
 **Versioning unifié** : tous les fichiers de version (`config.json`, `package.json`, `platformio.ini`,
 `version.txt`) doivent être bumpes manuellement **avant tagging** et correspondent exactement au
 tag de release.
