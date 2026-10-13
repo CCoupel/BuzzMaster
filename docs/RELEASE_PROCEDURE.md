@@ -19,8 +19,8 @@ Ce document décrit la procédure complète pour publier une nouvelle version de
 > **Note de migration — 2026-08-07.** L'ancienne règle propre au projet (3 segments :
 > `x` = architecture, `y` = fonctionnalité, `z` = toujours 0 en release) est **abandonnée** au
 > profit du schéma à 4 segments décrit ci-dessous, repris de
-> `.claude/commands/context/COMMON.md` §5 **à une exception près, la parité de `Y`** (voir
-> l'encadré ci-dessous). Les versions publiées avant cette date (jusqu'à **v6.1.1** incluse)
+> `.claude/commands/context/COMMON.template.md` §5 (parité de `Y` alignée avec le template depuis
+> le 2026-10-13, voir l'encadré ci-dessous). Les versions publiées avant cette date (jusqu'à **v6.1.1** incluse)
 > suivent l'ancienne règle : voir `CHANGELOG.md` pour l'historique.
 
 ### Format
@@ -42,21 +42,12 @@ Format prod : X.Y.Z       (3 segments — le « a » n'est jamais publié)
 > IA). Désormais **seule une rupture de compatibilité des données** incrémente X : une
 > fonctionnalité, même volumineuse, avance `Y`.
 
-> ⚠️ **Écart assumé avec le template — parité de `Y`.**
-> `.claude/commands/context/COMMON.md` §5 énonce l'inverse : « Impair = dev, pair = prod », et son
-> exemple est cohérent avec cet énoncé (dev en 1.1/1.3/1.5, prod en 1.2/1.4/1.6).
-> **Ce projet retient la convention opposée** — dev/milestone sur `Y` **pair**, release sur `Y`
-> **impair** — sur décision utilisateur, parce qu'elle correspond à la pratique réelle :
-> le milestone GitHub **`v6.0`** (Y=0, pair) a produit la release **v6.1.1** (Y=1, impair).
->
-> Elle est aussi la seule des deux qui reste cohérente après une rupture de compatibilité des
-> données : `X+1` remet `Y=0`, qui est directement un numéro de **dev** valide. Avec la parité du
-> template, `Y=0` serait un numéro de prod et il faudrait aussitôt sauter à `Y=1` — ce que
-> `COMMON.md` prévoit d'ailleurs explicitement, au prix d'un cas particulier dont on se passe ici.
->
-> **Seule la parité change. Toutes les opérations ci-dessous sont identiques à celles du
-> template** : les deux conventions décrivent la même mécanique en opposition de phase.
-> `COMMON.md` n'a **pas** été modifié — l'écart est ici, documenté et volontaire.
+> ℹ️ **Parité de `Y` — alignée avec le template depuis la sync v3.18.6 (2026-10-13).**
+> `.claude/commands/context/COMMON.template.md` §5 énonce désormais la même règle que ce projet :
+> dev/milestone sur `Y` **pair**, release sur `Y` **impair** (convention retenue ici dès v6.0 sur
+> décision utilisateur, parce qu'elle correspond à la pratique réelle : le milestone **`v6.0`** a
+> produit la release **v6.1.1**, et `X+1` remet `Y=0`, directement un numéro de dev valide).
+> L'ancien écart documenté ici (le template disait « impair = dev, pair = prod ») n'existe plus.
 
 ### Les 6 opérations
 

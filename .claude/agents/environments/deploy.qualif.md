@@ -60,7 +60,7 @@ Pas de ssh/journalctl — un echec ici est un echec de lancement local ou de smo
 
 ```
 SendMessage({
-  to: "main",
+  to: "team-lead",
   content: "DEPLOY FAILED
 Environnement : QUALIF
 Version  : v[X.Y.Z.a]

@@ -1,6 +1,6 @@
 # Mémoire Claude - BuzzControl
 
-> Règles techniques et workflows : `.claude/commands/context/COMMON.md` (chargé automatiquement par les commandes)
+> Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
 ## Démarrage de session
@@ -76,7 +76,6 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 - **#234 (pastille son Navbar)** demandée par l'utilisateur après validation de #230, développée/review/QA en une passe, PUIS corrigée une seconde fois suite retour utilisateur (capture d'écran) : la Navbar était correcte dès le premier coup (2 icônes distinctes), mais le bandeau de `/admin/ambiance` n'avait qu'une pastille dédiée à l'éclairage — incohérent avec le sous-titre "Éclairage et bruitages" déjà à 2 canaux depuis #230. Seconde pastille ajoutée + une collision de classe CSS trouvée au passage par code-reviewer (pastille interne de l'onglet Son partageait `.ambiance-status-badge` avec le bandeau éclairage) et corrigée. **Fermée avec validation manuelle utilisateur.**
 - **Leçon de planning notée par le planner lui-même** : 2 erreurs similaires sur ce chantier (omission `handleConfig`/`sound` en #230, contradiction de handoff en #234) — même cause : raisonner sur la structure d'un fichier sans l'ouvrir jusqu'au bout / vérifier les simulations sans vérifier les assertions.
 - **QUALIF poussée à v11.0.0.4** au fil des corrections (4 cycles BUILD+PUBLISH+DEPLOY dans la même session : 11.0.0.1 ad hoc → 11.0.0.2 milestone initial → 11.0.0.3 avec #234 v1 → 11.0.0.4 avec le correctif bandeau).
-- **Règle apprise :** dès qu'une modification demandée pendant une session de test utilisateur en cours passe review+QA, relancer QUALIF immédiatement sans demander.
 
 ## #230 DONE — milestone v11.0 complet côté dev (2026-09-21)
 
