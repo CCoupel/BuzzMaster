@@ -2,6 +2,15 @@
 
 ---
 
+## [20261013] — `POINTS_RULE` : applicabilité par type et validation à l'enregistrement (#190, v11.2.2, LOT-5)
+
+- **[CHANGED]** `question-types.md` §6.2 : modes acceptés **par type effectif** — binaire (`SPEEDY`, `QCM`) : `STARS`, `FIXED` ; progression (`MEMORY`, `RAFALE`) : `STARS_PRORATA`, `STARS`, `FIXED`, `PER_UNIT` (décision utilisateur 2026-10-13). Trois refus HTTP 400 au `POST /questions` : `POINTS_RULE_INVALID_MODE`, `POINTS_RULE_MODE_NOT_APPLICABLE`, `POINTS_RULE_VALUE_REQUIRED` (`VALUE` entier 1–999 pour `FIXED`/`PER_UNIT`).
+- **[CHANGED — précision]** §6.2/§6.3 : le défaut choisi dans l'éditeur **n'écrit pas** `POINTS_RULE` (résolution par registre, #187 cycle 5) ; une règle explicite survit à un changement de type et est remise au défaut par l'éditeur si elle devient inapplicable.
+- **[CHANGED — précision]** parité d'affichage : grille anim/TV et gain prévisionnel suivent la règle de la carte (plus seulement les ★) via une fonction JS miroir de `motionCardPointsForOutcome`.
+- Aucune BREAKING : validation à l'enregistrement seulement ; cartes existantes lues et jouées inchangées ; aucun mode ni champ nouveau.
+
+---
+
 ## [20261013] — `GameState.NETWORK` : état réseau du serveur, alerte admin plein écran (#267, v11.2.2, LOT-2)
 
 - **[NEW]** (ajout, ADDED) `game-state.md` §`NETWORK` : `{ONLY_LOCALHOST, IPS[], IGNORED_INTERFACES[{NAME, IP}], CHECKED_AT}`, toujours sérialisé, non persisté, diffusé à tous les clients web, renvoyé au `HELLO`. Critère « sans réseau » = aucune IPv4 utilisable hors boucle locale, APIPA **et interfaces virtuelles connues** (liste best-effort documentée — décision utilisateur 2026-10-13). Watchdog 30 s inchangé ; diffusion seulement sur changement.

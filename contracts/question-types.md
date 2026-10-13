@@ -503,12 +503,31 @@ pas à corriger** — seul le total exact importe.
 **`5 points / 8 paires`** comme cas nommé obligatoire — il attrape à lui seul les deux erreurs
 d'ordre d'opérations.
 
+#### Applicabilité par type et validation à l'enregistrement (v11.2.2, #190) — décision utilisateur du 2026-10-13
+
+L'éditeur de carte expose `POINTS_RULE` (contrôle « Points », face RECTO, replié sur le défaut). Les modes
+proposés dépendent du **type effectif** de la carte, et le serveur **refuse** à l'enregistrement
+(`POST /questions`, HTTP 400, requête entière rejetée comme pour `CARD_TYPE_CONTENT_MISMATCH`) ce que
+l'éditeur ne propose pas :
+
+| Type effectif | Modes acceptés | Défaut (⇒ `POINTS_RULE` **absent**) |
+|---|---|---|
+| Binaire (`Units` ∈ {0,1}, `UnitsTotal` = 0) : `SPEEDY`, `QCM` | `STARS`, `FIXED` | `STARS` |
+| Progression (`UnitsTotal` > 0) : `MEMORY`, `RAFALE` | `STARS_PRORATA`, `STARS`, `FIXED`, `PER_UNIT` | `STARS_PRORATA` (défaut du type, §7) |
+
+- `POINTS_RULE_INVALID_MODE` : `MODE` hors des quatre valeurs du contrat.
+- `POINTS_RULE_MODE_NOT_APPLICABLE` : `STARS_PRORATA` ou `PER_UNIT` sur un type binaire (`STARS_PRORATA` y vaudrait toujours 0 — garde `UnitsTotal <= 0` ; `PER_UNIT` y est indiscernable de `FIXED`).
+- `POINTS_RULE_VALUE_REQUIRED` : `FIXED` ou `PER_UNIT` sans `VALUE` entier compris entre 1 et 999. `VALUE` est ignorée (et peut être omise) pour `STARS` / `STARS_PRORATA`.
+- **Défaut explicite = champ absent.** Choisir le mode par défaut dans l'éditeur **n'écrit jamais** `POINTS_RULE` sur la carte : la règle suit alors le type si celui-ci change (résolution par le registre à la lecture, §7). Une règle explicite est un champ **de carte** (§3.1) : elle survit à un changement de type ; si elle devient inapplicable, l'éditeur la remet au défaut avant l'envoi (le serveur la refuserait).
+- Les cartes **déjà enregistrées** ne sont jamais refusées à la lecture ni au jeu : la validation ne porte que sur l'enregistrement.
+- **Parité d'affichage** : l'aide « → N pts » de l'éditeur, la grille (anim/TV) et le gain prévisionnel de l'anim utilisent une seule fonction JS miroir de `motionCardPointsForOutcome` (`FIXED` → `VALUE`, `PER_UNIT` → `VALUE × Units`, `STARS` → étoiles, `STARS_PRORATA` → formule ci-dessus) — cas de test nommés à l'identique des deux côtés (classe R5).
+
 ### 6.3 Barème d'une carte MEMORY (v7.1.0, #187) — décisions utilisateur du 2026-08-24
 
 | Point | Décision |
 |---|---|
 | **Nombre d'équipes** | **Une seule** — l'équipe MEMOTION courante. `MEMORY_MODE` (`SOLO`/`CHACUN_SON_TOUR`/`TANT_QUE_JE_GAGNE`) est **ignoré en carte**, et la rotation d'équipe MEMORY (`rotateToNextTeam`) **n'est jamais déclenchée** : la rotation appartient à MEMOTION. |
-| **Barème par défaut** | **`STARS_PRORATA`** — *« on compte les points en fonction du nombre de paires trouvées dans le temps imparti »*. Une carte MEMORY est créée avec `POINTS_RULE = {"MODE": "STARS_PRORATA"}`, **sans `VALUE`**. |
+| **Barème par défaut** | **`STARS_PRORATA`** — *« on compte les points en fonction du nombre de paires trouvées dans le temps imparti »*. Une carte MEMORY est créée avec `POINTS_RULE = {"MODE": "STARS_PRORATA"}`, **sans `VALUE`**. *Précision v11.2.2 (#190) : depuis #187 cycle 5 ce défaut est résolu par le registre (`DefaultPointsRule`, §7) — la carte créée par l'éditeur ne porte **aucun** `POINTS_RULE` ; seul un choix non défaut est écrit (§6.2). |
 | **`Units` / `UnitsTotal`** | `Units` = paires trouvées sur la carte ; `UnitsTotal` = nombre de paires de la carte. |
 | **Autorité** | 🔴 **Le serveur dérive `Units` et `UnitsTotal` de son propre état et ignore tout `UNITS` reçu du client** pour une carte MEMORY (voir §9.3). |
 | **Tout-ou-rien** | Reste possible en surcharge explicite (`STARS` ou `FIXED`) : le type ne rend alors `Units = 1` que si toutes les paires sont trouvées. |
@@ -827,3 +846,11 @@ jour en conséquence.
 | `motionCardPointsForOutcome`/`DoneMotionCard` | **CHANGED**, interne Go | second `case` RAFALE à côté du `case` MEMORY existant — modification d'hôte déclarée, §10.2/§14.7 |
 | `POINTS_RULE.MODE = "STARS_PRORATA"` pour `RAFALE` | **NEW**, réutilise un mode existant | introduit par #187 (§11.1), aucune extension du mode lui-même |
 | Génération IA | **inchangé** | `RAFALE` reste hors `GENERABLE_TYPES`/`generableQuestionTypes` — décision du 2026-08-28 non rouverte |
+
+### 11.3 Ajouts v11.2.2 (#190) — toujours aucun changement BREAKING
+
+| Élément | Nature | Justification |
+|---|---|---|
+| Validation de `POINTS_RULE` à l'enregistrement (3 refus HTTP 400) | **CHANGED**, additif | une carte stockée reste lue et jouée telle quelle ; seul un enregistrement invalide est refusé — aucune carte produite par l'éditeur avant #190 ne portait `POINTS_RULE` |
+| Applicabilité des modes par type (binaire / progression) | **CHANGED**, précision | restreint ce que l'éditeur propose ; aucun mode ni champ nouveau |
+| « Défaut explicite = champ absent » | **CHANGED**, précision de §6.3 | aligne le contrat sur la résolution par registre de #187 cycle 5 |
