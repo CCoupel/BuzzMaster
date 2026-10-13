@@ -43,6 +43,18 @@ func newEnv246(t *testing.T) *env246 {
 	return &env246{app: app, base: base, paul: paul, mamie: mamie}
 }
 
+// useLongArdoiseCoalescer (#266) remplace le coalescer ARDOISE de l'App par un coalescer de même
+// émission mais de fenêtre très longue (10 min) : tout UPDATE qui passerait par lui n'arriverait
+// jamais pendant le test. Sert aux preuves d'ORDRE « diffusé immédiatement, non coalescé ».
+// À appeler avant tout trafic ARDOISE ; le t.Cleanup de newTestApp arrête le coalescer en place.
+func (e *env246) useLongArdoiseCoalescer(t *testing.T) {
+	t.Helper()
+	e.app.ardoiseCoalescer.Stop()
+	e.app.ardoiseCoalescer = NewBroadcastCoalescer(10*time.Minute, func() {
+		e.app.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
+	})
+}
+
 // dial ouvre une vraie WebSocket du type donné ("/ws/player", "/ws/admin", "/ws/anim"…)
 // et retourne la connexion et l'identifiant que le hub lui a attribué.
 func (e *env246) dial(t *testing.T, path string) (*websocket.Conn, string) {
