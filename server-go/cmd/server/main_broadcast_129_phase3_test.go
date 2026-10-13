@@ -162,12 +162,13 @@ func TestBroadcast129_SimulatedButtonBuzz_TargetsOwnPlayerOnlyZeroFromOthers(t *
 
 	app.handleSimulatedButton(simulatedButtonMsg(t, buzzerID, "A"))
 
-	buzzerActions := collectActions(buzzerConn, 500*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, buzzerConn, observerConn) // #266 : un témoin, pas de fenêtre fixe
+	buzzerActions := seen[0]
 	if got := countActions(buzzerActions, protocol.ActionUpdate); got != 1 {
 		t.Errorf("#129: buzzing VPlayer should receive exactly 1 targeted UPDATE echo, got %d — actions=%v", got, buzzerActions)
 	}
 
-	observerActions := collectActions(observerConn, 500*time.Millisecond)
+	observerActions := seen[1]
 	if got := countActions(observerActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#129: a VPlayer who didn't buzz should receive 0 UPDATE from a peer's buzz, got %d — actions=%v", got, observerActions)
 	}
@@ -199,7 +200,7 @@ func TestBroadcast129_HandleButton_PhysicalBuzzer_NoTargetedEchoToAnyVPlayer(t *
 
 	app.handleButton("AA:BB:CC:01", buttonMsgFor(t), time.Now().UnixMicro())
 
-	actions := collectActions(observerConn, 500*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, observerConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if got := countActions(actions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#129: a physical buzzer press must not produce a targeted UPDATE echo to any VPlayer, got %d — actions=%v", got, actions)
 	}

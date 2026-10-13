@@ -4,7 +4,6 @@ import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"testing"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -27,7 +26,7 @@ import (
 // that specific call — same CA10/CA12-class assertion used throughout
 // #127/#129's own test suites.
 //
-// Single read per connection (collectActions), per the harness's own rule:
+// Single read per connection (collectAfterSentinel264), per the harness's own rule:
 // a gorilla *websocket.Conn becomes unusable in read after any timeout.
 // ---------------------------------------------------------------------------
 
@@ -55,7 +54,9 @@ func setupLEDBroadcast132TestApp(t *testing.T) (app *App, adminConn, tvConn, vpl
 
 	baseURL := startEvictionTestServer(t, app)
 	adminConn = dialWS(t, baseURL, "/ws/admin")
+	learnClientID(t, app, adminConn) // inscrits au hub avant le témoin (#266)
 	tvConn = dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tvConn)
 	vplayerConn = dialWS(t, baseURL, "/ws/player")
 	vplayerClientID := learnClientID(t, app, vplayerConn)
 	app.wsHub.SetClientPlayerID(vplayerClientID, vplayerID)
@@ -65,20 +66,22 @@ func setupLEDBroadcast132TestApp(t *testing.T) (app *App, adminConn, tvConn, vpl
 
 // assertLEDBroadcast132Targeting is the shared assertion for every function
 // below: Admin gets the UPDATE, TV and VPlayer get nothing.
-func assertLEDBroadcast132Targeting(t *testing.T, fnName string, adminConn, tvConn, vplayerConn *websocket.Conn) {
+func assertLEDBroadcast132Targeting(t *testing.T, app *App, fnName string, adminConn, tvConn, vplayerConn *websocket.Conn) {
 	t.Helper()
 
-	adminActions := collectActions(adminConn, 300*time.Millisecond)
+	// #266 : un témoin, puis lecture des trois connexions jusqu'à lui (plus de fenêtre fixe).
+	seen := collectAfterSentinel264(t, app, adminConn, tvConn, vplayerConn)
+	adminActions := seen[0]
 	if !containsAction(adminActions, protocol.ActionUpdate) {
 		t.Errorf("%s: expected Admin to receive %s, got: %v", fnName, protocol.ActionUpdate, adminActions)
 	}
 
-	tvActions := collectActions(tvConn, 300*time.Millisecond)
+	tvActions := seen[1]
 	if containsAction(tvActions, protocol.ActionUpdate) {
 		t.Errorf("%s: TV must NOT receive an UPDATE from this call (ACK_PENDING is always stripped from its payload) — got: %v", fnName, tvActions)
 	}
 
-	vplayerActions := collectActions(vplayerConn, 300*time.Millisecond)
+	vplayerActions := seen[2]
 	if containsAction(vplayerActions, protocol.ActionUpdate) {
 		t.Errorf("%s: VPlayer must NOT receive an UPDATE from this call (the loop always skips IsVPlayer bumpers) — got: %v", fnName, vplayerActions)
 	}
@@ -89,7 +92,7 @@ func TestLEDBroadcast132_BroadcastLEDSet_TargetsAdminAndBuzzerOnly(t *testing.T)
 
 	app.broadcastLEDSet(protocol.LEDSetPayload{Color: [3]int{255, 0, 0}, Intensity: 255, Effect: "SOLID"})
 
-	assertLEDBroadcast132Targeting(t, "broadcastLEDSet", adminConn, tvConn, vplayerConn)
+	assertLEDBroadcast132Targeting(t, app, "broadcastLEDSet", adminConn, tvConn, vplayerConn)
 }
 
 func TestLEDBroadcast132_SendLEDSetStop_TargetsAdminAndBuzzerOnly(t *testing.T) {
@@ -97,7 +100,7 @@ func TestLEDBroadcast132_SendLEDSetStop_TargetsAdminAndBuzzerOnly(t *testing.T) 
 
 	app.sendLEDSetStop()
 
-	assertLEDBroadcast132Targeting(t, "sendLEDSetStop", adminConn, tvConn, vplayerConn)
+	assertLEDBroadcast132Targeting(t, app, "sendLEDSetStop", adminConn, tvConn, vplayerConn)
 }
 
 func TestLEDBroadcast132_SendLEDSetReveal_TargetsAdminAndBuzzerOnly(t *testing.T) {
@@ -105,7 +108,7 @@ func TestLEDBroadcast132_SendLEDSetReveal_TargetsAdminAndBuzzerOnly(t *testing.T
 
 	app.sendLEDSetReveal("RED")
 
-	assertLEDBroadcast132Targeting(t, "sendLEDSetReveal", adminConn, tvConn, vplayerConn)
+	assertLEDBroadcast132Targeting(t, app, "sendLEDSetReveal", adminConn, tvConn, vplayerConn)
 }
 
 func TestLEDBroadcast132_SendLEDSetToTeam_TargetsAdminAndBuzzerOnly(t *testing.T) {
@@ -113,7 +116,7 @@ func TestLEDBroadcast132_SendLEDSetToTeam_TargetsAdminAndBuzzerOnly(t *testing.T
 
 	app.sendLEDSetToTeam("TeamA", protocol.LEDSetPayload{Color: [3]int{0, 255, 0}, Intensity: 255, Effect: "SOLID"})
 
-	assertLEDBroadcast132Targeting(t, "sendLEDSetToTeam", adminConn, tvConn, vplayerConn)
+	assertLEDBroadcast132Targeting(t, app, "sendLEDSetToTeam", adminConn, tvConn, vplayerConn)
 }
 
 func TestLEDBroadcast132_SendLEDSetComet_TargetsAdminAndBuzzerOnly(t *testing.T) {
@@ -121,7 +124,7 @@ func TestLEDBroadcast132_SendLEDSetComet_TargetsAdminAndBuzzerOnly(t *testing.T)
 
 	app.sendLEDSetComet("TeamA")
 
-	assertLEDBroadcast132Targeting(t, "sendLEDSetComet", adminConn, tvConn, vplayerConn)
+	assertLEDBroadcast132Targeting(t, app, "sendLEDSetComet", adminConn, tvConn, vplayerConn)
 }
 
 // TestLEDBroadcast132_SendLEDSetToTeam_EmptyTeamID_StillTargetsAdminAndBuzzerOnly
@@ -132,5 +135,5 @@ func TestLEDBroadcast132_SendLEDSetToTeam_EmptyTeamID_StillTargetsAdminAndBuzzer
 
 	app.sendLEDSetToTeam("", protocol.LEDSetPayload{Color: [3]int{0, 0, 255}, Intensity: 255, Effect: "SOLID"})
 
-	assertLEDBroadcast132Targeting(t, "sendLEDSetToTeam(empty teamID)", adminConn, tvConn, vplayerConn)
+	assertLEDBroadcast132Targeting(t, app, "sendLEDSetToTeam(empty teamID)", adminConn, tvConn, vplayerConn)
 }

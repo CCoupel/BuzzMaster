@@ -21,7 +21,7 @@ import (
 // pattern.
 //
 // Harness: newAnimTestApp/startAnimAllowlistTestServer/dialWS/learnClientID/
-// sendAction/readActionMatching/collectActionsT/containsAction — all defined
+// sendAction/readActionMatching/collectAfterSentinel264/containsAction — all defined
 // in inbound_allowlist_anim_test.go, send_state_to_client_anim_test.go and
 // player_evicted_test.go (same package, no local redefinition needed).
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ func TestHandleRegieMessageSend_EmptyAfterTrim_IgnoredNoStateChange(t *testing.T
 
 			sendAction(t, app, admin, protocol.ActionRegieMessageSend, protocol.RegieMessagePayload{Text: text})
 
-			animActions := collectActionsT(t, anim, 300*time.Millisecond)
+			animActions := collectAfterSentinel264(t, app, anim)[0] // #266 : témoin, pas de fenêtre fixe
 			if containsAction(animActions, protocol.ActionRegieMessage) {
 				t.Errorf("an empty (post-trim) SEND must not diffuse anything — got actions: %v", animActions)
 			}
@@ -262,11 +262,12 @@ func TestHandleRegieMessageClear_NoActiveMessage_NoOpIdempotent(t *testing.T) {
 
 	sendAction(t, app, anim, protocol.ActionRegieMessageClear, protocol.RegieMessagePayload{})
 
-	adminActions := collectActionsT(t, admin, 300*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, admin, anim) // #266 : un témoin, pas de fenêtre fixe
+	adminActions := seen[0]
 	if containsAction(adminActions, protocol.ActionRegieMessage) {
 		t.Errorf("CLEAR with no active message must not diffuse anything — got actions: %v", adminActions)
 	}
-	animActions := collectActionsT(t, anim, 300*time.Millisecond)
+	animActions := seen[1]
 	if containsAction(animActions, protocol.ActionRegieMessage) {
 		t.Errorf("CLEAR with no active message must not diffuse anything (self included) — got actions: %v", animActions)
 	}
@@ -299,7 +300,7 @@ func TestHandleRegieMessageClear_TwoSimultaneousAcquittals_OnlyOneDiffusion(t *t
 	// Tablet B, unaware A already cleared it, acquits "at the same time".
 	sendAction(t, app, animB, protocol.ActionRegieMessageClear, protocol.RegieMessagePayload{})
 
-	adminActions := collectActionsT(t, admin, 300*time.Millisecond)
+	adminActions := collectAfterSentinel264(t, app, admin)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(adminActions, protocol.ActionRegieMessage) {
 		t.Errorf("a second CLEAR on an already-inactive message must not produce a second diffusion — got actions: %v", adminActions)
 	}
@@ -349,7 +350,7 @@ func TestHandleRegieMessageSend_DifferentText_ReplacesAndRearmsSentAt(t *testing
 	}
 
 	// No queue: no further REGIE_MESSAGE is pending behind the second one.
-	moreActions := collectActionsT(t, anim, 300*time.Millisecond)
+	moreActions := collectAfterSentinel264(t, app, anim)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(moreActions, protocol.ActionRegieMessage) {
 		t.Errorf("replacement must not leave a queued third message — got actions: %v", moreActions)
 	}
@@ -391,7 +392,7 @@ func TestHandleRegieMessageSend_IdenticalTextWhileActive_NoRearmNoDiffusion(t *t
 	// this is the automatic-send scenario, not a deliberate resend.
 	sendAction(t, app, admin, protocol.ActionRegieMessageSend, protocol.RegieMessagePayload{Text: "Consigne stable"})
 
-	animActions := collectActionsT(t, anim, 300*time.Millisecond)
+	animActions := collectAfterSentinel264(t, app, anim)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(animActions, protocol.ActionRegieMessage) {
 		t.Errorf("an identical-text SEND while the message is still active must NOT diffuse anything — got actions: %v", animActions)
 	}
@@ -443,11 +444,12 @@ func TestHandleRegieMessageSend_IdenticalTextAfterAcquittal_DoesNotResurrect(t *
 
 	// The critical assertion: NOTHING is diffused — the message must not
 	// reappear on any connected tablet nor in régie.
-	adminActions := collectActionsT(t, admin, 300*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, admin, anim) // #266 : un témoin, pas de fenêtre fixe
+	adminActions := seen[0]
 	if containsAction(adminActions, protocol.ActionRegieMessage) {
 		t.Errorf("#167 AC1d: an identical-text SEND after acquittal must NOT resurrect the message — admin got actions: %v", adminActions)
 	}
-	animActions := collectActionsT(t, anim, 300*time.Millisecond)
+	animActions := seen[1]
 	if containsAction(animActions, protocol.ActionRegieMessage) {
 		t.Errorf("#167 AC1d: an identical-text SEND after acquittal must NOT resurrect the message — anim got actions: %v", animActions)
 	}
