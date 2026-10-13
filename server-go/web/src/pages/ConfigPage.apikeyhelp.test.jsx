@@ -155,7 +155,8 @@ describe('ConfigPage — Popup d\'aide clé API (bugfix/config-api-key-help, com
   it('renders a "?" help button next to the Groq API key field when Groq is the active provider', async () => {
     mockFetch({ provider: 'groq' })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
+    // #270 : attendre la carte Groq (config chargée), pas seulement l'en-tête « IA » rendu avant le fetch
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
 
     const btn = within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' })
     expect(btn).toBeInTheDocument()
@@ -193,7 +194,8 @@ describe('ConfigPage — Popup d\'aide clé API (bugfix/config-api-key-help, com
   it('closing the help modal (×) hides it, regardless of the active provider', async () => {
     mockFetch({ provider: 'groq' })
     render(<ConfigPage />)
-    await waitFor(() => expect(screen.getByText('IA')).toBeInTheDocument())
+    // #270 : attendre la carte Groq (config chargée), pas seulement l'en-tête « IA » rendu avant le fetch
+    await waitFor(() => expect(screen.getByText('Clé API Groq')).toBeInTheDocument())
 
     fireEvent.click(within(visibleBlock()).getByRole('button', { name: 'Comment obtenir une clé API Groq ?' }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
