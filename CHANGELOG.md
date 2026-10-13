@@ -2,6 +2,19 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] — Milestone v11.2.2 (LOT-1, en cours)
+
+### Changed
+
+- **Dépendances web (#268)** — `react-router-dom` passe à 6.30.6 (routage de l'admin inchangé). Porte CI `npm audit --omit=dev --audit-level=high` **provisoire** (`scripts/ci.sh`, étape 6) : elle ne bloque que les vulnérabilités `high`. Deux `moderate` restent sur react-router, leur correctif n'existe qu'en 7.x (rupture, hors périmètre). Le périmètre complet et la migration vite/vitest sont reportés en #270.
+
+### Fixed
+
+- **Data race du journal de debug (#269)** — Le niveau debug du journal de diffusion est lu et écrit de façon sûre entre goroutines. Les minuteurs et goroutines des tests `cmd/server` sont arrêtés en fin de test (`t.Cleanup`).
+- **Fenêtres d'observation fixes dans les tests Go (#266)** — Les tests de diffusion et d'ARDOISE n'observent plus les messages pendant une durée fixe (`collectActions`, marqué DEPRECATED, n'a plus d'appelant). Ils attendent l'événement attendu puis un témoin, qui prouve qu'aucun message en retard ne manque. Aucun changement de comportement côté produit.
+
+---
+
 ## [11.2.1] - 2026-10-13 — Milestone v11.2.1 : accusés des réponses tablette, attribution de points multi-équipes, corrections
 
 ### Added

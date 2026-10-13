@@ -16,7 +16,7 @@ Avant **tout merge dans `main`** et **tout tag** :
    ```bash
    gh run list --workflow ci-branch.yml --commit <sha>
    ```
-2. `govulncheck` propre juste avant le tag (même audit que `release.yml`).
+2. `govulncheck` propre juste avant le tag (même audit que `release.yml`), et `npm audit --omit=dev --audit-level=high` propre dans `server-go/web` (porte provisoire #268).
 3. Si un run échoue : analyser, corriger sur la branche, relancer. **Ne jamais merger ni tagger** tant que le run n'est pas vert.
    Un tag ne sert jamais de test.
 
