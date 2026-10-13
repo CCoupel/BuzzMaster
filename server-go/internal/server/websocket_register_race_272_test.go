@@ -332,3 +332,77 @@ func TestRegisterRace272_InvariantHoldsUnderConcurrentConnections(t *testing.T) 
 		}
 	}
 }
+
+// --- Hub buzzer : même défaut, même invariant --------------------------------------------------
+// BuzzerWebSocketHub.HandleConnection lançait aussi ses pompes sur le seul rendez-vous h.register.
+// Un buzzer qui envoie son message d'identification (MAC dans ID) dès l'ouverture ne doit pas être
+// lu avant d'être inscrit : sinon IsClientConnected(mac) et l'envoi ciblé SendToClient(mac) le ratent.
+
+func TestRegisterRace272_BuzzerHubFirstMessageIsReadOnlyAfterRegistration(t *testing.T) {
+	const mac = "AA:BB:CC:DD:EE:72"
+	hub := NewBuzzerWebSocketHub()
+	processed := make(chan struct{})
+	holdRegistration272(t, processed) // hook posé AVANT go hub.Run()
+	go hub.Run()
+
+	srv := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	t.Cleanup(srv.Close)
+
+	var mu sync.Mutex
+	var registeredAtRead, seen bool
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	go func() {
+		select {
+		case <-stop:
+		case in := <-hub.Incoming:
+			connected := hub.IsClientConnected(in.ClientID)
+			mu.Lock()
+			registeredAtRead, seen = connected, true
+			mu.Unlock()
+			// Écho ciblé par MAC, comme le fait cmd/server vers un buzzer identifié.
+			if echo, err := protocol.NewMessage("RACE_272_BUZZER_ECHO", map[string]interface{}{}); err == nil {
+				_ = hub.SendToClient(in.ClientID, echo)
+			}
+			close(processed)
+		}
+	}()
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatalf("connexion buzzer : %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	hello, err := protocol.NewMessage("PONG", map[string]interface{}{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hello.ID = mac // le buzzer s'identifie par son MAC dans le champ ID
+	data, err := hello.SerializeForWebSocket()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+		t.Fatalf("envoi du message d'identification : %v", err)
+	}
+
+	eventually272(t, "lecture du 1er message du buzzer par le hub", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return seen
+	})
+	mu.Lock()
+	reg := registeredAtRead
+	mu.Unlock()
+	if !reg {
+		t.Errorf("message du buzzer %s sorti d'Incoming alors que le client n'est PAS inscrit dans h.clients "+
+			"(readPump lancé avant l'inscription) : IsClientConnected et envoi ciblé le ratent", mac)
+	}
+	if !eventually272(t, "IsClientConnected("+mac+")", func() bool { return hub.IsClientConnected(mac) }) {
+		return
+	}
+	if !readUntilMarker272(conn, "RACE_272_BUZZER_ECHO", eventDeadline272) {
+		t.Errorf("l'envoi ciblé SendToClient(%s) n'est jamais parvenu au buzzer", mac)
+	}
+}
