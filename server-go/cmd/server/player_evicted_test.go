@@ -80,7 +80,19 @@ func learnClientID(t *testing.T, app *App, conn *websocket.Conn) string {
 	}
 	select {
 	case incoming := <-app.wsHub.Incoming:
-		return incoming.ClientID
+		// #266 : lire le message du client NE prouve PAS qu'il est inscrit dans h.clients. Le hub
+		// (HandleConnectionWithType) lance readPump juste après le rendez-vous sur h.register ; la boucle
+		// Run inscrit le client APRÈS ce rendez-vous. Sous charge (runner CI, -race) le message peut donc
+		// arriver avant l'inscription : SetClientPlayerID, SendRawToPlayerID et BroadcastRawToTypes
+		// (parcours direct de h.clients) manquent alors le client — écho jamais livré, PlayerID jamais lié
+		// (CI 38394871771, TestBroadcast129_QCMAnswer_EachPlayerReceivesOnlyOwnEchoZeroFromOthers).
+		// On attend donc l'inscription, par événement.
+		clientID := incoming.ClientID
+		eventually264(t, "inscription du client "+clientID+" dans le hub", func() bool {
+			_, registered := app.wsHub.ClientBinding(clientID)
+			return registered
+		})
+		return clientID
 	case <-time.After(eventDeadline264): // #264 : attente par événement, échéance large
 		t.Fatal("timed out waiting for an incoming message")
 		return ""
