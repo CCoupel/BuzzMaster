@@ -2,9 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [11.2.1] - non publié — Milestone v11.2.1 : accusés des réponses tablette, attribution de points multi-équipes, corrections
-
-> Brouillon (DOC DRAFT). Date et numéro de version définitifs à fixer en DOC FINALIZE.
+## [11.2.1] - 2026-10-13 — Milestone v11.2.1 : accusés des réponses tablette, attribution de points multi-équipes, corrections
 
 ### Added
 
