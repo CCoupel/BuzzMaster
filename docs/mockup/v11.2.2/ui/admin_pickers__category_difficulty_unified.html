@@ -1,0 +1,177 @@
+<!--
+mockup:
+  composant: admin_pickers
+  feature: category_difficulty_unified
+  version: 11.2.2
+  type: ui
+  issue: "#221"
+  validee_le: 2026-10-13
+  complete: []
+  remplace: []
+  notes: >
+    Brouillon planner (GATE 2). Décision utilisateur Q6 (2026-10-13) : « tout sauf QuizMetaForm » — 15 sites, 7 fichiers,
+    deux composants partagés CategoryPicker (mono / multi / filtre) et DifficultyPicker (mono / multi / mono-ou-aucune),
+    indication explicite mono vs multi sur chaque site. QuizMetaForm (Facile…Expert, publics, langue) hors périmètre.
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — sélecteurs catégorie / difficulté unifiés (#221)</title>
+<style>
+  * { box-sizing:border-box; }
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-600:#4b5563; --gray-700:#374151; --gray-800:#1f2937;
+          --primary-50:#eef2ff; --primary-500:#6366f1; --primary-700:#4338ca; --radius-sm:.375rem; --radius-md:.5rem; --radius-lg:.75rem; --radius-full:9999px; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#e9ebf0; color:var(--gray-800); line-height:1.5; }
+  .doc { max-width:1180px; margin:0 auto; padding:1rem; }
+  h1 { font-size:1.1rem; margin:0 0 .25rem; } .doc > p { color:var(--gray-600); font-size:.9rem; margin:0 0 .9rem; }
+  h2 { font-size:.95rem; margin:1.4rem 0 .5rem; color:var(--gray-700); } h3 { font-size:.85rem; margin:.8rem 0 .4rem; color:var(--gray-600); font-weight:600; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  .panel { background:#fff; border-radius:var(--radius-lg); padding:.9rem 1rem; box-shadow:0 1px 2px rgb(0 0 0 / .05); }
+  .panel.dark { background:#1f2937; color:#e5e7eb; }
+  .ctx { font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--gray-400); margin-bottom:.4rem; }
+  code { background:#fff; border:1px solid var(--gray-200); border-radius:4px; padding:0 .3rem; font-size:.85em; } .dark code { background:#111827; border-color:#374151; }
+
+  /* ── CategoryPicker ─────────────────────────────────────────────────────── */
+  .picker-label { display:flex; align-items:baseline; gap:.4rem; font-size:.875rem; font-weight:500; color:var(--gray-600); margin-bottom:.35rem; }
+  .dark .picker-label { color:var(--gray-400); }
+  .picker-mode { font-size:.75rem; font-weight:600; border-radius:var(--radius-full); padding:.05rem .5rem; }
+  .picker-mode.single { background:#fef3c7; color:#92400e; } .picker-mode.multi { background:#dbeafe; color:#1e40af; }
+  .category-picker { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; }
+  .cat-chip { display:inline-flex; align-items:center; gap:.35rem; border:2px solid var(--gray-200); background:#fff; border-radius:var(--radius-full); padding:.25rem .6rem .25rem .3rem; font:inherit; font-size:.82rem; cursor:pointer; color:var(--gray-800); }
+  .dark .cat-chip { background:#111827; border-color:#374151; color:#e5e7eb; }
+  .cat-chip .badge { width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:.8rem; background:var(--cat-color); color:#fff; }
+  .cat-chip.active { border-color:var(--cat-color); background:color-mix(in srgb, var(--cat-color) 14%, #fff); }
+  .dark .cat-chip.active { background:color-mix(in srgb, var(--cat-color) 30%, #111827); }
+  .cat-chip .check { font-size:.75rem; font-weight:800; color:var(--cat-color); }
+  .cat-chip .count { font-size:.72rem; background:var(--gray-100); color:var(--gray-600); border-radius:var(--radius-full); padding:0 .4rem; } .cat-chip .count.zero { background:#fee2e2; color:#b91c1c; }
+  .cat-chip.icon-only { padding:.2rem; border-radius:50%; }
+  .cat-chip.add { border-style:dashed; color:var(--gray-600); padding:.25rem .6rem; }
+  .picker-reset { border:none; background:var(--gray-200); color:var(--gray-600); border-radius:var(--radius-full); width:26px; height:26px; cursor:pointer; }
+  .picker-help { font-size:.75rem; color:var(--gray-400); margin-top:.3rem; }
+
+  /* ── DifficultyPicker ───────────────────────────────────────────────────── */
+  .difficulty-picker { display:inline-flex; gap:.35rem; }
+  .diff-chip { border:2px solid var(--gray-200); background:#fff; color:#b45309; border-radius:var(--radius-md); padding:.2rem .55rem; font:inherit; font-size:.85rem; cursor:pointer; letter-spacing:.05em; }
+  .dark .diff-chip { background:#111827; border-color:#374151; color:#fbbf24; }
+  .diff-chip.active { border-color:#f59e0b; background:#fef3c7; } .dark .diff-chip.active { background:rgba(251,191,36,.22); }
+  .diff-chip .check { font-size:.72rem; font-weight:800; margin-right:.2rem; }
+  .diff-chip .ghost { color:var(--gray-300); } .dark .diff-chip .ghost { color:#4b5563; }
+
+  table.sites { border-collapse:collapse; font-size:.8rem; width:100%; } .sites th, .sites td { border:1px solid var(--gray-300); padding:.28rem .45rem; text-align:left; vertical-align:top; } .sites th { background:#fff; }
+  .notes { font-size:.85rem; color:var(--gray-600); } .notes li { margin:.2rem 0; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <h1>Sélecteurs de catégorie et de difficulté unifiés — <code>CategoryPicker</code> / <code>DifficultyPicker</code> (#221, v11.2.2)</h1>
+  <p>Composant <code>admin_pickers</code>. Deux composants remplacent les 15 variantes actuelles (7 fichiers). Chaque site annonce explicitement <strong>une seule</strong> ou <strong>plusieurs possibles</strong> ; une sélection multiple porte des ✓, une sélection unique se comporte comme des boutons radio. Icônes et couleurs de catégorie = <code>CategoryBadge</code> existant, partout.</p>
+
+  <h2>1 · Les variantes</h2>
+  <div class="grid2">
+    <div class="panel">
+      <div class="ctx">CategoryPicker · mode="single" · allowCreate (éditeurs : question Quiz, question du réservoir RAFALE)</div>
+      <div class="picker-label">Catégorie <span class="picker-mode single">une seule</span></div>
+      <div class="category-picker">
+        <button class="cat-chip active" style="--cat-color:#3b82f6"><span class="badge">🌍</span>Géographie</button>
+        <button class="cat-chip" style="--cat-color:#ef4444"><span class="badge">🎬</span>Cinéma</button>
+        <button class="cat-chip" style="--cat-color:#22c55e"><span class="badge">⚽</span>Sport</button>
+        <button class="cat-chip" style="--cat-color:#a855f7"><span class="badge">🎵</span>Musique</button>
+        <button class="cat-chip" style="--cat-color:#f97316"><span class="badge">🧪</span>Sciences</button>
+        <button class="cat-chip" style="--cat-color:#0ea5e9"><span class="badge">🦖</span>Dinos (perso)</button>
+        <button class="cat-chip add">+ Créer</button>
+      </div>
+      <div class="picker-help">Re-cliquer la catégorie active la désélectionne (comportement actuel conservé). Le « + » n'existe qu'en mode unique, dans les éditeurs.</div>
+    </div>
+    <div class="panel">
+      <div class="ctx">CategoryPicker · mode="multi" (manche RAFALE, carte RAFALE, modales IA)</div>
+      <div class="picker-label">Catégories <span class="picker-mode multi">plusieurs possibles</span></div>
+      <div class="category-picker">
+        <button class="cat-chip active" style="--cat-color:#3b82f6" aria-pressed="true"><span class="badge">🌍</span>Géographie <span class="check">✓</span></button>
+        <button class="cat-chip active" style="--cat-color:#ef4444" aria-pressed="true"><span class="badge">🎬</span>Cinéma <span class="check">✓</span></button>
+        <button class="cat-chip" style="--cat-color:#22c55e" aria-pressed="false"><span class="badge">⚽</span>Sport</button>
+        <button class="cat-chip" style="--cat-color:#a855f7" aria-pressed="false"><span class="badge">🎵</span>Musique</button>
+        <button class="cat-chip" style="--cat-color:#f97316" aria-pressed="false"><span class="badge">🧪</span>Sciences</button>
+        <button class="cat-chip" style="--cat-color:#0ea5e9" aria-pressed="false"><span class="badge">🦖</span>Dinos (perso)</button>
+      </div>
+      <div class="picker-help">Remplace les chips texte <code>rafale-multi-chip</code> / <code>ai-chip</code> : même icône que partout ailleurs, libellé conservé.</div>
+    </div>
+    <div class="panel">
+      <div class="ctx">CategoryPicker · variant="filter" (listes : Quiz, réservoir RAFALE, page Jeu)</div>
+      <div class="picker-label">Filtrer <span class="picker-mode multi">plusieurs possibles</span></div>
+      <div class="category-picker">
+        <button class="cat-chip icon-only active" style="--cat-color:#3b82f6" title="Géographie"><span class="badge">🌍</span></button>
+        <button class="cat-chip icon-only" style="--cat-color:#ef4444" title="Cinéma"><span class="badge">🎬</span></button>
+        <button class="cat-chip icon-only" style="--cat-color:#22c55e" title="Sport"><span class="badge">⚽</span></button>
+        <button class="cat-chip icon-only" style="--cat-color:#0ea5e9" title="Dinos"><span class="badge">🦖</span></button>
+        <button class="picker-reset" title="Réinitialiser les filtres">×</button>
+      </div>
+      <div class="picker-help">Seules les catégories <em>présentes</em> dans la liste sont proposées (<code>availableCategories</code>) ; « × » efface. <code>showLabel</code> ajoute le libellé (page Quiz) — page Jeu : icônes seules comme aujourd'hui. Absorbe <code>CategoryFilterBar</code> et sa copie inline de GamePage.</div>
+    </div>
+    <div class="panel">
+      <div class="ctx">DifficultyPicker · trois modes</div>
+      <div class="picker-label">Difficulté <span class="picker-mode single">une seule</span></div>
+      <div class="difficulty-picker" role="radiogroup"><button class="diff-chip" role="radio" aria-checked="false">★</button><button class="diff-chip active" role="radio" aria-checked="true">★★</button><button class="diff-chip" role="radio" aria-checked="false">★★★</button></div>
+      <div class="picker-label" style="margin-top:.7rem">Difficultés <span class="picker-mode multi">plusieurs possibles</span></div>
+      <div class="difficulty-picker"><button class="diff-chip active" aria-pressed="true"><span class="check">✓</span>★</button><button class="diff-chip active" aria-pressed="true"><span class="check">✓</span>★★</button><button class="diff-chip" aria-pressed="false">★★★</button></div>
+      <div class="picker-label" style="margin-top:.7rem">Filtrer <span class="picker-mode single">une seule ou aucune</span></div>
+      <div class="difficulty-picker" role="radiogroup"><button class="diff-chip" role="radio">★<span class="ghost">☆☆</span></button><button class="diff-chip active" role="radio" aria-checked="true">★★<span class="ghost">☆</span></button><button class="diff-chip" role="radio">★★★</button></div>
+      <div class="picker-help"><code>allowNone</code> (filtre du réservoir) : re-cliquer désélectionne. Le libellé est libre : la carte MEMOTION garde « Valeur de la carte : » (retour QUALIF v9.0.0.4 C5).</div>
+    </div>
+  </div>
+
+  <h2>2 · En contexte (3 des 15 sites, inchangés hors sélecteurs)</h2>
+  <div class="grid2">
+    <div class="panel dark">
+      <div class="ctx" style="color:#9ca3af">Éditeur — carte MEMOTION de type RAFALE (QuestionsPage, sites 4, 5, 6)</div>
+      <div class="picker-label">Valeur de la carte : <span class="picker-mode single">une seule</span></div>
+      <div class="difficulty-picker" role="radiogroup"><button class="diff-chip" role="radio">★</button><button class="diff-chip active" role="radio" aria-checked="true">★★</button><button class="diff-chip" role="radio">★★★</button></div>
+      <div class="picker-label" style="margin-top:.8rem">Catégories des questions tirées <span class="picker-mode multi">plusieurs possibles</span></div>
+      <div class="category-picker">
+        <button class="cat-chip active" style="--cat-color:#ef4444"><span class="badge">🎬</span>Cinéma <span class="check">✓</span></button>
+        <button class="cat-chip active" style="--cat-color:#a855f7"><span class="badge">🎵</span>Musique <span class="check">✓</span></button>
+        <button class="cat-chip" style="--cat-color:#3b82f6"><span class="badge">🌍</span>Géographie</button>
+        <button class="cat-chip" style="--cat-color:#22c55e"><span class="badge">⚽</span>Sport</button>
+      </div>
+      <div class="picker-label" style="margin-top:.8rem">Difficultés des questions tirées <span class="picker-mode multi">plusieurs possibles</span></div>
+      <div class="difficulty-picker"><button class="diff-chip active" aria-pressed="true"><span class="check">✓</span>★</button><button class="diff-chip active" aria-pressed="true"><span class="check">✓</span>★★</button><button class="diff-chip" aria-pressed="false">★★★</button></div>
+    </div>
+    <div class="panel">
+      <div class="ctx">Modale « Générer des questions RAFALE » (RafaleAIGenerateModal, sites 14, 15) — compteur du réservoir conservé via <code>extra</code></div>
+      <div class="picker-label">Catégories cibles <span class="picker-mode multi">plusieurs possibles</span></div>
+      <div class="category-picker">
+        <button class="cat-chip active" style="--cat-color:#3b82f6"><span class="badge">🌍</span>Géographie <span class="count">42</span> <span class="check">✓</span></button>
+        <button class="cat-chip" style="--cat-color:#ef4444"><span class="badge">🎬</span>Cinéma <span class="count">17</span></button>
+        <button class="cat-chip" style="--cat-color:#22c55e"><span class="badge">⚽</span>Sport <span class="count zero">0</span></button>
+        <button class="cat-chip" style="--cat-color:#a855f7"><span class="badge">🎵</span>Musique <span class="count">9</span></button>
+      </div>
+      <div class="picker-label" style="margin-top:.8rem">Difficultés <span class="picker-mode multi">plusieurs possibles</span></div>
+      <div class="difficulty-picker"><button class="diff-chip active" aria-pressed="true"><span class="check">✓</span>★</button><button class="diff-chip" aria-pressed="false">★★</button><button class="diff-chip active" aria-pressed="true"><span class="check">✓</span>★★★</button></div>
+      <div class="picker-help">Hors périmètre, inchangés : publics, langue, taille du lot (chips <code>ai-chip</code> non liées aux catégories).</div>
+    </div>
+  </div>
+
+  <h2>3 · Les 15 sites migrés (QuizMetaForm exclu — décision utilisateur)</h2>
+  <table class="sites">
+    <tr><th>#</th><th>Fichier</th><th>Sélection</th><th>Composant cible</th></tr>
+    <tr><td>1</td><td>QuestionsPage — question (hors RAFALE)</td><td>catégorie, une seule, + créer</td><td>CategoryPicker single allowCreate</td></tr>
+    <tr><td>2 / 3</td><td>QuestionsPage — manche RAFALE</td><td>catégories / difficultés, plusieurs</td><td>CategoryPicker multi · DifficultyPicker multi</td></tr>
+    <tr><td>4 / 5</td><td>QuestionsPage — carte RAFALE (MEMOTION)</td><td>catégories / difficultés tirées, plusieurs</td><td>CategoryPicker multi · DifficultyPicker multi</td></tr>
+    <tr><td>6</td><td>QuestionsPage — carte MEMOTION « Valeur de la carte »</td><td>★ une seule</td><td>DifficultyPicker single, libellé conservé</td></tr>
+    <tr><td>7</td><td>QuestionsPage — filtre de la liste</td><td>filtre multi + ×</td><td>CategoryPicker filter showLabel</td></tr>
+    <tr><td>8 / 9</td><td>RafalePage — formulaire question</td><td>catégorie une seule + créer / ★ une seule</td><td>CategoryPicker single allowCreate · DifficultyPicker single</td></tr>
+    <tr><td>10 / 11</td><td>RafalePage — filtres du réservoir</td><td>filtre multi / ★ une seule ou aucune</td><td>CategoryPicker filter · DifficultyPicker single allowNone</td></tr>
+    <tr><td>12</td><td>GamePage — filtre de la liste de jeu</td><td>filtre multi (copie inline aujourd'hui)</td><td>CategoryPicker filter (icônes seules)</td></tr>
+    <tr><td>13</td><td>AIGenerateModal — catégories cibles</td><td>plusieurs</td><td>CategoryPicker multi</td></tr>
+    <tr><td>14 / 15</td><td>RafaleAIGenerateModal — catégories (+ compteur) / difficultés</td><td>plusieurs</td><td>CategoryPicker multi extra · DifficultyPicker multi</td></tr>
+  </table>
+  <ul class="notes">
+    <li><strong>Garde #197</strong> : le filtre <code>isCustom</code> des catégories personnalisées reste <em>dans</em> le composant (jamais confié à l'appelant) — aucune clé React dupliquée possible.</li>
+    <li><code>CategorySelector</code> et <code>CategoryFilterBar</code> deviennent des alias fins de <code>CategoryPicker</code> ou disparaissent après migration ; CSS consolidé dans <code>CategoryPicker.css</code> / <code>DifficultyPicker.css</code>.</li>
+    <li>Les formats d'état des pages ne changent pas (<code>rafaleCategories</code> tableau, <code>selectedCategories</code> Set, <code>DIFFICULTY</code> entier) : l'API des composants normalise, <code>RafalePoolAlert</code> et la sérialisation multipart sont intacts.</li>
+    <li>a11y : mode unique = <code>role="radiogroup"</code>/<code>aria-checked</code> ; mode multiple = <code>aria-pressed</code> ; libellé « une seule » / « plusieurs possibles » rendu dans le DOM, pas seulement en couleur.</li>
+  </ul>
+</div>
+</body>
+</html>

@@ -51,3 +51,18 @@
 - État « équipe déjà servie » présent. _(v11.2.1, ack, #248, 2026-10-12)_
 - Renvoi toutes les 4 s, plafond de 30 envois. _(v11.2.1, ack, #248, 2026-10-12)_
 
+## admin_network_overlay
+- Critère « sans réseau » : aucune IPv4 utilisable hors boucle locale, APIPA et **interfaces virtuelles connues** (vEthernet, Virtual, WSL, Hyper-V, VMware, VirtualBox, docker*, br-*, veth*, virbr*, tun*, tap*, wg*, lxc*, vmnet*, utun*) — liste best-effort documentée, jamais exhaustive. _(v11.2.2, no_network, #267, 2026-10-13)_
+- « Continuer quand même » replie l'overlay en bandeau rouge persistant jusqu'au retour du réseau ; l'overlay revient à chaque nouvelle perte ; jamais de fermeture définitive. _(v11.2.2, no_network, #267, 2026-10-13)_
+- Watchdog 30 s conservé ; aucun champ de plateforme ni conseil adapté à l'OS : texte unique. _(v11.2.2, no_network, #267, 2026-10-13)_
+- Admin seulement (toutes les pages `/admin/*`) ; rien sur TV, anim, tablette. _(v11.2.2, no_network, #267, 2026-10-13)_
+
+## admin_question_editor
+- Barème `POINTS_RULE` d'une carte MEMOTION : options filtrées par type — binaire (SPEEDY, QCM) : Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) : Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité. Le serveur refuse le reste. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
+- Le défaut choisi n'écrit jamais `POINTS_RULE` sur la carte. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
+
+## admin_pickers
+- Unification des sélecteurs catégorie / difficulté : tous les sites **sauf QuizMetaForm** (difficultés textuelles Facile…Expert, publics, langue — autre domaine). _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
+- Chaque site indique explicitement « une seule » ou « plusieurs possibles » ; ✓ sur les chips multiples, radio en sélection unique. _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
+- La « Valeur de la carte » MEMOTION garde son libellé : ce n'est pas une difficulté de tirage. _(v11.2.2, category_difficulty_unified, #221 ; origine retour QUALIF v9.0.0.4 C5)_
+

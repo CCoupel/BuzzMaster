@@ -1,0 +1,164 @@
+<!--
+mockup:
+  composant: admin_network_overlay
+  feature: no_network
+  version: 11.2.2
+  type: ui
+  issue: "#267"
+  validee_le: 2026-10-13
+  complete: []
+  remplace: []
+  notes: >
+    Brouillon planner (GATE 2). Décisions utilisateur appliquées (GATE 1.5, 2026-10-13) :
+    Q1 critère = aucune IPv4 utilisable, interfaces virtuelles connues ignorées (best-effort, liste documentée) ;
+    Q2 « Continuer quand même » replie l'overlay en bandeau rouge persistant, l'overlay revient à chaque nouvelle perte ;
+    Q3 watchdog 30 s inchangé, aucun conseil par plateforme (texte unique). Toutes les pages /admin/* ; rien sur TV, anim, tablette.
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — alerte « serveur sans réseau » (#267)</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-400:#9ca3af; --gray-600:#4b5563; --gray-800:#1f2937;
+    --primary-500:#6366f1; --primary-700:#4338ca; --error:#ef4444; --error-dark:#b91c1c; --success:#22c55e;
+    --radius-md:.5rem; --radius-lg:.75rem; --radius-xl:1rem;
+    --shadow-xl:0 20px 25px -5px rgb(0 0 0 / .1), 0 8px 10px -6px rgb(0 0 0 / .1);
+  }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#e9ebf0; color:var(--gray-800); line-height:1.5; }
+  h1 { font-size:1.1rem; margin:0 0 .25rem; }
+  .doc { max-width:1180px; margin:0 auto; padding:1rem; }
+  .doc-head { display:flex; flex-wrap:wrap; gap:.5rem 1rem; align-items:center; margin-bottom:.75rem; }
+  .doc-head p { margin:0; color:var(--gray-600); font-size:.9rem; }
+  .states { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.75rem; }
+  .states button { border:1px solid var(--gray-400); background:#fff; border-radius:999px; padding:.35rem .8rem; cursor:pointer; font:inherit; font-size:.85rem; }
+  .states button.on { background:var(--primary-500); color:#fff; border-color:var(--primary-500); }
+  .legend { font-size:.82rem; color:var(--gray-600); margin:.25rem 0 .75rem; }
+
+  /* ── Cadre « navigateur » : la page admin complète, inchangée ───────────────── */
+  .frame { position:relative; background:var(--gray-100); border:1px solid var(--gray-200); border-radius:var(--radius-lg); overflow:hidden; height:640px; }
+  .navbar { height:56px; background:#fff; border-bottom:1px solid var(--gray-200); display:flex; align-items:center; gap:1rem; padding:0 1rem; }
+  .logo { font-weight:800; color:var(--primary-700); } .logo span { color:#ec4899; }
+  .nav a { color:var(--gray-600); font-size:.9rem; margin-right:.9rem; text-decoration:none; }
+  .nav a.active { color:var(--primary-700); font-weight:700; }
+  .pill { margin-left:auto; font-size:.8rem; background:#dcfce7; color:#166534; padding:.2rem .6rem; border-radius:999px; }
+  .page { padding:1rem; display:grid; grid-template-columns:280px 1fr 280px; gap:1rem; }
+  .panel { background:#fff; border-radius:var(--radius-lg); padding:.9rem; min-height:160px; box-shadow:0 1px 2px rgb(0 0 0 / .05); }
+  .panel h2 { font-size:.9rem; margin:0 0 .6rem; color:var(--gray-600); }
+  .sk { height:12px; background:var(--gray-200); border-radius:6px; margin:.45rem 0; } .sk.w60 { width:60%; } .sk.w80 { width:80%; }
+  .tvbox { height:220px; background:#111827; border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:.85rem; }
+
+  /* ── État replié : bandeau rouge persistant sous la navbar (Q2) ───────────── */
+  .network-warning-banner { display:none; background:var(--error-dark); color:#fff; font-weight:600; font-size:.9rem; padding:.45rem 1rem; align-items:center; gap:.75rem; }
+  .network-warning-banner .spacer { flex:1; }
+  .network-warning-banner small { font-weight:500; opacity:.85; }
+  .network-warning-banner button { background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.45); border-radius:999px; padding:.2rem .7rem; font:inherit; font-size:.8rem; cursor:pointer; }
+  .frame.state-banner .network-warning-banner { display:flex; }
+
+  /* ── Overlay plein écran (position: fixed en prod, portail sur <body>) ─────── */
+  .network-overlay { display:none; position:absolute; inset:0; background:rgba(17,24,39,.78); backdrop-filter:blur(3px); z-index:1200; align-items:center; justify-content:center; padding:1.5rem; }
+  .frame.state-overlay .network-overlay { display:flex; }
+  .network-dialog { background:#fff; border-radius:var(--radius-xl); box-shadow:var(--shadow-xl); max-width:640px; width:100%; padding:1.6rem 1.8rem; border-top:8px solid var(--error); }
+  .network-dialog .icon { font-size:2.4rem; line-height:1; }
+  .network-dialog h3 { margin:.5rem 0 .25rem; font-size:1.45rem; color:var(--error-dark); }
+  .network-dialog p.lead { margin:0 0 1rem; color:var(--gray-800); font-size:1rem; }
+  .facts { display:grid; grid-template-columns:auto 1fr; gap:.3rem 1rem; font-size:.9rem; background:var(--gray-100); border-radius:var(--radius-md); padding:.75rem .9rem; margin-bottom:1rem; }
+  .facts dt { color:var(--gray-600); font-weight:600; } .facts dd { margin:0; }
+  .facts code { background:#fff; border:1px solid var(--gray-200); border-radius:4px; padding:0 .3rem; font-size:.85em; }
+  .advice { margin:0 0 1.2rem 1.1rem; padding:0; font-size:.92rem; } .advice li { margin:.2rem 0; }
+  .actions { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+  .actions .auto { color:var(--gray-600); font-size:.85rem; flex:1; }
+  .btn-secondary { background:#fff; color:var(--gray-800); border:1px solid var(--gray-400); border-radius:var(--radius-md); padding:.55rem 1rem; font:inherit; font-weight:600; cursor:pointer; }
+  .btn-secondary:hover { background:var(--gray-100); }
+
+  /* ── Retour du réseau : toast 6 s (motif LaunchGameHost .launch-toast) ──────── */
+  .network-toast { display:none; position:absolute; top:4.2rem; right:1rem; z-index:1100; max-width:360px; padding:.6rem .8rem; border-radius:.55rem; background:#dcfce7; color:#166534; font-size:.85rem; font-weight:600; box-shadow:0 8px 20px rgba(0,0,0,.15); }
+  .frame.state-restored .network-toast { display:block; }
+
+  .notes { margin-top:1rem; font-size:.85rem; color:var(--gray-600); }
+  .notes li { margin:.2rem 0; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="doc-head">
+    <div>
+      <h1>Admin — alerte plein écran « le serveur n'a pas de réseau » (#267, v11.2.2)</h1>
+      <p>Composant <code>admin_network_overlay</code> : overlay sur <strong>toutes</strong> les pages <code>/admin/*</code> (ici la page Jeu, inchangée en dessous). Rien sur la TV, l'anim et les tablettes.</p>
+    </div>
+  </div>
+  <div class="states">
+    <button class="on" data-state="overlay" onclick="setState('overlay')">1 · Perte de réseau — overlay</button>
+    <button data-state="banner" onclick="setState('banner')">2 · « Continuer quand même » — bandeau replié</button>
+    <button data-state="restored" onclick="setState('restored')">3 · Réseau rétabli — tout disparaît, toast 6 s</button>
+    <button data-state="normal" onclick="setState('normal')">0 · Réseau présent (état normal)</button>
+  </div>
+  <p class="legend">Cycle : 0 → 1 (watchdog serveur, 30 s, ou au démarrage) → 2 (choix de l'opérateur, tant que le réseau manque) → 3 (automatique) → 0. Une <em>nouvelle</em> perte revient toujours à l'état 1, même si l'opérateur avait replié l'alerte.</p>
+
+  <div class="frame state-overlay" id="frame">
+    <div class="navbar">
+      <div class="logo">Buzz<span>Control</span></div>
+      <nav class="nav"><a class="active" href="#">Jeu</a><a href="#">Préparation ▾</a><a href="#">Scores</a><a href="#">Historique</a><a href="#">Interface ▾</a></nav>
+      <span class="pill">● Connecté</span>
+    </div>
+
+    <!-- État 2 : bandeau rouge persistant (NetworkWarningBanner existant, déplacé au niveau App) -->
+    <div class="network-warning-banner" role="status">
+      <span>⚠️ Serveur sans réseau — les buzzers, les tablettes, la TV et l'animateur ne peuvent pas se connecter.</span>
+      <span class="spacer"></span>
+      <small>Vérifié il y a 12 s</small>
+      <button type="button" onclick="setState('overlay')">Détails</button>
+    </div>
+
+    <div class="page">
+      <div class="panel"><h2>Questions</h2><div class="sk w80"></div><div class="sk"></div><div class="sk w60"></div><div class="sk w80"></div><div class="sk"></div></div>
+      <div class="panel"><h2>Aperçu TV</h2><div class="tvbox">— aperçu TV —</div><div class="sk w60" style="margin-top:1rem"></div><div class="sk"></div></div>
+      <div class="panel"><h2>Équipes</h2><div class="sk"></div><div class="sk w60"></div><div class="sk w80"></div><div class="sk"></div></div>
+    </div>
+
+    <!-- État 1 : overlay plein écran -->
+    <div class="network-overlay" role="alertdialog" aria-modal="true" aria-labelledby="no-net-title" aria-describedby="no-net-lead">
+      <div class="network-dialog">
+        <div class="icon" aria-hidden="true">📡</div>
+        <h3 id="no-net-title">Le serveur n'a pas de réseau</h3>
+        <p class="lead" id="no-net-lead">BuzzControl n'est joignable que depuis ce poste (<code>localhost</code>). Tant que cela dure, <strong>aucun buzzer, aucune tablette, ni la TV ni l'animateur</strong> ne peuvent se connecter : une partie lancée maintenant ne pourrait pas être jouée.</p>
+        <dl class="facts">
+          <dt>Adresses détectées</dt><dd><strong>aucune</strong> — seulement <code>127.0.0.1</code></dd>
+          <dt>Interfaces ignorées</dt><dd><code>vEthernet (WSL)</code> 172.21.0.1 <small style="color:var(--gray-600)">(virtuelle — non joignable par les appareils)</small></dd>
+          <dt>Dernière vérification</dt><dd>il y a 12 s — contrôle automatique toutes les 30 s</dd>
+        </dl>
+        <ul class="advice">
+          <li>Branchez le câble réseau ou reconnectez le WiFi de ce poste.</li>
+          <li>Sur un Raspberry Pi, vérifiez que le point d'accès est démarré.</li>
+          <li>Cet écran disparaîtra de lui-même dès qu'une adresse réseau sera détectée.</li>
+        </ul>
+        <div class="actions">
+          <span class="auto">Vous pouvez continuer à préparer le quiz : l'alerte restera visible en bandeau rouge jusqu'au retour du réseau.</span>
+          <button type="button" class="btn-secondary" onclick="setState('banner')">Continuer quand même</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- État 3 : toast de retour -->
+    <div class="network-toast" role="status">✅ Réseau rétabli — <strong>192.168.1.84</strong></div>
+  </div>
+
+  <ul class="notes">
+    <li><strong>Overlay</strong> : portail sur <code>&lt;body&gt;</code>, <code>position: fixed; inset: 0</code>, au-dessus de la popup « Lancer la partie » (#253) ; <code>role="alertdialog"</code>, focus piégé, <kbd>Échap</kbd> = « Continuer quand même ».</li>
+    <li><strong>Bandeau</strong> (état 2) : reprend <code>.network-warning-banner</code> (#96, rouge <code>#b91c1c</code>), désormais monté au niveau de l'application (toutes les pages admin, plus seulement la page Jeu) ; « Détails » rouvre l'overlay.</li>
+    <li><strong>Données</strong> : <code>GameState.NETWORK</code> {ONLY_LOCALHOST, IPS, IGNORED_INTERFACES, CHECKED_AT} — <code>contracts/game-state.md</code>. Aucun champ de plateforme, texte de conseils unique (Q3).</li>
+    <li><strong>Hors cadre</strong> : un admin ouvert depuis un autre appareil a, par définition, du réseau — l'overlay ne le concerne jamais.</li>
+  </ul>
+</div>
+<script>
+  function setState(s) {
+    const f = document.getElementById('frame');
+    f.className = 'frame state-' + s;
+    document.querySelectorAll('.states button').forEach(b => b.classList.toggle('on', b.dataset.state === s));
+  }
+</script>
+</body>
+</html>
