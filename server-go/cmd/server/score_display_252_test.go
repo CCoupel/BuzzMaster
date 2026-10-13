@@ -302,7 +302,7 @@ func TestScoreDisplay252_Critical_ZeroPointsFromAnAdminAreIgnoredNoHistoryNoUpda
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv244(t)
 			hist, seq := e.historyLen(), mustScoreChange252(t, e).Seq
-			collectActions(e.adminConn, 100*time.Millisecond) // vide ce qui est déjà arrivé
+			collectAfterSentinel264(t, e.app, e.adminConn) // vide ce qui est déjà arrivé (jusqu'au témoin, #266)
 
 			tc.do(t, e)
 
@@ -312,7 +312,7 @@ func TestScoreDisplay252_Critical_ZeroPointsFromAnAdminAreIgnoredNoHistoryNoUpda
 			if mustScoreChange252(t, e).Seq != seq {
 				t.Error("SCORE_CHANGE.SEQ inchangé")
 			}
-			for _, a := range collectActions(e.adminConn, 300*time.Millisecond) {
+			for _, a := range collectAfterSentinel264(t, e.app, e.adminConn)[0] { // #266 : témoin, pas de fenêtre fixe
 				if a == "UPDATE" {
 					t.Error("aucun UPDATE pour un montant nul")
 				}

@@ -203,7 +203,7 @@ func TestTeamPointsBatch244_Critical_ValidBatchCreditsEveryTeamAndAnswersTheSend
 			t.Errorf("AWARDED_TEAMS reçu par %s doit contenir les 3 équipes : %v", name, got)
 		}
 	}
-	for _, a := range collectActions(e.otherConn, 300*time.Millisecond) {
+	for _, a := range collectAfterSentinel264(t, e.app, e.otherConn)[0] { // #266 : témoin, pas de fenêtre fixe
 		if a == "TEAM_POINTS_BATCH_RESULT" {
 			t.Fatal("RESULT est ciblé sur l'émetteur seul")
 		}

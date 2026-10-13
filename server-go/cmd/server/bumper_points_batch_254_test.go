@@ -152,7 +152,7 @@ func TestBumperPointsBatch254_Critical_ValidBatchCreditsEveryPlayerAndAnswersThe
 	if len(chg.Players) != 3 || len(chg.Teams) < 2 || !chg.Display {
 		t.Errorf("SCORE_CHANGE : PLAYERS (3) et TEAMS concernés, DISPLAY true : %+v", chg)
 	}
-	for _, a := range collectActions(e.otherConn, 300*time.Millisecond) {
+	for _, a := range collectAfterSentinel264(t, e.app, e.otherConn)[0] { // #266 : témoin, pas de fenêtre fixe
 		if a == "BUMPER_POINTS_BATCH_RESULT" {
 			t.Fatal("RESULT est ciblé sur l'émetteur seul")
 		}

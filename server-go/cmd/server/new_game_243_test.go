@@ -115,14 +115,20 @@ func (e *env243) newGame(t *testing.T, payload interface{}) {
 	e.send(t, e.admin, "admin", protocol.ActionNewGame, payload)
 }
 
-func evicted243(t *testing.T, conn *websocket.Conn) bool {
+// evictedEach243 dit, pour chaque connexion, si elle a reçu PLAYER_EVICTED avant le témoin (#266 :
+// plus de fenêtre fixe). Un seul témoin pour toutes les connexions lues à cet instant.
+func evictedEach243(t *testing.T, app *App, conns ...*websocket.Conn) []bool {
 	t.Helper()
-	for _, a := range collectActions(conn, 400*time.Millisecond) {
-		if a == protocol.ActionPlayerEvicted {
-			return true
-		}
+	out := make([]bool, len(conns))
+	for i, actions := range collectAfterSentinel264(t, app, conns...) {
+		out[i] = containsAction(actions, protocol.ActionPlayerEvicted)
 	}
-	return false
+	return out
+}
+
+func evicted243(t *testing.T, app *App, conn *websocket.Conn) bool {
+	t.Helper()
+	return evictedEach243(t, app, conn)[0]
 }
 
 func allZero243(m map[string]int) bool {
@@ -169,7 +175,7 @@ func TestNewGame243_Critical_NoOptionsKeepsTheV111Behaviour(t *testing.T) {
 			if s.Status != game.QuestionStatus("AVAILABLE") && s.Status != "" {
 				t.Errorf("v11.1 : questions remises à jouer : %q", s.Status)
 			}
-			if !evicted243(t, e.paulConn) || !evicted243(t, e.mamieConn) {
+			if ev := evictedEach243(t, e.app, e.paulConn, e.mamieConn); !ev[0] || !ev[1] {
 				t.Error("chaque tablette reçoit PLAYER_EVICTED {GAME_RESET}")
 			}
 		})
@@ -209,7 +215,7 @@ func TestNewGame243_Critical_PopupDefaultResetsScoresHistoryAndQuestionsOnly(t *
 	if _, ok := s.Bumpers[e.paul]; !ok || s.TeamKeys != 2 {
 		t.Errorf("tablettes et équipes conservées : %+v", s)
 	}
-	if evicted243(t, e.paulConn) || evicted243(t, e.mamieConn) {
+	if ev := evictedEach243(t, e.app, e.paulConn, e.mamieConn); ev[0] || ev[1] {
 		t.Error("aucun PLAYER_EVICTED : les tablettes restent inscrites")
 	}
 }
@@ -267,7 +273,7 @@ func TestNewGame243_PurgePlayersWithScoresRemovesTabletsAndKeepsBuzzers(t *testi
 	if _, ok := s.Bumpers[e.buzzer]; !ok {
 		t.Error("buzzer physique conservé")
 	}
-	if !evicted243(t, e.paulConn) {
+	if !evicted243(t, e.app, e.paulConn) {
 		t.Error("PLAYER_EVICTED {GAME_RESET}")
 	}
 	if !allZero243(s.Bumpers) {
@@ -295,7 +301,7 @@ func TestNewGame243_PurgeTeamsRemovesEveryTeamAndUnassignsEveryone(t *testing.T)
 	if _, ok := s.Bumpers[e.paul]; !ok || len(s.Bumpers) != 3 {
 		t.Errorf("tablettes et buzzer conservés : %v", s.Bumpers)
 	}
-	if evicted243(t, e.paulConn) {
+	if evicted243(t, e.app, e.paulConn) {
 		t.Error("les tablettes ne sont pas évincées (PURGE_PLAYERS=false)")
 	}
 	if _, ok := e.app.wsHub.GetClientPlayerID(e.paulCID); !ok {
@@ -351,7 +357,7 @@ func TestNewGame243_NothingCheckedOnlyAppliesTheAlwaysEffects(t *testing.T) {
 	if s.Status != before.Status {
 		t.Errorf("statuts conservés : %q → %q", before.Status, s.Status)
 	}
-	if evicted243(t, e.paulConn) {
+	if evicted243(t, e.app, e.paulConn) {
 		t.Error("aucune éviction")
 	}
 }
@@ -383,10 +389,10 @@ func TestNewGame243_Critical_PlayersWithoutScoresIsRefusedAndNothingChanges(t *t
 			if refused.Reason != "PLAYERS_REQUIRE_SCORES" {
 				t.Errorf("REASON = %q", refused.Reason)
 			}
-			for _, a := range collectActions(other, 300*time.Millisecond) {
-				if a == "NEW_GAME_REFUSED" {
-					t.Fatal("NEW_GAME_REFUSED est ciblé sur l'émetteur seul")
-				}
+			// un seul témoin pour « other » et pour l'éviction testée plus bas (#266)
+			seen := collectAfterSentinel264(t, e.app, other, e.paulConn)
+			if containsAction(seen[0], "NEW_GAME_REFUSED") {
+				t.Fatal("NEW_GAME_REFUSED est ciblé sur l'émetteur seul")
 			}
 			after := e.snap()
 			if after.Phase != before.Phase || after.QuestionID != before.QuestionID {
@@ -403,7 +409,7 @@ func TestNewGame243_Critical_PlayersWithoutScoresIsRefusedAndNothingChanges(t *t
 			if e.app.engine.GetQuestionStatus("q-ardoise") != beforeStatus {
 				t.Error("statuts des questions inchangés")
 			}
-			if evicted243(t, e.paulConn) {
+			if containsAction(seen[1], protocol.ActionPlayerEvicted) {
 				t.Error("aucune éviction")
 			}
 			if !e.hasLog(game.LogLevelWarn, "NEW_GAME_REFUSED", "options=") {

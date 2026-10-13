@@ -111,6 +111,11 @@ func readAction(t *testing.T, conn *websocket.Conn) (string, json.RawMessage) {
 // action among a client's normal traffic (UPDATE/ENROLLMENT_UPDATE/FULL...)
 // instead of requiring an exact message count, which would make these tests
 // brittle to unrelated broadcast changes.
+//
+// DEPRECATED (#266) : une fenêtre fixe est fragile sous charge (trop courte, un
+// message en retard est vu « absent »). Plus aucun test ne l'appelle ; utiliser
+// collectAfterSentinel264 / assertNoAction264 (sentinel_264_test.go) — attente
+// par témoin, jamais de fenêtre fixe (docs/DEV_COMMANDS.md).
 func collectActions(conn *websocket.Conn, window time.Duration) []string {
 	var actions []string
 	deadline := time.Now().Add(window)
@@ -184,6 +189,7 @@ func TestHandleDeleteBumper_VirtualPlayer_EmitsPlayerEvictedToTargetOnly(t *test
 
 	// A second, unrelated VJoueur must never receive an eviction meant for Alice.
 	bystanderConn := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, bystanderConn) // inscrite au hub avant le témoin (#266)
 
 	app.handleDeleteBumper(deleteBumperMsg(t, aliceID))
 
@@ -199,7 +205,7 @@ func TestHandleDeleteBumper_VirtualPlayer_EmitsPlayerEvictedToTargetOnly(t *test
 		t.Errorf("expected REASON=PLAYER_REMOVED, got %q", payload.Reason)
 	}
 
-	bystanderActions := collectActions(bystanderConn, 300*time.Millisecond)
+	bystanderActions := collectAfterSentinel264(t, app, bystanderConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(bystanderActions, protocol.ActionPlayerEvicted) {
 		t.Errorf("an unrelated VJoueur must never receive PLAYER_EVICTED, got actions: %v", bystanderActions)
 	}
@@ -216,10 +222,11 @@ func TestHandleDeleteBumper_PhysicalBuzzer_NoPlayerEvicted(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	bystanderConn := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, bystanderConn) // inscrite au hub avant le témoin (#266)
 
 	app.handleDeleteBumper(deleteBumperMsg(t, "AA:BB:CC:DD:EE:01"))
 
-	actions := collectActions(bystanderConn, 300*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, bystanderConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(actions, protocol.ActionPlayerEvicted) {
 		t.Errorf("deleting a physical buzzer must never emit PLAYER_EVICTED, got actions: %v", actions)
 	}
@@ -257,6 +264,7 @@ func TestNewGame_EmitsPlayerEvicted_GameResetToEachPurgedVJoueur(t *testing.T) {
 	app.wsHub.SetClientPlayerID(bobClientID, bobID)
 
 	adminConn := dialWS(t, baseURL, "/ws/admin")
+	learnClientID(t, app, adminConn) // inscrite au hub avant le témoin (#266)
 
 	// handleWebMessage's NEW_GAME case logs via a.logger (the App-level instance,
 	// distinct from the nil-safe package-level server.LogInfo/etc used elsewhere) —
@@ -280,7 +288,7 @@ func TestNewGame_EmitsPlayerEvicted_GameResetToEachPurgedVJoueur(t *testing.T) {
 		}
 	}
 
-	adminActions := collectActions(adminConn, 300*time.Millisecond)
+	adminActions := collectAfterSentinel264(t, app, adminConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(adminActions, protocol.ActionPlayerEvicted) {
 		t.Errorf("admin must never receive PLAYER_EVICTED itself, got actions: %v", adminActions)
 	}
