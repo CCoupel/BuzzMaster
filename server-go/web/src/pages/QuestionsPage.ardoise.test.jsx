@@ -278,10 +278,10 @@ describe('QuestionsPage — sérialisation ARDOISE_KEYBOARD_TYPE (#87)', () => {
     useGame.mockReturnValue(makeQPageMock({ sendMessage }))
 
     // Also mock fetch for the form submission
-    global.fetch = vi.fn().mockResolvedValue({
+    global.fetch = vi.fn().mockImplementation(async (url) => ({
       ok: true,
-      json: async () => ({ ID: '99' }),
-    })
+      json: async () => (url === '/api/categories' ? [] : { ID: '99' }),
+    }))
 
     const { container } = render(<QuestionsPage />)
 

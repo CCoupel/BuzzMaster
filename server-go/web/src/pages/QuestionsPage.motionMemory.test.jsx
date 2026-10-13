@@ -216,7 +216,7 @@ describe('QuestionsPage — sérialisation MEMORY_PAIRS d\'une carte MEMOTION (#
   it('motion_cards inclut MEMORY_MODE=SOLO, MEMORY_PAIRS et MEMORY_CONFIG pour une carte MEMORY', async () => {
     const sendMessage = vi.fn().mockResolvedValue(undefined)
     useGame.mockReturnValue(makeQPageMock({ sendMessage }))
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ID: '99' }) })
+    global.fetch = vi.fn().mockImplementation(async (url) => ({ ok: true, json: async () => (url === '/api/categories' ? [] : { ID: '99' }) }))
 
     const { container, firstCard } = renderAndSelectMemotion()
     selectCardTypeMemory(firstCard)
