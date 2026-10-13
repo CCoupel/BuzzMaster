@@ -9,7 +9,23 @@ Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de trava
 Source de vérité MEMORY : `.claude/memory/MEMORY.md` uniquement (versionné Git).
 Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
-## État courant (2026-10-12) — v11.2.0 en PROD
+## État courant (2026-10-13) — v11.2.1 en PROD
+
+- **PROD = v11.2.1** : merge `main` `01e36339`, tag `v11.2.1`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.2.1 (exe Windows, linux-arm64, firmware merged, SHA256SUMS). Dernière QUALIF : 11.2.1.1 (`f97600c5`, `build/qualif_v11.2.1/`). Installation PROD manuelle (DEPLOY PROD = no-op). Milestone v11.2.1 (#39) fermé 8/8, branche `milestone/v11.2.1` supprimée (local + remote). Branche courante : `main`.
+- **Livré** (toutes validées manuellement par l'utilisateur avant fermeture) : #261 arrêt idempotent (plus de panic `/shutdown`) ; #247 PAUSE seulement sur appui accepté, une seule fois, ARDOISE gardé par le moteur, écho ciblé sur buzz SPEEDY refusé d'un VJoueur ; #189 AnimAnswerZone en MEMOTION REVEAL ; #242 a11y navbar ; #188/#264 tests stabilisés ; #248 accusé + renvoi tablette (QCM, SPEEDY via `TIME`, retournement MEMORY/MEMOTION via `FLIP_ID` + `FLIP_MEMORY_CARD_ACK`, hook `useAckedSend`) ; #265 attribution multi-équipes en feu d'artifice par lots de 6, tablette calée sur la TV (`SCORE_CHANGE.GAINS`, module `pointsAwardLots.js`). Contrats : `contracts/game-state.md` (GAINS), `contracts/websocket-actions.md` (FLIP_ID/ACK). Maquettes validées : `docs/mockup/v11.2.1/ui/`.
+- **Marketing** : site gh-pages `0164f3e0` (2 cartes « Nouveau v11.2.1 ») ; notes + posts `docs/releases/v11.2.1/` (commit `f071ef56` sur main). Posts réseaux à publier par l'utilisateur. Le worktree `MARKETING/` était cassé (`.git` vers un ancien chemin), recréé depuis `origin/gh-pages`. Le site n'a jamais reçu de communication v11.2.0 (rattrapage proposé, non décidé).
+- **Commits locaux non poussés sur main** : `f071ef56`, `98a3cd8f` + `4406d42b` (promotion en `regression` des tests v11.2.0 restés en `feature`, oubli de la release précédente — plus aucune ligne `feature` dans `tests/INDEX.md`).
+- **Branches distantes non mergées, conservées (à trancher par l'utilisateur)** : `origin/chore/template-v3.8.0` (2 commits), `origin/spike/226-audio-bluetooth` (3 commits).
+- **Prochain : milestone v11.2.2 (#40, aucune branche)** : #267 alerte plein écran admin quand le serveur n'a pas de réseau (localhost seulement — l'utilisateur a demandé de ne PAS démarrer son dev, cadrage à faire), #266 fenêtres fixes restantes des tests `cmd/server`, #268 react-router (3 « high » `npm audit` non atteignables) + ajouter `npm audit` à `commands.audit`, #269 data race de test (timer résiduel `h246Setup` vu sur la CI de release), #221 composant catégorie/difficulté partagé, #190 barème `POINTS_RULE` par carte MEMOTION. #259 (sécurité endpoints) reste hors milestone.
+- **Leçons v11.2.1 (permanentes)** :
+  1. Au démarrage d'un milestone, faire cadrer par le planner les lots, dépendances et parallélisme AVANT tout dev, et poser un label `LOT-<entier>` par issue (demande utilisateur).
+  2. Clone partagé : un agent ne fait jamais `git stash`/`checkout`/`reset` dans le dépôt principal (dev-backend et test-writer l'ont fait, rien perdu) ; comparaison = worktree jetable par chemin absolu. Un test Go qui référence un champ inexistant casse la compilation du paquet pour tous : écrire les tests RED via JSON/messages bruts, ou séparer les paquets entre agents.
+  3. La relecture factuelle du CHANGELOG par code-reviewer a encore trouvé 7 erreurs (dont une introduite par la relecture elle-même) : la garder systématique, avec re-relecture.
+  4. `npm audit` n'était pas dans les contrôles pré-PROD : ajouté via #268.
+  5. Ne pas mettre une petite action (créer une issue, un milestone) en file derrière une tâche longue d'un agent : la lancer en parallèle (agent ponctuel).
+  6. Une QA « validée » sans navigateur laisse le visuel à l'utilisateur : toujours lui fournir les procédures `tests/procedures/` avant de proposer la fermeture.
+
+## État précédent (2026-10-12) — v11.2.0 en PROD (archivé)
 
 - **PROD = v11.2.0** : merge `main` `9fdb7f62`, tag `v11.2.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.2.0, CI run 38250528708. Dernier candidat QUALIF : 11.2.0.9 (`build/qualif_v11.2.0/`). Milestone v11.2 clôturé (18 issues), branche `milestone/v11.2` supprimée. Branche courante : `main`.
 - **Livré en v11.2** : #243, #244, #245 (manches, entractes), #246, #249 à #258, #233/#257 (tests Go stabilisés), #260 (govulncheck : Go 1.26.9, x/net v0.60.0, gorilla/websocket v1.5.3), #262/#263 (tests fragiles sur le runner CI).
@@ -27,7 +43,7 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 
 - **Template passé de v3.14.2 à v3.17.0** (commits locaux `65747c48` + `d32d9ddf`, aucun push). Nouveaux contextes `CDP_PHASES_{PLAN_DEV,RELEASE,REVIEW_QA}`, bloc `TEAMLEADER_PROTOCOL` à jour (section « Labels d'issues » : le teamleader fait poser les labels par `deployer`). `/context-audit` : seules des références mortes de ce fichier ont été retirées.
 - **Mod `milestone-panel`** (`.claude/skills/milestone-panel/`, gitignoré, copié depuis `TEMPLATE_claude/mods/`) : `session.start` sans garde, donc chaque session qui le charge ouvre le panneau et lance un timer `gh` toutes les 300 s. **Problème ouvert** : l'utilisateur veut qu'il ne se charge que pour le teamleader ; l'API de `session.start` ne distingue pas un teammate (seulement `cwd`, `surface`, `isInteractive`). Le hook `tool.call` doit rester ouvert aux teammates (les `gh issue edit` passent par `deployer`). La correction doit être reportée dans le dépôt du template, `.claude/skills/` étant régénéré à chaque sync.
-- **Prochain** : milestone v11.2.1 (aucune branche), commencer par #261 (panic `/shutdown`).
+- **Mise à jour 2026-10-12** : template synchronisé en **v3.17.2** (`template_version` dans `project-config.json`, commit `cf03b5ce`) ; le mod `milestone-panel` détecte désormais les sessions teammate (variables d'env + flags de lancement) — le problème ci-dessus est traité côté template.
 
 ## Sync template v3.14.1 (2026-10-10)
 
