@@ -1,0 +1,221 @@
+<!--
+mockup:
+  composant: vplayer_qcm_answer
+  feature: ack
+  version: 11.2.1
+  type: ui
+  issue: "#248"
+  validee_le: 2026-10-12
+  complete: ["v11.2/ui/vplayer_ardoise_keyboard__final_ack.html"]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablette — accusé de réception QCM, SPEEDY, MEMORY (#248)</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#0b1020; color:#fff; }
+  .mock-bar { position:sticky; top:0; z-index:500; background:#020617; color:#cbd5e1; padding:.5rem 1rem; display:flex; flex-direction:column; gap:.35rem; font-size:.82rem; border-bottom:1px solid #1e293b; }
+  .mock-bar .row { display:flex; flex-wrap:wrap; gap:.3rem .9rem; align-items:center; }
+  .mock-bar strong { color:#fff; min-width:4.5rem; }
+  .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-bar label.na { opacity:.35; pointer-events:none; }
+  .mock-note { max-width:900px; margin:.7rem auto; padding:0 1rem; font-size:.8rem; color:#94a3b8; line-height:1.45; }
+  .mock-note b { color:#e2e8f0; }
+  /* cadre tablette 4:3 (même cadre que vplayer_ardoise_keyboard__final_ack) */
+  .device { position:relative; width:min(900px, calc(100vw - 2rem)); aspect-ratio:4/3; margin:0 auto 1.2rem; border-radius:1.4rem; border:10px solid #1f2937; overflow:hidden;
+            background:linear-gradient(160deg,#1e1b4b,#312e81 55%,#4338ca); container-type:size; }
+  .player-head { position:absolute; top:0; left:0; right:0; display:flex; align-items:center; gap:.6rem; padding:.7rem 1rem; font-weight:700; z-index:3; }
+  .dot { width:.8rem; height:.8rem; border-radius:50%; background:#22c55e; }
+  .team { font-size:.85rem; color:#c7d2fe; font-weight:600; }
+  .conn { margin-left:auto; font-size:.75rem; padding:.15rem .55rem; border-radius:999px; background:rgba(34,197,94,.2); color:#86efac; }
+  .conn.off { background:rgba(239,68,68,.22); color:#fca5a5; }
+  /* bandeau de connexion existant (#118, inchangé) */
+  .banner { position:absolute; top:3.2rem; left:50%; transform:translateX(-50%); display:none; align-items:center; gap:.5rem; padding:.35rem .9rem; border-radius:999px; font-size:.85rem; font-weight:700; z-index:6; }
+  .banner.lost { display:flex; background:rgba(239,68,68,.85); }
+  .banner.back { display:flex; background:rgba(34,197,94,.85); }
+  .question { position:absolute; top:12%; left:6%; right:6%; text-align:center; font-size:clamp(1rem,3vw,1.6rem); font-weight:700; }
+  .timer { position:absolute; top:21%; left:0; right:0; text-align:center; font-size:clamp(1.2rem,4.5vw,2.2rem); font-weight:800; font-variant-numeric:tabular-nums; }
+  .view { position:absolute; inset:0; display:none; }
+  .view.on { display:block; }
+  /* QCM (grille existante qcm-answers-grid / qcm-answer-item) */
+  .grid { position:absolute; left:8%; right:8%; top:33%; display:grid; grid-template-columns:1fr 1fr; gap:3cqh 2cqw; }
+  .ans { position:relative; display:flex; align-items:center; gap:.8rem; padding:3cqh 1.2rem; border-radius:1rem; font-weight:700; font-size:clamp(.9rem,2.4vw,1.2rem); transition:all .25s; }
+  .ans .l { font-size:1.6em; font-weight:900; }
+  .a { background:#dc2626; } .b { background:#16a34a; } .c { background:#ca8a04; } .d { background:#2563eb; }
+  .grid.locked .ans { opacity:.35; filter:grayscale(40%); }
+  .grid.locked .ans.chosen { opacity:1; filter:none; outline:4px solid #fff; outline-offset:3px; }
+  .ans .tag { position:absolute; right:.6rem; top:50%; transform:translateY(-50%); font-size:1.4em; }
+  /* SPEEDY (zone de buzz existante : média / écran entier cliquable) */
+  .buzz-zone { position:absolute; left:50%; top:58%; transform:translate(-50%,-50%); width:34cqh; height:34cqh; border-radius:50%; background:radial-gradient(circle at 35% 30%, #f87171, #b91c1c); box-shadow:0 1.4cqh 0 #7f1d1d, 0 0 5cqh rgba(248,113,113,.6); display:flex; align-items:center; justify-content:center; font-size:5cqh; font-weight:900; letter-spacing:.1em; }
+  .buzz-zone.pressed { transform:translate(-50%,-48%); box-shadow:0 .4cqh 0 #7f1d1d, 0 0 3cqh rgba(248,113,113,.4); opacity:.75; }
+  /* MEMORY (grille existante memory-card) */
+  .mgrid { position:absolute; left:10%; right:10%; top:31%; display:grid; grid-template-columns:repeat(4,1fr); gap:2cqh 1.6cqw; }
+  .card { position:relative; aspect-ratio:3/4; max-height:26cqh; border-radius:.8rem; background:linear-gradient(145deg,#7c3aed,#4c1d95); border:2px solid rgba(255,255,255,.3); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:4cqh; }
+  .card.face { background:#f8fafc; color:#0f172a; font-size:3.2cqh; }
+  .card.matched { opacity:.35; }
+  .card.pending { outline:4px solid #fde68a; outline-offset:3px; }
+  .card.pending::after { content:'⏳'; position:absolute; right:.3rem; top:.3rem; font-size:2.6cqh; }
+  .card.failed { animation:shake .4s 2; outline:4px solid rgba(239,68,68,.8); outline-offset:3px; }
+  @keyframes shake { 0%,100% { transform:translateX(0); } 25% { transform:translateX(-6px); } 75% { transform:translateX(6px); } }
+  .turn { position:absolute; top:22%; left:0; right:0; text-align:center; font-size:clamp(.9rem,2.4vw,1.2rem); color:#fde68a; font-weight:700; }
+  /* overlay de confirmation existant (vplayer-buzz-overlay, inchangé) */
+  .buzz-ov { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:1rem; background:color-mix(in srgb, var(--bc, #22c55e) 55%, rgba(2,6,23,.6)); z-index:4; }
+  .buzz-ov.on { display:flex; }
+  .buzz-ov .ck { font-size:16cqh; font-weight:900; line-height:1; }
+  .buzz-ov .tx { font-size:6cqh; font-weight:900; }
+  /* message d'état : même vocabulaire que final_ack (#246) */
+  .pill { position:absolute; left:50%; bottom:6%; transform:translateX(-50%); display:none; max-width:88%; text-align:center; padding:.55rem 1.2rem; border-radius:999px; font-weight:700; font-size:clamp(.85rem,2.2vw,1.1rem); background:rgba(0,0,0,.75); z-index:5; }
+  .pill.on { display:block; }
+  .ov-sending { color:#fde68a; } .ov-ok { color:#86efac; border:2px solid rgba(34,197,94,.6); } .ov-off { color:#fca5a5; border:2px solid rgba(239,68,68,.6); }
+  .ov-pause { color:#e0e7ff; border:2px solid rgba(165,180,252,.6); } .ov-fail { color:#fecaca; border:2px solid rgba(239,68,68,.9); background:rgba(69,10,10,.85); } .ov-info { color:#e2e8f0; border:2px solid rgba(148,163,184,.6); }
+  .spin { display:inline-block; animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .rules { max-width:900px; margin:0 auto 2rem; padding:0 1rem; font-size:.8rem; color:#94a3b8; line-height:1.5; }
+  .rules h3 { color:#e2e8f0; font-size:.9rem; margin:.8rem 0 .3rem; }
+  .rules table { border-collapse:collapse; width:100%; margin:.4rem 0; }
+  .rules th, .rules td { border:1px solid #1e293b; padding:.3rem .5rem; text-align:left; vertical-align:top; }
+  .rules th { background:#0f172a; color:#fff; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <div class="row"><strong>Flux :</strong>
+    <label><input type="radio" name="fl" value="qcm" checked> Réponse QCM</label>
+    <label><input type="radio" name="fl" value="speedy"> Buzz SPEEDY</label>
+    <label><input type="radio" name="fl" value="memory"> Retournement MEMORY / MEMOTION</label>
+  </div>
+  <div class="row" id="states"><strong>État :</strong>
+    <label><input type="radio" name="st" value="idle" checked> 0. Saisie</label>
+    <label><input type="radio" name="st" value="pending"> 1. En attente d'accusé</label>
+    <label><input type="radio" name="st" value="ack"> 2. Envoyé (accusé reçu)</label>
+    <label><input type="radio" name="st" value="lost"> 3a. Coupure — en attente du réseau</label>
+    <label><input type="radio" name="st" value="resend"> 3b. Renvoi en cours après coupure</label>
+    <label><input type="radio" name="st" value="paused"> 3c. Jeu en pause avant accusé</label>
+    <label><input type="radio" name="st" value="fail"> 4. Échec définitif</label>
+    <label data-only="qcm,speedy"><input type="radio" name="st" value="team"> 5. Équipe déjà servie</label>
+  </div>
+</div>
+<p class="mock-note">Page joueur (<b>/player</b>) sur tablette. Les écrans de jeu (grille QCM, zone de buzz SPEEDY, grille MEMORY), le bandeau de connexion (#118) et l'overlay de confirmation « ✓ » existants sont <b>inchangés</b>. Ce qui change : après un appui, le joueur voit l'<b>attente d'accusé</b> (choix mis en avant, saisie verrouillée) ; « ✓ » et « reçue » ne s'affichent qu'<b>après l'accusé du serveur</b> ; la réponse est <b>renvoyée automatiquement</b> après une coupure, et un <b>échec définitif</b> est annoncé. Mêmes messages et mêmes couleurs que l'accusé ARDOISE (#246, maquette <code>vplayer_ardoise_keyboard__final_ack</code>). Hors saisie, aucun message n'invite à rejouer ou à réessayer (contrainte <code>DECISIONS.md</code>).</p>
+
+<div class="device">
+  <div class="player-head"><span class="dot"></span>Paul <span class="team">· Les Bleus</span><span class="conn" id="conn">● connecté</span></div>
+  <div class="banner" id="banner"><span>●</span><span id="bannerTx"></span></div>
+
+  <div class="view" id="v-qcm">
+    <div class="question">Quel est le plus long fleuve de France ?</div>
+    <div class="timer" id="t-qcm">00:12</div>
+    <div class="grid" id="grid">
+      <div class="ans a"><span class="l">A</span>La Seine</div>
+      <div class="ans b" id="chosen"><span class="l">B</span>La Loire<span class="tag" id="tag"></span></div>
+      <div class="ans c"><span class="l">C</span>Le Rhône</div>
+      <div class="ans d"><span class="l">D</span>La Garonne</div>
+    </div>
+  </div>
+
+  <div class="view" id="v-speedy">
+    <div class="question">Qui a peint « La Joconde » ?</div>
+    <div class="timer" id="t-speedy">00:09</div>
+    <div class="buzz-zone" id="bz">BUZZ</div>
+  </div>
+
+  <div class="view" id="v-memory">
+    <div class="question">MEMORY — Capitales</div>
+    <div class="turn" id="turn">À vous de jouer : retournez une carte</div>
+    <div class="mgrid" id="mgrid"></div>
+  </div>
+
+  <div class="buzz-ov" id="bov"><div class="ck">✓</div><div class="tx" id="bovTx"></div></div>
+  <div class="pill" id="pill"></div>
+</div>
+
+<div class="rules">
+  <h3>Comportement (référence dev / tests)</h3>
+  <table>
+    <tr><th>État</th><th>Entrée</th><th>Affichage</th><th>Sortie</th></tr>
+    <tr><td>1. En attente</td><td>Appui envoyé (socket ouvert et lié)</td><td>Choix mis en avant, saisie verrouillée, « ⏳ Envoi de votre réponse… »</td><td>Accusé → 2 ; perte de liaison → 3a ; plus de 4 s sans accusé (lien mort) → renvoi silencieux, reste en 1</td></tr>
+    <tr><td>2. Envoyé</td><td>Accusé : écho de son propre bumper avec <code>TIME &gt; 0</code> (QCM : <code>ANSWER_COLOR</code> ; MEMORY : carte retournée dans l'état)</td><td>Overlay « ✓ » existant + « ✓ Réponse reçue » (SPEEDY : « ✓ Buzz reçu » ; MEMORY : la carte se retourne normalement, pas de pastille)</td><td>Terminal</td></tr>
+    <tr><td>3a. Coupure</td><td>Liaison perdue avant l'accusé (appui fait pendant ou avant la coupure)</td><td>Bandeau existant « Connexion perdue — reconnexion… » + « ⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau »</td><td>Reliaison → 3b</td></tr>
+    <tr><td>3b. Renvoi</td><td>Reliaison ou retour au premier plan, même question, phase STARTED</td><td>Bandeau « Connexion rétablie » + « ⏳ Renvoi de votre réponse… »</td><td>Accusé → 2 ; contexte périmé → 4</td></tr>
+    <tr><td>3c. Pause</td><td>Phase PAUSED avant l'accusé</td><td>« ⏸ Jeu en pause · ⏳ envoi de votre réponse… » (comme ARDOISE)</td><td>Retour à STARTED → renvoi (3b) ; question terminée → 4</td></tr>
+    <tr><td>4. Échec définitif</td><td>Question changée, phase passée en REVEALED / STOPPED / PREPARE, ou plafond de renvois atteint, sans accusé</td><td>« ✕ Réponse non reçue — la question est terminée » (SPEEDY : « ✕ Buzz non reçu… » ; MEMORY : carte qui tremble puis revient face cachée, « ✕ Carte non retournée — ce n'est plus votre tour » ou « … la manche est terminée »). Aucune invitation à réessayer.</td><td>Disparaît à la question suivante (PREPARE)</td></tr>
+    <tr><td>5. Équipe déjà servie</td><td>QCM/SPEEDY : un coéquipier a répondu ou buzzé avant (l'équipe a un <code>TIME</code>), sans accusé pour ce joueur</td><td>« ℹ Votre équipe a déjà répondu » (gris, pas une erreur)</td><td>Terminal, renvois arrêtés</td></tr>
+  </table>
+  <h3>Règles communes</h3>
+  <ul>
+    <li>Un seul appui en attente par joueur et par question (le premier) ; tant qu'il est en attente, la saisie est verrouillée (pas de changement de réponse QCM, pas d'autre carte).</li>
+    <li>Renvoi : à chaque reliaison, au retour au premier plan, à la reprise après pause et toutes les 4 s sans accusé ; <b>plafond 30 envois</b> (comme ARDOISE_FINAL #246), puis état 4.</li>
+    <li>Le serveur ignore les doublons (bumper déjà appuyé) ; depuis #247, un doublon ne diffuse plus de PAUSE.</li>
+    <li>SPEEDY : l'heure du buzz est celle de sa réception par le serveur (arbitrage #118 F7 inchangé) ; un buzz renvoyé après une coupure arrive donc plus tard.</li>
+    <li>MEMORY/MEMOTION (sous-lot séparé) : l'accusé est la carte retournée dans l'état reçu ; si le tour est passé à une autre équipe, échec définitif sans renvoi.</li>
+  </ul>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const CARDS = ['?','?','Paris','?','?','?','?','?'];
+function renderMemory(st) {
+  const g = $('mgrid'); g.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const d = document.createElement('div'); d.className = 'card';
+    if (i === 2 || i === 6) { d.className += ' face matched'; d.textContent = 'Rome'; }
+    else if (i === 5) {
+      if (st === 'ack') { d.className += ' face'; d.textContent = 'Berlin'; }
+      else if (st === 'fail') { d.className += ' failed'; d.textContent = 'F'; }
+      else if (st !== 'idle') { d.className += ' pending'; d.textContent = 'F'; }
+      else d.textContent = 'F';
+    } else d.textContent = 'ABCDEFGH'[i];
+    g.appendChild(d);
+  }
+}
+const MSG = {
+  qcm: { pending:['ov-sending','<span class="spin">⏳</span> Envoi de votre réponse…'], ack:['ov-ok','✓ Réponse reçue'],
+         lost:['ov-off','⚠ Connexion perdue — votre réponse sera envoyée dès le retour du réseau'], resend:['ov-sending','<span class="spin">⏳</span> Renvoi de votre réponse…'],
+         paused:['ov-pause','⏸ Jeu en pause · <span class="spin">⏳</span> envoi de votre réponse…'], fail:['ov-fail','✕ Réponse non reçue — la question est terminée'],
+         team:['ov-info','ℹ Votre équipe a déjà répondu'] },
+  speedy: { pending:['ov-sending','<span class="spin">⏳</span> Envoi de votre buzz…'], ack:['ov-ok','✓ Buzz reçu'],
+         lost:['ov-off','⚠ Connexion perdue — votre buzz sera envoyé dès le retour du réseau'], resend:['ov-sending','<span class="spin">⏳</span> Renvoi de votre buzz…'],
+         paused:['ov-pause','⏸ Jeu en pause · <span class="spin">⏳</span> envoi de votre buzz…'], fail:['ov-fail','✕ Buzz non reçu — la question est terminée'],
+         team:['ov-info','ℹ Votre équipe a déjà buzzé'] },
+  memory: { pending:['ov-sending','<span class="spin">⏳</span> Retournement de la carte…'], ack:null,
+         lost:['ov-off','⚠ Connexion perdue — la carte sera retournée dès le retour du réseau'], resend:['ov-sending','<span class="spin">⏳</span> Renvoi du retournement…'],
+         paused:['ov-pause','⏸ Jeu en pause · <span class="spin">⏳</span> retournement en attente…'], fail:['ov-fail','✕ Carte non retournée — ce n\'est plus votre tour'] },
+};
+function render() {
+  const fl = document.querySelector('input[name=fl]:checked').value;
+  document.querySelectorAll('#states label[data-only]').forEach(l => l.classList.toggle('na', !l.dataset.only.split(',').includes(fl)));
+  let st = document.querySelector('input[name=st]:checked').value;
+  if (st === 'team' && fl === 'memory') { document.querySelector('input[name=st][value=idle]').checked = true; st = 'idle'; }
+  ['qcm','speedy','memory'].forEach(v => $('v-' + v).classList.toggle('on', v === fl));
+  const off = st === 'lost';
+  $('conn').textContent = off ? '● connexion perdue' : '● connecté'; $('conn').classList.toggle('off', off);
+  const b = $('banner'); b.className = 'banner' + (st === 'lost' ? ' lost' : st === 'resend' ? ' back' : '');
+  $('bannerTx').textContent = st === 'lost' ? 'Connexion perdue — reconnexion…' : 'Connexion rétablie';
+  const t = st === 'paused' ? 'PAUSE' : (st === 'fail' ? '00:00' : null);
+  $('t-qcm').textContent = t || '00:12'; $('t-speedy').textContent = t || '00:09';
+  // QCM
+  $('grid').classList.toggle('locked', st !== 'idle');
+  $('chosen').classList.toggle('chosen', st !== 'idle' && st !== 'team');
+  $('tag').textContent = { pending:'⏳', lost:'⏳', resend:'⏳', paused:'⏳', fail:'✕' }[st] || '';
+  // SPEEDY
+  $('bz').classList.toggle('pressed', st !== 'idle' && st !== 'team');
+  // MEMORY
+  renderMemory(st);
+  $('turn').textContent = st === 'fail' ? 'Au tour des Rouges' : st === 'ack' ? 'Carte retournée — retournez la deuxième' : 'À vous de jouer : retournez une carte';
+  // overlay de confirmation existant (après accusé seulement)
+  const bov = $('bov'), showOv = st === 'ack' && fl !== 'memory';
+  bov.classList.toggle('on', showOv);
+  bov.style.setProperty('--bc', fl === 'qcm' ? '#16a34a' : '#22c55e');
+  $('bovTx').textContent = fl === 'qcm' ? 'B : La Loire' : 'BUZZÉ !';
+  // pastille d'état
+  const m = MSG[fl][st], p = $('pill');
+  p.classList.toggle('on', !!m); if (m) { p.className = 'pill on ' + m[0]; p.innerHTML = m[1]; }
+}
+document.querySelectorAll('input[name=fl],input[name=st]').forEach(r => r.addEventListener('change', render));
+render();
+</script>
+</body>
+</html>

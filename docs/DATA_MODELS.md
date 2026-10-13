@@ -64,6 +64,9 @@ interface Team {
 - **`GameState.SCORE_CHANGE`** : `{SEQ, DISPLAY, TEAMS, PLAYERS}`, toujours sérialisé, listes jamais `null`. Défaut
   `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: []}`. Décrit la **dernière modification manuelle** de score
   (`contracts/game-state.md` §`SCORE_CHANGE`).
+- **`GameState.SCORE_CHANGE.GAINS`** (v11.2.1, #265) : `{TEAM, POINTS}[]`, toujours sérialisé, `[]` par défaut, jamais
+  `null`. Variation nette de score par équipe de la même modification (même `SEQ`). Non persisté
+  (`contracts/game-state.md` §`SCORE_CHANGE.GAINS`).
 - **`GameEvent.DISPLAY`** (historique `POINTS_AWARDED`) : `*bool`, `omitempty`. Absent = visible (anciens fichiers) ;
   `false` = correction cachée, enregistrée pour l'audit. Une correction cachée **n'est pas** comptée dans la règle
   « déjà créditée » (`AWARDED_TEAMS`).

@@ -19,6 +19,9 @@
 | admin_new_game | #253 launch_overlay | `v11.2/ui/admin_new_game__launch_overlay.html` | v11.2 | Overlay « Lancer la partie » (validée 2026-10-11) ; remplace `purge_popup_details` ; complète `admin_navbar__launch_game_entry` |
 | admin_questions_list | #245 rounds_entractes_delete_choice | `v11.2/ui/admin_questions_list__rounds_entractes_delete_choice.html` | v11.2 | Éditeur de manches : création automatique des entractes, fenêtre Conserver / Supprimer aussi / Annuler, « Sans manche » en premier (validée 2026-10-11) ; remplace `rounds_unassigned_first` (chaîne non archivée) |
 | game_round_indicator | #245 admin_anim_tv_next_entracte | `v11.2/ui/game_round_indicator__admin_anim_tv_next_entracte.html` | v11.2 | Indicateur de manche en jeu : « à suivre » propose les entractes ; anim : Lancer / Terminer l'entracte (validée 2026-10-11) ; remplace `admin_anim_tv_entractes` (chaîne non archivée) ; complète `rounds_entractes_delete_choice` et `docs/mockups/entracte-programme-214.html` (§04) |
+| tv_points_award | #265 multi_team | `v11.2.1/ui/tv_points_award__multi_team.html` | v11.2.1 | TV, attribution de points multi-équipes, feu d'artifice par lots de 6 au plus, grille 3 × 2 (validée 2026-10-12) |
+| vplayer_points_award | #265 own_team | `v11.2.1/ui/vplayer_points_award__own_team.html` | v11.2.1 | Tablette, gain de sa propre équipe seulement, animation calée sur le lot de la TV (validée 2026-10-12) ; complète `tv_points_award__multi_team` |
+| vplayer_qcm_answer | #248 ack | `v11.2.1/ui/vplayer_qcm_answer__ack.html` | v11.2.1 | Tablette, accusé de réponse QCM / SPEEDY / MEMORY, état « équipe déjà servie » (validée 2026-10-12) ; complète `vplayer_ardoise_keyboard__final_ack` |
 
 ## Obsolètes
 | Fichier | Remplacée par | Version |

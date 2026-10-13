@@ -122,6 +122,14 @@ Tous écrits sur disque avec la configuration par défaut (`WARN`/`ERROR`), sauf
 | `LAUNCH_LOCK_REFUSED` | WARN | Ouverture refusée | `client`, `reason` |
 | `ACTION_REFUSED_LAUNCH` | WARN | Action suspendue par le verrou | `client`, `type`, `action` |
 
+### 3.2 octies Retournement idempotent (v11.2.1, #248)
+
+| Événement | Niveau | Quand | Champs |
+|-----------|--------|-------|--------|
+| `FLIP_DUPLICATE` | INFO | `FLIP_MEMORY_CARD` dont le `FLIP_ID` est déjà connu pour ce bumper → aucun retournement, accusé mémorisé renvoyé | `client`, `player_id`, `flip_id`, `card`, `motion_card`, `status`, `reason` |
+| `FLIP_IGNORED` | INFO | Premier envoi d'un `FLIP_ID` ignoré (`NOT_TURN`, `NOT_FLIPPABLE`, `NOT_PLAYABLE`, `CARD_SCOPE`) | `client`, `player_id`, `flip_id`, `card`, `motion_card`, `reason` |
+| `FLIP_ID_INVALID` | WARN | `FLIP_ID` hors format → traité comme absent | `client`, `type`, `len` |
+
 ### 3.3 Diffusion
 
 | Événement | Niveau | Quand | Champs |

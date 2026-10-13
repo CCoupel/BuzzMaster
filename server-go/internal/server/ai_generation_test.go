@@ -498,7 +498,9 @@ func TestGenerateQuestions_IDExhausted_Returns507(t *testing.T) {
 	conn := dialAdminWS(t, server)
 	expectAccepted(t, postGenerateQuestions(server, baseGenerateRequest()))
 
-	final := waitForJobTerminalState(t, conn, 5*time.Second)
+	// #188 : le job balaie 999 répertoires ; 5 s étaient trop justes sur un NTFS chargé. Échéance large,
+	// attendue par événement (message terminal) : le test ne ralentit pas quand le disque est rapide.
+	final := waitForJobTerminalState(t, conn, 30*time.Second)
 	if final["STATE"] != "FAILED" {
 		t.Fatalf("Expected STATE=FAILED when no free ID remains, got %v (msg=%v)", final["STATE"], final)
 	}

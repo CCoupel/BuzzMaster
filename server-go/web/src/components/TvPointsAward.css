@@ -1,0 +1,30 @@
+/* #265 — animation d'attribution de points. Couche fixe STATIQUE : overflow hidden, unités viewport,
+   aucun scroll, aucun clic intercepté. Maquettes tv_points_award__multi_team / vplayer_points_award__own_team. */
+.tv-award-layer { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 100; }
+.tv-award-rocket { position: absolute; left: 0; top: 0; width: 1.6vh; height: 1.6vh; margin: -0.8vh 0 0 -0.8vh; border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 1.2vh 0.4vh var(--c), 0 0 3vh var(--c); will-change: transform; }
+.tv-award-sparks { position: absolute; width: 0; height: 0; }
+.tv-award-spark { position: absolute; left: 0; top: 0; width: 1vh; height: 1vh; margin: -0.5vh 0 0 -0.5vh; border-radius: 50%;
+  background: var(--c); opacity: 0; will-change: transform, opacity; }
+.tv-award-card { position: absolute; transform: translate(-50%, -50%) scale(0.2); opacity: 0; width: 20vw; max-width: 20vw; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; gap: 0.6vh; padding: 1.4vh 1.2vw; border-radius: 2vh;
+  background: rgba(2, 6, 23, 0.78); border: 0.5vh solid var(--c); box-shadow: 0 0 4vh var(--c); }
+.tv-award-card.own { width: auto; max-width: 70vw; gap: 1vh; padding: 3vh 4vw; border-radius: 3vh; border-width: 0.8vh; box-shadow: 0 0 6vh var(--c); }
+.tv-award-team { max-width: 100%; font-size: 3.2vh; font-weight: 800; color: var(--c); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+.tv-award-pts { font-size: 6.4vh; font-weight: 900; color: #4ade80; text-shadow: 0 0 3vh #22c55e; line-height: 1; }
+.tv-award-card.own .tv-award-team { font-size: 5.4vh; }
+.tv-award-card.own .tv-award-pts { font-size: 11vh; text-shadow: 0 0 4vh #22c55e; }
+.tv-award-sub { font-size: 2.8vh; color: #cbd5e1; }
+.tv-award-card.zoom { animation: tv-award-zoom var(--zoom) cubic-bezier(0.2, 1.6, 0.4, 1) forwards; }
+.tv-award-card.calm { animation: tv-award-calm var(--zoom) ease-out forwards; }
+.tv-award-card.out { animation: tv-award-out var(--fade) ease-in forwards; }
+@keyframes tv-award-zoom {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes tv-award-calm { from { opacity: 0; transform: translate(-50%, -50%) scale(1); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes tv-award-out { from { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(-50%, -50%) scale(0.85); } }
+.tv-award-lot-tag { position: absolute; right: 2vw; bottom: 2vh; font-size: 2.2vh; font-weight: 700; color: #e0e7ff;
+  background: rgba(2, 6, 23, 0.6); padding: 0.6vh 1.2vw; border-radius: 999px; opacity: 0.85; }

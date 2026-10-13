@@ -114,6 +114,7 @@ func callTestInjectPanic(site string) {
 // Engine manages the game state and logic
 type Engine struct {
 	state            GameState
+	flipMemo         map[string][]flipMemoEntry // #248: recent FLIP_IDs per bumper (flip_gesture.go)
 	data             *TeamsAndBumpers
 	questionStatuses map[string]QuestionStatus // Track question statuses across selections
 	history          []GameEvent
@@ -1202,6 +1203,7 @@ func (e *Engine) DeleteBumper(id string) *Bumper {
 	}
 	deletedTeam := deleted.Team
 	delete(e.data.Bumpers, id)
+	delete(e.flipMemo, id) // #248: the bumper's FLIP_ID memory goes with it
 	e.state.VirtualPlayerCount = e.countVirtualPlayersUnsafe()
 
 	newPhase := GamePhase("")
@@ -1324,7 +1326,8 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		(e.state.Question.Type == QuestionTypeMemory || e.state.Question.Type == QuestionTypeMemotion)
 
 	e.state.Phase = PhasePrepare
-	e.forceGamePageUnsafe() // #240 — question selection
+	e.purgeFlipMemoryUnsafe() // #248: question (re)selected
+	e.forceGamePageUnsafe()   // #240 — question selection
 	e.state.Question = question
 	e.setQuestionStatus(StatusPrepare)
 	// The question being (re)loaded here — new or replayed — has not
@@ -1827,6 +1830,7 @@ func (e *Engine) reevaluatePrepareReadyUnsafe() GamePhase {
 	case PhaseReady:
 		if !participantsConform(e.state.Question, &e.state) {
 			e.state.Phase = PhasePrepare
+			e.purgeFlipMemoryUnsafe() // #248: back to PREPARE
 			e.setQuestionStatus(StatusPrepare)
 			log.Printf("[Engine] Participants no longer conform, reverting READY -> PREPARE")
 			return PhasePrepare
@@ -3579,28 +3583,30 @@ func (e *Engine) Reveal() string {
 	return answer
 }
 
-// ProcessButtonPress handles a button press from a buzzer
-func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) {
+// ProcessButtonPress handles a button press from a buzzer. It returns true only
+// when the press was actually recorded (#247): callers broadcast PAUSE/state
+// updates on acceptance only.
+func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button string) (accepted bool) {
 	e.mu.Lock()
 
 	if e.state.Phase != PhaseStarted {
 		log.Printf("[Engine] Ignoring button press, game not started")
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for MEMORY questions - admin controls the game
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemory {
 		log.Printf("[Engine] Ignoring buzz for MEMORY question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for MEMOTION questions - admin controls the card selection
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeMemotion {
 		log.Printf("[Engine] Ignoring buzz for MEMOTION question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for RAFALE questions (v8.0.0, #107, contract §8.1) — no
@@ -3613,7 +3619,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
 		log.Printf("[Engine] Ignoring buzz for RAFALE question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Ignore buzz for ENTRACTE questions (v9.0.0, #214) — "ni buzzer"
@@ -3626,21 +3632,30 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeEntracte {
 		log.Printf("[Engine] Ignoring buzz for ENTRACTE question from %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
+	}
+
+	// Ignore buzz for ARDOISE questions (#247) — answers go through
+	// ARDOISE_INPUT/ARDOISE_FINAL; a physical press must neither be recorded
+	// (bumper.Time / team.Status) nor trigger a PAUSE.
+	if e.state.Question != nil && e.state.Question.Type == QuestionTypeArdoise {
+		log.Printf("[Engine] Ignoring buzz for ARDOISE question from %s", bumperID)
+		e.mu.Unlock()
+		return false
 	}
 
 	bumper, ok := e.data.Bumpers[bumperID]
 	if !ok {
 		log.Printf("[Engine] Unknown bumper: %s", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Check if bumper already pressed
 	if bumper.Time > 0 {
 		log.Printf("[Engine] Bumper %s already pressed", bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	teamID := bumper.Team
@@ -3650,13 +3665,13 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		bumper.Button = button
 		bumper.Status = "PAUSE"
 		e.mu.Unlock()
-		return
+		return true
 	}
 
 	team, ok := e.data.Teams[teamID]
 	if !ok {
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Phase 3: QCM VPlayer invalidation logic
@@ -3666,7 +3681,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 		if !bumper.IsVPlayer && e.teamHasVPlayerUnsafe(teamID) {
 			log.Printf("[Engine] Buzz ignored: team %s has VPlayer, physical bumper %s cannot buzz on QCM", teamID, bumperID)
 			e.mu.Unlock()
-			return
+			return false
 		}
 	}
 
@@ -3674,7 +3689,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if team.Time > 0 {
 		log.Printf("[Engine] Team %s already buzzed, ignoring bumper %s", teamID, bumperID)
 		e.mu.Unlock()
-		return
+		return false
 	}
 
 	// Record the press for both bumper and team
@@ -3713,6 +3728,7 @@ func (e *Engine) ProcessButtonPress(bumperID string, pressTime int64, button str
 	if callback != nil {
 		callback(bumperID, teamID, pressTime, button)
 	}
+	return true
 }
 
 // teamHasVPlayerUnsafe checks if a team has at least one VPlayer (virtual player)
@@ -3774,11 +3790,13 @@ func (e *Engine) UpdateBumperScoreDisplay(bumperID string, points int, display b
 
 	// Recalculate team score as sum of all bumpers in team
 	var changedTeams []string
+	var gains gainsAcc
 	if bumper.Team != "" {
 		e.recalculateTeamScoreUnsafe(bumper.Team)
 		changedTeams = []string{bumper.Team}
+		gains.add(bumper.Team, points) // #265
 	}
-	e.recordScoreChangeUnsafe(display, changedTeams, []string{bumperID})
+	e.recordScoreChangeUnsafe(display, changedTeams, []string{bumperID}, gains.list)
 
 	score := bumper.Score
 	e.mu.Unlock()
@@ -3796,14 +3814,18 @@ func (e *Engine) UpdateTeamScore(teamName string, points int) int {
 }
 
 // recordScoreChangeUnsafe bumps SCORE_CHANGE (#252). Caller holds e.mu.
-func (e *Engine) recordScoreChangeUnsafe(display bool, teams, players []string) {
+func (e *Engine) recordScoreChangeUnsafe(display bool, teams, players []string, gains []TeamGain) {
 	if teams == nil {
 		teams = []string{}
 	}
 	if players == nil {
 		players = []string{}
 	}
-	e.state.ScoreChange = ScoreChange{Seq: e.state.ScoreChange.Seq + 1, Display: display, Teams: teams, Players: players}
+	if gains == nil {
+		gains = []TeamGain{}
+	}
+	// #265: GAINS is written with SEQ/TEAMS/PLAYERS and the scores, under e.mu.
+	e.state.ScoreChange = ScoreChange{Seq: e.state.ScoreChange.Seq + 1, Display: display, Teams: teams, Players: players, Gains: gains}
 }
 
 // UpdateTeamScoreDisplay is UpdateTeamScore plus the SCORE_CHANGE marker, set in
@@ -3826,7 +3848,7 @@ func (e *Engine) UpdateTeamScoreDisplay(teamName string, points int, display boo
 
 	// Recalculate total team score (TeamPoints + bumper scores)
 	e.recalculateTeamScoreUnsafe(teamName)
-	e.recordScoreChangeUnsafe(display, []string{teamName}, nil)
+	e.recordScoreChangeUnsafe(display, []string{teamName}, nil, []TeamGain{{Team: teamName, Points: points}}) // #265
 
 	score := team.Score
 	e.mu.Unlock()
@@ -3962,6 +3984,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 		}
 	}
 	e.stopAllTimersUnsafe()
+	e.purgeFlipMemoryUnsafe() // #248: NEW_GAME
 
 	// 2. PURGE_TEAMS: same path as a team deletion (#249); surviving players
 	// become team-less.
@@ -5679,25 +5702,38 @@ func (e *Engine) RafaleInvalidateCard(cardID string) error {
 func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack bool, flipDelay int, isComplete bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMemoryCardUnsafe(cardID, false, "")
+	return
+}
 
+// flipMemoryCardUnsafe is FlipMemoryCard's body (#248): same logic, plus the
+// refusal reason (FlipReason*, "" when the card was flipped) and an optional
+// turn check done under the SAME lock as the flip (enforceTurn: the emitting
+// team must be MemoryCurrentTeam). Caller holds e.mu.
+func (e *Engine) flipMemoryCardUnsafe(cardID string, enforceTurn bool, team string) (isMatch bool, shouldFlipBack bool, flipDelay int, isComplete bool, refusal string) {
 	// Only allow flipping during STARTED phase
 	if e.state.Phase != PhaseStarted {
 		log.Printf("[Engine] Memory flip ignored: game not in STARTED phase (current: %s)", e.state.Phase)
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
+	}
+
+	// #248: turn check under the same lock as the flip (FLIP_ID gestures only).
+	if enforceTurn && (team == "" || e.state.MemoryCurrentTeam == "" || team != e.state.MemoryCurrentTeam) {
+		return false, false, 0, false, FlipReasonNotTurn
 	}
 
 	// Extract pair ID from card ID (format: "pairID-cardNum", e.g., "1-1", "2-2")
 	pairID := e.extractPairID(cardID)
 	if pairID == 0 {
 		log.Printf("[Engine] Memory flip ignored: invalid card ID format: %s", cardID)
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	// Check if this pair is already matched
 	for _, matchedPairID := range e.state.MemoryMatchedPairs {
 		if matchedPairID == pairID {
 			log.Printf("[Engine] Memory flip ignored: pair %d already matched", pairID)
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 
@@ -5705,14 +5741,14 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 	for _, id := range e.state.MemoryFlippedCards {
 		if id == cardID {
 			log.Printf("[Engine] Memory flip ignored: card %s already flipped", cardID)
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 
 	// Don't allow more than 2 cards to be flipped at once
 	if len(e.state.MemoryFlippedCards) >= 2 {
 		log.Printf("[Engine] Memory flip ignored: already 2 cards flipped")
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	// Add card to flipped cards
@@ -5721,7 +5757,7 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 
 	// If only 1 card flipped, just wait for second card
 	if len(e.state.MemoryFlippedCards) == 1 {
-		return false, false, 0, false
+		return false, false, 0, false, ""
 	}
 
 	// Two cards are now flipped - check if they match
@@ -5779,7 +5815,7 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 		// Mode TANT_QUE_JE_GAGNE: team keeps playing, no rotation
 
 		log.Printf("[Engine] Memory MATCH! Pair %d found. Total matched: %d/%d. Complete: %v", firstPairID, len(e.state.MemoryMatchedPairs), totalPairs, isComplete)
-		return true, false, 0, isComplete
+		return true, false, 0, isComplete, ""
 	}
 
 	// No match - increment error counter, caller should schedule flip-back after delay
@@ -5794,7 +5830,7 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 	// This ensures players see which team made the error before the turn changes
 
 	log.Printf("[Engine] Memory NO MATCH (error #%d). Cards %s and %s will flip back after %dms", e.state.MemoryErrors, firstCardID, secondCardID, flipDelay)
-	return false, true, flipDelay, false
+	return false, true, flipDelay, false, ""
 }
 
 // extractPairID extracts the pair ID from a card ID (format: "pairID-cardNum")
@@ -7975,16 +8011,22 @@ func (e *Engine) ValidateCardScope(motionCardID string) error {
 func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMotionMemoryCardUnsafe(motionCardID, cardID, false, "")
+	return
+}
 
+// flipMotionMemoryCardUnsafe is FlipMotionMemoryCard's body (#248), see
+// flipMemoryCardUnsafe. The turn is MotionCurrentTeam. Caller holds e.mu.
+func (e *Engine) flipMotionMemoryCardUnsafe(motionCardID, cardID string, enforceTurn bool, team string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete bool, refusal string) {
 	if e.state.Phase != PhaseStarted {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	// Playable per contract §4's HostContext table: MOTION_SUBPHASE==QUESTION.
 	if e.state.MotionSubPhase != MotionSubPhaseQuestion {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	if motionCardID == "" || e.state.MotionSelected != motionCardID {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	// #187 cycle 4, B3 — MotionSubPhase alone isn't enough to gate a flip:
 	// it stays QUESTION even after this card's own timer has expired (the
@@ -7992,40 +8034,45 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 	// closed round refuses further flips regardless of sub-phase, until an
 	// explicit MEMOTION_REVEAL/next SelectMotionCard reopens one.
 	if e.motionCardRoundClosed {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
 	}
 	card := e.activeMotionCardUnsafe()
 	if card == nil || card.EffectiveType() != QuestionTypeMemory {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotPlayable
+	}
+
+	// #248: turn check under the same lock as the flip (FLIP_ID gestures only).
+	if enforceTurn && (team == "" || e.state.MotionCurrentTeam == "" || team != e.state.MotionCurrentTeam) {
+		return false, false, 0, false, FlipReasonNotTurn
 	}
 
 	pairID := e.extractPairID(cardID)
 	if pairID == 0 {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	matched := motionActiveMemoryMatchedPairs(e.state.MotionActive.State)
 	for _, m := range matched {
 		if m == pairID {
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 
 	flipped := motionActiveMemoryFlippedCards(e.state.MotionActive.State)
 	for _, id := range flipped {
 		if id == cardID {
-			return false, false, 0, false
+			return false, false, 0, false, FlipReasonNotFlippable
 		}
 	}
 	if len(flipped) >= 2 {
-		return false, false, 0, false
+		return false, false, 0, false, FlipReasonNotFlippable
 	}
 
 	flipped = append(flipped, cardID)
 	e.state.MotionActive.State["MEMORY_FLIPPED_CARDS"] = flipped
 
 	if len(flipped) == 1 {
-		return false, false, 0, false
+		return false, false, 0, false, ""
 	}
 
 	firstCardID := flipped[0]
@@ -8051,7 +8098,7 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 
 		log.Printf("[Engine] MEMOTION memory card MATCH! cardId=%s pair %d found. Total matched: %d/%d. Complete: %v",
 			motionCardID, firstPairID, len(matched), totalPairs, isComplete)
-		return true, false, 0, isComplete
+		return true, false, 0, isComplete, ""
 	}
 
 	errs := motionActiveMemoryErrors(e.state.MotionActive.State)
@@ -8059,7 +8106,7 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 
 	log.Printf("[Engine] MEMOTION memory card NO MATCH (error #%d, cardId=%s). Cards %s and %s will flip back after %dms",
 		errs+1, motionCardID, firstCardID, secondCardID, flipDelay)
-	return false, true, flipDelay, false
+	return false, true, flipDelay, false, ""
 }
 
 // ClearMotionMemoryFlippedCards resets the flipped-cards slot of a MEMOTION
@@ -8578,10 +8625,12 @@ func (e *Engine) ApplyTeamPointsBatch(questionID string, entries []TeamPointsEnt
 	}
 	if len(res.Applied) > 0 {
 		teams := make([]string, 0, len(res.Applied))
+		var gains gainsAcc
 		for _, en := range res.Applied {
 			teams = append(teams, en.Team)
+			gains.add(en.Team, en.Points) // #265
 		}
-		e.recordScoreChangeUnsafe(display, teams, nil)
+		e.recordScoreChangeUnsafe(display, teams, nil, gains.list)
 	}
 	e.mu.Unlock()
 
@@ -8849,6 +8898,7 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 	}
 	q := e.state.Question
 	var teams []string
+	var gains gainsAcc // #265
 	teamSeen := map[string]bool{}
 	for _, en := range entries {
 		if already[en.ID] {
@@ -8862,6 +8912,7 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 			continue
 		}
 		b.Score += en.Points
+		gains.add(b.Team, en.Points) // #265 (no entry for a player without team)
 		var teamColor []int
 		if b.Team != "" {
 			e.recalculateTeamScoreUnsafe(b.Team)
@@ -8909,7 +8960,7 @@ func (e *Engine) ApplyBumperPointsBatch(questionID string, entries []BumperPoint
 		for _, en := range res.Applied {
 			players = append(players, en.ID)
 		}
-		e.recordScoreChangeUnsafe(display, teams, players)
+		e.recordScoreChangeUnsafe(display, teams, players, gains.list)
 	}
 	e.mu.Unlock()
 

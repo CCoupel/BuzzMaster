@@ -1,0 +1,245 @@
+<!--
+mockup:
+  composant: tv_points_award
+  feature: multi_team
+  version: 11.2.1
+  type: ui
+  issue: "#265"
+  validee_le: 2026-10-12
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV — attribution de points multi-équipes, feu d'artifice par lots (#265)</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#0b1020; color:#fff; }
+  .mock-bar { position:sticky; top:0; z-index:500; background:#020617; color:#cbd5e1; padding:.6rem 1rem; display:flex; flex-wrap:wrap; gap:.4rem .9rem; align-items:center; font-size:.82rem; border-bottom:1px solid #1e293b; }
+  .mock-bar strong { color:#fff; }
+  .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-bar button { background:#6366f1; color:#fff; border:0; border-radius:.4rem; padding:.3rem .8rem; font-weight:700; cursor:pointer; }
+  .mock-note { max-width:1100px; margin:.7rem auto; padding:0 1rem; font-size:.8rem; color:#94a3b8; line-height:1.45; }
+  .mock-note b { color:#e2e8f0; }
+  .status { font-variant-numeric:tabular-nums; color:#fde68a; }
+
+  /* ===== Cadre TV 16:9 — STATIQUE : overflow hidden, tout en % du cadre (= vw/vh sur la vraie TV) ===== */
+  .tv { position:relative; width:min(1100px, calc(100vw - 2rem)); aspect-ratio:16/9; margin:0 auto 1rem; overflow:hidden;
+        border:10px solid #111827; border-radius:.8rem; background:radial-gradient(ellipse at 50% 30%, #312e81 0%, #1e1b4b 55%, #0b1020 100%); container-type:size; }
+  /* Vue GAME existante (inchangée), en fond */
+  .tv-game { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; padding:4cqh 4cqw; gap:3cqh; }
+  .tv-head { width:100%; display:flex; justify-content:space-between; font-size:2.4cqh; color:#c7d2fe; font-weight:600; }
+  .tv-question { font-size:5.2cqh; font-weight:800; text-align:center; max-width:80cqw; text-shadow:0 2px 10px rgba(0,0,0,.5); }
+  .tv-answer { font-size:4.2cqh; font-weight:700; padding:1.4cqh 3cqw; border-radius:1.6cqh; background:rgba(34,197,94,.2); border:3px solid rgba(34,197,94,.7); color:#bbf7d0; }
+  .tv-timer { margin-top:auto; font-size:3.4cqh; color:#e0e7ff; opacity:.8; }
+
+  /* ===== Couche feu d'artifice ===== */
+  .fw-layer { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+  .rocket { position:absolute; width:1.6cqh; height:1.6cqh; margin:-.8cqh 0 0 -.8cqh; border-radius:50%;
+            background:var(--c); box-shadow:0 0 1.2cqh .4cqh var(--c), 0 0 3cqh var(--c); }
+  .trail { position:absolute; width:.8cqh; height:.8cqh; margin:-.4cqh 0 0 -.4cqh; border-radius:50%; background:var(--c); opacity:.7; transition:opacity .45s linear, transform .45s linear; }
+  .spark { position:absolute; width:1cqh; height:1cqh; margin:-.5cqh 0 0 -.5cqh; border-radius:50%; background:var(--c); }
+  /* Carte d'arrivée : équipe + « +X pts », effet de zoom */
+  .award { position:absolute; transform:translate(-50%,-50%) scale(.2); opacity:0; width:20cqw; max-width:20cqw;
+           display:flex; flex-direction:column; align-items:center; gap:.6cqh; padding:1.4cqh 1.2cqw; border-radius:2cqh;
+           background:rgba(2,6,23,.78); border:.5cqh solid var(--c); box-shadow:0 0 4cqh var(--c); }
+  .award .team { max-width:100%; font-size:3.2cqh; font-weight:800; color:var(--c); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 2px 10px rgba(0,0,0,.6); }
+  .award .pts { font-size:6.4cqh; font-weight:900; color:#4ade80; text-shadow:0 0 3cqh #22c55e; line-height:1; }
+  .award.zoom { animation: zoomIn var(--zoom) cubic-bezier(.2,1.6,.4,1) forwards; }
+  .award.out { animation: fadeOut var(--fade) ease-in forwards; }
+  @keyframes zoomIn { 0% { opacity:0; transform:translate(-50%,-50%) scale(.2); } 70% { opacity:1; transform:translate(-50%,-50%) scale(1.18); } 100% { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+  @keyframes fadeOut { from { opacity:1; transform:translate(-50%,-50%) scale(1); } to { opacity:0; transform:translate(-50%,-50%) scale(.85); } }
+  /* Repli prefers-reduced-motion : pas de trajectoire ni d'étincelles, apparition en fondu sur place */
+  .award.calm { animation: calmIn var(--zoom) ease-out forwards; }
+  @keyframes calmIn { from { opacity:0; transform:translate(-50%,-50%) scale(1); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+  /* Indicateur de lot (discret, coin bas droit) */
+  .lot-tag { position:absolute; right:2cqw; bottom:2cqh; font-size:2.2cqh; font-weight:700; color:#e0e7ff; background:rgba(2,6,23,.6); padding:.6cqh 1.2cqw; border-radius:999px; opacity:0; transition:opacity .3s; }
+  .lot-tag.on { opacity:.85; }
+  /* Débogage maquette : cases d'arrivée */
+  .slot { position:absolute; border:1px dashed rgba(253,230,138,.5); }
+  .safe { position:absolute; border:2px dashed rgba(248,113,113,.6); }
+
+  table.timing { margin:0 auto 1rem; border-collapse:collapse; font-size:.82rem; color:#cbd5e1; }
+  table.timing th, table.timing td { border:1px solid #1e293b; padding:.35rem .7rem; text-align:center; }
+  table.timing th { background:#0f172a; color:#fff; }
+  .rules { max-width:1100px; margin:0 auto 2rem; padding:0 1rem; font-size:.8rem; color:#94a3b8; line-height:1.5; }
+  .rules h3 { color:#e2e8f0; font-size:.9rem; margin:.8rem 0 .3rem; }
+  .rules li { margin:.15rem 0; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — équipes gagnantes :</strong>
+  <label><input type="radio" name="n" value="1"> 1</label>
+  <label><input type="radio" name="n" value="4" checked> 4</label>
+  <label><input type="radio" name="n" value="6"> 6</label>
+  <label><input type="radio" name="n" value="8"> 8</label>
+  <label><input type="radio" name="n" value="12"> 12</label>
+  <label><input type="radio" name="n" value="18"> 18</label>
+  <label><input type="radio" name="n" value="20"> 20</label>
+  <label><input type="radio" name="n" value="24"> 24</label>
+  <button id="play">▶ Rejouer</button>
+  <label><input type="checkbox" id="reduced"> prefers-reduced-motion (simulé)</label>
+  <label><input type="checkbox" id="debug"> cases d'arrivée / zone sûre</label>
+  <span class="status" id="status"></span>
+</div>
+<p class="mock-note">Écran TV (<b>/tv</b>, vue GAME), après une <b>attribution groupée</b> (BUMPER_POINTS_BATCH) qui fait monter le score de plusieurs équipes. La vue de jeu en fond est <b>inchangée</b>. On garde l'esprit de l'animation actuelle (confettis à la couleur de l'équipe, « +X pts »), en <b>feu d'artifice</b> : chaque équipe a une fusée partant d'un <b>point aléatoire du bas de l'écran</b> vers un <b>point d'arrivée aléatoire</b>, puis un <b>zoom</b> où se lisent l'équipe et son gain. Les équipes passent <b>par lots de 6 au plus</b> (une case de la grille 3 × 2 par équipe), un lot après l'autre ; <b>à partir du 4ᵉ lot, le rythme accélère</b>. Pas de plafond ni de « +N autres ». Écran statique : rien ne sort du cadre, aucun défilement.</p>
+
+<div class="tv" id="tv">
+  <div class="tv-game">
+    <div class="tv-head"><span>Manche 2 · Question 7/12</span><span>QCM</span></div>
+    <div class="tv-question">Quel est le plus long fleuve de France ?</div>
+    <div class="tv-answer">B — La Loire</div>
+    <div class="tv-timer">Réponse révélée</div>
+  </div>
+  <div class="fw-layer" id="layer"></div>
+  <div class="lot-tag" id="lotTag"></div>
+</div>
+
+<table class="timing" id="timing"></table>
+
+<div class="rules">
+  <h3>Règles de l'animation (référence pour le dev et les tests)</h3>
+  <ul>
+    <li><b>Déclencheur</b> : inchangé, uniquement les hausses de score d'équipe reçues dans une même mise à jour. Une baisse n'anime rien. Une correction cachée (#252) n'anime rien.</li>
+    <li><b>Lots</b> : <code>k = ceil(N / 6)</code> lots, équipes réparties au plus juste (4 → 4 ; 6 → 6 ; 8 → 4+4 ; 12 → 6+6 ; 13 → 5+4+4 ; 18 → 6+6+6 ; 20 → 5+5+5+5 ; 24 → 6+6+6+6). 1 à 6 équipes = un seul lot. Ordre : celui de <code>SCORE_CHANGE.GAINS</code> fourni par le serveur (identique sur la TV et les tablettes ; aucun tri par gain, pour ne pas classer les équipes). Calcul par une fonction pure partagée TV / tablette.</li>
+    <li><b>Rythme</b> : un lot dure <b>3,2 s</b> (fusées décalées de 3 % du lot, vol 28 %, zoom 10 %, lecture jusqu'à 86 %, fondu 14 %). Les lots s'enchaînent sans chevauchement. <b>Lots 1 à 3 au rythme normal ; à partir du 4ᵉ lot, 1,76 s par lot (×0,55)</b>.</li>
+    <li><b>Zone sûre</b> : les centres d'arrivée restent dans 8–92 % de la largeur et 12–78 % de la hauteur (au-dessus de la bande du bas, où partent les fusées). Une carte fait au plus 20 % de la largeur : elle ne déborde jamais.</li>
+    <li><b>Distance minimale</b> : la zone sûre est découpée en 3 × 2 = 6 cases, une par équipe d'un lot (à 6 équipes, toutes les cases servent : seuls l'attribution des cases et le décalage sont aléatoires). Chaque équipe tire une case au hasard, sans remise, avec un décalage aléatoire de <b>±1,5 %</b> en largeur et ±5 % en hauteur. Écart minimal entre deux centres : 25 % de la largeur ou 23 % de la hauteur, supérieur à la taille d'une carte <b>y compris au pic du zoom</b> (×1,18 : 23,6 % × ~17 %) : <b>deux zooms ne se recouvrent jamais</b>.</li>
+    <li><b>Trajectoire</b> : courbe (Bézier quadratique), départ à x aléatoire entre 5 et 95 % sur le bord bas, point de contrôle aléatoire contenu dans 2–98 % : la fusée reste dans l'écran.</li>
+    <li><b>Lisibilité</b> : fusée, traînée, étincelles et bord de carte à la couleur de l'équipe (COLOR) ; nom de l'équipe en couleur sur fond sombre semi-opaque (contraste garanti quelle que soit la couleur), sur une seule ligne avec points de suspension ; « +X pts » en vert, grand. Les étincelles reprennent les couleurs des confettis actuels (équipe, blanc, or).</li>
+    <li><b>prefers-reduced-motion</b> : ni fusée, ni étincelles, ni zoom ; les cartes du lot apparaissent en fondu à leur case, restent, puis disparaissent. Même découpage en lots et même rythme.</li>
+    <li><b>Nouvelle attribution pendant une animation</b> : ses équipes sont ajoutées à la file, à la suite des lots en cours (rien n'est coupé ni superposé). Un changement de vue (SCORE, PREPARE…) vide la file.</li>
+    <li><b>Indicateur « Lot i/k »</b> : affiché en bas à droite seulement s'il y a plus d'un lot.</li>
+  </ul>
+</div>
+
+<script>
+const TEAMS = [
+  ['Les Bleus','#3b82f6'],['Les Rouges','#ef4444'],['Team Vert Pomme','#22c55e'],['Les Jaunes','#eab308'],
+  ['Violettes Mystères','#a855f7'],['Les Turquoises de Montmartre','#14b8a6'],['Les Roses','#ec4899'],['Cyan Express','#06b6d4'],
+  ['Les Oranges','#f97316'],['Les Indigo','#6366f1'],['Les Citrons','#facc15'],['Les Coquelicots','#dc2626'],
+  ['Les Lavandes','#c084fc'],['Les Mandarines','#fb923c'],['Les Framboises','#db2777'],['Les Lagons','#0891b2'],
+  ['Les Sapins','#15803d'],['Les Saphirs','#2563eb'],['Les Tournesols','#ca8a04'],['Les Prunes','#7e22ce'],
+  ['Les Cerises','#be123c'],['Les Menthes','#10b981'],['Les Ardoises','#64748b'],['Les Abricots','#f59e0b'],
+];
+const PTS = [1, 2, 3, 5, 10];
+const LOT_MAX = 6, NORMAL_LOT_MS = 3200, ACCEL_FACTOR = 0.55, ACCEL_FROM_LOT = 4;
+const SAFE = { x0: 8, x1: 92, y0: 12, y1: 78 }, COLS = 3, ROWS = 2;
+
+const $ = id => document.getElementById(id);
+const layer = $('layer');
+let timers = [], rafs = [], playing = 0;
+
+function lotSizes(n) {
+  const k = Math.max(1, Math.ceil(n / LOT_MAX)), base = Math.floor(n / k), extra = n % k;
+  return Array.from({ length: k }, (_, i) => base + (i < extra ? 1 : 0));
+}
+function lotMs(i) { return i + 1 >= ACCEL_FROM_LOT ? NORMAL_LOT_MS * ACCEL_FACTOR : NORMAL_LOT_MS; }
+function totalMs(n) { return lotSizes(n).reduce((s, _, i) => s + lotMs(i), 0); }
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function slotCenters() {
+  const w = (SAFE.x1 - SAFE.x0) / COLS, h = (SAFE.y1 - SAFE.y0) / ROWS, out = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) out.push({ x: SAFE.x0 + w * (c + .5), y: SAFE.y0 + h * (r + .5), w, h });
+  return out;
+}
+function drawDebug() {
+  layer.querySelectorAll('.slot,.safe').forEach(e => e.remove());
+  if (!$('debug').checked) return;
+  const s = document.createElement('div'); s.className = 'safe';
+  Object.assign(s.style, { left: SAFE.x0 + '%', top: SAFE.y0 + '%', width: (SAFE.x1 - SAFE.x0) + '%', height: (SAFE.y1 - SAFE.y0) + '%' });
+  layer.appendChild(s);
+  slotCenters().forEach(c => { const d = document.createElement('div'); d.className = 'slot';
+    Object.assign(d.style, { left: (c.x - c.w / 2) + '%', top: (c.y - c.h / 2) + '%', width: c.w + '%', height: c.h + '%' }); layer.appendChild(d); });
+}
+
+function stopAll() { timers.forEach(clearTimeout); rafs.forEach(cancelAnimationFrame); timers = []; rafs = [];
+  layer.querySelectorAll('.rocket,.trail,.spark,.award').forEach(e => e.remove()); $('lotTag').classList.remove('on'); }
+const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+
+function launch(team, slot, t0, dur, reduced) {
+  const [name, color] = team.slice(0, 2), pts = team[2];
+  const end = { x: slot.x + rnd(-1.5, 1.5), y: slot.y + rnd(-5, 5) };
+  const card = document.createElement('div');
+  card.className = 'award'; card.style.setProperty('--c', color);
+  card.style.left = end.x + '%'; card.style.top = end.y + '%';
+  card.style.setProperty('--zoom', Math.round(dur.zoom) + 'ms'); card.style.setProperty('--fade', Math.round(dur.fade) + 'ms');
+  card.innerHTML = '<span class="team"></span><span class="pts"></span>';
+  card.querySelector('.team').textContent = name; card.querySelector('.pts').textContent = '+' + pts + ' pts';
+  card.title = name;
+  later(() => {
+    if (reduced) { layer.appendChild(card); card.classList.add('calm'); return; }
+    const start = { x: rnd(5, 95), y: 100 };
+    const ctrl = { x: clamp((start.x + end.x) / 2 + rnd(-20, 20), 2, 98), y: clamp(Math.min(end.y, start.y) - rnd(5, 15), 2, 98) };
+    const r = document.createElement('div'); r.className = 'rocket'; r.style.setProperty('--c', color); layer.appendChild(r);
+    const tStart = performance.now(); let lastTrail = 0;
+    const step = now => {
+      const k = Math.min(1, (now - tStart) / dur.flight), e = 1 - Math.pow(1 - k, 2);
+      const x = (1 - e) ** 2 * start.x + 2 * (1 - e) * e * ctrl.x + e * e * end.x;
+      const y = (1 - e) ** 2 * start.y + 2 * (1 - e) * e * ctrl.y + e * e * end.y;
+      r.style.left = x + '%'; r.style.top = y + '%';
+      if (now - lastTrail > 35) { lastTrail = now; const t = document.createElement('div'); t.className = 'trail'; t.style.setProperty('--c', color);
+        t.style.left = x + '%'; t.style.top = y + '%'; layer.appendChild(t);
+        requestAnimationFrame(() => { t.style.opacity = 0; t.style.transform = 'scale(.3)'; }); timers.push(setTimeout(() => t.remove(), 500)); }
+      if (k < 1) { rafs.push(requestAnimationFrame(step)); return; }
+      r.remove(); burst(end, color); layer.appendChild(card); card.classList.add('zoom');
+    };
+    rafs.push(requestAnimationFrame(step));
+  }, t0);
+  later(() => { card.classList.remove('zoom', 'calm'); card.classList.add('out'); }, dur.fadeAt);
+  later(() => card.remove(), dur.fadeAt + dur.fade);
+}
+
+function burst(at, color) {
+  const cols = [color, '#ffffff', '#ffd700'];
+  for (let i = 0; i < 18; i++) {
+    const s = document.createElement('div'); s.className = 'spark'; s.style.setProperty('--c', cols[i % 3]);
+    s.style.left = at.x + '%'; s.style.top = at.y + '%'; layer.appendChild(s);
+    const a = (i / 18) * Math.PI * 2, d = rnd(6, 12);
+    const tx = clamp(at.x + Math.cos(a) * d * .56, 1, 99), ty = clamp(at.y + Math.sin(a) * d, 1, 99);
+    s.animate([{ left: at.x + '%', top: at.y + '%', opacity: 1 }, { left: tx + '%', top: ty + 4 + '%', opacity: 0 }], { duration: 900, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'forwards' });
+    timers.push(setTimeout(() => s.remove(), 950));
+  }
+}
+
+function play() {
+  stopAll(); drawDebug(); playing++;
+  const n = +document.querySelector('input[name=n]:checked').value;
+  const reduced = $('reduced').checked;
+  const teams = TEAMS.slice(0, n).map(t => [t[0], t[1], PTS[Math.floor(Math.random() * PTS.length)]]);
+  const sizes = lotSizes(n); let offset = 0, idx = 0;
+  sizes.forEach((size, li) => {
+    const L = lotMs(li), lotTeams = teams.slice(idx, idx + size), slots = shuffle(slotCenters()); idx += size;
+    const lotStart = offset;
+    later(() => { $('status').textContent = `lot ${li + 1}/${sizes.length} — ${size} équipes — ${(L / 1000).toFixed(2)} s${li + 1 >= ACCEL_FROM_LOT ? ' (accéléré)' : ''}`;
+      const tag = $('lotTag'); tag.textContent = `Lot ${li + 1}/${sizes.length}`; tag.classList.toggle('on', sizes.length > 1); }, lotStart);
+    lotTeams.forEach((t, i) => {
+      const t0 = lotStart + i * L * 0.03;
+      launch(t, slots[i], t0, { flight: L * 0.28, zoom: L * 0.10, fade: L * 0.14, fadeAt: lotStart + L * 0.86 }, reduced);
+    });
+    offset += L;
+  });
+  later(() => { $('status').textContent = `terminé — ${n} équipes en ${(offset / 1000).toFixed(2)} s`; $('lotTag').classList.remove('on'); }, offset);
+}
+
+function renderTiming() {
+  const rows = [1, 4, 6, 8, 12, 18, 20, 24].map(n => { const s = lotSizes(n);
+    return `<tr><td>${n}</td><td>${s.length}</td><td>${s.join(' + ')}</td><td>${s.map((_, i) => (lotMs(i) / 1000).toFixed(2)).join(' · ')}</td><td><b>${(totalMs(n) / 1000).toFixed(2)} s</b></td></tr>`; }).join('');
+  $('timing').innerHTML = '<tr><th>Équipes</th><th>Lots</th><th>Répartition</th><th>Durée par lot (s)</th><th>Durée totale</th></tr>' + rows;
+}
+
+document.querySelectorAll('input[name=n]').forEach(r => r.addEventListener('change', play));
+$('reduced').addEventListener('change', play);
+$('debug').addEventListener('change', drawDebug);
+$('play').addEventListener('click', play);
+if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) $('reduced').checked = true;
+renderTiming(); play();
+</script>
+</body>
+</html>

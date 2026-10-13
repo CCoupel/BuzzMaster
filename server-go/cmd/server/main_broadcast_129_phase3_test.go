@@ -95,8 +95,9 @@ func TestBroadcast129_QCMAnswer_EachPlayerReceivesOnlyOwnEchoZeroFromOthers(t *t
 		app.handleVPlayerQCMAnswer(id, qcmAnswerMsg(t, id, colors[i%len(colors)]))
 	}
 
+	broadcastSentinel264(t, app) // #264 : fin d'observation par événement, pas par fenêtre fixe
 	for i, pc := range playerConns {
-		actions := collectActions(pc.conn, 500*time.Millisecond)
+		actions := collectUntilSentinel264(t, pc.conn)
 		got := countActions(actions, protocol.ActionUpdate)
 		if got != 1 {
 			t.Errorf("#129 CA10: player %d (%s) should receive exactly 1 UPDATE (its own echo, %d peers also answered), got %d — actions=%v", i, pc.playerID, n-1, got, actions)
@@ -125,7 +126,8 @@ func TestBroadcast129_QCMAnswer_PauseStillReachesAllVPlayers(t *testing.T) {
 
 	app.handleVPlayerQCMAnswer(ids[0], qcmAnswerMsg(t, ids[0], "RED"))
 
-	actions := collectActions(observerConn, 500*time.Millisecond)
+	broadcastSentinel264(t, app) // #264 : fin d'observation par événement, pas par fenêtre fixe
+	actions := collectUntilSentinel264(t, observerConn)
 	if !containsAction(actions, protocol.ActionPause) {
 		t.Errorf("#129: PAUSE must still reach every VPlayer (broadcastPause untouched by T3.1), got actions=%v", actions)
 	}

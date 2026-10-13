@@ -843,7 +843,7 @@ export default function AnimPage() {
             {/* #166/F10 — zone réponse permanente : remplace le bloc
                 conditionnel #163/F4. Absente si aucune question chargée
                 (AnimAnswerZone rend null). */}
-            <AnimAnswerZone question={answerZoneQuestion} revealed={revealed} />
+            <AnimAnswerZone question={answerZoneQuestion} revealed={hostContext.revealed} />
           </div>
         </div>
 

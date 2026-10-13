@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import NoSleep from 'nosleep.js'
 import { motion, AnimatePresence } from 'framer-motion'
-import confetti from 'canvas-confetti'
 import { useGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
@@ -21,6 +20,8 @@ import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import { getArdoiseTvLayout } from '../utils/ardoiseTvLayout'
+import TvPointsAward from '../components/TvPointsAward'
+import { usePointsAward } from '../hooks/usePointsAward'
 import './PlayerDisplay.css'
 import '../styles/neon.css'
 import '../styles/entracte.css'
@@ -215,15 +216,14 @@ function RafaleDifficultyPastilles({ difficulties }) {
   )
 }
 
-export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false }) {
-  const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard } = useGame()
+export default function PlayerDisplay({ playerName = null, playerNameColor = null, teamName = null, teamColor = null, playerId = null, isVPlayer = false, onMediaClick = null, onQCMAnswer = null, vplayerHasBuzzed = false, vplayerPending = null, onFlipCard = null }) {
+  const { gameState, teams, bumpers, flipMemoryCard, showQRCode, selectMotionCard, status: connectionStatus } = useGame()
   const { categories: apiCategories } = useCategories()
   const [previousRanking, setPreviousRanking] = useState({})
   const [changedTeams, setChangedTeams] = useState({})
   const [palmares, setPalmares] = useState([]) // For PALMARES view (v5.7.10 — GET /palmares)
   const [previousPlayerScores, setPreviousPlayerScores] = useState({})
   const [changedPlayers, setChangedPlayers] = useState({})
-  const [pointsAnimation, setPointsAnimation] = useState(null) // {name, points, color}
   const [justMatchedPairs, setJustMatchedPairs] = useState([]) // Track newly matched pairs for animation
   const [prevMatchedPairs, setPrevMatchedPairs] = useState([]) // Previous matched pairs
   const [revealedPairs, setRevealedPairs] = useState([]) // Pairs revealed progressively during REVEAL phase
@@ -472,40 +472,18 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     setPreviousPlayerScores(currentScores)
   }, [sortedPlayers, isVPlayer, gameState.remote])
 
-  // Detect score changes and trigger celebration animation in GAME view
-  // #127 — DÉLIBÉRÉMENT INDÉPENDANT de sortedTeams/previousRanking (ci-dessus) :
-  // cette célébration est rendue sans garde !isVPlayer (JSX plus bas, vue GAME) et
-  // doit se déclencher précisément quand remote==='GAME' — soit l'exact opposé de la
-  // condition qui vide sortedTeams pour un VJoueur. La coupler à sortedTeams aurait
-  // soit cassé la célébration pendant le jeu (si gardée alignée sur 'SCORE'), soit
-  // réintroduit le tri complet à chaque UPDATE pendant la rafale PREPARE→READY (si
-  // laissée inconditionnelle). Calcul dédié en O(n), sans tri, sur `teams` brut.
-  const previousTeamScoresRef = useRef({})
-  useEffect(() => {
-    const previous = previousTeamScoresRef.current
-    const currentScores = {}
-    const hidden = hiddenScoreChange('celebration')
-
-    Object.entries(teams).forEach(([name, data]) => {
-      const score = data.SCORE || 0
-      currentScores[name] = score
-
-      const prevScore = previous[name]
-      // #252 : une hausse listée par une correction cachée n'anime rien (la référence est
-      // mise à jour ; la prochaine hausse visible n'anime que sa propre différence).
-      if (prevScore !== undefined && score > prevScore && !hidden?.teams.has(name)) {
-        setPointsAnimation({
-          name,
-          points: score - prevScore,
-          color: data.COLOR,
-        })
-        triggerCelebration(data.COLOR)
-        setTimeout(() => setPointsAnimation(null), 2500)
-      }
-    })
-
-    previousTeamScoresRef.current = currentScores
-  }, [teams])
+  // #265 — attribution de points : un feu d'artifice par équipe, par lots de 6 au plus (TV) ; sur la
+  // tablette, seulement le gain de SA propre équipe, calé sur le lot de la TV. Calendrier = module pur
+  // utils/pointsAwardLots ; source = SCORE_CHANGE.GAINS (repli : comparaison des scores, équipes triées par
+  // nom). Hérite du #127 : calcul dédié, indépendant de sortedTeams/previousRanking (vue GAME uniquement).
+  const pointsAwardLots = usePointsAward({
+    scoreChange: gameState.SCORE_CHANGE,
+    teams,
+    enabled: !['SCORE', 'PLAYERS', 'PALMARES'].includes(gameState.remote),
+    ownTeam: teamName,
+    isVPlayer,
+    connectionStatus,
+  })
 
   // Background index is now server-synchronized via gameState.currentBackgroundIndex
   // No local cycling needed - server broadcasts BACKGROUND_CHANGE to all clients
@@ -682,18 +660,6 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
       setCascadeHideStarted(false)
     }
   }, [gameState.phase, gameState.question?.TYPE, gameState.question?.MEMORY_CONFIG, gameState.question?.MEMORY_PAIRS, prevPhase])
-
-  const triggerCelebration = (color) => {
-    const rgb = color || [99, 102, 241]
-    const hex = `#${rgb.map(c => c.toString(16).padStart(2, '0')).join('')}`
-
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: [hex, '#ffffff', '#ffd700'],
-    })
-  }
 
   const isShowingScores = gameState.remote === 'SCORE'
   const isShowingPlayers = gameState.remote === 'PLAYERS'
@@ -1890,7 +1856,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 3: Media or "PREPAREZ-VOUS" message or COUNTDOWN */}
                 <div
-                  className="zone-media"
+                  className={`zone-media${vplayerPending && !vplayerPending.cardId ? ' vplayer-pending-pressed' : ''}`}
                   onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
                   style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
                 >
@@ -1956,12 +1922,15 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       const teamsOnThisAnswer = teamsByQcmAnswer[colorKey] || []
                       const showTeamBadges = ['STOPPED', 'REVEALED'].includes(gameState.phase) && teamsOnThisAnswer.length > 0
 
-                      const isClickable = onQCMAnswer && gameState.phase === 'STARTED' && !isInvalidated && !vplayerHasBuzzed
+                      const isClickable = onQCMAnswer && gameState.phase === 'STARTED' && !isInvalidated && !vplayerHasBuzzed && !vplayerPending
+                      // #248 — choix en attente d'accusé : grille verrouillée, choix mis en avant
+                      const pendingChosen = !!vplayerPending && vplayerPending.color === colorKey
+                      const pendingDim = !!vplayerPending && !pendingChosen
 
                       return (
                         <motion.div
                           key={colorKey}
-                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''} ${isClickable ? 'clickable' : ''}`}
+                          className={`qcm-answer-item ${showAnswer ? (isCorrect ? 'correct' : 'wrong') : ''} ${isInvalidated ? 'invalidated' : ''} ${isClickable ? 'clickable' : ''} ${pendingChosen ? (vplayerPending.status === 'failed' ? 'vplayer-pending-chosen vplayer-pending-failed' : 'vplayer-pending-chosen') : ''} ${pendingDim ? 'vplayer-pending-dim' : ''}`}
                           style={{
                             backgroundColor: isInvalidated ? '#374151' : (showAnswer && !isCorrect ? '#4b5563' : colorData.color),
                             opacity: isInvalidated ? 0.35 : (showAnswer && !isCorrect ? 0.4 : 1),
@@ -2216,11 +2185,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       return (
                         <motion.div
                           key={cardData.id}
-                          className={`memory-card ${isFlipped ? 'flipped' : ''} ${showMatchedStyle ? 'matched' : ''} ${isJustMatched ? 'just-matched' : ''}`}
+                          className={`memory-card ${isFlipped ? 'flipped' : ''} ${showMatchedStyle ? 'matched' : ''} ${isJustMatched ? 'just-matched' : ''}${vplayerPending?.cardId === cardData.id ? (vplayerPending.status === 'failed' ? ' vplayer-pending-card vplayer-pending-failed' : ' vplayer-pending-card') : ''}`}
                           initial={{ opacity: 0, scale: 0.8 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: index * 0.05, duration: 0.3 }}
-                          onClick={() => canClick && flipMemoryCard(cardData.id, undefined, playerId)}
+                          onClick={() => canClick && (onFlipCard ? onFlipCard(cardData.id, undefined) : flipMemoryCard(cardData.id, undefined, playerId))}
                           style={{
                             cursor: canClick ? 'pointer' : 'default',
                             '--matched-team-color': teamColor
@@ -2435,9 +2404,9 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                       <button
                         key={cardData.id}
                         type="button"
-                        className={`memotion-tv-memory-card ${isMatched ? 'matched' : ''} ${cardRevealed ? 'up' : 'down'}`}
+                        className={`memotion-tv-memory-card ${isMatched ? 'matched' : ''} ${cardRevealed ? 'up' : 'down'}${vplayerPending?.cardId === cardData.id ? (vplayerPending.status === 'failed' ? ' vplayer-pending-card vplayer-pending-failed' : ' vplayer-pending-card') : ''}`}
                         disabled={!canClick}
-                        onClick={() => canClick && flipMemoryCard(cardData.id, cardHostContext.cardId, playerId)}
+                        onClick={() => canClick && (onFlipCard ? onFlipCard(cardData.id, cardHostContext.cardId) : flipMemoryCard(cardData.id, cardHostContext.cardId, playerId))}
                         aria-label={cardRevealed ? undefined : `Carte ${cardLetter}, face cachée`}
                       >
                         {cardRevealed ? (
@@ -2999,7 +2968,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
 
                 {/* Zone 3: Media - shows MEDIA_ANSWER during REVEAL if available - ALWAYS clickable for VPlayer buzz */}
                 <div
-                  className="zone-media"
+                  className={`zone-media${vplayerPending && !vplayerPending.cardId ? ' vplayer-pending-pressed' : ''}`}
                   onClick={onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? onMediaClick : undefined}
                   style={{ cursor: onMediaClick && isVPlayer && (gameState.phase === 'STARTED' || gameState.phase === 'PAUSED') ? 'pointer' : 'default' }}
                 >
@@ -3318,26 +3287,8 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
               </motion.div>
             )}
 
-            {/* Points Animation - floating +X pts when score changes */}
-            <AnimatePresence>
-              {pointsAnimation && (
-                <motion.div
-                  className="points-animation"
-                  initial={{ opacity: 0, scale: 0.5, y: 100 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 1.5, y: -100 }}
-                  transition={{ duration: 0.5 }}
-                  style={{
-                    '--team-color': pointsAnimation.color
-                      ? `rgb(${pointsAnimation.color.join(',')})`
-                      : 'var(--success)'
-                  }}
-                >
-                  <span className="points-team">{pointsAnimation.name}</span>
-                  <span className="points-value">+{pointsAnimation.points} pts</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* #265 — animation d'attribution de points (TV : lots de 6 ; tablette : son équipe) */}
+            <TvPointsAward lots={pointsAwardLots} />
           </motion.div>
         )}
       </AnimatePresence>

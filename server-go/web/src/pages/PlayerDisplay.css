@@ -1072,47 +1072,6 @@
   100% { transform: scale(1); }
 }
 
-/* Points Animation - floating +X pts in GAME view */
-.points-animation {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  background: rgba(0, 0, 0, 0.9);
-  backdrop-filter: blur(20px);
-  padding: var(--space-8) var(--space-12);
-  border-radius: var(--radius-2xl);
-  border: 4px solid var(--team-color);
-  box-shadow: 0 0 80px var(--team-color), 0 20px 60px rgba(0, 0, 0, 0.5);
-  z-index: 100;
-}
-
-.points-team {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--team-color);
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-}
-
-.points-value {
-  font-family: var(--font-display);
-  font-size: 4rem;
-  font-weight: 800;
-  color: var(--success);
-  text-shadow: 0 0 30px var(--success);
-  animation: points-pulse 0.3s ease-in-out infinite alternate;
-}
-
-@keyframes points-pulse {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.1); }
-}
-
 /* Responsive */
 @media (max-width: 1200px) {
   .players-layout {
@@ -3849,4 +3808,22 @@
   letter-spacing: 0.1em;
   color: #fcd34d;
   pointer-events: none;
+}
+
+/* #248 — choix en attente d'accusé (tablette) : grille verrouillée, choix mis en avant. */
+.qcm-answer-item.vplayer-pending-dim { opacity: 0.35 !important; filter: grayscale(40%); }
+.qcm-answer-item.vplayer-pending-chosen { position: relative; outline: 4px solid #fff; outline-offset: 3px; }
+.qcm-answer-item.vplayer-pending-chosen::after { content: '⏳'; position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); font-size: 1.4em; }
+.qcm-answer-item.vplayer-pending-chosen.vplayer-pending-failed::after { content: '✕'; }
+.zone-media.vplayer-pending-pressed { opacity: 0.75; transform: translateY(2px); }
+
+/* #248 lot 5b — carte MEMORY/MEMOTION en attente d'accusé (tablette) : contour jaune + ⏳, tremble si échec. */
+.memory-card.vplayer-pending-card, .memotion-tv-memory-card.vplayer-pending-card { outline: 4px solid #fde68a; outline-offset: 3px; position: relative; }
+.memory-card.vplayer-pending-card::after, .memotion-tv-memory-card.vplayer-pending-card::after { content: '⏳'; position: absolute; right: 0.3rem; top: 0.3rem; font-size: 2.6vh; }
+.memory-card.vplayer-pending-failed, .memotion-tv-memory-card.vplayer-pending-failed { outline-color: rgba(239, 68, 68, 0.8); animation: vplayer-card-shake 0.4s 2; }
+.memory-card.vplayer-pending-failed::after, .memotion-tv-memory-card.vplayer-pending-failed::after { content: '✕'; }
+@keyframes vplayer-card-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-card.vplayer-pending-failed, .memotion-tv-memory-card.vplayer-pending-failed { animation: none; }
 }

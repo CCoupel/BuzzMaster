@@ -111,12 +111,69 @@ Règles complètes : `contracts/websocket-actions.md` §LAUNCH_LOCK.
 
 | Propriété | Type | Défaut | Notes |
 |-----------|------|--------|-------|
-| SCORE_CHANGE | `{ SEQ: number, DISPLAY: boolean, TEAMS: string[], PLAYERS: string[] }` | `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: []}` | **Toujours sérialisé**, listes jamais `null`. Diffusé à tous les clients web |
+| SCORE_CHANGE | `{ SEQ: number, DISPLAY: boolean, TEAMS: string[], PLAYERS: string[], GAINS: {TEAM: string, POINTS: number}[] }` | `{SEQ: 0, DISPLAY: true, TEAMS: [], PLAYERS: [], GAINS: []}` | **Toujours sérialisé**, listes jamais `null`. Diffusé à tous les clients web. `GAINS` : v11.2.1, #265 (voir ci-dessous) |
 
 - `SCORE_CHANGE` décrit la **dernière modification de score MANUELLE** (actions `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH`). Les crédits **automatiques** du moteur (`UpdateScore`, par exemple MEMORY ou attribution automatique d'un type de jeu) **ne l'incrémentent pas** : leurs hausses de score restent animées comme aujourd'hui.
 - Mis à jour **à chaque** `TEAM_POINTS`, `BUMPER_POINTS` ou `TEAM_POINTS_BATCH` appliqué : `SEQ` augmente de 1, `DISPLAY` = valeur de l'action (absent = `true`), `TEAMS` = équipes dont le score change, `PLAYERS` = joueurs (ID de bumper) dont le score change. Non persisté ; remis à zéro au démarrage et sur `NEW_GAME`.
 - **Règle d'affichage des écrans (TV, VJoueur, anim)** : quand un `UPDATE` apporte un nouveau `SCORE_CHANGE.SEQ` avec `DISPLAY = false`, les nouveaux scores des équipes et joueurs listés sont **pris comme référence sans animation**. Pas de « +X pts », pas de célébration, pas de surbrillance ni de montée de rang ; les chiffres du classement changent simplement. Avec `DISPLAY = true`, le comportement actuel est conservé.
 - Si un même `UPDATE` cumule une modification cachée et une visible (rare), seule la dernière (`SEQ` le plus grand) fait foi pour les équipes et joueurs qu'elle liste.
+
+### `SCORE_CHANGE.GAINS` — gains par équipe de la dernière modification (v11.2.1, #265)
+
+| Propriété | Type | Défaut | Notes |
+|-----------|------|--------|-------|
+| GAINS | `{ TEAM: string, POINTS: number }[]` | `[]` | **Toujours sérialisé**, jamais `null`, pas d'`omitempty` (règle GameState). `TEAM` = nom de l'équipe (clé de `TEAMS`), `POINTS` = entier signé |
+
+**Sens** : pour la modification décrite par `SCORE_CHANGE` (même `SEQ`), la variation **nette** du score de chaque équipe,
+c'est-à-dire la différence entre `TEAMS[TEAM].SCORE` avant et après l'action.
+
+**Écriture (serveur)**
+- Écrit **dans la même section critique que les scores** (`recordScoreChangeUnsafe`, sous `e.mu`), en même temps que
+  `SEQ`, `DISPLAY`, `TEAMS` et `PLAYERS`. Un `UPDATE` qui porte les nouveaux scores porte donc toujours le `GAINS`
+  correspondant, et inversement : pas de mise à jour où l'un est présent sans l'autre.
+- Actions concernées : celles qui incrémentent `SEQ`, soit `TEAM_POINTS`, `BUMPER_POINTS`, `TEAM_POINTS_BATCH` et
+  `BUMPER_POINTS_BATCH`. Ce dernier incrémente déjà `SEQ` dans le code sans figurer dans la liste ci-dessus : il est
+  explicitement couvert ici.
+- **Une entrée par équipe**, sans doublon, dans **l'ordre de première apparition** de l'équipe dans les entrées de
+  l'action (ordre de `ENTRIES` d'un lot ; une seule entrée pour `TEAM_POINTS` et `BUMPER_POINTS`). Les gains de plusieurs
+  joueurs d'une même équipe sont **additionnés**.
+- `POINTS` peut être négatif (pénalité) ou nul (gains de joueurs qui se compensent) : l'entrée est quand même présente.
+  Un joueur sans équipe (`BUMPER_POINTS` sur un bumper sans `TEAM`) ne produit **aucune** entrée.
+- Avec `DISPLAY = false` (correction cachée), `GAINS` est renseigné de la même façon : il décrit le fait, et c'est
+  `DISPLAY` qui interdit l'animation.
+- Remis à `[]` avec le reste de `SCORE_CHANGE` au démarrage et sur `NEW_GAME`. Non persisté.
+- Les crédits **automatiques** du moteur (`UpdateScore`, MEMORY, types de jeu) ne touchent **ni** `SEQ` **ni** `GAINS`
+  (règle inchangée).
+
+**Lecture (écrans)**
+- Un `GAINS` n'est lu qu'**une fois**, quand un `UPDATE` apporte un `SEQ` nouveau pour ce client. Le même `SEQ`
+  rediffusé (UPDATE suivants) n'est jamais rejoué.
+- **TV** (`/tv`) : avec `DISPLAY = true`, les entrées `POINTS > 0` sont animées dans l'ordre de `GAINS`, découpées en
+  lots de 6 au plus (maquette `tv_points_award__multi_team`). Les entrées `POINTS ≤ 0` ne sont pas animées.
+- **VJoueur** : même calcul de lots que la TV, à partir du même `GAINS` (fonction partagée côté client). La tablette
+  n'anime que l'entrée de **sa propre équipe**, au moment où son lot passe à la TV (maquette
+  `vplayer_points_award__own_team`). Elle tient compte de chaque nouveau `SEQ` visible, même sans sa propre équipe, pour
+  garder la même file d'attente que la TV.
+- **Anim / admin** : aucun usage imposé.
+
+**Cas limites**
+| Cas | Règle |
+|-----|-------|
+| Gains en plusieurs actions (plusieurs `SEQ`) | Chaque `SEQ` est une annonce distincte, mise en file à la suite de la précédente, sur la TV comme sur la tablette. Si un client reçoit deux `SEQ` d'un coup (UPDATE manqué), seul le dernier `GAINS` est disponible : les gains intermédiaires ne sont pas animés par ce client |
+| Équipe absente de `GAINS` | Rien à animer pour elle ; la tablette de cette équipe n'affiche rien |
+| Correction cachée (`DISPLAY = false`) | Aucune animation, sur aucun écran ; l'annonce n'entre pas dans la file |
+| Connexion ou reconnexion | Le `SEQ` du **premier** état reçu par la connexion sert de référence **sans animation**, même s'il est différent de zéro |
+| Crédits automatiques (pas de nouveau `SEQ`) | `GAINS` ne les décrit pas. Les écrans gardent la détection actuelle par comparaison des scores ; pour que la TV et la tablette produisent les mêmes lots, ils trient alors les équipes concernées par nom |
+| Équipe renommée ou supprimée entre deux `UPDATE` | `TEAM` désigne l'équipe au moment de l'action ; un client qui ne la trouve pas dans `TEAMS` ignore l'entrée |
+
+**Compatibilité** : champ additif. Les anciens clients (TV, tablettes ou admin d'une version antérieure, mis en cache)
+l'ignorent et gardent leur comportement par comparaison des scores. Le format de `SEQ`, `DISPLAY`, `TEAMS` et `PLAYERS`
+est inchangé.
+
+```json
+{ "SCORE_CHANGE": { "SEQ": 15, "DISPLAY": true, "TEAMS": ["Les Rouges", "Les Bleus"], "PLAYERS": ["AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02", "AA:BB:CC:DD:EE:07"],
+  "GAINS": [ { "TEAM": "Les Rouges", "POINTS": 4 }, { "TEAM": "Les Bleus", "POINTS": 2 } ] } }
+```
 
 ## Question en cours
 

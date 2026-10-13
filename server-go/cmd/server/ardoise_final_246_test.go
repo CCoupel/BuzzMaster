@@ -119,7 +119,7 @@ func TestArdoiseFinal246_Critical_AcceptedFinalSetsReceivedAndAcksOnlyTheSender(
 
 	e.send(t, paul, "vplayer", "ARDOISE_FINAL", finalPayload246(e.paul, "q-ardoise", "PARIS EN FRANCE"))
 
-	raw := readActionMatchingWithin(t, paulConn, "ARDOISE_FINAL_ACK", 2*time.Second)
+	raw := readActionMatchingWithin(t, paulConn, "ARDOISE_FINAL_ACK", eventDeadline264)
 	var ack struct {
 		QuestionID string `json:"QUESTION_ID"`
 		Hash       string `json:"HASH"`
@@ -140,7 +140,7 @@ func TestArdoiseFinal246_Critical_AcceptedFinalSetsReceivedAndAcksOnlyTheSender(
 	}
 	// diffusion immédiate (non coalescée, < 150 ms) vers admin ET anim
 	for name, c := range map[string]*websocket.Conn{"admin": adminConn, "anim": animConn} {
-		_, took := readUpdateWithReceived(t, c, "Les Bleus", true, 2*time.Second)
+		_, took := readUpdateWithReceived(t, c, "Les Bleus", true, eventDeadline264)
 		if took > 140*time.Millisecond {
 			t.Errorf("UPDATE %s non immédiat (coalescé ?) : %v", name, took)
 		}
@@ -159,7 +159,7 @@ func TestArdoiseFinal246_EmptyTextIsAcceptedAsNothingWritten(t *testing.T) {
 
 	e.send(t, cid, "vplayer", "ARDOISE_FINAL", finalPayload246(e.paul, "q-ardoise", ""))
 
-	raw := readActionMatchingWithin(t, conn, "ARDOISE_FINAL_ACK", 2*time.Second)
+	raw := readActionMatchingWithin(t, conn, "ARDOISE_FINAL_ACK", eventDeadline264)
 	if !strings.Contains(string(raw), "811c9dc5") {
 		t.Errorf("hash du texte vide attendu : %s", raw)
 	}
@@ -230,13 +230,13 @@ func TestArdoiseFinal246_IsIdempotentOnTheSameHash(t *testing.T) {
 	e.connect(t, cid, "Paul", e.paul)
 	e.stop()
 	e.send(t, cid, "vplayer", "ARDOISE_FINAL", finalPayload246(e.paul, "q-ardoise", "PARIS"))
-	readActionMatchingWithin(t, conn, "ARDOISE_FINAL_ACK", 2*time.Second)
+	readActionMatchingWithin(t, conn, "ARDOISE_FINAL_ACK", eventDeadline264)
 	first := string(e.answersRaw("Les Bleus")["SUBMITTED_AT"])
 	time.Sleep(5 * time.Millisecond)
 
 	e.send(t, cid, "vplayer", "ARDOISE_FINAL", finalPayload246(e.paul, "q-ardoise", "PARIS")) // renvoi de la tablette
 
-	readActionMatchingWithin(t, conn, "ARDOISE_FINAL_ACK", 2*time.Second) // la tablette doit encore être accusée
+	readActionMatchingWithin(t, conn, "ARDOISE_FINAL_ACK", eventDeadline264) // la tablette doit encore être accusée
 	if again := string(e.answersRaw("Les Bleus")["SUBMITTED_AT"]); again != first {
 		t.Errorf("même hash déjà reçu : pas de réécriture (SUBMITTED_AT %s → %s)", first, again)
 	}
@@ -343,7 +343,7 @@ func TestRevealGuard246_Critical_RefusedWhileAnExpectedTeamIsPending(t *testing.
 	if e.app.engine.GetPhase() != game.PhaseStopped {
 		t.Fatalf("la phase ne change pas : %s", e.app.engine.GetPhase())
 	}
-	raw := readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", 2*time.Second)
+	raw := readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", eventDeadline264)
 	var rr struct {
 		Reason  string `json:"REASON"`
 		Pending []struct {
@@ -368,7 +368,7 @@ func TestRevealGuard246_AnimIsGuardedToo(t *testing.T) {
 
 	e.reveal(t, anim, "anim", false)
 
-	readActionMatchingWithin(t, animConn, "REVEAL_REFUSED", 2*time.Second)
+	readActionMatchingWithin(t, animConn, "REVEAL_REFUSED", eventDeadline264)
 	if e.app.engine.GetPhase() != game.PhaseStopped {
 		t.Errorf("phase = %s", e.app.engine.GetPhase())
 	}
@@ -386,7 +386,7 @@ func TestRevealGuard246_Critical_OfflineTabletStillBlocksAndIsFlagged(t *testing
 
 	e.reveal(t, admin, "admin", false)
 
-	raw := readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", 2*time.Second)
+	raw := readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", eventDeadline264)
 	var rr struct {
 		Pending []struct {
 			Team    string `json:"TEAM"`
@@ -515,7 +515,7 @@ func TestRevealGuard246_RevealFromPausedIsAlsoGuarded(t *testing.T) {
 
 	e.reveal(t, admin, "admin", false)
 
-	readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", 2*time.Second)
+	readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", eventDeadline264)
 	if e.app.engine.GetPhase() != game.PhasePaused {
 		t.Errorf("phase=%s", e.app.engine.GetPhase())
 	}
@@ -564,7 +564,7 @@ func TestRevealGuard246_TabletReloadedAfterStopStaysBlockedUntilForced(t *testin
 	e.connect(t, mamie2, "Mamie", e.mamie)
 	e.reveal(t, admin, "admin", false)
 
-	readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", 2*time.Second)
+	readActionMatchingWithin(t, adminConn, "REVEAL_REFUSED", eventDeadline264)
 	if e.app.engine.GetPhase() != game.PhaseStopped {
 		t.Fatalf("REVEAL bloqué tant que le final de Mamie n'est pas reçu : phase=%s", e.app.engine.GetPhase())
 	}

@@ -81,7 +81,7 @@ func learnClientID(t *testing.T, app *App, conn *websocket.Conn) string {
 	select {
 	case incoming := <-app.wsHub.Incoming:
 		return incoming.ClientID
-	case <-time.After(2 * time.Second):
+	case <-time.After(eventDeadline264): // #264 : attente par événement, échéance large
 		t.Fatal("timed out waiting for an incoming message")
 		return ""
 	}
@@ -91,7 +91,7 @@ func learnClientID(t *testing.T, app *App, conn *websocket.Conn) string {
 // plus raw MSG payload, failing the test if none arrives within the timeout.
 func readAction(t *testing.T, conn *websocket.Conn) (string, json.RawMessage) {
 	t.Helper()
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(eventDeadline264)) // #264
 	_, data, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("expected a message, got error: %v", err)

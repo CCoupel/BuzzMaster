@@ -36,6 +36,7 @@ type BroadcasterManager struct {
 	highFreq   bool // true when at least one known buzzer is disconnected (v3.6.5)
 	mu         sync.RWMutex
 	stopCh     chan struct{}
+	stopOnce   sync.Once // #261: Stop() is idempotent (double shutdown path)
 	wg         sync.WaitGroup
 }
 
@@ -58,7 +59,7 @@ func (b *BroadcasterManager) Start() {
 
 // Stop signals the background goroutine to exit and waits for it to finish.
 func (b *BroadcasterManager) Stop() {
-	close(b.stopCh)
+	b.stopOnce.Do(func() { close(b.stopCh) })
 	b.wg.Wait()
 }
 

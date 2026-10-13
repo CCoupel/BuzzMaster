@@ -68,6 +68,7 @@ const (
 	ActionVPlayerQCMAnswer = "VPLAYER_QCM_ANSWER"
 	// ARDOISE actions (v5.6.0)
 	ActionArdoiseFinal            = "ARDOISE_FINAL"              // VPlayer → Server: final text at STOP/PAUSE (v11.2, #246)
+	ActionFlipMemoryCardAck       = "FLIP_MEMORY_CARD_ACK"       // Server → VPlayer (targeted): flip gesture processed (v11.2.1, #248)
 	ActionArdoiseFinalAck         = "ARDOISE_FINAL_ACK"          // Server → VPlayer (targeted): final received (v11.2, #246)
 	ActionTeamsUpdateRefused      = "TEAMS_UPDATE_REFUSED"       // Server → sender (targeted): UPDATE/FULL removing a team refused while TEAMS_LOCKED (v11.2, #249)
 	ActionNewGameRefused          = "NEW_GAME_REFUSED"           // Server → sender (targeted): NEW_GAME refused (v11.2, #243)
@@ -515,7 +516,21 @@ type CancelAIGenerationPayload struct {
 type FlipMemoryCardPayload struct {
 	CardID string `json:"CARD_ID"`      // Card ID to flip (e.g., "1-1", "2-2")
 	ID     string `json:"ID,omitempty"` // Bumper ID (VPlayer) — #187, v7.1.0
+	// FlipID (#248, v11.2.1) identifies one flip gesture, identical on every
+	// re-send: makes the flip idempotent and triggers FLIP_MEMORY_CARD_ACK.
+	FlipID string `json:"FLIP_ID,omitempty"`
 	CardScope
+}
+
+// FlipMemoryCardAckPayload for FLIP_MEMORY_CARD_ACK (Server → emitting VPlayer
+// only, #248, v11.2.1). MOTION_CARD_ID and REASON are always serialized.
+type FlipMemoryCardAckPayload struct {
+	FlipID       string `json:"FLIP_ID"`
+	CardID       string `json:"CARD_ID"`
+	MotionCardID string `json:"MOTION_CARD_ID"`
+	Status       string `json:"STATUS"` // "APPLIED" | "IGNORED"
+	Reason       string `json:"REASON"` // "" | NOT_TURN | NOT_FLIPPABLE | NOT_PLAYABLE | CARD_SCOPE
+	Duplicate    bool   `json:"DUPLICATE"`
 }
 
 // MemorySetTeamsPayload for MEMORY_SET_TEAMS action

@@ -38,6 +38,8 @@ var Version = "dev"
 
 // App holds all server components
 type App struct {
+	stopMu      sync.Mutex // #261: serialises stop() — /shutdown hook and main() both call it
+	stopped     bool
 	config      *config.Config
 	engine      *game.Engine
 	udpBcast    *server.UDPBroadcaster
@@ -660,9 +662,10 @@ func (a *App) setupCallbacks() {
 	}
 
 	// Buzzer press
-	a.engine.OnBuzzerPress = func(bumperID, teamID string, pressTime int64, button string) {
-		a.broadcastPause(bumperID)
-	}
+	// #247: no OnBuzzerPress wiring — the PAUSE is broadcast ONCE by the three
+	// press handlers (handleButton, handleSimulatedButton,
+	// handleVPlayerQCMAnswer), after updateBuzzStates, and only when
+	// ProcessButtonPress reports the press as accepted.
 
 	// QCM hint (when a wrong answer is invalidated)
 	a.engine.OnQCMHint = func(invalidatedColor string, remainingAnswers int) {
@@ -1234,6 +1237,16 @@ func (a *App) start() error {
 }
 
 func (a *App) stop() {
+	// #261: /shutdown (OnShutdown hook) cancels a.ctx, waking main() which calls
+	// stop() again concurrently. The mutex makes the second caller wait for the
+	// first to finish, then return without re-running the teardown.
+	a.stopMu.Lock()
+	defer a.stopMu.Unlock()
+	if a.stopped {
+		return
+	}
+	a.stopped = true
+
 	// #208 (T2.3, contract §10.4): extinction totale des ampoules Hue et des
 	// LED buzzers, AVANT a.cancelCtx() — a.ctx porte le client HTTP vers le
 	// pont ET les hubs WebSocket buzzers, donc une extinction émise après
@@ -1832,7 +1845,9 @@ func (a *App) handleButton(clientID string, msg *protocol.Message, timestamp int
 	server.LogInfo(game.LogComponentWebSocket, "BUTTON from %s: %s", clientID, payload.Button)
 
 	// Process in engine
-	a.engine.ProcessButtonPress(clientID, timestamp, payload.Button)
+	if !a.engine.ProcessButtonPress(clientID, timestamp, payload.Button) {
+		return // #247: refused press → no PAUSE, no state broadcast
+	}
 
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(clientID)
@@ -1892,7 +1907,16 @@ func (a *App) handleSimulatedButton(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "Simulated BUTTON from %s: %s (time: %d)", payload.ID, button, timestamp)
 
 	// Process in engine (same as real button press)
-	a.engine.ProcessButtonPress(payload.ID, timestamp, button)
+	if !a.engine.ProcessButtonPress(payload.ID, timestamp, button) {
+		// #247: refused press → no PAUSE, no admin/TV/anim/buzzer broadcast.
+		// A refused VPlayer gets its own state back (same targeted echo as
+		// handleVPlayerQCMAnswer) so a re-sent buzz after a lost ack (#248)
+		// still sees the server state. Non-VPlayer (physical MAC): silent.
+		if bumper := a.engine.GetBumper(payload.ID); bumper != nil && bumper.IsVPlayer {
+			a.broadcastUpdateToPlayer(payload.ID)
+		}
+		return
+	}
 
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(payload.ID)
@@ -2788,40 +2812,83 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 
 	cardScoped := payload.MotionCardID != ""
 
-	// #187 contract §9.2 — card-scope invariant, refused explicitly.
-	if cardScoped {
-		if err := a.engine.ValidateCardScope(payload.MotionCardID); err != nil {
-			server.LogWarn(game.LogComponentEngine, "FLIP_MEMORY_CARD rejected: %v (motionCardId=%s)", err, payload.MotionCardID)
-			return
+	// #248: a FLIP_ID from a resolved vplayer makes this an idempotent gesture
+	// (dedupe → checks → flip → ACK, all decided atomically in the engine).
+	// Without a (valid) FLIP_ID, or from tv/anim, the legacy path below is
+	// strictly unchanged.
+	flipID := payload.FlipID
+	if flipID != "" && !validFlipID(flipID) {
+		server.LogWarn(game.LogComponentApp, "FLIP_ID_INVALID client=%s type=%s len=%d", clientID, clientType, len(flipID))
+		flipID = ""
+	}
+	var flipBumper *game.Bumper
+	flipBumperID := ""
+	if flipID != "" && clientType == server.ClientTypeVPlayer {
+		for _, cand := range []string{payload.ID, msg.ID, clientID} { // same 3 passes as resolveFlipMemoryCardBumper
+			if cand == "" {
+				continue
+			}
+			if b := a.engine.GetBumper(cand); b != nil {
+				flipBumper, flipBumperID = b, cand
+				break
+			}
 		}
 	}
-
-	// #187 contract §9.2 dérogation — server becomes sole authority on the
-	// turn, but ONLY for vplayer. tv (régie iframe preview / public screen
-	// click) and anim (the animateur, playing for the table) have no team
-	// and must keep working unconditionally, exactly as before.
-	if clientType == server.ClientTypeVPlayer {
-		state := a.engine.GetState()
-		activeTeam := state.MemoryCurrentTeam
-		if cardScoped {
-			activeTeam = state.MotionCurrentTeam
-		}
-		bumper := a.resolveFlipMemoryCardBumper(payload.ID, msg.ID, clientID)
-		if bumper == nil || bumper.Team == "" || activeTeam == "" || bumper.Team != activeTeam {
-			server.LogDebug(game.LogComponentApp, "FLIP_MEMORY_CARD ignored: not this VPlayer's turn (client=%s, cardScoped=%v)", clientID, cardScoped)
-			return
-		}
-	}
-
-	server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s motionCardId=%s", payload.CardID, payload.MotionCardID)
 
 	var isMatch, shouldFlipBack bool
 	var flipDelay int
 	var isComplete bool
-	if cardScoped {
-		isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMotionMemoryCard(payload.MotionCardID, payload.CardID)
+	if flipBumper != nil {
+		res := a.engine.FlipCardGesture(game.FlipGesture{
+			BumperID: flipBumperID, Team: flipBumper.Team,
+			FlipID: flipID, CardID: payload.CardID, MotionCardID: payload.MotionCardID,
+		})
+		a.logFlipGesture(clientID, flipBumperID, res)
+		if ack, err := protocol.NewMessage(protocol.ActionFlipMemoryCardAck, flipAckPayload(res)); err == nil {
+			a.wsHub.SendToClient(clientID, ack)
+		}
+		if !res.Applied || res.Duplicate {
+			// Duplicate or ignored gesture: the ACK and a targeted UPDATE only,
+			// never a general broadcast, PAUSE or LED change.
+			a.broadcastUpdateToPlayer(flipBumperID)
+			return
+		}
+		isMatch, shouldFlipBack, flipDelay, isComplete = res.IsMatch, res.ShouldFlipBack, res.FlipDelay, res.IsComplete
+		defer a.broadcastUpdateToPlayer(flipBumperID) // the ACK is followed by the targeted UPDATE
 	} else {
-		isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMemoryCard(payload.CardID)
+		// #187 contract §9.2 — card-scope invariant, refused explicitly.
+		if cardScoped {
+			if err := a.engine.ValidateCardScope(payload.MotionCardID); err != nil {
+				server.LogWarn(game.LogComponentEngine, "FLIP_MEMORY_CARD rejected: %v (motionCardId=%s)", err, payload.MotionCardID)
+				return
+			}
+		}
+
+		// #187 contract §9.2 dérogation — server becomes sole authority on the
+		// turn, but ONLY for vplayer. tv (régie iframe preview / public screen
+		// click) and anim (the animateur, playing for the table) have no team
+		// and must keep working unconditionally, exactly as before.
+		if clientType == server.ClientTypeVPlayer {
+			state := a.engine.GetState()
+			activeTeam := state.MemoryCurrentTeam
+			if cardScoped {
+				activeTeam = state.MotionCurrentTeam
+			}
+			bumper := a.resolveFlipMemoryCardBumper(payload.ID, msg.ID, clientID)
+			if bumper == nil || bumper.Team == "" || activeTeam == "" || bumper.Team != activeTeam {
+				server.LogDebug(game.LogComponentApp, "FLIP_MEMORY_CARD ignored: not this VPlayer's turn (client=%s, cardScoped=%v)", clientID, cardScoped)
+				return
+			}
+		}
+
+		server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s motionCardId=%s", payload.CardID, payload.MotionCardID)
+
+		if cardScoped {
+			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMotionMemoryCard(payload.MotionCardID, payload.CardID)
+		} else {
+			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMemoryCard(payload.CardID)
+		}
+
 	}
 
 	// Broadcast updated game state to all clients
@@ -4170,7 +4237,14 @@ func (a *App) handleVPlayerQCMAnswer(clientID string, msg *protocol.Message) {
 		bumperID, bumper.Name, payload.AnswerColor, button, timestamp)
 
 	// Process as a button press (same as physical buzzer or simulated button)
-	a.engine.ProcessButtonPress(bumperID, timestamp, button)
+	if !a.engine.ProcessButtonPress(bumperID, timestamp, button) {
+		// #247: refused answer (repeat, team already buzzed…) → no PAUSE, no
+		// admin/TV/anim/buzzer broadcast. Only the answering VPlayer gets its
+		// own state back (#129 per-player echo): a re-sent answer whose first
+		// ack was lost (#248) must still see the server state.
+		a.broadcastUpdateToPlayer(bumperID)
+		return
+	}
 
 	// Update BuzzState tracking after the engine has recorded the press
 	a.updateBuzzStates(bumperID)
@@ -8432,5 +8506,53 @@ func checkBonjourSupport() {
 	} else {
 		log.Println("[mDNS] âš  Bonjour service status unknown")
 		log.Printf("[mDNS]   â†’ Output: %s", strings.TrimSpace(outputStr))
+	}
+}
+
+// validFlipID reports whether id is a well-formed FLIP_ID: 1–64 characters of
+// [A-Za-z0-9_-] (contract websocket-actions.md §"Idempotence — FLIP_ID").
+func validFlipID(id string) bool {
+	if len(id) < 1 || len(id) > 64 {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// flipAckPayload builds the FLIP_MEMORY_CARD_ACK payload from a gesture result.
+func flipAckPayload(res game.FlipGestureResult) protocol.FlipMemoryCardAckPayload {
+	status := "IGNORED"
+	if res.Applied {
+		status = "APPLIED"
+	}
+	return protocol.FlipMemoryCardAckPayload{
+		FlipID: res.FlipID, CardID: res.CardID, MotionCardID: res.MotionCardID,
+		Status: status, Reason: res.Reason, Duplicate: res.Duplicate,
+	}
+}
+
+// logFlipGesture writes the FLIP_DUPLICATE / FLIP_IGNORED events of
+// contracts/logging.md (an APPLIED first send has no dedicated event; the
+// existing FLIP_MEMORY_CARD trace stays the legacy path's).
+func (a *App) logFlipGesture(clientID, playerID string, res game.FlipGestureResult) {
+	status := "IGNORED"
+	if res.Applied {
+		status = "APPLIED"
+	}
+	if res.ScopeError != "" {
+		server.LogWarn(game.LogComponentEngine, "FLIP_MEMORY_CARD rejected: %s (motionCardId=%s)", res.ScopeError, res.MotionCardID)
+	}
+	switch {
+	case res.Duplicate:
+		server.LogInfo(game.LogComponentApp, "FLIP_DUPLICATE client=%s player_id=%s flip_id=%s card=%s motion_card=%s status=%s reason=%s",
+			clientID, playerID, res.FlipID, res.CardID, res.MotionCardID, status, res.Reason)
+	case !res.Applied:
+		server.LogInfo(game.LogComponentApp, "FLIP_IGNORED client=%s player_id=%s flip_id=%s card=%s motion_card=%s reason=%s",
+			clientID, playerID, res.FlipID, res.CardID, res.MotionCardID, res.Reason)
 	}
 }
