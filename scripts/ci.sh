@@ -26,5 +26,7 @@ go vet ./...
 echo "== [6/6] Audit (commands.audit) =="
 command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
 govulncheck ./...
+# Audit npm des dépendances de prod du frontend (#268) — provisoire : LOT-2 passe au périmètre complet.
+( cd web && npm audit --omit=dev --audit-level=high )
 
 echo "CI OK"

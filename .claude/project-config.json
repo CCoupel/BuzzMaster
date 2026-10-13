@@ -77,7 +77,7 @@
     "build": "cd server-go && go build ./cmd/server",
     "test": "cd server-go && go test ./...",
     "lint": "cd server-go && go vet ./...",
-    "audit": "cd server-go && govulncheck ./...",
+    "audit": "cd server-go && govulncheck ./... && (cd web && npm audit --omit=dev --audit-level=high)",
     "typecheck": "",
     "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
     "ci": "scripts/ci.sh"
