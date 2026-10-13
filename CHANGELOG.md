@@ -11,7 +11,8 @@ Historique des versions du projet BuzzControl.
 ### Fixed
 
 - **Data race du journal de debug (#269)** — Le niveau debug du journal de diffusion est lu et écrit de façon sûre entre goroutines. Les minuteurs et goroutines des tests `cmd/server` sont arrêtés en fin de test (`t.Cleanup`).
-- **Fenêtres d'observation fixes dans les tests Go (#266)** — Les tests de diffusion et d'ARDOISE n'observent plus les messages pendant une durée fixe (`collectActions`, marqué DEPRECATED, n'a plus d'appelant). Ils attendent l'événement attendu puis un témoin, qui prouve qu'aucun message en retard ne manque. Aucun changement de comportement côté produit.
+- **Fenêtres d'observation fixes dans les tests Go (#266)** — Les tests de diffusion et d'ARDOISE n'observent plus les messages pendant une durée fixe. Les helpers à fenêtre fixe `collectActionsT` (supprimé) et `collectActions` (marqué DEPRECATED, sans appelant) ne sont plus utilisés. Les tests attendent l'événement attendu puis un témoin, qui prouve qu'aucun message en retard ne manque. Aucun changement de comportement côté produit.
+- **Pauses fixes dans les tests son, ambiance et minuteurs (#271)** — Les tests attendent un événement (son témoin joué, notification d'ambiance comptée, tick réel de décompte) au lieu de pauses fixes de 50 à 500 ms. Deux pauses restent volontairement : le franchissement de la seconde de l'identifiant horodaté (`seat_release_test.go`) et l'observation, pendant 6 s, qu'un minuteur ne ressuscite pas NEW_GAME (`new_game_243_test.go`).
 
 ---
 
