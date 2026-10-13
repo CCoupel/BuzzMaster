@@ -427,9 +427,9 @@
 /* Le panneau de conduite en direct ON/AUTO/OFF + Flash (#208) a déménagé
    vers components/LightingModePanel.jsx (+ .css) — v10.0.0, correction
    utilisateur du 2026-09-07 (voir en-tête du fichier .jsx). Les styles
-   .ambiance-mode-*/.ambiance-flash-* qui vivaient ici ont été retirés avec
+   .ambiance-mode-* et .ambiance-flash-* qui vivaient ici ont été retirés avec
    le composant, pas seulement déplacés : ils sont désormais dans
-   LightingModePanel.css sous des noms .lighting-mode-*/.lighting-flash-*
+   LightingModePanel.css sous des noms .lighting-mode-* et .lighting-flash-*
    neutres (composant partagé entre plusieurs pages). */
 
 @media (max-width: 768px) {
