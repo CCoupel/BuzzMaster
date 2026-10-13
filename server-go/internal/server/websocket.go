@@ -61,6 +61,14 @@ func SetRegisterHook(f func()) (restore func()) {
 	return func() { registerHook.Store(prev) }
 }
 
+// markRegistered releases the connection handler waiting on client.registered.
+// nil-safe: clients built by tests that bypass HandleConnection* have no channel.
+func markRegistered(c *WebSocketClient) {
+	if c.registered != nil {
+		close(c.registered)
+	}
+}
+
 func runRegisterHook() {
 	if f := registerHook.Load(); f != nil {
 		(*f)()
@@ -78,6 +86,12 @@ type WebSocketClient struct {
 	Hub      *WebSocketHub
 
 	ConnectedAt time.Time // connection open time (#246 conn_age_ms diagnostics)
+
+	// registered is closed by the hub's Run loop once the client is inscribed
+	// in h.clients. HandleConnection* waits on it before starting the pumps, so
+	// the first inbound message can never be processed (SetClientPlayerID,
+	// SendRawToPlayerID, BroadcastRawToTypes…) before the client is registered.
+	registered chan struct{}
 }
 
 // WebSocketHub manages all WebSocket connections
@@ -147,6 +161,7 @@ func (h *WebSocketHub) Run() {
 			// being re-read from the shared *WebSocketClient afterward.
 			id, clientType := client.ID, client.Type
 			h.mu.Unlock()
+			markRegistered(client)
 			LogInfo(game.LogComponentWebSocket, "Client connected: %s (type: %s)", id, clientType)
 			h.notifyClientChange()
 			// Fired here (not in HandleConnectionWithType) so the hook only
@@ -579,6 +594,7 @@ func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.R
 		Hub:  h,
 
 		ConnectedAt: time.Now(),
+		registered:  make(chan struct{}),
 	}
 
 	h.register <- client
@@ -590,6 +606,14 @@ func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.R
 	// inside Run() instead, once the client is actually in h.clients — firing
 	// it here raced SendToClient (used by the hook) against the registration
 	// itself and silently dropped the message when the hook lost the race.
+	//
+	// For the same reason the pumps must not start on the rendezvous alone:
+	// readPump would deliver the client's first message to the dispatcher
+	// while Run is still about to inscribe it, and SetClientPlayerID /
+	// SendRawToPlayerID (which walk h.clients) would miss the client — lost
+	// identity, undelivered echo (CI 38394871771). Run closes client.registered
+	// right after h.clients[client]=true; wait for it.
+	<-client.registered
 
 	go client.writePump()
 	go client.readPump()
