@@ -50,6 +50,7 @@ func (h *BuzzerWebSocketHub) Run() {
 	for {
 		select {
 		case client := <-h.register:
+			runRegisterHook() // test-only, nil in production
 			h.mu.Lock()
 			h.clients[client] = true
 			// Snapshot under lock (bugfix #133): client.MAC/client.ID can be

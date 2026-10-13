@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -37,6 +38,34 @@ const (
 	ClientTypeAnim   ClientType = "anim"
 	ClientTypeBuzzer ClientType = "buzzer"
 )
+
+// registerHook is a TEST-ONLY synchronization point: when set, the hubs' Run
+// loops call it right after receiving a client on h.register and BEFORE
+// inscribing it in h.clients. A test sets it (SetRegisterHook) to widen the
+// registration window that a loaded CI runner opens by chance, so the "client
+// message processed before the client is registered" race (
+// CI 38394871771) can be reproduced deterministically. nil in production
+// (one atomic load per connection).
+var registerHook atomic.Pointer[func()]
+
+// SetRegisterHook installs (or, with nil, removes) the test-only hook run by
+// the hubs' Run loops before a client is inscribed in h.clients. Returns a
+// function that restores the previous hook. Never call it outside tests.
+func SetRegisterHook(f func()) (restore func()) {
+	var prev *func()
+	if f == nil {
+		prev = registerHook.Swap(nil)
+	} else {
+		prev = registerHook.Swap(&f)
+	}
+	return func() { registerHook.Store(prev) }
+}
+
+func runRegisterHook() {
+	if f := registerHook.Load(); f != nil {
+		(*f)()
+	}
+}
 
 // WebSocketClient represents a connected WebSocket client
 type WebSocketClient struct {
@@ -105,6 +134,7 @@ func (h *WebSocketHub) Run() {
 	for {
 		select {
 		case client := <-h.register:
+			runRegisterHook() // test-only, nil in production
 			h.mu.Lock()
 			h.clients[client] = true
 			// Snapshot the fields this case needs to read AFTER Unlock, while
