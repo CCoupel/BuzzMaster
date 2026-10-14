@@ -4295,6 +4295,23 @@ func (e *Engine) SetNetworkOnlyLocalhost(v bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.state.NetworkOnlyLocalhost = v
+	e.state.Network.OnlyLocalhost = v
+}
+
+// SetNetworkState replaces the server network status (v11.2.2, #267) and keeps the legacy
+// NETWORK_ONLY_LOCALHOST mirror in sync. The caller decides whether to broadcast.
+func (e *Engine) SetNetworkState(n NetworkState) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.Network = n.Clone()
+	e.state.NetworkOnlyLocalhost = n.OnlyLocalhost
+}
+
+// GetNetworkState returns a deep copy of the server network status (v11.2.2, #267).
+func (e *Engine) GetNetworkState() NetworkState {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.state.Network.Clone()
 }
 
 // GetNetworkOnlyLocalhost returns whether the server has no non-loopback network interface active (v5.6.2)
