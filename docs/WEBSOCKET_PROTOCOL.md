@@ -83,6 +83,8 @@ Si le parametre `mac` n'est pas fourni dans l'URL, le buzzer peut s'identifier v
 3. Le buzzer envoie un message `HELLO` avec son adresse MAC et sa version firmware
 4. Le serveur enregistre le buzzer et repond avec l'etat du jeu
 
+**Garantie d'inscription (v11.2.2, #272)** : le serveur inscrit chaque connexion dans son hub **avant** de lire son premier message, sur les endpoints à identité (`/ws/buzzer`, `/ws/admin`, `/ws/tv`, `/ws/player`, `/ws/anim` ; `/ws/logs` n'en a pas). Un message envoyé immédiatement après l'ouverture de la connexion est donc toujours rattaché à celle-ci (buzzer, joueur, tablette). Aucun changement de format.
+
 ---
 
 ## Format des messages
