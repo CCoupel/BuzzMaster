@@ -29,7 +29,7 @@
 | Etape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Réseau normal : ouvrir `http://localhost/admin` | Page de jeu normale, **aucun** overlay, aucun bandeau rouge | | |
-| 2 | Couper le WiFi **et** débrancher le câble (ne laisser que les interfaces virtuelles, dont `vEthernet (WSL)` si WSL/Hyper-V est installé) ; attendre jusqu'à 30 s | Overlay plein écran « Le serveur n'a pas de réseau » par-dessus la page | | |
+| 2 | Couper le WiFi **et** débrancher le câble (ne laisser que les interfaces virtuelles, dont `vEthernet (WSL)` si WSL/Hyper-V est installé) ; attendre jusqu'à 30 s | Overlay plein écran « Le serveur n'a pas de réseau disponible » par-dessus la page | | |
 | 3 | Lire le bloc de faits | « Adresses détectées : **aucune** — seulement `127.0.0.1` » ; « Interfaces ignorées » liste `vEthernet (WSL)` (et son adresse, ex. `172.x.x.x`) avec « virtuelle — non joignable par les appareils » ; « Dernière vérification : il y a N s — contrôle automatique toutes les 30 s » | | |
 | 4 | Lire tout le texte de la fenêtre | Texte identique à la maquette ; **aucune** mention de Windows, Linux, macOS ni commande à taper | | |
 | 5 | Journal (`/admin/logs` dans l'autre onglet, ou après fermeture de l'alerte) | **Une seule** ligne `NETWORK_LOST` (WARN) avec `ignored` contenant `vEthernet (WSL):172…` ; pas de ligne répétée à chaque passage du contrôle de 30 s | | |
@@ -89,7 +89,7 @@
 |-------|--------|-----------------|----------------|------|
 | 1 | Overlay ouvert : appuyer plusieurs fois sur Tab, puis Maj+Tab | Le focus reste dans la fenêtre (sur « Continuer quand même ») ; la barre de navigation de derrière est inatteignable | | |
 | 2 | Cliquer dans la zone sombre derrière la fenêtre | Pas d'action sur la page de derrière | | |
-| 3 | Si un lecteur d'écran est disponible (Narrateur sous Windows) | La fenêtre est annoncée comme une alerte (« Le serveur n'a pas de réseau ») et son explication est lue | | |
+| 3 | Si un lecteur d'écran est disponible (Narrateur sous Windows) | La fenêtre est annoncée comme une alerte (« Le serveur n'a pas de réseau disponible ») et son explication est lue | | |
 | 4 | Ouvrir la popup « Lancer la partie » puis provoquer la perte | L'overlay réseau est **au-dessus** de la popup | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL

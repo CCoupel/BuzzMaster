@@ -55,6 +55,7 @@
 - Critère « sans réseau » : aucune IPv4 utilisable hors boucle locale, APIPA et **interfaces virtuelles connues** (vEthernet, Virtual, WSL, Hyper-V, VMware, VirtualBox, docker*, br-*, veth*, virbr*, tun*, tap*, wg*, lxc*, vmnet*, utun*) — liste best-effort documentée, jamais exhaustive. _(v11.2.2, no_network, #267, 2026-10-13)_
 - « Continuer quand même » replie l'overlay en bandeau rouge persistant jusqu'au retour du réseau ; l'overlay revient à chaque nouvelle perte ; jamais de fermeture définitive. _(v11.2.2, no_network, #267, 2026-10-13)_
 - Watchdog 30 s conservé ; aucun champ de plateforme ni conseil adapté à l'OS : texte unique. _(v11.2.2, no_network, #267, 2026-10-13)_
+- Titre de l'overlay « Le serveur n'a pas de réseau disponible » ; **aucune mention de plateforme** dans le texte (la phrase « Sur un Raspberry Pi, vérifiez que le point d'accès est démarré. » est retirée, Q3 précisée). _(v11.2.2, no_network, #267, 2026-10-14)_
 - Admin seulement (toutes les pages `/admin/*`) ; rien sur TV, anim, tablette. _(v11.2.2, no_network, #267, 2026-10-13)_
 
 ## admin_question_editor

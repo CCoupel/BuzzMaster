@@ -69,7 +69,7 @@ beforeEach(() => {
 describe('App — alerte réseau #267 : présence sur toutes les pages admin', () => {
   it.each(ADMIN_PATHS)('%s affiche l\'overlay « Le serveur n\'a pas de réseau »', (path) => {
     renderAt(path)
-    expect(screen.getByRole('alertdialog', { name: "Le serveur n'a pas de réseau" })).toBeInTheDocument()
+    expect(screen.getByRole('alertdialog', { name: "Le serveur n'a pas de réseau disponible" })).toBeInTheDocument()
   })
 
   it('/admin/rafale (redirection vers le quiz) affiche aussi l\'overlay', () => {

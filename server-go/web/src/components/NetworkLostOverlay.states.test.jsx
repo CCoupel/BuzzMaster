@@ -29,7 +29,7 @@ const LOST = {
 }
 const mk = (network) => ({ gameState: { NETWORK: network } })
 
-const DIALOG_NAME = "Le serveur n'a pas de réseau"
+const DIALOG_NAME = "Le serveur n'a pas de réseau disponible"
 
 function setup(network) {
   useGame.mockReturnValue(mk(network))
@@ -91,7 +91,8 @@ describe('NetworkLostOverlay — perte de réseau (état 1, overlay)', () => {
     expect(within(dialog).getByText('aucune')).toBeInTheDocument()
     expect(within(dialog).getByText('127.0.0.1')).toBeInTheDocument()
     expect(within(dialog).getByText('Branchez le câble réseau ou reconnectez le WiFi de ce poste.')).toBeInTheDocument()
-    expect(within(dialog).getByText("Sur un Raspberry Pi, vérifiez que le point d'accès est démarré.")).toBeInTheDocument()
+    // Q3 précisée (2026-10-14) : aucune mention de plateforme dans le texte
+    expect(dialog.textContent).not.toMatch(/Raspberry|Windows|Linux|macOS|point d'accès/i)
     expect(within(dialog).getByText(/disparaîtra de lui-même/)).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Continuer quand même' })).toBeInTheDocument()
   })

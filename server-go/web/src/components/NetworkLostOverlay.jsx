@@ -154,7 +154,7 @@ function NetworkLostDialog({ ips, ignored, checkedAt, now, onContinue }) {
         aria-describedby="no-net-lead"
       >
         <div className="network-dialog-icon" aria-hidden="true">📡</div>
-        <h3 id="no-net-title">Le serveur n'a pas de réseau</h3>
+        <h3 id="no-net-title">Le serveur n'a pas de réseau disponible</h3>
         <p className="network-dialog-lead" id="no-net-lead">
           BuzzControl n'est joignable que depuis ce poste (<code>localhost</code>). Tant que cela dure,{' '}
           <strong>aucun buzzer, aucune tablette, ni la TV ni l'animateur</strong> ne peuvent se connecter :
@@ -185,7 +185,6 @@ function NetworkLostDialog({ ips, ignored, checkedAt, now, onContinue }) {
         </dl>
         <ul className="network-advice">
           <li>Branchez le câble réseau ou reconnectez le WiFi de ce poste.</li>
-          <li>Sur un Raspberry Pi, vérifiez que le point d'accès est démarré.</li>
           <li>Cet écran disparaîtra de lui-même dès qu'une adresse réseau sera détectée.</li>
         </ul>
         <div className="network-actions">
