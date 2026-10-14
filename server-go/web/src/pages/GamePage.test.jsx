@@ -554,25 +554,38 @@ describe('GamePage - Tri par rapidité de réponse', () => {
 })
 
 // ---------------------------------------------------------------------------
-// NetworkWarningBanner — visibilité conditionnelle (#96)
-// La logique show/hide est dans GamePage : {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
+// Bandeau « serveur sans réseau » — #96, migré par #267 (v11.2.2)
+// Le bandeau n'est plus rendu par GamePage : il est monté au niveau App (NetworkLostOverlay) pour
+// toutes les pages /admin/*. Sa logique d'affichage (absent si réseau présent / champ absent, présent
+// si ONLY_LOCALHOST) est testée dans components/NetworkLostOverlay.states.test.jsx et App.network.267.test.jsx.
+// Ici : GamePage ne doit plus jamais rendre de bandeau réseau (pas de doublon avec celui d'App).
 // ---------------------------------------------------------------------------
 
-describe('GamePage — NetworkWarningBanner (#96)', () => {
+describe('GamePage — plus de bandeau réseau local (#96 → #267)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('banner is absent when NETWORK_ONLY_LOCALHOST is false', () => {
-    useGame.mockReturnValue(makeGameMock({ gameState: { NETWORK_ONLY_LOCALHOST: false } }))
+  it('banner is absent when NETWORK.ONLY_LOCALHOST is false', () => {
+    useGame.mockReturnValue(makeGameMock({ gameState: { NETWORK: { ONLY_LOCALHOST: false, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0 } } }))
     const { container } = render(<GamePage />)
     expect(container.querySelector('.network-warning-banner')).toBeNull()
   })
 
-  it('banner is absent when NETWORK_ONLY_LOCALHOST is undefined (backward compat)', () => {
+  it('banner is absent when NETWORK is undefined (backward compat)', () => {
     useGame.mockReturnValue(makeGameMock({ gameState: {} }))
     const { container } = render(<GamePage />)
     expect(container.querySelector('.network-warning-banner')).toBeNull()
+  })
+
+  it('GamePage ne rend aucun bandeau même quand le serveur est sans réseau (rendu par App, pas de doublon)', () => {
+    useGame.mockReturnValue(makeGameMock({ gameState: {
+      NETWORK: { ONLY_LOCALHOST: true, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0 },
+      NETWORK_ONLY_LOCALHOST: true,
+    } }))
+    const { container } = render(<GamePage />)
+    expect(container.querySelector('.network-warning-banner')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 })
 
