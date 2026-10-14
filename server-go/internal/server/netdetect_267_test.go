@@ -172,3 +172,15 @@ func TestFormatIgnoredInterfaces267(t *testing.T) {
 		t.Errorf("format = %q", got)
 	}
 }
+
+func TestTryDetectNetwork267_ListingErrorIsReportedNotConfusedWithNoNetwork(t *testing.T) {
+	restore := SetListInterfaces(func() ([]NetInterface, error) { return nil, errors.New("boom") })
+	defer restore()
+	st, err := TryDetectNetwork()
+	if err == nil {
+		t.Fatal("l'erreur de listage doit être retournée (« je n'ai pas pu regarder » n'est pas « pas de réseau »)")
+	}
+	if !reflect.DeepEqual(st, game.NetworkState{}) {
+		t.Errorf("état nul attendu avec l'erreur : %+v", st)
+	}
+}

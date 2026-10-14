@@ -1131,9 +1131,17 @@ func formatIPList(ips []string) string {
 // §NETWORK; originally v5.6.2 #96). The state (including CHECKED_AT and the ignored virtual
 // interfaces) is refreshed on every pass; it is broadcast and journaled ONLY when ONLY_LOCALHOST
 // or the retained IPs change, so the watchdog is silent while nothing happens
-// (contracts/logging.md §3.2 nonies). At startup only a lost network is an event.
+// (contracts/logging.md §3.2 nonies). At startup only a lost network is an event. A failure to
+// list the interfaces keeps the previous state and only journals NETWORK_LISTING_FAILED.
 func (a *App) updateNetworkState() {
-	next := server.DetectNetworkNow()
+	next, err := server.TryDetectNetwork()
+	if err != nil {
+		// Could not list the interfaces: that says nothing about the network. Keep the previous
+		// state (no broadcast, no NETWORK_LOST); at the very first pass there is none, so the
+		// default "network present" stands and the next successful pass is treated as the first.
+		server.LogWarn(game.LogComponentApp, "NETWORK_LISTING_FAILED err=%v (previous network state kept)", err)
+		return
+	}
 
 	a.networkMu.Lock()
 	prev := a.engine.GetNetworkState()

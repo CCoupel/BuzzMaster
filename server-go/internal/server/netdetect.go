@@ -141,14 +141,26 @@ func SetListInterfaces(f func() ([]NetInterface, error)) (restore func()) {
 	return func() { listInterfaces.Store(prev) }
 }
 
-// DetectNetworkNow lists the interfaces through the injectable source and runs DetectNetwork.
-// On a listing error the state is "no network" with empty lists (nothing usable is known).
-func DetectNetworkNow() game.NetworkState {
+// TryDetectNetwork lists the interfaces through the injectable source and runs DetectNetwork.
+// A listing ERROR is returned as such and the returned state is the zero value: the caller
+// must keep its previous state — "I could not look" is not "there is no network" (#267 review).
+func TryDetectNetwork() (game.NetworkState, error) {
 	ifaces, err := (*listInterfaces.Load())()
 	if err != nil {
-		ifaces = nil
+		return game.NetworkState{}, err
 	}
-	return DetectNetwork(ifaces, time.Now())
+	return DetectNetwork(ifaces, time.Now()), nil
+}
+
+// DetectNetworkNow is TryDetectNetwork for callers that only want a state: on a listing error it
+// returns "no network" with empty lists. updateNetworkState does NOT use it (it would raise a
+// false NETWORK_LOST); it uses TryDetectNetwork.
+func DetectNetworkNow() game.NetworkState {
+	st, err := TryDetectNetwork()
+	if err != nil {
+		return DetectNetwork(nil, time.Now())
+	}
+	return st
 }
 
 // NetworkChange is the kind of transition between two network states (contracts/logging.md §3.2 nonies).
