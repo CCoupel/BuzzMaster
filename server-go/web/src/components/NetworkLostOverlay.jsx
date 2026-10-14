@@ -68,6 +68,17 @@ export default function NetworkLostOverlay() {
     return () => clearInterval(id)
   }, [onlyLocalhost])
 
+  // Focus après repli : « Détails » (bouton d'origine) est démonté quand l'overlay s'ouvre, donc la
+  // restitution du focus par le dialogue ne trouve plus son élément. Une fois le bandeau remonté on
+  // redonne le focus à son bouton « Détails » — seulement si le focus est tombé sur <body>
+  // (sinon l'élément précédent, encore présent, l'a déjà récupéré).
+  const detailsRef = useRef(null)
+  useEffect(() => {
+    if (!(onlyLocalhost && collapsed)) return
+    const active = document.activeElement
+    if (!active || active === document.body) detailsRef.current?.focus()
+  }, [onlyLocalhost, collapsed])
+
   const collapse = useCallback(() => setCollapsed(true), [])
   const reopen = useCallback(() => setCollapsed(false), [])
 
@@ -76,13 +87,17 @@ export default function NetworkLostOverlay() {
   return (
     <>
       {onlyLocalhost && collapsed && (
-        <NetworkWarningBanner checkedAt={checkedAt} now={now} onDetails={reopen} />
+        <NetworkWarningBanner checkedAt={checkedAt} now={now} onDetails={reopen} detailsRef={detailsRef} />
       )}
       {overlayOpen && createPortal(
         <NetworkLostDialog ips={ips} ignored={ignored} checkedAt={checkedAt} now={now} onContinue={collapse} />,
         document.body
       )}
-      {toast && <div className="network-toast" role="status">{toast}</div>}
+      {toast && (
+        <div className="network-toast" role="status">
+          <span aria-hidden="true">✅</span> {toast}
+        </div>
+      )}
     </>
   )
 }

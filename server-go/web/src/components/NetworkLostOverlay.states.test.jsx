@@ -184,6 +184,37 @@ describe('NetworkLostOverlay — accessibilité (alertdialog)', () => {
   })
 })
 
+describe('NetworkLostOverlay — focus après Détails → Continuer (review #267)', () => {
+  it('« Détails » puis « Continuer quand même » : le focus revient sur le bouton « Détails » du bandeau', () => {
+    setup(LOST)
+    fireEvent.click(screen.getByRole('button', { name: 'Continuer quand même' }))
+    const details = screen.getByRole('button', { name: 'Détails' })
+    details.focus()
+    fireEvent.click(details) // overlay rouvert, le bouton d'origine est démonté
+    expect(screen.queryByRole('button', { name: 'Détails' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Continuer quand même' }))
+    expect(screen.getByRole('button', { name: 'Détails' })).toHaveFocus()
+  })
+
+  it('même chose avec Échap', () => {
+    setup(LOST)
+    fireEvent.click(screen.getByRole('button', { name: 'Continuer quand même' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Détails' }))
+    fireEvent.keyDown(document.activeElement, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: 'Détails' })).toHaveFocus()
+  })
+
+  it("ne vole pas le focus : si l'élément précédent existe encore, il le récupère", () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    setup(LOST)
+    fireEvent.click(screen.getByRole('button', { name: 'Continuer quand même' }))
+    expect(opener).toHaveFocus()
+    opener.remove()
+  })
+})
+
 describe('NetworkLostOverlay — « Continuer quand même » (état 2, bandeau replié)', () => {
   it('replie en bandeau rouge persistant avec « Vérifié il y a N s » et « Détails »', () => {
     setup(LOST)
@@ -254,6 +285,15 @@ describe('NetworkLostOverlay — transitions (réouverture, retour du réseau)',
     expect(toast).toHaveTextContent('Réseau rétabli — 192.168.1.84')
   })
 
+  it('le toast porte le ✅ de la maquette, masqué aux lecteurs d\'écran (aria-hidden)', () => {
+    const { update } = setup(LOST)
+    update(WIRED)
+    const toast = screen.getByRole('status')
+    expect(toast).toHaveTextContent('✅ Réseau rétabli — 192.168.1.84')
+    expect(within(toast).getByText('✅')).toHaveAttribute('aria-hidden', 'true')
+    expect(toast).toHaveAccessibleName('') // pas de nom parasite ; le texte lu est « Réseau rétabli — … »
+  })
+
   it('retour du réseau depuis le bandeau replié : bandeau retiré, toast affiché', () => {
     const { update } = setup(LOST)
     fireEvent.click(screen.getByRole('button', { name: 'Continuer quand même' }))
@@ -274,7 +314,7 @@ describe('NetworkLostOverlay — transitions (réouverture, retour du réseau)',
   it('retour sans IP connue : toast sans adresse', () => {
     const { update } = setup(LOST)
     update({ ...WIRED, IPS: [] })
-    expect(screen.getByRole('status').textContent).toBe('Réseau rétabli')
+    expect(screen.getByRole('status').textContent.trim()).toBe('✅ Réseau rétabli')
   })
 
   it("aucun toast au montage quand le réseau est présent (pas de transition)", () => {
@@ -304,6 +344,14 @@ describe('NetworkLostOverlay — empilement avec la popup « Lancer la partie »
     const zToast = z(net, '.network-toast')
     expect(zOverlay).toBeGreaterThan(zPopup)
     expect(zOverlay).toBeGreaterThan(zToast)
+  })
+
+  it("le toast réseau passe sous le toast de refus .launch-toast (z-index inférieur, décalé quand il est présent)", () => {
+    const net = css('./NetworkLostOverlay.css')
+    const launchToastZ = Number(css('./LaunchGameHost.css').match(/\.launch-toast\s*\{[^}]*z-index:\s*(\d+)/)[1])
+    const networkToastZ = Number(net.match(/\.network-toast\s*\{[^}]*z-index:\s*(\d+)/)[1])
+    expect(networkToastZ).toBeLessThan(launchToastZ)
+    expect(net).toMatch(/body:has\(\.launch-toast\)\s+\.network-toast\s*\{[^}]*top:\s*9\.5rem/)
   })
 
   it("avec une popup ouverte, Échap ferme l'overlay réseau sans fermer la popup", () => {

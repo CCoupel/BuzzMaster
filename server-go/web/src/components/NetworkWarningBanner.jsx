@@ -12,7 +12,7 @@ export function formatCheckedAgo(checkedAt, now) {
   return `il y a ${Math.floor(seconds / 60)} min`
 }
 
-export default function NetworkWarningBanner({ checkedAt = 0, now = Date.now(), onDetails }) {
+export default function NetworkWarningBanner({ checkedAt = 0, now = Date.now(), onDetails, detailsRef }) {
   const ago = formatCheckedAgo(checkedAt, now)
   return (
     <div className="network-warning-banner" role="status">
@@ -22,7 +22,7 @@ export default function NetworkWarningBanner({ checkedAt = 0, now = Date.now(), 
       <span className="network-warning-spacer" />
       {ago && <small>Vérifié {ago}</small>}
       {onDetails && (
-        <button type="button" className="network-warning-details" onClick={onDetails}>
+        <button ref={detailsRef} type="button" className="network-warning-details" onClick={onDetails}>
           Détails
         </button>
       )}

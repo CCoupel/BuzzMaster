@@ -97,7 +97,8 @@
   position: fixed;
   top: 4.2rem;
   right: 1rem;
-  z-index: 1100;
+  /* Sous .launch-toast (1100, role="alert" de refus d'action) : un refus n'est jamais masqué. */
+  z-index: 1090;
   max-width: 360px;
   padding: 0.6rem 0.8rem;
   border-radius: 0.55rem;
@@ -107,3 +108,7 @@
   font-weight: 600;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
+
+/* Quand le toast de refus de .launch-toast (même coin, LaunchGameHost.css) est affiché, ce toast
+   passe dessous au lieu de le recouvrir (3 lignes max ≈ 5 rem de hauteur). */
+body:has(.launch-toast) .network-toast { top: 9.5rem; }
