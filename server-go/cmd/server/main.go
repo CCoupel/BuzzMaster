@@ -145,6 +145,12 @@ type App struct {
 	// (OnStateChange) and stopped on server shutdown (a.stop()).
 	ardoiseCoalescer *BroadcastCoalescer
 
+	// Network detection bookkeeping (#267): guarded by networkMu. networkChecked is false until
+	// the first updateNetworkState (startup); networkLostAt feeds lost_for_s of NETWORK_RESTORED.
+	networkMu      sync.Mutex
+	networkChecked bool
+	networkLostAt  time.Time
+
 	// #246 diagnostic state: per-connection ARDOISE SEQ tracking and
 	// CLIENT_TRACE rate limiting.
 	diagMu      sync.Mutex
@@ -1112,20 +1118,62 @@ func (a *App) ensureCategoriesDir() {
 	}
 }
 
-// updateNetworkState detects whether only loopback interfaces are active and updates the engine (v5.6.2 — #96)
+// networkWatchInterval is the network watchdog period (30 s, unchanged — #267 Q3). It is
+// also reported as interval_s in the NETWORK_LOST journal line.
+const networkWatchInterval = 30 * time.Second
+
+// formatIPList renders an address list for the journal: "[a,b]" ("[]" when empty).
+func formatIPList(ips []string) string {
+	return "[" + strings.Join(ips, ",") + "]"
+}
+
+// updateNetworkState re-detects the server network (v11.2.2, #267 — contracts/game-state.md
+// §NETWORK; originally v5.6.2 #96). The state (including CHECKED_AT and the ignored virtual
+// interfaces) is refreshed on every pass; it is broadcast and journaled ONLY when ONLY_LOCALHOST
+// or the retained IPs change, so the watchdog is silent while nothing happens
+// (contracts/logging.md §3.2 nonies). At startup only a lost network is an event.
 func (a *App) updateNetworkState() {
-	ips := server.GetServerIPs()
-	onlyLocal := len(ips) == 0
-	if onlyLocal != a.engine.GetNetworkOnlyLocalhost() {
-		a.engine.SetNetworkOnlyLocalhost(onlyLocal)
-		a.broadcastUpdate()
-		server.LogInfo(game.LogComponentApp, "Network state updated: NETWORK_ONLY_LOCALHOST=%v (IPs=%v)", onlyLocal, ips)
+	next := server.DetectNetworkNow()
+
+	a.networkMu.Lock()
+	prev := a.engine.GetNetworkState()
+	a.engine.SetNetworkState(next)
+	first := !a.networkChecked
+	a.networkChecked = true
+	change := server.ClassifyNetworkChange(prev, next)
+	if first && change != server.NetworkChangeLost {
+		change = server.NetworkChangeNone // startup with a usable network: nothing to report
+	}
+	var lostFor int64
+	switch change {
+	case server.NetworkChangeLost:
+		a.networkLostAt = time.Now()
+	case server.NetworkChangeRestored:
+		if !a.networkLostAt.IsZero() {
+			lostFor = int64(time.Since(a.networkLostAt).Seconds())
+		}
+		a.networkLostAt = time.Time{}
+	}
+	a.networkMu.Unlock()
+
+	if change == server.NetworkChangeNone {
+		return
+	}
+	a.broadcastUpdate()
+	ignored := server.FormatIgnoredInterfaces(next.IgnoredInterfaces)
+	switch change {
+	case server.NetworkChangeLost:
+		server.LogWarn(game.LogComponentApp, "NETWORK_LOST ips=[] ignored=%s interval_s=%d", ignored, int(networkWatchInterval.Seconds()))
+	case server.NetworkChangeRestored:
+		server.LogInfo(game.LogComponentApp, "NETWORK_RESTORED ips=%s ignored=%s lost_for_s=%d", formatIPList(next.IPs), ignored, lostFor)
+	case server.NetworkChangeIPsChanged:
+		server.LogInfo(game.LogComponentApp, "NETWORK_IPS_CHANGED ips=%s prev_ips=%s", formatIPList(next.IPs), formatIPList(prev.IPs))
 	}
 }
 
-// networkWatchdog re-checks network state every 30s and broadcasts changes (v5.6.2 — #96)
+// networkWatchdog re-checks the network state every networkWatchInterval and broadcasts changes (v5.6.2 — #96)
 func (a *App) networkWatchdog() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(networkWatchInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -7473,9 +7521,8 @@ func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
 			log.Printf("â•‘  %-56s  â•‘", fmt.Sprintf("%s (%s)", url, iface.Name))
 
 			// Use first non-virtual interface as primary
-			if primaryURL == "" && !strings.Contains(strings.ToLower(iface.Name), "virtual") &&
-				!strings.Contains(strings.ToLower(iface.Name), "vethernet") &&
-				!strings.Contains(strings.ToLower(iface.Name), "wsl") {
+			// (same virtual-interface list as the network alert — server.IsVirtualInterfaceName, #267)
+			if primaryURL == "" && !server.IsVirtualInterfaceName(iface.Name) {
 				primaryURL = url
 			}
 		}
