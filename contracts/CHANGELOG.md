@@ -2,6 +2,14 @@
 
 ---
 
+## [20261014] — `NETWORK.CHECKED_AT` : horodatage du dernier changement d'état (#267, v11.2.2, clarification revue de code)
+
+- **[CHANGED — clarification]** `game-state.md` §`NETWORK` : `CHECKED_AT` = instant du **dernier changement d'état réseau** (perte, retour ou changement d'`IPS`), inchangé lors des passages du watchdog sans changement ; au premier passage = instant de la première détection. Cohérent avec « diffusion seulement sur changement » : aucun `UPDATE` ne porte un `CHECKED_AT` plus récent sans transition. Décision teamleader sur recommandation `_work/reports/code-reviewer-20261014-194259.md`.
+- **[NEW]** `logging.md` §3.2 nonies : `NETWORK_LISTING_FAILED` (WARN, champ `err`) — échec du listage des interfaces : état précédent conservé, aucune diffusion ni `NETWORK_LOST`, une ligne par passage en échec ; premier passage sans état = réseau présent (dev-backend `5cf77b14`, revue LOT-3).
+- Aucune BREAKING : même champ, même type (millisecondes epoch) ; l'écran admin affiche « depuis N s » plutôt que « vérifié il y a N s ».
+
+---
+
 ## [20261013] — `POINTS_RULE` : applicabilité par type et validation à l'enregistrement (#190, v11.2.2, LOT-5)
 
 - **[CHANGED]** `question-types.md` §6.2 : modes acceptés **par type effectif** — binaire (`SPEEDY`, `QCM`) : `STARS`, `FIXED` ; progression (`MEMORY`, `RAFALE`) : `STARS_PRORATA`, `STARS`, `FIXED`, `PER_UNIT` (décision utilisateur 2026-10-13). Trois refus HTTP 400 au `POST /questions` : `POINTS_RULE_INVALID_MODE`, `POINTS_RULE_MODE_NOT_APPLICABLE`, `POINTS_RULE_VALUE_REQUIRED` (`VALUE` entier 1–999 pour `FIXED`/`PER_UNIT`).
