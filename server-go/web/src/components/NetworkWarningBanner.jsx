@@ -20,7 +20,7 @@ export default function NetworkWarningBanner({ checkedAt = 0, now = Date.now(), 
         ⚠️ Serveur sans réseau — les buzzers, les tablettes, la TV et l'animateur ne peuvent pas se connecter.
       </span>
       <span className="network-warning-spacer" />
-      {ago && <small>Vérifié {ago}</small>}
+      {ago && <small>Perte détectée {ago}</small>}
       {onDetails && (
         <button ref={detailsRef} type="button" className="network-warning-details" onClick={onDetails}>
           Détails

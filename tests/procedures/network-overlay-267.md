@@ -30,7 +30,7 @@
 |-------|--------|-----------------|----------------|------|
 | 1 | Réseau normal : ouvrir `http://localhost/admin` | Page de jeu normale, **aucun** overlay, aucun bandeau rouge | | |
 | 2 | Couper le WiFi **et** débrancher le câble (ne laisser que les interfaces virtuelles, dont `vEthernet (WSL)` si WSL/Hyper-V est installé) ; attendre jusqu'à 30 s | Overlay plein écran « Le serveur n'a pas de réseau disponible » par-dessus la page | | |
-| 3 | Lire le bloc de faits | « Adresses détectées : **aucune** — seulement `127.0.0.1` » ; « Interfaces ignorées » liste `vEthernet (WSL)` (et son adresse, ex. `172.x.x.x`) avec « virtuelle — non joignable par les appareils » ; « Dernière vérification : il y a N s — contrôle automatique toutes les 30 s » | | |
+| 3 | Lire le bloc de faits | « Adresses détectées : **aucune** — seulement `127.0.0.1` » ; « Interfaces ignorées » liste `vEthernet (WSL)` (et son adresse, ex. `172.x.x.x`) avec « virtuelle — non joignable par les appareils » ; « Perte détectée : il y a N s — contrôle automatique toutes les 30 s » | | |
 | 4 | Lire tout le texte de la fenêtre | Texte identique à la maquette ; **aucune** mention de Windows, Linux, macOS ni commande à taper | | |
 | 5 | Journal (`/admin/logs` dans l'autre onglet, ou après fermeture de l'alerte) | **Une seule** ligne `NETWORK_LOST` (WARN) avec `ignored` contenant `vEthernet (WSL):172…` ; pas de ligne répétée à chaque passage du contrôle de 30 s | | |
 
@@ -43,8 +43,8 @@
 
 | Etape | Action | Résultat Attendu | Résultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Réseau toujours coupé, overlay affiché : cliquer « Continuer quand même » | Overlay fermé ; **bandeau rouge** sous la Navbar : « Serveur sans réseau — les buzzers, les tablettes, la TV et l'animateur ne peuvent pas se connecter. », « Vérifié il y a N s », bouton « Détails » | | |
-| 2 | Observer « Vérifié il y a N s » pendant ~10 s | Le compteur augmente chaque seconde | | |
+| 1 | Réseau toujours coupé, overlay affiché : cliquer « Continuer quand même » | Overlay fermé ; **bandeau rouge** sous la Navbar : « Serveur sans réseau — les buzzers, les tablettes, la TV et l'animateur ne peuvent pas se connecter. », « Perte détectée il y a N s », bouton « Détails » | | |
+| 2 | Observer « Perte détectée il y a N s » pendant ~10 s | Le compteur augmente chaque seconde | | |
 | 3 | Naviguer : Équipes, Questions, Scores, Configuration | Le bandeau rouge reste visible sur **toutes** les pages admin ; l'overlay ne se rouvre pas | | |
 | 4 | Cliquer « Détails » | L'overlay se rouvre | | |
 | 5 | Appuyer sur la touche Échap | Même effet que « Continuer quand même » : overlay fermé, bandeau visible | | |

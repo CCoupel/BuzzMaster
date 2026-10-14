@@ -60,7 +60,7 @@ export default function NetworkLostOverlay() {
     return () => clearTimeout(id)
   }, [toast])
 
-  // « Vérifié il y a N s » : horloge locale tant que l'alerte est affichée.
+  // « Perte détectée il y a N s » : horloge locale tant que l'alerte est affichée.
   useEffect(() => {
     if (!onlyLocalhost) return undefined
     setNow(Date.now())
@@ -180,7 +180,7 @@ function NetworkLostDialog({ ips, ignored, checkedAt, now, onContinue }) {
               </dd>
             </>
           )}
-          <dt>Dernière vérification</dt>
+          <dt>Perte détectée</dt>
           <dd>{ago ? `${ago} — ` : ''}contrôle automatique toutes les 30 s</dd>
         </dl>
         <ul className="network-advice">

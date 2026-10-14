@@ -10,7 +10,7 @@ import App from '../App'
 // docs/mockup/v11.2.2/ui/admin_network_overlay__no_network.html (3 états).
 //
 //   NETWORK.ONLY_LOCALHOST = true  → overlay plein écran, role="alertdialog"
-//   « Continuer quand même » / Échap → bandeau rouge persistant « Vérifié il y a N s » + « Détails »
+//   « Continuer quand même » / Échap → bandeau rouge persistant « Perte détectée il y a N s » + « Détails »
 //   toute NOUVELLE transition false → true rouvre l'overlay
 //   true → false → overlay et bandeau retirés, toast « Réseau rétabli — <IP> » 6 s
 //   uniquement sur /admin/* ; jamais sur /, /player, /tv, /anim ; aucun conseil par OS (Q3)
@@ -187,7 +187,7 @@ describe('#267 — overlay « serveur sans réseau »', () => {
       expect(document.body.contains(dialog())).toBe(true)
     })
 
-    it('libellés de la maquette : explication, adresses, interface ignorée, dernière vérification', () => {
+    it('libellés de la maquette : explication, adresses, interface ignorée, perte détectée', () => {
       render(tree('/admin'))
       const d = dialog()
       expect(within(d).getByText(/BuzzControl n.est joignable que depuis ce poste/)).toBeInTheDocument()
@@ -199,7 +199,7 @@ describe('#267 — overlay « serveur sans réseau »', () => {
       expect(within(d).getByText('vEthernet (WSL)')).toBeInTheDocument()
       expect(within(d).getByText(/172\.21\.0\.1/)).toBeInTheDocument()
       expect(within(d).getByText(/virtuelle — non joignable par les appareils/)).toBeInTheDocument()
-      expect(within(d).getByText('Dernière vérification')).toBeInTheDocument()
+      expect(within(d).getByText('Perte détectée')).toBeInTheDocument()
       expect(within(d).getByText(/il y a 12 s/)).toBeInTheDocument()
       expect(within(d).getByText(/contrôle automatique toutes les 30 s/)).toBeInTheDocument()
     })
@@ -282,33 +282,33 @@ describe('#267 — overlay « serveur sans réseau »', () => {
       await user.click(screen.getByRole('button', { name: 'Continuer quand même' }))
     }
 
-    it('Critical — « Continuer quand même » : plus d\'overlay, bandeau « Serveur sans réseau » avec « Vérifié il y a N s » et « Détails »', async () => {
+    it('Critical — « Continuer quand même » : plus d\'overlay, bandeau « Serveur sans réseau » avec « Perte détectée il y a N s » et « Détails »', async () => {
       await collapse()
       expect(dialog()).toBeNull()
       const status = screen.getByRole('status')
       expect(within(status).getByText(/Serveur sans réseau/)).toBeInTheDocument()
       expect(within(status).getByText(/les buzzers, les tablettes, la TV et l.animateur ne peuvent pas se connecter/)).toBeInTheDocument()
-      expect(within(status).getByText('Vérifié il y a 12 s')).toBeInTheDocument()
+      expect(within(status).getByText('Perte détectée il y a 12 s')).toBeInTheDocument()
       expect(within(status).getByRole('button', { name: 'Détails' })).toBeInTheDocument()
     })
 
-    it('« Vérifié il y a N s » avance avec l\'horloge, depuis CHECKED_AT', async () => {
+    it('« Perte détectée il y a N s » avance avec l\'horloge, depuis CHECKED_AT', async () => {
       await collapse()
-      expect(screen.getByText('Vérifié il y a 12 s')).toBeInTheDocument()
+      expect(screen.getByText('Perte détectée il y a 12 s')).toBeInTheDocument()
       act(() => { vi.advanceTimersByTime(5000) })
-      expect(screen.getByText('Vérifié il y a 17 s')).toBeInTheDocument()
+      expect(screen.getByText('Perte détectée il y a 17 s')).toBeInTheDocument()
       act(() => { vi.advanceTimersByTime(20000) })
-      expect(screen.getByText('Vérifié il y a 37 s')).toBeInTheDocument()
+      expect(screen.getByText('Perte détectée il y a 37 s')).toBeInTheDocument()
     })
 
-    it('« Vérifié il y a N s » repart de la nouvelle valeur quand le serveur actualise CHECKED_AT', async () => {
+    it('« Perte détectée il y a N s » repart de la nouvelle valeur quand le serveur actualise CHECKED_AT', async () => {
       const { rerender } = render(tree('/admin'))
       await user.click(screen.getByRole('button', { name: 'Continuer quand même' }))
       act(() => { vi.advanceTimersByTime(30000) })
-      expect(screen.getByText('Vérifié il y a 42 s')).toBeInTheDocument()
+      expect(screen.getByText('Perte détectée il y a 42 s')).toBeInTheDocument()
       setNetwork({ ...LOST, CHECKED_AT: NOW + 30000 - 3000 })
       rerender(tree('/admin'))
-      expect(screen.getByText('Vérifié il y a 3 s')).toBeInTheDocument()
+      expect(screen.getByText('Perte détectée il y a 3 s')).toBeInTheDocument()
     })
 
     it('Critical — « Détails » rouvre l\'overlay', async () => {

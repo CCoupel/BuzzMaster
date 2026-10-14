@@ -110,7 +110,7 @@ describe('NetworkLostOverlay — perte de réseau (état 1, overlay)', () => {
     expect(screen.queryByText('Interfaces ignorées')).toBeNull()
   })
 
-  it('affiche « Dernière vérification : il y a N s » calculé depuis CHECKED_AT', () => {
+  it('affiche « Perte détectée : il y a N s » calculé depuis CHECKED_AT', () => {
     setup(LOST)
     expect(within(screen.getByRole('alertdialog')).getByText(/il y a 12 s — contrôle automatique toutes les 30 s/)).toBeInTheDocument()
   })
@@ -217,7 +217,7 @@ describe('NetworkLostOverlay — focus après Détails → Continuer (review #26
 })
 
 describe('NetworkLostOverlay — « Continuer quand même » (état 2, bandeau replié)', () => {
-  it('replie en bandeau rouge persistant avec « Vérifié il y a N s » et « Détails »', () => {
+  it('replie en bandeau rouge persistant avec « Perte détectée il y a N s » et « Détails »', () => {
     setup(LOST)
     fireEvent.click(screen.getByRole('button', { name: 'Continuer quand même' }))
     expect(screen.queryByRole('alertdialog')).toBeNull()
@@ -226,7 +226,7 @@ describe('NetworkLostOverlay — « Continuer quand même » (état 2, bandeau r
     expect(banner).toHaveTextContent(
       "Serveur sans réseau — les buzzers, les tablettes, la TV et l'animateur ne peuvent pas se connecter."
     )
-    expect(within(banner).getByText('Vérifié il y a 12 s')).toBeInTheDocument()
+    expect(within(banner).getByText('Perte détectée il y a 12 s')).toBeInTheDocument()
     expect(within(banner).getByRole('button', { name: 'Détails' })).toBeInTheDocument()
   })
 
@@ -266,7 +266,7 @@ describe('NetworkLostOverlay — transitions (réouverture, retour du réseau)',
 
     update(LOST) // nouvelle perte
     expect(screen.getByRole('alertdialog', { name: DIALOG_NAME })).toBeInTheDocument()
-    expect(screen.queryByText(/Vérifié il y a/)).toBeNull()
+    expect(screen.queryByText(/Perte détectée il y a/)).toBeNull()
   })
 
   it('une perte survenant en cours de session ouvre l\'overlay (false → true)', () => {

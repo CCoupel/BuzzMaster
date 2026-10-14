@@ -16,16 +16,16 @@ describe('NetworkWarningBanner — issue #96', () => {
     expect(container.firstChild).not.toBeNull()
   })
 
-  it('sans props : bandeau d\'origine sans « Vérifié » ni « Détails »', () => {
+  it('sans props : bandeau d\'origine sans « Perte détectée » ni « Détails »', () => {
     render(<NetworkWarningBanner />)
     expect(screen.getByRole('status')).toHaveClass('network-warning-banner')
-    expect(screen.queryByText(/Vérifié/)).toBeNull()
+    expect(screen.queryByText(/Perte détectée/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Détails' })).toBeNull()
   })
 
-  it('avec checkedAt/now : affiche « Vérifié il y a N s »', () => {
+  it('avec checkedAt/now : affiche « Perte détectée il y a N s »', () => {
     render(<NetworkWarningBanner checkedAt={1_000_000} now={1_012_000} />)
-    expect(screen.getByText('Vérifié il y a 12 s')).toBeInTheDocument()
+    expect(screen.getByText('Perte détectée il y a 12 s')).toBeInTheDocument()
   })
 
   it('avec onDetails : le bouton « Détails » appelle le rappel', () => {
