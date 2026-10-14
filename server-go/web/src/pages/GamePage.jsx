@@ -44,7 +44,6 @@ import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
-import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import AnimRafaleActions from '../components/AnimRafaleActions'
@@ -833,7 +832,6 @@ export default function GamePage() {
 
   return (
     <>
-      {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
       {/* Addendum média indisponible (v11.1, #219/#236/#237, plan
           _work/reports/plan-20260923-101500.md §3bis/tâche 9bis) — puce
           globale, "on joue ici" : la voir avant de choisir une question,

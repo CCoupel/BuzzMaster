@@ -1,0 +1,109 @@
+/* #267 — alerte admin « serveur sans réseau » (maquette validée admin_network_overlay__no_network).
+   Remplace le bandeau #96 de GamePage.css : monté au niveau App, sur toutes les pages /admin/*. */
+
+/* ── État replié : bandeau rouge persistant sous la navbar ─────────────────── */
+.network-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #b91c1c;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.45rem 1rem;
+}
+.network-warning-spacer { flex: 1; }
+.network-warning-banner small { font-weight: 500; opacity: 0.85; }
+.network-warning-details {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.network-warning-details:hover { background: rgba(255, 255, 255, 0.28); }
+
+/* ── Overlay plein écran : au-dessus de la popup « Lancer la partie » (#253, z-index 1000)
+      et du toast (1100) ─────────────────────────────────────────────────────── */
+.network-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(3px);
+}
+.network-dialog {
+  background: #fff;
+  color: #1f2937;
+  border-radius: 1rem;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  border-top: 8px solid #ef4444;
+  max-width: 640px;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1.6rem 1.8rem;
+  line-height: 1.5;
+}
+.network-dialog-icon { font-size: 2.4rem; line-height: 1; }
+.network-dialog h3 { margin: 0.5rem 0 0.25rem; font-size: 1.45rem; color: #b91c1c; }
+.network-dialog-lead { margin: 0 0 1rem; font-size: 1rem; }
+.network-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 1rem;
+  font-size: 0.9rem;
+  background: #f3f4f6;
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  margin: 0 0 1rem;
+}
+.network-facts dt { color: #4b5563; font-weight: 600; }
+.network-facts dd { margin: 0; }
+.network-facts small { color: #4b5563; }
+.network-dialog code {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  font-size: 0.85em;
+}
+.network-advice { margin: 0 0 1.2rem 1.1rem; padding: 0; font-size: 0.92rem; }
+.network-advice li { margin: 0.2rem 0; }
+.network-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.network-actions-note { color: #4b5563; font-size: 0.85rem; flex: 1; min-width: 12rem; }
+.network-btn-secondary {
+  background: #fff;
+  color: #1f2937;
+  border: 1px solid #9ca3af;
+  border-radius: 0.5rem;
+  padding: 0.55rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.network-btn-secondary:hover { background: #f3f4f6; }
+.network-btn-secondary:focus-visible { outline: 3px solid #6366f1; outline-offset: 2px; }
+
+/* ── Retour du réseau : toast 6 s (même motif que .launch-toast) ───────────── */
+.network-toast {
+  position: fixed;
+  top: 4.2rem;
+  right: 1rem;
+  z-index: 1100;
+  max-width: 360px;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.55rem;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}

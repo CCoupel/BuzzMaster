@@ -1,20 +1,4 @@
-﻿/* Network warning banner (#96) */
-.network-warning-banner {
-  position: relative;
-  background: #dc2626;
-  color: #fff;
-  text-align: center;
-  padding: var(--space-2) var(--space-4);
-  font-size: 0.9rem;
-  font-weight: 600;
-  z-index: 1000;
-  animation: pulse-warning 2s ease-in-out infinite;
-}
-
-@keyframes pulse-warning {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.75; }
-}
+﻿/* Bandeau « serveur sans réseau » : déplacé dans components/NetworkLostOverlay.css (#267, monté au niveau App) */
 
 /* Game Page - Grid Layout (#198, retour QUALIF 8.0.0.13 : la zone
  * "questions disponibles" poussait l'apercu TV et la liste equipes vers le

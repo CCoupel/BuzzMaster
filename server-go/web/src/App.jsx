@@ -4,6 +4,7 @@ import { GameProvider, useGame } from './hooks/GameContext'
 import Navbar from './components/Navbar'
 import LaunchGameHost, { LaunchLockBanner } from './components/LaunchGameHost'
 import RegieMessageBar from './components/RegieMessageBar'
+import NetworkLostOverlay from './components/NetworkLostOverlay'
 import GamePage from './pages/GamePage'
 import ScoresPage from './pages/ScoresPage'
 import TeamsPage from './pages/TeamsPage'
@@ -62,6 +63,9 @@ function AppContent() {
       {!hideNavbar && <Navbar connectionStatus={status} clientCounts={clientCounts} serverVersion={version} bumpers={bumpers} />}
       {/* #253 — bandeau « verrou actif » quand la popup « Lancer la partie » est ouverte sur un AUTRE poste */}
       {!hideNavbar && <LaunchLockBanner />}
+      {/* #267 — alerte « serveur sans réseau » : overlay (portail) + bandeau replié + toast de retour,
+          sur TOUTES les pages /admin/* ; jamais sur /tv, /anim, /player (mêmes conditions que Navbar). */}
+      {!hideNavbar && <NetworkLostOverlay />}
       <main className={`main-content ${hideNavbar ? 'fullscreen' : ''}`}>
         <Routes>
           {/* Player enrollment page — connected via GameProvider endpoint="/ws/player" */}
