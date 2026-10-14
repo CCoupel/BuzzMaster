@@ -44,6 +44,27 @@ function normalizeQuizArray(value) {
   return Array.isArray(value) ? value : []
 }
 
+// #267 (v11.2.2) — état réseau du serveur (contrat game-state.md §NETWORK) :
+// {ONLY_LOCALHOST, IPS[], IGNORED_INTERFACES[{NAME, IP}], CHECKED_AT}. Toujours sérialisé par
+// le serveur, mais un serveur plus ancien n'envoie que le booléen hérité NETWORK_ONLY_LOCALHOST
+// (#96, miroir de NETWORK.ONLY_LOCALHOST) : on s'y replie, sans jamais le lire si NETWORK est là.
+const DEFAULT_NETWORK = { ONLY_LOCALHOST: false, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0 }
+
+function mapNetwork(net, legacyOnlyLocalhost, prev) {
+  if (net && typeof net === 'object') {
+    return {
+      ONLY_LOCALHOST: net.ONLY_LOCALHOST === true,
+      IPS: normalizeQuizArray(net.IPS),
+      IGNORED_INTERFACES: normalizeQuizArray(net.IGNORED_INTERFACES),
+      CHECKED_AT: Number.isFinite(net.CHECKED_AT) ? net.CHECKED_AT : 0,
+    }
+  }
+  if (typeof legacyOnlyLocalhost === 'boolean') {
+    return { ...(prev ?? DEFAULT_NETWORK), ONLY_LOCALHOST: legacyOnlyLocalhost }
+  }
+  return prev ?? DEFAULT_NETWORK
+}
+
 export default function useWebSocket(endpoint = '/ws/admin') {
   const [status, setStatus] = useState('disconnected')
   const [gameState, setGameState] = useState({
@@ -93,6 +114,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // #253 (v11.2) — verrou de la popup « Lancer la partie » : tant que ACTIVE, le serveur suspend les
     // actions de jeu ; OWNER = identifiant de la connexion admin propriétaire.
     LAUNCH_LOCK: { ACTIVE: false, OWNER: '', SINCE: 0, EXPIRES_AT: 0 },
+    // #267 (v11.2.2) — état réseau du serveur (alerte « serveur sans réseau », admin uniquement).
+    NETWORK: DEFAULT_NETWORK,
     // #245 (v11.2) — manches du quiz (liste ordonnée {ID, NAME}, diffusée à tous les clients) et place de la
     // question courante dans ses manches (calculée par le serveur ; la TV n'a pas la liste des questions).
     ROUNDS: [],
@@ -528,6 +551,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             TEAMS_LOCKED: MSG.GAME.TEAMS_LOCKED ?? prev.TEAMS_LOCKED,
             SCORE_CHANGE: MSG.GAME.SCORE_CHANGE ?? prev.SCORE_CHANGE,
             LAUNCH_LOCK: MSG.GAME.LAUNCH_LOCK ?? prev.LAUNCH_LOCK,
+            NETWORK: mapNetwork(MSG.GAME.NETWORK, MSG.GAME.NETWORK_ONLY_LOCALHOST, prev.NETWORK),
             ROUNDS: MSG.GAME.ROUNDS ?? prev.ROUNDS,
             ROUND_CONTEXT: MSG.GAME.ROUND_CONTEXT ?? prev.ROUND_CONTEXT,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
