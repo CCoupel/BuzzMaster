@@ -600,9 +600,41 @@ Contrats : `contracts/game-state.md` et `contracts/models.md`, section ArdoiseAn
 
 ## GameState — Champs réseau (v5.7.0)
 
-### NETWORK_ONLY_LOCALHOST
+### NETWORK (v11.2.2, #267)
 
-Indique que le serveur n'est accessible que depuis `localhost` (aucune interface réseau externe active).
+Décrit l'état réseau du serveur. Contrat : `contracts/game-state.md` §NETWORK.
+
+```json
+{
+  "NETWORK": {
+    "ONLY_LOCALHOST": true,
+    "IPS": [],
+    "IGNORED_INTERFACES": [{ "NAME": "vEthernet (WSL)", "IP": "172.21.0.1" }],
+    "CHECKED_AT": 1760000000000
+  }
+}
+```
+
+**Champs :**
+- `ONLY_LOCALHOST`: `bool` — `true` si aucune adresse IPv4 utilisable n'est détectée (hors boucle locale `127/8`, APIPA `169.254/16` et interfaces virtuelles connues)
+- `IPS`: `string[]` — adresses IPv4 retenues, dans l'ordre de `net.Interfaces()`
+- `IGNORED_INTERFACES`: `{NAME, IP}[]` — IPv4 portées par une interface virtuelle connue (diagnostic affiché par l'overlay). Une interface ignorée n'empêche jamais `ONLY_LOCALHOST` de passer à `true`
+- `CHECKED_AT`: `number` — date de la dernière vérification, en millisecondes epoch
+- Défaut : `{ONLY_LOCALHOST: false, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0}`
+- Toujours sérialisé (jamais `omitempty`), listes jamais `null`. Non persisté : recalculé au démarrage, puis par le watchdog toutes les 30 s
+- Diffusé (`UPDATE`) seulement quand `ONLY_LOCALHOST` ou `IPS` change, et renvoyé au `HELLO`
+- Ne change pas la source des heartbeats UDP ni de `resolveServerIP` (`server.GetServerIPs()`) : le critère d'alerte est plus strict que la diffusion
+
+**Liste d'exclusion des interfaces virtuelles** (exportée par `server-go/internal/server/netdetect.go` : `VirtualInterfaceSubstrings`, `VirtualInterfacePrefixes`). Best-effort, par nom d'interface, insensible à la casse. Elle **ne vise aucune exhaustivité** : un adaptateur exotique peut manquer.
+
+| Liste | Entrées | Correspondance |
+|-------|---------|----------------|
+| `VirtualInterfaceSubstrings` (Windows) | `vethernet`, `virtual`, `wsl`, `hyper-v`, `vmware`, `virtualbox`, `loopback` | sous-chaîne, n'importe où dans le nom |
+| `VirtualInterfacePrefixes` (Linux / macOS) | `docker`, `br-`, `veth`, `virbr`, `tun`, `tap`, `wg`, `lxc`, `vmnet`, `utun` | au début du nom |
+
+### NETWORK_ONLY_LOCALHOST (hérité, v5.6.2, #96)
+
+Miroir exact de `NETWORK.ONLY_LOCALHOST`, conservé pour compatibilité. Aucun nouveau lecteur ne doit s'y abonner.
 
 ```json
 {
@@ -610,12 +642,8 @@ Indique que le serveur n'est accessible que depuis `localhost` (aucune interface
 }
 ```
 
-**Champ :**
-- `NETWORK_ONLY_LOCALHOST`: `bool` — `true` si le serveur ne répond que sur 127.0.0.1, `false` sinon
-- Vérifié toutes les 30 s via goroutine dédiée (network watchdog)
-- Pushé via WebSocket à chaque changement d'état
-- Affiché comme bandeau rouge dans l'interface admin (GamePage)
-- Jamais `omitempty` — toujours présent dans le GameState JSON
+- `NETWORK_ONLY_LOCALHOST`: `bool`, jamais `omitempty`. Non persisté.
+- Le client web ne le recopiait pas avant #267 : le bandeau de la v5.6.2 ne s'affichait donc jamais. L'alerte est désormais portée par `NETWORK` (voir ci-dessus).
 
 ---
 

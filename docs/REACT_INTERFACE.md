@@ -27,6 +27,19 @@ Ce document décrit l'interface web React de BuzzControl.
 | `/admin/logs` | LogsPage | Logs serveur temps réel |
 | `/anim` | AnimPage | Interface animateur (tablette, nouvelle en v6.2.0 — refonte conduite permanente + zone réponse en v6.2.0.15, #166) |
 
+### Alerte réseau admin — `NetworkLostOverlay` (v11.2.2, #267)
+
+Fichiers : `web/src/components/NetworkLostOverlay.jsx` + `.css`, `NetworkWarningBanner.jsx` (bandeau replié, sans props). Source unique : `useGame().gameState.NETWORK` (aucune prop).
+
+- **Montage** : `App.jsx`, sous `!hideNavbar`, à côté de `LaunchLockBanner`. Ne s'affiche que sur les routes `/admin/*` (jamais `/tv`, `/anim`, `/player`, `/`).
+- **Overlay** : portail sur `document.body`, `div.network-overlay` (fixed, z-index 1200) > `[role="alertdialog"][aria-modal="true"]`, nommé et décrit par ses titres. Focus piégé, Échap = « Continuer quand même », focus restitué à la fermeture.
+- **Bandeau replié** (`role="status"`) : reste sous la navbar jusqu'au retour du réseau ; « Détails » rouvre l'overlay. L'ancien bandeau de `GamePage` (#96) et son animation ont été retirés.
+- **Toast** « Réseau rétabli — <IP> » : 6 s (`NETWORK_TOAST_MS`), z-index 1090.
+- **Transitions** : `false → true` rouvre l'overlay, même après un repli ; `true → false` retire overlay et bandeau et affiche le toast ; au chargement avec réseau absent, l'overlay s'ouvre sans toast.
+- **Empilement (du plus bas au plus haut)** : popup « Lancer la partie » (`.lg-backdrop`, z-index 1000) < toast réseau (1090) < `.launch-toast` (1100) < overlay réseau (1200) < modale OTA de `TeamCard` (2000). La modale OTA reste au-dessus, volontairement : une mise à jour firmware en cours ne doit pas être masquée.
+
+Hook : `useWebSocket.js` mappe `NETWORK` ; si le serveur est ancien et n'envoie que `NETWORK_ONLY_LOCALHOST`, le booléen sert de repli.
+
 **Navbar (v2.48.0 — groupes #238, logo #239) :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
 - Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence

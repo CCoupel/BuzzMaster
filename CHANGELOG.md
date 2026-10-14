@@ -2,7 +2,13 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased] — Milestone v11.2.2 (LOT-1, en cours)
+## [Unreleased] — Milestone v11.2.2 (en cours)
+
+### Added
+
+- **Alerte « serveur sans réseau » pour l'admin (#267)** — Quand le serveur n'a plus d'adresse IPv4 utilisable (hors boucle locale, APIPA et interfaces virtuelles connues), l'admin voit un overlay plein écran sur toutes les pages `/admin/*`. « Continuer quand même » le replie en bandeau rouge persistant ; une nouvelle perte rouvre l'overlay. Au retour du réseau, un toast « Réseau rétabli — <IP> » s'affiche 6 s. Les interfaces virtuelles (WSL, Hyper-V, VMware, VirtualBox, docker, etc.) ne comptent pas comme réseau ; elles sont listées dans l'overlay comme « interfaces ignorées ». La liste est best-effort et non exhaustive. TV, animateur et tablettes ne sont pas concernés.
+- **État réseau dans GameState (#267)** — Champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`), toujours sérialisé, non persisté, renvoyé au `HELLO`. Le booléen `NETWORK_ONLY_LOCALHOST` reste en miroir exact.
+- **Journal réseau (#267)** — `NETWORK_LOST` (WARN), `NETWORK_RESTORED` et `NETWORK_IPS_CHANGED` (INFO), un événement par transition. Ils remplacent la ligne « Network state updated » émise à chaque passage du watchdog. Le watchdog (30 s) ne change pas.
 
 ### Changed
 
@@ -12,6 +18,7 @@ Historique des versions du projet BuzzControl.
 
 ### Fixed
 
+- **Bandeau « serveur sans réseau » jamais affiché (#96, #267)** — Le bandeau rouge ajouté en v5.6.2 ne s'est jamais affiché : le client web ne recopiait jamais le champ `NETWORK_ONLY_LOCALHOST`. Corrigé par #267 : l'alerte est désormais l'overlay ci-dessus, puis son bandeau replié.
 - **Data race du journal de debug (#269)** — Le niveau debug du journal de diffusion est lu et écrit de façon sûre entre goroutines. Les minuteurs et goroutines des tests `cmd/server` sont arrêtés en fin de test (`t.Cleanup`).
 - **Connexion WebSocket : premier message rattaché au mauvais état (#272)** — Un client qui envoyait son premier message immédiatement après l'ouverture de sa connexion WebSocket pouvait ne jamais être lié à son identité (joueur, tablette, buzzer). Corrigé : le serveur inscrit la connexion dans son hub avant de lire le premier message, sur les endpoints à identité (admin, TV, joueur, tablette, buzzers). Aucun changement de format.
 - **Fenêtres d'observation fixes dans les tests Go (#266)** — Les tests de diffusion et d'ARDOISE n'observent plus les messages pendant une durée fixe. Les helpers à fenêtre fixe `collectActionsT` (supprimé) et `collectActions` (marqué DEPRECATED, sans appelant) ne sont plus utilisés. Les tests attendent l'événement attendu puis un témoin, qui prouve qu'aucun message en retard ne manque. Aucun changement de comportement côté produit.

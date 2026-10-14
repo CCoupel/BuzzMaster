@@ -23,6 +23,29 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Générateur du réservoir RAFALE via IA](#générateur-du-réservoir-rafale-via-ia-v810)
 - [Configuration Éclairage d'Ambiance Philips Hue](#configuration-éclairage-dambiance-philips-hue-v1000)
 - [Configuration Sonore (Bruitage d'Événement)](#configuration-sonore-bruitage-dévénement-v1100)
+- [Le serveur n'a pas de réseau (alerte admin)](#le-serveur-na-pas-de-réseau-alerte-admin-v1122-267)
+
+---
+
+## Le serveur n'a pas de réseau (alerte admin, v11.2.2, #267)
+
+Quand le serveur n'a plus d'adresse réseau utilisable, un écran s'affiche sur toutes les pages d'administration. Sans adresse réseau, aucun buzzer, aucune tablette, ni la TV ni l'animateur ne peuvent se connecter.
+
+**Ce que vous voyez :**
+- Un écran « Le serveur n'a pas de réseau » qui couvre la page. Il indique les adresses détectées (« aucune — seulement 127.0.0.1 » tant qu'aucune adresse n'est trouvée) et, le cas échéant, les interfaces ignorées (adaptateurs virtuels, par exemple WSL ou Hyper-V, qui ne sont pas joignables par les appareils).
+- Une dernière vérification et le rythme du contrôle automatique (toutes les 30 secondes).
+
+**Ce que vous pouvez faire :**
+- **Rétablir la connexion** : branchez le câble réseau ou reconnectez le WiFi de ce poste. L'écran disparaît de lui-même dès qu'une adresse réseau est détectée.
+- **« Continuer quand même »** (ou la touche Échap) : l'écran se replie en bandeau rouge persistant sous la barre de navigation, qui reste visible tant que le réseau manque. Le bouton « Détails » du bandeau rouvre l'écran.
+
+**Retour du réseau :** l'écran et le bandeau disparaissent, et un message « ✅ Réseau rétabli — <adresse> » s'affiche quelques secondes.
+
+**Nouvelle perte :** si le réseau tombe à nouveau après un retour, l'écran se rouvre, même si vous l'aviez replié.
+
+Le même événement est inscrit dans le journal du serveur (`NETWORK_LOST`, `NETWORK_RESTORED`, `NETWORK_IPS_CHANGED`).
+
+> La liste des interfaces virtuelles reconnues est une aide au diagnostic, non exhaustive : un adaptateur non reconnu peut être compté comme réseau.
 
 ---
 
