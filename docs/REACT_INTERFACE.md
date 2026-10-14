@@ -32,9 +32,9 @@ Ce document décrit l'interface web React de BuzzControl.
 Fichiers : `web/src/components/NetworkLostOverlay.jsx` + `.css`, `NetworkWarningBanner.jsx` (bandeau replié, sans props). Source unique : `useGame().gameState.NETWORK` (aucune prop).
 
 - **Montage** : `App.jsx`, sous `!hideNavbar`, à côté de `LaunchLockBanner`. Ne s'affiche que sur les routes `/admin/*` (jamais `/tv`, `/anim`, `/player`, `/`).
-- **Overlay** : portail sur `document.body`, `div.network-overlay` (fixed, z-index 1200) > `[role="alertdialog"][aria-modal="true"]`, nommé et décrit par ses titres. Focus piégé, Échap = « Continuer quand même », focus restitué à la fermeture.
-- **Bandeau replié** (`role="status"`) : reste sous la navbar jusqu'au retour du réseau ; « Détails » rouvre l'overlay. L'ancien bandeau de `GamePage` (#96) et son animation ont été retirés.
-- **Toast** « Réseau rétabli — <IP> » : 6 s (`NETWORK_TOAST_MS`), z-index 1090.
+- **Overlay** : portail sur `document.body`, `div.network-overlay` (fixed, z-index 1200) > `[role="alertdialog"][aria-modal="true"]`, titre « Le serveur n'a pas de réseau disponible » (aucune mention de plateforme). Focus piégé, Échap = « Continuer quand même », focus restitué à la fermeture (au bouton « Détails » du bandeau si l'élément d'origine n'existe plus).
+- **Bandeau replié** (`role="status"`) : reste sous la navbar jusqu'au retour du réseau, avec « Perte détectée il y a N s / N min » ; « Détails » rouvre l'overlay. L'ancien bandeau de `GamePage` (#96) et son animation ont été retirés.
+- **Toast** « ✅ Réseau rétabli — <IP> » (le ✅ est en `aria-hidden`) : 6 s (`NETWORK_TOAST_MS`), z-index 1090, décalé sous `.launch-toast` quand celui-ci est affiché.
 - **Transitions** : `false → true` rouvre l'overlay, même après un repli ; `true → false` retire overlay et bandeau et affiche le toast ; au chargement avec réseau absent, l'overlay s'ouvre sans toast.
 - **Empilement (du plus bas au plus haut)** : popup « Lancer la partie » (`.lg-backdrop`, z-index 1000) < toast réseau (1090) < `.launch-toast` (1100) < overlay réseau (1200) < modale OTA de `TeamCard` (2000). La modale OTA reste au-dessus, volontairement : une mise à jour firmware en cours ne doit pas être masquée.
 

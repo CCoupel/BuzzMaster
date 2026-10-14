@@ -192,7 +192,7 @@ Envoye en reponse au HELLO du buzzer avec l'etat du jeu.
 }
 ```
 
-**État réseau (v11.2.2, #267)** : le `GameState` renvoyé au `HELLO` contient le champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`), détaillé dans `docs/DATA_MODELS.md`. Les clients web (admin, TV, animateur, VJoueur) le reçoivent, et l'admin y trouve l'alerte réseau dès sa connexion. Présence de `NETWORK` dans le HELLO des buzzers : **à confirmer au FINALIZE**.
+**État réseau (v11.2.2, #267)** : le `GameState` renvoyé au `HELLO` contient le champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`), détaillé dans `docs/DATA_MODELS.md`. Il est livré aux quatre clients web (admin, TV, animateur, VJoueur), au `HELLO` et en diffusion `UPDATE` ; l'admin y trouve l'alerte réseau dès sa connexion. **Il n'est jamais envoyé aux buzzers** (exclu du sérialiseur buzzer, liste blanche).
 
 ### START (Demarrage du jeu)
 

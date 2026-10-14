@@ -104,7 +104,7 @@
 | 1 | Serveur démarré sur le Raspberry en mode point d'accès ; noter la sortie de `ip -4 -br addr` | L'interface du point d'accès (ex. `wlan0`) porte une adresse IPv4 du sous-réseau du point d'accès. **Noter son nom exact.** | | |
 | 2 | **Vérification R2** : comparer ce nom à la liste d'exclusion (préfixes `docker`, `br-`, `veth`, `virbr`, `tun`, `tap`, `wg`, `lxc`, `vmnet`, `utun`) | Le nom ne commence par aucun de ces préfixes (cas attendu : `wlan0`). **Si le point d'accès est monté sur un pont nommé `br-…`, ou sur `tun`/`tap`/`wg…`, c'est un ÉCHEC bloquant** : la perte d'un vrai réseau serait masquée — à remonter au CDP | | |
 | 3 | Admin ouvert (sur le Raspberry ou depuis un appareil connecté au point d'accès) en fonctionnement normal | Aucun overlay, aucun bandeau | | |
-| 4 | Sur le Raspberry : `sudo ip link set wlan0 down`, attendre jusqu'à 30 s ; regarder l'admin **sur le Raspberry** (écran local ou navigateur local) | Overlay « Le serveur n'a pas de réseau » (adresses : aucune) | | |
+| 4 | Sur le Raspberry : `sudo ip link set wlan0 down`, attendre jusqu'à 30 s ; regarder l'admin **sur le Raspberry** (écran local ou navigateur local) | Overlay « Le serveur n'a pas de réseau disponible » (adresses : aucune) | | |
 | 5 | `sudo ip link set wlan0 up` (relancer le point d'accès si besoin) et attendre jusqu'à 30 s | Toast « Réseau rétabli — <IP du point d'accès> » ; overlay/bandeau retirés | | |
 | 6 | Journal | `NETWORK_LOST` puis `NETWORK_RESTORED`, une seule fois chacun | | |
 

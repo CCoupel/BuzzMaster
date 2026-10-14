@@ -23,17 +23,17 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Générateur du réservoir RAFALE via IA](#générateur-du-réservoir-rafale-via-ia-v810)
 - [Configuration Éclairage d'Ambiance Philips Hue](#configuration-éclairage-dambiance-philips-hue-v1000)
 - [Configuration Sonore (Bruitage d'Événement)](#configuration-sonore-bruitage-dévénement-v1100)
-- [Le serveur n'a pas de réseau (alerte admin)](#le-serveur-na-pas-de-réseau-alerte-admin-v1122-267)
+- [Le serveur n'a pas de réseau disponible (alerte admin)](#le-serveur-na-pas-de-réseau-disponible-alerte-admin-v1122-267)
 
 ---
 
-## Le serveur n'a pas de réseau (alerte admin, v11.2.2, #267)
+## Le serveur n'a pas de réseau disponible (alerte admin, v11.2.2, #267)
 
 Quand le serveur n'a plus d'adresse réseau utilisable, un écran s'affiche sur toutes les pages d'administration. Sans adresse réseau, aucun buzzer, aucune tablette, ni la TV ni l'animateur ne peuvent se connecter.
 
 **Ce que vous voyez :**
-- Un écran « Le serveur n'a pas de réseau » qui couvre la page. Il indique les adresses détectées (« aucune — seulement 127.0.0.1 » tant qu'aucune adresse n'est trouvée) et, le cas échéant, les interfaces ignorées (adaptateurs virtuels, par exemple WSL ou Hyper-V, qui ne sont pas joignables par les appareils).
-- Une dernière vérification et le rythme du contrôle automatique (toutes les 30 secondes).
+- Un écran « Le serveur n'a pas de réseau disponible » qui couvre la page. Il indique les adresses détectées (« aucune — seulement 127.0.0.1 » tant qu'aucune adresse n'est trouvée) et, le cas échéant, les interfaces ignorées (adaptateurs virtuels, par exemple WSL ou Hyper-V, qui ne sont pas joignables par les appareils).
+- Depuis quand la perte est détectée (« Perte détectée il y a N s », puis « N min »), et le rythme du contrôle automatique (toutes les 30 secondes). Cet horodatage est celui du dernier changement d'état du réseau : il n'avance pas à chaque contrôle.
 
 **Ce que vous pouvez faire :**
 - **Rétablir la connexion** : branchez le câble réseau ou reconnectez le WiFi de ce poste. L'écran disparaît de lui-même dès qu'une adresse réseau est détectée.
@@ -43,7 +43,7 @@ Quand le serveur n'a plus d'adresse réseau utilisable, un écran s'affiche sur 
 
 **Nouvelle perte :** si le réseau tombe à nouveau après un retour, l'écran se rouvre, même si vous l'aviez replié.
 
-Le même événement est inscrit dans le journal du serveur (`NETWORK_LOST`, `NETWORK_RESTORED`, `NETWORK_IPS_CHANGED`).
+Le même événement est inscrit dans le journal du serveur (`NETWORK_LOST`, `NETWORK_RESTORED`, `NETWORK_IPS_CHANGED`). Si le serveur ne peut pas lister ses interfaces, l'écran ne s'ouvre pas à tort : l'état précédent est conservé et `NETWORK_LISTING_FAILED` est journalisé.
 
 > La liste des interfaces virtuelles reconnues est une aide au diagnostic, non exhaustive : un adaptateur non reconnu peut être compté comme réseau.
 
