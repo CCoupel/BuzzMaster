@@ -254,8 +254,12 @@ func TestNetwork267_Broadcast_SilentWhileNothingChanges(t *testing.T) {
 	tv, _ := e.dial(t, "/ws/tv")
 	e.drain(t, admin, tv)
 
+	checkedAt := e.app.engine.GetNetworkState().CheckedAt
 	for i := 0; i < 3; i++ {
-		e.pass() // CHECKED_AT change à chaque passage, rien d'autre
+		e.pass() // un passage sans changement : ni diffusion ni journal, CHECKED_AT inchangé (instant du dernier changement)
+	}
+	if got := e.app.engine.GetNetworkState().CheckedAt; got != checkedAt {
+		t.Errorf("CHECKED_AT est l'instant du dernier CHANGEMENT d'état, pas du dernier passage : %d → %d", checkedAt, got)
 	}
 
 	assertNoAction264(t, e.app, admin, protocol.ActionUpdate, "watchdog sans changement (admin)")

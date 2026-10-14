@@ -1129,7 +1129,7 @@ func formatIPList(ips []string) string {
 
 // updateNetworkState re-detects the server network (v11.2.2, #267 — contracts/game-state.md
 // §NETWORK; originally v5.6.2 #96). The state (including CHECKED_AT and the ignored virtual
-// interfaces) is refreshed on every pass; it is broadcast and journaled ONLY when ONLY_LOCALHOST
+// interfaces) is refreshed on every pass (CHECKED_AT excepted: it only moves on a change); it is broadcast and journaled ONLY when ONLY_LOCALHOST
 // or the retained IPs change, so the watchdog is silent while nothing happens
 // (contracts/logging.md §3.2 nonies). At startup only a lost network is an event. A failure to
 // list the interfaces keeps the previous state and only journals NETWORK_LISTING_FAILED.
@@ -1145,13 +1145,18 @@ func (a *App) updateNetworkState() {
 
 	a.networkMu.Lock()
 	prev := a.engine.GetNetworkState()
-	a.engine.SetNetworkState(next)
 	first := !a.networkChecked
 	a.networkChecked = true
 	change := server.ClassifyNetworkChange(prev, next)
 	if first && change != server.NetworkChangeLost {
 		change = server.NetworkChangeNone // startup with a usable network: nothing to report
 	}
+	if change == server.NetworkChangeNone && !first {
+		// CHECKED_AT is the instant of the LAST STATE CHANGE (loss, return, new addresses), not of
+		// the last pass: the admin screen says "loss detected N s ago" from it (#267 review).
+		next.CheckedAt = prev.CheckedAt
+	}
+	a.engine.SetNetworkState(next)
 	var lostFor int64
 	switch change {
 	case server.NetworkChangeLost:

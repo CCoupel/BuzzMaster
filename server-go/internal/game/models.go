@@ -1202,7 +1202,9 @@ type IgnoredInterface struct {
 }
 
 // NetworkState is the server's network status (v11.2.2, #267, contracts/game-state.md §NETWORK).
-// Lists are never null on the wire (see MarshalJSON). CheckedAt is epoch milliseconds.
+// Lists are never null on the wire (see MarshalJSON). CheckedAt is epoch milliseconds: the instant of
+// the last STATE CHANGE (loss, return, new retained addresses; the first detection at startup),
+// not of the last watchdog pass.
 type NetworkState struct {
 	OnlyLocalhost     bool               `json:"ONLY_LOCALHOST"`
 	IPs               []string           `json:"IPS"`

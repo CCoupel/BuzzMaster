@@ -141,6 +141,26 @@ func SetListInterfaces(f func() ([]NetInterface, error)) (restore func()) {
 	return func() { listInterfaces.Store(prev) }
 }
 
+// netClock is the injectable clock stamping CheckedAt (tests drive it; production uses time.Now).
+var netClock atomic.Pointer[func() time.Time]
+
+// SetNetworkClock replaces the clock used to stamp NETWORK.CHECKED_AT (TEST-ONLY) and returns a
+// function restoring the previous one. nil restores time.Now.
+func SetNetworkClock(f func() time.Time) (restore func()) {
+	if f == nil {
+		f = time.Now
+	}
+	prev := netClock.Swap(&f)
+	return func() { netClock.Store(prev) }
+}
+
+func netNow() time.Time {
+	if f := netClock.Load(); f != nil {
+		return (*f)()
+	}
+	return time.Now()
+}
+
 // TryDetectNetwork lists the interfaces through the injectable source and runs DetectNetwork.
 // A listing ERROR is returned as such and the returned state is the zero value: the caller
 // must keep its previous state — "I could not look" is not "there is no network" (#267 review).
@@ -149,7 +169,7 @@ func TryDetectNetwork() (game.NetworkState, error) {
 	if err != nil {
 		return game.NetworkState{}, err
 	}
-	return DetectNetwork(ifaces, time.Now()), nil
+	return DetectNetwork(ifaces, netNow()), nil
 }
 
 // DetectNetworkNow is TryDetectNetwork for callers that only want a state: on a listing error it
@@ -158,7 +178,7 @@ func TryDetectNetwork() (game.NetworkState, error) {
 func DetectNetworkNow() game.NetworkState {
 	st, err := TryDetectNetwork()
 	if err != nil {
-		return DetectNetwork(nil, time.Now())
+		return DetectNetwork(nil, netNow())
 	}
 	return st
 }
