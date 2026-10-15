@@ -46,18 +46,16 @@ func startTestWSServer(t *testing.T) (*httptest.Server, *WebSocketHub, func()) {
 func dialWSPath(t *testing.T, srv *httptest.Server, path string) *websocket.Conn {
 	t.Helper()
 	hub := hubOf(srv)
-	before := 0
-	if hub != nil {
-		before = typeCount(hub, path)
+	if hub == nil {
+		t.Fatalf("dialWSPath : serveur non créé par startTestWSServer, hub introuvable (#274)")
 	}
+	before := typeCount(hub, path)
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + path
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("Failed to connect WebSocket at %s: %v", path, err)
 	}
-	if hub != nil {
-		waitRegisteredPath(t, hub, path, before+1) // #274 : le dial ne rend la main qu'une fois inscrit
-	}
+	waitRegisteredPath(t, hub, path, before+1) // #274 : le dial ne rend la main qu'une fois inscrit
 	return conn
 }
 

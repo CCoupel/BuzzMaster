@@ -2,7 +2,6 @@ package server
 
 import (
 	"testing"
-	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -20,7 +19,6 @@ func TestGetClientPlayerID_ReturnsLinkedID(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/ws/player")
 	defer conn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(clientID, "vjoueur_Emma_20260725")
@@ -40,7 +38,6 @@ func TestGetClientPlayerID_FalseBeforeIdentification(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/ws/player")
 	defer conn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
 
@@ -66,7 +63,6 @@ func TestGetClientPlayerID_IgnoresNonVPlayerClientType(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/ws/admin")
 	defer conn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeAdmin)
 	hub.SetClientPlayerID(clientID, "vjoueur_NotAPlayer")
