@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased] — LOTs 1 et 2 du milestone en cours (partiel)
+## [Unreleased] — LOTs 1 à 3 du milestone en cours (partiel)
 
 ### Changed
 
@@ -16,6 +16,7 @@ Historique des versions du projet BuzzControl.
 ### Security
 
 - **`NETWORK` réservé à l'admin (#275)** — L'état réseau du serveur (adresses IPv4 et interfaces ignorées, champ `NETWORK`) n'est plus livré à la TV, à l'animateur ni au VJoueur, ni au `HELLO` ni en diffusion : seul le client admin le reçoit. Le booléen `NETWORK_ONLY_LOCALHOST` reste diffusé à tous les clients. L'overlay admin ne change pas.
+- **`react-router-dom` 7.18.4 (#277)** — Migration de 6.30.6 vers 7.18.4. Les deux avis `npm audit` `moderate` sur react-router (GHSA-wrjc-x8rr-h8h6, GHSA-337j-9hxr-rhxg) sont éteints. Aucun changement de code applicatif ; deux tests de la bannière « serveur sans réseau » sont adaptés à la transition de rendu de la v7 (`startTransition`).
 
 ---
 
