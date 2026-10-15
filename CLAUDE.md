@@ -218,6 +218,7 @@ SendMessage({
 - **QUALIF relancée sans demander** : une modification demandée par l'utilisateur pendant une session de test, une fois passée review + QA, déclenche immédiatement un nouveau cycle BUILD + PUBLISH + DEPLOY QUALIF.
 - **Procédures manuelles fournies avec la QUALIF** : une QA validée sans navigateur laisse le visuel à l'utilisateur ; le teamleader lui transmet les procédures `tests/procedures/` concernées avec le lien QUALIF, avant le GATE LOT / GATE 4.
 - **CHANGELOG relu avant PROD** : avant tout PUBLISH PROD, `code-reviewer` relit factuellement l'entrée CHANGELOG produite par `doc-updater`, puis re-relit après corrections (7 erreurs trouvées en v11.2.1, dont une introduite par la relecture).
+- **Docs relues à chaque lot** : toute documentation produite par `doc-updater` pour un lot (docs techniques, CHANGELOG partiel) est relue factuellement par `code-reviewer` avant le GATE LOT, puis re-relue après correction (v11.2.2 : 3 erreurs au LOT-4 dont une affirmation produit fausse, 1 au LOT-6).
 - **`/end-session` explicite** en fin de chantier, en particulier après une PROD : `.claude/memory/MEMORY.md` n'est mis à jour qu'à cette étape, aucune autre commande ne la rattrape.
 
 ## Branche courante et worktrees
