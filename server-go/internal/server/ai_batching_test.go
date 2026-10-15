@@ -213,10 +213,12 @@ func dialAdminWS(t *testing.T, server *HTTPServer) *websocket.Conn {
 	wsSrv := httptest.NewServer(server.mux)
 	t.Cleanup(wsSrv.Close)
 	wsURL := "ws" + strings.TrimPrefix(wsSrv.URL, "http") + "/ws/admin"
+	before := typeCount(server.wsHub, "/ws/admin")
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("Failed to connect admin WebSocket: %v", err)
 	}
+	waitRegisteredPath(t, server.wsHub, "/ws/admin", before+1) // #274
 	t.Cleanup(func() { conn.Close() })
 	return conn
 }
@@ -228,10 +230,12 @@ func dialWS(t *testing.T, server *HTTPServer, path string) *websocket.Conn {
 	wsSrv := httptest.NewServer(server.mux)
 	t.Cleanup(wsSrv.Close)
 	wsURL := "ws" + strings.TrimPrefix(wsSrv.URL, "http") + path
+	before := typeCount(server.wsHub, path)
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("Failed to connect WebSocket at %s: %v", path, err)
 	}
+	waitRegisteredPath(t, server.wsHub, path, before+1) // #274
 	t.Cleanup(func() { conn.Close() })
 	return conn
 }

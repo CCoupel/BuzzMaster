@@ -38,16 +38,25 @@ func startTestWSServer(t *testing.T) (*httptest.Server, *WebSocketHub, func()) {
 		}
 	}))
 
-	return srv, hub, func() { srv.Close() }
+	registerTestHub(srv, hub)
+	return srv, hub, func() { testHubs.Delete(srv); srv.Close() }
 }
 
 // dialWSPath connects to the test server at the given path.
 func dialWSPath(t *testing.T, srv *httptest.Server, path string) *websocket.Conn {
 	t.Helper()
+	hub := hubOf(srv)
+	before := 0
+	if hub != nil {
+		before = typeCount(hub, path)
+	}
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + path
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("Failed to connect WebSocket at %s: %v", path, err)
+	}
+	if hub != nil {
+		waitRegisteredPath(t, hub, path, before+1) // #274 : le dial ne rend la main qu'une fois inscrit
 	}
 	return conn
 }
@@ -88,8 +97,6 @@ func TestHandleConnectionWithType_AdminType(t *testing.T) {
 	conn := dialWSPath(t, srv, "/ws/admin")
 	defer conn.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if adminCount != 1 {
 		t.Errorf("Expected 1 admin client, got %d", adminCount)
@@ -105,8 +112,6 @@ func TestHandleConnectionWithType_TVType(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/ws/tv")
 	defer conn.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if tvCount != 1 {
@@ -124,8 +129,6 @@ func TestHandleConnectionWithType_VPlayerType(t *testing.T) {
 	conn := dialWSPath(t, srv, "/ws/player")
 	defer conn.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if vplayerCount != 1 {
 		t.Errorf("Expected 1 VPlayer client, got %d", vplayerCount)
@@ -141,8 +144,6 @@ func TestHandleConnection_DefaultsToAdmin(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/") // uses default HandleConnection
 	defer conn.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	adminCount, tvCount, vplayerCount, _ := hub.GetClientCounts()
 	if adminCount != 1 {
@@ -167,8 +168,6 @@ func TestBroadcastToTypes_AdminOnly(t *testing.T) {
 	defer tv.Close()
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	msg, _ := protocol.NewMessage(protocol.ActionClients, nil)
 	hub.BroadcastToTypes(msg, ClientTypeAdmin)
@@ -195,8 +194,6 @@ func TestBroadcastToTypes_TVOnly(t *testing.T) {
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	msg, _ := protocol.NewMessage(protocol.ActionReady, nil)
 	hub.BroadcastToTypes(msg, ClientTypeTV)
 
@@ -221,8 +218,6 @@ func TestBroadcastToTypes_AdminAndTV(t *testing.T) {
 	defer tv.Close()
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	msg, _ := protocol.NewMessage(protocol.ActionReady, nil)
 	hub.BroadcastToTypes(msg, ClientTypeAdmin, ClientTypeTV)
@@ -251,8 +246,6 @@ func TestBroadcastToTypes_AllTypes(t *testing.T) {
 	defer tv.Close()
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
 	hub.BroadcastToTypes(msg, ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer)
@@ -283,8 +276,6 @@ func TestBroadcastToTypes_VPlayerOnly(t *testing.T) {
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	msg, _ := protocol.NewMessage(protocol.ActionPlayerRejected, nil)
 	hub.BroadcastToTypes(msg, ClientTypeVPlayer)
 
@@ -305,8 +296,6 @@ func TestBroadcastToTypes_NoTypes_SendsNothing(t *testing.T) {
 	admin := dialWSPath(t, srv, "/ws/admin")
 	defer admin.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	msg, _ := protocol.NewMessage(protocol.ActionUpdate, nil)
 	hub.BroadcastToTypes(msg) // no types
 
@@ -323,8 +312,6 @@ func TestBroadcastToTypes_MultipleClientsOfSameType(t *testing.T) {
 	defer admin2.Close()
 	tv := dialWSPath(t, srv, "/ws/tv")
 	defer tv.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	msg, _ := protocol.NewMessage(protocol.ActionClients, nil)
 	hub.BroadcastToTypes(msg, ClientTypeAdmin)
@@ -354,8 +341,6 @@ func TestSetClientType_CanChangeType(t *testing.T) {
 	// Connect as admin (default)
 	conn := dialWSPath(t, srv, "/ws/admin")
 	defer conn.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	adminCount, tvCount, _, _ := hub.GetClientCounts()
 	if adminCount != 1 || tvCount != 0 {
@@ -399,8 +384,6 @@ func TestBroadcastRawToTypes_AdminOnly(t *testing.T) {
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	rawData := []byte(`{"ACTION":"CLIENTS","MSG":{}}`)
 	hub.BroadcastRawToTypes(rawData, ClientTypeAdmin)
 
@@ -431,8 +414,6 @@ func TestBroadcastRawToTypes_AdminAndTV(t *testing.T) {
 	defer tv.Close()
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	rawData := []byte(`{"ACTION":"UPDATE","MSG":{"PHASE":"STARTED"}}`)
 	hub.BroadcastRawToTypes(rawData, ClientTypeAdmin, ClientTypeTV)
@@ -470,8 +451,6 @@ func TestBroadcastRawToTypes_NoTypes(t *testing.T) {
 	admin := dialWSPath(t, srv, "/ws/admin")
 	defer admin.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	rawData := []byte(`{"ACTION":"UPDATE","MSG":{}}`)
 	hub.BroadcastRawToTypes(rawData) // no types
 
@@ -486,8 +465,6 @@ func TestBroadcastRawToTypes_ConcurrentSafety(t *testing.T) {
 
 	admin := dialWSPath(t, srv, "/ws/admin")
 	defer admin.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	const goroutines = 20
 	var wg sync.WaitGroup
@@ -536,8 +513,6 @@ func TestBroadcastToTypes_Questions_AdminOnly(t *testing.T) {
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	msg, _ := protocol.NewMessage(protocol.ActionQuestions, nil)
 	hub.BroadcastToTypes(msg, ClientTypeAdmin)
 
@@ -564,8 +539,6 @@ func TestBroadcastToTypes_BackgroundChange_AdminAndTV(t *testing.T) {
 	defer tv.Close()
 	player := dialWSPath(t, srv, "/ws/player")
 	defer player.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	msg, _ := protocol.NewMessage(protocol.ActionBackgroundChange, nil)
 	hub.BroadcastToTypes(msg, ClientTypeAdmin, ClientTypeTV)
@@ -596,8 +569,6 @@ func TestBroadcastToTypes_ConcurrentSafety(t *testing.T) {
 
 	admin := dialWSPath(t, srv, "/ws/admin")
 	defer admin.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	const goroutines = 20
 	var wg sync.WaitGroup
@@ -657,7 +628,6 @@ func TestSetClientPlayerID_LinksClientToPlayerID(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/ws/player")
 	defer conn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(clientID, "vjoueur_Alice_20260711")
@@ -693,7 +663,6 @@ func TestIsPlayerIDConnected_FalseAfterDisconnect(t *testing.T) {
 	defer cleanup()
 
 	conn := dialWSPath(t, srv, "/ws/player")
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(clientID, "vjoueur_Bob")
@@ -721,7 +690,6 @@ func TestIsPlayerIDConnected_IgnoresNonVPlayerClientType(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/ws/admin")
 	defer conn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeAdmin)
 	hub.SetClientPlayerID(clientID, "vjoueur_NotAPlayer")
@@ -741,7 +709,6 @@ func TestIsPlayerIDConnected_TrueAfterReconnectRace(t *testing.T) {
 	defer cleanup()
 
 	oldConn := dialWSPath(t, srv, "/ws/player")
-	time.Sleep(50 * time.Millisecond)
 	oldClientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(oldClientID, "vjoueur_Dan")
 
@@ -749,7 +716,6 @@ func TestIsPlayerIDConnected_TrueAfterReconnectRace(t *testing.T) {
 	// (typical fast tab-refresh / reconnect scenario).
 	newConn := dialWSPath(t, srv, "/ws/player")
 	defer newConn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	hub.mu.RLock()
 	var newClientID string
@@ -801,14 +767,12 @@ func TestSendToPlayerID_DuplicateRegistration_ReachesBothConnections(t *testing.
 
 	oldConn := dialWSPath(t, srv, "/ws/player")
 	defer oldConn.Close()
-	time.Sleep(50 * time.Millisecond)
 	oldClientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(oldClientID, "vjoueur_Eve")
 
 	// New connection for the same VJoueur arrives before the old one closes.
 	newConn := dialWSPath(t, srv, "/ws/player")
 	defer newConn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	hub.mu.RLock()
 	var newClientID string
@@ -850,13 +814,11 @@ func TestSendRawToPlayerID_DuplicateRegistration_ReachesBothConnections(t *testi
 
 	oldConn := dialWSPath(t, srv, "/ws/player")
 	defer oldConn.Close()
-	time.Sleep(50 * time.Millisecond)
 	oldClientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(oldClientID, "vjoueur_Frank")
 
 	newConn := dialWSPath(t, srv, "/ws/player")
 	defer newConn.Close()
-	time.Sleep(50 * time.Millisecond)
 
 	hub.mu.RLock()
 	var newClientID string
@@ -900,7 +862,6 @@ func TestSendToPlayerID_NoDuplicate_StillWorks(t *testing.T) {
 
 	conn := dialWSPath(t, srv, "/ws/player")
 	defer conn.Close()
-	time.Sleep(50 * time.Millisecond)
 	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(clientID, "vjoueur_Gina")
 
@@ -937,7 +898,6 @@ func TestOnPlayerDisconnected_FiresForVPlayerWithPlayerID(t *testing.T) {
 	}
 
 	conn := dialWSPath(t, srv, "/ws/player")
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(clientID, "vjoueur_Carla")
@@ -967,7 +927,6 @@ func TestOnPlayerDisconnected_DoesNotFireForAdmin(t *testing.T) {
 	}
 
 	conn := dialWSPath(t, srv, "/ws/admin")
-	time.Sleep(50 * time.Millisecond)
 	conn.Close()
 
 	select {
@@ -988,7 +947,6 @@ func TestOnPlayerDisconnected_DoesNotFireForTV(t *testing.T) {
 	}
 
 	conn := dialWSPath(t, srv, "/ws/tv")
-	time.Sleep(50 * time.Millisecond)
 	conn.Close()
 
 	select {
@@ -1011,7 +969,6 @@ func TestOnPlayerDisconnected_DoesNotFireForVPlayerWithoutPlayerID(t *testing.T)
 	// Connect as VPlayer but never call SetClientPlayerID — not yet identified
 	// (e.g. connection dropped before PLAYER_CONNECT was processed).
 	conn := dialWSPath(t, srv, "/ws/player")
-	time.Sleep(50 * time.Millisecond)
 	conn.Close()
 
 	select {
@@ -1028,7 +985,6 @@ func TestOnPlayerDisconnected_NilCallback_NoPanic(t *testing.T) {
 
 	// hub.OnPlayerDisconnected intentionally left nil.
 	conn := dialWSPath(t, srv, "/ws/player")
-	time.Sleep(50 * time.Millisecond)
 
 	clientID := clientIDForType(t, hub, ClientTypeVPlayer)
 	hub.SetClientPlayerID(clientID, "vjoueur_NilCallback")

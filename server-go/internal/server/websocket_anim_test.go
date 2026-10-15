@@ -162,8 +162,6 @@ func TestHandleConnectionWithType_AnimType(t *testing.T) {
 	conn := dialWSPath(t, srv, "/ws/anim")
 	defer conn.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	adminCount, tvCount, vplayerCount, animCount := hub.GetClientCounts()
 	if animCount != 1 {
 		t.Errorf("Expected 1 anim client, got %d", animCount)
@@ -187,8 +185,6 @@ func TestBroadcastToTypes_AnimOnly(t *testing.T) {
 	defer tv.Close()
 	anim := dialWSPath(t, srv, "/ws/anim")
 	defer anim.Close()
-
-	time.Sleep(50 * time.Millisecond)
 
 	msg := buildUpdateMessageWithAdminOnlyFields(t)
 	hub.BroadcastToTypes(msg, ClientTypeAnim)

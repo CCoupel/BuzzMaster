@@ -167,8 +167,6 @@ func TestBroadcastToTypes_PerTypeSerialization(t *testing.T) {
 	tv := dialWSPath(t, srv, "/ws/tv")
 	defer tv.Close()
 
-	time.Sleep(50 * time.Millisecond)
-
 	// A GetGameJSON()-shaped UPDATE payload with an admin-only bumper field.
 	raw := `{"GAME":{"PHASE":"STARTED"},"teams":{},"bumpers":{"mac-1":{"NAME":"Bob","FIRMWARE_VERSION":"1.2.3"}}}`
 	msg, err := protocol.NewMessage(protocol.ActionUpdate, nil)
