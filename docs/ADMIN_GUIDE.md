@@ -1619,7 +1619,7 @@ La modale affiche deux blocs :
 Ces valeurs viennent de la section "Quiz" en haut de QuestionsPage. Elles sont **affichées à titre informatif** et ne sont **pas modifiables** dans le formulaire de génération.
 
 **Bloc 2 — Cette génération (éditable)** :
-- **Difficulté** : Cocher une ou plusieurs cases (Facile, Moyen, Difficile, Expert). Vous pouvez mixer les niveaux pour un même lot — l'IA répartira les questions équitablement.
+- **Difficulté** : Choisir une ou plusieurs difficultés (★ 1 à 3, en pastilles ; v11.2.2). Vous pouvez mixer les niveaux pour un même lot — l'IA répartira les questions équitablement.
 - **Objectifs / Consignes** (optionnel) : Texte libre décrivant le contexte (ex: "révision scolaire", "ambiance conviviale") ou des contraintes spéciales (ex: "éviter les questions sur la politique").
 - **Catégories cibles** : Sélectionner une ou plusieurs catégories existantes. L'IA génère des questions **uniquement** dans ces catégories (elle ne crée jamais de nouvelle catégorie).
 - **Volume** : 
@@ -1801,8 +1801,8 @@ Une question trop longue est **écartée** (comptée dans `SKIPPED_COUNT`), **ja
 | **Populations** | Cases à cocher | ✅ | 1+ parmi (Junior, Ado, Adulte, Senior, Famille) | Cibles (ado, adulte, etc.) |
 | **Langue** | Liste déroulante | ✅ | Français, Anglais, Allemand… | Langue des questions |
 | **Instructions** | Texte optionnel | ❌ | ≤ 2000 car. | Consignes supplémentaires au modèle (ex: "Éviter l'actualité récente"), jamais stockées |
-| **Catégories** | Cases à cocher | ✅ | 1+ parmi toutes les catégories connues | Pas restreint à l'existant (voir ci-dessous) |
-| **Difficultés** | Cases à cocher | ✅ | 1+ parmi (1 ⭐, 2 ⭐⭐, 3 ⭐⭐⭐) | Niveaux de difficulté (entiers 1..3, pas de libellés) |
+| **Catégories** | Pastilles multiples | ✅ | 1+ parmi toutes les catégories connues | Pas restreint à l'existant (voir ci-dessous) |
+| **Difficultés** | Pastilles multiples (★) | ✅ | 1+ parmi (1 ⭐, 2 ⭐⭐, 3 ⭐⭐⭐) | Niveaux de difficulté (entiers 1..3, pas de libellés) |
 | **Volume** | Boutons segmentés | ✅ | `{10, 20, 50, 100, 200}` | Paliers fermés — on remplit par lots, pas à la question près |
 
 **Annotation des catégories** : Chaque catégorie affiche le **nombre de questions déjà présentes** dans le réservoir pour les difficultés sélectionnées, et la **répartition finale** `existant → après génération`.
