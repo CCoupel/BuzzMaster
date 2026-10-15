@@ -49,6 +49,25 @@ go tool cover -html=coverage.out -o coverage.html
 | Couverture par package modifié | 70% |
 | Tests en échec | 0 |
 
+### 2.3 Tests RED en clone partagé (TDD avec plusieurs agents)
+
+Les agents (dev-backend, test-writer, qa) travaillent dans le **même clone** et sur la même branche.
+Un test Go qui référence un champ, une méthode ou un type **pas encore implémenté** casse la compilation
+de tout le paquet (`go test`, `go vet`, `go build ./...`) pour tous les agents en parallèle.
+
+Règles pour écrire un test RED avant l'implémentation :
+
+- **Tester par les frontières, pas par les symboles** : passer par des JSON / messages WebSocket bruts, des
+  requêtes HTTP ou des payloads sérialisés, pour que le test compile et échoue fonctionnellement (assertion)
+  plutôt que syntaxiquement (compilation).
+- **Séparer les paquets entre agents** quand une référence directe est inévitable : le test RED va dans un
+  paquet que personne d'autre ne compile pendant ce temps (paquet `_test` dédié, sous-répertoire), ou est
+  livré avec un stub minimal compilable convenu dans le plan.
+- Un test RED qui casse la compilation partagée est un `BLOQUE` à remonter au teamleader, pas à contourner
+  par `git stash` ou `checkout` (interdits dans le dépôt principal, voir `CLAUDE.md`).
+
+_(Leçon v11.2.1, 2026-10-13)_
+
 ---
 
 ## 3. Tests Non-Régression (Existants)
