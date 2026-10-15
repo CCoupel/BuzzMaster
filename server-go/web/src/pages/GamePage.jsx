@@ -8,7 +8,7 @@ import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder, sortQuestionsByRounds, roundIndexOf, countEntries } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
-import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
+import { getMotionGridCols, getMotionCardCoord, getMotionCardPointsDisplay, isMotionSecretMode } from '../utils/motionGrid'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import {
   canSelectQuestion as canSelectQuestionRule,
@@ -1517,7 +1517,11 @@ export default function GamePage() {
             const currentTeam = gameState.MEMOTION_CURRENT_TEAM
             const motionCards = gameState.question?.MOTION_CARDS || []
             const motionCfg = gameState.question?.MOTION_CONFIG
-            const diffPts = d => getMotionCardPoints(d, motionCfg)
+            // #190 — montant selon la règle de la carte (FIXED/PER_UNIT), sinon barème étoiles
+            const cardPts = card => {
+              const { points, suffix } = getMotionCardPointsDisplay(card, motionCfg)
+              return `${points}pt${suffix}`
+            }
 
             if (subphase === 'MEMORIZE') {
               return (
@@ -1585,7 +1589,7 @@ export default function GamePage() {
                   <div className="memotion-admin-label">Carte sélectionnée</div>
                   <div className="memotion-admin-card-info">
                     <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
-                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {cardPts(selectedMotionCard)}</span>
                   </div>
                   <div className="memotion-admin-actions">
                     <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_FLIP', {})}>
@@ -1606,7 +1610,7 @@ export default function GamePage() {
                   <div className="memotion-admin-label">Question</div>
                   <div className="memotion-admin-card-info">
                     <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
-                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {cardPts(selectedMotionCard)}</span>
                   </div>
                   {selectedMotionCard.QUESTION_TEXT && (
                     <p className="memotion-admin-qtext">{selectedMotionCard.QUESTION_TEXT}</p>
@@ -1642,7 +1646,7 @@ export default function GamePage() {
                   <div className="memotion-admin-label">Réponse</div>
                   <div className="memotion-admin-card-info">
                     <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
-                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {cardPts(selectedMotionCard)}</span>
                   </div>
                   {selectedMotionCard.ANSWER_TEXT && (
                     <p className="memotion-admin-qtext">{selectedMotionCard.ANSWER_TEXT}</p>

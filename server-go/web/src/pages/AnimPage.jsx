@@ -17,7 +17,7 @@ import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
 import { resolveHostContext } from '../utils/hostContext'
 import { getTypeState } from '../utils/typeState'
 import { effectiveRafaleCategories } from '../utils/rafaleEffective'
-import { getMotionCardPoints } from '../utils/motionGrid'
+import { getMotionCardPointsDisplay } from '../utils/motionGrid'
 import { getPhaseBadge } from '../utils/phaseBadge'
 import { canAwardPoints } from '../utils/canAwardPoints'
 import { QCM_COLORS } from '../constants/colors'
@@ -293,9 +293,11 @@ export default function AnimPage() {
   // bouton de crédit d'AnimConductPanel en REVEAL) ne se chevauchent jamais
   // dans le temps, donc pas de risque de lire deux montants contradictoires
   // pour la même carte au même instant.
-  const motionCardPoints = selectedMotionCard
-    ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
-    : 0
+  // #190 — selon la règle de la carte (FIXED : VALUE ; PER_UNIT : VALUE / unité ; sinon étoiles).
+  const motionCardDisplay = selectedMotionCard
+    ? getMotionCardPointsDisplay(selectedMotionCard, question?.MOTION_CONFIG)
+    : { points: 0, suffix: '' }
+  const motionCardPoints = motionCardDisplay.points
   // #217 — carte RAFALE : pas de QUESTION_TEXT propre à la carte (mini-manche
   // à plusieurs questions, contrat rafale.md §14.1 — le texte affiché doit
   // suivre la question COURANTE tirée, `typeState.rafale.currentQuestion`,
@@ -307,7 +309,7 @@ export default function AnimPage() {
   // texte de la carte en QUESTION/REVEAL, rappel générique en MEMORIZE/GRID.
   const motionStatement = isMemotionQuestion
     ? (motionSubphase === 'SELECTED' && selectedMotionCard
-        ? `Carte « ${selectedMotionCard.RECTO_THEME} » — ${'★'.repeat(selectedMotionCard.DIFFICULTY || 1)} · ${motionCardPoints}pt${motionCardPoints > 1 ? 's' : ''}`
+        ? `Carte « ${selectedMotionCard.RECTO_THEME} » — ${'★'.repeat(selectedMotionCard.DIFFICULTY || 1)} · ${motionCardPoints}pt${motionCardPoints > 1 ? 's' : ''}${motionCardDisplay.suffix}`
         : motionSubphase === 'QUESTION' && isSelectedCardRafale
           ? (typeState.rafale.currentQuestion.QUESTION || 'Rafale en cours')
           : (motionSubphase === 'QUESTION' || motionSubphase === 'REVEAL') && selectedMotionCard?.QUESTION_TEXT
