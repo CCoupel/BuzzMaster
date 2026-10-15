@@ -317,6 +317,8 @@ Pipeline GitHub Actions (`.github/workflows/release.yml`) déclenché sur push `
 
 **Chaîne d'outils CI (#276)** : actions GitHub sur runtime Node 24 (`checkout@v7`, `setup-go@v7`, `setup-node@v7`, `setup-python@v7`, `upload-artifact@v7`, `download-artifact@v8`, `softprops/action-gh-release@v3`). La version de Go vient de `server-go/go.mod` (`go-version-file`, plus de `GO_VERSION` dans les workflows) : `setup-go` v6+ force `GOTOOLCHAIN=local`, la directive `go` de `go.mod` est donc la seule source de vérité, en CI comme en local. Cache Go indexé sur `server-go/go.sum`. Runner épinglé sur `ubuntu-24.04` (pas `ubuntu-latest`) : tout changement d'image se fait volontairement, après un run `ci-branch.yml` vert sur la nouvelle image.
 
+**Gouvernance Go** : la CI ne prend pas automatiquement le dernier patch 1.26.x. Un correctif de la stdlib signalé par `govulncheck` impose un bump de la directive `go` dans `server-go/go.mod`, relu et commité comme tout changement de dépendance.
+
 **Versioning unifié** : tous les fichiers de version (`config.json`, `package.json`, `platformio.ini`,
 `version.txt`) doivent être bumpes manuellement **avant tagging** et correspondent exactement au
 tag de release.
