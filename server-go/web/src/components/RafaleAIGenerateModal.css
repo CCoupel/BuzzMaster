@@ -36,11 +36,6 @@
 
 /* Chips ★/★★/★★★ — même base que .ai-chip, police mono pour un alignement
    régulier des étoiles. */
-.rafale-ai-star-chip {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  letter-spacing: 0.08em;
-}
-
 /* Matrice existant → après génération */
 .rafale-ai-matrix-block {
   background: var(--gray-50);

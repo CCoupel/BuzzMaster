@@ -1283,6 +1283,7 @@ export default function GamePage() {
         {/* Filtre catégories (#221) — CategoryPicker variant="filter" (icônes seules) */}
         <CategoryPicker
           variant="filter"
+          className="category-filter-bar"
           showLabel={false}
           value={selectedCategories}
           availableCategories={availableCategories}
@@ -1480,8 +1481,7 @@ export default function GamePage() {
                     composant AnimRafaleActions (mêmes actions rafaleValidate/
                     rafaleInvalidate, même logique de désactivation que
                     /anim, contrat §5.1) plutôt que d'en recréer un — même
-                    discipline de mutualisation que CategorySelector/
-                    CategoryFilterBar. */}
+                    discipline de mutualisation que CategoryPicker. */}
                 <AnimRafaleActions
                   disabled={gameState.RAFALE_SUBPHASE !== 'QUESTION'}
                   rafaleMode={gameState.question?.RAFALE_MODE}

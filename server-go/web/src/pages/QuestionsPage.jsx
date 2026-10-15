@@ -1919,6 +1919,7 @@ export default function QuestionsPage() {
             composant partagé avec RafalePage.jsx et GamePage.jsx. */}
         <CategoryPicker
           variant="filter"
+          className="questions-page-filter-bar"
           showLabel
           value={selectedCategories}
           availableCategories={availableCategories}
