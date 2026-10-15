@@ -979,7 +979,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid question number", http.StatusBadRequest)
 		return
 	}
-	id, questionsDir, err := h.resolveQuestionDir(r.FormValue("number"))
+	id, questionsDir, created, err := h.resolveQuestionDirCreated(r.FormValue("number"))
 	if err != nil {
 		if errors.Is(err, ErrQuestionIDExhausted) {
 			http.Error(w, "No question ID available (1-999 exhausted)", http.StatusInsufficientStorage)
@@ -993,6 +993,42 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// section against ROUNDS_UPDATE / REORDER_QUESTIONS / DELETE (no lost ROUND_ID / ORDER).
 	QuestionFilesMu.Lock()
 	defer QuestionFilesMu.Unlock()
+
+	// #278: a refused request must leave nothing behind. If THIS call created the directory
+	// (`created`), every file that appeared in it during the request (media, sound, card media)
+	// is removed on any refusal until question.json is written (`committed`), then the directory
+	// itself. Never RemoveAll, never a pre-existing directory; os.Remove on the directory still
+	// refuses if anything unexpected remains. Registered AFTER the QuestionFilesMu defer so
+	// (LIFO) it runs while that lock is still held.
+	// Race on a NEW explicit ID: a concurrent request that refused first may have removed the
+	// directory between our resolve and our Lock → recreate it here, under the lock.
+	if _, serr := os.Stat(questionsDir); os.IsNotExist(serr) {
+		if mkErr := os.MkdirAll(questionsDir, 0755); mkErr != nil {
+			http.Error(w, "Failed to allocate question storage", http.StatusInternalServerError)
+			return
+		}
+		created = true
+	}
+	preExisting := map[string]bool{}
+	if entries, derr := os.ReadDir(questionsDir); derr == nil {
+		for _, e := range entries {
+			preExisting[e.Name()] = true
+		}
+	}
+	committed := false
+	defer func() {
+		if !created || committed {
+			return
+		}
+		if entries, derr := os.ReadDir(questionsDir); derr == nil {
+			for _, e := range entries {
+				if !preExisting[e.Name()] && !e.IsDir() {
+					os.Remove(filepath.Join(questionsDir, e.Name()))
+				}
+			}
+		}
+		os.Remove(questionsDir)
+	}()
 
 	// Load existing question to preserve media if not updated
 	existingQuestion := make(map[string]interface{})
@@ -1524,39 +1560,8 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	// Handle question media upload
-	file, header, err := r.FormFile("file")
-	if err == nil {
-		defer file.Close()
-		// Use random number for filename (like ESP32: media_XXXX.jpg)
-		randomNum := rand.Intn(9000) + 1000
-		fileName := fmt.Sprintf("media_%d%s", randomNum, filepath.Ext(header.Filename))
-		filePath := filepath.Join(questionsDir, fileName)
-
-		dst, err := os.Create(filePath)
-		if err == nil {
-			defer dst.Close()
-			io.Copy(dst, file)
-			question["MEDIA"] = "/question/" + id + "/" + fileName
-		}
-	}
-
-	// Handle answer media upload
-	fileAnswer, headerAnswer, err := r.FormFile("file_answer")
-	if err == nil {
-		defer fileAnswer.Close()
-		randomNum := rand.Intn(9000) + 1000
-		fileName := fmt.Sprintf("media_answer_%d%s", randomNum, filepath.Ext(headerAnswer.Filename))
-		filePath := filepath.Join(questionsDir, fileName)
-
-		dst, err := os.Create(filePath)
-		if err == nil {
-			defer dst.Close()
-			io.Copy(dst, fileAnswer)
-			question["MEDIA_ANSWER"] = "/question/" + id + "/" + fileName
-		}
-	}
-
+	// #278: the sound is validated (and may REFUSE the whole save) BEFORE any MEDIA /
+	// MEDIA_ANSWER file is written, so the most common refusal leaves nothing behind.
 	// Question sound upload (v11.1, #219, contracts/sound.md §10). Unlike
 	// MEDIA/MEDIA_ANSWER above — which silently skip a failed write — a
 	// non-conforming sound REJECTS THE WHOLE SAVE (CA2: "refusé avec un
@@ -1618,6 +1623,39 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 			}
 		}
 	}
+	// Handle question media upload
+	file, header, err := r.FormFile("file")
+	if err == nil {
+		defer file.Close()
+		// Use random number for filename (like ESP32: media_XXXX.jpg)
+		randomNum := rand.Intn(9000) + 1000
+		fileName := fmt.Sprintf("media_%d%s", randomNum, filepath.Ext(header.Filename))
+		filePath := filepath.Join(questionsDir, fileName)
+
+		dst, err := os.Create(filePath)
+		if err == nil {
+			defer dst.Close()
+			io.Copy(dst, file)
+			question["MEDIA"] = "/question/" + id + "/" + fileName
+		}
+	}
+
+	// Handle answer media upload
+	fileAnswer, headerAnswer, err := r.FormFile("file_answer")
+	if err == nil {
+		defer fileAnswer.Close()
+		randomNum := rand.Intn(9000) + 1000
+		fileName := fmt.Sprintf("media_answer_%d%s", randomNum, filepath.Ext(headerAnswer.Filename))
+		filePath := filepath.Join(questionsDir, fileName)
+
+		dst, err := os.Create(filePath)
+		if err == nil {
+			defer dst.Close()
+			io.Copy(dst, fileAnswer)
+			question["MEDIA_ANSWER"] = "/question/" + id + "/" + fileName
+		}
+	}
+
 	// SOUND_TIMER_DELAYED (omitempty, contract §10.7 "valeur zéro =
 	// comportement correct"): written only when true, AND only when a sound
 	// actually ends up attached (preserved or freshly uploaded) — a stale
@@ -1631,7 +1669,9 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 
 	// Save question.json
 	data, _ := json.MarshalIndent(question, "", "  ")
-	os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644)
+	if werr := os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644); werr == nil {
+		committed = true
+	}
 
 	LogInfo(game.LogComponentHTTP, "Question %s saved", id)
 
@@ -1671,6 +1711,21 @@ var ErrQuestionIDExhausted = errors.New("id_exhausted")
 // concurrent AI batch generation (handleGenerateQuestions) can never race on
 // the same ID — previously an unlocked os.Stat scan with no reservation step.
 func (h *HTTPServer) resolveQuestionDir(explicitID string) (id, dir string, err error) {
+	id, dir, _, err = h.resolveQuestionDirCreated(explicitID)
+	return id, dir, err
+}
+
+// resolveQuestionDirCreated is resolveQuestionDir plus `created`: true only when THIS call
+// created the directory (os.Mkdir succeeded, or the explicit ID's path did not exist before
+// MkdirAll). A pre-existing directory (edit of an existing question) reports created == false so
+// a caller that cleans up after a refused request (#278) never touches it.
+//
+// Lock order (#278): questionIDMu is taken and released INSIDE this function; the caller then
+// takes QuestionFilesMu. The caller's cleanup defer must therefore run while QuestionFilesMu is
+// still held (registered after its Lock defer → LIFO runs it first) and never needs questionIDMu:
+// os.Remove refuses a non-empty directory, so a concurrent allocation that already wrote into the
+// directory is never destroyed.
+func (h *HTTPServer) resolveQuestionDirCreated(explicitID string) (id, dir string, created bool, err error) {
 	h.questionIDMu.Lock()
 	defer h.questionIDMu.Unlock()
 
@@ -1678,25 +1733,27 @@ func (h *HTTPServer) resolveQuestionDir(explicitID string) (id, dir string, err 
 
 	if explicitID != "" {
 		dir = filepath.Join(questionsDir, explicitID)
+		_, statErr := os.Stat(dir)
+		existed := statErr == nil
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return "", "", err
+			return "", "", false, err
 		}
-		return explicitID, dir, nil
+		return explicitID, dir, !existed, nil
 	}
 
 	if err := os.MkdirAll(questionsDir, 0755); err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	for i := 1; i < 1000; i++ {
 		candidate := strconv.Itoa(i)
 		candidateDir := filepath.Join(questionsDir, candidate)
 		if mkErr := os.Mkdir(candidateDir, 0755); mkErr == nil {
-			return candidate, candidateDir, nil
+			return candidate, candidateDir, true, nil
 		} else if !os.IsExist(mkErr) {
-			return "", "", mkErr
+			return "", "", false, mkErr
 		}
 	}
-	return "", "", ErrQuestionIDExhausted
+	return "", "", false, ErrQuestionIDExhausted
 }
 
 // getStorageInfo returns file storage information (like ESP32's printLittleFSInfo)

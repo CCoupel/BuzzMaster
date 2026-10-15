@@ -2,6 +2,22 @@
 
 ---
 
+## [20261015] — `NETWORK` réservé à l'admin (#275, v11.2.3, LOT-2)
+
+- **[CHANGED — non BREAKING]** `game-state.md` §`NETWORK` : le champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`) est **retiré du nœud `GAME`** pour les clients TV, anim et VJoueur (`AdminOnlyGameFields`), au `HELLO` comme à chaque diffusion ; l'admin le reçoit inchangé. Motif : noms d'adaptateurs et IP des interfaces ignorées (WSL, Docker, VPN) diffusés à tous les clients web alors que seul l'admin les affiche (revue #267, [MINEUR 3]).
+- **[CHANGED — précision]** le miroir hérité `NETWORK_ONLY_LOCALHOST` reste diffusé à tous les clients web (booléen sans information d'interface) ; le client non-admin s'y replie (`mapNetwork`) sans rien afficher.
+- **[CHANGED]** `ws-payload-serialization.md` : lignes `GAME.NETWORK` (admin seul) et `GAME.NETWORK_ONLY_LOCALHOST` (tous les clients web) ajoutées au tableau par type de client, et paragraphe `AdminOnlyGameFields` complété (relecture docs LOT-2, 2026-10-15).
+- Non BREAKING : aucun client non-admin ne lit `NETWORK` (règle d'écran admin seulement, #267) ; `GameState` Go inchangé (jamais `omitempty`) ; buzzers déjà exclus (liste blanche).
+
+---
+
+## [20261015] — `POST /questions` : aucun dossier vide après un refus (#278, v11.2.3, LOT-2)
+
+- **[CHANGED — garantie ajoutée]** `http-endpoints.md` §`POST /questions` « Atomicité du refus » : tout refus postérieur à l'allocation de l'identifiant (`400` validation des cartes, `400`/`413` `sound`, `500`) ne laisse **aucune trace sur disque** — dossier d'une question **nouvelle** supprimé et identifiant automatique **libéré** ; dossier et `question.json` d'une question **existante** jamais supprimés.
+- Non BREAKING : aucune requête acceptée ne devient refusée, aucun code ni corps de réponse ne change ; seul l'effet de bord disque disparaît.
+
+---
+
 ## [20261015] — Cartes QCM MEMOTION sans indices (#279, v11.2.2, LOT-6)
 
 - **[CHANGED — non BREAKING]** `question-types.md` §7.1 : une carte MEMOTION de type `QCM` **n'a pas d'indices** (décision utilisateur 2026-10-15 : pas d'indice sans effet sur les points ; option « prise en compte au crédit » écartée). À l'enregistrement (`POST /questions`), `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2` et `QCM_PENALTY_1/2` sont **ignorés et retirés** d'une carte QCM, quelle que soit leur valeur — aucune erreur, aucun code de refus (option « ignorer silencieusement »).

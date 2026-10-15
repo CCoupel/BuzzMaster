@@ -192,7 +192,7 @@ Envoye en reponse au HELLO du buzzer avec l'etat du jeu.
 }
 ```
 
-**État réseau (v11.2.2, #267)** : le `GameState` renvoyé au `HELLO` contient le champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`), détaillé dans `docs/DATA_MODELS.md`. Il est livré aux quatre clients web (admin, TV, animateur, VJoueur), au `HELLO` et en diffusion `UPDATE` ; l'admin y trouve l'alerte réseau dès sa connexion. **Il n'est jamais envoyé aux buzzers** (exclu du sérialiseur buzzer, liste blanche).
+**État réseau (v11.2.2, #267)** : le `GameState` renvoyé au `HELLO` contient le champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`), détaillé dans `docs/DATA_MODELS.md`. Il est livré **au seul client admin** (v11.2.3, #275), au `HELLO` et en diffusion `UPDATE` ; TV, animateur et VJoueur ne le reçoivent plus, ni au `HELLO` ni en diffusion. L'admin y trouve l'alerte réseau dès sa connexion. Le booléen miroir `NETWORK_ONLY_LOCALHOST` reste diffusé à tous les clients. **Il n'est jamais envoyé aux buzzers** (exclu du sérialiseur buzzer, liste blanche).
 
 ### START (Demarrage du jeu)
 
@@ -1691,6 +1691,7 @@ Le serveur applique **deux listes distinctes** de retrait de champs `GameState`,
 Champs **réservés à l'admin**, retirés automatiquement pour tous les autres clients :
 - `QUIZ_OBJECTIVES` — objectifs pédagogiques (jamais transmis à TV/VJoueur)
 - `ENTRACTE_CONFIG_SAVED` — configuration gelée d'entracte (interne)
+- `NETWORK` — état réseau (adresses IPv4 et interfaces ignorées), ajouté en v11.2.3 (#275) ; le miroir `NETWORK_ONLY_LOCALHOST` n'est pas concerné et reste diffusé à tous
 
 #### VPlayerOnlyGameFields
 Champs **spécifiquement retirés pour le VJoueur uniquement** (pas de retrait pour TV/animateur) :

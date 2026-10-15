@@ -65,6 +65,8 @@ Les besoins TV et VPlayer sont donc identiques côté messages.
 | `GAME.QUIZ_*` sauf `QUIZ_OBJECTIVES` | ✅ | ✅ | ❌ |
 | `GAME.QUIZ_HIDDEN_FIELDS` (**v6.1.0**) | ✅ | ✅ — la TV en a besoin pour **appliquer** la préférence | ❌ |
 | `GAME.QUIZ_OBJECTIVES` (**v6.1.0**) | ✅ | ❌ | ❌ |
+| `GAME.NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT` — **v11.2.3, #275**) | ✅ | ❌ — retiré par `AdminOnlyGameFields` pour TV, VJoueur **et** `/anim`, au `HELLO` comme sur toute charge utile portant `GAME` ; noms/IP d'interfaces réservés à l'admin (`game-state.md` §NETWORK) | ❌ (liste blanche buzzer) |
+| `GAME.NETWORK_ONLY_LOCALHOST` (miroir hérité, v5.6.2) | ✅ | ✅ — booléen sans information d'interface ; `mapNetwork` s'y replie sans rien afficher | ❌ |
 | `GAME.QUESTION_SOUND_STATE` / `GAME.ANSWER_TIMER_WAITING` (**v11.1, #219**) | ✅ | ✅ — la TV en a besoin pour la mention CA15 (« le chronomètre démarrera à la fin du son ») | ❌ — absent du payload minimal buzzer (`PHASE`/`TIME`/`CURRENT_TIME` seulement, `SerializeForBuzzer`), par construction, sans filtrage dédié |
 | `GAME.QUESTION_SOUND_UNAVAILABLE` / `GAME.SOUND_GATE_BYPASSED` (**v11.1, #219/#236/#237, 2026-09-23**) | ✅ | ✅ — `/anim` (routé vers `SerializeForWebClient`, comme TV/VPlayer) **doit** recevoir le motif pour `prepareWaitReason.js`/`AnimConductPanel.jsx` (CA26) ; TV/VPlayer le reçoivent par la même voie sans jamais l'afficher (`PlayerDisplay.jsx` inchangé) | ❌ — même raison que la ligne ci-dessus |
 | `config` (paramètres serveur) | ✅ | ❌ | ❌ |
@@ -259,6 +261,14 @@ configuration *enregistrée*, distincte de la configuration *diffusée* gelée p
 seule la page Quiz l'utilise. Rappel du piège documenté plus haut : ce retrait est ré-implémenté sur
 **trois** sites, qui lisent tous la même liste exportée — ne jamais écrire ce nom de champ en dur
 ailleurs.
+
+`NETWORK` (v11.2.3, #275) rejoint à son tour `AdminOnlyGameFields` : noms d'adaptateurs et IP des
+interfaces ignorées (`IGNORED_INTERFACES`, `IPS`) n'ont aucun lecteur hors de l'overlay admin (#267,
+règle d'écran « admin uniquement ») et étaient diffusés en clair à TV, VJoueur et `/anim` à chaque
+`UPDATE`. Le retrait passe par la même liste exportée (les trois sites), sans sous-filtrage partiel du
+champ ; le miroir booléen `NETWORK_ONLY_LOCALHOST` reste diffusé à tous les clients web, et le client
+non-admin s'y replie (`useWebSocket.js`, `mapNetwork`) sans rien afficher. Non BREAKING : aucun client
+non-admin ne lisait `NETWORK`.
 
 L'exclusion des buzzers est **voulue** : les LEDs sont pilotées par le serveur depuis la v3.4.0, le
 firmware n'a aucune décision à prendre sur l'entracte. Ne pas ajouter `ENTRACTE` à la liste

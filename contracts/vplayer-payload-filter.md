@@ -355,7 +355,7 @@ Définitions :
 | `GAME.QUESTION.MOTION_CARDS[i].ANSWER_TEXT` / `.ANSWER_IMAGE` / `.ANSWER` / `.QCM_CORRECT` | carte `i` non révélée |
 | `GAME.MEMOTION_ACTIVE.STATE.ANSWER_TEXT` / `.ANSWER_IMAGE` / `.ANSWER` / `.QCM_CORRECT` | carte active (`CARD_ID`) non révélée |
 | `GAME.ARDOISE_ANSWERS`, `GAME.LAUNCH_LOCK` (`VPlayerOnlyGameFields`, §6) | toujours |
-| `GAME.QUIZ_OBJECTIVES`, `GAME.ENTRACTE_CONFIG_SAVED` (`AdminOnlyGameFields`) | toujours |
+| `GAME.QUIZ_OBJECTIVES`, `GAME.ENTRACTE_CONFIG_SAVED`, `GAME.NETWORK` (`AdminOnlyGameFields`) | toujours |
 | `bumpers[*].FIRMWARE_VERSION` / `IS_OUTDATED` / `OTA_STATUS` / `OTA_PERCENT` / `ACK_PENDING` (`AdminOnlyBumperFields`) | toujours |
 
 **B. Neutralisées (clé conservée, valeur `0` / `""`)**

@@ -133,7 +133,7 @@ Source : `contracts/vplayer-payload-filter.md` §7.5 (liste exhaustive, référe
 - `GAME.QUESTION.EXPLANATION` : toujours ;
 - `MOTION_CARDS[i]` et `MEMOTION_ACTIVE.STATE` : `ANSWER_TEXT`, `ANSWER_IMAGE`, `ANSWER`, `QCM_CORRECT`, tant que la carte n'est pas révélée ;
 - `ARDOISE_ANSWERS`, `LAUNCH_LOCK` : toujours ;
-- `QUIZ_OBJECTIVES`, `ENTRACTE_CONFIG_SAVED` : toujours ;
+- `QUIZ_OBJECTIVES`, `ENTRACTE_CONFIG_SAVED`, `NETWORK` : toujours ;
 - `bumpers[*].FIRMWARE_VERSION`, `IS_OUTDATED`, `OTA_STATUS`, `OTA_PERCENT`, `ACK_PENDING` : toujours.
 
 **Neutralisés** (clé conservée, valeur `0` ou `""`) pour les autres équipes, pendant les réponses ouvertes :
@@ -600,7 +600,7 @@ Contrats : `contracts/game-state.md` et `contracts/models.md`, section ArdoiseAn
 
 ## GameState — Champs réseau (v5.7.0)
 
-### NETWORK (v11.2.2, #267)
+### NETWORK (v11.2.2, #267 ; admin seul depuis v11.2.3, #275)
 
 Décrit l'état réseau du serveur. Contrat : `contracts/game-state.md` §NETWORK.
 
@@ -622,7 +622,7 @@ Décrit l'état réseau du serveur. Contrat : `contracts/game-state.md` §NETWOR
 - `CHECKED_AT`: `number` — instant du **dernier changement d'état** réseau, en millisecondes epoch (première détection au démarrage). Il n'avance pas lors des passages calmes du watchdog : un `UPDATE` ne porte jamais un `CHECKED_AT` plus récent sans transition. C'est pourquoi l'écran parle de « perte détectée il y a N s », et non de « vérifié il y a N s »
 - Défaut : `{ONLY_LOCALHOST: false, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0}`
 - Toujours sérialisé (jamais `omitempty`), listes jamais `null`. Non persisté : recalculé au démarrage, puis par le watchdog toutes les 30 s
-- Diffusé (`UPDATE`) seulement quand `ONLY_LOCALHOST` ou `IPS` change, et renvoyé au `HELLO` des clients web
+- Diffusé (`UPDATE`) seulement quand `ONLY_LOCALHOST` ou `IPS` change, et renvoyé au `HELLO`, **au seul client admin** : `NETWORK` figure dans `AdminOnlyGameFields` (`internal/protocol/messages.go`, v11.2.3, #275). TV, animateur et VJoueur ne le reçoivent jamais, ni au `HELLO` ni en diffusion. Le miroir `NETWORK_ONLY_LOCALHOST` reste diffusé à tous les clients
 - **Jamais envoyé aux buzzers** : exclu du sérialiseur buzzer (`SerializeForBuzzer`, liste blanche ; revue backend `code-reviewer-20261014-194259`)
 - **Erreur de listage** des interfaces (`net.Interfaces()`) : l'état précédent est conservé, aucune diffusion, aucun `NETWORK_LOST` ni `NETWORK_RESTORED` ; `NETWORK_LISTING_FAILED` (WARN) est journalisé à chaque passage en échec. Au tout premier passage sans état, le réseau est considéré présent
 - Ne change pas la source des heartbeats UDP ni de `resolveServerIP` (`server.GetServerIPs()`) : le critère d'alerte est plus strict que la diffusion

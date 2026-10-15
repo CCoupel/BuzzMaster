@@ -1158,9 +1158,15 @@ var AdminOnlyBumperFields = []string{
 // so an admin can see their just-saved values even while an older
 // configuration is still frozen on screen during an active pause (contract
 // game-state.md §"Configuration gelée à l'activation").
+//
+// NETWORK (v11.2.3, #275, contracts/game-state.md §NETWORK) joins this list for a
+// confidentiality reason: it carries the server's interface addresses, which only the
+// admin needs. The boolean mirror NETWORK_ONLY_LOCALHOST stays broadcast to every
+// client (the frontend falls back on it when NETWORK is absent).
 var AdminOnlyGameFields = []string{
 	"QUIZ_OBJECTIVES",
 	"ENTRACTE_CONFIG_SAVED",
+	"NETWORK",
 }
 
 // VPlayerOnlyGameFields lists "GAME" node fields stripped from the VPlayer

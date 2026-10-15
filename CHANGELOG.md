@@ -2,6 +2,24 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.2.3] - 2026-10-15 — Milestone v11.2.3 : CI bloquante sur les tests web, dials de test, `NETWORK` réservé à l'admin, refus de `POST /questions`, react-router 7
+
+### Changed
+
+- **Tests web bloquants dans la CI (#273)** — `scripts/ci.sh` exécute désormais les tests vitest à l'étape `[2/7]`, après le build web et avant l'embed. Jusqu'ici, les tests web n'étaient jamais exécutés en CI ; ils bloquent désormais `ci-branch.yml` et `release.yml` lorsqu'ils échouent, ces deux workflows n'appelant que ce script. Durée de l'étape mesurée en CI : 144 s pour 4 215 tests (271 fichiers). Les 4 tests `fonts-embed` « dist/ (build) » s'exécutent non sautés, car `dist/` est produit à l'étape `[1/7]`.
+
+### Fixed
+
+- **Tests Go qui publiaient avant l'inscription du client (#274)** — Les dials de test (`dialWSPath`, `dialAdminWS`, `dialWS`) attendent l'inscription du client avant de rendre la connexion. 40 `time.Sleep(50 ms)` d'attente d'inscription sont retirés. Aucune assertion n'est supprimée ni relâchée. Le hub n'est pas modifié : aucun changement de comportement côté produit.
+- **Dossier vide laissé par un refus de `POST /questions` (#278)** — Un `POST /questions` refusé pour un identifiant nouveau ne laisse plus de dossier ni de fichier, et l'identifiant reste disponible pour la requête suivante.
+
+### Security
+
+- **`NETWORK` réservé à l'admin (#275)** — L'état réseau du serveur (adresses IPv4 et interfaces ignorées, champ `NETWORK`) n'est plus livré à la TV, à l'animateur ni au VJoueur, ni au `HELLO` ni en diffusion : seul le client admin le reçoit. Le booléen `NETWORK_ONLY_LOCALHOST` reste diffusé à tous les clients. L'overlay admin ne change pas.
+- **`react-router-dom` 7.18.4 (#277)** — Migration de 6.30.6 vers 7.18.4. Les deux avis `npm audit` `moderate` sur react-router (GHSA-wrjc-x8rr-h8h6, GHSA-337j-9hxr-rhxg) sont éteints. Aucun changement de code applicatif ; deux tests de la bannière « serveur sans réseau » sont adaptés à la transition de rendu de la v7 (`startTransition`).
+
+---
+
 ## [11.2.2] - 2026-10-15 — Milestone v11.2.2
 
 ### Added

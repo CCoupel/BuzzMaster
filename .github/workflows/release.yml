@@ -15,7 +15,7 @@ env:
 
 jobs:
   # ============================================
-  # STAGE 0: CI (scripts/ci.sh — build, tests -race, vet, govulncheck)
+  # STAGE 0: CI (scripts/ci.sh — frontend build + vitest, build, tests -race, vet, govulncheck)
   # ============================================
   testing:
     name: 🧪 CI (scripts/ci.sh)
@@ -44,7 +44,7 @@ jobs:
           cache-dependency-path: server-go/web/package-lock.json
 
       # commands.ci (project-config.json) — the single CI script (infra.md §3bis C3/C11):
-      # frontend build + embed, go build, tests with race detector, go vet, govulncheck.
+      # frontend build, vitest, embed, go build, tests with race detector, go vet, govulncheck + npm audit.
       # Identical to ci-branch.yml and to what qa/deploy run locally — no CI-only step.
       - name: Run CI script
         run: scripts/ci.sh

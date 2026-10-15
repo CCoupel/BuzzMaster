@@ -4,7 +4,7 @@
   "org": "CCoupel",
   "project": "BuzzMaster",
   "description": "Système de buzzers sans fil pour jeux de quiz — serveur Go + frontend React + firmware ESP32-C3",
-  "version": "11.2.1",
+  "version": "11.2.2",
   "initialized_at": "2026-04-28",
   "initialized_from": "analysis",
   "src_dir": "server-go/",
@@ -94,8 +94,8 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.19.1",
-    "commit": "e58ffd2efdb71e8e96f7c493c83aed1ed2b6f91a"
+    "tag": "v3.21.1",
+    "commit": "2f1f3374986cc9f9102db789ab601e722ccf2e3c"
   },
   "docs": {
     "mockup_dir": "docs/mockup"
