@@ -190,7 +190,7 @@ describe.each(['SELECTED', 'QUESTION', 'REVEAL'])('GamePage — panneau MEMOTION
     expect(text).not.toContain('jusqu\'à')
   })
 
-  it('carte SPEEDY par défaut / Montant fixe : aucun préfixe', () => {
+  it('carte SPEEDY par défaut : aucun préfixe', () => {
     expect(cardInfoText(subphase, { DIFFICULTY: 2 })).not.toContain('jusqu\'à')
   })
 })
