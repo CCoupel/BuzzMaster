@@ -67,6 +67,7 @@
 - Barème `POINTS_RULE` d'une carte MEMOTION : options filtrées par type — binaire (SPEEDY, QCM) : Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) : Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité. Le serveur refuse le reste. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
 - Le défaut choisi n'écrit jamais `POINTS_RULE` sur la carte. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
 - Parité du montant selon `POINTS_RULE` limitée aux surfaces qui affichent déjà un montant (zoom anim, bandeau anim, bouton de crédit anim, panneau admin GamePage) ; les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant. _(v11.2.2, memotion_card_points_rule, #190, décision utilisateur 2026-10-15)_
+- Les cartes QCM d'une question MEMOTION n'ont pas d'indices : les contrôles d'indices sont retirés de l'éditeur de carte et le moteur n'en déclenche aucun pendant une carte (principe : pas d'indice sans effet sur les points ; option « prise en compte au crédit » écartée). _(v11.2.2, LOT-6, décision utilisateur 2026-10-15)_
 
 ## admin_pickers
 - Unification des sélecteurs catégorie / difficulté : tous les sites **sauf QuizMetaForm** (difficultés textuelles Facile…Expert, publics, langue — autre domaine). _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
