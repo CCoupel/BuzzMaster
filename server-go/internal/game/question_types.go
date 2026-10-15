@@ -91,9 +91,12 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 		},
 		MediaSlots:           []string{"recto", "question"},
 		NestableInMotionCard: true,
-		// §7.1: displayed + invalidated + designated via MEMOTION_DONE,
-		// exactly like SPEEDY — no buzz, no VPLAYER_QCM_ANSWER, no
-		// whitelist change for #185.
+		// §7.1: displayed + designated via MEMOTION_DONE, exactly like
+		// SPEEDY — no buzz, no VPLAYER_QCM_ANSWER, no whitelist change for
+		// #185. #279 (LOT-6): NO hints on a card — the five hint fields
+		// below stay OwnedFields (host question QCM, server-side
+		// consistency) but are stripped from a card at save
+		// (StripCardHints) and never acted on by the engine in a card.
 		HasPlayerInput: false,
 	},
 	QuestionTypeArdoise: {
@@ -450,4 +453,30 @@ type PointsRuleError struct {
 
 func (e *PointsRuleError) Error() string {
 	return e.Code + ": card " + e.CardID + " (TYPE=" + string(e.Type) + ") " + e.Detail
+}
+
+// cardHintKeys are the five QCM hint settings of a question-host QCM
+// (contract question-types.md §3.1): QCM_HINTS_ENABLED and its thresholds /
+// penalties. They do not exist on a MEMOTION card since #279 (LOT-6).
+var cardHintKeys = []string{
+	"QCM_HINTS_ENABLED",
+	"QCM_HINT_THRESHOLD_1", "QCM_HINT_THRESHOLD_2",
+	"QCM_PENALTY_1", "QCM_PENALTY_2",
+}
+
+// StripCardHints removes the five QCM hint settings from one MEMOTION card
+// payload (a map decoded from the "motion_cards" form field), whatever their
+// value — contract question-types.md §7.1 « Une carte QCM n'a pas d'indices »
+// (#279, LOT-6, user decision 2026-10-15: ignore silently). No error, no
+// rejection code: nothing a request could send becomes refused. It mutates
+// card in place, so the map the caller later serializes into question.json
+// is the cleaned one. Intentionally type-agnostic: a hint field with
+// non-zero content on a NON-QCM card is already rejected upstream as
+// CARD_TYPE_CONTENT_MISMATCH (ValidateCardTypeContent, §3.2), and a zero-
+// valued one (e.g. QCM_HINTS_ENABLED:false on a SPEEDY card) is dead data
+// that should not be persisted either. A nil map is a no-op.
+func StripCardHints(card map[string]interface{}) {
+	for _, k := range cardHintKeys {
+		delete(card, k)
+	}
 }

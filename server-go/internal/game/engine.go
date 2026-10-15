@@ -2529,10 +2529,11 @@ func (e *Engine) processTimerTick() timerTickResult {
 // qcmHintShouldTrigger is the QCM hint threshold decision, extracted pure
 // (#185 C-B1) from the original question-only shouldTriggerQCMHint so both
 // the question host (processTimerTick) and the MEMOTION card host
-// (processMotionCardTick, a QCM-typed card) can share one implementation
+// (processMotionCardTick, a QCM-typed card, until #279) can share one implementation
 // instead of two copies — contracts/question-types.md §10's agnosticity
-// test anticipated exactly this move; see processMotionCardTick's doc
-// comment for why this is the one authorized host change in this batch.
+// test anticipated exactly this move. #279 (LOT-6): the card host no longer
+// calls it (a card has no hints, contract §7.1) — only the question host
+// (processTimerTick) does; kept pure and host-agnostic.
 // Reads nothing but its parameters: hintsEnabled/t1Percent/t2Percent come
 // from whichever host's own config (Question or MotionCard — both carry
 // identically-shaped QCMHintsEnabled/QCMHintThreshold1/2 via TypedContent,
@@ -2600,8 +2601,8 @@ func (e *Engine) shouldTriggerQCMHint(currentTime, totalTime int) bool {
 // returns the color to invalidate ("" if every wrong answer is already
 // invalidated) and the resulting remaining-valid-answers count; the caller
 // is responsible for appending color to its own invalidated-answers slice
-// (QcmInvalidated for the question host, MEMOTION_ACTIVE.STATE.QCM_INVALIDATED
-// for the card host — contract §5.3, two different slices, same shape).
+// (QcmInvalidated for the question host; the card host no longer has
+// hints since #279/LOT-6, contract §5.3/§7.1).
 func qcmInvalidateRandomWrongAnswer(answers *QCMAnswers, correct string, invalidated []string) (color string, remaining int) {
 	if answers == nil {
 		return "", 0
@@ -5428,14 +5429,14 @@ func (e *Engine) refreshRafalePoolRemainingUnsafe() {
 // float64 encoding/json always produces when a JSON number is decoded into
 // an interface{} target (#217 C2 regression, retour QUALIF v9.0.0.4, plan
 // `_work/reports/plan-v900-correctifs-qualif-20260906-104500.md` §5) — the
-// tolerant-helper precedent motionActiveQCMInvalidated (below) already
+// tolerant-helper precedent motionActiveMemoryFlippedCards (below) already
 // established for a []string field, extended here for the numeric case a
 // naive `.(int)`-only assertion gets dangerously wrong: it doesn't just
 // return an empty/zero value, a caller decrementing that zero value (the
 // RAFALE per-question countdown, processRafaleCardQuestionTickUnsafe) treats
 // a live question as instantly expired. Absent or of any other unexpected
 // type ⇒ (0, false) — same "never panics" contract as
-// motionActiveQCMInvalidated.
+// motionActiveMemoryFlippedCards.
 func motionActiveInt(state map[string]interface{}, key string) (int, bool) {
 	v, ok := state[key]
 	if !ok {
@@ -7493,13 +7494,6 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						e.OnTimerTick(result.currentTime)
 					}
 
-					// Call QCM hint callback outside of lock (#185 C-B1) —
-					// same pattern as startTimer's goroutine for the
-					// question host.
-					if result.qcmHintCallback != nil && result.invalidatedColor != "" {
-						result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
-					}
-
 					if result.currentTime <= 0 {
 						// Timer expired — do NOT call e.Stop(). Phase stays
 						// STARTED, MotionSubPhase stays QUESTION for every
@@ -7538,13 +7532,8 @@ type motionCardTickResult struct {
 	// a distinct outcome from guardFailed.
 	paused      bool
 	currentTime int
-	// qcmHintCallback/invalidatedColor/remainingAnswers (#185 C-B1) — set
-	// only when the active card is QCM-typed and a hint threshold was
-	// crossed this tick, mirroring timerTickResult's fields for the
-	// question host.
-	qcmHintCallback  func(string, int)
-	invalidatedColor string
-	remainingAnswers int
+	// #279 (LOT-6): no QCM hint fields any more — a card has no hints, the
+	// tick never reports a hint to broadcast (contract question-types.md §7.1).
 }
 
 // processMotionCardTick applies one MEMOTION card-timer tick under lock.
@@ -7552,16 +7541,17 @@ type motionCardTickResult struct {
 // e.mu.Unlock()` guarantees the mutex is released even if this panics — see
 // recoverBackgroundPanic's doc comment.
 //
-// #185 C-B1 — the QCM hint branch below is the ONE authorized host
-// modification of this batch: contracts/question-types.md §10's
-// agnosticity test explicitly anticipated a nested type needing its own
-// per-tick logic branched onto the MEMOTION card host, and QCM-in-card
-// (the GATE decision behind #185) is exactly that case. No new ticker is
-// created — this reuses the per-card timer StartMotionCardTimer already
-// starts (e.timer/e.stopCh, Risque R2 of the plan, untouched). The
-// decision/invalidation logic itself (qcmHintShouldTrigger,
-// qcmInvalidateRandomWrongAnswer, above) is fully host-agnostic — it was
-// extracted for exactly this reuse, not written twice.
+// #279 (LOT-6, v11.2.2) — a MEMOTION card has NO QCM hints: the per-tick
+// hint branch #185 C-B1 once added here (qcmHintShouldTrigger /
+// qcmInvalidateRandomWrongAnswer / OnQCMHint on a QCM-typed card) was
+// removed — no hint without an effect on the points (user decision
+// 2026-10-15, contract question-types.md §7.1). The tick only decrements
+// the card timer; MEMOTION_ACTIVE.STATE of a QCM card stays {} even if the
+// STORED card still carries QCM_HINTS_ENABLED/thresholds (a question saved
+// before LOT-6 is read and played, never refused — the editor/server drop
+// those fields on the next save, StripCardHints). The shared pure helpers
+// (qcmHintShouldTrigger, qcmInvalidateRandomWrongAnswer) remain for the
+// question host (processTimerTick).
 //
 // #187 cycle 6 bugfix (QUALIF v7.1.0.3) — PAUSE during a MEMOTION card's
 // own timer used to permanently kill the ticker goroutine: the combined
@@ -7606,24 +7596,6 @@ func (e *Engine) processMotionCardTick() motionCardTickResult {
 	e.state.CurrentTime--
 	currentTime := e.state.CurrentTime
 	result := motionCardTickResult{currentTime: currentTime}
-
-	// MotionActive.Type is checked first (cheap, no card lookup) since the
-	// overwhelmingly common case is a SPEEDY card, which never needs this
-	// branch at all.
-	if e.state.MotionActive.Type == QuestionTypeQCM {
-		if card := e.activeMotionCardUnsafe(); card != nil {
-			invalidated := motionActiveQCMInvalidated(e.state.MotionActive.State)
-			if qcmHintShouldTrigger(card.QCMHintsEnabled, card.QCMHintThreshold1, card.QCMHintThreshold2, currentTime, e.state.Delay, len(invalidated)) {
-				color, remaining := qcmInvalidateRandomWrongAnswer(card.QCMAnswers, card.QCMCorrect, invalidated)
-				if color != "" {
-					e.state.MotionActive.State["QCM_INVALIDATED"] = append(invalidated, color)
-					result.qcmHintCallback = e.OnQCMHint
-					result.invalidatedColor = color
-					result.remainingAnswers = remaining
-				}
-			}
-		}
-	}
 
 	// #187 cycle 4, B3 — a card's round closes on natural timer expiry,
 	// same as an explicit StopMotionCardTimer (MEMOTION_STOP_TIMER). This
@@ -7676,23 +7648,6 @@ func (e *Engine) activeMotionCardUnsafe() *MotionCard {
 		}
 	}
 	return nil
-}
-
-// motionActiveQCMInvalidated reads the QCM_INVALIDATED slice from
-// MEMOTION_ACTIVE.STATE — the card-scoped equivalent of the top-level
-// QcmInvalidated field (contract §5.3: a nested type's live state lives in
-// MEMOTION_ACTIVE.STATE, never the flat question-scoped fields). Absent or
-// unexpectedly-shaped ⇒ nil (no exclusions yet); never panics.
-func motionActiveQCMInvalidated(state map[string]interface{}) []string {
-	v, ok := state["QCM_INVALIDATED"]
-	if !ok {
-		return nil
-	}
-	s, ok := v.([]string)
-	if !ok {
-		return nil
-	}
-	return s
 }
 
 // ============================================================

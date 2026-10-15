@@ -1,6 +1,7 @@
 // Tests for #185 C-B1 — the QCM hint engine extracted host-agnostic
-// (qcmHintShouldTrigger, qcmInvalidateRandomWrongAnswer) and branched onto
-// the MEMOTION card host (processMotionCardTick), for a QCM-typed card.
+// (qcmHintShouldTrigger, qcmInvalidateRandomWrongAnswer). The MEMOTION card
+// host branch was removed by #279 (LOT-6); the pure functions stay for the
+// question host.
 // Run: go test ./internal/game/... -run TestQcmHint\|TestProcessMotionCardTick -v
 
 package game
@@ -114,70 +115,9 @@ func qcmMotionCard(id string) MotionCard {
 	}
 }
 
-// TestProcessMotionCardTick_QCMCard_HintFires drives the real
-// StartMotionCardTimer/processMotionCardTick path (not a hand-set state)
-// for a QCM-typed active card and verifies a hint fires at the expected
-// tick, landing in MEMOTION_ACTIVE.STATE.QCM_INVALIDATED — never the
-// question-scoped QcmInvalidated, which must stay empty throughout (this
-// is a MEMOTION question, no top-level QCM question is in play).
-func TestProcessMotionCardTick_QCMCard_HintFires(t *testing.T) {
-	e := NewEngine()
-	cards := []MotionCard{qcmMotionCard("mc-1")}
-	q := makeMotionQuestion("mq1", cards, "SOLO")
-	startMEMOTION(t, e, "mq1", q)
-	defer e.Stop()
-
-	var gotColor string
-	var gotRemaining int
-	hintCalls := 0
-	e.OnQCMHint = func(color string, remaining int) {
-		hintCalls++
-		gotColor = color
-		gotRemaining = remaining
-	}
-
-	_ = e.SelectMotionCard("mc-1")
-	if err := e.FlipMotionCard(); err != nil {
-		t.Fatalf("FlipMotionCard failed: %v", err)
-	}
-
-	// delay=10, threshold1=0.5 → fires at CurrentTime==5.
-	e.state.CurrentTime = 10
-	e.state.Delay = 10
-
-	for i := 0; i < 5; i++ {
-		result := e.processMotionCardTick()
-		if result.guardFailed {
-			t.Fatalf("processMotionCardTick guard failed unexpectedly at tick %d", i)
-		}
-		if result.qcmHintCallback != nil && result.invalidatedColor != "" {
-			result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
-		}
-	}
-
-	if hintCalls != 1 {
-		t.Fatalf("expected exactly 1 OnQCMHint call by CurrentTime==5, got %d", hintCalls)
-	}
-	if gotColor != "GREEN" && gotColor != "YELLOW" && gotColor != "BLUE" {
-		t.Errorf("invalidated color = %q, want one of GREEN/YELLOW/BLUE (never RED, the correct answer)", gotColor)
-	}
-	// remaining = 4 total answers - 1 just-invalidated = 3 (matches
-	// invalidateRandomWrongAnswer's pre-existing "4 - len(invalidated)"
-	// semantics for the question host — count of all answers not yet
-	// invalidated, correct one included).
-	if gotRemaining != 3 {
-		t.Errorf("remaining = %d, want 3", gotRemaining)
-	}
-
-	state := e.GetState()
-	invalidated := motionActiveQCMInvalidated(state.MotionActive.State)
-	if len(invalidated) != 1 || invalidated[0] != gotColor {
-		t.Errorf("MEMOTION_ACTIVE.STATE.QCM_INVALIDATED = %v, want [%q]", invalidated, gotColor)
-	}
-	if len(state.QcmInvalidated) != 0 {
-		t.Errorf("question-scoped QcmInvalidated must stay empty for a MEMOTION question, got %v", state.QcmInvalidated)
-	}
-}
+// TestProcessMotionCardTick_QCMCard_HintFires was REPLACED by #279 (LOT-6):
+// a card has no hints any more — see motion_card_no_hints_lot6_test.go
+// (TestProcessMotionCardTick_QCMCard_NeverHints_279).
 
 // TestProcessMotionCardTick_SPEEDYCard_NoQCMHintLogic is the non-regression
 // counterpart: a SPEEDY active card must never touch MEMOTION_ACTIVE.STATE
@@ -197,17 +137,16 @@ func TestProcessMotionCardTick_SPEEDYCard_NoQCMHintLogic(t *testing.T) {
 	e.state.Delay = 10
 
 	for i := 0; i < 10; i++ {
-		result := e.processMotionCardTick()
-		if result.qcmHintCallback != nil {
-			result.qcmHintCallback(result.invalidatedColor, result.remainingAnswers)
+		if result := e.processMotionCardTick(); result.guardFailed {
+			t.Fatalf("processMotionCardTick guard failed unexpectedly")
 		}
 	}
 
 	if hintCalls != 0 {
 		t.Errorf("expected 0 OnQCMHint calls for a SPEEDY card, got %d", hintCalls)
 	}
-	if got := motionActiveQCMInvalidated(e.GetState().MotionActive.State); len(got) != 0 {
-		t.Errorf("MEMOTION_ACTIVE.STATE.QCM_INVALIDATED = %v, want empty for a SPEEDY card", got)
+	if _, has := e.GetState().MotionActive.State["QCM_INVALIDATED"]; has {
+		t.Errorf("MEMOTION_ACTIVE.STATE must carry no QCM_INVALIDATED for a SPEEDY card, got %v", e.GetState().MotionActive.State)
 	}
 }
 
