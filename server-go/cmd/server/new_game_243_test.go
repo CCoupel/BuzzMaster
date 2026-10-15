@@ -115,14 +115,20 @@ func (e *env243) newGame(t *testing.T, payload interface{}) {
 	e.send(t, e.admin, "admin", protocol.ActionNewGame, payload)
 }
 
-func evicted243(t *testing.T, conn *websocket.Conn) bool {
+// evictedEach243 dit, pour chaque connexion, si elle a reçu PLAYER_EVICTED avant le témoin (#266 :
+// plus de fenêtre fixe). Un seul témoin pour toutes les connexions lues à cet instant.
+func evictedEach243(t *testing.T, app *App, conns ...*websocket.Conn) []bool {
 	t.Helper()
-	for _, a := range collectActions(conn, 400*time.Millisecond) {
-		if a == protocol.ActionPlayerEvicted {
-			return true
-		}
+	out := make([]bool, len(conns))
+	for i, actions := range collectAfterSentinel264(t, app, conns...) {
+		out[i] = containsAction(actions, protocol.ActionPlayerEvicted)
 	}
-	return false
+	return out
+}
+
+func evicted243(t *testing.T, app *App, conn *websocket.Conn) bool {
+	t.Helper()
+	return evictedEach243(t, app, conn)[0]
 }
 
 func allZero243(m map[string]int) bool {
@@ -169,7 +175,7 @@ func TestNewGame243_Critical_NoOptionsKeepsTheV111Behaviour(t *testing.T) {
 			if s.Status != game.QuestionStatus("AVAILABLE") && s.Status != "" {
 				t.Errorf("v11.1 : questions remises à jouer : %q", s.Status)
 			}
-			if !evicted243(t, e.paulConn) || !evicted243(t, e.mamieConn) {
+			if ev := evictedEach243(t, e.app, e.paulConn, e.mamieConn); !ev[0] || !ev[1] {
 				t.Error("chaque tablette reçoit PLAYER_EVICTED {GAME_RESET}")
 			}
 		})
@@ -209,7 +215,7 @@ func TestNewGame243_Critical_PopupDefaultResetsScoresHistoryAndQuestionsOnly(t *
 	if _, ok := s.Bumpers[e.paul]; !ok || s.TeamKeys != 2 {
 		t.Errorf("tablettes et équipes conservées : %+v", s)
 	}
-	if evicted243(t, e.paulConn) || evicted243(t, e.mamieConn) {
+	if ev := evictedEach243(t, e.app, e.paulConn, e.mamieConn); ev[0] || ev[1] {
 		t.Error("aucun PLAYER_EVICTED : les tablettes restent inscrites")
 	}
 }
@@ -267,7 +273,7 @@ func TestNewGame243_PurgePlayersWithScoresRemovesTabletsAndKeepsBuzzers(t *testi
 	if _, ok := s.Bumpers[e.buzzer]; !ok {
 		t.Error("buzzer physique conservé")
 	}
-	if !evicted243(t, e.paulConn) {
+	if !evicted243(t, e.app, e.paulConn) {
 		t.Error("PLAYER_EVICTED {GAME_RESET}")
 	}
 	if !allZero243(s.Bumpers) {
@@ -295,7 +301,7 @@ func TestNewGame243_PurgeTeamsRemovesEveryTeamAndUnassignsEveryone(t *testing.T)
 	if _, ok := s.Bumpers[e.paul]; !ok || len(s.Bumpers) != 3 {
 		t.Errorf("tablettes et buzzer conservés : %v", s.Bumpers)
 	}
-	if evicted243(t, e.paulConn) {
+	if evicted243(t, e.app, e.paulConn) {
 		t.Error("les tablettes ne sont pas évincées (PURGE_PLAYERS=false)")
 	}
 	if _, ok := e.app.wsHub.GetClientPlayerID(e.paulCID); !ok {
@@ -351,7 +357,7 @@ func TestNewGame243_NothingCheckedOnlyAppliesTheAlwaysEffects(t *testing.T) {
 	if s.Status != before.Status {
 		t.Errorf("statuts conservés : %q → %q", before.Status, s.Status)
 	}
-	if evicted243(t, e.paulConn) {
+	if evicted243(t, e.app, e.paulConn) {
 		t.Error("aucune éviction")
 	}
 }
@@ -383,10 +389,10 @@ func TestNewGame243_Critical_PlayersWithoutScoresIsRefusedAndNothingChanges(t *t
 			if refused.Reason != "PLAYERS_REQUIRE_SCORES" {
 				t.Errorf("REASON = %q", refused.Reason)
 			}
-			for _, a := range collectActions(other, 300*time.Millisecond) {
-				if a == "NEW_GAME_REFUSED" {
-					t.Fatal("NEW_GAME_REFUSED est ciblé sur l'émetteur seul")
-				}
+			// un seul témoin pour « other » et pour l'éviction testée plus bas (#266)
+			seen := collectAfterSentinel264(t, e.app, other, e.paulConn)
+			if containsAction(seen[0], "NEW_GAME_REFUSED") {
+				t.Fatal("NEW_GAME_REFUSED est ciblé sur l'émetteur seul")
 			}
 			after := e.snap()
 			if after.Phase != before.Phase || after.QuestionID != before.QuestionID {
@@ -403,7 +409,7 @@ func TestNewGame243_Critical_PlayersWithoutScoresIsRefusedAndNothingChanges(t *t
 			if e.app.engine.GetQuestionStatus("q-ardoise") != beforeStatus {
 				t.Error("statuts des questions inchangés")
 			}
-			if evicted243(t, e.paulConn) {
+			if containsAction(seen[1], protocol.ActionPlayerEvicted) {
 				t.Error("aucune éviction")
 			}
 			if !e.hasLog(game.LogLevelWarn, "NEW_GAME_REFUSED", "options=") {
@@ -422,7 +428,7 @@ func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *tes
 	if testing.Short() {
 		t.Skip("attend des minuteurs réels (≈ 6 s), exclu de la boucle rapide (-short)")
 	}
-	run := func(t *testing.T, name string, newGameAt func(e *env243)) {
+	run := func(t *testing.T, name string, newGameAt func(t *testing.T, e *env243, countdown, ticks <-chan struct{})) {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv243(t)
 			ticks := make(chan struct{}, 100)
@@ -432,11 +438,18 @@ func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *tes
 				default:
 				}
 			}
+			countdown := make(chan struct{}, 100)
+			e.app.engine.OnCountdownTick = func(ct int) {
+				select {
+				case countdown <- struct{}{}:
+				default:
+				}
+			}
 			e.app.engine.SetPhase(game.PhaseStopped)
 			e.app.engine.Ready("", &game.Question{ID: "q-timer", Type: game.QuestionTypeArdoise})
 			e.app.engine.SetPhase(game.PhaseReady)
 			e.app.engine.Start(2) // décompte 3 s puis chrono 2 s
-			newGameAt(e)
+			newGameAt(t, e, countdown, ticks)
 			for len(ticks) > 0 {
 				<-ticks
 			}
@@ -455,13 +468,21 @@ func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *tes
 			}
 		})
 	}
-	run(t, "pendant le décompte", func(e *env243) { time.Sleep(500 * time.Millisecond) })
-	run(t, "pendant le chrono (STARTED)", func(e *env243) {
-		deadline := time.Now().Add(5 * time.Second)
-		for e.app.engine.GetPhase() != game.PhaseStarted && time.Now().Before(deadline) {
-			time.Sleep(50 * time.Millisecond)
+	// #271 : on attend le tick du minuteur (événement, échéance large) au lieu d'une pause fixe.
+	waitTick := func(t *testing.T, what string, ch <-chan struct{}) {
+		t.Helper()
+		select {
+		case <-ch:
+		case <-time.After(eventDeadline264):
+			t.Fatalf("%s : aucun tick dans %v", what, eventDeadline264)
 		}
-		time.Sleep(300 * time.Millisecond)
+	}
+	run(t, "pendant le décompte", func(t *testing.T, e *env243, countdown, ticks <-chan struct{}) {
+		waitTick(t, "décompte", countdown)
+	})
+	run(t, "pendant le chrono (STARTED)", func(t *testing.T, e *env243, countdown, ticks <-chan struct{}) {
+		eventually264(t, "phase STARTED", func() bool { return e.app.engine.GetPhase() == game.PhaseStarted })
+		waitTick(t, "chrono", ticks)
 	})
 }
 

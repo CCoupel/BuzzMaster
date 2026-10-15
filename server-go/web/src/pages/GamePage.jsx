@@ -8,7 +8,7 @@ import { getRgbColor } from '../utils/colorUtils'
 import { sortQuestionsByOrder, sortQuestionsByRounds, roundIndexOf, countEntries } from '../utils/questionOrder'
 import { sortTeamsByBuzzOrder, sortTeamsByRafaleCounter } from '../utils/buzzOrder'
 import { formatArdoiseDelay, sortArdoiseEntries } from '../utils/ardoiseOrder'
-import { getMotionGridCols, getMotionCardCoord, getMotionCardPoints, isMotionSecretMode } from '../utils/motionGrid'
+import { getMotionGridCols, getMotionCardCoord, getMotionCardPointsDisplay, isMotionSecretMode } from '../utils/motionGrid'
 import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils/rafaleEffective'
 import {
   canSelectQuestion as canSelectQuestionRule,
@@ -43,8 +43,8 @@ import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
 import CategoryBadge from '../components/CategoryBadge'
+import CategoryPicker from '../components/CategoryPicker'
 import QuestionCard from '../components/QuestionCard'
-import NetworkWarningBanner from '../components/NetworkWarningBanner'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import RafalePoolAlert from '../components/RafalePoolAlert'
 import AnimRafaleActions from '../components/AnimRafaleActions'
@@ -833,7 +833,6 @@ export default function GamePage() {
 
   return (
     <>
-      {gameState.NETWORK_ONLY_LOCALHOST && <NetworkWarningBanner />}
       {/* Addendum média indisponible (v11.1, #219/#236/#237, plan
           _work/reports/plan-20260923-101500.md §3bis/tâche 9bis) — puce
           globale, "on joue ici" : la voir avant de choisir une question,
@@ -1281,36 +1280,17 @@ export default function GamePage() {
       <div className="questions-panel">
         <h2 className="panel-title">Questions</h2>
 
-        {/* Category filter bar */}
-        {availableCategories.length > 0 && (
-          <div className="category-filter-bar">
-            {availableCategories.map(catKey => {
-              const meta = categoryMeta(catKey, customCategories)
-              if (!meta) return null
-              const isActive = selectedCategories.has(catKey)
-              return (
-                <button
-                  key={catKey}
-                  className={`category-filter-pill${isActive ? ' active' : ''}`}
-                  style={{ '--cat-color': meta.color }}
-                  onClick={() => toggleCategoryFilter(catKey)}
-                  title={meta.label}
-                >
-                  <CategoryBadge catKey={catKey} customCategories={customCategories} size="md" chip={false} />
-                </button>
-              )
-            })}
-            {selectedCategories.size > 0 && (
-              <button
-                className="category-filter-reset"
-                onClick={clearCategoryFilters}
-                title="Reinitialiser les filtres"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        )}
+        {/* Filtre catégories (#221) — CategoryPicker variant="filter" (icônes seules) */}
+        <CategoryPicker
+          variant="filter"
+          className="category-filter-bar"
+          showLabel={false}
+          value={selectedCategories}
+          availableCategories={availableCategories}
+          customCategories={customCategories}
+          onToggle={toggleCategoryFilter}
+          onClear={clearCategoryFilters}
+        />
 
         <div className="questions-list">
           {(() => {
@@ -1501,8 +1481,7 @@ export default function GamePage() {
                     composant AnimRafaleActions (mêmes actions rafaleValidate/
                     rafaleInvalidate, même logique de désactivation que
                     /anim, contrat §5.1) plutôt que d'en recréer un — même
-                    discipline de mutualisation que CategorySelector/
-                    CategoryFilterBar. */}
+                    discipline de mutualisation que CategoryPicker. */}
                 <AnimRafaleActions
                   disabled={gameState.RAFALE_SUBPHASE !== 'QUESTION'}
                   rafaleMode={gameState.question?.RAFALE_MODE}
@@ -1538,7 +1517,11 @@ export default function GamePage() {
             const currentTeam = gameState.MEMOTION_CURRENT_TEAM
             const motionCards = gameState.question?.MOTION_CARDS || []
             const motionCfg = gameState.question?.MOTION_CONFIG
-            const diffPts = d => getMotionCardPoints(d, motionCfg)
+            // #190 — montant selon la règle de la carte (FIXED/PER_UNIT), sinon barème étoiles
+            const cardPts = card => {
+              const { points, prefix, suffix } = getMotionCardPointsDisplay(card, motionCfg)
+              return `${prefix}${points}pt${suffix}`
+            }
 
             if (subphase === 'MEMORIZE') {
               return (
@@ -1606,7 +1589,7 @@ export default function GamePage() {
                   <div className="memotion-admin-label">Carte sélectionnée</div>
                   <div className="memotion-admin-card-info">
                     <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
-                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {cardPts(selectedMotionCard)}</span>
                   </div>
                   <div className="memotion-admin-actions">
                     <Button variant="primary" size="md" onClick={() => sendMessage('MEMOTION_FLIP', {})}>
@@ -1627,7 +1610,7 @@ export default function GamePage() {
                   <div className="memotion-admin-label">Question</div>
                   <div className="memotion-admin-card-info">
                     <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
-                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {cardPts(selectedMotionCard)}</span>
                   </div>
                   {selectedMotionCard.QUESTION_TEXT && (
                     <p className="memotion-admin-qtext">{selectedMotionCard.QUESTION_TEXT}</p>
@@ -1663,7 +1646,7 @@ export default function GamePage() {
                   <div className="memotion-admin-label">Réponse</div>
                   <div className="memotion-admin-card-info">
                     <span className="memotion-admin-theme">{selectedMotionCard.RECTO_THEME}</span>
-                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {diffPts(diff)}pt</span>
+                    <span className="memotion-admin-diff">{'★'.repeat(diff)} · {cardPts(selectedMotionCard)}</span>
                   </div>
                   {selectedMotionCard.ANSWER_TEXT && (
                     <p className="memotion-admin-qtext">{selectedMotionCard.ANSWER_TEXT}</p>

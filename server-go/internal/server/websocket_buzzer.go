@@ -50,6 +50,7 @@ func (h *BuzzerWebSocketHub) Run() {
 	for {
 		select {
 		case client := <-h.register:
+			runRegisterHook() // test-only, nil in production
 			h.mu.Lock()
 			h.clients[client] = true
 			// Snapshot under lock (bugfix #133): client.MAC/client.ID can be
@@ -60,6 +61,7 @@ func (h *BuzzerWebSocketHub) Run() {
 			// (ack_manager.go:128-174).
 			id, mac := client.ID, client.MAC
 			h.mu.Unlock()
+			markRegistered(client)
 			LogInfo(game.LogComponentWebSocket, "Buzzer connected via WebSocket: %s (MAC: %s)", id, mac)
 			h.notifyBuzzerChange()
 
@@ -299,9 +301,15 @@ func (h *BuzzerWebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Req
 		Conn: conn,
 		Send: make(chan []byte, 256),
 		Hub:  nil, // Not using the web hub
+
+		registered: make(chan struct{}),
 	}
 
 	h.register <- client
+	// Same as WebSocketHub.HandleConnectionWithType: Run inscribes the client
+	// after the rendezvous; start the pumps only once it is in h.clients, so
+	// the buzzer's first message (HELLO/identify) and any targeted send see it.
+	<-client.registered
 
 	go h.writePump(client)
 	go h.readPump(client)

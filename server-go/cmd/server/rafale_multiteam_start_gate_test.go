@@ -128,6 +128,7 @@ func TestHandleStart_RefusedStart_DoesNotBroadcastStart(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app) // routes /ws/tv -> ClientTypeTV
 	tvConn := dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tvConn) // inscrit au hub avant toute diffusion directe (sinon elle le rate) — #266
 
 	dispatchAs(t, app, server.ClientTypeAnim, protocol.ActionStart, protocol.StartPayload{Delay: 30})
 
@@ -184,6 +185,7 @@ func TestHandleStart_AcceptedStart_StillBroadcasts(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	tvConn := dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tvConn) // inscrit au hub avant toute diffusion directe (sinon elle le rate) — #266
 
 	dispatchAs(t, app, server.ClientTypeAnim, protocol.ActionStart, protocol.StartPayload{Delay: 30})
 	defer app.engine.Stop()

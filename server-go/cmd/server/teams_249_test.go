@@ -229,7 +229,7 @@ func TestTeamsLock249_Critical_RenameDuringAQuestionIsRefusedAsAWholeAndOnlyTheS
 	if refused.Reason != "TEAMS_LOCKED_DURING_QUESTION" || len(refused.Teams) != 1 || refused.Teams[0] != "Les Bleus" {
 		t.Errorf("TEAMS_UPDATE_REFUSED = %+v", refused)
 	}
-	for _, a := range collectActions(otherConn, 300*time.Millisecond) {
+	for _, a := range collectAfterSentinel264(t, e.app, otherConn)[0] { // #266 : témoin, pas de fenêtre fixe
 		if a == "TEAMS_UPDATE_REFUSED" {
 			t.Fatal("TEAMS_UPDATE_REFUSED est ciblé sur l'émetteur seul")
 		}
@@ -324,7 +324,7 @@ func TestTeamsLock249_AddColorAndAssignmentStayAllowedDuringAQuestion(t *testing
 	if fmtColor(after.Teams["Les Bleus"]["COLOR"]) != "[1 2 3]" {
 		t.Errorf("changement de couleur permis : %v", after.Teams["Les Bleus"]["COLOR"])
 	}
-	for _, a := range collectActions(conn, 300*time.Millisecond) {
+	for _, a := range collectAfterSentinel264(t, e.app, conn)[0] { // #266 : témoin, pas de fenêtre fixe
 		if a == "TEAMS_UPDATE_REFUSED" {
 			t.Error("aucun refus pour un message qui ne retire aucune clé")
 		}

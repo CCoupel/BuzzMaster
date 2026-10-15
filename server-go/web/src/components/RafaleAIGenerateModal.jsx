@@ -1,6 +1,9 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AIJobModalShell from './ai/AIJobModalShell'
+import CategoryPicker from './CategoryPicker'
+import DifficultyPicker from './DifficultyPicker'
+import { DIFFICULTY_LEVELS } from '../utils/categoryUtils'
 import { QUIZ_POPULATIONS, QUIZ_LANGUAGES } from './QuizMetaForm'
 import './RafaleAIGenerateModal.css'
 
@@ -26,7 +29,6 @@ import './RafaleAIGenerateModal.css'
 // - AUCUN état "fraîchement ajouté" : `breakdown={[]}` sur l'écran "terminé",
 //   pas d'instantané avant lancement, pas de callback `onGenerated`.
 const RAFALE_GENERATION_PRESETS = [10, 20, 50, 100, 200]
-const RAFALE_DIFFICULTIES = [1, 2, 3]
 
 function stars(d) {
   return '★'.repeat(d) + '☆'.repeat(3 - d)
@@ -109,7 +111,7 @@ export default function RafaleAIGenerateModal({
     [categories, selectedCategories]
   )
   const orderedSelectedDifficulties = useMemo(
-    () => RAFALE_DIFFICULTIES.filter(d => selectedDifficulties.has(d)),
+    () => DIFFICULTY_LEVELS.filter(d => selectedDifficulties.has(d)),
     [selectedDifficulties]
   )
 
@@ -295,47 +297,40 @@ export default function RafaleAIGenerateModal({
         </div>
 
         <div className="ai-field ai-field--full">
-          <span>
-            Catégories cibles <em>— le nombre indique ce que contient déjà le réservoir pour les
-            difficultés sélectionnées</em>
-          </span>
-          <div className="ai-chip-row">
-            {categories.map(c => {
-              const n = existingCountByCategory[c.key] || 0
-              return (
-                <button
-                  type="button"
-                  key={c.key}
-                  className={`ai-chip ai-chip--category ${selectedCategories.has(c.key) ? 'active' : ''}`}
-                  style={{ '--chip-color': c.color || '#6b7280' }}
-                  onClick={() => toggleCategory(c.key)}
-                >
-                  {selectedCategories.has(c.key) && <span className="ai-chip-check" aria-hidden="true">✓</span>}
-                  {c.name}
-                  <span className={`rafale-ai-cat-count ${n === 0 ? 'zero' : ''}`}>{n}</span>
-                </button>
-              )
-            })}
-            {categories.length === 0 && (
-              <span className="ai-chip-row-empty">Aucune catégorie disponible.</span>
-            )}
-          </div>
+          {categories.length === 0 ? (
+            <>
+              <span>Catégories cibles</span>
+              <div className="ai-chip-row">
+                <span className="ai-chip-row-empty">Aucune catégorie disponible.</span>
+              </div>
+            </>
+          ) : (
+            <CategoryPicker
+              mode="multi"
+              label={(
+                <>
+                  Catégories cibles <em>— le nombre indique ce que contient déjà le réservoir pour les
+                  difficultés sélectionnées</em>
+                </>
+              )}
+              value={selectedCategories}
+              onToggle={toggleCategory}
+              customCategories={categories}
+              renderExtra={(key) => {
+                const n = existingCountByCategory[key] || 0
+                return <span className={`rafale-ai-cat-count ${n === 0 ? 'zero' : ''}`}>{n}</span>
+              }}
+            />
+          )}
         </div>
 
         <div className="ai-field ai-field--full">
-          <span>Difficultés</span>
-          <div className="ai-chip-row">
-            {RAFALE_DIFFICULTIES.map(d => (
-              <button
-                type="button"
-                key={d}
-                className={`ai-chip rafale-ai-star-chip ${selectedDifficulties.has(d) ? 'active' : ''}`}
-                onClick={() => toggleDifficulty(d)}
-              >
-                {stars(d)}
-              </button>
-            ))}
-          </div>
+          <DifficultyPicker
+            mode="multi"
+            ghost
+            value={selectedDifficulties}
+            onToggle={toggleDifficulty}
+          />
           <span className="rafale-ai-hint">
             Échelle native du réservoir (★ à ★★★) — pas de conversion depuis les 4 libellés de la
             génération Quiz, qui serait imprécise.

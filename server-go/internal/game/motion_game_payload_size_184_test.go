@@ -112,16 +112,14 @@ func Test184_GamePayload_MotionActiveAbsoluteBound_SPEEDY(t *testing.T) {
 }
 
 // Test184_GamePayload_MotionActiveAbsoluteBound_QCM borne le coût de
-// MEMOTION_ACTIVE pour une carte QCM avec un STATE réaliste (2 indices
-// invalidés — le maximum possible, deux seuils) — obtenu en faisant
-// réellement tourner deux tics du minuteur de carte (processMotionCardTick),
-// pas un littéral écrit à la main (§10.1 : « le garde-fou doit porter sur
-// l'état réellement produit par le moteur »). C'est exactement le défaut
-// que cette réparation corrige : l'ancien test mesurait un
-// map[string]interface{}{"QCM_INVALIDATED": []string{...}} construit à la
-// main, qui aurait pu diverger de ce que processMotionCardTick écrit
-// réellement (types Go différents, clés différentes...) sans jamais faire
-// échouer le test.
+// MEMOTION_ACTIVE pour une carte QCM.
+//
+// #279 (LOT-6) : une carte n'a plus d'indices, le moteur n'écrit donc plus
+// jamais QCM_INVALIDATED dans le STATE d'une carte QCM — le cas « 2 indices
+// produits par le tick » n'existe plus. On garde la garde de taille sur le
+// pire état qu'un STATE de carte QCM pourrait encore porter (2 couleurs
+// invalidées, injectées directement : ancienne donnée / futur type), plus le
+// cas réel produit par le moteur (STATE vide).
 func Test184_GamePayload_MotionActiveAbsoluteBound_QCM(t *testing.T) {
 	e := NewEngine()
 	card := MotionCard{
@@ -130,11 +128,8 @@ func Test184_GamePayload_MotionActiveAbsoluteBound_QCM(t *testing.T) {
 		RectoTheme: "T",
 		Difficulty: 1,
 		TypedContent: TypedContent{
-			QCMAnswers:        &QCMAnswers{Red: "a", Green: "b", Yellow: "c", Blue: "d"},
-			QCMCorrect:        "GREEN",
-			QCMHintsEnabled:   true,
-			QCMHintThreshold1: 0.10,
-			QCMHintThreshold2: 0.05,
+			QCMAnswers: &QCMAnswers{Red: "a", Green: "b", Yellow: "c", Blue: "d"},
+			QCMCorrect: "GREEN",
 		},
 	}
 	q := makeMotionQuestion("mq-bound-qcm", []MotionCard{card}, "SOLO")
@@ -148,33 +143,33 @@ func Test184_GamePayload_MotionActiveAbsoluteBound_QCM(t *testing.T) {
 		t.Fatalf("FlipMotionCard: %v", err)
 	}
 
-	// Threshold1=10s, threshold2=5s sur un total de 100s — décompte manuel
-	// (pas StartMotionCardTimer, dont le ticker réel attendrait 1s par tic)
-	// à travers le vrai chemin processMotionCardTick, jusqu'à ce que les
-	// deux indices soient posés par le moteur lui-même.
+	const bound = 200 // mesuré ~90 octets pour 2 couleurs invalidées ; marge large
+	measure := func(label string) {
+		raw, err := json.Marshal(e.state.MotionActive)
+		if err != nil {
+			t.Fatalf("marshal MotionActive : %v", err)
+		}
+		if len(raw) > bound {
+			t.Errorf("MEMOTION_ACTIVE (QCM, %s) = %d octets (%s), attendu < %d — coût d'un seul état de type censé rester petit",
+				label, len(raw), raw, bound)
+		}
+	}
+
+	// État réel produit par le moteur après des tics : STATE sans indices.
 	e.mu.Lock()
 	e.state.CurrentTime = 21
 	e.state.Delay = 100
 	e.mu.Unlock()
 	for i := 0; i < 20; i++ {
 		e.processMotionCardTick()
-		if len(motionActiveQCMInvalidated(e.state.MotionActive.State)) >= 2 {
-			break
-		}
 	}
-	if got := motionActiveQCMInvalidated(e.state.MotionActive.State); len(got) != 2 {
-		t.Fatalf("setup invalide : QCM_INVALIDATED = %v après 20 tics, attendu 2 indices (vérifier les seuils du test)", got)
-	}
+	measure("état produit par le moteur")
 
-	raw, err := json.Marshal(e.state.MotionActive)
-	if err != nil {
-		t.Fatalf("marshal MotionActive : %v", err)
-	}
-	const bound = 200 // mesuré ~90 octets pour ce contenu ; marge large pour un STATE réaliste
-	if len(raw) > bound {
-		t.Errorf("MEMOTION_ACTIVE (QCM) = %d octets (%s), attendu < %d — coût d'un seul état de type censé rester petit",
-			len(raw), raw, bound)
-	}
+	// Pire cas théorique : 2 couleurs invalidées injectées directement.
+	e.mu.Lock()
+	e.state.MotionActive.State = map[string]interface{}{"QCM_INVALIDATED": []string{"RED", "YELLOW"}}
+	e.mu.Unlock()
+	measure("2 indices injectés")
 }
 
 // Test184_GamePayload_MotionActiveAbsoluteBound_MEMORY borne le coût de

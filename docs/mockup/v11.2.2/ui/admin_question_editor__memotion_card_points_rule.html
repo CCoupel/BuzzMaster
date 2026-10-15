@@ -1,0 +1,179 @@
+<!--
+mockup:
+  composant: admin_question_editor
+  feature: memotion_card_points_rule
+  version: 11.2.2
+  type: ui
+  issue: "#190"
+  validee_le: 2026-10-13
+  complete: ["docs/mockups/memotion-card-type-selector-184.html (§2, historique non indexée)"]
+  remplace: []
+  notes: >
+    Brouillon planner (GATE 2). Décision utilisateur Q5 (2026-10-13) : options filtrées par type —
+    binaire (SPEEDY, QCM) = Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) =
+    Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité. Le serveur refuse le reste.
+    Défaut choisi = POINTS_RULE absent (jamais écrit). Cartes existantes inchangées.
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditeur de carte MEMOTION — barème POINTS_RULE (#190)</title>
+<style>
+  * { box-sizing:border-box; }
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-600:#4b5563; --gray-700:#374151; --gray-800:#1f2937;
+          --primary-50:#eef2ff; --primary-500:#6366f1; --primary-700:#4338ca; --bg-secondary:#1f2937; --bg-tertiary:#111827; --radius-sm:.375rem; --radius-md:.5rem; --radius-lg:.75rem; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#e9ebf0; color:var(--gray-800); line-height:1.5; }
+  .doc { max-width:1180px; margin:0 auto; padding:1rem; }
+  h1 { font-size:1.1rem; margin:0 0 .25rem; } .doc > p { color:var(--gray-600); font-size:.9rem; margin:0 0 .9rem; }
+  h2 { font-size:.95rem; margin:1.4rem 0 .5rem; color:var(--gray-700); }
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  /* — reprise des classes réelles de QuestionsPage.css (éditeur de cartes, panneau sombre) — */
+  .memotion-card-item { background:var(--bg-secondary); border:1px solid var(--gray-700); border-radius:var(--radius-md); padding:.75rem; display:flex; flex-direction:column; gap:.5rem; color:#e5e7eb; }
+  .memory-pair-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:.25rem; }
+  .memory-pair-number { font-weight:700; font-size:.9rem; }
+  .memory-remove-btn { width:24px; height:24px; border:none; border-radius:999px; background:var(--gray-200); color:var(--gray-600); cursor:pointer; }
+  .form-group label { display:block; font-size:.875rem; font-weight:500; color:var(--gray-400); margin-bottom:.3rem; }
+  .type-filter-row { display:flex; gap:.5rem; flex-wrap:wrap; }
+  .type-btn { flex:1 1 auto; padding:.5rem .75rem; border:2px solid var(--gray-200); border-radius:var(--radius-lg); background:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  .type-btn.speedy { border-color:#6b7280; color:#6b7280; background:rgba(107,114,128,.1); } .type-btn.speedy.active { background:rgba(107,114,128,.5); color:#111827; }
+  .type-btn.qcm { border-color:#3b82f6; color:#3b82f6; background:rgba(59,130,246,.1); }
+  .type-btn.memory { border-color:#8b5cf6; color:#8b5cf6; background:rgba(139,92,246,.1); } .type-btn.memory.active { background:rgba(139,92,246,.5); color:#ede9fe; }
+  .type-btn.rafale { border-color:#f97316; color:#f97316; background:rgba(249,115,22,.1); }
+  .memotion-face-section { display:flex; flex-direction:column; gap:.3rem; padding:.5rem; border-radius:var(--radius-sm); background:var(--bg-tertiary); }
+  .memotion-face-label { font-size:.65rem; letter-spacing:.08em; font-weight:800; color:#fbbf24; }
+  .memory-card-text-input { width:100%; padding:.5rem; border:1px solid var(--gray-700); border-radius:var(--radius-md); font-size:.875rem; background:#0b1020; color:#fff; }
+  .memotion-difficulty-row { display:flex; align-items:center; gap:.4rem; font-size:.85rem; }
+  .memotion-diff-label { color:var(--gray-400); }
+  .memotion-diff-btn { border:1px solid var(--gray-700); background:#0b1020; color:#fbbf24; border-radius:var(--radius-sm); padding:.2rem .5rem; cursor:pointer; font:inherit; }
+  .memotion-diff-btn.active { border-color:#fbbf24; background:rgba(251,191,36,.2); }
+  .memory-card-upload { border:1px dashed var(--gray-600); border-radius:var(--radius-sm); padding:.35rem; text-align:center; color:var(--gray-400); font-size:.8rem; }
+  .face-dim { opacity:.55; }
+  /* — NOUVEAU #190 : ligne « Points » (PointsRuleControl) — */
+  .points-rule-row { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; font-size:.85rem; margin-top:.15rem; padding:.35rem .5rem; border-radius:var(--radius-sm); border:1px dashed rgba(99,102,241,.6); background:rgba(99,102,241,.08); }
+  .points-rule-row .lbl { color:var(--gray-400); }
+  .points-rule-row select, .points-rule-row input { font:inherit; font-size:.85rem; background:#0b1020; color:#fff; border:1px solid var(--gray-700); border-radius:var(--radius-sm); padding:.25rem .4rem; }
+  .points-rule-row input { width:68px; }
+  .points-rule-row .hint { color:#a5b4fc; margin-left:auto; white-space:nowrap; }
+  .points-rule-row .err { color:#fca5a5; flex-basis:100%; font-size:.78rem; }
+  .is-new { position:relative; } .new-tag { position:absolute; top:-9px; right:8px; background:var(--primary-500); color:#fff; font-size:.6rem; font-weight:800; letter-spacing:.06em; padding:.05rem .4rem; border-radius:999px; }
+  .slot { border-radius:var(--radius-sm); padding:.5rem; background:var(--bg-tertiary); color:var(--gray-400); font-size:.8rem; }
+  /* — parité anim/TV — */
+  .parity { display:grid; grid-template-columns:repeat(4,1fr); gap:.75rem; }
+  .mini-card { background:#111827; color:#fff; border-radius:var(--radius-md); padding:.6rem; font-size:.8rem; min-height:92px; display:flex; flex-direction:column; justify-content:space-between; }
+  .mini-card .stars { color:#fbbf24; } .mini-card .pts { font-weight:800; font-size:1rem; color:#a5b4fc; }
+  .mini-card .sub { color:#9ca3af; font-size:.72rem; }
+  table.rules { border-collapse:collapse; font-size:.82rem; width:100%; } .rules th, .rules td { border:1px solid var(--gray-300); padding:.3rem .5rem; text-align:left; vertical-align:top; } .rules th { background:#fff; }
+  code { background:#fff; border:1px solid var(--gray-200); border-radius:4px; padding:0 .3rem; font-size:.85em; }
+  .notes { font-size:.85rem; color:var(--gray-600); } .notes li { margin:.2rem 0; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <h1>Éditeur de question MEMOTION — barème de points par carte (<code>POINTS_RULE</code>, #190, v11.2.2)</h1>
+  <p>Composant <code>admin_question_editor</code>, section « Cartes » d'une question MEMOTION (<code>/admin/quiz</code>). Chaque carte complète est montrée ; seule la ligne « Points » (encadrée) est nouvelle. Complète la maquette historique <code>memotion-card-type-selector-184.html</code> §2.</p>
+
+  <h2>1 · Carte de type binaire (SPEEDY / QCM) — 2 options · à gauche repliée sur le défaut, à droite « Montant fixe »</h2>
+  <div class="cards">
+    <div class="memotion-card-item">
+      <div class="memory-pair-header"><span class="memory-pair-number">Carte 1</span><button class="memory-remove-btn">×</button></div>
+      <div class="form-group"><label>Type de jeu de la carte</label>
+        <div class="type-filter-row"><button class="type-btn speedy active">Speedy</button><button class="type-btn qcm">QCM</button><button class="type-btn memory">Memory</button><button class="type-btn rafale">Rafale</button></div></div>
+      <div class="memotion-face-section">
+        <div class="memotion-face-label">RECTO</div>
+        <input class="memory-card-text-input" value="Capitales d'Europe" readonly>
+        <div class="memotion-difficulty-row"><span class="memotion-diff-label">Valeur de la carte :</span><button class="memotion-diff-btn">★</button><button class="memotion-diff-btn active">★★</button><button class="memotion-diff-btn">★★★</button></div>
+        <div class="points-rule-row is-new" role="group" aria-label="Barème de points de la carte"><span class="new-tag">nouveau</span>
+          <span class="lbl">Points :</span>
+          <select aria-label="Mode de barème"><option selected>Étoiles (défaut)</option><option>Montant fixe</option></select>
+          <span class="hint">→ 3 pts (★★)</span>
+        </div>
+        <div class="memory-card-upload">+ Image recto</div>
+      </div>
+      <div class="memotion-face-section face-dim"><div class="memotion-face-label">VERSO</div><input class="memory-card-text-input" value="Quelle est la capitale de la Slovénie ?" readonly></div>
+      <div class="memotion-face-section face-dim"><div class="memotion-face-label">REVEAL</div><input class="memory-card-text-input" value="Ljubljana" readonly></div>
+    </div>
+    <div class="memotion-card-item">
+      <div class="memory-pair-header"><span class="memory-pair-number">Carte 2</span><button class="memory-remove-btn">×</button></div>
+      <div class="form-group"><label>Type de jeu de la carte</label>
+        <div class="type-filter-row"><button class="type-btn speedy">Speedy</button><button class="type-btn qcm active" style="background:rgba(59,130,246,.5);color:#dbeafe">QCM</button><button class="type-btn memory">Memory</button><button class="type-btn rafale">Rafale</button></div></div>
+      <div class="memotion-face-section">
+        <div class="memotion-face-label">RECTO</div>
+        <input class="memory-card-text-input" value="Question bonus" readonly>
+        <div class="memotion-difficulty-row"><span class="memotion-diff-label">Valeur de la carte :</span><button class="memotion-diff-btn active">★</button><button class="memotion-diff-btn">★★</button><button class="memotion-diff-btn">★★★</button></div>
+        <div class="points-rule-row is-new" role="group" aria-label="Barème de points de la carte"><span class="new-tag">nouveau</span>
+          <span class="lbl">Points :</span>
+          <select aria-label="Mode de barème"><option>Étoiles (défaut)</option><option selected>Montant fixe</option></select>
+          <input type="number" min="1" max="999" value="10" aria-label="Montant">
+          <span class="hint">→ 10 pts, quelle que soit la valeur ★</span>
+        </div>
+        <div class="memory-card-upload">+ Image recto</div>
+      </div>
+      <div class="memotion-face-section face-dim"><div class="memotion-face-label">VERSO</div><div class="slot">Énoncé + 4 réponses QCM (QcmAnswersEditor, inchangé)</div></div>
+    </div>
+  </div>
+
+  <h2>2 · Carte de type à progression (MEMORY / RAFALE) — 4 options · à gauche défaut « Prorata », à droite « Par unité »</h2>
+  <div class="cards">
+    <div class="memotion-card-item">
+      <div class="memory-pair-header"><span class="memory-pair-number">Carte 3</span><button class="memory-remove-btn">×</button></div>
+      <div class="form-group"><label>Type de jeu de la carte</label>
+        <div class="type-filter-row"><button class="type-btn speedy">Speedy</button><button class="type-btn qcm">QCM</button><button class="type-btn memory active">Memory</button><button class="type-btn rafale">Rafale</button></div></div>
+      <div class="memotion-face-section">
+        <div class="memotion-face-label">RECTO</div>
+        <input class="memory-card-text-input" value="Monuments célèbres" readonly>
+        <div class="memotion-difficulty-row"><span class="memotion-diff-label">Valeur de la carte :</span><button class="memotion-diff-btn">★</button><button class="memotion-diff-btn">★★</button><button class="memotion-diff-btn active">★★★</button></div>
+        <div class="points-rule-row is-new" role="group" aria-label="Barème de points de la carte"><span class="new-tag">nouveau</span>
+          <span class="lbl">Points :</span>
+          <select aria-label="Mode de barème"><option selected>Prorata des étoiles (défaut)</option><option>Étoiles pleines (tout ou rien)</option><option>Montant fixe</option><option>Par unité</option></select>
+          <span class="hint">→ jusqu'à 5 pts, au prorata des paires trouvées (8 paires)</span>
+        </div>
+        <div class="memory-card-upload">+ Image recto</div>
+      </div>
+      <div class="memotion-face-section face-dim"><div class="memotion-face-label">VERSO</div><div class="slot">8 paires (MotionCardMemoryEditor, inchangé) — réglages de points MEMORY_CONFIG masqués (§6.3)</div></div>
+    </div>
+    <div class="memotion-card-item">
+      <div class="memory-pair-header"><span class="memory-pair-number">Carte 4</span><button class="memory-remove-btn">×</button></div>
+      <div class="form-group"><label>Type de jeu de la carte</label>
+        <div class="type-filter-row"><button class="type-btn speedy">Speedy</button><button class="type-btn qcm">QCM</button><button class="type-btn memory">Memory</button><button class="type-btn rafale active" style="background:rgba(249,115,22,.5);color:#ffedd5">Rafale</button></div></div>
+      <div class="memotion-face-section">
+        <div class="memotion-face-label">RECTO</div>
+        <input class="memory-card-text-input" value="Rafale cinéma" readonly>
+        <div class="memotion-difficulty-row"><span class="memotion-diff-label">Valeur de la carte :</span><button class="memotion-diff-btn">★</button><button class="memotion-diff-btn active">★★</button><button class="memotion-diff-btn">★★★</button></div>
+        <div class="points-rule-row is-new" role="group" aria-label="Barème de points de la carte"><span class="new-tag">nouveau</span>
+          <span class="lbl">Points :</span>
+          <select aria-label="Mode de barème"><option>Prorata des étoiles (défaut)</option><option>Étoiles pleines (tout ou rien)</option><option>Montant fixe</option><option selected>Par unité</option></select>
+          <input type="number" min="1" max="999" value="" placeholder="1–999" aria-label="Points par unité" aria-invalid="true">
+          <span class="hint">→ N pts × bonnes réponses</span>
+          <span class="err">Indiquez un montant par unité (1 à 999) — la carte ne peut pas être enregistrée sans.</span>
+        </div>
+        <div class="memory-card-upload">+ Image recto</div>
+      </div>
+      <div class="memotion-face-section face-dim"><div class="memotion-face-label">CONFIG</div><div class="slot">Catégories / difficultés tirées / temps (section RAFALE, inchangée)</div></div>
+    </div>
+  </div>
+
+  <h2>3 · Parité d'affichage (anim <code>AnimMotionCard</code> · TV grille) — la valeur affichée suit la règle, plus seulement les ★</h2>
+  <div class="parity">
+    <div class="mini-card"><div>Capitales d'Europe</div><div><span class="stars">★★</span> <span class="pts">3 pts</span></div><div class="sub">Étoiles (défaut) — inchangé</div></div>
+    <div class="mini-card"><div>Question bonus</div><div><span class="stars">★</span> <span class="pts">10 pts</span></div><div class="sub">Montant fixe — valeur de la règle, pas 1 pt</div></div>
+    <div class="mini-card"><div>Monuments célèbres</div><div><span class="stars">★★★</span> <span class="pts">jusqu'à 5 pts</span></div><div class="sub">Prorata — anim : gain réel 3/8 paires = 1 pt (existant #187)</div></div>
+    <div class="mini-card"><div>Rafale cinéma</div><div><span class="stars">★★</span> <span class="pts">2 pts / bonne rép.</span></div><div class="sub">Par unité — anim : gain réel = 2 × bonnes réponses</div></div>
+  </div>
+
+  <h2>4 · Règles</h2>
+  <table class="rules">
+    <tr><th>Type de carte</th><th>Options proposées</th><th>Défaut (= <code>POINTS_RULE</code> absent)</th><th>VALUE</th></tr>
+    <tr><td>SPEEDY, QCM (binaires)</td><td>Étoiles (défaut) · Montant fixe</td><td>Étoiles</td><td>Montant fixe : entier 1–999, obligatoire</td></tr>
+    <tr><td>MEMORY, RAFALE (progression)</td><td>Prorata des étoiles (défaut) · Étoiles pleines · Montant fixe · Par unité</td><td>Prorata des étoiles</td><td>Montant fixe / Par unité : entier 1–999, obligatoire</td></tr>
+  </table>
+  <ul class="notes">
+    <li>Choisir le défaut <strong>n'écrit rien</strong> dans la carte : si son type change ensuite, la règle suit le nouveau type (piège documenté <code>engine.go</code>). Choisir un autre mode écrit <code>POINTS_RULE {MODE, VALUE?}</code> ; le changer de type conserve la règle explicite (champ de carte, jamais verrouillé).</li>
+    <li>Le <code>select</code> est recalculé au changement de type : une règle devenue inapplicable (ex. « Par unité » puis passage en SPEEDY) est remise au défaut avec un avertissement bref.</li>
+    <li>Serveur : 400 <code>POINTS_RULE_INVALID_MODE</code>, <code>POINTS_RULE_VALUE_REQUIRED</code>, <code>POINTS_RULE_MODE_NOT_APPLICABLE</code> (contrat question-types.md §6.2). Les cartes déjà enregistrées ne sont jamais refusées à la lecture.</li>
+    <li>Aide « → N pts » et affichages anim/TV : même fonction JS <code>getMotionCardPointsForRule</code>, miroir de <code>motionCardPointsForOutcome</code> (cas nommés identiques, dont « 5 points / 8 paires »).</li>
+  </ul>
+</div>
+</body>
+</html>

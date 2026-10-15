@@ -64,16 +64,18 @@ func finalPayload246(id, questionID, text string) map[string]interface{} {
 	return map[string]interface{}{"ID": id, "QUESTION_ID": questionID, "TEXT": text, "HASH": fnv1a246(text)}
 }
 
-// readUpdateWhere lit la connexion jusqu'à un UPDATE dont GAME.ARDOISE_ANSWERS[team].RECEIVED == want.
-func readUpdateWithReceived(t *testing.T, conn *websocket.Conn, team string, want bool, within time.Duration) (json.RawMessage, time.Duration) {
+// updateWithReceivedBefore246 lit conn jusqu'au témoin (#264/#266) retourne aussi les ACTION vues et dit si un UPDATE portant
+// GAME.ARDOISE_ANSWERS[team].RECEIVED == want l'a précédé. Une preuve d'ORDRE, pas de durée : sous
+// charge la machine peut être lente, mais un UPDATE émis de façon synchrone par le handler précède
+// toujours le témoin, alors qu'un UPDATE coalescé (fenêtre injectée très longue) le suivrait.
+func updateWithReceivedBefore246(t *testing.T, conn *websocket.Conn, team string, want bool) (found bool, actions []string) {
 	t.Helper()
-	start := time.Now()
-	deadline := start.Add(within)
-	for time.Now().Before(deadline) {
+	deadline := time.Now().Add(eventDeadline264)
+	for {
 		conn.SetReadDeadline(deadline)
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			t.Fatalf("pas d'UPDATE avec %s.RECEIVED=%v dans %v : %v", team, want, within, err)
+			t.Fatalf("message témoin non reçu (UPDATE %s.RECEIVED=%v vu : %v) : %v", team, want, found, err)
 		}
 		var env struct {
 			Action string `json:"ACTION"`
@@ -85,21 +87,27 @@ func readUpdateWithReceived(t *testing.T, conn *websocket.Conn, team string, wan
 				} `json:"GAME"`
 			} `json:"MSG"`
 		}
-		if json.Unmarshal(data, &env) == nil && env.Action == "UPDATE" {
+		if json.Unmarshal(data, &env) != nil {
+			continue
+		}
+		if env.Action == sentinelAction264 {
+			return found, actions
+		}
+		actions = append(actions, env.Action)
+		if env.Action == "UPDATE" {
 			if a, ok := env.Msg.Game.A[team]; ok && a.Received == want {
-				return data, time.Since(start)
+				found = true
 			}
 		}
 	}
-	t.Fatalf("timeout : pas d'UPDATE avec %s.RECEIVED=%v", team, want)
-	return nil, 0
 }
 
-func noAction246(t *testing.T, conn *websocket.Conn, action string, window time.Duration) {
+// noAction246 : après le témoin, aucune des connexions n'a reçu `action` (#266 : plus de fenêtre fixe).
+func noAction246(t *testing.T, app *App, action string, conns ...*websocket.Conn) {
 	t.Helper()
-	for _, a := range collectActions(conn, window) {
-		if a == action {
-			t.Fatalf("%s inattendu", action)
+	for i, actions := range collectAfterSentinel264(t, app, conns...) {
+		if containsAction(actions, action) {
+			t.Fatalf("%s inattendu (connexion #%d, vu : %v)", action, i, actions)
 		}
 	}
 }
@@ -116,6 +124,8 @@ func TestArdoiseFinal246_Critical_AcceptedFinalSetsReceivedAndAcksOnlyTheSender(
 	animConn, _ := e.dial(t, "/ws/anim")
 	e.typeAs(t, paul, e.paul, "PARIS EN FRAN", nil) // la troncature C2 : le final porte le texte COMPLET
 	e.stop()
+	// #266 : fenêtre de coalescence de 10 min — un UPDATE coalescé n'arriverait jamais avant le témoin.
+	e.useLongArdoiseCoalescer(t)
 
 	e.send(t, paul, "vplayer", "ARDOISE_FINAL", finalPayload246(e.paul, "q-ardoise", "PARIS EN FRANCE"))
 
@@ -138,17 +148,23 @@ func TestArdoiseFinal246_Critical_AcceptedFinalSetsReceivedAndAcksOnlyTheSender(
 	if h := string(e.answersRaw("Les Bleus")["RECEIVED_HASH"]); h != `"066a01e6"` {
 		t.Errorf("RECEIVED_HASH = %s", h)
 	}
-	// diffusion immédiate (non coalescée, < 150 ms) vers admin ET anim
+	// diffusion immédiate (non coalescée) vers admin ET anim, et accusé ciblé (ni l'autre tablette, ni
+	// l'admin, ni l'anim). Preuve d'ORDRE (#266) : le coalescer ARDOISE a une fenêtre de 10 min ici,
+	// donc un UPDATE RECEIVED=true coalescé arriverait APRÈS le témoin ; seul un envoi immédiat le précède.
+	broadcastSentinel264(t, e.app)
 	for name, c := range map[string]*websocket.Conn{"admin": adminConn, "anim": animConn} {
-		_, took := readUpdateWithReceived(t, c, "Les Bleus", true, eventDeadline264)
-		if took > 140*time.Millisecond {
-			t.Errorf("UPDATE %s non immédiat (coalescé ?) : %v", name, took)
+		found, actions := updateWithReceivedBefore246(t, c, "Les Bleus", true)
+		if !found {
+			t.Errorf("UPDATE %s avec RECEIVED=true non immédiat (coalescé ?) : absent avant le témoin", name)
+		}
+		if containsAction(actions, "ARDOISE_FINAL_ACK") {
+			t.Errorf("ARDOISE_FINAL_ACK est ciblé sur l'émetteur seul, %s a vu : %v", name, actions)
 		}
 	}
-	// accusé ciblé : ni l'autre tablette, ni l'admin, ni l'anim
-	noAction246(t, mamieConn, "ARDOISE_FINAL_ACK", 300*time.Millisecond)
-	noAction246(t, adminConn, "ARDOISE_FINAL_ACK", 100*time.Millisecond)
-	noAction246(t, animConn, "ARDOISE_FINAL_ACK", 100*time.Millisecond)
+	// Le même témoin vaut pour mamie : un seul témoin pour les trois connexions (voir collectAfterSentinel264).
+	if actions := collectUntilSentinel264(t, mamieConn); containsAction(actions, "ARDOISE_FINAL_ACK") {
+		t.Errorf("ARDOISE_FINAL_ACK est ciblé sur l'émetteur seul, mamie a vu : %v", actions)
+	}
 }
 
 func TestArdoiseFinal246_EmptyTextIsAcceptedAsNothingWritten(t *testing.T) {
@@ -198,7 +214,7 @@ func TestArdoiseFinal246_RefusedCasesAreIgnoredLoggedAndNeverAcked(t *testing.T)
 			if !e.waitLog(t, game.LogLevelWarn, tc.event) {
 				t.Fatalf("WARN %s attendu ; logs=%v", tc.event, e.logLines(game.LogLevelWarn))
 			}
-			noAction246(t, conn, "ARDOISE_FINAL_ACK", 300*time.Millisecond)
+			noAction246(t, e.app, "ARDOISE_FINAL_ACK", conn)
 			if _, received := e.answers(); received["Les Bleus"] {
 				t.Error("RECEIVED ne doit pas passer à true")
 			}
@@ -355,7 +371,7 @@ func TestRevealGuard246_Critical_RefusedWhileAnExpectedTeamIsPending(t *testing.
 	if rr.Reason != "ARDOISE_PENDING" || len(rr.Pending) != 1 || rr.Pending[0].Team != "Les Rouges" {
 		t.Errorf("REVEAL_REFUSED = %+v", rr)
 	}
-	noAction246(t, animConn, "REVEAL_REFUSED", 300*time.Millisecond) // ciblé sur l'émetteur seul
+	noAction246(t, e.app, "REVEAL_REFUSED", animConn) // ciblé sur l'émetteur seul
 	if !e.hasLog(game.LogLevelWarn, "ARDOISE_REVEAL_REFUSED", "Les Rouges") {
 		t.Errorf("WARN ARDOISE_REVEAL_REFUSED attendu ; logs=%v", e.logLines(game.LogLevelWarn))
 	}
@@ -452,7 +468,7 @@ func TestRevealGuard246_ForceRevealsAndMarksMissingTeamsNotReceived(t *testing.T
 	if !e.hasLog(game.LogLevelWarn, "ARDOISE_REVEAL_FORCED", "Les Rouges") {
 		t.Errorf("WARN ARDOISE_REVEAL_FORCED (équipes non reçues) attendu ; logs=%v", e.logLines(game.LogLevelWarn))
 	}
-	noAction246(t, adminConn, "REVEAL_REFUSED", 200*time.Millisecond)
+	noAction246(t, e.app, "REVEAL_REFUSED", adminConn)
 }
 
 func TestRevealGuard246_ForceWithNothingMissingIsNotLoggedAsForced(t *testing.T) {

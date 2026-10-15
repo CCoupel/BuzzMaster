@@ -16,8 +16,10 @@ import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
-import CategorySelector from '../components/CategorySelector'
-import CategoryFilterBar from '../components/CategoryFilterBar'
+import CategoryPicker from '../components/CategoryPicker'
+import DifficultyPicker from '../components/DifficultyPicker'
+import PointsRuleControl from '../components/PointsRuleControl'
+import { loadMotionCardPointsRule, adaptPointsRuleToType, pointsRuleValueError, serializePointsRule, editorMotionConfig } from '../utils/pointsRuleEditor'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
@@ -140,15 +142,10 @@ export default function QuestionsPage() {
     // documenté par `contracts/question-types.md` §3.2 (QCM_HINT_THRESHOLD_1
     // etc. naissent non vides, PAS `undefined`/`0`).
     motionCards: [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
@@ -176,15 +173,10 @@ export default function QuestionsPage() {
         rafaleQuestionTime: 3,
         rafaleMaxQuestions: 100,
       },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
@@ -856,15 +848,10 @@ export default function QuestionsPage() {
 
     // Load MEMOTION cards from question data
     let motionCards = [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
@@ -892,15 +879,10 @@ export default function QuestionsPage() {
         rafaleQuestionTime: 3,
         rafaleMaxQuestions: 100,
       },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
@@ -933,6 +915,9 @@ export default function QuestionsPage() {
         rectoTheme: card.RECTO_THEME || '',
         rectoImage: card.RECTO_IMAGE || null,
         difficulty: card.DIFFICULTY || 1,
+        // #190 — POINTS_RULE : défaut du type ou règle inapplicable → '' (champ
+        // absent à l'envoi) ; seule une règle explicite ET applicable est conservée.
+        ...loadMotionCardPointsRule(card),
         questionText: card.QUESTION_TEXT || '',
         questionImage: card.QUESTION_IMAGE || null,
         answerText: card.ANSWER_TEXT || '',
@@ -943,11 +928,10 @@ export default function QuestionsPage() {
         type: card.TYPE || 'SPEEDY',
         qcmAnswers: card.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: card.QCM_CORRECT || '',
-        qcmHintsEnabled: card.QCM_HINTS_ENABLED || false,
-        qcmHintThreshold1: card.QCM_HINT_THRESHOLD_1 ?? 0.25,
-        qcmHintThreshold2: card.QCM_HINT_THRESHOLD_2 ?? 0.125,
-        qcmPenalty1: card.QCM_PENALTY_1 ?? 0.67,
-        qcmPenalty2: card.QCM_PENALTY_2 ?? 0.33,
+        // #279 (LOT-6) — une carte n'a plus d'indices : les champs d'une carte héritée
+        // sont ignorés au chargement (jamais renvoyés), seul l'indicateur reste pour
+        // afficher la ligne d'information.
+        legacyHintsRemoved: !!card.QCM_HINTS_ENABLED,
         // #187 — MEMORY : mêmes défauts de création que les autres sites
         // (synchronisés avec motionCardLock.js, MEMORY_MODE_CREATION_VALUE/
         // MEMORY_CONFIG_CREATION_VALUES). MEMORY_PAIRS d'une carte suit le
@@ -1113,15 +1097,10 @@ export default function QuestionsPage() {
       },
       motionMode: 'SOLO',
       motionCards: [
-        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
@@ -1149,15 +1128,10 @@ export default function QuestionsPage() {
         rafaleQuestionTime: 3,
         rafaleMaxQuestions: 100,
       },
-        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
@@ -1309,15 +1283,10 @@ export default function QuestionsPage() {
         ...prev,
         motionCards: [
           ...prev.motionCards,
-          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY, useState initial (mc-1).
@@ -1358,7 +1327,20 @@ export default function QuestionsPage() {
   const handleMotionCardChange = (cardId, field, value) => {
     setFormData(prev => ({
       ...prev,
-      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : { ...c, [field]: value })
+      motionCards: prev.motionCards.map(c => {
+        if (c.id !== cardId) return c
+        const next = { ...c, [field]: value }
+        // #190 — le barème est un champ de carte (ne verrouille jamais le type) ;
+        // sa modification efface l'avertissement et l'erreur précédents.
+        if (field === 'pointsRule') {
+          next.pointsRuleNotice = null
+          next.pointsRuleError = null
+        }
+        // #190 — changement de type : une règle inapplicable au nouveau type est
+        // remise au défaut (avertissement bref), une règle encore applicable est conservée.
+        if (field === 'type') Object.assign(next, adaptPointsRuleToType(c.pointsRule, value))
+        return next
+      })
     }))
   }
 
@@ -1487,6 +1469,21 @@ export default function QuestionsPage() {
       // Validate at least 2 cards with theme
       const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
       if (validCards.length < 2) return
+      // #190 — Montant fixe / Par unité sans montant entier 1–999 : enregistrement
+      // bloqué côté client (le serveur renverrait POINTS_RULE_VALUE_REQUIRED), erreur
+      // affichée sur la ligne « Points » de la carte concernée.
+      const pointsRuleErrors = {}
+      validCards.forEach(c => {
+        const err = pointsRuleValueError(c.pointsRule)
+        if (err) pointsRuleErrors[c.id] = err
+      })
+      if (Object.keys(pointsRuleErrors).length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          motionCards: prev.motionCards.map(c => ({ ...c, pointsRuleError: pointsRuleErrors[c.id] || null })),
+        }))
+        return
+      }
     }
     if (formData.type === 'RAFALE' && (formData.rafaleCategories.length === 0 || formData.rafaleDifficulties.length === 0)) {
       // code-review-20260829-163049.md [MAJEUR], réouvert #216 — au moins
@@ -1606,6 +1603,9 @@ export default function QuestionsPage() {
           RECTO_THEME: card.rectoTheme,
           RECTO_IMAGE: typeof card.rectoImage === 'string' ? card.rectoImage : '',
           DIFFICULTY: card.difficulty,
+          // #190 — mode '' = défaut du type = clé ABSENTE (jamais écrite, contrat §6.2) ;
+          // VALUE seulement pour FIXED / PER_UNIT.
+          ...serializePointsRule(card.pointsRule),
           QUESTION_TEXT: card.questionText,
           QUESTION_IMAGE: typeof card.questionImage === 'string' ? card.questionImage : '',
         }
@@ -1614,11 +1614,7 @@ export default function QuestionsPage() {
             ...base,
             QCM_ANSWERS: card.qcmAnswers,
             QCM_CORRECT: card.qcmCorrect,
-            QCM_HINTS_ENABLED: card.qcmHintsEnabled,
-            QCM_HINT_THRESHOLD_1: card.qcmHintThreshold1,
-            QCM_HINT_THRESHOLD_2: card.qcmHintThreshold2,
-            QCM_PENALTY_1: card.qcmPenalty1,
-            QCM_PENALTY_2: card.qcmPenalty2,
+            // #279 — jamais d'indices sur une carte : les 5 clés ne sont pas envoyées.
           }
         }
         if (cardType === 'MEMORY') {
@@ -1626,10 +1622,8 @@ export default function QuestionsPage() {
           // l'éditeur de carte (ignoré par le moteur en contexte carte,
           // contrat §6.3 — une seule équipe, celle de la manche MEMOTION en
           // cours), donc jamais écarté de sa valeur de création côté client.
-          // Pas de POINTS_RULE ici : le serveur applique STARS_PRORATA par
-          // défaut pour une carte MEMORY sans réglage explicite (contrat
-          // §6.3) — cette structure n'est pas encore modélisée côté JS
-          // (même état que pour SPEEDY/QCM, voir motionCardLock.js).
+          // POINTS_RULE : sérialisée dans `base` (#190) — absente = STARS_PRORATA
+          // par défaut côté serveur (contrat §6.3).
           return {
             ...base,
             MEMORY_MODE: 'SOLO',
@@ -1915,13 +1909,14 @@ export default function QuestionsPage() {
       <div className="category-filter-group">
         <CategoryBalance questions={sortedQuestions} />
 
-        {/* Category filter bar (#40) — CategoryFilterBar.jsx (v8.0.0,
-            #16/#197, bugfix cohérence UI/mutualisation, code-review
-            20260829-131404 MAJEUR 2) : composant partagé avec
-            RafalePage.jsx, plus de copie inline divergente ici. */}
-        <CategoryFilterBar
+        {/* Filtre par catégorie (#40) — CategoryPicker variant="filter" (#221),
+            composant partagé avec RafalePage.jsx et GamePage.jsx. */}
+        <CategoryPicker
+          variant="filter"
+          className="questions-page-filter-bar"
+          showLabel
+          value={selectedCategories}
           availableCategories={availableCategories}
-          selectedCategories={selectedCategories}
           customCategories={customCategories}
           onToggle={toggleCategoryFilter}
           onClear={clearCategoryFilters}
@@ -2202,7 +2197,14 @@ export default function QuestionsPage() {
               )}
             </CardHeader>
             <CardBody>
-              <form onSubmit={handleSubmit} className="add-form">
+              {/* #190 — `noValidate` seulement quand un montant de barème est invalide : la
+                  validation HTML5 (min/max du champ) bloquerait le submit AVANT notre garde
+                  (handleSubmit) et son message role="alert" sur la carte concernée. */}
+              <form
+                onSubmit={handleSubmit}
+                className="add-form"
+                noValidate={formData.type === 'MEMOTION' && formData.motionCards.some(c => c.rectoTheme.trim() && pointsRuleValueError(c.pointsRule))}
+              >
                 <div className="form-group">
                   <label htmlFor="question-input">Question *</label>
                   <textarea
@@ -2260,7 +2262,7 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector — CategorySelector.jsx (v8.0.0, #16/#197,
+                {/* Sélecteur de catégorie unique — CategoryPicker (#221, ex-CategorySelector v8.0.0,
                     bugfix cohérence UI), extrait ici (#95/#97/#100), aussi
                     utilisé par RafalePage.jsx — un seul composant, plus de
                     variante dupliquée. #216 (réouverture assumée de #107) —
@@ -2271,8 +2273,9 @@ export default function QuestionsPage() {
                     unique, inchangé. */}
                 {formData.type !== 'RAFALE' && (
                   <div className="form-group">
-                    <label>Categorie</label>
-                    <CategorySelector
+                    <CategoryPicker
+                      mode="single"
+                      allowCreate
                       value={formData.category}
                       onChange={(key) => handleInputChange('category', key)}
                       customCategories={customCategories}
@@ -2872,18 +2875,26 @@ export default function QuestionsPage() {
                                 étoiles pleines de la carte elle-même (§6.2), jamais
                                 un filtre. */}
                             <div className="memotion-difficulty-row">
-                              <span className="memotion-diff-label">Valeur de la carte :</span>
-                              {[1, 2, 3].map(d => (
-                                <button
-                                  key={d}
-                                  type="button"
-                                  className={`memotion-diff-btn ${card.difficulty === d ? 'active' : ''}`}
-                                  onClick={() => handleMotionCardChange(card.id, 'difficulty', d)}
-                                >
-                                  {'★'.repeat(d)}
-                                </button>
-                              ))}
+                              <DifficultyPicker
+                                mode="single"
+                                label="Valeur de la carte :"
+                                chipTitle={d => `Valeur de la carte : ${d}`}
+                                value={card.difficulty}
+                                onChange={d => handleMotionCardChange(card.id, 'difficulty', d)}
+                              />
                             </div>
+                            {/* #190 — barème de la carte (POINTS_RULE), sous « Valeur de la carte » */}
+                            <PointsRuleControl
+                              cardType={cardType}
+                              value={card.pointsRule}
+                              onChange={v => handleMotionCardChange(card.id, 'pointsRule', v)}
+                              difficulty={card.difficulty}
+                              motionConfig={editorMotionConfig(formData.motionConfig)}
+                              unitsTotal={cardType === 'MEMORY' ? card.memoryPairs.length : undefined}
+                              notice={card.pointsRuleNotice}
+                              error={card.pointsRuleError}
+                              idPrefix={`motion-card-${card.id}`}
+                            />
                             {/* Recto image (optional) */}
                             <div className="memotion-img-row">
                               {card.rectoImage ? (
@@ -2957,17 +2968,20 @@ export default function QuestionsPage() {
                                 values={{
                                   qcmAnswers: card.qcmAnswers,
                                   qcmCorrect: card.qcmCorrect,
-                                  qcmHintsEnabled: card.qcmHintsEnabled,
-                                  qcmHintThreshold1: card.qcmHintThreshold1,
-                                  qcmHintThreshold2: card.qcmHintThreshold2,
-                                  qcmPenalty1: card.qcmPenalty1,
-                                  qcmPenalty2: card.qcmPenalty2,
                                 }}
+                                showHints={false}
                                 onFieldChange={(field, value) => handleMotionCardChange(card.id, field, value)}
                                 onAnswerChange={(color, value) => handleMotionCardChange(
                                   card.id, 'qcmAnswers', { ...card.qcmAnswers, [color]: value }
                                 )}
                               />
+                            )}
+                            {/* #279 (LOT-6) — carte héritée chargée avec des indices : ignorés, jamais renvoyés. */}
+                            {cardType === 'QCM' && card.legacyHintsRemoved && (
+                              <div className="motion-card-lock-reason" role="status">
+                                <span aria-hidden="true">ℹ️</span>
+                                <span>Indices retirés : une carte MEMOTION n'a plus d'indices.</span>
+                              </div>
                             )}
                             {cardType === 'MEMORY' && (
                               <MotionCardMemoryEditor
@@ -2995,21 +3009,13 @@ export default function QuestionsPage() {
                             {cardType === 'RAFALE' && (
                               <div className="rafale-section">
                                 <div className="form-group">
-                                  <label>Catégories — plusieurs possibles</label>
-                                  <div className="rafale-multi-chip-row">
-                                    {apiCategories.map(c => (
-                                      <button
-                                        type="button"
-                                        key={c.key}
-                                        className={`rafale-multi-chip ${card.rafaleCategories.includes(c.key) ? 'active' : ''}`}
-                                        onClick={() => toggleMotionCardRafaleCategory(card.id, c.key)}
-                                      >
-                                        {card.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
-                                        <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
-                                        {c.name}
-                                      </button>
-                                    ))}
-                                  </div>
+                                  <CategoryPicker
+                                    mode="multi"
+                                    label="Catégories des questions tirées"
+                                    value={card.rafaleCategories}
+                                    onToggle={key => toggleMotionCardRafaleCategory(card.id, key)}
+                                    customCategories={customCategories}
+                                  />
                                 </div>
 
                                 <div className="form-group">
@@ -3023,19 +3029,12 @@ export default function QuestionsPage() {
                                       problème était l'ambiguïté visuelle entre les
                                       deux sélecteurs d'étoiles, pas la présence des
                                       deux. */}
-                                  <label>Difficultés des questions tirées — plusieurs possibles</label>
-                                  <div className="rafale-multi-chip-row">
-                                    {[1, 2, 3].map(d => (
-                                      <button
-                                        key={d}
-                                        type="button"
-                                        className={`rafale-multi-chip ${card.rafaleDifficulties.includes(d) ? 'active' : ''}`}
-                                        onClick={() => toggleMotionCardRafaleDifficulty(card.id, d)}
-                                      >
-                                        {'★'.repeat(d)}
-                                      </button>
-                                    ))}
-                                  </div>
+                                  <DifficultyPicker
+                                    mode="multi"
+                                    label="Difficultés des questions tirées"
+                                    value={card.rafaleDifficulties}
+                                    onToggle={d => toggleMotionCardRafaleDifficulty(card.id, d)}
+                                  />
                                 </div>
 
                                 <div className="form-row">
@@ -3190,37 +3189,20 @@ export default function QuestionsPage() {
                         classe "active" au lieu de "on" — cohérent avec le
                         reste de cet éditeur, cf. .type-btn/.quiz-chip). */}
                     <div className="form-group">
-                      <label>Catégories — plusieurs possibles</label>
-                      <div className="rafale-multi-chip-row">
-                        {apiCategories.map(c => (
-                          <button
-                            type="button"
-                            key={c.key}
-                            className={`rafale-multi-chip ${formData.rafaleCategories.includes(c.key) ? 'active' : ''}`}
-                            onClick={() => toggleRafaleCategory(c.key)}
-                          >
-                            {formData.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
-                            <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
-                            {c.name}
-                          </button>
-                        ))}
-                      </div>
+                      <CategoryPicker
+                        mode="multi"
+                        value={formData.rafaleCategories}
+                        onToggle={toggleRafaleCategory}
+                        customCategories={customCategories}
+                      />
                     </div>
 
                     <div className="form-group">
-                      <label>Difficultés — plusieurs possibles</label>
-                      <div className="rafale-multi-chip-row">
-                        {[1, 2, 3].map(d => (
-                          <button
-                            key={d}
-                            type="button"
-                            className={`rafale-multi-chip ${formData.rafaleDifficulties.includes(d) ? 'active' : ''}`}
-                            onClick={() => toggleRafaleDifficulty(d)}
-                          >
-                            {'★'.repeat(d)}
-                          </button>
-                        ))}
-                      </div>
+                      <DifficultyPicker
+                        mode="multi"
+                        value={formData.rafaleDifficulties}
+                        onToggle={toggleRafaleDifficulty}
+                      />
                     </div>
 
                     {formData.rafaleDifficulties.length > 0 && (
@@ -3622,6 +3604,12 @@ export default function QuestionsPage() {
                       })()}
                     </div>
                   </>
+                )}
+
+                {/* Refus serveur (corps HTTP brut) pour les types sans section « Son »
+                    (MEMORY, MEMOTION, RAFALE, ENTRACTE) — ex. POINTS_RULE_* (#190). */}
+                {soundError && ['MEMORY', 'MEMOTION', 'RAFALE', 'ENTRACTE'].includes(formData.type) && (
+                  <p className="sound-error-message" role="alert">✕ {soundError}</p>
                 )}
 
                 <Button

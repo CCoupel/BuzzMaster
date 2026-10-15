@@ -66,6 +66,17 @@ func newTestApp(t *testing.T) *App {
 	app.ardoiseCoalescer = NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
 		app.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
 	})
+	// #269: no timer/goroutine may outlive its test. A pending coalescer window
+	// (time.AfterFunc) would otherwise fire during a LATER test and log through
+	// the then-current global logger. Stop() is resolved at cleanup time, so a
+	// coalescer a test swapped in is the one stopped. engine.Stop() cancels the
+	// engine's round timers.
+	t.Cleanup(func() {
+		if app.ardoiseCoalescer != nil {
+			app.ardoiseCoalescer.Stop()
+		}
+		app.engine.Stop()
+	})
 
 	return app
 }

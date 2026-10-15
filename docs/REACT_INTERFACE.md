@@ -27,6 +27,19 @@ Ce document décrit l'interface web React de BuzzControl.
 | `/admin/logs` | LogsPage | Logs serveur temps réel |
 | `/anim` | AnimPage | Interface animateur (tablette, nouvelle en v6.2.0 — refonte conduite permanente + zone réponse en v6.2.0.15, #166) |
 
+### Alerte réseau admin — `NetworkLostOverlay` (v11.2.2, #267)
+
+Fichiers : `web/src/components/NetworkLostOverlay.jsx` + `.css`, `NetworkWarningBanner.jsx` (bandeau replié, sans props). Source unique : `useGame().gameState.NETWORK` (aucune prop).
+
+- **Montage** : `App.jsx`, sous `!hideNavbar`, à côté de `LaunchLockBanner`. Ne s'affiche que sur les routes `/admin/*` (jamais `/tv`, `/anim`, `/player`, `/`).
+- **Overlay** : portail sur `document.body`, `div.network-overlay` (fixed, z-index 1200) > `[role="alertdialog"][aria-modal="true"]`, titre « Le serveur n'a pas de réseau disponible » (aucune mention de plateforme). Focus piégé, Échap = « Continuer quand même », focus restitué à la fermeture (au bouton « Détails » du bandeau si l'élément d'origine n'existe plus).
+- **Bandeau replié** (`role="status"`) : reste sous la navbar jusqu'au retour du réseau, avec « Perte détectée il y a N s / N min » ; « Détails » rouvre l'overlay. L'ancien bandeau de `GamePage` (#96) et son animation ont été retirés.
+- **Toast** « ✅ Réseau rétabli — <IP> » (le ✅ est en `aria-hidden`) : 6 s (`NETWORK_TOAST_MS`), z-index 1090, décalé sous `.launch-toast` quand celui-ci est affiché.
+- **Transitions** : `false → true` rouvre l'overlay, même après un repli ; `true → false` retire overlay et bandeau et affiche le toast ; au chargement avec réseau absent, l'overlay s'ouvre sans toast.
+- **Empilement (du plus bas au plus haut)** : popup « Lancer la partie » (`.lg-backdrop`, z-index 1000) < toast réseau (1090) < `.launch-toast` (1100) < overlay réseau (1200) < modale OTA de `TeamCard` (2000). La modale OTA reste au-dessus, volontairement : une mise à jour firmware en cours ne doit pas être masquée.
+
+Hook : `useWebSocket.js` mappe `NETWORK` ; si le serveur est ancien et n'envoie que `NETWORK_ONLY_LOCALHOST`, le booléen sert de repli.
+
 **Navbar (v2.48.0 — groupes #238, logo #239) :**
 - Affiché uniquement sur les routes `/admin/*` et `/anim/*`
 - Préfixe dynamique : détecte `/anim` ou `/admin` depuis l'URL et construit les liens en conséquence
@@ -56,6 +69,107 @@ Ce document décrit l'interface web React de BuzzControl.
 | Timer | `components/Timer.jsx` | Chronomètre avec barre de progression |
 | Navbar | `components/Navbar.jsx` | Navigation + versions + compteurs clients |
 | CategoryBalance | `components/CategoryBalance.jsx` | Visualisation équilibre catégories |
+| CategoryPicker | `components/CategoryPicker.jsx` | Sélecteur de catégorie unique (single), multiple (multi) ou filtre (filter) — v11.2.2, #221 |
+| DifficultyPicker | `components/DifficultyPicker.jsx` | Sélecteur de difficulté ★ unique, unique ou aucune, multiple — v11.2.2, #221 |
+| PointsRuleControl | `components/PointsRuleControl.jsx` | Ligne « Points » de l'éditeur de carte MEMOTION (barème `POINTS_RULE`) — v11.2.2, #190 |
+
+### CategoryPicker et DifficultyPicker — sélecteurs partagés (v11.2.2, #221)
+
+Les 15 sites de sélection de catégorie et de difficulté (éditeurs Quiz et RAFALE, filtres de liste, modales IA) passent par deux composants partagés. Ils remplacent `CategorySelector`, `CategoryFilterBar` et les chips inline de `RafalePage` / `GamePage` (supprimés). `QuizMetaForm` n'est pas concerné.
+
+**`CategoryPicker`** — `mode` et `variant` :
+
+| Mode | Usage | Sélection | Accessibilité |
+|------|-------|-----------|---------------|
+| `single` (défaut) | Catégorie d'une question | Une seule ; re-clic sur l'active → `onChange('')` | `role="radiogroup"` + `aria-checked` |
+| `multi` | Manche RAFALE, carte RAFALE, modales IA | Plusieurs (`onToggle(key)`) | `aria-pressed` + ✓ |
+| `variant="filter"` | Filtres de liste (Quiz, réservoir RAFALE, page Jeu) | Plusieurs, restreint à `availableCategories`, bouton « × » (`onClear`) | `aria-pressed` + ✓ (✓ absente en icônes seules) |
+
+- `allowCreate` (mode `single` seulement) ajoute « + Créer » avec formulaire inline ; `onRefetchCategories` est appelé avant `onChange(created.key)`.
+- `showLabel` (filter, défaut `true`) affiche le libellé à côté de l'icône ; `showLabel={false}` = icônes seules (page Jeu). `showModeBadge` affiche le mode en texte.
+- `customCategories` accepte la réponse brute de `GET /api/categories`. La garde #197 est **interne** au composant : seule la liste `CATEGORIES` + customs `isCustom` est itérée, donc aucune clé React dupliquée, quel que soit l'appelant.
+
+```jsx
+<CategoryPicker
+  mode="single"
+  allowCreate
+  value={form.category}
+  onChange={(key) => setForm({ ...form, category: key })}
+  customCategories={customCategories}
+  onRefetchCategories={refetchCategories}
+/>
+
+<CategoryPicker
+  variant="filter"
+  value={selectedCategories}
+  availableCategories={availableCategories}
+  onToggle={toggleCategoryFilter}
+  onClear={clearCategoryFilters}
+  customCategories={customCategories}
+  showLabel
+/>
+```
+
+**`DifficultyPicker`** — trois modes, annoncés en texte (badge « une seule » / « plusieurs possibles » / « une seule ou aucune ») :
+
+- `single` : une seule valeur ; re-clic sur l'active sans effet.
+- `single` + `allowNone` : re-clic désélectionne → `onChange(null)`.
+- `multi` : plusieurs valeurs via `onToggle(d)`.
+
+Props : `levels` (défaut `DIFFICULTY_LEVELS`), `ghost` (affiche les étoiles vides ★☆☆), `chipTitle(d)` (infobulle ; à surcharger quand deux pickers cohabitent sur la même page, par exemple filtre et formulaire).
+
+```jsx
+<DifficultyPicker mode="single" allowNone value={filterDifficulty} onChange={setFilterDifficulty} />
+<DifficultyPicker mode="multi" value={rafaleDifficulties} onToggle={toggleDifficulty} chipTitle={(d) => `Difficulté ${d} (manche)`} />
+```
+
+`DIFFICULTY_LEVELS` est exporté par `utils/categoryUtils.js` : `[1, 2, 3]`.
+
+### PointsRuleControl — ligne « Points » de la carte MEMOTION (v11.2.2, #190)
+
+Fichier : `components/PointsRuleControl.jsx`. Utilisé par l'éditeur de carte MEMOTION de `QuestionsPage.jsx` (face RECTO, replié sur le défaut). Il édite `POINTS_RULE` (contrat `question-types.md` §6.2).
+
+| Prop | Rôle |
+|------|------|
+| `cardType` | `SPEEDY` / `QCM` / `MEMORY` / `RAFALE` : détermine les modes proposés |
+| `value` | `{ mode, value }` ; `mode: ''` = défaut du type |
+| `onChange` | Appelé avec `{ mode, value }` |
+| `difficulty`, `motionConfig` | Valeur ★ de la carte et `MOTION_CONFIG`, pour l'aide |
+| `unitsTotal` | MEMORY : nombre de paires de la carte |
+| `notice`, `error` | Avertissement de remise au défaut ; erreur de saisie au submit |
+| `idPrefix` | Préfixe des ids (ex. `motion-card-mc-1`) |
+
+- Options filtrées par type, le défaut en premier : binaire (SPEEDY, QCM) : Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) : Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité.
+- Le champ montant (entier 1 à 999) n'apparaît que pour `FIXED` et `PER_UNIT`.
+- L'aide « → … » est calculée par `describePointsRule` (même fonction que les affichages anim et admin).
+- Garde client : à l'envoi, `pointsRuleValueError` signale un montant invalide sur la ligne de la carte concernée (`error`, `role="alert"`). L'avertissement de remise au défaut (`notice`) est annoncé avec `role="status"`.
+- `QuestionsPage.jsx` pose `noValidate` sur le `<form>` seulement quand une carte MEMOTION a un montant invalide et un thème renseigné. Sans cela, la validation HTML5 (min/max) bloquerait l'envoi avant la garde ci-dessus.
+- Le serveur refait la validation (HTTP 400, voir `docs/DATA_MODELS.md`). Pour les types sans section « Son » (MEMORY, MEMOTION, RAFALE, ENTRACTE), le corps de ce refus est affiché en `role="alert"` au-dessus du bouton d'enregistrement (`soundError`, `QuestionsPage.jsx`).
+
+### Helpers du barème par carte — `utils/motionGrid.js` et `utils/pointsRuleEditor.js` (v11.2.2, #190)
+
+Fonctions pures, partagées par l'éditeur, l'anim et le panneau admin. Elles reprennent la règle serveur `motionCardPointsForOutcome` (`engine.go`) : aucun autre calcul de montant côté client.
+
+| Fonction | Fichier | Rôle |
+|----------|---------|------|
+| `allowedPointsRuleModes(type)` / `defaultPointsRuleMode(type)` | `motionGrid.js` | Modes acceptés et défaut d'un type (miroir de `AllowedPointsRuleModes`) |
+| `resolvePointsRuleMode(card)` | `motionGrid.js` | Mode effectif : `POINTS_RULE.MODE` explicite, sinon défaut du type courant |
+| `getMotionCardPointsForRule(card, motionConfig, { units, unitsTotal })` | `motionGrid.js` | Montant crédité pour un résultat donné (gain prévisionnel anim) |
+| `getMotionCardPointsDisplay(card, motionConfig)` | `motionGrid.js` | Montant affichable avant jeu : `{ points, prefix, suffix }` — `prefix` = « jusqu'à » pour le prorata, `suffix` = unité (ex. « / bonne rép. ») |
+| `describePointsRule(card, motionConfig, { unitsTotal, unitLabel })` | `motionGrid.js` | Libellé de l'aide « → … » de l'éditeur |
+| `computeStarsProrataPoints(stars, units, unitsTotal)` | `motionGrid.js` | `Math.floor(stars × units / unitsTotal)`, 0 si `unitsTotal <= 0` |
+| `loadMotionCardPointsRule(card)`, `adaptPointsRuleToType(rule, type)`, `pointsRuleValueError(rule)`, `serializePointsRule(rule)`, `editorMotionConfig(cfg)` | `pointsRuleEditor.js` | État client de l'éditeur : chargement, remise au défaut si le type change, validation du montant, sérialisation (`mode: ''` ⇒ champ absent) |
+
+Consommateurs du montant : `AnimMotionCard` et `AnimPage` (zoom et sélection), `AnimConductPanel` (gain prévisionnel), `GamePage` (panneau admin). **La grille anim (`AnimMotionGrid`) et la grille TV (`PlayerDisplay`) n'appellent pas ces fonctions** : elles restent en ★ seules (décision utilisateur du 2026-10-15).
+
+### QcmAnswersEditor — prop `showHints` et carte QCM sans indices (v11.2.2, #279)
+
+Fichier : `components/QcmAnswersEditor.jsx`. Sous-éditeur QCM partagé par l'hôte question et la carte MEMOTION de `QuestionsPage.jsx`.
+
+- Prop `showHints` (défaut `true`) : `false` masque tout le bloc « indices » (`qcm-hints-toggle`). L'hôte question garde le bloc (défaut) ; l'éditeur de carte passe `showHints={false}`.
+- Une carte QCM n'a donc pas d'indices à l'écran, ni à l'enregistrement (`QuestionsPage.jsx` : état de carte et sérialisation sans les cinq champs `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2`). Côté serveur, voir `docs/DATA_MODELS.md`.
+- **Carte héritée** : une carte chargée avec `QCM_HINTS_ENABLED` vrai (`legacyHintsRemoved`) affiche sous le sous-éditeur la ligne « Indices retirés : une carte MEMOTION n'a plus d'indices. » (classe `motion-card-lock-reason`, icône ℹ️, `role="status"`). Cette information est locale : elle n'est jamais envoyée au serveur, et elle disparaît au rechargement.
+- Le message de verrou QCM d'une carte (`utils/motionCardLock.js`) ne mentionne plus les réglages d'indices.
 
 ### Podium Component (v2.4.0)
 
@@ -1584,7 +1698,6 @@ export function MotionCardEditor({ card, onChange }) {
         <QcmEditor
           answers={card.QCM_ANSWERS}
           correct={card.QCM_CORRECT}
-          hints={card.QCM_HINTS_ENABLED}
           onChange={(update) => onChange({ ...card, ...update })}
         />
       )}

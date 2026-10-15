@@ -6,7 +6,6 @@ import (
 	"buzzcontrol/internal/server"
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -90,7 +89,7 @@ func TestHandleUpdate_RosterDiff_EmitsPlayerEvicted_ForDisappearedVirtualPlayer(
 		t.Errorf("expected REASON=PLAYER_REMOVED, got %q", payload.Reason)
 	}
 
-	bobActions := collectActions(bobConn, 300*time.Millisecond)
+	bobActions := collectAfterSentinel264(t, app, bobConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(bobActions, protocol.ActionPlayerEvicted) {
 		t.Errorf("Bob (still present in the roster) must never receive PLAYER_EVICTED, got actions: %v", bobActions)
 	}
@@ -109,11 +108,12 @@ func TestHandleUpdate_RosterDiff_PhysicalBuzzerDisappearing_NoNotification(t *te
 
 	baseURL := startEvictionTestServer(t, app)
 	bystanderConn := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, bystanderConn) // inscrite au hub avant le témoin (#266)
 
 	// Roster now empty: the physical buzzer "disappeared".
 	app.handleUpdate(updateBumpersMsg(t, map[string]*game.Bumper{}))
 
-	actions := collectActions(bystanderConn, 300*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, bystanderConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(actions, protocol.ActionPlayerEvicted) {
 		t.Errorf("a physical buzzer disappearing from the roster must never emit PLAYER_EVICTED, got actions: %v", actions)
 	}
@@ -144,7 +144,7 @@ func TestHandleUpdate_RosterDiff_NoRemoval_NoNotification(t *testing.T) {
 	}
 	app.handleUpdate(updateBumpersMsg(t, sameRoster))
 
-	actions := collectActions(aliceConn, 300*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, aliceConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(actions, protocol.ActionPlayerEvicted) {
 		t.Errorf("an UPDATE that removes nobody must never emit PLAYER_EVICTED, got actions: %v", actions)
 	}

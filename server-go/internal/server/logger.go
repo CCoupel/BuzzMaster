@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,15 +33,14 @@ func init() {
 type BroadcastLogger struct {
 	buffer      *LogBuffer
 	onNewEntry  func(entry game.LogEntry) // Callback when a new entry is added
-	debugEnabled bool
+	debugEnabled atomic.Bool // #269: read by timer goroutines, written by SetDebugEnabled
 	file        *fileSink // persistent log file (#246), nil when disabled
 }
 
 // NewBroadcastLogger creates a new BroadcastLogger with the specified buffer capacity
 func NewBroadcastLogger(capacity int) *BroadcastLogger {
 	return &BroadcastLogger{
-		buffer:      NewLogBuffer(capacity),
-		debugEnabled: false,
+		buffer: NewLogBuffer(capacity),
 	}
 }
 
@@ -51,13 +51,13 @@ func (bl *BroadcastLogger) SetOnNewEntry(callback func(entry game.LogEntry)) {
 
 // SetDebugEnabled enables or disables DEBUG level logging
 func (bl *BroadcastLogger) SetDebugEnabled(enabled bool) {
-	bl.debugEnabled = enabled
+	bl.debugEnabled.Store(enabled)
 }
 
 // log is the internal method that adds an entry to the buffer and notifies subscribers
 func (bl *BroadcastLogger) log(level game.LogLevel, component game.LogComponent, format string, args ...interface{}) {
 	// Skip DEBUG logs if debug is not enabled
-	if level == game.LogLevelDebug && !bl.debugEnabled {
+	if level == game.LogLevelDebug && !bl.debugEnabled.Load() {
 		return
 	}
 

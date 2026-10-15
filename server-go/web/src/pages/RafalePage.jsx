@@ -4,14 +4,12 @@ import { useOptionalGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import CategoryBadge from '../components/CategoryBadge'
-import CategorySelector from '../components/CategorySelector'
-import CategoryFilterBar from '../components/CategoryFilterBar'
+import CategoryPicker from '../components/CategoryPicker'
+import DifficultyPicker from '../components/DifficultyPicker'
 import RafaleAIGenerateModal from '../components/RafaleAIGenerateModal'
 import Button from '../components/Button'
 import Card from '../components/Card'
 import './RafalePage.css'
-
-const DIFFICULTIES = [1, 2, 3]
 
 const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULTY: 1 }
 
@@ -56,7 +54,7 @@ export default function RafalePage() {
   // utilisateur QUALIF 8.0.0.2) : RafalePage.jsx passait apiCategories brut
   // partout, une source de données différente de celle du Quiz — c'est ce
   // que ce filtrage aligne, en plus du composant d'affichage lui-même
-  // (CategoryFilterBar ci-dessous).
+  // (CategoryPicker ci-dessous).
   const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -352,31 +350,26 @@ export default function RafalePage() {
           )}
 
           <div className="rafale-filters">
-            {/* CategoryFilterBar (v8.0.0, #16/#197, bugfix cohérence UI) —
-                même composant/pattern que QuestionsPage.jsx (base
-                GamePage.css + modificateur "Quiz" QuestionsPage.css),
-                remplace l'ancienne variante .rafale-chip qui produisait un
-                rendu incohérent (garde `if (!meta) return null` manquante +
-                apiCategories non filtré). */}
-            <CategoryFilterBar
+            {/* Filtre catégories (#221) — CategoryPicker variant="filter", même
+                composant que QuestionsPage.jsx et GamePage.jsx. */}
+            <CategoryPicker
+              variant="filter"
+              className="questions-page-filter-bar"
+              showLabel
+              value={selectedCategories}
               availableCategories={availableCategories}
-              selectedCategories={selectedCategories}
               customCategories={customCategories}
               onToggle={toggleCategoryFilter}
               onClear={clearCategoryFilters}
             />
             <div className="rafale-filter-group">
-              {DIFFICULTIES.map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  className={`rafale-chip ${selectedDifficulty === d ? 'on' : ''}`}
-                  onClick={() => setSelectedDifficulty(prev => (prev === d ? null : d))}
-                  title={`Difficulte ${d}`}
-                >
-                  {'★'.repeat(d)}{'☆'.repeat(3 - d)}
-                </button>
-              ))}
+              <DifficultyPicker
+                mode="single"
+                allowNone
+                ghost
+                value={selectedDifficulty}
+                onChange={setSelectedDifficulty}
+              />
               <button
                 type="button"
                 className={`rafale-chip ${onlyUnused ? 'on' : ''}`}
@@ -506,11 +499,11 @@ export default function RafalePage() {
                 </span>
               </div>
               <div className="form-group">
-                <label>Categorie</label>
-                {/* CategorySelector (v8.0.0, #16/#197, bugfix cohérence UI) —
-                    meme composant que l'editeur de question standard
-                    (QuestionsPage.jsx), plus de <select> texte distinct. */}
-                <CategorySelector
+                {/* CategoryPicker (#221, ex-CategorySelector v8.0.0 #16/#197) — même
+                    composant que l'éditeur de question standard (QuestionsPage.jsx). */}
+                <CategoryPicker
+                  mode="single"
+                  allowCreate
                   value={form.CATEGORY}
                   onChange={(key) => setForm(prev => ({ ...prev, CATEGORY: key }))}
                   customCategories={customCategories}
@@ -518,19 +511,13 @@ export default function RafalePage() {
                 />
               </div>
               <div className="form-group">
-                <label>Difficulte</label>
-                <div className="rafale-diff-row">
-                  {DIFFICULTIES.map(d => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={`rafale-diff-btn ${form.DIFFICULTY === d ? 'active' : ''}`}
-                      onClick={() => setForm(prev => ({ ...prev, DIFFICULTY: d }))}
-                    >
-                      {'★'.repeat(d)}
-                    </button>
-                  ))}
-                </div>
+                <DifficultyPicker
+                  mode="single"
+                  label="Difficulté"
+                  chipTitle={(d) => `Difficulte de la question : ${d}`}
+                  value={form.DIFFICULTY}
+                  onChange={(d) => setForm(prev => ({ ...prev, DIFFICULTY: d }))}
+                />
               </div>
 
               {formError && <p className="rafale-status rafale-status-error">{formError}</p>}

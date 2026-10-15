@@ -361,7 +361,7 @@ func TestDuplicateSession246_SameConnectionReconnectingDoesNotEvictItself(t *tes
 	e.connect(t, cid, "Paul", e.paul)
 	e.connect(t, cid, "Paul", e.paul)
 
-	for _, a := range collectActions(conn, 400*time.Millisecond) {
+	for _, a := range collectAfterSentinel264(t, e.app, conn)[0] { // #266 : témoin, pas de fenêtre fixe
 		if a == protocol.ActionPlayerEvicted {
 			t.Fatal("une connexion ne doit pas recevoir PLAYER_EVICTED pour son propre PLAYER_CONNECT")
 		}

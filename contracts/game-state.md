@@ -175,6 +175,19 @@ est inchangé.
   "GAINS": [ { "TEAM": "Les Rouges", "POINTS": 4 }, { "TEAM": "Les Bleus", "POINTS": 2 } ] } }
 ```
 
+## `NETWORK` — état réseau du serveur (v11.2.2, #267)
+
+| Propriété | Type | Défaut | Notes |
+|-----------|------|--------|-------|
+| NETWORK | `{ ONLY_LOCALHOST: boolean, IPS: string[], IGNORED_INTERFACES: {NAME: string, IP: string}[], CHECKED_AT: number }` | `{ONLY_LOCALHOST: false, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0}` | **Toujours sérialisé**, listes jamais `null`. Diffusé à tous les clients web (seul l'admin l'affiche). Non persisté ; recalculé au démarrage. `CHECKED_AT` en millisecondes epoch : horodatage du **dernier changement d'état réseau** (perte, retour ou changement d'`IPS`) — **inchangé** lors des passages du watchdog sans changement ; au premier passage (démarrage) = instant de la première détection |
+| NETWORK_ONLY_LOCALHOST | `boolean` | `false` | **Hérité (v5.6.2, #96)**, conservé en miroir exact de `NETWORK.ONLY_LOCALHOST` ; aucun nouveau lecteur ne doit s'y abonner |
+
+- **Critère « sans réseau »** (`ONLY_LOCALHOST = true`, décision utilisateur 2026-10-13) : aucune adresse IPv4 **utilisable** sur une interface UP, c'est-à-dire après exclusion de la boucle locale (`127/8`), des adresses APIPA (`169.254/16`) **et des interfaces virtuelles connues** (`IGNORED_INTERFACES`). Liste d'exclusion **best-effort, par nom d'interface, insensible à la casse** : Windows `vEthernet`, `Virtual`, `WSL`, `Hyper-V`, `VMware`, `VirtualBox`, `Loopback` ; Linux/macOS préfixes `docker`, `br-`, `veth`, `virbr`, `tun`, `tap`, `wg`, `lxc`, `vmnet`, `utun`. Une interface ignorée **avec** une IPv4 est listée dans `IGNORED_INTERFACES` (diagnostic affiché par l'overlay) ; elle n'empêche jamais `ONLY_LOCALHOST` de passer à `true`. La liste est documentée dans `docs/DATA_MODELS.md` et ne vise aucune exhaustivité.
+- **`IPS`** : adresses retenues (non ignorées), dans l'ordre de `net.Interfaces()`. **Ne change pas** la source des heartbeats UDP ni de `resolveServerIP` (`server.GetServerIPs()`, inchangée) : le critère d'alerte est plus strict que la diffusion, jamais l'inverse.
+- **Détection** : au démarrage (`init`) puis par le watchdog toutes les **30 s** (inchangé) ; diffusion (`UPDATE`) **seulement quand `ONLY_LOCALHOST` ou `IPS` change**. `CHECKED_AT` n'avance qu'avec ces changements : un `UPDATE` ne porte jamais un `CHECKED_AT` plus récent sans transition (l'écran affiche donc « depuis N s », pas « vérifié il y a N s »). Renvoyé au `HELLO` (état complet) : un admin qui se connecte pendant la panne voit l'alerte immédiatement.
+- **Règle d'écran (admin uniquement, toutes les pages `/admin/*`)** : `ONLY_LOCALHOST = true` ⇒ overlay plein écran (`role="alertdialog"`) ; « Continuer quand même » le replie en **bandeau rouge persistant** jusqu'au retour du réseau ; toute **nouvelle** transition `false → true` rouvre l'overlay ; `true → false` retire overlay et bandeau et affiche un message bref « Réseau rétabli — <IP> ». TV, anim et tablette ignorent le champ. Maquette : `admin_network_overlay__no_network`.
+- Journal : `NETWORK_LOST` / `NETWORK_RESTORED` (`contracts/logging.md` §3.2 nonies).
+
 ## Question en cours
 
 ```typescript
@@ -316,7 +329,7 @@ Champ unique décrivant l'**état vivant du type imbriqué** de la carte MEMOTIO
 interface MotionActive {
   CARD_ID: string    // ID de la carte active ("" hors SELECTED/QUESTION/REVEAL)
   TYPE: string       // Type de la carte : "SPEEDY", "QCM", "MEMORY", "ARDOISE" (défaut "" = pas de type)
-  STATE: object      // État vivant propre au type (ex: { "QCM_INVALIDATED": ["RED", "YELLOW"] } pour QCM)
+  STATE: object      // État vivant propre au type (ex: MEMORY §5.4 de question-types.md ; {} pour SPEEDY et QCM — une carte QCM n'a pas d'indices depuis #279)
 }
 ```
 
@@ -331,11 +344,13 @@ interface MotionActive {
 {
   "CARD_ID": "mc-3",
   "TYPE": "QCM",
-  "STATE": {
-    "QCM_INVALIDATED": ["RED", "YELLOW"]
-  }
+  "STATE": {}
 }
 ```
+
+> *(v11.2.2, #279, LOT-6)* Une carte QCM n'a plus d'indices : `STATE.QCM_INVALIDATED` n'est plus
+> alimenté pour un hôte carte (`contracts/question-types.md` §7.1). Le champ question-scopé
+> `QCM_INVALIDATED` de l'hôte question est inchangé.
 
 #### `STATE` pour une carte `TYPE=MEMORY` (v7.1.0, #187)
 
@@ -674,7 +689,7 @@ clients connectés ni minuteur vivant ; noter que `Entracte`, l'état, est exclu
 `EntracteConfig`, le réglage, est persisté — deux champs voisins, deux cycles de vie opposés) ; `Delay` (minuteur du round courant, réaffecté à chaque
 `Start`/`Ready`/décompte MEMOTION — ce n'est pas un réglage, contrairement à
 `GameSettings.Game.DefaultDelay`, #150, qui lui est le vrai réglage stocké) ;
-`NetworkOnlyLocalhost` (recalculé au démarrage) ; `VirtualPlayerCount` (dérivé du nombre de
+`NetworkOnlyLocalhost` et `Network` (recalculés au démarrage, #267) ; `VirtualPlayerCount` (dérivé du nombre de
 buzzers réellement enrôlés) ; `Backgrounds`/`NewGameBackgrounds` (déjà persistés
 indépendamment dans `data/files/backgrounds/backgrounds.json`, chargés par `loadBackgrounds()`/
 `loadNewGameBackgrounds()` **avant** `LoadState()` dans la séquence de démarrage — les exclure

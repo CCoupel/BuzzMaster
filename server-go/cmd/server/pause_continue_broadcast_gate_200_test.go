@@ -56,6 +56,7 @@ func TestHandleContinue_RefusedContinue_DoesNotBroadcast(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	tvConn := dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tvConn) // inscrit au hub avant toute diffusion directe (sinon elle le rate) — #266
 
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionContinue, struct{}{})
 
@@ -91,6 +92,7 @@ func TestHandleContinue_AcceptedContinue_StillBroadcasts(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	tvConn := dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tvConn) // inscrit au hub avant toute diffusion directe (sinon elle le rate) — #266
 
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionContinue, struct{}{})
 
@@ -116,6 +118,7 @@ func TestHandlePause_RefusedPause_DoesNotBroadcast(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	tvConn := dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tvConn) // inscrit au hub avant toute diffusion directe (sinon elle le rate) — #266
 
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionPause, struct{}{})
 
@@ -148,6 +151,7 @@ func TestHandlePause_AcceptedPause_StillBroadcasts(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	tvConn := dialWS(t, baseURL, "/ws/tv")
+	learnClientID(t, app, tvConn) // inscrit au hub avant toute diffusion directe (sinon elle le rate) — #266
 
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionPause, struct{}{})
 

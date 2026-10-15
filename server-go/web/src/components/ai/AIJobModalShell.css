@@ -203,12 +203,6 @@
   color: white;
 }
 
-.ai-chip--category.active {
-  background: var(--chip-color, var(--primary-500));
-  border-color: var(--chip-color, var(--primary-500));
-  color: white;
-}
-
 .ai-chip-check {
   margin-right: var(--space-1);
 }

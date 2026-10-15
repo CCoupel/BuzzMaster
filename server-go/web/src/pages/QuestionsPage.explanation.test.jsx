@@ -150,7 +150,7 @@ describe('QuestionsPage — champ note d\'explication', () => {
 
 describe('QuestionsPage — soumission de la note (POST /questions)', () => {
   beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ID: '1' }) })
+    global.fetch = vi.fn().mockImplementation(async (url) => ({ ok: true, json: async () => (url === '/api/categories' ? [] : { ID: '1' }) }))
   })
 
   it('data.append("explanation", ...) porte le texte saisi', async () => {
@@ -198,7 +198,7 @@ describe('QuestionsPage — soumission de la note (POST /questions)', () => {
 
 describe('QuestionsPage — édition d\'une question existante (AC14)', () => {
   beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ID: '1' }) })
+    global.fetch = vi.fn().mockImplementation(async (url) => ({ ok: true, json: async () => (url === '/api/categories' ? [] : { ID: '1' }) }))
   })
 
   it('cliquer sur une question avec EXPLANATION pré-remplit la textarea', () => {

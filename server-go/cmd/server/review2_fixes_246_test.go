@@ -6,7 +6,6 @@ import (
 	"buzzcontrol/internal/game"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestReview2_246_HashAndReasonCannotForgeLogPairs(t *testing.T) {
@@ -19,7 +18,7 @@ func TestReview2_246_HashAndReasonCannotForgeLogPairs(t *testing.T) {
 	bad := finalPayload246(e.paul, "q-ardoise", "A")
 	bad["HASH"] = "zz zz=1\n[ERROR] faux"
 	e.send(t, cid, "vplayer", "ARDOISE_FINAL", bad)
-	noAction246(t, conn, "ARDOISE_FINAL_ACK", 100*time.Millisecond)
+	noAction246(t, e.app, "ARDOISE_FINAL_ACK", conn)
 
 	n := 0
 	for _, en := range e.app.logger.GetHistory() {
@@ -69,7 +68,7 @@ func TestReview2_246_FinalTextLimitIsCountedInCharacters(t *testing.T) {
 				if !e.hasLog(game.LogLevelWarn, "ARDOISE_FINAL_TOO_LONG") {
 					t.Errorf("WARN ARDOISE_FINAL_TOO_LONG attendu ; logs=%v", e.logLines(game.LogLevelWarn))
 				}
-				noAction246(t, conn, "ARDOISE_FINAL_ACK", 200*time.Millisecond)
+				noAction246(t, e.app, "ARDOISE_FINAL_ACK", conn)
 			}
 		})
 	}

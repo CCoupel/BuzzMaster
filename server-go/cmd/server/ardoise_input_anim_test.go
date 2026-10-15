@@ -5,7 +5,6 @@ import (
 	"buzzcontrol/internal/protocol"
 	"fmt"
 	"testing"
-	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -69,14 +68,19 @@ func TestArdoiseInput_Anim_ReceivesCoalescedUpdate(t *testing.T) {
 
 	// #158 B1: Anim now receives exactly 1 coalesced UPDATE, same discipline
 	// as Admin (ardoiseCoalesceWindow = 150ms).
-	animActions := collectActions(animConn, 500*time.Millisecond)
+	//
+	// #266 : l'UPDATE coalescé (timer de 150 ms) est attendu PAR ÉVÉNEMENT, échéance large ; le témoin
+	// prouve ensuite qu'aucun autre ne le suit (et que le buzzer, lu après le tir du timer, n'a rien reçu).
+	readActionMatchingWithin(t, animConn, protocol.ActionUpdate, eventDeadline264)
+	seen := collectAfterSentinel264(t, app, animConn, buzzerConn)
+	animActions := append([]string{protocol.ActionUpdate}, seen[0]...) // l'UPDATE attendu + la suite jusqu'au témoin
 	if got := countActions(animActions, protocol.ActionUpdate); got != 1 {
 		t.Errorf("#158/B1: Anim should receive exactly 1 coalesced UPDATE for %d ARDOISE_INPUT, got %d (actions=%v)", total, got, animActions)
 	}
 
 	// Buzzer stays excluded — SerializeForBuzzer carries no ARDOISE field at
 	// all (unchanged reasoning, #129 T1.5), #158 does not add it.
-	buzzerActions := collectActions(buzzerConn, 500*time.Millisecond)
+	buzzerActions := seen[1]
 	if got := countActions(buzzerActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#158/B1: Buzzer should receive 0 UPDATE from %d ARDOISE_INPUT, got %d (actions=%v)", total, got, buzzerActions)
 	}

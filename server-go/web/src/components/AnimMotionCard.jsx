@@ -1,4 +1,4 @@
-import { getMotionCardPoints } from '../utils/motionGrid'
+import { getMotionCardPointsDisplay } from '../utils/motionGrid'
 import './AnimMotionCard.css'
 
 /**
@@ -15,7 +15,7 @@ import './AnimMotionCard.css'
  *
  * `motionConfig` (`question.MOTION_CONFIG`) est transmis TEL QUEL — le
  * composant dérive lui-même les points via `utils/motionGrid.js`
- * (`getMotionCardPoints`), jamais un montant précalculé par l'appelant :
+ * (`getMotionCardPointsDisplay`, règle `POINTS_RULE` de la carte), jamais un montant précalculé par l'appelant :
  * même philosophie que #160/F0, la formule de barème ne doit exister qu'à
  * un seul endroit.
  *
@@ -46,7 +46,8 @@ export default function AnimMotionCard({ playable, revealed, card, motionConfig 
   if (!card) return null
 
   const diff = card.DIFFICULTY || 1
-  const points = getMotionCardPoints(diff, motionConfig)
+  // #190 — montant selon POINTS_RULE de la carte (FIXED, PER_UNIT), sinon barème étoiles
+  const { points, prefix, suffix } = getMotionCardPointsDisplay(card, motionConfig)
 
   if (!revealed && !playable) {
     // SELECTED — aucun hôte de carte actif, mais le seul cas qui atteint
@@ -61,7 +62,7 @@ export default function AnimMotionCard({ playable, revealed, card, motionConfig 
         <span className="anim-motion-card-focus-foot">
           <span className="anim-motion-card-focus-stars">{'★'.repeat(diff)}</span>
           {' · '}
-          <span className="anim-motion-card-focus-points">{points} pt{points > 1 ? 's' : ''}</span>
+          <span className="anim-motion-card-focus-points">{prefix}{points} pt{points > 1 ? 's' : ''}{suffix}</span>
         </span>
       </div>
     )

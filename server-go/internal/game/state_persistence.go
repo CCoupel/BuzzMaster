@@ -53,7 +53,7 @@ const persistedGameStateFormatVersion = 1
 //     current-round timer state, not a stored preference. The actual
 //     stored preference (GameSettings.Game.DefaultDelay, #150) already
 //     lives in game-config.json.
-//   - NetworkOnlyLocalhost: recalculated at startup, never a stored value.
+//   - NetworkOnlyLocalhost / Network (#267): recalculated at startup, never a stored value.
 //   - VirtualPlayerCount: derived from actually-enrolled bumpers, not a
 //     setting.
 //   - Backgrounds/NewGameBackgrounds: already persisted independently

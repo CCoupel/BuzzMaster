@@ -2,6 +2,50 @@
 
 ---
 
+## [20261015] — Cartes QCM MEMOTION sans indices (#279, v11.2.2, LOT-6)
+
+- **[CHANGED — non BREAKING]** `question-types.md` §7.1 : une carte MEMOTION de type `QCM` **n'a pas d'indices** (décision utilisateur 2026-10-15 : pas d'indice sans effet sur les points ; option « prise en compte au crédit » écartée). À l'enregistrement (`POST /questions`), `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2` et `QCM_PENALTY_1/2` sont **ignorés et retirés** d'une carte QCM, quelle que soit leur valeur — aucune erreur, aucun code de refus (option « ignorer silencieusement »).
+- **[CHANGED]** moteur : plus aucun `QCM_HINT` ni `MEMOTION_ACTIVE.STATE.QCM_INVALIDATED` pendant une carte, y compris pour une carte stockée avant #279 avec indices (lue et jouée sans erreur). `game-state.md` § `MEMOTION_ACTIVE` : `STATE` d'une carte QCM = `{}`. §5.3 : `qcmInvalidated` d'un hôte carte toujours vide, accesseur conservé.
+- **[CHANGED]** §3.1/§3.2 : les champs d'indices restent `OwnedFields` QCM (hôte question) mais sont **sans objet en carte** et ne verrouillent plus le type d'une carte.
+- **[CHANGED]** éditeur : bloc d'indices retiré du sous-éditeur QCM d'une carte ; carte héritée chargée sans indices avec une ligne d'information. Hôte question QCM (indices, `HINTS_AT_BUZZ`, commutateur #254) strictement inchangé.
+- Aucune BREAKING : aucune requête acceptée aujourd'hui ne devient refusée ; lecture, jeu et ré-enregistrement des cartes existantes garantis. Aucune question du jeu de données courant ne porte de carte QCM.
+
+---
+
+## [20261015] — `POINTS_RULE` : parité d'affichage limitée aux surfaces à montant (#190, v11.2.2, LOT-5)
+
+- **[CHANGED — précision de périmètre]** `question-types.md` §6.2 « Parité d'affichage » : le montant selon `POINTS_RULE` est affiché sur les seules surfaces **qui affichent déjà un montant** — aide « → N pts » de l'éditeur, zoom de carte anim (`AnimMotionCard`), bandeau de contexte `/anim`, bouton de crédit anim (`AnimConductPanel`), panneau admin `GamePage`. Les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant (décision utilisateur 2026-10-15, `docs/mockup/DECISIONS.md` § `admin_question_editor`). Corrige la formulation « la grille (anim/TV) » du [20261013], qui laissait entendre un montant sur les grilles.
+- Aucune BREAKING : aucun champ, aucun message, aucune règle de calcul ne change ; précision de l'étendue d'un affichage client.
+
+---
+
+## [20261014] — `NETWORK.CHECKED_AT` : horodatage du dernier changement d'état (#267, v11.2.2, clarification revue de code)
+
+- **[CHANGED — clarification]** `game-state.md` §`NETWORK` : `CHECKED_AT` = instant du **dernier changement d'état réseau** (perte, retour ou changement d'`IPS`), inchangé lors des passages du watchdog sans changement ; au premier passage = instant de la première détection. Cohérent avec « diffusion seulement sur changement » : aucun `UPDATE` ne porte un `CHECKED_AT` plus récent sans transition. Décision teamleader sur recommandation `_work/reports/code-reviewer-20261014-194259.md`.
+- **[NEW]** `logging.md` §3.2 nonies : `NETWORK_LISTING_FAILED` (WARN, champ `err`) — échec du listage des interfaces : état précédent conservé, aucune diffusion ni `NETWORK_LOST`, une ligne par passage en échec ; premier passage sans état = réseau présent (dev-backend `5cf77b14`, revue LOT-3).
+- Aucune BREAKING : même champ, même type (millisecondes epoch) ; l'écran admin affiche « depuis N s » plutôt que « vérifié il y a N s ».
+
+---
+
+## [20261013] — `POINTS_RULE` : applicabilité par type et validation à l'enregistrement (#190, v11.2.2, LOT-5)
+
+- **[CHANGED]** `question-types.md` §6.2 : modes acceptés **par type effectif** — binaire (`SPEEDY`, `QCM`) : `STARS`, `FIXED` ; progression (`MEMORY`, `RAFALE`) : `STARS_PRORATA`, `STARS`, `FIXED`, `PER_UNIT` (décision utilisateur 2026-10-13). Trois refus HTTP 400 au `POST /questions` : `POINTS_RULE_INVALID_MODE`, `POINTS_RULE_MODE_NOT_APPLICABLE`, `POINTS_RULE_VALUE_REQUIRED` (`VALUE` entier 1–999 pour `FIXED`/`PER_UNIT`).
+- **[CHANGED — précision]** §6.2/§6.3 : le défaut choisi dans l'éditeur **n'écrit pas** `POINTS_RULE` (résolution par registre, #187 cycle 5) ; une règle explicite survit à un changement de type et est remise au défaut par l'éditeur si elle devient inapplicable.
+- **[CHANGED — précision]** parité d'affichage : grille anim/TV et gain prévisionnel suivent la règle de la carte (plus seulement les ★) via une fonction JS miroir de `motionCardPointsForOutcome`.
+- Aucune BREAKING : validation à l'enregistrement seulement ; cartes existantes lues et jouées inchangées ; aucun mode ni champ nouveau.
+
+---
+
+## [20261013] — `GameState.NETWORK` : état réseau du serveur, alerte admin plein écran (#267, v11.2.2, LOT-2)
+
+- **[NEW]** (ajout, ADDED) `game-state.md` §`NETWORK` : `{ONLY_LOCALHOST, IPS[], IGNORED_INTERFACES[{NAME, IP}], CHECKED_AT}`, toujours sérialisé, non persisté, diffusé à tous les clients web, renvoyé au `HELLO`. Critère « sans réseau » = aucune IPv4 utilisable hors boucle locale, APIPA **et interfaces virtuelles connues** (liste best-effort documentée — décision utilisateur 2026-10-13). Watchdog 30 s inchangé ; diffusion seulement sur changement.
+- **[CHANGED — précision]** `NETWORK_ONLY_LOCALHOST` (v5.6.2, #96) devient un **miroir hérité** de `NETWORK.ONLY_LOCALHOST`. Constat : le client web ne l'a **jamais recopié** dans son état (`useWebSocket.js`) — le bandeau #96 ne s'est jamais affiché ; corrigé par #267 (overlay admin + bandeau replié).
+- **[NEW]** `logging.md` §3.2 nonies : `NETWORK_LOST` (WARN), `NETWORK_RESTORED`, `NETWORK_IPS_CHANGED` (INFO) ; remplacent la ligne INFO `Network state updated`.
+- Les heartbeats UDP et `resolveServerIP` gardent `server.GetServerIPs()` tel quel : le critère d'alerte est plus strict que la diffusion, jamais l'inverse.
+- Aucune BREAKING : champ additif, ancien booléen conservé.
+
+---
+
 ## [20261013] — `FLIP_MEMORY_CARD.FLIP_ID` : retournement MEMORY/MEMOTION idempotent avec accusé (#248, v11.2.1, lot 5b)
 
 - **[NEW]** (ajout, ADDED) `websocket-actions.md` §FLIP_MEMORY_CARD : champ optionnel `FLIP_ID` (1–64 `[A-Za-z0-9_-]`), honoré pour un `vplayer` résolu. Déduplication **par bumper**, **avant** la vérification du tour, sous le même verrou que le retournement : un renvoi ne retourne jamais la carte une seconde fois, même si elle est revenue face cachée. Mémoire de 16 `FLIP_ID` par bumper, purgée au changement de question, sur `NEW_GAME` et à la suppression du bumper ; non persistée.

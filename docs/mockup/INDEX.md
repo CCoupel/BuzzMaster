@@ -22,6 +22,9 @@
 | tv_points_award | #265 multi_team | `v11.2.1/ui/tv_points_award__multi_team.html` | v11.2.1 | TV, attribution de points multi-équipes, feu d'artifice par lots de 6 au plus, grille 3 × 2 (validée 2026-10-12) |
 | vplayer_points_award | #265 own_team | `v11.2.1/ui/vplayer_points_award__own_team.html` | v11.2.1 | Tablette, gain de sa propre équipe seulement, animation calée sur le lot de la TV (validée 2026-10-12) ; complète `tv_points_award__multi_team` |
 | vplayer_qcm_answer | #248 ack | `v11.2.1/ui/vplayer_qcm_answer__ack.html` | v11.2.1 | Tablette, accusé de réponse QCM / SPEEDY / MEMORY, état « équipe déjà servie » (validée 2026-10-12) ; complète `vplayer_ardoise_keyboard__final_ack` |
+| admin_network_overlay | #267 no_network | `v11.2.2/ui/admin_network_overlay__no_network.html` | v11.2.2 | Admin, alerte plein écran « serveur sans réseau » : overlay, bandeau replié, toast de retour (validée 2026-10-13) |
+| admin_question_editor | #190 memotion_card_points_rule | `v11.2.2/ui/admin_question_editor__memotion_card_points_rule.html` | v11.2.2 | Éditeur de carte MEMOTION, contrôle « Points » (POINTS_RULE) filtré par type, parité anim/TV (validée 2026-10-13) ; complète `docs/mockups/memotion-card-type-selector-184.html` §2 (historique, non indexée) |
+| admin_pickers | #221 category_difficulty_unified | `v11.2.2/ui/admin_pickers__category_difficulty_unified.html` | v11.2.2 | Sélecteurs catégorie / difficulté unifiés (CategoryPicker / DifficultyPicker : mono, multi, filtre), 15 sites, QuizMetaForm exclu (validée 2026-10-13) |
 
 ## Obsolètes
 | Fichier | Remplacée par | Version |

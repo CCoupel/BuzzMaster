@@ -19,8 +19,10 @@
   color: var(--gray-400);
 }
 
-.ai-chip.active .rafale-ai-cat-count {
-  color: rgba(255, 255, 255, 0.85);
+/* Chip active de CategoryPicker (#221) : fond clair teinté → compteur en gris foncé
+   (l'ancien blanc de .ai-chip.active était lisible sur fond plein, plus ici). */
+.cat-chip.active .rafale-ai-cat-count {
+  color: var(--gray-600);
 }
 
 .rafale-ai-cat-count.zero {
@@ -28,15 +30,8 @@
   font-weight: 600;
 }
 
-.ai-chip.active .rafale-ai-cat-count.zero {
-  color: #fde68a;
-}
-
-/* Chips ★/★★/★★★ — même base que .ai-chip, police mono pour un alignement
-   régulier des étoiles. */
-.rafale-ai-star-chip {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  letter-spacing: 0.08em;
+.cat-chip.active .rafale-ai-cat-count.zero {
+  color: #b45309;
 }
 
 /* Matrice existant → après génération */

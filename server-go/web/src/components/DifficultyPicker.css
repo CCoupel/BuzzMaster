@@ -1,0 +1,53 @@
+/* DifficultyPicker (#221) — maquette docs/mockup/v11.2.2/ui/admin_pickers__category_difficulty_unified.html
+   Variables du projet avec repli explicite : --bg-secondary / --text-secondary ne sont
+   définies nulle part globalement (les anciens boutons en dépendaient sans repli).
+   Les teintes ambre restent lisibles sur fond clair comme sur fond sombre. */
+
+.difficulty-picker-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.difficulty-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.diff-chip {
+  border: 2px solid var(--gray-200);
+  background: var(--bg-secondary, #fff);
+  color: var(--warning-text, #b45309);
+  border-radius: var(--radius-md);
+  padding: 0.2rem 0.55rem;
+  font: inherit;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.diff-chip:hover {
+  border-color: #f59e0b;
+}
+
+.diff-chip:focus-visible {
+  outline: 2px solid var(--primary-500, #6366f1);
+  outline-offset: 2px;
+}
+
+.diff-chip.active {
+  border-color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 22%, var(--bg-secondary, #fff));
+  font-weight: 700;
+}
+
+.diff-chip .check {
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-right: 0.2rem;
+}
+
+.diff-chip .diff-stars {
+  white-space: nowrap;
+}

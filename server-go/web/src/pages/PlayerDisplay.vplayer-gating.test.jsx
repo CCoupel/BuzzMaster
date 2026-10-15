@@ -158,16 +158,36 @@ beforeEach(() => {
   })
 })
 
+// jsdom 30 (#270) valide les propriétés CSS via css-tree, qui appelle lui-même
+// Array.prototype.sort : un espion global « jamais appelé » compterait ces tris
+// internes. On ne compte donc que les tris dont la pile passe par le code applicatif
+// (src/, hors node_modules et hors ce fichier de test) — l'intention de CA8 (aucun tri
+// applicatif côté VJoueur hors SCORE/PLAYERS) est inchangée.
+function spyAppSort() {
+  const original = Array.prototype.sort
+  const appCalls = []
+  const spy = vi.spyOn(Array.prototype, 'sort').mockImplementation(function (...args) {
+    const stack = new Error().stack || ''
+    const fromApp = stack
+      .split('\n')
+      .slice(1)
+      .some(line => /[\\/]src[\\/]/.test(line) && !line.includes('node_modules') && !line.includes('.test.'))
+    if (fromApp) appCalls.push(stack)
+    return original.apply(this, args)
+  })
+  return { spy, appCalls }
+}
+
 // ---------------------------------------------------------------------------
 // T3.2 — aucun tri exécuté côté VJoueur hors vue SCORE/PLAYERS
 // ---------------------------------------------------------------------------
 
 describe('PlayerDisplay — gating VJoueur du classement (#127, CA8)', () => {
   it('isVPlayer=true, remote=GAME (rafale PREPARE→READY) : aucun tri exécuté au montage ni sur UPDATE suivant', () => {
-    const sortSpy = vi.spyOn(Array.prototype, 'sort')
+    const { spy: sortSpy, appCalls } = spyAppSort()
 
     const { rerender } = renderVPlayer({ phase: 'PREPARE', remote: 'GAME' })
-    expect(sortSpy).not.toHaveBeenCalled()
+    expect(appCalls).toHaveLength(0)
 
     // Simule le message UPDATE suivant de la rafale (#127) : nouvelles références
     // teams/bumpers (comme après un JSON.parse frais), mêmes données modulo un score.
@@ -185,16 +205,16 @@ describe('PlayerDisplay — gating VJoueur du classement (#127, CA8)', () => {
       />
     )
 
-    expect(sortSpy).not.toHaveBeenCalled()
+    expect(appCalls).toHaveLength(0)
     sortSpy.mockRestore()
   })
 
   it('isVPlayer=true, phase READY : toujours aucun tri (couvre la transition PREPARE→READY elle-même)', () => {
-    const sortSpy = vi.spyOn(Array.prototype, 'sort')
+    const { spy: sortSpy, appCalls } = spyAppSort()
 
     renderVPlayer({ phase: 'READY', remote: 'GAME' })
 
-    expect(sortSpy).not.toHaveBeenCalled()
+    expect(appCalls).toHaveLength(0)
     sortSpy.mockRestore()
   })
 
@@ -222,11 +242,13 @@ describe('PlayerDisplay — gating VJoueur du classement (#127, CA8)', () => {
   })
 
   it('isVPlayer=false (TV) : le tri s\'exécute toujours normalement en vue SCORE (comportement TV inchangé)', () => {
-    const sortSpy = vi.spyOn(Array.prototype, 'sort')
+    const { spy: sortSpy, appCalls } = spyAppSort()
 
     renderTV({ phase: 'STOPPED', remote: 'SCORE' })
 
-    expect(sortSpy).toHaveBeenCalled()
+    // Témoin positif : prouve aussi que spyAppSort() détecte bien un tri applicatif
+    // (sinon les assertions « aucun tri » ci-dessus seraient vides).
+    expect(appCalls.length).toBeGreaterThan(0)
     sortSpy.mockRestore()
   })
 

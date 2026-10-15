@@ -4,3 +4,6 @@
 
 | Date | Milestone | Feature | Cycle | Verdict | feature | regression | quarantaine | environnement | flaky |
 |------|-----------|---------|-------|---------|---------|------------|-------------|---------------|-------|
+| 2026-10-15 | v11.2.2 | #221 pickers unifiés (LOT-4) | QA 1 (rejoué après finitions 26eda467) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-15 | v11.2.2 | #190 POINTS_RULE par carte MEMOTION (LOT-5) | QA 1 (Go 10d46795, web 79a18491) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
+| 2026-10-15 | v11.2.2 | #279 cartes QCM MEMOTION sans indices (LOT-6) | QA 1 (6c0f7f32) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |

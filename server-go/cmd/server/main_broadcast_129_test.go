@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -93,14 +92,15 @@ func TestBroadcast129_ObserverVPlayer_ReceivesZeroUpdatesFromPeerConnectDisconne
 		app.handlePlayerConnect(fmt.Sprintf("peer-client-%s", id), playerConnectMsg(t, "irrelevant", id))
 	}
 
-	observerActions := collectActions(observerConn, 500*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, observerConn, adminConn) // #266 : un témoin, pas de fenêtre fixe
+	observerActions := seen[0]
 	observerUpdates := countActions(observerActions, protocol.ActionUpdate)
 	t.Logf("observer received %d UPDATE from %d disconnects + %d reconnects (actions=%v)", observerUpdates, nPeers, nPeers, observerActions)
 	if observerUpdates != 0 {
 		t.Errorf("#129 CA1: observer VJoueur should receive 0 UPDATE from %d peer disconnects + %d peer reconnects, got %d", nPeers, nPeers, observerUpdates)
 	}
 
-	adminActions := collectActions(adminConn, 500*time.Millisecond)
+	adminActions := seen[1]
 	adminUpdates := countActions(adminActions, protocol.ActionUpdate)
 	t.Logf("admin received %d UPDATE (actions=%v)", adminUpdates, adminActions)
 	if adminUpdates != 2*nPeers {
@@ -129,7 +129,7 @@ func TestBroadcast129_ReconnectingPlayer_ReceivesExactlyOneTargetedEchoWithConne
 
 	app.handlePlayerConnect(clientID, playerConnectMsg(t, "Alice", id))
 
-	actions := collectActions(conn, 500*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, conn)[0] // #266 : témoin, pas de fenêtre fixe
 	got := countActions(actions, protocol.ActionUpdate)
 	t.Logf("reconnecting player received %d UPDATE (actions=%v)", got, actions)
 	if got != 1 {
@@ -229,12 +229,17 @@ func TestBroadcast129_ArdoiseInput_ZeroUpdatesToVPlayerAndTV(t *testing.T) {
 		}
 	}
 
-	vpActions := collectActions(vpConn, 500*time.Millisecond)
+	// #266 : l'UPDATE coalescé (fenêtre de 150 ms, timer) est attendu PAR ÉVÉNEMENT, échéance large ;
+	// le témoin prouve ensuite qu'aucun autre ne le suit — et que vp/tv, lus après le tir du timer,
+	// n'ont vraiment rien reçu (sinon « 0 UPDATE » serait vrai trivialement avant le tir).
+	readActionMatchingWithin(t, adminConn, protocol.ActionUpdate, eventDeadline264)
+	seen := collectAfterSentinel264(t, app, vpConn, tvConn, adminConn)
+	vpActions, tvActions, adminRest := seen[0], seen[1], seen[2]
+
 	if got := countActions(vpActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#129 CA4: VJoueur should receive 0 UPDATE from %d ARDOISE_INPUT, got %d (actions=%v)", total, got, vpActions)
 	}
 
-	tvActions := collectActions(tvConn, 500*time.Millisecond)
 	if got := countActions(tvActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#129 CA4: TV should receive 0 UPDATE from %d ARDOISE_INPUT, got %d (actions=%v)", total, got, tvActions)
 	}
@@ -246,7 +251,7 @@ func TestBroadcast129_ArdoiseInput_ZeroUpdatesToVPlayerAndTV(t *testing.T) {
 	// regression of the "admin sees answers build up live" guarantee: a real
 	// admin, typing over real seconds rather than a test's tight loop, still
 	// sees frequent updates — just capped in the pathological worst case.
-	adminActions := collectActions(adminConn, 500*time.Millisecond)
+	adminActions := append([]string{protocol.ActionUpdate}, adminRest...) // l'UPDATE attendu + la suite jusqu'au témoin
 	if got := countActions(adminActions, protocol.ActionUpdate); got != 1 {
 		t.Errorf("#129 CA5 (admin, coalesced): admin should receive exactly 1 UPDATE for %d ARDOISE_INPUT arriving within one %s window, got %d (actions=%v)", total, ardoiseCoalesceWindow, got, adminActions)
 	}
@@ -344,7 +349,7 @@ func TestBroadcast129_TV_UpdateCount_ConstantAcrossN(t *testing.T) {
 
 			runPrepareToReadySequence(t, app, n)
 
-			actions := collectActions(tvConn, 500*time.Millisecond)
+			actions := collectAfterSentinel264(t, app, tvConn)[0] // #266 : témoin, pas de fenêtre fixe
 			got := countActions(actions, protocol.ActionUpdate)
 			t.Logf("N=%d: TV reçoit %d UPDATE (actions=%v)", n, got, actions)
 

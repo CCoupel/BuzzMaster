@@ -270,7 +270,17 @@ describe('QuestionsPage — sélecteur de mode RAFALE (v8.0.0, #199, bugfix coh�
 // opposé — réécrit ci-dessous, pas supprimé, avec le nouveau sélecteur à
 // chips (motif éprouvé RafaleAIGenerateModal.jsx, classe .rafale-multi-chip,
 // pas .category-btn/.category-selector).
+//
+// [CHANGED] #221 (LOT-4, v11.2.2) — ce bloc ne cible plus aucune classe CSS :
+// CategoryPicker mode="multi" / DifficultyPicker mode="multi" exposent des
+// boutons `aria-pressed` ; les catégories sont repérées par leur libellé, les
+// difficultés par leur texte (★, ★★, ★★★). Comportement fonctionnel inchangé.
 // ---------------------------------------------------------------------------
+
+/** Chips de difficulté (multi) du formulaire RAFALE, dans l'ordre ★, ★★, ★★★. */
+function getDifficultyChips() {
+  return screen.getAllByRole('button', { name: /^(✓\s*)?★{1,3}$/ })
+}
 
 describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficultés (#216)', () => {
   const TWO_CATEGORIES = [
@@ -293,8 +303,13 @@ describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficul
     const { container } = render(<QuestionsPage />)
     switchToRafaleAndGetModeRadios(container)
 
-    expect(container.querySelector('.category-selector')).toBeNull()
-    expect(container.querySelectorAll('.rafale-multi-chip').length).toBeGreaterThan(0)
+    // #221 : aucun CategoryPicker en sélection unique (aucune catégorie en
+    // role="radio", pas de « + Créer ») ; sélecteur multi à la place, avec un
+    // badge « plusieurs possibles » pour les catégories ET pour les difficultés.
+    expect(screen.queryByRole('radio', { name: /Histoire/ })).toBeNull()
+    expect(screen.queryByTitle('Créer une catégorie')).toBeNull()
+    expect(screen.getAllByText('plusieurs possibles')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: /Histoire/ })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('plusieurs catégories peuvent être sélectionnées simultanément (non exclusives)', () => {
@@ -306,8 +321,8 @@ describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficul
     fireEvent.click(histoire)
     fireEvent.click(geographie)
 
-    expect(histoire.className).toMatch(/\bactive\b/)
-    expect(geographie.className).toMatch(/\bactive\b/)
+    expect(histoire).toHaveAttribute('aria-pressed', 'true')
+    expect(geographie).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('re-cliquer sur une catégorie déjà active la désélectionne, sans affecter l\'autre (toggle indépendant)', () => {
@@ -320,21 +335,24 @@ describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficul
     fireEvent.click(geographie)
     fireEvent.click(histoire)
 
-    expect(histoire.className).not.toMatch(/\bactive\b/)
-    expect(geographie.className).toMatch(/\bactive\b/)
+    expect(histoire).toHaveAttribute('aria-pressed', 'false')
+    expect(geographie).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('plusieurs difficultés peuvent être sélectionnées simultanément (non exclusives, contrairement à MEMOTION)', () => {
     const { container } = render(<QuestionsPage />)
     switchToRafaleAndGetModeRadios(container)
 
-    const diffChips = container.querySelectorAll('.rafale-multi-chip-row')[1].querySelectorAll('.rafale-multi-chip')
+    const diffChips = getDifficultyChips()
+    expect(diffChips).toHaveLength(3)
     fireEvent.click(diffChips[0]) // ★
     fireEvent.click(diffChips[2]) // ★★★
 
-    expect(diffChips[0].className).toMatch(/\bactive\b/)
-    expect(diffChips[1].className).not.toMatch(/\bactive\b/)
-    expect(diffChips[2].className).toMatch(/\bactive\b/)
+    // Les nœuds sont conservés entre rendus (clé stable) : on relit l'état.
+    const after = getDifficultyChips()
+    expect(after[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(after[1]).toHaveAttribute('aria-pressed', 'false')
+    expect(after[2]).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('sélection persistée après un aller-retour vers un autre type (RAFALE -> QCM -> RAFALE)', () => {
@@ -345,7 +363,7 @@ describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficul
     fireEvent.click(screen.getByText(/qcm/i).closest('button'))
     fireEvent.click(screen.getByRole('button', { name: 'Rafale' }))
 
-    expect(screen.getByRole('button', { name: /Histoire/ }).className).toMatch(/\bactive\b/)
+    expect(screen.getByRole('button', { name: /Histoire/ })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('éditeur de barème par difficulté : n\'apparaît qu\'après sélection d\'au moins une difficulté, un champ par difficulté sélectionnée', () => {
@@ -354,7 +372,7 @@ describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficul
 
     expect(container.querySelector('.rafale-points-by-difficulty-row')).toBeNull()
 
-    const diffChips = container.querySelectorAll('.rafale-multi-chip-row')[1].querySelectorAll('.rafale-multi-chip')
+    const diffChips = getDifficultyChips()
     fireEvent.click(diffChips[0]) // ★
     fireEvent.click(diffChips[1]) // ★★
 
@@ -367,7 +385,7 @@ describe('QuestionsPage — RAFALE : sélecteur multi-chips catégories/difficul
     const { container } = render(<QuestionsPage />)
     switchToRafaleAndGetModeRadios(container)
 
-    const diffChips = container.querySelectorAll('.rafale-multi-chip-row')[1].querySelectorAll('.rafale-multi-chip')
+    const diffChips = getDifficultyChips()
     fireEvent.click(diffChips[1]) // ★★
 
     const input = container.querySelector('#rafale-points-diff-2')

@@ -120,10 +120,12 @@ describe('GamePage - Filtres catégories (#40)', () => {
 
   it('la barre de filtres s\'affiche si des catégories existent dans les questions', () => {
     useGame.mockReturnValue(makeGameMock())
-    const { container } = render(<GamePage />)
+    render(<GamePage />)
 
-    const filterBar = container.querySelector('.category-filter-bar')
-    expect(filterBar).not.toBeNull()
+    // #221 : le filtre est le CategoryPicker variant="filter" — on cible ses
+    // pastilles par `title` (libellé) et `aria-pressed`, jamais par classe CSS.
+    expect(screen.getByTitle('Geographie')).toBeInTheDocument()
+    expect(screen.getByTitle('Sciences & Nature')).toBeInTheDocument()
   })
 
   it('la barre de filtres est absente si aucune question n\'a de catégorie', () => {
@@ -133,20 +135,24 @@ describe('GamePage - Filtres catégories (#40)', () => {
         '2': { ID: '2', STATUS: 'AVAILABLE', ORDER: 2 },
       },
     }))
-    const { container } = render(<GamePage />)
+    render(<GamePage />)
 
-    const filterBar = container.querySelector('.category-filter-bar')
-    expect(filterBar).toBeNull()
+    // Aucune pastille de catégorie, aucun bouton de réinitialisation.
+    for (const label of ['Geographie', 'Divertissement', 'Histoire', 'Arts & Litterature', 'Sciences & Nature', 'Sports & Loisirs', 'Gastronomie', 'Animaux']) {
+      expect(screen.queryByTitle(label)).toBeNull()
+    }
+    expect(screen.queryByTitle('Réinitialiser les filtres')).toBeNull()
   })
 
   it('cliquer sur une catégorie filtre les questions : seules GEOGRAPHY restent visibles', () => {
     useGame.mockReturnValue(makeGameMock())
-    const { container } = render(<GamePage />)
+    render(<GamePage />)
 
-    // Trouver et cliquer sur la pill GEOGRAPHY
-    const geoPill = container.querySelector('.category-filter-pill')
-    expect(geoPill).not.toBeNull()
+    // Trouver et cliquer sur la pastille GEOGRAPHY (title = libellé)
+    const geoPill = screen.getByTitle('Geographie')
+    expect(geoPill).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(geoPill)
+    expect(screen.getByTitle('Geographie')).toHaveAttribute('aria-pressed', 'true')
 
     // Questions GEOGRAPHY visibles
     expect(screen.getByTestId('question-card-1')).toBeInTheDocument()
@@ -161,33 +167,30 @@ describe('GamePage - Filtres catégories (#40)', () => {
 
   it('le bouton reset (×) apparaît après activation d\'un filtre', () => {
     useGame.mockReturnValue(makeGameMock())
-    const { container } = render(<GamePage />)
+    render(<GamePage />)
 
     // Avant : pas de bouton reset
-    expect(container.querySelector('.category-filter-reset')).toBeNull()
+    expect(screen.queryByTitle('Réinitialiser les filtres')).toBeNull()
 
     // Activer un filtre
-    const pill = container.querySelector('.category-filter-pill')
-    fireEvent.click(pill)
+    fireEvent.click(screen.getByTitle('Geographie'))
 
     // Après : bouton reset visible
-    expect(container.querySelector('.category-filter-reset')).not.toBeNull()
+    expect(screen.getByTitle('Réinitialiser les filtres')).toBeInTheDocument()
   })
 
   it('cliquer sur reset supprime les filtres et réaffiche toutes les questions', () => {
     useGame.mockReturnValue(makeGameMock())
-    const { container } = render(<GamePage />)
+    render(<GamePage />)
 
     // Activer filtre
-    const pill = container.querySelector('.category-filter-pill')
-    fireEvent.click(pill)
+    fireEvent.click(screen.getByTitle('Geographie'))
 
     // Vérifier filtre actif (question-card-2 masquée)
     expect(screen.queryByTestId('question-card-2')).toBeNull()
 
     // Cliquer reset
-    const resetBtn = container.querySelector('.category-filter-reset')
-    fireEvent.click(resetBtn)
+    fireEvent.click(screen.getByTitle('Réinitialiser les filtres'))
 
     // Toutes questions affichées
     expect(screen.getByTestId('question-card-2')).toBeInTheDocument()
@@ -196,16 +199,14 @@ describe('GamePage - Filtres catégories (#40)', () => {
 
   it('cliquer deux fois sur la même catégorie désactive le filtre', () => {
     useGame.mockReturnValue(makeGameMock())
-    const { container } = render(<GamePage />)
-
-    const pill = container.querySelector('.category-filter-pill')
+    render(<GamePage />)
 
     // Activer
-    fireEvent.click(pill)
+    fireEvent.click(screen.getByTitle('Geographie'))
     expect(screen.queryByTestId('question-card-2')).toBeNull()
 
     // Désactiver
-    fireEvent.click(pill)
+    fireEvent.click(screen.getByTitle('Geographie'))
     expect(screen.getByTestId('question-card-2')).toBeInTheDocument()
   })
 
@@ -220,11 +221,11 @@ describe('GamePage - Filtres catégories (#40)', () => {
         '2': { ID: '2', STATUS: 'AVAILABLE', ORDER: 2, CATEGORY: 'SCIENCE' },
       },
     }))
-    const { container, rerender } = render(<GamePage />)
+    const { rerender } = render(<GamePage />)
 
-    // Activer la pill GEOGRAPHY (title="Geographie")
-    const geoPill = container.querySelector('.category-filter-pill[title="Geographie"]')
-    expect(geoPill).not.toBeNull()
+    // Activer la pastille GEOGRAPHY (title="Geographie")
+    const geoPill = screen.getByTitle('Geographie')
+    expect(geoPill).toBeInTheDocument()
     fireEvent.click(geoPill)
 
     // Re-render avec uniquement des questions SCIENCE — filtre GEOGRAPHY toujours actif

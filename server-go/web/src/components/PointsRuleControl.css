@@ -1,0 +1,62 @@
+/* PointsRuleControl (#190) — maquette admin_question_editor__memotion_card_points_rule.html.
+   Variables projet avec replis : --bg-secondary / --text-secondary ne sont pas définies globalement. */
+
+.points-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--primary-500, #6366f1) 60%, transparent);
+  background: color-mix(in srgb, var(--primary-500, #6366f1) 8%, transparent);
+}
+
+.points-rule-row .lbl {
+  color: var(--text-secondary, var(--gray-600));
+}
+
+.points-rule-row select,
+.points-rule-row input {
+  font: inherit;
+  font-size: 0.85rem;
+  background: var(--bg-secondary, #fff);
+  color: var(--text-primary, var(--gray-800, #1f2937));
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.4rem;
+}
+
+.points-rule-row input {
+  width: 68px;
+}
+
+.points-rule-row input[aria-invalid='true'] {
+  border-color: var(--error, #ef4444);
+}
+
+.points-rule-row select:focus-visible,
+.points-rule-row input:focus-visible {
+  outline: 2px solid var(--primary-500, #6366f1);
+  outline-offset: 1px;
+}
+
+.points-rule-row .hint {
+  color: var(--primary-700, #4338ca);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.points-rule-row .notice {
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  color: #b45309;
+}
+
+.points-rule-row .err {
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  color: var(--error, #ef4444);
+}

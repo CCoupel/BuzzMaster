@@ -152,7 +152,7 @@ func TestBumperPointsBatch254_Critical_ValidBatchCreditsEveryPlayerAndAnswersThe
 	if len(chg.Players) != 3 || len(chg.Teams) < 2 || !chg.Display {
 		t.Errorf("SCORE_CHANGE : PLAYERS (3) et TEAMS concernés, DISPLAY true : %+v", chg)
 	}
-	for _, a := range collectActions(e.otherConn, 300*time.Millisecond) {
+	for _, a := range collectAfterSentinel264(t, e.app, e.otherConn)[0] { // #266 : témoin, pas de fenêtre fixe
 		if a == "BUMPER_POINTS_BATCH_RESULT" {
 			t.Fatal("RESULT est ciblé sur l'émetteur seul")
 		}
@@ -310,7 +310,7 @@ func TestBumperPointsBatch254_HiddenCorrectionDoesNotLockThePlayerButThe0ptAnimG
 	e.send(t, e.admin, "admin", protocol.ActionBumperPoints, map[string]interface{}{"ID": paul, "POINTS": 2, "DISPLAY": false})
 	_, anim := e.dial(t, "/ws/anim")
 	e.send(t, anim, "anim", protocol.ActionBumperPoints, map[string]interface{}{"ID": buzz, "POINTS": 0})
-	time.Sleep(100 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 
 	e.bbatch(t, qid244, []pentry254{{paul, 4}, {buzz, 4}}, nil)
 
@@ -330,9 +330,9 @@ func TestBumperPointsBatch254_PublicEffectsAreGroupedOneSoundOneCometPerConcerne
 	e.bbatch(t, qid244, []pentry254{{paul, 3}, {buzz, 2}, {mamie, -1}, {vert, 5}}, nil)
 
 	_ = e.bresult(t)
-	time.Sleep(400 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	if e.gagneCount() != 1 {
-		t.Errorf("un SEUL son « gagné » pour tout le lot, obtenu %d : %v", e.gagneCount(), e.sound.Played())
+		t.Errorf("un SEUL son « gagné » pour tout le lot, obtenu %d : %v", e.gagneCount(), e.cues())
 	}
 	comets := e.cometTeams()
 	if !comets["Les Bleus"] || !comets["Les Verts"] || comets["Les Rouges"] {
@@ -350,7 +350,7 @@ func TestBumperPointsBatch254_AllNegativeOrDisplayFalseProducesNoPublicEffect(t 
 			paul, buzz, _ := e.threePlayers()
 			e.bbatch(t, qid244, []pentry254{{paul, tc.points}, {buzz, tc.points}}, tc.display)
 			_ = e.bresult(t)
-			time.Sleep(400 * time.Millisecond)
+			e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 			if e.gagneCount() != 0 || len(e.cometTeams()) != 0 {
 				t.Errorf("aucun effet public (son %d, comètes %v)", e.gagneCount(), e.cometTeams())
 			}

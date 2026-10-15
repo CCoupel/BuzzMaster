@@ -85,8 +85,9 @@ func newEnv244(t *testing.T) *env244 {
 	adminConn, admin := e.dial(t, "/ws/admin")
 	animConn, _ := e.dial(t, "/ws/anim")
 	otherConn, _ := e.dial(t, "/ws/admin")
-	time.Sleep(50 * time.Millisecond)
-	return &env244{env246: e, adminConn: adminConn, admin: admin, animConn: animConn, otherConn: otherConn, sound: fake, ambiance: ambiance, buzzers: buzzers}
+	env := &env244{env246: e, adminConn: adminConn, admin: admin, animConn: animConn, otherConn: otherConn, sound: fake, ambiance: ambiance, buzzers: buzzers}
+	env.settleSound(t) // #271 : sons d'amorçage traités avant les instantanés « Before » (plus de pause fixe)
+	return env
 }
 
 type entry244 struct {
@@ -203,7 +204,7 @@ func TestTeamPointsBatch244_Critical_ValidBatchCreditsEveryTeamAndAnswersTheSend
 			t.Errorf("AWARDED_TEAMS reçu par %s doit contenir les 3 équipes : %v", name, got)
 		}
 	}
-	for _, a := range collectActions(e.otherConn, 300*time.Millisecond) {
+	for _, a := range collectAfterSentinel264(t, e.app, e.otherConn)[0] { // #266 : témoin, pas de fenêtre fixe
 		if a == "TEAM_POINTS_BATCH_RESULT" {
 			t.Fatal("RESULT est ciblé sur l'émetteur seul")
 		}
@@ -265,7 +266,7 @@ func TestTeamPointsBatch244_Critical_AnyValidationErrorRefusesTheWholeBatchAndCh
 			if !e.hasLog(game.LogLevelWarn, "TEAM_POINTS_BATCH_REFUSED", tc.reason) {
 				t.Errorf("WARN TEAM_POINTS_BATCH_REFUSED reason=%s ; logs=%v", tc.reason, e.logLines(game.LogLevelWarn))
 			}
-			if got := e.sound.Played(); len(got) != 0 {
+			if got := e.cues(); len(got) != 0 {
 				t.Errorf("aucun effet public sur un refus : %v", got)
 			}
 		})
@@ -407,8 +408,8 @@ func TestTeamPointsBatch244_DeletedThenRecreatedTeamIsNotSkipped(t *testing.T) {
 
 func TestTeamPointsBatch244_NegativeAmountsAreCreditedWithNoPublicEffectAndLockTheTeam(t *testing.T) {
 	e := newEnv244(t)
-	soundBefore := len(e.sound.Played())
-	ambBefore := e.ambiance.Count()
+	soundBefore := len(e.cues())
+	ambBefore := e.ambSnapshot()
 
 	e.batch(t, qid244, []entry244{{"Les Bleus", -1}, {"Les Rouges", -1}}, nil)
 
@@ -419,12 +420,12 @@ func TestTeamPointsBatch244_NegativeAmountsAreCreditedWithNoPublicEffectAndLockT
 	if sc := e.scores(); sc["Les Bleus"][1] != -1 || sc["Les Rouges"][1] != -1 {
 		t.Errorf("pénalités appliquées : %v", sc)
 	}
-	time.Sleep(300 * time.Millisecond)
-	if got := len(e.sound.Played()); got != soundBefore {
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
+	if got := len(e.cues()); got != soundBefore {
 		t.Errorf("aucun son pour des montants négatifs (%d → %d)", soundBefore, got)
 	}
-	if e.ambiance.Count() != ambBefore {
-		t.Errorf("aucune pulsation d'ambiance pour des montants négatifs (%d → %d)", ambBefore, e.ambiance.Count())
+	if e.ambChanged(ambBefore) {
+		t.Errorf("aucune pulsation d'ambiance pour des montants négatifs (%d → %d)", ambBefore.notif, e.ambianceNotifies())
 	}
 	for team, mac := range e.buzzers {
 		if p, ok := e.app.bumperLEDState[mac]; ok && p.Effect == "COMET" {
@@ -447,8 +448,8 @@ func TestTeamPointsBatch244_PublicEffectsAreGroupedOneSoundOneCometPerPositiveTe
 	e.batch(t, qid244, []entry244{{"Les Bleus", 3}, {"Les Rouges", -1}, {"Les Verts", 5}}, nil)
 
 	_ = e.result(t)
-	time.Sleep(400 * time.Millisecond)
-	played := e.sound.Played()
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
+	played := e.cues()
 	gagne := 0
 	for _, c := range played {
 		if c == audio.CueGagne {

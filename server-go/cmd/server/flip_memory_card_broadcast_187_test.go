@@ -29,7 +29,6 @@ import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"testing"
-	"time"
 )
 
 // TestFlipMemoryCard_Turn_VPlayerOffActiveTeam_NoBroadcastToOtherClients is
@@ -65,11 +64,12 @@ func TestFlipMemoryCard_Turn_VPlayerOffActiveTeam_NoBroadcastToOtherClients(t *t
 
 	sendAction(t, app, vplayer, protocol.ActionFlipMemoryCard, protocol.FlipMemoryCardPayload{CardID: "1-1", ID: bumperID})
 
-	tvActions := collectActions(tv, 500*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, tv, admin) // #266 : un témoin, pas de fenêtre fixe
+	tvActions := seen[0]
 	if got := countActions(tvActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#187: TV should receive 0 UPDATE from an off-turn FLIP_MEMORY_CARD, got %d (actions=%v)", got, tvActions)
 	}
-	adminActions := collectActions(admin, 500*time.Millisecond)
+	adminActions := seen[1]
 	if got := countActions(adminActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#187: admin should receive 0 UPDATE from an off-turn FLIP_MEMORY_CARD, got %d (actions=%v)", got, adminActions)
 	}
@@ -99,11 +99,12 @@ func TestFlipMemoryCard_CardScoped_VPlayerOffActiveTeam_NoBroadcastToOtherClient
 		CardScope: protocol.CardScope{MotionCardID: "mc-mem"},
 	})
 
-	tvActions := collectActions(tv, 500*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, tv, admin) // #266 : un témoin, pas de fenêtre fixe
+	tvActions := seen[0]
 	if got := countActions(tvActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#187 (card-scoped): TV should receive 0 UPDATE from an off-turn FLIP_MEMORY_CARD, got %d (actions=%v)", got, tvActions)
 	}
-	adminActions := collectActions(admin, 500*time.Millisecond)
+	adminActions := seen[1]
 	if got := countActions(adminActions, protocol.ActionUpdate); got != 0 {
 		t.Errorf("#187 (card-scoped): admin should receive 0 UPDATE from an off-turn FLIP_MEMORY_CARD, got %d (actions=%v)", got, adminActions)
 	}
@@ -131,7 +132,7 @@ func TestFlipMemoryCard_CardScoped_VPlayerOnActiveTeam_DoesBroadcast(t *testing.
 		CardScope: protocol.CardScope{MotionCardID: "mc-mem"},
 	})
 
-	tvActions := collectActions(tv, 500*time.Millisecond)
+	tvActions := collectAfterSentinel264(t, app, tv)[0] // #266 : témoin, pas de fenêtre fixe
 	if got := countActions(tvActions, protocol.ActionUpdate); got < 1 {
 		t.Errorf("#187 (card-scoped): TV should receive at least 1 UPDATE from an on-turn FLIP_MEMORY_CARD, got %d (actions=%v)", got, tvActions)
 	}

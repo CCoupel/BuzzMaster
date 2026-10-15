@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -38,6 +39,42 @@ const (
 	ClientTypeBuzzer ClientType = "buzzer"
 )
 
+// registerHook is a TEST-ONLY synchronization point: when set, the hubs' Run
+// loops call it right after receiving a client on h.register and BEFORE
+// inscribing it in h.clients. A test sets it (SetRegisterHook) to widen the
+// registration window that a loaded CI runner opens by chance, so the "client
+// message processed before the client is registered" race (
+// CI 38394871771) can be reproduced deterministically. nil in production
+// (one atomic load per connection).
+var registerHook atomic.Pointer[func()]
+
+// SetRegisterHook installs (or, with nil, removes) the test-only hook run by
+// the hubs' Run loops before a client is inscribed in h.clients. Returns a
+// function that restores the previous hook. Never call it outside tests.
+func SetRegisterHook(f func()) (restore func()) {
+	var prev *func()
+	if f == nil {
+		prev = registerHook.Swap(nil)
+	} else {
+		prev = registerHook.Swap(&f)
+	}
+	return func() { registerHook.Store(prev) }
+}
+
+// markRegistered releases the connection handler waiting on client.registered.
+// nil-safe: clients built by tests that bypass HandleConnection* have no channel.
+func markRegistered(c *WebSocketClient) {
+	if c.registered != nil {
+		close(c.registered)
+	}
+}
+
+func runRegisterHook() {
+	if f := registerHook.Load(); f != nil {
+		(*f)()
+	}
+}
+
 // WebSocketClient represents a connected WebSocket client
 type WebSocketClient struct {
 	ID       string
@@ -49,6 +86,12 @@ type WebSocketClient struct {
 	Hub      *WebSocketHub
 
 	ConnectedAt time.Time // connection open time (#246 conn_age_ms diagnostics)
+
+	// registered is closed by the hub's Run loop once the client is inscribed
+	// in h.clients. HandleConnection* waits on it before starting the pumps, so
+	// the first inbound message can never be processed (SetClientPlayerID,
+	// SendRawToPlayerID, BroadcastRawToTypes…) before the client is registered.
+	registered chan struct{}
 }
 
 // WebSocketHub manages all WebSocket connections
@@ -105,6 +148,7 @@ func (h *WebSocketHub) Run() {
 	for {
 		select {
 		case client := <-h.register:
+			runRegisterHook() // test-only, nil in production
 			h.mu.Lock()
 			h.clients[client] = true
 			// Snapshot the fields this case needs to read AFTER Unlock, while
@@ -117,6 +161,7 @@ func (h *WebSocketHub) Run() {
 			// being re-read from the shared *WebSocketClient afterward.
 			id, clientType := client.ID, client.Type
 			h.mu.Unlock()
+			markRegistered(client)
 			LogInfo(game.LogComponentWebSocket, "Client connected: %s (type: %s)", id, clientType)
 			h.notifyClientChange()
 			// Fired here (not in HandleConnectionWithType) so the hook only
@@ -549,6 +594,7 @@ func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.R
 		Hub:  h,
 
 		ConnectedAt: time.Now(),
+		registered:  make(chan struct{}),
 	}
 
 	h.register <- client
@@ -560,6 +606,14 @@ func (h *WebSocketHub) HandleConnectionWithType(w http.ResponseWriter, r *http.R
 	// inside Run() instead, once the client is actually in h.clients — firing
 	// it here raced SendToClient (used by the hook) against the registration
 	// itself and silently dropped the message when the hook lost the race.
+	//
+	// For the same reason the pumps must not start on the rendezvous alone:
+	// readPump would deliver the client's first message to the dispatcher
+	// while Run is still about to inscribe it, and SetClientPlayerID /
+	// SendRawToPlayerID (which walk h.clients) would miss the client — lost
+	// identity, undelivered echo (CI 38394871771). Run closes client.registered
+	// right after h.clients[client]=true; wait for it.
+	<-client.registered
 
 	go client.writePump()
 	go client.readPump()

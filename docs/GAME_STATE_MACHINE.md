@@ -747,16 +747,20 @@ Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mo
 
 #### Champ `POINTS_RULE` (v7.0.0)
 ```jsonc
-"POINTS_RULE": { "MODE": "STARS" | "FIXED" | "PER_UNIT", "VALUE": 10 }
+"POINTS_RULE": { "MODE": "STARS" | "STARS_PRORATA" | "FIXED" | "PER_UNIT", "VALUE": 10 }
 ```
 
 | `MODE` | Points attribués | Usage |
 |---|---|---|
-| absent / `STARS` | Barème par étoiles existant : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY` → 1/3/5 | **Défaut** — comportement actuel, inchangé |
+| absent / `STARS` | Barème par étoiles existant : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY` → 1/3/5 | Défaut des types binaires (SPEEDY, QCM) — comportement actuel, inchangé |
+| `STARS_PRORATA` | `points_étoiles × Units / UnitsTotal` | Défaut des types à progression (MEMORY, RAFALE, #187) |
 | `FIXED` | `VALUE` si équipe gagnante, sinon 0 | Carte dont la valeur ne dépend pas de sa difficulté |
 | `PER_UNIT` | `VALUE × Units` | Types à progression (MEMORY au prorata, #187 v7.1.0) |
 
-**Défaut** : absent ou `MODE="STARS"` → applique l'ancien barème par difficulté.
+**Résolution (v11.2.2, #190)** : `MODE` explicite sur la carte > défaut du type courant (registre `DefaultPointsRule`, résolu à chaque appel) > `STARS` (`engine.go`, `motionCardPointsForOutcome`). Le défaut choisi dans l'éditeur n'écrit pas `POINTS_RULE` : le champ est absent. Applicabilité des modes par type et refus HTTP 400 à l'enregistrement : voir `docs/DATA_MODELS.md`, section POINTS_RULE.
+
+**Parité d'affichage (v11.2.2, #190)** : le montant de la carte est affiché sur les surfaces qui en affichent déjà un (zoom anim, bandeau anim, bouton de crédit anim, panneau admin GamePage). Les grilles anim et TV restent en ★ seules, sans montant (décision utilisateur du 2026-10-15, `docs/mockup/DECISIONS.md`, section `admin_question_editor`). Le serveur reste seule autorité sur le crédit réel.
+
 **Non-régression** : les 9 questions MEMOTION existantes ne portent pas ce champ, donc valent STARS → comportement inchangé.
 
 ### Champ `MEMOTION_ACTIVE` (v7.0.0)
@@ -767,8 +771,8 @@ Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mo
 "MEMOTION_ACTIVE": {
   "CARD_ID": "mc-3",          // "" hors SELECTED/QUESTION/REVEAL
   "TYPE": "QCM",              // "" hors emplacement actif ; "SPEEDY" pour une carte historique
-  "STATE": {                  // état vivant du type — forme libre, propre au type
-    "QCM_INVALIDATED": ["RED", "YELLOW"]
+  "STATE": {                  // état vivant du type — forme libre, propre au type ; {} pour une carte QCM (#279)
+    "QCM_INVALIDATED": ["RED", "YELLOW"]   // jamais alimenté pour un hôte carte QCM depuis #279
   }
 }
 ```
@@ -788,7 +792,7 @@ Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mo
 - `""` quand `CARD_ID` est vide
 
 **`STATE`** :
-- Structure propre au type — ex. `{"QCM_INVALIDATED": [...]}` pour un QCM
+- Structure propre au type — ex. `{"QCM_INVALIDATED": [...]}` pour une question hôte QCM. **Carte QCM : `{}`** pendant toute la carte (v11.2.2, #279, `contracts/game-state.md`, `contracts/question-types.md` §7.1)
 - Vide (`{}`) quand aucune carte n'est active
 - Remis à zéro à chaque sélection de nouvelle carte
 
@@ -919,7 +923,7 @@ Structure commune à tous les jeux :
 2. **SELECTED → QUESTION** : Admin clique "Démarrer"
    - Action : `MEMOTION_FLIP`
    - Transitions : `MEMOTION_SUBPHASE = "QUESTION"`, `CURRENT_TIME = QUESTION.TIME`, timer démarre
-   - **`MEMOTION_ACTIVE.STATE` alimenté** selon le type (ex. QCM : indices en cours, réponses invalidées…)
+   - **`MEMOTION_ACTIVE.STATE` alimenté** selon le type. Une carte QCM n'a pas d'indices (#279) : aucun `QCM_HINT` n'est déclenché ni diffusé pendant la carte, et `STATE` reste `{}`, y compris pour une carte stockée qui porterait encore des champs d'indices
 
 3. **QUESTION contrôle-temps** : Timer décroît ou arrêt manuel
    - Action : `MEMOTION_STOP_TIMER` (optionnel, si arrêt avant expiration)

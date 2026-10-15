@@ -34,10 +34,10 @@ func TestNewGameReview243_Critical_NewGameDuringAnEntracteIsRefusedAndNothingCha
 	if refused.Reason != "ENTRACTE_ACTIVE" {
 		t.Errorf("REASON = %q (attendu ENTRACTE_ACTIVE)", refused.Reason)
 	}
-	for _, a := range collectActions(otherConn, 300*time.Millisecond) {
-		if a == "NEW_GAME_REFUSED" {
-			t.Fatal("NEW_GAME_REFUSED est ciblé sur l'émetteur seul")
-		}
+	// un seul témoin pour otherConn et pour l'éviction testée plus bas (#266)
+	seen := collectAfterSentinel264(t, e.app, otherConn, e.paulConn)
+	if containsAction(seen[0], "NEW_GAME_REFUSED") {
+		t.Fatal("NEW_GAME_REFUSED est ciblé sur l'émetteur seul")
 	}
 	after := e.snap()
 	if after.Phase != before.Phase || len(after.Bumpers) != len(before.Bumpers) || after.TeamKeys != before.TeamKeys || after.History != before.History {
@@ -51,7 +51,7 @@ func TestNewGameReview243_Critical_NewGameDuringAnEntracteIsRefusedAndNothingCha
 	if !e.app.engine.IsEntracte() {
 		t.Error("l'entracte n'est pas interrompue par un NEW_GAME refusé")
 	}
-	if evicted243(t, e.paulConn) {
+	if containsAction(seen[1], protocol.ActionPlayerEvicted) {
 		t.Error("aucune éviction")
 	}
 	if !e.hasLog(game.LogLevelWarn, "NEW_GAME_REFUSED", "ENTRACTE_ACTIVE") {

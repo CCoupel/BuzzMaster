@@ -142,7 +142,7 @@ func TestBroadcast127_VPlayer_UpdateCount_ConstantAcrossN(t *testing.T) {
 
 			runPrepareToReadySequence(t, app, n)
 
-			actions := collectActions(vpConn, 500*time.Millisecond)
+			actions := collectAfterSentinel264(t, app, vpConn)[0] // #266 : témoin, pas de fenêtre fixe
 			got := countActions(actions, protocol.ActionUpdate)
 			t.Logf("N=%d: VJoueur reçoit %d UPDATE (actions=%v)", n, got, actions)
 
@@ -185,7 +185,7 @@ func TestBroadcast127_Admin_UpdateCadence_OnePerPong(t *testing.T) {
 
 	runPrepareToReadySequence(t, app, n)
 
-	actions := collectActions(adminConn, 500*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, adminConn)[0] // #266 : témoin, pas de fenêtre fixe
 	got := countActions(actions, protocol.ActionUpdate)
 	t.Logf("admin received %d UPDATE across PREPARE + %d PONG + READY (actions=%v)", got, n, actions)
 

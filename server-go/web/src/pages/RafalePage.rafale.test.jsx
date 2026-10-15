@@ -509,7 +509,7 @@ describe('RafalePage — non-régression : listing du pool sans doublon de caté
 
     await screen.findByText('Q Histoire')
 
-    // Scopé à la barre de filtre (.rafale-filters) : CategorySelector (dans
+    // Scopé à la barre de filtre (.rafale-filters) : CategoryPicker single (dans
     // .rafale-form-card, formulaire de création) rend AUSSI ces mêmes
     // catégories plus bas sur la page — sans ce scope, getByTitle serait
     // ambigu entre les 2 (2 usages légitimes, pas un doublon).
@@ -519,7 +519,10 @@ describe('RafalePage — non-régression : listing du pool sans doublon de caté
     expect(filterBar.getAllByTitle('Mascottes')).toHaveLength(1)
 
     // 3 catégories présentes dans le réservoir chargé -> 3 pastilles, pas plus.
-    expect(container.querySelectorAll('.category-filter-pill').length).toBe(3)
+    // #221 : les pastilles du CategoryPicker variant="filter" sont des boutons
+    // aria-pressed (les autres boutons de la barre, ex. « Non utilisees », n'ont
+    // pas cet attribut et ne sont donc pas comptés).
+    expect(filterBar.getAllByRole('button', { pressed: false })).toHaveLength(3)
   })
 
   it('cliquer sur le filtre "Mascottes" (catégorie custom) fonctionne malgré le mélange de données brutes', async () => {
@@ -535,12 +538,17 @@ describe('RafalePage — non-régression : listing du pool sans doublon de caté
     })
   })
 
-  it('le formulaire de création (CategorySelector) ne présente pas non plus de doublon avec cette même réponse API brute', async () => {
+  it('le formulaire de création (CategoryPicker single) ne présente pas non plus de doublon avec cette même réponse API brute', async () => {
     const { container } = renderRafalePage({ questions: MIXED_CATEGORY_QUESTIONS, categories: RAW_API_CATEGORIES_RESPONSE })
     await screen.findByText('Q Histoire')
 
-    // 8 standard + 1 custom (Mascottes) + le bouton "+" du formulaire de création.
-    expect(container.querySelectorAll('.rafale-form-card .category-btn').length).toBe(10)
-    expect(within(container.querySelector('.rafale-form-card')).getAllByTitle('Histoire')).toHaveLength(1)
+    // 8 standard + 1 custom (Mascottes) = 9 radios de catégorie ; le bouton "+"
+    // de création n'a PAS role="radio" (#221). Les 3 radios ★ du DifficultyPicker
+    // du même formulaire sont exclus (leur texte commence par ★).
+    const formCard = within(container.querySelector('.rafale-form-card'))
+    const categoryRadios = formCard.getAllByRole('radio').filter(r => !r.textContent.trim().startsWith('★'))
+    expect(categoryRadios).toHaveLength(9)
+    expect(formCard.getByTitle('Créer une catégorie')).toBeInTheDocument()
+    expect(formCard.getAllByTitle('Histoire')).toHaveLength(1)
   })
 })

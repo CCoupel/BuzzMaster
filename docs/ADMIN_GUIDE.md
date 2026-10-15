@@ -23,6 +23,29 @@ Ce document decrit les fonctionnalites d'administration du systeme BuzzControl.
 - [Générateur du réservoir RAFALE via IA](#générateur-du-réservoir-rafale-via-ia-v810)
 - [Configuration Éclairage d'Ambiance Philips Hue](#configuration-éclairage-dambiance-philips-hue-v1000)
 - [Configuration Sonore (Bruitage d'Événement)](#configuration-sonore-bruitage-dévénement-v1100)
+- [Le serveur n'a pas de réseau disponible (alerte admin)](#le-serveur-na-pas-de-réseau-disponible-alerte-admin-v1122-267)
+
+---
+
+## Le serveur n'a pas de réseau disponible (alerte admin, v11.2.2, #267)
+
+Quand le serveur n'a plus d'adresse réseau utilisable, un écran s'affiche sur toutes les pages d'administration. Sans adresse réseau, aucun buzzer, aucune tablette, ni la TV ni l'animateur ne peuvent se connecter.
+
+**Ce que vous voyez :**
+- Un écran « Le serveur n'a pas de réseau disponible » qui couvre la page. Il indique les adresses détectées (« aucune — seulement 127.0.0.1 » tant qu'aucune adresse n'est trouvée) et, le cas échéant, les interfaces ignorées (adaptateurs virtuels, par exemple WSL ou Hyper-V, qui ne sont pas joignables par les appareils).
+- Depuis quand la perte est détectée (« Perte détectée il y a N s », puis « N min »), et le rythme du contrôle automatique (toutes les 30 secondes). Cet horodatage est celui du dernier changement d'état du réseau : il n'avance pas à chaque contrôle.
+
+**Ce que vous pouvez faire :**
+- **Rétablir la connexion** : branchez le câble réseau ou reconnectez le WiFi de ce poste. L'écran disparaît de lui-même dès qu'une adresse réseau est détectée.
+- **« Continuer quand même »** (ou la touche Échap) : l'écran se replie en bandeau rouge persistant sous la barre de navigation, qui reste visible tant que le réseau manque. Le bouton « Détails » du bandeau rouvre l'écran.
+
+**Retour du réseau :** l'écran et le bandeau disparaissent, et un message « ✅ Réseau rétabli — <adresse> » s'affiche quelques secondes.
+
+**Nouvelle perte :** si le réseau tombe à nouveau après un retour, l'écran se rouvre, même si vous l'aviez replié.
+
+Le même événement est inscrit dans le journal du serveur (`NETWORK_LOST`, `NETWORK_RESTORED`, `NETWORK_IPS_CHANGED`). Si le serveur ne peut pas lister ses interfaces, l'écran ne s'ouvre pas à tort : l'état précédent est conservé et `NETWORK_LISTING_FAILED` est journalisé.
+
+> La liste des interfaces virtuelles reconnues est une aide au diagnostic, non exhaustive : un adaptateur non reconnu peut être compté comme réseau.
 
 ---
 
@@ -1591,13 +1614,13 @@ La modale affiche deux blocs :
 - Thème global de votre quiz
 - Population cible
 - Langue
-- Difficulté globale
+- Difficultés (Facile, Moyen, Difficile, Expert — une ou plusieurs)
+- Objectif
 
 Ces valeurs viennent de la section "Quiz" en haut de QuestionsPage. Elles sont **affichées à titre informatif** et ne sont **pas modifiables** dans le formulaire de génération.
 
 **Bloc 2 — Cette génération (éditable)** :
-- **Difficulté** : Cocher une ou plusieurs cases (Facile, Moyen, Difficile, Expert). Vous pouvez mixer les niveaux pour un même lot — l'IA répartira les questions équitablement.
-- **Objectifs / Consignes** (optionnel) : Texte libre décrivant le contexte (ex: "révision scolaire", "ambiance conviviale") ou des contraintes spéciales (ex: "éviter les questions sur la politique").
+- **Précisions pour cette génération** (optionnel) : Texte libre décrivant le contexte (ex: "révision scolaire", "ambiance conviviale") ou des contraintes spéciales (ex: "éviter les questions sur la politique").
 - **Catégories cibles** : Sélectionner une ou plusieurs catégories existantes. L'IA génère des questions **uniquement** dans ces catégories (elle ne crée jamais de nouvelle catégorie).
 - **Volume** : 
   - **Mode "Nombre"** : indiquer combien de questions générer (ex: 20)
@@ -1778,8 +1801,8 @@ Une question trop longue est **écartée** (comptée dans `SKIPPED_COUNT`), **ja
 | **Populations** | Cases à cocher | ✅ | 1+ parmi (Junior, Ado, Adulte, Senior, Famille) | Cibles (ado, adulte, etc.) |
 | **Langue** | Liste déroulante | ✅ | Français, Anglais, Allemand… | Langue des questions |
 | **Instructions** | Texte optionnel | ❌ | ≤ 2000 car. | Consignes supplémentaires au modèle (ex: "Éviter l'actualité récente"), jamais stockées |
-| **Catégories** | Cases à cocher | ✅ | 1+ parmi toutes les catégories connues | Pas restreint à l'existant (voir ci-dessous) |
-| **Difficultés** | Cases à cocher | ✅ | 1+ parmi (1 ⭐, 2 ⭐⭐, 3 ⭐⭐⭐) | Niveaux de difficulté (entiers 1..3, pas de libellés) |
+| **Catégories** | Pastilles multiples | ✅ | 1+ parmi toutes les catégories connues | Pas restreint à l'existant (voir ci-dessous) |
+| **Difficultés** | Pastilles multiples (★) | ✅ | 1+ parmi (1 ⭐, 2 ⭐⭐, 3 ⭐⭐⭐) | Niveaux de difficulté (entiers 1..3, pas de libellés) |
 | **Volume** | Boutons segmentés | ✅ | `{10, 20, 50, 100, 200}` | Paliers fermés — on remplit par lots, pas à la question près |
 
 **Annotation des catégories** : Chaque catégorie affiche le **nombre de questions déjà présentes** dans le réservoir pour les difficultés sélectionnées, et la **répartition finale** `existant → après génération`.

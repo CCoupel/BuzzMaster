@@ -600,9 +600,43 @@ Contrats : `contracts/game-state.md` et `contracts/models.md`, section ArdoiseAn
 
 ## GameState — Champs réseau (v5.7.0)
 
-### NETWORK_ONLY_LOCALHOST
+### NETWORK (v11.2.2, #267)
 
-Indique que le serveur n'est accessible que depuis `localhost` (aucune interface réseau externe active).
+Décrit l'état réseau du serveur. Contrat : `contracts/game-state.md` §NETWORK.
+
+```json
+{
+  "NETWORK": {
+    "ONLY_LOCALHOST": true,
+    "IPS": [],
+    "IGNORED_INTERFACES": [{ "NAME": "vEthernet (WSL)", "IP": "172.21.0.1" }],
+    "CHECKED_AT": 1760000000000
+  }
+}
+```
+
+**Champs :**
+- `ONLY_LOCALHOST`: `bool` — `true` si aucune adresse IPv4 utilisable n'est détectée (hors boucle locale `127/8`, APIPA `169.254/16` et interfaces virtuelles connues)
+- `IPS`: `string[]` — adresses IPv4 retenues, dans l'ordre de `net.Interfaces()`
+- `IGNORED_INTERFACES`: `{NAME, IP}[]` — IPv4 portées par une interface virtuelle connue (diagnostic affiché par l'overlay). Une interface ignorée n'empêche jamais `ONLY_LOCALHOST` de passer à `true`
+- `CHECKED_AT`: `number` — instant du **dernier changement d'état** réseau, en millisecondes epoch (première détection au démarrage). Il n'avance pas lors des passages calmes du watchdog : un `UPDATE` ne porte jamais un `CHECKED_AT` plus récent sans transition. C'est pourquoi l'écran parle de « perte détectée il y a N s », et non de « vérifié il y a N s »
+- Défaut : `{ONLY_LOCALHOST: false, IPS: [], IGNORED_INTERFACES: [], CHECKED_AT: 0}`
+- Toujours sérialisé (jamais `omitempty`), listes jamais `null`. Non persisté : recalculé au démarrage, puis par le watchdog toutes les 30 s
+- Diffusé (`UPDATE`) seulement quand `ONLY_LOCALHOST` ou `IPS` change, et renvoyé au `HELLO` des clients web
+- **Jamais envoyé aux buzzers** : exclu du sérialiseur buzzer (`SerializeForBuzzer`, liste blanche ; revue backend `code-reviewer-20261014-194259`)
+- **Erreur de listage** des interfaces (`net.Interfaces()`) : l'état précédent est conservé, aucune diffusion, aucun `NETWORK_LOST` ni `NETWORK_RESTORED` ; `NETWORK_LISTING_FAILED` (WARN) est journalisé à chaque passage en échec. Au tout premier passage sans état, le réseau est considéré présent
+- Ne change pas la source des heartbeats UDP ni de `resolveServerIP` (`server.GetServerIPs()`) : le critère d'alerte est plus strict que la diffusion
+
+**Liste d'exclusion des interfaces virtuelles** (exportée par `server-go/internal/server/netdetect.go` : `VirtualInterfaceSubstrings`, `VirtualInterfacePrefixes`). Best-effort, par nom d'interface, insensible à la casse. Elle **ne vise aucune exhaustivité** : un adaptateur exotique peut manquer.
+
+| Liste | Entrées | Correspondance |
+|-------|---------|----------------|
+| `VirtualInterfaceSubstrings` (Windows) | `vethernet` (ex. `vEthernet (WSL)`, `vEthernet (External)` de Hyper-V), `virtual`, `wsl`, `hyper-v`, `vmware`, `virtualbox`, `loopback` | sous-chaîne, n'importe où dans le nom |
+| `VirtualInterfacePrefixes` (Linux / macOS) | `docker`, `br-`, `veth`, `virbr`, `tun`, `tap`, `wg`, `lxc`, `vmnet`, `utun` | au début du nom |
+
+### NETWORK_ONLY_LOCALHOST (hérité, v5.6.2, #96)
+
+Miroir exact de `NETWORK.ONLY_LOCALHOST`, conservé pour compatibilité. Aucun nouveau lecteur ne doit s'y abonner.
 
 ```json
 {
@@ -610,12 +644,8 @@ Indique que le serveur n'est accessible que depuis `localhost` (aucune interface
 }
 ```
 
-**Champ :**
-- `NETWORK_ONLY_LOCALHOST`: `bool` — `true` si le serveur ne répond que sur 127.0.0.1, `false` sinon
-- Vérifié toutes les 30 s via goroutine dédiée (network watchdog)
-- Pushé via WebSocket à chaque changement d'état
-- Affiché comme bandeau rouge dans l'interface admin (GamePage)
-- Jamais `omitempty` — toujours présent dans le GameState JSON
+- `NETWORK_ONLY_LOCALHOST`: `bool`, jamais `omitempty`. Non persisté.
+- Le client web ne le recopiait pas avant #267 : le bandeau de la v5.6.2 ne s'affichait donc jamais. L'alerte est désormais portée par `NETWORK` (voir ci-dessus).
 
 ---
 
@@ -1019,9 +1049,11 @@ type TypedContent struct {
 | Type | Champs embarqués | Description |
 |------|------------------|-------------|
 | `SPEEDY` | `ANSWER_TEXT`, `ANSWER_IMAGE` | Réponse texte et/ou image — historique |
-| `QCM` | `QCM_ANSWERS` (4 options), `QCM_CORRECT` (couleur gagnante), `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2` | Système d'indices avec seuils et pénalités configurables |
+| `QCM` | `QCM_ANSWERS` (4 options), `QCM_CORRECT` (couleur gagnante), `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2` | Système d'indices avec seuils et pénalités configurables pour une **question hôte** ; sur une **carte**, pas d'indices (v11.2.2, #279, voir ci-dessous) |
 | `ARDOISE` *(v7.1.0)* | `ANSWER`, `ARDOISE_KEYBOARD_TYPE` | Réponse libre au clavier (AZERTY, NUMPAD) |
 | `MEMORY` *(v7.1.0)* | `MEMORY_PAIRS`, `MEMORY_CONFIG`, `MEMORY_MODE` | Paires et configuration multi-équipes |
+
+*(v11.2.2, #279, LOT-6 — décision utilisateur du 2026-10-15)* **Une carte QCM n'a pas d'indices.** À l'enregistrement (`POST /questions`), `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2` et `QCM_PENALTY_1/2` sont **retirés de toute carte** (`StripCardHints`, `server-go/internal/game/question_types.go`), quelle que soit leur valeur : aucune erreur, aucun code de refus (`contracts/question-types.md` §7.1). Sur une carte d'un type autre que `QCM`, un champ d'indices **non nul** est d'abord refusé en `CARD_TYPE_CONTENT_MISMATCH` (§3.2, `ValidateCardTypeContent`) ; une valeur nulle est simplement retirée. Le moteur ne déclenche aucun indice pendant une carte (`processMotionCardTick`, `server-go/internal/game/engine.go`). Une carte déjà enregistrée qui porte encore ces champs est lue et jouée sans erreur, sans indice. Les champs d'indices restent valides pour une **question hôte** QCM, inchangés.
 
 **Rétrocompatibilité** : une carte sans `TYPE` vaut `SPEEDY` et se comporte exactement comme avant. Aucune migration de fichier.
 
@@ -1054,8 +1086,47 @@ Le barème appartient **toujours à la carte (hôte), jamais au type imbriqué.*
 | absent ou `"STARS"` | Barème par étoiles existant : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY → 1/3/5` | Comportement actuel, inchangé | ✅ |
 | `"FIXED"` | `VALUE` si jeu gagné, sinon 0 | Carte dont la valeur est indépendante de la difficulté | — |
 | `"PER_UNIT"` | `VALUE × Units` (Units = nombre d'items trouvés) | Types à progression — MEMORY au prorata (v7.1.0) | — |
+| `"STARS_PRORATA"` | `points_étoiles × Units / UnitsTotal` (multiplication avant division) | Types à progression — défaut de MEMORY et RAFALE (#187) | ✅ (progression) |
 
-**`Units` par défaut = 1** pour tout type binaire (gagné/perdu). Un type à progression rapporte son propre décompte.
+**`Units` par défaut = 1** pour tout type binaire (gagné/perdu). Un type à progression rapporte son propre décompte, et son total (`UnitsTotal`).
+
+#### Résolution du mode (v11.2.2, #190)
+
+1. `POINTS_RULE.MODE` explicite sur la carte → appliqué tel quel.
+2. Sinon, le défaut du **type courant** de la carte (`DefaultPointsRule` du registre des types, `question_types.go`) : `STARS` pour SPEEDY et QCM, `STARS_PRORATA` pour MEMORY et RAFALE. Résolu à chaque lecture, jamais recopié sur la carte.
+3. Sinon, `STARS`.
+
+Le défaut choisi dans l'éditeur n'écrit donc **jamais** `POINTS_RULE` : le champ est absent (défaut explicite = champ absent). Une règle explicite est un champ de carte : elle survit à un changement de `TYPE`.
+
+#### Applicabilité par type et validation à l'enregistrement (v11.2.2, #190)
+
+| Type effectif | Modes acceptés | Défaut (⇒ champ absent) |
+|---|---|---|
+| Binaire : `SPEEDY`, `QCM` | `STARS`, `FIXED` | `STARS` |
+| Progression : `MEMORY`, `RAFALE` | `STARS_PRORATA`, `STARS`, `FIXED`, `PER_UNIT` | `STARS_PRORATA` |
+
+- `VALUE` : entier compris entre **1 et 999**, requis pour `FIXED` et `PER_UNIT`. **Ignorée** pour `STARS` et `STARS_PRORATA` : elle peut être absente ou invalide sans refus.
+- Les valeurs de `MODE` sont **sensibles à la casse** : `fixed` est refusé comme `POINTS_RULE_INVALID_MODE`.
+
+**Ordre d'évaluation à l'enregistrement** (`POST /questions`, carte par carte), premier refus gagnant :
+
+1. `POINTS_RULE` absent, `null`, sans `MODE`, ou `MODE` `null` / `""` : accepté (défaut du type).
+2. `POINTS_RULE` non-objet, `MODE` non-chaîne, ou `MODE` hors de `STARS`, `FIXED`, `PER_UNIT`, `STARS_PRORATA` → `POINTS_RULE_INVALID_MODE`.
+3. `MODE` hors des modes acceptés pour le type effectif → `POINTS_RULE_MODE_NOT_APPLICABLE`. Ce refus passe avant `VALUE_REQUIRED` : `PER_UNIT` sans `VALUE` sur SPEEDY donne `NOT_APPLICABLE`.
+4. `FIXED` ou `PER_UNIT` sans `VALUE` entière entre 1 et 999 (absente, 0, 1000, négative, décimale, chaîne, `null`) → `POINTS_RULE_VALUE_REQUIRED`.
+5. Mode explicite égal au défaut du type (par exemple `STARS_PRORATA` sur MEMORY) : accepté.
+
+**Forme du refus** : réponse HTTP **400**, corps en texte brut (`text/plain`), requête entière rejetée, rien n'est écrit. Le corps suit le format `<CODE>: card <ID> (TYPE=<type effectif>) <détail>`, par exemple :
+
+```
+POINTS_RULE_MODE_NOT_APPLICABLE: card mc-7 (TYPE=SPEEDY) declares POINTS_RULE.MODE=PER_UNIT, which is not applicable to this type (accepted: STARS, FIXED)
+```
+
+`<ID>` est l'`ID` de la carte (chaîne vide si absent). Le `TYPE` est le type effectif (vide ⇒ `SPEEDY`).
+
+- Les cartes déjà enregistrées ne sont jamais refusées à la lecture ni au jeu.
+
+Sources : `contracts/question-types.md` §6.2 ; `ValidatePointsRule`, `AllowedPointsRuleModes` et `PointsRuleError.Error()` (`server-go/internal/game/question_types.go`) ; appel dans `handleUploadQuestion` (`server-go/internal/server/http.go`, après `ValidateCardTypeContent`).
 
 ---
 

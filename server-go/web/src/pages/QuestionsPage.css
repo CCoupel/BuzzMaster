@@ -621,18 +621,6 @@
   color: white;
 }
 
-/* Category Selector — extrait dans components/CategorySelector.css
-   (v8.0.0, #16/#197, bugfix cohérence UI) : partagé avec RafalePage.jsx,
-   plus de copie ici. Chargé transitivement via CategorySelector.jsx,
-   importé par QuestionsPage.jsx. */
-
-.cat-pill-img {
-  width: 20px;
-  height: 20px;
-  object-fit: cover;
-  border-radius: 3px;
-}
-
 /* Type Selector */
 .type-selector {
   display: flex;
@@ -1475,10 +1463,8 @@
 
 /* ── Category filter bar (#40) ── */
 .questions-page-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
+  /* Conteneur du CategoryPicker variant="filter" (#221) : la disposition interne
+     (libellé + chips) est portée par CategoryPicker.css. */
   margin-bottom: var(--space-4);
   padding: var(--space-3) 0;
   border-bottom: 1px solid var(--gray-100);
@@ -1494,70 +1480,6 @@
   border: 1px solid var(--gray-200);
   border-top: 1px solid var(--gray-100);
   box-shadow: var(--shadow-sm);
-}
-
-.questions-page-filter-bar .category-filter-pill {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  width: auto;
-  height: auto;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  border: 2px solid transparent;
-  background: var(--gray-100);
-  font-size: 0.82rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.questions-page-filter-bar .category-filter-pill:hover {
-  background: color-mix(in srgb, var(--cat-color) 20%, white);
-  border-color: var(--cat-color);
-  transform: scale(1.03);
-}
-
-.questions-page-filter-bar .category-filter-pill.active {
-  background: var(--cat-color);
-  border-color: var(--cat-color);
-  color: white;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cat-color) 35%, transparent);
-}
-
-.questions-page-filter-bar .cat-pill-icon {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.questions-page-filter-bar .cat-pill-label {
-  line-height: 1;
-}
-
-.questions-page-filter-bar .category-filter-reset {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: var(--gray-300);
-  color: var(--gray-700);
-  font-size: 0.95rem;
-  font-weight: 700;
-  cursor: pointer;
-  line-height: 1;
-  transition: all 0.15s ease;
-  padding: 0;
-  margin-left: var(--space-1);
-}
-
-.questions-page-filter-bar .category-filter-reset:hover {
-  background: var(--error);
-  color: white;
 }
 
 .category-filter-empty {
@@ -1638,37 +1560,6 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
-}
-
-.memotion-diff-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-
-.memotion-diff-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  background: var(--bg-secondary);
-  border: 2px solid var(--gray-600);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  transition: all 0.15s ease;
-}
-
-.memotion-diff-btn:hover {
-  border-color: var(--warning);
-  color: var(--warning);
-}
-
-.memotion-diff-btn.active {
-  border-color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 15%, var(--bg-secondary));
-  color: var(--warning);
-  font-weight: 700;
 }
 
 .memotion-img-row {
@@ -1816,53 +1707,6 @@
   border-top: 1px solid var(--gray-200);
   padding-top: var(--space-3);
   margin-top: var(--space-1);
-}
-
-/* #216 — chips multi-sélection Catégories/Difficultés de l'éditeur RAFALE
-   (même motif visuel que .memotion-diff-btn ci-dessous, forme pilule plutôt
-   que carrée — rapproche du style .chip de la maquette rafale-multi-216.html). */
-.rafale-multi-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.rafale-multi-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  border: 2px solid var(--gray-200);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast, 0.15s ease);
-}
-
-/* A4 (retour QUALIF v9.0.0.4) — icône CategoryBadge (chip={false}) au sein
-   d'une chip catégorie RAFALE (manche ou carte MEMOTION+, #216/#217) — le
-   libellé texte reste affiché à côté (catégories personnalisées sans emoji,
-   categoryUtils.js). Chips DIFFICULTÉ (étoiles) n'ont pas de CategoryBadge,
-   inchangées. */
-.rafale-multi-chip .category-badge__icon,
-.rafale-multi-chip .category-badge__img {
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.rafale-multi-chip:hover {
-  border-color: var(--warning);
-  color: var(--warning);
-}
-
-.rafale-multi-chip.active {
-  border-color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 15%, var(--bg-secondary));
-  color: var(--warning);
-  font-weight: 700;
 }
 
 /* Barème par étoile (216-Q7c) — un mini form-group par difficulté

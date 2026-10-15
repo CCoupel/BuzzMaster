@@ -44,10 +44,11 @@ func TestHandleReleaseBumperName_Disconnected_NoPlayerEvicted(t *testing.T) {
 
 	baseURL := startEvictionTestServer(t, app)
 	bystanderConn := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, bystanderConn) // inscrite au hub avant le témoin (#266)
 
 	app.handleReleaseBumperName(releaseBumperNameMsg(t, id))
 
-	actions := collectActions(bystanderConn, 300*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, bystanderConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(actions, protocol.ActionPlayerEvicted) {
 		t.Errorf("releasing a disconnected bumper must never emit PLAYER_EVICTED, got actions: %v", actions)
 	}
@@ -81,6 +82,7 @@ func TestHandleReleaseBumperName_Connected_EmitsPlayerEvictedToTargetOnly(t *tes
 	app.wsHub.SetClientPlayerID(targetClientID, aliceID)
 
 	bystanderConn := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, bystanderConn) // inscrite au hub avant le témoin (#266)
 
 	app.handleReleaseBumperName(releaseBumperNameMsg(t, aliceID))
 
@@ -96,7 +98,7 @@ func TestHandleReleaseBumperName_Connected_EmitsPlayerEvictedToTargetOnly(t *tes
 		t.Errorf("expected REASON=SEAT_RELEASED, got %q", payload.Reason)
 	}
 
-	bystanderActions := collectActions(bystanderConn, 300*time.Millisecond)
+	bystanderActions := collectAfterSentinel264(t, app, bystanderConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(bystanderActions, protocol.ActionPlayerEvicted) {
 		t.Errorf("an unrelated VJoueur must never receive PLAYER_EVICTED, got actions: %v", bystanderActions)
 	}
@@ -129,7 +131,7 @@ func TestHandleReleaseBumperName_Connected_SocketNeverClosed(t *testing.T) {
 	// follows it (broadcastUpdate reaches every VPlayer, this connection
 	// included) — a single collectActions call, per the harness's own
 	// single-read-per-connection rule (no repeat drains on the same conn).
-	actions := collectActions(targetConn, 500*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, targetConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if !containsAction(actions, protocol.ActionPlayerEvicted) {
 		t.Fatalf("expected PLAYER_EVICTED among the traffic on the still-open socket, got: %v", actions)
 	}
@@ -198,10 +200,11 @@ func TestHandleReleaseBumperName_UnknownID_NoPanicNoPlayerEvicted(t *testing.T) 
 
 	baseURL := startEvictionTestServer(t, app)
 	bystanderConn := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, bystanderConn) // inscrite au hub avant le témoin (#266)
 
 	app.handleReleaseBumperName(releaseBumperNameMsg(t, "does-not-exist"))
 
-	actions := collectActions(bystanderConn, 300*time.Millisecond)
+	actions := collectAfterSentinel264(t, app, bystanderConn)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(actions, protocol.ActionPlayerEvicted) {
 		t.Errorf("an unknown ID must never emit PLAYER_EVICTED, got actions: %v", actions)
 	}

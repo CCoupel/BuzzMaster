@@ -97,6 +97,22 @@ go test ./... -v -cover
 
 Ne jamais utiliser `taskkill` ou `kill` pour arrêter le serveur.
 
+### Frontend web (Node 22, vite 8, vitest 5)
+
+Prérequis : **Node 22.22.2 ou plus** (jsdom 30 ; la CI utilise Node 22). Le build et les tests se lancent depuis `server-go/web`.
+
+```bash
+cd server-go/web
+npm ci
+npm run build              # produit web/dist (requis par les tests fonts-embed et le smoke test dist)
+npx vitest run             # tests unitaires
+npx vitest run --coverage  # couverture v8
+npm audit --audit-level=high   # même porte que scripts/ci.sh (étape 6)
+```
+
+- Les commentaires CSS ne doivent **pas** contenir `*/` (même dans un texte) : lightningcss refuse la fermeture prématurée, qu'esbuild tolérait avant vite 8.
+- En cas d'échec de `npx vitest run` après un bump de dépendance, vérifier d'abord les mocks `fetch` (vitest 5 remonte les exceptions de rendu en erreur non gérée).
+
 ### Cross-compilation
 
 ```bash
@@ -224,6 +240,9 @@ Issues de la stabilisation des tests de `cmd/server` (corrections `8b0e5ead`, `5
 
 - **Pas de `time.Sleep` pour attendre un événement.** Attendre par condition : lire les messages jusqu'à l'action attendue, avec un délai maximal (`readActionMatchingWithin`, `collectMessagesUntil`, 10 s).
 - **Lire jusqu'à l'action attendue, pas la première trame.** Une trame antérieure (`HEARTBEAT`, `UPDATE`) peut arriver avant. Si une trame interdite arrive (ex. `PLAYER_CONNECTED` quand on attend un rejet), le test échoue immédiatement.
+- **Jamais de fenêtre fixe d'observation** (`collectActions(conn, 500ms)`) pour prouver l'absence ou l'ordre d'un message. Attendre l'événement attendu par condition, puis lire jusqu'à un **témoin** diffusé après l'action : le témoin prouve que tout ce qui devait arriver est arrivé. Helpers réels (`cmd/server`) : `collectAfterSentinel264` (un témoin, plusieurs connexions lues ensemble), `collectUntilSentinel264`, `assertNoAction264`, `eventually264` (`sentinel_264_test.go`) ; `noAction246` (`ardoise_final_246_test.go`) pour l'absence d'action sur plusieurs connexions ; `readActionMatchingWithin` (`rafale_countdown_wire_test.go`) pour attendre une action précise ; `settleSound` (méthode de `env244`, `score_display_252_test.go`) pour attendre que le moteur de son ait joué son témoin. Toutes les connexions à lire doivent être passées ensemble à `collectAfterSentinel264`, sinon un témoin reste en file.
+- **Attendre l'inscription d'un client avant d'émettre vers lui.** Lire un message du client ne prouve pas qu'il est inscrit dans le hub (#272). Le helper `learnClientID` (`player_evicted_test.go`) attend donc `ClientBinding` après le premier message. Un test qui diffuse ou cible un client sans passer par `learnClientID` doit attendre lui-même l'inscription par événement. Le hook test-only `SetRegisterHook` (`internal/server/websocket.go`, appelé par `Run` avant l'inscription) sert à provoquer la course dans les tests de régression ; il ne s'appelle jamais hors tests.
+- **Pauses fixes légitimes, à conserver** : `seat_release_test.go:167` (franchir la seconde de l'identifiant horodaté) ; la boucle d'observation d'absence de `new_game_243_test.go:464` (vérifier pendant 6 s qu'un minuteur ne ressuscite pas NEW_GAME) ; la boucle d'absence de 600 ms de `identity_binding_246_test.go:352` (le bumper ne doit pas passer hors ligne). Une absence observée dans la durée n'a pas de témoin possible. Toute autre pause fixe est à remplacer par une attente par événement.
 - **Arrêter les minuteurs en fin de test** avec `t.Cleanup` (ex. `engine.Stop()`, annulation du chien de garde de l'adaptateur de son). Les `defer` du test s'exécutent d'abord ; ensuite, tous les `t.Cleanup` s'exécutent dans l'ordre inverse de leur enregistrement.
 - **Ne pas modifier le singleton `config` dans des tests parallèles.** Utiliser une injection (ex. `soundEnabled` de l'adaptateur de son). Si un test doit appeler `config.SetInstance`, restaurer l'instance précédente par `t.Cleanup`.
 - **Pas de `t.Parallel()` sur un test qui utilise le singleton `config`.** Les tests parallèles s'exécutent après la phase séquentielle du paquet.

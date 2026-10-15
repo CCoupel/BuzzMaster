@@ -7,7 +7,7 @@ import {
   showSoundRow,
 } from '../utils/phaseRules'
 import { getQuestionTypeMeta } from '../utils/questionTypeMeta'
-import { getMotionCardPoints, computeStarsProrataPoints } from '../utils/motionGrid'
+import { getMotionCardPointsForRule } from '../utils/motionGrid'
 import AnimNextButton from './AnimNextButton'
 import ArdoiseRevealGate from './ArdoiseRevealGate'
 import AnimQcmOptions from './AnimQcmOptions'
@@ -236,45 +236,33 @@ export default function AnimConductPanel({
   const selectedMotionCard = isMemotion
     ? motionCards.find(c => c.ID === motion?.selectedId) || null
     : null
-  const selectedMotionCardStars = selectedMotionCard
-    ? getMotionCardPoints(selectedMotionCard.DIFFICULTY || 1, question?.MOTION_CONFIG)
+  // Gain affiché sur le bouton d'attribution (L2, AnimMotionActions, sous-phase
+  // REVEAL) : UNE seule fonction, miroir de `motionCardPointsForOutcome` (Go),
+  // selon la règle effective de la carte (#187 cycle 4/5, #190) — POINTS_RULE
+  // explicite (FIXED : VALUE ; PER_UNIT : VALUE × unités ; STARS : étoiles
+  // pleines ; STARS_PRORATA : prorata), sinon le défaut du TYPE. Jamais le type
+  // en dur : un 3e type nestable n'aura pas à recorriger ce point.
+  // Units/UnitsTotal propres à chaque type (contrat §9.3/§14.4) : MEMORY compte
+  // les paires trouvées sur le total de paires de la carte, RAFALE les bonnes
+  // réponses sur le nombre de questions posées (`cardRafale.correctCount`/
+  // `askedCount`, déjà résolus côté carte) ; binaire (SPEEDY/QCM) : 1 unité.
+  const cardType = selectedMotionCard?.TYPE
+  const motionCardUnits = cardType === 'RAFALE'
+    ? (cardRafale?.correctCount || 0)
+    : cardType === 'MEMORY'
+      ? (cardMemory?.matchedPairs?.length || 0)
+      : 1
+  const motionCardUnitsTotal = cardType === 'RAFALE'
+    ? (cardRafale?.askedCount || 0)
+    : cardType === 'MEMORY'
+      ? (selectedMotionCard?.MEMORY_PAIRS?.length || 0)
+      : 0
+  const motionCardPoints = selectedMotionCard
+    ? getMotionCardPointsForRule(selectedMotionCard, question?.MOTION_CONFIG, {
+        units: motionCardUnits,
+        unitsTotal: motionCardUnitsTotal,
+      })
     : 0
-  // #187 cycle 4 (F1) — gain affiché sur le bouton d'attribution (L2,
-  // AnimMotionActions, sous-phase REVEAL) : pour une carte en barème
-  // STARS_PRORATA (le défaut du TYPE — POINTS_RULE absent ou MODE explicite
-  // "STARS_PRORATA", contrat §6.2/§6.3), le montant plein NE DOIT PAS être
-  // affiché — le serveur, seule autorité, crédite le prorata réel. Une
-  // surcharge explicite STARS/FIXED/PER_UNIT sur la carte reste au barème
-  // étoiles plein (tout-ou-rien, §6.2). Sans ce branchement, l'animateur
-  // voit un montant différent de celui réellement attribué.
-  //
-  // 🔴 C3 (retour QUALIF v9.0.0.4, réouverture #187 cycle 4) — ce test
-  // testait `selectedMotionCard?.TYPE === 'MEMORY'` EN DUR : RAFALE devenu
-  // nestable (#217) avec le MÊME barème par défaut (contrat rafale.md §14.4)
-  // a reproduit exactement le même défaut (montant plein au lieu du
-  // prorata). Corrigé en testant la RÈGLE effective du TYPE
-  // (`defaultPointsRule`, utils/questionTypeMeta.js — miroir du registre Go,
-  // question-types.md §6.2), jamais le type lui-même — un 3e type nestable
-  // STARS_PRORATA futur n'aura donc pas à recorriger ce point une 3e fois.
-  const isStarsProrataCard = selectedMotionCard
-    && getQuestionTypeMeta(selectedMotionCard.TYPE).defaultPointsRule === 'STARS_PRORATA'
-    && (!selectedMotionCard.POINTS_RULE?.MODE || selectedMotionCard.POINTS_RULE.MODE === 'STARS_PRORATA')
-  // Units/UnitsTotal du prorata — propres à chaque type (contrat §9.3/§14.4) :
-  // MEMORY compte les paires trouvées sur le total de paires de la carte,
-  // RAFALE compte les bonnes réponses sur le nombre de questions posées
-  // (`cardRafale.correctCount`/`askedCount`, déjà résolus côté carte par
-  // `getTypeState`/`AnimPage.jsx`, mêmes noms que `typeState.rafale`).
-  const motionCardPoints = isStarsProrataCard
-    ? computeStarsProrataPoints(
-        selectedMotionCardStars,
-        selectedMotionCard.TYPE === 'RAFALE'
-          ? (cardRafale?.correctCount || 0)
-          : (cardMemory?.matchedPairs?.length || 0),
-        selectedMotionCard.TYPE === 'RAFALE'
-          ? (cardRafale?.askedCount || 0)
-          : (selectedMotionCard.MEMORY_PAIRS?.length || 0),
-      )
-    : selectedMotionCardStars
   const modeLabel = question?.TYPE ? getQuestionTypeMeta(question.TYPE).label : null
   // #171/F3 — contenu L2 (gestes propres au mode), ex-L3 #166.
   const modeGestureText = modeLabel ? `Aucun geste propre au mode ${modeLabel}` : 'Aucun geste propre au mode'

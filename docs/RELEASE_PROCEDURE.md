@@ -19,8 +19,8 @@ Ce document décrit la procédure complète pour publier une nouvelle version de
 > **Note de migration — 2026-08-07.** L'ancienne règle propre au projet (3 segments :
 > `x` = architecture, `y` = fonctionnalité, `z` = toujours 0 en release) est **abandonnée** au
 > profit du schéma à 4 segments décrit ci-dessous, repris de
-> `.claude/commands/context/COMMON.md` §5 **à une exception près, la parité de `Y`** (voir
-> l'encadré ci-dessous). Les versions publiées avant cette date (jusqu'à **v6.1.1** incluse)
+> `.claude/commands/context/COMMON.template.md` §5 (parité de `Y` alignée avec le template depuis
+> le 2026-10-13, voir l'encadré ci-dessous). Les versions publiées avant cette date (jusqu'à **v6.1.1** incluse)
 > suivent l'ancienne règle : voir `CHANGELOG.md` pour l'historique.
 
 ### Format
@@ -42,21 +42,12 @@ Format prod : X.Y.Z       (3 segments — le « a » n'est jamais publié)
 > IA). Désormais **seule une rupture de compatibilité des données** incrémente X : une
 > fonctionnalité, même volumineuse, avance `Y`.
 
-> ⚠️ **Écart assumé avec le template — parité de `Y`.**
-> `.claude/commands/context/COMMON.md` §5 énonce l'inverse : « Impair = dev, pair = prod », et son
-> exemple est cohérent avec cet énoncé (dev en 1.1/1.3/1.5, prod en 1.2/1.4/1.6).
-> **Ce projet retient la convention opposée** — dev/milestone sur `Y` **pair**, release sur `Y`
-> **impair** — sur décision utilisateur, parce qu'elle correspond à la pratique réelle :
-> le milestone GitHub **`v6.0`** (Y=0, pair) a produit la release **v6.1.1** (Y=1, impair).
->
-> Elle est aussi la seule des deux qui reste cohérente après une rupture de compatibilité des
-> données : `X+1` remet `Y=0`, qui est directement un numéro de **dev** valide. Avec la parité du
-> template, `Y=0` serait un numéro de prod et il faudrait aussitôt sauter à `Y=1` — ce que
-> `COMMON.md` prévoit d'ailleurs explicitement, au prix d'un cas particulier dont on se passe ici.
->
-> **Seule la parité change. Toutes les opérations ci-dessous sont identiques à celles du
-> template** : les deux conventions décrivent la même mécanique en opposition de phase.
-> `COMMON.md` n'a **pas** été modifié — l'écart est ici, documenté et volontaire.
+> ℹ️ **Parité de `Y` — alignée avec le template depuis la sync v3.18.6 (2026-10-13).**
+> `.claude/commands/context/COMMON.template.md` §5 énonce désormais la même règle que ce projet :
+> dev/milestone sur `Y` **pair**, release sur `Y` **impair** (convention retenue ici dès v6.0 sur
+> décision utilisateur, parce qu'elle correspond à la pratique réelle : le milestone **`v6.0`** a
+> produit la release **v6.1.1**, et `X+1` remet `Y=0`, directement un numéro de dev valide).
+> L'ancien écart documenté ici (le template disait « impair = dev, pair = prod ») n'existe plus.
 
 ### Les 6 opérations
 
@@ -334,20 +325,20 @@ EOF
 
 Avant de merger dans `main` et de créer le tag, vérifier :
 
-1. **Run vert de `test-branch.yml` sur le commit exact** : le workflow se déclenche au push de `milestone/**` ou à la main
-   (`gh workflow run test-branch.yml --ref <branche>`). Il doit être vert pour le SHA à publier :
+1. **Run vert de `ci-branch.yml` sur le commit exact** : le workflow se déclenche au push de `milestone/**` ou à la main
+   (`gh workflow run ci-branch.yml --ref <branche>`). Il doit être vert pour le SHA à publier :
    ```bash
-   gh run list --workflow test-branch.yml --commit <sha>
+   gh run list --workflow ci-branch.yml --commit <sha>
    ```
    Il exécute les mêmes étapes que le job « Test (race) » de `release.yml`, sans rien publier.
-2. **`govulncheck` propre juste avant le tag** : le même audit que `release.yml` (`govulncheck@latest`, `govulncheck ./...`, toolchain de la CI),
-   en plus de la QA.
+2. **`govulncheck` et `npm audit` propres juste avant le tag** : `govulncheck` reprend le même audit que `release.yml` (`govulncheck@latest`, `govulncheck ./...`, toolchain de la CI) ;
+   `npm audit --audit-level=high` reprend la porte de `scripts/ci.sh` (étape 6, `cd web`, toutes dépendances, seuil `high`). En plus de la QA.
 3. **En cas d'échec** : analyser, corriger sur la branche, relancer le run. **Aucun merge dans `main` et aucun tag** tant que ce run n'est pas vert.
    Un tag ne sert jamais de test.
 
 Rappels :
-- Les tests de timing se valident dans les conditions du runner (2 CPU, `-race`, paquet entier) : `test-branch.yml` est le juge.
-- Tout changement de `release.yml` doit être reflété dans `test-branch.yml` (même version de Go, mêmes étapes).
+- Les tests de timing se valident dans les conditions du runner (2 CPU, `-race`, paquet entier) : `ci-branch.yml` est le juge.
+- Tout changement de `release.yml` doit être reflété dans `ci-branch.yml` (même version de Go, mêmes étapes).
 
 ---
 
@@ -510,7 +501,7 @@ curl -s http://localhost/version
 [ ] 7.  Backlog mis à jour
 [ ] 8.  Documentation utilisateur mise à jour (si nécessaire)
 [ ] 9.  Changements commités
-[ ] 10bis. Run vert de test-branch.yml sur le commit exact + govulncheck propre (avant merge et tag)
+[ ] 10bis. Run vert de ci-branch.yml sur le commit exact + govulncheck et npm audit propres (avant merge et tag)
 [ ] 10. Commits poussés
 [ ] 11. Tag créé et poussé (déclenche CI)
 [ ] 12. 🤖 CI surveillée par Claude (6 jobs verts ✅ : checking, testing, compiling-firmware,
@@ -597,5 +588,5 @@ ls -lh releases/
 - Les exécutables portables embarquent le site web (pas besoin de fichiers séparés)
 - Le dossier `data/` est créé automatiquement à côté de l'exécutable
 - Sur Raspberry Pi, donner les droits d'exécution : `chmod +x buzzcontrol-linux-arm64`
-- Le workflow CI utilise Go 1.26 et Node.js 18
+- Le workflow CI utilise la version de Go de `server-go/go.mod` (directive `go`) et Node.js 22 ; la chaîne d'outils est détaillée dans [GO_SERVER.md](GO_SERVER.md), section « Chaîne d'outils CI (#276) »
 - Le firmware compilé (`buzzclick-vX.Y.Z-merged.bin`) est automatiquement embarqué dans le serveur pour les mises à jour OTA

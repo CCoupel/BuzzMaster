@@ -12,7 +12,6 @@ import (
 	"buzzcontrol/internal/protocol"
 	"encoding/json"
 	"testing"
-	"time"
 )
 
 type scoreChange252 struct {
@@ -59,9 +58,65 @@ func (e *env244) bumperPoints(t *testing.T, id string, points int, display *bool
 
 func boolPtr252(b bool) *bool { return &b }
 
+// witnessCue252 : son témoin (#271). Le moteur de son est une file FIFO bornée lue par UNE goroutine : quand le
+// témoin est joué, tout son notifié avant lui l'a été aussi. Aucun test n'asserte sur ce son.
+const witnessCue252 = audio.CueEntracteFin
+
+// cues : les sons joués, hors témoin.
+func (e *env244) cues() []audio.Cue {
+	var out []audio.Cue
+	for _, c := range e.sound.Played() {
+		if c != witnessCue252 {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// settleSound attend que le moteur de son ait traité tout ce qui lui a été notifié (événement : le témoin est joué).
+func (e *env244) settleSound(t *testing.T) {
+	t.Helper()
+	count := func() int {
+		n := 0
+		for _, c := range e.sound.Played() {
+			if c == witnessCue252 {
+				n++
+			}
+		}
+		return n
+	}
+	before := count()
+	e.app.sound().PlayCue(witnessCue252)
+	eventually264(t, "son témoin joué par le moteur de son", func() bool { return count() > before })
+}
+
+// amb252 : compteurs de l'ambiance avant l'action. notif = NotifyState + NotifyPulse comptés SYNCHRONEMENT par le
+// writer (déterministe) ; count = Apply du driver factice, asynchrone.
+type amb252 struct{ count, notif int }
+
+func (e *env244) ambianceNotifies() int { return e.app.ambiance().Stats().Notifies }
+
+func (e *env244) ambSnapshot() amb252 {
+	return amb252{count: e.ambiance.Count(), notif: e.ambianceNotifies()}
+}
+
+// ambChanged : l'ambiance a-t-elle été notifiée depuis le snapshot ? Compteur synchrone : « aucune pulsation ni
+// flash » se prouve sans attendre, et sans pouvoir être pris en défaut par un Apply d'amorçage tardif.
+func (e *env244) ambChanged(before amb252) bool { return e.ambianceNotifies() != before.notif }
+
+// ambPulsed : l'ambiance a été notifiée ET le driver a appliqué (attente par événement, échéance large).
+func (e *env244) ambPulsed(t *testing.T, before amb252) bool {
+	t.Helper()
+	if e.ambianceNotifies() <= before.notif {
+		return false
+	}
+	eventually264(t, "Apply de l'ambiance", func() bool { return e.ambiance.Count() > before.count })
+	return true
+}
+
 func (e *env244) gagneCount() int {
 	n := 0
-	for _, c := range e.sound.Played() {
+	for _, c := range e.cues() {
 		if c == audio.CueGagne {
 			n++
 		}
@@ -96,19 +151,19 @@ func (e *env244) lastHistoryEvent(team string) (map[string]interface{}, bool) {
 
 func TestScoreDisplay252_Critical_WithoutDisplayFieldPublicEffectsAreUnchanged(t *testing.T) {
 	e := newEnv244(t)
-	ambBefore := e.ambiance.Count()
+	ambBefore := e.ambSnapshot()
 	seqBefore := mustScoreChange252(t, e).Seq
 
 	e.teamPoints(t, "Les Bleus", 3, nil)
 
-	time.Sleep(400 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	if e.gagneCount() != 1 {
-		t.Errorf("sans DISPLAY : son « gagné » joué (%v)", e.sound.Played())
+		t.Errorf("sans DISPLAY : son « gagné » joué (%v)", e.cues())
 	}
 	if !e.cometTeams()["Les Bleus"] {
 		t.Error("sans DISPLAY : comète LED de l'équipe")
 	}
-	if e.ambiance.Count() <= ambBefore {
+	if !e.ambPulsed(t, ambBefore) {
 		t.Error("sans DISPLAY : pulsation d'ambiance (NotifyPulse)")
 	}
 	sc, _ := e.scoreChange(t)
@@ -131,7 +186,7 @@ func mustScoreChange252(t *testing.T, e *env244) scoreChange252 {
 func TestScoreDisplay252_DisplayTrueIsTheSameAsAbsent(t *testing.T) {
 	e := newEnv244(t)
 	e.teamPoints(t, "Les Bleus", 3, boolPtr252(true))
-	time.Sleep(400 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	sc, _ := e.scoreChange(t)
 	if e.gagneCount() != 1 || !e.cometTeams()["Les Bleus"] || !sc.Display {
 		t.Errorf("DISPLAY:true = comportement actuel (son %d, comètes %v, SCORE_CHANGE %+v)", e.gagneCount(), e.cometTeams(), sc)
@@ -142,22 +197,22 @@ func TestScoreDisplay252_DisplayTrueIsTheSameAsAbsent(t *testing.T) {
 
 func TestScoreDisplay252_Critical_TeamPointsHiddenCorrectionHasNoPublicEffectOnAnyChannel(t *testing.T) {
 	e := newEnv244(t)
-	soundBefore, ambBefore := len(e.sound.Played()), e.ambiance.Count()
+	soundBefore, ambBefore := len(e.cues()), e.ambSnapshot()
 
 	e.teamPoints(t, "Les Bleus", 3, boolPtr252(false))
 
-	time.Sleep(500 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	if sc := e.scores(); sc["Les Bleus"][1] != 3 || sc["Les Bleus"][0] != 3 {
 		t.Errorf("le score est mis à jour malgré DISPLAY:false : %v", sc["Les Bleus"])
 	}
-	if got := len(e.sound.Played()); got != soundBefore {
-		t.Errorf("aucun son (%d → %d) : %v", soundBefore, got, e.sound.Played())
+	if got := len(e.cues()); got != soundBefore {
+		t.Errorf("aucun son (%d → %d) : %v", soundBefore, got, e.cues())
 	}
 	if c := e.cometTeams(); len(c) != 0 {
 		t.Errorf("aucune comète LED : %v", c)
 	}
-	if e.ambiance.Count() != ambBefore {
-		t.Errorf("aucune pulsation ni flash d'ambiance (%d → %d)", ambBefore, e.ambiance.Count())
+	if e.ambChanged(ambBefore) {
+		t.Errorf("aucune pulsation ni flash d'ambiance (%d → %d)", ambBefore.notif, e.ambianceNotifies())
 	}
 	sc, _ := e.scoreChange(t)
 	if sc.Display || len(sc.Teams) != 1 || sc.Teams[0] != "Les Bleus" || sc.Seq < 1 {
@@ -187,16 +242,16 @@ func TestScoreDisplay252_HiddenCorrectionStillUpdatesTheRankingForEveryClient(t 
 func TestScoreDisplay252_Critical_BumperPointsHiddenCorrectionHasNoPublicEffect(t *testing.T) {
 	e := newEnv244(t)
 	mac := e.buzzers["Les Bleus"]
-	soundBefore, ambBefore := len(e.sound.Played()), e.ambiance.Count()
+	soundBefore, ambBefore := len(e.cues()), e.ambSnapshot()
 
 	e.bumperPoints(t, mac, 4, boolPtr252(false))
 
-	time.Sleep(500 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	if b := e.app.engine.GetBumper(mac); b == nil || b.Score != 4 {
 		t.Errorf("score du joueur mis à jour : %+v", b)
 	}
-	if len(e.sound.Played()) != soundBefore || len(e.cometTeams()) != 0 || e.ambiance.Count() != ambBefore {
-		t.Errorf("aucun effet public (son %v, comètes %v, ambiance %d→%d)", e.sound.Played(), e.cometTeams(), ambBefore, e.ambiance.Count())
+	if len(e.cues()) != soundBefore || len(e.cometTeams()) != 0 || e.ambChanged(ambBefore) {
+		t.Errorf("aucun effet public (son %v, comètes %v, ambiance %d→%d)", e.cues(), e.cometTeams(), ambBefore.notif, e.ambianceNotifies())
 	}
 	sc, _ := e.scoreChange(t)
 	if sc.Display || len(sc.Players) != 1 || sc.Players[0] != mac || len(sc.Teams) != 1 || sc.Teams[0] != "Les Bleus" {
@@ -210,7 +265,7 @@ func TestScoreDisplay252_Critical_BumperPointsHiddenCorrectionHasNoPublicEffect(
 func TestScoreDisplay252_BumperPointsWithoutDisplayKeepsItsEffects(t *testing.T) {
 	e := newEnv244(t)
 	e.bumperPoints(t, e.buzzers["Les Bleus"], 4, nil)
-	time.Sleep(400 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	sc, _ := e.scoreChange(t)
 	if e.gagneCount() != 1 || !sc.Display || len(sc.Players) != 1 {
 		t.Errorf("sans DISPLAY : comportement actuel (son %d, SCORE_CHANGE %+v)", e.gagneCount(), sc)
@@ -221,16 +276,16 @@ func TestScoreDisplay252_BumperPointsWithoutDisplayKeepsItsEffects(t *testing.T)
 
 func TestScoreDisplay252_Critical_BatchWithDisplayFalseHasNoGroupedEffect(t *testing.T) {
 	e := newEnv244(t)
-	soundBefore, ambBefore := len(e.sound.Played()), e.ambiance.Count()
+	soundBefore, ambBefore := len(e.cues()), e.ambSnapshot()
 
 	e.batch(t, qid244, threeEntries244(), map[string]interface{}{"DISPLAY": false})
 
 	if r := e.result(t); r.Status != "APPLIED" || len(r.Applied) != 3 {
 		t.Fatalf("RESULT = %+v", r)
 	}
-	time.Sleep(500 * time.Millisecond)
-	if len(e.sound.Played()) != soundBefore || len(e.cometTeams()) != 0 || e.ambiance.Count() != ambBefore {
-		t.Errorf("aucun effet groupé (son %v, comètes %v, ambiance %d→%d)", e.sound.Played(), e.cometTeams(), ambBefore, e.ambiance.Count())
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
+	if len(e.cues()) != soundBefore || len(e.cometTeams()) != 0 || e.ambChanged(ambBefore) {
+		t.Errorf("aucun effet groupé (son %v, comètes %v, ambiance %d→%d)", e.cues(), e.cometTeams(), ambBefore.notif, e.ambianceNotifies())
 	}
 	sc, _ := e.scoreChange(t)
 	if sc.Display || len(sc.Teams) != 3 {
@@ -245,7 +300,7 @@ func TestScoreDisplay252_BatchWithoutDisplayKeepsGroupedEffects(t *testing.T) {
 	e := newEnv244(t)
 	e.batch(t, qid244, threeEntries244(), nil)
 	_ = e.result(t)
-	time.Sleep(400 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	sc, _ := e.scoreChange(t)
 	if e.gagneCount() != 1 || len(e.cometTeams()) != 3 || !sc.Display {
 		t.Errorf("sans DISPLAY : un son, une comète par équipe (%d, %v, %+v)", e.gagneCount(), e.cometTeams(), sc)
@@ -258,15 +313,15 @@ func TestScoreDisplay252_NegativeAmountsUpdateScoresWithNoEffectWithOrWithoutDis
 	for name, d := range map[string]*bool{"sans DISPLAY": nil, "DISPLAY true": boolPtr252(true), "DISPLAY false": boolPtr252(false)} {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv244(t)
-			soundBefore, ambBefore := len(e.sound.Played()), e.ambiance.Count()
+			soundBefore, ambBefore := len(e.cues()), e.ambSnapshot()
 
 			e.teamPoints(t, "Les Rouges", -4, d)
 
-			time.Sleep(400 * time.Millisecond)
+			e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 			if sc := e.scores(); sc["Les Rouges"][0] != -4 {
 				t.Errorf("score mis à jour : %v", sc["Les Rouges"])
 			}
-			if len(e.sound.Played()) != soundBefore || len(e.cometTeams()) != 0 || e.ambiance.Count() != ambBefore {
+			if len(e.cues()) != soundBefore || len(e.cometTeams()) != 0 || e.ambChanged(ambBefore) {
 				t.Errorf("aucun effet pour un montant négatif")
 			}
 		})
@@ -302,7 +357,7 @@ func TestScoreDisplay252_Critical_ZeroPointsFromAnAdminAreIgnoredNoHistoryNoUpda
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv244(t)
 			hist, seq := e.historyLen(), mustScoreChange252(t, e).Seq
-			collectActions(e.adminConn, 100*time.Millisecond) // vide ce qui est déjà arrivé
+			collectAfterSentinel264(t, e.app, e.adminConn) // vide ce qui est déjà arrivé (jusqu'au témoin, #266)
 
 			tc.do(t, e)
 
@@ -312,7 +367,7 @@ func TestScoreDisplay252_Critical_ZeroPointsFromAnAdminAreIgnoredNoHistoryNoUpda
 			if mustScoreChange252(t, e).Seq != seq {
 				t.Error("SCORE_CHANGE.SEQ inchangé")
 			}
-			for _, a := range collectActions(e.adminConn, 300*time.Millisecond) {
+			for _, a := range collectAfterSentinel264(t, e.app, e.adminConn)[0] { // #266 : témoin, pas de fenêtre fixe
 				if a == "UPDATE" {
 					t.Error("aucun UPDATE pour un montant nul")
 				}
@@ -460,18 +515,18 @@ func warnHiddenRefused(e *env244, action string) bool {
 
 func TestScoreDisplay252_Critical_DisplayFalseFromTheAnimIsIgnoredAndTreatedAsVisible(t *testing.T) {
 	e := newEnv244(t)
-	ambBefore := e.ambiance.Count()
+	ambBefore := e.ambSnapshot()
 
 	e.animSend(t, protocol.ActionTeamPoints, map[string]interface{}{"TEAM": "Les Bleus", "POINTS": 3, "DISPLAY": false})
 
-	time.Sleep(400 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	if e.gagneCount() != 1 {
-		t.Errorf("effets publics NORMAUX malgré DISPLAY:false de l'anim : son « gagné » (%v)", e.sound.Played())
+		t.Errorf("effets publics NORMAUX malgré DISPLAY:false de l'anim : son « gagné » (%v)", e.cues())
 	}
 	if !e.cometTeams()["Les Bleus"] {
 		t.Error("comète LED jouée")
 	}
-	if e.ambiance.Count() <= ambBefore {
+	if !e.ambPulsed(t, ambBefore) {
 		t.Error("pulsation d'ambiance jouée")
 	}
 	sc, _ := e.scoreChange(t)
@@ -498,7 +553,7 @@ func TestScoreDisplay252_DisplayFalseFromTheAnimOnBumperPointsIsIgnoredToo(t *te
 
 	e.animSend(t, protocol.ActionBumperPoints, map[string]interface{}{"ID": mac, "POINTS": 4, "DISPLAY": false})
 
-	time.Sleep(400 * time.Millisecond)
+	e.settleSound(t) // #271 : témoin FIFO du moteur de son, pas de pause fixe
 	sc, _ := e.scoreChange(t)
 	if e.gagneCount() != 1 || !sc.Display || len(sc.Players) != 1 {
 		t.Errorf("effets normaux et SCORE_CHANGE.DISPLAY true (son %d, %+v)", e.gagneCount(), sc)

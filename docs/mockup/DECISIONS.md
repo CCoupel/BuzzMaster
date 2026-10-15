@@ -3,6 +3,11 @@
 > Contraintes durables issues des refus/corrections de l'utilisateur, par composant.
 > Le planner les respecte, QA les vérifie. Tenu par le CDP.
 
+## (toutes maquettes) — règle de dispatch
+- Une maquette validée se dispatche dans **tout son périmètre**, pas seulement l'issue nominale : le planner
+  liste chaque issue couverte par la maquette et le CDP les dispatche ensemble. _(v11.1.0 : le logo #239 a été
+  livré seul alors que la maquette validée couvrait aussi #238.)_
+
 ## vplayer_ardoise_keyboard
 - En PAUSE (et plus généralement hors saisie), aucun message n'invite le joueur à continuer ou à écrire : afficher l'état de jeu (« Jeu en pause ») et le statut de la réponse (envoi en cours / reçue), rien d'autre. _(v11.2.0, final_ack, #246)_
 - Clavier verrouillé et vide : texte indicatif « Aucune réponse », jamais « Votre réponse… ». _(v11.2.0, final_ack, #246)_
@@ -50,4 +55,22 @@
 - Aucune invitation à réessayer. _(v11.2.1, ack, #248, 2026-10-12)_
 - État « équipe déjà servie » présent. _(v11.2.1, ack, #248, 2026-10-12)_
 - Renvoi toutes les 4 s, plafond de 30 envois. _(v11.2.1, ack, #248, 2026-10-12)_
+
+## admin_network_overlay
+- Critère « sans réseau » : aucune IPv4 utilisable hors boucle locale, APIPA et **interfaces virtuelles connues** (vEthernet, Virtual, WSL, Hyper-V, VMware, VirtualBox, docker*, br-*, veth*, virbr*, tun*, tap*, wg*, lxc*, vmnet*, utun*) — liste best-effort documentée, jamais exhaustive. _(v11.2.2, no_network, #267, 2026-10-13)_
+- « Continuer quand même » replie l'overlay en bandeau rouge persistant jusqu'au retour du réseau ; l'overlay revient à chaque nouvelle perte ; jamais de fermeture définitive. _(v11.2.2, no_network, #267, 2026-10-13)_
+- Watchdog 30 s conservé ; aucun champ de plateforme ni conseil adapté à l'OS : texte unique. _(v11.2.2, no_network, #267, 2026-10-13)_
+- Titre de l'overlay « Le serveur n'a pas de réseau disponible » ; **aucune mention de plateforme** dans le texte (la phrase « Sur un Raspberry Pi, vérifiez que le point d'accès est démarré. » est retirée, Q3 précisée). _(v11.2.2, no_network, #267, 2026-10-14)_
+- Admin seulement (toutes les pages `/admin/*`) ; rien sur TV, anim, tablette. _(v11.2.2, no_network, #267, 2026-10-13)_
+
+## admin_question_editor
+- Barème `POINTS_RULE` d'une carte MEMOTION : options filtrées par type — binaire (SPEEDY, QCM) : Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) : Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité. Le serveur refuse le reste. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
+- Le défaut choisi n'écrit jamais `POINTS_RULE` sur la carte. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
+- Parité du montant selon `POINTS_RULE` limitée aux surfaces qui affichent déjà un montant (zoom anim, bandeau anim, bouton de crédit anim, panneau admin GamePage) ; les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant. _(v11.2.2, memotion_card_points_rule, #190, décision utilisateur 2026-10-15)_
+- Les cartes QCM d'une question MEMOTION n'ont pas d'indices : les contrôles d'indices sont retirés de l'éditeur de carte et le moteur n'en déclenche aucun pendant une carte (principe : pas d'indice sans effet sur les points ; option « prise en compte au crédit » écartée). _(v11.2.2, LOT-6, décision utilisateur 2026-10-15)_
+
+## admin_pickers
+- Unification des sélecteurs catégorie / difficulté : tous les sites **sauf QuizMetaForm** (difficultés textuelles Facile…Expert, publics, langue — autre domaine). _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
+- Chaque site indique explicitement « une seule » ou « plusieurs possibles » ; ✓ sur les chips multiples, radio en sélection unique. _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
+- La « Valeur de la carte » MEMOTION garde son libellé : ce n'est pas une difficulté de tirage. _(v11.2.2, category_difficulty_unified, #221 ; origine retour QUALIF v9.0.0.4 C5)_
 

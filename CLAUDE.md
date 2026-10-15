@@ -187,7 +187,7 @@ une ligne, sans attendre le DONE. Un jalon n'est pas un DONE : ne pas enchaîner
 
 ### Labels d'issues — à chaque changement de phase
 
-Mettre à jour les labels de **toutes** les issues suivies (`ISSUE_NUMS[]`) **avant** d'envoyer l'ordre suivant :
+Mettre à jour les labels de **toutes** les issues suivies (`ISSUE_NUMS[]`) **avant** d'envoyer l'ordre suivant, **et dès l'événement** (retour de fin de tâche d'un teammate `DONE`/`FAILED`/`BLOQUE`, validation d'un GATE — `GITHUB.md` §9.12), avant de le relayer. L'état dit ce qui **reste à faire** (ex. `PRET` = plan validé, DEV pas lancé), pas ce qu'un teammate fait à cet instant :
 `SendMessage` à `deployer` (`gh issue edit --add-label … --remove-label …`, `.claude/commands/context/GITHUB.md` §9).
 La clôture du milestone reste soumise à la validation utilisateur.
 
@@ -208,11 +208,17 @@ SendMessage({
 
 ## Suivi des états des issues
 
-- À **chaque** changement de phase d'un workflow, le teamleader met à jour les labels de **toutes** les issues suivies **avant** d'envoyer l'ordre suivant.
-- Transitions : dev → `EN COURS` (retirer PLANNING, EN REVIEW, EN QA, DONE) ; revue → `EN REVIEW` ; QA en parallèle → `EN QA` en gardant `EN REVIEW` ; QA validée et revue approuvée → `DONE` (retirer EN QA, EN REVIEW, EN COURS) ; retour en dev → `EN COURS` (retirer EN REVIEW, EN QA). Bugfix : pas de `PLANNING`.
+- À **chaque** changement de phase d'un workflow, et dès l'événement (retour `DONE`/`FAILED`/`BLOQUE` d'un teammate, validation d'un GATE), le teamleader fait mettre à jour les labels de **toutes** les issues suivies **avant** d'envoyer l'ordre suivant.
+- États et transitions (`PLANNING` → `PRET` → `EN COURS` → `EN REVIEW` / `EN QA` → `DONE`, lots `LOT-N`) : une seule source de vérité, la table « Labels GitHub — Suivi de Phase » de `.claude/commands/context/CDP_WORKFLOWS.template.md` et `.claude/commands/context/GITHUB.template.md` §9 (§9.12 pour le moment des transitions). Bugfix : pas de `PLANNING`.
 - Commande : `gh issue edit <n> --add-label "<L>" --remove-label "<L1>" --remove-label "<L2>"` (l'outil MCP `issue_write` n'est pas disponible).
-- Une issue n'est **jamais** fermée automatiquement (ni CI verte, ni QA) : la fermeture est une validation manuelle explicite de l'utilisateur. Si elle n'est pas validée, label `EN COURS`.
-- Table complète : `.claude/commands/context/CDP_WORKFLOWS.template.md`, section « Labels GitHub — Suivi de Phase ».
+- Fermeture des issues (décision utilisateur du 2026-10-13 : règle du template) : la validation utilisateur a lieu au **GATE LOT** (lot testé en QUALIF) ou au GATE 4 sans lots ; après validation, push de la branche puis CI de pré-validation ; **CI verte → fermeture des issues** (label `DONE` conservé), CI non verte → `EN COURS`. La clôture du milestone reste une validation explicite de l'utilisateur (GATE 4).
+
+## Règles projet du cycle de livraison
+
+- **QUALIF relancée sans demander** : une modification demandée par l'utilisateur pendant une session de test, une fois passée review + QA, déclenche immédiatement un nouveau cycle BUILD + PUBLISH + DEPLOY QUALIF.
+- **Procédures manuelles fournies avec la QUALIF** : une QA validée sans navigateur laisse le visuel à l'utilisateur ; le teamleader lui transmet les procédures `tests/procedures/` concernées avec le lien QUALIF, avant le GATE LOT / GATE 4.
+- **CHANGELOG relu avant PROD** : avant tout PUBLISH PROD, `code-reviewer` relit factuellement l'entrée CHANGELOG produite par `doc-updater`, puis re-relit après corrections (7 erreurs trouvées en v11.2.1, dont une introduite par la relecture).
+- **`/end-session` explicite** en fin de chantier, en particulier après une PROD : `.claude/memory/MEMORY.md` n'est mis à jour qu'à cette étape, aucune autre commande ne la rattrape.
 
 ## Branche courante et worktrees
 
@@ -246,7 +252,7 @@ SendMessage({
 > template) — sa colonne Fichier pointe directement vers son fichier complet.
 
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
-> **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-buzzclick`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.md`).
+> **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-buzzclick`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.template.md`).
 
 > Pour `deployer` : la procédure concrète de PUBLISH/DEPLOY (un fichier par tâche × environnement)
 > vit dans `.claude/agents/environments/{publish,deploy}.<env>.md` — voir `agents/deploy.md`

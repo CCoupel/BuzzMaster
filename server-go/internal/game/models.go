@@ -824,6 +824,9 @@ type GameState struct {
 	EntracteConfigSaved EntracteConfig `json:"ENTRACTE_CONFIG_SAVED"`
 	// Network state (v5.6.2) — NO omitempty: always serialized so frontend receives updates
 	NetworkOnlyLocalhost bool `json:"NETWORK_ONLY_LOCALHOST"`
+	// Network (v11.2.2, #267, contracts/game-state.md §NETWORK) — always serialized, never omitempty;
+	// NETWORK_ONLY_LOCALHOST above is the legacy mirror of Network.OnlyLocalhost. Not persisted.
+	Network NetworkState `json:"NETWORK"`
 	// ARDOISE answers (v5.6.0) — NO omitempty: always serialized so frontend resets on new question
 	ArdoiseAnswers map[string]ArdoiseAnswer `json:"ARDOISE_ANSWERS"`
 	// Quiz metadata (v4.0.0) — no omitempty so empty strings clear the field on clients
@@ -1189,4 +1192,43 @@ func DefaultPointsTarget(t string) PointsTarget {
 		return PointsTargetTeam
 	}
 	return PointsTargetPlayer
+}
+
+// IgnoredInterface is a network interface that carries an IPv4 address but was excluded from
+// the "usable network" criterion because it is a known virtual interface (#267, Q1).
+type IgnoredInterface struct {
+	Name string `json:"NAME"`
+	IP   string `json:"IP"`
+}
+
+// NetworkState is the server's network status (v11.2.2, #267, contracts/game-state.md §NETWORK).
+// Lists are never null on the wire (see MarshalJSON). CheckedAt is epoch milliseconds: the instant of
+// the last STATE CHANGE (loss, return, new retained addresses; the first detection at startup),
+// not of the last watchdog pass.
+type NetworkState struct {
+	OnlyLocalhost     bool               `json:"ONLY_LOCALHOST"`
+	IPs               []string           `json:"IPS"`
+	IgnoredInterfaces []IgnoredInterface `json:"IGNORED_INTERFACES"`
+	CheckedAt         int64              `json:"CHECKED_AT"`
+}
+
+// MarshalJSON guarantees IPS and IGNORED_INTERFACES serialize as [] (never null), whatever the
+// producer left nil — the frontend maps over them unconditionally.
+func (n NetworkState) MarshalJSON() ([]byte, error) {
+	type plain NetworkState
+	if n.IPs == nil {
+		n.IPs = []string{}
+	}
+	if n.IgnoredInterfaces == nil {
+		n.IgnoredInterfaces = []IgnoredInterface{}
+	}
+	return json.Marshal(plain(n))
+}
+
+// Clone returns a deep copy (the slices are never shared with the engine's state).
+func (n NetworkState) Clone() NetworkState {
+	out := n
+	out.IPs = append([]string{}, n.IPs...)
+	out.IgnoredInterfaces = append([]IgnoredInterface{}, n.IgnoredInterfaces...)
+	return out
 }

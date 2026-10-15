@@ -64,11 +64,24 @@ func h246Setup(t *testing.T, nTeams int) (*App, string, []string, []string) {
 
 	base := startAnimAllowlistTestServer(t, app)
 	// real dispatch loop, as in main.go:586
+	// #269: stoppable — the loop must not outlive the test.
+	done := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
-		for msg := range app.wsHub.Incoming {
-			app.handleWebMessage(msg)
+		defer close(stopped)
+		for {
+			select {
+			case <-done:
+				return
+			case msg := <-app.wsHub.Incoming:
+				app.handleWebMessage(msg)
+			}
 		}
 	}()
+	t.Cleanup(func() {
+		close(done)
+		<-stopped
+	})
 	return app, base, names, ids
 }
 

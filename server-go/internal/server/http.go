@@ -1269,6 +1269,22 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 						http.Error(w, err.Error(), http.StatusBadRequest)
 						return
 					}
+					// #190 — POINTS_RULE per effective type (contract
+					// question-types.md §6.2): POINTS_RULE_INVALID_MODE /
+					// POINTS_RULE_MODE_NOT_APPLICABLE / POINTS_RULE_VALUE_REQUIRED.
+					// Save-time only; whole request rejected, nothing written.
+					if err := game.ValidatePointsRule(cardType, card); err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
+					// #279 (LOT-6) — a card has no QCM hints: the five hint
+					// settings are ignored and removed, whatever their value
+					// (no error; contract question-types.md §7.1). Runs AFTER
+					// ValidateCardTypeContent, which still rejects a non-zero
+					// hint field on a non-QCM card. `card` is the map element
+					// of `cards` (a reference), so the cleaned map is the
+					// one serialized into question.json below.
+					game.StripCardHints(card)
 				}
 
 				// Process each card to handle per-face image uploads. The

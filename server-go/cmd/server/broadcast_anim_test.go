@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -257,11 +256,12 @@ func TestBroadcastQuestions_StillAdminOnly(t *testing.T) {
 
 	readActionMatching(t, admin, protocol.ActionQuestions) // admin must still receive it
 
-	animActions := collectActionsT(t, anim, 300*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, anim, tv) // #266 : un témoin, pas de fenêtre fixe
+	animActions := seen[0]
 	if containsAction(animActions, protocol.ActionQuestions) {
 		t.Errorf("#162: anim must NOT receive QUESTIONS (#155 B4 admin-only policy) — got actions: %v", animActions)
 	}
-	tvActions := collectActionsT(t, tv, 300*time.Millisecond)
+	tvActions := seen[1]
 	if containsAction(tvActions, protocol.ActionQuestions) {
 		t.Errorf("TV must NOT receive QUESTIONS — got actions: %v", tvActions)
 	}
@@ -282,7 +282,7 @@ func TestBroadcastClientCounts_StillAdminOnly(t *testing.T) {
 
 	readActionMatching(t, admin, protocol.ActionClients)
 
-	animActions := collectActionsT(t, anim, 300*time.Millisecond)
+	animActions := collectAfterSentinel264(t, app, anim)[0] // #266 : témoin, pas de fenêtre fixe
 	if containsAction(animActions, protocol.ActionClients) {
 		t.Errorf("#162: anim must NOT receive CLIENTS — got actions: %v", animActions)
 	}
@@ -309,11 +309,12 @@ func TestBroadcastConfigUpdate_StillAdminAndTVOnly(t *testing.T) {
 	readActionMatching(t, admin, protocol.ActionConfigUpdate)
 	readActionMatching(t, tv, protocol.ActionConfigUpdate)
 
-	animActions := collectActionsT(t, anim, 300*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, anim, vplayer) // #266 : un témoin, pas de fenêtre fixe
+	animActions := seen[0]
 	if containsAction(animActions, protocol.ActionConfigUpdate) {
 		t.Errorf("#162: anim must NOT receive CONFIG_UPDATE — got actions: %v", animActions)
 	}
-	vplayerActions := collectActionsT(t, vplayer, 300*time.Millisecond)
+	vplayerActions := seen[1]
 	if containsAction(vplayerActions, protocol.ActionConfigUpdate) {
 		t.Errorf("vplayer must NOT receive CONFIG_UPDATE (unaffected by #162) — got actions: %v", vplayerActions)
 	}
@@ -379,11 +380,12 @@ func TestBroadcastRegieMessage_ReachesAdminAndAnim_NeverTVOrVPlayer(t *testing.T
 		}
 	}
 
-	tvActions := collectActionsT(t, tv, 300*time.Millisecond)
+	seen := collectAfterSentinel264(t, app, tv, vplayer) // #266 : un témoin, pas de fenêtre fixe
+	tvActions := seen[0]
 	if containsAction(tvActions, protocol.ActionRegieMessage) {
 		t.Errorf("#167: tv must NEVER receive REGIE_MESSAGE — got actions: %v", tvActions)
 	}
-	vplayerActions := collectActionsT(t, vplayer, 300*time.Millisecond)
+	vplayerActions := seen[1]
 	if containsAction(vplayerActions, protocol.ActionRegieMessage) {
 		t.Errorf("#167: vplayer must NEVER receive REGIE_MESSAGE — got actions: %v", vplayerActions)
 	}
@@ -435,7 +437,7 @@ func TestHandlePong_StillExcludesAnim(t *testing.T) {
 
 			runPrepareToReadySequence(t, app, n)
 
-			actions := collectActions(anim, 500*time.Millisecond)
+			actions := collectAfterSentinel264(t, app, anim)[0] // #266 : témoin, pas de fenêtre fixe
 			got := countActions(actions, protocol.ActionUpdate)
 			if got != 2 {
 				t.Errorf("#162/#127 D1: anim should receive exactly 2 UPDATE (PREPARE entry + READY transition) regardless of N — N=%d, got %d (actions=%v)", n, got, actions)

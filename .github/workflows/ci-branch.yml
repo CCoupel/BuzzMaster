@@ -1,0 +1,48 @@
+name: CI (milestone branches)
+
+# Pre-validation CI (infra.md §3bis C10): runs only scripts/ci.sh (commands.ci), without
+# publishing or deploying. Its green verdict on the exact SHA gates issue closure and the
+# merge/tag barrier of PUBLISH PROD. release.yml runs the very same script before building.
+on:
+  push:
+    branches:
+      - 'milestone/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runner pinned (#276): ubuntu-latest moves to Ubuntu 26.04 on 2026-10-19. Bump deliberately,
+# after a green ci-branch.yml run on the new image (toolcache Python 3.11, gcc for -race, jq).
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  testing:
+    name: 🧪 CI (scripts/ci.sh)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          # Go version = server-go/go.mod (single source of truth, same as local builds).
+          # setup-go v6+ forces GOTOOLCHAIN=local: a runner-cached 1.26.x older than the
+          # go.mod directive would fail instead of auto-downloading the toolchain (#276).
+          go-version-file: server-go/go.mod
+          # go.sum lives in server-go/, not at the repo root (#276: cache restore failed).
+          cache-dependency-path: server-go/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: server-go/web/package-lock.json
+
+      # commands.ci (project-config.json) — single CI script, same steps as local qa/deploy
+      - name: Run CI script
+        run: scripts/ci.sh

@@ -27,3 +27,10 @@ export function categoryMeta(key, customCategories = []) {
   }
   return null
 }
+
+/**
+ * Niveaux de difficulté (étoiles) du réservoir RAFALE et des cartes MEMOTION.
+ * Source unique (#221) — remplace RAFALE_DIFFICULTIES / DIFFICULTIES locales
+ * et les `[1, 2, 3]` inline des pages.
+ */
+export const DIFFICULTY_LEVELS = [1, 2, 3]
