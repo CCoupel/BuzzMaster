@@ -44,5 +44,6 @@ jobs:
           cache-dependency-path: server-go/web/package-lock.json
 
       # commands.ci (project-config.json) — single CI script, same steps as local qa/deploy
+      # (frontend build, vitest, embed, go build, tests -race, go vet, govulncheck + npm audit).
       - name: Run CI script
         run: scripts/ci.sh

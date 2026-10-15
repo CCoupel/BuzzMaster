@@ -5,25 +5,29 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "== [1/6] Frontend: npm ci + build =="
+echo "== [1/7] Frontend: npm ci + build =="
 ( cd server-go/web && npm ci && npm run build )
 
-echo "== [2/6] Embed dist (go:embed all:dist, #153) =="
+# Après le build : les tests fonts-embed « dist/ (build) » vérifient dist/ (sinon skipped).
+echo "== [2/7] Frontend: tests (vitest, #273) =="
+( cd server-go/web && npm test )
+
+echo "== [3/7] Embed dist (go:embed all:dist, #153) =="
 rm -rf server-go/cmd/server/dist
 cp -r server-go/web/dist server-go/cmd/server/dist
 
 cd server-go
-echo "== [3/6] Build (commands.build) =="
+echo "== [4/7] Build (commands.build) =="
 go build ./cmd/server
 rm -f server server.exe
 
-echo "== [4/6] Tests + race detector =="
+echo "== [5/7] Tests + race detector =="
 CGO_ENABLED=1 go test -race -timeout=20m ./...
 
-echo "== [5/6] Lint (commands.lint) =="
+echo "== [6/7] Lint (commands.lint) =="
 go vet ./...
 
-echo "== [6/6] Audit (commands.audit) =="
+echo "== [7/7] Audit (commands.audit) =="
 command -v govulncheck >/dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
 govulncheck ./...
 # Audit npm du frontend (#268, #270) : toutes dépendances (prod + dev), seuil high.
