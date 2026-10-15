@@ -3,6 +3,11 @@
 > Contraintes durables issues des refus/corrections de l'utilisateur, par composant.
 > Le planner les respecte, QA les vérifie. Tenu par le CDP.
 
+## (toutes maquettes) — règle de dispatch
+- Une maquette validée se dispatche dans **tout son périmètre**, pas seulement l'issue nominale : le planner
+  liste chaque issue couverte par la maquette et le CDP les dispatche ensemble. _(v11.1.0 : le logo #239 a été
+  livré seul alors que la maquette validée couvrait aussi #238.)_
+
 ## vplayer_ardoise_keyboard
 - En PAUSE (et plus généralement hors saisie), aucun message n'invite le joueur à continuer ou à écrire : afficher l'état de jeu (« Jeu en pause ») et le statut de la réponse (envoi en cours / reçue), rien d'autre. _(v11.2.0, final_ack, #246)_
 - Clavier verrouillé et vide : texte indicatif « Aucune réponse », jamais « Votre réponse… ». _(v11.2.0, final_ack, #246)_
@@ -61,6 +66,7 @@
 ## admin_question_editor
 - Barème `POINTS_RULE` d'une carte MEMOTION : options filtrées par type — binaire (SPEEDY, QCM) : Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) : Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité. Le serveur refuse le reste. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
 - Le défaut choisi n'écrit jamais `POINTS_RULE` sur la carte. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
+- Parité du montant selon `POINTS_RULE` limitée aux surfaces qui affichent déjà un montant (zoom anim, bandeau anim, bouton de crédit anim, panneau admin GamePage) ; les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant. _(v11.2.2, memotion_card_points_rule, #190, décision utilisateur 2026-10-15)_
 
 ## admin_pickers
 - Unification des sélecteurs catégorie / difficulté : tous les sites **sauf QuizMetaForm** (difficultés textuelles Facile…Expert, publics, langue — autre domaine). _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
