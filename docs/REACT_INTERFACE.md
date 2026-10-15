@@ -69,6 +69,62 @@ Hook : `useWebSocket.js` mappe `NETWORK` ; si le serveur est ancien et n'envoie 
 | Timer | `components/Timer.jsx` | Chronomètre avec barre de progression |
 | Navbar | `components/Navbar.jsx` | Navigation + versions + compteurs clients |
 | CategoryBalance | `components/CategoryBalance.jsx` | Visualisation équilibre catégories |
+| CategoryPicker | `components/CategoryPicker.jsx` | Sélecteur de catégorie unique (single), multiple (multi) ou filtre (filter) — v11.2.2, #221 |
+| DifficultyPicker | `components/DifficultyPicker.jsx` | Sélecteur de difficulté ★ unique, unique ou aucune, multiple — v11.2.2, #221 |
+
+### CategoryPicker et DifficultyPicker — sélecteurs partagés (v11.2.2, #221)
+
+Les 15 sites de sélection de catégorie et de difficulté (éditeurs Quiz et RAFALE, filtres de liste, modales IA) passent par deux composants partagés. Ils remplacent `CategorySelector`, `CategoryFilterBar` et les chips inline de `RafalePage` / `GamePage` (supprimés). `QuizMetaForm` n'est pas concerné.
+
+**`CategoryPicker`** — `mode` et `variant` :
+
+| Mode | Usage | Sélection | Accessibilité |
+|------|-------|-----------|---------------|
+| `single` (défaut) | Catégorie d'une question | Une seule ; re-clic sur l'active → `onChange('')` | `role="radiogroup"` + `aria-checked` |
+| `multi` | Manche RAFALE, carte RAFALE, modales IA | Plusieurs (`onToggle(key)`) | `aria-pressed` + ✓ |
+| `variant="filter"` | Filtres de liste (Quiz, réservoir RAFALE, page Jeu) | Plusieurs, restreint à `availableCategories`, bouton « × » (`onClear`) | `aria-pressed` + ✓ |
+
+- `allowCreate` (mode `single` seulement) ajoute « + Créer » avec formulaire inline ; `onRefetchCategories` est appelé avant `onChange(created.key)`.
+- `showLabel` (filter) ajoute le libellé à côté de l'icône ; `showModeBadge` affiche le mode en texte.
+- `customCategories` accepte la réponse brute de `GET /api/categories`. La garde #197 est **interne** au composant : seule la liste `CATEGORIES` + customs `isCustom` est itérée, donc aucune clé React dupliquée, quel que soit l'appelant.
+
+```jsx
+<CategoryPicker
+  mode="single"
+  allowCreate
+  value={form.category}
+  onChange={(key) => setForm({ ...form, category: key })}
+  customCategories={customCategories}
+  onRefetchCategories={refetchCategories}
+/>
+
+<CategoryPicker
+  variant="filter"
+  value={selectedCategories}
+  availableCategories={availableCategories}
+  onToggle={toggleCategoryFilter}
+  onClear={clearCategoryFilters}
+  customCategories={customCategories}
+  showLabel
+/>
+```
+
+**`DifficultyPicker`** — trois modes, annoncés en texte (badge « une seule » / « plusieurs possibles » / « une seule ou aucune ») :
+
+- `single` : une seule valeur ; re-clic sur l'active sans effet.
+- `single` + `allowNone` : re-clic désélectionne → `onChange(null)`.
+- `multi` : plusieurs valeurs via `onToggle(d)`.
+
+Props : `levels` (défaut `DIFFICULTY_LEVELS`), `ghost` (affiche les étoiles vides ★☆☆), `chipTitle(d)` (infobulle ; à surcharger quand deux pickers cohabitent sur la même page, par exemple filtre et formulaire).
+
+```jsx
+<DifficultyPicker mode="single" allowNone value={filterDifficulty} onChange={setFilterDifficulty} />
+<DifficultyPicker mode="multi" value={rafaleDifficulties} onToggle={toggleDifficulty} chipTitle={(d) => `Difficulté ${d} (manche)`} />
+```
+
+`DIFFICULTY_LEVELS` est exporté par `utils/categoryUtils.js` : `[1, 2, 3]`.
+
+### Podium Component (v2.4.0)
 
 ### Podium Component (v2.4.0)
 
