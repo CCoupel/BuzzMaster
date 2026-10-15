@@ -326,3 +326,82 @@ func TestQuestionDirCleanup278_ExplicitNewID_RefusedThenValid_SecondCreatesTheQu
 		t.Errorf("question.json de B doit porter la question de B : %s", raw)
 	}
 }
+
+// ── 9. Purge de secours : médias de CARTES MEMOTION écrits, puis refus du son ────────────────
+//
+// Dans handleUploadQuestion, la validation des cartes précède l'écriture des médias de cartes
+// (aucun refus de carte ne peut donc survenir après) : le seul refus tardif possible après des
+// fichiers déjà écrits est celui du `sound`. C'est ce chemin qui exerce la purge de secours
+// (suppression des fichiers apparus pendant la requête quand dossier créé && non validé).
+
+func postMemotionCardMediaAndSound278(t *testing.T, server *HTTPServer, number, soundName string, sound []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	card := pointsRuleCard("mc-1", "SPEEDY") // carte valide, sans POINTS_RULE
+	for k, v := range memotionFields278(t, number, []map[string]interface{}{card}) {
+		_ = mw.WriteField(k, v)
+	}
+	for _, slot := range []string{"recto", "question", "answer"} {
+		part, err := mw.CreateFormFile("motion_card_mc-1_"+slot, "img.png")
+		if err != nil {
+			t.Fatalf("CreateFormFile(%s): %v", slot, err)
+		}
+		_, _ = part.Write(minimalPNG)
+	}
+	snd, err := mw.CreateFormFile("sound", soundName)
+	if err != nil {
+		t.Fatalf("CreateFormFile(sound): %v", err)
+	}
+	_, _ = snd.Write(sound)
+	_ = mw.Close()
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+	return w
+}
+
+func TestQuestionDirCleanup278_CardMediaWrittenThenSoundRefused_PurgesEverything(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		number    string
+		soundName string
+		sound     []byte
+		wantCode  int
+	}{
+		{"id explicite, son .mp3 (400)", "47", "son.mp3", []byte("ID3-pas-un-wav"), http.StatusBadRequest},
+		{"id explicite, son trop lourd (413)", "48", "gros.wav", make([]byte, 64<<20), http.StatusRequestEntityTooLarge},
+		{"allocation automatique, son .mp3 (400)", "", "son.mp3", []byte("ID3-pas-un-wav"), http.StatusBadRequest},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			server, dataDir := setupTestHTTPServer(t)
+
+			w := postMemotionCardMediaAndSound278(t, server, tc.number, tc.soundName, tc.sound)
+
+			if w.Code != tc.wantCode {
+				t.Fatalf("attendu %d, obtenu %d : %s", tc.wantCode, w.Code, w.Body.String())
+			}
+			assertNoQuestionDir278(t, dataDir, "médias de cartes écrits puis son refusé ("+tc.name+")")
+
+			ok := post278(t, server, speedyFields278(tc.number), "", "", nil)
+			if ok.Code != http.StatusOK {
+				t.Fatalf("POST valide suivant : attendu 200, obtenu %d : %s", ok.Code, ok.Body.String())
+			}
+			want := tc.number
+			if want == "" {
+				want = "1"
+			}
+			if dirs := questionDirs278(t, dataDir); len(dirs) != 1 || dirs[0] != want {
+				t.Errorf("attendu exactement [%s], trouvé %v", want, dirs)
+			}
+			entries, _ := os.ReadDir(filepath.Join(dataDir, "files", "questions", want))
+			for _, e := range entries {
+				if e.Name() != "question.json" {
+					t.Errorf("fichier résiduel du POST refusé dans le dossier réutilisé : %s", e.Name())
+				}
+			}
+		})
+	}
+}
