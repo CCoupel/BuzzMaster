@@ -2,6 +2,13 @@
 
 ---
 
+## [20261015] — `POINTS_RULE` : parité d'affichage limitée aux surfaces à montant (#190, v11.2.2, LOT-5)
+
+- **[CHANGED — précision de périmètre]** `question-types.md` §6.2 « Parité d'affichage » : le montant selon `POINTS_RULE` est affiché sur les seules surfaces **qui affichent déjà un montant** — aide « → N pts » de l'éditeur, zoom de carte anim (`AnimMotionCard`), bandeau de contexte `/anim`, bouton de crédit anim (`AnimConductPanel`), panneau admin `GamePage`. Les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant (décision utilisateur 2026-10-15, `docs/mockup/DECISIONS.md` § `admin_question_editor`). Corrige la formulation « la grille (anim/TV) » du [20261013], qui laissait entendre un montant sur les grilles.
+- Aucune BREAKING : aucun champ, aucun message, aucune règle de calcul ne change ; précision de l'étendue d'un affichage client.
+
+---
+
 ## [20261014] — `NETWORK.CHECKED_AT` : horodatage du dernier changement d'état (#267, v11.2.2, clarification revue de code)
 
 - **[CHANGED — clarification]** `game-state.md` §`NETWORK` : `CHECKED_AT` = instant du **dernier changement d'état réseau** (perte, retour ou changement d'`IPS`), inchangé lors des passages du watchdog sans changement ; au premier passage = instant de la première détection. Cohérent avec « diffusion seulement sur changement » : aucun `UPDATE` ne porte un `CHECKED_AT` plus récent sans transition. Décision teamleader sur recommandation `_work/reports/code-reviewer-20261014-194259.md`.
