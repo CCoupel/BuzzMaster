@@ -12,26 +12,32 @@ on:
 permissions:
   contents: read
 
+# Runner pinned (#276): ubuntu-latest moves to Ubuntu 26.04 on 2026-10-19. Bump deliberately,
+# after a green ci-branch.yml run on the new image (toolcache Python 3.11, gcc for -race, jq).
 env:
-  GO_VERSION: '1.26'
   NODE_VERSION: '22'
 
 jobs:
   testing:
     name: 🧪 CI (scripts/ci.sh)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          # Go version = server-go/go.mod (single source of truth, same as local builds).
+          # setup-go v6+ forces GOTOOLCHAIN=local: a runner-cached 1.26.x older than the
+          # go.mod directive would fail instead of auto-downloading the toolchain (#276).
+          go-version-file: server-go/go.mod
+          # go.sum lives in server-go/, not at the repo root (#276: cache restore failed).
+          cache-dependency-path: server-go/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'

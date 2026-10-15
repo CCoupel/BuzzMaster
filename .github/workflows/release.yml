@@ -8,8 +8,9 @@ on:
 permissions:
   contents: write
 
+# Runner pinned (#276): ubuntu-latest moves to Ubuntu 26.04 on 2026-10-19. Bump deliberately,
+# after a green ci-branch.yml run on the new image (toolcache Python 3.11, gcc for -race, jq).
 env:
-  GO_VERSION: '1.26'
   NODE_VERSION: '22'
 
 jobs:
@@ -18,20 +19,25 @@ jobs:
   # ============================================
   testing:
     name: 🧪 CI (scripts/ci.sh)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: checking
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          # Go version = server-go/go.mod (single source of truth, same as local builds).
+          # setup-go v6+ forces GOTOOLCHAIN=local: a runner-cached 1.26.x older than the
+          # go.mod directive would fail instead of auto-downloading the toolchain (#276).
+          go-version-file: server-go/go.mod
+          # go.sum lives in server-go/, not at the repo root (#276: cache restore failed).
+          cache-dependency-path: server-go/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -49,14 +55,14 @@ jobs:
   # ============================================
   checking:
     name: 🔍 Checking
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Get version from tag
         id: version
@@ -146,7 +152,7 @@ jobs:
   # ============================================
   compiling:
     name: 🔨 Compile ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [checking, testing, compiling-firmware]
 
     strategy:
@@ -163,15 +169,20 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          # Go version = server-go/go.mod (single source of truth, same as local builds).
+          # setup-go v6+ forces GOTOOLCHAIN=local: a runner-cached 1.26.x older than the
+          # go.mod directive would fail instead of auto-downloading the toolchain (#276).
+          go-version-file: server-go/go.mod
+          # go.sum lives in server-go/, not at the repo root (#276: cache restore failed).
+          cache-dependency-path: server-go/go.sum
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -191,7 +202,7 @@ jobs:
           cp -r server-go/web/dist server-go/cmd/server/dist
 
       - name: Download firmware artifact for embedding
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: firmware-buzzclick
           path: firmware-artifact
@@ -280,7 +291,7 @@ jobs:
           echo "✅ ${{ matrix.target }} binary validation passed"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
           path: buzzcontrol-v${{ needs.checking.outputs.version }}-${{ matrix.suffix }}
@@ -288,15 +299,15 @@ jobs:
 
   compiling-firmware:
     name: 🔨 Compile BuzzClick Firmware
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: checking
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -361,7 +372,7 @@ jobs:
           echo "✅ Firmware validation passed"
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: firmware-buzzclick
           # The merged binary is the primary artifact: supports both USB flash and OTA.
@@ -374,22 +385,22 @@ jobs:
   # ============================================
   releasing:
     name: 🚀 Releasing
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [checking, testing, compiling, compiling-firmware]
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download server binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: binary-*
           merge-multiple: true
 
       - name: Download firmware
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: firmware-*
@@ -432,7 +443,7 @@ jobs:
           echo "---------------------"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: BuzzControl v${{ needs.checking.outputs.version }}
           body_path: release_notes.md
