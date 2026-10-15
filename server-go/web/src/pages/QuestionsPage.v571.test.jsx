@@ -181,13 +181,13 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
 
   it('le bouton "+" est présent dans le sélecteur de catégorie', () => {
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     expect(addBtn).not.toBeNull()
   })
 
   it('cliquer sur "+" affiche le formulaire inline d\'ajout de catégorie', () => {
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const form = container.querySelector('.add-category-inline')
@@ -196,7 +196,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
 
   it('le formulaire inline contient un champ texte et les boutons Valider/Annuler', () => {
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const input = container.querySelector('.add-category-input')
@@ -211,7 +211,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
 
   it('cliquer sur "Annuler" masque le formulaire inline', () => {
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const cancelBtn = container.querySelector('.add-category-cancel')
@@ -221,7 +221,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     expect(form).toBeNull()
 
     // Le bouton "+" est de nouveau visible
-    const addBtnAfter = container.querySelector('.category-btn--add')
+    const addBtnAfter = screen.queryByTitle('Créer une catégorie')
     expect(addBtnAfter).not.toBeNull()
   })
 
@@ -232,7 +232,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     })
 
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const input = container.querySelector('.add-category-input')
@@ -260,7 +260,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
 
   it('sans image sélectionnée, le formulaire affiche "Image requise" (v5.7.2 #100)', async () => {
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const input = container.querySelector('.add-category-input')
@@ -279,7 +279,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
 
   it('le formulaire contient un input file acceptant les images (v5.7.2 #100)', () => {
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const fileInput = container.querySelector('.add-category-inline input[type="file"]')
@@ -301,7 +301,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     })
 
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const input = container.querySelector('.add-category-input')
@@ -344,7 +344,7 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     })
 
     const { container } = render(<QuestionsPage />)
-    const addBtn = container.querySelector('.category-btn--add')
+    const addBtn = screen.queryByTitle('Créer une catégorie')
     fireEvent.click(addBtn)
 
     const input = container.querySelector('.add-category-input')
