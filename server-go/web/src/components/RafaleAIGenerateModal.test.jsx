@@ -24,7 +24,7 @@ import RafaleAIGenerateModal from './RafaleAIGenerateModal'
 const CATEGORIES = [
   { key: 'HISTORY', name: 'Histoire', color: '#f97316' },
   { key: 'SCIENCE', name: 'Sciences & Nature', color: '#22c55e' },
-  { key: 'GEOGRAPHY', name: 'Géographie', color: '#3b82f6' },
+  { key: 'GEOGRAPHY', name: 'Geographie', color: '#3b82f6' },
 ]
 
 function questionFixture(category, difficulty, n = 1) {
@@ -140,7 +140,7 @@ describe('RafaleAIGenerateModal — comptes par catégorie (contrat §3.1)', () 
 
   it('shows 0 for a category absent from the reservoir — no amorçage blockage (contrat §3.1)', () => {
     renderModal({ questions: questionFixture('HISTORY', 1, 2) })
-    const geoChip = screen.getByText('Géographie').closest('button')
+    const geoChip = screen.getByText('Geographie').closest('button')
     expect(geoChip.querySelector('.rafale-ai-cat-count').textContent).toBe('0')
     expect(geoChip).not.toBeDisabled()
   })
@@ -204,7 +204,7 @@ describe('RafaleAIGenerateModal — matrice existant → après (contrat §2bis)
     renderModal({ questions: [] })
     fireEvent.click(screen.getByText('Histoire'))
     fireEvent.click(screen.getByText('Sciences & Nature'))
-    fireEvent.click(screen.getByText('Géographie'))
+    fireEvent.click(screen.getByText('Geographie'))
     fireEvent.click(screen.getByText('★☆☆'))
     fireEvent.click(presetButton(10)) // 10 / 3 couples = 3,3,3 + 1 remainder -> first gets 4
 
