@@ -6,6 +6,7 @@
 
 - **[CHANGED — non BREAKING]** `game-state.md` §`NETWORK` : le champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`) est **retiré du nœud `GAME`** pour les clients TV, anim et VJoueur (`AdminOnlyGameFields`), au `HELLO` comme à chaque diffusion ; l'admin le reçoit inchangé. Motif : noms d'adaptateurs et IP des interfaces ignorées (WSL, Docker, VPN) diffusés à tous les clients web alors que seul l'admin les affiche (revue #267, [MINEUR 3]).
 - **[CHANGED — précision]** le miroir hérité `NETWORK_ONLY_LOCALHOST` reste diffusé à tous les clients web (booléen sans information d'interface) ; le client non-admin s'y replie (`mapNetwork`) sans rien afficher.
+- **[CHANGED]** `ws-payload-serialization.md` : lignes `GAME.NETWORK` (admin seul) et `GAME.NETWORK_ONLY_LOCALHOST` (tous les clients web) ajoutées au tableau par type de client, et paragraphe `AdminOnlyGameFields` complété (relecture docs LOT-2, 2026-10-15).
 - Non BREAKING : aucun client non-admin ne lit `NETWORK` (règle d'écran admin seulement, #267) ; `GameState` Go inchangé (jamais `omitempty`) ; buzzers déjà exclus (liste blanche).
 
 ---
