@@ -11,7 +11,7 @@ Historique des versions du projet BuzzControl.
 ### Fixed
 
 - **Tests Go qui publiaient avant l'inscription du client (#274)** — Les dials de test (`dialWSPath`, `dialAdminWS`, `dialWS`) attendent l'inscription du client avant de rendre la connexion. 40 `time.Sleep(50 ms)` d'attente d'inscription sont retirés. Aucune assertion n'est supprimée ni relâchée. Le hub n'est pas modifié : aucun changement de comportement côté produit.
-- **Dossier vide laissé par un refus de `POST /questions` (#278)** — Un `POST /questions` refusé (carte MEMOTION invalide, son refusé en 400 ou 413, erreur 500) pour un identifiant nouveau ne laisse plus de dossier vide : le dossier créé par la requête est supprimé, et l'identifiant auto-alloué est libéré pour la requête suivante. Pour une question existante, le dossier et `question.json` restent intacts. Limite connue : si le refus survient après l'écriture d'un média dans le dossier, ce dossier non vide reste en place (aucune suppression récursive).
+- **Dossier vide laissé par un refus de `POST /questions` (#278)** — Un `POST /questions` refusé pour un identifiant nouveau ne laisse plus de dossier ni de fichier, et l'identifiant reste disponible pour la requête suivante.
 
 ### Security
 
