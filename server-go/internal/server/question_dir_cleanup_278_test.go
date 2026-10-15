@@ -232,3 +232,97 @@ func TestQuestionDirCleanup278_InvalidNumber_Returns400WithoutDirectory(t *testi
 		t.Error("un number invalide ne doit rien créer hors de data/files/questions")
 	}
 }
+
+// ── 7. Média valide + son refusé : ni dossier, ni média orphelin, identifiant réutilisable ──
+
+// postWithMediaAndSound278 envoie un SPEEDY avec un média image (`file`) ET un son (`sound`).
+func postWithMediaAndSound278(t *testing.T, server *HTTPServer, number, soundName string, sound []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	for k, v := range speedyFields278(number) {
+		_ = mw.WriteField(k, v)
+	}
+	img, err := mw.CreateFormFile("file", "image.png")
+	if err != nil {
+		t.Fatalf("CreateFormFile(file): %v", err)
+	}
+	_, _ = img.Write([]byte("\x89PNG\r\n\x1a\n-image-valide-de-test"))
+	snd, err := mw.CreateFormFile("sound", soundName)
+	if err != nil {
+		t.Fatalf("CreateFormFile(sound): %v", err)
+	}
+	_, _ = snd.Write(sound)
+	_ = mw.Close()
+	req := httptest.NewRequest("POST", "/questions", body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	w := httptest.NewRecorder()
+	server.mux.ServeHTTP(w, req)
+	return w
+}
+
+func TestQuestionDirCleanup278_MediaThenSoundRefused_LeavesNoDirectoryNorOrphanMedia(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		number    string
+		soundName string
+		sound     []byte
+		wantCode  int
+	}{
+		{"id explicite, son .mp3 (400)", "44", "son.mp3", []byte("ID3-pas-un-wav"), http.StatusBadRequest},
+		{"id explicite, son trop lourd (413)", "45", "gros.wav", make([]byte, 64<<20), http.StatusRequestEntityTooLarge},
+		{"allocation automatique, son .mp3 (400)", "", "son.mp3", []byte("ID3-pas-un-wav"), http.StatusBadRequest},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			server, dataDir := setupTestHTTPServer(t)
+
+			w := postWithMediaAndSound278(t, server, tc.number, tc.soundName, tc.sound)
+
+			if w.Code != tc.wantCode {
+				t.Fatalf("attendu %d, obtenu %d : %s", tc.wantCode, w.Code, w.Body.String())
+			}
+			assertNoQuestionDir278(t, dataDir, "média valide + son refusé ("+tc.name+") : le média écrit avant le refus ne doit pas subsister")
+
+			// L'identifiant est réutilisable : le POST valide suivant le prend.
+			ok := post278(t, server, speedyFields278(tc.number), "", "", nil)
+			if ok.Code != http.StatusOK {
+				t.Fatalf("POST valide suivant : attendu 200, obtenu %d : %s", ok.Code, ok.Body.String())
+			}
+			want := tc.number
+			if want == "" {
+				want = "1"
+			}
+			if dirs := questionDirs278(t, dataDir); len(dirs) != 1 || dirs[0] != want {
+				t.Errorf("attendu exactement [%s], trouvé %v", want, dirs)
+			}
+		})
+	}
+}
+
+// ── 8. Id explicite nouveau : A refusée puis B valide → B crée dossier et question.json ─────
+
+func TestQuestionDirCleanup278_ExplicitNewID_RefusedThenValid_SecondCreatesTheQuestion(t *testing.T) {
+	server, dataDir := setupTestHTTPServer(t)
+
+	a := post278(t, server, speedyFields278("46"), "sound", "son.mp3", []byte("ID3-pas-un-wav"))
+	if a.Code != http.StatusBadRequest {
+		t.Fatalf("requête A : attendu 400, obtenu %d : %s", a.Code, a.Body.String())
+	}
+	assertNoQuestionDir278(t, dataDir, "requête A refusée (id 46)")
+
+	b := post278(t, server, speedyFields278("46"), "", "", nil)
+	if b.Code != http.StatusOK {
+		t.Fatalf("requête B : attendu 200, obtenu %d : %s", b.Code, b.Body.String())
+	}
+	if dirs := questionDirs278(t, dataDir); len(dirs) != 1 || dirs[0] != "46" {
+		t.Errorf("requête B : attendu exactement le dossier [46], trouvé %v", dirs)
+	}
+	raw, err := os.ReadFile(filepath.Join(dataDir, "files", "questions", "46", "question.json"))
+	if err != nil {
+		t.Fatalf("requête B : question.json absent : %v", err)
+	}
+	if !bytes.Contains(raw, []byte("Capitale de la France")) {
+		t.Errorf("question.json de B doit porter la question de B : %s", raw)
+	}
+}
