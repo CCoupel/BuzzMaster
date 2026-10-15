@@ -1,7 +1,6 @@
 ---
 name: doc-updater
 description: "Adaptations projet BuzzControl pour l'agent doc-updater. Base generique : doc-updater.template.md."
-model: sonnet
 color: cyan
 ---
 

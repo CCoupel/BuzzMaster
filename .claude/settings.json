@@ -20,5 +20,7 @@
         ]
       }
     ]
-  }
+  },
+  "model": "fable",
+  "effortLevel": "medium"
 }
