@@ -167,6 +167,21 @@ Une erreur sur `sound` **rejette toute la requête** — rien n'est enregistré,
 champs de la question (contrairement à `MEDIA`/`MEDIA_ANSWER`, qui échouent silencieusement sans
 jamais renvoyer d'erreur).
 
+#### Atomicité du refus — aucune trace sur disque (v11.2.3, #278)
+
+Tout refus survenant **après l'allocation de l'identifiant** (`400` de validation des cartes MEMOTION
+— `CARD_TYPE_CONTENT_MISMATCH`, `POINTS_RULE_*` —, `400`/`413` sur `sound`, `500` d'écriture) ne
+laisse **aucune trace sur disque** :
+
+- **question nouvelle** (identifiant absent ou libre) : le dossier `data/files/questions/<id>/` créé
+  par l'allocation est **supprimé** et l'identifiant **redevient disponible** pour l'allocation
+  automatique suivante (`resolveQuestionDir` alloue par `mkdir`, l'identifiant libéré est donc le
+  premier candidat réutilisé) ;
+- **question existante** : le dossier et le `question.json` antérieurs **ne sont jamais supprimés**
+  (un refus survient avant toute réécriture de `question.json`).
+
+Avant v11.2.3, un refus de validation des cartes laissait un dossier vide (constat QA #190).
+
 ---
 
 ## Configuration
