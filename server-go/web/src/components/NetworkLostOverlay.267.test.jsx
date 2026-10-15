@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within, act, cleanup } from '@testing-library/react'
+import { render, screen, within, act, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Link } from 'react-router-dom'
 import App from '../App'
@@ -104,6 +104,10 @@ const dialog = () => screen.queryByRole('alertdialog')
 const banner = () => screen.queryByText(/Serveur sans réseau/)
 const restoredToast = () => screen.queryByText(/Réseau rétabli/)
 
+// react-router 7 : navigate() est enveloppé dans startTransition → le rendu de la nouvelle route
+// passe par le scheduler (timers factices ici) ; on le vide avant de lire le DOM.
+const flushTransition = () => act(async () => { await vi.advanceTimersByTimeAsync(50) })
+
 describe('#267 — overlay « serveur sans réseau »', () => {
   let user
 
@@ -165,6 +169,7 @@ describe('#267 — overlay « serveur sans réseau »', () => {
       await user.keyboard('{Escape}') // replie pour atteindre la barre
       expect(banner()).toBeInTheDocument()
       await user.click(screen.getByRole('link', { name: 'Télévision' }))
+      await flushTransition()
       expect(screen.queryByRole('navigation', { name: 'navigation test' })).toBeNull() // plus de coque admin
       expect(banner()).toBeNull()
       expect(dialog()).toBeNull()
@@ -328,10 +333,12 @@ describe('#267 — overlay « serveur sans réseau »', () => {
     it('le bandeau est PERSISTANT : il suit la navigation entre pages admin, sans rouvrir l\'overlay', async () => {
       await collapse()
       await user.click(screen.getByRole('link', { name: 'Équipes' }))
+      await flushTransition()
       expect(screen.getByTestId('page-TeamsPage')).toBeInTheDocument()
       expect(banner()).toBeInTheDocument()
       expect(dialog()).toBeNull()
       await user.click(screen.getByRole('link', { name: 'Questions' }))
+      await flushTransition()
       expect(screen.getByTestId('page-QuestionsPage')).toBeInTheDocument()
       expect(banner()).toBeInTheDocument()
       expect(dialog()).toBeNull()
