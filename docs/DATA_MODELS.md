@@ -133,7 +133,7 @@ Source : `contracts/vplayer-payload-filter.md` §7.5 (liste exhaustive, référe
 - `GAME.QUESTION.EXPLANATION` : toujours ;
 - `MOTION_CARDS[i]` et `MEMOTION_ACTIVE.STATE` : `ANSWER_TEXT`, `ANSWER_IMAGE`, `ANSWER`, `QCM_CORRECT`, tant que la carte n'est pas révélée ;
 - `ARDOISE_ANSWERS`, `LAUNCH_LOCK` : toujours ;
-- `QUIZ_OBJECTIVES`, `ENTRACTE_CONFIG_SAVED` : toujours ;
+- `QUIZ_OBJECTIVES`, `ENTRACTE_CONFIG_SAVED`, `NETWORK` : toujours ;
 - `bumpers[*].FIRMWARE_VERSION`, `IS_OUTDATED`, `OTA_STATUS`, `OTA_PERCENT`, `ACK_PENDING` : toujours.
 
 **Neutralisés** (clé conservée, valeur `0` ou `""`) pour les autres équipes, pendant les réponses ouvertes :

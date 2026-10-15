@@ -1691,6 +1691,7 @@ Le serveur applique **deux listes distinctes** de retrait de champs `GameState`,
 Champs **réservés à l'admin**, retirés automatiquement pour tous les autres clients :
 - `QUIZ_OBJECTIVES` — objectifs pédagogiques (jamais transmis à TV/VJoueur)
 - `ENTRACTE_CONFIG_SAVED` — configuration gelée d'entracte (interne)
+- `NETWORK` — état réseau (adresses IPv4 et interfaces ignorées), ajouté en v11.2.3 (#275) ; le miroir `NETWORK_ONLY_LOCALHOST` n'est pas concerné et reste diffusé à tous
 
 #### VPlayerOnlyGameFields
 Champs **spécifiquement retirés pour le VJoueur uniquement** (pas de retrait pour TV/animateur) :
