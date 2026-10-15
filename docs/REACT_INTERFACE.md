@@ -142,7 +142,9 @@ Fichier : `components/PointsRuleControl.jsx`. Utilisé par l'éditeur de carte M
 - Options filtrées par type, le défaut en premier : binaire (SPEEDY, QCM) : Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) : Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité.
 - Le champ montant (entier 1 à 999) n'apparaît que pour `FIXED` et `PER_UNIT`.
 - L'aide « → … » est calculée par `describePointsRule` (même fonction que les affichages anim et admin).
-- Garde client : `pointsRuleValueError` signale un montant invalide au submit. Le serveur refait la validation (HTTP 400, voir `docs/DATA_MODELS.md`).
+- Garde client : à l'envoi, `pointsRuleValueError` signale un montant invalide sur la ligne de la carte concernée (`error`, `role="alert"`). L'avertissement de remise au défaut (`notice`) est annoncé avec `role="status"`.
+- `QuestionsPage.jsx` pose `noValidate` sur le `<form>` seulement quand une carte MEMOTION a un montant invalide et un thème renseigné. Sans cela, la validation HTML5 (min/max) bloquerait l'envoi avant la garde ci-dessus.
+- Le serveur refait la validation (HTTP 400, voir `docs/DATA_MODELS.md`). Pour les types sans section « Son » (MEMORY, MEMOTION, RAFALE, ENTRACTE), le corps de ce refus est affiché en `role="alert"` au-dessus du bouton d'enregistrement (`soundError`, `QuestionsPage.jsx`).
 
 ### Helpers du barème par carte — `utils/motionGrid.js` et `utils/pointsRuleEditor.js` (v11.2.2, #190)
 
@@ -153,7 +155,7 @@ Fonctions pures, partagées par l'éditeur, l'anim et le panneau admin. Elles re
 | `allowedPointsRuleModes(type)` / `defaultPointsRuleMode(type)` | `motionGrid.js` | Modes acceptés et défaut d'un type (miroir de `AllowedPointsRuleModes`) |
 | `resolvePointsRuleMode(card)` | `motionGrid.js` | Mode effectif : `POINTS_RULE.MODE` explicite, sinon défaut du type courant |
 | `getMotionCardPointsForRule(card, motionConfig, { units, unitsTotal })` | `motionGrid.js` | Montant crédité pour un résultat donné (gain prévisionnel anim) |
-| `getMotionCardPointsDisplay(card, motionConfig)` | `motionGrid.js` | Montant affichable avant jeu : `{ points, suffix }` (ex. suffixe « / bonne rép. ») |
+| `getMotionCardPointsDisplay(card, motionConfig)` | `motionGrid.js` | Montant affichable avant jeu : `{ points, prefix, suffix }` — `prefix` = « jusqu'à » pour le prorata, `suffix` = unité (ex. « / bonne rép. ») |
 | `describePointsRule(card, motionConfig, { unitsTotal, unitLabel })` | `motionGrid.js` | Libellé de l'aide « → … » de l'éditeur |
 | `computeStarsProrataPoints(stars, units, unitsTotal)` | `motionGrid.js` | `Math.floor(stars × units / unitsTotal)`, 0 si `unitsTotal <= 0` |
 | `loadMotionCardPointsRule(card)`, `adaptPointsRuleToType(rule, type)`, `pointsRuleValueError(rule)`, `serializePointsRule(rule)`, `editorMotionConfig(cfg)` | `pointsRuleEditor.js` | État client de l'éditeur : chargement, remise au défaut si le type change, validation du montant, sérialisation (`mode: ''` ⇒ champ absent) |
