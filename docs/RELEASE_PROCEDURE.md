@@ -332,7 +332,7 @@ Avant de merger dans `main` et de créer le tag, vérifier :
    ```
    Il exécute les mêmes étapes que le job « Test (race) » de `release.yml`, sans rien publier.
 2. **`govulncheck` et `npm audit` propres juste avant le tag** : `govulncheck` reprend le même audit que `release.yml` (`govulncheck@latest`, `govulncheck ./...`, toolchain de la CI) ;
-   `npm audit --audit-level=high` reprend la porte de `scripts/ci.sh` (étape 6, `cd web`, toutes dépendances, seuil `high`). En plus de la QA.
+   `npm audit --audit-level=high` reprend la porte de `scripts/ci.sh` (étape 7, `cd web`, toutes dépendances, seuil `high`). En plus de la QA.
 3. **En cas d'échec** : analyser, corriger sur la branche, relancer le run. **Aucun merge dans `main` et aucun tag** tant que ce run n'est pas vert.
    Un tag ne sert jamais de test.
 

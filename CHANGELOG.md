@@ -6,7 +6,7 @@ Historique des versions du projet BuzzControl.
 
 ### Changed
 
-- **Tests web bloquants dans la CI (#273)** — `scripts/ci.sh` exécute désormais les tests vitest à l'étape `[2/7]`, après le build web et avant l'embed. Un test web rouge fait échouer `ci-branch.yml` et `release.yml`, qui n'appellent que ce script. Durée ajoutée mesurée en local : 110 à 125 s pour 4 209 tests (270 fichiers). Les 4 tests `fonts-embed` « dist/ (build) » s'exécutent au lieu d'être sautés.
+- **Tests web bloquants dans la CI (#273)** — `scripts/ci.sh` exécute désormais les tests vitest à l'étape `[2/7]`, après le build web et avant l'embed. Jusqu'ici, les tests web n'étaient jamais exécutés en CI ; ils bloquent désormais `ci-branch.yml` et `release.yml` lorsqu'ils échouent, ces deux workflows n'appelant que ce script. Durée ajoutée mesurée en local : 110 à 125 s pour 4 209 tests (270 fichiers). Les 4 tests `fonts-embed` « dist/ (build) » s'exécutent non sautés, car `dist/` est produit à l'étape `[1/7]`.
 
 ### Fixed
 
