@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AIJobModalShell from './ai/AIJobModalShell'
+import CategoryPicker from './CategoryPicker'
 import { clampInt } from './ai/aiJobHelpers'
 import { GENERABLE_TYPES } from '../utils/questionTypeMeta'
 import './AIGenerateModal.css'
@@ -389,24 +390,22 @@ export default function AIGenerateModal({
         </label>
 
         <div className="ai-field ai-field--full">
-          <span>Catégories cibles</span>
-          <div className="ai-chip-row">
-            {categories.map(c => (
-              <button
-                type="button"
-                key={c.key}
-                className={`ai-chip ai-chip--category ${selectedCategories.has(c.key) ? 'active' : ''}`}
-                style={{ '--chip-color': c.color || '#6b7280' }}
-                onClick={() => toggleCategory(c.key)}
-              >
-                {selectedCategories.has(c.key) && <span className="ai-chip-check" aria-hidden="true">✓</span>}
-                {c.name}
-              </button>
-            ))}
-            {categories.length === 0 && (
-              <span className="ai-chip-row-empty">Aucune catégorie disponible.</span>
-            )}
-          </div>
+          {categories.length === 0 ? (
+            <>
+              <span>Catégories cibles</span>
+              <div className="ai-chip-row">
+                <span className="ai-chip-row-empty">Aucune catégorie disponible.</span>
+              </div>
+            </>
+          ) : (
+            <CategoryPicker
+              mode="multi"
+              label="Catégories cibles"
+              value={selectedCategories}
+              onToggle={toggleCategory}
+              customCategories={categories}
+            />
+          )}
         </div>
 
         <div className="ai-field ai-field--full">

@@ -2991,21 +2991,13 @@ export default function QuestionsPage() {
                             {cardType === 'RAFALE' && (
                               <div className="rafale-section">
                                 <div className="form-group">
-                                  <label>Catégories — plusieurs possibles</label>
-                                  <div className="rafale-multi-chip-row">
-                                    {apiCategories.map(c => (
-                                      <button
-                                        type="button"
-                                        key={c.key}
-                                        className={`rafale-multi-chip ${card.rafaleCategories.includes(c.key) ? 'active' : ''}`}
-                                        onClick={() => toggleMotionCardRafaleCategory(card.id, c.key)}
-                                      >
-                                        {card.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
-                                        <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
-                                        {c.name}
-                                      </button>
-                                    ))}
-                                  </div>
+                                  <CategoryPicker
+                                    mode="multi"
+                                    label="Catégories des questions tirées"
+                                    value={card.rafaleCategories}
+                                    onToggle={key => toggleMotionCardRafaleCategory(card.id, key)}
+                                    customCategories={customCategories}
+                                  />
                                 </div>
 
                                 <div className="form-group">
@@ -3019,19 +3011,12 @@ export default function QuestionsPage() {
                                       problème était l'ambiguïté visuelle entre les
                                       deux sélecteurs d'étoiles, pas la présence des
                                       deux. */}
-                                  <label>Difficultés des questions tirées — plusieurs possibles</label>
-                                  <div className="rafale-multi-chip-row">
-                                    {[1, 2, 3].map(d => (
-                                      <button
-                                        key={d}
-                                        type="button"
-                                        className={`rafale-multi-chip ${card.rafaleDifficulties.includes(d) ? 'active' : ''}`}
-                                        onClick={() => toggleMotionCardRafaleDifficulty(card.id, d)}
-                                      >
-                                        {'★'.repeat(d)}
-                                      </button>
-                                    ))}
-                                  </div>
+                                  <DifficultyPicker
+                                    mode="multi"
+                                    label="Difficultés des questions tirées"
+                                    value={card.rafaleDifficulties}
+                                    onToggle={d => toggleMotionCardRafaleDifficulty(card.id, d)}
+                                  />
                                 </div>
 
                                 <div className="form-row">
@@ -3186,37 +3171,20 @@ export default function QuestionsPage() {
                         classe "active" au lieu de "on" — cohérent avec le
                         reste de cet éditeur, cf. .type-btn/.quiz-chip). */}
                     <div className="form-group">
-                      <label>Catégories — plusieurs possibles</label>
-                      <div className="rafale-multi-chip-row">
-                        {apiCategories.map(c => (
-                          <button
-                            type="button"
-                            key={c.key}
-                            className={`rafale-multi-chip ${formData.rafaleCategories.includes(c.key) ? 'active' : ''}`}
-                            onClick={() => toggleRafaleCategory(c.key)}
-                          >
-                            {formData.rafaleCategories.includes(c.key) && <span aria-hidden="true">✓ </span>}
-                            <CategoryBadge catKey={c.key} customCategories={customCategories} size="sm" chip={false} />
-                            {c.name}
-                          </button>
-                        ))}
-                      </div>
+                      <CategoryPicker
+                        mode="multi"
+                        value={formData.rafaleCategories}
+                        onToggle={toggleRafaleCategory}
+                        customCategories={customCategories}
+                      />
                     </div>
 
                     <div className="form-group">
-                      <label>Difficultés — plusieurs possibles</label>
-                      <div className="rafale-multi-chip-row">
-                        {[1, 2, 3].map(d => (
-                          <button
-                            key={d}
-                            type="button"
-                            className={`rafale-multi-chip ${formData.rafaleDifficulties.includes(d) ? 'active' : ''}`}
-                            onClick={() => toggleRafaleDifficulty(d)}
-                          >
-                            {'★'.repeat(d)}
-                          </button>
-                        ))}
-                      </div>
+                      <DifficultyPicker
+                        mode="multi"
+                        value={formData.rafaleDifficulties}
+                        onToggle={toggleRafaleDifficulty}
+                      />
                     </div>
 
                     {formData.rafaleDifficulties.length > 0 && (

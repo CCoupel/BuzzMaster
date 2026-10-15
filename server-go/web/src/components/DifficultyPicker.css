@@ -48,6 +48,6 @@
   margin-right: 0.2rem;
 }
 
-.diff-chip .ghost {
-  color: var(--gray-300);
+.diff-chip .diff-stars {
+  white-space: nowrap;
 }

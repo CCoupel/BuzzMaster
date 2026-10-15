@@ -90,8 +90,9 @@ export default function DifficultyPicker({
               {...a11y}
             >
               {isMulti && active && <span className="check">✓</span>}
-              {'★'.repeat(d)}
-              {ghost && maxLevel > d && <span className="ghost">{'☆'.repeat(maxLevel - d)}</span>}
+              {/* Un seul nœud texte (★ + ☆ fantômes) : lisible tel quel par les lecteurs d'écran
+                  et par les requêtes `getByText('★☆☆')`. */}
+              <span className="diff-stars">{'★'.repeat(d) + (ghost ? '☆'.repeat(maxLevel - d) : '')}</span>
             </button>
           )
         })}
