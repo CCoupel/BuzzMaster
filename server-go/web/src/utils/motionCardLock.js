@@ -18,8 +18,9 @@
  * non-nullité.
  *
  * Champs communs à la carte (`rectoTheme`, `rectoImage`, `difficulty`,
- * `questionText`, `questionImage`, `pointsRule` — pas encore modélisé côté
- * JS en v7.0.0) **ne verrouillent jamais**, quel que soit leur contenu : ils
+ * `questionText`, `questionImage`, `pointsRule` — barème POINTS_RULE de la carte,
+ * modélisé côté JS depuis #190 : `{ mode, value }`, `pointsRuleNotice`/
+ * `pointsRuleError` sont de l'état d'affichage) **ne verrouillent jamais**, quel que soit leur contenu : ils
  * appartiennent à la carte, pas au type (contrat §3.1).
  *
  * Champs client (camelCase) d'un item `formData.motionCards[i]` — voir

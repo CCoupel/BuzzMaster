@@ -18,6 +18,8 @@ import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategoryPicker from '../components/CategoryPicker'
 import DifficultyPicker from '../components/DifficultyPicker'
+import PointsRuleControl from '../components/PointsRuleControl'
+import { loadMotionCardPointsRule, adaptPointsRuleToType, pointsRuleValueError, serializePointsRule, editorMotionConfig } from '../utils/pointsRuleEditor'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
@@ -140,7 +142,7 @@ export default function QuestionsPage() {
     // documenté par `contracts/question-types.md` §3.2 (QCM_HINT_THRESHOLD_1
     // etc. naissent non vides, PAS `undefined`/`0`).
     motionCards: [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
@@ -176,7 +178,7 @@ export default function QuestionsPage() {
         rafaleQuestionTime: 3,
         rafaleMaxQuestions: 100,
       },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
@@ -856,7 +858,7 @@ export default function QuestionsPage() {
 
     // Load MEMOTION cards from question data
     let motionCards = [
-      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
@@ -892,7 +894,7 @@ export default function QuestionsPage() {
         rafaleQuestionTime: 3,
         rafaleMaxQuestions: 100,
       },
-      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+      { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
@@ -933,6 +935,9 @@ export default function QuestionsPage() {
         rectoTheme: card.RECTO_THEME || '',
         rectoImage: card.RECTO_IMAGE || null,
         difficulty: card.DIFFICULTY || 1,
+        // #190 — POINTS_RULE : défaut du type ou règle inapplicable → '' (champ
+        // absent à l'envoi) ; seule une règle explicite ET applicable est conservée.
+        ...loadMotionCardPointsRule(card),
         questionText: card.QUESTION_TEXT || '',
         questionImage: card.QUESTION_IMAGE || null,
         answerText: card.ANSWER_TEXT || '',
@@ -1113,7 +1118,7 @@ export default function QuestionsPage() {
       },
       motionMode: 'SOLO',
       motionCards: [
-        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        { id: 'mc-1', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
@@ -1149,7 +1154,7 @@ export default function QuestionsPage() {
         rafaleQuestionTime: 3,
         rafaleMaxQuestions: 100,
       },
-        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+        { id: 'mc-2', rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
@@ -1309,7 +1314,7 @@ export default function QuestionsPage() {
         ...prev,
         motionCards: [
           ...prev.motionCards,
-          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, questionText: '', questionImage: null, answerText: '', answerImage: null,
+          { id: newId, rectoTheme: '', rectoImage: null, difficulty: 1, pointsRule: { mode: '', value: '' }, pointsRuleNotice: null, pointsRuleError: null, questionText: '', questionImage: null, answerText: '', answerImage: null,
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
@@ -1358,7 +1363,20 @@ export default function QuestionsPage() {
   const handleMotionCardChange = (cardId, field, value) => {
     setFormData(prev => ({
       ...prev,
-      motionCards: prev.motionCards.map(c => c.id !== cardId ? c : { ...c, [field]: value })
+      motionCards: prev.motionCards.map(c => {
+        if (c.id !== cardId) return c
+        const next = { ...c, [field]: value }
+        // #190 — le barème est un champ de carte (ne verrouille jamais le type) ;
+        // sa modification efface l'avertissement et l'erreur précédents.
+        if (field === 'pointsRule') {
+          next.pointsRuleNotice = null
+          next.pointsRuleError = null
+        }
+        // #190 — changement de type : une règle inapplicable au nouveau type est
+        // remise au défaut (avertissement bref), une règle encore applicable est conservée.
+        if (field === 'type') Object.assign(next, adaptPointsRuleToType(c.pointsRule, value))
+        return next
+      })
     }))
   }
 
@@ -1487,6 +1505,21 @@ export default function QuestionsPage() {
       // Validate at least 2 cards with theme
       const validCards = formData.motionCards.filter(c => c.rectoTheme.trim())
       if (validCards.length < 2) return
+      // #190 — Montant fixe / Par unité sans montant entier 1–999 : enregistrement
+      // bloqué côté client (le serveur renverrait POINTS_RULE_VALUE_REQUIRED), erreur
+      // affichée sur la ligne « Points » de la carte concernée.
+      const pointsRuleErrors = {}
+      formData.motionCards.forEach(c => {
+        const err = pointsRuleValueError(c.pointsRule)
+        if (err) pointsRuleErrors[c.id] = err
+      })
+      if (Object.keys(pointsRuleErrors).length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          motionCards: prev.motionCards.map(c => ({ ...c, pointsRuleError: pointsRuleErrors[c.id] || null })),
+        }))
+        return
+      }
     }
     if (formData.type === 'RAFALE' && (formData.rafaleCategories.length === 0 || formData.rafaleDifficulties.length === 0)) {
       // code-review-20260829-163049.md [MAJEUR], réouvert #216 — au moins
@@ -1606,6 +1639,9 @@ export default function QuestionsPage() {
           RECTO_THEME: card.rectoTheme,
           RECTO_IMAGE: typeof card.rectoImage === 'string' ? card.rectoImage : '',
           DIFFICULTY: card.difficulty,
+          // #190 — mode '' = défaut du type = clé ABSENTE (jamais écrite, contrat §6.2) ;
+          // VALUE seulement pour FIXED / PER_UNIT.
+          ...serializePointsRule(card.pointsRule),
           QUESTION_TEXT: card.questionText,
           QUESTION_IMAGE: typeof card.questionImage === 'string' ? card.questionImage : '',
         }
@@ -1626,10 +1662,8 @@ export default function QuestionsPage() {
           // l'éditeur de carte (ignoré par le moteur en contexte carte,
           // contrat §6.3 — une seule équipe, celle de la manche MEMOTION en
           // cours), donc jamais écarté de sa valeur de création côté client.
-          // Pas de POINTS_RULE ici : le serveur applique STARS_PRORATA par
-          // défaut pour une carte MEMORY sans réglage explicite (contrat
-          // §6.3) — cette structure n'est pas encore modélisée côté JS
-          // (même état que pour SPEEDY/QCM, voir motionCardLock.js).
+          // POINTS_RULE : sérialisée dans `base` (#190) — absente = STARS_PRORATA
+          // par défaut côté serveur (contrat §6.3).
           return {
             ...base,
             MEMORY_MODE: 'SOLO',
@@ -2882,6 +2916,18 @@ export default function QuestionsPage() {
                                 onChange={d => handleMotionCardChange(card.id, 'difficulty', d)}
                               />
                             </div>
+                            {/* #190 — barème de la carte (POINTS_RULE), sous « Valeur de la carte » */}
+                            <PointsRuleControl
+                              cardType={cardType}
+                              value={card.pointsRule}
+                              onChange={v => handleMotionCardChange(card.id, 'pointsRule', v)}
+                              difficulty={card.difficulty}
+                              motionConfig={editorMotionConfig(formData.motionConfig)}
+                              unitsTotal={cardType === 'MEMORY' ? card.memoryPairs.length : undefined}
+                              notice={card.pointsRuleNotice}
+                              error={card.pointsRuleError}
+                              idPrefix={`motion-card-${card.id}`}
+                            />
                             {/* Recto image (optional) */}
                             <div className="memotion-img-row">
                               {card.rectoImage ? (

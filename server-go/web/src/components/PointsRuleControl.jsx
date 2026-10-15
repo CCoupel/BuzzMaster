@@ -1,26 +1,9 @@
 import { allowedPointsRuleModes, defaultPointsRuleMode, describePointsRule } from '../utils/motionGrid'
+import { isValidPointsRuleValue, pointsRuleModeLabel, POINTS_RULE_VALUE_MAX, POINTS_RULE_VALUE_MIN } from '../utils/pointsRuleEditor'
 import './PointsRuleControl.css'
-
-const VALUE_MIN = 1
-const VALUE_MAX = 999
-
-/** Libellé d'une option du `select` selon le type (maquette admin_question_editor §4). */
-function optionLabel(mode, isDefault, isProgression) {
-  if (isDefault) return isProgression ? 'Prorata des étoiles (défaut)' : 'Étoiles (défaut)'
-  switch (mode) {
-    case 'STARS': return 'Étoiles pleines (tout ou rien)'
-    case 'FIXED': return 'Montant fixe'
-    case 'PER_UNIT': return 'Par unité'
-    default: return mode
-  }
-}
 
 function needsValue(mode) {
   return mode === 'FIXED' || mode === 'PER_UNIT'
-}
-
-function isValidValue(v) {
-  return Number.isInteger(v) && v >= VALUE_MIN && v <= VALUE_MAX
 }
 
 /**
@@ -59,11 +42,10 @@ export default function PointsRuleControl({
 }) {
   const modes = allowedPointsRuleModes(cardType)
   const defaultMode = defaultPointsRuleMode(cardType)
-  const isProgression = defaultMode === 'STARS_PRORATA'
   const mode = value?.mode || ''
   const amount = value?.value ?? ''
   const showInput = needsValue(mode)
-  const invalid = showInput && !isValidValue(amount)
+  const invalid = showInput && !isValidPointsRuleValue(amount)
 
   const hint = describePointsRule(
     {
@@ -100,7 +82,7 @@ export default function PointsRuleControl({
           const isDefault = m === defaultMode
           return (
             <option key={m} value={isDefault ? '' : m}>
-              {optionLabel(m, isDefault, isProgression)}
+              {pointsRuleModeLabel(isDefault ? '' : m, cardType)}
             </option>
           )
         })}
@@ -108,8 +90,8 @@ export default function PointsRuleControl({
       {showInput && (
         <input
           type="number"
-          min={VALUE_MIN}
-          max={VALUE_MAX}
+          min={POINTS_RULE_VALUE_MIN}
+          max={POINTS_RULE_VALUE_MAX}
           step={1}
           placeholder="1–999"
           aria-label={mode === 'PER_UNIT' ? 'Points par unité' : 'Montant'}
