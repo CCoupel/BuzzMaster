@@ -35,6 +35,8 @@ if [ "${CI_GATE_REAL_GO:-0}" != "1" ]; then
   export PATH="$SHIM:$PATH"
   echo "Étapes Go court-circuitées (shims) — CI_GATE_REAL_GO=1 pour les exécuter."
 fi
+SUFFIX=""
+[ "${CI_GATE_REAL_GO:-0}" != "1" ] && SUFFIX=" (étapes Go simulées — CI_GATE_REAL_GO=1 pour le run complet)"
 LOG_A="$WT_PARENT/run-normal.log"
 LOG_B="$WT_PARENT/run-rouge.log"
 
@@ -65,7 +67,7 @@ LINE="$(grep -E "fonts-embed\.test\.js" "$LOG_A" | tail -1)"
 [ -n "$LINE" ] || fail "A : fonts-embed.test.js absent de la sortie vitest"
 echo "   $LINE"
 echo "$LINE" | grep -qi "skipped" && fail "A : fonts-embed contient des tests skipped (dist/ (build) non exécutés) : $LINE"
-echo "   OK : fonts-embed sans test sauté, ci.sh → CI OK"
+echo "   OK : fonts-embed sans test sauté, ci.sh → CI OK$SUFFIX"
 
 # --- B. Run avec un test rouge -------------------------------------------------------------
 echo "== B. run avec un test vitest volontairement rouge =="
@@ -84,5 +86,5 @@ grep -qE "== \[[0-9]+/[0-9]+\] (Embed|Build|Tests \+ race|Lint|Audit)" "$LOG_B" 
   && fail "B : une étape postérieure à vitest a démarré — la porte n'arrête pas ci.sh à l'étape vitest"
 echo "   OK : ci.sh sort en erreur (code $RC_B) à l'étape vitest"
 
-echo "PORTE #273 PROUVÉE"
+echo "PORTE #273 PROUVÉE$SUFFIX"
 exit 0
