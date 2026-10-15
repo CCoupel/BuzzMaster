@@ -7,6 +7,7 @@ package server
 // de façon explicite (t.Fatalf). Un compteur déjà atteint rend la main sans attendre.
 
 import (
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -18,15 +19,16 @@ import (
 
 // dialRaw274 ouvre une connexion SANS passer par dialWSPath : le test du helper
 // ne doit pas dépendre de l'attente d'inscription que ce même helper alimente.
-func dialRaw274(t *testing.T, srv *httptest.Server, path string) *websocket.Conn {
+// Sans appel à t.Fatalf : utilisable depuis une goroutine ; l'erreur est renvoyée.
+func dialRaw274(t *testing.T, srv *httptest.Server, path string) error {
 	t.Helper()
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + path
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
-		t.Fatalf("dial %s : %v", path, err)
+		return fmt.Errorf("dial %s : %w", path, err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	return conn
+	return nil
 }
 
 // Cas 1 — succès : après un dial concurrent de N clients, waitRegistered ne rend la main
@@ -41,7 +43,9 @@ func TestWaitRegistered274_ReturnsOnceAllClientsAreRegistered(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			dialRaw274(t, srv, "/ws/admin")
+			if err := dialRaw274(t, srv, "/ws/admin"); err != nil {
+				t.Errorf("%v", err)
+			}
 		}()
 	}
 	wg.Wait() // upgrades terminés : l'inscription, elle, peut encore être en cours
@@ -58,7 +62,9 @@ func TestWaitRegistered274_AlreadyReachedReturnsImmediately(t *testing.T) {
 	srv, hub, cleanup := startTestWSServer(t)
 	defer cleanup()
 
-	dialRaw274(t, srv, "/ws/tv")
+	if err := dialRaw274(t, srv, "/ws/tv"); err != nil {
+		t.Fatal(err)
+	}
 	// Première attente : on établit l'état « déjà atteint » avec le helper lui-même.
 	waitRegistered(t, hub, 1)
 
@@ -81,7 +87,7 @@ func TestWaitRegistered274_DeadlineExceededFailsExplicitly(t *testing.T) {
 	done := make(chan struct{})
 	start := time.Now()
 	go func() {
-		defer close(done) // t.Fatalf termine la goroutine par runtime.Goexit : le defer s'exécute
+		defer close(done)             // t.Fatalf termine la goroutine par runtime.Goexit : le defer s'exécute
 		waitRegistered(probe, hub, 1) // aucun client ne s'inscrira
 	}()
 
