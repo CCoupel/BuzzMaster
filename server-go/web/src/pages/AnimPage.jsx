@@ -309,7 +309,7 @@ export default function AnimPage() {
   // texte de la carte en QUESTION/REVEAL, rappel générique en MEMORIZE/GRID.
   const motionStatement = isMemotionQuestion
     ? (motionSubphase === 'SELECTED' && selectedMotionCard
-        ? `Carte « ${selectedMotionCard.RECTO_THEME} » — ${'★'.repeat(selectedMotionCard.DIFFICULTY || 1)} · ${motionCardPoints}pt${motionCardPoints > 1 ? 's' : ''}${motionCardDisplay.suffix}`
+        ? `Carte « ${selectedMotionCard.RECTO_THEME} » — ${'★'.repeat(selectedMotionCard.DIFFICULTY || 1)} · ${motionCardDisplay.prefix}${motionCardPoints}pt${motionCardPoints > 1 ? 's' : ''}${motionCardDisplay.suffix}`
         : motionSubphase === 'QUESTION' && isSelectedCardRafale
           ? (typeState.rafale.currentQuestion.QUESTION || 'Rafale en cours')
           : (motionSubphase === 'QUESTION' || motionSubphase === 'REVEAL') && selectedMotionCard?.QUESTION_TEXT

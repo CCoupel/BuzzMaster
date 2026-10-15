@@ -47,7 +47,7 @@ export default function AnimMotionCard({ playable, revealed, card, motionConfig 
 
   const diff = card.DIFFICULTY || 1
   // #190 — montant selon POINTS_RULE de la carte (FIXED, PER_UNIT), sinon barème étoiles
-  const { points, suffix } = getMotionCardPointsDisplay(card, motionConfig)
+  const { points, prefix, suffix } = getMotionCardPointsDisplay(card, motionConfig)
 
   if (!revealed && !playable) {
     // SELECTED — aucun hôte de carte actif, mais le seul cas qui atteint
@@ -62,7 +62,7 @@ export default function AnimMotionCard({ playable, revealed, card, motionConfig 
         <span className="anim-motion-card-focus-foot">
           <span className="anim-motion-card-focus-stars">{'★'.repeat(diff)}</span>
           {' · '}
-          <span className="anim-motion-card-focus-points">{points} pt{points > 1 ? 's' : ''}{suffix}</span>
+          <span className="anim-motion-card-focus-points">{prefix}{points} pt{points > 1 ? 's' : ''}{suffix}</span>
         </span>
       </div>
     )

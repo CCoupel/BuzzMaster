@@ -233,20 +233,22 @@ function unitWord(card, { plural }) {
  * Montant AFFICHABLE d'une carte avant jeu (sélection, bandeau, panneau
  * admin) : ce que la carte vaut « au maximum » / par unité, sans présumer
  * d'un résultat. `STARS` et `STARS_PRORATA` → points du barème étoiles
- * (comportement historique inchangé) ; `FIXED` → `VALUE` ; `PER_UNIT` →
+ * (prorata : préfixe « jusqu'à ») ; `FIXED` → `VALUE` ; `PER_UNIT` →
  * `VALUE` avec le suffixe d'unité (« / bonne rép. », « / paire »).
  *
  * @param {Object} card - carte serveur
  * @param {Object|null|undefined} motionConfig
- * @returns {{ points: number, suffix: string }}
+ * @returns {{ points: number, prefix: string, suffix: string }} `prefix` : « jusqu'à  » en prorata
  */
 export function getMotionCardPointsDisplay(card, motionConfig) {
   const mode = resolvePointsRuleMode(card)
-  if (mode === 'FIXED') return { points: card?.POINTS_RULE?.VALUE || 0, suffix: '' }
+  if (mode === 'FIXED') return { points: card?.POINTS_RULE?.VALUE || 0, prefix: '', suffix: '' }
   if (mode === 'PER_UNIT') {
-    return { points: card?.POINTS_RULE?.VALUE || 0, suffix: ` / ${unitWord(card, { plural: false })}` }
+    return { points: card?.POINTS_RULE?.VALUE || 0, prefix: '', suffix: ` / ${unitWord(card, { plural: false })}` }
   }
-  return { points: getMotionCardPoints(card?.DIFFICULTY || 1, motionConfig), suffix: '' }
+  const stars = getMotionCardPoints(card?.DIFFICULTY || 1, motionConfig)
+  // Prorata : le montant plein est un maximum (maquette admin_question_editor §3 : « jusqu'à 5 pts »).
+  return { points: stars, prefix: mode === 'STARS_PRORATA' ? "jusqu'à " : '', suffix: '' }
 }
 
 const pts = (n) => `${n} pt${n > 1 ? 's' : ''}`

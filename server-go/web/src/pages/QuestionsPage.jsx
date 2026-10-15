@@ -1509,7 +1509,7 @@ export default function QuestionsPage() {
       // bloqué côté client (le serveur renverrait POINTS_RULE_VALUE_REQUIRED), erreur
       // affichée sur la ligne « Points » de la carte concernée.
       const pointsRuleErrors = {}
-      formData.motionCards.forEach(c => {
+      validCards.forEach(c => {
         const err = pointsRuleValueError(c.pointsRule)
         if (err) pointsRuleErrors[c.id] = err
       })
@@ -2243,7 +2243,7 @@ export default function QuestionsPage() {
               <form
                 onSubmit={handleSubmit}
                 className="add-form"
-                noValidate={formData.type === 'MEMOTION' && formData.motionCards.some(c => pointsRuleValueError(c.pointsRule))}
+                noValidate={formData.type === 'MEMOTION' && formData.motionCards.some(c => c.rectoTheme.trim() && pointsRuleValueError(c.pointsRule))}
               >
                 <div className="form-group">
                   <label htmlFor="question-input">Question *</label>

@@ -1519,8 +1519,8 @@ export default function GamePage() {
             const motionCfg = gameState.question?.MOTION_CONFIG
             // #190 — montant selon la règle de la carte (FIXED/PER_UNIT), sinon barème étoiles
             const cardPts = card => {
-              const { points, suffix } = getMotionCardPointsDisplay(card, motionCfg)
-              return `${points}pt${suffix}`
+              const { points, prefix, suffix } = getMotionCardPointsDisplay(card, motionCfg)
+              return `${prefix}${points}pt${suffix}`
             }
 
             if (subphase === 'MEMORIZE') {
