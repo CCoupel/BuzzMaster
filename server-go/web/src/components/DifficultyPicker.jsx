@@ -1,13 +1,7 @@
 import { useId } from 'react'
 import { DIFFICULTY_LEVELS } from '../utils/categoryUtils'
+import { PickerHeader, toSet } from './pickerCommon'
 import './DifficultyPicker.css'
-
-function toSet(value) {
-  if (value instanceof Set) return value
-  if (Array.isArray(value)) return new Set(value)
-  if (value === null || value === undefined) return new Set()
-  return new Set([value])
-}
 
 /**
  * DifficultyPicker — sélecteur de difficulté (★) partagé (#221).
@@ -66,12 +60,13 @@ export default function DifficultyPicker({
 
   return (
     <div className={`difficulty-picker-wrap${className ? ` ${className}` : ''}`}>
-      <div className="picker-label" id={labelId}>
-        <span className="picker-label-text">{resolvedLabel}</span>
-        {showModeBadge && (
-          <span className={`picker-mode ${isMulti ? 'multi' : 'single'}`}>{modeText}</span>
-        )}
-      </div>
+      <PickerHeader
+        id={labelId}
+        label={resolvedLabel}
+        isMulti={isMulti}
+        modeText={modeText}
+        showModeBadge={showModeBadge}
+      />
       <div
         className="difficulty-picker"
         role={isMulti ? 'group' : 'radiogroup'}

@@ -1,14 +1,8 @@
 import { useId, useState } from 'react'
 import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import CategoryBadge from './CategoryBadge'
+import { PickerHeader, toSet } from './pickerCommon'
 import './CategoryPicker.css'
-
-function toSet(value) {
-  if (value instanceof Set) return value
-  if (Array.isArray(value)) return new Set(value)
-  if (!value) return new Set()
-  return new Set([value])
-}
 
 /**
  * CategoryPicker — sélecteur de catégorie partagé (#221), remplace
@@ -117,14 +111,13 @@ export default function CategoryPicker({
 
   return (
     <div className={`category-picker-wrap${className ? ` ${className}` : ''}`}>
-      <div className="picker-label" id={labelId}>
-        <span className="picker-label-text">{resolvedLabel}</span>
-        {showModeBadge && (
-          <span className={`picker-mode ${isMulti ? 'multi' : 'single'}`}>
-            {isMulti ? 'plusieurs possibles' : 'une seule'}
-          </span>
-        )}
-      </div>
+      <PickerHeader
+        id={labelId}
+        label={resolvedLabel}
+        isMulti={isMulti}
+        modeText={isMulti ? 'plusieurs possibles' : 'une seule'}
+        showModeBadge={showModeBadge}
+      />
       <div
         className="category-picker"
         role={isMulti ? 'group' : 'radiogroup'}

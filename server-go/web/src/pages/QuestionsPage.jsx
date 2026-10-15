@@ -2877,6 +2877,7 @@ export default function QuestionsPage() {
                               <DifficultyPicker
                                 mode="single"
                                 label="Valeur de la carte :"
+                                chipTitle={d => `Valeur de la carte : ${d}`}
                                 value={card.difficulty}
                                 onChange={d => handleMotionCardChange(card.id, 'difficulty', d)}
                               />

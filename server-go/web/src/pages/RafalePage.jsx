@@ -11,7 +11,6 @@ import Button from '../components/Button'
 import Card from '../components/Card'
 import './RafalePage.css'
 
-
 const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULTY: 1 }
 
 // #203 (v8.1.0) — plafonds de longueur du réservoir, contrat
@@ -368,7 +367,6 @@ export default function RafalePage() {
                 mode="single"
                 allowNone
                 ghost
-                label="Filtrer"
                 value={selectedDifficulty}
                 onChange={setSelectedDifficulty}
               />
@@ -515,7 +513,7 @@ export default function RafalePage() {
               <div className="form-group">
                 <DifficultyPicker
                   mode="single"
-                  label="Difficulte"
+                  label="Difficulté"
                   chipTitle={(d) => `Difficulte de la question : ${d}`}
                   value={form.DIFFICULTY}
                   onChange={(d) => setForm(prev => ({ ...prev, DIFFICULTY: d }))}

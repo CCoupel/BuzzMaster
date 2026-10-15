@@ -34,8 +34,6 @@
   color: #b45309;
 }
 
-/* Chips ★/★★/★★★ — même base que .ai-chip, police mono pour un alignement
-   régulier des étoiles. */
 /* Matrice existant → après génération */
 .rafale-ai-matrix-block {
   background: var(--gray-50);
