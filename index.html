@@ -491,7 +491,7 @@
             <!-- Version badge (populated dynamically by js/main.js via GitHub Releases API) -->
             <div class="version-badge">
                 <span class="version-label">Version actuelle</span>
-                <span class="version-number" id="hero-version">v11.2.1</span>
+                <span class="version-number" id="hero-version">v11.2.2</span>
                 <span class="version-date" id="hero-version-date">13 octobre 2026</span>
             </div>
 
@@ -866,7 +866,7 @@
                 <div class="cat-header">
                     <span class="cat-icon">🎉</span>
                     <span class="cat-title">Expérience en salle</span>
-                    <span class="cat-count">7 fonctionnalités</span>
+                    <span class="cat-count">8 fonctionnalités</span>
                 </div>
                 <p class="cat-desc">Ce qui se passe en direct pendant l'événement : affichage, classements, éclairage, ambiance sonore et participation depuis un smartphone.</p>
                 <div class="features-grid">
@@ -917,6 +917,17 @@
                         <p>Quand l'animateur donne des points à plusieurs équipes d'un coup, la TV les célèbre par lots de 6 équipes au plus, rangées dans une grille 3 × 2 : une fusée par équipe, des étincelles, et chaque carte reste bien lisible, sans recouvrement. Sur sa tablette, chaque équipe ne voit que son propre gain, au moment où son lot passe sur la TV. Les noms trop longs sont tronqués proprement, et les joueurs qui préfèrent éviter les animations voient un simple fondu. Une correction de score cachée, elle, n'anime rien.</p>
                         <div class="audience-badges">
                             <span class="aud-badge aud-public">👀 Public</span>
+                            <span class="aud-badge aud-animateur">🎤 Animateur</span>
+                        </div>
+                    </div>
+                    <div class="feature-card feature-card--new">
+                        <div class="feature-card-top">
+                            <div class="feature-icon">🎯</div>
+                            <span class="badge badge-new">Nouveau v11.2.2</span>
+                        </div>
+                        <h3>Barème de points par carte MEMOTION</h3>
+                        <p>Chaque carte MEMOTION choisit comment elle rapporte des points. Pour une carte à réponse simple (SPEEDY, QCM) : les étoiles ou un montant fixe. Pour une carte à progression (MEMORY, RAFALE) : le prorata des étoiles, les étoiles pleines, un montant fixe ou un montant par unité. Le montant s'affiche dans le zoom et le bandeau de l'animateur et dans le panneau admin ; avant le jeu, le prorata indique « jusqu'à N pts ».</p>
+                        <div class="audience-badges">
                             <span class="aud-badge aud-animateur">🎤 Animateur</span>
                         </div>
                     </div>
@@ -1031,7 +1042,7 @@
                 <div class="cat-header">
                     <span class="cat-icon">🛡️</span>
                     <span class="cat-title">Fiabilité &amp; maintenance</span>
-                    <span class="cat-count">3 fonctionnalités</span>
+                    <span class="cat-count">4 fonctionnalités</span>
                 </div>
                 <p class="cat-desc">Ce qui garde la partie stable et les données en sécurité, même en conditions réelles (WiFi instable, mises à jour, erreur de manipulation).</p>
                 <div class="features-grid">
@@ -1045,6 +1056,17 @@
                         <div class="audience-badges">
                             <span class="aud-badge aud-public">👀 Public</span>
                             <span class="aud-badge aud-technique">🔧 Technique</span>
+                        </div>
+                    </div>
+                    <div class="feature-card feature-card--new">
+                        <div class="feature-card-top">
+                            <div class="feature-icon">📡</div>
+                            <span class="badge badge-new">Nouveau v11.2.2</span>
+                        </div>
+                        <h3>Alerte « serveur sans réseau »</h3>
+                        <p>Si le serveur perd son réseau en pleine partie, l'administration affiche un message plein écran « Le serveur n'a pas de réseau disponible ». « Continuer quand même » le replie en bandeau rouge qui indique depuis quand le réseau est perdu ; au retour du réseau, un message « Réseau rétabli » le confirme. Les interfaces virtuelles (WSL, Hyper-V, docker…) ne comptent pas comme un réseau.</p>
+                        <div class="audience-badges">
+                            <span class="aud-badge aud-animateur">🎤 Animateur</span>
                         </div>
                     </div>
                     <div class="feature-card">
