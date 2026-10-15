@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased] — Milestone v11.2.2 (en cours)
+## [11.2.2] - 2026-10-15 — Milestone v11.2.2
 
 ### Added
 
