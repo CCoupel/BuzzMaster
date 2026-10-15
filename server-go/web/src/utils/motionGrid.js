@@ -25,6 +25,8 @@
  * la TAILLE des cartes s'adapte (CSS, container queries).
  */
 
+import { getQuestionTypeMeta } from './questionTypeMeta'
+
 /**
  * Nombre de colonnes — formule FIXE sur le nombre de cartes, jamais sur la
  * largeur de l'écran (c'est ce qui rend la correspondance possible).
@@ -129,4 +131,160 @@ export function computeStarsProrataPoints(starsPoints, units, unitsTotal) {
  */
 export function isMotionSecretMode(question) {
   return (question?.MOTION_MEMORIZE_DURATION || 0) > 0
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Barème par carte — POINTS_RULE (#190, v11.2.2, contrat question-types.md §6.2)
+//
+// Miroir JS de `Engine.motionCardPointsForOutcome` (engine.go) : UNE seule
+// fonction de calcul pour tous les affichages (éditeur, anim, admin) — classe
+// de bug R5 (divergence Go/JS du montant). Les cas de test sont NOMMÉS à
+// l'identique côté Go (`engine_points_rule_190_test.go`) : FIXED_10_won,
+// FIXED_10_lost, PER_UNIT_2x3, DEFAULT_SPEEDY_is_STARS,
+// DEFAULT_MEMORY_is_STARS_PRORATA, DEFAULT_RAFALE_is_STARS_PRORATA,
+// EXPLICIT_STARS_on_MEMORY_full_value, STARS_PRORATA_5points_8pairs.
+//
+// `card` = carte telle que sérialisée par le serveur (`TYPE`, `DIFFICULTY`,
+// `POINTS_RULE: { MODE, VALUE }`) — jamais l'état camelCase de l'éditeur.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Modes de barème possibles (contrat §6.1). */
+export const POINTS_RULE_MODES = ['STARS', 'STARS_PRORATA', 'FIXED', 'PER_UNIT']
+
+/**
+ * Barème par défaut d'un type de carte (registre, `defaultPointsRule`) :
+ * `STARS_PRORATA` pour les types à progression (MEMORY, RAFALE), `STARS`
+ * sinon (SPEEDY, QCM — tout-ou-rien).
+ *
+ * @param {string} [type]
+ * @returns {'STARS'|'STARS_PRORATA'}
+ */
+export function defaultPointsRuleMode(type) {
+  return getQuestionTypeMeta(type).defaultPointsRule === 'STARS_PRORATA' ? 'STARS_PRORATA' : 'STARS'
+}
+
+/**
+ * Modes proposés/acceptés pour un type de carte, le défaut en premier.
+ * Binaire (SPEEDY, QCM) : `['STARS', 'FIXED']`. Progression (MEMORY, RAFALE) :
+ * `['STARS_PRORATA', 'STARS', 'FIXED', 'PER_UNIT']`. Miroir de
+ * `AllowedPointsRuleModes` (Go) — classification dérivée du registre.
+ *
+ * @param {string} [type]
+ * @returns {string[]}
+ */
+export function allowedPointsRuleModes(type) {
+  return defaultPointsRuleMode(type) === 'STARS_PRORATA'
+    ? ['STARS_PRORATA', 'STARS', 'FIXED', 'PER_UNIT']
+    : ['STARS', 'FIXED']
+}
+
+/**
+ * Mode effectif d'une carte : `POINTS_RULE.MODE` explicite, sinon le défaut
+ * de son TYPE courant (résolu à chaque appel, jamais figé sur la carte —
+ * miroir d'`engine.go` `motionCardPointsForOutcome`).
+ *
+ * @param {{TYPE?: string, POINTS_RULE?: {MODE?: string}|null}|null|undefined} card
+ * @returns {'STARS'|'STARS_PRORATA'|'FIXED'|'PER_UNIT'}
+ */
+export function resolvePointsRuleMode(card) {
+  const explicit = card?.POINTS_RULE?.MODE
+  if (explicit) return explicit
+  return defaultPointsRuleMode(card?.TYPE)
+}
+
+/**
+ * Montant crédité pour une carte selon sa règle — miroir de
+ * `motionCardPointsForOutcome(card, units, unitsTotal)` (engine.go).
+ *
+ * - `FIXED`          : `VALUE` si `units > 0`, sinon 0
+ * - `PER_UNIT`       : `VALUE × units`
+ * - `STARS_PRORATA`  : `computeStarsProrataPoints(étoiles, units, unitsTotal)`
+ * - `STARS` (défaut) : points du barème étoiles
+ *
+ * Affichage seul — le serveur reste seule autorité sur le crédit réel.
+ *
+ * @param {Object} card - carte serveur (`TYPE`, `DIFFICULTY`, `POINTS_RULE`)
+ * @param {Object|null|undefined} motionConfig - `question.MOTION_CONFIG`
+ * @param {{units?: number, unitsTotal?: number}} [outcome]
+ * @returns {number}
+ */
+export function getMotionCardPointsForRule(card, motionConfig, { units = 1, unitsTotal = 0 } = {}) {
+  const mode = resolvePointsRuleMode(card)
+  const value = card?.POINTS_RULE?.VALUE || 0
+  const stars = getMotionCardPoints(card?.DIFFICULTY || 1, motionConfig)
+  switch (mode) {
+    case 'FIXED':
+      return units > 0 ? value : 0
+    case 'PER_UNIT':
+      return value * units
+    case 'STARS_PRORATA':
+      return computeStarsProrataPoints(stars, units, unitsTotal)
+    default:
+      return stars
+  }
+}
+
+function unitWord(card, { plural }) {
+  if (card?.TYPE === 'MEMORY') return plural ? 'paires trouvées' : 'paire'
+  return plural ? 'bonnes réponses' : 'bonne rép.'
+}
+
+/**
+ * Montant AFFICHABLE d'une carte avant jeu (sélection, bandeau, panneau
+ * admin) : ce que la carte vaut « au maximum » / par unité, sans présumer
+ * d'un résultat. `STARS` et `STARS_PRORATA` → points du barème étoiles
+ * (comportement historique inchangé) ; `FIXED` → `VALUE` ; `PER_UNIT` →
+ * `VALUE` avec le suffixe d'unité (« / bonne rép. », « / paire »).
+ *
+ * @param {Object} card - carte serveur
+ * @param {Object|null|undefined} motionConfig
+ * @returns {{ points: number, suffix: string }}
+ */
+export function getMotionCardPointsDisplay(card, motionConfig) {
+  const mode = resolvePointsRuleMode(card)
+  if (mode === 'FIXED') return { points: card?.POINTS_RULE?.VALUE || 0, suffix: '' }
+  if (mode === 'PER_UNIT') {
+    return { points: card?.POINTS_RULE?.VALUE || 0, suffix: ` / ${unitWord(card, { plural: false })}` }
+  }
+  return { points: getMotionCardPoints(card?.DIFFICULTY || 1, motionConfig), suffix: '' }
+}
+
+const pts = (n) => `${n} pt${n > 1 ? 's' : ''}`
+
+/**
+ * Libellé d'aide « → … » de l'éditeur (sans la flèche) : décrit la règle de
+ * la carte en langage clair.
+ *
+ * - STARS         → « 3 pts (★★) »
+ * - FIXED         → « 10 pts, quelle que soit la valeur ★ »
+ * - STARS_PRORATA → « jusqu'à 5 pts, au prorata des paires trouvées (8 paires) »
+ *                   / « jusqu'à 5 pts, au prorata des bonnes réponses »
+ * - PER_UNIT      → « 2 pts × bonnes réponses » / « 2 pts × paires trouvées »
+ *
+ * `FIXED` / `PER_UNIT` sans `VALUE` valide : « N pts … ».
+ *
+ * @param {Object} card - carte (forme serveur) ; `POINTS_RULE.VALUE` peut être '' / absent
+ * @param {Object|null|undefined} motionConfig
+ * @param {{unitsTotal?: number, unitLabel?: string}} [opts]
+ * @returns {string}
+ */
+export function describePointsRule(card, motionConfig, { unitsTotal, unitLabel } = {}) {
+  const mode = resolvePointsRuleMode(card)
+  const diff = card?.DIFFICULTY || 1
+  const stars = getMotionCardPoints(diff, motionConfig)
+  const rawValue = Number(card?.POINTS_RULE?.VALUE)
+  const valueText = Number.isInteger(rawValue) && rawValue >= 1 && rawValue <= 999 ? pts(rawValue) : 'N pts'
+  const unit = unitLabel || unitWord(card, { plural: true })
+  switch (mode) {
+    case 'FIXED':
+      return `${valueText}, quelle que soit la valeur ★`
+    case 'PER_UNIT':
+      return `${valueText} × ${unit}`
+    case 'STARS_PRORATA':
+      return `jusqu'à ${pts(stars)}, au prorata des ${unit}${
+        unitsTotal > 0 && card?.TYPE === 'MEMORY' ? ` (${unitsTotal} paires)` : ''
+      }`
+    default:
+      return `${pts(stars)} (${'★'.repeat(diff)})`
+  }
 }
