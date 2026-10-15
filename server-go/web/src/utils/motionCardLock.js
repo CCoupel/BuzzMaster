@@ -8,9 +8,10 @@
  * > s'écarte de sa valeur de création.
  *
  * ⚠️ **Piège explicitement documenté par le contrat, à ne pas réintroduire** :
- * plusieurs `OwnedFields` de QCM naissent avec une valeur **non vide**
- * (`qcmHintThreshold1: 0.25`, `qcmPenalty1: 0.67`… — `formData` initial de
- * `QuestionsPage.jsx`). Un prédicat « au moins un `OwnedField` non vide »
+ * un `OwnedField` peut naître avec une valeur **non vide** (c'était le cas des
+ * réglages d'indices QCM `qcmHintThreshold1: 0.25`, `qcmPenalty1: 0.67`… avant
+ * #279/LOT-6, qui les a retirés de la carte ; reste valable pour MEMORY/RAFALE
+ * — `formData` initial de `QuestionsPage.jsx`). Un prédicat « au moins un `OwnedField` non vide »
  * verrouillerait donc une carte QCM **dès sa création** — SPEEDY seul y
  * échapperait (ses deux `OwnedFields` naissent vides), ce qui rendrait le
  * sélecteur inutilisable pour tout autre type dès le premier essai. Le
@@ -27,7 +28,8 @@
  * `QuestionsPage.jsx` (`handleAddMotionCard`, mapping de chargement) :
  * `type`, `rectoTheme`, `rectoImage`, `difficulty`, `questionText`,
  * `questionImage`, `answerText`, `answerImage` (SPEEDY), `qcmAnswers`,
- * `qcmCorrect`, `qcmHintsEnabled`, `qcmHintThreshold1/2`, `qcmPenalty1/2` (QCM),
+ * `qcmCorrect` (QCM ; plus d'indices sur une carte, #279), `legacyHintsRemoved` (état
+ * d'affichage, jamais un OwnedField),
  * `memoryMode`, `memoryPairs`, `memoryConfig` (MEMORY, #187).
  *
  * ⚠️ **MEMORY_PAIRS n'est pas listé dans le tableau de verrouillage du
@@ -44,13 +46,12 @@
 // Valeurs de création des OwnedFields QCM — DOIVENT rester synchronisées avec
 // `formData` initial et `handleAddMotionCard` de `QuestionsPage.jsx`. Un écart
 // entre les deux ferait apparaître une carte neuve comme déjà verrouillée.
+//
+// #279 (LOT-6) : une carte n'a plus d'indices — `qcmHintsEnabled`, `qcmHintThreshold1/2`
+// et `qcmPenalty1/2` ne sont plus des champs de carte (contrat question-types.md §3.2/§7.1),
+// donc plus des OwnedFields à comparer. Reste `qcmCorrect` (+ les réponses saisies).
 const QCM_CREATION_VALUES = {
   qcmCorrect: '',
-  qcmHintsEnabled: false,
-  qcmHintThreshold1: 0.25,
-  qcmHintThreshold2: 0.125,
-  qcmPenalty1: 0.67,
-  qcmPenalty2: 0.33,
 }
 const QCM_ANSWER_COLORS = ['RED', 'GREEN', 'YELLOW', 'BLUE']
 
@@ -146,7 +147,7 @@ export function isMotionCardTypeLocked(card) {
 export function motionCardLockReason(card) {
   const type = card?.type || 'SPEEDY'
   if (type === 'SPEEDY') return 'Videz la face RÉPONSE pour pouvoir changer de type.'
-  if (type === 'QCM') return 'Videz les 4 réponses QCM (et les réglages d\'indices) pour pouvoir changer de type.'
+  if (type === 'QCM') return 'Videz les 4 réponses QCM pour pouvoir changer de type.'
   if (type === 'MEMORY') return 'Videz les paires MEMORY (et la configuration) pour pouvoir changer de type.'
   if (type === 'RAFALE') return 'Videz les catégories/difficultés RAFALE (et la configuration) pour pouvoir changer de type.'
   return ''

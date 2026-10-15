@@ -24,10 +24,12 @@ import { QCM_COLORS } from '../constants/colors'
  *   qcmHintsEnabled, qcmHintThreshold1, qcmHintThreshold2, qcmPenalty1, qcmPenalty2}
  * @param {(field: string, value: any) => void} props.onFieldChange - écrit un
  *   champ scalaire (qcmCorrect, qcmHintsEnabled, qcmHintThreshold1/2, qcmPenalty1/2)
+ * @param {boolean} [props.showHints=true] - affiche le bloc indices (hôte question).
+ *   `false` pour le sous-éditeur d'une carte MEMOTION (#279, LOT-6 : aucun indice sur une carte).
  * @param {(color: string, value: string) => void} props.onAnswerChange - écrit
  *   le texte d'une réponse (qcmAnswers[color])
  */
-export default function QcmAnswersEditor({ values, onFieldChange, onAnswerChange }) {
+export default function QcmAnswersEditor({ values, onFieldChange, onAnswerChange, showHints = true }) {
   const {
     qcmAnswers,
     qcmCorrect,
@@ -73,68 +75,70 @@ export default function QcmAnswersEditor({ values, onFieldChange, onAnswerChange
         <p className="qcm-hint">Cliquez sur ○ pour indiquer la bonne reponse</p>
       )}
 
-      {/* QCM Hints Toggle */}
-      <div className="qcm-hints-toggle">
-        <label>
-          <input
-            type="checkbox"
-            checked={qcmHintsEnabled}
-            onChange={(e) => onFieldChange('qcmHintsEnabled', e.target.checked)}
-          />
-          Activer les indices progressifs
-        </label>
-        <span className="qcm-hints-description">
-          {qcmHintsEnabled
-            ? `Les mauvaises reponses seront invalidees progressivement (penalites: ${Math.round((qcmPenalty1 || 0.67) * 100)}% puis ${Math.round((qcmPenalty2 || 0.33) * 100)}%)`
-            : 'Pas d\'indices automatiques'}
-        </span>
-        {qcmHintsEnabled && (
-          <div className="qcm-hints-config">
-            <div className="hint-row">
-              <span className="hint-label">Indice 1 :</span>
-              <span className="hint-at">a</span>
-              <input
-                type="number"
-                min="1"
-                max="99"
-                value={Math.round((qcmHintThreshold1 || 0.25) * 100)}
-                onChange={(e) => onFieldChange('qcmHintThreshold1', parseInt(e.target.value) / 100)}
-              />
-              <span className="hint-unit">%</span>
-              <span className="hint-arrow">→</span>
-              <input
-                type="number"
-                min="1"
-                max="99"
-                value={Math.round((qcmPenalty1 || 0.67) * 100)}
-                onChange={(e) => onFieldChange('qcmPenalty1', parseInt(e.target.value) / 100)}
-              />
-              <span className="hint-unit">% pts</span>
+      {/* QCM Hints Toggle — hôte question seulement (#279, LOT-6 : une carte MEMOTION n'a pas d'indices) */}
+      {showHints && (
+        <div className="qcm-hints-toggle">
+          <label>
+            <input
+              type="checkbox"
+              checked={qcmHintsEnabled}
+              onChange={(e) => onFieldChange('qcmHintsEnabled', e.target.checked)}
+            />
+            Activer les indices progressifs
+          </label>
+          <span className="qcm-hints-description">
+            {qcmHintsEnabled
+              ? `Les mauvaises reponses seront invalidees progressivement (penalites: ${Math.round((qcmPenalty1 || 0.67) * 100)}% puis ${Math.round((qcmPenalty2 || 0.33) * 100)}%)`
+              : 'Pas d\'indices automatiques'}
+          </span>
+          {qcmHintsEnabled && (
+            <div className="qcm-hints-config">
+              <div className="hint-row">
+                <span className="hint-label">Indice 1 :</span>
+                <span className="hint-at">a</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={Math.round((qcmHintThreshold1 || 0.25) * 100)}
+                  onChange={(e) => onFieldChange('qcmHintThreshold1', parseInt(e.target.value) / 100)}
+                />
+                <span className="hint-unit">%</span>
+                <span className="hint-arrow">→</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={Math.round((qcmPenalty1 || 0.67) * 100)}
+                  onChange={(e) => onFieldChange('qcmPenalty1', parseInt(e.target.value) / 100)}
+                />
+                <span className="hint-unit">% pts</span>
+              </div>
+              <div className="hint-row">
+                <span className="hint-label">Indice 2 :</span>
+                <span className="hint-at">a</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={Math.round((qcmHintThreshold2 || 0.125) * 100)}
+                  onChange={(e) => onFieldChange('qcmHintThreshold2', parseInt(e.target.value) / 100)}
+                />
+                <span className="hint-unit">%</span>
+                <span className="hint-arrow">→</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={Math.round((qcmPenalty2 || 0.33) * 100)}
+                  onChange={(e) => onFieldChange('qcmPenalty2', parseInt(e.target.value) / 100)}
+                />
+                <span className="hint-unit">% pts</span>
+              </div>
             </div>
-            <div className="hint-row">
-              <span className="hint-label">Indice 2 :</span>
-              <span className="hint-at">a</span>
-              <input
-                type="number"
-                min="1"
-                max="99"
-                value={Math.round((qcmHintThreshold2 || 0.125) * 100)}
-                onChange={(e) => onFieldChange('qcmHintThreshold2', parseInt(e.target.value) / 100)}
-              />
-              <span className="hint-unit">%</span>
-              <span className="hint-arrow">→</span>
-              <input
-                type="number"
-                min="1"
-                max="99"
-                value={Math.round((qcmPenalty2 || 0.33) * 100)}
-                onChange={(e) => onFieldChange('qcmPenalty2', parseInt(e.target.value) / 100)}
-              />
-              <span className="hint-unit">% pts</span>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

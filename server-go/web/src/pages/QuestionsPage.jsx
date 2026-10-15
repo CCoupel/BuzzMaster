@@ -146,11 +146,6 @@ export default function QuestionsPage() {
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
@@ -182,11 +177,6 @@ export default function QuestionsPage() {
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
@@ -862,11 +852,6 @@ export default function QuestionsPage() {
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
@@ -898,11 +883,6 @@ export default function QuestionsPage() {
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
@@ -948,11 +928,10 @@ export default function QuestionsPage() {
         type: card.TYPE || 'SPEEDY',
         qcmAnswers: card.QCM_ANSWERS || { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: card.QCM_CORRECT || '',
-        qcmHintsEnabled: card.QCM_HINTS_ENABLED || false,
-        qcmHintThreshold1: card.QCM_HINT_THRESHOLD_1 ?? 0.25,
-        qcmHintThreshold2: card.QCM_HINT_THRESHOLD_2 ?? 0.125,
-        qcmPenalty1: card.QCM_PENALTY_1 ?? 0.67,
-        qcmPenalty2: card.QCM_PENALTY_2 ?? 0.33,
+        // #279 (LOT-6) — une carte n'a plus d'indices : les champs d'une carte héritée
+        // sont ignorés au chargement (jamais renvoyés), seul l'indicateur reste pour
+        // afficher la ligne d'information.
+        legacyHintsRemoved: !!card.QCM_HINTS_ENABLED,
         // #187 — MEMORY : mêmes défauts de création que les autres sites
         // (synchronisés avec motionCardLock.js, MEMORY_MODE_CREATION_VALUE/
         // MEMORY_CONFIG_CREATION_VALUES). MEMORY_PAIRS d'une carte suit le
@@ -1122,11 +1101,6 @@ export default function QuestionsPage() {
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — OwnedFields MEMORY, valeurs de création (contrat §3.2,
@@ -1158,11 +1132,6 @@ export default function QuestionsPage() {
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY sur la carte mc-1 ci-dessus.
@@ -1318,11 +1287,6 @@ export default function QuestionsPage() {
         type: 'SPEEDY',
         qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
         qcmCorrect: '',
-        qcmHintsEnabled: false,
-        qcmHintThreshold1: 0.25,
-        qcmHintThreshold2: 0.125,
-        qcmPenalty1: 0.67,
-        qcmPenalty2: 0.33,
         qcmWrongPenalty: '0', // #254 : pénalité de mauvaise réponse (saisie 0 à 100, enregistrée en négatif)
         qcmWrongPenaltyDefault: true, // 0 « par défaut » : nouvelle question ou question sans le champ
         // #187 — voir commentaire OwnedFields MEMORY, useState initial (mc-1).
@@ -1650,11 +1614,7 @@ export default function QuestionsPage() {
             ...base,
             QCM_ANSWERS: card.qcmAnswers,
             QCM_CORRECT: card.qcmCorrect,
-            QCM_HINTS_ENABLED: card.qcmHintsEnabled,
-            QCM_HINT_THRESHOLD_1: card.qcmHintThreshold1,
-            QCM_HINT_THRESHOLD_2: card.qcmHintThreshold2,
-            QCM_PENALTY_1: card.qcmPenalty1,
-            QCM_PENALTY_2: card.qcmPenalty2,
+            // #279 — jamais d'indices sur une carte : les 5 clés ne sont pas envoyées.
           }
         }
         if (cardType === 'MEMORY') {
@@ -3008,17 +2968,20 @@ export default function QuestionsPage() {
                                 values={{
                                   qcmAnswers: card.qcmAnswers,
                                   qcmCorrect: card.qcmCorrect,
-                                  qcmHintsEnabled: card.qcmHintsEnabled,
-                                  qcmHintThreshold1: card.qcmHintThreshold1,
-                                  qcmHintThreshold2: card.qcmHintThreshold2,
-                                  qcmPenalty1: card.qcmPenalty1,
-                                  qcmPenalty2: card.qcmPenalty2,
                                 }}
+                                showHints={false}
                                 onFieldChange={(field, value) => handleMotionCardChange(card.id, field, value)}
                                 onAnswerChange={(color, value) => handleMotionCardChange(
                                   card.id, 'qcmAnswers', { ...card.qcmAnswers, [color]: value }
                                 )}
                               />
+                            )}
+                            {/* #279 (LOT-6) — carte héritée chargée avec des indices : ignorés, jamais renvoyés. */}
+                            {cardType === 'QCM' && card.legacyHintsRemoved && (
+                              <div className="motion-card-lock-reason">
+                                <span>ℹ️</span>
+                                <span>Indices retirés : une carte MEMOTION n'a plus d'indices (LOT-6)</span>
+                              </div>
                             )}
                             {cardType === 'MEMORY' && (
                               <MotionCardMemoryEditor
