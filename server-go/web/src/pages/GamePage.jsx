@@ -43,6 +43,7 @@ import Timer from '../components/Timer'
 import TeamCard from '../components/TeamCard'
 import QuestionPreview from '../components/QuestionPreview'
 import CategoryBadge from '../components/CategoryBadge'
+import CategoryPicker from '../components/CategoryPicker'
 import QuestionCard from '../components/QuestionCard'
 import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import RafalePoolAlert from '../components/RafalePoolAlert'
@@ -1279,36 +1280,16 @@ export default function GamePage() {
       <div className="questions-panel">
         <h2 className="panel-title">Questions</h2>
 
-        {/* Category filter bar */}
-        {availableCategories.length > 0 && (
-          <div className="category-filter-bar">
-            {availableCategories.map(catKey => {
-              const meta = categoryMeta(catKey, customCategories)
-              if (!meta) return null
-              const isActive = selectedCategories.has(catKey)
-              return (
-                <button
-                  key={catKey}
-                  className={`category-filter-pill${isActive ? ' active' : ''}`}
-                  style={{ '--cat-color': meta.color }}
-                  onClick={() => toggleCategoryFilter(catKey)}
-                  title={meta.label}
-                >
-                  <CategoryBadge catKey={catKey} customCategories={customCategories} size="md" chip={false} />
-                </button>
-              )
-            })}
-            {selectedCategories.size > 0 && (
-              <button
-                className="category-filter-reset"
-                onClick={clearCategoryFilters}
-                title="Reinitialiser les filtres"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        )}
+        {/* Filtre catégories (#221) — CategoryPicker variant="filter" (icônes seules) */}
+        <CategoryPicker
+          variant="filter"
+          showLabel={false}
+          value={selectedCategories}
+          availableCategories={availableCategories}
+          customCategories={customCategories}
+          onToggle={toggleCategoryFilter}
+          onClear={clearCategoryFilters}
+        />
 
         <div className="questions-list">
           {(() => {

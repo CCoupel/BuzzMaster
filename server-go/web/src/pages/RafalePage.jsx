@@ -5,7 +5,8 @@ import { useCategories } from '../hooks/useCategories'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import CategoryBadge from '../components/CategoryBadge'
 import CategorySelector from '../components/CategorySelector'
-import CategoryFilterBar from '../components/CategoryFilterBar'
+import CategoryPicker from '../components/CategoryPicker'
+import DifficultyPicker from '../components/DifficultyPicker'
 import RafaleAIGenerateModal from '../components/RafaleAIGenerateModal'
 import Button from '../components/Button'
 import Card from '../components/Card'
@@ -56,7 +57,7 @@ export default function RafalePage() {
   // utilisateur QUALIF 8.0.0.2) : RafalePage.jsx passait apiCategories brut
   // partout, une source de données différente de celle du Quiz — c'est ce
   // que ce filtrage aligne, en plus du composant d'affichage lui-même
-  // (CategoryFilterBar ci-dessous).
+  // (CategoryPicker ci-dessous).
   const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -352,31 +353,26 @@ export default function RafalePage() {
           )}
 
           <div className="rafale-filters">
-            {/* CategoryFilterBar (v8.0.0, #16/#197, bugfix cohérence UI) —
-                même composant/pattern que QuestionsPage.jsx (base
-                GamePage.css + modificateur "Quiz" QuestionsPage.css),
-                remplace l'ancienne variante .rafale-chip qui produisait un
-                rendu incohérent (garde `if (!meta) return null` manquante +
-                apiCategories non filtré). */}
-            <CategoryFilterBar
+            {/* Filtre catégories (#221) — CategoryPicker variant="filter", même
+                composant que QuestionsPage.jsx et GamePage.jsx. */}
+            <CategoryPicker
+              variant="filter"
+              showLabel
+              value={selectedCategories}
               availableCategories={availableCategories}
-              selectedCategories={selectedCategories}
               customCategories={customCategories}
               onToggle={toggleCategoryFilter}
               onClear={clearCategoryFilters}
             />
             <div className="rafale-filter-group">
-              {DIFFICULTIES.map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  className={`rafale-chip ${selectedDifficulty === d ? 'on' : ''}`}
-                  onClick={() => setSelectedDifficulty(prev => (prev === d ? null : d))}
-                  title={`Difficulte ${d}`}
-                >
-                  {'★'.repeat(d)}{'☆'.repeat(3 - d)}
-                </button>
-              ))}
+              <DifficultyPicker
+                mode="single"
+                allowNone
+                ghost
+                label="Filtrer"
+                value={selectedDifficulty}
+                onChange={setSelectedDifficulty}
+              />
               <button
                 type="button"
                 className={`rafale-chip ${onlyUnused ? 'on' : ''}`}

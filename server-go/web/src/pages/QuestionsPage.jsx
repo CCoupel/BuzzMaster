@@ -17,7 +17,8 @@ import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
 import CategorySelector from '../components/CategorySelector'
-import CategoryFilterBar from '../components/CategoryFilterBar'
+import CategoryPicker from '../components/CategoryPicker'
+import DifficultyPicker from '../components/DifficultyPicker'
 import CategoryBadge from '../components/CategoryBadge'
 import QuestionCard from '../components/QuestionCard'
 import AIGenerateModal from '../components/AIGenerateModal'
@@ -1915,13 +1916,13 @@ export default function QuestionsPage() {
       <div className="category-filter-group">
         <CategoryBalance questions={sortedQuestions} />
 
-        {/* Category filter bar (#40) — CategoryFilterBar.jsx (v8.0.0,
-            #16/#197, bugfix cohérence UI/mutualisation, code-review
-            20260829-131404 MAJEUR 2) : composant partagé avec
-            RafalePage.jsx, plus de copie inline divergente ici. */}
-        <CategoryFilterBar
+        {/* Filtre par catégorie (#40) — CategoryPicker variant="filter" (#221),
+            composant partagé avec RafalePage.jsx et GamePage.jsx. */}
+        <CategoryPicker
+          variant="filter"
+          showLabel
+          value={selectedCategories}
           availableCategories={availableCategories}
-          selectedCategories={selectedCategories}
           customCategories={customCategories}
           onToggle={toggleCategoryFilter}
           onClear={clearCategoryFilters}
