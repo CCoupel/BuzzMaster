@@ -979,7 +979,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid question number", http.StatusBadRequest)
 		return
 	}
-	id, questionsDir, err := h.resolveQuestionDir(r.FormValue("number"))
+	id, questionsDir, created, err := h.resolveQuestionDirCreated(r.FormValue("number"))
 	if err != nil {
 		if errors.Is(err, ErrQuestionIDExhausted) {
 			http.Error(w, "No question ID available (1-999 exhausted)", http.StatusInsufficientStorage)
@@ -993,6 +993,17 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// section against ROUNDS_UPDATE / REORDER_QUESTIONS / DELETE (no lost ROUND_ID / ORDER).
 	QuestionFilesMu.Lock()
 	defer QuestionFilesMu.Unlock()
+
+	// #278: a refused request must leave no empty directory behind. Cleanup covers every early
+	// return (400 cards, sound 400/413, 500) until question.json is written (`committed`). It is
+	// registered AFTER the QuestionFilesMu defer so (LIFO) it runs while that lock is still held.
+	// Only a directory created by THIS call is removed, and os.Remove refuses a non-empty one.
+	committed := false
+	defer func() {
+		if created && !committed {
+			os.Remove(questionsDir)
+		}
+	}()
 
 	// Load existing question to preserve media if not updated
 	existingQuestion := make(map[string]interface{})
@@ -1631,7 +1642,9 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 
 	// Save question.json
 	data, _ := json.MarshalIndent(question, "", "  ")
-	os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644)
+	if werr := os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644); werr == nil {
+		committed = true
+	}
 
 	LogInfo(game.LogComponentHTTP, "Question %s saved", id)
 
@@ -1671,6 +1684,21 @@ var ErrQuestionIDExhausted = errors.New("id_exhausted")
 // concurrent AI batch generation (handleGenerateQuestions) can never race on
 // the same ID — previously an unlocked os.Stat scan with no reservation step.
 func (h *HTTPServer) resolveQuestionDir(explicitID string) (id, dir string, err error) {
+	id, dir, _, err = h.resolveQuestionDirCreated(explicitID)
+	return id, dir, err
+}
+
+// resolveQuestionDirCreated is resolveQuestionDir plus `created`: true only when THIS call
+// created the directory (os.Mkdir succeeded, or the explicit ID's path did not exist before
+// MkdirAll). A pre-existing directory (edit of an existing question) reports created == false so
+// a caller that cleans up after a refused request (#278) never touches it.
+//
+// Lock order (#278): questionIDMu is taken and released INSIDE this function; the caller then
+// takes QuestionFilesMu. The caller's cleanup defer must therefore run while QuestionFilesMu is
+// still held (registered after its Lock defer → LIFO runs it first) and never needs questionIDMu:
+// os.Remove refuses a non-empty directory, so a concurrent allocation that already wrote into the
+// directory is never destroyed.
+func (h *HTTPServer) resolveQuestionDirCreated(explicitID string) (id, dir string, created bool, err error) {
 	h.questionIDMu.Lock()
 	defer h.questionIDMu.Unlock()
 
@@ -1678,25 +1706,27 @@ func (h *HTTPServer) resolveQuestionDir(explicitID string) (id, dir string, err 
 
 	if explicitID != "" {
 		dir = filepath.Join(questionsDir, explicitID)
+		_, statErr := os.Stat(dir)
+		existed := statErr == nil
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return "", "", err
+			return "", "", false, err
 		}
-		return explicitID, dir, nil
+		return explicitID, dir, !existed, nil
 	}
 
 	if err := os.MkdirAll(questionsDir, 0755); err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	for i := 1; i < 1000; i++ {
 		candidate := strconv.Itoa(i)
 		candidateDir := filepath.Join(questionsDir, candidate)
 		if mkErr := os.Mkdir(candidateDir, 0755); mkErr == nil {
-			return candidate, candidateDir, nil
+			return candidate, candidateDir, true, nil
 		} else if !os.IsExist(mkErr) {
-			return "", "", mkErr
+			return "", "", false, mkErr
 		}
 	}
-	return "", "", ErrQuestionIDExhausted
+	return "", "", false, ErrQuestionIDExhausted
 }
 
 // getStorageInfo returns file storage information (like ESP32's printLittleFSInfo)
