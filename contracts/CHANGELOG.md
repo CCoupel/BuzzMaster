@@ -2,6 +2,16 @@
 
 ---
 
+## [20261015] — Cartes QCM MEMOTION sans indices (#279, v11.2.2, LOT-6)
+
+- **[CHANGED — non BREAKING]** `question-types.md` §7.1 : une carte MEMOTION de type `QCM` **n'a pas d'indices** (décision utilisateur 2026-10-15 : pas d'indice sans effet sur les points ; option « prise en compte au crédit » écartée). À l'enregistrement (`POST /questions`), `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2` et `QCM_PENALTY_1/2` sont **ignorés et retirés** d'une carte QCM, quelle que soit leur valeur — aucune erreur, aucun code de refus (option « ignorer silencieusement »).
+- **[CHANGED]** moteur : plus aucun `QCM_HINT` ni `MEMOTION_ACTIVE.STATE.QCM_INVALIDATED` pendant une carte, y compris pour une carte stockée avant #279 avec indices (lue et jouée sans erreur). `game-state.md` § `MEMOTION_ACTIVE` : `STATE` d'une carte QCM = `{}`. §5.3 : `qcmInvalidated` d'un hôte carte toujours vide, accesseur conservé.
+- **[CHANGED]** §3.1/§3.2 : les champs d'indices restent `OwnedFields` QCM (hôte question) mais sont **sans objet en carte** et ne verrouillent plus le type d'une carte.
+- **[CHANGED]** éditeur : bloc d'indices retiré du sous-éditeur QCM d'une carte ; carte héritée chargée sans indices avec une ligne d'information. Hôte question QCM (indices, `HINTS_AT_BUZZ`, commutateur #254) strictement inchangé.
+- Aucune BREAKING : aucune requête acceptée aujourd'hui ne devient refusée ; lecture, jeu et ré-enregistrement des cartes existantes garantis. Aucune question du jeu de données courant ne porte de carte QCM.
+
+---
+
 ## [20261015] — `POINTS_RULE` : parité d'affichage limitée aux surfaces à montant (#190, v11.2.2, LOT-5)
 
 - **[CHANGED — précision de périmètre]** `question-types.md` §6.2 « Parité d'affichage » : le montant selon `POINTS_RULE` est affiché sur les seules surfaces **qui affichent déjà un montant** — aide « → N pts » de l'éditeur, zoom de carte anim (`AnimMotionCard`), bandeau de contexte `/anim`, bouton de crédit anim (`AnimConductPanel`), panneau admin `GamePage`. Les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant (décision utilisateur 2026-10-15, `docs/mockup/DECISIONS.md` § `admin_question_editor`). Corrige la formulation « la grille (anim/TV) » du [20261013], qui laissait entendre un montant sur les grilles.

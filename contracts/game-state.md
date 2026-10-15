@@ -329,7 +329,7 @@ Champ unique décrivant l'**état vivant du type imbriqué** de la carte MEMOTIO
 interface MotionActive {
   CARD_ID: string    // ID de la carte active ("" hors SELECTED/QUESTION/REVEAL)
   TYPE: string       // Type de la carte : "SPEEDY", "QCM", "MEMORY", "ARDOISE" (défaut "" = pas de type)
-  STATE: object      // État vivant propre au type (ex: { "QCM_INVALIDATED": ["RED", "YELLOW"] } pour QCM)
+  STATE: object      // État vivant propre au type (ex: MEMORY §5.4 de question-types.md ; {} pour SPEEDY et QCM — une carte QCM n'a pas d'indices depuis #279)
 }
 ```
 
@@ -344,11 +344,13 @@ interface MotionActive {
 {
   "CARD_ID": "mc-3",
   "TYPE": "QCM",
-  "STATE": {
-    "QCM_INVALIDATED": ["RED", "YELLOW"]
-  }
+  "STATE": {}
 }
 ```
+
+> *(v11.2.2, #279, LOT-6)* Une carte QCM n'a plus d'indices : `STATE.QCM_INVALIDATED` n'est plus
+> alimenté pour un hôte carte (`contracts/question-types.md` §7.1). Le champ question-scopé
+> `QCM_INVALIDATED` de l'hôte question est inchangé.
 
 #### `STATE` pour une carte `TYPE=MEMORY` (v7.1.0, #187)
 

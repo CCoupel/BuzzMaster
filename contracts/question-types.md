@@ -128,6 +128,11 @@ Le registre (§7) déclare, pour chaque type, les champs de `TypedContent` qui *
 | **`ARDOISE`** *(hôte question uniquement)* | `ANSWER`, `ARDOISE_KEYBOARD_TYPE` | ✅ |
 | **`MEMORY`** *(v7.1.0, imbricable)* | `MEMORY_PAIRS`, `MEMORY_CONFIG`, `MEMORY_MODE` | ✅ |
 
+> *(v11.2.2, #279, LOT-6 — décision utilisateur du 2026-10-15)* Les cinq champs d'indices QCM
+> (`QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2`) restent des `OwnedFields` QCM
+> (cohérence serveur, hôte question), mais **n'existent plus sur une carte MEMOTION** : ignorés et
+> retirés à l'enregistrement, jamais déclenchés au jeu — voir §7.1.
+
 `OwnedFields` sert à trois choses : le **verrou de type** (§3.2), la **cohérence serveur** (§3.2),
 et le **montage du sous-éditeur** dans l'éditeur de carte.
 
@@ -157,9 +162,9 @@ d'une carte, relevée dans `QuestionsPage.jsx` (`formData` initial et `handleAdd
 |---|---|---|---|
 | `SPEEDY` | `ANSWER_TEXT` / `ANSWER_IMAGE` | `""` / absente | non vide |
 | `QCM` | `QCM_ANSWERS` / `QCM_CORRECT` | `{"","","",""}` / `""` | une réponse ou la désignation est saisie |
-| `QCM` | `QCM_HINTS_ENABLED` | `false` | passe à `true` |
-| `QCM` | `QCM_HINT_THRESHOLD_1/2` | **`0.25` / `0.125`** | s'écarte de ces valeurs |
-| `QCM` | `QCM_PENALTY_1/2` | **`0.67` / `0.33`** | s'écarte de ces valeurs |
+| ~~`QCM`~~ | ~~`QCM_HINTS_ENABLED`~~ | — | **sans objet en carte** *(v11.2.2, #279, LOT-6)* : une carte n'a pas d'indices, le champ n'est plus ni proposé ni persisté sur une carte (§7.1) |
+| ~~`QCM`~~ | ~~`QCM_HINT_THRESHOLD_1/2`~~ | — | **sans objet en carte** *(#279)* — idem |
+| ~~`QCM`~~ | ~~`QCM_PENALTY_1/2`~~ | — | **sans objet en carte** *(#279)* — idem ; la valeur de création QCM d'une carte se réduit à `QCM_ANSWERS` vides + `QCM_CORRECT` vide |
 
 > *(v11.2, #254)* `QCM_WRONG_PENALTY` est un champ de **question hôte QCM seulement** : il n'est **pas** dans `OwnedFields`, n'existe pas sur une carte MEMOTION et n'intervient dans aucun verrou de sélecteur de type. **Les indices n'ont aucun effet sur la pénalité d'une mauvaise réponse** *(décision utilisateur, option A)* : même pénalité que la réponse ait été donnée avant ou après la révélation d'indices, y compris pour une réponse éliminée par un indice ; la régie peut décocher une équipe ou modifier le champ « Points » avant le clic.
 | `MEMORY` *(v7.1.0)* | `MEMORY_PAIRS` | **liste de paires vides** | **au moins une paire porte du contenu** — un `TEXT` ou une `IMAGE` sur l'une de ses deux faces |
@@ -210,7 +215,7 @@ d'une carte, relevée dans `QuestionsPage.jsx` (`formData` initial et `handleAdd
 | Carte neuve, `SPEEDY` ou `QCM`, aucun `OwnedField` écarté de son défaut | Type librement modifiable |
 | Thème, difficulté, énoncé ou barème renseignés — rien d'autre | **Modifiable** — ces champs appartiennent à la carte |
 | Un texte de réponse SPEEDY saisi | **Verrouillée** |
-| Une réponse QCM saisie, ou un seuil d'indice déplacé | **Verrouillée** |
+| Une réponse QCM saisie, ou la bonne réponse désignée | **Verrouillée** *(les seuils d'indices ne verrouillent plus : sans objet en carte depuis #279)* |
 | `OwnedFields` ramenés à leurs valeurs de création | Redevient modifiable — le verrou est réactif |
 | `TYPE` inchangé, contenu quelconque | Toujours accepté |
 | Charge utile portant du contenu de deux types à la fois | **HTTP 400**, quelle que soit son origine |
@@ -372,6 +377,10 @@ obligatoire : ne servir l'état carte que si `MEMOTION_ACTIVE.CARD_ID === hostCo
 
 `ARDOISE_ANSWERS` **n'y entre pas** et reste lu à son emplacement question-scopé : ARDOISE n'est pas
 imbricable (§7, #186 fermée « not planned »).
+
+> *(v11.2.2, #279, LOT-6)* Pour un **hôte carte**, `qcmInvalidated` est désormais **toujours vide** :
+> le moteur n'alimente plus `MEMOTION_ACTIVE.STATE.QCM_INVALIDATED` (une carte QCM n'a pas d'indices,
+> §7.1). L'accesseur est conservé tel quel (tolérant) ; l'hôte question est inchangé.
 
 > **Duplication assumée et délibérée** : la même notion (ex. les réponses QCM invalidées) existe à
 > deux emplacements selon l'hôte. L'alternative — faire lire au QCM classique un emplacement
@@ -580,9 +589,29 @@ de #184 (hors portée : « toute abstraction spéculative pour des types qui n'e
 ### 7.1 Carte QCM : affichage et désignation, sans entrée joueur
 
 Une carte MEMOTION de type `QCM` **n'ouvre aucune action entrante nouvelle**. Les quatre réponses
-sont **affichées** (`/tv` et `/anim`), les indices invalident progressivement des réponses à
-l'écran, et l'animateur **désigne** l'équipe gagnante par le `MEMOTION_DONE` existant — exactement
-comme une carte SPEEDY aujourd'hui.
+sont **affichées** (`/tv` et `/anim`) et l'animateur **désigne** l'équipe gagnante par le
+`MEMOTION_DONE` existant — exactement comme une carte SPEEDY aujourd'hui.
+
+#### Une carte QCM n'a pas d'indices *(v11.2.2, #279, LOT-6 — décision utilisateur du 2026-10-15)*
+
+Principe retenu : **pas d'indice sans effet sur les points**. Le barème d'une carte (`POINTS_RULE`,
+§6.2) ne tient pas compte des indices, et l'option « prise en compte au crédit » a été écartée ; les
+indices sont donc **retirés des cartes** (ils restent inchangés pour une **question hôte** QCM).
+
+- **Éditeur** : le bloc « indices progressifs » (activation, seuils, pénalités) n'est plus proposé
+  pour une carte ; une carte enregistrée avant #279 avec des indices se charge **sans** indices, avec
+  une ligne d'information, et se ré-enregistre proprement.
+- **Enregistrement (`POST /questions`)** : sur une carte de type effectif `QCM`, `QCM_HINTS_ENABLED`,
+  `QCM_HINT_THRESHOLD_1/2` et `QCM_PENALTY_1/2` sont **ignorés et retirés** de la carte, quelle que
+  soit leur valeur — **aucune erreur, aucun code de refus** (option « ignorer silencieusement »,
+  non BREAKING). Sur une carte d'un autre type, un champ d'indices non nul reste un
+  `CARD_TYPE_CONTENT_MISMATCH` (§3.2), comme avant.
+- **Moteur** : pendant une carte, aucun `QCM_HINT` n'est déclenché ni diffusé et
+  `MEMOTION_ACTIVE.STATE` d'une carte QCM reste `{}`, **y compris pour une carte stockée qui
+  porterait encore ces champs** (lecture et jeu jamais refusés). Le mécanisme d'indices de l'hôte
+  question (`QcmInvalidated`, `HINTS_AT_BUZZ`, commutateur « Tenir compte des indices » #254) est
+  strictement inchangé.
+- **Verrou de type** (§3.2) : les champs d'indices n'interviennent plus dans le verrou d'une carte.
 
 > ⚠️ Il n'y a **ni buzz, ni `VPLAYER_QCM_ANSWER`, ni modification de la liste blanche entrante**
 > pour #185. `engine.go` ignore les buzz en MEMOTION et cela reste vrai. C'est ce qui fait de QCM
@@ -854,3 +883,11 @@ jour en conséquence.
 | Validation de `POINTS_RULE` à l'enregistrement (3 refus HTTP 400) | **CHANGED**, additif | une carte stockée reste lue et jouée telle quelle ; seul un enregistrement invalide est refusé — aucune carte produite par l'éditeur avant #190 ne portait `POINTS_RULE` |
 | Applicabilité des modes par type (binaire / progression) | **CHANGED**, précision | restreint ce que l'éditeur propose ; aucun mode ni champ nouveau |
 | « Défaut explicite = champ absent » | **CHANGED**, précision de §6.3 | aligne le contrat sur la résolution par registre de #187 cycle 5 |
+
+### 11.4 Ajouts v11.2.2 (#279, LOT-6) — toujours aucun changement BREAKING
+
+| Élément | Nature | Justification |
+|---|---|---|
+| Champs d'indices ignorés et retirés d'une carte QCM à l'enregistrement (§7.1) | **CHANGED**, non BREAKING | aucune requête acceptée aujourd'hui ne devient refusée ; aucune donnée persistée sans effet ; l'éditeur ne produit plus ces champs pour une carte |
+| Plus aucun `QCM_HINT` ni `MEMOTION_ACTIVE.STATE.QCM_INVALIDATED` pendant une carte (§5.3, §7.1) | **CHANGED**, comportement | une carte stockée avec indices est lue et jouée sans erreur, simplement sans indice ; accesseur client conservé (liste vide) |
+| Champs d'indices retirés du verrou de type d'une carte (§3.2) | **CHANGED**, précision | sans objet en carte ; `QCM_ANSWERS` / `QCM_CORRECT` verrouillent toujours |
