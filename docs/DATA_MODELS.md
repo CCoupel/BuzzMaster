@@ -1084,8 +1084,33 @@ Le barème appartient **toujours à la carte (hôte), jamais au type imbriqué.*
 | absent ou `"STARS"` | Barème par étoiles existant : `MOTION_CONFIG.POINTS_<n>_STAR` si `> 0`, sinon `DIFFICULTY → 1/3/5` | Comportement actuel, inchangé | ✅ |
 | `"FIXED"` | `VALUE` si jeu gagné, sinon 0 | Carte dont la valeur est indépendante de la difficulté | — |
 | `"PER_UNIT"` | `VALUE × Units` (Units = nombre d'items trouvés) | Types à progression — MEMORY au prorata (v7.1.0) | — |
+| `"STARS_PRORATA"` | `points_étoiles × Units / UnitsTotal` (multiplication avant division) | Types à progression — défaut de MEMORY et RAFALE (#187) | ✅ (progression) |
 
-**`Units` par défaut = 1** pour tout type binaire (gagné/perdu). Un type à progression rapporte son propre décompte.
+**`Units` par défaut = 1** pour tout type binaire (gagné/perdu). Un type à progression rapporte son propre décompte, et son total (`UnitsTotal`).
+
+#### Résolution du mode (v11.2.2, #190)
+
+1. `POINTS_RULE.MODE` explicite sur la carte → appliqué tel quel.
+2. Sinon, le défaut du **type courant** de la carte (`DefaultPointsRule` du registre des types, `question_types.go`) : `STARS` pour SPEEDY et QCM, `STARS_PRORATA` pour MEMORY et RAFALE. Résolu à chaque lecture, jamais recopié sur la carte.
+3. Sinon, `STARS`.
+
+Le défaut choisi dans l'éditeur n'écrit donc **jamais** `POINTS_RULE` : le champ est absent (défaut explicite = champ absent). Une règle explicite est un champ de carte : elle survit à un changement de `TYPE`.
+
+#### Applicabilité par type et validation à l'enregistrement (v11.2.2, #190)
+
+| Type effectif | Modes acceptés | Défaut (⇒ champ absent) |
+|---|---|---|
+| Binaire : `SPEEDY`, `QCM` | `STARS`, `FIXED` | `STARS` |
+| Progression : `MEMORY`, `RAFALE` | `STARS_PRORATA`, `STARS`, `FIXED`, `PER_UNIT` | `STARS_PRORATA` |
+
+- `VALUE` : entier compris entre **1 et 999**, requis pour `FIXED` et `PER_UNIT`. Ignoré (et pouvant être omis) pour `STARS` et `STARS_PRORATA`.
+- À l'enregistrement (`POST /questions`), le serveur refuse la requête entière en **HTTP 400** si la règle n'est pas valide. Trois codes d'erreur :
+  - `POINTS_RULE_INVALID_MODE` : `MODE` hors des quatre valeurs.
+  - `POINTS_RULE_MODE_NOT_APPLICABLE` : `STARS_PRORATA` ou `PER_UNIT` sur un type binaire.
+  - `POINTS_RULE_VALUE_REQUIRED` : `FIXED` ou `PER_UNIT` sans `VALUE` entier entre 1 et 999.
+- Les cartes déjà enregistrées ne sont jamais refusées à la lecture ni au jeu.
+
+Sources : `contracts/question-types.md` §6.2 ; `ValidatePointsRule` et `AllowedPointsRuleModes` (`server-go/internal/game/question_types.go`) ; appel dans `handleUploadQuestion` (`server-go/internal/server/http.go`).
 
 ---
 

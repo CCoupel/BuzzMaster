@@ -71,6 +71,7 @@ Hook : `useWebSocket.js` mappe `NETWORK` ; si le serveur est ancien et n'envoie 
 | CategoryBalance | `components/CategoryBalance.jsx` | Visualisation équilibre catégories |
 | CategoryPicker | `components/CategoryPicker.jsx` | Sélecteur de catégorie unique (single), multiple (multi) ou filtre (filter) — v11.2.2, #221 |
 | DifficultyPicker | `components/DifficultyPicker.jsx` | Sélecteur de difficulté ★ unique, unique ou aucune, multiple — v11.2.2, #221 |
+| PointsRuleControl | `components/PointsRuleControl.jsx` | Ligne « Points » de l'éditeur de carte MEMOTION (barème `POINTS_RULE`) — v11.2.2, #190 |
 
 ### CategoryPicker et DifficultyPicker — sélecteurs partagés (v11.2.2, #221)
 
@@ -123,6 +124,41 @@ Props : `levels` (défaut `DIFFICULTY_LEVELS`), `ghost` (affiche les étoiles vi
 ```
 
 `DIFFICULTY_LEVELS` est exporté par `utils/categoryUtils.js` : `[1, 2, 3]`.
+
+### PointsRuleControl — ligne « Points » de la carte MEMOTION (v11.2.2, #190)
+
+Fichier : `components/PointsRuleControl.jsx`. Utilisé par l'éditeur de carte MEMOTION de `QuestionsPage.jsx` (face RECTO, replié sur le défaut). Il édite `POINTS_RULE` (contrat `question-types.md` §6.2).
+
+| Prop | Rôle |
+|------|------|
+| `cardType` | `SPEEDY` / `QCM` / `MEMORY` / `RAFALE` : détermine les modes proposés |
+| `value` | `{ mode, value }` ; `mode: ''` = défaut du type |
+| `onChange` | Appelé avec `{ mode, value }` |
+| `difficulty`, `motionConfig` | Valeur ★ de la carte et `MOTION_CONFIG`, pour l'aide |
+| `unitsTotal` | MEMORY : nombre de paires de la carte |
+| `notice`, `error` | Avertissement de remise au défaut ; erreur de saisie au submit |
+| `idPrefix` | Préfixe des ids (ex. `motion-card-mc-1`) |
+
+- Options filtrées par type, le défaut en premier : binaire (SPEEDY, QCM) : Étoiles (défaut) / Montant fixe ; progression (MEMORY, RAFALE) : Prorata des étoiles (défaut) / Étoiles pleines / Montant fixe / Par unité.
+- Le champ montant (entier 1 à 999) n'apparaît que pour `FIXED` et `PER_UNIT`.
+- L'aide « → … » est calculée par `describePointsRule` (même fonction que les affichages anim et admin).
+- Garde client : `pointsRuleValueError` signale un montant invalide au submit. Le serveur refait la validation (HTTP 400, voir `docs/DATA_MODELS.md`).
+
+### Helpers du barème par carte — `utils/motionGrid.js` et `utils/pointsRuleEditor.js` (v11.2.2, #190)
+
+Fonctions pures, partagées par l'éditeur, l'anim et le panneau admin. Elles reprennent la règle serveur `motionCardPointsForOutcome` (`engine.go`) : aucun autre calcul de montant côté client.
+
+| Fonction | Fichier | Rôle |
+|----------|---------|------|
+| `allowedPointsRuleModes(type)` / `defaultPointsRuleMode(type)` | `motionGrid.js` | Modes acceptés et défaut d'un type (miroir de `AllowedPointsRuleModes`) |
+| `resolvePointsRuleMode(card)` | `motionGrid.js` | Mode effectif : `POINTS_RULE.MODE` explicite, sinon défaut du type courant |
+| `getMotionCardPointsForRule(card, motionConfig, { units, unitsTotal })` | `motionGrid.js` | Montant crédité pour un résultat donné (gain prévisionnel anim) |
+| `getMotionCardPointsDisplay(card, motionConfig)` | `motionGrid.js` | Montant affichable avant jeu : `{ points, suffix }` (ex. suffixe « / bonne rép. ») |
+| `describePointsRule(card, motionConfig, { unitsTotal, unitLabel })` | `motionGrid.js` | Libellé de l'aide « → … » de l'éditeur |
+| `computeStarsProrataPoints(stars, units, unitsTotal)` | `motionGrid.js` | `Math.floor(stars × units / unitsTotal)`, 0 si `unitsTotal <= 0` |
+| `loadMotionCardPointsRule(card)`, `adaptPointsRuleToType(rule, type)`, `pointsRuleValueError(rule)`, `serializePointsRule(rule)`, `editorMotionConfig(cfg)` | `pointsRuleEditor.js` | État client de l'éditeur : chargement, remise au défaut si le type change, validation du montant, sérialisation (`mode: ''` ⇒ champ absent) |
+
+Consommateurs du montant : `AnimMotionCard` et `AnimPage` (zoom et sélection), `AnimConductPanel` (gain prévisionnel), `GamePage` (panneau admin). **La grille anim (`AnimMotionGrid`) et la grille TV (`PlayerDisplay`) n'appellent pas ces fonctions** : elles restent en ★ seules (décision utilisateur du 2026-10-15).
 
 ### Podium Component (v2.4.0)
 
