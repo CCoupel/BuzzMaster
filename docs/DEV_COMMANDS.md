@@ -107,10 +107,11 @@ npm ci
 npm run build              # produit web/dist (requis par les tests fonts-embed et le smoke test dist)
 npx vitest run             # tests unitaires
 npx vitest run --coverage  # couverture v8
-npm audit --audit-level=high   # même porte que scripts/ci.sh (étape 6)
+npm audit --audit-level=high   # même porte que scripts/ci.sh (étape 7)
 ```
 
 - Les commentaires CSS ne doivent **pas** contenir `*/` (même dans un texte) : lightningcss refuse la fermeture prématurée, qu'esbuild tolérait avant vite 8.
+- `scripts/ci.sh` exécute ces tests à l'étape `[2/7]` (`npm test`, avant l'embed) : un test rouge bloque la CI (#273).
 - En cas d'échec de `npx vitest run` après un bump de dépendance, vérifier d'abord les mocks `fetch` (vitest 5 remonte les exceptions de rendu en erreur non gérée).
 
 ### Cross-compilation
@@ -242,6 +243,7 @@ Issues de la stabilisation des tests de `cmd/server` (corrections `8b0e5ead`, `5
 - **Lire jusqu'à l'action attendue, pas la première trame.** Une trame antérieure (`HEARTBEAT`, `UPDATE`) peut arriver avant. Si une trame interdite arrive (ex. `PLAYER_CONNECTED` quand on attend un rejet), le test échoue immédiatement.
 - **Jamais de fenêtre fixe d'observation** (`collectActions(conn, 500ms)`) pour prouver l'absence ou l'ordre d'un message. Attendre l'événement attendu par condition, puis lire jusqu'à un **témoin** diffusé après l'action : le témoin prouve que tout ce qui devait arriver est arrivé. Helpers réels (`cmd/server`) : `collectAfterSentinel264` (un témoin, plusieurs connexions lues ensemble), `collectUntilSentinel264`, `assertNoAction264`, `eventually264` (`sentinel_264_test.go`) ; `noAction246` (`ardoise_final_246_test.go`) pour l'absence d'action sur plusieurs connexions ; `readActionMatchingWithin` (`rafale_countdown_wire_test.go`) pour attendre une action précise ; `settleSound` (méthode de `env244`, `score_display_252_test.go`) pour attendre que le moteur de son ait joué son témoin. Toutes les connexions à lire doivent être passées ensemble à `collectAfterSentinel264`, sinon un témoin reste en file.
 - **Attendre l'inscription d'un client avant d'émettre vers lui.** Lire un message du client ne prouve pas qu'il est inscrit dans le hub (#272). Le helper `learnClientID` (`player_evicted_test.go`) attend donc `ClientBinding` après le premier message. Un test qui diffuse ou cible un client sans passer par `learnClientID` doit attendre lui-même l'inscription par événement. Le hook test-only `SetRegisterHook` (`internal/server/websocket.go`, appelé par `Run` avant l'inscription) sert à provoquer la course dans les tests de régression ; il ne s'appelle jamais hors tests.
+- **Dials de test : attendre l'inscription (#274).** `dialWSPath` (`websocket_test.go`), `dialAdminWS` et `dialWS` (`ai_batching_test.go`) attendent l'inscription du client avant de rendre la connexion, via `waitRegistered` et `waitRegisteredPath` (`testhelpers_register_274_test.go`). N'ajoutez pas de `time.Sleep` pour attendre une inscription : un test qui ouvre une connexion hors de ces helpers appelle `waitRegistered` lui-même. L'attente compte les clients **par type** et non le total : pour des dials séquentiels de types différents, le client précédent peut se désinscrire pendant l'attente. `dialWSPath` échoue (`t.Fatalf`) si le hub du serveur de test est introuvable.
 - **Pauses fixes légitimes, à conserver** : `seat_release_test.go:167` (franchir la seconde de l'identifiant horodaté) ; la boucle d'observation d'absence de `new_game_243_test.go:464` (vérifier pendant 6 s qu'un minuteur ne ressuscite pas NEW_GAME) ; la boucle d'absence de 600 ms de `identity_binding_246_test.go:352` (le bumper ne doit pas passer hors ligne). Une absence observée dans la durée n'a pas de témoin possible. Toute autre pause fixe est à remplacer par une attente par événement.
 - **Arrêter les minuteurs en fin de test** avec `t.Cleanup` (ex. `engine.Stop()`, annulation du chien de garde de l'adaptateur de son). Les `defer` du test s'exécutent d'abord ; ensuite, tous les `t.Cleanup` s'exécutent dans l'ordre inverse de leur enregistrement.
 - **Ne pas modifier le singleton `config` dans des tests parallèles.** Utiliser une injection (ex. `soundEnabled` de l'adaptateur de son). Si un test doit appeler `config.SetInstance`, restaurer l'instance précédente par `t.Cleanup`.
@@ -254,6 +256,27 @@ Issues de la stabilisation des tests de `cmd/server` (corrections `8b0e5ead`, `5
 - La série `go test -race -count=20 -timeout 3h ./...` complète : environ 80 minutes aussi (paquets en parallèle).
 - Une exécution unique de `go test -race ./...` : environ 4 à 5 minutes.
 - Le `-timeout` par défaut (10 min) fait échouer les séries : utilisez `-timeout 3h`.
+
+### Vérification sous hook d'inscription 20 ms (#274)
+
+Le hook `SetRegisterHook` (`websocket.go`, appelé par `Run` avant l'inscription) élargit la fenêtre de course. Procédure :
+
+1. Créer dans `server-go/internal/server` un fichier de test temporaire qui installe `SetRegisterHook` avec une pause de 20 ms. **Ne jamais le committer** ; le supprimer après le run.
+2. `export PATH=$PATH:/usr/local/go/bin` (`go` est absent du PATH des sessions d'agents).
+3. `cd server-go && CGO_ENABLED=1 go test -race -count=20 -timeout 60m ./internal/server`
+
+Résultat attendu : seul `TestBuzzerWSHub_ConcurrentConnections` échoue (artefact connu, échec 20/20 sous hook) et aucun data race. Le `-timeout` par défaut (10 min) est insuffisant : count=20 sur ce paquet dure environ 36 min. Tant que le fichier de hook est présent, `go test` sans `-race` échoue aussi sur ce test.
+
+### Preuve de la porte vitest (#273)
+
+`tests/scripts/ci-gate-273.sh [<ref>]` (défaut : `HEAD`, ref commitée) prouve que `scripts/ci.sh` s'arrête à l'étape vitest :
+
+- **Run A** : `ci.sh` doit réussir (« CI OK », tests `fonts-embed` passés et non sautés).
+- **Run B** : un test vitest rouge injecté doit faire échouer `ci.sh`, sans qu'aucune étape postérieure ne démarre.
+
+Le script travaille dans un `git worktree` jetable, créé dans le dossier frère du dépôt (pas dans `/tmp`, où le `npm` Windows du PATH WSL échoue). `CI_GATE_TMPDIR` change ce dossier. Le worktree est supprimé en fin de script, même en cas d'échec. Code retour : 0 = porte prouvée, 1 = preuve non établie, 2 = erreur d'environnement.
+
+Par défaut, `go` et `govulncheck` sont remplacés par des shims no-op. Avec ces shims, la ligne « CI OK » ne prouve pas que la suite Go passe : cette preuve vient de QA et de la CI. `CI_GATE_REAL_GO=1` exécute les étapes Go réelles ; le run est alors très long (deux exécutions complètes de `ci.sh`).
 
 ### Hypothèse non prouvée
 

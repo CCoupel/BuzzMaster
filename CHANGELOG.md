@@ -2,6 +2,18 @@
 
 Historique des versions du projet BuzzControl.
 
+## [Unreleased] — LOT-1 du milestone en cours (partiel)
+
+### Changed
+
+- **Tests web bloquants dans la CI (#273)** — `scripts/ci.sh` exécute désormais les tests vitest à l'étape `[2/7]`, après le build web et avant l'embed. Un test web rouge fait échouer `ci-branch.yml` et `release.yml`, qui n'appellent que ce script. Durée ajoutée mesurée en local : 110 à 125 s pour 4 209 tests (270 fichiers). Les 4 tests `fonts-embed` « dist/ (build) » s'exécutent au lieu d'être sautés.
+
+### Fixed
+
+- **Tests Go qui publiaient avant l'inscription du client (#274)** — Les dials de test (`dialWSPath`, `dialAdminWS`, `dialWS`) attendent l'inscription du client avant de rendre la connexion. 40 `time.Sleep(50 ms)` d'attente d'inscription sont retirés. Aucune assertion n'est supprimée ni relâchée. Le hub n'est pas modifié : aucun changement de comportement côté produit.
+
+---
+
 ## [11.2.2] - 2026-10-15 — Milestone v11.2.2
 
 ### Added

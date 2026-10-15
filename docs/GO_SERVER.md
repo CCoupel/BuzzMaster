@@ -313,7 +313,9 @@ Pipeline GitHub Actions (`.github/workflows/release.yml`) déclenché sur push `
    - Génère checksums SHA256 pour vérification intégrité
    - Publie la release GitHub
 
-**Frontend web (#270)** : les workflows CI (`ci-branch.yml`, `release.yml`) utilisent **Node 22** (`NODE_VERSION: '22'`, `setup-node` résout la dernière 22.x). Le build web repose sur vite 8 (bundler rolldown, CSS minifié par lightningcss). `scripts/ci.sh` étape 6 exécute `govulncheck ./...` puis `npm audit --audit-level=high` (toutes dépendances) dans `server-go/web`.
+**Frontend web (#270)** : les workflows CI (`ci-branch.yml`, `release.yml`) utilisent **Node 22** (`NODE_VERSION: '22'`, `setup-node` résout la dernière 22.x). Le build web repose sur vite 8 (bundler rolldown, CSS minifié par lightningcss). `scripts/ci.sh` étape 7 exécute `govulncheck ./...` puis `npm audit --audit-level=high` (toutes dépendances) dans `server-go/web`.
+
+**Étapes de `scripts/ci.sh` (#273)** : `[1/7]` npm ci + build web ; `[2/7]` tests vitest (`npm test` = `vitest run`, 270 fichiers / 4209 tests, 110 à 125 s mesurés en local) ; `[3/7]` embed de `dist` ; `[4/7]` build Go ; `[5/7]` `go test -race` ; `[6/7]` `go vet` ; `[7/7]` govulncheck puis audit npm. L'étape vitest vient après le build web et avant l'embed : elle teste un `dist/` frais, et les tests `fonts-embed` « dist/ (build) » s'exécutent au lieu d'être sautés. Un test web rouge fait échouer `ci-branch.yml` et `release.yml`, qui n'appellent que ce script.
 
 **Chaîne d'outils CI (#276)** : actions GitHub sur runtime Node 24 (`checkout@v7`, `setup-go@v7`, `setup-node@v7`, `setup-python@v7`, `upload-artifact@v7`, `download-artifact@v8`, `softprops/action-gh-release@v3`). La version de Go vient de `server-go/go.mod` (`go-version-file`, plus de `GO_VERSION` dans les workflows) : `setup-go` v6+ force `GOTOOLCHAIN=local`, la directive `go` de `go.mod` est donc la seule source de vérité, en CI comme en local. Cache Go indexé sur `server-go/go.sum`. Runner épinglé sur `ubuntu-24.04` (pas `ubuntu-latest`) : tout changement d'image se fait volontairement, après un run `ci-branch.yml` vert sur la nouvelle image.
 
