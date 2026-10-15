@@ -164,3 +164,33 @@ describe.each(['SELECTED', 'QUESTION', 'REVEAL'])('GamePage — panneau MEMOTION
     expect(text).toMatch(/\b5\s?pts?\b/)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Préfixe « jusqu'à » du prorata (#190, m3 de la revue) : avant le jeu, le
+// montant d'une carte en STARS_PRORATA est un maximum. Format historique du
+// panneau conservé : « ★★★ · jusqu'à 5pt » (sans espace avant « pt »).
+// ---------------------------------------------------------------------------
+
+describe.each(['SELECTED', 'QUESTION', 'REVEAL'])('GamePage — panneau MEMOTION, sous-phase %s : préfixe « jusqu\'à » du prorata (#190, m-B)', (subphase) => {
+  it('carte MEMORY par défaut (prorata, ★★★) : « jusqu\'à 5pt »', () => {
+    expect(cardInfoText(subphase, { TYPE: 'MEMORY', DIFFICULTY: 3 })).toMatch(/· jusqu'à 5pt/)
+  })
+
+  it('carte RAFALE par défaut (prorata, ★★) : « jusqu\'à 3pt »', () => {
+    expect(cardInfoText(subphase, { TYPE: 'RAFALE', DIFFICULTY: 2 })).toMatch(/· jusqu'à 3pt/)
+  })
+
+  it('STARS_PRORATA explicite (MEMORY ★★★) : même préfixe que le défaut', () => {
+    expect(cardInfoText(subphase, { TYPE: 'MEMORY', DIFFICULTY: 3, POINTS_RULE: { MODE: 'STARS_PRORATA' } })).toMatch(/jusqu'à 5pt/)
+  })
+
+  it('STARS explicite (tout-ou-rien, MEMORY ★★★) : « 5pt » SANS préfixe', () => {
+    const text = cardInfoText(subphase, { TYPE: 'MEMORY', DIFFICULTY: 3, POINTS_RULE: { MODE: 'STARS' } })
+    expect(text).toMatch(/\b5pt/)
+    expect(text).not.toContain('jusqu\'à')
+  })
+
+  it('carte SPEEDY par défaut / Montant fixe : aucun préfixe', () => {
+    expect(cardInfoText(subphase, { DIFFICULTY: 2 })).not.toContain('jusqu\'à')
+  })
+})

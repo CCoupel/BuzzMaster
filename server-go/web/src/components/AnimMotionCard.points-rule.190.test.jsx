@@ -122,3 +122,42 @@ describe('AnimMotionGrid — NR : la grille anim reste en ★ seules, aucun mont
     expect(container).not.toHaveTextContent(/\b10\b/)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Préfixe « jusqu'à » du prorata (#190, m3 de la revue, maquette
+// admin_question_editor__memotion_card_points_rule §3 : « jusqu'à 5 pts ») :
+// avant le jeu, le montant d'une carte en STARS_PRORATA est un MAXIMUM, pas un
+// gain garanti. Les autres règles n'ont pas de préfixe.
+// ---------------------------------------------------------------------------
+
+describe('AnimMotionCard (SELECTED) — préfixe « jusqu\'à » du prorata (#190, m-B)', () => {
+  it('carte MEMORY par défaut (prorata, ★★★) : le montant commence par « jusqu\'à » (« jusqu\'à 5 pts »)', () => {
+    renderSelected(selectedCard({ TYPE: 'MEMORY', DIFFICULTY: 3 }))
+    expect(screen.getByText(/jusqu'à 5 pts/).textContent.startsWith('jusqu\'à ')).toBe(true)
+  })
+
+  it('carte RAFALE par défaut (prorata, ★★) : « jusqu\'à 3 pts »', () => {
+    renderSelected(selectedCard({ TYPE: 'RAFALE', DIFFICULTY: 2 }))
+    expect(screen.getByText(/jusqu'à 3 pts/).textContent.startsWith('jusqu\'à ')).toBe(true)
+  })
+
+  it('STARS_PRORATA explicite (MEMORY ★★★) : même préfixe que le défaut', () => {
+    renderSelected(selectedCard({ TYPE: 'MEMORY', DIFFICULTY: 3, POINTS_RULE: { MODE: 'STARS_PRORATA' } }))
+    expect(screen.getByText(/jusqu'à 5 pts/)).toBeInTheDocument()
+  })
+
+  it('STARS explicite (tout-ou-rien, MEMORY ★★★) : « 5 pts » SANS préfixe', () => {
+    const { container } = renderSelected(selectedCard({ TYPE: 'MEMORY', DIFFICULTY: 3, POINTS_RULE: { MODE: 'STARS' } }))
+    expect(container).toHaveTextContent(/5 pts/)
+    expect(container).not.toHaveTextContent(/jusqu'à/)
+  })
+
+  it.each([
+    ['SPEEDY par défaut', { TYPE: 'SPEEDY', DIFFICULTY: 2 }],
+    ['QCM Montant fixe', { TYPE: 'QCM', POINTS_RULE: { MODE: 'FIXED', VALUE: 10 } }],
+    ['RAFALE Par unité', { TYPE: 'RAFALE', POINTS_RULE: { MODE: 'PER_UNIT', VALUE: 2 } }],
+  ])('%s : aucun préfixe « jusqu\'à »', (_label, card) => {
+    const { container } = renderSelected(selectedCard(card))
+    expect(container).not.toHaveTextContent(/jusqu'à/)
+  })
+})

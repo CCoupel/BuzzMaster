@@ -149,3 +149,43 @@ describe('AnimPage — bandeau SELECTED d\'une carte MEMOTION : montant selon PO
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// Préfixe « jusqu'à » du prorata (#190, m3 de la revue) : avant le jeu, le
+// montant d'une carte en STARS_PRORATA est un maximum. Format historique du
+// bandeau conservé : « ★★★ · jusqu'à 5pts » (sans espace avant « pt »).
+// ---------------------------------------------------------------------------
+
+describe('AnimPage — bandeau SELECTED : préfixe « jusqu\'à » du prorata (#190, m-B)', () => {
+  it('carte MEMORY par défaut (prorata, ★★★) : « · jusqu\'à 5pts »', () => {
+    const texts = statements({ TYPE: 'MEMORY', DIFFICULTY: 3 })
+    expect(texts.length).toBeGreaterThan(0)
+    for (const text of texts) expect(text).toMatch(/· jusqu'à 5\s?pts\b/)
+  })
+
+  it('carte RAFALE par défaut (prorata, ★★) : « · jusqu\'à 3pts »', () => {
+    const texts = statements({ TYPE: 'RAFALE', DIFFICULTY: 2 })
+    for (const text of texts) expect(text).toMatch(/· jusqu'à 3\s?pts\b/)
+  })
+
+  it('STARS_PRORATA explicite (MEMORY ★★★) : même préfixe que le défaut', () => {
+    const texts = statements({ TYPE: 'MEMORY', DIFFICULTY: 3, POINTS_RULE: { MODE: 'STARS_PRORATA' } })
+    for (const text of texts) expect(text).toMatch(/jusqu'à 5\s?pts\b/)
+  })
+
+  it('STARS explicite (tout-ou-rien, MEMORY ★★★) : « 5pts » SANS préfixe', () => {
+    const texts = statements({ TYPE: 'MEMORY', DIFFICULTY: 3, POINTS_RULE: { MODE: 'STARS' } })
+    for (const text of texts) {
+      expect(text).toMatch(/\b5\s?pts\b/)
+      expect(text).not.toContain('jusqu\'à')
+    }
+  })
+
+  it.each([
+    ['SPEEDY par défaut', { DIFFICULTY: 2 }],
+    ['QCM Montant fixe', { TYPE: 'QCM', POINTS_RULE: { MODE: 'FIXED', VALUE: 10 } }],
+    ['RAFALE Par unité', { TYPE: 'RAFALE', POINTS_RULE: { MODE: 'PER_UNIT', VALUE: 2 } }],
+  ])('%s : aucun préfixe « jusqu\'à »', (_label, card) => {
+    for (const text of statements(card)) expect(text).not.toContain('jusqu\'à')
+  })
+})
