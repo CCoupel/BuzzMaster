@@ -2978,9 +2978,9 @@ export default function QuestionsPage() {
                             )}
                             {/* #279 (LOT-6) — carte héritée chargée avec des indices : ignorés, jamais renvoyés. */}
                             {cardType === 'QCM' && card.legacyHintsRemoved && (
-                              <div className="motion-card-lock-reason">
-                                <span>ℹ️</span>
-                                <span>Indices retirés : une carte MEMOTION n'a plus d'indices (LOT-6)</span>
+                              <div className="motion-card-lock-reason" role="status">
+                                <span aria-hidden="true">ℹ️</span>
+                                <span>Indices retirés : une carte MEMOTION n'a plus d'indices.</span>
                               </div>
                             )}
                             {cardType === 'MEMORY' && (
