@@ -5,7 +5,7 @@
 **Testeur** : QA
 **Issue** : #185 — première carte MEMOTION réellement jouable au-delà de SPEEDY. QCM en carte est
 **affichage + désignation, sans entrée joueur** (contrat §7.1) : les quatre réponses sont montrées,
-les indices invalident progressivement des réponses à l'écran, et l'animateur désigne l'équipe
+les indices invalident progressivement des réponses à l'écran *(retiré en v11.2.2 — LOT-6 / #279 : une carte QCM n'a plus d'indices)*, et l'animateur désigne l'équipe
 gagnante par le geste `MEMOTION_DONE` habituel — exactement comme une carte SPEEDY.
 **Référence** : `contracts/question-types.md` §7/§7.1, plan `_work/reports/plan-memotion-v700-20260821.md`
 
@@ -25,8 +25,8 @@ recette spécifique à #185 : une carte QCM réellement en jeu au sein d'une man
 - [ ] Environnement : QUALIF ou LOCAL
 - [ ] Un quiz contenant une question MEMOTION **mélangeant** au moins 2 cartes SPEEDY et 2 cartes
       QCM (créées via l'éditeur `/admin` → Questions, cf. `memotion-card-type-184.md` Scénario 4
-      pour créer une carte QCM), avec sur au moins une carte QCM les indices activés
-      (`QCM_HINTS_ENABLED=true`) et un chrono de carte assez long pour observer les seuils (ex: 20s)
+      pour créer une carte QCM) *(depuis LOT-6 / #279 les indices ne sont plus proposés sur une
+      carte : plus d'« indices activés » à préparer, voir `memotion-card-hints-lot6.md`)*
 - [ ] Trois postes/onglets ouverts : `/anim` (tablette), `/tv` (affichage), `/admin` (régie)
 - [ ] Au moins 2 équipes actives avec bumpers assignés
 
@@ -50,7 +50,13 @@ identique dans sa conduite à une carte SPEEDY (AC1 de #185).
 
 ---
 
-## Scénario 2 — Indices QCM sur le timer de carte : seuils, apparition progressive
+## Scénario 2 — ~~Indices QCM sur le timer de carte : seuils, apparition progressive~~ — **RETIRÉ LOT-6 (#279)**
+
+> **Scénario retiré (LOT-6, v11.2.2, décision utilisateur 2026-10-15).** Une carte QCM d'une question
+> MEMOTION n'a plus d'indices : l'éditeur ne les propose plus, le serveur les ignore et les retire à
+> l'enregistrement, le moteur n'en déclenche plus jamais. **Ne plus exécuter ce scénario** (son résultat
+> attendu est devenu faux). Il est remplacé par le scénario 2 de `tests/procedures/memotion-card-hints-lot6.md`
+> (aucune réponse invalidée pendant toute la carte). Le tableau ci-dessous est conservé pour mémoire.
 
 **Objectif** : Vérifier que le mécanisme d'indices d'une carte QCM se comporte comme celui d'une
 question QCM classique (AC2 de #185) — sur les données observables directement : quelles réponses
@@ -64,7 +70,7 @@ s'invalident, et quand.
 | 4 | Comparer au comportement d'une **question QCM classique** (hors carte) avec les mêmes seuils | Même logique d'apparition progressive (une réponse à la fois, jamais la bonne, jamais deux fois la même) | | |
 | 5 | ⚠️ **Point d'attention connu** — observer la **barre de chrono** elle-même (pas la grille de réponses) | À la différence d'une question QCM classique, la barre de chrono d'une carte QCM ne porte **pas** les repères visuels (petits traits) indiquant à l'avance où les seuils se déclencheront — **comportement actuellement différent, signalé au CDP, pas un bug à corriger silencieusement par QA**. Noter si observé, ne pas bloquer la validation sur ce seul point. | | |
 
-**Verdict** : [ ] PASS  [ ] FAIL
+**Verdict** : ~~PASS / FAIL~~ — **sans objet (scénario retiré LOT-6 / #279)**
 
 ---
 
@@ -104,7 +110,7 @@ test automatisé (`TestMEMOTION_QCMCard_NoNewInboundAction`,
 ## Critères de Validation Globale
 
 - [ ] Carte QCM conduite de bout en bout depuis `/anim`, affichée correctement sur `/tv`
-- [ ] Indices QCM déclenchés sur le timer de carte : seuils respectés, apparition progressive, jamais la bonne réponse invalidée
+- ~~Indices QCM déclenchés sur le timer de carte~~ — **retiré LOT-6 (#279)** : critère remplacé par `memotion-card-hints-lot6.md` (aucune réponse invalidée pendant une carte)
 - [ ] Aucune régression sur les cartes SPEEDY d'une même manche mixte
 - [ ] Aucune action entrante nouvelle (buzz et VJoueur restent sans effet sur une carte QCM)
 - [ ] Point d'attention noté (barre de chrono sans repères visuels sur carte QCM) — signalé, pas bloquant

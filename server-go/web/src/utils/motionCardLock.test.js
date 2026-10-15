@@ -26,11 +26,10 @@ const NEW_QCM_CARD = {
   questionImage: null,
   qcmAnswers: { RED: '', GREEN: '', YELLOW: '', BLUE: '' },
   qcmCorrect: '',
-  qcmHintsEnabled: false,
-  qcmHintThreshold1: 0.25,
-  qcmHintThreshold2: 0.125,
-  qcmPenalty1: 0.67,
-  qcmPenalty2: 0.33,
+  // [CHANGED] #279 (LOT-6, v11.2.2, contrat question-types.md §3.2/§7.1, CHANGELOG
+  // contrats [20261015]) : une carte n'a plus d'indices — qcmHintsEnabled,
+  // qcmHintThreshold1/2 et qcmPenalty1/2 ne sont plus des champs de carte, donc
+  // plus des valeurs de création à comparer (la carte neuve n'en porte plus).
 }
 
 // #187 — valeurs de création réelles d'une carte MEMORY neuve, reproduites
@@ -73,10 +72,10 @@ describe('isMotionCardTypeLocked — carte neuve, déverrouillée', () => {
     expect(isMotionCardTypeLocked(NEW_MEMORY_CARD)).toBe(false)
   })
 
-  // Piège explicite du contrat §3.2 : QCM_HINT_THRESHOLD_1 (0.25) et
-  // QCM_PENALTY_1 (0.67) naissent NON vides — un prédicat par non-nullité
-  // verrouillerait cette carte dès sa création.
-  it('carte QCM neuve : déverrouillée malgré des OwnedFields non vides (thresholds/pénalités par défaut)', () => {
+  // Le piège « OwnedField qui naît non vide » du contrat §3.2 ne concerne plus QCM
+  // depuis #279 (LOT-6 : plus d'indices sur une carte) ; il reste valable pour
+  // MEMORY / RAFALE (voir leurs cartes neuves ci-dessous).
+  it('carte QCM neuve (réponses et désignation vides) : déverrouillée', () => {
     expect(isMotionCardTypeLocked(NEW_QCM_CARD)).toBe(false)
   })
 
@@ -119,13 +118,26 @@ describe('isMotionCardTypeLocked — contenu propre au type, verrouille', () => 
     expect(isMotionCardTypeLocked(card)).toBe(true)
   })
 
-  it('QCM : seuil d\'indice déplacé → verrouillée', () => {
+  // [CHANGED] #279 (LOT-6) — ces deux cas affirmaient « verrouillée » : les champs
+  // d'indices n'existent plus sur une carte, ils n'interviennent plus dans le
+  // verrou. Une carte chargée avec d'anciennes valeurs résiduelles reste libre.
+  it('QCM : seuil d\'indice résiduel déplacé → SANS EFFET, déverrouillée (#279)', () => {
     const card = { ...NEW_QCM_CARD, qcmHintThreshold1: 0.4 }
-    expect(isMotionCardTypeLocked(card)).toBe(true)
+    expect(isMotionCardTypeLocked(card)).toBe(false)
   })
 
-  it('QCM : indices activés (qcmHintsEnabled) → verrouillée', () => {
+  it('QCM : indices activés résiduels (qcmHintsEnabled) → SANS EFFET, déverrouillée (#279)', () => {
     const card = { ...NEW_QCM_CARD, qcmHintsEnabled: true }
+    expect(isMotionCardTypeLocked(card)).toBe(false)
+  })
+
+  it('QCM : indicateur d\'affichage legacyHintsRemoved (carte héritée à indices) → ne verrouille jamais (#279)', () => {
+    const card = { ...NEW_QCM_CARD, legacyHintsRemoved: true }
+    expect(isMotionCardTypeLocked(card)).toBe(false)
+  })
+
+  it('QCM : une réponse saisie verrouille toujours, même avec des indices résiduels (#279)', () => {
+    const card = { ...NEW_QCM_CARD, qcmHintsEnabled: true, qcmAnswers: { ...NEW_QCM_CARD.qcmAnswers, BLUE: 'Zagreb' } }
     expect(isMotionCardTypeLocked(card)).toBe(true)
   })
 
