@@ -771,8 +771,8 @@ Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mo
 "MEMOTION_ACTIVE": {
   "CARD_ID": "mc-3",          // "" hors SELECTED/QUESTION/REVEAL
   "TYPE": "QCM",              // "" hors emplacement actif ; "SPEEDY" pour une carte historique
-  "STATE": {                  // état vivant du type — forme libre, propre au type
-    "QCM_INVALIDATED": ["RED", "YELLOW"]
+  "STATE": {                  // état vivant du type — forme libre, propre au type ; {} pour une carte QCM (#279)
+    "QCM_INVALIDATED": ["RED", "YELLOW"]   // jamais alimenté pour un hôte carte QCM depuis #279
   }
 }
 ```
@@ -792,7 +792,7 @@ Jeu de cartes à 3 faces avec grille interactive, difficulté configurable et mo
 - `""` quand `CARD_ID` est vide
 
 **`STATE`** :
-- Structure propre au type — ex. `{"QCM_INVALIDATED": [...]}` pour un QCM
+- Structure propre au type — ex. `{"QCM_INVALIDATED": [...]}` pour une question hôte QCM. **Carte QCM : `{}`** pendant toute la carte (v11.2.2, #279, `contracts/game-state.md`, `contracts/question-types.md` §7.1)
 - Vide (`{}`) quand aucune carte n'est active
 - Remis à zéro à chaque sélection de nouvelle carte
 
@@ -923,7 +923,7 @@ Structure commune à tous les jeux :
 2. **SELECTED → QUESTION** : Admin clique "Démarrer"
    - Action : `MEMOTION_FLIP`
    - Transitions : `MEMOTION_SUBPHASE = "QUESTION"`, `CURRENT_TIME = QUESTION.TIME`, timer démarre
-   - **`MEMOTION_ACTIVE.STATE` alimenté** selon le type (ex. QCM : indices en cours, réponses invalidées…)
+   - **`MEMOTION_ACTIVE.STATE` alimenté** selon le type. Une carte QCM n'a pas d'indices (#279) : aucun `QCM_HINT` n'est déclenché ni diffusé pendant la carte, et `STATE` reste `{}`, y compris pour une carte stockée qui porterait encore des champs d'indices
 
 3. **QUESTION contrôle-temps** : Timer décroît ou arrêt manuel
    - Action : `MEMOTION_STOP_TIMER` (optionnel, si arrêt avant expiration)

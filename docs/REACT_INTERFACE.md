@@ -162,6 +162,15 @@ Fonctions pures, partagées par l'éditeur, l'anim et le panneau admin. Elles re
 
 Consommateurs du montant : `AnimMotionCard` et `AnimPage` (zoom et sélection), `AnimConductPanel` (gain prévisionnel), `GamePage` (panneau admin). **La grille anim (`AnimMotionGrid`) et la grille TV (`PlayerDisplay`) n'appellent pas ces fonctions** : elles restent en ★ seules (décision utilisateur du 2026-10-15).
 
+### QcmAnswersEditor — prop `showHints` et carte QCM sans indices (v11.2.2, #279)
+
+Fichier : `components/QcmAnswersEditor.jsx`. Sous-éditeur QCM partagé par l'hôte question et la carte MEMOTION de `QuestionsPage.jsx`.
+
+- Prop `showHints` (défaut `true`) : `false` masque tout le bloc « indices » (`qcm-hints-toggle`). L'hôte question garde le bloc (défaut) ; l'éditeur de carte passe `showHints={false}`.
+- Une carte QCM n'a donc pas d'indices à l'écran, ni à l'enregistrement (`QuestionsPage.jsx` : état de carte et sérialisation sans les cinq champs `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2`). Côté serveur, voir `docs/DATA_MODELS.md`.
+- **Carte héritée** : une carte chargée avec `QCM_HINTS_ENABLED` vrai (`legacyHintsRemoved`) affiche sous le sous-éditeur la ligne « Indices retirés : une carte MEMOTION n'a plus d'indices (LOT-6) » (classe `motion-card-lock-reason`, icône ℹ️). Cette information est locale : elle n'est jamais envoyée au serveur, et elle disparaît au rechargement.
+- Le message de verrou QCM d'une carte (`utils/motionCardLock.js`) ne mentionne plus les réglages d'indices.
+
 ### Podium Component (v2.4.0)
 
 Shared component for displaying rankings with tie support:
@@ -1689,7 +1698,6 @@ export function MotionCardEditor({ card, onChange }) {
         <QcmEditor
           answers={card.QCM_ANSWERS}
           correct={card.QCM_CORRECT}
-          hints={card.QCM_HINTS_ENABLED}
           onChange={(update) => onChange({ ...card, ...update })}
         />
       )}
