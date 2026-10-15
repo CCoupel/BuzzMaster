@@ -30,6 +30,8 @@ function toSet(value) {
  * @param {boolean} [props.ghost=false] - affiche les étoiles vides (★☆☆)
  * @param {React.ReactNode} [props.label] - défaut « Difficulté » / « Difficultés »
  * @param {boolean} [props.showModeBadge=true]
+ * @param {(d: number) => string} [props.chipTitle] - infobulle d'une chip (défaut « Difficulte N ») ;
+ *   à surcharger quand deux pickers cohabitent sur la même page (filtre + formulaire)
  * @param {string} [props.className]
  */
 export default function DifficultyPicker({
@@ -42,6 +44,7 @@ export default function DifficultyPicker({
   ghost = false,
   label,
   showModeBadge = true,
+  chipTitle = (d) => `Difficulte ${d}`,
   className,
 }) {
   const labelId = useId()
@@ -83,7 +86,7 @@ export default function DifficultyPicker({
               type="button"
               className={`diff-chip${active ? ' active' : ''}`}
               onClick={() => handleClick(d)}
-              title={`Difficulte ${d}`}
+              title={chipTitle(d)}
               {...a11y}
             >
               {isMulti && active && <span className="check">✓</span>}

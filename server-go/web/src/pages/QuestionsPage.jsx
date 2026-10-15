@@ -16,7 +16,6 @@ import { effectiveRafaleCategories, effectiveRafaleDifficulties } from '../utils
 import Button from '../components/Button'
 import Card, { CardHeader, CardBody } from '../components/Card'
 import CategoryBalance from '../components/CategoryBalance'
-import CategorySelector from '../components/CategorySelector'
 import CategoryPicker from '../components/CategoryPicker'
 import DifficultyPicker from '../components/DifficultyPicker'
 import CategoryBadge from '../components/CategoryBadge'
@@ -2261,7 +2260,7 @@ export default function QuestionsPage() {
                   </div>
                 </div>
 
-                {/* Category Selector — CategorySelector.jsx (v8.0.0, #16/#197,
+                {/* Sélecteur de catégorie unique — CategoryPicker (#221, ex-CategorySelector v8.0.0,
                     bugfix cohérence UI), extrait ici (#95/#97/#100), aussi
                     utilisé par RafalePage.jsx — un seul composant, plus de
                     variante dupliquée. #216 (réouverture assumée de #107) —
@@ -2272,8 +2271,9 @@ export default function QuestionsPage() {
                     unique, inchangé. */}
                 {formData.type !== 'RAFALE' && (
                   <div className="form-group">
-                    <label>Categorie</label>
-                    <CategorySelector
+                    <CategoryPicker
+                      mode="single"
+                      allowCreate
                       value={formData.category}
                       onChange={(key) => handleInputChange('category', key)}
                       customCategories={customCategories}
@@ -2873,17 +2873,12 @@ export default function QuestionsPage() {
                                 étoiles pleines de la carte elle-même (§6.2), jamais
                                 un filtre. */}
                             <div className="memotion-difficulty-row">
-                              <span className="memotion-diff-label">Valeur de la carte :</span>
-                              {[1, 2, 3].map(d => (
-                                <button
-                                  key={d}
-                                  type="button"
-                                  className={`memotion-diff-btn ${card.difficulty === d ? 'active' : ''}`}
-                                  onClick={() => handleMotionCardChange(card.id, 'difficulty', d)}
-                                >
-                                  {'★'.repeat(d)}
-                                </button>
-                              ))}
+                              <DifficultyPicker
+                                mode="single"
+                                label="Valeur de la carte :"
+                                value={card.difficulty}
+                                onChange={d => handleMotionCardChange(card.id, 'difficulty', d)}
+                              />
                             </div>
                             {/* Recto image (optional) */}
                             <div className="memotion-img-row">

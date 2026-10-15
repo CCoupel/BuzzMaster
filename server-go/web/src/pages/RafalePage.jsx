@@ -4,7 +4,6 @@ import { useOptionalGame } from '../hooks/GameContext'
 import { useCategories } from '../hooks/useCategories'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import CategoryBadge from '../components/CategoryBadge'
-import CategorySelector from '../components/CategorySelector'
 import CategoryPicker from '../components/CategoryPicker'
 import DifficultyPicker from '../components/DifficultyPicker'
 import RafaleAIGenerateModal from '../components/RafaleAIGenerateModal'
@@ -12,7 +11,6 @@ import Button from '../components/Button'
 import Card from '../components/Card'
 import './RafalePage.css'
 
-const DIFFICULTIES = [1, 2, 3]
 
 const EMPTY_FORM = { ID: null, QUESTION: '', ANSWER: '', CATEGORY: '', DIFFICULTY: 1 }
 
@@ -502,11 +500,11 @@ export default function RafalePage() {
                 </span>
               </div>
               <div className="form-group">
-                <label>Categorie</label>
-                {/* CategorySelector (v8.0.0, #16/#197, bugfix cohérence UI) —
-                    meme composant que l'editeur de question standard
-                    (QuestionsPage.jsx), plus de <select> texte distinct. */}
-                <CategorySelector
+                {/* CategoryPicker (#221, ex-CategorySelector v8.0.0 #16/#197) — même
+                    composant que l'éditeur de question standard (QuestionsPage.jsx). */}
+                <CategoryPicker
+                  mode="single"
+                  allowCreate
                   value={form.CATEGORY}
                   onChange={(key) => setForm(prev => ({ ...prev, CATEGORY: key }))}
                   customCategories={customCategories}
@@ -514,19 +512,13 @@ export default function RafalePage() {
                 />
               </div>
               <div className="form-group">
-                <label>Difficulte</label>
-                <div className="rafale-diff-row">
-                  {DIFFICULTIES.map(d => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={`rafale-diff-btn ${form.DIFFICULTY === d ? 'active' : ''}`}
-                      onClick={() => setForm(prev => ({ ...prev, DIFFICULTY: d }))}
-                    >
-                      {'★'.repeat(d)}
-                    </button>
-                  ))}
-                </div>
+                <DifficultyPicker
+                  mode="single"
+                  label="Difficulte"
+                  chipTitle={(d) => `Difficulte de la question : ${d}`}
+                  value={form.DIFFICULTY}
+                  onChange={(d) => setForm(prev => ({ ...prev, DIFFICULTY: d }))}
+                />
               </div>
 
               {formError && <p className="rafale-status rafale-status-error">{formError}</p>}
