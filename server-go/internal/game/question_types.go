@@ -1,5 +1,11 @@
 package game
 
+import (
+	"fmt"
+	"math"
+	"strings"
+)
+
 // TypeDescriptor documents one QuestionType's shape and capabilities: the
 // TypedContent fields it owns, its media slots when nested in a MEMOTION
 // card, whether it may be nested at all, and whether it needs its own
@@ -278,4 +284,170 @@ type CardTypeContentMismatchError struct {
 func (e *CardTypeContentMismatchError) Error() string {
 	return "CARD_TYPE_CONTENT_MISMATCH: card " + e.CardID + " declares TYPE=" + string(e.Type) +
 		" but carries " + e.Field + ", which belongs to " + string(e.Owner)
+}
+
+// PointsRuleValueMin / PointsRuleValueMax bound POINTS_RULE.VALUE for the
+// modes that need one (FIXED, PER_UNIT) — contract question-types.md §6.2
+// (#190): an integer between 1 and 999.
+const (
+	PointsRuleValueMin = 1
+	PointsRuleValueMax = 999
+)
+
+// allPointsRuleModes lists the four POINTS_RULE.MODE values of the contract
+// (§6.2) — the only ones ValidatePointsRule accepts as "known".
+var allPointsRuleModes = []PointsRuleMode{
+	PointsRuleModeStars, PointsRuleModeFixed, PointsRuleModePerUnit, PointsRuleModeStarsProrata,
+}
+
+// AllowedPointsRuleModes returns the POINTS_RULE.MODE values a card of type t
+// may carry — contract §6.2 "Applicabilité par type" (#190). nil for an
+// unregistered type.
+//
+// The binary / progression classification is DERIVED from the registry, not
+// stored as a second field that could diverge: a type whose
+// DefaultPointsRule is STARS_PRORATA reports Units/UnitsTotal (progression:
+// MEMORY, RAFALE) and accepts all four modes, STARS_PRORATA first (its
+// default); any other type is binary (UnitsTotal = 0) where STARS_PRORATA
+// would always be worth 0 and PER_UNIT is indistinguishable from FIXED, so
+// only STARS and FIXED are accepted.
+func AllowedPointsRuleModes(t QuestionType) []PointsRuleMode {
+	d, ok := questionTypeRegistry[t]
+	if !ok {
+		return nil
+	}
+	if d.DefaultPointsRule == PointsRuleModeStarsProrata {
+		return []PointsRuleMode{
+			PointsRuleModeStarsProrata, PointsRuleModeStars, PointsRuleModeFixed, PointsRuleModePerUnit,
+		}
+	}
+	return []PointsRuleMode{PointsRuleModeStars, PointsRuleModeFixed}
+}
+
+// ValidatePointsRule checks one MEMOTION card payload's POINTS_RULE against
+// contract §6.2 (#190), applied at save time only (POST /questions) — cards
+// already stored are never validated on read or play. cardType is the card's
+// own (possibly empty ⇒ SPEEDY) TYPE. Returns a *PointsRuleError, or nil:
+//
+//   - POINTS_RULE absent, null, or with an empty/absent MODE ⇒ nil (the
+//     type's default applies — "défaut explicite = champ absent");
+//   - MODE outside the four contract values ⇒ POINTS_RULE_INVALID_MODE;
+//   - MODE not in AllowedPointsRuleModes(effective type) ⇒
+//     POINTS_RULE_MODE_NOT_APPLICABLE;
+//   - FIXED / PER_UNIT without an integer VALUE in [1, 999] ⇒
+//     POINTS_RULE_VALUE_REQUIRED (VALUE is ignored for STARS / STARS_PRORATA).
+//
+// VALUE arrives as float64 (JSON decoded into map[string]interface{}), hence
+// the integrality check.
+func ValidatePointsRule(cardType QuestionType, card map[string]interface{}) error {
+	effective := cardType
+	if effective == "" {
+		effective = QuestionTypeSpeedy
+	}
+	raw, exists := card["POINTS_RULE"]
+	if !exists || raw == nil {
+		return nil
+	}
+	cardID := stringOrEmpty(card["ID"])
+	rule, isMap := raw.(map[string]interface{})
+	if !isMap {
+		return &PointsRuleError{Code: PointsRuleErrInvalidMode, CardID: cardID, Type: effective,
+			Detail: "declares a POINTS_RULE that is not an object"}
+	}
+	modeRaw, hasMode := rule["MODE"]
+	if !hasMode || modeRaw == nil {
+		return nil
+	}
+	modeStr, isString := modeRaw.(string)
+	if !isString {
+		return &PointsRuleError{Code: PointsRuleErrInvalidMode, CardID: cardID, Type: effective,
+			Detail: "declares a POINTS_RULE.MODE that is not a string"}
+	}
+	if modeStr == "" {
+		return nil
+	}
+	mode := PointsRuleMode(modeStr)
+
+	known := false
+	for _, m := range allPointsRuleModes {
+		if m == mode {
+			known = true
+			break
+		}
+	}
+	if !known {
+		return &PointsRuleError{Code: PointsRuleErrInvalidMode, CardID: cardID, Type: effective,
+			Detail: fmt.Sprintf("declares POINTS_RULE.MODE=%s, which is not one of %s",
+				modeStr, joinPointsRuleModes(allPointsRuleModes))}
+	}
+
+	allowed := AllowedPointsRuleModes(effective)
+	applicable := false
+	for _, m := range allowed {
+		if m == mode {
+			applicable = true
+			break
+		}
+	}
+	if !applicable {
+		return &PointsRuleError{Code: PointsRuleErrModeNotApplicable, CardID: cardID, Type: effective,
+			Detail: fmt.Sprintf("declares POINTS_RULE.MODE=%s, which is not applicable to this type (accepted: %s)",
+				modeStr, joinPointsRuleModes(allowed))}
+	}
+
+	if mode == PointsRuleModeFixed || mode == PointsRuleModePerUnit {
+		if v, ok := pointsRuleIntValue(rule["VALUE"]); !ok || v < PointsRuleValueMin || v > PointsRuleValueMax {
+			return &PointsRuleError{Code: PointsRuleErrValueRequired, CardID: cardID, Type: effective,
+				Detail: fmt.Sprintf("declares POINTS_RULE.MODE=%s, which requires an integer VALUE between %d and %d",
+					modeStr, PointsRuleValueMin, PointsRuleValueMax)}
+		}
+	}
+	return nil
+}
+
+// pointsRuleIntValue extracts an integer from a decoded-JSON VALUE: float64
+// (encoding/json) with no fractional part, or a Go int. Anything else
+// (absent, string, bool, 2.5, NaN/Inf) is not an integer.
+func pointsRuleIntValue(v interface{}) (int, bool) {
+	switch x := v.(type) {
+	case float64:
+		if math.IsNaN(x) || math.IsInf(x, 0) || x != math.Trunc(x) || math.Abs(x) > 1e9 {
+			return 0, false
+		}
+		return int(x), true
+	case int:
+		return x, true
+	default:
+		return 0, false
+	}
+}
+
+func joinPointsRuleModes(modes []PointsRuleMode) string {
+	parts := make([]string, len(modes))
+	for i, m := range modes {
+		parts[i] = string(m)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// POINTS_RULE_* error codes (contract §6.2, #190).
+const (
+	PointsRuleErrInvalidMode       = "POINTS_RULE_INVALID_MODE"
+	PointsRuleErrModeNotApplicable = "POINTS_RULE_MODE_NOT_APPLICABLE"
+	PointsRuleErrValueRequired     = "POINTS_RULE_VALUE_REQUIRED"
+)
+
+// PointsRuleError is the HTTP 400 POINTS_RULE_* error family (contract §6.2),
+// shaped like CardTypeContentMismatchError / CARD_TYPE_NOT_NESTABLE: the
+// message starts with the machine-readable code, then names the card and
+// its effective type.
+type PointsRuleError struct {
+	Code   string
+	CardID string
+	Type   QuestionType
+	Detail string
+}
+
+func (e *PointsRuleError) Error() string {
+	return e.Code + ": card " + e.CardID + " (TYPE=" + string(e.Type) + ") " + e.Detail
 }
