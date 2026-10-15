@@ -1103,14 +1103,28 @@ Le défaut choisi dans l'éditeur n'écrit donc **jamais** `POINTS_RULE` : le ch
 | Binaire : `SPEEDY`, `QCM` | `STARS`, `FIXED` | `STARS` |
 | Progression : `MEMORY`, `RAFALE` | `STARS_PRORATA`, `STARS`, `FIXED`, `PER_UNIT` | `STARS_PRORATA` |
 
-- `VALUE` : entier compris entre **1 et 999**, requis pour `FIXED` et `PER_UNIT`. Ignoré (et pouvant être omis) pour `STARS` et `STARS_PRORATA`.
-- À l'enregistrement (`POST /questions`), le serveur refuse la requête entière en **HTTP 400** si la règle n'est pas valide. Trois codes d'erreur :
-  - `POINTS_RULE_INVALID_MODE` : `MODE` hors des quatre valeurs.
-  - `POINTS_RULE_MODE_NOT_APPLICABLE` : `STARS_PRORATA` ou `PER_UNIT` sur un type binaire.
-  - `POINTS_RULE_VALUE_REQUIRED` : `FIXED` ou `PER_UNIT` sans `VALUE` entier entre 1 et 999.
+- `VALUE` : entier compris entre **1 et 999**, requis pour `FIXED` et `PER_UNIT`. **Ignorée** pour `STARS` et `STARS_PRORATA` : elle peut être absente ou invalide sans refus.
+- Les valeurs de `MODE` sont **sensibles à la casse** : `fixed` est refusé comme `POINTS_RULE_INVALID_MODE`.
+
+**Ordre d'évaluation à l'enregistrement** (`POST /questions`, carte par carte), premier refus gagnant :
+
+1. `POINTS_RULE` absent, `null`, sans `MODE`, ou `MODE` `null` / `""` : accepté (défaut du type).
+2. `POINTS_RULE` non-objet, `MODE` non-chaîne, ou `MODE` hors de `STARS`, `FIXED`, `PER_UNIT`, `STARS_PRORATA` → `POINTS_RULE_INVALID_MODE`.
+3. `MODE` hors des modes acceptés pour le type effectif → `POINTS_RULE_MODE_NOT_APPLICABLE`. Ce refus passe avant `VALUE_REQUIRED` : `PER_UNIT` sans `VALUE` sur SPEEDY donne `NOT_APPLICABLE`.
+4. `FIXED` ou `PER_UNIT` sans `VALUE` entière entre 1 et 999 (absente, 0, 1000, négative, décimale, chaîne, `null`) → `POINTS_RULE_VALUE_REQUIRED`.
+5. Mode explicite égal au défaut du type (par exemple `STARS_PRORATA` sur MEMORY) : accepté.
+
+**Forme du refus** : réponse HTTP **400**, corps en texte brut (`text/plain`), requête entière rejetée, rien n'est écrit. Le corps suit le format `<CODE>: card <ID> (TYPE=<type effectif>) <détail>`, par exemple :
+
+```
+POINTS_RULE_MODE_NOT_APPLICABLE: card mc-7 (TYPE=SPEEDY) declares POINTS_RULE.MODE=PER_UNIT, which is not applicable to this type (accepted: STARS, FIXED)
+```
+
+`<ID>` est l'`ID` de la carte (chaîne vide si absent). Le `TYPE` est le type effectif (vide ⇒ `SPEEDY`).
+
 - Les cartes déjà enregistrées ne sont jamais refusées à la lecture ni au jeu.
 
-Sources : `contracts/question-types.md` §6.2 ; `ValidatePointsRule` et `AllowedPointsRuleModes` (`server-go/internal/game/question_types.go`) ; appel dans `handleUploadQuestion` (`server-go/internal/server/http.go`).
+Sources : `contracts/question-types.md` §6.2 ; `ValidatePointsRule`, `AllowedPointsRuleModes` et `PointsRuleError.Error()` (`server-go/internal/game/question_types.go`) ; appel dans `handleUploadQuestion` (`server-go/internal/server/http.go`, après `ValidateCardTypeContent`).
 
 ---
 
