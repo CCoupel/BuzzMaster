@@ -82,10 +82,10 @@ Les 15 sites de sélection de catégorie et de difficulté (éditeurs Quiz et RA
 |------|-------|-----------|---------------|
 | `single` (défaut) | Catégorie d'une question | Une seule ; re-clic sur l'active → `onChange('')` | `role="radiogroup"` + `aria-checked` |
 | `multi` | Manche RAFALE, carte RAFALE, modales IA | Plusieurs (`onToggle(key)`) | `aria-pressed` + ✓ |
-| `variant="filter"` | Filtres de liste (Quiz, réservoir RAFALE, page Jeu) | Plusieurs, restreint à `availableCategories`, bouton « × » (`onClear`) | `aria-pressed` + ✓ |
+| `variant="filter"` | Filtres de liste (Quiz, réservoir RAFALE, page Jeu) | Plusieurs, restreint à `availableCategories`, bouton « × » (`onClear`) | `aria-pressed` + ✓ (✓ absente en icônes seules) |
 
 - `allowCreate` (mode `single` seulement) ajoute « + Créer » avec formulaire inline ; `onRefetchCategories` est appelé avant `onChange(created.key)`.
-- `showLabel` (filter) ajoute le libellé à côté de l'icône ; `showModeBadge` affiche le mode en texte.
+- `showLabel` (filter, défaut `true`) affiche le libellé à côté de l'icône ; `showLabel={false}` = icônes seules (page Jeu). `showModeBadge` affiche le mode en texte.
 - `customCategories` accepte la réponse brute de `GET /api/categories`. La garde #197 est **interne** au composant : seule la liste `CATEGORIES` + customs `isCustom` est itérée, donc aucune clé React dupliquée, quel que soit l'appelant.
 
 ```jsx
@@ -123,8 +123,6 @@ Props : `levels` (défaut `DIFFICULTY_LEVELS`), `ghost` (affiche les étoiles vi
 ```
 
 `DIFFICULTY_LEVELS` est exporté par `utils/categoryUtils.js` : `[1, 2, 3]`.
-
-### Podium Component (v2.4.0)
 
 ### Podium Component (v2.4.0)
 

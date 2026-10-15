@@ -1614,13 +1614,13 @@ La modale affiche deux blocs :
 - Thème global de votre quiz
 - Population cible
 - Langue
-- Difficulté globale
+- Difficultés (Facile, Moyen, Difficile, Expert — une ou plusieurs)
+- Objectif
 
 Ces valeurs viennent de la section "Quiz" en haut de QuestionsPage. Elles sont **affichées à titre informatif** et ne sont **pas modifiables** dans le formulaire de génération.
 
 **Bloc 2 — Cette génération (éditable)** :
-- **Difficulté** : Choisir une ou plusieurs difficultés (★ 1 à 3, en pastilles ; v11.2.2). Vous pouvez mixer les niveaux pour un même lot — l'IA répartira les questions équitablement.
-- **Objectifs / Consignes** (optionnel) : Texte libre décrivant le contexte (ex: "révision scolaire", "ambiance conviviale") ou des contraintes spéciales (ex: "éviter les questions sur la politique").
+- **Précisions pour cette génération** (optionnel) : Texte libre décrivant le contexte (ex: "révision scolaire", "ambiance conviviale") ou des contraintes spéciales (ex: "éviter les questions sur la politique").
 - **Catégories cibles** : Sélectionner une ou plusieurs catégories existantes. L'IA génère des questions **uniquement** dans ces catégories (elle ne crée jamais de nouvelle catégorie).
 - **Volume** : 
   - **Mode "Nombre"** : indiquer combien de questions générer (ex: 20)
