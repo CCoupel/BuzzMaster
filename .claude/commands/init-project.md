@@ -58,8 +58,8 @@ jamais du texte brut listant des lettres dans le chat :
 [PLACEHOLDERS] --> Substituer {VAR} dans commandes et agents deployes
     |
     v
-[FINALISATION] --> CLAUDE.md + .gitignore + CI/CD workflow
-    |
+[FINALISATION] --> CLAUDE.md + .gitignore + CI/CD workflow + labels GitHub
+    |              + milestone v0.1.0 et issues de base (nouveau projet avec remote GitHub)
     v
 [AUDIT CONTEXTE] --> commit d'init puis /context-audit (audit complet)
 ```
@@ -708,6 +708,9 @@ Mener un entretien structure en 6 phases.
 8. Existe-t-il des solutions concurrentes ? Qu'est-ce qui differencie ce projet ?
 ```
 
+> Conserver les reponses 2, 5, 6 et 7 : elles alimentent les issues de base du milestone `v0.1.0`
+> (section "Premier milestone v0.1.0 et issues de base" de la finalisation) — une issue par cas d'usage v1.
+
 **Phase 3 — Parties prenantes et utilisateurs**
 ```
 9.  Qui sont les utilisateurs finaux ? (roles, profils, niveau technique)
@@ -750,7 +753,21 @@ A la fin du workshop, generer `CLAUDE.md` complet, `project-config.json`, et les
    « Autre » pour saisir un autre nom
 
 2. Decris brievement le projet (1-2 phrases) :
+
+3. Repo GitHub ?
+   [Detecte: `git remote get-url origin`] → rien a demander, afficher "Remote GitHub : <owner>/<repo>"
+   Sinon AskUserQuestion : "Quel repo GitHub pour ce projet ?"
+   - Aucun pour l'instant — pas de remote : labels de phase, milestone v0.1.0 et issues de base ne
+     seront pas crees (relancer /init-project apres `git remote add origin ...`, ou `/milestone new v0.1`)
+   - Autre : `owner/repo` ou URL → `gh repo view owner/repo` ;
+       existe     → `git remote add origin https://github.com/owner/repo.git`
+       n'existe pas → AskUserQuestion "Creer le repo GitHub owner/repo (prive) ?" :
+                      Creer (Recommande) → `gh repo create owner/repo --private --source=. --remote=origin`
+                      Ne pas creer → comme "Aucun pour l'instant"
 ```
+
+> `org` / `project` de `project-config.json` sont extraits du remote (section "Generation de la Configuration") ;
+> sans remote, ils restent vides et les etapes GitHub de la finalisation sont sautees.
 
 ---
 
@@ -1469,6 +1486,80 @@ gh label create "DONE"      --color "0e8a16" --description "Issue livrée et val
 > Si le repo n'a pas encore de remote GitHub configuré, sauter cette étape et noter dans
 > le Message de Fin : "Labels GitHub à créer manuellement ou relancer /init-project après `git remote add`."
 
+#### Premier milestone v0.1.0 et issues de base (nouveau projet)
+
+Un projet qui demarre n'a ni milestone ni backlog : le cycle (`/feature`, planner, panneau milestone) n'a rien a
+piloter. Creer le premier milestone `v0.1.0` (aligne sur `project-config.json` → `version: 0.1.0`) et ses issues de
+socle, pour que la premiere session commence directement par `/feature #<n>`.
+
+**Conditions (toutes requises, sinon sauter l'etape sans question et le dire dans le Message de Fin) :**
+
+- Etape 0 : **projet vide** (aucun code detecte → `initialized_from` = `workshop` ou `manual`). Code existant →
+  ne rien creer : le projet a deja une histoire, `/milestone new` reste la voie.
+- Remote GitHub configure (Etape 1, question 3) et `gh auth status` OK.
+- Aucun milestone (ouvert ou ferme) et aucun tag `v*` (local ou distant) : sinon `v0.1.0` n'est pas le premier
+  milestone, et ne serait pas posterieur a la derniere version livree (`/milestone new` Etape 2d).
+- Etape d'**initialisation uniquement** : jamais executee par la reinitialisation / mise a jour d'un projet deja
+  initialise (section "Reinitialisation (projet v3)").
+
+```bash
+REPO=$(gh repo view --json owner,name --jq '.owner.login + "/" + .name')
+MILESTONES=$(gh api "repos/$REPO/milestones?state=all" --jq 'length')
+TAGS=$(( $(git tag --list 'v*' | wc -l) + $(git ls-remote --tags origin 'v*' | wc -l) ))
+[ "$MILESTONES" = "0" ] && [ "$TAGS" = "0" ] || echo "Milestones ou tags existants : milestone v0.1.0 non cree"
+```
+
+**Issues de base** — composees depuis les reponses de l'init (stack, CI/CD, environnements, workshop). Label de
+**type** uniquement (`feature`, `context/GITHUB.md` §8.2) ; **aucun label de phase** : elles entrent dans le cycle
+(`PLANNING`) au premier `/feature #<n>`. Toutes rattachees au milestone `v0.1.0`.
+
+| # | Titre | Corps (resume) | Condition |
+|---|-------|----------------|-----------|
+| 1 | `Squelette du projet` | Arborescence `<SRC_DIR>`, `<BUILD_CMD>` et `<TEST_CMD>` qui passent (meme a vide), lint, `<VERSION_FILE>` a `0.1.0` | toujours |
+| 2 | `Pipeline CI/CD de release` | Premier run vert du pipeline genere/audite (contrat `agents/infra.md` §3bis, C1-C11), script `commands.ci` | CI/CD ≠ "Aucun" (Etape 7) |
+| 3 | `Publication et deploiement <ENV>` | `publish.mode` et `deploy.mechanism` du premier environnement (`infrastructure.environments[0]`, ex. QUALIF) operationnels de bout en bout | au moins un environnement (Etape 8) |
+| 4 | `Documentation initiale (README)` | Objectif, installation, lancement, tests, contribution | toujours |
+| 5+ | Un cas d'usage v1 par issue | Titre = cas d'usage (workshop, q6) ; corps = probleme central (q2), solution (q5), hors perimetre (q7) ; labels `feature` + `roadmap` | `initialized_from` = `workshop` (questionnaire rapide : les ajouter ensuite via `/backlog`) |
+
+Afficher la liste (titres, labels) puis AskUserQuestion :
+`"Creer le milestone v0.1.0 avec ces N issues sur https://github.com/<REPO> ?"`
+- Creer le milestone et les issues (Recommande)
+- Creer le milestone seul — issues a ajouter ensuite via `/backlog`
+- Ne rien creer — `/milestone new v0.1` plus tard
+
+```bash
+# Labels de type — absents d'un repo neuf, et `gh issue create` echoue sur un label inconnu
+gh label create "feature" --color "a2eeef" --description "Nouvelle fonctionnalite"       --force
+gh label create "roadmap" --color "fbca04" --description "Visible sur le site marketing" --force
+
+# Milestone — titre = version seule (context/COMMON.md §5.7 : le titre fixe X.Y.Z pour tout le cycle)
+gh api "repos/$REPO/milestones" --method POST -f title="v0.1.0" -f description="Release v0.1.0 — socle du projet"
+
+# Issues — idempotent : un titre deja present dans le milestone (ouvert ou ferme) n'est pas recree
+EXISTING=$(gh issue list --milestone "v0.1.0" --state all --json title --jq '.[].title')
+for each issue (titre, labels, fichier corps) :
+  grep -qxF "<titre>" <<< "$EXISTING" && continue
+  gh issue create --title "<titre>" --label "<labels>" --milestone "v0.1.0" --body-file <fichier>
+```
+
+Corps d'issue (meme structure pour toutes, fichier temporaire dans le scratchpad) :
+
+```markdown
+## Objectif
+<une phrase>
+
+## Perimetre
+- <element 1>
+- <element 2>
+
+## Critere de validation
+- [ ] <verifiable : commande qui passe, URL qui repond, fichier present>
+```
+
+A reporter dans le Message de Fin : titre du milestone, URL (`https://github.com/<REPO>/milestone/<numero>`),
+nombre d'issues creees — ou "non cree" avec la raison (code existant, pas de remote, milestones/tags existants,
+refus de l'utilisateur).
+
 #### Settings Claude Code
 
 Les règles critiques du teamleader sont dans `CLAUDE.md` (bloc `TEAMLEADER_PROTOCOL`) — elles survivent aux compactages nativement via le chargement natif de CLAUDE.md.
@@ -1576,6 +1667,9 @@ Agents generiques : <NOM> (.claude/agents/generic.<NOM>.md), ...   (si declares)
 Audit contexte (/context-audit) : N ecarts corriges (Auto), N arbitres, N laisses — voir `git diff`
   (commit d'init = point de retour)
 
+Milestone v0.1.0 : N issues de base — https://github.com/<org>/<repo>/milestone/<numero>
+  (nouveau projet avec remote GitHub ; sinon "non cree — <raison>")
+
 Agents generes :
 - .claude/agents/dev-backend.template.md
 - .claude/agents/dev-frontend.template.md
@@ -1589,6 +1683,8 @@ Commandes disponibles :
 - /progression, /context-audit
 - /start-session, /end-session
 - /team-status
+
+Prochaine etape : /start-session, puis /feature #<n> sur la premiere issue du milestone v0.1.0
 
 Bonne utilisation de Claude Code !
 ```
@@ -2371,7 +2467,9 @@ Puis appliquer la sous-section **"Memoire projet et squelettes lus au demarrage"
 
 #### Etape d7 — Vérifier et créer les labels GitHub de phase
 
-S'assurer que les labels de suivi existent sur le repo (même commande que l'init, idempotent) :
+S'assurer que les labels de suivi existent sur le repo (même commande que l'init, idempotent). Le milestone initial
+`v0.1.0` et ses issues de base ne sont **pas** concernés : ils ne sont créés qu'à la première initialisation d'un
+projet vide (section "Premier milestone v0.1.0 et issues de base"), jamais en mise à jour.
 
 ```bash
 gh label create "PLANNING"  --color "0075ca" --description "Plan à élaborer ou à valider"      --force
