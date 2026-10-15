@@ -169,6 +169,30 @@ func parseNetwork267(t *testing.T, msg json.RawMessage) network267 {
 	return n
 }
 
+// parseRestrictedNetwork267 vérifie qu'un UPDATE destiné à un client non admin (#275) ne porte
+// PAS GAME.NETWORK (adresses du serveur) mais garde le miroir NETWORK_ONLY_LOCALHOST ; retourne le miroir.
+func parseRestrictedNetwork267(t *testing.T, who string, msg json.RawMessage) bool {
+	t.Helper()
+	var u struct {
+		Game map[string]json.RawMessage `json:"GAME"`
+	}
+	if err := json.Unmarshal(msg, &u); err != nil {
+		t.Fatalf("%s : UPDATE illisible : %v", who, err)
+	}
+	if _, has := u.Game["NETWORK"]; has {
+		t.Errorf("%s : GAME.NETWORK ne doit pas être diffusé à un client non admin (#275)", who)
+	}
+	raw, ok := u.Game["NETWORK_ONLY_LOCALHOST"]
+	if !ok {
+		t.Fatalf("%s : le miroir NETWORK_ONLY_LOCALHOST doit rester diffusé", who)
+	}
+	var mirror bool
+	if err := json.Unmarshal(raw, &mirror); err != nil {
+		t.Fatalf("%s : miroir illisible : %v", who, err)
+	}
+	return mirror
+}
+
 // nextUpdate attend (par événement) le prochain UPDATE de conn et en retourne le NETWORK.
 func nextUpdate267(t *testing.T, conn *websocket.Conn) network267 {
 	t.Helper()
@@ -218,8 +242,9 @@ func TestNetwork267_Hello_HealthyNetworkIsSerializedExplicitly(t *testing.T) {
 	}
 }
 
-func TestNetwork267_Hello_NetworkIsDeliveredToEveryWebClientType(t *testing.T) {
-	// Contrat : « diffusé à tous les clients web (seul l'admin l'affiche) ».
+func TestNetwork267_Hello_NetworkIsDeliveredToAdminOnly(t *testing.T) {
+	// Contrat (v11.2.3, #275) : GAME.NETWORK est réservé à l'admin ; TV, anim et VJoueur reçoivent
+	// seulement le miroir NETWORK_ONLY_LOCALHOST.
 	for _, tc := range []struct {
 		path string
 		typ  server.ClientType
@@ -237,9 +262,15 @@ func TestNetwork267_Hello_NetworkIsDeliveredToEveryWebClientType(t *testing.T) {
 
 			e.app.sendStateToClient(id, tc.typ)
 
-			n := parseNetwork267(t, readActionMatchingWithin(t, conn, protocol.ActionUpdate, eventDeadline264))
-			if !n.OnlyLocalhost {
-				t.Errorf("%s : NETWORK.ONLY_LOCALHOST=true attendu au HELLO", tc.path)
+			msg := readActionMatchingWithin(t, conn, protocol.ActionUpdate, eventDeadline264)
+			if tc.typ == server.ClientTypeAdmin {
+				if n := parseNetwork267(t, msg); !n.OnlyLocalhost {
+					t.Errorf("%s : NETWORK.ONLY_LOCALHOST=true attendu au HELLO", tc.path)
+				}
+				return
+			}
+			if !parseRestrictedNetwork267(t, tc.path, msg) {
+				t.Errorf("%s : NETWORK_ONLY_LOCALHOST=true attendu au HELLO", tc.path)
 			}
 		})
 	}
@@ -280,8 +311,8 @@ func TestNetwork267_Broadcast_OneUpdateOnLossThenSilentWhileLost(t *testing.T) {
 	if n := nextUpdate267(t, admin); !n.OnlyLocalhost {
 		t.Error("l'admin doit recevoir NETWORK.ONLY_LOCALHOST=true à la perte")
 	}
-	if n := nextUpdate267(t, tv); !n.OnlyLocalhost {
-		t.Error("la TV reçoit aussi l'état (elle l'ignore à l'écran) : ONLY_LOCALHOST=true attendu")
+	if !parseRestrictedNetwork267(t, "TV", readActionMatchingWithin(t, tv, protocol.ActionUpdate, eventDeadline264)) {
+		t.Error("la TV reçoit l'UPDATE avec le miroir seul (#275) : NETWORK_ONLY_LOCALHOST=true attendu")
 	}
 	// Ni doublon...
 	assertNoAction264(t, e.app, admin, protocol.ActionUpdate, "un seul UPDATE par perte (admin)")
