@@ -2237,7 +2237,14 @@ export default function QuestionsPage() {
               )}
             </CardHeader>
             <CardBody>
-              <form onSubmit={handleSubmit} className="add-form">
+              {/* #190 — `noValidate` seulement quand un montant de barème est invalide : la
+                  validation HTML5 (min/max du champ) bloquerait le submit AVANT notre garde
+                  (handleSubmit) et son message role="alert" sur la carte concernée. */}
+              <form
+                onSubmit={handleSubmit}
+                className="add-form"
+                noValidate={formData.type === 'MEMOTION' && formData.motionCards.some(c => pointsRuleValueError(c.pointsRule))}
+              >
                 <div className="form-group">
                   <label htmlFor="question-input">Question *</label>
                   <textarea
@@ -3634,6 +3641,12 @@ export default function QuestionsPage() {
                       })()}
                     </div>
                   </>
+                )}
+
+                {/* Refus serveur (corps HTTP brut) pour les types sans section « Son »
+                    (MEMORY, MEMOTION, RAFALE, ENTRACTE) — ex. POINTS_RULE_* (#190). */}
+                {soundError && ['MEMORY', 'MEMOTION', 'RAFALE', 'ENTRACTE'].includes(formData.type) && (
+                  <p className="sound-error-message" role="alert">✕ {soundError}</p>
                 )}
 
                 <Button
