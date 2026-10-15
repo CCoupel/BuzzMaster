@@ -2,11 +2,11 @@
 
 Historique des versions du projet BuzzControl.
 
-## [Unreleased] — LOTs 1 à 3 du milestone en cours (partiel)
+## [11.2.3] - 2026-10-15 — Milestone v11.2.3 : CI bloquante sur les tests web, dials de test, `NETWORK` réservé à l'admin, refus de `POST /questions`, react-router 7
 
 ### Changed
 
-- **Tests web bloquants dans la CI (#273)** — `scripts/ci.sh` exécute désormais les tests vitest à l'étape `[2/7]`, après le build web et avant l'embed. Jusqu'ici, les tests web n'étaient jamais exécutés en CI ; ils bloquent désormais `ci-branch.yml` et `release.yml` lorsqu'ils échouent, ces deux workflows n'appelant que ce script. Durée ajoutée mesurée en local : 110 à 125 s pour 4 209 tests (270 fichiers). Les 4 tests `fonts-embed` « dist/ (build) » s'exécutent non sautés, car `dist/` est produit à l'étape `[1/7]`.
+- **Tests web bloquants dans la CI (#273)** — `scripts/ci.sh` exécute désormais les tests vitest à l'étape `[2/7]`, après le build web et avant l'embed. Jusqu'ici, les tests web n'étaient jamais exécutés en CI ; ils bloquent désormais `ci-branch.yml` et `release.yml` lorsqu'ils échouent, ces deux workflows n'appelant que ce script. Durée de l'étape mesurée en CI : 144 s pour 4 215 tests (271 fichiers). Les 4 tests `fonts-embed` « dist/ (build) » s'exécutent non sautés, car `dist/` est produit à l'étape `[1/7]`.
 
 ### Fixed
 
