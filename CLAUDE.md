@@ -234,9 +234,9 @@ SendMessage({
 | Nom | Rôle | Fichier | Spawn |
 |-----|------|---------|-------|
 | `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.template.md` | permanent |
-| `dev-backend` | Backend (go) | `.claude/agents/dev-backend.template.md` | permanent |
-| `dev-frontend` | Frontend (react) | `.claude/agents/dev-frontend.template.md` | permanent |
-| `dev-buzzclick` | Firmware ESP32-C3 | `.claude/agents/dev-buzzclick.md` | ponctuel |
+| `dev-backend` | Backend (Go) | `.claude/agents/dev-backend.template.md` | permanent |
+| `dev-frontend` | Frontend (React) | `.claude/agents/dev-frontend.template.md` | permanent |
+| `dev-firmware` | Firmware BuzzClick (ESP32-C3) — `src/BuzzClick/**`, `src/Common/**` | `.claude/agents/dev-firmware.template.md` | ponctuel |
 | `marketing-release` | Release notes, posts, site gh-pages | `.claude/agents/marketing-release.template.md` + `.claude/agents/marketing-release.md` | ponctuel |
 | `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
 | `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
@@ -249,11 +249,14 @@ SendMessage({
 > **Fichier** pointe vers le `.template.md` — géré par sync, toujours présent. Un compagnon
 > `.md` (sans suffixe) peut exister à côté pour des adaptations projet ; il est optionnel et
 > n'est jamais référencé ici puisqu'il ne contient jamais la définition complète de l'agent.
-> Exception : `dev-buzzclick` n'a pas de `.template.md` (agent ponctuel, non géré par la sync
-> template) — sa colonne Fichier pointe directement vers son fichier complet.
+
+> **Agents `dev-*`** : une ligne par agent de stack inscrit au registre des agents (`agents.registry[]` de
+> `project-config.json`), avec son périmètre. `dev-firmware` est l'agent standard du template (source
+> `templates/dev-firmware-esp32.md`) ; ses adaptations BuzzClick vivent dans le compagnon `.claude/agents/dev-firmware.md`
+> (ex-`dev-buzzclick`, remplacé le 2026-10-16).
 
 > **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
-> **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-buzzclick`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.template.md`).
+> **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-firmware`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.template.md`).
 
 > Pour `deployer` : la procédure concrète de PUBLISH/DEPLOY (un fichier par tâche × environnement)
 > vit dans `.claude/agents/environments/{publish,deploy}.<env>.md` — voir `agents/deploy.md`

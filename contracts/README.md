@@ -160,9 +160,9 @@ L'agent `dev-frontend` **doit** consulter les contrats avant d'implementer :
 2. Lire `http-endpoints.md` pour les appels API
 3. Lire `game-state.md` pour les champs a afficher
 
-### Consultation (DEV-BUZZCLICK)
+### Consultation (DEV-FIRMWARE)
 
-L'agent `dev-buzzclick` **doit** consulter les contrats avant d'implementer :
+L'agent `dev-firmware` (firmware BuzzClick) **doit** consulter les contrats avant d'implementer :
 1. Lire `tcp-udp-protocol.md` pour le protocole de communication
 2. Lire `models.md` pour la structure Bumper
 

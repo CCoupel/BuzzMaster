@@ -94,10 +94,134 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.21.1",
-    "commit": "2f1f3374986cc9f9102db789ab601e722ccf2e3c"
+    "tag": "v3.23.0",
+    "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9"
   },
   "docs": {
     "mockup_dir": "docs/mockup"
+  },
+  "agents": {
+    "registry": [
+      {
+        "name": "cdp",
+        "source": "agents/cdp.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "7611a074e0afec13cbb9f749d983dc54af0eaa7c0e292a9c4f5b34ca05b72ad1"
+      },
+      {
+        "name": "code-reviewer",
+        "source": "agents/code-reviewer.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "2159bea9068780fff433e46bb7df04b9548524bf151d98a967714ce805ed6c92"
+      },
+      {
+        "name": "deploy",
+        "source": "agents/deploy.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "f0302369b60aa862760ecdfc42d31ef4ef55f478fde65b35c8ba6cc9a8dad978"
+      },
+      {
+        "name": "dev-backend",
+        "source": "templates/dev-backend-go.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "c0a698a5b586346dc469ca28ed9da7d395e3a26442c4a0aba46da858feb5d82e",
+        "role": "Backend (Go)"
+      },
+      {
+        "name": "dev-firmware",
+        "source": "templates/dev-firmware-esp32.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "43f1129c4e0f513775b51b71c67a9c6e8d978ee61accaf93f64f2cd840c6e891",
+        "role": "Firmware BuzzClick (ESP32-C3)",
+        "paths": [
+          "src/BuzzClick/**",
+          "src/Common/**",
+          "platformio.ini"
+        ]
+      },
+      {
+        "name": "dev-frontend",
+        "source": "templates/dev-frontend-react.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "d7e037f8d2105adeebd51251ea6c107eb8883befa729009df958fcc420c5cbfb",
+        "role": "Frontend (React)"
+      },
+      {
+        "name": "doc-updater",
+        "source": "agents/doc-updater.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "4538a44097f7425c85364ca242bac4a53f2103b5170c1186fd15ad9906b40dfc"
+      },
+      {
+        "name": "generic",
+        "source": "agents/generic.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "b75d20a266c43ce85865e3e1c9350040d2ad167ffdea108c9f2ddd9f290feed5"
+      },
+      {
+        "name": "implementation-planner",
+        "source": "agents/implementation-planner.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "a1c60179af7932db0a16b7468391429bfe43be477588095fc930f8f455e7f82d"
+      },
+      {
+        "name": "infra",
+        "source": "agents/infra.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "15dc6ae8ab1ed1950748b5269d88608fd09ac55884a5c3b986b2b509b4f55daf"
+      },
+      {
+        "name": "marketing-release",
+        "source": "agents/marketing-release.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "86bde88ab29a2292b98bbf9ad80dc290121485cb756a5b87bf7677b06aa46903"
+      },
+      {
+        "name": "pr-reviewer",
+        "source": "agents/pr-reviewer.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "91f233a61cd8efab23c949c160a878a6a7d047c47f6a19855f3feaef665db186"
+      },
+      {
+        "name": "qa",
+        "source": "agents/qa.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "5c4cb032e22d2fd875a3dd19a8f8de523c329bc39e409a72ad619e47040a67cf"
+      },
+      {
+        "name": "security",
+        "source": "agents/security.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "65bedfdf40295d956bd440cf9073a358e411c0ab3f6b2abf44e8822638123f8f"
+      },
+      {
+        "name": "teamleader",
+        "source": "agents/teamleader.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "bb58ff9c09e1c8cecea275bb8f88bf6d355a5724df176e74c55fd58f5968a00e"
+      },
+      {
+        "name": "test-writer",
+        "source": "agents/test-writer.md",
+        "tag": "v3.23.0",
+        "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9",
+        "sha256": "4af9502b21c0bf143a695b087a7564d93d243ecb23e8707469fca4f5f73f190c"
+      }
+    ]
   }
 }
