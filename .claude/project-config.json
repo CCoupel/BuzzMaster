@@ -94,8 +94,8 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.23.0",
-    "commit": "4b264a0ad923985013b16cfffd4de1070cf18db9"
+    "tag": "v3.23.1",
+    "commit": "6a98ad17984236eb175f6cd4e6742a3a59f549a1"
   },
   "docs": {
     "mockup_dir": "docs/mockup"
