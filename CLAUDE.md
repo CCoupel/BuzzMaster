@@ -227,6 +227,7 @@ SendMessage({
 - Les agents **commitent sur la branche courante**, avec des fichiers explicites (`git add <fichiers>`, jamais `git add -A`), et ne la changent **jamais**. Interdits dans le dépôt principal : `checkout`, `switch`, `reset --hard`, `clean`, `rebase`, `merge`, `stash`, détachement de HEAD.
 - Tout travail sur un autre état du code (red check, comparaison, reproduction) se fait dans un **`git worktree` jetable**, par **chemin absolu** (`git -C <worktree> …`, jamais `cd ../..`), supprimé ensuite. Avant chaque commande destructive, vérifier que le chemin n'est pas le dépôt principal.
 - Un agent qui constate que la branche courante a changé s'arrête et prévient le teamleader (`BLOQUE`).
+- Pendant une QA ou un BUILD exécuté dans le dépôt principal (`go test`, `scripts/ci.sh`), les devs ne modifient pas le dépôt principal : ils travaillent dans un **worktree jetable sous `/mnt/c`** sur une branche `tmp/*`, puis cherry-pick sur la branche courante après le verdict (leçon v11.2.3, correctif #278).
 - Incident de référence : QA #253, 2026-10-11 (HEAD détaché quelques minutes, aucun commit perdu).
 
 ## Agents Disponibles
