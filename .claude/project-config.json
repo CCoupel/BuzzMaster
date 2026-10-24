@@ -94,8 +94,8 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.26.1",
-    "commit": "41d92c06661477b4b8804592cb61cb4a31197f65"
+    "tag": "v3.26.2",
+    "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05"
   },
   "docs": {
     "mockup_dir": "docs/mockup"
@@ -105,37 +105,37 @@
       {
         "name": "cdp",
         "source": "agents/cdp.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "295f16df7bd0eb0afd044dda340e2cbc8988d431b52812999d503d00cfc4d480"
       },
       {
         "name": "code-reviewer",
         "source": "agents/code-reviewer.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "6db56bbdc6483602b9284348bb1f2653fa1bc541ef31681697b6bbf98920b5fe"
       },
       {
         "name": "deploy",
         "source": "agents/deploy.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "8060486767f4ba0d4536c9cc195ac6f38554a35dde7ded76d68ff4245b895f27"
       },
       {
         "name": "dev-backend",
         "source": "templates/dev-backend-go.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "6fa0b4812a59d4c53cfb2afbd808052214dcf793cd5a66da51351a27fcc47332",
         "role": "Backend (Go)"
       },
       {
         "name": "dev-firmware",
         "source": "templates/dev-firmware-esp32.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "7267d6092f3e2358c32a7cfd1fe057d90baa60b18abbaf223aa6df0cf325baa3",
         "role": "Firmware BuzzClick (ESP32-C3)",
         "paths": [
@@ -147,79 +147,79 @@
       {
         "name": "dev-frontend",
         "source": "templates/dev-frontend-react.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "33093553669105572dc7be79b18f8d79404f9e94a19c35567cf9b55c0759aadd",
         "role": "Frontend (React)"
       },
       {
         "name": "doc-updater",
         "source": "agents/doc-updater.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "dd2b57b3cdba9c649295d5bd86bea4539728aadce0416c5bfb40275f223baab8"
       },
       {
         "name": "generic",
         "source": "agents/generic.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "4157f75529762528a54afbfcc50630d772ca8734c8ab693c913bb0d8933f6be7"
       },
       {
         "name": "implementation-planner",
         "source": "agents/implementation-planner.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "aaa506eddb0a237da081ec9735f7ef42e616a5bac27479326c8f75bce3f26261"
       },
       {
         "name": "infra",
         "source": "agents/infra.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "81f8f8de43a2b331e7e1266fce60ac35ef97bbc2f1e62eee6a807d7613f533e7"
       },
       {
         "name": "marketing-release",
         "source": "agents/marketing-release.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "d73e32b7001792a9829f5cafc66175a807a564593425b0f13a66e21ac887be9a"
       },
       {
         "name": "pr-reviewer",
         "source": "agents/pr-reviewer.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "399fb28b4180b86be96dbb6dab0c483c287a2a660c403adc0a357977d2acb24b"
       },
       {
         "name": "qa",
         "source": "agents/qa.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "0e22c6afb97c592cf8b0c561d1978371963a61a51929deb22130fda62cf56c6c"
       },
       {
         "name": "security",
         "source": "agents/security.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "c92fc9d89ba987149dee4e7a7442cae784267ff15e43100bc0e357e21547bc54"
       },
       {
         "name": "teamleader",
         "source": "agents/teamleader.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
-        "sha256": "3c1fca4f8f474482ec0ecf52f297194fdab87892c5cf34bcc5918e799c6f5661"
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
+        "sha256": "98d0f3b9c9a9661dc2d32599a9237fb9eeba83bd35afa286c0ae2b37f0a3b223"
       },
       {
         "name": "test-writer",
         "source": "agents/test-writer.md",
-        "tag": "v3.26.1",
-        "commit": "41d92c06661477b4b8804592cb61cb4a31197f65",
+        "tag": "v3.26.2",
+        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
         "sha256": "5b4b6fc94d68be1f4c6e050c801afdbdac21fe77c7ea87a37a98440cd074f53c"
       }
     ]
