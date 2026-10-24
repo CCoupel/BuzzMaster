@@ -1420,6 +1420,68 @@ l'utilisateur de le personnaliser par environnement uniquement s'il le demande e
 > sont scaffoldes a la demande par l'agent `infra`, au premier deploiement sur chaque
 > environnement (voir `agents/infra.md` section "Mode Validation", etape 0) — pas a l'init.
 
+### Etape 8b : Acces aux environnements (collecte + validation)
+
+Declarer un mecanisme ne suffit pas : un environnement injoignable ou mal configure (mauvais hote, cle
+refusee, runtime absent, droits insuffisants) doit etre decouvert **ici, au cadrage**, pas au premier
+`/deploy`. Pour **chaque** entree d'`infrastructure.environments[]` (Etape 8), collecter les elements
+d'acces **puis les tester**. Cette etape est conduite avec le **role de l'agent `infra`** : lire
+`TEMPLATE_claude/agents/infra.md` section « Mode Acces (cadrage) » (grille de collecte, sondes, verdicts)
+et l'appliquer — meme demarche que l'audit CI/CD (§ 3), `infra` n'etant pas un teammate actif pendant
+l'init. L'utilisateur peut aussi deleguer la verification a un acces qu'il n'a pas lui-meme
+(administrateur de la plateforme) : dans ce cas, produire la liste exacte des commandes a lui faire
+executer et l'attendre.
+
+**1. Collecter** (AskUserQuestion, une serie par environnement, selon `deploy.mechanism` et `publish.mode`) :
+
+| Mecanisme | Elements a demander | Variables secretes (noms seulement → `<env>.env.example`) |
+|-----------|--------------------|------------------|
+| `docker-compose` / `vps` | hote (vide = deploiement local), utilisateur, port SSH, **runtime** (`docker` ou `podman`, compose inclus), repertoire cible et droits d'ecriture, registre d'images, **services a deployer** (liste ; vide = tous — ecrit dans `deploy.services`, les autres services du compose ne sont jamais touches) | `SSH_KEY_PATH`, `REGISTRY_USER`, `REGISTRY_PASSWORD` |
+| `kubernetes` / `helm` | contexte kube, namespace, registre, **deployments a mettre a jour** (`deploy.services`, vide = `app`) | `KUBE_CONTEXT`, `KUBECONFIG` |
+| `serverless` / `paas` / `cloud-run` | **plateforme** (`access.platform` : aws/vercel/netlify, heroku/railway/render, gcp), compte/projet (`access.project`), region (`access.region`), CLI de la plateforme | jetons de la section 3bis |
+| `publish.mode = promote` | registre ou depot de stockage de l'artefact et droit de push | `REGISTRY_USER`, `REGISTRY_PASSWORD` |
+| `publish.mode = rebuild-ci` | droit de pousser un tag sur le depot, secrets configures cote CI | — |
+
+Regles : **jamais de valeur secrete** dans `project-config.json`, la conversation ou un fichier commite —
+uniquement des **noms** de variables (valeurs dans `<env>.env`, gitignore, que l'utilisateur renseigne
+lui-meme avant le test ; s'il n'est pas pret, passer au point 3 « Reporter »). Un acces
+« je ne sais pas encore » est un resultat valide : il est enregistre `unknown`, pas devine.
+
+**2. Valider** — sondes **lecture seule**, `<env>.env` charge dans le shell du test (ordre de
+`agents/deploy.md` « Variables et secrets »), un resultat par sonde :
+
+```bash
+# vps / docker-compose / podman — joignabilite SSH sans mot de passe, runtime, droits sur la cible
+ssh -o BatchMode=yes -o ConnectTimeout=10 -i "$SSH_KEY_PATH" -p "$PORT" "$USER@$HOST" 'true'
+ssh ... "command -v $RUNTIME && $RUNTIME info >/dev/null && $RUNTIME compose version"
+ssh ... "test -w '$TARGET_DIR' || mkdir -p '$TARGET_DIR'"        # le repertoire est-il ecrivable ?
+printf '%s' "$REGISTRY_PASSWORD" | $RUNTIME login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin  # push/pull
+# kubernetes / helm
+kubectl --context "$KUBE_CONTEXT" auth can-i create deployments -n "$NAMESPACE"
+# serverless / paas / cloud-run : commande « whoami » de la CLI (aws sts get-caller-identity,
+# vercel whoami, heroku auth:whoami, gcloud auth list...)
+# rebuild-ci : droits du jeton sur le depot
+gh api "repos/<owner>/<repo>" --jq '.permissions.push'
+```
+
+Aucune sonde ne cree de ressource, ne deploie ni ne modifie l'etat distant (le `mkdir` du repertoire cible
+est le seul effet, propose a l'utilisateur et sans importance si le repertoire existe deja).
+
+**3. Verdict par environnement** — afficher le tableau (✓ OK / ✗ ECHEC avec l'erreur brute / ? NON TESTE),
+puis pour tout environnement non `ok`, AskUserQuestion :
+- Corriger et retester (Recommande) — `infra` propose le correctif precis (cle a installer, utilisateur
+  a ajouter au groupe `docker`, port a ouvrir...), l'utilisateur l'applique, on relance les sondes
+- Basculer sur un autre mecanisme/hote — retour a l'Etape 8 pour cet environnement
+- Reporter — l'environnement est enregistre `verified.status: "skipped"` ; l'ecart est reporte dans le
+  rapport final et bloquera `/deploy <env>` (preflight, `agents/deploy.md`) jusqu'a validation
+
+Jamais de passage silencieux : un environnement non valide ne doit apparaitre nulle part comme « pret ».
+
+**4. Enregistrer** dans `project-config.json` (schema ci-dessous, section « 1. project-config.json »),
+sans secret : `infrastructure.environments[].access` — coordonnees non sensibles, **noms** des variables
+requises (`credentials_env`) et `verified` (date, statut, sondes jouees). Reporter ces memes noms dans
+`<env>.env.example` (section 3bis).
+
 ---
 
 ## Etape 9 : Tests
@@ -1481,7 +1543,13 @@ AskUserQuestion (`multiSelect: true`) : "Quels aspects securite sont importants 
         "name": "QUALIF",
         "order": 1,
         "publish": { "mode": "promote", "target": "build/qualif_v{X.Y.Z}/" },
-        "deploy":  { "mechanism": "docker-compose", "target": "docker-compose.qualif.yml" }
+        "deploy":  { "mechanism": "docker-compose", "target": "docker-compose.qualif.yml", "services": ["api", "web"] },
+        "access":  {
+          "method": "ssh", "host": "qualif.example.com", "user": "deploy", "port": 22,
+          "runtime": "podman", "registry": "registry.example.com",
+          "credentials_env": ["SSH_KEY_PATH", "REGISTRY_USER", "REGISTRY_PASSWORD"],
+          "verified": { "status": "ok", "at": "2026-10-22T11:30:00Z", "checks": ["ssh", "runtime", "target-dir", "registry"] }
+        }
       },
       {
         "name": "PROD",
@@ -1568,6 +1636,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `src_dir` | Detection Etape 0 (repertoire source principal) ou stack par defaut : `src`, `cmd`... |
 | `version_file` | Fichier source de verite de la version (ex: `package.json`, `config.json`, `VERSION`) |
 | `infrastructure.environments` | Defaut `[QUALIF, PROD]` (Etape 8, question 9bis) ; `publish.mode` = `promote` pour tous sauf le dernier (`rebuild-ci`) ; `deploy.mechanism` reprend la reponse a la question 9 pour chaque environnement, sauf personnalisation explicite |
+| `infrastructure.environments[].access` | Etape 8b : coordonnees non sensibles d'acces (`method`, `host`, `user`, `port`, `runtime`, `registry`/`context`...), **noms** des variables secretes (`credentials_env`) et resultat des sondes (`verified.status` : `ok` / `failed` / `skipped` / `unknown`). Jamais de valeur secrete. Lu par le preflight de `agents/deploy.md` et par les fichiers `deploy.<env>` (runtime, hote, port). `deploy.services` (optionnel) : seuls ces services/unites sont deployes |
 | Nom de fichier des environnements | `infrastructure.environments[].name` normalise : minuscules, espaces/underscores → tirets (ex. `PRE-PROD` → `pre-prod`) — utilise pour `.claude/agents/environments/{publish,deploy}.<nom>.template.md` (section 3bis) |
 
 ### 2. Agents dev-* et registre des agents
@@ -2463,6 +2532,22 @@ Le résultat (liste `BROKEN[]` et `ORPHAN[]` avec fichier, cible/raison, correct
 pour d4 (rapport) et d5e (revérification). Aucun fichier de `TEMPLATE_claude/` n'est jamais candidat à
 la suppression ou à la modification : **le template fait toujours foi**.
 
+#### Etape d1f — Acces aux environnements (validation)
+
+Un projet initialise avant l'Etape 8b n'a pas d'`access` dans `infrastructure.environments[]` ; un acces
+`failed` / `skipped` / `unknown`, ou verifie il y a longtemps, reste un risque au prochain `/deploy`.
+Lecture seule ici (rien n'est modifie avant d5) :
+
+```bash
+jq -r '.infrastructure.environments[]? | "\(.name)\t\(.access.verified.status // "absent")\t\(.access.verified.at // "-")"' \
+  .claude/project-config.json
+```
+
+Pour tout environnement dont le statut n'est pas `ok` : l'inclure au rapport d4 (`[⚠] <ENV> — acces non
+valide (<statut>)`), puis a l'etape d5 AskUserQuestion : Collecter et valider maintenant (Recommande —
+rejouer l'Etape 8b pour ces seuls environnements, avec le role `infra`) / Plus tard (l'ecart reste affiche
+a chaque sync et `/deploy <env>` refusera de partir tant que l'acces n'est pas valide).
+
 #### Etape d2 — Calculer les noms deployes attendus
 
 ```bash
@@ -3069,6 +3154,7 @@ Synchronisation terminee.
   Labels GitHub                     : vérifiés (PLANNING, PRET, EN COURS, EN REVIEW, EN QA, DONE)
   Audit contexte (/context-audit)   : N corriges (Auto), N arbitres, N laisses (etape d7b)
   Schema infrastructure             : [convertit vers environments[] | deja a jour | inchange (refuse)]
+  Acces aux environnements          : [<ENV>: ok | <ENV>: non valide (statut) | valides a l'instant (etape d1f)]
 
   Fichiers PROJET preserves (non touches) :
     ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL et hors table Agents Disponibles)

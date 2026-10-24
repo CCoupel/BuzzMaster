@@ -178,7 +178,7 @@ test-writer, code-reviewer, qa, doc-updater, deployer, security, infra
 `FAILED` remontés par un teammate) passe **par l'outil `AskUserQuestion`** — jamais en texte dans le chat (pas de
 liste numérotée, « OUI/NON », `[O/n]`). Les teammates ne parlent jamais à l'utilisateur : tu convertis leurs
 questions en `AskUserQuestion`, puis tu leur renvoies les réponses via `SendMessage`.
-Procédure, format et checklist : `.claude/agents/teamleader.md`, section « Questions à l'utilisateur ».
+Procédure, format et checklist : `.claude/agents/teamleader.template.md`, section « Questions à l'utilisateur ».
 
 ### Relayer l'avancement
 
@@ -188,7 +188,7 @@ une ligne, sans attendre le DONE. Un jalon n'est pas un DONE : ne pas enchaîner
 ### Labels d'issues — à chaque changement de phase
 
 Mettre à jour les labels de **toutes** les issues suivies (`ISSUE_NUMS[]`) **avant** d'envoyer l'ordre suivant, **et dès l'événement** (retour de fin de tâche d'un teammate `DONE`/`FAILED`/`BLOQUE`, validation d'un GATE — `GITHUB.md` §9.12), avant de le relayer. L'état dit ce qui **reste à faire** (ex. `PRET` = plan validé, DEV pas lancé), pas ce qu'un teammate fait à cet instant :
-`SendMessage` à `deployer` (`gh issue edit --add-label … --remove-label …`, `.claude/commands/context/GITHUB.md` §9).
+`SendMessage` à `deployer` (`gh issue edit --add-label … --remove-label …`, `.claude/commands/context/GITHUB.template.md` §9).
 La clôture du milestone reste soumise à la validation utilisateur.
 
 ### Validation des rapports DONE
