@@ -201,3 +201,6 @@ server-go/data/logs/
 .claude/skills/milestone-panel/
 MARKETING/
 .claude/workflow/
+
+# Fichier audio local (non versionné)
+/data/WEAPSwrd_Epee (ID 0129)_LaSonotheque.fr.wav
