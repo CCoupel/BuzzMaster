@@ -94,8 +94,8 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.26.2",
-    "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05"
+    "tag": "v3.27.0",
+    "commit": "2ca467df6ab3786c4e6949c1bce43f25c869a5bf"
   },
   "docs": {
     "mockup_dir": "docs/mockup"
@@ -105,9 +105,9 @@
       {
         "name": "cdp",
         "source": "agents/cdp.md",
-        "tag": "v3.26.2",
-        "commit": "ebc223407d505850c8ba1fb8ee0638343259bc05",
-        "sha256": "295f16df7bd0eb0afd044dda340e2cbc8988d431b52812999d503d00cfc4d480"
+        "tag": "v3.27.0",
+        "commit": "2ca467df6ab3786c4e6949c1bce43f25c869a5bf",
+        "sha256": "30da29c70a547aae940c27e00604f5806964ab05498c8ad380a095e353247e25"
       },
       {
         "name": "code-reviewer",

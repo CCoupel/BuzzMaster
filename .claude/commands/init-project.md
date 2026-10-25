@@ -2217,8 +2217,9 @@ MEMORY_EOF
 CHANGELOG_EOF
 ```
 
-> `_work/` est gitignore (purge a chaque `/start-session`). `.claude/workflow-state.json` n'est **pas** cree ici :
-> il est cree par le CDP au premier workflow. `.claude/memory/` est tracke — l'inclure dans le commit d'init.
+> `_work/` est gitignore (purge a chaque `/start-session`, selective si un workflow interrompu est repris).
+> `.claude/workflow-state.json` et `.claude/workflow/` (copie du plan valide, gitignore) ne sont **pas** crees ici :
+> ils sont crees par le CDP au premier workflow. `.claude/memory/` est tracke — l'inclure dans le commit d'init.
 
 ---
 
@@ -3113,6 +3114,10 @@ dans le rapport).
 
 Puis appliquer la sous-section **"Memoire projet et squelettes lus au demarrage"** (creation idempotente de
 `.claude/memory/MEMORY.md` et `contracts/CHANGELOG.md` s'ils sont absents).
+
+Puis fusionner le `.gitignore` projet avec `TEMPLATE_claude/gitignore-for-projects` (meme bloc non destructif que la
+Finalisation : seules les lignes template absentes sont ajoutees, ex. `.claude/workflow/`). Lister les lignes ajoutees
+dans le rapport.
 
 #### Etape d7 — Vérifier et créer les labels GitHub de phase
 

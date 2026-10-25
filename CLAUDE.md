@@ -128,14 +128,14 @@ Tu **coordonnes et dispatches**. Tu n'exécutes aucune tâche technique toi-mêm
 
 | Outil interdit | Déléguer à |
 |---------------|-----------|
-| `Edit`, `Write`, `MultiEdit` (sauf `Write` d'un ordre dans `_work/tasks/*.md`) | `dev-*`, `doc-updater` |
+| `Edit`, `Write`, `MultiEdit` (sauf `Write` d'un ordre dans `_work/tasks/*.md` et de l'état `.claude/workflow-state.json`, `.claude/workflow/*`) | `dev-*`, `doc-updater` |
 | `Bash` (build / test / git) | `qa`, `deployer`, `dev-*` |
 | `Read` (code applicatif) | `code-reviewer`, `planner` |
 | `Glob`, `Grep` (recherche code) | `planner`, `dev-*` |
 
 **`Read` autorisé uniquement pour** : `CLAUDE.md`, `MEMORY.md`, `project-config.json`, `_work/tasks/*.md`, `_work/handoff/*.md`, `_work/reports/*.md`, `contracts/CHANGELOG.md`
 
-**`Write` autorisé uniquement pour** : `_work/tasks/*.md` (ordres aux teammates, création seule — jamais `Edit`/`MultiEdit`, jamais un autre chemin)
+**`Write` autorisé uniquement pour** : `_work/tasks/*.md` (ordres aux teammates, création seule — jamais `Edit`/`MultiEdit`) et l'état d'orchestration `.claude/workflow-state.json` / `.claude/workflow/plan-<version>.md` (reprise après interruption) — jamais un autre chemin
 
 **Ne jamais** exécuter une tâche technique soi-même — spawner l'agent approprié.
 
@@ -208,10 +208,12 @@ SendMessage({
 
 ## Suivi des états des issues
 
-- À **chaque** changement de phase d'un workflow, et dès l'événement (retour `DONE`/`FAILED`/`BLOQUE` d'un teammate, validation d'un GATE), le teamleader fait mettre à jour les labels de **toutes** les issues suivies **avant** d'envoyer l'ordre suivant.
-- États et transitions (`PLANNING` → `PRET` → `EN COURS` → `EN REVIEW` / `EN QA` → `DONE`, lots `LOT-N`) : une seule source de vérité, la table « Labels GitHub — Suivi de Phase » de `.claude/commands/context/CDP_WORKFLOWS.template.md` et `.claude/commands/context/GITHUB.template.md` §9 (§9.12 pour le moment des transitions). Bugfix : pas de `PLANNING`.
-- Commande : `gh issue edit <n> --add-label "<L>" --remove-label "<L1>" --remove-label "<L2>"` (l'outil MCP `issue_write` n'est pas disponible).
-- Fermeture des issues (décision utilisateur du 2026-10-13 : règle du template) : la validation utilisateur a lieu au **GATE LOT** (lot testé en QUALIF) ou au GATE 4 sans lots ; après validation, push de la branche puis CI de pré-validation ; **CI verte → fermeture des issues** (label `DONE` conservé), CI non verte → `EN COURS`. La clôture du milestone reste une validation explicite de l'utilisateur (GATE 4).
+Règles portées par le template — il fait foi, rien n'est recopié ici :
+- Moment des mises à jour : « Labels d'issues — à chaque changement de phase » ci-dessus.
+- États, transitions et lots (`PLANNING` → `PRET` → `EN COURS` → `EN REVIEW` / `EN QA` → `DONE`, `LOT-N`) : `.claude/commands/context/CDP_WORKFLOWS.template.md` (table « Labels GitHub — Suivi de Phase ») et `.claude/commands/context/GITHUB.template.md` §9 (§9.12 pour le moment des transitions).
+- Validation des lots (GATE LOT si `VALID-HUMAINE`, sinon auto-validation ; GATE 4 jamais sauté) : `GITHUB.template.md` §9.12 / §9.13.
+- Fermeture des issues (CI verte → fermeture, `DONE` conservé ; clôture du milestone = GATE 4) : `GITHUB.template.md` §9.5.
+- Commande : `gh issue edit <n> --add-label "<L>" --remove-label "<L1>"` (l'outil MCP `issue_write` n'est pas disponible).
 
 ## Règles projet du cycle de livraison
 
