@@ -38,6 +38,22 @@
         "deploy": {
           "mechanism": "vps",
           "target": "local-windows-binary (meme poste, pas de ssh distant)"
+        },
+        "access": {
+          "method": "local",
+          "host": "",
+          "runtime": "windows-binary",
+          "port": 9090,
+          "target_dir": "build/qualif_v{X.Y.Z}/",
+          "credentials_env": [],
+          "verified": {
+            "status": "ok",
+            "at": "2026-10-27T13:57:43Z",
+            "checks": [
+              "local-shell (powershell.exe)",
+              "target-dir (build/ writable)"
+            ]
+          }
         }
       },
       {
@@ -51,6 +67,18 @@
         "deploy": {
           "mechanism": "none",
           "target": "aucune plateforme geree par deployer — installation manuelle utilisateur depuis la GitHub Release"
+        },
+        "access": {
+          "method": "github-release",
+          "repo": "CCoupel/BuzzMaster",
+          "credentials_env": [],
+          "verified": {
+            "status": "ok",
+            "at": "2026-10-27T13:57:43Z",
+            "checks": [
+              "repo-push (gh api permissions.push=true)"
+            ]
+          }
         }
       }
     ]
@@ -94,8 +122,8 @@
     "version_read": "cat server-go/config.json | python3 -c \"import json,sys; d=json.load(sys.stdin); print(d['version'])\""
   },
   "template_version": {
-    "tag": "v3.27.0",
-    "commit": "2ca467df6ab3786c4e6949c1bce43f25c869a5bf"
+    "tag": "v3.28.0",
+    "commit": "8f583bf7a54085e38bbf0c06704f32b48a7b4912"
   },
   "docs": {
     "mockup_dir": "docs/mockup"

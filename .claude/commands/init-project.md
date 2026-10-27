@@ -1701,11 +1701,70 @@ specification repond `BLOQUE` au demarrage). Le fichier est **tracke git**, jama
 (le compagnon `generic.md` sans nom reste, lui, un compagnon classique du template `generic.template.md`).
 Si l'instance justifie un autre modele ou effort que `generic.template.md` (`sonnet` / `medium`), ajouter en tete
 de la specification un frontmatter ne contenant que `model:` et/ou `effort:` (ex. `opus` pour un redacteur de
-documents longs) — resolu au spawn, voir `agents/context/TEAMMATES_PROTOCOL.md` section 7.
+documents longs) — resolu au spawn, voir `agents/context/TEAMMATES_PROTOCOL.md` section 7. Ce choix est
+revu avec les autres agents a la section 2ter ci-dessous.
 
 Ajouter une ligne par instance dans la table `## Agents Disponibles` de `CLAUDE.md` :
 `| <name> | <role> | .claude/agents/generic.template.md + .claude/agents/generic.<name>.md | <spawn> |`.
 Le CDP les connait via cette table et `agents.generic[]` (voir `agents/cdp.md`).
+
+### 2ter. Adequation modele/effort des agents
+
+Une fois tous les agents connus (communs, de stack, instances `generic.<nom>`), verifier que leurs modele et effort
+resolus (compagnon > template, `agents/context/TEAMMATES_PROTOCOL.md` section 7) conviennent a **ce** projet.
+Claude confronte les reponses de l'init (`project-config.json`, `docs/CADRAGE.md` s'il existe) a la grille de la
+section 7.1 du meme fichier. Aucun agent n'est surcharge sans validation.
+
+**1. Retour high level** — toujours affiche, sans question s'il n'y a aucune alerte :
+
+```
+Adequation modele/effort : 2 alertes (14 agents, defauts du template sinon)
+  ↑ security       sonnet/high    → opus/high      paiements (PCI-DSS) — Etape 10
+  ↑ dev-firmware   sonnet/medium  → sonnet/high    firmware temps reel — Etape 5
+  ↓ infra          opus/medium    → sonnet/medium  aucun deploiement distant — Etape 8
+  = surcharges projet conservees : teamleader (fable/high)
+```
+
+Ou, sans alerte : `Adequation modele/effort : defauts du template adaptes au projet (14 agents)`.
+
+**2. S'il y a au moins une alerte** :
+
+```
+AskUserQuestion : "Les modeles/efforts de N agents semblent inadaptes au projet. Revoir en detail ?"
+- Revoir agent par agent (Recommande) — une question par agent (alertes d'abord, puis les autres),
+  avec la valeur actuelle, la suggestion et le motif
+- Appliquer les suggestions — ecrit les N surcharges ci-dessus sans autre question
+- Garder les defauts — aucune surcharge ; l'alerte reapparaitra a la prochaine synchronisation
+```
+
+**Revue detaillee** : jusqu'a 4 agents par appel `AskUserQuestion`. Pour chaque agent, options :
+`<suggestion> (Recommande)` si l'agent est en alerte, `Garder <actuel>` (Recommande sinon), et un cran
+au-dessus / en dessous (modele `haiku` < `sonnet` < `opus` < `fable`, effort `low` < `medium` < `high` < `max`),
+chaque description donnant le motif et l'effet (cout, frequence d'appel de l'agent).
+
+**3. Ecriture** — dans le compagnon, frontmatter limite a `model:`/`effort:` (instance generique :
+`generic.<nom>.md`) ; une valeur egale au defaut du template est retiree plutot qu'ecrite :
+
+```bash
+# companion_fm_set FICHIER MODEL EFFORT DEFAUT_MODEL DEFAUT_EFFORT — pose/retire la surcharge, conserve le corps
+companion_fm_set() {
+  local f="$1" m="$2" e="$3" body fm=""
+  [ "$m" = "$4" ] && m=""; [ "$e" = "$5" ] && e=""
+  body=$( [ -f "$f" ] && awk 'NR==1&&$0=="---"{h=1;next} h&&$0=="---"{h=0;next} !h' "$f" )
+  [ -n "$m" ] && fm="${fm}model: $m"$'\n'
+  [ -n "$e" ] && fm="${fm}effort: $e"$'\n'
+  [ -z "$fm" ] && [ -z "$body" ] && { rm -f "$f"; return; }
+  { [ -n "$fm" ] && printf -- '---\n%s---\n' "$fm"; [ -n "$body" ] && printf '%s\n' "$body"; } > "$f"
+  echo "  ✓ $f — ${m:-defaut}/${e:-defaut}"
+}
+```
+
+Un compagnon cree ici ne contient que ce frontmatter — il reste un compagnon classique, tracke git. Le teamleader
+est traite comme les autres : sa valeur est reportee dans `.claude/settings.json` a la Finalisation ("Settings
+Claude Code"), effective au prochain lancement de session.
+
+En **reconfiguration** ou en **synchronisation** (etape d6a), meme procedure : seuls les agents **sans** surcharge
+projet peuvent etre en alerte, pour ne pas reposer a chaque sync une question deja tranchee.
 
 ### 3. Workflow CI/CD
 
@@ -2264,6 +2323,7 @@ Configuration :
 
 Memoire projet : .claude/memory/MEMORY.md initialisee (si absente)
 Teamleader : <modele> / <effort> ecrits dans .claude/settings.json (surcharge : compagnon .claude/agents/teamleader.md)
+Modeles/efforts : <defauts adaptes | N alertes — N surcharges appliquees, N conservees>   (section 2ter)
 Cadrage : docs/CADRAGE.md — <workshop|brief : N elements deduits, N precises>   (si workshop ou brief)
 Agents generiques : <NOM> (.claude/agents/generic.<NOM>.md), ...   (si declares)
 
@@ -3104,6 +3164,12 @@ echo "✓ CLAUDE.md — bloc TEAMLEADER_PROTOCOL mis à jour"
 > Si `CLAUDE.md` ne contient pas encore les marqueurs (projet initialisé avant cette version du template) :
 > ajouter manuellement la section entre marqueurs ou relancer `/init-project` option a (réinitialisation).
 
+#### Etape d6a — Adequation modele/effort des agents
+
+Appliquer la section **"2ter. Adequation modele/effort des agents"** (Generation de la Configuration) sur les
+agents deployes : retour high level, puis revue detaillee proposee seulement s'il y a une alerte. Un agent avec
+surcharge projet n'est jamais signale. A faire avant d6b, qui reporte le modele/effort du teamleader.
+
 #### Etape d6b — Synchroniser settings.json
 
 Appliquer la sous-section **"Settings Claude Code"** (section Finalisation) : création de `.claude/settings.json`
@@ -3155,6 +3221,7 @@ Synchronisation terminee.
   Liens casses / orphelins corriges : N / N (etapes d1e, d5)
   Verification post-nettoyage       : N doublons residuels (dont N assumes), N liens casses, N orphelins (etape d5e)
   CLAUDE.md bloc TEAMLEADER_PROTOCOL : mis à jour
+  Modeles/efforts agents            : <defauts adaptes | N alertes — N surcharges appliquees> (etape d6a)
   CLAUDE.md table Agents Disponibles : mis à jour (N lignes — documentation uniquement)
   Labels GitHub                     : vérifiés (PLANNING, PRET, EN COURS, EN REVIEW, EN QA, DONE)
   Audit contexte (/context-audit)   : N corriges (Auto), N arbitres, N laisses (etape d7b)
