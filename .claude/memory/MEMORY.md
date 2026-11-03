@@ -82,7 +82,7 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 ## Sync template v3.14.1 (2026-10-10)
 
 - **Template passé de v3.9.1 à v3.14.1** (commits locaux `42094004` + audit), aucun push. Aucune vraie customisation de commande perdue ; `init-project.md` pris au tag. Bloc `TEAMLEADER_PROTOCOL` de CLAUDE.md à jour : ordres > 3 lignes via `_work/tasks/*.md`, questions utilisateur toujours via `AskUserQuestion`.
-- **Adresse du teamleader = `team-lead`**, jamais `main` (rejeté). Corrigé durablement par le compagnon `.claude/agents/context/TEAMMATES_PROTOCOL.md` (le template, lui, dit encore `main`). Le bug signalé à la session v11.1.0 est donc traité côté projet.
+- **Adresse du teamleader = `team-lead`**, jamais `main` (rejeté). Corrigé côté template depuis v3.26.1 (`TEAMMATES_PROTOCOL.template.md` impose `to: "team-lead"`) ; l'ancien compagnon projet `.claude/agents/context/TEAMMATES_PROTOCOL.md` a été supprimé à cette sync.
 - **Squelettes créés** : `docs/mockup/{INDEX,DECISIONS}.md` (les 19 maquettes historiques restent dans `docs/mockups/`, non indexées — choix utilisateur), `tests/INDEX.md`, `tests/METRICS.md`; `project-config.json` : `docs.mockup_dir` + défauts `testing.*`. `marketing-release` ajouté au tableau Agents de CLAUDE.md.
 - **Gitignore** : ajout `_work/`, `.claude/worktrees/`, `build/`. Fichier `data/WEAPSwrd_Epee…wav` toujours non suivi (hors sujet).
 - Aucun chantier ouvert ; prochain : choisir dans le backlog (v11.2 bruitages #231/#232/#235, ou bugs #189/#242).
