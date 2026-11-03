@@ -1700,7 +1700,8 @@ Jamais de passage silencieux : un environnement non valide ne doit apparaitre nu
 **4. Enregistrer** dans `project-config.json` (schema ci-dessous, section « 1. project-config.json »),
 sans secret : `infrastructure.environments[].access` — coordonnees non sensibles, **noms** des variables
 requises (`credentials_env`) et `verified` (date, statut, sondes jouees). Reporter ces memes noms dans
-`<env>.env.example` (section 3bis).
+`<env>.env.example` (section 3bis). Un acces par **fichier** (kubeconfig, token k8s, cle SSH, compte de service)
+se range dans `PRIVATE/` (Etape 10b) : la variable de `<env>.env` le designe par chemin (`KUBECONFIG=PRIVATE/k8s/...`).
 
 ---
 
@@ -1731,6 +1732,55 @@ AskUserQuestion (`multiSelect: true`) : "Quels aspects securite sont importants 
 
 ---
 
+## Etape 10b : Elements prives (`PRIVATE/`)
+
+Regle du template (section « Éléments privés » de `CLAUDE.md`) : tout element prive qui ne doit jamais etre
+commite vit dans `PRIVATE/` a la racine, gitignore. Cette etape **etudie** ce qui doit ou peut y aller.
+Hors perimetre (conventions propres, jamais deplacees) : `.env`, `.claude/agents/environments/<env>.env` et leurs
+`*.env.example`, `_work/`, `MARKETING/`, `build/`, `TEMPLATE_claude/`, `.claude/`.
+
+### Etude
+
+```bash
+EXCL='^(\.env(\.example)?$|\.claude/|_work/|MARKETING/|build/|TEMPLATE_claude/|PRIVATE/)'
+echo "## 1. Trackes, nom evocateur (deja commites → a sortir)"
+git ls-files | grep -vE "$EXCL" | grep -iE \
+  '(^|/)(secrets?|credentials?|private|perso(nal)?|tokens?)([._/-]|$)|[_.-](key|token|secret|password)s?$|\.(pem|key|p12|pfx|jks|keystore|kdbx|ovpn|mobileprovision)$|(^|/)id_(rsa|ecdsa|ed25519)$|kubeconfig|\.env\.[a-z]+$|\.(sql|dump)(\.gz)?$'
+echo "## 2. Trackes, contenu evocateur (fichiers seulement, jamais les valeurs)"
+git grep -lIE -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' -e 'AKIA[0-9A-Z]{16}' -e 'gh[pousr]_[A-Za-z0-9]{36}' \
+  -e 'xox[abprs]-[A-Za-z0-9-]+' -e '(password|passwd|secret|api[_-]?key|token)["'"'"']?\s*[:=]\s*["'"'"'][^"'"'"' ]{8,}' \
+  -- . ':!*.env.example' ':!TEMPLATE_claude' ':!.claude' 2>/dev/null
+echo "## 3. Non trackes et non ignores (prive → PRIVATE/, sinon a commiter ou ignorer)"
+git ls-files --others --exclude-standard | grep -vE "$EXCL"
+```
+
+Puis **anticiper** ce qui y ira d'apres les reponses deja donnees (meme absent aujourd'hui) :
+
+| Reponse | Element prive attendu |
+|---------|-----------------------|
+| Etape 8b — acces par cle / fichier / token (SSH, kubeconfig, token k8s, compte de service cloud, registre) | fichier d'acces dans `PRIVATE/<type>/` ; la variable de `<env>.env` qui le designe (`KUBECONFIG`, `SSH_KEY_PATH`, `GOOGLE_APPLICATION_CREDENTIALS`...) pointe dans `PRIVATE/` — son **nom** reste dans `<env>.env.example`. Fichier volontairement partage hors repo (`~/.kube/config`) : proposer « Laisser » |
+| Etape 8b — comptes (identifiants de consoles, comptes de service, acces fournisseurs) | `PRIVATE/ACCES.md` (notes d'acces, jamais dans un fichier tracke) |
+| Etape 10 — donnees sensibles / paiements | exports et dumps de donnees reelles (jamais en fixtures de test) |
+| Etape 4 — mobile | keystore Android, profils et certificats de signature iOS |
+| Etape 5 — firmware | cles de provisioning / certificats d'appareil, secrets de flashage |
+| Brief / cadrage — client, contrat | documents client, contrats, specifications sous NDA |
+| Toujours | notes personnelles du developpeur, config locale propre au poste |
+
+Les candidats d'un **fixture de test manifestement factice** (ex. `password: "secret"` dans un test) sont
+listes comme tels et proposes « Laisser » par defaut.
+
+### Presentation et decision
+
+Tableau `Element | Etat (tracke / non tracke / attendu) | Raison | Action proposee`, puis AskUserQuestion
+(`multiSelect: true`) : "Quels elements ranger dans `PRIVATE/` ?" — une option par candidat (jusqu'a 4 par
+question, enchainer les questions sinon), la raison en description. Les elements attendus non retenus ne sont pas
+enregistres. Aucun candidat et rien d'attendu → l'indiquer en une ligne, `private.items: []`.
+
+Enregistre dans `project-config.json` → `private` (noms et chemins seulement, **jamais de contenu**) ; le
+deplacement est fait a la Finalisation (sous-section « Elements prives »), apres la fusion du `.gitignore`.
+
+---
+
 ## Generation de la Configuration
 
 ### 1. project-config.json
@@ -1743,6 +1793,13 @@ AskUserQuestion (`multiSelect: true`) : "Quels aspects securite sont importants 
   "project": "<REPO_NAME>",
   "description": "<DESCRIPTION>",
   "license": { "spdx": "MIT", "holder": "<TITULAIRE>", "year": 2026, "source": "guided" },
+  "private": {
+    "reviewed": "2026-11-03",
+    "items": [
+      { "path": "PRIVATE/deploy_key", "kind": "cle d'acces PROD", "origin": "moved", "from": "deploy/deploy_key" },
+      { "path": "PRIVATE/dumps/", "kind": "dumps de donnees reelles", "origin": "expected" }
+    ]
+  },
   "version": "0.1.0",
   "initialized_at": "<TIMESTAMP>",
   "initialized_from": "analysis|manual|workshop|brief",
@@ -1858,6 +1915,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `testing.coverage_min` | Defaut `70` (seuil minimal de couverture, en %) |
 | `milestone.defaults` | Intensite de depart d'un milestone selon son type de version (`patch` / `minor` / `major` → `leger` / `complet`). Defaut `patch: leger`, `minor` et `major: complet`. Le cadrage complet (options, team) est propose par le planner et valide au GATE 2 : `agents/context/MILESTONE_CADRAGE.md`. Absent = `complet` partout |
 | `testing.lot_max_tests` | Defaut `50` (nombre max de cas de test par lot ; QA execute et rapporte lot par lot) |
+| `private` | Etape 10b. `reviewed` : date de l'etude ; `items[]` : contenu attendu de `PRIVATE/` (gitignore) — `path`, `kind` (nature, sans valeur), `origin` : `moved` (deplace depuis `from`) \| `existing` (deja hors git, range) \| `expected` (a fournir par le developpeur). Copie trackee : un clone frais sait ce qui manque ; `qa` y lit ce qu'il copie dans ses worktrees |
 | `license` | Etape 1b. `spdx` : identifiant SPDX (`MIT`, `Apache-2.0`...), `LicenseRef-proprietary` (tous droits reserves), `LicenseRef-custom` (texte maison fourni) ou `null` (« Decider plus tard ») ; `holder` / `year` : titulaire et annee du copyright ; `source` : `detected` \| `provided` \| `guided` \| `proprietary` \| `deferred` |
 | `src_dir` | Detection Etape 0 (repertoire source principal) ou stack par defaut : `src`, `cmd`... |
 | `version_file` | Fichier source de verite de la version (ex: `package.json`, `config.json`, `VERSION`) |
@@ -2299,6 +2357,33 @@ Puis, pour chaque manifeste present (`package.json`, `Cargo.toml`, `pyproject.to
 le renseigner avec l'identifiant SPDX (`"UNLICENSED"` dans `package.json` pour une licence proprietaire) ;
 present et different → le signaler dans le message de fin, sans le modifier.
 
+#### Elements prives (`PRIVATE/`)
+
+Selon `private` (Etape 10b), **apres** la fusion du `.gitignore` ci-dessus (`PRIVATE/` doit etre ignore avant
+tout deplacement) :
+
+```bash
+grep -qxF 'PRIVATE/' .gitignore 2>/dev/null || echo 'PRIVATE/' >> .gitignore   # garde-fou .gitignore personnalise
+mkdir -p PRIVATE
+git check-ignore -q PRIVATE/ || { echo "⚠ PRIVATE/ non ignore — deplacement annule"; exit 1; }
+jq -r '.private.items[]? | select(.origin=="moved") | "\(.from)\t\(.path)"' .claude/project-config.json |
+while IFS=$'\t' read -r from to; do
+  [ -e "$from" ] || continue
+  mkdir -p "$(dirname "$to")"
+  if git ls-files --error-unmatch "$from" >/dev/null 2>&1; then
+    git rm -r --cached -q "$from"          # retire de l'index ; le fichier reste sur disque
+  fi
+  mv "$from" "$to" && echo "  ✓ $from → $to"
+done
+```
+
+Puis :
+- **References** : `git grep -nF "<from>"` pour chaque element deplace — mettre a jour les chemins trackes
+  (config, scripts, `<env>.env` via la variable qui le designe) vers `PRIVATE/...` ; lister les modifications.
+- **Historique** : un element **tracke et deja pousse** reste lisible dans l'historique git. Le signaler au message
+  de fin (« rotation recommandee : <element> ») ; ne jamais reecrire l'historique automatiquement.
+- Le retrait de l'index (`git rm --cached`) est commite avec le reste de l'init (section 7, publication).
+
 Notice de copyright : seuls MIT, BSD et la licence proprietaire portent le titulaire dans `LICENSE`. Pour les
 autres (Apache-2.0, MPL-2.0, famille GNU, Unlicense), le texte officiel est verbatim et le titulaire n'y figure
 pas. Ajouter donc au `README.md` (le creer s'il est absent) une section `## Licence`, si aucune section
@@ -2643,6 +2728,8 @@ Configuration :
 - Environnements : <ENVIRONMENTS>  (ex: QUALIF -> PROD)
 - Licence      : <SPDX> (<TITULAIRE>, <ANNEE>) — LICENSE <cree | deja present>
                  | non definie — a choisir avant toute publication (relancer /init-project, option d)
+- Prive        : PRIVATE/ (gitignore) — N deplaces, N attendus a fournir : <chemins>
+                 rotation recommandee (deja pousse) : <elements | aucun>
 
 Memoire projet : .claude/memory/MEMORY.md initialisee (si absente)
 Teamleader : <modele> / <effort> ecrits dans .claude/settings.json (surcharge : compagnon .claude/agents/teamleader.md)
@@ -2951,6 +3038,35 @@ Un projet initialise avant l'Etape 1b n'a pas de cle `license` dans `project-con
 - Cle absente, aucune licence → au rapport d4 `[?] licence — non definie` ; a l'etape d5 AskUserQuestion :
   Definir maintenant (Recommande — rejouer l'Etape 1b puis « Fichier de licence » de la Finalisation) /
   Plus tard (`license: { "spdx": null, "source": "deferred" }`, plus reposee, rappelee au rapport d8).
+
+#### Etape d1h — Elements prives (`PRIVATE/`)
+
+Un projet initialise avant l'Etape 10b n'a ni cle `private` dans `project-config.json` ni section « Éléments
+privés » dans `CLAUDE.md` (hors bloc `TEAMLEADER_PROTOCOL`, donc non resynchronisee par d6). Lecture seule ici :
+
+- Cle `private` absente → jouer l'**Etude** de l'Etape 10b ; au rapport d4 `[+] PRIVATE/ — N candidats
+  (N trackes, N non trackes, N attendus)` (ou `[+] PRIVATE/ — aucun candidat, a creer`) ; a l'etape d5,
+  « Presentation et decision » de l'Etape 10b puis « Elements prives » de la Finalisation.
+- Cle `private` presente → rejouer seulement les recherches 1-2 de l'Etude (trackes) : un nouveau candidat →
+  `[!] PRIVATE/ — <fichier> tracke hors PRIVATE/` au rapport d4, decision a l'etape d5 comme ci-dessus.
+- `CLAUDE.md` sans `## Éléments privés` → a l'etape d5, inserer la section depuis `TEMPLATE_claude/CLAUDE_TEMPLATE.md`
+  juste avant `## Conventions Git` (ou en fin de fichier), sans toucher au reste :
+
+```bash
+grep -q '^## Éléments privés' CLAUDE.md || {
+  mkdir -p _work/tmp
+  awk '/^## Éléments privés/{p=1} p&&/^## Conventions Git/{exit} p' TEMPLATE_claude/CLAUDE_TEMPLATE.md > _work/tmp/private-section.md
+  if grep -q '^## Conventions Git' CLAUDE.md; then
+    awk 'FNR==NR{s=s $0 "\n"; next} /^## Conventions Git/{printf "%s", s} {print}' _work/tmp/private-section.md CLAUDE.md > CLAUDE.md.tmp
+  else
+    { cat CLAUDE.md; echo; cat _work/tmp/private-section.md; } > CLAUDE.md.tmp
+  fi
+  mv CLAUDE.md.tmp CLAUDE.md && rm -f _work/tmp/private-section.md && echo "✓ CLAUDE.md — section Éléments privés ajoutée"
+}
+```
+
+La ligne `PRIVATE/` du `.gitignore` est ajoutee par la fusion de l'etape d6b — la faire **avant** tout deplacement
+(le garde-fou de la Finalisation l'ajoute de toute facon).
 
 #### Etape d2 — Calculer les noms deployes attendus
 
@@ -3547,6 +3663,7 @@ Synchronisation terminee.
   Schema infrastructure             : [convertit vers environments[] | deja a jour | inchange (refuse)]
   Acces aux environnements          : [<ENV>: ok | <ENV>: non valide (statut) | valides a l'instant (etape d1f)]
   Licence                           : [<SPDX> (inchangee | enregistree | definie a l'instant) | non definie — reportee] (etape d1g)
+  Elements prives (PRIVATE/)        : [N deplaces, N attendus | inchange] — rotation recommandee : <elements> (etape d1h)
 
   Fichiers PROJET preserves (non touches) :
     ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL et hors table Agents Disponibles)
