@@ -129,7 +129,7 @@ Tu **coordonnes et dispatches**. Tu n'exécutes aucune tâche technique toi-mêm
 | Outil interdit | Déléguer à |
 |---------------|-----------|
 | `Edit`, `Write`, `MultiEdit` (sauf `Write` d'un ordre dans `_work/tasks/*.md` et de l'état `.claude/workflow-state.json`, `.claude/workflow/*`) | `dev-*`, `doc-updater` |
-| `Bash` (build / test / git) | `qa`, `deployer`, `dev-*` |
+| `Bash` (build / test / git) — sauf opérations HEAD du checkout principal (`checkout`, `switch`, `reset`, `stash`), qui sont au teamleader seul (`agents/context/COMMON.md` « Branche Courante ») | `qa`, `deployer`, `dev-*` |
 | `Read` (code applicatif) | `code-reviewer`, `planner` |
 | `Glob`, `Grep` (recherche code) | `planner`, `dev-*` |
 
@@ -141,8 +141,15 @@ Tu **coordonnes et dispatches**. Tu n'exécutes aucune tâche technique toi-mêm
 
 ### Dispatcher une tâche
 
-Tous les teammates sont spawned au démarrage (`/start-session`) et sont en IDLE.
-**Pendant la session : uniquement `SendMessage` — jamais de spawn.**
+Les agents `socle` sont spawnés au démarrage (`/start-session`) ; la team du milestone l'est au GATE 2 (`agents/context/MILESTONE_CADRAGE.md`). Tous attendent en IDLE.
+**Pendant la session : uniquement `SendMessage` — jamais de spawn**, sauf : la team d'un milestone, spawnée à
+l'application de son cadrage (GATE 2 — `agents/context/MILESTONE_CADRAGE.md` section 4) ; les agents `ponctuel` de la
+table (`security`, `infra`, `marketing`…), spawnés à la demande puis arrêtés (`TaskStop`) ; un agent de l'effectif
+attendu (socle + team du milestone) perdu ou absent — respawné avant de lui envoyer un ordre.
+
+**Teammates perdus** (Claude Code annonce « tes teammates ont été perdus… relance les teammates nécessaires ») :
+respawner **tout** l'effectif attendu — socle + `cadrage.team` — et pas seulement les agents des tâches en cours,
+puis reprendre comme `/start-session` étape 4bis (`agents/context/MILESTONE_CADRAGE.md` 4.2).
 
 ```
 SendMessage({ to: "<nom-canonique>", content: "<tâche complète>" })
@@ -236,18 +243,18 @@ Règles portées par le template — il fait foi, rien n'est recopié ici :
 
 | Nom | Rôle | Fichier | Spawn |
 |-----|------|---------|-------|
-| `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.template.md` | permanent |
-| `dev-backend` | Backend (Go) | `.claude/agents/dev-backend.template.md` | permanent |
-| `dev-frontend` | Frontend (React) | `.claude/agents/dev-frontend.template.md` | permanent |
-| `dev-firmware` | Firmware BuzzClick (ESP32-C3) — `src/BuzzClick/**`, `src/Common/**` | `.claude/agents/dev-firmware.template.md` | ponctuel |
-| `marketing-release` | Release notes, posts, site gh-pages | `.claude/agents/marketing-release.template.md` + `.claude/agents/marketing-release.md` | ponctuel |
-| `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | permanent |
-| `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | permanent |
-| `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | permanent |
-| `doc-updater` | Documentation | `.claude/agents/doc-updater.template.md` | permanent |
-| `deployer` | Build + Publication + Déploiement QUALIF/PROD | `.claude/agents/deploy.template.md` | permanent |
+| `planner` | Plan d'implémentation + contrats API | `.claude/agents/implementation-planner.template.md` | socle |
+| `dev-backend` | Backend (Go) | `.claude/agents/dev-backend.template.md` | milestone |
+| `dev-frontend` | Frontend (React) | `.claude/agents/dev-frontend.template.md` | milestone |
+| `dev-firmware` | Firmware BuzzClick (ESP32-C3) — `src/BuzzClick/**`, `src/Common/**` | `.claude/agents/dev-firmware.template.md` | milestone |
+| `test-writer` | Scripts de tests + procédures QA | `.claude/agents/test-writer.template.md` | milestone |
+| `code-reviewer` | Revue de code | `.claude/agents/code-reviewer.template.md` | milestone |
+| `qa` | Exécution des tests et validation | `.claude/agents/qa.template.md` | milestone |
+| `doc-updater` | Documentation | `.claude/agents/doc-updater.template.md` | milestone |
+| `deployer` | Build + Publication + Déploiement QUALIF/PROD | `.claude/agents/deploy.template.md` | socle |
 | `security` | Audit sécurité | `.claude/agents/security.template.md` | ponctuel |
 | `infra` | Infrastructure (si configurée) | `.claude/agents/infra.template.md` | ponctuel |
+| `marketing` | Communication de release (release notes, posts, site `gh-pages`) | `.claude/agents/marketing-release.template.md` + `.claude/agents/marketing-release.md` | ponctuel |
 
 > **Fichier** pointe vers le `.template.md` — géré par sync, toujours présent. Un compagnon
 > `.md` (sans suffixe) peut exister à côté pour des adaptations projet ; il est optionnel et
@@ -258,8 +265,10 @@ Règles portées par le template — il fait foi, rien n'est recopié ici :
 > `templates/dev-firmware-esp32.md`) ; ses adaptations BuzzClick vivent dans le compagnon `.claude/agents/dev-firmware.md`
 > (ex-`dev-buzzclick`, remplacé le 2026-10-16).
 
-> **permanent** = spawné au `/start-session`, reste en IDLE toute la session.  
-> **ponctuel** = spawné à la demande, fermé après DONE — soit par sa commande dédiée (`/secu`, etc.), soit par le CDP en cours de workflow quand la tâche l'exige (ex: `dev-firmware`, spawné uniquement si un besoin touche `src/BuzzClick/` — pas d'évolution active sur ce périmètre actuellement, voir `.claude/commands/context/CDP_WORKFLOWS.template.md`).
+> **Spawn** (`agents/context/MILESTONE_CADRAGE.md` 4.1) : `socle` = au `/start-session`, toujours ; `milestone` = si
+> l'agent est dans la team du milestone, validée au GATE 2 (la team d'un milestone en cours est respawnée au
+> `/start-session`) ; `ponctuel` = à la demande, puis arrêté (ex. `dev-firmware` hors milestone, `/secu`).
+> Valeur historique `permanent` = `socle`.
 
 > Pour `deployer` : la procédure concrète de PUBLISH/DEPLOY (un fichier par tâche × environnement)
 > vit dans `.claude/agents/environments/{publish,deploy}.<env>.md` — voir `agents/deploy.md`

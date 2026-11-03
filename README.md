@@ -256,7 +256,9 @@ buzzcontrol/
 
 ## Licence
 
-Projet prive - Tous droits reserves.
+Copyright (C) 2026 ccoupel
+
+Distribue sous licence GPL-3.0-or-later — voir [LICENSE](LICENSE).
 
 ---
 
