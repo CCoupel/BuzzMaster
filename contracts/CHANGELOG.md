@@ -1,6 +1,21 @@
 # Changelog des Contrats API
 
 ---
+## [20261105] — RAFALE alphabétique + composant Wheel (#282, v11.4.0, LOT-2)
+
+- **[NEW]** `rafale.md` §15 — option de manche `RAFALE_ALPHABETICAL` (bool, `omitempty`) et `RAFALE_WHEEL_LAYOUT`
+  (`strip` défaut | `arc`, `omitempty`), multipart `rafale_alphabetical` / `rafale_wheel_layout` ; normalisation
+  `rafaleAlphaKey` (accents, casse, articles initiaux) ; tirage par passes A→Z cyclique (une réponse par lettre par
+  passe) ; `GameState.RAFALE_CURRENT_LETTER` (string) et `RAFALE_LETTERS` ([]string, jamais nil), diffusés à tous
+  les clients web ; tests de fuite amendés (une lettre, jamais `ANSWER`/`NEXT`).
+- **[CHANGED]** `GET /api/rafale/pool` — champ `LETTERS` ajouté (rétrocompatible).
+- **[NEW]** `wheel-component.md` — composant frontend `Wheel` (segments, `current`, `layout strip|arc`, normalisation
+  modulo n, critère « lisible après 100 mouvements », `motion` réservé v12.0).
+- **[CHANGED]** `ws-payload-serialization.md` — lignes `GAME.RAFALE_CURRENT_LETTER` / `GAME.RAFALE_LETTERS`.
+- Non BREAKING : option désactivée ⇒ comportement v11.2.3 inchangé ; champs `GameState` additifs ; aucun client
+  existant ne lit les nouveaux champs ; carte MEMOTION RAFALE inchangée.
+
+---
 
 ## [20261105] — Son coupé persisté + popover « Ambiance » (#286 recadrée, #284, v11.4.0, LOT-1)
 
@@ -13,8 +28,7 @@
   passage à `true` ; popover d'en-tête « Ambiance » (éclairage + son), classe `.navbar-popover` (#284).
 - Non BREAKING : aucun client existant ne lit `muted` ; aucun champ `GameState`, aucune action WebSocket, aucun
   nouvel endpoint.
-- À venir dans ce milestone (contrats rédigés au démarrage de chaque lot) : LOT-2 `RAFALE_ALPHABETICAL` / `RAFALE_WHEEL_LAYOUT` (`strip` défaut | `arc`) /
-  `RAFALE_CURRENT_LETTER` / `RAFALE_LETTERS` / `GET /api/rafale/pool.letters` (#282) ; LOT-3 son de décompte `decompte` + `SOUND_LOOP` (#287/#288) ;
+- À venir dans ce milestone (contrats rédigés au démarrage de chaque lot) : LOT-2 : fait (entrée ci-dessus) ; LOT-3 son de décompte `decompte` + `SOUND_LOOP` (#287/#288) ;
   LOT-4 `PUT`/`DELETE /api/categories/{key}` (+ `mode`, fusion historique), `POST …/{key}/icon` (custom seulement),
   `color` persistée (#285).
 
