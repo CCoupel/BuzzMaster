@@ -93,7 +93,7 @@ describe('Navbar — bouton d\'accès aux commandes d\'éclairage (#208)', () =>
     const btn = getButton()
     expect(btn).not.toBeNull()
     expect(btn).toHaveClass('is-auto')
-    expect(btn.textContent).toContain('Éclairage')
+    expect(btn.textContent).toContain('Ambiance')
     expect(btn.textContent).not.toContain('engagé') // AUTO n'est pas "engagé"
   })
 

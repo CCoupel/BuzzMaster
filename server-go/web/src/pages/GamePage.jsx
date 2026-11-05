@@ -566,6 +566,10 @@ export default function GamePage() {
           : null
   const awardPenaltyMode = pointsInput < 0 || noPenaltyDefined
   const awardUnitName = isPlayerLevel ? 'joueur' : 'équipe'
+  // #289 — équipes distinctes des joueurs sélectionnés (affichage « x joueurs · y équipes »).
+  const awardTeamCount = isPlayerLevel
+    ? new Set(displayTeams.filter(t => t.buzzers.some(b => awardEntries.some(e => e.id === b.mac))).map(t => t.name)).size
+    : awardEntries.length
 
   // Ligne 1 du bloc : source du montant, liée au commutateur et à l'état (contrat §Montant).
   const awardSourceLabel = (() => {
@@ -1758,6 +1762,7 @@ export default function GamePage() {
                 question={gameState.question}
                 teamCounts={Object.fromEntries(Object.entries(qcmUnitsByColor).map(([c, set]) => [c, set.size]))}
                 unit={awardUnitName}
+                teamCount={awardTeamCount}
                 picked={pickedColor}
                 onPick={pickQcmAnswer}
               />

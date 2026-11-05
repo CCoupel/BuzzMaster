@@ -303,6 +303,24 @@ export default function AmbiancePage() {
     }
   }
 
+  // #286 — interrupteur général de l'éclairage d'ambiance (contracts/sound.md
+  // §11.4) : `lighting.enabled`, persisté, patch partiel de la section
+  // `lighting`. Jamais optimiste : la position affichée est celle rechargée.
+  const [savingMaster, setSavingMaster] = useState(false)
+  const handleToggleLightingEnabled = async () => {
+    setSavingMaster(true)
+    try {
+      const res = await saveLighting({ enabled: !lighting.enabled })
+      if (!res.ok) throw new Error(await res.text())
+      await afterSave()
+    } catch (error) {
+      console.error('Toggle lighting enabled failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setSavingMaster(false)
+    }
+  }
+
   // ---- Étape 1 : découverte ------------------------------------------------
   const handleDiscover = async () => {
     setDiscovery({ phase: 'searching', bridges: [] })
@@ -749,7 +767,7 @@ export default function AmbiancePage() {
   // (status) fait foi ; s'il n'est pas encore démarré (« disabled » juste
   // après l'association), le résultat de l'inventaire — preuve directe que le
   // pont répond ou non — le remplace.
-  const badgeState = !configured
+  const badgeState = !configured || !lighting.enabled
     ? 'disabled'
     : normalizeLightingState(status.state) !== 'disabled'
       ? status.state
@@ -1010,9 +1028,38 @@ export default function AmbiancePage() {
           </section>
         )}
 
+        {/* #286 — interrupteur général « Éclairage d'ambiance activé » (en tête
+            de l'onglet Lumière, pont associé) — maquette admin_navbar__ambiance_popover. */}
+        {configLoaded && step === 3 && (
+          <section className="ambiance-step ambiance-master" aria-labelledby="ambiance-master-title">
+            <h2 id="ambiance-master-title" className="ambiance-step-title">Éclairage d'ambiance</h2>
+            <div className="sound-master-row ambiance-master-row">
+              {/* Bouton à bascule (aria-pressed), pas une case : la liste d'ampoules
+                  plus bas porte déjà ses propres cases à cocher. */}
+              <button
+                type="button"
+                className={`ambiance-master-toggle${lighting.enabled ? ' is-on' : ''}`}
+                aria-pressed={!!lighting.enabled}
+                disabled={savingMaster}
+                onClick={handleToggleLightingEnabled}
+              >
+                <span className="ambiance-master-track" aria-hidden="true" />
+                Éclairage d'ambiance activé
+              </button>
+              <span className="ambiance-hint">
+                Éteint : les ampoules ne suivent plus la partie et les commandes de l'en-tête
+                (ON / AUTO / OFF, Flash) sont sans effet. Le réglage est conservé au redémarrage.
+              </span>
+            </div>
+          </section>
+        )}
+
         {/* ---------------- Étape 3 : choisir et tester les ampoules ---------------- */}
         {configLoaded && step === 3 && (
-          <section className="ambiance-step ambiance-step-lights" aria-labelledby="ambiance-step3-title">
+          <section
+            className={`ambiance-step ambiance-step-lights${lighting.enabled ? '' : ' is-dimmed'}`}
+            aria-labelledby="ambiance-step3-title"
+          >
             <div className="ambiance-bridge-row">
               <div>
                 <h2 id="ambiance-step3-title" className="ambiance-step-title">Ampoules du pont</h2>

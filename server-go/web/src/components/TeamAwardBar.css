@@ -1,4 +1,4 @@
-/* #254 — bloc d'attribution compact 2 lignes (maquettes admin_game_award__*_hints_toggle) */
+/* #254/#289 — bloc d'attribution 3 lignes (maquette admin_game_award__selection_lines) */
 .award { margin-bottom: 0.55rem; padding: 0.45rem 0.55rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.6rem; }
 .award.neg { background: #fff5f5; border-color: #fecaca; }
 .award-l1 { font-size: 0.74rem; color: #6b7280; display: flex; gap: 0.4rem; align-items: center; }
@@ -15,7 +15,11 @@
 .award-icon-btn { width: 2rem; height: 2rem; border: 1px solid #d1d5db; border-radius: 0.45rem; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; color: #374151; }
 .award-icon-btn:hover { background: #f3f4f6; }
 .award-icon-btn svg { width: 1.05rem; height: 1.05rem; }
-.award-give { flex: 1; border: 0; border-radius: 0.5rem; height: 2rem; padding: 0 0.8rem; font-weight: 800; font-size: 0.88rem; color: #fff; background: #4f46e5; cursor: pointer; }
+.award-count { flex: 1; min-width: 0; font-size: 0.86rem; font-weight: 800; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.award-count.empty { color: #6b7280; font-weight: 600; }
+.award-icon-btn { flex: 0 0 auto; }
+.award-l3 { margin-top: 0.35rem; }
+.award-give { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; border-radius: 0.5rem; height: 2rem; padding: 0 0.8rem; font-weight: 800; font-size: 0.88rem; color: #fff; background: #4f46e5; cursor: pointer; }
 .award-give.neg { background: #dc2626; }
 .award-give:disabled { opacity: 0.4; cursor: not-allowed; }
 .award-reason { margin: 0.35rem 0 0; font-size: 0.76rem; font-weight: 700; color: #b45309; background: #fef3c7; border-radius: 0.4rem; padding: 0.3rem 0.5rem; }

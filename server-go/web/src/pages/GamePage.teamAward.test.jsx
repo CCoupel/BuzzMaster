@@ -83,7 +83,9 @@ const mkGame = (extra = {}, question = QCM()) => ({
   bumperPointsBatchResult: null, clearBumperPointsBatchResult: vi.fn(),
   ...extra,
 })
-const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
+const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités)$/ })
+// #289 : le compteur n'est plus dans le bouton mais sur la ligne 2 du bloc (`.award-count`)
+const awardN = () => parseInt(document.querySelector('.award-count')?.textContent, 10) || 0
 const box = (name) => screen.getByRole('checkbox', { name: `Sélectionner ${name}` })
 const pointsField = () => screen.getByLabelText('Points')
 
@@ -120,7 +122,8 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
     fireEvent.click(screen.getByRole('button', { name: 'Tout sélectionner' }))
     expect(box('Paul').checked).toBe(false) // jamais re-sélectionné
     expect(box('Mamie').checked).toBe(true)
-    expect(action().textContent).toBe('Attribuer les points (1)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(1)
   })
 
   it('résultat APPLIED : confirmation, sélection vidée, déjà crédités ignorés signalés', () => {
@@ -135,7 +138,8 @@ describe('GamePage — attribution groupée : envoi, résultat, bornes, niveau j
     } })
     rerender(<GamePage />)
     expect(screen.getByText(/✓ Points attribués à 1 équipe\. 1 équipe déjà créditée ignorée\./)).toBeTruthy()
-    expect(action().textContent).toBe('Attribuer les points (0)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(0)
     expect(g.clearTeamPointsBatchResult).toHaveBeenCalled()
   })
 

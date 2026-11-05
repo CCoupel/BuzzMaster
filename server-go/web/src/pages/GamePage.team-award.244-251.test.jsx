@@ -95,8 +95,10 @@ const show = (over) => {
 }
 const box = (name) => screen.getByRole('checkbox', { name: `Sélectionner ${name}` })
 const queryBox = (name) => screen.queryByRole('checkbox', { name: `Sélectionner ${name}` })
-const give = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
-const queryGive = () => screen.queryByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
+const give = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités)$/ })
+// #289 : le compteur n'est plus dans le bouton mais sur la ligne 2 du bloc (`.award-count`)
+const awardN = () => parseInt(document.querySelector('.award-count')?.textContent, 10) || 0
+const queryGive = () => screen.queryByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités)$/ })
 // #254 : plus de montant propre au bloc — le montant est le champ « Points » de la page
 const amountInput = () => screen.getAllByLabelText('Points').find((el) => el.tagName === 'INPUT' && el.type === 'number')
 const answerBtn = (label) => screen.getByRole('button', { name: new RegExp(label) })
@@ -116,7 +118,8 @@ describe('Attribution groupée — visibilité (#244/#251, scénario 11)', () =>
   it('après le REVEAL : une case par carte d’équipe, la barre et le bouton « Attribuer les points (0) » désactivé', () => {
     show()
     for (const [n] of TEAM_ROWS) expect(box(n).checked).toBe(false)
-    expect(give().textContent).toBe('Attribuer les points (0)')
+    expect(give().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(0)
     expect(give().disabled).toBe(true)
     expect(amountInput().value).toBe('3') // B = points de la question
   })
@@ -138,7 +141,8 @@ describe('Attribution groupée — QCM : clic sur une réponse (scénario 12)', 
     fireEvent.click(answerBtn('La Seine'))
     expect(checked().sort()).toEqual(['Les Bleus', 'Les Roses', 'Les Rouges', 'Les Verts'])
     expect(amountInput().value).toBe('3')
-    expect(give().textContent).toBe('Attribuer les points (4)')
+    expect(give().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(4)
     expect(give().className).not.toMatch(/neg/)
   })
 
@@ -149,7 +153,8 @@ describe('Attribution groupée — QCM : clic sur une réponse (scénario 12)', 
 
     expect(checked().sort()).toEqual(['Les Jaunes', 'Les Oranges'])
     expect(amountInput().value).toBe('-1')
-    expect(give().textContent).toBe('Appliquer les pénalités (2)')
+    expect(give().textContent).toBe('Appliquer les pénalités')
+    expect(awardN()).toBe(2)
     expect(give().className).toMatch(/neg/)
   })
 
@@ -158,7 +163,8 @@ describe('Attribution groupée — QCM : clic sur une réponse (scénario 12)', 
     fireEvent.click(answerBtn('La Seine'))
     expect(box('Les Gris').checked).toBe(false)
     fireEvent.click(box('Les Gris'))
-    expect(give().textContent).toBe('Attribuer les points (5)')
+    expect(give().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(5)
   })
 })
 
@@ -169,7 +175,8 @@ describe('Attribution groupée — sélection manuelle et envoi (scénarios 13 e
     show()
     fireEvent.click(screen.getByRole('button', { name: 'Tout sélectionner' }))
     expect(checked().length).toBe(8)
-    expect(give().textContent).toBe('Attribuer les points (8)')
+    expect(give().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(8)
     fireEvent.click(screen.getByRole('button', { name: 'Tout désélectionner' }))
     expect(checked().length).toBe(0)
     expect(give().disabled).toBe(true)
@@ -179,9 +186,11 @@ describe('Attribution groupée — sélection manuelle et envoi (scénarios 13 e
     show()
     fireEvent.click(box('Les Bleus'))
     fireEvent.change(amountInput(), { target: { value: '-2' } })
-    expect(give().textContent).toBe('Appliquer les pénalités (1)')
+    expect(give().textContent).toBe('Appliquer les pénalités')
+    expect(awardN()).toBe(1)
     fireEvent.change(amountInput(), { target: { value: '7' } })
-    expect(give().textContent).toBe('Attribuer les points (1)')
+    expect(give().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(1)
   })
 
   it('Critical — le bouton envoie UN lot avec l’ID de la question et un montant par équipe sélectionnée', () => {
@@ -270,7 +279,8 @@ describe('Attribution groupée — équipes déjà créditées (scénario 14)', 
     expect(checked().sort()).toEqual(['Les Roses', 'Les Verts']) // Bleus et Rouges déjà créditées : exclues
     fireEvent.click(screen.getByRole('button', { name: 'Tout sélectionner' }))
     expect(box('Les Bleus').checked).toBe(false)
-    expect(give().textContent).toBe('Attribuer les points (6)') // 8 équipes − 2 déjà créditées
+    expect(give().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(6) // 8 équipes − 2 déjà créditées
   })
 })
 

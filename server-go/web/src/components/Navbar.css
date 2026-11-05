@@ -260,20 +260,56 @@
   box-shadow: none;
 }
 
-/* Popover — même patron que .navbar-menu-dropdown (position absolue,
-   ombre, coin arrondi), ancré à droite (le bouton est en fin de
-   .navbar-brand, un popover ancré à gauche déborderait de l'écran). */
-.lighting-mode-popover {
+/* Popover de l'en-tête (#284, classe commune .navbar-popover) — même patron que
+   .navbar-menu-dropdown (position absolue, ombre, coin arrondi). Ancré à GAUCHE
+   du bouton : le bouton est en fin du bloc gauche de la barre, l'ancrage à
+   droite (v11.2.3) faisait déborder le popover hors de l'écran à gauche.
+   `white-space: normal` : le nowrap de la barre est hérité sinon, et un
+   avertissement long devenait une seule ligne infinie. `max-width` borné au
+   viewport. */
+.navbar-popover {
   position: absolute;
   top: 100%;
-  right: 0;
+  left: 0;
+  right: auto;
   margin-top: var(--space-2);
   z-index: 1000;
   min-width: 280px;
+  max-width: min(380px, calc(100vw - 2rem));
+  white-space: normal;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md), 0 8px 16px rgba(0, 0, 0, 0.1);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
   animation: slideDown 200ms ease-out;
 }
+
+/* #286 — contenu du popover « Ambiance » */
+.ambiance-popover-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+.navbar-popover-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gray-500);
+  margin: var(--space-1) 0 0;
+}
+.navbar-popover-hint {
+  font-size: 0.76rem;
+  color: var(--gray-500);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.navbar-popover-hint a { color: var(--primary-500, #4f46e5); }
+.ambiance-popover-lighting { display: flex; flex-direction: column; gap: var(--space-2); }
+.ambiance-popover-lighting.is-muted { opacity: 0.75; }
+.sound-toggle-panel { display: flex; flex-direction: column; gap: var(--space-2); }
+.sound-toggle-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
 
 .update-badge-version {
   display: inline-flex;

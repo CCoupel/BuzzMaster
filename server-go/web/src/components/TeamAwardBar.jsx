@@ -15,24 +15,33 @@ const ICON_NONE = (
 )
 
 /**
- * TeamAwardBar — bloc d'attribution COMPACT sur 2 lignes (#254, maquettes admin_game_award__compact_block_hints_toggle
- * et admin_game_award__team_or_player_level_hints_toggle) :
- *   ligne 1 : « N équipes/joueurs · source du montant » + commutateur « Indices » (si visible) ;
- *   ligne 2 : icônes « Tout sélectionner / Tout désélectionner » (nom accessible) + bouton
- *             « Attribuer les points (N) » / « Appliquer les pénalités (N) » (rouge).
+ * TeamAwardBar — bloc d'attribution sur 3 lignes (#289, maquette admin_game_award__selection_lines ;
+ * remplace le bloc compact 2 lignes de #254) :
+ *   ligne 1 : source du montant + commutateur « Indices » (si visible) ;
+ *   ligne 2 : compteur de sélection (`role="status"`) — « x joueurs · y équipes » (niveau joueur),
+ *             « y équipes » (niveau équipe), « Aucune sélection » — + icônes Tout (dé)sélectionner ;
+ *   ligne 3 : bouton pleine largeur, SANS compteur dans son libellé, sur une seule ligne
+ *             (nowrap + ellipse : plus de débordement).
+ * `teamCount` = équipes distinctes des joueurs sélectionnés (niveau joueur uniquement ; calculé par GamePage).
  * Aucun champ de montant : le montant est le champ « Points » de la page. Le bouton est désactivé à
  * N = 0, pendant l'envoi ou si `blockedReason` ; la raison est affichée EN TEXTE sous le bloc
  * (une infobulle sur un bouton désactivé est invisible au toucher).
  */
 export default function TeamAwardBar({
-  count, unit = 'équipe', source, penaltyMode, sending, blockedReason, hints,
+  count, unit = 'équipe', teamCount, source, penaltyMode, sending, blockedReason, hints,
   onSelectAll, onSelectNone, onGive,
 }) {
+  const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`
+  const countLabel = count === 0
+    ? 'Aucune sélection'
+    : unit === 'joueur'
+      ? `${plural(count, 'joueur')} · ${plural(teamCount ?? 0, 'équipe')}`
+      : plural(count, unit)
   return (
     <div className={`award${penaltyMode ? ' neg' : ''}`} role="group" aria-label="Attribution des points">
       <div className="award-l1">
         <span className="award-l1t">
-          <b>{count} {unit}{count > 1 ? 's' : ''}</b> · {source}
+          {source}
         </span>
         {hints?.visible && (
           <label
@@ -52,15 +61,18 @@ export default function TeamAwardBar({
         )}
       </div>
       <div className="award-l2">
+        <span className={`award-count${count === 0 ? ' empty' : ''}`} role="status" aria-live="polite">{countLabel}</span>
         <button type="button" className="award-icon-btn" onClick={onSelectAll} aria-label="Tout sélectionner" title="Tout sélectionner">{ICON_ALL}</button>
         <button type="button" className="award-icon-btn" onClick={onSelectNone} aria-label="Tout désélectionner" title="Tout désélectionner">{ICON_NONE}</button>
+      </div>
+      <div className="award-l3">
         <button
           type="button"
           className={`award-give${penaltyMode ? ' neg' : ''}`}
           disabled={count === 0 || sending || !!blockedReason}
           onClick={onGive}
         >
-          {penaltyMode ? 'Appliquer les pénalités' : 'Attribuer les points'} ({count})
+          {penaltyMode ? 'Appliquer les pénalités' : 'Attribuer les points'}
         </button>
       </div>
       {blockedReason && <p className="award-reason" role="status">{blockedReason}</p>}
