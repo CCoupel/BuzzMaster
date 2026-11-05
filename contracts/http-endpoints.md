@@ -1066,8 +1066,11 @@ délibérément** (maquette révision 4, section 06 « deux états, et c'est tou
 #### Response 200
 
 ```json
-{"active": true}
+{"active": true, "muted": false}
 ```
+
+> **v11.4.0 (#286, LOT-1)** : champ `muted` ajouté (additif) — son coupé persisté (`sound.muted`), `contracts/sound.md` §11.
+> `muted` est indépendant d'`active` : `active=true, muted=true` = sortie disponible mais régie en silence.
 
 `active = sound.enabled == true ET !audio.IsNeutral(sortie attachée)`. **Tout le reste fusionne en
 `false`** — que le son soit désactivé ou que la sortie soit indisponible : la conséquence pour qui
@@ -1090,6 +1093,16 @@ par `POST /api/sounds/{cue}/test`, qui la nomme, et par les journaux du serveur.
 > Le seul remède à un état inactif d'origine matérielle est un **redémarrage du serveur** — la
 > tentative d'ouverture est unique. L'interface doit le dire explicitement, jamais laisser
 > supposer une action corrective côté configuration seule.
+
+### `POST /config.json {"sound": {"muted": bool}}` — son coupé (v11.4.0, #286, LOT-1)
+
+**Aucun endpoint dédié** (même règle que `enabled` et `cues_disabled`, `contracts/sound.md` §6.3/§11) : le réglage
+ponctuel du popover « Ambiance » s'écrit par le patch partiel additif existant, fusion champ par champ (clé absente
+⇒ valeur préservée). Persisté. Effets de bord d'un passage à `true` (dans `handleConfig`, après écriture) : arrêt net
+du média de question en cours (`QUESTION_SOUND_STATE` → `IDLE`, chronomètre différé libéré) et du son de décompte.
+Un passage à `false` ne reprend rien. `POST /api/sounds/{cue}/test` reste joué même coupé (geste explicite).
+`GET /api/sound/status.muted` le reflète. Même mécanisme pour l'interrupteur général de l'éclairage d'ambiance :
+`POST /config.json {"lighting": {"enabled": bool}}` (`sound.md` §11.4).
 
 ### `POST /api/sounds/restore-defaults` — déjà livré en #229
 

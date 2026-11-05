@@ -2,6 +2,24 @@
 
 ---
 
+## [20261105] — Son coupé persisté + popover « Ambiance » (#286 recadrée, #284, v11.4.0, LOT-1)
+
+- **[CHANGED]** `GET /api/sound/status` — champ `muted` ajouté en réponse (rétrocompatible).
+- **[CHANGED]** `POST /config.json` — section `sound` accepte `muted` (fusion champ par champ, valeur zéro = son
+  actif) ; section `lighting` : `enabled` devient un interrupteur utilisateur explicite (page Ambiance › Lumière),
+  sémantique précisée (`sound.md` §11.4).
+- **[NEW]** `sound.md` §11 — troisième garde dans `notifySound` (avant `Enabled`), T1 du média de question traité
+  comme `DISABLED` (différé libéré), gate T0 **non** concernée, `/test` exempté, arrêt du média et du décompte au
+  passage à `true` ; popover d'en-tête « Ambiance » (éclairage + son), classe `.navbar-popover` (#284).
+- Non BREAKING : aucun client existant ne lit `muted` ; aucun champ `GameState`, aucune action WebSocket, aucun
+  nouvel endpoint.
+- À venir dans ce milestone (contrats rédigés au démarrage de chaque lot) : LOT-2 `RAFALE_ALPHABETICAL` / `RAFALE_WHEEL_LAYOUT` (`strip` défaut | `arc`) /
+  `RAFALE_CURRENT_LETTER` / `RAFALE_LETTERS` / `GET /api/rafale/pool.letters` (#282) ; LOT-3 son de décompte `decompte` + `SOUND_LOOP` (#287/#288) ;
+  LOT-4 `PUT`/`DELETE /api/categories/{key}` (+ `mode`, fusion historique), `POST …/{key}/icon` (custom seulement),
+  `color` persistée (#285).
+
+---
+
 ## [20261015] — `NETWORK` réservé à l'admin (#275, v11.2.3, LOT-2)
 
 - **[CHANGED — non BREAKING]** `game-state.md` §`NETWORK` : le champ `NETWORK` (`ONLY_LOCALHOST`, `IPS`, `IGNORED_INTERFACES`, `CHECKED_AT`) est **retiré du nœud `GAME`** pour les clients TV, anim et VJoueur (`AdminOnlyGameFields`), au `HELLO` comme à chaque diffusion ; l'admin le reçoit inchangé. Motif : noms d'adaptateurs et IP des interfaces ignorées (WSL, Docker, VPN) diffusés à tous les clients web alors que seul l'admin les affiche (revue #267, [MINEUR 3]).

@@ -1,0 +1,175 @@
+<!--
+mockup:
+  composant: admin_game_award
+  feature: selection_lines
+  version: 11.4.0
+  type: ui
+  issue: "#289"
+  validee_le: 2026-11-05
+  complete: [docs/mockup/v11.2/ui/admin_game_award__team_or_player_level_hints_toggle.html, docs/mockup/v11.2/ui/admin_game_award__compact_block_hints_toggle.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — bloc d'attribution : compteur « x joueurs · y équipes » sur sa propre ligne, bouton sans débordement (#289)</title>
+<style>
+  :root { --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); }
+  .mock-note b { color:var(--gray-700); }
+  .page { max-width:1100px; margin:1rem auto; padding:0 1rem; display:grid; grid-template-columns:1.3fr 1fr; gap:.8rem; }
+  .card { background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:.8rem; font-size:.82rem; }
+  .card h3 { margin:0 0 .5rem; font-size:.95rem; display:flex; gap:.5rem; align-items:center; }
+  .qtext { font-size:1rem; font-weight:700; margin:.3rem 0 .6rem; }
+  .head { display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem; }
+  .head .t { flex:1; margin:0; font-size:.95rem; }
+  .pts { display:flex; align-items:center; gap:.35rem; font-size:.8rem; font-weight:700; color:var(--gray-700); }
+  .amount { display:flex; align-items:center; border:1px solid var(--gray-300); border-radius:.45rem; overflow:hidden; background:#fff; }
+  .amount button { border:0; background:var(--gray-100); width:1.8rem; height:1.9rem; font-weight:800; }
+  .amount input { width:3.2rem; height:1.9rem; border:0; text-align:center; font-weight:800; font-size:.95rem; }
+
+  /* ---- Bloc d'attribution (TeamAwardBar) — 3 lignes ---- */
+  .award { margin-bottom:.55rem; padding:.45rem .55rem; background:#f9fafb; border:1px solid var(--gray-200); border-radius:.6rem; }
+  .award.neg { background:#fff5f5; border-color:#fecaca; }
+  .award-l1 { font-size:.74rem; color:var(--gray-500); display:flex; gap:.4rem; align-items:center; }
+  .award-l1t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .award-l1 b { color:var(--gray-700); }
+  .hints { display:flex; align-items:center; gap:.3rem; font-size:.72rem; font-weight:700; color:var(--gray-700); white-space:nowrap; }
+  .track { width:1.9rem; height:1.05rem; border-radius:999px; background:var(--primary); position:relative; }
+  .track::after { content:''; position:absolute; top:.15rem; left:1rem; width:.75rem; height:.75rem; border-radius:50%; background:#fff; }
+  .award-l2 { display:flex; align-items:center; gap:.35rem; margin-top:.35rem; }
+  .award-count { flex:1; min-width:0; font-size:.86rem; font-weight:800; color:var(--gray-900); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .award-count.empty { color:var(--gray-500); font-weight:600; }
+  .award-count small { font-weight:600; color:var(--gray-500); }
+  .ibtn { width:2rem; height:2rem; border:1px solid var(--gray-300); border-radius:.45rem; background:#fff; display:flex; align-items:center; justify-content:center; padding:0; color:var(--gray-700); flex:0 0 auto; }
+  .ibtn svg { width:1.05rem; height:1.05rem; }
+  .award-l3 { margin-top:.35rem; }
+  .give { width:100%; border:0; border-radius:.5rem; height:2rem; padding:0 .8rem; font-weight:800; font-size:.88rem; color:#fff; background:var(--primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .give.neg { background:#dc2626; }
+  .give:disabled { opacity:.4; }
+
+  /* ---- Cartes équipes / joueurs ---- */
+  .teams { display:flex; flex-direction:column; gap:.4rem; }
+  .team { border:1px solid var(--gray-200); border-radius:.55rem; padding:.45rem .55rem; }
+  .team-h { display:flex; align-items:center; gap:.45rem; font-weight:700; }
+  .sw { width:.8rem; height:.8rem; border-radius:50%; display:inline-block; }
+  .players { margin:.35rem 0 0 1.2rem; display:flex; flex-direction:column; gap:.25rem; color:var(--gray-700); }
+  .players label, .team-h label { display:flex; align-items:center; gap:.4rem; cursor:pointer; }
+  .before { margin-top:1rem; padding:.6rem; border:1px dashed #f87171; border-radius:.5rem; }
+  .before h4 { margin:0 0 .4rem; color:#b91c1c; font-size:.8rem; }
+  .before .give-old { flex:1; border:0; border-radius:.5rem; min-height:2rem; padding:.2rem .5rem; font-weight:800; font-size:.88rem; color:#fff; background:var(--primary); width:140px; white-space:normal; line-height:1.1; text-align:left; }
+  .narrow { width:270px; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — état :</strong>
+  <label><input type="radio" name="st" value="p2" checked> Niveau joueur · 2 joueurs (2 équipes)</label>
+  <label><input type="radio" name="st" value="p3t1"> Niveau joueur · 2 joueurs (1 équipe)</label>
+  <label><input type="radio" name="st" value="p1"> Niveau joueur · 1 joueur</label>
+  <label><input type="radio" name="st" value="t3"> Niveau équipe · 3 équipes</label>
+  <label><input type="radio" name="st" value="t1"> Niveau équipe · 1 équipe</label>
+  <label><input type="radio" name="st" value="t0"> Aucune sélection</label>
+  <label><input type="radio" name="st" value="pen"> Pénalité · 2 joueurs (2 équipes)</label>
+</div>
+<div class="mock-note">
+  <b>Ce qui change</b> (bloc <code>TeamAwardBar</code>, colonne Équipes de la page Jeu en phase REVEALED) : le bloc passe de 2 à <b>3 lignes</b>.
+  <b>Ligne 1</b> — source du montant + commutateur « Indices » (inchangés, contraintes <code>DECISIONS.md › admin_game_award</code> respectées : la ligne 1 reste liée au commutateur).
+  <b>Ligne 2</b> — le compteur, seul et en gras : « <b>2 joueurs · 2 équipes</b> » au niveau joueur (joueurs sélectionnés · équipes distinctes auxquelles ils appartiennent),
+  « <b>3 équipes</b> » au niveau équipe, « Aucune sélection » quand rien n'est coché ; icônes Tout sélectionner / Tout désélectionner à droite.
+  <b>Ligne 3</b> — le bouton sur toute la largeur, <b>sans compteur dans son libellé</b> (« Attribuer les points » / « Appliquer les pénalités »), en une seule ligne (<code>nowrap</code> + ellipse) : plus de débordement, quelle que soit la largeur de la colonne.
+  Le compteur exclut les unités déjà créditées (règle existante : <code>awardEntries.length</code>). Singulier/pluriel gérés.
+</div>
+
+<div class="page">
+  <section class="card">
+    <h3>Question en cours <span style="font-size:.7rem;background:#6366f1;color:#fff;border-radius:999px;padding:.12rem .45rem">REVEALED</span></h3>
+    <p class="qtext" id="qtext">Quelle est la capitale de l'Australie ?</p>
+    <p style="color:var(--gray-500)">Réponse : Canberra · Barème : 10 pts · Points : <b id="level">joueur</b></p>
+  </section>
+
+  <aside class="card">
+    <div class="head"><h3 class="t">Équipes</h3>
+      <div class="pts">Points <div class="amount"><button>−</button><input id="amount" value="10"><button>+</button></div></div>
+    </div>
+
+    <div class="award" id="award" role="group" aria-label="Attribution des points">
+      <div class="award-l1">
+        <span class="award-l1t" id="l1t"><b>Barème de la question</b> · 10 pts par joueur</span>
+        <span class="hints"><span class="track"></span>Indices</span>
+      </div>
+      <div class="award-l2">
+        <span class="award-count" id="count" role="status" aria-live="polite">2 joueurs · 2 équipes</span>
+        <button class="ibtn" aria-label="Tout sélectionner" title="Tout sélectionner"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/><path d="M6 10.5l3 3 5-6"/></svg></button>
+        <button class="ibtn" aria-label="Tout désélectionner" title="Tout désélectionner"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="2.5" width="15" height="15" rx="3"/></svg></button>
+      </div>
+      <div class="award-l3"><button class="give" id="give">Attribuer les points</button></div>
+    </div>
+
+    <div class="teams" id="teams"></div>
+
+    <div class="before">
+      <h4>Avant (v11.2.3, capture utilisateur) — bouton qui déborde sur 2 lignes, à ne plus produire</h4>
+      <div style="display:flex;gap:.35rem;align-items:center" class="narrow">
+        <span style="flex:1;font-size:.74rem;color:var(--gray-500)"><b>2 joueurs</b> · points de la question</span>
+        <button class="give-old">Attribuer les points (2)</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const TEAMS = [
+    { name:'Bleus', color:'#3b82f6', players:['Alice','Bob'] },
+    { name:'Rouges', color:'#ef4444', players:['Chloé','Dan'] },
+    { name:'Verts', color:'#22c55e', players:['Eva'] },
+  ];
+  const plural = (n, w) => n + ' ' + w + (n > 1 ? 's' : '');
+  const states = {
+    p2:   { level:'PLAYER', sel:['Alice','Chloé'], pen:false },
+    p3t1: { level:'PLAYER', sel:['Alice','Bob'], pen:false, extra:['Alice','Bob'] },
+    p1:   { level:'PLAYER', sel:['Eva'], pen:false },
+    t3:   { level:'TEAM', sel:['Bleus','Rouges','Verts'], pen:false },
+    t1:   { level:'TEAM', sel:['Verts'], pen:false },
+    t0:   { level:'TEAM', sel:[], pen:false },
+    pen:  { level:'PLAYER', sel:['Alice','Chloé'], pen:true },
+  };
+  function render(key) {
+    const s = states[key];
+    const isPlayer = s.level === 'PLAYER';
+    $('level').textContent = isPlayer ? 'joueur' : 'équipe';
+    $('amount').value = s.pen ? '-5' : '10';
+    $('award').className = 'award' + (s.pen ? ' neg' : '');
+    $('l1t').innerHTML = s.pen
+      ? '<b>Pénalité</b> · −5 pts par ' + (isPlayer ? 'joueur' : 'équipe') + ' (montant uniforme)'
+      : '<b>Barème de la question</b> · 10 pts par ' + (isPlayer ? 'joueur' : 'équipe');
+    // compteur
+    let txt, empty = false;
+    if (s.sel.length === 0) { txt = 'Aucune sélection'; empty = true; }
+    else if (isPlayer) {
+      const teams = new Set(TEAMS.filter(t => t.players.some(p => s.sel.includes(p))).map(t => t.name));
+      txt = plural(s.sel.length, 'joueur') + ' · ' + plural(teams.size, 'équipe');
+    } else txt = plural(s.sel.length, 'équipe');
+    $('count').textContent = txt; $('count').className = 'award-count' + (empty ? ' empty' : '');
+    // bouton
+    const g = $('give'); g.textContent = s.pen ? 'Appliquer les pénalités' : 'Attribuer les points';
+    g.className = 'give' + (s.pen ? ' neg' : ''); g.disabled = empty;
+    // cartes
+    $('teams').innerHTML = TEAMS.map(t => `
+      <div class="team">
+        <div class="team-h"><label>${!isPlayer ? `<input type="checkbox" ${s.sel.includes(t.name) ? 'checked' : ''}>` : ''}<span class="sw" style="background:${t.color}"></span>${t.name}</label></div>
+        ${isPlayer ? `<div class="players">${t.players.map(p => `<label><input type="checkbox" ${s.sel.includes(p) ? 'checked' : ''}>${p}</label>`).join('')}</div>` : ''}
+      </div>`).join('');
+  }
+  document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => render(e.target.value)));
+  render('p2');
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!--
+mockup:
+  composant: tv_rafale_started
+  feature: letter_wheel
+  version: 11.4.0
+  type: ui
+  issue: "#282 (composant réutilisable #144)"
+  validee_le: 2026-11-05
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TV — RAFALE alphabétique : roue des lettres générique, deux présentations (bandeau / roue en arc), en bas de l'écran (#282)</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:#111827; color:#e5e7eb; }
+  .mock-bar { position:sticky; top:0; z-index:300; background:#000; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; align-items:center; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-bar button { font:inherit; font-size:.78rem; padding:.25rem .6rem; border-radius:.4rem; border:1px solid #4b5563; background:#1f2937; color:#fff; cursor:pointer; }
+  .mock-note { max-width:1200px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:#9ca3af; }
+  .mock-note b { color:#e5e7eb; }
+  h2.mock-h { max-width:1200px; margin:1rem auto .3rem; padding:0 1rem; font-size:.95rem; color:#cbd5e1; }
+
+  /* ---- Écran TV 16:9, STATIQUE ---- */
+  .tv { width:1120px; height:630px; margin:0 auto 1rem; position:relative; overflow:hidden; background:radial-gradient(circle at 50% 20%, #1f2a5a, #0b1020 70%); border:3px solid #374151; display:flex; flex-direction:column; --vh:6.3px; --vw:11.2px; }
+  .zone-timer { height:calc(10 * var(--vh)); display:flex; align-items:center; justify-content:center; gap:calc(4 * var(--vw)); font-weight:800; }
+  .timer { display:flex; flex-direction:column; align-items:center; }
+  .timer .v { font-size:calc(5 * var(--vh)); line-height:1; } .timer.q .v { color:#fbbf24; }
+  .timer .l { font-size:calc(1.6 * var(--vh)); color:#9ca3af; text-transform:uppercase; letter-spacing:.1em; }
+  .zone-main { flex:1; min-height:0; display:flex; flex-direction:column; gap:calc(1.2 * var(--vh)); padding:0 calc(6 * var(--vw)); }
+  .qcard { flex:1; border:4px solid var(--team,#3b82f6); border-radius:calc(2 * var(--vh)); background:rgba(255,255,255,.06); padding:calc(1.2 * var(--vh)) calc(3 * var(--vw)); display:flex; flex-direction:column; gap:calc(.8 * var(--vh)); min-height:0; overflow:hidden; }
+  .qcard-team { font-size:calc(2.6 * var(--vh)); font-weight:800; color:var(--team); text-transform:uppercase; letter-spacing:.08em; }
+  .meta { display:flex; gap:calc(1 * var(--vw)); font-size:calc(1.8 * var(--vh)); }
+  .chip { background:rgba(255,255,255,.12); border-radius:999px; padding:.15em .8em; }
+  .qtext { font-size:calc(3.6 * var(--vh)); font-weight:700; line-height:1.25; overflow:hidden; margin:0; }
+  .board { display:grid; grid-template-columns:repeat(14, 1fr); gap:.4vh; }
+  .bcell { aspect-ratio:1; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:calc(3.2 * var(--vh)); background:#e5e7eb; color:#111827; border-radius:.3rem; }
+  .bcell.space { background:transparent; } .bcell.hidden { color:transparent; background:#1f2937; } .bcell.new { background:#fbbf24; }
+  .scores { display:flex; gap:calc(1 * var(--vw)); }
+  .score { flex:1; border-radius:.8rem; padding:.3rem .8rem; background:rgba(255,255,255,.08); border-left:6px solid var(--c); font-size:calc(2 * var(--vh)); font-weight:800; }
+  .score.active { background:rgba(255,255,255,.18); outline:2px solid var(--c); }
+  .score small { display:block; font-weight:600; color:#9ca3af; font-size:calc(1.4 * var(--vh)); }
+
+  /* ---- Composant Wheel — zone basse ---- */
+  .wheel-zone { position:relative; overflow:hidden; }
+  .wheel-zone.strip { height:calc(16 * var(--vh)); display:flex; align-items:center; padding:0 calc(3 * var(--vw)) calc(1.5 * var(--vh)); }
+  .wheel-zone.arc { height:calc(30 * var(--vh)); }
+  /* bandeau */
+  .strip-box { width:100%; height:calc(12 * var(--vh)); overflow:hidden; position:relative; border-radius:calc(1.5 * var(--vh)); background:rgba(0,0,0,.35); border:2px solid rgba(255,255,255,.15); --cw:calc(10 * var(--vw)); }
+  .track { position:absolute; top:0; bottom:0; left:50%; display:flex; will-change:transform; }
+  .cell { width:var(--cw); flex:0 0 var(--cw); display:flex; align-items:center; justify-content:center; font-weight:900; color:#111827; border-right:2px solid #0b1020; font-size:calc(5.5 * var(--vh)); }
+  .cell.special { font-size:calc(1.9 * var(--vh)); color:#fff; }
+  .cell.disabled { opacity:.25; }
+  .strip-box::before, .strip-box::after { content:''; position:absolute; top:0; bottom:0; width:18%; z-index:2; pointer-events:none; }
+  .strip-box::before { left:0; background:linear-gradient(90deg, #0b1020, transparent); } .strip-box::after { right:0; background:linear-gradient(270deg, #0b1020, transparent); }
+  .pointer-box { position:absolute; left:50%; top:-2px; bottom:-2px; width:var(--cw); transform:translateX(-50%); border:4px solid var(--team,#fff); border-radius:.6rem; z-index:3; box-shadow:0 0 0 3px #111827, 0 0 24px rgba(255,255,255,.5); pointer-events:none; }
+  .pointer-box::before { content:''; position:absolute; left:50%; top:-14px; transform:translateX(-50%); border:10px solid transparent; border-top:12px solid var(--team,#fff); }
+  /* arc */
+  .wheel-zone.arc svg { position:absolute; left:50%; top:calc(3 * var(--vh)); width:calc(120 * var(--vw)); height:calc(120 * var(--vw)); transform:translateX(-50%); overflow:visible; }
+  .seg { stroke:#0b1020; stroke-width:2; } .seg.disabled { opacity:.25; }
+  .seg-label { font-weight:900; text-anchor:middle; dominant-baseline:central; }
+  .rim { fill:none; stroke:rgba(255,255,255,.25); stroke-width:6; }
+  .rotor { transform-origin:500px 500px; will-change:transform; }
+  .pointer { fill:var(--team,#fff); stroke:#111827; stroke-width:2; filter:drop-shadow(0 0 8px rgba(255,255,255,.7)); }
+  /* compact admin/anim */
+  .compact { max-width:1200px; margin:0 auto 1.5rem; display:flex; gap:1rem; padding:0 1rem; }
+  .ccard { flex:1; background:#fff; color:#111827; border-radius:.7rem; padding:.8rem; font-size:.85rem; }
+  .ccard.anim { background:#0f172a; color:#e5e7eb; }
+  .ccard .strip-box { height:44px; --cw:40px; background:#111827; } .ccard .cell { font-size:20px; } .ccard .cell.special { font-size:9px; }
+  .ccard .wheel-zone.arc { height:80px; } .ccard .wheel-zone.arc svg { width:400px; height:400px; top:6px; } .ccard .seg-label { font-size:22px !important; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Présentation :</strong>
+  <label><input type="radio" name="layout" value="strip" checked> Bandeau (B)</label>
+  <label><input type="radio" name="layout" value="arc"> Roue en arc (C)</label>
+  <strong style="margin-left:.6rem">Contenu :</strong>
+  <label><input type="radio" name="st" value="rafale" checked> RAFALE alphabétique (v11.4.0)</label>
+  <label><input type="radio" name="st" value="rdf"> Roue de la Fortune (v12.0, aperçu)</label>
+  <button id="step">▶ Mot suivant (RAFALE : glisse à la lettre suivante)</button>
+  <button id="spin">🎡 Tourner (RdF : 2 tours puis arrêt)</button>
+</div>
+<div class="mock-note">
+  <b>Un seul composant `Wheel`, deux présentations</b> (`layout = "strip" | "arc"`), choisies par un <b>sélecteur par manche RAFALE</b> (éditeur de manche, champ <code>RAFALE_WHEEL_LAYOUT</code>, <b>Bandeau par défaut</b>).
+  <b>Position</b> : <b>en bas de l'écran</b> dans les deux cas (bandeau 16 vh ; arc 30 vh), la question (RAFALE) ou le plateau de phrase + scores (RdF) occupe la zone centrale.
+  <b>Même animation</b> pour les deux : le <b>pointeur est fixe</b>, c'est le contenu qui <b>glisse</b> (bandeau : translation ; arc : rotation) avec <b>la même courbe et la même durée</b> — un pas de 0,6 s vers la lettre suivante en RAFALE ; en Roue de la Fortune un long mouvement (plusieurs tours) qui décélère jusqu'au segment choisi par le serveur.
+  <b>États</b> : lettre courante sous le pointeur (couleur de l'équipe active), lettres sans mot restant grisées. Aucune ligne A→Z supplémentaire dans l'encart : le bandeau ou la roue suffit, même comportement qu'en Roue de la Fortune (décision utilisateur, itération 3).
+  TV statique : <code>overflow: hidden</code>, transformations CSS seulement, aucun scroll. <b>Piège d'implémentation</b> (trouvé sur cette maquette) : la position continue doit être <b>normalisée modulo n</b> à la fin de chaque mouvement et le ruban doit avoir assez de répétitions pour l'amplitude maximale — sinon, après plusieurs rotations, le bandeau sort de son contenu et s'affiche vide (noir). Critère LOT-2 : roue lisible après 100 mouvements.
+</div>
+
+<div class="tv" id="tv" style="--team:#3b82f6">
+  <div class="zone-timer">
+    <div class="timer"><span class="v" id="round">1:42</span><span class="l">manche</span></div>
+    <div class="timer q"><span class="v" id="qt">3</span><span class="l">question</span></div>
+  </div>
+  <div class="zone-main" id="main"></div>
+  <div class="wheel-zone strip" id="wz"></div>
+</div>
+
+<h2 class="mock-h">Rendu compact (même composant, même `layout`) — admin page Jeu et animateur ; en v11.4.0 ces surfaces n'affichent que la lettre (pastille), le compact est prévu pour v12.0</h2>
+<div class="compact">
+  <div class="ccard"><div id="wzA"></div><b id="cTitle">Lettre courante : C</b> · <span>réponse attendue : Canberra</span></div>
+  <div class="ccard anim"><div id="wzB"></div><b id="cTitleB">C — Canberra · Bleus</b></div>
+</div>
+
+<script>
+  const LET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const REMAIN = 'ABCDEFGHIJKLMNOPRSTVZ';
+  const RDF = [500,'PERDU',300,200,1000,250,'BANQUEROUTE',400,150,600,300,200,800,250,'PERDU',500,350,200,1500,300,'BANQUEROUTE',400,250,700];
+  const COLORS = ['#f97316','#3b82f6','#22c55e','#eab308','#a855f7','#ec4899','#14b8a6','#f43f5e'];
+  const model = {
+    rafale: { segments: LET.map(l => ({ label:l, color: REMAIN.includes(l) ? '#e5e7eb' : '#4b5563', state: REMAIN.includes(l) ? '' : 'disabled' })), pos: 2 },
+    rdf: { segments: RDF.map((v, i) => ({ label:v, color: v === 'BANQUEROUTE' ? '#111827' : v === 'PERDU' ? '#9ca3af' : COLORS[i % COLORS.length], special: typeof v !== 'number', state:'' })), pos: 4 },
+  };
+  let key = 'rafale', layout = 'strip';
+  // ---------- moteur de mouvement commun : position continue (en segments), easing cubique ----------
+  const ease = (p) => 1 - Math.pow(1 - p, 3);
+  let anim = null;
+  function animateTo(m, to, ms) {
+    const n0 = m.segments.length; m.pos = ((m.pos % n0) + n0) % n0; to = ((to - m.pos) % (4 * n0)) + m.pos; // départ normalisé, amplitude bornée
+    const from = m.pos, t0 = performance.now();
+    if (anim) cancelAnimationFrame(anim);
+    const frame = (t) => { const p = Math.min(1, (t - t0) / ms); m.pos = from + (to - from) * ease(p); paint(); if (p < 1) anim = requestAnimationFrame(frame); else { const n = m.segments.length; m.pos = ((to % n) + n) % n; paint(); } };
+    anim = requestAnimationFrame(frame);
+  }
+  // ---------- rendus ----------
+  const REP = 7; // ≥ 2 (avant) + amplitude max d'un mouvement (2 tours + n = 3n) + 1 : la position est normalisée modulo n à la fin de chaque mouvement
+  function stripHTML(m, id) {
+    let cells = '';
+    for (let k = 0; k < REP; k++) m.segments.forEach(s => { cells += `<div class="cell ${s.state} ${s.special ? 'special' : ''}" style="background:${s.color}">${s.label}</div>`; });
+    return `<div class="strip-box"><div class="track" id="${id}">${cells}</div><div class="pointer-box"></div></div>`;
+  }
+  function arcHTML(m, id) {
+    const n = m.segments.length, cx = 500, cy = 500, R = 480, r = 330;
+    let g = `<svg viewBox="0 0 1000 1000"><g class="rotor" id="${id}">`;
+    m.segments.forEach((s, i) => {
+      const a0 = (i / n) * 2 * Math.PI - Math.PI / 2 - Math.PI / n, a1 = a0 + 2 * Math.PI / n, am = (a0 + a1) / 2;
+      const p = (a, rr) => `${cx + Math.cos(a) * rr},${cy + Math.sin(a) * rr}`;
+      g += `<path class="seg ${s.state}" d="M${p(a0, r)} L${p(a0, R)} A${R},${R} 0 0 1 ${p(a1, R)} L${p(a1, r)} A${r},${r} 0 0 0 ${p(a0, r)} Z" fill="${s.color}"/>`;
+      const lx = cx + Math.cos(am) * (R - 70), ly = cy + Math.sin(am) * (R - 70);
+      g += `<text class="seg-label" x="${lx}" y="${ly}" font-size="${s.special ? 26 : 54}" fill="${s.special ? '#fff' : '#111827'}" transform="rotate(${(am * 180 / Math.PI) + 90} ${lx} ${ly})">${s.label}</text>`;
+    });
+    g += `<circle class="rim" cx="${cx}" cy="${cy}" r="${R + 3}"/></g><polygon class="pointer" points="${cx - 26},${cy - R - 14} ${cx + 26},${cy - R - 14} ${cx},${cy - R + 50}"/></svg>`;
+    return g;
+  }
+  function build() {
+    const m = model[key];
+    const wz = document.getElementById('wz'); wz.className = 'wheel-zone ' + layout;
+    wz.innerHTML = layout === 'strip' ? stripHTML(m, 'mv') : arcHTML(m, 'mv');
+    document.getElementById('wzA').innerHTML = `<div class="wheel-zone ${layout}">${layout === 'strip' ? stripHTML(m, 'mvA') : arcHTML(m, 'mvA')}</div>`;
+    document.getElementById('wzB').innerHTML = `<div class="wheel-zone ${layout}">${layout === 'strip' ? stripHTML(m, 'mvB') : arcHTML(m, 'mvB')}</div>`;
+    paint(); content();
+  }
+  function paint() {
+    const m = model[key], n = m.segments.length;
+    ['mv','mvA','mvB'].forEach(id => {
+      const el = document.getElementById(id); if (!el) return;
+      if (layout === 'strip') { const cw = el.firstElementChild.getBoundingClientRect().width || 1; el.style.transform = `translateX(${-((2 * n + m.pos) * cw + cw / 2)}px)`; }
+      else el.style.transform = `rotate(${-(m.pos / n) * 360}deg)`;
+    });
+    const cur = m.segments[((Math.round(m.pos) % n) + n) % n];
+    document.getElementById('cTitle').textContent = (key === 'rafale' ? 'Lettre courante : ' : 'Segment : ') + cur.label;
+    document.getElementById('cTitleB').textContent = cur.label + (key === 'rafale' ? ' — Canberra · Bleus' : ' · Bleus');
+  }
+  function content() {
+    const main = document.getElementById('main');
+    if (key === 'rafale') {
+      document.getElementById('round').textContent = '1:42'; document.getElementById('qt').textContent = '3';
+      main.innerHTML = `<div class="qcard"><span class="qcard-team">Bleus</span><div class="meta"><span class="chip">🌍 Géographie</span><span class="chip">★★</span><span class="chip">10 pts</span></div><p class="qtext">Capitale de l'Australie ?</p></div>`;
+    } else {
+      document.getElementById('round').textContent = 'TOUR 3'; document.getElementById('qt').textContent = '—';
+      const phrase = 'LA ROUE TOURNE', shown = 'LAROUE';
+      main.innerHTML = `<div class="board">${phrase.split('').map(c => `<div class="bcell ${c === ' ' ? 'space' : shown.includes(c) ? (c === 'R' ? 'new' : '') : 'hidden'}">${c}</div>`).join('')}</div>
+        <div class="scores"><div class="score active" style="--c:#3b82f6">Bleus<small>1 250 pts · R × 2 = +1 000</small></div><div class="score" style="--c:#ef4444">Rouges<small>700 pts</small></div><div class="score" style="--c:#22c55e">Verts<small>0 pt</small></div></div>`;
+    }
+    paint();
+  }
+  document.querySelectorAll('input[name=layout]').forEach(r => r.addEventListener('change', e => { layout = e.target.value; build(); }));
+  document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => { key = e.target.value; build(); }));
+  document.getElementById('step').addEventListener('click', () => {
+    const m = model[key], n = m.segments.length; let i = Math.round(m.pos), k = 0;
+    do { i++; k++; } while (m.segments[i % n].state === 'disabled' && k < n);
+    animateTo(m, i, 600);
+  });
+  document.getElementById('spin').addEventListener('click', () => { const m = model[key], n = m.segments.length; animateTo(m, Math.round(m.pos) + 2 * n + Math.floor(Math.random() * n), 4000); });
+  build();
+</script>
+</body>
+</html>

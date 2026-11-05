@@ -1,0 +1,138 @@
+<!--
+mockup:
+  composant: admin_question_editor
+  feature: rafale_alphabetical
+  version: 11.4.0
+  type: ui
+  issue: "#282"
+  validee_le: 2026-11-05
+  complete: [docs/mockup/v11.2.2/ui/admin_question_editor__memotion_card_points_rule.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — éditeur de manche RAFALE : option « Alphabétique » ; chips admin / animateur (#282)</title>
+<style>
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); }
+  .mock-note b { color:var(--gray-700); }
+  h2.mock-h { max-width:1100px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+  .card { max-width:1100px; margin:0 auto 1rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; font-size:.85rem; }
+  .form-group { margin-bottom:.8rem; } .form-group > label { display:block; font-weight:700; margin-bottom:.3rem; }
+  .form-row { display:flex; gap:1rem; } .form-row .form-group { flex:1; }
+  input[type=number], input[type=text] { width:100%; padding:.4rem .5rem; border:1px solid var(--gray-300); border-radius:.4rem; font:inherit; }
+  .chips { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .cat-chip { border:1px solid var(--gray-300); border-radius:999px; padding:.25rem .7rem; background:#fff; font-size:.8rem; }
+  .cat-chip.active { border-color:var(--primary); background:#eef2ff; font-weight:700; }
+  .mode-opts { display:grid; grid-template-columns:repeat(2,1fr); gap:.4rem; }
+  .mode-opt { display:flex; gap:.5rem; align-items:flex-start; border:1px solid var(--gray-200); border-radius:.5rem; padding:.45rem .6rem; }
+  .mode-opt small { display:block; color:var(--gray-500); }
+  .hint { color:var(--gray-500); font-size:.78rem; }
+  /* --- option Alphabétique (nouveau) : patron .sound-timer-toggle / .quiz-switch --- */
+  .alpha { display:flex; align-items:center; gap:.7rem; border:1px solid var(--gray-200); border-radius:.5rem; padding:.55rem .7rem; background:var(--gray-50); }
+  .alpha .sw { width:2.2rem; height:1.2rem; border-radius:999px; background:var(--gray-300); position:relative; border:0; cursor:pointer; flex:0 0 auto; }
+  .alpha .sw::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.9rem; height:.9rem; border-radius:50%; background:#fff; transition:left .15s; }
+  .alpha.on .sw { background:var(--primary); } .alpha.on .sw::after { left:1.15rem; }
+  .alpha b { display:block; } .alpha small { color:var(--gray-500); display:block; }
+  .alpha-detail { margin:.4rem 0 0 2.9rem; font-size:.78rem; color:var(--gray-700); display:none; }
+  .alpha.on + .alpha-detail { display:block; }
+  .alert { margin-top:.6rem; padding:.5rem .7rem; border-radius:.5rem; background:#ecfdf5; color:#065f46; font-size:.8rem; }
+  /* --- chips de configuration (GamePage avant lancement / AnimPage bandeau) --- */
+  .cfg { display:flex; gap:.4rem; flex-wrap:wrap; }
+  .cfg .chip { background:var(--gray-100); border-radius:999px; padding:.2rem .6rem; font-size:.78rem; font-weight:600; color:var(--gray-700); }
+  .cfg .chip.new { background:#eef2ff; color:#3730a3; outline:2px solid #c7d2fe; }
+  .live { margin-top:.6rem; border:2px solid #3b82f6; border-radius:.6rem; padding:.6rem .8rem; }
+  .live .t { font-size:.72rem; text-transform:uppercase; color:#3b82f6; font-weight:800; }
+  .live .q { font-size:1rem; font-weight:700; margin:.2rem 0; }
+  .live .a { color:#166534; font-weight:700; }
+  .letter-pill { display:inline-flex; align-items:center; justify-content:center; width:1.6rem; height:1.6rem; border-radius:.4rem; background:#3b82f6; color:#fff; font-weight:900; margin-right:.4rem; }
+  .anim { background:#0f172a; color:#e5e7eb; border-radius:.7rem; padding:.8rem; }
+  .anim .cfg .chip { background:#1e293b; color:#cbd5e1; } .anim .cfg .chip.new { background:#312e81; color:#e0e7ff; outline-color:#4338ca; }
+  .anim .live { border-color:#60a5fa; } .anim .live .a { color:#86efac; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — état :</strong>
+  <label><input type="radio" name="st" value="off" checked> Option désactivée (défaut — RAFALE classique)</label>
+  <label><input type="radio" name="st" value="on"> Option « Alphabétique » activée</label>
+</div>
+<div class="mock-note">
+  <b>Éditeur</b> (page Questions, type RAFALE, section « Manche RAFALE » présentée <b>en entier</b>) : un interrupteur « Alphabétique » est ajouté <b>entre le mode de jeu et les temps</b>.
+  Désactivé par défaut → comportement actuel strictement inchangé. Activé : le texte sous l'interrupteur rappelle la règle (tri sur la réponse, accents/casse/articles ignorés, un mot par lettre par passage A→Z, roue sur la TV).
+  Champ persisté <code>RAFALE_ALPHABETICAL</code> (manche RAFALE seulement — le sous-éditeur de carte MEMOTION RAFALE ne le propose pas).
+  <b>Admin / animateur</b> : une chip « 🔤 Alphabétique » rejoint les chips de configuration, et la lettre courante apparaît dans l'encart de la question en cours (ils voient aussi la réponse, comme aujourd'hui).
+</div>
+
+<h2 class="mock-h">01 — Éditeur : section « Manche RAFALE »</h2>
+<div class="card">
+  <div class="form-group"><label>Catégories <span class="hint">(plusieurs possibles)</span></label>
+    <div class="chips"><span class="cat-chip active">🌍 Géographie ✓</span><span class="cat-chip active">📜 Histoire ✓</span><span class="cat-chip">🎬 Divertissement</span><span class="cat-chip">🔬 Sciences</span><span class="cat-chip">⚽ Sports</span><span class="cat-chip">🍽 Gastronomie</span><span class="cat-chip">🐾 Animaux</span><span class="cat-chip">🎨 Arts</span></div></div>
+  <div class="form-group"><label>Difficultés <span class="hint">(plusieurs possibles)</span></label>
+    <div class="chips"><span class="cat-chip active">★ ✓</span><span class="cat-chip active">★★ ✓</span><span class="cat-chip">★★★</span></div></div>
+  <div class="form-group"><label>Points par bonne réponse, selon la difficulté</label>
+    <div class="form-row"><div class="form-group"><label>★</label><input type="number" value="5"></div><div class="form-group"><label>★★</label><input type="number" placeholder="10"></div></div>
+    <span class="hint">Saisie libre. Si rien n'est renseigné pour une difficulté, le barème général de la manche (« Points » ci-dessous) s'applique.</span></div>
+  <div class="form-group"><label>Mode de jeu</label>
+    <div class="mode-opts">
+      <label class="mode-opt"><input type="radio" name="m"><span><b>SOLO</b><small>Une équipe joue seule</small></span></label>
+      <label class="mode-opt"><input type="radio" name="m" checked><span><b>CHACUN SON TOUR</b><small>Rotation après chaque réponse (juste ou fausse)</small></span></label>
+      <label class="mode-opt"><input type="radio" name="m"><span><b>TANT QUE JE GAGNE</b><small>Garde la main si bonne réponse</small></span></label>
+      <label class="mode-opt"><input type="radio" name="m"><span><b>MAILLON FAIBLE</b><small>Compteur remis à 0 sur erreur, meilleur score mémorisé</small></span></label>
+    </div></div>
+
+  <div class="form-group">
+    <div class="alpha" id="alpha">
+      <button type="button" class="sw" role="switch" aria-checked="false" aria-label="Alphabétique — mots triés et roue des lettres" id="alphaSw"></button>
+      <span><b>🔤 Alphabétique</b><small>Les réponses sont présentées dans l'ordre alphabétique ; la TV affiche une roue des lettres qui indique la première lettre de la réponse en cours.</small></span>
+    </div>
+    <div class="alpha-detail">Règle : tri sur la <b>réponse</b>, accents, casse et articles initiaux (le, la, les, l', un, une) ignorés — « La Seine » se joue à <b>S</b>. <b>Une réponse par lettre</b> à chaque passage de A à Z ; s'il reste des réponses, un nouveau passage repart de A. La première lettre de la réponse devient <b>visible par la salle</b>.</div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group"><label>Temps par question (s)</label><input type="number" value="3"></div>
+    <div class="form-group"><label>Plafond de questions</label><input type="number" value="100"></div>
+  </div>
+  <div class="alert" id="pool">✓ 48 questions disponibles (Géographie / Histoire · ★ / ★★) pour une manche de 120 s à 3 s par question.</div>
+</div>
+
+<h2 class="mock-h">02 — Admin (page Jeu) : chips avant lancement et encart de la question en cours</h2>
+<div class="card">
+  <div class="cfg"><span class="chip">CHACUN SON TOUR</span><span class="chip">3 s / question</span><span class="chip">★ ★★</span><span class="chip">Plafond 100</span><span class="chip new" id="chipA" hidden>🔤 Alphabétique</span></div>
+  <div class="live"><div class="t">Question 7 · Bleus · 🌍 Géographie · ★★ · 10 pts</div>
+    <div class="q"><span class="letter-pill" id="pillA" hidden>C</span>Capitale de l'Australie ?</div>
+    <div class="a">Réponse attendue : Canberra</div>
+    <div class="hint" id="nextA">Suivante : Fleuve qui traverse Paris ? → La Seine</div></div>
+</div>
+
+<h2 class="mock-h">03 — Animateur (tablette) : bandeau et question en cours</h2>
+<div class="card anim">
+  <div class="cfg"><span class="chip">RAFALE</span><span class="chip">CHACUN SON TOUR</span><span class="chip">3 s</span><span class="chip new" id="chipB" hidden>🔤 Alphabétique</span></div>
+  <div class="live"><div class="t">Bleus · question 7</div>
+    <div class="q"><span class="letter-pill" id="pillB" hidden>C</span>Capitale de l'Australie ?</div>
+    <div class="a">Canberra</div>
+    <div class="hint" id="nextB">SUIVANTE — Fleuve qui traverse Paris ? → La Seine</div></div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  function render(on) {
+    $('alpha').classList.toggle('on', on); $('alphaSw').setAttribute('aria-checked', String(on));
+    ['chipA','chipB','pillA','pillB'].forEach(id => $(id).hidden = !on);
+    $('nextA').textContent = on ? 'Suivante (lettre S) : Fleuve qui traverse Paris ? → La Seine' : 'Suivante : Fleuve qui traverse Paris ? → La Seine';
+    $('nextB').textContent = on ? 'SUIVANTE (S) — Fleuve qui traverse Paris ? → La Seine' : 'SUIVANTE — Fleuve qui traverse Paris ? → La Seine';
+    $('pool').textContent = on ? '✓ 48 questions disponibles · 21 lettres couvertes (A–Z sauf J, K, Q, U, W, X, Y) pour une manche de 120 s à 3 s par question.' : '✓ 48 questions disponibles (Géographie / Histoire · ★ / ★★) pour une manche de 120 s à 3 s par question.';
+  }
+  document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => render(e.target.value === 'on')));
+  $('alphaSw').addEventListener('click', () => { const on = !$('alpha').classList.contains('on'); document.querySelector(`input[name=st][value=${on ? 'on' : 'off'}]`).checked = true; render(on); });
+  render(false);
+</script>
+</body>
+</html>

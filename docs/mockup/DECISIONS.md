@@ -74,3 +74,31 @@
 - Chaque site indique explicitement « une seule » ou « plusieurs possibles » ; ✓ sur les chips multiples, radio en sélection unique. _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
 - La « Valeur de la carte » MEMOTION garde son libellé : ce n'est pas une difficulté de tirage. _(v11.2.2, category_difficulty_unified, #221 ; origine retour QUALIF v9.0.0.4 C5)_
 
+
+## admin_navbar
+- Le popover d'en-tête s'appelle « Ambiance » et regroupe éclairage (ON/AUTO/OFF + Flash) et son (ON/OFF, jamais d'AUTO) ; le son coupé est persisté et toujours visible dans l'en-tête. _(v11.4.0, ambiance_popover, #286, 2026-11-05)_
+- Tout popover de la barre porte `.navbar-popover` : ancré à gauche, `white-space: normal`, largeur bornée au viewport. _(v11.4.0, #284, 2026-11-05)_
+
+## ambiance_page
+- L'interrupteur général « Éclairage d'ambiance activé » est persisté ; éteint, aucune commande n'atteint les ampoules. _(v11.4.0, #286, 2026-11-05)_
+
+## admin_game_award
+- Le bouton d'attribution ne porte jamais de compteur et tient sur une ligne ; le compteur « x joueurs · y équipes » / « y équipes » / « Aucune sélection » occupe sa propre ligne. _(v11.4.0, selection_lines, #289, 2026-11-05)_
+
+## tv_rafale_started (composant Wheel)
+- Option A « roue circulaire complète » rejetée. Deux présentations : bandeau (défaut) et roue en arc, choisies par manche RAFALE, toujours en bas de l'écran. _(v11.4.0, letter_wheel, #282, 2026-11-05)_
+- Même animation pour les deux présentations : pointeur fixe, contenu qui glisse (pas de 0,6 s). _(v11.4.0, #282, 2026-11-05)_
+- Pas de ligne A→Z supplémentaire dans l'encart question : le bandeau ou la roue suffit, homogène avec la Roue de la Fortune. _(v11.4.0, #282, 2026-11-05)_
+- La roue doit rester lisible après un nombre quelconque de mouvements (position normalisée modulo n). _(v11.4.0, #282, 2026-11-05)_
+
+## admin_question_editor
+- Tri alphabétique RAFALE : accents, casse et articles initiaux ignorés ; une lettre à la fois, cyclique A→Z. _(v11.4.0, rafale_alphabetical, #282, 2026-11-05)_
+
+## admin_sounds_manager
+- Son de décompte joué au début de chaque chronomètre (global, question RAFALE, carte MEMOTION), rejoué si « en boucle » ; jamais si la question a un média audio pendant le chrono. _(v11.4.0, countdown_loop, #287, 2026-11-05)_
+- Commutateur une fois / en boucle réservé au média de question et au son de décompte, jamais aux bruitages. _(v11.4.0, #288, 2026-11-05)_
+
+## admin_category_manager
+- La couleur se choisit en cliquant la pastille (palette), jamais par un champ séparé. _(v11.4.0, rename_color_delete, #285, 2026-11-05)_
+- L'icône ne se téléverse que sur une catégorie personnalisée ; les intégrées gardent leur emoji et ne sont jamais supprimables. _(v11.4.0, #285, 2026-11-05)_
+- Supprimer une catégorie utilisée demande « réaffecter à Sans catégorie » ou « supprimer aussi » ; les points d'historique sont regroupés dans « Sans catégorie » (sauvegarde + confirmation). _(v11.4.0, #285, 2026-11-05)_

@@ -1010,3 +1010,89 @@ question) — patron `RafalePoolAlert`, un composant pour deux surfaces.
 
 Le libellé **nomme le remède**, aussi contre-intuitif ici qu'au §10.8.5 : réactiver le son ou
 brancher l'enceinte **exige un redémarrage du serveur** (§10.8.8).
+
+---
+
+## 11. Son coupé (`sound.muted`) — réglage ponctuel du popover « Ambiance » — normatif (v11.4.0, #286, LOT-1)
+
+> **Issue** : #286 (milestone v11.4.0, recadrée au GATE 1.5 du 2026-11-05). **Plan** :
+> `_work/reports/planner-20261105-110000.md` §4.2. **Maquette** : `admin_navbar__ambiance_popover.html`.
+> Section **additive** : §2 à §10 inchangés au bit près.
+
+### 11.1 Pourquoi ce n'est PAS `sound.enabled`
+
+`sound.enabled` est **asymétrique** (§6.3 : éteindre est immédiat, rallumer exige un redémarrage) **et** alimente
+la gate T0 (§10.8) : à `false`, toute question portant un son est **empêchée de démarrer** (`DISABLED`). Un
+réglage de régie « couper le son maintenant, le rendre tout à l'heure » ne peut remplir ni l'un ni l'autre de ces
+rôles. C'est donc une **troisième garde**, indépendante des deux autres :
+
+| Garde | Où | Portée | Rallumage |
+|---|---|---|---|
+| `sound.enabled` (§6.3) | `config.json` | construction du moteur + cues + média | redémarrage |
+| `CuesDisabled` (§6.3) | `config.json` | une cue | immédiat |
+| **`sound.muted`** (ici) | `config.json`, **persisté** (décision utilisateur Q2) | cues + média de question + son de décompte (§12, LOT-3) | immédiat |
+
+### 11.2 Sémantique — normatif
+
+- **Champ** : `SoundConfig.Muted bool \`json:"muted,omitempty"\`` — **on stocke ce qui est coupé** : valeur zéro
+  (clé absente) = son actif = comportement actuel, aucune migration (même discipline que `CuesDisabled`).
+  Persisté : un redémarrage **conserve** le son coupé — c'est pourquoi l'en-tête admin le montre en permanence
+  (§11.4), seul garde-fou contre une soirée muette oubliée.
+- **Écriture** : `POST /config.json {"sound": {"muted": true|false}}` — fusion champ par champ existante de
+  `handleConfig` (§6.3 « Fusion champ par champ »), **aucun endpoint dédié** (même règle que `enabled` et
+  `cues_disabled`). **Effet de bord à l'écriture** (dans `handleConfig`, après persistance, via le rappel
+  `OnSoundMutedChange(muted bool)` de l'`App`) : passage à `true` ⇒ `questionSound().Stop()` (arrêt net,
+  `QUESTION_SOUND_STATE` → `IDLE`, chronomètre différé libéré) **et** arrêt du son de décompte (§12). Passage à
+  `false` ⇒ **rien n'est repris** (un `Rejouer` manuel reste possible).
+- **Lecture** : `GET /api/sound/status` → `{active, muted}` (`http-endpoints.md` §Sound). Lue à l'appel,
+  jamais en cache.
+- **Cues** : `notifySound` (`cmd/server/sound.go`) gagne **une** garde, en tête :
+  ```go
+  func (a *App) notifySound(c audio.Cue) {
+      sc := config.Get().Sound
+      if sc.Muted { return }
+      if !sc.Enabled { return }
+      if sc.CuesDisabled[string(c)] { return }
+      a.sound().PlayCue(c)
+  }
+  ```
+  Corps existant inchangé ; le test-garde AST du §6.2 reste valide (même sélecteur).
+- **Média de question (T1)** : dans `questionSoundAdapter.play`, `Muted` est traité **comme `DISABLED` à T1** :
+  aucun `Play`, chronomètre différé libéré (`ReleaseDeferredTimer`, règle de non-blocage §10.7). **La gate T0
+  (`questionSoundAvailability`, §10.8) ne lit jamais `Muted`** : une question sonore démarre normalement quand le
+  son est coupé — `QUESTION_SOUND_UNAVAILABLE` reste `""`. Test exigé : muet, PREPARE→READY passe et le différé
+  est libéré immédiatement à STARTED.
+- **`POST /api/sounds/{cue}/test` ignore `Muted`** — geste explicite de l'utilisateur, même règle que `CuesDisabled`.
+- **Son de décompte** (§12, LOT-3) : lit la même garde avant tout `Play`.
+
+### 11.3 Interface — popover « Ambiance » de l'en-tête (ex-« Éclairage »)
+
+- Le bouton « 💡 Éclairage » de `Navbar.jsx` devient **« Ambiance »** et son popover regroupe **deux sections** :
+  « Éclairage général » (`LightingModePanel` inchangé, ON / AUTO / OFF + Flash) et **« Son »** — sélecteur
+  `role="radiogroup"` à **deux positions ON / OFF** (le son n'a pas d'état automatique), avertissement quand coupé
+  (il dit que le réglage survit au redémarrage), écriture par `POST /config.json`, `refresh()` de
+  `useSoundStatus` après réponse, jamais de mise à jour optimiste.
+- **Visibilité** : bouton présent dès qu'un pont Hue est configuré **ou** que `status.active` est vrai ; chaque
+  section n'apparaît que si sa fonction existe. Éclairage d'ambiance désactivé (`lighting.enabled=false`, §11.5) :
+  section Éclairage grisée avec renvoi vers Ambiance › Lumière.
+- **Libellé du bouton** : « Ambiance » au repos ; « Mode ON/OFF engagé » et/ou « Son coupé » quand un réglage est
+  engagé ; glyphes 💡 et 🔊/🔇 ; badge orange (rouge si lumière OFF).
+- **Popover** : classe commune `.navbar-popover` (`left: 0`, `white-space: normal`, `max-width` bornée au viewport)
+  — correctif #284.
+
+### 11.4 Interrupteur général de l'éclairage d'ambiance — page Ambiance › Lumière (#286, partie lumière)
+
+Nouveau bloc en tête de l'onglet Lumière : « Éclairage d'ambiance activé », **persisté** — c'est le champ existant
+`lighting.enabled` (`LightingConfig`), écrit par `POST /config.json {"lighting": {"enabled": bool}}` (fusion
+existante). Sémantique, normative : à `false`, **aucune scène n'est envoyée aux ampoules** (pilote détaché,
+`a.ambiance()` sans pilote — chemin existant « non configuré »), les commandes ON / AUTO / OFF / Flash répondent
+`409 not_configured` (déjà le cas sans pilote) et l'en-tête grise sa section Éclairage ; au basculement à `false`,
+la zone `general` et les ampoules d'équipe sont **éteintes** (même geste que l'arrêt du serveur, `lighting.md`
+§10.4) ; à `true`, le pilote est reconstruit depuis la configuration et `NotifyState()` ré-applique la scène
+courante. Associer un pont force `enabled=true` (comportement existant, `http_lighting.go`). Ce champ est
+distinct du mode ON/AUTO/OFF (non persisté, §10.1.1 de `lighting.md`).
+
+### 11.5 Hors de cette section
+
+Reconstruction à chaud du moteur son (rallumer `sound.enabled` sans redémarrage) : toujours rejetée (§6.3).
+Atténuation (volume) : hors périmètre — le réglage est binaire.
