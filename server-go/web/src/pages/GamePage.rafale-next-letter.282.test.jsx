@@ -60,11 +60,11 @@ const NEXT_Q = (letter) => ({
 describe('GamePage — lettre de la question suivante (#282, §15.10)', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('NEXT.LETTER = "T" : affiche « Suivante (lettre T) » dans .rafale-admin-live', () => {
+  it('NEXT.LETTER = "T" : affiche « Suivante (lettre T) : <énoncé> » dans .rafale-admin-live', () => {
     useGame.mockReturnValue(makeGameMock({ alphabetical: true, phase: 'STARTED', rafaleAnswer: NEXT_Q('T') }))
     const { container } = render(<GamePage />)
     const live = container.querySelector('.rafale-admin-live')
-    expect(live.textContent).toMatch(/Suivante\s*\(lettre T\)/)
+    expect(live.textContent).toMatch(/Suivante\s*\(lettre T\)\s*:\s*Fleuve de Rome \?/)
     expect(live.textContent).toContain('Fleuve de Rome ?')
   })
 
@@ -76,15 +76,26 @@ describe('GamePage — lettre de la question suivante (#282, §15.10)', () => {
     expect(live.textContent).not.toMatch(/\(lettre S\)/)
   })
 
-  it('NEXT.LETTER = "" : aucun libellé « lettre » (libellé v11.2.3 inchangé)', () => {
+  it('NEXT.LETTER = "" (sans l\'option) : « Suivante : <énoncé> », sans « lettre »', () => {
     useGame.mockReturnValue(makeGameMock({ alphabetical: false, phase: 'STARTED', rafaleAnswer: NEXT_Q('') }))
     const { container } = render(<GamePage />)
-    expect(container.querySelector('.rafale-admin-live').textContent).not.toMatch(/lettre/i)
+    const txt = container.querySelector('.rafale-admin-live').textContent
+    expect(txt).toMatch(/Suivante\s*:\s*Fleuve de Rome \?/)
+    expect(txt).not.toMatch(/lettre/i)
   })
 
-  it('NEXT = null (dernière question) : aucun libellé « lettre »', () => {
+  it('NEXT = null : « Dernière question du réservoir », sans « lettre »', () => {
     useGame.mockReturnValue(makeGameMock({ alphabetical: true, phase: 'STARTED', rafaleAnswer: { ID: 'r-1', ANSWER: 'Seine', NEXT: null } }))
     const { container } = render(<GamePage />)
-    expect(container.querySelector('.rafale-admin-live').textContent).not.toMatch(/\(lettre/)
+    const txt = container.querySelector('.rafale-admin-live').textContent
+    expect(txt).toContain('Dernière question du réservoir')
+    expect(txt).not.toMatch(/\(lettre/)
+  })
+
+  it('la réponse de la question suivante n\'est jamais affichée', () => {
+    const ra = NEXT_Q('T'); ra.NEXT.ANSWER = 'Tibre-secret'
+    useGame.mockReturnValue(makeGameMock({ alphabetical: true, phase: 'STARTED', rafaleAnswer: ra }))
+    const { container } = render(<GamePage />)
+    expect(container.querySelector('.rafale-admin-live').textContent).not.toContain('Tibre-secret')
   })
 })

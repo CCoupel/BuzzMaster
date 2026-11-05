@@ -27,6 +27,8 @@ describe('AnimRafaleQuestion — lettre de la question suivante (#282, §15.10)'
     const { container } = render(<AnimRafaleQuestion current={cur} next={{ QUESTION: 'Q2', LETTER: '' }} />)
     expect(screen.queryByTestId('rafale-next-letter')).not.toBeInTheDocument()
     expect(container.querySelector('.rafale-anim-qcard-next-label').textContent).toContain('Suivante')
+    expect(container.querySelector('.rafale-anim-qcard-next-label').textContent).not.toContain('(')
+    expect(screen.getByText('Q2')).toBeInTheDocument()
   })
 
   it('next.LETTER absent : aucune lettre', () => {
