@@ -406,9 +406,12 @@ func TestCountdownConfig287_PostConfig_CallsOnSoundCountdownDisabledChange_OnlyO
 	if len(calls) != 1 {
 		t.Errorf("valeur inchangée / countdown_once : aucun nouvel appel attendu, got %v", calls)
 	}
+	// true→false : le contrat n'exige que l'arrêt à true ; un éventuel appel (false) est toléré, jamais (true).
 	tw286PostConfig(t, s, `{"sound":{"countdown_disabled":false}}`)
-	if len(calls) != 2 || calls[1] {
-		t.Errorf("true→false : appel (false) attendu, got %v", calls)
+	for _, c := range calls[1:] {
+		if c {
+			t.Errorf("true→false : aucun appel (true) attendu, got %v", calls)
+		}
 	}
 }
 

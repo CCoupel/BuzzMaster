@@ -135,9 +135,11 @@ func tw287InstallCountdown(t *testing.T, app *App, fake audio.MediaPlayer) {
 func tw287App(t *testing.T, cfgJSON string) (*App, *tw287Fake) {
 	t.Helper()
 	app := newTestAppWithHub(t)
-	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
+	app.logsHub = server.NewLogsWebSocketHub(10) // callback du logger (setupCallbacks) diffuse vers ce hub
+	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, app.logsHub)
 	app.logger = server.NewBroadcastLogger(100)
 	app.udpBcast = server.NewUDPBroadcaster()
+	setGlobalLogger246(t, app) // le dispatcher journalise via le logger global (hub de logs requis)
 	app.config.Storage.QuestionsDir = t.TempDir()
 	filesDir := t.TempDir()
 	prev := app.config.Storage.FilesDir

@@ -71,7 +71,8 @@ func TestQuestionSoundLoop288_Rejouer_FollowsTheLoopSetting(t *testing.T) {
 	app, fake, qs := tw288Install(t)
 	q := tw288Question(true, false)
 	app.engine.Ready(q.ID, q)
-	app.engine.StartImmediate(30)
+	app.engine.StartImmediate(30) // le câblage de production (OnStateChange → Start) lance déjà un premier PlayLoop
+	fake.reset()
 	qs.HandleCommand(protocol.QuestionSoundCommandPlay)
 	if fake.count("PlayLoop:sound_1.wav") != 1 {
 		t.Fatalf("« Rejouer » avec boucle ⇒ PlayLoop (§13.3), journal %v", fake.journal())
@@ -156,11 +157,10 @@ func TestQuestionSoundLoop288_LoopPlusDeferred_LaterPassesReleaseNothing(t *test
 
 func tw288Looping(t *testing.T) (*App, *tw287Fake) {
 	t.Helper()
-	app, fake, qs := tw288Install(t)
+	app, fake, _ := tw288Install(t)
 	q := tw288Question(true, false)
 	app.engine.Ready(q.ID, q)
-	app.engine.StartImmediate(30)
-	qs.Start(q)
+	app.engine.StartImmediate(30) // OnStateChange(STARTED) → questionSound().Start(q) (câblage de production)
 	if fake.count("PlayLoop") != 1 {
 		t.Fatalf("setup invalide : boucle non démarrée, journal %v", fake.journal())
 	}
@@ -220,13 +220,11 @@ func TestQuestionSoundLoop288_ManualPauseContinue_SuspendsThenResumesLoop(t *tes
 func TestQuestionSoundLoop288_WithLoopMedia_NoCountdownPlayed(t *testing.T) {
 	app, cd := tw287App(t, tw287Active)
 	qfake := &tw287Fake{}
-	qs := &questionSoundAdapter{app: app, player: qfake}
-	app.qsound = qs
+	app.qsound = &questionSoundAdapter{app: app, player: qfake}
 	t.Cleanup(func() { tw257CancelWatchdog(app) })
 	q := tw288Question(true, false)
 	app.engine.Ready(q.ID, q)
 	app.engine.StartImmediate(30)
-	qs.Start(q)
 	time.Sleep(150 * time.Millisecond)
 	if cd.count("Play") != 0 {
 		t.Errorf("décompte lancé sur une question à média en boucle : %v", cd.journal())
