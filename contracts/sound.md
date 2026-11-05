@@ -696,7 +696,7 @@ discipline seule ne suffit pas, c'est précisément le raisonnement que §6.2 ti
 | Sujet | Statut |
 |---|---|
 | *Ducking* (atténuer le média pendant un bruitage) | **Hors v11.1.** `oto.Player.SetVolume` le rendrait trivial, mais il recouplerait les deux chemins que §10.5 sépare. Suite possible, jamais un effet de bord |
-| Lecture en boucle (ambiance d'ENTRACTE prolongée) | ~~**Hors v11.1.** Une lecture = un passage~~ — **dans le périmètre depuis v11.4.0 (#288, §13)** : `SOUND_LOOP`, exclusif du différé |
+| Lecture en boucle (ambiance d'ENTRACTE prolongée) | ~~**Hors v11.1.** Une lecture = un passage~~ — **dans le périmètre depuis v11.4.0 (#288, §13)** : `SOUND_LOOP`, combinable avec le différé (fin du 1ᵉʳ passage) |
 | Position de lecture diffusée dans le `GameState` | **Exclu.** Seul l'**état** (`IDLE`/`PLAYING`/`PAUSED`) est diffusé, à chaque changement. Le chronomètre est le seul flux à cadence du projet ; on n'en ajoute pas un second |
 | Sélection du périphérique de sortie | Inchangé — `SoundConfig.Device` n'est toujours pas honoré par `oto` (§9, `OutputConfig`) |
 | Média sonore de **réponse** (symétrique de `MEDIA_ANSWER`) | Non demandé au cadrage. Additif si un jour souhaité |
@@ -714,8 +714,9 @@ Chaque son porte un réglage propre : le chronomètre de réponse démarre **en 
 SoundTimerDelayed bool `json:"SOUND_TIMER_DELAYED,omitempty"`
 ```
 
-> **Amendement v11.4.0 (#288, §13.2)** : `SOUND_TIMER_DELAYED` et `SOUND_LOOP` sont **exclusifs** (une boucle n'a pas
-> de fin) — refus `400` à l'upload, le différé prime à la lecture d'un fichier qui porterait les deux.
+> **Amendement v11.4.0 (#288, §13.2, décision utilisateur 2026-11-05)** : `SOUND_TIMER_DELAYED` et `SOUND_LOOP` se
+> **combinent** — « la fin du son » d'une lecture en boucle est la **fin du premier passage** ; le média continue
+> ensuite en boucle, le chronomètre tourne.
 
 **La valeur zéro est le comportement correct** — `false` = simultané = ce que fait le serveur
 aujourd'hui. Aucune migration, aucun `question.json` existant modifié. Même discipline que
@@ -1313,8 +1314,9 @@ type MediaPlayer interface {
     Play(path string) error
     // PlayLoop (v11.4.0, #288) démarre la lecture et la REPREND au début à
     // chaque fin naturelle, sans fin : seul Stop/Close/un Play(Loop) ultérieur
-    // y met un terme. onNaturalEnd n'est JAMAIS appelé pour une lecture en
-    // boucle. Voix unique comme Play. Implémentation neutre : no-op.
+    // y met un terme. onNaturalEnd est appelé EXACTEMENT UNE FOIS, à la fin
+    // du PREMIER passage (« fin du son » au sens de §10.7), jamais aux
+    // passages suivants. Voix unique comme Play. Implémentation neutre : no-op.
     PlayLoop(path string) error
     Pause()
     Resume()
@@ -1324,10 +1326,16 @@ type MediaPlayer interface {
 }
 ```
 
-- Implémentation `oto` : le `monitor` d'une lecture en boucle, à la fin naturelle détectée (`!IsPlaying()`),
+- Implémentation `oto` : le `monitor` d'une lecture en boucle, à chaque fin naturelle détectée (`!IsPlaying()`),
   **reconstruit un `oto.Player`** sur la même `SectionReader` après `Seek(0, io.SeekStart)` (§10.2 : `Seek` **est** le
   mécanisme de rejeu), **sans changer de génération** et en conservant la référence forte (§10.3) ; `State()` reste
   `PLAYING` d'un tour à l'autre. Un `Pause()` pendant la boucle suspend ; `Resume()` reprend où elle en était.
+- **Évènement « fin du 1ᵉʳ passage »** : à la **première** fin naturelle seulement, le `monitor` appelle `onNaturalEnd`
+  (sans verrou, comme pour `Play`) **puis** relance le passage suivant ; un compteur de passages par génération
+  (`passes`) garantit l'unicité. Un `Stop`/`Play`/`Close` avant la fin du 1ᵉʳ passage ⇒ jamais d'`onNaturalEnd` (règle
+  `Play` inchangée : l'arrêt manuel est la responsabilité de l'appelant, qui libère lui-même le différé). Une `Pause()`
+  pendant le 1ᵉʳ passage en retarde la fin d'autant. Test exigé (fake horloge/lecteur) : 3 passages ⇒ 1 seul
+  `onNaturalEnd`, émis à la fin du 1ᵉʳ ; `Stop` pendant le 2ᵉ ⇒ aucun appel supplémentaire.
 - `neutralMediaPlayer.PlayLoop` = no-op. Les **faux lecteurs de test** (`tw219qFakeMediaPlayer`,
   `tw219dFakeMediaPlayer`, et tout fake `test-writer`) gagnent la méthode — c'est le seul coût de l'extension, assumé.
 - La note « Ne pas l'étendre » du commentaire de `media.go` est **remplacée** par le renvoi à cette section.
@@ -1342,27 +1350,29 @@ SoundLoop bool `json:"SOUND_LOOP,omitempty"` // false (zéro) = une fois = compo
 - Multipart `POST /questions` : champ `sound_loop` (`"true"`/absent), réécrit à chaque enregistrement (même discipline
   que `sound_timer_delayed`), **écrit dans `SOUND_LOOP` uniquement si un son est effectivement attaché** (préservé ou
   téléversé). Voir `http-endpoints.md` §Questions.
-- **Exclusivité boucle × différé — serveur** : `sound_loop=true` **et** `sound_timer_delayed=true` ⇒ **`400`**,
-  corps texte `SOUND_LOOP_DELAYED_EXCLUSIVE : une boucle n'a pas de fin — choisissez « Chrono démarre : début » pour
-  boucler` (même canal d'erreur que §10.4 : texte brut, nommant la cause). Rien n'est enregistré. Une question
-  **existante** `question.json` portant les deux (édition manuelle) est lue comme **différée, sans boucle** (le différé
-  prime : un chrono qui n'arrive jamais est le pire défaut — §10.7).
-- **Exclusivité — éditeur** (`QuestionsPage.jsx`, bloc « Son de la question », maquette §02) : nouvelle ligne
-  « Lecture : Une fois / En boucle » (`role="switch"`, `aria-label="Jouer le son en boucle jusqu'à la fin du
-  chronomètre"`, patron `.quiz-switch` **identique** à « Chrono démarre »), **sous** la ligne « Chrono démarre » ;
-  désactivée (`disabled`, classe `disabled`) et **forcée à « Une fois »** quand « À la fin » est actif, avec
-  l'avertissement `« En boucle » n'est pas disponible quand le chrono démarre à la fin du son…` (texte de la maquette) ;
-  passer sur « À la fin » alors que « En boucle » est actif **remet « Une fois »** (`soundLoop:false`) ; conseil
-  `Le son est joué une fois, puis s'arrête.` / `Le son est rejoué jusqu'à la fin du chronomètre.` ; `data.append('sound_loop', …)`
-  comme `sound_timer_delayed` ; défauts/chargement/reset de `formData.soundLoop` depuis `question.SOUND_LOOP`. Absent des
-  types sans section « Son » (MEMORY, MEMOTION, RAFALE, ENTRACTE) — décision d'éditeur §10.4bis, pas de garde serveur.
+- **Boucle × différé — combinables (décision utilisateur 2026-11-05)** : `sound_loop=true` **et**
+  `sound_timer_delayed=true` ⇒ les deux champs sont écrits ; à la lecture, le chronomètre démarre à la **fin du premier
+  passage** (évènement `onNaturalEnd` de `PlayLoop`, §13.1 — c'est « la fin du son » de §10.7, libération idempotente
+  et irréversible inchangée) et le média **continue en boucle** pendant le chronomètre. Le chien de garde §10.7
+  (`MaxQuestionSoundDuration + 2 s`) reste la borne : un 1ᵉʳ passage ne peut pas dépasser 30 s. Aucun `400`, aucune
+  règle de priorité.
+- **Éditeur** (`QuestionsPage.jsx`, bloc « Son de la question », maquette §02 **amendée** : plus de ligne désactivée ni
+  d'avertissement) : nouvelle ligne « Lecture : Une fois / En boucle » (`role="switch"`, `aria-label="Jouer le son en
+  boucle jusqu'à la fin du chronomètre"`, patron `.quiz-switch` **identique** à « Chrono démarre »), **sous** la ligne
+  « Chrono démarre », désactivée seulement quand **aucun son** n'est attaché (comme « Chrono démarre ») ; conseils :
+  `Le son est joué une fois, puis s'arrête.` / `Le son est rejoué jusqu'à la fin du chronomètre.` / avec « À la fin » **et**
+  boucle : `Le chronomètre démarre à la fin du premier passage ; le son continue en boucle.` ;
+  `data.append('sound_loop', …)` comme `sound_timer_delayed` ; défauts/chargement/reset de `formData.soundLoop` depuis
+  `question.SOUND_LOOP`. Absent des types sans section « Son » (MEMORY, MEMOTION, RAFALE, ENTRACTE) — décision
+  d'éditeur §10.4bis, pas de garde serveur.
 
 ### 13.3 Lecture
 
-- `questionSoundAdapter.play` : `q.SoundLoop && !q.SoundTimerDelayed` ⇒ `player.PlayLoop(path)` au lieu de `Play` ;
-  **tout le reste est inchangé** : gate T0 (§10.8), `Muted` ⇒ `DISABLED` (§11.2), `QUESTION_SOUND_STATE` (`PLAYING`
-  jusqu'à l'arrêt), le chien de garde §10.7 reste armé mais, la boucle n'étant jamais différée, sa libération est un
-  no-op (`ReleaseDeferredTimer` idempotent).
+- `questionSoundAdapter.play` : `q.SoundLoop` ⇒ `player.PlayLoop(path)` au lieu de `Play` ; **tout le reste est
+  inchangé** : gate T0 (§10.8), `Muted` ⇒ `DISABLED` (§11.2), `QUESTION_SOUND_STATE` (`PLAYING` jusqu'à l'arrêt),
+  `onNaturalEnd` (fin du 1ᵉʳ passage) ⇒ `ReleaseDeferredTimer` comme pour `Play` — mais **sans** passer
+  `QUESTION_SOUND_STATE` à `IDLE` tant que la boucle joue (l'adaptateur lit `player.State()` avant d'écrire l'état) ;
+  chien de garde §10.7 armé à l'identique.
 - « Rejouer » (`QUESTION_SOUND PLAY`) relance **selon le réglage** (boucle ⇒ boucle).
 - **Arrêt** : la boucle s'arrête sur **tous** les sites actuels de `questionSound().Stop()` (temps écoulé, STOP,
   REVEAL, question rechargée, NEW_GAME, `muted`) — **aucun site nouveau**. **Au buzz, la boucle continue** (décision
@@ -1374,7 +1384,7 @@ SoundLoop bool `json:"SOUND_LOOP,omitempty"` // false (zéro) = une fois = compo
 
 ### 13.4 Non-régression exigée
 
-`SOUND_LOOP` absent ⇒ `Play` (un passage), octet pour octet ; `question_sound_219_test.go`,
+`SOUND_LOOP` absent ⇒ `Play` (un passage), octet pour octet ; différé sans boucle : `onNaturalEnd` à la fin du passage unique, inchangé ; `question_sound_219_test.go`,
 `question_sound_delayed_219_test.go`, `question_sound_enabled_dev_257_test.go` verts (fakes étendus de la seule
 méthode `PlayLoop`) ; `rafale_upload_nonregression_test.go` et fixtures `models_roundtrip_test.go` inchangés
 (`SOUND_LOOP` est `omitempty`) ; `QuestionsPage.sound.test.jsx` vert.

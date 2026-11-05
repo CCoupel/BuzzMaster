@@ -9,8 +9,9 @@
   rappels moteur `OnAnswerTimerStarted(AnswerTimerStart)` (global + carte MEMOTION — **jamais** par question RAFALE :
   sonorisation par manche) et `OnMotionCardTimeUp`, exclusion « jamais si média » (tout `SOUND`), au buzz tout continue,
   PAUSE/CONTINUE = pause/reprise, arrêt sur expiration, STOP, REVEAL, `Ready`, NEW_GAME, `muted`.
-- **[NEW]** `sound.md` §13 — `Question.SOUND_LOOP` (`omitempty`), multipart `sound_loop`, exclusif de
-  `SOUND_TIMER_DELAYED` (`400 SOUND_LOOP_DELAYED_EXCLUSIVE`) ; `MediaPlayer.PlayLoop` (amendement §10.2) ; §10.6
+- **[NEW]** `sound.md` §13 — `Question.SOUND_LOOP` (`omitempty`), multipart `sound_loop`, **combinable** avec
+  `SOUND_TIMER_DELAYED` (chrono à la fin du 1ᵉʳ passage, `onNaturalEnd` émis une fois par `PlayLoop`) ;
+  `MediaPlayer.PlayLoop` (amendement §10.2) ; §10.6
   amendé (boucle désormais dans le périmètre) ; au buzz la boucle continue (`OnBuzzerPress` reste non câblé).
 - **[CHANGED]** `GET /api/sounds` — tableau `long` ajouté (`decompte`, `kind:"countdown"`, `enabled`, `loop`) ;
   `cues` byte-identique. `POST /api/sounds/restore-defaults` restaure 7 + 1 fichiers.

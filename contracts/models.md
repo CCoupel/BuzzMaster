@@ -199,7 +199,7 @@ interface Question {
   EXPLANATION?: string   // Note d'explication/justification — animateur uniquement (v6.4.x, #168)
   SOUND?: string               // URL média sonore de question (v11.1, #219) — voir §SOUND ci-dessous
   SOUND_TIMER_DELAYED?: boolean // true = chronomètre différé jusqu'à la fin du son (v11.1, #219)
-  SOUND_LOOP?: boolean         // true = média rejoué en boucle jusqu'à l'arrêt du chrono (v11.4.0, #288) — exclusif de SOUND_TIMER_DELAYED
+  SOUND_LOOP?: boolean         // true = média rejoué en boucle jusqu'à l'arrêt du chrono (v11.4.0, #288) — combinable avec SOUND_TIMER_DELAYED (chrono à la fin du 1er passage)
 
   // QCM
   QCM_ANSWERS?: QCMAnswers
@@ -324,8 +324,8 @@ absent ⇒ `false`) = comportement strictement identique à avant ce lot.
 #### `SOUND_LOOP` — lecture en boucle (v11.4.0, #288, LOT-3)
 
 > Contrat normatif : `contracts/sound.md` §13. `omitempty`, valeur zéro = **une fois** (comportement v11.1). Multipart
-> `sound_loop`, écrit seulement si un son est attaché. **Exclusif de `SOUND_TIMER_DELAYED`** : `400` à l'upload si les
-> deux sont vrais ; un `question.json` qui porterait les deux est lu comme différé **sans** boucle. Commun à tous les
+> `sound_loop`, écrit seulement si un son est attaché. **Combinable avec `SOUND_TIMER_DELAYED`** : le chronomètre démarre
+> à la fin du **premier passage**, le média continue en boucle (décision utilisateur 2026-11-05). Commun à tous les
 > types comme `SOUND` (décision d'éditeur : SPEEDY/QCM/ARDOISE seulement, jamais une garde serveur — §10.4bis).
 
 ### Exemple NORMAL

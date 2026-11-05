@@ -70,7 +70,7 @@ Crée ou met à jour une question.
 | sound | file | ❌ | **v11.1 (#219)** — média sonore de question, `.wav` canonique (44 100 Hz/16 bits, **mono ou stéréo** — un mono est suréchantillonné et stocké stéréo, arbitrage QUALIF 2026-09-22, `contracts/sound.md` §10.4), ≤ 30 s, ≤ 6 Mio. Écrit dans `SOUND`. Refusé en `400` (cause nommée : pas WAV / fréquence-bits / nombre de voies invalide / > 30 s) ou `413` (> 6 Mio) — voir §Réponses d'erreur ci-dessous |
 | sound_cleared | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` supprime le son existant (fichier disque compris, `os.Remove`) et empêche sa recopie. Sans effet si `sound` est également fourni dans la même requête (le nouveau fichier prévaut) |
 | sound_timer_delayed | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` = chronomètre de réponse différé jusqu'à la fin du son (`contracts/sound.md` §10.7). Écrit dans `SOUND_TIMER_DELAYED` **uniquement si un son est effectivement attaché** (préservé ou fraîchement téléversé) — jamais laissé actif sans son |
-| sound_loop | bool (`"true"`/absent) | ❌ | **v11.4.0 (#288)** — `"true"` = média rejoué en boucle jusqu'à l'arrêt du chronomètre (`contracts/sound.md` §13). Écrit dans `SOUND_LOOP` **uniquement si un son est effectivement attaché** (même règle que `sound_timer_delayed`). **`400`** si fourni avec `sound_timer_delayed=true` (`SOUND_LOOP_DELAYED_EXCLUSIVE`, texte brut) — rien n'est enregistré |
+| sound_loop | bool (`"true"`/absent) | ❌ | **v11.4.0 (#288)** — `"true"` = média rejoué en boucle jusqu'à l'arrêt du chronomètre (`contracts/sound.md` §13). Écrit dans `SOUND_LOOP` **uniquement si un son est effectivement attaché** (même règle que `sound_timer_delayed`). Combinable avec `sound_timer_delayed=true` : le chronomètre démarre à la fin du **premier passage**, le média continue en boucle (`sound.md` §13.2) |
 
 > ⚠️ **`explanation` doit être lu explicitement par `handleUploadQuestion`.** Ce handler
 > **reconstruit la question de zéro** à chaque enregistrement et ne recopie depuis le fichier
@@ -149,13 +149,6 @@ Crée ou met à jour une question.
   `POST /api/sounds/{cue}` ci-dessous), sinon une **chaîne** nommant la cause — aujourd'hui la seule
   source possible est le son de question en mode simultané plus long que `time` (voir la note
   ci-dessus). Non bloquant : la question est enregistrée normalement.
-
-#### Réponses d'erreur (v11.4.0, #288 — champs `sound_loop` × `sound_timer_delayed`)
-
-`sound_loop=true` **et** `sound_timer_delayed=true` dans la même requête ⇒ **`400`**, corps texte brut
-`SOUND_LOOP_DELAYED_EXCLUSIVE : une boucle n'a pas de fin — choisissez « Chrono démarre : début » pour boucler`.
-Vérifié **avant** tout traitement de fichier (aucun `sound` écrit, aucune question enregistrée) ; l'éditeur empêche la
-combinaison en amont (`sound.md` §13.2) — le `400` est la garde serveur, jamais le chemin nominal.
 
 #### Réponses d'erreur (v11.1, #219 — champ `sound`)
 
