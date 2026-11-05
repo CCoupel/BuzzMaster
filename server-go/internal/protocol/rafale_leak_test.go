@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"buzzcontrol/internal/game"
@@ -236,6 +237,54 @@ func TestRafaleAnswerPayload_SurvivesAdminAndAnimSerialization(t *testing.T) {
 		m := parseMsgMap(t, tc.data)
 		if m["ID"] != "r-042" || m["ANSWER"] != "Rome" {
 			t.Errorf("%s: RAFALE_ANSWER payload must survive intact (no GAME node to filter), got %v", tc.name, m)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// #282 (contracts/rafale.md §15.5) — RAFALE_CURRENT_LETTER / RAFALE_LETTERS sont
+// publics (TV, VPlayer, anim) ; la réponse « Canberra » ne l'est jamais : seule sa
+// lettre « C » traverse, sur un seul caractère.
+// ---------------------------------------------------------------------------
+
+func TestSerialize_RafaleCurrentLetter_PublicOneChar_NeverTheAnswer(t *testing.T) {
+	current := game.RafaleCurrent{ID: "r-1", Question: "Capitale de l'Australie ?", Category: "GEOGRAPHY", Difficulty: 1}
+	payload := map[string]interface{}{
+		"GAME": map[string]interface{}{
+			"PHASE": "STARTED", "RAFALE_CURRENT_QUESTION": current, "RAFALE_SUBPHASE": "QUESTION",
+			"RAFALE_CURRENT_LETTER": "C", "RAFALE_LETTERS": []string{"C", "D"},
+		},
+		"bumpers": map[string]interface{}{}, "teams": map[string]interface{}{},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, err := NewMessage(ActionUpdate, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg.Msg = raw
+
+	web, err := msg.SerializeForWebClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	common, err := msg.SerializeForVPlayerCommon()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string][]byte{"tv/anim": web, "vplayer": common} {
+		node := gameNodeOf(t, data)
+		letter, _ := node["RAFALE_CURRENT_LETTER"].(string)
+		if len([]rune(letter)) != 1 || letter != "C" {
+			t.Errorf("%s: RAFALE_CURRENT_LETTER doit traverser sur un seul caractère \"C\", got %q", name, letter)
+		}
+		if _, ok := node["RAFALE_LETTERS"]; !ok {
+			t.Errorf("%s: RAFALE_LETTERS doit traverser", name)
+		}
+		if strings.Contains(string(data), "Canberra") {
+			t.Errorf("%s: la réponse ne doit jamais apparaître dans la charge utile", name)
 		}
 	}
 }

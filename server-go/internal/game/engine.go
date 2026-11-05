@@ -170,6 +170,11 @@ type Engine struct {
 	// drawNextRafaleUnsafe's own doc comment).
 	rafaleDraw rafaleDrawState
 
+	// rafaleAlpha (#282, contracts/rafale.md §15.4) is the alphabetical draw
+	// queue of the current classic round; nil ⇔ option off. Ephemeral like
+	// rafaleDraw, but explicitly released by stopUnsafe/Ready/InitGame.
+	rafaleAlpha *rafaleAlphaState
+
 	// rafaleQuestionTimer/rafaleQuestionStopCh (v8.0.0, #107, contract
 	// rafale.md §2.2) — the per-question ~3s countdown, DELIBERATELY its own
 	// pair of fields, never e.timer/e.stopCh. The global round timer
@@ -430,6 +435,7 @@ func NewEngine() *Engine {
 			RafaleTeamErrors:           map[string]int{},
 			RafaleParticipatingTeams:   []string{},
 			RafaleCurrentTeamColor:     []int{},
+			RafaleLetters:              []string{}, // #282 — never nil (JSON [])
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -1455,6 +1461,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.RafaleAskedCount = 0
 		e.state.RafalePoolRemaining = 0
 		e.state.RafaleExhausted = false
+		e.resetRafaleAlphaUnsafe() // #282
 	}
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)
@@ -2764,6 +2771,7 @@ func (e *Engine) stopUnsafe() bool {
 	released := false
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
 		released = e.releaseRafaleNextUnsafe()
+		e.resetRafaleAlphaUnsafe() // #282 — queue abandoned, public letters cleared
 		if e.state.RafaleSubPhase == RafaleSubPhaseQuestion {
 			e.stopRafaleQuestionTimerUnsafe()
 			e.state.RafaleSubPhase = RafaleSubPhaseRoundEnd
@@ -3189,6 +3197,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 	e.state.RafaleAskedCount++
 
 	e.prefetchRafaleNextUnsafe()
+	e.refreshRafaleLettersUnsafe(drawn) // #282
 	e.refreshRafalePoolRemainingUnsafe()
 
 	questionTime := e.state.Question.RafaleQuestionTime
@@ -3342,6 +3351,14 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	// source) before calling the now-generalized builder — see that
 	// function's own doc comment.
 	e.rafaleDraw = e.newRafaleDrawStateUnsafe(e.state.Question.EffectiveRafaleCategories(), e.state.Question.EffectiveRafaleDifficulties())
+	// #282 (contract §15.4): the alphabetical option replaces the stratified
+	// draw by a full queue of A→Z passes; off ⇒ rafaleAlpha stays nil and the
+	// round is byte-for-byte the v11.2.3 one.
+	e.rafaleAlpha = nil
+	if e.state.Question.RafaleAlphabetical {
+		e.rafaleAlpha = &rafaleAlphaState{queue: e.buildRafaleAlphaQueueUnsafe(
+			e.state.Question.EffectiveRafaleCategories(), e.state.Question.EffectiveRafaleDifficulties())}
+	}
 
 	drawn, err := e.drawNextRafaleUnsafe()
 	if err != nil {
@@ -3368,6 +3385,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	// it's ready to be consumed as-is by the first advanceRafaleUnsafe call
 	// — see prefetchRafaleNextUnsafe's own doc comment.
 	e.prefetchRafaleNextUnsafe()
+	e.refreshRafaleLettersUnsafe(drawn) // #282 — after the prefetch (letters include the pre-drawn one)
 	e.refreshRafalePoolRemainingUnsafe()
 
 	questionTime := e.state.Question.RafaleQuestionTime
@@ -4088,6 +4106,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	e.state.RafaleAskedCount = 0
 	e.state.RafalePoolRemaining = 0
 	e.state.RafaleExhausted = false
+	e.resetRafaleAlphaUnsafe() // #282
 
 	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
 		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
@@ -5194,6 +5213,9 @@ func (e *Engine) removeRafaleActiveCoupleUnsafe(couple rafaleCouple) {
 // rebalancing; it NEVER surfaces that couple's own emptiness as an error to
 // the caller. Caller must hold e.mu (write lock).
 func (e *Engine) drawNextRafaleUnsafe() (*RafaleQuestion, error) {
+	if e.rafaleAlpha != nil { // #282, contract §15.4 — same entry for current draw and prefetch
+		return e.drawNextRafaleAlphaUnsafe()
+	}
 	for {
 		if len(e.rafaleDraw.active) == 0 {
 			return nil, ErrRafalePoolEmpty
@@ -5509,6 +5531,7 @@ func (e *Engine) refreshRafaleCardPoolRemainingUnsafe(card *MotionCard) {
 // Caller (StartRafaleMotionCardRound) must hold e.mu (write) and must
 // already have confirmed card is the active, RAFALE-typed card.
 func (e *Engine) startRafaleCardRoundUnsafe(card *MotionCard) (drawn *RafaleQuestion, ok bool) {
+	e.rafaleAlpha = nil // #282 — the alphabetical option is ignored by a MEMOTION card (§15.2)
 	e.rafaleDraw = e.newRafaleDrawStateUnsafe(card.RafaleCategories, card.RafaleDifficulties)
 
 	drawn, err := e.drawNextRafaleUnsafe()

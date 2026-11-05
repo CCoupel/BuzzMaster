@@ -141,6 +141,7 @@ var questionTypeRegistry = map[QuestionType]TypeDescriptor{
 			// reintroduced, v9.0.0) IS type-specific and IS owned.
 			"RAFALE_CATEGORIES", "RAFALE_DIFFICULTY", "RAFALE_DIFFICULTIES", "RAFALE_MODE",
 			"RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS", "RAFALE_POINTS_BY_DIFFICULTY",
+			"RAFALE_ALPHABETICAL", "RAFALE_WHEEL_LAYOUT", // #282 — classic round only, ignored by a MEMOTION card (§15.2)
 			"RAFALE_ROUND_TIME", // #217 — a MEMOTION card's own round duration, meaningless for the classic round
 		},
 		// #217 (v9.0.0): text-only by design, exactly like a classic RAFALE

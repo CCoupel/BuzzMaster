@@ -362,3 +362,80 @@ func TestRafaleAnswerNext_NeverLeaksToTVOrPlayer(t *testing.T) {
 	assertNoFrameContainsSecret(t, "tv", tv, parsed.Msg.Next.Question)
 	assertNoFrameContainsSecret(t, "vplayer", vplayer, parsed.Msg.Next.Question)
 }
+
+// ---------------------------------------------------------------------------
+// #282, contract rafale.md §15.5 — mode Alphabétique : la PREMIÈRE LETTRE de la
+// réponse courante est publique par conception (RAFALE_CURRENT_LETTER, un
+// caractère), la réponse elle-même (et NEXT) jamais. « Canberra » ne doit
+// apparaître nulle part dans la charge utile TV/VPlayer — sauf sa lettre « C ».
+// ---------------------------------------------------------------------------
+
+func newRafaleAlphaLeakTestApp(t *testing.T) *App {
+	t.Helper()
+	app := newAnimTestApp(t)
+	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+		app.broadcastRafaleAnswer(id, answer, next)
+	}
+	for _, rq := range []game.RafaleQuestion{
+		{ID: "ra-1", Question: "QS-ALPHA-1", Answer: "Canberra", Category: rafaleAnswerLeakReservoirCategory, Difficulty: rafaleAnswerLeakReservoirDifficulty},
+		{ID: "ra-2", Question: "QS-ALPHA-2", Answer: "Dakar", Category: rafaleAnswerLeakReservoirCategory, Difficulty: rafaleAnswerLeakReservoirDifficulty},
+		{ID: "ra-3", Question: "QS-ALPHA-3", Answer: "Eriwan", Category: rafaleAnswerLeakReservoirCategory, Difficulty: rafaleAnswerLeakReservoirDifficulty},
+	} {
+		if _, err := app.engine.UpsertRafaleQuestion(rq); err != nil {
+			t.Fatalf("UpsertRafaleQuestion(%q) failed: %v", rq.ID, err)
+		}
+	}
+	q := &game.Question{
+		ID: "rafale-alpha-leak-q", Question: "RAFALE round", Type: game.QuestionTypeRafale,
+		Category: rafaleAnswerLeakReservoirCategory, Points: "10", Time: "120",
+		TypedContent: game.TypedContent{
+			RafaleDifficulty: rafaleAnswerLeakReservoirDifficulty, RafaleMode: string(game.RafaleModeSolo),
+			RafaleQuestionTime: 3, RafaleMaxQuestions: 100, RafaleAlphabetical: true,
+		},
+	}
+	app.engine.Ready(q.ID, q)
+	app.engine.StartImmediate(0) // current = Canberra (C), pre-fetched NEXT = Dakar
+	return app
+}
+
+func TestRafaleAlpha282_TVAndVPlayer_OnlyTheLetter_NeverTheAnswer(t *testing.T) {
+	app := newRafaleAlphaLeakTestApp(t)
+	baseURL := startAnimAllowlistTestServer(t, app)
+	admin := dialWS(t, baseURL, "/ws/admin")
+	tv := dialWS(t, baseURL, "/ws/tv")
+	vplayer := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, admin)
+	learnClientID(t, app, tv)
+	learnClientID(t, app, vplayer)
+
+	sendAction(t, app, admin, protocol.ActionRafaleValidate, struct{}{}) // current → Dakar (D), NEXT → Eriwan
+	_, _ = readActionMatching(t, admin, protocol.ActionRafaleAnswer)
+	app.broadcastUpdate() // le harnais ne câble pas OnStateChange : on force la diffusion d'état aux clients
+
+	for name, conn := range map[string]interface {
+		SetReadDeadline(time.Time) error
+		ReadMessage() (int, []byte, error)
+	}{"tv": tv, "vplayer": vplayer} {
+		sawLetter := false
+		deadline := time.Now().Add(500 * time.Millisecond)
+		for {
+			conn.SetReadDeadline(deadline)
+			_, data, err := conn.ReadMessage()
+			if err != nil {
+				break
+			}
+			s := string(data)
+			for _, secret := range []string{"Canberra", "Dakar", "Eriwan", "anberra", "akar", "riwan"} {
+				if strings.Contains(s, secret) {
+					t.Fatalf("%s: la réponse %q ne doit jamais atteindre le client public — frame: %s", name, secret, s)
+				}
+			}
+			if strings.Contains(s, `"RAFALE_CURRENT_LETTER":"D"`) {
+				sawLetter = true
+			}
+		}
+		if !sawLetter {
+			t.Errorf("%s: RAFALE_CURRENT_LETTER=\"D\" (une seule lettre, publique) attendu dans les diffusions d'état", name)
+		}
+	}
+}

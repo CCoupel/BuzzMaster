@@ -1561,6 +1561,19 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 				}
 			}
 		}
+		// #282 (contracts/rafale.md §15.2) — "Alphabétique" option and its TV
+		// layout. Plain fields resubmitted at every save (precedent
+		// qcm_hints_enabled): a field not read here is LOST at each save (#107).
+		if r.FormValue("rafale_alphabetical") == "true" {
+			question["RAFALE_ALPHABETICAL"] = true
+		}
+		if layout := r.FormValue("rafale_wheel_layout"); layout != "" {
+			if !game.ValidRafaleWheelLayout(layout) {
+				http.Error(w, "rafale_wheel_layout doit valoir strip ou arc", http.StatusBadRequest)
+				return
+			}
+			question["RAFALE_WHEEL_LAYOUT"] = layout
+		}
 		if pointsStr := r.FormValue("RAFALE_POINTS_BY_DIFFICULTY"); pointsStr != "" {
 			var points map[string]int
 			if err := json.Unmarshal([]byte(pointsStr), &points); err == nil && len(points) > 0 {
@@ -3113,10 +3126,13 @@ func (h *HTTPServer) handleRafalePool(w http.ResponseWriter, r *http.Request) {
 	available, used, total := h.engine.CountRafalePool(categories, difficulties)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{
+	// LETTERS (#282, contract rafale.md §15.6): A–Z of the available answers,
+	// through the engine's single normalisation; always an array.
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"AVAILABLE": available,
 		"USED":      used,
 		"TOTAL":     total,
+		"LETTERS":   h.engine.RafaleAvailableLetters(categories, difficulties),
 	})
 }
 

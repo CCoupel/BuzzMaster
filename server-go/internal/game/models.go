@@ -363,6 +363,12 @@ type TypedContent struct {
 	// than needing its own. A RAFALE card needs a card-own value ("durée
 	// propre", task #217), so it gets a dedicated OwnedField instead.
 	RafaleRoundTime int `json:"RAFALE_ROUND_TIME,omitempty"`
+	// RafaleAlphabetical / RafaleWheelLayout (v11.4.0, #282, contracts/
+	// rafale.md §15.2) — the "Alphabétique" option of a classic RAFALE round
+	// and its TV presentation ("strip" default | "arc"). omitempty like every
+	// TypedContent field (§3.3); ignored by a MEMOTION RAFALE card (§14).
+	RafaleAlphabetical bool   `json:"RAFALE_ALPHABETICAL,omitempty"`
+	RafaleWheelLayout  string `json:"RAFALE_WHEEL_LAYOUT,omitempty"`
 
 	// EntracteConfig (v9.0.0, #214) — the per-occurrence panel configuration
 	// of an ENTRACTE-type question, question host only, never nestable
@@ -929,6 +935,11 @@ type GameState struct {
 	RafaleAskedCount           int                       `json:"RAFALE_ASKED_COUNT"`
 	RafalePoolRemaining        int                       `json:"RAFALE_POOL_REMAINING"`
 	RafaleExhausted            bool                      `json:"RAFALE_EXHAUSTED"`
+	// v11.4.0 (#282, contracts/rafale.md §15.5) — NO omitempty. The current
+	// answer's first normalised letter is PUBLIC by design (never the answer);
+	// RafaleLetters = A–Z letters that still have an unplayed answer.
+	RafaleCurrentLetter string   `json:"RAFALE_CURRENT_LETTER"`
+	RafaleLetters       []string `json:"RAFALE_LETTERS"`
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero
