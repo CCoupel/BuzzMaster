@@ -101,3 +101,30 @@ describe('Wheel — critère « lisible après 100 mouvements » (§4, #282)', (
     expect(container.querySelectorAll('path').length).toBeGreaterThanOrEqual(26)
   })
 })
+
+describe('Wheel — changement de lettre pendant une bascule (#282, revue mineure)', () => {
+  it('ne saute pas : la bascule en cours n\'est pas interrompue, la cible suivante est enchaînée', async () => {
+    const { vi } = await import('vitest')
+    const { act } = await import('@testing-library/react')
+    vi.useFakeTimers()
+    try {
+      const segs = letters()
+      const { container, rerender } = render(<Wheel segments={segs} current={0} stepMs={600} />)
+      const root = () => container.querySelector('[role="img"]')
+      rerender(<Wheel segments={segs} current={3} stepMs={600} />)
+      await act(async () => { vi.advanceTimersByTime(100) })
+      expect(root().getAttribute('data-animate')).toBe('true')
+      rerender(<Wheel segments={segs} current={7} stepMs={600} />)
+      // la 2e lettre n'interrompt pas la bascule vers 3 (pas de repli sans transition = pas de saut)
+      expect(root().getAttribute('data-animate')).toBe('true')
+      expect(Number(root().getAttribute('data-pos'))).toBeCloseTo(3, 5)
+      await act(async () => { vi.advanceTimersByTime(700) }) // fin de la 1re, la 2e démarre
+      await act(async () => { vi.advanceTimersByTime(700) }) // fin de la 2e
+      expect(root().getAttribute('data-animate')).toBe('false')
+      expect(Number(root().getAttribute('data-pos'))).toBe(7)
+      expect(root().getAttribute('aria-label')).toContain('H')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

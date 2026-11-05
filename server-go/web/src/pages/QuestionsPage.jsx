@@ -3284,7 +3284,7 @@ export default function QuestionsPage() {
                         <span className="rafale-alpha-switch-label">🔤 Alphabétique</span>
                       </button>
                       <small className="rafale-alpha-hint">
-                        Les questions sont tirées par passes A→Z ; la première lettre de la réponse est affichée à la TV.
+                        Les questions sont tirées par passes A→Z. La TV affiche uniquement la première lettre de la réponse (jamais la réponse elle-même).
                       </small>
                       {formData.rafaleAlphabetical && (
                         <div className="memory-mode-options rafale-wheel-layouts">

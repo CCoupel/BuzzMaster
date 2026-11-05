@@ -54,31 +54,52 @@ export default function Wheel({
 
   // pos : position affichée (continue). animate : transition CSS active pendant la bascule.
   const [view, setView] = useState({ pos: safeCurrent ?? 0, animate: false })
-  const posRef = useRef(safeCurrent ?? 0) // position normalisée au repos
+  const settledRef = useRef(safeCurrent ?? 0) // position normalisée AU REPOS (fin de la dernière bascule)
+  const animatingRef = useRef(false)
+  const pendingRef = useRef(null) // dernière cible reçue pendant une bascule (la plus récente gagne)
   const timerRef = useRef(null)
+  const mountedRef = useRef(true)
+  const latest = useRef({ n, stepMs })
+  latest.current = { n, stepMs }
 
-  useEffect(() => {
-    if (safeCurrent == null || n === 0) return undefined
-    const from = posRef.current
-    const delta = forwardDistance(from, safeCurrent, n) // [0, n) : plus court chemin vers l'avant
-    posRef.current = safeCurrent
-    if (timerRef.current) clearTimeout(timerRef.current)
+  // Une bascule à la fois : si `current` change pendant une bascule, la cible est mise en file et
+  // enchaînée à la fin (aucune interruption ⇒ aucun saut visuel). La position est ramenée modulo n
+  // à la fin de chaque bascule (§4) : aucune dérive après 100 mouvements.
+  const start = useRef(null)
+  start.current = (target) => {
+    const { n: count, stepMs: ms } = latest.current
+    const from = settledRef.current
+    const delta = forwardDistance(from, target, count) // [0, n) : plus court chemin vers l'avant
     if (delta === 0 || reducedMotion()) {
-      setView({ pos: safeCurrent, animate: false })
-      return undefined
+      settledRef.current = target
+      setView({ pos: target, animate: false })
+      return
     }
-    // Départ depuis la position normalisée précédente (jamais une valeur cumulée), arrivée = from + delta.
+    animatingRef.current = true
     setView({ pos: from, animate: false })
     const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (f) => setTimeout(f, 0)
-    raf(() => setView({ pos: from + delta, animate: true }))
-    // Normalisation modulo n à la fin du mouvement (§4) : repli sans transition.
+    raf(() => { if (mountedRef.current && animatingRef.current) setView({ pos: from + delta, animate: true }) })
     timerRef.current = setTimeout(() => {
-      setView({ pos: offsetToIndex(safeCurrent, n), animate: false })
-    }, stepMs + 30)
-    return undefined
-  }, [safeCurrent, n, stepMs])
+      if (!mountedRef.current) return
+      settledRef.current = offsetToIndex(target, count)
+      animatingRef.current = false
+      setView({ pos: settledRef.current, animate: false })
+      const next = pendingRef.current
+      pendingRef.current = null
+      if (next != null && next !== settledRef.current) start.current(next)
+    }, ms + 30)
+  }
 
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
+  useEffect(() => {
+    if (safeCurrent == null || n === 0) return
+    if (animatingRef.current) pendingRef.current = safeCurrent
+    else start.current(safeCurrent)
+  }, [safeCurrent, n])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false; if (timerRef.current) clearTimeout(timerRef.current) }
+  }, [])
 
   const transition = view.animate ? `transform ${stepMs}ms cubic-bezier(.215,.61,.355,1)` : 'none'
   const cls = `wheel wheel-${layout === 'arc' ? 'arc' : 'strip'} wheel-size-${size}`
@@ -87,10 +108,9 @@ export default function Wheel({
     [seg.state === 'disabled' ? 'disabled' : '', seg.state === 'played' ? 'played' : '',
       seg.kind === 'special' ? 'special' : '', i === safeCurrent ? 'is-current' : ''].filter(Boolean).join(' ')
 
-  const common = { role: 'img', 'aria-label': ariaLabelFor(segments, safeCurrent), style: { '--wheel-accent': accent } }
+  const common = { 'data-pos': view.pos, 'data-animate': view.animate ? 'true' : 'false', role: 'img', 'aria-label': ariaLabelFor(segments, safeCurrent), style: { '--wheel-accent': accent } }
 
   if (layout === 'arc') {
-    const step = n > 0 ? 360 / n : 0
     const deg = -(view.pos / Math.max(n, 1)) * 360
     return (
       <div className={cls} {...common}>
@@ -122,7 +142,6 @@ export default function Wheel({
           </g>
           <polygon className="wheel-pointer" points="470,4 530,4 500,64" fill={accent} />
         </svg>
-        <span hidden>{step}</span>
       </div>
     )
   }
