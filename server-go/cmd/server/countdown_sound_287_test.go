@@ -422,3 +422,25 @@ func tw287Loop(q *game.Question) *game.Question {
 	_ = json.Unmarshal(raw, out)
 	return out
 }
+
+// §12.8 (corrigé 1f9624ac) : OnStateChange(STOPPED) arrête le décompte — c'est le chemin de la fin de manche RAFALE
+// (plafond ou épuisement du réservoir : le moteur s'arrête lui-même, sans passer par le handler STOP).
+func TestCountdown287_EngineStopsItself_StoppedPhase_StopsCountdown(t *testing.T) {
+	app, fake := tw287Playing(t)
+	fake.reset()
+	app.engine.Stop() // transition interne vers STOPPED, comme à l'épuisement du réservoir RAFALE
+	tw287Waiting(t, fake, "Stop", 1)
+}
+
+func TestCountdown287_OnStateChange_Stopped_Stops_StartedAndPaused_DoNothing(t *testing.T) {
+	app, fake := tw287Playing(t)
+	fake.reset()
+	app.engine.OnStateChange(game.PhaseStarted)
+	app.engine.OnStateChange(game.PhasePaused)
+	time.Sleep(100 * time.Millisecond)
+	if got := fake.journal(); len(got) != 0 {
+		t.Fatalf("STARTED/PAUSED ne doivent rien faire au décompte, journal %v", got)
+	}
+	app.engine.OnStateChange(game.PhaseStopped)
+	tw287Waiting(t, fake, "Stop", 1)
+}

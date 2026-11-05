@@ -332,9 +332,13 @@ func TestRestoreDefaults287_RestoresEightIncludingDecompte(t *testing.T) {
 		t.Fatalf("attendu 200, got %d : %s", w.Code, w.Body.String())
 	}
 	var resp struct {
+		Written  []string `json:"written"`
 		Restored []string `json:"restored"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp.Written) != 7 {
+		t.Errorf("written = %v, attendu les 7 cues (forme inchangée)", resp.Written)
+	}
 	if len(resp.Restored) != 8 || !tw287Contains(resp.Restored, "decompte") {
 		t.Errorf("restored = %v, attendu 8 noms dont decompte", resp.Restored)
 	}
