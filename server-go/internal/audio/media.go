@@ -11,15 +11,21 @@ package audio
 // (rejouer, pause, stop) que l'interface Output n'offre pas et n'a jamais
 // eu à offrir.
 //
-// Interface normative — contracts/sound.md §10.2. Ne pas l'étendre : une
-// notification de fin de lecture se règle au niveau du constructeur
-// (NewMediaPlayer's onNaturalEnd), jamais par une méthode supplémentaire
-// ici — voir le commentaire de NewMediaPlayer.
+// Interface normative — contracts/sound.md §10.2, amendée par §13.1
+// (v11.4.0, #288 : PlayLoop). Une notification de fin de lecture se règle
+// toujours au niveau du constructeur (NewMediaPlayer's onNaturalEnd), jamais
+// par une méthode supplémentaire — voir le commentaire de NewMediaPlayer.
 type MediaPlayer interface {
 	// Play démarre la lecture du fichier désigné. VOIX UNIQUE : un Play
 	// pendant une lecture en cours REMPLACE celle-ci (arrêt net), il ne
 	// superpose jamais deux extraits.
 	Play(path string) error
+	// PlayLoop (v11.4.0, #288, contrat §13.1) démarre la lecture et la
+	// REPREND au début à chaque fin naturelle, sans fin : seul
+	// Stop/Close/un Play(Loop) ultérieur y met un terme. onNaturalEnd est
+	// appelé EXACTEMENT UNE FOIS, à la fin du PREMIER passage, jamais aux
+	// suivants. Voix unique comme Play. Implémentation neutre : no-op.
+	PlayLoop(path string) error
 	Pause()
 	Resume()
 	Stop()
@@ -47,12 +53,13 @@ const (
 // §10.2 "dégradation silencieuse identique à §5.5".
 type neutralMediaPlayer struct{}
 
-func (neutralMediaPlayer) Play(path string) error { return nil }
-func (neutralMediaPlayer) Pause()                 {}
-func (neutralMediaPlayer) Resume()                {}
-func (neutralMediaPlayer) Stop()                  {}
-func (neutralMediaPlayer) State() MediaState      { return MediaIdle }
-func (neutralMediaPlayer) Close() error           { return nil }
+func (neutralMediaPlayer) Play(path string) error     { return nil }
+func (neutralMediaPlayer) PlayLoop(path string) error { return nil }
+func (neutralMediaPlayer) Pause()                     {}
+func (neutralMediaPlayer) Resume()                    {}
+func (neutralMediaPlayer) Stop()                      {}
+func (neutralMediaPlayer) State() MediaState          { return MediaIdle }
+func (neutralMediaPlayer) Close() error               { return nil }
 
 // NewMediaPlayer construit le MediaPlayer réel de la plateforme (contract
 // §10.2), adossé au contexte `oto` partagé (§10.3), ou un neutralMediaPlayer

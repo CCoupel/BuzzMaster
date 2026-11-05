@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-
-	"buzzcontrol/internal/audio"
 )
 
 // ManifestEntry describes one cue's on-disk sound file — informational
@@ -36,17 +34,23 @@ const manifestFilename = "sounds.json"
 // the startup path (cmd/server) and the restore endpoint
 // (internal/server/http.go), so the manifest never lags behind whatever
 // WriteAll just did to the directory.
-func ReconcileManifest(dir string) (map[audio.Cue]ManifestEntry, error) {
-	manifest := make(map[audio.Cue]ManifestEntry, len(Cues))
+func ReconcileManifest(dir string) (map[string]ManifestEntry, error) {
+	manifest := make(map[string]ManifestEntry, len(Cues)+1)
 	for _, c := range Cues {
 		path := filepath.Join(dir, Filename(c))
 		data, err := os.ReadFile(path)
 		if err != nil {
-			manifest[c] = ManifestEntry{Present: false}
+			manifest[string(c)] = ManifestEntry{Present: false}
 			continue
 		}
 		ref, _ := Generate(c) // Cues and Generate are kept in lockstep — see Cues' own doc comment
-		manifest[c] = ManifestEntry{Present: true, Custom: !bytes.Equal(data, ref)}
+		manifest[string(c)] = ManifestEntry{Present: true, Custom: !bytes.Equal(data, ref)}
+	}
+	// v11.4.0 (#287, §12.2): the countdown entry, keyed by its file stem.
+	if data, err := os.ReadFile(filepath.Join(dir, CountdownFilename())); err != nil {
+		manifest[CountdownName] = ManifestEntry{Present: false}
+	} else {
+		manifest[CountdownName] = ManifestEntry{Present: true, Custom: !bytes.Equal(data, GenerateCountdown())}
 	}
 
 	out, err := json.MarshalIndent(manifest, "", "  ")

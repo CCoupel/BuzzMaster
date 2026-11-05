@@ -74,6 +74,10 @@ type HTTPServer struct {
 	// changed value and was persisted (contract sound.md §11.2): true stops
 	// the question media (and countdown voice); false resumes nothing.
 	OnSoundMutedChange func(muted bool)
+	// OnSoundCountdownDisabledChange is called by POST /config.json after
+	// `sound.countdown_disabled` changed value and was persisted (contract
+	// sound.md §12.3): true stops the countdown voice.
+	OnSoundCountdownDisabledChange func(disabled bool)
 	// OnLightingEnabledChange is called by POST /config.json, BEFORE
 	// OnConfigUpdate, after `lighting.enabled` changed value and was
 	// persisted (contract sound.md §11.4): false ⇒ the App extinguishes the
@@ -1592,6 +1596,8 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// discipline as qcm_hints_enabled above), never preserved from
 	// existingQuestion.
 	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true"
+	// sound_loop (v11.4.0, #288, contract sound.md §13.2): same discipline.
+	soundLoop := r.FormValue("sound_loop") == "true"
 	var soundWarning string
 	if soundFile, soundHeader, ferr := r.FormFile("sound"); ferr == nil {
 		defer soundFile.Close()
@@ -1686,6 +1692,14 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	if soundTimerDelayed {
 		if soundURL, ok := question["SOUND"].(string); ok && soundURL != "" {
 			question["SOUND_TIMER_DELAYED"] = true
+		}
+	}
+
+	// SOUND_LOOP (omitempty): same rule as SOUND_TIMER_DELAYED above, and
+	// combinable with it (contract §13.2: both written together).
+	if soundLoop {
+		if soundURL, ok := question["SOUND"].(string); ok && soundURL != "" {
+			question["SOUND_LOOP"] = true
 		}
 	}
 
@@ -2158,6 +2172,16 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			if _, ok := sRaw["muted"]; ok {
 				cfg.Sound.Muted = incoming.Muted
 			}
+			// countdown_disabled / countdown_once (v11.4.0, #287/#288,
+			// contract sound.md §12.3): key present ⇒ written, absent ⇒
+			// unchanged — a lone {"countdown_once":true} never erases
+			// muted / cues_disabled.
+			if _, ok := sRaw["countdown_disabled"]; ok {
+				cfg.Sound.CountdownDisabled = incoming.CountdownDisabled
+			}
+			if _, ok := sRaw["countdown_once"]; ok {
+				cfg.Sound.CountdownOnce = incoming.CountdownOnce
+			}
 			// cues_disabled is a map, so "absent" and "present but empty"
 			// are two DIFFERENT intents that json.Unmarshal into a struct
 			// cannot tell apart (both leave `incoming.CuesDisabled` as a
@@ -2196,6 +2220,9 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		// régie switches, only on an actual value change.
 		if cfg.Sound.Muted != current.Sound.Muted && h.OnSoundMutedChange != nil {
 			h.OnSoundMutedChange(cfg.Sound.Muted)
+		}
+		if cfg.Sound.CountdownDisabled != current.Sound.CountdownDisabled && cfg.Sound.CountdownDisabled && h.OnSoundCountdownDisabledChange != nil {
+			h.OnSoundCountdownDisabledChange(cfg.Sound.CountdownDisabled)
 		}
 		if cfg.Lighting.Enabled != current.Lighting.Enabled && h.OnLightingEnabledChange != nil {
 			h.OnLightingEnabledChange(cfg.Lighting.Enabled)

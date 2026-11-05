@@ -319,6 +319,21 @@ type Engine struct {
 	// every consumer re-derives whatever it needs from live state, same
 	// convention as OnRafaleTeamsChanged.
 	OnTimeUp func()
+	// OnAnswerTimerStarted (v11.4.0, #287, contracts/sound.md §12.5) fires
+	// whenever a response timer ACTUALLY starts ticking: startTimer() (global
+	// SPEEDY/QCM/ARDOISE and the RAFALE round — its 3 callers, one
+	// instrumentation) and StartMotionCardTimer (MEMOTION card, RAFALE card
+	// included). NEVER from StartRafaleQuestionTimer, StartMotionMemorizeTimer
+	// nor the COUNTDOWN phase.
+	//
+	// ⚠️ May be invoked WITH e.mu held (startTimer() runs under the lock): the
+	// callee must never call back into the Engine synchronously and must not
+	// block — read config, drive a MediaPlayer, return.
+	OnAnswerTimerStarted func(start AnswerTimerStart)
+	// OnMotionCardTimeUp (v11.4.0, #287, §12.5) fires when a MEMOTION card
+	// timer reaches 0 (the phase stays STARTED, so no OnStateChange/OnTimeUp
+	// exists for this expiry). Fired outside the lock, like OnTimerTick.
+	OnMotionCardTimeUp func()
 	// RAFALE callbacks (v8.0.0, #107, contract §5.2/§2.2).
 	//
 	// OnRafaleAnswer fires whenever a new RAFALE question is drawn — round
@@ -2385,6 +2400,37 @@ func (e *Engine) StartImmediate(delay int) {
 	}
 }
 
+// AnswerTimerKind says which kind of response timer just started
+// (contracts/sound.md §12.5).
+type AnswerTimerKind string
+
+const (
+	// AnswerTimerGlobal — startTimer(): SPEEDY/QCM/ARDOISE, and the RAFALE round.
+	AnswerTimerGlobal AnswerTimerKind = "GLOBAL"
+	// AnswerTimerMotionCard — StartMotionCardTimer (card flip, RAFALE card included).
+	AnswerTimerMotionCard AnswerTimerKind = "MOTION_CARD"
+)
+
+// AnswerTimerStart is the payload of Engine.OnAnswerTimerStarted.
+type AnswerTimerStart struct {
+	Kind          AnswerTimerKind
+	Seconds       int    // programmed duration, always > 0
+	QuestionSound string // state.Question.Sound at start ("" if none)
+}
+
+// fireAnswerTimerStartedUnsafe emits OnAnswerTimerStarted (>0 seconds only).
+// May be called with e.mu held — see the callback's contract.
+func (e *Engine) fireAnswerTimerStartedUnsafe(kind AnswerTimerKind, seconds int) {
+	if e.OnAnswerTimerStarted == nil || seconds <= 0 {
+		return
+	}
+	qs := ""
+	if e.state.Question != nil {
+		qs = e.state.Question.Sound
+	}
+	e.OnAnswerTimerStarted(AnswerTimerStart{Kind: kind, Seconds: seconds, QuestionSound: qs})
+}
+
 func (e *Engine) startTimer() {
 	if e.timer != nil {
 		e.timer.Stop()
@@ -2397,6 +2443,14 @@ func (e *Engine) startTimer() {
 	// Capture references locally to avoid nil pointer issues
 	ticker := e.timer
 	stopCh := e.stopCh
+
+	// #287 (§12.5): the single instrumentation point of the global timer —
+	// under e.mu, the adapter must not call back into the Engine.
+	seconds := e.state.CurrentTime
+	if seconds <= 0 {
+		seconds = e.state.Delay
+	}
+	e.fireAnswerTimerStartedUnsafe(AnswerTimerGlobal, seconds)
 
 	go func() {
 		for {
@@ -7496,6 +7550,17 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 	log.Printf("[Engine] MEMOTION StartMotionCardTimer: delay=%ds", delay)
 	e.mu.Unlock()
 
+	// #287 (§12.5): after unlock (this path is not under the lock).
+	e.mu.RLock()
+	startInfo := AnswerTimerStart{Kind: AnswerTimerMotionCard, Seconds: delay}
+	if e.state.Question != nil {
+		startInfo.QuestionSound = e.state.Question.Sound
+	}
+	e.mu.RUnlock()
+	if e.OnAnswerTimerStarted != nil {
+		e.OnAnswerTimerStarted(startInfo)
+	}
+
 	go func() {
 		for {
 			select {
@@ -7536,6 +7601,9 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						// admin must act via MEMOTION_REVEAL.
 						ticker.Stop()
 						log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
+						if e.OnMotionCardTimeUp != nil { // #287 (§12.5/§12.8)
+							e.OnMotionCardTimeUp()
+						}
 						return true
 					}
 					return false

@@ -47,9 +47,12 @@ func (f *tw219dFakeMediaPlayer) Play(path string) error {
 	f.state = audio.MediaPlaying
 	return nil
 }
-func (f *tw219dFakeMediaPlayer) Pause()  { f.state = audio.MediaPaused }
-func (f *tw219dFakeMediaPlayer) Resume() { f.state = audio.MediaPlaying }
-func (f *tw219dFakeMediaPlayer) Stop()   { f.state = audio.MediaIdle }
+
+// PlayLoop (v11.4.0, #288, contract sound.md §13.1) — mechanical extension of the fake.
+func (f *tw219dFakeMediaPlayer) PlayLoop(path string) error { return f.Play(path) }
+func (f *tw219dFakeMediaPlayer) Pause()                     { f.state = audio.MediaPaused }
+func (f *tw219dFakeMediaPlayer) Resume()                    { f.state = audio.MediaPlaying }
+func (f *tw219dFakeMediaPlayer) Stop()                      { f.state = audio.MediaIdle }
 func (f *tw219dFakeMediaPlayer) State() audio.MediaState {
 	return f.state
 }

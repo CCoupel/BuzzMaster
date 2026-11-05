@@ -31,7 +31,8 @@ type otoMediaPlayer struct {
 
 	mu         sync.Mutex
 	file       *os.File
-	player     *oto.Player // référence FORTE — voir le commentaire de monitor
+	player     *oto.Player       // référence FORTE — voir le commentaire de monitor
+	section    *io.SectionReader // section data courante, rembobinée par Seek(0) à chaque tour d'une boucle (§13.1)
 	state      MediaState
 	generation uint64 // invalide une goroutine monitor périmée après Stop/replace/Close
 }
@@ -58,7 +59,15 @@ func newPlatformMediaPlayer(cfg OutputConfig, onNaturalEnd func()) MediaPlayer {
 // section [offset, offset+size) du chunk "data", localisée en ne lisant
 // QUE ses en-têtes de chunks, jamais le fichier entier (contract §10.2 :
 // « jamais un os.ReadFile »).
-func (p *otoMediaPlayer) Play(path string) error {
+func (p *otoMediaPlayer) Play(path string) error { return p.start(path, false) }
+
+// PlayLoop implémente MediaPlayer (contract §13.1, #288) : comme Play, mais
+// le monitor rejoue le fichier à chaque fin naturelle (Seek(0) + nouveau
+// oto.Player, MÊME génération, référence forte conservée, State() reste
+// PLAYING). onNaturalEnd n'est émis qu'à la fin du PREMIER passage.
+func (p *otoMediaPlayer) PlayLoop(path string) error { return p.start(path, true) }
+
+func (p *otoMediaPlayer) start(path string, loop bool) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("question sound: cannot open %s: %w", path, err)
@@ -79,11 +88,12 @@ func (p *otoMediaPlayer) Play(path string) error {
 	player.Play()
 
 	p.file = f
+	p.section = section
 	p.player = player
 	p.state = MediaPlaying
 	p.mu.Unlock()
 
-	go p.monitor(gen, player)
+	go p.monitor(gen, player, loop)
 	return nil
 }
 
@@ -103,7 +113,8 @@ func (p *otoMediaPlayer) Play(path string) error {
 // §10.3, « piège de durée de vie » : oto documente « a player is closed
 // when it becomes unreachable »). Cette goroutine conserve cette même
 // référence pendant toute sa durée de vie.
-func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player) {
+func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player, loop bool) {
+	passes := 0
 	for {
 		time.Sleep(mediaMonitorPoll)
 
@@ -128,6 +139,27 @@ func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player) {
 		if p.generation != gen {
 			p.mu.Unlock()
 			return
+		}
+		if loop {
+			// §13.1 : fin naturelle d'un passage — onNaturalEnd UNE seule
+			// fois (fin du 1er passage), puis le passage suivant sur la même
+			// SectionReader rembobinée, même génération, State() inchangé.
+			passes++
+			if _, err := p.section.Seek(0, io.SeekStart); err != nil {
+				log.Printf("audio: loop rewind failed, stopping loop: %v", err)
+				loop = false
+			} else {
+				next := p.ctx.NewPlayer(p.section)
+				next.Play()
+				p.player = next
+				player = next // référence forte conservée (§10.3)
+				first := passes == 1
+				p.mu.Unlock()
+				if first && p.onNaturalEnd != nil {
+					p.onNaturalEnd()
+				}
+				continue
+			}
 		}
 		p.state = MediaIdle
 		if p.player == player {
@@ -187,6 +219,7 @@ func (p *otoMediaPlayer) stopLocked() {
 		_ = p.player.Close() // no-op documenté depuis oto v3.4 — la fermeture réelle passe par le finalizer GC une fois inatteignable (§10.3)
 		p.player = nil
 	}
+	p.section = nil
 	if p.file != nil {
 		_ = p.file.Close()
 		p.file = nil

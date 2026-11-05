@@ -671,8 +671,14 @@ type Question struct {
 	// defers the timer until the sound ends — naturally or by an explicit
 	// animateur Stop — never blocking (contract's own non-blocking rule,
 	// CA12): see Engine.maybeStartDeferredTimerUnsafe/ReleaseDeferredTimer.
-	SoundTimerDelayed bool           `json:"SOUND_TIMER_DELAYED,omitempty"`
-	Status            QuestionStatus `json:"STATUS,omitempty"`
+	SoundTimerDelayed bool `json:"SOUND_TIMER_DELAYED,omitempty"`
+	// SoundLoop (v11.4.0, #288, contract sound.md §13.2) — false (zero) = the
+	// sound plays once (v11.1 behaviour); true = replayed in a loop until an
+	// existing stop site fires. Combinable with SoundTimerDelayed (the timer
+	// then starts at the end of the FIRST pass). Common to all question
+	// types like Sound; written only when a sound is attached.
+	SoundLoop bool           `json:"SOUND_LOOP,omitempty"`
+	Status    QuestionStatus `json:"STATUS,omitempty"`
 
 	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE (Answer shadowed by the explicit field above)
 }

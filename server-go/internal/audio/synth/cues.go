@@ -94,3 +94,26 @@ var Cues = []audio.Cue{
 	audio.CueEntracteDebut,
 	audio.CueEntracteFin,
 }
+
+// CountdownName is the manifest key / file stem of the chronometer
+// countdown sound (v11.4.0, #287, contracts/sound.md §12.2). A plain string,
+// NEVER an audio.Cue: the countdown is not an impulse cue (§2.2), so the
+// closed 7-value catalogue (Cues, soundCueFromString) is untouched.
+const CountdownName = "decompte"
+
+// CountdownFilename is the countdown's on-disk name, next to the cues.
+func CountdownFilename() string { return CountdownName + ".wav" }
+
+// GenerateCountdown returns the deterministic default countdown: a 2.00 s
+// tic-tac (two short "tic" per second, ~1 kHz / ~800 Hz alternating),
+// amplitude <= 0.5 to stay under the cues. Built to loop seamlessly
+// (silence at both ends; each note carries the anti-click envelope).
+func GenerateCountdown() []byte {
+	second := []note{
+		{freq: 1000, duration: 60 * time.Millisecond, amplitude: 0.5},
+		{freq: 0, duration: 440 * time.Millisecond},
+		{freq: 800, duration: 60 * time.Millisecond, amplitude: 0.5},
+		{freq: 0, duration: 440 * time.Millisecond},
+	}
+	return WriteWAV(sequence(append(append([]note{}, second...), second...)))
+}

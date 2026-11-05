@@ -130,6 +130,13 @@ type SoundConfig struct {
 	// means sound active, today's behaviour, no migration. Independent from
 	// Enabled (restart-bound, feeds the T0 gate) — never merge the two.
 	Muted bool `json:"muted,omitempty"`
+	// CountdownDisabled / CountdownOnce (v11.4.0, #287/#288, contract
+	// sound.md §12.3): the chronometer countdown voice. Same "store the
+	// deviation from the default" discipline as Muted/CuesDisabled — the
+	// zero values (keys absent) mean countdown ACTIVE and LOOPING, no
+	// migration needed.
+	CountdownDisabled bool `json:"countdown_disabled,omitempty"`
+	CountdownOnce     bool `json:"countdown_once,omitempty"`
 }
 
 // EnvHueAPIKey overrides lighting.api_key without ever touching config.json
