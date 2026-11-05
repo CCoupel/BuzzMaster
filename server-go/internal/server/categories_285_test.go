@@ -781,10 +781,23 @@ func TestCategories285_DELETE_Unused_NoMode_200(t *testing.T) {
 
 // ---------- historique : fusion dans « Sans catégorie » + .bak ----------
 
-// settleHistory laisse finir les sauvegardes asynchrones d'AddGameEvent (safeGo) puis fige un état disque stable.
+// settleHistory attend (attente active, échéance 5 s) que history.json contienne tous les événements du moteur — les
+// sauvegardes d'AddGameEvent sont asynchrones (safeGo) — puis fige l'état disque par une sauvegarde synchrone.
 func (e tw285Env) settleHistory(t *testing.T) {
 	t.Helper()
-	time.Sleep(250 * time.Millisecond)
+	want := len(e.srv.engine.GetHistory())
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		raw, err := os.ReadFile(e.histPath())
+		var events []json.RawMessage
+		if err == nil && json.Unmarshal(raw, &events) == nil && len(events) == want {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("setup : history.json ne contient pas les %d événements attendus après 5 s (lecture : %v)", want, err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 	if err := e.srv.engine.SaveHistory(); err != nil {
 		t.Fatalf("setup : %v", err)
 	}
