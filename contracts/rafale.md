@@ -1045,9 +1045,10 @@ Principes de lisibilité à respecter dans la maquette :
 
 ### 13.7 Périmètre
 
-- **`/anim` uniquement.** `/admin` (`GamePage.jsx`, `.rafale-admin-live`) reçoit le champ `NEXT`
-  (même canal, même destinataires) mais **ne l'affiche pas** dans ce lot — l'issue #202 ne le
-  demande pas. Affichage admin possible ultérieurement sans aucun changement de contrat.
+- **`/anim` uniquement — périmètre de #202 (v8.x).** `/admin` (`GamePage.jsx`, `.rafale-admin-live`) recevait
+  déjà le champ `NEXT` (même canal, même destinataires) sans l'afficher. **Depuis v11.4.0 (#282, §15.7/§15.10),
+  l'admin affiche la question suivante** — « Suivante (lettre S) : <énoncé> » — sans changement de canal ni de
+  destinataires, comme ce paragraphe l'anticipait.
 - **RAFALE uniquement.** Aucun autre type de question n'a de notion de « question suivante »
   pendant une manche.
 - `/tv` et `/player` : **strictement inchangés**, et c'est un critère bloquant (§13.2).
