@@ -1408,6 +1408,9 @@ export default function GamePage() {
                 <span className="rafale-admin-chip">
                   {gameState.question.RAFALE_QUESTION_TIME || 3}s/question
                 </span>
+                {gameState.question.RAFALE_ALPHABETICAL === true && (
+                  <span className="rafale-admin-chip rafale-admin-chip-alpha">🔤 Alphabétique</span>
+                )}
               </div>
               <RafalePoolAlert
                 // #216 — union catégories×difficultés (contrat §7.5), plus
@@ -1422,6 +1425,7 @@ export default function GamePage() {
                 difficulties={rafaleDifficulties}
                 roundTime={parseInt(timeInput) || 0}
                 questionTime={gameState.question.RAFALE_QUESTION_TIME || 3}
+                alphabetical={gameState.question.RAFALE_ALPHABETICAL === true}
                 onLevelChange={setRafalePoolLevel}
               />
             </div>
@@ -1446,6 +1450,11 @@ export default function GamePage() {
               <div className="rafale-admin-live">
                 <div className="rafale-anim-qcard" style={{ '--rafale-active-color': teamCss }}>
                   <div className="rafale-anim-qcard-meta">
+                    {gameState.question?.RAFALE_ALPHABETICAL === true && gameState.RAFALE_CURRENT_LETTER && (
+                      <span className="rafale-letter-badge" data-testid="rafale-letter" title="Lettre courante">
+                        {gameState.RAFALE_CURRENT_LETTER}
+                      </span>
+                    )}
                     {gameState.RAFALE_CURRENT_TEAM && (
                       <span className="chip rafale-anim-qcard-team">{gameState.RAFALE_CURRENT_TEAM}</span>
                     )}

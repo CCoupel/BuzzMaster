@@ -3827,3 +3827,14 @@
 @media (prefers-reduced-motion: reduce) {
   .memory-card.vplayer-pending-failed, .memotion-tv-memory-card.vplayer-pending-failed { animation: none; }
 }
+
+/* #282 — zone basse « roue des lettres » RAFALE alphabétique (TV STATIQUE : overflow hidden, vh/vw) */
+.rafale-wheel-zone {
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.rafale-tv .zone-timer,
+.rafale-tv .zone-media,
+.rafale-tv .zone-answers { min-height: 0; }

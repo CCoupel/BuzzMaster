@@ -171,6 +171,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     RAFALE_ASKED_COUNT: 0,
     RAFALE_POOL_REMAINING: 0,
     RAFALE_EXHAUSTED: false,
+    // #282 (v11.4.0) — option Alphabétique : lettre courante publique + lettres encore à jouer
+    RAFALE_CURRENT_LETTER: '',
+    RAFALE_LETTERS: [],
     // Son de la question (v11.1, #219, contrats game-state.md/sound.md §10).
     // Jamais omitempty côté serveur (règle projet) : les défauts ci-dessous
     // sont les valeurs zéro correctes ("aucune lecture en cours" / "le
@@ -540,6 +543,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             RAFALE_ASKED_COUNT: MSG.GAME.RAFALE_ASKED_COUNT ?? prev.RAFALE_ASKED_COUNT,
             RAFALE_POOL_REMAINING: MSG.GAME.RAFALE_POOL_REMAINING ?? prev.RAFALE_POOL_REMAINING,
             RAFALE_EXHAUSTED: MSG.GAME.RAFALE_EXHAUSTED ?? prev.RAFALE_EXHAUSTED,
+            RAFALE_CURRENT_LETTER: MSG.GAME.RAFALE_CURRENT_LETTER ?? prev.RAFALE_CURRENT_LETTER,
+            RAFALE_LETTERS: MSG.GAME.RAFALE_LETTERS ?? prev.RAFALE_LETTERS,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,

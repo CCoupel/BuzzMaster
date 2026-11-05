@@ -161,3 +161,17 @@
   color: var(--warning, #eab308);
   font-weight: 800;
 }
+
+/* #282 — pastille de lettre courante (option Alphabétique) */
+.rafale-letter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8em;
+  height: 1.8em;
+  padding: 0 0.4em;
+  border-radius: 6px;
+  background: var(--rafale-active-color, #3b82f6);
+  color: #fff;
+  font-weight: 800;
+}

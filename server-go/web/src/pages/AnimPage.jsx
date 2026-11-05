@@ -939,6 +939,8 @@ export default function AnimPage() {
             answerValue: rafaleAnswerValue,
             catMeta: rafaleCatMeta,
             askedCount: gameState.RAFALE_ASKED_COUNT,
+            alphabetical: gameState.question?.RAFALE_ALPHABETICAL === true,
+            currentLetter: gameState.RAFALE_CURRENT_LETTER || '',
             // NEXT (#202, contrat §13.3/§13.5/§13.6) — zone "SUIVANTE" de
             // AnimRafaleQuestion. `showNext` reprend TELLE QUELLE la
             // condition déjà posée sur `rafaleDisabled` ci-dessus (sous-phase

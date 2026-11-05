@@ -119,6 +119,9 @@ export default function QuestionsPage() {
     rafaleMode: 'SOLO',
     rafaleQuestionTime: 3,
     rafaleMaxQuestions: 100,
+    // #282 (v11.4.0) — option Alphabétique + présentation TV de la roue (contrat rafale.md §15.2/§15.7)
+    rafaleAlphabetical: false,
+    rafaleWheelLayout: 'strip',
     // ENTRACTE fields (#214, milestone v9.0.0) — second déclencheur du
     // mécanisme ENTRACTE existant (#119, EntracteConfigForm.jsx/#215) :
     // chaque occurrence du déroulé porte sa propre config, MÊME STRUCTURE
@@ -1017,6 +1020,8 @@ export default function QuestionsPage() {
       rafaleMode: question.RAFALE_MODE || 'SOLO',
       rafaleQuestionTime: question.RAFALE_QUESTION_TIME || 3,
       rafaleMaxQuestions: question.RAFALE_MAX_QUESTIONS || 100,
+      rafaleAlphabetical: question.RAFALE_ALPHABETICAL === true,
+      rafaleWheelLayout: question.RAFALE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
       // ENTRACTE (#214) — ENTRACTE_CONFIG (nested, contrat backend
       // TypedContent.EntracteConfig) : mêmes défauts que la config globale
       // (EntracteConfigForm.jsx) si l'occurrence n'en porte pas encore.
@@ -1170,6 +1175,8 @@ export default function QuestionsPage() {
       rafaleMode: 'SOLO',
       rafaleQuestionTime: 3,
       rafaleMaxQuestions: 100,
+      rafaleAlphabetical: false,
+      rafaleWheelLayout: 'strip',
       // ENTRACTE fields — voir commentaire de l'état initial (useState
       // ci-dessus) pour le détail des champs.
       entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
@@ -1727,6 +1734,9 @@ export default function QuestionsPage() {
       data.append('RAFALE_MODE', formData.rafaleMode)
       data.append('RAFALE_QUESTION_TIME', String(formData.rafaleQuestionTime))
       data.append('RAFALE_MAX_QUESTIONS', String(formData.rafaleMaxQuestions))
+      // #282 — champs multipart en minuscules (contrat rafale.md §15.2)
+      data.append('rafale_alphabetical', formData.rafaleAlphabetical ? 'true' : 'false')
+      data.append('rafale_wheel_layout', formData.rafaleWheelLayout === 'arc' ? 'arc' : 'strip')
       // Réponse d'affichage dans la liste des questions (patron MEMORY/
       // MEMOTION ci-dessus — `answer` reste un champ purement informatif,
       // repli textuel pour tout consommateur qui n'afficherait pas les chips
@@ -3260,6 +3270,46 @@ export default function QuestionsPage() {
                       </div>
                     </div>
 
+                    {/* #282 — option Alphabétique (contrat rafale.md §15.7) */}
+                    <div className="rafale-alpha-option">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={formData.rafaleAlphabetical ? 'true' : 'false'}
+                        aria-label="Alphabétique"
+                        className={`rafale-alpha-switch${formData.rafaleAlphabetical ? ' is-on' : ''}`}
+                        onClick={() => handleInputChange('rafaleAlphabetical', !formData.rafaleAlphabetical)}
+                      >
+                        <span className="rafale-alpha-switch-track"><span className="rafale-alpha-switch-thumb" /></span>
+                        <span className="rafale-alpha-switch-label">🔤 Alphabétique</span>
+                      </button>
+                      <small className="rafale-alpha-hint">
+                        Les questions sont tirées par passes A→Z ; la première lettre de la réponse est affichée à la TV.
+                      </small>
+                      {formData.rafaleAlphabetical && (
+                        <div className="memory-mode-options rafale-wheel-layouts">
+                          {[
+                            { value: 'strip', label: 'Bandeau', desc: 'Ruban de lettres en bas de l\'écran' },
+                            { value: 'arc', label: 'Roue', desc: 'Grande roue émergeant du bas de l\'écran' },
+                          ].map(l => (
+                            <label key={l.value} className="memory-mode-option">
+                              <input
+                                type="radio"
+                                name="rafaleWheelLayout"
+                                value={l.value}
+                                checked={formData.rafaleWheelLayout === l.value}
+                                onChange={(e) => handleInputChange('rafaleWheelLayout', e.target.value)}
+                              />
+                              <span className="memory-mode-label">
+                                <strong>{l.label}</strong>
+                                <small>{l.desc}</small>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="form-row">
                       <div className="form-group">
                         <label htmlFor="rafale-question-time-input">Temps par question (s)</label>
@@ -3295,6 +3345,7 @@ export default function QuestionsPage() {
                       difficulties={formData.rafaleDifficulties}
                       roundTime={parseInt(formData.time) || 0}
                       questionTime={formData.rafaleQuestionTime}
+                      alphabetical={formData.rafaleAlphabetical}
                     />
                   </div>
                 )}

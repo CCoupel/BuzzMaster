@@ -10,6 +10,7 @@ import QRCodeOverlay from '../components/QRCodeOverlay'
 import QRCodeDisplay from '../components/QRCodeDisplay'
 import EntractePanel from '../components/EntractePanel'
 import RafaleTimers from '../components/RafaleTimers'
+import RafaleLetterWheel from '../components/RafaleLetterWheel'
 import { getCategoryColor } from '../constants/colors'
 import { getRgbColor } from '../utils/colorUtils'
 import { answeredColor } from '../utils/pointsAward'
@@ -3252,6 +3253,27 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                   {/* Zone 4: vide — AUCUN score/compteur/classement sur TV
                       (retour utilisateur 2026-08-28, maquette §9.1). */}
                   <div className="zone-answers rafale-tv-zone-answers" />
+
+                  {/* #282 (v11.4.0, contrat rafale.md §15.8) — zone basse « roue des lettres »,
+                      UNIQUEMENT avec l'option Alphabétique. TV STATIQUE : overflow hidden,
+                      unités vh (16 vh bandeau / 30 vh arc). La lettre est publique par
+                      conception ; la réponse n'est jamais lue ici. */}
+                  {gameState.question?.RAFALE_ALPHABETICAL === true && (() => {
+                    const wheelLayout = gameState.question?.RAFALE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip'
+                    return (
+                      <div
+                        className={`rafale-wheel-zone rafale-wheel-zone-${wheelLayout}`}
+                        style={{ flex: `0 0 ${wheelLayout === 'arc' ? 30 : 16}vh`, height: `${wheelLayout === 'arc' ? 30 : 16}vh`, minHeight: 0, overflow: 'hidden' }}
+                      >
+                        <RafaleLetterWheel
+                          currentLetter={gameState.RAFALE_CURRENT_LETTER || ''}
+                          letters={gameState.RAFALE_LETTERS || []}
+                          layout={wheelLayout}
+                          accent={currentTeamCss}
+                        />
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })()}
