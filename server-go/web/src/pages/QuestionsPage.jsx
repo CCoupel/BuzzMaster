@@ -235,6 +235,7 @@ export default function QuestionsPage() {
     sound: null,
     existingSound: null,
     soundTimerDelayed: false,
+    soundLoop: false, // #288 : lecture en boucle du son de question (SOUND_LOOP)
     soundCleared: false,
     // Note d'explication — animateur seul (v6.4.x, #168)
     explanation: '',
@@ -1046,6 +1047,7 @@ export default function QuestionsPage() {
       sound: null,
       existingSound: question.SOUND || null,
       soundTimerDelayed: question.SOUND_TIMER_DELAYED || false,
+      soundLoop: question.SOUND_LOOP === true,
       soundCleared: false,
       // Note d'explication — animateur seul (v6.4.x, #168)
       explanation: question.EXPLANATION || '',
@@ -1190,6 +1192,7 @@ export default function QuestionsPage() {
       sound: null,
       existingSound: null,
       soundTimerDelayed: false,
+      soundLoop: false,
       soundCleared: false,
       // Note d'explication — animateur seul (v6.4.x, #168)
       explanation: '',
@@ -1785,6 +1788,8 @@ export default function QuestionsPage() {
       data.append('sound_cleared', 'true')
     }
     data.append('sound_timer_delayed', formData.soundTimerDelayed ? 'true' : 'false')
+    // #288 — lecture en boucle (contrat sound.md §13.2) : toujours envoyé, combinable avec le différé
+    data.append('sound_loop', formData.soundLoop ? 'true' : 'false')
 
     setSoundError(null)
 
@@ -3651,6 +3656,41 @@ export default function QuestionsPage() {
                               <span className={`sound-timer-switch-side ${delayed ? 'active' : ''}`}>À la fin</span>
                             </span>
                           </div>
+                        )
+                      })()}
+
+                      {/* #288 (contrat sound.md §13.2) — « Lecture : Une fois / En boucle », même patron que
+                          « Chrono démarre » (.quiz-switch), désactivée seulement sans son. Combinable avec
+                          « À la fin » (décision 2026-11-05) : aucune exclusivité. */}
+                      {(() => {
+                        const hasSound = !!(formData.sound || formData.existingSound)
+                        const loop = formData.soundLoop
+                        const delayed = formData.soundTimerDelayed
+                        const hint = loop && delayed
+                          ? 'Le chronomètre démarre à la fin du premier passage ; le son continue en boucle.'
+                          : loop
+                            ? 'Le son est rejoué jusqu\'à la fin du chronomètre.'
+                            : 'Le son est joué une fois, puis s\'arrête.'
+                        return (
+                          <>
+                            <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
+                              <span className="sound-timer-toggle-label">Lecture</span>
+                              <span className="sound-timer-switch-group">
+                                <span className={`sound-timer-switch-side ${!loop ? 'active' : ''}`}>Une fois</span>
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={loop}
+                                  aria-label="Jouer le son en boucle jusqu'à la fin du chronomètre"
+                                  className={`quiz-switch ${loop ? 'on' : ''}`}
+                                  disabled={!hasSound}
+                                  onClick={() => handleInputChange('soundLoop', !loop)}
+                                />
+                                <span className={`sound-timer-switch-side ${loop ? 'active' : ''}`}>En boucle</span>
+                              </span>
+                            </div>
+                            <p className="sound-loop-hint">{hint}</p>
+                          </>
                         )
                       })()}
                     </div>

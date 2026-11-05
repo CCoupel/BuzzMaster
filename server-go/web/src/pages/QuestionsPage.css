@@ -1840,3 +1840,10 @@
 .rafale-alpha-hint { font-size: 0.75rem; color: var(--gray-500); }
 .rafale-wheel-layouts { flex-direction: row; }
 .rafale-wheel-layouts .memory-mode-option { flex: 1; }
+
+/* #288 — conseil sous la ligne « Lecture » du bloc Son de la question */
+.sound-loop-hint {
+  margin: var(--space-1) 0 0;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+}
