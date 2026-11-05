@@ -293,6 +293,16 @@ func (qs *questionSoundAdapter) play(q *game.Question, releaseOnFailure bool) {
 		return
 	}
 
+	// #286 (contract sound.md §11.2): muted is treated as DISABLED at T1 only
+	// — never in questionSoundAvailability (T0 gate), so a sound question
+	// still starts normally; no Play, deferred timer released at once.
+	if config.Get().Sound.Muted {
+		if releaseOnFailure {
+			qs.app.engine.ReleaseDeferredTimer()
+		}
+		return
+	}
+
 	path := qs.app.questionSoundPath(q.Sound)
 
 	qs.app.engine.SetQuestionSoundState(game.QuestionSoundPlaying)

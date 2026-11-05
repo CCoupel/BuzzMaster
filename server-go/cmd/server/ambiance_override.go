@@ -437,6 +437,13 @@ func (a *App) PreviewColor(role string) [3]int {
 const shutdownLightingTimeout = 2 * time.Second
 
 func (a *App) shutdownExtinguishHueLighting() {
+	a.quiesceAmbiance()
+	a.extinguishFreshDriver()
+}
+
+// quiesceAmbiance is steps 1 and 2: detach the writer's driver
+// synchronously and cancel the Flash goroutine.
+func (a *App) quiesceAmbiance() {
 	a.ambiance().SetDriver(nil) // step 1 — nil-safe, synchronously quiesces the old driver
 
 	a.ambianceMu.Lock()
@@ -447,8 +454,25 @@ func (a *App) shutdownExtinguishHueLighting() {
 	if cancel != nil {
 		cancel() // step 2
 	}
+}
 
-	d := a.buildHueDriver() // step 3 — fresh instance, config.json unchanged
+// extinguishOnLightingDisabled is the `lighting.enabled=false` gesture of the
+// master switch (#286, contract sound.md §11.4): same extinction as the
+// shutdown (§10.4) — general + team bulbs — then the writer stays detached
+// (OnConfigUpdate's reconfigureAmbiance finds no usable config). The detach is
+// synchronous (no further command can reach the bulbs after this returns);
+// the network write runs in the background so the HTTP response is not held
+// for the bridge timeout.
+func (a *App) extinguishOnLightingDisabled() {
+	a.quiesceAmbiance()
+	go a.extinguishFreshDriver()
+}
+
+// extinguishFreshDriver is step 3: a fresh driver (config.json unchanged,
+// `enabled` deliberately NOT required — the master switch may just have been
+// turned off) writes intensity 0 to the general zone and every team zone.
+func (a *App) extinguishFreshDriver() {
+	d := a.buildHueDriverOpt(false)
 	if d == nil {
 		return
 	}

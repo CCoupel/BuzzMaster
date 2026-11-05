@@ -70,6 +70,15 @@ type HTTPServer struct {
 	OnShutdown                func()              // Called before server shutdown for cleanup
 	OnLoadDemo                func()              // Called to load demo data
 	OnConfigUpdate            func()              // Called after config update to broadcast to clients
+	// OnSoundMutedChange is called by POST /config.json after `sound.muted`
+	// changed value and was persisted (contract sound.md §11.2): true stops
+	// the question media (and countdown voice); false resumes nothing.
+	OnSoundMutedChange func(muted bool)
+	// OnLightingEnabledChange is called by POST /config.json, BEFORE
+	// OnConfigUpdate, after `lighting.enabled` changed value and was
+	// persisted (contract sound.md §11.4): false ⇒ the App extinguishes the
+	// general + team bulbs and detaches the driver.
+	OnLightingEnabledChange func(enabled bool)
 	// Lighting gives the /api/lighting/* handlers the live Hue driver (#207,
 	// contracts/hue-bridge.md §7); nil provider or nil driver = "disabled".
 	Lighting LightingProvider
@@ -2132,6 +2141,10 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			if _, ok := sRaw["device"]; ok {
 				cfg.Sound.Device = incoming.Device
 			}
+			// muted (v11.4.0, #286, contract sound.md §11.2): absent preserves.
+			if _, ok := sRaw["muted"]; ok {
+				cfg.Sound.Muted = incoming.Muted
+			}
 			// cues_disabled is a map, so "absent" and "present but empty"
 			// are two DIFFERENT intents that json.Unmarshal into a struct
 			// cannot tell apart (both leave `incoming.CuesDisabled` as a
@@ -2165,6 +2178,15 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		config.SetInstance(&cfg)
+
+		// #286 (contract sound.md §11.2/§11.4): side effects of the two
+		// régie switches, only on an actual value change.
+		if cfg.Sound.Muted != current.Sound.Muted && h.OnSoundMutedChange != nil {
+			h.OnSoundMutedChange(cfg.Sound.Muted)
+		}
+		if cfg.Lighting.Enabled != current.Lighting.Enabled && h.OnLightingEnabledChange != nil {
+			h.OnLightingEnabledChange(cfg.Lighting.Enabled)
+		}
 
 		if h.OnConfigUpdate != nil {
 			h.OnConfigUpdate()

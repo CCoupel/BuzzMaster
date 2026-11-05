@@ -334,7 +334,9 @@ func (h *HTTPServer) handleAPISoundStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	active := h.Sound != nil && h.Sound.SoundEnabled() && h.Sound.SoundOutputAvailable()
-	writeSoundJSON(w, http.StatusOK, map[string]bool{"active": active})
+	// muted (v11.4.0, #286): read at call time from the live config, never
+	// cached; independent from active (contract sound.md §11.2).
+	writeSoundJSON(w, http.StatusOK, map[string]bool{"active": active, "muted": config.Get().Sound.Muted})
 }
 
 // nullableString returns nil for an empty string, s otherwise — so a JSON

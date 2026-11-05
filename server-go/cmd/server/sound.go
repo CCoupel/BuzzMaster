@@ -234,6 +234,10 @@ func (a *App) startSoundEngine() {
 // (CuesDisabled absent/empty/nil), the condition is always false and the
 // behaviour is identical to the bit to what #227 shipped.
 func (a *App) notifySound(c audio.Cue) {
+	// #286 (contract sound.md §11.2): the régie's mute switch, first guard.
+	if config.Get().Sound.Muted {
+		return
+	}
 	if !config.Get().Sound.Enabled {
 		return
 	}

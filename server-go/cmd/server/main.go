@@ -784,6 +784,19 @@ func (a *App) setupCallbacks() {
 		a.broadcastUpdate()
 	}
 
+	// #286: sound mute / lighting master switch side effects (contract
+	// sound.md §11.2, §11.4) — fired by POST /config.json on a value change.
+	a.httpServer.OnSoundMutedChange = func(muted bool) {
+		if muted {
+			a.questionSound().Stop() // nil-safe; countdown voice joins in LOT-3
+		}
+	}
+	a.httpServer.OnLightingEnabledChange = func(enabled bool) {
+		if !enabled {
+			a.extinguishOnLightingDisabled()
+		}
+	}
+
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()

@@ -117,10 +117,21 @@ func (a *App) ambianceIsConfigured() bool {
 // returns nil when lighting is not usable. No network I/O (hue.New). An
 // invalid configuration is logged once here and treated as "not configured".
 func (a *App) buildHueDriver() *hue.Driver {
-	if !a.ambianceIsConfigured() {
+	return a.buildHueDriverOpt(true)
+}
+
+// buildHueDriverOpt is buildHueDriver with the `lighting.enabled` check
+// optional: requireEnabled=false builds a driver from a configured-but-
+// switched-off installation, for the single purpose of extinguishing its
+// bulbs when the master switch is turned off (#286, contract sound.md §11.4).
+func (a *App) buildHueDriverOpt(requireEnabled bool) *hue.Driver {
+	lc := config.Get().Lighting
+	if requireEnabled && !a.ambianceIsConfigured() {
 		return nil
 	}
-	lc := config.Get().Lighting
+	if !lc.EffectiveAPIKeyConfigured() || (strings.TrimSpace(lc.BridgeIP) == "" && strings.TrimSpace(lc.BridgeID) == "") {
+		return nil
+	}
 	specs := make([]hue.LightSpec, 0, len(lc.Lights))
 	for _, l := range lc.Lights {
 		specs = append(specs, hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team})
