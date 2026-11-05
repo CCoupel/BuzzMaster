@@ -8,6 +8,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -111,6 +113,23 @@ func TestSoundMuted286_GateT0_Unchanged_ByMuted(t *testing.T) {
 	app, _ := tw219qDeferredApp(t, fake)
 	defer app.engine.Stop()
 	tw219qSetSoundEnabledFor(app, true)
+
+	// Fichier son VALIDE sur disque : sinon la gate répond « FILE » (condition 3 de §10.8.2),
+	// ce qui n'a rien à voir avec muted. Chemin résolu comme questionSoundPath (QuestionsDir/<id>/<fichier>).
+	prevDir := app.config.Storage.QuestionsDir
+	app.config.Storage.QuestionsDir = t.TempDir()
+	t.Cleanup(func() { app.config.Storage.QuestionsDir = prevDir })
+	soundPath := app.questionSoundPath(app.engine.GetState().Question.Sound)
+	if err := os.MkdirAll(filepath.Dir(soundPath), 0o755); err != nil {
+		t.Fatalf("setup invalide : %v", err)
+	}
+	if err := os.WriteFile(soundPath, tw219cValidWAV(1), 0o644); err != nil {
+		t.Fatalf("setup invalide : %v", err)
+	}
+	app.refreshQuestionSoundAvailability()
+	if got := app.engine.GetState().QuestionSoundUnavailable; got != "" {
+		t.Fatalf("setup invalide : question sonore valide, son actif, non coupé ⇒ UNAVAILABLE vide, got %q", got)
+	}
 
 	before := app.engine.GetState().QuestionSoundUnavailable
 	tw286SetMuted(t, true)

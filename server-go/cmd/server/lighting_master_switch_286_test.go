@@ -104,7 +104,7 @@ func TestLightingMasterSwitch286_Disabled_NoHueWrites_ThenReenabled(t *testing.T
 	srv := httptest.NewServer(bridge.handler())
 	defer srv.Close()
 
-	app := newTestApp(t)
+	app := newTestAppWithHub(t) // OnConfigUpdate → broadcastConfigUpdate déréférence wsHub
 	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
 	app.logger = server.NewBroadcastLogger(100)
 	app.setupCallbacks()
