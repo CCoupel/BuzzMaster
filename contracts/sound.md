@@ -1270,18 +1270,21 @@ isolément, arrête un décompte en boucle) :
 | Évènement | Site `main.go` | Déjà site de `questionSound().Stop()` ? |
 |---|---|---|
 | Temps écoulé (global, manche RAFALE) | `OnTimeUp` | oui |
-| Expiration d'une question RAFALE | **rien** (12.7) ; fin de manche ⇒ `OnStateChange(STOPPED)` | — |
+| Expiration d'une question RAFALE | **rien** (12.7) ; fin de manche par plafond ou épuisement ⇒ `e.Stop()` **interne** au moteur, sans handler `ActionStop` ⇒ `OnStateChange(STOPPED)` est le **seul** signal : câblé pour cette raison (voir règle ci-dessous) | — |
 | Expiration d'une carte MEMOTION | `OnMotionCardTimeUp` (nouveau) | — |
-| Buzz (`Engine.Pause()` interne, `OnStateChange(PAUSED)`) | **aucun** — tout continue (décision utilisateur 2026-11-05) ; `OnStateChange` n'est **pas** câblé au décompte | buzz : le média continue, inchangé |
+| Buzz (`Engine.Pause()` interne, `OnStateChange(PAUSED)`) | **aucun** — tout continue (décision utilisateur 2026-11-05) ; la branche `PAUSED` de `OnStateChange` ne touche **pas** au décompte | buzz : le média continue, inchangé |
 | PAUSE manuelle / CONTINUE | `ActionPause` ⇒ `countdownSound().Pause()` ; `ActionContinue` ⇒ `countdownSound().Resume()` — à côté des appels `questionSound()` existants, mêmes gardes de phase | oui (Pause/Resume) |
 | STOP, REVEAL, question (re)chargée (`Ready`), NEW_GAME | handlers `ActionStop`, `ActionReveal`, `handleQuestionReady`, `handleNewGame` | oui (mêmes lignes) |
 | Résolution de carte MEMOTION | tous les appelants de `StopMotionCardTimer` | — |
 | Son coupé (`muted` → `true`), décompte désactivé | `OnSoundMutedChange`, `OnSoundCountdownDisabledChange` | oui / — |
 
 `Stop()`, `Pause()` et `Resume()` sont **idempotents** et sans effet sur le jeu (aucun champ `GameState`, aucun broadcast :
-le décompte n'a pas d'état diffusé — §12.9). Ils **ne touchent jamais** le lecteur n°1. Une fin de phase `STARTED` qui
-n'est ni un buzz ni une PAUSE manuelle passe toujours par l'un des sites ci-dessus (STOP, REVEAL, temps écoulé, `Ready`,
-NEW_GAME) : aucun câblage sur `OnStateChange` n'est nécessaire, et il est **proscrit** (il arrêterait au buzz).
+le décompte n'a pas d'état diffusé — §12.9). Ils **ne touchent jamais** le lecteur n°1. **Règle `OnStateChange`**
+(précisée 2026-11-05, écart dev-backend) : `OnStateChange(STOPPED)` ⇒ `countdownSound().Stop()` — c'est le filet
+pour toute fin de manche décidée **dans** le moteur (plafond/épuisement RAFALE via `e.Stop()` interne, sans handler
+`ActionStop`) ; `OnStateChange(PAUSED)` ⇒ **rien** (ce serait l'arrêt au buzz, proscrit) ; `STARTED` ⇒ rien (le
+démarrage est porté par `OnAnswerTimerStarted`, jamais par la phase). Les autres phases (`REVEALED`, `READY`,
+`NEW_GAME`…) sont déjà couvertes par leurs handlers ; les traiter aussi dans `OnStateChange` est toléré (idempotence).
 
 ### 12.9 Hors de cette section
 

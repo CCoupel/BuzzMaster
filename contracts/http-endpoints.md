@@ -1134,7 +1134,8 @@ Branche **dédiée** de `handleAPISoundsRouter` : le segment `decompte` est reco
 | `POST /api/sounds/decompte/restore` | réécrit `synth.GenerateCountdown()` ; idempotent ; `{status:"ok", custom:false, duration_seconds:2.0}` | — |
 | `POST /api/sounds/decompte/test` | `countdownSound().Test()` : joue le fichier **une fois** sur l'enceinte, **ignore** `muted`, `countdown_disabled` et `sound.enabled` éteint au même titre que `/{cue}/test` (`sound.md` §11.2/§12.4) ; remplace un décompte en cours ; réponse `{played|disabled|unavailable}` avec la **même** sémantique que `/{cue}/test` (`disabled` = `sound.enabled == false`) | lecteur n°2 (`MediaPlayer`), jamais `PlayCue` |
 
-`POST /api/sounds/restore-defaults` restaure désormais **7 cues + `decompte`** (`restored` liste les 8 noms).
+`POST /api/sounds/restore-defaults` restaure désormais **7 cues + `decompte`** : `written` **inchangé** (les 7 cues,
+forme #229 conservée pour les clients existants) et **nouveau** `restored` = 8 noms (7 cues + `"decompte"`), additif.
 
 **Réglages** (`sound.md` §12.3) — `POST /config.json {"sound": {"countdown_disabled": bool, "countdown_once": bool}}`,
 fusion champ par champ, aucun endpoint dédié (même règle que `muted`/`cues_disabled`). Effet de bord serveur : passage de
@@ -1162,7 +1163,8 @@ identiques.
 ```json
 {
   "status": "ok",
-  "written": ["depart", "temps-ecoule", "gagne", "perdu", "reveal", "entracte-debut", "entracte-fin"]
+  "written": ["depart", "temps-ecoule", "gagne", "perdu", "reveal", "entracte-debut", "entracte-fin"],
+  "restored": ["depart", "temps-ecoule", "gagne", "perdu", "reveal", "entracte-debut", "entracte-fin", "decompte"]
 }
 ```
 
