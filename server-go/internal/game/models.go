@@ -614,6 +614,14 @@ type RafaleCurrent struct {
 	Points int `json:"POINTS"`
 }
 
+// RafaleNext (#282, contract §15.10) is the pre-fetched NEXT question's
+// preview: RafaleCurrent plus the upcoming letter. Dedicated type so that
+// RafaleCurrent (broadcast to TV inside GameState) never carries the letter.
+type RafaleNext struct {
+	RafaleCurrent
+	Letter string `json:"LETTER"` // "" when the alphabetical option is off
+}
+
 // Question represents a quiz question
 //
 // Answer is declared here explicitly (not left to the embedded TypedContent

@@ -336,7 +336,7 @@ type Engine struct {
 	// Guarded by the exact same admin+anim-only rule as answer above — see
 	// this field's own "never widen this recipient list" warning at its
 	// consumer (cmd/server/main.go, broadcastRafaleAnswer).
-	OnRafaleAnswer func(id, answer string, next *RafaleCurrent)
+	OnRafaleAnswer func(id, answer string, next *RafaleNext)
 	// OnRafaleQuestionTick fires every second the RAFALE question ticker is
 	// live and NOT expiring this tick — the consumer broadcasts RAFALE_TICK
 	// (lightweight, all clients, no full GameState re-emission — contract
@@ -3046,7 +3046,7 @@ type rafaleAdvanceResult struct {
 	// will become current at the FOLLOWING advance (answer-free), nil when
 	// the pool is empty or the cap is imminent (contract §13.5). Forwarded
 	// to OnRafaleAnswer's own next parameter — see its doc comment.
-	next *RafaleCurrent
+	next *RafaleNext
 }
 
 // advanceRafaleUnsafe judges the current RAFALE question (correct==true for
@@ -3323,7 +3323,7 @@ type rafaleRoundStartResult struct {
 	// become current at the FIRST advance (answer-free), nil when the pool
 	// is empty after the first draw or the cap is imminent (contract
 	// §13.5). Forwarded to OnRafaleAnswer's own next parameter.
-	next *RafaleCurrent
+	next *RafaleNext
 }
 
 // startRafaleRoundUnsafe initializes a fresh RAFALE round: resets the
@@ -5289,14 +5289,20 @@ func rafaleMaxQuestionsUnsafe(raw int) int {
 // Points (#216, resolveRafalePoints) the same way the CURRENT question's own
 // RafaleCurrent does — the NEXT preview must never show a misleading 0 for a
 // round with a per-difficulty barème. Pure function, no locking.
-func rafaleNextPreview(q *RafaleQuestion, roundQuestion *Question) *RafaleCurrent {
+func rafaleNextPreview(q *RafaleQuestion, roundQuestion *Question) *RafaleNext {
 	if q == nil {
 		return nil
 	}
-	return &RafaleCurrent{
+	n := &RafaleNext{RafaleCurrent: RafaleCurrent{
 		ID: q.ID, Question: q.Question, Category: string(q.Category), Difficulty: q.Difficulty,
 		Points: resolveRafalePoints(roundQuestion, q.Difficulty),
+	}}
+	// #282 (contract §15.10): the upcoming letter, from the SAME
+	// normalisation as the draw and pool.LETTERS. "" when the option is off.
+	if roundQuestion != nil && roundQuestion.RafaleAlphabetical {
+		n.Letter, _ = rafaleAlphaKey(q.Answer)
 	}
+	return n
 }
 
 // prefetchRafaleNextUnsafe (#202, contract §13.1/§13.4) draws the question

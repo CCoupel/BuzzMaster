@@ -623,6 +623,9 @@ type RafaleNextPayload struct {
 	Question   string `json:"QUESTION"`
 	Category   string `json:"CATEGORY"`
 	Difficulty int    `json:"DIFFICULTY"`
+	// Letter (#282, contract §15.10) — upcoming letter "A".."Z"/"#", ""
+	// when the alphabetical option is off. Never omitempty.
+	Letter string `json:"LETTER"`
 }
 
 // RafaleAnswerPayload for the RAFALE_ANSWER action (Server → admin+anim

@@ -682,7 +682,7 @@ func (a *App) setupCallbacks() {
 	// ONLY (never GameState — contract §2.3). next (#202, contract §13.3)
 	// extends this to the pre-fetched next question's statement, same
 	// restricted channel — see broadcastRafaleAnswer's own comment.
-	a.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+	a.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleNext) {
 		a.broadcastRafaleAnswer(id, answer, next)
 	}
 
@@ -6492,7 +6492,7 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 // exclusion list — the ONLY thing keeping either field off TV is this call
 // site's explicit, narrow type list (precedent: ardoise_leak_128). Do not
 // add ClientTypeTV/ClientTypeVPlayer/ClientTypeBuzzer here.
-func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleCurrent) {
+func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleNext) {
 	payload := protocol.RafaleAnswerPayload{ID: id, Answer: answer, Next: rafaleNextPayload(next)}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionRafaleAnswer, data, false,
@@ -6519,17 +6519,18 @@ func (a *App) broadcastRafaleCardAnswer(cardID, id, answer string) {
 }
 
 // rafaleNextPayload (#202) maps the engine's answer-free preview
-// (*game.RafaleCurrent) onto the wire payload's own NEXT type
+// (*game.RafaleNext) onto the wire payload's own NEXT type
 // (*protocol.RafaleNextPayload) — nil in, nil out (contract §13.5). A
 // distinct type from game.RafaleCurrent by design (see
 // protocol.RafaleNextPayload's own doc comment); this is the one place
 // that converts between them.
-func rafaleNextPayload(next *game.RafaleCurrent) *protocol.RafaleNextPayload {
+func rafaleNextPayload(next *game.RafaleNext) *protocol.RafaleNextPayload {
 	if next == nil {
 		return nil
 	}
 	return &protocol.RafaleNextPayload{
 		ID: next.ID, Question: next.Question, Category: next.Category, Difficulty: next.Difficulty,
+		Letter: next.Letter,
 	}
 }
 

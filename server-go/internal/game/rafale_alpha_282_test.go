@@ -246,8 +246,8 @@ func TestRafaleAlpha282_Next_MatchesNextQueueEntry(t *testing.T) {
 	e := tw282Engine(t, []tw282Word{
 		{"a1", "Ail"}, {"b1", "Banane"}, {"c1", "Cerise"}, {"a2", "Avion"},
 	}, true, 100)
-	var lastNext *RafaleCurrent
-	e.OnRafaleAnswer = func(id, answer string, next *RafaleCurrent) { lastNext = next }
+	var lastNext *RafaleNext
+	e.OnRafaleAnswer = func(id, answer string, next *RafaleNext) { lastNext = next }
 	e.StartImmediate(0)
 	defer e.Stop()
 
