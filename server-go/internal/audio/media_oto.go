@@ -115,6 +115,7 @@ func (p *otoMediaPlayer) start(path string, loop bool) error {
 // référence pendant toute sa durée de vie.
 func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player, loop bool) {
 	passes := 0
+	emitted := false // onNaturalEnd already called for this playback ("exactly once", §13.1)
 	for {
 		time.Sleep(mediaMonitorPoll)
 
@@ -153,7 +154,8 @@ func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player, loop bool) {
 				next.Play()
 				p.player = next
 				player = next // référence forte conservée (§10.3)
-				first := passes == 1
+				first := !emitted
+				emitted = true
 				p.mu.Unlock()
 				if first && p.onNaturalEnd != nil {
 					p.onNaturalEnd()
@@ -172,10 +174,10 @@ func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player, loop bool) {
 		}
 		p.mu.Unlock()
 
-		// "Exactly once" (§13.1): passes > 0 means the loop branch above already
-		// emitted onNaturalEnd at the end of the first pass (reached here only
-		// when the rewind failed on a later pass).
-		if p.onNaturalEnd != nil && passes == 0 {
+		// "Exactly once" (§13.1): never again once emitted at the end of the
+		// first pass; if the rewind failed on the first pass itself nothing was
+		// emitted yet, so this is the one call.
+		if p.onNaturalEnd != nil && !emitted {
 			p.onNaturalEnd()
 		}
 		return
