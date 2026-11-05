@@ -438,7 +438,7 @@ const shutdownLightingTimeout = 2 * time.Second
 
 func (a *App) shutdownExtinguishHueLighting() {
 	a.quiesceAmbiance()
-	a.extinguishFreshDriver()
+	a.extinguishFreshDriver(true) // historical behaviour: a switched-off installation is left untouched
 }
 
 // quiesceAmbiance is steps 1 and 2: detach the writer's driver
@@ -465,14 +465,25 @@ func (a *App) quiesceAmbiance() {
 // for the bridge timeout.
 func (a *App) extinguishOnLightingDisabled() {
 	a.quiesceAmbiance()
-	go a.extinguishFreshDriver()
+	go func() {
+		// Re-enabled meanwhile (fast off→on): the bulbs must not be switched
+		// off behind the new driver's back — skip entirely.
+		if config.Get().Lighting.Enabled {
+			return
+		}
+		a.extinguishFreshDriver(false)
+		// A re-enable landing during the write: re-derive the live scene so the
+		// last word is the game's, never the extinction (nil-safe, no-op if off).
+		a.ambiance().NotifyState()
+	}()
 }
 
-// extinguishFreshDriver is step 3: a fresh driver (config.json unchanged,
-// `enabled` deliberately NOT required — the master switch may just have been
-// turned off) writes intensity 0 to the general zone and every team zone.
-func (a *App) extinguishFreshDriver() {
-	d := a.buildHueDriverOpt(false)
+// extinguishFreshDriver is step 3: a fresh driver (config.json unchanged)
+// writes intensity 0 to the general zone and every team zone. requireEnabled
+// is true at server shutdown (a `lighting.enabled=false` installation must
+// not be touched) and false when the master switch has just been turned off.
+func (a *App) extinguishFreshDriver(requireEnabled bool) {
+	d := a.buildHueDriverOpt(requireEnabled)
 	if d == nil {
 		return
 	}
