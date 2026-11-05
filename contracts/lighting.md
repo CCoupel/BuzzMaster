@@ -503,8 +503,18 @@ ambiance: site LED sans décision d'ambiance — handleNouveauTruc -> sendLEDSet
 > Format source : hex `#rrggbb` (`ResolveCategoryMeta`, `internal/server/http.go`) → `[3]int`.
 > Valeurs reprises **telles quelles** (jamais passées par `nearestPaletteColorByHue`) — ce sont des
 > accents d'interface (badges, pastilles) réemployés comme couleurs de salle, pas une seconde
-> palette calibrée pour l'éclairage. Seules les 8 catégories intégrées portent une couleur ; une
-> catégorie personnalisée (image déposée par l'utilisateur) n'en a pas et retombe sur le blanc.
+> palette calibrée pour l'éclairage. ~~Seules les 8 catégories intégrées portent une couleur ; une
+> catégorie personnalisée (image déposée par l'utilisateur) n'en a pas et retombe sur le blanc.~~
+>
+> **Amendement v11.4.0 (#285, LOT-4)** : la couleur est **réglable par catégorie** (intégrée ou personnalisée,
+> `PUT /api/categories/{key} {color}`, `http-endpoints.md` §Catégories) et c'est **elle** que `ambianceThemeColor()`
+> applique, via `ResolveCategoryMeta` (source unique, inchangée dans son rôle). Règle 3 précisée : couleur `""`
+> (« aucune », choix explicite ou personnalisée jamais colorée), catégorie inconnue ou aucune question ⇒ **blanc**.
+> Un changement de couleur ou une suppression de catégorie **notifie** la salle (`OnCategoriesChanged` ⇒
+> `NotifyState()`, §10.5) : une question de cette catégorie en cours change de teinte sans attendre l'évènement
+> suivant. Les valeurs restent reprises telles quelles (pas de `nearestPaletteColorByHue`) ; la palette de 12 teintes
+> de la maquette est bornée en luminosité (aucune teinte < `#14b8a6`-équivalent en luminance), ce qui évite une salle
+> « éteinte » sur une couleur sombre — une couleur hors palette saisie à la main n'est pas protégée (assumé).
 
 > **Pourquoi l'entracte n'éteint pas la salle**, alors que `sendLEDSetAllEntracteOff`
 > (`main.go:2819`) éteint tous les buzzers : les buzzers s'éteignent pour cesser d'attirer

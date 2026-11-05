@@ -1,6 +1,28 @@
 # Changelog des Contrats API
 
 ---
+## [20261105] — Catégories : renommage, couleur, icône, suppression + fusion historique (#285, v11.4.0, LOT-4)
+
+- **[CHANGED]** `GET /api/categories` — `name`/`color` **résolus** (surcharge sidecar `<KEY>.json {name?, color?}`,
+  intégrées comprises) ; `color` des personnalisées = valeur stockée ou `""` (le repli `#6b7280` quitte la réponse,
+  reste un repli frontend) ; nouveaux `questionCount`, `rafaleCount`. Rétrocompatible pour tout client qui traitait
+  déjà `""`.
+- **[CHANGED]** `POST /api/categories` — champ `color` optionnel ; icône **≤ 2 Mio** + `http.DetectContentType`
+  (`413`/`400` nouveaux — avant : 10 Mio sans contrôle de contenu).
+- **[NEW]** `PUT /api/categories/{key}` `{name?, color?}` — intégrées et personnalisées, clé immuable, aucune
+  réécriture des questions/historique ; notifie l'ambiance.
+- **[NEW]** `POST /api/categories/{key}/icon` — personnalisées seulement (`400` sur une intégrée, pas de `DELETE`).
+- **[NEW]** `DELETE /api/categories/{key}` `{mode: reassign|delete}` — `400` intégrée, `404`, `409 game in progress`,
+  `409 category in use` (+ compteurs pour le dialogue) ; fusion de l'historique dans « Sans catégorie »
+  (`QUESTION_CATEGORY` ⇒ `""`, `CATEGORY_BREAKDOWN` fusionné), sauvegarde `history.json.bak-<ts>` (5 conservées),
+  écriture atomique ; réaffectation ou suppression des questions, cartes et réservoir ; `RAFALE_CATEGORIES` nettoyés.
+- **[CHANGED]** `lighting.md` §8 — la couleur de catégorie (réglable, personnalisées comprises) pilote l'ambiance ;
+  `""` ⇒ blanc ; `OnCategoriesChanged` ⇒ `NotifyState()`.
+- **[CHANGED]** `GET /history` / `GET /palmares` — note de fusion ; bucket `UNKNOWN` affiché « Sans catégorie ».
+- Non BREAKING : aucun fichier existant modifié sans action ; aucun champ `GameState`, aucune action WebSocket.
+  Clé de chemin validée `^[A-Z0-9_]{1,50}$`, nom disque jamais dérivé du `Filename`.
+
+---
 ## [20261105] — Son de décompte + lecture en boucle (#287, #288, v11.4.0, LOT-3)
 
 - **[NEW]** `sound.md` §12 — son de décompte : troisième chemin audio (`cmd/server/countdown_sound.go`, second
@@ -55,9 +77,7 @@
   passage à `true` ; popover d'en-tête « Ambiance » (éclairage + son), classe `.navbar-popover` (#284).
 - Non BREAKING : aucun client existant ne lit `muted` ; aucun champ `GameState`, aucune action WebSocket, aucun
   nouvel endpoint.
-- À venir dans ce milestone (contrats rédigés au démarrage de chaque lot) : LOT-2 : fait ; LOT-3 : fait (entrées ci-dessus) ;
-  LOT-4 `PUT`/`DELETE /api/categories/{key}` (+ `mode`, fusion historique), `POST …/{key}/icon` (custom seulement),
-  `color` persistée (#285).
+- Contrats du milestone : LOT-1 (cette entrée), LOT-2, LOT-3, LOT-4 — voir les entrées ci-dessus.
 
 ---
 

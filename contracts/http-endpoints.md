@@ -387,9 +387,38 @@ Reset sélectif.
 
 ## Catégories
 
-### GET /api/categories
+> **v11.4.0 (#285, LOT-4) — section réécrite.** Gestion complète des catégories : renommage, couleur (pilote les badges
+> **et** l'éclairage d'ambiance, `contracts/lighting.md` §8), icône (personnalisées seulement), suppression avec
+> réaffectation ou suppression des questions et **fusion de l'historique dans « Sans catégorie »**. Décisions utilisateur
+> (GATE 2, commentaire de l'issue #285 ; `docs/mockup/DECISIONS.md` « admin_category_manager ») ; maquette normative
+> `docs/mockup/v11.4.0/ui/admin_category_manager__rename_color_delete.html` — **sauf** son état « Icône envoyée sur une
+> catégorie intégrée » et le bouton « ↺ emoji », **écartés** par la décision (icône réservée aux personnalisées).
+> Historique : `GET /api/categories` v5.7.6 (`color`), v5.7.7 (sidecar `name`), `POST` v5.7.2 (#100).
 
-Liste les catégories disponibles (hardcodées + custom images).
+### Modèle de stockage — `data/files/categories/`
+
+| Élément | Catégorie **intégrée** (8 clés de `hardcodedCategories`) | Catégorie **personnalisée** |
+|---|---|---|
+| Identité | clé fixe (`GEOGRAPHY`…), **jamais supprimable** | clé = `toUpperSnakeCase(name)` à la création, **immuable** ensuite |
+| Icône | emoji (table frontend `CATEGORIES`), **jamais d'image** | image `<KEY>.<ext>` (`png`/`jpg`/`jpeg`/`webp`), **obligatoire** (c'est sa présence qui fait exister la catégorie — inchangé) |
+| Sidecar `<KEY>.json` | **surcharge** optionnelle `{ "name"?: string, "color"?: string }` — absent = valeurs de la table (`name` ASCII historique, couleur intégrée) | `{ "name": string, "color"?: string }` — `name` écrit à la création (v5.7.7), `color` optionnelle |
+| Couleur | table (`#3b82f6`…) sauf surcharge `color` du sidecar ; `""` dans le sidecar = **aucune** (explicite) | `color` du sidecar ; absente ou `""` = **aucune** |
+
+- **Valeur zéro / rétrocompatibilité** : aucun fichier existant n'est modifié ; une catégorie personnalisée sans
+  `color` se comporte comme aujourd'hui (badge gris `#6b7280` côté frontend, salle **blanche**) ; une intégrée sans
+  sidecar garde nom et couleur d'origine. `handleGetCategories` continue d'**ignorer** une image dont la clé est
+  intégrée (conflit journalisé) : le sidecar d'une intégrée **n'a jamais d'image à côté**.
+- **Résolution** (`ResolveCategoryMeta(key)`, source unique pour le palmarès, l'historique **et** l'ambiance) :
+  intégrée ⇒ table **puis** surcharge sidecar (`name`, `color`) ; personnalisée ⇒ image + sidecar. **Aucune seconde
+  table** côté serveur ; le frontend devient **API-first** (voir « Frontend » ci-dessous).
+- **« Sans catégorie »** : `CATEGORY == ""` sur une question/carte/réponse du réservoir ; dans l'historique
+  `QUESTION_CATEGORY == ""` ⇒ bucket palmarès `UNKNOWN` (comportement existant de `handlePalmares`), affiché
+  **« Sans catégorie »** (le libellé « Inconnue » de `CategoryPalmaresPage.jsx` est renommé).
+- **Sécurité des chemins** : toute clé reçue en URL (`/api/categories/{key}…`) est validée par
+  `^[A-Z0-9_]{1,50}$` **avant** toute jointure de chemin (`400` sinon) ; un nom disque est **toujours** dérivé de la
+  clé validée + extension de l'allowlist, **jamais** de `header.Filename` (même discipline que `SafeQuestionPath`).
+
+### GET /api/categories
 
 | Propriété | Valeur |
 |-----------|--------|
@@ -400,76 +429,155 @@ Liste les catégories disponibles (hardcodées + custom images).
 
 ```json
 [
-  { "key": "GEOGRAPHY",    "name": "Geographie",     "imageURL": "",                                  "color": "#3b82f6", "isCustom": false },
-  { "key": "ENTERTAINMENT","name": "Divertissement",  "imageURL": "",                                  "color": "#f59e0b", "isCustom": false },
-  { "key": "MA_CATEGORIE", "name": "Ma Catégorie",    "imageURL": "/files/categories/MA_CATEGORIE.png","color": "#6b7280", "isCustom": true }
+  { "key": "GEOGRAPHY",    "name": "Géographie",  "imageURL": "",                                   "color": "#3b82f6", "isCustom": false, "questionCount": 24, "rafaleCount": 110 },
+  { "key": "CINEMA",       "name": "Cinéma",      "imageURL": "/files/categories/CINEMA.png",       "color": "#0ea5e9", "isCustom": true,  "questionCount": 12, "rafaleCount": 30 },
+  { "key": "MA_CATEGORIE", "name": "Ma Catégorie","imageURL": "/files/categories/MA_CATEGORIE.png", "color": "",        "isCustom": true,  "questionCount": 0,  "rafaleCount": 0 }
 ]
 ```
 
-**Champs** :
-- `key` : identifiant unique (MAJUSCULES_UNDERSCORES)
-- `name` : nom affiché (pour custom : nom original saisi lors de la création depuis v5.7.7, sinon stem du fichier)
-- `imageURL` : URL image (vide pour hardcodées sans image, URL pour custom)
-- `color` : couleur accent hex (couleur prédéfinie pour hardcodées, `#6b7280` fallback pour custom)
-- `isCustom` : `true` si catégorie custom uploadée, `false` si hardcodée
+| Champ | Type | Description |
+|---|---|---|
+| `key` | string | identifiant unique (`[A-Z0-9_]`), immuable |
+| `name` | string | nom affiché — **résolu** (surcharge sidecar pour une intégrée, v11.4.0) |
+| `imageURL` | string | URL de l'icône (`""` pour une intégrée — toujours) |
+| `color` | string | `#rrggbb` **stockée/résolue**, ou `""` = aucune (v11.4.0 : les personnalisées peuvent en avoir une ; le repli `#6b7280` est **retiré** de la réponse — il reste un repli d'affichage frontend) |
+| `isCustom` | bool | `false` pour les 8 intégrées |
+| `questionCount` | int | **v11.4.0** — questions `question.json` dont `CATEGORY == key` **+** cartes MEMOTION dont `CATEGORY == key` |
+| `rafaleCount` | int | **v11.4.0** — réponses du réservoir RAFALE dont `CATEGORY == key` (utilisées ou non) |
 
-> Les catégories custom sont des fichiers image dans `data/files/categories/`. 
-> Le champ `color` est ajouté en v5.7.6.
-> Depuis v5.7.7, le nom original est persiste en sidecar JSON (`<KEY>.json` aux côtés de `<KEY>.<ext>`). Les catégories créées avant v5.7.7 affichent leur nom technique (stem du fichier).
+> Ordre : 8 intégrées dans l'ordre de la table, puis personnalisées par ordre de lecture du dossier (inchangé).
+> `questionCount`/`rafaleCount` sont calculés à l'appel (lecture `ReadQuestionMaps` + `SnapshotRafaleReservoir`), jamais mis en cache.
 
 ---
 
 ### POST /api/categories
 
-Crée une nouvelle catégorie custom avec image. (v5.7.2 — #100)
-
-**⚠️ BREAKING depuis v5.7.1** : remplace le body JSON par multipart/form-data (nom + image obligatoire).
-
-| Propriété | Valeur |
-|-----------|--------|
-| Auth      | Aucune |
-| Content-Type | multipart/form-data |
-
-#### Request fields
+Création d'une catégorie personnalisée (multipart, inchangé) — **v11.4.0** : champ `color` optionnel.
 
 | Champ | Type | Obligatoire | Description |
 |-------|------|-------------|-------------|
-| name  | string (form field) | ✅ | Nom de la catégorie (max 50 chars, alphanumérique/espace/tiret/underscore) |
-| file  | file (image)        | ✅ | Image PNG, JPG, JPEG ou WebP |
+| name  | string | ✅ | nom (max 50, lettres/chiffres/espace/tiret/underscore — **inchangé**) |
+| file  | file | ✅ | icône PNG/JPG/JPEG/WebP, **≤ 2 Mio**, validée par `http.DetectContentType` (voir « Validation d'icône ») |
+| color | string | ❌ | `#rrggbb` ou `""`/absent = aucune. Autre valeur ⇒ `400` |
 
-> La clé est calculée automatiquement : `toUpperSnakeCase(name)` (espaces et tirets → underscore, MAJUSCULES).
-> L'image est sauvegardée comme `<KEY>.<ext>` dans `data/files/categories/`.
-> Depuis v5.7.7, le nom original est persiste en sidecar JSON : `<KEY>.json` contient `{ "name": "Ma Catégorie" }`.
+Réponse `200` : `CategoryInfo` complet (avec `color`, `questionCount: 0`, `rafaleCount: 0`). Sidecar écrit
+`{ "name", "color" }` (`color` omise si vide). Erreurs : `400` (nom, fichier, type, `color`), `409` (clé existante),
+`413` (> 2 Mio — nouveau, avant c'était 10 Mio sans contrôle de type). Le frontend propose par défaut la **première
+teinte libre** de la palette (maquette §01) — décision d'interface, le serveur n'impose rien.
 
-#### Exemple fetch (ne pas définir Content-Type manuellement)
+#### Validation d'icône (commune à POST /api/categories et POST /api/categories/{key}/icon)
 
-```js
-const fd = new FormData()
-fd.append('name', 'Ma Categorie')
-fd.append('file', imageFile)
-fetch('/api/categories', { method: 'POST', body: fd })
-```
+1. `r.Body = http.MaxBytesReader(w, r.Body, 2<<20 + 64<<10)` puis `ParseMultipartForm` ⇒ dépassement ⇒ `413`.
+2. Extension de `header.Filename` dans l'allowlist `.png .jpg .jpeg .webp` (insensible à la casse) ⇒ sinon `400`.
+3. Les 512 premiers octets passés à `http.DetectContentType` doivent donner `image/png`, `image/jpeg` ou `image/webp`
+   **cohérent avec l'extension** (`.jpg`/`.jpeg` ⇔ `image/jpeg`) ⇒ sinon `400 {"error":"file content does not match its extension"}`.
+4. Nom disque = `<KEY>.<ext normalisée>` (`.jpeg` ⇒ `.jpg`), écrit en **`<KEY>.<ext>.tmp` puis `os.Rename`** ; toute
+   autre `<KEY>.*` image préexistante est supprimée **après** le rename (jamais deux images pour une clé).
+5. Jamais de chemin construit depuis `Filename` ; la clé a été validée `^[A-Z0-9_]{1,50}$` en amont.
+
+Tests exigés : `../x.png` en nom de fichier, clé `../../etc` en URL, PNG renommé `.webp`, HTML renommé `.png`,
+2 Mio + 1 octet, remplacement `.png` → `.webp` (l'ancien `.png` disparaît), image envoyée sur une intégrée ⇒ `400`.
+
+---
+
+### PUT /api/categories/{key} (v11.4.0, #285)
+
+Renommage et/ou couleur. Intégrées **et** personnalisées. Clé immuable.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Content-Type | application/json |
+| Body | `{ "name"?: string, "color"?: string }` — au moins un champ |
+
+- `name` : mêmes règles que `POST` (max 50, caractères autorisés) ; ne change **que** le nom affiché — les
+  `question.json`, le réservoir, les `rounds.json` et l'historique **ne sont pas réécrits** (ils portent la clé ;
+  l'historique garde ses snapshots `CATEGORY_NAME`, le palmarès résout en direct via `ResolveCategoryMeta` — comportement
+  existant).
+- `color` : `^#[0-9a-fA-F]{6}$` ou `""` (= aucune) ; stockée telle quelle (le serveur ne restreint pas à la palette de
+  12 teintes de la maquette — c'est l'interface qui la propose).
+- Écriture sidecar `<KEY>.json` (fusion : un champ absent du body est conservé), tmp + rename.
+- Effet immédiat : `OnCategoriesChanged()` (nouveau rappel `HTTPServer` → `App`) ⇒ `broadcastQuestions()` (les
+  clients rechargent `/api/categories` sur `QUESTIONS_UPDATE`, `CategoriesChanged` n'a pas de message dédié) **et**
+  `a.ambiance().NotifyState()` (`lighting.md` §10.5 : tout ce qui change la salle notifie — une question de cette
+  catégorie peut être en cours).
+- Réponse `200` : `CategoryInfo` résolu. Erreurs : `400` (clé invalide, body vide, `name`/`color` invalides), `404`
+  (clé inconnue), `405`.
+
+---
+
+### POST /api/categories/{key}/icon (v11.4.0, #285)
+
+Remplace l'icône d'une catégorie **personnalisée** (multipart, champ `file`, « Validation d'icône » ci-dessus).
+
+- Intégrée ⇒ **`400 {"error":"built-in categories keep their emoji"}`** (décision utilisateur ; pas de `DELETE …/icon`).
+- `404` clé inconnue ; `413` > 2 Mio ; `400` type/contenu.
+- Réponse `200` : `CategoryInfo` résolu (nouvelle `imageURL`, l'extension peut changer). `OnCategoriesChanged()`.
+- Le navigateur doit contourner son cache : le frontend ajoute `?v=<timestamp>` à `imageURL` après un remplacement.
+
+---
+
+### DELETE /api/categories/{key} (v11.4.0, #285)
+
+| Propriété | Valeur |
+|-----------|--------|
+| Content-Type | application/json |
+| Body | `{ "mode": "reassign" \| "delete" }` — **obligatoire dès que la catégorie est utilisée** |
+
+**Gardes, dans l'ordre** :
+1. clé invalide ⇒ `400` ; intégrée ⇒ `400 {"error":"built-in categories cannot be deleted"}` ; inconnue ⇒ `404`.
+2. **Partie en cours** ⇒ `409 {"error":"game in progress"}` : phase du moteur ∉ {`STOPPED`, `NEW_GAME`, `REVEALED`} —
+   on ne réécrit pas l'historique ni les questions pendant qu'une question est vivante (`PREPARE`…`PAUSED`, `ENROLL`).
+3. Utilisation = `questionCount + rafaleCount > 0` (même calcul que `GET`) **et** `mode` absent/invalide ⇒
+   `409 {"error":"category in use","questions":12,"rafale":30,"history":{"events":3,"points":1240}}` — c'est le
+   payload qui alimente le dialogue (maquette §02 « Supprimer “Cinéma” — 12 questions et 30 … »). `history.events`
+   = événements dont `QUESTION_CATEGORY == key` **ou** dont `CATEGORY_BREAKDOWN` contient `key` ; `history.points` =
+   somme des points concernés.
+
+**Exécution** (après les gardes), **dans cet ordre** — l'historique d'abord parce que c'est l'étape la plus risquée
+et la seule à exiger une sauvegarde : si elle échoue, **rien d'autre n'est touché** (`500`, état inchangé) :
+
+| Étape | Action |
+|---|---|
+| H. Historique | `Engine.MergeHistoryCategory(key) (events, points int, err)` — sous `e.mu` : pour chaque événement, `QUESTION_CATEGORY == key` ⇒ `""` et `CATEGORY_NAME`/`CATEGORY_IMAGE_URL`/`CATEGORY_COLOR` vidés (snapshot d'une catégorie qui n'existe plus) ; `CATEGORY_BREAKDOWN[key]` ⇒ sa part est **ajoutée** à `CATEGORY_BREAKDOWN[""]` (créée si besoin) et la clé retirée — la somme des parts reste égale à `POINTS`. **Sauvegarde** `history.json.bak-<YYYYMMDD-HHmmss>` (copie octet pour octet du fichier courant, même dossier `config/`, **5 plus récentes conservées**, les autres supprimées ; jamais incluses dans le `.tar` de sauvegarde — `addFileToTAR` n'ajoute que `history.json`) **puis** écriture **atomique** (`history.json.tmp` + `os.Rename`, patron `atomicWriteFile` de `rafale_store.go`). Aucun événement concerné ⇒ pas de `.bak`, pas de réécriture. |
+| Q. Questions | `mode: "reassign"` ⇒ chaque `question.json` (et chaque carte MEMOTION) dont `CATEGORY == key` est réécrit avec `CATEGORY: ""` (tmp + rename) ; `mode: "delete"` ⇒ le dossier `questions/<id>/` de chaque question dont `CATEGORY == key` est supprimé (`os.RemoveAll`, médias et son compris), `ForgetQuestionStatuses(ids)`, retrait de `rounds.json` par le **chemin existant** de `DELETE /question/{id}` (factorisé, jamais dupliqué) ; une carte MEMOTION dont `CATEGORY == key` est **réaffectée** (`""`) même en mode `delete` — on ne supprime jamais une question hôte pour une de ses cartes. Dans les **deux** modes, `key` est **retiré** de toute liste `RAFALE_CATEGORIES` (questions RAFALE et cartes RAFALE) ; une liste devenue vide reste vide (= toutes catégories, sémantique `EffectiveRafaleCategories` inchangée). |
+| R. Réservoir | `reassign` ⇒ `Engine.ReassignRafaleCategory(key, "")` (réponses non tirables tant qu'elles n'ont pas de catégorie — maquette : « à recatégoriser ») ; `delete` ⇒ `Engine.DeleteRafaleQuestionsByCategory(key)` (+ purge de `rafale_used` pour ces IDs). Sauvegarde `SaveRafale`/`SaveRafaleUsed` existantes. |
+| F. Fichiers | suppression de `<KEY>.<ext>` et `<KEY>.json`. |
+| N. Notification | `OnCategoriesChanged()` ⇒ `broadcastQuestions()` + `NotifyState()` ; `OnQuestionUpload()` si des questions ont changé. |
 
 #### Response 200
 
 ```json
-{
-  "key": "MA_CATEGORIE",
-  "name": "Ma Categorie",
-  "imageURL": "/files/categories/MA_CATEGORIE.png",
-  "isCustom": true
-}
+{ "deleted": "CINEMA", "mode": "reassign",
+  "questions": { "reassigned": 12, "deleted": 0, "rafaleFiltersCleaned": 3 },
+  "rafale":    { "reassigned": 30, "deleted": 0 },
+  "history":   { "events": 3, "points": 1240, "backup": "history.json.bak-20261105-173306" } }
 ```
 
-#### Errors
-
-| Code | Raison |
-|------|--------|
-| 400  | `name` vide, trop long (>50), caractères invalides, `file` manquant, ou extension non autorisée |
-| 405  | Méthode non autorisée |
-| 409  | Clé déjà existante (catégorie hardcodée ou custom) |
+`backup` est `""` quand aucun événement n'était concerné. Erreurs : `400`, `404`, `405`, `409` (deux formes ci-dessus),
+`500` (échec d'écriture — état inchangé si l'échec est à l'étape H ; sinon la réponse `500` porte `"partial": true` et
+les compteurs déjà appliqués).
 
 ---
+
+### Frontend (normatif pour dev-frontend — maquette §01/§02)
+
+- **API-first** : `categoryMeta(key, categories)` (`utils/categoryUtils.js`) résout **d'abord** l'entrée `GET
+  /api/categories` (nom, `color` — `""` ⇒ `#6b7280` pour les badges, `imageURL`), la table JS `CATEGORIES` ne fournit
+  plus que l'**emoji** des intégrées et un repli hors ligne ; `getCategoryColor` (`constants/colors.js`, néon TV) prend
+  la liste API en second argument et retombe sur la table. La table `CATEGORIES` de `constants/colors.js` (doublon de
+  `categoryUtils.js`) est **supprimée** au profit d'un import unique. `CategoryBalance` compte aussi les personnalisées.
+- `useCategories` : rechargé sur `QUESTIONS_UPDATE` (le serveur n'a pas de message dédié).
+- `CategoryPicker` : chip « ⚙ Gérer… » à côté de « + Créer » (mode `single` avec `allowCreate`, et mode `filter`
+  de la page Questions) ; création enrichie : nom + icône (obligatoire) + couleur (pastille, défaut = 1ʳᵉ teinte libre).
+- `CategoryManagerDialog` (nouveau, `role="dialog"`, maquette §02) : lignes = pastille-bouton (`aria-haspopup`, palette
+  12 teintes + « aucune », `PUT {color}`), icône (bouton d'envoi **sur les personnalisées seulement** ; emoji statique +
+  mention « emoji » sur les intégrées), nom + ✎ renommage en ligne (`PUT {name}`), compteurs `questionCount` (+
+  `rafaleCount` en infobulle), aperçu 💡 (couleur ou « blanc »), 🗑 (désactivé + 🔒 « intégrée » sur les intégrées).
+  Suppression : `DELETE` sans `mode` ⇒ `200` (inutilisée) ou `409 category in use` ⇒ dialogue de confirmation
+  (radio « Garder les questions, sans catégorie » présélectionné / « Supprimer aussi les questions », encart 📊
+  depuis `history`, **case de confirmation obligatoire dès que `history.events > 0` ou mode `delete`**, textes de la
+  maquette), puis `DELETE {mode}`. `409 game in progress` ⇒ message « Impossible pendant une partie ».
+- Palmarès : libellé du bucket `UNKNOWN` = « Sans catégorie ».
 
 ## Historique
 
@@ -509,6 +617,11 @@ Récupère l'historique des événements.
 | `CATEGORY_COLOR` | string | Couleur accent (ex: `"#22c55e"`) — absent pour catégories custom |
 
 > Ces champs sont absents des anciens événements (avant v5.7.9). Le frontend doit gérer le fallback via `/api/categories`.
+
+> **v11.4.0 (#285, LOT-4) — fusion d'une catégorie supprimée.** `DELETE /api/categories/{key}` réécrit `history.json`
+> (§Catégories, étape H) : `QUESTION_CATEGORY == key` ⇒ `""` (champs `CATEGORY_*` vidés), `CATEGORY_BREAKDOWN[key]`
+> fusionné dans `CATEGORY_BREAKDOWN[""]`. Le palmarès crédite alors le bucket `UNKNOWN` (« Sans catégorie ») — aucune
+> perte de points (somme conservée). Sauvegarde `config/history.json.bak-<horodatage>` (5 conservées), écriture atomique.
 
 ---
 

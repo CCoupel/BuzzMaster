@@ -189,7 +189,7 @@ interface Question {
   TYPE: QuestionType
   POINTS: number
   TIME: number           // Durée en secondes
-  CATEGORY?: string
+  CATEGORY?: string            // clé de catégorie ("" = Sans catégorie) — gestion (nom, couleur, icône, suppression) : http-endpoints.md §Catégories (v11.4.0, #285)
   POINTS_TARGET: PointsTarget
   ORDER: number          // Position dans la liste (à l'intérieur de sa manche depuis v11.2, #245)
   ROUND_ID?: string      // v11.2 (#245) — manche de la question ; absent, "" ou inconnu = « Sans manche »
