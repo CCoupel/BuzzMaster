@@ -1110,8 +1110,10 @@ Atténuation (volume) : hors périmètre — le réglage est binaire.
 > **Issue** : #287 (milestone v11.4.0). **Plan** : `.claude/workflow/plan-11.4.0.md` §5 LOT-3. **Décisions utilisateur**
 > (GATE 1.5, 2026-11-05, `docs/mockup/DECISIONS.md` « admin_sounds_manager ») : joué **au début** de chaque
 > chronomètre ; rejoué **en boucle** seulement si le commutateur « en boucle » est actif ; **tous** les chronomètres
-> (global SPEEDY/QCM/ARDOISE, question RAFALE, carte MEMOTION) ; jamais si la question a un média audio joué pendant
-> le chrono ; respecte « Son coupé » (§11) et « Bruitages activés ». **Maquette normative** :
+> (global SPEEDY/QCM/ARDOISE, **manche** RAFALE, carte MEMOTION) ; **jamais si la question a un média audio** ;
+> respecte « Son coupé » (§11) et « Bruitages activés ». **Révision 2026-11-05 (décisions utilisateur, GATE 2 LOT-3)** :
+> la sonorisation RAFALE est **par manche, pas par question** ; **au buzz tout continue** (décompte et médias) ;
+> exclusion dès qu'un média est attaché, différé ou non. **Maquette normative** :
 > `docs/mockup/v11.4.0/ui/admin_sounds_manager__countdown_loop.html` (§01).
 > Section **additive** : §1–§11 inchangés sauf amendements explicitement notés (§10.2, §10.6, §10.7).
 
@@ -1180,7 +1182,7 @@ func (cs *countdownSoundAdapter) mayPlay(start game.AnswerTimerStart) bool {
     if sc.Muted { return false }                 // §11 — son coupé
     if !sc.Enabled { return false }              // « Bruitages activés » éteint : moteur non démarré (§6.3)
     if sc.CountdownDisabled { return false }     // §12.3
-    if start.QuestionSound != "" && !start.QuestionSoundTimerDelayed { return false } // §12.6 exclusion
+    if start.QuestionSound != "" { return false }     // §12.6 — jamais si la question a un média audio
     return true
 }
 ```
@@ -1201,16 +1203,14 @@ Le décompte est piloté par **le moteur**, jamais par un changement de phase (u
 type AnswerTimerKind string
 
 const (
-    AnswerTimerGlobal         AnswerTimerKind = "GLOBAL"          // startTimer() — SPEEDY/QCM/ARDOISE, manche RAFALE (voir 12.7)
-    AnswerTimerRafaleQuestion AnswerTimerKind = "RAFALE_QUESTION" // StartRafaleQuestionTimer — manche classique ET carte RAFALE
-    AnswerTimerMotionCard     AnswerTimerKind = "MOTION_CARD"     // StartMotionCardTimer — carte MEMOTION (retournement)
+    AnswerTimerGlobal     AnswerTimerKind = "GLOBAL"      // startTimer() — SPEEDY/QCM/ARDOISE, et la MANCHE RAFALE (voir 12.7)
+    AnswerTimerMotionCard AnswerTimerKind = "MOTION_CARD" // StartMotionCardTimer — carte MEMOTION (retournement, carte RAFALE comprise)
 )
 
 type AnswerTimerStart struct {
-    Kind                      AnswerTimerKind
-    Seconds                   int    // durée programmée (> 0, sinon le rappel n'est pas émis)
-    QuestionSound             string // state.Question.Sound au moment du démarrage ("" si aucun)
-    QuestionSoundTimerDelayed bool   // state.Question.SoundTimerDelayed
+    Kind          AnswerTimerKind
+    Seconds       int    // durée programmée (> 0, sinon le rappel n'est pas émis)
+    QuestionSound string // state.Question.Sound au moment du démarrage ("" si aucun)
 }
 
 // OnAnswerTimerStarted fires whenever a response timer ACTUALLY starts ticking.
@@ -1229,38 +1229,37 @@ OnMotionCardTimeUp func()
 
 | Site moteur | Kind | Remarque |
 |---|---|---|
-| `startTimer()` (ses 3 appelants : `actualStart` simultané, `releaseDeferredTimerUnsafe`, `Continue()` après libération pendant la pause) | `GLOBAL` | une seule instrumentation, dans `startTimer()` — **pas** dans les appelants ; émis sous `e.mu` |
-| `StartRafaleQuestionTimer(seconds)` après `seconds > 0` | `RAFALE_QUESTION` | à chaque question (démarrage de manche, validation, invalidation, expiration) — émis après `e.mu.Unlock()`, avant le lancement de la goroutine |
-| `StartMotionCardTimer(delay)` après `delay > 0` | `MOTION_CARD` | retournement de carte (`handleMotionFlip`) ; carte RAFALE : émis **puis** aussitôt suivi d'un `RAFALE_QUESTION` (voir 12.7) |
+| `startTimer()` (ses 3 appelants : `actualStart` simultané, `releaseDeferredTimerUnsafe`, `Continue()` après libération pendant la pause) | `GLOBAL` | une seule instrumentation, dans `startTimer()` — **pas** dans les appelants ; émis sous `e.mu`. Couvre la **manche RAFALE** (`actualStart` démarre le chrono de manche par ce même `startTimer()`) |
+| `StartRafaleQuestionTimer(seconds)` | — | **jamais** (décision utilisateur 2026-11-05 : « la sonorisation est faite pour la manche, pas pour chaque question rapide ») — le ticker par question n'est pas instrumenté |
+| `StartMotionCardTimer(delay)` après `delay > 0` | `MOTION_CARD` | retournement de carte (`handleMotionFlip`), carte RAFALE comprise (son chrono `RafaleRoundTime` est le chrono de manche de la carte) |
 | `StartMotionMemorizeTimer` | — | **jamais** : la mémorisation n'est pas un chronomètre de réponse |
 | Phase `COUNTDOWN` (3-2-1 avant le START, `OnCountdownTick`) | — | **jamais** : « décompte » au sens de ce contrat = pendant le chrono de réponse, pas avant |
 
 ### 12.6 Exclusion « média audio pendant le chrono »
 
-Un décompte **n'est pas joué** pour un chronomètre `GLOBAL` dont la question porte un média (`SOUND != ""`) lu **pendant**
-le chrono, c'est-à-dire en mode simultané (`SOUND_TIMER_DELAYED == false`) — qu'il boucle ou non (§13). En mode différé
-(`SOUND_TIMER_DELAYED == true`) le média est terminé quand le chrono démarre : le décompte **joue**. L'exclusion se
-décide sur la **configuration de la question** (`AnswerTimerStart`), jamais sur l'état réel du lecteur n°1 (un média
-muet, absent ou en échec ne « libère » pas le décompte — règle simple, prévisible, testable sans matériel).
-Un « Rejouer » manuel du média (`QUESTION_SOUND PLAY`) pendant un décompte **arrête le décompte** pour le reste de la
-question (`questionSound` ne connaît pas `countdownSound` : c'est `handleQuestionSound`, dans `main.go`, qui appelle
-`countdownSound().Stop()` avant de transmettre la commande).
+**« Jamais si média »** (décision utilisateur 2026-11-05) : un décompte **n'est jamais joué** pour une question qui porte
+un média audio (`SOUND != ""`), quel que soit son réglage — simultané, différé (§10.7) ou en boucle (§13). L'exclusion se
+décide sur la **configuration de la question** (`AnswerTimerStart.QuestionSound`), jamais sur l'état réel du lecteur n°1
+(un média muet, absent ou en échec ne « libère » pas le décompte — règle simple, prévisible, testable sans matériel).
+Conséquence : `handleQuestionSound` (Rejouer) n'a **rien** à faire du décompte — il n'y en a jamais sur une question
+sonore.
 
 ### 12.7 Chevauchements — voix unique, chrono le plus intérieur
 
 Le lecteur n°2 est **à voix unique** (§10.2) : tout `Play`/`PlayLoop` remplace la lecture en cours. Règle :
-**le décompte suit le chronomètre le plus intérieur** ; chaque `OnAnswerTimerStarted` **relance le son depuis le
-début**, quel que soit le kind.
+**un chronomètre de manche ou de carte = une lecture** ; chaque `OnAnswerTimerStarted` relance le son depuis le début.
+Le ticker **par question** RAFALE n'a aucune voix (12.5).
 
 | Situation | Chronomètres actifs | Comportement |
 |---|---|---|
 | SPEEDY/QCM/ARDOISE | global | joue au `startTimer()`, s'arrête aux évènements de 12.8 |
-| Manche RAFALE classique | global (manche) **+** question | `GLOBAL` est émis à `actualStart` puis **immédiatement remplacé** par le `RAFALE_QUESTION` de `finishRafaleRoundStart` (même tour, < 1 ms : aucune double lecture audible — test : un seul `Play` effectif par question, le premier est remplacé avant tout rendu). Le **chrono de manche n'a pas de voix propre** (décision GATE 1.5) : il n'émet rien de plus ; son expiration (`OnTimeUp` → `CueTempsEcoule`) **arrête** le décompte comme pour toute fin de manche |
-| Question RAFALE suivante (validation, invalidation, expiration) | question | relance depuis le début ; `CuePerdu` (invalidation) part sur le chemin des cues et se **mixe** — pas d'attente |
+| Manche RAFALE classique | global (manche) **+** question | **une seule lecture pour toute la manche**, démarrée au `startTimer()` de `actualStart`, en boucle ou une fois selon `countdown_once` ; les questions qui s'enchaînent (validation, invalidation, expiration) **ne la relancent ni ne l'arrêtent** ; `CuePerdu` (invalidation) part sur le chemin des cues et se **mixe** ; fin de manche (expiration `OnTimeUp`, plafond, épuisement ⇒ `STOPPED`) ⇒ arrêt |
 | Carte MEMOTION (SPEEDY/QCM/MEMORY) | carte | joue au retournement (`StartMotionCardTimer`), s'arrête à l'expiration (`OnMotionCardTimeUp`), à la résolution de la carte (`StopMotionCardTimer`, sites de `main.go` : done/validate/reveal/close) ou aux évènements de 12.8 |
-| Carte MEMOTION RAFALE | carte (`RafaleRoundTime`) **+** question | comme la manche classique : `MOTION_CARD` remplacé par `RAFALE_QUESTION` ; expiration de la carte ⇒ arrêt |
+| Carte MEMOTION RAFALE | carte (`RafaleRoundTime`) **+** question | une lecture au `StartMotionCardTimer` de la carte (si `RafaleRoundTime > 0`, sinon aucune) ; les questions de la carte ne relancent rien ; expiration ou résolution de la carte ⇒ arrêt |
 | Mémorisation (`MEMORIZE`) puis retournement | mémorisation, puis carte | rien pendant la mémorisation ; joue au retournement |
-| Média de question en boucle (§13) + décompte | — | exclusifs par 12.6 : jamais les deux |
+| Question avec média (§10/§13) | — | aucun décompte, 12.6 |
+| Buzz (`PhasePaused` interne) | chrono figé par le moteur | **tout continue** (décision utilisateur) : décompte, média, boucle — ni arrêt ni pause ; à l'expiration ou à la fin de la question, arrêt normal (12.8) |
+| PAUSE manuelle / CONTINUE | chrono figé | décompte **mis en pause** (`Pause()`) puis **repris** (`Resume()`) exactement comme le média de question (`ActionPause`/`ActionContinue`, §10.7) — jamais relancé depuis le début |
 
 ### 12.8 Arrêt — tout évènement qui termine ou suspend le chronomètre courant
 
@@ -1270,24 +1269,25 @@ isolément, arrête un décompte en boucle) :
 | Évènement | Site `main.go` | Déjà site de `questionSound().Stop()` ? |
 |---|---|---|
 | Temps écoulé (global, manche RAFALE) | `OnTimeUp` | oui |
-| Expiration d'une question RAFALE | `OnRafaleAnswer` reçoit la suivante ⇒ **relance** (12.7) ; fin de manche ⇒ `OnStateChange(STOPPED)` | — |
+| Expiration d'une question RAFALE | **rien** (12.7) ; fin de manche ⇒ `OnStateChange(STOPPED)` | — |
 | Expiration d'une carte MEMOTION | `OnMotionCardTimeUp` (nouveau) | — |
-| Buzz (`Engine.Pause()` interne) et PAUSE manuelle | `OnStateChange(PAUSED)` — **arrêt**, pas pause (décision : « arrêté au buzz, à la pause ») | PAUSE manuelle seulement (buzz : le média continue, inchangé) |
-| CONTINUE | `OnStateChange(STARTED)` depuis `PAUSED` : **relance** depuis le début si un chronomètre de réponse est toujours en cours (`AnswerTimerWaiting == false` **et** `CurrentTime > 0` pour global/carte, ou sous-phase RAFALE `QUESTION`) ; sinon rien | — |
+| Buzz (`Engine.Pause()` interne, `OnStateChange(PAUSED)`) | **aucun** — tout continue (décision utilisateur 2026-11-05) ; `OnStateChange` n'est **pas** câblé au décompte | buzz : le média continue, inchangé |
+| PAUSE manuelle / CONTINUE | `ActionPause` ⇒ `countdownSound().Pause()` ; `ActionContinue` ⇒ `countdownSound().Resume()` — à côté des appels `questionSound()` existants, mêmes gardes de phase | oui (Pause/Resume) |
 | STOP, REVEAL, question (re)chargée (`Ready`), NEW_GAME | handlers `ActionStop`, `ActionReveal`, `handleQuestionReady`, `handleNewGame` | oui (mêmes lignes) |
 | Résolution de carte MEMOTION | tous les appelants de `StopMotionCardTimer` | — |
 | Son coupé (`muted` → `true`), décompte désactivé | `OnSoundMutedChange`, `OnSoundCountdownDisabledChange` | oui / — |
-| Rejouer le média de question | `handleQuestionSound` (PLAY) | — |
 
-`Stop()` est **idempotent** et sans effet sur le jeu (aucun champ `GameState`, aucun broadcast : le décompte n'a pas
-d'état diffusé — §12.9). Il **ne touche jamais** le lecteur n°1.
+`Stop()`, `Pause()` et `Resume()` sont **idempotents** et sans effet sur le jeu (aucun champ `GameState`, aucun broadcast :
+le décompte n'a pas d'état diffusé — §12.9). Ils **ne touchent jamais** le lecteur n°1. Une fin de phase `STARTED` qui
+n'est ni un buzz ni une PAUSE manuelle passe toujours par l'un des sites ci-dessus (STOP, REVEAL, temps écoulé, `Ready`,
+NEW_GAME) : aucun câblage sur `OnStateChange` n'est nécessaire, et il est **proscrit** (il arrêterait au buzz).
 
 ### 12.9 Hors de cette section
 
 - **Aucun champ `GameState`** (pas de `COUNTDOWN_SOUND_STATE`) : rien à afficher, rien à synchroniser ; les clients ne
   savent pas qu'un décompte joue. `game-state.md` et `ws-payload-serialization.md` **inchangés**.
-- Pas de pause/reprise du décompte (arrêt + relance suffisent, 12.8) ; pas de volume ; pas de son de décompte **par
-  question** (un seul fichier serveur) ; pas de décompte sur la phase `COUNTDOWN` ni sur `MEMORIZE`.
+- Pas de volume ; pas de son de décompte **par question** (un seul fichier serveur) ; pas de décompte sur la phase
+  `COUNTDOWN`, sur `MEMORIZE`, ni **par question RAFALE** (par manche seulement, 12.5/12.7).
 
 ### 12.10 Non-régression exigée
 
@@ -1365,15 +1365,12 @@ SoundLoop bool `json:"SOUND_LOOP,omitempty"` // false (zéro) = une fois = compo
   no-op (`ReleaseDeferredTimer` idempotent).
 - « Rejouer » (`QUESTION_SOUND PLAY`) relance **selon le réglage** (boucle ⇒ boucle).
 - **Arrêt** : la boucle s'arrête sur **tous** les sites actuels de `questionSound().Stop()` (temps écoulé, STOP,
-  REVEAL, question rechargée, NEW_GAME, `muted`) **plus un site nouveau, réservé à la boucle** : le **buzz** qui met
-  la partie en pause (maquette §02 : « Un son en boucle s'arrête avec le chronomètre … ou au buzz ; en pause il est mis
-  en pause »). Aujourd'hui le média **continue** au buzz (seule la PAUSE manuelle le met en pause, `ActionPause`) — ce
-  comportement est **conservé pour une lecture « une fois »** ; pour une lecture en boucle, `main.go` câble
-  `OnBuzzerPress` (aujourd'hui non câblé, #247) pour appeler `questionSound().Stop()` **si et seulement si**
-  `question.SoundLoop && GetPhase() == PAUSED` (phase relue hors verrou). PAUSE manuelle : `Pause()`/`Resume()`
-  inchangés, la boucle reprend où elle en était. Une boucle **ne survit jamais à la question** (test exigé : chaque
-  site, buzz compris, arrête une lecture `PlayLoop`).
-- Décompte (§12) : jamais en même temps qu'un média simultané, boucle comprise (§12.6).
+  REVEAL, question rechargée, NEW_GAME, `muted`) — **aucun site nouveau**. **Au buzz, la boucle continue** (décision
+  utilisateur 2026-11-05 : « au buzz tout continue » — la mention « ou au buzz » du conseil de la maquette §02 est
+  **retirée** du texte livré ; `OnBuzzerPress` reste non câblé, #247). PAUSE manuelle : `Pause()`/`Resume()` inchangés,
+  la boucle reprend où elle en était. Une boucle **ne survit jamais à la question** (test exigé : chaque site arrête
+  une lecture `PlayLoop`).
+- Décompte (§12) : jamais sur une question qui a un média, boucle comprise (§12.6).
 
 ### 13.4 Non-régression exigée
 
