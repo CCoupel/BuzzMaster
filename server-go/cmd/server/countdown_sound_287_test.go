@@ -227,8 +227,8 @@ func TestCountdown287_Guards_NeverPlays(t *testing.T) {
 		{"countdown_disabled", `{"sound":{"enabled":true,"muted":false,"countdown_disabled":true,"countdown_once":false}}`, tw287Speedy()},
 		{"média simultané", tw287Active, &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Sound: "/question/q1/sound_1.wav"}},
 		{"média différé", tw287Active, &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Sound: "/question/q1/sound_1.wav", SoundTimerDelayed: true}},
-		{"média en boucle", tw287Active, &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Sound: "/question/q1/sound_1.wav", SoundLoop: true}},
-		{"média en boucle + différé", tw287Active, &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Sound: "/question/q1/sound_1.wav", SoundLoop: true, SoundTimerDelayed: true}},
+		{"média en boucle", tw287Active, tw287Loop(&game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Sound: "/question/q1/sound_1.wav"})},
+		{"média en boucle + différé", tw287Active, tw287Loop(&game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Sound: "/question/q1/sound_1.wav", SoundTimerDelayed: true})},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -409,4 +409,16 @@ func tw287CountEmissions(t *testing.T, e *game.Engine) *tw287EmissionCounter {
 		return nil
 	}))
 	return c
+}
+
+// tw287Loop pose SOUND_LOOP=true par le JSON (frontière) : le fichier compile même avant le champ typé.
+func tw287Loop(q *game.Question) *game.Question {
+	raw, _ := json.Marshal(q)
+	var m map[string]interface{}
+	_ = json.Unmarshal(raw, &m)
+	m["SOUND_LOOP"] = true
+	raw, _ = json.Marshal(m)
+	out := &game.Question{}
+	_ = json.Unmarshal(raw, out)
+	return out
 }

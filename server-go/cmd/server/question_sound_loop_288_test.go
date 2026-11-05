@@ -3,7 +3,7 @@
 // (onNaturalEnd) exactement une fois, QUESTION_SOUND_STATE reste PLAYING ; la boucle s'arrête sur tous les sites
 // existants de questionSound().Stop(), jamais au buzz ; PAUSE/CONTINUE la suspend/reprend.
 // Réutilise tw287Fake / tw287App / tw287Config (countdown_sound_287_test.go) ; décompte désactivé par config.
-// Compile avant le code (champ game.Question.SoundLoop déjà présent ; PlayLoop porté par tw287Fake).
+// Compile avant le code (SOUND_LOOP posé par le JSON (tw287Loop) ; PlayLoop porté par tw287Fake).
 package main
 
 import (
@@ -20,8 +20,12 @@ import (
 const tw288Cfg = `{"sound":{"enabled":true,"muted":false,"countdown_disabled":true,"countdown_once":false}}`
 
 func tw288Question(loop, delayed bool) *game.Question {
-	return &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Time: "30",
-		Sound: "/question/q1/sound_1.wav", SoundLoop: loop, SoundTimerDelayed: delayed}
+	q := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy, Answer: "x", Time: "30",
+		Sound: "/question/q1/sound_1.wav", SoundTimerDelayed: delayed}
+	if loop {
+		return tw287Loop(q)
+	}
+	return q
 }
 
 func tw288QuestionSoundState(app *App) string {

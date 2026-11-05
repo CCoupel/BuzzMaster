@@ -221,6 +221,7 @@ func TestDecompteUpload287_RejectsNonPOST(t *testing.T) {
 
 func TestDecompteRestore287_BackToDefault_CustomFalse_Idempotent(t *testing.T) {
 	s, dataDir := tw287Seeded(t)
+	defaultBytes := tw287DecompteWAV(t, dataDir) // octets du défaut synthétisé au démarrage
 	body, ct := multipartImageBody(t, "d.wav", tw230CanonicalWAV(3))
 	tw230Post(t, s, "/api/sounds/decompte", body, ct)
 
@@ -239,8 +240,8 @@ func TestDecompteRestore287_BackToDefault_CustomFalse_Idempotent(t *testing.T) {
 			t.Errorf("restore #%d : %+v, attendu ok/custom=false/2.0", i, resp)
 		}
 	}
-	if !bytes.Equal(tw287DecompteWAV(t, dataDir), synth.GenerateCountdown()) {
-		t.Error("restore : octets différents de synth.GenerateCountdown()")
+	if !bytes.Equal(tw287DecompteWAV(t, dataDir), defaultBytes) {
+		t.Error("restore : octets différents du défaut synthétisé")
 	}
 }
 
@@ -322,6 +323,7 @@ func TestDecompte287_CuePathsStillRefuseUnknownSegments(t *testing.T) {
 
 func TestRestoreDefaults287_RestoresEightIncludingDecompte(t *testing.T) {
 	s, dataDir := tw287Seeded(t)
+	defaultBytes := tw287DecompteWAV(t, dataDir)
 	body, ct := multipartImageBody(t, "d.wav", tw230CanonicalWAV(3))
 	tw230Post(t, s, "/api/sounds/decompte", body, ct)
 
@@ -336,7 +338,7 @@ func TestRestoreDefaults287_RestoresEightIncludingDecompte(t *testing.T) {
 	if len(resp.Restored) != 8 || !tw287Contains(resp.Restored, "decompte") {
 		t.Errorf("restored = %v, attendu 8 noms dont decompte", resp.Restored)
 	}
-	if !bytes.Equal(tw287DecompteWAV(t, dataDir), synth.GenerateCountdown()) {
+	if !bytes.Equal(tw287DecompteWAV(t, dataDir), defaultBytes) {
 		t.Error("restore-defaults doit aussi réécrire decompte.wav")
 	}
 }
