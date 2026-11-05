@@ -70,6 +70,7 @@ Crée ou met à jour une question.
 | sound | file | ❌ | **v11.1 (#219)** — média sonore de question, `.wav` canonique (44 100 Hz/16 bits, **mono ou stéréo** — un mono est suréchantillonné et stocké stéréo, arbitrage QUALIF 2026-09-22, `contracts/sound.md` §10.4), ≤ 30 s, ≤ 6 Mio. Écrit dans `SOUND`. Refusé en `400` (cause nommée : pas WAV / fréquence-bits / nombre de voies invalide / > 30 s) ou `413` (> 6 Mio) — voir §Réponses d'erreur ci-dessous |
 | sound_cleared | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` supprime le son existant (fichier disque compris, `os.Remove`) et empêche sa recopie. Sans effet si `sound` est également fourni dans la même requête (le nouveau fichier prévaut) |
 | sound_timer_delayed | bool (`"true"`/absent) | ❌ | **v11.1 (#219)** — `"true"` = chronomètre de réponse différé jusqu'à la fin du son (`contracts/sound.md` §10.7). Écrit dans `SOUND_TIMER_DELAYED` **uniquement si un son est effectivement attaché** (préservé ou fraîchement téléversé) — jamais laissé actif sans son |
+| sound_loop | bool (`"true"`/absent) | ❌ | **v11.4.0 (#288)** — `"true"` = média rejoué en boucle jusqu'à l'arrêt du chronomètre (`contracts/sound.md` §13). Écrit dans `SOUND_LOOP` **uniquement si un son est effectivement attaché** (même règle que `sound_timer_delayed`). **`400`** si fourni avec `sound_timer_delayed=true` (`SOUND_LOOP_DELAYED_EXCLUSIVE`, texte brut) — rien n'est enregistré |
 
 > ⚠️ **`explanation` doit être lu explicitement par `handleUploadQuestion`.** Ce handler
 > **reconstruit la question de zéro** à chaque enregistrement et ne recopie depuis le fichier
@@ -148,6 +149,13 @@ Crée ou met à jour une question.
   `POST /api/sounds/{cue}` ci-dessous), sinon une **chaîne** nommant la cause — aujourd'hui la seule
   source possible est le son de question en mode simultané plus long que `time` (voir la note
   ci-dessus). Non bloquant : la question est enregistrée normalement.
+
+#### Réponses d'erreur (v11.4.0, #288 — champs `sound_loop` × `sound_timer_delayed`)
+
+`sound_loop=true` **et** `sound_timer_delayed=true` dans la même requête ⇒ **`400`**, corps texte brut
+`SOUND_LOOP_DELAYED_EXCLUSIVE : une boucle n'a pas de fin — choisissez « Chrono démarre : début » pour boucler`.
+Vérifié **avant** tout traitement de fichier (aucun `sound` écrit, aucune question enregistrée) ; l'éditeur empêche la
+combinaison en amont (`sound.md` §13.2) — le `400` est la garde serveur, jamais le chemin nominal.
 
 #### Réponses d'erreur (v11.1, #219 — champ `sound`)
 
@@ -918,9 +926,27 @@ actuel — source de vérité : le manifeste réconcilié de #229
       "duration_seconds": 0.42,
       "path": "/files/sounds/depart.wav"
     }
+  ],
+  "long": [
+    {
+      "name": "decompte",
+      "kind": "countdown",
+      "enabled": true,
+      "loop": true,
+      "custom": false,
+      "duration_seconds": 2.0,
+      "path": "/files/sounds/decompte.wav"
+    }
   ]
 }
 ```
+
+> **v11.4.0 (#287/#288, LOT-3)** — tableau **`long`** (additif ; `cues` byte-identique) : les sons longs (≤ 30 s,
+> `sound.md` §10.4), aujourd'hui le seul `decompte` (`kind: "countdown"`, `sound.md` §12). `enabled` =
+> `!SoundConfig.CountdownDisabled`, `loop` = `!SoundConfig.CountdownOnce`, `custom` = manifeste (`sounds.json`, entrée
+> `decompte`), `duration_seconds` calculée comme pour les cues, `path` servi par `handleFiles`. Toujours présent
+> (`[]` impossible aujourd'hui : l'entrée `decompte` est toujours listée, `custom:false`/`duration_seconds:null` si le
+> fichier manque — `present` n'est pas exposé, comme pour les cues).
 
 | Champ | Type | Description |
 |---|---|---|
@@ -1103,6 +1129,23 @@ du média de question en cours (`QUESTION_SOUND_STATE` → `IDLE`, chronomètre 
 Un passage à `false` ne reprend rien. `POST /api/sounds/{cue}/test` reste joué même coupé (geste explicite).
 `GET /api/sound/status.muted` le reflète. Même mécanisme pour l'interrupteur général de l'éclairage d'ambiance :
 `POST /config.json {"lighting": {"enabled": bool}}` (`sound.md` §11.4).
+
+### `POST /api/sounds/decompte` · `POST /api/sounds/decompte/restore` · `POST /api/sounds/decompte/test` (v11.4.0, #287, LOT-3)
+
+Branche **dédiée** de `handleAPISoundsRouter` : le segment `decompte` est reconnu **avant** `soundCueFromString`
+(qui reste inchangé et refuse toujours `decompte` : ce n'est pas une cue, `sound.md` §12.1). Contrat `sound.md` §12.
+
+| Route | Comportement | Différences avec `/api/sounds/{cue}…` |
+|---|---|---|
+| `POST /api/sounds/decompte` (multipart `file`) | remplace `data/files/sounds/decompte.wav` ; validation **`audio.ValidateQuestionSound`** (≤ 30 s, ≤ 6 Mio, mono accepté ⇒ stocké stéréo, `sound.md` §10.4) ; écriture tmp + rename ; manifeste réconcilié ; réponse `{status:"ok", custom:true, duration_seconds}` | limite **30 s** (cues : 5 s) ; `413` au-delà de 6 Mio ; erreurs `writeSoundError` (`{status:"error", message}`) |
+| `POST /api/sounds/decompte/restore` | réécrit `synth.GenerateCountdown()` ; idempotent ; `{status:"ok", custom:false, duration_seconds:2.0}` | — |
+| `POST /api/sounds/decompte/test` | `countdownSound().Test()` : joue le fichier **une fois** sur l'enceinte, **ignore** `muted`, `countdown_disabled` et `sound.enabled` éteint au même titre que `/{cue}/test` (`sound.md` §11.2/§12.4) ; remplace un décompte en cours ; réponse `{played|disabled|unavailable}` avec la **même** sémantique que `/{cue}/test` (`disabled` = `sound.enabled == false`) | lecteur n°2 (`MediaPlayer`), jamais `PlayCue` |
+
+`POST /api/sounds/restore-defaults` restaure désormais **7 cues + `decompte`** (`restored` liste les 8 noms).
+
+**Réglages** (`sound.md` §12.3) — `POST /config.json {"sound": {"countdown_disabled": bool, "countdown_once": bool}}`,
+fusion champ par champ, aucun endpoint dédié (même règle que `muted`/`cues_disabled`). Effet de bord serveur : passage de
+`countdown_disabled` à `true` ⇒ arrêt immédiat d'un décompte en cours.
 
 ### `POST /api/sounds/restore-defaults` — déjà livré en #229
 

@@ -199,6 +199,7 @@ interface Question {
   EXPLANATION?: string   // Note d'explication/justification — animateur uniquement (v6.4.x, #168)
   SOUND?: string               // URL média sonore de question (v11.1, #219) — voir §SOUND ci-dessous
   SOUND_TIMER_DELAYED?: boolean // true = chronomètre différé jusqu'à la fin du son (v11.1, #219)
+  SOUND_LOOP?: boolean         // true = média rejoué en boucle jusqu'à l'arrêt du chrono (v11.4.0, #288) — exclusif de SOUND_TIMER_DELAYED
 
   // QCM
   QCM_ANSWERS?: QCMAnswers
@@ -319,6 +320,13 @@ absent ⇒ `false`) = comportement strictement identique à avant ce lot.
 > réelle via le champ `sound_cleared=true` (`contracts/http-endpoints.md` §Questions) : contrairement
 > à `MEDIA`/`MEDIA_ANSWER` (qui n'ont aujourd'hui aucun moyen réel de suppression, défaut connu —
 > `sound.md` §12 point 4), le fichier disque est effectivement supprimé (`os.Remove`).
+
+#### `SOUND_LOOP` — lecture en boucle (v11.4.0, #288, LOT-3)
+
+> Contrat normatif : `contracts/sound.md` §13. `omitempty`, valeur zéro = **une fois** (comportement v11.1). Multipart
+> `sound_loop`, écrit seulement si un son est attaché. **Exclusif de `SOUND_TIMER_DELAYED`** : `400` à l'upload si les
+> deux sont vrais ; un `question.json` qui porterait les deux est lu comme différé **sans** boucle. Commun à tous les
+> types comme `SOUND` (décision d'éditeur : SPEEDY/QCM/ARDOISE seulement, jamais une garde serveur — §10.4bis).
 
 ### Exemple NORMAL
 

@@ -1,6 +1,28 @@
 # Changelog des Contrats API
 
 ---
+## [20261105] — Son de décompte + lecture en boucle (#287, #288, v11.4.0, LOT-3)
+
+- **[NEW]** `sound.md` §12 — son de décompte : troisième chemin audio (`cmd/server/countdown_sound.go`, second
+  `audio.MediaPlayer` sur le contexte `oto` partagé), fichier `data/files/sounds/decompte.wav` (défaut synthétisé 2 s,
+  limites du média de question), config `sound.countdown_disabled` / `sound.countdown_once` (zéro = actif, en boucle),
+  rappels moteur `OnAnswerTimerStarted(AnswerTimerStart)` et `OnMotionCardTimeUp`, exclusion « média simultané »,
+  voix unique / chrono le plus intérieur, arrêt sur buzz, pause, expiration, STOP, REVEAL, `Ready`, NEW_GAME, `muted`.
+- **[NEW]** `sound.md` §13 — `Question.SOUND_LOOP` (`omitempty`), multipart `sound_loop`, exclusif de
+  `SOUND_TIMER_DELAYED` (`400 SOUND_LOOP_DELAYED_EXCLUSIVE`) ; `MediaPlayer.PlayLoop` (amendement §10.2) ; §10.6
+  amendé (boucle désormais dans le périmètre) ; boucle arrêtée au buzz (`OnBuzzerPress` câblé pour cela seul).
+- **[CHANGED]** `GET /api/sounds` — tableau `long` ajouté (`decompte`, `kind:"countdown"`, `enabled`, `loop`) ;
+  `cues` byte-identique. `POST /api/sounds/restore-defaults` restaure 7 + 1 fichiers.
+- **[NEW]** `POST /api/sounds/decompte`, `…/decompte/restore`, `…/decompte/test` — branche dédiée, `soundCueFromString`
+  inchangé ; validation `ValidateQuestionSound` (30 s / 6 Mio).
+- **[CHANGED]** `POST /config.json` — section `sound` accepte `countdown_disabled`, `countdown_once` (fusion champ par
+  champ, effet de bord : arrêt du décompte à la désactivation).
+- **[CHANGED]** `models.md` §SOUND — `SOUND_LOOP`.
+- Non BREAKING : aucun champ `GameState`, aucune action WebSocket nouvelle ; `config.json` et `question.json` existants
+  inchangés (valeurs zéro = comportement v11.4.0 LOT-2) ; `game-state.md`, `ws-payload-serialization.md` inchangés.
+  Coût assumé : les faux `audio.MediaPlayer` des tests gagnent `PlayLoop`.
+
+---
 ## [20261105] — RAFALE alphabétique + composant Wheel (#282, v11.4.0, LOT-2)
 
 - **[NEW]** `rafale.md` §15 — option de manche `RAFALE_ALPHABETICAL` (bool, `omitempty`) et `RAFALE_WHEEL_LAYOUT`
@@ -31,7 +53,7 @@
   passage à `true` ; popover d'en-tête « Ambiance » (éclairage + son), classe `.navbar-popover` (#284).
 - Non BREAKING : aucun client existant ne lit `muted` ; aucun champ `GameState`, aucune action WebSocket, aucun
   nouvel endpoint.
-- À venir dans ce milestone (contrats rédigés au démarrage de chaque lot) : LOT-2 : fait (entrée ci-dessus) ; LOT-3 son de décompte `decompte` + `SOUND_LOOP` (#287/#288) ;
+- À venir dans ce milestone (contrats rédigés au démarrage de chaque lot) : LOT-2 : fait ; LOT-3 : fait (entrées ci-dessus) ;
   LOT-4 `PUT`/`DELETE /api/categories/{key}` (+ `mode`, fusion historique), `POST …/{key}/icon` (custom seulement),
   `color` persistée (#285).
 
