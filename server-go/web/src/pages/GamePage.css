@@ -1491,3 +1491,14 @@
   color: #fff;
   font-weight: 800;
 }
+
+/* #282 — ligne discrète « Suivante » de l'admin RAFALE (écrêtée, jamais de scroll) */
+.rafale-admin-next {
+  margin: var(--space-2, 0.5rem) 0 0;
+  font-size: 0.8125rem;
+  color: var(--gray-500);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

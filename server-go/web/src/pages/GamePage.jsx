@@ -1446,6 +1446,11 @@ export default function GamePage() {
               : 'var(--error)'
             const answerValue = (rafaleAnswer && rafaleAnswer.ID === current.ID) ? rafaleAnswer.ANSWER : ''
             const catMeta = categoryMeta(current.CATEGORY, customCategories)
+            // Question suivante (rafale.md §13/§15.7, NEXT sans ANSWER). undefined = pas encore
+            // reçue/périmée pour la question courante ⇒ rien ; null = fin de réservoir.
+            const rafaleNext = (rafaleAnswer && rafaleAnswer.ID === current.ID) ? rafaleAnswer.NEXT : undefined
+            const nextAlpha = gameState.question?.RAFALE_ALPHABETICAL === true
+            const nextLetter = rafaleNext && nextAlpha && rafaleNext.LETTER ? rafaleNext.LETTER : ''
             return (
               <div className="rafale-admin-live">
                 <div className="rafale-anim-qcard" style={{ '--rafale-active-color': teamCss }}>
@@ -1480,6 +1485,13 @@ export default function GamePage() {
                     )}
                   </div>
                   {current.QUESTION && <p className="rafale-anim-qcard-text">{current.QUESTION}</p>}
+                  {rafaleNext !== undefined && gameState.RAFALE_SUBPHASE === 'QUESTION' && (
+                    <p className="rafale-admin-next" data-testid="rafale-admin-next">
+                      {rafaleNext === null
+                        ? 'Dernière question du réservoir'
+                        : `${nextLetter ? `Suivante (lettre ${nextLetter})` : 'Suivante'} : ${rafaleNext.QUESTION}`}
+                    </p>
+                  )}
                   {answerValue && (
                     <div className="ans rafale-anim-qcard-answer">
                       <b>Réponse attendue</b>
