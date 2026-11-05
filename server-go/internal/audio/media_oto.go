@@ -172,7 +172,10 @@ func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player, loop bool) {
 		}
 		p.mu.Unlock()
 
-		if p.onNaturalEnd != nil {
+		// "Exactly once" (§13.1): passes > 0 means the loop branch above already
+		// emitted onNaturalEnd at the end of the first pass (reached here only
+		// when the rewind failed on a later pass).
+		if p.onNaturalEnd != nil && passes == 0 {
 			p.onNaturalEnd()
 		}
 		return

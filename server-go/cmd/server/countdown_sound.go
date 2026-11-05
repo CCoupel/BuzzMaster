@@ -153,3 +153,8 @@ func (a *App) CountdownOutputAvailable() bool { return a.countdownSound().Output
 
 // TestCountdown implements server.CountdownProvider.
 func (a *App) TestCountdown() (accepted bool) { return a.countdownSound().Test() }
+
+// StopCountdown stops the countdown voice before decompte.wav is replaced or
+// restored (Windows cannot rename over a file still held open) — used by
+// the HTTP layer through an optional interface (http_sound.go).
+func (a *App) StopCountdown() { a.countdownSound().Stop() }

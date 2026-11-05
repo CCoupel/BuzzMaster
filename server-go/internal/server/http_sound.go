@@ -553,6 +553,12 @@ func (h *HTTPServer) handleAPICountdownRestore(w http.ResponseWriter, r *http.Re
 // writeCountdownFile writes decompte.wav atomically (tmp + rename). Returns
 // (0, "") on success, else the HTTP status and message.
 func (h *HTTPServer) writeCountdownFile(data []byte) (int, string) {
+	// Windows: os.Rename onto a file a player still holds open fails (no
+	// FILE_SHARE_DELETE) — release the countdown player first. Optional
+	// interface (type-asserted) so existing providers keep compiling.
+	if sc, ok := h.Sound.(interface{ StopCountdown() }); ok {
+		sc.StopCountdown()
+	}
 	dir := h.soundsDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		LogError(game.LogComponentHTTP, "Countdown: cannot create %s: %v", dir, err)
