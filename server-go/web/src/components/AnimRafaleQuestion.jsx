@@ -100,6 +100,10 @@ export default function AnimRafaleQuestion({
         <div className={`rafale-anim-qcard-next${isLastQuestion ? ' rafale-anim-qcard-next-last' : ''}`}>
           <div className="rafale-anim-qcard-next-label">
             <span>Suivante</span>
+            {/* #282 (§15.10) : lettre de la suivante, fournie par le serveur (jamais normalisée ici) */}
+            {!isLastQuestion && next.LETTER && (
+              <span className="rafale-next-letter" data-testid="rafale-next-letter">({next.LETTER})</span>
+            )}
             {!isLastQuestion && nextCatMeta && (
               <span className="anim-chip">
                 {nextCatMeta.icon && <span className="anim-chip-glyph">{nextCatMeta.icon}</span>}
