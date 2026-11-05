@@ -55,7 +55,7 @@ export default function AnimRafaleActions({
         type="button"
         className="anim-conduct-btn anim-conduct-btn-go anim-rafale-action-btn"
         disabled={disabled}
-        onClick={disabled ? undefined : onValidate}
+        onClick={disabled ? undefined : () => onValidate()}
       >
         RÉPONSE VALIDE
         {sublabels.valid && <span className="anim-conduct-btn-sub">{sublabels.valid}</span>}
@@ -64,7 +64,7 @@ export default function AnimRafaleActions({
         type="button"
         className="anim-conduct-btn anim-conduct-btn-danger anim-rafale-action-btn"
         disabled={disabled}
-        onClick={disabled ? undefined : onInvalidate}
+        onClick={disabled ? undefined : () => onInvalidate()}
       >
         RÉPONSE INVALIDE
         {sublabels.invalid && <span className="anim-conduct-btn-sub">{sublabels.invalid}</span>}

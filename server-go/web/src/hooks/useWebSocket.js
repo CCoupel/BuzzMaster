@@ -1292,13 +1292,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // comportement inchangé pour la manche classique.
   const rafaleValidate = useCallback((motionCardId) => {
     const msg = {}
-    if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    // Garde stricte : un handler branché tel quel sur onClick recevrait l'événement React (circulaire ⇒ JSON.stringify jette)
+    if (typeof motionCardId === 'string' && motionCardId) msg.MOTION_CARD_ID = motionCardId
     sendMessage('RAFALE_VALIDATE', msg)
   }, [sendMessage])
 
   const rafaleInvalidate = useCallback((motionCardId) => {
     const msg = {}
-    if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    // Garde stricte : un handler branché tel quel sur onClick recevrait l'événement React (circulaire ⇒ JSON.stringify jette)
+    if (typeof motionCardId === 'string' && motionCardId) msg.MOTION_CARD_ID = motionCardId
     sendMessage('RAFALE_INVALIDATE', msg)
   }, [sendMessage])
 
