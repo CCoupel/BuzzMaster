@@ -12,6 +12,9 @@
 - **[NEW]** `PUT /api/categories/{key}` `{name?, color?}` — intégrées et personnalisées, clé immuable, aucune
   réécriture des questions/historique ; notifie l'ambiance.
 - **[NEW]** `POST /api/categories/{key}/icon` — personnalisées seulement (`400` sur une intégrée, pas de `DELETE`).
+- **[CHANGED]** Toute écriture de catégorie (`POST`, `PUT`, `POST …/icon`, `DELETE`) ⇒ `409 game in progress` hors
+  {`STOPPED`, `NEW_GAME`, `REVEALED`} (décision utilisateur). Mode `delete` : les cartes MEMOTION de la catégorie sont
+  supprimées de leur question hôte (hôte conservée) ; mode `reassign` : cartes ⇒ `""`.
 - **[NEW]** `DELETE /api/categories/{key}` `{mode: reassign|delete}` — `400` intégrée, `404`, `409 game in progress`,
   `409 category in use` (+ compteurs pour le dialogue) ; fusion de l'historique dans « Sans catégorie »
   (`QUESTION_CATEGORY` ⇒ `""`, `CATEGORY_BREAKDOWN` fusionné), sauvegarde `history.json.bak-<ts>` (5 conservées),

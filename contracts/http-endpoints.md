@@ -414,6 +414,10 @@ Reset sélectif.
 - **« Sans catégorie »** : `CATEGORY == ""` sur une question/carte/réponse du réservoir ; dans l'historique
   `QUESTION_CATEGORY == ""` ⇒ bucket palmarès `UNKNOWN` (comportement existant de `handlePalmares`), affiché
   **« Sans catégorie »** (le libellé « Inconnue » de `CategoryPalmaresPage.jsx` est renommé).
+- **Partie en cours ⇒ tout est bloqué** (décision utilisateur 2026-11-05) : `POST /api/categories`, `PUT`, `POST …/icon`
+  et `DELETE` répondent **`409 {"error":"game in progress"}`** quand la phase du moteur ∉ {`STOPPED`, `NEW_GAME`,
+  `REVEALED`} (question vivante `PREPARE`…`PAUSED`, ou `ENROLL`). `GET` reste libre. Garde évaluée **en premier**, avant
+  toute validation de corps ou de fichier (fonction commune `categoriesLocked()`), testée sur les quatre routes.
 - **Sécurité des chemins** : toute clé reçue en URL (`/api/categories/{key}…`) est validée par
   `^[A-Z0-9_]{1,50}$` **avant** toute jointure de chemin (`400` sinon) ; un nom disque est **toujours** dérivé de la
   clé validée + extension de l'allowlist, **jamais** de `header.Filename` (même discipline que `SafeQuestionPath`).
@@ -461,8 +465,8 @@ Création d'une catégorie personnalisée (multipart, inchangé) — **v11.4.0**
 | color | string | ❌ | `#rrggbb` ou `""`/absent = aucune. Autre valeur ⇒ `400` |
 
 Réponse `200` : `CategoryInfo` complet (avec `color`, `questionCount: 0`, `rafaleCount: 0`). Sidecar écrit
-`{ "name", "color" }` (`color` omise si vide). Erreurs : `400` (nom, fichier, type, `color`), `409` (clé existante),
-`413` (> 2 Mio — nouveau, avant c'était 10 Mio sans contrôle de type). Le frontend propose par défaut la **première
+`{ "name", "color" }` (`color` omise si vide). Erreurs : `409 game in progress` (v11.4.0, évaluée en premier), `400`
+(nom, fichier, type, `color`), `409` (clé existante), `413` (> 2 Mio — nouveau, avant c'était 10 Mio sans contrôle de type). Le frontend propose par défaut la **première
 teinte libre** de la palette (maquette §01) — décision d'interface, le serveur n'impose rien.
 
 #### Validation d'icône (commune à POST /api/categories et POST /api/categories/{key}/icon)
@@ -500,8 +504,8 @@ Renommage et/ou couleur. Intégrées **et** personnalisées. Clé immuable.
   clients rechargent `/api/categories` sur `QUESTIONS_UPDATE`, `CategoriesChanged` n'a pas de message dédié) **et**
   `a.ambiance().NotifyState()` (`lighting.md` §10.5 : tout ce qui change la salle notifie — une question de cette
   catégorie peut être en cours).
-- Réponse `200` : `CategoryInfo` résolu. Erreurs : `400` (clé invalide, body vide, `name`/`color` invalides), `404`
-  (clé inconnue), `405`.
+- Réponse `200` : `CategoryInfo` résolu. Erreurs : `409 game in progress` (en premier), `400` (clé invalide, body
+  vide, `name`/`color` invalides), `404` (clé inconnue), `405`.
 
 ---
 
@@ -510,7 +514,7 @@ Renommage et/ou couleur. Intégrées **et** personnalisées. Clé immuable.
 Remplace l'icône d'une catégorie **personnalisée** (multipart, champ `file`, « Validation d'icône » ci-dessus).
 
 - Intégrée ⇒ **`400 {"error":"built-in categories keep their emoji"}`** (décision utilisateur ; pas de `DELETE …/icon`).
-- `404` clé inconnue ; `413` > 2 Mio ; `400` type/contenu.
+- `409 game in progress` (en premier) ; `404` clé inconnue ; `413` > 2 Mio ; `400` type/contenu.
 - Réponse `200` : `CategoryInfo` résolu (nouvelle `imageURL`, l'extension peut changer). `OnCategoriesChanged()`.
 - Le navigateur doit contourner son cache : le frontend ajoute `?v=<timestamp>` à `imageURL` après un remplacement.
 
@@ -524,9 +528,8 @@ Remplace l'icône d'une catégorie **personnalisée** (multipart, champ `file`, 
 | Body | `{ "mode": "reassign" \| "delete" }` — **obligatoire dès que la catégorie est utilisée** |
 
 **Gardes, dans l'ordre** :
-1. clé invalide ⇒ `400` ; intégrée ⇒ `400 {"error":"built-in categories cannot be deleted"}` ; inconnue ⇒ `404`.
-2. **Partie en cours** ⇒ `409 {"error":"game in progress"}` : phase du moteur ∉ {`STOPPED`, `NEW_GAME`, `REVEALED`} —
-   on ne réécrit pas l'historique ni les questions pendant qu'une question est vivante (`PREPARE`…`PAUSED`, `ENROLL`).
+1. **Partie en cours** ⇒ `409 {"error":"game in progress"}` (règle commune ci-dessus).
+2. clé invalide ⇒ `400` ; intégrée ⇒ `400 {"error":"built-in categories cannot be deleted"}` ; inconnue ⇒ `404`.
 3. Utilisation = `questionCount + rafaleCount > 0` (même calcul que `GET`) **et** `mode` absent/invalide ⇒
    `409 {"error":"category in use","questions":12,"rafale":30,"history":{"events":3,"points":1240}}` — c'est le
    payload qui alimente le dialogue (maquette §02 « Supprimer “Cinéma” — 12 questions et 30 … »). `history.events`
@@ -539,7 +542,7 @@ et la seule à exiger une sauvegarde : si elle échoue, **rien d'autre n'est tou
 | Étape | Action |
 |---|---|
 | H. Historique | `Engine.MergeHistoryCategory(key) (events, points int, err)` — sous `e.mu` : pour chaque événement, `QUESTION_CATEGORY == key` ⇒ `""` et `CATEGORY_NAME`/`CATEGORY_IMAGE_URL`/`CATEGORY_COLOR` vidés (snapshot d'une catégorie qui n'existe plus) ; `CATEGORY_BREAKDOWN[key]` ⇒ sa part est **ajoutée** à `CATEGORY_BREAKDOWN[""]` (créée si besoin) et la clé retirée — la somme des parts reste égale à `POINTS`. **Sauvegarde** `history.json.bak-<YYYYMMDD-HHmmss>` (copie octet pour octet du fichier courant, même dossier `config/`, **5 plus récentes conservées**, les autres supprimées ; jamais incluses dans le `.tar` de sauvegarde — `addFileToTAR` n'ajoute que `history.json`) **puis** écriture **atomique** (`history.json.tmp` + `os.Rename`, patron `atomicWriteFile` de `rafale_store.go`). Aucun événement concerné ⇒ pas de `.bak`, pas de réécriture. |
-| Q. Questions | `mode: "reassign"` ⇒ chaque `question.json` (et chaque carte MEMOTION) dont `CATEGORY == key` est réécrit avec `CATEGORY: ""` (tmp + rename) ; `mode: "delete"` ⇒ le dossier `questions/<id>/` de chaque question dont `CATEGORY == key` est supprimé (`os.RemoveAll`, médias et son compris), `ForgetQuestionStatuses(ids)`, retrait de `rounds.json` par le **chemin existant** de `DELETE /question/{id}` (factorisé, jamais dupliqué) ; une carte MEMOTION dont `CATEGORY == key` est **réaffectée** (`""`) même en mode `delete` — on ne supprime jamais une question hôte pour une de ses cartes. Dans les **deux** modes, `key` est **retiré** de toute liste `RAFALE_CATEGORIES` (questions RAFALE et cartes RAFALE) ; une liste devenue vide reste vide (= toutes catégories, sémantique `EffectiveRafaleCategories` inchangée). |
+| Q. Questions | `mode: "reassign"` ⇒ chaque `question.json` (et chaque carte MEMOTION) dont `CATEGORY == key` est réécrit avec `CATEGORY: ""` (tmp + rename) ; `mode: "delete"` ⇒ le dossier `questions/<id>/` de chaque question dont `CATEGORY == key` est supprimé (`os.RemoveAll`, médias et son compris), `ForgetQuestionStatuses(ids)`, retrait de `rounds.json` par le **chemin existant** de `DELETE /question/{id}` (factorisé, jamais dupliqué) ; une **carte MEMOTION** dont `CATEGORY == key` est **supprimée de sa question hôte** (liste de cartes réécrite, ses médias de carte supprimés ; la question hôte est conservée même sans carte restante, et comptée dans `questions.cardsDeleted`) — décision utilisateur 2026-11-05 ; en mode `reassign` la carte passe à `""` comme le reste (`cardsReassigned`). Dans les **deux** modes, `key` est **retiré** de toute liste `RAFALE_CATEGORIES` (questions RAFALE et cartes RAFALE) ; une liste devenue vide reste vide (= toutes catégories, sémantique `EffectiveRafaleCategories` inchangée). |
 | R. Réservoir | `reassign` ⇒ `Engine.ReassignRafaleCategory(key, "")` (réponses non tirables tant qu'elles n'ont pas de catégorie — maquette : « à recatégoriser ») ; `delete` ⇒ `Engine.DeleteRafaleQuestionsByCategory(key)` (+ purge de `rafale_used` pour ces IDs). Sauvegarde `SaveRafale`/`SaveRafaleUsed` existantes. |
 | F. Fichiers | suppression de `<KEY>.<ext>` et `<KEY>.json`. |
 | N. Notification | `OnCategoriesChanged()` ⇒ `broadcastQuestions()` + `NotifyState()` ; `OnQuestionUpload()` si des questions ont changé. |
@@ -548,7 +551,7 @@ et la seule à exiger une sauvegarde : si elle échoue, **rien d'autre n'est tou
 
 ```json
 { "deleted": "CINEMA", "mode": "reassign",
-  "questions": { "reassigned": 12, "deleted": 0, "rafaleFiltersCleaned": 3 },
+  "questions": { "reassigned": 12, "deleted": 0, "cardsReassigned": 2, "cardsDeleted": 0, "rafaleFiltersCleaned": 3 },
   "rafale":    { "reassigned": 30, "deleted": 0 },
   "history":   { "events": 3, "points": 1240, "backup": "history.json.bak-20261105-173306" } }
 ```
@@ -576,7 +579,9 @@ les compteurs déjà appliqués).
   Suppression : `DELETE` sans `mode` ⇒ `200` (inutilisée) ou `409 category in use` ⇒ dialogue de confirmation
   (radio « Garder les questions, sans catégorie » présélectionné / « Supprimer aussi les questions », encart 📊
   depuis `history`, **case de confirmation obligatoire dès que `history.events > 0` ou mode `delete`**, textes de la
-  maquette), puis `DELETE {mode}`. `409 game in progress` ⇒ message « Impossible pendant une partie ».
+  maquette — en mode `delete`, le texte compte aussi les cartes MEMOTION), puis `DELETE {mode}`. `409 game in
+  progress` sur **toute** action (créer, renommer, colorer, icône, supprimer) ⇒ message « Impossible pendant une
+  partie » ; le dialogue reste consultable (lecture seule).
 - Palmarès : libellé du bucket `UNKNOWN` = « Sans catégorie ».
 
 ## Historique
