@@ -930,7 +930,7 @@ avec un risque de désynchronisation entre les deux.
     "ID": "r-042",
     "ANSWER": "Rome",
     "NEXT": { "ID": "r-017", "QUESTION": "Plus long fleuve d'Europe ?",
-              "CATEGORY": "GEOGRAPHY", "DIFFICULTY": 2 }
+              "CATEGORY": "GEOGRAPHY", "DIFFICULTY": 2, "LETTER": "" }
   } }
 ```
 
@@ -942,6 +942,7 @@ type RafaleNextPayload struct {
     Question   string `json:"QUESTION"`
     Category   string `json:"CATEGORY"`
     Difficulty int    `json:"DIFFICULTY"`
+    Letter     string `json:"LETTER"`     // v11.4.0 #282 (§15.10) : "" hors option alphabétique ; "A".."Z" ou "#" sinon. Jamais omitempty.
 }
 
 type RafaleAnswerPayload struct {
@@ -1397,8 +1398,10 @@ questions · L lettres couvertes (A–Z sauf J, K, Q, U, W, X, Y) » ; sinon mes
   (complément Q15 à la maquette validée) ; défauts `rafaleAlphabetical:false`, `rafaleWheelLayout:'strip'` ; chargement,
   reset, `data.append` des deux champs ; absents du sous-éditeur de carte MEMOTION.
 - `GamePage.jsx` : chip « 🔤 Alphabétique » dans `.rafale-admin-config` ; pastille de la lettre courante devant la
-  question dans `.rafale-admin-live` ; « Suivante (lettre S) : … ».
-- `AnimPage.jsx` / `AnimRafaleQuestion.jsx` : chip méta et pastille de lettre (l'anim voit déjà la réponse).
+  question dans `.rafale-admin-live` ; « Suivante (lettre S) : … » — la lettre `S` vient de `rafaleAnswer.NEXT.LETTER`
+  (§15.10), jamais d'une normalisation locale.
+- `AnimPage.jsx` / `AnimRafaleQuestion.jsx` : chip méta et pastille de lettre (l'anim voit déjà la réponse) ; zone
+  « SUIVANTE » : libellé « SUIVANTE (S) — … » depuis `next.LETTER` (§15.10) quand il est non vide, « Suivante » sinon.
 - `useWebSocket.js` : défauts (`RAFALE_CURRENT_LETTER: ''`, `RAFALE_LETTERS: []`) **et** fusion explicite des deux
   champs (le hook fusionne champ par champ : un champ non listé n'arrive jamais).
 
@@ -1420,3 +1423,32 @@ questions · L lettres couvertes (A–Z sauf J, K, Q, U, W, X, Y) » ; sinon mes
 Option désactivée : `rafale_*_test.go` existants verts sans modification ; `models_roundtrip_test.go` vert (fixtures
 inchangées) ; `rafale_upload_nonregression_test.go` étendu aux deux champs ; `rafale_go_js_alignment_203_test.go`
 inchangé (aucune constante JS nouvelle à aligner). Carte MEMOTION RAFALE (`rafale_motion_card_*_test.go`) : inchangée.
+
+### 15.10 Lettre de la question suivante — `RAFALE_ANSWER.NEXT.LETTER` (admin + anim, ajout 2026-11-05)
+
+> Écart remonté par `dev-frontend` pendant le Batch 2 : la maquette (admin « Suivante (lettre S) : … », anim
+> « SUIVANTE (S) — … ») et §15.7 affichent la lettre de la **question suivante**, mais aucun champ ne la portait.
+> Le frontend ne possède pas la normalisation (§15.3) et `NEXT` n'a pas d'`ANSWER` (§13.3) : la lettre doit être
+> calculée par le serveur.
+
+- **Champ** : `RafaleNextPayload.Letter` — JSON `LETTER`, `string`, **jamais `omitempty`** (même discipline que
+  `NEXT` lui-même, §13.3). Valeurs : `""` quand l'option alphabétique est inactive (manche classique **et** carte
+  MEMOTION — `NEXT` y est de toute façon `null`), sinon `rafaleAlphaKey(next.ANSWER).letter` ⇒ `"A"`..`"Z"` ou `"#"`.
+  **Même fonction** que le tirage et que `pool.LETTERS` — jamais une seconde implémentation.
+- **Canal et destinataires : inchangés** — `RAFALE_ANSWER`, `broadcastRafaleAnswer`, `ClientTypeAdmin` +
+  `ClientTypeAnim` seulement. Le champ voyage dans `NEXT`, qui n'atteint déjà jamais `/tv`, `/player` ni les buzzers
+  (§13.2, `TestRafaleAnswerNext_NeverLeaksToTVOrPlayer`). Aucun champ `GameState` nouveau, aucune modification de
+  `ws-payload-serialization.md` : la lettre **suivante** n'est pas publique (seule la courante l'est, §15.5) ;
+  `RAFALE_LETTERS` reste la seule information TV sur les lettres à venir.
+- **Sérialiseur / moteur** : le pré-tirage expose la lettre à côté de l'aperçu — recommandé : `rafaleNextPreview`
+  renvoie un type dédié au pré-tirage (ex. `game.RafaleNext { RafaleCurrent; Letter string }`), **sans toucher
+  `RafaleCurrent`** (qui sert aussi à `RAFALE_CURRENT` du `GameState`, diffusé à la TV) ; `rafaleNextPayload`
+  (`cmd/server/main.go`) recopie `Letter`. `rafaleCardAnswer` : `NEXT` reste `null` (§14.2).
+- **Frontend** : `useWebSocket.js` transmet `MSG.NEXT` tel quel (`NEXT: MSG.NEXT ?? null`) — aucun changement de
+  hook ; `GamePage.jsx` et `AnimRafaleQuestion.jsx` lisent `NEXT.LETTER` (§15.7). Hors option (`""`) : libellés
+  v11.2.3 inchangés.
+- **Tests exigés** : `TestRafaleAnswerNext_ReachesAdminAndAnim_ConsistentBetweenBoth` étendu — option active ⇒
+  `LETTER` non vide, identique admin/anim, égal à `rafaleAlphaKey` de la réponse pré-tirée ; option inactive ⇒
+  `LETTER == ""` ; décodage JSON : clé `LETTER` présente même vide ; fuite : le test TV/VPlayer existant couvre déjà
+  le champ (il cherche tout contenu de `NEXT`) — y ajouter l'assertion « aucune clé `LETTER` dans les trames TV ».
+- Rétrocompatible : champ additif, clients antérieurs l'ignorent.

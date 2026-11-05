@@ -9,6 +9,9 @@
   passe) ; `GameState.RAFALE_CURRENT_LETTER` (string) et `RAFALE_LETTERS` ([]string, jamais nil), diffusés à tous
   les clients web ; tests de fuite amendés (une lettre, jamais `ANSWER`/`NEXT`).
 - **[CHANGED]** `GET /api/rafale/pool` — champ `LETTERS` ajouté (rétrocompatible).
+- **[CHANGED]** `RAFALE_ANSWER.NEXT` — champ `LETTER` ajouté (`rafale.md` §15.10, ajout 2026-11-05 sur écart Batch 2) :
+  lettre normalisée de la question pré-tirée, `""` hors option, jamais `omitempty` ; admin + anim seulement, jamais
+  TV/VPlayer (même canal que `NEXT`). Rétrocompatible.
 - **[NEW]** `wheel-component.md` — composant frontend `Wheel` (segments, `current`, `layout strip|arc`, normalisation
   modulo n, critère « lisible après 100 mouvements », `motion` réservé v12.0).
 - **[CHANGED]** `ws-payload-serialization.md` — lignes `GAME.RAFALE_CURRENT_LETTER` / `GAME.RAFALE_LETTERS`.
