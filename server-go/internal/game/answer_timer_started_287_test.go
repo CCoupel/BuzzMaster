@@ -297,7 +297,7 @@ func TestAnswerTimerStarted287_PreStartCountdown_NeverEmitsBeforeTheRealStart(t 
 func TestOnMotionCardTimeUp287_FiredOnceAtCardExpiry_PhaseStaysStarted(t *testing.T) {
 	e := NewEngine()
 	card := memoryMotionCard("mc-1", 1, 2, 0)
-	startMEMOTION(t, e, "mq-1", makeMotionQuestion("mq-1", []MotionCard{card}, "SOLO"))
+	startMEMOTIONAtMemoryCardQuestion(t, e, card) // carte sélectionnée + retournée : le ticker de carte a un état actif
 	t.Cleanup(e.Stop)
 
 	fired := make(chan struct{}, 4)
@@ -322,7 +322,7 @@ func TestOnMotionCardTimeUp287_FiredOnceAtCardExpiry_PhaseStaysStarted(t *testin
 func TestOnMotionCardTimeUp287_NotFiredWhenCardTimerStoppedBeforeExpiry(t *testing.T) {
 	e := NewEngine()
 	card := memoryMotionCard("mc-1", 1, 2, 0)
-	startMEMOTION(t, e, "mq-1", makeMotionQuestion("mq-1", []MotionCard{card}, "SOLO"))
+	startMEMOTIONAtMemoryCardQuestion(t, e, card) // carte sélectionnée + retournée : le ticker de carte a un état actif
 	t.Cleanup(e.Stop)
 	fired := make(chan struct{}, 1)
 	tw287HookMotionTimeUp(t, e, func() { fired <- struct{}{} })
