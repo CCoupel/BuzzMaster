@@ -129,4 +129,33 @@ describe('CategoryManagerDialog — création (#285)', () => {
     expect(await screen.findByText(/Impossible pendant une partie/i)).toBeInTheDocument()
     expect(within(form).getByRole('button', { name: /Ajouter|Créer/i })).toBeDisabled()
   })
+
+  it('fichier de plus de 2 Mio : refusé côté client, aucun POST, message « 2 Mio »', () => {
+    const { form } = setup()
+    const big = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'gros.png', { type: 'image/png' })
+    fill(form, { name: 'Musique', file: big })
+    submit(form)
+    expect(posts).toHaveLength(0)
+    expect(within(form).getByRole('alert')).toHaveTextContent(/2 Mio/i)
+  })
+
+  it('413 du serveur : message « 2 Mio », formulaire conservé', async () => {
+    postResponse = () => ({ ok: false, status: 413, json: async () => ({ error: 'request entity too large' }), text: async () => 'too large' })
+    const { form } = setup()
+    fill(form)
+    submit(form)
+    expect((await screen.findAllByText(/2 Mio/i)).length).toBeGreaterThan(0)
+    expect(within(form).getByPlaceholderText(/Nom de la catégorie/i)).toHaveValue('Musique')
+  })
+
+  it('500 : message générique d\'échec, jamais « Nom invalide »', async () => {
+    postResponse = () => ({ ok: false, status: 500, json: async () => ({ error: 'internal error' }), text: async () => 'internal error' })
+    const { form } = setup()
+    fill(form)
+    submit(form)
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect((await screen.findAllByText(/échec|erreur/i)).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Nom invalide/i)).not.toBeInTheDocument()
+    expect(within(form).getByPlaceholderText(/Nom de la catégorie/i)).toHaveValue('Musique')
+  })
 })
