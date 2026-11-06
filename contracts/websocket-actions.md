@@ -1065,6 +1065,71 @@ Liste des questions.
 
 ---
 
+### CATEGORIES_CHANGED ✨ (v11.4.0, #285 — LOT-4, révision 2) — `[NEW]`
+
+Diffusé après **toute écriture de catégorie** réussie (`POST /api/categories`, `PUT /api/categories/{key}`,
+`POST /api/categories/{key}/icon`, `DELETE /api/categories/{key}`) pour que la TV, le VJoueur, l'animateur et la
+régie reflètent **immédiatement** un renommage, un changement de couleur ou d'icône, une création ou une suppression,
+**sans recharger la page** (décision utilisateur 2026-11-06 : avant, seul `QUESTIONS` — admin-only — était émis, et la
+TV ne voyait les changements qu'au rechargement).
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | `Server→Client` |
+| Trigger   | rappel `HTTPServer.OnCategoriesChanged(change)` — une fois par écriture réussie, **après** la persistance (sidecar, image, suppression) et **avant** le retour HTTP `200` |
+| Destinataires | `admin`, `tv`, `vplayer`, `anim` (`BroadcastToTypes`) — **jamais** `buzzer` |
+| Sérialisation | `SerializeForWebClient` (tv, anim) / `SerializeForVPlayerCommon` (vplayer) / `SerializeForAdmin` (admin) : la charge n'a ni `GAME` ni `bumpers`, elle est donc **identique pour les quatre types** |
+| HELLO | **pas de rejeu** : chaque client charge `GET /api/categories` au montage (`useCategories`) ; le message ne sert qu'aux changements **pendant** la connexion |
+
+#### Payload (`MSG`)
+
+```json
+{
+  "CATEGORIES": [
+    { "key": "GEOGRAPHY", "name": "Géo", "imageURL": "", "color": "#3b82f6", "isCustom": false, "questionCount": 24, "rafaleCount": 110 },
+    { "key": "CINEMA", "name": "Cinéma", "imageURL": "/files/categories/CINEMA.png", "color": "#0ea5e9", "isCustom": true, "questionCount": 12, "rafaleCount": 30 }
+  ],
+  "CHANGE": { "TYPE": "renamed", "KEY": "GEOGRAPHY" },
+  "TS": 1762425548123
+}
+```
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `CATEGORIES` | `CategoryInfo[]` | **Liste complète résolue, octet pour octet la réponse de `GET /api/categories`** (même fonction `listCategories()`, même ordre : 8 intégrées puis personnalisées) — aucune donnée sensible (ni chemin disque, ni configuration, ni état de jeu). Une catégorie supprimée n'y figure plus. |
+| `CHANGE.TYPE` | string | `created` \| `renamed` \| `colored` \| `icon` \| `deleted`. Un `PUT` qui change `name` **et** `color` ⇒ `renamed` (le nom prime ; la liste porte de toute façon les deux). |
+| `CHANGE.KEY` | string | clé de la catégorie touchée (encore présente dans `CATEGORIES`, sauf `deleted`). |
+| `TS` | int | horodatage serveur, millisecondes Unix. Sert de **cache-buster** d'icône côté client (voir ci-dessous). |
+
+#### Règles côté client (normatif — `useWebSocket` / `useCategories`)
+
+- `useWebSocket` : `case 'CATEGORIES_CHANGED'` ⇒ stocker `MSG` dans un état `categoriesPush` (`{ categories, change, ts }`),
+  exposé par `GameContext` ; **plus d'évènement `window` sur `QUESTIONS`** (contournement `buzz:questions-update`
+  **retiré**, ainsi que `CATEGORIES_RELOAD_EVENT`).
+- `useCategories` : **applique directement** `CATEGORIES` (`setCategories`) — **sans refetch** (`GET`) — et, si
+  `CHANGE.TYPE ∈ {icon, created}`, appelle `bustCategoryIcon(CHANGE.KEY)` avec `TS` pour que `<img>` recharge l'icône
+  (`categoryMeta` ajoute `?v=<TS>`). Le hook reste utilisable hors `GameProvider` (page sans WebSocket) : il garde son
+  `GET` au montage et son `refetch()`.
+- Effet visible attendu, **sans rechargement** : TV (`PlayerDisplay` : badge/néon/pastilles RAFALE/palmarès), VJoueur,
+  `/anim` (chips), régie (`CategoryPicker`, `CategoryManagerDialog`, `CategoryBalance`) montrent le nouveau nom, la nouvelle
+  couleur, la nouvelle icône ; une catégorie supprimée disparaît (les questions passées à `""` s'affichent « Sans
+  catégorie »).
+
+#### Règles côté serveur (normatif — dev-backend)
+
+- `OnCategoriesChanged` prend désormais un argument `server.CategoryChange{ Type, Key }` (types `CategoryChangeCreated`,
+  `…Renamed`, `…Colored`, `…Icon`, `…Deleted`). `App` enchaîne, dans cet ordre : `broadcastCategoriesChanged(change)`
+  (ce message) → `broadcastQuestions()` (inchangé : les questions réaffectées/supprimées doivent atteindre la régie) →
+  `a.ambiance().NotifyState()` (inchangé, `lighting.md` §8).
+- Construction : `protocol.ActionCategoriesChanged = "CATEGORIES_CHANGED"`, `protocol.CategoriesChangedPayload{ Categories
+  []server…CategoryInfo, Change, TS }` — attention au cycle d'import : la charge est marshalée **côté `server`**
+  (`HTTPServer.CategoriesChangedPayload(change) json.RawMessage`) ou le type `CategoryInfo` est dupliqué en
+  `protocol` ; au choix du dev, documenté dans le handoff. Diffusion via `a.broadcast(protocol.ActionCategoriesChanged,
+  data, false, ClientTypeAdmin, ClientTypeTV, ClientTypeVPlayer, ClientTypeAnim)`.
+- Un échec de diffusion ne change pas la réponse HTTP (log `WARN`).
+
+---
+
 ### CLIENTS
 
 Compteurs de clients connectés (3 types depuis v2.47.0).

@@ -30,6 +30,7 @@ Les besoins TV et VPlayer sont donc identiques côté messages.
 | `READY` / `RESET` | ✅ | ✅ | ✅ | ✅ |
 | `REVEAL` | ✅ | ✅ | ✅ | ❌ |
 | `QUESTIONS` | ✅ | ❌ | ❌ | ❌ |
+| `CATEGORIES_CHANGED` (v11.4.0, #285) | ✅ | ✅ | ✅ (+ anim) | ❌ |
 | `CLIENTS` | ✅ | ❌ | ❌ | ❌ |
 | `FIRMWARE_VERSION` | ✅ | ❌ | ❌ | ❌ |
 | `BACKGROUND_CHANGE` | ✅ | ✅ | ✅ | ❌ |

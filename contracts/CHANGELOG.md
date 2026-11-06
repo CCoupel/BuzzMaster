@@ -1,6 +1,23 @@
 # Changelog des Contrats API
 
 ---
+## [20261106] — Catégories : diffusion temps réel `CATEGORIES_CHANGED` (#285, v11.4.0, LOT-4 — révision 2)
+
+- **[NEW]** WS `CATEGORIES_CHANGED` (Server→Client, `admin`/`tv`/`vplayer`/`anim`) — après toute écriture de catégorie
+  (`POST`, `PUT`, icône, `DELETE`) : `{ CATEGORIES: <liste résolue = GET /api/categories>, CHANGE: {TYPE, KEY}, TS }`.
+  Décision utilisateur : la TV et le VJoueur reflètent renommage, couleur, icône, création, suppression **sans
+  rechargement**. Pas de rejeu au `HELLO`. `websocket-actions.md`, `websocket-endpoints.md`, `ws-payload-serialization.md`.
+- **[CHANGED]** `OnCategoriesChanged` (rappel interne `HTTPServer` → `App`) prend `CategoryChange{Type, Key}` ; ordre :
+  `CATEGORIES_CHANGED` → `QUESTIONS` → `NotifyState()`. `http-endpoints.md` §Catégories (PUT, icône, DELETE N., Frontend).
+- **[CHANGED]** Frontend : `useCategories` applique la liste du message (plus de refetch sur `QUESTIONS`, évènement
+  `window` `buzz:questions-update` retiré) ; `?v=<TS>` d'icône piloté par le message.
+- **[CHANGED]** `DELETE /api/categories/{key}` — `409 category in use` aussi quand `history.events > 0` sans question ni
+  réservoir (revue LOT-4 MAJEUR : la suppression réécrit l'historique ⇒ confirmation obligatoire). Dialogue frontend inchangé.
+- **[CHANGED]** Clé de catégorie : regex alignée sur le code `^[\p{L}\p{N}_]{1,50}$` (Unicode, `CINÉMA` accepté — le
+  contrat disait `[A-Z0-9_]`) ; **nouveau refus `400 reserved name`** des noms réservés Windows (`CON`, `PRN`, `AUX`,
+  `NUL`, `COM1-9`, `LPT1-9`) à `POST /api/categories`.
+
+---
 ## [20261105] — Catégories : renommage, couleur, icône, suppression + fusion historique (#285, v11.4.0, LOT-4)
 
 - **[CHANGED]** `GET /api/categories` — `name`/`color` **résolus** (surcharge sidecar `<KEY>.json {name?, color?}`,
