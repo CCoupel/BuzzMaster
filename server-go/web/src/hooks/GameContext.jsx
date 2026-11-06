@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import useWebSocket from './useWebSocket'
+import { CategoriesPushContext } from './CategoriesPushContext'
 
 const GameContext = createContext(null)
 
@@ -8,7 +9,9 @@ export function GameProvider({ children, endpoint = '/ws/admin' }) {
 
   return (
     <GameContext.Provider value={websocket}>
-      {children}
+      <CategoriesPushContext.Provider value={websocket.categoriesPush ?? null}>
+        {children}
+      </CategoriesPushContext.Provider>
     </GameContext.Provider>
   )
 }

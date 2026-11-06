@@ -29,8 +29,8 @@ func TestRafaleNext_ConsumedQuestionMatchesAnnouncedNext(t *testing.T) {
 	e.SetTeams(map[string]*Team{"red": {Name: "red"}})
 	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
 
-	var lastNext *RafaleCurrent
-	e.OnRafaleAnswer = func(id, answer string, next *RafaleCurrent) {
+	var lastNext *RafaleNext
+	e.OnRafaleAnswer = func(id, answer string, next *RafaleNext) {
 		lastNext = next
 	}
 
@@ -83,9 +83,9 @@ func TestRafaleNext_NilWhenPoolEmptyAfterFirstDraw(t *testing.T) {
 	e.SetTeams(map[string]*Team{"red": {Name: "red"}})
 	seedRafaleReservoirBulk(t, e, 1, CategoryHistory, 1)
 
-	var lastNext *RafaleCurrent
+	var lastNext *RafaleNext
 	nextCalls := 0
-	e.OnRafaleAnswer = func(id, answer string, next *RafaleCurrent) {
+	e.OnRafaleAnswer = func(id, answer string, next *RafaleNext) {
 		lastNext = next
 		nextCalls++
 	}
@@ -122,8 +122,8 @@ func TestRafaleNext_NilOnlyOnceCapActuallyReached(t *testing.T) {
 	e.SetTeams(map[string]*Team{"red": {Name: "red"}})
 	seedRafaleReservoirBulk(t, e, 10, CategoryHistory, 1)
 
-	var lastNext *RafaleCurrent
-	e.OnRafaleAnswer = func(id, answer string, next *RafaleCurrent) {
+	var lastNext *RafaleNext
+	e.OnRafaleAnswer = func(id, answer string, next *RafaleNext) {
 		lastNext = next
 	}
 

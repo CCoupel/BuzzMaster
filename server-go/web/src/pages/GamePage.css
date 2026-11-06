@@ -1477,3 +1477,28 @@
 .game-round-count { margin-left: auto; font-weight: 600; color: var(--gray-500, #6b7280); }
 .game-round-toggle { border: 0; background: transparent; cursor: pointer; font-size: 0.8rem; color: inherit; width: 1.8rem; height: 1.8rem; }
 .game-entracte-row { font-style: italic; }
+
+/* #282 — pastille de lettre courante RAFALE alphabétique */
+.rafale-letter-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8em;
+  height: 1.8em;
+  padding: 0 0.4em;
+  border-radius: 6px;
+  background: var(--rafale-active-color, #3b82f6);
+  color: #fff;
+  font-weight: 800;
+}
+
+/* #282 — ligne discrète « Suivante » de l'admin RAFALE (écrêtée, jamais de scroll) */
+.rafale-admin-next {
+  margin: var(--space-2, 0.5rem) 0 0;
+  font-size: 0.8125rem;
+  color: var(--gray-500);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

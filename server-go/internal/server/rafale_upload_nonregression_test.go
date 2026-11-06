@@ -99,7 +99,7 @@ func TestHTTPServer_QCMQuestionUpload_UnaffectedByRafaleBlock(t *testing.T) {
 	}
 	// Sanity: no RAFALE_* field leaked into a QCM question (the RAFALE
 	// block is guarded by questionType == "RAFALE", never reached here).
-	for _, key := range []string{"RAFALE_DIFFICULTY", "RAFALE_MODE", "RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS"} {
+	for _, key := range []string{"RAFALE_DIFFICULTY", "RAFALE_MODE", "RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS", "RAFALE_ALPHABETICAL", "RAFALE_WHEEL_LAYOUT"} {
 		if _, present := question[key]; present {
 			t.Errorf("QCM question must never carry %s, got %v", key, question[key])
 		}
@@ -160,7 +160,7 @@ func TestHTTPServer_ArdoiseQuestionUpload_UnaffectedByRafaleBlock(t *testing.T) 
 	if question["ARDOISE_KEYBOARD_TYPE"] != "NUMPAD" {
 		t.Errorf("Expected ARDOISE_KEYBOARD_TYPE='NUMPAD', got %v", question["ARDOISE_KEYBOARD_TYPE"])
 	}
-	for _, key := range []string{"RAFALE_DIFFICULTY", "RAFALE_MODE", "RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS"} {
+	for _, key := range []string{"RAFALE_DIFFICULTY", "RAFALE_MODE", "RAFALE_QUESTION_TIME", "RAFALE_MAX_QUESTIONS", "RAFALE_ALPHABETICAL", "RAFALE_WHEEL_LAYOUT"} {
 		if _, present := question[key]; present {
 			t.Errorf("ARDOISE question must never carry %s, got %v", key, question[key])
 		}

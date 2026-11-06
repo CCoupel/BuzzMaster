@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import './CategoryBalance.css'
 
-// Import categories from QuestionsPage
-import { CATEGORIES } from '../pages/QuestionsPage'
+import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import { effectiveRafaleCategories } from '../utils/rafaleEffective'
 
 // 🔴 Retour QUALIF v9.0.0.4 (point A+3) — depuis #216 une manche RAFALE porte
@@ -13,6 +12,9 @@ import { effectiveRafaleCategories } from '../utils/rafaleEffective'
 // manche RAFALE compte pour CHACUNE de ses catégories effectives (couverture
 // du quiz, pas une répartition de points — sans objet ici, ce composant
 // travaille sur la définition des questions, pas une partie en cours).
+// Nom accessible d'une catégorie personnalisée (icône image seule dans la barre).
+const VISUALLY_HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }
+
 function questionCategoryKeys(q) {
   if (q.TYPE === 'RAFALE') return effectiveRafaleCategories(q)
   return q.CATEGORY ? [q.CATEGORY] : []
@@ -23,7 +25,7 @@ function questionCategoryKeys(q) {
  * Shows diverging bars for questions count and points per category
  * Color coding: green = balanced, orange = warning, red = imbalanced
  */
-export default function CategoryBalance({ questions = [] }) {
+export default function CategoryBalance({ questions = [], customCategories = [] }) {
   const [hoveredCategory, setHoveredCategory] = useState(null)
 
   // Calculate statistics per category
@@ -46,7 +48,7 @@ export default function CategoryBalance({ questions = [] }) {
 
     // Only keep categories that have questions and are in CATEGORIES
     const representedCategories = Object.keys(categoryData).filter(
-      cat => cat !== 'UNCATEGORIZED' && CATEGORIES[cat]
+      cat => cat !== 'UNCATEGORIZED' && categoryMeta(cat, customCategories)
     )
 
     if (representedCategories.length === 0) {
@@ -54,7 +56,7 @@ export default function CategoryBalance({ questions = [] }) {
     }
 
     // Calculate totals and averages
-    const totalQuestions = questions.filter(q => questionCategoryKeys(q).some(cat => CATEGORIES[cat])).length
+    const totalQuestions = questions.filter(q => questionCategoryKeys(q).some(cat => categoryMeta(cat, customCategories))).length
     const totalPoints = representedCategories.reduce((sum, cat) => sum + categoryData[cat].points, 0)
     const avgQuestions = totalQuestions / representedCategories.length
     const avgPoints = totalPoints / representedCategories.length
@@ -89,7 +91,7 @@ export default function CategoryBalance({ questions = [] }) {
 
       return {
         key: cat,
-        ...CATEGORIES[cat],
+        ...categoryMeta(cat, customCategories),
         count: data.count,
         points: data.points,
         questionsDev,
@@ -102,7 +104,11 @@ export default function CategoryBalance({ questions = [] }) {
     })
 
     // Sort by category order (as defined in CATEGORIES)
-    const categoryOrder = Object.keys(CATEGORIES)
+    // (intégrées dans l'ordre de la table, puis personnalisées dans l'ordre de l'API — #285)
+    const categoryOrder = [
+      ...Object.keys(CATEGORIES),
+      ...customCategories.filter(c => c.isCustom).map(c => c.key),
+    ]
     categories.sort((a, b) => categoryOrder.indexOf(a.key) - categoryOrder.indexOf(b.key))
 
     // Find max deviation for scaling bars
@@ -120,7 +126,7 @@ export default function CategoryBalance({ questions = [] }) {
       playerCount,
       teamCount,
     }
-  }, [questions])
+  }, [questions, customCategories])
 
   if (!stats || stats.categories.length === 0) {
     return null
@@ -157,7 +163,12 @@ export default function CategoryBalance({ questions = [] }) {
                 style={{ backgroundColor: cat.color }}
                 title={cat.label}
               >
-                {cat.icon}
+                {cat.icon ?? (
+                  <>
+                    <img src={cat.imageURL} alt="" style={{ width: '1.1em', height: '1.1em', objectFit: 'cover', borderRadius: '50%' }} />
+                    <span style={VISUALLY_HIDDEN}>{cat.label}</span>
+                  </>
+                )}
               </span>
               <span className="category-values">
                 {cat.count} / {cat.points}
@@ -230,7 +241,7 @@ export default function CategoryBalance({ questions = [] }) {
                 animate={{ opacity: 1, y: 0 }}
               >
                 <div className="tooltip-header" style={{ borderColor: cat.color }}>
-                  <span className="tooltip-icon">{cat.icon}</span>
+                  <span className="tooltip-icon">{cat.icon ?? <img src={cat.imageURL} alt="" style={{ width: '1.1em', height: '1.1em', objectFit: 'cover', borderRadius: '50%' }} />}</span>
                   <span className="tooltip-label">{cat.label}</span>
                 </div>
                 <div className="tooltip-section">

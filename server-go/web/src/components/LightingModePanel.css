@@ -139,3 +139,11 @@
 @media (max-width: 768px) {
   .lighting-mode-row { flex-direction: column; align-items: flex-start; }
 }
+
+/* #284 — le texte d'avertissement se replie dans un popover étroit */
+.lighting-mode-warning { overflow-wrap: anywhere; }
+.lighting-mode-warning.is-error { border-left-color: var(--error); }
+
+/* #286 — variante imbriquée dans le popover « Ambiance » (sans cadre ni titre) */
+.lighting-mode-panel.is-bare { padding: 0; border: 0; background: transparent; }
+.lighting-mode-btn.is-sound-on.is-selected { background: var(--success); color: #fff; }

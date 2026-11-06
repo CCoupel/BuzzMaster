@@ -1,0 +1,148 @@
+<!--
+mockup:
+  composant: admin_sounds_manager
+  feature: countdown_loop
+  version: 11.4.0
+  type: ui
+  issue: "#287 #288"
+  validee_le: 2026-11-05
+  complete: []
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — Ambiance › Son : son de décompte du chronomètre (#287) et commutateur « une fois / en boucle » (#288), éditeur de question</title>
+<style>
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); }
+  .mock-note b { color:var(--gray-700); }
+  h2.mock-h { max-width:1100px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+  .card { max-width:1100px; margin:0 auto 1rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; font-size:.85rem; }
+  .tabs { display:flex; gap:.4rem; margin-bottom:.8rem; }
+  .tab { padding:.4rem .8rem; border-radius:.45rem; font-size:.85rem; background:var(--gray-100); color:var(--gray-600); }
+  .tab.active { background:var(--primary); color:#fff; font-weight:700; }
+  h3 { font-size:.95rem; margin:0 0 .5rem; }
+  .master { display:flex; align-items:center; gap:1rem; margin-bottom:1rem; }
+  .sw { display:inline-block; width:1.9rem; height:1.05rem; border-radius:999px; background:var(--gray-300); position:relative; vertical-align:middle; }
+  .sw::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.75rem; height:.75rem; border-radius:50%; background:#fff; }
+  .sw.on { background:var(--primary); } .sw.on::after { left:1rem; }
+  .badge { display:inline-flex; align-items:center; gap:.35rem; font-size:.75rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:#dcfce7; color:#166534; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:.5rem .4rem; border-bottom:1px solid var(--gray-200); vertical-align:middle; }
+  th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+  td small { display:block; color:var(--gray-500); }
+  .btn { font:inherit; font-size:.78rem; padding:.3rem .6rem; border:1px solid var(--gray-300); border-radius:.4rem; background:#fff; cursor:pointer; margin-right:.25rem; }
+  .btn.ghost { border-color:transparent; color:var(--primary); }
+  tr.new { background:#eef2ff; }
+  tr.new td:first-child { border-left:3px solid var(--primary); }
+  .tag { font-size:.68rem; font-weight:700; background:#4f46e5; color:#fff; border-radius:999px; padding:.1rem .4rem; margin-left:.3rem; vertical-align:middle; }
+  .loop { display:inline-flex; border:1px solid var(--gray-300); border-radius:.4rem; overflow:hidden; }
+  .loop span { padding:.25rem .5rem; font-size:.75rem; font-weight:700; color:var(--gray-500); background:#fff; }
+  .loop span.sel { background:var(--primary); color:#fff; }
+  .loop.off span.sel { background:var(--gray-400, #9ca3af); }
+  .sep-row td { background:var(--gray-50); font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); font-weight:700; }
+  .hint { color:var(--gray-500); font-size:.78rem; margin:.4rem 0 0; }
+  /* éditeur */
+  .sound-block { border:1px solid var(--gray-200); border-radius:.6rem; padding:.7rem .9rem; }
+  .row { display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; margin-top:.5rem; }
+  .lbl { font-weight:700; }
+  .side { font-size:.78rem; color:var(--gray-500); } .side.active { color:var(--gray-900); font-weight:700; }
+  .qs { display:inline-block; width:2.2rem; height:1.2rem; border-radius:999px; background:var(--gray-300); position:relative; }
+  .qs::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.9rem; height:.9rem; border-radius:50%; background:#fff; }
+  .qs.on { background:var(--primary); } .qs.on::after { left:1.15rem; }
+  .disabled { opacity:.45; }
+  audio { width:100%; max-width:420px; }
+  .warn { font-size:.78rem; color:#b45309; background:#fef3c7; border-radius:.4rem; padding:.3rem .5rem; margin-top:.4rem; display:inline-block; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — état :</strong>
+  <label><input type="radio" name="st" value="loop" checked> Décompte actif · en boucle (défaut) ; question : une fois, chrono au début</label>
+  <label><input type="radio" name="st" value="once"> Décompte actif · une fois ; question : en boucle, chrono au début</label>
+  <label><input type="radio" name="st" value="delayed"> Question : chrono « à la fin » → boucle indisponible</label>
+  <label><input type="radio" name="st" value="disabled"> Décompte désactivé</label>
+</div>
+<div class="mock-note">
+  <b>Onglet Son</b> (page Ambiance, composant <code>SoundsManager</code> présenté en entier) : la table des 7 bruitages est inchangée ; une <b>nouvelle section « Sons longs »</b> accueille le <b>« Décompte du chronomètre »</b> — fichier WAV ≤ 30 s (comme un média de question), remplacer / restaurer / tester comme les bruitages, interrupteur actif/inactif,
+  et le commutateur <b>une fois / en boucle</b> (#288). Par défaut : actif, en boucle (tic-tac synthétisé de 2 s).
+  Règle de lecture (#287) : joué au <b>démarrage effectif</b> de chaque chronomètre (global SPEEDY/QCM/ARDOISE, chaque question RAFALE, carte MEMOTION) ; en boucle il est rejoué jusqu'à la fin du décompte, sinon une seule fois ; arrêté au buzz, à la pause, à l'expiration, au STOP ou à la révélation.
+  Jamais joué si la question a un média audio joué pendant le chrono. Respecte « Son coupé » (en-tête) et « Bruitages activés ».
+  <br><b>Éditeur de question</b> (bloc « Son de la question » en entier) : commutateur « Lecture : une fois / en boucle » à côté de « Chrono démarre : début / à la fin » ; <b>boucle et « à la fin » sont exclusifs</b> (une boucle n'a pas de fin).
+</div>
+
+<h2 class="mock-h">01 — Ambiance › Son</h2>
+<div class="card">
+  <div class="tabs"><span class="tab">Lumière</span><span class="tab active">Son</span></div>
+  <h3>Sortie audio</h3>
+  <div class="master"><label><span class="sw on"></span> Bruitages activés</label><span class="badge">● Son actif</span></div>
+  <h3>Sons</h3>
+  <table>
+    <thead><tr><th>Événement</th><th>Fichier</th><th>Durée</th><th>Lecture</th><th>Actif</th><th>Actions</th></tr></thead>
+    <tbody>
+      <tr class="sep-row"><td colspan="6">Bruitages (impulsions, ≤ 5 s)</td></tr>
+      <tr><td>Départ<small>Le chronomètre démarre</small></td><td>défaut</td><td>0,45 s</td><td>—</td><td><span class="sw on"></span></td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+      <tr><td>Temps écoulé<small>Le chronomètre arrive à zéro</small></td><td>personnalisé</td><td>1,20 s</td><td>—</td><td><span class="sw on"></span></td><td><button class="btn">Remplacer</button><button class="btn ghost">Restaurer</button><button class="btn">Tester</button></td></tr>
+      <tr><td>Points gagnés<small>La régie crédite une équipe</small></td><td>défaut</td><td>0,80 s</td><td>—</td><td><span class="sw on"></span></td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+      <tr><td>Erreur<small>Paire ratée en MEMORY, réponse invalidée en RAFALE</small></td><td>défaut</td><td>0,60 s</td><td>—</td><td><span class="sw on"></span></td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+      <tr><td>Révélation<small>La réponse est dévoilée</small></td><td>défaut</td><td>0,70 s</td><td>—</td><td><span class="sw"></span></td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+      <tr><td>Début d'entracte<small>La pause commence</small></td><td>défaut</td><td>1,00 s</td><td>—</td><td><span class="sw on"></span></td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+      <tr><td>Fin d'entracte<small>La partie reprend</small></td><td>défaut</td><td>1,00 s</td><td>—</td><td><span class="sw on"></span></td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+      <tr class="sep-row"><td colspan="6">Sons longs (≤ 30 s)<span class="tag">nouveau</span></td></tr>
+      <tr class="new" id="cd"><td>Décompte du chronomètre<small>Pendant que le chronomètre décompte — pas si la question a un média audio joué pendant le chrono</small></td><td id="cdFile">défaut</td><td id="cdDur">2,00 s</td>
+        <td><span class="loop" id="cdLoop"><span id="cdOnce">Une fois</span><span id="cdLoopS" class="sel">En boucle</span></span></td>
+        <td><span class="sw on" id="cdOn"></span></td>
+        <td><button class="btn">Remplacer</button><button class="btn ghost" id="cdRestore" hidden>Restaurer</button><button class="btn">Tester</button></td></tr>
+    </tbody>
+  </table>
+  <p class="hint">« Tester » joue le son une fois sur l'enceinte du serveur, même désactivé ou son coupé. « En boucle » rejoue le fichier jusqu'à la fin du décompte ; « Une fois » le joue au début du décompte seulement.</p>
+  <p class="hint">Restaurer tout (7 bruitages + décompte) : <button class="btn ghost">Restaurer les sons par défaut</button></p>
+</div>
+
+<h2 class="mock-h">02 — Éditeur de question (SPEEDY / QCM / ARDOISE) : bloc « Son de la question »</h2>
+<div class="card">
+  <div class="sound-block">
+    <div class="lbl">🔊 Son de la question</div>
+    <div class="row"><span>jingle_intro.wav · 12,4 s</span><button class="btn">Remplacer</button><button class="btn ghost">Supprimer</button></div>
+    <div class="row"><audio controls></audio></div>
+    <div class="row">
+      <span class="lbl">Chrono démarre</span>
+      <span class="side" id="dStart">Début</span><span class="qs" id="dSw"></span><span class="side" id="dEnd">À la fin</span>
+    </div>
+    <div class="row" id="loopRow">
+      <span class="lbl">Lecture</span>
+      <span class="side active" id="lOnce">Une fois</span><span class="qs" id="lSw" role="switch" aria-checked="false" aria-label="Jouer le son en boucle jusqu'à la fin du chronomètre"></span><span class="side" id="lLoop">En boucle</span>
+      <span class="hint" id="loopHint">Le son est joué une fois, puis s'arrête.</span>
+    </div>
+    <div class="warn" id="loopWarn" hidden>« En boucle » n'est pas disponible quand le chrono démarre à la fin du son : une boucle n'a pas de fin. Repassez « Chrono démarre » sur « Début » pour boucler.</div>
+    <p class="hint">Un son en boucle s'arrête avec le chronomètre (temps écoulé, STOP, révélation) ou au buzz ; en pause il est mis en pause.</p>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  function render(key) {
+    const cdLoop = key === 'loop' || key === 'delayed' || key === 'disabled';
+    $('cdLoopS').className = cdLoop ? 'sel' : ''; $('cdOnce').className = cdLoop ? '' : 'sel';
+    const cdOn = key !== 'disabled';
+    $('cdOn').className = 'sw' + (cdOn ? ' on' : ''); $('cdLoop').className = 'loop' + (cdOn ? '' : ' off');
+    $('cdFile').textContent = key === 'once' ? 'personnalisé' : 'défaut'; $('cdDur').textContent = key === 'once' ? '4,80 s' : '2,00 s'; $('cdRestore').hidden = key !== 'once';
+    const delayed = key === 'delayed'; const qLoop = key === 'once';
+    $('dSw').className = 'qs' + (delayed ? ' on' : ''); $('dStart').className = 'side' + (delayed ? '' : ' active'); $('dEnd').className = 'side' + (delayed ? ' active' : '');
+    $('lSw').className = 'qs' + (qLoop ? ' on' : ''); $('lSw').setAttribute('aria-checked', String(qLoop));
+    $('lOnce').className = 'side' + (qLoop ? '' : ' active'); $('lLoop').className = 'side' + (qLoop ? ' active' : '');
+    $('loopRow').className = 'row' + (delayed ? ' disabled' : ''); $('loopWarn').hidden = !delayed;
+    $('loopHint').textContent = qLoop ? 'Le son est rejoué jusqu\'à la fin du chronomètre.' : 'Le son est joué une fois, puis s\'arrête.';
+  }
+  document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => render(e.target.value)));
+  render('loop');
+</script>
+</body>
+</html>

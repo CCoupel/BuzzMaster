@@ -25,6 +25,8 @@ import './RafalePoolAlert.css'
  * @param {number[]} props.difficulties - RAFALE_DIFFICULTIES (chaque valeur 1..3)
  * @param {number} props.roundTime - durée de la manche en secondes (TIME)
  * @param {number} props.questionTime - secondes par question (RAFALE_QUESTION_TIME)
+ * @param {boolean} [props.alphabetical] - #282 : option Alphabétique active ⇒ ajoute
+ *   « L lettres couvertes (A–Z sauf …) » (champ LETTERS du pool, contrat rafale.md §15.6)
  * @param {string} [props.className]
  * @param {(level: 'blocking'|'warning'|'ok'|null) => void} [props.onLevelChange] -
  *   notifié à chaque recalcul du niveau (`null` tant qu'aucun pool n'est
@@ -33,7 +35,7 @@ import './RafalePoolAlert.css'
  *   vide (§7.2 : "disponibles == 0 → Bloquant — démarrage refusé"),
  *   `QuestionsPage.jsx` l'ignore (pas de bouton à bloquer en édition).
  */
-export default function RafalePoolAlert({ categories = [], difficulties = [], roundTime, questionTime, className = '', onLevelChange }) {
+export default function RafalePoolAlert({ categories = [], difficulties = [], roundTime, questionTime, className = '', onLevelChange, alphabetical = false }) {
   const [pool, setPool] = useState(null) // { AVAILABLE, USED, TOTAL } | null
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -122,11 +124,21 @@ export default function RafalePoolAlert({ categories = [], difficulties = [], ro
     ok: { icon: '✓', cls: 'rafale-pool-alert-ok', title: `${pool.AVAILABLE} question${pool.AVAILABLE > 1 ? 's' : ''} disponible${pool.AVAILABLE > 1 ? 's' : ''}` },
   }[level]
 
+  // #282 — lettres couvertes (serveur ancien sans LETTERS : repli sans ligne)
+  let lettersLine = null
+  if (alphabetical && Array.isArray(pool.LETTERS)) {
+    const covered = pool.LETTERS
+    const missing = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(l => !covered.includes(l))
+    lettersLine = `${covered.length} lettre${covered.length > 1 ? 's' : ''} couverte${covered.length > 1 ? 's' : ''}`
+      + (missing.length > 0 && covered.length > 0 ? ` (A–Z sauf ${missing.join(', ')})` : '')
+  }
+
   return (
     <div className={`rafale-pool-alert ${levelMeta.cls} ${className}`}>
       <span className="rafale-pool-alert-icon">{levelMeta.icon}</span>
       <div>
         <b>{levelMeta.title}</b>
+        {lettersLine && <p className="rafale-pool-alert-detail">{lettersLine}</p>}
         {need > 0 && (
           <p className="rafale-pool-alert-detail">
             {level === 'blocking'

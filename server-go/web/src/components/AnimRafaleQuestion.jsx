@@ -37,6 +37,8 @@ import './AnimRafaleQuestion.css'
  * @param {string} [props.teamColorCss] - couleur CSS déjà résolue (`rgb(r,g,b)` ou repli `var(--error)`)
  * @param {string} [props.answerValue] - réponse jugée (rafaleAnswer.ANSWER — garde anti-obsolescence déjà appliquée par l'appelant)
  * @param {{icon?: string, imageURL?: string, label: string}} [props.catMeta] - categoryMeta(current.CATEGORY, ...) déjà résolu
+ * @param {string} [props.currentLetter] - #282 : lettre courante (RAFALE_CURRENT_LETTER), option Alphabétique active seulement
+ * @param {boolean} [props.alphabetical] - #282 : chip « Alphabétique »
  * @param {number} [props.askedCount] - gameState.RAFALE_ASKED_COUNT
  * @param {Object|null} [props.next] - question suivante SANS réponse (rafaleAnswer.NEXT, contrat
  *   §13.3 — `{ID, QUESTION, CATEGORY, DIFFICULTY}`), `null` = fin de réservoir (§13.5),
@@ -57,6 +59,8 @@ export default function AnimRafaleQuestion({
   answerValue = '',
   catMeta = null,
   askedCount = 0,
+  currentLetter = '',
+  alphabetical = false,
   next = undefined,
   nextCatMeta = null,
   showNext = true,
@@ -67,6 +71,10 @@ export default function AnimRafaleQuestion({
   return (
     <div className="rafale-anim-qcard" style={{ '--rafale-active-color': teamColorCss }}>
       <div className="rafale-anim-qcard-meta">
+        {alphabetical && currentLetter && (
+          <span className="rafale-letter-badge" data-testid="rafale-letter" title="Lettre courante">{currentLetter}</span>
+        )}
+        {alphabetical && <span className="anim-chip">🔤 Alphabétique</span>}
         {teamName && <span className="rafale-anim-qcard-team">{teamName}</span>}
         {catMeta && (
           <span className="anim-chip">
@@ -92,6 +100,10 @@ export default function AnimRafaleQuestion({
         <div className={`rafale-anim-qcard-next${isLastQuestion ? ' rafale-anim-qcard-next-last' : ''}`}>
           <div className="rafale-anim-qcard-next-label">
             <span>Suivante</span>
+            {/* #282 (§15.10) : lettre de la suivante, fournie par le serveur (jamais normalisée ici) */}
+            {!isLastQuestion && next.LETTER && (
+              <span className="rafale-next-letter" data-testid="rafale-next-letter">({next.LETTER})</span>
+            )}
             {!isLastQuestion && nextCatMeta && (
               <span className="anim-chip">
                 {nextCatMeta.icon && <span className="anim-chip-glyph">{nextCatMeta.icon}</span>}

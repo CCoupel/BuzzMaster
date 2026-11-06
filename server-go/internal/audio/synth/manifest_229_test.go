@@ -26,11 +26,12 @@ func TestReconcileManifest_AllDefaultFiles_PresentNotCustom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconcileManifest a échoué : %v", err)
 	}
-	if len(manifest) != len(Cues) {
-		t.Fatalf("manifeste couvre %d cue(s), attendu %d", len(manifest), len(Cues))
+	// v11.4.0 (#287, §12.2) : + l'entrée « decompte ».
+	if len(manifest) != len(Cues)+1 {
+		t.Fatalf("manifeste couvre %d entrée(s), attendu %d (7 cues + decompte)", len(manifest), len(Cues)+1)
 	}
 	for _, c := range Cues {
-		entry, ok := manifest[c]
+		entry, ok := manifest[string(c)]
 		if !ok {
 			t.Errorf("%s absent du manifeste", c)
 			continue
@@ -63,7 +64,7 @@ func TestReconcileManifest_CustomizedFile_ReportedCustom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconcileManifest a échoué : %v", err)
 	}
-	entry := manifest[customized]
+	entry := manifest[string(customized)]
 	if !entry.Present {
 		t.Errorf("%s : Present=false, attendu true (le fichier existe)", customized)
 	}
@@ -83,10 +84,10 @@ func TestReconcileManifest_MissingFile_ReportedAbsent(t *testing.T) {
 		t.Fatalf("ReconcileManifest a échoué sur un répertoire vide : %v", err)
 	}
 	for _, c := range Cues {
-		if manifest[c].Present {
+		if manifest[string(c)].Present {
 			t.Errorf("%s : Present=true sur un répertoire vide, attendu false", c)
 		}
-		if manifest[c].Custom {
+		if manifest[string(c)].Custom {
 			t.Errorf("%s : Custom=true sur un fichier absent — n'a de sens que si Present=true", c)
 		}
 	}
@@ -117,7 +118,7 @@ func TestReconcileManifest_WritesValidJSONToDisk(t *testing.T) {
 		t.Fatalf("sounds.json sur disque contient %d entrée(s), attendu %d (résultat en mémoire)", len(onDisk), len(inMemory))
 	}
 	for c, entry := range inMemory {
-		diskEntry, ok := onDisk[string(c)]
+		diskEntry, ok := onDisk[c]
 		if !ok {
 			t.Errorf("%s absent de sounds.json sur disque", c)
 			continue

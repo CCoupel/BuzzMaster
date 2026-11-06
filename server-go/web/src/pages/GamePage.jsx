@@ -294,7 +294,8 @@ export default function GamePage() {
 
   // Custom categories from API (#95)
   const { categories: apiCategories } = useCategories()
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+  // #285 : liste API brute (surcharges nom/couleur des intégrées incluses) ; les composants filtrent eux-mêmes.
+  const customCategories = apiCategories
 
   // Category filter (shared hook) — passes custom categories for filter support
   const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions, customCategories)
@@ -566,6 +567,10 @@ export default function GamePage() {
           : null
   const awardPenaltyMode = pointsInput < 0 || noPenaltyDefined
   const awardUnitName = isPlayerLevel ? 'joueur' : 'équipe'
+  // #289 — équipes distinctes des joueurs sélectionnés (affichage « x joueurs · y équipes »).
+  const awardTeamCount = isPlayerLevel
+    ? new Set(displayTeams.filter(t => t.buzzers.some(b => awardEntries.some(e => e.id === b.mac))).map(t => t.name)).size
+    : awardEntries.length
 
   // Ligne 1 du bloc : source du montant, liée au commutateur et à l'état (contrat §Montant).
   const awardSourceLabel = (() => {
@@ -1404,6 +1409,9 @@ export default function GamePage() {
                 <span className="rafale-admin-chip">
                   {gameState.question.RAFALE_QUESTION_TIME || 3}s/question
                 </span>
+                {gameState.question.RAFALE_ALPHABETICAL === true && (
+                  <span className="rafale-admin-chip rafale-admin-chip-alpha">🔤 Alphabétique</span>
+                )}
               </div>
               <RafalePoolAlert
                 // #216 — union catégories×difficultés (contrat §7.5), plus
@@ -1418,6 +1426,7 @@ export default function GamePage() {
                 difficulties={rafaleDifficulties}
                 roundTime={parseInt(timeInput) || 0}
                 questionTime={gameState.question.RAFALE_QUESTION_TIME || 3}
+                alphabetical={gameState.question.RAFALE_ALPHABETICAL === true}
                 onLevelChange={setRafalePoolLevel}
               />
             </div>
@@ -1438,10 +1447,20 @@ export default function GamePage() {
               : 'var(--error)'
             const answerValue = (rafaleAnswer && rafaleAnswer.ID === current.ID) ? rafaleAnswer.ANSWER : ''
             const catMeta = categoryMeta(current.CATEGORY, customCategories)
+            // Question suivante (rafale.md §13/§15.7, NEXT sans ANSWER). undefined = pas encore
+            // reçue/périmée pour la question courante ⇒ rien ; null = fin de réservoir.
+            const rafaleNext = (rafaleAnswer && rafaleAnswer.ID === current.ID) ? rafaleAnswer.NEXT : undefined
+            const nextAlpha = gameState.question?.RAFALE_ALPHABETICAL === true
+            const nextLetter = rafaleNext && nextAlpha && rafaleNext.LETTER ? rafaleNext.LETTER : ''
             return (
               <div className="rafale-admin-live">
                 <div className="rafale-anim-qcard" style={{ '--rafale-active-color': teamCss }}>
                   <div className="rafale-anim-qcard-meta">
+                    {gameState.question?.RAFALE_ALPHABETICAL === true && gameState.RAFALE_CURRENT_LETTER && (
+                      <span className="rafale-letter-badge" data-testid="rafale-letter" title="Lettre courante">
+                        {gameState.RAFALE_CURRENT_LETTER}
+                      </span>
+                    )}
                     {gameState.RAFALE_CURRENT_TEAM && (
                       <span className="chip rafale-anim-qcard-team">{gameState.RAFALE_CURRENT_TEAM}</span>
                     )}
@@ -1467,6 +1486,13 @@ export default function GamePage() {
                     )}
                   </div>
                   {current.QUESTION && <p className="rafale-anim-qcard-text">{current.QUESTION}</p>}
+                  {rafaleNext !== undefined && gameState.RAFALE_SUBPHASE === 'QUESTION' && (
+                    <p className="rafale-admin-next" data-testid="rafale-admin-next">
+                      {rafaleNext === null
+                        ? 'Dernière question du réservoir'
+                        : `${nextLetter ? `Suivante (lettre ${nextLetter})` : 'Suivante'} : ${rafaleNext.QUESTION}`}
+                    </p>
+                  )}
                   {answerValue && (
                     <div className="ans rafale-anim-qcard-answer">
                       <b>Réponse attendue</b>
@@ -1758,6 +1784,7 @@ export default function GamePage() {
                 question={gameState.question}
                 teamCounts={Object.fromEntries(Object.entries(qcmUnitsByColor).map(([c, set]) => [c, set.size]))}
                 unit={awardUnitName}
+                teamCount={awardTeamCount}
                 picked={pickedColor}
                 onPick={pickQcmAnswer}
               />

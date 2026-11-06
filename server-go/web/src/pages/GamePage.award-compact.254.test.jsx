@@ -98,8 +98,10 @@ const queryBox = (name) => screen.queryByRole('checkbox', { name: `Sélectionner
 const checkedOf = (names) => names.filter((n) => queryBox(n)?.checked)
 const TEAM_NAMES = ROWS.map((r) => r[0])
 const PLAYER_NAMES = ROWS.map((r) => r[1])
-const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
-const queryAction = () => screen.queryByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
+const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités)$/ })
+// #289 : le compteur n'est plus dans le bouton mais sur la ligne 2 du bloc (`.award-count`)
+const awardN = () => parseInt(document.querySelector('.award-count')?.textContent, 10) || 0
+const queryAction = () => screen.queryByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités)$/ })
 const pointsField = () => screen.getAllByLabelText('Points').find((el) => el.tagName === 'INPUT' && el.type === 'number')
 const setPoints = (v) => fireEvent.change(pointsField(), { target: { value: String(v) } })
 const answerBtn = (label) => screen.getByRole('button', { name: new RegExp(label) })
@@ -113,7 +115,8 @@ describe('Bloc compact (#254, scénario 13)', () => {
 
   it('Critical — après le REVEAL : « Attribuer les points (0) » désactivé, AUCUNE saisie de montant dans le bloc, le champ « Points » de la page sert de montant', () => {
     show()
-    expect(action().textContent).toBe('Attribuer les points (0)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(0)
     expect(action().disabled).toBe(true)
     expect(screen.queryByLabelText('Points par équipe')).toBeNull()
     expect(screen.queryByLabelText('Augmenter les points par équipe')).toBeNull()
@@ -126,9 +129,11 @@ describe('Bloc compact (#254, scénario 13)', () => {
     const clearAll = screen.getByRole('button', { name: 'Tout désélectionner' })
     expect(selectAll.getAttribute('title')).toBe('Tout sélectionner')
     expect(clearAll.getAttribute('title')).toBe('Tout désélectionner')
-    // même ligne que le bouton d'action : ancêtre commun proche, bloc compact
-    const row = action().parentElement
-    expect(row.contains(selectAll) && row.contains(clearAll)).toBe(true)
+    // #289 : les icônes sont sur la ligne 2 (compteur) ; le bouton est seul sur la ligne 3, dans le même bloc
+    const row = selectAll.parentElement
+    expect(row.contains(clearAll)).toBe(true)
+    expect(row.querySelector('.award-count')).not.toBeNull()
+    expect(action().closest('.award')).toBe(row.closest('.award'))
   })
 
   it('« Tout sélectionner » ne coche pas les équipes déjà créditées ; « Tout désélectionner » vide la sélection', () => {
@@ -172,7 +177,8 @@ describe('Niveau d\'attribution : équipe ou joueur (scénario 10)', () => {
     for (const n of TEAM_NAMES) expect(queryBox(n), n).toBeNull()
     fireEvent.click(box('Paul'))
     fireEvent.click(box('Jade'))
-    expect(action().textContent).toBe('Attribuer les points (2)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(2)
     fireEvent.click(action())
     expect(game.teamPointsBatch).not.toHaveBeenCalled()
     expect(game.bumperPointsBatch).toHaveBeenCalledTimes(1)
@@ -211,7 +217,8 @@ describe('QCM : clic sur une réponse (scénario 11)', () => {
     fireEvent.click(answerBtn('La Seine'))
     expect(checkedOf(TEAM_NAMES).sort()).toEqual(['Les Bleus', 'Les Rouges', 'Les Verts'])
     expect(pointsField().value).toBe('3')
-    expect(action().textContent).toBe('Attribuer les points (3)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(3)
     expect(action().disabled).toBe(false)
   })
 
@@ -227,7 +234,8 @@ describe('QCM : clic sur une réponse (scénario 11)', () => {
     fireEvent.click(answerBtn('La Loire'))
     expect(checkedOf(TEAM_NAMES)).toEqual(['Les Jaunes'])
     expect(pointsField().value).toBe('-3')
-    expect(action().textContent).toBe('Appliquer les pénalités (1)')
+    expect(action().textContent).toBe('Appliquer les pénalités')
+    expect(awardN()).toBe(1)
     expect(action().disabled).toBe(false)
   })
 
@@ -246,7 +254,8 @@ describe('QCM : clic sur une réponse (scénario 11)', () => {
     fireEvent.click(answerBtn('La Loire'))
     expect(checkedOf(TEAM_NAMES)).toEqual(['Les Jaunes'])
     expect(pointsField().value).toBe('0')
-    expect(action().textContent).toBe('Appliquer les pénalités (1)')
+    expect(action().textContent).toBe('Appliquer les pénalités')
+    expect(awardN()).toBe(1)
     expect(action().disabled).toBe(true)
     expect(screen.getByText(REASON)).toBeTruthy()
     fireEvent.click(action())
@@ -262,10 +271,12 @@ describe('QCM : clic sur une réponse (scénario 11)', () => {
     expect(screen.queryByText(REASON)).toBeNull()
     setPoints(2)
     expect(action().disabled).toBe(false)
-    expect(action().textContent).toBe('Attribuer les points (1)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(1)
     fireEvent.click(answerBtn('La Seine'))
     expect(pointsField().value).toBe('3')
-    expect(action().textContent).toBe('Attribuer les points (3)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(3)
     expect(game.teamPointsBatch).not.toHaveBeenCalled()
   })
 
@@ -324,7 +335,8 @@ describe('Base du barème (scénario 27)', () => {
     expect(pointsField().value).toBe('-2')
     fireEvent.click(answerBtn('La Seine'))
     expect(pointsField().value).toBe('6')
-    expect(action().textContent).toBe('Attribuer les points (3)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(3)
   })
 
   it('le lot envoyé après réglage à 6 porte 6 (et non les points de la question)', () => {

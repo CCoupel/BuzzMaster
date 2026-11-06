@@ -1,6 +1,105 @@
 # Changelog des Contrats API
 
 ---
+## [20261106] — Catégories : diffusion temps réel `CATEGORIES_CHANGED` (#285, v11.4.0, LOT-4 — révision 2)
+
+- **[NEW]** WS `CATEGORIES_CHANGED` (Server→Client, `admin`/`tv`/`vplayer`/`anim`) — après toute écriture de catégorie
+  (`POST`, `PUT`, icône, `DELETE`) : `{ CATEGORIES: <liste résolue = GET /api/categories>, CHANGE: {TYPE, KEY}, TS }`.
+  Décision utilisateur : la TV et le VJoueur reflètent renommage, couleur, icône, création, suppression **sans
+  rechargement**. Pas de rejeu au `HELLO`. `websocket-actions.md`, `websocket-endpoints.md`, `ws-payload-serialization.md`.
+- **[CHANGED]** `OnCategoriesChanged` (rappel interne `HTTPServer` → `App`) prend `CategoryChange{Type, Key}` ; ordre :
+  `CATEGORIES_CHANGED` → `QUESTIONS` → `NotifyState()`. `http-endpoints.md` §Catégories (PUT, icône, DELETE N., Frontend).
+- **[CHANGED]** Frontend : `useCategories` applique la liste du message (plus de refetch sur `QUESTIONS`, évènement
+  `window` `buzz:questions-update` retiré) ; `?v=<TS>` d'icône piloté par le message.
+- **[CHANGED]** `DELETE /api/categories/{key}` — `409 category in use` aussi quand `history.events > 0` sans question ni
+  réservoir (revue LOT-4 MAJEUR : la suppression réécrit l'historique ⇒ confirmation obligatoire). Dialogue frontend inchangé.
+- **[CHANGED]** Clé de catégorie : regex alignée sur le code `^[\p{L}\p{N}_]{1,50}$` (Unicode, `CINÉMA` accepté — le
+  contrat disait `[A-Z0-9_]`) ; **nouveau refus `400 reserved name`** des noms réservés Windows (`CON`, `PRN`, `AUX`,
+  `NUL`, `COM1-9`, `LPT1-9`) à `POST /api/categories`.
+
+---
+## [20261105] — Catégories : renommage, couleur, icône, suppression + fusion historique (#285, v11.4.0, LOT-4)
+
+- **[CHANGED]** `GET /api/categories` — `name`/`color` **résolus** (surcharge sidecar `<KEY>.json {name?, color?}`,
+  intégrées comprises) ; `color` des personnalisées = valeur stockée ou `""` (le repli `#6b7280` quitte la réponse,
+  reste un repli frontend) ; nouveaux `questionCount`, `rafaleCount`. Rétrocompatible pour tout client qui traitait
+  déjà `""`.
+- **[CHANGED]** `POST /api/categories` — champ `color` optionnel ; icône **≤ 2 Mio** + `http.DetectContentType`
+  (`413`/`400` nouveaux — avant : 10 Mio sans contrôle de contenu).
+- **[NEW]** `PUT /api/categories/{key}` `{name?, color?}` — intégrées et personnalisées, clé immuable, aucune
+  réécriture des questions/historique ; notifie l'ambiance.
+- **[NEW]** `POST /api/categories/{key}/icon` — personnalisées seulement (`400` sur une intégrée, pas de `DELETE`).
+- **[CHANGED]** Toute écriture de catégorie (`POST`, `PUT`, `POST …/icon`, `DELETE`) ⇒ `409 game in progress` hors
+  {`STOPPED`, `NEW_GAME`, `REVEALED`} (décision utilisateur). Mode `delete` : les cartes MEMOTION de la catégorie sont
+  supprimées de leur question hôte (hôte conservée) ; mode `reassign` : cartes ⇒ `""`.
+- **[NEW]** `DELETE /api/categories/{key}` `{mode: reassign|delete}` — `400` intégrée, `404`, `409 game in progress`,
+  `409 category in use` (+ compteurs pour le dialogue) ; fusion de l'historique dans « Sans catégorie »
+  (`QUESTION_CATEGORY` ⇒ `""`, `CATEGORY_BREAKDOWN` fusionné), sauvegarde `history.json.bak-<ts>` (5 conservées),
+  écriture atomique ; réaffectation ou suppression des questions, cartes et réservoir ; `RAFALE_CATEGORIES` nettoyés.
+- **[CHANGED]** `lighting.md` §8 — la couleur de catégorie (réglable, personnalisées comprises) pilote l'ambiance ;
+  `""` ⇒ blanc ; `OnCategoriesChanged` ⇒ `NotifyState()`.
+- **[CHANGED]** `GET /history` / `GET /palmares` — note de fusion ; bucket `UNKNOWN` affiché « Sans catégorie ».
+- Non BREAKING : aucun fichier existant modifié sans action ; aucun champ `GameState`, aucune action WebSocket.
+  Clé de chemin validée `^[A-Z0-9_]{1,50}$`, nom disque jamais dérivé du `Filename`.
+
+---
+## [20261105] — Son de décompte + lecture en boucle (#287, #288, v11.4.0, LOT-3)
+
+- **[NEW]** `sound.md` §12 — son de décompte : troisième chemin audio (`cmd/server/countdown_sound.go`, second
+  `audio.MediaPlayer` sur le contexte `oto` partagé), fichier `data/files/sounds/decompte.wav` (défaut synthétisé 2 s,
+  limites du média de question), config `sound.countdown_disabled` / `sound.countdown_once` (zéro = actif, en boucle),
+  rappels moteur `OnAnswerTimerStarted(AnswerTimerStart)` (global + carte MEMOTION — **jamais** par question RAFALE :
+  sonorisation par manche) et `OnMotionCardTimeUp`, exclusion « jamais si média » (tout `SOUND`), au buzz tout continue,
+  PAUSE/CONTINUE = pause/reprise, arrêt sur expiration, STOP, REVEAL, `Ready`, NEW_GAME, `muted`.
+- **[NEW]** `sound.md` §13 — `Question.SOUND_LOOP` (`omitempty`), multipart `sound_loop`, **combinable** avec
+  `SOUND_TIMER_DELAYED` (chrono à la fin du 1ᵉʳ passage, `onNaturalEnd` émis une fois par `PlayLoop`) ;
+  `MediaPlayer.PlayLoop` (amendement §10.2) ; §10.6
+  amendé (boucle désormais dans le périmètre) ; au buzz la boucle continue (`OnBuzzerPress` reste non câblé).
+- **[CHANGED]** `GET /api/sounds` — tableau `long` ajouté (`decompte`, `kind:"countdown"`, `enabled`, `loop`) ;
+  `cues` byte-identique. `POST /api/sounds/restore-defaults` restaure 7 + 1 fichiers.
+- **[NEW]** `POST /api/sounds/decompte`, `…/decompte/restore`, `…/decompte/test` — branche dédiée, `soundCueFromString`
+  inchangé ; validation `ValidateQuestionSound` (30 s / 6 Mio).
+- **[CHANGED]** `POST /config.json` — section `sound` accepte `countdown_disabled`, `countdown_once` (fusion champ par
+  champ, effet de bord : arrêt du décompte à la désactivation).
+- **[CHANGED]** `models.md` §SOUND — `SOUND_LOOP`.
+- Non BREAKING : aucun champ `GameState`, aucune action WebSocket nouvelle ; `config.json` et `question.json` existants
+  inchangés (valeurs zéro = comportement v11.4.0 LOT-2) ; `game-state.md`, `ws-payload-serialization.md` inchangés.
+  Coût assumé : les faux `audio.MediaPlayer` des tests gagnent `PlayLoop`.
+
+---
+## [20261105] — RAFALE alphabétique + composant Wheel (#282, v11.4.0, LOT-2)
+
+- **[NEW]** `rafale.md` §15 — option de manche `RAFALE_ALPHABETICAL` (bool, `omitempty`) et `RAFALE_WHEEL_LAYOUT`
+  (`strip` défaut | `arc`, `omitempty`), multipart `rafale_alphabetical` / `rafale_wheel_layout` ; normalisation
+  `rafaleAlphaKey` (accents, casse, articles initiaux) ; tirage par passes A→Z cyclique (une réponse par lettre par
+  passe) ; `GameState.RAFALE_CURRENT_LETTER` (string) et `RAFALE_LETTERS` ([]string, jamais nil), diffusés à tous
+  les clients web ; tests de fuite amendés (une lettre, jamais `ANSWER`/`NEXT`).
+- **[CHANGED]** `GET /api/rafale/pool` — champ `LETTERS` ajouté (rétrocompatible).
+- **[CHANGED]** `RAFALE_ANSWER.NEXT` — champ `LETTER` ajouté (`rafale.md` §15.10, ajout 2026-11-05 sur écart Batch 2) :
+  lettre normalisée de la question pré-tirée, `""` hors option, jamais `omitempty` ; admin + anim seulement, jamais
+  TV/VPlayer (même canal que `NEXT`). Rétrocompatible.
+- **[NEW]** `wheel-component.md` — composant frontend `Wheel` (segments, `current`, `layout strip|arc`, normalisation
+  modulo n, critère « lisible après 100 mouvements », `motion` réservé v12.0).
+- **[CHANGED]** `ws-payload-serialization.md` — lignes `GAME.RAFALE_CURRENT_LETTER` / `GAME.RAFALE_LETTERS`.
+- Non BREAKING : option désactivée ⇒ comportement v11.2.3 inchangé ; champs `GameState` additifs ; aucun client
+  existant ne lit les nouveaux champs ; carte MEMOTION RAFALE inchangée.
+
+---
+
+## [20261105] — Son coupé persisté + popover « Ambiance » (#286 recadrée, #284, v11.4.0, LOT-1)
+
+- **[CHANGED]** `GET /api/sound/status` — champ `muted` ajouté en réponse (rétrocompatible).
+- **[CHANGED]** `POST /config.json` — section `sound` accepte `muted` (fusion champ par champ, valeur zéro = son
+  actif) ; section `lighting` : `enabled` devient un interrupteur utilisateur explicite (page Ambiance › Lumière),
+  sémantique précisée (`sound.md` §11.4).
+- **[NEW]** `sound.md` §11 — troisième garde dans `notifySound` (avant `Enabled`), T1 du média de question traité
+  comme `DISABLED` (différé libéré), gate T0 **non** concernée, `/test` exempté, arrêt du média et du décompte au
+  passage à `true` ; popover d'en-tête « Ambiance » (éclairage + son), classe `.navbar-popover` (#284).
+- Non BREAKING : aucun client existant ne lit `muted` ; aucun champ `GameState`, aucune action WebSocket, aucun
+  nouvel endpoint.
+- Contrats du milestone : LOT-1 (cette entrée), LOT-2, LOT-3, LOT-4 — voir les entrées ci-dessus.
+
+---
 
 ## [20261015] — `NETWORK` réservé à l'admin (#275, v11.2.3, LOT-2)
 

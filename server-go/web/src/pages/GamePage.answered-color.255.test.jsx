@@ -84,7 +84,9 @@ const show = (rows, over = {}) => {
 }
 const answerBtn = (label) => screen.getByRole('button', { name: new RegExp(label) })
 const countOf = (label) => answerBtn(label).querySelector('.qcm-picker-n').textContent.trim()
-const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
+const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités)$/ })
+// #289 : le compteur n'est plus dans le bouton mais sur la ligne 2 du bloc (`.award-count`)
+const awardN = () => parseInt(document.querySelector('.award-count')?.textContent, 10) || 0
 const checkedLabels = () => screen.queryAllByRole('checkbox').filter((c) => c.checked).map((c) => c.getAttribute('aria-label'))
 const LEVELS = [['équipe', {}], ['joueur', { POINTS_TARGET: 'PLAYER' }]]
 
@@ -108,7 +110,8 @@ describe('ANSWERED_COLOR — le sélecteur et les montants lisent la réponse ef
     expect(countOf('La Seine')).toMatch(/^2 /)
     expect(countOf('La Loire')).toMatch(/^1 /)
     fireEvent.click(answerBtn('La Seine'))
-    expect(action().textContent).toBe('Attribuer les points (2)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(2)
     fireEvent.click(action())
     const calls = (q.POINTS_TARGET ? game.bumperPointsBatch : game.teamPointsBatch).mock.calls
     expect(calls[0][1].map((e) => e.points)).toEqual([3, 3])

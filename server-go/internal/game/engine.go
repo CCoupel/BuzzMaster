@@ -170,6 +170,11 @@ type Engine struct {
 	// drawNextRafaleUnsafe's own doc comment).
 	rafaleDraw rafaleDrawState
 
+	// rafaleAlpha (#282, contracts/rafale.md §15.4) is the alphabetical draw
+	// queue of the current classic round; nil ⇔ option off. Ephemeral like
+	// rafaleDraw, but explicitly released by stopUnsafe/Ready/InitGame.
+	rafaleAlpha *rafaleAlphaState
+
 	// rafaleQuestionTimer/rafaleQuestionStopCh (v8.0.0, #107, contract
 	// rafale.md §2.2) — the per-question ~3s countdown, DELIBERATELY its own
 	// pair of fields, never e.timer/e.stopCh. The global round timer
@@ -314,6 +319,21 @@ type Engine struct {
 	// every consumer re-derives whatever it needs from live state, same
 	// convention as OnRafaleTeamsChanged.
 	OnTimeUp func()
+	// OnAnswerTimerStarted (v11.4.0, #287, contracts/sound.md §12.5) fires
+	// whenever a response timer ACTUALLY starts ticking: startTimer() (global
+	// SPEEDY/QCM/ARDOISE and the RAFALE round — its 3 callers, one
+	// instrumentation) and StartMotionCardTimer (MEMOTION card, RAFALE card
+	// included). NEVER from StartRafaleQuestionTimer, StartMotionMemorizeTimer
+	// nor the COUNTDOWN phase.
+	//
+	// ⚠️ May be invoked WITH e.mu held (startTimer() runs under the lock): the
+	// callee must never call back into the Engine synchronously and must not
+	// block — read config, drive a MediaPlayer, return.
+	OnAnswerTimerStarted func(start AnswerTimerStart)
+	// OnMotionCardTimeUp (v11.4.0, #287, §12.5) fires when a MEMOTION card
+	// timer reaches 0 (the phase stays STARTED, so no OnStateChange/OnTimeUp
+	// exists for this expiry). Fired outside the lock, like OnTimerTick.
+	OnMotionCardTimeUp func()
 	// RAFALE callbacks (v8.0.0, #107, contract §5.2/§2.2).
 	//
 	// OnRafaleAnswer fires whenever a new RAFALE question is drawn — round
@@ -331,7 +351,7 @@ type Engine struct {
 	// Guarded by the exact same admin+anim-only rule as answer above — see
 	// this field's own "never widen this recipient list" warning at its
 	// consumer (cmd/server/main.go, broadcastRafaleAnswer).
-	OnRafaleAnswer func(id, answer string, next *RafaleCurrent)
+	OnRafaleAnswer func(id, answer string, next *RafaleNext)
 	// OnRafaleQuestionTick fires every second the RAFALE question ticker is
 	// live and NOT expiring this tick — the consumer broadcasts RAFALE_TICK
 	// (lightweight, all clients, no full GameState re-emission — contract
@@ -430,6 +450,7 @@ func NewEngine() *Engine {
 			RafaleTeamErrors:           map[string]int{},
 			RafaleParticipatingTeams:   []string{},
 			RafaleCurrentTeamColor:     []int{},
+			RafaleLetters:              []string{}, // #282 — never nil (JSON [])
 			// Quiz metadata multi-values (v6.1.0, #137 Batch 2b): initialize
 			// empty (not nil) so JSON serializes [] (not null) before the
 			// first UPDATE_QUIZ_META (contract game-state.md §"Aucun omitempty").
@@ -1455,6 +1476,7 @@ func (e *Engine) Ready(questionID string, question *Question) {
 		e.state.RafaleAskedCount = 0
 		e.state.RafalePoolRemaining = 0
 		e.state.RafaleExhausted = false
+		e.resetRafaleAlphaUnsafe() // #282
 	}
 
 	log.Printf("[Engine] Game ready with question: %s", questionID)
@@ -2378,6 +2400,37 @@ func (e *Engine) StartImmediate(delay int) {
 	}
 }
 
+// AnswerTimerKind says which kind of response timer just started
+// (contracts/sound.md §12.5).
+type AnswerTimerKind string
+
+const (
+	// AnswerTimerGlobal — startTimer(): SPEEDY/QCM/ARDOISE, and the RAFALE round.
+	AnswerTimerGlobal AnswerTimerKind = "GLOBAL"
+	// AnswerTimerMotionCard — StartMotionCardTimer (card flip, RAFALE card included).
+	AnswerTimerMotionCard AnswerTimerKind = "MOTION_CARD"
+)
+
+// AnswerTimerStart is the payload of Engine.OnAnswerTimerStarted.
+type AnswerTimerStart struct {
+	Kind          AnswerTimerKind
+	Seconds       int    // programmed duration, always > 0
+	QuestionSound string // state.Question.Sound at start ("" if none)
+}
+
+// fireAnswerTimerStartedUnsafe emits OnAnswerTimerStarted (>0 seconds only).
+// May be called with e.mu held — see the callback's contract.
+func (e *Engine) fireAnswerTimerStartedUnsafe(kind AnswerTimerKind, seconds int) {
+	if e.OnAnswerTimerStarted == nil || seconds <= 0 {
+		return
+	}
+	qs := ""
+	if e.state.Question != nil {
+		qs = e.state.Question.Sound
+	}
+	e.OnAnswerTimerStarted(AnswerTimerStart{Kind: kind, Seconds: seconds, QuestionSound: qs})
+}
+
 func (e *Engine) startTimer() {
 	if e.timer != nil {
 		e.timer.Stop()
@@ -2390,6 +2443,14 @@ func (e *Engine) startTimer() {
 	// Capture references locally to avoid nil pointer issues
 	ticker := e.timer
 	stopCh := e.stopCh
+
+	// #287 (§12.5): the single instrumentation point of the global timer —
+	// under e.mu, the adapter must not call back into the Engine.
+	seconds := e.state.CurrentTime
+	if seconds <= 0 {
+		seconds = e.state.Delay
+	}
+	e.fireAnswerTimerStartedUnsafe(AnswerTimerGlobal, seconds)
 
 	go func() {
 		for {
@@ -2764,6 +2825,7 @@ func (e *Engine) stopUnsafe() bool {
 	released := false
 	if e.state.Question != nil && e.state.Question.Type == QuestionTypeRafale {
 		released = e.releaseRafaleNextUnsafe()
+		e.resetRafaleAlphaUnsafe() // #282 — queue abandoned, public letters cleared
 		if e.state.RafaleSubPhase == RafaleSubPhaseQuestion {
 			e.stopRafaleQuestionTimerUnsafe()
 			e.state.RafaleSubPhase = RafaleSubPhaseRoundEnd
@@ -3038,7 +3100,7 @@ type rafaleAdvanceResult struct {
 	// will become current at the FOLLOWING advance (answer-free), nil when
 	// the pool is empty or the cap is imminent (contract §13.5). Forwarded
 	// to OnRafaleAnswer's own next parameter — see its doc comment.
-	next *RafaleCurrent
+	next *RafaleNext
 }
 
 // advanceRafaleUnsafe judges the current RAFALE question (correct==true for
@@ -3189,6 +3251,7 @@ func (e *Engine) advanceRafaleUnsafe(correct bool) rafaleAdvanceResult {
 	e.state.RafaleAskedCount++
 
 	e.prefetchRafaleNextUnsafe()
+	e.refreshRafaleLettersUnsafe(drawn) // #282
 	e.refreshRafalePoolRemainingUnsafe()
 
 	questionTime := e.state.Question.RafaleQuestionTime
@@ -3314,7 +3377,7 @@ type rafaleRoundStartResult struct {
 	// become current at the FIRST advance (answer-free), nil when the pool
 	// is empty after the first draw or the cap is imminent (contract
 	// §13.5). Forwarded to OnRafaleAnswer's own next parameter.
-	next *RafaleCurrent
+	next *RafaleNext
 }
 
 // startRafaleRoundUnsafe initializes a fresh RAFALE round: resets the
@@ -3342,6 +3405,14 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	// source) before calling the now-generalized builder — see that
 	// function's own doc comment.
 	e.rafaleDraw = e.newRafaleDrawStateUnsafe(e.state.Question.EffectiveRafaleCategories(), e.state.Question.EffectiveRafaleDifficulties())
+	// #282 (contract §15.4): the alphabetical option replaces the stratified
+	// draw by a full queue of A→Z passes; off ⇒ rafaleAlpha stays nil and the
+	// round is byte-for-byte the v11.2.3 one.
+	e.rafaleAlpha = nil
+	if e.state.Question.RafaleAlphabetical {
+		e.rafaleAlpha = &rafaleAlphaState{queue: e.buildRafaleAlphaQueueUnsafe(
+			e.state.Question.EffectiveRafaleCategories(), e.state.Question.EffectiveRafaleDifficulties())}
+	}
 
 	drawn, err := e.drawNextRafaleUnsafe()
 	if err != nil {
@@ -3368,6 +3439,7 @@ func (e *Engine) startRafaleRoundUnsafe() rafaleRoundStartResult {
 	// it's ready to be consumed as-is by the first advanceRafaleUnsafe call
 	// — see prefetchRafaleNextUnsafe's own doc comment.
 	e.prefetchRafaleNextUnsafe()
+	e.refreshRafaleLettersUnsafe(drawn) // #282 — after the prefetch (letters include the pre-drawn one)
 	e.refreshRafalePoolRemainingUnsafe()
 
 	questionTime := e.state.Question.RafaleQuestionTime
@@ -4088,6 +4160,7 @@ func (e *Engine) InitGameWith(opts NewGameOptions) NewGameResult {
 	e.state.RafaleAskedCount = 0
 	e.state.RafalePoolRemaining = 0
 	e.state.RafaleExhausted = false
+	e.resetRafaleAlphaUnsafe() // #282
 
 	log.Printf("[Engine] Game initialized (scores=%v players=%v teams=%v questions=%v)",
 		opts.PurgeScores, opts.PurgePlayers, opts.PurgeTeams, opts.ResetQuestions)
@@ -5194,6 +5267,9 @@ func (e *Engine) removeRafaleActiveCoupleUnsafe(couple rafaleCouple) {
 // rebalancing; it NEVER surfaces that couple's own emptiness as an error to
 // the caller. Caller must hold e.mu (write lock).
 func (e *Engine) drawNextRafaleUnsafe() (*RafaleQuestion, error) {
+	if e.rafaleAlpha != nil { // #282, contract §15.4 — same entry for current draw and prefetch
+		return e.drawNextRafaleAlphaUnsafe()
+	}
 	for {
 		if len(e.rafaleDraw.active) == 0 {
 			return nil, ErrRafalePoolEmpty
@@ -5267,14 +5343,20 @@ func rafaleMaxQuestionsUnsafe(raw int) int {
 // Points (#216, resolveRafalePoints) the same way the CURRENT question's own
 // RafaleCurrent does — the NEXT preview must never show a misleading 0 for a
 // round with a per-difficulty barème. Pure function, no locking.
-func rafaleNextPreview(q *RafaleQuestion, roundQuestion *Question) *RafaleCurrent {
+func rafaleNextPreview(q *RafaleQuestion, roundQuestion *Question) *RafaleNext {
 	if q == nil {
 		return nil
 	}
-	return &RafaleCurrent{
+	n := &RafaleNext{RafaleCurrent: RafaleCurrent{
 		ID: q.ID, Question: q.Question, Category: string(q.Category), Difficulty: q.Difficulty,
 		Points: resolveRafalePoints(roundQuestion, q.Difficulty),
+	}}
+	// #282 (contract §15.10): the upcoming letter, from the SAME
+	// normalisation as the draw and pool.LETTERS. "" when the option is off.
+	if roundQuestion != nil && roundQuestion.RafaleAlphabetical {
+		n.Letter, _ = rafaleAlphaKey(q.Answer)
 	}
+	return n
 }
 
 // prefetchRafaleNextUnsafe (#202, contract §13.1/§13.4) draws the question
@@ -5509,6 +5591,7 @@ func (e *Engine) refreshRafaleCardPoolRemainingUnsafe(card *MotionCard) {
 // Caller (StartRafaleMotionCardRound) must hold e.mu (write) and must
 // already have confirmed card is the active, RAFALE-typed card.
 func (e *Engine) startRafaleCardRoundUnsafe(card *MotionCard) (drawn *RafaleQuestion, ok bool) {
+	e.rafaleAlpha = nil // #282 — the alphabetical option is ignored by a MEMOTION card (§15.2)
 	e.rafaleDraw = e.newRafaleDrawStateUnsafe(card.RafaleCategories, card.RafaleDifficulties)
 
 	drawn, err := e.drawNextRafaleUnsafe()
@@ -7467,6 +7550,17 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 	log.Printf("[Engine] MEMOTION StartMotionCardTimer: delay=%ds", delay)
 	e.mu.Unlock()
 
+	// #287 (§12.5): after unlock (this path is not under the lock).
+	e.mu.RLock()
+	startInfo := AnswerTimerStart{Kind: AnswerTimerMotionCard, Seconds: delay}
+	if e.state.Question != nil {
+		startInfo.QuestionSound = e.state.Question.Sound
+	}
+	e.mu.RUnlock()
+	if e.OnAnswerTimerStarted != nil {
+		e.OnAnswerTimerStarted(startInfo)
+	}
+
 	go func() {
 		for {
 			select {
@@ -7507,6 +7601,9 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 						// admin must act via MEMOTION_REVEAL.
 						ticker.Stop()
 						log.Printf("[Engine] MEMOTION card timer expired — phase stays STARTED, admin must act")
+						if e.OnMotionCardTimeUp != nil { // #287 (§12.5/§12.8)
+							e.OnMotionCardTimeUp()
+						}
 						return true
 					}
 					return false

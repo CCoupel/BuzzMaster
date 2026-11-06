@@ -1,0 +1,240 @@
+<!--
+mockup:
+  composant: admin_navbar
+  feature: ambiance_popover
+  version: 11.4.0
+  type: ui
+  issue: "#284 #286"
+  validee_le: 2026-11-05
+  complete: [docs/mockup/v11.2/ui/admin_navbar__launch_game_entry.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — en-tête : popover « Ambiance » (éclairage corrigé #284 + son ponctuel #286) et interrupteur général de la page Ambiance</title>
+<style>
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --warning:#f59e0b; --error:#ef4444; --amber:#b45309; --amberbg:#fef3c7; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1200px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); }
+  .mock-note b { color:var(--gray-700); }
+  h2.mock-h { max-width:1200px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+
+  /* ---------- Navbar (inchangée, hors bouton Ambiance) ---------- */
+  .viewport { margin:0 auto; background:#fff; border:2px dashed var(--gray-300); position:relative; overflow:hidden; }
+  .viewport.w1280 { width:1280px; } .viewport.w1024 { width:1024px; }
+  .navbar { background:linear-gradient(90deg,#312e81,#4338ca); color:#fff; display:flex; align-items:center; gap:.4rem; padding:.45rem .8rem; position:relative; white-space:nowrap; }
+  .brand { font-weight:800; margin-right:.2rem; display:flex; align-items:center; gap:.5rem; }
+  .brand-container { position:relative; }
+  .nav-item { padding:.35rem .6rem; border-radius:.45rem; font-size:.85rem; color:#e0e7ff; }
+  .nav-item.active { background:rgba(255,255,255,.18); color:#fff; font-weight:700; }
+  .group { display:flex; align-items:center; gap:.2rem; padding:.15rem .3rem; border-radius:.55rem; background:rgba(255,255,255,.07); }
+  .group-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:#c7d2fe; margin-right:.2rem; }
+  .sep { width:1px; height:1.4rem; background:rgba(255,255,255,.25); margin:0 .3rem; }
+  .right { margin-left:auto; display:flex; gap:.3rem; }
+
+  /* Bouton Ambiance = ex-bouton Éclairage (.lighting-mode-nav-badge), libellé et glyphes revus */
+  .ambiance-badge { font:inherit; font-size:.7rem; font-weight:600; padding:2px 8px; border:0; border-radius:.3rem; cursor:pointer; display:inline-flex; align-items:center; gap:4px; color:#fff; background:var(--gray-400); }
+  .ambiance-badge.is-warn { background:var(--warning); }
+  .ambiance-badge.is-err { background:var(--error); }
+  .w1024 .ambiance-badge .label { display:none; } /* < 1094 px : libellé masqué, comme .lighting-label aujourd'hui */
+
+  /* Popover partagé — correctif #284 : classe commune .navbar-popover */
+  .viewport.bug .navbar-popover { left:auto; right:0; white-space:nowrap; max-width:none; }
+  .viewport.bug .section-title, .viewport.bug .panel-title { display:none; }
+  .navbar-popover { position:absolute; top:100%; left:0; right:auto; margin-top:.5rem; z-index:1000; min-width:280px; max-width:min(380px, calc(100vw - 2rem)); white-space:normal; border-radius:.75rem; box-shadow:0 4px 6px rgba(0,0,0,.1), 0 8px 16px rgba(0,0,0,.1); background:var(--gray-50); border:1px solid var(--gray-200); color:var(--gray-900); }
+  .panel { display:flex; flex-direction:column; gap:.5rem; padding:1rem; }
+  .panel-title { font-size:.85rem; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:var(--gray-600); margin:0; }
+  .section-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); margin:.4rem 0 0; }
+  .row { display:flex; align-items:center; flex-wrap:wrap; gap:1rem; margin-top:.25rem; }
+  .tristate { display:inline-flex; border:1px solid var(--gray-300); border-radius:.5rem; overflow:hidden; }
+  .tristate button { padding:.5rem 1rem; font-size:.85rem; font-weight:600; font-family:inherit; color:var(--gray-600); background:#fff; border:0; border-right:1px solid var(--gray-300); cursor:pointer; }
+  .tristate button:last-child { border-right:0; }
+  .tristate button.sel-on { background:var(--warning); color:#fff; }
+  .tristate button.sel-auto { background:var(--gray-600); color:#fff; }
+  .tristate button.sel-off { background:var(--error); color:#fff; }
+  .tristate button.sel-sound-on { background:#16a34a; color:#fff; }
+  .toggle { display:inline-flex; align-items:center; gap:.4rem; font-size:.85rem; font-weight:600; background:#fff; border:1px solid var(--gray-300); border-radius:.5rem; padding:.4rem .7rem; cursor:pointer; }
+  .sw { width:1.9rem; height:1.05rem; border-radius:999px; background:var(--gray-300); position:relative; }
+  .sw::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.75rem; height:.75rem; border-radius:50%; background:#fff; }
+  .toggle.on .sw { background:var(--primary); } .toggle.on .sw::after { left:1rem; }
+  .warning { margin:0; padding:.45rem .6rem; border-left:3px solid var(--warning); background:#fff; border-radius:.3rem; font-size:.82rem; color:var(--gray-700); overflow-wrap:anywhere; }
+  .muted-block { opacity:.55; }
+  .hint { font-size:.76rem; color:var(--gray-500); margin:0; }
+  .hint a { color:var(--primary); }
+  .page-fill { height:400px; background:var(--gray-100); }
+
+  /* ---------- Page Ambiance (onglet Lumière) ---------- */
+  .amb { max-width:900px; margin:1rem auto; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+  .amb-title { display:flex; align-items:center; gap:.8rem; }
+  .amb-title h1 { font-size:1.2rem; margin:0; }
+  .tabs { display:flex; gap:.4rem; margin:.8rem 0; }
+  .tab { padding:.4rem .8rem; border-radius:.45rem; font-size:.85rem; background:var(--gray-100); color:var(--gray-600); }
+  .tab.active { background:var(--primary); color:#fff; font-weight:700; }
+  .step { border:1px solid var(--gray-200); border-radius:.6rem; padding:.8rem 1rem; margin-bottom:.8rem; }
+  .step h2 { font-size:.95rem; margin:0 0 .5rem; }
+  .master-row { display:flex; align-items:center; gap:1rem; flex-wrap:wrap; }
+  .badge { display:inline-flex; align-items:center; gap:.35rem; font-size:.75rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:#dcfce7; color:#166534; }
+  .badge.off { background:var(--gray-200); color:var(--gray-600); }
+  .dot { width:.5rem; height:.5rem; border-radius:50%; background:currentColor; }
+  .dim { opacity:.5; pointer-events:none; }
+  .lights { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; font-size:.8rem; color:var(--gray-600); }
+  .light { border:1px solid var(--gray-200); border-radius:.5rem; padding:.5rem; }
+  .bad { display:inline-block; margin-top:.5rem; padding:.4rem .5rem; border:1px dashed #f87171; border-radius:.4rem; color:#b91c1c; font-size:.75rem; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — en-tête :</strong>
+  <label><input type="radio" name="st" value="auto-on" checked> Lumière AUTO · Son ON (repos)</label>
+  <label><input type="radio" name="st" value="on-on"> Lumière ON · Son ON</label>
+  <label><input type="radio" name="st" value="off-off"> Lumière OFF · Son OFF</label>
+  <label><input type="radio" name="st" value="auto-off"> Lumière AUTO · Son OFF</label>
+  <label><input type="radio" name="st" value="disabled-on"> Éclairage d'ambiance désactivé (page Ambiance) · Son ON</label>
+  <label><input type="radio" name="st" value="nolight-off"> Aucun pont Hue · Son OFF</label>
+  <span style="margin-left:auto">Largeur :</span>
+  <label><input type="radio" name="w" value="w1280" checked> 1280 px</label>
+  <label><input type="radio" name="w" value="w1024"> 1024 px (libellé masqué)</label>
+  <label style="margin-left:1rem;color:#fca5a5"><input type="checkbox" id="bug"> Montrer le bug #284 (v11.2.3 : ancré à droite, nowrap, sans max-width → déborde à gauche)</label>
+</div>
+<div class="mock-note">
+  <b>#284</b> — le popover porte désormais la classe commune <code>.navbar-popover</code> : ancré <b>à gauche</b> du bouton
+  (le bouton est en fin du bloc gauche de la barre), <code>white-space: normal</code> (le <code>nowrap</code> de la barre n'est plus hérité),
+  <code>max-width: min(380px, 100vw − 2rem)</code>. Le texte d'avertissement est renvoyé à la ligne, les commandes restent visibles quel que soit le mode.
+  <br><b>#286</b> — le bouton « 💡 Éclairage » devient « 🎛 Ambiance » et le popover gagne une section <b>Son</b> (ON / OFF, deux positions — le son n'a pas d'état automatique).
+  Le son coupé est <b>persisté</b> (<code>config.json</code> → <code>sound.muted</code>) : l'avertissement le dit, et l'en-tête le montre tant qu'il dure (🔇 sur le bouton, badge orange).
+  Le bouton est visible dès qu'<b>un pont Hue est configuré OU que le son est actif</b> ; une fonction absente n'affiche pas sa section.
+</div>
+
+<h2 class="mock-h">01 — En-tête admin (page Jeu), popover « Ambiance » <b>ouvert d'emblée</b> (le cadre pointillé = le viewport ; cocher « Montrer le bug #284 » pour voir le débordement d'avant)</h2>
+<div class="viewport w1280" id="vp">
+  <div class="navbar">
+    <div class="brand">
+      <span>BuzzControl</span>
+      <span class="nav-item active">Jeu</span>
+      <span class="nav-item">Équipes</span>
+      <div class="brand-container">
+        <button class="ambiance-badge" id="btn" aria-haspopup="true" aria-expanded="true" title="Ambiance — conduite en direct">
+          <span id="glyphL" aria-hidden="true">💡</span><span id="glyphS" aria-hidden="true">🔊</span>
+          <span class="label" id="label">Ambiance</span>
+        </button>
+        <div class="navbar-popover" id="pop">
+          <div class="panel">
+            <h3 class="panel-title">Ambiance — conduite en direct</h3>
+
+            <div id="secLight">
+              <p class="section-title">Éclairage général</p>
+              <div class="row">
+                <div class="tristate" role="radiogroup" aria-label="Éclairage général">
+                  <button id="lOn">ON</button><button id="lAuto">AUTO</button><button id="lOff">OFF</button>
+                </div>
+                <button class="toggle" id="flash" aria-pressed="false"><span class="sw"></span>Flash</button>
+              </div>
+              <p class="warning" id="lWarn" hidden></p>
+              <p class="hint" id="lDisabled" hidden>Éclairage d'ambiance <b>désactivé</b> — réactivez-le dans <a href="#amb">Ambiance › Lumière</a>. Les commandes ci-dessus n'ont aucun effet.</p>
+            </div>
+
+            <div id="secSound">
+              <p class="section-title">Son</p>
+              <div class="row">
+                <div class="tristate" role="radiogroup" aria-label="Son">
+                  <button id="sOn">ON</button><button id="sOff">OFF</button>
+                </div>
+                <span class="hint" id="sHint">Bruitages, média de question et son de décompte.</span>
+              </div>
+              <p class="warning" id="sWarn" hidden>Son <strong>coupé</strong> — toutes les sorties audio du serveur restent muettes, même pendant une partie <strong>et après un redémarrage</strong>, jusqu'à un retour manuel sur ON. Un média de question en cours est arrêté ; le chronomètre différé démarre immédiatement.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="group"><span class="group-label">Préparation</span><span class="nav-item">Questions</span><span class="nav-item">Rafale</span><span class="nav-item">Scores</span></div>
+    <div class="sep"></div>
+    <div class="group"><span class="group-label">Interfaces</span><span class="nav-item">TV</span><span class="nav-item">Animateur</span></div>
+    <div class="right"><span class="nav-item">⚙ Menu</span></div>
+  </div>
+  <div class="page-fill"></div>
+</div>
+
+<h2 class="mock-h" id="amb">02 — Page Ambiance › onglet Lumière : interrupteur général (nouveau, persisté)</h2>
+<div class="mock-note">
+  Nouveau bloc en tête de l'onglet Lumière, même patron visuel que « Bruitages activés » de l'onglet Son. Désactivé : la fonction
+  éclairage d'ambiance est <b>éteinte</b> (<code>lighting.enabled = false</code>, persisté) — plus aucune scène n'est envoyée aux ampoules,
+  le popover de l'en-tête affiche sa section Éclairage grisée avec le renvoi vers cette page, et les ampoules sont éteintes au moment du basculement.
+  Les étapes de configuration du pont restent accessibles mais grisées tant que l'interrupteur est éteint. Associer un nouveau pont rallume l'interrupteur (comportement existant).
+</div>
+<div class="amb">
+  <div class="amb-title"><h1>Ambiance</h1><span class="badge" id="ambBadge"><span class="dot"></span>Pont connecté · 4/4 ampoules</span></div>
+  <div class="tabs"><span class="tab active">Lumière</span><span class="tab">Son</span></div>
+  <div class="step">
+    <h2>Éclairage d'ambiance</h2>
+    <div class="master-row">
+      <button class="toggle on" id="master" aria-pressed="true"><span class="sw"></span>Éclairage d'ambiance activé</button>
+      <span class="hint">Éteint : les ampoules ne suivent plus la partie et les commandes de l'en-tête (ON / AUTO / OFF, Flash) sont sans effet. Le réglage est conservé au redémarrage.</span>
+    </div>
+  </div>
+  <div id="ambRest">
+    <div class="step"><h2>Trouver le pont</h2><p class="hint">Pont <code>192.168.1.40</code> · BSB002 — Associé</p></div>
+    <div class="step"><h2>Ampoules</h2>
+      <div class="lights"><div class="light">Salon 1 · <b>Générale</b></div><div class="light">Salon 2 · <b>Générale</b></div><div class="light">Spot bleu · Équipe <b>Bleus</b></div><div class="light">Spot rouge · Équipe <b>Rouges</b></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const states = {
+    'auto-on':     { light:'AUTO', sound:true,  lightOn:true,  hue:true },
+    'on-on':       { light:'ON',   sound:true,  lightOn:true,  hue:true },
+    'off-off':     { light:'OFF',  sound:false, lightOn:true,  hue:true },
+    'auto-off':    { light:'AUTO', sound:false, lightOn:true,  hue:true },
+    'disabled-on': { light:'AUTO', sound:true,  lightOn:false, hue:true },
+    'nolight-off': { light:'AUTO', sound:false, lightOn:false, hue:false },
+  };
+  function render(key) {
+    const s = states[key];
+    // section lumière
+    $('secLight').hidden = !s.hue;
+    $('secLight').classList.toggle('muted-block', s.hue && !s.lightOn);
+    $('lDisabled').hidden = !(s.hue && !s.lightOn);
+    ['lOn','lAuto','lOff'].forEach(id => $(id).className = '');
+    if (s.hue && s.lightOn) {
+      $({ON:'lOn',AUTO:'lAuto',OFF:'lOff'}[s.light]).className = 'sel-' + s.light.toLowerCase();
+      $('lWarn').hidden = s.light === 'AUTO';
+      $('lWarn').innerHTML = 'Mode <strong>' + s.light + '</strong> engagé — l\'éclairage général restera ' + (s.light === 'ON' ? 'allumé' : 'éteint') + ' indéfiniment, même pendant une partie, jusqu\'à un retour manuel sur AUTO.';
+    } else { $('lWarn').hidden = true; }
+    // section son
+    $('sOn').className = s.sound ? 'sel-sound-on' : '';
+    $('sOff').className = s.sound ? '' : 'sel-off';
+    $('sWarn').hidden = s.sound;
+    // bouton d'en-tête
+    const lightEngaged = s.hue && s.lightOn && s.light !== 'AUTO';
+    const parts = [];
+    if (lightEngaged) parts.push('Mode ' + s.light + ' engagé');
+    if (!s.sound) parts.push('Son coupé');
+    $('label').textContent = parts.length ? parts.join(' · ') : 'Ambiance';
+    $('glyphL').textContent = s.hue ? '💡' : '';
+    $('glyphS').textContent = s.sound ? '🔊' : '🔇';
+    const b = $('btn'); b.className = 'ambiance-badge';
+    if (lightEngaged && s.light === 'OFF') b.classList.add('is-err');
+    else if (lightEngaged || !s.sound) b.classList.add('is-warn');
+    // page Ambiance
+    $('master').classList.toggle('on', s.lightOn);
+    $('master').setAttribute('aria-pressed', String(s.lightOn));
+    $('ambRest').classList.toggle('dim', !s.lightOn);
+    $('ambBadge').className = 'badge' + (s.lightOn ? '' : ' off');
+    $('ambBadge').innerHTML = '<span class="dot"></span>' + (s.lightOn ? 'Pont connecté · 4/4 ampoules' : 'Éclairage d\'ambiance désactivé');
+  }
+  document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => render(e.target.value)));
+  const applyVp = () => { $('vp').className = 'viewport ' + document.querySelector('input[name=w]:checked').value + ($('bug').checked ? ' bug' : ''); };
+  document.querySelectorAll('input[name=w]').forEach(r => r.addEventListener('change', applyVp));
+  $('bug').addEventListener('change', () => { if ($('bug').checked) { document.querySelector('input[name=st][value="on-on"]').checked = true; render('on-on'); } applyVp(); });
+  render('auto-on');
+</script>
+</body>
+</html>

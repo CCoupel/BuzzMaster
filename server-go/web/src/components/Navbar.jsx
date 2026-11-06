@@ -5,7 +5,7 @@ import { useUpdates } from '../hooks/useUpdates'
 import { useLightingStatus } from '../hooks/useLightingStatus'
 import { lightingStateTitle, normalizeLightingState } from '../utils/lightingState'
 import LightingBulbIcon from './LightingBulbIcon'
-import LightingModePanel from './LightingModePanel'
+import AmbiancePopoverPanel from './AmbiancePopoverPanel'
 import { useSoundStatus } from '../hooks/useSoundStatus'
 import { soundStateTitle } from '../utils/soundState'
 import SoundSpeakerIcon from './SoundSpeakerIcon'
@@ -92,7 +92,7 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // l'entrée « Ambiance » ci-dessous. Aucun second polling de l'éclairage
   // introduit — deux hooks, deux intervalles indépendants, comme prévu par
   // le handoff (§4, "Second sondage réseau").
-  const { status: soundStatus } = useSoundStatus()
+  const { status: soundStatus, refresh: refreshSound } = useSoundStatus()
   // #208 — point d'accès UNIQUE aux commandes ON/AUTO/OFF/Flash (retour
   // utilisateur QUALIF v10.0.0.13, 2026-09-07) : d'abord un simple bandeau
   // d'avertissement renvoyant vers GamePage (SHA 110dfff3), le panneau
@@ -111,6 +111,22 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // (EMPTY_LIGHTING_STATUS), mais un mock de test ou un serveur antérieur
   // au Batch 2 peut renvoyer un statut sans `mode` — jamais planter dessus.
   const lightingMode = lightingStatus.mode || 'AUTO'
+  // #286 — interrupteur général coupé (Ambiance › Lumière) : le pilote est
+  // détaché (state 'disabled') MAIS un pont reste associé. Sans pont, rien.
+  const lightingSwitchedOff = lightingStatus.enabled === false && !!lightingStatus.bridge_ip
+  const showLightingSection = lightingConfigured || lightingSwitchedOff
+  const soundMuted = soundStatus.muted === true
+  // Bouton « Ambiance » (ex-« Éclairage », #286) : présent dès qu'un pont est
+  // associé OU que le son est actif (ou coupé — sinon le garde-fou « soirée
+  // muette oubliée » disparaîtrait avec le son).
+  const showSoundSection = soundStatus.active === true || soundMuted
+  const showAmbianceButton = showLightingSection || showSoundSection
+  const lightEngaged = lightingConfigured && lightingMode !== 'AUTO'
+  const ambianceParts = []
+  if (lightEngaged) ambianceParts.push(`Mode ${lightingMode} engagé`)
+  if (soundMuted) ambianceParts.push('Son coupé')
+  const ambianceLabel = ambianceParts.length ? ambianceParts.join(' · ') : 'Ambiance'
+  const ambianceTone = lightEngaged && lightingMode === 'OFF' ? 'off' : (lightEngaged || soundMuted) ? 'on' : 'auto'
   const lightingPopoverOpen = openMenu === 'lighting'
   const setLightingPopoverOpen = (fn) =>
     setOpenMenu(cur => ((typeof fn === 'function' ? fn(cur === 'lighting') : fn) ? 'lighting' : null))
@@ -442,24 +458,33 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
             Absent tant que l'éclairage n'est pas configuré — même ligne de
             conduite que l'entrée Ambiance du menu (aucune trace si aucun
             pont Hue). */}
-        {lightingConfigured && (
+        {showAmbianceButton && (
           <div className="lighting-mode-container">
             <button
               ref={lightingButtonRef}
               type="button"
-              className={`lighting-mode-nav-badge is-${lightingMode.toLowerCase()}`}
-              title="Éclairage général — ouvrir les commandes"
+              className={`lighting-mode-nav-badge is-${ambianceTone}`}
+              title="Ambiance — conduite en direct (éclairage et son)"
               aria-haspopup="true"
               aria-expanded={lightingPopoverOpen}
               onClick={() => setLightingPopoverOpen(o => !o)}
-              aria-label={lightingMode === 'AUTO' ? 'Éclairage' : `Mode ${lightingMode} engagé`}
+              aria-label={ambianceLabel}
             >
-              <span aria-hidden="true">💡</span>{' '}
-              <span className="lighting-label">{lightingMode === 'AUTO' ? 'Éclairage' : `Mode ${lightingMode} engagé`}</span>
+              {showLightingSection && <span aria-hidden="true">💡</span>}
+              {showSoundSection && <span aria-hidden="true">{soundMuted ? '🔇' : '🔊'}</span>}
+              {' '}
+              <span className="lighting-label">{ambianceLabel}</span>
             </button>
             {lightingPopoverOpen && (
-              <div ref={lightingPopoverRef} className="lighting-mode-popover">
-                <LightingModePanel />
+              <div ref={lightingPopoverRef} className="navbar-popover lighting-mode-popover">
+                <AmbiancePopoverPanel
+                  showLighting={showLightingSection}
+                  lightingSwitchedOff={lightingSwitchedOff}
+                  showSound={showSoundSection}
+                  soundMuted={soundMuted}
+                  refreshSound={refreshSound}
+                  ambianceHref={getFullPath('ambiance')}
+                />
               </div>
             )}
           </div>

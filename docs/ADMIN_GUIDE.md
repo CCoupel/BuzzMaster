@@ -2865,4 +2865,62 @@ Cette alerte :
 - N'apparaît **jamais sur `/anim`** (interface animateur, elle n'a pas de rôle de configuration)
 - Vous aide à détecter les situations de blocage avant qu'une question ne reste figée
 
+---
+
+## Ambiance : son coupé et éclairage (v11.4.0)
+
+Le bouton **Ambiance** de l'en-tête ouvre un popover regroupant la lumière et le son :
+
+- **Son** : l'interrupteur coupe tous les sons (bruitages, son de question, son de décompte). Le choix est conservé après redémarrage. Les réglages des sons restent en place : réactiver le son les rétablit tels quels.
+- **Éclairage** : les commandes ON / AUTO / OFF et Flash. Quand l'éclairage est désactivé, elles n'ont aucun effet et le popover propose un lien vers **Ambiance › Lumière**.
+
+L'interrupteur général de l'éclairage (« Éclairage d'ambiance activé ») se trouve en tête de l'onglet **Ambiance › Lumière**.
+
+## Son de décompte (v11.4.0)
+
+Un son peut jouer pendant tout compte à rebours de question (tous les chronos).
+
+- **Ce qui est joué** : le fichier `decompte.wav` (un son par défaut est fourni, de 2 secondes). Il peut être remplacé ou restauré depuis **Ambiance › Son**.
+- **Quand il ne joue pas** : jamais si la question a un son attaché (une image seule ne l'empêche pas) ; en RAFALE, il est joué par manche, pas par question.
+- **Au buzz** : le décompte continue, le son aussi.
+- **Réglages** : désactiver le décompte, ou le jouer une seule fois au lieu d'en boucle.
+
+## Lecture en boucle du son de question (v11.4.0)
+
+Sur une question avec un son, l'option **Lecture : Une fois / En boucle** répète le son jusqu'à la fin du chrono (ou jusqu'à l'arrêt de la question).
+
+- Elle se combine avec **Chrono démarre à la fin** : le chrono démarre à la fin du premier passage, et le son continue ensuite en boucle.
+- Au buzz, la boucle continue.
+
+## RAFALE alphabétique (v11.4.0)
+
+Dans l'éditeur d'une question RAFALE, l'interrupteur **🔤 Alphabétique** tire les réponses par ordre alphabétique :
+
+- Une réponse est tirée par lettre, de A à Z. Une fois la lettre Z passée, une nouvelle passe reprend à la première lettre qui a encore une réponse. Les lettres sans réponse restante sont sautées.
+- Le tri ignore les accents, la casse et les articles au début (« La Seine » se classe à S, « L'Égypte » à E).
+- La lettre courante est affichée sur l'écran admin, l'animateur et la TV. L'écran admin indique la lettre de la question suivante, « Suivante (lettre X) ».
+- Sur la TV, une **roue des lettres** s'affiche. Dans l'éditeur, les vignettes **Bandeau** (par défaut) et **Roue** choisissent sa présentation, par manche ; la vignette **Roue** affiche la roue en arc.
+- L'alerte de pioche indique le nombre de lettres couvertes par le réservoir.
+
+## Gestion des catégories (v11.4.0)
+
+Ouvrez **⚙ Gérer…** dans la barre de filtre par catégorie de la page **Questions** (sous « Equilibre des categories ») pour :
+
+- **Renommer** une catégorie, intégrée comprise. Sa clé reste la même.
+- **Changer sa couleur**. Cette couleur pilote aussi l'éclairage d'ambiance pendant les questions de la catégorie.
+- **Changer son icône** (catégories personnalisées seulement), au format PNG, JPG ou WebP, 2 Mio maximum.
+- **Créer** une catégorie : un nom et une icône (PNG, JPG ou WebP, 2 Mio maximum) sont obligatoires ; la couleur est facultative.
+- **Supprimer** une catégorie. Si elle est utilisée, deux choix sont proposés (radios du dialogue) :
+  - **Garder les questions, sans catégorie** : les questions (et cartes MEMOTION) passent dans « Sans catégorie ».
+  - **Supprimer aussi les questions** : les questions et cartes de la catégorie sont supprimées.
+
+Une catégorie n'ayant que de l'historique est aussi considérée comme utilisée. Une case de confirmation est obligatoire dès qu'un historique est concerné, et toujours en mode « Supprimer aussi les questions ».
+
+Les changements apparaissent en direct sur la TV, le VJoueur et l'animateur, sans rechargement.
+
+**Points à savoir :**
+
+- Toute modification de catégorie est **bloquée pendant une partie en cours**. Elle est possible à l'arrêt, en « Nouvelle partie » ou après le REVEAL.
+- La suppression **réécrit l'historique** : les points gagnés dans la catégorie apparaissent sous « Sans catégorie ». Avant d'écrire, le serveur conserve une copie `history.json.bak-<date-heure>` (5 copies au maximum). Aucune restauration n'est proposée dans l'interface ; une restauration depuis une copie `.bak` ne peut se faire que manuellement, sur les fichiers du serveur.
+
 

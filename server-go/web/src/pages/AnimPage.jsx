@@ -205,7 +205,8 @@ export default function AnimPage() {
   }, [])
 
   const { categories: apiCategories } = useCategories()
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+  // #285 : liste API brute (surcharges nom/couleur des intégrées incluses) ; les composants filtrent eux-mêmes.
+  const customCategories = apiCategories
 
   const question = gameState.question
   // 🔴 Retour QUALIF v9.0.0.4 (point A+5) — depuis #216 une manche RAFALE
@@ -939,6 +940,8 @@ export default function AnimPage() {
             answerValue: rafaleAnswerValue,
             catMeta: rafaleCatMeta,
             askedCount: gameState.RAFALE_ASKED_COUNT,
+            alphabetical: gameState.question?.RAFALE_ALPHABETICAL === true,
+            currentLetter: gameState.RAFALE_CURRENT_LETTER || '',
             // NEXT (#202, contrat §13.3/§13.5/§13.6) — zone "SUIVANTE" de
             // AnimRafaleQuestion. `showNext` reprend TELLE QUELLE la
             // condition déjà posée sur `rafaleDisabled` ci-dessus (sous-phase

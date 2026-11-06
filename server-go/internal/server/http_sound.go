@@ -35,6 +35,19 @@ type SoundProvider interface {
 	TestSoundCue(c audio.Cue) (accepted bool)
 }
 
+// CountdownProvider is the optional extension of SoundProvider for the
+// chronometer countdown voice (v11.4.0, #287, contract sound.md §12). A
+// separate interface (type-asserted on HTTPServer.Sound) so existing
+// SoundProvider fakes keep compiling.
+type CountdownProvider interface {
+	// CountdownOutputAvailable reports whether a REAL (non-neutral)
+	// MediaPlayer backs the countdown voice.
+	CountdownOutputAvailable() bool
+	// TestCountdown plays the countdown file ONCE, replacing a running one,
+	// ignoring muted / countdown_disabled (explicit gesture, §12.4).
+	TestCountdown() (accepted bool)
+}
+
 // soundsDir is data/files/sounds/ — the same location cmd/server's own
 // soundsDir(cfg) resolves to (filesDir/"sounds"), computed independently
 // here since internal/server already anchors every other media directory
@@ -107,7 +120,7 @@ func (h *HTTPServer) handleAPISoundsList(w http.ResponseWriter, r *http.Request)
 			Enabled: !cuesDisabled[string(c)],
 			Path:    "/files/sounds/" + synth.Filename(c),
 		}
-		m := manifest[c]
+		m := manifest[string(c)]
 		entry.Custom = m.Custom
 		if m.Present {
 			if raw, readErr := os.ReadFile(filepath.Join(dir, synth.Filename(c))); readErr == nil {
@@ -119,7 +132,39 @@ func (h *HTTPServer) handleAPISoundsList(w http.ResponseWriter, r *http.Request)
 		entries = append(entries, entry)
 	}
 
-	writeSoundJSON(w, http.StatusOK, map[string]interface{}{"cues": entries})
+	// v11.4.0 (#287/#288, http-endpoints.md §Sound): the additive `long`
+	// array — today the countdown only. `cues` stays byte-identical.
+	sc := config.Get().Sound
+	long := soundLongEntry{
+		Name:    synth.CountdownName,
+		Kind:    "countdown",
+		Enabled: !sc.CountdownDisabled,
+		Loop:    !sc.CountdownOnce,
+		Custom:  manifest[synth.CountdownName].Custom,
+		Path:    "/files/sounds/" + synth.CountdownFilename(),
+	}
+	if manifest[synth.CountdownName].Present {
+		if raw, readErr := os.ReadFile(filepath.Join(dir, synth.CountdownFilename())); readErr == nil {
+			if res, valErr := audio.ValidateQuestionSound(raw); valErr == nil {
+				d := res.Duration.Seconds()
+				long.DurationSeconds = &d
+			}
+		}
+	}
+
+	writeSoundJSON(w, http.StatusOK, map[string]interface{}{"cues": entries, "long": []soundLongEntry{long}})
+}
+
+// soundLongEntry is one element of GET /api/sounds `long` (v11.4.0).
+// duration_seconds is null when the file is missing/unreadable.
+type soundLongEntry struct {
+	Name            string   `json:"name"`
+	Kind            string   `json:"kind"`
+	Enabled         bool     `json:"enabled"`
+	Loop            bool     `json:"loop"`
+	Custom          bool     `json:"custom"`
+	DurationSeconds *float64 `json:"duration_seconds"`
+	Path            string   `json:"path"`
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +182,20 @@ func (h *HTTPServer) handleAPISoundsRouter(w http.ResponseWriter, r *http.Reques
 	path = strings.TrimSuffix(path, "/")
 	if path == "" {
 		http.NotFound(w, r)
+		return
+	}
+
+	// v11.4.0 (#287): the countdown is NOT a cue — its dedicated branch is
+	// recognised BEFORE soundCueFromString (which keeps refusing it).
+	switch path {
+	case synth.CountdownName:
+		h.handleAPICountdownReplace(w, r)
+		return
+	case synth.CountdownName + "/restore":
+		h.handleAPICountdownRestore(w, r)
+		return
+	case synth.CountdownName + "/test":
+		h.handleAPICountdownTest(w, r)
 		return
 	}
 
@@ -219,12 +278,12 @@ func (h *HTTPServer) handleAPISoundReplace(w http.ResponseWriter, r *http.Reques
 	if mErr != nil {
 		LogWarn(game.LogComponentHTTP, "Sound replace: failed to write sounds.json manifest: %v", mErr)
 	}
-	LogInfo(game.LogComponentHTTP, "Sound replace: cue=%s custom=%v duration=%.2fs", cue, manifest[cue].Custom, result.Duration.Seconds())
+	LogInfo(game.LogComponentHTTP, "Sound replace: cue=%s custom=%v duration=%.2fs", cue, manifest[string(cue)].Custom, result.Duration.Seconds())
 
 	writeSoundJSON(w, http.StatusOK, map[string]interface{}{
 		"status":           "ok",
 		"cue":              string(cue),
-		"custom":           manifest[cue].Custom,
+		"custom":           manifest[string(cue)].Custom,
 		"duration_seconds": result.Duration.Seconds(),
 		"warning":          nullableString(result.Warning),
 	})
@@ -275,7 +334,7 @@ func (h *HTTPServer) handleAPISoundRestoreOne(w http.ResponseWriter, r *http.Req
 	writeSoundJSON(w, http.StatusOK, map[string]interface{}{
 		"status":           "ok",
 		"cue":              string(cue),
-		"custom":           manifest[cue].Custom,
+		"custom":           manifest[string(cue)].Custom,
 		"duration_seconds": result.Duration.Seconds(),
 	})
 }
@@ -334,7 +393,9 @@ func (h *HTTPServer) handleAPISoundStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	active := h.Sound != nil && h.Sound.SoundEnabled() && h.Sound.SoundOutputAvailable()
-	writeSoundJSON(w, http.StatusOK, map[string]bool{"active": active})
+	// muted (v11.4.0, #286): read at call time from the live config, never
+	// cached; independent from active (contract sound.md §11.2).
+	writeSoundJSON(w, http.StatusOK, map[string]bool{"active": active, "muted": config.Get().Sound.Muted})
 }
 
 // nullableString returns nil for an empty string, s otherwise — so a JSON
@@ -381,10 +442,160 @@ func (h *HTTPServer) handleAPISoundsRestoreDefaults(w http.ResponseWriter, r *ht
 		LogWarn(game.LogComponentHTTP, "Sounds restore-defaults: failed to write sounds.json manifest: %v", mErr)
 	}
 
-	LogInfo(game.LogComponentHTTP, "Sounds restore-defaults: %d cue(s) rewritten to their default", len(written))
+	LogInfo(game.LogComponentHTTP, "Sounds restore-defaults: %d cue(s) + countdown rewritten to their default", len(written))
+
+	// `written` stays the 7 cues (unchanged shape, #229); `restored` (v11.4.0,
+	// #287) lists all 8 names, countdown included.
+	restored := make([]string, 0, len(written)+1)
+	for _, c := range written {
+		restored = append(restored, string(c))
+	}
+	restored = append(restored, synth.CountdownName)
+	writeSoundJSON(w, http.StatusOK, map[string]interface{}{
+		"status":   "ok",
+		"written":  written,
+		"restored": restored,
+	})
+}
+
+// ---------------------------------------------------------------------------
+// /api/sounds/decompte[/restore|/test] — chronometer countdown (v11.4.0,
+// #287, contracts/sound.md §12, http-endpoints.md §Sound)
+// ---------------------------------------------------------------------------
+
+// handleAPICountdownReplace handles POST /api/sounds/decompte (multipart
+// `file`). Validated by audio.ValidateQuestionSound (<= 30 s, <= 6 Mio, mono
+// accepted and stored as canonical stereo) — never ValidateUpload (5 s).
+// Written tmp + rename.
+func (h *HTTPServer) handleAPICountdownReplace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseMultipartForm(audio.MaxQuestionSoundBytes + (1 << 20)); err != nil {
+		writeSoundError(w, http.StatusBadRequest, "corps de requête invalide")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeSoundError(w, http.StatusBadRequest, "aucun fichier envoyé (champ \"file\" attendu)")
+		return
+	}
+	defer file.Close()
+
+	if !strings.EqualFold(filepath.Ext(header.Filename), ".wav") {
+		writeSoundError(w, http.StatusBadRequest, "ce fichier n'est pas un WAV — seuls les fichiers .wav sont acceptés")
+		return
+	}
+	if header.Size > audio.MaxQuestionSoundBytes {
+		writeSoundError(w, http.StatusRequestEntityTooLarge, "fichier trop volumineux")
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, audio.MaxQuestionSoundBytes+1))
+	if err != nil {
+		writeSoundError(w, http.StatusBadRequest, "lecture du fichier échouée")
+		return
+	}
+	if int64(len(raw)) > audio.MaxQuestionSoundBytes {
+		writeSoundError(w, http.StatusRequestEntityTooLarge, "fichier trop volumineux")
+		return
+	}
+
+	result, err := audio.ValidateQuestionSound(raw)
+	if err != nil {
+		writeSoundError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Store the VALIDATED PCM (always canonical stereo) in a fresh header,
+	// like the question sound upload — never the raw (possibly mono) bytes.
+	if status, msg := h.writeCountdownFile(audio.BuildCanonicalWAV(result.PCM)); status != 0 {
+		writeSoundError(w, status, msg)
+		return
+	}
+	manifest, mErr := synth.ReconcileManifest(h.soundsDir())
+	if mErr != nil {
+		LogWarn(game.LogComponentHTTP, "Countdown replace: failed to write sounds.json manifest: %v", mErr)
+	}
+	LogInfo(game.LogComponentHTTP, "Countdown replace: custom=%v duration=%.2fs", manifest[synth.CountdownName].Custom, result.Duration.Seconds())
 
 	writeSoundJSON(w, http.StatusOK, map[string]interface{}{
-		"status":  "ok",
-		"written": written,
+		"status":           "ok",
+		"custom":           manifest[synth.CountdownName].Custom,
+		"duration_seconds": result.Duration.Seconds(),
 	})
+}
+
+// handleAPICountdownRestore handles POST /api/sounds/decompte/restore.
+func (h *HTTPServer) handleAPICountdownRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	data := synth.GenerateCountdown()
+	if status, msg := h.writeCountdownFile(data); status != 0 {
+		writeSoundError(w, status, msg)
+		return
+	}
+	manifest, mErr := synth.ReconcileManifest(h.soundsDir())
+	if mErr != nil {
+		LogWarn(game.LogComponentHTTP, "Countdown restore: failed to write sounds.json manifest: %v", mErr)
+	}
+	result, _ := audio.ValidateQuestionSound(data) // our own fresh synthesis — always valid
+	LogInfo(game.LogComponentHTTP, "Countdown restore: restored to default")
+	writeSoundJSON(w, http.StatusOK, map[string]interface{}{
+		"status":           "ok",
+		"custom":           manifest[synth.CountdownName].Custom,
+		"duration_seconds": result.Duration.Seconds(),
+	})
+}
+
+// writeCountdownFile writes decompte.wav atomically (tmp + rename). Returns
+// (0, "") on success, else the HTTP status and message.
+func (h *HTTPServer) writeCountdownFile(data []byte) (int, string) {
+	// Windows: os.Rename onto a file a player still holds open fails (no
+	// FILE_SHARE_DELETE) — release the countdown player first. Optional
+	// interface (type-asserted) so existing providers keep compiling.
+	if sc, ok := h.Sound.(interface{ StopCountdown() }); ok {
+		sc.StopCountdown()
+	}
+	dir := h.soundsDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		LogError(game.LogComponentHTTP, "Countdown: cannot create %s: %v", dir, err)
+		return http.StatusInternalServerError, "échec d'écriture disque"
+	}
+	path := filepath.Join(dir, synth.CountdownFilename())
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		LogError(game.LogComponentHTTP, "Countdown: cannot write %s: %v", tmp, err)
+		return http.StatusInternalServerError, "échec d'écriture disque"
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		LogError(game.LogComponentHTTP, "Countdown: cannot rename into %s: %v", path, err)
+		return http.StatusInternalServerError, "échec d'écriture disque"
+	}
+	return 0, ""
+}
+
+// handleAPICountdownTest handles POST /api/sounds/decompte/test — same
+// three-outcome semantics as /api/sounds/{cue}/test (disabled = sound.enabled
+// false), but through the countdown MediaPlayer, never PlayCue. Ignores
+// muted and countdown_disabled (explicit gesture, §12.4).
+func (h *HTTPServer) handleAPICountdownTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cp, _ := h.Sound.(CountdownProvider)
+	result := "unavailable"
+	switch {
+	case h.Sound == nil || !h.Sound.SoundEnabled():
+		result = "disabled"
+	case cp == nil || !cp.CountdownOutputAvailable():
+		result = "unavailable"
+	case cp.TestCountdown():
+		result = "played"
+	}
+	writeSoundJSON(w, http.StatusOK, map[string]string{"result": result})
 }

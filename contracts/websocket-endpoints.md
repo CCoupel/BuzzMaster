@@ -88,6 +88,7 @@ Le serveur envoie chaque action uniquement aux types clients concernés :
 | `RESET` | ✓ | ✓ | ✓ | ✓ | ✓ | Firmware : resetGame(). **Anim depuis #162** (`broadcastReset`) |
 | `REMOTE` | ✓ | ✓ | — | ✗ | — | Contrôle de l'affichage TV — régie uniquement |
 | `QUESTIONS` | ✓ | — | — | ✗ | — | Grande payload, inutile hors admin. Anim en est exclu comme TV/VPlayer |
+| `CATEGORIES_CHANGED` | ✓ | ✓ | ✓ | ✓ | — | **Nouveau (v11.4.0, #285 révision 2)** — liste résolue des catégories après toute écriture (`POST`/`PUT`/icône/`DELETE`), charge identique pour les quatre types (pas de nœud `GAME`). Voir `contracts/websocket-actions.md` §"CATEGORIES_CHANGED". Pas de rejeu au `HELLO` (les clients font `GET /api/categories` au montage) |
 | `CLIENTS` | ✓ | — | — | ✗ | — | Liste clients, admin uniquement |
 | `FIRMWARE_VERSION` | ✓ | — | — | ✗ | — | Info OTA, frontend admin uniquement |
 | `BACKGROUND_CHANGE` | ✓ | ✓ | ✓ | ✗ | — | VPlayer affiche PlayerDisplay ; hors périmètre animateur |

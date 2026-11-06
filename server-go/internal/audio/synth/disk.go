@@ -56,5 +56,20 @@ func WriteAll(dir string, overwrite bool) (written []audio.Cue, err error) {
 		}
 		written = append(written, c)
 	}
+	// v11.4.0 (#287, §12.2): the countdown sits next to the cues, same
+	// "never clobber unless overwrite" rule. Not reported in `written`
+	// (typed []audio.Cue — the countdown is not a cue).
+	cpath := filepath.Join(dir, CountdownFilename())
+	write := overwrite
+	if !overwrite {
+		if _, statErr := os.Stat(cpath); statErr != nil {
+			write = true
+		}
+	}
+	if write {
+		if writeErr := os.WriteFile(cpath, GenerateCountdown(), 0644); writeErr != nil && firstErr == nil {
+			firstErr = fmt.Errorf("writing %s: %w", cpath, writeErr)
+		}
+	}
 	return written, firstErr
 }

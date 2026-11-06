@@ -2211,3 +2211,26 @@ Utilitaires pour normaliser l'état du son, appels d'API, stockage d'état local
 
 Classes `.sound-*` préfixées (ex: `.sound-toggle`, `.sound-table`, `.sound-cue-row`) — **aucune collision** avec les styles `.lighting-*` existants. Tous les styles sont scoped sous `.ambiance-page`.
 
+## Interface v11.4.0 — popover Ambiance, catégories, roue des lettres
+
+Sources : `contracts/wheel-component.md`, `contracts/rafale.md` §15.7–§15.8, `contracts/websocket-actions.md` §CATEGORIES_CHANGED.
+
+### Popover « Ambiance » de l'en-tête (#284, #286)
+
+- Bouton d'en-tête unique qui ouvre un popover (classe `.navbar-popover`) : commandes d'éclairage (ON / AUTO / OFF, Flash) et interrupteur **Son** (`sound.muted`).
+- Quand l'éclairage est désactivé (`lighting.enabled`), les commandes sont inactives et un lien mène à **Ambiance › Lumière**.
+- Le popover ne déborde plus de l'écran (#284).
+
+### Dialogue « Gérer les catégories » (#285)
+
+- Composant `CategoryManagerDialog`, ouvert par le bouton « ⚙ Gérer… » de la barre de filtre par catégorie de la page Questions (sous « Equilibre des categories »).
+- Colonnes : couleur, icône, nom, nombre de questions, pilotage de l'ambiance, actions. Création, renommage, couleur, icône et suppression (choix `reassign` ou `delete`) passent par `/api/categories`.
+- Le formulaire de création est dans ce dialogue seulement : l'éditeur de question n'a plus de bouton « Gérer » ni « Créer ».
+- Hook `useCategories` : applique la liste reçue dans `CATEGORIES_CHANGED` sans refetch ; la page ne réagit plus à l'évènement `QUESTIONS` pour les catégories.
+
+### Roue des lettres (#282)
+
+- Composant générique `Wheel` (`contracts/wheel-component.md`) : segments, segment courant, présentation `strip` (bandeau) ou `arc`, normalisation modulo n. Pas d'animation de mouvement (`motion` réservé à v12.0).
+- Adaptateur `RafaleLetterWheel` pour la TV (`PlayerDisplay.jsx`, RAFALE STARTED) : 26 segments A–Z, segment courant = `RAFALE_CURRENT_LETTER`, lettres absentes de `RAFALE_LETTERS` grisées sauf la courante. `#` n'a pas de segment.
+- La TV n'ajoute aucune zone quand l'option est désactivée. Les zones basses restent en `overflow: hidden`, unités `vh`/`vw`.
+

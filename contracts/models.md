@@ -189,7 +189,7 @@ interface Question {
   TYPE: QuestionType
   POINTS: number
   TIME: number           // Durée en secondes
-  CATEGORY?: string
+  CATEGORY?: string            // clé de catégorie ("" = Sans catégorie) — gestion (nom, couleur, icône, suppression) : http-endpoints.md §Catégories (v11.4.0, #285)
   POINTS_TARGET: PointsTarget
   ORDER: number          // Position dans la liste (à l'intérieur de sa manche depuis v11.2, #245)
   ROUND_ID?: string      // v11.2 (#245) — manche de la question ; absent, "" ou inconnu = « Sans manche »
@@ -199,6 +199,7 @@ interface Question {
   EXPLANATION?: string   // Note d'explication/justification — animateur uniquement (v6.4.x, #168)
   SOUND?: string               // URL média sonore de question (v11.1, #219) — voir §SOUND ci-dessous
   SOUND_TIMER_DELAYED?: boolean // true = chronomètre différé jusqu'à la fin du son (v11.1, #219)
+  SOUND_LOOP?: boolean         // true = média rejoué en boucle jusqu'à l'arrêt du chrono (v11.4.0, #288) — combinable avec SOUND_TIMER_DELAYED (chrono à la fin du 1er passage)
 
   // QCM
   QCM_ANSWERS?: QCMAnswers
@@ -319,6 +320,13 @@ absent ⇒ `false`) = comportement strictement identique à avant ce lot.
 > réelle via le champ `sound_cleared=true` (`contracts/http-endpoints.md` §Questions) : contrairement
 > à `MEDIA`/`MEDIA_ANSWER` (qui n'ont aujourd'hui aucun moyen réel de suppression, défaut connu —
 > `sound.md` §12 point 4), le fichier disque est effectivement supprimé (`os.Remove`).
+
+#### `SOUND_LOOP` — lecture en boucle (v11.4.0, #288, LOT-3)
+
+> Contrat normatif : `contracts/sound.md` §13. `omitempty`, valeur zéro = **une fois** (comportement v11.1). Multipart
+> `sound_loop`, écrit seulement si un son est attaché. **Combinable avec `SOUND_TIMER_DELAYED`** : le chronomètre démarre
+> à la fin du **premier passage**, le média continue en boucle (décision utilisateur 2026-11-05). Commun à tous les
+> types comme `SOUND` (décision d'éditeur : SPEEDY/QCM/ARDOISE seulement, jamais une garde serveur — §10.4bis).
 
 ### Exemple NORMAL
 

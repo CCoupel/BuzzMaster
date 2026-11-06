@@ -10,7 +10,7 @@
  *   2. Catégorie custom avec imageURL → <img> affiché
  *   3. Entry sans imageURL → icône emoji (CATEGORIES[key]?.icon ?? '📷')
  *   4. Entry avec couleur → backgroundColor correct
- *   5. Entry name vide + key UNKNOWN → fallback "Inconnue"
+ *   5. Entry name vide + key UNKNOWN → fallback "Sans catégorie" (#285, ex-« Inconnue »)
  *   6. Entry name vide + key générique → fallback title case
  *   7. Classement équipes (ranks) avec ex aequo
  *   8. Palmares vide → "Aucun evenement enregistre"
@@ -185,15 +185,15 @@ describe('PlayerDisplay — PALMARES v5.7.10 (GET /palmares)', () => {
     })
   })
 
-  it('entry name vide + category UNKNOWN → fallback "Inconnue"', async () => {
+  it('entry name vide + category UNKNOWN → fallback "Sans catégorie" (#285)', async () => {
     // Backend retourne name="" pour les catégories non résolues
-    // Frontend applique le fallback : category === 'UNKNOWN' → 'Inconnue'
+    // Frontend applique le fallback : category === 'UNKNOWN' → 'Sans catégorie'
     setupMocks({
       palmaresEntries: [makePalmaresEntry('UNKNOWN', { name: '' })],
     })
     render(<PlayerDisplay />)
     await waitFor(() => {
-      expect(screen.getByText('Inconnue')).toBeInTheDocument()
+      expect(screen.getByText('Sans catégorie')).toBeInTheDocument()
     })
   })
 

@@ -562,6 +562,9 @@ const (
 )
 ```
 
+> **Amendement v11.4.0 (#288, §13.1)** : l'interface gagne `PlayLoop(path string) error` — lecture reprise au début à
+> chaque fin naturelle, jamais d'`onNaturalEnd`. Le bloc ci-dessus est conservé tel quel comme état v11.1.
+
 - **Voix unique, normatif.** Deux extraits ne se superposent jamais. Une question chasse l'autre.
 - **Lecture en flux depuis le disque**, jamais un `os.ReadFile`. Un média de 45 s pèse ~8 Mo de
   PCM : le charger d'un bloc pour chaque lecture est un gaspillage inutile alors que
@@ -693,7 +696,7 @@ discipline seule ne suffit pas, c'est précisément le raisonnement que §6.2 ti
 | Sujet | Statut |
 |---|---|
 | *Ducking* (atténuer le média pendant un bruitage) | **Hors v11.1.** `oto.Player.SetVolume` le rendrait trivial, mais il recouplerait les deux chemins que §10.5 sépare. Suite possible, jamais un effet de bord |
-| Lecture en boucle (ambiance d'ENTRACTE prolongée) | **Hors v11.1.** Une lecture = un passage |
+| Lecture en boucle (ambiance d'ENTRACTE prolongée) | ~~**Hors v11.1.** Une lecture = un passage~~ — **dans le périmètre depuis v11.4.0 (#288, §13)** : `SOUND_LOOP`, combinable avec le différé (fin du 1ᵉʳ passage) |
 | Position de lecture diffusée dans le `GameState` | **Exclu.** Seul l'**état** (`IDLE`/`PLAYING`/`PAUSED`) est diffusé, à chaque changement. Le chronomètre est le seul flux à cadence du projet ; on n'en ajoute pas un second |
 | Sélection du périphérique de sortie | Inchangé — `SoundConfig.Device` n'est toujours pas honoré par `oto` (§9, `OutputConfig`) |
 | Média sonore de **réponse** (symétrique de `MEDIA_ANSWER`) | Non demandé au cadrage. Additif si un jour souhaité |
@@ -710,6 +713,10 @@ Chaque son porte un réglage propre : le chronomètre de réponse démarre **en 
 // sur Question
 SoundTimerDelayed bool `json:"SOUND_TIMER_DELAYED,omitempty"`
 ```
+
+> **Amendement v11.4.0 (#288, §13.2, décision utilisateur 2026-11-05)** : `SOUND_TIMER_DELAYED` et `SOUND_LOOP` se
+> **combinent** — « la fin du son » d'une lecture en boucle est la **fin du premier passage** ; le média continue
+> ensuite en boucle, le chronomètre tourne.
 
 **La valeur zéro est le comportement correct** — `false` = simultané = ce que fait le serveur
 aujourd'hui. Aucune migration, aucun `question.json` existant modifié. Même discipline que
@@ -1010,3 +1017,377 @@ question) — patron `RafalePoolAlert`, un composant pour deux surfaces.
 
 Le libellé **nomme le remède**, aussi contre-intuitif ici qu'au §10.8.5 : réactiver le son ou
 brancher l'enceinte **exige un redémarrage du serveur** (§10.8.8).
+
+---
+
+## 11. Son coupé (`sound.muted`) — réglage ponctuel du popover « Ambiance » — normatif (v11.4.0, #286, LOT-1)
+
+> **Issue** : #286 (milestone v11.4.0, recadrée au GATE 1.5 du 2026-11-05). **Plan** :
+> `_work/reports/planner-20261105-110000.md` §4.2. **Maquette** : `admin_navbar__ambiance_popover.html`.
+> Section **additive** : §2 à §10 inchangés au bit près.
+
+### 11.1 Pourquoi ce n'est PAS `sound.enabled`
+
+`sound.enabled` est **asymétrique** (§6.3 : éteindre est immédiat, rallumer exige un redémarrage) **et** alimente
+la gate T0 (§10.8) : à `false`, toute question portant un son est **empêchée de démarrer** (`DISABLED`). Un
+réglage de régie « couper le son maintenant, le rendre tout à l'heure » ne peut remplir ni l'un ni l'autre de ces
+rôles. C'est donc une **troisième garde**, indépendante des deux autres :
+
+| Garde | Où | Portée | Rallumage |
+|---|---|---|---|
+| `sound.enabled` (§6.3) | `config.json` | construction du moteur + cues + média | redémarrage |
+| `CuesDisabled` (§6.3) | `config.json` | une cue | immédiat |
+| **`sound.muted`** (ici) | `config.json`, **persisté** (décision utilisateur Q2) | cues + média de question + son de décompte (§12, LOT-3) | immédiat |
+
+### 11.2 Sémantique — normatif
+
+- **Champ** : `SoundConfig.Muted bool \`json:"muted,omitempty"\`` — **on stocke ce qui est coupé** : valeur zéro
+  (clé absente) = son actif = comportement actuel, aucune migration (même discipline que `CuesDisabled`).
+  Persisté : un redémarrage **conserve** le son coupé — c'est pourquoi l'en-tête admin le montre en permanence
+  (§11.4), seul garde-fou contre une soirée muette oubliée.
+- **Écriture** : `POST /config.json {"sound": {"muted": true|false}}` — fusion champ par champ existante de
+  `handleConfig` (§6.3 « Fusion champ par champ »), **aucun endpoint dédié** (même règle que `enabled` et
+  `cues_disabled`). **Effet de bord à l'écriture** (dans `handleConfig`, après persistance, via le rappel
+  `OnSoundMutedChange(muted bool)` de l'`App`) : passage à `true` ⇒ `questionSound().Stop()` (arrêt net,
+  `QUESTION_SOUND_STATE` → `IDLE`, chronomètre différé libéré) **et** arrêt du son de décompte (§12). Passage à
+  `false` ⇒ **rien n'est repris** (un `Rejouer` manuel reste possible).
+- **Lecture** : `GET /api/sound/status` → `{active, muted}` (`http-endpoints.md` §Sound). Lue à l'appel,
+  jamais en cache.
+- **Cues** : `notifySound` (`cmd/server/sound.go`) gagne **une** garde, en tête :
+  ```go
+  func (a *App) notifySound(c audio.Cue) {
+      sc := config.Get().Sound
+      if sc.Muted { return }
+      if !sc.Enabled { return }
+      if sc.CuesDisabled[string(c)] { return }
+      a.sound().PlayCue(c)
+  }
+  ```
+  Corps existant inchangé ; le test-garde AST du §6.2 reste valide (même sélecteur).
+- **Média de question (T1)** : dans `questionSoundAdapter.play`, `Muted` est traité **comme `DISABLED` à T1** :
+  aucun `Play`, chronomètre différé libéré (`ReleaseDeferredTimer`, règle de non-blocage §10.7). **La gate T0
+  (`questionSoundAvailability`, §10.8) ne lit jamais `Muted`** : une question sonore démarre normalement quand le
+  son est coupé — `QUESTION_SOUND_UNAVAILABLE` reste `""`. Test exigé : muet, PREPARE→READY passe et le différé
+  est libéré immédiatement à STARTED.
+- **`POST /api/sounds/{cue}/test` ignore `Muted`** — geste explicite de l'utilisateur, même règle que `CuesDisabled`.
+- **Son de décompte** (§12, LOT-3) : lit la même garde avant tout `Play`.
+
+### 11.3 Interface — popover « Ambiance » de l'en-tête (ex-« Éclairage »)
+
+- Le bouton « 💡 Éclairage » de `Navbar.jsx` devient **« Ambiance »** et son popover regroupe **deux sections** :
+  « Éclairage général » (`LightingModePanel` inchangé, ON / AUTO / OFF + Flash) et **« Son »** — sélecteur
+  `role="radiogroup"` à **deux positions ON / OFF** (le son n'a pas d'état automatique), avertissement quand coupé
+  (il dit que le réglage survit au redémarrage), écriture par `POST /config.json`, `refresh()` de
+  `useSoundStatus` après réponse, jamais de mise à jour optimiste.
+- **Visibilité** : bouton présent dès qu'un pont Hue est configuré **ou** que `status.active` est vrai ; chaque
+  section n'apparaît que si sa fonction existe. Éclairage d'ambiance désactivé (`lighting.enabled=false`, §11.5) :
+  section Éclairage grisée avec renvoi vers Ambiance › Lumière.
+- **Libellé du bouton** : « Ambiance » au repos ; « Mode ON/OFF engagé » et/ou « Son coupé » quand un réglage est
+  engagé ; glyphes 💡 et 🔊/🔇 ; badge orange (rouge si lumière OFF).
+- **Popover** : classe commune `.navbar-popover` (`left: 0`, `white-space: normal`, `max-width` bornée au viewport)
+  — correctif #284.
+
+### 11.4 Interrupteur général de l'éclairage d'ambiance — page Ambiance › Lumière (#286, partie lumière)
+
+Nouveau bloc en tête de l'onglet Lumière : « Éclairage d'ambiance activé », **persisté** — c'est le champ existant
+`lighting.enabled` (`LightingConfig`), écrit par `POST /config.json {"lighting": {"enabled": bool}}` (fusion
+existante). Sémantique, normative : à `false`, **aucune scène n'est envoyée aux ampoules** (pilote détaché,
+`a.ambiance()` sans pilote — chemin existant « non configuré »), les commandes ON / AUTO / OFF / Flash répondent
+`409 not_configured` (déjà le cas sans pilote) et l'en-tête grise sa section Éclairage ; au basculement à `false`,
+la zone `general` et les ampoules d'équipe sont **éteintes** (même geste que l'arrêt du serveur, `lighting.md`
+§10.4) ; à `true`, le pilote est reconstruit depuis la configuration et `NotifyState()` ré-applique la scène
+courante. Associer un pont force `enabled=true` (comportement existant, `http_lighting.go`). Ce champ est
+distinct du mode ON/AUTO/OFF (non persisté, §10.1.1 de `lighting.md`).
+
+### 11.5 Hors de cette section
+
+Reconstruction à chaud du moteur son (rallumer `sound.enabled` sans redémarrage) : toujours rejetée (§6.3).
+Atténuation (volume) : hors périmètre — le réglage est binaire.
+
+---
+
+## 12. Son de décompte — joué pendant chaque chronomètre de réponse — normatif (v11.4.0, #287, LOT-3)
+
+> **Issue** : #287 (milestone v11.4.0). **Plan** : `.claude/workflow/plan-11.4.0.md` §5 LOT-3. **Décisions utilisateur**
+> (GATE 1.5, 2026-11-05, `docs/mockup/DECISIONS.md` « admin_sounds_manager ») : joué **au début** de chaque
+> chronomètre ; rejoué **en boucle** seulement si le commutateur « en boucle » est actif ; **tous** les chronomètres
+> (global SPEEDY/QCM/ARDOISE, **manche** RAFALE, carte MEMOTION) ; **jamais si la question a un média audio** ;
+> respecte « Son coupé » (§11) et « Bruitages activés ». **Révision 2026-11-05 (décisions utilisateur, GATE 2 LOT-3)** :
+> la sonorisation RAFALE est **par manche, pas par question** ; **au buzz tout continue** (décompte et médias) ;
+> exclusion dès qu'un média est attaché, différé ou non. **Maquette normative** :
+> `docs/mockup/v11.4.0/ui/admin_sounds_manager__countdown_loop.html` (§01).
+> Section **additive** : §1–§11 inchangés sauf amendements explicitement notés (§10.2, §10.6, §10.7).
+
+### 12.1 Nature — un troisième chemin audio, ni cue ni média de question
+
+Le décompte est un **son long** (≤ 30 s, format du §10.4), rejoué éventuellement en boucle, arrêté par un
+évènement de jeu. Ce n'est **pas une cue** (§2.2 : une cue est une impulsion sans état, jamais arrêtée — `audio.Cue`
+reste un catalogue fermé de 7 valeurs, `synth.Cues` et `soundCueFromString` **inchangés**) et ce n'est **pas le média
+de question** (§10 : un média appartient à une question ; le décompte appartient à la configuration serveur et joue
+sur toutes les questions). Il a donc son propre adaptateur, `cmd/server/countdown_sound.go`, bâti sur un **second**
+`audio.MediaPlayer` (§10.2), adossé au **même** contexte `oto` partagé (§10.3 — `sharedOtoContext`, deux
+`oto.Player` sur un contexte se **mixent**, c'est ce que `oto` garantit et ce que le spike #226 a vérifié).
+
+| Chemin | Objet | Instance | Fichier | Appelle |
+|---|---|---|---|---|
+| Cues (§5) | impulsions | `audio.Engine` | `cmd/server/sound.go` | `notifySound` |
+| Média de question (§10) | son d'une question | `audio.MediaPlayer` n°1 | `cmd/server/question_sound.go` | `questionSound()` |
+| **Décompte (§12)** | son pendant le chrono | **`audio.MediaPlayer` n°2** | **`cmd/server/countdown_sound.go`** | **`countdownSound()`** |
+
+**Frontière (même discipline que §10.5, vérifiée par test, jamais par discipline)** : `countdown_sound.go` n'appelle
+jamais `notifySound`/`PlayCue` (extension de `sound_sites_test.go` : le sélecteur `notifySound` n'apparaît pas dans
+ce fichier ; le registre `soundSiteRegistry` ne gagne **aucune** entrée) ; `question_sound.go` et `countdown_sound.go`
+ne s'importent ni ne s'appellent (test AST : aucun sélecteur `countdownSound` dans `question_sound.go`, aucun
+`questionSound` dans `countdown_sound.go`). Le seul lieu où les trois chemins se rencontrent est `main.go`.
+
+### 12.2 Fichier et valeur par défaut
+
+- **Chemin** : `data/files/sounds/decompte.wav` — même dossier que les cues, constante dédiée
+  `synth.CountdownName = "decompte"` (type `string`, **jamais** un `audio.Cue`), `synth.CountdownFilename()`.
+- **Format et limites** : ceux du média de question, §10.4 (WAV canonique, mono accepté et stocké stéréo, ≤ 30 s,
+  ≤ 6 Mio), validés par **`audio.ValidateQuestionSound`** — jamais `ValidateUpload` (limite 5 s des cues), jamais un
+  troisième validateur.
+- **Défaut synthétisé** : `synth.GenerateCountdown() []byte` — tic-tac de **2,00 s** (deux « tic » brefs par seconde,
+  ~1 kHz/~800 Hz alternés, enveloppe du §`tone.go`, amplitude ≤ 0,5 pour rester sous les cues), écrit par
+  `synth.WriteAll` au démarrage **si absent** (même règle « jamais écraser » que les cues), restauré par
+  `POST /api/sounds/decompte/restore` et par `POST /api/sounds/restore-defaults` (qui couvre désormais **7 + 1**
+  fichiers — maquette §01 « Restaurer tout (7 bruitages + décompte) »).
+- **Manifeste** `sounds.json` : `synth.ReconcileManifest` gagne l'entrée `"decompte"` (clé = nom de fichier sans
+  extension, `Custom` = octets ≠ `GenerateCountdown()`). Le type de la map devient `map[string]ManifestEntry`
+  (clés `string(cue)` pour les cues) — adaptation mécanique de `handleAPISoundsList` et de `manifest_229_test.go`
+  (indexation par `string(c)`), **aucun changement de sémantique** pour les cues.
+
+### 12.3 Configuration — `SoundConfig`, valeur zéro = actif, en boucle
+
+```go
+// internal/config/config.go — SoundConfig
+CountdownDisabled bool `json:"countdown_disabled,omitempty"` // zéro = décompte ACTIF (défaut)
+CountdownOnce     bool `json:"countdown_once,omitempty"`     // zéro = EN BOUCLE (défaut, décision #288) ; true = une seule lecture
+```
+
+- **On stocke l'écart au défaut** (même discipline que `CuesDisabled`/`Muted`) : un `config.json` antérieur donne
+  « actif, en boucle » sans migration ni `ApplyDefaults`.
+- **Écriture** : `POST /config.json {"sound": {"countdown_disabled": bool}}` et/ou `{"countdown_once": bool}` —
+  fusion champ par champ de `handleConfig` (clé présente ⇒ écrite, absente ⇒ inchangée, même mécanisme que `muted`),
+  **aucun endpoint dédié**. Effet de bord : passage de `countdown_disabled` à `true` ⇒ `countdownSound().Stop()`
+  (rappel `OnSoundCountdownDisabledChange(disabled bool)` de l'`App`, voisin de `OnSoundMutedChange`). Un changement
+  de `countdown_once` **ne touche pas** une lecture en cours (pris en compte au prochain démarrage de chrono).
+- **Lecture** : `GET /api/sounds` → tableau `long` (`http-endpoints.md` §Sound, LOT-3) ; `GET /api/sound/status`
+  **inchangé**.
+
+### 12.4 Gardes de lecture — dans l'ordre, avant tout `Play`
+
+```go
+func (cs *countdownSoundAdapter) mayPlay(start game.AnswerTimerStart) bool {
+    sc := config.Get().Sound
+    if sc.Muted { return false }                 // §11 — son coupé
+    if !sc.Enabled { return false }              // « Bruitages activés » éteint : moteur non démarré (§6.3)
+    if sc.CountdownDisabled { return false }     // §12.3
+    if start.QuestionSound != "" { return false }     // §12.6 — jamais si la question a un média audio
+    return true
+}
+```
+
+- `POST /api/sounds/decompte/test` **ignore** `Muted`, `Enabled`-éteint et `CountdownDisabled` au même titre que
+  `/api/sounds/{cue}/test` (§11.2) — geste explicite ; il joue le fichier **une fois** (jamais en boucle), via
+  `countdownSound().Test()` qui **remplace** une lecture de décompte en cours (voix unique) sans toucher au jeu.
+- Lecteur neutre (`IsNeutralMedia`), fichier absent ou non conforme ⇒ dégradation silencieuse §5.5 : aucun son,
+  aucune erreur de jeu, **aucun effet sur le chronomètre** (le décompte n'a pas de différé — il n'a rien à libérer).
+
+### 12.5 Déclenchement — « le démarrage effectif d'un chronomètre »
+
+Le décompte est piloté par **le moteur**, jamais par un changement de phase (une phase `STARTED` sans ticker — différé
+§10.7, MEMOTION avant le premier retournement — ne joue rien). Nouveau rappel de `game.Engine` :
+
+```go
+// internal/game/engine.go
+type AnswerTimerKind string
+
+const (
+    AnswerTimerGlobal     AnswerTimerKind = "GLOBAL"      // startTimer() — SPEEDY/QCM/ARDOISE, et la MANCHE RAFALE (voir 12.7)
+    AnswerTimerMotionCard AnswerTimerKind = "MOTION_CARD" // StartMotionCardTimer — carte MEMOTION (retournement, carte RAFALE comprise)
+)
+
+type AnswerTimerStart struct {
+    Kind          AnswerTimerKind
+    Seconds       int    // durée programmée (> 0, sinon le rappel n'est pas émis)
+    QuestionSound string // state.Question.Sound au moment du démarrage ("" si aucun)
+}
+
+// OnAnswerTimerStarted fires whenever a response timer ACTUALLY starts ticking.
+// May be invoked WITH e.mu held (startTimer() runs under the lock): the
+// callee must never call back into the Engine synchronously and must not
+// block — read config, drive the MediaPlayer, return.
+OnAnswerTimerStarted func(start AnswerTimerStart)
+
+// OnMotionCardTimeUp fires when a MEMOTION card timer reaches 0 (the phase
+// stays STARTED — admin must act — so no OnStateChange/OnTimeUp exists
+// for this expiry today). Fired outside the lock, like OnTimerTick.
+OnMotionCardTimeUp func()
+```
+
+**Sites d'émission (exhaustifs, vérifiés par test)** :
+
+| Site moteur | Kind | Remarque |
+|---|---|---|
+| `startTimer()` (ses 3 appelants : `actualStart` simultané, `releaseDeferredTimerUnsafe`, `Continue()` après libération pendant la pause) | `GLOBAL` | une seule instrumentation, dans `startTimer()` — **pas** dans les appelants ; émis sous `e.mu`. Couvre la **manche RAFALE** (`actualStart` démarre le chrono de manche par ce même `startTimer()`) |
+| `StartRafaleQuestionTimer(seconds)` | — | **jamais** (décision utilisateur 2026-11-05 : « la sonorisation est faite pour la manche, pas pour chaque question rapide ») — le ticker par question n'est pas instrumenté |
+| `StartMotionCardTimer(delay)` après `delay > 0` | `MOTION_CARD` | retournement de carte (`handleMotionFlip`), carte RAFALE comprise (son chrono `RafaleRoundTime` est le chrono de manche de la carte) |
+| `StartMotionMemorizeTimer` | — | **jamais** : la mémorisation n'est pas un chronomètre de réponse |
+| Phase `COUNTDOWN` (3-2-1 avant le START, `OnCountdownTick`) | — | **jamais** : « décompte » au sens de ce contrat = pendant le chrono de réponse, pas avant |
+
+### 12.6 Exclusion « média audio pendant le chrono »
+
+**« Jamais si média »** (décision utilisateur 2026-11-05) : un décompte **n'est jamais joué** pour une question qui porte
+un média audio (`SOUND != ""`), quel que soit son réglage — simultané, différé (§10.7) ou en boucle (§13). L'exclusion se
+décide sur la **configuration de la question** (`AnswerTimerStart.QuestionSound`), jamais sur l'état réel du lecteur n°1
+(un média muet, absent ou en échec ne « libère » pas le décompte — règle simple, prévisible, testable sans matériel).
+Conséquence : `handleQuestionSound` (Rejouer) n'a **rien** à faire du décompte — il n'y en a jamais sur une question
+sonore.
+
+### 12.7 Chevauchements — voix unique, chrono le plus intérieur
+
+Le lecteur n°2 est **à voix unique** (§10.2) : tout `Play`/`PlayLoop` remplace la lecture en cours. Règle :
+**un chronomètre de manche ou de carte = une lecture** ; chaque `OnAnswerTimerStarted` relance le son depuis le début.
+Le ticker **par question** RAFALE n'a aucune voix (12.5).
+
+| Situation | Chronomètres actifs | Comportement |
+|---|---|---|
+| SPEEDY/QCM/ARDOISE | global | joue au `startTimer()`, s'arrête aux évènements de 12.8 |
+| Manche RAFALE classique | global (manche) **+** question | **une seule lecture pour toute la manche**, démarrée au `startTimer()` de `actualStart`, en boucle ou une fois selon `countdown_once` ; les questions qui s'enchaînent (validation, invalidation, expiration) **ne la relancent ni ne l'arrêtent** ; `CuePerdu` (invalidation) part sur le chemin des cues et se **mixe** ; fin de manche (expiration `OnTimeUp`, plafond, épuisement ⇒ `STOPPED`) ⇒ arrêt |
+| Carte MEMOTION (SPEEDY/QCM/MEMORY) | carte | joue au retournement (`StartMotionCardTimer`), s'arrête à l'expiration (`OnMotionCardTimeUp`), à la résolution de la carte (`StopMotionCardTimer`, sites de `main.go` : done/validate/reveal/close) ou aux évènements de 12.8 |
+| Carte MEMOTION RAFALE | carte (`RafaleRoundTime`) **+** question | une lecture au `StartMotionCardTimer` de la carte (si `RafaleRoundTime > 0`, sinon aucune) ; les questions de la carte ne relancent rien ; expiration ou résolution de la carte ⇒ arrêt |
+| Mémorisation (`MEMORIZE`) puis retournement | mémorisation, puis carte | rien pendant la mémorisation ; joue au retournement |
+| Question avec média (§10/§13) | — | aucun décompte, 12.6 |
+| Buzz (`PhasePaused` interne) | chrono figé par le moteur | **tout continue** (décision utilisateur) : décompte, média, boucle — ni arrêt ni pause ; à l'expiration ou à la fin de la question, arrêt normal (12.8) |
+| PAUSE manuelle / CONTINUE | chrono figé | décompte **mis en pause** (`Pause()`) puis **repris** (`Resume()`) exactement comme le média de question (`ActionPause`/`ActionContinue`, §10.7) — jamais relancé depuis le début |
+
+### 12.8 Arrêt — tout évènement qui termine ou suspend le chronomètre courant
+
+`countdownSound().Stop()` est appelé depuis `main.go` sur **chacun** des sites suivants (test exigé : chaque site,
+isolément, arrête un décompte en boucle) :
+
+| Évènement | Site `main.go` | Déjà site de `questionSound().Stop()` ? |
+|---|---|---|
+| Temps écoulé (global, manche RAFALE) | `OnTimeUp` | oui |
+| Expiration d'une question RAFALE | **rien** (12.7) ; fin de manche par plafond ou épuisement ⇒ `e.Stop()` **interne** au moteur, sans handler `ActionStop` ⇒ `OnStateChange(STOPPED)` est le **seul** signal : câblé pour cette raison (voir règle ci-dessous) | — |
+| Expiration d'une carte MEMOTION | `OnMotionCardTimeUp` (nouveau) | — |
+| Buzz (`Engine.Pause()` interne, `OnStateChange(PAUSED)`) | **aucun** — tout continue (décision utilisateur 2026-11-05) ; la branche `PAUSED` de `OnStateChange` ne touche **pas** au décompte | buzz : le média continue, inchangé |
+| PAUSE manuelle / CONTINUE | `ActionPause` ⇒ `countdownSound().Pause()` ; `ActionContinue` ⇒ `countdownSound().Resume()` — à côté des appels `questionSound()` existants, mêmes gardes de phase | oui (Pause/Resume) |
+| STOP, REVEAL, question (re)chargée (`Ready`), NEW_GAME | handlers `ActionStop`, `ActionReveal`, `handleQuestionReady`, `handleNewGame` | oui (mêmes lignes) |
+| Résolution de carte MEMOTION | tous les appelants de `StopMotionCardTimer` | — |
+| Son coupé (`muted` → `true`), décompte désactivé | `OnSoundMutedChange`, `OnSoundCountdownDisabledChange` | oui / — |
+
+`Stop()`, `Pause()` et `Resume()` sont **idempotents** et sans effet sur le jeu (aucun champ `GameState`, aucun broadcast :
+le décompte n'a pas d'état diffusé — §12.9). Ils **ne touchent jamais** le lecteur n°1. **Règle `OnStateChange`**
+(précisée 2026-11-05, écart dev-backend) : `OnStateChange(STOPPED)` ⇒ `countdownSound().Stop()` — c'est le filet
+pour toute fin de manche décidée **dans** le moteur (plafond/épuisement RAFALE via `e.Stop()` interne, sans handler
+`ActionStop`) ; `OnStateChange(PAUSED)` ⇒ **rien** (ce serait l'arrêt au buzz, proscrit) ; `STARTED` ⇒ rien (le
+démarrage est porté par `OnAnswerTimerStarted`, jamais par la phase). Les autres phases (`REVEALED`, `READY`,
+`NEW_GAME`…) sont déjà couvertes par leurs handlers ; les traiter aussi dans `OnStateChange` est toléré (idempotence).
+
+### 12.9 Hors de cette section
+
+- **Aucun champ `GameState`** (pas de `COUNTDOWN_SOUND_STATE`) : rien à afficher, rien à synchroniser ; les clients ne
+  savent pas qu'un décompte joue. `game-state.md` et `ws-payload-serialization.md` **inchangés**.
+- Pas de volume ; pas de son de décompte **par question** (un seul fichier serveur) ; pas de décompte sur la phase
+  `COUNTDOWN`, sur `MEMORIZE`, ni **par question RAFALE** (par manche seulement, 12.5/12.7).
+
+### 12.10 Non-régression exigée
+
+`sound_sites_test.go` (registre inchangé, aucun `notifySound` dans `countdown_sound.go`) ; `question_sound_*_test.go`
+verts sans modification ; tests-gardes §10.3 (`play_blocks_228`, `output_228`, `cross_compile_228`,
+`isneutral_230`, `oto_singleton_219`) verts sans modification ; `sound_muted_286_test.go` vert ; `config.json`
+sans clé `countdown_*` ⇒ actif + boucle ; `GET /api/sounds.cues` **byte-identique** à v11.4.0 LOT-2 (le tableau `long`
+est additif) ; `go test -race ./...`.
+
+---
+
+## 13. Lecture « une fois / en boucle » du média de question — normatif (v11.4.0, #288, LOT-3)
+
+> **Issue** : #288. **Décision utilisateur** (GATE 1.5, `DECISIONS.md` « admin_sounds_manager ») : le commutateur
+> une fois / en boucle est réservé au **média de question** et au **son de décompte** (§12.3 `countdown_once`), jamais
+> aux bruitages. **Maquette** : `admin_sounds_manager__countdown_loop.html` §02 (bloc « Son de la question »).
+> Amende §10.6 (« Lecture en boucle : hors v11.1 » — désormais **dans** le périmètre) et §10.2 (interface).
+
+### 13.1 Interface `MediaPlayer` — amendement §10.2
+
+```go
+type MediaPlayer interface {
+    Play(path string) error
+    // PlayLoop (v11.4.0, #288) démarre la lecture et la REPREND au début à
+    // chaque fin naturelle, sans fin : seul Stop/Close/un Play(Loop) ultérieur
+    // y met un terme. onNaturalEnd est appelé EXACTEMENT UNE FOIS, à la fin
+    // du PREMIER passage (« fin du son » au sens de §10.7), jamais aux
+    // passages suivants. Voix unique comme Play. Implémentation neutre : no-op.
+    PlayLoop(path string) error
+    Pause()
+    Resume()
+    Stop()
+    State() MediaState
+    Close() error
+}
+```
+
+- Implémentation `oto` : le `monitor` d'une lecture en boucle, à chaque fin naturelle détectée (`!IsPlaying()`),
+  **reconstruit un `oto.Player`** sur la même `SectionReader` après `Seek(0, io.SeekStart)` (§10.2 : `Seek` **est** le
+  mécanisme de rejeu), **sans changer de génération** et en conservant la référence forte (§10.3) ; `State()` reste
+  `PLAYING` d'un tour à l'autre. Un `Pause()` pendant la boucle suspend ; `Resume()` reprend où elle en était.
+- **Évènement « fin du 1ᵉʳ passage »** : à la **première** fin naturelle seulement, le `monitor` appelle `onNaturalEnd`
+  (sans verrou, comme pour `Play`) **puis** relance le passage suivant ; un compteur de passages par génération
+  (`passes`) garantit l'unicité. Un `Stop`/`Play`/`Close` avant la fin du 1ᵉʳ passage ⇒ jamais d'`onNaturalEnd` (règle
+  `Play` inchangée : l'arrêt manuel est la responsabilité de l'appelant, qui libère lui-même le différé). Une `Pause()`
+  pendant le 1ᵉʳ passage en retarde la fin d'autant. Test exigé (fake horloge/lecteur) : 3 passages ⇒ 1 seul
+  `onNaturalEnd`, émis à la fin du 1ᵉʳ ; `Stop` pendant le 2ᵉ ⇒ aucun appel supplémentaire.
+- `neutralMediaPlayer.PlayLoop` = no-op. Les **faux lecteurs de test** (`tw219qFakeMediaPlayer`,
+  `tw219dFakeMediaPlayer`, et tout fake `test-writer`) gagnent la méthode — c'est le seul coût de l'extension, assumé.
+- La note « Ne pas l'étendre » du commentaire de `media.go` est **remplacée** par le renvoi à cette section.
+
+### 13.2 Modèle et upload — `SOUND_LOOP`
+
+```go
+// internal/game/models.go — Question (hors TypedContent, commun à tous les types comme SOUND, §10.4bis)
+SoundLoop bool `json:"SOUND_LOOP,omitempty"` // false (zéro) = une fois = comportement v11.1
+```
+
+- Multipart `POST /questions` : champ `sound_loop` (`"true"`/absent), réécrit à chaque enregistrement (même discipline
+  que `sound_timer_delayed`), **écrit dans `SOUND_LOOP` uniquement si un son est effectivement attaché** (préservé ou
+  téléversé). Voir `http-endpoints.md` §Questions.
+- **Boucle × différé — combinables (décision utilisateur 2026-11-05)** : `sound_loop=true` **et**
+  `sound_timer_delayed=true` ⇒ les deux champs sont écrits ; à la lecture, le chronomètre démarre à la **fin du premier
+  passage** (évènement `onNaturalEnd` de `PlayLoop`, §13.1 — c'est « la fin du son » de §10.7, libération idempotente
+  et irréversible inchangée) et le média **continue en boucle** pendant le chronomètre. Le chien de garde §10.7
+  (`MaxQuestionSoundDuration + 2 s`) reste la borne : un 1ᵉʳ passage ne peut pas dépasser 30 s. Aucun `400`, aucune
+  règle de priorité.
+- **Éditeur** (`QuestionsPage.jsx`, bloc « Son de la question », maquette §02 **amendée** : plus de ligne désactivée ni
+  d'avertissement) : nouvelle ligne « Lecture : Une fois / En boucle » (`role="switch"`, `aria-label="Jouer le son en
+  boucle jusqu'à la fin du chronomètre"`, patron `.quiz-switch` **identique** à « Chrono démarre »), **sous** la ligne
+  « Chrono démarre », désactivée seulement quand **aucun son** n'est attaché (comme « Chrono démarre ») ; conseils :
+  `Le son est joué une fois, puis s'arrête.` / `Le son est rejoué jusqu'à la fin du chronomètre.` / avec « À la fin » **et**
+  boucle : `Le chronomètre démarre à la fin du premier passage ; le son continue en boucle.` ;
+  `data.append('sound_loop', …)` comme `sound_timer_delayed` ; défauts/chargement/reset de `formData.soundLoop` depuis
+  `question.SOUND_LOOP`. Absent des types sans section « Son » (MEMORY, MEMOTION, RAFALE, ENTRACTE) — décision
+  d'éditeur §10.4bis, pas de garde serveur.
+
+### 13.3 Lecture
+
+- `questionSoundAdapter.play` : `q.SoundLoop` ⇒ `player.PlayLoop(path)` au lieu de `Play` ; **tout le reste est
+  inchangé** : gate T0 (§10.8), `Muted` ⇒ `DISABLED` (§11.2), `QUESTION_SOUND_STATE` (`PLAYING` jusqu'à l'arrêt),
+  `onNaturalEnd` (fin du 1ᵉʳ passage) ⇒ `ReleaseDeferredTimer` comme pour `Play` — mais **sans** passer
+  `QUESTION_SOUND_STATE` à `IDLE` tant que la boucle joue (l'adaptateur lit `player.State()` avant d'écrire l'état) ;
+  chien de garde §10.7 armé à l'identique.
+- « Rejouer » (`QUESTION_SOUND PLAY`) relance **selon le réglage** (boucle ⇒ boucle).
+- **Arrêt** : la boucle s'arrête sur **tous** les sites actuels de `questionSound().Stop()` (temps écoulé, STOP,
+  REVEAL, question rechargée, NEW_GAME, `muted`) — **aucun site nouveau**. **Au buzz, la boucle continue** (décision
+  utilisateur 2026-11-05 : « au buzz tout continue » — la mention « ou au buzz » du conseil de la maquette §02 est
+  **retirée** du texte livré ; `OnBuzzerPress` reste non câblé, #247). PAUSE manuelle : `Pause()`/`Resume()` inchangés,
+  la boucle reprend où elle en était. Une boucle **ne survit jamais à la question** (test exigé : chaque site arrête
+  une lecture `PlayLoop`).
+- Décompte (§12) : jamais sur une question qui a un média, boucle comprise (§12.6).
+
+### 13.4 Non-régression exigée
+
+`SOUND_LOOP` absent ⇒ `Play` (un passage), octet pour octet ; différé sans boucle : `onNaturalEnd` à la fin du passage unique, inchangé ; `question_sound_219_test.go`,
+`question_sound_delayed_219_test.go`, `question_sound_enabled_dev_257_test.go` verts (fakes étendus de la seule
+méthode `PlayLoop`) ; `rafale_upload_nonregression_test.go` et fixtures `models_roundtrip_test.go` inchangés
+(`SOUND_LOOP` est `omitempty`) ; `QuestionsPage.sound.test.jsx` vert.

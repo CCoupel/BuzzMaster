@@ -119,6 +119,9 @@ export default function QuestionsPage() {
     rafaleMode: 'SOLO',
     rafaleQuestionTime: 3,
     rafaleMaxQuestions: 100,
+    // #282 (v11.4.0) — option Alphabétique + présentation TV de la roue (contrat rafale.md §15.2/§15.7)
+    rafaleAlphabetical: false,
+    rafaleWheelLayout: 'strip',
     // ENTRACTE fields (#214, milestone v9.0.0) — second déclencheur du
     // mécanisme ENTRACTE existant (#119, EntracteConfigForm.jsx/#215) :
     // chaque occurrence du déroulé porte sa propre config, MÊME STRUCTURE
@@ -232,6 +235,7 @@ export default function QuestionsPage() {
     sound: null,
     existingSound: null,
     soundTimerDelayed: false,
+    soundLoop: false, // #288 : lecture en boucle du son de question (SOUND_LOOP)
     soundCleared: false,
     // Note d'explication — animateur seul (v6.4.x, #168)
     explanation: '',
@@ -419,7 +423,8 @@ export default function QuestionsPage() {
 
   // Custom categories from API (#95)
   const { categories: apiCategories, refetch: refetchCategories } = useCategories()
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+  // #285 : liste API brute (surcharges nom/couleur des intégrées incluses) ; les composants filtrent eux-mêmes.
+  const customCategories = apiCategories
 
   // #219 (ajustement ergonomie QUALIF v11.1.0.1) — URL objet STABLE pour le
   // fichier son fraîchement choisi, mémoïsée sur `formData.sound` plutôt que
@@ -1017,6 +1022,8 @@ export default function QuestionsPage() {
       rafaleMode: question.RAFALE_MODE || 'SOLO',
       rafaleQuestionTime: question.RAFALE_QUESTION_TIME || 3,
       rafaleMaxQuestions: question.RAFALE_MAX_QUESTIONS || 100,
+      rafaleAlphabetical: question.RAFALE_ALPHABETICAL === true,
+      rafaleWheelLayout: question.RAFALE_WHEEL_LAYOUT === 'arc' ? 'arc' : 'strip',
       // ENTRACTE (#214) — ENTRACTE_CONFIG (nested, contrat backend
       // TypedContent.EntracteConfig) : mêmes défauts que la config globale
       // (EntracteConfigForm.jsx) si l'occurrence n'en porte pas encore.
@@ -1041,6 +1048,7 @@ export default function QuestionsPage() {
       sound: null,
       existingSound: question.SOUND || null,
       soundTimerDelayed: question.SOUND_TIMER_DELAYED || false,
+      soundLoop: question.SOUND_LOOP === true,
       soundCleared: false,
       // Note d'explication — animateur seul (v6.4.x, #168)
       explanation: question.EXPLANATION || '',
@@ -1170,6 +1178,8 @@ export default function QuestionsPage() {
       rafaleMode: 'SOLO',
       rafaleQuestionTime: 3,
       rafaleMaxQuestions: 100,
+      rafaleAlphabetical: false,
+      rafaleWheelLayout: 'strip',
       // ENTRACTE fields — voir commentaire de l'état initial (useState
       // ci-dessus) pour le détail des champs.
       entracteConfig: { title: 'ENTRACTE', subtitle: 'Retour dans 20mn', panelSize: 65, animPeriod: 10, animIntensity: 20, transitionMs: 2000 },
@@ -1183,6 +1193,7 @@ export default function QuestionsPage() {
       sound: null,
       existingSound: null,
       soundTimerDelayed: false,
+      soundLoop: false,
       soundCleared: false,
       // Note d'explication — animateur seul (v6.4.x, #168)
       explanation: '',
@@ -1727,6 +1738,9 @@ export default function QuestionsPage() {
       data.append('RAFALE_MODE', formData.rafaleMode)
       data.append('RAFALE_QUESTION_TIME', String(formData.rafaleQuestionTime))
       data.append('RAFALE_MAX_QUESTIONS', String(formData.rafaleMaxQuestions))
+      // #282 — champs multipart en minuscules (contrat rafale.md §15.2)
+      data.append('rafale_alphabetical', formData.rafaleAlphabetical ? 'true' : 'false')
+      data.append('rafale_wheel_layout', formData.rafaleWheelLayout === 'arc' ? 'arc' : 'strip')
       // Réponse d'affichage dans la liste des questions (patron MEMORY/
       // MEMOTION ci-dessus — `answer` reste un champ purement informatif,
       // repli textuel pour tout consommateur qui n'afficherait pas les chips
@@ -1775,6 +1789,8 @@ export default function QuestionsPage() {
       data.append('sound_cleared', 'true')
     }
     data.append('sound_timer_delayed', formData.soundTimerDelayed ? 'true' : 'false')
+    // #288 — lecture en boucle (contrat sound.md §13.2) : toujours envoyé, combinable avec le différé
+    data.append('sound_loop', formData.soundLoop ? 'true' : 'false')
 
     setSoundError(null)
 
@@ -1907,7 +1923,7 @@ export default function QuestionsPage() {
 
       {/* Category Balance + Filters — div unique pour alignement parfait */}
       <div className="category-filter-group">
-        <CategoryBalance questions={sortedQuestions} />
+        <CategoryBalance questions={sortedQuestions} customCategories={customCategories} />
 
         {/* Filtre par catégorie (#40) — CategoryPicker variant="filter" (#221),
             composant partagé avec RafalePage.jsx et GamePage.jsx. */}
@@ -1918,6 +1934,8 @@ export default function QuestionsPage() {
           value={selectedCategories}
           availableCategories={availableCategories}
           customCategories={customCategories}
+          allowManage
+          onRefetchCategories={refetchCategories}
           onToggle={toggleCategoryFilter}
           onClear={clearCategoryFilters}
         />
@@ -2275,11 +2293,9 @@ export default function QuestionsPage() {
                   <div className="form-group">
                     <CategoryPicker
                       mode="single"
-                      allowCreate
                       value={formData.category}
                       onChange={(key) => handleInputChange('category', key)}
                       customCategories={customCategories}
-                      onRefetchCategories={refetchCategories}
                     />
                   </div>
                 )}
@@ -3260,6 +3276,46 @@ export default function QuestionsPage() {
                       </div>
                     </div>
 
+                    {/* #282 — option Alphabétique (contrat rafale.md §15.7) */}
+                    <div className="rafale-alpha-option">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={formData.rafaleAlphabetical ? 'true' : 'false'}
+                        aria-label="Alphabétique"
+                        className={`rafale-alpha-switch${formData.rafaleAlphabetical ? ' is-on' : ''}`}
+                        onClick={() => handleInputChange('rafaleAlphabetical', !formData.rafaleAlphabetical)}
+                      >
+                        <span className="rafale-alpha-switch-track"><span className="rafale-alpha-switch-thumb" /></span>
+                        <span className="rafale-alpha-switch-label">🔤 Alphabétique</span>
+                      </button>
+                      <small className="rafale-alpha-hint">
+                        Les questions sont tirées par passes A→Z. La TV affiche uniquement la première lettre de la réponse (jamais la réponse elle-même).
+                      </small>
+                      {formData.rafaleAlphabetical && (
+                        <div className="memory-mode-options rafale-wheel-layouts">
+                          {[
+                            { value: 'strip', label: 'Bandeau', desc: 'Ruban de lettres en bas de l\'écran' },
+                            { value: 'arc', label: 'Roue', desc: 'Grande roue émergeant du bas de l\'écran' },
+                          ].map(l => (
+                            <label key={l.value} className="memory-mode-option">
+                              <input
+                                type="radio"
+                                name="rafaleWheelLayout"
+                                value={l.value}
+                                checked={formData.rafaleWheelLayout === l.value}
+                                onChange={(e) => handleInputChange('rafaleWheelLayout', e.target.value)}
+                              />
+                              <span className="memory-mode-label">
+                                <strong>{l.label}</strong>
+                                <small>{l.desc}</small>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="form-row">
                       <div className="form-group">
                         <label htmlFor="rafale-question-time-input">Temps par question (s)</label>
@@ -3295,6 +3351,7 @@ export default function QuestionsPage() {
                       difficulties={formData.rafaleDifficulties}
                       roundTime={parseInt(formData.time) || 0}
                       questionTime={formData.rafaleQuestionTime}
+                      alphabetical={formData.rafaleAlphabetical}
                     />
                   </div>
                 )}
@@ -3600,6 +3657,41 @@ export default function QuestionsPage() {
                               <span className={`sound-timer-switch-side ${delayed ? 'active' : ''}`}>À la fin</span>
                             </span>
                           </div>
+                        )
+                      })()}
+
+                      {/* #288 (contrat sound.md §13.2) — « Lecture : Une fois / En boucle », même patron que
+                          « Chrono démarre » (.quiz-switch), désactivée seulement sans son. Combinable avec
+                          « À la fin » (décision 2026-11-05) : aucune exclusivité. */}
+                      {(() => {
+                        const hasSound = !!(formData.sound || formData.existingSound)
+                        const loop = formData.soundLoop
+                        const delayed = formData.soundTimerDelayed
+                        const hint = loop && delayed
+                          ? 'Le chronomètre démarre à la fin du premier passage ; le son continue en boucle.'
+                          : loop
+                            ? 'Le son est rejoué jusqu\'à la fin du chronomètre.'
+                            : 'Le son est joué une fois, puis s\'arrête.'
+                        return (
+                          <>
+                            <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
+                              <span className="sound-timer-toggle-label">Lecture</span>
+                              <span className="sound-timer-switch-group">
+                                <span className={`sound-timer-switch-side ${!loop ? 'active' : ''}`}>Une fois</span>
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={loop}
+                                  aria-label="Jouer le son en boucle jusqu'à la fin du chronomètre"
+                                  className={`quiz-switch ${loop ? 'on' : ''}`}
+                                  disabled={!hasSound}
+                                  onClick={() => handleInputChange('soundLoop', !loop)}
+                                />
+                                <span className={`sound-timer-switch-side ${loop ? 'active' : ''}`}>En boucle</span>
+                              </span>
+                            </div>
+                            <p className="sound-loop-hint">{hint}</p>
+                          </>
                         )
                       })()}
                     </div>

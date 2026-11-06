@@ -1,0 +1,81 @@
+/* Roue générique — contracts/wheel-component.md. TV STATIQUE : overflow hidden, unités viewport. */
+.wheel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  --wheel-accent: #3b82f6;
+}
+
+/* ---------- strip (bandeau) ---------- */
+.wheel-strip {
+  --cell-w: 7.4vw;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+}
+.wheel-strip.wheel-size-compact { --cell-w: 44px; height: 64px; }
+.wheel-track {
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  left: 50%;
+  display: flex;
+  width: calc(var(--cell-w) * var(--wheel-cells));
+}
+.wheel-cell {
+  flex: 0 0 var(--cell-w);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 0.3vh solid rgba(0, 0, 0, 0.25);
+  border-radius: 1vh;
+  color: #111827;
+  font-weight: 800;
+  font-size: 6vh;
+  line-height: 1;
+}
+.wheel-size-compact .wheel-cell { font-size: 28px; border-width: 2px; border-radius: 6px; }
+.wheel-cell.special, .wheel-sector.special text { color: #fff; }
+.wheel-cell.special { background: #111827 !important; }
+.wheel-cell.disabled, .wheel-sector.disabled { opacity: 0.25; }
+.wheel-cell.played, .wheel-sector.played { opacity: 0.5; }
+.wheel-cell.is-current {
+  opacity: 1;
+  border-color: var(--wheel-accent);
+  box-shadow: 0 0 2vh var(--wheel-accent), inset 0 0 1vh var(--wheel-accent);
+  transform: none;
+}
+.wheel-strip > .wheel-pointer {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 1.2vh solid transparent;
+  border-right: 1.2vh solid transparent;
+  border-top: 2.2vh solid var(--wheel-accent);
+}
+
+/* ---------- arc (disque dont la partie haute émerge) ---------- */
+.wheel-arc .wheel-svg {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 92vw;
+  height: 92vw;
+  transform: translateX(-50%);
+}
+.wheel-arc.wheel-size-compact .wheel-svg { width: 360px; height: 360px; }
+.wheel-arc.wheel-size-compact { height: 160px; }
+.wheel-arc path { stroke: rgba(0, 0, 0, 0.3); stroke-width: 3; }
+.wheel-arc text { fill: #111827; font-weight: 800; }
+.wheel-arc .wheel-sector.special text { fill: #fff; }
+.wheel-arc .wheel-sector.is-current path { stroke: var(--wheel-accent); stroke-width: 10; }
+.wheel-arc .wheel-sector.is-current { opacity: 1; filter: drop-shadow(0 0 12px var(--wheel-accent)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .wheel-track, .wheel-arc .rotor { transition: none !important; }
+}

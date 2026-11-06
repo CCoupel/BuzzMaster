@@ -1,0 +1,186 @@
+<!--
+mockup:
+  composant: admin_category_manager
+  feature: rename_color_delete
+  version: 11.4.0
+  type: ui
+  issue: "#285"
+  validee_le: 2026-11-05
+  complete: [docs/mockup/v11.2.2/ui/admin_pickers__category_difficulty_unified.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — gestion des catégories : couleur par la pastille, icône par upload, renommer, supprimer (#285)</title>
+<style>
+  :root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-500:#6b7280; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+  .mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+  .mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+  .mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); }
+  .mock-note b { color:var(--gray-700); }
+  h2.mock-h { max-width:1100px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+  .card { max-width:1100px; margin:0 auto 1rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; font-size:.85rem; }
+  .picker-h { display:flex; align-items:center; gap:.5rem; font-weight:700; margin-bottom:.4rem; }
+  .mode { font-size:.7rem; font-weight:600; color:var(--gray-500); background:var(--gray-100); border-radius:999px; padding:.1rem .5rem; }
+  .chips { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .cat-chip { --cat-color:#6b7280; display:inline-flex; align-items:center; gap:.35rem; border:1px solid var(--gray-300); border-radius:999px; padding:.25rem .7rem .25rem .4rem; background:#fff; font-size:.8rem; }
+  .cat-chip .dot { width:1.2rem; height:1.2rem; border-radius:50%; background:var(--cat-color); display:inline-flex; align-items:center; justify-content:center; font-size:.65rem; overflow:hidden; }
+  .cat-chip .dot img { width:100%; height:100%; object-fit:cover; }
+  .cat-chip.active { border-color:var(--cat-color); background:color-mix(in srgb, var(--cat-color) 12%, #fff); font-weight:700; }
+  .cat-chip.add, .cat-chip.manage { border-style:dashed; color:var(--primary); }
+  /* dialogue */
+  .overlay { background:rgba(17,24,39,.55); padding:1.5rem; border-radius:.7rem; }
+  .dialog { max-width:720px; margin:0 auto; background:#fff; border-radius:.7rem; box-shadow:0 20px 50px rgba(0,0,0,.3); padding:1rem 1.2rem; }
+  .dialog h3 { margin:0 0 .6rem; font-size:1rem; display:flex; justify-content:space-between; }
+  .dialog h3 button { font:inherit; border:0; background:none; color:var(--gray-500); cursor:pointer; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:.45rem .4rem; border-bottom:1px solid var(--gray-200); vertical-align:middle; }
+  th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+  /* pastille = bouton couleur */
+  .swatch-wrap { position:relative; display:inline-block; }
+  .swatch { width:1.5rem; height:1.5rem; border-radius:50%; border:2px solid rgba(0,0,0,.15); cursor:pointer; padding:0; background:var(--c); position:relative; }
+  .swatch.none { background:repeating-linear-gradient(45deg,#fff 0 3px,#e5e7eb 3px 6px); }
+  .swatch::after { content:'▾'; position:absolute; right:-.9rem; top:.05rem; font-size:.7rem; color:var(--gray-500); }
+  .swatch:hover { box-shadow:0 0 0 3px #c7d2fe; }
+  .pal-pop { position:absolute; left:0; top:2rem; z-index:20; background:#fff; border:1px solid var(--gray-200); border-radius:.6rem; box-shadow:0 10px 30px rgba(0,0,0,.2); padding:.6rem; width:230px; }
+  .pal-pop .t { font-size:.72rem; font-weight:700; color:var(--gray-500); margin:0 0 .4rem; text-transform:uppercase; letter-spacing:.04em; }
+  .palette { display:grid; grid-template-columns:repeat(7, 1.5rem); gap:.4rem; }
+  .palette span { width:1.5rem; height:1.5rem; border-radius:50%; display:inline-block; cursor:pointer; border:2px solid transparent; }
+  .palette span.sel { border-color:#111827; }
+  .palette span.none { background:repeating-linear-gradient(45deg,#fff 0 3px,#e5e7eb 3px 6px); }
+  .pal-pop .hint { margin:.5rem 0 0; }
+  /* icône = bouton upload */
+  .icon-btn { width:2.2rem; height:2.2rem; border-radius:.5rem; border:1px dashed var(--gray-300); background:var(--gray-50); display:inline-flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; font-size:1.1rem; position:relative; }
+  .icon-btn img { width:100%; height:100%; object-fit:cover; }
+  .icon-btn:hover::after { content:'📁'; position:absolute; inset:0; background:rgba(255,255,255,.85); display:flex; align-items:center; justify-content:center; font-size:1rem; }
+  .icon-btn.builtin-default { border-style:solid; }
+  .icon-cell { display:flex; align-items:center; gap:.4rem; }
+  .icon-cell small { color:var(--gray-500); font-size:.7rem; }
+  .ibtn { font:inherit; font-size:.78rem; padding:.25rem .5rem; border:1px solid var(--gray-300); border-radius:.4rem; background:#fff; cursor:pointer; margin-right:.2rem; }
+  .ibtn.danger { color:#b91c1c; border-color:#fecaca; }
+  .ibtn:disabled { opacity:.4; cursor:not-allowed; }
+  .lock { font-size:.7rem; color:var(--gray-500); }
+  input[type=text] { padding:.35rem .5rem; border:1px solid var(--gray-300); border-radius:.4rem; font:inherit; width:100%; }
+  .inline-edit { display:flex; gap:.4rem; align-items:center; }
+  .confirm { border:1px solid #fecaca; background:#fff5f5; border-radius:.6rem; padding:.8rem 1rem; margin-top:.8rem; }
+  .confirm h4 { margin:0 0 .4rem; color:#b91c1c; font-size:.9rem; }
+  .confirm label { display:flex; gap:.5rem; align-items:flex-start; margin:.35rem 0; }
+  .confirm small { color:var(--gray-500); display:block; }
+  .confirm .hist { margin:.5rem 0; padding:.4rem .6rem; background:#fef3c7; color:#92400e; border-radius:.4rem; font-size:.78rem; }
+  .actions { display:flex; gap:.5rem; justify-content:flex-end; margin-top:.6rem; }
+  .btn { font:inherit; font-size:.82rem; padding:.4rem .8rem; border-radius:.45rem; border:1px solid var(--gray-300); background:#fff; cursor:pointer; }
+  .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .btn.danger { background:#dc2626; color:#fff; border-color:#dc2626; }
+  .btn:disabled { opacity:.4; }
+  .hint { color:var(--gray-500); font-size:.78rem; }
+  .create { border:1px dashed var(--gray-300); border-radius:.5rem; padding:.6rem .8rem; margin-top:.5rem; display:flex; gap:.6rem; align-items:center; flex-wrap:wrap; }
+  .hue { display:inline-flex; align-items:center; gap:.4rem; font-size:.78rem; color:var(--gray-500); }
+  .bulb { width:1.3rem; height:1.3rem; border-radius:50%; box-shadow:0 0 10px 3px currentColor; }
+  .toast { display:inline-block; margin-top:.5rem; padding:.35rem .6rem; border-radius:.4rem; background:#dcfce7; color:#166534; font-size:.78rem; font-weight:700; }
+  .toast.err { background:#fee2e2; color:#b91c1c; }
+</style>
+</head>
+<body>
+<div class="mock-bar">
+  <strong>Maquette — état :</strong>
+  <label><input type="radio" name="st" value="list" checked> Dialogue « Gérer les catégories »</label>
+  <label><input type="radio" name="st" value="color"> Clic sur la pastille → palette (Cinéma)</label>
+  <label><input type="radio" name="st" value="icon"> Icône envoyée sur une catégorie intégrée (Histoire)</label>
+  <label><input type="radio" name="st" value="rename"> Renommage en ligne (Ma Catégorie)</label>
+  <label><input type="radio" name="st" value="delete-used"> Suppression d'une catégorie utilisée (Cinéma)</label>
+  <label><input type="radio" name="st" value="create"> Création (nom + icône + couleur)</label>
+</div>
+<div class="mock-note">
+  <b>Où</b> : le sélecteur de catégorie (<code>CategoryPicker</code>, inchangé par ailleurs) gagne « ⚙ Gérer… » à côté de « + Créer ». Le <b>dialogue « Gérer les catégories »</b> liste chaque catégorie :
+  <b>pastille de couleur = bouton</b> (cliquer ouvre la palette de 12 teintes + « aucune » ; la couleur s'applique aux badges/chips <b>et à l'éclairage d'ambiance</b>, aperçu 💡),
+  <b>icône = bouton d'envoi</b> (cliquer ouvre le sélecteur de fichier : PNG / JPG / WebP ≤ 2 Mio, carré conseillé ; remplace l'icône ; sur une catégorie intégrée l'image remplace l'emoji, « ↺ emoji » le rétablit),
+  nom (✎ renommage en ligne — nom d'affichage seulement, la clé technique ne change pas), nombre de questions, 🗑 (jamais pour les 8 intégrées 🔒).
+  <b>Suppression d'une catégorie utilisée</b> : garder les questions « sans catégorie » (présélectionné) ou les supprimer aussi ; dans les deux cas les points d'historique de la catégorie sont <b>regroupés dans « Sans catégorie »</b> (historique et palmarès réécrits, sauvegarde automatique) — case de confirmation obligatoire dès qu'un historique existe.
+</div>
+
+<h2 class="mock-h">01 — Sélecteur de catégorie (éditeur de question) avec « Gérer… » et la création enrichie</h2>
+<div class="card">
+  <div class="picker-h">Catégorie <span class="mode">une seule</span></div>
+  <div class="chips" id="chips"></div>
+  <div class="create" id="create" hidden>
+    <input type="text" placeholder="Nom de la catégorie…" value="Musique" style="width:200px">
+    <span class="icon-btn" title="Icône (PNG/JPG/WebP ≤ 2 Mio)">🖼</span><span class="hint">Icône (obligatoire)</span>
+    <span class="swatch-wrap"><button class="swatch" style="--c:#14b8a6" title="Couleur"></button></span><span class="hint">Couleur (proposée : 1ʳᵉ teinte libre)</span>
+    <button class="btn primary">Valider</button><button class="btn">Annuler</button>
+  </div>
+</div>
+
+<h2 class="mock-h">02 — Dialogue « Gérer les catégories »</h2>
+<div class="overlay">
+  <div class="dialog" role="dialog" aria-labelledby="dlgT">
+    <h3 id="dlgT">Gérer les catégories <button aria-label="Fermer">✕</button></h3>
+    <table>
+      <thead><tr><th>Couleur</th><th>Icône</th><th>Nom</th><th>Questions</th><th>Ambiance</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="toast"></div>
+    <p class="hint">Couleur : cliquer la pastille. Icône : cliquer l'image (PNG, JPG, WebP, ≤ 2 Mio, carré conseillé). Renommer ne change que le nom affiché ; la clé technique et les questions existantes ne sont pas modifiées.</p>
+
+    <div class="confirm" id="confirm" hidden>
+      <h4>Supprimer « Cinéma » — 12 questions et 30 questions du réservoir RAFALE l'utilisent</h4>
+      <label><input type="radio" name="del" checked><span><b>Garder les questions, sans catégorie</b><small>Les 42 questions restent jouables et passent en « Sans catégorie » (réservoir : à recatégoriser pour être tirées).</small></span></label>
+      <label><input type="radio" name="del" id="delAll"><span><b>Supprimer aussi les questions</b><small>Les 12 questions (et leurs médias) et les 30 questions du réservoir sont supprimées définitivement.</small></span></label>
+      <div class="hist">📊 3 parties ont marqué <b>1 240 points</b> dans cette catégorie : ils seront regroupés dans « Sans catégorie » (historique et palmarès réécrits ; sauvegarde automatique <code>history.json.bak-…</code>).</div>
+      <label><input type="checkbox" id="ackBox"><span id="ackText">Je comprends que l'historique sera réécrit.</span></label>
+      <div class="actions"><button class="btn">Annuler</button><button class="btn danger" id="delBtn" disabled>Supprimer la catégorie</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const PAL = ['#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#0ea5e9','#3b82f6','#6366f1','#a855f7','#ec4899','#f43f5e','#a3e635'];
+  const IMG = (c) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect width='40' height='40' fill='${c}'/><circle cx='20' cy='20' r='11' fill='white' opacity='.85'/></svg>`)}`;
+  const CATS = [
+    { key:'GEOGRAPHY', name:'Géographie', color:'#3b82f6', n:24, builtin:true, emoji:'🌍' },
+    { key:'ENTERTAINMENT', name:'Divertissement', color:'#ec4899', n:9, builtin:true, emoji:'🎬' },
+    { key:'HISTORY', name:'Histoire', color:'#eab308', n:31, builtin:true, emoji:'📜' },
+    { key:'ARTS', name:'Arts & Littérature', color:'#a855f7', n:6, builtin:true, emoji:'🎨' },
+    { key:'SCIENCE', name:'Sciences & Nature', color:'#22c55e', n:18, builtin:true, emoji:'🔬' },
+    { key:'SPORTS', name:'Sports & Loisirs', color:'#f97316', n:12, builtin:true, emoji:'⚽' },
+    { key:'FOOD', name:'Gastronomie', color:'#991b1b', n:4, builtin:true, emoji:'🍽' },
+    { key:'ANIMALS', name:'Animaux', color:'#78716c', n:7, builtin:true, emoji:'🐾' },
+    { key:'CINEMA', name:'Cinéma', color:'#0ea5e9', n:42, builtin:false, img:IMG('#0ea5e9') },
+    { key:'MA_CATEGORIE', name:'Ma Catégorie', color:'', n:0, builtin:false, img:IMG('#9ca3af') },
+  ];
+  const palette = (sel) => `<div class="pal-pop"><p class="t">Couleur de la catégorie</p><div class="palette">${['none', ...PAL].map(c => `<span class="${c === 'none' ? 'none' : ''} ${c === sel ? 'sel' : ''}" style="background:${c === 'none' ? '' : c}" title="${c === 'none' ? 'Aucune (badge gris, salle blanche)' : c}"></span>`).join('')}</div><p class="hint">Appliquée aux badges et à l'éclairage d'ambiance pendant une question de cette catégorie.</p></div>`;
+  function render(key) {
+    const histIcon = key === 'icon';
+    $('rows').innerHTML = CATS.map(c => {
+      const editing = key === 'rename' && c.key === 'MA_CATEGORIE';
+      const coloring = key === 'color' && c.key === 'CINEMA';
+      const hasImg = c.img || (histIcon && c.key === 'HISTORY');
+      const imgSrc = c.img || IMG('#eab308');
+      return `<tr>
+        <td><span class="swatch-wrap"><button class="swatch ${c.color ? '' : 'none'}" style="--c:${c.color}" title="Changer la couleur" aria-haspopup="true"></button>${coloring ? palette(c.color) : ''}</span></td>
+        <td><span class="icon-cell"><span class="icon-btn ${c.builtin && !hasImg ? 'builtin-default' : ''}" title="${hasImg ? 'Remplacer l\'icône' : 'Envoyer une icône'}" role="button">${hasImg ? `<img src="${imgSrc}" alt="">` : c.emoji}</span>${c.builtin && hasImg ? '<button class="ibtn" title="Revenir à l\'emoji">↺</button>' : ''}${c.builtin && !hasImg ? '<small>emoji</small>' : ''}</span></td>
+        <td>${editing ? `<span class="inline-edit"><input type="text" value="${c.name}" style="width:180px"><button class="ibtn">OK</button><button class="ibtn">✕</button></span>` : c.name}${c.builtin ? ' <span class="lock">🔒 intégrée</span>' : ''}</td>
+        <td>${c.n}</td>
+        <td><span class="hue"><span class="bulb" style="color:${c.color || '#ffffff'}"></span>${c.color ? '' : 'blanc'}</span></td>
+        <td><button class="ibtn" title="Renommer">✎</button><button class="ibtn danger" title="Supprimer" ${c.builtin ? 'disabled' : ''}>🗑</button></td>
+      </tr>`;
+    }).join('');
+    $('toast').innerHTML = histIcon ? '<span class="toast">Icône de « Histoire » mise à jour (HISTORY.png, 48 Ko).</span>' : '';
+    $('confirm').hidden = key !== 'delete-used';
+    $('create').hidden = key !== 'create';
+    $('chips').innerHTML = CATS.map(c => `<span class="cat-chip ${c.key === 'CINEMA' ? 'active' : ''}" style="--cat-color:${c.color || '#6b7280'}"><span class="dot">${c.img || (histIcon && c.key === 'HISTORY') ? `<img src="${c.img || IMG('#eab308')}" alt="">` : c.emoji}</span>${c.name}</span>`).join('') + '<span class="cat-chip add">+ Créer</span><span class="cat-chip manage">⚙ Gérer…</span>';
+  }
+  document.querySelectorAll('input[name=st]').forEach(r => r.addEventListener('change', e => render(e.target.value)));
+  document.addEventListener('change', e => {
+    if (e.target.name === 'del') { const all = $('delAll').checked; $('ackText').textContent = all ? 'Je comprends que 42 questions seront supprimées définitivement et que l\'historique sera réécrit.' : 'Je comprends que l\'historique sera réécrit.'; $('ackBox').checked = false; $('delBtn').disabled = true; }
+    if (e.target.id === 'ackBox') $('delBtn').disabled = !e.target.checked;
+  });
+  render('list');
+</script>
+</body>
+</html>

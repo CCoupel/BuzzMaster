@@ -1797,3 +1797,53 @@
 .penalty-input.invalid { border-color: #dc2626; box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15); }
 .penalty-err { font-size: 0.74rem; color: #dc2626; font-weight: 700; margin: 0.3rem 0 0; }
 .penalty-effect { margin: 0.35rem 0 0; font-size: 0.74rem; color: #374151; }
+
+/* #282 — option Alphabétique de l'éditeur RAFALE */
+.rafale-alpha-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.rafale-alpha-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+.rafale-alpha-switch-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--gray-300);
+  position: relative;
+  transition: background var(--transition-fast);
+}
+.rafale-alpha-switch.is-on .rafale-alpha-switch-track { background: var(--primary-600); }
+.rafale-alpha-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  transition: transform var(--transition-fast);
+}
+.rafale-alpha-switch.is-on .rafale-alpha-switch-thumb { transform: translateX(18px); }
+.rafale-alpha-hint { font-size: 0.75rem; color: var(--gray-500); }
+.rafale-wheel-layouts { flex-direction: row; }
+.rafale-wheel-layouts .memory-mode-option { flex: 1; }
+
+/* #288 — conseil sous la ligne « Lecture » du bloc Son de la question */
+.sound-loop-hint {
+  margin: var(--space-1) 0 0;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+}

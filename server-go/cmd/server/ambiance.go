@@ -109,18 +109,36 @@ var ambianceSiteRegistry = map[ambianceSite]ambianceDecision{
 // is available (stored or BUZZCONTROL_HUE_API_KEY) and the bridge is known
 // by IP or by id. #205 returned false unconditionally; #207 reads config.json.
 func (a *App) ambianceIsConfigured() bool {
+	return config.Get().Lighting.Enabled && ambianceCredsPresent()
+}
+
+// ambianceCredsPresent reports whether the lighting section carries usable
+// credentials (an API key, stored or from the environment, and a bridge IP or
+// id), regardless of the `enabled` master switch.
+func ambianceCredsPresent() bool {
 	lc := config.Get().Lighting
-	return lc.Enabled && lc.EffectiveAPIKeyConfigured() && (strings.TrimSpace(lc.BridgeIP) != "" || strings.TrimSpace(lc.BridgeID) != "")
+	return lc.EffectiveAPIKeyConfigured() && (strings.TrimSpace(lc.BridgeIP) != "" || strings.TrimSpace(lc.BridgeID) != "")
 }
 
 // buildHueDriver builds the Hue driver from the current configuration, or
 // returns nil when lighting is not usable. No network I/O (hue.New). An
 // invalid configuration is logged once here and treated as "not configured".
 func (a *App) buildHueDriver() *hue.Driver {
-	if !a.ambianceIsConfigured() {
+	return a.buildHueDriverOpt(true)
+}
+
+// buildHueDriverOpt is buildHueDriver with the `lighting.enabled` check
+// optional: requireEnabled=false builds a driver from a configured-but-
+// switched-off installation, for the single purpose of extinguishing its
+// bulbs when the master switch is turned off (#286, contract sound.md §11.4).
+func (a *App) buildHueDriverOpt(requireEnabled bool) *hue.Driver {
+	lc := config.Get().Lighting
+	if requireEnabled && !lc.Enabled {
 		return nil
 	}
-	lc := config.Get().Lighting
+	if !ambianceCredsPresent() {
+		return nil
+	}
 	specs := make([]hue.LightSpec, 0, len(lc.Lights))
 	for _, l := range lc.Lights {
 		specs = append(specs, hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team})

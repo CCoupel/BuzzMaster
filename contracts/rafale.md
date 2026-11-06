@@ -930,7 +930,7 @@ avec un risque de désynchronisation entre les deux.
     "ID": "r-042",
     "ANSWER": "Rome",
     "NEXT": { "ID": "r-017", "QUESTION": "Plus long fleuve d'Europe ?",
-              "CATEGORY": "GEOGRAPHY", "DIFFICULTY": 2 }
+              "CATEGORY": "GEOGRAPHY", "DIFFICULTY": 2, "LETTER": "" }
   } }
 ```
 
@@ -942,6 +942,7 @@ type RafaleNextPayload struct {
     Question   string `json:"QUESTION"`
     Category   string `json:"CATEGORY"`
     Difficulty int    `json:"DIFFICULTY"`
+    Letter     string `json:"LETTER"`     // v11.4.0 #282 (§15.10) : "" hors option alphabétique ; "A".."Z" ou "#" sinon. Jamais omitempty.
 }
 
 type RafaleAnswerPayload struct {
@@ -1044,9 +1045,10 @@ Principes de lisibilité à respecter dans la maquette :
 
 ### 13.7 Périmètre
 
-- **`/anim` uniquement.** `/admin` (`GamePage.jsx`, `.rafale-admin-live`) reçoit le champ `NEXT`
-  (même canal, même destinataires) mais **ne l'affiche pas** dans ce lot — l'issue #202 ne le
-  demande pas. Affichage admin possible ultérieurement sans aucun changement de contrat.
+- **`/anim` uniquement — périmètre de #202 (v8.x).** `/admin` (`GamePage.jsx`, `.rafale-admin-live`) recevait
+  déjà le champ `NEXT` (même canal, même destinataires) sans l'afficher. **Depuis v11.4.0 (#282, §15.7/§15.10),
+  l'admin affiche la question suivante** — « Suivante (lettre S) : <énoncé> » — sans changement de canal ni de
+  destinataires, comme ce paragraphe l'anticipait.
 - **RAFALE uniquement.** Aucun autre type de question n'a de notion de « question suivante »
   pendant une manche.
 - `/tv` et `/player` : **strictement inchangés**, et c'est un critère bloquant (§13.2).
@@ -1272,3 +1274,182 @@ distinction d'hôte.
 | Réservoir | Une carte et une manche classique se marchent dessus | `TestRafaleReservoir_SharedBetweenClassicRoundAndMotionCard` (test-writer, #217) |
 | Manche classique | Le changement de signature §14.7 modifie un comportement existant | Suite `internal/game` RAFALE (#216/#202/#199/#107) intégralement au vert, `-race` |
 | Deux cartes RAFALE | Compteurs mélangés entre deux passages de cartes différentes | `MEMOTION_ACTIVE` remis à zéro à chaque `MEMOTION_SELECT` (§5.1, acquis générique) — test dédié recommandé |
+
+---
+
+## 15. Option « Alphabétique » — tirage par passes A→Z, lettre courante, roue des lettres (v11.4.0, #282, LOT-2)
+
+> **Issue** : #282 (milestone v11.4.0 « RAFALE Alphabétique »). **Plan** : `.claude/workflow/plan-11.4.0.md` §5 LOT-2.
+> **Décisions utilisateur** (GATE 1.5/2, 2026-11-05) : `docs/mockup/DECISIONS.md` « tv_rafale_started », « admin_question_editor ».
+> **Maquettes normatives** : `docs/mockup/v11.4.0/ui/tv_rafale_started__letter_wheel.html` (TV),
+> `docs/mockup/v11.4.0/ui/admin_question_editor__rafale_alphabetical.html` (éditeur, chips admin/anim).
+> **Composant** : `contracts/wheel-component.md` (roue générique, réutilisée par la Roue de la Fortune v12.0).
+> Section **additive** : §1–§14 inchangés. Hors périmètre : carte MEMOTION RAFALE (§14 — l'option y est ignorée),
+> tablette VJoueur (aucun rendu nouveau).
+
+### 15.1 Vocabulaire
+
+- **Mot** : la réponse attendue `RafaleQuestion.ANSWER` (§3.1). Le mode alphabétique **rend publique la première
+  lettre normalisée de la réponse courante** — par conception (aide aux joueurs), jamais la réponse elle-même (§2.3
+  reste en vigueur : `ANSWER` et `NEXT` n'atteignent jamais TV/VPlayer).
+- **Lettre** : A–Z, ou `#` pour une réponse dont le premier caractère normalisé n'est pas une lettre latine.
+- **Passe** : un parcours A→Z (puis `#`) qui prend **au plus une** réponse par lettre.
+
+### 15.2 Configuration de manche — champs `TypedContent` (RAFALE `OwnedFields`)
+
+```go
+RafaleAlphabetical bool   `json:"RAFALE_ALPHABETICAL,omitempty"` // faux (défaut) = tirage stratifié §7.2, comportement inchangé
+RafaleWheelLayout  string `json:"RAFALE_WHEEL_LAYOUT,omitempty"`  // "strip" (défaut, valeur zéro) | "arc" — présentation TV
+```
+
+- Tous deux `omitempty` (règle §3.3 : aucun champ RAFALE ne fuit sur un autre type, `models_roundtrip_test.go`) ;
+  ajoutés à `OwnedFields` RAFALE (`question_types.go`, test d'exhaustivité).
+- **Multipart `POST /questions`** : `rafale_alphabetical` (`"true"` ⇒ vrai, précédent `qcm_hints_enabled`) et
+  `rafale_wheel_layout` (`strip`|`arc`, autre valeur ⇒ `400`, absent ⇒ `""`). ⚠️ **Lecture obligatoire dans
+  `handleUploadQuestion` (bloc RAFALE)** — un champ non relu est perdu à chaque enregistrement (#107, §3.3).
+- Réglage **par manche** (décision Q15), **`strip` par défaut** (Q16). Une valeur vide est lue comme `strip` par la TV.
+- Carte MEMOTION RAFALE (§14) : les deux champs sont **ignorés** (ni exposés par le sous-éditeur, ni lus par
+  `startRafaleCardRoundUnsafe`).
+- Garde `participantsConform` (§3.3) : **inchangée** — l'option ne conditionne pas le START.
+
+### 15.3 Normalisation — `rafaleAlphaKey(answer string) (letter, sortKey string)` (`internal/game`, fonction pure)
+
+1. `strings.TrimSpace`, puis suppression des caractères de tête qui ne sont ni lettre ni chiffre (guillemets,
+   parenthèses, tirets, points…).
+2. Repli des accents par **table Latin intégrée** (Latin-1 + Latin Extended-A : `àáâãäå→a`, `ç→c`, `èéêë→e`,
+   `ìíîï→i`, `ñ→n`, `òóôõöø→o`, `ùúûü→u`, `ýÿ→y`, `œ→oe`, `æ→ae`, `ß→ss`, majuscules idem) — **aucune dépendance
+   nouvelle** (`golang.org/x/text` absent de `go.mod`). Casse ignorée (`strings.ToUpper` après repli).
+3. **Articles initiaux retirés** (liste fermée, un seul retrait, suivi d'un espace ou d'une apostrophe `'`/`’`) :
+   `LE`, `LA`, `LES`, `L'`, `UN`, `UNE`, `DES`, `DU`, `DE LA`, `DE L'`. « La Seine » ⇒ `SEINE`, « L'Égypte » ⇒ `EGYPTE`,
+   « Les Misérables » ⇒ `MISERABLES`. « Lapin » n'est pas touché (pas d'espace après `LA`). Documenté dans
+   `docs/ADMIN_GUIDE.md` (section RAFALE alphabétique) pour les auteurs du réservoir.
+4. `sortKey` = chaîne résultante ; `letter` = son premier caractère s'il est dans `A–Z`, sinon `#` (chiffre, vide,
+   lettre non latine). Comparaison des `sortKey` : ordre des octets (ASCII pur après repli) ; égalité ⇒ tri par `ID`.
+
+Le frontend **ne possède aucune copie** de cette normalisation : il reçoit `RAFALE_CURRENT_LETTER` et
+`RAFALE_LETTERS` calculés par le serveur, et `letters` de `GET /api/rafale/pool` (§15.6).
+
+### 15.4 Tirage par passes — moteur (`engine.go`)
+
+État de manche éphémère (même nature que `rafaleDraw`/`rafaleNext`, jamais sérialisé ni persisté, reconstruit à
+chaque `startRafaleRoundUnsafe`, libéré dans `stopUnsafe`, `Ready()`, `InitGame()`) :
+
+```go
+type rafaleAlphaState struct {
+    queue []*RafaleQuestion // ordre de tirage complet de la manche, consommé par l'avant
+}
+```
+
+**Construction** (`startRafaleRoundUnsafe`, si `RafaleAlphabetical`) :
+1. `pool := rafalePoolUnsafe(EffectiveRafaleCategories(), EffectiveRafaleDifficulties())` — même filtre, mêmes
+   questions non utilisées que §7.1.
+2. Grouper par `letter` ; dans chaque groupe trier par `sortKey` puis `ID`.
+3. `queue` = pour k = 0, 1, 2… : pour L dans `A..Z` puis `#` : le k-ième élément du groupe L s'il existe. (Passe 1 =
+   premier mot de chaque lettre, passe 2 = deuxième, etc. — **une lettre à la fois, cyclique A→Z**, décision Q4.)
+4. Le tirage stratifié (`rafaleDraw`, §7.2) **n'est pas construit** en mode alphabétique ; il reste construit et
+   utilisé tel quel hors option.
+
+**Tirage** (`drawNextRafaleUnsafe`) : branche alphabétique = dépiler `queue[0]` (sauter toute question devenue
+`used` entre-temps — édition concurrente, §7.4) ; marquer `used`, `safeGo("SaveRafaleUsed", …)` — inchangé ; file vide
+⇒ `nil` ⇒ épuisement (§7.4, `RAFALE_EXHAUSTED`, inchangé). **Le pré-tirage (§13.4, `prefetchRafaleNextUnsafe`) appelle
+cette même fonction** ⇒ `NEXT` annoncé à l'anim est exactement la prochaine entrée de la file.
+`RAFALE_MAX_QUESTIONS`, `RAFALE_POOL_REMAINING` (+1 si pré-tirée), épuisement d'un couple, fin de manche : **inchangés**.
+
+**Cas limites normatifs (tests exigés)** :
+- une seule lettre pourvue ⇒ réponses consécutives de la même lettre (la roue ne bouge pas) ;
+- passe k+1 commence à la **première lettre encore pourvue**, pas forcément A ;
+- `#` est tiré en fin de passe ; la roue n'a pas de segment `#` : aucune surbrillance ;
+- plafond `RAFALE_MAX_QUESTIONS` ou chrono de manche ⇒ fin normale, file abandonnée ;
+- option désactivée ⇒ **aucune** différence byte-for-byte avec v11.2.3 (tests §12 verts, `rafaleAlpha == nil`).
+
+### 15.5 Champs `GameState` (jamais `omitempty`, initialisés dans `NewEngine` et à chaque reset, non persistés)
+
+```go
+RafaleCurrentLetter string   `json:"RAFALE_CURRENT_LETTER"` // "" hors option/hors manche ; "A".."Z" ; "#"
+RafaleLetters       []string `json:"RAFALE_LETTERS"`        // jamais nil ; lettres A–Z ayant encore ≥ 1 réponse NON JOUÉE
+```
+
+- `RAFALE_CURRENT_LETTER` : posé à chaque question courante (`startRafaleRoundUnsafe`, `advanceRafaleUnsafe`), vidé
+  avec les autres champs RAFALE (`stopUnsafe`, `Ready`, `InitGame`).
+- `RAFALE_LETTERS` : lettres (A–Z seulement, `#` exclu) des réponses **encore à jouer** = `queue` **+ la question
+  pré-tirée** (`rafaleNext`) ; recalculé à chaque tirage ⇒ une lettre se grise dès que sa dernière réponse est devenue
+  courante (la courante reste mise en évidence par `RAFALE_CURRENT_LETTER`). Hors option : `[]`.
+- **Diffusion** : tous les clients web (admin, `/anim`, `/tv`, `/player`) — aucune entrée dans `AdminOnlyGameFields`,
+  `VPlayerOnlyGameFields` ni `TVOnlyGameFields` ; jamais aux buzzers (liste blanche). `ws-payload-serialization.md`
+  mis à jour.
+- **Tests de fuite amendés** (`cmd/server/rafale_answer_leak_test.go`, `internal/protocol/rafale_leak_test.go`) :
+  `ANSWER`/`NEXT` toujours absents de TV/VPlayer ; `RAFALE_CURRENT_LETTER` autorisé **à un caractère** ; une réponse
+  « Canberra » ne doit apparaître nulle part dans la charge utile TV sauf sa lettre `C`.
+
+### 15.6 `GET /api/rafale/pool` — champ `letters` (additif, Q11)
+
+```json
+{ "AVAILABLE": 42, "USED": 8, "TOTAL": 50, "LETTERS": ["A","B","C","D","E","F","G","H","I","L","M","N","O","P","R","S","T","V","Z"] }
+```
+
+`LETTERS` = lettres A–Z (triées, sans doublon, `#` exclu) des réponses **disponibles** (`AVAILABLE`) du filtre, par
+`rafaleAlphaKey` (§15.3) — **même fonction** que le tirage, jamais une seconde implémentation. Toujours présent (tableau
+vide si aucune). `RafalePoolAlert` (éditeur et page Jeu avant lancement) affiche, quand l'option est active : « N
+questions · L lettres couvertes (A–Z sauf J, K, Q, U, W, X, Y) » ; sinon message inchangé.
+
+### 15.7 Interface — admin et animateur
+
+- Éditeur (`QuestionsPage.jsx`, section RAFALE, maquette) : interrupteur « 🔤 Alphabétique » entre le mode de jeu et
+  les temps ; **vignettes radio « Bandeau / Roue »** sous l'interrupteur, visibles seulement quand il est actif
+  (complément Q15 à la maquette validée) ; défauts `rafaleAlphabetical:false`, `rafaleWheelLayout:'strip'` ; chargement,
+  reset, `data.append` des deux champs ; absents du sous-éditeur de carte MEMOTION.
+- `GamePage.jsx` : chip « 🔤 Alphabétique » dans `.rafale-admin-config` ; pastille de la lettre courante devant la
+  question dans `.rafale-admin-live` ; « Suivante (lettre S) : … » — la lettre `S` vient de `rafaleAnswer.NEXT.LETTER`
+  (§15.10), jamais d'une normalisation locale.
+- `AnimPage.jsx` / `AnimRafaleQuestion.jsx` : chip méta et pastille de lettre (l'anim voit déjà la réponse) ; zone
+  « SUIVANTE » : libellé « SUIVANTE (S) — … » depuis `next.LETTER` (§15.10) quand il est non vide, « Suivante » sinon.
+- `useWebSocket.js` : défauts (`RAFALE_CURRENT_LETTER: ''`, `RAFALE_LETTERS: []`) **et** fusion explicite des deux
+  champs (le hook fusionne champ par champ : un champ non listé n'arrive jamais).
+
+### 15.8 Interface — TV (`PlayerDisplay.jsx`, RAFALE STARTED, maquette `tv_rafale_started__letter_wheel`)
+
+- Zone basse de l'écran, **en plus** des 4 zones existantes qui se compriment : `layout = strip` ⇒ bande de 16 vh ;
+  `layout = arc` ⇒ bande de 30 vh. `overflow: hidden`, unités `vh`/`vw`, `min-height: 0` sur les zones flexibles
+  (CLAUDE.md « TV STATIQUE »). Hors option : aucune zone ajoutée (rendu v11.2.3 inchangé).
+- Rendu par l'adaptateur `RafaleLetterWheel` → `Wheel` (`contracts/wheel-component.md`) : 26 segments A–Z, `current` =
+  `RAFALE_CURRENT_LETTER` (`#`/`""` ⇒ `null`, aucune surbrillance), `state: 'disabled'` pour toute lettre absente de
+  `RAFALE_LETTERS` **sauf la courante**, couleur d'accent = `RAFALE_CURRENT_TEAM_COLOR`, `motion = null` (pas de 0,6 s).
+- **Aucune ligne A→Z** supplémentaire dans l'encart question (décision itération 3). VPlayer : rien.
+- **Critère « lisible après 100 mouvements »** : après 100 avancées consécutives (ou 100 `current` successifs), tous
+  les segments sont encore rendus dans la zone visible — garanti par `wheel-component.md` §4 (position normalisée),
+  vérifié par un test vitest (100 mises à jour de `current` ⇒ le segment courant est dans le `viewBox`/le cadre).
+
+### 15.9 Non-régression exigée (s'ajoute à §12/§13.8/§14.10)
+
+Option désactivée : `rafale_*_test.go` existants verts sans modification ; `models_roundtrip_test.go` vert (fixtures
+inchangées) ; `rafale_upload_nonregression_test.go` étendu aux deux champs ; `rafale_go_js_alignment_203_test.go`
+inchangé (aucune constante JS nouvelle à aligner). Carte MEMOTION RAFALE (`rafale_motion_card_*_test.go`) : inchangée.
+
+### 15.10 Lettre de la question suivante — `RAFALE_ANSWER.NEXT.LETTER` (admin + anim, ajout 2026-11-05)
+
+> Écart remonté par `dev-frontend` pendant le Batch 2 : la maquette (admin « Suivante (lettre S) : … », anim
+> « SUIVANTE (S) — … ») et §15.7 affichent la lettre de la **question suivante**, mais aucun champ ne la portait.
+> Le frontend ne possède pas la normalisation (§15.3) et `NEXT` n'a pas d'`ANSWER` (§13.3) : la lettre doit être
+> calculée par le serveur.
+
+- **Champ** : `RafaleNextPayload.Letter` — JSON `LETTER`, `string`, **jamais `omitempty`** (même discipline que
+  `NEXT` lui-même, §13.3). Valeurs : `""` quand l'option alphabétique est inactive (manche classique **et** carte
+  MEMOTION — `NEXT` y est de toute façon `null`), sinon `rafaleAlphaKey(next.ANSWER).letter` ⇒ `"A"`..`"Z"` ou `"#"`.
+  **Même fonction** que le tirage et que `pool.LETTERS` — jamais une seconde implémentation.
+- **Canal et destinataires : inchangés** — `RAFALE_ANSWER`, `broadcastRafaleAnswer`, `ClientTypeAdmin` +
+  `ClientTypeAnim` seulement. Le champ voyage dans `NEXT`, qui n'atteint déjà jamais `/tv`, `/player` ni les buzzers
+  (§13.2, `TestRafaleAnswerNext_NeverLeaksToTVOrPlayer`). Aucun champ `GameState` nouveau, aucune modification de
+  `ws-payload-serialization.md` : la lettre **suivante** n'est pas publique (seule la courante l'est, §15.5) ;
+  `RAFALE_LETTERS` reste la seule information TV sur les lettres à venir.
+- **Sérialiseur / moteur** : le pré-tirage expose la lettre à côté de l'aperçu — recommandé : `rafaleNextPreview`
+  renvoie un type dédié au pré-tirage (ex. `game.RafaleNext { RafaleCurrent; Letter string }`), **sans toucher
+  `RafaleCurrent`** (qui sert aussi à `RAFALE_CURRENT` du `GameState`, diffusé à la TV) ; `rafaleNextPayload`
+  (`cmd/server/main.go`) recopie `Letter`. `rafaleCardAnswer` : `NEXT` reste `null` (§14.2).
+- **Frontend** : `useWebSocket.js` transmet `MSG.NEXT` tel quel (`NEXT: MSG.NEXT ?? null`) — aucun changement de
+  hook ; `GamePage.jsx` et `AnimRafaleQuestion.jsx` lisent `NEXT.LETTER` (§15.7). Hors option (`""`) : libellés
+  v11.2.3 inchangés.
+- **Tests exigés** : `TestRafaleAnswerNext_ReachesAdminAndAnim_ConsistentBetweenBoth` étendu — option active ⇒
+  `LETTER` non vide, identique admin/anim, égal à `rafaleAlphaKey` de la réponse pré-tirée ; option inactive ⇒
+  `LETTER == ""` ; décodage JSON : clé `LETTER` présente même vide ; fuite : le test TV/VPlayer existant couvre déjà
+  le champ (il cherche tout contenu de `NEXT`) — y ajouter l'assertion « aucune clé `LETTER` dans les trames TV ».
+- Rétrocompatible : champ additif, clients antérieurs l'ignorent.

@@ -171,6 +171,9 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     RAFALE_ASKED_COUNT: 0,
     RAFALE_POOL_REMAINING: 0,
     RAFALE_EXHAUSTED: false,
+    // #282 (v11.4.0) — option Alphabétique : lettre courante publique + lettres encore à jouer
+    RAFALE_CURRENT_LETTER: '',
+    RAFALE_LETTERS: [],
     // Son de la question (v11.1, #219, contrats game-state.md/sound.md §10).
     // Jamais omitempty côté serveur (règle projet) : les défauts ci-dessous
     // sont les valeurs zéro correctes ("aucune lecture en cours" / "le
@@ -187,6 +190,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
   const [questions, setQuestions] = useState({})
+  // #285 : dernier CATEGORIES_CHANGED { categories, change, ts } (consommé par useCategories)
+  const [categoriesPush, setCategoriesPush] = useState(null)
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
   const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0, anim: 0 })
@@ -540,6 +545,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             RAFALE_ASKED_COUNT: MSG.GAME.RAFALE_ASKED_COUNT ?? prev.RAFALE_ASKED_COUNT,
             RAFALE_POOL_REMAINING: MSG.GAME.RAFALE_POOL_REMAINING ?? prev.RAFALE_POOL_REMAINING,
             RAFALE_EXHAUSTED: MSG.GAME.RAFALE_EXHAUSTED ?? prev.RAFALE_EXHAUSTED,
+            RAFALE_CURRENT_LETTER: MSG.GAME.RAFALE_CURRENT_LETTER ?? prev.RAFALE_CURRENT_LETTER,
+            RAFALE_LETTERS: MSG.GAME.RAFALE_LETTERS ?? prev.RAFALE_LETTERS,
             qcmInvalidated: MSG.GAME.QCM_INVALIDATED || [],
             virtualPlayerCount: MSG.GAME.VIRTUAL_PLAYER_COUNT ?? prev.virtualPlayerCount,
             virtualPlayerLimit: MSG.GAME.VIRTUAL_PLAYER_LIMIT ?? prev.virtualPlayerLimit,
@@ -639,6 +646,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
       case 'BUMPER':
         if (MSG?.teams !== undefined) setTeams(MSG.teams ?? {})
         if (MSG?.bumpers !== undefined) setBumpers(MSG.bumpers ?? {})
+        break
+
+      case 'CATEGORIES_CHANGED':
+        // #285 (contrat websocket-actions.md §CATEGORIES_CHANGED) : liste complète résolue + nature du changement.
+        if (Array.isArray(MSG?.CATEGORIES)) {
+          setCategoriesPush({ categories: MSG.CATEGORIES, change: MSG.CHANGE ?? null, ts: MSG.TS ?? Date.now() })
+        }
         break
 
       case 'QUESTIONS':
@@ -1287,13 +1301,15 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   // comportement inchangé pour la manche classique.
   const rafaleValidate = useCallback((motionCardId) => {
     const msg = {}
-    if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    // Garde stricte : un handler branché tel quel sur onClick recevrait l'événement React (circulaire ⇒ JSON.stringify jette)
+    if (typeof motionCardId === 'string' && motionCardId) msg.MOTION_CARD_ID = motionCardId
     sendMessage('RAFALE_VALIDATE', msg)
   }, [sendMessage])
 
   const rafaleInvalidate = useCallback((motionCardId) => {
     const msg = {}
-    if (motionCardId) msg.MOTION_CARD_ID = motionCardId
+    // Garde stricte : un handler branché tel quel sur onClick recevrait l'événement React (circulaire ⇒ JSON.stringify jette)
+    if (typeof motionCardId === 'string' && motionCardId) msg.MOTION_CARD_ID = motionCardId
     sendMessage('RAFALE_INVALIDATE', msg)
   }, [sendMessage])
 
@@ -1545,6 +1561,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     teams,
     bumpers,
     questions,
+    categoriesPush,
     fsInfo,
     version,
     clientCounts,

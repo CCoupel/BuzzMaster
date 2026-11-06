@@ -49,21 +49,27 @@ func TestHandleRafalePool_PluralParams(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (body: %s)", w.Code, w.Body.String())
 	}
 
-	var got map[string]int
+	// #282 (contract rafale.md §15.6): LETTERS ([]string) joined the counters,
+	// so only the three int counters are decoded here.
+	var got struct {
+		AVAILABLE int `json:"AVAILABLE"`
+		USED      int `json:"USED"`
+		TOTAL     int `json:"TOTAL"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("could not decode response body %q: %v", w.Body.String(), err)
 	}
 
 	// h1-1, h1-2, h2-1, s1-1 = 4 questions across the requested union;
 	// decoy-1 (SPORTS/1) must NOT be counted.
-	if got["AVAILABLE"] != 4 {
-		t.Errorf("AVAILABLE = %d, want 4 (union of HISTORY×{1,2} ∪ SCIENCE×{1,2}, decoy excluded)", got["AVAILABLE"])
+	if got.AVAILABLE != 4 {
+		t.Errorf("AVAILABLE = %d, want 4 (union of HISTORY×{1,2} ∪ SCIENCE×{1,2}, decoy excluded)", got.AVAILABLE)
 	}
-	if got["TOTAL"] != 4 {
-		t.Errorf("TOTAL = %d, want 4", got["TOTAL"])
+	if got.TOTAL != 4 {
+		t.Errorf("TOTAL = %d, want 4", got.TOTAL)
 	}
-	if got["USED"] != 0 {
-		t.Errorf("USED = %d, want 0 (nothing drawn yet)", got["USED"])
+	if got.USED != 0 {
+		t.Errorf("USED = %d, want 0 (nothing drawn yet)", got.USED)
 	}
 }
 

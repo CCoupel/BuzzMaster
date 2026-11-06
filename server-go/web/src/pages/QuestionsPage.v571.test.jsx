@@ -164,10 +164,12 @@ describe('QuestionsPage — Type Speedy (#98)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// #97 — Bouton + catégorie (création inline)
+// #97 → #285 — la création inline (« + ») a été retirée du sélecteur de catégorie par décision utilisateur
+// (retour QUALIF 11.4.0.5) : la création vit dans CategoryManagerDialog (CategoryManagerDialog.create285.test.jsx).
+// Les 9 anciens cas du bloc « Bouton + catégorie (#97) » sont supprimés ; il ne reste que l'absence du bouton.
 // ---------------------------------------------------------------------------
 
-describe('QuestionsPage — Bouton + catégorie (#97)', () => {
+describe('QuestionsPage — pas de création de catégorie dans l\'éditeur (#285)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useGame.mockReturnValue(makeQPageMock())
@@ -175,194 +177,9 @@ describe('QuestionsPage — Bouton + catégorie (#97)', () => {
     global.fetch = vi.fn()
   })
 
-  afterEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('le bouton "+" est présent dans le sélecteur de catégorie', () => {
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    expect(addBtn).not.toBeNull()
-  })
-
-  it('cliquer sur "+" affiche le formulaire inline d\'ajout de catégorie', () => {
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const form = container.querySelector('.add-category-inline')
-    expect(form).not.toBeNull()
-  })
-
-  it('le formulaire inline contient un champ texte et les boutons Valider/Annuler', () => {
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const input = container.querySelector('.add-category-input')
-    expect(input).not.toBeNull()
-
-    const validateBtn = container.querySelector('.add-category-validate')
-    expect(validateBtn).not.toBeNull()
-
-    const cancelBtn = container.querySelector('.add-category-cancel')
-    expect(cancelBtn).not.toBeNull()
-  })
-
-  it('cliquer sur "Annuler" masque le formulaire inline', () => {
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const cancelBtn = container.querySelector('.add-category-cancel')
-    fireEvent.click(cancelBtn)
-
-    const form = container.querySelector('.add-category-inline')
-    expect(form).toBeNull()
-
-    // Le bouton "+" est de nouveau visible
-    const addBtnAfter = screen.queryByTitle('Créer une catégorie')
-    expect(addBtnAfter).not.toBeNull()
-  })
-
-  it('une erreur 400 (nom invalide) affiche le message d\'erreur attendu', async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-    })
-
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const input = container.querySelector('.add-category-input')
-    fireEvent.change(input, { target: { value: '' } }) // nom vide
-
-    const validateBtn = container.querySelector('.add-category-validate')
-    fireEvent.click(validateBtn)
-
-    // Le message d'erreur "Nom invalide" doit apparaître
-    await waitFor(() => {
-      const errorEl = container.querySelector('.add-category-error')
-      expect(errorEl).not.toBeNull()
-      expect(errorEl.textContent).toMatch(/nom invalide/i)
-    })
-  })
-
-  // Helper : sélectionner un fichier image dans le formulaire inline
-  // Nécessaire depuis v5.7.2 — le champ file est obligatoire (BREAKING #100)
-  const selectCategoryFile = (container, filename = 'photo.png') => {
-    const fileInput = container.querySelector('.add-category-inline input[type="file"]')
-    if (!fileInput) return
-    const file = new File(['fake-image'], filename, { type: 'image/png' })
-    fireEvent.change(fileInput, { target: { files: [file] } })
-  }
-
-  it('sans image sélectionnée, le formulaire affiche "Image requise" (v5.7.2 #100)', async () => {
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const input = container.querySelector('.add-category-input')
-    fireEvent.change(input, { target: { value: 'Bonne Catégorie' } })
-
-    // Cliquer Valider sans sélectionner de fichier
-    const validateBtn = container.querySelector('.add-category-validate')
-    fireEvent.click(validateBtn)
-
-    await waitFor(() => {
-      const errorEl = container.querySelector('.add-category-error')
-      expect(errorEl).not.toBeNull()
-      expect(errorEl.textContent).toMatch(/image requise/i)
-    })
-  })
-
-  it('le formulaire contient un input file acceptant les images (v5.7.2 #100)', () => {
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const fileInput = container.querySelector('.add-category-inline input[type="file"]')
-    expect(fileInput).not.toBeNull()
-    expect(fileInput.getAttribute('accept')).toContain('.png')
-    expect(fileInput.getAttribute('accept')).toContain('.jpg')
-  })
-
-  it('une erreur 409 (conflit) affiche "Cette catégorie existe déjà"', async () => {
-    // v5.7.2 BREAKING: POST /api/categories requiert multipart + fichier image obligatoire
-    // v6.0.0 (#8): QuestionsPage appelle aussi GET /config.json au montage
-    // (état de la clé IA) — router par URL plutôt que mockResolvedValueOnce
-    // pour ne pas dépendre de l'ordre des appels fetch.
-    global.fetch = vi.fn((url) => {
-      if (url === '/config.json') {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ai: { api_key_configured: false } }) })
-      }
-      return Promise.resolve({ ok: false, status: 409 })
-    })
-
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const input = container.querySelector('.add-category-input')
-    fireEvent.change(input, { target: { value: 'Geography' } })
-
-    // Sélectionner un fichier (obligatoire depuis v5.7.2)
-    selectCategoryFile(container)
-
-    const validateBtn = container.querySelector('.add-category-validate')
-    fireEvent.click(validateBtn)
-
-    await waitFor(() => {
-      const errorEl = container.querySelector('.add-category-error')
-      expect(errorEl).not.toBeNull()
-      expect(errorEl.textContent).toMatch(/existe déjà/i)
-    })
-  })
-
-  it('un POST réussi ferme le formulaire et appelle refetch', async () => {
-    // v5.7.2 BREAKING: POST /api/categories requiert multipart + fichier image obligatoire
-    const mockRefetch = vi.fn()
-    useCategories.mockReturnValue(makeCategoriesMock({ refetch: mockRefetch }))
-
-    // v6.0.0 (#8): QuestionsPage appelle aussi GET /config.json au montage
-    // (état de la clé IA) — router par URL plutôt que mockResolvedValueOnce
-    // pour ne pas dépendre de l'ordre des appels fetch.
-    global.fetch = vi.fn((url) => {
-      if (url === '/config.json') {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ai: { api_key_configured: false } }) })
-      }
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({
-          key: 'MA_CATEGORIE',
-          name: 'Ma Categorie',
-          imageURL: '/files/categories/MA_CATEGORIE.png',
-          isCustom: true,
-        }),
-      })
-    })
-
-    const { container } = render(<QuestionsPage />)
-    const addBtn = screen.queryByTitle('Créer une catégorie')
-    fireEvent.click(addBtn)
-
-    const input = container.querySelector('.add-category-input')
-    fireEvent.change(input, { target: { value: 'Ma Categorie' } })
-
-    // Sélectionner un fichier (obligatoire depuis v5.7.2)
-    selectCategoryFile(container, 'ma-categorie.png')
-
-    const validateBtn = container.querySelector('.add-category-validate')
-    fireEvent.click(validateBtn)
-
-    await waitFor(() => {
-      // Le formulaire doit être fermé
-      const form = container.querySelector('.add-category-inline')
-      expect(form).toBeNull()
-    })
-
-    expect(mockRefetch).toHaveBeenCalledTimes(1)
+  it('aucun bouton « Créer une catégorie » dans le sélecteur de l\'éditeur', () => {
+    render(<QuestionsPage />)
+    expect(screen.queryByTitle('Créer une catégorie')).toBeNull()
   })
 })
 

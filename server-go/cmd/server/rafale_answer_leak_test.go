@@ -56,7 +56,7 @@ func newRafaleAnswerLeakTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newAnimTestApp(t)
 
-	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleNext) {
 		app.broadcastRafaleAnswer(id, answer, next)
 	}
 
@@ -220,9 +220,16 @@ const (
 // gone dry).
 func newRafaleNextLeakTestApp(t *testing.T) *App {
 	t.Helper()
+	return newRafaleNextLeakTestAppAlpha(t, false)
+}
+
+// newRafaleNextLeakTestAppAlpha — same, with the #282 alphabetical option
+// on/off (contract §15.10: NEXT.LETTER is "" off, "A".."Z"/"#" on).
+func newRafaleNextLeakTestAppAlpha(t *testing.T, alpha bool) *App {
+	t.Helper()
 	app := newAnimTestApp(t)
 
-	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleNext) {
 		app.broadcastRafaleAnswer(id, answer, next)
 	}
 
@@ -248,6 +255,7 @@ func newRafaleNextLeakTestApp(t *testing.T) *App {
 			RafaleMode:         string(game.RafaleModeSolo),
 			RafaleQuestionTime: 3,
 			RafaleMaxQuestions: 100,
+			RafaleAlphabetical: alpha,
 		},
 	}
 	app.engine.Ready(q.ID, q)
@@ -289,38 +297,59 @@ func assertNoFrameContainsSecret(t *testing.T, name string, conn interface {
 // proven before the negative (leak) assertions below, so a failure there
 // can't be misread as "NEXT just isn't wired up at all".
 func TestRafaleAnswerNext_ReachesAdminAndAnim_ConsistentBetweenBoth(t *testing.T) {
-	app := newRafaleNextLeakTestApp(t)
+	// #282 (contract §15.10): NEXT.LETTER — "" with the option off, the
+	// upcoming letter ("A": the reservoir answers are A1/A2/A3) with it on,
+	// identical on admin and anim, and always present on the wire.
+	for _, tc := range []struct {
+		name       string
+		alpha      bool
+		wantLetter string
+	}{{"option_off", false, ""}, {"option_on", true, "A"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := newRafaleNextLeakTestAppAlpha(t, tc.alpha)
 
-	baseURL := startAnimAllowlistTestServer(t, app)
-	admin := dialWS(t, baseURL, "/ws/admin")
-	anim := dialWS(t, baseURL, "/ws/anim")
-	learnClientID(t, app, admin)
-	learnClientID(t, app, anim)
+			baseURL := startAnimAllowlistTestServer(t, app)
+			admin := dialWS(t, baseURL, "/ws/admin")
+			anim := dialWS(t, baseURL, "/ws/anim")
+			learnClientID(t, app, admin)
+			learnClientID(t, app, anim)
 
-	sendAction(t, app, admin, protocol.ActionRafaleValidate, struct{}{})
+			sendAction(t, app, admin, protocol.ActionRafaleValidate, struct{}{})
 
-	var statements []string
-	for _, recipient := range []struct {
-		name string
-		conn *websocket.Conn
-	}{{"admin", admin}, {"anim", anim}} {
-		_, raw := readActionMatching(t, recipient.conn, protocol.ActionRafaleAnswer)
-		var parsed struct {
-			Msg protocol.RafaleAnswerPayload `json:"MSG"`
-		}
-		if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-			t.Fatalf("%s: failed to unmarshal RAFALE_ANSWER: %v (raw: %s)", recipient.name, err, raw)
-		}
-		if parsed.Msg.Next == nil {
-			t.Fatalf("%s: expected a non-nil NEXT (1 question still in the pool), got nil", recipient.name)
-		}
-		if parsed.Msg.Next.ID == "" || parsed.Msg.Next.Question == "" {
-			t.Errorf("%s: expected a fully-populated NEXT, got %+v", recipient.name, parsed.Msg.Next)
-		}
-		statements = append(statements, parsed.Msg.Next.Question)
-	}
-	if statements[0] != statements[1] {
-		t.Errorf("admin and anim disagree on the NEXT statement: %q vs %q — both must see the exact same pre-fetch", statements[0], statements[1])
+			var statements, letters []string
+			for _, recipient := range []struct {
+				name string
+				conn *websocket.Conn
+			}{{"admin", admin}, {"anim", anim}} {
+				_, raw := readActionMatching(t, recipient.conn, protocol.ActionRafaleAnswer)
+				var parsed struct {
+					Msg protocol.RafaleAnswerPayload `json:"MSG"`
+				}
+				if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+					t.Fatalf("%s: failed to unmarshal RAFALE_ANSWER: %v (raw: %s)", recipient.name, err, raw)
+				}
+				if parsed.Msg.Next == nil {
+					t.Fatalf("%s: expected a non-nil NEXT (1 question still in the pool), got nil", recipient.name)
+				}
+				if parsed.Msg.Next.ID == "" || parsed.Msg.Next.Question == "" {
+					t.Errorf("%s: expected a fully-populated NEXT, got %+v", recipient.name, parsed.Msg.Next)
+				}
+				if !strings.Contains(raw, `"LETTER":`) {
+					t.Errorf("%s: NEXT.LETTER must always be on the wire (no omitempty), raw: %s", recipient.name, raw)
+				}
+				if parsed.Msg.Next.Letter != tc.wantLetter {
+					t.Errorf("%s: NEXT.LETTER = %q, want %q", recipient.name, parsed.Msg.Next.Letter, tc.wantLetter)
+				}
+				statements = append(statements, parsed.Msg.Next.Question)
+				letters = append(letters, parsed.Msg.Next.Letter)
+			}
+			if statements[0] != statements[1] {
+				t.Errorf("admin and anim disagree on the NEXT statement: %q vs %q — both must see the exact same pre-fetch", statements[0], statements[1])
+			}
+			if letters[0] != letters[1] {
+				t.Errorf("admin and anim disagree on NEXT.LETTER: %q vs %q", letters[0], letters[1])
+			}
+		})
 	}
 }
 
@@ -331,7 +360,8 @@ func TestRafaleAnswerNext_ReachesAdminAndAnim_ConsistentBetweenBoth(t *testing.T
 // existing ANSWER-only tests above) NOR embedded in any other frame
 // (assertNoFrameContainsSecret's raw substring scan across every action).
 func TestRafaleAnswerNext_NeverLeaksToTVOrPlayer(t *testing.T) {
-	app := newRafaleNextLeakTestApp(t)
+	// #282: option on, so NEXT.LETTER is non-empty — it must stay off TV/VPlayer too.
+	app := newRafaleNextLeakTestAppAlpha(t, true)
 
 	baseURL := startAnimAllowlistTestServer(t, app)
 	admin := dialWS(t, baseURL, "/ws/admin")
@@ -361,4 +391,85 @@ func TestRafaleAnswerNext_NeverLeaksToTVOrPlayer(t *testing.T) {
 	assertRafaleAnswerNeverReceived(t, "vplayer", vplayer)
 	assertNoFrameContainsSecret(t, "tv", tv, parsed.Msg.Next.Question)
 	assertNoFrameContainsSecret(t, "vplayer", vplayer, parsed.Msg.Next.Question)
+	// #282 (contract §15.10): no NEXT.LETTER key on TV/VPlayer frames (the
+	// public RAFALE_CURRENT_LETTER / RAFALE_LETTERS keys do not match `"LETTER":`).
+	assertNoFrameContainsSecret(t, "tv", tv, `"LETTER":`)
+	assertNoFrameContainsSecret(t, "vplayer", vplayer, `"LETTER":`)
+}
+
+// ---------------------------------------------------------------------------
+// #282, contract rafale.md §15.5 — mode Alphabétique : la PREMIÈRE LETTRE de la
+// réponse courante est publique par conception (RAFALE_CURRENT_LETTER, un
+// caractère), la réponse elle-même (et NEXT) jamais. « Canberra » ne doit
+// apparaître nulle part dans la charge utile TV/VPlayer — sauf sa lettre « C ».
+// ---------------------------------------------------------------------------
+
+func newRafaleAlphaLeakTestApp(t *testing.T) *App {
+	t.Helper()
+	app := newAnimTestApp(t)
+	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleNext) {
+		app.broadcastRafaleAnswer(id, answer, next)
+	}
+	for _, rq := range []game.RafaleQuestion{
+		{ID: "ra-1", Question: "QS-ALPHA-1", Answer: "Canberra", Category: rafaleAnswerLeakReservoirCategory, Difficulty: rafaleAnswerLeakReservoirDifficulty},
+		{ID: "ra-2", Question: "QS-ALPHA-2", Answer: "Dakar", Category: rafaleAnswerLeakReservoirCategory, Difficulty: rafaleAnswerLeakReservoirDifficulty},
+		{ID: "ra-3", Question: "QS-ALPHA-3", Answer: "Eriwan", Category: rafaleAnswerLeakReservoirCategory, Difficulty: rafaleAnswerLeakReservoirDifficulty},
+	} {
+		if _, err := app.engine.UpsertRafaleQuestion(rq); err != nil {
+			t.Fatalf("UpsertRafaleQuestion(%q) failed: %v", rq.ID, err)
+		}
+	}
+	q := &game.Question{
+		ID: "rafale-alpha-leak-q", Question: "RAFALE round", Type: game.QuestionTypeRafale,
+		Category: rafaleAnswerLeakReservoirCategory, Points: "10", Time: "120",
+		TypedContent: game.TypedContent{
+			RafaleDifficulty: rafaleAnswerLeakReservoirDifficulty, RafaleMode: string(game.RafaleModeSolo),
+			RafaleQuestionTime: 3, RafaleMaxQuestions: 100, RafaleAlphabetical: true,
+		},
+	}
+	app.engine.Ready(q.ID, q)
+	app.engine.StartImmediate(0) // current = Canberra (C), pre-fetched NEXT = Dakar
+	return app
+}
+
+func TestRafaleAlpha282_TVAndVPlayer_OnlyTheLetter_NeverTheAnswer(t *testing.T) {
+	app := newRafaleAlphaLeakTestApp(t)
+	baseURL := startAnimAllowlistTestServer(t, app)
+	admin := dialWS(t, baseURL, "/ws/admin")
+	tv := dialWS(t, baseURL, "/ws/tv")
+	vplayer := dialWS(t, baseURL, "/ws/player")
+	learnClientID(t, app, admin)
+	learnClientID(t, app, tv)
+	learnClientID(t, app, vplayer)
+
+	sendAction(t, app, admin, protocol.ActionRafaleValidate, struct{}{}) // current → Dakar (D), NEXT → Eriwan
+	_, _ = readActionMatching(t, admin, protocol.ActionRafaleAnswer)
+	app.broadcastUpdate() // le harnais ne câble pas OnStateChange : on force la diffusion d'état aux clients
+
+	for name, conn := range map[string]interface {
+		SetReadDeadline(time.Time) error
+		ReadMessage() (int, []byte, error)
+	}{"tv": tv, "vplayer": vplayer} {
+		sawLetter := false
+		deadline := time.Now().Add(500 * time.Millisecond)
+		for {
+			conn.SetReadDeadline(deadline)
+			_, data, err := conn.ReadMessage()
+			if err != nil {
+				break
+			}
+			s := string(data)
+			for _, secret := range []string{"Canberra", "Dakar", "Eriwan", "anberra", "akar", "riwan"} {
+				if strings.Contains(s, secret) {
+					t.Fatalf("%s: la réponse %q ne doit jamais atteindre le client public — frame: %s", name, secret, s)
+				}
+			}
+			if strings.Contains(s, `"RAFALE_CURRENT_LETTER":"D"`) {
+				sawLetter = true
+			}
+		}
+		if !sawLetter {
+			t.Errorf("%s: RAFALE_CURRENT_LETTER=\"D\" (une seule lettre, publique) attendu dans les diffusions d'état", name)
+		}
+	}
 }

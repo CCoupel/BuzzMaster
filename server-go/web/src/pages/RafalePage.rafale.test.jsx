@@ -538,17 +538,17 @@ describe('RafalePage — non-régression : listing du pool sans doublon de caté
     })
   })
 
-  it('le formulaire de création (CategoryPicker single) ne présente pas non plus de doublon avec cette même réponse API brute', async () => {
+  it('le sélecteur de catégorie du formulaire (CategoryPicker single) ne présente pas de doublon avec cette même réponse API brute, ni bouton de création (#285)', async () => {
     const { container } = renderRafalePage({ questions: MIXED_CATEGORY_QUESTIONS, categories: RAW_API_CATEGORIES_RESPONSE })
     await screen.findByText('Q Histoire')
 
-    // 8 standard + 1 custom (Mascottes) = 9 radios de catégorie ; le bouton "+"
-    // de création n'a PAS role="radio" (#221). Les 3 radios ★ du DifficultyPicker
+    // 8 standard + 1 custom (Mascottes) = 9 radios de catégorie (la création a été retirée du
+    // sélecteur : #285, elle vit dans CategoryManagerDialog). Les 3 radios ★ du DifficultyPicker
     // du même formulaire sont exclus (leur texte commence par ★).
     const formCard = within(container.querySelector('.rafale-form-card'))
     const categoryRadios = formCard.getAllByRole('radio').filter(r => !r.textContent.trim().startsWith('★'))
     expect(categoryRadios).toHaveLength(9)
-    expect(formCard.getByTitle('Créer une catégorie')).toBeInTheDocument()
+    expect(formCard.queryByTitle('Créer une catégorie')).not.toBeInTheDocument()
     expect(formCard.getAllByTitle('Histoire')).toHaveLength(1)
   })
 })

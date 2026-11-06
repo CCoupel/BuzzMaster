@@ -363,6 +363,12 @@ type TypedContent struct {
 	// than needing its own. A RAFALE card needs a card-own value ("durée
 	// propre", task #217), so it gets a dedicated OwnedField instead.
 	RafaleRoundTime int `json:"RAFALE_ROUND_TIME,omitempty"`
+	// RafaleAlphabetical / RafaleWheelLayout (v11.4.0, #282, contracts/
+	// rafale.md §15.2) — the "Alphabétique" option of a classic RAFALE round
+	// and its TV presentation ("strip" default | "arc"). omitempty like every
+	// TypedContent field (§3.3); ignored by a MEMOTION RAFALE card (§14).
+	RafaleAlphabetical bool   `json:"RAFALE_ALPHABETICAL,omitempty"`
+	RafaleWheelLayout  string `json:"RAFALE_WHEEL_LAYOUT,omitempty"`
 
 	// EntracteConfig (v9.0.0, #214) — the per-occurrence panel configuration
 	// of an ENTRACTE-type question, question host only, never nestable
@@ -608,6 +614,14 @@ type RafaleCurrent struct {
 	Points int `json:"POINTS"`
 }
 
+// RafaleNext (#282, contract §15.10) is the pre-fetched NEXT question's
+// preview: RafaleCurrent plus the upcoming letter. Dedicated type so that
+// RafaleCurrent (broadcast to TV inside GameState) never carries the letter.
+type RafaleNext struct {
+	RafaleCurrent
+	Letter string `json:"LETTER"` // "" when the alphabetical option is off
+}
+
 // Question represents a quiz question
 //
 // Answer is declared here explicitly (not left to the embedded TypedContent
@@ -657,8 +671,14 @@ type Question struct {
 	// defers the timer until the sound ends — naturally or by an explicit
 	// animateur Stop — never blocking (contract's own non-blocking rule,
 	// CA12): see Engine.maybeStartDeferredTimerUnsafe/ReleaseDeferredTimer.
-	SoundTimerDelayed bool           `json:"SOUND_TIMER_DELAYED,omitempty"`
-	Status            QuestionStatus `json:"STATUS,omitempty"`
+	SoundTimerDelayed bool `json:"SOUND_TIMER_DELAYED,omitempty"`
+	// SoundLoop (v11.4.0, #288, contract sound.md §13.2) — false (zero) = the
+	// sound plays once (v11.1 behaviour); true = replayed in a loop until an
+	// existing stop site fires. Combinable with SoundTimerDelayed (the timer
+	// then starts at the end of the FIRST pass). Common to all question
+	// types like Sound; written only when a sound is attached.
+	SoundLoop bool           `json:"SOUND_LOOP,omitempty"`
+	Status    QuestionStatus `json:"STATUS,omitempty"`
 
 	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE (Answer shadowed by the explicit field above)
 }
@@ -929,6 +949,11 @@ type GameState struct {
 	RafaleAskedCount           int                       `json:"RAFALE_ASKED_COUNT"`
 	RafalePoolRemaining        int                       `json:"RAFALE_POOL_REMAINING"`
 	RafaleExhausted            bool                      `json:"RAFALE_EXHAUSTED"`
+	// v11.4.0 (#282, contracts/rafale.md §15.5) — NO omitempty. The current
+	// answer's first normalised letter is PUBLIC by design (never the answer);
+	// RafaleLetters = A–Z letters that still have an unplayed answer.
+	RafaleCurrentLetter string   `json:"RAFALE_CURRENT_LETTER"`
+	RafaleLetters       []string `json:"RAFALE_LETTERS"`
 
 	// Question sound (v11.1, #219, contracts/sound.md §10) — NO omitempty
 	// (project rule, CLAUDE.md): always serialized, including their zero

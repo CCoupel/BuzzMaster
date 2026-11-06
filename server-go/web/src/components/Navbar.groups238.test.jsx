@@ -441,7 +441,7 @@ describe('#238 — ENTRACTE 🍿 / 🎬 et Éclairage : icône + nom accessible'
     lightingMock.status = { state: 'ok', mode: 'AUTO', flash: false }
     const { container } = renderNavbar()
     const b = container.querySelector('.lighting-mode-nav-badge')
-    expect(b.getAttribute('aria-label') || b.getAttribute('title')).toMatch(/clairage/i)
+    expect(b.getAttribute('aria-label') || b.getAttribute('title')).toMatch(/ambiance/i)
   })
 })
 

@@ -84,7 +84,9 @@ const show = (rows, over = {}) => {
 }
 const answerBtn = (label) => screen.getByRole('button', { name: new RegExp(label) })
 const countOf = (label) => answerBtn(label).querySelector('.qcm-picker-n').textContent.trim()
-const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités) \(\d+\)$/ })
+const action = () => screen.getByRole('button', { name: /^(Attribuer les points|Appliquer les pénalités)$/ })
+// #289 : le compteur n'est plus dans le bouton mais sur la ligne 2 du bloc (`.award-count`)
+const awardN = () => parseInt(document.querySelector('.award-count')?.textContent, 10) || 0
 const checkedBoxes = () => screen.queryAllByRole('checkbox').filter((c) => c.checked)
 const ALL = ['La Loire', 'La Seine', 'Le Rhône', 'La Garonne']
 
@@ -101,7 +103,7 @@ describe('Bug #255 — le sélecteur QCM ne compte que les joueurs qui ont répo
     for (const label of ALL) {
       fireEvent.click(answerBtn(label))
       expect(checkedBoxes(), label).toHaveLength(0)
-      expect(action().textContent).toMatch(/\(0\)$/)
+      expect(awardN()).toBe(0)
       expect(action().disabled).toBe(true)
     }
   })
@@ -143,7 +145,8 @@ describe('Bug #255 — le sélecteur QCM ne compte que les joueurs qui ont répo
     expect(countOf('Le Rhône')).toMatch(/^0 /)
     fireEvent.click(answerBtn('La Seine'))
     expect(checkedBoxes()).toHaveLength(2)
-    expect(action().textContent).toBe('Attribuer les points (2)')
+    expect(action().textContent).toBe('Attribuer les points')
+    expect(awardN()).toBe(2)
     expect(game.teamPointsBatch).not.toHaveBeenCalled()
   })
 
@@ -160,6 +163,7 @@ describe('Bug #255 — le sélecteur QCM ne compte que les joueurs qui ont répo
     show(rows)
     fireEvent.click(answerBtn('La Loire'))
     expect(checkedBoxes().map((c) => c.getAttribute('aria-label'))).toEqual(['Sélectionner Les Rouges'])
-    expect(action().textContent).toBe('Appliquer les pénalités (1)')
+    expect(action().textContent).toBe('Appliquer les pénalités')
+    expect(awardN()).toBe(1)
   })
 })

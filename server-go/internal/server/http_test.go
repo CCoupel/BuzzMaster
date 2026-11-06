@@ -2547,7 +2547,7 @@ func TestPostCategory_SidecarNamePersisted(t *testing.T) {
 	os.MkdirAll(catDir, 0755)
 
 	// Create category with a display name different from the key
-	req := newMultipartCategoryRequest("Mon Super Jeu", "image.webp", minimalPNG)
+	req := newMultipartCategoryRequest("Mon Super Jeu", "image.png", minimalPNG) // #285 : le contenu doit correspondre à l'extension
 	w := httptest.NewRecorder()
 	server.mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

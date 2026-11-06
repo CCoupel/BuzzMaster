@@ -123,6 +123,20 @@ type SoundConfig struct {
 	// notifySound, before PlayCue — never inside internal/audio (this
 	// package is never imported there, contract §2.1).
 	CuesDisabled map[string]bool `json:"cues_disabled,omitempty"`
+	// Muted is the régie's "couper le son" switch (v11.4.0, #286, contract
+	// sound.md §11): persisted, immediate in both directions, applies to the
+	// cues AND the question media (and, from LOT-3, the countdown voice).
+	// Like CuesDisabled it stores what is OFF — the zero value (key absent)
+	// means sound active, today's behaviour, no migration. Independent from
+	// Enabled (restart-bound, feeds the T0 gate) — never merge the two.
+	Muted bool `json:"muted,omitempty"`
+	// CountdownDisabled / CountdownOnce (v11.4.0, #287/#288, contract
+	// sound.md §12.3): the chronometer countdown voice. Same "store the
+	// deviation from the default" discipline as Muted/CuesDisabled — the
+	// zero values (keys absent) mean countdown ACTIVE and LOOPING, no
+	// migration needed.
+	CountdownDisabled bool `json:"countdown_disabled,omitempty"`
+	CountdownOnce     bool `json:"countdown_once,omitempty"`
 }
 
 // EnvHueAPIKey overrides lighting.api_key without ever touching config.json

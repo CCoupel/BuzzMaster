@@ -293,12 +293,30 @@ func (qs *questionSoundAdapter) play(q *game.Question, releaseOnFailure bool) {
 		return
 	}
 
+	// #286 (contract sound.md §11.2): muted is treated as DISABLED at T1 only
+	// — never in questionSoundAvailability (T0 gate), so a sound question
+	// still starts normally; no Play, deferred timer released at once.
+	if config.Get().Sound.Muted {
+		if releaseOnFailure {
+			qs.app.engine.ReleaseDeferredTimer()
+		}
+		return
+	}
+
 	path := qs.app.questionSoundPath(q.Sound)
 
 	qs.app.engine.SetQuestionSoundState(game.QuestionSoundPlaying)
 	qs.app.broadcastUpdate()
 
-	if err := qs.player.Play(path); err != nil {
+	// #288 (contract sound.md §13.3): SOUND_LOOP ⇒ PlayLoop, the rest of the
+	// path (gate T0, muted, state, watchdog, onNaturalEnd) is unchanged.
+	var err error
+	if q.SoundLoop {
+		err = qs.player.PlayLoop(path)
+	} else {
+		err = qs.player.Play(path)
+	}
+	if err != nil {
 		// Third non-blocking case: fichier illisible/non conforme, caught
 		// HERE (not pre-empted above — see this function's own comment on
 		// why FILE never gates play() itself), or a race/lower-level I/O
@@ -372,8 +390,18 @@ func (qs *questionSoundAdapter) onNaturalEnd() {
 	qs.mu.Lock()
 	qs.cancelWatchdogLocked()
 	qs.mu.Unlock()
-	qs.app.engine.SetQuestionSoundState(game.QuestionSoundIdle)
-	qs.app.broadcastUpdate()
+	// #288 (§13.3): with a loop, onNaturalEnd is the end of the FIRST pass —
+	// the media keeps playing, so QUESTION_SOUND_STATE must not drop to IDLE.
+	// Only for a looped question (SOUND_LOOP): a one-shot's natural end is
+	// always the end of playback (v11.1 behaviour, byte for byte).
+	looping := false
+	if q := qs.app.engine.GetState().Question; q != nil && q.SoundLoop {
+		looping = qs.player.State() == audio.MediaPlaying
+	}
+	if !looping {
+		qs.app.engine.SetQuestionSoundState(game.QuestionSoundIdle)
+		qs.app.broadcastUpdate()
+	}
 	qs.app.engine.ReleaseDeferredTimer()
 }
 

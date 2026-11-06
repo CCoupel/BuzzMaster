@@ -78,7 +78,7 @@ func newRafaleCountdownWireTestApp(t *testing.T) *App {
 	app.engine.OnTimerTick = func(currentTime int) {
 		app.broadcastTimerUpdate(currentTime)
 	}
-	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+	app.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleNext) {
 		app.broadcastRafaleAnswer(id, answer, next)
 	}
 	app.engine.OnRafaleQuestionTick = func(cardID string, questionTime int) {

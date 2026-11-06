@@ -8,6 +8,9 @@ import (
 )
 
 // Actions constants - matching ESP32 protocol
+// ActionCategoriesChanged (Server→Client: admin, tv, vplayer, anim) — category write (#285).
+const ActionCategoriesChanged = "CATEGORIES_CHANGED"
+
 const (
 	ActionHello            = "HELLO"
 	ActionButton           = "BUTTON"
@@ -623,6 +626,9 @@ type RafaleNextPayload struct {
 	Question   string `json:"QUESTION"`
 	Category   string `json:"CATEGORY"`
 	Difficulty int    `json:"DIFFICULTY"`
+	// Letter (#282, contract §15.10) — upcoming letter "A".."Z"/"#", ""
+	// when the alphabetical option is off. Never omitempty.
+	Letter string `json:"LETTER"`
 }
 
 // RafaleAnswerPayload for the RAFALE_ANSWER action (Server → admin+anim

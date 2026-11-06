@@ -43,7 +43,9 @@ const postJson = (url, body) =>
 
 const TOAST_MS = 3000
 
-export default function LightingModePanel({ className = '' }) {
+// `bare` (#284/#286) : rendu sans cadre ni titre, pour l'imbrication dans le
+// popover « Ambiance » (qui porte son propre titre et sa propre bordure).
+export default function LightingModePanel({ className = '', bare = false }) {
   const { status, refresh: refreshStatus } = useLightingStatus()
   const [modeBusy, setModeBusy] = useState(false)
   const [flashBusy, setFlashBusy] = useState(false)
@@ -98,8 +100,8 @@ export default function LightingModePanel({ className = '' }) {
   if (normalizeLightingState(status.state) === 'disabled') return null
 
   return (
-    <div className={`lighting-mode-panel ${className}`}>
-      <h3 className="lighting-mode-title">Éclairage général — conduite en direct</h3>
+    <div className={`lighting-mode-panel${bare ? ' is-bare' : ''} ${className}`}>
+      {!bare && <h3 className="lighting-mode-title">Éclairage général — conduite en direct</h3>}
       <div className="lighting-mode-row">
         <div className="lighting-mode-tristate" role="radiogroup" aria-label="Éclairage général">
           {['ON', 'AUTO', 'OFF'].map(m => (

@@ -75,6 +75,10 @@ type App struct {
 	// nothing ever swaps it after construction (only its internal
 	// MediaPlayer's own state changes, guarded by its own mutex).
 	qsound *questionSoundAdapter
+	// csound is the countdown-sound adapter (v11.4.0, #287, contracts/
+	// sound.md §12), read through a.countdownSound(). Built once in setup()
+	// (setupCountdownSound, cmd/server/countdown_sound.go).
+	csound *countdownSoundAdapter
 	// ambianceMu serialises setupAmbiance/reconfigureAmbiance: two config
 	// updates in flight must never leave hueDriver and the writer's driver
 	// pointing at different (or already closed) drivers.
@@ -592,6 +596,11 @@ func (a *App) init() {
 	// cues engine above (cmd/server/question_sound.go, contract §10.5).
 	a.setupQuestionSound()
 
+	// Countdown-sound adapter (v11.4.0, #287) — third audio path, second
+	// MediaPlayer on the shared oto context (cmd/server/countdown_sound.go,
+	// contract sound.md §12).
+	a.setupCountdownSound()
+
 	// Set up callbacks
 	a.setupCallbacks()
 }
@@ -638,6 +647,12 @@ func (a *App) setupCallbacks() {
 		// prior to THIS transition, never a value already overwritten by a
 		// nested/re-entrant call.
 		previousPhase := a.soundTrackPhase(phase)
+		// #287 (contract sound.md §12.7/§12.8): the end of a RAFALE round
+		// (cap / pool exhausted ⇒ STOPPED) ends the countdown. STOPPED only —
+		// never PAUSED: at the buzz everything keeps playing.
+		if phase == game.PhaseStopped {
+			a.countdownSound().Stop()
+		}
 		if phase == game.PhaseStarted {
 			a.onPhaseStarted(previousPhase)
 		}
@@ -659,7 +674,19 @@ func (a *App) setupCallbacks() {
 	a.engine.OnTimeUp = func() {
 		a.ambiance().NotifyPulse(lighting.KindTimeUp, nil, 0, lighting.TimeUpPulseDuration)
 		a.notifySound(audio.CueTempsEcoule)
-		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — a still-playing question sound must not survive the chrono's own expiry
+		a.questionSound().Stop()  // v11.1/#219, plan §7 tâche 11 — a still-playing question sound must not survive the chrono's own expiry
+		a.countdownSound().Stop() // #287 §12.8 — the countdown ends with the chrono
+	}
+
+	// #287 (contract sound.md §12.5/§12.8): the countdown starts with every
+	// response timer. ⚠️ may run WITH the engine lock held (startTimer()):
+	// the adapter never calls back into the engine.
+	a.engine.OnAnswerTimerStarted = func(start game.AnswerTimerStart) {
+		a.countdownSound().OnAnswerTimerStarted(start)
+	}
+	// MEMOTION card timer expiry (phase stays STARTED, no OnTimeUp).
+	a.engine.OnMotionCardTimeUp = func() {
+		a.countdownSound().Stop()
 	}
 
 	// Countdown ticks (3-2-1 before game starts)
@@ -682,7 +709,7 @@ func (a *App) setupCallbacks() {
 	// ONLY (never GameState — contract §2.3). next (#202, contract §13.3)
 	// extends this to the pre-fetched next question's statement, same
 	// restricted channel — see broadcastRafaleAnswer's own comment.
-	a.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleCurrent) {
+	a.engine.OnRafaleAnswer = func(id, answer string, next *game.RafaleNext) {
 		a.broadcastRafaleAnswer(id, answer, next)
 	}
 
@@ -750,6 +777,15 @@ func (a *App) setupCallbacks() {
 		a.broadcastQuestions()
 	}
 
+	// #285 (contract http-endpoints.md §Catégories): any category write
+	// (create / rename / colour / icon / delete) — clients reload /api/categories
+	// on QUESTIONS_UPDATE, and the ambiance re-reads the theme colour.
+	a.httpServer.OnCategoriesChanged = func(change server.CategoryChange) {
+		a.broadcastCategoriesChanged(change)
+		a.broadcastQuestions()
+		a.ambiance().NotifyState()
+	}
+
 	// Background change handler
 	a.httpServer.OnBackgroundChange = func(action string) {
 		if action == "save" {
@@ -782,6 +818,25 @@ func (a *App) setupCallbacks() {
 		a.loadDemoData()
 		a.broadcastQuestions()
 		a.broadcastUpdate()
+	}
+
+	// #286: sound mute / lighting master switch side effects (contract
+	// sound.md §11.2, §11.4) — fired by POST /config.json on a value change.
+	a.httpServer.OnSoundMutedChange = func(muted bool) {
+		if muted {
+			a.questionSound().Stop()  // nil-safe
+			a.countdownSound().Stop() // #287 §12.8
+		}
+	}
+	a.httpServer.OnSoundCountdownDisabledChange = func(disabled bool) {
+		if disabled {
+			a.countdownSound().Stop() // #287 §12.3
+		}
+	}
+	a.httpServer.OnLightingEnabledChange = func(enabled bool) {
+		if !enabled {
+			a.extinguishOnLightingDisabled()
+		}
 	}
 
 	// Config update handler
@@ -1328,6 +1383,7 @@ func (a *App) stop() {
 	if a.qsound != nil {
 		a.qsound.Stop()
 	}
+	a.countdownSound().Stop() // #287 — nil-safe
 
 	// Cancel the application context — stops the AckManager goroutine and any other ctx-aware components.
 	if a.cancelCtx != nil {
@@ -1546,7 +1602,8 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 	case protocol.ActionStop:
 		a.logger.Info(game.LogComponentEngine, "STOP game")
 		a.engine.Stop()
-		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — safe unconditionally
+		a.questionSound().Stop()  // v11.1/#219, plan §7 tâche 11 — safe unconditionally
+		a.countdownSound().Stop() // #287 §12.8
 		a.broadcastStop()
 		a.broadcastNextQuestion() // #155/#156 B5 — question ends, "next" may now differ
 
@@ -1569,7 +1626,8 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// before Pause() returns, on every accepted call.
 		if a.engine.GetPhase() == game.PhasePaused {
 			a.broadcastPauseAll()
-			a.questionSound().Pause() // v11.1/#219, contract §10.7 — "PAUSE du jeu met le son en pause"
+			a.questionSound().Pause()  // v11.1/#219, contract §10.7 — "PAUSE du jeu met le son en pause"
+			a.countdownSound().Pause() // #287 §12.7/§12.8 — same gesture as the media
 		}
 
 	case protocol.ActionContinue:
@@ -1581,7 +1639,8 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		// Continue() actually transitioned, never on a silent refusal.
 		if a.engine.GetPhase() == game.PhaseStarted {
 			a.broadcastContinue()
-			a.questionSound().Resume() // v11.1/#219, contract §10.7 — "CONTINUER le reprend sans coupure"
+			a.questionSound().Resume()  // v11.1/#219, contract §10.7 — "CONTINUER le reprend sans coupure"
+			a.countdownSound().Resume() // #287 §12.7/§12.8
 		}
 
 	case protocol.ActionReveal:
@@ -1608,7 +1667,8 @@ func (a *App) handleWebMessage(incoming *protocol.IncomingMessage) {
 		}
 		a.logger.Info(game.LogComponentEngine, "REVEAL answer")
 		answer := a.engine.Reveal()
-		a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11
+		a.questionSound().Stop()  // v11.1/#219, plan §7 tâche 11
+		a.countdownSound().Stop() // #287 §12.8
 		a.broadcastReveal(answer)
 		a.broadcastNextQuestion() // #155/#156 B5 — REVEALED status can change "next"
 
@@ -2145,6 +2205,7 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 	}
 	res := a.engine.InitGameWith(opts) // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
 	a.questionSound().Stop()           // the question sound ends with the question
+	a.countdownSound().Stop()          // #287 §12.8
 	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
 		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, logToken(res.QuestionBefore))
 
@@ -2405,7 +2466,8 @@ func (a *App) handleReady(msg *protocol.Message) {
 	if st := a.engine.GetState(); st.Question == nil || st.Question.ID != payload.Question {
 		a.refreshRoundContext() // Ready() refused or selected another question: keep the context truthful
 	}
-	a.questionSound().Stop() // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
+	a.questionSound().Stop()  // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
+	a.countdownSound().Stop() // #287 §12.8
 	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
 	// question selection is one of the "quatre moments" — Ready() just
 	// reset QUESTION_SOUND_UNAVAILABLE to "", recompute it immediately for
@@ -3030,7 +3092,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 			// handleMotionReveal) rather than rely on its own guard to
 			// self-detect the sub-phase change on its next tick — harmless
 			// either way, but this avoids one extra no-op tick.
-			a.engine.StopMotionCardTimer()
+			a.stopMotionCardTimer()
 			if err := a.engine.RevealMotionCard(); err != nil {
 				server.LogWarn(game.LogComponentEngine, "MEMOTION memory card auto-reveal failed: %v", err)
 			} else {
@@ -3169,7 +3231,7 @@ func (a *App) handleMotionFlip(msg *protocol.Message) {
 // handleMotionStopTimer processes MEMOTION_STOP_TIMER: stops the per-card timer without changing subphase.
 func (a *App) handleMotionStopTimer(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "MEMOTION_STOP_TIMER")
-	a.engine.StopMotionCardTimer()
+	a.stopMotionCardTimer()
 	a.broadcastUpdate()
 }
 
@@ -3178,7 +3240,7 @@ func (a *App) handleMotionReveal(msg *protocol.Message) {
 	server.LogInfo(game.LogComponentEngine, "MEMOTION_REVEAL")
 
 	// Stop timer (if running) before revealing
-	a.engine.StopMotionCardTimer()
+	a.stopMotionCardTimer()
 
 	if err := a.engine.RevealMotionCard(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "MEMOTION_REVEAL error: %v", err)
@@ -3211,7 +3273,7 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 		payload.CardID, payload.WinnerTeam, units)
 
 	// Stop per-card timer if still running
-	a.engine.StopMotionCardTimer()
+	a.stopMotionCardTimer()
 
 	points, isComplete, err := a.engine.DoneMotionCard(payload.CardID, payload.WinnerTeam, units)
 	if err != nil {
@@ -6479,7 +6541,7 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 // exclusion list — the ONLY thing keeping either field off TV is this call
 // site's explicit, narrow type list (precedent: ardoise_leak_128). Do not
 // add ClientTypeTV/ClientTypeVPlayer/ClientTypeBuzzer here.
-func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleCurrent) {
+func (a *App) broadcastRafaleAnswer(id, answer string, next *game.RafaleNext) {
 	payload := protocol.RafaleAnswerPayload{ID: id, Answer: answer, Next: rafaleNextPayload(next)}
 	data, _ := json.Marshal(payload)
 	a.broadcast(protocol.ActionRafaleAnswer, data, false,
@@ -6506,17 +6568,18 @@ func (a *App) broadcastRafaleCardAnswer(cardID, id, answer string) {
 }
 
 // rafaleNextPayload (#202) maps the engine's answer-free preview
-// (*game.RafaleCurrent) onto the wire payload's own NEXT type
+// (*game.RafaleNext) onto the wire payload's own NEXT type
 // (*protocol.RafaleNextPayload) — nil in, nil out (contract §13.5). A
 // distinct type from game.RafaleCurrent by design (see
 // protocol.RafaleNextPayload's own doc comment); this is the one place
 // that converts between them.
-func rafaleNextPayload(next *game.RafaleCurrent) *protocol.RafaleNextPayload {
+func rafaleNextPayload(next *game.RafaleNext) *protocol.RafaleNextPayload {
 	if next == nil {
 		return nil
 	}
 	return &protocol.RafaleNextPayload{
 		ID: next.ID, Question: next.Question, Category: next.Category, Difficulty: next.Difficulty,
+		Letter: next.Letter,
 	}
 }
 
@@ -6790,6 +6853,18 @@ func (a *App) broadcastWifiConfig() {
 		a.broadcastUpdate()
 	}
 	server.LogInfo(game.LogComponentApp, "Sent WIFI_CONFIG to %d connected buzzer(s)", sent)
+}
+
+// broadcastCategoriesChanged pushes CATEGORIES_CHANGED (full resolved list + change + TS)
+// to admin, tv, vplayer and anim — never to buzzers (#285, websocket-actions.md).
+func (a *App) broadcastCategoriesChanged(change server.CategoryChange) {
+	data, err := a.httpServer.CategoriesChangedPayload(change)
+	if err != nil {
+		log.Printf("[WARN] CATEGORIES_CHANGED not broadcast: %v", err)
+		return
+	}
+	a.broadcast(protocol.ActionCategoriesChanged, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 }
 
 func (a *App) broadcastQuestions() {
@@ -8615,4 +8690,12 @@ func (a *App) logFlipGesture(clientID, playerID string, res game.FlipGestureResu
 		server.LogInfo(game.LogComponentApp, "FLIP_IGNORED client=%s player_id=%s flip_id=%s card=%s motion_card=%s reason=%s",
 			clientID, playerID, res.FlipID, res.CardID, res.MotionCardID, res.Reason)
 	}
+}
+
+// stopMotionCardTimer stops the MEMOTION per-card timer AND its countdown
+// voice (contract sound.md §12.7/§12.8: card resolution — done / validate /
+// reveal / close / stop-timer — all route through here).
+func (a *App) stopMotionCardTimer() {
+	a.engine.StopMotionCardTimer()
+	a.countdownSound().Stop()
 }
