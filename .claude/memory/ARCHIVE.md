@@ -2,6 +2,37 @@
 
 > Sections d'état archivées, déplacées depuis `MEMORY.md` par /context-audit le 2026-10-15. Non chargées au démarrage de session ; consulter à la demande.
 
+
+## État précédent (2026-10-13) — v11.2.1 en PROD (archivé)
+
+- **PROD = v11.2.1** : merge `main` `01e36339`, tag `v11.2.1`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.2.1 (exe Windows, linux-arm64, firmware merged, SHA256SUMS). Dernière QUALIF : 11.2.1.1 (`f97600c5`, `build/qualif_v11.2.1/`). Installation PROD manuelle (DEPLOY PROD = no-op). Milestone v11.2.1 (#39) fermé 8/8, branche `milestone/v11.2.1` supprimée (local + remote). Branche courante : `main`.
+- **Livré** (toutes validées manuellement par l'utilisateur avant fermeture) : #261 arrêt idempotent (plus de panic `/shutdown`) ; #247 PAUSE seulement sur appui accepté, une seule fois, ARDOISE gardé par le moteur, écho ciblé sur buzz SPEEDY refusé d'un VJoueur ; #189 AnimAnswerZone en MEMOTION REVEAL ; #242 a11y navbar ; #188/#264 tests stabilisés ; #248 accusé + renvoi tablette (QCM, SPEEDY via `TIME`, retournement MEMORY/MEMOTION via `FLIP_ID` + `FLIP_MEMORY_CARD_ACK`, hook `useAckedSend`) ; #265 attribution multi-équipes en feu d'artifice par lots de 6, tablette calée sur la TV (`SCORE_CHANGE.GAINS`, module `pointsAwardLots.js`). Contrats : `contracts/game-state.md` (GAINS), `contracts/websocket-actions.md` (FLIP_ID/ACK). Maquettes validées : `docs/mockup/v11.2.1/ui/`.
+- **Marketing** : site gh-pages `0164f3e0` (2 cartes « Nouveau v11.2.1 ») ; notes + posts `docs/releases/v11.2.1/` (commit `f071ef56` sur main). Posts réseaux à publier par l'utilisateur. Le worktree `MARKETING/` était cassé (`.git` vers un ancien chemin), recréé depuis `origin/gh-pages`. Le site n'a jamais reçu de communication v11.2.0 (rattrapage proposé, non décidé).
+- **Commits locaux non poussés sur main** : `f071ef56`, `98a3cd8f` + `4406d42b` (promotion en `regression` des tests v11.2.0 restés en `feature`, oubli de la release précédente — plus aucune ligne `feature` dans `tests/INDEX.md`).
+- **Branches distantes non mergées, conservées (à trancher par l'utilisateur)** : `origin/chore/template-v3.8.0` (2 commits), `origin/spike/226-audio-bluetooth` (3 commits).
+- **Prochain : milestone v11.2.2 (#40, aucune branche)** : #267 alerte plein écran admin quand le serveur n'a pas de réseau (localhost seulement — l'utilisateur a demandé de ne PAS démarrer son dev, cadrage à faire), #266 fenêtres fixes restantes des tests `cmd/server`, #268 react-router (3 « high » `npm audit` non atteignables) + ajouter `npm audit` à `commands.audit`, #269 data race de test (timer résiduel `h246Setup` vu sur la CI de release), #221 composant catégorie/difficulté partagé, #190 barème `POINTS_RULE` par carte MEMOTION. #259 (sécurité endpoints) reste hors milestone.
+- **Leçons v11.2.1 (permanentes)** :
+  1. Au démarrage d'un milestone, faire cadrer par le planner les lots, dépendances et parallélisme AVANT tout dev, et poser un label `LOT-<entier>` par issue (demande utilisateur).
+  2. Clone partagé : un agent ne fait jamais `git stash`/`checkout`/`reset` dans le dépôt principal (dev-backend et test-writer l'ont fait, rien perdu) ; comparaison = worktree jetable par chemin absolu. Un test Go qui référence un champ inexistant casse la compilation du paquet pour tous : écrire les tests RED via JSON/messages bruts, ou séparer les paquets entre agents.
+  3. La relecture factuelle du CHANGELOG par code-reviewer a encore trouvé 7 erreurs (dont une introduite par la relecture elle-même) : la garder systématique, avec re-relecture.
+  4. `npm audit` n'était pas dans les contrôles pré-PROD : ajouté via #268.
+  5. Ne pas mettre une petite action (créer une issue, un milestone) en file derrière une tâche longue d'un agent : la lancer en parallèle (agent ponctuel).
+  6. Une QA « validée » sans navigateur laisse le visuel à l'utilisateur : toujours lui fournir les procédures `tests/procedures/` avant de proposer la fermeture.
+
+## État précédent (2026-10-12) — v11.2.0 en PROD (archivé)
+
+- **PROD = v11.2.0** : merge `main` `9fdb7f62`, tag `v11.2.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.2.0, CI run 38250528708. Dernier candidat QUALIF : 11.2.0.9 (`build/qualif_v11.2.0/`). Milestone v11.2 clôturé (18 issues), branche `milestone/v11.2` supprimée. Branche courante : `main`.
+- **Livré en v11.2** : #243, #244, #245 (manches, entractes), #246, #249 à #258, #233/#257 (tests Go stabilisés), #260 (govulncheck : Go 1.26.9, x/net v0.60.0, gorilla/websocket v1.5.3), #262/#263 (tests fragiles sur le runner CI).
+- **À venir — milestone v11.2.1** (aucune branche créée) : #265 animation d'attribution de points à plusieurs équipes (cadrage et maquettes à faire) ; #264 et #188 tests instables ; #261 panic d'arrêt `close of closed channel` ; #247, #248, #189 bugs ; #242 a11y navbar. #259 (endpoints sans authentification) : milestone dédié ultérieur, non planifié.
+- **Leçons de release (permanentes)** :
+  1. Release PROD : `ci-branch.yml` doit être vert sur le commit exact avant tout merge dans `main` et tout tag ; `govulncheck` propre avant le tag (`docs/RELEASE_PROCEDURE.md` §9bis, `.claude/agents/environments/publish.prod.md`, `.claude/agents/qa.md`). Un tag ne sert jamais de test.
+  2. Quatre tentatives pour 11.2.0 : govulncheck (Go 1.25.14), `TestLingerListener_SetsLinger`, `TestDNSServer_Start_UsesConfiguredPort`.
+  3. Un revert de merge impose d'annuler le revert avant de re-merger.
+  4. Go 1.26.9 minimum. `release.yml` ne publie que Windows, Linux arm64 et le firmware.
+  5. Tests : pas de `time.Sleep` d'attente, pas de singleton `config` en parallèle, attentes par événement avec échéance large (`docs/DEV_COMMANDS.md`).
+  6. L'utilisateur transmet lui-même aux templates la spécification « script CI unique, workflow de pré-validation, barrière du deployer » : à suivre côté dépôt des templates.
+- **Environnements** : PROD = v11.2.0 ; QUALIF = 11.2.0.9.
+
 ## PROD v11.1.0 livrée (2026-09-25)
 
 - **PROD déployée** : merge `9928dcb8` (`--no-ff`, `milestone/v11.1` → `main`), tag `v11.1.0`, CI verte (run 36152979273), release GitHub avec 3 assets. Milestone #37 « v11.1 — Question sonore » clos 7/7 : #219/#236/#237 (médias sonores par question SPEEDY/QCM/ARDOISE), #239 (logo BuzzControl A1, `BrandLogo`), #238 (Navbar : groupe « Préparation » + section Interface, « Config »→« Réglages » dans le menu du logo, libellés→icônes par paliers 1945/1855/1685/1495/1275/1095/955 px, badge 👥 <955 px, 🍿 ENTRACTE / 🎬 REPRISE, pastille Connecté toujours visible), #240 (forçage TV « Jeu » à la sélection, START, CONTINUE, cartes MEMOTION/RAFALE), #241 (doublon de #238, fermé).

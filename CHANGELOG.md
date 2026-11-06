@@ -21,6 +21,7 @@ Historique des versions du projet BuzzControl.
 
 ### Fixed
 
+- **Release v11.4.0 : firmware non compilable au premier tag** — La plateforme `espressif32` n'était pas épinglée : la version 8.0.0 ne fournit plus `esp_websocket_client.h`, ce qui cassait `release.yml`. Épinglée à `espressif32@6.9.0` (`platformio.ini`, `d65618dd`) ; le tag a été recréé.
 - **Popover d'en-tête qui débordait (#284)** — Le popover ne sort plus de l'écran.
 - **RAFALE : clic OK/KO de la régie et de `/anim` en échec (depuis v9.0.0)** — Les boutons OK/KO, partagés par la régie et `/anim` (`AnimRafaleActions.jsx`), transmettaient l'évènement React comme identifiant de carte, ce qui faisait échouer l'envoi (RAFALE classique et alphabétique). Boutons corrigés et garde stricte côté client (`useWebSocket.js`). La carte MEMOTION n'était pas touchée.
 

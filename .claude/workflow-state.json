@@ -1,22 +1,141 @@
 {
-  "type": "FEATURE",
-  "description": "#203 — feat(RAFALE): génération IA du réservoir de questions (énoncés et réponses courts)",
-  "branch": "milestone/v8.1.0",
-  "version": "8.1.0",
-  "started_at": "2026-09-01T14:14:00Z",
+  "type": "MILESTONE",
+  "description": "v11.4.0 — RAFALE Alphabétique (#282, #284–#289)",
+  "branch": "milestone/v11.4.0",
+  "version": "11.4.0",
+  "status": "completed",
+  "started_at": "2026-11-05T09:20:00Z",
+  "updated_at": "2026-11-06T16:20:00Z",
   "cycles": 1,
-  "issue_nums": [203],
-  "milestone_num": 31,
+  "issue_nums": [
+    282,
+    284,
+    285,
+    286,
+    287,
+    288,
+    289
+  ],
+  "milestone_num": 43,
+  "plan": ".claude/workflow/plan-11.4.0.md",
+  "cadrage": {
+    "intensite": "complet",
+    "test_writer": true,
+    "review": true,
+    "qualif": true,
+    "doc": "doc-updater",
+    "team": [
+      "dev-backend",
+      "dev-frontend",
+      "test-writer",
+      "code-reviewer",
+      "qa",
+      "doc-updater"
+    ],
+    "validated_at": "2026-11-05T10:45:00Z"
+  },
+  "lots": {
+    "order": [
+      "LOT-1",
+      "LOT-2",
+      "LOT-3",
+      "LOT-4"
+    ],
+    "sequential": true,
+    "current": null,
+    "completed": [
+      "LOT-1",
+      "LOT-2",
+      "LOT-3",
+      "LOT-4"
+    ],
+    "map": {
+      "LOT-1": [
+        284,
+        286,
+        289
+      ],
+      "LOT-2": [
+        282
+      ],
+      "LOT-3": [
+        287,
+        288
+      ],
+      "LOT-4": [
+        285
+      ]
+    }
+  },
   "phases": {
-    "clarification": { "status": "completed", "skipped": false },
-    "plan":          { "status": "completed", "report": "_work/reports/plan-20260901-162105.md" },
-    "dev-backend":   { "status": "completed", "sha": "ac2e61a7", "handoff": "_work/handoff/dev-backend-20260901-173041.md" },
-    "dev-frontend":  { "status": "completed", "sha": "53d17e4a", "handoff": "_work/handoff/dev-frontend-20260901-173135.md" },
-    "test-writer":   { "status": "completed", "sha": "958c52ed", "handoff": "_work/handoff/test-writer-20260901-173832.md" },
-    "review":        { "status": "completed", "verdict": "APPROUVE_AVEC_RESERVES", "report": "_work/reports/code-review-20260901-175014.md", "note": "2 majeurs (couverture test) corrigés par test-writer (SHA 3ac3aa97)" },
-    "qa":            { "status": "completed", "verdict": "VALIDATED", "report": "_work/reports/qa-20260901-174932.md" },
-    "doc":           { "status": "completed", "sha": "6c38797d", "handoff": null },
-    "deploy-qualif": { "status": "completed", "sha": "b05e62d3", "version": "8.1.0.1" },
-    "deploy-prod":   { "status": "completed", "sha": "f48cfabe", "tag": "v8.1.0" }
+    "clarification": {
+      "status": "completed"
+    },
+    "plan": {
+      "status": "completed",
+      "note": "GATE 1.5 maquettes validées (6) ; GATE 2 validé, lots traités dans l'ordre",
+      "sha": "593299b9"
+    },
+    "dev": {
+      "status": "completed"
+    },
+    "lot1": {
+      "status": "completed",
+      "sha": "61ff9851",
+      "qualif": "11.4.0.1",
+      "review": "_work/reports/code-review-20261105-124500.md",
+      "qa": "_work/reports/qa-20261105-121102.md",
+      "gate": "validé 2026-11-05",
+      "closure": "CI verte run 42038655690 sur b4cc1d24 — issues fermées"
+    },
+    "lot2": {
+      "status": "completed",
+      "phase": "gate validé",
+      "contracts_sha": "e6d1a48d",
+      "backend_sha": "4698db65",
+      "tests_sha": "0b4f5aa0",
+      "split": "_work/reports/planner-lot2-20261105-120000.md",
+      "qualif": "11.4.0.3",
+      "sha": "bca493d4",
+      "review": "_work/reports/code-review-20261105-145000.md",
+      "qa": "_work/reports/qa-20261105-144049.md",
+      "fix": "clic OK/KO b19724f8 (bug depuis v9.0.0, aussi en PROD)"
+    },
+    "lot3": {
+      "status": "completed",
+      "phase": "gate validé",
+      "qualif": "11.4.0.4",
+      "sha": "3cf5506c",
+      "review": "_work/reports/code-review-20261105-170000.md",
+      "qa": "_work/reports/qa-20261105-165446.md"
+    },
+    "lot4": {
+      "status": "completed",
+      "phase": "gate validé",
+      "contracts_sha": "cf8c69d5",
+      "tests_sha": "bcaf1733",
+      "split": "_work/reports/planner-lot4-20261105-173306.md",
+      "backend": "code B1-B6 non commité dans l arbre (interruption montage /mnt/c 2026-11-05 ~18h), suite complète à rejouer",
+      "qualif": "11.4.0.6",
+      "sha": "13115620",
+      "review": "_work/reports/code-review-20261106-120255-rev3.md",
+      "qa": "_work/reports/qa-20261106-120800.md"
+    },
+    "doc": {
+      "status": "completed",
+      "sha": "787f4198",
+      "review": "_work/reports/code-review-20261106-141635-docs-v1140-rev2.md"
+    },
+    "gate4": {
+      "status": "completed",
+      "validated": "2026-11-06"
+    },
+    "deploy-prod": {
+      "status": "completed",
+      "merge": "9b76ef61",
+      "tag": "v11.4.0",
+      "release_run": "42248974789",
+      "note": "1er tag retiré (release.yml rouge firmware, plateforme non épinglée) ; correctif d65618dd espressif32@6.9.0 ; retag"
+    }
   }
 }

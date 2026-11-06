@@ -3,6 +3,37 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
+## État courant (2026-11-06) — v11.4.0 en PROD
+
+- **PROD = v11.4.0** « RAFALE Alphabétique » : merge `main` `9b76ef61` (`--no-ff`), tag `v11.4.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.4.0 (4 assets), `release.yml` run 42248974789 vert. Milestone #43 clôturé 7/7. Dernière QUALIF : 11.4.0.6. Branche `milestone/v11.4.0` encore présente (nettoyage proposé en fin de session). Branche courante : `main`.
+- **Livré** (4 lots, chacun validé par l'utilisateur en QUALIF) :
+  - LOT-1 #284 #286 #289 : popover « Ambiance » (lumière + son ON/OFF persisté `sound.muted`), interrupteur général `lighting.enabled` dans Ambiance › Lumière, bloc d'attribution « x joueurs · y équipes ».
+  - LOT-2 #282 : RAFALE alphabétique, roue générique Bandeau/Roue par manche, NEXT.LETTER admin + anim, alerte de pioche avec lettres. Correctif : clic OK/KO de la régie et de `/anim` en échec depuis v9.0.0 (#217).
+  - LOT-3 #287 #288 : son de décompte (tous chronos, par manche en RAFALE, jamais si son attaché, au buzz tout continue) ; boucle combinable avec « Chrono démarre à la fin » (chrono à la fin du 1er passage).
+  - LOT-4 #285 : catégories (couleur, icône personnalisées, création dans « ⚙ Gérer… » du filtre de la page Questions) ; suppression réaffecter/supprimer avec cartes MEMOTION ; historique fusionné dans « Sans catégorie » + `.bak` ; tout bloqué en partie ; `CATEGORIES_CHANGED` en direct TV/VJoueur/anim.
+- **Incidents et décisions techniques** :
+  - Go 1.26.10 (GO-2026-6809) avec `GOTOOLCHAIN=go1.26.10` (Go local 1.26.9) ; undici 8.12.4 (npm audit).
+  - Node **Linux** nvm v22.23.3 en tête du PATH : node_modules réinstallé sous Linux. `server-go/build.ps1` lancé depuis Windows nécessite un `npm ci` Windows.
+  - Ruleset de branches « ReadOnlly » supprimé par l'utilisateur (push bloqué « commit_refs_rules »). Reste le ruleset de tags `readOnly_tags`.
+  - **`release.yml` rouge au 1er tag** : la plateforme `espressif32` non épinglée a pris 8.0.0, sans `esp_websocket_client.h`. Épinglée `espressif32@6.9.0` (`d65618dd`) ; tag supprimé puis reposé. `ci-branch.yml` ne compile pas le firmware.
+  - `/mnt/c` a décroché deux fois sous forte I/O (vitest complet, `npm ci`) : vitest validé par la CI seulement.
+  - `.git/index.lock` orphelin supprimé 3 fois (5ᵉ occurrence ou plus depuis fin octobre).
+- **Règles adoptées par l'utilisateur (permanentes)** :
+  1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
+  2. Jalon `EN COURS` au moins toutes les 10 min pendant toute attente.
+  3. Maquettes ouvertes avec `cmd.exe /c start chrome <chemin Windows>`.
+  4. Jamais d'amend ni de réécriture dans le dépôt principal.
+- **Leçons v11.4.0** :
+  1. Documentation produite seulement en fin de milestone : la règle « docs relues à chaque lot » n'a pas été appliquée. La relecture finale a trouvé 7 erreurs et 4 imprécisions, corrigées puis re-relues.
+  2. Deux commits faits avant lecture des tests (dev-backend LOT-1, dev-frontend).
+  3. Tests Go référençant des symboles absents évités grâce à `docs/TEST_PROCEDURE.md` §2.3.
+- **Backlog / suite** :
+  - Milestone **#44 v11.5.0 « Optimisation des tests »** : #280 vitest en CI, #291 découpage de `cmd/server`, #292 Node Linux et dépôt sur disque Linux, #293 tests ciblés.
+  - **#36 v11.6.0 Ambiance** : #290 ambiance par manche.
+  - Proposé, non créé : issue « compiler le firmware dans `ci-branch.yml` ».
+  - Panneau milestone-panel : sélectionne un milestone en PLANNING avant un milestone en publication. Correction à faire dans le dépôt du template.
+  - #283 (observabilité audio) toujours sans milestone ; #259, #281, #209 en backlog.
+
 ## Démarrage de session
 
 Utiliser `/start-session` pour démarrer chaque session : crée la TEAM de travail.
@@ -21,7 +52,7 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
 - **Session** : sans team (pas de `/start-session`) ; tests/build non joués (aucun code applicatif touché). Aucune branche résiduelle (seules `main`, `gh-pages`). 18 stashes historiques toujours non relus.
 - **Prochain** : choisir un milestone ouvert (v11.3, v12.0, v12.1, v13.0, v15.0...) ; backlog #259, #280, #281.
 
-## État courant (2026-10-16) — v11.2.3 en PROD
+## État précédent (2026-10-16) — v11.2.3 en PROD (archivé)
 
 - **PROD = v11.2.3** « Tests et sécurité » : merge `main` `46b7fdc8` (`--no-ff`), tag `v11.2.3`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.2.3 (4 assets), `release.yml` run 38784948251 vert. `main` = `6c325442` (notes + posts `docs/releases/v11.2.3/`). Milestone #41 clôturé 5/5, branche `milestone/v11.2.3` supprimée. Branche courante : `main`. Seules branches restantes : `main`, `gh-pages`.
 - **Livré** (3 lots, chacun validé au GATE LOT, QUALIF 11.2.3.1 → .3) : LOT-1 #273 (vitest étape [2/7] de `scripts/ci.sh`, bloquant en CI ; 144 s en CI) + #274 (dials de test attendent l'inscription via `waitRegistered`, 40 `Sleep` retirés, `-race -count=20` sous hook 20 ms) ; LOT-2 #278 (`POST /questions` refusé → aucun dossier/fichier, son validé avant les médias, purge de secours, id libéré) + #275 (`NETWORK` dans `AdminOnlyGameFields` : TV/anim/VJoueur sans `NETWORK`, miroir `NETWORK_ONLY_LOCALHOST` diffusé à tous) ; LOT-3 #277 (react-router-dom 7.18.4, imports `react-router-dom` conservés, 0 fichier source, 2 tests adaptés à `startTransition`, procédure manuelle `tests/procedures/router-277.md` validée 8/8 par l'utilisateur).
@@ -54,37 +85,6 @@ Le hook SessionStart a été supprimé — plus de démarrage automatique.
   3. Tests Go de test-writer par la frontière HTTP uniquement (`docs/TEST_PROCEDURE.md` §2.3) : aucune casse de compilation sur 3 lots.
   4. Un test visuel reste à la charge de l'utilisateur ; lui transmettre binaire + procédure `tests/procedures/` à chaque GATE LOT.
   5. Modèle des agents : depuis le template v3.21.1, `model`/`effort` sont résolus au spawn (compagnon > template, `TEAMMATES_PROTOCOL.md` §7). Décision 2026-10-15 : doc-updater suit le template (`haiku`/`low`), l’override `model: sonnet` du compagnon a été retiré ; aucun DONE oublié en v11.2.2 sous Haiku.
-
-## État précédent (2026-10-13) — v11.2.1 en PROD (archivé)
-
-- **PROD = v11.2.1** : merge `main` `01e36339`, tag `v11.2.1`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.2.1 (exe Windows, linux-arm64, firmware merged, SHA256SUMS). Dernière QUALIF : 11.2.1.1 (`f97600c5`, `build/qualif_v11.2.1/`). Installation PROD manuelle (DEPLOY PROD = no-op). Milestone v11.2.1 (#39) fermé 8/8, branche `milestone/v11.2.1` supprimée (local + remote). Branche courante : `main`.
-- **Livré** (toutes validées manuellement par l'utilisateur avant fermeture) : #261 arrêt idempotent (plus de panic `/shutdown`) ; #247 PAUSE seulement sur appui accepté, une seule fois, ARDOISE gardé par le moteur, écho ciblé sur buzz SPEEDY refusé d'un VJoueur ; #189 AnimAnswerZone en MEMOTION REVEAL ; #242 a11y navbar ; #188/#264 tests stabilisés ; #248 accusé + renvoi tablette (QCM, SPEEDY via `TIME`, retournement MEMORY/MEMOTION via `FLIP_ID` + `FLIP_MEMORY_CARD_ACK`, hook `useAckedSend`) ; #265 attribution multi-équipes en feu d'artifice par lots de 6, tablette calée sur la TV (`SCORE_CHANGE.GAINS`, module `pointsAwardLots.js`). Contrats : `contracts/game-state.md` (GAINS), `contracts/websocket-actions.md` (FLIP_ID/ACK). Maquettes validées : `docs/mockup/v11.2.1/ui/`.
-- **Marketing** : site gh-pages `0164f3e0` (2 cartes « Nouveau v11.2.1 ») ; notes + posts `docs/releases/v11.2.1/` (commit `f071ef56` sur main). Posts réseaux à publier par l'utilisateur. Le worktree `MARKETING/` était cassé (`.git` vers un ancien chemin), recréé depuis `origin/gh-pages`. Le site n'a jamais reçu de communication v11.2.0 (rattrapage proposé, non décidé).
-- **Commits locaux non poussés sur main** : `f071ef56`, `98a3cd8f` + `4406d42b` (promotion en `regression` des tests v11.2.0 restés en `feature`, oubli de la release précédente — plus aucune ligne `feature` dans `tests/INDEX.md`).
-- **Branches distantes non mergées, conservées (à trancher par l'utilisateur)** : `origin/chore/template-v3.8.0` (2 commits), `origin/spike/226-audio-bluetooth` (3 commits).
-- **Prochain : milestone v11.2.2 (#40, aucune branche)** : #267 alerte plein écran admin quand le serveur n'a pas de réseau (localhost seulement — l'utilisateur a demandé de ne PAS démarrer son dev, cadrage à faire), #266 fenêtres fixes restantes des tests `cmd/server`, #268 react-router (3 « high » `npm audit` non atteignables) + ajouter `npm audit` à `commands.audit`, #269 data race de test (timer résiduel `h246Setup` vu sur la CI de release), #221 composant catégorie/difficulté partagé, #190 barème `POINTS_RULE` par carte MEMOTION. #259 (sécurité endpoints) reste hors milestone.
-- **Leçons v11.2.1 (permanentes)** :
-  1. Au démarrage d'un milestone, faire cadrer par le planner les lots, dépendances et parallélisme AVANT tout dev, et poser un label `LOT-<entier>` par issue (demande utilisateur).
-  2. Clone partagé : un agent ne fait jamais `git stash`/`checkout`/`reset` dans le dépôt principal (dev-backend et test-writer l'ont fait, rien perdu) ; comparaison = worktree jetable par chemin absolu. Un test Go qui référence un champ inexistant casse la compilation du paquet pour tous : écrire les tests RED via JSON/messages bruts, ou séparer les paquets entre agents.
-  3. La relecture factuelle du CHANGELOG par code-reviewer a encore trouvé 7 erreurs (dont une introduite par la relecture elle-même) : la garder systématique, avec re-relecture.
-  4. `npm audit` n'était pas dans les contrôles pré-PROD : ajouté via #268.
-  5. Ne pas mettre une petite action (créer une issue, un milestone) en file derrière une tâche longue d'un agent : la lancer en parallèle (agent ponctuel).
-  6. Une QA « validée » sans navigateur laisse le visuel à l'utilisateur : toujours lui fournir les procédures `tests/procedures/` avant de proposer la fermeture.
-
-## État précédent (2026-10-12) — v11.2.0 en PROD (archivé)
-
-- **PROD = v11.2.0** : merge `main` `9fdb7f62`, tag `v11.2.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.2.0, CI run 38250528708. Dernier candidat QUALIF : 11.2.0.9 (`build/qualif_v11.2.0/`). Milestone v11.2 clôturé (18 issues), branche `milestone/v11.2` supprimée. Branche courante : `main`.
-- **Livré en v11.2** : #243, #244, #245 (manches, entractes), #246, #249 à #258, #233/#257 (tests Go stabilisés), #260 (govulncheck : Go 1.26.9, x/net v0.60.0, gorilla/websocket v1.5.3), #262/#263 (tests fragiles sur le runner CI).
-- **À venir — milestone v11.2.1** (aucune branche créée) : #265 animation d'attribution de points à plusieurs équipes (cadrage et maquettes à faire) ; #264 et #188 tests instables ; #261 panic d'arrêt `close of closed channel` ; #247, #248, #189 bugs ; #242 a11y navbar. #259 (endpoints sans authentification) : milestone dédié ultérieur, non planifié.
-- **Leçons de release (permanentes)** :
-  1. Release PROD : `ci-branch.yml` doit être vert sur le commit exact avant tout merge dans `main` et tout tag ; `govulncheck` propre avant le tag (`docs/RELEASE_PROCEDURE.md` §9bis, `.claude/agents/environments/publish.prod.md`, `.claude/agents/qa.md`). Un tag ne sert jamais de test.
-  2. Quatre tentatives pour 11.2.0 : govulncheck (Go 1.25.14), `TestLingerListener_SetsLinger`, `TestDNSServer_Start_UsesConfiguredPort`.
-  3. Un revert de merge impose d'annuler le revert avant de re-merger.
-  4. Go 1.26.9 minimum. `release.yml` ne publie que Windows, Linux arm64 et le firmware.
-  5. Tests : pas de `time.Sleep` d'attente, pas de singleton `config` en parallèle, attentes par événement avec échéance large (`docs/DEV_COMMANDS.md`).
-  6. L'utilisateur transmet lui-même aux templates la spécification « script CI unique, workflow de pré-validation, barrière du deployer » : à suivre côté dépôt des templates.
-- **Environnements** : PROD = v11.2.0 ; QUALIF = 11.2.0.9.
-
 ## Sync template v3.17.0 (2026-10-12)
 
 - **Template passé de v3.14.2 à v3.17.0** (commits locaux `65747c48` + `d32d9ddf`, aucun push). Nouveaux contextes `CDP_PHASES_{PLAN_DEV,RELEASE,REVIEW_QA}`, bloc `TEAMLEADER_PROTOCOL` à jour (section « Labels d'issues » : le teamleader fait poser les labels par `deployer`). `/context-audit` : seules des références mortes de ce fichier ont été retirées.
