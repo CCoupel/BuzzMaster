@@ -36,6 +36,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
   const [renaming, setRenaming] = useState(null) // { key, value }
   const [newName, setNewName] = useState('')
   const [newFile, setNewFile] = useState(null)
+  const [fileInputKey, setFileInputKey] = useState(0) // remonte l'<input type=file> pour vider sa valeur
   const [newColor, setNewColor] = useState(() => firstFreePaletteColor(categories))
   const [createError, setCreateError] = useState('')
   const [confirm, setConfirm] = useState(null) // { key, name, questions, rafale, history, mode, ack }
@@ -179,6 +180,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       say(`Catégorie « ${name} » créée.`)
       setNewName('')
       setNewFile(null)
+      setFileInputKey(k => k + 1)
       setNewColor(firstFreePaletteColor([...source, { color: newColor }]))
       armResync()
     } else if (r.conflict) {
@@ -187,6 +189,8 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       setCreateError('Image trop lourde (2 Mio max)')
     } else if (r.error === 'reserved name') {
       setCreateError('Nom réservé par le système, choisissez-en un autre')
+    } else if (r.status >= 500) {
+      setCreateError('Échec côté serveur, réessayez ou consultez les journaux')
     } else if (r.status) {
       setCreateError('Nom invalide ou image non supportée (PNG, JPG, WebP)')
     } else if (!r.locked) {
@@ -370,6 +374,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
           />
           <label className="cm-create-file">
             <input
+              key={fileInputKey}
               type="file"
               accept={ACCEPT}
               disabled={frozen}

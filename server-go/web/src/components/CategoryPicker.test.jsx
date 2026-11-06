@@ -19,9 +19,8 @@ import CategoryPicker from './CategoryPicker'
 //   - badge de mode rendu dans le DOM : « une seule » / « plusieurs possibles »
 //
 // Ce fichier transpose les cas de CategoryFilterBar.test.jsx (section filter) ;
-// les 12 cas `allowCreate` de CategorySelector.test.jsx vivent dans
-// CategoryPicker.create.test.jsx. Les deux anciens fichiers sont supprimés dans
-// le même commit.
+// la création de catégorie vit désormais dans CategoryManagerDialog (#285, cf.
+// CategoryManagerDialog.create285.test.jsx).
 // ---------------------------------------------------------------------------
 
 vi.mock('./CategoryPicker.css', () => ({}))
@@ -64,7 +63,7 @@ function renderSingle(overrides = {}) {
       onChange={onChange}
       customCategories={overrides.customCategories ?? []}
       onRefetchCategories={overrides.onRefetchCategories}
-      allowCreate={overrides.allowCreate}
+      allowManage={overrides.allowManage}
       label={overrides.label}
       showModeBadge={overrides.showModeBadge}
     />
@@ -102,7 +101,7 @@ function renderFilter(overrides = {}) {
       onToggle={onToggle}
       onClear={onClear}
       showLabel={overrides.showLabel}
-      allowCreate={overrides.allowCreate}
+      allowManage={overrides.allowManage}
     />
   )
   return { ...utils, onToggle, onClear }
@@ -272,9 +271,10 @@ describe('CategoryPicker — mode single', () => {
     }
   })
 
-  it('allowCreate par défaut = false : aucun bouton « + », jamais de formulaire inline possible', () => {
+  it('allowManage par défaut = false : ni « + Créer » ni « Gérer… »', () => {
     renderSingle()
     expect(screen.queryByTitle('Créer une catégorie')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Gérer/ })).not.toBeInTheDocument()
   })
 })
 
@@ -403,8 +403,9 @@ describe('CategoryPicker — variant filter (ex-CategoryFilterBar)', () => {
     expect(onClear).toHaveBeenCalledTimes(1)
   })
 
-  it('le « + » de création n\'existe pas en filter, même avec allowCreate (réservé au mode single)', () => {
-    renderFilter({ allowCreate: true })
+  it('le « + » de création n\'existe pas en filter, même avec allowManage (« Gérer… » seulement)', () => {
+    renderFilter({ allowManage: true })
     expect(screen.queryByTitle('Créer une catégorie')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Gérer/ })).toBeInTheDocument()
   })
 })
