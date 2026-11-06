@@ -215,3 +215,26 @@ describe('useCategories — CATEGORIES_CHANGED (#285)', () => {
     expect(categoryMeta('SPORT_EXTREME', result.current.categories).imageURL).toBe('/files/categories/SPORT_EXTREME.png?v=4242')
   })
 })
+
+describe('useCategories — refetch renvoie sa promesse (#285)', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('await refetch() n\'est résolu qu\'une fois la liste rechargée', async () => {
+    let release
+    const first = { ok: true, json: () => Promise.resolve(MOCK_CATEGORIES) }
+    const second = new Promise(res => { release = () => res({ ok: true, json: () => Promise.resolve([MOCK_CATEGORIES[0]]) }) })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(first).mockReturnValueOnce(second))
+    const { result } = renderHook(() => useCategories())
+    await act(async () => {})
+
+    let done = false
+    let p
+    act(() => { p = result.current.refetch().then(() => { done = true }) })
+    await act(async () => {})
+    expect(done).toBe(false)
+
+    await act(async () => { release(); await p })
+    expect(done).toBe(true)
+    expect(result.current.categories).toHaveLength(1)
+  })
+})

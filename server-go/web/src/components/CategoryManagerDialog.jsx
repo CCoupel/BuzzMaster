@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import CategoryColorSwatch from './CategoryColorSwatch'
@@ -6,6 +6,7 @@ import './CategoryManagerDialog.css'
 
 const LOCKED_MSG = 'Impossible pendant une partie'
 const ACCEPT = '.png,.jpg,.jpeg,.webp'
+export const PUSH_GRACE_MS = 1500
 
 /**
  * CategoryManagerDialog — « Gérer les catégories » (#285, maquette
@@ -68,6 +69,19 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
   // Repli : resynchronise la liste via le parent (GET) quand l'état serveur est incertain (500, échec partiel).
   const resync = useCallback(async () => { await onChanged?.() }, [onChanged])
 
+  // Repli de la diffusion CATEGORIES_CHANGED : après une écriture réussie, la liste (prop `categories`) doit être
+  // renouvelée par le push ; sinon (message perdu) on resynchronise par GET après PUSH_GRACE_MS.
+  const resyncTimer = useRef(null)
+  const onChangedRef = useRef(onChanged)
+  useEffect(() => { onChangedRef.current = onChanged }, [onChanged])
+  const armResync = () => {
+    clearTimeout(resyncTimer.current)
+    resyncTimer.current = setTimeout(() => { onChangedRef.current?.() }, PUSH_GRACE_MS)
+  }
+  // Un nouveau tableau `categories` = le push (ou un refetch) est arrivé : plus besoin du repli.
+  useEffect(() => { clearTimeout(resyncTimer.current) }, [categories])
+  useEffect(() => () => clearTimeout(resyncTimer.current), [])
+
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && !renaming && !confirm) onClose?.() }
     document.addEventListener('keydown', onKey)
@@ -117,7 +131,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    if (r.ok) say(okText)
+    if (r.ok) { say(okText); armResync() }
     return r.ok
   }
 
@@ -139,6 +153,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
     const r = await request(`/api/categories/${row.key}/icon`, { method: 'POST', body: fd })
     if (r.ok) {
       say(`Icône de « ${row.name} » mise à jour.`)
+      armResync()
     }
   }
 
@@ -146,6 +161,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
     const r = await request(`/api/categories/${row.key}`, { method: 'DELETE' })
     if (r.ok) {
       say(`Catégorie « ${row.name} » supprimée.`)
+      armResync()
       onDeleted?.(row.key)
     } else if (r.conflict?.error === 'category in use') {
       setConfirm({
@@ -175,6 +191,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       setConfirm(null)
       const backup = r.data?.history?.backup
       say(`Catégorie « ${c.name} » supprimée${backup ? ` — historique sauvegardé (${backup})` : ''}.`)
+      armResync()
       onDeleted?.(c.key)
     } else if (r.conflict) {
       setConfirm(null)

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useState, useEffect, useCallback, useContext, useRef } from 'react'
 import { CategoriesPushContext } from './CategoriesPushContext'
 import { bustCategoryIcon } from '../utils/categoryUtils'
 
@@ -7,6 +7,8 @@ export function useCategories() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [fetchTick, setFetchTick] = useState(0)
+  const waiters = useRef([]) // résolveurs des refetch() en attente
+  const flushWaiters = () => { const w = waiters.current; waiters.current = []; w.forEach(r => r()) }
 
   // #285 : CATEGORIES_CHANGED (WebSocket, via GameProvider) porte la liste complète résolue :
   // appliquée directement, sans refetch. Hors GameProvider : contexte null ⇒ GET au montage + refetch().
@@ -42,10 +44,20 @@ export function useCategories() {
           setLoading(false)
         }
       })
+      .finally(() => { if (!cancelled) flushWaiters() })
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchTick])
 
-  const refetch = useCallback(() => setFetchTick(t => t + 1), [])
+  // À la sortie du composant, ne laisse aucun `await refetch()` en suspens.
+  useEffect(() => () => flushWaiters(), []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // #285 : renvoie une promesse résolue quand le rechargement est terminé (succès ou échec),
+  // pour que `await refetch()` attende réellement la liste à jour.
+  const refetch = useCallback(() => new Promise(resolve => {
+    waiters.current.push(resolve)
+    setFetchTick(t => t + 1)
+  }), [])
 
   return { categories, loading, error, refetch }
 }
