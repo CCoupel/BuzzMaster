@@ -109,7 +109,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
         if (body.error === 'game in progress') {
           setLocked(true)
           say(LOCKED_MSG, 'err')
-          return { ok: false }
+          return { ok: false, locked: true }
         }
         return { ok: false, conflict: body }
       }
@@ -189,7 +189,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       setCreateError('Nom réservé par le système, choisissez-en un autre')
     } else if (r.status) {
       setCreateError('Nom invalide ou image non supportée (PNG, JPG, WebP)')
-    } else if (!locked) {
+    } else if (!r.locked) {
       setCreateError('Erreur réseau')
     }
   }
@@ -356,7 +356,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
           </table>
         </div>
 
-        <div className="cm-create">
+        <div className="cm-create" role="group" aria-label="Nouvelle catégorie">
           <input
             type="text"
             className="cm-create-name"
