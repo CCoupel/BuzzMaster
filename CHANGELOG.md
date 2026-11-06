@@ -8,11 +8,11 @@ Historique des versions du projet BuzzControl.
 
 - **RAFALE alphabétique (#282)** — Nouvelle option de manche « 🔤 Alphabétique ». Les réponses sont tirées par passes A→Z cycliques : une réponse par lettre et par passe, les lettres sans réponse restante sont sautées. Le tri ignore les accents, la casse et les articles initiaux (« La Seine » se classe à S). La lettre courante est affichée sur l'admin, `/anim` et la TV ; l'admin et l'animateur voient la lettre de la question suivante (« Suivante (lettre X) »). L'alerte de pioche indique les lettres couvertes par le réservoir.
 - **Roue des lettres (#282)** — Composant `Wheel` générique (bandeau ou arc, réglable par manche ; bandeau par défaut) affiché sur la TV en RAFALE alphabétique. Réutilisable pour la future Roue de la Fortune.
-- **Popover « Ambiance » d'en-tête (#286)** — Un seul bouton regroupe la lumière et le son. L'interrupteur « Son » (persisté, `sound.muted`) coupe les sons sans toucher aux réglages ; l'interrupteur général « Éclairage d'ambiance activé » (`lighting.enabled`) coupe l'éclairage.
-- **Son de décompte (#287)** — Un son joue pendant tout compte à rebours de question (tous les chronos ; par manche en RAFALE). Il n'est jamais joué si la question a un média. Au buzz, le décompte continue. Le son est remplaçable et restaurable, et peut se jouer une fois ou en boucle.
+- **Popover « Ambiance » d'en-tête (#286)** — Un seul bouton regroupe la lumière et le son. L'interrupteur « Son » (persisté, `sound.muted`) coupe les sons sans toucher aux réglages. L'interrupteur général de l'éclairage « Éclairage d'ambiance activé » (`lighting.enabled`) est dans Ambiance › Lumière.
+- **Son de décompte (#287)** — Un son joue pendant tout compte à rebours de question (tous les chronos ; par manche en RAFALE). Il n'est jamais joué si la question a un son attaché. Au buzz, le décompte continue. Le son est remplaçable et restaurable, et peut se jouer une fois ou en boucle (en boucle par défaut).
 - **Lecture en boucle du média de question (#288)** — « Lecture : Une fois / En boucle » sur les questions sonores. Combinable avec « Chrono démarre à la fin » : le chrono démarre à la fin du premier passage.
 - **Catégories éditables (#285)** — Renommer une catégorie, changer sa couleur (qui pilote aussi l'ambiance lumineuse) et son icône (catégories personnalisées), ou en créer une depuis le dialogue « Gérer les catégories ». Les changements sont reflétés en direct sur la TV, le VJoueur et `/anim`, sans rechargement.
-- **Attribution : bloc d'équipes et de joueurs (#289)** — Le bloc d'attribution affiche « x joueurs · y équipes » sur trois lignes.
+- **Attribution : bloc d'équipes et de joueurs (#289)** — Le bloc d'attribution affiche sur trois lignes « x joueurs · y équipes » (niveau joueur) ou « y équipes » (niveau équipe).
 
 ### Changed
 
@@ -22,7 +22,7 @@ Historique des versions du projet BuzzControl.
 ### Fixed
 
 - **Popover d'en-tête qui débordait (#284)** — Le popover ne sort plus de l'écran.
-- **RAFALE : clic OK/KO de l'admin ignoré (depuis v9.0.0)** — En RAFALE, le clic admin sur OK ou KO était ignoré. Corrigé aussi en mode classique et sur `/anim`.
+- **RAFALE : clic OK/KO de l'admin en échec** — Un handler branché tel quel sur `onClick` transmettait l'évènement React comme identifiant de carte, ce qui faisait échouer l'envoi du clic OK/KO. Garde stricte côté client (`useWebSocket.js`) et boutons `/anim` (`AnimRafaleActions.jsx`) corrigés.
 
 ### Security
 

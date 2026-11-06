@@ -2223,7 +2223,7 @@ Sources : `contracts/wheel-component.md`, `contracts/rafale.md` §15.7–§15.8,
 
 ### Dialogue « Gérer les catégories » (#285)
 
-- Composant `CategoryManagerDialog`, ouvert depuis la zone « Équilibre des équipes » de la régie.
+- Composant `CategoryManagerDialog`, ouvert par le bouton « ⚙ Gérer… » de la barre de filtre par catégorie de la page Questions (sous « Equilibre des categories »).
 - Colonnes : couleur, icône, nom, nombre de questions, pilotage de l'ambiance, actions. Création, renommage, couleur, icône et suppression (choix `reassign` ou `delete`) passent par `/api/categories`.
 - Le formulaire de création est dans ce dialogue seulement : l'éditeur de question n'a plus de bouton « Gérer » ni « Créer ».
 - Hook `useCategories` : applique la liste reçue dans `CATEGORIES_CHANGED` sans refetch ; la page ne réagit plus à l'évènement `QUESTIONS` pour les catégories.

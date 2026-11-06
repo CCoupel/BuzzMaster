@@ -973,9 +973,9 @@ Non persistés. Réinitialisés à `stopUnsafe`, `Ready` et `InitGame`. Visibles
 | `muted` | `sound` | `false` | Son coupé, persisté (#286). Coupe aussi le média de question et le décompte |
 | `countdown_disabled` | `sound` | `false` | Décompte silencieux (#287) |
 | `countdown_once` | `sound` | `false` | Décompte joué une fois au lieu d'en boucle (#287) |
-| `enabled` | `lighting` | — | Interrupteur général de l'éclairage d'ambiance, distinct de `sound.muted` (#286) |
+| `enabled` | `lighting` | — | Champ existant (v10.0.0) ; en v11.4.0 (#286), interrupteur général explicite de l'éclairage, distinct de `sound.muted` |
 
-Valeur zéro = comportement v11.4.0 LOT-2 : `config.json` existants restent valides.
+Valeur zéro : son actif, décompte actif **en boucle** (`countdown_once` à zéro = boucle, §12.3). `config.json` existants restent valides.
 
 ### Catégories — nom, couleur, icône, historique (#285)
 

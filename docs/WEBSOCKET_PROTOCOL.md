@@ -664,16 +664,19 @@ Diffusé après chaque écriture de catégorie réussie (`POST /api/categories`,
 {
   "ACTION": "CATEGORIES_CHANGED",
   "MSG": {
-    "CATEGORIES": [{ "key": "GEO", "name": "Géographie", "imageURL": "", "isCustom": true, "color": "#3b82f6", "questionCount": 12, "rafaleCount": 0 }],
-    "CHANGE": { "TYPE": "renamed", "KEY": "GEO" },
-    "TS": 1762400000
+    "CATEGORIES": [
+      { "key": "GEOGRAPHY", "name": "Géo", "imageURL": "", "color": "#3b82f6", "isCustom": false, "questionCount": 24, "rafaleCount": 110 },
+      { "key": "CINEMA", "name": "Cinéma", "imageURL": "/files/categories/CINEMA.png", "color": "#0ea5e9", "isCustom": true, "questionCount": 12, "rafaleCount": 30 }
+    ],
+    "CHANGE": { "TYPE": "renamed", "KEY": "GEOGRAPHY" },
+    "TS": 1762425548123
   }
 }
 ```
 
-- `CATEGORIES` : liste résolue, identique à `GET /api/categories` (champs `key`, `name`, `imageURL`, `isCustom`, `color`, `questionCount`, `rafaleCount`). Le client l'applique directement, sans refetch. Les valeurs de l'exemple sont illustratives.
+- `CATEGORIES` : liste résolue, identique à `GET /api/categories` (champs `key`, `name`, `imageURL`, `isCustom`, `color`, `questionCount`, `rafaleCount`). Le client l'applique directement, sans refetch. Exemple tiré de `contracts/websocket-actions.md`.
 - `CHANGE.TYPE` ∈ `created`, `renamed`, `colored`, `icon`, `deleted`. `CHANGE.KEY` : clé de la catégorie touchée. Pour `icon` et `created`, le client recharge l'icône (`?v=<TS>`).
-- `TS` : horodatage de l'écriture, utilisé comme version de cache des icônes.
+- `TS` : horodatage de l'écriture en millisecondes Unix (`time.Now().UnixMilli()`), utilisé comme version de cache des icônes.
 - Une diffusion en échec ne change pas la réponse HTTP (log `WARN`).
 
 Côté client : `useWebSocket` stocke le message ; `useCategories` applique `CATEGORIES` ; l'ancien évènement `window` `buzz:questions-update` n'est plus utilisé pour les catégories.
