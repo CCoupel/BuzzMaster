@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"unicode"
 
 	"buzzcontrol/internal/game"
@@ -69,8 +70,22 @@ func writeCategorySidecar(catDir, key string, sc categorySidecar) error {
 }
 
 func writeFileAtomic(path string, data []byte) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Chmod(tmp, 0644); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -216,6 +231,12 @@ func (h *HTTPServer) rejectIfLocked(w http.ResponseWriter) bool {
 	return false
 }
 
+// categoryWriteMu serialises every category write handler (POST/PUT/icon/DELETE).
+var categoryWriteMu sync.Mutex
+
+// reservedWindowsNames are device names that cannot be used as file stems on Windows.
+var reservedWindowsNames = regexp.MustCompile(`(?i)^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$`)
+
 func (h *HTTPServer) categoriesChanged() {
 	if h.OnCategoriesChanged != nil {
 		h.OnCategoriesChanged()
@@ -230,6 +251,8 @@ func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request)
 	case http.MethodGet:
 		h.handleGetCategories(w, r)
 	case http.MethodPost:
+		categoryWriteMu.Lock()
+		defer categoryWriteMu.Unlock()
 		if h.rejectIfLocked(w) {
 			return
 		}
@@ -262,6 +285,8 @@ func (h *HTTPServer) handleAPICategoryByKey(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
+	categoryWriteMu.Lock()
+	defer categoryWriteMu.Unlock()
 	// 409 first, before any validation.
 	if h.rejectIfLocked(w) {
 		return
@@ -427,6 +452,10 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 		writeCategoryError(w, http.StatusBadRequest, "invalid category key")
 		return
 	}
+	if reservedWindowsNames.MatchString(key) {
+		writeCategoryError(w, http.StatusBadRequest, "reserved category name")
+		return
+	}
 	if _, exists := h.findCategory(key); exists {
 		writeCategoryError(w, http.StatusConflict, "key already exists")
 		return
@@ -451,7 +480,10 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 		sc.Color = &color
 	}
 	if err := writeCategorySidecar(h.categoriesDir(), key, sc); err != nil {
-		LogWarn(game.LogComponentHTTP, "Categories POST: could not save sidecar for %s: %v", key, err)
+		LogError(game.LogComponentHTTP, "Categories POST: could not save sidecar for %s: %v", key, err)
+		h.purgeCategoryImages(key, "")
+		writeCategoryError(w, http.StatusInternalServerError, "failed to write category")
+		return
 	}
 	LogInfo(game.LogComponentHTTP, "Categories POST: created category key=%s name=%q", key, name)
 	h.categoriesChanged()
@@ -608,8 +640,8 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 	}
 
 	qc, rc := h.categoryCounts()
-	if qc[key]+rc[key] > 0 && mode == "" {
-		ev, pts := h.engine.CountHistoryCategory(key)
+	ev, pts := h.engine.CountHistoryCategory(key)
+	if qc[key]+rc[key]+ev > 0 && mode == "" {
 		writeCategoryJSON(w, http.StatusConflict, map[string]interface{}{
 			"error": "category in use", "questions": qc[key], "rafale": rc[key],
 			"history": map[string]int{"events": ev, "points": pts},
@@ -621,7 +653,7 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 	events, points, backup, herr := h.engine.MergeHistoryCategoryWithBackup(key)
 	if herr != nil {
 		LogError(game.LogComponentHTTP, "Categories DELETE %s: history merge failed, nothing else touched: %v", key, herr)
-		writeCategoryError(w, http.StatusInternalServerError, "history merge failed: "+herr.Error())
+		writeCategoryError(w, http.StatusInternalServerError, "history merge failed")
 		return
 	}
 
@@ -632,7 +664,7 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 	fail := func(step string, err error) {
 		LogError(game.LogComponentHTTP, "Categories DELETE %s: step %s failed: %v", key, step, err)
 		writeCategoryJSON(w, http.StatusInternalServerError, map[string]interface{}{
-			"error": "partial failure at step " + step + ": " + err.Error(), "partial": true,
+			"error": "partial failure at step " + step, "partial": true,
 			"questions": qcounts, "rafale": map[string]int{"reassigned": rafaleReassigned, "deleted": rafaleDeleted}, "history": hist,
 		})
 	}

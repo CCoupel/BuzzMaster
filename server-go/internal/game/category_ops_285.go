@@ -105,6 +105,12 @@ func (e *Engine) MergeHistoryCategoryWithBackup(key string) (events, points int,
 			return 0, 0, "", fmt.Errorf("history: creating %s: %w", dir, mkErr)
 		}
 		backup = "history.json.bak-" + time.Now().Format("20060102-150405")
+		for n := 2; ; n++ { // never overwrite an earlier backup of the same second
+			if _, stErr := os.Stat(filepath.Join(dir, backup)); os.IsNotExist(stErr) {
+				break
+			}
+			backup = fmt.Sprintf("history.json.bak-%s-%d", time.Now().Format("20060102-150405"), n)
+		}
 		if cur, rdErr := os.ReadFile(e.historyPath); rdErr == nil {
 			if wErr := os.WriteFile(filepath.Join(dir, backup), cur, 0644); wErr != nil {
 				return 0, 0, "", fmt.Errorf("history backup: %w", wErr)
