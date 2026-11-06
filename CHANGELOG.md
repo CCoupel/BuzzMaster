@@ -22,7 +22,7 @@ Historique des versions du projet BuzzControl.
 ### Fixed
 
 - **Popover d'en-tête qui débordait (#284)** — Le popover ne sort plus de l'écran.
-- **RAFALE : clic OK/KO de l'admin en échec** — Un handler branché tel quel sur `onClick` transmettait l'évènement React comme identifiant de carte, ce qui faisait échouer l'envoi du clic OK/KO. Garde stricte côté client (`useWebSocket.js`) et boutons `/anim` (`AnimRafaleActions.jsx`) corrigés.
+- **RAFALE : clic OK/KO de la régie et de `/anim` en échec (depuis v9.0.0)** — Les boutons OK/KO, partagés par la régie et `/anim` (`AnimRafaleActions.jsx`), transmettaient l'évènement React comme identifiant de carte, ce qui faisait échouer l'envoi (RAFALE classique et alphabétique). Boutons corrigés et garde stricte côté client (`useWebSocket.js`). La carte MEMOTION n'était pas touchée.
 
 ### Security
 
