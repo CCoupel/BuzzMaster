@@ -1,6 +1,8 @@
 import { useId, useState } from 'react'
-import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
+import { CATEGORIES, categoryMeta, firstFreePaletteColor } from '../utils/categoryUtils'
 import CategoryBadge from './CategoryBadge'
+import CategoryColorSwatch from './CategoryColorSwatch'
+import CategoryManagerDialog from './CategoryManagerDialog'
 import { PickerHeader, toSet } from './pickerCommon'
 import './CategoryPicker.css'
 
@@ -66,11 +68,20 @@ export default function CategoryPicker({
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryFile, setNewCategoryFile] = useState(null)
   const [addCategoryError, setAddCategoryError] = useState('')
+  const [newCategoryColor, setNewCategoryColor] = useState('')
+  const [showManager, setShowManager] = useState(false)
 
   const resetCreateForm = () => {
     setShowAddCategory(false)
     setNewCategoryName('')
     setNewCategoryFile(null)
+    setAddCategoryError('')
+    setNewCategoryColor('')
+  }
+
+  const openCreateForm = () => {
+    setNewCategoryColor(firstFreePaletteColor(customCategories))
+    setShowAddCategory(true)
     setAddCategoryError('')
   }
 
@@ -81,6 +92,7 @@ export default function CategoryPicker({
       const fd = new FormData()
       fd.append('name', newCategoryName.trim())
       fd.append('file', newCategoryFile)
+      if (newCategoryColor) fd.append('color', newCategoryColor)
       // Ne PAS définir Content-Type — le browser gère le boundary
       const res = await fetch('/api/categories', { method: 'POST', body: fd })
       if (res.ok) {
@@ -89,7 +101,9 @@ export default function CategoryPicker({
         await onRefetchCategories?.()
         onChange?.(created.key)
       } else if (res.status === 409) {
-        setAddCategoryError('Cette catégorie existe déjà')
+        let body = {}
+        try { body = await res.json() } catch { body = {} }
+        setAddCategoryError(body.error === 'game in progress' ? 'Impossible pendant une partie' : 'Cette catégorie existe déjà')
       } else {
         setAddCategoryError('Nom invalide ou image non supportée')
       }
@@ -99,6 +113,7 @@ export default function CategoryPicker({
   }
 
   // Garde #197 : voir la doc du composant. Un seul chemin pour construire la liste.
+  // #285 : categoryMeta reçoit la liste BRUTE (surcharges nom/couleur des intégrées).
   const trueCustomCategories = customCategories.filter(c => c.isCustom)
   const allKeys = [...Object.keys(CATEGORIES), ...trueCustomCategories.map(c => c.key)]
   const keys = isFilter && availableCategories ? availableCategories : allKeys
@@ -124,7 +139,7 @@ export default function CategoryPicker({
         aria-labelledby={labelId}
       >
         {keys.map(key => {
-          const meta = categoryMeta(key, trueCustomCategories)
+          const meta = categoryMeta(key, customCategories)
           if (!meta) return null
           const active = selected.has(key)
           const a11y = isMulti
@@ -141,7 +156,7 @@ export default function CategoryPicker({
               {...a11y}
             >
               <span className="cat-chip-icon">
-                <CategoryBadge catKey={key} customCategories={trueCustomCategories} size={size} chip={false} />
+                <CategoryBadge catKey={key} customCategories={customCategories} size={size} chip={false} />
               </span>
               {!iconOnly && <span className="cat-chip-label">{meta.label}</span>}
               {isMulti && renderExtra?.(key)}
@@ -154,9 +169,19 @@ export default function CategoryPicker({
             type="button"
             className="cat-chip cat-chip--add"
             title="Créer une catégorie"
-            onClick={() => { setShowAddCategory(true); setAddCategoryError('') }}
+            onClick={openCreateForm}
           >
             + Créer
+          </button>
+        )}
+        {allowCreate && (
+          <button
+            type="button"
+            className="cat-chip cat-chip--add cat-chip--manage"
+            title="Gérer les catégories : couleur, icône, nom, suppression"
+            onClick={() => setShowManager(true)}
+          >
+            ⚙ Gérer…
           </button>
         )}
         {isFilter && selected.size > 0 && (
@@ -188,6 +213,10 @@ export default function CategoryPicker({
               {newCategoryFile ? '✓ ' + newCategoryFile.name : '📁 Choisir une image…'}
             </span>
           </label>
+          <span className="add-category-color">
+            <CategoryColorSwatch value={newCategoryColor} onChange={setNewCategoryColor} label="Couleur de la catégorie" />
+            <span className="add-category-color-hint">Couleur</span>
+          </span>
           <div className="add-category-actions">
             <button type="button" className="add-category-validate" onClick={handleCreate}>
               Valider
@@ -198,6 +227,18 @@ export default function CategoryPicker({
           </div>
           {addCategoryError && <p className="add-category-error">{addCategoryError}</p>}
         </div>
+      )}
+      {showManager && (
+        <CategoryManagerDialog
+          categories={customCategories}
+          onClose={() => setShowManager(false)}
+          onChanged={onRefetchCategories}
+          onDeleted={(key) => {
+            if (!selected.has(key)) return
+            if (isMulti) onToggle?.(key)
+            else onChange?.('')
+          }}
+        />
       )}
     </div>
   )

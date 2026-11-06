@@ -205,7 +205,8 @@ export default function AnimPage() {
   }, [])
 
   const { categories: apiCategories } = useCategories()
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+  // #285 : liste API brute (surcharges nom/couleur des intégrées incluses) ; les composants filtrent eux-mêmes.
+  const customCategories = apiCategories
 
   const question = gameState.question
   // 🔴 Retour QUALIF v9.0.0.4 (point A+5) — depuis #216 une manche RAFALE

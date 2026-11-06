@@ -658,6 +658,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
           console.log('[WS] Parsed questions:', questionsMap)
           setQuestions(questionsMap)
         }
+        // #285 : useCategories se recharge (renommage/couleur/suppression d'une catégorie).
+        window.dispatchEvent(new Event('buzz:questions-update'))
         if (FSINFO) setFsInfo(FSINFO)
         if (VERSION) setVersion(VERSION)
         break

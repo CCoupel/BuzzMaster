@@ -117,7 +117,7 @@ export default function CategoryPalmaresPage() {
               // v5.7.10 : name et color viennent directement de l'entry (backend résout)
               // Plus de fallback ❓ — si catégorie inconnue, backend retourne name vide et on titre-case la clé
               const catLabel = entry.name
-                || (entry.category === 'UNKNOWN' ? 'Inconnue' : entry.category.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()))
+                || (entry.category === 'UNKNOWN' ? 'Sans catégorie' : entry.category.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()))
               const catIcon  = entry.imageURL
                 ? <img src={entry.imageURL} alt={catLabel} style={{ width: '1.25rem', height: '1.25rem', objectFit: 'cover', borderRadius: '0.125rem' }} />
                 : (CATEGORIES[entry.category]?.icon ?? '📷')

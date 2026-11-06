@@ -294,7 +294,8 @@ export default function GamePage() {
 
   // Custom categories from API (#95)
   const { categories: apiCategories } = useCategories()
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+  // #285 : liste API brute (surcharges nom/couleur des intégrées incluses) ; les composants filtrent eux-mêmes.
+  const customCategories = apiCategories
 
   // Category filter (shared hook) — passes custom categories for filter support
   const { selectedCategories, availableCategories, filteredQuestions, toggleCategoryFilter, clearCategoryFilters } = useCategoryFilter(sortedQuestions, customCategories)

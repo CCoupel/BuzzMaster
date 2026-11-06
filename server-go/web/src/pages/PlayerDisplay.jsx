@@ -946,11 +946,11 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
     // RAFALE : la catégorie suit la question tirée, pas la manche (§3.3 —
     // question.CATEGORY n'existe plus depuis #216 pour ce type).
     if (gameState?.question?.TYPE === 'RAFALE') {
-      return getCategoryColor(gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY)
+      return getCategoryColor(gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY, apiCategories)
     }
     // Otherwise, use category color
-    return getCategoryColor(gameState?.question?.CATEGORY)
-  }, [gameState?.question?.TYPE, gameState?.question?.CATEGORY, gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR, gameState?.MEMOTION_CURRENT_TEAM_COLOR])
+    return getCategoryColor(gameState?.question?.CATEGORY, apiCategories)
+  }, [gameState?.question?.TYPE, gameState?.question?.CATEGORY, gameState?.RAFALE_CURRENT_QUESTION?.CATEGORY, gameState?.MEMORY_CURRENT_TEAM_COLOR, gameState?.MEMOTION_CURRENT_TEAM_COLOR, apiCategories])
 
   // Neon style variables
   const neonStyle = useMemo(() => {
@@ -1436,7 +1436,7 @@ export default function PlayerDisplay({ playerName = null, playerNameColor = nul
                 palmares.slice(0, 6).map((entry, index) => {
                   const catLabel    = entry.name
                     || (entry.category === 'UNKNOWN'
-                      ? 'Inconnue'
+                      ? 'Sans catégorie'
                       : entry.category.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()))
                   const catImageURL = entry.imageURL || null
                   const catColor    = entry.color || '#6b7280'

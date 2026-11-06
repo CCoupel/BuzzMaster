@@ -1,0 +1,44 @@
+/* CategoryManagerDialog (#285) — maquette admin_category_manager__rename_color_delete §02 */
+.cm-overlay {
+  position: fixed; inset: 0; z-index: 1000; background: rgba(17, 24, 39, 0.55);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.cm-dialog {
+  width: 100%; max-width: 760px; max-height: 90vh; overflow: auto; background: #fff; color: #111827;
+  border-radius: 0.7rem; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3); padding: 1rem 1.2rem; font-size: 0.85rem;
+}
+.cm-title { margin: 0 0 0.6rem; font-size: 1rem; display: flex; justify-content: space-between; align-items: center; }
+.cm-close { font: inherit; border: 0; background: none; color: #6b7280; cursor: pointer; }
+.cm-scroll { overflow-x: auto; }
+.cm-table { width: 100%; border-collapse: collapse; }
+.cm-table th, .cm-table td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+.cm-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; }
+.cm-icon-btn {
+  position: relative; width: 2.2rem; height: 2.2rem; border-radius: 0.5rem; border: 1px dashed #d1d5db;
+  background: #f9fafb; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden;
+}
+.cm-icon-btn img { width: 100%; height: 100%; object-fit: cover; }
+.cm-icon-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.cm-icon-btn:hover { border-color: #6366f1; }
+.cm-emoji small, .cm-lock { color: #6b7280; font-size: 0.7rem; }
+.cm-inline-edit { display: flex; gap: 0.4rem; align-items: center; }
+.cm-inline-edit input { padding: 0.35rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.4rem; font: inherit; width: 180px; }
+.cm-hue { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: #6b7280; }
+.cm-bulb { width: 1.3rem; height: 1.3rem; border-radius: 50%; box-shadow: 0 0 10px 3px currentColor; background: currentColor; }
+.cm-actions-cell { white-space: nowrap; }
+.cm-ibtn { font: inherit; font-size: 0.78rem; padding: 0.25rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.4rem; background: #fff; cursor: pointer; margin-right: 0.2rem; }
+.cm-ibtn--danger { color: #b91c1c; border-color: #fecaca; }
+.cm-ibtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cm-hint { color: #6b7280; font-size: 0.78rem; margin: 0.6rem 0 0; }
+.cm-toast { margin: 0 0 0.5rem; padding: 0.35rem 0.6rem; border-radius: 0.4rem; background: #dcfce7; color: #166534; font-size: 0.78rem; font-weight: 700; }
+.cm-toast--err { background: #fee2e2; color: #b91c1c; }
+.cm-locked { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; margin: 0 0 0.5rem; padding: 0.4rem 0.6rem; border-radius: 0.4rem; background: #fef3c7; color: #92400e; font-weight: 700; }
+.cm-confirm { border: 1px solid #fecaca; background: #fff5f5; border-radius: 0.6rem; padding: 0.8rem 1rem; margin-top: 0.8rem; }
+.cm-confirm h4 { margin: 0 0 0.4rem; color: #b91c1c; font-size: 0.9rem; }
+.cm-confirm label { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0.35rem 0; }
+.cm-confirm small { color: #6b7280; display: block; }
+.cm-hist { margin: 0.5rem 0; padding: 0.4rem 0.6rem; background: #fef3c7; color: #92400e; border-radius: 0.4rem; font-size: 0.78rem; }
+.cm-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.6rem; }
+.cm-btn { font: inherit; font-size: 0.82rem; padding: 0.4rem 0.8rem; border-radius: 0.45rem; border: 1px solid #d1d5db; background: #fff; cursor: pointer; }
+.cm-btn--danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+.cm-btn:disabled { opacity: 0.4; cursor: not-allowed; }

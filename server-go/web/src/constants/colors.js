@@ -2,6 +2,8 @@
  * Shared color constants for BuzzControl
  */
 
+import { categoryMeta } from '../utils/categoryUtils'
+
 // QCM answer colors - used for multiple choice questions
 export const QCM_COLORS = {
   RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
@@ -18,18 +20,6 @@ export const BUTTON_TO_QCM_COLOR = {
   'D': 'BLUE',
 }
 
-// Question categories with icons and colors
-export const CATEGORIES = {
-  GEOGRAPHY: { label: 'Geographie', icon: '🌍', color: '#3b82f6' },
-  ENTERTAINMENT: { label: 'Divertissement', icon: '🎭', color: '#ec4899' },
-  HISTORY: { label: 'Histoire', icon: '📜', color: '#eab308' },
-  ARTS: { label: 'Arts & Litterature', icon: '🎨', color: '#a855f7' },
-  SCIENCE: { label: 'Sciences & Nature', icon: '🔬', color: '#22c55e' },
-  SPORTS: { label: 'Sports & Loisirs', icon: '⚽', color: '#f97316' },
-  FOOD: { label: 'Gastronomie', icon: '🍽️', color: '#991b1b' },
-  ANIMALS: { label: 'Animaux', icon: '🐾', color: '#78716c' },
-}
-
 // Answer colors for unassigned players (TeamsPage)
 export const ANSWER_COLORS = {
   RED: { label: 'Rouge', color: '#ef4444', letter: 'A' },
@@ -42,14 +32,15 @@ export const ANSWER_COLORS = {
 export const DEFAULT_NEON_COLOR = '#6b7280';
 
 /**
- * Get the color for a category (for neon effect)
- * @param {string} category - Category name (e.g., 'GEOGRAPHY', 'HISTORY')
+ * Get the color for a category (for neon effect) — API-first (#285).
+ * @param {string} category - Category key (e.g., 'GEOGRAPHY', 'CINEMA')
+ * @param {Array} [categories] - GET /api/categories ; sans liste, repli sur la table
  * @returns {string} Hex color code
  */
-export const getCategoryColor = (category) => {
+export const getCategoryColor = (category, categories = []) => {
   if (!category) return DEFAULT_NEON_COLOR;
-  const cat = CATEGORIES[category];
-  return cat ? cat.color : DEFAULT_NEON_COLOR;
+  const meta = categoryMeta(category, categories);
+  return meta ? meta.color : DEFAULT_NEON_COLOR;
 }
 
 // ---------------------------------------------------------------------------

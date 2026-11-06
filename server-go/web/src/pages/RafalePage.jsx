@@ -55,7 +55,8 @@ export default function RafalePage() {
   // partout, une source de données différente de celle du Quiz — c'est ce
   // que ce filtrage aligne, en plus du composant d'affichage lui-même
   // (CategoryPicker ci-dessous).
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+  // #285 : liste API brute (surcharges nom/couleur des intégrées incluses) ; les composants filtrent eux-mêmes.
+  const customCategories = apiCategories
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)

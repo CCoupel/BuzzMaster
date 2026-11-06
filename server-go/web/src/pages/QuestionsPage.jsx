@@ -423,7 +423,8 @@ export default function QuestionsPage() {
 
   // Custom categories from API (#95)
   const { categories: apiCategories, refetch: refetchCategories } = useCategories()
-  const customCategories = useMemo(() => apiCategories.filter(c => c.isCustom), [apiCategories])
+  // #285 : liste API brute (surcharges nom/couleur des intégrées incluses) ; les composants filtrent eux-mêmes.
+  const customCategories = apiCategories
 
   // #219 (ajustement ergonomie QUALIF v11.1.0.1) — URL objet STABLE pour le
   // fichier son fraîchement choisi, mémoïsée sur `formData.sound` plutôt que
@@ -1922,7 +1923,7 @@ export default function QuestionsPage() {
 
       {/* Category Balance + Filters — div unique pour alignement parfait */}
       <div className="category-filter-group">
-        <CategoryBalance questions={sortedQuestions} />
+        <CategoryBalance questions={sortedQuestions} customCategories={customCategories} />
 
         {/* Filtre par catégorie (#40) — CategoryPicker variant="filter" (#221),
             composant partagé avec RafalePage.jsx et GamePage.jsx. */}
@@ -1933,6 +1934,8 @@ export default function QuestionsPage() {
           value={selectedCategories}
           availableCategories={availableCategories}
           customCategories={customCategories}
+          allowCreate
+          onRefetchCategories={refetchCategories}
           onToggle={toggleCategoryFilter}
           onClear={clearCategoryFilters}
         />

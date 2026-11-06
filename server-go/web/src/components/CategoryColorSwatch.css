@@ -1,0 +1,21 @@
+/* Pastille de couleur + palette (#285) — maquette admin_category_manager */
+.cat-swatch-wrap { position: relative; display: inline-block; }
+.cat-swatch {
+  width: 1.5rem; height: 1.5rem; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 2px solid rgba(0, 0, 0, 0.15); background: var(--c, transparent);
+}
+.cat-swatch--none { background: repeating-linear-gradient(45deg, #fff 0 3px, #e5e7eb 3px 6px); }
+.cat-swatch:hover:not(:disabled) { box-shadow: 0 0 0 3px #c7d2fe; }
+.cat-swatch:focus-visible, .cat-pal-dot:focus-visible { outline: 2px solid var(--primary-500, #6366f1); outline-offset: 2px; }
+.cat-swatch:disabled { opacity: 0.5; cursor: not-allowed; }
+.cat-pal-pop {
+  position: absolute; left: 0; top: 2rem; z-index: 1100; background: #fff;
+  border: 1px solid var(--gray-200, #e5e7eb); border-radius: 0.6rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); padding: 0.6rem; width: 230px;
+}
+.cat-pal-title { margin: 0 0 0.4rem; font-size: 0.72rem; font-weight: 700; color: var(--gray-500, #6b7280); text-transform: uppercase; letter-spacing: 0.04em; }
+.cat-palette { display: grid; grid-template-columns: repeat(7, 1.5rem); gap: 0.4rem; }
+.cat-pal-dot { width: 1.5rem; height: 1.5rem; border-radius: 50%; padding: 0; cursor: pointer; border: 2px solid transparent; }
+.cat-pal-dot.sel { border-color: #111827; }
+.cat-pal-dot--none { background: repeating-linear-gradient(45deg, #fff 0 3px, #e5e7eb 3px 6px); border-color: var(--gray-300, #d1d5db); }
+.cat-pal-dot--none.sel { border-color: #111827; }
