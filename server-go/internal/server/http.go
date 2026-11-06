@@ -66,7 +66,7 @@ type HTTPServer struct {
 	// OnCategoriesChanged (v11.4.0, #285) is called after any category write
 	// (create, rename/colour, icon, delete): the App rebroadcasts the questions
 	// (clients reload /api/categories on QUESTIONS_UPDATE) and notifies the ambiance.
-	OnCategoriesChanged       func()
+	OnCategoriesChanged       func(change CategoryChange)
 	OnBackgroundChange        func(path string)   // Called after background upload/delete
 	OnNewGameBackgroundChange func(action string) // Called after NEW_GAME background upload/delete (v4.0.4)
 	OnShutdown                func()              // Called before server shutdown for cleanup

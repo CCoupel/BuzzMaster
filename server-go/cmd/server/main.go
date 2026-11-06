@@ -780,7 +780,8 @@ func (a *App) setupCallbacks() {
 	// #285 (contract http-endpoints.md §Catégories): any category write
 	// (create / rename / colour / icon / delete) — clients reload /api/categories
 	// on QUESTIONS_UPDATE, and the ambiance re-reads the theme colour.
-	a.httpServer.OnCategoriesChanged = func() {
+	a.httpServer.OnCategoriesChanged = func(change server.CategoryChange) {
+		a.broadcastCategoriesChanged(change)
 		a.broadcastQuestions()
 		a.ambiance().NotifyState()
 	}
@@ -6852,6 +6853,18 @@ func (a *App) broadcastWifiConfig() {
 		a.broadcastUpdate()
 	}
 	server.LogInfo(game.LogComponentApp, "Sent WIFI_CONFIG to %d connected buzzer(s)", sent)
+}
+
+// broadcastCategoriesChanged pushes CATEGORIES_CHANGED (full resolved list + change + TS)
+// to admin, tv, vplayer and anim — never to buzzers (#285, websocket-actions.md).
+func (a *App) broadcastCategoriesChanged(change server.CategoryChange) {
+	data, err := a.httpServer.CategoriesChangedPayload(change)
+	if err != nil {
+		log.Printf("[WARN] CATEGORIES_CHANGED not broadcast: %v", err)
+		return
+	}
+	a.broadcast(protocol.ActionCategoriesChanged, data, false,
+		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 }
 
 func (a *App) broadcastQuestions() {

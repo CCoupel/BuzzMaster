@@ -8,6 +8,9 @@ import (
 )
 
 // Actions constants - matching ESP32 protocol
+// ActionCategoriesChanged (Server→Client: admin, tv, vplayer, anim) — category write (#285).
+const ActionCategoriesChanged = "CATEGORIES_CHANGED"
+
 const (
 	ActionHello            = "HELLO"
 	ActionButton           = "BUTTON"

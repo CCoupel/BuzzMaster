@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"buzzcontrol/internal/game"
@@ -237,10 +238,41 @@ var categoryWriteMu sync.Mutex
 // reservedWindowsNames are device names that cannot be used as file stems on Windows.
 var reservedWindowsNames = regexp.MustCompile(`(?i)^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$`)
 
-func (h *HTTPServer) categoriesChanged() {
+// CategoryChange describes the write that triggered OnCategoriesChanged
+// (contract websocket-actions.md §CATEGORIES_CHANGED).
+type CategoryChange struct {
+	Type string
+	Key  string
+}
+
+const (
+	CategoryChangeCreated = "created"
+	CategoryChangeRenamed = "renamed"
+	CategoryChangeColored = "colored"
+	CategoryChangeIcon    = "icon"
+	CategoryChangeDeleted = "deleted"
+)
+
+func (h *HTTPServer) categoriesChanged(change CategoryChange) {
 	if h.OnCategoriesChanged != nil {
-		h.OnCategoriesChanged()
+		h.OnCategoriesChanged(change)
 	}
+}
+
+// CategoriesChangedPayload builds the CATEGORIES_CHANGED message body:
+// the full resolved list (same as GET /api/categories), the change and a server
+// timestamp (ms) used by clients as icon cache-buster.
+func (h *HTTPServer) CategoriesChangedPayload(change CategoryChange) (json.RawMessage, error) {
+	list := h.listCategories()
+	q, rf := h.categoryCounts()
+	for i := range list {
+		list[i].QuestionCount, list[i].RafaleCount = q[list[i].Key], rf[list[i].Key]
+	}
+	return json.Marshal(map[string]interface{}{
+		"CATEGORIES": list,
+		"CHANGE":     map[string]string{"TYPE": change.Type, "KEY": change.Key},
+		"TS":         time.Now().UnixMilli(),
+	})
 }
 
 // ---- routing -------------------------------------------------------------
@@ -486,7 +518,7 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	LogInfo(game.LogComponentHTTP, "Categories POST: created category key=%s name=%q", key, name)
-	h.categoriesChanged()
+	h.categoriesChanged(CategoryChange{Type: CategoryChangeCreated, Key: key})
 	info, _ := h.findCategory(key)
 	writeCategoryJSON(w, http.StatusOK, h.withCounts(info))
 }
@@ -543,7 +575,11 @@ func (h *HTTPServer) handlePutCategory(w http.ResponseWriter, r *http.Request, k
 		writeCategoryError(w, http.StatusInternalServerError, "failed to write category")
 		return
 	}
-	h.categoriesChanged()
+	changeType := CategoryChangeColored
+	if hasName {
+		changeType = CategoryChangeRenamed
+	}
+	h.categoriesChanged(CategoryChange{Type: changeType, Key: key})
 	info, _ := h.findCategory(key)
 	writeCategoryJSON(w, http.StatusOK, h.withCounts(info))
 }
@@ -569,7 +605,7 @@ func (h *HTTPServer) handleCategoryIcon(w http.ResponseWriter, r *http.Request, 
 		writeCategoryError(w, http.StatusInternalServerError, "failed to save image")
 		return
 	}
-	h.categoriesChanged()
+	h.categoriesChanged(CategoryChange{Type: CategoryChangeIcon, Key: key})
 	info, _ = h.findCategory(key)
 	writeCategoryJSON(w, http.StatusOK, h.withCounts(info))
 }
@@ -775,7 +811,7 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 	if changedQuestions && h.OnQuestionUpload != nil {
 		h.OnQuestionUpload()
 	}
-	h.categoriesChanged()
+	h.categoriesChanged(CategoryChange{Type: CategoryChangeDeleted, Key: key})
 	writeCategoryJSON(w, http.StatusOK, res)
 }
 

@@ -107,5 +107,5 @@ func TestAmbianceCategoryColor285_OnCategoriesChanged_IsWiredAndSafe(t *testing.
 	if app.httpServer.OnCategoriesChanged == nil {
 		t.Fatal("HTTPServer.OnCategoriesChanged doit être câblé par setupCallbacks (broadcastQuestions + NotifyState)")
 	}
-	app.httpServer.OnCategoriesChanged() // ne doit pas paniquer, même sans pilote d'éclairage ni client connecté
+	app.httpServer.OnCategoriesChanged(server.CategoryChange{}) // ne doit pas paniquer, même sans pilote d'éclairage ni client connecté
 }
