@@ -706,7 +706,6 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 	}
 
 	// Q. questions and MEMOTION cards.
-	changedQuestions := false
 	if mode != "" || qc[key] > 0 {
 		var deletedIDs []string
 		QuestionFilesMu.Lock()
@@ -729,7 +728,6 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 				}
 				deletedIDs = append(deletedIDs, id)
 				qcounts.Deleted++
-				changedQuestions = true
 				continue
 			}
 			modified := false
@@ -778,7 +776,6 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 					fail("questions", merr)
 					return
 				}
-				changedQuestions = true
 			}
 		}
 		QuestionFilesMu.Unlock()
@@ -808,9 +805,7 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 
 	// N. notification.
 	LogInfo(game.LogComponentHTTP, "Categories DELETE: %s mode=%q questions=%+v rafale=%d/%d history=%d events", key, mode, qcounts, rafaleReassigned, rafaleDeleted, events)
-	if changedQuestions && h.OnQuestionUpload != nil {
-		h.OnQuestionUpload()
-	}
+	// QUESTIONS is rebroadcast by OnCategoriesChanged (after CATEGORIES_CHANGED): no separate OnQuestionUpload here.
 	h.categoriesChanged(CategoryChange{Type: CategoryChangeDeleted, Key: key})
 	writeCategoryJSON(w, http.StatusOK, res)
 }
