@@ -2,7 +2,7 @@
   "name": "buzzcontrol-web",
   "private": true,
   "license": "GPL-3.0-or-later",
-  "version": "11.2.3",
+  "version": "11.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
