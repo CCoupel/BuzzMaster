@@ -647,6 +647,51 @@ Quand un buzzer se connecte ou se deconnecte, le serveur broadcast un message `C
 
 ---
 
+## Catégories — `CATEGORIES_CHANGED` (v11.4.0, #285)
+
+Source de vérité : `contracts/websocket-actions.md` §CATEGORIES_CHANGED ; `contracts/http-endpoints.md` §Catégories.
+
+Diffusé après chaque écriture de catégorie réussie (`POST /api/categories`, `PUT /api/categories/{key}`,
+`POST /api/categories/{key}/icon`, `DELETE /api/categories/{key}`), après la persistance et avant la réponse HTTP.
+
+| Propriété | Valeur |
+|-----------|--------|
+| Direction | Server → Client |
+| Destinataires | `admin`, `tv`, `vplayer`, `anim` — jamais `buzzer` |
+| Rejeu au `HELLO` | Non |
+
+```json
+{
+  "ACTION": "CATEGORIES_CHANGED",
+  "MSG": {
+    "CATEGORIES": [{ "key": "GEO", "name": "Géographie", "imageURL": "", "isCustom": true, "color": "#3b82f6", "questionCount": 12, "rafaleCount": 0 }],
+    "CHANGE": { "TYPE": "renamed", "KEY": "GEO" },
+    "TS": 1762400000
+  }
+}
+```
+
+- `CATEGORIES` : liste résolue, identique à `GET /api/categories` (champs `key`, `name`, `imageURL`, `isCustom`, `color`, `questionCount`, `rafaleCount`). Le client l'applique directement, sans refetch. Les valeurs de l'exemple sont illustratives.
+- `CHANGE.TYPE` ∈ `created`, `renamed`, `colored`, `icon`, `deleted`. `CHANGE.KEY` : clé de la catégorie touchée. Pour `icon` et `created`, le client recharge l'icône (`?v=<TS>`).
+- `TS` : horodatage de l'écriture, utilisé comme version de cache des icônes.
+- Une diffusion en échec ne change pas la réponse HTTP (log `WARN`).
+
+Côté client : `useWebSocket` stocke le message ; `useCategories` applique `CATEGORIES` ; l'ancien évènement `window` `buzz:questions-update` n'est plus utilisé pour les catégories.
+
+## RAFALE alphabétique — `RAFALE_CURRENT_LETTER`, `RAFALE_LETTERS`, `NEXT.LETTER` (v11.4.0, #282)
+
+Source de vérité : `contracts/rafale.md` §15.
+
+- **`GameState.RAFALE_CURRENT_LETTER`** (string, jamais `omitempty`) : `""` hors option ou hors manche, sinon `"A"`–`"Z"` ou `"#"`.
+- **`GameState.RAFALE_LETTERS`** (`[]string`, jamais `nil`) : lettres A–Z ayant encore au moins une réponse non jouée (la question pré-tirée comprise). `[]` hors option.
+- Diffusés à tous les clients web (admin, anim, TV, VPlayer). Jamais envoyés aux buzzers.
+- **Fuite** : la lettre est publique par conception ; `ANSWER` et `NEXT.QUESTION` restent interdits à TV et VPlayer. Une réponse n'apparaît dans une charge TV que par sa lettre.
+- **`RAFALE_ANSWER.NEXT.LETTER`** (string, jamais `omitempty`) : lettre normalisée de la question pré-tirée, `""` hors option. Même canal que `NEXT` : admin et anim seulement.
+
+Exemple de valeurs dans `GameState` (`RAFALE_CURRENT_LETTER` = `"S"`, `RAFALE_LETTERS` = `["A", "E", "S", "T"]`) : ce sont des champs de `GameState`, transportés par la diffusion d'état habituelle.
+
+---
+
 ## Architecture serveur
 
 ### Hubs separes

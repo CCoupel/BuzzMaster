@@ -939,6 +939,51 @@ Système d'effet néon rotatif autour de l'écran TV et VPlayer avec couleur de 
 | `glow_pulse_min` | int | 0-100 | 30 | Opacité minimale du glow pulsant (%) |
 | `glow_pulse_max` | int | 0-100 | 50 | Opacité maximale du glow pulsant (%) |
 
+## Modèles v11.4.0 — RAFALE alphabétique, son de décompte, catégories
+
+Sources : `contracts/rafale.md` §15, `contracts/sound.md` §11–§13, `contracts/models.md` §SOUND, `contracts/CHANGELOG.md` (entrées 20261105 et 20261106).
+
+### Question RAFALE — option alphabétique (#282)
+
+| Champ | Type | Défaut | Description |
+|-------|------|--------|-------------|
+| `RAFALE_ALPHABETICAL` | bool, `omitempty` | `false` | Tirage par passes A→Z (une réponse par lettre et par passe). `false` = tirage stratifié inchangé |
+| `RAFALE_WHEEL_LAYOUT` | string, `omitempty` | `"strip"` | Présentation TV de la roue des lettres : `strip` (bandeau) ou `arc`. Valeur vide lue comme `strip` |
+
+Ces deux champs sont réglés **par manche** et ignorés par la carte MEMOTION RAFALE (§14). Multipart `POST /questions` : `rafale_alphabetical`, `rafale_wheel_layout`.
+
+### GameState — lettres RAFALE (#282)
+
+| Champ | Type | Sérialisation | Description |
+|-------|------|---------------|-------------|
+| `RAFALE_CURRENT_LETTER` | string | toujours | `""` hors option ; `"A"`–`"Z"` ou `"#"` |
+| `RAFALE_LETTERS` | []string | toujours, jamais `nil` | Lettres A–Z ayant encore une réponse non jouée (pré-tirage compris) |
+
+Non persistés. Réinitialisés à `stopUnsafe`, `Ready` et `InitGame`. Visibles de tous les clients web, jamais des buzzers.
+
+### Question — son de décompte et boucle (#287, #288)
+
+- `SOUND_LOOP` (bool, `omitempty`) : lecture en boucle du média de question. Combinable avec `SOUND_TIMER_DELAYED` (le chrono démarre à la fin du premier passage).
+- Le son de décompte n'est pas un champ de question : c'est un fichier global (`decompte.wav`, défaut synthétisé de 2 s) joué pendant le compte à rebours. Il n'est jamais joué pour une question qui a un média (`SOUND`).
+
+### config.json — nouveaux réglages (v11.4.0)
+
+| Clé | Section | Défaut | Description |
+|-----|---------|--------|-------------|
+| `muted` | `sound` | `false` | Son coupé, persisté (#286). Coupe aussi le média de question et le décompte |
+| `countdown_disabled` | `sound` | `false` | Décompte silencieux (#287) |
+| `countdown_once` | `sound` | `false` | Décompte joué une fois au lieu d'en boucle (#287) |
+| `enabled` | `lighting` | — | Interrupteur général de l'éclairage d'ambiance, distinct de `sound.muted` (#286) |
+
+Valeur zéro = comportement v11.4.0 LOT-2 : `config.json` existants restent valides.
+
+### Catégories — nom, couleur, icône, historique (#285)
+
+- **Sidecar `<KEY>.json`** `{ "name"?: string, "color"?: string }` : surcharge du nom et de la couleur d'une catégorie, intégrées comprises. La clé ne change jamais.
+- **Icône** : fichier image des catégories personnalisées, limité à 2 Mio et contrôlé par type de contenu.
+- **Historique** : lors d'une suppression, `QUESTION_CATEGORY` passe à `""` et `CATEGORY_BREAKDOWN` est fusionné dans « Sans catégorie ». Une copie `history.json.bak-<horodatage>` est écrite avant (5 conservées).
+- `GET /api/categories` renvoie désormais `name` et `color` résolus, `questionCount` et `rafaleCount`.
+
 ## Game Flow
 
 > **Documentation complète**: Voir [GAME_STATE_MACHINE.md](GAME_STATE_MACHINE.md) pour la spécification détaillée.

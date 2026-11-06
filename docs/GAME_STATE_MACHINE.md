@@ -202,6 +202,10 @@ Contrats : `contracts/game-state.md` §`TEAMS_LOCKED`, `contracts/websocket-acti
 
 RAFALE n'ajoute **aucune phase** à la machine à états principale (STOPPED/PREPARE/READY/COUNTDOWN/STARTED/PAUSED/REVEALED). C'est un **nouveau `QuestionType`** qui suit le patron MEMOTION : il porte une configuration de manche et génère des **sous-phases** internes.
 
+**Option alphabétique (v11.4.0, #282)** : sans nouvelle phase. Le tirage suit des passes A→Z (une réponse par lettre et par passe), construites au début de la manche et consommées par le tirage ; le pré-tirage de la question suivante (§13.4) utilise le même tirage. `RAFALE_CURRENT_LETTER` et `RAFALE_LETTERS` sont posés à chaque question et réinitialisés comme les autres champs RAFALE (`contracts/rafale.md` §15.4–§15.5).
+
+**Décompte sonore (v11.4.0, #287)** : le son de décompte n'est pas une phase. Il démarre avec le chrono de réponse (rappel `OnAnswerTimerStarted`), suit PAUSE/CONTINUE (pause et reprise) et s'arrête à l'expiration, au STOP, au REVEAL, à NEW_GAME et quand le son est coupé (`contracts/sound.md` §12). En RAFALE, il est déclenché par manche, jamais par question.
+
 ### Sous-phases RAFALE
 
 Au lieu d'une seule question avec une seule réponse, RAFALE enchaîne les questions automatiquement jusqu'à expiration du timer. Deux sous-phases gouvernent ce comportement :
