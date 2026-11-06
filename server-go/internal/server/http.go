@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,7 +25,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 )
 
 // HTTPServer handles HTTP requests
@@ -63,8 +61,12 @@ type HTTPServer struct {
 	questionIDMu sync.Mutex
 
 	// Callbacks
-	OnAction                  func(action string, data json.RawMessage)
-	OnQuestionUpload          func()              // Called after question upload to broadcast update
+	OnAction         func(action string, data json.RawMessage)
+	OnQuestionUpload func() // Called after question upload to broadcast update
+	// OnCategoriesChanged (v11.4.0, #285) is called after any category write
+	// (create, rename/colour, icon, delete): the App rebroadcasts the questions
+	// (clients reload /api/categories on QUESTIONS_UPDATE) and notifies the ambiance.
+	OnCategoriesChanged       func()
 	OnBackgroundChange        func(path string)   // Called after background upload/delete
 	OnNewGameBackgroundChange func(action string) // Called after NEW_GAME background upload/delete (v4.0.4)
 	OnShutdown                func()              // Called before server shutdown for cleanup
@@ -453,6 +455,7 @@ func (h *HTTPServer) setupRoutes() {
 
 	// Categories API (v5.6.2 — #95)
 	h.mux.HandleFunc("/api/categories", h.handleAPICategories)
+	h.mux.HandleFunc("/api/categories/", h.handleAPICategoryByKey) // v11.4.0, #285: PUT/DELETE {key}, POST {key}/icon
 
 	// RAFALE reservoir API (v8.0.0 — #197, contracts/rafale.md §9)
 	h.mux.HandleFunc("/api/rafale/questions", h.handleRafaleQuestions)
@@ -2566,7 +2569,11 @@ type CategoryInfo struct {
 	Name     string `json:"name"`
 	ImageURL string `json:"imageURL"`
 	IsCustom bool   `json:"isCustom"`
-	Color    string `json:"color"` // accent color for PALMARES headers; "" for custom categories
+	Color    string `json:"color"` // #rrggbb, or "" = none (v11.4.0: custom categories can have one)
+	// QuestionCount / RafaleCount (v11.4.0, #285) — questions + MEMOTION cards and
+	// reservoir answers of this category, computed at each GET.
+	QuestionCount int `json:"questionCount"`
+	RafaleCount   int `json:"rafaleCount"`
 }
 
 // hardcodedCategories lists built-in categories in display order (v5.6.2 — #95)
@@ -2606,245 +2613,11 @@ type PlayerScore struct {
 	Points int    `json:"points"`
 }
 
-// ResolveCategoryMeta returns the display name, image URL and accent color for a category key.
-// It first checks hardcoded categories, then scans custom image files on disk.
-// Used at GameEvent recording time to embed resolved metadata in history (v5.7.9).
-func (h *HTTPServer) ResolveCategoryMeta(key string) (name, imageURL, color string) {
-	// Check hardcoded categories
-	for _, c := range hardcodedCategories {
-		if c.Key == key {
-			return c.Name, c.ImageURL, c.Color
-		}
-	}
-	if key == "" {
-		return
-	}
-	// Check custom categories on disk
-	catDir := filepath.Join(h.dataDir, "files", "categories")
-	entries, _ := os.ReadDir(catDir)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
-			continue
-		}
-		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		if toUpperSnakeCase(stem) == key {
-			imageURL = "/files/categories/" + url.PathEscape(entry.Name())
-			// Prefer sidecar JSON name, fall back to stem
-			metaPath := filepath.Join(catDir, key+".json")
-			if data, err := os.ReadFile(metaPath); err == nil {
-				var meta struct {
-					Name string `json:"name"`
-				}
-				if json.Unmarshal(data, &meta) == nil && meta.Name != "" {
-					name = meta.Name
-				} else {
-					name = stem
-				}
-			} else {
-				name = stem
-			}
-			return
-		}
-	}
-	return
-}
-
 // toUpperSnakeCase converts a filename stem to UPPER_SNAKE_CASE (spaces/hyphens → underscore, upper-case).
 func toUpperSnakeCase(s string) string {
 	s = strings.ReplaceAll(s, "-", "_")
 	s = strings.ReplaceAll(s, " ", "_")
 	return strings.ToUpper(s)
-}
-
-// handleAPICategories returns the merged list of hardcoded + custom categories (v5.6.2 — #95)
-// GET: returns hardcoded + custom image categories
-// POST: creates a new category with name + image (multipart/form-data) (v5.7.2 — #100)
-func (h *HTTPServer) handleAPICategories(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		h.handleGetCategories(w, r)
-	case http.MethodPost:
-		h.handlePostCategory(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-// handleGetCategories returns the merged list of hardcoded + custom image categories
-func (h *HTTPServer) handleGetCategories(w http.ResponseWriter, r *http.Request) {
-	// Build a set of hardcoded keys for dedup
-	hardcodedKeys := make(map[string]struct{}, len(hardcodedCategories))
-	for _, c := range hardcodedCategories {
-		hardcodedKeys[c.Key] = struct{}{}
-	}
-
-	catDir := filepath.Join(h.dataDir, "files", "categories")
-	entries, _ := os.ReadDir(catDir)
-
-	// Track custom keys to deduplicate within image files
-	customKeys := make(map[string]struct{})
-	var custom []CategoryInfo
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		ext := strings.ToLower(filepath.Ext(entry.Name()))
-		if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".webp" {
-			continue
-		}
-		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		key := toUpperSnakeCase(stem)
-		if _, exists := hardcodedKeys[key]; exists {
-			log.Printf("[HTTP] Categories: custom file %q conflicts with hardcoded key %s — skipped", entry.Name(), key)
-			continue
-		}
-		if _, exists := customKeys[key]; exists {
-			continue // deduplicate same key with different extension
-		}
-		customKeys[key] = struct{}{}
-
-		// Resolve display name: prefer sidecar <KEY>.json, fall back to stem
-		displayName := stem
-		metaPath := filepath.Join(catDir, key+".json")
-		if data, err := os.ReadFile(metaPath); err == nil {
-			var meta struct {
-				Name string `json:"name"`
-			}
-			if json.Unmarshal(data, &meta) == nil && meta.Name != "" {
-				displayName = meta.Name
-			}
-		}
-
-		custom = append(custom, CategoryInfo{
-			Key:      key,
-			Name:     displayName,
-			ImageURL: "/files/categories/" + url.PathEscape(entry.Name()),
-			IsCustom: true,
-		})
-	}
-
-	result := make([]CategoryInfo, 0, len(hardcodedCategories)+len(custom))
-	result = append(result, hardcodedCategories...)
-	result = append(result, custom...)
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
-}
-
-// handlePostCategory creates a new custom category with name + image upload (v5.7.2 — #100)
-// Expects multipart/form-data with fields: name (string) + file (image: png/jpg/jpeg/webp)
-func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) {
-	// Enforce 10 MB hard limit on the request body before parsing
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
-	// Parse multipart form (max 10 MB)
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, `{"error":"invalid multipart form"}`, http.StatusBadRequest)
-		return
-	}
-
-	name := r.FormValue("name")
-	if name == "" {
-		http.Error(w, `{"error":"name is required"}`, http.StatusBadRequest)
-		return
-	}
-	if len(name) > 50 {
-		http.Error(w, `{"error":"name is too long (max 50 chars)"}`, http.StatusBadRequest)
-		return
-	}
-	// Security: reject any character that is not alphanumeric, space, hyphen or underscore
-	// to prevent path traversal and filesystem injection.
-	for _, ch := range name {
-		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != ' ' && ch != '-' && ch != '_' {
-			http.Error(w, `{"error":"name contains invalid characters"}`, http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Read uploaded image file
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		http.Error(w, `{"error":"file is required"}`, http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	// Validate image extension
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	allowedExt := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true}
-	if !allowedExt[ext] {
-		http.Error(w, `{"error":"invalid file type, allowed: png, jpg, jpeg, webp"}`, http.StatusBadRequest)
-		return
-	}
-
-	key := toUpperSnakeCase(name)
-
-	// Check conflict with hardcoded categories
-	for _, c := range hardcodedCategories {
-		if c.Key == key {
-			http.Error(w, `{"error":"key already exists"}`, http.StatusConflict)
-			return
-		}
-	}
-
-	catDir := filepath.Join(h.dataDir, "files", "categories")
-	if err := os.MkdirAll(catDir, 0755); err != nil {
-		http.Error(w, `{"error":"failed to create category directory"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Check conflict with existing custom categories (any image extension)
-	entries, _ := os.ReadDir(catDir)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		if toUpperSnakeCase(stem) == key {
-			http.Error(w, `{"error":"key already exists"}`, http.StatusConflict)
-			return
-		}
-	}
-
-	// Save image file
-	filePath := filepath.Join(catDir, key+ext)
-	outFile, err := os.Create(filePath)
-	if err != nil {
-		log.Printf("[HTTP] Categories POST: failed to create %s: %v", filePath, err)
-		http.Error(w, `{"error":"failed to save image"}`, http.StatusInternalServerError)
-		return
-	}
-	defer outFile.Close()
-	if _, err := io.Copy(outFile, file); err != nil {
-		log.Printf("[HTTP] Categories POST: failed to write image %s: %v", filePath, err)
-		http.Error(w, `{"error":"failed to save image"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// Save sidecar JSON to persist the original display name (v5.7.7)
-	metaPath := filepath.Join(catDir, key+".json")
-	if metaFile, err := os.Create(metaPath); err == nil {
-		_ = json.NewEncoder(metaFile).Encode(struct {
-			Name string `json:"name"`
-		}{Name: name})
-		metaFile.Close()
-	} else {
-		log.Printf("[HTTP] Categories POST: warning — could not save sidecar metadata %s: %v", metaPath, err)
-	}
-
-	imageURL := "/files/categories/" + url.PathEscape(key+ext)
-	log.Printf("[HTTP] Categories POST: created category key=%s name=%q file=%s", key, name, key+ext)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(CategoryInfo{
-		Key:      key,
-		Name:     name,
-		ImageURL: imageURL,
-		IsCustom: true,
-	})
 }
 
 // ---- RAFALE reservoir API (v8.0.0 — #197, contracts/rafale.md §9) --------

@@ -777,6 +777,14 @@ func (a *App) setupCallbacks() {
 		a.broadcastQuestions()
 	}
 
+	// #285 (contract http-endpoints.md §Catégories): any category write
+	// (create / rename / colour / icon / delete) — clients reload /api/categories
+	// on QUESTIONS_UPDATE, and the ambiance re-reads the theme colour.
+	a.httpServer.OnCategoriesChanged = func() {
+		a.broadcastQuestions()
+		a.ambiance().NotifyState()
+	}
+
 	// Background change handler
 	a.httpServer.OnBackgroundChange = func(action string) {
 		if action == "save" {
