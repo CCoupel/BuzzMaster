@@ -176,9 +176,30 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Comparer le sélecteur (« ⚙ Gérer… » à côté de « + Créer ») et la création à la maquette §01 | Conforme | | |
+| 1 | Comparer le sélecteur de catégorie de l'éditeur (ni « Gérer » ni « Ajouter ») et le filtre de la zone d'équilibre des équipes (« ⚙ Gérer… ») à la maquette §01 | Conforme à la décision du retour QUALIF 11.4.0.5 | | |
 | 2 | Comparer le dialogue (colonnes, palette 12 teintes + « aucune », aperçu 💡, 🔒 sur les intégrées) et la confirmation de suppression à la maquette §02 | Conforme ; textes lisibles, rien ne déborde | | |
 | 3 | Tablette (1024 px) et poste (1280 px) | Dialogue entièrement visible | | |
+
+**Verdict** : [ ] PASS  [ ] FAIL
+
+---
+
+### Scénario 12 — Créer une catégorie depuis le dialogue « Gérer les catégories »
+
+**Validation** : HUMAIN — **Issues** : #285
+
+**Objectif** : la création (nom, couleur, image) n'existe plus dans l'éditeur de questions ; elle se fait uniquement dans le dialogue ouvert par « ⚙ Gérer… » de la zone d'équilibre des équipes (retour QUALIF 11.4.0.5, décision utilisateur).
+
+| Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
+|-------|--------|-----------------|----------------|------|
+| 1 | Ouvrir l'éditeur d'une nouvelle question, regarder le sélecteur de catégorie | Les catégories sont choisissables ; **aucun** bouton « Gérer » ni « Ajouter / + Créer » | | |
+| 2 | Zone d'équilibre des équipes : cliquer « ⚙ Gérer… » | Le dialogue s'ouvre ; un formulaire « Nouvelle catégorie » est visible (nom, pastille de couleur, image, bouton) | | |
+| 3 | Valider avec le nom vide, puis avec un nom mais sans image | Message sur le nom, puis sur l'image ; rien n'est créé | | |
+| 4 | Saisir « Musique », choisir une teinte dans la palette (la teinte proposée par défaut est la première libre), choisir une image PNG, valider | La catégorie apparaît **sans recharger** dans le dialogue, l'éditeur, les filtres, la TV et l'anim, avec sa couleur et son icône ; le formulaire est vidé | | |
+| 5 | Recréer « Musique » | Message « existe déjà » ; rien de dupliqué | | |
+| 6 | Créer une catégorie nommée « CON » (ou « Lpt1 ») | Message « nom réservé » ; rien n'est créé | | |
+| 7 | Créer « Cinéma » avec accent, puis l'utiliser dans une question | Acceptée ; clé `CINÉMA` ; la question affiche le badge | | |
+| 8 | Démarrer une question (partie en cours) puis tenter une création | Bouton de création désactivé ou message « Impossible pendant une partie » ; rien n'est créé | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
