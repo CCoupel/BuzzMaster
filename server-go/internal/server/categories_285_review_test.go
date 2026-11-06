@@ -21,7 +21,8 @@ func TestCategories285Review_Delete409WhenOnlyHistoryReferencesCategory(t *testi
 	s.engine.SaveHistory()
 
 	rec := dev285Do(s, "DELETE", "/api/categories/CINEMA", nil, "")
-	if rec.Code != 409 || !strings.Contains(rec.Body.String(), "category in use") || !strings.Contains(rec.Body.String(), `"events":1`) {
+	if rec.Code != 409 || !strings.Contains(rec.Body.String(), "category in use") || !strings.Contains(rec.Body.String(), `"events":1`) ||
+		!strings.Contains(rec.Body.String(), `"questions":0`) || !strings.Contains(rec.Body.String(), `"rafale":0`) || !strings.Contains(rec.Body.String(), `"points":10`) {
 		t.Fatalf("DELETE sans mode, historique seul : %d %s", rec.Code, rec.Body.String())
 	}
 	if h := s.engine.GetHistory(); len(h) != 1 || h[0].QuestionCategory != "CINEMA" {
@@ -42,11 +43,12 @@ func TestCategories285Review_ReservedWindowsNamesRejected(t *testing.T) {
 	s, _ := dev285Server(t)
 	for _, name := range []string{"CON", "prn", "Aux", "NUL", "COM1", "com9", "Lpt1", "LPT9"} {
 		body, ct := dev285Multipart(t, map[string]string{"name": name}, "i.png", dev285PNG)
-		if rec := dev285Do(s, "POST", "/api/categories", body, ct); rec.Code != 400 {
+		if rec := dev285Do(s, "POST", "/api/categories", body, ct); rec.Code != 400 || !strings.Contains(rec.Body.String(), `"error":"reserved name"`) {
 			t.Errorf("%q : %d %s, attendu 400", name, rec.Code, rec.Body.String())
 		}
 	}
 	dev285Create(t, s, "Console", "") // préfixe seulement : accepté
+	dev285Create(t, s, "Cinéma", "")  // clé Unicode CINÉMA : acceptée
 }
 
 func TestCategories285Review_HistoryBackupNeverOverwritten(t *testing.T) {

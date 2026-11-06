@@ -485,7 +485,7 @@ func (h *HTTPServer) handlePostCategory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if reservedWindowsNames.MatchString(key) {
-		writeCategoryError(w, http.StatusBadRequest, "reserved category name")
+		writeCategoryError(w, http.StatusBadRequest, "reserved name")
 		return
 	}
 	if _, exists := h.findCategory(key); exists {
