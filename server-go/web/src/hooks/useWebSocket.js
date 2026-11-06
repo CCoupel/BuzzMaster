@@ -190,6 +190,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
   const [teams, setTeams] = useState({})
   const [bumpers, setBumpers] = useState({})
   const [questions, setQuestions] = useState({})
+  // #285 : dernier CATEGORIES_CHANGED { categories, change, ts } (consommé par useCategories)
+  const [categoriesPush, setCategoriesPush] = useState(null)
   const [fsInfo, setFsInfo] = useState(null)
   const [version, setVersion] = useState(null)
   const [clientCounts, setClientCounts] = useState({ admin: 0, tv: 0, vplayer: 0, buzzerWs: 0, anim: 0 })
@@ -646,6 +648,13 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         if (MSG?.bumpers !== undefined) setBumpers(MSG.bumpers ?? {})
         break
 
+      case 'CATEGORIES_CHANGED':
+        // #285 (contrat websocket-actions.md §CATEGORIES_CHANGED) : liste complète résolue + nature du changement.
+        if (Array.isArray(MSG?.CATEGORIES)) {
+          setCategoriesPush({ categories: MSG.CATEGORIES, change: MSG.CHANGE ?? null, ts: MSG.TS ?? Date.now() })
+        }
+        break
+
       case 'QUESTIONS':
         console.log('[WS] QUESTIONS handler - MSG:', MSG, 'FSINFO:', FSINFO)
         if (MSG) {
@@ -658,8 +667,6 @@ export default function useWebSocket(endpoint = '/ws/admin') {
           console.log('[WS] Parsed questions:', questionsMap)
           setQuestions(questionsMap)
         }
-        // #285 : useCategories se recharge (renommage/couleur/suppression d'une catégorie).
-        window.dispatchEvent(new Event('buzz:questions-update'))
         if (FSINFO) setFsInfo(FSINFO)
         if (VERSION) setVersion(VERSION)
         break
@@ -1554,6 +1561,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     teams,
     bumpers,
     questions,
+    categoriesPush,
     fsInfo,
     version,
     clientCounts,

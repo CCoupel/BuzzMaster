@@ -13,10 +13,10 @@ export const CATEGORIES = {
 export const NO_CATEGORY_COLOR = '#6b7280'
 
 // Contournement du cache navigateur après remplacement d'une icône (#285) :
-// `?v=<timestamp>` ajouté à l'imageURL de la clé concernée.
+// `?v=<TS>` (TS serveur de CATEGORIES_CHANGED) ajouté à l'imageURL de la clé concernée.
 const iconBust = {}
-export function bustCategoryIcon(key) {
-  iconBust[key] = Date.now()
+export function bustCategoryIcon(key, ts = Date.now()) {
+  iconBust[key] = ts
 }
 
 /**

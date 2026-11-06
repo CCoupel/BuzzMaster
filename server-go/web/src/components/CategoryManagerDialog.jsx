@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CATEGORIES, bustCategoryIcon } from '../utils/categoryUtils'
+import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
 import CategoryColorSwatch from './CategoryColorSwatch'
 import './CategoryManagerDialog.css'
 
@@ -20,13 +20,13 @@ const ACCEPT = '.png,.jpg,.jpeg,.webp'
  * lecture seule (contrat http-endpoints.md §Catégories).
  *
  * @param {Object} props
- * @param {Array}  props.categories - GET /api/categories (liste brute, valeur initiale)
+ * @param {Array}  props.categories - liste /api/categories tenue à jour par CATEGORIES_CHANGED (useCategories)
  * @param {() => void} props.onClose
- * @param {() => Promise<void>|void} [props.onChanged] - rappelé après chaque écriture réussie (refetch parent)
+ * @param {() => Promise<void>|void} [props.onChanged] - refetch du parent, rappelé en REPLI seulement (erreur/échec partiel) :
+ *   une écriture réussie est répercutée par CATEGORIES_CHANGED, sans rechargement
  * @param {(key: string) => void} [props.onDeleted] - rappelé quand une catégorie est supprimée
  */
 export default function CategoryManagerDialog({ categories = [], onClose, onChanged, onDeleted }) {
-  const [fetched, setFetched] = useState(null)
   const [message, setMessage] = useState('')
   const [messageKind, setMessageKind] = useState('ok') // 'ok' | 'err'
   const [locked, setLocked] = useState(false)
@@ -34,7 +34,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
   const [renaming, setRenaming] = useState(null) // { key, value }
   const [confirm, setConfirm] = useState(null) // { key, name, questions, rafale, history, mode, ack }
 
-  const source = fetched ?? categories
+  const source = categories
 
   // Intégrées dans l'ordre de la table (même si l'API est indisponible), puis personnalisées.
   const rows = useMemo(() => {
@@ -58,20 +58,15 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       color: c.color || '',
       isCustom: true,
       emoji: '',
-      imageURL: c.imageURL,
+      imageURL: categoryMeta(c.key, source)?.imageURL ?? c.imageURL, // ?v=<TS> après remplacement d'icône
       questionCount: c.questionCount ?? 0,
       rafaleCount: c.rafaleCount ?? 0,
     }))
     return [...builtins, ...customs]
   }, [source])
 
-  const reload = useCallback(async () => {
-    try {
-      const res = await fetch('/api/categories')
-      if (res.ok) setFetched((await res.json()) ?? [])
-    } catch { /* la liste du parent reste affichée */ }
-    await onChanged?.()
-  }, [onChanged])
+  // Repli : resynchronise la liste via le parent (GET) quand l'état serveur est incertain (500, échec partiel).
+  const resync = useCallback(async () => { await onChanged?.() }, [onChanged])
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape' && !renaming && !confirm) onClose?.() }
@@ -122,7 +117,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    if (r.ok) { say(okText); await reload() }
+    if (r.ok) say(okText)
     return r.ok
   }
 
@@ -143,9 +138,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
     fd.append('file', file)
     const r = await request(`/api/categories/${row.key}/icon`, { method: 'POST', body: fd })
     if (r.ok) {
-      bustCategoryIcon(row.key)
       say(`Icône de « ${row.name} » mise à jour.`)
-      await reload()
     }
   }
 
@@ -154,7 +147,6 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
     if (r.ok) {
       say(`Catégorie « ${row.name} » supprimée.`)
       onDeleted?.(row.key)
-      await reload()
     } else if (r.conflict?.error === 'category in use') {
       setConfirm({
         key: row.key,
@@ -184,14 +176,13 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       const backup = r.data?.history?.backup
       say(`Catégorie « ${c.name} » supprimée${backup ? ` — historique sauvegardé (${backup})` : ''}.`)
       onDeleted?.(c.key)
-      await reload()
     } else if (r.conflict) {
       setConfirm(null)
       say(`Erreur : ${r.conflict.error || 'conflit'}`, 'err')
     } else {
       // 409 game in progress (dialogue verrouillé) ou 500 (éventuellement partiel) : on resynchronise la liste.
       setConfirm(null)
-      await reload()
+      await resync()
     }
   }
 

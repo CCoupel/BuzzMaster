@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-
-/** Évènement window émis par useWebSocket à chaque message QUESTIONS (#285). */
-export const CATEGORIES_RELOAD_EVENT = 'buzz:questions-update'
+import { useState, useEffect, useCallback, useContext } from 'react'
+import { CategoriesPushContext } from './CategoriesPushContext'
+import { bustCategoryIcon } from '../utils/categoryUtils'
 
 export function useCategories() {
   const [categories, setCategories] = useState([])
@@ -9,13 +8,19 @@ export function useCategories() {
   const [error, setError] = useState(null)
   const [fetchTick, setFetchTick] = useState(0)
 
-  // #285 : le serveur n'a pas de message dédié — OnCategoriesChanged diffuse QUESTIONS, que
-  // useWebSocket relaie en évènement window ; on recharge /api/categories à sa réception.
+  // #285 : CATEGORIES_CHANGED (WebSocket, via GameProvider) porte la liste complète résolue :
+  // appliquée directement, sans refetch. Hors GameProvider : contexte null ⇒ GET au montage + refetch().
+  const push = useContext(CategoriesPushContext)
+  const pushTs = push?.ts
   useEffect(() => {
-    const onUpdate = () => setFetchTick(t => t + 1)
-    window.addEventListener(CATEGORIES_RELOAD_EVENT, onUpdate)
-    return () => window.removeEventListener(CATEGORIES_RELOAD_EVENT, onUpdate)
-  }, [])
+    if (!push) return
+    setCategories(push.categories ?? [])
+    setError(null)
+    if (push.change && (push.change.TYPE === 'icon' || push.change.TYPE === 'created')) {
+      bustCategoryIcon(push.change.KEY, push.ts)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pushTs])
 
   useEffect(() => {
     let cancelled = false

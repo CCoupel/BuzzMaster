@@ -185,3 +185,33 @@ describe('useCategories — refetch (v5.7.1 #97)', () => {
     expect(keys).toContain('MA_CATEGORIE')
   })
 })
+
+// ---------------------------------------------------------------------------
+// #285 — CATEGORIES_CHANGED : liste appliquée sans fetch, bust d'icône sur icon/created
+// ---------------------------------------------------------------------------
+describe('useCategories — CATEGORIES_CHANGED (#285)', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('applique la liste poussée sans nouveau fetch et ajoute ?v=<TS> à l\'icône remplacée', async () => {
+    const [{ createElement }, { CategoriesPushContext }, { categoryMeta }] = await Promise.all([
+      import('react'),
+      import('./CategoriesPushContext'),
+      import('../utils/categoryUtils'),
+    ])
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(MOCK_CATEGORIES) }))
+    const pushed = [{ key: 'SPORT_EXTREME', name: 'Sport Neuf', imageURL: '/files/categories/SPORT_EXTREME.png', color: '#0ea5e9', isCustom: true }]
+    let push = null
+    const wrapper = ({ children }) => createElement(CategoriesPushContext.Provider, { value: push }, children)
+    const { result, rerender } = renderHook(() => useCategories(), { wrapper })
+    await act(async () => {})
+    expect(fetch).toHaveBeenCalledTimes(1)
+
+    push = { categories: pushed, change: { TYPE: 'icon', KEY: 'SPORT_EXTREME' }, ts: 4242 }
+    rerender()
+    await act(async () => {})
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(result.current.categories).toEqual(pushed)
+    expect(categoryMeta('SPORT_EXTREME', result.current.categories).imageURL).toBe('/files/categories/SPORT_EXTREME.png?v=4242')
+  })
+})
