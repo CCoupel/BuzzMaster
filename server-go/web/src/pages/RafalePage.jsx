@@ -46,7 +46,7 @@ function runeCount(str) {
  * aucune liste de catégories parallèle (§3.1).
  */
 export default function RafalePage() {
-  const { categories: apiCategories, refetch: refetchCategories } = useCategories()
+  const { categories: apiCategories } = useCategories()
   // Catégories CUSTOM uniquement (isCustom:true) — même filtrage que
   // QuestionsPage.jsx/GamePage.jsx (`customCategories`), JAMAIS apiCategories
   // brut (qui inclut aussi les 8 catégories codées en dur en miroir,
@@ -504,11 +504,9 @@ export default function RafalePage() {
                     composant que l'éditeur de question standard (QuestionsPage.jsx). */}
                 <CategoryPicker
                   mode="single"
-                  allowCreate
                   value={form.CATEGORY}
                   onChange={(key) => setForm(prev => ({ ...prev, CATEGORY: key }))}
                   customCategories={customCategories}
-                  onRefetchCategories={refetchCategories}
                 />
               </div>
               <div className="form-group">

@@ -43,7 +43,7 @@ function installFetch({ onWrite } = {}) {
 const writes = (m) => calls.filter((c) => c.method === m && c.url.startsWith('/api/categories/'))
 
 async function openDialog() {
-  render(<CategoryPicker mode="single" value="" onChange={() => {}} customCategories={API()} allowCreate onRefetchCategories={() => {}} />)
+  render(<CategoryPicker mode="single" value="" onChange={() => {}} customCategories={API()} allowManage onRefetchCategories={() => {}} />)
   fireEvent.click(screen.getByRole('button', { name: /Gérer/ }))
   const dlg = await screen.findByRole('dialog')
   return dlg
@@ -60,13 +60,13 @@ describe('CategoryPicker — « ⚙ Gérer… » (#285)', () => {
     expect(within(dlg).getByText(/Gérer les catégories/i)).toBeInTheDocument()
   })
 
-  it('sans allowCreate (sélecteur de lecture) : pas de « Gérer… »', () => {
+  it('sans allowManage (sélecteur de lecture) : pas de « Gérer… »', () => {
     render(<CategoryPicker mode="single" value="" onChange={() => {}} customCategories={API()} />)
     expect(screen.queryByRole('button', { name: /Gérer/ })).not.toBeInTheDocument()
   })
 
   it('mode filtre de la page Questions : « Gérer… » disponible', () => {
-    render(<CategoryPicker variant="filter" value={new Set()} onToggle={() => {}} customCategories={API()} availableCategories={['CINEMA']} allowCreate onRefetchCategories={() => {}} />)
+    render(<CategoryPicker variant="filter" value={new Set()} onToggle={() => {}} customCategories={API()} availableCategories={['CINEMA']} allowManage onRefetchCategories={() => {}} />)
     expect(screen.getByRole('button', { name: /Gérer/ })).toBeInTheDocument()
   })
 

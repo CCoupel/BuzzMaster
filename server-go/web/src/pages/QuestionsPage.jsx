@@ -1934,7 +1934,7 @@ export default function QuestionsPage() {
           value={selectedCategories}
           availableCategories={availableCategories}
           customCategories={customCategories}
-          allowCreate
+          allowManage
           onRefetchCategories={refetchCategories}
           onToggle={toggleCategoryFilter}
           onClear={clearCategoryFilters}
@@ -2293,11 +2293,9 @@ export default function QuestionsPage() {
                   <div className="form-group">
                     <CategoryPicker
                       mode="single"
-                      allowCreate
                       value={formData.category}
                       onChange={(key) => handleInputChange('category', key)}
                       customCategories={customCategories}
-                      onRefetchCategories={refetchCategories}
                     />
                   </div>
                 )}

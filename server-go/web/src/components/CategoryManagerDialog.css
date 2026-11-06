@@ -42,3 +42,11 @@
 .cm-btn { font: inherit; font-size: 0.82rem; padding: 0.4rem 0.8rem; border-radius: 0.45rem; border: 1px solid #d1d5db; background: #fff; cursor: pointer; }
 .cm-btn--danger { background: #dc2626; color: #fff; border-color: #dc2626; }
 .cm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Création d'une catégorie dans le dialogue (retour QUALIF 11.4.0.5) */
+.cm-create { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.7rem; padding: 0.6rem 0.8rem; border: 1px dashed #d1d5db; border-radius: 0.5rem; }
+.cm-create-name { padding: 0.35rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.4rem; font: inherit; width: 200px; }
+.cm-create-file input { display: none; }
+.cm-create-color { display: inline-flex; align-items: center; gap: 0.35rem; color: #6b7280; }
+.cm-btn--primary { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.cm-create-error { flex-basis: 100%; margin: 0; color: #b91c1c; font-size: 0.78rem; font-weight: 700; }

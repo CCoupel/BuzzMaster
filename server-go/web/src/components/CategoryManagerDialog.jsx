@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CATEGORIES, categoryMeta } from '../utils/categoryUtils'
+import { CATEGORIES, categoryMeta, firstFreePaletteColor } from '../utils/categoryUtils'
 import CategoryColorSwatch from './CategoryColorSwatch'
 import './CategoryManagerDialog.css'
 
 const LOCKED_MSG = 'Impossible pendant une partie'
 const ACCEPT = '.png,.jpg,.jpeg,.webp'
+const MAX_ICON_BYTES = 2 * 1024 * 1024
 export const PUSH_GRACE_MS = 1500
 
 /**
@@ -33,6 +34,10 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
   const [locked, setLocked] = useState(false)
   const [busy, setBusy] = useState(false)
   const [renaming, setRenaming] = useState(null) // { key, value }
+  const [newName, setNewName] = useState('')
+  const [newFile, setNewFile] = useState(null)
+  const [newColor, setNewColor] = useState(() => firstFreePaletteColor(categories))
+  const [createError, setCreateError] = useState('')
   const [confirm, setConfirm] = useState(null) // { key, name, questions, rafale, history, mode, ack }
 
   const source = categories
@@ -94,7 +99,7 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
    * Appel d'écriture commun. Retourne { ok, data } ; un 409 `game in progress` verrouille le dialogue,
    * un autre 409 est rendu à l'appelant (`conflict`).
    */
-  const request = async (url, opts) => {
+  const request = async (url, opts, { quiet = false } = {}) => {
     setBusy(true)
     try {
       const res = await fetch(url, opts)
@@ -111,8 +116,8 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
       if (!res.ok) {
         let body = {}
         try { body = await res.json() } catch { body = {} }
-        say(body.error ? `Erreur : ${body.error}` : `Erreur ${res.status}`, 'err')
-        return { ok: false }
+        if (!quiet) say(body.error ? `Erreur : ${body.error}` : `Erreur ${res.status}`, 'err')
+        return { ok: false, status: res.status, error: body.error }
       }
       let data = null
       try { data = await res.json() } catch { data = null }
@@ -154,6 +159,38 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
     if (r.ok) {
       say(`Icône de « ${row.name} » mise à jour.`)
       armResync()
+    }
+  }
+
+  // Création (nom + couleur + image) — POST /api/categories (contrat §Catégories). Liste mise à jour par CATEGORIES_CHANGED.
+  const createCategory = async () => {
+    const name = newName.trim()
+    if (!name) { setCreateError('Nom invalide'); return }
+    if (!newFile) { setCreateError('Image requise'); return }
+    if (newFile.size > MAX_ICON_BYTES) { setCreateError('Image trop lourde (2 Mio max)'); return }
+    setCreateError('')
+    const fd = new FormData()
+    fd.append('name', name)
+    fd.append('file', newFile)
+    if (newColor) fd.append('color', newColor)
+    // Ne PAS définir Content-Type — le navigateur gère le boundary
+    const r = await request('/api/categories', { method: 'POST', body: fd }, { quiet: true })
+    if (r.ok) {
+      say(`Catégorie « ${name} » créée.`)
+      setNewName('')
+      setNewFile(null)
+      setNewColor(firstFreePaletteColor([...source, { color: newColor }]))
+      armResync()
+    } else if (r.conflict) {
+      setCreateError('Cette catégorie existe déjà')
+    } else if (r.status === 413) {
+      setCreateError('Image trop lourde (2 Mio max)')
+    } else if (r.error === 'reserved name') {
+      setCreateError('Nom réservé par le système, choisissez-en un autre')
+    } else if (r.status) {
+      setCreateError('Nom invalide ou image non supportée (PNG, JPG, WebP)')
+    } else if (!locked) {
+      setCreateError('Erreur réseau')
     }
   }
 
@@ -317,6 +354,36 @@ export default function CategoryManagerDialog({ categories = [], onClose, onChan
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="cm-create">
+          <input
+            type="text"
+            className="cm-create-name"
+            placeholder="Nom de la catégorie…"
+            aria-label="Nom de la nouvelle catégorie"
+            value={newName}
+            maxLength={50}
+            disabled={frozen}
+            onChange={(e) => { setNewName(e.target.value); setCreateError('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createCategory() } }}
+          />
+          <label className="cm-create-file">
+            <input
+              type="file"
+              accept={ACCEPT}
+              disabled={frozen}
+              aria-label="Image de la nouvelle catégorie"
+              onChange={(e) => { setNewFile(e.target.files?.[0] || null); setCreateError('') }}
+            />
+            <span className="cm-btn">{newFile ? `✓ ${newFile.name}` : '📁 Choisir une image…'}</span>
+          </label>
+          <span className="cm-create-color">
+            <CategoryColorSwatch value={newColor} onChange={setNewColor} label="Couleur de la nouvelle catégorie" disabled={frozen} />
+            <small>Couleur</small>
+          </span>
+          <button type="button" className="cm-btn cm-btn--primary" disabled={frozen} onClick={createCategory}>Créer la catégorie</button>
+          {createError && <p className="cm-create-error" role="alert">{createError}</p>}
         </div>
 
         <p className="cm-hint">
