@@ -39,10 +39,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   global.fetch = vi.fn().mockResolvedValue({ ok: true, text: async () => '' })
   vi.spyOn(window, 'confirm').mockReturnValue(true)
-  // window.location.reload is called on successful upload — stub it so
-  // jsdom doesn't throw "Not implemented: navigation".
-  delete window.location
-  window.location = { reload: vi.fn() }
+  // window.location.reload (upload réussi) : window.location n'est pas
+  // redéfinissable sous vmThreads ; jsdom journalise « not implemented:
+  // navigation » sans lever d'exception — on garde ce bruit hors du rapport.
+  vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
 afterEach(() => {

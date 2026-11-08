@@ -137,8 +137,8 @@ describe('BackupPage', () => {
     it('la réinitialisation utilise toujours la clé ambiance', async () => {
       global.fetch = vi.fn().mockResolvedValue({ ok: true })
       global.confirm = vi.fn(() => true)
-      const reload = vi.fn()
-      Object.defineProperty(window, 'location', { value: { reload }, writable: true })
+      // window.location non redéfinissable sous vmThreads : le reload jsdom
+      // (« not implemented ») n'est pas bloquant et n'est pas asserté ici.
       renderBackupPage()
 
       const resetCheckbox = screen.getAllByLabelText('Réglages de jeu')[1]
