@@ -36,25 +36,10 @@ cd "$REPO_ROOT"
 # node, go, pio dans ~/.local/bin, GOTOOLCHAIN=go1.26.10). Plus de powershell.exe ni de /mnt/c.
 eval "$(jq -r .commands.env .claude/project-config.json)"
 
-# 1a. Compiler (pio Linux, core dir ~/.platformio — plateforme epinglee dans platformio.ini)
-pio run -e buzzclick
-
-# 1b. Merger — meme recette que release.yml / ci-branch.yml (job compiling-firmware).
-# Le conteneur n'a pas de commande `python` : esptool tourne avec le python de PlatformIO.
-PIO_CORE=$(pio system info --json-output | jq -r .core_dir.value)
-PIO_PY=$(pio system info --json-output | jq -r .python_exe.value)
-ESPTOOL=$(find "$PIO_CORE/packages/tool-esptoolpy" -name esptool.py | head -1)
-BOOT_APP0=$(find "$PIO_CORE"/packages/framework-arduinoespressif32*/tools/partitions/boot_app0.bin | head -1)
-test -n "$ESPTOOL" && test -n "$BOOT_APP0" || { echo "esptool.py / boot_app0.bin introuvable dans $PIO_CORE"; exit 1; }
-"$PIO_PY" "$ESPTOOL" --chip esp32c3 merge_bin \
-  -o buzzclick-merged.bin \
-  0x0     .pio/build/buzzclick/bootloader.bin \
-  0x8000  .pio/build/buzzclick/partitions.bin \
-  0xe000  "$BOOT_APP0" \
-  0x10000 .pio/build/buzzclick/firmware.bin
-# Bornes de taille identiques a la CI (200 Ko - 3 Mo)
-SIZE=$(stat -c%s buzzclick-merged.bin)
-[ "$SIZE" -ge 204800 ] && [ "$SIZE" -le 3145728 ] || { echo "Firmware merged hors bornes : $SIZE octets"; exit 1; }
+# 1a+1b. Compiler + merger + bornes de taille : script unique scripts/build-firmware.sh
+# (appele aussi par scripts/ci.sh, ci-branch.yml et release.yml — meme recette partout, #294).
+# pio Linux (core dir ~/.platformio), esptool avec le python de PlatformIO, 200 Ko - 3 Mo.
+scripts/build-firmware.sh buzzclick-merged.bin
 
 # 1c. Integrer dans les assets Go (merged binary + version), comme release.yml
 VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')

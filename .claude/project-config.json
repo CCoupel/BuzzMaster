@@ -110,7 +110,7 @@
     "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
     "ci": "scripts/ci.sh",
     "test_related": "cd server-go/web && npx vitest related --run {FILES}",
-    "env": "export PATH=$HOME/.local/bin:$PATH GOTOOLCHAIN=go1.26.10",
+    "env": "export PATH=$HOME/.local/bin:$HOME/go/bin:$PATH GOTOOLCHAIN=go1.26.10",
     "test_targeted": "cd server-go && go test {TARGETS}"
   },
   "extended_commands": {
