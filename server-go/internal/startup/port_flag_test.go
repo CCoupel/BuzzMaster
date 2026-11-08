@@ -1,4 +1,4 @@
-package main
+package startup
 
 import (
 	"os"
@@ -48,9 +48,9 @@ func TestResolvePort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolvePort(tt.configPort, tt.flagPort)
+			got := ResolvePort(tt.configPort, tt.flagPort)
 			if got != tt.wantPort {
-				t.Errorf("resolvePort(%d, %d) = %d, want %d",
+				t.Errorf("ResolvePort(%d, %d) = %d, want %d",
 					tt.configPort, tt.flagPort, got, tt.wantPort)
 			}
 		})
@@ -73,46 +73,46 @@ func TestResolvePortSource(t *testing.T) {
 
 	t.Run("--port flag wins even with an explicit config.json value", func(t *testing.T) {
 		path := writeConfig(t, `{"server":{"http_port":8080}}`)
-		got := resolvePortSource(path, 9090, 9090)
+		got := ResolvePortSource(path, 9090, 9090)
 		want := "--port flag (9090)"
 		if got != want {
-			t.Errorf("resolvePortSource() = %q, want %q", got, want)
+			t.Errorf("ResolvePortSource() = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("explicit config.json http_port, no flag", func(t *testing.T) {
 		path := writeConfig(t, `{"server":{"http_port":8080}}`)
-		got := resolvePortSource(path, 0, 8080)
+		got := ResolvePortSource(path, 0, 8080)
 		want := "config.json (8080)"
 		if got != want {
-			t.Errorf("resolvePortSource() = %q, want %q", got, want)
+			t.Errorf("ResolvePortSource() = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("config.json exists but omits http_port — falls back to code default", func(t *testing.T) {
 		path := writeConfig(t, `{"server":{"websocket_path":"/ws"}}`)
-		got := resolvePortSource(path, 0, 80)
+		got := ResolvePortSource(path, 0, 80)
 		want := "code default (80)"
 		if got != want {
-			t.Errorf("resolvePortSource() = %q, want %q", got, want)
+			t.Errorf("ResolvePortSource() = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("config.json missing entirely — falls back to code default", func(t *testing.T) {
 		missing := filepath.Join(t.TempDir(), "does-not-exist.json")
-		got := resolvePortSource(missing, 0, 80)
+		got := ResolvePortSource(missing, 0, 80)
 		want := "code default (80)"
 		if got != want {
-			t.Errorf("resolvePortSource() = %q, want %q", got, want)
+			t.Errorf("ResolvePortSource() = %q, want %q", got, want)
 		}
 	})
 
 	t.Run("config.json is malformed — falls back to code default rather than erroring", func(t *testing.T) {
 		path := writeConfig(t, `{not valid json`)
-		got := resolvePortSource(path, 0, 80)
+		got := ResolvePortSource(path, 0, 80)
 		want := "code default (80)"
 		if got != want {
-			t.Errorf("resolvePortSource() = %q, want %q", got, want)
+			t.Errorf("ResolvePortSource() = %q, want %q", got, want)
 		}
 	})
 }
