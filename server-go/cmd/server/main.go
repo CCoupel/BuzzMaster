@@ -6,6 +6,7 @@ import (
 	"buzzcontrol/internal/coalesce"
 	"buzzcontrol/internal/colors"
 	"buzzcontrol/internal/config"
+	"buzzcontrol/internal/diag"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
 	"buzzcontrol/internal/lighting/hue"
@@ -164,7 +165,7 @@ type App struct {
 	// #246 diagnostic state: per-connection ARDOISE SEQ tracking and
 	// CLIENT_TRACE rate limiting.
 	diagMu      sync.Mutex
-	ardoiseSq   map[string]*ardoiseSeqState
+	ardoiseSq   map[string]*diag.ArdoiseSeqState
 	traceLim    map[string]*traceLimiter
 	traceGlobal traceLimiter
 
@@ -2174,7 +2175,7 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 	a.questionSound().Stop()           // the question sound ends with the question
 	a.countdownSound().Stop()          // #287 §12.8
 	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
-		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, logToken(res.QuestionBefore))
+		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, diag.LogToken(res.QuestionBefore))
 
 	// #123 B3 — a fresh game invalidates any eviction context left over from
 	// before it, so clear the registry first; fresh GAME_RESET entries follow.
@@ -2256,7 +2257,7 @@ func (a *App) handleFullUpdate(msg *protocol.Message, senders ...updateSender) {
 				qid = st.Question.ID
 			}
 			server.LogWarn(game.LogComponentApp, "TEAMS_CHANGE_REFUSED client=%s teams=%s phase=%s question=%s",
-				clientID, logValue(removed), st.Phase, logToken(qid))
+				clientID, diag.LogValue(removed), st.Phase, diag.LogToken(qid))
 			if clientID != "" {
 				if rm, err := protocol.NewMessage(protocol.ActionTeamsUpdateRefused, protocol.TeamsUpdateRefusedPayload{Reason: "TEAMS_LOCKED_DURING_QUESTION", Teams: removed}); err == nil {
 					a.wsHub.SendToClient(clientID, rm)
@@ -3578,7 +3579,7 @@ func (a *App) logHiddenCorrection(senders []updateSender, action, targets string
 	if st := a.engine.GetState(); st.Question != nil {
 		question = st.Question.ID
 	}
-	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN client=%s action=%s targets=[%s] question=%s", clientID, action, targets, logToken(question))
+	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN client=%s action=%s targets=[%s] question=%s", clientID, action, targets, diag.LogToken(question))
 }
 
 // handleTeamPointsBatch applies a grouped team award (#244/#251): complete
@@ -3604,7 +3605,7 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 	}
 	refuse := func(reason string, teams []string) {
 		server.LogWarn(game.LogComponentApp, "TEAM_POINTS_BATCH_REFUSED client=%s question=%s reason=%s teams=%s",
-			clientID, logToken(p.QuestionID), reason, logValue(teams))
+			clientID, diag.LogToken(p.QuestionID), reason, diag.LogValue(teams))
 		reply(protocol.TeamPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Teams: teams})
 	}
 	if err := json.Unmarshal(msg.Msg, &p); err != nil {
@@ -3642,7 +3643,7 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.Team, sk.Reason))
 	}
 	server.LogInfo(game.LogComponentApp, "TEAM_POINTS_BATCH client=%s question=%s applied=[%s] skipped=[%s]",
-		clientID, logToken(p.QuestionID), strings.Join(applied, ","), strings.Join(skipped, ","))
+		clientID, diag.LogToken(p.QuestionID), strings.Join(applied, ","), strings.Join(skipped, ","))
 
 	if !batchDisplay {
 		a.logHiddenCorrection([]updateSender{{ClientID: clientID}}, protocol.ActionTeamPointsBatch, strings.Join(applied, ","))
@@ -3697,7 +3698,7 @@ func (a *App) handleBumperPointsBatch(clientID string, msg *protocol.Message) {
 	}
 	refuse := func(reason string, players []string) {
 		server.LogWarn(game.LogComponentApp, "BUMPER_POINTS_BATCH_REFUSED client=%q question=%q reason=%q players=%s",
-			clientID, p.QuestionID, reason, logValue(players))
+			clientID, p.QuestionID, reason, diag.LogValue(players))
 		reply(protocol.BumperPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Players: players})
 	}
 	if err := json.Unmarshal(msg.Msg, &p); err != nil {
@@ -4433,7 +4434,7 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 			connAge = ms
 		}
 		server.LogWarn(game.LogComponentApp, "ARDOISE_CLEARED team=%q bumper=%s client=%s conn_age_ms=%d prev_len=%d seq=%d reason=%s question=%q phase=%s",
-			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, logToken(payload.Reason), questionID, phase)
+			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, diag.LogToken(payload.Reason), questionID, phase)
 	}
 
 	// #129 T1.5: admin only — so admin sees answers build up in real-time.
@@ -4477,7 +4478,7 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 		return
 	}
 	if n := utf8.RuneCountInString(p.Text); n > ardoiseMaxTextRunes {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s client=%s len=%d question_id=%s", bumperID, clientID, n, logToken(p.QuestionID))
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s client=%s len=%d question_id=%s", bumperID, clientID, n, diag.LogToken(p.QuestionID))
 		return
 	}
 	st := a.engine.GetState()
@@ -4490,7 +4491,7 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_STALE bumper=%s question_id=%q current_question=%q phase=%s", bumperID, p.QuestionID, currentQ, st.Phase)
 		return
 	case game.ArdoiseFinalHashMismatch:
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, logToken(p.Hash), game.ArdoiseHash(p.Text), len(p.Text))
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, diag.LogToken(p.Hash), game.ArdoiseHash(p.Text), len(p.Text))
 		return
 	case game.ArdoiseFinalAccepted:
 		server.LogInfo(game.LogComponentApp, "ARDOISE_FINAL_RECEIVED team=%q bumper=%s hash=%s len=%d", bumper.Team, bumperID, p.Hash, len(p.Text))
@@ -4500,13 +4501,6 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 	if ack, err := protocol.NewMessage(protocol.ActionArdoiseFinalAck, protocol.ArdoiseFinalAckPayload{QuestionID: p.QuestionID, Hash: p.Hash}); err == nil {
 		a.wsHub.SendToClient(clientID, ack)
 	}
-}
-
-// ardoiseSeqState tracks the last applied ARDOISE_INPUT SEQ for one connection
-// and one question (#246).
-type ardoiseSeqState struct {
-	question string
-	last     int
 }
 
 // onClientClosed runs when any web connection closes: drops its diagnostic state
@@ -4637,28 +4631,14 @@ func (a *App) forgetClientDiag(clientID string) {
 	a.diagMu.Unlock()
 }
 
-// checkArdoiseSeq returns false when the message is stale (SEQ <= last applied,
-// same connection and question) and must be ignored; a gap is only logged.
+// checkArdoiseSeq returns false when the message is stale (see diag.CheckArdoiseSeq).
 func (a *App) checkArdoiseSeq(clientID, bumperID, questionID string, seq int) bool {
 	a.diagMu.Lock()
 	defer a.diagMu.Unlock()
 	if a.ardoiseSq == nil {
-		a.ardoiseSq = make(map[string]*ardoiseSeqState)
+		a.ardoiseSq = make(map[string]*diag.ArdoiseSeqState)
 	}
-	st := a.ardoiseSq[clientID]
-	if st == nil || st.question != questionID {
-		st = &ardoiseSeqState{question: questionID}
-		a.ardoiseSq[clientID] = st
-	}
-	if seq <= st.last {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_STALE bumper=%s client=%s last=%d got=%d", bumperID, clientID, st.last, seq)
-		return false
-	}
-	if seq != st.last+1 {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_GAP bumper=%s client=%s expected=%d got=%d", bumperID, clientID, st.last+1, seq)
-	}
-	st.last = seq
-	return true
+	return diag.CheckArdoiseSeq(a.ardoiseSq, clientID, bumperID, questionID, seq)
 }
 
 // traceLimiter caps CLIENT_TRACE at 10 messages/s per connection and emits one
@@ -4674,35 +4654,6 @@ const (
 	clientTraceGlobalMaxPerSecond = 50
 	clientTraceMaxBytes           = 1024
 )
-
-// logToken renders a client-supplied string for a log line: bare when it is a
-// harmless token, quoted (%q, control characters escaped) otherwise, so a
-// client can never inject a forged log line (#246 review MAJEUR-1).
-func logToken(s string) string {
-	if s == "" {
-		return `""`
-	}
-	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == ':' || r == '-') {
-			return fmt.Sprintf("%q", s)
-		}
-	}
-	return s
-}
-
-// logValue renders a CLIENT_TRACE DETAIL value: scalars through logToken /
-// number / bool formatting, anything else re-serialised as quoted JSON.
-func logValue(v interface{}) string {
-	switch x := v.(type) {
-	case string:
-		return logToken(x)
-	case bool, float64, int, int64, nil:
-		return fmt.Sprint(x)
-	default:
-		b, _ := json.Marshal(x)
-		return fmt.Sprintf("%q", string(b))
-	}
-}
 
 // handleClientTrace journalises a client diagnostic event. No game effect.
 func (a *App) handleClientTrace(clientID string, clientType server.ClientType, msg *protocol.Message) {
@@ -4762,7 +4713,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		return
 	}
 	playerID, _ := a.wsHub.GetClientPlayerID(clientID)
-	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, logToken(playerID), logToken(p.Kind), p.At)
+	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, diag.LogToken(playerID), diag.LogToken(p.Kind), p.At)
 	if p.Team != "" {
 		line += fmt.Sprintf(" team=%q", p.Team)
 	}
@@ -4770,7 +4721,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		line += fmt.Sprintf(" prev_len=%d", p.PrevLen)
 	}
 	if p.CauseAction != "" {
-		line += fmt.Sprintf(" cause_action=%s", logToken(p.CauseAction))
+		line += fmt.Sprintf(" cause_action=%s", diag.LogToken(p.CauseAction))
 	}
 	if len(p.Detail) > 0 {
 		keys := make([]string, 0, len(p.Detail))
@@ -4779,7 +4730,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			line += fmt.Sprintf(" detail.%s=%s", logToken(k), logValue(p.Detail[k]))
+			line += fmt.Sprintf(" detail.%s=%s", diag.LogToken(k), diag.LogValue(p.Detail[k]))
 		}
 	}
 	server.LogWarn(game.LogComponentWebSocket, "%s", line)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/diag"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/rounds"
@@ -72,10 +73,10 @@ func (a *App) handleRoundsUpdate(clientID string, msg *protocol.Message) {
 	}
 	res, line := a.applyRoundsUpdate(req)
 	if res.Status == "REFUSED" && res.Reason == "WRITE_FAILED" {
-		server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE_ROLLBACK client=%q files=%s", clientID, logValue(res.Questions))
+		server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE_ROLLBACK client=%q files=%s", clientID, diag.LogValue(res.Questions))
 	}
 	if res.Status == "REFUSED" {
-		server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE_REFUSED client=%q reason=%q questions=%s", clientID, res.Reason, logValue(res.Questions))
+		server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE_REFUSED client=%q reason=%q questions=%s", clientID, res.Reason, diag.LogValue(res.Questions))
 		reply(res)
 		return
 	}
