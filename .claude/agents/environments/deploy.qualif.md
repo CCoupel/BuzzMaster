@@ -14,6 +14,15 @@ description: "Adaptations projet BuzzControl pour DEPLOY QUALIF. Base generique 
 Aucun build ni publication ici — le binaire deja produit par PUBLISH QUALIF
 (`$QUALIF_DIR/buzzcontrol-qualif-*.exe`) est celui qu'on lance et teste tel quel.
 
+> **Conteneur Claude-Launcher (v11.5.0, #292)** : `deployer` tourne sous Linux, sans `powershell.exe`
+> ni `/mnt/c` — il **ne lance plus** l'exe Windows (`… .exe &` est impossible). L'exe est lance par
+> **l'utilisateur, depuis Windows**, via le partage (`build/qualif_v<X.Y.Z>/` du depot). `deployer`
+> verifie la presence de l'exe, transmet au teamleader son chemin et la commande de lancement
+> (`--port 9090`) ; les smoke tests ci-dessous sont executes par l'utilisateur (ou par `deployer`
+> seulement si le port 9090 du poste Windows est joignable depuis le conteneur — sinon, ne pas
+> pretendre les avoir passes). `access.verified` de QUALIF = `failed` sur `local-shell` tant que
+> ce mode dure.
+
 ## Variables attendues
 
 Aucune — pas de ssh, pas de registre, pas de credentials.
@@ -33,25 +42,23 @@ test -f "$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" || {
   echo "Aucune publication QUALIF trouvee — executer /publish qualif d'abord"; exit 1;
 }
 
-# Depuis la racine du projet — lancer le binaire QUALIF sur port 9090 (flag --port, v5.1.3+)
-"$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" --port 9090 &
-QUALIF_PID=$!
-sleep 2  # attendre démarrage
+sha256sum "$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe"
 
-BASE="http://localhost:9090"
-
-# Smoke tests
-curl -sf $BASE/version               # version
+# Lancement : PAR L'UTILISATEUR, depuis Windows (PowerShell, dossier build\qualif_v<X.Y.Z>\ du depot) :
+#   .\buzzcontrol-qualif-<FULL_VERSION>-windows-amd64.exe --port 9090
+# deployer ne lance rien sous Linux. Smoke tests (utilisateur, navigateur ou curl Windows ;
+# deployer uniquement si BASE est joignable depuis le conteneur) :
+BASE="${QUALIF_BASE_URL:-http://localhost:9090}"
+curl -sf $BASE/version               # version (= $FULL_VERSION, serveur ET firmware)
 curl -sf $BASE/                      # page principale
 curl -sf $BASE/api/firmware/buzzclick/version  # firmware endpoint
 curl -sf $BASE/questions             # questions
 curl -sf $BASE/listGame              # liste des jeux
 curl -sf $BASE/tv                    # affichage TV
 
-# Arrêt propre
-kill $QUALIF_PID
+# Arret : par l'utilisateur (Ctrl+C dans la console Windows, ou curl $BASE/shutdown)
 
-echo "Deploiement QUALIF termine - $FULL_VERSION"
+echo "QUALIF prete - $FULL_VERSION (lancement et smoke tests cote utilisateur)"
 ```
 
 ## Echec
