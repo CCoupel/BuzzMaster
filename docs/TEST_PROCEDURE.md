@@ -78,7 +78,7 @@ Règle adoptée le 2026-11-06 (v11.4.0), inscrite pour v11.5.0 (#293) :
 | `qa`, CI | **Suites complètes** | `go test ./...`, vitest complet, `scripts/ci.sh` |
 
 - Un dev ne lance pas la suite complète : la validation globale revient à `qa` et à la CI de branche.
-- Le registre des exécutions de tests est tenu dans `_work/tests-ledger.md`.
+- Pendant un workflow, `qa` tient un registre de travail (non versionné) `_work/tests-ledger.md` ; il ne figure pas dans le dépôt.
 
 ---
 

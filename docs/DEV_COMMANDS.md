@@ -77,7 +77,7 @@ Les procédures détaillées sont documentées dans des fichiers séparés.
 
 Les agents tournent dans le conteneur Claude-Launcher : Ubuntu 24.04, Linux natif. Le dépôt est sur le partage `/share/MFS` (MooseFS) ; il n'y a ni WSL ni `/mnt/c`.
 
-- **Go** : `/usr/local/go/bin` hors PATH des agents. Exporter le PATH et forcer la chaîne d'outils : `export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin` puis `GOTOOLCHAIN=go1.26.10` (`go.mod` en 1.26.10).
+- **Go** : Go 1.26.10 est sur le PATH (`~/.local/bin/go`, lien vers `~/.local/go/bin/go`) ; aucun export ni `GOTOOLCHAIN` requis (`go.mod` en 1.26.10).
 - **Node** : Node **Linux** v22.23.3 (`~/.local/bin/node`), `node_modules` natif Linux.
 - **PlatformIO** : `pio` Linux (build firmware depuis le conteneur).
 - **`server-go/build.ps1`** reste un script Windows destiné à l'utilisateur ; s'il est lancé depuis Windows, il faut un `npm ci` Windows.
@@ -287,7 +287,7 @@ Résultat attendu : seul `TestBuzzerWSHub_ConcurrentConnections` échoue (artefa
 - **Run A** : `ci.sh` doit réussir (« CI OK », tests `fonts-embed` passés et non sautés).
 - **Run B** : un test vitest rouge injecté doit faire échouer `ci.sh`, sans qu'aucune étape postérieure ne démarre.
 
-Le script travaille dans un `git worktree` jetable, créé dans le dossier frère du dépôt (pas dans `/tmp`, où le `npm` Windows du PATH WSL échoue). `CI_GATE_TMPDIR` change ce dossier. Le worktree est supprimé en fin de script, même en cas d'échec. Code retour : 0 = porte prouvée, 1 = preuve non établie, 2 = erreur d'environnement.
+Le script travaille dans un `git worktree` jetable, créé dans le dossier frère du dépôt par défaut ; `CI_GATE_TMPDIR` change ce dossier. Le worktree est supprimé en fin de script, même en cas d'échec. Code retour : 0 = porte prouvée, 1 = preuve non établie, 2 = erreur d'environnement.
 
 Par défaut, `go` et `govulncheck` sont remplacés par des shims no-op. Avec ces shims, la ligne « CI OK » ne prouve pas que la suite Go passe : cette preuve vient de QA et de la CI. `CI_GATE_REAL_GO=1` exécute les étapes Go réelles ; le run est alors très long (deux exécutions complètes de `ci.sh`).
 
