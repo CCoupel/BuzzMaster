@@ -57,7 +57,9 @@ func (e *env258) allConns258(extra ...*websocket.Conn) []*websocket.Conn {
 }
 
 // settle258 : barrière positive sur toutes les connexions (+ extra) — remplace les pauses fixes (#291).
-func (e *env258) settle258(extra ...*websocket.Conn) { barrier291(e.t258, e.app, e.allConns258(extra...)...) }
+func (e *env258) settle258(extra ...*websocket.Conn) {
+	barrier291(e.t258, e.app, e.allConns258(extra...)...)
+}
 
 // waitFrameAfter258 attend (≤ 2 s) qu'une trame de plus soit arrivée sur conn depuis before (réponse d'une action client).
 func (e *env258) waitFrameAfter258(conn *websocket.Conn, before int) {

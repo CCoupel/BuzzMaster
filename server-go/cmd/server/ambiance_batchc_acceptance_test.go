@@ -311,6 +311,7 @@ func twCWaitTeamZoneColor(t *testing.T, fake *lighting.FakeDriver, team string, 
 func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *testing.T) {
 	app, fake, cancel := tw208NewWriterApp(t)
 	defer cancel()
+	app.flashPhases = flashPhaseOverride{scoreGold: 125 * time.Millisecond, scoreTeam: 250 * time.Millisecond} // #291 : ÷2 (driver factice)
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}}})
 	wantTeamA := app.teamNameToRGB("TeamA")
 	app.ambiance().NotifyState() // établit un premier état stable (hors partie)
@@ -370,11 +371,11 @@ func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *tes
 }
 
 func TestC2b_ScoreFlash_ClampsAboveSixPoints(t *testing.T) {
-	if testing.Short() {
-		t.Skip("mesure temporelle réelle (~5 s)")
-	}
 	app, fake, cancel := tw208NewWriterApp(t)
 	defer cancel()
+	// #291 Phase A : cadence ÷2 (125 ms or / 250 ms équipe = 375 ms/cycle, driver factice) ; toutes les bornes
+	// du test sont mises à l'échelle : 6 cycles = 2250 ms, 8 cycles = 3000 ms, fenêtre 2350 ms (marge identique, 4,4 %).
+	app.flashPhases = flashPhaseOverride{scoreGold: 125 * time.Millisecond, scoreTeam: 250 * time.Millisecond}
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}}})
 	app.ambiance().NotifyState()
 	twCWaitTeamZoneColor(t, fake, "TeamA", app.teamNameToRGB("TeamA"), 2*time.Second)
@@ -389,14 +390,14 @@ func TestC2b_ScoreFlash_ClampsAboveSixPoints(t *testing.T) {
 	// laisse une marge confortable au-dessus de 6 cycles tout en restant
 	// nettement sous ce que 7 ou 8 cycles réels prendraient — de quoi
 	// distinguer sans ambiguïté "plafonné à 6" de "pas plafonné".
-	deadline := time.Now().Add(4700 * time.Millisecond)
+	deadline := time.Now().Add(2350 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		if app.currentScoreFlashTeam() == "" {
 			return // terminé — plafond respecté
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("le clignotement n'était pas terminé à 4,7 s — points=40 n'a pas été plafonné à 6 cycles (6 x 750 ms = 4500 ms attendu)")
+	t.Fatalf("le clignotement n'était pas terminé à 2,35 s — points=40 n'a pas été plafonné à 6 cycles (6 x 375 ms = 2250 ms attendu)")
 }
 
 func TestC2b_ScoreFlashAndGeneralFlash_RunSimultaneouslyWithoutInterference(t *testing.T) {

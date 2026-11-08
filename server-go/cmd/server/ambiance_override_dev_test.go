@@ -130,6 +130,9 @@ func TestDevLightingMode_ReDerivesThroughTheRealWriter(t *testing.T) {
 // exactly to the selector's own position (here OFF) — contract §10.1.2.
 func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	app := newTestApp(t)
+	// #291 Phase A : blink 100/100 ms (prod 400/400) sur CETTE App (driver factice, aucun pacing Hue).
+	const flashPhase = 100 * time.Millisecond
+	app.flashPhases = flashPhaseOverride{lightingOn: flashPhase, lightingOff: flashPhase}
 	// A real, NON-white theme so the 2026-09-08 white<->room-colour
 	// alternation is actually observable (a themeless room degenerates to
 	// white/white, an accepted but non-discriminating case — see
@@ -188,7 +191,7 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	// The blink goroutine must actually have stopped: no further applies
 	// after a settling window.
 	countAfterOff := fake.Count()
-	time.Sleep(2 * (lightingFlashOnPhase + lightingFlashOffPhase))
+	time.Sleep(5 * 2 * flashPhase) // 5 périodes de blink (avant : 2 périodes de 800 ms)
 	if fake.Count() != countAfterOff {
 		t.Fatalf("blink goroutine kept running after setLightingFlash(false): %d applies before, %d after", countAfterOff, fake.Count())
 	}
@@ -326,6 +329,9 @@ func TestDevStop_FlashEngagedAtShutdown_FinalStateIsOff(t *testing.T) {
 	app, bridge, cancel := devReconnectApp(t)
 	defer cancel()
 
+	// #291 Phase A : blink 100/100 ms (prod 400/400) ; le pacing du VRAI driver Hue (250 ms) reste appliqué.
+	const flashPhase = 100 * time.Millisecond
+	app.flashPhases = flashPhaseOverride{lightingOn: flashPhase, lightingOff: flashPhase}
 	app.engine.SetPhase(game.PhaseStarted) // partie en cours, comme au vrai arrêt serveur
 	app.setLightingFlash(true)
 	devWaitPutCount(t, bridge, 1) // au moins un tick de blink a réellement écrit
@@ -339,7 +345,9 @@ func TestDevStop_FlashEngagedAtShutdown_FinalStateIsOff(t *testing.T) {
 	// Le goroutine de blink doit être bel et bien mort : aucun nouveau PUT,
 	// même en attendant largement plus qu'un cycle complet — pas un simple
 	// sommeil symbolique.
-	time.Sleep(3 * (lightingFlashOnPhase + lightingFlashOffPhase))
+	// Fenêtre = 1 s : plus de 2 périodes de blink (200 ms) + pacing Hue (250 ms) — une réécriture tardive
+	// de la goroutine de blink y serait visible (avant : 3 périodes de 800 ms = 2,4 s).
+	time.Sleep(5 * 2 * flashPhase)
 	if got := bridge.count(); got != countAfterShutdown {
 		t.Fatalf("Flash a continué d'écrire après shutdownExtinguishHueLighting() : %d PUT(s) juste après l'extinction, %d après stabilisation — la salle a pu se rallumer, dernier corps %q", countAfterShutdown, got, bridge.last())
 	}

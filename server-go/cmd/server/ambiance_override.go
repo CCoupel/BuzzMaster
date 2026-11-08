@@ -82,6 +82,19 @@ const (
 	scoreFlashTeamPhase = 500 * time.Millisecond
 )
 
+// flashPhaseOverride lets a test shorten the blink cadences of ONE App (zero
+// field = production constant). #291, Phase A.
+type flashPhaseOverride struct {
+	lightingOn, lightingOff, scoreGold, scoreTeam time.Duration
+}
+
+func orDefault(d, def time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return def
+}
+
 // lightingMode reads the current selector position. AUTO is the zero value
 // (an unset atomic.Value.Load() returns nil, which the type assertion below
 // turns into "") — contract §10.1.1 point 5 needs no explicit
@@ -160,9 +173,9 @@ func (a *App) runLightingFlash(ctx context.Context) {
 	for {
 		a.lightingFlashPhaseOn.Store(phase)
 		a.ambiance().NotifyState()
-		wait := lightingFlashOnPhase
+		wait := orDefault(a.flashPhases.lightingOn, lightingFlashOnPhase)
 		if !phase {
-			wait = lightingFlashOffPhase
+			wait = orDefault(a.flashPhases.lightingOff, lightingFlashOffPhase)
 		}
 		select {
 		case <-ctx.Done():
@@ -302,14 +315,14 @@ func (a *App) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(scoreFlashGoldPhase):
+		case <-time.After(orDefault(a.flashPhases.scoreGold, scoreFlashGoldPhase)):
 		}
 		a.scoreFlashPhaseGold.Store(false)
 		a.ambiance().NotifyState()
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(scoreFlashTeamPhase):
+		case <-time.After(orDefault(a.flashPhases.scoreTeam, scoreFlashTeamPhase)):
 		}
 	}
 	// Same critical section as startScoreFlash's own team publication (code-

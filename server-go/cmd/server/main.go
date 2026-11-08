@@ -98,6 +98,11 @@ type App struct {
 	lightingFlashOn      atomic.Bool
 	lightingFlashPhaseOn atomic.Bool
 	lightingFlashCancel  context.CancelFunc
+	// flashPhases overrides the blink cadences (zero value = production
+	// constants lightingFlash*/scoreFlash*Phase). Per-App, set by tests before
+	// the blink goroutine starts (#291, Phase A) — never package-level: the
+	// Hue pacing floor (250 ms) concerns the REAL driver, untouched here.
+	flashPhases flashPhaseOverride
 	// scoreFlashTeam/-PhaseGold/-Epoch/-Cancel drive the SCORE gold/team-
 	// colour flicker (Batch C/C2b, contract lighting.md §2.4/§8.1) —
 	// scoreFlashTeam is the team currently flickering ("" = none),
