@@ -23,11 +23,12 @@ pio run -e buzzclick
 
 # esptool et boot_app0.bin viennent des paquets PlatformIO ; esptool tourne avec le Python
 # de PlatformIO (le conteneur des agents n'a pas de commande `python`).
-PIO_INFO=$(pio system info --json-output)
+PIO_INFO=$(pio system info --json-output 2>/dev/null) && [ -n "$PIO_INFO" ] \
+  || { echo "❌ pio system info --json-output a échoué (installation PlatformIO à vérifier)" >&2; exit 1; }
 PIO_CORE=$(jq -r .core_dir.value <<<"$PIO_INFO")
 PIO_PY=$(jq -r .python_exe.value <<<"$PIO_INFO")
-ESPTOOL=$(find "$PIO_CORE/packages/tool-esptoolpy" -name esptool.py 2>/dev/null | head -1)
-BOOT_APP0=$(find "$PIO_CORE"/packages/framework-arduinoespressif32*/tools/partitions/boot_app0.bin 2>/dev/null | head -1)
+ESPTOOL=$(find "$PIO_CORE/packages/tool-esptoolpy" -name esptool.py 2>/dev/null | head -1 || true)
+BOOT_APP0=$(find "$PIO_CORE"/packages/framework-arduinoespressif32*/tools/partitions/boot_app0.bin 2>/dev/null | head -1 || true)
 [ -n "$ESPTOOL" ]   || { echo "❌ esptool.py introuvable dans $PIO_CORE/packages" >&2; exit 1; }
 [ -n "$BOOT_APP0" ] || { echo "❌ boot_app0.bin introuvable dans $PIO_CORE/packages" >&2; exit 1; }
 

@@ -39,7 +39,7 @@ eval "$(jq -r .commands.env .claude/project-config.json)"
 # 1a+1b. Compiler + merger + bornes de taille : script unique scripts/build-firmware.sh
 # (appele aussi par scripts/ci.sh, ci-branch.yml et release.yml — meme recette partout, #294).
 # pio Linux (core dir ~/.platformio), esptool avec le python de PlatformIO, 200 Ko - 3 Mo.
-scripts/build-firmware.sh buzzclick-merged.bin
+bash scripts/build-firmware.sh buzzclick-merged.bin
 
 # 1c. Integrer dans les assets Go (merged binary + version), comme release.yml
 VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')

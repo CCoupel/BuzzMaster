@@ -14,7 +14,7 @@ if [ "${SKIP_FIRMWARE:-0}" = "1" ]; then
   echo "SKIP_FIRMWARE=1 : compilé par le job compiling-firmware"
 else
   # Sortie sous .pio/ (gitignoré) : vérification seulement, les assets ne sont pas touchés.
-  scripts/build-firmware.sh .pio/build/buzzclick/buzzclick-merged.bin
+  bash scripts/build-firmware.sh .pio/build/buzzclick/buzzclick-merged.bin
 fi
 
 echo "== [2/8] Frontend: npm ci + build =="

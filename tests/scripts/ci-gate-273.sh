@@ -8,6 +8,8 @@
 #   Par défaut, `go` et `govulncheck` sont remplacés par des shims no-op (PATH) : la porte prouvée est
 #   l'étape vitest, et `go test -race ./...` (jusqu'à 20 min) la dépasse de loin. Les étapes npm
 #   (ci, build, vitest, audit) et l'embed (cp) restent réelles.
+#   L'étape firmware de ci.sh ([1/8], pio) est sautée : SKIP_FIRMWARE=1 est exporté pour les deux runs
+#   (elle ne fait pas partie de la porte prouvée ; elle est couverte par le job compiling-firmware).
 #   Ne modifie JAMAIS le dépôt principal : tout se passe dans un `git worktree` jetable créé à
 #   un chemin absolu (mktemp -d), supprimé en fin de script (trap EXIT, même en cas d'échec).
 #   ATTENTION : ne pas lancer depuis un worktree dont l'état n'est pas commité — la ref testée
@@ -35,6 +37,8 @@ if [ "${CI_GATE_REAL_GO:-0}" != "1" ]; then
   export PATH="$SHIM:$PATH"
   echo "Étapes Go court-circuitées (shims) — CI_GATE_REAL_GO=1 pour les exécuter."
 fi
+# Firmware hors périmètre de la porte #273 (pio, réseau, plusieurs minutes) : sauté dans les deux runs.
+export SKIP_FIRMWARE=1
 SUFFIX=""
 [ "${CI_GATE_REAL_GO:-0}" != "1" ] && SUFFIX=" (étapes Go simulées — CI_GATE_REAL_GO=1 pour le run complet)"
 LOG_A="$WT_PARENT/run-normal.log"
