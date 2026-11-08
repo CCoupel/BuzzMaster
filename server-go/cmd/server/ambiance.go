@@ -17,10 +17,10 @@ package main
 import (
 	"context"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
+	"buzzcontrol/internal/colors"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/lighting"
@@ -831,7 +831,7 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 		rgb := a.teamNameToRGB(teamName)
 		teamIntensity := 255 // full — the room-side equivalent of the buzzer's own SOLID/BLINK at 255
 		if dims && !distinguished[teamName] {
-			teamIntensity = dimIntensityFor(rgb)
+			teamIntensity = colors.DimIntensityFor(rgb)
 		}
 		if teamName == flashTeam && a.scoreFlashPhaseGold.Load() {
 			rgb = ambianceScoreGold // C2b — transient, see this function's own doc comment
@@ -859,7 +859,7 @@ func (a *App) ambianceScene(ev lighting.Event) lighting.State {
 // in main.go) rather than a second category→colour table — these are UI
 // accent colours repurposed as light colours (contract's own documented
 // caveat: calibrated for a screen, not a room; hex values taken as-is for
-// this revision, not passed through nearestPaletteColorByHue).
+// this revision, not passed through colors.NearestPaletteColorByHue).
 func (a *App) ambianceThemeColor() [3]int {
 	white := [3]int{255, 255, 255}
 	if a.httpServer == nil { // defensive: nil in some minimal test harnesses, never in production (setup() before any scene is ever rendered)
@@ -877,24 +877,9 @@ func (a *App) ambianceThemeColor() [3]int {
 		return white
 	}
 	_, _, hex := a.httpServer.ResolveCategoryMeta(category)
-	rgb, ok := hexToRGB(hex)
+	rgb, ok := colors.HexToRGB(hex)
 	if !ok {
 		return white
 	}
 	return rgb
-}
-
-// hexToRGB parses a "#rrggbb" colour (ResolveCategoryMeta's own format)
-// into the project's [3]int 0-255 RGB. false for anything else (empty —
-// custom category or none, malformed, wrong length).
-func hexToRGB(s string) ([3]int, bool) {
-	s = strings.TrimPrefix(s, "#")
-	if len(s) != 6 {
-		return [3]int{}, false
-	}
-	v, err := strconv.ParseUint(s, 16, 32)
-	if err != nil {
-		return [3]int{}, false
-	}
-	return [3]int{int(v >> 16 & 0xff), int(v >> 8 & 0xff), int(v & 0xff)}, true
 }

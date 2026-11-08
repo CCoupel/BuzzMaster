@@ -7,6 +7,7 @@ package main
 // no-op path that makes the 21 unguarded sites safe.
 
 import (
+	"buzzcontrol/internal/colors"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -161,7 +162,7 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 	app := newTestApp(t)
 	// TeamA is {255,0,0} without ColorName → hue-nearest palette "rouge".
 	wantTeamA := app.teamNameToRGB("TeamA")
-	if wantTeamA != teamColorPalette["rouge"] {
+	if wantTeamA != colors.TeamColorPalette["rouge"] {
 		t.Fatalf("palette factoring broken: TeamA → %v", wantTeamA)
 	}
 	if got := app.teamColorToRGB(&game.Bumper{Team: "TeamA"}); got != wantTeamA {
@@ -333,7 +334,7 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 			if z.Color != want {
 				t.Errorf("%s: zone %s doit porter sa propre couleur, got %v want %v", ev.Kind, name, z.Color, want)
 			}
-			if z.Intensity != dimIntensityFor(want) {
+			if z.Intensity != colors.DimIntensityFor(want) {
 				t.Errorf("%s: zone %s non distinguée doit être atténuée (dimIntensityFor), got intensity=%d", ev.Kind, name, z.Intensity)
 			}
 		}
@@ -355,7 +356,7 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 		if got := zones["TeamA"]; got.Color != wantTeamA || got.Intensity != 255 {
 			t.Errorf("%s: TeamA (distinguée) doit être à pleine intensité dans sa propre couleur, got %+v", ev.Kind, got)
 		}
-		if got := zones["TeamB"]; got.Intensity != dimIntensityFor(wantTeamB) {
+		if got := zones["TeamB"]; got.Intensity != colors.DimIntensityFor(wantTeamB) {
 			t.Errorf("%s: TeamB (non distinguée) doit rester atténuée, got %+v", ev.Kind, got)
 		}
 	}
@@ -383,7 +384,7 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 	if zones["TeamB"].Color != wantTeamB || zones["TeamB"].Intensity != 255 {
 		t.Errorf("REVEAL multi-équipe : zone TeamB doit porter sa propre couleur à pleine intensité, got %+v", zones["TeamB"])
 	}
-	if zones["TeamC"].Intensity != dimIntensityFor(wantTeamC) {
+	if zones["TeamC"].Intensity != colors.DimIntensityFor(wantTeamC) {
 		t.Errorf("REVEAL multi-équipe : TeamC (sur le plateau, non distinguée) doit rester atténuée, got %+v", zones["TeamC"])
 	}
 }

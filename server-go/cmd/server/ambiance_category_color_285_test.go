@@ -5,6 +5,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/colors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -50,7 +51,7 @@ func TestAmbianceCategoryColor285_CustomWithColor_UsesIt_WithoutColor_White(t *t
 	tw285WriteCustom(t, catDir, "CINEMA", `{"name":"Cinéma","color":"#0ea5e9"}`)
 	tw285WriteCustom(t, catDir, "NUE", `{"name":"Nue"}`)
 
-	want, _ := hexToRGB("#0ea5e9")
+	want, _ := colors.HexToRGB("#0ea5e9")
 	tw285Ready(app, "CINEMA")
 	if got := app.ambianceThemeColor(); got != want {
 		t.Errorf("custom colorée : got %v, want %v", got, want)
@@ -64,7 +65,7 @@ func TestAmbianceCategoryColor285_CustomWithColor_UsesIt_WithoutColor_White(t *t
 func TestAmbianceCategoryColor285_BuiltinOverride_AndExplicitNone(t *testing.T) {
 	app, catDir := tw285AmbianceApp(t)
 	tw285Ready(app, "GEOGRAPHY")
-	orig, _ := hexToRGB("#3b82f6")
+	orig, _ := colors.HexToRGB("#3b82f6")
 	if got := app.ambianceThemeColor(); got != orig {
 		t.Fatalf("intégrée sans sidecar : got %v, want %v", got, orig)
 	}

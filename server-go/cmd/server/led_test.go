@@ -1,6 +1,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/colors"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"encoding/json"
@@ -85,9 +86,9 @@ func TestAnswerColorToRGB(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		result := answerColorToRGB(tt.color)
+		result := colors.AnswerColorToRGB(tt.color)
 		if result != tt.expected {
-			t.Errorf("answerColorToRGB(%s) = %v, want %v", tt.color, result, tt.expected)
+			t.Errorf("colors.AnswerColorToRGB(%s) = %v, want %v", tt.color, result, tt.expected)
 		}
 	}
 }
@@ -168,7 +169,7 @@ func TestLEDSet_BroadcastStop(t *testing.T) {
 		t.Fatal("Expected LED state for bumper AA:BB:CC:DD:EE:01")
 	}
 	// No ColorName → nearestPaletteColorByHue maps [200,100,50] to the closest hue entry
-	wantColor := nearestPaletteColorByHue(200, 100, 50)
+	wantColor := colors.NearestPaletteColorByHue(200, 100, 50)
 	if state.Color != wantColor {
 		t.Errorf("STOP color: got %v, want nearest-hue-palette %v (from [200,100,50])", state.Color, wantColor)
 	}
@@ -902,7 +903,7 @@ func TestLEDMemory_Solo_Paused_DeepTone_UsesToneRelativeDim(t *testing.T) {
 	if s.Effect != "DIM" {
 		t.Errorf("MEMORY SOLO PAUSED deep tone: expected DIM, got %s", s.Effect)
 	}
-	want := dimIntensityFor([3]int{0, 54, 179}) // bleu-profond RGB
+	want := colors.DimIntensityFor([3]int{0, 54, 179}) // bleu-profond RGB
 	if s.Intensity != want {
 		t.Errorf("MEMORY SOLO PAUSED deep tone: intensity = %d, want %d (dimIntensityFor)", s.Intensity, want)
 	}
@@ -941,7 +942,7 @@ func TestLEDMemory_Solo_Inactive_DeepTone_UsesToneRelativeDim(t *testing.T) {
 	if s.Effect != "DIM" {
 		t.Errorf("MEMORY SOLO inactive deep tone: expected DIM, got %s", s.Effect)
 	}
-	want := dimIntensityFor([3]int{179, 0, 104}) // rose-profond RGB
+	want := colors.DimIntensityFor([3]int{179, 0, 104}) // rose-profond RGB
 	if s.Intensity != want {
 		t.Errorf("MEMORY SOLO inactive deep tone: intensity = %d, want %d (dimIntensityFor)", s.Intensity, want)
 	}
@@ -983,7 +984,7 @@ func TestLEDMemory_MultiTeam_OtherParticipating_DeepTone_UsesToneRelativeDim(t *
 	if s.Effect != "DIM" {
 		t.Errorf("MEMORY multi-team other participating, deep tone: expected DIM, got %s", s.Effect)
 	}
-	want := dimIntensityFor([3]int{0, 179, 45}) // vert-profond RGB
+	want := colors.DimIntensityFor([3]int{0, 179, 45}) // vert-profond RGB
 	if s.Intensity != want {
 		t.Errorf("MEMORY multi-team other participating, deep tone: intensity = %d, want %d (dimIntensityFor)", s.Intensity, want)
 	}
