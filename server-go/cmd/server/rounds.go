@@ -1,6 +1,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/diag"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
@@ -13,6 +14,15 @@ import (
 
 // Engine and QuestionsDirPath make *App a rounds.Host.
 func (a *App) Engine() *game.Engine { return a.engine }
+
+// Config, ResolveCategoryMeta and SaveBackgroundsConfig make *App a demo.Host.
+func (a *App) Config() *config.Config { return a.config }
+
+func (a *App) ResolveCategoryMeta(key string) (name, imageURL, color string) {
+	return a.httpServer.ResolveCategoryMeta(key)
+}
+
+func (a *App) SaveBackgroundsConfig() { a.saveBackgroundsConfig() }
 
 func (a *App) QuestionsDirPath() string { return a.questionsDirPath() }
 
