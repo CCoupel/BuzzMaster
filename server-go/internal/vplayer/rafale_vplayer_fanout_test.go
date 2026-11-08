@@ -1,4 +1,4 @@
-package main
+package vplayer
 
 import (
 	"encoding/json"
@@ -10,11 +10,11 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Traversée du chemin de fan-out VPlayer "chaud" (buildVPlayerPayloads) par
+// Traversée du chemin de fan-out VPlayer "chaud" (BuildPayloads) par
 // les 3 champs indicateur « équipe active » RAFALE (milestone v8.0.0 #16,
 // issue #199 task 37, contrat rafale.md §8.2).
 //
-// buildVPlayerPayloads (main.go) réimplémente le filtrage de
+// BuildPayloads (main.go) réimplémente le filtrage de
 // SerializeForVPlayer par concaténation d'octets, en extrayant le noeud GAME
 // directement du message source — indépendamment de
 // internal/protocol/messages.go (voir stripVPlayerHiddenGameFields, main.go).
@@ -103,12 +103,12 @@ func assertRafaleTeamFieldsInFanoutPayload(t *testing.T, gameNode map[string]int
 }
 
 // TestBuildVPlayerPayloads_RafaleTeamFields_Survive_ReducedPath covers the
-// per-recipient reduction (PREPARE/READY — the phases buildVPlayerPayloads
+// per-recipient reduction (PREPARE/READY — the phases BuildPayloads
 // actually reduces; see its own ok=false fallback for every other phase).
 func TestBuildVPlayerPayloads_RafaleTeamFields_Survive_ReducedPath(t *testing.T) {
 	msg := buildRafaleTeamFieldsFanoutMessage(t, game.PhaseReady)
 
-	payloads, ok := buildVPlayerPayloads(msg, []server.VPlayerRecipient{
+	payloads, ok := BuildPayloads(msg, []server.VPlayerRecipient{
 		{ClientID: "c1", PlayerID: rafaleFanoutPlayerID},
 	})
 	if !ok {

@@ -1,4 +1,4 @@
-package main
+package vplayer
 
 import (
 	"bytes"
@@ -194,7 +194,7 @@ func keysOf(m map[string]map[string]interface{}) []string {
 }
 
 // ---------------------------------------------------------------------------
-// End-to-end sanity: buildVPlayerPayloads (the production entry point) still
+// End-to-end sanity: BuildPayloads (the production entry point) still
 // produces JSON that round-trips correctly for a recipient whose playerID
 // contains characters that would break naive string concatenation.
 // ---------------------------------------------------------------------------
@@ -203,7 +203,7 @@ func TestBuildVPlayerPayloads_SpecialCharacterPlayerID_RoundTrips(t *testing.T) 
 	weirdID := `vp-"weird"\id` + "\n"
 	msg := buildFanoutBenchMessageWithPlayerIDs(t, []string{weirdID}, benchQCMQuestion())
 
-	payloads, ok := buildVPlayerPayloads(msg, []server.VPlayerRecipient{{ClientID: "c1", PlayerID: weirdID}})
+	payloads, ok := BuildPayloads(msg, []server.VPlayerRecipient{{ClientID: "c1", PlayerID: weirdID}})
 	if !ok {
 		t.Fatalf("expected reduction to apply")
 	}

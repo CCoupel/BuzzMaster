@@ -1,4 +1,4 @@
-package main
+package vplayer
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ import (
 // "chaud" (#137 Batch 2b, contract game-state.md § "QUIZ_OBJECTIVES — champ
 // à diffusion restreinte", 3e site listé).
 //
-// buildVPlayerPayloads réimplémente le filtrage de SerializeForVPlayer par
+// BuildPayloads réimplémente le filtrage de SerializeForVPlayer par
 // concaténation d'octets (voir son commentaire dans main.go) pour éviter un
 // aller-retour map[string]interface{} par destinataire. Ce chemin extrait le
 // nœud GAME directement du message source, indépendamment de
@@ -82,7 +82,7 @@ func buildQuizObjectivesFanoutMessage(t *testing.T, phase game.GamePhase) *proto
 func TestBuildVPlayerPayloads_StripsQuizObjectives(t *testing.T) {
 	msg := buildQuizObjectivesFanoutMessage(t, game.PhaseReady)
 
-	payloads, ok := buildVPlayerPayloads(msg, []server.VPlayerRecipient{
+	payloads, ok := BuildPayloads(msg, []server.VPlayerRecipient{
 		{ClientID: "c1", PlayerID: quizObjectivesFanoutPlayerID},
 	})
 	if !ok {
@@ -102,7 +102,7 @@ func TestBuildVPlayerPayloads_StripsQuizObjectives(t *testing.T) {
 		t.Fatalf("payload is not valid JSON: %v (bytes: %s)", err, data)
 	}
 	if _, present := parsed.Msg.Game["QUIZ_OBJECTIVES"]; present {
-		t.Errorf("buildVPlayerPayloads (fan-out chaud): QUIZ_OBJECTIVES should be stripped from the reduced VPlayer payload, got %v", parsed.Msg.Game["QUIZ_OBJECTIVES"])
+		t.Errorf("BuildPayloads (fan-out chaud): QUIZ_OBJECTIVES should be stripped from the reduced VPlayer payload, got %v", parsed.Msg.Game["QUIZ_OBJECTIVES"])
 	}
 	if parsed.Msg.Game["QUIZ_NAME"] != "Quiz confidentiel" {
 		t.Errorf("expected QUIZ_NAME to survive untouched (only QUIZ_OBJECTIVES is admin-only), got %v", parsed.Msg.Game["QUIZ_NAME"])
@@ -112,6 +112,6 @@ func TestBuildVPlayerPayloads_StripsQuizObjectives(t *testing.T) {
 	// anywhere in the payload — catches a leak via a field this test doesn't
 	// know to look for (e.g. duplicated into another key by a future change).
 	if strings.Contains(string(data), quizObjectivesFanoutSecret) {
-		t.Errorf("buildVPlayerPayloads: the QUIZ_OBJECTIVES value leaked somewhere in the payload bytes: %s", data)
+		t.Errorf("BuildPayloads: the QUIZ_OBJECTIVES value leaked somewhere in the payload bytes: %s", data)
 	}
 }
