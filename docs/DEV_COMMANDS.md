@@ -73,14 +73,18 @@ Les procédures détaillées sont documentées dans des fichiers séparés.
 
 ## Commandes Rapides
 
-### Environnement des agents sous WSL (v11.4.0)
+### Environnement conteneur Claude-Launcher (depuis le 2026-11-08)
 
-- **Go** : `/usr/local/go/bin` hors PATH des agents. Exporter le PATH et forcer la chaîne d'outils : `export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin` puis `GOTOOLCHAIN=go1.26.10` (`go.mod` en 1.26.10, Go local 1.26.9).
-- **Node** : Node **Linux** (nvm v22.23.3) en tête du PATH. Le `npm` du PATH peut être celui de Windows : les worktrees de travail restent sous `/mnt/c`.
-- **Pas de vitest ni de `npm ci` sur `/mnt/c`** : l'I/O fait décrocher WSL (vitest complet, `npm ci` observés en v11.4.0). Ces suites sont validées par la CI. Si `server-go/build.ps1` est lancé depuis Windows, il faut un `npm ci` Windows.
-- **Tests ciblés** (dev-* et test-writer) : `vitest related <fichiers touchés>`, `go test -run <motif>` sur les paquets touchés.
-- **Suites complètes** (`qa` et CI seules) : `go test ./...`, vitest complet, `scripts/ci.sh`.
-- Mise en œuvre durable prévue : #292 (Node Linux, dépôt sur disque Linux) et #293 (tests ciblés), milestone v11.5.0.
+Les agents tournent dans le conteneur Claude-Launcher : Ubuntu 24.04, Linux natif. Le dépôt est sur le partage `/share/MFS` (MooseFS) ; il n'y a ni WSL ni `/mnt/c`.
+
+- **Go** : `/usr/local/go/bin` hors PATH des agents. Exporter le PATH et forcer la chaîne d'outils : `export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin` puis `GOTOOLCHAIN=go1.26.10` (`go.mod` en 1.26.10).
+- **Node** : Node **Linux** v22.23.3 (`~/.local/bin/node`), `node_modules` natif Linux.
+- **PlatformIO** : `pio` Linux (build firmware depuis le conteneur).
+- **`server-go/build.ps1`** reste un script Windows destiné à l'utilisateur ; s'il est lancé depuis Windows, il faut un `npm ci` Windows.
+- **Tests ciblés** (dev-* et test-writer) : `npx vitest related --run <fichiers touchés>`, `go test ./<paquet> -run <motif>` ; `-race` seulement sur le code concurrent.
+- **Suites complètes** (`qa` et CI seules) : `go test ./...`, vitest complet, `scripts/ci.sh` local.
+
+Règle complète : `docs/TEST_PROCEDURE.md`, section « Tests ciblés / suites complètes ».
 
 ### Développement Go
 

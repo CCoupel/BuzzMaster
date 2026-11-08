@@ -153,12 +153,14 @@ go build -o server.exe ./cmd/server && ./server.exe
 ### 3.5 Tests rapides pendant le dev
 
 ```bash
-# Test unitaire d'un package spécifique
-go test ./internal/game/... -v
+# Test d'une fonction spécifique dans le paquet touché
+go test ./internal/game/ -run TestNomDuTest -v
 
-# Test d'une fonction spécifique
-go test ./internal/game/... -v -run TestNomDuTest
+# Tests Vitest liés aux fichiers frontend touchés (depuis server-go/web)
+npx vitest related --run <fichiers frontend touchés>
 ```
+
+Les agents dev-* et test-writer ne lancent que les tests ciblés (voir `TEST_PROCEDURE.md` §2.4). La suite complète (`go test ./...`, vitest complet, `scripts/ci.sh`) est réservée à `qa` et à la CI.
 
 ---
 
