@@ -1,7 +1,7 @@
 name: CI (milestone branches)
 
-# Pre-validation CI (infra.md §3bis C10): runs only scripts/ci.sh (commands.ci), without
-# publishing or deploying. Its green verdict on the exact SHA gates issue closure and the
+# Pre-validation CI (infra.md §3bis C10): runs scripts/ci.sh (commands.ci) plus the firmware
+# compilation job of release.yml (#294), without publishing or deploying. Its green verdict on the exact SHA gates issue closure and the
 # merge/tag barrier of PUBLISH PROD. release.yml runs the very same script before building.
 on:
   push:
@@ -47,3 +47,79 @@ jobs:
       # (frontend build, vitest, embed, go build, tests -race, go vet, govulncheck + npm audit).
       - name: Run CI script
         run: scripts/ci.sh
+
+  # BuzzClick firmware (#294): same recipe as release.yml job compiling-firmware, so that
+  # "green on the branch => green at the tag" (the v11.4.0 tag run broke on the firmware
+  # build only, run 42244441889). Runs in parallel with `testing`, on every push (no path
+  # filter). Nothing is uploaded nor published: the merged binary is only size-checked.
+  compiling-firmware:
+    name: 🔨 Compile BuzzClick Firmware
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # pip wheels + PlatformIO core dir (platform espressif32 pinned in platformio.ini,
+      # toolchains, frameworks): key follows platformio.ini, so a platform bump refreshes it.
+      - name: Cache pip and PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: |
+          pip install --upgrade platformio
+          pio --version
+
+      - name: Build BuzzClick firmware
+        run: pio run -e buzzclick
+
+      - name: Generate merged firmware binary
+        run: |
+          # Same merge as release.yml (bootloader + partitions + boot_app0 + app).
+          ESPTOOL=$(find $HOME/.platformio/packages/tool-esptoolpy -name "esptool.py" 2>/dev/null | head -1)
+          if [ -z "$ESPTOOL" ]; then
+            ESPTOOL="python -m esptool"
+          else
+            ESPTOOL="python $ESPTOOL"
+          fi
+
+          BOOT_APP0=$(find $HOME/.platformio/packages/framework-arduinoespressif32*/tools/partitions/boot_app0.bin 2>/dev/null | head -1)
+          if [ -z "$BOOT_APP0" ]; then
+            echo "❌ ERROR: boot_app0.bin not found in PlatformIO packages"
+            exit 1
+          fi
+
+          $ESPTOOL --chip esp32c3 merge_bin \
+            -o buzzclick-merged.bin \
+            0x0     .pio/build/buzzclick/bootloader.bin \
+            0x8000  .pio/build/buzzclick/partitions.bin \
+            0xe000  $BOOT_APP0 \
+            0x10000 .pio/build/buzzclick/firmware.bin
+
+      - name: Validate firmware binary
+        run: |
+          SIZE=$(stat -c%s buzzclick-merged.bin)
+          echo "Merged firmware binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
+          MIN_SIZE=204800   # 200 KB
+          MAX_SIZE=3145728  # 3 MB
+          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
+            echo "❌ ERROR: Firmware too small ($SIZE < $MIN_SIZE)"
+            exit 1
+          fi
+          if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+            echo "❌ ERROR: Firmware too large ($SIZE > $MAX_SIZE)"
+            exit 1
+          fi
+          echo "✅ Firmware validation passed"
