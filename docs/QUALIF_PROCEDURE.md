@@ -57,7 +57,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 # 1a-1b. Compiler et merger le firmware : recette unique scripts/build-firmware.sh
 #        (pio run -e buzzclick, puis merge esptool, bornes de taille). Produit buzzclick-merged.bin à la racine.
-scripts/build-firmware.sh buzzclick-merged.bin
+bash scripts/build-firmware.sh buzzclick-merged.bin
 
 # 1c. Intégrer dans les assets Go (merged binary + version)
 VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
