@@ -41,8 +41,7 @@ beforeEach(() => {
   vi.spyOn(window, 'confirm').mockReturnValue(true)
   // window.location.reload (upload réussi) : window.location n'est pas
   // redéfinissable sous vmThreads ; jsdom journalise « not implemented:
-  // navigation » sans lever d'exception — on garde ce bruit hors du rapport.
-  vi.spyOn(console, 'error').mockImplementation(() => {})
+  // navigation » (sortie jsdom directe, hors console.error : non filtrable) sans lever d'exception.
 })
 
 afterEach(() => {

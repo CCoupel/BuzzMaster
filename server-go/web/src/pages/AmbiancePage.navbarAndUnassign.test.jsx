@@ -276,6 +276,8 @@ describe('AmbiancePage — non-régression MAJEUR (code-reviewer) : portée ind�
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
+    // Config persistée appliquée (boutons « Libre » actifs) avant toute action.
+    await waitFor(() => expect(teamBtn()).not.toBeDisabled())
     // Les deux sont cochées par défaut (config déjà persistée). On décoche
     // "Salle gauche" (équipe) pour une raison quelconque — AVANT de cliquer
     // un bouton "Libre" qui ne la concerne pas.
@@ -297,6 +299,8 @@ describe('AmbiancePage — non-régression MAJEUR (code-reviewer) : portée ind�
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
+    // Config persistée appliquée (boutons « Libre » actifs) avant toute action.
+    await waitFor(() => expect(teamBtn()).not.toBeDisabled())
     fireEvent.click(screen.getByLabelText('Salle droite'))
     expect(screen.getByLabelText('Salle droite')).not.toBeChecked()
 
