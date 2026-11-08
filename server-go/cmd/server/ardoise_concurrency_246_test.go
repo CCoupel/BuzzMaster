@@ -442,6 +442,8 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 	app.engine.SetPhase(game.PhaseStopped)
 	app.engine.Ready("", &game.Question{ID: "q-ardoise", Type: game.QuestionTypeArdoise})
 	app.engine.SetPhase(game.PhaseReady)
+	// #291 Phase A : le tick de 1 s est CONSERVÉ ici — il fait partie du trafic
+	// de fond (UPDATE_TIMER vers l'admin lent) que ce test de stress mesure.
 	app.engine.Start(dur + 15)
 	deadline := time.Now().Add(5 * time.Second)
 	for app.engine.GetPhase() != game.PhaseStarted && time.Now().Before(deadline) {
@@ -557,8 +559,25 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 	wg.Wait()
 	close(stopAdmin)
 	awg.Wait()
-	// laisser l'admin lent se vider / se reconnecter
-	time.Sleep(8 * time.Second)
+	// laisser l'admin lent se vider / se reconnecter : attente de convergence
+	// (sondage 50 ms, échéance 8 s = l'ancienne pause fixe) au lieu d'un sommeil de 8 s.
+	converged := func() bool {
+		st := serverTexts()
+		for _, v := range []*h246AdminView{A, B} {
+			v.mu.Lock()
+			for _, n := range names {
+				if v.view[n] != st[n] || st[n] != final[n] {
+					v.mu.Unlock()
+					return false
+				}
+			}
+			v.mu.Unlock()
+		}
+		return true
+	}
+	for settle := time.Now().Add(8 * time.Second); time.Now().Before(settle) && !converged(); {
+		time.Sleep(50 * time.Millisecond)
+	}
 	st := serverTexts()
 	fail := 0
 	for _, v := range []*h246AdminView{A, B} {

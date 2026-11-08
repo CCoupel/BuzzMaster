@@ -83,7 +83,9 @@ func TestConnStateProtocol_EnrollDisconnectReconnect_NeverSkipsOrangeNeverStuckR
 	// Step 4: eventually, once the minimum green window elapses and a delivery
 	// is confirmed (e.g. the next broadcast, or a message from the client),
 	// the badge must settle back to HIDDEN — never stay stuck on any color.
-	time.Sleep(2100 * time.Millisecond) // connGreenMinDuration default (2s, D2) — see package game
+	// #291 Phase A : fenêtre « green » (2 s, D2) raccourcie sur CE moteur ; le test attend toujours qu'elle soit écoulée.
+	app.engine.SetConnGreenMinDuration(100 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	app.engine.ApplyVPlayerBroadcastConnEvents()
 
 	if got := app.engine.GetBumper(id).ConnState; got != "" {

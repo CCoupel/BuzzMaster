@@ -80,14 +80,15 @@ func TestHandleBuzzerACK_ConfirmsDelivery(t *testing.T) {
 		t.Fatalf("setup failed: expected green, got %q", got)
 	}
 
-	// connGreenMinDuration is unexported (game package) and intentionally not
-	// exposed for cross-package overriding — wait past the real, production
-	// default (2s, D2) so the assertion below can only pass if handleBuzzerACK
+	// connGreenMinDuration (2s, D2) is shortened per engine (#291, Phase A) —
+	// wait past that window so the assertion below can only pass if handleBuzzerACK
 	// genuinely called engine.ConfirmDelivery (DeliveryConfirmed is a no-op on
 	// every state except green, so this is the only way to observe the wiring
 	// fired at all). Register the ACK only AFTER the wait, so the ack_timeout_ms
 	// retry/expiry clock (also ~2s by default) starts fresh and can't race it.
-	time.Sleep(2100 * time.Millisecond)
+	// #291 Phase A : fenêtre « green » (2 s, D2) raccourcie sur CE moteur ; le test attend toujours qu'elle soit écoulée.
+	app.engine.SetConnGreenMinDuration(100 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	msgID := "abc123def456"
 	app.ackManager.Register(mac, msgID, protocol.ActionLEDSet)
@@ -177,14 +178,15 @@ func TestHandleWebMessage_ConfirmsDeliveryForIdentifiedVPlayer(t *testing.T) {
 		t.Fatalf("setup failed: GetClientPlayerID = (%q, %v), want (%q, true)", got, ok, playerID)
 	}
 
-	// connGreenMinDuration is unexported (game package) and intentionally not
-	// exposed for cross-package overriding — wait past the real, production
-	// default (2s, D2) so the assertion below can only pass if handleWebMessage
+	// connGreenMinDuration (2s, D2) is shortened per engine (#291, Phase A) —
+	// wait past that window so the assertion below can only pass if handleWebMessage
 	// genuinely called engine.ConfirmDelivery (DeliveryConfirmed is a no-op on
 	// every state except green, so "stays green" alone wouldn't prove the wiring
 	// fired at all; the elapsed window makes the immediate-apply branch the only
 	// way to observe a HIDDEN transition here).
-	time.Sleep(2100 * time.Millisecond)
+	// #291 Phase A : fenêtre « green » (2 s, D2) raccourcie sur CE moteur ; le test attend toujours qu'elle soit écoulée.
+	app.engine.SetConnGreenMinDuration(100 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	// This is the message under test — handleWebMessage must call ConfirmDelivery
 	// for it since the client is now linked to playerID.

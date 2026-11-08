@@ -194,6 +194,7 @@ type Engine struct {
 	rafaleQuestionStopCh chan struct{}
 	mu                   sync.RWMutex
 	timer                *time.Ticker
+	connGreenMin         time.Duration // 0 = connGreenMinDuration; per-engine test knob (#291)
 	tickInterval         time.Duration // 0 = DefaultTickInterval; per-engine test knob (#291)
 	stopCh               chan struct{}
 	countdownTimer       *time.Ticker
@@ -652,7 +653,8 @@ func (e *Engine) ConfirmDelivery(bumperID string) {
 	}
 
 	elapsed := time.Since(bumper.greenSince)
-	if elapsed >= connGreenMinDuration {
+	greenMin := e.connGreenMinUnsafe()
+	if elapsed >= greenMin {
 		applyConnEventUnsafe(bumper, ConnEventDeliveryConfirmed)
 		e.mu.Unlock()
 		return
@@ -665,7 +667,7 @@ func (e *Engine) ConfirmDelivery(bumperID string) {
 	}
 	bumper.confirmPending = true
 	scheduledFor := bumper.greenSince
-	remaining := connGreenMinDuration - elapsed
+	remaining := greenMin - elapsed
 	e.mu.Unlock()
 
 	time.AfterFunc(remaining, func() {
@@ -9104,4 +9106,23 @@ func (e *Engine) SetTickInterval(d time.Duration) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.tickInterval = d
+}
+
+// connGreenMinUnsafe returns the minimum "green" window of this engine.
+// Caller must hold e.mu.
+func (e *Engine) connGreenMinUnsafe() time.Duration {
+	if e.connGreenMin > 0 {
+		return e.connGreenMin
+	}
+	return connGreenMinDuration
+}
+
+// SetConnGreenMinDuration shortens this engine's minimum "green" badge window
+// (production: connGreenMinDuration = 2 s) so that cross-package tests can wait
+// for it in milliseconds. Per-engine, never global; d <= 0 restores the
+// default (#291, Phase A).
+func (e *Engine) SetConnGreenMinDuration(d time.Duration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.connGreenMin = d
 }
