@@ -4,6 +4,7 @@ package main
 // ARDOISE_FINAL. Contrats : contracts/websocket-actions.md, contracts/logging.md.
 
 import (
+	"buzzcontrol/internal/coalesce"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
@@ -50,7 +51,7 @@ func newEnv246(t *testing.T) *env246 {
 func (e *env246) useLongArdoiseCoalescer(t *testing.T) {
 	t.Helper()
 	e.app.ardoiseCoalescer.Stop()
-	e.app.ardoiseCoalescer = NewBroadcastCoalescer(10*time.Minute, func() {
+	e.app.ardoiseCoalescer = coalesce.NewBroadcastCoalescer(10*time.Minute, func() {
 		e.app.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
 	})
 }

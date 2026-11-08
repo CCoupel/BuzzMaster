@@ -1,6 +1,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/coalesce"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
@@ -63,7 +64,7 @@ func newTestApp(t *testing.T) *App {
 	// (TestArdoiseInput_Anim_ReceivesCoalescedUpdate, ardoise_input_anim_test.go,
 	// #158/T1) failing against the real production wiring — this test-only
 	// helper was the one out of sync, not the production code.
-	app.ardoiseCoalescer = NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
+	app.ardoiseCoalescer = coalesce.NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
 		app.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
 	})
 	// #269: no timer/goroutine may outlive its test. A pending coalescer window

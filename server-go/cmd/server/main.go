@@ -3,6 +3,7 @@ package main
 import (
 	"buzzcontrol/assets"
 	"buzzcontrol/internal/audio"
+	"buzzcontrol/internal/coalesce"
 	"buzzcontrol/internal/colors"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
@@ -154,7 +155,7 @@ type App struct {
 	// UPDATEs (#129 T2.1/T2.2) into at most one per ≤150ms window — see
 	// broadcast_coalescer.go. Flushed immediately on every phase change
 	// (OnStateChange) and stopped on server shutdown (a.stop()).
-	ardoiseCoalescer *BroadcastCoalescer
+	ardoiseCoalescer *coalesce.BroadcastCoalescer
 
 	// Network detection bookkeeping (#267): guarded by networkMu. networkChecked is false until
 	// the first updateNetworkState (startup); networkLostAt feeds lost_for_s of NETWORK_RESTORED.
@@ -491,7 +492,7 @@ func (a *App) init() {
 	// broadcastUpdateTo has routed to ClientTypeAnim since #162 — the
 	// only gap was this call site never asking for it. /tv, /vplayer and
 	// /buzzer stay excluded, as before.
-	a.ardoiseCoalescer = NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
+	a.ardoiseCoalescer = coalesce.NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
 		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
 	})
 
