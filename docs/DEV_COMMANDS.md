@@ -120,11 +120,11 @@ npm ci
 npm run build              # produit web/dist (requis par les tests fonts-embed et le smoke test dist)
 npx vitest run             # tests unitaires
 npx vitest run --coverage  # couverture v8
-npm audit --audit-level=high   # même porte que scripts/ci.sh (étape 7)
+npm audit --audit-level=high   # même porte que scripts/ci.sh (étape 8)
 ```
 
 - Les commentaires CSS ne doivent **pas** contenir `*/` (même dans un texte) : lightningcss refuse la fermeture prématurée, qu'esbuild tolérait avant vite 8.
-- `scripts/ci.sh` exécute ces tests à l'étape `[2/7]` (`npm test`, avant l'embed) : un test rouge bloque la CI (#273).
+- `scripts/ci.sh` exécute ces tests à l'étape `[3/8]` (`npm test`, avant l'embed) : un test rouge bloque la CI (#273).
 - En cas d'échec de `npx vitest run` après un bump de dépendance, vérifier d'abord les mocks `fetch` (vitest 5 remonte les exceptions de rendu en erreur non gérée).
 
 ### Cross-compilation

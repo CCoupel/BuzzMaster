@@ -32,7 +32,8 @@ Ce document décrit la phase de qualification avant mise en production.
 ```bash
 cd server-go
 
-# Arrêter le serveur en cours
+# Action utilisateur, sous Windows (PowerShell) : arrêter le serveur en cours
+# (Claude ne lance pas cette commande : elle n'est pas exécutable depuis le conteneur)
 taskkill /IM server.exe /F 2>nul
 
 # Nettoyer les fichiers temporaires
@@ -54,17 +55,9 @@ cd "$(git rev-parse --show-toplevel)"
 # On produit le binaire MERGED (bootloader + partitions + boot_app0 + app),
 # identique à ce que fait la CI/CD → garantit le BORE QUALIF ↔ PROD.
 
-# 1a. Compiler le firmware (PlatformIO Linux, `pio` dans le PATH)
-pio run -e buzzclick
-
-# 1b. Merger les blocs (fichier unique flashable USB + OTA)
-# Chemins PlatformIO Linux par défaut (~/.platformio) : à vérifier sur le poste avant usage.
-python3 ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32c3 merge_bin \
-  -o buzzclick-merged.bin \
-  0x0     .pio/build/buzzclick/bootloader.bin \
-  0x8000  .pio/build/buzzclick/partitions.bin \
-  0xe000  ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
-  0x10000 .pio/build/buzzclick/firmware.bin
+# 1a-1b. Compiler et merger le firmware : recette unique scripts/build-firmware.sh
+#        (pio run -e buzzclick, puis merge esptool, bornes de taille). Produit buzzclick-merged.bin à la racine.
+scripts/build-firmware.sh buzzclick-merged.bin
 
 # 1c. Intégrer dans les assets Go (merged binary + version)
 VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
@@ -95,8 +88,10 @@ L'exe Windows n'est pas lancé depuis le conteneur : l'utilisateur le lance depu
 
 ### 1.3 Démarrer le serveur
 
-```bash
-./server.exe
+Action utilisateur, sous Windows (PowerShell, dossier `build\qualif_v<X.Y.Z>\`) — Claude ne la lance pas depuis le conteneur :
+
+```powershell
+.\buzzcontrol-qualif-<FULL_VERSION>-windows-amd64.exe --port 9090
 ```
 
 Vérifier :
@@ -327,11 +322,9 @@ RÉSULTAT: QUALIFIÉ / NON QUALIFIÉ
 # Vérifier si le serveur tourne
 curl -s http://localhost/version
 
-# Si pas de réponse, redémarrer le serveur
-cd server-go
-./server.exe &
-# ou en mode visible :
-# start ./server.exe
+# Si pas de réponse, redémarrer le serveur — action utilisateur, sous Windows (PowerShell) :
+# cd server-go
+# .\server.exe            (ou : start .\server.exe pour une fenêtre visible)
 ```
 
 Vérifier :
