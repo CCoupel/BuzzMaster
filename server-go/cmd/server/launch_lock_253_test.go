@@ -756,7 +756,7 @@ func TestLaunchLock253_Critical_HelloAckGivesEachAdminAndAnimItsConnectionIDBefo
 	}{{"admin", e.admin2, "admin", e.a2}, {"anim", e.anim, "anim", e.an}} {
 		e.purge253() // #291 : barrière positive au lieu d'une fenêtre fixe
 		e.send(t, c.id, c.ctype, "HELLO", map[string]interface{}{})
-		e.settle253() // #291 : barrière + marge de silence au lieu de 300 ms fixes
+		e.settle253After() // #291 : barrière + marge de 250 ms (action client HELLO) au lieu de 300 ms fixes
 
 		frames := tapOf253(c.conn).take()
 		ackAt, updateAt := -1, -1
@@ -793,7 +793,7 @@ func TestLaunchLock253_HelloAckIsNeverSentToTvPlayerOrToAnotherStation(t *testin
 	e.send(t, e.tv, "tv", "HELLO", map[string]interface{}{})
 	e.send(t, e.paulCID, "vplayer", "HELLO", map[string]interface{}{})
 	e.send(t, e.admin2, "admin", "HELLO", map[string]interface{}{})
-	e.settle253() // #291 : barrière + marge de silence au lieu de 300 ms fixes
+	e.settle253After() // #291 : barrière + marge de 250 ms (action client HELLO) au lieu de 300 ms fixes
 
 	if countAction253(tapOf253(e.tvc).take(), "HELLO_ACK") != 0 || countAction253(tapOf253(e.paulConn).take(), "HELLO_ACK") != 0 {
 		t.Error("jamais de HELLO_ACK vers la TV ni vers un VJoueur")

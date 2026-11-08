@@ -27,6 +27,10 @@ import (
 
 const settleQuiet291 = 100 * time.Millisecond
 
+// settleQuietAfterClient291 : marge après une action CLIENT asynchrone (HELLO, PLAYER_CONNECT) dont la réponse peut
+// passer par une goroutine supplémentaire du serveur (revue Phase A, R-3a).
+const settleQuietAfterClient291 = 250 * time.Millisecond
+
 var barrierSeq291 atomic.Int64
 
 // has reports whether a frame containing needle was received (frames are not consumed).
@@ -64,6 +68,12 @@ func (tp *tap253) dropContaining291(needle string) {
 // arrivé sur chacune des connexions, l'efface des trames puis laisse la marge de silence.
 func barrier291(t *testing.T, app *App, conns ...*websocket.Conn) {
 	t.Helper()
+	barrier291Quiet(t, app, settleQuiet291, conns...)
+}
+
+// barrier291Quiet : comme barrier291 avec une marge de silence explicite.
+func barrier291Quiet(t *testing.T, app *App, quiet time.Duration, conns ...*websocket.Conn) {
+	t.Helper()
 	id := fmt.Sprintf("BARRIER291-%d", barrierSeq291.Add(1))
 	msg, err := protocol.NewMessage("BARRIER_291", map[string]string{"ID": id})
 	if err != nil {
@@ -80,7 +90,7 @@ func barrier291(t *testing.T, app *App, conns ...*websocket.Conn) {
 			time.Sleep(2 * time.Millisecond)
 		}
 	}
-	time.Sleep(settleQuiet291)
+	time.Sleep(quiet)
 	for _, c := range conns {
 		tapOf253(c).dropContaining291(id)
 	}
@@ -101,6 +111,11 @@ func (e *env253) conns253() []*websocket.Conn {
 // settle253 : barrière positive sur toutes les connexions de l'environnement (voir en-tête). Les actions du test
 // sont exécutées de façon synchrone (handleWebMessage appelé en ligne) : leurs envois sont en file avant le témoin.
 func (e *env253) settle253() { barrier291(e.t253, e.app, e.conns253()...) }
+
+// settle253After : marge de 250 ms après une action client (HELLO).
+func (e *env253) settle253After() {
+	barrier291Quiet(e.t253, e.app, settleQuietAfterClient291, e.conns253()...)
+}
 
 // purge253 : barrière puis oubli des trames reçues sur toutes les connexions.
 func (e *env253) purge253() {

@@ -575,7 +575,21 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 		}
 		return true
 	}
-	for settle := time.Now().Add(8 * time.Second); time.Now().Before(settle) && !converged(); {
+	// M1 (revue Phase A) : on ne sort qu'après une convergence STABLE d'au moins 1 s (un état vu convergé un instant
+	// puis modifié par une trame en retard ne compte pas) ; échéance 9 s (8 s de l'ancienne pause + 1 s de stabilité).
+	const stableFor = time.Second
+	var stableSince time.Time
+	for settle := time.Now().Add(8*time.Second + stableFor); time.Now().Before(settle); {
+		if converged() {
+			if stableSince.IsZero() {
+				stableSince = time.Now()
+			}
+			if time.Since(stableSince) >= stableFor {
+				break
+			}
+		} else {
+			stableSince = time.Time{}
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	st := serverTexts()

@@ -411,6 +411,15 @@ func (qs *questionSoundAdapter) onNaturalEnd() {
 	qs.app.engine.ReleaseDeferredTimer()
 }
 
+// watchdogPeriod is the watchdog delay: the injected watchdogDelay, else the production
+// default audio.MaxQuestionSoundDuration + questionSoundWatchdogGrace (32 s).
+func (qs *questionSoundAdapter) watchdogPeriod() time.Duration {
+	if qs.watchdogDelay > 0 {
+		return qs.watchdogDelay
+	}
+	return audio.MaxQuestionSoundDuration + questionSoundWatchdogGrace
+}
+
 // armWatchdog starts a goroutine that releases the deferred timer at the
 // latest audio.MaxQuestionSoundDuration+questionSoundWatchdogGrace after
 // this Play() call, in case no end-of-playback signal ever arrives (a dead
@@ -419,10 +428,7 @@ func (qs *questionSoundAdapter) onNaturalEnd() {
 // onNaturalEnd. Caller must NOT hold qs.mu.
 func (qs *questionSoundAdapter) armWatchdog(questionID string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	delay := qs.watchdogDelay
-	if delay <= 0 {
-		delay = audio.MaxQuestionSoundDuration + questionSoundWatchdogGrace
-	}
+	delay := qs.watchdogPeriod()
 	qs.mu.Lock()
 	qs.watchdogCancel = cancel
 	qs.mu.Unlock()

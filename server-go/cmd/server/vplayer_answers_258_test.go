@@ -57,6 +57,11 @@ func (e *env258) allConns258(extra ...*websocket.Conn) []*websocket.Conn {
 }
 
 // settle258 : barrière positive sur toutes les connexions (+ extra) — remplace les pauses fixes (#291).
+func (e *env258) settle258After(extra ...*websocket.Conn) {
+	barrier291Quiet(e.t258, e.app, settleQuietAfterClient291, e.allConns258(extra...)...)
+}
+
+// settle258 : voir ci-dessus ; marge 100 ms (actions serveur synchrones).
 func (e *env258) settle258(extra ...*websocket.Conn) {
 	barrier291(e.t258, e.app, e.allConns258(extra...)...)
 }
@@ -103,7 +108,11 @@ func (e *env258) stageAwait(await *websocket.Conn, do func()) map[string][]strin
 	for _, c := range conns {
 		all = append(all, c)
 	}
-	barrier291(e.t258, e.app, all...)
+	quiet := settleQuiet291
+	if await != nil {
+		quiet = settleQuietAfterClient291 // réponse à une action client (HELLO, PLAYER_CONNECT)
+	}
+	barrier291Quiet(e.t258, e.app, quiet, all...)
 	out := map[string][]string{}
 	for n, c := range conns {
 		out[n] = tapOf253(c).take()
@@ -362,7 +371,7 @@ func TestVPlayerAnswers258_Critical_UnboundTabletInitialStateIsNeutralAndWithout
 
 	e.send(t, id, "vplayer", "HELLO", map[string]interface{}{})
 	e.waitFrameAfter258(conn, 0)
-	e.settle258(conn) // #291 : barrière + marge de silence 100 ms au lieu de 450 ms fixes
+	e.settle258After(conn) // #291 : barrière + marge de 250 ms (action client) au lieu de 450 ms fixes
 	frames := tapOf253(conn).take()
 
 	if len(frames) == 0 {
@@ -556,7 +565,7 @@ func TestVPlayerAnswers258_Critical_AfterPlayerConnectATargetedUpdateGivesTheTab
 	startTap253(conn)
 	e.send(t, id, "vplayer", "HELLO", map[string]interface{}{})
 	e.waitFrameAfter258(conn, 0)
-	e.settle258(conn) // #291 : barrière + marge au lieu de 300 ms fixes
+	e.settle258After(conn) // #291 : barrière + marge de 250 ms (action client) au lieu de 300 ms fixes
 	before := tapOf253(conn).take()
 	if seen258(before, e.jadeID, "ANSWERED_COLOR", "RED") {
 		t.Fatal("précondition : avant PLAYER_CONNECT la connexion non liée ne voit pas la réponse de Jade")
@@ -565,7 +574,7 @@ func TestVPlayerAnswers258_Critical_AfterPlayerConnectATargetedUpdateGivesTheTab
 	nBefore := tapOf253(conn).count291()
 	e.connect(t, id, "Jade", e.jadeID)
 	e.waitFrameAfter258(conn, nBefore)
-	e.settle258(conn) // #291 : barrière + marge au lieu de 450 ms fixes
+	e.settle258After(conn) // #291 : barrière + marge de 250 ms (action client) au lieu de 450 ms fixes
 	after := tapOf253(conn).take()
 
 	if !seen258(after, e.jadeID, "ANSWERED_COLOR", "RED") {
