@@ -24,6 +24,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"buzzcontrol/internal/config"
+	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 )
 
@@ -87,6 +88,53 @@ func tw285WireStart(t *testing.T) *tw285Wire {
 	w.listen("buzzer", dialWS(t, w.base, "/ws/buzzer?mac=AA:BB:CC:DD:EE:01"))
 	eventually264(t, "buzzer enregistré", func() bool { return app.buzzerHub.ConnectedCount() == 1 })
 	return w
+}
+
+// settle (#291, Phase A) remplace frames(window) : barrière positive — un témoin est diffusé par le wsHub (admin, tv,
+// vplayer, anim) ET par le buzzerHub ; une connexion livre ses trames dans l'ordre, donc le témoin reçu garantit que tout ce
+// qui a été émis avant lui est arrivé. Puis marge de silence de 100 ms (envois différés par un saut de goroutine) et
+// témoin effacé. Rend (et vide) les trames par client, comme frames.
+func (w *tw285Wire) settle(t *testing.T) map[string][][]byte {
+	t.Helper()
+	id := fmt.Sprintf("BARRIER291-%d", barrierSeq291.Add(1))
+	msg, err := protocol.NewMessage("BARRIER_291", map[string]string{"ID": id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.app.wsHub.BroadcastToTypes(msg, server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
+	w.app.buzzerHub.Broadcast(msg)
+	seen := func(name string) bool {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		for _, f := range w.buf[name] {
+			if strings.Contains(string(f), id) {
+				return true
+			}
+		}
+		return false
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for name := range w.conns {
+		for !seen(name) {
+			if time.Now().After(deadline) {
+				t.Fatalf("settle : témoin %s jamais reçu par %s", id, name)
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+	time.Sleep(settleQuiet291)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := map[string][][]byte{}
+	for name, frames := range w.buf {
+		for _, f := range frames {
+			if !strings.Contains(string(f), id) {
+				out[name] = append(out[name], f)
+			}
+		}
+	}
+	w.buf = map[string][][]byte{}
+	return out
 }
 
 // frames laisse s'écouler window puis rend (et vide) les trames reçues par client. Un lecteur par connexion tourne en
@@ -197,7 +245,7 @@ func TestCategoriesChanged285_Wire_RecipientsPayloadChangeAndOrder(t *testing.T)
 	w := tw285WireStart(t)
 
 	w.postCategory(t, "Cinéma")
-	got := w.frames(700 * time.Millisecond)
+	got := w.settle(t)
 
 	// destinataires : exactement admin, tv, vplayer, anim ; jamais le buzzer
 	for _, name := range []string{"admin", "tv", "vplayer", "anim"} {
@@ -269,7 +317,7 @@ func TestCategoriesChanged285_Wire_RecipientsPayloadChangeAndOrder(t *testing.T)
 func TestCategoriesChanged285_Wire_ChangeTypePerWrite_RenamedBeatsColor_DeletedAbsentFromList(t *testing.T) {
 	w := tw285WireStart(t)
 	w.postCategory(t, "Cinema")
-	w.frames(400 * time.Millisecond) // purge
+	w.settle(t) // purge
 
 	steps := []struct {
 		method, path, body, wantType string
@@ -280,7 +328,7 @@ func TestCategoriesChanged285_Wire_ChangeTypePerWrite_RenamedBeatsColor_DeletedA
 	}
 	for _, s := range steps {
 		w.request(t, s.method, s.path, s.body)
-		got := w.frames(500 * time.Millisecond)
+		got := w.settle(t)
 		fr := tw285Of(got["tv"], "CATEGORIES_CHANGED")
 		if len(fr) != 1 {
 			t.Fatalf("%s %s : %d CATEGORIES_CHANGED sur la TV, attendu 1", s.method, s.path, len(fr))
