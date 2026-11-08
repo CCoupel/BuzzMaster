@@ -100,6 +100,7 @@ func tw288Deferred(t *testing.T) (*App, *tw287Fake, *questionSoundAdapter, *tw28
 			once.Do(func() { close(started) })
 		}
 	}
+	app.engine.SetTickInterval(tw219qTick) // #291 Phase A : décompte 3-2-1 en ticks de 50 ms
 	app.engine.Start(20)
 	select {
 	case <-started:

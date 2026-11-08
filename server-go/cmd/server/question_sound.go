@@ -59,6 +59,12 @@ type questionSoundAdapter struct {
 	// process-wide config singleton (#257/#233).
 	soundEnabled func() bool
 
+	// watchdogDelay overrides the watchdog period (0 = production default,
+	// audio.MaxQuestionSoundDuration + questionSoundWatchdogGrace). Per-adapter,
+	// not package-level: tests run in parallel and a shortened global would
+	// fire the watchdog of unrelated tests (#291, Phase A).
+	watchdogDelay time.Duration
+
 	// validationMu/validationCache back questionSoundAvailability's file
 	// cache (contract sound.md §10.8.3) — a SEPARATE mutex from mu above:
 	// this cache is read/written far more often (every PONG, §10.8.7) and
@@ -413,6 +419,10 @@ func (qs *questionSoundAdapter) onNaturalEnd() {
 // onNaturalEnd. Caller must NOT hold qs.mu.
 func (qs *questionSoundAdapter) armWatchdog(questionID string) {
 	ctx, cancel := context.WithCancel(context.Background())
+	delay := qs.watchdogDelay
+	if delay <= 0 {
+		delay = audio.MaxQuestionSoundDuration + questionSoundWatchdogGrace
+	}
 	qs.mu.Lock()
 	qs.watchdogCancel = cancel
 	qs.mu.Unlock()
@@ -424,7 +434,7 @@ func (qs *questionSoundAdapter) armWatchdog(questionID string) {
 			}
 		}()
 		select {
-		case <-time.After(audio.MaxQuestionSoundDuration + questionSoundWatchdogGrace):
+		case <-time.After(delay):
 			server.LogWarn(game.LogComponentApp, "Question sound: watchdog fired for question %s — releasing the deferred timer (contract §10.7)", questionID)
 			qs.app.engine.ReleaseDeferredTimer()
 		case <-ctx.Done():

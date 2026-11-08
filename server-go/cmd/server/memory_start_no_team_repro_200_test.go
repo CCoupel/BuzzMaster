@@ -153,6 +153,7 @@ func TestReproMemoryStart_NoTeamSelected_RealDiskQuestion_RealWSSequence(t *test
 //     COUNTDOWN/STARTED on the stale selection from step 1.
 func TestReproMemoryReplay_ZeroFlipStartStop_NoTeamSelected_RealDiskQuestion_RealWSSequence(t *testing.T) {
 	app := newNextQuestionTestApp(t)
+	app.engine.SetTickInterval(50 * time.Millisecond) // #291 Phase A : décompte réel en ticks de 50 ms
 	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red"}, "blue": {Name: "blue"}})
 	app.engine.UpdateBumper("b1", map[string]interface{}{"TEAM": "red"})
 	app.engine.UpdateBumper("b2", map[string]interface{}{"TEAM": "blue"})

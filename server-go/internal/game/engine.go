@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+// DefaultTickInterval is the production period of the engine tickers (global
+// timer, countdown, RAFALE question timer): 1 s.
+const DefaultTickInterval = time.Second
+
 // safeGo runs fn in a new goroutine, recovering any panic so a single
 // failed background save can never take down the whole process (bugfix
 // #131, plan task 10 — applied uniformly to the ~30 `go e.SaveXxx()`
@@ -190,6 +194,7 @@ type Engine struct {
 	rafaleQuestionStopCh chan struct{}
 	mu                   sync.RWMutex
 	timer                *time.Ticker
+	tickInterval         time.Duration // 0 = DefaultTickInterval; per-engine test knob (#291)
 	stopCh               chan struct{}
 	countdownTimer       *time.Ticker
 	countdownStopCh      chan struct{}
@@ -1978,7 +1983,7 @@ func (e *Engine) startCountdown() {
 
 	// Create new stop channel for this countdown instance
 	e.countdownStopCh = make(chan struct{})
-	e.countdownTimer = time.NewTicker(1 * time.Second)
+	e.countdownTimer = time.NewTicker(e.tickIntervalUnsafe())
 
 	// Capture references locally
 	ticker := e.countdownTimer
@@ -2438,7 +2443,7 @@ func (e *Engine) startTimer() {
 
 	// Create new stop channel for this timer instance
 	e.stopCh = make(chan struct{})
-	e.timer = time.NewTicker(1 * time.Second)
+	e.timer = time.NewTicker(e.tickIntervalUnsafe())
 
 	// Capture references locally to avoid nil pointer issues
 	ticker := e.timer
@@ -2892,7 +2897,7 @@ func (e *Engine) StartRafaleQuestionTimer(seconds int) {
 	}
 
 	e.rafaleQuestionStopCh = make(chan struct{})
-	e.rafaleQuestionTimer = time.NewTicker(1 * time.Second)
+	e.rafaleQuestionTimer = time.NewTicker(e.tickIntervalUnsafe())
 
 	ticker := e.rafaleQuestionTimer
 	stopCh := e.rafaleQuestionStopCh
@@ -7542,7 +7547,7 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 
 	// Create new stop channel and ticker
 	e.stopCh = make(chan struct{})
-	e.timer = time.NewTicker(1 * time.Second)
+	e.timer = time.NewTicker(e.tickIntervalUnsafe())
 
 	ticker := e.timer
 	stopCh := e.stopCh
@@ -7842,7 +7847,7 @@ func (e *Engine) StartMotionMemorizeTimer(duration int) {
 
 	// Create new stop channel and ticker
 	e.stopCh = make(chan struct{})
-	e.timer = time.NewTicker(1 * time.Second)
+	e.timer = time.NewTicker(e.tickIntervalUnsafe())
 
 	ticker := e.timer
 	stopCh := e.stopCh
@@ -9079,4 +9084,24 @@ func (e *Engine) ForgetQuestionStatuses(ids []string) {
 	}
 	e.mu.Unlock()
 	safeGo("SaveStatuses", e.SaveStatuses)
+}
+
+// tickIntervalUnsafe returns the period of the engine tickers. Caller must
+// hold e.mu (every ticker creation site does).
+func (e *Engine) tickIntervalUnsafe() time.Duration {
+	if e.tickInterval > 0 {
+		return e.tickInterval
+	}
+	return DefaultTickInterval
+}
+
+// SetTickInterval shortens the period of this engine's tickers (global timer,
+// countdown, RAFALE question timer) so that tests whose "seconds" are whole
+// ticks run in milliseconds. Per-engine on purpose: tests run in parallel, a
+// package-level knob would speed up the timers of unrelated tests. Must be
+// called before Start(); d <= 0 restores the production 1 s (#291, Phase A).
+func (e *Engine) SetTickInterval(d time.Duration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tickInterval = d
 }

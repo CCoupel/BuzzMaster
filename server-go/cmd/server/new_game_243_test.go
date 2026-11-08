@@ -425,12 +425,14 @@ func TestNewGame243_Critical_PlayersWithoutScoresIsRefusedAndNothingChanges(t *t
 // --- 7. Minuteurs arrêtés (critical) ---------------------------------------------------------
 
 func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *testing.T) {
-	if testing.Short() {
-		t.Skip("attend des minuteurs réels (≈ 6 s), exclu de la boucle rapide (-short)")
-	}
+	// #291 Phase A : tick moteur injecté (50 ms au lieu de 1 s) — même
+	// scénario (décompte 3 ticks puis chrono 2 ticks, NEW_GAME pendant l'un
+	// ou l'autre, observation au-delà de la fin des deux), sans attente réelle.
+	const tick = 50 * time.Millisecond
 	run := func(t *testing.T, name string, newGameAt func(t *testing.T, e *env243, countdown, ticks <-chan struct{})) {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv243(t)
+			e.app.engine.SetTickInterval(tick)
 			ticks := make(chan struct{}, 100)
 			e.app.engine.OnTimerTick = func(ct int) {
 				select {
@@ -456,12 +458,12 @@ func TestNewGame243_Critical_RunningTimerNeverBringsThePhaseBackToStopped(t *tes
 
 			e.newGame(t, map[string]interface{}{"PURGE_SCORES": true, "PURGE_PLAYERS": false, "PURGE_TEAMS": false, "RESET_QUESTIONS": true})
 
-			deadline := time.Now().Add(6 * time.Second) // bien au-delà de la fin du décompte et du chrono
+			deadline := time.Now().Add(12 * tick) // bien au-delà de la fin du décompte (3 ticks) et du chrono (2 ticks)
 			for time.Now().Before(deadline) {
 				if ph := e.app.engine.GetPhase(); ph != game.GamePhase("NEW_GAME") {
 					t.Fatalf("la phase doit rester NEW_GAME, obtenu %s (un minuteur a survécu au NEW_GAME)", ph)
 				}
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 			if len(ticks) > 0 {
 				t.Errorf("aucun tick de chrono après NEW_GAME (%d reçus)", len(ticks))
