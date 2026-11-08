@@ -60,7 +60,7 @@ jamais du texte brut listant des lettres dans le chat :
     |
     v
 [FINALISATION] --> CLAUDE.md + .gitignore + CI/CD workflow + labels GitHub
-    |              + .claude-launcher/env.yaml (conteneur Claude-Launcher NG2, Etape 9c)
+    |              + .claude-launcher/env-template.yaml (conteneur Claude-Launcher NG2 ≥ v5.5.0, Etape 9c)
     |              + milestone v0.1.0 et issues de base (nouveau projet avec remote GitHub)
     v
 [AUDIT CONTEXTE] --> commit d'init puis /context-audit (audit complet)
@@ -1750,34 +1750,40 @@ echo "${TOOLCHAIN_ISSUES:-toolchain native}"
   existant installe sous Windows → `npm ci` cote Linux a faire, signale au rapport) / Garder Windows (consigne
   au rapport : `⚠ toolchain Windows — tests lents`).
 
-### Etape 9c : Environnement conteneur Claude-Launcher (`.claude-launcher/env.yaml`)
+### Etape 9c : Environnement conteneur Claude-Launcher (`.claude-launcher/env-template.yaml`)
 
-Claude-Launcher NG2 (v5.1.0+) peut executer le projet dans un conteneur bootstrappe depuis
-`.claude-launcher/env.yaml` (versionne). Le launcher fournit le mecanisme, le template connait la stack : il en
-propose le contenu — paquets, `setup`, `watch`, dossiers derives prives au conteneur (`local`). Reference complete
-(schema, correspondance stack → contenu, versions de chaine, regles de fusion) :
-**`TEMPLATE_claude/templates/launcher/env-yaml.md`** — la lire avant cette etape.
+Claude-Launcher NG2 (**≥ v5.5.0**) execute le projet dans un conteneur bootstrappe depuis deux fichiers versionnes de
+`.claude-launcher/` : **`env-template.yaml`**, propriete du template — regenere entierement a chaque passage, sans
+fusion, de facon deterministe — et **`env.yaml`**, propriete du projet — le template n'y ecrit **jamais** (hors
+migration) et ne le cree pas. Le launcher fusionne config du launcher → `env-template.yaml` → `env.yaml`. Reference
+complete (contrat de fusion, socle commun `gh`/`jq`/`PRIVATE/gitconfig`, correspondance stack → contenu, versions de
+chaine, forme canonique, migration, cas d'essai) : **`TEMPLATE_claude/templates/launcher/env-yaml.md`** — la lire
+avant cette etape.
 
-1. **Detecter** (lecture seule) : `env.yaml` present (`image` choisie par le launcher, cles deja renseignees),
-   launcher NG2 installe (`${XDG_CONFIG_HOME:-$HOME/.config}/claude-launcher-ng2/` ou `~/.local/state/claude-launcher-ng2/`),
-   manifestes et dossiers derives (§3 de la reference, sous-dossiers compris), versions requises (§2.1).
-2. **Composer** la proposition (reference §2-§4) a partir des manifestes, et des reponses aux Etapes 2-5 et 9 pour
-   un projet sans manifeste.
-3. **Question** (sans objet si `project-config.json` → `launcher_env.status` = `declined` et aucun `env.yaml` : rien
-   a demander) — la question affiche la proposition (ou le diff de fusion si le fichier existe) et le chemin
-   `.claude-launcher/env.yaml` :
+1. **Detecter** (lecture seule) : `env-template.yaml` / `env.yaml` presents, launcher NG2 installe
+   (`${XDG_CONFIG_HOME:-$HOME/.config}/claude-launcher-ng2/` ou `~/.local/state/claude-launcher-ng2/` ; version :
+   `claude-launcher-ng2 version`), manifestes et dossiers derives (§3 de la reference, sous-dossiers compris),
+   versions requises (§2.2), `project-config.json` → `launcher_env`.
+2. **Composer** `env-template.yaml` (reference §2-§4 : socle + stack, forme canonique) a partir des manifestes, et
+   des reponses aux Etapes 2-5 et 9 pour un projet sans manifeste. Comparer au fichier existant (`cmp`).
+3. **Question** (sans objet si `launcher_env.status` = `declined` et aucun fichier dans `.claude-launcher/` : rien a
+   demander ; sans objet aussi si `launcher_env.file` est pose : `env-template.yaml` est regenere sans question,
+   inchange s'il est identique) — la question affiche le contenu (ou le diff) et le chemin
+   `.claude-launcher/env-template.yaml` :
    ```
-   AskUserQuestion : "Environnement conteneur Claude-Launcher (.claude-launcher/env.yaml) — <cree | complete : N ajouts> ?"
-   - Generer / completer (Recommande si env.yaml existe ou launcher NG2 detecte) — ecrit la proposition (fusion
-     additive si le fichier existe), ajoute les chemins `local` au .gitignore
+   AskUserQuestion : "Environnement conteneur Claude-Launcher (.claude-launcher/env-template.yaml) — <cree | regenere : diff | inchange> ?"
+   - Generer (Recommande si .claude-launcher/ existe ou launcher NG2 detecte) — ecrit env-template.yaml (env.yaml
+     jamais cree ni touche), PRIVATE/gitconfig s'il manque, chemins `local` au .gitignore
    - Ne pas generer (Recommande sinon) — projet execute sur l'hote ; launcher_env.status = declined (l'Etape d1j
-     ne reposera la question que si un env.yaml apparait)
-   (Autre : ajuster la proposition — paquets, image, version de chaine, dossiers local)
+     ne reposera la question que si un fichier apparait dans .claude-launcher/)
+   (Autre : ajuster la stack — paquets, version de chaine, dossiers local ; un ajout propre au projet va dans env.yaml)
    ```
-   Etape `setup` existante divergente (reference §4) : option supplementaire « Remplacer les etapes divergentes ».
+   `launcher_env.status` = `managed` sans `launcher_env.file` (`env.yaml` genere par une version anterieure du
+   template) : jouer d'abord la **migration** (reference §5 : diff des deux fichiers, confirmation, « Plus tard » =
+   rien n'est modifie).
 4. Version requise non couverte par le socle (Alpine/musl, paquet trop ancien sans binaire officiel possible) →
    signaler `⚠ <outil> <version socle> < requis <version>` au message de fin, avec l'alternative (image
-   `<outil officiel>:<version>-bookworm`, a choisir par F2 dans le launcher).
+   `<outil officiel>:<version>-bookworm` dans `env.yaml` — choix F2 du launcher —, qui l'emporte sur celle du template).
 
 Ecriture a la Finalisation (section 5, « Environnement conteneur »).
 
@@ -1866,7 +1872,7 @@ deplacement est fait a la Finalisation (sous-section « Elements prives »), apr
       { "path": "PRIVATE/dumps/", "kind": "dumps de donnees reelles", "origin": "expected" }
     ]
   },
-  "launcher_env": { "status": "managed", "updated": "2026-11-07" },
+  "launcher_env": { "status": "managed", "file": "env-template.yaml", "updated": "2026-11-07" },
   "version": "0.1.0",
   "initialized_at": "<TIMESTAMP>",
   "initialized_from": "analysis|manual|workshop|brief",
@@ -1991,7 +1997,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `milestone.defaults` | Intensite de depart d'un milestone selon son type de version (`patch` / `minor` / `major` → `leger` / `complet`). Defaut `patch: leger`, `minor` et `major: complet`. Le cadrage complet (options, team) est propose par le planner et valide au GATE 2 : `agents/context/MILESTONE_CADRAGE.md`. Absent = `complet` partout |
 | `testing.lot_max_tests` | Defaut `50` (nombre max de cas de test par lot ; QA execute et rapporte lot par lot) |
 | `private` | Etape 10b. `reviewed` : date de l'etude ; `items[]` : contenu attendu de `PRIVATE/` (gitignore) — `path`, `kind` (nature, sans valeur), `origin` : `moved` (deplace depuis `from`) \| `existing` (deja hors git, range) \| `expected` (a fournir par le developpeur). Copie trackee : un clone frais sait ce qui manque ; `qa` y lit ce qu'il copie dans ses worktrees |
-| `launcher_env` | Etape 9c. `status` : `managed` (`.claude-launcher/env.yaml` genere ou complete par le template — fusion additive a chaque option d, Etape d1j) \| `declined` (refuse : plus de question tant qu'aucun `env.yaml` n'apparait) ; `updated` : date de la derniere ecriture. Absent = jamais propose (projet anterieur : Etape d1j) |
+| `launcher_env` | Etape 9c. `status` : `managed` (environnement conteneur gere par le template) \| `declined` (refuse : plus de question tant qu'aucun fichier n'apparait dans `.claude-launcher/`) ; `file` : `env-template.yaml` (fichier genere par le template, regenere a chaque passage ; absent avec `managed` = convention anterieure, `env.yaml` genere par fusion additive → migration, `templates/launcher/env-yaml.md` §5) ; `updated` : date de la derniere ecriture ; `migrated` : date de la migration de `env.yaml`. Absent = jamais propose (projet anterieur : Etape d1j) |
 | `license` | Etape 1b. `spdx` : identifiant SPDX (`MIT`, `Apache-2.0`...), `LicenseRef-proprietary` (tous droits reserves), `LicenseRef-custom` (texte maison fourni) ou `null` (« Decider plus tard ») ; `holder` / `year` : titulaire et annee du copyright ; `source` : `detected` \| `provided` \| `guided` \| `proprietary` \| `deferred` |
 | `src_dir` | Detection Etape 0 (repertoire source principal) ou stack par defaut : `src`, `cmd`... |
 | `version_file` | Fichier source de verite de la version (ex: `package.json`, `config.json`, `VERSION`) |
@@ -2404,21 +2410,25 @@ else
 fi
 ```
 
-#### Environnement conteneur (`.claude-launcher/env.yaml`)
+#### Environnement conteneur (`.claude-launcher/env-template.yaml`)
 
-Si l'Etape 9c a retenu « Generer / completer » : ecrire ou fusionner `.claude-launcher/env.yaml` selon
-`TEMPLATE_claude/templates/launcher/env-yaml.md` §4 (creation, ou fusion additive par Edit — commentaires, `image`,
-`mounts`, `prefer`, `on_start` conserves), verifier la syntaxe, puis ignorer les points de montage `local` (apres la
-fusion du `.gitignore` ci-dessus) :
+Si l'Etape 9c a retenu « Generer » (ou si `launcher_env.file` est pose) : migration d'abord si elle a ete acceptee
+(`env.yaml` allege par Edit, `templates/launcher/env-yaml.md` §5), puis ecrire `.claude-launcher/env-template.yaml`
+**seulement si son contenu change** (reference §4 : forme canonique, `cmp`), verifier la syntaxe, creer
+`PRIVATE/gitconfig` s'il manque, ignorer les points de montage `local` (apres la fusion du `.gitignore` ci-dessus).
+`env.yaml` : jamais cree, jamais modifie hors migration.
 
 ```bash
+[ -f PRIVATE/gitconfig ] || { mkdir -p PRIVATE && cp TEMPLATE_claude/templates/launcher/gitconfig PRIVATE/gitconfig; }
+git check-ignore -q PRIVATE/gitconfig || echo "⚠ PRIVATE/ non ignore par le .gitignore"
 for l in $LOCAL_PATHS; do git check-ignore -q "$l/" || echo "/$l/" >> .gitignore; done
-git check-ignore -q .claude-launcher/env.yaml && echo "⚠ .claude-launcher/ ignore par le .gitignore — env.yaml doit etre versionne"
+git check-ignore -q .claude-launcher/env-template.yaml && echo "⚠ .claude-launcher/ ignore par le .gitignore — env-template.yaml et env.yaml doivent etre versionnes"
 ```
 
-`project-config.json` → `launcher_env` = `{ "status": "managed", "updated": "<date>" }` (`declined` si refuse).
-Le fichier part avec le commit d'init (section 6) ; un `node_modules`/`.venv` deja present sur l'hote n'est pas touche
-(le conteneur le masque).
+`project-config.json` → `launcher_env` = `{ "status": "managed", "file": "env-template.yaml", "updated": "<date>" }`
+(+ `"migrated": "<date>"` apres migration ; `updated` change seulement si le fichier a ete reecrit ; `declined` si
+refuse). Les fichiers partent avec le commit d'init (section 6) ; un `node_modules`/`.venv` deja present sur l'hote
+n'est pas touche (le conteneur le masque).
 
 #### Fichier de licence
 
@@ -2822,7 +2832,8 @@ Configuration :
                  | non definie — a choisir avant toute publication (relancer /init-project, option d)
 - Prive        : PRIVATE/ (gitignore) — N deplaces, N attendus a fournir : <chemins>
                  rotation recommandee (deja pousse) : <elements | aucun>
-- Conteneur    : .claude-launcher/env.yaml <cree | complete (N ajouts) | non genere> — local : <chemins> ;
+- Conteneur    : .claude-launcher/env-template.yaml <cree | regenere | inchange | non genere> — local : <chemins> ;
+                 env.yaml <non touche | migre (image <x> gardee)> ; necessite Claude-Launcher ≥ v5.5.0 ;
                  <⚠ outil version socle < requis | rien a signaler>   (Etape 9c)
 
 Memoire projet : .claude/memory/MEMORY.md initialisee (si absente)
@@ -3178,17 +3189,20 @@ Lecture seule ici :
   DEV ou au test-writer (`go test ./...`, `npm test`, `vitest run` sans cible, `commands.test_fast`) → conflit
   avec le template, arbitre a l'etape d5c comme les autres conflits.
 
-#### Etape d1j — Environnement conteneur (`.claude-launcher/env.yaml`)
+#### Etape d1j — Environnement conteneur (`.claude-launcher/env-template.yaml`)
 
-Lecture seule ici : jouer la detection et la composition de l'Etape 9c (projet anterieur : `launcher_env` absent).
-- `launcher_env.status` = `declined` et aucun `env.yaml` → rien (`[=] env.yaml — non gere`).
-- Sinon, comparer la proposition au fichier : manifeste ou dossier derive nouveau (ex. `web/node_modules` apparu),
-  verrou non surveille, version de chaine changee (`go.mod`, `.nvmrc`) → au rapport d4
-  `[+] env.yaml — <N ajouts : local web/node_modules, watch web/package-lock.json...>` ; etape divergente
-  `[~] env.yaml setup — <diff court>` ; rien a ajouter → `[=] env.yaml`. Fichier absent et launcher NG2 detecte →
-  `[+] env.yaml — a creer`.
-- A l'etape d5 : la question de l'Etape 9c (fusion additive, jamais d'ecrasement sans le choix « Remplacer »), puis
-  l'ecriture de la Finalisation (« Environnement conteneur »), `.gitignore` compris.
+Lecture seule ici : jouer la detection et la composition de l'Etape 9c (`templates/launcher/env-yaml.md`).
+- `launcher_env.status` = `declined` et aucun fichier dans `.claude-launcher/` → rien (`[=] env-template.yaml — non gere`).
+- `launcher_env.file` pose → comparer le fichier compose a `env-template.yaml` (`cmp`) : identique → `[=] env-template.yaml` ;
+  sinon `[~] env-template.yaml — <diff court : local web/node_modules, watch web/package-lock.json...>`.
+- `launcher_env.status` = `managed` sans `file` (`env.yaml` genere par fusion additive, convention anterieure) →
+  `[⇄] env.yaml → env-template.yaml + env.yaml — migration : <N elements retires de env.yaml, image <x> gardee,
+  ⚠ etapes divergentes gardees> (necessite Claude-Launcher ≥ v5.5.0)`.
+- `launcher_env` absent : fichier present dans `.claude-launcher/` ou launcher NG2 detecte → `[+] env-template.yaml — a creer`
+  (`env.yaml` existant non touche : il n'etait pas gere par le template).
+- A l'etape d5 : la migration (confirmation, reference §5 — « Plus tard » = rien n'est modifie) puis l'ecriture de la
+  Finalisation (« Environnement conteneur »), `.gitignore` et `PRIVATE/gitconfig` compris ; la question de l'Etape 9c
+  seulement si `launcher_env` est absent.
 
 #### Etape d2 — Calculer les noms deployes attendus
 
@@ -3333,7 +3347,7 @@ Synchronisation depuis github.com/<repo>
   [=] planner, test-writer, code-reviewer, qa, doc-updater, deployer, security, infra (8 inchangés)
 
   Environnement conteneur (etape d1j) :
-  [+] .claude-launcher/env.yaml — 2 ajouts : local web/node_modules, watch web/package-lock.json
+  [~] .claude-launcher/env-template.yaml — local web/node_modules, watch web/package-lock.json
 
   Graphe des fichiers de définition locaux (etape d1e, etat avant mise a jour) :
   [⛓] CLAUDE.md:42 → .claude/agents/old.md          ← lien casse (cible absente)
@@ -3790,7 +3804,7 @@ Synchronisation terminee.
   Licence                           : [<SPDX> (inchangee | enregistree | definie a l'instant) | non definie — reportee] (etape d1g)
   Elements prives (PRIVATE/)        : [N deplaces, N attendus | inchange] — rotation recommandee : <elements> (etape d1h)
   Toolchain / tests cibles          : [native | Linux activee (commands.env) | ⚠ Windows conservee] ; test_related [ajoute | inchange] (etape d1i)
-  Environnement conteneur           : [.claude-launcher/env.yaml cree | complete (N ajouts) | inchange | non gere] (etape d1j)
+  Environnement conteneur           : [.claude-launcher/env-template.yaml cree | regenere | inchange | non gere] ; env.yaml [non touche | migre | migration reportee] (etape d1j)
 
   Fichiers PROJET preserves (non touches) :
     ✓ CLAUDE.md (hors bloc TEAMLEADER_PROTOCOL et hors table Agents Disponibles)
