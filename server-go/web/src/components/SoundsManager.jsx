@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import Button from './Button'
 import { soundUploadMessage } from '../utils/soundState'
 import SoundTestModal from './SoundTestModal'
+import AmbianceSettingsPanel from './AmbianceSettingsPanel'
+import { CUE_LABELS } from '../utils/soundCues'
+import { useSoundStatus, notifySoundChanged } from '../hooks/useSoundStatus'
 
 // #230 — tableau des sept sons d'événement, onglet Son de /admin/ambiance.
 // Maquette : docs/mockups/sound-config-230.html (rév. 4, §02/§03/§04/§05).
@@ -19,15 +22,6 @@ import SoundTestModal from './SoundTestModal'
 // la seule page qui monte ce composant importe déjà AmbiancePage.css ;
 // éviter de faire entrer ConfigPage.css comme le ferait BackgroundsManager).
 
-const CUE_LABELS = {
-  depart: { label: 'Départ', sub: 'Le chronomètre démarre' },
-  'temps-ecoule': { label: 'Temps écoulé', sub: 'Le chronomètre arrive à zéro' },
-  gagne: { label: 'Points gagnés', sub: 'La régie crédite une équipe' },
-  perdu: { label: 'Erreur', sub: 'Paire ratée en MEMORY, réponse invalidée en RAFALE' },
-  reveal: { label: 'Révélation', sub: 'La réponse est dévoilée' },
-  'entracte-debut': { label: "Début d'entracte", sub: 'La pause commence' },
-  'entracte-fin': { label: "Fin d'entracte", sub: 'La partie reprend' },
-}
 
 // #287/#288 (v11.4.0, LOT-3) — sons LONGS (≤ 30 s), table à part : le décompte du chronomètre n'est PAS
 // une cue (CUE_LABELS reste inchangé, soundCueFromString('decompte') est faux côté serveur). Contrat :
@@ -231,194 +225,213 @@ export default function SoundsManager() {
   const longAsCue = sounds.long.map(l => ({ ...l, cue: l.name }))
   const testingRow = sounds.cues.find(c => c.cue === testCue) || longAsCue.find(c => c.cue === testCue) || null
 
+  // #231/#290 — l'écran Son est hébergé par le composant mutualisé (mode global).
+  // Les réglages (Son coupé, interrupteurs de cues) passent par `value`/`onChange` ;
+  // les colonnes catalogue (fichier, durée, Remplacer/Restaurer/Tester) restent ICI.
+  // Section « Lumière » masquée (backend lighting.default_mode : LOT-4) ; le décompte
+  // garde ses commandes dans sa ligne « Sons longs » (comportement v11.4.0 inchangé).
+  const { status: soundStatus } = useSoundStatus()
+  const panelValue = {
+    sound: {
+      muted: soundStatus.muted === true,
+      cues: Object.fromEntries(sounds.cues.map(c => [c.cue, c.enabled])),
+    },
+  }
+  const handlePanelChange = async (field, value) => {
+    if (field === 'sound.muted') {
+      try {
+        const res = await postJson('/config.json', { sound: { muted: value } })
+        if (!res.ok) throw new Error(await res.text())
+        notifySoundChanged()
+      } catch (error) {
+        console.error('Set sound muted failed:', error)
+        setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+      }
+    } else if (field.startsWith('sound.cues.')) {
+      await handleToggleCue(field.slice('sound.cues.'.length), value)
+    }
+  }
+  const emptyRow = sounds.phase === 'loading'
+    ? <tr><td colSpan={7} className="sound-hint-row">Chargement…</td></tr>
+    : sounds.phase === 'done'
+      ? <tr><td colSpan={7} className="sound-hint-row">Aucun son disponible.</td></tr>
+      : null
+  const CATALOGUE_COLUMNS = [
+    <th key="lecture">Lecture</th>,
+    <th key="son">Son</th>,
+    <th key="duree" className="sound-col-right">Durée</th>,
+    <th key="test" className="sound-col-center">Test</th>,
+    <th key="actions" className="sound-col-right">Actions</th>,
+  ]
+  const renderCatalogue = (cue) => {
+    const row = sounds.cues.find(c => c.cue === cue)
+    if (!row) return null
+    const v = verdicts[row.cue] || EMPTY_VERDICT
+    return (
+      <>
+              <td className="sound-mono">—</td>
+              <td>
+                <span className={`sound-tag ${row.custom ? 'is-custom' : ''}`}>
+                  {row.custom ? 'Personnalisé' : 'Défaut'}
+                </span>
+              </td>
+              <td className="sound-col-right sound-mono">{formatDuration(row.duration_seconds)}</td>
+              <td className="sound-col-center">
+                <span className="sound-verdict-dots">
+                  <span className={`sound-verdict-dot is-${v.local}`} title="Écoute locale" />
+                  <span className={`sound-verdict-dot is-${v.server}`} title="Écoute serveur" />
+                </span>
+              </td>
+              <td>
+                <div className="sound-row-actions">
+                  {/* Un moment éteint reste testable — tester est un
+                      geste explicite, seule LA PARTIE est muette pour
+                      cette cue (maquette §02, "Un moment éteint peut
+                      quand même être testé"). */}
+                  <Button variant="secondary" size="sm" onClick={() => setTestCue(row.cue)}>
+                    ▶ Tester
+                  </Button>
+                  <label className="sound-replace-btn">
+                    <input
+                      type="file"
+                      accept=".wav,audio/wav,audio/x-wav"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        e.target.value = ''
+                        if (file) handleReplace(row.cue, file)
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    <Button variant="secondary" size="sm" as="span" loading={busyCue === row.cue}>
+                      ⬆ Remplacer
+                    </Button>
+                  </label>
+                  {/* « Restaurer » n'apparaît que sur les sons
+                      personnalisés (maquette §02) — un son déjà par
+                      défaut n'a rien à restaurer. */}
+                  {row.custom && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={busyCue === row.cue}
+                      onClick={() => handleRestore(row.cue)}
+                    >
+                      ↺ Restaurer
+                    </Button>
+                  )}
+                </div>
+              </td>
+
+      </>
+    )
+  }
+  const renderLongRows = (tabKey) => {
+    if (tabKey !== '') return null
+    return (
+      <>
+        {sounds.long.length > 0 && (
+          <tr className="sound-section-row"><th colSpan={7} scope="colgroup">Sons longs (≤ 30 s)</th></tr>
+        )}
+        {sounds.long.map(row => {
+          const meta = LONG_LABELS[row.name] || { label: row.name, sub: '' }
+          const v = verdicts[row.name] || EMPTY_VERDICT
+          return (
+            <tr key={row.name} className={!row.enabled ? 'is-off' : ''}>
+              <td>
+                <b>{meta.label}</b>
+                <span className="sound-sub">{meta.sub}</span>
+              </td>
+              <td className="sound-col-center">
+                <label className="sound-switch sound-switch-sm">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    onChange={e => handleToggleLong(row.name, e.target.checked)}
+                    aria-label={`Activer ${meta.label}`}
+                  />
+                  <span className="sound-switch-track" aria-hidden="true" />
+                </label>
+              </td>
+              <td>
+                <span className="sound-loop-seg" role="group" aria-label="Lecture du décompte">
+                  {[{ loop: false, label: 'Une fois' }, { loop: true, label: 'En boucle' }].map(opt => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      className={`sound-loop-seg-opt ${row.loop === opt.loop ? 'sel' : ''}`}
+                      aria-pressed={row.loop === opt.loop}
+                      onClick={() => row.loop !== opt.loop && handleSetLoop(row.name, opt.loop)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </span>
+              </td>
+              <td>
+                <span className={`sound-tag ${row.custom ? 'is-custom' : ''}`}>
+                  {row.custom ? 'Personnalisé' : 'Défaut'}
+                </span>
+              </td>
+              <td className="sound-col-right sound-mono">{formatDuration(row.duration_seconds)}</td>
+              <td className="sound-col-center">
+                <span className="sound-verdict-dots">
+                  <span className={`sound-verdict-dot is-${v.local}`} title="Écoute locale" />
+                  <span className={`sound-verdict-dot is-${v.server}`} title="Écoute serveur" />
+                </span>
+              </td>
+              <td>
+                <div className="sound-row-actions">
+                  <Button variant="secondary" size="sm" onClick={() => setTestCue(row.name)}>
+                    ▶ Tester
+                  </Button>
+                  <label className="sound-replace-btn">
+                    <input
+                      type="file"
+                      accept=".wav,audio/wav,audio/x-wav"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        e.target.value = ''
+                        if (file) handleReplace(row.name, file)
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    <Button variant="secondary" size="sm" as="span" loading={busyCue === row.name}>
+                      ⬆ Remplacer
+                    </Button>
+                  </label>
+                  {row.custom && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={busyCue === row.name}
+                      onClick={() => handleRestore(row.name)}
+                    >
+                      ↺ Restaurer
+                    </Button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          )
+        })}
+
+      </>
+    )
+  }
+
   return (
     <div className="sound-manager">
-      <div className="sound-table-scroll">
-        <table className="sound-table">
-          <thead>
-            <tr>
-              <th>Moment du jeu</th>
-              <th className="sound-col-center">Actif</th>
-              <th>Lecture</th>
-              <th>Son</th>
-              <th className="sound-col-right">Durée</th>
-              <th className="sound-col-center">Test</th>
-              <th className="sound-col-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sounds.phase === 'loading' && sounds.cues.length === 0 && (
-              <tr><td colSpan={7} className="sound-hint-row">Chargement…</td></tr>
-            )}
-            {sounds.phase === 'done' && sounds.cues.length === 0 && (
-              <tr><td colSpan={7} className="sound-hint-row">Aucun son disponible.</td></tr>
-            )}
-            {sounds.cues.length > 0 && (
-              <tr className="sound-section-row"><th colSpan={7} scope="colgroup">Bruitages (impulsions, ≤ 5 s)</th></tr>
-            )}
-            {sounds.cues.map(row => {
-              const meta = CUE_LABELS[row.cue] || { label: row.cue, sub: '' }
-              const v = verdicts[row.cue] || EMPTY_VERDICT
-              return (
-                <tr key={row.cue} className={!row.enabled ? 'is-off' : ''}>
-                  <td>
-                    <b>{meta.label}</b>
-                    <span className="sound-sub">{meta.sub}</span>
-                  </td>
-                  <td className="sound-col-center">
-                    <label className="sound-switch sound-switch-sm">
-                      <input
-                        type="checkbox"
-                        checked={row.enabled}
-                        onChange={e => handleToggleCue(row.cue, e.target.checked)}
-                        aria-label={`Activer ${meta.label}`}
-                      />
-                      <span className="sound-switch-track" aria-hidden="true" />
-                    </label>
-                  </td>
-                  <td className="sound-mono">—</td>
-                  <td>
-                    <span className={`sound-tag ${row.custom ? 'is-custom' : ''}`}>
-                      {row.custom ? 'Personnalisé' : 'Défaut'}
-                    </span>
-                  </td>
-                  <td className="sound-col-right sound-mono">{formatDuration(row.duration_seconds)}</td>
-                  <td className="sound-col-center">
-                    <span className="sound-verdict-dots">
-                      <span className={`sound-verdict-dot is-${v.local}`} title="Écoute locale" />
-                      <span className={`sound-verdict-dot is-${v.server}`} title="Écoute serveur" />
-                    </span>
-                  </td>
-                  <td>
-                    <div className="sound-row-actions">
-                      {/* Un moment éteint reste testable — tester est un
-                          geste explicite, seule LA PARTIE est muette pour
-                          cette cue (maquette §02, "Un moment éteint peut
-                          quand même être testé"). */}
-                      <Button variant="secondary" size="sm" onClick={() => setTestCue(row.cue)}>
-                        ▶ Tester
-                      </Button>
-                      <label className="sound-replace-btn">
-                        <input
-                          type="file"
-                          accept=".wav,audio/wav,audio/x-wav"
-                          onChange={e => {
-                            const file = e.target.files?.[0]
-                            e.target.value = ''
-                            if (file) handleReplace(row.cue, file)
-                          }}
-                          style={{ display: 'none' }}
-                        />
-                        <Button variant="secondary" size="sm" as="span" loading={busyCue === row.cue}>
-                          ⬆ Remplacer
-                        </Button>
-                      </label>
-                      {/* « Restaurer » n'apparaît que sur les sons
-                          personnalisés (maquette §02) — un son déjà par
-                          défaut n'a rien à restaurer. */}
-                      {row.custom && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          loading={busyCue === row.cue}
-                          onClick={() => handleRestore(row.cue)}
-                        >
-                          ↺ Restaurer
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {sounds.long.length > 0 && (
-              <tr className="sound-section-row"><th colSpan={7} scope="colgroup">Sons longs (≤ 30 s)</th></tr>
-            )}
-            {sounds.long.map(row => {
-              const meta = LONG_LABELS[row.name] || { label: row.name, sub: '' }
-              const v = verdicts[row.name] || EMPTY_VERDICT
-              return (
-                <tr key={row.name} className={!row.enabled ? 'is-off' : ''}>
-                  <td>
-                    <b>{meta.label}</b>
-                    <span className="sound-sub">{meta.sub}</span>
-                  </td>
-                  <td className="sound-col-center">
-                    <label className="sound-switch sound-switch-sm">
-                      <input
-                        type="checkbox"
-                        checked={row.enabled}
-                        onChange={e => handleToggleLong(row.name, e.target.checked)}
-                        aria-label={`Activer ${meta.label}`}
-                      />
-                      <span className="sound-switch-track" aria-hidden="true" />
-                    </label>
-                  </td>
-                  <td>
-                    <span className="sound-loop-seg" role="group" aria-label="Lecture du décompte">
-                      {[{ loop: false, label: 'Une fois' }, { loop: true, label: 'En boucle' }].map(opt => (
-                        <button
-                          key={opt.label}
-                          type="button"
-                          className={`sound-loop-seg-opt ${row.loop === opt.loop ? 'sel' : ''}`}
-                          aria-pressed={row.loop === opt.loop}
-                          onClick={() => row.loop !== opt.loop && handleSetLoop(row.name, opt.loop)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`sound-tag ${row.custom ? 'is-custom' : ''}`}>
-                      {row.custom ? 'Personnalisé' : 'Défaut'}
-                    </span>
-                  </td>
-                  <td className="sound-col-right sound-mono">{formatDuration(row.duration_seconds)}</td>
-                  <td className="sound-col-center">
-                    <span className="sound-verdict-dots">
-                      <span className={`sound-verdict-dot is-${v.local}`} title="Écoute locale" />
-                      <span className={`sound-verdict-dot is-${v.server}`} title="Écoute serveur" />
-                    </span>
-                  </td>
-                  <td>
-                    <div className="sound-row-actions">
-                      <Button variant="secondary" size="sm" onClick={() => setTestCue(row.name)}>
-                        ▶ Tester
-                      </Button>
-                      <label className="sound-replace-btn">
-                        <input
-                          type="file"
-                          accept=".wav,audio/wav,audio/x-wav"
-                          onChange={e => {
-                            const file = e.target.files?.[0]
-                            e.target.value = ''
-                            if (file) handleReplace(row.name, file)
-                          }}
-                          style={{ display: 'none' }}
-                        />
-                        <Button variant="secondary" size="sm" as="span" loading={busyCue === row.name}>
-                          ⬆ Remplacer
-                        </Button>
-                      </label>
-                      {row.custom && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          loading={busyCue === row.name}
-                          onClick={() => handleRestore(row.name)}
-                        >
-                          ↺ Restaurer
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <AmbianceSettingsPanel
+        mode="global"
+        value={panelValue}
+        onChange={handlePanelChange}
+        cues={sounds.cues}
+        sections={['sound', 'cues']}
+        catalogueColumns={CATALOGUE_COLUMNS}
+        renderCatalogue={renderCatalogue}
+        renderExtraRows={renderLongRows}
+        emptyRow={emptyRow}
+      />
 
       <div className="ambiance-actions sound-actions">
         <Button variant="ghost" onClick={handleRestoreAll} loading={restoringAll}>
@@ -429,8 +442,8 @@ export default function SoundsManager() {
         Colonne <b>Test</b> : deux pastilles, écoute locale puis écoute serveur — grise « pas
         testé », verte « ok », rouge « ko ». Elles font de ce tableau la liste de contrôle d&rsquo;une
         séance de réglage.
-        <br />Format accepté : WAV, 44 100 Hz, 16 bits, stéréo — 5 secondes au maximum (30 secondes pour les sons longs).
-        <br />« Tester » joue le son une fois, même s&rsquo;il est désactivé. Restaurer tout (7 bruitages + décompte) remet les sons d&rsquo;origine.
+        <br />Format accepté : WAV PCM (44 100 Hz, 16 bits, stéréo canonique) — 5 secondes au maximum (30 secondes pour les sons longs).
+        <br />« Tester » joue le son une fois, même s&rsquo;il est désactivé. Restaurer tout ({sounds.cues.length || 7} bruitages + décompte) remet les sons d&rsquo;origine.
       </p>
 
       {testingRow && (
