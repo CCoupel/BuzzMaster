@@ -303,7 +303,8 @@ Nouveau champ optionnel dans le payload de reconnexion WebSocket VJoueur.
 
 **Note sur `SOUND` et `SOUND_TIMER_DELAYED`** (v11.1.0, #219) :
 - **Structurellement commun à tous les types** — le champ `SOUND` s'attache à n'importe quel `Question`, peu importe son type (`SPEEDY`, `QCM`, `ARDOISE`, `MEMORY`, `MEMOTION`, `ENTRACTE`, `RAFALE`), **pas de garde serveur**.
-- **Restriction d'affichage = décision d'éditeur frontend** — l'interface d'édition (QuestionsPage.jsx) choisit de n'exposer le bloc son qu'aux types `SPEEDY`, `QCM`, `ARDOISE` ; aucune barrière serveur n'empêche une question de type `MEMORY` de porter un son (si réimportée, elle le conserve ; l'éditeur simplement ne l'affiche pas).
+- **Restriction d'affichage = décision d'éditeur frontend** — l'interface d'édition (QuestionsPage.jsx) expose le bloc son aux types `SPEEDY`, `QCM`, `ARDOISE`, et depuis v11.6.0 (#235) aussi à `MEMORY`, à l'hôte `MEMOTION` (libellé « Son de la manche ») et à `ENTRACTE` (libellé « Son de l'entracte ») ; aucune barrière serveur n'empêche une question d'un autre type de porter un son.
+- **v11.6.0 (#235) — `SOUND_TIMER_DELAYED` forcé à faux pour l'hôte `MEMOTION` et `ENTRACTE`** : ces deux types n'ont pas de « Chrono démarre » dans l'éditeur ; le champ, s'il est reçu, est écrit `false`. Pour `MEMORY`, le champ est écrit tel quel et n'a d'effet que sur le chronomètre global existant (à vérifier en QUALIF).
 - Chemin canonique — relative à `data/files/questions/{question-id}/` (ex: `sound_12345.wav` → `/question/{id}/sound_12345.wav`). Nom réel généré : `sound_<nombre-aléatoire>.wav`.
 - Format WAV canonique : PCM 16 bits, 44 100 Hz, stéréo. Durée maximale **30 secondes**, taille maximale **6 Mio**.
 - Téléversement via `POST /questions` (multipart `sound`, `sound_cleared`, `sound_timer_delayed`), suppression via flag `sound_cleared` (supprime le fichier disque).
@@ -1057,8 +1058,13 @@ Une carte MEMOTION porte un **type discriminant** (`TYPE`) et un **contenu typé
 | `ANSWER_TEXT` | string | optionnel | Réponse texte (SPEEDY historique) |
 | `ANSWER_IMAGE` | string | optionnel | Réponse image (SPEEDY historique) |
 | `POINTS_RULE` | object | optionnel | Barème de points de la carte (§6.2) |
+| `SOUND` | string | optionnel | Chemin du WAV de la carte (`/question/<id>/motion_<cardID>_sound_<rand4>.wav`) — v11.6.0 (#235) |
+| `SOUND_TIMER_DELAYED` | bool | optionnel | Le chrono **de la carte** démarre à la fin du son (`true`) ou au début (`false`, défaut) — v11.6.0 (#235) |
+| `SOUND_LOOP` | bool | optionnel | Lecture du son de la carte en boucle — v11.6.0 (#235) |
 
 **Jamais `omitempty`** : tous les champs sont toujours sérialisés. Les champs optionnels valent `""` ou `null`, jamais absents.
+
+**Exception — champs de son de carte (v11.6.0, #235)** : `SOUND`, `SOUND_TIMER_DELAYED` et `SOUND_LOOP` portent `omitempty` (comme `SOUND` sur `Question`, §Question). Une carte sans son ne les sérialise pas. Ce sont des **champs communs de carte** : ils sont conservés quel que soit le `TYPE` de la carte, hors `OwnedFields`, et préservés côté serveur par `ID` de carte lors d'une ré-édition (une carte existante sans nouveau fichier garde son son et ses réglages).
 
 ### TypedContent — contenu partagé embarqué plat
 

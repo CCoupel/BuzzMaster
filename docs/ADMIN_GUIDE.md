@@ -2736,14 +2736,14 @@ Les questions créées avant les manches restent « Sans manche » : aucune conv
 
 ## Son Attaché à une Question (v11.1.0, #219)
 
-En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un **son personnel à une question individuelle** (types SPEEDY, QCM, ARDOISE uniquement). Ce son joue au lancement de la question et peut configurer le chronomètre de réponse.
+En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un **son personnel à une question individuelle**. Ce son joue au lancement de la question et peut configurer le chronomètre de réponse. Les types concernés sont SPEEDY, QCM, ARDOISE ; depuis v11.6.0, aussi MEMORY, MEMOTION (son de manche et sons de carte) et ENTRACTE (voir « Son par type de question » plus bas).
 
 ### Attacher un son à une question
 
 **Procédure** :
 
-1. Allez à `/admin/quiz` et sélectionnez une question SPEEDY, QCM ou ARDOISE
-2. Faites défiler jusqu'au bloc **« Son »** (onglet Questions, dans le formulaire de la question)
+1. Allez à `/admin/quiz` et sélectionnez une question SPEEDY, QCM, ARDOISE, MEMORY, MEMOTION ou ENTRACTE
+2. Faites défiler jusqu'au bloc **« Son »** (onglet Questions, dans le formulaire de la question ; son libellé dépend du type, voir plus bas)
 3. Cliquez **« Choisir un fichier »** et sélectionnez un fichier `.wav`
 4. Le serveur **valide instantanément** le fichier selon les spécifications ci-dessous
 5. Une fois accepté, le bouton affiche **« Son attaché »** (pastille verte)
@@ -2755,14 +2755,55 @@ En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un
 
 | Paramètre | Valeur | Raison |
 |---|---|---|
-| Extension | **`.wav`** seulement | Décision utilisateur. Aucune conversion serveur ni navigateur |
+| Extension | **`.wav`** seulement | Décision utilisateur. Les formats compressés (MP3, M4A) sont refusés |
 | Conteneur | **RIFF/WAVE valide** | Sinon, fichier rejeté au téléversement |
-| Codec | **PCM** (non compressé) | Un seul contexte audio pour toute l'application |
-| Fréquence | **44 100 Hz** exactement | Imposée par le pilote matériel (#228) |
-| Canaux | **Stéréo (2 canaux)** ou mono (1 canal) | Stéréo préféré pour les sons mélodiques |
-| Profondeur | **16 bits** | Qualité CD standard, équilibre taille/qualité |
+| Codec à l'upload | **PCM** 8, 16, 24 ou 32 bits, ou **flottant 32 bits** | Converti à l'upload (#232) ; le fichier stocké est toujours PCM 16 bits |
+| Fréquence à l'upload | **8 000 à 192 000 Hz** | Rééchantillonné à **44 100 Hz** (un seul contexte audio pour toute l'application) |
+| Canaux à l'upload | **Stéréo (2 canaux)** ou mono (1 canal) | Un mono est dupliqué sur les deux voies ; le fichier stocké est stéréo |
+| Profondeur stockée | **16 bits** | Qualité CD standard, équilibre taille/qualité |
 | Durée | **Maximum 30 s** ; aucun avertissement | Permet des introductions musicales, enregistrements vocal, vidéos silencieuses avec son |
-| Taille fichier | **Maximum 6 Mio** | Un son de 30 s pèse ~2.6 Mo, cette limite laisse de la marge |
+| Taille fichier | **Maximum 6 Mio** après conversion ; **24 Mio** avant conversion | Un son de 30 s pèse ~2.6 Mo en stéréo 16 bits, cette limite laisse de la marge |
+
+Un fichier converti est signalé à l'écran (« converti depuis … »). Le détail de la conversion est dans « Formats acceptés » du bloc des bruitages ci-dessus.
+
+### Son par type de question (v11.6.0, #235)
+
+Le libellé du bloc son dans l'éditeur dépend du type de question :
+
+| Type | Bloc dans l'éditeur | Quand le son joue | Chronomètre |
+|---|---|---|---|
+| SPEEDY, QCM, ARDOISE | « Son de la question » | Au lancement | « Chrono démarre » (voir « Modes de démarrage ») |
+| MEMORY | « Son de la question » | Au lancement de la manche (phase de mémorisation comprise) | « Chrono démarre » enregistré ; son effet dépend du chronomètre global de la question (**à vérifier en QUALIF**) |
+| MEMOTION (hôte) | « Son de la manche » | Au lancement de la manche | Pas de « Chrono démarre » (réglage forcé à faux) |
+| ENTRACTE | « Son de l'entracte » | À l'activation de l'entracte, après le bruitage d'entracte | Pas de « Chrono démarre » ; lecture **une fois** ou **en boucle** |
+
+#### Sons de carte MEMOTION
+
+Chaque carte MEMOTION peut porter **son propre son**, indépendant du son de la manche. Son bloc **« Son de la carte »** comporte :
+- le fichier (WAV, 30 s maximum, mêmes règles de conversion que ci-dessus) ;
+- **« Chrono de la carte démarre »** : **Début** (le chrono de la carte part avec le son) ou **À la fin** (le chrono attend la fin du son) ;
+- **« Lecture de la carte »** : **Une fois** ou **En boucle**.
+
+Une carte sonore porte la puce **♪** dans l'éditeur, et la question entière la porte dès qu'une de ses cartes a un son.
+
+**Règles de lecture** :
+- Au retournement d'une carte sonore, son son **remplace** le son en cours, y compris celui de la manche. Le son de la manche **ne reprend pas** à la fermeture de la carte.
+- Une carte **sans** son laisse le son de la manche jouer.
+- Le son de la carte s'arrête à la fermeture de la carte, à la révélation et à l'arrêt de la manche.
+- En mode « À la fin », le chrono de la carte démarre à la fin du son (ou à l'arrêt par l'animateur). Si le son est en pause, le chrono démarre à la reprise. Il est abandonné à la fermeture de la carte ou à la révélation.
+- **Le décompte ne se joue jamais pendant un son de manche ou de carte.**
+- **Fichier manquant** : si le fichier d'une carte est indisponible, la carte se retourne quand même, **sans son**, et le motif s'affiche (« FILE »).
+- **Rejouer** rejoue la carte ouverte, ou l'entracte si elle est en cours ; sinon il rejoue le son de la manche.
+
+#### Son d'entracte
+
+- Le son d'entracte démarre à l'**activation** de l'entracte et s'arrête à la **sortie**, à l'arrêt de la partie (STOP), à la nouvelle partie et à la restauration d'une sauvegarde.
+- **Entracte programmée** (« à suivre ») : le son joue automatiquement.
+- **Entracte activée à la main** : le son ne joue **que si la question chargée est une ENTRACTE** portant un son. Une entracte activée pendant une autre question reste muette.
+
+#### Restauration de sauvegarde
+
+Une restauration de sauvegarde **coupe le son en cours** (manche, carte ou entracte). Un média ne survit jamais à une restauration.
 
 ### Modes de démarrage du chronomètre
 
@@ -2806,7 +2847,7 @@ Pendant une question avec son attaché, l'animateur voit une **rangée de trois 
 | ⏸ **Pause** (alternée ▶ Reprendre) | Pause/Reprise | Met le son en pause. En mode différé, le chronomètre pause aussi. Le bouton bascule en ▶ pour reprendre. |
 | ⏹ **Stop** | Arrêt | Arrête le son définitivement. En mode différé, **libère le chronomètre immédiatement** — la réponse continue sans attendre la fin du son. |
 
-Ces trois gestes n'apparaissent **que si** une question en cours porte un son attaché.
+Ces trois gestes n'apparaissent **que si** une question en cours porte un son attaché. Sur une manche MEMOTION, ils agissent sur le son de la carte ouverte lorsqu'une carte sonore est sélectionnée (voir « Son par type de question »).
 
 ### Coûts disque et sauvegarde
 
@@ -2824,6 +2865,8 @@ Une question avec son attaché **conserve son son** si vous :
 - Modifiez le mode de démarrage du chronomètre (simultané ↔ différé)
 
 **Le son n'est supprimé que si vous cliquez explicitement le bouton « Supprimer le son »**.
+
+Les **sons de carte MEMOTION** suivent la même règle : une carte qui garde son fichier garde son son, et ses réglages (chrono « À la fin », boucle) ; le son d'une carte n'est supprimé que par « Supprimer le son » de cette carte, ou quand la carte disparaît.
 
 ### Comportement en cas de dégradation
 
