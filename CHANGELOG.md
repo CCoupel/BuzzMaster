@@ -9,10 +9,10 @@ Historique des versions du projet BuzzControl.
 ### Changed
 
 - **Suite vitest plus rapide (#280)** — Les tests web tournent dans le pool `vmThreads` de vitest, et 33 fichiers sans DOM passent en environnement `node` : l'environnement jsdom n'est plus créé pour chacun. Local : 94 s → 26–46 s. Étape `[3/8]` de la CI : 155 s → 30–50 s (45,7 s et 49,3 s sur `0d2ca78b`). 298 fichiers, 4 385 tests : même périmètre qu'avant.
-- **`cmd/server` découpé en paquets (#291, #295)** — Le code de l'`App` est extrait dans des paquets `internal/` testables seuls : `vplayer`, `colors`, `coalesce`, `rounds`, `startup`, `diag`, `demo`, `led` (LED_SET des buzzers) et `ambiance` (couche d'ambiance lumineuse). `cmd/server/main.go` passe de 8 706 à 6 217 lignes. Les tests de `cmd/server` passent de 796 à 737 ; 76 tests vivent désormais dans les nouveaux paquets. Tous les tests existants sont conservés (2 595 → 2 612 tests de premier niveau, 7 benchmarks, aucun nom disparu).
-- **Tests `cmd/server` parallélisés (#295)** — 15 tests sont en `t.Parallel()` après audit de leur isolation (pas de logger global, pas de configuration partagée modifiée).
+- **`cmd/server` découpé en paquets (#291, #295)** — Le code de l'`App` est extrait dans des paquets `internal/` testables seuls : `vplayer`, `colors`, `coalesce`, `rounds`, `startup`, `diag`, `demo`, `led` (LED_SET des buzzers) et `ambiance` (couche d'ambiance lumineuse). `cmd/server/main.go` passe de 8 701 à 6 217 lignes. Les tests de `cmd/server` passent de 796 à 737 ; 76 tests vivent désormais dans les nouveaux paquets. Tous les tests existants sont conservés (2 595 → 2 612 tests de premier niveau, 7 benchmarks, aucun nom disparu).
+- **Tests `cmd/server` parallélisés (#295)** — 15 tests supplémentaires passent en `t.Parallel()` après audit de leur isolation (pas de logger global, pas de configuration partagée modifiée) : 27 tests sont en `t.Parallel()` dans `cmd/server`, dont 11 existaient avant la version.
 - **Environnement de test (#292, #293)** — Les agents de développement tournent désormais dans un conteneur Linux natif (Go 1.26.10, Node 22.23.3, PlatformIO). La règle est : les agents `dev-*` et `test-writer` lancent les tests ciblés ; la suite complète est réservée à la QA et à la CI. Documentée dans `docs/TEST_PROCEDURE.md` §2.4.
-- **Firmware compilé dans la CI (#294)** — Un job parallèle `compiling-firmware` compile le firmware BuzzClick à chaque run de `ci-branch.yml` et `release.yml`, avec le même script que local : `scripts/build-firmware.sh` (`pio run`, merge esptool, contrôle de taille 200 Ko – 3 Mo). `scripts/ci.sh` passe à 8 étapes, la première étant ce firmware.
+- **Firmware compilé dans la CI (#294)** — Ajout du job `compiling-firmware` à `ci-branch.yml` ; `release.yml` en avait déjà un, qui appelle désormais le même script que `ci-branch.yml` : `scripts/build-firmware.sh` (`pio run`, merge esptool, contrôle de taille 200 Ko – 3 Mo). `scripts/ci.sh` passe à 8 étapes ; l'étape firmware (`[1/8]`) est jouée en local et sautée en CI par `SKIP_FIRMWARE=1`, le job parallèle la couvrant.
 - **Procédures QUALIF mises à jour (#292)** — Le BUILD se fait depuis le conteneur ; l'exécutable Windows de QUALIF est lancé par l'utilisateur depuis Windows.
 
 ### Performance (mesures QA)
@@ -36,7 +36,7 @@ Historique des versions du projet BuzzControl.
 
 ### Fixed
 
-- **Tests de cadence d'ambiance instables sous charge** — Deux tests de flash (`TestDevLightingFlash_BlinksAndReturnsToSelector`, `TestC2b_ScoreFlash_TwoCycles`) étaient en aliasing avec la cadence du writer (100 ms) ; leurs phases de test sont passées à 250 ms, soit 2,5 fois cette cadence, sans changer leurs assertions. Ces corrections ont été faites en cours de milestone, avant la release.
+- **Tests de cadence d'ambiance instables sous charge** — Deux tests de flash (`TestDevLightingFlash_BlinksAndReturnsToSelector`, `TestC2b_ScoreFlash_TwoCycles`) étaient en aliasing avec la cadence du writer (100 ms). `TestDevLightingFlash` passe à un blink de 250/250 ms et lit l'historique des applications (3e et 4e) au lieu de `Last()` ; `TestC2b_ScoreFlash_TwoCycles` retrouve la cadence de production (250/500 ms, override retiré). Les assertions sont inchangées. Ces corrections ont été faites en cours de milestone, avant la release.
 
 ### Issues de suivi
 

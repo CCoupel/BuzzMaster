@@ -42,9 +42,9 @@ server-go/
 │   ├── vplayer/              # Payloads UPDATE individualisés VPlayer (#291)
 │   ├── colors/               # Palette équipes, maths RGB/HSL (#291)
 │   ├── coalesce/             # Coalesceur de diffusion (#291)
-│   ├── rounds/               # Logique pure des manches (#291, v11.2)
+│   ├── rounds/               # Logique des manches : contexte, application de ROUNDS_UPDATE sur disque (#291, v11.2)
 │   ├── startup/              # Démarrage : port, URLs, pages ouvertes (#291)
-│   ├── diag/                 # Helpers de diagnostic WebSocket (#291)
+│   ├── diag/                 # Journalisation sûre des valeurs client, séquence ARDOISE (#291)
 │   ├── demo/                 # Données de démo et de développement (#291)
 │   ├── led/                  # LED_SET vers les buzzers (#291/#295)
 │   └── ambiance/             # Couche d'ambiance lumineuse (#205, #295)
@@ -92,7 +92,7 @@ server-go/
 | Paquet | Interface `Host` | Rôle |
 |--------|------------------|------|
 | `internal/led` | `Engine()`, `BuzzerHub()`, `AckManager()`, `BroadcastUpdateTo(...)` | Envoi des `LED_SET` aux buzzers (règles par phase, COMET, ACK, rejeu à la reconnexion) |
-| `internal/ambiance` | `Engine()`, `Ctx()`, `TeamNameColor()`, `HasCategoryMeta()`, `ResolveCategoryMeta()` | Writer d'ambiance, scènes, override manuel (Flash, SCORE), extinction à l'arrêt |
+| `internal/ambiance` | `Engine()`, `Ctx()`, `TeamNameColor()`, `HasCategoryMeta()`, `ResolveCategoryMeta()` | Writer d'ambiance, scènes, override manuel Flash, clignotement SCORE, extinction à l'arrêt |
 | `internal/rounds` | `Engine()`, `QuestionsDirPath()` | Application d'un `ROUNDS_UPDATE` |
 | `internal/demo` | `Engine()`, `Config()`, `ResolveCategoryMeta()`, `SaveBackgroundsConfig()` | Données de démo et de développement |
 
@@ -107,15 +107,15 @@ Deux modèles coexistent, à ne pas mélanger :
 ### Règles pour les tests
 
 1. **Durées injectables par instance, jamais par variable de paquet.** Les tests peuvent tourner en `t.Parallel()` : une variable de paquet raccourcie accélère les timers des tests voisins. Injecter par instance : `Engine.SetTickInterval(d)`, `Engine.SetConnGreenMinDuration(d)`, `questionSoundAdapter.watchdogDelay`, `FlashPhases` du `Controller` ambiance. Valeur `0` = valeur de production.
-2. **Barrière positive plutôt que fenêtre fixe pour une assertion négative.** « Aucune trame fautive » n'est vraie qu'une fois que le serveur a fini d'émettre. Après l'action, un témoin est diffusé par le même hub ; les trames WebSocket arrivant dans l'ordre, la réception du témoin prouve que tout ce qui précède est arrivé. Modèle : `cmd/server/settle_barrier_291_test.go`. Les envois différés par un saut de goroutine sont couverts par une marge courte (`settleQuiet291`, 100 ms).
-3. **Cadence de test > 2 × pacing du writer.** Le writer `lighting.Writer` (`MinInterval` 100 ms) dérive l'état **au moment de l'application**. Si la phase d'un test est proche de 100 ms, deux applications consécutives tombent dans la même phase (aliasing) et le test échoue sous charge. Règles : phase ≥ 2 × 100 ms ; lire les appels par indice (3e et 4e applications), jamais `Last()` après une attente, qui peut voir une application supplémentaire. Cas réel : `TestDevLightingFlash_BlinksAndReturnsToSelector` (blink 250/250 ms) et `TestC2b_ScoreFlash_TwoCycles` (phase or 250 ms).
+2. **Barrière positive plutôt que fenêtre fixe pour une assertion négative.** « Aucune trame fautive » n'est vraie qu'une fois que le serveur a fini d'émettre. Après l'action, un témoin est diffusé par le même hub ; les trames WebSocket arrivant dans l'ordre, la réception du témoin prouve que tout ce qui précède est arrivé. Modèle : `cmd/server/settle_barrier_291_test.go`. Les envois différés par un saut de goroutine sont couverts par une marge courte (`settleQuiet291`, 100 ms) ; après une action client asynchrone (HELLO, PLAYER_CONNECT), la marge est `settleQuietAfterClient291` (250 ms).
+3. **Cadence de test > 2 × pacing du writer.** Le writer `lighting.Writer` (`MinInterval` 100 ms) dérive l'état **au moment de l'application**. Si la phase d'un test est proche de 100 ms, deux applications consécutives tombent dans la même phase (aliasing) et le test échoue sous charge. Règles : phase ≥ 2 × 100 ms (exception existante : `TestC2b_ScoreFlash_ClampsAboveSixPoints`, phases 167/333 ms, qui n'asserte que l'heure de fin, indépendante du writer) ; lire les appels par indice (3e et 4e applications) plutôt que de comparer deux `Last()` successifs, qui peuvent voir une application supplémentaire entre les deux lectures. Sonder `Last()` jusqu'à une couleur donnée reste correct. Cas réel : `TestDevLightingFlash_BlinksAndReturnsToSelector` (blink 250/250 ms) et `TestC2b_ScoreFlash_TwoCycles` (phase or 250 ms).
 4. **Critère d'isolation pour `t.Parallel()`.** Un test ne passe en parallèle que si, ni lui ni ses appelants, ne touchent un état global :
    - pas de logger global (`SetGlobalLogger`) ;
    - pas d'écriture du singleton de configuration (`config.SetInstance`, écriture d'un champ de `app.config`) — `newTestApp` ne fait que lire `config.Get()` ;
    - pas de variable de paquet partagée (`LaunchLock*`) ni de hook `setTestInject*` non protégé ;
    - pas de `t.Setenv`, `os.Setenv`, `os.Chdir`, `http.Default*`, `log.Set*` ;
    - pas de fenêtre de temps serrée (flash, chrono, watchdog, expiration de verrou) : le jitter d'un test voisin la rendrait instable.
-   La propriété se propage aux appelants. Au terme de v11.5.0, 15 tests de `cmd/server` sont en `t.Parallel()` après audit (311 tests jugés sûrs sur 736 au moment de l'audit). Le reste reste séquentiel ; le lever suppose un logger et une configuration **par `App`** (issue #298).
+   La propriété se propage aux appelants. L'Option P a ajouté 15 tests en `t.Parallel()` dans `cmd/server` (27 au total, dont 11 existants) après audit (311 tests jugés sûrs sur 736 au moment de l'audit). Le reste reste séquentiel ; le lever suppose un logger et une configuration **par `App`** (issue #298).
 
 ## Data Persistence (v2.21.0)
 
