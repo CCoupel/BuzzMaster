@@ -7571,6 +7571,14 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 	startInfo := AnswerTimerStart{Kind: AnswerTimerMotionCard, Seconds: delay}
 	if e.state.Question != nil {
 		startInfo.QuestionSound = e.state.Question.Sound
+		// M1 (#235) : le son de la carte sélectionnée prime — le décompte ne doit pas
+		// jouer pendant ce média (sound.md §14.2/§14.4).
+		for i := range e.state.Question.MotionCards {
+			if c := &e.state.Question.MotionCards[i]; c.ID == e.state.MotionSelected && c.Sound != "" {
+				startInfo.QuestionSound = c.Sound
+				break
+			}
+		}
 	}
 	e.mu.RUnlock()
 	if e.OnAnswerTimerStarted != nil {

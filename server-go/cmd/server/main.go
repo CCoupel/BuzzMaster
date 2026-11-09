@@ -688,6 +688,7 @@ func (a *App) setupCallbacks() {
 		case "REBOOT", "RESET":
 			a.broadcastReset()
 		case "RESTORE":
+			a.questionSound().Stop() // #235 (m1) : un média en cours ne survit pas à une restauration
 			a.broadcastQuestions()
 			a.broadcastUpdate()
 		case "RESET_SELECT":

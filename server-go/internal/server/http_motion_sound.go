@@ -41,7 +41,7 @@ type cardWarning struct {
 // supprime les sons des cartes disparues. Renvoie les avertissements de durée,
 // ou (status, message) non nul si un upload est refusé (tout l'enregistrement
 // est alors refusé — l'appelant écrit l'erreur et abandonne).
-func applyMotionCardSounds(r *http.Request, id, questionsDir string, cards []map[string]interface{}, existing map[string]interface{}) (warnings []cardWarning, commit func(), status int, msg string) {
+func applyMotionCardSounds(r *http.Request, id, questionsDir string, cards []map[string]interface{}, existing map[string]interface{}) (warnings []cardWarning, commit func(), rollback func(), status int, msg string) {
 	warnings = []cardWarning{}
 	prefix := "/question/" + id + "/"
 
@@ -67,6 +67,14 @@ func applyMotionCardSounds(r *http.Request, id, questionsDir string, cards []map
 			}
 		}
 	}
+	// m2 : fichiers créés par cet appel, supprimés si l'enregistrement échoue ensuite.
+	var created []string
+	rollback = func() {
+		for _, name := range created {
+			_ = os.Remove(filepath.Join(questionsDir, name))
+		}
+	}
+	rollbackNow := func() func() { rollback(); return nil }
 	removeFile := func(url string) {
 		if !strings.HasPrefix(url, prefix) {
 			return
@@ -113,7 +121,7 @@ func applyMotionCardSounds(r *http.Request, id, questionsDir string, cards []map
 			raw, rerr := readSoundUpload(file, header.Filename)
 			file.Close()
 			if rerr != nil {
-				return nil, nil, rerr.status, fmt.Sprintf("carte %s : %s", cardID, rerr.msg)
+				return nil, nil, rollbackNow(), rerr.status, fmt.Sprintf("carte %s : %s", cardID, rerr.msg)
 			}
 			result, verr := audio.ValidateQuestionSound(raw)
 			if verr != nil {
@@ -121,13 +129,21 @@ func applyMotionCardSounds(r *http.Request, id, questionsDir string, cards []map
 				if isTooLarge(verr) {
 					st = http.StatusRequestEntityTooLarge
 				}
-				return nil, nil, st, fmt.Sprintf("carte %s : %s", cardID, verr.Error())
+				return nil, nil, rollbackNow(), st, fmt.Sprintf("carte %s : %s", cardID, verr.Error())
 			}
-			fileName := fmt.Sprintf("motion_%s_sound_%d.wav", cardID, rand.Intn(9000)+1000)
+			// M2 : jamais le nom de l'ancien son (il serait écrasé puis supprimé au commit).
+			var fileName string
+			for {
+				fileName = fmt.Sprintf("motion_%s_sound_%d.wav", cardID, rand.Intn(9000)+1000)
+				if prefix+fileName != oldSound {
+					break
+				}
+			}
 			if werr := os.WriteFile(filepath.Join(questionsDir, fileName), audio.BuildCanonicalWAV(result.PCM), 0644); werr != nil {
 				LogError(game.LogComponentHTTP, "Question %s: failed to write card sound %s: %v", id, fileName, werr)
-				return nil, nil, http.StatusInternalServerError, "échec d'écriture du fichier son de carte"
+				return nil, nil, rollbackNow(), http.StatusInternalServerError, "échec d'écriture du fichier son de carte"
 			}
+			created = append(created, fileName)
 			if oldSound != "" {
 				removeFile(oldSound)
 			}
@@ -176,7 +192,7 @@ func applyMotionCardSounds(r *http.Request, id, questionsDir string, cards []map
 			}
 		}
 	}
-	return warnings, commit, 0, ""
+	return warnings, commit, rollback, 0, ""
 }
 
 func copyCardSoundFlags(card, old map[string]interface{}) {

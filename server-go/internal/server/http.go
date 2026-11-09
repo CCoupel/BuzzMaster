@@ -1464,11 +1464,17 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 				}
 				// #235 (v11.6.0) — sons de cartes : upload, effacement et
 				// PRÉSERVATION par ID de carte depuis le question.json existant.
-				cw, ccommit, cstatus, cmsg := applyMotionCardSounds(r, id, questionsDir, cards, existingQuestion)
+				cw, ccommit, crollback, cstatus, cmsg := applyMotionCardSounds(r, id, questionsDir, cards, existingQuestion)
 				if cstatus != 0 {
 					http.Error(w, cmsg, cstatus)
 					return
 				}
+				// m2 : un refus ultérieur (autre champ, son d'hôte) retire les fichiers de cartes créés.
+				defer func() {
+					if !committed {
+						crollback()
+					}
+				}()
 				cardWarnings, cardSoundCommit = cw, ccommit
 				question["MOTION_CARDS"] = cards
 			}
