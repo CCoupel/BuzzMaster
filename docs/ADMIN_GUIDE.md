@@ -2782,7 +2782,7 @@ Le libellé du bloc son dans l'éditeur dépend du type de question :
 Chaque carte MEMOTION peut porter **son propre son**, indépendant du son de la manche. Son bloc **« Son de la carte »** comporte :
 - le fichier (WAV, 30 s maximum, mêmes règles de conversion que ci-dessus) ;
 - **« Chrono de la carte démarre »** : **Début** (le chrono de la carte part avec le son) ou **À la fin** (le chrono attend la fin du son) ;
-- **« Lecture de la carte »** : **Une fois** ou **En boucle**.
+- **« Lecture de la carte »** : **Une fois** ou **En boucle** (exclusifs : choisir l'un désactive l'autre).
 
 Une carte sonore porte la puce **♪** dans l'éditeur, et la question entière la porte dès qu'une de ses cartes a un son.
 
