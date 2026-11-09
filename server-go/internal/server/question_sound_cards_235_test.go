@@ -30,6 +30,7 @@ type tw235Form struct {
 	fields map[string]string
 	files  map[string][]byte // champ multipart -> contenu (nom de fichier x.wav)
 	title  string
+	time   string // "" = 30
 }
 
 func tw235Post(t *testing.T, s *HTTPServer, f tw235Form) *httptest.ResponseRecorder {
@@ -44,7 +45,11 @@ func tw235Post(t *testing.T, s *HTTPServer, f tw235Form) *httptest.ResponseRecor
 	if typ == "" {
 		typ = "MEMOTION"
 	}
-	for k, v := range map[string]string{"number": "7", "question": title, "answer": "", "points": "1", "time": "30", "type": typ} {
+	timeStr := f.time
+	if timeStr == "" {
+		timeStr = "30"
+	}
+	for k, v := range map[string]string{"number": "7", "question": title, "answer": "", "points": "1", "time": timeStr, "type": typ} {
 		_ = mw.WriteField(k, v)
 	}
 	if f.cards != nil {
