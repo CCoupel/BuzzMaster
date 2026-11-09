@@ -68,17 +68,25 @@ var soundSiteRegistry = map[soundSite]soundDecision{
 	{Func: "handleTeamPoints"}:        {"team points (CueGagne)"},
 	{Func: "handleBumperPointsBatch"}: {"grouped player award (CueGagne once for the batch, #254)"},
 	{Func: "handleTeamPointsBatch"}:   {"grouped team award (CueGagne once for the batch, #244/#251)"},
-	{Func: "handleMotionDone"}:        {"MEMOTION winner (CueGagne) — the auto-stop branch carries no cue"},
-	{Func: "handleFlipMemoryCard"}: {"flip-back branch only (CuePerdu) — match/complete branches carry no cue; " +
+	{Func: "handleMotionDone"}: {"MEMOTION winner (CueGagne) or card closed without winner (CueMemotionFinCarte, #231) — " +
+		"the auto-stop branch carries no cue"},
+	{Func: "handleFlipMemoryCard"}: {"applied flip: pair found (CueMemoryPaire) or card turned (CueMemoryCarte), #231; " +
+		"a missed pair keeps CuePerdu after the flip-back delay. Several cues, ONE per event (D4) — " +
 		"same per-function collapsing limit as contract lighting.md §6.3/§7, cannot be narrowed further by this test"},
+	{Func: "broadcastQCMHint"}:     {"QCM hint strikes an answer (CueQCMIndice, #231)"},
+	{Func: "handleMotionSelect"}:   {"MEMOTION card chosen from the grid (CueMemotionSelection, #231)"},
+	{Func: "handleRafaleValidate"}: {"RAFALE answer validated, classic and card-scoped (CueRafaleBonne, #231)"},
+	{Func: "handleRafaleInvalidate"}: {"RAFALE card-scoped answer invalidated (CueRafaleMauvaise, #231) — the classic " +
+		"round's invalidate/timeout sounds from the OnRafaleInvalid callback (setupCallbacks)"},
 	{Func: "broadcastReveal"}: {"answer revealed (CueReveal)"},
 	{Func: "handleEntracteSet"}: {"CueEntracteDebut / CueEntracteFin depending on payload.Active — " +
 		"manual toggle, idempotence guard already present (contract lighting.md §10.5 precedent)"},
 	{Func: "onPhaseStarted"}: {"CueDepart / CueEntracteDebut / silence, front-detected against the phase " +
 		"BEFORE this transition (soundTrackPhase) — a resume-after-PAUSE (Continue()) must never sound " +
 		"depart again; see _work/reports/plan-verif-front-227-20260921-103500.md"},
-	{Func: "setupCallbacks"}: {"OnRafaleInvalid (CuePerdu, classic RAFALE invalidate/timeout only, never the " +
-		"MEMOTION-card-scoped variant) and OnTimeUp (CueTempsEcoule) callbacks wired here"},
+	{Func: "setupCallbacks"}: {"OnRafaleInvalid (CueRafaleMauvaise — replaces CuePerdu, D4 #231 — classic RAFALE " +
+		"invalidate/timeout only, never the MEMOTION-card-scoped variant), OnRafaleLotEnd (CueRafaleFinLot) and " +
+		"OnTimeUp (CueTempsEcoule) callbacks wired here"},
 }
 
 // ---------------------------------------------------------------------------

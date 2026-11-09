@@ -396,6 +396,12 @@ type Engine struct {
 	// here; see _work/reports/plan-verif-front-227-20260921-103500.md §1.
 	// No payload, same convention as OnRafaleTeamsChanged.
 	OnRafaleInvalid func()
+	// OnRafaleLotEnd (v11.6.0, #231, contracts/sound.md §2.1 `rafale-fin-lot`)
+	// fires when a RAFALE lot ends — pool exhausted or RAFALE_MAX_QUESTIONS
+	// reached — for the classic round (fireRafaleAdvanceCallbacks) and for a
+	// MEMOTION card's mini-round (fireRafaleCardAdvanceCallbacks). Sound-only,
+	// no payload; the global chrono's expiry stays OnTimeUp (`temps-ecoule`).
+	OnRafaleLotEnd func()
 	// OnRafaleCardAnswer (#217, v9.0.0, contracts/rafale.md §14.6) is
 	// OnRafaleAnswer's card-scoped counterpart: fires whenever a new
 	// question is drawn for a RAFALE-in-card mini-round — card round start
@@ -3307,6 +3313,9 @@ func (e *Engine) rotateRafaleTeam() {
 // look identical on the wire too). Must be called with e.mu NOT held.
 func (e *Engine) fireRafaleAdvanceCallbacks(result rafaleAdvanceResult) {
 	if result.roundEnded {
+		if e.OnRafaleLotEnd != nil {
+			e.OnRafaleLotEnd()
+		}
 		// #202: persist the released pre-fetch's rafaleUsed flag, if any —
 		// AFTER e.mu was released by the caller (RafaleValidate/
 		// RafaleInvalidate/the question-timer goroutine), matching the
@@ -5747,6 +5756,9 @@ func (e *Engine) advanceRafaleCardUnsafe(correct bool) rafaleCardAdvanceResult {
 // classic round (contract §6.1). Must be called with e.mu NOT held.
 func (e *Engine) fireRafaleCardAdvanceCallbacks(result rafaleCardAdvanceResult) {
 	if result.roundEnded {
+		if e.OnRafaleLotEnd != nil {
+			e.OnRafaleLotEnd()
+		}
 		if e.OnStateChange != nil {
 			// Not a real phase transition (Phase/MotionSubPhase stay put,
 			// contract §14.3) — reused purely as "please rebroadcast full
@@ -5821,6 +5833,18 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 	defer e.mu.Unlock()
 	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMemoryCardUnsafe(cardID, false, "")
 	return
+}
+
+// FlipMemoryCardApplied is FlipMemoryCard plus `applied` — true iff the card was
+// actually flipped (not refused: wrong phase, already flipped, grid locked…).
+// Used by the sound layer (#231 `memory-carte` / `memory-paire`): a refused
+// flip must stay silent.
+func (e *Engine) FlipMemoryCardApplied(cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete, applied bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var refusal string
+	isMatch, shouldFlipBack, flipDelay, isComplete, refusal = e.flipMemoryCardUnsafe(cardID, false, "")
+	return isMatch, shouldFlipBack, flipDelay, isComplete, refusal == ""
 }
 
 // flipMemoryCardUnsafe is FlipMemoryCard's body (#248): same logic, plus the
@@ -8106,6 +8130,15 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 	defer e.mu.Unlock()
 	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMotionMemoryCardUnsafe(motionCardID, cardID, false, "")
 	return
+}
+
+// FlipMotionMemoryCardApplied : FlipMotionMemoryCard plus `applied` (see FlipMemoryCardApplied).
+func (e *Engine) FlipMotionMemoryCardApplied(motionCardID, cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete, applied bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var refusal string
+	isMatch, shouldFlipBack, flipDelay, isComplete, refusal = e.flipMotionMemoryCardUnsafe(motionCardID, cardID, false, "")
+	return isMatch, shouldFlipBack, flipDelay, isComplete, refusal == ""
 }
 
 // flipMotionMemoryCardUnsafe is FlipMotionMemoryCard's body (#248), see

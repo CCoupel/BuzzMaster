@@ -112,6 +112,7 @@ func writeSoundError(w http.ResponseWriter, status int, message string) {
 
 type soundCueEntry struct {
 	Cue             string  `json:"cue"`
+	Type            string  `json:"type"` // "" (globale) | QCM | MEMORY | MEMOTION | RAFALE (#231)
 	Enabled         bool    `json:"enabled"`
 	Custom          bool    `json:"custom"`
 	DurationSeconds float64 `json:"duration_seconds"`
@@ -139,6 +140,7 @@ func (h *HTTPServer) handleAPISoundsList(w http.ResponseWriter, r *http.Request)
 	for _, c := range synth.Cues {
 		entry := soundCueEntry{
 			Cue:     string(c),
+			Type:    c.Type(),
 			Enabled: !cuesDisabled[string(c)],
 			Path:    "/files/sounds/" + synth.Filename(c),
 		}

@@ -655,7 +655,11 @@ func (a *App) setupCallbacks() {
 	// contracts/sound.md §2.1's CuePerdu) — sound-only, no lighting
 	// counterpart exists at this site today.
 	a.engine.OnRafaleInvalid = func() {
-		a.notifySound(audio.CuePerdu)
+		a.notifySound(audio.CueRafaleMauvaise) // #231 (D4) : remplace `perdu` sur ce site
+	}
+	// #231 : fin du lot RAFALE (réservoir épuisé / nombre max atteint), manche classique et carte.
+	a.engine.OnRafaleLotEnd = func() {
+		a.notifySound(audio.CueRafaleFinLot)
 	}
 
 	// RAFALE-in-MEMOTION-card (#217, v9.0.0, contract §14.5/§14.6) — fires
@@ -2881,6 +2885,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 	var isMatch, shouldFlipBack bool
 	var flipDelay int
 	var isComplete bool
+	flipApplied := false // #231 : le retournement a réellement eu lieu (sinon silence)
 	if flipBumper != nil {
 		res := a.engine.FlipCardGesture(game.FlipGesture{
 			BumperID: flipBumperID, Team: flipBumper.Team,
@@ -2897,6 +2902,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 			return
 		}
 		isMatch, shouldFlipBack, flipDelay, isComplete = res.IsMatch, res.ShouldFlipBack, res.FlipDelay, res.IsComplete
+		flipApplied = true
 		defer a.broadcastUpdateToPlayer(flipBumperID) // the ACK is followed by the targeted UPDATE
 	} else {
 		// #187 contract §9.2 — card-scope invariant, refused explicitly.
@@ -2927,15 +2933,25 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 		server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s motionCardId=%s", payload.CardID, payload.MotionCardID)
 
 		if cardScoped {
-			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMotionMemoryCard(payload.MotionCardID, payload.CardID)
+			isMatch, shouldFlipBack, flipDelay, isComplete, flipApplied = a.engine.FlipMotionMemoryCardApplied(payload.MotionCardID, payload.CardID)
 		} else {
-			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMemoryCard(payload.CardID)
+			isMatch, shouldFlipBack, flipDelay, isComplete, flipApplied = a.engine.FlipMemoryCardApplied(payload.CardID)
 		}
 
 	}
 
 	// Broadcast updated game state to all clients
 	a.broadcastUpdate()
+
+	// #231 (D4 — une cue par événement) : paire trouvée ⇒ memory-paire, sinon carte
+	// retournée ⇒ memory-carte ; la paire ratée garde en plus `perdu` après le délai (ci-dessous).
+	if flipApplied {
+		if isMatch {
+			a.notifySound(audio.CueMemoryPaire)
+		} else {
+			a.notifySound(audio.CueMemoryCarte)
+		}
+	}
 
 	// If no match and 2 cards are flipped, schedule auto-flip-back
 	if shouldFlipBack && flipDelay > 0 {
@@ -3078,6 +3094,7 @@ func (a *App) handleMotionSelect(msg *protocol.Message) {
 		return
 	}
 
+	a.notifySound(audio.CueMemotionSelection) // #231 : carte choisie
 	a.broadcastUpdate()
 }
 
@@ -3220,6 +3237,9 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.WinnerTeam}, points, lighting.ScorePulseDuration)
 		a.notifySound(audio.CueGagne)
 		a.startScoreFlash(payload.WinnerTeam, points)
+	} else {
+		// #231 (D4) : carte fermée sans gagnant ⇒ memotion-fin-carte (avec gagnant : gagne, ci-dessus).
+		a.notifySound(audio.CueMemotionFinCarte)
 	}
 
 	// Record event to history
@@ -3336,13 +3356,17 @@ func (a *App) handleRafaleValidate(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE: cardId=%s", cardID)
 		if err := a.engine.RafaleValidateCard(cardID); err != nil {
 			server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE (card) error: %v", err)
+			return
 		}
+		a.notifySound(audio.CueRafaleBonne) // #231
 		return
 	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE")
 	if err := a.engine.RafaleValidate(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE error: %v", err)
+		return
 	}
+	a.notifySound(audio.CueRafaleBonne) // #231
 }
 
 // handleRafaleInvalidate processes RAFALE_INVALIDATE (contract rafale.md
@@ -3358,7 +3382,9 @@ func (a *App) handleRafaleInvalidate(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE: cardId=%s", cardID)
 		if err := a.engine.RafaleInvalidateCard(cardID); err != nil {
 			server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE (card) error: %v", err)
+			return
 		}
+		a.notifySound(audio.CueRafaleMauvaise) // #231 (carte MEMOTION ; la manche classique passe par OnRafaleInvalid)
 		return
 	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE")
@@ -5157,6 +5183,7 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 	a.broadcast(protocol.ActionQCMHint, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	server.LogInfo(game.LogComponentEngine, "QCM hint: invalidated=%s, remaining=%d", invalidatedColor, remainingAnswers)
+	a.notifySound(audio.CueQCMIndice) // #231 : un indice barre une réponse
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state
 	a.broadcastUpdate()

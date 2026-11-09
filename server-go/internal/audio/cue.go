@@ -30,6 +30,55 @@ const (
 	CueEntracteFin   Cue = "entracte-fin"   // left intermission
 )
 
+// Cues par type de jeu (v11.6.0, #231 — contracts/sound.md §2.1 amendement).
+// Une cue par site d'émission (D4) ; Type() ≠ "" les distingue des 7 cues globales.
+const (
+	CueQCMIndice         Cue = "qcm-indice"         // QCM : un indice barre une réponse
+	CueMemoryCarte       Cue = "memory-carte"       // MEMORY : carte retournée (face visible)
+	CueMemoryPaire       Cue = "memory-paire"       // MEMORY : paire trouvée
+	CueMemotionSelection Cue = "memotion-selection" // MEMOTION : carte choisie dans la grille
+	CueMemotionFinCarte  Cue = "memotion-fin-carte" // MEMOTION : carte fermée sans gagnant
+	CueRafaleBonne       Cue = "rafale-bonne"       // RAFALE : réponse validée
+	CueRafaleMauvaise    Cue = "rafale-mauvaise"    // RAFALE : réponse invalidée / passée
+	CueRafaleFinLot      Cue = "rafale-fin-lot"     // RAFALE : fin du lot (réservoir épuisé / nombre max atteint)
+)
+
+// Types de jeu portés par Cue.Type().
+const (
+	CueTypeQCM      = "QCM"
+	CueTypeMemory   = "MEMORY"
+	CueTypeMemotion = "MEMOTION"
+	CueTypeRafale   = "RAFALE"
+)
+
+// AllCues renvoie les 15 cues dans l'ordre normatif : les 7 globales, puis
+// QCM, MEMORY, MEMOTION, RAFALE (contracts/sound.md §2.1).
+func AllCues() []Cue {
+	return []Cue{
+		CueDepart, CueTempsEcoule, CueGagne, CuePerdu, CueReveal, CueEntracteDebut, CueEntracteFin,
+		CueQCMIndice,
+		CueMemoryCarte, CueMemoryPaire,
+		CueMemotionSelection, CueMemotionFinCarte,
+		CueRafaleBonne, CueRafaleMauvaise, CueRafaleFinLot,
+	}
+}
+
+// Type renvoie le type de jeu de la cue ("QCM", "MEMORY", "MEMOTION", "RAFALE"),
+// ou "" pour les 7 cues globales (et toute valeur inconnue).
+func (c Cue) Type() string {
+	switch c {
+	case CueQCMIndice:
+		return CueTypeQCM
+	case CueMemoryCarte, CueMemoryPaire:
+		return CueTypeMemory
+	case CueMemotionSelection, CueMemotionFinCarte:
+		return CueTypeMemotion
+	case CueRafaleBonne, CueRafaleMauvaise, CueRafaleFinLot:
+		return CueTypeRafale
+	}
+	return ""
+}
+
 // Output plays one already-decoded PCM stream, already conforming to the
 // canonical format (contract §3: WAV PCM 16-bit, 44100 Hz, stereo — Play
 // never has to inspect or convert anything). Symmetric to lighting.Driver
