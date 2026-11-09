@@ -1321,6 +1321,20 @@ export default function AmbiancePage() {
                 {soundStateLabel(soundStatus.active)}
               </span>
             </div>
+            {/* #283 — cause lisible sous la pastille (pastille inchangée) et
+                bannière « Redémarrage requis » (output = restart_required). */}
+            {soundStatus.reason && (
+              <p className="ambiance-hint sound-output-reason" data-output={soundStatus.output || ''}>
+                {soundStatus.reason}
+              </p>
+            )}
+            {soundStatus.restartRequired && (
+              <div className="sound-restart-banner" role="alert">
+                <strong>Redémarrage requis.</strong> L'interrupteur a changé depuis le lancement du
+                serveur : la sortie audio n'est ouverte qu'au démarrage (un seul contexte audio par
+                processus). Redémarrez le serveur pour appliquer.
+              </div>
+            )}
             <p className="ambiance-hint">
               {/* Maquette rév. 5 — interrupteur général ASYMÉTRIQUE : éteindre
                   coupe le fan-out immédiatement (lu à chaque déclenchement,

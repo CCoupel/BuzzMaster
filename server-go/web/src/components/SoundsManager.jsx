@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Button from './Button'
+import { soundUploadMessage } from '../utils/soundState'
 import SoundTestModal from './SoundTestModal'
 
 // #230 — tableau des sept sons d'événement, onglet Son de /admin/ambiance.
@@ -168,7 +169,7 @@ export default function SoundsManager() {
       clearVerdicts(cue)
       await loadSounds()
       setToast({
-        message: body.warning ? `Son remplacé — ${body.warning}` : 'Son remplacé.',
+        message: soundUploadMessage('Son remplacé', body),
         type: body.warning ? 'warning' : 'success',
       })
     } catch (error) {

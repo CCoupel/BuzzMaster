@@ -44,3 +44,19 @@ export function soundStateTitle(active) {
 export function soundStateGlyph(active) {
   return normalizeSoundActive(active) ? 'on' : 'off'
 }
+
+/**
+ * #232 — fragment « converti depuis <source_format> » d'une réponse d'upload
+ * sonore (`converted: true`, `source_format` ex. "48000Hz/1ch/24bit").
+ * `null` si le fichier était déjà canonique (ou champs absents).
+ */
+export function convertedNote(body) {
+  if (!body || body.converted !== true) return null
+  return body.source_format ? `converti depuis ${body.source_format}` : 'converti au format canonique'
+}
+
+/** Message de toast d'un upload sonore réussi : base + conversion + avertissement. */
+export function soundUploadMessage(base, body) {
+  const parts = [convertedNote(body), body?.warning || null].filter(Boolean)
+  return parts.length ? `${base} — ${parts.join(' · ')}` : `${base}.`
+}

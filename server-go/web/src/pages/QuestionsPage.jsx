@@ -2,6 +2,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
+import { convertedNote } from '../utils/soundState'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES } from '../utils/categoryUtils'
@@ -1809,14 +1810,22 @@ export default function QuestionsPage() {
         // `{"status":"ok"}` (pas encore de warning, ou aucune question de
         // type concerné) → pas de toast, comportement inchangé.
         let warning = null
+        let convertedMsg = null
         try {
           const body = await response.json()
           warning = body?.warning || null
+          convertedMsg = convertedNote(body)
         } catch {
           // Réponse non-JSON ou vide — ignorée.
         }
-        if (warning) {
-          setSoundToast({ message: warning, type: 'warning' })
+        if (warning || convertedMsg) {
+          // #232 — « Son converti depuis … » (toast existant, + avertissement éventuel)
+          setSoundToast({
+            message: warning
+              ? (convertedMsg ? `Son ${convertedMsg} — ${warning}` : warning)
+              : `Son ${convertedMsg}`,
+            type: warning ? 'warning' : 'success',
+          })
         }
         // #245 — changement de manche d'une question existante : à la fin de la manche choisie.
         if (editingId && formRoundId !== originalRoundId) {

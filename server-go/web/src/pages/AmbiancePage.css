@@ -834,3 +834,16 @@
 }
 .sound-loop-seg-opt + .sound-loop-seg-opt { border-left: 1px solid var(--gray-300); }
 .sound-loop-seg-opt.sel { background: var(--primary-600); color: #fff; font-weight: 600; }
+
+/* #283 — diagnostic de la sortie audio (maquette output_diagnostic) */
+.sound-output-reason { margin: 0.4rem 0 0; }
+.sound-restart-banner {
+  font-size: 0.78rem;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 0.4rem;
+  border-left: 3px solid var(--warning, #f59e0b);
+  padding: 0.45rem 0.6rem;
+  margin: 0.5rem 0;
+  overflow-wrap: anywhere;
+}
