@@ -3041,7 +3041,7 @@ Quand la manche en cours impose des réglages, le popover affiche « Manche « X
 
 Dans **Ambiance › Lumière**, la section **« Mode d'éclairage par défaut »** règle le mode d'éclairage **global** (ON, AUTO ou OFF). Sans réglage, le mode est AUTO. Le popover Éclairage reste un geste direct : il ne change jamais ce mode par défaut.
 
-Si une manche impose le mode d'éclairage, un changement fait dans cette section ne modifie pas le global, et la page affiche le message « Appliqué à la manche en cours seulement ».
+Si une manche impose le mode d'éclairage, un changement fait dans cette section n'est pas écrit dans le réglage global : la page affiche le message « Appliqué à la manche en cours seulement (la manche impose ce réglage). ». Le mode de la manche reste celui qui s'applique pendant la manche.
 
 ### Après un redémarrage
 
