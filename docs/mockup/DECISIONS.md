@@ -68,6 +68,7 @@
 - Le défaut choisi n'écrit jamais `POINTS_RULE` sur la carte. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
 - Parité du montant selon `POINTS_RULE` limitée aux surfaces qui affichent déjà un montant (zoom anim, bandeau anim, bouton de crédit anim, panneau admin GamePage) ; les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant. _(v11.2.2, memotion_card_points_rule, #190, décision utilisateur 2026-10-15)_
 - Les cartes QCM d'une question MEMOTION n'ont pas d'indices : les contrôles d'indices sont retirés de l'éditeur de carte et le moteur n'en déclenche aucun pendant une carte (principe : pas d'indice sans effet sur les points ; option « prise en compte au crédit » écartée). _(v11.2.2, LOT-6, décision utilisateur 2026-10-15)_
+- Éditeur de carte MEMOTION : la ligne de lecture du son de carte s'intitule **« Lecture de la carte »** (et non « Lecture » comme la maquette §03) pour la distinguer de la ligne « Lecture » du son d'hôte ; blocs « Son de la manche » (hôte MEMOTION) et « Son de l'entracte » (ENTRACTE). _(v11.6.0, sound_memory_memotion_entracte, #235, revue LOT-2 point 8, 2026-11-09)_
 
 ## admin_pickers
 - Unification des sélecteurs catégorie / difficulté : tous les sites **sauf QuizMetaForm** (difficultés textuelles Facile…Expert, publics, langue — autre domaine). _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_

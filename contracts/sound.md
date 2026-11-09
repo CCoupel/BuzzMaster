@@ -1452,7 +1452,9 @@ champ nouveau sur `Question`, aucune garde serveur à retirer puisqu'il n'y en a
 ### 14.2 MEMORY — son de manche
 
 Joué au **START** (phase de mémorisation comprise), `Play`/`PlayLoop` selon `SOUND_LOOP` ; `SOUND_TIMER_DELAYED` diffère
-le chronomètre global **si `MEMORY_CONFIG.USE_TIMER`** (sinon le champ est écrit mais sans effet — pas de refus) ;
+le chronomètre global ; **amendement revue LOT-2 (m4)** : `SOUND_TIMER_DELAYED` est écrit **sans condition** sur
+`MEMORY_CONFIG.USE_TIMER` (aucun changement moteur : l'effet repose sur le chrono global existant ; sans chrono global, le
+champ est stocké mais sans effet — pas de refus, à vérifier en QUALIF) ;
 arrêt sur les sites existants de `questionSound().Stop()`. Décompte (§12.6) : jamais pendant ce média.
 
 ### 14.3 ENTRACTE — son d'entracte
@@ -1479,7 +1481,9 @@ SoundLoop         bool   `json:"SOUND_LOOP,omitempty"`
 
 **Upload** (`POST /questions`, `http-endpoints.md`) — champs multipart `motion_card_<cardID>_sound` (fichier, validé par
 `ValidateQuestionSound` **après** `ToCanonical` §3), `motion_card_<cardID>_sound_cleared`, `_sound_timer_delayed`,
-`_sound_loop` (`"true"`/absent, écrits **seulement si un son est attaché**, même règle que la question). Nom de fichier
+`_sound_loop` — **tri-valués (amendement revue LOT-2, m4)** : `"true"` / `"false"` **explicite** / **absent = conservé**
+(la carte inchangée n'envoie rien ; `"false"` désactive un réglage sans re-téléverser) ; écrits **seulement si un son est
+attaché**, même règle que la question. Nom de fichier
 régénéré côté serveur ; suppression du fichier à `_sound_cleared=true` et quand la carte disparaît (`removeCardMedia`).
 
 **Préservation — normatif, piège majeur** : `handleUploadQuestion` reconstruit `MOTION_CARDS` depuis le payload client.
@@ -1499,6 +1503,8 @@ du titre de la question hôte ⇒ sons de cartes intacts, octet pour octet dans 
   « chrono le plus intérieur » s'applique au décompte).
 - **D9 — pas de reprise** : à la fermeture de la carte (`MEMOTION_DONE`), révélation ou STOP, le son de carte s'arrête
   et le son d'hôte **ne reprend pas** (« une question chasse l'autre »). Une carte **sans** son laisse l'hôte continuer.
+- **RESTORE coupe le média courant** (hôte, carte ou entracte) — câblé en LOT-2 (`OnAction "RESTORE"` → `questionSound().Stop()`,
+  revue m1) : un média ne survit jamais à une restauration de sauvegarde.
 - **Gate T0 appliquée au retournement** : si le fichier de la carte est indisponible (§10.8.2), le retournement **n'est
   pas refusé** (la carte s'ouvre, aucun son) ; le motif remonte comme un état (`QUESTION_SOUND_UNAVAILABLE`, §10.8.5) et
   la pastille d'alerte (§10.9) l'affiche. La gate T0 **de la question hôte** (PREPARE→READY) n'examine **que** le son
@@ -1506,7 +1512,9 @@ du titre de la question hôte ⇒ sons de cartes intacts, octet pour octet dans 
 - `QUESTION_SOUND_STATE` reflète le média **courant** quel qu'en soit le propriétaire ; nouveau champ sœur
   `QUESTION_SOUND_OWNER: "" | "HOST" | "CARD:<cardID>" | "ENTRACTE"` (`game-state.md`, toujours sérialisé). Les gestes
   `QUESTION_SOUND` agissent sur le média courant.
-- Conduite : `phaseRules.showSoundRow` vrai pendant une carte sonore (admin et anim) ; grille d'édition : chip ♪ sur les
+- Conduite : `phaseRules.showSoundRow(phase, question, selectedCardId = null)` — **signature à 3 paramètres (amendement
+  revue LOT-2, m4)**, 3ᵉ optionnel, rétrocompatible : vrai pendant une carte sonore (`MOTION_CARDS[].ID === selectedCardId`
+  avec `SOUND`) même si l'hôte est muet (admin et anim) ; grille d'édition : chip ♪ sur les
   cartes sonores.
 
 ### 14.5 Non-régression exigée

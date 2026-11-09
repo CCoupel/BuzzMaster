@@ -34,6 +34,12 @@
 - **[CHANGED]** `POST /questions` — `sound`/`sound_loop` acceptés pour MEMORY, ENTRACTE, hôte MEMOTION (champ commun,
   §10.4bis — décision d'éditeur) ; `sound_timer_delayed` ignoré pour ENTRACTE et hôte MEMOTION ; réponse `card_warnings[]`.
   LOT-2.
+- **[CHANGED]** *(revue LOT-2, m4 — écarts livrés actés)* : réglages de carte `motion_card_<id>_sound_timer_delayed` /
+  `_sound_loop` **tri-valués** (`"true"` / `"false"` explicite / absent = conservé) ; `phaseRules.showSoundRow(phase, question,
+  selectedCardId = null)` (3ᵉ paramètre optionnel, rétrocompatible) ; MEMORY écrit `SOUND_TIMER_DELAYED` **sans condition**
+  `USE_TIMER` (aucun changement moteur) ; `RESTORE` coupe le média courant (hôte / carte / entracte). `sound.md` §14.2/§14.4,
+  `http-endpoints.md` §POST /questions. Libellés livrés : « Son de la manche » (hôte MEMOTION), « Son de l'entracte »,
+  « Lecture de la carte » (éditeur de carte, maquette §03 disait « Lecture ») — consignés dans `docs/mockup/DECISIONS.md`.
 - **[CHANGED]** `POST /config.json {"sound":{muted|cues_disabled|countdown_*}}`, `POST /api/lighting/mode` = gestes
   **directs** (couche directe + global seulement hors surcharge de manche) ; réponse `scope: global|round`. `sound.md` §11.2
   amendement / §15. LOT-4.

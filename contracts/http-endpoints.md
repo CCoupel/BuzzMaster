@@ -1372,8 +1372,8 @@ conversion). Le message frontend indique « converti depuis <source_format> » (
 |---|---|---|
 | `motion_card_<cardID>_sound` | file | Média sonore de la **carte** (`sound.md` §14.4) — mêmes règles que `sound` (`ValidateQuestionSound` après conversion §232, ≤ 30 s, ≤ 6 Mio) ; écrit `MOTION_CARDS[].SOUND = "/question/<id>/motion_<cardID>_sound_<rand4>.wav"` |
 | `motion_card_<cardID>_sound_cleared` | `"true"`/absent | Supprime le son de la carte (fichier compris) |
-| `motion_card_<cardID>_sound_timer_delayed` | `"true"`/absent | Différé du **chrono de la carte** ; écrit seulement si un son est attaché |
-| `motion_card_<cardID>_sound_loop` | `"true"`/absent | Boucle ; écrit seulement si un son est attaché |
+| `motion_card_<cardID>_sound_timer_delayed` | `"true"` / `"false"` / absent | Différé du **chrono de la carte**. **Tri-valué (revue LOT-2, m4)** : `"false"` explicite désactive, **absent = valeur conservée** depuis l'existant ; écrit seulement si un son est attaché |
+| `motion_card_<cardID>_sound_loop` | `"true"` / `"false"` / absent | Boucle — même règle tri-valuée ; écrit seulement si un son est attaché |
 
 **Préservation serveur par `ID` de carte** (normatif, `sound.md` §14.4) : une carte existante sans nouveau fichier ni
 `_sound_cleared` **conserve** ses trois champs depuis le `question.json` existant. `sound` / `sound_loop` restent
