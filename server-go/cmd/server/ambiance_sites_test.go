@@ -134,6 +134,39 @@ func ambianceSitesDiff205(found map[ambianceSite]bool, registry map[ambianceSite
 // sendLEDSet* n'est plus dans main.go (la décision d'ambiance du registre est inchangée : resync d'UN appareil, code mort).
 var movedToLEDPackage295 = map[string]bool{"broadcastLEDSet": true, "resendLEDOnReconnect": true}
 
+// TestMovedToLEDPackage295_FunctionsStillExistInInternalLed garde la liste ci-dessus : chaque fonction exemptée du contrôle
+// de péremption doit toujours exister dans internal/led (sous son nom exporté) ; sinon l'exemption masquerait une entrée
+// du registre devenue réellement périmée.
+func TestMovedToLEDPackage295_FunctionsStillExistInInternalLed(t *testing.T) {
+	ledFile := filepath.Join(filepath.Dir(mainGoPath205(t)), "..", "..", "internal", "led", "led.go")
+	f, err := parser.ParseFile(token.NewFileSet(), ledFile, nil, 0)
+	if err != nil {
+		t.Fatalf("lecture de %s : %v", ledFile, err)
+	}
+	declared := map[string]bool{}
+	for _, d := range f.Decls {
+		if fd, ok := d.(*ast.FuncDecl); ok {
+			declared[fd.Name.Name] = true
+		}
+	}
+	exported := map[string]string{"broadcastLEDSet": "Broadcast", "resendLEDOnReconnect": "ResendOnReconnect"}
+	for fn := range movedToLEDPackage295 {
+		want, ok := exported[fn]
+		if !ok {
+			t.Errorf("movedToLEDPackage295 contient %q sans nom correspondant dans internal/led : compléter la table de ce test", fn)
+			continue
+		}
+		if !declared[want] {
+			t.Errorf("%s est exemptée du contrôle de péremption du registre mais %s n'existe plus dans internal/led/led.go", fn, want)
+		}
+	}
+	for fn := range exported {
+		if !movedToLEDPackage295[fn] {
+			t.Errorf("%s doit figurer dans movedToLEDPackage295", fn)
+		}
+	}
+}
+
 // TestAmbianceExhaustiveness_MainGoMatchesRegistry is CA3 itself: the real
 // check that must run on every build.
 func TestAmbianceExhaustiveness_MainGoMatchesRegistry(t *testing.T) {
