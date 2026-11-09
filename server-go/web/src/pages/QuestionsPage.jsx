@@ -803,6 +803,10 @@ export default function QuestionsPage() {
   // pour les types à chronomètre global : jamais pour ENTRACTE ni l'hôte MEMOTION.
   const renderQuestionSoundBlock = () => {
     const hasTimer = formData.type !== 'ENTRACTE' && formData.type !== 'MEMOTION'
+    // Libellés de la maquette #235 : entracte / manche MEMOTION (hôte) / question.
+    const soundBlockTitle = formData.type === 'ENTRACTE' ? 'Son de l\'entracte'
+      : formData.type === 'MEMOTION' ? 'Son de la manche'
+        : 'Son de la question'
     return (
       <>
                     {/* #219 — Son de la question, maquette question-sound-219.html
@@ -814,7 +818,7 @@ export default function QuestionsPage() {
                         serveur. */}
                     <div className="form-group">
                       <label htmlFor="sound-input">
-                        Son de la question{' '}
+                        {soundBlockTitle}{' '}
                         <span className="section-hint">
                           (optionnel — WAV, 30 s maximum)
                         </span>

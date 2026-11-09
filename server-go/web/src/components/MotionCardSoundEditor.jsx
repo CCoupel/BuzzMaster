@@ -94,7 +94,7 @@ export default function MotionCardSoundEditor({ card, onChange }) {
         </span>
       </div>
       <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
-        <span className="sound-timer-toggle-label">Lecture</span>
+        <span className="sound-timer-toggle-label">Lecture de la carte</span>
         <span className="sound-timer-switch-group">
           <span className={`sound-timer-switch-side ${!loop ? 'active' : ''}`}>Une fois</span>
           <button
