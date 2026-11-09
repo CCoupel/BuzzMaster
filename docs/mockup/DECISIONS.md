@@ -99,6 +99,9 @@
 - Son de décompte joué au début de chaque chronomètre (global, question RAFALE, carte MEMOTION), rejoué si « en boucle » ; jamais si la question a un média audio pendant le chrono. _(v11.4.0, countdown_loop, #287, 2026-11-05)_
 - Commutateur une fois / en boucle réservé au média de question et au son de décompte, jamais aux bruitages. _(v11.4.0, #288, 2026-11-05)_
 
+## ambiance_settings_panel
+- Sous-titres de cues livrés après la review LOT-3 (D4), différents de la maquette `global_per_type_tabs` : « Erreur » — _Paire ratée en MEMORY_ (la réponse invalidée en RAFALE sonne désormais « Mauvaise réponse », `rafale-mauvaise`) ; « Fin de lot » — _Le réservoir est épuisé ou le nombre maximal de questions est atteint_ (l'expiration du chrono global reste « Temps écoulé »). La maquette validée n'est pas modifiée ; ces libellés font foi. _(v11.6.0, global_per_type_tabs, #231, commit 59083554, 2026-11-09)_
+
 ## admin_category_manager
 - La couleur se choisit en cliquant la pastille (palette), jamais par un champ séparé. _(v11.4.0, rename_color_delete, #285, 2026-11-05)_
 - L'icône ne se téléverse que sur une catégorie personnalisée ; les intégrées gardent leur emoji et ne sont jamais supprimables. _(v11.4.0, #285, 2026-11-05)_
