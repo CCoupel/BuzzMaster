@@ -3010,7 +3010,7 @@ Le son et l'éclairage ont **trois niveaux de réglage** :
 
 **Quand le geste direct s'efface** : au changement de manche, et à une nouvelle partie. Un geste direct vaut donc jusqu'à la fin de la manche en cours.
 
-**Une manche n'écrit jamais le global.** Si un geste direct porte sur un réglage imposé par la manche en cours, le global n'est pas modifié : le geste vaut pour la manche seulement. Un message l'indique : « Appliqué à la manche en cours seulement (la manche impose ce réglage). » Il s'affiche sur le popover Son, sur le popover Éclairage et sur l'écran Son de la page Ambiance (son coupé, bruitages, décompte). Il ne s'affiche pas dans la section « Mode d'éclairage par défaut » (voir plus bas).
+**Une manche n'écrit jamais le global.** Si un geste direct porte sur un réglage imposé par la manche en cours, le global n'est pas modifié : le geste vaut pour la manche seulement. Un message l'indique : « Appliqué à la manche en cours seulement (la manche impose ce réglage). » Il s'affiche sur tous les gestes retenus par la manche : popover Son, popover Éclairage, écran Son de la page Ambiance (son coupé, bruitages, décompte) et section « Mode d'éclairage par défaut ».
 
 ### Réglages surchargeables
 
@@ -3041,7 +3041,7 @@ Quand la manche en cours impose des réglages, le popover affiche « Manche « X
 
 Dans **Ambiance › Lumière**, la section **« Mode d'éclairage par défaut »** règle le mode d'éclairage **global** (ON, AUTO ou OFF). Sans réglage, le mode est AUTO. Le popover Éclairage reste un geste direct : il ne change jamais ce mode par défaut.
 
-Si une manche impose le mode d'éclairage, un changement fait dans cette section ne modifie pas le global, et la page n'affiche **aucun message** : le message « Appliqué à la manche en cours seulement » n'apparaît que sur le popover Éclairage, pas ici.
+Si une manche impose le mode d'éclairage, un changement fait dans cette section ne modifie pas le global, et la page affiche le message « Appliqué à la manche en cours seulement ».
 
 ### Après un redémarrage
 
