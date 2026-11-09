@@ -165,7 +165,9 @@ describe('QuestionsPage — ligne « Lecture » (#288)', () => {
     expect(container.textContent).not.toMatch(/ou au buzz/i)
   })
 
-  it.each(['memory', 'memotion', 'rafale', 'entracte'])('type %s : la ligne « Lecture » est ABSENTE (pas de section Son)', (typeKey) => {
+  // #235 (v11.6.0) : MEMORY, MEMOTION (hôte) et ENTRACTE ont désormais la section Son (et la ligne « Lecture »),
+  // couverts par QuestionsPage.sound.235.test.jsx ; la liste d'origine était ['memory', 'memotion', 'rafale', 'entracte'].
+  it.each(['rafale'])('type %s : la ligne « Lecture » est ABSENTE (pas de section Son)', (typeKey) => {
     const { container } = render(<QuestionsPage />)
     fireEvent.click(container.querySelector(`.type-btn.${typeKey}`))
     expect(screen.queryByRole('switch', { name: LOOP_LABEL })).not.toBeInTheDocument()
