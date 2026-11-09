@@ -375,8 +375,14 @@ func TestSoundChain_MemoryPairMissed_PlaysPerdu(t *testing.T) {
 	}
 	app.handleFlipMemoryCard("test-admin", server.ClientTypeAdmin, secondMsg)
 
-	got := twa227WaitForPlayed(t, fake, 1, time.Second)
-	if len(got) != 1 || got[0] != audio.CuePerdu {
+	// #231 (v11.6.0) : chaque carte retournée joue désormais `memory-carte` ; `perdu` (paire ratée) arrive à l'issue du
+	// délai de retournement. On attend donc `perdu` lui-même (et non plus « la 1re cue »).
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) && tw231Count(fake.Played(), audio.CuePerdu) == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := fake.Played()
+	if tw231Count(got, audio.CuePerdu) != 1 {
 		t.Fatalf("une paire ratée MEMORY doit jouer perdu (à l'issue du délai de retournement), got %v", got)
 	}
 }
@@ -439,9 +445,11 @@ func TestSoundChain_RafaleInvalidate_PlaysPerdu(t *testing.T) {
 
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleInvalidate, nil)
 
+	// #231 (v11.6.0, D4) : sur ce site, `perdu` est REMPLACÉ par `rafale-mauvaise` (une seule cue par site) —
+	// voir TestSounds231_RafaleInvalidate_PlaysRafaleMauvaise_InsteadOfPerdu.
 	got := twa227WaitForPlayed(t, fake, 2, time.Second)
-	if len(got) != 2 || got[1] != audio.CuePerdu {
-		t.Fatalf("RAFALE_INVALIDATE (manche classique) doit jouer perdu, got %v", got)
+	if len(got) != 2 || got[1] != audio.Cue("rafale-mauvaise") {
+		t.Fatalf("RAFALE_INVALIDATE (manche classique) doit jouer rafale-mauvaise (remplace perdu, D4), got %v", got)
 	}
 }
 

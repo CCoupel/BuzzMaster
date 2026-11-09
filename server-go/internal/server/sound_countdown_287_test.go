@@ -91,8 +91,9 @@ func TestSoundsList287_LongArray_DefaultDecompteEntry(t *testing.T) {
 		t.Fatalf("`cues` doit rester à %d entrées (byte-identique à LOT-2), got %d", len(synth.Cues), len(cues))
 	}
 	for i, c := range cues {
-		if len(c) != 5 {
-			t.Errorf("cue %d : %d clés (%v), attendu exactement cue/enabled/custom/duration_seconds/path", i, len(c), c)
+		// #231 (v11.6.0) : `type` s'ajoute (additif) — cue/enabled/custom/duration_seconds/path/type.
+		if len(c) != 6 {
+			t.Errorf("cue %d : %d clés (%v), attendu exactement cue/enabled/custom/duration_seconds/path/type", i, len(c), c)
 		}
 	}
 	if len(long) != 1 {
@@ -305,8 +306,9 @@ func TestDecompte287_IsNotACue_ClosedCatalogueUnchanged(t *testing.T) {
 	if _, ok := soundCueFromString("decompte"); ok {
 		t.Error("soundCueFromString(\"decompte\") doit rester faux : le décompte n'est pas une cue (sound.md §12.1)")
 	}
-	if len(synth.Cues) != 7 {
-		t.Errorf("le catalogue de cues reste fermé à 7, got %d", len(synth.Cues))
+	// #231 (v11.6.0) : catalogue fermé à 15 cues (7 globales + 8 par type) ; le décompte n'en fait toujours pas partie.
+	if len(synth.Cues) != 15 {
+		t.Errorf("le catalogue de cues reste fermé à 15, got %d", len(synth.Cues))
 	}
 }
 
@@ -337,11 +339,12 @@ func TestRestoreDefaults287_RestoresEightIncludingDecompte(t *testing.T) {
 		Restored []string `json:"restored"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if len(resp.Written) != 7 {
-		t.Errorf("written = %v, attendu les 7 cues (forme inchangée)", resp.Written)
+	// #231 (v11.6.0) : 15 cues restaurées (forme inchangée) + decompte.
+	if len(resp.Written) != 15 {
+		t.Errorf("written = %v, attendu les 15 cues (forme inchangée)", resp.Written)
 	}
-	if len(resp.Restored) != 8 || !tw287Contains(resp.Restored, "decompte") {
-		t.Errorf("restored = %v, attendu 8 noms dont decompte", resp.Restored)
+	if len(resp.Restored) != 16 || !tw287Contains(resp.Restored, "decompte") {
+		t.Errorf("restored = %v, attendu 16 noms dont decompte", resp.Restored)
 	}
 	if !bytes.Equal(tw287DecompteWAV(t, dataDir), defaultBytes) {
 		t.Error("restore-defaults doit aussi réécrire decompte.wav")

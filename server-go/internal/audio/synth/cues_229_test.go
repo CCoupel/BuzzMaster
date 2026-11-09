@@ -38,8 +38,9 @@ func tw229FirstAndLastSample(t *testing.T, wav []byte) (first, last int16) {
 // timbre (e.g. a duration computation only wrong for a 2-note sequence)
 // would otherwise slip through.
 func TestGenerate_EveryClosedCatalogueCueProducesAValidWAV(t *testing.T) {
-	if len(Cues) != 7 {
-		t.Fatalf("Cues doit lister exactement les 7 cues du catalogue fermé v11.0 (contract §2.1), got %d: %v", len(Cues), Cues)
+	// #231 (v11.6.0) : le catalogue fermé compte désormais 15 cues (7 globales v11.0 + 8 par type, sound.md §2.1).
+	if len(Cues) != 15 {
+		t.Fatalf("Cues doit lister exactement les 15 cues du catalogue fermé (contract §2.1, #231), got %d: %v", len(Cues), Cues)
 	}
 	for _, c := range Cues {
 		t.Run(string(c), func(t *testing.T) {
