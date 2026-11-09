@@ -2506,7 +2506,7 @@ Le haut de l'onglet **Son** indique l'état de la sortie audio. L'état est fig�
 | Pastille **Son actif** | `ok` | La sortie audio est prête ; les bruitages sont joués | Rien |
 | **Enceinte indisponible.** + cause | `unavailable` | Aucun périphérique de sortie n'a répondu au démarrage. La cause (`reason`) est affichée sous la pastille | Vérifier la session audio (section « Prérequis système » ci-dessus) puis redémarrer le serveur |
 | **Bruitages désactivés** dans `config.json` | `disabled` | `sound.enabled = false` au démarrage : aucun son n'est joué | Mettre `sound.enabled` à `true` dans `config.json`, puis redémarrer |
-| **Redémarrage requis.** | `restart_required` | L'interrupteur `sound.enabled` a changé depuis le lancement du serveur | Éteindre prend effet immédiatement (le serveur reste muet). Rallumer n'a d'effet qu'après un redémarrage |
+| **Redémarrage requis.** | `restart_required` | L'interrupteur `sound.enabled` a changé depuis le lancement du serveur | Éteindre prend effet immédiatement (le serveur reste muet). Rallumer n'a d'effet qu'après un redémarrage. La bannière s'affiche dans les deux sens |
 
 La ligne de démarrage `AUDIO` du journal donne le même diagnostic :
 
@@ -2543,11 +2543,11 @@ Un WAV qui n'est pas dans le format canonique n'est plus refusé : le serveur le
 | Fréquence | **8 000 à 192 000 Hz** | **44 100 Hz** (rééchantillonnage) |
 | Canaux | **1 (mono) ou 2 (stéréo)** | **Stéréo** (un mono est dupliqué sur les deux voies) |
 | Durée | **Maximum 5 s** ; avertissement au-delà de 2 s | Inchangée |
-| Taille | Fichier brut jusqu'à **4 fois** la taille du format stocké (soit ~8 Mo pour un bruitage, ~24 Mo pour un son de question) | **Maximum ~2 Mo** pour un bruitage, **6 Mo** pour un son de question |
+| Taille | Fichier brut jusqu'à **4 fois** la taille du format stocké (soit 8 Mio pour un bruitage, 24 Mio pour un son de question) | **Maximum 2 Mio** pour un bruitage, **6 Mio** pour un son de question |
 
 Points à connaître :
 
-- **Un WAV déjà au format stocké** (44 100 Hz, stéréo, 16 bits) est enregistré **tel quel**, sans conversion.
+- **Un WAV déjà au format stocké** (44 100 Hz, stéréo, 16 bits) n'est pas converti : il est ré-enregistré à l'identique, seuls les blocs annexes (métadonnées type `LIST`/`INFO`) étant retirés.
 - La conversion est indiquée à l'écran : le message de remplacement affiche « converti depuis » suivi du format d'origine (par exemple `48000Hz/2ch/24bit`).
 - Un fichier trop volumineux avant conversion est refusé (`413`) ; un fichier dont la durée dépasse la limite est refusé, sans conversion.
 

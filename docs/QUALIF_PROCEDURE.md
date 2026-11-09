@@ -118,7 +118,7 @@ sound: enabled=<true|false> output=<ok|unavailable|disabled> reason="<cause>" de
 Vérifier :
 - [ ] La ligne `sound:` est présente, et `config:` pointe sur le `config.json` attendu
 - [ ] `enabled` correspond au réglage voulu
-- [ ] `output=ok` si le son doit être testé. `output=unavailable` (ligne `ERROR`, `reason` renseigné) signifie qu'aucune sortie audio n'a répondu : c'est un constat à consigner dans le rapport, pas un blocage du serveur. Sur une plateforme non ciblée par le pilote audio, la ligne attendue est `unavailable`
+- [ ] `output=ok` si le son doit être testé. `output=unavailable` (ligne `ERROR`, `reason` renseigné) signifie qu'aucune sortie audio n'a répondu : c'est un constat à consigner dans le rapport, pas un blocage du serveur. Sur une plateforme non ciblée par le pilote audio, avec `sound.enabled=true`, la ligne attendue est `unavailable` (avec `sound.enabled=false`, elle reste `disabled`)
 - [ ] L'onglet **Son** de `/admin/ambiance` affiche le même état que la ligne (voir `docs/ADMIN_GUIDE.md`, « Diagnostic de la sortie audio »)
 
 ---
