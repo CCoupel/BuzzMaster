@@ -95,8 +95,6 @@ func ambianceGestureFromRequest(raw map[string]json.RawMessage, before ambiancec
 	current, cfg *config.Config) (changes ambiancecfg.Partial, scope string) {
 	scope = "global"
 	touchedRound := false
-	curCfg := AmbianceFromConfig(current)
-	_ = curCfg
 
 	var sRaw map[string]json.RawMessage
 	if data, ok := raw["sound"]; ok {

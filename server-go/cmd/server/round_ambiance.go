@@ -18,9 +18,12 @@ import (
 
 // ambianceLayers is the process-memory state of the two non-global layers.
 type ambianceLayers struct {
-	mu      sync.Mutex
-	roundID string              // effective round ("" = none)
-	direct  ambiancecfg.Partial // gestures of the régie since the last round change
+	mu sync.Mutex
+	// refreshMu serialises resolve → publish → effects of refreshAmbianceB (review m2):
+	// two concurrent refreshes must not lose a transition (missed stop / broadcast).
+	refreshMu sync.Mutex
+	roundID   string              // effective round ("" = none)
+	direct    ambiancecfg.Partial // gestures of the régie since the last round change
 }
 
 // ambianceGlobal is the global layer, read from config.json through the adapter.
@@ -141,6 +144,7 @@ func (a *App) refreshAmbianceB(broadcast bool) {
 	if a.engine == nil {
 		return
 	}
+	a.ambLayers.refreshMu.Lock()
 	eff, src, id := a.resolveAmbiance()
 	prev := a.engine.GetState().AmbianceEffective
 	next := ambiancecfg.Effective{Settings: eff, Sources: src, RoundID: id}
@@ -158,6 +162,7 @@ func (a *App) refreshAmbianceB(broadcast bool) {
 	if !eff.CountdownEnabled && prev.Settings.CountdownEnabled {
 		a.countdownSound().Stop()
 	}
+	a.ambLayers.refreshMu.Unlock()
 	if broadcast && !ambianceEffectiveEqual(prev, next) {
 		a.broadcastUpdate()
 	}
