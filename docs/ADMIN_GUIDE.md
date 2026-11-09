@@ -3051,7 +3051,7 @@ Chaque bruitage et le décompte ont une colonne **Fichier** dans la fenêtre « 
 - **Tout remettre à Hérité** demande une confirmation qui indique le nombre de fichiers à supprimer. Si une suppression échoue, le message est : « Erreur : N fichier(s) de la manche non supprimé(s) (noms). Les réglages n'ont pas été remis à « Hérité » : réessayez. » Dans ce cas, les réglages ne sont pas remis à Hérité : relancez l'action une fois le problème réglé.
 - **Suppression de la manche** : ses fichiers propres sont supprimés avec elle.
 - **Restauration du catalogue** (« Restaurer » d'un bruitage, « Restaurer tous les sons par défaut ») : sans effet sur les fichiers propres aux manches.
-- **Sauvegarde et remise à zéro « médias »** : les fichiers propres aux manches suivent le même sort que les autres sons (ils sont inclus dans la sauvegarde « médias » et supprimés par la remise à zéro « médias »).
+- **Sauvegarde et remise à zéro « médias »** : les fichiers propres aux manches sont inclus dans la sauvegarde « médias ». La remise à zéro « médias » supprime **tous** les sons, fichiers de manche compris, mais laisse les références dans `rounds.json` : les lignes concernées passent alors en « fichier introuvable, le son global est joué ». « Revenir au fichier global » supprime ces références.
 - **Limite connue (Windows)** : remplacer un fichier de manche pendant qu'il est en cours de lecture peut échouer ponctuellement (« accès refusé »). Renvoyez le fichier une fois la lecture terminée.
 
 ### Popover Ambiance pendant une manche
