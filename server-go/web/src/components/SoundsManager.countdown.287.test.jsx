@@ -104,48 +104,53 @@ describe('SoundsManager — section « Sons longs » (#287)', () => {
   })
 })
 
-describe('SoundsManager — Décompte : réglages (#287/#288)', () => {
-  it('interrupteur « Actif » (coché par défaut) ; décocher ⇒ POST /config.json {sound:{countdown_disabled:true}}', async () => {
+// #290 (v11.6.0, LOT-4) — les commandes « Actif » et « Lecture » du décompte vivent désormais dans la section
+// « Décompte » du composant mutualisé AmbianceSettingsPanel (maquette ambiance_settings_panel__global_per_type_tabs :
+// « Décompte du chronomètre  Actif / Inactif  Une fois / En boucle »), plus dans la ligne « Sons longs » (qui garde
+// fichier, durée, Remplacer / Restaurer / Tester). L'intention des tests d'origine est conservée : mêmes patchs
+// `countdown_disabled` / `countdown_once`, champ par champ.
+const cdActive = () => screen.getByRole('radiogroup', { name: /décompte actif/i })
+const cdLoop = () => screen.getByRole('radiogroup', { name: /lecture du décompte/i })
+
+describe('SoundsManager — Décompte : réglages (#287/#288 → section « Décompte » du panneau #290)', () => {
+  it('« Actif » sélectionné par défaut ; « Inactif » ⇒ POST /config.json {sound:{countdown_disabled:true}}', async () => {
     const server = makeServer()
-    const row = await openRow()
-    const sw = within(row).getByRole('checkbox', { name: /Activer Décompte/i })
-    expect(sw).toBeChecked()
-    fireEvent.click(sw)
+    await openRow()
+    expect(within(cdActive()).getByRole('radio', { name: 'Actif' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(within(cdActive()).getByRole('radio', { name: 'Inactif' }))
     await waitFor(() => expect(callsTo(server, 'POST', '/config.json')).toHaveLength(1))
     expect(callsTo(server, 'POST', '/config.json')[0].body).toEqual({ sound: { countdown_disabled: true } })
   })
 
-  it('décompte désactivé côté serveur : interrupteur décoché et ligne atténuée (is-off)', async () => {
+  it('décompte désactivé côté serveur : « Inactif » sélectionné ; « Tester » reste actif (geste explicite)', async () => {
     makeServer({ long: [decompte({ enabled: false })] })
     const row = await openRow()
-    expect(within(row).getByRole('checkbox', { name: /Activer Décompte/i })).not.toBeChecked()
-    expect(row.className).toContain('is-off')
-    // « Tester » reste actif même désactivé (geste explicite, maquette §01)
+    await waitFor(() => expect(within(cdActive()).getByRole('radio', { name: 'Inactif' })).toHaveAttribute('aria-checked', 'true'))
     expect(within(row).getByRole('button', { name: /Tester/ })).not.toBeDisabled()
   })
 
-  it('Lecture : « En boucle » sélectionné par défaut ; choisir « Une fois » ⇒ POST {sound:{countdown_once:true}}', async () => {
+  it('Lecture : « En boucle » sélectionné par défaut ; « Une fois » ⇒ POST {sound:{countdown_once:true}}', async () => {
     const server = makeServer()
-    const row = await openRow()
-    expect(within(row).getByText('En boucle')).toBeInTheDocument()
-    expect(within(row).getByText('Une fois')).toBeInTheDocument()
-    fireEvent.click(within(row).getByText('Une fois'))
+    await openRow()
+    expect(within(cdLoop()).getByRole('radio', { name: 'En boucle' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(within(cdLoop()).getByRole('radio', { name: 'Une fois' }))
     await waitFor(() => expect(callsTo(server, 'POST', '/config.json')).toHaveLength(1))
     expect(callsTo(server, 'POST', '/config.json')[0].body).toEqual({ sound: { countdown_once: true } })
   })
 
   it('Lecture « Une fois » côté serveur (loop=false) puis « En boucle » ⇒ POST {sound:{countdown_once:false}}', async () => {
     const server = makeServer({ long: [decompte({ loop: false })] })
-    const row = await openRow()
-    fireEvent.click(within(row).getByText('En boucle'))
+    await openRow()
+    await waitFor(() => expect(within(cdLoop()).getByRole('radio', { name: 'Une fois' })).toHaveAttribute('aria-checked', 'true'))
+    fireEvent.click(within(cdLoop()).getByRole('radio', { name: 'En boucle' }))
     await waitFor(() => expect(callsTo(server, 'POST', '/config.json')).toHaveLength(1))
     expect(callsTo(server, 'POST', '/config.json')[0].body).toEqual({ sound: { countdown_once: false } })
   })
 
   it('changer la boucle n\'écrase pas countdown_disabled (patch champ par champ)', async () => {
     const server = makeServer()
-    const row = await openRow()
-    fireEvent.click(within(row).getByText('Une fois'))
+    await openRow()
+    fireEvent.click(within(cdLoop()).getByRole('radio', { name: 'Une fois' }))
     await waitFor(() => expect(callsTo(server, 'POST', '/config.json')).toHaveLength(1))
     expect(Object.keys(callsTo(server, 'POST', '/config.json')[0].body.sound)).toEqual(['countdown_once'])
   })
