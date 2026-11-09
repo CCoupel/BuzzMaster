@@ -657,6 +657,9 @@ func (a *App) setupCallbacks() {
 	a.engine.OnRafaleInvalid = func() {
 		a.notifySound(audio.CueRafaleMauvaise) // #231 (D4) : remplace `perdu` sur ce site
 	}
+	// #231 (review m1) : le verdict sonne AVANT la fin de lot éventuelle — callbacks moteur.
+	a.engine.OnRafaleCorrect = func() { a.notifySound(audio.CueRafaleBonne) }
+	a.engine.OnRafaleCardInvalid = func() { a.notifySound(audio.CueRafaleMauvaise) }
 	// #231 : fin du lot RAFALE (réservoir épuisé / nombre max atteint), manche classique et carte.
 	a.engine.OnRafaleLotEnd = func() {
 		a.notifySound(audio.CueRafaleFinLot)
@@ -3356,17 +3359,13 @@ func (a *App) handleRafaleValidate(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE: cardId=%s", cardID)
 		if err := a.engine.RafaleValidateCard(cardID); err != nil {
 			server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE (card) error: %v", err)
-			return
 		}
-		a.notifySound(audio.CueRafaleBonne) // #231
 		return
 	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_VALIDATE")
 	if err := a.engine.RafaleValidate(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "RAFALE_VALIDATE error: %v", err)
-		return
 	}
-	a.notifySound(audio.CueRafaleBonne) // #231
 }
 
 // handleRafaleInvalidate processes RAFALE_INVALIDATE (contract rafale.md
@@ -3382,9 +3381,7 @@ func (a *App) handleRafaleInvalidate(msg *protocol.Message) {
 		server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE: cardId=%s", cardID)
 		if err := a.engine.RafaleInvalidateCard(cardID); err != nil {
 			server.LogWarn(game.LogComponentEngine, "RAFALE_INVALIDATE (card) error: %v", err)
-			return
 		}
-		a.notifySound(audio.CueRafaleMauvaise) // #231 (carte MEMOTION ; la manche classique passe par OnRafaleInvalid)
 		return
 	}
 	server.LogInfo(game.LogComponentEngine, "RAFALE_INVALIDATE")

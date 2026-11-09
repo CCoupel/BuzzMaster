@@ -402,6 +402,13 @@ type Engine struct {
 	// MEMOTION card's mini-round (fireRafaleCardAdvanceCallbacks). Sound-only,
 	// no payload; the global chrono's expiry stays OnTimeUp (`temps-ecoule`).
 	OnRafaleLotEnd func()
+	// OnRafaleCorrect / OnRafaleCardInvalid (v11.6.0, #231 review m1) fire on an
+	// explicit RAFALE_VALIDATE (classic and card-scoped) / a card-scoped
+	// RAFALE_INVALIDATE, BEFORE the advance callbacks — so that the verdict cue
+	// (`rafale-bonne` / `rafale-mauvaise`) precedes `rafale-fin-lot` when the
+	// answer ends the lot. Sound-only, no payload.
+	OnRafaleCorrect     func()
+	OnRafaleCardInvalid func()
 	// OnRafaleCardAnswer (#217, v9.0.0, contracts/rafale.md §14.6) is
 	// OnRafaleAnswer's card-scoped counterpart: fires whenever a new
 	// question is drawn for a RAFALE-in-card mini-round — card round start
@@ -3365,6 +3372,9 @@ func (e *Engine) RafaleValidate() error {
 	if result.guardFailed {
 		return ErrRafaleNotInQuestion
 	}
+	if e.OnRafaleCorrect != nil {
+		e.OnRafaleCorrect()
+	}
 	e.fireRafaleAdvanceCallbacks(result)
 	return nil
 }
@@ -5798,6 +5808,9 @@ func (e *Engine) RafaleValidateCard(cardID string) error {
 	if result.guardFailed {
 		return ErrRafaleCardNotFound
 	}
+	if e.OnRafaleCorrect != nil {
+		e.OnRafaleCorrect()
+	}
 	e.fireRafaleCardAdvanceCallbacks(result)
 	return nil
 }
@@ -5817,6 +5830,9 @@ func (e *Engine) RafaleInvalidateCard(cardID string) error {
 
 	if result.guardFailed {
 		return ErrRafaleCardNotFound
+	}
+	if e.OnRafaleCardInvalid != nil {
+		e.OnRafaleCardInvalid()
 	}
 	e.fireRafaleCardAdvanceCallbacks(result)
 	return nil

@@ -380,6 +380,16 @@ func TestSounds231_RafaleLastQuestion_PlaysRafaleFinLot_NotTempsEcoule(t *testin
 	}
 }
 
+// Review m1 : à la dernière bonne réponse, le verdict sonne AVANT la fin de lot.
+func TestSounds231_RafaleLastValidate_VerdictBeforeFinLot(t *testing.T) {
+	app, fake := tw231RafaleApp(t, 1)
+	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleValidate, nil)
+	got := tw231Settle(fake, tw231RafaleFinLot)
+	if len(got) < 2 || got[len(got)-2] != tw231RafaleBonne || got[len(got)-1] != tw231RafaleFinLot {
+		t.Errorf("ordre attendu ... rafale-bonne puis rafale-fin-lot, got %v", got)
+	}
+}
+
 func TestSounds231_Rafale_CueDisabled_Silent(t *testing.T) {
 	app, fake := tw231RafaleApp(t, 100)
 	tw231SetCuesDisabled(t, "rafale-bonne", "rafale-mauvaise", "rafale-fin-lot")
