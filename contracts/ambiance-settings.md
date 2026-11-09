@@ -322,7 +322,7 @@ ignorant `muted` / interrupteurs (geste explicite, comme `/api/sounds/{cue}/test
 `{cue}` contre `audio.AllCues()` ∪ `decompte`, avant tout usage.
 
 ### 9.4 Lecture et repli
-`audio.Bank` gagne `PCMAt(rel string) (pcm []byte, ok bool)` ; `audio.Engine` gagne `PlayCueAt(c Cue, rel string)` (file
+`audio.RelBank` (interface **optionnelle**, type-assertée sur la banque — revue LOT-4b m2, `sound.md` §15) porte `PCMAt(rel string) (pcm []byte, ok bool)` ; `audio.Engine` gagne `PlayCueAt(c Cue, rel string)` (file
 `{cue, rel}`, garanties §5 de `sound.md` inchangées ; `PlayCue(c)` ≡ `PlayCueAt(c, "<cue>.wav")`). `FileBank.PCMAt` lit
 `<dir>/<rel>` ; fichier **absent ou non conforme ⇒ repli sur `<cue>.wav`** avec un `WARN` (dédoublonné par `rel` jusqu'au prochain
 succès). `notifySound` : `a.sound().PlayCueAt(c, s.SoundFiles[string(c)])` ; décompte : `filePath()` = `soundsDir/<s.SoundFiles["decompte"]>`

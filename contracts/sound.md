@@ -1533,8 +1533,16 @@ jamais directement dans `config.Get()` (test-garde §5.2 de ce contrat). Les §6
 de la **sémantique** de chaque réglage ; `ambiance-settings.md` est la référence de **sa résolution**.
 
 **Révision 3 (#290, fichiers par manche)** : le **fichier** d'une cue et du décompte est aussi résolu (`SoundFiles`,
-`ambiance-settings.md` §9). `audio.Bank` gagne `PCMAt(rel)`, `audio.Engine` gagne `PlayCueAt(c, rel)` (file `{cue, rel}`,
+`ambiance-settings.md` §9). **Amendement revue LOT-4b (m2)** : `PCMAt(rel)` n'est **pas** ajouté à `audio.Bank` mais porté par
+l'interface **optionnelle** `audio.RelBank { PCMAt(rel string) (data []byte, ok bool) }`, **type-assertée** par le moteur sur la banque
+(`e.bank.(RelBank)`) — une banque sans `RelBank` (fakes de tests, banques tierces) joue toujours `<cue>.wav` ; comportement
+identique au libellé initial. `FileBank` implémente `RelBank`. `audio.Engine` gagne `PlayCueAt(c, rel)` (file `{cue, rel}`,
 garanties §5 inchangées ; `PlayCue(c)` ≡ `PlayCueAt(c, "<cue>.wav")`) ; `FileBank.PCMAt` replie sur `<cue>.wav` (WARN) si le fichier
 de manche manque ; `notifySound` et `countdownSoundAdapter.filePath()` passent le chemin résolu. Le format canonique (§3) et la
 validation d'upload (§7) s'appliquent à l'identique aux fichiers de manche.
+
+**Limite connue (revue LOT-4b, m3) — Windows** : le remplacement d'un fichier de manche (`writeFileAtomic` : écriture temporaire
+puis `os.Rename` sur la cible) peut échouer **de façon transitoire** (« Accès refusé ») si la banque est en train de lire ce même
+fichier (`os.ReadFile`, lecture brève, fichier entièrement chargé en mémoire). Même schéma que le catalogue ; cas rare ;
+**relancer l'envoi** suffit. Aucune reprise automatique côté serveur ; à documenter dans le guide si la QUALIF Windows le rencontre.
 

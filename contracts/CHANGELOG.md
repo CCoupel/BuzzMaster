@@ -10,7 +10,10 @@
 - **[NEW]** `GET /api/rounds/{id}/sounds`, `POST /api/rounds/{id}/sounds/{cue}`, `DELETE …/{cue}`, `POST …/{cue}/test`
   (`http-endpoints.md` §Rounds sounds) — effet immédiat, validation/conversion identiques au catalogue, `rounds.json` sous le verrou
   des questions.
-- **[NEW]** `audio.Bank.PCMAt(rel)`, `audio.Engine.PlayCueAt(c, rel)` avec repli sur `<cue>.wav` (`sound.md` §15).
+- **[NEW]** `audio.RelBank.PCMAt(rel)` (interface **optionnelle**, type-assertée sur la `Bank` — revue LOT-4b m2 : `Bank` inchangée,
+  comportement identique), `audio.Engine.PlayCueAt(c, rel)` avec repli sur `<cue>.wav` (`sound.md` §15).
+- **Limite connue** (revue LOT-4b m3) : sous Windows, remplacer un fichier de manche pendant sa lecture peut échouer transitoirement
+  (`os.Rename`, « Accès refusé ») — relancer l'envoi. `sound.md` §15.
 - **[CHANGED]** `Round.AMBIANCE.sound.files` (`models.md` §Manches) ; `ROUNDS_UPDATE` **ignore et conserve** `sound.files`
   (`websocket-actions.md`) ; manche supprimée ⇒ dossier supprimé ; `AMBIANCE_EFFECTIVE` expose `sound.files` (`game-state.md`).
 - Aucun **BREAKING** : `rounds.json` sans `sound.files` = comportement LOT-4 livré ; `PlayCue` inchangé.
