@@ -195,15 +195,16 @@ export default function SoundsManager() {
   // `window.confirm` comme le reste du projet (AmbiancePage.handleUnpair,
   // handleResetToLibre) plutôt qu'une modale dédiée.
   const handleRestoreAll = async () => {
+    const nCues = sounds.cues.length || 7
     const customNames = [
       ...sounds.cues.filter(c => c.custom).map(c => labelFor(c.cue)),
       ...sounds.long.filter(l => l.custom).map(l => labelFor(l.name)),
     ]
     const message = customNames.length > 0
-      ? `Restaurer les sept sons par défaut ? ${customNames.length} son${customNames.length > 1 ? 's' : ''} ` +
+      ? `Restaurer les ${nCues} bruitages et le décompte par défaut ? ${customNames.length} son${customNames.length > 1 ? 's' : ''} ` +
         `personnalisé${customNames.length > 1 ? 's' : ''} seront remplacés par les sons d'origine : ` +
         `${customNames.join(', ')}. Cette action ne peut pas être annulée.`
-      : 'Restaurer les sept sons par défaut ? Cette action ne peut pas être annulée.'
+      : `Restaurer les ${nCues} bruitages et le décompte par défaut ? Cette action ne peut pas être annulée.`
     if (!window.confirm(message)) return
     setRestoringAll(true)
     try {
@@ -211,7 +212,7 @@ export default function SoundsManager() {
       if (!res.ok) throw new Error(await readErrorMessage(res, `HTTP ${res.status}`))
       setVerdicts({})
       await loadSounds()
-      setToast({ message: 'Les sept sons ont été restaurés.', type: 'success' })
+      setToast({ message: `Les ${nCues} bruitages et le décompte ont été restaurés.`, type: 'success' })
     } catch (error) {
       console.error('Restore all sounds failed:', error)
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
