@@ -33,7 +33,7 @@ import EntracteFields from '../components/EntracteFields'
 import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
-import { overriddenFields, describeOverride } from '../utils/ambianceSettings'
+import { overriddenFields, describeOverride, fileOverrides } from '../utils/ambianceSettings'
 import { cueMeta } from '../utils/soundCues'
 import RafalePage from './RafalePage'
 import './QuestionsPage.css'
@@ -2293,8 +2293,11 @@ export default function QuestionsPage() {
                         onRename: () => startRename(r),
                         onDelete: (e) => { deleteOpenerRef.current = e?.currentTarget || document.activeElement; setDeletingRound(r.id) },
                         onAmbiance: (e) => { ambianceOpenerRef.current = e?.currentTarget || document.activeElement; setAmbianceRound(r.id) },
-                        ambianceCount: overriddenFields(r.ambiance).length,
-                        ambianceTitle: overriddenFields(r.ambiance).map(f => describeOverride(f, c => cueMeta(c).label)).join(' · '),
+                        ambianceCount: overriddenFields(r.ambiance).length + fileOverrides(r.ambiance).length,
+                        ambianceTitle: [
+                          ...overriddenFields(r.ambiance).map(f => describeOverride(f, c => cueMeta(c).label)),
+                          ...fileOverrides(r.ambiance).map(c => `Fichier ${cueMeta(c).label === c && c === 'decompte' ? 'Décompte' : cueMeta(c).label} : propre à la manche`),
+                        ].join(' · '),
                         onAddQuestion: () => {
                           handleNewQuestion()
                           setFormRoundId(r.id || '')
@@ -2339,6 +2342,7 @@ export default function QuestionsPage() {
               })()}
               {ambianceRound && roundOf(ambianceRound) && (
                 <RoundAmbianceDialog
+                  roundId={ambianceRound}
                   roundName={roundOf(ambianceRound).name}
                   value={roundOf(ambianceRound).ambiance || {}}
                   onSave={saveRoundAmbiance}

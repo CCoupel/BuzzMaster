@@ -81,3 +81,9 @@ export function countRoundSources(sources) {
   walk(sources)
   return n
 }
+
+/** Cues dont la manche porte un fichier propre (`sound.files`, géré côté serveur — effet immédiat, D10). */
+export function fileOverrides(partial) {
+  const f = isObj(partial?.sound) ? partial.sound.files : null
+  return isObj(f) ? Object.keys(f) : []
+}

@@ -25,6 +25,9 @@ import './AmbianceSettingsPanel.css'
 //   catalogueColumns       [<th>…] en-têtes correspondants
 //   renderExtraRows(tabKey) lignes <tr> supplémentaires d'un onglet (ex. sons longs, onglet Global)
 //   emptyRow               <tr> affiché quand `cues` est vide (chargement / aucun son)
+//   renderFile(cue)  mode override (T27, LOT-4 Batch 2) : contenu de la colonne « Fichier » (fichier de manche /
+//                    fichier global hérité, boutons) — fourni par RoundAmbianceDialog, comme renderCatalogue en global
+//   files     mode override : { [cue]: fichier de manche } — sert au point « • » des onglets (réglage OU fichier surchargé)
 //   disabled  fige tous les contrôles
 
 const get = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj)
@@ -61,6 +64,8 @@ export default function AmbianceSettingsPanel({
   catalogueColumns = [],
   renderExtraRows = null,
   emptyRow = null,
+  renderFile = null,
+  files = null,
   disabled = false,
 }) {
   const override = mode === 'override'
@@ -85,8 +90,9 @@ export default function AmbianceSettingsPanel({
   const typed = cues.some(c => c.type)
   const activeTab = typed ? tab : ''
   const rows = byTab[activeTab] || []
-  const overridden = (key) => override && (byTab[key] || []).some(c => get(value, `sound.cues.${c.cue}`) !== undefined)
+  const overridden = (key) => override && (byTab[key] || []).some(c => get(value, `sound.cues.${c.cue}`) !== undefined || !!files?.[c.cue])
   const colSpan = 2 + catalogueColumns.length
+  const fileCol = override && !!renderFile
 
   const onoff = (v) => (v ? 'actif' : 'inactif')
 
@@ -108,24 +114,32 @@ export default function AmbianceSettingsPanel({
       )}
 
       {has('countdown') && (
-        <div className="asp-row">
-          <span className="asp-label">Décompte</span>
-          <Tri
-            label="Décompte actif"
-            disabled={disabled}
-            selected={override ? cur('sound.countdown.enabled') : cur('sound.countdown.enabled') !== false}
-            options={[...inh, { value: true, label: 'Actif' }, { value: false, label: 'Inactif' }]}
-            onSelect={v => setField('sound.countdown.enabled', v)}
-          />
-          <Tri
-            label="Lecture du décompte"
-            disabled={disabled}
-            selected={override ? cur('sound.countdown.loop') : cur('sound.countdown.loop') !== false}
-            options={[...inh, { value: false, label: 'Une fois' }, { value: true, label: 'En boucle' }]}
-            onSelect={v => setField('sound.countdown.loop', v)}
-          />
-          {inherited('sound.countdown', c => `${c?.enabled === false ? 'inactif' : 'actif'}, ${c?.loop === false ? 'une fois' : 'en boucle'}`)}
-        </div>
+        <>
+          <div className="asp-row">
+            <span className="asp-label">Décompte</span>
+            <Tri
+              label="Décompte actif"
+              disabled={disabled}
+              selected={override ? cur('sound.countdown.enabled') : cur('sound.countdown.enabled') !== false}
+              options={[...inh, { value: true, label: 'Actif' }, { value: false, label: 'Inactif' }]}
+              onSelect={v => setField('sound.countdown.enabled', v)}
+            />
+            <Tri
+              label="Lecture du décompte"
+              disabled={disabled}
+              selected={override ? cur('sound.countdown.loop') : cur('sound.countdown.loop') !== false}
+              options={[...inh, { value: false, label: 'Une fois' }, { value: true, label: 'En boucle' }]}
+              onSelect={v => setField('sound.countdown.loop', v)}
+            />
+            {inherited('sound.countdown', c => `${c?.enabled === false ? 'inactif' : 'actif'}, ${c?.loop === false ? 'une fois' : 'en boucle'}`)}
+          </div>
+          {fileCol && (
+            <div className="asp-row asp-file-row">
+              <span className="asp-label">Fichier du décompte</span>
+              <span className="asp-file">{renderFile('decompte')}</span>
+            </div>
+          )}
+        </>
       )}
 
       {has('cues') && (
@@ -156,6 +170,7 @@ export default function AmbianceSettingsPanel({
                   <th>{override ? 'Événement' : 'Moment du jeu'}</th>
                   <th className="sound-col-center">{override ? 'Pendant cette manche' : 'Actif'}</th>
                   {override ? <th>Valeur globale</th> : catalogueColumns}
+                  {fileCol && <th>Fichier</th>}
                 </tr>
               </thead>
               <tbody>
@@ -195,6 +210,7 @@ export default function AmbianceSettingsPanel({
                       {override
                         ? <td className="asp-inherit">{onoff(get(base, field) !== false)}</td>
                         : renderCatalogue && renderCatalogue(c.cue)}
+                      {fileCol && <td className="asp-file">{renderFile(c.cue)}</td>}
                     </tr>
                   )
                 })}

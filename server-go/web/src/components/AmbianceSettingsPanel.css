@@ -15,3 +15,11 @@
 .asp-subtab.is-active { color: var(--primary, #4f46e5); border-color: var(--primary, #4f46e5); font-weight: 700; }
 .asp-subtab .asp-count { display: inline-block; min-width: 1.1rem; padding: 0 0.3rem; margin-left: 0.3rem; border-radius: 999px; background: var(--gray-200, #e5e7eb); font-size: 0.68rem; text-align: center; }
 .asp-subtab .asp-dot { color: var(--primary, #4f46e5); margin-left: 0.2rem; }
+.asp-file { font-size: 0.78rem; min-width: 14rem; }
+.asp-file-acts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.asp-file-acts button { font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem; border: 1px solid var(--gray-300, #d1d5db); background: #fff; cursor: pointer; }
+.asp-file-acts button:disabled { opacity: 0.5; cursor: wait; }
+.asp-file-acts .is-ghost { border-style: dashed; }
+.asp-file-name { font-weight: 600; }
+.asp-file-badge { margin-left: 0.3rem; font-size: 0.65rem; font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 999px; background: var(--primary-100, #e0e7ff); color: #3730a3; }
+.asp-file-missing { color: #b45309; }
