@@ -10,6 +10,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -101,7 +102,9 @@ func TestSoundBoot283_StartupLine_Enabled_OkOrUnavailableWithReason(t *testing.T
 		if strings.TrimSpace(reason) == "" {
 			t.Error("unavailable ⇒ une cause lisible est exigée (reason non vide)")
 		}
-		if !strings.Contains(lines[0].Message, reason) {
+		// Le journal écrit reason="…" avec %q (guillemets/antislashs échappés) : on compare à la forme quotée,
+		// indépendante de l'environnement (la cause oto d'un runner sans carte son contient des guillemets).
+		if !strings.Contains(lines[0].Message, fmt.Sprintf("reason=%q", reason)) {
 			t.Errorf("la cause doit être le MÊME texte dans le journal et dans le statut : reason=%q ligne=%q", reason, lines[0].Message)
 		}
 		if lines[0].Level == game.LogLevelInfo {
