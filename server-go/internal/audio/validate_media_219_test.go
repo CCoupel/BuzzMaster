@@ -136,6 +136,12 @@ func TestValidateQuestionSound_Converts48kHzMono(t *testing.T) {
 	if len(res.PCM)%FrameSize != 0 {
 		t.Errorf("PCM de sortie non canonique (len=%d)", len(res.PCM))
 	}
+	if !res.Converted {
+		t.Error("Converted=true attendu pour un 48 kHz mono")
+	}
+	if res.SourceFormat != "48000Hz/1ch/16bit" {
+		t.Errorf("SourceFormat attendu \"48000Hz/1ch/16bit\", got %q", res.SourceFormat)
+	}
 }
 
 // TestValidateQuestionSound_AcceptsMono_UpmixedToStereo verrouille
@@ -223,8 +229,15 @@ func TestUpmixMonoToStereo_DuplicatesEachSampleOntoBothChannels(t *testing.T) {
 // #232 (v11.6.0) : le 24 bits est converti en 16 bits canonique, plus refusé.
 func TestValidateQuestionSound_Converts24Bits(t *testing.T) {
 	data := tw219vBuildWAV(t, ChannelCount, SampleRate, 24, tw219vCanonicalDataLen(5*time.Second), 0)
-	if _, err := ValidateQuestionSound(data); err != nil {
+	res, err := ValidateQuestionSound(data)
+	if err != nil {
 		t.Fatalf("un WAV 24 bits doit être converti en 16 bits canonique (#232) : %v", err)
+	}
+	if !res.Converted {
+		t.Error("Converted=true attendu pour un 24 bits")
+	}
+	if res.SourceFormat != "44100Hz/2ch/24bit" {
+		t.Errorf("SourceFormat attendu \"44100Hz/2ch/24bit\", got %q", res.SourceFormat)
 	}
 }
 
