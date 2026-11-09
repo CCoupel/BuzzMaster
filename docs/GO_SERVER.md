@@ -115,7 +115,7 @@ Deux modèles coexistent, à ne pas mélanger :
    - pas de variable de paquet partagée (`LaunchLock*`) ni de hook `setTestInject*` non protégé ;
    - pas de `t.Setenv`, `os.Setenv`, `os.Chdir`, `http.Default*`, `log.Set*` ;
    - pas de fenêtre de temps serrée (flash, chrono, watchdog, expiration de verrou) : le jitter d'un test voisin la rendrait instable.
-   La propriété se propage aux appelants. L'Option P a ajouté 15 tests en `t.Parallel()` dans `cmd/server` (27 au total, dont 11 existants) après audit (311 tests jugés sûrs sur 736 au moment de l'audit). Le reste reste séquentiel ; le lever suppose un logger et une configuration **par `App`** (issue #298).
+   La propriété se propage aux appelants. Après audit, 27 tests en `t.Parallel()` au total dans `cmd/server` : 11 existants, 1 ajouté en Phase A, 15 ajoutés par l'Option P (311 tests jugés sûrs sur 736 au moment de l'audit). Le reste reste séquentiel ; le lever suppose un logger et une configuration **par `App`** (issue #298).
 
 ## Data Persistence (v2.21.0)
 
