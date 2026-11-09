@@ -398,6 +398,7 @@ func TestFlipID248_WithoutFlipID_BehaviourUnchanged_NoAck_GeneralBroadcast(t *te
 }
 
 func TestFlipID248_InvalidFlipID_TreatedAsAbsent(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	for _, bad := range []string{"id avec espaces", "id!", strings.Repeat("a", 65), "é-accent"} {
 		r := newFlipRoom248(t)
 		r.flip(t, "p1", "1-1", bad, nil)
@@ -497,6 +498,7 @@ func TestFlipID248_MemoryKeeps16PerBumper_OldestForgotten(t *testing.T) {
 // --- Concurrence : un seul retournement, un seul ACK « neuf » (lancer aussi avec -race) -------------
 
 func TestFlipID248_ConcurrentCopiesOfTheSameFlipID_FlipOnce_Race(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	for iter := 0; iter < 20; iter++ {
 		r := newFlipRoom248(t)
 		start := make(chan struct{})

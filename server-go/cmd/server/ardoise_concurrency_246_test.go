@@ -186,6 +186,7 @@ func TestArdoiseConcurrency246_H1_TenTeamsTyping(t *testing.T) {
 	if testing.Short() {
 		t.Skip("H1 : test lent (≈ 6 s), exclu de la boucle rapide (-short)")
 	}
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	nTeams := 10
 	app, base, names, ids := h246Setup(t, nTeams)
 	stop := make(chan struct{})
@@ -424,6 +425,7 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 	if testing.Short() {
 		t.Skip("H6 : test lent (≈ 25 s), exclu de la boucle rapide (-short)")
 	}
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	dur := 8
 	if s := os.Getenv("H246_SECS"); s != "" {
 		fmt.Sscanf(s, "%d", &dur)
@@ -625,6 +627,7 @@ func TestArdoiseConcurrency246_ClearThenContinuousRetypeIsLiveForTheAdmin(t *tes
 	if testing.Short() {
 		t.Skip("cadence réelle 200 ms (≈ 3 s), exclu de la boucle rapide (-short)")
 	}
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app, base, names, ids := h246Setup(t, 2)
 	stop := make(chan struct{})
 	admin := h246Dial(t, base, "/ws/admin")

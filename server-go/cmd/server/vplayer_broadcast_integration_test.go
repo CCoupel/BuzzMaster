@@ -253,6 +253,7 @@ func parseBumperCountAndPhase(t *testing.T, msg *protocol.Message) (int, string)
 // ---------------------------------------------------------------------------
 
 func TestVPlayerBroadcastIntegration_PrepareToRevealSequence(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	for _, n := range []int{1, 10} {
 		n := n
 		t.Run(fmt.Sprintf("N=%d", n), func(t *testing.T) {
