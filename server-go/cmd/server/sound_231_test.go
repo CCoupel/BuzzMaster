@@ -33,16 +33,40 @@ const (
 	tw231RafaleFinLot      = audio.Cue("rafale-fin-lot")
 )
 
-// tw231Settle laisse la goroutine de lecture du moteur son vider sa file, puis renvoie les cues jouées SANS `depart`.
-func tw231Settle(fake *audio.FakeOutput) []audio.Cue {
-	time.Sleep(350 * time.Millisecond)
-	var out []audio.Cue
-	for _, c := range fake.Played() {
-		if c != audio.CueDepart {
-			out = append(out, c)
+// tw231Settle renvoie les cues jouées SANS `depart`. Attente SUR CONDITION : si des cues sont attendues (expect),
+// on sonde (≤ 5 s) jusqu'à ce que chacune ait été jouée, puis on laisse une courte grâce pour qu'une cue en trop
+// (doublon, D4) ait le temps de se manifester. Sans attente (cas « silence »), simple fenêtre d'observation.
+func tw231Settle(fake *audio.FakeOutput, expect ...audio.Cue) []audio.Cue {
+	played := func() []audio.Cue {
+		var out []audio.Cue
+		for _, c := range fake.Played() {
+			if c != audio.CueDepart {
+				out = append(out, c)
+			}
 		}
+		return out
 	}
-	return out
+	if len(expect) == 0 {
+		time.Sleep(300 * time.Millisecond)
+		return played()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		got := played()
+		all := true
+		for _, e := range expect {
+			if tw231Count(got, e) == 0 {
+				all = false
+				break
+			}
+		}
+		if all {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(150 * time.Millisecond)
+	return played()
 }
 
 func tw231Count(cues []audio.Cue, want audio.Cue) int {
@@ -84,7 +108,7 @@ func TestSounds231_QCMHint_PlaysQcmIndiceOnce(t *testing.T) {
 	config.Get().Sound.CuesDisabled = nil
 	app, fake := tw231Wire(t)
 	app.broadcastQCMHint("RED", 2)
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231QCMIndice)
 	if len(got) != 1 || got[0] != tw231QCMIndice {
 		t.Fatalf("un indice QCM doit jouer exactement [qcm-indice], got %v", got)
 	}
@@ -152,7 +176,7 @@ func tw231Flip(t *testing.T, app *App, cardID string) {
 func TestSounds231_MemoryFirstCardFlip_PlaysMemoireCarteOnly(t *testing.T) {
 	app, fake := tw231MemoryApp(t)
 	tw231Flip(t, app, "1-1")
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231MemoryCarte)
 	if len(got) != 1 || got[0] != tw231MemoryCarte {
 		t.Fatalf("une carte retournée (1re de la paire) doit jouer exactement [memory-carte], got %v", got)
 	}
@@ -162,7 +186,7 @@ func TestSounds231_MemoryPairFound_PlaysMemoryPaire_NeverPerdu(t *testing.T) {
 	app, fake := tw231MemoryApp(t)
 	tw231Flip(t, app, "1-1")
 	tw231Flip(t, app, "1-2")
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231MemoryCarte, tw231MemoryPaire)
 	if tw231Count(got, tw231MemoryPaire) != 1 {
 		t.Errorf("une paire trouvée doit jouer memory-paire UNE fois, got %v", got)
 	}
@@ -177,7 +201,7 @@ func TestSounds231_MemoryPairFound_OneCuePerFlip(t *testing.T) {
 	app, fake := tw231MemoryApp(t)
 	tw231Flip(t, app, "1-1")
 	tw231Flip(t, app, "1-2")
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231MemoryCarte, tw231MemoryPaire)
 	if len(got) != 2 {
 		t.Fatalf("deux retournements ⇒ exactement 2 cues (une par site/événement, D4), got %v", got)
 	}
@@ -190,7 +214,7 @@ func TestSounds231_MemoryPairMissed_KeepsPerdu_NoMemoryPaire(t *testing.T) {
 	app, fake := tw231MemoryApp(t)
 	tw231Flip(t, app, "1-1")
 	tw231Flip(t, app, "2-1") // paires différentes ⇒ raté
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, audio.CuePerdu)
 	if tw231Count(got, audio.CuePerdu) != 1 {
 		t.Errorf("une paire ratée garde perdu (une fois), got %v", got)
 	}
@@ -236,7 +260,7 @@ func tw231MemotionApp(t *testing.T) (*App, *audio.FakeOutput) {
 func TestSounds231_MotionSelect_PlaysMemotionSelection(t *testing.T) {
 	app, fake := tw231MemotionApp(t)
 	dispatchAs(t, app, server.ClientTypeAnim, protocol.ActionMotionSelect, protocol.MotionSelectPayload{CardID: "c1"})
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231MemotionSelection)
 	if len(got) != 1 || got[0] != tw231MemotionSelection {
 		t.Fatalf("choisir une carte doit jouer exactement [memotion-selection], got %v", got)
 	}
@@ -248,7 +272,7 @@ func TestSounds231_MotionDone_NoWinner_PlaysMemotionFinCarte_NotGagne(t *testing
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionMotionFlip, nil)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionMotionReveal, nil)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionMotionDone, protocol.MotionDonePayload{CardID: "c1"})
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231MemotionFinCarte)
 	if tw231Count(got, tw231MemotionFinCarte) != 1 {
 		t.Errorf("fermeture de carte SANS gagnant : memotion-fin-carte attendue une fois, got %v", got)
 	}
@@ -263,7 +287,7 @@ func TestSounds231_MotionDone_WithWinner_PlaysGagne_NotFinCarte(t *testing.T) {
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionMotionFlip, nil)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionMotionReveal, nil)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionMotionDone, protocol.MotionDonePayload{CardID: "c1", WinnerTeam: "red"})
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, audio.CueGagne)
 	if tw231Count(got, audio.CueGagne) != 1 {
 		t.Errorf("avec gagnant : gagne inchangé (une fois), got %v", got)
 	}
@@ -321,7 +345,7 @@ func tw231RafaleApp(t *testing.T, maxQuestions int) (*App, *audio.FakeOutput) {
 func TestSounds231_RafaleValidate_PlaysRafaleBonne(t *testing.T) {
 	app, fake := tw231RafaleApp(t, 100)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleValidate, nil)
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231RafaleBonne)
 	if tw231Count(got, tw231RafaleBonne) != 1 {
 		t.Errorf("RAFALE_VALIDATE : rafale-bonne attendue une fois, got %v", got)
 	}
@@ -334,7 +358,7 @@ func TestSounds231_RafaleValidate_PlaysRafaleBonne(t *testing.T) {
 func TestSounds231_RafaleInvalidate_PlaysRafaleMauvaise_InsteadOfPerdu(t *testing.T) {
 	app, fake := tw231RafaleApp(t, 100)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleInvalidate, nil)
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231RafaleMauvaise)
 	if tw231Count(got, tw231RafaleMauvaise) != 1 {
 		t.Errorf("RAFALE_INVALIDATE : rafale-mauvaise attendue une fois, got %v", got)
 	}
@@ -347,7 +371,7 @@ func TestSounds231_RafaleInvalidate_PlaysRafaleMauvaise_InsteadOfPerdu(t *testin
 func TestSounds231_RafaleLastQuestion_PlaysRafaleFinLot_NotTempsEcoule(t *testing.T) {
 	app, fake := tw231RafaleApp(t, 1)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleValidate, nil)
-	got := tw231Settle(fake)
+	got := tw231Settle(fake, tw231RafaleFinLot)
 	if tw231Count(got, tw231RafaleFinLot) != 1 {
 		t.Errorf("dernière question du lot : rafale-fin-lot attendue une fois, got %v", got)
 	}
@@ -374,7 +398,7 @@ func TestSounds231_QCMHint_DoesNotAlsoPlayGlobalCue(t *testing.T) {
 	config.Get().Sound.CuesDisabled = nil
 	app, fake := tw231Wire(t)
 	app.broadcastQCMHint("BLUE", 1)
-	for _, c := range tw231Settle(fake) {
+	for _, c := range tw231Settle(fake, tw231QCMIndice) {
 		switch c {
 		case audio.CueGagne, audio.CuePerdu, audio.CueReveal, audio.CueTempsEcoule:
 			t.Errorf("un indice QCM ne doit pas jouer la cue globale %s", c)
