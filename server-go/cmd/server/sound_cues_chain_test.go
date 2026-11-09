@@ -385,6 +385,16 @@ func TestSoundChain_MemoryPairMissed_PlaysPerdu(t *testing.T) {
 	if tw231Count(got, audio.CuePerdu) != 1 {
 		t.Fatalf("une paire ratée MEMORY doit jouer perdu (à l'issue du délai de retournement), got %v", got)
 	}
+	// Revue LOT-3, m2 : séquence exacte — une cue par événement, `perdu` en dernier (après le délai de retournement).
+	want := []audio.Cue{audio.Cue("memory-carte"), audio.Cue("memory-carte"), audio.CuePerdu}
+	if len(got) != len(want) {
+		t.Fatalf("séquence attendue %v (carte, carte ratée, puis perdu), got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("position %d : attendu %q, got %q (séquence %v)", i, want[i], got[i], got)
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------

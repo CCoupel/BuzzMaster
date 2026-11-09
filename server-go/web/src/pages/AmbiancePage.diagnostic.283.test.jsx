@@ -120,8 +120,9 @@ describe('Onglet Son — toast d\'upload « converti » (#232)', () => {
     await openSoundTab()
     const row = screen.getByText('Départ').closest('tr')
     upload(row.querySelector('input[type="file"]'))
-    await screen.findByText(/Son remplacé/)
-    expect(screen.queryByText(/converti/i)).toBeNull()
+    // Le mot « converti » peut figurer dans le texte d'aide « Format accepté » : on restreint l'assertion au TOAST.
+    const toast = await screen.findByText(/Son remplacé/)
+    expect(toast).not.toHaveTextContent(/converti/i)
   })
 
   it('décompte converti : même message sur la ligne « Décompte du chronomètre »', async () => {

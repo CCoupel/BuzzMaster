@@ -313,7 +313,7 @@ func TestSounds231_Memotion_CueDisabled_Silent(t *testing.T) {
 // RAFALE — bonne / mauvaise (remplace perdu) / fin de lot (temps-ecoule reste global).
 // ---------------------------------------------------------------------------
 
-func tw231RafaleApp(t *testing.T, maxQuestions int) (*App, *audio.FakeOutput) {
+func tw231RafaleApp(t *testing.T, maxQuestions int, startDelay ...int) (*App, *audio.FakeOutput) {
 	t.Helper()
 	config.Get().Sound.CuesDisabled = nil
 	app, fake := tw231Wire(t)
@@ -336,7 +336,11 @@ func tw231RafaleApp(t *testing.T, maxQuestions int) (*App, *audio.FakeOutput) {
 	}
 	app.engine.Ready("rq1", q)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleSetTeams, protocol.RafaleSetTeamsPayload{Teams: []string{"red"}})
-	app.engine.StartImmediate(0)
+	delay := 0
+	if len(startDelay) > 0 {
+		delay = startDelay[0]
+	}
+	app.engine.StartImmediate(delay)
 	t.Cleanup(func() { app.engine.Stop() })
 	twa227WaitForPlayed(t, fake, 1, time.Second) // depart
 	return app, fake
@@ -371,12 +375,30 @@ func TestSounds231_RafaleInvalidate_PlaysRafaleMauvaise_InsteadOfPerdu(t *testin
 func TestSounds231_RafaleLastQuestion_PlaysRafaleFinLot_NotTempsEcoule(t *testing.T) {
 	app, fake := tw231RafaleApp(t, 1)
 	dispatchAs(t, app, server.ClientTypeAdmin, protocol.ActionRafaleValidate, nil)
-	got := tw231Settle(fake, tw231RafaleFinLot)
+	got := tw231Settle(fake, tw231RafaleBonne, tw231RafaleFinLot)
 	if tw231Count(got, tw231RafaleFinLot) != 1 {
 		t.Errorf("dernière question du lot : rafale-fin-lot attendue une fois, got %v", got)
 	}
 	if tw231Count(got, audio.CueTempsEcoule) != 0 {
 		t.Errorf("temps-ecoule reste la cue du chrono GLOBAL (pas de la fin de lot), got %v", got)
+	}
+	// Ordre (revue LOT-3, m1) : la bonne réponse d'abord, puis la fin de lot — « bonne » ne doit pas être couverte par le jingle de fin.
+	if len(got) != 2 || got[0] != tw231RafaleBonne || got[1] != tw231RafaleFinLot {
+		t.Errorf("ordre attendu [rafale-bonne, rafale-fin-lot] à la dernière bonne réponse, got %v", got)
+	}
+}
+
+// Revue LOT-3, m3 — négatif : l'expiration du chrono GLOBAL d'une manche RAFALE joue temps-ecoule et JAMAIS rafale-fin-lot
+// (le chrono du lot est le chrono global : contrat sound.md §2.1 amendé).
+func TestSounds231_RafaleGlobalChronoExpiry_PlaysTempsEcoule_NeverRafaleFinLot(t *testing.T) {
+	app, fake := tw231RafaleApp(t, 100, 1) // CurrentTime=1 s : expire au premier tick réel
+	_ = app
+	got := tw231Settle(fake, audio.CueTempsEcoule)
+	if tw231Count(got, audio.CueTempsEcoule) != 1 {
+		t.Fatalf("l'expiration du chrono global doit jouer temps-ecoule, got %v", got)
+	}
+	if tw231Count(got, tw231RafaleFinLot) != 0 {
+		t.Errorf("l'expiration du chrono global ne joue JAMAIS rafale-fin-lot, got %v", got)
 	}
 }
 
