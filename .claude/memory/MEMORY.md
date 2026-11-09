@@ -3,36 +3,53 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-06) — v11.4.0 en PROD
+## État courant (2026-11-09) — v11.5.0 en PROD
 
-- **PROD = v11.4.0** « RAFALE Alphabétique » : merge `main` `9b76ef61` (`--no-ff`), tag `v11.4.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.4.0 (4 assets), `release.yml` run 42248974789 vert. Milestone #43 clôturé 7/7. Dernière QUALIF : 11.4.0.6. Branche `milestone/v11.4.0` encore présente (nettoyage proposé en fin de session). Branche courante : `main`.
-- **Livré** (4 lots, chacun validé par l'utilisateur en QUALIF) :
-  - LOT-1 #284 #286 #289 : popover « Ambiance » (lumière + son ON/OFF persisté `sound.muted`), interrupteur général `lighting.enabled` dans Ambiance › Lumière, bloc d'attribution « x joueurs · y équipes ».
-  - LOT-2 #282 : RAFALE alphabétique, roue générique Bandeau/Roue par manche, NEXT.LETTER admin + anim, alerte de pioche avec lettres. Correctif : clic OK/KO de la régie et de `/anim` en échec depuis v9.0.0 (#217).
-  - LOT-3 #287 #288 : son de décompte (tous chronos, par manche en RAFALE, jamais si son attaché, au buzz tout continue) ; boucle combinable avec « Chrono démarre à la fin » (chrono à la fin du 1er passage).
-  - LOT-4 #285 : catégories (couleur, icône personnalisées, création dans « ⚙ Gérer… » du filtre de la page Questions) ; suppression réaffecter/supprimer avec cartes MEMOTION ; historique fusionné dans « Sans catégorie » + `.bak` ; tout bloqué en partie ; `CATEGORIES_CHANGED` en direct TV/VJoueur/anim.
-- **Incidents et décisions techniques** :
-  - Go 1.26.10 (GO-2026-6809) avec `GOTOOLCHAIN=go1.26.10` (Go local 1.26.9) ; undici 8.12.4 (npm audit).
-  - Node **Linux** nvm v22.23.3 en tête du PATH : node_modules réinstallé sous Linux. `server-go/build.ps1` lancé depuis Windows nécessite un `npm ci` Windows.
-  - Ruleset de branches « ReadOnlly » supprimé par l'utilisateur (push bloqué « commit_refs_rules »). Reste le ruleset de tags `readOnly_tags`.
-  - **`release.yml` rouge au 1er tag** : la plateforme `espressif32` non épinglée a pris 8.0.0, sans `esp_websocket_client.h`. Épinglée `espressif32@6.9.0` (`d65618dd`) ; tag supprimé puis reposé. `ci-branch.yml` ne compile pas le firmware.
-  - `/mnt/c` a décroché deux fois sous forte I/O (vitest complet, `npm ci`) : vitest validé par la CI seulement.
-  - `.git/index.lock` orphelin supprimé 3 fois (5ᵉ occurrence ou plus depuis fin octobre).
-- **Règles adoptées par l'utilisateur (permanentes)** :
-  1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
-  2. Jalon `EN COURS` au moins toutes les 10 min pendant toute attente.
-  3. Maquettes ouvertes avec `cmd.exe /c start chrome <chemin Windows>`.
-  4. Jamais d'amend ni de réécriture dans le dépôt principal.
-- **Leçons v11.4.0** :
-  1. Documentation produite seulement en fin de milestone : la règle « docs relues à chaque lot » n'a pas été appliquée. La relecture finale a trouvé 7 erreurs et 4 imprécisions, corrigées puis re-relues.
-  2. Deux commits faits avant lecture des tests (dev-backend LOT-1, dev-frontend).
-  3. Tests Go référençant des symboles absents évités grâce à `docs/TEST_PROCEDURE.md` §2.3.
-- **Backlog / suite** :
-  - Milestone **#44 v11.5.0 « Optimisation des tests »** : #280 vitest en CI, #291 découpage de `cmd/server`, #292 Node Linux et dépôt sur disque Linux, #293 tests ciblés.
-  - **#36 v11.6.0 Ambiance** : #290 ambiance par manche.
-  - Proposé, non créé : issue « compiler le firmware dans `ci-branch.yml` ».
-  - Panneau milestone-panel : sélectionne un milestone en PLANNING avant un milestone en publication. Correction à faire dans le dépôt du template.
-  - #283 (observabilité audio) toujours sans milestone ; #259, #281, #209 en backlog.
+- **PROD = v11.5.0** « Optimisation des tests » : version officielle `d5095ce8`, merge `main` `6c826cd3` (`--no-ff`), tag `v11.5.0` (sur `6c826cd3`), Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.5.0 (4 assets), `release.yml` run 42598655680 vert. Notes + posts : `6719d96b` (`docs/releases/v11.5.0/`). Milestone #44 clôturé 6/6. Branche milestone supprimée (local + remote). Branche courante : `main`.
+- **Pas de QUALIF** (`qualif: false`, décision utilisateur) : GATE 4 validé sur l'exe candidat 11.5.0.28 (`build/candidate_v11.5.0/`). La QUALIF n'est plus exécutable depuis le conteneur : l'exe est lancé par l'utilisateur sous Windows (`deploy.qualif.md`, `access.verified = failed`).
+- Site `gh-pages` laissé en v11.2.2 (GATE 4d : pas de nouveauté fonctionnelle, comme v11.2.3). Posts réseaux à publier par l'utilisateur.
+
+### Livré (4 lots, auto-validés QA + CI, sans VALID-HUMAINE)
+- LOT-1 #292 #293 #294 : environnement conteneur Claude-Launcher constaté et documenté (Linux natif, pas de WSL ni `/mnt/c`, Go 1.26.10 / Node 22.23.3 / `pio` dans `~/.local/bin`), `commands.test_targeted`, firmware compilé dans `ci-branch.yml` via le script commun `scripts/build-firmware.sh` (appelé par `scripts/ci.sh` étape [1/8], par la CI, `release.yml` et BUILD ; `SKIP_FIRMWARE=1` en CI). `scripts/ci.sh` = **8 étapes** (vitest [3/8], Go [6/8]).
+- LOT-2 #280 : vitest `pool: vmThreads` + environnement `node` pour 33 fichiers sans DOM : vitest CI 155 s → 30–53 s.
+- LOT-3 #291 : Phase A (durées injectables **par instance**, barrières positives) + Phase B (7 paquets `internal/{vplayer,colors,coalesce,rounds,startup,diag,demo}`) : `cmd/server` CI 221 s → 100,5 s ; écarts acceptés (cibles 90 s et `main.go` 6 000).
+- LOT-4 #295 : `internal/led` + `internal/ambiance`, Option P (15 tests `t.Parallel` ajoutés, 27 au total) ; `main.go` 8 701 → 6 217 lignes ; `cmd/server` CI 86,6–90,9 s (cible 75 s non atteinte, écart accepté).
+- Bilan : job CI complet 7 min 23–8 min 07 → 3 min 32–3 min 38 ; `go test -race ./...` local 266 s → 114–123 s ; 9 → 18 paquets testés ; 2 595 → 2 612 tests de premier niveau, aucun disparu.
+
+### Décisions techniques
+- Durées de test injectées **par instance** (`Engine.SetTickInterval`, `SetConnGreenMinDuration`, `watchdogDelay`, `flashPhases`), jamais par variable de paquet (`t.Parallel` les partagerait).
+- Barrière positive (`settle_barrier_291_test.go`) au lieu des fenêtres « aucun message » ; marge 250 ms après une action client (HELLO / PLAYER_CONNECT).
+- Cadences de test > 2 × le pacing du writer lumière (`MinInterval` 100 ms) ; ne pas comparer deux `Last()` successifs (cause des 2 CI rouges du LOT-4, corrigées `465a8590` et `0d2ca78b`).
+- Cadences de production verrouillées par `TestFlashCadenceConstants_291`.
+- `version.txt` : chaque BUILD commite la valeur candidate `X.Y.Z.a` ; la PROD pose `X.Y.Z` dans un commit séparé.
+- Propriété de l'état : LED → l'`App` (partagé par pointeur) ; ambiance → le `Controller` (détails dans `docs/GO_SERVER.md`).
+
+### Incidents / leçons (v11.5.0)
+1. Le partage `/share/MFS` a `core.fileMode=false` et perd le bit exécutable : un nouveau script passe par `git update-index --chmod=+x` (vérifier `git ls-tree`) et est appelé via `bash <script>`.
+2. Ne jamais lier `node_modules` par symlink dans un worktree jetable : `git worktree remove --force` suit le lien et vide `server-go/web/node_modules` du dépôt principal (restauré par `npm ci`).
+3. Pendant une QA dans le dépôt principal, les devs travaillent en worktree `tmp/*` puis cherry-pick après le verdict (appliqué 3 fois, sans incident).
+4. Identité git : `.git/config` portait la coquille `user.mail` → les commits du milestone (mesure `8dc81b23..HEAD` : 43 commits, dont le tag `v11.5.0`) ont l'e-mail du conteneur (`ubuntu@…svc.cluster.local`). Corrigé en fin de session (`user.email` dans `PRIVATE/gitconfig`, inclus par `~/.gitconfig`) ; pas de réécriture d'historique.
+5. Les reviewers et devs ne lancent pas de suite complète (règle rappelée à code-reviewer : son run vitest pendant la QA a faussé une mesure).
+6. Label `ci` créé par deployer alors que `ci-cd` existait : doublon à fusionner un jour.
+7. Documentation : la relecture factuelle a trouvé des erreurs à chaque passe (E1–E3 de la relecture finale : chiffres de baseline, décompte `t.Parallel`, description du job firmware) : re-relecture après chaque correction, comme prévu.
+
+### Règles permanentes (adoptées par l'utilisateur)
+1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
+2. Jalon `EN COURS` au moins toutes les 10 min pendant toute attente.
+3. Maquettes ouvertes avec `cmd.exe /c start chrome <chemin Windows>`.
+4. Jamais d'amend ni de réécriture dans le dépôt principal.
+
+### Backlog / suite
+- Suites v11.5.0 : **#296** attentes fixes `internal/game` (118 s), **#297** attentes fixes `internal/server` (110 s), **#298** logger + config par `App` pour paralléliser `cmd/server` — prochain levier pour l'étape Go de la CI (134–137 s).
+- **#36 v11.6.0 Ambiance** : #290, #231, #232, #235. Milestones v12.0/v12.1 (Roue), v13.0 (Pictionary), v15.0, vX (DNS #65), vx (#12).
+- Toujours : #283 (observabilité audio, PLANNING, sans milestone), #259, #281, #209 en backlog.
+- Template : nouvelle version disponible (`c3faa5c` vs `b80b912` local) — l'utilisateur a continué sans sync ; à faire via `/init-project` (option d).
+- Toujours valables : panneau milestone-panel (sélection PLANNING), liste « Nommage des Agents » du bloc template.
+
+## État précédent (2026-11-06) — v11.4.0 en PROD (archivé)
+
+- **PROD = v11.4.0** « RAFALE Alphabétique » : merge `main` `9b76ef61`, tag `v11.4.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.4.0, milestone #43 clôturé 7/7. Lots : popover ambiance, RAFALE alphabétique, son de décompte, catégories éditables (#282–#289). Détail : historique git de ce fichier (commit `2661dd56`).
+- Leçons conservées : doc relue seulement en fin de milestone (7 erreurs trouvées) ; `TEST_PROCEDURE.md` §2.3 évite les tests Go à symboles absents.
 
 ## Démarrage de session
 
