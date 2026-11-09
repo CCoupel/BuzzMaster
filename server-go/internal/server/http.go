@@ -1053,6 +1053,8 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		json.Unmarshal(data, &existingQuestion)
 	}
 
+	var cardSoundCommit func() // suppressions de sons de cartes, après écriture réussie
+	cardWarnings := []cardWarning{} // #235 : avertissements de durée des sons de cartes
 	// Save question data
 	question := map[string]interface{}{
 		"ID":       id,
@@ -1460,6 +1462,14 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 						}
 					}
 				}
+				// #235 (v11.6.0) — sons de cartes : upload, effacement et
+				// PRÉSERVATION par ID de carte depuis le question.json existant.
+				cw, ccommit, cstatus, cmsg := applyMotionCardSounds(r, id, questionsDir, cards, existingQuestion)
+				if cstatus != 0 {
+					http.Error(w, cmsg, cstatus)
+					return
+				}
+				cardWarnings, cardSoundCommit = cw, ccommit
 				question["MOTION_CARDS"] = cards
 			}
 		}
@@ -1598,7 +1608,10 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// soundTimerDelayed is a plain resubmitted-every-time form field (same
 	// discipline as qcm_hints_enabled above), never preserved from
 	// existingQuestion.
-	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true"
+	// #235 : MEMOTION (hôte) et ENTRACTE n'ont pas de chrono global — le différé est
+	// ignoré (écrit false), contracts/sound.md §14.3/§14.4.
+	noGlobalTimer := questionType == string(game.QuestionTypeMemotion) || questionType == string(game.QuestionTypeEntracte)
+	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true" && !noGlobalTimer
 	// sound_loop (v11.4.0, #288, contract sound.md §13.2): same discipline.
 	soundLoop := r.FormValue("sound_loop") == "true"
 	var soundWarning string
@@ -1651,7 +1664,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		// mode SIMULTANÉ. In mode différé the answer timer waits for the
 		// sound regardless of TIME, so the mismatch this warns about cannot
 		// occur.
-		if !soundTimerDelayed {
+		if !soundTimerDelayed && !noGlobalTimer {
 			if questionTime, terr := strconv.Atoi(r.FormValue("time")); terr == nil && questionTime > 0 {
 				if result.Duration > time.Duration(questionTime)*time.Second {
 					soundWarning = fmt.Sprintf(
@@ -1717,6 +1730,9 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	data, _ := json.MarshalIndent(question, "", "  ")
 	if werr := os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644); werr == nil {
 		committed = true
+		if cardSoundCommit != nil {
+			cardSoundCommit()
+		}
 	}
 
 	LogInfo(game.LogComponentHTTP, "Question %s saved", id)
@@ -1732,6 +1748,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		"warning":       nullableString(soundWarning),
 		"converted":     soundConverted,
 		"source_format": nullableString(soundSourceFormat),
+		"card_warnings": cardWarnings,
 	})
 	w.Write(respBody)
 }

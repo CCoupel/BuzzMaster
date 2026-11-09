@@ -3132,17 +3132,28 @@ func (a *App) handleMotionFlip(msg *protocol.Message) {
 		}
 		a.engine.StartRafaleQuestionTimer(questionTime)
 		a.broadcastRafaleCardAnswer(cardID, questionID, answer)
+		// #235 : son de carte RAFALE joué sans différé (la carte a son propre minuteur de manche).
+		if card := a.findMotionCard(state, cardID); card != nil && card.Sound != "" {
+			c := *card
+			c.SoundTimerDelayed = false
+			a.questionSound().StartCard(state.Question, &c, func() {})
+		}
 		a.broadcastUpdate()
 		return
 	}
 
-	// Start per-card timer if Question.Time > 0 (every other nestable type)
-	if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
-		var delay int
-		if _, err2 := fmt.Sscanf(state.Question.Time, "%d", &delay); err2 == nil && delay > 0 {
-			a.engine.StartMotionCardTimer(delay)
+	// Start per-card timer if Question.Time > 0 (every other nestable type) —
+	// #235 : via StartCard, qui le diffère jusqu'à la fin du son de la carte
+	// quand elle a SOUND_TIMER_DELAYED, et joue le son de la carte (remplace l'hôte, D9).
+	startCardTimer := func() {
+		if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
+			var delay int
+			if _, err2 := fmt.Sscanf(state.Question.Time, "%d", &delay); err2 == nil && delay > 0 {
+				a.engine.StartMotionCardTimer(delay)
+			}
 		}
 	}
+	a.questionSound().StartCard(state.Question, a.findMotionCard(state, state.MotionSelected), startCardTimer)
 
 	a.broadcastUpdate()
 }
@@ -3160,6 +3171,7 @@ func (a *App) handleMotionReveal(msg *protocol.Message) {
 
 	// Stop timer (if running) before revealing
 	a.stopMotionCardTimer()
+	a.questionSound().StopCard() // #235 (D9) : le son de la carte s'arrête à la révélation, l'hôte ne reprend pas
 
 	if err := a.engine.RevealMotionCard(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "MEMOTION_REVEAL error: %v", err)
@@ -3193,6 +3205,7 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 
 	// Stop per-card timer if still running
 	a.stopMotionCardTimer()
+	a.questionSound().StopCard() // #235 (D9) : fermeture de la carte, l'hôte ne reprend pas
 
 	points, isComplete, err := a.engine.DoneMotionCard(payload.CardID, payload.WinnerTeam, units)
 	if err != nil {
@@ -3904,11 +3917,13 @@ func (a *App) handleEntracteSet(msg *protocol.Message, senders ...updateSender) 
 		a.sendLEDSetAllEntracteOff()
 		a.ambiance().NotifyState()
 		a.notifySound(audio.CueEntracteDebut)
+		a.questionSound().StartEntracte(a.engine.GetState().Question) // #235 : média après la cue
 		server.LogInfo(game.LogComponentApp, "Entracte activated — buzzer LEDs off")
 	} else {
 		a.sendLEDSetAllBuzzers()
 		a.ambiance().NotifyState()
 		a.notifySound(audio.CueEntracteFin)
+		a.questionSound().StopEntracte() // #235
 		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
 		programmed := false
 		if st := a.engine.GetState(); st.Question != nil && st.Question.Type == game.QuestionTypeEntracte {

@@ -2178,6 +2178,15 @@ func (e *Engine) SetQuestionSoundState(state QuestionSoundState) {
 	e.state.QuestionSoundState = state
 }
 
+// SetQuestionSoundOwner sets GameState.QuestionSoundOwner (v11.6.0, #235) —
+// "" | "HOST" | "CARD:<cardID>" | "ENTRACTE". Called only by the question-sound
+// adapter (cmd/server), like SetQuestionSoundState.
+func (e *Engine) SetQuestionSoundOwner(owner string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.QuestionSoundOwner = owner
+}
+
 // SetQuestionSoundUnavailable pushes the media-availability verdict for the
 // CURRENT question into GameState (v11.1/#219/#236/#237, 2026-09-23,
 // contract sound.md §10.8.2/§10.8.7) — computed entirely by the application

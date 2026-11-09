@@ -442,6 +442,16 @@ type MotionCard struct {
 	// §6.2) — absent ⇒ STARS, the pre-#184 star-based scale, unchanged.
 	PointsRule *PointsRule `json:"POINTS_RULE,omitempty"`
 
+	// Sound* (v11.6.0, #235, contracts/sound.md §14.4) — média sonore de la
+	// carte, joué au retournement (remplace le son d'hôte, sans reprise — D9).
+	// Champs COMMUNS de carte : jamais dans OwnedFields, conservés quel que soit
+	// le TYPE de la carte. Sound = "/question/<qid>/motion_<cardID>_sound_<rand4>.wav" ;
+	// SoundTimerDelayed diffère le chrono DE LA CARTE ; omitempty comme Question.SOUND
+	// (question.json sans son : octet pour octet identique).
+	Sound             string `json:"SOUND,omitempty"`
+	SoundTimerDelayed bool   `json:"SOUND_TIMER_DELAYED,omitempty"`
+	SoundLoop         bool   `json:"SOUND_LOOP,omitempty"`
+
 	TypedContent // embedded flat — QCM_*/MEMORY_*/ARDOISE_KEYBOARD_TYPE/ANSWER for a typed card (#184, contract §2/§3)
 }
 
@@ -975,7 +985,11 @@ type GameState struct {
 	// two are the engine's OWN bookkeeping (also survive a PAUSE), this one
 	// is the wire-facing summary a client actually needs.
 	QuestionSoundState QuestionSoundState `json:"QUESTION_SOUND_STATE"`
-	AnswerTimerWaiting bool               `json:"ANSWER_TIMER_WAITING"`
+	// QuestionSoundOwner (v11.6.0, #235, game-state.md) : propriétaire du média
+	// courant — "" (IDLE) | "HOST" | "CARD:<cardID>" | "ENTRACTE". Toujours
+	// sérialisé, éphémère comme QuestionSoundState.
+	QuestionSoundOwner string `json:"QUESTION_SOUND_OWNER"`
+	AnswerTimerWaiting bool   `json:"ANSWER_TIMER_WAITING"`
 
 	// Média indisponible avant le lancement (v11.1, #219/#236/#237,
 	// 2026-09-23, contracts/sound.md §10.8) — NO omitempty, same discipline

@@ -815,7 +815,7 @@ func (h *HTTPServer) handleDeleteCategory(w http.ResponseWriter, r *http.Request
 // removed, never an arbitrary path.
 func removeCardMedia(hostPath, hostID string, card map[string]interface{}) {
 	prefix := "/question/" + hostID + "/"
-	for _, f := range []string{"RECTO_IMAGE", "QUESTION_IMAGE", "ANSWER_IMAGE"} {
+	for _, f := range []string{"RECTO_IMAGE", "QUESTION_IMAGE", "ANSWER_IMAGE", "SOUND"} {
 		p, _ := card[f].(string)
 		if !strings.HasPrefix(p, prefix) {
 			continue
