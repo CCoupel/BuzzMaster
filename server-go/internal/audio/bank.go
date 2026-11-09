@@ -3,7 +3,6 @@ package audio
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 )
@@ -43,7 +42,7 @@ func (b *FileBank) PCM(c Cue) (data []byte, ok bool) {
 	}
 	pcm, err := extractCanonicalPCM(raw)
 	if err != nil {
-		log.Printf("audio: %s does not conform to the canonical format (contracts/sound.md §3), cue silently skipped: %v", path, err)
+		logf(LogWarn, "audio: %s does not conform to the canonical format (contracts/sound.md §3), cue silently skipped: %v", path, err)
 		return nil, false
 	}
 	return pcm, true

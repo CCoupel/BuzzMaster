@@ -35,6 +35,17 @@ type SoundProvider interface {
 	TestSoundCue(c audio.Cue) (accepted bool)
 }
 
+// SoundDiagnosticProvider is the optional extension of SoundProvider for the
+// output diagnostic of GET /api/sound/status (#283 P2, contracts/http-endpoints.md
+// « Sound & Ambiance — amendements v11.6.0 »). Type-asserted on HTTPServer.Sound so
+// existing SoundProvider fakes keep compiling.
+type SoundDiagnosticProvider interface {
+	// SoundDiagnostic returns sound.enabled as read at startup, the output
+	// state ("ok"|"unavailable"|"disabled"|"restart_required"), its readable
+	// cause ("" when ok) and restartRequired (output == "restart_required").
+	SoundDiagnostic() (enabled bool, output, reason string, restartRequired bool)
+}
+
 // CountdownProvider is the optional extension of SoundProvider for the
 // chronometer countdown voice (v11.4.0, #287, contract sound.md §12). A
 // separate interface (type-asserted on HTTPServer.Sound) so existing
@@ -395,7 +406,25 @@ func (h *HTTPServer) handleAPISoundStatus(w http.ResponseWriter, r *http.Request
 	active := h.Sound != nil && h.Sound.SoundEnabled() && h.Sound.SoundOutputAvailable()
 	// muted (v11.4.0, #286): read at call time from the live config, never
 	// cached; independent from active (contract sound.md §11.2).
-	writeSoundJSON(w, http.StatusOK, map[string]bool{"active": active, "muted": config.Get().Sound.Muted})
+	body := map[string]interface{}{
+		"active": active,
+		"muted":  config.Get().Sound.Muted,
+		// v11.6.0 (#283) additive diagnostic fields; defaults when the
+		// provider does not implement SoundDiagnosticProvider.
+		"enabled":          false,
+		"output":           "disabled",
+		"reason":           nil,
+		"restart_required": false,
+		"muted_source":     "global", // #290 (LOT-4) will make it resolved
+	}
+	if dp, ok := h.Sound.(SoundDiagnosticProvider); ok {
+		enabled, output, reason, restart := dp.SoundDiagnostic()
+		body["enabled"] = enabled
+		body["output"] = output
+		body["reason"] = nullableString(reason)
+		body["restart_required"] = restart
+	}
+	writeSoundJSON(w, http.StatusOK, body)
 }
 
 // nullableString returns nil for an empty string, s otherwise — so a JSON

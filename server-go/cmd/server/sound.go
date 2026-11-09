@@ -24,6 +24,7 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"sync"
 
@@ -173,10 +174,92 @@ func (a *App) buildAudioOutput() audio.Output {
 // audio.Engine directly (not via newSoundEngine, kept Bank-less above for
 // test-writer's #227 suite).
 func (a *App) setupSound() {
+	wireAudioLogger()
+	out := a.buildAudioOutput()
 	a.soundEngine.Store(audio.NewEngine(audio.Config{
-		Output: a.buildAudioOutput(),
+		Output: out,
 		Bank:   a.buildSoundBank(),
 	}))
+	a.recordSoundBoot(out)
+}
+
+// soundBootState : état de la sortie audio au démarrage (#283). Figé : la
+// tentative d'ouverture est unique (contrat GET /api/sound/status).
+type soundBootState struct {
+	enabled bool
+	output  string // ok | unavailable | disabled
+	reason  string // "" si ok
+}
+
+// wireAudioLogger branche le journal de internal/audio sur le logger serveur
+// (/ws/logs + fichier), composant AUDIO.
+func wireAudioLogger() {
+	audio.SetLogger(func(level audio.LogLevel, format string, args ...any) {
+		switch level {
+		case audio.LogError:
+			server.LogError(game.LogComponentAudio, format, args...)
+		case audio.LogWarn:
+			server.LogWarn(game.LogComponentAudio, format, args...)
+		default:
+			server.LogInfo(game.LogComponentAudio, format, args...)
+		}
+	})
+}
+
+// recordSoundBoot détermine l'état de la sortie, le mémorise et écrit la ligne
+// de démarrage unique (#283 P1).
+func (a *App) recordSoundBoot(out audio.Output) {
+	sc := config.Get().Sound
+	st := &soundBootState{enabled: sc.Enabled}
+	switch {
+	case !sc.Enabled:
+		st.output, st.reason = "disabled", "sound.enabled=false"
+	case audio.IsNeutral(out):
+		st.output = "unavailable"
+		st.reason = audio.OutputReason()
+		if st.reason == "" {
+			st.reason = "audio output unavailable"
+		}
+	default:
+		st.output = "ok"
+	}
+	a.soundBoot.Store(st)
+
+	device := sc.Device
+	if device == "" {
+		device = "default"
+	}
+	format := "sound: enabled=%t output=%s reason=%q device=%s format=%dHz/%dch/%dbit (config: %s)"
+	args := []any{st.enabled, st.output, st.reason, device, audio.SampleRate, audio.ChannelCount, audio.BitsPerSample, configAbsPath()}
+	if st.output == "unavailable" {
+		server.LogError(game.LogComponentAudio, format, args...)
+	} else {
+		server.LogInfo(game.LogComponentAudio, format, args...)
+	}
+}
+
+func configAbsPath() string {
+	p := config.ConfigPath()
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
+}
+
+// SoundDiagnostic implements server.SoundDiagnosticProvider (#283 P2).
+// `enabled` = valeur au démarrage ; restart_required si sound.enabled courant
+// diffère de celle-ci.
+func (a *App) SoundDiagnostic() (enabled bool, output, reason string, restartRequired bool) {
+	st := a.soundBoot.Load()
+	if st == nil {
+		return false, "disabled", "sound not initialised", false
+	}
+	live := config.Get().Sound.Enabled
+	if live != st.enabled {
+		return st.enabled, "restart_required",
+			fmt.Sprintf("enabled flipped %t→%t after startup", st.enabled, live), true
+	}
+	return st.enabled, st.output, st.reason, false
 }
 
 // startSoundEngine starts the engine's playback goroutine — same lifecycle

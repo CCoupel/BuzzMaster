@@ -1063,6 +1063,7 @@ const (
 	LogComponentUDP       LogComponent = "UDP"
 	LogComponentApp       LogComponent = "App"
 	LogComponentUpdater   LogComponent = "Updater"
+	LogComponentAudio     LogComponent = "AUDIO" // #283 : sortie audio (journal de démarrage)
 )
 
 // LogEntry represents a log entry for the logs page

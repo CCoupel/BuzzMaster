@@ -61,6 +61,8 @@ type App struct {
 	// call site is therefore unconditional and safe, same discipline as
 	// lightingWriter/a.ambiance() above.
 	soundEngine atomic.Pointer[audio.Engine]
+	// soundBoot : état de la sortie audio figé à setupSound (#283), lu par GET /api/sound/status.
+	soundBoot atomic.Pointer[soundBootState]
 	// soundPhase is the sound layer's own front-detection memory (contract
 	// sound.md §5.4) — see its doc comment in cmd/server/sound.go.
 	soundPhase soundPhaseTracker

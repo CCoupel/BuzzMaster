@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 	"time"
 
@@ -125,12 +124,13 @@ func sharedOtoContext() (*oto.Context, error) {
 // built in #228.
 func newOtoOutput(cfg OutputConfig) Output {
 	if cfg.Device != "" {
-		log.Printf("audio: device selection (%q) is not yet implemented — using the system default output (contracts/sound.md §9)", cfg.Device)
+		logf(LogWarn, "audio: device selection (%q) is not yet implemented — using the system default output (contracts/sound.md §9)", cfg.Device)
 	}
 
 	ctx, err := sharedOtoContext()
 	if err != nil {
-		log.Printf("audio: oto context unavailable — sound bruitage disabled (silent degradation, contracts/sound.md §5.5): %v", err)
+		setOutputReason(err.Error())
+		logf(LogWarn, "audio: oto context unavailable — sound bruitage disabled (silent degradation, contracts/sound.md §5.5): %v", err)
 		return noopOutput{}
 	}
 
@@ -152,7 +152,7 @@ func (o *otoOutput) prime() {
 	ctx, cancel := context.WithTimeout(context.Background(), otoPlayMaxWait)
 	defer cancel()
 	if err := o.Play(ctx, bytes.NewReader(silence)); err != nil {
-		log.Printf("audio: stream pre-arming failed (non-fatal, first real cue will pay this cost instead): %v", err)
+		logf(LogWarn, "audio: stream pre-arming failed (non-fatal, first real cue will pay this cost instead): %v", err)
 	}
 }
 
@@ -176,7 +176,7 @@ func (o *otoOutput) Play(ctx context.Context, pcm io.Reader) error {
 		default:
 		}
 		if time.Now().After(deadline) {
-			log.Printf("audio: Play exceeded the %s safety deadline — returning anyway to avoid freezing the engine permanently", otoPlayMaxWait)
+			logf(LogWarn, "audio: Play exceeded the %s safety deadline — returning anyway to avoid freezing the engine permanently", otoPlayMaxWait)
 			return nil
 		}
 		time.Sleep(2 * time.Millisecond)
