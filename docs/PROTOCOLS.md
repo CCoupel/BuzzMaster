@@ -258,6 +258,35 @@ When a VJoueur is removed from the game, the server sends a `PLAYER_EVICTED` mes
 | GET | `/reset` | Factory reset |
 | GET | `/shutdown` | Graceful server shutdown |
 
+### Réglages d'ambiance et gestes directs (v11.6.0, #290)
+
+```
+GET /api/ambiance/settings
+```
+
+Lecture seule (`GET` uniquement, `405` sinon). Retourne les réglages globaux, les réglages effectifs, la source de chaque champ, la manche effective et sa surcharge :
+
+```json
+{
+  "global":   { "sound": { "muted": false, "countdown": {"enabled": true, "loop": true}, "cues": { "depart": true } }, "light": { "mode": "AUTO" } },
+  "effective":{ "sound": { "muted": false, "countdown": {"enabled": false, "loop": true}, "cues": { "depart": true } }, "light": { "mode": "ON" } },
+  "sources":  { "sound": { "muted": "global", "countdown": {"enabled": "round", "loop": "global"}, "cues": { "depart": "global" } }, "light": { "mode": "round" } },
+  "round_id": "r2",
+  "round_override": { "sound": { "countdown": {"enabled": false} }, "light": {"mode": "ON"} }
+}
+```
+
+Hors manche : `round_id` = `""` et `round_override` = `{}`. Forme complète : `contracts/ambiance-settings.md` §3 ; la liste des cues est abrégée ici.
+
+**Mode d'éclairage par défaut** — `POST /config.json {"lighting": {"default_mode": "ON" | "AUTO" | "OFF"}}` : réglage **global persisté** (`lighting.default_mode`, absent ⇒ `AUTO`). Toute autre valeur ⇒ `400`. `GET /config.json` l'expose.
+
+**Gestes directs** — `POST /config.json {"sound": {"muted" | "cues_disabled" | "countdown_disabled" | "countdown_once"}}` et `POST /api/lighting/mode` :
+- si la manche effective ne surcharge pas le champ, la valeur est aussi écrite dans le global (comportement v11.4.0) ;
+- si la manche le surcharge, le global n'est pas écrit et la réponse porte `"scope": "round"` ; sinon `"scope": "global"`. Les réponses de `POST /config.json` portent aussi `"status": "ok"` ;
+- `POST /api/lighting/mode` n'écrit jamais `default_mode`.
+
+**Champs de statut** — `GET /api/sound/status` : `muted` est la valeur **résolue**, `muted_source` vaut `"global"`, `"round"` ou `"direct"`. `GET /api/sounds` : `enabled` reste la valeur **globale** (le catalogue édite le global).
+
 ### Categories API (v5.7.0)
 
 ```

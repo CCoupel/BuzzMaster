@@ -985,6 +985,38 @@ Valeur zéro : son actif, décompte actif **en boucle** (`countdown_once` à zé
 - **Historique** : lors d'une suppression, `QUESTION_CATEGORY` passe à `""` et `CATEGORY_BREAKDOWN` est fusionné dans « Sans catégorie ». Une copie `history.json.bak-<horodatage>` est écrite avant (5 conservées).
 - `GET /api/categories` renvoie désormais `name` et `color` résolus, `questionCount` et `rafaleCount`.
 
+## Modèles v11.6.0 — réglages d'ambiance par manche (#290)
+
+Sources : `contracts/ambiance-settings.md` §3–§5, `contracts/models.md` §Manches, `contracts/game-state.md`, `contracts/websocket-actions.md` §ROUNDS_UPDATE.
+
+### Round.AMBIANCE — surcharge partielle d'une manche
+
+| Champ | Type | Défaut | Description |
+|-------|------|--------|-------------|
+| `AMBIANCE` | `Partial`, objet | `{}` (tout hérité) | Surcharge des réglages d'ambiance pendant la manche. Forme : `{ "sound": { "muted"?, "countdown": { "enabled"?, "loop"? }, "cues": { "<cue>": bool } }, "light": { "mode"? } }`. Un champ **absent** est hérité du global |
+
+- **`rounds.json`** : clé optionnelle. Absente ⇒ `{}` (fichiers v11.2 à v11.4 inchangés). L'écriture réécrit toujours la clé explicitement.
+- **`GameState.ROUNDS[]`** : toujours sérialisé (`{}` si hérité), comme les autres champs de manche.
+- **`ROUNDS_UPDATE`** : `ROUNDS[].AMBIANCE` absent ⇒ surcharge conservée ; `{}` ⇒ surcharge effacée ; nouvelle manche ⇒ `{}`. Validé strictement : clé inconnue, type non booléen, `light.mode` hors `ON`/`AUTO`/`OFF`, cue absente du registre ⇒ refus `INVALID_AMBIANCE` (chemins fautifs dans `QUESTIONS`, ex. `r2:sound.cues.qcm-indce`).
+- **Cycle de vie** : suit la manche (renommage, déplacement) ; disparaît avec elle (`KEEP` : les questions passent en « Sans manche », sans surcharge). « Sans manche » n'a pas d'`AMBIANCE`.
+- **Hors modèle (D7), jamais surchargeable** : `sound.enabled`, périphérique audio, compensation de latence, `lighting.enabled`, pont Hue et ampoules, fichiers de sons, Flash.
+
+### GameState.AMBIANCE_EFFECTIVE — réglages résolus
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `AMBIANCE_EFFECTIVE` | `{ SETTINGS, SOURCES, ROUND_ID }` | `SETTINGS` : réglages effectifs (forme complète, toutes les cues). `SOURCES` : pour chaque champ, `"global"`, `"round"` ou `"direct"`. `ROUND_ID` : manche effective (`""` hors manche) |
+
+Toujours sérialisé, sans persistance (dérivé). Recalculé à chaque changement de résolution (READY de manche, `NEW_GAME`, `RESTORE`, `ROUNDS_UPDATE`, gestes directs). Voir `docs/WEBSOCKET_PROTOCOL.md`.
+
+### config.json — `lighting.default_mode`
+
+| Clé | Section | Défaut | Description |
+|-----|---------|--------|-------------|
+| `default_mode` | `lighting` | `"AUTO"` (absent) | Mode d'éclairage global, `ON` / `AUTO` / `OFF`. `omitempty`. Réglé dans Ambiance › Lumière. Un `POST /api/lighting/mode` (popover) reste un geste direct et ne l'écrit jamais |
+
+`config.json` existants restent valides : clé absente ⇒ `AUTO`.
+
 ## Game Flow
 
 > **Documentation complète**: Voir [GAME_STATE_MACHINE.md](GAME_STATE_MACHINE.md) pour la spécification détaillée.

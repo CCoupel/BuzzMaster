@@ -2540,7 +2540,7 @@ Chaque événement joue **un seul** bruitage. Quelques enchaînements observés 
 
 Chaque bruitage est un **emplacement fixe** : vous pouvez le **désactiver**, le **remplacer** par votre fichier, ou le **restaurer au défaut**, mais pas le supprimer. Le bouton **Tester** joue le son une fois, même s'il est désactivé.
 
-Un bruitage désactivé reste muet dans le déroulé de la partie ; l'interrupteur général `sound.enabled` reste prioritaire (voir « Configuration Sonore »).
+Un bruitage désactivé reste muet dans le déroulé de la partie ; l'interrupteur général `sound.enabled` reste prioritaire (voir « Configuration Sonore »). Une manche peut aussi désactiver un bruitage pour sa durée (voir « Réglages d'ambiance par manche »).
 
 #### Format accepté
 
@@ -2683,7 +2683,7 @@ Deux boutons coexistent dans l'interface pour tester un son, mais ils ont des r�
 
 ### Activation et désactivation du son — Interrupteur général
 
-La barre de statut en haut de l'onglet Son affiche un **interrupteur à deux positions** :
+La barre de statut en haut de l'onglet Son affiche un **interrupteur à deux positions**, « Bruitages activés » (`sound.enabled`). Il est distinct du réglage **Son** ON / Coupé du panneau (`sound.muted`), qui peut être imposé par une manche :
 
 #### 🔊 Bouton ON (Activation)
 
@@ -2994,11 +2994,64 @@ Cette alerte :
 
 ---
 
+## Réglages d'ambiance par manche (v11.6.0, #290)
+
+Le son et l'éclairage ont **trois niveaux de réglage** :
+
+1. **Global** — le réglage persisté, dans **Ambiance › Son** et **Ambiance › Lumière**.
+2. **Manche** — une surcharge propre à une manche. Elle ne concerne que les questions de cette manche.
+3. **Geste direct** — un geste de régie depuis le popover **Ambiance** ou les interrupteurs de la page.
+
+**Précédence** : pour chaque réglage, le niveau le plus précis qui le définit l'emporte : geste direct, puis manche, puis global. Un réglage non surchargé par la manche est **« Hérité »** : il suit le global.
+
+**Quand la manche s'applique** :
+- à l'entrée d'une question de la manche (prête à jouer), et non à chaque question suivante de la même manche ;
+- immédiatement, si vous modifiez la surcharge pendant que la manche est en cours.
+
+**Quand le geste direct s'efface** : au changement de manche, et à une nouvelle partie. Un geste direct vaut donc jusqu'à la fin de la manche en cours.
+
+**Une manche n'écrit jamais le global.** Si un geste direct porte sur un réglage imposé par la manche en cours, le global n'est pas modifié : le geste vaut pour la manche seulement. Un message l'indique : « Appliqué à la manche en cours seulement (la manche impose ce réglage). »
+
+### Réglages surchargeables
+
+| Réglage | Valeurs |
+|---|---|
+| Son | Coupé ou ON |
+| Décompte actif | Actif ou Inactif |
+| Lecture du décompte | Une fois ou En boucle |
+| Chacun des 15 bruitages | Hérité, Actif ou Inactif |
+| Mode d'éclairage | Hérité, ON, AUTO ou OFF |
+
+**Jamais surchargeables** : « Bruitages activés » (sortie audio, qui exige un redémarrage), le périphérique et la compensation de latence, « Éclairage d'ambiance activé », le pont Hue et les ampoules, les fichiers de sons, le Flash de la régie.
+
+### Éditer la surcharge d'une manche
+
+Dans l'éditeur de manches, le bouton **🎛** de la manche (« Ambiance de la manche ») ouvre la fenêtre **« Ambiance de la manche « X » »** :
+- le badge indique « Hérite tout du réglage global » ou « N réglages surchargés » ;
+- le bouton « Tout remettre à « Hérité » » efface toute la surcharge ;
+- Enregistrer applique la surcharge à la manche (sans toucher au global).
+
+Le bouton 🎛 est absent sur « Sans manche » et sur une manche en cours de création. Une manche qui porte une surcharge affiche le badge « 🎛 Ambiance : N réglage(s) ».
+
+### Popover Ambiance pendant une manche
+
+Quand la manche en cours impose des réglages, le popover affiche « Manche « X » : N réglages imposés » et marque « manche » sur les réglages concernés. Le pied du popover rappelle qu'un geste ici l'emporte sur la manche jusqu'au prochain changement de manche.
+
+### Mode d'éclairage par défaut
+
+Dans **Ambiance › Lumière**, la section **« Mode d'éclairage »** règle le mode d'éclairage **global** (ON, AUTO ou OFF). Sans réglage, le mode est AUTO. Le popover Éclairage reste un geste direct : il ne change jamais ce mode par défaut.
+
+### Après un redémarrage
+
+Au démarrage, aucune question n'est chargée : la surcharge de manche ne s'applique qu'à la prochaine question prête à jouer. Les réglages globaux s'appliquent dès le démarrage.
+
+**Limite connue** : si la manche en cours est supprimée, elle garde son nom affiché jusqu'au prochain changement de manche, mais sa surcharge n'est plus appliquée.
+
 ## Ambiance : son coupé et éclairage (v11.4.0)
 
 Le bouton **Ambiance** de l'en-tête ouvre un popover regroupant la lumière et le son :
 
-- **Son** : l'interrupteur coupe tous les sons (bruitages, son de question, son de décompte). Le choix est conservé après redémarrage. Les réglages des sons restent en place : réactiver le son les rétablit tels quels.
+- **Son** : l'interrupteur coupe tous les sons (bruitages, son de question, son de décompte). Le choix est conservé après redémarrage. Les réglages des sons restent en place : réactiver le son les rétablit tels quels. Pendant une manche qui impose le son coupé ou actif, ce geste vaut pour la manche seulement (voir « Réglages d'ambiance par manche »).
 - **Éclairage** : les commandes ON / AUTO / OFF et Flash. Quand l'éclairage est désactivé, elles n'ont aucun effet et le popover propose un lien vers **Ambiance › Lumière**.
 
 L'interrupteur général de l'éclairage (« Éclairage d'ambiance activé ») se trouve en tête de l'onglet **Ambiance › Lumière**.
@@ -3010,7 +3063,7 @@ Un son peut jouer pendant tout compte à rebours de question (tous les chronos).
 - **Ce qui est joué** : le fichier `decompte.wav` (un son par défaut est fourni, de 2 secondes). Il peut être remplacé ou restauré depuis **Ambiance › Son**.
 - **Quand il ne joue pas** : jamais si la question a un son attaché (une image seule ne l'empêche pas) ; en RAFALE, il est joué par manche, pas par question.
 - **Au buzz** : le décompte continue, le son aussi.
-- **Réglages** : désactiver le décompte, ou le jouer une seule fois au lieu d'en boucle.
+- **Réglages** : section **Décompte** du panneau Son (Ambiance › Son, onglet Global) — « Décompte actif » (Actif / Inactif) et « Lecture du décompte » (Une fois / En boucle). Le fichier se remplace toujours depuis la ligne « Sons longs ». Ces deux réglages peuvent être imposés par une manche (voir « Réglages d'ambiance par manche »).
 
 ## Lecture en boucle du son de question (v11.4.0)
 
