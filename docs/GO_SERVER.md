@@ -8,7 +8,9 @@ Ce document décrit l'implémentation du serveur Go.
 server-go/
 ├── cmd/
 │   └── server/
-│       └── main.go           # Entry point + App orchestration
+│       ├── main.go           # Entry point + App orchestration (6 217 lignes après v11.5.0)
+│       ├── hosts.go          # Implémentations des interfaces Host des paquets extraits
+│       └── *_test.go         # Tests d'intégration de l'App (737 tests après v11.5.0)
 ├── internal/
 │   ├── config/
 │   │   └── config.go         # Configuration management
@@ -30,11 +32,22 @@ server-go/
 │   │   ├── models_test.go
 │   │   ├── engine.go         # Game state machine
 │   │   └── engine_test.go
-│   └── protocol/
-│       ├── messages.go       # Message types (ACTION, MSG structure)
-│       ├── messages_test.go
-│       ├── parser.go         # JSON parsing
-│       └── parser_test.go
+│   ├── protocol/
+│   │   ├── messages.go       # Message types (ACTION, MSG structure)
+│   │   ├── messages_test.go
+│   │   ├── parser.go         # JSON parsing
+│   │   └── parser_test.go
+│   ├── lighting/             # Couche Hue (writer, driver, événements)
+│   ├── audio/                # Moteur son
+│   ├── vplayer/              # Payloads UPDATE individualisés VPlayer (#291)
+│   ├── colors/               # Palette équipes, maths RGB/HSL (#291)
+│   ├── coalesce/             # Coalesceur de diffusion (#291)
+│   ├── rounds/               # Logique pure des manches (#291, v11.2)
+│   ├── startup/              # Démarrage : port, URLs, pages ouvertes (#291)
+│   ├── diag/                 # Helpers de diagnostic WebSocket (#291)
+│   ├── demo/                 # Données de démo et de développement (#291)
+│   ├── led/                  # LED_SET vers les buzzers (#291/#295)
+│   └── ambiance/             # Couche d'ambiance lumineuse (#205, #295)
 ├── data/
 │   └── files/
 │       └── questions/        # Question storage (mirrors ESP32 structure)
@@ -69,6 +82,40 @@ server-go/
 | Selective reset | OK | Choose what to reset |
 | Intelligent restore | OK | Auto-detect and restore from TAR |
 | Question status persistence | OK | Statuses preserved across selections & restarts |
+
+## Découpage en paquets et règles de test (v11.5.0)
+
+`cmd/server` ne garde que l'orchestration de l'`App` (câblage, handlers, routes). La logique extraite vit dans des paquets `internal/` testables seuls. Les paquets extraits ne dépendent jamais de `cmd/server` : ils reçoivent l'application par une interface `Host` étroite.
+
+### Interfaces `Host`
+
+| Paquet | Interface `Host` | Rôle |
+|--------|------------------|------|
+| `internal/led` | `Engine()`, `BuzzerHub()`, `AckManager()`, `BroadcastUpdateTo(...)` | Envoi des `LED_SET` aux buzzers (règles par phase, COMET, ACK, rejeu à la reconnexion) |
+| `internal/ambiance` | `Engine()`, `Ctx()`, `TeamNameColor()`, `HasCategoryMeta()`, `ResolveCategoryMeta()` | Writer d'ambiance, scènes, override manuel (Flash, SCORE), extinction à l'arrêt |
+| `internal/rounds` | `Engine()`, `QuestionsDirPath()` | Application d'un `ROUNDS_UPDATE` |
+| `internal/demo` | `Engine()`, `Config()`, `ResolveCategoryMeta()`, `SaveBackgroundsConfig()` | Données de démo et de développement |
+
+L'`App` implémente ces interfaces dans `cmd/server/hosts.go`. Les paquets `vplayer`, `colors`, `coalesce`, `startup`, `diag` n'ont pas d'interface `Host` : ce sont des fonctions pures ou des helpers sans état applicatif.
+
+### Propriété de l'état
+
+Deux modèles coexistent, à ne pas mélanger :
+- **LED** (`internal/led`) : l'état (`bumperLEDState`, `bumperBuzzState`, `ledStateMu`) reste dans l'`App`. Le `Controller` le partage par pointeur (`*map`, `*sync.RWMutex`), car une partie des tests réassigne ces maps.
+- **Ambiance** (`internal/ambiance`) : le `Controller` **possède** son état (writer, pilote Hue, verrou, atomics flash/score/chrono). Les champs ont été retirés de l'`App` ; `*App` ne fait que déléguer en une ligne (`ambiance_delegates.go`).
+
+### Règles pour les tests
+
+1. **Durées injectables par instance, jamais par variable de paquet.** Les tests peuvent tourner en `t.Parallel()` : une variable de paquet raccourcie accélère les timers des tests voisins. Injecter par instance : `Engine.SetTickInterval(d)`, `Engine.SetConnGreenMinDuration(d)`, `questionSoundAdapter.watchdogDelay`, `FlashPhases` du `Controller` ambiance. Valeur `0` = valeur de production.
+2. **Barrière positive plutôt que fenêtre fixe pour une assertion négative.** « Aucune trame fautive » n'est vraie qu'une fois que le serveur a fini d'émettre. Après l'action, un témoin est diffusé par le même hub ; les trames WebSocket arrivant dans l'ordre, la réception du témoin prouve que tout ce qui précède est arrivé. Modèle : `cmd/server/settle_barrier_291_test.go`. Les envois différés par un saut de goroutine sont couverts par une marge courte (`settleQuiet291`, 100 ms).
+3. **Cadence de test > 2 × pacing du writer.** Le writer `lighting.Writer` (`MinInterval` 100 ms) dérive l'état **au moment de l'application**. Si la phase d'un test est proche de 100 ms, deux applications consécutives tombent dans la même phase (aliasing) et le test échoue sous charge. Règles : phase ≥ 2 × 100 ms ; lire les appels par indice (3e et 4e applications), jamais `Last()` après une attente, qui peut voir une application supplémentaire. Cas réel : `TestDevLightingFlash_BlinksAndReturnsToSelector` (blink 250/250 ms) et `TestC2b_ScoreFlash_TwoCycles` (phase or 250 ms).
+4. **Critère d'isolation pour `t.Parallel()`.** Un test ne passe en parallèle que si, ni lui ni ses appelants, ne touchent un état global :
+   - pas de logger global (`SetGlobalLogger`) ;
+   - pas d'écriture du singleton de configuration (`config.SetInstance`, écriture d'un champ de `app.config`) — `newTestApp` ne fait que lire `config.Get()` ;
+   - pas de variable de paquet partagée (`LaunchLock*`) ni de hook `setTestInject*` non protégé ;
+   - pas de `t.Setenv`, `os.Setenv`, `os.Chdir`, `http.Default*`, `log.Set*` ;
+   - pas de fenêtre de temps serrée (flash, chrono, watchdog, expiration de verrou) : le jitter d'un test voisin la rendrait instable.
+   La propriété se propage aux appelants. Au terme de v11.5.0, 15 tests de `cmd/server` sont en `t.Parallel()` après audit (311 tests jugés sûrs sur 736 au moment de l'audit). Le reste reste séquentiel ; le lever suppose un logger et une configuration **par `App`** (issue #298).
 
 ## Data Persistence (v2.21.0)
 

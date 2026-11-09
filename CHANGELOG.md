@@ -2,6 +2,50 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.5.0] - 2026-11-09 — Milestone v11.5.0 « Optimisation des tests » : suite de tests et CI plus rapides, environnement conteneur
+
+**Aucun changement fonctionnel pour l'utilisateur final.** Cette version ne modifie ni l'interface, ni les protocoles, ni le comportement du jeu. Elle raccourcit les tests et la CI, et découpe le code de test et de serveur pour le rendre maintenable. Les mesures ci-dessous sont celles des rapports QA du milestone (SHA final `0d2ca78b`).
+
+### Changed
+
+- **Suite vitest plus rapide (#280)** — Les tests web tournent dans le pool `vmThreads` de vitest, et 33 fichiers sans DOM passent en environnement `node` : l'environnement jsdom n'est plus créé pour chacun. Local : 94 s → 26–46 s. Étape `[3/8]` de la CI : 155 s → 30–50 s (45,7 s et 49,3 s sur `0d2ca78b`). 298 fichiers, 4 385 tests : même périmètre qu'avant.
+- **`cmd/server` découpé en paquets (#291, #295)** — Le code de l'`App` est extrait dans des paquets `internal/` testables seuls : `vplayer`, `colors`, `coalesce`, `rounds`, `startup`, `diag`, `demo`, `led` (LED_SET des buzzers) et `ambiance` (couche d'ambiance lumineuse). `cmd/server/main.go` passe de 8 706 à 6 217 lignes. Les tests de `cmd/server` passent de 796 à 737 ; 76 tests vivent désormais dans les nouveaux paquets. Tous les tests existants sont conservés (2 595 → 2 612 tests de premier niveau, 7 benchmarks, aucun nom disparu).
+- **Tests `cmd/server` parallélisés (#295)** — 15 tests sont en `t.Parallel()` après audit de leur isolation (pas de logger global, pas de configuration partagée modifiée).
+- **Environnement de test (#292, #293)** — Les agents de développement tournent désormais dans un conteneur Linux natif (Go 1.26.10, Node 22.23.3, PlatformIO). La règle est : les agents `dev-*` et `test-writer` lancent les tests ciblés ; la suite complète est réservée à la QA et à la CI. Documentée dans `docs/TEST_PROCEDURE.md` §2.4.
+- **Firmware compilé dans la CI (#294)** — Un job parallèle `compiling-firmware` compile le firmware BuzzClick à chaque run de `ci-branch.yml` et `release.yml`, avec le même script que local : `scripts/build-firmware.sh` (`pio run`, merge esptool, contrôle de taille 200 Ko – 3 Mo). `scripts/ci.sh` passe à 8 étapes, la première étant ce firmware.
+- **Procédures QUALIF mises à jour (#292)** — Le BUILD se fait depuis le conteneur ; l'exécutable Windows de QUALIF est lancé par l'utilisateur depuis Windows.
+
+### Performance (mesures QA)
+
+| Mesure | Avant (`2f7da1cf`) | Après (`0d2ca78b`) |
+|--------|--------------------|--------------------|
+| vitest local | 94 s | 26–46 s |
+| vitest CI `[3/8]` | 155 s | 30–50 s |
+| `go test -race ./...` local | 266 s | 114–123 s |
+| `cmd/server` local `-race` | 226 s | ~90 s |
+| `cmd/server` CI `-race` | 221 s | 86,6–90,9 s |
+| `scripts/ci.sh` local | 332 s | ~172 s |
+| Job CI complet | 7 min 23 – 8 min 07 | 3 min 32 – 3 min 38 |
+| Paquets Go testés | 9 | 18 |
+
+### Écarts acceptés
+
+- **Cible `cmd/server` ≤ 75 s non atteinte** : 86,6–90,9 s en CI. Décision utilisateur d'accepter l'écart et d'ouvrir un suivi (#298).
+- **Étape Go de la CI non réduite (≈ 130–137 s)** : elle est bornée par `internal/game` (≈ 118 s) et `internal/server` (≈ 110 s), qui gardent des attentes réelles. Ces paquets sont suivis par #296 et #297.
+- **Cible `main.go` ≤ 6 000 lignes non atteinte** : 6 217 lignes, pour la même raison (paquets restants dans l'`App`, voir `docs/GO_SERVER.md`).
+
+### Fixed
+
+- **Tests de cadence d'ambiance instables sous charge** — Deux tests de flash (`TestDevLightingFlash_BlinksAndReturnsToSelector`, `TestC2b_ScoreFlash_TwoCycles`) étaient en aliasing avec la cadence du writer (100 ms) ; leurs phases de test sont passées à 250 ms, soit 2,5 fois cette cadence, sans changer leurs assertions. Ces corrections ont été faites en cours de milestone, avant la release.
+
+### Issues de suivi
+
+- #296 — `internal/game` : remplacer les attentes fixes (goulot de l'étape Go de la CI).
+- #297 — `internal/server` : remplacer les attentes fixes (goulot de l'étape Go de la CI).
+- #298 — `cmd/server` : logger et configuration par `App`, pour paralléliser les tests restants.
+
+---
+
 ## [11.4.0] - 2026-11-06 — Milestone v11.4.0 « RAFALE Alphabétique » : RAFALE par ordre alphabétique, ambiance et son, catégories éditables
 
 ### Added

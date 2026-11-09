@@ -99,6 +99,10 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux (script Windows, lan
 - `server-go/internal/server/websocket_buzzer.go` — BuzzerWebSocketHub
 - `server-go/internal/server/http.go` — routes HTTP + WebSocket
 - `server-go/internal/server/ack_manager.go` — registre ACK (v3.8.0)
+- `server-go/internal/led/led.go` — envoi des LED_SET aux buzzers (règles par phase, COMET, ACK) ; interface `Host`
+- `server-go/internal/ambiance/ambiance.go` — couche d'ambiance lumineuse (writer, scènes, override Flash/SCORE) ; interface `Host`
+- `server-go/internal/vplayer/vplayer.go` — payloads UPDATE individualisés VPlayer
+- `server-go/internal/rounds/rounds.go` — logique pure des manches (ROUNDS_UPDATE)
 
 **Frontend React** :
 - `server-go/web/src/pages/GamePage.jsx` — contrôle admin jeu en cours
