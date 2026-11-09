@@ -124,13 +124,17 @@ func TestValidateQuestionSound_Refuses31Seconds(t *testing.T) {
 // Format canonique, réutilisant extractCanonicalPCM (contract §3, §10.4).
 // ---------------------------------------------------------------------------
 
-func TestValidateQuestionSound_Refuses48kHzMono(t *testing.T) {
-	// Deux non-conformités à la fois (fréquence ET canaux), exactement le
-	// cas illustré par la maquette rév.3 §01 ("Ce WAV est en 48 000 Hz
-	// mono").
+// #232 (v11.6.0) : un WAV 48 000 Hz mono n'est plus refusé, il est converti (contrat sound.md §3
+// amendement). Ancienne intention « format non canonique refusé » : désormais portée par les refus
+// de formats compressés / hors bornes (resample_232_test.go).
+func TestValidateQuestionSound_Converts48kHzMono(t *testing.T) {
 	data := tw219vBuildWAV(t, 1, 48000, BitsPerSample, tw219vCanonicalDataLen(5*time.Second), 0)
-	if _, err := ValidateQuestionSound(data); err == nil {
-		t.Fatal("un WAV 48 000 Hz mono doit être refusé — format non canonique (contract §3, réutilisé par §10.4)")
+	res, err := ValidateQuestionSound(data)
+	if err != nil {
+		t.Fatalf("un WAV 48 000 Hz mono doit être converti (#232) : %v", err)
+	}
+	if len(res.PCM)%FrameSize != 0 {
+		t.Errorf("PCM de sortie non canonique (len=%d)", len(res.PCM))
 	}
 }
 
@@ -216,10 +220,11 @@ func TestUpmixMonoToStereo_DuplicatesEachSampleOntoBothChannels(t *testing.T) {
 	}
 }
 
-func TestValidateQuestionSound_Refuses24Bits(t *testing.T) {
+// #232 (v11.6.0) : le 24 bits est converti en 16 bits canonique, plus refusé.
+func TestValidateQuestionSound_Converts24Bits(t *testing.T) {
 	data := tw219vBuildWAV(t, ChannelCount, SampleRate, 24, tw219vCanonicalDataLen(5*time.Second), 0)
-	if _, err := ValidateQuestionSound(data); err == nil {
-		t.Fatal("un WAV 24 bits doit être refusé — le format canonique exige 16 bits (contract §3)")
+	if _, err := ValidateQuestionSound(data); err != nil {
+		t.Fatalf("un WAV 24 bits doit être converti en 16 bits canonique (#232) : %v", err)
 	}
 }
 
@@ -229,23 +234,17 @@ func TestValidateQuestionSound_RefusesNonRIFF(t *testing.T) {
 	}
 }
 
-func TestValidateQuestionSound_RefusesOver6MioEvenWithinDurationLimit(t *testing.T) {
-	// Contract §10.4 : "6 Mio laisse +18,9 % pour l'en-tête RIFF et
-	// d'éventuels chunks LIST/INFO... sans autoriser un fichier abusif" — le
-	// plafond de taille protège contre les MÉTADONNÉES, pas seulement
-	// contre une durée excessive. Ce fixture reste à EXACTEMENT 30 s de PCM
-	// (accepté par la seule règle de durée) mais un chunk LIST de
-	// remplissage fait dépasser le plafond de taille du fichier BRUT —
-	// isolant le refus par TAILLE de celui par DURÉE, déjà couvert par
-	// TestValidateQuestionSound_Refuses31Seconds.
+// #232 (v11.6.0) : le plafond d'octets canonique (6 Mio) est évalué APRÈS conversion ; l'entrée brute est
+// bornée à 4 × ce plafond (24 Mio). Un fichier brut au-delà est refusé quelle que soit sa durée utile.
+func TestValidateQuestionSound_RefusesRawOver4xCap(t *testing.T) {
 	dataLen := tw219vCanonicalDataLen(MaxQuestionSoundDuration)
-	pad := MaxQuestionSoundBytes - dataLen // amène juste au-dessus du plafond, en-têtes comprises
+	pad := 4*MaxQuestionSoundBytes - dataLen + 1024 // brut juste au-dessus de 4 × le plafond
 	data := tw219vBuildWAV(t, ChannelCount, SampleRate, BitsPerSample, dataLen, pad)
-	if len(data) <= MaxQuestionSoundBytes {
-		t.Fatalf("setup invalide : fixture de %d octets ne dépasse pas le plafond de %d", len(data), MaxQuestionSoundBytes)
+	if len(data) <= 4*MaxQuestionSoundBytes {
+		t.Fatalf("setup invalide : fixture de %d octets ne dépasse pas 4 × %d", len(data), MaxQuestionSoundBytes)
 	}
 	if _, err := ValidateQuestionSound(data); err == nil {
-		t.Fatalf("un fichier de %d octets (> %d, le plafond) doit être refusé même si son extrait audio ne dure que %s — le plafond de taille couvre l'en-tête/les métadonnées, pas seulement la durée (contract §10.4)", len(data), MaxQuestionSoundBytes, MaxQuestionSoundDuration)
+		t.Fatalf("un fichier brut de %d octets (> 4 × plafond) doit être refusé", len(data))
 	}
 }
 

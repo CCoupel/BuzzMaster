@@ -176,9 +176,10 @@ func TestDecompteUpload287_30sLimit_31sRejected400_30sAccepted(t *testing.T) {
 
 func TestDecompteUpload287_Over6MiB_Returns413(t *testing.T) {
 	s, _ := tw287Seeded(t)
-	body, ct := multipartImageBody(t, "d.wav", make([]byte, 7<<20))
+	// #232 : plafond d'entrée brute = 4 × 6 Mio = 24 Mio ; un vrai WAV de 25 Mio ⇒ 413.
+	body, ct := multipartImageBody(t, "d.wav", tw232uAssemble(1, 2, 44100, 16, make([]byte, 25<<20)))
 	if w := tw230Post(t, s, "/api/sounds/decompte", body, ct); w.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("> 6 Mio : attendu 413, got %d : %s", w.Code, w.Body.String())
+		t.Errorf("> 4 × 6 Mio : attendu 413, got %d : %s", w.Code, w.Body.String())
 	}
 }
 

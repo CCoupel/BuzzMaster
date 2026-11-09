@@ -361,39 +361,51 @@ func TestPOSTAPISoundsCue_MP3RenamedAsWAV_Rejected(t *testing.T) {
 	}
 }
 
-func TestPOSTAPISoundsCue_WrongSampleRate_Rejected(t *testing.T) {
+// #232 (v11.6.0) : 22050 Hz n'est plus refusé, il est converti (réponse 200, converted=true).
+func TestPOSTAPISoundsCue_WrongSampleRate_ConvertedNotRejected(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 	tw230SeedDefaultSounds(t, dataDir)
 
 	wav := tw230BuildWAV(audio.ChannelCount, 22050, audio.BitsPerSample, 1, 1.0)
 	body, ct := multipartImageBody(t, "x.wav", wav)
 	w := tw230Post(t, server, "/api/sounds/depart", body, ct)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("22050 Hz : attendu 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("22050 Hz : attendu 200 (converti, #232), got %d: %s", w.Code, w.Body.String())
+	}
+	if converted, _ := tw232uDecode(t, w.Body.Bytes()); !converted {
+		t.Error("22050 Hz : converted=true attendu")
 	}
 }
 
-func TestPOSTAPISoundsCue_Mono_Rejected(t *testing.T) {
+// #232 (v11.6.0) : mono n'est plus refusé, il est converti (réponse 200, converted=true).
+func TestPOSTAPISoundsCue_Mono_ConvertedNotRejected(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 	tw230SeedDefaultSounds(t, dataDir)
 
 	wav := tw230BuildWAV(1, audio.SampleRate, audio.BitsPerSample, 1, 1.0)
 	body, ct := multipartImageBody(t, "x.wav", wav)
 	w := tw230Post(t, server, "/api/sounds/depart", body, ct)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("mono : attendu 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("mono : attendu 200 (converti, #232), got %d: %s", w.Code, w.Body.String())
+	}
+	if converted, _ := tw232uDecode(t, w.Body.Bytes()); !converted {
+		t.Error("mono : converted=true attendu")
 	}
 }
 
-func TestPOSTAPISoundsCue_EightBit_Rejected(t *testing.T) {
+// #232 (v11.6.0) : 8 bits n'est plus refusé, il est converti (réponse 200, converted=true).
+func TestPOSTAPISoundsCue_EightBit_ConvertedNotRejected(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 	tw230SeedDefaultSounds(t, dataDir)
 
 	wav := tw230BuildWAV(audio.ChannelCount, audio.SampleRate, 8, 1, 1.0)
 	body, ct := multipartImageBody(t, "x.wav", wav)
 	w := tw230Post(t, server, "/api/sounds/depart", body, ct)
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("8 bits : attendu 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("8 bits : attendu 200 (converti, #232), got %d: %s", w.Code, w.Body.String())
+	}
+	if converted, _ := tw232uDecode(t, w.Body.Bytes()); !converted {
+		t.Error("8 bits : converted=true attendu")
 	}
 }
 
@@ -414,12 +426,12 @@ func TestPOSTAPISoundsCue_OversizedFile_Returns413(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 	tw230SeedDefaultSounds(t, dataDir)
 
-	// ~3 Mo — au-delà du plafond ~2 Mo, quel que soit le contenu.
-	oversized := make([]byte, 3<<20)
+	// #232 : plafond d'entrée brute = 4 × 2 Mio ; un vrai WAV de 9 Mio ⇒ 413.
+	oversized := tw232uAssemble(1, 2, 44100, 16, make([]byte, 9<<20))
 	body, ct := multipartImageBody(t, "x.wav", oversized)
 	w := tw230Post(t, server, "/api/sounds/depart", body, ct)
 	if w.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("fichier ~3 Mo : attendu 413, got %d: %s", w.Code, w.Body.String())
+		t.Errorf("WAV de 9 Mio : attendu 413, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
