@@ -18,6 +18,10 @@
 - **[NEW]** 8 cues par type (`qcm-indice`, `memory-carte`, `memory-paire`, `memotion-selection`, `memotion-fin-carte`,
   `rafale-bonne`, `rafale-mauvaise`, `rafale-fin-lot`), `audio.Cue.Type()`, `audio.AllCues()`, règle « une cue par site » ;
   `GET /api/sounds.cues[].type`. `sound.md` §2.1 amendement. LOT-3.
+- **[CHANGED]** *(LOT-3, code livré 042fe976)* `rafale-fin-lot` : émise par le nouveau callback `Engine.OnRafaleLotEnd` (réservoir
+  épuisé / maximum atteint, classique + carte) et non par `OnRafaleAnswer next == nil` (inexistant en fin de manche) ; le chrono
+  de lot est le chrono global ⇒ `temps-ecoule` inchangé. Les autres questions D4 du handoff (`rafale-mauvaise` via `OnRafaleInvalid`,
+  `memory-carte` puis `perdu`) sont laissées à la review LOT-3. `sound.md` §2.1.
 - **[NEW]** `MotionCard.SOUND / SOUND_TIMER_DELAYED / SOUND_LOOP` (champs communs de carte, préservés par `ID` côté
   serveur) ; multipart `motion_card_<id>_sound[_cleared|_timer_delayed|_loop]` ; son d'hôte MEMOTION au START, son de carte
   au retournement (remplace l'hôte, sans reprise — D9), son d'ENTRACTE (boucle) à `ENTRACTE_SET`. `sound.md` §14,
