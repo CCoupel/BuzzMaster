@@ -1532,3 +1532,9 @@ mutualisé `contracts/ambiance-settings.md` : lus résolus (global ← manche �
 jamais directement dans `config.Get()` (test-garde §5.2 de ce contrat). Les §6.3, §11, §12.3–12.4 restent la référence
 de la **sémantique** de chaque réglage ; `ambiance-settings.md` est la référence de **sa résolution**.
 
+**Révision 3 (#290, fichiers par manche)** : le **fichier** d'une cue et du décompte est aussi résolu (`SoundFiles`,
+`ambiance-settings.md` §9). `audio.Bank` gagne `PCMAt(rel)`, `audio.Engine` gagne `PlayCueAt(c, rel)` (file `{cue, rel}`,
+garanties §5 inchangées ; `PlayCue(c)` ≡ `PlayCueAt(c, "<cue>.wav")`) ; `FileBank.PCMAt` replie sur `<cue>.wav` (WARN) si le fichier
+de manche manque ; `notifySound` et `countdownSoundAdapter.filePath()` passent le chemin résolu. Le format canonique (§3) et la
+validation d'upload (§7) s'appliquent à l'identique aux fichiers de manche.
+

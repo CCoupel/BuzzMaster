@@ -41,13 +41,17 @@ Et **un seul composant React** (`AmbianceSettingsPanel`) pour éditer un `Settin
 | `CountdownLoop` | `sound.countdown.loop` | `!sound.countdown_once` | `true` | ✅ |
 | `CuesEnabled[cue]` | `sound.cues.<cue>` | `!sound.cues_disabled[cue]` — **toutes** les cues du registre (`sound.md` §2.1, cues par type comprises) | `true` | ✅ (par cue) |
 | `LightMode` | `light.mode` | **`lighting.default_mode`** (nouveau, D8 ; absent ⇒ `"AUTO"`) | `"AUTO"` | ✅ |
+| `SoundFiles[cue]` ✨ r3 | `sound.files.<cue>` (`cue` ∈ 15 cues ∪ `decompte`) | catalogue : `"<cue>.wav"` / `"decompte.wav"` (`data/files/sounds/`) | fichier du catalogue | ✅ (par cue, **fichier propre à la manche** — §9) |
 
 **Hors du modèle — jamais surchargeable** (matériel, cycle de vie du processus, ou contenu du catalogue) :
 `sound.enabled` (ouverture de la sortie, lié au redémarrage — `sound.md` §1/§11.1), `sound.device`,
 `sound.ambiance_compensation_ms`, `lighting.enabled` (interrupteur général #286), `lighting.bridge_*`, `lighting.api_key`,
-`lighting.lights[]` (ampoules, rôles, équipes), **les fichiers des sons** (`data/files/sounds/<cue>.wav`, `decompte.wav`) :
-une manche active ou coupe un son, **elle n'en change pas le fichier**. Le Flash (`lighting.md` §10.1) est un geste
-ponctuel, pas un réglage : hors modèle.
+`lighting.lights[]` (ampoules, rôles, équipes), les **médias de question** (déjà par question). Le Flash (`lighting.md` §10.1)
+est un geste ponctuel, pas un réglage : hors modèle.
+
+> **Révision 3 (GATE LOT-4 refusé, 2026-11-09) — D7′.** La phrase « les fichiers des sons sont hors surcharge » de la
+> révision 2 est **annulée** (malentendu au GATE 2) : les fichiers des **15 bruitages et du décompte** sont surchargeables
+> **par manche**, via `SoundFiles` (§9). Le **catalogue global** reste le seul fichier hors manche.
 
 Le JSON externe est **structuré** (`sound.countdown.enabled`) et **positif** (`enabled`, pas `disabled`) : c'est la forme
 que le composant React et les manches manipulent. La conversion depuis/vers les clés « négatives » de `config.json`
@@ -74,6 +78,10 @@ que le composant React et les manches manipulent. La conversion depuis/vers les 
   "light": { "mode": "AUTO" }
 }
 ```
+
+> **r3** : `sound` gagne `"files": { "depart": "depart.wav", "…": "…", "decompte": "decompte.wav" }` — forme complète : toutes les
+> cues + `decompte`, valeurs relatives à `data/files/sounds/`. En `Partial` : `"files": { "<cue>": "rounds/<roundID>/<cue>.wav" }`
+> (partiel, seules les cues dont la manche a son fichier). `Sources.sound.files[cue]` ∈ `global | round` (jamais `direct`).
 
 `cues` contient **toutes** les cues du registre, dans l'ordre normatif de `sound.md` §2.1 (global puis par type) — jamais
 une clé manquante en forme complète.
@@ -130,7 +138,9 @@ Règle **champ par champ**, à chaque geste direct sur un champ F :
 2. **si la manche effective ne surcharge pas F**, la valeur est **aussi écrite dans le global** (persistée) — c'est le
    comportement v11.4.0 (« son coupé persisté », #286) **conservé hors surcharge** ;
 3. si la manche effective surcharge F, le global **n'est pas touché** : le geste vaut pour la manche en cours seulement.
-4. Exception matérielle : `POST /api/lighting/mode` n'écrit **jamais** le global (`default_mode`) — le mode du popover
+4. **Fichiers (r3)** : la couche directe **ne porte jamais** `sound.files` — un geste de régie ne change pas de fichier ; un
+   fichier de manche ne réécrit jamais le catalogue ; remplacer un son du catalogue ne touche aucun fichier de manche.
+5. Exception matérielle : `POST /api/lighting/mode` n'écrit **jamais** le global (`default_mode`) — le mode du popover
    reste un geste de conduite (lighting.md §10.1, inchangé) ; seul `POST /config.json {"lighting":{"default_mode"}}`
    écrit le réglage persisté.
 
@@ -278,3 +288,57 @@ Un futur réglage déclaratif (scène ou effet par événement, `light.scenes…
   **exactement** le comportement actuel ; `rounds.json` v11.2 (sans `AMBIANCE`) ⇒ couche manche vide partout.
 - Tests v11.4.0 (`*_286_test`, `*_287_test`, `*_288_test`, `*_230_test`) verts **après** passage à l'accesseur.
 - Hors toute surcharge de manche, un geste du popover a **le même effet persisté** qu'en v11.4.0 (§4.2 point 2).
+
+---
+
+## 9. Fichiers de son par manche — normatif (révision 3, #290, LOT-4 Batch 2)
+
+> Décision utilisateur du 2026-11-09 (GATE LOT-4 refusé) : « je dois aussi pouvoir assigner un autre fichier de son ».
+> Périmètre : les **15 bruitages** et le **son du décompte**. Maquette `ambiance_settings_panel__round_override_files.html`
+> (remplace `…__round_override`). Plan : `_work/reports/planner-plan-v11.6.0-r3-lot4.md` (décisions C1–C10, D10–D13).
+
+### 9.1 Stockage
+`data/files/sounds/rounds/<roundID>/<cue>.wav` — `cue` ∈ `audio.AllCues()` ∪ `decompte`, nom **déterministe** (un fichier par
+(manche, cue) ; remplacement = écriture temporaire + `rename`, jamais de suffixe aléatoire). `roundID` n'est jamais réutilisé
+(`models.md` §Manches, `NEXT_ID`). Le dossier des sons étant couvert par la sauvegarde `medias` (`files/sounds`, récursif) et par
+la remise à zéro « médias » (`RemoveAll` + régénération du catalogue), les fichiers de manche suivent **le même sort** sans code
+dédié. Ils **ne figurent pas** dans `sounds.json` (manifeste du catalogue) : un fichier de manche est toujours « personnalisé ».
+
+### 9.2 Modèle
+`Round.AMBIANCE.sound.files[cue] = "rounds/<roundID>/<cue>.wav"` (chemin relatif au dossier des sons) — **la vérité est
+`rounds.json`**, jamais l'existence du fichier. Validation stricte à l'écriture : clé ∈ cues ∪ `decompte`, valeur
+`^rounds/<ce roundID>/<clé>\.wav$` (aucune traversée, aucune autre manche). `Settings.SoundFiles` (global) = `"<cue>.wav"` pour
+toutes les cues et `"decompte.wav"`. `Resolve` fusionne clé par clé ; `Sources.sound.files[cue]` ∈ `global | round`.
+**`ROUNDS_UPDATE` ignore `sound.files`** (toujours recopié depuis l'existant) : seule l'API §9.3 l'écrit.
+
+### 9.3 API — `http-endpoints.md` §Rounds sounds
+`GET /api/rounds/{id}/sounds` → `{ round_id, files: [{cue, path, present, duration_seconds|null}] }` ;
+`POST /api/rounds/{id}/sounds/{cue}` (multipart `file`) → **immédiat** (D10) : `ToCanonical` (#232) → validateur **du catalogue**
+pour cette cue (`ValidateUpload` ≤ 5 s / décompte ≤ 30 s, plafonds et avertissement identiques) → écriture dans
+`sounds/rounds/<id>/` → `rounds.json` sous le **verrou des fichiers de questions** (celui de `ROUNDS_UPDATE`) → `refreshAmbiance()`
++ `UPDATE` ; `DELETE /api/rounds/{id}/sounds/{cue}` (« Revenir au fichier global ») : fichier supprimé, clé retirée, même chemin ;
+`POST /api/rounds/{id}/sounds/{cue}/test` : joue le fichier **effectif** de la ligne (manche si présent, sinon catalogue), en
+ignorant `muted` / interrupteurs (geste explicite, comme `/api/sounds/{cue}/test`). `{id}` validé contre `rounds.json`,
+`{cue}` contre `audio.AllCues()` ∪ `decompte`, avant tout usage.
+
+### 9.4 Lecture et repli
+`audio.Bank` gagne `PCMAt(rel string) (pcm []byte, ok bool)` ; `audio.Engine` gagne `PlayCueAt(c Cue, rel string)` (file
+`{cue, rel}`, garanties §5 de `sound.md` inchangées ; `PlayCue(c)` ≡ `PlayCueAt(c, "<cue>.wav")`). `FileBank.PCMAt` lit
+`<dir>/<rel>` ; fichier **absent ou non conforme ⇒ repli sur `<cue>.wav`** avec un `WARN` (dédoublonné par `rel` jusqu'au prochain
+succès). `notifySound` : `a.sound().PlayCueAt(c, s.SoundFiles[string(c)])` ; décompte : `filePath()` = `soundsDir/<s.SoundFiles["decompte"]>`
+avec le même repli. **Aucune réconciliation automatique** de `rounds.json` (D12) : une référence orpheline est signalée (`present:false`),
+jamais corrigée en silence.
+
+### 9.5 Nettoyage
+Suppression d'une manche (`DELETED_ROUNDS`, `KEEP` ou `DELETE`) ⇒ `RemoveAll(sounds/rounds/<rid>)` **après** l'écriture réussie de
+`rounds.json` ; « Tout remettre à Hérité » ⇒ `DELETE` de chaque fichier de la manche, avec confirmation nommant leur nombre (D11).
+`POST /api/sounds/{cue}/restore` et `restore-defaults` **ne touchent pas** les fichiers de manche.
+
+### 9.6 Composant (`AmbianceSettingsPanel`, mode override)
+Colonne **Fichier** sur chaque bruitage et sur le décompte, rendue par le slot `renderFile(cue)` (symétrique de `renderCatalogue`,
+fourni par `RoundAmbianceDialog`) : hérité = nom global en italique (`défaut`/`personnalisé`, durée) + Remplacer… / Tester ;
+fichier de manche = nom + durée + badge « manche » + Remplacer… / Revenir au fichier global / Tester / Écouter ici
+(`/files/sounds/rounds/<rid>/<cue>.wav?v=<mtime>`) ; manquant = signalé. Activation (tri-état) et fichier sont **indépendants**.
+Remplacer / Revenir sont immédiats, Enregistrer / Annuler ne portent que sur les tri-états et le mode. Le test de parité des
+chemins (§6) couvre `sound.files.*`.
+

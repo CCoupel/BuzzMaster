@@ -616,4 +616,7 @@ interface Round {
   fichiers v11.2 inchangés) ; **`GameState.ROUNDS[]`** : toujours sérialisée (`{}` si hérité). Écrite par `ROUNDS_UPDATE`
   (`ROUNDS[].AMBIANCE`, absent = conserver l'existant), validée (`INVALID_AMBIANCE`). Suit la manche (renommage, déplacement),
   disparaît avec elle (`KEEP` : les questions passent « Sans manche », sans surcharge). Les fichiers des sons, le matériel
-  et `sound.enabled` ne sont **jamais** surchargeables (D7). « Sans manche » n'a pas d'`AMBIANCE`.
+  et `sound.enabled` ne sont **jamais** surchargeables (D7′). « Sans manche » n'a pas d'`AMBIANCE`.
+  **Révision 3 (#290)** : `AMBIANCE.sound.files[cue] = "rounds/<ID>/<cue>.wav"` — fichier de son propre à la manche (15 bruitages
+  + `decompte`), stocké sous `data/files/sounds/rounds/<ID>/`, écrit **uniquement** par `POST/DELETE /api/rounds/{ID}/sounds/{cue}`
+  (`ROUNDS_UPDATE` l'ignore et le conserve) ; dossier supprimé avec la manche ; `ambiance-settings.md` §9.

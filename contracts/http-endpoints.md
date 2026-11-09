@@ -1407,6 +1407,21 @@ d'éclairage (`ambiance-settings.md` §2) ; `POST /api/lighting/mode` reste le *
 Formes : `ambiance-settings.md` §3. `round_id = ""` et `round_override = {}` hors manche. Lu par la fenêtre « Ambiance de
 la manche » (`base = global`) et par le popover en secours de `GameState.AMBIANCE_EFFECTIVE`.
 
+### Rounds sounds — fichiers de son par manche ✨ (#290, LOT-4 Batch 2, révision 3)
+
+> `contracts/ambiance-settings.md` §9. `{id}` validé contre `rounds.json` (`^r[0-9]+$`), `{cue}` contre `audio.AllCues()` ∪ `decompte`
+> **avant** toute jointure de chemin (`404` sinon). Auth : aucune. Effet **immédiat**, indépendant de `ROUNDS_UPDATE`.
+
+| Endpoint | Rôle | Réponse / erreurs |
+|---|---|---|
+| `GET /api/rounds/{id}/sounds` | Liste des fichiers propres à la manche | `200 {round_id, files:[{cue, path, present, duration_seconds|null}]}` (`files: []` si aucun) ; `404` manche inconnue |
+| `POST /api/rounds/{id}/sounds/{cue}` (multipart `file`) | Remplacer… — fichier de manche pour cette cue (ou `decompte`) | Validation **identique au catalogue** : `ToCanonical` (#232) puis `ValidateUpload` (≤ 5 s, 2 Mio) ou validateur décompte (≤ 30 s) ; écrit `sounds/rounds/<id>/<cue>.wav` (temp + rename), `rounds.json` sous le verrou des questions, `UPDATE`. `200 {status, round_id, cue, path, duration_seconds, converted, source_format, warning}` ; `400`/`413` comme `/api/sounds/{cue}` ; `404` ; `405` |
+| `DELETE /api/rounds/{id}/sounds/{cue}` | Revenir au fichier global | Fichier supprimé, clé retirée de `AMBIANCE.sound.files`, `UPDATE`. `200 {status:"ok"}` ; `404` si la manche n'a pas de fichier pour cette cue |
+| `POST /api/rounds/{id}/sounds/{cue}/test` | Tester sur l'enceinte le fichier **effectif** (manche si présent, sinon catalogue) | Ignore `muted` et interrupteurs (geste explicite). `200 {status:"ok", played:"round"|"global"}` |
+
+`GET /api/ambiance/settings` expose `sound.files` dans `global` / `effective` / `sources` / `round_override` (forme §3 du contrat).
+`Écouter ici` = `<audio src="/files/sounds/rounds/<id>/<cue>.wav?v=<mtime>">` (servi par `handleFiles`, aucune route nouvelle).
+
 ### Écritures de réglages existantes — effet « geste direct » (#290, LOT-4)
 
 `POST /config.json {"sound": {"muted"|"cues_disabled"|"countdown_disabled"|"countdown_once"}}` et `POST /api/lighting/mode`

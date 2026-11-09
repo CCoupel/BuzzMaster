@@ -1,6 +1,21 @@
 # Changelog des Contrats API
 
 ---
+## [20261109] — v11.6.0 révision 3 — fichiers de son par manche (#290, LOT-4 Batch 2, GATE LOT-4 refusé)
+
+- **[CHANGED]** `ambiance-settings.md` §2 — **D7′** : annule « les fichiers des sons sont hors surcharge » ; les 15 bruitages et le
+  décompte sont surchargeables **par fichier** et par manche (`Settings.SoundFiles` / `Partial.SoundFiles`, JSON `sound.files`,
+  `Sources.sound.files` ∈ `global | round`, jamais `direct`). Nouveau **§9** (stockage `data/files/sounds/rounds/<ID>/<cue>.wav`,
+  API, lecture/repli, nettoyage, composant).
+- **[NEW]** `GET /api/rounds/{id}/sounds`, `POST /api/rounds/{id}/sounds/{cue}`, `DELETE …/{cue}`, `POST …/{cue}/test`
+  (`http-endpoints.md` §Rounds sounds) — effet immédiat, validation/conversion identiques au catalogue, `rounds.json` sous le verrou
+  des questions.
+- **[NEW]** `audio.Bank.PCMAt(rel)`, `audio.Engine.PlayCueAt(c, rel)` avec repli sur `<cue>.wav` (`sound.md` §15).
+- **[CHANGED]** `Round.AMBIANCE.sound.files` (`models.md` §Manches) ; `ROUNDS_UPDATE` **ignore et conserve** `sound.files`
+  (`websocket-actions.md`) ; manche supprimée ⇒ dossier supprimé ; `AMBIANCE_EFFECTIVE` expose `sound.files` (`game-state.md`).
+- Aucun **BREAKING** : `rounds.json` sans `sound.files` = comportement LOT-4 livré ; `PlayCue` inchangé.
+
+---
 ## [20261109] — v11.6.0 — Ambiance : portée étendue (#283, #232, #235, #231, #290 — Phase 0, tous lots)
 
 - **[NEW]** `contracts/ambiance-settings.md` — modèle mutualisé des réglages de comportement son + lumière (`Settings` /
