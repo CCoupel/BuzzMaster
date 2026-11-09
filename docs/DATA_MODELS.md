@@ -1064,7 +1064,7 @@ Une carte MEMOTION porte un **type discriminant** (`TYPE`) et un **contenu typé
 
 **Jamais `omitempty`** : tous les champs sont toujours sérialisés. Les champs optionnels valent `""` ou `null`, jamais absents.
 
-**Exceptions (v11.6.0, #235)** : `POINTS_RULE` (déjà `omitempty` avant v11.6.0, `models.go`) et les champs de son de carte `SOUND`, `SOUND_TIMER_DELAYED` et `SOUND_LOOP` portent `omitempty`. Pour les champs de son de carte : (comme `SOUND` sur `Question`, §Question). Une carte sans son ne les sérialise pas. Ce sont des **champs communs de carte** : ils sont conservés quel que soit le `TYPE` de la carte, hors `OwnedFields`, et préservés côté serveur par `ID` de carte lors d'une ré-édition (une carte existante sans nouveau fichier garde son son et ses réglages).
+**Exceptions (v11.6.0, #235)** : `POINTS_RULE` (déjà `omitempty` avant v11.6.0, `models.go`) et les champs de son de carte `SOUND`, `SOUND_TIMER_DELAYED` et `SOUND_LOOP` portent `omitempty`. Pour les champs de son de carte (comme `SOUND` sur `Question`, §Question) : une carte sans son ne les sérialise pas. Ce sont des **champs communs de carte** : ils sont conservés quel que soit le `TYPE` de la carte, hors `OwnedFields`, et préservés côté serveur par `ID` de carte lors d'une ré-édition (une carte existante sans nouveau fichier garde son son et ses réglages).
 
 ### TypedContent — contenu partagé embarqué plat
 
