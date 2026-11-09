@@ -2472,23 +2472,81 @@ La page `/admin/ambiance` combine deux canaux d'ambiance dans une seule interfac
 | Onglet | Contenu |
 |---|---|
 | **Lumière** | Configuration de l'éclairage Philips Hue (voir section précédente) |
-| **Son** | Gestion des sept cues sonores, sept emplacements fixes |
+| **Son** | Gestion des 15 bruitages d'événement, répartis en onglets par type de jeu (voir ci-dessous) |
 
-#### Structure des sons — Sept emplacements fixes, pas une galerie
+#### Écran Son à onglets (v11.6.0, #231)
 
-Les bruitages d'événement du jeu portent des noms normalisés (cues), chacun correspondant à un **événement précis** :
+L'onglet **Son** est organisé en cinq onglets : **Global**, **QCM**, **MEMORY**, **MEMOTION**, **RAFALE**. Chaque onglet affiche un **compteur** (le nombre de bruitages de l'onglet). L'onglet **Global** regroupe les sept bruitages généraux et les sons longs (décompte) ; les autres onglets regroupent les bruitages propres à leur type de jeu.
 
-| Cue | Événement | Exemple d'usage |
+Le réglage « Sons longs » (décompte) reste sur la ligne « Sons longs » de l'onglet Global.
+
+#### Structure des bruitages — 15 emplacements fixes, pas une galerie
+
+Les bruitages d'événement du jeu portent des noms normalisés (cues), chacun correspondant à un **événement précis**. Le nom affiché est celui de la colonne « Bruitage » :
+
+**Onglet Global**
+
+| Nom affiché | Cue | Moment où il sonne |
 |---|---|---|
-| `depart` | Début d'une nouvelle question | Appel cloche |
-| `temps-ecoule` | Expiration du chronomètre | Carillon descendant |
-| `gagne` | Points crédités à une équipe | Arpège ascendant |
-| `perdu` | Paire échouée (MEMORY) ou réponse invalide | Note basse sourde |
-| `reveal` | Révélation (affichage de la réponse) | Carillon court |
-| `entracte-debut` | Début d'une pause programmée | Descente musicale |
-| `entracte-fin` | Fin de la pause | Montée musicale |
+| Départ | `depart` | Le chronomètre démarre (entrée en question, pas une reprise après pause) |
+| Temps écoulé | `temps-ecoule` | Le chronomètre global arrive à zéro |
+| Points gagnés | `gagne` | La régie crédite une équipe (y compris la carte MEMOTION avec gagnant) |
+| Erreur | `perdu` | Paire ratée en MEMORY |
+| Révélation | `reveal` | La réponse est dévoilée |
+| Début d'entracte | `entracte-debut` | La pause commence |
+| Fin d'entracte | `entracte-fin` | La partie reprend |
 
-Vous **ne pouvez pas ajouter** de nouveaux sons au-delà de ces sept. Chaque cue est un **emplacement fixe** : vous pouvez le **personnaliser** ou le **restaurer au défaut**, mais pas le supprimer.
+**Onglet QCM**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Indice révélé | `qcm-indice` | Un indice barre une réponse |
+
+**Onglet MEMORY**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Carte retournée | `memory-carte` | Une carte est retournée (face visible), hors paire trouvée |
+| Paire trouvée | `memory-paire` | Les deux cartes retournées forment une paire |
+
+**Onglet MEMOTION**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Carte choisie | `memotion-selection` | L'équipe sélectionne une carte de la grille |
+| Fin de carte | `memotion-fin-carte` | La carte est fermée sans gagnant (ou avec 0 point) |
+
+**Onglet RAFALE**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Bonne réponse | `rafale-bonne` | L'animateur valide la réponse |
+| Mauvaise réponse | `rafale-mauvaise` | L'animateur invalide ou passe la réponse, ou le chrono de la question expire (RAFALE classique) |
+| Fin de lot | `rafale-fin-lot` | Le réservoir est épuisé ou le nombre maximal de questions est atteint |
+
+**Limite connue** : sur une carte RAFALE (MEMOTION), l'expiration du chrono de la question ne joue aucun bruitage.
+
+#### Un bruitage par événement — enchaînements réels
+
+Chaque événement joue **un seul** bruitage. Quelques enchaînements observés :
+
+- **Paire ratée en MEMORY** : « Carte retournée », puis « Carte retournée » (la deuxième carte), puis « Erreur » après le délai de retournement.
+- **Paire trouvée en MEMORY** : « Carte retournée » (la première carte), puis « Paire trouvée » (la deuxième).
+- **Dernière bonne réponse RAFALE** : « Bonne réponse », puis « Fin de lot ».
+- **Dernière mauvaise réponse RAFALE** : « Mauvaise réponse », puis « Fin de lot ».
+- **Temps écoulé** : « Temps écoulé » seulement. Le chrono global qui expire ne joue jamais « Fin de lot ».
+
+#### Désactiver, remplacer, restaurer un bruitage
+
+Chaque bruitage est un **emplacement fixe** : vous pouvez le **désactiver**, le **remplacer** par votre fichier, ou le **restaurer au défaut**, mais pas le supprimer. Le bouton **Tester** joue le son une fois, même s'il est désactivé.
+
+Un bruitage désactivé reste muet dans le déroulé de la partie ; l'interrupteur général `sound.enabled` reste prioritaire (voir « Configuration Sonore »).
+
+#### Format accepté
+
+« WAV PCM ou flottant 32 bits, mono ou stéréo, 8 000 à 192 000 Hz — ramené automatiquement à 44 100 Hz, stéréo, 16 bits à l'envoi — 5 secondes au maximum (30 secondes pour les sons longs). »
+
+Les détails de la conversion sont dans « Formats acceptés » plus bas.
 
 #### Sons par défaut vs. sons personnalisés
 
@@ -2664,10 +2722,10 @@ Apparaît uniquement sur les cues personnalisées. Cliquez-le pour **revenir au 
 En bas de l'onglet Son, un bouton :
 
 ```
-[ 🔄 Restaurer tous les sons livrés ]
+[ ↺ Restaurer tous les sons par défaut ]
 ```
 
-Cliquez-le pour **restaurer les sept sons par défaut** en une seule action. Les sons personnalisés sont écrasés. **Cette action est définitive** — les fichiers personnalisés sont perdus.
+Cliquez-le pour **restaurer les 15 bruitages et le décompte par défaut** en une seule action. Les sons personnalisés sont écrasés. **Cette action est définitive** — les fichiers personnalisés sont perdus.
 
 **Utilité** : Après avoir testé plusieurs sons personnalisés, ramener rapidement la salle à une configuration « neuve ».
 
@@ -2736,7 +2794,7 @@ Les questions créées avant les manches restent « Sans manche » : aucune conv
 
 ## Son Attaché à une Question (v11.1.0, #219)
 
-En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un **son personnel à une question individuelle**. Ce son joue au lancement de la question et peut configurer le chronomètre de réponse. Les types concernés sont SPEEDY, QCM, ARDOISE ; depuis v11.6.0, aussi MEMORY, MEMOTION (son de manche et sons de carte) et ENTRACTE (voir « Son par type de question » plus bas).
+En plus des bruitages d'événement du jeu (v11.0, puis par type de jeu en v11.6.0), vous pouvez attacher un **son personnel à une question individuelle**. Ce son joue au lancement de la question et peut configurer le chronomètre de réponse. Les types concernés sont SPEEDY, QCM, ARDOISE ; depuis v11.6.0, aussi MEMORY, MEMOTION (son de manche et sons de carte) et ENTRACTE (voir « Son par type de question » plus bas).
 
 ### Attacher un son à une question
 
