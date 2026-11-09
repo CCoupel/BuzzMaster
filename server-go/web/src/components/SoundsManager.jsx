@@ -442,7 +442,7 @@ export default function SoundsManager() {
         Colonne <b>Test</b> : deux pastilles, écoute locale puis écoute serveur — grise « pas
         testé », verte « ok », rouge « ko ». Elles font de ce tableau la liste de contrôle d&rsquo;une
         séance de réglage.
-        <br />Format accepté : WAV PCM (44 100 Hz, 16 bits, stéréo canonique) — 5 secondes au maximum (30 secondes pour les sons longs).
+        <br />Format accepté : WAV PCM ou flottant 32 bits, mono ou stéréo, 8 000 à 192 000 Hz — ramené automatiquement à 44 100 Hz, stéréo, 16 bits à l'envoi — 5 secondes au maximum (30 secondes pour les sons longs).
         <br />« Tester » joue le son une fois, même s&rsquo;il est désactivé. Restaurer tout ({sounds.cues.length || 7} bruitages + décompte) remet les sons d&rsquo;origine.
       </p>
 

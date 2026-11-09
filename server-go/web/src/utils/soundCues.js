@@ -8,7 +8,7 @@ export const CUE_LABELS = {
   depart: { label: 'Départ', sub: 'Le chronomètre démarre' },
   'temps-ecoule': { label: 'Temps écoulé', sub: 'Le chronomètre arrive à zéro' },
   gagne: { label: 'Points gagnés', sub: 'La régie crédite une équipe' },
-  perdu: { label: 'Erreur', sub: 'Paire ratée en MEMORY, réponse invalidée en RAFALE' },
+  perdu: { label: 'Erreur', sub: 'Paire ratée en MEMORY' },
   reveal: { label: 'Révélation', sub: 'La réponse est dévoilée' },
   'entracte-debut': { label: "Début d'entracte", sub: 'La pause commence' },
   'entracte-fin': { label: "Fin d'entracte", sub: 'La partie reprend' },
@@ -20,7 +20,7 @@ export const CUE_LABELS = {
   'memotion-fin-carte': { label: 'Fin de carte', sub: 'Carte fermée sans gagnant (avec gagnant : « Points gagnés », onglet Global)' },
   'rafale-bonne': { label: 'Bonne réponse', sub: "L'animateur valide la réponse RAFALE" },
   'rafale-mauvaise': { label: 'Mauvaise réponse', sub: "L'animateur invalide (ou passe) la réponse" },
-  'rafale-fin-lot': { label: 'Fin de lot', sub: 'Le réservoir est épuisé ou le temps du lot est écoulé' },
+  'rafale-fin-lot': { label: 'Fin de lot', sub: 'Le réservoir est épuisé ou le nombre maximal de questions est atteint' },
 }
 
 /** Onglets de bruitages : '' = Global (cues sans type). */
