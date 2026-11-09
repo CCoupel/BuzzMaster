@@ -2524,7 +2524,7 @@ Les bruitages d'événement du jeu portent des noms normalisés (cues), chacun c
 | Mauvaise réponse | `rafale-mauvaise` | L'animateur invalide ou passe la réponse, ou le chrono de la question expire (RAFALE classique) |
 | Fin de lot | `rafale-fin-lot` | Le réservoir est épuisé ou le nombre maximal de questions est atteint |
 
-**Limite connue** : sur une carte RAFALE (MEMOTION), l'expiration du chrono de la question ne joue pas « Mauvaise réponse ». Seul « Fin de lot » peut sonner, si cette expiration termine le lot.
+**Limite connue** : sur une carte RAFALE (MEMOTION), l'expiration du chrono de la question ne joue pas « Mauvaise réponse » ; « Fin de lot » sonne si cette expiration termine le lot.
 
 #### Un bruitage par événement — enchaînements réels
 
