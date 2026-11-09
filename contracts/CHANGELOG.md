@@ -1,6 +1,76 @@
 # Changelog des Contrats API
 
 ---
+## [20261109] — v11.6.0 révision 3 — fichiers de son par manche (#290, LOT-4 Batch 2, GATE LOT-4 refusé)
+
+- **[CHANGED]** `ambiance-settings.md` §2 — **D7′** : annule « les fichiers des sons sont hors surcharge » ; les 15 bruitages et le
+  décompte sont surchargeables **par fichier** et par manche (`Settings.SoundFiles` / `Partial.SoundFiles`, JSON `sound.files`,
+  `Sources.sound.files` ∈ `global | round`, jamais `direct`). Nouveau **§9** (stockage `data/files/sounds/rounds/<ID>/<cue>.wav`,
+  API, lecture/repli, nettoyage, composant).
+- **[NEW]** `GET /api/rounds/{id}/sounds`, `POST /api/rounds/{id}/sounds/{cue}`, `DELETE …/{cue}`, `POST …/{cue}/test`
+  (`http-endpoints.md` §Rounds sounds) — effet immédiat, validation/conversion identiques au catalogue, `rounds.json` sous le verrou
+  des questions.
+- **[NEW]** `audio.RelBank.PCMAt(rel)` (interface **optionnelle**, type-assertée sur la `Bank` — revue LOT-4b m2 : `Bank` inchangée,
+  comportement identique), `audio.Engine.PlayCueAt(c, rel)` avec repli sur `<cue>.wav` (`sound.md` §15).
+- **Limite connue** (revue LOT-4b m3) : sous Windows, remplacer un fichier de manche pendant sa lecture peut échouer transitoirement
+  (`os.Rename`, « Accès refusé ») — relancer l'envoi. `sound.md` §15.
+- **[CHANGED]** `Round.AMBIANCE.sound.files` (`models.md` §Manches) ; `ROUNDS_UPDATE` **ignore et conserve** `sound.files`
+  (`websocket-actions.md`) ; manche supprimée ⇒ dossier supprimé ; `AMBIANCE_EFFECTIVE` expose `sound.files` (`game-state.md`).
+- Aucun **BREAKING** : `rounds.json` sans `sound.files` = comportement LOT-4 livré ; `PlayCue` inchangé.
+
+---
+## [20261109] — v11.6.0 — Ambiance : portée étendue (#283, #232, #235, #231, #290 — Phase 0, tous lots)
+
+- **[NEW]** `contracts/ambiance-settings.md` — modèle mutualisé des réglages de comportement son + lumière (`Settings` /
+  `Partial` / `Resolve`), précédence **global ← manche ← geste direct** champ par champ (D1′), périmètre D7 (fichiers de
+  sons, matériel, `sound.enabled` jamais surchargeables), accesseur unique `a.ambianceSettings()` + test-garde, composant
+  React unique `AmbianceSettingsPanel` (modes global / override). LOT-4.
+- **[NEW]** `GET /api/ambiance/settings` `{global, effective, sources, round_id, round_override}`. LOT-4.
+- **[NEW]** `GameState.AMBIANCE_EFFECTIVE {SETTINGS, SOURCES, ROUND_ID}` (toujours sérialisé, tous clients web) ;
+  `GameState.QUESTION_SOUND_OWNER` (`"" | HOST | CARD:<id> | ENTRACTE`). `game-state.md`.
+- **[NEW]** `Round.AMBIANCE` (`Partial`, `{}` = hérité) dans `rounds.json` / `GameState.ROUNDS[]` ; `ROUNDS_UPDATE`
+  `ROUNDS[].AMBIANCE` (absent = conserver), refus `INVALID_AMBIANCE`, `ROUNDS_UPDATE_RESULT.ROUNDS[].AMBIANCE`.
+  `models.md` §Manches, `websocket-actions.md`. LOT-4.
+- **[NEW]** `lighting.default_mode` (`config.json`, absent ⇒ `AUTO`, D8) — mode d'éclairage persisté et résolu par manche ;
+  `POST /api/lighting/mode` reste un geste direct. `lighting.md` §12, `http-endpoints.md`. LOT-4.
+- **[NEW]** 8 cues par type (`qcm-indice`, `memory-carte`, `memory-paire`, `memotion-selection`, `memotion-fin-carte`,
+  `rafale-bonne`, `rafale-mauvaise`, `rafale-fin-lot`), `audio.Cue.Type()`, `audio.AllCues()`, règle « une cue par site » ;
+  `GET /api/sounds.cues[].type`. `sound.md` §2.1 amendement. LOT-3.
+- **[CHANGED]** *(LOT-3, code livré 042fe976)* `rafale-fin-lot` : émise par le nouveau callback `Engine.OnRafaleLotEnd` (réservoir
+  épuisé / maximum atteint, classique + carte) et non par `OnRafaleAnswer next == nil` (inexistant en fin de manche) ; le chrono
+  de lot est le chrono global ⇒ `temps-ecoule` inchangé. Les autres questions D4 du handoff (`rafale-mauvaise` via `OnRafaleInvalid`,
+  `memory-carte` puis `perdu`) sont laissées à la review LOT-3. `sound.md` §2.1.
+- **[CHANGED]** *(revue LOT-3, m1)* ordre à la dernière bonne réponse RAFALE : `rafale-bonne` **puis** `rafale-fin-lot` (corrige l'ordre
+  « fin-lot puis bonne » acté dans f0aef23b). `sound.md` §2.1.
+- **[NEW]** `MotionCard.SOUND / SOUND_TIMER_DELAYED / SOUND_LOOP` (champs communs de carte, préservés par `ID` côté
+  serveur) ; multipart `motion_card_<id>_sound[_cleared|_timer_delayed|_loop]` ; son d'hôte MEMOTION au START, son de carte
+  au retournement (remplace l'hôte, sans reprise — D9), son d'ENTRACTE (boucle) à `ENTRACTE_SET`. `sound.md` §14,
+  `question-types.md` §3.1/§11.5, `http-endpoints.md`, `websocket-actions.md`. LOT-2.
+- **[CHANGED]** `GET /api/sound/status` — champs additifs `enabled`, `output ∈ {ok, unavailable, disabled, restart_required}`,
+  `reason`, `restart_required`, `muted_source` ; journal de démarrage `AUDIO` normalisé. `http-endpoints.md`. LOT-1 (#283).
+- **[NEW]** `audio.SetLogger(Logger)` — `type Logger func(level LogLevel, format string, args ...any)`, `type LogLevel int`
+  (`LogInfo`, `LogWarn`, `LogError`) : logger injecté dans `internal/audio`, remplace les `log.Printf` ; **signature actée après revue LOT-1**
+  (le plan disait `func(string, ...any)` sans niveau). `http-endpoints.md` §status (#283).
+- **[CHANGED]** Uploads sonores (`/api/sounds/{cue}`, `/api/sounds/decompte`, `POST /questions sound`, cartes) — un WAV PCM
+  non canonique est **converti** à l'upload (Go pur, FIR fenêtré, repliement < −40 dB) au lieu d'être refusé ; `.mp3`
+  toujours refusé ; réponses `converted`, `source_format` ; plafond d'entrée brute 4 × canonique. `sound.md` §3 amendement,
+  `http-endpoints.md`. LOT-1 (#232).
+- **[CHANGED]** `POST /questions` — `sound`/`sound_loop` acceptés pour MEMORY, ENTRACTE, hôte MEMOTION (champ commun,
+  §10.4bis — décision d'éditeur) ; `sound_timer_delayed` ignoré pour ENTRACTE et hôte MEMOTION ; réponse `card_warnings[]`.
+  LOT-2.
+- **[CHANGED]** *(revue LOT-2, m4 — écarts livrés actés)* : réglages de carte `motion_card_<id>_sound_timer_delayed` /
+  `_sound_loop` **tri-valués** (`"true"` / `"false"` explicite / absent = conservé) ; `phaseRules.showSoundRow(phase, question,
+  selectedCardId = null)` (3ᵉ paramètre optionnel, rétrocompatible) ; MEMORY écrit `SOUND_TIMER_DELAYED` **sans condition**
+  `USE_TIMER` (aucun changement moteur) ; `RESTORE` coupe le média courant (hôte / carte / entracte). `sound.md` §14.2/§14.4,
+  `http-endpoints.md` §POST /questions. Libellés livrés : « Son de la manche » (hôte MEMOTION), « Son de l'entracte »,
+  « Lecture de la carte » (éditeur de carte, maquette §03 disait « Lecture ») — consignés dans `docs/mockup/DECISIONS.md`.
+- **[CHANGED]** `POST /config.json {"sound":{muted|cues_disabled|countdown_*}}`, `POST /api/lighting/mode` = gestes
+  **directs** (couche directe + global seulement hors surcharge de manche) ; réponse `scope: global|round`. `sound.md` §11.2
+  amendement / §15. LOT-4.
+- Aucun **BREAKING** : toute clé nouvelle a une valeur zéro égale au comportement v11.5.0 ; `config.json`, `rounds.json`,
+  `question.json` existants se chargent et se jouent à l'identique.
+
+---
 ## [20261106] — Catégories : diffusion temps réel `CATEGORIES_CHANGED` (#285, v11.4.0, LOT-4 — révision 2)
 
 - **[NEW]** WS `CATEGORIES_CHANGED` (Server→Client, `admin`/`tv`/`vplayer`/`anim`) — après toute écriture de catégorie

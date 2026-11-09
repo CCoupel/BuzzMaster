@@ -303,7 +303,8 @@ Nouveau champ optionnel dans le payload de reconnexion WebSocket VJoueur.
 
 **Note sur `SOUND` et `SOUND_TIMER_DELAYED`** (v11.1.0, #219) :
 - **Structurellement commun à tous les types** — le champ `SOUND` s'attache à n'importe quel `Question`, peu importe son type (`SPEEDY`, `QCM`, `ARDOISE`, `MEMORY`, `MEMOTION`, `ENTRACTE`, `RAFALE`), **pas de garde serveur**.
-- **Restriction d'affichage = décision d'éditeur frontend** — l'interface d'édition (QuestionsPage.jsx) choisit de n'exposer le bloc son qu'aux types `SPEEDY`, `QCM`, `ARDOISE` ; aucune barrière serveur n'empêche une question de type `MEMORY` de porter un son (si réimportée, elle le conserve ; l'éditeur simplement ne l'affiche pas).
+- **Restriction d'affichage = décision d'éditeur frontend** — l'interface d'édition (QuestionsPage.jsx) expose le bloc son aux types `SPEEDY`, `QCM`, `ARDOISE`, et depuis v11.6.0 (#235) aussi à `MEMORY`, à l'hôte `MEMOTION` (libellé « Son de la manche ») et à `ENTRACTE` (libellé « Son de l'entracte ») ; aucune barrière serveur n'empêche une question d'un autre type de porter un son.
+- **v11.6.0 (#235) — `SOUND_TIMER_DELAYED` forcé à faux pour l'hôte `MEMOTION` et `ENTRACTE`** : ces deux types n'ont pas de « Chrono démarre » dans l'éditeur ; le champ, s'il est reçu, est écrit `false`. Pour `MEMORY`, le champ est écrit tel quel et n'a d'effet que sur le chronomètre global existant (à vérifier en QUALIF).
 - Chemin canonique — relative à `data/files/questions/{question-id}/` (ex: `sound_12345.wav` → `/question/{id}/sound_12345.wav`). Nom réel généré : `sound_<nombre-aléatoire>.wav`.
 - Format WAV canonique : PCM 16 bits, 44 100 Hz, stéréo. Durée maximale **30 secondes**, taille maximale **6 Mio**.
 - Téléversement via `POST /questions` (multipart `sound`, `sound_cleared`, `sound_timer_delayed`), suppression via flag `sound_cleared` (supprime le fichier disque).
@@ -984,6 +985,39 @@ Valeur zéro : son actif, décompte actif **en boucle** (`countdown_once` à zé
 - **Historique** : lors d'une suppression, `QUESTION_CATEGORY` passe à `""` et `CATEGORY_BREAKDOWN` est fusionné dans « Sans catégorie ». Une copie `history.json.bak-<horodatage>` est écrite avant (5 conservées).
 - `GET /api/categories` renvoie désormais `name` et `color` résolus, `questionCount` et `rafaleCount`.
 
+## Modèles v11.6.0 — réglages d'ambiance par manche (#290)
+
+Sources : `contracts/ambiance-settings.md` §3–§5, `contracts/models.md` §Manches, `contracts/game-state.md`, `contracts/websocket-actions.md` §ROUNDS_UPDATE.
+
+### Round.AMBIANCE — surcharge partielle d'une manche
+
+| Champ | Type | Défaut | Description |
+|-------|------|--------|-------------|
+| `AMBIANCE` | `Partial`, objet | `{}` (tout hérité) | Surcharge des réglages d'ambiance pendant la manche. Forme : `{ "sound": { "muted"?, "countdown": { "enabled"?, "loop"? }, "cues": { "<cue>": bool } }, "light": { "mode"? } }`. Un champ **absent** est hérité du global |
+
+- **`rounds.json`** : clé optionnelle. Absente ⇒ `{}` (fichiers v11.2 à v11.4 inchangés). L'écriture réécrit toujours la clé explicitement.
+- **`GameState.ROUNDS[]`** : toujours sérialisé (`{}` si hérité), comme les autres champs de manche.
+- **`ROUNDS_UPDATE`** : `ROUNDS[].AMBIANCE` absent ⇒ surcharge conservée ; `{}` ⇒ surcharge effacée ; nouvelle manche ⇒ `{}`. Validé strictement : clé inconnue, type non booléen, `light.mode` hors `ON`/`AUTO`/`OFF`, cue absente du registre ⇒ refus `INVALID_AMBIANCE` (chemins fautifs dans `QUESTIONS`, ex. `r2:sound.cues.qcm-indce`).
+- **Cycle de vie** : suit la manche (renommage, déplacement) ; disparaît avec elle (`KEEP` : les questions passent en « Sans manche », sans surcharge). « Sans manche » n'a pas d'`AMBIANCE`.
+- **`sound.files`** (v11.6.0, #290, LOT-4 Batch 2) : fichiers de son propres à la manche, `{ "<cue>": "rounds/<roundID>/<cue>.wav" }`, pour les 15 bruitages et `decompte`. Stockage : `data/files/sounds/rounds/<roundID>/<cue>.wav` (nom déterministe, un fichier par manche et par cue). **`rounds.json` fait foi** : une référence sans fichier est signalée (`present:false`) et le son global est joué, jamais corrigée en silence. Écrit **uniquement** par l'API `/api/rounds/{id}/sounds` ; `ROUNDS_UPDATE` l'ignore et le recopie depuis l'existant. Résolu depuis la couche manche seulement (jamais depuis la couche directe). `GameState.ROUNDS[]` le sérialise avec le reste de `AMBIANCE`.
+- **Hors modèle (D7), jamais surchargeable** : `sound.enabled`, périphérique audio, compensation de latence, `lighting.enabled`, pont Hue et ampoules, Flash. Les **fichiers** des bruitages et du décompte sont en revanche surchargeables par manche (`sound.files`).
+
+### GameState.AMBIANCE_EFFECTIVE — réglages résolus
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| `AMBIANCE_EFFECTIVE` | `{ SETTINGS, SOURCES, ROUND_ID }` | `SETTINGS` : réglages effectifs (forme complète, toutes les cues). `SOURCES` : pour chaque champ, `"global"`, `"round"` ou `"direct"`. `ROUND_ID` : manche effective (`""` hors manche) |
+
+Toujours sérialisé, sans persistance (dérivé). Recalculé à chaque changement de résolution (READY de manche, `NEW_GAME`, `RESTORE`, `ROUNDS_UPDATE`, gestes directs). Voir `docs/WEBSOCKET_PROTOCOL.md`.
+
+### config.json — `lighting.default_mode`
+
+| Clé | Section | Défaut | Description |
+|-----|---------|--------|-------------|
+| `default_mode` | `lighting` | `"AUTO"` (absent) | Mode d'éclairage global, `ON` / `AUTO` / `OFF`. `omitempty`. Réglé dans Ambiance › Lumière. Un `POST /api/lighting/mode` (popover) reste un geste direct et ne l'écrit jamais |
+
+`config.json` existants restent valides : clé absente ⇒ `AUTO`.
+
 ## Game Flow
 
 > **Documentation complète**: Voir [GAME_STATE_MACHINE.md](GAME_STATE_MACHINE.md) pour la spécification détaillée.
@@ -1057,8 +1091,13 @@ Une carte MEMOTION porte un **type discriminant** (`TYPE`) et un **contenu typé
 | `ANSWER_TEXT` | string | optionnel | Réponse texte (SPEEDY historique) |
 | `ANSWER_IMAGE` | string | optionnel | Réponse image (SPEEDY historique) |
 | `POINTS_RULE` | object | optionnel | Barème de points de la carte (§6.2) |
+| `SOUND` | string | optionnel | Chemin du WAV de la carte (`/question/<id>/motion_<cardID>_sound_<rand4>.wav`) — v11.6.0 (#235) |
+| `SOUND_TIMER_DELAYED` | bool | optionnel | Le chrono **de la carte** démarre à la fin du son (`true`) ou au début (`false`, défaut) — v11.6.0 (#235) |
+| `SOUND_LOOP` | bool | optionnel | Lecture du son de la carte en boucle — v11.6.0 (#235) |
 
 **Jamais `omitempty`** : tous les champs sont toujours sérialisés. Les champs optionnels valent `""` ou `null`, jamais absents.
+
+**Exceptions (v11.6.0, #235)** : `POINTS_RULE` (déjà `omitempty` avant v11.6.0, `models.go`) et les champs de son de carte `SOUND`, `SOUND_TIMER_DELAYED` et `SOUND_LOOP` portent `omitempty`. Pour les champs de son de carte (comme `SOUND` sur `Question`, §Question) : une carte sans son ne les sérialise pas. Ce sont des **champs communs de carte** : ils sont conservés quel que soit le `TYPE` de la carte, hors `OwnedFields`, et préservés côté serveur par `ID` de carte lors d'une ré-édition (une carte existante sans nouveau fichier garde son son et ses réglages).
 
 ### TypedContent — contenu partagé embarqué plat
 

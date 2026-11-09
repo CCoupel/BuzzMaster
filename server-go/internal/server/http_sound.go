@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -33,6 +34,17 @@ type SoundProvider interface {
 	// via CuesDisabled must stay testable (contract §6.3). c is assumed
 	// already validated against the closed catalogue by the caller.
 	TestSoundCue(c audio.Cue) (accepted bool)
+}
+
+// SoundDiagnosticProvider is the optional extension of SoundProvider for the
+// output diagnostic of GET /api/sound/status (#283 P2, contracts/http-endpoints.md
+// « Sound & Ambiance — amendements v11.6.0 »). Type-asserted on HTTPServer.Sound so
+// existing SoundProvider fakes keep compiling.
+type SoundDiagnosticProvider interface {
+	// SoundDiagnostic returns sound.enabled as read at startup, the output
+	// state ("ok"|"unavailable"|"disabled"|"restart_required"), its readable
+	// cause ("" when ok) and restartRequired (output == "restart_required").
+	SoundDiagnostic() (enabled bool, output, reason string, restartRequired bool)
 }
 
 // CountdownProvider is the optional extension of SoundProvider for the
@@ -80,6 +92,16 @@ func writeSoundJSON(w http.ResponseWriter, status int, body interface{}) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// writeSoundValidationError : ErrTooLarge ⇒ 413, toute autre cause de refus ⇒ 400
+// (le texte nomme la cause, contracts/http-endpoints.md « Uploads sonores »).
+func writeSoundValidationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, audio.ErrTooLarge) {
+		writeSoundError(w, http.StatusRequestEntityTooLarge, err.Error())
+		return
+	}
+	writeSoundError(w, http.StatusBadRequest, err.Error())
+}
+
 func writeSoundError(w http.ResponseWriter, status int, message string) {
 	writeSoundJSON(w, status, map[string]string{"status": "error", "message": message})
 }
@@ -90,6 +112,7 @@ func writeSoundError(w http.ResponseWriter, status int, message string) {
 
 type soundCueEntry struct {
 	Cue             string  `json:"cue"`
+	Type            string  `json:"type"` // "" (globale) | QCM | MEMORY | MEMOTION | RAFALE (#231)
 	Enabled         bool    `json:"enabled"`
 	Custom          bool    `json:"custom"`
 	DurationSeconds float64 `json:"duration_seconds"`
@@ -111,13 +134,14 @@ func (h *HTTPServer) handleAPISoundsList(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		LogWarn(game.LogComponentHTTP, "GET /api/sounds: failed to reconcile manifest: %v", err)
 	}
-	cuesDisabled := config.Get().Sound.CuesDisabled
+	globalAmb := AmbianceFromConfig(config.Get()) // #290: the GLOBAL value (the catalogue edits the global)
 
 	entries := make([]soundCueEntry, 0, len(synth.Cues))
 	for _, c := range synth.Cues {
 		entry := soundCueEntry{
 			Cue:     string(c),
-			Enabled: !cuesDisabled[string(c)],
+			Type:    c.Type(),
+			Enabled: globalAmb.CueEnabled(string(c)),
 			Path:    "/files/sounds/" + synth.Filename(c),
 		}
 		m := manifest[string(c)]
@@ -225,7 +249,7 @@ func (h *HTTPServer) handleAPISoundReplace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := r.ParseMultipartForm(audio.MaxUploadBytes + (1 << 20)); err != nil {
+	if err := r.ParseMultipartForm(audio.MaxRawUploadBytes + (1 << 20)); err != nil {
 		writeSoundError(w, http.StatusBadRequest, "corps de requête invalide")
 		return
 	}
@@ -240,26 +264,29 @@ func (h *HTTPServer) handleAPISoundReplace(w http.ResponseWriter, r *http.Reques
 		writeSoundError(w, http.StatusBadRequest, "ce fichier n'est pas un WAV — seuls les fichiers .wav sont acceptés")
 		return
 	}
-	if header.Size > audio.MaxUploadBytes {
+	if header.Size > audio.MaxRawUploadBytes {
 		writeSoundError(w, http.StatusRequestEntityTooLarge, "fichier trop volumineux")
 		return
 	}
 
-	raw, err := io.ReadAll(io.LimitReader(file, audio.MaxUploadBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(file, audio.MaxRawUploadBytes+1))
 	if err != nil {
 		writeSoundError(w, http.StatusBadRequest, "lecture du fichier échouée")
 		return
 	}
-	if len(raw) > audio.MaxUploadBytes {
+	if len(raw) > audio.MaxRawUploadBytes {
 		writeSoundError(w, http.StatusRequestEntityTooLarge, "fichier trop volumineux")
 		return
 	}
 
 	result, err := audio.ValidateUpload(raw)
 	if err != nil {
-		writeSoundError(w, http.StatusBadRequest, err.Error())
+		writeSoundValidationError(w, err)
 		return
 	}
+	// #232 : toujours stocké en WAV canonique neuf (plafond de stockage 2 Mio rétabli,
+	// chunks annexes retirés) ; octets identiques pour un fichier canonique propre.
+	stored := audio.BuildCanonicalWAV(result.PCM)
 
 	dir := h.soundsDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -268,7 +295,7 @@ func (h *HTTPServer) handleAPISoundReplace(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	path := filepath.Join(dir, synth.Filename(cue))
-	if err := os.WriteFile(path, raw, 0644); err != nil {
+	if err := os.WriteFile(path, stored, 0644); err != nil {
 		LogError(game.LogComponentHTTP, "Sound replace: cannot write %s: %v", path, err)
 		writeSoundError(w, http.StatusInternalServerError, "échec d'écriture disque")
 		return
@@ -286,6 +313,8 @@ func (h *HTTPServer) handleAPISoundReplace(w http.ResponseWriter, r *http.Reques
 		"custom":           manifest[string(cue)].Custom,
 		"duration_seconds": result.Duration.Seconds(),
 		"warning":          nullableString(result.Warning),
+		"converted":        result.Converted,
+		"source_format":    nullableString(result.SourceFormat),
 	})
 }
 
@@ -395,7 +424,26 @@ func (h *HTTPServer) handleAPISoundStatus(w http.ResponseWriter, r *http.Request
 	active := h.Sound != nil && h.Sound.SoundEnabled() && h.Sound.SoundOutputAvailable()
 	// muted (v11.4.0, #286): read at call time from the live config, never
 	// cached; independent from active (contract sound.md §11.2).
-	writeSoundJSON(w, http.StatusOK, map[string]bool{"active": active, "muted": config.Get().Sound.Muted})
+	effAmb, effSrc := h.ambianceSettingsNow()
+	body := map[string]interface{}{
+		"active": active,
+		"muted":  effAmb.SoundMuted, // #290: resolved value
+		// v11.6.0 (#283) additive diagnostic fields; defaults when the
+		// provider does not implement SoundDiagnosticProvider.
+		"enabled":          false,
+		"output":           "disabled",
+		"reason":           nil,
+		"restart_required": false,
+		"muted_source":     string(effSrc.SoundMuted), // #290
+	}
+	if dp, ok := h.Sound.(SoundDiagnosticProvider); ok {
+		enabled, output, reason, restart := dp.SoundDiagnostic()
+		body["enabled"] = enabled
+		body["output"] = output
+		body["reason"] = nullableString(reason)
+		body["restart_required"] = restart
+	}
+	writeSoundJSON(w, http.StatusOK, body)
 }
 
 // nullableString returns nil for an empty string, s otherwise — so a JSON
@@ -472,7 +520,7 @@ func (h *HTTPServer) handleAPICountdownReplace(w http.ResponseWriter, r *http.Re
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if err := r.ParseMultipartForm(audio.MaxQuestionSoundBytes + (1 << 20)); err != nil {
+	if err := r.ParseMultipartForm(audio.MaxRawQuestionSoundBytes + (1 << 20)); err != nil {
 		writeSoundError(w, http.StatusBadRequest, "corps de requête invalide")
 		return
 	}
@@ -487,23 +535,23 @@ func (h *HTTPServer) handleAPICountdownReplace(w http.ResponseWriter, r *http.Re
 		writeSoundError(w, http.StatusBadRequest, "ce fichier n'est pas un WAV — seuls les fichiers .wav sont acceptés")
 		return
 	}
-	if header.Size > audio.MaxQuestionSoundBytes {
+	if header.Size > audio.MaxRawQuestionSoundBytes {
 		writeSoundError(w, http.StatusRequestEntityTooLarge, "fichier trop volumineux")
 		return
 	}
-	raw, err := io.ReadAll(io.LimitReader(file, audio.MaxQuestionSoundBytes+1))
+	raw, err := io.ReadAll(io.LimitReader(file, audio.MaxRawQuestionSoundBytes+1))
 	if err != nil {
 		writeSoundError(w, http.StatusBadRequest, "lecture du fichier échouée")
 		return
 	}
-	if int64(len(raw)) > audio.MaxQuestionSoundBytes {
+	if int64(len(raw)) > audio.MaxRawQuestionSoundBytes {
 		writeSoundError(w, http.StatusRequestEntityTooLarge, "fichier trop volumineux")
 		return
 	}
 
 	result, err := audio.ValidateQuestionSound(raw)
 	if err != nil {
-		writeSoundError(w, http.StatusBadRequest, err.Error())
+		writeSoundValidationError(w, err)
 		return
 	}
 
@@ -523,6 +571,8 @@ func (h *HTTPServer) handleAPICountdownReplace(w http.ResponseWriter, r *http.Re
 		"status":           "ok",
 		"custom":           manifest[synth.CountdownName].Custom,
 		"duration_seconds": result.Duration.Seconds(),
+		"converted":        result.Converted,
+		"source_format":    nullableString(result.SourceFormat),
 	})
 }
 

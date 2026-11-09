@@ -37,7 +37,10 @@ export default function QuizSoundWarningPill({ className = '' }) {
   const { status } = useSoundStatus()
 
   const soundQuestionCount = useMemo(
-    () => Object.values(questions || {}).filter(q => q.SOUND).length,
+    () => Object.values(questions || {}).filter(
+      // #235 — une carte MEMOTION sonore compte comme une question sonore
+      q => q.SOUND || (Array.isArray(q.MOTION_CARDS) && q.MOTION_CARDS.some(c => c?.SOUND)),
+    ).length,
     [questions],
   )
 

@@ -77,23 +77,60 @@ func Generate(c audio.Cue) ([]byte, bool) {
 			{freq: noteC5, duration: 110 * time.Millisecond, amplitude: 0.6},
 			{freq: noteE5, duration: 130 * time.Millisecond, amplitude: 0.6},
 		})), true
+
+	// --- cues par type de jeu (v11.6.0, #231) — courtes (< 0,35 s), distinctes ---
+	case audio.CueQCMIndice: // bip sec descendant : une réponse est barrée
+		return WriteWAV(sequence([]note{
+			{freq: noteE5, duration: 60 * time.Millisecond, amplitude: 0.55},
+			{freq: noteA4, duration: 90 * time.Millisecond, amplitude: 0.55},
+		})), true
+
+	case audio.CueMemoryCarte: // tic clair : carte retournée
+		return WriteWAV(sequence([]note{
+			{freq: noteG5, duration: 70 * time.Millisecond, amplitude: 0.5},
+		})), true
+
+	case audio.CueMemoryPaire: // deux notes montantes : paire trouvée
+		return WriteWAV(sequence([]note{
+			{freq: noteG5, duration: 80 * time.Millisecond, amplitude: 0.6},
+			{freq: noteC6, duration: 120 * time.Millisecond, amplitude: 0.65},
+		})), true
+
+	case audio.CueMemotionSelection: // note médiane courte : carte choisie
+		return WriteWAV(sequence([]note{
+			{freq: noteC5, duration: 70 * time.Millisecond, amplitude: 0.55},
+			{freq: noteG4, duration: 70 * time.Millisecond, amplitude: 0.5},
+		})), true
+
+	case audio.CueMemotionFinCarte: // cloche décroissante : carte refermée
+		return WriteWAV(decayingTone(noteE5, 300*time.Millisecond, 0.5)), true
+
+	case audio.CueRafaleBonne: // arpège bref ascendant
+		return WriteWAV(sequence([]note{
+			{freq: noteE5, duration: 55 * time.Millisecond, amplitude: 0.6},
+			{freq: noteG5, duration: 70 * time.Millisecond, amplitude: 0.6},
+		})), true
+
+	case audio.CueRafaleMauvaise: // buzz grave bref
+		return WriteWAV(sequence([]note{
+			{freq: noteC3, duration: 160 * time.Millisecond, amplitude: 0.55},
+		})), true
+
+	case audio.CueRafaleFinLot: // trois notes descendantes : fin du lot
+		return WriteWAV(sequence([]note{
+			{freq: noteG5, duration: 90 * time.Millisecond, amplitude: 0.6},
+			{freq: noteE5, duration: 90 * time.Millisecond, amplitude: 0.6},
+			{freq: noteC5, duration: 150 * time.Millisecond, amplitude: 0.6},
+		})), true
 	}
 	return nil, false
 }
 
-// Cues is the closed v11.0 catalogue, in the same order as
+// Cues is the closed catalogue (7 cues in v11.0, 15 since v11.6.0 — #231), in the same order as
 // contracts/sound.md §2.1 — the enumeration WriteAll/reconciliation walks,
 // so both stay in lockstep with the contract by construction rather than
 // by a separately-maintained list.
-var Cues = []audio.Cue{
-	audio.CueDepart,
-	audio.CueTempsEcoule,
-	audio.CueGagne,
-	audio.CuePerdu,
-	audio.CueReveal,
-	audio.CueEntracteDebut,
-	audio.CueEntracteFin,
-}
+var Cues = audio.AllCues()
 
 // CountdownName is the manifest key / file stem of the chronometer
 // countdown sound (v11.4.0, #287, contracts/sound.md §12.2). A plain string,

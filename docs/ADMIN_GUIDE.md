@@ -2472,23 +2472,81 @@ La page `/admin/ambiance` combine deux canaux d'ambiance dans une seule interfac
 | Onglet | Contenu |
 |---|---|
 | **Lumière** | Configuration de l'éclairage Philips Hue (voir section précédente) |
-| **Son** | Gestion des sept cues sonores, sept emplacements fixes |
+| **Son** | Gestion des 15 bruitages d'événement, répartis en onglets par type de jeu (voir ci-dessous) |
 
-#### Structure des sons — Sept emplacements fixes, pas une galerie
+#### Écran Son à onglets (v11.6.0, #231)
 
-Les bruitages d'événement du jeu portent des noms normalisés (cues), chacun correspondant à un **événement précis** :
+L'onglet **Son** est organisé en cinq onglets : **Global**, **QCM**, **MEMORY**, **MEMOTION**, **RAFALE**. Chaque onglet affiche un **compteur** (le nombre de bruitages de l'onglet). L'onglet **Global** regroupe les sept bruitages généraux et les sons longs (décompte) ; les autres onglets regroupent les bruitages propres à leur type de jeu.
 
-| Cue | Événement | Exemple d'usage |
+Le fichier du décompte se remplace depuis la ligne « Sons longs » de l'onglet Global ; ses réglages (actif, lecture) sont dans la section « Décompte » du panneau.
+
+#### Structure des bruitages — 15 emplacements fixes, pas une galerie
+
+Les bruitages d'événement du jeu portent des noms normalisés (cues), chacun correspondant à un **événement précis**. Le nom affiché est celui de la colonne « Bruitage » :
+
+**Onglet Global**
+
+| Nom affiché | Cue | Moment où il sonne |
 |---|---|---|
-| `depart` | Début d'une nouvelle question | Appel cloche |
-| `temps-ecoule` | Expiration du chronomètre | Carillon descendant |
-| `gagne` | Points crédités à une équipe | Arpège ascendant |
-| `perdu` | Paire échouée (MEMORY) ou réponse invalide | Note basse sourde |
-| `reveal` | Révélation (affichage de la réponse) | Carillon court |
-| `entracte-debut` | Début d'une pause programmée | Descente musicale |
-| `entracte-fin` | Fin de la pause | Montée musicale |
+| Départ | `depart` | Le chronomètre démarre (entrée en question, pas une reprise après pause) |
+| Temps écoulé | `temps-ecoule` | Le chronomètre global arrive à zéro |
+| Points gagnés | `gagne` | La régie crédite une équipe (y compris la carte MEMOTION avec gagnant) |
+| Erreur | `perdu` | Paire ratée en MEMORY |
+| Révélation | `reveal` | La réponse est dévoilée |
+| Début d'entracte | `entracte-debut` | La pause commence |
+| Fin d'entracte | `entracte-fin` | La partie reprend |
 
-Vous **ne pouvez pas ajouter** de nouveaux sons au-delà de ces sept. Chaque cue est un **emplacement fixe** : vous pouvez le **personnaliser** ou le **restaurer au défaut**, mais pas le supprimer.
+**Onglet QCM**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Indice révélé | `qcm-indice` | Un indice barre une réponse |
+
+**Onglet MEMORY**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Carte retournée | `memory-carte` | Une carte est retournée (face visible), hors paire trouvée |
+| Paire trouvée | `memory-paire` | Les deux cartes retournées forment une paire |
+
+**Onglet MEMOTION**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Carte choisie | `memotion-selection` | L'équipe sélectionne une carte de la grille |
+| Fin de carte | `memotion-fin-carte` | La carte est fermée sans gagnant (ou avec 0 point) |
+
+**Onglet RAFALE**
+
+| Nom affiché | Cue | Moment où il sonne |
+|---|---|---|
+| Bonne réponse | `rafale-bonne` | L'animateur valide la réponse |
+| Mauvaise réponse | `rafale-mauvaise` | L'animateur invalide ou passe la réponse, ou le chrono de la question expire (RAFALE classique) |
+| Fin de lot | `rafale-fin-lot` | Le réservoir est épuisé ou le nombre maximal de questions est atteint |
+
+**Limite connue** : sur une carte RAFALE (MEMOTION), l'expiration du chrono de la question ne joue pas « Mauvaise réponse » ; « Fin de lot » sonne si cette expiration termine le lot.
+
+#### Un bruitage par événement — enchaînements réels
+
+Chaque événement joue **un seul** bruitage. Quelques enchaînements observés :
+
+- **Paire ratée en MEMORY** : « Carte retournée », puis « Carte retournée » (la deuxième carte), puis « Erreur » après le délai de retournement.
+- **Paire trouvée en MEMORY** : « Carte retournée » (la première carte), puis « Paire trouvée » (la deuxième).
+- **Dernière bonne réponse RAFALE** : « Bonne réponse », puis « Fin de lot ».
+- **Dernière mauvaise réponse RAFALE** : « Mauvaise réponse », puis « Fin de lot ».
+- **Temps écoulé** : « Temps écoulé » seulement. Le chrono global qui expire ne joue jamais « Fin de lot ».
+
+#### Désactiver, remplacer, restaurer un bruitage
+
+Chaque bruitage est un **emplacement fixe** : vous pouvez le **désactiver**, le **remplacer** par votre fichier, ou le **restaurer au défaut**, mais pas le supprimer. Le bouton **Tester** joue le son une fois, même s'il est désactivé.
+
+Un bruitage désactivé reste muet dans le déroulé de la partie ; l'interrupteur général `sound.enabled` reste prioritaire (voir « Configuration Sonore »). Une manche peut aussi désactiver un bruitage pour sa durée (voir « Réglages d'ambiance par manche »).
+
+#### Format accepté
+
+« WAV PCM ou flottant 32 bits, mono ou stéréo, 8 000 à 192 000 Hz — ramené automatiquement à 44 100 Hz, stéréo, 16 bits à l'envoi — 5 secondes au maximum (30 secondes pour les sons longs). »
+
+Les détails de la conversion sont dans « Formats acceptés » plus bas.
 
 #### Sons par défaut vs. sons personnalisés
 
@@ -2496,6 +2554,25 @@ Vous **ne pouvez pas ajouter** de nouveaux sons au-delà de ces sept. Chaque cue
 - **Son personnalisé** : un son que vous avez téléversé pour remplacer le défaut
 
 L'interface affiche clairement lequel des deux est actif pour chaque cue. Un bouton **Restaurer** n'apparaît que sur les cues personnalisées.
+
+#### Diagnostic de la sortie audio (v11.6.0, #283)
+
+Le haut de l'onglet **Son** indique l'état de la sortie audio. L'état est figé au démarrage du serveur, sauf pour l'interrupteur général (voir ci-dessous) :
+
+| Affichage | État (`output`) | Signification | Que faire |
+|---|---|---|---|
+| Pastille **Son actif** | `ok` | La sortie audio est prête ; les bruitages sont joués | Rien |
+| **Enceinte indisponible.** + cause | `unavailable` | Aucun périphérique de sortie n'a répondu au démarrage. La cause (`reason`) est affichée sous la pastille | Vérifier la session audio (section « Prérequis système » ci-dessus) puis redémarrer le serveur |
+| **Bruitages désactivés** dans `config.json` | `disabled` | `sound.enabled = false` au démarrage : aucun son n'est joué | Mettre `sound.enabled` à `true` dans `config.json`, puis redémarrer |
+| **Redémarrage requis.** | `restart_required` | L'interrupteur `sound.enabled` a changé depuis le lancement du serveur | Éteindre prend effet immédiatement (le serveur reste muet). Rallumer n'a d'effet qu'après un redémarrage. La bannière s'affiche dans les deux sens |
+
+La ligne de démarrage `AUDIO` du journal donne le même diagnostic :
+
+```
+sound: enabled=true output=ok reason="" device=default format=44100Hz/2ch/16bit (config: /chemin/absolu/config.json)
+```
+
+Elle est écrite en `ERROR` si `output=unavailable`, en `INFO` sinon. Le champ `(config: …)` indique le fichier de configuration réellement lu.
 
 ### Remplacer un son
 
@@ -2508,26 +2585,31 @@ L'interface affiche clairement lequel des deux est actif pour chaque cue. Un bou
 5. Le serveur **valide instantanément** le fichier :
    - ✅ Accepté → le son est remplacé **immédiatement**, aucun redémarrage
    - ⚠️ Avertissement → fichier accepté, mais sa durée pourrait gêner la fluidité du jeu (ex: > 2 s)
-   - ❌ Refusé → format invalide ou trop long (> 5 s) — message d'erreur explique pourquoi
+   - ❌ Refusé → format non accepté (MP3, M4A, fichier qui n'est pas un WAV), durée trop longue (> 5 s) ou fichier trop volumineux — le message d'erreur explique pourquoi
 
-### Formats acceptés — Spécifications strictes
+### Formats acceptés — conversion automatique à l'upload (v11.6.0, #232)
 
-**Obligatoire** : WAV uniquement — aucune conversion automatique.
+**Obligatoire** : fichier **`.wav`**. Les formats compressés (MP3, M4A, etc.) sont **refusés**.
 
-Les sons de BuzzControl partagent un seul contexte audio par processus (contrainte d'architecture). Tous les fichiers doivent donc être **strictement conformes au format canonique** :
+Un WAV qui n'est pas dans le format canonique n'est plus refusé : le serveur le **convertit une fois, à l'upload**, puis stocke et joue uniquement le résultat converti. Le format joué reste toujours le même, car les sons de BuzzControl partagent un seul contexte audio par processus (contrainte d'architecture) :
 
-| Paramètre | Valeur | Raison |
+| Paramètre | Accepté à l'upload | Stocké et joué |
 |---|---|---|
-| Extension | **`.wav`** seulement | Décision utilisateur. Aucune conversion serveur ni navigateur |
-| Conteneur | **RIFF/WAVE valide** | Sinon, fichier rejeté au téléversement |
-| Codec | **PCM** (non compressé) | Un seul contexte audio pour toute l'application |
-| Fréquence | **44 100 Hz** exactement | Imposée par le pilote matériel (#228) |
-| Canaux | **Stéréo (2 canaux)** ou mono (1 canal) | Stéréo préféré pour les sons mélodiques |
-| Profondeur | **16 bits** | Qualité CD standard, équilibre taille/qualité |
-| Durée | **Maximum 5 s** ; avertissement au-delà de 2 s | Lecture séquentielle bloquante — sons longs retardent les événements suivants |
-| Taille fichier | **Maximum ~2 Mo** | Un son de 5 s pèse ~880 Ko, cette limite est très généreuse |
+| Extension | **`.wav`** seulement | `.wav` |
+| Conteneur | **RIFF/WAVE valide** | RIFF/WAVE |
+| Codec | **PCM** 8, 16, 24 ou 32 bits, ou **flottant 32 bits** (y compris `WAVE_FORMAT_EXTENSIBLE` avec ces formats) | **PCM 16 bits** |
+| Fréquence | **8 000 à 192 000 Hz** | **44 100 Hz** (rééchantillonnage) |
+| Canaux | **1 (mono) ou 2 (stéréo)** | **Stéréo** (un mono est dupliqué sur les deux voies) |
+| Durée | **Maximum 5 s** ; avertissement au-delà de 2 s | Inchangée |
+| Taille | Fichier brut jusqu'à **4 fois** la taille du format stocké (soit 8 Mio pour un bruitage, 24 Mio pour un son de question) | **Maximum 2 Mio** pour un bruitage, **6 Mio** pour un son de question |
 
-**Convertir un fichier au bon format** (exemple depuis MP3 ou M4A) :
+Points à connaître :
+
+- **Un WAV déjà au format stocké** (44 100 Hz, stéréo, 16 bits) n'est pas converti : il est ré-enregistré à l'identique, seuls les blocs annexes (métadonnées type `LIST`/`INFO`) étant retirés.
+- La conversion est indiquée à l'écran : le message de remplacement affiche « converti depuis » suivi du format d'origine (par exemple `48000Hz/2ch/24bit`).
+- Un fichier trop volumineux avant conversion est refusé (`413`) ; un fichier dont la durée dépasse la limite est refusé, sans conversion.
+
+**Convertir un fichier compressé en WAV** (obligatoire pour un MP3 ou un M4A, qui sont refusés ; exemple depuis M4A) :
 
 ```bash
 # Avec ffmpeg (Windows/macOS/Linux)
@@ -2601,7 +2683,7 @@ Deux boutons coexistent dans l'interface pour tester un son, mais ils ont des r�
 
 ### Activation et désactivation du son — Interrupteur général
 
-La barre de statut en haut de l'onglet Son affiche un **interrupteur à deux positions** :
+La barre de statut en haut de l'onglet Son affiche un **interrupteur à deux positions**, « Bruitages activés » (`sound.enabled`). Il est distinct du réglage **Son** ON / Coupé du panneau (`sound.muted`), qui peut être imposé par une manche :
 
 #### 🔊 Bouton ON (Activation)
 
@@ -2640,10 +2722,10 @@ Apparaît uniquement sur les cues personnalisées. Cliquez-le pour **revenir au 
 En bas de l'onglet Son, un bouton :
 
 ```
-[ 🔄 Restaurer tous les sons livrés ]
+[ ↺ Restaurer tous les sons par défaut ]
 ```
 
-Cliquez-le pour **restaurer les sept sons par défaut** en une seule action. Les sons personnalisés sont écrasés. **Cette action est définitive** — les fichiers personnalisés sont perdus.
+Cliquez-le pour **restaurer les 15 bruitages et le décompte par défaut** en une seule action. Les sons personnalisés sont écrasés. **Cette action est définitive** — les fichiers personnalisés sont perdus.
 
 **Utilité** : Après avoir testé plusieurs sons personnalisés, ramener rapidement la salle à une configuration « neuve ».
 
@@ -2712,14 +2794,14 @@ Les questions créées avant les manches restent « Sans manche » : aucune conv
 
 ## Son Attaché à une Question (v11.1.0, #219)
 
-En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un **son personnel à une question individuelle** (types SPEEDY, QCM, ARDOISE uniquement). Ce son joue au lancement de la question et peut configurer le chronomètre de réponse.
+En plus des bruitages d'événement du jeu (v11.0, puis par type de jeu en v11.6.0), vous pouvez attacher un **son personnel à une question individuelle**. Ce son joue au lancement de la question et peut configurer le chronomètre de réponse. Les types concernés sont SPEEDY, QCM, ARDOISE ; depuis v11.6.0, aussi MEMORY, MEMOTION (son de manche et sons de carte) et ENTRACTE (voir « Son par type de question » plus bas).
 
 ### Attacher un son à une question
 
 **Procédure** :
 
-1. Allez à `/admin/quiz` et sélectionnez une question SPEEDY, QCM ou ARDOISE
-2. Faites défiler jusqu'au bloc **« Son »** (onglet Questions, dans le formulaire de la question)
+1. Allez à `/admin/quiz` et sélectionnez une question SPEEDY, QCM, ARDOISE, MEMORY, MEMOTION ou ENTRACTE
+2. Faites défiler jusqu'au bloc **« Son »** (onglet Questions, dans le formulaire de la question ; son libellé dépend du type, voir plus bas)
 3. Cliquez **« Choisir un fichier »** et sélectionnez un fichier `.wav`
 4. Le serveur **valide instantanément** le fichier selon les spécifications ci-dessous
 5. Une fois accepté, le bouton affiche **« Son attaché »** (pastille verte)
@@ -2731,14 +2813,57 @@ En plus des sept bruitages d'événement du jeu (v11.0), vous pouvez attacher un
 
 | Paramètre | Valeur | Raison |
 |---|---|---|
-| Extension | **`.wav`** seulement | Décision utilisateur. Aucune conversion serveur ni navigateur |
+| Extension | **`.wav`** seulement | Décision utilisateur. Les formats compressés (MP3, M4A) sont refusés |
 | Conteneur | **RIFF/WAVE valide** | Sinon, fichier rejeté au téléversement |
-| Codec | **PCM** (non compressé) | Un seul contexte audio pour toute l'application |
-| Fréquence | **44 100 Hz** exactement | Imposée par le pilote matériel (#228) |
-| Canaux | **Stéréo (2 canaux)** ou mono (1 canal) | Stéréo préféré pour les sons mélodiques |
-| Profondeur | **16 bits** | Qualité CD standard, équilibre taille/qualité |
+| Codec à l'upload | **PCM** 8, 16, 24 ou 32 bits, ou **flottant 32 bits** | Converti à l'upload (#232) ; le fichier stocké est toujours PCM 16 bits |
+| Fréquence à l'upload | **8 000 à 192 000 Hz** | Rééchantillonné à **44 100 Hz** (un seul contexte audio pour toute l'application) |
+| Canaux à l'upload | **Stéréo (2 canaux)** ou mono (1 canal) | Un mono est dupliqué sur les deux voies ; le fichier stocké est stéréo |
+| Profondeur stockée | **16 bits** | Qualité CD standard, équilibre taille/qualité |
 | Durée | **Maximum 30 s** ; aucun avertissement | Permet des introductions musicales, enregistrements vocal, vidéos silencieuses avec son |
-| Taille fichier | **Maximum 6 Mio** | Un son de 30 s pèse ~2.6 Mo, cette limite laisse de la marge |
+| Taille fichier | **Maximum 6 Mio** après conversion ; **24 Mio** avant conversion | Un son de 30 s pèse ~2.6 Mo en stéréo 16 bits, cette limite laisse de la marge |
+
+Un fichier converti est signalé à l'écran (« converti depuis … »). Le détail de la conversion est dans « Formats acceptés » du bloc des bruitages ci-dessus.
+
+### Son par type de question (v11.6.0, #235)
+
+Le libellé du bloc son dans l'éditeur dépend du type de question :
+
+| Type | Bloc dans l'éditeur | Quand le son joue | Chronomètre |
+|---|---|---|---|
+| SPEEDY, QCM, ARDOISE | « Son de la question » | Au lancement | « Chrono démarre » (voir « Modes de démarrage ») |
+| MEMORY | « Son de la question » | Au lancement de la manche (phase de mémorisation comprise) | « Chrono démarre » enregistré ; son effet dépend du chronomètre global de la question (**à vérifier en QUALIF**) |
+| MEMOTION (hôte) | « Son de la manche » | Au lancement de la manche | Pas de « Chrono démarre » (réglage forcé à faux) |
+| ENTRACTE | « Son de l'entracte » | À l'activation de l'entracte, après le bruitage d'entracte | Pas de « Chrono démarre » ; lecture **une fois** ou **en boucle** |
+
+#### Sons de carte MEMOTION
+
+Chaque carte MEMOTION peut porter **son propre son**, indépendant du son de la manche. Son bloc **« Son de la carte »** comporte :
+- le fichier (WAV, 30 s maximum, mêmes règles de conversion que ci-dessus) ;
+- **« Chrono de la carte démarre »** : **Début** (le chrono de la carte part avec le son) ou **À la fin** (le chrono attend la fin du son) ;
+- **« Lecture de la carte »** : **Une fois** ou **En boucle**.
+
+**« À la fin » et « En boucle » sont incompatibles** (une boucle n'a pas de fin) : activer l'un désactive automatiquement l'autre.
+
+Une carte sonore porte la puce **♪** dans l'éditeur, et la question entière la porte dès qu'une de ses cartes a un son.
+
+**Règles de lecture** :
+- Au retournement d'une carte sonore, son son **remplace** le son en cours, y compris celui de la manche. Le son de la manche **ne reprend pas** à la fermeture de la carte.
+- Une carte **sans** son laisse le son de la manche jouer.
+- Le son de la carte s'arrête à la fermeture de la carte, à la révélation et à l'arrêt de la manche.
+- En mode « À la fin », le chrono de la carte démarre à la fin du son (ou à l'arrêt par l'animateur). Si la partie est en pause au moment où le chrono devrait démarrer (fin du son ou arrêt par l'animateur pendant la pause), le chrono démarre à la reprise de la partie. Il est abandonné à la fermeture de la carte ou à la révélation.
+- **Le décompte ne se joue jamais pendant un son de manche ou de carte.**
+- **Fichier manquant** : si le fichier d'une carte est indisponible, la carte se retourne quand même, **sans son**, et le motif s'affiche (« FILE »).
+- **Rejouer** rejoue la carte ouverte, ou l'entracte si elle est en cours ; sinon il rejoue le son de la manche.
+
+#### Son d'entracte
+
+- Le son d'entracte démarre à l'**activation** de l'entracte et s'arrête à la **sortie**, à l'arrêt de la partie (STOP), à la nouvelle partie et à la restauration d'une sauvegarde.
+- **Entracte programmée** (« à suivre ») : le son joue automatiquement.
+- **Entracte activée à la main** : le son ne joue **que si la question chargée est une ENTRACTE** portant un son. Une entracte activée pendant une autre question reste muette.
+
+#### Restauration de sauvegarde
+
+Une restauration de sauvegarde **coupe le son en cours** (manche, carte ou entracte). Un média ne survit jamais à une restauration.
 
 ### Modes de démarrage du chronomètre
 
@@ -2782,7 +2907,7 @@ Pendant une question avec son attaché, l'animateur voit une **rangée de trois 
 | ⏸ **Pause** (alternée ▶ Reprendre) | Pause/Reprise | Met le son en pause. En mode différé, le chronomètre pause aussi. Le bouton bascule en ▶ pour reprendre. |
 | ⏹ **Stop** | Arrêt | Arrête le son définitivement. En mode différé, **libère le chronomètre immédiatement** — la réponse continue sans attendre la fin du son. |
 
-Ces trois gestes n'apparaissent **que si** une question en cours porte un son attaché.
+Ces trois gestes n'apparaissent **que si** une question en cours porte un son attaché. Sur une manche MEMOTION, ils agissent sur le son de la carte ouverte lorsqu'une carte sonore est sélectionnée (voir « Son par type de question »).
 
 ### Coûts disque et sauvegarde
 
@@ -2800,6 +2925,8 @@ Une question avec son attaché **conserve son son** si vous :
 - Modifiez le mode de démarrage du chronomètre (simultané ↔ différé)
 
 **Le son n'est supprimé que si vous cliquez explicitement le bouton « Supprimer le son »**.
+
+Les **sons de carte MEMOTION** suivent la même règle : une carte qui garde son fichier garde son son, et ses réglages (chrono « À la fin », boucle) ; le son d'une carte n'est supprimé que par « Supprimer le son » de cette carte, ou quand la carte disparaît.
 
 ### Comportement en cas de dégradation
 
@@ -2867,11 +2994,87 @@ Cette alerte :
 
 ---
 
+## Réglages d'ambiance par manche (v11.6.0, #290)
+
+Le son et l'éclairage ont **trois niveaux de réglage** :
+
+1. **Global** — le réglage persisté, dans **Ambiance › Son** et **Ambiance › Lumière**.
+2. **Manche** — une surcharge propre à une manche. Elle ne concerne que les questions de cette manche.
+3. **Geste direct** — un geste de régie depuis le popover **Ambiance** ou les interrupteurs de la page.
+
+**Précédence** : pour chaque réglage, le niveau le plus précis qui le définit l'emporte : geste direct, puis manche, puis global. Un réglage non surchargé par la manche est **« Hérité »** : il suit le global.
+
+**Quand la manche s'applique** :
+- à l'entrée d'une question de la manche (prête à jouer), et non à chaque question suivante de la même manche ;
+- immédiatement, si vous modifiez la surcharge pendant que la manche est en cours.
+
+**Quand le geste direct s'efface** : au changement de manche, et à une nouvelle partie. Un geste direct vaut donc jusqu'à la fin de la manche en cours.
+
+**Une manche n'écrit jamais le global.** Si un geste direct porte sur un réglage imposé par la manche en cours, le global n'est pas modifié : le geste vaut pour la manche seulement. Un message l'indique : « Appliqué à la manche en cours seulement (la manche impose ce réglage). » Il s'affiche sur tous les gestes retenus par la manche : popover Son, popover Éclairage, écran Son de la page Ambiance (son coupé, bruitages, décompte) et section « Mode d'éclairage par défaut ».
+
+### Réglages surchargeables
+
+| Réglage | Valeurs |
+|---|---|
+| Son | Coupé ou ON |
+| Décompte actif | Actif ou Inactif |
+| Lecture du décompte | Une fois ou En boucle |
+| Chacun des 15 bruitages | Hérité, Actif ou Inactif |
+| Mode d'éclairage | Hérité, ON, AUTO ou OFF |
+| Fichier de chaque bruitage et du décompte | Hérité (fichier global) ou fichier propre à la manche (voir « Fichiers de son propres à une manche ») |
+
+**Jamais surchargeables** : « Bruitages activés » (sortie audio, qui exige un redémarrage), le périphérique et la compensation de latence, « Éclairage d'ambiance activé », le pont Hue et les ampoules, le Flash de la régie.
+
+### Éditer la surcharge d'une manche
+
+Dans l'éditeur de manches, le bouton **🎛** de la manche (« Ambiance de la manche ») ouvre la fenêtre **« Ambiance de la manche « X » »** :
+- le badge indique « Hérite tout du réglage global » ou « N réglages surchargés » (avec les fichiers : « N réglages et M fichiers surchargés ») ;
+- le bouton « Tout remettre à « Hérité » » efface toute la surcharge, et supprime les fichiers propres à la manche (voir plus bas) ;
+- Enregistrer applique les réglages à la manche (sans toucher au global). Il n'envoie pas les fichiers.
+
+Le bouton 🎛 est absent sur « Sans manche » et sur une manche en cours de création. Une manche qui porte une surcharge affiche le badge « 🎛 Ambiance : N réglage(s) » ; une manche qui porte des fichiers propres affiche aussi « Fichier X : propre à la manche » dans son titre.
+
+### Fichiers de son propres à une manche
+
+Chaque bruitage et le décompte ont une colonne **Fichier** dans la fenêtre « Ambiance de la manche » :
+
+| État de la ligne | Affichage | Actions |
+|---|---|---|
+| **Hérité** | Nom du fichier global (`<cue>.wav`), « défaut » ou « personnalisé », durée | Remplacer… (crée un fichier propre à la manche), Tester |
+| **Fichier de la manche** | Chemin, durée, badge « manche » | Remplacer…, Revenir au fichier global, Tester, Écouter ici |
+| **Fichier introuvable** | « fichier introuvable, le son global est joué » | Remplacer…, Revenir au fichier global ; pas de Tester ni d'Écouter ici |
+
+- **Effet immédiat** : Remplacer…, Revenir au fichier global et Tester agissent tout de suite, indépendamment d'Enregistrer et d'Annuler. Annuler ne défait pas un fichier déjà remplacé.
+- **Formats et durées identiques au catalogue** : WAV, conversion automatique à l'upload, 5 s pour un bruitage, 30 s pour le décompte (voir « Formats acceptés »).
+- **Lecture** : la manche joue son fichier. Si le fichier est absent ou invalide, le **son global est joué** à la place, et l'écran le signale. Un fichier introuvable ne devient jamais un silence.
+- **Tester** joue le fichier effectif de la ligne (celui de la manche, sinon le global), même si le bruitage est désactivé. **Écouter ici** joue dans le navigateur, sans passer par l'enceinte.
+- **Tout remettre à Hérité** demande une confirmation qui indique le nombre de fichiers à supprimer. Si une suppression échoue, le message est : « Erreur : N fichier(s) de la manche non supprimé(s) (noms). Les réglages n'ont pas été remis à « Hérité » : réessayez. » Dans ce cas, les réglages ne sont pas remis à Hérité : relancez l'action une fois le problème réglé.
+- **Suppression de la manche** : ses fichiers propres sont supprimés avec elle.
+- **Restauration du catalogue** (« Restaurer » d'un bruitage, « Restaurer tous les sons par défaut ») : sans effet sur les fichiers propres aux manches.
+- **Sauvegarde et remise à zéro « médias »** : les fichiers propres aux manches sont inclus dans la sauvegarde « médias ». La remise à zéro « médias » supprime **tous** les sons, fichiers de manche compris, mais laisse les références dans `rounds.json` : les lignes concernées passent alors en « fichier introuvable, le son global est joué ». « Revenir au fichier global » supprime ces références.
+- **Limite connue (Windows)** : remplacer un fichier de manche pendant qu'il est en cours de lecture peut échouer ponctuellement (« accès refusé »). Renvoyez le fichier une fois la lecture terminée.
+
+### Popover Ambiance pendant une manche
+
+Quand la manche en cours impose des réglages, le popover affiche « Manche « X » : N réglages imposés » et marque « manche » sur les réglages concernés. Le pied du popover rappelle qu'un geste ici l'emporte sur la manche jusqu'au prochain changement de manche.
+
+### Mode d'éclairage par défaut
+
+Dans **Ambiance › Lumière**, la section **« Mode d'éclairage par défaut »** règle le mode d'éclairage **global** (ON, AUTO ou OFF). Sans réglage, le mode est AUTO. Le popover Éclairage reste un geste direct : il ne change jamais ce mode par défaut.
+
+Si une manche impose le mode d'éclairage, un changement fait dans cette section n'est pas écrit dans le réglage global : la page affiche le message « Appliqué à la manche en cours seulement (la manche impose ce réglage). ». Le mode choisi s'applique pendant la manche en cours, comme un geste direct, jusqu'au prochain changement de manche ; le mode par défaut global reste inchangé. Si le mode choisi est déjà celui que la manche impose, il est écrit dans le réglage global, sans message.
+
+### Après un redémarrage
+
+Au démarrage, aucune question n'est chargée : la surcharge de manche ne s'applique qu'à la prochaine question prête à jouer. Les réglages globaux s'appliquent dès le démarrage.
+
+**Limite connue** : si la manche en cours est supprimée, elle garde son identifiant affiché (et non son nom) jusqu'au prochain changement de manche, mais sa surcharge n'est plus appliquée.
+
 ## Ambiance : son coupé et éclairage (v11.4.0)
 
 Le bouton **Ambiance** de l'en-tête ouvre un popover regroupant la lumière et le son :
 
-- **Son** : l'interrupteur coupe tous les sons (bruitages, son de question, son de décompte). Le choix est conservé après redémarrage. Les réglages des sons restent en place : réactiver le son les rétablit tels quels.
+- **Son** : l'interrupteur coupe tous les sons (bruitages, son de question, son de décompte). Le choix est conservé après redémarrage. Les réglages des sons restent en place : réactiver le son les rétablit tels quels. Pendant une manche qui impose le son coupé ou actif, ce geste vaut pour la manche seulement (voir « Réglages d'ambiance par manche »).
 - **Éclairage** : les commandes ON / AUTO / OFF et Flash. Quand l'éclairage est désactivé, elles n'ont aucun effet et le popover propose un lien vers **Ambiance › Lumière**.
 
 L'interrupteur général de l'éclairage (« Éclairage d'ambiance activé ») se trouve en tête de l'onglet **Ambiance › Lumière**.
@@ -2883,7 +3086,7 @@ Un son peut jouer pendant tout compte à rebours de question (tous les chronos).
 - **Ce qui est joué** : le fichier `decompte.wav` (un son par défaut est fourni, de 2 secondes). Il peut être remplacé ou restauré depuis **Ambiance › Son**.
 - **Quand il ne joue pas** : jamais si la question a un son attaché (une image seule ne l'empêche pas) ; en RAFALE, il est joué par manche, pas par question.
 - **Au buzz** : le décompte continue, le son aussi.
-- **Réglages** : désactiver le décompte, ou le jouer une seule fois au lieu d'en boucle.
+- **Réglages** : section **Décompte** du panneau Son (Ambiance › Son, onglet Global) — « Décompte actif » (Actif / Inactif) et « Lecture du décompte » (Une fois / En boucle). Le fichier se remplace toujours depuis la ligne « Sons longs ». Ces deux réglages peuvent être imposés par une manche (voir « Réglages d'ambiance par manche »).
 
 ## Lecture en boucle du son de question (v11.4.0)
 

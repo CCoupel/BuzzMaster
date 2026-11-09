@@ -427,6 +427,12 @@ Envoye par l'animateur (`/anim`) ou l'administrateur (`/admin`) pour contrôler 
    - `QUESTION_SOUND_UNAVAILABLE` → `""` | `"DISABLED"` | `"OUTPUT"` | `"FILE"` (motif de blocage, si la question est bloquée avant STARTED par manque de média)
    - `SOUND_GATE_BYPASSED` → `true` si l'admin a déverrouillé via Ctrl+clic, `false` sinon
 
+**Addendum v11.6.0 (#235, LOT-2) — propriétaire du son courant** : nouveau champ diffusé dans le même `UPDATE` que `QUESTION_SOUND_STATE` :
+   - `QUESTION_SOUND_OWNER` → `""` | `"HOST"` | `"CARD:<cardID>"` | `"ENTRACTE"` — indique quel média joue actuellement (son de question/manche, son de carte MEMOTION, son d'entracte). `""` à IDLE. Toujours sérialisé (pas d'`omitempty`).
+   - `QUESTION_SOUND_STATE` reflète le média **courant**, quel qu'en soit le propriétaire ; un son de carte remplace le son d'hôte sans reprise à la fermeture de la carte.
+   - Restauration de sauvegarde (`POST /restore`, pas une action WS) : coupe le média courant (hôte, carte ou entracte) avant les diffusions de restauration.
+   - Action `QUESTION_SOUND` (`PLAY`, `PAUSE`, `RESUME`, `STOP`) : `PLAY` rejoue la carte ouverte ou l'entracte en cours, sinon le son d'hôte.
+
 **Cycle de vie du son par commande** :
 
 | Commande | Phase valide | Avant | Après |
@@ -1681,13 +1687,16 @@ Fixe en une action la structure complète : manches (ordre, noms, questions), qu
 - **Refus global** (`ROUNDS_UPDATE_RESULT { STATUS: "REFUSED", REASON }`, rien n'est appliqué, `WARN ROUNDS_UPDATE_REFUSED`) :
   `INVALID_NAME`, `TOO_MANY_ROUNDS` (plus de 50), `UNKNOWN_ROUND`, `INVALID_DECISION`, `MISSING_ROUND_DECISION`,
   `DUPLICATE_QUESTION`, `UNKNOWN_QUESTION`, `INCOMPLETE`, `QUESTION_ID_EXHAUSTED` (plus assez d'identifiants libres, de 1 à 999, pour créer les entractes demandées),
-  `INCONSISTENT_STORE`, `ROUNDS_FILE_UNREADABLE`, `QUESTION_IN_PROGRESS` (suppression de la question courante hors repos), `WRITE_FAILED`.
+  `INCONSISTENT_STORE`, `ROUNDS_FILE_UNREADABLE`, `QUESTION_IN_PROGRESS` (suppression de la question courante hors repos), `WRITE_FAILED`,
+  `INVALID_AMBIANCE` (#290 : `ROUNDS[].AMBIANCE` invalide — clé inconnue, type non booléen, `light.mode` hors `ON`/`AUTO`/`OFF`, cue absente du registre ; chemins fautifs dans `QUESTIONS`, ex. `r2:sound.cues.qcm-indce`).
 - **Identité** : le nom du dossier `data/files/questions/<ID>/`. Aucun chemin n'est construit à partir d'un ID non validé.
 - **Ordre des effets** : validation complète ; réservation des IDs ; écriture de `rounds.json` (échec : `WRITE_FAILED`) ;
   réécriture des `question.json` modifiés, puis création des entractes ; **suppressions en dernier** ; mise à jour de l'état et
   diffusions seulement en cas de succès.
 - **Diffusions** : `UPDATE` (`ROUNDS`, `ROUND_CONTEXT`), `QUESTIONS` (admin), `NEXT_QUESTION` (anim).
-- **Résultat** : `ROUNDS_UPDATE_RESULT { STATUS: "APPLIED", ROUNDS: [{ID, NAME}], CREATED_ENTRACTES: [{ROUND_ID, START_ID, END_ID}], DELETED_QUESTIONS: [ids] }`.
+- **Résultat** : `ROUNDS_UPDATE_RESULT { STATUS: "APPLIED", ROUNDS: [{ID, NAME, AMBIANCE}], CREATED_ENTRACTES: [{ROUND_ID, START_ID, END_ID}], DELETED_QUESTIONS: [ids] }`.
+- **Surcharge d'ambiance par manche (#290)** : `ROUNDS[].AMBIANCE` (objet `Partial`, voir `docs/DATA_MODELS.md`, « Modèles v11.6.0 ») est **optionnel** dans la requête. Absent ⇒ surcharge existante conservée ; `{}` ⇒ surcharge effacée. Appliqué **immédiatement** si la manche est la manche effective. `sound.files` (fichiers de son propres à la manche) est **ignoré** par `ROUNDS_UPDATE` : il est toujours recopié depuis l'existant ; seule l'API REST `/api/rounds/{id}/sounds` l'écrit (`docs/PROTOCOLS.md`). Aucune action WebSocket nouvelle : les gestes directs et les fichiers restent en REST.
+- **`GameState.AMBIANCE_EFFECTIVE`** (`{ SETTINGS, SOURCES, ROUND_ID }`) est diffusé dans l'`UPDATE` à chaque changement de résolution (changement de manche, `NEW_GAME`, `RESTORE`, `ROUNDS_UPDATE`, gestes directs). Tous clients web ; jamais `omitempty`.
 
 ### NEXT_QUESTION étendu (anim)
 

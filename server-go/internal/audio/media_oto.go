@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -47,7 +46,7 @@ type otoMediaPlayer struct {
 func newPlatformMediaPlayer(cfg OutputConfig, onNaturalEnd func()) MediaPlayer {
 	ctx, err := sharedOtoContext()
 	if err != nil {
-		log.Printf("audio: oto context unavailable — question sound media disabled (silent degradation, contracts/sound.md §10.2/§5.5): %v", err)
+		logf(LogWarn, "audio: oto context unavailable — question sound media disabled (silent degradation, contracts/sound.md §10.2/§5.5): %v", err)
 		return neutralMediaPlayer{}
 	}
 	return &otoMediaPlayer{ctx: ctx, onNaturalEnd: onNaturalEnd, state: MediaIdle}
@@ -147,7 +146,7 @@ func (p *otoMediaPlayer) monitor(gen uint64, player *oto.Player, loop bool) {
 			// SectionReader rembobinée, même génération, State() inchangé.
 			passes++
 			if _, err := p.section.Seek(0, io.SeekStart); err != nil {
-				log.Printf("audio: loop rewind failed, stopping loop: %v", err)
+				logf(LogWarn, "audio: loop rewind failed, stopping loop: %v", err)
 				loop = false
 			} else {
 				next := p.ctx.NewPlayer(p.section)

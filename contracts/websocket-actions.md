@@ -905,6 +905,7 @@ Fixe **en une action** la structure complète : liste ordonnée des manches, que
 | ROUNDS[].NAME | string | ✅ | 1 à 60 caractères après suppression des espaces de bord |
 | ROUNDS[].QUESTIONS | []string | ✅ | IDs des questions de la manche, dans l'ordre (peut être vide) |
 | ROUNDS[].ENTRACTES | boolean | ⬜ | **Nouvelle manche seulement** (ignoré pour une manche existante) : créer les deux entractes automatiques (ci-dessous). **Absent = `true`** *(décision utilisateur : création automatique par défaut)* |
+| ROUNDS[].AMBIANCE | object | ⬜ | ✨ **v11.6.0 (#290)** — surcharge partielle des réglages d'ambiance (`contracts/ambiance-settings.md` §3.2 ; `models.md` §Manches). **Absent** : manche existante ⇒ surcharge **conservée** telle quelle ; nouvelle manche ⇒ `{}` (tout hérité). `{}` explicite ⇒ **efface** la surcharge. Validé (`INVALID_AMBIANCE`). Appliqué **immédiatement** si la manche est la manche effective (`ambiance-settings.md` §4.1). **r3** : la clé `sound.files` est **ignorée et conservée** depuis l'existant (écrite seulement par `POST/DELETE /api/rounds/{id}/sounds/{cue}`) ; une manche supprimée perd son dossier `sounds/rounds/<ID>/` |
 | UNASSIGNED | []string | ✅ | IDs « Sans manche », dans l'ordre |
 | DELETED_ROUNDS | array | ⬜ | Manches **supprimées** par ce message, avec le choix fait dans la fenêtre de suppression |
 | DELETED_ROUNDS[].ID | string | ✅ | ID d'une manche existante |
@@ -921,6 +922,7 @@ Fixe **en une action** la structure complète : liste ordonnée des manches, que
 
 **Validation (refus global, rien appliqué)** → `ROUNDS_UPDATE_RESULT{STATUS:"REFUSED", REASON}` à l'émetteur et `WARN ROUNDS_UPDATE_REFUSED` :
 - `INVALID_NAME` : nom vide ou de plus de 60 caractères ;
+- `INVALID_AMBIANCE` ✨ *(v11.6.0, #290)* : `ROUNDS[].AMBIANCE` invalide — `light.mode` hors `{ON, AUTO, OFF}`, cue inconnue du registre, clé inconnue ou type non booléen (`QUESTIONS` = liste des chemins fautifs, ex. `r2:sound.cues.qcm-indce`). Jamais ignoré en silence ;
 - `TOO_MANY_ROUNDS` : plus de 50 manches ;
 - `UNKNOWN_ROUND` : ID fourni (dans `ROUNDS` ou `DELETED_ROUNDS`) mais inconnu ;
 - `INVALID_DECISION` : `DELETED_ROUNDS[].QUESTIONS` ∉ {`KEEP`, `DELETE`}, ou manche à la fois dans `ROUNDS` et dans `DELETED_ROUNDS` ;
@@ -949,7 +951,7 @@ Les questions d'une manche supprimée **ne sont pas** citées par le client : le
 
    ```
    ROUNDS_UPDATE_RESULT{STATUS:"APPLIED",
-     ROUNDS:[{ID, NAME}],
+     ROUNDS:[{ID, NAME, AMBIANCE}],   // AMBIANCE depuis v11.6.0 (#290), {} si hérité
      CREATED_ENTRACTES:[{ROUND_ID, START_ID, END_ID}],
      DELETED_QUESTIONS:[ids]}
    ```
@@ -2762,3 +2764,21 @@ est refusé.
 > **Liste fermée, volontairement.** Une action ajoutée plus tard au protocole sans décision explicite
 > sera refusée pendant l'entracte — bruyamment, dans les journaux — plutôt que silencieusement
 > permise. Un test balaie l'ensemble des actions du protocole pour que cet arbitrage reste conscient.
+
+---
+
+### Amendements v11.6.0 — média audio MEMOTION / ENTRACTE et surcharge par manche (#235, #290)
+
+- **`MEMOTION_SELECT` / retournement de carte** (`handleMotionFlip`) *(#235, `sound.md` §14.4)* : si la carte retournée
+  porte un `SOUND`, le média courant (hôte ou carte précédente) est remplacé ; **aucun refus** si le fichier est
+  indisponible (la carte s'ouvre, `QUESTION_SOUND_UNAVAILABLE` renseigné). `SOUND_TIMER_DELAYED` de la carte ⇒ le chrono de
+  la carte ne démarre qu'à la fin du premier passage ou au `QUESTION_SOUND{STOP}`.
+- **`MEMOTION_DONE`** *(#235)* : arrête le son de carte ; le son d'hôte **ne reprend pas** (D9).
+- **`ENTRACTE_SET`** *(#235, `sound.md` §14.3)* : `ACTIVE:true` démarre le `SOUND` de l'entracte (boucle si `SOUND_LOOP`)
+  après la cue `entracte-debut` ; `ACTIVE:false` l'arrête. Même chose pour l'entrée/sortie automatique par « à suivre ».
+- **`QUESTION_SOUND`** *(#235)* : `PLAY`/`PAUSE`/`RESUME`/`STOP` agissent sur le **média courant** quel que soit son
+  propriétaire (`GameState.QUESTION_SOUND_OWNER`). Matrice d'émetteurs inchangée.
+- **`UPDATE`** *(#290)* : `GameState` gagne `AMBIANCE_EFFECTIVE` (`game-state.md`), diffusé à tous les clients web ;
+  `ROUNDS[].AMBIANCE` toujours présent. Aucune action WebSocket nouvelle : les gestes directs restent REST
+  (`ambiance-settings.md` §4.2 ; `lighting.md` §10.1.3).
+

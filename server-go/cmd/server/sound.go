@@ -24,6 +24,7 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"sync"
 
@@ -67,17 +68,23 @@ var soundSiteRegistry = map[soundSite]soundDecision{
 	{Func: "handleTeamPoints"}:        {"team points (CueGagne)"},
 	{Func: "handleBumperPointsBatch"}: {"grouped player award (CueGagne once for the batch, #254)"},
 	{Func: "handleTeamPointsBatch"}:   {"grouped team award (CueGagne once for the batch, #244/#251)"},
-	{Func: "handleMotionDone"}:        {"MEMOTION winner (CueGagne) — the auto-stop branch carries no cue"},
-	{Func: "handleFlipMemoryCard"}: {"flip-back branch only (CuePerdu) — match/complete branches carry no cue; " +
+	{Func: "handleMotionDone"}: {"MEMOTION winner (CueGagne) or card closed without winner (CueMemotionFinCarte, #231) — " +
+		"the auto-stop branch carries no cue"},
+	{Func: "handleFlipMemoryCard"}: {"applied flip: pair found (CueMemoryPaire) or card turned (CueMemoryCarte), #231; " +
+		"a missed pair keeps CuePerdu after the flip-back delay. Several cues, ONE per event (D4) — " +
 		"same per-function collapsing limit as contract lighting.md §6.3/§7, cannot be narrowed further by this test"},
-	{Func: "broadcastReveal"}: {"answer revealed (CueReveal)"},
+	{Func: "broadcastQCMHint"}:   {"QCM hint strikes an answer (CueQCMIndice, #231)"},
+	{Func: "handleMotionSelect"}: {"MEMOTION card chosen from the grid (CueMemotionSelection, #231)"},
+	{Func: "broadcastReveal"}:    {"answer revealed (CueReveal)"},
 	{Func: "handleEntracteSet"}: {"CueEntracteDebut / CueEntracteFin depending on payload.Active — " +
 		"manual toggle, idempotence guard already present (contract lighting.md §10.5 precedent)"},
 	{Func: "onPhaseStarted"}: {"CueDepart / CueEntracteDebut / silence, front-detected against the phase " +
 		"BEFORE this transition (soundTrackPhase) — a resume-after-PAUSE (Continue()) must never sound " +
 		"depart again; see _work/reports/plan-verif-front-227-20260921-103500.md"},
-	{Func: "setupCallbacks"}: {"OnRafaleInvalid (CuePerdu, classic RAFALE invalidate/timeout only, never the " +
-		"MEMOTION-card-scoped variant) and OnTimeUp (CueTempsEcoule) callbacks wired here"},
+	{Func: "setupCallbacks"}: {"OnRafaleInvalid (CueRafaleMauvaise — replaces CuePerdu, D4 #231 — classic RAFALE " +
+		"invalidate/timeout only), OnRafaleCorrect (CueRafaleBonne) / OnRafaleCardInvalid (CueRafaleMauvaise, card-scoped), " +
+		"OnRafaleLotEnd (CueRafaleFinLot — fired AFTER the verdict cue, review m1) and " +
+		"OnTimeUp (CueTempsEcoule) callbacks wired here"},
 }
 
 // ---------------------------------------------------------------------------
@@ -173,10 +180,92 @@ func (a *App) buildAudioOutput() audio.Output {
 // audio.Engine directly (not via newSoundEngine, kept Bank-less above for
 // test-writer's #227 suite).
 func (a *App) setupSound() {
+	wireAudioLogger()
+	out := a.buildAudioOutput()
 	a.soundEngine.Store(audio.NewEngine(audio.Config{
-		Output: a.buildAudioOutput(),
+		Output: out,
 		Bank:   a.buildSoundBank(),
 	}))
+	a.recordSoundBoot(out)
+}
+
+// soundBootState : état de la sortie audio au démarrage (#283). Figé : la
+// tentative d'ouverture est unique (contrat GET /api/sound/status).
+type soundBootState struct {
+	enabled bool
+	output  string // ok | unavailable | disabled
+	reason  string // "" si ok
+}
+
+// wireAudioLogger branche le journal de internal/audio sur le logger serveur
+// (/ws/logs + fichier), composant AUDIO.
+func wireAudioLogger() {
+	audio.SetLogger(func(level audio.LogLevel, format string, args ...any) {
+		switch level {
+		case audio.LogError:
+			server.LogError(game.LogComponentAudio, format, args...)
+		case audio.LogWarn:
+			server.LogWarn(game.LogComponentAudio, format, args...)
+		default:
+			server.LogInfo(game.LogComponentAudio, format, args...)
+		}
+	})
+}
+
+// recordSoundBoot détermine l'état de la sortie, le mémorise et écrit la ligne
+// de démarrage unique (#283 P1).
+func (a *App) recordSoundBoot(out audio.Output) {
+	sc := config.Get().Sound
+	st := &soundBootState{enabled: sc.Enabled}
+	switch {
+	case !sc.Enabled:
+		st.output, st.reason = "disabled", "sound.enabled=false"
+	case audio.IsNeutral(out):
+		st.output = "unavailable"
+		st.reason = audio.OutputReason()
+		if st.reason == "" {
+			st.reason = "audio output unavailable"
+		}
+	default:
+		st.output = "ok"
+	}
+	a.soundBoot.Store(st)
+
+	device := sc.Device
+	if device == "" {
+		device = "default"
+	}
+	format := "sound: enabled=%t output=%s reason=%q device=%s format=%dHz/%dch/%dbit (config: %s)"
+	args := []any{st.enabled, st.output, st.reason, device, audio.SampleRate, audio.ChannelCount, audio.BitsPerSample, configAbsPath()}
+	if st.output == "unavailable" {
+		server.LogError(game.LogComponentAudio, format, args...)
+	} else {
+		server.LogInfo(game.LogComponentAudio, format, args...)
+	}
+}
+
+func configAbsPath() string {
+	p := config.ConfigPath()
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
+}
+
+// SoundDiagnostic implements server.SoundDiagnosticProvider (#283 P2).
+// `enabled` = valeur au démarrage ; restart_required si sound.enabled courant
+// diffère de celle-ci.
+func (a *App) SoundDiagnostic() (enabled bool, output, reason string, restartRequired bool) {
+	st := a.soundBoot.Load()
+	if st == nil {
+		return false, "disabled", "sound not initialised", false
+	}
+	live := config.Get().Sound.Enabled
+	if live != st.enabled {
+		return st.enabled, "restart_required",
+			fmt.Sprintf("enabled flipped %t→%t after startup", st.enabled, live), true
+	}
+	return st.enabled, st.output, st.reason, false
 }
 
 // startSoundEngine starts the engine's playback goroutine — same lifecycle
@@ -234,17 +323,18 @@ func (a *App) startSoundEngine() {
 // (CuesDisabled absent/empty/nil), the condition is always false and the
 // behaviour is identical to the bit to what #227 shipped.
 func (a *App) notifySound(c audio.Cue) {
-	// #286 (contract sound.md §11.2): the régie's mute switch, first guard.
-	if config.Get().Sound.Muted {
-		return
-	}
+	// Hardware guard first, unchanged (ambiance-settings.md §4.4).
 	if !config.Get().Sound.Enabled {
 		return
 	}
-	if config.Get().Sound.CuesDisabled[string(c)] {
+	// #290: muted and the per-cue switches are read RESOLVED (global ← round ← direct).
+	s := a.ambianceSettings()
+	if s.SoundMuted || !s.CueEnabled(string(c)) {
 		return
 	}
-	a.sound().PlayCue(c)
+	// r3 (#290): the resolved file (the round's own, or the catalogue); FileBank.PCMAt falls
+	// back on the catalogue file when the round's file is missing.
+	a.sound().PlayCueAt(c, s.SoundFiles[string(c)])
 }
 
 // ---------------------------------------------------------------------------

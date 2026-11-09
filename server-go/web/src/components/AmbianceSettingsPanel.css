@@ -1,0 +1,25 @@
+/* #231/#290 — AmbianceSettingsPanel (composant mutualisé global / surcharge) */
+.ambiance-settings-panel { border: 1px solid var(--primary-100, #e0e7ff); border-radius: 0.6rem; padding: 0.6rem 0.8rem; margin-top: 0.8rem; }
+.asp-title { margin: 0 0 0.4rem; font-size: 0.95rem; }
+.asp-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.8rem; margin: 0.3rem 0; }
+.asp-label { font-size: 0.8rem; font-weight: 600; min-width: 11rem; }
+.asp-tri { display: inline-flex; border: 1px solid var(--gray-300, #d1d5db); border-radius: 0.5rem; overflow: hidden; }
+.asp-tri button { border: 0; border-right: 1px solid var(--gray-300, #d1d5db); background: #fff; color: var(--gray-600, #4b5563); padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.asp-tri button:last-child { border-right: 0; }
+.asp-tri button.is-selected { background: var(--primary, #4f46e5); color: #fff; }
+.asp-tri button.is-selected.is-inherit { background: var(--primary-100, #e0e7ff); color: #3730a3; }
+.asp-tri button:disabled { opacity: 0.5; cursor: not-allowed; }
+.asp-inherit { font-size: 0.72rem; font-style: italic; color: var(--gray-500, #6b7280); }
+.asp-subtabs { display: flex; gap: 0.25rem; border-bottom: 2px solid var(--gray-200, #e5e7eb); margin: 0.6rem 0 0.4rem; flex-wrap: wrap; }
+.asp-subtab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -2px; padding: 0.35rem 0.7rem; font-size: 0.8rem; color: var(--gray-600, #4b5563); cursor: pointer; }
+.asp-subtab.is-active { color: var(--primary, #4f46e5); border-color: var(--primary, #4f46e5); font-weight: 700; }
+.asp-subtab .asp-count { display: inline-block; min-width: 1.1rem; padding: 0 0.3rem; margin-left: 0.3rem; border-radius: 999px; background: var(--gray-200, #e5e7eb); font-size: 0.68rem; text-align: center; }
+.asp-subtab .asp-dot { color: var(--primary, #4f46e5); margin-left: 0.2rem; }
+.asp-file { font-size: 0.78rem; min-width: 14rem; }
+.asp-file-acts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.asp-file-acts button { font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem; border: 1px solid var(--gray-300, #d1d5db); background: #fff; cursor: pointer; }
+.asp-file-acts button:disabled { opacity: 0.5; cursor: wait; }
+.asp-file-acts .is-ghost { border-style: dashed; }
+.asp-file-name { font-weight: 600; }
+.asp-file-badge { margin-left: 0.3rem; font-size: 0.65rem; font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 999px; background: var(--primary-100, #e0e7ff); color: #3730a3; }
+.asp-file-missing { color: #b45309; }

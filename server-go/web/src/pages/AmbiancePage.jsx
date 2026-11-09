@@ -9,6 +9,8 @@ import { useSoundStatus, notifySoundChanged } from '../hooks/useSoundStatus'
 import { soundStateLabel } from '../utils/soundState'
 import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
 import SoundsManager from '../components/SoundsManager'
+import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
+import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
 import '../styles/tabs.css'
@@ -318,6 +320,27 @@ export default function AmbiancePage() {
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
     } finally {
       setSavingMaster(false)
+    }
+  }
+
+  // #290 (LOT-4) — « Mode d'éclairage par défaut » : réglage persisté `lighting.default_mode`
+  // (ambiance-settings.md §2), édité par le composant mutualisé en mode global (section Lumière).
+  const [savingDefaultMode, setSavingDefaultMode] = useState(false)
+  const handleDefaultModeChange = async (field, value) => {
+    if (field !== 'light.mode' || !value) return
+    setSavingDefaultMode(true)
+    try {
+      const res = await saveLighting({ default_mode: value })
+      if (!res.ok) throw new Error(await res.text())
+      const roundScope = await isRoundScope(res)
+      await afterSave()
+      // La manche impose le mode : le geste n'a pas modifié le défaut persisté → retour visuel.
+      if (roundScope) setToast({ message: ROUND_SCOPE_MESSAGE, type: 'warning' })
+    } catch (error) {
+      console.error('Set lighting default_mode failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setSavingDefaultMode(false)
     }
   }
 
@@ -1054,6 +1077,22 @@ export default function AmbiancePage() {
           </section>
         )}
 
+        {configLoaded && step === 3 && (
+          <section className="ambiance-step" aria-labelledby="ambiance-default-mode-title">
+            <h2 id="ambiance-default-mode-title" className="ambiance-step-title">Réglages d'ambiance — Lumière</h2>
+            <AmbianceSettingsPanel
+              mode="global"
+              value={{ light: { mode: lighting.default_mode || 'AUTO' } }}
+              onChange={handleDefaultModeChange}
+              sections={['light']}
+              disabled={savingDefaultMode}
+            />
+            <p className="ambiance-hint">
+              Mode appliqué au démarrage et quand aucune manche ni geste direct ne le surcharge.
+            </p>
+          </section>
+        )}
+
         {/* ---------------- Étape 3 : choisir et tester les ampoules ---------------- */}
         {configLoaded && step === 3 && (
           <section
@@ -1321,6 +1360,34 @@ export default function AmbiancePage() {
                 {soundStateLabel(soundStatus.active)}
               </span>
             </div>
+            {/* #283 — cause lisible sous la pastille (pastille inchangée) et
+                bannière « Redémarrage requis » (output = restart_required). */}
+            {soundStatus.reason && !['unavailable', 'disabled', 'restart_required'].includes(soundStatus.output) && !soundStatus.restartRequired && (
+              <p className="ambiance-hint sound-output-reason" data-output={soundStatus.output || ''}>
+                {soundStatus.reason}
+              </p>
+            )}
+            {soundStatus.output === 'unavailable' && (
+              <div className="sound-unavailable-banner" role="alert">
+                <strong>Enceinte indisponible.</strong> Aucun périphérique de sortie n'a répondu au
+                démarrage (<span className="sound-output-cause">{soundStatus.reason || 'cause inconnue'}</span>).
+                Branchez ou connectez l'enceinte, puis redémarrez le serveur. « Écouter ici » lit les
+                sons dans le navigateur et reste disponible.
+              </div>
+            )}
+            {soundStatus.output === 'disabled' && (
+              <div className="sound-restart-banner" role="status">
+                <strong>Bruitages désactivés</strong> dans <code>config.json</code> (<code>sound.enabled = false</code>).
+                Activez l'interrupteur puis redémarrez.
+              </div>
+            )}
+            {soundStatus.restartRequired && (
+              <div className="sound-restart-banner" role="alert">
+                <strong>Redémarrage requis.</strong> L'interrupteur a changé depuis le lancement du
+                serveur : la sortie audio n'est ouverte qu'au démarrage (un seul contexte audio par
+                processus). Redémarrez le serveur pour appliquer.
+              </div>
+            )}
             <p className="ambiance-hint">
               {/* Maquette rév. 5 — interrupteur général ASYMÉTRIQUE : éteindre
                   coupe le fan-out immédiatement (lu à chaque déclenchement,

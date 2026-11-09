@@ -6,6 +6,7 @@ import { useLightingStatus } from '../hooks/useLightingStatus'
 import { lightingStateTitle, normalizeLightingState } from '../utils/lightingState'
 import LightingBulbIcon from './LightingBulbIcon'
 import AmbiancePopoverPanel from './AmbiancePopoverPanel'
+import { countRoundSources } from '../utils/ambianceSettings'
 import { useSoundStatus } from '../hooks/useSoundStatus'
 import { soundStateTitle } from '../utils/soundState'
 import SoundSpeakerIcon from './SoundSpeakerIcon'
@@ -110,12 +111,15 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
   // Repli défensif : useLightingStatus() applique ce défaut lui-même
   // (EMPTY_LIGHTING_STATUS), mais un mock de test ou un serveur antérieur
   // au Batch 2 peut renvoyer un statut sans `mode` — jamais planter dessus.
-  const lightingMode = lightingStatus.mode || 'AUTO'
+  // #290 — réglages RÉSOLUS (global ← manche ← direct) diffusés par le serveur ; repli : statuts historiques.
+  const eff = gameState.AMBIANCE_EFFECTIVE
+  const effSettings = eff?.SETTINGS || null
+  const lightingMode = effSettings?.light?.mode || lightingStatus.mode || 'AUTO'
   // #286 — interrupteur général coupé (Ambiance › Lumière) : le pilote est
   // détaché (state 'disabled') MAIS un pont reste associé. Sans pont, rien.
   const lightingSwitchedOff = lightingStatus.enabled === false && !!lightingStatus.bridge_ip
   const showLightingSection = lightingConfigured || lightingSwitchedOff
-  const soundMuted = soundStatus.muted === true
+  const soundMuted = typeof effSettings?.sound?.muted === 'boolean' ? effSettings.sound.muted : soundStatus.muted === true
   // Bouton « Ambiance » (ex-« Éclairage », #286) : présent dès qu'un pont est
   // associé OU que le son est actif (ou coupé — sinon le garde-fou « soirée
   // muette oubliée » disparaîtrait avec le son).
@@ -484,6 +488,13 @@ export default function Navbar({ connectionStatus = 'disconnected', clientCounts
                   soundMuted={soundMuted}
                   refreshSound={refreshSound}
                   ambianceHref={getFullPath('ambiance')}
+                  ambiance={eff ? {
+                    settings: effSettings,
+                    sources: eff.SOURCES || null,
+                    roundId: eff.ROUND_ID || '',
+                    roundName: (gameState.ROUNDS || []).find(r => r.ID === eff.ROUND_ID)?.NAME || eff.ROUND_ID || '',
+                    roundCount: countRoundSources(eff.SOURCES),
+                  } : null}
                 />
               </div>
             )}

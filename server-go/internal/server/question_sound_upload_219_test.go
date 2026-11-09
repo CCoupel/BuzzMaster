@@ -285,11 +285,12 @@ func TestQuestionSoundUpload_RefusesNonWavExtension(t *testing.T) {
 	}
 }
 
+// #232 (v11.6.0) : un 48 kHz mono est converti (voir sound_upload_232_test.go). L'intention CA2 « un son
+// refusé rejette TOUTE la sauvegarde » est conservée avec un format réellement refusé (compressé, tag 0x55).
 func TestQuestionSoundUpload_RefusesNonCanonicalFormat(t *testing.T) {
 	server, dataDir := setupTestHTTPServer(t)
 
-	// 48kHz mono — structurally valid WAV, wrong format (contract §3).
-	bad := tw219hBuildWAV(1, 48000, 16, 48000*1*2*2)
+	bad := tw232uAssemble(0x55, 2, 44100, 16, make([]byte, 4000))
 	req := tw219hNewUploadRequest(t, tw219hUploadFields{
 		number: "1", question: "Q", answer: "A", points: "1", time: "20",
 		soundFileName: "sound.wav", soundFileContent: bad,
@@ -298,7 +299,7 @@ func TestQuestionSoundUpload_RefusesNonCanonicalFormat(t *testing.T) {
 	server.mux.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for a non-canonical WAV, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("expected 400 for a compressed WAV, got %d: %s", w.Code, w.Body.String())
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "files", "questions", "1", "question.json")); !os.IsNotExist(err) {
 		t.Error("CA2 : un son refusé doit rejeter TOUTE la sauvegarde — question.json ne doit pas exister")
@@ -323,10 +324,8 @@ func TestQuestionSoundUpload_RefusesOver30Seconds(t *testing.T) {
 func TestQuestionSoundUpload_RefusesOverByteLimit(t *testing.T) {
 	server, _ := setupTestHTTPServer(t)
 
-	// The handler caps its read at MaxQuestionSoundBytes+1 via
-	// io.LimitReader before even validating the format — any file whose
-	// RAW SIZE exceeds the cap is refused with 413, regardless of content.
-	huge := make([]byte, audio.MaxQuestionSoundBytes+1024)
+	// #232 : plafond d'entrée brute = 4 × MaxQuestionSoundBytes ; un vrai WAV au-delà ⇒ 413.
+	huge := tw232uAssemble(1, 2, 44100, 16, make([]byte, 4*int(audio.MaxQuestionSoundBytes)+1024))
 	req := tw219hNewUploadRequest(t, tw219hUploadFields{
 		number: "1", question: "Q", answer: "A", points: "1", time: "20",
 		soundFileName: "sound.wav", soundFileContent: huge,
@@ -335,7 +334,7 @@ func TestQuestionSoundUpload_RefusesOverByteLimit(t *testing.T) {
 	server.mux.ServeHTTP(w, req)
 
 	if w.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("expected 413 for a file over the byte cap, got %d: %s", w.Code, w.Body.String())
+		t.Fatalf("expected 413 for a file over the raw cap, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

@@ -369,6 +369,26 @@ ANSWER_TIMER_WAITING  bool    // true si chronomètre est figé en attente de fi
 - `QUESTION_SOUND_STATE` = "IDLE" par défaut (no sound attached, or sound finished)
 - `ANSWER_TIMER_WAITING` = false par défaut (timer running or no sound)
 
+### Champ GameState — propriétaire du son (v11.6.0, #235)
+
+```go
+QUESTION_SOUND_OWNER  string  // "" | "HOST" | "CARD:<cardID>" | "ENTRACTE" (propriétaire du média sonore courant)
+```
+
+- `HOST` = son de la question (tous types, hôte MEMOTION compris) ; `CARD:<cardID>` = son de la carte MEMOTION retournée ; `ENTRACTE` = son d'entracte.
+- **Sérialisation** : **Jamais `omitempty`** — toujours présent dans GameState. Par défaut `""` (IDLE).
+- Éphémère comme `QUESTION_SOUND_STATE` : la valeur suit le média courant, elle est remise à `""` à l'arrêt ou à la fin du média. Le champ est posé par l'adaptateur `cmd/server/question_sound.go` via `SetQuestionSoundOwner` (`internal/game/engine.go`), selon `contracts/game-state.md`.
+
+### Champ GameState — réglages d'ambiance effectifs (v11.6.0, #290)
+
+```go
+AMBIANCE_EFFECTIVE  { SETTINGS, SOURCES, ROUND_ID }   // réglages résolus : global ← manche ← geste direct
+```
+
+- `SETTINGS` : réglages effectifs (forme complète) ; `SOURCES` : `"global"`, `"round"` ou `"direct"` pour chaque champ ; `ROUND_ID` : manche effective (`""` hors manche).
+- **Sérialisation** : toujours présent, jamais `omitempty`. Non persisté (dérivé).
+- Recalculé et diffusé à chaque changement de résolution : changement de manche à la mise en prêt d'une question, `NEW_GAME`, `RESTORE`, `ROUNDS_UPDATE`, gestes directs (`POST /config.json` sound/lighting, `POST /api/lighting/mode`).
+
 ### Actions WebSocket pour Son (v11.1.0)
 
 **Client (Admin + Animateur) → Serveur** (allow-list `admin`, `anim`) :

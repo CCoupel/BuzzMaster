@@ -1,0 +1,96 @@
+<!--
+mockup:
+  composant: admin_navbar
+  feature: ambiance_popover_round_source
+  version: 11.6.0
+  type: ui
+  issue: "#290"
+  validee_le: 2026-11-09
+  complete: [docs/mockup/v11.4.0/ui/admin_navbar__ambiance_popover.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>En-tête admin — popover « Ambiance » : état effectif et source « manche » (#290)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --ok:#16a34a; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+.mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+.mock-note { max-width:1200px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; }
+.mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1200px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.tabs { display:flex; gap:.4rem; margin:.4rem 0 .9rem; }
+.tab { padding:.4rem .8rem; border-radius:.45rem; font-size:.85rem; background:var(--gray-100); color:var(--gray-600); }
+.tab.active { background:var(--primary); color:#fff; font-weight:700; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.6rem 0 .4rem; }
+.subtab { padding:.35rem .7rem; font-size:.8rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; }
+.subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+.subtab .n { display:inline-block; min-width:1.1rem; padding:0 .3rem; margin-left:.3rem; border-radius:999px; background:var(--gray-200); font-size:.68rem; text-align:center; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th, td { text-align:left; padding:.45rem .5rem; border-bottom:1px solid var(--gray-200); vertical-align:middle; }
+th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+td small { display:block; color:var(--gray-500); font-size:.72rem; }
+tr.sep-row td { background:var(--gray-50); font-weight:700; color:var(--gray-700); }
+.btn { font:inherit; font-size:.78rem; padding:.3rem .6rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; cursor:pointer; }
+.btn.ghost { border-style:dashed; } .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.sw { display:inline-block; width:1.9rem; height:1.05rem; border-radius:999px; background:var(--gray-300); position:relative; vertical-align:middle; }
+.sw::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.75rem; height:.75rem; border-radius:50%; background:#fff; }
+.sw.on { background:var(--primary); } .sw.on::after { left:1rem; }
+.badge { display:inline-flex; align-items:center; gap:.35rem; font-size:.75rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:#dcfce7; color:#166534; }
+.badge.off { background:var(--gray-200); color:var(--gray-600); } .badge.warn { background:var(--amberbg); color:var(--amber); } .badge.err { background:#fee2e2; color:#991b1b; }
+.badge.round { background:var(--primary-100); color:#3730a3; }
+.tag { display:inline-block; margin-left:.5rem; font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.1rem .4rem; border-radius:.3rem; background:var(--primary-100); color:var(--primary); vertical-align:middle; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:.4rem 0 0; }
+.warn { font-size:.78rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--warning); }
+.err { font-size:.78rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--error); }
+.row { display:flex; align-items:center; flex-wrap:wrap; gap:.8rem; margin:.3rem 0; }
+.lbl { font-size:.8rem; font-weight:600; color:var(--gray-700); min-width:11rem; }
+.tristate { display:inline-flex; border:1px solid var(--gray-300); border-radius:.5rem; overflow:hidden; }
+.tristate span { padding:.35rem .7rem; font-size:.8rem; font-weight:600; color:var(--gray-600); background:#fff; border-right:1px solid var(--gray-300); cursor:pointer; }
+.tristate span:last-child { border-right:0; }
+.tristate .sel-on { background:var(--warning); color:#fff; } .tristate .sel-auto { background:var(--gray-600); color:#fff; } .tristate .sel-off { background:var(--error); color:#fff; }
+.tristate .sel-ok { background:var(--ok); color:#fff; } .tristate .sel-inherit { background:var(--primary-100); color:#3730a3; }
+.inherit { font-size:.72rem; color:var(--gray-500); font-style:italic; }
+.dim { opacity:.5; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette — état :</strong>
+<label><input type="radio" name="st" value="g" checked> Hors manche surchargée (v11.4.0 à l'identique)</label>
+<label><input type="radio" name="st" value="r"> Manche « Blind-test » active : lumière ON et décompte inactif imposés par la manche</label>
+<label><input type="radio" name="st" value="d"> Idem + geste direct : l'animateur a coupé le son depuis le popover</label>
+</div>
+<div class="mock-note">Popover <b>« Ambiance »</b> (v11.4.0, <code>.navbar-popover</code>, présenté en entier). Il affiche désormais l'<b>état effectif</b> (<code>GameState.AMBIANCE_EFFECTIVE</code>) et, pour chaque réglage imposé par la manche courante, une mention <b>« manche »</b>. Un geste depuis le popover s'applique immédiatement et vaut <b>jusqu'au prochain changement de manche</b> (mention « direct ») ; il n'est enregistré dans la configuration globale que si la manche courante ne surcharge pas ce réglage. Le badge d'en-tête garde ses couleurs (ON ambre, OFF rouge, Son coupé toujours visible).</div>
+<h2 class="mock-h">01 — En-tête + popover ouvert</h2>
+<div style="max-width:1000px;margin:0 auto;background:#fff;border:2px dashed var(--gray-300);overflow:hidden;position:relative">
+  <div style="background:linear-gradient(90deg,#312e81,#4338ca);color:#fff;display:flex;align-items:center;gap:.5rem;padding:.5rem .8rem;white-space:nowrap;font-size:.85rem">
+    <b>BuzzControl</b><span style="opacity:.8">Préparation ▾</span><span style="opacity:.8">Jeu</span><span style="opacity:.8">Scores</span>
+    <span style="margin-left:auto;display:flex;gap:.4rem;align-items:center"><span id="hb" style="font-size:.7rem;font-weight:600;padding:2px 8px;border-radius:.3rem;background:var(--gray-400)">🎛 Ambiance · AUTO</span><span id="hm" class="badge err" hidden>🔇 Son coupé</span></span>
+  </div>
+  <div style="position:absolute;right:.8rem;top:2.6rem;width:360px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.75rem;box-shadow:0 8px 16px rgba(0,0,0,.12);padding:1rem;z-index:5">
+    <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;color:var(--gray-600)">Ambiance — conduite en direct</div>
+    <div id="roundLine" class="badge round" style="margin:.5rem 0" hidden>Manche « Blind-test » : 3 réglages imposés</div>
+    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-top:.6rem">Éclairage général <span class="tag" id="srcL" hidden>manche</span></div>
+    <div class="row"><span class="tristate" id="tl"><span>ON</span><span class="sel-auto">AUTO</span><span>OFF</span></span><label class="btn" style="margin:0">⚡ Flash</label></div>
+    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--gray-500);margin-top:.6rem">Son <span class="tag" id="srcS" hidden>manche</span></div>
+    <div class="row"><span class="tristate" id="ts"><span class="sel-ok">ON</span><span>Coupé</span></span><span class="hint" id="hs">Bruitages, média de question et son de décompte.</span></div>
+    <div class="row" id="cdRow"><span class="inherit">Décompte : <b id="cdV">actif, en boucle</b> <span class="tag" id="srcC" hidden>manche</span></span></div>
+    <p class="hint" id="foot">Réglages détaillés : Ambiance › Son / Lumière.</p>
+  </div>
+  <div style="height:260px;background:var(--gray-100)"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);function sel(id,i,cls){[...$(id).children].forEach((s,k)=>s.className=k===i?cls:'');}
+function r(k){const rd=k!=='g',d=k==='d';$('roundLine').hidden=!rd;$('srcL').hidden=!rd;$('srcC').hidden=!rd;$('srcS').hidden=true;sel('tl',rd?0:1,rd?'sel-on':'sel-auto');$('cdV').textContent=rd?'inactif':'actif, en boucle';sel('ts',d?1:0,d?'sel-off':'sel-ok');$('hm').hidden=!d;$('hb').textContent=rd?'🎛 Ambiance · ON':'🎛 Ambiance · AUTO';$('hb').style.background=rd?'var(--warning)':'var(--gray-400)';$('hs').textContent=d?'Coupé par un geste direct — vaut jusqu\'au prochain changement de manche (la manche ne fixe pas le son : réglage global mis à jour).':'Bruitages, média de question et son de décompte.';$('foot').textContent=rd?'Un geste ici l\'emporte sur la manche jusqu\'au prochain changement de manche. Réglages de la manche : éditeur de manches › 🎛.':'Réglages détaillés : Ambiance › Son / Lumière.';}
+document.querySelectorAll('input[name=st]').forEach(e=>e.addEventListener('change',x=>r(x.target.value)));r('g');
+</script>
+
+</body>
+</html>

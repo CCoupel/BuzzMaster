@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"buzzcontrol/internal/ambiancecfg"
 )
 
 // DefaultTickInterval is the production period of the engine tickers (global
@@ -396,6 +398,19 @@ type Engine struct {
 	// here; see _work/reports/plan-verif-front-227-20260921-103500.md §1.
 	// No payload, same convention as OnRafaleTeamsChanged.
 	OnRafaleInvalid func()
+	// OnRafaleLotEnd (v11.6.0, #231, contracts/sound.md §2.1 `rafale-fin-lot`)
+	// fires when a RAFALE lot ends — pool exhausted or RAFALE_MAX_QUESTIONS
+	// reached — for the classic round (fireRafaleAdvanceCallbacks) and for a
+	// MEMOTION card's mini-round (fireRafaleCardAdvanceCallbacks). Sound-only,
+	// no payload; the global chrono's expiry stays OnTimeUp (`temps-ecoule`).
+	OnRafaleLotEnd func()
+	// OnRafaleCorrect / OnRafaleCardInvalid (v11.6.0, #231 review m1) fire on an
+	// explicit RAFALE_VALIDATE (classic and card-scoped) / a card-scoped
+	// RAFALE_INVALIDATE, BEFORE the advance callbacks — so that the verdict cue
+	// (`rafale-bonne` / `rafale-mauvaise`) precedes `rafale-fin-lot` when the
+	// answer ends the lot. Sound-only, no payload.
+	OnRafaleCorrect     func()
+	OnRafaleCardInvalid func()
 	// OnRafaleCardAnswer (#217, v9.0.0, contracts/rafale.md §14.6) is
 	// OnRafaleAnswer's card-scoped counterpart: fires whenever a new
 	// question is drawn for a RAFALE-in-card mini-round — card round start
@@ -2178,6 +2193,23 @@ func (e *Engine) SetQuestionSoundState(state QuestionSoundState) {
 	e.state.QuestionSoundState = state
 }
 
+// SetAmbianceEffective stores the resolved ambiance settings published in
+// GameState.AMBIANCE_EFFECTIVE (v11.6.0, #290). Derived by cmd/server, never persisted.
+func (e *Engine) SetAmbianceEffective(eff ambiancecfg.Effective) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.AmbianceEffective = eff
+}
+
+// SetQuestionSoundOwner sets GameState.QuestionSoundOwner (v11.6.0, #235) —
+// "" | "HOST" | "CARD:<cardID>" | "ENTRACTE". Called only by the question-sound
+// adapter (cmd/server), like SetQuestionSoundState.
+func (e *Engine) SetQuestionSoundOwner(owner string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.QuestionSoundOwner = owner
+}
+
 // SetQuestionSoundUnavailable pushes the media-availability verdict for the
 // CURRENT question into GameState (v11.1/#219/#236/#237, 2026-09-23,
 // contract sound.md §10.8.2/§10.8.7) — computed entirely by the application
@@ -3298,6 +3330,9 @@ func (e *Engine) rotateRafaleTeam() {
 // look identical on the wire too). Must be called with e.mu NOT held.
 func (e *Engine) fireRafaleAdvanceCallbacks(result rafaleAdvanceResult) {
 	if result.roundEnded {
+		if e.OnRafaleLotEnd != nil {
+			e.OnRafaleLotEnd()
+		}
 		// #202: persist the released pre-fetch's rafaleUsed flag, if any —
 		// AFTER e.mu was released by the caller (RafaleValidate/
 		// RafaleInvalidate/the question-timer goroutine), matching the
@@ -3346,6 +3381,9 @@ func (e *Engine) RafaleValidate() error {
 
 	if result.guardFailed {
 		return ErrRafaleNotInQuestion
+	}
+	if e.OnRafaleCorrect != nil {
+		e.OnRafaleCorrect()
 	}
 	e.fireRafaleAdvanceCallbacks(result)
 	return nil
@@ -5738,6 +5776,9 @@ func (e *Engine) advanceRafaleCardUnsafe(correct bool) rafaleCardAdvanceResult {
 // classic round (contract §6.1). Must be called with e.mu NOT held.
 func (e *Engine) fireRafaleCardAdvanceCallbacks(result rafaleCardAdvanceResult) {
 	if result.roundEnded {
+		if e.OnRafaleLotEnd != nil {
+			e.OnRafaleLotEnd()
+		}
 		if e.OnStateChange != nil {
 			// Not a real phase transition (Phase/MotionSubPhase stay put,
 			// contract §14.3) — reused purely as "please rebroadcast full
@@ -5777,6 +5818,9 @@ func (e *Engine) RafaleValidateCard(cardID string) error {
 	if result.guardFailed {
 		return ErrRafaleCardNotFound
 	}
+	if e.OnRafaleCorrect != nil {
+		e.OnRafaleCorrect()
+	}
 	e.fireRafaleCardAdvanceCallbacks(result)
 	return nil
 }
@@ -5797,6 +5841,9 @@ func (e *Engine) RafaleInvalidateCard(cardID string) error {
 	if result.guardFailed {
 		return ErrRafaleCardNotFound
 	}
+	if e.OnRafaleCardInvalid != nil {
+		e.OnRafaleCardInvalid()
+	}
 	e.fireRafaleCardAdvanceCallbacks(result)
 	return nil
 }
@@ -5812,6 +5859,18 @@ func (e *Engine) FlipMemoryCard(cardID string) (isMatch bool, shouldFlipBack boo
 	defer e.mu.Unlock()
 	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMemoryCardUnsafe(cardID, false, "")
 	return
+}
+
+// FlipMemoryCardApplied is FlipMemoryCard plus `applied` — true iff the card was
+// actually flipped (not refused: wrong phase, already flipped, grid locked…).
+// Used by the sound layer (#231 `memory-carte` / `memory-paire`): a refused
+// flip must stay silent.
+func (e *Engine) FlipMemoryCardApplied(cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete, applied bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var refusal string
+	isMatch, shouldFlipBack, flipDelay, isComplete, refusal = e.flipMemoryCardUnsafe(cardID, false, "")
+	return isMatch, shouldFlipBack, flipDelay, isComplete, refusal == ""
 }
 
 // flipMemoryCardUnsafe is FlipMemoryCard's body (#248): same logic, plus the
@@ -7562,6 +7621,14 @@ func (e *Engine) StartMotionCardTimer(delay int) {
 	startInfo := AnswerTimerStart{Kind: AnswerTimerMotionCard, Seconds: delay}
 	if e.state.Question != nil {
 		startInfo.QuestionSound = e.state.Question.Sound
+		// M1 (#235) : le son de la carte sélectionnée prime — le décompte ne doit pas
+		// jouer pendant ce média (sound.md §14.2/§14.4).
+		for i := range e.state.Question.MotionCards {
+			if c := &e.state.Question.MotionCards[i]; c.ID == e.state.MotionSelected && c.Sound != "" {
+				startInfo.QuestionSound = c.Sound
+				break
+			}
+		}
 	}
 	e.mu.RUnlock()
 	if e.OnAnswerTimerStarted != nil {
@@ -8089,6 +8156,15 @@ func (e *Engine) FlipMotionMemoryCard(motionCardID, cardID string) (isMatch, sho
 	defer e.mu.Unlock()
 	isMatch, shouldFlipBack, flipDelay, isComplete, _ = e.flipMotionMemoryCardUnsafe(motionCardID, cardID, false, "")
 	return
+}
+
+// FlipMotionMemoryCardApplied : FlipMotionMemoryCard plus `applied` (see FlipMemoryCardApplied).
+func (e *Engine) FlipMotionMemoryCardApplied(motionCardID, cardID string) (isMatch, shouldFlipBack bool, flipDelay int, isComplete, applied bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var refusal string
+	isMatch, shouldFlipBack, flipDelay, isComplete, refusal = e.flipMotionMemoryCardUnsafe(motionCardID, cardID, false, "")
+	return isMatch, shouldFlipBack, flipDelay, isComplete, refusal == ""
 }
 
 // flipMotionMemoryCardUnsafe is FlipMotionMemoryCard's body (#248), see

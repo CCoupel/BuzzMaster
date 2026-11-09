@@ -68,6 +68,7 @@
 - Le défaut choisi n'écrit jamais `POINTS_RULE` sur la carte. _(v11.2.2, memotion_card_points_rule, #190, 2026-10-13)_
 - Parité du montant selon `POINTS_RULE` limitée aux surfaces qui affichent déjà un montant (zoom anim, bandeau anim, bouton de crédit anim, panneau admin GamePage) ; les grilles anim (`AnimMotionGrid`) et TV (`PlayerDisplay`) restent en ★ seules, sans montant. _(v11.2.2, memotion_card_points_rule, #190, décision utilisateur 2026-10-15)_
 - Les cartes QCM d'une question MEMOTION n'ont pas d'indices : les contrôles d'indices sont retirés de l'éditeur de carte et le moteur n'en déclenche aucun pendant une carte (principe : pas d'indice sans effet sur les points ; option « prise en compte au crédit » écartée). _(v11.2.2, LOT-6, décision utilisateur 2026-10-15)_
+- Éditeur de carte MEMOTION : la ligne de lecture du son de carte s'intitule **« Lecture de la carte »** (et non « Lecture » comme la maquette §03) pour la distinguer de la ligne « Lecture » du son d'hôte ; blocs « Son de la manche » (hôte MEMOTION) et « Son de l'entracte » (ENTRACTE). _(v11.6.0, sound_memory_memotion_entracte, #235, revue LOT-2 point 8, 2026-11-09)_
 
 ## admin_pickers
 - Unification des sélecteurs catégorie / difficulté : tous les sites **sauf QuizMetaForm** (difficultés textuelles Facile…Expert, publics, langue — autre domaine). _(v11.2.2, category_difficulty_unified, #221, 2026-10-13)_
@@ -97,6 +98,9 @@
 ## admin_sounds_manager
 - Son de décompte joué au début de chaque chronomètre (global, question RAFALE, carte MEMOTION), rejoué si « en boucle » ; jamais si la question a un média audio pendant le chrono. _(v11.4.0, countdown_loop, #287, 2026-11-05)_
 - Commutateur une fois / en boucle réservé au média de question et au son de décompte, jamais aux bruitages. _(v11.4.0, #288, 2026-11-05)_
+
+## ambiance_settings_panel
+- Sous-titres de cues livrés après la review LOT-3 (D4), différents de la maquette `global_per_type_tabs` : « Erreur » — _Paire ratée en MEMORY_ (la réponse invalidée en RAFALE sonne désormais « Mauvaise réponse », `rafale-mauvaise`) ; « Fin de lot » — _Le réservoir est épuisé ou le nombre maximal de questions est atteint_ (l'expiration du chrono global reste « Temps écoulé »). La maquette validée n'est pas modifiée ; ces libellés font foi. _(v11.6.0, global_per_type_tabs, #231, commit 59083554, 2026-11-09)_
 
 ## admin_category_manager
 - La couleur se choisit en cliquant la pastille (palette), jamais par un champ séparé. _(v11.4.0, rename_color_delete, #285, 2026-11-05)_

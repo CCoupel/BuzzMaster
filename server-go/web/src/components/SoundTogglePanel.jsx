@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { notifySoundChanged } from '../hooks/useSoundStatus'
+import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 
 // #286 — section « Son » du popover « Ambiance » : sélecteur ON / OFF à DEUX
 // positions (le son n'a pas d'état automatique). Écrit `sound.muted` par
@@ -8,14 +9,16 @@ import { notifySoundChanged } from '../hooks/useSoundStatus'
 // affichée est celle que le serveur confirme (refresh() après réponse).
 // `muted` = on stocke ce qui est coupé : ON ⇔ !muted.
 
-export default function SoundTogglePanel({ muted, refresh }) {
+export default function SoundTogglePanel({ muted, refresh, source = 'global', roundActive = false }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
 
   const setMuted = async (next) => {
     if (busy || muted === next) return
     setBusy(true)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch('/config.json', {
         method: 'POST',
@@ -23,6 +26,7 @@ export default function SoundTogglePanel({ muted, refresh }) {
         body: JSON.stringify({ sound: { muted: next } }),
       })
       if (!res.ok) throw new Error(await res.text())
+      if (await isRoundScope(res)) setNotice(ROUND_SCOPE_MESSAGE)
       notifySoundChanged()
       if (refresh) await refresh()
     } catch (e) {
@@ -35,7 +39,9 @@ export default function SoundTogglePanel({ muted, refresh }) {
 
   return (
     <div className="sound-toggle-panel">
-      <p className="navbar-popover-section-title">Son</p>
+      <p className="navbar-popover-section-title">
+        Son{source === 'round' && <span className="ambiance-source-tag"> manche</span>}
+      </p>
       <div className="sound-toggle-row">
         <div className="lighting-mode-tristate" role="radiogroup" aria-label="Son">
           <button
@@ -59,7 +65,13 @@ export default function SoundTogglePanel({ muted, refresh }) {
             OFF
           </button>
         </div>
-        <span className="navbar-popover-hint">Bruitages, média de question et son de décompte.</span>
+        <span className="navbar-popover-hint">
+          {source === 'direct' && roundActive
+            ? 'Réglé par un geste direct — vaut jusqu\'au prochain changement de manche (la manche ne fixe pas le son : réglage global mis à jour).'
+            : source === 'round'
+              ? 'Imposé par la manche courante — un geste ici l\'emporte jusqu\'au prochain changement de manche (le réglage global n\'est pas modifié).'
+              : 'Bruitages, média de question et son de décompte.'}
+        </span>
       </div>
       {muted && (
         <p className="lighting-mode-warning" role="status">
@@ -68,6 +80,7 @@ export default function SoundTogglePanel({ muted, refresh }) {
           en cours est arrêté ; le chronomètre différé démarre immédiatement.
         </p>
       )}
+      {notice && <p className="lighting-mode-warning" role="status">{notice}</p>}
       {error && <p className="lighting-mode-warning is-error" role="alert">{error}</p>}
     </div>
   )

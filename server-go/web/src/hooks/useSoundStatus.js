@@ -19,7 +19,15 @@ export const SOUND_STATUS_URL = '/api/sound/status'
 export const SOUND_STATUS_INTERVAL_MS = 30_000
 export const SOUND_CHANGED_EVENT = 'buzzcontrol:sound-changed'
 
-export const EMPTY_SOUND_STATUS = Object.freeze({ active: false, muted: false })
+export const EMPTY_SOUND_STATUS = Object.freeze({
+  active: false,
+  muted: false,
+  // #283 — diagnostic (additif, absent d'un serveur antérieur à v11.6.0)
+  enabled: null,
+  output: null,
+  reason: null,
+  restartRequired: false,
+})
 
 /** À appeler après tout enregistrement touchant la section `sound`. */
 export function notifySoundChanged() {
@@ -41,7 +49,14 @@ export function useSoundStatus({ intervalMs = SOUND_STATUS_INTERVAL_MS } = {}) {
       }
       const data = await res.json()
       // #286 — `muted` (sound.muted, persisté) : absent = son non coupé.
-      const next = { active: normalizeSoundActive(data?.active), muted: data?.muted === true }
+      const next = {
+        active: normalizeSoundActive(data?.active),
+        muted: data?.muted === true,
+        enabled: typeof data?.enabled === 'boolean' ? data.enabled : null,
+        output: typeof data?.output === 'string' ? data.output : null,
+        reason: typeof data?.reason === 'string' && data.reason ? data.reason : null,
+        restartRequired: data?.restart_required === true || data?.output === 'restart_required',
+      }
       if (mountedRef.current) setStatus(next)
       return next
     } catch {

@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -34,6 +35,9 @@ type ValidationResult struct {
 	// to surface it (contracts/http-endpoints.md §Sound: `warning` field,
 	// null when absent, never an omitted key).
 	Warning string
+	// Converted / SourceFormat : conversion à l'upload (#232) — voir ConversionInfo.
+	Converted    bool
+	SourceFormat string
 }
 
 // ValidateUpload validates raw file bytes for #230's `POST
@@ -46,25 +50,43 @@ type ValidationResult struct {
 // Duration is computed from the header alone, without decoding:
 // len(pcm) / (SampleRate * ChannelCount * BytesPerSample).
 func ValidateUpload(raw []byte) (ValidationResult, error) {
-	pcm, err := extractCanonicalPCM(raw)
+	if len(raw) > MaxRawUploadBytes {
+		return ValidationResult{}, ErrTooLarge
+	}
+	// #232 : point d'entrée unique de conversion, appelé avant tout le reste.
+	// Un fichier déjà canonique ressort inchangé (chemin court).
+	pcm, info, err := toCanonical(raw, MaxSoundDuration)
 	if err != nil {
+		var tl *tooLongError
+		if errors.As(err, &tl) {
+			if canonicalBytesFor(tl.duration) > MaxUploadBytes {
+				return ValidationResult{}, ErrTooLarge
+			}
+			return ValidationResult{}, errSoundTooLong(tl.duration)
+		}
 		return ValidationResult{}, err
 	}
-
+	if len(pcm)+44 > MaxUploadBytes {
+		return ValidationResult{}, ErrTooLarge
+	}
 	duration := pcmDuration(pcm)
-	if duration > MaxSoundDuration {
-		return ValidationResult{}, fmt.Errorf(
-			"ce son dure %.1f s — la limite est de %d s (le moteur joue les sons l'un après l'autre ; un son long retarderait tous les suivants)",
-			duration.Seconds(), int(MaxSoundDuration.Seconds()))
+	if duration > MaxSoundDuration { // (plafond d'octets déjà vérifié ci-dessus)
+		return ValidationResult{}, errSoundTooLong(duration)
 	}
 
-	result := ValidationResult{PCM: pcm, Duration: duration}
+	result := ValidationResult{PCM: pcm, Duration: duration, Converted: info.Converted, SourceFormat: info.SourceFormat}
 	if duration > WarnSoundDuration {
 		result.Warning = fmt.Sprintf(
 			"ce son dure %.1f s — accepté, mais c'est long pour un bruitage (au-delà de %d s environ, il risque de déborder sur le moment de jeu suivant)",
 			duration.Seconds(), int(WarnSoundDuration.Seconds()))
 	}
 	return result, nil
+}
+
+func errSoundTooLong(d time.Duration) error {
+	return fmt.Errorf(
+		"ce son dure %.1f s — la limite est de %d s (le moteur joue les sons l'un après l'autre ; un son long retarderait tous les suivants)",
+		d.Seconds(), int(MaxSoundDuration.Seconds()))
 }
 
 // pcmDuration computes a canonical-format PCM buffer's playback duration

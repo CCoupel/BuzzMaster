@@ -221,7 +221,8 @@ interface Question {
   MEMORY_PAIRS?: MemoryPair[]
   MEMORY_CONFIG?: MemoryConfig
 
-  // MEMOTION (v5.0.0+)
+  // MEMOTION (v5.0.0+) — MotionCard : question-types.md §3 ; champs son de carte SOUND / SOUND_TIMER_DELAYED /
+  // SOUND_LOOP ajoutés en v11.6.0 (#235, question-types.md §3.1 amendement, sound.md §14.4)
   MEMOTION_CARDS?: MotionCard[]
   MEMOTION_MODE?: "SOLO" | "CHACUN_SON_TOUR" | "TANT_QUE_JE_GAGNE"
   MOTION_MEMORIZE_DURATION?: number  // Seconds for MEMORIZE phase in Secret Mode. 0 = standard mode (no memorization). (v5.5.0)
@@ -609,3 +610,13 @@ interface Round {
 - **Suppression d'une manche** : choix explicite `KEEP` (ses questions, entractes comprises, passent en fin de « Sans manche ») ou `DELETE` (ses questions, entractes comprises, sont supprimées).
 - **Types** : `ROUND_ID` est un champ commun à tous les types de question (ENTRACTE compris). Ce n'est pas un `OwnedField` ; il n'existe pas sur une carte MEMOTION.
 - **Repli** : l'état « déplié / replié » des manches dans l'éditeur est une **préférence d'affichage locale** au navigateur (`localStorage`) *(décision utilisateur)*. Elle n'est jamais envoyée au serveur.
+- **`AMBIANCE` ✨ (v11.6.0, #290)** : surcharge **partielle** des réglages d'ambiance pendant la manche —
+  `contracts/ambiance-settings.md` (forme `Partial`, §3.2 : `{ sound: { muted?, countdown: { enabled?, loop? }, cues: { <cue>: bool } }, light: { mode? } }`,
+  champ absent = hérité du global). `Round` devient `{ ID, NAME, AMBIANCE }`. **`rounds.json`** : clé optionnelle (absent ⇒ `{}`,
+  fichiers v11.2 inchangés) ; **`GameState.ROUNDS[]`** : toujours sérialisée (`{}` si hérité). Écrite par `ROUNDS_UPDATE`
+  (`ROUNDS[].AMBIANCE`, absent = conserver l'existant), validée (`INVALID_AMBIANCE`). Suit la manche (renommage, déplacement),
+  disparaît avec elle (`KEEP` : les questions passent « Sans manche », sans surcharge). Les fichiers des sons, le matériel
+  et `sound.enabled` ne sont **jamais** surchargeables (D7′). « Sans manche » n'a pas d'`AMBIANCE`.
+  **Révision 3 (#290)** : `AMBIANCE.sound.files[cue] = "rounds/<ID>/<cue>.wav"` — fichier de son propre à la manche (15 bruitages
+  + `decompte`), stocké sous `data/files/sounds/rounds/<ID>/`, écrit **uniquement** par `POST/DELETE /api/rounds/{ID}/sounds/{cue}`
+  (`ROUNDS_UPDATE` l'ignore et le conserve) ; dossier supprimé avec la manche ; `ambiance-settings.md` §9.

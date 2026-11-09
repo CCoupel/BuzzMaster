@@ -104,7 +104,7 @@ export function groupQuestionsByRound(questionsById, rounds) {
     })
   return {
     unassigned: unassigned.sort(compareInGroup),
-    rounds: list.map(r => ({ ID: r.ID, NAME: r.NAME, questions: byRound.get(r.ID).sort(compareInGroup) })),
+    rounds: list.map(r => ({ ID: r.ID, NAME: r.NAME, AMBIANCE: r.AMBIANCE, questions: byRound.get(r.ID).sort(compareInGroup) })),
   }
 }
 

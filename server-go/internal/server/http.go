@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"buzzcontrol/internal/ambiancecfg"
 	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/audio/synth"
 	"buzzcontrol/internal/config"
@@ -92,7 +93,9 @@ type HTTPServer struct {
 	// the live sound engine (#230, contracts/http-endpoints.md §Sound); nil
 	// provider is never expected in production (cmd/server always sets it,
 	// same as Lighting) but every accessor below is nil-safe regardless.
-	Sound              SoundProvider
+	Sound SoundProvider
+	// Ambiance (v11.6.0, #290) resolves global ← round ← direct (ambiance-settings.md).
+	Ambiance           AmbianceProvider
 	OnBuzzerWifiConfig func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
@@ -490,6 +493,8 @@ func (h *HTTPServer) setupRoutes() {
 	// Conduite manuelle — sélecteur tri-état + Flash (#208, contract §10.1)
 	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
 	h.mux.HandleFunc("/api/lighting/flash", h.handleLightingFlash)
+	h.mux.HandleFunc("/api/ambiance/settings", h.handleAPIAmbianceSettings) // #290
+	h.mux.HandleFunc("/api/rounds/", h.handleAPIRoundsRouter)               // #290 r3 — per-round sound files
 
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
@@ -1053,6 +1058,8 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		json.Unmarshal(data, &existingQuestion)
 	}
 
+	var cardSoundCommit func()      // suppressions de sons de cartes, après écriture réussie
+	cardWarnings := []cardWarning{} // #235 : avertissements de durée des sons de cartes
 	// Save question data
 	question := map[string]interface{}{
 		"ID":       id,
@@ -1460,6 +1467,20 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 						}
 					}
 				}
+				// #235 (v11.6.0) — sons de cartes : upload, effacement et
+				// PRÉSERVATION par ID de carte depuis le question.json existant.
+				cw, ccommit, crollback, cstatus, cmsg := applyMotionCardSounds(r, id, questionsDir, cards, existingQuestion)
+				if cstatus != 0 {
+					http.Error(w, cmsg, cstatus)
+					return
+				}
+				// m2 : un refus ultérieur (autre champ, son d'hôte) retire les fichiers de cartes créés.
+				defer func() {
+					if !committed {
+						crollback()
+					}
+				}()
+				cardWarnings, cardSoundCommit = cw, ccommit
 				question["MOTION_CARDS"] = cards
 			}
 		}
@@ -1598,31 +1619,41 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// soundTimerDelayed is a plain resubmitted-every-time form field (same
 	// discipline as qcm_hints_enabled above), never preserved from
 	// existingQuestion.
-	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true"
+	// #235 : MEMOTION (hôte) et ENTRACTE n'ont pas de chrono global — le différé est
+	// ignoré (écrit false), contracts/sound.md §14.3/§14.4.
+	noGlobalTimer := questionType == string(game.QuestionTypeMemotion) || questionType == string(game.QuestionTypeEntracte)
+	soundTimerDelayed := r.FormValue("sound_timer_delayed") == "true" && !noGlobalTimer
 	// sound_loop (v11.4.0, #288, contract sound.md §13.2): same discipline.
 	soundLoop := r.FormValue("sound_loop") == "true"
 	var soundWarning string
+	var soundConverted bool
+	var soundSourceFormat string
 	if soundFile, soundHeader, ferr := r.FormFile("sound"); ferr == nil {
 		defer soundFile.Close()
 		if !strings.EqualFold(filepath.Ext(soundHeader.Filename), ".wav") {
 			http.Error(w, "le son doit être un fichier .wav", http.StatusBadRequest)
 			return
 		}
-		raw, rerr := io.ReadAll(io.LimitReader(soundFile, audio.MaxQuestionSoundBytes+1))
+		raw, rerr := io.ReadAll(io.LimitReader(soundFile, audio.MaxRawQuestionSoundBytes+1))
 		if rerr != nil {
 			http.Error(w, "lecture du fichier son échouée", http.StatusBadRequest)
 			return
 		}
-		if int64(len(raw)) > audio.MaxQuestionSoundBytes {
-			http.Error(w, fmt.Sprintf("ce fichier pèse plus que la limite de %d Mio pour un son de question", audio.MaxQuestionSoundBytes>>20), http.StatusRequestEntityTooLarge)
+		if int64(len(raw)) > audio.MaxRawQuestionSoundBytes {
+			http.Error(w, fmt.Sprintf("ce fichier pèse plus que la limite de %d Mio pour un son de question", audio.MaxRawQuestionSoundBytes>>20), http.StatusRequestEntityTooLarge)
 			return
 		}
 
 		result, verr := audio.ValidateQuestionSound(raw)
 		if verr != nil {
-			http.Error(w, verr.Error(), http.StatusBadRequest)
+			status := http.StatusBadRequest
+			if errors.Is(verr, audio.ErrTooLarge) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			http.Error(w, verr.Error(), status)
 			return
 		}
+		soundConverted, soundSourceFormat = result.Converted, result.SourceFormat
 
 		randomNum := rand.Intn(9000) + 1000
 		fileName := fmt.Sprintf("sound_%d.wav", randomNum)
@@ -1644,7 +1675,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		// mode SIMULTANÉ. In mode différé the answer timer waits for the
 		// sound regardless of TIME, so the mismatch this warns about cannot
 		// occur.
-		if !soundTimerDelayed {
+		if !soundTimerDelayed && !noGlobalTimer {
 			if questionTime, terr := strconv.Atoi(r.FormValue("time")); terr == nil && questionTime > 0 {
 				if result.Duration > time.Duration(questionTime)*time.Second {
 					soundWarning = fmt.Sprintf(
@@ -1710,6 +1741,9 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	data, _ := json.MarshalIndent(question, "", "  ")
 	if werr := os.WriteFile(filepath.Join(questionsDir, "question.json"), data, 0644); werr == nil {
 		committed = true
+		if cardSoundCommit != nil {
+			cardSoundCommit()
+		}
 	}
 
 	LogInfo(game.LogComponentHTTP, "Question %s saved", id)
@@ -1721,8 +1755,11 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	respBody, _ := json.Marshal(map[string]interface{}{
-		"status":  "ok",
-		"warning": nullableString(soundWarning),
+		"status":        "ok",
+		"warning":       nullableString(soundWarning),
+		"converted":     soundConverted,
+		"source_format": nullableString(soundSourceFormat),
+		"card_warnings": cardWarnings,
 	})
 	w.Write(respBody)
 }
@@ -1924,6 +1961,13 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 		current := config.Get()
 		cfg := *current // value copy: every section is a plain struct, no aliasing
+		// #290 (ambiance-settings.md §4.2): resolved values and round layer BEFORE the merge,
+		// to tell which fields this request really changes (a "geste direct").
+		ambBefore, _ := h.ambianceSettingsNow()
+		var ambRound ambiancecfg.Partial
+		if h.Ambiance != nil {
+			ambRound = h.Ambiance.AmbianceRoundLayer()
+		}
 
 		if data, ok := raw["server"]; ok {
 			cfg.Server = config.ServerConfig{}
@@ -2086,6 +2130,14 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			if _, ok := lRaw["enabled"]; ok {
 				cfg.Lighting.Enabled = incoming.Enabled
 			}
+			// default_mode (v11.6.0, #290, D8): ON | AUTO | OFF, 400 otherwise.
+			if _, ok := lRaw["default_mode"]; ok {
+				if !ambiancecfg.LightMode(incoming.DefaultMode).Valid() {
+					http.Error(w, "lighting.default_mode doit être ON, AUTO ou OFF", http.StatusBadRequest)
+					return
+				}
+				cfg.Lighting.DefaultMode = incoming.DefaultMode
+			}
 			if _, ok := lRaw["bridge_ip"]; ok {
 				ip := strings.TrimSpace(incoming.BridgeIP)
 				if ip != "" {
@@ -2208,6 +2260,10 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// #290: direct gestures hold for the round when the round overrides the field
+		// (the global is then NOT written) — §4.2 points 2–3.
+		ambChanges, ambScope := ambianceGestureFromRequest(raw, ambBefore, ambRound, current, &cfg)
+
 		// Re-apply defaults to any field a partial section reset to zero,
 		// exactly as a config.json load would. (Neon effect clamping moved
 		// to handleGameConfig with the rest of the game settings, #150.)
@@ -2221,14 +2277,22 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 		// #286 (contract sound.md §11.2/§11.4): side effects of the two
 		// régie switches, only on an actual value change.
-		if cfg.Sound.Muted != current.Sound.Muted && h.OnSoundMutedChange != nil {
-			h.OnSoundMutedChange(cfg.Sound.Muted)
+		newAmb, oldAmb := AmbianceFromConfig(&cfg), AmbianceFromConfig(current)
+		if newAmb.SoundMuted != oldAmb.SoundMuted && h.OnSoundMutedChange != nil {
+			h.OnSoundMutedChange(newAmb.SoundMuted)
 		}
-		if cfg.Sound.CountdownDisabled != current.Sound.CountdownDisabled && cfg.Sound.CountdownDisabled && h.OnSoundCountdownDisabledChange != nil {
-			h.OnSoundCountdownDisabledChange(cfg.Sound.CountdownDisabled)
+		if newAmb.CountdownEnabled != oldAmb.CountdownEnabled && !newAmb.CountdownEnabled && h.OnSoundCountdownDisabledChange != nil {
+			h.OnSoundCountdownDisabledChange(!newAmb.CountdownEnabled)
 		}
 		if cfg.Lighting.Enabled != current.Lighting.Enabled && h.OnLightingEnabledChange != nil {
 			h.OnLightingEnabledChange(cfg.Lighting.Enabled)
+		}
+
+		// #290: the direct layer receives the gestures, then everything is re-resolved,
+		// applied and broadcast (the effective mute / light mode may change even when the
+		// global did not).
+		if h.Ambiance != nil && !ambChanges.IsEmpty() {
+			h.Ambiance.AmbianceGesture(ambChanges)
 		}
 
 		if h.OnConfigUpdate != nil {
@@ -2241,6 +2305,15 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "Failed to encode config", http.StatusInternalServerError)
 			return
+		}
+		// additive `status` / `scope` ("global" | "round") — contracts/http-endpoints.md (#290)
+		var respMap map[string]json.RawMessage
+		if json.Unmarshal(respJSON, &respMap) == nil {
+			respMap["status"] = json.RawMessage(`"ok"`)
+			respMap["scope"] = json.RawMessage(strconv.Quote(ambScope))
+			if merged, merr := json.MarshalIndent(respMap, "", "  "); merr == nil {
+				respJSON = merged
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(respJSON)

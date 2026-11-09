@@ -99,6 +99,28 @@ Vérifier :
 - [ ] `[TCP] Server started on port 1234`
 - [ ] `[HTTP] Using embedded web files (portable mode)`
 
+### 1.4 Son : réglage et contrôle au démarrage (v11.6.0, #283)
+
+Le serveur lit `config.json` **dans le répertoire courant** (celui d'où le binaire est lancé, soit `build\qualif_v<X.Y.Z>\` en QUALIF). Pour tester les bruitages, régler **avant** le lancement :
+
+```json
+"sound": { "enabled": true }
+```
+
+`sound.enabled` vaut `false` par défaut : sans ce réglage, aucun son n'est joué et aucun périphérique n'est ouvert. Le réglage ne se rattrape pas à chaud en QUALIF : rallumer le son exige un redémarrage (éteindre prend effet immédiatement).
+
+Au démarrage, le serveur écrit **une seule ligne** `AUDIO` dans sa sortie ou son journal :
+
+```
+sound: enabled=<true|false> output=<ok|unavailable|disabled> reason="<cause>" device=<…> format=44100Hz/2ch/16bit (config: <chemin absolu>)
+```
+
+Vérifier :
+- [ ] La ligne `sound:` est présente, et `config:` pointe sur le `config.json` attendu
+- [ ] `enabled` correspond au réglage voulu
+- [ ] `output=ok` si le son doit être testé. `output=unavailable` (ligne `ERROR`, `reason` renseigné) signifie qu'aucune sortie audio n'a répondu : c'est un constat à consigner dans le rapport, pas un blocage du serveur. Sur une plateforme non ciblée par le pilote audio, avec `sound.enabled=true`, la ligne attendue est `unavailable` (avec `sound.enabled=false`, elle reste `disabled`)
+- [ ] L'onglet **Son** de `/admin/ambiance` affiche le même état que la ligne (voir `docs/ADMIN_GUIDE.md`, « Diagnostic de la sortie audio »)
+
 ---
 
 ## 2. Tests Unitaires Go

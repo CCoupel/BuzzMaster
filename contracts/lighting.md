@@ -908,3 +908,32 @@ scène READY/RUNNING au lieu de passer en `KindEntracte`.
 | Association configurable effet ↔ événement (« seconde phase ») | v10.1 (#210) |
 | Restitution en fin de partie | **retiré du périmètre** (décision du 2026-09-07, §10.2) |
 | Édition des scènes, effets répartis, synchronisation sur le minuteur | v10.1 (#210, #211, #212) |
+
+---
+
+## 12. Mode d'éclairage persisté et résolu par manche — normatif (v11.6.0, #290, LOT-4)
+
+> Décision utilisateur Q1 (GATE 2 du 2026-11-09) et hypothèse **D8** validée. Référence de la résolution :
+> `contracts/ambiance-settings.md`.
+
+- **`lighting.default_mode`** (`config.json`, `string`, `omitempty`, absent ⇒ `"AUTO"`) : valeur **globale** du sélecteur
+  tri-état du §10.1 (ON / AUTO / OFF). Jusqu'ici le mode n'existait qu'en runtime (AUTO au démarrage) ; il devient un
+  **réglage de comportement** (`ambiance-settings.md` §2, `light.mode`) pour pouvoir être **hérité et surchargé par une
+  manche**. Écriture : `POST /config.json {"lighting":{"default_mode"}}` (page Ambiance › Lumière, bloc « Réglages
+  d'ambiance — Lumière », maquette `ambiance_settings_panel__global_per_type_tabs.html` §02).
+- **Mode effectif** = `Resolve(global, manche, direct).LightMode` ; poussé à `Controller.SetLightingMode` à chaque
+  changement de résolution (entrée de manche, `ROUNDS_UPDATE`, geste direct, `POST /config.json`). Au démarrage :
+  `default_mode` (plus `AUTO` implicite).
+- **`POST /api/lighting/mode`** (popover) reste le **geste direct** du §10.1 : il alimente la couche directe, **n'écrit
+  jamais `default_mode`**, et vaut jusqu'au prochain changement de manche (`ambiance-settings.md` §4.2 point 4). La règle
+  de tenue du §10.1.1 (« AUTO est le seul chemin de retour », pas d'annulation automatique par un événement de jeu)
+  est **inchangée** : seul un **changement de manche** ou `NEW_GAME` vide la couche directe — ce n'est pas un événement
+  de jeu ordinaire mais un changement de contexte voulu par la régie dans l'éditeur de manches.
+- **Flash** (§10.1) : geste ponctuel, **hors** du modèle de réglages, inchangé.
+- **Interrupteur général** `lighting.enabled` (#286, `sound.md` §11.4) : garde **matérielle en amont**, jamais
+  surchargeable ; éteint, le mode résolu n'atteint aucune ampoule.
+- **Restitution** (§10.2) : à la reconnexion, le popover lit `GameState.AMBIANCE_EFFECTIVE.SETTINGS.light.mode` et
+  `SOURCES.light.mode` (étiquette « manche » / « direct »).
+- Non-régression : `config.json` sans `default_mode` et `rounds.json` sans `AMBIANCE` ⇒ comportement v11.5.0 exact
+  (AUTO au démarrage, popover persistant jusqu'au retour manuel).
+

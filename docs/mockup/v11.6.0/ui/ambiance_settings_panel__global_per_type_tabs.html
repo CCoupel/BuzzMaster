@@ -1,0 +1,137 @@
+<!--
+mockup:
+  composant: ambiance_settings_panel
+  feature: global_per_type_tabs
+  version: 11.6.0
+  type: ui
+  issue: "#231 #290"
+  validee_le: 2026-11-09
+  complete: [docs/mockup/v11.4.0/ui/admin_sounds_manager__countdown_loop.html, docs/mockup/v11.4.0/ui/admin_navbar__ambiance_popover.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Composant « Réglages d'ambiance » en mode global — onglets Global / par type de jeu (#231, #290)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --ok:#16a34a; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+.mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+.mock-note { max-width:1200px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; }
+.mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1200px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.tabs { display:flex; gap:.4rem; margin:.4rem 0 .9rem; }
+.tab { padding:.4rem .8rem; border-radius:.45rem; font-size:.85rem; background:var(--gray-100); color:var(--gray-600); }
+.tab.active { background:var(--primary); color:#fff; font-weight:700; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.6rem 0 .4rem; }
+.subtab { padding:.35rem .7rem; font-size:.8rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; }
+.subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+.subtab .n { display:inline-block; min-width:1.1rem; padding:0 .3rem; margin-left:.3rem; border-radius:999px; background:var(--gray-200); font-size:.68rem; text-align:center; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th, td { text-align:left; padding:.45rem .5rem; border-bottom:1px solid var(--gray-200); vertical-align:middle; }
+th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+td small { display:block; color:var(--gray-500); font-size:.72rem; }
+tr.sep-row td { background:var(--gray-50); font-weight:700; color:var(--gray-700); }
+.btn { font:inherit; font-size:.78rem; padding:.3rem .6rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; cursor:pointer; }
+.btn.ghost { border-style:dashed; } .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.sw { display:inline-block; width:1.9rem; height:1.05rem; border-radius:999px; background:var(--gray-300); position:relative; vertical-align:middle; }
+.sw::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.75rem; height:.75rem; border-radius:50%; background:#fff; }
+.sw.on { background:var(--primary); } .sw.on::after { left:1rem; }
+.badge { display:inline-flex; align-items:center; gap:.35rem; font-size:.75rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:#dcfce7; color:#166534; }
+.badge.off { background:var(--gray-200); color:var(--gray-600); } .badge.warn { background:var(--amberbg); color:var(--amber); } .badge.err { background:#fee2e2; color:#991b1b; }
+.badge.round { background:var(--primary-100); color:#3730a3; }
+.tag { display:inline-block; margin-left:.5rem; font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.1rem .4rem; border-radius:.3rem; background:var(--primary-100); color:var(--primary); vertical-align:middle; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:.4rem 0 0; }
+.warn { font-size:.78rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--warning); }
+.err { font-size:.78rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--error); }
+.row { display:flex; align-items:center; flex-wrap:wrap; gap:.8rem; margin:.3rem 0; }
+.lbl { font-size:.8rem; font-weight:600; color:var(--gray-700); min-width:11rem; }
+.tristate { display:inline-flex; border:1px solid var(--gray-300); border-radius:.5rem; overflow:hidden; }
+.tristate span { padding:.35rem .7rem; font-size:.8rem; font-weight:600; color:var(--gray-600); background:#fff; border-right:1px solid var(--gray-300); cursor:pointer; }
+.tristate span:last-child { border-right:0; }
+.tristate .sel-on { background:var(--warning); color:#fff; } .tristate .sel-auto { background:var(--gray-600); color:#fff; } .tristate .sel-off { background:var(--error); color:#fff; }
+.tristate .sel-ok { background:var(--ok); color:#fff; } .tristate .sel-inherit { background:var(--primary-100); color:#3730a3; }
+.inherit { font-size:.72rem; color:var(--gray-500); font-style:italic; }
+.dim { opacity:.5; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette — onglet de bruitages :</strong>
+<label><input type="radio" name="tb" value="g" checked> Global</label>
+<label><input type="radio" name="tb" value="qcm"> QCM</label>
+<label><input type="radio" name="tb" value="memory"> MEMORY</label>
+<label><input type="radio" name="tb" value="memotion"> MEMOTION</label>
+<label><input type="radio" name="tb" value="rafale"> RAFALE</label>
+</div>
+<div class="mock-note"><b>Un seul composant « Réglages d'ambiance »</b> (<code>AmbianceSettingsPanel</code>) porte tous les <b>réglages de comportement</b> son + lumière : il est rendu ici en <b>mode global</b> (page Ambiance) et, à l'identique, en <b>mode surcharge</b> dans l'éditeur de manche (maquette <code>round_override</code>). En mode global, les lignes de bruitages ajoutent les colonnes <b>catalogue</b> (fichier, durée, Remplacer / Restaurer / Tester) qui n'existent pas par manche : <b>le fichier d'un son est un contenu du catalogue, pas un réglage</b>. Le matériel (pont Hue, ampoules et rôles, périphérique audio, « Bruitages activés » lié au redémarrage) reste dans ses sections actuelles, hors du composant : il n'est jamais surchargeable.<br>
+<b>#231</b> : les bruitages sont présentés en <b>onglets</b> — <b>Global</b> (7 cues v11.0) puis <b>un onglet par type de jeu</b> ne contenant que ses événements propres (8 nouvelles cues, chacune avec son fichier par défaut). Le décompte reste dans Global (sons longs).</div>
+<h2 class="mock-h">01 — Page Ambiance › Son (composant en mode global)</h2>
+<div class="card">
+  <div class="tabs"><span class="tab">🔆 Lumière</span><span class="tab active">🔊 Son</span></div>
+  <h3>Sortie audio <span class="inherit">(matériel — hors composant)</span></h3>
+  <div class="row"><label><span class="sw on"></span> Bruitages activés</label><span class="badge">● Son actif</span></div>
+  <p class="hint">Sortie système par défaut ouverte au démarrage.</p>
+  <div style="border:1px solid var(--primary-100);border-radius:.6rem;padding:.6rem .8rem;margin-top:.8rem;background:#fcfcff">
+  <h3 style="margin-top:0">Réglages d'ambiance — Son <span class="tag">composant mutualisé</span></h3>
+  <div class="row"><span class="lbl">Son</span><span class="tristate"><span class="sel-ok">ON</span><span>Coupé</span></span><span class="hint">Même réglage que le popover d'en-tête ; persisté.</span></div>
+  <div class="row"><span class="lbl">Décompte du chronomètre</span><span class="tristate"><span class="sel-ok">Actif</span><span>Inactif</span></span><span class="tristate"><span>Une fois</span><span class="sel-auto">En boucle</span></span></div>
+  <h3>Bruitages</h3>
+  <div class="subtabs" id="subtabs">
+    <span class="subtab active" data-k="g">Global <span class="n">7</span></span><span class="subtab" data-k="qcm">QCM <span class="n">1</span></span><span class="subtab" data-k="memory">MEMORY <span class="n">2</span></span><span class="subtab" data-k="memotion">MEMOTION <span class="n">2</span></span><span class="subtab" data-k="rafale">RAFALE <span class="n">3</span></span>
+  </div>
+  <table><thead><tr><th>Événement</th><th>Actif</th><th class="cat">Fichier</th><th class="cat">Durée</th><th class="cat">Actions</th></tr></thead>
+  <tbody id="tb-g">
+    <tr><td>Départ<small>Le chronomètre démarre</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,45 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Temps écoulé<small>Le chronomètre arrive à zéro</small></td><td><span class="sw on"></span></td><td>personnalisé</td><td>1,20 s</td><td><button class="btn">Remplacer</button><button class="btn ghost">Restaurer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Points gagnés<small>La régie crédite une équipe</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,80 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Erreur<small>Paire ratée en MEMORY, réponse invalidée en RAFALE</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,60 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Révélation<small>La réponse est dévoilée</small></td><td><span class="sw"></span></td><td>défaut</td><td>0,70 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Début d'entracte<small>La pause commence</small></td><td><span class="sw on"></span></td><td>défaut</td><td>1,00 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Fin d'entracte<small>La partie reprend</small></td><td><span class="sw on"></span></td><td>défaut</td><td>1,00 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr class="sep-row"><td colspan="5">Sons longs (≤ 30 s)</td></tr>
+    <tr><td>Décompte du chronomètre<small>Pendant que le chronomètre décompte</small></td><td><span class="inherit">réglé ci-dessus</span></td><td>défaut</td><td>2,00 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+  </tbody>
+  <tbody id="tb-qcm" hidden>
+    <tr><td>Indice révélé <span class="tag">nouveau</span><small>Une réponse est barrée par l'indice (QCM)</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,50 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+  </tbody>
+  <tbody id="tb-memory" hidden>
+    <tr><td>Carte retournée <span class="tag">nouveau</span><small>Une carte MEMORY est révélée</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,30 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Paire trouvée <span class="tag">nouveau</span><small>Les deux cartes correspondent (la paire ratée joue « Erreur », onglet Global)</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,90 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+  </tbody>
+  <tbody id="tb-memotion" hidden>
+    <tr><td>Carte choisie <span class="tag">nouveau</span><small>L'équipe sélectionne une carte de la grille</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,40 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Fin de carte <span class="tag">nouveau</span><small>Carte fermée sans gagnant (avec gagnant : « Points gagnés », onglet Global)</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,70 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+  </tbody>
+  <tbody id="tb-rafale" hidden>
+    <tr><td>Bonne réponse <span class="tag">nouveau</span><small>L'animateur valide la réponse RAFALE</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,40 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Mauvaise réponse <span class="tag">nouveau</span><small>L'animateur invalide (ou passe) la réponse</small></td><td><span class="sw on"></span></td><td>défaut</td><td>0,40 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+    <tr><td>Fin de lot <span class="tag">nouveau</span><small>Le réservoir est épuisé ou le temps du lot est écoulé</small></td><td><span class="sw on"></span></td><td>défaut</td><td>1,10 s</td><td><button class="btn">Remplacer</button><button class="btn">Tester</button></td></tr>
+  </tbody></table>
+  <p class="hint">Un son désactivé ici ne joue plus nulle part, sauf si une manche le réactive explicitement (surcharge). « Tester » joue sur l'enceinte du serveur, même désactivé ou son coupé.</p>
+  <p class="hint">Restaurer tout (15 bruitages + décompte) : <button class="btn ghost">Restaurer les sons par défaut</button></p>
+  </div>
+</div>
+<h2 class="mock-h">02 — Page Ambiance › Lumière (partie « Réglages d'ambiance — Lumière » du même composant)</h2>
+<div class="card">
+  <div class="tabs"><span class="tab active">🔆 Lumière</span><span class="tab">🔊 Son</span></div>
+  <div class="row dim"><span class="lbl">Trouver / Associer le pont · Ampoules du pont · Éclairage général</span><span>… sections matériel inchangées (pont, rôles general / équipe, Tester) …</span></div>
+  <div class="row"><label><span class="sw on"></span> Éclairage d'ambiance activé</label><span class="inherit">interrupteur général (matériel, #286) — hors composant</span></div>
+  <div style="border:1px solid var(--primary-100);border-radius:.6rem;padding:.6rem .8rem;margin-top:.8rem;background:#fcfcff">
+  <h3 style="margin-top:0">Réglages d'ambiance — Lumière <span class="tag">composant mutualisé</span></h3>
+  <div class="row"><span class="lbl">Mode d'éclairage par défaut</span><span class="tristate"><span>ON</span><span class="sel-auto">AUTO</span><span>OFF</span></span><span class="hint">Mode appliqué au démarrage et quand aucune manche ni geste direct ne le surcharge (nouveau réglage persisté ; aujourd'hui AUTO implicite).</span></div>
+  <p class="hint">Les futurs réglages déclaratifs (scènes, effets — v11.7.0 / v11.8.0) s'ajouteront dans ce bloc, et deviendront surchargeables par manche sans autre changement de structure.</p>
+  </div>
+</div>
+<script>
+function show(k){['g','qcm','memory','memotion','rafale'].forEach(x=>{document.getElementById('tb-'+x).hidden=x!==k;});document.querySelectorAll('.subtab').forEach(s=>s.classList.toggle('active',s.dataset.k===k));document.querySelector('input[name=tb][value='+k+']').checked=true;}
+document.querySelectorAll('input[name=tb]').forEach(e=>e.addEventListener('change',x=>show(x.target.value)));document.querySelectorAll('.subtab').forEach(s=>s.addEventListener('click',()=>show(s.dataset.k)));
+</script>
+
+</body>
+</html>

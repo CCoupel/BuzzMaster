@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"buzzcontrol/internal/ambiancecfg"
+	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
@@ -43,7 +46,7 @@ func CurrentRounds(h Host) []game.Round {
 	have := h.Engine().GetRounds()
 	same := len(have) == len(rounds)
 	for i := 0; same && i < len(rounds); i++ {
-		same = have[i] == rounds[i]
+		same = reflect.DeepEqual(have[i], rounds[i])
 	}
 	if !same {
 		h.Engine().SetRounds(rounds)
@@ -222,6 +225,36 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 		}
 		req.Rounds[i].Name = name
 	}
+	// #290 : the AMBIANCE overrides are validated strictly, before anything else is applied.
+	newAmbiance := make([]*ambiancecfg.Partial, len(req.Rounds)) // nil = field absent (keep / `{}`)
+	var badAmbiance []string
+	knownCue := func(c string) bool { _, ok := audio.CueByName(c); return ok }
+	for i, r := range req.Rounds {
+		if len(r.Ambiance) == 0 {
+			continue
+		}
+		label := r.ID
+		if label == "" {
+			label = fmt.Sprintf("new%d", i+1)
+		}
+		p, bad := ambiancecfg.ParsePartial(r.Ambiance, knownCue)
+		for _, b := range bad {
+			badAmbiance = append(badAmbiance, label+":"+b)
+		}
+		if len(bad) == 0 {
+			pp := p
+			// r3 : sound.files is written ONLY by POST/DELETE /api/rounds/{id}/sounds/{cue} —
+			// ROUNDS_UPDATE ignores it and keeps the stored files (a client with a stale payload
+			// must not destroy a reference).
+			pp.SoundFiles = existingRounds[r.ID].Ambiance.Clone().SoundFiles
+			newAmbiance[i] = &pp
+		}
+	}
+	if len(badAmbiance) > 0 {
+		res, line := refuse("INVALID_AMBIANCE")
+		res.Questions = badAmbiance
+		return res, line
+	}
 	keptIDs := map[string]bool{}
 	for _, r := range req.Rounds {
 		if r.ID == "" {
@@ -374,7 +407,7 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 	newEntractes := map[string]map[string]interface{}{} // id -> content
 	created := 0
 	nextReserved := 0
-	for _, r := range req.Rounds {
+	for ri, r := range req.Rounds {
 		id := r.ID
 		ids := append([]string{}, r.Questions...)
 		if id == "" {
@@ -393,7 +426,15 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 				result.CreatedEntractes = append(result.CreatedEntractes, protocol.RoundsCreatedEntractes{RoundID: id, StartID: startID, EndID: endID})
 			}
 		}
-		newRF.Rounds = append(newRF.Rounds, game.Round{ID: id, Name: r.Name})
+		// #290 : AMBIANCE absent ⇒ existing override kept (new round: `{}`); `{}` clears it.
+		amb := existingRounds[r.ID].Ambiance // zero Partial for a new round (ID "")
+		if r.ID == "" {
+			amb = ambiancecfg.Partial{}
+		}
+		if newAmbiance[ri] != nil {
+			amb = *newAmbiance[ri]
+		}
+		newRF.Rounds = append(newRF.Rounds, game.Round{ID: id, Name: r.Name, Ambiance: amb})
 		layout = append(layout, placement{roundID: id, ids: ids})
 	}
 	unassigned := append(append([]string{}, req.Unassigned...), keptToUnassigned...)
@@ -505,6 +546,18 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 	}
 	h.Engine().ForgetQuestionStatuses(result.DeletedQuestions)
 
+	// ---- (5b) r3 (#290) : a deleted round (KEEP or DELETE) loses its sound-files folder,
+	// AFTER rounds.json was written successfully. rid comes from rounds.json (never a path).
+	soundsRoot := filepath.Join(filepath.Dir(qdir), "sounds", "rounds")
+	for rid := range deleted {
+		if !validRoundIDForPath(rid) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(soundsRoot, rid)); err != nil {
+			server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE: failed to remove sound files of round %s: %v", rid, err)
+		}
+	}
+
 	// ---- (6) memory state and answer
 	h.Engine().SetRounds(newRF.Rounds)
 	result.Rounds = append([]game.Round{}, newRF.Rounds...)
@@ -514,3 +567,16 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 }
 
 // handleRoundsUpdate processes ROUNDS_UPDATE from an admin (#245).
+
+// validRoundIDForPath accepts only "r<digits>" before an ID is joined to a path.
+func validRoundIDForPath(id string) bool {
+	if len(id) < 2 || id[0] != 'r' {
+		return false
+	}
+	for _, c := range id[1:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}

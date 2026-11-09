@@ -62,6 +62,25 @@ contrat, jamais en surchargeant la sémantique d'une cue existante. Les bruitage
 question (indice QCM, sélection de carte MEMORY/MEMOTION, etc. — catalogue étendu proposé au
 cadrage §C) appartiennent à v11.1 (#231), hors périmètre ici.
 
+> **Amendement v11.6.0 (#231, LOT-3) — la liste fermée gagne 8 cues « par type »**, chacune avec un son par défaut
+> synthétisé (`internal/audio/synth`), un fichier remplaçable et un interrupteur (`CuesEnabled`, `ambiance-settings.md`) :
+>
+> | Cue | `Type()` | Site d'émission — **une cue par site (D4)** |
+> |---|---|---|
+> | `qcm-indice` | `QCM` | `broadcastQCMHint` — un indice barre une réponse |
+> | `memory-carte` | `MEMORY` | `handleFlipMemoryCard` — carte retournée (face visible) |
+> | `memory-paire` | `MEMORY` | `handleFlipMemoryCard` — paire trouvée (la paire ratée **garde** `perdu`) |
+> | `memotion-selection` | `MEMOTION` | `handleMotionSelect` — carte choisie dans la grille |
+> | `memotion-fin-carte` | `MEMOTION` | `handleMotionDone` — carte fermée **sans** gagnant (avec gagnant : `gagne`, inchangé) |
+> | `rafale-bonne` | `RAFALE` | `handleRafaleValidate` — réponse validée |
+> | `rafale-mauvaise` | `RAFALE` | `handleRafaleInvalidate` — réponse invalidée / passée (si ce site émet déjà `perdu`, `perdu` est **remplacé** par `rafale-mauvaise` : une seule cue par site) |
+> | `rafale-fin-lot` | `RAFALE` | fin du lot — **amendement LOT-3 (code livré 042fe976)** : nouveau callback `Engine.OnRafaleLotEnd` (`setupCallbacks`), déclenché par le moteur quand le **réservoir est épuisé** ou le **nombre maximal de questions atteint**, manche RAFALE classique **et** carte MEMOTION RAFALE. (Le contrat citait `OnRafaleAnswer` avec `next == nil` : ce callback n'est pas appelé en fin de manche — fin = `roundEnded` → `OnStateChange(PhaseStopped)`.) Le « chrono de lot » **est** le chrono global : son expiration reste `temps-ecoule`, inchangé. Ordre à la dernière bonne réponse — **revue LOT-3 (m1)** : `rafale-bonne` **puis** `rafale-fin-lot` (la validation sonne avant la fin du lot ; la file du moteur de bruitages conserve cet ordre) |
+>
+> `audio.Cue` gagne `Type() string` (`""` pour les 7 cues globales) et `audio.AllCues()` dans l'ordre normatif : global
+> puis `QCM`, `MEMORY`, `MEMOTION`, `RAFALE`. Le test d'exhaustivité (§6.2) couvre les 15 cues : chaque site d'émission
+> émet **exactement une** cue, les 8 nouvelles ne passent **que** par `notifySound`. `GET /api/sounds` expose `type`
+> (`http-endpoints.md`). Aucun changement pour les 7 cues v11.0 (noms, fichiers, sites) — octet pour octet.
+
 ### 2.2 Une seule nature : l'impulsion — et pourquoi il n'y en a pas d'autre
 
 `contracts/lighting.md` §2.3 distingue deux natures (scène d'état, dérivable ; impulsion, non
@@ -93,6 +112,22 @@ vérifié par compilation/exécution sur les deux cibles CI.
 - Tout fichier son (livré en #229, ou téléversé en #230) **doit** se conformer à ce format
   exactement. Un fichier non conforme est **refusé à l'upload** (§7, `contracts/http-endpoints.md`)
   — jamais accepté puis rééchantillonné à la volée, jamais accepté puis silencieusement injouable.
+  > **Amendement v11.6.0 (#232, LOT-1) — converti à l'upload, jamais à la volée.** Le format **stocké et joué** reste
+  > strictement canonique ; mais un WAV PCM non conforme n'est plus **refusé** : il est **converti une fois, à l'upload**
+  > (`internal/audio/resample.go`, `ToCanonical(raw) (pcm, ConversionInfo, error)`), puis écrit en canonique comme
+  > aujourd'hui (`BuildCanonicalWAV`). Point d'entrée **unique**, appelé **avant** `extractCanonicalPCM` par
+  > `ValidateUpload` (cues), `ValidateQuestionSound` (médias de question **et** de carte MEMOTION, §14) et le chemin
+  > `decompte` — jamais un second convertisseur. Entrées acceptées (D2) : tags `1` (PCM entier 8/16/24/32 bits),
+  > `3` (IEEE float 32 bits), `0xFFFE` extensible avec ces sous-formats ; 1 ou 2 canaux ; 8 000–192 000 Hz.
+  > **`.mp3` et tout format compressé restent refusés** (décision 2026-09-21, ci-dessous, inchangée). Conversion
+  > déterministe, Go pur, **aucune dépendance** (`TestCA7_NoNewThirdPartyDependency`) : PCM → flottant interne → FIR
+  > fenêtré (sinc × Kaiser, polyphase, coupure `min(f_src, f_dst)/2`, ≥ 32 taps par phase) → arrondi 16 bits sans
+  > dither → upmix mono (`upmixMonoToStereo`, inchangé). Fichier **déjà canonique ⇒ chemin court, octets identiques**
+  > (non-régression). Qualité exigée : repliement < −40 dB sur un balayage sinus 48 000 → 44 100 Hz (test unitaire).
+  > Plafonds : les limites de **durée** et les plafonds d'octets **canoniques** de chaque chemin (2 Mio cue, 6 Mio
+  > média, §10.4) sont **inchangés** et évalués **après** conversion ; un plafond d'entrée **brute** = 4 × le plafond
+  > canonique borne la mémoire (`413` au-delà). **Seul le résultat canonique est stocké** (pas d'original conservé).
+  > Les réponses d'upload gagnent `converted: bool` et `source_format: string|null` (`http-endpoints.md`).
 - **Aucun format de compression n'est accepté** (`.mp3` en particulier) — décision utilisateur
   déjà actée au cadrage : le décodeur MP3 Go de référence est annoncé non maintenu par son auteur,
   et l'ajouter contredirait la même prudence de dépendances qui a établi `oto` comme seule voie
@@ -1072,6 +1107,13 @@ rôles. C'est donc une **troisième garde**, indépendante des deux autres :
 - **`POST /api/sounds/{cue}/test` ignore `Muted`** — geste explicite de l'utilisateur, même règle que `CuesDisabled`.
 - **Son de décompte** (§12, LOT-3) : lit la même garde avant tout `Play`.
 
+> **Amendement v11.6.0 (#290, LOT-4)** — `Muted`, `CuesDisabled`, `CountdownDisabled`, `CountdownOnce` ne sont plus
+> lus directement dans `config.Get()` par `notifySound`, `question_sound.go` et `countdown_sound.go` : ils sont lus
+> **résolus** (global ← manche ← geste direct) par l'accesseur unique `a.ambianceSettings()` —
+> `contracts/ambiance-settings.md` §4–§5 (le corps de `notifySound` ci-dessus est remplacé par celui du §5.2 de ce
+> contrat ; les effets de bord d'un passage à « coupé » (§11.2) sont déclenchés par la **résolution**, pas seulement par
+> l'écriture de `config.json`). La persistance du geste « son coupé » est conservée **hors surcharge de manche** (D1′).
+
 ### 11.3 Interface — popover « Ambiance » de l'en-tête (ex-« Éclairage »)
 
 - Le bouton « 💡 Éclairage » de `Navbar.jsx` devient **« Ambiance »** et son popover regroupe **deux sections** :
@@ -1391,3 +1433,116 @@ SoundLoop bool `json:"SOUND_LOOP,omitempty"` // false (zéro) = une fois = compo
 `question_sound_delayed_219_test.go`, `question_sound_enabled_dev_257_test.go` verts (fakes étendus de la seule
 méthode `PlayLoop`) ; `rafale_upload_nonregression_test.go` et fixtures `models_roundtrip_test.go` inchangés
 (`SOUND_LOOP` est `omitempty`) ; `QuestionsPage.sound.test.jsx` vert.
+
+---
+
+## 14. Média audio sur MEMORY, MEMOTION (hôte **et** carte) et ENTRACTE — normatif (v11.6.0, #235, LOT-2)
+
+> Décisions utilisateur GATE 1.5/GATE 2 du 2026-11-09 : **Q2** ENTRACTE incluse, boucle activable ; **Q3** « les deux » —
+> son d'hôte MEMOTION au START **et** son par carte au retournement ; **D3** MEMORY au niveau `Question.SOUND` ;
+> **D9** la carte remplace l'hôte, sans reprise. Maquette `docs/mockup/v11.6.0/ui/admin_question_editor__sound_memory_memotion_entracte.html`.
+
+### 14.1 Ce qui ne change pas
+
+`Question.SOUND`, `SOUND_TIMER_DELAYED`, `SOUND_LOOP` restent **communs à tous les types** (§10.4bis) : l'ouverture à
+MEMORY, ENTRACTE et à l'hôte MEMOTION est **une décision d'éditeur** (`QuestionsPage.jsx` lève son filtre de type) — aucun
+champ nouveau sur `Question`, aucune garde serveur à retirer puisqu'il n'y en a pas. Format, limites (§10.4), gate T0
+(§10.8), chien de garde (§10.7), voix unique (§10.2) : inchangés.
+
+### 14.2 MEMORY — son de manche
+
+Joué au **START** (phase de mémorisation comprise), `Play`/`PlayLoop` selon `SOUND_LOOP` ; `SOUND_TIMER_DELAYED` diffère
+le chronomètre global ; **amendement revue LOT-2 (m4)** : `SOUND_TIMER_DELAYED` est écrit **sans condition** sur
+`MEMORY_CONFIG.USE_TIMER` (aucun changement moteur : l'effet repose sur le chrono global existant ; sans chrono global, le
+champ est stocké mais sans effet — pas de refus, à vérifier en QUALIF) ;
+arrêt sur les sites existants de `questionSound().Stop()`. Décompte (§12.6) : jamais pendant ce média.
+
+### 14.3 ENTRACTE — son d'entracte
+
+- Éditeur : bloc « 🔊 Son de l'entracte » avec **Lecture : une fois / en boucle** ; **pas** de « Chrono démarre » (aucun
+  chronomètre) — `sound_timer_delayed` n'est pas envoyé pour une ENTRACTE, et s'il l'était il est **ignoré** (écrit `false`).
+- Lecture : à l'**activation** de l'entracte (`ENTRACTE_SET{ACTIVE:true}` et entrée automatique par « à suivre », même
+  site que `CueEntracteDebut`) → `Play`/`PlayLoop` **après** la cue `entracte-debut` (la cue est une impulsion sur le
+  moteur de bruitages, le média est sur le `MediaPlayer` : deux chemins, aucune attente) ; **arrêt** à la sortie
+  (`ENTRACTE_SET{ACTIVE:false}`, même site que `CueEntracteFin`), au STOP, au NEW_GAME, au RESTORE.
+- `Muted` résolu (`ambiance-settings.md`) ⇒ `DISABLED` à T1 comme pour une question (§11.2). Gestes `QUESTION_SOUND`
+  (PLAY/PAUSE/RESUME/STOP) **applicables** pendant l'entracte (`QUESTION_SOUND_STATE` suit).
+
+### 14.4 MEMOTION — son d'hôte **et** son de carte (Q3)
+
+**Modèle** — `MotionCard` gagne trois champs **communs de carte** (`question-types.md` §3.1, jamais `OwnedFields`,
+conservés quel que soit le `TYPE` de la carte) :
+
+```go
+Sound             string `json:"SOUND,omitempty"`               // "/question/<qid>/motion_<cardID>_sound_<rand4>.wav"
+SoundTimerDelayed bool   `json:"SOUND_TIMER_DELAYED,omitempty"` // différé du CHRONO DE LA CARTE
+SoundLoop         bool   `json:"SOUND_LOOP,omitempty"`
+```
+
+**Upload** (`POST /questions`, `http-endpoints.md`) — champs multipart `motion_card_<cardID>_sound` (fichier, validé par
+`ValidateQuestionSound` **après** `ToCanonical` §3), `motion_card_<cardID>_sound_cleared`, `_sound_timer_delayed`,
+`_sound_loop` — **tri-valués (amendement revue LOT-2, m4)** : `"true"` / `"false"` **explicite** / **absent = conservé**
+(la carte inchangée n'envoie rien ; `"false"` désactive un réglage sans re-téléverser) ; écrits **seulement si un son est
+attaché**, même règle que la question. Nom de fichier
+régénéré côté serveur ; suppression du fichier à `_sound_cleared=true` et quand la carte disparaît (`removeCardMedia`).
+
+**Préservation — normatif, piège majeur** : `handleUploadQuestion` reconstruit `MOTION_CARDS` depuis le payload client.
+Le serveur **fusionne par `ID` de carte** avec le `question.json` existant : pour toute carte dont l'`ID` existe déjà et
+dont le payload ne porte ni nouveau fichier ni `_sound_cleared`, `SOUND`/`SOUND_TIMER_DELAYED`/`SOUND_LOOP` sont
+**recopiés depuis l'existant** (même discipline que `SOUND` hôte, `http.go` « piège de reconstruction »). **Jamais** une
+préservation côté frontend (4 sites de sérialisation : destruction silencieuse garantie à terme). Test exigé : édition
+du titre de la question hôte ⇒ sons de cartes intacts, octet pour octet dans `question.json`.
+
+**Lecture — voix unique, « le plus intérieur gagne »** :
+- **Hôte** : `Question.SOUND` joué au **START** de la manche MEMOTION (`Play`/`PlayLoop`) ; pas de « Chrono démarre »
+  (pas de chrono global en MEMOTION) : `SOUND_TIMER_DELAYED` d'un hôte MEMOTION est ignoré (écrit `false`).
+- **Carte** : au **retournement** de la carte (révélation de la face question — `handleMotionFlip`), si la carte a un
+  `SOUND` : la lecture courante (hôte ou carte précédente) est **remplacée** (arrêt net, §10.2) ; `PlayLoop` si
+  `SOUND_LOOP` ; `SOUND_TIMER_DELAYED` ⇒ le **chrono de la carte** (`MotionCard` durée) ne démarre qu'à la fin du
+  premier passage ou au Stop animateur (`ReleaseDeferredTimer` sur le chrono de carte — extension du §10.7 ; §12.7
+  « chrono le plus intérieur » s'applique au décompte).
+- **D9 — pas de reprise** : à la fermeture de la carte (`MEMOTION_DONE`), révélation ou STOP, le son de carte s'arrête
+  et le son d'hôte **ne reprend pas** (« une question chasse l'autre »). Une carte **sans** son laisse l'hôte continuer.
+- **RESTORE coupe le média courant** (hôte, carte ou entracte) — câblé en LOT-2 (`OnAction "RESTORE"` → `questionSound().Stop()`,
+  revue m1) : un média ne survit jamais à une restauration de sauvegarde.
+- **Gate T0 appliquée au retournement** : si le fichier de la carte est indisponible (§10.8.2), le retournement **n'est
+  pas refusé** (la carte s'ouvre, aucun son) ; le motif remonte comme un état (`QUESTION_SOUND_UNAVAILABLE`, §10.8.5) et
+  la pastille d'alerte (§10.9) l'affiche. La gate T0 **de la question hôte** (PREPARE→READY) n'examine **que** le son
+  d'hôte — jamais les cartes (sinon une manche entière serait bloquée par un fichier de carte).
+- `QUESTION_SOUND_STATE` reflète le média **courant** quel qu'en soit le propriétaire ; nouveau champ sœur
+  `QUESTION_SOUND_OWNER: "" | "HOST" | "CARD:<cardID>" | "ENTRACTE"` (`game-state.md`, toujours sérialisé). Les gestes
+  `QUESTION_SOUND` agissent sur le média courant.
+- Conduite : `phaseRules.showSoundRow(phase, question, selectedCardId = null)` — **signature à 3 paramètres (amendement
+  revue LOT-2, m4)**, 3ᵉ optionnel, rétrocompatible : vrai pendant une carte sonore (`MOTION_CARDS[].ID === selectedCardId`
+  avec `SOUND`) même si l'hôte est muet (admin et anim) ; grille d'édition : chip ♪ sur les
+  cartes sonores.
+
+### 14.5 Non-régression exigée
+
+SPEEDY/QCM/ARDOISE : `question_sound_219_test.go`, `_delayed_`, `_enabled_dev_257_`, `media_loop_288_test.go` verts ;
+`QuestionsPage.sound.test.jsx` vert ; une question MEMOTION **sans** son (hôte ni carte) : aucun appel au `MediaPlayer`
+(test) ; `MOTION_CARDS` sans `SOUND` : `question.json` octet pour octet.
+
+---
+
+## 15. Réglages résolus — renvoi (v11.6.0, #290, LOT-4)
+
+`Muted`, `CuesDisabled`, `CountdownDisabled`, `CountdownOnce` sont désormais des **réglages de comportement** du modèle
+mutualisé `contracts/ambiance-settings.md` : lus résolus (global ← manche ← geste direct) par `a.ambianceSettings()`,
+jamais directement dans `config.Get()` (test-garde §5.2 de ce contrat). Les §6.3, §11, §12.3–12.4 restent la référence
+de la **sémantique** de chaque réglage ; `ambiance-settings.md` est la référence de **sa résolution**.
+
+**Révision 3 (#290, fichiers par manche)** : le **fichier** d'une cue et du décompte est aussi résolu (`SoundFiles`,
+`ambiance-settings.md` §9). **Amendement revue LOT-4b (m2)** : `PCMAt(rel)` n'est **pas** ajouté à `audio.Bank` mais porté par
+l'interface **optionnelle** `audio.RelBank { PCMAt(rel string) (data []byte, ok bool) }`, **type-assertée** par le moteur sur la banque
+(`e.bank.(RelBank)`) — une banque sans `RelBank` (fakes de tests, banques tierces) joue toujours `<cue>.wav` ; comportement
+identique au libellé initial. `FileBank` implémente `RelBank`. `audio.Engine` gagne `PlayCueAt(c, rel)` (file `{cue, rel}`,
+garanties §5 inchangées ; `PlayCue(c)` ≡ `PlayCueAt(c, "<cue>.wav")`) ; `FileBank.PCMAt` replie sur `<cue>.wav` (WARN) si le fichier
+de manche manque ; `notifySound` et `countdownSoundAdapter.filePath()` passent le chemin résolu. Le format canonique (§3) et la
+validation d'upload (§7) s'appliquent à l'identique aux fichiers de manche.
+
+**Limite connue (revue LOT-4b, m3) — Windows** : le remplacement d'un fichier de manche (`writeFileAtomic` : écriture temporaire
+puis `os.Rename` sur la cible) peut échouer **de façon transitoire** (« Accès refusé ») si la banque est en train de lire ce même
+fichier (`os.ReadFile`, lecture brève, fichier entièrement chargé en mémoire). Même schéma que le catalogue ; cas rare ;
+**relancer l'envoi** suffit. Aucune reprise automatique côté serveur ; à documenter dans le guide si la QUALIF Windows le rencontre.
+

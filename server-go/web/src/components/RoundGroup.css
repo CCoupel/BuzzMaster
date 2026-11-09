@@ -42,3 +42,14 @@
 .round-choice.danger b { color: var(--red, #dc2626); }
 .round-choice.danger:hover, .round-choice.danger:focus { border-color: var(--red, #dc2626); background: #fff5f5; }
 .round-modal-actions { text-align: right; }
+
+/* #290 — fenêtre « Ambiance de la manche » + badge/bouton d'en-tête */
+.round-ambiance-box { max-width: 760px; max-height: 90vh; overflow-y: auto; }
+.round-amb-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.round-amb-hint { font-size: 0.8rem; color: var(--gray-500, #6b7280); margin: 0.3rem 0 0.5rem; }
+.round-amb-actions { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 1rem; }
+.round-ambiance-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--primary-100, #e0e7ff); color: #3730a3; }
+.round-btn.primary { background: var(--primary, #4f46e5); color: #fff; border-color: var(--primary, #4f46e5); }
+.round-ibtn.is-active { background: var(--primary, #4f46e5); color: #fff; }
+.round-amb-notice.is-error { color: #991b1b; }
+.round-amb-notice.is-warning { color: #b45309; }

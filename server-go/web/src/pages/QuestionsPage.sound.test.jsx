@@ -132,7 +132,10 @@ describe('QuestionsPage — visibilité du champ son (garde de type, plan §0.2)
     expect(screen.getByLabelText(/Son de la question/i)).toBeInTheDocument()
   })
 
-  it.each(['memory', 'memotion', 'rafale', 'entracte'])('type %s : le champ son est ABSENT (aucune garde propre, réutilise la garde Image existante)', (typeKey) => {
+  // #235 (v11.6.0, sound.md §14.1) : MEMORY, MEMOTION (hôte) et ENTRACTE ouvrent le bloc son — voir
+  // QuestionsPage.sound.235.test.jsx. Seule RAFALE reste sans son (la liste d'origine était
+  // ['memory', 'memotion', 'rafale', 'entracte']).
+  it.each(['rafale'])('type %s : le champ son est ABSENT (aucune garde propre, réutilise la garde Image existante)', (typeKey) => {
     const { container } = render(<QuestionsPage />)
     fireEvent.click(container.querySelector(`.type-btn.${typeKey}`))
     expect(screen.queryByLabelText(/Son de la question/i)).not.toBeInTheDocument()

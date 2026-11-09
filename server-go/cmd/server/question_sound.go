@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,37 @@ import (
 // — belt-and-braces against a monitoring goroutine that fails to signal.
 const questionSoundWatchdogGrace = 2 * time.Second
 
+// soundSource décrit le média à jouer (v11.6.0, #235) : la question (hôte,
+// tous types), une carte MEMOTION, ou le son d'un ENTRACTE. owner suit le
+// vocabulaire de GameState.QuestionSoundOwner : "HOST" | "CARD:<id>" | "ENTRACTE".
+type soundSource struct {
+	url        string
+	delayed    bool
+	loop       bool
+	owner      string
+	questionID string
+}
+
+// hostSource : source de la question elle-même. Le son d'une question de type
+// ENTRACTE a pour propriétaire "ENTRACTE". Le différé n'a pas de sens pour
+// MEMOTION (hôte) ni ENTRACTE (pas de chrono global) : ignoré.
+func hostSource(q *game.Question) soundSource {
+	src := soundSource{url: q.Sound, delayed: q.SoundTimerDelayed, loop: q.SoundLoop, owner: "HOST", questionID: q.ID}
+	switch q.Type {
+	case game.QuestionTypeEntracte:
+		src.owner = "ENTRACTE"
+		src.delayed = false
+	case game.QuestionTypeMemotion:
+		src.delayed = false
+	}
+	return src
+}
+
+// cardSource : source d'une carte MEMOTION.
+func cardSource(q *game.Question, c *game.MotionCard) soundSource {
+	return soundSource{url: c.Sound, delayed: c.SoundTimerDelayed, loop: c.SoundLoop, owner: "CARD:" + c.ID, questionID: q.ID}
+}
+
 // questionSoundAdapter owns the MediaPlayer and the bookkeeping needed to
 // enforce §10.7's non-blocking rule and idempotent release. Constructed
 // once in setup() (setupQuestionSound), never rebuilt — same "built once,
@@ -53,6 +85,14 @@ type questionSoundAdapter struct {
 
 	mu             sync.Mutex
 	watchdogCancel context.CancelFunc // cancels the CURRENT watchdog goroutine, if any
+
+	// cur : source du dernier média lancé (v11.6.0, #235) — sert à la boucle
+	// (onNaturalEnd) et au geste « Rejouer ». pendingCardTimer : démarrage
+	// différé du chrono de la carte (SOUND_TIMER_DELAYED d'une carte), libéré
+	// avec le chrono global par release().
+	cur              *soundSource
+	pendingCardTimer func() (consumed bool)
+	heldCardTimer    func() (consumed bool) // libéré pendant une PAUSE du jeu : démarre à Resume
 
 	// soundEnabled reports the master "sound on" switch. nil = production default
 	// (config.Get().Sound.Enabled); tests inject their own so they never touch the
@@ -145,7 +185,93 @@ func (qs *questionSoundAdapter) Start(q *game.Question) {
 	if qs == nil || q == nil || q.Sound == "" {
 		return
 	}
-	qs.play(q, true)
+	qs.playSource(hostSource(q), true)
+}
+
+// StartCard joue le son d'une carte MEMOTION au retournement (v11.6.0, #235,
+// sound.md §14.4) et démarre le chrono de la carte via startTimer : tout de
+// suite, ou — si la carte a SOUND_TIMER_DELAYED — à la fin du premier passage
+// (ou au Stop animateur). Une carte sans son laisse l'hôte continuer (D9) et
+// démarre simplement son chrono. Un média indisponible n'empêche jamais le
+// retournement (§14.4 gate T0) : pas de son, chrono libéré.
+func (qs *questionSoundAdapter) StartCard(q *game.Question, card *game.MotionCard, startTimer func()) {
+	if startTimer == nil {
+		startTimer = func() {}
+	}
+	if qs == nil || q == nil || card == nil || card.Sound == "" {
+		startTimer()
+		return
+	}
+	// Gate T0 au retournement (§14.4) : média indisponible ⇒ la carte s'ouvre quand
+	// même, sans son, chrono immédiat ; le motif remonte comme un état (§10.9).
+	if ok, _ := qs.sourceAvailability(card.Sound); !ok {
+		startTimer()
+		qs.app.refreshQuestionSoundAvailability()
+		qs.app.broadcastUpdate()
+		return
+	}
+	qs.app.refreshQuestionSoundAvailability() // efface un motif de carte précédente
+	if card.SoundTimerDelayed {
+		cardID := card.ID
+		qs.mu.Lock()
+		qs.heldCardTimer = nil
+		qs.pendingCardTimer = func() bool {
+			// Ne démarre que si la carte est toujours ouverte (face question).
+			st := qs.app.engine.GetState()
+			if st.Phase == game.PhasePaused {
+				return false // libéré pendant la pause : démarre à la reprise (Resume)
+			}
+			if st.Phase == game.PhaseStarted && st.MotionSelected == cardID && st.MotionCardStates[cardID] == game.MotionCardStateQuestion {
+				startTimer()
+			}
+			return true
+		}
+		qs.mu.Unlock()
+	} else {
+		startTimer()
+	}
+	qs.playSource(cardSource(q, card), true)
+}
+
+// StopCard arrête le son d'une carte (fermeture MEMOTION_DONE, révélation) :
+// l'hôte ne reprend PAS (D9) et un chrono de carte encore différé est abandonné.
+// Sans effet si le média courant n'appartient pas à une carte.
+func (qs *questionSoundAdapter) StopCard() {
+	if qs == nil {
+		return
+	}
+	qs.mu.Lock()
+	qs.pendingCardTimer = nil
+	qs.heldCardTimer = nil
+	isCard := qs.cur != nil && strings.HasPrefix(qs.cur.owner, "CARD:")
+	qs.mu.Unlock()
+	if isCard {
+		qs.Stop()
+	}
+	qs.app.refreshQuestionSoundAvailability() // le motif d'une carte fermée disparaît
+}
+
+// StartEntracte joue le son d'un entracte activé manuellement (ENTRACTE_SET
+// ACTIVE:true) : seulement si la question chargée est de type ENTRACTE et porte
+// un son (v11.6.0, #235, §14.3). L'entracte programmé passe par Start().
+func (qs *questionSoundAdapter) StartEntracte(q *game.Question) {
+	if qs == nil || q == nil || q.Type != game.QuestionTypeEntracte || q.Sound == "" {
+		return
+	}
+	qs.playSource(hostSource(q), false)
+}
+
+// StopEntracte arrête le son d'entracte à la sortie de l'entracte.
+func (qs *questionSoundAdapter) StopEntracte() {
+	if qs == nil {
+		return
+	}
+	qs.mu.Lock()
+	isEntracte := qs.cur != nil && qs.cur.owner == "ENTRACTE"
+	qs.mu.Unlock()
+	if isEntracte {
+		qs.Stop()
+	}
 }
 
 // HandleCommand processes an admin/anim QUESTION_SOUND command (contract
@@ -163,10 +289,16 @@ func (qs *questionSoundAdapter) HandleCommand(command protocol.QuestionSoundComm
 	q := state.Question
 	switch command {
 	case protocol.QuestionSoundCommandPlay:
+		// « Rejouer » : le média courant s'il est encore valide (carte ouverte,
+		// entracte), sinon le son de la question.
+		if src := qs.replaySource(state); src != nil {
+			qs.playSource(*src, false)
+			return
+		}
 		if q == nil || q.Sound == "" {
 			return
 		}
-		qs.play(q, false)
+		qs.playSource(hostSource(q), false)
 	case protocol.QuestionSoundCommandPause:
 		qs.Pause()
 	case protocol.QuestionSoundCommandResume:
@@ -196,7 +328,16 @@ func (qs *questionSoundAdapter) HandleCommand(command protocol.QuestionSoundComm
 // cost is made sustainable by validateSoundFile's cache (§10.8.3): calling
 // this with an unchanged file is a cheap os.Stat, not a re-parse.
 func (qs *questionSoundAdapter) questionSoundAvailability(q *game.Question) (ok bool, reason string) {
-	if qs == nil || q == nil || q.Sound == "" {
+	if qs == nil || q == nil {
+		return true, ""
+	}
+	return qs.sourceAvailability(q.Sound)
+}
+
+// sourceAvailability : la définition unique de « média disponible » (§10.8.2)
+// appliquée à une URL de son — question, carte ou entracte (#235).
+func (qs *questionSoundAdapter) sourceAvailability(soundURL string) (ok bool, reason string) {
+	if qs == nil || soundURL == "" {
 		return true, ""
 	}
 	if !qs.enabled() {
@@ -205,7 +346,7 @@ func (qs *questionSoundAdapter) questionSoundAvailability(q *game.Question) (ok 
 	if audio.IsNeutralMedia(qs.player) {
 		return false, "OUTPUT"
 	}
-	if reason := qs.validateSoundFile(qs.app.questionSoundPath(q.Sound)); reason != "" {
+	if reason := qs.validateSoundFile(qs.app.questionSoundPath(soundURL)); reason != "" {
 		return false, reason
 	}
 	return true, ""
@@ -268,75 +409,123 @@ func (qs *questionSoundAdapter) validateSoundFile(path string) (reason string) {
 // question must never freeze), false for Rejouer (CA13: never touches the
 // timer, success or failure).
 func (qs *questionSoundAdapter) play(q *game.Question, releaseOnFailure bool) {
+	qs.playSource(hostSource(q), releaseOnFailure)
+}
+
+// replaySource renvoie la source à rejouer pour « Rejouer », ou nil si le dernier
+// média n'est plus pertinent (carte fermée, autre question, entracte terminé).
+func (qs *questionSoundAdapter) replaySource(state game.GameState) *soundSource {
+	qs.mu.Lock()
+	cur := qs.cur
+	qs.mu.Unlock()
+	if cur == nil || state.Question == nil || state.Question.ID != cur.questionID {
+		return nil
+	}
+	switch {
+	case strings.HasPrefix(cur.owner, "CARD:"):
+		id := strings.TrimPrefix(cur.owner, "CARD:")
+		if state.MotionSelected == id && state.MotionCardStates[id] == game.MotionCardStateQuestion {
+			for i := range state.Question.MotionCards {
+				if c := &state.Question.MotionCards[i]; c.ID == id && c.Sound != "" {
+					src := cardSource(state.Question, c)
+					return &src
+				}
+			}
+		}
+		return nil
+	case cur.owner == "ENTRACTE":
+		if state.Entracte {
+			src := *cur
+			return &src
+		}
+		return nil
+	}
+	return nil // HOST : le chemin habituel (hostSource) s'en charge
+}
+
+// release libère les chronomètres différés : le chrono global du moteur
+// (idempotent) et, le cas échéant, le chrono de la carte en attente (#235).
+func (qs *questionSoundAdapter) release() {
+	qs.mu.Lock()
+	pending := qs.pendingCardTimer
+	qs.pendingCardTimer = nil
+	qs.mu.Unlock()
+	qs.app.engine.ReleaseDeferredTimer()
+	qs.runPending(pending)
+}
+
+// runPending exécute le démarrage différé d'un chrono de carte ; s'il n'est pas
+// encore possible (jeu en pause) il est remis en attente jusqu'à Resume.
+func (qs *questionSoundAdapter) runPending(pending func() bool) {
+	if pending == nil {
+		return
+	}
+	if !pending() {
+		qs.mu.Lock()
+		qs.heldCardTimer = pending
+		qs.mu.Unlock()
+	}
+}
+
+// setIdle : le média courant est terminé ou arrêté — état IDLE, plus de propriétaire.
+func (qs *questionSoundAdapter) setIdle() {
+	qs.app.engine.SetQuestionSoundState(game.QuestionSoundIdle)
+	qs.app.engine.SetQuestionSoundOwner("")
+}
+
+// playSource est le cœur commun de Start, du geste « Rejouer », du son de carte
+// et du son d'entracte (#235) — releaseOnFailure comme play ci-dessus.
+func (qs *questionSoundAdapter) playSource(src soundSource, releaseOnFailure bool) {
 	qs.mu.Lock()
 	qs.cancelWatchdogLocked()
 	qs.mu.Unlock()
 
-	// CA12/CA21, non-blocking rule — checked BEFORE ever touching
-	// QuestionSoundState or the player, so a degraded case never flickers
-	// PLAYING before immediately reverting to IDLE. Reuses
-	// questionSoundAvailability — the SAME function the T0 gate uses
-	// (CA21/R19), replacing what used to be this file's own inline
-	// `!config.Get().Sound.Enabled || audio.IsNeutralMedia(qs.player)`.
-	//
-	// ⚠️ DISABLED/OUTPUT pre-empt here, exactly as before this lot — a
-	// disabled config or a neutral player can NEVER produce a sound, no
-	// point ever calling Play(). FILE deliberately does NOT pre-empt: T1
-	// has always let the actual Play() attempt surface a bad file through
-	// its OWN error (below) — CA12's own
-	// TestQuestionSoundAdapter_CA12_UnreadableFile_ReleasesImmediately
-	// specifically drives this via a fake MediaPlayer's own Play() error,
-	// never touching a real file at all, and contract CA12 requires that
-	// test to stay green and UNCHANGED. Pre-empting on FILE here too would
-	// mean deciding a real-hardware playback failure from a pure
-	// filesystem check alone — the T0 gate is where a bad file actually
-	// belongs (it runs BEFORE the question ever reaches STARTED); T1 stays
-	// a pure last-resort safety net, per §10.7's own founding reasoning.
-	if ok, reason := qs.questionSoundAvailability(q); !ok && reason != "FILE" {
+	// CA12/CA21, non-blocking rule — see the pre-#235 comment history: DISABLED/OUTPUT
+	// pre-empt; FILE deliberately does not (the Play() attempt surfaces it).
+	if ok, reason := qs.sourceAvailability(src.url); !ok && reason != "FILE" {
 		if releaseOnFailure {
-			qs.app.engine.ReleaseDeferredTimer()
+			qs.release()
 		}
 		return
 	}
 
-	// #286 (contract sound.md §11.2): muted is treated as DISABLED at T1 only
-	// — never in questionSoundAvailability (T0 gate), so a sound question
-	// still starts normally; no Play, deferred timer released at once.
-	if config.Get().Sound.Muted {
+	// #286 (contract sound.md §11.2): muted is treated as DISABLED at T1 only.
+	if qs.app.ambianceSettings().SoundMuted { // #290: resolved value
 		if releaseOnFailure {
-			qs.app.engine.ReleaseDeferredTimer()
+			qs.release()
 		}
 		return
 	}
 
-	path := qs.app.questionSoundPath(q.Sound)
+	path := qs.app.questionSoundPath(src.url)
 
+	qs.mu.Lock()
+	cur := src
+	qs.cur = &cur
+	qs.mu.Unlock()
+
+	qs.app.engine.SetQuestionSoundOwner(src.owner)
 	qs.app.engine.SetQuestionSoundState(game.QuestionSoundPlaying)
 	qs.app.broadcastUpdate()
 
-	// #288 (contract sound.md §13.3): SOUND_LOOP ⇒ PlayLoop, the rest of the
-	// path (gate T0, muted, state, watchdog, onNaturalEnd) is unchanged.
+	// #288 (contract sound.md §13.3): SOUND_LOOP ⇒ PlayLoop.
 	var err error
-	if q.SoundLoop {
+	if src.loop {
 		err = qs.player.PlayLoop(path)
 	} else {
 		err = qs.player.Play(path)
 	}
 	if err != nil {
-		// Third non-blocking case: fichier illisible/non conforme, caught
-		// HERE (not pre-empted above — see this function's own comment on
-		// why FILE never gates play() itself), or a race/lower-level I/O
-		// failure on a file questionSoundAvailability just validated.
 		server.LogWarn(game.LogComponentApp, "Question sound: Play(%s) failed — degrading to no-op (contract §5.5/§10.2): %v", path, err)
-		qs.app.engine.SetQuestionSoundState(game.QuestionSoundIdle)
+		qs.setIdle()
 		qs.app.broadcastUpdate()
 		if releaseOnFailure {
-			qs.app.engine.ReleaseDeferredTimer()
+			qs.release()
 		}
 		return
 	}
 
-	qs.armWatchdog(q.ID)
+	qs.armWatchdog(src.questionID)
 }
 
 // Pause implements QUESTION_SOUND's PAUSE gesture, and is also called from
@@ -363,6 +552,12 @@ func (qs *questionSoundAdapter) Resume() {
 	qs.player.Resume()
 	qs.app.engine.SetQuestionSoundState(game.QuestionSoundPlaying)
 	qs.app.broadcastUpdate()
+	// #235 : chrono de carte libéré pendant la pause — démarre à la reprise.
+	qs.mu.Lock()
+	held := qs.heldCardTimer
+	qs.heldCardTimer = nil
+	qs.mu.Unlock()
+	qs.runPending(held)
 }
 
 // Stop implements QUESTION_SOUND's STOP gesture, and is also called
@@ -380,9 +575,9 @@ func (qs *questionSoundAdapter) Stop() {
 	qs.cancelWatchdogLocked()
 	qs.mu.Unlock()
 	qs.player.Stop()
-	qs.app.engine.SetQuestionSoundState(game.QuestionSoundIdle)
+	qs.setIdle()
 	qs.app.broadcastUpdate()
-	qs.app.engine.ReleaseDeferredTimer()
+	qs.release()
 }
 
 // onNaturalEnd is the MediaPlayer's natural-end callback (registered ONCE
@@ -401,14 +596,17 @@ func (qs *questionSoundAdapter) onNaturalEnd() {
 	// Only for a looped question (SOUND_LOOP): a one-shot's natural end is
 	// always the end of playback (v11.1 behaviour, byte for byte).
 	looping := false
-	if q := qs.app.engine.GetState().Question; q != nil && q.SoundLoop {
+	qs.mu.Lock()
+	curLoop := qs.cur != nil && qs.cur.loop
+	qs.mu.Unlock()
+	if curLoop {
 		looping = qs.player.State() == audio.MediaPlaying
 	}
 	if !looping {
-		qs.app.engine.SetQuestionSoundState(game.QuestionSoundIdle)
+		qs.setIdle()
 		qs.app.broadcastUpdate()
 	}
-	qs.app.engine.ReleaseDeferredTimer()
+	qs.release()
 }
 
 // watchdogPeriod is the watchdog delay: the injected watchdogDelay, else the production
@@ -442,7 +640,7 @@ func (qs *questionSoundAdapter) armWatchdog(questionID string) {
 		select {
 		case <-time.After(delay):
 			server.LogWarn(game.LogComponentApp, "Question sound: watchdog fired for question %s — releasing the deferred timer (contract §10.7)", questionID)
-			qs.app.engine.ReleaseDeferredTimer()
+			qs.release()
 		case <-ctx.Done():
 		}
 	}()
@@ -469,8 +667,18 @@ func (qs *questionSoundAdapter) cancelWatchdogLocked() {
 // verdict hasn't changed, and validateSoundFile's cache (§10.8.3) makes an
 // unchanged file a bare os.Stat, never a re-parse.
 func (a *App) refreshQuestionSoundAvailability() {
-	q := a.engine.GetState().Question
-	_, reason := a.questionSound().questionSoundAvailability(q)
+	state := a.engine.GetState()
+	_, reason := a.questionSound().questionSoundAvailability(state.Question)
+	// #235 : une carte MEMOTION ouverte dont le média est indisponible remonte son
+	// motif comme un état (le retournement n'est jamais refusé, §14.4).
+	if reason == "" && state.Question != nil && state.MotionSelected != "" &&
+		state.MotionCardStates[state.MotionSelected] == game.MotionCardStateQuestion {
+		for i := range state.Question.MotionCards {
+			if c := &state.Question.MotionCards[i]; c.ID == state.MotionSelected && c.Sound != "" {
+				_, reason = a.questionSound().sourceAvailability(c.Sound)
+			}
+		}
+	}
 	a.engine.SetQuestionSoundUnavailable(reason)
 }
 

@@ -61,6 +61,10 @@ type App struct {
 	// call site is therefore unconditional and safe, same discipline as
 	// lightingWriter/a.ambiance() above.
 	soundEngine atomic.Pointer[audio.Engine]
+	// soundBoot : état de la sortie audio figé à setupSound (#283), lu par GET /api/sound/status.
+	soundBoot atomic.Pointer[soundBootState]
+	// ambLayers : round + direct layers of the ambiance settings (#290, round_ambiance.go).
+	ambLayers ambianceLayers
 	// soundPhase is the sound layer's own front-detection memory (contract
 	// sound.md §5.4) — see its doc comment in cmd/server/sound.go.
 	soundPhase soundPhaseTracker
@@ -507,6 +511,7 @@ func (a *App) init() {
 	// Sound bruitage engine (#227/#228) — real Output when `sound.enabled`
 	// is true (sound.go).
 	a.setupSound()
+	a.refreshAmbiance() // #290: initial AMBIANCE_EFFECTIVE + the persisted lighting.default_mode pushed at startup
 
 	// Default sounds (#229): generates any MISSING cue's WAV into
 	// data/files/sounds/, never overwrites — unconditional at every real
@@ -653,7 +658,14 @@ func (a *App) setupCallbacks() {
 	// contracts/sound.md §2.1's CuePerdu) — sound-only, no lighting
 	// counterpart exists at this site today.
 	a.engine.OnRafaleInvalid = func() {
-		a.notifySound(audio.CuePerdu)
+		a.notifySound(audio.CueRafaleMauvaise) // #231 (D4) : remplace `perdu` sur ce site
+	}
+	// #231 (review m1) : le verdict sonne AVANT la fin de lot éventuelle — callbacks moteur.
+	a.engine.OnRafaleCorrect = func() { a.notifySound(audio.CueRafaleBonne) }
+	a.engine.OnRafaleCardInvalid = func() { a.notifySound(audio.CueRafaleMauvaise) }
+	// #231 : fin du lot RAFALE (réservoir épuisé / nombre max atteint), manche classique et carte.
+	a.engine.OnRafaleLotEnd = func() {
+		a.notifySound(audio.CueRafaleFinLot)
 	}
 
 	// RAFALE-in-MEMOTION-card (#217, v9.0.0, contract §14.5/§14.6) — fires
@@ -686,6 +698,8 @@ func (a *App) setupCallbacks() {
 		case "REBOOT", "RESET":
 			a.broadcastReset()
 		case "RESTORE":
+			a.questionSound().Stop() // #235 (m1) : un média en cours ne survit pas à une restauration
+			a.syncAmbianceRound()    // #290: round of the restored question (rounds.json restored with the questions)
 			a.broadcastQuestions()
 			a.broadcastUpdate()
 		case "RESET_SELECT":
@@ -744,6 +758,7 @@ func (a *App) setupCallbacks() {
 
 	// #286: sound mute / lighting master switch side effects (contract
 	// sound.md §11.2, §11.4) — fired by POST /config.json on a value change.
+	a.httpServer.Ambiance = a // #290: /api/ambiance/settings + direct gestures (wired with the callbacks)
 	a.httpServer.OnSoundMutedChange = func(muted bool) {
 		if muted {
 			a.questionSound().Stop()  // nil-safe
@@ -764,6 +779,7 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
+		a.refreshAmbiance() // #290: the global layer may have changed (default_mode, sound switches)
 		// #207: the `lighting` section may have changed — rebuild/hot-swap
 		// the Hue driver (no-op when nothing relevant changed).
 		a.reconfigureAmbiance()
@@ -2120,9 +2136,10 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 	if rel, ok := a.engine.CloseLaunchLock(clientID, "new_game"); ok { // applied NEW_GAME of the owner lifts the lock
 		a.logLaunchLockReleased(clientID, rel)
 	}
-	res := a.engine.InitGameWith(opts) // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
-	a.questionSound().Stop()           // the question sound ends with the question
-	a.countdownSound().Stop()          // #287 §12.8
+	res := a.engine.InitGameWith(opts)   // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
+	a.setAmbianceRoundB("", true, false) // #290: NEW_GAME ⇒ no effective round, direct layer emptied
+	a.questionSound().Stop()             // the question sound ends with the question
+	a.countdownSound().Stop()            // #287 §12.8
 	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
 		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, diag.LogToken(res.QuestionBefore))
 
@@ -2383,6 +2400,7 @@ func (a *App) handleReady(msg *protocol.Message) {
 	if st := a.engine.GetState(); st.Question == nil || st.Question.ID != payload.Question {
 		a.refreshRoundContext() // Ready() refused or selected another question: keep the context truthful
 	}
+	a.syncAmbianceRound()     // #290 (D1′): READY changing round applies its ambiance layer, emptying the direct one
 	a.questionSound().Stop()  // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
 	a.countdownSound().Stop() // #287 §12.8
 	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):
@@ -2878,6 +2896,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 	var isMatch, shouldFlipBack bool
 	var flipDelay int
 	var isComplete bool
+	flipApplied := false // #231 : le retournement a réellement eu lieu (sinon silence)
 	if flipBumper != nil {
 		res := a.engine.FlipCardGesture(game.FlipGesture{
 			BumperID: flipBumperID, Team: flipBumper.Team,
@@ -2894,6 +2913,7 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 			return
 		}
 		isMatch, shouldFlipBack, flipDelay, isComplete = res.IsMatch, res.ShouldFlipBack, res.FlipDelay, res.IsComplete
+		flipApplied = true
 		defer a.broadcastUpdateToPlayer(flipBumperID) // the ACK is followed by the targeted UPDATE
 	} else {
 		// #187 contract §9.2 — card-scope invariant, refused explicitly.
@@ -2924,15 +2944,25 @@ func (a *App) handleFlipMemoryCard(clientID string, clientType server.ClientType
 		server.LogInfo(game.LogComponentEngine, "FLIP_MEMORY_CARD: cardID=%s motionCardId=%s", payload.CardID, payload.MotionCardID)
 
 		if cardScoped {
-			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMotionMemoryCard(payload.MotionCardID, payload.CardID)
+			isMatch, shouldFlipBack, flipDelay, isComplete, flipApplied = a.engine.FlipMotionMemoryCardApplied(payload.MotionCardID, payload.CardID)
 		} else {
-			isMatch, shouldFlipBack, flipDelay, isComplete = a.engine.FlipMemoryCard(payload.CardID)
+			isMatch, shouldFlipBack, flipDelay, isComplete, flipApplied = a.engine.FlipMemoryCardApplied(payload.CardID)
 		}
 
 	}
 
 	// Broadcast updated game state to all clients
 	a.broadcastUpdate()
+
+	// #231 (D4 — une cue par événement) : paire trouvée ⇒ memory-paire, sinon carte
+	// retournée ⇒ memory-carte ; la paire ratée garde en plus `perdu` après le délai (ci-dessous).
+	if flipApplied {
+		if isMatch {
+			a.notifySound(audio.CueMemoryPaire)
+		} else {
+			a.notifySound(audio.CueMemoryCarte)
+		}
+	}
 
 	// If no match and 2 cards are flipped, schedule auto-flip-back
 	if shouldFlipBack && flipDelay > 0 {
@@ -3075,6 +3105,7 @@ func (a *App) handleMotionSelect(msg *protocol.Message) {
 		return
 	}
 
+	a.notifySound(audio.CueMemotionSelection) // #231 : carte choisie
 	a.broadcastUpdate()
 }
 
@@ -3130,17 +3161,28 @@ func (a *App) handleMotionFlip(msg *protocol.Message) {
 		}
 		a.engine.StartRafaleQuestionTimer(questionTime)
 		a.broadcastRafaleCardAnswer(cardID, questionID, answer)
+		// #235 : son de carte RAFALE joué sans différé (la carte a son propre minuteur de manche).
+		if card := a.findMotionCard(state, cardID); card != nil && card.Sound != "" {
+			c := *card
+			c.SoundTimerDelayed = false
+			a.questionSound().StartCard(state.Question, &c, func() {})
+		}
 		a.broadcastUpdate()
 		return
 	}
 
-	// Start per-card timer if Question.Time > 0 (every other nestable type)
-	if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
-		var delay int
-		if _, err2 := fmt.Sscanf(state.Question.Time, "%d", &delay); err2 == nil && delay > 0 {
-			a.engine.StartMotionCardTimer(delay)
+	// Start per-card timer if Question.Time > 0 (every other nestable type) —
+	// #235 : via StartCard, qui le diffère jusqu'à la fin du son de la carte
+	// quand elle a SOUND_TIMER_DELAYED, et joue le son de la carte (remplace l'hôte, D9).
+	startCardTimer := func() {
+		if state.Question != nil && state.Question.Time != "" && state.Question.Time != "0" {
+			var delay int
+			if _, err2 := fmt.Sscanf(state.Question.Time, "%d", &delay); err2 == nil && delay > 0 {
+				a.engine.StartMotionCardTimer(delay)
+			}
 		}
 	}
+	a.questionSound().StartCard(state.Question, a.findMotionCard(state, state.MotionSelected), startCardTimer)
 
 	a.broadcastUpdate()
 }
@@ -3158,6 +3200,7 @@ func (a *App) handleMotionReveal(msg *protocol.Message) {
 
 	// Stop timer (if running) before revealing
 	a.stopMotionCardTimer()
+	a.questionSound().StopCard() // #235 (D9) : le son de la carte s'arrête à la révélation, l'hôte ne reprend pas
 
 	if err := a.engine.RevealMotionCard(); err != nil {
 		server.LogWarn(game.LogComponentEngine, "MEMOTION_REVEAL error: %v", err)
@@ -3191,6 +3234,7 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 
 	// Stop per-card timer if still running
 	a.stopMotionCardTimer()
+	a.questionSound().StopCard() // #235 (D9) : fermeture de la carte, l'hôte ne reprend pas
 
 	points, isComplete, err := a.engine.DoneMotionCard(payload.CardID, payload.WinnerTeam, units)
 	if err != nil {
@@ -3204,6 +3248,9 @@ func (a *App) handleMotionDone(msg *protocol.Message) {
 		a.ambiance().NotifyPulse(lighting.KindScore, []string{payload.WinnerTeam}, points, lighting.ScorePulseDuration)
 		a.notifySound(audio.CueGagne)
 		a.startScoreFlash(payload.WinnerTeam, points)
+	} else {
+		// #231 (D4) : carte fermée sans gagnant ⇒ memotion-fin-carte (avec gagnant : gagne, ci-dessus).
+		a.notifySound(audio.CueMemotionFinCarte)
 	}
 
 	// Record event to history
@@ -3902,11 +3949,13 @@ func (a *App) handleEntracteSet(msg *protocol.Message, senders ...updateSender) 
 		a.sendLEDSetAllEntracteOff()
 		a.ambiance().NotifyState()
 		a.notifySound(audio.CueEntracteDebut)
+		a.questionSound().StartEntracte(a.engine.GetState().Question) // #235 : média après la cue
 		server.LogInfo(game.LogComponentApp, "Entracte activated — buzzer LEDs off")
 	} else {
 		a.sendLEDSetAllBuzzers()
 		a.ambiance().NotifyState()
 		a.notifySound(audio.CueEntracteFin)
+		a.questionSound().StopEntracte() // #235
 		server.LogInfo(game.LogComponentApp, "Entracte deactivated — buzzer LEDs restored")
 		programmed := false
 		if st := a.engine.GetState(); st.Question != nil && st.Question.Type == game.QuestionTypeEntracte {
@@ -5139,6 +5188,7 @@ func (a *App) broadcastQCMHint(invalidatedColor string, remainingAnswers int) {
 	a.broadcast(protocol.ActionQCMHint, data, false,
 		server.ClientTypeAdmin, server.ClientTypeTV, server.ClientTypeVPlayer, server.ClientTypeAnim)
 	server.LogInfo(game.LogComponentEngine, "QCM hint: invalidated=%s, remaining=%d", invalidatedColor, remainingAnswers)
+	a.notifySound(audio.CueQCMIndice) // #231 : un indice barre une réponse
 
 	// Also broadcast full update so clients receive the updated QcmInvalidated state
 	a.broadcastUpdate()

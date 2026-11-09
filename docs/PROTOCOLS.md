@@ -258,6 +258,52 @@ When a VJoueur is removed from the game, the server sends a `PLAYER_EVICTED` mes
 | GET | `/reset` | Factory reset |
 | GET | `/shutdown` | Graceful server shutdown |
 
+### Réglages d'ambiance et gestes directs (v11.6.0, #290)
+
+```
+GET /api/ambiance/settings
+```
+
+Lecture seule (`GET` uniquement, `405` sinon). Retourne les réglages globaux, les réglages effectifs, la source de chaque champ, la manche effective et sa surcharge :
+
+```json
+{
+  "global":   { "sound": { "muted": false, "countdown": {"enabled": true, "loop": true}, "cues": { "depart": true } }, "light": { "mode": "AUTO" } },
+  "effective":{ "sound": { "muted": false, "countdown": {"enabled": false, "loop": true}, "cues": { "depart": true } }, "light": { "mode": "ON" } },
+  "sources":  { "sound": { "muted": "global", "countdown": {"enabled": "round", "loop": "global"}, "cues": { "depart": "global" } }, "light": { "mode": "round" } },
+  "round_id": "r2",
+  "round_override": { "sound": { "countdown": {"enabled": false} }, "light": {"mode": "ON"} }
+}
+```
+
+Hors manche : `round_id` = `""` et `round_override` = `{}`. Forme complète : `contracts/ambiance-settings.md` §3 ; la liste des cues est abrégée ici.
+
+**Mode d'éclairage par défaut** — `POST /config.json {"lighting": {"default_mode": "ON" | "AUTO" | "OFF"}}` : réglage **global persisté** (`lighting.default_mode`, absent ⇒ `AUTO`). Toute autre valeur ⇒ `400`. `GET /config.json` l'expose.
+
+**Gestes directs** — `POST /config.json {"sound": {"muted" | "cues_disabled" | "countdown_disabled" | "countdown_once"}}` et `POST /api/lighting/mode` :
+- si la manche effective ne surcharge pas le champ, la valeur est aussi écrite dans le global (comportement v11.4.0) ;
+- si la manche le surcharge, le global n'est pas écrit et la réponse porte `"scope": "round"` ; sinon `"scope": "global"`. Les réponses de `POST /config.json` portent aussi `"status": "ok"` ;
+- `POST /api/lighting/mode` n'écrit jamais `default_mode`.
+
+**Champs de statut** — `GET /api/sound/status` : `muted` est la valeur **résolue**, `muted_source` vaut `"global"`, `"round"` ou `"direct"`. `GET /api/sounds` : `enabled` reste la valeur **globale** (le catalogue édite le global).
+
+### Fichiers de son par manche (v11.6.0, #290)
+
+Un fichier propre à une manche remplace le son global d'une cue (15 bruitages) ou du décompte, pour les questions de cette manche. Effet **immédiat** (indépendant de `ROUNDS_UPDATE`). `{id}` est validé contre `rounds.json` (`^r[0-9]+$`) et `{cue}` contre les 15 cues ∪ `decompte` **avant** tout usage de chemin : `404` sinon. Aucune authentification.
+
+| Méthode | Endpoint | Rôle | Réponse |
+|---------|----------|------|---------|
+| GET | `/api/rounds/{id}/sounds` | Liste des fichiers propres à la manche | `200 {round_id, files:[{cue, path, present, duration_seconds\|null}]}` (`files: []` si aucun) ; `404` manche inconnue |
+| POST | `/api/rounds/{id}/sounds/{cue}` (multipart `file`) | Remplacer le son de la cue pour cette manche | `200 {status, round_id, cue, path, duration_seconds, converted, source_format, warning}` ; `400` / `413` comme `/api/sounds/{cue}` ; `404` ; `405` |
+| DELETE | `/api/rounds/{id}/sounds/{cue}` | Revenir au fichier global | `200 {status:"ok"}` ; `404` si la manche n'a pas de fichier pour cette cue |
+| POST | `/api/rounds/{id}/sounds/{cue}/test` | Tester le fichier **effectif** (manche si présent, sinon global) | `200 {status:"ok", played:"round"\|"global"}` ; ignore `muted` et les interrupteurs |
+
+- **Validation** : identique au catalogue (`ToCanonical` #232, puis `ValidateUpload` pour une cue, validateur décompte pour `decompte`, plafonds bruts ×4). Le fichier écrit est toujours canonique, sous `data/files/sounds/rounds/<id>/<cue>.wav` (écriture temporaire puis renommage). `rounds.json` est mis à jour sous le verrou des fichiers de questions ; un fichier neuf est retiré si cette écriture échoue.
+- **Après écriture** : rechargement de `GameState.ROUNDS`, re-résolution des réglages, diffusion `UPDATE` (et `AMBIANCE_EFFECTIVE`).
+- **Lecture** : si le fichier de la manche est absent ou non conforme, le fichier global est joué (avec un `WARN` journalisé une fois).
+- `GET /api/ambiance/settings` expose `sound.files` dans `global`, `effective`, `sources` et `round_override`. `Écouter ici` lit `/files/sounds/rounds/<id>/<cue>.wav` (servi par `/files/**`, sans route dédiée).
+- `POST /api/sounds/{cue}/restore` et `restore-defaults` ne touchent pas les fichiers de manche. La suppression d'une manche supprime son dossier de sons.
+
 ### Categories API (v5.7.0)
 
 ```
