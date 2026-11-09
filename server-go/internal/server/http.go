@@ -1602,27 +1602,34 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 	// sound_loop (v11.4.0, #288, contract sound.md §13.2): same discipline.
 	soundLoop := r.FormValue("sound_loop") == "true"
 	var soundWarning string
+	var soundConverted bool
+	var soundSourceFormat string
 	if soundFile, soundHeader, ferr := r.FormFile("sound"); ferr == nil {
 		defer soundFile.Close()
 		if !strings.EqualFold(filepath.Ext(soundHeader.Filename), ".wav") {
 			http.Error(w, "le son doit être un fichier .wav", http.StatusBadRequest)
 			return
 		}
-		raw, rerr := io.ReadAll(io.LimitReader(soundFile, audio.MaxQuestionSoundBytes+1))
+		raw, rerr := io.ReadAll(io.LimitReader(soundFile, audio.MaxRawQuestionSoundBytes+1))
 		if rerr != nil {
 			http.Error(w, "lecture du fichier son échouée", http.StatusBadRequest)
 			return
 		}
-		if int64(len(raw)) > audio.MaxQuestionSoundBytes {
-			http.Error(w, fmt.Sprintf("ce fichier pèse plus que la limite de %d Mio pour un son de question", audio.MaxQuestionSoundBytes>>20), http.StatusRequestEntityTooLarge)
+		if int64(len(raw)) > audio.MaxRawQuestionSoundBytes {
+			http.Error(w, fmt.Sprintf("ce fichier pèse plus que la limite de %d Mio pour un son de question", audio.MaxRawQuestionSoundBytes>>20), http.StatusRequestEntityTooLarge)
 			return
 		}
 
 		result, verr := audio.ValidateQuestionSound(raw)
 		if verr != nil {
-			http.Error(w, verr.Error(), http.StatusBadRequest)
+			status := http.StatusBadRequest
+			if errors.Is(verr, audio.ErrTooLarge) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			http.Error(w, verr.Error(), status)
 			return
 		}
+		soundConverted, soundSourceFormat = result.Converted, result.SourceFormat
 
 		randomNum := rand.Intn(9000) + 1000
 		fileName := fmt.Sprintf("sound_%d.wav", randomNum)
@@ -1721,8 +1728,10 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	respBody, _ := json.Marshal(map[string]interface{}{
-		"status":  "ok",
-		"warning": nullableString(soundWarning),
+		"status":        "ok",
+		"warning":       nullableString(soundWarning),
+		"converted":     soundConverted,
+		"source_format": nullableString(soundSourceFormat),
 	})
 	w.Write(respBody)
 }

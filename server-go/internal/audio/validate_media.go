@@ -2,6 +2,7 @@ package audio
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -42,6 +43,9 @@ const (
 type QuestionSoundValidation struct {
 	PCM      []byte
 	Duration time.Duration
+	// Converted / SourceFormat : conversion à l'upload (#232) — voir ConversionInfo.
+	Converted    bool
+	SourceFormat string
 }
 
 // ValidateQuestionSound valide les octets bruts d'un upload de son de
@@ -74,30 +78,38 @@ type QuestionSoundValidation struct {
 // pas WAV / fréquence-bits / nombre de voies invalide / > 30 s / > 6 Mio),
 // jamais un message générique.
 func ValidateQuestionSound(raw []byte) (QuestionSoundValidation, error) {
-	if len(raw) > MaxQuestionSoundBytes {
-		return QuestionSoundValidation{}, fmt.Errorf(
-			"ce fichier pèse %.1f Mio — la limite pour un son de question est de %d Mio",
-			float64(len(raw))/(1<<20), MaxQuestionSoundBytes>>20)
+	if len(raw) > MaxRawQuestionSoundBytes {
+		return QuestionSoundValidation{}, ErrTooLarge
 	}
 
-	pcm, channels, err := extractQuestionSoundPCM(raw)
+	// #232 : conversion unique (WAV PCM/float, 1–2 voies, 8–192 kHz → canonique
+	// stéréo). Un mono 44,1 kHz 16 bits est upmixé ici (et signalé converti).
+	pcm, info, err := toCanonical(raw, MaxQuestionSoundDuration)
 	if err != nil {
-		return QuestionSoundValidation{}, fmt.Errorf(
-			"ce fichier n'est pas un WAV compatible (%d Hz, mono ou stéréo, %d bits) : %w",
-			SampleRate, BitsPerSample, err)
+		var tl *tooLongError
+		if errors.As(err, &tl) {
+			if canonicalBytesFor(tl.duration) > MaxQuestionSoundBytes {
+				return QuestionSoundValidation{}, ErrTooLarge
+			}
+			return QuestionSoundValidation{}, errQuestionSoundTooLong(tl.duration)
+		}
+		return QuestionSoundValidation{}, err
 	}
-	if channels == 1 {
-		pcm = upmixMonoToStereo(pcm)
+	if len(pcm)+44 > MaxQuestionSoundBytes {
+		return QuestionSoundValidation{}, ErrTooLarge
 	}
 
 	duration := pcmDuration(pcm)
 	if duration > MaxQuestionSoundDuration {
-		return QuestionSoundValidation{}, fmt.Errorf(
-			"ce son dure %.1f s — la limite pour un son de question est de %d s",
-			duration.Seconds(), int(MaxQuestionSoundDuration.Seconds()))
+		return QuestionSoundValidation{}, errQuestionSoundTooLong(duration)
 	}
 
-	return QuestionSoundValidation{PCM: pcm, Duration: duration}, nil
+	return QuestionSoundValidation{PCM: pcm, Duration: duration, Converted: info.Converted, SourceFormat: info.SourceFormat}, nil
+}
+
+func errQuestionSoundTooLong(d time.Duration) error {
+	return fmt.Errorf("ce son dure %.1f s — la limite pour un son de question est de %d s",
+		d.Seconds(), int(MaxQuestionSoundDuration.Seconds()))
 }
 
 // extractQuestionSoundPCM parse un flux RIFF/WAVE et valide son chunk
