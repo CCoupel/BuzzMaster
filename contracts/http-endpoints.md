@@ -1021,7 +1021,7 @@ et `new-game-backgrounds/` en sont déjà absentes et ne survivent qu'à une sau
 ### Sécurité — le nom de cue vient de l'URL, normatif pour tous les endpoints `{cue}` ci-dessous
 
 Le segment `{cue}` transite par l'URL et sert à construire un chemin de fichier
-(`data/files/sounds/<cue>.wav`). **Il doit être validé contre le catalogue fermé des 7 cues**
+(`data/files/sounds/<cue>.wav`). **Il doit être validé contre le catalogue fermé des cues** (7 en v11.0 ; **15 depuis v11.6.0**, `sound.md` §2.1 amendement #231)
 (`contracts/sound.md` §2.1) **avant tout usage** — jamais passé tel quel à une jointure de chemin.
 Une valeur hors catalogue rend `404`, jamais une tentative de résolution disque. Même discipline
 que la garde SSRF de #206 et que `filepath.Base` à la suppression d'un fond d'écran.
@@ -1318,3 +1318,98 @@ comportement d'interface, hors périmètre de ce contrat HTTP.
 - `GET /questions` : chaque question porte son `ROUND_ID` éventuel. La liste des manches est dans `GameState.ROUNDS`.
 - **Sauvegarde / restauration** : `data/files/questions/rounds.json` fait partie de `files/questions`, donc il est sauvegardé et restauré **avec les questions**. Une restauration remplace les manches comme elle remplace les questions. Une question qui cite une manche absente tombe dans « Sans manche ».
 - **Génération IA** (`ai-generation.md` §5.2) : les questions générées n'ont pas de `ROUND_ID`. Elles arrivent **à la fin du groupe « Sans manche »**, qui est **en tête** de la liste *(décision utilisateur)*. `ORDER` = plus grand `ORDER` de ce groupe + 1, comme aujourd'hui.
+
+---
+
+## Sound & Ambiance — amendements v11.6.0 (#283, #232, #235, #231, #290)
+
+> Plan `_work/reports/planner-plan-v11.6.0.md` (Révision 2). Tous additifs ; aucun BREAKING.
+
+### `GET /api/sound/status` — diagnostic (#283, LOT-1)
+
+```json
+{"active": true, "muted": false,
+ "enabled": true, "output": "ok", "reason": null, "restart_required": false, "muted_source": "global"}
+```
+
+| Champ | Type | Description |
+|---|---|---|
+| `active`, `muted` | bool | **Inchangés** (v11.0 / v11.4.0). `muted` = valeur **résolue** (`ambiance-settings.md`) |
+| `enabled` | bool | `sound.enabled` lu **au démarrage** (valeur qui a ouvert ou non la sortie) |
+| `output` | `"ok" \| "unavailable" \| "disabled" \| "restart_required"` | `ok` : sortie ouverte ; `unavailable` : `enabled` mais contexte audio refusé (`IsNeutral`) ; `disabled` : `enabled=false` au démarrage ; `restart_required` : `sound.enabled` **courant ≠ valeur au démarrage** (interrupteur changé sans redémarrage, dans un sens ou l'autre) |
+| `reason` | string \| null | Cause lisible, **même texte que le journal de démarrage** (ex. `oto: no output device`, `sound.enabled=false`, `enabled flipped false→true after startup`) ; `null` si `ok` |
+| `restart_required` | bool | `output == "restart_required"` (commodité frontend) |
+| `muted_source` | `"global" \| "round" \| "direct"` | Source du `muted` résolu (#290, LOT-4 ; `"global"` tant que LOT-4 n'est pas livré) |
+
+Journal de démarrage (P1) : une ligne `INFO`/`WARN`/`ERROR` composant `AUDIO`
+`sound: enabled=<b> output=<ok|unavailable|disabled> reason="…" device=<…> format=44100Hz/2ch/16bit (config: <chemin>)`
+routée vers le logger serveur (`/ws/logs`, fichier `logging.md`) ; les `log.Printf` d'`internal/audio` passent par un
+logger injecté (`audio.SetLogger`). Maquette `docs/mockup/v11.6.0/ui/admin_sounds_manager__output_diagnostic.html`.
+
+### Uploads sonores — conversion automatique (#232, LOT-1)
+
+`POST /api/sounds/{cue}`, `POST /api/sounds/decompte`, `POST /questions` (`sound`, `motion_card_<id>_sound`) : la règle
+« format canonique strict » de la table de `POST /api/sounds/{cue}` devient **« WAV PCM, converti en canonique »**
+(`sound.md` §3 amendement #232 : tags 1/3/extensible, 8–32 bits ou float32, 1–2 canaux, 8–192 kHz ; `.mp3` toujours
+refusé). Réponses `200` : champs additifs `converted: bool` et `source_format: string|null` (ex. `"48000Hz/1ch/24bit"`,
+`null` si déjà canonique). `POST /questions` : mêmes champs dans la réponse JSON. Erreurs : `400` « pas WAV / format
+PCM inconnu / compressé » (texte nommant le cas), `413` au-delà de **4 ×** le plafond canonique du chemin (entrée brute)
+ou du plafond canonique après conversion ; limites de **durée** inchangées (5 s cue, 30 s média, calculées **après**
+conversion). Le message frontend indique « converti depuis <source_format> » (toast existant).
+
+### `GET /api/sounds` — cues par type (#231, LOT-3)
+
+`cues[]` gagne `type: "" | "QCM" | "MEMORY" | "MEMOTION" | "RAFALE"` et contient les **15** cues dans l'ordre normatif
+(global puis par type — `sound.md` §2.1 amendement). `long[]` inchangé. Les endpoints `POST /api/sounds/{cue}`,
+`/restore`, `/test` acceptent les 8 nouvelles cues (validation URL contre `audio.AllCues()`), sans autre changement.
+`POST /api/sounds/restore-defaults` restaure les 15 + `decompte`.
+
+### `POST /questions` — sons de cartes MEMOTION (#235, LOT-2)
+
+| Champ | Type | Description |
+|---|---|---|
+| `motion_card_<cardID>_sound` | file | Média sonore de la **carte** (`sound.md` §14.4) — mêmes règles que `sound` (`ValidateQuestionSound` après conversion §232, ≤ 30 s, ≤ 6 Mio) ; écrit `MOTION_CARDS[].SOUND = "/question/<id>/motion_<cardID>_sound_<rand4>.wav"` |
+| `motion_card_<cardID>_sound_cleared` | `"true"`/absent | Supprime le son de la carte (fichier compris) |
+| `motion_card_<cardID>_sound_timer_delayed` | `"true"`/absent | Différé du **chrono de la carte** ; écrit seulement si un son est attaché |
+| `motion_card_<cardID>_sound_loop` | `"true"`/absent | Boucle ; écrit seulement si un son est attaché |
+
+**Préservation serveur par `ID` de carte** (normatif, `sound.md` §14.4) : une carte existante sans nouveau fichier ni
+`_sound_cleared` **conserve** ses trois champs depuis le `question.json` existant. `sound` / `sound_loop` restent
+acceptés pour **MEMORY**, **ENTRACTE** et l'**hôte MEMOTION** (champ commun, §10.4bis) ; `sound_timer_delayed` est ignoré
+(écrit `false`) pour ENTRACTE et hôte MEMOTION (pas de chrono global). Réponse : `warning` de durée (v11.1) étendu aux
+cartes sous la forme `card_warnings: [{card_id, warning}]` (additif, `[]` sinon).
+
+### `POST /config.json {"lighting": {"default_mode": "ON"|"AUTO"|"OFF"}}` (#290, LOT-4)
+
+Nouveau réglage **persisté** (D8), fusion champ par champ existante ; `400` hors valeurs. Valeur **globale** du mode
+d'éclairage (`ambiance-settings.md` §2) ; `POST /api/lighting/mode` reste le **geste direct** et n'écrit jamais
+`default_mode` (§4.2 point 4). `GET /config.json` l'expose (absent ⇒ `AUTO`).
+
+### `GET /api/ambiance/settings` ✨ (#290, LOT-4)
+
+| Propriété | Valeur |
+|---|---|
+| Auth | Aucune |
+| Méthode | `GET` uniquement |
+
+```json
+{
+  "global":   { "sound": { "muted": false, "countdown": {"enabled": true, "loop": true}, "cues": { "depart": true, "…": true } }, "light": { "mode": "AUTO" } },
+  "effective":{ "sound": { "muted": false, "countdown": {"enabled": false, "loop": true}, "cues": { "…": true, "qcm-indice": false } }, "light": { "mode": "ON" } },
+  "sources":  { "sound": { "muted": "global", "countdown": {"enabled": "round", "loop": "global"}, "cues": { "…": "global", "qcm-indice": "round" } }, "light": { "mode": "round" } },
+  "round_id": "r2",
+  "round_override": { "sound": { "countdown": {"enabled": false}, "cues": {"qcm-indice": false} }, "light": {"mode": "ON"} }
+}
+```
+
+Formes : `ambiance-settings.md` §3. `round_id = ""` et `round_override = {}` hors manche. Lu par la fenêtre « Ambiance de
+la manche » (`base = global`) et par le popover en secours de `GameState.AMBIANCE_EFFECTIVE`.
+
+### Écritures de réglages existantes — effet « geste direct » (#290, LOT-4)
+
+`POST /config.json {"sound": {"muted"|"cues_disabled"|"countdown_disabled"|"countdown_once"}}` et `POST /api/lighting/mode`
+sont des **gestes directs** (`ambiance-settings.md` §4.2) : ils alimentent la couche directe et, **si la manche effective
+ne surcharge pas le champ**, le global persisté (comportement v11.4.0 conservé). Sinon le global n'est pas écrit et la
+réponse `200` porte `{"status":"ok","scope":"round"}` (additif ; `"scope":"global"` sinon) pour que la page Ambiance
+puisse l'indiquer.
+

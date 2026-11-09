@@ -534,8 +534,14 @@ const ardoiseAnswers = gameState.ARDOISE_ANSWERS || {}
 
 | Champ | Type | Défaut | Description |
 |-------|------|--------|-------------|
-| ROUNDS | `Round[]` (`models.md` §Manches) | `[]` | Liste **ordonnée** des manches du quiz (`ID`, `NAME`). **Toujours sérialisé**, `[]` jamais `null`. Diffusé à **tous** les clients web (admin, anim, TV, VJoueur) : il ne contient aucune donnée sensible et sert au tri et à l'indicateur de manche. La manche de la question courante se lit par `QUESTION.ROUND_ID` ; absent ou inconnu = « Sans manche ». Rechargé depuis `rounds.json` au démarrage et après chaque `ROUNDS_UPDATE` |
+| ROUNDS | `Round[]` (`models.md` §Manches) | `[]` | Liste **ordonnée** des manches du quiz (`ID`, `NAME`, **`AMBIANCE`** depuis v11.6.0 #290 — surcharge partielle, `{}` si hérité, toujours présente). **Toujours sérialisé**, `[]` jamais `null`. Diffusé à **tous** les clients web (admin, anim, TV, VJoueur) : il ne contient aucune donnée sensible et sert au tri et à l'indicateur de manche. La manche de la question courante se lit par `QUESTION.ROUND_ID` ; absent ou inconnu = « Sans manche ». Rechargé depuis `rounds.json` au démarrage et après chaque `ROUNDS_UPDATE` |
 | ROUND_CONTEXT | `{ ROUND_ID: string, ROUND_INDEX: number, ROUND_COUNT: number, POSITION: number, TOTAL: number, FIRST_OF_ROUND: boolean }` | `{ROUND_ID:"", ROUND_INDEX:0, ROUND_COUNT:0, POSITION:0, TOTAL:0, FIRST_OF_ROUND:false}` | Place de la **question courante** dans les manches, **calculée par le serveur** à chaque `READY` (et après `ROUNDS_UPDATE`, `DELETE`, `NEW_GAME`). La TV n'a pas la liste des questions, d'où ce champ. Sémantique des champs :<ul><li>`ROUND_INDEX` : rang 1-based de la manche, `0` = « Sans manche » ou aucune manche ;</li><li>`ROUND_COUNT` : nombre de manches ;</li><li>`POSITION` / `TOTAL` : rang 1-based de la question et nombre de questions dans son groupe, même tri que `NEXT_QUESTION`, **sans compter les entrées ENTRACTE** (`POSITION = 0` quand la question courante est une ENTRACTE) ;</li><li>`FIRST_OF_ROUND` : `true` pour la **première entrée non-ENTRACTE** de sa manche dans l'ordre de jeu, `false` pour toutes les autres et pour toute ENTRACTE. Le titre de manche de l'écran d'attente TV s'affiche ainsi sur la première question, qu'il y ait ou non une entracte de début avant elle ; une ENTRACTE affiche déjà son propre panneau.</li></ul>**Toujours sérialisé**, tous clients web. Tout à zéro si `ROUNDS` est vide : aucun indicateur ne s'affiche |
+
+## Réglages d'ambiance effectifs (`AMBIANCE_EFFECTIVE`) ✨ (v11.6.0, #290)
+
+| Champ | Type | Défaut | Description |
+|-------|------|--------|-------------|
+| AMBIANCE_EFFECTIVE | `{ SETTINGS: Settings, SOURCES: Sources, ROUND_ID: string }` | réglages globaux, toutes sources `"global"`, `ROUND_ID: ""` | Réglages de comportement **résolus** (global ← manche ← geste direct, `contracts/ambiance-settings.md` §3–§4) et la **source** de chaque champ (`"global" \| "round" \| "direct"`). `ROUND_ID` = manche effective (`""` hors manche). **Toujours sérialisé** (règle projet : pas d'`omitempty`), **tous clients web** (admin, anim, TV, VJoueur — aucune donnée sensible ; seul l'admin l'affiche, popover « Ambiance » : valeurs effectives + étiquettes « manche » / « direct », maquette `admin_navbar__ambiance_popover_round_source.html`). Recalculé et diffusé à chaque changement de résolution : `READY` changeant de manche, `NEW_GAME`, `RESTORE`, `ROUNDS_UPDATE`, `POST /config.json` (sound/lighting), `POST /api/lighting/mode`. `SETTINGS` est de forme **complète** (toutes les cues présentes). **Persistance : aucune** (dérivé). |
 
 ## Métadonnées Quiz (`QUIZ_*`)
 
@@ -1089,6 +1095,7 @@ les deux — ne pas « corriger » l'un en croyant à un oubli.
 interface GameState {
   // ...
   QUESTION_SOUND_STATE: "IDLE" | "PLAYING" | "PAUSED"
+  QUESTION_SOUND_OWNER: "" | "HOST" | "CARD:<cardID>" | "ENTRACTE"   // v11.6.0 (#235) — propriétaire du média courant ; "" si IDLE ; HOST = question (tous types, hôte MEMOTION compris)
   ANSWER_TIMER_WAITING: boolean
 }
 ```

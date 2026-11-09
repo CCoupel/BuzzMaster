@@ -123,6 +123,7 @@ Le registre (§7) déclare, pour chaque type, les champs de `TypedContent` qui *
 | Portée | Champs | Change avec le type ? |
 |---|---|---|
 | **Carte** — face de grille, énoncé, barème | `RECTO_THEME`, `RECTO_IMAGE`, `DIFFICULTY`, `POINTS_RULE`, `QUESTION_TEXT`, `QUESTION_IMAGE` | ❌ jamais — conservés tels quels quel que soit le `TYPE` |
+| **Carte — son** ✨ v11.6.0 (#235) | `SOUND`, `SOUND_TIMER_DELAYED`, `SOUND_LOOP` (`sound.md` §14.4) | ❌ jamais — champs **communs de carte**, conservés quel que soit le `TYPE` ; **préservés côté serveur par `ID` de carte** à chaque ré-édition (jamais par le frontend) |
 | **`SPEEDY`** | `ANSWER_TEXT`, `ANSWER_IMAGE` | ✅ |
 | **`QCM`** | `QCM_ANSWERS`, `QCM_CORRECT`, `QCM_HINTS_ENABLED`, `QCM_HINT_THRESHOLD_1/2`, `QCM_PENALTY_1/2` | ✅ |
 | **`ARDOISE`** *(hôte question uniquement)* | `ANSWER`, `ARDOISE_KEYBOARD_TYPE` | ✅ |
@@ -891,3 +892,13 @@ jour en conséquence.
 | Champs d'indices ignorés et retirés d'une carte QCM à l'enregistrement (§7.1) | **CHANGED**, non BREAKING | aucune requête acceptée aujourd'hui ne devient refusée ; aucune donnée persistée sans effet ; l'éditeur ne produit plus ces champs pour une carte |
 | Plus aucun `QCM_HINT` ni `MEMOTION_ACTIVE.STATE.QCM_INVALIDATED` pendant une carte (§5.3, §7.1) | **CHANGED**, comportement | une carte stockée avec indices est lue et jouée sans erreur, simplement sans indice ; accesseur client conservé (liste vide) |
 | Champs d'indices retirés du verrou de type d'une carte (§3.2) | **CHANGED**, précision | sans objet en carte ; `QCM_ANSWERS` / `QCM_CORRECT` verrouillent toujours |
+
+### 11.5 Ajouts v11.6.0 (#235, LOT-2) — toujours aucun changement BREAKING
+
+| Élément | Changement | Preuve |
+|---|---|---|
+| `MotionCard.SOUND`, `SOUND_TIMER_DELAYED`, `SOUND_LOOP` | **NEW**, `omitempty`, champs communs de carte (§3.1) | fixtures `models_roundtrip_test.go` octet pour octet sans ces clés |
+| Upload `motion_card_<cardID>_sound[_cleared|_timer_delayed|_loop]` | **NEW** (`http-endpoints.md` §POST /questions v11.6.0) — pipeline §8 : le slot `sound` **n'est pas** un `MediaSlot` (`*_IMAGE`) ; traité comme `SOUND` hôte, hors `TypeDescriptor.MediaSlots` | `TestQuestionTypeRegistry_NestableTypesDeclareMediaSlots` inchangé |
+| Préservation par `ID` de carte à la ré-édition | **NEW**, serveur (`handleUploadQuestion`) | test « édition du titre hôte ⇒ sons de cartes intacts » |
+| Lecture au retournement, différé sur le chrono de carte, voix unique D9 | **NEW** (`sound.md` §14.4) | `question_sound_235_test.go` |
+
