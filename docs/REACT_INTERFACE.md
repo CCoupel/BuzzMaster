@@ -2045,7 +2045,7 @@ La page utilise une **barre d'onglets** (`role="tablist"`) avec deux positions m
 | Onglet | Contenu | Statut |
 |---|---|---|
 | 🔆 **Lumière** | Configuration Philips Hue (pont, ampoules, sélecteur ON/AUTO/OFF) | Actif par défaut |
-| 🔊 **Son** | Gestion des sept cues sonores, interrupteur général | v11.0 (#230) |
+| 🔊 **Son** | Gestion des bruitages (15 depuis v11.6.0, répartis en onglets par type de jeu), interrupteur général | v11.0 (#230) ; onglets v11.6.0 (#231) |
 
 #### Mécanique des onglets
 
@@ -2089,7 +2089,7 @@ Réutilise intégralement le contenu existant de `AmbiancePage` (v10.0.0+). Voir
 
 **Fichier** : `web/src/components/SoundsManager.jsx`
 
-**Description** : Tableau de gestion des sept cues sonores — affichage de l'état (défaut/personnalisé), durée, et trois actions.
+**Description** : Tableau de gestion des bruitages (15 depuis v11.6.0) — affichage de l'état (défaut/personnalisé), durée, et trois actions.
 
 #### Interrupteur général
 
@@ -2111,7 +2111,7 @@ En haut de l'onglet Son, un **bascule ON/OFF** pour activer/désactiver les brui
 
 État affiché aussi dans la pastille (badge `active` en haut de l'onglet).
 
-#### Tableau des sept cues — `SoundsManager`
+#### Tableau des bruitages — `SoundsManager`
 
 Pour chaque cue, une ligne affiche :
 
@@ -2159,7 +2159,7 @@ En bas du tableau `SoundsManager` :
 </button>
 ```
 
-**Effet** : `POST /api/sounds/restore-defaults` — régénère les sept sons, écrase tous les personnalisés.
+**Effet** : `POST /api/sounds/restore-defaults` — régénère tous les bruitages (15 depuis v11.6.0) et le décompte, écrase tous les personnalisés.
 
 **Dialogue de confirmation** : « Cette action est définitive — les sons personnalisés seront perdus. Continuer ? »
 
