@@ -24,6 +24,9 @@
   `question-types.md` §3.1/§11.5, `http-endpoints.md`, `websocket-actions.md`. LOT-2.
 - **[CHANGED]** `GET /api/sound/status` — champs additifs `enabled`, `output ∈ {ok, unavailable, disabled, restart_required}`,
   `reason`, `restart_required`, `muted_source` ; journal de démarrage `AUDIO` normalisé. `http-endpoints.md`. LOT-1 (#283).
+- **[NEW]** `audio.SetLogger(Logger)` — `type Logger func(level LogLevel, format string, args ...any)`, `type LogLevel int`
+  (`LogInfo`, `LogWarn`, `LogError`) : logger injecté dans `internal/audio`, remplace les `log.Printf` ; **signature actée après revue LOT-1**
+  (le plan disait `func(string, ...any)` sans niveau). `http-endpoints.md` §status (#283).
 - **[CHANGED]** Uploads sonores (`/api/sounds/{cue}`, `/api/sounds/decompte`, `POST /questions sound`, cartes) — un WAV PCM
   non canonique est **converti** à l'upload (Go pur, FIR fenêtré, repliement < −40 dB) au lieu d'être refusé ; `.mp3`
   toujours refusé ; réponses `converted`, `source_format` ; plafond d'entrée brute 4 × canonique. `sound.md` §3 amendement,

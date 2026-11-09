@@ -1344,7 +1344,9 @@ comportement d'interface, hors périmètre de ce contrat HTTP.
 Journal de démarrage (P1) : une ligne `INFO`/`WARN`/`ERROR` composant `AUDIO`
 `sound: enabled=<b> output=<ok|unavailable|disabled> reason="…" device=<…> format=44100Hz/2ch/16bit (config: <chemin>)`
 routée vers le logger serveur (`/ws/logs`, fichier `logging.md`) ; les `log.Printf` d'`internal/audio` passent par un
-logger injecté (`audio.SetLogger`). Maquette `docs/mockup/v11.6.0/ui/admin_sounds_manager__output_diagnostic.html`.
+logger injecté — **signature livrée (revue LOT-1)** : `audio.SetLogger(l audio.Logger)` avec
+`type Logger func(level LogLevel, format string, args ...any)` et `type LogLevel int` (`LogInfo`, `LogWarn`, `LogError`) ; défaut `log.Printf`
+sans niveau. L'adaptateur `cmd/server` mappe `LogLevel` → `logger.Info/Warn/Error(game.LogComponentAudio, …)`. Maquette `docs/mockup/v11.6.0/ui/admin_sounds_manager__output_diagnostic.html`.
 
 ### Uploads sonores — conversion automatique (#232, LOT-1)
 
