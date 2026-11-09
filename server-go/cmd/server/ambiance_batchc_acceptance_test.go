@@ -311,7 +311,10 @@ func twCWaitTeamZoneColor(t *testing.T, fake *lighting.FakeDriver, team string, 
 func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *testing.T) {
 	app, fake, cancel := tw208NewWriterApp(t)
 	defer cancel()
-	app.ambCtl().FlashPhases = flashPhaseOverride{ScoreGold: 125 * time.Millisecond, ScoreTeam: 250 * time.Millisecond} // #291 : ÷2 (driver factice)
+	// Cadence de PRODUCTION (250 ms or / 500 ms équipe, aucun override) : la phase or doit rester nettement supérieure au
+	// pacing du writer (lighting.MinInterval = 100 ms) — à 125 ms (marge de 25 ms) l'apply « or » pouvait tomber hors
+	// phase sous charge (même aliasing que le Flash, correctif CI 465a8590). Les attentes de 800 ms couvrent la phase
+	// d'équipe de 500 ms ; coût : ≈ 1,5 s au lieu de 0,8 s.
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}}})
 	wantTeamA := app.teamNameToRGB("TeamA")
 	app.ambiance().NotifyState() // établit un premier état stable (hors partie)
