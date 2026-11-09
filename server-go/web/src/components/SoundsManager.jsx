@@ -235,6 +235,10 @@ export default function SoundsManager() {
   const panelValue = {
     sound: {
       muted: soundStatus.muted === true,
+      countdown: {
+        enabled: sounds.long.find(l => l.name === 'decompte')?.enabled !== false,
+        loop: sounds.long.find(l => l.name === 'decompte')?.loop !== false,
+      },
       cues: Object.fromEntries(sounds.cues.map(c => [c.cue, c.enabled])),
     },
   }
@@ -248,6 +252,10 @@ export default function SoundsManager() {
         console.error('Set sound muted failed:', error)
         setToast({ message: 'Erreur : ' + error.message, type: 'error' })
       }
+    } else if (field === 'sound.countdown.enabled') {
+      handleToggleLong('decompte', value)
+    } else if (field === 'sound.countdown.loop') {
+      handleSetLoop('decompte', value)
     } else if (field.startsWith('sound.cues.')) {
       await handleToggleCue(field.slice('sound.cues.'.length), value)
     }
@@ -342,32 +350,10 @@ export default function SoundsManager() {
                 <b>{meta.label}</b>
                 <span className="sound-sub">{meta.sub}</span>
               </td>
-              <td className="sound-col-center">
-                <label className="sound-switch sound-switch-sm">
-                  <input
-                    type="checkbox"
-                    checked={row.enabled}
-                    onChange={e => handleToggleLong(row.name, e.target.checked)}
-                    aria-label={`Activer ${meta.label}`}
-                  />
-                  <span className="sound-switch-track" aria-hidden="true" />
-                </label>
-              </td>
-              <td>
-                <span className="sound-loop-seg" role="group" aria-label="Lecture du décompte">
-                  {[{ loop: false, label: 'Une fois' }, { loop: true, label: 'En boucle' }].map(opt => (
-                    <button
-                      key={opt.label}
-                      type="button"
-                      className={`sound-loop-seg-opt ${row.loop === opt.loop ? 'sel' : ''}`}
-                      aria-pressed={row.loop === opt.loop}
-                      onClick={() => row.loop !== opt.loop && handleSetLoop(row.name, opt.loop)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </span>
-              </td>
+              {/* #290 — le réglage (actif, une fois / en boucle) vit dans la section « Décompte » du panneau
+                  mutualisé ; la ligne ne garde que le fichier (maquette global_per_type_tabs). */}
+              <td className="sound-col-center"><span className="asp-inherit">réglé ci-dessus</span></td>
+              <td className="sound-mono">—</td>
               <td>
                 <span className={`sound-tag ${row.custom ? 'is-custom' : ''}`}>
                   {row.custom ? 'Personnalisé' : 'Défaut'}
@@ -427,7 +413,7 @@ export default function SoundsManager() {
         value={panelValue}
         onChange={handlePanelChange}
         cues={sounds.cues}
-        sections={['sound', 'cues']}
+        sections={['sound', 'countdown', 'cues']}
         catalogueColumns={CATALOGUE_COLUMNS}
         renderCatalogue={renderCatalogue}
         renderExtraRows={renderLongRows}

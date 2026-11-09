@@ -28,6 +28,9 @@ export default function RoundGroup({
   onDown,
   onRename,
   onDelete,
+  onAmbiance,
+  ambianceCount = 0,
+  ambianceTitle = '',
   onAddQuestion,
   isEmpty = false,
   emptyText,
@@ -93,10 +96,24 @@ export default function RoundGroup({
         )}
         <span className="round-count">{countText}</span>
         {collapsed && typesText && <span className="round-types">{typesText}</span>}
+        {!unassigned && !isNew && ambianceCount > 0 && (
+          <span className="round-ambiance-badge" title={ambianceTitle}>
+            🎛 Ambiance : {ambianceCount} réglage{ambianceCount > 1 ? 's' : ''}
+          </span>
+        )}
         {!unassigned && (
           <>
             <button type="button" className="round-ibtn" aria-label="Monter la manche" title="Monter" disabled={index === 0} onClick={onUp}>▲</button>
             <button type="button" className="round-ibtn" aria-label="Descendre la manche" title="Descendre" disabled={index === total - 1} onClick={onDown}>▼</button>
+            {!isNew && onAmbiance && (
+              <button
+                type="button"
+                className={`round-ibtn${ambianceCount > 0 ? ' is-active' : ''}`}
+                aria-label="Ambiance de la manche"
+                title="Ambiance de la manche"
+                onClick={onAmbiance}
+              >🎛</button>
+            )}
             {editing ? (
               <>
                 <button type="button" className="round-ibtn" aria-label="Valider le nom" title="Valider" disabled={!nameValid} onClick={onNameValidate}>✓</button>

@@ -119,6 +119,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
     // #245 (v11.2) — manches du quiz (liste ordonnée {ID, NAME}, diffusée à tous les clients) et place de la
     // question courante dans ses manches (calculée par le serveur ; la TV n'a pas la liste des questions).
     ROUNDS: [],
+    // #290 (v11.6.0) — réglages d'ambiance résolus { SETTINGS, SOURCES, ROUND_ID } ; null tant que non reçu.
+    AMBIANCE_EFFECTIVE: null,
     ROUND_CONTEXT: { ROUND_ID: '', ROUND_INDEX: 0, ROUND_COUNT: 0, POSITION: 0, TOTAL: 0, FIRST_OF_ROUND: false },
     // ENTRACTE_CONFIG — configuration DIFFUSÉE au panneau (gelée pendant une
     // pause active, corrections C4). entracteConfigSaved (ci-dessous) est la
@@ -561,6 +563,7 @@ export default function useWebSocket(endpoint = '/ws/admin') {
             NETWORK: mapNetwork(MSG.GAME.NETWORK, MSG.GAME.NETWORK_ONLY_LOCALHOST, prev.NETWORK),
             ROUNDS: MSG.GAME.ROUNDS ?? prev.ROUNDS,
             ROUND_CONTEXT: MSG.GAME.ROUND_CONTEXT ?? prev.ROUND_CONTEXT,
+            AMBIANCE_EFFECTIVE: MSG.GAME.AMBIANCE_EFFECTIVE ?? prev.AMBIANCE_EFFECTIVE,
             entracteConfig: MSG.GAME.ENTRACTE_CONFIG ?? prev.entracteConfig,
             // ENTRACTE_CONFIG_SAVED (corrections C4) — diffusion restreinte à
             // l'admin (AdminOnlyGameFields), même repli que QUIZ_OBJECTIVES :
@@ -1411,6 +1414,8 @@ export default function useWebSocket(endpoint = '/ws/admin') {
         NAME: r.name,
         QUESTIONS: (r.questions || []).map(String),
         ...(r.entractes !== undefined ? { ENTRACTES: !!r.entractes } : {}),
+        // #290 — absent ⇒ le serveur conserve la surcharge ; {} explicite ⇒ l'efface
+        ...(r.ambiance !== undefined ? { AMBIANCE: r.ambiance } : {}),
       })),
       UNASSIGNED: (payload.unassigned || []).map(String),
     }

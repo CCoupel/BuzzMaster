@@ -16,7 +16,7 @@ export const MAX_ROUND_NAME = 60
 export function structureFrom(questionsById, rounds) {
   const g = groupQuestionsByRound(questionsById, rounds)
   return {
-    rounds: g.rounds.map(r => ({ id: r.ID, name: r.NAME, questions: r.questions.map(q => String(q.ID)) })),
+    rounds: g.rounds.map(r => ({ id: r.ID, name: r.NAME, ...(r.AMBIANCE !== undefined ? { ambiance: r.AMBIANCE } : {}), questions: r.questions.map(q => String(q.ID)) })),
     unassigned: g.unassigned.map(q => String(q.ID)),
     deletedRounds: [],
   }
@@ -90,6 +90,15 @@ export function addRound(struct, name, entractes = true) {
   return s
 }
 
+/** #290 — remplace la surcharge d'ambiance d'une manche existante (`{}` = tout hérité). */
+export function setRoundAmbiance(struct, id, ambiance) {
+  const s = clone(struct)
+  const r = s.rounds.find(x => x.id === id)
+  if (!r) return struct
+  r.ambiance = ambiance || {}
+  return s
+}
+
 /**
  * Supprime une manche avec le choix de la fenêtre : 'KEEP' (ses entrées passent à la fin de « Sans manche », dans
  * leur ordre) ou 'DELETE' (supprimées avec leurs médias). Les entrées d'une manche supprimée ne sont pas citées
@@ -119,6 +128,8 @@ export function toRoundsUpdatePayload(struct) {
       name: r.name,
       questions: r.questions,
       ...(r.id ? {} : { entractes: r.entractes !== false }),
+      // #290 — surcharge d'ambiance transportée telle quelle (conservée quand on édite autre chose)
+      ...(r.ambiance !== undefined ? { ambiance: r.ambiance } : {}),
     })),
     unassigned: struct.unassigned,
     deletedRounds: struct.deletedRounds || [],

@@ -9,7 +9,7 @@ import { useCategories } from '../hooks/useCategories'
 import { CATEGORIES } from '../utils/categoryUtils'
 import { sortQuestionsByOrder, shuffleArray, sortQuestionsByRounds, countEntries } from '../utils/questionOrder'
 import {
-  structureFrom, moveQuestion, moveRound, renameRound, addRound, deleteRound, toRoundsUpdatePayload, typesSummary,
+  structureFrom, moveQuestion, moveRound, renameRound, addRound, deleteRound, toRoundsUpdatePayload, typesSummary, setRoundAmbiance,
   cleanRoundName, UNASSIGNED_KEY, roundKey,
 } from '../utils/roundsEdit'
 import { QUESTION_TYPES } from '../utils/questionTypeMeta'
@@ -32,6 +32,9 @@ import QuizSoundWarningPill from '../components/QuizSoundWarningPill'
 import EntracteFields from '../components/EntracteFields'
 import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
+import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
+import { overriddenFields, describeOverride } from '../utils/ambianceSettings'
+import { cueMeta } from '../utils/soundCues'
 import RafalePage from './RafalePage'
 import './QuestionsPage.css'
 import './ConfigPage.css'
@@ -562,6 +565,16 @@ export default function QuestionsPage() {
     applyStruct(next, toast ? `✓ Question #${qid} déplacée.` : null)
   }
   const roundOf = (id) => struct.rounds.find(r => r.id === id)
+  // #290 — fenêtre « Ambiance de la manche » (surcharge partielle, transportée par ROUNDS_UPDATE).
+  const [ambianceRound, setAmbianceRound] = useState(null)
+  const ambianceOpenerRef = useRef(null)
+  const saveRoundAmbiance = (partial) => {
+    const id = ambianceRound
+    setAmbianceRound(null)
+    const next = setRoundAmbiance(struct, id, partial)
+    if (next !== struct) applyStruct(next, '✓ Ambiance de la manche enregistrée.')
+    ambianceOpenerRef.current?.focus?.()
+  }
   const deletingInfo = (() => {
     const r = deletingRound && roundOf(deletingRound)
     if (!r) return null
@@ -2279,6 +2292,9 @@ export default function QuestionsPage() {
                         onDown: () => moveRoundBy(i, 1),
                         onRename: () => startRename(r),
                         onDelete: (e) => { deleteOpenerRef.current = e?.currentTarget || document.activeElement; setDeletingRound(r.id) },
+                        onAmbiance: (e) => { ambianceOpenerRef.current = e?.currentTarget || document.activeElement; setAmbianceRound(r.id) },
+                        ambianceCount: overriddenFields(r.ambiance).length,
+                        ambianceTitle: overriddenFields(r.ambiance).map(f => describeOverride(f, c => cueMeta(c).label)).join(' · '),
                         onAddQuestion: () => {
                           handleNewQuestion()
                           setFormRoundId(r.id || '')
@@ -2321,6 +2337,14 @@ export default function QuestionsPage() {
                   </>
                 )
               })()}
+              {ambianceRound && roundOf(ambianceRound) && (
+                <RoundAmbianceDialog
+                  roundName={roundOf(ambianceRound).name}
+                  value={roundOf(ambianceRound).ambiance || {}}
+                  onSave={saveRoundAmbiance}
+                  onCancel={() => { setAmbianceRound(null); ambianceOpenerRef.current?.focus?.() }}
+                />
+              )}
               {deletingInfo && (
                 <RoundDeleteDialog
                   name={deletingInfo.round.name}

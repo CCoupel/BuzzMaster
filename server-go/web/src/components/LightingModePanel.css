@@ -147,3 +147,7 @@
 /* #286 — variante imbriquée dans le popover « Ambiance » (sans cadre ni titre) */
 .lighting-mode-panel.is-bare { padding: 0; border: 0; background: transparent; }
 .lighting-mode-btn.is-sound-on.is-selected { background: var(--success); color: #fff; }
+
+/* #290 (T22) — popover Ambiance : étiquette de source et ligne de manche */
+.ambiance-source-tag { display: inline-block; margin-left: 0.4rem; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.1rem 0.4rem; border-radius: 0.3rem; background: var(--primary-100, #e0e7ff); color: var(--primary, #4f46e5); }
+.ambiance-round-line { display: inline-block; margin: 0.5rem 0; font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--primary-100, #e0e7ff); color: #3730a3; }

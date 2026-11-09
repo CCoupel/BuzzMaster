@@ -9,6 +9,7 @@ import { useSoundStatus, notifySoundChanged } from '../hooks/useSoundStatus'
 import { soundStateLabel } from '../utils/soundState'
 import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
 import SoundsManager from '../components/SoundsManager'
+import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
 import '../styles/tabs.css'
@@ -318,6 +319,24 @@ export default function AmbiancePage() {
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
     } finally {
       setSavingMaster(false)
+    }
+  }
+
+  // #290 (LOT-4) — « Mode d'éclairage par défaut » : réglage persisté `lighting.default_mode`
+  // (ambiance-settings.md §2), édité par le composant mutualisé en mode global (section Lumière).
+  const [savingDefaultMode, setSavingDefaultMode] = useState(false)
+  const handleDefaultModeChange = async (field, value) => {
+    if (field !== 'light.mode' || !value) return
+    setSavingDefaultMode(true)
+    try {
+      const res = await saveLighting({ default_mode: value })
+      if (!res.ok) throw new Error(await res.text())
+      await afterSave()
+    } catch (error) {
+      console.error('Set lighting default_mode failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setSavingDefaultMode(false)
     }
   }
 
@@ -1051,6 +1070,22 @@ export default function AmbiancePage() {
                 (ON / AUTO / OFF, Flash) sont sans effet. Le réglage est conservé au redémarrage.
               </span>
             </div>
+          </section>
+        )}
+
+        {configLoaded && step === 3 && (
+          <section className="ambiance-step" aria-labelledby="ambiance-default-mode-title">
+            <h2 id="ambiance-default-mode-title" className="ambiance-step-title">Réglages d'ambiance — Lumière</h2>
+            <AmbianceSettingsPanel
+              mode="global"
+              value={{ light: { mode: lighting.default_mode || 'AUTO' } }}
+              onChange={handleDefaultModeChange}
+              sections={['light']}
+              disabled={savingDefaultMode}
+            />
+            <p className="ambiance-hint">
+              Mode appliqué au démarrage et quand aucune manche ni geste direct ne le surcharge.
+            </p>
           </section>
         )}
 
