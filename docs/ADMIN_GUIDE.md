@@ -2478,7 +2478,7 @@ La page `/admin/ambiance` combine deux canaux d'ambiance dans une seule interfac
 
 L'onglet **Son** est organisé en cinq onglets : **Global**, **QCM**, **MEMORY**, **MEMOTION**, **RAFALE**. Chaque onglet affiche un **compteur** (le nombre de bruitages de l'onglet). L'onglet **Global** regroupe les sept bruitages généraux et les sons longs (décompte) ; les autres onglets regroupent les bruitages propres à leur type de jeu.
 
-Le réglage « Sons longs » (décompte) reste sur la ligne « Sons longs » de l'onglet Global.
+Le fichier du décompte se remplace depuis la ligne « Sons longs » de l'onglet Global ; ses réglages (actif, lecture) sont dans la section « Décompte » du panneau.
 
 #### Structure des bruitages — 15 emplacements fixes, pas une galerie
 
@@ -3010,7 +3010,7 @@ Le son et l'éclairage ont **trois niveaux de réglage** :
 
 **Quand le geste direct s'efface** : au changement de manche, et à une nouvelle partie. Un geste direct vaut donc jusqu'à la fin de la manche en cours.
 
-**Une manche n'écrit jamais le global.** Si un geste direct porte sur un réglage imposé par la manche en cours, le global n'est pas modifié : le geste vaut pour la manche seulement. Un message l'indique : « Appliqué à la manche en cours seulement (la manche impose ce réglage). »
+**Une manche n'écrit jamais le global.** Si un geste direct porte sur un réglage imposé par la manche en cours, le global n'est pas modifié : le geste vaut pour la manche seulement. Un message l'indique : « Appliqué à la manche en cours seulement (la manche impose ce réglage). » Il s'affiche sur le popover Son, sur le popover Éclairage et sur l'écran Son de la page Ambiance (son coupé, bruitages, décompte). Il ne s'affiche pas dans la section « Mode d'éclairage par défaut » (voir plus bas).
 
 ### Réglages surchargeables
 
@@ -3039,13 +3039,15 @@ Quand la manche en cours impose des réglages, le popover affiche « Manche « X
 
 ### Mode d'éclairage par défaut
 
-Dans **Ambiance › Lumière**, la section **« Mode d'éclairage »** règle le mode d'éclairage **global** (ON, AUTO ou OFF). Sans réglage, le mode est AUTO. Le popover Éclairage reste un geste direct : il ne change jamais ce mode par défaut.
+Dans **Ambiance › Lumière**, la section **« Mode d'éclairage par défaut »** règle le mode d'éclairage **global** (ON, AUTO ou OFF). Sans réglage, le mode est AUTO. Le popover Éclairage reste un geste direct : il ne change jamais ce mode par défaut.
+
+Si une manche impose le mode d'éclairage, un changement fait dans cette section ne modifie pas le global, et la page n'affiche **aucun message** : le message « Appliqué à la manche en cours seulement » n'apparaît que sur le popover Éclairage, pas ici.
 
 ### Après un redémarrage
 
 Au démarrage, aucune question n'est chargée : la surcharge de manche ne s'applique qu'à la prochaine question prête à jouer. Les réglages globaux s'appliquent dès le démarrage.
 
-**Limite connue** : si la manche en cours est supprimée, elle garde son nom affiché jusqu'au prochain changement de manche, mais sa surcharge n'est plus appliquée.
+**Limite connue** : si la manche en cours est supprimée, elle garde son identifiant affiché (et non son nom) jusqu'au prochain changement de manche, mais sa surcharge n'est plus appliquée.
 
 ## Ambiance : son coupé et éclairage (v11.4.0)
 
