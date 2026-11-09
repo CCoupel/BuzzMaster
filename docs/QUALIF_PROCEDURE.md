@@ -32,7 +32,8 @@ Ce document décrit la phase de qualification avant mise en production.
 ```bash
 cd server-go
 
-# Arrêter le serveur en cours
+# Action utilisateur, sous Windows (PowerShell) : arrêter le serveur en cours
+# (Claude ne lance pas cette commande : elle n'est pas exécutable depuis le conteneur)
 taskkill /IM server.exe /F 2>nul
 
 # Nettoyer les fichiers temporaires
@@ -46,25 +47,17 @@ rm -f *.bak web/src/pages/*.bak
 **⚠️ IMPORTANT : Respecter impérativement l'ordre suivant.**
 
 ```bash
-# Depuis la racine du projet (pas server-go/)
-cd /mnt/c/Users/cyril/Documents/VScode/GITHUB/BuzzMaster
+# Depuis la racine du projet (pas server-go/). Le BUILD tourne dans le conteneur Linux :
+# pas de powershell.exe ni de /mnt/c. L'exe Windows produit est lancé ensuite par l'utilisateur.
+cd "$(git rev-parse --show-toplevel)"
 
 # ── Étape 1 : Firmware BuzzClick (OBLIGATOIRE, TOUJOURS en premier) ──────────
 # On produit le binaire MERGED (bootloader + partitions + boot_app0 + app),
 # identique à ce que fait la CI/CD → garantit le BORE QUALIF ↔ PROD.
 
-# 1a. Compiler le firmware
-powershell.exe -NoProfile -Command "& 'C:\Users\cyril\.platformio\penv\Scripts\pio.exe' run -e buzzclick"
-
-# 1b. Merger les blocs (fichier unique flashable USB + OTA)
-powershell.exe -NoProfile -Command "
-  python 'C:\Users\cyril\.platformio\packages\tool-esptoolpy\esptool.py' --chip esp32c3 merge_bin \`
-    -o buzzclick-merged.bin \`
-    0x0     .pio\build\buzzclick\bootloader.bin \`
-    0x8000  .pio\build\buzzclick\partitions.bin \`
-    0xe000  'C:\Users\cyril\.platformio\packages\framework-arduinoespressif32\tools\partitions\boot_app0.bin' \`
-    0x10000 .pio\build\buzzclick\firmware.bin
-"
+# 1a-1b. Compiler et merger le firmware : recette unique scripts/build-firmware.sh
+#        (pio run -e buzzclick, puis merge esptool, bornes de taille). Produit buzzclick-merged.bin à la racine.
+bash scripts/build-firmware.sh buzzclick-merged.bin
 
 # 1c. Intégrer dans les assets Go (merged binary + version)
 VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
@@ -78,7 +71,6 @@ rm buzzclick-merged.bin
 cd server-go/web && npm run build && cd ..
 
 # ── Étape 3 : Backend Go — cross-compilation Windows (embarque web/dist/ + assets/firmware/) ───
-export PATH="$PATH:/usr/local/go/bin"
 MILESTONE_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)\..*/\1/')
 FULL_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
 QUALIF_DIR="build/qualif_v${MILESTONE_VERSION}"
@@ -87,6 +79,8 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
   go build -ldflags="-s -w" -o "$QUALIF_DIR/buzzcontrol-qualif-${FULL_VERSION}-windows-amd64.exe" ./cmd/server
 ```
 
+L'exe Windows n'est pas lancé depuis le conteneur : l'utilisateur le lance depuis Windows, dans le dossier `build\qualif_v<X.Y.Z>\` du dépôt, avec `--port 9090` (voir `.claude/agents/environments/deploy.qualif.md`).
+
 **Règle BORE** : `buzzclick-latest.bin` est TOUJOURS le merged binary (bootloader + partitions + boot_app0 + app). Cela permet :
 - Flash USB de buzzers neufs/morts depuis l'interface admin
 - OTA via le serveur (le serveur extrait la partition app du merged)
@@ -94,8 +88,10 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 \
 
 ### 1.3 Démarrer le serveur
 
-```bash
-./server.exe
+Action utilisateur, sous Windows (PowerShell, dossier `build\qualif_v<X.Y.Z>\`) — Claude ne la lance pas depuis le conteneur :
+
+```powershell
+.\buzzcontrol-qualif-<FULL_VERSION>-windows-amd64.exe --port 9090
 ```
 
 Vérifier :
@@ -326,11 +322,9 @@ RÉSULTAT: QUALIFIÉ / NON QUALIFIÉ
 # Vérifier si le serveur tourne
 curl -s http://localhost/version
 
-# Si pas de réponse, redémarrer le serveur
-cd server-go
-./server.exe &
-# ou en mode visible :
-# start ./server.exe
+# Si pas de réponse, redémarrer le serveur — action utilisateur, sous Windows (PowerShell) :
+# cd server-go
+# .\server.exe            (ou : start .\server.exe pour une fenêtre visible)
 ```
 
 Vérifier :

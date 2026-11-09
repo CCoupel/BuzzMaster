@@ -73,14 +73,18 @@ Les procédures détaillées sont documentées dans des fichiers séparés.
 
 ## Commandes Rapides
 
-### Environnement des agents sous WSL (v11.4.0)
+### Environnement conteneur Claude-Launcher (depuis le 2026-11-08)
 
-- **Go** : `/usr/local/go/bin` hors PATH des agents. Exporter le PATH et forcer la chaîne d'outils : `export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin` puis `GOTOOLCHAIN=go1.26.10` (`go.mod` en 1.26.10, Go local 1.26.9).
-- **Node** : Node **Linux** (nvm v22.23.3) en tête du PATH. Le `npm` du PATH peut être celui de Windows : les worktrees de travail restent sous `/mnt/c`.
-- **Pas de vitest ni de `npm ci` sur `/mnt/c`** : l'I/O fait décrocher WSL (vitest complet, `npm ci` observés en v11.4.0). Ces suites sont validées par la CI. Si `server-go/build.ps1` est lancé depuis Windows, il faut un `npm ci` Windows.
-- **Tests ciblés** (dev-* et test-writer) : `vitest related <fichiers touchés>`, `go test -run <motif>` sur les paquets touchés.
-- **Suites complètes** (`qa` et CI seules) : `go test ./...`, vitest complet, `scripts/ci.sh`.
-- Mise en œuvre durable prévue : #292 (Node Linux, dépôt sur disque Linux) et #293 (tests ciblés), milestone v11.5.0.
+Les agents tournent dans le conteneur Claude-Launcher : Ubuntu 24.04, Linux natif. Le dépôt est sur le partage `/share/MFS` (MooseFS) ; il n'y a ni WSL ni `/mnt/c`.
+
+- **Go** : Go 1.26.10 est sur le PATH (`~/.local/bin/go`, lien vers `~/.local/go/bin/go`) ; aucun export ni `GOTOOLCHAIN` requis (`go.mod` en 1.26.10).
+- **Node** : Node **Linux** v22.23.3 (`~/.local/bin/node`), `node_modules` natif Linux.
+- **PlatformIO** : `pio` Linux (build firmware depuis le conteneur).
+- **`server-go/build.ps1`** reste un script Windows destiné à l'utilisateur ; s'il est lancé depuis Windows, il faut un `npm ci` Windows.
+- **Tests ciblés** (dev-* et test-writer) : `npx vitest related --run <fichiers touchés>`, `go test ./<paquet> -run <motif>` ; `-race` seulement sur le code concurrent.
+- **Suites complètes** (`qa` et CI seules) : `go test ./...`, vitest complet, `scripts/ci.sh` local.
+
+Règle complète : `docs/TEST_PROCEDURE.md`, section « Tests ciblés / suites complètes ».
 
 ### Développement Go
 
@@ -116,11 +120,11 @@ npm ci
 npm run build              # produit web/dist (requis par les tests fonts-embed et le smoke test dist)
 npx vitest run             # tests unitaires
 npx vitest run --coverage  # couverture v8
-npm audit --audit-level=high   # même porte que scripts/ci.sh (étape 7)
+npm audit --audit-level=high   # même porte que scripts/ci.sh (étape 8)
 ```
 
 - Les commentaires CSS ne doivent **pas** contenir `*/` (même dans un texte) : lightningcss refuse la fermeture prématurée, qu'esbuild tolérait avant vite 8.
-- `scripts/ci.sh` exécute ces tests à l'étape `[2/7]` (`npm test`, avant l'embed) : un test rouge bloque la CI (#273).
+- `scripts/ci.sh` exécute ces tests à l'étape `[3/8]` (`npm test`, avant l'embed) : un test rouge bloque la CI (#273).
 - En cas d'échec de `npx vitest run` après un bump de dépendance, vérifier d'abord les mocks `fetch` (vitest 5 remonte les exceptions de rendu en erreur non gérée).
 
 ### Cross-compilation
@@ -283,7 +287,7 @@ Résultat attendu : seul `TestBuzzerWSHub_ConcurrentConnections` échoue (artefa
 - **Run A** : `ci.sh` doit réussir (« CI OK », tests `fonts-embed` passés et non sautés).
 - **Run B** : un test vitest rouge injecté doit faire échouer `ci.sh`, sans qu'aucune étape postérieure ne démarre.
 
-Le script travaille dans un `git worktree` jetable, créé dans le dossier frère du dépôt (pas dans `/tmp`, où le `npm` Windows du PATH WSL échoue). `CI_GATE_TMPDIR` change ce dossier. Le worktree est supprimé en fin de script, même en cas d'échec. Code retour : 0 = porte prouvée, 1 = preuve non établie, 2 = erreur d'environnement.
+Le script travaille dans un `git worktree` jetable, créé dans le dossier frère du dépôt par défaut ; `CI_GATE_TMPDIR` change ce dossier. Le worktree est supprimé en fin de script, même en cas d'échec. Code retour : 0 = porte prouvée, 1 = preuve non établie, 2 = erreur d'environnement.
 
 Par défaut, `go` et `govulncheck` sont remplacés par des shims no-op. Avec ces shims, la ligne « CI OK » ne prouve pas que la suite Go passe : cette preuve vient de QA et de la CI. `CI_GATE_REAL_GO=1` exécute les étapes Go réelles ; le run est alors très long (deux exécutions complètes de `ci.sh`).
 

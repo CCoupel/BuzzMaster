@@ -23,6 +23,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestSendStateToClient_VPlayer_StripsAdminFieldsAndConfigUpdate(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newTestAppWithHub(t)
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA"}})
 	app.engine.UpdateBumper("bumper-1", map[string]interface{}{

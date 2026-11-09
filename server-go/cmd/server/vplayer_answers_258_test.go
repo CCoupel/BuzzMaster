@@ -25,6 +25,7 @@ type env258 struct {
 	jadeID, mamieID         string
 	tabA2, tabB, tabUnbound *websocket.Conn
 	tabA2CID                string
+	t258                    *testing.T
 }
 
 const (
@@ -47,17 +48,71 @@ func newEnv258(t *testing.T) *env258 {
 	for _, c := range []*websocket.Conn{a2, b, un} {
 		startTap253(c)
 	}
-	return &env258{env253: e, jadeID: jade, mamieID: e.mamie, tabA2: a2, tabB: b, tabUnbound: un, tabA2CID: a2id}
+	return &env258{env253: e, jadeID: jade, mamieID: e.mamie, tabA2: a2, tabB: b, tabUnbound: un, tabA2CID: a2id, t258: t}
+}
+
+// allConns258 : toutes les connexions espionnées de l'environnement (+ extra).
+func (e *env258) allConns258(extra ...*websocket.Conn) []*websocket.Conn {
+	return append([]*websocket.Conn{e.paulConn, e.tabA2, e.tabB, e.tabUnbound, e.tvc, e.an, e.a1}, extra...)
+}
+
+// settle258 : barrière positive sur toutes les connexions (+ extra) — remplace les pauses fixes (#291).
+func (e *env258) settle258After(extra ...*websocket.Conn) {
+	barrier291Quiet(e.t258, e.app, settleQuietAfterClient291, e.allConns258(extra...)...)
+}
+
+// settle258 : voir ci-dessus ; marge 100 ms (actions serveur synchrones).
+func (e *env258) settle258(extra ...*websocket.Conn) {
+	barrier291(e.t258, e.app, e.allConns258(extra...)...)
+}
+
+// waitFrameAfter258 attend (≤ 2 s) qu'une trame de plus soit arrivée sur conn depuis before (réponse d'une action client).
+func (e *env258) waitFrameAfter258(conn *websocket.Conn, before int) {
+	deadline := time.Now().Add(2 * time.Second)
+	for tapOf253(conn).count291() <= before {
+		if time.Now().After(deadline) {
+			e.t258.Fatal("aucune trame reçue en réponse à l'action client")
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
 }
 
 // stage : purge les trames, exécute, laisse arriver, rend les trames par client.
-func (e *env258) stage(do func()) map[string][]string {
+func (e *env258) stage(do func()) map[string][]string { return e.stageAwait(nil, do) }
+
+// stageAwait : comme stage ; si await != nil, attend d'abord (≤ 2 s) qu'une trame arrive sur cette connexion — la
+// réponse d'une action CLIENT (HELLO, PLAYER_CONNECT) est émise par une goroutine du serveur et peut suivre le témoin.
+func (e *env258) stageAwait(await *websocket.Conn, do func()) map[string][]string {
 	conns := map[string]*websocket.Conn{"A1": e.paulConn, "A2": e.tabA2, "B": e.tabB, "unbound": e.tabUnbound, "tv": e.tvc, "anim": e.an, "admin": e.a1}
 	for _, c := range conns {
 		tapOf253(c).take()
 	}
+	before := 0
+	if await != nil {
+		before = tapOf253(await).count291()
+	}
 	do()
-	time.Sleep(450 * time.Millisecond)
+	if await != nil {
+		deadline := time.Now().Add(2 * time.Second)
+		for tp := tapOf253(await); tp.count291() <= before; {
+			if time.Now().After(deadline) {
+				e.t258.Fatal("stageAwait : aucune trame reçue en réponse à l'action client")
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+	}
+	// #291 Phase A : fenêtre fixe de 450 ms → barrière positive (témoin reçu par
+	// toutes les connexions) + marge de silence 100 ms ; voir settle_barrier_291_test.go.
+	// Les actions client (HELLO…) attendent d'abord leur réponse via stageAwait.
+	all := make([]*websocket.Conn, 0, len(conns))
+	for _, c := range conns {
+		all = append(all, c)
+	}
+	quiet := settleQuiet291
+	if await != nil {
+		quiet = settleQuietAfterClient291 // réponse à une action client (HELLO, PLAYER_CONNECT)
+	}
+	barrier291Quiet(e.t258, e.app, quiet, all...)
 	out := map[string][]string{}
 	for n, c := range conns {
 		out[n] = tapOf253(c).take()
@@ -310,12 +365,13 @@ func TestVPlayerAnswers258_Critical_UnboundTabletInitialStateIsNeutralAndWithout
 	e := newEnv258(t)
 	e.startQCM()
 	e.app.engine.ProcessButtonPress(e.mamieID, time.Now().UnixMicro(), "B")
-	time.Sleep(100 * time.Millisecond)
+	e.settle258() // #291 : barrière au lieu de 100 ms fixes
 	conn, id := e.dial(t, "/ws/player")
 	startTap253(conn)
 
 	e.send(t, id, "vplayer", "HELLO", map[string]interface{}{})
-	time.Sleep(450 * time.Millisecond)
+	e.waitFrameAfter258(conn, 0)
+	e.settle258After(conn) // #291 : barrière + marge de 250 ms (action client) au lieu de 450 ms fixes
 	frames := tapOf253(conn).take()
 
 	if len(frames) == 0 {
@@ -339,9 +395,9 @@ func TestVPlayerAnswers258_BoundTabletInitialStateAtHelloKeepsItsOwnAndHidesTheO
 	e := newEnv258(t)
 	e.startQCM()
 	e.app.engine.ProcessButtonPress(e.mamieID, time.Now().UnixMicro(), "B")
-	time.Sleep(100 * time.Millisecond)
+	e.settle258() // #291 : barrière au lieu de 100 ms fixes
 
-	frames := e.stage(func() { e.send(t, e.tabA2CID, "vplayer", "HELLO", map[string]interface{}{}) })
+	frames := e.stageAwait(e.tabA2, func() { e.send(t, e.tabA2CID, "vplayer", "HELLO", map[string]interface{}{}) })
 
 	if l := leaks258(frames["A2"], teamA258, "STARTED"); len(l) != 0 {
 		t.Errorf("tablette liée (A2), état initial HELLO : %v", l[:min(3, len(l))])
@@ -502,20 +558,23 @@ func TestVPlayerAnswers258_Critical_AfterPlayerConnectATargetedUpdateGivesTheTab
 	e.app.engine.ProcessButtonPress(e.jadeID, time.Now().UnixMicro(), "A")  // Jade (équipe A) a répondu RED
 	e.app.engine.ProcessButtonPress(e.mamieID, time.Now().UnixMicro(), "B") // Mamie (équipe B) aussi (GREEN)
 	e.app.broadcastUpdate()
-	time.Sleep(150 * time.Millisecond)
+	e.settle258() // #291 : barrière au lieu de 150 ms fixes
 
 	// une NOUVELLE connexion non liée, puis PLAYER_CONNECT de Jade : état initial neutre, puis UPDATE ciblé par destinataire
 	conn, id := e.dial(t, "/ws/player")
 	startTap253(conn)
 	e.send(t, id, "vplayer", "HELLO", map[string]interface{}{})
-	time.Sleep(300 * time.Millisecond)
+	e.waitFrameAfter258(conn, 0)
+	e.settle258After(conn) // #291 : barrière + marge de 250 ms (action client) au lieu de 300 ms fixes
 	before := tapOf253(conn).take()
 	if seen258(before, e.jadeID, "ANSWERED_COLOR", "RED") {
 		t.Fatal("précondition : avant PLAYER_CONNECT la connexion non liée ne voit pas la réponse de Jade")
 	}
 
+	nBefore := tapOf253(conn).count291()
 	e.connect(t, id, "Jade", e.jadeID)
-	time.Sleep(450 * time.Millisecond)
+	e.waitFrameAfter258(conn, nBefore)
+	e.settle258After(conn) // #291 : barrière + marge de 250 ms (action client) au lieu de 450 ms fixes
 	after := tapOf253(conn).take()
 
 	if !seen258(after, e.jadeID, "ANSWERED_COLOR", "RED") {

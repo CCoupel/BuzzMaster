@@ -40,6 +40,7 @@ import (
 // (Phase stays PREPARE, Continue()'s cycle 3 guard refuses) — the handler
 // must NOT broadcast ACTION:"CONTINUE" to any connected client.
 func TestHandleContinue_RefusedContinue_DoesNotBroadcast(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newTestAppWithHub(t)
 	app.udpBcast = server.NewUDPBroadcaster()
 	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red"}})
@@ -110,6 +111,7 @@ func TestHandleContinue_AcceptedContinue_StillBroadcasts(t *testing.T) {
 // PhaseStarted — dispatched from the engine's default PhaseStopped, it must
 // refuse, and the handler must not broadcast.
 func TestHandlePause_RefusedPause_DoesNotBroadcast(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newTestAppWithHub(t)
 	app.udpBcast = server.NewUDPBroadcaster()
 	if state := app.engine.GetState(); state.Phase != game.PhaseStopped {

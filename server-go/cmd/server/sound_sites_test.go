@@ -337,25 +337,28 @@ func runChronoPulse(a *App) {
 // TestSoundSites_ForbiddenFamiliesNeverCallSoundFanOut would pass for the
 // wrong reason (nothing named that way exists to violate the rule).
 func TestSoundForbiddenFuncs227_AllTargetsStillExistInSource(t *testing.T) {
-	dir := cmdServerDir227(t)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("lecture de %s : %v", dir, err)
-	}
+	// #295 : la couche ambiance (runChronoPulse, runLightingFlash, runScoreFlash…) vit désormais dans
+	// internal/ambiance ; les noms interdits y sont cherchés aussi (cmd/server ne garde que des délégués).
 	declared := map[string]bool{}
 	fset := token.NewFileSet()
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+	for _, dir := range []string{cmdServerDir227(t), filepath.Join(cmdServerDir227(t), "..", "..", "internal", "ambiance")} {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			t.Fatalf("go/parser a échoué sur %s : %v", name, err)
+			t.Fatalf("lecture de %s : %v", dir, err)
 		}
-		for _, decl := range f.Decls {
-			if fd, ok := decl.(*ast.FuncDecl); ok {
-				declared[fd.Name.Name] = true
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+			if err != nil {
+				t.Fatalf("go/parser a échoué sur %s : %v", name, err)
+			}
+			for _, decl := range f.Decls {
+				if fd, ok := decl.(*ast.FuncDecl); ok {
+					declared[fd.Name.Name] = true
+				}
 			}
 		}
 	}

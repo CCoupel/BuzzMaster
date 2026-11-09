@@ -14,7 +14,7 @@
 //     même valeur que ce que la zone general affiche déjà pour un événement
 //     UseTeamColor à équipe unique, contract §8) quand CETTE équipe est
 //     distinguée par l'événement ;
-//   - intensité ATTÉNUÉE (dimIntensityFor(sa couleur), main.go — même seuil
+//   - intensité ATTÉNUÉE (colors.DimIntensityFor(sa couleur), main.go — même seuil
 //     que les buzzers, pas un second seuil inventé) sinon ;
 //   - aucune zone du tout si l'équipe n'est pas/plus au plateau — elle
 //     retombe alors dans `general` (hue-bridge.md §5.2), et donc dans le
@@ -34,6 +34,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/colors"
 	"testing"
 
 	"buzzcontrol/internal/game"
@@ -108,7 +109,7 @@ func TestTeamColor_DistinguishedTeamFullIntensity_OthersAttenuated(t *testing.T)
 		"TeamB": {Name: "TeamB", Color: []int{0, 0, 255}},
 	})
 	wantTeamB := app.teamNameToRGB("TeamB")
-	wantDimB := dimIntensityFor(wantTeamB)
+	wantDimB := colors.DimIntensityFor(wantTeamB)
 
 	// "Pleine" intensité = 255, FIXE — l'équivalent salle du SOLID/BLINK des
 	// buzzers (rapport §Problème 1, table), PAS l'intensité propre de la

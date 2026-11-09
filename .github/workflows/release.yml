@@ -47,6 +47,9 @@ jobs:
       # frontend build, vitest, embed, go build, tests with race detector, go vet, govulncheck + npm audit.
       # Identical to ci-branch.yml and to what qa/deploy run locally — no CI-only step.
       - name: Run CI script
+        # Firmware compiled by the parallel compiling-firmware job (same scripts/build-firmware.sh).
+        env:
+          SKIP_FIRMWARE: '1'
         run: scripts/ci.sh
 
   # ============================================
@@ -316,60 +319,11 @@ jobs:
           pip install --upgrade platformio
           pio --version
 
-      - name: Build BuzzClick firmware
-        run: |
-          echo "Building BuzzClick firmware..."
-          pio run -e buzzclick
-          echo "✅ Firmware build complete"
-
-      - name: Generate merged firmware binary
-        run: |
-          VERSION="${{ needs.checking.outputs.version }}"
-          echo "Generating merged firmware binary (bootloader + partitions + boot_app0 + app)..."
-
-          # Use esptool from PlatformIO packages
-          ESPTOOL=$(find $HOME/.platformio/packages/tool-esptoolpy -name "esptool.py" 2>/dev/null | head -1)
-          if [ -z "$ESPTOOL" ]; then
-            ESPTOOL="python -m esptool"
-          else
-            ESPTOOL="python $ESPTOOL"
-          fi
-
-          # boot_app0.bin: standard Arduino-ESP32 file that initializes OTA data to boot from ota_0
-          BOOT_APP0=$(find $HOME/.platformio/packages/framework-arduinoespressif32*/tools/partitions/boot_app0.bin 2>/dev/null | head -1)
-          if [ -z "$BOOT_APP0" ]; then
-            echo "❌ ERROR: boot_app0.bin not found in PlatformIO packages"
-            exit 1
-          fi
-
-          $ESPTOOL --chip esp32c3 merge_bin \
-            -o buzzclick-v$VERSION-merged.bin \
-            0x0     .pio/build/buzzclick/bootloader.bin \
-            0x8000  .pio/build/buzzclick/partitions.bin \
-            0xe000  $BOOT_APP0 \
-            0x10000 .pio/build/buzzclick/firmware.bin
-
-          echo "✅ Merged binary: buzzclick-v$VERSION-merged.bin ($(numfmt --to=iec $(stat -c%s buzzclick-v$VERSION-merged.bin)))"
-
-      - name: Validate firmware binary
-        run: |
-          VERSION="${{ needs.checking.outputs.version }}"
-          # Validate the merged binary (contains bootloader + app, so larger than app-only)
-          FILE="buzzclick-v$VERSION-merged.bin"
-          SIZE=$(stat -c%s "$FILE")
-          echo "Merged firmware binary: $SIZE bytes ($(numfmt --to=iec $SIZE))"
-
-          MIN_SIZE=204800   # 200 KB
-          MAX_SIZE=3145728  # 3 MB
-          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
-            echo "❌ ERROR: Firmware too small ($SIZE < $MIN_SIZE)"
-            exit 1
-          fi
-          if [ "$SIZE" -gt "$MAX_SIZE" ]; then
-            echo "❌ ERROR: Firmware too large ($SIZE > $MAX_SIZE)"
-            exit 1
-          fi
-          echo "✅ Firmware validation passed"
+      # scripts/build-firmware.sh: pio run + esptool merge + size bounds 200 KB - 3 MB
+      # (same script as scripts/ci.sh, ci-branch.yml and the BUILD recipe of deploy.md).
+      # Output name unchanged: buzzclick-v<VERSION>-merged.bin (published asset).
+      - name: Build and validate BuzzClick firmware
+        run: scripts/build-firmware.sh "buzzclick-v${{ needs.checking.outputs.version }}-merged.bin"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v7

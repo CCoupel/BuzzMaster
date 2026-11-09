@@ -39,6 +39,9 @@ import (
 
 const tw219qCountdownTimeout = 8 * time.Second
 
+// tw219qTick is the injected engine tick of the deferred harness (#291).
+const tw219qTick = 50 * time.Millisecond
+
 // tw219qFakeMediaPlayer implements audio.MediaPlayer with full
 // instrumentation — never touches real hardware, deterministic for CA12's
 // "fichier illisible" case (PlayErr) and for proving voix-unique/observable
@@ -143,6 +146,9 @@ func tw219qDeferredApp(t *testing.T, player audio.MediaPlayer) (*App, *game.Ques
 			once.Do(func() { close(started) })
 		}
 	}
+	// #291 Phase A : décompte 3-2-1 et chrono en « secondes » de 50 ms au lieu
+	// de 1 s (même séquence d'événements, ~3 s gagnées par test du harnais).
+	app.engine.SetTickInterval(tw219qTick)
 	app.engine.Start(20)
 	select {
 	case <-started:
@@ -391,9 +397,6 @@ func TestQuestionSoundAdapter_CA13_Rejouer_NoOp_WhenQuestionCarriesNoSound(t *te
 // ---------------------------------------------------------------------------
 
 func TestQuestionSoundAdapter_Watchdog_ReleasesAfterGraceIfNoSignalEver(t *testing.T) {
-	if testing.Short() {
-		t.Skip("lent (~32s, MaxQuestionSoundDuration+2s) — sauté en -short")
-	}
 	t.Parallel()
 	// Un fake dont Play() réussit mais qui ne signale JAMAIS de fin
 	// (naturelle) — simule une goroutine de surveillance morte ou un pilote
@@ -403,19 +406,24 @@ func TestQuestionSoundAdapter_Watchdog_ReleasesAfterGraceIfNoSignalEver(t *testi
 	defer app.engine.Stop()
 
 	tw219qSetSoundEnabledFor(app, true)
+	// #291 Phase A : durée de production (MaxQuestionSoundDuration + 2 s = 32 s)
+	// remplacée par un délai court injecté sur l'adaptateur ; même scénario
+	// (aucun signal de fin, le chien de garde est le seul à libérer).
+	const watchdog = 300 * time.Millisecond
+	app.qsound.watchdogDelay = watchdog
 	app.qsound.Start(q)
 	if !app.engine.GetState().AnswerTimerWaiting {
 		t.Fatal("setup invalide : le chronomètre devrait encore attendre juste après Start()")
 	}
 
-	deadline := time.Now().Add(audio.MaxQuestionSoundDuration + 2*time.Second + 3*time.Second)
+	deadline := time.Now().Add(watchdog + 3*time.Second)
 	for time.Now().Before(deadline) {
 		if !app.engine.GetState().AnswerTimerWaiting {
 			return // le chien de garde a bien libéré le chronomètre
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
-	t.Errorf("le chien de garde n'a pas libéré le chronomètre après %s (MaxQuestionSoundDuration+2s+marge)", audio.MaxQuestionSoundDuration+2*time.Second+3*time.Second)
+	t.Errorf("le chien de garde n'a pas libéré le chronomètre après %s (délai injecté %s + marge)", watchdog+3*time.Second, watchdog)
 }
 
 func TestQuestionSoundAdapter_Watchdog_CancelledByStop(t *testing.T) {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Tests for utils/questionTypeMeta.js — table unique des types de question
  * (#183, A-T1 — filet de non-régression du refactor A-F2).

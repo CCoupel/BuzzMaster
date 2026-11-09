@@ -1,4 +1,4 @@
-package main
+package vplayer
 
 import (
 	"fmt"
@@ -10,10 +10,10 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// BenchmarkVPlayerFanout (#127 T2.4) — CPU cost of buildVPlayerPayloads, the
+// BenchmarkVPlayerFanout (#127 T2.4) — CPU cost of BuildPayloads, the
 // core of the individualized VPlayer fan-out (T2.2/T2.3), for 10 and 30
 // VPlayers, on a QCM (light) and a MEMOTION (heavy, ~11KB GAME.QUESTION)
-// question. No WebSocketHub/network involved — see buildVPlayerPayloads'
+// question. No WebSocketHub/network involved — see BuildPayloads'
 // doc comment: it is deliberately factored out so this benchmark measures
 // exactly the JSON work, not I/O.
 //
@@ -124,7 +124,7 @@ func runFanoutBenchmark(b *testing.B, n int, question *game.Question) {
 	// Sanity check outside the timed loop: must actually take the reduction
 	// path (ok=true) and produce one payload per recipient — a benchmark
 	// silently measuring the "malformed input" fallback would be meaningless.
-	payloads, ok := buildVPlayerPayloads(msg, recipients)
+	payloads, ok := BuildPayloads(msg, recipients)
 	if !ok {
 		b.Fatalf("setup failed: message did not qualify for VPlayer reduction")
 	}
@@ -135,7 +135,7 @@ func runFanoutBenchmark(b *testing.B, n int, question *game.Question) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		buildVPlayerPayloads(msg, recipients)
+		BuildPayloads(msg, recipients)
 	}
 }
 

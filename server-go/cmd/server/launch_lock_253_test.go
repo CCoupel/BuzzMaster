@@ -29,6 +29,7 @@ type env253 struct {
 	a1, a2, an, tvc          *websocket.Conn
 	paulConn                 *websocket.Conn
 	paulCID                  string
+	t253                     *testing.T
 }
 
 // newEnv253 : deux équipes, un VJoueur lié par équipe, question ARDOISE en cours (STARTED) ou révélée (revealed),
@@ -74,7 +75,7 @@ func buildEnv253(t *testing.T, revealed, withHTTP bool) *env253 {
 		e.app.engine.Stop()
 		e.app.engine.Reveal()
 	}
-	return &env253{env246: e, admin1: id1, admin2: id2, anim: ida, tv: idt, a1: a1, a2: a2, an: an, tvc: tv, paulConn: pc, paulCID: pid}
+	return &env253{env246: e, admin1: id1, admin2: id2, anim: ida, tv: idt, a1: a1, a2: a2, an: an, tvc: tv, paulConn: pc, paulCID: pid, t253: t}
 }
 
 type lockState253 struct {
@@ -179,7 +180,12 @@ func tapOf253(conn *websocket.Conn) *tap253 {
 func (tp *tap253) take() []string {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
-	out := append([]string(nil), tp.frames[tp.cursor:]...)
+	var out []string
+	for _, f := range tp.frames[tp.cursor:] {
+		if !strings.Contains(f, "BARRIER_291") { // témoins des barrières positives (#291) : jamais vus des assertions
+			out = append(out, f)
+		}
+	}
 	tp.cursor = len(tp.frames)
 	return out
 }
@@ -313,19 +319,15 @@ func TestLaunchLock253_OpenByAdminTakesTheLockInTheNameOfThatConnection(t *testi
 
 func TestLaunchLock253_OnlyAdminAndAnimReceiveTheLockNeverTvNorPlayers(t *testing.T) {
 	e := newEnv253(t, true)
-	collectRaw253(e.a1, 200*time.Millisecond)
-	collectRaw253(e.a2, 50*time.Millisecond)
-	collectRaw253(e.an, 50*time.Millisecond)
-	collectRaw253(e.tvc, 50*time.Millisecond)
-	collectRaw253(e.paulConn, 50*time.Millisecond)
+	e.purge253() // #291 : barrière positive au lieu d'une fenêtre fixe
 
 	e.openLock(t, e.admin1)
 	e.app.broadcastUpdate()
 
-	adminFrames := collectRaw253(e.a2, 600*time.Millisecond)
-	animFrames := collectRaw253(e.an, 300*time.Millisecond)
-	tvFrames := collectRaw253(e.tvc, 300*time.Millisecond)
-	playerFrames := collectRaw253(e.paulConn, 300*time.Millisecond)
+	adminFrames := e.collect253(e.a2)
+	animFrames := e.collect253(e.an)
+	tvFrames := e.collect253(e.tvc)
+	playerFrames := e.collect253(e.paulConn)
 	if !anyContains253(adminFrames, `"LAUNCH_LOCK"`) {
 		t.Error("un 2ᵉ poste admin reçoit LAUNCH_LOCK")
 	}
@@ -344,7 +346,7 @@ func TestLaunchLock253_OpenFromANonAdminIsRejectedByTheAllowList(t *testing.T) {
 	e := newEnv253(t, true)
 	e.send(t, e.anim, "anim", "LAUNCH_LOCK", map[string]interface{}{"STATE": "OPEN"})
 	e.send(t, e.paulCID, "vplayer", "LAUNCH_LOCK", map[string]interface{}{"STATE": "OPEN"})
-	time.Sleep(200 * time.Millisecond)
+	e.settle253() // #291 : barrière + marge de silence au lieu de 200 ms fixes
 	if e.lock().Active {
 		t.Error("LAUNCH_LOCK est réservé à l'admin")
 	}
@@ -456,17 +458,14 @@ func TestLaunchLock253_RefusalIsTargetedAtTheSenderOnly(t *testing.T) {
 	e := newEnv253(t, true)
 	e.openLock(t, e.admin1)
 	e.waitLock(func(l lockState253) bool { return l.Active })
-	collectRaw253(e.a1, 200*time.Millisecond)
-	collectRaw253(e.a2, 50*time.Millisecond)
-	collectRaw253(e.an, 50*time.Millisecond)
-	collectRaw253(e.tvc, 50*time.Millisecond)
+	e.purge253() // #291 : barrière positive au lieu d'une fenêtre fixe
 
 	e.send(t, e.anim, "anim", "TEAM_POINTS", map[string]interface{}{"TEAM": "Les Bleus", "POINTS": 3})
 	if _, ok := readRefused253(e.an, "TEAM_POINTS"); !ok {
 		t.Fatal("l'émetteur est informé")
 	}
 	for name, c := range map[string]*websocket.Conn{"admin propriétaire": e.a1, "2e admin": e.a2, "TV": e.tvc} {
-		if n := countAction253(collectRaw253(c, 250*time.Millisecond), "ACTION_REFUSED"); n != 0 {
+		if n := countAction253(e.collect253(c), "ACTION_REFUSED"); n != 0 {
 			t.Errorf("%s ne reçoit pas le refus d'un autre poste (%d)", name, n)
 		}
 	}
@@ -484,9 +483,9 @@ func TestLaunchLock253_ActionsAreAcceptedAgainOnceTheLockIsReleased(t *testing.T
 	base := e.teamScore("Les Bleus")
 	e.closeLock(t, e.admin1)
 	e.waitLock(func(l lockState253) bool { return !l.Active })
-	collectRaw253(e.a2, 200*time.Millisecond)
+	e.purge253() // #291 : barrière positive au lieu d'une fenêtre fixe
 	e.send(t, e.admin2, "admin", "TEAM_POINTS", map[string]interface{}{"TEAM": "Les Bleus", "POINTS": 5})
-	if n := countAction253(collectRaw253(e.a2, 400*time.Millisecond), "ACTION_REFUSED"); n != 0 {
+	if n := countAction253(e.collect253(e.a2), "ACTION_REFUSED"); n != 0 {
 		t.Error("après la levée du verrou, plus aucun refus")
 	}
 	if e.teamScore("Les Bleus") != base+5 {
@@ -498,7 +497,7 @@ func TestLaunchLock253_WithoutLockNothingIsRefused(t *testing.T) {
 	e := newEnv253(t, true)
 	e.send(t, e.anim, "anim", "TEAM_POINTS", map[string]interface{}{"TEAM": "Les Bleus", "POINTS": 2})
 	e.send(t, e.admin2, "admin", "BUMPER_POINTS", map[string]interface{}{"ID": e.paul, "POINTS": 1})
-	if n := countAction253(collectRaw253(e.an, 300*time.Millisecond), "ACTION_REFUSED"); n != 0 {
+	if n := countAction253(e.collect253(e.an), "ACTION_REFUSED"); n != 0 {
 		t.Error("sans verrou, aucun ACTION_REFUSED")
 	}
 	if e.countLog(game.LogLevelWarn, "ACTION_REFUSED_LAUNCH") != 0 {
@@ -512,7 +511,7 @@ func TestLaunchLock253_PlayersAndAuxiliaryActionsStayAccepted(t *testing.T) {
 	e := newEnv253(t, false) // question STARTED : la frappe ARDOISE est observable
 	e.openLock(t, e.admin1)
 	e.waitLock(func(l lockState253) bool { return l.Active })
-	collectRaw253(e.paulConn, 200*time.Millisecond)
+	e.purge253() // #291 : barrière positive au lieu d'une fenêtre fixe
 
 	e.send(t, e.paulCID, "vplayer", protocol.ActionArdoiseInput, map[string]interface{}{"TEXT": "LYON"})
 	e.send(t, e.paulCID, "vplayer", "VPLAYER_QCM_ANSWER", map[string]interface{}{"ANSWER": "A"})
@@ -533,7 +532,7 @@ func TestLaunchLock253_PlayersAndAuxiliaryActionsStayAccepted(t *testing.T) {
 	if n := e.countLog(game.LogLevelWarn, "ACTION_REFUSED_LAUNCH"); n != 0 {
 		t.Errorf("aucune de ces actions n'est suspendue (%d WARN) ; logs=%v", n, e.logLines(game.LogLevelWarn))
 	}
-	if n := countAction253(collectRaw253(e.paulConn, 200*time.Millisecond), "ACTION_REFUSED"); n != 0 {
+	if n := countAction253(e.collect253(e.paulConn), "ACTION_REFUSED"); n != 0 {
 		t.Errorf("le joueur n'est jamais refusé (%d)", n)
 	}
 }
@@ -611,7 +610,7 @@ func TestLaunchLock253_OpenByASecondAdminIsRefusedLockedByOther(t *testing.T) {
 	if !e.hasLog(game.LogLevelWarn, "LAUNCH_LOCK_REFUSED", "LOCKED_BY_OTHER") {
 		t.Errorf("WARN LAUNCH_LOCK_REFUSED ; logs=%v", e.logLines(game.LogLevelWarn))
 	}
-	if n := countAction253(collectRaw253(e.a1, 300*time.Millisecond), "LAUNCH_LOCK_REFUSED"); n != 0 {
+	if n := countAction253(e.collect253(e.a1), "LAUNCH_LOCK_REFUSED"); n != 0 {
 		t.Error("le refus est ciblé sur l'émetteur seul")
 	}
 }
@@ -657,7 +656,7 @@ func TestLaunchLock253_OwnerOpenAgainRenewsTheExpiryWithoutRefusal(t *testing.T)
 	if after.ExpiresAt-after.Since < 45000 {
 		t.Errorf("EXPIRES_AT ≥ SINCE + 45 s : %+v", after)
 	}
-	if n := countAction253(collectRaw253(e.a1, 300*time.Millisecond), "LAUNCH_LOCK_REFUSED"); n != 0 {
+	if n := countAction253(e.collect253(e.a1), "LAUNCH_LOCK_REFUSED"); n != 0 {
 		t.Error("un OPEN du propriétaire est un renouvellement, jamais refusé")
 	}
 	if e.countLog(game.LogLevelInfo, "LAUNCH_LOCK_OPENED") != 1 {
@@ -691,7 +690,7 @@ func TestLaunchLock253_CloseByANonOwnerIsIgnored(t *testing.T) {
 	e.waitLock(func(l lockState253) bool { return l.Active })
 
 	e.closeLock(t, e.admin2)
-	time.Sleep(200 * time.Millisecond)
+	e.settle253() // #291 : barrière + marge de silence au lieu de 200 ms fixes
 
 	if l := e.lock(); !l.Active || l.Owner != e.admin1 {
 		t.Errorf("le verrou du propriétaire est intact : %+v", l)
@@ -711,10 +710,12 @@ func TestLaunchLock253_Critical_OwnerDisconnectReleasesTheLockImmediately(t *tes
 	if !e.waitLog(t, game.LogLevelWarn, "LAUNCH_LOCK_RELEASED") || !e.hasLog(game.LogLevelWarn, "LAUNCH_LOCK_RELEASED", "disconnect") {
 		t.Errorf("WARN LAUNCH_LOCK_RELEASED reason=disconnect ; logs=%v", e.logLines(game.LogLevelWarn))
 	}
-	// les autres postes retrouvent la main
-	collectRaw253(e.a2, 200*time.Millisecond)
+	// les autres postes retrouvent la main (a1 est fermée : la barrière ne l'attend pas)
+	barrier291(t, e.app, e.a2, e.an, e.tvc, e.paulConn)
+	tapOf253(e.a2).take()
 	e.send(t, e.admin2, "admin", "TEAM_POINTS", map[string]interface{}{"TEAM": "Les Bleus", "POINTS": 4})
-	if n := countAction253(collectRaw253(e.a2, 300*time.Millisecond), "ACTION_REFUSED"); n != 0 {
+	barrier291(t, e.app, e.a2, e.an, e.tvc, e.paulConn)
+	if n := countAction253(tapOf253(e.a2).take(), "ACTION_REFUSED"); n != 0 {
 		t.Error("après la déconnexion du propriétaire, les actions sont de nouveau acceptées")
 	}
 }
@@ -726,7 +727,7 @@ func TestLaunchLock253_DisconnectOfAnotherStationLeavesTheLockInPlace(t *testing
 
 	e.a2.Close()
 	e.an.Close()
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(400 * time.Millisecond) // fermeture côté client → détection serveur asynchrone : pas de témoin possible, fenêtre conservée
 
 	if l := e.lock(); !l.Active || l.Owner != e.admin1 {
 		t.Errorf("seule la déconnexion du propriétaire lève le verrou : %+v", l)
@@ -753,9 +754,9 @@ func TestLaunchLock253_Critical_HelloAckGivesEachAdminAndAnimItsConnectionIDBefo
 		name, id, ctype string
 		conn            *websocket.Conn
 	}{{"admin", e.admin2, "admin", e.a2}, {"anim", e.anim, "anim", e.an}} {
-		collectRaw253(c.conn, 100*time.Millisecond) // purge des trames de connexion
+		e.purge253() // #291 : barrière positive au lieu d'une fenêtre fixe
 		e.send(t, c.id, c.ctype, "HELLO", map[string]interface{}{})
-		time.Sleep(300 * time.Millisecond)
+		e.settle253After() // #291 : barrière + marge de 250 ms (action client HELLO) au lieu de 300 ms fixes
 
 		frames := tapOf253(c.conn).take()
 		ackAt, updateAt := -1, -1
@@ -788,13 +789,11 @@ func TestLaunchLock253_Critical_HelloAckGivesEachAdminAndAnimItsConnectionIDBefo
 
 func TestLaunchLock253_HelloAckIsNeverSentToTvPlayerOrToAnotherStation(t *testing.T) {
 	e := helloEnv253(t)
-	for _, c := range []*websocket.Conn{e.a1, e.a2, e.an, e.tvc, e.paulConn} {
-		collectRaw253(c, 50*time.Millisecond)
-	}
+	e.purge253() // #291 : barrière positive au lieu de 5 × 50 ms fixes
 	e.send(t, e.tv, "tv", "HELLO", map[string]interface{}{})
 	e.send(t, e.paulCID, "vplayer", "HELLO", map[string]interface{}{})
 	e.send(t, e.admin2, "admin", "HELLO", map[string]interface{}{})
-	time.Sleep(300 * time.Millisecond)
+	e.settle253After() // #291 : barrière + marge de 250 ms (action client HELLO) au lieu de 300 ms fixes
 
 	if countAction253(tapOf253(e.tvc).take(), "HELLO_ACK") != 0 || countAction253(tapOf253(e.paulConn).take(), "HELLO_ACK") != 0 {
 		t.Error("jamais de HELLO_ACK vers la TV ni vers un VJoueur")
@@ -806,7 +805,7 @@ func TestLaunchLock253_HelloAckIsNeverSentToTvPlayerOrToAnotherStation(t *testin
 
 func TestLaunchLock253_OwnerIsTheSameStringAsTheHelloAckClientID(t *testing.T) {
 	e := helloEnv253(t)
-	collectRaw253(e.a1, 50*time.Millisecond)
+	e.purge253() // #291 : barrière positive au lieu d'une fenêtre fixe
 	e.send(t, e.admin1, "admin", "HELLO", map[string]interface{}{})
 	m, ok := waitFrame253(e.a1, "HELLO_ACK", nil)
 	if !ok {

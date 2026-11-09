@@ -1,4 +1,4 @@
-package main
+package vplayer
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 // #119, contract ws-payload-serialization.md §"ENTRACTE / ENTRACTE_CONFIG":
 // "idem, y compris sur le chemin chaud").
 //
-// buildVPlayerPayloads (main.go) bypasses SerializeForVPlayer entirely for
+// BuildPayloads (main.go) bypasses SerializeForVPlayer entirely for
 // PREPARE/READY phases — it extracts GAME as json.RawMessage and splices it
 // into every recipient's frame verbatim (see stripVPlayerHiddenGameFields),
 // stripping ONLY protocol.AdminOnlyGameFields. ENTRACTE/ENTRACTE_CONFIG are
@@ -80,7 +80,7 @@ func TestBuildVPlayerPayloads_PreservesEntracte(t *testing.T) {
 		t.Run(string(phase), func(t *testing.T) {
 			msg := buildEntracteFanoutMessage(t, phase)
 
-			payloads, ok := buildVPlayerPayloads(msg, []server.VPlayerRecipient{
+			payloads, ok := BuildPayloads(msg, []server.VPlayerRecipient{
 				{ClientID: "c1", PlayerID: entracteFanoutPlayerID},
 			})
 			if !ok {
@@ -101,14 +101,14 @@ func TestBuildVPlayerPayloads_PreservesEntracte(t *testing.T) {
 			}
 
 			if parsed.Msg.Game["ENTRACTE"] != true {
-				t.Errorf("buildVPlayerPayloads (fan-out chaud, %s): expected ENTRACTE=true to reach VPlayer, got %v", phase, parsed.Msg.Game["ENTRACTE"])
+				t.Errorf("BuildPayloads (fan-out chaud, %s): expected ENTRACTE=true to reach VPlayer, got %v", phase, parsed.Msg.Game["ENTRACTE"])
 			}
 			cfg, ok := parsed.Msg.Game["ENTRACTE_CONFIG"].(map[string]interface{})
 			if !ok {
-				t.Fatalf("buildVPlayerPayloads (fan-out chaud, %s): expected ENTRACTE_CONFIG object, got %v", phase, parsed.Msg.Game["ENTRACTE_CONFIG"])
+				t.Fatalf("BuildPayloads (fan-out chaud, %s): expected ENTRACTE_CONFIG object, got %v", phase, parsed.Msg.Game["ENTRACTE_CONFIG"])
 			}
 			if cfg["TITLE"] != "Pause déjeuner" || cfg["PANEL_SIZE"] != float64(70) || cfg["ANIM_INTENSITY"] != float64(0) {
-				t.Errorf("buildVPlayerPayloads (fan-out chaud, %s): ENTRACTE_CONFIG fields not preserved, got %v", phase, cfg)
+				t.Errorf("BuildPayloads (fan-out chaud, %s): ENTRACTE_CONFIG fields not preserved, got %v", phase, cfg)
 			}
 		})
 	}

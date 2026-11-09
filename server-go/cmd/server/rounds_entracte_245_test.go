@@ -57,6 +57,7 @@ func (e *env245) fixtureFlow(t *testing.T) []string {
 
 func TestRoundsEntracte245_Critical_AnimAloneDrivesAFullRunThroughEntractesAndRounds(t *testing.T) {
 	e := newEnv245(t)
+	e.app.engine.SetTickInterval(50 * time.Millisecond) // #291 Phase A : décomptes 3-2-1 en 150 ms au lieu de 3 s (5 étapes)
 	want := e.fixtureFlow(t)
 	e.app.engine.SetPhase(game.PhaseStopped)
 	e.app.engine.Ready("", &game.Question{ID: "", Type: game.QuestionTypeSpeedy}) // aucune question courante

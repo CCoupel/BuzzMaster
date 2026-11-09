@@ -45,6 +45,7 @@ import (
 func newRafaleCardCountdownWireTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newTestAppWithHub(t)
+	app.engine.SetTickInterval(50 * time.Millisecond) // #291 Phase A : décompte 3-2-1 et ticks RAFALE en 50 ms au lieu de 1 s
 	app.udpBcast = server.NewUDPBroadcaster()
 
 	app.engine.OnStateChange = func(phase game.GamePhase) {
@@ -126,7 +127,8 @@ func TestRafaleCardCountdown_TickCarriesMotionCardID_QuestionTimeDecreasesOnTheW
 	// tick) — this test asserts on however many arrive within the window,
 	// rather than pinning an exact count.
 	var ticks []protocol.RafaleTickPayload
-	deadline := time.Now().Add(4 * time.Second)
+	// #291 Phase A : fenêtre de 4 s = 4 ticks de 1 s ; ticks de 50 ms → 20 ticks (1 s), marge x5 conservée.
+	deadline := time.Now().Add(20 * 50 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		tvConn.SetReadDeadline(deadline)
 		_, data, err := tvConn.ReadMessage()
@@ -148,7 +150,7 @@ func TestRafaleCardCountdown_TickCarriesMotionCardID_QuestionTimeDecreasesOnTheW
 	}
 
 	if len(ticks) < 2 {
-		t.Fatalf("got %d RAFALE_TICK frames on the wire in 4s, want at least 2 (3->2->1 sequence) — the 'chrono figé' symptom", len(ticks))
+		t.Fatalf("got %d RAFALE_TICK frames on the wire in the window, want at least 2 (3->2->1 sequence) — the 'chrono figé' symptom", len(ticks))
 	}
 	for i, tick := range ticks {
 		if tick.MotionCardID != cardID {

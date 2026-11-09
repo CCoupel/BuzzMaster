@@ -63,6 +63,7 @@ import (
 func newRafaleCountdownWireTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newTestAppWithHub(t)
+	app.engine.SetTickInterval(50 * time.Millisecond) // #291 Phase A : décompte 3-2-1 et ticks RAFALE en 50 ms au lieu de 1 s
 	// broadcastGameState/broadcastCountdownUpdate/broadcastTimerUpdate all
 	// call a.broadcast(..., viaTCP=true, ...) -> a.udpBcast.Broadcast(msg) —
 	// an unstarted NewUDPBroadcaster() no-ops safely (conn == nil), same

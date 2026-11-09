@@ -104,6 +104,7 @@ func TestRafaleMultiTeamGate_AnimDispatch_StartRefused_StaysInPrepare(t *testing
 // engine-internal state — a callback-based assertion wouldn't actually
 // exercise broadcastStart() itself.
 func TestHandleStart_RefusedStart_DoesNotBroadcastStart(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newTestAppWithHub(t)
 	app.udpBcast = server.NewUDPBroadcaster()
 	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red"}, "blue": {Name: "blue"}})

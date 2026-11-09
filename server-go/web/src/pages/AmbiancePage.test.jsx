@@ -587,6 +587,8 @@ describe('Étape 3 — pont configuré', () => {
     })
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
+    // L'inventaire du pont arrive après la config : attendre son application.
+    await screen.findByText(/introuvable sur le pont/)
 
     expect(screen.getByLabelText('Salle gauche')).toBeChecked()
     expect(screen.getByLabelText('Salle droite')).not.toBeChecked()
@@ -678,7 +680,7 @@ describe('Cas dégradés (maquette §07, contrat §5.6)', () => {
     render(<AmbiancePage />)
 
     await screen.findByText('Salle gauche')
-    expect(badge().dataset.state).toBe('unreachable')
+    await waitFor(() => expect(badge().dataset.state).toBe('unreachable'))
     expect(badge().textContent).toContain('Pont injoignable')
     expect(badge().textContent).not.toContain('refusée')
     expect(screen.getByText(/La partie continue normalement/)).toBeInTheDocument()

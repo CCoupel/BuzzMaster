@@ -311,6 +311,10 @@ func twCWaitTeamZoneColor(t *testing.T, fake *lighting.FakeDriver, team string, 
 func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *testing.T) {
 	app, fake, cancel := tw208NewWriterApp(t)
 	defer cancel()
+	// Cadence de PRODUCTION (250 ms or / 500 ms équipe, aucun override) : la phase or doit rester nettement supérieure au
+	// pacing du writer (lighting.MinInterval = 100 ms) — à 125 ms (marge de 25 ms) l'apply « or » pouvait tomber hors
+	// phase sous charge (même aliasing que le Flash, correctif CI 465a8590). Les attentes de 800 ms couvrent la phase
+	// d'équipe de 500 ms ; coût : ≈ 1,5 s au lieu de 0,8 s.
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}}})
 	wantTeamA := app.teamNameToRGB("TeamA")
 	app.ambiance().NotifyState() // établit un premier état stable (hors partie)
@@ -370,11 +374,12 @@ func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *tes
 }
 
 func TestC2b_ScoreFlash_ClampsAboveSixPoints(t *testing.T) {
-	if testing.Short() {
-		t.Skip("mesure temporelle réelle (~5 s)")
-	}
 	app, fake, cancel := tw208NewWriterApp(t)
 	defer cancel()
+	// #291 Phase A : cadence ÷1,5 (167 ms or / 333 ms équipe = 500 ms/cycle, driver factice) : 6 cycles = 3000 ms,
+	// 7 = 3500 ms, 8 = 4000 ms ; fenêtre 3200 ms = marge anti-faux-rouge de 200 ms (revue m2, comme l'original),
+	// et un plafond manquant (7 cycles) dépasse la fenêtre de 300 ms.
+	app.ambCtl().FlashPhases = flashPhaseOverride{ScoreGold: 167 * time.Millisecond, ScoreTeam: 333 * time.Millisecond}
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}}})
 	app.ambiance().NotifyState()
 	twCWaitTeamZoneColor(t, fake, "TeamA", app.teamNameToRGB("TeamA"), 2*time.Second)
@@ -389,14 +394,14 @@ func TestC2b_ScoreFlash_ClampsAboveSixPoints(t *testing.T) {
 	// laisse une marge confortable au-dessus de 6 cycles tout en restant
 	// nettement sous ce que 7 ou 8 cycles réels prendraient — de quoi
 	// distinguer sans ambiguïté "plafonné à 6" de "pas plafonné".
-	deadline := time.Now().Add(4700 * time.Millisecond)
+	deadline := time.Now().Add(3200 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		if app.currentScoreFlashTeam() == "" {
 			return // terminé — plafond respecté
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("le clignotement n'était pas terminé à 4,7 s — points=40 n'a pas été plafonné à 6 cycles (6 x 750 ms = 4500 ms attendu)")
+	t.Fatalf("le clignotement n'était pas terminé à 3,2 s — points=40 n'a pas été plafonné à 6 cycles (6 x 500 ms = 3000 ms attendu)")
 }
 
 func TestC2b_ScoreFlashAndGeneralFlash_RunSimultaneouslyWithoutInterference(t *testing.T) {

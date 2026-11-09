@@ -47,11 +47,11 @@
           "target_dir": "build/qualif_v{X.Y.Z}/",
           "credentials_env": [],
           "verified": {
-            "status": "ok",
-            "at": "2026-10-27T13:57:43Z",
+            "status": "failed",
+            "at": "2026-11-08T17:25:27Z",
             "checks": [
-              "local-shell (powershell.exe)",
-              "target-dir (build/ writable)"
+              "target-dir (build/ writable) : ok",
+              "local-shell (powershell.exe) : failed — absent du conteneur Claude-Launcher (pas de /mnt/c) ; l exe Windows est lance par l utilisateur depuis Windows (deploy.qualif.md)"
             ]
           }
         }
@@ -110,7 +110,8 @@
     "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
     "ci": "scripts/ci.sh",
     "test_related": "cd server-go/web && npx vitest related --run {FILES}",
-    "env": "export PATH=$HOME/.nvm/versions/node/v22.23.3/bin:/usr/local/go/bin:$PATH GOTOOLCHAIN=go1.26.10"
+    "env": "export PATH=$HOME/.local/bin:$HOME/go/bin:$PATH GOTOOLCHAIN=go1.26.10",
+    "test_targeted": "cd server-go && go test {TARGETS}"
   },
   "extended_commands": {
     "repo_url": "https://github.com/CCoupel/BuzzMaster",

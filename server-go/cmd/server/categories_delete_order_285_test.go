@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"buzzcontrol/internal/config"
 )
@@ -23,10 +22,10 @@ func TestCategoriesDelete285_Wire_SingleQuestionsAfterCategoriesChanged(t *testi
 	if err := os.WriteFile(filepath.Join(dir, "question.json"), q, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	w.frames(400 * time.Millisecond) // purge
+	w.settle(t) // purge
 
 	w.request(t, "DELETE", "/api/categories/CINEMA", `{"mode":"reassign"}`)
-	got := w.frames(700 * time.Millisecond)
+	got := w.settle(t)
 
 	var order []string
 	for _, f := range got["admin"] {

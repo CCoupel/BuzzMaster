@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { boostTeamColor, getRgbColor, rgbToHex, getContrastColor } from './colorUtils'
 import { TEAM_COLORS } from '../constants/colors'

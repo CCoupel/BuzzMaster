@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { categoryMeta } from './categoryUtils'
 import { getCategoryColor, DEFAULT_NEON_COLOR } from '../constants/colors'

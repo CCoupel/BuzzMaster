@@ -62,28 +62,6 @@ func TestTeamColorToRGB_ContractTable(t *testing.T) {
 	}
 }
 
-// TestTeamColorPalette_SixteenEntriesDistinct guards against a future edit collapsing
-// two of the 16 canonical entries onto the same RGB value (e.g. a typo'd channel).
-func TestTeamColorPalette_SixteenEntriesDistinct(t *testing.T) {
-	seen := make(map[[3]int]string, len(contractColorTable))
-	for _, c := range contractColorTable {
-		rgb, ok := teamColorPalette[c.key]
-		if !ok {
-			t.Fatalf("teamColorPalette missing canonical key %q (rang %d)", c.key, c.rank)
-		}
-		if rgb != c.rgb {
-			t.Errorf("teamColorPalette[%q] = %v, want %v (contract drift)", c.key, rgb, c.rgb)
-		}
-		if prevKey, dup := seen[rgb]; dup {
-			t.Errorf("RGB %v used by both %q and %q — the 16 entries must be pairwise distinct", rgb, prevKey, c.key)
-		}
-		seen[rgb] = c.key
-	}
-	if len(seen) != 16 {
-		t.Errorf("expected 16 distinct RGB values across the canonical palette, got %d", len(seen))
-	}
-}
-
 // TestTeamColorToRGB_LegacyFallbackByHue_NeverGray verifies that a team created before
 // #113 (Color set, no ColorName) still resolves to a real, non-gray color via
 // nearestPaletteColorByHue — one representative hue per vivid anchor (rangs 1-8).
@@ -108,51 +86,6 @@ func TestTeamColorToRGB_LegacyFallbackByHue_NeverGray(t *testing.T) {
 		}
 		if got != c.rgb {
 			t.Errorf("teamColorToRGB(legacy Color=%v, no COLOR_NAME) = %v, want %v (nearest vivid anchor)", c.rgb, got, c.rgb)
-		}
-	}
-}
-
-// TestDimIntensityFor_VifTones_Are64 verifies the 8 vivid tones (L≈55%) keep the
-// pre-#113 dim intensity of 64 — this is the backward-compatibility anchor: existing
-// hardcoded-64 assertions in led_test.go (TestLEDNormal_*, no COLOR_NAME) must not
-// regress once dimIntensityFor replaces the flat constant.
-func TestDimIntensityFor_VifTones_Are64(t *testing.T) {
-	for _, c := range contractColorTable[:8] {
-		got := dimIntensityFor(c.rgb)
-		if got != 64 {
-			t.Errorf("dimIntensityFor(%s vif %v) = %d, want 64", c.key, c.rgb, got)
-		}
-	}
-}
-
-// TestDimIntensityFor_ProfondTones_AreApprox100 verifies the 8 deep tones (L≈35%)
-// land close to the ~100 target from the plan, clearly above the vivid-tone value —
-// this is what makes a deep-tone buzzer stay visibly lit in the dim/"not buzzed" state.
-func TestDimIntensityFor_ProfondTones_AreApprox100(t *testing.T) {
-	for _, c := range contractColorTable[8:] {
-		got := dimIntensityFor(c.rgb)
-		if got < 90 || got > 110 {
-			t.Errorf("dimIntensityFor(%s profond %v) = %d, want within [90,110] (~100)", c.key, c.rgb, got)
-		}
-		if got <= 64 {
-			t.Errorf("dimIntensityFor(%s profond %v) = %d, expected strictly brighter than the vivid-tone value (64)", c.key, c.rgb, got)
-		}
-	}
-}
-
-// TestDimIntensityFor_BoundedRange verifies the [64, 128] clamp holds for all 16
-// palette entries plus the achromatic extremes (white/black/gray fallback).
-func TestDimIntensityFor_BoundedRange(t *testing.T) {
-	inputs := make([][3]int, 0, len(contractColorTable)+3)
-	for _, c := range contractColorTable {
-		inputs = append(inputs, c.rgb)
-	}
-	inputs = append(inputs, [3]int{255, 255, 255}, [3]int{0, 0, 0}, [3]int{128, 128, 128})
-
-	for _, rgb := range inputs {
-		got := dimIntensityFor(rgb)
-		if got < 64 || got > 128 {
-			t.Errorf("dimIntensityFor(%v) = %d, out of bounds [64,128]", rgb, got)
 		}
 	}
 }

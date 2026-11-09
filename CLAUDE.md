@@ -43,10 +43,11 @@ buzzcontrol/
 
 ```bash
 cd server-go
-go build -o server.exe ./cmd/server && ./server.exe
-curl -s http://localhost/shutdown && sleep 2 && ./server.exe  # Relancer (méthode OBLIGATOIRE)
+go build -o server.exe ./cmd/server && ./server.exe        # Windows (binaire server.exe)
+go build -o server ./cmd/server && ./server                # Linux (binaire server)
+curl -s http://localhost/shutdown && sleep 2 && ./server.exe  # Relancer (méthode OBLIGATOIRE, adapter le nom du binaire à l'OS)
 go test ./... -v -cover
-cd server-go && ./build.ps1  # Build portable Windows/Linux
+cd server-go && ./build.ps1  # Build portable Windows/Linux (script Windows, lancé par l'utilisateur)
 ```
 
 ## Ports Standards
@@ -98,6 +99,10 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux
 - `server-go/internal/server/websocket_buzzer.go` — BuzzerWebSocketHub
 - `server-go/internal/server/http.go` — routes HTTP + WebSocket
 - `server-go/internal/server/ack_manager.go` — registre ACK (v3.8.0)
+- `server-go/internal/led/led.go` — envoi des LED_SET aux buzzers (règles par phase, COMET, ACK) ; interface `Host`
+- `server-go/internal/ambiance/ambiance.go` — couche d'ambiance lumineuse (writer, scènes, override Flash/SCORE) ; interface `Host`
+- `server-go/internal/vplayer/vplayer.go` — payloads UPDATE individualisés VPlayer
+- `server-go/internal/rounds/rounds.go` — logique des manches (ROUNDS_UPDATE)
 
 **Frontend React** :
 - `server-go/web/src/pages/GamePage.jsx` — contrôle admin jeu en cours
@@ -236,7 +241,7 @@ Règles portées par le template — il fait foi, rien n'est recopié ici :
 - Les agents **commitent sur la branche courante**, avec des fichiers explicites (`git add <fichiers>`, jamais `git add -A`), et ne la changent **jamais**. Interdits dans le dépôt principal : `checkout`, `switch`, `reset --hard`, `clean`, `rebase`, `merge`, `stash`, détachement de HEAD.
 - Tout travail sur un autre état du code (red check, comparaison, reproduction) se fait dans un **`git worktree` jetable**, par **chemin absolu** (`git -C <worktree> …`, jamais `cd ../..`), supprimé ensuite. Avant chaque commande destructive, vérifier que le chemin n'est pas le dépôt principal.
 - Un agent qui constate que la branche courante a changé s'arrête et prévient le teamleader (`BLOQUE`).
-- Pendant une QA ou un BUILD exécuté dans le dépôt principal (`go test`, `scripts/ci.sh`), les devs ne modifient pas le dépôt principal : ils travaillent dans un **worktree jetable sous `/mnt/c`** sur une branche `tmp/*`, puis cherry-pick sur la branche courante après le verdict (leçon v11.2.3, correctif #278).
+- Pendant une QA ou un BUILD exécuté dans le dépôt principal (`go test`, `scripts/ci.sh`), les devs ne modifient pas le dépôt principal : ils travaillent dans un **worktree jetable** sur une branche `tmp/*`, puis cherry-pick sur la branche courante après le verdict (leçon v11.2.3, correctif #278).
 - Incident de référence : QA #253, 2026-10-11 (HEAD détaché quelques minutes, aucun commit perdu).
 
 ## Agents Disponibles

@@ -32,34 +32,32 @@ cd "$REPO_ROOT"
 # On produit le merged binary (bootloader + partitions + boot_app0 + app)
 # identique a la CI/CD PROD -> garantit le BORE QUALIF <-> PROD
 
-# 1a. Compiler
-powershell.exe -NoProfile -Command "& 'C:\Users\cyril\.platformio\penv\Scripts\pio.exe' run -e buzzclick"
+# Environnement : conteneur Claude-Launcher Linux (commands.env de project-config.json :
+# node, go, pio dans ~/.local/bin, GOTOOLCHAIN=go1.26.10). Plus de powershell.exe ni de /mnt/c.
+eval "$(jq -r .commands.env .claude/project-config.json)"
 
-# 1b. Merger
-powershell.exe -NoProfile -Command "
-  python 'C:\Users\cyril\.platformio\packages\tool-esptoolpy\esptool.py' --chip esp32c3 merge_bin \`
-    -o buzzclick-merged.bin \`
-    0x0     .pio\build\buzzclick\bootloader.bin \`
-    0x8000  .pio\build\buzzclick\partitions.bin \`
-    0xe000  'C:\Users\cyril\.platformio\packages\framework-arduinoespressif32\tools\partitions\boot_app0.bin' \`
-    0x10000 .pio\build\buzzclick\firmware.bin
-"
+# 1a+1b. Compiler + merger + bornes de taille : script unique scripts/build-firmware.sh
+# (appele aussi par scripts/ci.sh, ci-branch.yml et release.yml — meme recette partout, #294).
+# pio Linux (core dir ~/.platformio), esptool avec le python de PlatformIO, 200 Ko - 3 Mo.
+bash scripts/build-firmware.sh buzzclick-merged.bin
 
-# 1c. Integrer dans les assets Go (merged binary + version)
+# 1c. Integrer dans les assets Go (merged binary + version), comme release.yml
 VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
 cp buzzclick-merged.bin server-go/assets/firmware/buzzclick-latest.bin
+cp buzzclick-merged.bin server-go/assets/firmware/buzzclick-merged.bin
 echo -n "$VERSION" > server-go/assets/firmware/version.txt
 rm buzzclick-merged.bin
 
 # Etape 2 — Frontend React (revient explicitement a $REPO_ROOT, jamais un "cd .." relatif)
-cd "$REPO_ROOT/server-go/web" && npm run build
+# npm ci si node_modules absent (worktree neuf) ; copie dist comme release.yml
+cd "$REPO_ROOT/server-go/web" && { [ -d node_modules ] || npm ci; } && npm run build
 cd "$REPO_ROOT"
+rm -rf server-go/cmd/server/dist && cp -r server-go/web/dist server-go/cmd/server/dist
 
 # Etape 3 — Backend Go — cross-compilation Windows exe (candidat local, agnostique a
 # l'environnement — c'est PUBLISH QUALIF qui le rend disponible pour QUALIF)
 # BUILD_DIR ancre sur $REPO_ROOT (pas relatif au cwd courant) — non negociable, voir
 # deploy.template.md pour l'exemple INCORRECT (monorepo) que cet ancrage evite.
-export PATH="$PATH:/usr/local/go/bin"
 MILESTONE_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)\..*/\1/')
 FULL_VERSION=$(grep '"version"' server-go/config.json | sed 's/.*"\([0-9.]*\)".*/\1/')
 BUILD_DIR="$REPO_ROOT/build/candidate_v${MILESTONE_VERSION}"

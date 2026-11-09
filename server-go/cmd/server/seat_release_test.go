@@ -150,6 +150,7 @@ func TestHandleReleaseBumperName_Connected_SocketNeverClosed(t *testing.T) {
 // rejected with REASON=SEAT_RELEASED — sourced from the eviction registry —
 // never silently reconnected and never a generic ENROLLMENT_CLOSED guess.
 func TestHandleReleaseBumperName_Connected_StaleIDRejectedWithSeatReleased(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newTestAppWithHub(t)
 	app.evictionRegistry = server.NewEvictionRegistry()
 	app.engine.SetPhase(game.PhaseEnroll)

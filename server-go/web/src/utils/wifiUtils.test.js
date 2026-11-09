@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Tests unitaires — escapeWifiString (non-régression #85)
  *

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // ---------------------------------------------------------------------------
 // AmbiancePage — retours QUALIF v10.0.0.13 (2026-09-07), points 2 et 3 de
@@ -140,6 +140,9 @@ describe('AmbiancePage — point 3 : 3 boutons « Remettre à Libre » à porté
   async function renderWithBothRoles() {
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
+    // La config persistée arrive après l'inventaire : attendre qu'elle soit appliquée
+    // (boutons « Libre » actifs) avant tout clic.
+    await waitFor(() => expect(teamBtn()).not.toBeDisabled())
   }
 
   it('les 3 boutons sont désactivés tant que rien n\'est assigné (config vide, rien coché)', async () => {
@@ -273,6 +276,8 @@ describe('AmbiancePage — non-régression MAJEUR (code-reviewer) : portée ind�
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
+    // Config persistée appliquée (boutons « Libre » actifs) avant toute action.
+    await waitFor(() => expect(teamBtn()).not.toBeDisabled())
     // Les deux sont cochées par défaut (config déjà persistée). On décoche
     // "Salle gauche" (équipe) pour une raison quelconque — AVANT de cliquer
     // un bouton "Libre" qui ne la concerne pas.
@@ -294,6 +299,8 @@ describe('AmbiancePage — non-régression MAJEUR (code-reviewer) : portée ind�
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<AmbiancePage />)
     await screen.findByText('Salle gauche')
+    // Config persistée appliquée (boutons « Libre » actifs) avant toute action.
+    await waitFor(() => expect(teamBtn()).not.toBeDisabled())
     fireEvent.click(screen.getByLabelText('Salle droite'))
     expect(screen.getByLabelText('Salle droite')).not.toBeChecked()
 

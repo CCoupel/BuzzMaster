@@ -127,6 +127,7 @@ func assertRafaleAnswerNeverReceived(t *testing.T, name string, conn interface {
 // never receive it — dispatched through the genuine WS path, not a direct
 // function call.
 func TestRafaleAnswer_ValidateReachesAdminAndAnim_NeverTVOrVPlayer(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newRafaleAnswerLeakTestApp(t)
 
 	baseURL := startAnimAllowlistTestServer(t, app)
@@ -166,6 +167,7 @@ func TestRafaleAnswer_ValidateReachesAdminAndAnim_NeverTVOrVPlayer(t *testing.T)
 // through the same advance/broadcast path, this proves the leak guard holds
 // for both entry points, not just one.
 func TestRafaleAnswer_InvalidateReachesAdminAndAnim_NeverTVOrVPlayer(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newRafaleAnswerLeakTestApp(t)
 
 	baseURL := startAnimAllowlistTestServer(t, app)
@@ -360,6 +362,7 @@ func TestRafaleAnswerNext_ReachesAdminAndAnim_ConsistentBetweenBoth(t *testing.T
 // existing ANSWER-only tests above) NOR embedded in any other frame
 // (assertNoFrameContainsSecret's raw substring scan across every action).
 func TestRafaleAnswerNext_NeverLeaksToTVOrPlayer(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	// #282: option on, so NEXT.LETTER is non-empty — it must stay off TV/VPlayer too.
 	app := newRafaleNextLeakTestAppAlpha(t, true)
 
@@ -433,6 +436,7 @@ func newRafaleAlphaLeakTestApp(t *testing.T) *App {
 }
 
 func TestRafaleAlpha282_TVAndVPlayer_OnlyTheLetter_NeverTheAnswer(t *testing.T) {
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app := newRafaleAlphaLeakTestApp(t)
 	baseURL := startAnimAllowlistTestServer(t, app)
 	admin := dialWS(t, baseURL, "/ws/admin")

@@ -186,6 +186,7 @@ func TestArdoiseConcurrency246_H1_TenTeamsTyping(t *testing.T) {
 	if testing.Short() {
 		t.Skip("H1 : test lent (≈ 6 s), exclu de la boucle rapide (-short)")
 	}
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	nTeams := 10
 	app, base, names, ids := h246Setup(t, nTeams)
 	stop := make(chan struct{})
@@ -424,6 +425,7 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 	if testing.Short() {
 		t.Skip("H6 : test lent (≈ 25 s), exclu de la boucle rapide (-short)")
 	}
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	dur := 8
 	if s := os.Getenv("H246_SECS"); s != "" {
 		fmt.Sscanf(s, "%d", &dur)
@@ -442,6 +444,8 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 	app.engine.SetPhase(game.PhaseStopped)
 	app.engine.Ready("", &game.Question{ID: "q-ardoise", Type: game.QuestionTypeArdoise})
 	app.engine.SetPhase(game.PhaseReady)
+	// #291 Phase A : le tick de 1 s est CONSERVÉ ici — il fait partie du trafic
+	// de fond (UPDATE_TIMER vers l'admin lent) que ce test de stress mesure.
 	app.engine.Start(dur + 15)
 	deadline := time.Now().Add(5 * time.Second)
 	for app.engine.GetPhase() != game.PhaseStarted && time.Now().Before(deadline) {
@@ -557,8 +561,39 @@ func TestArdoiseConcurrency246_H6_TwoAdminsTwoTV_Critical(t *testing.T) {
 	wg.Wait()
 	close(stopAdmin)
 	awg.Wait()
-	// laisser l'admin lent se vider / se reconnecter
-	time.Sleep(8 * time.Second)
+	// laisser l'admin lent se vider / se reconnecter : attente de convergence
+	// (sondage 50 ms, échéance 8 s = l'ancienne pause fixe) au lieu d'un sommeil de 8 s.
+	converged := func() bool {
+		st := serverTexts()
+		for _, v := range []*h246AdminView{A, B} {
+			v.mu.Lock()
+			for _, n := range names {
+				if v.view[n] != st[n] || st[n] != final[n] {
+					v.mu.Unlock()
+					return false
+				}
+			}
+			v.mu.Unlock()
+		}
+		return true
+	}
+	// M1 (revue Phase A) : on ne sort qu'après une convergence STABLE d'au moins 1 s (un état vu convergé un instant
+	// puis modifié par une trame en retard ne compte pas) ; échéance 9 s (8 s de l'ancienne pause + 1 s de stabilité).
+	const stableFor = time.Second
+	var stableSince time.Time
+	for settle := time.Now().Add(8*time.Second + stableFor); time.Now().Before(settle); {
+		if converged() {
+			if stableSince.IsZero() {
+				stableSince = time.Now()
+			}
+			if time.Since(stableSince) >= stableFor {
+				break
+			}
+		} else {
+			stableSince = time.Time{}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	st := serverTexts()
 	fail := 0
 	for _, v := range []*h246AdminView{A, B} {
@@ -592,6 +627,7 @@ func TestArdoiseConcurrency246_ClearThenContinuousRetypeIsLiveForTheAdmin(t *tes
 	if testing.Short() {
 		t.Skip("cadence réelle 200 ms (≈ 3 s), exclu de la boucle rapide (-short)")
 	}
+	t.Parallel() // #295 P2 : environnement auto-porté, aucun état global (table P1 du handoff)
 	app, base, names, ids := h246Setup(t, 2)
 	stop := make(chan struct{})
 	admin := h246Dial(t, base, "/ws/admin")

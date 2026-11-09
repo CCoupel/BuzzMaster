@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { groupQuestionsByRound, sortQuestionsByRounds, sortQuestionsByOrder, countEntries } from './questionOrder'
 import { structureFrom, moveQuestion, moveRound, addRound, renameRound, deleteRound, toRoundsUpdatePayload, cleanRoundName } from './roundsEdit'

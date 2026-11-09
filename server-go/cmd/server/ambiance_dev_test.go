@@ -7,6 +7,7 @@ package main
 // no-op path that makes the 21 unguarded sites safe.
 
 import (
+	"buzzcontrol/internal/colors"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -36,27 +37,6 @@ func TestDevAmbianceNilWriterSitesAreNoOps(t *testing.T) {
 	app.setupAmbiance()
 	if app.ambiance() != nil {
 		t.Fatal("setupAmbiance must leave lighting nil when not configured")
-	}
-}
-
-func TestDevAmbianceActiveTeam(t *testing.T) {
-	q := func(typ game.QuestionType) *game.Question { return &game.Question{Type: typ} }
-	tests := []struct {
-		name  string
-		state game.GameState
-		want  string
-	}{
-		{"no question", game.GameState{}, ""},
-		{"classic question", game.GameState{Question: q(game.QuestionTypeSpeedy), MemoryCurrentTeam: "X"}, ""},
-		{"memory", game.GameState{Question: q(game.QuestionTypeMemory), MemoryCurrentTeam: "TeamB"}, "TeamB"},
-		{"memotion", game.GameState{Question: q(game.QuestionTypeMemotion), MotionCurrentTeam: "TeamC"}, "TeamC"},
-		{"rafale", game.GameState{Question: q(game.QuestionTypeRafale), RafaleCurrentTeam: "TeamA"}, "TeamA"},
-		{"memory solo (no current team)", game.GameState{Question: q(game.QuestionTypeMemory)}, ""},
-	}
-	for _, tt := range tests {
-		if got := ambianceActiveTeam(tt.state); got != tt.want {
-			t.Errorf("%s: active team = %q, want %q", tt.name, got, tt.want)
-		}
 	}
 }
 
@@ -161,7 +141,7 @@ func TestDevAmbianceSceneTableAndTeamPalette(t *testing.T) {
 	app := newTestApp(t)
 	// TeamA is {255,0,0} without ColorName → hue-nearest palette "rouge".
 	wantTeamA := app.teamNameToRGB("TeamA")
-	if wantTeamA != teamColorPalette["rouge"] {
+	if wantTeamA != colors.TeamColorPalette["rouge"] {
 		t.Fatalf("palette factoring broken: TeamA → %v", wantTeamA)
 	}
 	if got := app.teamColorToRGB(&game.Bumper{Team: "TeamA"}); got != wantTeamA {
@@ -333,7 +313,7 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 			if z.Color != want {
 				t.Errorf("%s: zone %s doit porter sa propre couleur, got %v want %v", ev.Kind, name, z.Color, want)
 			}
-			if z.Intensity != dimIntensityFor(want) {
+			if z.Intensity != colors.DimIntensityFor(want) {
 				t.Errorf("%s: zone %s non distinguée doit être atténuée (dimIntensityFor), got intensity=%d", ev.Kind, name, z.Intensity)
 			}
 		}
@@ -355,7 +335,7 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 		if got := zones["TeamA"]; got.Color != wantTeamA || got.Intensity != 255 {
 			t.Errorf("%s: TeamA (distinguée) doit être à pleine intensité dans sa propre couleur, got %+v", ev.Kind, got)
 		}
-		if got := zones["TeamB"]; got.Intensity != dimIntensityFor(wantTeamB) {
+		if got := zones["TeamB"]; got.Intensity != colors.DimIntensityFor(wantTeamB) {
 			t.Errorf("%s: TeamB (non distinguée) doit rester atténuée, got %+v", ev.Kind, got)
 		}
 	}
@@ -383,7 +363,7 @@ func TestDevAmbianceTeamZones213(t *testing.T) {
 	if zones["TeamB"].Color != wantTeamB || zones["TeamB"].Intensity != 255 {
 		t.Errorf("REVEAL multi-équipe : zone TeamB doit porter sa propre couleur à pleine intensité, got %+v", zones["TeamB"])
 	}
-	if zones["TeamC"].Intensity != dimIntensityFor(wantTeamC) {
+	if zones["TeamC"].Intensity != colors.DimIntensityFor(wantTeamC) {
 		t.Errorf("REVEAL multi-équipe : TeamC (sur le plateau, non distinguée) doit rester atténuée, got %+v", zones["TeamC"])
 	}
 }
@@ -427,7 +407,7 @@ func TestDevAmbianceRegistryShape(t *testing.T) {
 func TestDevAmbianceWriterRendersLiveState(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -481,12 +461,12 @@ func waitForChronoPulseTier(t *testing.T, app *App, wantTier int32) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if app.chronoPulseActive.Load() && app.chronoPulseTier.Load() == wantTier {
+		if app.ambCtl().ChronoPulseActive.Load() && app.ambCtl().ChronoPulseTier.Load() == wantTier {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("chrono-pulse never reported tier %d (active=%v tier=%d)", wantTier, app.chronoPulseActive.Load(), app.chronoPulseTier.Load())
+	t.Fatalf("chrono-pulse never reported tier %d (active=%v tier=%d)", wantTier, app.ambCtl().ChronoPulseActive.Load(), app.ambCtl().ChronoPulseTier.Load())
 }
 
 // TestDevChronoPulse_TierSelectionFromLiveTimer covers runChronoPulse's own
@@ -497,7 +477,7 @@ func waitForChronoPulseTier(t *testing.T, app *App, wantTier int32) {
 func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -520,10 +500,10 @@ func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 		// NotifyState in runChronoPulse's own "become inactive" branch —
 		// see its doc comment on why this isn't load-bearing either way).
 		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) && app.chronoPulseActive.Load() {
+		for time.Now().Before(deadline) && app.ambCtl().ChronoPulseActive.Load() {
 			time.Sleep(5 * time.Millisecond)
 		}
-		if app.chronoPulseActive.Load() {
+		if app.ambCtl().ChronoPulseActive.Load() {
 			t.Fatalf("delay=%d: chrono-pulse still active after Stop()", tt.delay)
 		}
 	}
@@ -553,7 +533,7 @@ func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -598,7 +578,7 @@ func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *test
 func TestDevChronoPulse_SuppressedBySelector(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -655,7 +635,7 @@ func TestDevChronoPulse_SuppressedBySelector_ON(t *testing.T) {
 	app := newTestApp(t)
 	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)

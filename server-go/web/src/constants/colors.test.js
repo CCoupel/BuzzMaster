@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { TEAM_COLORS, getNextTeamColor, findTeamColor } from './colors'
 

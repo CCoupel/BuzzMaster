@@ -1,4 +1,4 @@
-package main
+package vplayer
 
 import (
 	"bytes"
@@ -13,13 +13,13 @@ func BenchmarkVPlayerFanout_Started_20_QCM(b *testing.B) {
 	msg.Msg = bytes.Replace(msg.Msg, []byte(`"PHASE":"READY"`), []byte(`"PHASE":"STARTED"`), 1)
 	msg.Msg = bytes.Replace(msg.Msg, []byte(`"PHASE":"PREPARE"`), []byte(`"PHASE":"STARTED"`), 1)
 	recipients := buildFanoutBenchRecipients(20)
-	if payloads, ok := buildVPlayerPayloads(msg, recipients); !ok || len(payloads) != 20 {
+	if payloads, ok := BuildPayloads(msg, recipients); !ok || len(payloads) != 20 {
 		b.Fatalf("STARTED must build 20 per-recipient frames (ok=%v, n=%d)", ok, len(payloads))
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		buildVPlayerPayloads(msg, recipients)
+		BuildPayloads(msg, recipients)
 	}
 }
 

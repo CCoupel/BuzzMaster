@@ -68,6 +68,18 @@ Règles pour écrire un test RED avant l'implémentation :
 
 _(Leçon v11.2.1, 2026-10-13)_
 
+### 2.4 Tests ciblés (dev, test-writer) / suites complètes (qa, CI)
+
+Règle adoptée le 2026-11-06 (v11.4.0), inscrite pour v11.5.0 (#293) :
+
+| Qui | Quoi | Commandes |
+|-----|------|-----------|
+| `dev-*`, `test-writer` | **Tests ciblés** : uniquement les tests des fichiers touchés | `npx vitest related --run <fichiers>` ; `go test ./<paquet> -run <motif>` ; `-race` seulement sur le code concurrent |
+| `qa`, CI | **Suites complètes** | `go test ./...`, vitest complet, `scripts/ci.sh` |
+
+- Un dev ne lance pas la suite complète : la validation globale revient à `qa` et à la CI de branche.
+- Pendant un workflow, `qa` tient un registre de travail (non versionné) `_work/tests-ledger.md` ; il ne figure pas dans le dépôt.
+
 ---
 
 ## 3. Tests Non-Régression (Existants)

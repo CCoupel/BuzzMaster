@@ -28,6 +28,7 @@
 package main
 
 import (
+	"buzzcontrol/internal/colors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -95,15 +96,15 @@ func TestThemeColor_CustomCategory_NoColour_FallsBackToWhite(t *testing.T) {
 func TestThemeColor_Rafale_ThemeFollowsEachDrawnQuestion_NotTheRoundsOwnCategory(t *testing.T) {
 	app := newTestApp(t)
 	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
-	wantHistory, ok := hexToRGB("#eab308") // HISTORY, hardcodedCategories
+	wantHistory, ok := colors.HexToRGB("#eab308") // HISTORY, hardcodedCategories
 	if !ok {
 		t.Fatal("setup invalide : hexToRGB a échoué sur une couleur connue")
 	}
-	wantScience, ok := hexToRGB("#22c55e") // SCIENCE
+	wantScience, ok := colors.HexToRGB("#22c55e") // SCIENCE
 	if !ok {
 		t.Fatal("setup invalide : hexToRGB a échoué sur une couleur connue")
 	}
-	wantGeography, ok := hexToRGB("#3b82f6") // GEOGRAPHY — la catégorie DÉCOY de la manche, ne doit JAMAIS apparaître
+	wantGeography, ok := colors.HexToRGB("#3b82f6") // GEOGRAPHY — la catégorie DÉCOY de la manche, ne doit JAMAIS apparaître
 	if !ok {
 		t.Fatal("setup invalide : hexToRGB a échoué sur une couleur connue")
 	}

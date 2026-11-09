@@ -51,8 +51,8 @@ func TestDevLightingOverrideGeneral_PureLogic(t *testing.T) {
 	// Flash primes over OFF (contract §10.1.2: "un Flash demandé alors que
 	// la salle est sur OFF ne produirait rien de visible" otherwise).
 	app.setLightingMode(lightingModeOff)
-	app.lightingFlashOn.Store(true)
-	app.lightingFlashPhaseOn.Store(true)
+	app.ambCtl().LightingFlashOn.Store(true)
+	app.ambCtl().LightingFlashPhaseOn.Store(true)
 	if color, intensity := app.lightingOverrideGeneral(auto, 160); color != lightingFlashColor || intensity != lightingOnIntensity {
 		t.Fatalf("Flash ON-phase must win over OFF, got %v/%d", color, intensity)
 	}
@@ -60,7 +60,7 @@ func TestDevLightingOverrideGeneral_PureLogic(t *testing.T) {
 	// room's own current colour (ambianceThemeColor(), white here since
 	// newTestApp sets no httpServer/live question), at the SAME full
 	// intensity as the white phase.
-	app.lightingFlashPhaseOn.Store(false)
+	app.ambCtl().LightingFlashPhaseOn.Store(false)
 	white := [3]int{255, 255, 255}
 	if color, intensity := app.lightingOverrideGeneral(auto, 160); color != white || intensity != lightingOnIntensity {
 		t.Fatalf("Flash's other phase must show the room's own colour (white here) at full intensity, got %v/%d", color, intensity)
@@ -104,7 +104,7 @@ func TestDevLightingMode_ScopedToGeneralZoneOnly(t *testing.T) {
 func TestDevLightingMode_ReDerivesThroughTheRealWriter(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -130,6 +130,12 @@ func TestDevLightingMode_ReDerivesThroughTheRealWriter(t *testing.T) {
 // exactly to the selector's own position (here OFF) — contract §10.1.2.
 func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	app := newTestApp(t)
+	// #291 Phase A : blink 250/250 ms (prod 400/400) sur CETTE App (driver factice, aucun pacing Hue). Correctif CI
+	// (Option P) : la phase doit rester nettement SUPÉRIEURE au pacing du writer (lighting.MinInterval = 100 ms) ;
+	// à 100/100 ms, deux applies consécutifs pouvaient tomber dans la même phase (aliasing) et le test voyait deux
+	// fois la couleur de la salle.
+	const flashPhase = 250 * time.Millisecond
+	app.ambCtl().FlashPhases = flashPhaseOverride{LightingOn: flashPhase, LightingOff: flashPhase}
 	// A real, NON-white theme so the 2026-09-08 white<->room-colour
 	// alternation is actually observable (a themeless room degenerates to
 	// white/white, an accepted but non-discriminating case — see
@@ -138,7 +144,7 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	app.engine.Ready("q1", &game.Question{ID: "q1", Type: game.QuestionTypeQCM, Category: game.CategoryGeography})
 	geography := [3]int{0x3b, 0x82, 0xf6}
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -153,10 +159,11 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	// Wait for at least one full white/room-colour cycle: two more applies
 	// after the initial OFF, alternating COLOUR (2026-09-08 revision — no
 	// longer intensity, both phases are now full/lit).
-	waitForCount(t, fake, 3)
-	first, _ := fake.Last()
+	// Lecture de l'historique des applies (3e et 4e) et non de Last() après chaque attente : un retard du test
+	// entre l'attente et la lecture ne peut plus faire lire deux fois le même état.
 	waitForCount(t, fake, 4)
-	second, _ := fake.Last()
+	applied := fake.States()
+	first, second := applied[2], applied[3]
 	if first.Zones[0].Color == second.Zones[0].Color {
 		t.Fatalf("Flash must alternate colour between ticks, got %v then %v", first.Zones[0].Color, second.Zones[0].Color)
 	}
@@ -188,7 +195,7 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	// The blink goroutine must actually have stopped: no further applies
 	// after a settling window.
 	countAfterOff := fake.Count()
-	time.Sleep(2 * (lightingFlashOnPhase + lightingFlashOffPhase))
+	time.Sleep(3 * 2 * flashPhase) // 3 périodes de blink = 1,5 s (avant Phase A : 2 périodes de 800 ms = 1,6 s)
 	if fake.Count() != countAfterOff {
 		t.Fatalf("blink goroutine kept running after setLightingFlash(false): %d applies before, %d after", countAfterOff, fake.Count())
 	}
@@ -326,6 +333,9 @@ func TestDevStop_FlashEngagedAtShutdown_FinalStateIsOff(t *testing.T) {
 	app, bridge, cancel := devReconnectApp(t)
 	defer cancel()
 
+	// #291 Phase A : blink 100/100 ms (prod 400/400) ; le pacing du VRAI driver Hue (250 ms) reste appliqué.
+	const flashPhase = 100 * time.Millisecond
+	app.ambCtl().FlashPhases = flashPhaseOverride{LightingOn: flashPhase, LightingOff: flashPhase}
 	app.engine.SetPhase(game.PhaseStarted) // partie en cours, comme au vrai arrêt serveur
 	app.setLightingFlash(true)
 	devWaitPutCount(t, bridge, 1) // au moins un tick de blink a réellement écrit
@@ -339,7 +349,9 @@ func TestDevStop_FlashEngagedAtShutdown_FinalStateIsOff(t *testing.T) {
 	// Le goroutine de blink doit être bel et bien mort : aucun nouveau PUT,
 	// même en attendant largement plus qu'un cycle complet — pas un simple
 	// sommeil symbolique.
-	time.Sleep(3 * (lightingFlashOnPhase + lightingFlashOffPhase))
+	// Fenêtre = 1 s : plus de 2 périodes de blink (200 ms) + pacing Hue (250 ms) — une réécriture tardive
+	// de la goroutine de blink y serait visible (avant : 3 périodes de 800 ms = 2,4 s).
+	time.Sleep(5 * 2 * flashPhase)
 	if got := bridge.count(); got != countAfterShutdown {
 		t.Fatalf("Flash a continué d'écrire après shutdownExtinguishHueLighting() : %d PUT(s) juste après l'extinction, %d après stabilisation — la salle a pu se rallumer, dernier corps %q", countAfterShutdown, got, bridge.last())
 	}

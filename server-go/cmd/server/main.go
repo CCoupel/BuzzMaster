@@ -2,13 +2,19 @@ package main
 
 import (
 	"buzzcontrol/assets"
+	"buzzcontrol/internal/ambiance"
 	"buzzcontrol/internal/audio"
+	"buzzcontrol/internal/coalesce"
 	"buzzcontrol/internal/config"
+	"buzzcontrol/internal/demo"
+	"buzzcontrol/internal/diag"
 	"buzzcontrol/internal/game"
+	"buzzcontrol/internal/led"
 	"buzzcontrol/internal/lighting"
-	"buzzcontrol/internal/lighting/hue"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
+	"buzzcontrol/internal/startup"
+	"buzzcontrol/internal/vplayer"
 	"buzzcontrol/web"
 	"context"
 	"encoding/json"
@@ -17,12 +23,9 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,13 +55,6 @@ type App struct {
 	dnsServer   *server.DNSServer
 	logger      *server.BroadcastLogger
 	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
-	// lightingWriter is the ambiance-lighting writer (#205, contracts/
-	// lighting.md), read through a.ambiance(). nil when lighting is not
-	// configured: every a.ambiance().Notify*() call is then a no-op, so the 21
-	// event sites carry no guard (contract §4.3). Atomic because the first
-	// runtime enable (reconfigureAmbiance, HTTP goroutine) sets it while the
-	// event sites read it from other goroutines.
-	lightingWriter atomic.Pointer[lighting.Writer]
 	// soundEngine is the sound-bruitage engine (#227, contracts/sound.md),
 	// read through a.sound(). No real Output exists before #228, so it is
 	// always constructed disabled (see setupSound) — every notifySound()
@@ -79,53 +75,10 @@ type App struct {
 	// sound.md §12), read through a.countdownSound(). Built once in setup()
 	// (setupCountdownSound, cmd/server/countdown_sound.go).
 	csound *countdownSoundAdapter
-	// ambianceMu serialises setupAmbiance/reconfigureAmbiance: two config
-	// updates in flight must never leave hueDriver and the writer's driver
-	// pointing at different (or already closed) drivers.
-	ambianceMu sync.Mutex
-	// hueDriver is the live Hue driver behind a.ambiance() (nil when disabled),
-	// read by the /api/lighting/* handlers without I/O (#207).
-	hueDriver atomic.Pointer[hue.Driver]
-	// lightingModeState is the #208 manual override on the "general" zone
-	// (contract lighting.md §10.1): AUTO (zero value, contract §10.1.1 point
-	// 5) follows the game; ON/OFF force it indefinitely. Server-owned state,
-	// never the browser's, never persisted. See cmd/server/ambiance_override.go.
-	lightingModeState atomic.Value // holds lightingMode
-	// lightingFlashOn/-PhaseOn are the Flash bascule (§10.1.2): -On is
-	// whether Flash is engaged at all, -PhaseOn is the current blink phase
-	// (toggled by runLightingFlash). lightingFlashCancel stops that
-	// goroutine; guarded by ambianceMu, reused rather than a fourth mutex.
-	lightingFlashOn      atomic.Bool
-	lightingFlashPhaseOn atomic.Bool
-	lightingFlashCancel  context.CancelFunc
-	// scoreFlashTeam/-PhaseGold/-Epoch/-Cancel drive the SCORE gold/team-
-	// colour flicker (Batch C/C2b, contract lighting.md §2.4/§8.1) —
-	// scoreFlashTeam is the team currently flickering ("" = none),
-	// scoreFlashPhaseGold the current phase (toggled by runScoreFlash,
-	// ambiance_override.go), scoreFlashEpoch guards the flicker's own
-	// natural end-of-run against a race with a newer SCORE pulse superseding
-	// it, scoreFlashCancel stops the running goroutine when a newer pulse
-	// arrives; guarded by ambianceMu, same pattern as lightingFlashCancel.
-	scoreFlashTeam      atomic.Value // holds string
-	scoreFlashPhaseGold atomic.Bool
-	scoreFlashEpoch     atomic.Int64
-	scoreFlashCancel    context.CancelFunc
-	// chronoPulse* drive the RUNNING-only breathing pulse on 'general'
-	// synchronised to the active question's global timer (2026-09-08,
-	// contracts/lighting.md §5.4/§8.1) — chronoPulseActive is whether a
-	// pulse is currently live (KindRunning + a timed question),
-	// chronoPulseTier is 1/2/3 (ambianceChronoPulseColor, ambiance.go),
-	// chronoPulseHigh the current phase. All three are written ONLY by
-	// runChronoPulse (ambiance.go) and read ONLY by ambianceScene — no
-	// mutex needed, same pattern as scoreFlashPhaseGold. chronoPulseStarted
-	// makes runChronoPulse's own goroutine start idempotent (it is invoked
-	// from two call sites, mirroring the writer's own two "go w.Start"
-	// sites, which are mutually exclusive in practice but not provably so
-	// without this guard — see runChronoPulse's own doc comment).
-	chronoPulseActive  atomic.Bool
-	chronoPulseTier    atomic.Int32
-	chronoPulseHigh    atomic.Bool
-	chronoPulseStarted atomic.Bool
+	// ambOnce/amb: lazily built internal/ambiance controller owning the ambiance state (writer, Hue driver,
+	// override mode, Flash/SCORE/chrono-pulse state — formerly fields here); see ambCtl in hosts.go.
+	ambOnce sync.Once
+	amb     *ambiance.Controller
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).
@@ -142,12 +95,15 @@ type App struct {
 	// bumperBuzzState tracks the BuzzState (NONE/MOI/EQUIPE/AUTRE) for each buzzer
 	// within the current question round. Reset on READY/PREPARE; updated on each buzz.
 	bumperBuzzState map[string]game.BuzzState
+	// ledOnce/ledc: lazily built internal/led controller sharing the three fields above (see ledCtl).
+	ledOnce sync.Once
+	ledc    *led.Controller
 
 	// ardoiseCoalescer collapses a burst of ARDOISE_INPUT-triggered admin
 	// UPDATEs (#129 T2.1/T2.2) into at most one per ≤150ms window — see
 	// broadcast_coalescer.go. Flushed immediately on every phase change
 	// (OnStateChange) and stopped on server shutdown (a.stop()).
-	ardoiseCoalescer *BroadcastCoalescer
+	ardoiseCoalescer *coalesce.BroadcastCoalescer
 
 	// Network detection bookkeeping (#267): guarded by networkMu. networkChecked is false until
 	// the first updateNetworkState (startup); networkLostAt feeds lost_for_s of NETWORK_RESTORED.
@@ -158,7 +114,7 @@ type App struct {
 	// #246 diagnostic state: per-connection ARDOISE SEQ tracking and
 	// CLIENT_TRACE rate limiting.
 	diagMu      sync.Mutex
-	ardoiseSq   map[string]*ardoiseSeqState
+	ardoiseSq   map[string]*diag.ArdoiseSeqState
 	traceLim    map[string]*traceLimiter
 	traceGlobal traceLimiter
 
@@ -207,40 +163,6 @@ type App struct {
 	regieMessage *protocol.RegieMessagePayload
 }
 
-// resolvePort returns the effective HTTP port.
-// If flagPort > 0 it takes precedence over configPort (--port CLI flag).
-func resolvePort(configPort, flagPort int) int {
-	if flagPort > 0 {
-		return flagPort
-	}
-	return configPort
-}
-
-// resolvePortSource returns a short human-readable description of where the
-// effective HTTP port came from — surfaced in HTTPServer's bind-wait log
-// messages (#220 acceptance criterion: "le message d'attente nomme le port
-// résolu et sa provenance"). Reads config.json's raw bytes independently of
-// config.Load/ApplyDefaults purely to tell an explicit http_port in the file
-// apart from the code default (both of which config.Load already merges into
-// one int by the time main() sees it) — best-effort only, this is diagnostic
-// text, never used for any decision.
-func resolvePortSource(configPath string, flagPort, effectivePort int) string {
-	if flagPort > 0 {
-		return fmt.Sprintf("--port flag (%d)", flagPort)
-	}
-	if data, err := os.ReadFile(configPath); err == nil {
-		var probe struct {
-			Server struct {
-				HTTPPort int `json:"http_port"`
-			} `json:"server"`
-		}
-		if json.Unmarshal(data, &probe) == nil && probe.Server.HTTPPort != 0 {
-			return fmt.Sprintf("config.json (%d)", probe.Server.HTTPPort)
-		}
-	}
-	return fmt.Sprintf("code default (%d)", effectivePort)
-}
-
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("=== BuzzControl Server (Go) ===")
@@ -250,7 +172,7 @@ func main() {
 	flag.Parse()
 
 	// Check for Bonjour/mDNS support
-	checkBonjourSupport()
+	startup.CheckBonjourSupport()
 
 	// Load configuration
 	cfg, err := config.Load("config.json")
@@ -260,11 +182,11 @@ func main() {
 	}
 
 	// --port flag overrides config.json when provided
-	cfg.Server.HTTPPort = resolvePort(cfg.Server.HTTPPort, *portFlag)
+	cfg.Server.HTTPPort = startup.ResolvePort(cfg.Server.HTTPPort, *portFlag)
 	// #220: remembered for HTTPServer's bind-wait log messages (SetPortSource
 	// below, once app.httpServer exists) — computed here, not later, so it
 	// reflects the exact same config.json/--port precedence as the line above.
-	portSource := resolvePortSource("config.json", *portFlag, cfg.Server.HTTPPort)
+	portSource := startup.ResolvePortSource("config.json", *portFlag, cfg.Server.HTTPPort)
 
 	// Override version with embedded value (set via -ldflags at build time)
 	if Version != "dev" {
@@ -310,7 +232,7 @@ func main() {
 	// Only initialize test data if no saved data exists
 	if !teamsLoaded && !bumpersLoaded {
 		server.LogInfo(game.LogComponentApp, "No saved teams/bumpers found, initializing test data...")
-		app.initTestData()
+		demo.InitTestData(app)
 		// Save initial test data
 		app.engine.SaveTeams()
 		app.engine.SaveBumpers()
@@ -435,7 +357,7 @@ func main() {
 	server.LogInfo(game.LogComponentApp, "Server started successfully")
 
 	// Display all accessible URLs and open browser if enabled
-	displayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
+	startup.DisplayAndOpenURLs(cfg.Server.HTTPPort, cfg.Server.AutoOpenBrowsers, cfg.Server.Debug)
 
 	// Wait for shutdown — appCtx is cancelled exactly once, by the goroutine
 	// installed above. If that already happened during startup, app.start()
@@ -484,7 +406,7 @@ func (a *App) init() {
 	// broadcastUpdateTo has routed to ClientTypeAnim since #162 — the
 	// only gap was this call site never asking for it. /tv, /vplayer and
 	// /buzzer stay excluded, as before.
-	a.ardoiseCoalescer = NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
+	a.ardoiseCoalescer = coalesce.NewBroadcastCoalescer(ardoiseCoalesceWindow, func() {
 		a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeAnim)
 	})
 
@@ -815,7 +737,7 @@ func (a *App) setupCallbacks() {
 
 	// Load demo handler
 	a.httpServer.OnLoadDemo = func() {
-		a.loadDemoData()
+		demo.LoadDemoData(a)
 		a.broadcastQuestions()
 		a.broadcastUpdate()
 	}
@@ -1177,11 +1099,6 @@ func (a *App) ensureCategoriesDir() {
 // also reported as interval_s in the NETWORK_LOST journal line.
 const networkWatchInterval = 30 * time.Second
 
-// formatIPList renders an address list for the journal: "[a,b]" ("[]" when empty).
-func formatIPList(ips []string) string {
-	return "[" + strings.Join(ips, ",") + "]"
-}
-
 // updateNetworkState re-detects the server network (v11.2.2, #267 — contracts/game-state.md
 // §NETWORK; originally v5.6.2 #96). The state (including CHECKED_AT and the ignored virtual
 // interfaces) is refreshed on every pass (CHECKED_AT excepted: it only moves on a change); it is broadcast and journaled ONLY when ONLY_LOCALHOST
@@ -1233,9 +1150,9 @@ func (a *App) updateNetworkState() {
 	case server.NetworkChangeLost:
 		server.LogWarn(game.LogComponentApp, "NETWORK_LOST ips=[] ignored=%s interval_s=%d", ignored, int(networkWatchInterval.Seconds()))
 	case server.NetworkChangeRestored:
-		server.LogInfo(game.LogComponentApp, "NETWORK_RESTORED ips=%s ignored=%s lost_for_s=%d", formatIPList(next.IPs), ignored, lostFor)
+		server.LogInfo(game.LogComponentApp, "NETWORK_RESTORED ips=%s ignored=%s lost_for_s=%d", startup.FormatIPList(next.IPs), ignored, lostFor)
 	case server.NetworkChangeIPsChanged:
-		server.LogInfo(game.LogComponentApp, "NETWORK_IPS_CHANGED ips=%s prev_ips=%s", formatIPList(next.IPs), formatIPList(prev.IPs))
+		server.LogInfo(game.LogComponentApp, "NETWORK_IPS_CHANGED ips=%s prev_ips=%s", startup.FormatIPList(next.IPs), startup.FormatIPList(prev.IPs))
 	}
 }
 
@@ -2207,7 +2124,7 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 	a.questionSound().Stop()           // the question sound ends with the question
 	a.countdownSound().Stop()          // #287 §12.8
 	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
-		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, logToken(res.QuestionBefore))
+		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, diag.LogToken(res.QuestionBefore))
 
 	// #123 B3 — a fresh game invalidates any eviction context left over from
 	// before it, so clear the registry first; fresh GAME_RESET entries follow.
@@ -2289,7 +2206,7 @@ func (a *App) handleFullUpdate(msg *protocol.Message, senders ...updateSender) {
 				qid = st.Question.ID
 			}
 			server.LogWarn(game.LogComponentApp, "TEAMS_CHANGE_REFUSED client=%s teams=%s phase=%s question=%s",
-				clientID, logValue(removed), st.Phase, logToken(qid))
+				clientID, diag.LogValue(removed), st.Phase, diag.LogToken(qid))
 			if clientID != "" {
 				if rm, err := protocol.NewMessage(protocol.ActionTeamsUpdateRefused, protocol.TeamsUpdateRefusedPayload{Reason: "TEAMS_LOCKED_DURING_QUESTION", Teams: removed}); err == nil {
 					a.wsHub.SendToClient(clientID, rm)
@@ -3611,7 +3528,7 @@ func (a *App) logHiddenCorrection(senders []updateSender, action, targets string
 	if st := a.engine.GetState(); st.Question != nil {
 		question = st.Question.ID
 	}
-	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN client=%s action=%s targets=[%s] question=%s", clientID, action, targets, logToken(question))
+	server.LogWarn(game.LogComponentApp, "SCORE_CORRECTION_HIDDEN client=%s action=%s targets=[%s] question=%s", clientID, action, targets, diag.LogToken(question))
 }
 
 // handleTeamPointsBatch applies a grouped team award (#244/#251): complete
@@ -3637,7 +3554,7 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 	}
 	refuse := func(reason string, teams []string) {
 		server.LogWarn(game.LogComponentApp, "TEAM_POINTS_BATCH_REFUSED client=%s question=%s reason=%s teams=%s",
-			clientID, logToken(p.QuestionID), reason, logValue(teams))
+			clientID, diag.LogToken(p.QuestionID), reason, diag.LogValue(teams))
 		reply(protocol.TeamPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Teams: teams})
 	}
 	if err := json.Unmarshal(msg.Msg, &p); err != nil {
@@ -3675,7 +3592,7 @@ func (a *App) handleTeamPointsBatch(clientID string, msg *protocol.Message) {
 		skipped = append(skipped, fmt.Sprintf("%q:%s", sk.Team, sk.Reason))
 	}
 	server.LogInfo(game.LogComponentApp, "TEAM_POINTS_BATCH client=%s question=%s applied=[%s] skipped=[%s]",
-		clientID, logToken(p.QuestionID), strings.Join(applied, ","), strings.Join(skipped, ","))
+		clientID, diag.LogToken(p.QuestionID), strings.Join(applied, ","), strings.Join(skipped, ","))
 
 	if !batchDisplay {
 		a.logHiddenCorrection([]updateSender{{ClientID: clientID}}, protocol.ActionTeamPointsBatch, strings.Join(applied, ","))
@@ -3730,7 +3647,7 @@ func (a *App) handleBumperPointsBatch(clientID string, msg *protocol.Message) {
 	}
 	refuse := func(reason string, players []string) {
 		server.LogWarn(game.LogComponentApp, "BUMPER_POINTS_BATCH_REFUSED client=%q question=%q reason=%q players=%s",
-			clientID, p.QuestionID, reason, logValue(players))
+			clientID, p.QuestionID, reason, diag.LogValue(players))
 		reply(protocol.BumperPointsBatchResultPayload{Status: "REFUSED", Reason: reason, QuestionID: p.QuestionID, Players: players})
 	}
 	if err := json.Unmarshal(msg.Msg, &p); err != nil {
@@ -4466,7 +4383,7 @@ func (a *App) handleArdoiseInput(clientID string, msg *protocol.Message) {
 			connAge = ms
 		}
 		server.LogWarn(game.LogComponentApp, "ARDOISE_CLEARED team=%q bumper=%s client=%s conn_age_ms=%d prev_len=%d seq=%d reason=%s question=%q phase=%s",
-			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, logToken(payload.Reason), questionID, phase)
+			teamName, bumperID, clientID, connAge, len(prevText), payload.Seq, diag.LogToken(payload.Reason), questionID, phase)
 	}
 
 	// #129 T1.5: admin only — so admin sees answers build up in real-time.
@@ -4510,7 +4427,7 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 		return
 	}
 	if n := utf8.RuneCountInString(p.Text); n > ardoiseMaxTextRunes {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s client=%s len=%d question_id=%s", bumperID, clientID, n, logToken(p.QuestionID))
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_TOO_LONG bumper=%s client=%s len=%d question_id=%s", bumperID, clientID, n, diag.LogToken(p.QuestionID))
 		return
 	}
 	st := a.engine.GetState()
@@ -4523,7 +4440,7 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_STALE bumper=%s question_id=%q current_question=%q phase=%s", bumperID, p.QuestionID, currentQ, st.Phase)
 		return
 	case game.ArdoiseFinalHashMismatch:
-		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, logToken(p.Hash), game.ArdoiseHash(p.Text), len(p.Text))
+		server.LogWarn(game.LogComponentApp, "ARDOISE_FINAL_HASH_MISMATCH bumper=%s got=%s computed=%s len=%d", bumperID, diag.LogToken(p.Hash), game.ArdoiseHash(p.Text), len(p.Text))
 		return
 	case game.ArdoiseFinalAccepted:
 		server.LogInfo(game.LogComponentApp, "ARDOISE_FINAL_RECEIVED team=%q bumper=%s hash=%s len=%d", bumper.Team, bumperID, p.Hash, len(p.Text))
@@ -4533,13 +4450,6 @@ func (a *App) handleArdoiseFinal(clientID string, msg *protocol.Message) {
 	if ack, err := protocol.NewMessage(protocol.ActionArdoiseFinalAck, protocol.ArdoiseFinalAckPayload{QuestionID: p.QuestionID, Hash: p.Hash}); err == nil {
 		a.wsHub.SendToClient(clientID, ack)
 	}
-}
-
-// ardoiseSeqState tracks the last applied ARDOISE_INPUT SEQ for one connection
-// and one question (#246).
-type ardoiseSeqState struct {
-	question string
-	last     int
 }
 
 // onClientClosed runs when any web connection closes: drops its diagnostic state
@@ -4670,28 +4580,14 @@ func (a *App) forgetClientDiag(clientID string) {
 	a.diagMu.Unlock()
 }
 
-// checkArdoiseSeq returns false when the message is stale (SEQ <= last applied,
-// same connection and question) and must be ignored; a gap is only logged.
+// checkArdoiseSeq returns false when the message is stale (see diag.CheckArdoiseSeq).
 func (a *App) checkArdoiseSeq(clientID, bumperID, questionID string, seq int) bool {
 	a.diagMu.Lock()
 	defer a.diagMu.Unlock()
 	if a.ardoiseSq == nil {
-		a.ardoiseSq = make(map[string]*ardoiseSeqState)
+		a.ardoiseSq = make(map[string]*diag.ArdoiseSeqState)
 	}
-	st := a.ardoiseSq[clientID]
-	if st == nil || st.question != questionID {
-		st = &ardoiseSeqState{question: questionID}
-		a.ardoiseSq[clientID] = st
-	}
-	if seq <= st.last {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_STALE bumper=%s client=%s last=%d got=%d", bumperID, clientID, st.last, seq)
-		return false
-	}
-	if seq != st.last+1 {
-		server.LogWarn(game.LogComponentApp, "ARDOISE_SEQ_GAP bumper=%s client=%s expected=%d got=%d", bumperID, clientID, st.last+1, seq)
-	}
-	st.last = seq
-	return true
+	return diag.CheckArdoiseSeq(a.ardoiseSq, clientID, bumperID, questionID, seq)
 }
 
 // traceLimiter caps CLIENT_TRACE at 10 messages/s per connection and emits one
@@ -4707,35 +4603,6 @@ const (
 	clientTraceGlobalMaxPerSecond = 50
 	clientTraceMaxBytes           = 1024
 )
-
-// logToken renders a client-supplied string for a log line: bare when it is a
-// harmless token, quoted (%q, control characters escaped) otherwise, so a
-// client can never inject a forged log line (#246 review MAJEUR-1).
-func logToken(s string) string {
-	if s == "" {
-		return `""`
-	}
-	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '.' || r == ':' || r == '-') {
-			return fmt.Sprintf("%q", s)
-		}
-	}
-	return s
-}
-
-// logValue renders a CLIENT_TRACE DETAIL value: scalars through logToken /
-// number / bool formatting, anything else re-serialised as quoted JSON.
-func logValue(v interface{}) string {
-	switch x := v.(type) {
-	case string:
-		return logToken(x)
-	case bool, float64, int, int64, nil:
-		return fmt.Sprint(x)
-	default:
-		b, _ := json.Marshal(x)
-		return fmt.Sprintf("%q", string(b))
-	}
-}
 
 // handleClientTrace journalises a client diagnostic event. No game effect.
 func (a *App) handleClientTrace(clientID string, clientType server.ClientType, msg *protocol.Message) {
@@ -4795,7 +4662,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		return
 	}
 	playerID, _ := a.wsHub.GetClientPlayerID(clientID)
-	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, logToken(playerID), logToken(p.Kind), p.At)
+	line := fmt.Sprintf("CLIENT_TRACE client=%s type=%s player_id=%s kind=%s at=%d", clientID, clientType, diag.LogToken(playerID), diag.LogToken(p.Kind), p.At)
 	if p.Team != "" {
 		line += fmt.Sprintf(" team=%q", p.Team)
 	}
@@ -4803,7 +4670,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		line += fmt.Sprintf(" prev_len=%d", p.PrevLen)
 	}
 	if p.CauseAction != "" {
-		line += fmt.Sprintf(" cause_action=%s", logToken(p.CauseAction))
+		line += fmt.Sprintf(" cause_action=%s", diag.LogToken(p.CauseAction))
 	}
 	if len(p.Detail) > 0 {
 		keys := make([]string, 0, len(p.Detail))
@@ -4812,7 +4679,7 @@ func (a *App) handleClientTrace(clientID string, clientType server.ClientType, m
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			line += fmt.Sprintf(" detail.%s=%s", logToken(k), logValue(p.Detail[k]))
+			line += fmt.Sprintf(" detail.%s=%s", diag.LogToken(k), diag.LogValue(p.Detail[k]))
 		}
 	}
 	server.LogWarn(game.LogComponentWebSocket, "%s", line)
@@ -5045,7 +4912,7 @@ func (a *App) broadcastUpdateToVPlayers(msg *protocol.Message, fallback []byte) 
 		return
 	}
 
-	payloads, ok := buildVPlayerPayloads(msg, recipients)
+	payloads, ok := vplayer.BuildPayloads(msg, recipients)
 	if !ok {
 		// msg doesn't qualify for reduction (not UPDATE, wrong phase, or
 		// malformed) — same complete payload for every VPlayer, as before #127.
@@ -5054,328 +4921,6 @@ func (a *App) broadcastUpdateToVPlayers(msg *protocol.Message, fallback []byte) 
 	}
 
 	a.wsHub.SendRawToVPlayers(payloads, fallback)
-}
-
-// buildVPlayerPayloads is the CPU-bound core of the #127 individualized
-// VPlayer fan-out: one reduced payload per recipient (contract §2), given
-// the full UPDATE message and the set of identified VPlayer recipients.
-// Deliberately factored out of broadcastUpdateToVPlayers, with no
-// WebSocketHub/network involvement at all, so BenchmarkVPlayerFanout (T2.4)
-// measures exactly this cost in isolation.
-//
-// ok=false means msg doesn't qualify for reduction (not an UPDATE, GAME.PHASE
-// outside PREPARE/READY, or malformed JSON) — the caller falls back to the
-// shared complete payload for every VPlayer instead.
-//
-// Perf-critical (CA10/R3, contract §3): GAME and teams are extracted once as
-// json.RawMessage and never re-parsed/re-marshaled as a whole per recipient
-// (up to ~11KB for a MEMOTION question) — only the small "bumpers"
-// sub-object is rebuilt per recipient.
-func buildVPlayerPayloads(msg *protocol.Message, recipients []server.VPlayerRecipient) (map[string][]byte, bool) {
-	if msg.Action != protocol.ActionUpdate {
-		return nil, false
-	}
-
-	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal(msg.Msg, &envelope); err != nil {
-		return nil, false
-	}
-
-	var phaseProbe struct {
-		Phase string `json:"PHASE"`
-	}
-	if err := json.Unmarshal(envelope["GAME"], &phaseProbe); err != nil {
-		return nil, false
-	}
-	// #258: COUNTDOWN / STARTED / PAUSED are "answers open" phases too: each tablette
-	// gets its OWN frame (own team intact, other teams neutralised), built by the
-	// reference serializer. STOPPED and later keep the shared frame (fallback).
-	switch phaseProbe.Phase {
-	case string(game.PhaseCountdown), string(game.PhaseStarted), string(game.PhasePaused):
-		return buildVPlayerOpenPhasePayloads(msg, envelope, phaseProbe.Phase, recipients)
-	case string(game.PhasePrepare), string(game.PhaseReady):
-	default:
-		return nil, false
-	}
-
-	var bumpers map[string]json.RawMessage
-	if err := json.Unmarshal(envelope["bumpers"], &bumpers); err != nil {
-		return nil, false
-	}
-
-	// #127 T2.4 checkpoint follow-up: BenchmarkVPlayerFanout showed the
-	// obvious approach (build a map[string]json.RawMessage per recipient and
-	// hand it to json.Marshal / Message.SerializeForWebSocket) was ~10-11x
-	// costlier than the pre-#127 shared path for a MEMOTION question at 30
-	// VPlayers (~3.3-3.7ms vs ~0.32ms) — encoding/json calls compact() on
-	// every json.RawMessage value it marshals, an O(len) rescan of GAME
-	// (up to ~11KB) repeated per recipient, not the re-parse we'd guarded
-	// against but a real cost anyway. gameRaw/teamsRaw/actionJSON/versionJSON
-	// are computed ONCE here (constant across recipients); the per-recipient
-	// loop below builds each final frame by byte concatenation instead
-	// (see buildVPlayerMessageBytes) — no json.Marshal ever touches
-	// GAME/teams again after this point. Only the small per-recipient bumper
-	// object (a few hundred bytes) and the playerID key still go through
-	// json.Marshal — cheap, and it's the standard library's own string
-	// escaping, reused rather than hand-rolled, for the "no raw string
-	// concatenation of user-controlled data" rule this project follows.
-	// See _work/reports/dev-backend-t2-benchmark-*.md for the byte-for-byte
-	// equality tests and rebenchmark this rewrite was validated against.
-	actionJSON, err := json.Marshal(msg.Action)
-	if err != nil {
-		return nil, false
-	}
-	var versionJSON []byte
-	if msg.Version != "" {
-		if versionJSON, err = json.Marshal(msg.Version); err != nil {
-			return nil, false
-		}
-	}
-	// Strip admin-only GAME fields (QUIZ_OBJECTIVES, ENTRACTE_CONFIG_SAVED)
-	// AND VPlayer-hidden fields (ARDOISE_ANSWERS, #128) once here, before the
-	// per-recipient loop — this hot path bypasses SerializeForWebClient/
-	// SerializeForVPlayer entirely (it keeps GAME as json.RawMessage and
-	// splices it in verbatim, see buildVPlayerMessageBytes below), so
-	// without this call gameRaw would carry both to every VPlayer during
-	// PREPARE/READY — the confidentiality/exclusivity rules from
-	// contracts/game-state.md and vplayer-payload-filter.md §6 would be
-	// enforced everywhere except here.
-	gameRaw, err := stripVPlayerHiddenGameFields(envelope["GAME"])
-	if err != nil {
-		return nil, false
-	}
-	teamsRaw := envelope["teams"]
-	// #258: shared parts of the PREPARE/READY frame go through the same single filter,
-	// once per fan-out (recipient "": every team's answer/time fields neutral — they are
-	// zero after Ready() anyway; QUESTION.QCM_CORRECT / ANSWER removed).
-	var gameNode, teamsNode interface{}
-	if json.Unmarshal(gameRaw, &gameNode) == nil {
-		root := map[string]interface{}{"GAME": gameNode}
-		if teamsRaw != nil && json.Unmarshal(teamsRaw, &teamsNode) == nil {
-			root["teams"] = teamsNode
-		}
-		protocol.FilterVPlayerAnswers(root, "", phaseProbe.Phase)
-		if g, err := json.Marshal(root["GAME"]); err == nil {
-			gameRaw = g
-		}
-		if _, ok := root["teams"]; ok {
-			if t, err := json.Marshal(root["teams"]); err == nil {
-				teamsRaw = t
-			}
-		}
-	}
-
-	payloads := make(map[string][]byte, len(recipients))
-	for _, r := range recipients {
-		ownRaw, present := bumpers[r.PlayerID]
-		if !present {
-			// Evicted between GetGameJSON() and this call — SendRawToVPlayers
-			// falls back to the complete payload for this recipient.
-			continue
-		}
-		var own map[string]interface{}
-		if err := json.Unmarshal(ownRaw, &own); err != nil {
-			continue
-		}
-		for _, field := range protocol.AdminOnlyBumperFields {
-			delete(own, field)
-		}
-		strippedBumper, err := json.Marshal(own)
-		if err != nil {
-			continue
-		}
-		playerIDJSON, err := json.Marshal(r.PlayerID)
-		if err != nil {
-			continue
-		}
-		payloads[r.PlayerID] = buildVPlayerMessageBytes(actionJSON, versionJSON, gameRaw, teamsRaw, playerIDJSON, strippedBumper)
-	}
-
-	return payloads, true
-}
-
-// buildVPlayerOpenPhasePayloads builds the per-recipient frames of an UPDATE sent while
-// answers are open (COUNTDOWN / STARTED / PAUSED, #258): GAME is filtered and
-// serialised ONCE (QCM_CORRECT/ANSWER removed, admin/vplayer-hidden fields stripped);
-// bumpers and teams — small — are decoded, filtered for the recipient
-// (protocol.FilterVPlayerAnswers: own team intact, other teams neutral) and
-// serialised per tablette. Frame layout is the one of buildVPlayerMessageBytes.
-func buildVPlayerOpenPhasePayloads(msg *protocol.Message, envelope map[string]json.RawMessage, phase string, recipients []server.VPlayerRecipient) (map[string][]byte, bool) {
-	actionJSON, err := json.Marshal(msg.Action)
-	if err != nil {
-		return nil, false
-	}
-	var versionJSON []byte
-	if msg.Version != "" {
-		if versionJSON, err = json.Marshal(msg.Version); err != nil {
-			return nil, false
-		}
-	}
-	gameRaw, err := stripVPlayerHiddenGameFields(envelope["GAME"])
-	if err != nil {
-		return nil, false
-	}
-	var gameNode interface{}
-	if json.Unmarshal(gameRaw, &gameNode) != nil {
-		return nil, false
-	}
-	gameRoot := map[string]interface{}{"GAME": gameNode}
-	protocol.FilterVPlayerAnswers(gameRoot, "", phase)
-	if gameRaw, err = json.Marshal(gameRoot["GAME"]); err != nil {
-		return nil, false
-	}
-
-	// bumpers / teams decoded ONCE (admin-only bumper fields stripped once); each
-	// recipient works on a deep copy it is free to neutralise in place.
-	var bumpersAny, teamsAny interface{}
-	if json.Unmarshal(envelope["bumpers"], &bumpersAny) != nil {
-		return nil, false
-	}
-	baseBumpers, ok := bumpersAny.(map[string]interface{})
-	if !ok {
-		return nil, false
-	}
-	for _, b := range baseBumpers {
-		if bumper, ok := b.(map[string]interface{}); ok {
-			for _, field := range protocol.AdminOnlyBumperFields {
-				delete(bumper, field)
-			}
-		}
-	}
-	hasTeams := envelope["teams"] != nil && json.Unmarshal(envelope["teams"], &teamsAny) == nil
-
-	payloads := make(map[string][]byte, len(recipients))
-	for _, r := range recipients {
-		if _, present := baseBumpers[r.PlayerID]; !present {
-			continue // evicted since GetGameJSON(): SendRawToVPlayers falls back to the shared frame
-		}
-		root := map[string]interface{}{"bumpers": deepCopyJSON(baseBumpers)}
-		if hasTeams {
-			root["teams"] = deepCopyJSON(teamsAny)
-		}
-		protocol.FilterVPlayerAnswers(root, r.PlayerID, phase)
-		bumpersRaw, err1 := json.Marshal(root["bumpers"])
-		teamsRaw, err2 := json.Marshal(root["teams"])
-		if err1 != nil || err2 != nil {
-			continue
-		}
-		buf := make([]byte, 0, len(gameRaw)+len(bumpersRaw)+len(teamsRaw)+len(actionJSON)+len(versionJSON)+64)
-		buf = append(buf, `{"ACTION":`...)
-		buf = append(buf, actionJSON...)
-		if len(versionJSON) > 0 {
-			buf = append(buf, `,"VERSION":`...)
-			buf = append(buf, versionJSON...)
-		}
-		buf = append(buf, `,"MSG":{"GAME":`...)
-		buf = append(buf, gameRaw...)
-		buf = append(buf, `,"bumpers":`...)
-		buf = append(buf, bumpersRaw...)
-		buf = append(buf, `,"teams":`...)
-		buf = append(buf, teamsRaw...)
-		buf = append(buf, `}}`...)
-		payloads[r.PlayerID] = buf
-	}
-	return payloads, true
-}
-
-// deepCopyJSON copies a decoded JSON tree (maps, slices, scalars).
-func deepCopyJSON(v interface{}) interface{} {
-	switch x := v.(type) {
-	case map[string]interface{}:
-		out := make(map[string]interface{}, len(x))
-		for k, e := range x {
-			out[k] = deepCopyJSON(e)
-		}
-		return out
-	case []interface{}:
-		out := make([]interface{}, len(x))
-		for i, e := range x {
-			out[i] = deepCopyJSON(e)
-		}
-		return out
-	default:
-		return v
-	}
-}
-
-// stripVPlayerHiddenGameFields returns a copy of the "GAME" node JSON with
-// BOTH protocol.AdminOnlyGameFields (QUIZ_OBJECTIVES, ENTRACTE_CONFIG_SAVED)
-// AND protocol.VPlayerOnlyGameFields (ARDOISE_ANSWERS, #128) removed —
-// renamed from stripAdminOnlyGameFields (v6.5.2, #128) because it always
-// served the VPlayer fan-out path exclusively, and a name mentioning only
-// "admin-only" undersold what it actually strips once VPlayerOnlyGameFields
-// existed to strip too. Called once per broadcastUpdateToVPlayers fan-out
-// (not per recipient) by buildVPlayerPayloads, since this hot path keeps
-// GAME as json.RawMessage and splices it into every recipient's frame
-// verbatim (buildVPlayerMessageBytes) — it never goes through
-// Message.SerializeForWebClient/SerializeForVPlayer, which apply the same
-// two lists on their own code paths (internal/protocol/messages.go). All
-// three sites must agree (contracts/vplayer-payload-filter.md §6 "trois
-// sites, une seule liste" — now two lists, same discipline).
-func stripVPlayerHiddenGameFields(raw json.RawMessage) (json.RawMessage, error) {
-	var gameNode map[string]interface{}
-	if err := json.Unmarshal(raw, &gameNode); err != nil {
-		return nil, err
-	}
-	for _, field := range protocol.AdminOnlyGameFields {
-		delete(gameNode, field)
-	}
-	for _, field := range protocol.VPlayerOnlyGameFields {
-		delete(gameNode, field)
-	}
-	return json.Marshal(gameNode)
-}
-
-// buildVPlayerMessageBytes assembles the final WebSocket frame for one
-// VPlayer recipient by direct byte concatenation — no json.Marshal call ever
-// sees gameRaw or teamsRaw here, avoiding the compact()-rescan cost
-// identified by BenchmarkVPlayerFanout (see buildVPlayerPayloads' comment
-// above this call site).
-//
-// Must stay byte-for-byte identical to the reference (slow) path:
-//
-//	json.Marshal(&protocol.Message{Action: <action>, Version: <version>, Msg:
-//	  mustMarshal(map[string]json.RawMessage{"GAME": gameRaw, "teams": teamsRaw,
-//	    "bumpers": mustMarshal(map[string]json.RawMessage{playerID: strippedBumper})})})
-//
-// — verified by TestBuildVPlayerMessageBytes_MatchesReferencePath
-// (cmd/server/vplayer_fanout_bytes_test.go), including playerID/bumper
-// content with quotes, backslashes, and non-ASCII characters. This hardcodes
-// two format facts that test locks in as a regression guard:
-//   - encoding/json marshals map[string]T with keys sorted lexicographically,
-//     so "GAME" < "bumpers" < "teams" (uppercase 'G' sorts before lowercase
-//     letters in ASCII) is always the actual key order for both the outer
-//     MSG object and Message's own field order (Action, then Version if
-//     non-empty per its `omitempty` tag, then MSG — struct fields keep
-//     declaration order, unlike map keys).
-//   - gameRaw/teamsRaw, sourced from json.Unmarshal into a
-//     map[string]json.RawMessage, are already the exact compact-JSON byte
-//     span of the original message — no whitespace to strip, safe to splice
-//     in verbatim.
-//
-// actionJSON/versionJSON/gameRaw/teamsRaw are identical for every recipient
-// of one broadcast (computed once by the caller); playerIDJSON and
-// strippedBumper are the only per-recipient inputs.
-func buildVPlayerMessageBytes(actionJSON, versionJSON, gameRaw, teamsRaw, playerIDJSON, strippedBumper []byte) []byte {
-	size := len(actionJSON) + len(versionJSON) + len(gameRaw) + len(teamsRaw) +
-		len(playerIDJSON) + len(strippedBumper) + 64 // +64: literal braces/keys/colons/commas below
-	buf := make([]byte, 0, size)
-	buf = append(buf, `{"ACTION":`...)
-	buf = append(buf, actionJSON...)
-	if len(versionJSON) > 0 {
-		buf = append(buf, `,"VERSION":`...)
-		buf = append(buf, versionJSON...)
-	}
-	buf = append(buf, `,"MSG":{"GAME":`...)
-	buf = append(buf, gameRaw...)
-	buf = append(buf, `,"bumpers":{`...)
-	buf = append(buf, playerIDJSON...)
-	buf = append(buf, ':')
-	buf = append(buf, strippedBumper...)
-	buf = append(buf, `},"teams":`...)
-	buf = append(buf, teamsRaw...)
-	buf = append(buf, `}}`...)
-	return buf
 }
 
 // updateBroadcasterFrequency adjusts the UDP heartbeat interval based on whether
@@ -5502,979 +5047,47 @@ func (a *App) broadcastReveal(answer string) {
 	a.notifySound(audio.CueReveal)
 }
 
-// answerColorToRGB maps a QCM AnswerColor to an [R, G, B] array for buzzer LED.
-func answerColorToRGB(color game.AnswerColor) [3]int {
-	switch color {
-	case game.AnswerColorRed:
-		return [3]int{255, 0, 0}
-	case game.AnswerColorGreen:
-		return [3]int{0, 255, 0}
-	case game.AnswerColorYellow:
-		return [3]int{255, 255, 0}
-	case game.AnswerColorBlue:
-		return [3]int{0, 0, 255}
-	default:
-		return [3]int{0, 0, 0}
-	}
-}
+// --- LED family: delegates to internal/led (#295) — old names kept for the call sites and tests ---
 
-// teamColorPalette maps the 16 canonical team color keys (#113) to their exact RGB
-// values, plus a handful of legacy English aliases pointing at the vivid tones for
-// robustness. Used by teamColorToRGB when a team has a ColorName set.
-//
-// The 16 entries are 8 hues declined as a vivid tone (S=100% L=55%) and a deep tone
-// (S=100% L=35%) — this is the normative table in contracts/models.md ("Palette
-// d'équipes (#113)"). Frontend source of truth: web/src/constants/colors.js
-// (TEAM_COLORS). The two tables MUST stay value-for-value identical, or a team's
-// physical buzzer LED will diverge from its on-screen color.
-var teamColorPalette = map[string][3]int{
-	// Vivid tones (rank 1-8)
-	"rouge":  {255, 26, 26},
-	"red":    {255, 26, 26},
-	"orange": {255, 133, 26},
-	"jaune":  {255, 217, 26},
-	"yellow": {255, 217, 26},
-	"vert":   {26, 255, 83},
-	"green":  {26, 255, 83},
-	"cyan":   {26, 236, 255},
-	"bleu":   {26, 94, 255},
-	"blue":   {26, 94, 255},
-	"violet": {159, 26, 255},
-	"purple": {159, 26, 255},
-	"rose":   {255, 26, 159},
-	"pink":   {255, 26, 159},
-	// Deep tones (rank 9-16)
-	"rouge-profond":  {179, 0, 0},
-	"orange-profond": {179, 83, 0},
-	"jaune-profond":  {179, 149, 0},
-	"vert-profond":   {0, 179, 45},
-	"cyan-profond":   {0, 164, 179},
-	"bleu-profond":   {0, 54, 179},
-	"violet-profond": {104, 0, 179},
-	"rose-profond":   {179, 0, 104},
-}
+func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int { return a.ledCtl().TeamColor(bumper) }
 
-// rgbToHue converts an RGB color (0-255 per channel) to a hue angle in degrees [0, 360).
-// Returns -1 for achromatic colors (delta < 0.01).
-func rgbToHue(r, g, b int) float64 {
-	rf := float64(r) / 255.0
-	gf := float64(g) / 255.0
-	bf := float64(b) / 255.0
-	max := math.Max(rf, math.Max(gf, bf))
-	min := math.Min(rf, math.Min(gf, bf))
-	delta := max - min
-	if delta < 0.01 {
-		return -1 // achromatic
-	}
-	var h float64
-	switch max {
-	case rf:
-		h = (gf - bf) / delta
-		if gf < bf {
-			h += 6
-		}
-	case gf:
-		h = (bf-rf)/delta + 2
-	default:
-		h = (rf-gf)/delta + 4
-	}
-	return h * 60
-}
+func (a *App) teamNameToRGB(teamName string) [3]int { return a.ledCtl().TeamNameColor(teamName) }
 
-// rgbSaturation returns the HSL saturation (0.0–1.0) for the given RGB.
-func rgbSaturation(r, g, b int) float64 {
-	rf := float64(r) / 255.0
-	gf := float64(g) / 255.0
-	bf := float64(b) / 255.0
-	max := math.Max(rf, math.Max(gf, bf))
-	min := math.Min(rf, math.Min(gf, bf))
-	l := (max + min) / 2
-	if l == 0 || l == 1 {
-		return 0
-	}
-	return (max - min) / (1 - math.Abs(2*l-1))
-}
+func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) { a.ledCtl().Send(mac, payload) }
 
-// rgbLightness returns the HSL lightness (0.0–1.0) for the given RGB.
-func rgbLightness(r, g, b int) float64 {
-	rf := float64(r) / 255.0
-	gf := float64(g) / 255.0
-	bf := float64(b) / 255.0
-	max := math.Max(rf, math.Max(gf, bf))
-	min := math.Min(rf, math.Min(gf, bf))
-	return (max + min) / 2
-}
+func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) { a.ledCtl().Broadcast(payload) }
 
-// dimIntensityFor returns the LED intensity (0-255) to use for a "dimmed team color"
-// LED state, scaled to the perceived brightness of the team color rather than a flat
-// constant. Used by sendLEDSetForBuzzerNormal (#113 B3) and by the MEMORY LED paths
-// sendLEDSetForBuzzerMemory / sendLEDSetMemoryMultiTeam (#113 B3 fast-follow,
-// code-review 20260726) — every place that dims the TEAM color. Not used by the QCM
-// paths (sendLEDSetForBuzzerQCM/Reveal), which dim the ANSWER color at a flat 64 and
-// are intentionally left untouched. The firmware applies intensity multiplicatively
-// (channel × intensity / 255, see src/Common/led.h), so a flat 64 nearly extinguishes
-// deep tones (L≈35%) while looking fine on vivid ones (L≈55%).
-//
-// Linear interpolation pinned at the two tone families defined by the #113 palette
-// (contracts/models.md): L=55% (vivid) → 64 (unchanged from the pre-#113 behavior),
-// L=35% (deep) → ~100. Result is clamped to [64, 128] so both ends of the color
-// spectrum (near-white, near-black/achromatic fallback) stay within a sane dim range.
-func dimIntensityFor(rgb [3]int) int {
-	l := rgbLightness(rgb[0], rgb[1], rgb[2])
-	intensity := 163.0 - 180.0*l
-	i := int(math.Round(intensity))
-	if i < 64 {
-		i = 64
-	}
-	if i > 128 {
-		i = 128
-	}
-	return i
-}
+func (a *App) resendLEDOnReconnect(mac string) { a.ledCtl().ResendOnReconnect(mac) }
 
-// nearestPaletteColorByHue returns the teamColorPalette entry whose hue angle is closest
-// to (r,g,b) using circular hue distance. For achromatic inputs (saturation < 0.15)
-// returns white. Hue-based matching is more robust than Euclidean RGB distance for
-// distinguishing orange/red, blue/violet, etc., and prevents two teams with the same
-// raw RGB from mapping to the same palette entry.
-func nearestPaletteColorByHue(r, g, b int) [3]int {
-	if rgbSaturation(r, g, b) < 0.15 {
-		return [3]int{255, 255, 255} // achromatic → white
-	}
-	hue := rgbToHue(r, g, b)
-	if hue < 0 {
-		return [3]int{255, 255, 255}
-	}
-	type entry struct {
-		rgb [3]int
-		hue float64
-	}
-	ordered := []entry{
-		{[3]int{255, 26, 26}, 0},    // rouge
-		{[3]int{255, 133, 26}, 28},  // orange
-		{[3]int{255, 217, 26}, 50},  // jaune
-		{[3]int{26, 255, 83}, 135},  // vert
-		{[3]int{26, 236, 255}, 185}, // cyan
-		{[3]int{26, 94, 255}, 222},  // bleu
-		{[3]int{159, 26, 255}, 275}, // violet
-		{[3]int{255, 26, 159}, 325}, // rose
-	}
-	best := ordered[0].rgb
-	minDist := 361.0
-	for _, e := range ordered {
-		d := math.Abs(hue - e.hue)
-		if d > 180 {
-			d = 360 - d // circular hue distance
-		}
-		if d < minDist {
-			minDist = d
-			best = e.rgb
-		}
-	}
-	return best
-}
+func (a *App) resetBuzzStates() { a.ledCtl().ResetBuzzStates() }
 
-// teamColorToRGB returns the LED RGB color for a bumper's team, or gray [128,128,128] if no team.
-// Resolution order:
-//  1. team.ColorName (explicit name set by frontend) → direct palette lookup
-//  2. Hue-based nearest palette color (more robust than Euclidean distance)
-func (a *App) teamColorToRGB(bumper *game.Bumper) [3]int {
-	return a.teamNameToRGB(bumper.Team)
-}
+func (a *App) updateBuzzStates(buzzingMAC string) { a.ledCtl().UpdateBuzzStates(buzzingMAC) }
 
-// teamNameToRGB is the shared trunk of teamColorToRGB: team NAME → palette
-// RGB (game.Team has no ID). Factored out for the ambiance scene table (#205,
-// contracts/lighting.md §8), which only knows team names and must show the
-// SAME colour as the buzzers — never a second palette. Gray {128,128,128}
-// for no/unknown team, unchanged.
-func (a *App) teamNameToRGB(teamName string) [3]int {
-	if teamName == "" {
-		return [3]int{128, 128, 128}
-	}
-	team := a.engine.GetTeam(teamName)
-	if team == nil {
-		return [3]int{128, 128, 128}
-	}
-	// 1. Named color lookup (explicit, highest priority)
-	if team.ColorName != "" {
-		if rgb, ok := teamColorPalette[strings.ToLower(team.ColorName)]; ok {
-			return rgb
-		}
-	}
-	// 2. Hue-based nearest palette color
-	if len(team.Color) < 3 {
-		return [3]int{128, 128, 128}
-	}
-	return nearestPaletteColorByHue(team.Color[0], team.Color[1], team.Color[2])
-}
+func (a *App) buzzStateFor(mac string) game.BuzzState { return a.ledCtl().BuzzStateFor(mac) }
 
-// sendLEDSet sends a LED_SET message to a specific buzzer and stores the state for reconnect.
-// A MSG_ID is attached so the buzzer can ACK receipt (v3.8.0 ACK protocol).
-func (a *App) sendLEDSet(mac string, payload protocol.LEDSetPayload) {
-	a.ledStateMu.Lock()
-	a.bumperLEDState[mac] = payload
-	a.ledStateMu.Unlock()
-	if !a.buzzerHub.IsClientConnected(mac) {
-		// #109 Phase 2 (D4): a LED_SET that should have reached this buzzer while
-		// it's disconnected counts as a lost message (orange -> red).
-		a.engine.TransitionConn(mac, game.ConnEventMessageLost)
-		return
-	}
-	msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
-	if err != nil {
-		server.LogError(game.LogComponentApp, "Failed to create LED_SET message for %s: %v", mac, err)
-		return
-	}
-	// Attach MSG_ID for ACK tracking
-	msgID := server.GenerateMsgID()
-	msg.MsgID = msgID
-
-	if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
-		server.LogWarn(game.LogComponentApp, "Failed to send LED_SET to buzzer %s: %v", mac, err)
-	} else {
-		server.LogInfo(game.LogComponentApp, "LED_SET sent to %s (msgID=%s): RGB(%d,%d,%d) intensity=%d effect=%s",
-			mac, msgID, payload.Color[0], payload.Color[1], payload.Color[2], payload.Intensity, payload.Effect)
-		// Register for ACK tracking; set AckPending on bumper.
-		// NOTE: broadcastUpdate() is intentionally NOT called here — callers are responsible for
-		// a single broadcast after the full loop completes, avoiding N redundant UPDATE messages.
-		a.ackManager.Register(mac, msgID, protocol.ActionLEDSet)
-		a.engine.UpdateBumper(mac, map[string]interface{}{"ACK_PENDING": true})
-	}
-}
-
-// broadcastLEDSet sends the same LED_SET payload to all connected buzzers.
-//
-// #132 audit: currently DEAD CODE — grep confirms zero call sites anywhere
-// in the codebase (including tests). Fixed anyway, for the same reason
-// dead code still gets its imports checked: if this is ever wired up, it
-// should not silently reintroduce the exact #127/#129 bug class. Flagged
-// separately in the audit report as its own finding (candidate for removal
-// — not done here, out of this bugfix's scope).
-func (a *App) broadcastLEDSet(payload protocol.LEDSetPayload) {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		a.sendLEDSet(mac, payload)
-	}
-	// One broadcast for all AckPending state changes set by the loop above.
-	// #132 (same pattern/justification as sendLEDSetAllBuzzers #127/#129-T1.6
-	// and sendLEDSetPause #129 T3.1-adjacent): the loop above unconditionally
-	// skips IsVPlayer bumpers, and ACK_PENDING — the only field this call
-	// exists to announce — is always stripped from TV's payload too
-	// (protocol.AdminOnlyBumperFields, via SerializeForWebClient). Neither
-	// client type can ever see anything this call carries.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
-}
-
-// resendLEDOnReconnect re-sends the last known LED state to a buzzer that just reconnected (HELLO).
-func (a *App) resendLEDOnReconnect(mac string) {
-	a.ledStateMu.RLock()
-	payload, ok := a.bumperLEDState[mac]
-	a.ledStateMu.RUnlock()
-	if !ok {
-		// No stored state — derive from current game state
-		a.sendLEDSetForBuzzer(mac)
-		return
-	}
-	msg, err := protocol.NewMessage(protocol.ActionLEDSet, payload)
-	if err != nil {
-		return
-	}
-	if err := a.buzzerHub.SendToClient(mac, msg); err != nil {
-		server.LogWarn(game.LogComponentApp, "Failed to resend LED_SET to %s: %v", mac, err)
-	} else {
-		server.LogInfo(game.LogComponentApp, "LED_SET resent on reconnect to %s", mac)
-	}
-}
-
-// resetBuzzStates resets BuzzState to NONE for all known buzzers.
-// Called at the start of each question round (READY phase).
-func (a *App) resetBuzzStates() {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	for mac := range tb.Bumpers {
-		a.bumperBuzzState[mac] = game.BuzzStateNone
-	}
-}
-
-// updateBuzzStates updates BuzzState for all buzzers after buzzingMAC has pressed.
-//
-// Rules (from BUZZER_LED_STATE_MACHINE.md):
-//   - The buzzing bumper becomes MOI (first buzz of its team).
-//   - All other bumpers of the same team become EQUIPE.
-//   - Bumpers of other teams that had no buzz yet become AUTRE.
-//   - Existing MOI/EQUIPE/AUTRE states of already-buzzed teams are preserved.
-func (a *App) updateBuzzStates(buzzingMAC string) {
-	buzzingBumper := a.engine.GetBumper(buzzingMAC)
-	if buzzingBumper == nil {
-		return
-	}
-	buzzingTeam := buzzingBumper.Team
-
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		current := a.bumperBuzzState[mac]
-
-		if mac == buzzingMAC {
-			// The buzzing bumper itself: MOI (first of its team)
-			a.bumperBuzzState[mac] = game.BuzzStateMoi
-		} else if bumper.Team == buzzingTeam {
-			// Same team as the buzzer: EQUIPE (unless already MOI — impossible here
-			// since the engine only allows one buzz per team, but defensive check)
-			if current != game.BuzzStateMoi {
-				a.bumperBuzzState[mac] = game.BuzzStateEquipe
-			}
-		} else {
-			// Different team: promote to AUTRE only if still NONE
-			if current == game.BuzzStateNone {
-				a.bumperBuzzState[mac] = game.BuzzStateAutre
-			}
-			// If already MOI/EQUIPE/AUTRE, leave unchanged (their team buzzed earlier)
-		}
-	}
-}
-
-// buzzStateFor returns the current BuzzState for a given buzzer MAC.
-// Defaults to NONE if not tracked yet.
-func (a *App) buzzStateFor(mac string) game.BuzzState {
-	if bs, ok := a.bumperBuzzState[mac]; ok {
-		return bs
-	}
-	return game.BuzzStateNone
-}
-
-// sendLEDSetForBuzzer derives and sends the correct LED state for one buzzer based on current game phase.
-// Used on reconnect when no stored LED state is available.
-func (a *App) sendLEDSetForBuzzer(mac string) {
-	bumper := a.engine.GetBumper(mac)
-	if bumper == nil || bumper.IsVPlayer {
-		return
-	}
-
-	// #119 (B5): a buzzer connecting for the first time during ENTRACTE (no
-	// prior stored LED state — resendLEDOnReconnect's fallback path, the
-	// sole caller of this function) must come up OFF, not its team color.
-	// The reconnect-with-remembered-state path is already covered: entering
-	// entracte overwrites bumperLEDState via sendLEDSetAllEntracteOff, so
-	// resendLEDOnReconnect's "stored state" branch already resends OFF.
-	if a.engine.IsEntracte() {
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
-		return
-	}
-
-	state := a.engine.GetState()
-	phase := a.engine.GetPhase()
-
-	switch {
-	case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
-		a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
-	case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
-		a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
-	case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
-		// MEMOTION: buzzers display team color (same as NORMAL stopped state)
-		a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
-	default:
-		a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
-	}
-}
-
-func (a *App) sendLEDSetForBuzzerNormal(mac string, bumper *game.Bumper, phase game.GamePhase) {
-	rgb := a.teamColorToRGB(bumper)
-	dimIntensity := dimIntensityFor(rgb)
-	bs := a.buzzStateFor(mac)
-	switch phase {
-	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseCountdown:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-	case game.PhaseStarted:
-		switch bs {
-		case game.BuzzStateMoi:
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "BLINK"})
-		case game.BuzzStateEquipe:
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-		default: // NONE or AUTRE
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
-		}
-	case game.PhasePaused:
-		switch bs {
-		case game.BuzzStateMoi:
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "BLINK"})
-		case game.BuzzStateEquipe:
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-		default: // NONE or AUTRE
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
-		}
-	case game.PhaseRevealed:
-		switch bs {
-		case game.BuzzStateMoi:
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "BLINK"})
-		case game.BuzzStateEquipe:
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-		default: // NONE or AUTRE
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
-		}
-	default:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-	}
-}
-
-func (a *App) sendLEDSetForBuzzerQCM(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
-	answerRGB := answerColorToRGB(bumper.AnswerColor)
-	teamRGB := a.teamColorToRGB(bumper)
-	bs := a.buzzStateFor(mac)
-
-	switch phase {
-	case game.PhaseStopped, game.PhasePrepare:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
-	case game.PhaseReady, game.PhaseCountdown:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
-	case game.PhaseStarted:
-		if bs == game.BuzzStateMoi || bs == game.BuzzStateEquipe {
-			// My team buzzed → show team color (hides the answer)
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
-		} else {
-			// NONE or AUTRE → show answer color
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
-		}
-	case game.PhasePaused:
-		if bs == game.BuzzStateMoi || bs == game.BuzzStateEquipe {
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
-		} else {
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
-		}
-	case game.PhaseRevealed:
-		// Revealed logic uses firstBuzzTeam from engine state (team.Time > 0 && team.Bumper == mac or same team)
-		a.sendLEDSetForBuzzerQCMReveal(mac, bumper, state)
-	default:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: teamRGB, Intensity: 255, Effect: "SOLID"})
-	}
-}
-
-// sendLEDSetForBuzzerQCMReveal handles the REVEALED phase LED for a single QCM buzzer.
 func (a *App) sendLEDSetForBuzzerQCMReveal(mac string, bumper *game.Bumper, state game.GameState) {
-	answerRGB := answerColorToRGB(bumper.AnswerColor)
-	bs := a.buzzStateFor(mac)
-	myTeamBuzzed := bs == game.BuzzStateMoi || bs == game.BuzzStateEquipe
-
-	if !myTeamBuzzed {
-		// No buzz from my team: DIM 25% answer color
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 64, Effect: "DIM"})
-		return
-	}
-
-	// My team buzzed — determine correct answer from current question
-	correctAnswer := ""
-	if state.Question != nil {
-		correctAnswer = state.Question.QCMCorrect
-	}
-	myAnswerCorrect := correctAnswer != "" && string(bumper.AnsweredColor) == correctAnswer // #255: answered, not assigned
-
-	if !myAnswerCorrect {
-		// Wrong answer (or no correct defined): DIM 25%
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 64, Effect: "DIM"})
-		return
-	}
-
-	// Correct answer — check if my team was the first to buzz (team.Time == smallest among buzzed teams)
-	isFirstBuzz := a.isFirstBuzzTeam(bumper.Team)
-	if isFirstBuzz {
-		// Good answer + first buzz: BLINK
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "BLINK"})
-	} else {
-		// Good answer + not first buzz: SOLID 100%
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: answerRGB, Intensity: 255, Effect: "SOLID"})
-	}
+	a.ledCtl().ForBuzzerQCMReveal(mac, bumper, state)
 }
 
-// isFirstBuzzTeam returns true if the given team was the first team to buzz in this round.
-// Uses bumper.Time values stored by the engine to find the earliest buzz.
-func (a *App) isFirstBuzzTeam(teamName string) bool {
-	if teamName == "" {
-		return false
-	}
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return false
-	}
+func (a *App) sendLEDSetRafaleTeams() { a.ledCtl().RafaleTeams() }
 
-	// Find the earliest buzz time across all teams
-	var minTime int64 = 0
-	teamEarliestTime := int64(0)
+func (a *App) sendLEDSetAllBuzzers() { a.ledCtl().AllBuzzers() }
 
-	for _, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer || bumper.Time <= 0 {
-			continue
-		}
-		if minTime == 0 || bumper.Time < minTime {
-			minTime = bumper.Time
-		}
-		if bumper.Team == teamName {
-			if teamEarliestTime == 0 || bumper.Time < teamEarliestTime {
-				teamEarliestTime = bumper.Time
-			}
-		}
-	}
+func (a *App) sendLEDSetStop() { a.ledCtl().Stop() }
 
-	return teamEarliestTime > 0 && teamEarliestTime == minTime
-}
+func (a *App) sendLEDSetPause(bumperID string) { a.ledCtl().Pause(bumperID) }
 
-func (a *App) sendLEDSetForBuzzerMemory(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
-	rgb := a.teamColorToRGB(bumper)
-	dimIntensity := dimIntensityFor(rgb)
-	memoryMode := ""
-	if state.Question != nil {
-		memoryMode = state.Question.MemoryMode
-	}
+func (a *App) sendLEDSetPauseAll() { a.ledCtl().PauseAll() }
 
-	switch phase {
-	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseRevealed:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-	case game.PhasePaused:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
-	case game.PhaseStarted:
-		if memoryMode == string(game.MemoryModeSolo) || memoryMode == "" {
-			// SOLO: active team = SOLID 100%, inactive = DIM 25%
-			if bumper.Team == state.MemoryCurrentTeam {
-				a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-			} else {
-				a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
-			}
-		} else {
-			// Multi-team modes: active=SOLID 100%, next=SOLID 50%, others participating=DIM 25%, not selected=OFF
-			a.sendLEDSetMemoryMultiTeam(mac, bumper, state)
-		}
-	default:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-	}
-}
+func (a *App) sendLEDSetContinue() { a.ledCtl().Continue() }
 
-// sendLEDSetMemoryMultiTeam computes the LED for a buzzer in a multi-team Memory round.
-func (a *App) sendLEDSetMemoryMultiTeam(mac string, bumper *game.Bumper, state game.GameState) {
-	a.sendLEDSetMultiTeam(mac, bumper, state.MemoryCurrentTeam, a.nextMemoryTeam(state), state.MemoryParticipatingTeams)
-}
+func (a *App) sendLEDSetReveal(correctAnswer string) { a.ledCtl().Reveal(correctAnswer) }
 
-// sendLEDSetMultiTeam computes and sends the LED for one buzzer in a
-// multi-team round — the "active/next/other-participant/non-participant"
-// grid shared by MEMORY (sendLEDSetMemoryMultiTeam) and RAFALE
-// (sendLEDSetRafaleTeams, v8.0.0, #199 task 35): active team SOLID 100%
-// (INTENSITY=255), next team SOLID 50% (INTENSITY=128), other participating
-// teams DIM at a tone-relative intensity (dimIntensityFor — #113 B3, a flat
-// value nearly extinguishes deep-toned team colors), non-participants OFF.
-// Color is always resolved via bumper.Team's COLOR_NAME (teamColorToRGB),
-// never a hard-coded RGB triplet (contract LED_SET_PROTOCOL.md §11).
-//
-// Deliberately parameterized by (activeTeam, nextTeam, participatingTeams)
-// rather than a game.GameState — the caller decides which mode's fields
-// those come from (Memory* vs Rafale*), this function only knows the grid
-// itself, exactly the same separation team_rotation.go's rotateTeam keeps
-// between rotation MECHANISM and per-mode rotation POLICY.
-func (a *App) sendLEDSetMultiTeam(mac string, bumper *game.Bumper, activeTeam, nextTeam string, participatingTeams []string) {
-	rgb := a.teamColorToRGB(bumper)
-
-	// Not in participating teams → OFF
-	participating := false
-	for _, t := range participatingTeams {
-		if t == bumper.Team {
-			participating = true
-			break
-		}
-	}
-	if !participating {
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
-		return
-	}
-
-	// Active team
-	if bumper.Team == activeTeam {
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-		return
-	}
-
-	// Next team: SOLID 50% (INTENSITY=128)
-	if nextTeam != "" && bumper.Team == nextTeam {
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 128, Effect: "SOLID"})
-		return
-	}
-
-	// Other participating teams: DIM 25% (tone-relative, #113 B3 fast-follow —
-	// same rationale as sendLEDSetForBuzzerNormal: a flat 64 nearly extinguishes
-	// deep-toned team colors).
-	a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensityFor(rgb), Effect: "DIM"})
-}
-
-// nextMemoryTeam returns the name of the team that plays after MemoryCurrentTeam,
-// cycling through MemoryParticipatingTeams in order.
-func (a *App) nextMemoryTeam(state game.GameState) string {
-	teams := state.MemoryParticipatingTeams
-	if len(teams) < 2 {
-		return ""
-	}
-	for i, t := range teams {
-		if t == state.MemoryCurrentTeam {
-			return teams[(i+1)%len(teams)]
-		}
-	}
-	return ""
-}
-
-// nextRafaleTeam returns the name of the team that plays after
-// RafaleCurrentTeam, cycling through RafaleParticipatingTeams in order —
-// RAFALE's counterpart to nextMemoryTeam above (v8.0.0, #199 task 35/36).
-func (a *App) nextRafaleTeam(state game.GameState) string {
-	teams := state.RafaleParticipatingTeams
-	if len(teams) < 2 {
-		return ""
-	}
-	for i, t := range teams {
-		if t == state.RafaleCurrentTeam {
-			return teams[(i+1)%len(teams)]
-		}
-	}
-	return ""
-}
-
-// sendLEDSetForBuzzerRafale computes and sends the LED for ONE buzzer during
-// a RAFALE question — mirrors sendLEDSetForBuzzerMemory's per-buzzer phase
-// dispatch (STOPPED/PREPARE/READY/REVEALED → plain team color, PAUSED →
-// DIM, STARTED → the mode-specific grid). Extracted (post-review MINEUR-3,
-// code-review-20260828-183037.md) so sendLEDSetAllBuzzers can call it
-// per-buzzer like every other question type's case in that switch — without
-// this, RAFALE fell into the `default:` branch there (plain per-buzzer team
-// color, no active/next/dim/off grid at all), so an admin action that
-// re-triggers sendLEDSetAllBuzzers mid-round (e.g. editing bumpers/teams)
-// transiently overwrote the "active team" grid until the next RAFALE
-// advance self-corrected it via OnRafaleTeamsChanged — never a state/data
-// loss, but a visible flicker.
-//
-// STARTED/SOLO is OFF for everyone (contract §8.3's own table: "Mode SOLO |
-// Éteint pour tous") — deliberately NOT the same as MEMORY's own SOLO
-// branch (active=SOLID/inactive=DIM): RAFALE has no notion of "my turn" LED
-// feedback in SOLO, there is exactly one team and nothing to distinguish.
-func (a *App) sendLEDSetForBuzzerRafale(mac string, bumper *game.Bumper, phase game.GamePhase, state game.GameState) {
-	rgb := a.teamColorToRGB(bumper)
-	dimIntensity := dimIntensityFor(rgb)
-
-	switch phase {
-	case game.PhaseStopped, game.PhasePrepare, game.PhaseReady, game.PhaseRevealed:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-	case game.PhasePaused:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: dimIntensity, Effect: "DIM"})
-	case game.PhaseStarted:
-		mode := ""
-		if state.Question != nil {
-			mode = state.Question.RafaleMode
-		}
-		if mode == "" || mode == string(game.RafaleModeSolo) {
-			a.sendLEDSet(mac, protocol.LEDSetPayload{Color: [3]int{0, 0, 0}, Intensity: 0, Effect: "SOLID"})
-			return
-		}
-		a.sendLEDSetMultiTeam(mac, bumper, state.RafaleCurrentTeam, a.nextRafaleTeam(state), state.RafaleParticipatingTeams)
-	default:
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-	}
-}
-
-// sendLEDSetRafaleTeams refreshes buzzer LEDs for the active RAFALE round —
-// contract §8.3. Wired to Engine.OnRafaleTeamsChanged (setupCallbacks
-// below) — fired on round start, RAFALE_SET_TEAMS, and every advance (task
-// 36: "rafraîchi à chaque rotation d'équipe et chaque changement de
-// question").
-//
-// Phase-gated to STARTED, mirroring sendLEDSetForBuzzerRafale's own
-// dispatch: the multi-team grid is a "round in progress" concept — a no-op
-// during PREPARE/READY (see SetRafaleParticipatingTeams' doc comment) and
-// during ROUND_END (whatever was lit for the last question stays lit; no
-// LED behavior is specified past the round ending, and the next START —
-// any question type — resets buzzer LEDs via sendLEDSetAllBuzzers as
-// usual, which now also carries a dedicated RAFALE case — see it below).
-//
-// ⚠️ This function only ever drives LED OUTPUT — buzzer presses stay
-// ignored regardless of what's lit (engine.go ProcessButtonPress, #107 task
-// 25, untouched by this batch).
-func (a *App) sendLEDSetRafaleTeams() {
-	state := a.engine.GetState()
-	if state.Phase != game.PhaseStarted || state.Question == nil || state.Question.Type != game.QuestionTypeRafale {
-		return
-	}
-
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		a.sendLEDSetForBuzzerRafale(mac, bumper, state.Phase, state)
-	}
-	// One broadcast for all AckPending state changes set by the loop above —
-	// same rationale as sendLEDSetAllBuzzers' own trailing call (#127/#129).
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
-}
-
-// sendLEDSetAllBuzzers sends per-buzzer LED_SET based on current game state (READY/START/STOPPED phase).
-// Called after READY, START, and FULL updates.
-func (a *App) sendLEDSetAllBuzzers() {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	state := a.engine.GetState()
-	phase := a.engine.GetPhase()
-
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		switch {
-		case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
-			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
-		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
-			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
-		case state.Question != nil && state.Question.Type == game.QuestionTypeRafale:
-			// Post-review MINEUR-3 (code-review-20260828-183037.md): without
-			// this case, RAFALE fell into `default:` below (plain per-buzzer
-			// team color) — any admin action that re-triggers
-			// sendLEDSetAllBuzzers mid-round (editing bumpers/teams) would
-			// transiently overwrite the active-team grid.
-			a.sendLEDSetForBuzzerRafale(mac, bumper, phase, state)
-		case state.Question != nil && state.Question.Type == game.QuestionTypeMemotion:
-			// MEMOTION: buzzers display team color (same as NORMAL)
-			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
-		default:
-			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
-		}
-	}
-	// One broadcast for all AckPending state changes set by the loop above.
-	// #127: the loop above unconditionally skips IsVPlayer bumpers (line
-	// 3077), so this broadcast never carries a change relevant to any
-	// VJoueur, at any of this function's call sites — targeting VPlayer here
-	// was always a needless full-GameState resend to every connected
-	// VJoueur. Found while verifying #127 CA1 empirically: it was firing an
-	// extra unconditional UPDATE at every PREPARE->READY transition (via
-	// broadcastReady -> sendLEDSetAllBuzzers), on top of the legitimate one
-	// from TransitionToReady's OnStateChange.
-	//
-	// #129: TV removed too, at all 11 call sites, for a stronger reason than
-	// the VPlayer case above — ACK_PENDING (the very field this broadcast
-	// exists to announce) is one of the 5 fields SerializeForWebClient always
-	// strips from TV's payload (protocol.AdminOnlyBumperFields). TV can never
-	// see the content this call carries, regardless of phase or call site —
-	// unlike the VPlayer case, this isn't conditional on the loop skipping
-	// virtual bumpers, it's the serializer itself making the field invisible
-	// to TV unconditionally. Found while verifying #129 CA12 empirically: TV
-	// was still receiving 3 UPDATE in the PREPARE->READY window instead of
-	// the 2 the contract promises (§1), this call being the 3rd, redundant
-	// with the legitimate READY-transition broadcast from
-	// TransitionToReady's OnStateChange. Admin still needs it (ACK_PENDING
-	// spinner UI); Buzzer still needs it (LED sync, its own fields).
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
-}
-
-// sendLEDSetStop broadcasts team color SOLID 100% to all buzzers (game stopped/prepare).
-func (a *App) sendLEDSetStop() {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		rgb := a.teamColorToRGB(bumper)
-		a.sendLEDSet(mac, protocol.LEDSetPayload{Color: rgb, Intensity: 255, Effect: "SOLID"})
-	}
-	// One broadcast for all AckPending changes.
-	// #132 audit: same pattern as sendLEDSetAllBuzzers/sendLEDSetPause
-	// (#127/#129) — loop always skips IsVPlayer, ACK_PENDING always stripped
-	// from TV. Sole call site (broadcastStop) already sends its own
-	// Admin+TV+VPlayer ActionStop broadcast right before this — TV/VPlayer
-	// already have everything they need from that call; this one only ever
-	// carried ACK_PENDING, which neither can see anyway.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
-}
-
-// sendLEDSetPause sends per-buzzer LED state when a specific buzzer has buzzed (PAUSED phase).
-// Uses BuzzState to determine each buzzer's LED.
-func (a *App) sendLEDSetPause(bumperID string) {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	state := a.engine.GetState()
-	phase := a.engine.GetPhase()
-
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		switch {
-		case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
-			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
-		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
-			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
-		default:
-			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
-		}
-	}
-	// One broadcast for all AckPending changes.
-	// #129 (found while verifying Phase 3/CA10 empirically — same pattern
-	// and justification as sendLEDSetAllBuzzers's #127/#129-T1.6 narrowing):
-	// the loop above unconditionally skips IsVPlayer bumpers, and
-	// ACK_PENDING (the field this broadcast exists to announce) is always
-	// stripped from TV's payload too (protocol.AdminOnlyBumperFields, via
-	// SerializeForWebClient) — neither client type can ever see anything
-	// this call carries, at either of sendLEDSetPause's two call sites
-	// (broadcastPause, broadcastPauseAll → sendLEDSetPauseAll). Without this,
-	// every buzz/QCM-answer/etc. still sent a full, un-targeted UPDATE to
-	// every VPlayer right next to it, defeating T3.1's targeting entirely —
-	// this is what main_broadcast_129_phase3_test.go's CA10 tests caught.
-	// broadcastPause's OWN direct PAUSE broadcast (the one the plan says to
-	// leave untouched — it still reaches Admin/TV/VPlayer) is a separate
-	// call, unaffected by this line.
-	//
-	// The 5 sibling sendLEDSet* functions with the identical pattern
-	// (broadcastLEDSet, sendLEDSetStop, sendLEDSetReveal, sendLEDSetToTeam,
-	// sendLEDSetComet) were audited and fixed the same way under #132 —
-	// see their own doc comments and _work/reports/dev-backend-132-audit-*.md.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
-}
-
-// sendLEDSetPauseAll sends LED state for PAUSE ALL (admin-initiated pause, no specific buzzer).
-func (a *App) sendLEDSetPauseAll() {
-	a.sendLEDSetPause("")
-}
-
-// sendLEDSetContinue sends LED state after the game resumes from pause (back to STARTED).
-// Uses the same per-buzzer state machine as sendLEDSetAllBuzzers but preserves BuzzStates.
-func (a *App) sendLEDSetContinue() {
-	a.sendLEDSetAllBuzzers()
-}
-
-// sendLEDSetReveal sends per-buzzer LED feedback at REVEALED phase.
-func (a *App) sendLEDSetReveal(correctAnswer string) {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	state := a.engine.GetState()
-	phase := a.engine.GetPhase()
-
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		switch {
-		case state.Question != nil && state.Question.Type == game.QuestionTypeQCM:
-			a.sendLEDSetForBuzzerQCM(mac, bumper, phase, state)
-		case state.Question != nil && state.Question.Type == game.QuestionTypeMemory:
-			a.sendLEDSetForBuzzerMemory(mac, bumper, phase, state)
-		default:
-			a.sendLEDSetForBuzzerNormal(mac, bumper, phase)
-		}
-	}
-	// One broadcast for all AckPending changes.
-	// #132 audit: same pattern as sendLEDSetAllBuzzers/sendLEDSetPause
-	// (#127/#129) — loop always skips IsVPlayer, ACK_PENDING always stripped
-	// from TV. Sole call site (broadcastReveal) already sends its own
-	// Admin+TV+VPlayer ActionReveal broadcast right before this.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
-}
-
-// sendLEDSetToTeam sends a LED_SET payload to all physical buzzers belonging to teamID.
-// If teamID is empty, sends to ALL physical buzzers (excluding VPlayers).
-//
-// #132 audit: currently DEAD CODE — grep confirms zero call sites anywhere
-// in the codebase (including tests). Fixed anyway — see broadcastLEDSet's
-// doc comment for the reasoning; both are flagged together in the audit
-// report as candidates for removal in a separate cleanup, not done here.
 func (a *App) sendLEDSetToTeam(teamID string, payload protocol.LEDSetPayload) {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		if teamID != "" && bumper.Team != teamID {
-			continue
-		}
-		a.sendLEDSet(mac, payload)
-	}
-	// One broadcast for all AckPending changes.
-	// #132: same pattern/justification as the other sendLEDSet* functions —
-	// loop always skips IsVPlayer, ACK_PENDING always stripped from TV.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
+	a.ledCtl().ToTeam(teamID, payload)
 }
 
-// cometBandColor returns the best-contrasting band color for a COMET animation over bgColor.
-// Uses gold [255,215,0] by default; switches to white [255,255,255] when the background is
-// too close to gold (squared Euclidean distance < 8000, ~89 units).
-func cometBandColor(bg [3]int) [3]int {
-	gold := [3]int{255, 215, 0}
-	dr := bg[0] - gold[0]
-	dg := bg[1] - gold[1]
-	db := bg[2] - gold[2]
-	if dr*dr+dg*dg+db*db < 8000 {
-		return [3]int{255, 255, 255} // white for yellow/gold teams
-	}
-	return gold
-}
-
-// sendLEDSetComet sends a COMET LED effect to all physical buzzers of the given team.
-// COLOR = team background color; COMET_COLOR = contrasting band color (gold or white).
-// Duration: 2 laps × 23 steps × 100 ms = 4600 ms + 200 ms margin = 4800 ms.
-func (a *App) sendLEDSetComet(teamID string) {
-	tb := a.engine.GetTeamsAndBumpers()
-	if tb == nil {
-		return
-	}
-	for mac, bumper := range tb.Bumpers {
-		if bumper.IsVPlayer {
-			continue
-		}
-		if teamID != "" && bumper.Team != teamID {
-			continue
-		}
-		teamColor := a.teamColorToRGB(bumper)
-		band := cometBandColor(teamColor)
-		a.sendLEDSet(mac, protocol.LEDSetPayload{
-			Color:      teamColor,
-			Intensity:  255,
-			Effect:     protocol.LEDEffectComet,
-			CometColor: &band,
-		})
-	}
-	// One broadcast for all AckPending changes from the loop above.
-	// #132 audit: same pattern as sendLEDSetAllBuzzers/sendLEDSetPause
-	// (#127/#129) — loop always skips IsVPlayer, ACK_PENDING always stripped
-	// from TV. All 4 call sites (handlePoints, MEMOTION_DONE, BUMPER_POINTS,
-	// handleTeamPoints) already call their own unconditional broadcastUpdate()
-	// right after this returns, to announce the score change itself — by
-	// then ACK_PENDING is already set (sendLEDSet sets it synchronously), so
-	// Admin still sees it on that later broadcast; nothing is lost, only the
-	// redundant TV/VPlayer leg of THIS broadcast is removed.
-	a.broadcastUpdateTo(server.ClientTypeAdmin, server.ClientTypeBuzzer)
-	// Restore normal LED state after firmware COMET animation completes.
-	time.AfterFunc(4800*time.Millisecond, func() {
-		a.sendLEDSetAllBuzzers()
-	})
-}
+func (a *App) sendLEDSetComet(teamID string) { a.ledCtl().Comet(teamID) }
 
 func (a *App) broadcastReset() {
 	msg, _ := protocol.NewMessage(protocol.ActionReset, map[string]interface{}{})
@@ -6766,20 +5379,6 @@ func (a *App) broadcastConfigUpdate() {
 		gs.NeonEffect.Enabled, gs.NeonEffect.Mode, gs.NeonEffect.ArcWidth, gs.NeonEffect.IntensityGap, gs.NeonEffect.RotationSpeed, gs.NeonEffect.GlowPulseSpeed, gs.NeonEffect.GlowPulseMax, gs.NeonEffect.BarOffset, gs.NeonEffect.BarThickness, gs.NeonEffect.ArcBlur)
 }
 
-// resolveServerIP returns the actual server IP to send to buzzers.
-// It uses the first IP from GetServerIPs() (same source as UDP broadcast heartbeats)
-// so that buzzers always receive the current server IP regardless of what is stored in config.json.
-// Falls back to cfg.ServerIP if no active interface is found.
-func resolveServerIP(cfgServerIP string) string {
-	ips := server.GetServerIPs()
-	if len(ips) > 0 {
-		server.LogInfo(game.LogComponentApp, "resolveServerIP: using detected IP %s (GetServerIPs=%v)", ips[0], ips)
-		return ips[0]
-	}
-	server.LogInfo(game.LogComponentApp, "resolveServerIP: no detected IP, falling back to config value %q", cfgServerIP)
-	return cfgServerIP
-}
-
 // sendWifiConfigToBuzzer sends the current WiFi defaults config to a specific buzzer via WebSocket.
 // A MSG_ID is attached so the buzzer can ACK receipt (v3.8.0 ACK protocol).
 func (a *App) sendWifiConfigToBuzzer(clientID string) {
@@ -6787,7 +5386,7 @@ func (a *App) sendWifiConfigToBuzzer(clientID string) {
 	payload := protocol.WifiConfigPayload{
 		SSID:       cfg.SSID,
 		Pass:       cfg.Password,
-		ServerIP:   resolveServerIP(cfg.ServerIP),
+		ServerIP:   startup.ResolveServerIP(cfg.ServerIP),
 		ServerPort: cfg.ServerPort,
 		SSID2:      cfg.SSID2,
 		Pass2:      cfg.Password2,
@@ -6824,7 +5423,7 @@ func (a *App) broadcastWifiConfig() {
 	payload := protocol.WifiConfigPayload{
 		SSID:       cfg.SSID,
 		Pass:       cfg.Password,
-		ServerIP:   resolveServerIP(cfg.ServerIP),
+		ServerIP:   startup.ResolveServerIP(cfg.ServerIP),
 		ServerPort: cfg.ServerPort,
 		SSID2:      cfg.SSID2,
 		Pass2:      cfg.Password2,
@@ -7559,1089 +6158,6 @@ func (a *App) buildAwardedTeamsMessage() *protocol.Message {
 func (a *App) broadcastAwardedTeams() {
 	// v11.2 (#244/#251): the admin also receives it (greys out already-credited teams).
 	a.wsHub.BroadcastToTypes(a.buildAwardedTeamsMessage(), server.ClientTypeAnim, server.ClientTypeAdmin)
-}
-
-// startupPage describes one browser tab opened automatically at server startup.
-type startupPage struct {
-	path string
-	name string
-}
-
-// startupPages returns the ordered list of pages to open automatically at
-// server startup. Pure function (no side effect, no process spawned) so it
-// can be unit-tested independently of displayAndOpenURLs, which is the one
-// that actually launches browser processes via openBrowser.
-//
-// Order: /admin (régie), /anim (animateur), /tv (affichage TV),
-// / (accueil joueurs), then /logs (logs (debug)) if debug is enabled.
-func startupPages(debug bool) []startupPage {
-	pages := []startupPage{
-		{"/admin", "régie"},
-		{"/anim", "animateur"},
-		{"/tv", "affichage TV"},
-		{"/", "accueil joueurs"},
-	}
-
-	if debug {
-		pages = append(pages, startupPage{"/logs", "logs (debug)"})
-	}
-
-	return pages
-}
-
-// displayAndOpenURLs shows all accessible URLs and opens the browser
-func displayAndOpenURLs(httpPort int, autoOpen bool, debug bool) {
-	log.Println("")
-	log.Println("â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—")
-	log.Println("â•‘                    WEB INTERFACE URLs                      â•‘")
-	log.Println("â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£")
-
-	var primaryURL string
-
-	// Get all local IPs
-	interfaces, err := getNetworkInterfaces()
-	if err == nil {
-		for _, iface := range interfaces {
-			url := fmt.Sprintf("http://%s:%d", iface.IP, httpPort)
-			if httpPort == 80 {
-				url = fmt.Sprintf("http://%s", iface.IP)
-			}
-			log.Printf("â•‘  %-56s  â•‘", fmt.Sprintf("%s (%s)", url, iface.Name))
-
-			// Use first non-virtual interface as primary
-			// (same virtual-interface list as the network alert — server.IsVirtualInterfaceName, #267)
-			if primaryURL == "" && !server.IsVirtualInterfaceName(iface.Name) {
-				primaryURL = url
-			}
-		}
-	}
-
-	// Localhost
-	localhostURL := fmt.Sprintf("http://localhost:%d", httpPort)
-	if httpPort == 80 {
-		localhostURL = "http://localhost"
-	}
-	log.Printf("â•‘  %-56s  â•‘", localhostURL+" (localhost)")
-
-	log.Println("â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•")
-	log.Println("")
-
-	// Use localhost if no primary found
-	if primaryURL == "" {
-		primaryURL = localhostURL
-	}
-
-	// Only auto-open if enabled in config
-	if !autoOpen {
-		log.Println("Auto-open browsers disabled in config")
-		return
-	}
-
-	// Open browsers to /admin, /anim, /tv and / pages with small delays
-	pagesToOpen := startupPages(debug)
-
-	for i, page := range pagesToOpen {
-		url := primaryURL + page.path
-		log.Printf("Opening browser: %s (%s)", url, page.name)
-		openBrowser(url)
-		// Small delay between browser opens to avoid resource issues
-		if i < len(pagesToOpen)-1 {
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
-}
-
-// NetworkInterface represents a network interface with IP
-type NetworkInterface struct {
-	Name string
-	IP   string
-}
-
-// getNetworkInterfaces returns all active network interfaces with IPv4 addresses
-func getNetworkInterfaces() ([]NetworkInterface, error) {
-	var result []NetworkInterface
-
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, iface := range interfaces {
-		// Skip down and loopback interfaces
-		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			}
-
-			// Only IPv4
-			if ip == nil || ip.To4() == nil {
-				continue
-			}
-
-			result = append(result, NetworkInterface{
-				Name: iface.Name,
-				IP:   ip.String(),
-			})
-		}
-	}
-
-	return result, nil
-}
-
-// openBrowser opens the default browser with the given URL
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	default: // Linux
-		cmd = exec.Command("xdg-open", url)
-	}
-
-	if err := cmd.Start(); err != nil {
-		server.LogWarn(game.LogComponentApp, "Failed to open browser: %v", err)
-	}
-}
-
-// initTestData creates test teams and bumpers for development
-func (a *App) initTestData() {
-	server.LogInfo(game.LogComponentApp, "Initializing test data...")
-
-	// 6 teams with different colors (scores will be calculated from bumpers)
-	teams := map[string]*game.Team{
-		"Les Rouges": {
-			Name:  "Les Rouges",
-			Color: []int{239, 68, 68}, // Red
-			Score: 0,
-		},
-		"Les Bleus": {
-			Name:  "Les Bleus",
-			Color: []int{59, 130, 246}, // Blue
-			Score: 0,
-		},
-		"Les Verts": {
-			Name:  "Les Verts",
-			Color: []int{34, 197, 94}, // Green
-			Score: 0,
-		},
-		"Les Jaunes": {
-			Name:  "Les Jaunes",
-			Color: []int{234, 179, 8}, // Yellow
-			Score: 0,
-		},
-		"Les Violets": {
-			Name:  "Les Violets",
-			Color: []int{168, 85, 247}, // Purple
-			Score: 0,
-		},
-		"Les Oranges": {
-			Name:  "Les Oranges",
-			Color: []int{249, 115, 22}, // Orange
-			Score: 0,
-		},
-	}
-
-	// Fake bumpers (2-3 per team) with answer colors for QCM mode
-	bumpers := map[string]*game.Bumper{
-		"AA:BB:CC:DD:EE:01": {
-			Name:        "Alice",
-			Team:        "Les Rouges",
-			Score:       8,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorRed,
-		},
-		"AA:BB:CC:DD:EE:02": {
-			Name:        "Bob",
-			Team:        "Les Rouges",
-			Score:       7,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorGreen,
-		},
-		"AA:BB:CC:DD:EE:03": {
-			Name:        "Charlie",
-			Team:        "Les Bleus",
-			Score:       6,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorYellow,
-		},
-		"AA:BB:CC:DD:EE:04": {
-			Name:        "Diana",
-			Team:        "Les Bleus",
-			Score:       6,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorBlue,
-		},
-		"AA:BB:CC:DD:EE:05": {
-			Name:        "Ethan",
-			Team:        "Les Verts",
-			Score:       5,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorRed,
-		},
-		"AA:BB:CC:DD:EE:06": {
-			Name:        "Fiona",
-			Team:        "Les Verts",
-			Score:       3,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorGreen,
-		},
-		"AA:BB:CC:DD:EE:07": {
-			Name:        "George",
-			Team:        "Les Jaunes",
-			Score:       7,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorYellow,
-		},
-		"AA:BB:CC:DD:EE:08": {
-			Name:        "Hannah",
-			Team:        "Les Jaunes",
-			Score:       3,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorBlue,
-		},
-		"AA:BB:CC:DD:EE:09": {
-			Name:    "Ivan",
-			Team:    "Les Violets",
-			Score:   3,
-			Version: "1.0.0",
-		},
-		"AA:BB:CC:DD:EE:10": {
-			Name:    "Julia",
-			Team:    "Les Violets",
-			Score:   2,
-			Version: "1.0.0",
-		},
-		"AA:BB:CC:DD:EE:11": {
-			Name:        "Kevin",
-			Team:        "Les Oranges",
-			Score:       4,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorYellow, // C
-		},
-		"AA:BB:CC:DD:EE:12": {
-			Name:        "Laura",
-			Team:        "Les Oranges",
-			Score:       5,
-			Version:     "1.0.0",
-			AnswerColor: game.AnswerColorRed, // A
-		},
-	}
-
-	a.engine.SetTeams(teams)
-	a.engine.SetBumpers(bumpers)
-	a.engine.RecalculateAllTeamScores()
-
-	// Create test questions with different categories
-	a.createTestQuestions()
-
-	server.LogInfo(game.LogComponentApp, "Test data initialized: %d teams, %d bumpers", len(teams), len(bumpers))
-}
-
-// createTestQuestions creates test questions with various categories
-func (a *App) createTestQuestions() {
-	questionsDir := a.config.Storage.QuestionsDir
-	if questionsDir == "" {
-		questionsDir = "./data/files/questions"
-	}
-
-	// Ensure questions directory exists
-	os.MkdirAll(questionsDir, 0755)
-
-	// Check if questions already exist
-	entries, _ := os.ReadDir(questionsDir)
-	if len(entries) > 0 {
-		server.LogInfo(game.LogComponentApp, "Questions already exist (%d), skipping test questions", len(entries))
-		return
-	}
-
-	server.LogInfo(game.LogComponentApp, "Creating test questions with categories...")
-
-	testQuestions := []map[string]interface{}{
-		// GEOGRAPHY
-		{
-			"ID":            "1",
-			"QUESTION":      "Quelle est la capitale de l'Australie?",
-			"ANSWER":        "Canberra",
-			"POINTS":        "10",
-			"TIME":          "30",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "GEOGRAPHY",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         0,
-		},
-		// ENTERTAINMENT - QCM
-		{
-			"ID":       "2",
-			"QUESTION": "Quel acteur joue Iron Man dans les films Marvel?",
-			"ANSWER":   "Robert Downey Jr.",
-			"POINTS":   "10",
-			"TIME":     "20",
-			"TYPE":     "QCM",
-			"CATEGORY": "ENTERTAINMENT",
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "Chris Evans",
-				"GREEN":  "Robert Downey Jr.",
-				"YELLOW": "Chris Hemsworth",
-				"BLUE":   "Mark Ruffalo",
-			},
-			"QCM_CORRECT":   "GREEN",
-			"POINTS_TARGET": "TEAM",
-			"ORDER":         1,
-		},
-		// HISTORY
-		{
-			"ID":            "3",
-			"QUESTION":      "En quelle annee a eu lieu la Revolution francaise?",
-			"ANSWER":        "1789",
-			"POINTS":        "10",
-			"TIME":          "30",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "HISTORY",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         2,
-		},
-		// ARTS - QCM
-		{
-			"ID":       "4",
-			"QUESTION": "Qui a peint la Joconde?",
-			"ANSWER":   "Leonard de Vinci",
-			"POINTS":   "10",
-			"TIME":     "20",
-			"TYPE":     "QCM",
-			"CATEGORY": "ARTS",
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "Michel-Ange",
-				"GREEN":  "Leonard de Vinci",
-				"YELLOW": "Raphael",
-				"BLUE":   "Botticelli",
-			},
-			"QCM_CORRECT":   "GREEN",
-			"POINTS_TARGET": "TEAM",
-			"ORDER":         3,
-		},
-		// SCIENCE
-		{
-			"ID":            "5",
-			"QUESTION":      "Quel est le symbole chimique de l'or?",
-			"ANSWER":        "Au",
-			"POINTS":        "10",
-			"TIME":          "30",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "SCIENCE",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         4,
-		},
-		// SPORTS - QCM
-		{
-			"ID":       "6",
-			"QUESTION": "Dans quel sport utilise-t-on un volant?",
-			"ANSWER":   "Badminton",
-			"POINTS":   "10",
-			"TIME":     "20",
-			"TYPE":     "QCM",
-			"CATEGORY": "SPORTS",
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "Tennis",
-				"GREEN":  "Badminton",
-				"YELLOW": "Squash",
-				"BLUE":   "Ping-pong",
-			},
-			"QCM_CORRECT":   "GREEN",
-			"POINTS_TARGET": "TEAM",
-			"ORDER":         5,
-		},
-		// FOOD
-		{
-			"ID":            "7",
-			"QUESTION":      "De quel pays vient le sushi?",
-			"ANSWER":        "Japon",
-			"POINTS":        "10",
-			"TIME":          "30",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "FOOD",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         6,
-		},
-		// ANIMALS - QCM
-		{
-			"ID":       "8",
-			"QUESTION": "Quel est le plus grand animal terrestre?",
-			"ANSWER":   "Elephant d'Afrique",
-			"POINTS":   "10",
-			"TIME":     "20",
-			"TYPE":     "QCM",
-			"CATEGORY": "ANIMALS",
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "Girafe",
-				"GREEN":  "Elephant d'Afrique",
-				"YELLOW": "Rhinoceros",
-				"BLUE":   "Hippopotame",
-			},
-			"QCM_CORRECT":   "GREEN",
-			"POINTS_TARGET": "TEAM",
-			"ORDER":         7,
-		},
-	}
-
-	for _, q := range testQuestions {
-		id := q["ID"].(string)
-		questionDir := filepath.Join(questionsDir, id)
-		os.MkdirAll(questionDir, 0755)
-
-		data, err := json.MarshalIndent(q, "", "  ")
-		if err != nil {
-			server.LogError(game.LogComponentApp, "Failed to marshal question %s: %v", id, err)
-			continue
-		}
-
-		questionFile := filepath.Join(questionDir, "question.json")
-		if err := os.WriteFile(questionFile, data, 0644); err != nil {
-			server.LogError(game.LogComponentApp, "Failed to write question %s: %v", id, err)
-			continue
-		}
-	}
-
-	server.LogInfo(game.LogComponentApp, "Created %d test questions", len(testQuestions))
-}
-
-// loadDemoData creates comprehensive demo data for showcasing all features
-func (a *App) loadDemoData() {
-	server.LogInfo(game.LogComponentApp, "Loading demo data...")
-
-	// Clear existing data first
-	a.engine.ClearHistory()
-
-	// 6 teams with distinct colors and pre-filled TeamPoints
-	teams := map[string]*game.Team{
-		"Les Rouges": {
-			Name:       "Les Rouges",
-			Color:      []int{239, 68, 68}, // Red
-			Score:      0,
-			TeamPoints: 30, // Pre-filled for podium display
-		},
-		"Les Bleus": {
-			Name:       "Les Bleus",
-			Color:      []int{59, 130, 246}, // Blue
-			Score:      0,
-			TeamPoints: 45,
-		},
-		"Les Verts": {
-			Name:       "Les Verts",
-			Color:      []int{34, 197, 94}, // Green
-			Score:      0,
-			TeamPoints: 25,
-		},
-		"Les Jaunes": {
-			Name:       "Les Jaunes",
-			Color:      []int{234, 179, 8}, // Yellow
-			Score:      0,
-			TeamPoints: 35,
-		},
-		"Les Violets": {
-			Name:       "Les Violets",
-			Color:      []int{168, 85, 247}, // Purple
-			Score:      0,
-			TeamPoints: 20,
-		},
-		"Les Oranges": {
-			Name:       "Les Oranges",
-			Color:      []int{249, 115, 22}, // Orange
-			Score:      0,
-			TeamPoints: 40,
-		},
-	}
-
-	// Players: 4 per team with all 4 QCM answer colors (RED=A, GREEN=B, YELLOW=C, BLUE=D)
-	bumpers := map[string]*game.Bumper{
-		// Les Rouges - 4 joueurs
-		"DEMO:AA:BB:CC:01": {Name: "Alice", Team: "Les Rouges", Score: 12, Version: "DEMO", AnswerColor: game.AnswerColorRed},
-		"DEMO:AA:BB:CC:02": {Name: "Antoine", Team: "Les Rouges", Score: 8, Version: "DEMO", AnswerColor: game.AnswerColorGreen},
-		"DEMO:AA:BB:CC:03": {Name: "Amelie", Team: "Les Rouges", Score: 6, Version: "DEMO", AnswerColor: game.AnswerColorYellow},
-		"DEMO:AA:BB:CC:04": {Name: "Arthur", Team: "Les Rouges", Score: 4, Version: "DEMO", AnswerColor: game.AnswerColorBlue},
-		// Les Bleus - 4 joueurs
-		"DEMO:AA:BB:CC:05": {Name: "Bruno", Team: "Les Bleus", Score: 15, Version: "DEMO", AnswerColor: game.AnswerColorRed},
-		"DEMO:AA:BB:CC:06": {Name: "Brigitte", Team: "Les Bleus", Score: 10, Version: "DEMO", AnswerColor: game.AnswerColorGreen},
-		"DEMO:AA:BB:CC:07": {Name: "Baptiste", Team: "Les Bleus", Score: 7, Version: "DEMO", AnswerColor: game.AnswerColorYellow},
-		"DEMO:AA:BB:CC:08": {Name: "Berenice", Team: "Les Bleus", Score: 5, Version: "DEMO", AnswerColor: game.AnswerColorBlue},
-		// Les Verts - 4 joueurs
-		"DEMO:AA:BB:CC:09": {Name: "Clara", Team: "Les Verts", Score: 9, Version: "DEMO", AnswerColor: game.AnswerColorRed},
-		"DEMO:AA:BB:CC:10": {Name: "Cedric", Team: "Les Verts", Score: 7, Version: "DEMO", AnswerColor: game.AnswerColorGreen},
-		"DEMO:AA:BB:CC:11": {Name: "Camille", Team: "Les Verts", Score: 5, Version: "DEMO", AnswerColor: game.AnswerColorYellow},
-		"DEMO:AA:BB:CC:12": {Name: "Cyril", Team: "Les Verts", Score: 3, Version: "DEMO", AnswerColor: game.AnswerColorBlue},
-		// Les Jaunes - 4 joueurs
-		"DEMO:AA:BB:CC:13": {Name: "David", Team: "Les Jaunes", Score: 11, Version: "DEMO", AnswerColor: game.AnswerColorRed},
-		"DEMO:AA:BB:CC:14": {Name: "Delphine", Team: "Les Jaunes", Score: 9, Version: "DEMO", AnswerColor: game.AnswerColorGreen},
-		"DEMO:AA:BB:CC:15": {Name: "Dylan", Team: "Les Jaunes", Score: 6, Version: "DEMO", AnswerColor: game.AnswerColorYellow},
-		"DEMO:AA:BB:CC:16": {Name: "Diane", Team: "Les Jaunes", Score: 4, Version: "DEMO", AnswerColor: game.AnswerColorBlue},
-		// Les Violets - 4 joueurs
-		"DEMO:AA:BB:CC:17": {Name: "Emma", Team: "Les Violets", Score: 8, Version: "DEMO", AnswerColor: game.AnswerColorRed},
-		"DEMO:AA:BB:CC:18": {Name: "Ethan", Team: "Les Violets", Score: 6, Version: "DEMO", AnswerColor: game.AnswerColorGreen},
-		"DEMO:AA:BB:CC:19": {Name: "Eva", Team: "Les Violets", Score: 4, Version: "DEMO", AnswerColor: game.AnswerColorYellow},
-		"DEMO:AA:BB:CC:20": {Name: "Eliot", Team: "Les Violets", Score: 2, Version: "DEMO", AnswerColor: game.AnswerColorBlue},
-		// Les Oranges - 4 joueurs
-		"DEMO:AA:BB:CC:21": {Name: "Felix", Team: "Les Oranges", Score: 13, Version: "DEMO", AnswerColor: game.AnswerColorRed},
-		"DEMO:AA:BB:CC:22": {Name: "Fanny", Team: "Les Oranges", Score: 10, Version: "DEMO", AnswerColor: game.AnswerColorGreen},
-		"DEMO:AA:BB:CC:23": {Name: "Florian", Team: "Les Oranges", Score: 7, Version: "DEMO", AnswerColor: game.AnswerColorYellow},
-		"DEMO:AA:BB:CC:24": {Name: "Flore", Team: "Les Oranges", Score: 5, Version: "DEMO", AnswerColor: game.AnswerColorBlue},
-	}
-
-	a.engine.SetTeams(teams)
-	a.engine.SetBumpers(bumpers)
-	a.engine.RecalculateAllTeamScores()
-
-	// Create demo questions
-	a.createDemoQuestions()
-
-	// Create demo backgrounds with varied opacities
-	a.createDemoBackgrounds()
-
-	// Create demo history events for PALMARES
-	a.createDemoHistory()
-
-	server.LogInfo(game.LogComponentApp, "Demo data loaded: %d teams, %d players", len(teams), len(bumpers))
-}
-
-// createDemoQuestions creates diverse demo questions
-func (a *App) createDemoQuestions() {
-	questionsDir := a.config.Storage.QuestionsDir
-	if questionsDir == "" {
-		questionsDir = "./data/files/questions"
-	}
-
-	// Clear existing questions
-	os.RemoveAll(questionsDir)
-	os.MkdirAll(questionsDir, 0755)
-
-	demoQuestions := []map[string]interface{}{
-		// GEOGRAPHY - QCM with hints + image
-		{
-			"ID":                   "demo1",
-			"QUESTION":             "Quelle est la capitale de l'Australie?",
-			"ANSWER":               "Canberra",
-			"POINTS":               "10",
-			"TIME":                 "20",
-			"TYPE":                 "QCM",
-			"CATEGORY":             "GEOGRAPHY",
-			"POINTS_TARGET":        "TEAM",
-			"QCM_HINTS_ENABLED":    true,
-			"QCM_HINT_THRESHOLD_1": 0.25,
-			"QCM_HINT_THRESHOLD_2": 0.125,
-			"QCM_PENALTY_1":        0.67,
-			"QCM_PENALTY_2":        0.33,
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "Sydney",
-				"GREEN":  "Canberra",
-				"YELLOW": "Melbourne",
-				"BLUE":   "Brisbane",
-			},
-			"QCM_CORRECT": "GREEN",
-			"ORDER":       0,
-			"MEDIA":       "/question/demo1/media.jpg",
-		},
-		// ENTERTAINMENT - Normal question
-		{
-			"ID":            "demo2",
-			"QUESTION":      "Quel acteur joue Iron Man dans les films Marvel?",
-			"ANSWER":        "Robert Downey Jr.",
-			"POINTS":        "10",
-			"TIME":          "30",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "ENTERTAINMENT",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         1,
-		},
-		// HISTORY - QCM with hints
-		{
-			"ID":                "demo3",
-			"QUESTION":          "En quelle annee a debute la Premiere Guerre mondiale?",
-			"ANSWER":            "1914",
-			"POINTS":            "15",
-			"TIME":              "25",
-			"TYPE":              "QCM",
-			"CATEGORY":          "HISTORY",
-			"POINTS_TARGET":     "TEAM",
-			"QCM_HINTS_ENABLED": true,
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "1912",
-				"GREEN":  "1914",
-				"YELLOW": "1916",
-				"BLUE":   "1918",
-			},
-			"QCM_CORRECT": "GREEN",
-			"ORDER":       2,
-		},
-		// SCIENCE - Normal question + images
-		{
-			"ID":            "demo4",
-			"QUESTION":      "Quel est le symbole chimique de l'or?",
-			"ANSWER":        "Au",
-			"POINTS":        "10",
-			"TIME":          "20",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "SCIENCE",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         3,
-			"MEDIA":         "/question/demo4/media.jpg",
-			"MEDIA_ANSWER":  "/question/demo4/media_answer.jpg",
-		},
-		// SPORTS - QCM
-		{
-			"ID":       "demo5",
-			"QUESTION": "Combien de joueurs composent une equipe de football?",
-			"ANSWER":   "11",
-			"POINTS":   "10",
-			"TIME":     "15",
-			"TYPE":     "QCM",
-			"CATEGORY": "SPORTS",
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "9",
-				"GREEN":  "11",
-				"YELLOW": "13",
-				"BLUE":   "15",
-			},
-			"QCM_CORRECT":   "GREEN",
-			"POINTS_TARGET": "TEAM",
-			"ORDER":         4,
-		},
-		// ARTS - Normal question
-		{
-			"ID":            "demo6",
-			"QUESTION":      "Qui a peint la Joconde?",
-			"ANSWER":        "Leonard de Vinci",
-			"POINTS":        "10",
-			"TIME":          "30",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "ARTS",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         5,
-		},
-		// FOOD - QCM with hints + images
-		{
-			"ID":                "demo7",
-			"QUESTION":          "De quel pays vient la pizza?",
-			"ANSWER":            "Italie",
-			"POINTS":            "10",
-			"TIME":              "20",
-			"TYPE":              "QCM",
-			"CATEGORY":          "FOOD",
-			"POINTS_TARGET":     "TEAM",
-			"QCM_HINTS_ENABLED": true,
-			"QCM_ANSWERS": map[string]string{
-				"RED":    "France",
-				"GREEN":  "Italie",
-				"YELLOW": "Espagne",
-				"BLUE":   "Grece",
-			},
-			"QCM_CORRECT":  "GREEN",
-			"ORDER":        6,
-			"MEDIA":        "/question/demo7/media.jpg",
-			"MEDIA_ANSWER": "/question/demo7/media_answer.jpg",
-		},
-		// ANIMALS - Normal
-		{
-			"ID":            "demo8",
-			"QUESTION":      "Quel est le plus grand animal terrestre?",
-			"ANSWER":        "L'elephant d'Afrique",
-			"POINTS":        "10",
-			"TIME":          "30",
-			"TYPE":          "SPEEDY",
-			"CATEGORY":      "ANIMALS",
-			"POINTS_TARGET": "PLAYER",
-			"ORDER":         7,
-		},
-		// GEOGRAPHY - MEMORY game
-		{
-			"ID":            "demo9",
-			"QUESTION":      "Associez les pays a leurs capitales",
-			"ANSWER":        "",
-			"POINTS":        "0",
-			"TIME":          "90",
-			"TYPE":          "MEMORY",
-			"CATEGORY":      "GEOGRAPHY",
-			"POINTS_TARGET": "TEAM",
-			"MEMORY_PAIRS": []map[string]interface{}{
-				{
-					"ID":    1,
-					"CARD1": map[string]interface{}{"TEXT": "France", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Paris", "IS_IMAGE": false},
-				},
-				{
-					"ID":    2,
-					"CARD1": map[string]interface{}{"TEXT": "Espagne", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Madrid", "IS_IMAGE": false},
-				},
-				{
-					"ID":    3,
-					"CARD1": map[string]interface{}{"TEXT": "Allemagne", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Berlin", "IS_IMAGE": false},
-				},
-				{
-					"ID":    4,
-					"CARD1": map[string]interface{}{"TEXT": "Italie", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Rome", "IS_IMAGE": false},
-				},
-			},
-			"MEMORY_CONFIG": map[string]interface{}{
-				"FLIP_DELAY":           3.0,
-				"POINTS_PER_PAIR":      10,
-				"ERROR_PENALTY":        0,
-				"COMPLETION_BONUS":     20,
-				"USE_TIMER":            true,
-				"MEMORIZE_TIME":        5,
-				"SHOW_DURING_MEMORIZE": true,
-				"REVEAL_DELAY":         0.5,
-			},
-			"ORDER": 8,
-		},
-		// ENTERTAINMENT - MEMORY game
-		{
-			"ID":            "demo10",
-			"QUESTION":      "Associez les superheros a leurs pouvoirs",
-			"ANSWER":        "",
-			"POINTS":        "0",
-			"TIME":          "120",
-			"TYPE":          "MEMORY",
-			"CATEGORY":      "ENTERTAINMENT",
-			"POINTS_TARGET": "TEAM",
-			"MEMORY_PAIRS": []map[string]interface{}{
-				{
-					"ID":    1,
-					"CARD1": map[string]interface{}{"TEXT": "Superman", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Vol", "IS_IMAGE": false},
-				},
-				{
-					"ID":    2,
-					"CARD1": map[string]interface{}{"TEXT": "Spider-Man", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Toiles", "IS_IMAGE": false},
-				},
-				{
-					"ID":    3,
-					"CARD1": map[string]interface{}{"TEXT": "Flash", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Vitesse", "IS_IMAGE": false},
-				},
-				{
-					"ID":    4,
-					"CARD1": map[string]interface{}{"TEXT": "Aquaman", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Eau", "IS_IMAGE": false},
-				},
-				{
-					"ID":    5,
-					"CARD1": map[string]interface{}{"TEXT": "Hulk", "IS_IMAGE": false},
-					"CARD2": map[string]interface{}{"TEXT": "Force", "IS_IMAGE": false},
-				},
-			},
-			"MEMORY_CONFIG": map[string]interface{}{
-				"FLIP_DELAY":           2.0,
-				"POINTS_PER_PAIR":      15,
-				"ERROR_PENALTY":        5,
-				"COMPLETION_BONUS":     30,
-				"USE_TIMER":            true,
-				"MEMORIZE_TIME":        7,
-				"SHOW_DURING_MEMORIZE": true,
-				"REVEAL_DELAY":         0.5,
-			},
-			"ORDER": 9,
-		},
-	}
-
-	for _, q := range demoQuestions {
-		id := q["ID"].(string)
-		questionDir := filepath.Join(questionsDir, id)
-		os.MkdirAll(questionDir, 0755)
-
-		data, err := json.MarshalIndent(q, "", "  ")
-		if err != nil {
-			server.LogError(game.LogComponentApp, "Failed to marshal demo question %s: %v", id, err)
-			continue
-		}
-
-		questionFile := filepath.Join(questionDir, "question.json")
-		if err := os.WriteFile(questionFile, data, 0644); err != nil {
-			server.LogError(game.LogComponentApp, "Failed to write demo question %s: %v", id, err)
-			continue
-		}
-	}
-
-	// Extract demo question images from embedded assets
-	demoImages := []struct {
-		questionID string
-		assetName  string
-		destName   string
-	}{
-		{"demo1", "demo1_australia.jpg", "media.jpg"},
-		{"demo4", "demo4_gold_miner.jpg", "media.jpg"},
-		{"demo4", "demo4_periodic_table.jpg", "media_answer.jpg"},
-		{"demo7", "demo7_pizza.jpg", "media.jpg"},
-		{"demo7", "demo7_italy.jpg", "media_answer.jpg"},
-	}
-
-	for _, img := range demoImages {
-		questionDir := filepath.Join(questionsDir, img.questionID)
-		destPath := filepath.Join(questionDir, img.destName)
-
-		data, err := assets.DemoAssets.ReadFile("demo/" + img.assetName)
-		if err != nil {
-			server.LogError(game.LogComponentApp, "Failed to read embedded %s: %v", img.assetName, err)
-			continue
-		}
-		if err := os.WriteFile(destPath, data, 0644); err != nil {
-			server.LogError(game.LogComponentApp, "Failed to write %s: %v", destPath, err)
-			continue
-		}
-		server.LogDebug(game.LogComponentApp, "Extracted demo image: %s -> %s", img.assetName, destPath)
-	}
-
-	server.LogInfo(game.LogComponentApp, "Created %d demo questions with images", len(demoQuestions))
-}
-
-// createDemoBackgrounds creates demo backgrounds with varied opacities
-func (a *App) createDemoBackgrounds() {
-	filesDir := a.config.Storage.FilesDir
-	if filesDir == "" {
-		filesDir = "./data/files"
-	}
-	bgDir := filepath.Join(filesDir, "backgrounds")
-	os.MkdirAll(bgDir, 0755)
-
-	// Demo backgrounds: extract from embedded assets
-	demoImages := []struct {
-		filename string
-		duration int
-		opacity  float64
-	}{
-		{"demo_bg_1.jpg", 8, 100},
-		{"demo_bg_2.jpg", 12, 80},
-		{"demo_bg_3.jpg", 10, 60},
-	}
-
-	var backgrounds []game.Background
-	for _, img := range demoImages {
-		destPath := filepath.Join(bgDir, img.filename)
-		// Extract from embedded assets if not exists
-		if _, err := os.Stat(destPath); os.IsNotExist(err) {
-			server.LogDebug(game.LogComponentApp, "Extracting demo background: %s", img.filename)
-			data, err := assets.DemoAssets.ReadFile("demo/" + img.filename)
-			if err != nil {
-				server.LogError(game.LogComponentApp, "Failed to read embedded %s: %v", img.filename, err)
-				continue
-			}
-			if err := os.WriteFile(destPath, data, 0644); err != nil {
-				server.LogError(game.LogComponentApp, "Failed to write %s: %v", img.filename, err)
-				continue
-			}
-		}
-		backgrounds = append(backgrounds, game.Background{
-			Path:     "/files/backgrounds/" + img.filename,
-			Duration: img.duration,
-			Opacity:  img.opacity,
-		})
-	}
-
-	a.engine.SetBackgrounds(backgrounds)
-	a.saveBackgroundsConfig()
-	server.LogInfo(game.LogComponentApp, "Created %d demo backgrounds", len(backgrounds))
-}
-
-// createDemoHistory creates demo history events for PALMARES view
-func (a *App) createDemoHistory() {
-	baseTime := time.Now().Add(-1 * time.Hour).UnixMicro()
-
-	// Create events for different categories and teams
-	events := []game.GameEvent{
-		// GEOGRAPHY events
-		{
-			Timestamp:        baseTime,
-			QuestionID:       "demo1",
-			QuestionText:     "Quelle est la capitale de l'Australie?",
-			QuestionCategory: "GEOGRAPHY",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "TEAM",
-			TeamName:         "Les Bleus",
-			TeamColor:        []int{59, 130, 246},
-			Points:           10,
-		},
-		{
-			Timestamp:        baseTime + 60000000,
-			QuestionID:       "demo9",
-			QuestionText:     "Associez les pays a leurs capitales",
-			QuestionCategory: "GEOGRAPHY",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "TEAM",
-			TeamName:         "Les Oranges",
-			TeamColor:        []int{249, 115, 22},
-			Points:           40,
-		},
-		// ENTERTAINMENT events
-		{
-			Timestamp:        baseTime + 120000000,
-			QuestionID:       "demo2",
-			QuestionText:     "Quel acteur joue Iron Man?",
-			QuestionCategory: "ENTERTAINMENT",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "PLAYER",
-			WinnerID:         "DEMO:AA:BB:CC:05",
-			PlayerName:       "Bruno",
-			TeamName:         "Les Bleus",
-			TeamColor:        []int{59, 130, 246},
-			Points:           10,
-		},
-		{
-			Timestamp:        baseTime + 180000000,
-			QuestionID:       "demo10",
-			QuestionText:     "Associez les superheros a leurs pouvoirs",
-			QuestionCategory: "ENTERTAINMENT",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "TEAM",
-			TeamName:         "Les Rouges",
-			TeamColor:        []int{239, 68, 68},
-			Points:           60,
-		},
-		// HISTORY events
-		{
-			Timestamp:        baseTime + 240000000,
-			QuestionID:       "demo3",
-			QuestionText:     "Debut de la Premiere Guerre mondiale?",
-			QuestionCategory: "HISTORY",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "TEAM",
-			TeamName:         "Les Verts",
-			TeamColor:        []int{34, 197, 94},
-			Points:           15,
-		},
-		// SCIENCE events
-		{
-			Timestamp:        baseTime + 300000000,
-			QuestionID:       "demo4",
-			QuestionText:     "Symbole chimique de l'or?",
-			QuestionCategory: "SCIENCE",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "PLAYER",
-			WinnerID:         "DEMO:AA:BB:CC:13",
-			PlayerName:       "David",
-			TeamName:         "Les Jaunes",
-			TeamColor:        []int{234, 179, 8},
-			Points:           10,
-		},
-		// SPORTS events
-		{
-			Timestamp:        baseTime + 360000000,
-			QuestionID:       "demo5",
-			QuestionText:     "Joueurs dans une equipe de football?",
-			QuestionCategory: "SPORTS",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "TEAM",
-			TeamName:         "Les Violets",
-			TeamColor:        []int{168, 85, 247},
-			Points:           10,
-		},
-		// ARTS events
-		{
-			Timestamp:        baseTime + 420000000,
-			QuestionID:       "demo6",
-			QuestionText:     "Qui a peint la Joconde?",
-			QuestionCategory: "ARTS",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "PLAYER",
-			WinnerID:         "DEMO:AA:BB:CC:21",
-			PlayerName:       "Felix",
-			TeamName:         "Les Oranges",
-			TeamColor:        []int{249, 115, 22},
-			Points:           10,
-		},
-		// FOOD events
-		{
-			Timestamp:        baseTime + 480000000,
-			QuestionID:       "demo7",
-			QuestionText:     "De quel pays vient la pizza?",
-			QuestionCategory: "FOOD",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "TEAM",
-			TeamName:         "Les Jaunes",
-			TeamColor:        []int{234, 179, 8},
-			Points:           7,
-		},
-		// ANIMALS events
-		{
-			Timestamp:        baseTime + 540000000,
-			QuestionID:       "demo8",
-			QuestionText:     "Plus grand animal terrestre?",
-			QuestionCategory: "ANIMALS",
-			EventType:        "POINTS_AWARDED",
-			WinnerType:       "PLAYER",
-			WinnerID:         "DEMO:AA:BB:CC:01",
-			PlayerName:       "Alice",
-			TeamName:         "Les Rouges",
-			TeamColor:        []int{239, 68, 68},
-			Points:           10,
-		},
-	}
-
-	// Enrich each demo event with resolved category metadata (v5.7.9)
-	for i := range events {
-		catName, catImageURL, catColor := a.httpServer.ResolveCategoryMeta(events[i].QuestionCategory)
-		events[i].CategoryDisplayName = catName
-		events[i].CategoryImageURL = catImageURL
-		events[i].CategoryColor = catColor
-	}
-	for _, event := range events {
-		a.engine.AddGameEvent(event)
-	}
-
-	server.LogInfo(game.LogComponentApp, "Created %d demo history events", len(events))
-}
-
-// checkBonjourSupport checks if Bonjour/mDNS is available on the system
-func checkBonjourSupport() {
-	if runtime.GOOS != "windows" {
-		// On Linux/macOS, mDNS is usually available via avahi or built-in
-		log.Println("[mDNS] Running on", runtime.GOOS, "- mDNS should be available")
-		return
-	}
-
-	// On Windows, check if Bonjour service is running
-	log.Println("[mDNS] Checking Bonjour service status...")
-
-	// Query the Bonjour service using sc command
-	cmd := exec.Command("sc", "query", "Bonjour Service")
-	output, err := cmd.Output()
-	if err != nil {
-		// Service not found or error
-		log.Println("[mDNS] âš  Bonjour is NOT installed")
-		log.Println("[mDNS]   â†’ mDNS hostname resolution (buzzcontrol.local) will NOT work")
-		log.Println("[mDNS]   â†’ BuzzClick service discovery will still work")
-		log.Println("[mDNS]   â†’ To enable hostname resolution, install Bonjour:")
-		log.Println("[mDNS]     https://support.apple.com/kb/DL999")
-		return
-	}
-
-	// Check if service is running
-	outputStr := string(output)
-	if strings.Contains(outputStr, "RUNNING") {
-		log.Println("[mDNS] âœ“ Bonjour service is running")
-		log.Println("[mDNS]   â†’ mDNS hostname resolution (buzzcontrol.local) should work")
-	} else if strings.Contains(outputStr, "STOPPED") {
-		log.Println("[mDNS] âš  Bonjour service is installed but STOPPED")
-		log.Println("[mDNS]   â†’ Start the service: sc start \"Bonjour Service\"")
-	} else {
-		log.Println("[mDNS] âš  Bonjour service status unknown")
-		log.Printf("[mDNS]   â†’ Output: %s", strings.TrimSpace(outputStr))
-	}
 }
 
 // validFlipID reports whether id is a well-formed FLIP_ID: 1–64 characters of
