@@ -1,7 +1,6 @@
 package main
 
 import (
-	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/diag"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
@@ -11,20 +10,6 @@ import (
 )
 
 // Rounds (v11.2, #245) — App side. The logic lives in internal/rounds (#291, Phase B).
-
-// Engine and QuestionsDirPath make *App a rounds.Host.
-func (a *App) Engine() *game.Engine { return a.engine }
-
-// Config, ResolveCategoryMeta and SaveBackgroundsConfig make *App a demo.Host.
-func (a *App) Config() *config.Config { return a.config }
-
-func (a *App) ResolveCategoryMeta(key string) (name, imageURL, color string) {
-	return a.httpServer.ResolveCategoryMeta(key)
-}
-
-func (a *App) SaveBackgroundsConfig() { a.saveBackgroundsConfig() }
-
-func (a *App) QuestionsDirPath() string { return a.questionsDirPath() }
 
 func (a *App) questionsDirPath() string {
 	d := a.config.Storage.QuestionsDir
