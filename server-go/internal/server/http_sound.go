@@ -282,12 +282,9 @@ func (h *HTTPServer) handleAPISoundReplace(w http.ResponseWriter, r *http.Reques
 		writeSoundValidationError(w, err)
 		return
 	}
-	// #232 : un WAV converti est stocké en canonique (jamais l'original) ;
-	// un WAV déjà canonique garde ses octets d'origine (non-régression).
-	stored := raw
-	if result.Converted {
-		stored = audio.BuildCanonicalWAV(result.PCM)
-	}
+	// #232 : toujours stocké en WAV canonique neuf (plafond de stockage 2 Mio rétabli,
+	// chunks annexes retirés) ; octets identiques pour un fichier canonique propre.
+	stored := audio.BuildCanonicalWAV(result.PCM)
 
 	dir := h.soundsDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {

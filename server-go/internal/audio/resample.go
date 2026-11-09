@@ -208,7 +208,7 @@ func decodeChannels(f wavFormat, data []byte, frames int) [][]float32 {
 			switch {
 			case f.float:
 				v = math.Float32frombits(binary.LittleEndian.Uint32(data[p:]))
-				if v != v { // NaN
+				if v != v || math.IsInf(float64(v), 0) { // NaN / ±Inf
 					v = 0
 				}
 			case f.bits == 8:
