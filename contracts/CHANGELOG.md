@@ -22,6 +22,8 @@
   épuisé / maximum atteint, classique + carte) et non par `OnRafaleAnswer next == nil` (inexistant en fin de manche) ; le chrono
   de lot est le chrono global ⇒ `temps-ecoule` inchangé. Les autres questions D4 du handoff (`rafale-mauvaise` via `OnRafaleInvalid`,
   `memory-carte` puis `perdu`) sont laissées à la review LOT-3. `sound.md` §2.1.
+- **[CHANGED]** *(revue LOT-3, m1)* ordre à la dernière bonne réponse RAFALE : `rafale-bonne` **puis** `rafale-fin-lot` (corrige l'ordre
+  « fin-lot puis bonne » acté dans f0aef23b). `sound.md` §2.1.
 - **[NEW]** `MotionCard.SOUND / SOUND_TIMER_DELAYED / SOUND_LOOP` (champs communs de carte, préservés par `ID` côté
   serveur) ; multipart `motion_card_<id>_sound[_cleared|_timer_delayed|_loop]` ; son d'hôte MEMOTION au START, son de carte
   au retournement (remplace l'hôte, sans reprise — D9), son d'ENTRACTE (boucle) à `ENTRACTE_SET`. `sound.md` §14,
