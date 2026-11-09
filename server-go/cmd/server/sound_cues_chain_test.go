@@ -10,7 +10,7 @@
 // Câblage utilisé (proposé à dev-backend en coordination directe, contract
 // §6.2 délègue la spec du test-garde/chaîne à Lot C) :
 //
-//	app.soundEngine.Store(app.newSoundEngine(fake))  // symétrique à app.lightingWriter
+//	app.soundEngine.Store(app.newSoundEngine(fake))  // symétrique à app.ambCtl().LightingWriter
 //	go app.sound().Start(ctx)
 //	func (a *App) notifySound(c audio.Cue)           // point d'entrée unique, nil-safe
 //

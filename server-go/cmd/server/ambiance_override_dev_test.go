@@ -51,8 +51,8 @@ func TestDevLightingOverrideGeneral_PureLogic(t *testing.T) {
 	// Flash primes over OFF (contract §10.1.2: "un Flash demandé alors que
 	// la salle est sur OFF ne produirait rien de visible" otherwise).
 	app.setLightingMode(lightingModeOff)
-	app.lightingFlashOn.Store(true)
-	app.lightingFlashPhaseOn.Store(true)
+	app.ambCtl().LightingFlashOn.Store(true)
+	app.ambCtl().LightingFlashPhaseOn.Store(true)
 	if color, intensity := app.lightingOverrideGeneral(auto, 160); color != lightingFlashColor || intensity != lightingOnIntensity {
 		t.Fatalf("Flash ON-phase must win over OFF, got %v/%d", color, intensity)
 	}
@@ -60,7 +60,7 @@ func TestDevLightingOverrideGeneral_PureLogic(t *testing.T) {
 	// room's own current colour (ambianceThemeColor(), white here since
 	// newTestApp sets no httpServer/live question), at the SAME full
 	// intensity as the white phase.
-	app.lightingFlashPhaseOn.Store(false)
+	app.ambCtl().LightingFlashPhaseOn.Store(false)
 	white := [3]int{255, 255, 255}
 	if color, intensity := app.lightingOverrideGeneral(auto, 160); color != white || intensity != lightingOnIntensity {
 		t.Fatalf("Flash's other phase must show the room's own colour (white here) at full intensity, got %v/%d", color, intensity)
@@ -104,7 +104,7 @@ func TestDevLightingMode_ScopedToGeneralZoneOnly(t *testing.T) {
 func TestDevLightingMode_ReDerivesThroughTheRealWriter(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -132,7 +132,7 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	app := newTestApp(t)
 	// #291 Phase A : blink 100/100 ms (prod 400/400) sur CETTE App (driver factice, aucun pacing Hue).
 	const flashPhase = 100 * time.Millisecond
-	app.flashPhases = flashPhaseOverride{lightingOn: flashPhase, lightingOff: flashPhase}
+	app.ambCtl().FlashPhases = flashPhaseOverride{LightingOn: flashPhase, LightingOff: flashPhase}
 	// A real, NON-white theme so the 2026-09-08 white<->room-colour
 	// alternation is actually observable (a themeless room degenerates to
 	// white/white, an accepted but non-discriminating case — see
@@ -141,7 +141,7 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	app.engine.Ready("q1", &game.Question{ID: "q1", Type: game.QuestionTypeQCM, Category: game.CategoryGeography})
 	geography := [3]int{0x3b, 0x82, 0xf6}
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -331,7 +331,7 @@ func TestDevStop_FlashEngagedAtShutdown_FinalStateIsOff(t *testing.T) {
 
 	// #291 Phase A : blink 100/100 ms (prod 400/400) ; le pacing du VRAI driver Hue (250 ms) reste appliqué.
 	const flashPhase = 100 * time.Millisecond
-	app.flashPhases = flashPhaseOverride{lightingOn: flashPhase, lightingOff: flashPhase}
+	app.ambCtl().FlashPhases = flashPhaseOverride{LightingOn: flashPhase, LightingOff: flashPhase}
 	app.engine.SetPhase(game.PhaseStarted) // partie en cours, comme au vrai arrêt serveur
 	app.setLightingFlash(true)
 	devWaitPutCount(t, bridge, 1) // au moins un tick de blink a réellement écrit

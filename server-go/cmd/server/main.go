@@ -2,6 +2,7 @@ package main
 
 import (
 	"buzzcontrol/assets"
+	"buzzcontrol/internal/ambiance"
 	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/coalesce"
 	"buzzcontrol/internal/config"
@@ -10,7 +11,6 @@ import (
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/led"
 	"buzzcontrol/internal/lighting"
-	"buzzcontrol/internal/lighting/hue"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
 	"buzzcontrol/internal/startup"
@@ -55,13 +55,6 @@ type App struct {
 	dnsServer   *server.DNSServer
 	logger      *server.BroadcastLogger
 	ackManager  *server.AckManager // ACK tracking for priority buzzer messages (v3.8.0)
-	// lightingWriter is the ambiance-lighting writer (#205, contracts/
-	// lighting.md), read through a.ambiance(). nil when lighting is not
-	// configured: every a.ambiance().Notify*() call is then a no-op, so the 21
-	// event sites carry no guard (contract §4.3). Atomic because the first
-	// runtime enable (reconfigureAmbiance, HTTP goroutine) sets it while the
-	// event sites read it from other goroutines.
-	lightingWriter atomic.Pointer[lighting.Writer]
 	// soundEngine is the sound-bruitage engine (#227, contracts/sound.md),
 	// read through a.sound(). No real Output exists before #228, so it is
 	// always constructed disabled (see setupSound) — every notifySound()
@@ -82,58 +75,10 @@ type App struct {
 	// sound.md §12), read through a.countdownSound(). Built once in setup()
 	// (setupCountdownSound, cmd/server/countdown_sound.go).
 	csound *countdownSoundAdapter
-	// ambianceMu serialises setupAmbiance/reconfigureAmbiance: two config
-	// updates in flight must never leave hueDriver and the writer's driver
-	// pointing at different (or already closed) drivers.
-	ambianceMu sync.Mutex
-	// hueDriver is the live Hue driver behind a.ambiance() (nil when disabled),
-	// read by the /api/lighting/* handlers without I/O (#207).
-	hueDriver atomic.Pointer[hue.Driver]
-	// lightingModeState is the #208 manual override on the "general" zone
-	// (contract lighting.md §10.1): AUTO (zero value, contract §10.1.1 point
-	// 5) follows the game; ON/OFF force it indefinitely. Server-owned state,
-	// never the browser's, never persisted. See cmd/server/ambiance_override.go.
-	lightingModeState atomic.Value // holds lightingMode
-	// lightingFlashOn/-PhaseOn are the Flash bascule (§10.1.2): -On is
-	// whether Flash is engaged at all, -PhaseOn is the current blink phase
-	// (toggled by runLightingFlash). lightingFlashCancel stops that
-	// goroutine; guarded by ambianceMu, reused rather than a fourth mutex.
-	lightingFlashOn      atomic.Bool
-	lightingFlashPhaseOn atomic.Bool
-	lightingFlashCancel  context.CancelFunc
-	// flashPhases overrides the blink cadences (zero value = production
-	// constants lightingFlash*/scoreFlash*Phase). Per-App, set by tests before
-	// the blink goroutine starts (#291, Phase A) — never package-level: the
-	// Hue pacing floor (250 ms) concerns the REAL driver, untouched here.
-	flashPhases flashPhaseOverride
-	// scoreFlashTeam/-PhaseGold/-Epoch/-Cancel drive the SCORE gold/team-
-	// colour flicker (Batch C/C2b, contract lighting.md §2.4/§8.1) —
-	// scoreFlashTeam is the team currently flickering ("" = none),
-	// scoreFlashPhaseGold the current phase (toggled by runScoreFlash,
-	// ambiance_override.go), scoreFlashEpoch guards the flicker's own
-	// natural end-of-run against a race with a newer SCORE pulse superseding
-	// it, scoreFlashCancel stops the running goroutine when a newer pulse
-	// arrives; guarded by ambianceMu, same pattern as lightingFlashCancel.
-	scoreFlashTeam      atomic.Value // holds string
-	scoreFlashPhaseGold atomic.Bool
-	scoreFlashEpoch     atomic.Int64
-	scoreFlashCancel    context.CancelFunc
-	// chronoPulse* drive the RUNNING-only breathing pulse on 'general'
-	// synchronised to the active question's global timer (2026-09-08,
-	// contracts/lighting.md §5.4/§8.1) — chronoPulseActive is whether a
-	// pulse is currently live (KindRunning + a timed question),
-	// chronoPulseTier is 1/2/3 (ambianceChronoPulseColor, ambiance.go),
-	// chronoPulseHigh the current phase. All three are written ONLY by
-	// runChronoPulse (ambiance.go) and read ONLY by ambianceScene — no
-	// mutex needed, same pattern as scoreFlashPhaseGold. chronoPulseStarted
-	// makes runChronoPulse's own goroutine start idempotent (it is invoked
-	// from two call sites, mirroring the writer's own two "go w.Start"
-	// sites, which are mutually exclusive in practice but not provably so
-	// without this guard — see runChronoPulse's own doc comment).
-	chronoPulseActive  atomic.Bool
-	chronoPulseTier    atomic.Int32
-	chronoPulseHigh    atomic.Bool
-	chronoPulseStarted atomic.Bool
+	// ambOnce/amb: lazily built internal/ambiance controller owning the ambiance state (writer, Hue driver,
+	// override mode, Flash/SCORE/chrono-pulse state — formerly fields here); see ambCtl in hosts.go.
+	ambOnce sync.Once
+	amb     *ambiance.Controller
 	// evictionRegistry remembers why a VJoueur was recently removed (PLAYER_REMOVED
 	// or GAME_RESET) so a later PLAYER_CONNECT with that now-unknown ID gets the
 	// real reason instead of a generic ENROLLMENT_CLOSED guess (#123 B3).

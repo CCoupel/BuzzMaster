@@ -40,27 +40,6 @@ func TestDevAmbianceNilWriterSitesAreNoOps(t *testing.T) {
 	}
 }
 
-func TestDevAmbianceActiveTeam(t *testing.T) {
-	q := func(typ game.QuestionType) *game.Question { return &game.Question{Type: typ} }
-	tests := []struct {
-		name  string
-		state game.GameState
-		want  string
-	}{
-		{"no question", game.GameState{}, ""},
-		{"classic question", game.GameState{Question: q(game.QuestionTypeSpeedy), MemoryCurrentTeam: "X"}, ""},
-		{"memory", game.GameState{Question: q(game.QuestionTypeMemory), MemoryCurrentTeam: "TeamB"}, "TeamB"},
-		{"memotion", game.GameState{Question: q(game.QuestionTypeMemotion), MotionCurrentTeam: "TeamC"}, "TeamC"},
-		{"rafale", game.GameState{Question: q(game.QuestionTypeRafale), RafaleCurrentTeam: "TeamA"}, "TeamA"},
-		{"memory solo (no current team)", game.GameState{Question: q(game.QuestionTypeMemory)}, ""},
-	}
-	for _, tt := range tests {
-		if got := ambianceActiveTeam(tt.state); got != tt.want {
-			t.Errorf("%s: active team = %q, want %q", tt.name, got, tt.want)
-		}
-	}
-}
-
 func TestDevAmbianceDerivationTable(t *testing.T) {
 	app := newTestApp(t)
 	// setState puts the engine in (phase, question) and installs bumpers
@@ -428,7 +407,7 @@ func TestDevAmbianceRegistryShape(t *testing.T) {
 func TestDevAmbianceWriterRendersLiveState(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -482,12 +461,12 @@ func waitForChronoPulseTier(t *testing.T, app *App, wantTier int32) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if app.chronoPulseActive.Load() && app.chronoPulseTier.Load() == wantTier {
+		if app.ambCtl().ChronoPulseActive.Load() && app.ambCtl().ChronoPulseTier.Load() == wantTier {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("chrono-pulse never reported tier %d (active=%v tier=%d)", wantTier, app.chronoPulseActive.Load(), app.chronoPulseTier.Load())
+	t.Fatalf("chrono-pulse never reported tier %d (active=%v tier=%d)", wantTier, app.ambCtl().ChronoPulseActive.Load(), app.ambCtl().ChronoPulseTier.Load())
 }
 
 // TestDevChronoPulse_TierSelectionFromLiveTimer covers runChronoPulse's own
@@ -498,7 +477,7 @@ func waitForChronoPulseTier(t *testing.T, app *App, wantTier int32) {
 func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -521,10 +500,10 @@ func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 		// NotifyState in runChronoPulse's own "become inactive" branch —
 		// see its doc comment on why this isn't load-bearing either way).
 		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) && app.chronoPulseActive.Load() {
+		for time.Now().Before(deadline) && app.ambCtl().ChronoPulseActive.Load() {
 			time.Sleep(5 * time.Millisecond)
 		}
-		if app.chronoPulseActive.Load() {
+		if app.ambCtl().ChronoPulseActive.Load() {
 			t.Fatalf("delay=%d: chrono-pulse still active after Stop()", tt.delay)
 		}
 	}
@@ -554,7 +533,7 @@ func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -599,7 +578,7 @@ func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *test
 func TestDevChronoPulse_SuppressedBySelector(t *testing.T) {
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -656,7 +635,7 @@ func TestDevChronoPulse_SuppressedBySelector_ON(t *testing.T) {
 	app := newTestApp(t)
 	app.httpServer = server.NewHTTPServer(0, app.engine, app.wsHub, app.buzzerHub, server.NewLogsWebSocketHub(10))
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)

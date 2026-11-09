@@ -43,7 +43,7 @@ func TestEntracteProgrammed_AmbianceNotifiedAndBuzzersOff_T21(t *testing.T) {
 	app.setupCallbacks() // real production wiring — this is what must be exercised
 
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -122,7 +122,7 @@ func TestEntracteProgrammed_OrdinaryStartAlsoNotifiesAmbiance(t *testing.T) {
 	app.setupCallbacks()
 
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)

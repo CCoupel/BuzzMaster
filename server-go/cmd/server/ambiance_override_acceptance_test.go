@@ -71,7 +71,7 @@ func tw208NewWriterApp(t *testing.T) (*App, *lighting.FakeDriver, func()) {
 	t.Helper()
 	app := newTestApp(t)
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	go app.ambiance().Start(ctx)
 	return app, fake, cancel
@@ -268,7 +268,7 @@ func TestCA208_Flash_NeverAffectsAnActiveTeamZone(t *testing.T) {
 	app := newTestApp(t)
 	app.setLightingFlash(true)
 	defer app.setLightingFlash(false)
-	app.lightingFlashPhaseOn.Store(true) // phase allumée du blink, déterministe pour ce test
+	app.ambCtl().LightingFlashPhaseOn.Store(true) // phase allumée du blink, déterministe pour ce test
 
 	ev := lighting.Event{Kind: lighting.KindTeamTurn, Teams: []string{"TeamA"}}
 	st := app.ambianceScene(ev)

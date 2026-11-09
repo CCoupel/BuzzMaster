@@ -1,24 +1,4 @@
-package main
-
-// Manual override on the "general" ambiance zone, and shutdown extinction
-// (#208, contracts/lighting.md §10 — reprise du milestone v10.0.0 du
-// 2026-09-07, `_work/reports/planner-v10-etat-courant-20260907.md`).
-//
-// Two controls, and two only (§10.1):
-//   - a tri-state selector ON | AUTO | OFF, exclusive by construction;
-//   - a separate Flash bascule, which PRIMES over the selector while
-//     engaged, WITHOUT moving it.
-//
-// Both are SERVER state (never the browser's — two admins see the same
-// position), not persisted (§10.1.1 point 5/6: AUTO at every server start),
-// and apply ONLY to the "general" zone — the per-team zones added by #213
-// always follow the game, whatever the selector says (§10.1, "Portée").
-//
-// AUTO's return to the game and the reconnection resync of §10.3 are
-// deliberately the SAME code path: lightingOverrideGeneral is consulted by
-// ambianceScene on every re-derivation, so there is nothing to "restore"
-// when a mode ends — the room is simply re-derived from whatever
-// (mode, live game state) says right now (§10.1.1 point 3).
+package ambiance
 
 import (
 	"context"
@@ -38,20 +18,20 @@ import (
 var errLightingInvalidMode = errors.New("lighting: mode must be ON, AUTO or OFF")
 
 // lightingMode is the tri-state selector's value (contract §10.1 table).
-type lightingMode string
+type Mode string
 
 const (
-	lightingModeAuto lightingMode = "AUTO"
-	lightingModeOn   lightingMode = "ON"
-	lightingModeOff  lightingMode = "OFF"
+	ModeAuto Mode = "AUTO"
+	ModeOn   Mode = "ON"
+	ModeOff  Mode = "OFF"
 )
 
 // lightingOnColor/-Intensity is the ON position's forced scene: full
 // intensity, neutral white (contract §10.1 table — "forcée à pleine
 // intensité, blanc neutre").
-var lightingOnColor = [3]int{255, 255, 255}
+var OnColor = [3]int{255, 255, 255}
 
-const lightingOnIntensity = 255
+const OnIntensity = 255
 
 // lightingFlashColor and the two blink phase durations drive the Flash
 // bascule (contract §10.1.2 / "Implémentation du clignotement (Flash)") —
@@ -59,11 +39,11 @@ const lightingOnIntensity = 255
 // blinking. 400 ms/400 ms is a plainly visible, unhurried blink — nothing
 // in the contract fixes an exact cadence, so this is a named constant, not
 // a literal, ready to be recalibrated without touching the loop itself.
-var lightingFlashColor = [3]int{255, 255, 255}
+var FlashColor = [3]int{255, 255, 255}
 
 const (
-	lightingFlashOnPhase  = 400 * time.Millisecond
-	lightingFlashOffPhase = 400 * time.Millisecond
+	FlashOnPhase  = 400 * time.Millisecond
+	FlashOffPhase = 400 * time.Millisecond
 )
 
 // scoreFlashGoldPhase/-TeamPhase drive the SCORE flicker's own cadence
@@ -78,17 +58,17 @@ const (
 // absorbed, so what would actually render in the room stops matching what
 // was scheduled.
 const (
-	scoreFlashGoldPhase = 250 * time.Millisecond
-	scoreFlashTeamPhase = 500 * time.Millisecond
+	ScoreFlashGoldPhase = 250 * time.Millisecond
+	ScoreFlashTeamPhase = 500 * time.Millisecond
 )
 
 // flashPhaseOverride lets a test shorten the blink cadences of ONE App (zero
 // field = production constant). #291, Phase A.
-type flashPhaseOverride struct {
-	lightingOn, lightingOff, scoreGold, scoreTeam time.Duration
+type FlashPhaseOverride struct {
+	LightingOn, LightingOff, ScoreGold, ScoreTeam time.Duration
 }
 
-func orDefault(d, def time.Duration) time.Duration {
+func OrDefault(d, def time.Duration) time.Duration {
 	if d > 0 {
 		return d
 	}
@@ -99,10 +79,10 @@ func orDefault(d, def time.Duration) time.Duration {
 // (an unset atomic.Value.Load() returns nil, which the type assertion below
 // turns into "") — contract §10.1.1 point 5 needs no explicit
 // initialisation at server start for AUTO to hold.
-func (a *App) lightingMode() lightingMode {
-	v, _ := a.lightingModeState.Load().(lightingMode)
+func (c *Controller) lightingMode() Mode {
+	v, _ := c.lightingModeState.Load().(Mode)
 	if v == "" {
-		return lightingModeAuto
+		return ModeAuto
 	}
 	return v
 }
@@ -111,14 +91,14 @@ func (a *App) lightingMode() lightingMode {
 // the SAME NotifyState() path as every other ambiance transition (contract
 // §10.1.1 point 3: "aucune mémorisation de la scène d'avant, tout est
 // re-dérivé").
-func (a *App) setLightingMode(m lightingMode) {
-	a.lightingModeState.Store(m)
-	a.ambiance().NotifyState()
+func (c *Controller) SetMode(m Mode) {
+	c.lightingModeState.Store(m)
+	c.Writer().NotifyState()
 }
 
 // isLightingFlashOn reports whether Flash is currently engaged.
-func (a *App) isLightingFlashOn() bool {
-	return a.lightingFlashOn.Load()
+func (c *Controller) isLightingFlashOn() bool {
+	return c.LightingFlashOn.Load()
 }
 
 // setLightingFlash engages/disengages Flash (contract §10.1.2). Engaging
@@ -133,31 +113,31 @@ func (a *App) isLightingFlashOn() bool {
 // re-derives once more so the room falls back to whatever the selector
 // says (ON/OFF forced, or AUTO re-derived from the live game) — same
 // NotifyState() call, no separate "restore" path.
-func (a *App) setLightingFlash(on bool) {
-	a.ambianceMu.Lock()
-	if on == a.lightingFlashOn.Load() {
-		a.ambianceMu.Unlock()
+func (c *Controller) SetFlash(on bool) {
+	c.ambianceMu.Lock()
+	if on == c.LightingFlashOn.Load() {
+		c.ambianceMu.Unlock()
 		return
 	}
-	a.lightingFlashOn.Store(on)
+	c.LightingFlashOn.Store(on)
 	if on {
-		parent := a.ctx
+		parent := c.h.Ctx()
 		if parent == nil {
 			parent = context.Background()
 		}
 		ctx, cancel := context.WithCancel(parent)
-		a.lightingFlashCancel = cancel
-		a.ambianceMu.Unlock()
-		go a.runLightingFlash(ctx)
+		c.lightingFlashCancel = cancel
+		c.ambianceMu.Unlock()
+		go c.runLightingFlash(ctx)
 		return
 	}
-	cancel := a.lightingFlashCancel
-	a.lightingFlashCancel = nil
-	a.ambianceMu.Unlock()
+	cancel := c.lightingFlashCancel
+	c.lightingFlashCancel = nil
+	c.ambianceMu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
-	a.ambiance().NotifyState() // back to the selector's own position
+	c.Writer().NotifyState() // back to the selector's own position
 }
 
 // runLightingFlash is the Flash blink loop (contract §10.1.2): alternates
@@ -168,14 +148,14 @@ func (a *App) setLightingFlash(on bool) {
 // setLightingFlash(false), or by a.cancelCtx() at server shutdown
 // ((*App).stop(), main.go) — never left blinking after a browser tab closes
 // or the process exits.
-func (a *App) runLightingFlash(ctx context.Context) {
+func (c *Controller) runLightingFlash(ctx context.Context) {
 	phase := true // start lit — an operator pressing Flash wants to SEE it fire
 	for {
-		a.lightingFlashPhaseOn.Store(phase)
-		a.ambiance().NotifyState()
-		wait := orDefault(a.flashPhases.lightingOn, lightingFlashOnPhase)
+		c.LightingFlashPhaseOn.Store(phase)
+		c.Writer().NotifyState()
+		wait := OrDefault(c.FlashPhases.LightingOn, FlashOnPhase)
 		if !phase {
-			wait = orDefault(a.flashPhases.lightingOff, lightingFlashOffPhase)
+			wait = OrDefault(c.FlashPhases.LightingOff, FlashOffPhase)
 		}
 		select {
 		case <-ctx.Done():
@@ -206,17 +186,17 @@ func (a *App) runLightingFlash(ctx context.Context) {
 // uses (PreviewColor, above), never a second copy of the logic. A
 // themeless room (no question active, or no category) degenerates to
 // white/white, which is an accepted, unremarkable case, not a special one.
-func (a *App) lightingOverrideGeneral(autoColor [3]int, autoIntensity int) ([3]int, int) {
-	if a.isLightingFlashOn() {
-		if a.lightingFlashPhaseOn.Load() {
-			return lightingFlashColor, lightingOnIntensity
+func (c *Controller) OverrideGeneral(autoColor [3]int, autoIntensity int) ([3]int, int) {
+	if c.isLightingFlashOn() {
+		if c.LightingFlashPhaseOn.Load() {
+			return FlashColor, OnIntensity
 		}
-		return a.ambianceThemeColor(), lightingOnIntensity
+		return c.ThemeColor(), OnIntensity
 	}
-	switch a.lightingMode() {
-	case lightingModeOn:
-		return lightingOnColor, lightingOnIntensity
-	case lightingModeOff:
+	switch c.lightingMode() {
+	case ModeOn:
+		return OnColor, OnIntensity
+	case ModeOff:
 		return [3]int{0, 0, 0}, 0
 	default: // AUTO
 		return autoColor, autoIntensity
@@ -259,7 +239,7 @@ func (a *App) lightingOverrideGeneral(autoColor [3]int, autoIntensity int) ([3]i
 // register itself (contract §4.2) — by cancelling its context; team=""
 // is a no-op (nothing to celebrate, contract §2.3's "0 pour tout genre
 // autre que SCORE" case reached defensively).
-func (a *App) startScoreFlash(team string, points int) {
+func (c *Controller) StartScoreFlash(team string, points int) {
 	if team == "" {
 		return
 	}
@@ -273,17 +253,17 @@ func (a *App) startScoreFlash(team string, points int) {
 	if cycles > 6 {
 		cycles = 6
 	}
-	a.ambianceMu.Lock()
-	if cancel := a.scoreFlashCancel; cancel != nil {
+	c.ambianceMu.Lock()
+	if cancel := c.scoreFlashCancel; cancel != nil {
 		cancel()
 	}
-	parent := a.ctx
+	parent := c.h.Ctx()
 	if parent == nil {
 		parent = context.Background()
 	}
 	ctx, cancel := context.WithCancel(parent)
-	a.scoreFlashCancel = cancel
-	epoch := a.scoreFlashEpoch.Add(1)
+	c.scoreFlashCancel = cancel
+	epoch := c.scoreFlashEpoch.Add(1)
 	// code-reviewer (Batch C, MINEUR 1): Store belongs INSIDE the critical
 	// section, not after Unlock — two SCORE events for two different teams
 	// arriving a few instructions apart (engine callbacks are not
@@ -293,9 +273,9 @@ func (a *App) startScoreFlash(team string, points int) {
 	// (higher-epoch) goroutine is the one actually running. Publishing the
 	// team name atomically with cancel/epoch under the same lock makes the
 	// whole start sequence indivisible with respect to a concurrent call.
-	a.scoreFlashTeam.Store(team)
-	a.ambianceMu.Unlock()
-	go a.runScoreFlash(ctx, cycles, epoch)
+	c.scoreFlashTeam.Store(team)
+	c.ambianceMu.Unlock()
+	go c.runScoreFlash(ctx, cycles, epoch)
 }
 
 // runScoreFlash is the flicker loop itself (see startScoreFlash). Stops the
@@ -308,21 +288,21 @@ func (a *App) startScoreFlash(team string, points int) {
 // the narrow window between this goroutine's last timer firing and it
 // reaching that tail: if scoreFlashEpoch has moved on, a newer flicker is
 // already live and this stale goroutine must touch nothing further.
-func (a *App) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
+func (c *Controller) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
 	for i := 0; i < cycles; i++ {
-		a.scoreFlashPhaseGold.Store(true)
-		a.ambiance().NotifyState()
+		c.scoreFlashPhaseGold.Store(true)
+		c.Writer().NotifyState()
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(orDefault(a.flashPhases.scoreGold, scoreFlashGoldPhase)):
+		case <-time.After(OrDefault(c.FlashPhases.ScoreGold, ScoreFlashGoldPhase)):
 		}
-		a.scoreFlashPhaseGold.Store(false)
-		a.ambiance().NotifyState()
+		c.scoreFlashPhaseGold.Store(false)
+		c.Writer().NotifyState()
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(orDefault(a.flashPhases.scoreTeam, scoreFlashTeamPhase)):
+		case <-time.After(OrDefault(c.FlashPhases.ScoreTeam, ScoreFlashTeamPhase)):
 		}
 	}
 	// Same critical section as startScoreFlash's own team publication (code-
@@ -331,12 +311,12 @@ func (a *App) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
 	// startScoreFlash call landing in the narrow window between the check
 	// and the clear — otherwise this goroutine's natural end-of-run could
 	// wipe out a newer flicker's just-published team name.
-	a.ambianceMu.Lock()
-	if a.scoreFlashEpoch.Load() == epoch {
-		a.scoreFlashTeam.Store("")
+	c.ambianceMu.Lock()
+	if c.scoreFlashEpoch.Load() == epoch {
+		c.scoreFlashTeam.Store("")
 	}
-	a.ambianceMu.Unlock()
-	a.ambiance().NotifyState() // harmless even if a newer flicker is now live: always re-derives from current state, never buffers (contract §4.1)
+	c.ambianceMu.Unlock()
+	c.Writer().NotifyState() // harmless even if a newer flicker is now live: always re-derives from current state, never buffers (contract §4.1)
 }
 
 // ---------------------------------------------------------------------------
@@ -345,17 +325,17 @@ func (a *App) runScoreFlash(ctx context.Context, cycles int, epoch int64) {
 // ---------------------------------------------------------------------------
 
 // LightingMode returns the selector's current position as a string.
-func (a *App) LightingMode() string {
-	return string(a.lightingMode())
+func (c *Controller) LightingMode() string {
+	return string(c.lightingMode())
 }
 
 // SetLightingMode validates and applies a new selector position. The string
 // boundary (rather than the lightingMode type) is what LightingProvider can
 // expose without internal/server importing package main.
-func (a *App) SetLightingMode(mode string) error {
-	switch lightingMode(mode) {
-	case lightingModeOn, lightingModeAuto, lightingModeOff:
-		a.setLightingMode(lightingMode(mode))
+func (c *Controller) SetLightingMode(mode string) error {
+	switch Mode(mode) {
+	case ModeOn, ModeAuto, ModeOff:
+		c.SetMode(Mode(mode))
 		return nil
 	default:
 		return errLightingInvalidMode
@@ -363,13 +343,13 @@ func (a *App) SetLightingMode(mode string) error {
 }
 
 // LightingFlash reports whether Flash is currently engaged.
-func (a *App) LightingFlash() bool {
-	return a.isLightingFlashOn()
+func (c *Controller) LightingFlash() bool {
+	return c.isLightingFlashOn()
 }
 
 // SetLightingFlash engages/disengages Flash.
-func (a *App) SetLightingFlash(on bool) {
-	a.setLightingFlash(on)
+func (c *Controller) SetLightingFlash(on bool) {
+	c.SetFlash(on)
 }
 
 // previewTeamRolePrefix is the "team:<name>" encoding POST /api/lighting/
@@ -386,11 +366,11 @@ const previewTeamRolePrefix = "team:"
 // ambianceThemeColor() verbatim rather than duplicating its resolution
 // order (live question theme, white if none/unknown/custom category or no
 // question at all — contract lighting.md §8.2's own doc comment).
-func (a *App) PreviewColor(role string) [3]int {
+func (c *Controller) PreviewColor(role string) [3]int {
 	if team, ok := strings.CutPrefix(role, previewTeamRolePrefix); ok {
-		return a.teamNameToRGB(team)
+		return c.h.TeamNameColor(team)
 	}
-	return a.ambianceThemeColor()
+	return c.ThemeColor()
 }
 
 // ---------------------------------------------------------------------------
@@ -449,21 +429,21 @@ func (a *App) PreviewColor(role string) [3]int {
 // shutdown is a normal case, at most one log line (point 3).
 const shutdownLightingTimeout = 2 * time.Second
 
-func (a *App) shutdownExtinguishHueLighting() {
-	a.quiesceAmbiance()
-	a.extinguishFreshDriver(true) // historical behaviour: a switched-off installation is left untouched
+func (c *Controller) ShutdownExtinguish() {
+	c.quiesceAmbiance()
+	c.extinguishFreshDriver(true) // historical behaviour: a switched-off installation is left untouched
 }
 
 // quiesceAmbiance is steps 1 and 2: detach the writer's driver
 // synchronously and cancel the Flash goroutine.
-func (a *App) quiesceAmbiance() {
-	a.ambiance().SetDriver(nil) // step 1 — nil-safe, synchronously quiesces the old driver
+func (c *Controller) quiesceAmbiance() {
+	c.Writer().SetDriver(nil) // step 1 — nil-safe, synchronously quiesces the old driver
 
-	a.ambianceMu.Lock()
-	cancel := a.lightingFlashCancel
-	a.lightingFlashCancel = nil
-	a.lightingFlashOn.Store(false)
-	a.ambianceMu.Unlock()
+	c.ambianceMu.Lock()
+	cancel := c.lightingFlashCancel
+	c.lightingFlashCancel = nil
+	c.LightingFlashOn.Store(false)
+	c.ambianceMu.Unlock()
 	if cancel != nil {
 		cancel() // step 2
 	}
@@ -476,18 +456,18 @@ func (a *App) quiesceAmbiance() {
 // synchronous (no further command can reach the bulbs after this returns);
 // the network write runs in the background so the HTTP response is not held
 // for the bridge timeout.
-func (a *App) extinguishOnLightingDisabled() {
-	a.quiesceAmbiance()
+func (c *Controller) ExtinguishOnDisabled() {
+	c.quiesceAmbiance()
 	go func() {
 		// Re-enabled meanwhile (fast off→on): the bulbs must not be switched
 		// off behind the new driver's back — skip entirely.
 		if config.Get().Lighting.Enabled {
 			return
 		}
-		a.extinguishFreshDriver(false)
+		c.extinguishFreshDriver(false)
 		// A re-enable landing during the write: re-derive the live scene so the
 		// last word is the game's, never the extinction (nil-safe, no-op if off).
-		a.ambiance().NotifyState()
+		c.Writer().NotifyState()
 	}()
 }
 
@@ -495,8 +475,8 @@ func (a *App) extinguishOnLightingDisabled() {
 // writes intensity 0 to the general zone and every team zone. requireEnabled
 // is true at server shutdown (a `lighting.enabled=false` installation must
 // not be touched) and false when the master switch has just been turned off.
-func (a *App) extinguishFreshDriver(requireEnabled bool) {
-	d := a.buildHueDriverOpt(requireEnabled)
+func (c *Controller) extinguishFreshDriver(requireEnabled bool) {
+	d := c.BuildHueDriverOpt(requireEnabled)
 	if d == nil {
 		return
 	}

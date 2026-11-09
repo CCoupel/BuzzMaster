@@ -142,13 +142,14 @@ func TestCA2_StartAmbianceLifecycleGuard_IsPresentInSource(t *testing.T) {
 	if !ok {
 		t.Fatal("runtime.Caller(0) a échoué")
 	}
-	path := filepath.Join(filepath.Dir(thisFile), "ambiance.go")
+	// #295 : startAmbianceWriter vit désormais dans internal/ambiance (Controller.StartWriter).
+	path := filepath.Join(filepath.Dir(thisFile), "..", "..", "internal", "ambiance", "ambiance.go")
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("lecture de %s : %v", path, err)
 	}
 	if !tw205LightingGuardRE.Match(content) {
-		t.Fatal("CA2 : la garde conditionnelle 'if w != nil { go w.Start(...) }' est introuvable dans ambiance.go ((*App).startAmbianceWriter) — " +
+		t.Fatal("CA2 : la garde conditionnelle 'if w != nil { go w.Start(...) }' est introuvable dans internal/ambiance/ambiance.go ((*Controller).StartWriter) — " +
 			"le lancement de la goroutine d'ambiance doit rester conditionnel, jamais inconditionnel")
 	}
 }
@@ -364,7 +365,7 @@ func TestIntegration_GoldenPath_SceneSequenceMatchesTable(t *testing.T) {
 		"TeamB": {Name: "TeamB", Color: []int{0, 0, 255}},
 	})
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
@@ -507,7 +508,7 @@ func TestCA5_ConcurrentEngineMutationAndNotify_RaceFree(t *testing.T) {
 		"m2": {Name: "m2", Team: "TeamB"},
 	})
 	fake := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(fake))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	go app.ambiance().Start(ctx)
 

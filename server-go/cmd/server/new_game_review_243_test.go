@@ -113,7 +113,7 @@ func TestNewGameReview243_APurgedTabletCannotWriteAfterwards(t *testing.T) {
 func TestNewGameReview243_Critical_EveryAppliedNewGameRefreshesTheBuzzerLedsAndTheAmbiance(t *testing.T) {
 	e := newEnv243(t)
 	fake := lighting.NewFakeDriver()
-	e.app.lightingWriter.Store(e.app.newAmbianceWriter(fake))
+	e.app.ambCtl().LightingWriter.Store(e.app.newAmbianceWriter(fake))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go e.app.ambiance().Start(ctx)

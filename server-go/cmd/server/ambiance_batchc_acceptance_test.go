@@ -311,7 +311,7 @@ func twCWaitTeamZoneColor(t *testing.T, fake *lighting.FakeDriver, team string, 
 func TestC2b_ScoreFlash_TwoCycles_AlternatesGoldAndTeamColour_ThenSettles(t *testing.T) {
 	app, fake, cancel := tw208NewWriterApp(t)
 	defer cancel()
-	app.flashPhases = flashPhaseOverride{scoreGold: 125 * time.Millisecond, scoreTeam: 250 * time.Millisecond} // #291 : ÷2 (driver factice)
+	app.ambCtl().FlashPhases = flashPhaseOverride{ScoreGold: 125 * time.Millisecond, ScoreTeam: 250 * time.Millisecond} // #291 : ÷2 (driver factice)
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}}})
 	wantTeamA := app.teamNameToRGB("TeamA")
 	app.ambiance().NotifyState() // établit un premier état stable (hors partie)
@@ -376,7 +376,7 @@ func TestC2b_ScoreFlash_ClampsAboveSixPoints(t *testing.T) {
 	// #291 Phase A : cadence ÷1,5 (167 ms or / 333 ms équipe = 500 ms/cycle, driver factice) : 6 cycles = 3000 ms,
 	// 7 = 3500 ms, 8 = 4000 ms ; fenêtre 3200 ms = marge anti-faux-rouge de 200 ms (revue m2, comme l'original),
 	// et un plafond manquant (7 cycles) dépasse la fenêtre de 300 ms.
-	app.flashPhases = flashPhaseOverride{scoreGold: 167 * time.Millisecond, scoreTeam: 333 * time.Millisecond}
+	app.ambCtl().FlashPhases = flashPhaseOverride{ScoreGold: 167 * time.Millisecond, ScoreTeam: 333 * time.Millisecond}
 	app.engine.SetTeams(map[string]*game.Team{"TeamA": {Name: "TeamA", Color: []int{255, 0, 0}}})
 	app.ambiance().NotifyState()
 	twCWaitTeamZoneColor(t, fake, "TeamA", app.teamNameToRGB("TeamA"), 2*time.Second)

@@ -68,7 +68,7 @@ func newEnv244(t *testing.T) *env244 {
 	app.engine.SetBumpers(bumpers)
 
 	ambiance := lighting.NewFakeDriver()
-	app.lightingWriter.Store(app.newAmbianceWriter(ambiance))
+	app.ambCtl().LightingWriter.Store(app.newAmbianceWriter(ambiance))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go app.ambiance().Start(ctx)
