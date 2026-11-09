@@ -268,6 +268,30 @@ describe('Compteur, onglet « • » et confirmation « Tout remettre à Hérit�
     expect(onSave).toHaveBeenCalledWith({})
   })
 
+  it('un DELETE en échec ⇒ erreur nommant le son non supprimé, liste rechargée, réglages PAS remis à Hérité', async () => {
+    roundFiles = [FILE('depart'), FILE('gagne')]
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const base = global.fetch
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      if ((opts.method || 'GET') === 'DELETE' && url === '/api/rounds/r2/sounds/gagne') {
+        calls.push({ method: 'DELETE', url })
+        return ok({ status: 'error', message: 'disque plein' }, 500)
+      }
+      return base(url, opts)
+    })
+    const { onSave } = await setup({ value: { sound: { muted: true } } })
+    await waitFor(() => expect(screen.getByText(/2 fichiers/)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Tout remettre à/ }))
+    const err = await screen.findByText(/non supprimé/)
+    expect(err.textContent).toMatch(/Points gagnés/)
+    expect(err.textContent).not.toMatch(/Départ/)
+    // état réel rechargé : depart supprimé, gagne toujours là
+    await waitFor(() => expect(screen.getByText(/1 fichier surchargé|1 réglage et 1 fichier surchargé/)).toBeInTheDocument())
+    expect(calls.filter((c) => c.method === 'GET' && c.url === '/api/rounds/r2/sounds').length).toBeGreaterThanOrEqual(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer' }))
+    expect(onSave.mock.calls[0][0].sound.muted).toBe(true) // brouillon conservé
+  })
+
   it('aucun fichier de manche ⇒ aucune confirmation (comportement LOT-4 inchangé)', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     await setup({ value: { sound: { muted: true } } })

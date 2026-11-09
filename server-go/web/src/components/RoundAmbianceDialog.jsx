@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import AmbianceSettingsPanel from './AmbianceSettingsPanel'
 import { setPartialPath, countOverrides } from '../utils/ambianceSettings'
 import { soundUploadMessage } from '../utils/soundState'
+import { cueMeta } from '../utils/soundCues'
 import './RoundGroup.css'
 
 /**
@@ -191,10 +192,24 @@ export default function RoundAmbianceDialog({ roundId = null, roundName, value, 
       const ok = window.confirm(`Tout remettre à « Hérité » ? Les ${nFiles} fichier${nFiles > 1 ? 's' : ''} propre${nFiles > 1 ? 's' : ''} à la manche seront supprimé${nFiles > 1 ? 's' : ''} (immédiat, définitif).`)
       if (!ok) return
       setNotice(null)
+      const failed = []
       for (const cue of Object.keys(files)) {
-        try { await fetch(`/api/rounds/${roundId}/sounds/${cue}`, { method: 'DELETE' }) } catch { /* rechargé ci-dessous */ }
+        try {
+          const res = await fetch(`/api/rounds/${roundId}/sounds/${cue}`, { method: 'DELETE' })
+          if (!res.ok && res.status !== 404) failed.push(cue)   // 404 = déjà sans fichier : l'objectif est atteint
+        } catch {
+          failed.push(cue)
+        }
       }
-      await loadFiles()
+      await loadFiles()   // l'état réel du serveur, succès partiel compris
+      if (failed.length) {
+        const names = failed.map(c => (c === 'decompte' ? 'Décompte' : cueMeta(c).label)).join(', ')
+        setNotice({
+          text: `Erreur : ${failed.length} fichier${failed.length > 1 ? 's' : ''} de la manche non supprimé${failed.length > 1 ? 's' : ''} (${names}). Les réglages n'ont pas été remis à « Hérité » : réessayez.`,
+          type: 'error',
+        })
+        return
+      }
     }
     onChange('*', null)
   }
