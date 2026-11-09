@@ -430,7 +430,7 @@ Envoye par l'animateur (`/anim`) ou l'administrateur (`/admin`) pour contrôler 
 **Addendum v11.6.0 (#235, LOT-2) — propriétaire du son courant** : nouveau champ diffusé dans le même `UPDATE` que `QUESTION_SOUND_STATE` :
    - `QUESTION_SOUND_OWNER` → `""` | `"HOST"` | `"CARD:<cardID>"` | `"ENTRACTE"` — indique quel média joue actuellement (son de question/manche, son de carte MEMOTION, son d'entracte). `""` à IDLE. Toujours sérialisé (pas d'`omitempty`).
    - `QUESTION_SOUND_STATE` reflète le média **courant**, quel qu'en soit le propriétaire ; un son de carte remplace le son d'hôte sans reprise à la fermeture de la carte.
-   - Action `RESTORE` : coupe le média courant (hôte, carte ou entracte) avant les diffusions de restauration.
+   - Restauration de sauvegarde (`POST /restore`, pas une action WS) : coupe le média courant (hôte, carte ou entracte) avant les diffusions de restauration.
    - Action `QUESTION_SOUND` (`PLAY`, `PAUSE`, `RESUME`, `STOP`) : `PLAY` rejoue la carte ouverte ou l'entracte en cours, sinon le son d'hôte.
 
 **Cycle de vie du son par commande** :

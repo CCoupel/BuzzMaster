@@ -2790,7 +2790,7 @@ Une carte sonore porte la puce **♪** dans l'éditeur, et la question entière 
 - Au retournement d'une carte sonore, son son **remplace** le son en cours, y compris celui de la manche. Le son de la manche **ne reprend pas** à la fermeture de la carte.
 - Une carte **sans** son laisse le son de la manche jouer.
 - Le son de la carte s'arrête à la fermeture de la carte, à la révélation et à l'arrêt de la manche.
-- En mode « À la fin », le chrono de la carte démarre à la fin du son (ou à l'arrêt par l'animateur). Si le son est en pause, le chrono démarre à la reprise. Il est abandonné à la fermeture de la carte ou à la révélation.
+- En mode « À la fin », le chrono de la carte démarre à la fin du son (ou à l'arrêt par l'animateur). Si la partie est en pause au moment où le chrono devrait démarrer (fin du son ou arrêt par l'animateur pendant la pause), le chrono démarre à la reprise de la partie. Il est abandonné à la fermeture de la carte ou à la révélation.
 - **Le décompte ne se joue jamais pendant un son de manche ou de carte.**
 - **Fichier manquant** : si le fichier d'une carte est indisponible, la carte se retourne quand même, **sans son**, et le motif s'affiche (« FILE »).
 - **Rejouer** rejoue la carte ouverte, ou l'entracte si elle est en cours ; sinon il rejoue le son de la manche.
