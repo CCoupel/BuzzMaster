@@ -2,6 +2,16 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.6.0] - 2026-11-09 — Milestone v11.6.0 « Ambiance : portée étendue » — entrée partielle (LOT-1)
+
+> Entrée **partielle** : seul le LOT-1 de la milestone est décrit ici. Les autres lots seront documentés à leur livraison.
+
+### Changed
+
+- **Diagnostic de la sortie audio (#283)** — `GET /api/sound/status` expose désormais `enabled`, `output` (`ok`, `unavailable`, `disabled`, `restart_required`), `reason`, `restart_required` et `muted_source`. La ligne de démarrage `AUDIO` (`sound: enabled=… output=… reason=…`) est normalisée : `ERROR` si la sortie est indisponible, `INFO` sinon. L'onglet Son de `/admin/ambiance` affiche la cause de l'état et une bannière « Redémarrage requis ». Voir `docs/ADMIN_GUIDE.md`, « Diagnostic de la sortie audio ».
+- **Conversion des WAV à l'upload (#232)** — un WAV qui n'est pas au format canonique n'est plus refusé : il est converti une fois, à l'upload (rééchantillonnage vers 44 100 Hz, passage en stéréo 16 bits). Entrées acceptées : PCM 8, 16, 24 ou 32 bits, flottant 32 bits, 1 ou 2 canaux, 8 000 à 192 000 Hz. Les réponses d'upload indiquent `converted` et `source_format`, et le toast de remplacement signale la conversion. Les limites de durée sont inchangées ; un plafond brut (4 fois le plafond canonique) borne la mémoire. Les formats compressés (MP3) restent refusés. Un WAV déjà canonique est stocké tel quel. Voir `docs/ADMIN_GUIDE.md`, « Formats acceptés ».
+- Aucun changement **BREAKING** : `config.json` et les fichiers existants se chargent et se jouent comme avant.
+
 ## [11.5.0] - 2026-11-09 — Milestone v11.5.0 « Optimisation des tests » : suite de tests et CI plus rapides, environnement conteneur
 
 **Aucun changement fonctionnel pour l'utilisateur final.** Cette version ne modifie ni l'interface, ni les protocoles, ni le comportement du jeu. Elle raccourcit les tests et la CI, et découpe le code de test et de serveur pour le rendre maintenable. Les mesures ci-dessous sont celles des rapports QA du milestone (SHA final `0d2ca78b`).

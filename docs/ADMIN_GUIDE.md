@@ -2497,6 +2497,25 @@ Vous **ne pouvez pas ajouter** de nouveaux sons au-delà de ces sept. Chaque cue
 
 L'interface affiche clairement lequel des deux est actif pour chaque cue. Un bouton **Restaurer** n'apparaît que sur les cues personnalisées.
 
+#### Diagnostic de la sortie audio (v11.6.0, #283)
+
+Le haut de l'onglet **Son** indique l'état de la sortie audio. L'état est figé au démarrage du serveur, sauf pour l'interrupteur général (voir ci-dessous) :
+
+| Affichage | État (`output`) | Signification | Que faire |
+|---|---|---|---|
+| Pastille **Son actif** | `ok` | La sortie audio est prête ; les bruitages sont joués | Rien |
+| **Enceinte indisponible.** + cause | `unavailable` | Aucun périphérique de sortie n'a répondu au démarrage. La cause (`reason`) est affichée sous la pastille | Vérifier la session audio (section « Prérequis système » ci-dessus) puis redémarrer le serveur |
+| **Bruitages désactivés** dans `config.json` | `disabled` | `sound.enabled = false` au démarrage : aucun son n'est joué | Mettre `sound.enabled` à `true` dans `config.json`, puis redémarrer |
+| **Redémarrage requis.** | `restart_required` | L'interrupteur `sound.enabled` a changé depuis le lancement du serveur | Éteindre prend effet immédiatement (le serveur reste muet). Rallumer n'a d'effet qu'après un redémarrage |
+
+La ligne de démarrage `AUDIO` du journal donne le même diagnostic :
+
+```
+sound: enabled=true output=ok reason="" device=default format=44100Hz/2ch/16bit (config: /chemin/absolu/config.json)
+```
+
+Elle est écrite en `ERROR` si `output=unavailable`, en `INFO` sinon. Le champ `(config: …)` indique le fichier de configuration réellement lu.
+
 ### Remplacer un son
 
 **Procédure** :
@@ -2508,26 +2527,31 @@ L'interface affiche clairement lequel des deux est actif pour chaque cue. Un bou
 5. Le serveur **valide instantanément** le fichier :
    - ✅ Accepté → le son est remplacé **immédiatement**, aucun redémarrage
    - ⚠️ Avertissement → fichier accepté, mais sa durée pourrait gêner la fluidité du jeu (ex: > 2 s)
-   - ❌ Refusé → format invalide ou trop long (> 5 s) — message d'erreur explique pourquoi
+   - ❌ Refusé → format non accepté (MP3, M4A, fichier qui n'est pas un WAV), durée trop longue (> 5 s) ou fichier trop volumineux — le message d'erreur explique pourquoi
 
-### Formats acceptés — Spécifications strictes
+### Formats acceptés — conversion automatique à l'upload (v11.6.0, #232)
 
-**Obligatoire** : WAV uniquement — aucune conversion automatique.
+**Obligatoire** : fichier **`.wav`**. Les formats compressés (MP3, M4A, etc.) sont **refusés**.
 
-Les sons de BuzzControl partagent un seul contexte audio par processus (contrainte d'architecture). Tous les fichiers doivent donc être **strictement conformes au format canonique** :
+Un WAV qui n'est pas dans le format canonique n'est plus refusé : le serveur le **convertit une fois, à l'upload**, puis stocke et joue uniquement le résultat converti. Le format joué reste toujours le même, car les sons de BuzzControl partagent un seul contexte audio par processus (contrainte d'architecture) :
 
-| Paramètre | Valeur | Raison |
+| Paramètre | Accepté à l'upload | Stocké et joué |
 |---|---|---|
-| Extension | **`.wav`** seulement | Décision utilisateur. Aucune conversion serveur ni navigateur |
-| Conteneur | **RIFF/WAVE valide** | Sinon, fichier rejeté au téléversement |
-| Codec | **PCM** (non compressé) | Un seul contexte audio pour toute l'application |
-| Fréquence | **44 100 Hz** exactement | Imposée par le pilote matériel (#228) |
-| Canaux | **Stéréo (2 canaux)** ou mono (1 canal) | Stéréo préféré pour les sons mélodiques |
-| Profondeur | **16 bits** | Qualité CD standard, équilibre taille/qualité |
-| Durée | **Maximum 5 s** ; avertissement au-delà de 2 s | Lecture séquentielle bloquante — sons longs retardent les événements suivants |
-| Taille fichier | **Maximum ~2 Mo** | Un son de 5 s pèse ~880 Ko, cette limite est très généreuse |
+| Extension | **`.wav`** seulement | `.wav` |
+| Conteneur | **RIFF/WAVE valide** | RIFF/WAVE |
+| Codec | **PCM** 8, 16, 24 ou 32 bits, ou **flottant 32 bits** (y compris `WAVE_FORMAT_EXTENSIBLE` avec ces formats) | **PCM 16 bits** |
+| Fréquence | **8 000 à 192 000 Hz** | **44 100 Hz** (rééchantillonnage) |
+| Canaux | **1 (mono) ou 2 (stéréo)** | **Stéréo** (un mono est dupliqué sur les deux voies) |
+| Durée | **Maximum 5 s** ; avertissement au-delà de 2 s | Inchangée |
+| Taille | Fichier brut jusqu'à **4 fois** la taille du format stocké (soit ~8 Mo pour un bruitage, ~24 Mo pour un son de question) | **Maximum ~2 Mo** pour un bruitage, **6 Mo** pour un son de question |
 
-**Convertir un fichier au bon format** (exemple depuis MP3 ou M4A) :
+Points à connaître :
+
+- **Un WAV déjà au format stocké** (44 100 Hz, stéréo, 16 bits) est enregistré **tel quel**, sans conversion.
+- La conversion est indiquée à l'écran : le message de remplacement affiche « converti depuis » suivi du format d'origine (par exemple `48000Hz/2ch/24bit`).
+- Un fichier trop volumineux avant conversion est refusé (`413`) ; un fichier dont la durée dépasse la limite est refusé, sans conversion.
+
+**Convertir un fichier compressé en WAV** (obligatoire pour un MP3 ou un M4A, qui sont refusés ; exemple depuis M4A) :
 
 ```bash
 # Avec ffmpeg (Windows/macOS/Linux)
