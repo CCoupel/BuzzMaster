@@ -63,6 +63,8 @@ type App struct {
 	soundEngine atomic.Pointer[audio.Engine]
 	// soundBoot : état de la sortie audio figé à setupSound (#283), lu par GET /api/sound/status.
 	soundBoot atomic.Pointer[soundBootState]
+	// ambLayers : round + direct layers of the ambiance settings (#290, round_ambiance.go).
+	ambLayers ambianceLayers
 	// soundPhase is the sound layer's own front-detection memory (contract
 	// sound.md §5.4) — see its doc comment in cmd/server/sound.go.
 	soundPhase soundPhaseTracker
@@ -509,6 +511,7 @@ func (a *App) init() {
 	// Sound bruitage engine (#227/#228) — real Output when `sound.enabled`
 	// is true (sound.go).
 	a.setupSound()
+	a.refreshAmbiance() // #290: initial AMBIANCE_EFFECTIVE + the persisted lighting.default_mode pushed at startup
 
 	// Default sounds (#229): generates any MISSING cue's WAV into
 	// data/files/sounds/, never overwrites — unconditional at every real
@@ -696,6 +699,7 @@ func (a *App) setupCallbacks() {
 			a.broadcastReset()
 		case "RESTORE":
 			a.questionSound().Stop() // #235 (m1) : un média en cours ne survit pas à une restauration
+			a.syncAmbianceRound()    // #290: round of the restored question (rounds.json restored with the questions)
 			a.broadcastQuestions()
 			a.broadcastUpdate()
 		case "RESET_SELECT":
@@ -754,6 +758,7 @@ func (a *App) setupCallbacks() {
 
 	// #286: sound mute / lighting master switch side effects (contract
 	// sound.md §11.2, §11.4) — fired by POST /config.json on a value change.
+	a.httpServer.Ambiance = a // #290: /api/ambiance/settings + direct gestures (wired with the callbacks)
 	a.httpServer.OnSoundMutedChange = func(muted bool) {
 		if muted {
 			a.questionSound().Stop()  // nil-safe
@@ -774,6 +779,7 @@ func (a *App) setupCallbacks() {
 	// Config update handler
 	a.httpServer.OnConfigUpdate = func() {
 		a.broadcastConfigUpdate()
+		a.refreshAmbiance() // #290: the global layer may have changed (default_mode, sound switches)
 		// #207: the `lighting` section may have changed — rebuild/hot-swap
 		// the Hue driver (no-op when nothing relevant changed).
 		a.reconfigureAmbiance()
@@ -2130,9 +2136,10 @@ func (a *App) handleNewGame(clientID string, msg *protocol.Message) {
 	if rel, ok := a.engine.CloseLaunchLock(clientID, "new_game"); ok { // applied NEW_GAME of the owner lifts the lock
 		a.logLaunchLockReleased(clientID, rel)
 	}
-	res := a.engine.InitGameWith(opts) // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
-	a.questionSound().Stop()           // the question sound ends with the question
-	a.countdownSound().Stop()          // #287 §12.8
+	res := a.engine.InitGameWith(opts)   // also clears the deferred timer (#219), so the sound's end can no longer relaunch it
+	a.setAmbianceRoundB("", true, false) // #290: NEW_GAME ⇒ no effective round, direct layer emptied
+	a.questionSound().Stop()             // the question sound ends with the question
+	a.countdownSound().Stop()            // #287 §12.8
 	server.LogWarn(game.LogComponentApp, "NEW_GAME_PURGE client=%s options=%s players_removed=%d teams_removed=%d scores_reset=%v questions_reset=%v phase_before=%s question_before=%s",
 		clientID, newGameOptionsLog(opts), len(res.PurgedPlayerIDs), len(res.RemovedTeams), opts.PurgeScores, opts.ResetQuestions, res.PhaseBefore, diag.LogToken(res.QuestionBefore))
 
@@ -2393,6 +2400,7 @@ func (a *App) handleReady(msg *protocol.Message) {
 	if st := a.engine.GetState(); st.Question == nil || st.Question.ID != payload.Question {
 		a.refreshRoundContext() // Ready() refused or selected another question: keep the context truthful
 	}
+	a.syncAmbianceRound()     // #290 (D1′): READY changing round applies its ambiance layer, emptying the direct one
 	a.questionSound().Stop()  // v11.1/#219, plan §7 tâche 11 — a newly (re)loaded question starts silent
 	a.countdownSound().Stop() // #287 §12.8
 	// v11.1/#219/#236/#237 (2026-09-23, contract sound.md §10.8.7):

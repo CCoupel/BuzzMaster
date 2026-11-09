@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"buzzcontrol/internal/ambiancecfg"
 )
 
 // DefaultTickInterval is the production period of the engine tickers (global
@@ -2189,6 +2191,14 @@ func (e *Engine) SetQuestionSoundState(state QuestionSoundState) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.state.QuestionSoundState = state
+}
+
+// SetAmbianceEffective stores the resolved ambiance settings published in
+// GameState.AMBIANCE_EFFECTIVE (v11.6.0, #290). Derived by cmd/server, never persisted.
+func (e *Engine) SetAmbianceEffective(eff ambiancecfg.Effective) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.state.AmbianceEffective = eff
 }
 
 // SetQuestionSoundOwner sets GameState.QuestionSoundOwner (v11.6.0, #235) —

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"buzzcontrol/internal/ambiancecfg"
 )
 
 // GamePhase represents the current game state
@@ -989,6 +991,10 @@ type GameState struct {
 	// courant — "" (IDLE) | "HOST" | "CARD:<cardID>" | "ENTRACTE". Toujours
 	// sérialisé, éphémère comme QuestionSoundState.
 	QuestionSoundOwner string `json:"QUESTION_SOUND_OWNER"`
+	// AmbianceEffective (v11.6.0, #290, game-state.md) — resolved behaviour settings
+	// (global ← round ← direct) and the source of each field. Always serialised,
+	// derived, never persisted.
+	AmbianceEffective ambiancecfg.Effective `json:"AMBIANCE_EFFECTIVE"`
 	AnswerTimerWaiting bool   `json:"ANSWER_TIMER_WAITING"`
 
 	// Média indisponible avant le lancement (v11.1, #219/#236/#237,
@@ -1142,6 +1148,10 @@ type LaunchLock struct {
 type Round struct {
 	ID   string `json:"ID"`
 	Name string `json:"NAME"`
+	// Ambiance (v11.6.0, #290) — partial override of the ambiance settings while
+	// this round is the effective round; `{}` = everything inherited. Always
+	// serialised (GameState rule: no omitempty).
+	Ambiance ambiancecfg.Partial `json:"AMBIANCE"`
 }
 
 // RoundContext is GameState.ROUND_CONTEXT (contracts/game-state.md): all zero when there is

@@ -899,6 +899,9 @@ type RoundsUpdatePayload struct {
 		Name      string   `json:"NAME"`
 		Questions []string `json:"QUESTIONS"`
 		Entractes *bool    `json:"ENTRACTES,omitempty"` // new round only; absent = true
+		// Ambiance (v11.6.0, #290): raw JSON to tell "absent" (keep) from `{}` (clear);
+		// validated strictly by rounds.ApplyUpdate (INVALID_AMBIANCE).
+		Ambiance json.RawMessage `json:"AMBIANCE,omitempty"`
 	} `json:"ROUNDS"`
 	Unassigned    []string `json:"UNASSIGNED"`
 	DeletedRounds []struct {

@@ -84,6 +84,10 @@ type LightingConfig struct {
 	// key. Never persisted, never returned.
 	ClearAPIKey bool                 `json:"clear_api_key,omitempty"`
 	Lights      []LightingLightEntry `json:"lights"`
+	// DefaultMode (v11.6.0, #290, D8) — global value of the tri-state general
+	// selector ("ON" | "AUTO" | "OFF"); absent ⇒ "AUTO". Read ONLY through the
+	// ambiance adapter (cmd/server/round_ambiance.go FromConfig).
+	DefaultMode string `json:"default_mode,omitempty"`
 }
 
 // LightingLightEntry is one bulb, addressed by NAME (Hue ids are reassignable).

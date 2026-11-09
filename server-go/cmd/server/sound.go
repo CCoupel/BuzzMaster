@@ -323,14 +323,13 @@ func (a *App) startSoundEngine() {
 // (CuesDisabled absent/empty/nil), the condition is always false and the
 // behaviour is identical to the bit to what #227 shipped.
 func (a *App) notifySound(c audio.Cue) {
-	// #286 (contract sound.md §11.2): the régie's mute switch, first guard.
-	if config.Get().Sound.Muted {
-		return
-	}
+	// Hardware guard first, unchanged (ambiance-settings.md §4.4).
 	if !config.Get().Sound.Enabled {
 		return
 	}
-	if config.Get().Sound.CuesDisabled[string(c)] {
+	// #290: muted and the per-cue switches are read RESOLVED (global ← round ← direct).
+	s := a.ambianceSettings()
+	if s.SoundMuted || !s.CueEnabled(string(c)) {
 		return
 	}
 	a.sound().PlayCue(c)

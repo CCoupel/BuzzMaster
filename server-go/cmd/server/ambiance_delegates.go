@@ -56,8 +56,6 @@ func (a *App) startScoreFlash(team string, points int) { a.ambCtl().StartScoreFl
 
 func (a *App) LightingMode() string { return a.ambCtl().LightingMode() }
 
-func (a *App) SetLightingMode(mode string) error { return a.ambCtl().SetLightingMode(mode) }
-
 func (a *App) LightingFlash() bool { return a.ambCtl().LightingFlash() }
 
 func (a *App) SetLightingFlash(on bool) { a.ambCtl().SetLightingFlash(on) }

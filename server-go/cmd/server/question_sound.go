@@ -490,7 +490,7 @@ func (qs *questionSoundAdapter) playSource(src soundSource, releaseOnFailure boo
 	}
 
 	// #286 (contract sound.md §11.2): muted is treated as DISABLED at T1 only.
-	if config.Get().Sound.Muted {
+	if qs.app.ambianceSettings().SoundMuted { // #290: resolved value
 		if releaseOnFailure {
 			qs.release()
 		}

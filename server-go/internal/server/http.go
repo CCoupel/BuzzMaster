@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"buzzcontrol/internal/ambiancecfg"
 	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/audio/synth"
 	"buzzcontrol/internal/config"
@@ -93,6 +94,8 @@ type HTTPServer struct {
 	// provider is never expected in production (cmd/server always sets it,
 	// same as Lighting) but every accessor below is nil-safe regardless.
 	Sound              SoundProvider
+	// Ambiance (v11.6.0, #290) resolves global ← round ← direct (ambiance-settings.md).
+	Ambiance AmbianceProvider
 	OnBuzzerWifiConfig func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
@@ -490,6 +493,7 @@ func (h *HTTPServer) setupRoutes() {
 	// Conduite manuelle — sélecteur tri-état + Flash (#208, contract §10.1)
 	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
 	h.mux.HandleFunc("/api/lighting/flash", h.handleLightingFlash)
+	h.mux.HandleFunc("/api/ambiance/settings", h.handleAPIAmbianceSettings) // #290
 
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
@@ -1956,6 +1960,13 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 		current := config.Get()
 		cfg := *current // value copy: every section is a plain struct, no aliasing
+		// #290 (ambiance-settings.md §4.2): resolved values and round layer BEFORE the merge,
+		// to tell which fields this request really changes (a "geste direct").
+		ambBefore, _ := h.ambianceSettingsNow()
+		var ambRound ambiancecfg.Partial
+		if h.Ambiance != nil {
+			ambRound = h.Ambiance.AmbianceRoundLayer()
+		}
 
 		if data, ok := raw["server"]; ok {
 			cfg.Server = config.ServerConfig{}
@@ -2118,6 +2129,14 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			if _, ok := lRaw["enabled"]; ok {
 				cfg.Lighting.Enabled = incoming.Enabled
 			}
+			// default_mode (v11.6.0, #290, D8): ON | AUTO | OFF, 400 otherwise.
+			if _, ok := lRaw["default_mode"]; ok {
+				if !ambiancecfg.LightMode(incoming.DefaultMode).Valid() {
+					http.Error(w, "lighting.default_mode doit être ON, AUTO ou OFF", http.StatusBadRequest)
+					return
+				}
+				cfg.Lighting.DefaultMode = incoming.DefaultMode
+			}
 			if _, ok := lRaw["bridge_ip"]; ok {
 				ip := strings.TrimSpace(incoming.BridgeIP)
 				if ip != "" {
@@ -2240,6 +2259,10 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// #290: direct gestures hold for the round when the round overrides the field
+		// (the global is then NOT written) — §4.2 points 2–3.
+		ambChanges, ambScope := ambianceGestureFromRequest(raw, ambBefore, ambRound, current, &cfg)
+
 		// Re-apply defaults to any field a partial section reset to zero,
 		// exactly as a config.json load would. (Neon effect clamping moved
 		// to handleGameConfig with the rest of the game settings, #150.)
@@ -2253,14 +2276,22 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 
 		// #286 (contract sound.md §11.2/§11.4): side effects of the two
 		// régie switches, only on an actual value change.
-		if cfg.Sound.Muted != current.Sound.Muted && h.OnSoundMutedChange != nil {
-			h.OnSoundMutedChange(cfg.Sound.Muted)
+		newAmb, oldAmb := AmbianceFromConfig(&cfg), AmbianceFromConfig(current)
+		if newAmb.SoundMuted != oldAmb.SoundMuted && h.OnSoundMutedChange != nil {
+			h.OnSoundMutedChange(newAmb.SoundMuted)
 		}
-		if cfg.Sound.CountdownDisabled != current.Sound.CountdownDisabled && cfg.Sound.CountdownDisabled && h.OnSoundCountdownDisabledChange != nil {
-			h.OnSoundCountdownDisabledChange(cfg.Sound.CountdownDisabled)
+		if newAmb.CountdownEnabled != oldAmb.CountdownEnabled && !newAmb.CountdownEnabled && h.OnSoundCountdownDisabledChange != nil {
+			h.OnSoundCountdownDisabledChange(!newAmb.CountdownEnabled)
 		}
 		if cfg.Lighting.Enabled != current.Lighting.Enabled && h.OnLightingEnabledChange != nil {
 			h.OnLightingEnabledChange(cfg.Lighting.Enabled)
+		}
+
+		// #290: the direct layer receives the gestures, then everything is re-resolved,
+		// applied and broadcast (the effective mute / light mode may change even when the
+		// global did not).
+		if h.Ambiance != nil && !ambChanges.IsEmpty() {
+			h.Ambiance.AmbianceGesture(ambChanges)
 		}
 
 		if h.OnConfigUpdate != nil {
@@ -2273,6 +2304,15 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "Failed to encode config", http.StatusInternalServerError)
 			return
+		}
+		// additive `status` / `scope` ("global" | "round") — contracts/http-endpoints.md (#290)
+		var respMap map[string]json.RawMessage
+		if json.Unmarshal(respJSON, &respMap) == nil {
+			respMap["status"] = json.RawMessage(`"ok"`)
+			respMap["scope"] = json.RawMessage(strconv.Quote(ambScope))
+			if merged, merr := json.MarshalIndent(respMap, "", "  "); merr == nil {
+				respJSON = merged
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(respJSON)

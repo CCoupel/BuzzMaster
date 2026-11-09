@@ -77,6 +77,8 @@ func (a *App) handleRoundsUpdate(clientID string, msg *protocol.Message) {
 	}
 	server.LogInfo(game.LogComponentApp, "ROUNDS_UPDATE client=%q %s", clientID, line)
 	a.refreshRoundContext()
+	a.syncAmbianceRound()
+	a.refreshAmbiance() // #290: an AMBIANCE edit of the effective round applies at once (§4.1)
 	a.broadcastUpdate()
 	a.broadcastQuestions()
 	a.broadcastNextQuestion()

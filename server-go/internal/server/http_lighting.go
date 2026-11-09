@@ -155,7 +155,13 @@ func (h *HTTPServer) handleLightingMode(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "mode must be ON, AUTO or OFF", http.StatusBadRequest)
 		return
 	}
-	writeLightingJSON(w, http.StatusOK, map[string]string{"result": "ok", "mode": mode})
+	// #290 (ambiance-settings.md §4.2 point 4): a direct gesture, never written to the
+	// global; "scope" tells whether the effective round overrides the field.
+	scope := "global"
+	if h.Ambiance != nil && h.Ambiance.AmbianceRoundLayer().LightMode != nil {
+		scope = "round"
+	}
+	writeLightingJSON(w, http.StatusOK, map[string]string{"result": "ok", "mode": mode, "scope": scope})
 }
 
 // handleLightingFlash — POST /api/lighting/flash {"on":true|false} (contract

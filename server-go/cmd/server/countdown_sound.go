@@ -73,14 +73,14 @@ func (cs *countdownSoundAdapter) filePath() string {
 
 // mayPlay is §12.4, in the contract's order. Pure config + start data.
 func (cs *countdownSoundAdapter) mayPlay(start game.AnswerTimerStart) bool {
-	sc := config.Get().Sound
-	if sc.Muted {
+	amb := cs.app.ambianceSettings() // #290: resolved values (global ← round ← direct)
+	if amb.SoundMuted {
 		return false // §11 — son coupé
 	}
 	if !cs.enabled() {
 		return false // « Bruitages activés » éteint
 	}
-	if sc.CountdownDisabled {
+	if !amb.CountdownEnabled {
 		return false // §12.3
 	}
 	if start.QuestionSound != "" {
@@ -97,7 +97,7 @@ func (cs *countdownSoundAdapter) OnAnswerTimerStarted(start game.AnswerTimerStar
 	}
 	path := cs.filePath()
 	var err error
-	if config.Get().Sound.CountdownOnce {
+	if !cs.app.ambianceSettings().CountdownLoop { // #290: resolved "une fois" ⇔ !loop
 		err = cs.player.Play(path)
 	} else {
 		err = cs.player.PlayLoop(path)

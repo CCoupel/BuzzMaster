@@ -63,6 +63,16 @@ func AllCues() []Cue {
 	}
 }
 
+// CueByName resolves a cue name against the closed catalogue (AllCues).
+func CueByName(name string) (Cue, bool) {
+	for _, c := range AllCues() {
+		if string(c) == name {
+			return c, true
+		}
+	}
+	return "", false
+}
+
 // Type renvoie le type de jeu de la cue ("QCM", "MEMORY", "MEMOTION", "RAFALE"),
 // ou "" pour les 7 cues globales (et toute valeur inconnue).
 func (c Cue) Type() string {

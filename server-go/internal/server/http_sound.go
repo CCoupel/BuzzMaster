@@ -134,14 +134,14 @@ func (h *HTTPServer) handleAPISoundsList(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		LogWarn(game.LogComponentHTTP, "GET /api/sounds: failed to reconcile manifest: %v", err)
 	}
-	cuesDisabled := config.Get().Sound.CuesDisabled
+	globalAmb := AmbianceFromConfig(config.Get()) // #290: the GLOBAL value (the catalogue edits the global)
 
 	entries := make([]soundCueEntry, 0, len(synth.Cues))
 	for _, c := range synth.Cues {
 		entry := soundCueEntry{
 			Cue:     string(c),
 			Type:    c.Type(),
-			Enabled: !cuesDisabled[string(c)],
+			Enabled: globalAmb.CueEnabled(string(c)),
 			Path:    "/files/sounds/" + synth.Filename(c),
 		}
 		m := manifest[string(c)]
@@ -424,16 +424,17 @@ func (h *HTTPServer) handleAPISoundStatus(w http.ResponseWriter, r *http.Request
 	active := h.Sound != nil && h.Sound.SoundEnabled() && h.Sound.SoundOutputAvailable()
 	// muted (v11.4.0, #286): read at call time from the live config, never
 	// cached; independent from active (contract sound.md §11.2).
+	effAmb, effSrc := h.ambianceSettingsNow()
 	body := map[string]interface{}{
 		"active": active,
-		"muted":  config.Get().Sound.Muted,
+		"muted":  effAmb.SoundMuted, // #290: resolved value
 		// v11.6.0 (#283) additive diagnostic fields; defaults when the
 		// provider does not implement SoundDiagnosticProvider.
 		"enabled":          false,
 		"output":           "disabled",
 		"reason":           nil,
 		"restart_required": false,
-		"muted_source":     "global", // #290 (LOT-4) will make it resolved
+		"muted_source":     string(effSrc.SoundMuted), // #290
 	}
 	if dp, ok := h.Sound.(SoundDiagnosticProvider); ok {
 		enabled, output, reason, restart := dp.SoundDiagnostic()

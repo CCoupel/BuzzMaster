@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"buzzcontrol/internal/ambiancecfg"
+	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
@@ -43,7 +46,7 @@ func CurrentRounds(h Host) []game.Round {
 	have := h.Engine().GetRounds()
 	same := len(have) == len(rounds)
 	for i := 0; same && i < len(rounds); i++ {
-		same = have[i] == rounds[i]
+		same = reflect.DeepEqual(have[i], rounds[i])
 	}
 	if !same {
 		h.Engine().SetRounds(rounds)
@@ -222,6 +225,32 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 		}
 		req.Rounds[i].Name = name
 	}
+	// #290 : the AMBIANCE overrides are validated strictly, before anything else is applied.
+	newAmbiance := make([]*ambiancecfg.Partial, len(req.Rounds)) // nil = field absent (keep / `{}`)
+	var badAmbiance []string
+	knownCue := func(c string) bool { _, ok := audio.CueByName(c); return ok }
+	for i, r := range req.Rounds {
+		if len(r.Ambiance) == 0 {
+			continue
+		}
+		label := r.ID
+		if label == "" {
+			label = fmt.Sprintf("new%d", i+1)
+		}
+		p, bad := ambiancecfg.ParsePartial(r.Ambiance, knownCue)
+		for _, b := range bad {
+			badAmbiance = append(badAmbiance, label+":"+b)
+		}
+		if len(bad) == 0 {
+			pp := p
+			newAmbiance[i] = &pp
+		}
+	}
+	if len(badAmbiance) > 0 {
+		res, line := refuse("INVALID_AMBIANCE")
+		res.Questions = badAmbiance
+		return res, line
+	}
 	keptIDs := map[string]bool{}
 	for _, r := range req.Rounds {
 		if r.ID == "" {
@@ -374,7 +403,7 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 	newEntractes := map[string]map[string]interface{}{} // id -> content
 	created := 0
 	nextReserved := 0
-	for _, r := range req.Rounds {
+	for ri, r := range req.Rounds {
 		id := r.ID
 		ids := append([]string{}, r.Questions...)
 		if id == "" {
@@ -393,7 +422,15 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 				result.CreatedEntractes = append(result.CreatedEntractes, protocol.RoundsCreatedEntractes{RoundID: id, StartID: startID, EndID: endID})
 			}
 		}
-		newRF.Rounds = append(newRF.Rounds, game.Round{ID: id, Name: r.Name})
+		// #290 : AMBIANCE absent ⇒ existing override kept (new round: `{}`); `{}` clears it.
+		amb := existingRounds[r.ID].Ambiance // zero Partial for a new round (ID "")
+		if r.ID == "" {
+			amb = ambiancecfg.Partial{}
+		}
+		if newAmbiance[ri] != nil {
+			amb = *newAmbiance[ri]
+		}
+		newRF.Rounds = append(newRF.Rounds, game.Round{ID: id, Name: r.Name, Ambiance: amb})
 		layout = append(layout, placement{roundID: id, ids: ids})
 	}
 	unassigned := append(append([]string{}, req.Unassigned...), keptToUnassigned...)
