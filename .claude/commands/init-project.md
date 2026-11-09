@@ -1711,7 +1711,7 @@ Jamais de passage silencieux : un environnement non valide ne doit apparaitre nu
 sans secret : `infrastructure.environments[].access` — coordonnees non sensibles, **noms** des variables
 requises (`credentials_env`) et `verified` (date, statut, sondes jouees). Reporter ces memes noms dans
 `<env>.env.example` (section 3bis). Un acces par **fichier** (kubeconfig, token k8s, cle SSH, compte de service)
-se range dans `PRIVATE/` (Etape 10b) : la variable de `<env>.env` le designe par chemin (`KUBECONFIG=PRIVATE/k8s/...`).
+se range dans `PRIVATE/<ENV>/` (Etape 10b) : la variable de `<env>.env` le designe par chemin (`KUBECONFIG=PRIVATE/PROD/kubeconfig`).
 
 ---
 
@@ -1807,7 +1807,10 @@ AskUserQuestion (`multiSelect: true`) : "Quels aspects securite sont importants 
 ## Etape 10b : Elements prives (`PRIVATE/`)
 
 Regle du template (section « Éléments privés » de `CLAUDE.md`) : tout element prive qui ne doit jamais etre
-commite vit dans `PRIVATE/` a la racine, gitignore. Cette etape **etudie** ce qui doit ou peut y aller.
+commite vit dans `PRIVATE/` a la racine, gitignore, partage par les worktrees (jamais copie), range par portee :
+`PRIVATE/GLOBAL/` (commun au projet) et `PRIVATE/<ENV>/` (`<ENV>` = `infrastructure.environments[].name`, ex.
+`PRIVATE/PROD/`). `PRIVATE/gitconfig` reste a la racine (lie a la structure du projet, Etape 9c). Cette etape
+**etudie** ce qui doit ou peut y aller.
 Hors perimetre (conventions propres, jamais deplacees) : `.env`, `.claude/agents/environments/<env>.env` et leurs
 `*.env.example`, `_work/`, `MARKETING/`, `build/`, `TEMPLATE_claude/`, `.claude/`.
 
@@ -1830,9 +1833,9 @@ Puis **anticiper** ce qui y ira d'apres les reponses deja donnees (meme absent a
 
 | Reponse | Element prive attendu |
 |---------|-----------------------|
-| Etape 8b — acces par cle / fichier / token (SSH, kubeconfig, token k8s, compte de service cloud, registre) | fichier d'acces dans `PRIVATE/<type>/` ; la variable de `<env>.env` qui le designe (`KUBECONFIG`, `SSH_KEY_PATH`, `GOOGLE_APPLICATION_CREDENTIALS`...) pointe dans `PRIVATE/` — son **nom** reste dans `<env>.env.example`. Fichier volontairement partage hors repo (`~/.kube/config`) : proposer « Laisser » |
-| Etape 8b — comptes (identifiants de consoles, comptes de service, acces fournisseurs) | `PRIVATE/ACCES.md` (notes d'acces, jamais dans un fichier tracke) |
-| Etape 10 — donnees sensibles / paiements | exports et dumps de donnees reelles (jamais en fixtures de test) |
+| Etape 8b — acces par cle / fichier / token (SSH, kubeconfig, token k8s, compte de service cloud, registre) | fichier d'acces dans `PRIVATE/<ENV>/` (commun a tous les environnements : `PRIVATE/GLOBAL/`) ; la variable de `<env>.env` qui le designe (`KUBECONFIG`, `SSH_KEY_PATH`, `GOOGLE_APPLICATION_CREDENTIALS`...) pointe dans `PRIVATE/` — son **nom** reste dans `<env>.env.example`. Fichier volontairement partage hors repo (`~/.kube/config`) : proposer « Laisser » |
+| Etape 8b — comptes (identifiants de consoles, comptes de service, acces fournisseurs) | `PRIVATE/GLOBAL/ACCES.md` (notes d'acces, jamais dans un fichier tracke ; acces propres a un environnement : `PRIVATE/<ENV>/ACCES.md`) |
+| Etape 10 — donnees sensibles / paiements | exports et dumps de donnees reelles (jamais en fixtures de test) — `PRIVATE/GLOBAL/dumps/`, ou `PRIVATE/<ENV>/dumps/` s'ils viennent d'un environnement |
 | Etape 4 — mobile | keystore Android, profils et certificats de signature iOS |
 | Etape 5 — firmware | cles de provisioning / certificats d'appareil, secrets de flashage |
 | Brief / cadrage — client, contrat | documents client, contrats, specifications sous NDA |
@@ -1868,8 +1871,8 @@ deplacement est fait a la Finalisation (sous-section « Elements prives »), apr
   "private": {
     "reviewed": "2026-11-03",
     "items": [
-      { "path": "PRIVATE/deploy_key", "kind": "cle d'acces PROD", "origin": "moved", "from": "deploy/deploy_key" },
-      { "path": "PRIVATE/dumps/", "kind": "dumps de donnees reelles", "origin": "expected" }
+      { "path": "PRIVATE/PROD/deploy_key", "kind": "cle d'acces PROD", "origin": "moved", "from": "deploy/deploy_key" },
+      { "path": "PRIVATE/GLOBAL/dumps/", "kind": "dumps de donnees reelles", "origin": "expected" }
     ]
   },
   "launcher_env": { "status": "managed", "file": "env-template.yaml", "updated": "2026-11-07" },
@@ -1996,7 +1999,7 @@ Valeurs a deriver si elles ne sont pas fournies explicitement :
 | `testing.coverage_min` | Defaut `70` (seuil minimal de couverture, en %) |
 | `milestone.defaults` | Intensite de depart d'un milestone selon son type de version (`patch` / `minor` / `major` → `leger` / `complet`). Defaut `patch: leger`, `minor` et `major: complet`. Le cadrage complet (options, team) est propose par le planner et valide au GATE 2 : `agents/context/MILESTONE_CADRAGE.md`. Absent = `complet` partout |
 | `testing.lot_max_tests` | Defaut `50` (nombre max de cas de test par lot ; QA execute et rapporte lot par lot) |
-| `private` | Etape 10b. `reviewed` : date de l'etude ; `items[]` : contenu attendu de `PRIVATE/` (gitignore) — `path`, `kind` (nature, sans valeur), `origin` : `moved` (deplace depuis `from`) \| `existing` (deja hors git, range) \| `expected` (a fournir par le developpeur). Copie trackee : un clone frais sait ce qui manque ; `qa` y lit ce qu'il copie dans ses worktrees |
+| `private` | Etape 10b. `reviewed` : date de l'etude ; `items[]` : contenu attendu de `PRIVATE/` (gitignore) — `path`, `kind` (nature, sans valeur), `origin` : `moved` (deplace depuis `from`) \| `existing` (deja hors git, range) \| `expected` (a fournir par le developpeur). `path` sous `PRIVATE/GLOBAL/` ou `PRIVATE/<ENV>/`. Copie trackee : un clone frais sait ce qui manque ; `PRIVATE/` est partage (lien symbolique dans les worktrees de `qa`, jamais copie) |
 | `launcher_env` | Etape 9c. `status` : `managed` (environnement conteneur gere par le template) \| `declined` (refuse : plus de question tant qu'aucun fichier n'apparait dans `.claude-launcher/`) ; `file` : `env-template.yaml` (fichier genere par le template, regenere a chaque passage ; absent avec `managed` = convention anterieure, `env.yaml` genere par fusion additive → migration, `templates/launcher/env-yaml.md` §5) ; `updated` : date de la derniere ecriture ; `migrated` : date de la migration de `env.yaml`. Absent = jamais propose (projet anterieur : Etape d1j) |
 | `license` | Etape 1b. `spdx` : identifiant SPDX (`MIT`, `Apache-2.0`...), `LicenseRef-proprietary` (tous droits reserves), `LicenseRef-custom` (texte maison fourni) ou `null` (« Decider plus tard ») ; `holder` / `year` : titulaire et annee du copyright ; `source` : `detected` \| `provided` \| `guided` \| `proprietary` \| `deferred` |
 | `src_dir` | Detection Etape 0 (repertoire source principal) ou stack par defaut : `src`, `cmd`... |
@@ -2466,7 +2469,9 @@ tout deplacement) :
 
 ```bash
 grep -qxF 'PRIVATE/' .gitignore 2>/dev/null || echo 'PRIVATE/' >> .gitignore   # garde-fou .gitignore personnalise
-mkdir -p PRIVATE
+grep -qxF '/PRIVATE' .gitignore 2>/dev/null || echo '/PRIVATE' >> .gitignore   # lien symbolique d'un worktree
+mkdir -p PRIVATE/GLOBAL
+jq -r '.infrastructure.environments[]?.name // empty' .claude/project-config.json | while read -r e; do mkdir -p "PRIVATE/$e"; done
 git check-ignore -q PRIVATE/ || { echo "⚠ PRIVATE/ non ignore — deplacement annule"; exit 1; }
 jq -r '.private.items[]? | select(.origin=="moved") | "\(.from)\t\(.path)"' .claude/project-config.json |
 while IFS=$'\t' read -r from to; do
@@ -3154,8 +3159,24 @@ privés » dans `CLAUDE.md` (hors bloc `TEAMLEADER_PROTOCOL`, donc non resynchro
   « Presentation et decision » de l'Etape 10b puis « Elements prives » de la Finalisation.
 - Cle `private` presente → rejouer seulement les recherches 1-2 de l'Etude (trackes) : un nouveau candidat →
   `[!] PRIVATE/ — <fichier> tracke hors PRIVATE/` au rapport d4, decision a l'etape d5 comme ci-dessus.
-- `CLAUDE.md` sans `## Éléments privés` → a l'etape d5, inserer la section depuis `TEMPLATE_claude/CLAUDE_TEMPLATE.md`
-  juste avant `## Conventions Git` (ou en fin de fichier), sans toucher au reste :
+- **Rangement par portee** (projet anterieur a `GLOBAL/` / `<ENV>/`) — elements de `PRIVATE/` hors de cette
+  structure (`gitconfig` excepte) :
+  ```bash
+  ENVS=$(jq -r '[.infrastructure.environments[]?.name] | join("|")' .claude/project-config.json)
+  find PRIVATE -mindepth 1 -maxdepth 1 2>/dev/null | grep -vxE "PRIVATE/(gitconfig|GLOBAL${ENVS:+|$ENVS})"
+  ```
+  Chaque element trouve → `[~] PRIVATE/ — <element> a ranger (GLOBAL/ ou <ENV>/)` au rapport d4, destination
+  proposee d'apres son nom / son `kind` dans `private.items` (ex. `k8s/kubeconfig-prod` → `PROD/kubeconfig`). A
+  l'etape d5 : AskUserQuestion (`multiSelect: true`) « Quels elements ranger ? » (destination en description) ;
+  pour chaque element retenu : `mv`, mise a jour des chemins qui le designent (`.env`, `<env>.env` — fichiers non
+  trackes, edites en place —, et `git grep -nF` dans les fichiers trackes), puis de `private.items[].path`. Rien
+  n'est deplace sans reponse. Dossiers `GLOBAL/` et `<ENV>/` absents : crees (Finalisation, « Elements prives »).
+- `CLAUDE.md` sans `## Éléments privés` → a l'etape d5, inserer la section (et la suivante, `## Outil manquant`)
+  depuis `TEMPLATE_claude/CLAUDE_TEMPLATE.md` juste avant `## Conventions Git` (ou en fin de fichier), sans toucher au
+  reste. Section presente mais anterieure (sans `PRIVATE/GLOBAL` ou sans `## Outil manquant`) → `[~] CLAUDE.md —
+  Éléments privés / Outil manquant a mettre a jour` au rapport d4 ; a l'etape d5, montrer le diff du bloc
+  (`## Éléments privés` → `## Conventions Git`) et le remplacer par celui du template apres accord (supprimer le bloc
+  existant, puis jouer l'insertion ci-dessous) :
 
 ```bash
 grep -q '^## Éléments privés' CLAUDE.md || {
