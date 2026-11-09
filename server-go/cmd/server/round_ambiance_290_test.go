@@ -18,6 +18,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -644,12 +645,33 @@ func TestRoundAmbiance290_EnteringAndLeavingRound_NeverRewritesGlobal(t *testing
 	}
 }
 
+// tw290Lighting configure un éclairage RÉEL de bout en bout avec un pont Hue FACTICE (httptest, tw286Bridge) :
+// config → OnConfigUpdate → pilote construit. Sans pilote, POST /api/lighting/mode répond 409 not_configured.
+func tw290Lighting(t *testing.T, e *tw290Env) {
+	t.Helper()
+	bridge := &tw286Bridge{}
+	srv := httptest.NewServer(bridge.handler())
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	e.app.ctx = ctx
+	e.app.httpServer.Lighting = e.app // câblé par setup() en production (main.go), pas par setupCallbacks
+	config.Get().Lighting = config.LightingConfig{Enabled: true, BridgeIP: srv.URL, BridgeID: "fffe0000deadbeef", APIKey: "k",
+		Lights: []config.LightingLightEntry{{Name: "L1", Role: "general"}}}
+	e.app.httpServer.OnConfigUpdate()
+	tw286WaitDriver(t, e.app, false)
+}
+
 // POST /api/lighting/mode = geste direct : jamais d'écriture de default_mode (§4.2 point 4).
 func TestRoundAmbiance290_D1prime_LightingModeGesture_NeverWritesDefaultMode(t *testing.T) {
 	e := tw290New(t)
-	code, _ := e.post(t, "/api/lighting/mode", `{"mode":"OFF"}`)
+	tw290Lighting(t, e)
+	code, body := e.post(t, "/api/lighting/mode", `{"mode":"OFF"}`)
 	if code != http.StatusOK {
-		t.Skipf("POST /api/lighting/mode refusé dans ce harnais (%d) — pilote d'éclairage non configuré ?", code)
+		t.Fatalf("POST /api/lighting/mode : 200 attendu avec un pilote configuré, got %d %v", code, body)
+	}
+	if body["scope"] != "global" {
+		t.Errorf("hors surcharge de la manche : scope=\"global\" attendu, got %v", body["scope"])
 	}
 	m := e.settings(t)
 	if tw290Path(m, "effective", "light", "mode") != "OFF" || tw290Path(m, "sources", "light", "mode") != "direct" {
@@ -657,6 +679,32 @@ func TestRoundAmbiance290_D1prime_LightingModeGesture_NeverWritesDefaultMode(t *
 	}
 	if tw290Path(m, "global", "light", "mode") != "AUTO" {
 		t.Error("POST /api/lighting/mode n'écrit JAMAIS lighting.default_mode : global=AUTO attendu")
+	}
+}
+
+// Avec une manche qui impose le mode : le geste vaut pour la manche (scope \"round\"), le global reste intact.
+func TestRoundAmbiance290_D1prime_LightingModeGesture_OnOverriddenField_ScopeRound(t *testing.T) {
+	e := tw290New(t)
+	tw290Lighting(t, e)
+	e.twoRounds(t, map[string]interface{}{"light": map[string]interface{}{"mode": "ON"}})
+	e.ready(t, "1")
+	code, body := e.post(t, "/api/lighting/mode", `{"mode":"OFF"}`)
+	if code != http.StatusOK {
+		t.Fatalf("200 attendu, got %d %v", code, body)
+	}
+	if body["scope"] != "round" {
+		t.Errorf("la manche surcharge le mode : scope=\"round\" attendu, got %v", body["scope"])
+	}
+	m := e.settings(t)
+	if tw290Path(m, "effective", "light", "mode") != "OFF" || tw290Path(m, "sources", "light", "mode") != "direct" {
+		t.Errorf("OFF / \"direct\" attendus, got %v / %v", m["effective"], m["sources"])
+	}
+	if tw290Path(m, "global", "light", "mode") != "AUTO" {
+		t.Error("le global ne doit pas bouger")
+	}
+	e.ready(t, "3") // autre manche : la couche directe est vidée
+	if tw290Path(e.settings(t), "effective", "light", "mode") != "AUTO" {
+		t.Error("changement de manche : retour au global (AUTO)")
 	}
 }
 
