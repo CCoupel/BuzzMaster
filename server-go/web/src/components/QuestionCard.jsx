@@ -173,6 +173,10 @@ export default function QuestionCard({
         {question.SOUND && (
           <span className="qcard-sound-badge" title="Cette question a un son">🔊</span>
         )}
+        {/* #235 — carte(s) MEMOTION sonore(s) (chip ♪) */}
+        {!question.SOUND && Array.isArray(question.MOTION_CARDS) && question.MOTION_CARDS.some(c => c?.SOUND) && (
+          <span className="qcard-sound-badge" title="Une ou plusieurs cartes ont un son">♪</span>
+        )}
 
         <span className="qcard-meta">
           <span className="qcard-time">{question.TIME}s</span>

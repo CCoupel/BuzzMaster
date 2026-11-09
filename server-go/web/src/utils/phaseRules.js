@@ -151,10 +151,18 @@ export function canToggleEntracte(phase, entracteActive) {
  * QUESTION_SOUND (contrat websocket-actions.md : "Phase STARTED ou PAUSED").
  *
  * @param {string} phase - gameState.phase
- * @param {{SOUND?: string}|null} [question] - gameState.question
+ * @param {{SOUND?: string, MOTION_CARDS?: Array<{ID: string, SOUND?: string}>}|null} [question] - gameState.question
+ * @param {string|null} [selectedCardId] - MEMOTION : ID de la carte sélectionnée (#235)
  */
-export function showSoundRow(phase, question) {
-  return isPlaying(phase) && !!question?.SOUND
+export function showSoundRow(phase, question, selectedCardId = null) {
+  if (!isPlaying(phase)) return false
+  if (question?.SOUND) return true
+  // #235 (T14, sound.md §14.4) — pendant une carte MEMOTION sonore (carte
+  // retournée = sélectionnée), la rangée est visible même si l'hôte est muet.
+  if (selectedCardId && Array.isArray(question?.MOTION_CARDS)) {
+    return question.MOTION_CARDS.some(c => c?.ID === selectedCardId && !!c.SOUND)
+  }
+  return false
 }
 
 /**

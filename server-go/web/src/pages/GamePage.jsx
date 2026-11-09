@@ -1524,7 +1524,7 @@ export default function GamePage() {
               (jamais grisée) si la question courante ne porte pas de son ou
               si la partie n'est pas en cours — phaseRules.showSoundRow,
               source de vérité unique (jamais une condition réécrite ici). */}
-          {showSoundRowRule(gameState.phase, gameState.question) && (
+          {showSoundRowRule(gameState.phase, gameState.question, gameState.MEMOTION_SELECTED) && (
             <div className="question-sound-admin-live">
               <div className="question-sound-admin-label">Son de la question</div>
               <AnimSoundActions

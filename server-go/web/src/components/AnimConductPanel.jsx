@@ -231,7 +231,7 @@ export default function AnimConductPanel({
   // TYPE (le champ est structurellement commun à tous les types, plan
   // §0.3) — jamais en même temps que MEMOTION/RAFALE en pratique (types
   // mutuellement exclusifs).
-  const showSound = showSoundRow(phase, question)
+  const showSound = showSoundRow(phase, question, isMemotion ? motion?.selectedId : null)
   const motionCards = question?.MOTION_CARDS || []
   const selectedMotionCard = isMemotion
     ? motionCards.find(c => c.ID === motion?.selectedId) || null
@@ -375,6 +375,7 @@ export default function AnimConductPanel({
             revue). */}
         <div className="anim-conduct-l2">
           {isMemotion ? (
+            <>
             <AnimMotionActions
               subphase={motion?.subphase}
               timerRunning={motion?.timerRunning}
@@ -387,6 +388,10 @@ export default function AnimConductPanel({
               onRevealMotionCard={onRevealMotionCard}
               onDoneMotionCard={onDoneMotionCard}
             />
+            {/* #235 (T14) — gestes du son (hôte au START, ou carte sonore retournée) sous les
+                gestes de carte ; rangée absente quand ni l'hôte ni la carte courante n'ont de son. */}
+            {showSound && <AnimSoundActions soundState={soundState} onCommand={onQuestionSound} />}
+            </>
           ) : isRafale ? (
             <AnimRafaleActions
               disabled={rafaleDisabled}

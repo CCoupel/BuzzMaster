@@ -2,6 +2,7 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGame } from '../hooks/GameContext'
+import MotionCardSoundEditor from '../components/MotionCardSoundEditor'
 import { convertedNote } from '../utils/soundState'
 import { useCategoryFilter } from '../hooks/useCategoryFilter'
 import { useCategories } from '../hooks/useCategories'
@@ -797,6 +798,158 @@ export default function QuestionsPage() {
     }
   }
 
+  // #235 — bloc « Son de la question » (extrait de son emplacement #219/#288 pour être
+  // rendu aussi par MEMORY / MEMOTION (hôte) / ENTRACTE). « Chrono démarre » n'existe que
+  // pour les types à chronomètre global : jamais pour ENTRACTE ni l'hôte MEMOTION.
+  const renderQuestionSoundBlock = () => {
+    const hasTimer = formData.type !== 'ENTRACTE' && formData.type !== 'MEMOTION'
+    return (
+      <>
+                    {/* #219 — Son de la question, maquette question-sound-219.html
+                        rév. 3 §01. Périmètre : exactement la garde ci-dessus
+                        (SPEEDY/QCM/ARDOISE) — aucune garde propre à créer, plan
+                        §0.2/§7 tâche 12. Question.SOUND reste structurellement
+                        commun à tous les types côté modèle (plan §0.3) : cette
+                        restriction est une décision d'éditeur, pas une garde
+                        serveur. */}
+                    <div className="form-group">
+                      <label htmlFor="sound-input">
+                        Son de la question{' '}
+                        <span className="section-hint">
+                          (optionnel — WAV, 30 s maximum)
+                        </span>
+                      </label>
+                      <input
+                        id="sound-input"
+                        type="file"
+                        ref={soundInputRef}
+                        onChange={handleSoundChange}
+                        accept=".wav,audio/wav"
+                      />
+                      {(formData.sound || formData.existingSound) && (
+                        <div className="sound-preview">
+                          <div className="sound-preview-info">
+                            <span className="sound-preview-name">
+                              {formData.sound
+                                ? formData.sound.name
+                                : decodeURIComponent(formData.existingSound.split('/').pop())}
+                            </span>
+                            {/* Ajustement ergonomie QUALIF v11.1.0.1 — durée
+                                lue par `onLoadedMetadata` ci-dessous, jamais
+                                calculée autrement ; taille uniquement pour un
+                                fichier fraîchement choisi (inconnue pour un
+                                son déjà enregistré sans le retélécharger). */}
+                            {(soundDuration != null || formData.sound) && (
+                              <span className="sound-preview-meta">
+                                {soundDuration != null && formatSoundDuration(soundDuration)}
+                                {soundDuration != null && formData.sound && ' · '}
+                                {formData.sound && `${(formData.sound.size / (1024 * 1024)).toFixed(1)} Mo`}
+                              </span>
+                            )}
+                          </div>
+                          <audio
+                            key={soundObjectUrl || formData.existingSound}
+                            controls
+                            preload="metadata"
+                            src={formData.sound ? soundObjectUrl : formData.existingSound}
+                            onLoadedMetadata={(e) => {
+                              const d = e.target.duration
+                              if (Number.isFinite(d)) setSoundDuration(d)
+                            }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => ({ ...prev, sound: null, existingSound: null, soundCleared: true }))
+                              setSoundError(null)
+                              setSoundToast(null)
+                              setSoundDuration(null)
+                              if (soundInputRef.current) soundInputRef.current.value = ''
+                            }}
+                          >
+                            Supprimer
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* CA2 — le refus nomme sa cause (message serveur brut,
+                          ValidateQuestionSound), jamais une étiquette générique. */}
+                      {soundError && (
+                        <p className="sound-error-message">✕ {soundError}</p>
+                      )}
+
+                      {/* Ajustement ergonomie QUALIF v11.1.0.2 — remplace les
+                          2 options radio empilées (trop volumineuses, retour
+                          QUALIF v11.1.0.1/.2) par un interrupteur compact sur
+                          une seule ligne, patron `.quiz-switch` déjà utilisé
+                          par QuizMetaForm.jsx (BackstagePage.css) — jamais un
+                          nouveau composant de switch inventé. Comportement
+                          inchangé : toujours monté dans cette même garde de
+                          type, désactivé tant qu'aucun son n'est attaché,
+                          lié au même `formData.soundTimerDelayed`. */}
+                      {hasTimer && (() => {
+                        const hasSound = !!(formData.sound || formData.existingSound)
+                        const delayed = formData.soundTimerDelayed
+                        return (
+                          <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
+                            <span className="sound-timer-toggle-label">Chrono démarre</span>
+                            <span className="sound-timer-switch-group">
+                              <span className={`sound-timer-switch-side ${!delayed ? 'active' : ''}`}>Début</span>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={delayed}
+                                aria-label="Démarrer le chronomètre à la fin du son plutôt qu'en même temps"
+                                className={`quiz-switch ${delayed ? 'on' : ''}`}
+                                disabled={!hasSound}
+                                onClick={() => handleInputChange('soundTimerDelayed', !delayed)}
+                              />
+                              <span className={`sound-timer-switch-side ${delayed ? 'active' : ''}`}>À la fin</span>
+                            </span>
+                          </div>
+                        )
+                      })()}
+
+                      {/* #288 (contrat sound.md §13.2) — « Lecture : Une fois / En boucle », même patron que
+                          « Chrono démarre » (.quiz-switch), désactivée seulement sans son. Combinable avec
+                          « À la fin » (décision 2026-11-05) : aucune exclusivité. */}
+                      {(() => {
+                        const hasSound = !!(formData.sound || formData.existingSound)
+                        const loop = formData.soundLoop
+                        const delayed = formData.soundTimerDelayed
+                        const hint = loop && delayed
+                          ? 'Le chronomètre démarre à la fin du premier passage ; le son continue en boucle.'
+                          : loop
+                            ? 'Le son est rejoué jusqu\'à la fin du chronomètre.'
+                            : 'Le son est joué une fois, puis s\'arrête.'
+                        return (
+                          <>
+                            <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
+                              <span className="sound-timer-toggle-label">Lecture</span>
+                              <span className="sound-timer-switch-group">
+                                <span className={`sound-timer-switch-side ${!loop ? 'active' : ''}`}>Une fois</span>
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={loop}
+                                  aria-label="Jouer le son en boucle jusqu'à la fin du chronomètre"
+                                  className={`quiz-switch ${loop ? 'on' : ''}`}
+                                  disabled={!hasSound}
+                                  onClick={() => handleInputChange('soundLoop', !loop)}
+                                />
+                                <span className={`sound-timer-switch-side ${loop ? 'active' : ''}`}>En boucle</span>
+                              </span>
+                            </div>
+                            <p className="sound-loop-hint">{hint}</p>
+                          </>
+                        )
+                      })()}
+                    </div>
+      </>
+    )
+  }
+
   const handleQuestionClick = (question) => {
     setEditingId(question.ID)
     // #245 — champ « Manche » : manche actuelle de la question (inconnue / absente = « Sans manche »).
@@ -928,6 +1081,14 @@ export default function QuestionsPage() {
         questionImage: card.QUESTION_IMAGE || null,
         answerText: card.ANSWER_TEXT || '',
         answerImage: card.ANSWER_IMAGE || null,
+        // #235 — son de la carte (sound.md §14.4). `soundOrig` : valeurs chargées, pour
+        // n'envoyer les réglages que s'ils changent (la préservation est serveur).
+        sound: null,
+        existingSound: card.SOUND || null,
+        soundTimerDelayed: card.SOUND_TIMER_DELAYED === true,
+        soundLoop: card.SOUND_LOOP === true,
+        soundCleared: false,
+        soundOrig: { delayed: card.SOUND_TIMER_DELAYED === true, loop: card.SOUND_LOOP === true },
         // #184/B-F4 — TYPE absent/vide ⇒ SPEEDY (contrat §3, rétrocompatibilité
         // stricte : les 9 questions MEMOTION existantes n'ont pas ce champ).
         // Défauts QCM synchronisés avec motionCardLock.js (QCM_CREATION_VALUES).
@@ -1706,6 +1867,22 @@ export default function QuestionsPage() {
         if (card.rectoImage instanceof File) data.append(`motion_card_${card.id}_recto`, card.rectoImage)
         if (card.questionImage instanceof File) data.append(`motion_card_${card.id}_question`, card.questionImage)
         if (card.answerImage instanceof File) data.append(`motion_card_${card.id}_answer`, card.answerImage)
+        // #235 — son de carte : jamais reconstruit ni effacé côté front ; on n'envoie que ce qui
+        // change (nouveau fichier, suppression explicite, réglages modifiés).
+        if (card.sound instanceof File) {
+          data.append(`motion_card_${card.id}_sound`, card.sound)
+          data.append(`motion_card_${card.id}_sound_timer_delayed`, card.soundTimerDelayed ? 'true' : 'false')
+          data.append(`motion_card_${card.id}_sound_loop`, card.soundLoop ? 'true' : 'false')
+        } else if (card.soundCleared) {
+          data.append(`motion_card_${card.id}_sound_cleared`, 'true')
+        } else if (card.existingSound && card.soundOrig) {
+          if (!!card.soundTimerDelayed !== card.soundOrig.delayed) {
+            data.append(`motion_card_${card.id}_sound_timer_delayed`, card.soundTimerDelayed ? 'true' : 'false')
+          }
+          if (!!card.soundLoop !== card.soundOrig.loop) {
+            data.append(`motion_card_${card.id}_sound_loop`, card.soundLoop ? 'true' : 'false')
+          }
+        }
         // #187 — images de paires MEMORY. MediaSlots d'une carte MEMORY =
         // "recto + N paires" (contrat §7, aucun slot `question`/`answer`) :
         // convention retenue pour le nom de champ, coordonnée avec
@@ -1789,7 +1966,7 @@ export default function QuestionsPage() {
     } else if (formData.soundCleared) {
       data.append('sound_cleared', 'true')
     }
-    data.append('sound_timer_delayed', formData.soundTimerDelayed ? 'true' : 'false')
+    data.append('sound_timer_delayed', (formData.soundTimerDelayed && formData.type !== 'ENTRACTE' && formData.type !== 'MEMOTION') ? 'true' : 'false')
     // #288 — lecture en boucle (contrat sound.md §13.2) : toujours envoyé, combinable avec le différé
     data.append('sound_loop', formData.soundLoop ? 'true' : 'false')
 
@@ -2834,6 +3011,9 @@ export default function QuestionsPage() {
                         <div key={card.id} className="memotion-card-item">
                           <div className="memory-pair-header">
                             <span className="memory-pair-number">Carte {index + 1}</span>
+                            {(card.sound || card.existingSound) && (
+                              <span className="qcard-sound-badge motion-card-sound-chip" title="Carte sonore">♪</span>
+                            )}
                             {formData.motionCards.length > 2 && (
                               <button
                                 type="button"
@@ -3150,6 +3330,10 @@ export default function QuestionsPage() {
                               </p>
                             </div>
                           )}
+                          <MotionCardSoundEditor
+                            card={card}
+                            onChange={(field, value) => handleMotionCardChange(card.id, field, value)}
+                          />
                         </div>
                         )
                       })}
@@ -3563,153 +3747,18 @@ export default function QuestionsPage() {
                       )}
                     </div>
 
-                    {/* #219 — Son de la question, maquette question-sound-219.html
-                        rév. 3 §01. Périmètre : exactement la garde ci-dessus
-                        (SPEEDY/QCM/ARDOISE) — aucune garde propre à créer, plan
-                        §0.2/§7 tâche 12. Question.SOUND reste structurellement
-                        commun à tous les types côté modèle (plan §0.3) : cette
-                        restriction est une décision d'éditeur, pas une garde
-                        serveur. */}
-                    <div className="form-group">
-                      <label htmlFor="sound-input">
-                        Son de la question{' '}
-                        <span className="section-hint">
-                          (optionnel — WAV 44,1 kHz stéréo 16 bits, 30 s maximum)
-                        </span>
-                      </label>
-                      <input
-                        id="sound-input"
-                        type="file"
-                        ref={soundInputRef}
-                        onChange={handleSoundChange}
-                        accept=".wav,audio/wav"
-                      />
-                      {(formData.sound || formData.existingSound) && (
-                        <div className="sound-preview">
-                          <div className="sound-preview-info">
-                            <span className="sound-preview-name">
-                              {formData.sound
-                                ? formData.sound.name
-                                : decodeURIComponent(formData.existingSound.split('/').pop())}
-                            </span>
-                            {/* Ajustement ergonomie QUALIF v11.1.0.1 — durée
-                                lue par `onLoadedMetadata` ci-dessous, jamais
-                                calculée autrement ; taille uniquement pour un
-                                fichier fraîchement choisi (inconnue pour un
-                                son déjà enregistré sans le retélécharger). */}
-                            {(soundDuration != null || formData.sound) && (
-                              <span className="sound-preview-meta">
-                                {soundDuration != null && formatSoundDuration(soundDuration)}
-                                {soundDuration != null && formData.sound && ' · '}
-                                {formData.sound && `${(formData.sound.size / (1024 * 1024)).toFixed(1)} Mo`}
-                              </span>
-                            )}
-                          </div>
-                          <audio
-                            key={soundObjectUrl || formData.existingSound}
-                            controls
-                            preload="metadata"
-                            src={formData.sound ? soundObjectUrl : formData.existingSound}
-                            onLoadedMetadata={(e) => {
-                              const d = e.target.duration
-                              if (Number.isFinite(d)) setSoundDuration(d)
-                            }}
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, sound: null, existingSound: null, soundCleared: true }))
-                              setSoundError(null)
-                              setSoundToast(null)
-                              setSoundDuration(null)
-                              if (soundInputRef.current) soundInputRef.current.value = ''
-                            }}
-                          >
-                            Supprimer
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* CA2 — le refus nomme sa cause (message serveur brut,
-                          ValidateQuestionSound), jamais une étiquette générique. */}
-                      {soundError && (
-                        <p className="sound-error-message">✕ {soundError}</p>
-                      )}
-
-                      {/* Ajustement ergonomie QUALIF v11.1.0.2 — remplace les
-                          2 options radio empilées (trop volumineuses, retour
-                          QUALIF v11.1.0.1/.2) par un interrupteur compact sur
-                          une seule ligne, patron `.quiz-switch` déjà utilisé
-                          par QuizMetaForm.jsx (BackstagePage.css) — jamais un
-                          nouveau composant de switch inventé. Comportement
-                          inchangé : toujours monté dans cette même garde de
-                          type, désactivé tant qu'aucun son n'est attaché,
-                          lié au même `formData.soundTimerDelayed`. */}
-                      {(() => {
-                        const hasSound = !!(formData.sound || formData.existingSound)
-                        const delayed = formData.soundTimerDelayed
-                        return (
-                          <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
-                            <span className="sound-timer-toggle-label">Chrono démarre</span>
-                            <span className="sound-timer-switch-group">
-                              <span className={`sound-timer-switch-side ${!delayed ? 'active' : ''}`}>Début</span>
-                              <button
-                                type="button"
-                                role="switch"
-                                aria-checked={delayed}
-                                aria-label="Démarrer le chronomètre à la fin du son plutôt qu'en même temps"
-                                className={`quiz-switch ${delayed ? 'on' : ''}`}
-                                disabled={!hasSound}
-                                onClick={() => handleInputChange('soundTimerDelayed', !delayed)}
-                              />
-                              <span className={`sound-timer-switch-side ${delayed ? 'active' : ''}`}>À la fin</span>
-                            </span>
-                          </div>
-                        )
-                      })()}
-
-                      {/* #288 (contrat sound.md §13.2) — « Lecture : Une fois / En boucle », même patron que
-                          « Chrono démarre » (.quiz-switch), désactivée seulement sans son. Combinable avec
-                          « À la fin » (décision 2026-11-05) : aucune exclusivité. */}
-                      {(() => {
-                        const hasSound = !!(formData.sound || formData.existingSound)
-                        const loop = formData.soundLoop
-                        const delayed = formData.soundTimerDelayed
-                        const hint = loop && delayed
-                          ? 'Le chronomètre démarre à la fin du premier passage ; le son continue en boucle.'
-                          : loop
-                            ? 'Le son est rejoué jusqu\'à la fin du chronomètre.'
-                            : 'Le son est joué une fois, puis s\'arrête.'
-                        return (
-                          <>
-                            <div className={`sound-timer-toggle ${!hasSound ? 'disabled' : ''}`}>
-                              <span className="sound-timer-toggle-label">Lecture</span>
-                              <span className="sound-timer-switch-group">
-                                <span className={`sound-timer-switch-side ${!loop ? 'active' : ''}`}>Une fois</span>
-                                <button
-                                  type="button"
-                                  role="switch"
-                                  aria-checked={loop}
-                                  aria-label="Jouer le son en boucle jusqu'à la fin du chronomètre"
-                                  className={`quiz-switch ${loop ? 'on' : ''}`}
-                                  disabled={!hasSound}
-                                  onClick={() => handleInputChange('soundLoop', !loop)}
-                                />
-                                <span className={`sound-timer-switch-side ${loop ? 'active' : ''}`}>En boucle</span>
-                              </span>
-                            </div>
-                            <p className="sound-loop-hint">{hint}</p>
-                          </>
-                        )
-                      })()}
-                    </div>
+                    {renderQuestionSoundBlock()}
                   </>
                 )}
 
+                {/* #235 — Son pour MEMORY, ENTRACTE et hôte MEMOTION (maquette
+                    admin_question_editor__sound_memory_memotion_entracte.html) :
+                    même bloc, filtre de type levé. */}
+                {['MEMORY', 'MEMOTION', 'ENTRACTE'].includes(formData.type) && renderQuestionSoundBlock()}
+
                 {/* Refus serveur (corps HTTP brut) pour les types sans section « Son »
-                    (MEMORY, MEMOTION, RAFALE, ENTRACTE) — ex. POINTS_RULE_* (#190). */}
-                {soundError && ['MEMORY', 'MEMOTION', 'RAFALE', 'ENTRACTE'].includes(formData.type) && (
+                    (RAFALE) — ex. POINTS_RULE_* (#190). */}
+                {soundError && formData.type === 'RAFALE' && (
                   <p className="sound-error-message" role="alert">✕ {soundError}</p>
                 )}
 
