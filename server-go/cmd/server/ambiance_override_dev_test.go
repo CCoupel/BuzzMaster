@@ -130,8 +130,11 @@ func TestDevLightingMode_ReDerivesThroughTheRealWriter(t *testing.T) {
 // exactly to the selector's own position (here OFF) — contract §10.1.2.
 func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	app := newTestApp(t)
-	// #291 Phase A : blink 100/100 ms (prod 400/400) sur CETTE App (driver factice, aucun pacing Hue).
-	const flashPhase = 100 * time.Millisecond
+	// #291 Phase A : blink 250/250 ms (prod 400/400) sur CETTE App (driver factice, aucun pacing Hue). Correctif CI
+	// (Option P) : la phase doit rester nettement SUPÉRIEURE au pacing du writer (lighting.MinInterval = 100 ms) ;
+	// à 100/100 ms, deux applies consécutifs pouvaient tomber dans la même phase (aliasing) et le test voyait deux
+	// fois la couleur de la salle.
+	const flashPhase = 250 * time.Millisecond
 	app.ambCtl().FlashPhases = flashPhaseOverride{LightingOn: flashPhase, LightingOff: flashPhase}
 	// A real, NON-white theme so the 2026-09-08 white<->room-colour
 	// alternation is actually observable (a themeless room degenerates to
@@ -156,10 +159,11 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	// Wait for at least one full white/room-colour cycle: two more applies
 	// after the initial OFF, alternating COLOUR (2026-09-08 revision — no
 	// longer intensity, both phases are now full/lit).
-	waitForCount(t, fake, 3)
-	first, _ := fake.Last()
+	// Lecture de l'historique des applies (3e et 4e) et non de Last() après chaque attente : un retard du test
+	// entre l'attente et la lecture ne peut plus faire lire deux fois le même état.
 	waitForCount(t, fake, 4)
-	second, _ := fake.Last()
+	applied := fake.States()
+	first, second := applied[2], applied[3]
 	if first.Zones[0].Color == second.Zones[0].Color {
 		t.Fatalf("Flash must alternate colour between ticks, got %v then %v", first.Zones[0].Color, second.Zones[0].Color)
 	}
@@ -191,7 +195,7 @@ func TestDevLightingFlash_BlinksAndReturnsToSelector(t *testing.T) {
 	// The blink goroutine must actually have stopped: no further applies
 	// after a settling window.
 	countAfterOff := fake.Count()
-	time.Sleep(5 * 2 * flashPhase) // 5 périodes de blink (avant : 2 périodes de 800 ms)
+	time.Sleep(3 * 2 * flashPhase) // 3 périodes de blink = 1,5 s (avant Phase A : 2 périodes de 800 ms = 1,6 s)
 	if fake.Count() != countAfterOff {
 		t.Fatalf("blink goroutine kept running after setLightingFlash(false): %d applies before, %d after", countAfterOff, fake.Count())
 	}
