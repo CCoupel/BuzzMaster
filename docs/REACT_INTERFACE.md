@@ -2161,7 +2161,7 @@ En bas du tableau `SoundsManager` :
 
 **Effet** : `POST /api/sounds/restore-defaults` — régénère tous les bruitages (15 depuis v11.6.0) et le décompte, écrase tous les personnalisés.
 
-**Dialogue de confirmation** : « Cette action est définitive — les sons personnalisés seront perdus. Continuer ? »
+**Dialogue de confirmation** : « Restaurer les N bruitages et le décompte par défaut ? » (N = nombre de bruitages reçus du serveur : 15 depuis v11.6.0), suivi du nombre de sons personnalisés qui seront remplacés, puis « Cette action ne peut pas être annulée. ». Toast de succès : « Les N bruitages et le décompte ont été restaurés. »
 
 #### Résultat du test sur l'enceinte
 
