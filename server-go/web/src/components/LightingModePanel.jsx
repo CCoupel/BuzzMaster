@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLightingStatus } from '../hooks/useLightingStatus'
 import { normalizeLightingState } from '../utils/lightingState'
+import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import './LightingModePanel.css'
 
 // #208 (v10.0.0, Batch 3, déplacé de AmbiancePage.jsx vers GamePage.jsx sur
@@ -67,6 +68,7 @@ export default function LightingModePanel({ className = '', bare = false }) {
     try {
       const res = await postJson('/api/lighting/mode', { mode })
       if (!res.ok) throw new Error(await res.text())
+      if (await isRoundScope(res)) setToast({ message: ROUND_SCOPE_MESSAGE, type: 'warning' })
       await refreshStatus()
     } catch (error) {
       console.error('Set lighting mode failed:', error)

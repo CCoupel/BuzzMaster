@@ -4,6 +4,7 @@ import { soundUploadMessage } from '../utils/soundState'
 import SoundTestModal from './SoundTestModal'
 import AmbianceSettingsPanel from './AmbianceSettingsPanel'
 import { CUE_LABELS } from '../utils/soundCues'
+import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { useSoundStatus, notifySoundChanged } from '../hooks/useSoundStatus'
 
 // #230 — tableau des sept sons d'événement, onglet Son de /admin/ambiance.
@@ -123,6 +124,7 @@ export default function SoundsManager() {
     try {
       const res = await postJson('/config.json', { sound: { cues_disabled: nextDisabled } })
       if (!res.ok) throw new Error(await res.text())
+      if (await isRoundScope(res)) setToast({ message: ROUND_SCOPE_MESSAGE, type: 'warning' })
     } catch (error) {
       console.error('Toggle cue failed:', error)
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
@@ -137,6 +139,7 @@ export default function SoundsManager() {
     try {
       const res = await postJson('/config.json', { sound })
       if (!res.ok) throw new Error(await res.text())
+      if (await isRoundScope(res)) setToast({ message: ROUND_SCOPE_MESSAGE, type: 'warning' })
     } catch (error) {
       console.error('Update long sound config failed:', error)
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
@@ -247,6 +250,7 @@ export default function SoundsManager() {
       try {
         const res = await postJson('/config.json', { sound: { muted: value } })
         if (!res.ok) throw new Error(await res.text())
+        if (await isRoundScope(res)) setToast({ message: ROUND_SCOPE_MESSAGE, type: 'warning' })
         notifySoundChanged()
       } catch (error) {
         console.error('Set sound muted failed:', error)

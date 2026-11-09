@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { notifySoundChanged } from '../hooks/useSoundStatus'
+import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 
 // #286 — section « Son » du popover « Ambiance » : sélecteur ON / OFF à DEUX
 // positions (le son n'a pas d'état automatique). Écrit `sound.muted` par
@@ -11,11 +12,13 @@ import { notifySoundChanged } from '../hooks/useSoundStatus'
 export default function SoundTogglePanel({ muted, refresh, source = 'global', roundActive = false }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(null)
 
   const setMuted = async (next) => {
     if (busy || muted === next) return
     setBusy(true)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch('/config.json', {
         method: 'POST',
@@ -23,6 +26,7 @@ export default function SoundTogglePanel({ muted, refresh, source = 'global', ro
         body: JSON.stringify({ sound: { muted: next } }),
       })
       if (!res.ok) throw new Error(await res.text())
+      if (await isRoundScope(res)) setNotice(ROUND_SCOPE_MESSAGE)
       notifySoundChanged()
       if (refresh) await refresh()
     } catch (e) {
@@ -76,6 +80,7 @@ export default function SoundTogglePanel({ muted, refresh, source = 'global', ro
           en cours est arrêté ; le chronomètre différé démarre immédiatement.
         </p>
       )}
+      {notice && <p className="lighting-mode-warning" role="status">{notice}</p>}
       {error && <p className="lighting-mode-warning is-error" role="alert">{error}</p>}
     </div>
   )
