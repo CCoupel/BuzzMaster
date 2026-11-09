@@ -33,6 +33,12 @@ type AmbianceProvider interface {
 	// AmbianceGesture records a direct gesture (fields changed by the régie), then
 	// re-resolves, applies and broadcasts.
 	AmbianceGesture(changes ambiancecfg.Partial)
+	// AmbianceRoundsChanged re-resolves and broadcasts after rounds.json was rewritten by
+	// the per-round sound files API (r3, #290).
+	AmbianceRoundsChanged()
+	// AmbianceTestFile plays a sound file once (cue or "decompte") on the speaker, ignoring
+	// muted / switches (explicit gesture). rel is relative to the sounds directory.
+	AmbianceTestFile(key, rel string) bool
 }
 
 // AmbianceFromConfig is THE adapter from config.json to Settings (the only reader of
@@ -46,10 +52,13 @@ func AmbianceFromConfig(cfg *config.Config) ambiancecfg.Settings {
 		CountdownLoop:    !cfg.Sound.CountdownOnce,
 		CuesEnabled:      make(map[string]bool, len(audio.AllCues())),
 		LightMode:        ambiancecfg.LightAuto,
+		SoundFiles:       make(map[string]string, len(audio.AllCues())+1),
 	}
 	for _, c := range audio.AllCues() {
 		s.CuesEnabled[string(c)] = !cfg.Sound.CuesDisabled[string(c)]
+		s.SoundFiles[string(c)] = string(c) + ".wav" // catalogue file (r3, #290)
 	}
+	s.SoundFiles[ambiancecfg.DecompteKey] = ambiancecfg.DecompteKey + ".wav"
 	if m := ambiancecfg.LightMode(cfg.Lighting.DefaultMode); m.Valid() {
 		s.LightMode = m
 	}

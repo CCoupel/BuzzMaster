@@ -243,6 +243,10 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 		}
 		if len(bad) == 0 {
 			pp := p
+			// r3 : sound.files is written ONLY by POST/DELETE /api/rounds/{id}/sounds/{cue} —
+			// ROUNDS_UPDATE ignores it and keeps the stored files (a client with a stale payload
+			// must not destroy a reference).
+			pp.SoundFiles = existingRounds[r.ID].Ambiance.Clone().SoundFiles
 			newAmbiance[i] = &pp
 		}
 	}
@@ -542,6 +546,18 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 	}
 	h.Engine().ForgetQuestionStatuses(result.DeletedQuestions)
 
+	// ---- (5b) r3 (#290) : a deleted round (KEEP or DELETE) loses its sound-files folder,
+	// AFTER rounds.json was written successfully. rid comes from rounds.json (never a path).
+	soundsRoot := filepath.Join(filepath.Dir(qdir), "sounds", "rounds")
+	for rid := range deleted {
+		if !validRoundIDForPath(rid) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(soundsRoot, rid)); err != nil {
+			server.LogWarn(game.LogComponentApp, "ROUNDS_UPDATE: failed to remove sound files of round %s: %v", rid, err)
+		}
+	}
+
 	// ---- (6) memory state and answer
 	h.Engine().SetRounds(newRF.Rounds)
 	result.Rounds = append([]game.Round{}, newRF.Rounds...)
@@ -551,3 +567,16 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 }
 
 // handleRoundsUpdate processes ROUNDS_UPDATE from an admin (#245).
+
+// validRoundIDForPath accepts only "r<digits>" before an ID is joined to a path.
+func validRoundIDForPath(id string) bool {
+	if len(id) < 2 || id[0] != 'r' {
+		return false
+	}
+	for _, c := range id[1:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}

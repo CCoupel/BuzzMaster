@@ -332,7 +332,9 @@ func (a *App) notifySound(c audio.Cue) {
 	if s.SoundMuted || !s.CueEnabled(string(c)) {
 		return
 	}
-	a.sound().PlayCue(c)
+	// r3 (#290): the resolved file (the round's own, or the catalogue); FileBank.PCMAt falls
+	// back on the catalogue file when the round's file is missing.
+	a.sound().PlayCueAt(c, s.SoundFiles[string(c)])
 }
 
 // ---------------------------------------------------------------------------

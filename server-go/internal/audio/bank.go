@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 )
 
 // FileBank resolves a Cue to raw canonical PCM bytes (contract §3) by
@@ -21,6 +23,9 @@ import (
 // here, so the two can never drift apart on naming.
 type FileBank struct {
 	dir string
+
+	warnMu sync.Mutex
+	warned map[string]bool // rel paths whose fallback WARN was already emitted (until the next success)
 }
 
 // NewFileBank builds a FileBank rooted at dir (typically
@@ -46,6 +51,36 @@ func (b *FileBank) PCM(c Cue) (data []byte, ok bool) {
 		return nil, false
 	}
 	return pcm, true
+}
+
+// PCMAt implements RelBank (v11.6.0, #290): reads `<dir>/<rel>` (rel is relative to the
+// sounds directory, e.g. "rounds/r2/gagne.wav") and strips the header. Missing or
+// non-conforming ⇒ FALLBACK on the catalogue file "<cue>.wav" (the base name of rel) with
+// a WARN emitted once per rel until the next success (D12: nothing is corrected silently,
+// but a cue never becomes mute). A rel that escapes the directory is treated as missing.
+func (b *FileBank) PCMAt(rel string) (data []byte, ok bool) {
+	clean := filepath.Clean(filepath.FromSlash(rel))
+	if rel != "" && !filepath.IsAbs(clean) && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		if raw, err := os.ReadFile(filepath.Join(b.dir, clean)); err == nil {
+			if pcm, perr := extractCanonicalPCM(raw); perr == nil {
+				b.warnMu.Lock()
+				delete(b.warned, rel)
+				b.warnMu.Unlock()
+				return pcm, true
+			}
+		}
+	}
+	b.warnMu.Lock()
+	first := !b.warned[rel]
+	if b.warned == nil {
+		b.warned = map[string]bool{}
+	}
+	b.warned[rel] = true
+	b.warnMu.Unlock()
+	if first {
+		logf(LogWarn, "audio: per-round sound file %q missing or non-conforming — falling back to the catalogue file (ambiance-settings.md §9.4)", rel)
+	}
+	return b.PCM(Cue(strings.TrimSuffix(filepath.Base(clean), ".wav")))
 }
 
 // extractCanonicalPCM parses a RIFF/WAVE byte stream, validates its "fmt "

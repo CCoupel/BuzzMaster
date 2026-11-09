@@ -93,9 +93,9 @@ type HTTPServer struct {
 	// the live sound engine (#230, contracts/http-endpoints.md §Sound); nil
 	// provider is never expected in production (cmd/server always sets it,
 	// same as Lighting) but every accessor below is nil-safe regardless.
-	Sound              SoundProvider
+	Sound SoundProvider
 	// Ambiance (v11.6.0, #290) resolves global ← round ← direct (ambiance-settings.md).
-	Ambiance AmbianceProvider
+	Ambiance           AmbianceProvider
 	OnBuzzerWifiConfig func() int // Called to broadcast WiFi config to all buzzers; returns connected buzzer count
 	// OnPriorityMessageSent is called after a priority message (OTA_UPDATE, WIFI_CONFIG) is sent to a buzzer.
 	// mac is the buzzer MAC, msgID is the generated MSG_ID, action is the protocol action string.
@@ -494,6 +494,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
 	h.mux.HandleFunc("/api/lighting/flash", h.handleLightingFlash)
 	h.mux.HandleFunc("/api/ambiance/settings", h.handleAPIAmbianceSettings) // #290
+	h.mux.HandleFunc("/api/rounds/", h.handleAPIRoundsRouter)               // #290 r3 — per-round sound files
 
 	// Buzzer API (WiFi config + OTA)
 	h.mux.HandleFunc("/api/buzzers", h.handleAPIBuzzers)
@@ -1057,7 +1058,7 @@ func (h *HTTPServer) handleUploadQuestion(w http.ResponseWriter, r *http.Request
 		json.Unmarshal(data, &existingQuestion)
 	}
 
-	var cardSoundCommit func() // suppressions de sons de cartes, après écriture réussie
+	var cardSoundCommit func()      // suppressions de sons de cartes, après écriture réussie
 	cardWarnings := []cardWarning{} // #235 : avertissements de durée des sons de cartes
 	// Save question data
 	question := map[string]interface{}{

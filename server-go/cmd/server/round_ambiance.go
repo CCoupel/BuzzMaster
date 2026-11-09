@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"buzzcontrol/internal/ambiancecfg"
+	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/server"
 )
@@ -95,6 +96,22 @@ func (a *App) AmbianceGesture(changes ambiancecfg.Partial) {
 	a.ambLayers.direct = a.ambLayers.direct.Merge(changes)
 	a.ambLayers.mu.Unlock()
 	a.refreshAmbiance()
+}
+
+// AmbianceRoundsChanged implements server.AmbianceProvider (r3): rounds.json was rewritten
+// by the per-round sound files API — reload GameState.ROUNDS, re-resolve, broadcast.
+func (a *App) AmbianceRoundsChanged() {
+	a.reloadRounds()
+	a.refreshAmbianceB(false)
+	a.broadcastUpdate()
+}
+
+// AmbianceTestFile implements server.AmbianceProvider (r3, C8).
+func (a *App) AmbianceTestFile(key, rel string) bool {
+	if key == ambiancecfg.DecompteKey {
+		return a.countdownSound().TestAt(rel)
+	}
+	return a.sound().PlayCueAt(audio.Cue(key), rel)
 }
 
 // SetLightingMode implements server.LightingProvider: POST /api/lighting/mode is a

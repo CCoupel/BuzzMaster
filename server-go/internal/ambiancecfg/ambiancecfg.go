@@ -43,6 +43,9 @@ type Settings struct {
 	CountdownLoop    bool
 	CuesEnabled      map[string]bool // key = cue name; complete form: every cue of the registry
 	LightMode        LightMode
+	// SoundFiles (r3, #290): path of the sound file of each cue + "decompte", relative to
+	// data/files/sounds/ — complete form ("<cue>.wav" / "decompte.wav" for the catalogue).
+	SoundFiles map[string]string
 }
 
 // Partial is an overlay: every field optional, absent = inherited.
@@ -52,6 +55,9 @@ type Partial struct {
 	CountdownLoop    *bool
 	CuesEnabled      map[string]bool // partial: only the overridden cues
 	LightMode        *LightMode
+	// SoundFiles (r3): partial, "rounds/<roundID>/<cue>.wav" — only the cues for which the
+	// round has its own file. The direct layer never carries files (§4.2 point 4).
+	SoundFiles map[string]string
 }
 
 // Sources gives, for each resolved field, the layer it comes from.
@@ -61,6 +67,7 @@ type Sources struct {
 	CountdownLoop    Source
 	LightMode        Source
 	CuesEnabled      map[string]Source
+	SoundFiles       map[string]Source // "global" | "round"
 }
 
 // Effective is the published resolution (GameState.AMBIANCE_EFFECTIVE).
@@ -85,6 +92,12 @@ func (s Settings) Clone() Settings {
 	c.CuesEnabled = make(map[string]bool, len(s.CuesEnabled))
 	for k, v := range s.CuesEnabled {
 		c.CuesEnabled[k] = v
+	}
+	if s.SoundFiles != nil {
+		c.SoundFiles = make(map[string]string, len(s.SoundFiles))
+		for k, v := range s.SoundFiles {
+			c.SoundFiles[k] = v
+		}
 	}
 	return c
 }
@@ -114,13 +127,19 @@ func (p Partial) Clone() Partial {
 			c.CuesEnabled[k] = v
 		}
 	}
+	if len(p.SoundFiles) > 0 {
+		c.SoundFiles = make(map[string]string, len(p.SoundFiles))
+		for k, v := range p.SoundFiles {
+			c.SoundFiles[k] = v
+		}
+	}
 	return c
 }
 
 // IsEmpty reports whether p overrides nothing (`{}`).
 func (p Partial) IsEmpty() bool {
 	return p.SoundMuted == nil && p.CountdownEnabled == nil && p.CountdownLoop == nil &&
-		p.LightMode == nil && len(p.CuesEnabled) == 0
+		p.LightMode == nil && len(p.CuesEnabled) == 0 && len(p.SoundFiles) == 0
 }
 
 // Merge returns p overlaid by q (every field defined in q wins).
@@ -145,6 +164,12 @@ func (p Partial) Merge(q Partial) Partial {
 		}
 		out.CuesEnabled[k] = v
 	}
+	for k, v := range q.SoundFiles {
+		if out.SoundFiles == nil {
+			out.SoundFiles = map[string]string{}
+		}
+		out.SoundFiles[k] = v
+	}
 	return out
 }
 
@@ -159,6 +184,12 @@ func Resolve(global Settings, layers ...Partial) (Settings, Sources) {
 	}
 	for k := range eff.CuesEnabled {
 		src.CuesEnabled[k] = SourceGlobal
+	}
+	if eff.SoundFiles != nil {
+		src.SoundFiles = make(map[string]Source, len(eff.SoundFiles))
+		for k := range eff.SoundFiles {
+			src.SoundFiles[k] = SourceGlobal
+		}
 	}
 	for i, l := range layers {
 		s := SourceRound
@@ -182,6 +213,12 @@ func Resolve(global Settings, layers ...Partial) (Settings, Sources) {
 		}
 		for cue, v := range l.CuesEnabled {
 			eff.CuesEnabled[cue], src.CuesEnabled[cue] = v, s
+		}
+		for cue, v := range l.SoundFiles { // files come from the round layer only (never "direct")
+			if eff.SoundFiles == nil {
+				eff.SoundFiles, src.SoundFiles = map[string]string{}, map[string]Source{}
+			}
+			eff.SoundFiles[cue], src.SoundFiles[cue] = v, SourceRound
 		}
 	}
 	return eff, src
@@ -227,9 +264,10 @@ type countdownWire struct {
 	Loop    *bool `json:"loop,omitempty"`
 }
 type partialSoundWire struct {
-	Muted     *bool           `json:"muted,omitempty"`
-	Countdown *countdownWire  `json:"countdown,omitempty"`
-	Cues      map[string]bool `json:"cues,omitempty"`
+	Muted     *bool             `json:"muted,omitempty"`
+	Countdown *countdownWire    `json:"countdown,omitempty"`
+	Cues      map[string]bool   `json:"cues,omitempty"`
+	Files     map[string]string `json:"files,omitempty"`
 }
 type partialLightWire struct {
 	Mode *LightMode `json:"mode,omitempty"`
@@ -243,13 +281,16 @@ type partialWire struct {
 // `{}` for an empty Partial, and `cues` is omitted when empty (never `null`).
 func (p Partial) MarshalJSON() ([]byte, error) {
 	w := partialWire{}
-	if p.SoundMuted != nil || p.CountdownEnabled != nil || p.CountdownLoop != nil || len(p.CuesEnabled) > 0 {
+	if p.SoundMuted != nil || p.CountdownEnabled != nil || p.CountdownLoop != nil || len(p.CuesEnabled) > 0 || len(p.SoundFiles) > 0 {
 		w.Sound = &partialSoundWire{Muted: p.SoundMuted}
 		if p.CountdownEnabled != nil || p.CountdownLoop != nil {
 			w.Sound.Countdown = &countdownWire{Enabled: p.CountdownEnabled, Loop: p.CountdownLoop}
 		}
 		if len(p.CuesEnabled) > 0 {
 			w.Sound.Cues = p.CuesEnabled
+		}
+		if len(p.SoundFiles) > 0 {
+			w.Sound.Files = p.SoundFiles
 		}
 	}
 	if p.LightMode != nil {
@@ -275,6 +316,9 @@ func (p *Partial) UnmarshalJSON(data []byte) error {
 		}
 		if len(w.Sound.Cues) > 0 {
 			p.CuesEnabled = w.Sound.Cues
+		}
+		if len(w.Sound.Files) > 0 {
+			p.SoundFiles = w.Sound.Files
 		}
 	}
 	if w.Light != nil {
@@ -332,6 +376,19 @@ func ValidateRaw(raw []byte, known func(cue string) bool) []string {
 							bad = append(bad, PathCuePrefix+cue)
 						}
 					}
+				case "files":
+					// r3: the files map is written only by the REST API; here only its shape and
+					// keys are checked (ROUNDS_UPDATE ignores and keeps it).
+					fm, ok := sv.(map[string]interface{})
+					if !ok {
+						bad = append(bad, "sound.files")
+						continue
+					}
+					for fk, fv := range fm {
+						if _, isStr := fv.(string); !isStr || !validFileKey(fk, known) {
+							bad = append(bad, "sound.files."+fk)
+						}
+					}
 				default:
 					bad = append(bad, "sound."+sk)
 				}
@@ -378,7 +435,8 @@ type settingsWire struct {
 			Enabled bool `json:"enabled"`
 			Loop    bool `json:"loop"`
 		} `json:"countdown"`
-		Cues map[string]bool `json:"cues"`
+		Cues  map[string]bool   `json:"cues"`
+		Files map[string]string `json:"files"`
 	} `json:"sound"`
 	Light struct {
 		Mode LightMode `json:"mode"`
@@ -395,6 +453,10 @@ func (s Settings) MarshalJSON() ([]byte, error) {
 	if w.Sound.Cues == nil {
 		w.Sound.Cues = map[string]bool{}
 	}
+	w.Sound.Files = s.SoundFiles
+	if w.Sound.Files == nil {
+		w.Sound.Files = map[string]string{}
+	}
 	w.Light.Mode = s.LightMode
 	return json.Marshal(w)
 }
@@ -409,6 +471,10 @@ func (s *Settings) UnmarshalJSON(data []byte) error {
 	s.CountdownEnabled = w.Sound.Countdown.Enabled
 	s.CountdownLoop = w.Sound.Countdown.Loop
 	s.CuesEnabled = w.Sound.Cues
+	s.SoundFiles = nil
+	if len(w.Sound.Files) > 0 {
+		s.SoundFiles = w.Sound.Files
+	}
 	s.LightMode = w.Light.Mode
 	return nil
 }
@@ -420,7 +486,8 @@ type sourcesWire struct {
 			Enabled Source `json:"enabled"`
 			Loop    Source `json:"loop"`
 		} `json:"countdown"`
-		Cues map[string]Source `json:"cues"`
+		Cues  map[string]Source `json:"cues"`
+		Files map[string]Source `json:"files"`
 	} `json:"sound"`
 	Light struct {
 		Mode Source `json:"mode"`
@@ -443,6 +510,10 @@ func (s Sources) MarshalJSON() ([]byte, error) {
 	if w.Sound.Cues == nil {
 		w.Sound.Cues = map[string]Source{}
 	}
+	w.Sound.Files = s.SoundFiles
+	if w.Sound.Files == nil {
+		w.Sound.Files = map[string]Source{}
+	}
 	w.Light.Mode = def(s.LightMode)
 	return json.Marshal(w)
 }
@@ -451,4 +522,28 @@ func (s Sources) MarshalJSON() ([]byte, error) {
 func (s Settings) String() string {
 	b, _ := json.Marshal(s)
 	return fmt.Sprintf("%s", b)
+}
+
+// DecompteKey is the key of the countdown file in SoundFiles (not a cue).
+const DecompteKey = "decompte"
+
+func validFileKey(k string, known func(string) bool) bool {
+	return k == DecompteKey || known == nil || known(k)
+}
+
+// RoundFilePath is the expected value of SoundFiles[key] for round roundID.
+func RoundFilePath(roundID, key string) string { return "rounds/" + roundID + "/" + key + ".wav" }
+
+// InvalidFilePaths checks p.SoundFiles for round roundID (r3): every key ∈ cues ∪ "decompte"
+// and every value EXACTLY "rounds/<roundID>/<key>.wav" (no traversal, no other round).
+// Returns the offending paths (empty when valid).
+func (p Partial) InvalidFilePaths(roundID string, known func(cue string) bool) []string {
+	var bad []string
+	for k, v := range p.SoundFiles {
+		if !validFileKey(k, known) || v != RoundFilePath(roundID, k) {
+			bad = append(bad, "sound.files."+k)
+		}
+	}
+	sort.Strings(bad)
+	return bad
 }

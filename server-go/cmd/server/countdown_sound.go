@@ -16,8 +16,12 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 
+	"buzzcontrol/internal/ambiancecfg"
 	"buzzcontrol/internal/audio"
 	"buzzcontrol/internal/audio/synth"
 	"buzzcontrol/internal/config"
@@ -34,6 +38,9 @@ type countdownSoundAdapter struct {
 	soundEnabled func() bool
 	// soundsDirFn resolves data/files/sounds. nil = derived from the app config.
 	soundsDirFn func() string
+	// warned dedups the "round file missing" WARN (r3).
+	warnMu sync.Mutex
+	warned map[string]bool
 }
 
 // setupCountdownSound builds the adapter — mirrors setupQuestionSound. The
@@ -60,15 +67,60 @@ func (cs *countdownSoundAdapter) enabled() bool {
 	return config.Get().Sound.Enabled
 }
 
-func (cs *countdownSoundAdapter) filePath() string {
-	var dir string
+// catalogDir is the sounds directory (data/files/sounds).
+func (cs *countdownSoundAdapter) catalogDir() string {
 	switch {
 	case cs.soundsDirFn != nil:
-		dir = cs.soundsDirFn()
+		return cs.soundsDirFn()
 	case cs.app != nil:
-		dir = soundsDir(cs.app.config)
+		return soundsDir(cs.app.config)
 	}
-	return filepath.Join(dir, synth.CountdownFilename())
+	return ""
+}
+
+// filePath is the countdown file RESOLVED for the effective round (r3, #290 §9.4):
+// SoundFiles["decompte"] relative to the sounds directory, with a fallback on the
+// catalogue file when the round's file is missing (WARN once per path) — the countdown
+// never becomes mute because of an orphan reference.
+func (cs *countdownSoundAdapter) filePath() string {
+	rel := ""
+	if cs.app != nil {
+		rel = cs.app.ambianceSettings().SoundFiles[ambiancecfg.DecompteKey]
+	}
+	return cs.filePathFor(rel)
+}
+
+// filePathFor resolves rel (relative to the sounds directory; "" or "decompte.wav" = catalogue).
+func (cs *countdownSoundAdapter) filePathFor(rel string) string {
+	dir := cs.catalogDir()
+	catalog := filepath.Join(dir, synth.CountdownFilename())
+	if rel == "" || rel == synth.CountdownFilename() {
+		return catalog
+	}
+	clean := filepath.Clean(filepath.FromSlash(rel))
+	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return catalog
+	}
+	p := filepath.Join(dir, clean)
+	if _, err := os.Stat(p); err != nil {
+		cs.warnMissing(rel)
+		return catalog
+	}
+	return p
+}
+
+// warnMissing journalises a missing round file once per path.
+func (cs *countdownSoundAdapter) warnMissing(rel string) {
+	cs.warnMu.Lock()
+	first := !cs.warned[rel]
+	if cs.warned == nil {
+		cs.warned = map[string]bool{}
+	}
+	cs.warned[rel] = true
+	cs.warnMu.Unlock()
+	if first {
+		server.LogWarn(game.LogComponentApp, "Countdown sound: round file %q missing — falling back to the catalogue file (ambiance-settings.md §9.4)", rel)
+	}
 }
 
 // mayPlay is §12.4, in the contract's order. Pure config + start data.
@@ -101,6 +153,15 @@ func (cs *countdownSoundAdapter) OnAnswerTimerStarted(start game.AnswerTimerStar
 		err = cs.player.Play(path)
 	} else {
 		err = cs.player.PlayLoop(path)
+	}
+	if err != nil {
+		if catalog := cs.filePathFor(""); path != catalog { // r3: a non-conforming round file ⇒ catalogue file
+			if !cs.app.ambianceSettings().CountdownLoop {
+				err = cs.player.Play(catalog)
+			} else {
+				err = cs.player.PlayLoop(catalog)
+			}
+		}
 	}
 	if err != nil {
 		// Silent degradation (§12.4): no sound, no game effect, no timer effect.
@@ -139,6 +200,15 @@ func (cs *countdownSoundAdapter) Test() (accepted bool) {
 		return false
 	}
 	return cs.player.Play(cs.filePath()) == nil
+}
+
+// TestAt plays the file rel (relative to the sounds directory, with the catalogue fallback)
+// ONCE — the round dialog's "Tester" (r3, C8). Same explicit-gesture rules as Test.
+func (cs *countdownSoundAdapter) TestAt(rel string) (accepted bool) {
+	if cs == nil || cs.player == nil {
+		return false
+	}
+	return cs.player.Play(cs.filePathFor(rel)) == nil
 }
 
 // OutputAvailable reports whether a REAL (non-neutral) MediaPlayer backs it.

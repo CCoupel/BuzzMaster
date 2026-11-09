@@ -994,8 +994,8 @@ type GameState struct {
 	// AmbianceEffective (v11.6.0, #290, game-state.md) — resolved behaviour settings
 	// (global ← round ← direct) and the source of each field. Always serialised,
 	// derived, never persisted.
-	AmbianceEffective ambiancecfg.Effective `json:"AMBIANCE_EFFECTIVE"`
-	AnswerTimerWaiting bool   `json:"ANSWER_TIMER_WAITING"`
+	AmbianceEffective  ambiancecfg.Effective `json:"AMBIANCE_EFFECTIVE"`
+	AnswerTimerWaiting bool                  `json:"ANSWER_TIMER_WAITING"`
 
 	// Média indisponible avant le lancement (v11.1, #219/#236/#237,
 	// 2026-09-23, contracts/sound.md §10.8) — NO omitempty, same discipline
