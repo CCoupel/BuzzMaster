@@ -3021,17 +3021,38 @@ Le son et l'éclairage ont **trois niveaux de réglage** :
 | Lecture du décompte | Une fois ou En boucle |
 | Chacun des 15 bruitages | Hérité, Actif ou Inactif |
 | Mode d'éclairage | Hérité, ON, AUTO ou OFF |
+| Fichier de chaque bruitage et du décompte | Hérité (fichier global) ou fichier propre à la manche (voir « Fichiers de son propres à une manche ») |
 
-**Jamais surchargeables** : « Bruitages activés » (sortie audio, qui exige un redémarrage), le périphérique et la compensation de latence, « Éclairage d'ambiance activé », le pont Hue et les ampoules, les fichiers de sons, le Flash de la régie.
+**Jamais surchargeables** : « Bruitages activés » (sortie audio, qui exige un redémarrage), le périphérique et la compensation de latence, « Éclairage d'ambiance activé », le pont Hue et les ampoules, le Flash de la régie.
 
 ### Éditer la surcharge d'une manche
 
 Dans l'éditeur de manches, le bouton **🎛** de la manche (« Ambiance de la manche ») ouvre la fenêtre **« Ambiance de la manche « X » »** :
-- le badge indique « Hérite tout du réglage global » ou « N réglages surchargés » ;
-- le bouton « Tout remettre à « Hérité » » efface toute la surcharge ;
-- Enregistrer applique la surcharge à la manche (sans toucher au global).
+- le badge indique « Hérite tout du réglage global » ou « N réglages surchargés » (avec les fichiers : « N réglages et M fichiers surchargés ») ;
+- le bouton « Tout remettre à « Hérité » » efface toute la surcharge, et supprime les fichiers propres à la manche (voir plus bas) ;
+- Enregistrer applique les réglages à la manche (sans toucher au global). Il n'envoie pas les fichiers.
 
-Le bouton 🎛 est absent sur « Sans manche » et sur une manche en cours de création. Une manche qui porte une surcharge affiche le badge « 🎛 Ambiance : N réglage(s) ».
+Le bouton 🎛 est absent sur « Sans manche » et sur une manche en cours de création. Une manche qui porte une surcharge affiche le badge « 🎛 Ambiance : N réglage(s) » ; une manche qui porte des fichiers propres affiche aussi « Fichier X : propre à la manche » dans son titre.
+
+### Fichiers de son propres à une manche
+
+Chaque bruitage et le décompte ont une colonne **Fichier** dans la fenêtre « Ambiance de la manche » :
+
+| État de la ligne | Affichage | Actions |
+|---|---|---|
+| **Hérité** | Nom du fichier global (`<cue>.wav`), « défaut » ou « personnalisé », durée | Remplacer… (crée un fichier propre à la manche) |
+| **Fichier de la manche** | Chemin, durée, badge « manche » | Remplacer…, Revenir au fichier global, Tester, Écouter ici |
+| **Fichier introuvable** | « fichier introuvable, le son global est joué » | Remplacer… ; pas de Tester ni d'Écouter ici |
+
+- **Effet immédiat** : Remplacer…, Revenir au fichier global et Tester agissent tout de suite, indépendamment d'Enregistrer et d'Annuler. Annuler ne défait pas un fichier déjà remplacé.
+- **Formats et durées identiques au catalogue** : WAV, conversion automatique à l'upload, 5 s pour un bruitage, 30 s pour le décompte (voir « Formats acceptés »).
+- **Lecture** : la manche joue son fichier. Si le fichier est absent ou invalide, le **son global est joué** à la place, et l'écran le signale. Un fichier introuvable ne devient jamais un silence.
+- **Tester** joue le fichier effectif de la ligne (celui de la manche, sinon le global), même si le bruitage est désactivé. **Écouter ici** joue dans le navigateur, sans passer par l'enceinte.
+- **Tout remettre à Hérité** demande une confirmation qui indique le nombre de fichiers à supprimer. Si une suppression échoue, un message signale les fichiers qui n'ont pas pu être supprimés.
+- **Suppression de la manche** : ses fichiers propres sont supprimés avec elle.
+- **Restauration du catalogue** (« Restaurer » d'un bruitage, « Restaurer tous les sons par défaut ») : sans effet sur les fichiers propres aux manches.
+- **Sauvegarde et remise à zéro « médias »** : les fichiers propres aux manches suivent le même sort que les autres sons (ils sont inclus dans la sauvegarde « médias » et supprimés par la remise à zéro « médias »).
+- **Limite connue (Windows)** : remplacer un fichier de manche pendant qu'il est en cours de lecture peut échouer ponctuellement (« accès refusé »). Renvoyez le fichier une fois la lecture terminée.
 
 ### Popover Ambiance pendant une manche
 

@@ -287,6 +287,23 @@ Hors manche : `round_id` = `""` et `round_override` = `{}`. Forme complète : `c
 
 **Champs de statut** — `GET /api/sound/status` : `muted` est la valeur **résolue**, `muted_source` vaut `"global"`, `"round"` ou `"direct"`. `GET /api/sounds` : `enabled` reste la valeur **globale** (le catalogue édite le global).
 
+### Fichiers de son par manche (v11.6.0, #290)
+
+Un fichier propre à une manche remplace le son global d'une cue (15 bruitages) ou du décompte, pour les questions de cette manche. Effet **immédiat** (indépendant de `ROUNDS_UPDATE`). `{id}` est validé contre `rounds.json` (`^r[0-9]+$`) et `{cue}` contre les 15 cues ∪ `decompte` **avant** tout usage de chemin : `404` sinon. Aucune authentification.
+
+| Méthode | Endpoint | Rôle | Réponse |
+|---------|----------|------|---------|
+| GET | `/api/rounds/{id}/sounds` | Liste des fichiers propres à la manche | `200 {round_id, files:[{cue, path, present, duration_seconds\|null}]}` (`files: []` si aucun) ; `404` manche inconnue |
+| POST | `/api/rounds/{id}/sounds/{cue}` (multipart `file`) | Remplacer le son de la cue pour cette manche | `200 {status, round_id, cue, path, duration_seconds, converted, source_format, warning}` ; `400` / `413` comme `/api/sounds/{cue}` ; `404` ; `405` |
+| DELETE | `/api/rounds/{id}/sounds/{cue}` | Revenir au fichier global | `200 {status:"ok"}` ; `404` si la manche n'a pas de fichier pour cette cue |
+| POST | `/api/rounds/{id}/sounds/{cue}/test` | Tester le fichier **effectif** (manche si présent, sinon global) | `200 {status:"ok", played:"round"\|"global"}` ; ignore `muted` et les interrupteurs |
+
+- **Validation** : identique au catalogue (`ToCanonical` #232, puis `ValidateUpload` pour une cue, validateur décompte pour `decompte`, plafonds bruts ×4). Le fichier écrit est toujours canonique, sous `data/files/sounds/rounds/<id>/<cue>.wav` (écriture temporaire puis renommage). `rounds.json` est mis à jour sous le verrou des fichiers de questions ; un fichier neuf est retiré si cette écriture échoue.
+- **Après écriture** : rechargement de `GameState.ROUNDS`, re-résolution des réglages, diffusion `UPDATE` (et `AMBIANCE_EFFECTIVE`).
+- **Lecture** : si le fichier de la manche est absent ou non conforme, le fichier global est joué (avec un `WARN` journalisé une fois).
+- `GET /api/ambiance/settings` expose `sound.files` dans `global`, `effective`, `sources` et `round_override`. `Écouter ici` lit `/files/sounds/rounds/<id>/<cue>.wav` (servi par `/files/**`, sans route dédiée).
+- `POST /api/sounds/{cue}/restore` et `restore-defaults` ne touchent pas les fichiers de manche. La suppression d'une manche supprime son dossier de sons.
+
 ### Categories API (v5.7.0)
 
 ```

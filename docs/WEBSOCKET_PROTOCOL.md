@@ -1695,7 +1695,7 @@ Fixe en une action la structure complète : manches (ordre, noms, questions), qu
   diffusions seulement en cas de succès.
 - **Diffusions** : `UPDATE` (`ROUNDS`, `ROUND_CONTEXT`), `QUESTIONS` (admin), `NEXT_QUESTION` (anim).
 - **Résultat** : `ROUNDS_UPDATE_RESULT { STATUS: "APPLIED", ROUNDS: [{ID, NAME, AMBIANCE}], CREATED_ENTRACTES: [{ROUND_ID, START_ID, END_ID}], DELETED_QUESTIONS: [ids] }`.
-- **Surcharge d'ambiance par manche (#290)** : `ROUNDS[].AMBIANCE` (objet `Partial`, voir `docs/DATA_MODELS.md`, « Modèles v11.6.0 ») est **optionnel** dans la requête. Absent ⇒ surcharge existante conservée ; `{}` ⇒ surcharge effacée. Appliqué **immédiatement** si la manche est la manche effective. Aucune action WebSocket nouvelle : les gestes directs restent en REST.
+- **Surcharge d'ambiance par manche (#290)** : `ROUNDS[].AMBIANCE` (objet `Partial`, voir `docs/DATA_MODELS.md`, « Modèles v11.6.0 ») est **optionnel** dans la requête. Absent ⇒ surcharge existante conservée ; `{}` ⇒ surcharge effacée. Appliqué **immédiatement** si la manche est la manche effective. `sound.files` (fichiers de son propres à la manche) est **ignoré** par `ROUNDS_UPDATE` : il est toujours recopié depuis l'existant ; seule l'API REST `/api/rounds/{id}/sounds` l'écrit (`docs/PROTOCOLS.md`). Aucune action WebSocket nouvelle : les gestes directs et les fichiers restent en REST.
 - **`GameState.AMBIANCE_EFFECTIVE`** (`{ SETTINGS, SOURCES, ROUND_ID }`) est diffusé dans l'`UPDATE` à chaque changement de résolution (changement de manche, `NEW_GAME`, `RESTORE`, `ROUNDS_UPDATE`, gestes directs). Tous clients web ; jamais `omitempty`.
 
 ### NEXT_QUESTION étendu (anim)

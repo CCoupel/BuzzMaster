@@ -999,7 +999,8 @@ Sources : `contracts/ambiance-settings.md` §3–§5, `contracts/models.md` §Ma
 - **`GameState.ROUNDS[]`** : toujours sérialisé (`{}` si hérité), comme les autres champs de manche.
 - **`ROUNDS_UPDATE`** : `ROUNDS[].AMBIANCE` absent ⇒ surcharge conservée ; `{}` ⇒ surcharge effacée ; nouvelle manche ⇒ `{}`. Validé strictement : clé inconnue, type non booléen, `light.mode` hors `ON`/`AUTO`/`OFF`, cue absente du registre ⇒ refus `INVALID_AMBIANCE` (chemins fautifs dans `QUESTIONS`, ex. `r2:sound.cues.qcm-indce`).
 - **Cycle de vie** : suit la manche (renommage, déplacement) ; disparaît avec elle (`KEEP` : les questions passent en « Sans manche », sans surcharge). « Sans manche » n'a pas d'`AMBIANCE`.
-- **Hors modèle (D7), jamais surchargeable** : `sound.enabled`, périphérique audio, compensation de latence, `lighting.enabled`, pont Hue et ampoules, fichiers de sons, Flash.
+- **`sound.files`** (v11.6.0, #290, LOT-4 Batch 2) : fichiers de son propres à la manche, `{ "<cue>": "rounds/<roundID>/<cue>.wav" }`, pour les 15 bruitages et `decompte`. Stockage : `data/files/sounds/rounds/<roundID>/<cue>.wav` (nom déterministe, un fichier par manche et par cue). **`rounds.json` fait foi** : une référence sans fichier est signalée (`present:false`) et le son global est joué, jamais corrigée en silence. Écrit **uniquement** par l'API `/api/rounds/{id}/sounds` ; `ROUNDS_UPDATE` l'ignore et le recopie depuis l'existant. Résolu depuis la couche manche seulement (jamais depuis la couche directe). `GameState.ROUNDS[]` le sérialise avec le reste de `AMBIANCE`.
+- **Hors modèle (D7), jamais surchargeable** : `sound.enabled`, périphérique audio, compensation de latence, `lighting.enabled`, pont Hue et ampoules, Flash. Les **fichiers** des bruitages et du décompte sont en revanche surchargeables par manche (`sound.files`).
 
 ### GameState.AMBIANCE_EFFECTIVE — réglages résolus
 
