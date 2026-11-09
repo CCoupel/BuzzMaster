@@ -3040,15 +3040,15 @@ Chaque bruitage et le décompte ont une colonne **Fichier** dans la fenêtre « 
 
 | État de la ligne | Affichage | Actions |
 |---|---|---|
-| **Hérité** | Nom du fichier global (`<cue>.wav`), « défaut » ou « personnalisé », durée | Remplacer… (crée un fichier propre à la manche) |
+| **Hérité** | Nom du fichier global (`<cue>.wav`), « défaut » ou « personnalisé », durée | Remplacer… (crée un fichier propre à la manche), Tester |
 | **Fichier de la manche** | Chemin, durée, badge « manche » | Remplacer…, Revenir au fichier global, Tester, Écouter ici |
-| **Fichier introuvable** | « fichier introuvable, le son global est joué » | Remplacer… ; pas de Tester ni d'Écouter ici |
+| **Fichier introuvable** | « fichier introuvable, le son global est joué » | Remplacer…, Revenir au fichier global ; pas de Tester ni d'Écouter ici |
 
 - **Effet immédiat** : Remplacer…, Revenir au fichier global et Tester agissent tout de suite, indépendamment d'Enregistrer et d'Annuler. Annuler ne défait pas un fichier déjà remplacé.
 - **Formats et durées identiques au catalogue** : WAV, conversion automatique à l'upload, 5 s pour un bruitage, 30 s pour le décompte (voir « Formats acceptés »).
 - **Lecture** : la manche joue son fichier. Si le fichier est absent ou invalide, le **son global est joué** à la place, et l'écran le signale. Un fichier introuvable ne devient jamais un silence.
 - **Tester** joue le fichier effectif de la ligne (celui de la manche, sinon le global), même si le bruitage est désactivé. **Écouter ici** joue dans le navigateur, sans passer par l'enceinte.
-- **Tout remettre à Hérité** demande une confirmation qui indique le nombre de fichiers à supprimer. Si une suppression échoue, un message signale les fichiers qui n'ont pas pu être supprimés.
+- **Tout remettre à Hérité** demande une confirmation qui indique le nombre de fichiers à supprimer. Si une suppression échoue, le message est : « Erreur : N fichier(s) de la manche non supprimé(s) (noms). Les réglages n'ont pas été remis à « Hérité » : réessayez. » Dans ce cas, les réglages ne sont pas remis à Hérité : relancez l'action une fois le problème réglé.
 - **Suppression de la manche** : ses fichiers propres sont supprimés avec elle.
 - **Restauration du catalogue** (« Restaurer » d'un bruitage, « Restaurer tous les sons par défaut ») : sans effet sur les fichiers propres aux manches.
 - **Sauvegarde et remise à zéro « médias »** : les fichiers propres aux manches suivent le même sort que les autres sons (ils sont inclus dans la sauvegarde « médias » et supprimés par la remise à zéro « médias »).
