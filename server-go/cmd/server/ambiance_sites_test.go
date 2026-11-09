@@ -118,7 +118,7 @@ func ambianceSitesDiff205(found map[ambianceSite]bool, registry map[ambianceSite
 		}
 	}
 	for site := range registry {
-		if ambianceIsRenderingLayer(site.Func) {
+		if ambianceIsRenderingLayer(site.Func) || movedToLEDPackage295[site.Func] {
 			continue
 		}
 		if !found[site] {
@@ -129,6 +129,10 @@ func ambianceSitesDiff205(found map[ambianceSite]bool, registry map[ambianceSite
 	sort.Strings(extra)
 	return missing, extra
 }
+
+// movedToLEDPackage295 : fonctions de la couche LED déplacées de main.go vers internal/led (#295) ; leur appel
+// sendLEDSet* n'est plus dans main.go (la décision d'ambiance du registre est inchangée : resync d'UN appareil, code mort).
+var movedToLEDPackage295 = map[string]bool{"broadcastLEDSet": true, "resendLEDOnReconnect": true}
 
 // TestAmbianceExhaustiveness_MainGoMatchesRegistry is CA3 itself: the real
 // check that must run on every build.
