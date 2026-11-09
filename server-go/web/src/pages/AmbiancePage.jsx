@@ -1323,7 +1323,7 @@ export default function AmbiancePage() {
             </div>
             {/* #283 — cause lisible sous la pastille (pastille inchangée) et
                 bannière « Redémarrage requis » (output = restart_required). */}
-            {soundStatus.reason && soundStatus.output !== 'unavailable' && (
+            {soundStatus.reason && !['unavailable', 'disabled', 'restart_required'].includes(soundStatus.output) && !soundStatus.restartRequired && (
               <p className="ambiance-hint sound-output-reason" data-output={soundStatus.output || ''}>
                 {soundStatus.reason}
               </p>
