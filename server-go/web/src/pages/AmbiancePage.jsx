@@ -1323,10 +1323,24 @@ export default function AmbiancePage() {
             </div>
             {/* #283 — cause lisible sous la pastille (pastille inchangée) et
                 bannière « Redémarrage requis » (output = restart_required). */}
-            {soundStatus.reason && (
+            {soundStatus.reason && soundStatus.output !== 'unavailable' && (
               <p className="ambiance-hint sound-output-reason" data-output={soundStatus.output || ''}>
                 {soundStatus.reason}
               </p>
+            )}
+            {soundStatus.output === 'unavailable' && (
+              <div className="sound-unavailable-banner" role="alert">
+                <strong>Enceinte indisponible.</strong> Aucun périphérique de sortie n'a répondu au
+                démarrage (<span className="sound-output-cause">{soundStatus.reason || 'cause inconnue'}</span>).
+                Branchez ou connectez l'enceinte, puis redémarrez le serveur. « Écouter ici » lit les
+                sons dans le navigateur et reste disponible.
+              </div>
+            )}
+            {soundStatus.output === 'disabled' && (
+              <div className="sound-restart-banner" role="status">
+                <strong>Bruitages désactivés</strong> dans <code>config.json</code> (<code>sound.enabled = false</code>).
+                Activez l'interrupteur puis redémarrez.
+              </div>
             )}
             {soundStatus.restartRequired && (
               <div className="sound-restart-banner" role="alert">

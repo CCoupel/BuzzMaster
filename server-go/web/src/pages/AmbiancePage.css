@@ -847,3 +847,13 @@
   margin: 0.5rem 0;
   overflow-wrap: anywhere;
 }
+.sound-unavailable-banner {
+  font-size: 0.78rem;
+  color: #991b1b;
+  background: #fee2e2;
+  border-radius: 0.4rem;
+  border-left: 3px solid var(--error, #ef4444);
+  padding: 0.45rem 0.6rem;
+  margin: 0.5rem 0;
+  overflow-wrap: anywhere;
+}
