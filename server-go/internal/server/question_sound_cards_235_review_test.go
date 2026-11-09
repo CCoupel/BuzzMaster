@@ -6,43 +6,53 @@ package server
 
 import (
 	"encoding/json"
-	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-// M2 — « tirage forcé » : math/rand global réamorcé avec la même graine avant chaque envoi ⇒ le nom aléatoire du
-// nouveau fichier est IDENTIQUE à celui de l'ancien. Le remplacement ne doit alors ni détruire le fichier fraîchement
-// écrit (suppression différée de l'ancien nom), ni laisser question.json pointer vers un fichier absent.
+// M2 — « tirage forcé » : la couture motionCardSoundRand renvoie d'abord le MÊME suffixe que l'ancien fichier, puis un
+// autre. Sans le correctif (tirage unique), le nouveau fichier écrase l'ancien nom puis la suppression différée de
+// l'ancien le détruit alors que question.json le référence ; avec le correctif, le nom en collision est écarté.
 func TestCardSound235_Replace_ForcedSameRandomName_FileKeptAndReferenced(t *testing.T) {
 	s, dataDir := setupTestHTTPServer(t)
-	const seed = 235235
 
-	rand.Seed(seed) //nolint:staticcheck // tirage forcé voulu : reproduit le même nom de fichier
-	tw235OK(t, tw235Post(t, s, tw235Form{cards: tw235Cards("c1"), files: map[string][]byte{"motion_card_c1_sound": tw219hCanonicalWAV(1)}}))
-	first, _ := tw235Card(t, tw235ReadQuestion(t, dataDir), "c1")["SOUND"].(string)
-	if first == "" {
-		t.Fatal("setup invalide : premier son absent")
+	draws := []int{4242, 4242, 4243} // 1er envoi : 4242 ; 2e envoi : 4242 (collision) puis 4243
+	old := motionCardSoundRand
+	t.Cleanup(func() { motionCardSoundRand = old })
+	motionCardSoundRand = func() int {
+		if len(draws) == 0 {
+			t.Fatal("tirage épuisé : plus de tirage prévu")
+		}
+		v := draws[0]
+		draws = draws[1:]
+		return v
 	}
 
-	rand.Seed(seed) //nolint:staticcheck
+	tw235OK(t, tw235Post(t, s, tw235Form{cards: tw235Cards("c1"), files: map[string][]byte{"motion_card_c1_sound": tw219hCanonicalWAV(1)}}))
+	first, _ := tw235Card(t, tw235ReadQuestion(t, dataDir), "c1")["SOUND"].(string)
+	if filepath.Base(first) != "motion_c1_sound_4242.wav" {
+		t.Fatalf("setup invalide : premier son %q", first)
+	}
+
 	tw235OK(t, tw235Post(t, s, tw235Form{cards: tw235Cards("c1"), files: map[string][]byte{"motion_card_c1_sound": tw219hCanonicalWAV(3)}}))
 	second, _ := tw235Card(t, tw235ReadQuestion(t, dataDir), "c1")["SOUND"].(string)
 	if second == "" {
 		t.Fatal("le second envoi doit référencer un son")
 	}
-	if _, err := os.Stat(filepath.Join(tw235QDir(dataDir), filepath.Base(second))); err != nil {
-		t.Fatalf("le fichier référencé %q est absent du disque (détruit par la suppression de l'ancien nom ?) : %v", second, err)
-	}
-	// Le fichier référencé doit être le NOUVEAU contenu (3 s), pas un reste de l'ancien (1 s) ni un fichier vide.
-	raw, err := os.ReadFile(filepath.Join(tw235QDir(dataDir), filepath.Base(second)))
-	if err != nil || len(raw) < 3*44100*4 {
-		t.Errorf("le fichier référencé doit contenir le nouveau son de 3 s (len=%d, err=%v)", len(raw), err)
-	}
 	if second == first {
-		t.Log("collision de nom effectivement forcée (même URL) — c'est le cas à protéger")
+		t.Fatalf("le nom en collision (4242) doit être écarté, got %q", second)
+	}
+	raw, err := os.ReadFile(filepath.Join(tw235QDir(dataDir), filepath.Base(second)))
+	if err != nil {
+		t.Fatalf("le fichier référencé %q est absent du disque : %v", second, err)
+	}
+	if len(raw) < 3*44100*4 {
+		t.Errorf("le fichier référencé doit contenir le nouveau son de 3 s (len=%d)", len(raw))
+	}
+	if _, err := os.Stat(filepath.Join(tw235QDir(dataDir), "motion_c1_sound_4242.wav")); err == nil {
+		t.Errorf("l'ancien fichier (4242) doit avoir été supprimé")
 	}
 }
 

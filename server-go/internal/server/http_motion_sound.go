@@ -31,6 +31,10 @@ import (
 // jamais de séparateur de chemin (les ID générés sont du type "mc-1").
 var motionCardIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
+// motionCardSoundRand tire le suffixe numérique (1000–9999) du nom d'un son de
+// carte. Couture de test (M2) : remplaçable pour forcer une collision de nom.
+var motionCardSoundRand = func() int { return rand.Intn(9000) + 1000 }
+
 // cardWarning est l'élément de `card_warnings` dans la réponse de POST /questions.
 type cardWarning struct {
 	CardID  string `json:"card_id"`
@@ -134,7 +138,7 @@ func applyMotionCardSounds(r *http.Request, id, questionsDir string, cards []map
 			// M2 : jamais le nom de l'ancien son (il serait écrasé puis supprimé au commit).
 			var fileName string
 			for {
-				fileName = fmt.Sprintf("motion_%s_sound_%d.wav", cardID, rand.Intn(9000)+1000)
+				fileName = fmt.Sprintf("motion_%s_sound_%d.wav", cardID, motionCardSoundRand())
 				if prefix+fileName != oldSound {
 					break
 				}
