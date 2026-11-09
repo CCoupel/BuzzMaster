@@ -11,11 +11,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 vi.mock('./LightingModePanel.css', () => ({}))
 vi.mock('../pages/AmbiancePage.css', () => ({}))
+vi.mock('../hooks/GameContext', () => ({ useGame: vi.fn(() => ({ teams: {} })), GameProvider: ({ children }) => children }))
 vi.mock('../hooks/useSoundStatus', async (orig) => ({ ...(await orig()), notifySoundChanged: vi.fn() }))
 
 import SoundTogglePanel from './SoundTogglePanel'
 import LightingModePanel from './LightingModePanel'
 import SoundsManager from './SoundsManager'
+import AmbiancePage from '../pages/AmbiancePage'
 
 const MSG = /Appliqué à la manche en cours seulement/
 
@@ -152,6 +154,48 @@ describe('SoundsManager — cues et décompte (#290)', () => {
     setup(null)
     await toggleDepart()
     await waitFor(() => expect(global.fetch.mock.calls.some((c) => c[0] === '/config.json' && c[1]?.method === 'POST')).toBe(true))
+    expect(screen.queryByText(MSG)).toBeNull()
+    expect(screen.queryByText(/^Erreur : /)).toBeNull()
+  })
+})
+
+describe('AmbiancePage › Lumière — mode d\'éclairage par défaut (#290)', () => {
+  const CFG = { enabled: true, bridge_ip: '10.0.0.2', bridge_id: 'x', api_key_configured: true, lights: [] }
+  const setup = (postBody) => {
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      const method = opts.method || 'GET'
+      if (method === 'POST' && url === '/config.json') return reply(postBody)
+      if (url === '/config.json') return reply({ lighting: CFG, sound: { enabled: true } })
+      if (url === '/api/lighting/status') return reply({ state: 'ok', enabled: true })
+      if (url === '/api/sound/status') return reply({ active: true, muted: false })
+      if (url === '/api/lighting/lights') return reply({ lights: [] })
+      return reply({})
+    })
+    render(<AmbiancePage />)
+  }
+  const clickOn = async () => {
+    const group = await screen.findByRole('radiogroup', { name: "Mode d'éclairage" })
+    fireEvent.click(Array.from(group.querySelectorAll('button')).find((b) => b.textContent === 'ON'))
+  }
+  const posted = () => global.fetch.mock.calls.some((c) => c[0] === '/config.json' && c[1]?.method === 'POST')
+
+  it('scope "round" ⇒ toast affiché', async () => {
+    setup({ status: 'ok', scope: 'round' })
+    await clickOn()
+    expect(await screen.findByText(MSG)).toBeInTheDocument()
+  })
+
+  it('scope "global" ⇒ aucun message', async () => {
+    setup({ status: 'ok', scope: 'global' })
+    await clickOn()
+    await waitFor(() => expect(posted()).toBe(true))
+    expect(screen.queryByText(MSG)).toBeNull()
+  })
+
+  it('corps non JSON ⇒ aucun message ni erreur', async () => {
+    setup(null)
+    await clickOn()
+    await waitFor(() => expect(posted()).toBe(true))
     expect(screen.queryByText(MSG)).toBeNull()
     expect(screen.queryByText(/^Erreur : /)).toBeNull()
   })

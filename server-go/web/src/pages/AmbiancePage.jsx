@@ -10,6 +10,7 @@ import { soundStateLabel } from '../utils/soundState'
 import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
 import SoundsManager from '../components/SoundsManager'
 import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
+import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
 import '../styles/tabs.css'
@@ -331,7 +332,10 @@ export default function AmbiancePage() {
     try {
       const res = await saveLighting({ default_mode: value })
       if (!res.ok) throw new Error(await res.text())
+      const roundScope = await isRoundScope(res)
       await afterSave()
+      // La manche impose le mode : le geste n'a pas modifié le défaut persisté → retour visuel.
+      if (roundScope) setToast({ message: ROUND_SCOPE_MESSAGE, type: 'warning' })
     } catch (error) {
       console.error('Set lighting default_mode failed:', error)
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
