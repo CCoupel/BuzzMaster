@@ -1,0 +1,89 @@
+<!--
+mockup:
+  composant: admin_questions_list
+  feature: round_ambiance_override
+  version: 11.6.0
+  type: ui
+  issue: "#290"
+  validee_le: 2026-11-09
+  complete: [docs/mockup/v11.2/ui/admin_questions_list__rounds_entractes_delete_choice.html, docs/mockup/v11.6.0/ui/ambiance_settings_panel__round_override.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditeur de manches — bouton « Ambiance » et badge de surcharge dans l'en-tête de manche (#290)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --ok:#16a34a; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+.mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+.mock-note { max-width:1200px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; }
+.mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1200px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.tabs { display:flex; gap:.4rem; margin:.4rem 0 .9rem; }
+.tab { padding:.4rem .8rem; border-radius:.45rem; font-size:.85rem; background:var(--gray-100); color:var(--gray-600); }
+.tab.active { background:var(--primary); color:#fff; font-weight:700; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.6rem 0 .4rem; }
+.subtab { padding:.35rem .7rem; font-size:.8rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; }
+.subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+.subtab .n { display:inline-block; min-width:1.1rem; padding:0 .3rem; margin-left:.3rem; border-radius:999px; background:var(--gray-200); font-size:.68rem; text-align:center; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th, td { text-align:left; padding:.45rem .5rem; border-bottom:1px solid var(--gray-200); vertical-align:middle; }
+th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+td small { display:block; color:var(--gray-500); font-size:.72rem; }
+tr.sep-row td { background:var(--gray-50); font-weight:700; color:var(--gray-700); }
+.btn { font:inherit; font-size:.78rem; padding:.3rem .6rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; cursor:pointer; }
+.btn.ghost { border-style:dashed; } .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.sw { display:inline-block; width:1.9rem; height:1.05rem; border-radius:999px; background:var(--gray-300); position:relative; vertical-align:middle; }
+.sw::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.75rem; height:.75rem; border-radius:50%; background:#fff; }
+.sw.on { background:var(--primary); } .sw.on::after { left:1rem; }
+.badge { display:inline-flex; align-items:center; gap:.35rem; font-size:.75rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:#dcfce7; color:#166534; }
+.badge.off { background:var(--gray-200); color:var(--gray-600); } .badge.warn { background:var(--amberbg); color:var(--amber); } .badge.err { background:#fee2e2; color:#991b1b; }
+.badge.round { background:var(--primary-100); color:#3730a3; }
+.tag { display:inline-block; margin-left:.5rem; font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.1rem .4rem; border-radius:.3rem; background:var(--primary-100); color:var(--primary); vertical-align:middle; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:.4rem 0 0; }
+.warn { font-size:.78rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--warning); }
+.err { font-size:.78rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--error); }
+.row { display:flex; align-items:center; flex-wrap:wrap; gap:.8rem; margin:.3rem 0; }
+.lbl { font-size:.8rem; font-weight:600; color:var(--gray-700); min-width:11rem; }
+.tristate { display:inline-flex; border:1px solid var(--gray-300); border-radius:.5rem; overflow:hidden; }
+.tristate span { padding:.35rem .7rem; font-size:.8rem; font-weight:600; color:var(--gray-600); background:#fff; border-right:1px solid var(--gray-300); cursor:pointer; }
+.tristate span:last-child { border-right:0; }
+.tristate .sel-on { background:var(--warning); color:#fff; } .tristate .sel-auto { background:var(--gray-600); color:#fff; } .tristate .sel-off { background:var(--error); color:#fff; }
+.tristate .sel-ok { background:var(--ok); color:#fff; } .tristate .sel-inherit { background:var(--primary-100); color:#3730a3; }
+.inherit { font-size:.72rem; color:var(--gray-500); font-style:italic; }
+.dim { opacity:.5; }
+</style>
+</head>
+<body>
+<div class="mock-note"><b>Éditeur de manches</b> (<code>QuestionsPage</code> / <code>RoundGroup</code>, structure v11.2 inchangée : poignée, repli, nom, compteur, ▲▼ ✎ 🗑, questions, « + Question »). Nouveau dans l'en-tête de chaque manche : un bouton <b>🎛 Ambiance</b> (même famille que ✎ 🗑) qui ouvre la fenêtre « Ambiance de la manche » (maquette <code>ambiance_settings_panel__round_override</code>), et un <b>badge</b> « Ambiance : N réglages » quand la manche surcharge au moins un réglage. « Sans manche » n'a pas de bouton Ambiance : ces questions suivent toujours le réglage global.</div>
+<h2 class="mock-h">01 — Liste des manches</h2>
+<div class="card" style="max-width:900px">
+  <div style="border:1px solid var(--gray-200);border-radius:.6rem;margin-bottom:.6rem;background:var(--gray-50)">
+    <div class="row" style="padding:.5rem .7rem;gap:.5rem"><span style="width:1rem"></span><span>▾</span><b>Sans manche</b><span class="inherit">3 questions</span><span style="margin-left:auto" class="inherit">réglage global</span></div>
+  </div>
+  <div style="border:1px solid var(--gray-200);border-radius:.6rem;margin-bottom:.6rem">
+    <div class="row" style="padding:.5rem .7rem;gap:.5rem"><span style="color:var(--gray-400)">⋮⋮</span><span>▾</span><b>Manche 1 — Cinéma</b><span class="inherit">8 questions · 2 entractes</span>
+      <span style="margin-left:auto;display:flex;gap:.25rem;align-items:center"><button class="btn" style="margin:0">▲</button><button class="btn" style="margin:0">▼</button><button class="btn" style="margin:0" title="Ambiance de la manche">🎛</button><button class="btn" style="margin:0">✎</button><button class="btn" style="margin:0">🗑</button></span></div>
+    <div style="padding:0 .7rem .6rem" class="dim"><span class="inherit">… cartes des questions, « + Question » — inchangés …</span></div>
+  </div>
+  <div style="border:1px solid var(--primary-100);border-radius:.6rem;margin-bottom:.6rem">
+    <div class="row" style="padding:.5rem .7rem;gap:.5rem"><span style="color:var(--gray-400)">⋮⋮</span><span>▸</span><b>Manche 2 — Blind-test</b><span class="inherit">6 questions · 2 entractes</span><span class="badge round" title="Son coupé : hérité · Décompte : inactif · Bruitages QCM : inactifs · Lumière : ON">🎛 Ambiance : 3 réglages</span>
+      <span style="margin-left:auto;display:flex;gap:.25rem;align-items:center"><button class="btn" style="margin:0">▲</button><button class="btn" style="margin:0">▼</button><button class="btn primary" style="margin:0" title="Ambiance de la manche">🎛</button><button class="btn" style="margin:0">✎</button><button class="btn" style="margin:0">🗑</button></span></div>
+  </div>
+  <div style="border:1px solid var(--gray-200);border-radius:.6rem;margin-bottom:.6rem">
+    <div class="row" style="padding:.5rem .7rem;gap:.5rem"><span style="color:var(--gray-400)">⋮⋮</span><span>▸</span><b>Manche 3 — Finale</b><span class="inherit">4 questions · 2 entractes</span>
+      <span style="margin-left:auto;display:flex;gap:.25rem;align-items:center"><button class="btn" style="margin:0">▲</button><button class="btn" style="margin:0">▼</button><button class="btn" style="margin:0" title="Ambiance de la manche">🎛</button><button class="btn" style="margin:0">✎</button><button class="btn" style="margin:0">🗑</button></span></div>
+  </div>
+  <div class="row"><button class="btn ghost">+ Nouvelle manche</button></div>
+  <p class="hint">Le badge résume le nombre de réglages surchargés ; son info-bulle les liste. Repli, renommage, suppression (Conserver / Supprimer aussi) et entractes automatiques : règles v11.2 inchangées. La surcharge suit la manche (déplacement, renommage) et disparaît avec elle.</p>
+</div>
+
+</body>
+</html>

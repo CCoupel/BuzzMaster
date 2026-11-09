@@ -1,0 +1,101 @@
+<!--
+mockup:
+  composant: admin_sounds_manager
+  feature: output_diagnostic
+  version: 11.6.0
+  type: ui
+  issue: "#283"
+  validee_le: 2026-11-09
+  complete: [docs/mockup/v11.4.0/ui/admin_sounds_manager__countdown_loop.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambiance › Son — diagnostic de la sortie audio (#283)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --ok:#16a34a; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; display:flex; flex-wrap:wrap; gap:.35rem .9rem; font-size:.8rem; }
+.mock-bar strong { color:#fff; } .mock-bar label { display:flex; gap:.3rem; align-items:center; cursor:pointer; }
+.mock-note { max-width:1200px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; }
+.mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1200px; margin:1.2rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.tabs { display:flex; gap:.4rem; margin:.4rem 0 .9rem; }
+.tab { padding:.4rem .8rem; border-radius:.45rem; font-size:.85rem; background:var(--gray-100); color:var(--gray-600); }
+.tab.active { background:var(--primary); color:#fff; font-weight:700; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.6rem 0 .4rem; }
+.subtab { padding:.35rem .7rem; font-size:.8rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; }
+.subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+.subtab .n { display:inline-block; min-width:1.1rem; padding:0 .3rem; margin-left:.3rem; border-radius:999px; background:var(--gray-200); font-size:.68rem; text-align:center; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th, td { text-align:left; padding:.45rem .5rem; border-bottom:1px solid var(--gray-200); vertical-align:middle; }
+th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+td small { display:block; color:var(--gray-500); font-size:.72rem; }
+tr.sep-row td { background:var(--gray-50); font-weight:700; color:var(--gray-700); }
+.btn { font:inherit; font-size:.78rem; padding:.3rem .6rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; cursor:pointer; }
+.btn.ghost { border-style:dashed; } .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+.sw { display:inline-block; width:1.9rem; height:1.05rem; border-radius:999px; background:var(--gray-300); position:relative; vertical-align:middle; }
+.sw::after { content:''; position:absolute; top:.15rem; left:.15rem; width:.75rem; height:.75rem; border-radius:50%; background:#fff; }
+.sw.on { background:var(--primary); } .sw.on::after { left:1rem; }
+.badge { display:inline-flex; align-items:center; gap:.35rem; font-size:.75rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:#dcfce7; color:#166534; }
+.badge.off { background:var(--gray-200); color:var(--gray-600); } .badge.warn { background:var(--amberbg); color:var(--amber); } .badge.err { background:#fee2e2; color:#991b1b; }
+.badge.round { background:var(--primary-100); color:#3730a3; }
+.tag { display:inline-block; margin-left:.5rem; font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.1rem .4rem; border-radius:.3rem; background:var(--primary-100); color:var(--primary); vertical-align:middle; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:.4rem 0 0; }
+.warn { font-size:.78rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--warning); }
+.err { font-size:.78rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.45rem .6rem; margin:.5rem 0; border-left:3px solid var(--error); }
+.row { display:flex; align-items:center; flex-wrap:wrap; gap:.8rem; margin:.3rem 0; }
+.lbl { font-size:.8rem; font-weight:600; color:var(--gray-700); min-width:11rem; }
+.tristate { display:inline-flex; border:1px solid var(--gray-300); border-radius:.5rem; overflow:hidden; }
+.tristate span { padding:.35rem .7rem; font-size:.8rem; font-weight:600; color:var(--gray-600); background:#fff; border-right:1px solid var(--gray-300); cursor:pointer; }
+.tristate span:last-child { border-right:0; }
+.tristate .sel-on { background:var(--warning); color:#fff; } .tristate .sel-auto { background:var(--gray-600); color:#fff; } .tristate .sel-off { background:var(--error); color:#fff; }
+.tristate .sel-ok { background:var(--ok); color:#fff; } .tristate .sel-inherit { background:var(--primary-100); color:#3730a3; }
+.inherit { font-size:.72rem; color:var(--gray-500); font-style:italic; }
+.dim { opacity:.5; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette — état :</strong>
+<label><input type="radio" name="st" value="ok" checked> Sortie OK</label>
+<label><input type="radio" name="st" value="disabled"> Bruitages désactivés dans config.json</label>
+<label><input type="radio" name="st" value="restart"> Interrupteur changé sans redémarrage</label>
+<label><input type="radio" name="st" value="unavail"> Périphérique audio indisponible au démarrage</label>
+</div>
+<div class="mock-note"><b>Onglet Son</b> (composant <code>SoundsManager</code>, en-tête « Sortie audio » présenté en entier ; la table des sons est inchangée et résumée). La pastille d'en-tête <b>ne change pas</b> ; sous elle, une <b>ligne de cause</b> lisible (nouveau champ <code>reason</code> de <code>GET /api/sound/status</code>) et, quand l'interrupteur « Bruitages activés » a été modifié depuis le démarrage, une <b>bannière « Redémarrage requis »</b> (<code>output = restart_required</code>). Les mêmes informations sont écrites au démarrage dans le journal serveur (onglet Logs, fichier).</div>
+<h2 class="mock-h">01 — Ambiance › Son › Sortie audio</h2>
+<div class="card">
+  <div class="tabs"><span class="tab">🔆 Lumière</span><span class="tab active">🔊 Son</span></div>
+  <h3>Sortie audio</h3>
+  <div class="row"><label><span class="sw on" id="sw"></span> Bruitages activés</label><span class="badge" id="badge">● Son actif</span></div>
+  <p class="hint" id="reason">Sortie système par défaut ouverte au démarrage (Windows · 44,1 kHz stéréo).</p>
+  <div class="warn" id="restart" hidden><b>Redémarrage requis.</b> L'interrupteur a changé depuis le lancement du serveur : la sortie audio n'est ouverte qu'au démarrage (un seul contexte audio par processus). Redémarrez le serveur pour appliquer.</div>
+  <div class="err" id="unavail" hidden><b>Enceinte indisponible.</b> Aucun périphérique de sortie n'a répondu au démarrage (<span id="unavailWhy">« oto: no output device » — enceinte Bluetooth non connectée ?</span>). Branchez ou connectez l'enceinte, puis redémarrez le serveur. « Écouter ici » lit les sons dans le navigateur et reste disponible.</div>
+  <div class="warn" id="disabledNote" hidden><b>Bruitages désactivés</b> dans <code>config.json</code> (<code>sound.enabled = false</code>, fichier lu depuis le répertoire de lancement : <code>C:\BuzzControl\config.json</code>). Activez l'interrupteur puis redémarrez.</div>
+  <h3>Sons</h3>
+  <table><thead><tr><th>Événement</th><th>Fichier</th><th>Durée</th><th>Actif</th><th>Actions</th></tr></thead>
+  <tbody><tr class="sep-row"><td colspan="5">Bruitages (impulsions, ≤ 5 s)</td></tr>
+  <tr><td>Départ<small>Le chronomètre démarre</small></td><td>défaut</td><td>0,45 s</td><td><span class="sw on"></span></td><td><button class="btn">Remplacer</button><button class="btn">Écouter ici</button><button class="btn" id="t1">Tester sur l'enceinte</button></td></tr>
+  <tr><td colspan="5" class="dim">… 6 autres bruitages, sons longs (décompte) — inchangés (maquette <code>countdown_loop</code>)</td></tr></tbody></table>
+  <p class="hint">« Tester sur l'enceinte » reste proposé même quand la sortie est indisponible : il échoue avec le même motif que ci-dessus (toast), ce qui permet de vérifier après branchement.</p>
+</div>
+<h2 class="mock-h">02 — Journal serveur au démarrage (onglet Logs / fichier buzzcontrol.log)</h2>
+<div class="card"><pre style="font-size:.78rem;background:#111827;color:#e5e7eb;padding:.8rem;border-radius:.5rem;margin:0" id="log">[INFO ] AUDIO  sound: enabled=true output=ok device=default format=44100Hz/2ch/16bit (config: C:\BuzzControl\config.json)</pre></div>
+<script>
+const $=id=>document.getElementById(id);
+const S={ok:{badge:'● Son actif',cls:'badge',sw:true,reason:'Sortie système par défaut ouverte au démarrage (Windows · 44,1 kHz stéréo).',log:'[INFO ] AUDIO  sound: enabled=true output=ok device=default format=44100Hz/2ch/16bit (config: C:\\BuzzControl\\config.json)'},
+disabled:{badge:'○ Son inactif',cls:'badge off',sw:false,reason:'Bruitages désactivés par la configuration.',log:'[WARN ] AUDIO  sound: enabled=false output=disabled reason="sound.enabled=false" (config: C:\\BuzzControl\\config.json)'},
+restart:{badge:'○ Son inactif',cls:'badge warn',sw:true,reason:'Interrupteur modifié après le démarrage — la sortie n\'est pas ouverte.',log:'[WARN ] AUDIO  sound: enabled=true (changed at runtime) output=restart_required reason="enabled flipped false→true after startup"'},
+unavail:{badge:'○ Son inactif',cls:'badge err',sw:true,reason:'Périphérique de sortie indisponible au démarrage.',log:'[ERROR] AUDIO  sound: enabled=true output=unavailable reason="oto: no output device" — restart after connecting a speaker'}};
+function r(k){const s=S[k];$('badge').textContent=s.badge;$('badge').className=s.cls;$('sw').className='sw'+(s.sw?' on':'');$('reason').textContent=s.reason;$('restart').hidden=k!=='restart';$('unavail').hidden=k!=='unavail';$('disabledNote').hidden=k!=='disabled';$('log').textContent=s.log;}
+document.querySelectorAll('input[name=st]').forEach(e=>e.addEventListener('change',x=>r(x.target.value)));r('ok');
+</script>
+
+</body>
+</html>
