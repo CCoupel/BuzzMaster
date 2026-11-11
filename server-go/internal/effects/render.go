@@ -287,72 +287,119 @@ func renderRandom(frame Frame, p Pattern, rl func(string) GroupLook, ctx Context
 	}
 }
 
+// renderGradient implements contracts/light-effects.md §4.3.1: a fixed gradient
+// (travel none), a rotating ring (forward/backward, repeat true) or a propagation in
+// time from a starting group (outward, or forward/backward with repeat false).
 func renderGradient(frame Frame, p Pattern, rl func(string) GroupLook, ctx Context, elapsed time.Duration) {
 	n := len(frame)
 	stops := make([]GroupLook, len(p.Stops))
 	for i, s := range p.Stops {
 		stops[i] = rl(s)
 	}
-	if n == 0 || len(stops) == 0 {
+	k := len(stops)
+	if n == 0 || k == 0 {
 		return
 	}
-	step := float64(stepIndex(elapsed, p.StepMs))
 	repeat := p.Repeat == nil || *p.Repeat
-	origin := 0.0
-	switch p.Origin {
-	case "last":
-		origin = float64(n - 1)
-	case "center":
-		origin = float64(n-1) / 2
-	case "team":
-		o := ctx.Origin
-		if o < 1 || o > n {
-			o = 1
+	s := stepIndex(elapsed, p.StepMs)
+
+	switch {
+	case p.Travel == "" || p.Travel == "none":
+		for i := range frame {
+			x := 0.0
+			if n > 1 {
+				x = float64(i) / float64(n-1) * float64(k-1)
+			}
+			frame[i] = interpStops(stops, x, false)
 		}
-		origin = float64(o - 1)
-	}
-	span := float64(n - 1)
-	for i := range frame {
-		var pos float64
+	case p.Travel != "outward" && repeat: // rotating closed ring
+		for i := range frame {
+			shifted := i - s
+			if p.Travel == "backward" {
+				shifted = i + s
+			}
+			x := float64(posMod(shifted, n)) / float64(n) * float64(k)
+			frame[i] = interpStops(stops, x, true)
+		}
+	default: // propagation
+		start := 0
 		switch p.Travel {
-		case "forward":
-			pos = float64(i) - step
 		case "backward":
-			pos = float64(i) + step
+			start = n - 1
 		case "outward":
-			pos = math.Abs(float64(i)-origin) - step
-		default:
-			pos = float64(i)
+			switch p.Origin {
+			case "last":
+				start = n - 1
+			case "center":
+				start = (n - 1) / 2
+			case "team":
+				o := ctx.Origin
+				if o < 1 || o > n {
+					o = 1
+				}
+				start = o - 1
+			}
 		}
-		t := 0.0
-		if span > 0 {
-			t = pos / span
+		var rest *GroupLook
+		if p.Rest != "" {
+			r := rl(p.Rest)
+			rest = &r
 		}
-		if repeat {
-			t -= math.Floor(t)
-		} else {
-			t = math.Max(0, math.Min(1, t))
+		for i := range frame {
+			d := i - start
+			if d < 0 {
+				d = -d
+			}
+			if d > s {
+				if rest != nil {
+					frame[i] = *rest
+				} else {
+					frame[i] = GroupLook{Absent: true}
+				}
+				continue
+			}
+			a := s - d
+			if repeat {
+				a %= k
+			} else if a > k-1 {
+				a = k - 1
+			}
+			frame[i] = stops[a]
 		}
-		frame[i] = sampleStops(stops, t)
 	}
 }
 
-// sampleStops interpolates linearly (RGB and intensity) between the stops.
-func sampleStops(stops []GroupLook, t float64) GroupLook {
-	if len(stops) == 1 {
-		return stops[0]
-	}
-	x := t * float64(len(stops)-1)
-	i := int(math.Floor(x))
-	if i >= len(stops)-1 {
-		return stops[len(stops)-1]
-	}
+// interpStops samples the stops at abscissa x (0 = first stop, k-1 = last). With closed
+// set, the gradient comes back from the last stop to the first one (x in [0, k)).
+// The fade of a position is the one of the nearest stop.
+func interpStops(stops []GroupLook, x float64, closed bool) GroupLook {
+	k := len(stops)
+	i := int(math.Floor(x + 1e-9))
 	f := x - float64(i)
-	a, b := stops[i], stops[i+1]
+	if f < 1e-9 {
+		f = 0
+	}
+	var a, b GroupLook
+	switch {
+	case closed:
+		i = posMod(i, k)
+		a, b = stops[i], stops[(i+1)%k]
+	case i >= k-1:
+		return stops[k-1]
+	default:
+		a, b = stops[i], stops[i+1]
+	}
+	if f == 0 {
+		return a
+	}
 	lerp := func(u, v int) int { return int(math.Round(float64(u) + (float64(v)-float64(u))*f)) }
-	return GroupLook{
+	out := GroupLook{
 		Color:     [3]int{lerp(a.Color[0], b.Color[0]), lerp(a.Color[1], b.Color[1]), lerp(a.Color[2], b.Color[2])},
 		Intensity: lerp(a.Intensity, b.Intensity),
 		FadeMs:    a.FadeMs,
 	}
+	if f >= 0.5 {
+		out.FadeMs = b.FadeMs
+	}
+	return out
 }

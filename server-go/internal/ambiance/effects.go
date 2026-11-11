@@ -340,6 +340,9 @@ func (c *Controller) applyEffectFrames(ev lighting.Event, zones []lighting.ZoneS
 				if i >= len(fr.roomNums) {
 					break
 				}
+				if g.Absent { // no state for this group: it keeps the plain room scene (§4.3.1)
+					continue
+				}
 				extra = append(extra, lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: fr.roomNums[i], Color: g.Color, Intensity: g.Intensity, TransitionMs: g.FadeMs})
 			}
 			zones = append(zones[:1], append(extra, zones[1:]...)...)
@@ -355,5 +358,8 @@ func (c *Controller) hostEffectState(ev lighting.Event) (lighting.ZoneState, boo
 		return lighting.ZoneState{}, false
 	}
 	g := fr.host[0]
+	if g.Absent {
+		return lighting.ZoneState{}, false
+	}
 	return lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: lighting.GroupHost, Color: g.Color, Intensity: g.Intensity, TransitionMs: g.FadeMs}, true
 }

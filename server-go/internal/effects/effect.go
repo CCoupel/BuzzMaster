@@ -190,6 +190,9 @@ type GroupLook struct {
 	Color     [3]int `json:"color"`
 	Intensity int    `json:"intensity"`
 	FadeMs    int    `json:"fade_ms"`
+	// Absent: no state is emitted for this group, it keeps the ordinary room scene
+	// (gradient propagation not yet reached, without `rest` — §4.3.1 point 3).
+	Absent bool `json:"absent,omitempty"`
 }
 
 // Frame is one look per rendered group, in order; a single entry for

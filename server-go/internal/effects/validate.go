@@ -245,6 +245,17 @@ func (v *validator) pattern(path string, p Pattern, looks map[string]Appearance)
 		if !oneOf(p.Origin, "", "first", "last", "center", "team") {
 			v.add(path+".origin", "origin « %s » inconnue (first, last, center ou team)", p.Origin)
 		}
+		propagation := p.Travel == "outward" || ((p.Travel == "forward" || p.Travel == "backward") && p.Repeat != nil && !*p.Repeat)
+		if p.Rest != "" {
+			if !propagation {
+				v.add(path+".rest", "rest n'a de sens que pour une propagation (travel: outward, ou forward/backward avec repeat: false)")
+			} else {
+				v.ref(path+".rest", p.Rest, looks)
+			}
+		}
+		if p.Origin != "" && p.Travel != "outward" {
+			v.add(path+".origin", "origin n'a de sens qu'avec travel: outward")
+		}
 	default:
 		v.add(path+".type", "le type de motif « %s » est inconnu (uniform, shift, gauge, random ou gradient)", p.Type)
 	}
