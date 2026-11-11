@@ -1970,7 +1970,10 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 
 		current := config.Get()
-		cfg := *current // value copy: every section is a plain struct, no aliasing
+		// Shallow value copy: the sections are structs, but their maps and slices (e.g. Lighting.Effects,
+		// Lighting.Speeds, Lighting.Groups, Sound.CuesDisabled) are SHARED with the live config — a section
+		// that merges into one must copy it first, or a refused patch would still change the live config.
+		cfg := *current
 		// #290 (ambiance-settings.md §4.2): resolved values and round layer BEFORE the merge,
 		// to tell which fields this request really changes (a "geste direct").
 		ambBefore, _ := h.ambianceSettingsNow()
