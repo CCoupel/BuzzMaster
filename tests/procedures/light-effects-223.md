@@ -146,6 +146,7 @@
 | 7 | Lancer une question, revenir sur la page Effets | Boutons « Tester » grisés (« Une question est en cours ») ; réactivés à la fin | | |
 | 8 | Éclairage d'ambiance désactivé, ou pont éteint | Bouton grisé (désactivé) / message « Pont injoignable » ; l'interface reste utilisable | | |
 | 9 | Test en zone Public (lampe réglée à la main avant) | L'effet joue sur la lampe du public ; **à la fin la lampe retrouve exactement son réglage d'avant** (lu sur le pont puis réécrit) ; éteinte si la lecture était impossible | | |
+| 10 | Remarque (revue M3) : tester la zone Public avec un pont qui répond mal (lent ou partiellement coupé) | Le démarrage d'un test ou d'un essai en zone Public lit d'abord l'état des lampes sur le pont (1 requête, 1,5 s au plus) : le bouton « Tester » peut donc **répondre avec jusqu'à 1,5 s de latence** ; noter le délai observé ; l'interface reste utilisable et, si la lecture échoue, les lampes sont éteintes à la fin | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 

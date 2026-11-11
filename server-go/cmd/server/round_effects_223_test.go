@@ -276,14 +276,26 @@ func TestTW223_RoundOldFlatFormsInRoundsJson_ReadLeniently(t *testing.T) {
 	// rounds.json de QUALIF : effects à plat (= zone ambiance), host_effects ignoré. Le serveur le lit sans erreur.
 	e := tw223Env(t)
 	tw223Zones3(t)
-	for i, id := range []string{"1", "2"} {
-		e.writeQ(t, id, i)
-	}
-	rounds := `{"ROUNDS":[{"ID":"r1","NAME":"R","QUESTIONS":["1","2"],"ENTRACTES":false,"AMBIANCE":{"light":{"effects":{"chrono":"chenillard"},` +
-		`"host_effects":{"chrono":"","calm":"","score":"couleur-equipe"},"host_speeds":{"ha":{"calm":2}}}}}]}`
-	if err := os.WriteFile(filepath.Join(e.dir, "rounds.json"), []byte(rounds), 0o644); err != nil {
+	// la manche (et l'appartenance des questions) est créée par l'API, puis l'AMBIANCE de rounds.json est réécrite dans
+	// l'ancienne forme à plat, comme le ferait un fichier de QUALIF ; rounds.json est relu comme au démarrage
+	e.twoRounds(t, nil)
+	path := filepath.Join(e.dir, "rounds.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
 	}
+	var doc map[string]interface{}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	r0 := doc["ROUNDS"].([]interface{})[0].(map[string]interface{})
+	r0["AMBIANCE"] = tw223From(`{"light":{"effects":{"chrono":"chenillard"},` +
+		`"host_effects":{"chrono":"","calm":"","score":"couleur-equipe"},"host_speeds":{"ha":{"calm":2}}}}`)
+	out, _ := json.Marshal(doc)
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.app.reloadRounds()
 	e.ready(t, "1")
 	m := e.settings(t) // ne plante pas, effectif lisible
 	if got := tw290Path(m, "effective", "light", "effects", "ambiance", "chrono"); got != "chenillard" {
