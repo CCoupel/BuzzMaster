@@ -20,18 +20,11 @@ import (
 	"buzzcontrol/internal/lighting"
 )
 
+// tw223Source : source des réglages RÉSOLUS (global ← manche) par zone, voir zones_api_spec_test.go.
 type tw223Source struct {
-	cat  effects.Catalogue
-	room map[string]string
-	host map[string]map[string]string // id de groupe animateur → moment → id d'effet
-	// vitesses (R13) — voir effects_speed_api_spec_test.go
-	speeds     map[string]float64
-	hostSpeeds map[string]map[string]float64
-}
-
-func (s *tw223Source) EffectsCatalogue() effects.Catalogue { return s.cat }
-func (s *tw223Source) EffectSettings() (map[string]string, map[string]map[string]string) {
-	return s.room, s.host
+	cat effects.Catalogue
+	eff map[string]map[string]string  // zone → moment → id d'effet
+	spd map[string]map[string]float64 // zone → moment → vitesse
 }
 
 type tw223Env struct {
@@ -81,7 +74,7 @@ func tw223New(t *testing.T) *tw223Env {
 	env := &tw223Env{c: c, eng: eng, dir: dir, now: time.Unix(1_800_000_000, 0)}
 	c.EffectsClock = func() time.Time { return env.now }
 	c.LightingWriter.Store(lighting.NewWriter(lighting.Config{Driver: lighting.NewFakeDriver(), Derive: c.DeriveEvent, Scene: c.Scene}))
-	env.src = &tw223Source{room: map[string]string{"chrono": "pulsation", "calm": "", "score": ""}, host: map[string]map[string]string{"h1": {"chrono": "", "calm": "", "score": ""}}}
+	env.src = tw223DefaultSource()
 	c.SetEffectsSource(env.src)
 	env.setup = func(groups []config.LightingGroupEntry) {
 		next := *config.Get()
@@ -106,42 +99,8 @@ func (e *tw223Env) reload() {
 
 func (e *tw223Env) step() { e.c.EffectsStep() }
 
-// setHost règle l'effet d'un moment pour le groupe animateur d'identifiant id (réglage global ← manche, déjà résolu).
-func (e *tw223Env) setHost(id, moment, effect string) {
-	if e.src.host[id] == nil {
-		e.src.host[id] = map[string]string{"chrono": "", "calm": "", "score": ""}
-	}
-	e.src.host[id][moment] = effect
-}
-
 func grp(n int, lights ...string) config.LightingGroupEntry {
 	return config.LightingGroupEntry{ID: "g" + string(rune(0x61+n)), Role: config.GroupRoleSalle, Lights: lights}
-}
-
-func hostGrp() config.LightingGroupEntry {
-	return config.LightingGroupEntry{ID: "h1", Role: config.GroupRoleAnimateur, Lights: []string{"H"}}
-}
-
-func zonesWithGroup(st lighting.State, pred func(int) bool) []lighting.ZoneState {
-	var out []lighting.ZoneState
-	for _, z := range st.Zones {
-		if z.Zone == lighting.ZoneGeneral && pred(z.Group) {
-			out = append(out, z)
-		}
-	}
-	return out
-}
-
-func roomGroups(st lighting.State) []lighting.ZoneState {
-	return zonesWithGroup(st, func(g int) bool { return g > 0 })
-}
-
-func hostEntry(st lighting.State) (lighting.ZoneState, bool) {
-	z := zonesWithGroup(st, func(g int) bool { return g == lighting.HostGroup(1) })
-	if len(z) == 0 {
-		return lighting.ZoneState{}, false
-	}
-	return z[0], true
 }
 
 var tw223Kinds = []lighting.EventKind{
@@ -204,7 +163,7 @@ func TestEffects223_EmptyGroupsInterleaved_FrameUsesRealNumbers(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1), grp(2, "C"), grp(3, "D")}) // groupe 2 vide
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
-	env.src.room["calm"] = "calm-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
 	env.step()
 	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
 	g := roomGroups(st)
@@ -229,7 +188,7 @@ func TestEffects223_HostGroupNeverCountsInN(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	// chenillard demande 3 groupes : N = 2 (l'animateur ne compte pas) ⇒ inapplicable ⇒ aucune trame
-	env.src.room["chrono"] = "chenillard"
+	env.setEffect("ambiance", "chrono", "chenillard")
 	env.eng.StartImmediate(20)
 	t.Cleanup(func() { env.eng.SetPhase(game.PhaseStopped) })
 	env.step()
@@ -244,7 +203,7 @@ func TestEffects223_ChronoMoment_NativeChenillardTraine_SixGroups_AdvancesWithIn
 	env := tw223New(t)
 	// 6 groupes : traînée à 50 % visible (thème blanc par défaut dans ce harnais)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B"), grp(2, "C"), grp(3, "D"), grp(4, "E"), grp(5, "F")})
-	env.src.room["chrono"] = "chenillard-traine"
+	env.setEffect("ambiance", "chrono", "chenillard-traine")
 	env.eng.StartImmediate(20)
 	t.Cleanup(func() { env.eng.SetPhase(game.PhaseStopped) })
 	env.step()
@@ -283,7 +242,7 @@ func TestEffects223_CalmMoment_AppliesToIdleReady_NotToOtherMoments(t *testing.T
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
-	env.src.room["calm"] = "calm-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
 	env.step() // état STOPPED ⇒ KindIdle ⇒ moment calm
 	for _, k := range []lighting.EventKind{lighting.KindIdle, lighting.KindPauseAll, lighting.KindEntracte} {
 		if g := roomGroups(env.c.Scene(lighting.Event{Kind: k})); len(g) != 2 {
@@ -301,7 +260,7 @@ func TestEffects223_ScoreMoment_WindowBoundedToThePulse(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "score.yaml", tw223Effect("score-fx", "score", "groups", 1, "#00FF00"))
-	env.src.room["score"] = "score-fx"
+	env.setEffect("ambiance", "score", "score-fx")
 	env.step()
 	if g := roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindScore, Teams: []string{"Rouges"}})); len(g) != 0 {
 		t.Fatal("pas d'effet de score avant l'attribution")
@@ -324,7 +283,8 @@ func TestEffects223_ScorePrimesOverCalm(t *testing.T) {
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
 	env.writeUser(t, "score.yaml", tw223Effect("score-fx", "score", "groups", 1, "#00FF00"))
-	env.src.room["calm"], env.src.room["score"] = "calm-fx", "score-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
+	env.setEffect("ambiance", "score", "score-fx")
 	env.step()
 	env.c.StartScoreFlash("Rouges", 5)
 	t.Cleanup(func() { env.c.StartScoreFlash("", 0) })
@@ -341,7 +301,7 @@ func TestEffects223_Precedence_OnOffFlashSuppressRoomEffect_AutoRestoresIt(t *te
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
-	env.src.room["calm"] = "calm-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
 	env.step()
 	ev := lighting.Event{Kind: lighting.KindIdle}
 	if len(roomGroups(env.c.Scene(ev))) != 2 {
@@ -381,7 +341,7 @@ func TestEffects223_Fallback_AbsentInvalidInapplicableWrongMoment_NoFrame(t *tes
 	env.writeUser(t, "grand.yaml", tw223Effect("grand", "calm", "groups", 5, "#FF0000")) // min_groups 5, N = 2
 	env.writeUser(t, "chrono.yaml", tw223Effect("chrono-only", "chrono", "groups", 1, "#FF0000"))
 	for name, id := range map[string]string{"absent": "n-existe-pas", "invalide": "casse", "inapplicable": "grand", "autre moment": "chrono-only"} {
-		env.src.room["calm"] = id
+		env.setEffect("ambiance", "calm", id)
 		env.step()
 		if g := roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); len(g) != 0 {
 			t.Errorf("effet %s : repli sur la valeur par défaut (aucun effet en phase calme), obtenu %+v", name, g)
@@ -397,64 +357,62 @@ func TestEffects223_ChangeOfSettingTakesEffectAtNextStep_NoRestart(t *testing.T)
 	if len(roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))) != 0 {
 		t.Fatal("aucun effet réglé")
 	}
-	env.src.room["calm"] = "calm-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
 	env.step()
 	if len(roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))) != 2 {
 		t.Error("réglage changé à chaud : pris en compte au pas suivant")
 	}
-	env.src.room["calm"] = ""
+	env.setEffect("ambiance", "calm", "")
 	env.step()
 	if len(roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))) != 0 {
 		t.Error("retour à « aucun effet » : la trame disparaît")
 	}
 }
 
-// ---------- groupe animateur ----------
+// ---------- zone Animateur (§2.5) : blanc fixe sans effet, effet par moment, hors ON / OFF / Flash ----------
 
 func TestEffects223_Host_DefaultFixedWhiteAtEveryKind_RoomEffectNeverReachesIt(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
-	env.src.room["calm"] = "calm-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
 	env.step()
 	for _, k := range tw223Kinds {
 		z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: k, Teams: []string{"Rouges"}}))
 		if !ok || z.Color != [3]int{255, 255, 255} || z.Intensity != 255 {
-			t.Errorf("%s : l'animateur reste en blanc fixe : %+v (%v)", k, z, ok)
+			t.Errorf("%s : la zone animateur reste en blanc fixe : %+v (%v)", k, z, ok)
 		}
 	}
 }
 
-func TestEffects223_Host_EffectPerMoment_WhiteSceneColour(t *testing.T) {
+func TestEffects223_Host_EffectPerMoment_ThenFixedWhiteOutsideTheMoment(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.setHost("h1", "calm", "host-fx")
+	env.setHost("calm", "host-fx")
 	env.step()
 	z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))
 	if !ok || z.Color != [3]int{0, 255, 0} {
-		t.Fatalf("effet de l'animateur en phase calme : %+v (%v)", z, ok)
+		t.Fatalf("effet de la zone animateur en phase calme : %+v (%v)", z, ok)
 	}
-	// l'effet de l'animateur ne s'applique qu'à son moment
 	z, _ = hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindReveal}))
 	if z.Color != [3]int{255, 255, 255} {
 		t.Errorf("hors du moment calm, blanc fixe : %+v", z)
 	}
-	// la salle n'est pas concernée par l'effet de l'animateur
 	if g := roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); len(g) != 0 {
-		t.Errorf("l'effet de l'animateur n'écrit aucun groupe de salle : %+v", g)
+		t.Errorf("l'effet de la zone animateur n'écrit aucun groupe de la zone ambiance : %+v", g)
 	}
 }
 
-func TestEffects223_Host_UsesSceneColourWhite_ForSceneLooks(t *testing.T) {
+func TestEffects223_Host_SceneColourIsWhite(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-scene", "calm", "all", 1, "scene"))
-	env.setHost("h1", "calm", "host-scene")
+	env.setHost("calm", "host-scene")
 	env.step()
 	z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))
 	if !ok || z.Color != [3]int{255, 255, 255} {
-		t.Errorf("la couleur `scene` vaut blanc pour le groupe animateur : %+v", z)
+		t.Errorf("la couleur `scene` vaut blanc pour la zone animateur : %+v", z)
 	}
 }
 
@@ -462,14 +420,14 @@ func TestEffects223_Host_InsensitiveToOnOffFlash_StillPlaysItsEffect(t *testing.
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.setHost("h1", "calm", "host-fx")
+	env.setHost("calm", "host-fx")
 	for _, mode := range []string{"OFF", "ON"} {
 		if err := env.c.SetLightingMode(mode); err != nil {
 			t.Fatal(err)
 		}
 		env.step()
 		if z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); !ok || z.Color != [3]int{0, 255, 0} || z.Intensity != 255 {
-			t.Errorf("mode %s : l'animateur garde son effet : %+v", mode, z)
+			t.Errorf("mode %s : la zone animateur garde son effet : %+v", mode, z)
 		}
 	}
 	if err := env.c.SetLightingMode("AUTO"); err != nil {
@@ -479,17 +437,17 @@ func TestEffects223_Host_InsensitiveToOnOffFlash_StillPlaysItsEffect(t *testing.
 	t.Cleanup(func() { env.c.SetLightingFlash(false) })
 	env.step()
 	if z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); !ok || z.Color != [3]int{0, 255, 0} {
-		t.Errorf("Flash : l'animateur garde son effet : %+v", z)
+		t.Errorf("Flash : la zone animateur garde son effet : %+v", z)
 	}
 }
 
 func TestEffects223_Host_FallbackToFixedWhite_AbsentInvalidInapplicable(t *testing.T) {
 	env := tw223New(t)
-	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
+	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")}) // N = 1 groupe non vide dans la zone animateur
 	env.writeUser(t, "cassé.yaml", "id: casse\nbidule: 1\n")
-	env.writeUser(t, "multi.yaml", tw223Effect("multi", "calm", "groups", 3, "#FF0000")) // plusieurs groupes : inapplicable à l'animateur
-	for name, id := range map[string]string{"absent": "nope", "invalide": "casse", "plusieurs groupes": "multi"} {
-		env.setHost("h1", "calm", id)
+	env.writeUser(t, "grand.yaml", tw223Effect("grand", "calm", "groups", 3, "#FF0000")) // demande 3 groupes, la zone en a 1
+	for name, id := range map[string]string{"absent": "nope", "invalide": "casse", "demande trop de groupes": "grand"} {
+		env.setHost("calm", id)
 		env.step()
 		z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))
 		if !ok || z.Color != [3]int{255, 255, 255} || z.Intensity != 255 {
@@ -498,51 +456,207 @@ func TestEffects223_Host_FallbackToFixedWhite_AbsentInvalidInapplicable(t *testi
 	}
 }
 
-func TestEffects223_Host_EffectWritingGroupsIsInapplicable_FixedWhite_G0OnlyIsApplicable(t *testing.T) {
+func TestEffects223_Host_SameRuleAsRoom_EffectWritingGroupsIsApplicableWhenEnoughGroups(t *testing.T) {
+	// révision 4 : la règle « un effet qui n'écrit que g0 » est supprimée ; la zone animateur applique les mêmes règles que la salle
 	env := tw223New(t)
-	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
-	env.writeUser(t, "uni.yaml", tw223Effect("uni", "calm", "groups", 1, "#0000FF")) // écrit g1…g12
-	env.setHost("h1", "calm", "uni")
+	env.setup([]config.LightingGroupEntry{hostGrp("H1"), hostGrp("H2"), grp(0, "A")})
+	env.writeUser(t, "uni.yaml", tw223Effect("uni", "calm", "groups", 2, "#0000FF")) // g1…g12, groupes_min 2
+	env.setHost("calm", "uni")
 	env.step()
-	if z, _ := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); z.Color != [3]int{255, 255, 255} {
-		t.Errorf("seul un effet qui n'écrit que g0 est applicable à un groupe animateur : blanc fixe attendu : %+v", z)
+	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
+	for g := 1; g <= 2; g++ {
+		z, ok := areaEntry(st, lighting.AreaHost, g)
+		if !ok || z.Color != [3]int{0, 0, 255} {
+			t.Errorf("zone animateur, groupe %d : bleu (effet applicable, N = 2 ≥ groupes_min) : %+v (%v)", g, z, ok)
+		}
 	}
-	env.writeUser(t, "all.yaml", tw223Effect("tout", "calm", "all", 1, "#0000FF")) // g0 seul
-	env.setHost("h1", "calm", "tout")
-	env.step()
-	if z, _ := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); z.Color != [3]int{0, 0, 255} {
-		t.Errorf("un effet g0 seul est joué par le groupe animateur : %+v", z)
+}
+
+func TestEffects223_Host_ChenillardRunsOnItsOwnGroups(t *testing.T) {
+	// un chenillard peut tourner sur les groupes de la zone animateur (§2.5, symétrie)
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{hostGrp("H1"), hostGrp("H2"), hostGrp("H3"), grp(0, "A")})
+	env.writeUser(t, "tour.yaml", "id: tour\nnom: Tour\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\nvariables:\n  gA: g1; +1\npas:\n  - { g0: [\"#0000FF\", 40], gA: [\"#FFFFFF\", 100] }\n")
+	env.setHost("calm", "tour")
+	start := env.now
+	var heads []int
+	for tick := 0; tick < 4; tick++ {
+		env.now = start.Add(time.Duration(tick) * time.Second)
+		env.step()
+		st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
+		for g := 1; g <= 3; g++ {
+			if z, ok := areaEntry(st, lighting.AreaHost, g); ok && z.Color == [3]int{255, 255, 255} {
+				heads = append(heads, g)
+			}
+		}
+	}
+	if len(heads) != 4 || heads[0] != 1 || heads[1] != 2 || heads[2] != 3 || heads[3] != 1 {
+		t.Errorf("la tête parcourt g1, g2, g3 de la zone animateur puis reboucle : %v", heads)
 	}
 }
 
 func TestEffects223_Host_ScoreEffect_TeamColour_BoundedToThePulse(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
-	env.setHost("h1", "score", "couleur-equipe") // natif target: all
+	env.setHost("score", "couleur-equipe")
 	env.step()
 	env.c.StartScoreFlash("Rouges", 5)
 	t.Cleanup(func() { env.c.StartScoreFlash("", 0) })
 	env.step()
 	z, _ := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindScore, Teams: []string{"Rouges"}}))
 	if want := (fakeHost{}).TeamNameColor("Rouges"); z.Color != want || z.Intensity < 250 {
-		t.Errorf("couleur de l'équipe créditée sur l'animateur : %+v, attendu %v", z, want)
+		t.Errorf("couleur de l'équipe créditée sur la zone animateur : %+v, attendu %v", z, want)
 	}
 	env.now = env.now.Add(lighting.ScorePulseDuration + time.Millisecond)
 	env.step()
 	z, _ = hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindScore, Teams: []string{"Rouges"}}))
 	if z.Color != [3]int{255, 255, 255} {
-		t.Errorf("après l'impulsion, l'animateur redevient blanc : %+v", z)
+		t.Errorf("après l'impulsion, la zone animateur redevient blanche : %+v", z)
 	}
 }
 
-func TestEffects223_Host_WithoutHostGroup_SettingsKeptButNoEntry(t *testing.T) {
+func TestEffects223_Host_ZoneWithoutGroup_SettingsKeptButNoEntry(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.setHost("h1", "calm", "host-fx")
+	env.setHost("calm", "host-fx")
 	env.step()
-	if _, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); ok {
-		t.Error("sans groupe animateur, les réglages sont conservés mais sans effet : aucune entrée GroupHost")
+	if es := areaEntries(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaHost); len(es) != 0 {
+		t.Errorf("zone animateur sans groupe : elle n'existe pas, aucune entrée : %+v", es)
+	}
+}
+
+func TestEffects223_Host_EmptyGroupsOnly_ZoneDoesNotExist(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), {ID: "hv", Role: config.GroupRoleAnimateur, Lights: []string{}}})
+	env.step()
+	if es := areaEntries(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaHost); len(es) != 0 {
+		t.Errorf("zone sans groupe non vide : aucune entrée : %+v", es)
+	}
+}
+
+// ---------- zone Public (§2.5) : jamais pilotée sans effet ----------
+
+func TestEffects223_Public_NoEffect_NothingIsEverSent_AtAnyKind(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), pubGrp("P1", "P2")})
+	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
+	env.setEffect("ambiance", "calm", "calm-fx") // un effet de salle ne touche pas la zone public
+	env.step()
+	for _, k := range tw223Kinds {
+		if es := areaEntries(env.c.Scene(lighting.Event{Kind: k, Teams: []string{"Rouges"}, Points: 5}), lighting.AreaPublic); len(es) != 0 {
+			t.Errorf("%s : sans effet pour la zone public, ni scène de salle ni blanc fixe : %+v", k, es)
+		}
+	}
+}
+
+func TestEffects223_Public_NoEffect_NotEvenAtStartup(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{pubGrp("P1")})
+	env.step()
+	if es := areaEntries(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaPublic); len(es) != 0 {
+		t.Errorf("au démarrage rien n'est envoyé à la zone public : %+v", es)
+	}
+}
+
+func TestEffects223_Public_EffectPlaysOnItsOwnGroups_PerMoment(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), pubGrp("P1"), pubGrp("P2")})
+	env.writeUser(t, "pub.yaml", tw223Effect("pub-fx", "calm", "groups", 1, "#00FF00"))
+	env.setPublic("calm", "pub-fx")
+	env.step()
+	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
+	for g := 1; g <= 2; g++ {
+		if z, ok := areaEntry(st, lighting.AreaPublic, g); !ok || z.Color != [3]int{0, 255, 0} {
+			t.Errorf("zone public, groupe %d : vert : %+v (%v)", g, z, ok)
+		}
+	}
+	if g := roomGroups(st); len(g) != 0 {
+		t.Errorf("aucune écriture croisée : la zone ambiance n'est pas touchée : %+v", g)
+	}
+	if es := areaEntries(env.c.Scene(lighting.Event{Kind: lighting.KindRunning}), lighting.AreaPublic); len(es) != 0 {
+		t.Errorf("hors du moment réglé, plus rien n'est émis pour la zone public (elle garde l'état de l'effet) : %+v", es)
+	}
+}
+
+func TestEffects223_Public_IndependentOfOnOffFlash(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), pubGrp("P1")})
+	env.writeUser(t, "pub.yaml", tw223Effect("pub-fx", "calm", "all", 1, "#00FF00"))
+	env.setPublic("calm", "pub-fx")
+	for _, mode := range []string{"OFF", "ON"} {
+		if err := env.c.SetLightingMode(mode); err != nil {
+			t.Fatal(err)
+		}
+		env.step()
+		if z, ok := areaEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaPublic, 0); !ok || z.Color != [3]int{0, 255, 0} {
+			t.Errorf("mode %s : la zone public garde son effet : %+v (%v)", mode, z, ok)
+		}
+	}
+	if err := env.c.SetLightingMode("AUTO"); err != nil {
+		t.Fatal(err)
+	}
+	env.c.SetLightingFlash(true)
+	t.Cleanup(func() { env.c.SetLightingFlash(false) })
+	env.step()
+	if z, ok := areaEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaPublic, 0); !ok || z.Color != [3]int{0, 255, 0} {
+		t.Errorf("Flash : la zone public garde son effet : %+v (%v)", z, ok)
+	}
+}
+
+func TestEffects223_Public_PostAppliedAndHeldAtEndOfMoment_OnlyZoneWherePostIsVisible(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), pubGrp("P1")})
+	env.writeUser(t, "pub.yaml", "id: pub-post\nnom: Pub\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npas:\n  - { g0: [\"#00FF00\", 100] }\npost:\n  { g0: [\"#FF0000\", 100] }\n")
+	env.setPublic("calm", "pub-post")
+	env.step() // moment calm : l'effet joue (vert)
+	if z, ok := areaEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaPublic, 0); !ok || z.Color != [3]int{0, 255, 0} {
+		t.Fatalf("pendant le moment : vert : %+v (%v)", z, ok)
+	}
+	env.eng.StartImmediate(20) // le moment calm se termine
+	t.Cleanup(func() { env.eng.SetPhase(game.PhaseStopped) })
+	env.now = env.now.Add(time.Second)
+	env.step()
+	if z, ok := areaEntry(env.c.Scene(lighting.Event{Kind: lighting.KindRunning}), lighting.AreaPublic, 0); !ok || z.Color != [3]int{255, 0, 0} {
+		t.Errorf("fin du moment : POST (rouge) appliqué et tenu en zone public : %+v (%v)", z, ok)
+	}
+}
+
+func TestEffects223_Public_NoPost_LampsKeepTheLastStateOfTheEffect(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), pubGrp("P1")})
+	env.writeUser(t, "pub.yaml", tw223Effect("pub-fx", "calm", "all", 1, "#00FF00"))
+	env.setPublic("calm", "pub-fx")
+	env.step()
+	env.eng.StartImmediate(20)
+	t.Cleanup(func() { env.eng.SetPhase(game.PhaseStopped) })
+	env.now = env.now.Add(time.Second)
+	env.step()
+	// sans POST, le serveur n'envoie plus rien : aucune entrée (les lampes gardent leur dernier état sur le pont)
+	if es := areaEntries(env.c.Scene(lighting.Event{Kind: lighting.KindRunning}), lighting.AreaPublic); len(es) != 0 {
+		t.Errorf("sans POST, rien n'est (re)envoyé à la zone public : %+v", es)
+	}
+}
+
+func TestEffects223_Post_InAmbianceAndHostZones_NeverVisible_SceneRepaintsTheZone(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), hostGrp()})
+	post := "id: avec-post\nnom: P\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npas:\n  - { g0: [\"#00FF00\", 100] }\npost:\n  { g0: [\"#FF0000\", 100] }\n"
+	env.writeUser(t, "post.yaml", post)
+	env.setEffect("ambiance", "calm", "avec-post")
+	env.setHost("calm", "avec-post")
+	env.step()
+	env.eng.StartImmediate(20)
+	t.Cleanup(func() { env.eng.SetPhase(game.PhaseStopped) })
+	env.now = env.now.Add(time.Second)
+	env.step()
+	st := env.c.Scene(lighting.Event{Kind: lighting.KindRunning})
+	if st.Zones[0].Color == [3]int{255, 0, 0} && st.Zones[0].Area == lighting.AreaAmbiance && st.Zones[0].Group == 0 && st.Zones[0].Intensity == 255 {
+		// la scène du chronomètre (pulsation) repeint la zone : le rouge de POST ne doit pas rester
+		t.Errorf("POST n'est pas visible en zone ambiance : la scène suivante la repeint : %+v", st.Zones[0])
+	}
+	if z, _ := hostEntry(st); z.Color != [3]int{255, 255, 255} {
+		t.Errorf("POST n'est pas visible en zone animateur : blanc fixe : %+v", z)
 	}
 }
 
@@ -553,8 +667,8 @@ func TestEffects223_Quiesce_ReaderStopsPublishing_NoGhostWrite(t *testing.T) {
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.src.room["calm"] = "calm-fx"
-	env.setHost("h1", "calm", "host-fx")
+	env.setEffect("ambiance", "calm", "calm-fx")
+	env.setHost("calm", "host-fx")
 	env.step()
 	if len(roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))) != 2 {
 		t.Fatal("effet actif avant l'arrêt")
@@ -605,7 +719,7 @@ func TestEffects223_DisabledLighting_NoWriter_NoFrame(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
-	env.src.room["calm"] = "calm-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
 	env.c.LightingWriter.Store(nil) // éclairage non configuré / pilote absent (§5.3 point 1)
 	env.step()
 	if g := roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); len(g) != 0 {

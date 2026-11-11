@@ -33,9 +33,9 @@ var tw225Sequence = []tw225Colour{
 
 func tw225Near(a, b int) bool { d := a - b; return d >= -1 && d <= 1 }
 
-func tw225Entry(st lighting.State, group int) (lighting.ZoneState, bool) {
+func tw225Entry(st lighting.State, area lighting.Area, group int) (lighting.ZoneState, bool) {
 	for _, z := range st.Zones {
-		if z.Zone == lighting.ZoneGeneral && z.Group == group {
+		if z.Zone == lighting.ZoneGeneral && z.Area == area && z.Group == group {
 			return z, true
 		}
 	}
@@ -64,7 +64,7 @@ func TestGroupTest225_RoomGroup_SixStepsInOrder_ThenLive(t *testing.T) {
 	for i, want := range tw225Sequence {
 		tw225Mid(env, start, i)
 		st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
-		z, ok := tw225Entry(st, 2)
+		z, ok := tw225Entry(st, lighting.AreaAmbiance, 2)
 		if !ok {
 			t.Fatalf("pas %d : une entrée {general, Group 2} est émise par Scene()", i+1)
 		}
@@ -76,14 +76,14 @@ func TestGroupTest225_RoomGroup_SixStepsInOrder_ThenLive(t *testing.T) {
 		}
 		// les autres groupes ne sont pas touchés
 		for _, g := range []int{1, 3} {
-			if _, has := tw225Entry(st, g); has {
+			if _, has := tw225Entry(st, lighting.AreaAmbiance, g); has {
 				t.Errorf("pas %d : le groupe %d n'est pas concerné par l'essai", i+1, g)
 			}
 		}
 	}
 	// après 6 pas : retour à l'état vivant (plus d'entrée d'essai)
 	env.now = start.Add(6*tw225Step + 100*time.Millisecond)
-	if z, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 2); ok {
+	if z, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaAmbiance, 2); ok {
 		t.Errorf("fin de séquence : retour à l'état vivant, plus d'entrée Group 2 : %+v", z)
 	}
 }
@@ -96,31 +96,38 @@ func TestGroupTest225_HostGroup_SequenceOnItsOwnAddress_ThenFixedWhite(t *testin
 	}
 	for i, want := range tw225Sequence {
 		tw225Mid(env, start, i)
-		z, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.HostGroup(1))
+		z, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaHost, 1)
 		if !ok || z.Color != want.color || !tw225Near(z.Intensity, want.intensity) {
 			t.Errorf("pas %d : %+v (%v), attendu %v @%d", i+1, z, ok, want.color, want.intensity)
 		}
 	}
 	env.now = start.Add(6*tw225Step + 100*time.Millisecond)
-	z, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.HostGroup(1))
+	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
+	if _, ok := tw225Entry(st, lighting.AreaHost, 1); ok {
+		t.Error("fin de séquence : plus d'entrée de groupe d'essai")
+	}
+	z, ok := hostEntry(st)
 	if !ok || z.Color != [3]int{255, 255, 255} || z.Intensity != 255 {
-		t.Errorf("retour à l'état vivant de l'animateur = blanc fixe : %+v (%v)", z, ok)
+		t.Errorf("retour à l'état vivant de la zone animateur = blanc fixe : %+v (%v)", z, ok)
 	}
 }
 
-func TestGroupTest225_SecondHostGroup_UsesAddressMinusTwo(t *testing.T) {
-	env := tw225TestEnv(t, hostGrp(), config.LightingGroupEntry{Role: config.GroupRoleAnimateur, Lights: []string{"R"}})
+func TestGroupTest225_SecondHostGroup_OnItsOwnGroupNumber(t *testing.T) {
+	env := tw225TestEnv(t, hostGrp("H"), hostGrp("R"))
 	start := env.now
 	if err := tw225StartTest(env.c, "host2"); err != nil {
 		t.Fatal(err)
 	}
 	tw225Mid(env, start, 3) // pas 4 : rouge
 	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
-	if z, ok := tw225Entry(st, lighting.HostGroup(2)); !ok || z.Color != [3]int{255, 0, 0} {
+	if z, ok := tw225Entry(st, lighting.AreaHost, 2); !ok || z.Color != [3]int{255, 0, 0} {
 		t.Errorf("host2 ⇒ Group -2, rouge au pas 4 : %+v (%v)", z, ok)
 	}
-	if z, _ := tw225Entry(st, lighting.HostGroup(1)); z.Color != [3]int{255, 255, 255} {
-		t.Errorf("host1 non concerné, reste blanc fixe : %+v", z)
+	if _, ok := tw225Entry(st, lighting.AreaHost, 1); ok {
+		t.Error("host1 n'est pas concerné par l'essai de host2")
+	}
+	if z, _ := hostEntry(st); z.Color != [3]int{255, 255, 255} {
+		t.Errorf("le reste de la zone animateur reste en blanc fixe : %+v", z)
 	}
 }
 
@@ -129,7 +136,7 @@ func TestGroupTest225_NewTestReplacesTheRunningOne_PreviousGroupBackToLive(t *te
 	start := env.now
 	_ = tw225StartTest(env.c, "1")
 	tw225Mid(env, start, 1)
-	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 1); !ok {
+	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaAmbiance, 1); !ok {
 		t.Fatal("essai du groupe 1 en cours")
 	}
 	// remplacement par le groupe 3 : le groupe 1 revient aussitôt à son état vivant, la séquence repart du pas 1
@@ -138,15 +145,15 @@ func TestGroupTest225_NewTestReplacesTheRunningOne_PreviousGroupBackToLive(t *te
 		t.Fatal(err)
 	}
 	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
-	if _, ok := tw225Entry(st, 1); ok {
+	if _, ok := tw225Entry(st, lighting.AreaAmbiance, 1); ok {
 		t.Error("un nouvel essai remplace le précédent : le groupe 1 revient aussitôt à l'état vivant")
 	}
-	z, ok := tw225Entry(st, 3)
+	z, ok := tw225Entry(st, lighting.AreaAmbiance, 3)
 	if !ok || z.Intensity != 0 {
 		t.Errorf("la séquence du groupe 3 repart du pas 1 (éteint) : %+v (%v)", z, ok)
 	}
 	env.now = restart.Add(2*tw225Step + 100*time.Millisecond) // pas 3 : blanc 100 %
-	if z, _ := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 3); z.Intensity != 255 || z.Color != [3]int{255, 255, 255} {
+	if z, _ := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaAmbiance, 3); z.Intensity != 255 || z.Color != [3]int{255, 255, 255} {
 		t.Errorf("pas 3 du nouvel essai : %+v", z)
 	}
 }
@@ -157,18 +164,18 @@ func TestGroupTest225_Stop_GroupBackToLiveImmediately_StopWithoutTestIsHarmless(
 	start := env.now
 	_ = tw225StartTest(env.c, "2")
 	tw225Mid(env, start, 2)
-	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 2); !ok {
+	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaAmbiance, 2); !ok {
 		t.Fatal("essai en cours")
 	}
 	tw225StopTest(env.c)
-	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 2); ok {
+	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaAmbiance, 2); ok {
 		t.Error("arrêt : le groupe revient aussitôt à son état vivant")
 	}
 	tw225StopTest(env.c)
 }
 
 func TestGroupTest225_UnknownOrEmptyGroup_Refused_NothingStarted(t *testing.T) {
-	env := tw225TestEnv(t, grp(0, "A"), grp(1), hostGrp(), config.LightingGroupEntry{Role: config.GroupRoleAnimateur, Lights: []string{}})
+	env := tw225TestEnv(t, grp(0, "A"), grp(1), hostGrp(), zoneGrp(config.GroupRoleAnimateur), zoneGrp("public"))
 	for _, ref := range []string{"9", "0", "2", "host3", "host2", "host", "salle", ""} {
 		if err := tw225StartTest(env.c, ref); err == nil {
 			t.Errorf("groupe %q inconnu ou vide : refus attendu", ref)
@@ -182,18 +189,18 @@ func TestGroupTest225_UnknownOrEmptyGroup_Refused_NothingStarted(t *testing.T) {
 func TestGroupTest225_PrimesOverRoomEffect_ForThatGroupOnly(t *testing.T) {
 	env := tw225TestEnv(t, grp(0, "A"), grp(1, "B"), grp(2, "C"))
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
-	env.src.room["calm"] = "calm-fx"
+	env.setEffect("ambiance", "calm", "calm-fx")
 	env.step()
 	start := env.now
 	_ = tw225StartTest(env.c, "2")
 	tw225Mid(env, start, 4) // pas 5 : vert
 	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
-	z2, _ := tw225Entry(st, 2)
+	z2, _ := tw225Entry(st, lighting.AreaAmbiance, 2)
 	if z2.Color != [3]int{0, 255, 0} {
 		t.Errorf("l'essai prime sur l'effet pour le groupe 2 : %+v", z2)
 	}
 	for _, g := range []int{1, 3} {
-		z, ok := tw225Entry(st, g)
+		z, ok := tw225Entry(st, lighting.AreaAmbiance, g)
 		if !ok || z.Color != [3]int{255, 0, 0} {
 			t.Errorf("les autres groupes gardent l'effet de salle (rouge) : groupe %d = %+v (%v)", g, z, ok)
 		}
@@ -210,17 +217,17 @@ func TestGroupTest225_PrimesOverOffAndFlash_ForThatGroupOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 		st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
-		if z, ok := tw225Entry(st, 1); !ok || z.Color != [3]int{255, 0, 0} {
+		if z, ok := tw225Entry(st, lighting.AreaAmbiance, 1); !ok || z.Color != [3]int{255, 0, 0} {
 			t.Errorf("mode %s : la séquence reste visible sur le groupe testé : %+v (%v)", mode, z, ok)
 		}
-		if _, ok := tw225Entry(st, 2); ok {
+		if _, ok := tw225Entry(st, lighting.AreaAmbiance, 2); ok {
 			t.Errorf("mode %s : l'autre groupe n'est pas concerné", mode)
 		}
 	}
 	_ = env.c.SetLightingMode("AUTO")
 	env.c.SetLightingFlash(true)
 	t.Cleanup(func() { env.c.SetLightingFlash(false) })
-	if z, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 1); !ok || z.Color != [3]int{255, 0, 0} {
+	if z, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaAmbiance, 1); !ok || z.Color != [3]int{255, 0, 0} {
 		t.Errorf("Flash : la séquence reste visible : %+v (%v)", z, ok)
 	}
 }
@@ -231,7 +238,7 @@ func TestGroupTest225_QuiesceCancelsTheTest(t *testing.T) {
 	_ = tw225StartTest(env.c, "1")
 	tw225Mid(env, start, 2)
 	env.c.quiesceAmbiance()
-	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 1); ok {
+	if _, ok := tw225Entry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaAmbiance, 1); ok {
 		t.Error("l'arrêt du serveur / la désactivation annule l'essai")
 	}
 }
@@ -243,8 +250,47 @@ func TestGroupTest225_DoesNotChangeStateWithoutTest_NoRegression(t *testing.T) {
 		if g := roomGroups(st); len(g) != 0 {
 			t.Errorf("%s : sans essai, aucune entrée de groupe de salle : %+v", k, g)
 		}
-		if z, ok := tw225Entry(st, lighting.HostGroup(1)); !ok || z.Color != [3]int{255, 255, 255} {
+		if z, ok := hostEntry(st); !ok || z.Color != [3]int{255, 255, 255} {
 			t.Errorf("%s : l'animateur reste en blanc fixe : %+v", k, z)
 		}
+	}
+}
+
+func TestGroupTest225_PublicGroup_SequenceOnItsOwnZone_ThenNothingIsSent(t *testing.T) {
+	env := tw225TestEnv(t, grp(0, "A"), pubGrp("P1"), pubGrp("P2"))
+	start := env.now
+	if err := tw225StartTest(env.c, "public2"); err != nil {
+		t.Fatalf("essai du groupe 2 de la zone public : %v", err)
+	}
+	for i, want := range tw225Sequence {
+		tw225Mid(env, start, i)
+		st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
+		z, ok := tw225Entry(st, lighting.AreaPublic, 2)
+		if !ok || z.Color != want.color || !tw225Near(z.Intensity, want.intensity) {
+			t.Errorf("pas %d : %+v (%v), attendu %v @%d", i+1, z, ok, want.color, want.intensity)
+		}
+		if _, other := tw225Entry(st, lighting.AreaPublic, 1); other {
+			t.Errorf("pas %d : le groupe 1 de la zone public n'est pas concerné", i+1)
+		}
+	}
+	// après la séquence : aucune entrée pour la zone public (jamais pilotée sans effet) ; l'état des lampes est
+	// rétabli par le pilote, qui l'a lu sur le pont au début de l'essai (§2.5 — testé avec un faux pont dans cmd/server)
+	env.now = start.Add(6*tw225Step + 100*time.Millisecond)
+	if es := areaEntries(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}), lighting.AreaPublic); len(es) != 0 {
+		t.Errorf("fin de séquence : plus rien n'est émis pour la zone public : %+v", es)
+	}
+}
+
+func TestGroupTest225_TestOnOneZone_NeverTouchesTheOthers(t *testing.T) {
+	env := tw225TestEnv(t, grp(0, "A"), grp(1, "B"), hostGrp("H"), pubGrp("P"))
+	start := env.now
+	_ = tw225StartTest(env.c, "host1")
+	tw225Mid(env, start, 3)
+	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
+	if es := areaEntries(st, lighting.AreaPublic); len(es) != 0 {
+		t.Errorf("zone public non concernée : %+v", es)
+	}
+	if g := roomGroups(st); len(g) != 0 {
+		t.Errorf("zone ambiance non concernée : %+v", g)
 	}
 }

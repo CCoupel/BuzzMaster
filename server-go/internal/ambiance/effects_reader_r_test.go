@@ -58,7 +58,7 @@ func tw223SceneRow(env *tw223Env, ev lighting.Event, n int) string {
 		out[i] = base[0]
 	}
 	for _, z := range st.Zones {
-		if z.Zone == lighting.ZoneGeneral && z.Group >= 1 && z.Group <= n {
+		if z.Zone == lighting.ZoneGeneral && z.Area == lighting.AreaAmbiance && z.Group >= 1 && z.Group <= n {
 			out[z.Group-1] = tw223Token(z)[0]
 		}
 	}
@@ -73,7 +73,7 @@ func TestReader_Chronogram_TickByTick_ThroughScene_WithInjectedClock(t *testing.
 	env := tw223New(t)
 	env.setup(tw223FourGroups())
 	env.writeUser(t, "chrono-calm.yaml", chronogramCalm)
-	env.src.room["calm"] = "chrono-calm"
+	env.setEffect("ambiance", "calm", "chrono-calm")
 	start := env.now
 	want := []string{"bbbb", "Wbbb", "WbbR", "bbbb", "bbWb", "bbWR", "bbbb", "Wbbb"}
 	ev := lighting.Event{Kind: lighting.KindIdle}
@@ -90,7 +90,7 @@ func TestReader_TickIsConstantInsideAStep_NoDriftBetweenSteps(t *testing.T) {
 	env := tw223New(t)
 	env.setup(tw223FourGroups())
 	env.writeUser(t, "chrono-calm.yaml", chronogramCalm)
-	env.src.room["calm"] = "chrono-calm"
+	env.setEffect("ambiance", "calm", "chrono-calm")
 	start := env.now
 	ev := lighting.Event{Kind: lighting.KindIdle}
 	env.step() // tick 0
@@ -112,7 +112,7 @@ func TestReader_EffectRestartsFromTick0_WhenTheMomentStartsAgain(t *testing.T) {
 	env := tw223New(t)
 	env.setup(tw223FourGroups())
 	env.writeUser(t, "chrono-calm.yaml", chronogramCalm)
-	env.src.room["calm"] = "chrono-calm"
+	env.setEffect("ambiance", "calm", "chrono-calm")
 	start := env.now
 	ev := lighting.Event{Kind: lighting.KindIdle}
 	env.step()
@@ -162,7 +162,7 @@ func TestReader_Speed_DefaultIsOne(t *testing.T) {
 	env := tw223New(t)
 	env.setup(tw223FourGroups())
 	env.writeUser(t, "tour.yaml", ticker1s)
-	env.src.room["calm"] = "tour"
+	env.setEffect("ambiance", "calm", "tour")
 	start := env.now
 	for tick, want := range []int{1, 2, 3, 4, 1} {
 		env.now = start.Add(time.Duration(tick) * time.Second)
@@ -184,7 +184,7 @@ func TestReader_Speed_DividesTheTick_AllFiveValues(t *testing.T) {
 		env := tw223New(t)
 		env.setup(tw223FourGroups())
 		env.writeUser(t, "tour.yaml", ticker1s)
-		env.src.room["calm"] = "tour"
+		env.setEffect("ambiance", "calm", "tour")
 		env.setSpeed("calm", c.speed)
 		start := env.now
 		env.step()
@@ -218,7 +218,7 @@ variables:
 pas:
   - { g0: ["#0000FF", 40], gA: ["#FFFFFF", 100] }
 `)
-	env.src.room["calm"] = "vite"
+	env.setEffect("ambiance", "calm", "vite")
 	env.setSpeed("calm", 2) // 400 ÷ 2 = 200 ms : plafonné à 250 ms
 	start := env.now
 	env.step()
@@ -238,7 +238,7 @@ func TestReader_Speed_ChangeTakenAtNextTick_EffectDoesNotRestart(t *testing.T) {
 	env := tw223New(t)
 	env.setup(tw223FourGroups())
 	env.writeUser(t, "tour.yaml", ticker1s)
-	env.src.room["calm"] = "tour"
+	env.setEffect("ambiance", "calm", "tour")
 	start := env.now
 	for s := 0; s <= 2; s++ { // ×1 : ticks 0, 1, 2 aux secondes 0, 1, 2 → tête en g3 à 2 s
 		env.now = start.Add(time.Duration(s) * time.Second)
@@ -269,7 +269,7 @@ func TestReader_Speed_IsPerMoment_NotPerEffect(t *testing.T) {
 	env := tw223New(t)
 	env.setup(tw223FourGroups())
 	env.writeUser(t, "tour.yaml", ticker1s)
-	env.src.room["calm"] = "tour"
+	env.setEffect("ambiance", "calm", "tour")
 	env.setSpeed("chrono", 2) // un autre moment : sans effet sur « calm »
 	start := env.now
 	env.step()
@@ -280,9 +280,9 @@ func TestReader_Speed_IsPerMoment_NotPerEffect(t *testing.T) {
 	}
 }
 
-func TestReader_HostGroups_EachPlaysAtItsOwnSpeed(t *testing.T) {
+func TestReader_EachZonePlaysAtItsOwnSpeed(t *testing.T) {
 	env := tw223New(t)
-	env.setup([]config.LightingGroupEntry{tw223Host2("ha", "P", "P1"), tw223Host2("hb", "R", "R1"), grp(0, "A")})
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), hostGrp("H1"), pubGrp("P1")})
 	env.writeUser(t, "clignote.yaml", `id: clignote
 nom: Clignote
 version: 2
@@ -292,28 +292,67 @@ pas:
   - { g0: ["#FF0000", 100] }
   - { g0: ["#00FF00", 100] }
 `)
-	env.setHost("ha", "calm", "clignote")
-	env.setHost("hb", "calm", "clignote")
-	env.setHostSpeed("hb", "calm", 2)
+	env.setEffect("ambiance", "calm", "clignote")
+	env.setHost("calm", "clignote")
+	env.setPublic("calm", "clignote")
+	env.setSpeedZone("animateur", "calm", 2) // l'animateur va deux fois plus vite
+	env.setSpeedZone("public", "calm", 0.5)  // le public deux fois moins vite
 	start := env.now
 	env.step()
 	ev := lighting.Event{Kind: lighting.KindIdle}
-	at := func(ms int) (a, b [3]int) {
+	at := func(ms int) (amb, host, pub [3]int) {
 		env.now = start.Add(time.Duration(ms) * time.Millisecond)
 		env.step()
-		got := tw225HostEntries(env.c.Scene(ev))
-		return got[lighting.HostGroup(1)].Color, got[lighting.HostGroup(2)].Color
+		st := env.c.Scene(ev)
+		amb = st.Zones[0].Color
+		h, _ := areaEntry(st, lighting.AreaHost, 0)
+		p, _ := areaEntry(st, lighting.AreaPublic, 0)
+		return amb, h.Color, p.Color
 	}
-	if a, b := at(0); a != [3]int{255, 0, 0} || b != [3]int{255, 0, 0} {
-		t.Fatalf("tick 0 : les deux groupes au pas 0 (rouge) : %v %v", a, b)
+	red, green := [3]int{255, 0, 0}, [3]int{0, 255, 0}
+	if a, h, p := at(0); a != red || h != red || p != red {
+		t.Fatalf("tick 0 : les trois zones au pas 0 (rouge) : %v %v %v", a, h, p)
 	}
-	a, b := at(600) // A2 (×2, tick 500 ms) est au pas 1 (vert) ; A1 (×1) reste au pas 0 (rouge)
-	if a != [3]int{255, 0, 0} || b != [3]int{0, 255, 0} {
-		t.Errorf("à 600 ms : A1 (×1) rouge, A2 (×2) vert : %v %v", a, b)
+	if a, h, p := at(600); a != red || h != green || p != red {
+		t.Errorf("à 0,6 s : ambiance (×1) rouge, animateur (×2) vert, public (×0,5) rouge : %v %v %v", a, h, p)
 	}
-	if a, b := at(1100); a != [3]int{0, 255, 0} || b != [3]int{255, 0, 0} {
-		t.Errorf("à 1,1 s : A1 vert (tick 1), A2 rouge (tick 2) : %v %v", a, b)
+	if a, h, p := at(1100); a != green || h != red || p != red {
+		t.Errorf("à 1,1 s : ambiance vert (tick 1), animateur rouge (tick 2), public rouge (tick 0) : %v %v %v", a, h, p)
 	}
+	if a, h, p := at(2100); a != red || h != red || p != green {
+		t.Errorf("à 2,1 s : ambiance rouge (tick 2), animateur rouge (tick 4), public vert (tick 1 à 2 s) : %v %v %v", a, h, p)
+	}
+}
+
+func TestReader_OneFramePerZone_NoCrossWrites(t *testing.T) {
+	env := tw223New(t)
+	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B"), hostGrp("H1"), hostGrp("H2"), pubGrp("P1")})
+	env.writeUser(t, "a.yaml", tw223Effect("amb-fx", "calm", "groups", 1, "#FF0000"))
+	env.writeUser(t, "b.yaml", tw223Effect("host-fx", "calm", "groups", 1, "#00FF00"))
+	env.writeUser(t, "c.yaml", tw223Effect("pub-fx", "calm", "groups", 1, "#0000FF"))
+	env.setEffect("ambiance", "calm", "amb-fx")
+	env.setHost("calm", "host-fx")
+	env.setPublic("calm", "pub-fx")
+	env.step()
+	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
+	check := func(area lighting.Area, n int, want [3]int, label string) {
+		t.Helper()
+		got := 0
+		for _, z := range areaEntries(st, area) {
+			if z.Group >= 1 {
+				got++
+				if z.Color != want {
+					t.Errorf("%s, groupe %d : %v, attendu %v (aucune écriture croisée)", label, z.Group, z.Color, want)
+				}
+			}
+		}
+		if got != n {
+			t.Errorf("%s : %d entrées de groupe, attendu %d", label, got, n)
+		}
+	}
+	check(lighting.AreaAmbiance, 2, [3]int{255, 0, 0}, "ambiance")
+	check(lighting.AreaHost, 2, [3]int{0, 255, 0}, "animateur")
+	check(lighting.AreaPublic, 1, [3]int{0, 0, 255}, "public")
 }
 
 func TestReader_G0OnlyEffect_FrameIsASingleGroupZeroEntry(t *testing.T) {
@@ -321,7 +360,7 @@ func TestReader_G0OnlyEffect_FrameIsASingleGroupZeroEntry(t *testing.T) {
 	env := tw223New(t)
 	env.setup(tw223FourGroups())
 	env.writeUser(t, "all.yaml", tw223Effect("tout", "calm", "all", 1, "#FF0000"))
-	env.src.room["calm"] = "tout"
+	env.setEffect("ambiance", "calm", "tout")
 	env.step()
 	st := env.c.Scene(lighting.Event{Kind: lighting.KindIdle})
 	if g := roomGroups(st); len(g) != 0 {
@@ -337,7 +376,7 @@ func TestReader_FixedGroupTargets_AreRealNumbers_EmptyOrAbsentIgnored(t *testing
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1), grp(2, "C")})
 	env.writeUser(t, "pos.yaml", "id: pos\nnom: Pos\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npas:\n  - { g1: [\"#FF0000\", 100], g2: [\"#00FF00\", 100], g3: [\"#0000FF\", 100], g4: [\"#FFFFFF\", 100] }\n")
-	env.src.room["calm"] = "pos"
+	env.setEffect("ambiance", "calm", "pos")
 	env.step()
 	g := roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))
 	if len(g) != 2 || g[0].Group != 1 || g[1].Group != 3 || g[0].Color != [3]int{255, 0, 0} || g[1].Color != [3]int{0, 0, 255} {
@@ -350,7 +389,7 @@ func TestReader_VariablesProgressOnNonEmptyGroups_WithRealNumbersOnTheWire(t *te
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1), grp(2, "C")})
 	env.writeUser(t, "tour.yaml", ticker1s)
-	env.src.room["calm"] = "tour"
+	env.setEffect("ambiance", "calm", "tour")
 	start := env.now
 	var heads []int
 	for tick := 0; tick < 4; tick++ {
