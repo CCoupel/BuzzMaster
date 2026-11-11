@@ -1,6 +1,15 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — `hue-bridge.md` §11 aligné sur les groupes animateur multiples (#225, #223)
+
+- **[CHANGED]** Correction rédactionnelle, sans changement de comportement : le §11 de `hue-bridge.md` gardait trois
+  formulations d'avant le GATE LOT-1 (« un seul » groupe animateur, `lighting.GroupHost (-1)` / `buzzmaster-general-host`,
+  `"host"`, et `lighting.host_effects {chrono, calm, score}` en forme plate). Elles sont alignées sur `light-effects.md`
+  §2.1, §2.5, §6 et sur le code (3d3e5426) : plusieurs groupes animateur, `HostGroup(k) = -k`,
+  `buzzmaster-general-host<k>`, `"host<k>"`, `lighting.host_effects { "<id>": { chrono, calm, score } }`.
+
+---
 ## [20261111] — v11.7.0 — corrections du GATE LOT-1 refusé (#225, impacts #223)
 
 Retour utilisateur sur la QUALIF 11.7.0.2. **Aucun de ces points n'a été livré en PROD** ; les marques **[BREAKING]**
