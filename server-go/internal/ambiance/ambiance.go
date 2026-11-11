@@ -93,6 +93,9 @@ type Controller struct {
 	// instance (0 = 1 s).
 	GroupTestStep time.Duration
 	groupTest     groupTestRuntime
+	// Effect trial and the public zone's hold (v11.7.0, #223, trial.go / grouptest.go).
+	trial  trialRuntime
+	public publicHold
 }
 
 // New builds a Controller over the given Host.
@@ -138,15 +141,12 @@ func (c *Controller) BuildHueDriverOpt(requireEnabled bool) *hue.Driver {
 		return nil
 	}
 	specs := make([]hue.LightSpec, 0, len(lc.Lights))
-	groupNum, hostLights := lc.GroupAssignment() // v11.7.0, #225
+	refs := lc.GroupOfLight() // v11.7.0, #225: zone and group number of every grouped bulb
 	for _, l := range lc.Lights {
 		spec := hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team}
 		if l.Role != string(hue.RoleTeam) {
-			switch {
-			case hostLights[l.Name] > 0:
-				spec.Group = lighting.HostGroup(hostLights[l.Name])
-			default:
-				spec.Group = groupNum[l.Name]
+			if ref, ok := refs[l.Name]; ok {
+				spec.Area, spec.Group = areaOfZone(ref.Zone), ref.Num
 			}
 		}
 		specs = append(specs, spec)
@@ -661,27 +661,26 @@ func (c *Controller) Scene(ev lighting.Event) lighting.State {
 			Intensity: teamIntensity,
 		})
 	}
-	// v11.7.0 (#225, light-effects.md §2.5): every animateur group shows a fixed white,
-	// whatever the game does — emitted AFTER the override above, which never touches it
-	// (ON / OFF / Flash / pulse act on the room only) — unless its own effect is live
-	// (effects.go). Only the master switch and the shutdown extinction turn it off.
-	for _, g := range config.Get().Lighting.HostGroups() {
-		if len(g.Lights) == 0 {
-			continue
-		}
-		host := lighting.ZoneState{
-			Zone:      lighting.ZoneGeneral,
-			Group:     lighting.HostGroup(g.Rank),
-			Color:     [3]int{255, 255, 255},
-			Intensity: 255,
-		}
-		if hz, ok := c.hostEffectState(ev, g.Rank); ok {
-			host = hz
-		}
-		zones = append(zones, host)
-	}
+	// v11.7.0 (#225, light-effects.md §2.5, revision 4): the animateur zone shows a fixed
+	// white whatever the game does — emitted AFTER the override above, which never touches
+	// it (ON / OFF / Flash act on the room only) — unless its own effect is live (effects.go).
+	// The public zone gets NO entry unless an effect, a held POST or a test drives it: the
+	// server never writes those bulbs on its own. Only the master switch and the shutdown
+	// extinction turn the zones off.
+	zones = c.zoneEntries(ev, zones)
 	zones = c.applyGroupTest(zones) // #225 §2.4: the test sequence of one group, over everything else
 	return lighting.State{Zones: zones}
+}
+
+// areaOfZone maps a config zone name to the writer's Area.
+func areaOfZone(zone string) lighting.Area {
+	switch zone {
+	case config.ZoneAnimateur:
+		return lighting.AreaHost
+	case config.ZonePublic:
+		return lighting.AreaPublic
+	}
+	return lighting.AreaAmbiance
 }
 
 // baseSceneColor is the colour and intensity of the ordinary scene of ev (before the

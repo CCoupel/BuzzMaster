@@ -18,7 +18,6 @@ import (
 
 	"buzzcontrol/internal/ambiancecfg"
 	"buzzcontrol/internal/audio"
-	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/protocol"
 	"buzzcontrol/internal/server"
@@ -249,35 +248,11 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 			badAmbiance = append(badAmbiance, label+":"+b)
 		}
 		if len(bad) == 0 {
-			// An animateur group id that no longer exists is dropped without error
-			// (light-effects.md §6): an id dies with its group.
-			if len(p.LightHostEffects) > 0 {
-				live := map[string]bool{}
-				for _, g := range config.Get().Lighting.HostGroups() {
-					live[g.ID] = true
-				}
-				for gid := range p.LightHostEffects {
-					if !live[gid] {
-						delete(p.LightHostEffects, gid)
-					}
-				}
-			}
-			if len(p.LightHostSpeeds) > 0 {
-				live := map[string]bool{}
-				for _, g := range config.Get().Lighting.HostGroups() {
-					live[g.ID] = true
-				}
-				for gid := range p.LightHostSpeeds {
-					if !live[gid] {
-						delete(p.LightHostSpeeds, gid)
-					}
-				}
-			}
 			// v11.7.0 (#223): an effect id must exist in the catalogue for its moment.
 			if ec, ok := h.(EffectChecker); ok {
-				bad = p.InvalidEffects(func(moment, id string, _ bool) bool { return ec.EffectExists(moment, id) })
+				bad = p.InvalidEffects(func(_, moment, id string) bool { return ec.EffectExists(moment, id) })
 			} else {
-				bad = p.InvalidEffects(func(string, string, bool) bool { return false })
+				bad = p.InvalidEffects(func(string, string, string) bool { return false })
 			}
 			for _, b := range bad {
 				badAmbiance = append(badAmbiance, label+":"+b)

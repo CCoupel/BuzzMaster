@@ -8,11 +8,30 @@ import (
 	"regexp"
 )
 
-// Caps (light-effects.md §2.1): 12 salle groups, 4 animateur groups.
+// MaxGroupsPerZone is the cap of groups in one zone (light-effects.md §2.1, revision 4).
+const MaxGroupsPerZone = 12
+
+// Zones of the ambiance (light-effects.md §2.5): the room ("ambiance", role salle), the
+// animateur zone and the public zone.
 const (
-	MaxSalleGroups = 12
-	MaxHostGroups  = 4
+	ZoneAmbiance  = "ambiance"
+	ZoneAnimateur = "animateur"
+	ZonePublic    = "public"
 )
+
+// Zones lists the three zones in their normative order.
+var Zones = []string{ZoneAmbiance, ZoneAnimateur, ZonePublic}
+
+// ZoneOfRole maps a group role to its zone ("" and salle ⇒ ambiance).
+func ZoneOfRole(role string) string {
+	switch role {
+	case GroupRoleAnimateur:
+		return ZoneAnimateur
+	case GroupRolePublic:
+		return ZonePublic
+	}
+	return ZoneAmbiance
+}
 
 var reGroupID = regexp.MustCompile(`^[a-z0-9]{1,12}$`)
 
@@ -79,7 +98,7 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 	}
 	out := make([]LightingGroupEntry, 0, len(groups))
 	usedLight := map[string]string{}
-	hosts, salles := 0, 0
+	perZone := map[string]int{}
 	usedID := map[string]bool{}
 	for _, g := range groups {
 		if g.ID != "" {
@@ -96,16 +115,14 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 		switch g.Role {
 		case "":
 			g.Role = GroupRoleSalle
-			salles++
-		case GroupRoleSalle:
-			salles++
-		case GroupRoleAnimateur:
-			hosts++
-			if hosts > MaxHostGroups {
-				return nil, fmt.Errorf("lighting.groups : %d groupes animateur au maximum", MaxHostGroups)
-			}
+		case GroupRoleSalle, GroupRoleAnimateur, GroupRolePublic:
 		default:
-			return nil, fmt.Errorf("lighting.groups : rôle de groupe inconnu %q (salle ou animateur)", g.Role)
+			return nil, fmt.Errorf("lighting.groups : rôle de groupe inconnu %q (salle, animateur ou public)", g.Role)
+		}
+		zone := ZoneOfRole(g.Role)
+		perZone[zone]++
+		if perZone[zone] > MaxGroupsPerZone {
+			return nil, fmt.Errorf("lighting.groups : %d groupes au maximum dans la zone %s", MaxGroupsPerZone, zone)
 		}
 		lst := make([]string, 0, len(g.Lights))
 		for _, ln := range g.Lights {
@@ -128,9 +145,6 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 			usedID[g.ID] = true
 		}
 		out = append(out, g)
-	}
-	if salles > MaxSalleGroups {
-		return nil, fmt.Errorf("lighting.groups : %d groupes de salle au maximum", MaxSalleGroups)
 	}
 	return out, nil
 }
@@ -159,67 +173,63 @@ func PruneLightingGroups(groups []LightingGroupEntry, lights []LightingLightEntr
 	return out
 }
 
-// HostGroup is one animateur group with its own rank (A1, A2… among the animateur groups,
-// empty ones included) — light-effects.md §2.5.
-type HostGroup struct {
+// ZoneGroup is one group of a zone: its stable id, its real number (1-based rank among ALL
+// the groups of the zone, empty ones included — an empty group keeps its number) and its
+// bulbs.
+type ZoneGroup struct {
 	ID     string
-	Rank   int // 1-based; the state address is -Rank (lighting.HostGroupAddr)
+	Num    int
 	Lights []string
 }
 
-// HostGroups lists the animateur groups in order.
-func (l LightingConfig) HostGroups() []HostGroup {
-	var out []HostGroup
+// ZoneGroups lists every group of a zone in order (empty ones included).
+func (l LightingConfig) ZoneGroups(zone string) []ZoneGroup {
+	var out []ZoneGroup
 	for _, g := range l.Groups {
-		if g.Role == GroupRoleAnimateur {
-			out = append(out, HostGroup{ID: g.ID, Rank: len(out) + 1, Lights: g.Lights})
+		if ZoneOfRole(g.Role) == zone {
+			out = append(out, ZoneGroup{ID: g.ID, Num: len(out) + 1, Lights: g.Lights})
 		}
 	}
 	return out
 }
 
-// GroupAssignment maps each general bulb name to its salle group number (1-based rank
-// among ALL "salle" groups — an empty group keeps its number, it simply has no bulb) and
-// to the rank k of its animateur group.
-func (l LightingConfig) GroupAssignment() (num map[string]int, host map[string]int) {
-	num = map[string]int{}
-	host = map[string]int{}
-	n := 0
-	for _, g := range l.Groups {
-		if g.Role == GroupRoleAnimateur {
-			continue
-		}
-		n++
-		for _, ln := range g.Lights {
-			num[ln] = n
-		}
-	}
-	for _, h := range l.HostGroups() {
-		for _, ln := range h.Lights {
-			host[ln] = h.Rank
-		}
-	}
-	return num, host
-}
-
-// RoomGroup is one non-empty salle group: its real number (1-based rank among all
-// salle groups, never renumbered).
-type RoomGroup struct {
-	Num int
-}
-
-// RoomGroups lists the non-empty salle groups in order — the N groups an effect
-// renders on (light-effects.md §2.1, §4.5).
-func (l LightingConfig) RoomGroups() []RoomGroup {
-	var out []RoomGroup
-	n := 0
-	for _, g := range l.Groups {
-		if g.Role == GroupRoleAnimateur {
-			continue
-		}
-		n++
+// NonEmptyGroups lists the non-empty groups of a zone in order, with their real numbers —
+// the N groups an effect renders on (light-effects.md §2.1, §4.3).
+func (l LightingConfig) NonEmptyGroups(zone string) []ZoneGroup {
+	var out []ZoneGroup
+	for _, g := range l.ZoneGroups(zone) {
 		if len(g.Lights) > 0 {
-			out = append(out, RoomGroup{Num: n})
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// ZoneExists reports whether a zone exists: the ambiance zone always does (it owns every
+// general bulb that is in no group); animateur and public exist only with at least one
+// non-empty group (§2.5).
+func (l LightingConfig) ZoneExists(zone string) bool {
+	if zone == ZoneAmbiance {
+		return true
+	}
+	return len(l.NonEmptyGroups(zone)) > 0
+}
+
+// LightRef says where a bulb sits: its zone and group number (0 = in no group).
+type LightRef struct {
+	Zone string
+	Num  int
+}
+
+// GroupOfLight maps each grouped bulb name to its zone and group number. A general bulb that
+// is in no group is absent (it belongs to the ambiance zone, group 0).
+func (l LightingConfig) GroupOfLight() map[string]LightRef {
+	out := map[string]LightRef{}
+	for _, zone := range Zones {
+		for _, g := range l.ZoneGroups(zone) {
+			for _, ln := range g.Lights {
+				out[ln] = LightRef{Zone: zone, Num: g.Num}
+			}
 		}
 	}
 	return out

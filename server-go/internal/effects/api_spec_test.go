@@ -104,7 +104,27 @@ func renderPostView(e Effect, c Ctx, lastTick int) (View, bool) {
 }
 
 func applicable(e Effect, n int) (bool, string) { return e.Applicable(n) }
-func hostApplicable(e Effect) bool              { return e.HostApplicable() }
+// hostApplicable : « n'écrit que g0 » (HostApplicable() est supprimé en révision 4 : même règle d'applicabilité pour les trois
+// zones, §4.7) — calculé ici sur les actions de l'effet.
+func hostApplicable(e Effect) bool {
+	only := func(s Step) bool {
+		for _, a := range s {
+			if a.Target.Kind != TargetG0 {
+				return false
+			}
+		}
+		return true
+	}
+	if !only(e.Pre) || !only(e.Last) || !only(e.Post) {
+		return false
+	}
+	for _, s := range e.Steps {
+		if !only(s) {
+			return false
+		}
+	}
+	return true
+}
 func tickDuration(tickMs int, speed float64) time.Duration {
 	return TickDuration(tickMs, speed)
 }

@@ -126,7 +126,7 @@ func TestScene_HostGroupFixedWhiteIgnoresOverride_225(t *testing.T) {
 	hostEntries := func(st lighting.State) []lighting.ZoneState {
 		var out []lighting.ZoneState
 		for _, z := range st.Zones {
-			if z.Group == lighting.GroupHost {
+			if z.Area == lighting.AreaHost {
 				out = append(out, z)
 			}
 		}

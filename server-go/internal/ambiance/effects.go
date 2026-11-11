@@ -29,32 +29,44 @@ const EffectsTickInterval = 100 * time.Millisecond
 // minimal test hosts keep compiling; SetEffectsSource overrides it.
 type EffectsSource interface {
 	EffectsCatalogue() effects.Catalogue
-	// EffectSettings returns the resolved effect id per moment for the room and, by
-	// animateur group id, for the animateur groups (ambiancecfg LightEffects / LightHostEffects).
-	EffectSettings() (room map[string]string, host map[string]map[string]string)
+	// EffectSettings returns the resolved effect id by zone (ambiance, animateur, public) then
+	// moment (ambiancecfg Settings.LightEffects).
+	EffectSettings() map[string]map[string]string
 }
 
 // EffectSpeedSource is optionally implemented next to EffectsSource: the resolved speed
-// multiplier per moment for the room and, by animateur group id, for the animateur groups
-// (ambiancecfg LightSpeeds / LightHostSpeeds). Absent ⇒ ×1 everywhere.
+// multiplier by zone then moment (ambiancecfg Settings.LightSpeeds). Absent ⇒ ×1 everywhere.
 type EffectSpeedSource interface {
-	EffectSpeeds() (room map[string]float64, host map[string]map[string]float64)
+	EffectSpeeds() map[string]map[string]float64
+}
+
+// zoneFrame is what a zone's live effect shows after the current tick.
+type zoneFrame struct {
+	on    bool // an effect frame is live for this zone
+	frame effects.Frame
+	nums  []int // real numbers of the groups the frame positions stand for
 }
 
 // effectFrames is the published result of one reader step.
 type effectFrames struct {
-	moment   effects.Moment
-	room     effects.Frame         // zero = no room effect (ordinary scene)
-	roomOn   bool                  // a room frame is live
-	roomNums []int                 // real group numbers of the frame positions
-	host     map[int]effects.Frame // by animateur rank k; a missing rank = fixed white
-	// post holds, for the one step that follows the end of a run, the POST frame of the
-	// effect that just ended (§4.5 point 5). The next scene covers it at once, so Scene()
-	// never applies it; it is published so that the end of the moment is observable.
-	post *effects.Frame
+	moment effects.Moment
+	zones  map[string]zoneFrame
+	// post holds, for a short window after the end of a run, the POST frame of the effect that
+	// just ended (§4.5 point 5). Only the public zone shows it: the ambiance and animateur
+	// zones are repainted at once by the scene that follows.
+	post map[string]*postFrame
 }
 
-// effectRun is the bookkeeping of one running effect (the room, or one animateur group).
+type postFrame struct {
+	frame effects.Frame
+	nums  []int
+	until time.Time
+}
+
+// postHold is how long a POST frame is published (long enough for the writer to apply it).
+const postHold = 600 * time.Millisecond
+
+// effectRun is the bookkeeping of one running effect (one zone).
 type effectRun struct {
 	key    string
 	start  time.Time
@@ -62,6 +74,7 @@ type effectRun struct {
 	nextAt time.Time
 	eff    effects.Effect // for POST at the end of the run
 	ctx    effects.Context
+	nums   []int
 }
 
 // advance moves the run to `now`: tick 0 at start, then one tick per real tick duration
@@ -80,8 +93,7 @@ func (r *effectRun) advance(now time.Time, tickMs int, speed float64) {
 // effectsState is the reader's own bookkeeping.
 type effectsState struct {
 	mu    sync.Mutex
-	room  *effectRun
-	host  map[int]*effectRun // by animateur rank
+	runs  map[string]*effectRun // by zone
 	score struct {
 		start time.Time
 		team  string
@@ -179,10 +191,10 @@ func momentOfEvent(k lighting.EventKind) effects.Moment {
 	return ""
 }
 
-// resolveEffect returns the catalogue entry to play for the setting id, or false: absent,
-// not declaring the moment, or not applicable (the caller then falls back to the default
-// of the moment, §3.3). "" means no effect. host selects the animateur rule (§4.7).
-func resolveEffect(cat effects.Catalogue, id string, m effects.Moment, n int, host bool) (effects.Entry, bool) {
+// resolveEffect returns the catalogue entry to play for the setting id in a zone, or false:
+// absent, not declaring the moment, or not applicable to the zone's n groups (§4.7). "" means
+// no effect.
+func resolveEffect(cat effects.Catalogue, id string, m effects.Moment, n int) (effects.Entry, bool) {
 	if id == "" {
 		return effects.Entry{}, false
 	}
@@ -190,25 +202,21 @@ func resolveEffect(cat effects.Catalogue, id string, m effects.Moment, n int, ho
 	if !ok || !en.Effect.HasMoment(m) {
 		return effects.Entry{}, false
 	}
-	if host {
-		if !en.Effect.HostApplicable() {
-			return effects.Entry{}, false
-		}
-	} else if okApp, _ := en.Effect.Applicable(n); !okApp {
+	if okApp, _ := en.Effect.Applicable(n); !okApp {
 		return effects.Entry{}, false
 	}
 	return en, true
 }
 
-// resolveRoomEffect is resolveEffect with the fallback of §3.3: a moment set to an absent,
-// invalid or inapplicable effect plays its default (the pulsation at the chrono moment, no
-// effect elsewhere). A moment explicitly set to "" plays nothing.
-func resolveRoomEffect(cat effects.Catalogue, id string, m effects.Moment, n int) (effects.Entry, bool) {
-	if en, ok := resolveEffect(cat, id, m, n, false); ok {
+// resolveZoneEffect is resolveEffect with the default of the zone (§6): a moment set to an
+// absent, invalid or inapplicable effect plays the room's pulsation at the chrono moment and
+// no effect anywhere else. A moment explicitly set to "" plays nothing.
+func resolveZoneEffect(cat effects.Catalogue, zone, id string, m effects.Moment, n int) (effects.Entry, bool) {
+	if en, ok := resolveEffect(cat, id, m, n); ok {
 		return en, true
 	}
-	if id != "" && m == effects.MomentChrono && id != ambiancecfg.PulsationID {
-		return resolveEffect(cat, ambiancecfg.PulsationID, m, n, false)
+	if zone == config.ZoneAmbiance && id != "" && m == effects.MomentChrono && id != ambiancecfg.PulsationID {
+		return resolveEffect(cat, ambiancecfg.PulsationID, m, n)
 	}
 	return effects.Entry{}, false
 }
@@ -232,24 +240,13 @@ func speedOf(m map[string]float64, moment string) float64 {
 	return 1
 }
 
-// startOrAdvance returns the run for (key), restarting it when the key changed, and
-// advances its tick counter to now.
-func startOrAdvance(r *effectRun, key string, start, now time.Time, en effects.Entry, ctx effects.Context, speed float64) *effectRun {
-	if r == nil || r.key != key {
-		r = &effectRun{key: key, start: start}
-	}
-	r.advance(now, en.Effect.TickMs, speed)
-	r.eff, r.ctx = en.Effect, ctx
-	return r
-}
-
 // endPost returns the POST frame of a run that just ended, if its effect has one.
-func endPost(r *effectRun) *effects.Frame {
+func endPost(r *effectRun, now time.Time) *postFrame {
 	if r == nil || !r.eff.HasPost {
 		return nil
 	}
 	if f, ok := effects.RenderPost(r.eff, r.ctx, r.tick); ok {
-		return &f
+		return &postFrame{frame: f, nums: r.nums, until: now.Add(postHold)}
 	}
 	return nil
 }
@@ -269,117 +266,99 @@ func (c *Controller) computeFrames() *effectFrames {
 
 	c.effects.mu.Lock()
 	defer c.effects.mu.Unlock()
-	if !ok {
-		out := c.endRuns(nil)
+	// A POST published a moment ago stays for its window.
+	out := &effectFrames{zones: map[string]zoneFrame{}, post: map[string]*postFrame{}}
+	if prev := c.effectFrames.Load(); prev != nil {
+		for z, pf := range prev.post {
+			if pf != nil && now.Before(pf.until) {
+				out.post[z] = pf
+			}
+		}
+	}
+	finish := func() *effectFrames {
+		if len(out.zones) == 0 && len(out.post) == 0 {
+			return nil
+		}
 		return out
 	}
+	if !ok {
+		for z, r := range c.effects.runs {
+			if pf := endPost(r, now); pf != nil {
+				out.post[z] = pf
+			}
+		}
+		c.effects.runs = nil
+		return finish()
+	}
+	out.moment = moment
 	cat := src.EffectsCatalogue()
-	roomSet, hostSet := src.EffectSettings()
-	var roomSpeed map[string]float64
-	var hostSpeed map[string]map[string]float64
+	settings := src.EffectSettings()
+	var speeds map[string]map[string]float64
 	if ss, okS := src.(EffectSpeedSource); okS {
-		roomSpeed, hostSpeed = ss.EffectSpeeds()
+		speeds = ss.EffectSpeeds()
 	}
 	lc := config.Get().Lighting
-	groups := lc.RoomGroups()
-	nums := make([]int, len(groups))
-	for i, g := range groups {
-		nums[i] = g.Num
-	}
 
 	sceneColor, _ := c.baseSceneColor(ev)
-	ctx := effects.Context{
-		Groups:    len(groups),
-		Nums:      nums,
+	base := effects.Context{
 		Moment:    moment,
 		Remaining: time.Duration(state.CurrentTime) * time.Second,
 		Total:     time.Duration(state.Delay) * time.Second,
-		Scene:     sceneColor,
 		Theme:     c.ThemeColor(),
 	}
 	if moment == effects.MomentScore && scoreTeam != "" {
-		ctx.Team = c.h.TeamNameColor(scoreTeam)
+		base.Team = c.h.TeamNameColor(scoreTeam)
 	}
-	startAt := now
-	keySuffix := ""
+	startAt, keySuffix := now, ""
 	if moment == effects.MomentScore {
 		startAt, keySuffix = scoreStart, "|"+scoreStart.String()
 	}
 
-	out := &effectFrames{moment: moment}
-	var post *effects.Frame
-
-	// Room: only in AUTO mode without Flash (§5.3 point 2).
-	var roomRun *effectRun
-	if c.lightingMode() == ModeAuto && !c.isLightingFlashOn() {
-		if en, okE := resolveRoomEffect(cat, roomSet[string(moment)], moment, len(groups)); okE {
-			key := string(moment) + "|" + en.Effect.ID + "|" + itoa(cat.Generation) + keySuffix
-			roomRun = startOrAdvance(c.effects.room, key, startAt, now, en, ctx, speedOf(roomSpeed, string(moment)))
-			if f := effects.Render(en.Effect, ctx, roomRun.tick); f.Groups != nil || f.Base != nil {
-				out.room, out.roomOn, out.roomNums = f, true, nums
-			}
-		}
-	}
-	if roomRun != c.effects.room && c.effects.room != nil && (roomRun == nil || roomRun.key != c.effects.room.key) {
-		post = endPost(c.effects.room)
-	}
-	c.effects.room = roomRun
-
-	// Animateur groups: each independent of the others, of mode, Flash and trial (§2.5, §5.3).
-	live := map[int]*effectRun{}
-	for _, g := range lc.HostGroups() {
-		if len(g.Lights) == 0 {
+	live := map[string]*effectRun{}
+	for _, zone := range config.Zones {
+		if !lc.ZoneExists(zone) {
 			continue
 		}
-		en, okE := resolveEffect(cat, hostSet[g.ID][string(moment)], moment, 0, true)
+		// The room obeys ON / OFF / Flash (§5.3 point 2); the other zones never do.
+		if zone == config.ZoneAmbiance && (c.lightingMode() != ModeAuto || c.isLightingFlashOn()) {
+			continue
+		}
+		groups := lc.NonEmptyGroups(zone)
+		nums := make([]int, len(groups))
+		for i, g := range groups {
+			nums[i] = g.Num
+		}
+		en, okE := resolveZoneEffect(cat, zone, settings[zone][string(moment)], moment, len(groups))
 		if !okE {
 			continue
 		}
+		ctx := base
+		ctx.Groups, ctx.Nums = len(groups), nums
+		ctx.Scene = [3]int{255, 255, 255} // "scene" is white outside the room (§2.5)
+		if zone == config.ZoneAmbiance {
+			ctx.Scene = sceneColor
+		}
 		key := string(moment) + "|" + en.Effect.ID + "|" + itoa(cat.Generation) + keySuffix
-		hctx := ctx
-		hctx.Groups, hctx.Nums = 0, nil
-		hctx.Scene = [3]int{255, 255, 255} // "scene" is white for an animateur group (§2.5)
-		run := startOrAdvance(c.effects.host[g.Rank], key, startAt, now, en, hctx, speedOf(hostSpeed[g.ID], string(moment)))
-		live[g.Rank] = run
-		if f := effects.Render(en.Effect, hctx, run.tick); f.Base != nil {
-			if out.host == nil {
-				out.host = map[int]effects.Frame{}
-			}
-			out.host[g.Rank] = f
+		run := c.effects.runs[zone]
+		if run == nil || run.key != key {
+			run = &effectRun{key: key, start: startAt}
+		}
+		run.advance(now, en.Effect.TickMs, speedOf(speeds[zone], string(moment)))
+		run.eff, run.ctx, run.nums = en.Effect, ctx, nums
+		live[zone] = run
+		if f := effects.Render(en.Effect, ctx, run.tick); f.Groups != nil || f.Base != nil {
+			out.zones[zone] = zoneFrame{on: true, frame: f, nums: nums}
 		}
 	}
-	for rank, old := range c.effects.host {
-		if r, still := live[rank]; (!still || r.key != old.key) && post == nil {
-			post = endPost(old)
-		}
-	}
-	c.effects.host = live
-	if !out.roomOn && out.host == nil && post == nil {
-		return nil
-	}
-	out.post = post
-	return out
-}
-
-// endRuns closes every run (the moment ended): the POST of the room's effect, if any, is
-// published once.
-func (c *Controller) endRuns(_ *effectFrames) *effectFrames {
-	var post *effects.Frame
-	if c.effects.room != nil {
-		post = endPost(c.effects.room)
-	}
-	if post == nil {
-		for _, r := range c.effects.host {
-			if post = endPost(r); post != nil {
-				break
+	for z, old := range c.effects.runs { // a run that stopped or changed: its POST
+		if r, still := live[z]; !still || r.key != old.key {
+			if pf := endPost(old, now); pf != nil {
+				out.post[z] = pf
 			}
 		}
 	}
-	c.effects.room, c.effects.host = nil, nil
-	if post == nil {
-		return nil
-	}
-	return &effectFrames{post: post}
+	c.effects.runs = live
+	return finish()
 }
 
 func itoa(u uint64) string {
@@ -396,40 +375,81 @@ func itoa(u uint64) string {
 	return string(b[i:])
 }
 
-// applyEffectFrames adds the published room frame to the zones of Scene(ev), only when it
-// was computed for ev's moment: the state of g0 over the general zone, then one entry per
-// group whose state differs from it, with the real group number (§4.6).
-func (c *Controller) applyEffectFrames(ev lighting.Event, zones []lighting.ZoneState) []lighting.ZoneState {
-	fr := c.effectFrames.Load()
-	if fr == nil || !fr.roomOn || fr.moment != momentOfEvent(ev.Kind) {
-		return zones
+// frameEntries turns a zone frame into the entries of its area: the state of g0 on Group 0
+// (when written), then one entry per group whose state differs from it (§4.6).
+func frameEntries(area lighting.Area, f effects.Frame, nums []int) []lighting.ZoneState {
+	var out []lighting.ZoneState
+	if b := f.Base; b != nil {
+		out = append(out, lighting.ZoneState{Zone: lighting.ZoneGeneral, Area: area, Color: b.Color, Intensity: b.Intensity, TransitionMs: b.FadeMs})
 	}
+	for i, g := range f.Groups {
+		if i >= len(nums) || g.Absent {
+			continue
+		}
+		out = append(out, lighting.ZoneState{Zone: lighting.ZoneGeneral, Area: area, Group: nums[i], Color: g.Color, Intensity: g.Intensity, TransitionMs: g.FadeMs})
+	}
+	return out
+}
+
+// zoneEntries adds to the zones of Scene(ev) what the animateur and public zones show
+// (§2.5): the animateur zone its live effect or a fixed white; the public zone only a live
+// effect, a trial or a POST being held — otherwise nothing at all.
+func (c *Controller) zoneEntries(ev lighting.Event, zones []lighting.ZoneState) []lighting.ZoneState {
+	lc := config.Get().Lighting
+	fr := c.effectFrames.Load()
+	now := c.effectsNow()
+	sameMoment := fr != nil && fr.moment == momentOfEvent(ev.Kind)
+	for _, zone := range []string{config.ZoneAnimateur, config.ZonePublic} {
+		if !lc.ZoneExists(zone) {
+			continue
+		}
+		area := areaOfZone(zone)
+		var entries []lighting.ZoneState
+		switch tr, trOn := c.trialEntries(zone, now); {
+		case trOn:
+			entries = tr
+		case fr != nil && sameMoment && fr.zones[zone].on:
+			entries = frameEntries(area, fr.zones[zone].frame, fr.zones[zone].nums)
+		case zone == config.ZonePublic && fr != nil && fr.post[zone] != nil && now.Before(fr.post[zone].until):
+			entries = frameEntries(area, fr.post[zone].frame, fr.post[zone].nums)
+		}
+		if zone == config.ZoneAnimateur && !hasGroupZero(entries, area) {
+			// no effect (or an effect that never wrote g0): fixed white under it
+			entries = append([]lighting.ZoneState{{Zone: lighting.ZoneGeneral, Area: area, Color: [3]int{255, 255, 255}, Intensity: 255}}, entries...)
+		}
+		zones = append(zones, entries...)
+	}
+	return zones
+}
+
+func hasGroupZero(entries []lighting.ZoneState, area lighting.Area) bool {
+	for _, e := range entries {
+		if e.Area == area && e.Group == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// applyEffectFrames adds the published room frame to the zones of Scene(ev), only when it was
+// computed for ev's moment (or a trial drives the room): the state of g0 over the general
+// zone, then one entry per group whose state differs from it, with the real group number.
+func (c *Controller) applyEffectFrames(ev lighting.Event, zones []lighting.ZoneState) []lighting.ZoneState {
 	if c.lightingMode() != ModeAuto || c.isLightingFlashOn() {
 		return zones
 	}
-	if b := fr.room.Base; b != nil {
-		zones[0].Color, zones[0].Intensity, zones[0].TransitionMs = b.Color, b.Intensity, b.FadeMs
+	var entries []lighting.ZoneState
+	if tr, on := c.trialEntries(config.ZoneAmbiance, c.effectsNow()); on {
+		entries = tr
+	} else if fr := c.effectFrames.Load(); fr != nil && fr.moment == momentOfEvent(ev.Kind) && fr.zones[config.ZoneAmbiance].on {
+		entries = frameEntries(lighting.AreaAmbiance, fr.zones[config.ZoneAmbiance].frame, fr.zones[config.ZoneAmbiance].nums)
 	}
-	extra := make([]lighting.ZoneState, 0, len(fr.room.Groups))
-	for i, g := range fr.room.Groups {
-		if i >= len(fr.roomNums) || g.Absent {
+	for _, e := range entries {
+		if e.Group == 0 {
+			zones[0].Color, zones[0].Intensity, zones[0].TransitionMs = e.Color, e.Intensity, e.TransitionMs
 			continue
 		}
-		extra = append(extra, lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: fr.roomNums[i], Color: g.Color, Intensity: g.Intensity, TransitionMs: g.FadeMs})
+		zones = append(zones[:1], append([]lighting.ZoneState{e}, zones[1:]...)...)
 	}
-	return append(zones[:1], append(extra, zones[1:]...)...)
-}
-
-// hostEffectState returns the published animateur frame (its g0) for ev's moment, if any.
-func (c *Controller) hostEffectState(ev lighting.Event, rank int) (lighting.ZoneState, bool) {
-	fr := c.effectFrames.Load()
-	if fr == nil || fr.host == nil || fr.moment != momentOfEvent(ev.Kind) {
-		return lighting.ZoneState{}, false
-	}
-	f, ok := fr.host[rank]
-	if !ok || f.Base == nil {
-		return lighting.ZoneState{}, false
-	}
-	g := *f.Base
-	return lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: lighting.HostGroup(rank), Color: g.Color, Intensity: g.Intensity, TransitionMs: g.FadeMs}, true
+	return zones
 }

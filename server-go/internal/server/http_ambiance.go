@@ -62,39 +62,18 @@ func AmbianceFromConfig(cfg *config.Config) ambiancecfg.Settings {
 	if m := ambiancecfg.LightMode(cfg.Lighting.DefaultMode); m.Valid() {
 		s.LightMode = m
 	}
-	// v11.7.0 (#223): the per-moment effects, missing keys taking the default of the moment.
-	s.LightEffects, s.LightHostEffects = ambiancecfg.DefaultLightEffects(), map[string]map[string]string{}
-	for _, m := range ambiancecfg.Moments {
-		if v, ok := cfg.Lighting.Effects[m]; ok {
-			s.LightEffects[m] = v
-		}
-	}
-	// One entry per existing animateur group (ids of deleted groups are ignored), the
-	// three moments always present.
-	for _, g := range cfg.Lighting.HostGroups() {
-		moments := ambiancecfg.DefaultHostMoments()
+	// v11.7.0 (#223, revision 4): the effect and the speed of each moment, by zone — the three
+	// zones and the three moments always present, missing keys taking the default.
+	s.LightEffects, s.LightSpeeds = ambiancecfg.DefaultLightEffects(), ambiancecfg.DefaultLightSpeeds()
+	for _, z := range ambiancecfg.Zones {
 		for _, m := range ambiancecfg.Moments {
-			if v, ok := cfg.Lighting.HostEffects[g.ID][m]; ok {
-				moments[m] = v
+			if v, ok := cfg.Lighting.Effects[z][m]; ok {
+				s.LightEffects[z][m] = v
+			}
+			if v, ok := cfg.Lighting.Speeds[z][m]; ok && ambiancecfg.ValidSpeed(v) {
+				s.LightSpeeds[z][m] = v
 			}
 		}
-		s.LightHostEffects[g.ID] = moments
-	}
-	// Speeds (R13): ×1 by default; one entry per existing animateur group.
-	s.LightSpeeds, s.LightHostSpeeds = ambiancecfg.DefaultLightSpeeds(), map[string]map[string]float64{}
-	for _, m := range ambiancecfg.Moments {
-		if v, ok := cfg.Lighting.Speeds[m]; ok && ambiancecfg.ValidSpeed(v) {
-			s.LightSpeeds[m] = v
-		}
-	}
-	for _, g := range cfg.Lighting.HostGroups() {
-		moments := ambiancecfg.DefaultLightSpeeds()
-		for _, m := range ambiancecfg.Moments {
-			if v, ok := cfg.Lighting.HostSpeeds[g.ID][m]; ok && ambiancecfg.ValidSpeed(v) {
-				moments[m] = v
-			}
-		}
-		s.LightHostSpeeds[g.ID] = moments
 	}
 	return s
 }

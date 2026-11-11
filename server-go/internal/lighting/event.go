@@ -67,19 +67,22 @@ type ZoneState struct {
 	Color        [3]int
 	Intensity    int
 	TransitionMs int
-	// Group (v11.7.0, #225, contracts/light-effects.md §2.2): 0 = the whole
-	// zone (v11.6.0 behaviour, the zero value every existing caller keeps);
-	// n >= 1 with Zone == ZoneGeneral = ambiance group n; GroupHost = the
-	// animateur group.
+	// Area and Group (v11.7.0, #225, contracts/light-effects.md §2.2, revision 4): the area of
+	// the "general" zone this state is for (AreaAmbiance, the zero value, is the room — every
+	// existing caller), and the group inside that area: 0 = the whole area, n >= 1 = its
+	// group n.
+	Area  Area
 	Group int
 }
 
-// HostGroup is the state address of the animateur group of rank k (A1, A2…):
-// {Zone: ZoneGeneral, Group: HostGroup(k)} = -k (light-effects.md §2.2, §2.5).
-func HostGroup(k int) int { return -k }
+// Area is one of the three areas of the "general" zone (light-effects.md §2.5).
+type Area int
 
-// GroupHost is the address of the first animateur group (A1).
-const GroupHost = -1
+const (
+	AreaAmbiance Area = iota // the room (zero value)
+	AreaHost                 // the animateur area
+	AreaPublic               // the public area
+)
 
 // ZoneGeneral is the single zone name used by #205.
 const ZoneGeneral = "general"

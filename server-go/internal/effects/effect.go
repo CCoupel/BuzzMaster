@@ -115,8 +115,6 @@ type Effect struct {
 	HasLast     bool
 	Post        Step
 	HasPost     bool
-
-	onlyG0 bool
 }
 
 // HasMoment reports whether the effect declares moment m.
@@ -128,10 +126,6 @@ func (e Effect) HasMoment(m Moment) bool {
 	}
 	return false
 }
-
-// HostApplicable reports whether the effect can play on an animateur group: it writes
-// only `g0` (§4.7).
-func (e Effect) HostApplicable() bool { return e.onlyG0 }
 
 // Error is a validation problem localised in a file (§4.8). Message is a sentence in
 // French without the file/line prefix; Error() adds it.

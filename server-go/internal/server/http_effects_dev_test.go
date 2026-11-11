@@ -54,8 +54,9 @@ func devPostCfg(t *testing.T, srv *HTTPServer, body string) (int, string) {
 	return w.Code, w.Body.String()
 }
 
-func TestAPIEffects_CatalogueShapeAndReload_Dev(t *testing.T) {
+func TestAPIEffects_CatalogueByZoneAndReload_Dev(t *testing.T) {
 	srv, dir := devEffectsServer(t)
+	devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"L1","role":"general"},{"name":"P1","role":"general"}],"groups":[{"role":"salle","lights":["L1"]},{"role":"public","lights":["P1"]}]}}`)
 	get := func(method, path string) map[string]any {
 		w := httptest.NewRecorder()
 		srv.mux.ServeHTTP(w, httptest.NewRequest(method, path, nil))
@@ -69,13 +70,23 @@ func TestAPIEffects_CatalogueShapeAndReload_Dev(t *testing.T) {
 		return m
 	}
 	v := get("GET", "/api/lighting/effects")
+	groups := v["groups"].(map[string]any)
+	if groups["ambiance"].(float64) != 1 || groups["animateur"].(float64) != 0 || groups["public"].(float64) != 1 {
+		t.Fatalf("groups par zone : %+v", groups)
+	}
 	list := v["effects"].([]any)
 	if len(list) != 2 || v["dir"] != "data/files/effects" || v["errors"] == nil || v["unresolved"] == nil {
 		t.Fatalf("forme §7.1 : %+v", v)
 	}
 	e := list[0].(map[string]any)
-	if _, hasTarget := e["target"]; hasTarget || e["min_groups"].(float64) != 0 || e["applicable"] != true || e["host_applicable"] != true || e["origin"] != "native" {
-		t.Fatalf("entrée target all : %+v", e)
+	app := e["applicable"].(map[string]any)
+	if e["tick_ms"].(float64) != 1000 || e["min_groups"].(float64) != 0 || app["ambiance"] != true || app["public"] != true || app["animateur"] != false {
+		t.Fatalf("applicabilité par zone (animateur n'existe pas) et tick_ms : %+v", e)
+	}
+	for _, gone := range []string{"target", "reason", "host_applicable"} {
+		if _, has := e[gone]; has {
+			t.Errorf("champ %q supprimé en révision 4", gone)
+		}
 	}
 	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("id: ["), 0o644); err != nil {
 		t.Fatal(err)
@@ -92,106 +103,117 @@ func TestAPIEffects_CatalogueShapeAndReload_Dev(t *testing.T) {
 	}
 }
 
-func TestConfig_LightingEffects_PartialPatchesMergeAndValidate_Dev(t *testing.T) {
+func TestConfig_LightingEffectsAndSpeeds_ByZoneMergeAndValidate_Dev(t *testing.T) {
 	srv, _ := devEffectsServer(t)
-	if code, out := devPostCfg(t, srv, `{"lighting":{"effects":{"calm":"cal"}}}`); code != 200 {
-		t.Fatalf("patch calm : %d %s", code, out)
+	if code, out := devPostCfg(t, srv, `{"lighting":{"effects":{"ambiance":{"calm":"cal"}}}}`); code != 200 {
+		t.Fatalf("patch ambiance.calm : %d %s", code, out)
 	}
-	if code, out := devPostCfg(t, srv, `{"lighting":{"effects":{"chrono":"pul"}}}`); code != 200 {
-		t.Fatalf("patch chrono : %d %s", code, out)
+	if code, out := devPostCfg(t, srv, `{"lighting":{"effects":{"public":{"chrono":"pul"}}}}`); code != 200 {
+		t.Fatalf("patch public.chrono : %d %s", code, out)
 	}
 	eff := config.Get().Lighting.Effects
-	if eff["calm"] != "cal" || eff["chrono"] != "pul" || eff["score"] != "" {
-		t.Fatalf("un patch d'un moment n'écrase pas les autres : %+v", eff)
+	if eff["ambiance"]["calm"] != "cal" || eff["public"]["chrono"] != "pul" || eff["ambiance"]["chrono"] != "pulsation" || eff["animateur"]["score"] != "" {
+		t.Fatalf("un patch d'un moment d'une zone n'écrase rien d'autre, tables complètes : %+v", eff)
 	}
-	if code, out := devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"H1","role":"general"}],"groups":[{"id":"p1","role":"animateur","lights":["H1"]}]}}`); code != 200 {
-		t.Fatalf("groupe animateur : %d %s", code, out)
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"speeds":{"animateur":{"score":1.5}}}}`); code != 200 {
+		t.Fatal("speeds par zone")
 	}
-	if code, out := devPostCfg(t, srv, `{"lighting":{"host_effects":{"p1":{"calm":"cal"},"ghost":{"calm":"cal"}}}}`); code != 200 || config.Get().Lighting.HostEffects["p1"]["calm"] != "cal" {
-		t.Fatalf("host_effects : %d %s", code, out)
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"speeds":{"public":{"calm":0.5}}}}`); code != 200 {
+		t.Fatal("speeds : un autre patch")
 	}
-	if _, ok := config.Get().Lighting.HostEffects["ghost"]; ok {
-		t.Fatal("un id inconnu est écarté sans erreur")
-	}
-	if code, _ := devPostCfg(t, srv, `{"lighting":{"host_effects":{"calm":"cal"}}}`); code != http.StatusBadRequest {
-		t.Fatal("l'ancienne forme plate n'est plus acceptée à l'écriture")
+	sp := config.Get().Lighting.Speeds
+	if sp["animateur"]["score"] != 1.5 || sp["public"]["calm"] != 0.5 || sp["ambiance"]["chrono"] != 1 {
+		t.Fatalf("fusion par zone et par moment, ×1 par défaut : %+v", sp)
 	}
 	for name, body := range map[string]string{
-		"id inconnu":      `{"lighting":{"effects":{"calm":"nope"}}}`,
-		"mauvais moment":  `{"lighting":{"effects":{"calm":"pul"}}}`,
-		"moment inconnu":  `{"lighting":{"effects":{"zzz":""}}}`,
-		"hôte id inconnu": `{"lighting":{"host_effects":{"p1":{"score":"nope"}}}}`,
+		"effet inconnu":           `{"lighting":{"effects":{"ambiance":{"calm":"nope"}}}}`,
+		"effet d'un autre moment": `{"lighting":{"effects":{"ambiance":{"calm":"pul"}}}}`,
+		"zone inconnue":           `{"lighting":{"effects":{"scène":{"calm":""}}}}`,
+		"moment inconnu":          `{"lighting":{"effects":{"public":{"nuit":""}}}}`,
+		"forme à plat":            `{"lighting":{"effects":{"calm":"cal"}}}`,
+		"host_effects":            `{"lighting":{"host_effects":{"g1":{"calm":"cal"}}}}`,
+		"host_speeds":             `{"lighting":{"host_speeds":{"g1":{"calm":2}}}}`,
+		"vitesse hors liste":      `{"lighting":{"speeds":{"public":{"calm":3}}}}`,
+		"vitesse zone inconnue":   `{"lighting":{"speeds":{"scène":{"calm":1}}}}`,
 	} {
 		if code, _ := devPostCfg(t, srv, body); code != http.StatusBadRequest {
 			t.Errorf("%s : 400 attendu, obtenu %d", name, code)
 		}
 	}
-	if config.Get().Lighting.Effects["calm"] != "cal" {
+	if config.Get().Lighting.Effects["ambiance"]["calm"] != "cal" {
 		t.Fatal("un refus ne modifie rien")
 	}
-	// Deleting the group purges its effects.
-	if code, _ := devPostCfg(t, srv, `{"lighting":{"groups":[]}}`); code != 200 || len(config.Get().Lighting.HostEffects) != 0 {
-		t.Fatalf("la purge suit la suppression du groupe : %+v", config.Get().Lighting.HostEffects)
-	}
-	// "" clears back to the default of the moment's "no effect".
-	if code, _ := devPostCfg(t, srv, `{"lighting":{"effects":{"calm":""}}}`); code != 200 || config.Get().Lighting.Effects["calm"] != "" {
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"effects":{"ambiance":{"calm":""}}}}`); code != 200 || config.Get().Lighting.Effects["ambiance"]["calm"] != "" {
 		t.Fatal("\"\" est valide")
+	}
+}
+
+func TestConfig_LegacyQualifEffectsFormsReadLeniently_Dev(t *testing.T) {
+	var lc config.LightingConfig
+	if err := json.Unmarshal([]byte(`{"effects":{"chrono":"pulsation","calm":"vague-lente"},"speeds":{"chrono":2},"host_effects":{"g1":{"calm":"x"}},"host_speeds":{"g1":{"calm":2}}}`), &lc); err != nil {
+		t.Fatalf("lecture tolérante : %v", err)
+	}
+	if lc.Effects["ambiance"]["calm"] != "vague-lente" || lc.Speeds["ambiance"]["chrono"] != 2 || len(lc.Effects) != 1 {
+		t.Fatalf("à plat = zone ambiance, host_* ignorés : %+v", lc)
+	}
+}
+
+func TestConfig_GroupRolesAndCapsPerZone_Dev(t *testing.T) {
+	srv, _ := devEffectsServer(t)
+	lights := `"lights":[{"name":"L1","role":"general"},{"name":"L2","role":"general"}]`
+	devPostCfg(t, srv, `{"lighting":{`+lights+`}}`)
+	if code, out := devPostCfg(t, srv, `{"lighting":{"groups":[{"role":"public","lights":["L1"]},{"role":"animateur","lights":["L2"]}]}}`); code != 200 {
+		t.Fatalf("rôle public accepté : %d %s", code, out)
+	}
+	if n := len(config.Get().Lighting.NonEmptyGroups(config.ZonePublic)); n != 1 {
+		t.Fatalf("zone public : %d groupe(s)", n)
+	}
+	many := ""
+	for i := 0; i < 13; i++ {
+		many += `{"role":"public","lights":[]},`
+	}
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"groups":[`+many[:len(many)-1]+`]}}`); code != http.StatusBadRequest {
+		t.Fatal("13 groupes dans une zone : refusé")
+	}
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"groups":[{"role":"scène","lights":[]}]}}`); code != http.StatusBadRequest {
+		t.Fatal("rôle inconnu : refusé")
+	}
+}
+
+func TestEffectTrialEndpoints_ValidationAndRefusals_Dev(t *testing.T) {
+	srv, _ := devEffectsServer(t)
+	post := func(path, body string) int {
+		w := httptest.NewRecorder()
+		srv.mux.ServeHTTP(w, httptest.NewRequest("POST", path, strings.NewReader(body)))
+		return w.Code
+	}
+	if c := post("/api/lighting/effects/cal/try", `{"zone":"scène"}`); c != http.StatusBadRequest {
+		t.Errorf("zone invalide : %d", c)
+	}
+	if c := post("/api/lighting/effects/cal/try", `{"speed":3}`); c != http.StatusBadRequest {
+		t.Errorf("vitesse invalide : %d", c)
+	}
+	if c := post("/api/lighting/effects/cal/try", `{"seconds":30}`); c != http.StatusBadRequest {
+		t.Errorf("durée invalide : %d", c)
+	}
+	if c := post("/api/lighting/effects/nope/try", `{}`); c != http.StatusNotFound {
+		t.Errorf("effet inconnu : %d", c)
+	}
+	if c := post("/api/lighting/effects/cal/try", ``); c != http.StatusConflict {
+		t.Errorf("éclairage désactivé (aucun pilote) : %d", c)
+	}
+	if c := post("/api/lighting/effects/try/stop", ``); c != http.StatusOK {
+		t.Errorf("try/stop sans essai : %d", c)
+	}
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/lighting/effects/cal/try", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET sur try : %d", w.Code)
 	}
 }
 
 func TestBackup_EffectsDirWithoutNatifs_Dev(t *testing.T) {
 	if !isEffectsReferencePath("files/effects/natifs/a.yaml") || !isEffectsReferencePath("effects/natifs") || isEffectsReferencePath("files/effects/mon.yaml") || isEffectsReferencePath("files/effects/natifsX/a.yaml") {
 		t.Fatal("isEffectsReferencePath")
-	}
-}
-
-func TestConfig_GroupsRefuseNameAndNearTeams_Dev(t *testing.T) {
-	srv, _ := devEffectsServer(t)
-	devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"L1","role":"general"}]}}`)
-	for _, body := range []string{
-		`{"lighting":{"groups":[{"name":"Scène","role":"salle","lights":["L1"]}]}}`,
-		`{"lighting":{"groups":[{"role":"salle","lights":["L1"],"near_teams":["Rouges"]}]}}`,
-	} {
-		if code, _ := devPostCfg(t, srv, body); code != http.StatusBadRequest {
-			t.Errorf("name / near_teams refusés à l'écriture : %d pour %s", code, body)
-		}
-	}
-	if code, out := devPostCfg(t, srv, `{"lighting":{"groups":[{"role":"salle","lights":["L1"]}]}}`); code != 200 {
-		t.Fatalf("un groupe n'a plus que id, role et lights : %d %s", code, out)
-	}
-}
-
-func TestConfig_LightingSpeeds_PartialMergeValidateAndPurge_Dev(t *testing.T) {
-	srv, _ := devEffectsServer(t)
-	if code, out := devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"H1","role":"general"}],"groups":[{"id":"p1","role":"animateur","lights":["H1"]}]}}`); code != 200 {
-		t.Fatalf("groupe animateur : %d %s", code, out)
-	}
-	if code, out := devPostCfg(t, srv, `{"lighting":{"speeds":{"chrono":2}}}`); code != 200 {
-		t.Fatalf("speeds : %d %s", code, out)
-	}
-	if code, _ := devPostCfg(t, srv, `{"lighting":{"speeds":{"calm":0.5}}}`); code != 200 {
-		t.Fatal("un patch d'un moment")
-	}
-	sp := config.Get().Lighting.Speeds
-	if sp["chrono"] != 2 || sp["calm"] != 0.5 || sp["score"] != 1 {
-		t.Fatalf("fusion par moment, défaut ×1 : %+v", sp)
-	}
-	if code, _ := devPostCfg(t, srv, `{"lighting":{"host_speeds":{"p1":{"score":1.5},"ghost":{"score":2}}}}`); code != 200 {
-		t.Fatal("host_speeds")
-	}
-	hs := config.Get().Lighting.HostSpeeds
-	if hs["p1"]["score"] != 1.5 || len(hs) != 1 {
-		t.Fatalf("id inconnu écarté sans erreur : %+v", hs)
-	}
-	for _, body := range []string{`{"lighting":{"speeds":{"chrono":3}}}`, `{"lighting":{"speeds":{"nuit":1}}}`, `{"lighting":{"host_speeds":{"p1":{"calm":0.6}}}}`} {
-		if code, _ := devPostCfg(t, srv, body); code != http.StatusBadRequest {
-			t.Errorf("400 attendu : %s", body)
-		}
-	}
-	if config.Get().Lighting.Speeds["chrono"] != 2 {
-		t.Fatal("un refus ne modifie rien")
-	}
-	if code, _ := devPostCfg(t, srv, `{"lighting":{"groups":[]}}`); code != 200 || len(config.Get().Lighting.HostSpeeds) != 0 {
-		t.Fatalf("la suppression du groupe purge ses vitesses : %+v", config.Get().Lighting.HostSpeeds)
 	}
 }

@@ -438,6 +438,7 @@ func (c *Controller) ShutdownExtinguish() {
 // quiesceAmbiance is steps 1 and 2: detach the writer's driver
 // synchronously and cancel the Flash goroutine.
 func (c *Controller) quiesceAmbiance() {
+	c.StopEffectTrial()        // #223: shutdown and disabling cancel a running trial too
 	c.StopGroupTest()          // #225 (§2.4): shutdown and disabling cancel a running group test
 	c.effectsQuiet.Store(true) // #223 (§5.3): the effect reader stops publishing before the extinction
 	c.effectFrames.Store(nil)
@@ -488,10 +489,10 @@ func (c *Controller) extinguishFreshDriver(requireEnabled bool) {
 	ctx, cancelTimeout := context.WithTimeout(context.Background(), shutdownLightingTimeout)
 	defer cancelTimeout()
 	off := lighting.State{Zones: []lighting.ZoneState{{Zone: lighting.ZoneGeneral, Intensity: 0}}}
-	for _, g := range config.Get().Lighting.HostGroups() {
-		if len(g.Lights) > 0 {
-			// An animateur group ignores Group 0: extinguish each one explicitly.
-			off.Zones = append(off.Zones, lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: lighting.HostGroup(g.Rank), Intensity: 0})
+	for _, zone := range []string{config.ZoneAnimateur, config.ZonePublic} {
+		if config.Get().Lighting.ZoneExists(zone) {
+			// The animateur and public areas ignore the room's Group 0: extinguish each explicitly.
+			off.Zones = append(off.Zones, lighting.ZoneState{Zone: lighting.ZoneGeneral, Area: areaOfZone(zone), Intensity: 0})
 		}
 	}
 	seen := map[string]bool{}

@@ -352,20 +352,23 @@ func (h *HTTPServer) handleLightingLights(w http.ResponseWriter, r *http.Request
 	// v11.7.0, #225 (light-effects.md §2.4): each bulb carries its ambiance
 	// group — the salle group number, "host" for the animateur group, 0 when
 	// it belongs to none (team bulbs and unassigned bulbs).
-	num, host := config.Get().Lighting.GroupAssignment()
+	refs := config.Get().Lighting.GroupOfLight()
 	type lightWithGroup struct {
 		hue.LightInfo
 		Group any `json:"group"`
 	}
 	out := make([]lightWithGroup, 0, len(lights))
 	for _, l := range lights {
-		n := hue.NormalizeLightName(l.Name)
 		var g any = 0
-		switch {
-		case host[n] > 0:
-			g = "host" + strconv.Itoa(host[n])
-		case num[n] > 0:
-			g = num[n]
+		if ref, ok := refs[hue.NormalizeLightName(l.Name)]; ok {
+			switch ref.Zone {
+			case config.ZoneAnimateur:
+				g = "host" + strconv.Itoa(ref.Num)
+			case config.ZonePublic:
+				g = "public" + strconv.Itoa(ref.Num)
+			default:
+				g = ref.Num
+			}
 		}
 		out = append(out, lightWithGroup{LightInfo: l, Group: g})
 	}

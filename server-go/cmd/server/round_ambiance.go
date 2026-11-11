@@ -202,40 +202,10 @@ func ambianceEffectiveEqual(x, y ambiancecfg.Effective) bool {
 			return false
 		}
 	}
-	for _, m := range ambiancecfg.Moments { // v11.7.0 (#223): effects and where they come from
-		if xs.LightEffects[m] != ys.LightEffects[m] || x.Sources.LightEffects[m] != y.Sources.LightEffects[m] {
-			return false
-		}
-	}
-	for _, m := range ambiancecfg.Moments { // R13: speeds and where they come from
-		if xs.LightSpeeds[m] != ys.LightSpeeds[m] || x.Sources.LightSpeeds[m] != y.Sources.LightSpeeds[m] {
-			return false
-		}
-	}
-	if len(xs.LightHostSpeeds) != len(ys.LightHostSpeeds) {
-		return false
-	}
-	for id, xm := range xs.LightHostSpeeds {
-		ym, ok := ys.LightHostSpeeds[id]
-		if !ok {
-			return false
-		}
+	for _, z := range ambiancecfg.Zones { // effects and speeds by zone, and where they come from
 		for _, m := range ambiancecfg.Moments {
-			if xm[m] != ym[m] || x.Sources.LightHostSpeeds[id][m] != y.Sources.LightHostSpeeds[id][m] {
-				return false
-			}
-		}
-	}
-	if len(xs.LightHostEffects) != len(ys.LightHostEffects) {
-		return false
-	}
-	for id, xm := range xs.LightHostEffects {
-		ym, ok := ys.LightHostEffects[id]
-		if !ok {
-			return false
-		}
-		for _, m := range ambiancecfg.Moments {
-			if xm[m] != ym[m] || x.Sources.LightHostEffects[id][m] != y.Sources.LightHostEffects[id][m] {
+			if xs.LightEffects[z][m] != ys.LightEffects[z][m] || x.Sources.LightEffects[z][m] != y.Sources.LightEffects[z][m] ||
+				xs.LightSpeeds[z][m] != ys.LightSpeeds[z][m] || x.Sources.LightSpeeds[z][m] != y.Sources.LightSpeeds[z][m] {
 				return false
 			}
 		}

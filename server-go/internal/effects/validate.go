@@ -104,28 +104,7 @@ func (v *validator) build(r *rawEffect, present map[string]int) Effect {
 	if r.Post.Kind != 0 {
 		e.Post, e.HasPost = v.step(&r.Post, "post"), true
 	}
-	e.onlyG0 = onlyG0(&e)
 	return e
-}
-
-func onlyG0(e *Effect) bool {
-	check := func(s Step) bool {
-		for _, a := range s {
-			if a.Target.Kind != TargetG0 {
-				return false
-			}
-		}
-		return true
-	}
-	if !check(e.Pre) || !check(e.Last) || !check(e.Post) {
-		return false
-	}
-	for _, s := range e.Steps {
-		if !check(s) {
-			return false
-		}
-	}
-	return true
 }
 
 // variables parses the `variables` table (§4.4).

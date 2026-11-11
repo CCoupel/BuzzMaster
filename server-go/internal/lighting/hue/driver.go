@@ -99,10 +99,11 @@ type LightSpec struct {
 	Name string    `json:"name"`
 	Role LightRole `json:"role"`
 	Team string    `json:"team,omitempty"`
-	// Group (v11.7.0, #225, hue-bridge.md §11): ambiance group of a general
-	// light — 0 = none, n >= 1 = salle group n, a negative
-	// number -k = the animateur group of rank k (lighting.HostGroup(k)). Ignored for team lights.
-	Group int `json:"group,omitempty"`
+	// Area and Group (v11.7.0, #225, hue-bridge.md §11, revision 4): the area of a general
+	// light (the room by default, the animateur or the public area) and its group number in
+	// that area (0 = in no group). Ignored for team lights.
+	Area  lighting.Area `json:"area,omitempty"`
+	Group int           `json:"group,omitempty"`
 }
 
 // Config of a Driver — filled by #207 from config.json's `lighting` section.
@@ -452,9 +453,10 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 		want  applied
 		dirty bool
 	}
-	// v11.7.0 (#225, hue-bridge.md §11): general lights may belong to an
-	// ambiance group and so carry their own target state. First collect every
-	// light's target, then decide the bucketing.
+	// v11.7.0 (#225, hue-bridge.md §11, revision 4): general lights sit in one of three areas
+	// (the room, the animateur area, the public area), possibly in a group of it, and carry
+	// their own target state. First collect every light's target, then decide the bucketing.
+	// A light of the animateur or public area with no entry emitted is NOT written.
 	type cand struct {
 		lc   LightSpec
 		rl   resolvedLight
@@ -472,33 +474,33 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 		}
 		cands = append(cands, cand{lc: lc, rl: rl, want: desired(zs)})
 	}
-	// Débit préservé: when every (non-animateur) general light has the same
-	// target — any scene without a distributed effect — they all stay in ONE
-	// bucket, written through buzzmaster-general exactly as in v11.6.0.
-	uniform := true
-	var first *applied
+	// Débit préservé: when every light of an area has the same target — any scene without a
+	// distributed effect — they all stay in ONE bucket, written through the area's Hue group
+	// (buzzmaster-general for the room) exactly as in v11.6.0.
+	uniform := map[lighting.Area]bool{lighting.AreaAmbiance: true, lighting.AreaHost: true, lighting.AreaPublic: true}
+	firstWant := map[lighting.Area]*applied{}
 	for i := range cands {
 		c := &cands[i]
-		if c.lc.Role == RoleTeam || c.lc.Group < 0 {
+		if c.lc.Role == RoleTeam {
 			continue
 		}
-		if first == nil {
-			first = &c.want
-		} else if *first != c.want {
-			uniform = false
+		if f := firstWant[c.lc.Area]; f == nil {
+			firstWant[c.lc.Area] = &c.want
+		} else if *f != c.want {
+			uniform[c.lc.Area] = false
 		}
 	}
 	buckets := map[string][]bucketEntry{}
 	order := make([]string, 0, len(cands))
 	for _, c := range cands {
-		key := bucketGeneral
+		var key string
 		switch {
 		case c.lc.Role == RoleTeam:
 			key = bucketTeamPfx + c.lc.Team
-		case c.lc.Group < 0:
-			key = bucketHostPfx + strconv.Itoa(-c.lc.Group)
-		case !uniform && c.lc.Group > 0:
-			key = bucketGroupPfx + strconv.Itoa(c.lc.Group)
+		case !uniform[c.lc.Area] && c.lc.Group > 0:
+			key = bucketGroupPfx + strconv.Itoa(int(c.lc.Area)) + ":" + strconv.Itoa(c.lc.Group)
+		default:
+			key = bucketAreaPfx + strconv.Itoa(int(c.lc.Area))
 		}
 		if _, seen := buckets[key]; !seen {
 			order = append(order, key)
@@ -639,12 +641,12 @@ type groupPlannedWrite struct {
 	members   []plannedWrite
 }
 
-// zoneFor picks the ZoneState a light follows (contract §5.2): a team light
-// follows its team's zone when present in st, otherwise the general zone.
-// A general light of ambiance group n follows the {general, Group n} entry
-// when present, else the plain general entry (Group 0); an animateur light
-// follows ONLY its own host-group entry (-k) — it never receives the Group 0 one
-// (light-effects.md §2.5).
+// zoneFor picks the ZoneState a light follows (contract §5.2): a team light follows its
+// team's zone when present in st, otherwise the general zone. A general light of group n in
+// an area follows the {general, Area, Group n} entry when present, else the area's plain
+// {general, Area, Group 0} entry. The room always has its Group 0 entry; the animateur and
+// public areas have an entry only when something drives them — a light of those areas with
+// none is not written (light-effects.md §2.5).
 func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 	if lc.Role == RoleTeam {
 		for _, z := range st.Zones {
@@ -653,18 +655,15 @@ func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 			}
 		}
 	}
-	if lc.Role != RoleTeam && lc.Group != 0 {
+	if lc.Group != 0 {
 		for _, z := range st.Zones {
-			if z.Zone == lighting.ZoneGeneral && z.Group == lc.Group {
+			if z.Zone == lighting.ZoneGeneral && z.Area == lc.Area && z.Group == lc.Group {
 				return z, true
 			}
 		}
-		if lc.Group < 0 {
-			return lighting.ZoneState{}, false
-		}
 	}
 	for _, z := range st.Zones {
-		if z.Zone == lighting.ZoneGeneral && z.Group == 0 {
+		if z.Zone == lighting.ZoneGeneral && z.Area == lc.Area && z.Group == 0 {
 			return z, true
 		}
 	}
@@ -1189,6 +1188,93 @@ func (d *Driver) SetLightDirect(ctx context.Context, name string, on bool, color
 	d.mu.Lock()
 	delete(d.appliedState, name)
 	d.mu.Unlock()
+	d.ok()
+	return nil
+}
+
+// LightSnapshot is the state of one bulb as read on the bridge (on/off, brightness,
+// colour) — what the public area is given back after a test or a trial
+// (light-effects.md §2.5).
+type LightSnapshot struct {
+	Name  string
+	On    bool
+	Bri   int
+	XY    [2]float64
+	HasXY bool
+}
+
+// SnapshotLights reads the state of the given configured lights on the bridge (GET only).
+// A light that cannot be resolved or read is simply left out; an error means the bridge
+// could not be read at all.
+func (d *Driver) SnapshotLights(ctx context.Context, names []string) ([]LightSnapshot, error) {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return nil, d.fail(err)
+	}
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
+	if err != nil {
+		return nil, d.fail(err)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var out []LightSnapshot
+	for _, n := range names {
+		rl, ok := d.resolved[n]
+		if !ok {
+			continue
+		}
+		l, ok := lights[rl.id]
+		if !ok {
+			continue
+		}
+		sn := LightSnapshot{Name: n, On: l.State.On, Bri: l.State.Bri}
+		if len(l.State.XY) == 2 {
+			sn.XY, sn.HasXY = [2]float64{l.State.XY[0], l.State.XY[1]}, true
+		}
+		out = append(out, sn)
+	}
+	return out, nil
+}
+
+// RestoreLights writes snapshots back (on/off, brightness, colour). Every name in off is
+// switched off — the fallback when the state could not be read. Goes through the same
+// guarded write as Apply and keeps the dedup cache honest.
+func (d *Driver) RestoreLights(ctx context.Context, snaps []LightSnapshot, off []string) error {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return d.fail(err)
+	}
+	c, _ := d.conn()
+	write := func(name string, want applied) error {
+		d.mu.Lock()
+		rl, ok := d.resolved[name]
+		d.mu.Unlock()
+		if !ok {
+			return nil
+		}
+		return d.writeOne(ctx, c, name, rl.id, want)
+	}
+	for _, sn := range snaps {
+		want := applied{on: sn.On}
+		if sn.On {
+			want.bri = clamp(sn.Bri, 1, 254)
+			want.xy = sn.XY
+			if !sn.HasXY {
+				want.xy = rgbToXY(255, 214, 170)
+			}
+		}
+		if err := write(sn.Name, want); err != nil {
+			return d.fail(err)
+		}
+	}
+	for _, n := range off {
+		if err := write(n, applied{on: false}); err != nil {
+			return d.fail(err)
+		}
+	}
 	d.ok()
 	return nil
 }

@@ -89,54 +89,149 @@ type LightingConfig struct {
 	// ambiance adapter (cmd/server/round_ambiance.go FromConfig).
 	DefaultMode string `json:"default_mode,omitempty"`
 	// Groups (v11.7.0, #225 — contracts/light-effects.md §2.1): ordered
-	// ambiance groups of role=general bulbs. Order = group number among the
-	// "salle" groups. Absent/empty ⇒ v11.6.0 behaviour exactly.
+	// ambiance groups of role=general bulbs. The number of a group is its rank among the
+	// groups of its zone (salle = ambiance, animateur, public). Absent/empty ⇒ v11.6.0 exactly.
 	Groups []LightingGroupEntry `json:"groups"`
-	// Effects / HostEffects (v11.7.0, #223 — light-effects.md §6): global effect id per
-	// moment (chrono, calm, score) for the room and for the animateur group. Read ONLY
-	// through the ambiance adapter (server.AmbianceFromConfig). Absent keys take the
-	// default of the moment (chrono → "pulsation", else "").
-	Effects map[string]string `json:"effects"`
-	// HostEffects is a table by animateur group id, then moment (light-effects.md §6). The
-	// old flat form {chrono, calm, score} of a QUALIF config.json is ignored on reading.
-	HostEffects HostEffectsTable `json:"host_effects"`
-	// Speeds / HostSpeeds (R13 — light-effects.md §6): the speed multiplier of the effect of
-	// each moment, for the room and by animateur group id (0.5, 0.75, 1, 1.5, 2; default 1).
-	Speeds     map[string]float64            `json:"speeds"`
-	HostSpeeds map[string]map[string]float64 `json:"host_speeds"`
+	// Effects / Speeds (v11.7.0, #223 — light-effects.md §6, revision 4): the effect id and the
+	// speed multiplier of each moment (chrono, calm, score), by zone (ambiance, animateur,
+	// public). Read ONLY through the ambiance adapter (server.AmbianceFromConfig). A config.json
+	// of a QUALIF build (flat tables, host_effects / host_speeds) is read leniently: flat
+	// values are the "ambiance" zone, host_* keys are ignored.
+	Effects ZoneEffects `json:"effects"`
+	Speeds  ZoneSpeeds  `json:"speeds"`
 }
 
-// HostEffectsTable is lighting.host_effects: group id → moment → effect id.
-type HostEffectsTable map[string]map[string]string
+// ZoneEffects is lighting.effects: zone → moment → effect id.
+type ZoneEffects map[string]map[string]string
 
-// UnmarshalJSON is tolerant: an entry that is not an object (old flat form) is dropped.
-func (h *HostEffectsTable) UnmarshalJSON(b []byte) error {
+// UnmarshalJSON is lenient: the flat QUALIF form {moment: id} is read as the ambiance zone,
+// anything else that does not fit is dropped.
+func (z *ZoneEffects) UnmarshalJSON(b []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
-		*h = nil
+		*z = nil
 		return nil
 	}
-	out := make(HostEffectsTable, len(raw))
-	for id, v := range raw {
-		var m map[string]string
-		if json.Unmarshal(v, &m) == nil {
-			out[id] = m
+	out := ZoneEffects{}
+	for k, v := range raw {
+		var obj map[string]string
+		if isZone(k) && json.Unmarshal(v, &obj) == nil {
+			if out[k] == nil {
+				out[k] = map[string]string{}
+			}
+			for m, id := range obj {
+				out[k][m] = id
+			}
+			continue
+		}
+		var id string
+		if isMoment(k) && json.Unmarshal(v, &id) == nil {
+			if out[ZoneAmbiance] == nil {
+				out[ZoneAmbiance] = map[string]string{}
+			}
+			out[ZoneAmbiance][k] = id
 		}
 	}
-	*h = out
+	*z = out
 	return nil
 }
 
-// Lighting group roles (contracts/light-effects.md §2.1).
+// ZoneSpeeds is lighting.speeds: zone → moment → speed multiplier.
+type ZoneSpeeds map[string]map[string]float64
+
+// UnmarshalJSON is lenient, like ZoneEffects.
+func (z *ZoneSpeeds) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		*z = nil
+		return nil
+	}
+	out := ZoneSpeeds{}
+	for k, v := range raw {
+		var obj map[string]float64
+		if isZone(k) && json.Unmarshal(v, &obj) == nil {
+			if out[k] == nil {
+				out[k] = map[string]float64{}
+			}
+			for m, f := range obj {
+				out[k][m] = f
+			}
+			continue
+		}
+		var f float64
+		if isMoment(k) && json.Unmarshal(v, &f) == nil {
+			if out[ZoneAmbiance] == nil {
+				out[ZoneAmbiance] = map[string]float64{}
+			}
+			out[ZoneAmbiance][k] = f
+		}
+	}
+	*z = out
+	return nil
+}
+
+func isZone(k string) bool   { return k == ZoneAmbiance || k == ZoneAnimateur || k == ZonePublic }
+func isMoment(k string) bool { return k == "chrono" || k == "calm" || k == "score" }
+
+// Moments of the light effects, in order.
+var lightMoments = []string{"chrono", "calm", "score"}
+
+// completeZoneEffects returns the table with the three zones and three moments present (the
+// room's chrono defaults to the pulsation, everything else to no effect).
+func completeZoneEffects(in ZoneEffects) ZoneEffects {
+	out := ZoneEffects{}
+	for _, z := range Zones {
+		out[z] = map[string]string{}
+		for _, m := range lightMoments {
+			out[z][m] = ""
+		}
+	}
+	out[ZoneAmbiance]["chrono"] = "pulsation"
+	for z, mm := range in {
+		if !isZone(z) {
+			continue
+		}
+		for m, id := range mm {
+			if isMoment(m) {
+				out[z][m] = id
+			}
+		}
+	}
+	return out
+}
+
+func completeZoneSpeeds(in ZoneSpeeds) ZoneSpeeds {
+	out := ZoneSpeeds{}
+	for _, z := range Zones {
+		out[z] = map[string]float64{}
+		for _, m := range lightMoments {
+			out[z][m] = 1
+		}
+	}
+	for z, mm := range in {
+		if !isZone(z) {
+			continue
+		}
+		for m, v := range mm {
+			if isMoment(m) {
+				out[z][m] = v
+			}
+		}
+	}
+	return out
+}
+
+// Lighting group roles (contracts/light-effects.md §2.1): the role of a group is its zone.
 const (
 	GroupRoleSalle     = "salle"
 	GroupRoleAnimateur = "animateur"
+	GroupRolePublic    = "public"
 )
 
 // LightingGroupEntry is one ambiance group. Role "" means "salle".
 type LightingGroupEntry struct {
 	// ID is the stable identifier of the group (light-effects.md §2.1): assigned by the
-	// server when absent, the key of the animateur groups' effects.
+	// server when absent.
 	ID     string   `json:"id"`
 	Role   string   `json:"role"`
 	Lights []string `json:"lights"`
@@ -525,16 +620,8 @@ func ApplyDefaults(cfg *Config) {
 		cfg.Lighting.Groups = []LightingGroupEntry{}
 	}
 	AssignGroupIDs(cfg.Lighting.Groups)
-	cfg.Lighting.Effects = fillMoments(cfg.Lighting.Effects, map[string]string{"chrono": "pulsation", "calm": "", "score": ""})
-	if cfg.Lighting.HostEffects == nil {
-		cfg.Lighting.HostEffects = HostEffectsTable{}
-	}
-	if cfg.Lighting.Speeds == nil {
-		cfg.Lighting.Speeds = map[string]float64{}
-	}
-	if cfg.Lighting.HostSpeeds == nil {
-		cfg.Lighting.HostSpeeds = map[string]map[string]float64{}
-	}
+	cfg.Lighting.Effects = completeZoneEffects(cfg.Lighting.Effects)
+	cfg.Lighting.Speeds = completeZoneSpeeds(cfg.Lighting.Speeds)
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}
 	}
@@ -662,16 +749,4 @@ func Save(cfg *Config) error {
 		return err
 	}
 	return nil
-}
-
-// fillMoments returns m with every key of def present (missing ones take the default).
-func fillMoments(m, def map[string]string) map[string]string {
-	out := make(map[string]string, len(def))
-	for k, v := range def {
-		out[k] = v
-	}
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
 }

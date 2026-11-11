@@ -5,11 +5,13 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/lighting"
+	"buzzcontrol/internal/lighting/hue"
 )
 
 // Group test sequence (v11.7.0, #225 — contracts/light-effects.md §2.4): six one-second
@@ -48,9 +50,15 @@ var groupTestSequence = [GroupTestSteps]groupTestStep{
 	{[3]int{0, 0, 255}, 255},     // blue
 }
 
+// testAddr addresses the tested group: its area and its number in that area.
+type testAddr struct {
+	area  lighting.Area
+	group int
+}
+
 // groupTestState is the published state of the running test.
 type groupTestState struct {
-	addr  int // ZoneState.Group of the tested group: n >= 1 (salle) or -k (animateur)
+	addr  testAddr
 	start time.Time
 	step  time.Duration
 }
@@ -75,43 +83,29 @@ func (c *Controller) GroupTestDurationMs() int {
 	return int(c.groupTestStepDuration() * GroupTestSteps / time.Millisecond)
 }
 
-// resolveGroupRef turns "2" (salle group 2) or "host1" (animateur of rank 1) into the
-// state address and checks the group exists and is not empty.
-func resolveGroupRef(ref string) (int, error) {
-	lc := config.Get().Lighting
+// resolveGroupRef turns "2" (group 2 of the ambiance zone), "host1" (group 1 of the
+// animateur zone) or "public1" (group 1 of the public zone) into the state address and checks
+// the group exists and is not empty.
+func resolveGroupRef(ref string) (testAddr, error) {
+	zone, numStr := config.ZoneAmbiance, ref
 	if k, ok := strings.CutPrefix(ref, "host"); ok {
-		rank, err := strconv.Atoi(k)
-		if err != nil || rank < 1 {
-			return 0, ErrUnknownGroup
-		}
-		for _, g := range lc.HostGroups() {
-			if g.Rank == rank {
-				if len(g.Lights) == 0 {
-					return 0, ErrEmptyGroup
-				}
-				return lighting.HostGroup(rank), nil
-			}
-		}
-		return 0, ErrUnknownGroup
+		zone, numStr = config.ZoneAnimateur, k
+	} else if k, ok := strings.CutPrefix(ref, "public"); ok {
+		zone, numStr = config.ZonePublic, k
 	}
-	n, err := strconv.Atoi(ref)
+	n, err := strconv.Atoi(numStr)
 	if err != nil || n < 1 {
-		return 0, ErrUnknownGroup
+		return testAddr{}, ErrUnknownGroup
 	}
-	rank := 0
-	for _, g := range lc.Groups {
-		if g.Role == config.GroupRoleAnimateur {
-			continue
-		}
-		rank++
-		if rank == n {
+	for _, g := range config.Get().Lighting.ZoneGroups(zone) {
+		if g.Num == n {
 			if len(g.Lights) == 0 {
-				return 0, ErrEmptyGroup
+				return testAddr{}, ErrEmptyGroup
 			}
-			return n, nil
+			return testAddr{area: areaOfZone(zone), group: n}, nil
 		}
 	}
-	return 0, ErrUnknownGroup
+	return testAddr{}, ErrUnknownGroup
 }
 
 // CheckGroupRef validates a group reference ("2", "host1") against the configuration.
@@ -129,6 +123,8 @@ func (c *Controller) StartGroupTest(ref string) error {
 		return err
 	}
 	step := c.groupTestStepDuration()
+	c.StopEffectTrial()                               // a group test replaces a trial (§7.4)
+	c.holdPublicFor(addr.area == lighting.AreaPublic) // public zone: read the bulbs' state first
 	c.ambianceMu.Lock()
 	if c.groupTest.cancel != nil {
 		c.groupTest.cancel()
@@ -144,6 +140,7 @@ func (c *Controller) StartGroupTest(ref string) error {
 	c.groupTest.state.Store(st)
 	c.ambianceMu.Unlock()
 	c.Writer().NotifyState()
+	c.releasePublicIfIdle() // a replaced public test followed by a non-public one gives the bulbs back
 	go c.runGroupTest(ctx, epoch, st)
 	return nil
 }
@@ -167,6 +164,7 @@ func (c *Controller) runGroupTest(ctx context.Context, epoch int64, st *groupTes
 		}
 		c.Writer().NotifyState()
 	}
+	c.releasePublicIfIdle() // public zone: give the bulbs back their state
 }
 
 // StopGroupTest stops the running sequence; the group returns to its live state. Safe
@@ -183,6 +181,7 @@ func (c *Controller) StopGroupTest() {
 	if was != nil {
 		c.Writer().NotifyState()
 	}
+	c.releasePublicIfIdle()
 }
 
 // GroupTestRunning reports whether a sequence is in progress (on the injected clock).
@@ -219,13 +218,104 @@ func (c *Controller) applyGroupTest(zones []lighting.ZoneState) []lighting.ZoneS
 		return zones
 	}
 	addr := c.groupTest.state.Load().addr
-	z := lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: addr, Color: s.color, Intensity: s.intensity}
+	return overlayGroup(zones, lighting.ZoneState{Zone: lighting.ZoneGeneral, Area: addr.area, Group: addr.group, Color: s.color, Intensity: s.intensity})
+}
+
+// overlayGroup replaces the entry of the same (area, group) in zones, or adds it — after the
+// room's Group 0 entry, which always stays first.
+func overlayGroup(zones []lighting.ZoneState, z lighting.ZoneState) []lighting.ZoneState {
 	for i := range zones {
-		if zones[i].Zone == lighting.ZoneGeneral && zones[i].Group == addr {
+		if zones[i].Zone == lighting.ZoneGeneral && zones[i].Area == z.Area && zones[i].Group == z.Group {
 			zones[i] = z
 			return zones
 		}
 	}
-	// The group has no entry of its own yet (plain room scene): add it after Group 0.
 	return append(zones[:1], append([]lighting.ZoneState{z}, zones[1:]...)...)
+}
+
+// ---------------------------------------------------------------------------
+// Public area: state read before a test or a trial, given back afterwards
+// (light-effects.md §2.5). The public bulbs are never written by the scene, so after a test
+// they would stay on its last colour: their state is read on the bridge when the first test
+// or trial starts and written back when the last one ends. A failed read ⇒ switched off.
+// ---------------------------------------------------------------------------
+
+type publicHold struct {
+	mu    sync.Mutex
+	held  bool
+	snaps []hue.LightSnapshot
+	read  bool // the snapshot was read successfully
+}
+
+func publicLightNames() []string {
+	var names []string
+	for _, g := range config.Get().Lighting.NonEmptyGroups(config.ZonePublic) {
+		names = append(names, g.Lights...)
+	}
+	return names
+}
+
+// holdPublicFor snapshots the public bulbs when needed is true and no hold is active yet.
+func (c *Controller) holdPublicFor(needed bool) {
+	if !needed {
+		return
+	}
+	c.public.mu.Lock()
+	defer c.public.mu.Unlock()
+	if c.public.held {
+		return
+	}
+	c.public.held, c.public.read, c.public.snaps = true, false, nil
+	drv := c.hueDriver.Load()
+	if drv == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	if snaps, err := drv.SnapshotLights(ctx, publicLightNames()); err == nil {
+		c.public.snaps, c.public.read = snaps, true
+	}
+}
+
+// publicBusy reports whether a test or a trial is still driving the public zone.
+func (c *Controller) publicBusy() bool {
+	if st := c.groupTest.state.Load(); st != nil && st.addr.area == lighting.AreaPublic {
+		if _, running := c.currentGroupTest(); running {
+			return true
+		}
+	}
+	return c.trialOnPublic()
+}
+
+// releasePublicIfIdle writes the snapshot back once nothing drives the public zone any more,
+// unless a live effect now owns it.
+func (c *Controller) releasePublicIfIdle() {
+	if c.publicBusy() {
+		return
+	}
+	c.public.mu.Lock()
+	if !c.public.held {
+		c.public.mu.Unlock()
+		return
+	}
+	snaps, read := c.public.snaps, c.public.read
+	c.public.held, c.public.snaps = false, nil
+	c.public.mu.Unlock()
+	if fr := c.effectFrames.Load(); fr != nil && fr.zones[config.ZonePublic].on {
+		return // a live effect owns the zone: it keeps its state
+	}
+	drv := c.hueDriver.Load()
+	if drv == nil {
+		return
+	}
+	names := publicLightNames()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if read {
+			_ = drv.RestoreLights(ctx, snaps, nil)
+		} else {
+			_ = drv.RestoreLights(ctx, nil, names) // unreadable: switched off
+		}
+	}()
 }

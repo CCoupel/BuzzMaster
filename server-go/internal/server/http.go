@@ -495,6 +495,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/lighting/groups/test/stop", h.handleLightingGroupTestStop)
 	h.mux.HandleFunc("/api/lighting/effects", h.handleLightingEffects)
 	h.mux.HandleFunc("/api/lighting/effects/reload", h.handleLightingEffectsReload)
+	h.mux.HandleFunc("/api/lighting/effects/", h.handleLightingEffectsSub)
 	h.mux.HandleFunc("/api/lighting/preview", h.handleLightingPreview)
 	// Conduite manuelle — sélecteur tri-état + Flash (#208, contract §10.1)
 	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
@@ -2217,141 +2218,75 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 				}
 				cfg.Lighting.Groups = groups
 			}
-			// Saving the groups purges the effects of animateur groups that no longer exist
-			// (light-effects.md §6): an id dies with its group.
-			if _, gok := lRaw["groups"]; gok {
-				live := map[string]bool{}
-				for _, g := range cfg.Lighting.HostGroups() {
-					live[g.ID] = true
-				}
-				for gid := range cfg.Lighting.HostEffects {
-					if !live[gid] {
-						delete(cfg.Lighting.HostEffects, gid)
-					}
-				}
-				for gid := range cfg.Lighting.HostSpeeds {
-					if !live[gid] {
-						delete(cfg.Lighting.HostSpeeds, gid)
-					}
-				}
-			}
-			// v11.7.0, #223 (light-effects.md §6): per-moment effect, PARTIAL patches — the
-			// front writes one moment at a time, so the incoming keys are merged over the
-			// stored ones, never replacing the other moments.
-			if _, ok := lRaw["effects"]; ok {
-				merged := ambiancecfg.DefaultLightEffects()
-				for m, v := range cfg.Lighting.Effects {
-					merged[m] = v
-				}
-				for m, id := range incoming.Effects {
-					if !ambiancecfg.ValidMoment(m) {
-						http.Error(w, "lighting.effects : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
-						return
-					}
-					if id != "" && !h.effectExists(m, id) {
-						http.Error(w, "lighting.effects."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
-						return
-					}
-					merged[m] = id
-				}
-				cfg.Lighting.Effects = merged
-			}
-			// speeds (R13): PATCH-merged moment by moment; only 0.5, 0.75, 1, 1.5, 2.
-			if _, ok := lRaw["speeds"]; ok {
-				merged := ambiancecfg.DefaultLightSpeeds()
-				for m, v := range cfg.Lighting.Speeds {
-					merged[m] = v
-				}
-				for m, v := range incoming.Speeds {
-					if !ambiancecfg.ValidMoment(m) || !ambiancecfg.ValidSpeed(v) {
-						http.Error(w, "lighting.speeds."+m+" : vitesse invalide (0,5 ; 0,75 ; 1 ; 1,5 ou 2)", http.StatusBadRequest)
-						return
-					}
-					merged[m] = v
-				}
-				cfg.Lighting.Speeds = merged
-			}
-			// host_speeds: by animateur group id then moment; an unknown id is dropped without error.
-			if _, ok := lRaw["host_speeds"]; ok {
-				live := map[string]bool{}
-				for _, g := range cfg.Lighting.HostGroups() {
-					live[g.ID] = true
-				}
-				merged := map[string]map[string]float64{}
-				for gid, mm := range cfg.Lighting.HostSpeeds {
-					if live[gid] {
-						merged[gid] = map[string]float64{}
-						for m, v := range mm {
-							merged[gid][m] = v
-						}
-					}
-				}
-				for gid, mm := range incoming.HostSpeeds {
-					for m, v := range mm {
-						if !ambiancecfg.ValidMoment(m) || !ambiancecfg.ValidSpeed(v) {
-							http.Error(w, "lighting.host_speeds."+gid+"."+m+" : vitesse invalide (0,5 ; 0,75 ; 1 ; 1,5 ou 2)", http.StatusBadRequest)
-							return
-						}
-						if !live[gid] {
-							continue
-						}
-						if merged[gid] == nil {
-							merged[gid] = map[string]float64{}
-						}
-						merged[gid][m] = v
-					}
-				}
-				cfg.Lighting.HostSpeeds = merged
-			}
-			// host_effects: a table by animateur group id, PATCH-merged group by group and
-			// moment by moment (the front writes one moment at a time). The old flat form
-			// is refused; an id that is not an animateur group is dropped without error.
-			if rawHost, ok := lRaw["host_effects"]; ok {
-				var probe map[string]json.RawMessage
-				if json.Unmarshal(rawHost, &probe) != nil {
-					http.Error(w, "lighting.host_effects : table par identifiant de groupe animateur attendue", http.StatusBadRequest)
+			// v11.7.0, #223 (light-effects.md §6, revision 4): the effect and the speed of each
+			// moment, by zone — PARTIAL patches merged zone by zone and moment by moment (the
+			// front writes one moment at a time). The flat QUALIF forms and the host_* tables
+			// are no longer accepted on write.
+			for _, old := range []string{"host_effects", "host_speeds"} {
+				if _, has := lRaw[old]; has {
+					http.Error(w, "lighting."+old+" n'est plus accepté : les réglages se font par zone (lighting.effects.<zone>.<moment>)", http.StatusBadRequest)
 					return
 				}
-				for gid, v := range probe {
-					var obj map[string]json.RawMessage
-					if json.Unmarshal(v, &obj) != nil || obj == nil {
-						http.Error(w, "lighting.host_effects : « "+gid+" » doit être un objet {chrono, calm, score} (l'ancienne forme à plat n'est plus acceptée)", http.StatusBadRequest)
+			}
+			if rawEff, ok := lRaw["effects"]; ok {
+				var in map[string]map[string]string
+				if err := json.Unmarshal(rawEff, &in); err != nil {
+					http.Error(w, "lighting.effects : table zone → moment → effet attendue (ambiance, animateur, public)", http.StatusBadRequest)
+					return
+				}
+				merged := cfg.Lighting.Effects
+				if merged == nil {
+					merged = config.ZoneEffects{}
+				}
+				for zone, mm := range in {
+					if !ambiancecfg.ValidZone(zone) {
+						http.Error(w, "lighting.effects : zone inconnue « "+zone+" » (ambiance, animateur ou public)", http.StatusBadRequest)
 						return
-					}
-				}
-				live := map[string]bool{}
-				for _, g := range cfg.Lighting.HostGroups() {
-					live[g.ID] = true
-				}
-				merged := config.HostEffectsTable{}
-				for gid, mm := range cfg.Lighting.HostEffects {
-					if live[gid] {
-						merged[gid] = map[string]string{}
-						for m, v := range mm {
-							merged[gid][m] = v
-						}
-					}
-				}
-				for gid, mm := range incoming.HostEffects {
-					if !live[gid] {
-						continue
 					}
 					for m, id := range mm {
 						if !ambiancecfg.ValidMoment(m) {
-							http.Error(w, "lighting.host_effects : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
+							http.Error(w, "lighting.effects."+zone+" : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
 							return
 						}
 						if id != "" && !h.effectExists(m, id) {
-							http.Error(w, "lighting.host_effects."+gid+"."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
+							http.Error(w, "lighting.effects."+zone+"."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
 							return
 						}
-						if merged[gid] == nil {
-							merged[gid] = map[string]string{}
+						if merged[zone] == nil {
+							merged[zone] = map[string]string{}
 						}
-						merged[gid][m] = id
+						merged[zone][m] = id
 					}
 				}
-				cfg.Lighting.HostEffects = merged
+				cfg.Lighting.Effects = merged
+			}
+			if rawSp, ok := lRaw["speeds"]; ok {
+				var in map[string]map[string]float64
+				if err := json.Unmarshal(rawSp, &in); err != nil {
+					http.Error(w, "lighting.speeds : table zone → moment → vitesse attendue (ambiance, animateur, public)", http.StatusBadRequest)
+					return
+				}
+				merged := cfg.Lighting.Speeds
+				if merged == nil {
+					merged = config.ZoneSpeeds{}
+				}
+				for zone, mm := range in {
+					if !ambiancecfg.ValidZone(zone) {
+						http.Error(w, "lighting.speeds : zone inconnue « "+zone+" » (ambiance, animateur ou public)", http.StatusBadRequest)
+						return
+					}
+					for m, v := range mm {
+						if !ambiancecfg.ValidMoment(m) || !ambiancecfg.ValidSpeed(v) {
+							http.Error(w, "lighting.speeds."+zone+"."+m+" : vitesse ou moment invalide (0,5 ; 0,75 ; 1 ; 1,5 ou 2)", http.StatusBadRequest)
+							return
+						}
+						if merged[zone] == nil {
+							merged[zone] = map[string]float64{}
+						}
+						merged[zone][m] = v
+					}
+				}
+				cfg.Lighting.Speeds = merged
 			}
 			// The secret: absent or empty preserves, clear_api_key erases,
 			// a non-empty value replaces. Derived/request-only flags never persist.
