@@ -15,7 +15,7 @@
 ### Incidents / leçons (v11.6.0)
 1. Le commit « Release 11.6.0 » n'avait posé la version que dans `server-go/config.json` ; 4 fichiers restaient à 11.5.0 (`server-go/internal/server/config.json`, `server-go/web/package.json`, `platformio.ini` VERSION+FIRMWARE_VERSION, `server-go/assets/firmware/version.txt`) → job Checking de `release.yml` en échec après le tag. `ci-branch.yml` ne contrôle pas cette cohérence. Résolution validée par l'utilisateur : bump, re-merge, suppression puis recréation du tag (aucune Release n'existait). Suivi : **#304**. Règle : en PUBLISH PROD, vérifier les 5 fichiers de version avec la logique du job Checking **avant** de poser le tag.
 2. Interruption de session pendant la PUBLISH PROD : reprise via `.claude/workflow-state.json` sans perte ; le fichier est commité à l'état final de chaque milestone (`chore(workflow): état final …`).
-3. Template à jour : v5.5.0 (`b26c5a94` / `ebfe1fb1`).
+3. Template à jour : v5.6.0 (`be4a7a8d`, sync 2026-11-11 : panneau milestone en arbre lots / sous-lots, objectif de lot = description du label `LOT-n`, plan du planner par lots).
 
 ### Règles permanentes (adoptées par l'utilisateur)
 1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
