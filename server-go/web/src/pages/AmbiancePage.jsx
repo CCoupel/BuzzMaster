@@ -13,7 +13,7 @@ import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
 import { groupLabelForLight, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
-import { configKeyFor, configPatchFor, globalEffect, findHostGroups, MOMENTS } from '../utils/lightEffects'
+import { configKeyFor, configPatchFor, globalEffect, globalSpeed, findHostGroups, MOMENTS } from '../utils/lightEffects'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -389,6 +389,8 @@ export default function AmbiancePage() {
       mode: lighting.default_mode || 'AUTO',
       effects: Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, false, m.key)])),
       host_effects: Object.fromEntries(hostGroupsConfigured.map(g => [g.id, Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, g.id, m.key)]))])),
+      speeds: Object.fromEntries(MOMENTS.map(m => [m.key, globalSpeed(lighting, false, m.key)])),
+      host_speeds: Object.fromEntries(hostGroupsConfigured.map(g => [g.id, Object.fromEntries(MOMENTS.map(m => [m.key, globalSpeed(lighting, g.id, m.key)]))])),
     },
   }), [lighting, hostGroupsConfigured])
   const openSubTab = (key, hostId = null) => {
@@ -1188,8 +1190,6 @@ export default function AmbiancePage() {
         {configLoaded && step === 3 && lightSubTab === 'groups' && (
           <LightGroupsManager
             generalLights={generalLightNames}
-            teams={teamNames}
-            teamColor={teamSwatchColor}
             groups={lighting.groups}
             enabled={!!lighting.enabled}
             testUnavailableReason={frozen ? 'Pont injoignable ou association refusée' : ''}
@@ -1425,7 +1425,7 @@ export default function AmbiancePage() {
                             onClick={() => setLightSubTab('groups')}
                             aria-label={`Groupe de ${row.name}`}
                           >
-                            {label ? (label.kind === 'host' ? `🎤 A${label.rank} · ${label.name}` : `${label.n} · ${label.name}`) : 'hors groupe'}
+                            {label ? (label.kind === 'host' ? `🎤 Animateur ${label.rank}` : `Groupe ${label.n}`) : 'hors groupe'}
                           </button>
                         )
                       })()}

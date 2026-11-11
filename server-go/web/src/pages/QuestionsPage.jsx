@@ -296,7 +296,7 @@ export default function QuestionsPage() {
   const [hostGroups, setHostGroups] = useState([])
   const hostLabel = (id) => {
     const g = hostGroups.find(h => h.id === id)
-    return g ? `🎤 A${g.rank} · ${g.name}` : `🎤 ${id}`
+    return g ? `🎤 Groupe animateur ${g.rank}` : `🎤 ${id}`
   }
   useEffect(() => {
     let cancelled = false

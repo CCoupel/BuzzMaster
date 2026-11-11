@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CUE_TABS, cueMeta } from '../utils/soundCues'
 import {
-  MOMENTS, DEFAULT_EFFECTS, DEFAULT_HOST_EFFECTS, INHERIT, effectsPath, buildOptions, optionLabel, effectWarning,
+  MOMENTS, DEFAULT_EFFECTS, DEFAULT_HOST_EFFECTS, DEFAULT_SPEED, SPEEDS, INHERIT, effectsPath, speedPath, formatSpeed, isSpeedCapped,
+  buildOptions, optionLabel, effectWarning,
 } from '../utils/lightEffects'
 import './AmbianceSettingsPanel.css'
 
@@ -27,8 +28,9 @@ import './AmbianceSettingsPanel.css'
 //             'lightEffects' (#223, v11.7.0) : un effet lumière par moment (salle) + ceux du groupe animateur ;
 //             champs 'light.effects.<moment>' et 'light.host_effects.<moment>' (contracts/light-effects.md §6).
 //   catalog   catalogue d'effets (GET /api/lighting/effects normalisé, voir useLightEffects) ; indéfini = section masquée
-//   hostGroups [{id, name, rank, empty}] — groupes animateur configurés (un bloc de trois sélecteurs chacun ;
+//   hostGroups [{id, rank, empty}] — groupes animateur configurés (un bloc de trois sélecteurs chacun, « Groupe animateur n » ;
 //             chemins `light.host_effects.<id>.<moment>`, clé = `id` stable du groupe, contracts/light-effects.md §6)
+//             Vitesse (×0,5 … ×2) à droite de chaque effet : `light.speeds.<moment>` / `light.host_speeds.<id>.<moment>`.
 //   focusHostId  `id` du groupe animateur dont le bloc est mis en vue (lien « Choisir ses effets » de la page Groupes)
 //   onManageGroups / onOpenCatalogue / onCreateHost   liens des avertissements (facultatifs)
 //   renderCatalogue(cue)   mode global : cellules <td> catalogue de la ligne
@@ -133,6 +135,16 @@ export default function AmbianceSettingsPanel({
     const options = buildOptions(catalog, m.key, { host: isHost, selected: effective, defaultValue: override ? null : dflt })
     const warning = effectWarning(catalog, m.key, effective, { host: isHost })
     const id = `asp-eff-${isHost ? `host-${host}` : 'room'}-${m.key}`
+    // Vitesse : sans effet joué, le sélecteur est grisé ; « plafonné » si le tick tomberait sous 250 ms.
+    const sField = speedPath(host, m.key)
+    const sRaw = get(value, sField)
+    const sCurrent = sRaw === undefined ? (override ? INHERIT : DEFAULT_SPEED) : sRaw
+    const sBaseRaw = get(base, sField)
+    const sBase = sBaseRaw === undefined ? DEFAULT_SPEED : sBaseRaw
+    const sEffective = sCurrent === INHERIT ? sBase : sCurrent
+    const tickMs = catalog?.effects?.find(e => e.id === effective)?.tick_ms
+    const capped = !!effective && isSpeedCapped(tickMs, sEffective)
+    const sId = `asp-spd-${isHost ? `host-${host}` : 'room'}-${m.key}`
     return (
       <div className="asp-row asp-effect-row" key={id}>
         <label className="asp-label" htmlFor={id}>
@@ -149,8 +161,21 @@ export default function AmbianceSettingsPanel({
           {override && <option value={INHERIT}>Hérité ({optionLabel(options, baseValue)})</option>}
           {options.map(o => <option key={o.value || '__none'} value={o.value} disabled={o.disabled}>{o.text}</option>)}
         </select>
-        {override && current !== INHERIT && <span className="asp-file-badge">manche</span>}
-        {override && current === INHERIT && <span className="asp-inherit">Valeur globale appliquée.</span>}
+        <select
+          id={sId}
+          className="asp-select asp-speed"
+          title="Vitesse de l'effet"
+          aria-label={`Vitesse — ${m.label}`}
+          value={String(sCurrent)}
+          disabled={disabled || !effective}
+          onChange={e => setField(sField, e.target.value === INHERIT ? null : Number(e.target.value))}
+        >
+          {override && <option value={INHERIT}>Hérité ({formatSpeed(sBase)})</option>}
+          {SPEEDS.map(v => <option key={v} value={String(v)}>{formatSpeed(v)}</option>)}
+        </select>
+        {capped && <span className="asp-inherit" title="Un effet ne descend jamais sous 4 changements par seconde">plafonné</span>}
+        {override && (current !== INHERIT || sCurrent !== INHERIT) && <span className="asp-file-badge">manche</span>}
+        {override && current === INHERIT && sCurrent === INHERIT && <span className="asp-inherit">Valeur globale appliquée.</span>}
         {warning && (
           <span className="asp-warn" role="status" data-kind={warning.kind}>
             {warning.text}{' '}
@@ -297,7 +322,7 @@ export default function AmbianceSettingsPanel({
               <p className="asp-inherit">Un bloc par groupe animateur, dans l'ordre de la page Groupes. Chaque groupe a ses propres effets.</p>
               {hostGroups.map(g => (
                 <div key={g.id} id={`asp-host-block-${g.id}`} className={`asp-host-block${focusHostId === g.id ? ' is-focus' : ''}`} data-testid={`asp-host-${g.id}`}>
-                  <h5 className="asp-host-name">🎤{g.rank} · {g.name || `Animateur ${g.rank}`}{g.empty && <span className="asp-inherit"> (groupe vide)</span>}</h5>
+                  <h5 className="asp-host-name">🎤 Groupe animateur {g.rank}{g.empty && <span className="asp-inherit"> (groupe vide)</span>}</h5>
                   {MOMENTS.map(m => renderEffectRow(m, g.id))}
                 </div>
               ))}

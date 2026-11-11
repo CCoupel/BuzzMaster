@@ -35,3 +35,5 @@
 .asp-host-block { margin: 0.5rem 0; padding: 0.3rem 0.6rem; border-radius: 0.5rem; border: 1px solid transparent; }
 .asp-host-block.is-focus { border-color: #c7d2fe; background: #f5f7ff; }
 .asp-host-name { margin: 0.4rem 0 0.2rem; font-size: 0.86rem; }
+
+.asp-speed { min-width: 5.5rem; }

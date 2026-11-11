@@ -12,10 +12,15 @@ export const SETTINGS_FIELD_PATHS = [
   'light.effects.chrono',
   'light.effects.calm',
   'light.effects.score',
+  // Vitesse des effets (révision 3) : salle ; les groupes animateur ont `light.host_speeds.<id>.<moment>` (hostSpeedPaths).
+  'light.speeds.chrono',
+  'light.speeds.calm',
+  'light.speeds.score',
 ]
 // Groupes animateur : chemins `light.host_effects.<id>.<moment>` (un par groupe), construits à la volée
 // (hostEffectPaths) — la liste des `id` vit dans la configuration, pas ici.
 export const hostEffectPaths = (ids) => ids.flatMap(id => ['chrono', 'calm', 'score'].map(m => `light.host_effects.${id}.${m}`))
+export const hostSpeedPaths = (ids) => ids.flatMap(id => ['chrono', 'calm', 'score'].map(m => `light.host_speeds.${id}.${m}`))
 export const CUE_PATH_PREFIX = 'sound.cues.'
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
@@ -71,13 +76,20 @@ export function overriddenFields(partial) {
         if (room[moment] !== undefined) out.push({ path: `light.effects.${moment}`, value: room[moment] })
       }
     }
-    // Un réglage compte pour chaque (groupe animateur, moment) surchargé.
-    const hosts = partial.light.host_effects
-    if (isObj(hosts)) {
+    const speeds = partial.light.speeds
+    if (isObj(speeds)) {
+      for (const moment of ['chrono', 'calm', 'score']) {
+        if (speeds[moment] !== undefined) out.push({ path: `light.speeds.${moment}`, value: speeds[moment] })
+      }
+    }
+    // Un réglage compte pour chaque (groupe animateur, moment) surchargé, effet et vitesse séparément.
+    for (const branch of ['host_effects', 'host_speeds']) {
+      const hosts = partial.light[branch]
+      if (!isObj(hosts)) continue
       for (const [id, byMoment] of Object.entries(hosts)) {
         if (!isObj(byMoment)) continue
         for (const moment of ['chrono', 'calm', 'score']) {
-          if (byMoment[moment] !== undefined) out.push({ path: `light.host_effects.${id}.${moment}`, value: byMoment[moment] })
+          if (byMoment[moment] !== undefined) out.push({ path: `light.${branch}.${id}.${moment}`, value: byMoment[moment] })
         }
       }
     }
@@ -93,10 +105,14 @@ export function describeOverride({ path, value }, cueLabel = (c) => c, hostLabel
   if (path === 'sound.countdown.enabled') return `Décompte : ${value ? 'actif' : 'inactif'}`
   if (path === 'sound.countdown.loop') return `Décompte : ${value ? 'en boucle' : 'une fois'}`
   if (path === 'light.mode') return `Lumière : ${value}`
-  const eff = /^light\.(?:effects\.(chrono|calm|score)|host_effects\.([a-z0-9]{1,12})\.(chrono|calm|score))$/.exec(path)
+  const eff = /^light\.(?:(effects|speeds)\.(chrono|calm|score)|(host_effects|host_speeds)\.([a-z0-9]{1,12})\.(chrono|calm|score))$/.exec(path)
   if (eff) {
-    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[1] || eff[3]]
-    return `${eff[2] ? hostLabel(eff[2]) : 'Effet'} (${moment}) : ${value || 'aucun'}`
+    const branch = eff[1] || eff[3]
+    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[2] || eff[5]]
+    const val = branch.endsWith('speeds') ? `×${String(value).replace('.', ',')}` : (value || 'aucun')
+    if (branch === 'effects') return `Effet (${moment}) : ${val}`
+    if (branch === 'speeds') return `Vitesse (${moment}) : ${val}`
+    return `${hostLabel(eff[4])}${branch === 'host_speeds' ? ' — vitesse' : ''} (${moment}) : ${val}`
   }
   if (path.startsWith(CUE_PATH_PREFIX)) return `${cueLabel(path.slice(CUE_PATH_PREFIX.length))} : ${value ? 'actif' : 'inactif'}`
   return path
