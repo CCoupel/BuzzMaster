@@ -2124,6 +2124,17 @@ Le sous-onglet Effets rend le composant **mutualisé** `AmbianceSettingsPanel` (
 - **Badge de manche** : compte chaque couple (zone, moment) surchargé.
 - **Valeur relue** : le réglage est affiché d'après la réponse serveur, jamais optimiste.
 - **Vitesse « plafonnée »** : indiquée quand la durée d'un tick passerait sous 250 ms (champ `tick_ms` du catalogue).
+- **Lien « Voir l'aperçu »** : sous le choix d'un effet, appelle `onShowEffect(id)` pour mettre en vue la carte du catalogue.
+
+#### Catalogue des effets — `LightEffectsCatalogue` et `LightEffectPreview` (v11.7.0, #299)
+
+**Fichiers** : `web/src/components/LightEffectsCatalogue.jsx` + `.css` (cartes, bandeau d'erreurs, recharger, essai) ; `web/src/components/LightEffectPreview.jsx` (aperçu animé) ; `web/src/utils/lightEffects.js` (`TRY_EVENT`, `TRY_SECONDS`, `visibleZones`, `formatSpeed`).
+
+- **Props de `LightEffectsCatalogue`** : `catalog` (réponse normalisée de `GET /api/lighting/effects`, via `useLightEffects`), `lighting` (section `lighting` de `config.json`, pour « utilisé : … » d'après les réglages globaux), `zoneGroups` (groupes non vides par zone), `onReload()` (`POST /api/lighting/effects/reload`), `onTry(id, seconds?)` (`POST /api/lighting/effects/{id}/try`, corps `{}` ou `{seconds}`), `onStopTry()` (`…/try/stop`), `tryUnavailable()` (raison ou `''`), `onManageGroups()`, `focus` (`{id, n}` : carte à mettre en vue).
+- **Un seul aperçu et un seul essai à la fois** : un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble. Le dernier lancé remplace l'autre : l'événement fenêtre `TRY_EVENT` (`'buzzcontrol:effect-try'`) prévient l'autre composant.
+- **`LightEffectPreview`** : rejoue les trames de `GET /api/lighting/effects/{id}/preview?groups=N&moment=…`. Le navigateur ne calcule rien : il lit `frames[]` (`at_ms`, `tick`, `step`, `groups[]` avec `color` et `intensity`) à partir de `at_ms`. `stepLabel(step)` traduit `pre` en « PRE », `pas:<n>` en « pas n », `dernier` en « dernier ». Le cache de l'aperçu est invalidé par un numéro de version du catalogue, qui change à chaque rechargement.
+- **Étiquettes d'origine** : `ORIGIN_BADGE` — `native` → « natif », `user` → « personnalisé », `override` → « natif modifié ».
+- Pas de `fade_ms` dans les trames de l'aperçu : pas de fondu (§4.2).
 
 ### Onglet Son — Bruitages d'événement
 

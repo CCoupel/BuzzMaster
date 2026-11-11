@@ -282,7 +282,15 @@ Effets livrés à ce jour : `pulsation`, `chenillard`, `chenillard-traine`, `cou
 
 ## 14. Vérifier son effet
 
-- **Catalogue** : Ambiance › Lumière › Effets. Un effet inapplicable à une zone est grisé, avec sa raison.
-- **Erreurs** : `GET /api/lighting/effects` (champ `errors`) ou le journal du serveur.
-- **Essai** : le bouton « Tester » (à côté du choix d'effet) joue l'effet dix secondes sur sa zone, à la vitesse réglée.
-  « Arrêter » l'interrompt. Pendant une question, le bouton est grisé, et le serveur refuse l'essai (409 `game`).
+- **Catalogue** : Ambiance › Lumière › Effets, sous les réglages. Chaque carte indique l'origine de l'effet (natif,
+  personnalisé, natif modifié), ses moments, son nombre de pas et l'endroit où il est utilisé.
+- **Erreurs** : le bandeau du catalogue liste les fichiers invalides (fichier, ligne, cause), comme
+  `GET /api/lighting/effects` (champ `errors`) et le journal du serveur.
+- **Aperçu** : « ▶ Aperçu » rejoue l'effet sur des ampoules dessinées g1, g2… ; le numéro du tick et le pas joué
+  (PRE, pas 0, dernier) s'affichent. L'aperçu ne simule ni la fin du moment ni la vitesse.
+- **Essai sur la salle** : « 💡 Essayer sur la salle » joue l'effet sur la zone ambiance, à la vitesse ×1, pendant
+  10 secondes (5 secondes pour un effet de score seul). « ■ Arrêter l'essai » l'interrompt.
+- **Tester** (réglages) : joue l'effet sur sa zone, à la vitesse réglée pour ce moment. Le dernier essai lancé remplace
+  l'autre.
+- **Grisage** : l'essai est grisé pendant une question en cours, et le serveur refuse un essai pendant une question
+  (409 `game`).

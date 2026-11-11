@@ -1122,7 +1122,7 @@ Réponse (`light-effects.md` §7.1) :
   "groups": { "ambiance": 4, "animateur": 2, "public": 0 },
   "effects": [
     { "id": "chenillard", "name": "Chenillard", "description": "…", "moments": ["chrono"],
-      "origin": "native", "file": "natifs/chenillard.yaml", "min_groups": 3, "tick_ms": 1000,
+      "origin": "native", "file": "natifs/chenillard.yaml", "min_groups": 3, "tick_ms": 1000, "steps": 1,
       "applicable": { "ambiance": true, "animateur": false, "public": false } }
   ],
   "errors": [ { "file": "mon-effet.yaml", "line": 12, "message": "…" } ],
@@ -1133,12 +1133,33 @@ Réponse (`light-effects.md` §7.1) :
 
 - `groups` : nombre de groupes **non vides** par zone. `applicable` : table par zone.
 - `origin` ∈ `native` | `user` | `override`.
-- `tick_ms` = `duree_tick_ms` du fichier.
+- `tick_ms` = `duree_tick_ms` du fichier. `steps` = nombre de pas de `pas` (sans `pre`, `dernier` ni `post`).
 - Les champs `reason` et `host_applicable` n'existent plus.
 
 ### `POST /api/lighting/effects/{id}/try` et `…/try/stop` (v11.7.0, #223)
 
-Corps : `{"zone": "ambiance", "speed": 1, "seconds": 10}` (`zone` par défaut `ambiance` ; `speed` parmi les valeurs de `SpeedValues` ; `seconds` de 1 à 20). Réponse immédiate `200 {"ok": true, "duration_ms": 10000}`. Refus : `409` avec `reason` (`disabled`, `game`, `not_applicable`, `mode`), `503` pont injoignable, `400`, `404`. Jamais `502`. L'essai n'est pas persisté.
+Corps : `{"zone": "ambiance", "speed": 1, "seconds": 10}` (`zone` par défaut `ambiance` ; `speed` parmi les valeurs de `SpeedValues` ; `seconds` de 1 à 20, défaut 10, ou 5 pour un effet qui ne déclare que `score`). Le bouton « Essayer sur la salle » du catalogue envoie un corps vide ou `{}` : zone ambiance, vitesse ×1. Réponse immédiate `200 {"ok": true, "duration_ms": 10000}`. Refus : `409` avec `reason` (`disabled`, `game`, `not_applicable`, `mode`), `503` pont injoignable, `400`, `404`. Jamais `502`. L'essai n'est pas persisté.
+
+### `GET /api/lighting/effects/{id}/preview` — aperçu (v11.7.0, #299)
+
+Trames calculées par le serveur (`effects.Preview`, qui appelle `Render` : rien n'est joué sur le pont). Requête : `groups` de 1 à 12 (défaut : groupes non vides de la zone ambiance, 6 s'il n'y en a pas), `moment` ∈ `chrono`, `calm`, `score` (défaut : premier moment de l'effet). Vitesse ×1. Refus : `404` effet inconnu, `400` paramètre invalide ou moment non déclaré, `405` hors GET.
+
+```json
+{ "id": "chenillard", "moment": "chrono", "groups": 6, "tick_ms": 1000,
+  "duration_ms": 20000, "chrono_s": 20, "loop": true,
+  "frames": [
+    { "at_ms": 0, "tick": 0, "step": "pas:0",
+      "groups": [ { "color": [255,255,255], "intensity": 255 }, { "color": [79,70,229], "intensity": 255 } ] } ] }
+```
+
+- **Une trame par tick**, même identique à la précédente. Si une couleur nommée change entre deux ticks, une trame de plus est insérée au même `tick` et `step`.
+- `tick` : numéro du tick depuis le début de l'effet. `step` : `"pre"`, `"pas:<n>"` (rang du pas dans `pas`, à partir de 0) ou `"dernier"`. `post` n'apparaît jamais.
+- `at_ms` : instant depuis le début de l'aperçu (`tick` × `tick_ms` pour une trame de tick).
+- `groups` : un état par groupe, dans l'ordre g1…gN ; `color` (RGB), `intensity` (0-255). Pas de `fade_ms`.
+- Groupe jamais peint par l'effet : blanc `[255,255,255]`, intensité `200` (scène ordinaire simulée, valeur d'affichage propre à l'aperçu).
+- Calculé même sous `groupes_min` : c'est l'interface qui lit `applicable`.
+- Aucun pas visible (tous sautés) : `200` avec `"frames": []`.
+- `duration_ms` : 20 000 pour `chrono` et `calm`, 5 000 pour `score`. `chrono_s` : 20 pour `chrono`, 0 sinon. 400 trames au plus (au-delà, l'aperçu est tronqué et `duration_ms` raccourci).
 
 ### `internal/effects` — effets lumière (Go, #223)
 

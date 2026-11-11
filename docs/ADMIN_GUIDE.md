@@ -2412,6 +2412,20 @@ Le sous-onglet **Effets** choisit, pour chaque **zone** et chaque **moment**, l'
 - Les effets sont des fichiers `.yaml` du dossier `data/files/effects/` ; un fichier modifié est rechargé en 2 secondes, sans redémarrer le serveur. Un fichier invalide est écarté et son erreur (fichier, ligne, message) est signalée. Les effets livrés se trouvent dans `data/files/effects/natifs/` : ce dossier est une copie de référence à ne pas modifier. Pour écrire un effet, voir `docs/LIGHT_EFFECTS.md`.
 - Effets livrés à ce jour : **pulsation**, **chenillard**, **chenillard avec traînée** (à partir de 5 groupes), **couleur d'équipe** (score) et **dégradé** (calme).
 
+#### Catalogue des effets (v11.7.0, #299)
+
+Sous les réglages du sous-onglet Effets, le **catalogue** liste chaque effet disponible, sous forme de carte :
+
+- **Étiquette d'origine** : « natif », « personnalisé » (fichier de l'utilisateur) ou « natif modifié » (fichier qui remplace un effet livré, avec la mention « remplace natifs/… »).
+- **Moments** et **description** de l'effet, et la ligne **Fichier** : nombre de pas (« 2 pas »), durée d'un tick, nombre de groupes demandé.
+- **« utilisé : zone, moment »** : où l'effet est choisi dans les réglages **globaux** (zones existantes seulement), avec la vitesse si elle n'est pas ×1 (par exemple « utilisé : Animateur, chronomètre (×1,5) »). Les manches ne sont pas listées.
+- **Fichiers en erreur** : un bandeau affiche chaque fichier invalide, sa ligne et la cause. Les autres effets restent utilisables.
+- **↻ Recharger les fichiers** : relit le dossier `data/files/effects/` sans redémarrer le serveur. Le bouton n'est utile qu'après une modification des fichiers : le rechargement se fait déjà toutes les 2 secondes.
+- **▶ Aperçu** : rejoue l'effet tel qu'il serait joué, sur des ampoules dessinées g1, g2… (une par groupe). Sous les ampoules s'affichent le **numéro du tick** et le **pas joué** : « PRE », « pas 0 », « pas 1 », « dernier ». Le compte à rebours simulé (20 s pour le chronomètre) est affiché. Un seul aperçu tourne à la fois. Si l'effet ne s'applique pas à assez de groupes, l'aperçu est calculé avec le nombre de groupes choisi et l'indique (« simulation avec N groupes »). Un groupe que l'effet n'a jamais peint est affiché en blanc atténué : c'est la scène ordinaire.
+- **💡 Essayer sur la salle** : joue l'effet sur la **zone ambiance**, à la vitesse ×1, pendant 10 secondes (5 secondes pour un effet qui ne sert qu'au score). « ■ Arrêter l'essai » l'interrompt. Le dernier essai lancé remplace l'autre : un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble.
+- Le bouton d'essai est grisé avec une infobulle dans les mêmes cas que « Tester » (aucun effet, pont injoignable, éclairage désactivé, forçage ON / OFF / Flash, question en cours).
+- Depuis les réglages, le lien **« Voir l'aperçu »** d'un effet choisi fait défiler la page jusqu'à sa carte du catalogue.
+
 ### Comportement à l'arrêt du serveur
 
 À l'arrêt du serveur BuzzControl, **l'éclairage de salle s'éteint complètement** (ampoules générales + ampoules d'équipe). À la relance, un nouvel état de jeu redémarre depuis zéro — aucun mode manuel n'est persisté entre redémarrages.
