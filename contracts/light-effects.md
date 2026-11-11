@@ -564,6 +564,18 @@ couleur `scene` blanche ; pour `chrono`, un chronomètre qui descend de `chrono_
 - **`at_ms`** : instant de la trame depuis le début de l'aperçu (`tick` × `tick_ms` pour une trame de tick).
 - **`groups`** : un état par groupe, dans l'ordre `g1`…`gN` : `color` (RGB résolu), `intensity` (0-255). Le champ
   `fade_ms` est supprimé (pas de fondu, §4.2).
+- **Groupe jamais écrit par l'effet** *(revue LOT-3, 2026-11-12)* : tant qu'aucun pas ne l'a peint (ni par `g0`, ni
+  directement, ni par une variable), un groupe apparaît dans l'aperçu avec la **scène ordinaire simulée : blanc
+  `[255,255,255]`, intensité `200`**. `200` est une valeur d'affichage propre à l'aperçu (celle de la scène de salle hors
+  question, `lighting.md` §8) : elle distingue à l'œil un groupe « laissé à la scène » d'un groupe peint en blanc à 100 %
+  (intensité `255`, comme la tête du chenillard dans l'exemple ci-dessus).
+- **Aperçu calculé même sous `groupes_min`** *(revue LOT-3)* : la route ne refuse pas un `groups` inférieur à
+  `groupes_min` et ne consulte pas l'applicabilité ; elle rend l'effet tel qu'il se jouerait avec ce nombre de groupes.
+  C'est l'interface qui lit `applicable` (§7.1) : pour un effet inapplicable, elle demande l'aperçu avec assez de groupes
+  et l'annonce (« simulation avec N groupes »).
+- **Aucun pas visible** *(revue LOT-3)* : si, pour le `groups` demandé, tous les pas de l'effet sont sautés (§4.3), la
+  réponse est `200` avec **`"frames": []`** (tableau vide, jamais `null`) ; `duration_ms`, `tick_ms`, `chrono_s` et les
+  autres champs de premier niveau restent renseignés.
 - **`duration_ms`** — durée de l'aperçu, **fixée par le moment** : **20 000** pour `chrono` et `calm`, **5 000** pour
   `score`. L'interface lit cette valeur ; elle ne la fixe pas elle-même. `loop: true` : l'aperçu se rejoue depuis le
   début après `duration_ms`.

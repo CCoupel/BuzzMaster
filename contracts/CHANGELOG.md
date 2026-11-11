@@ -1,6 +1,18 @@
 # Changelog des Contrats API
 
 ---
+## [20261112] — v11.7.0 — précisions de l'aperçu d'effet après la revue LOT-3 (#299)
+
+Source : `_work/reports/code-review-lot3-20261112-040000.md` (table des choix validés). Le code livré fait foi ; le contrat
+est aligné. **Aucun changement de comportement, aucun BREAKING.**
+
+- **[CHANGED]** `GET /api/lighting/effects/{id}/preview` (`light-effects.md` §7.3) — trois précisions : un groupe jamais
+  écrit par l'effet apparaît avec la scène ordinaire simulée, blanc `[255,255,255]` à l'intensité `200` ; l'aperçu est
+  calculé même quand `groups` est inférieur à `groupes_min` (l'interface lit `applicable` et annonce une simulation) ;
+  `"frames": []` (jamais `null`) quand aucun pas n'est visible pour le nombre de groupes demandé, les autres champs
+  restant renseignés.
+
+---
 ## [20261111] — v11.7.0 — compléments de l'API pour le catalogue (#299, LOT-3)
 
 Relevés par `dev-frontend` (`_work/handoff/dev-frontend-20261111-182000.md`) pour couvrir la maquette
