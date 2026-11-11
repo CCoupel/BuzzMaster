@@ -156,13 +156,13 @@ export function globalSpeed(lighting, zone, moment) {
   return SPEEDS.includes(v) ? v : DEFAULT_SPEED
 }
 
-// Nombre de groupes par zone d'après `lighting.groups` : { ambiance, animateur, public } (groupes vides compris).
-// Une zone Animateur ou Public sans groupe « n'existe pas » : pas de bloc d'effets.
+// Nombre de groupes NON VIDES par zone d'après `lighting.groups` : { ambiance, animateur, public } (contrat §2.1 :
+// N = groupes non vides ; une zone Animateur ou Public sans groupe non vide « n'existe pas » : pas de bloc d'effets).
 export function zoneGroupCounts(groups) {
   const out = { ambiance: 0, animateur: 0, public: 0 }
   if (!Array.isArray(groups)) return out
   for (const g of groups) {
-    if (!g || typeof g !== 'object') continue
+    if (!g || typeof g !== 'object' || !Array.isArray(g.lights) || g.lights.length === 0) continue
     out[g.role === 'animateur' ? 'animateur' : g.role === 'public' ? 'public' : 'ambiance'] += 1
   }
   return out
@@ -170,6 +170,11 @@ export function zoneGroupCounts(groups) {
 
 // Zones dont le bloc est affiché : Ambiance toujours, Animateur et Public si elles ont au moins un groupe.
 export const visibleZones = (counts) => ZONES.filter(z => z === 'ambiance' || (counts?.[z] ?? 0) > 0)
+
+// Une question est en cours : phase de jeu autre que STOPPED / NEW_GAME / ENROLL (§7.4, refus 409 `game`).
+// Phase inconnue (état de jeu pas encore reçu) : on ne bloque pas, le serveur reste juge.
+const IDLE_PHASES = ['STOPPED', 'NEW_GAME', 'ENROLL']
+export const isQuestionRunning = (phase) => typeof phase === 'string' && phase !== '' && !IDLE_PHASES.includes(phase)
 
 // Durée d'un test (§7.4) et messages des refus 409 (`reason`).
 export const TRY_SECONDS = 10

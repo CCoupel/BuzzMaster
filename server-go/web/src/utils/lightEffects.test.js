@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildOptions, effectWarning, normalizeCatalog, globalEffect, globalSpeed, zoneGroupCounts, visibleZones, configKeyFor,
+  buildOptions, effectWarning, normalizeCatalog, globalEffect, globalSpeed, zoneGroupCounts, visibleZones, isQuestionRunning, configKeyFor,
   configPatchFor, effectsPath, speedPath, effectFieldPaths, defaultEffect, formatSpeed, isSpeedCapped, inapplicableReason, INHERIT,
 } from './lightEffects'
 import { overriddenFields, setPartialPath, describeOverride, SETTINGS_FIELD_PATHS } from './ambianceSettings'
@@ -77,10 +77,18 @@ describe('lightEffects — réglages par zone (#223, révision 4)', () => {
     expect(globalSpeed({ speeds: { ambiance: { chrono: 3 } } }, 'ambiance', 'chrono')).toBe(1)
   })
   it('zones qui existent : Ambiance toujours, Animateur et Public s\'ils ont un groupe', () => {
-    const counts = zoneGroupCounts([{ role: 'salle' }, { role: 'animateur' }, { role: 'animateur' }])
+    const counts = zoneGroupCounts([
+      { role: 'salle', lights: ['A'] }, { role: 'animateur', lights: ['B'] }, { role: 'animateur', lights: ['C'] },
+      { role: 'public', lights: [] }, { role: 'salle', lights: [] },
+    ])
+    // un groupe VIDE ne compte pas : la zone Public (groupe vide seulement) n'existe pas
     expect(counts).toEqual({ ambiance: 1, animateur: 2, public: 0 })
     expect(visibleZones(counts)).toEqual(['ambiance', 'animateur'])
     expect(visibleZones({ ambiance: 0, animateur: 0, public: 1 })).toEqual(['ambiance', 'public'])
+  })
+  it('question en cours : toute phase sauf STOPPED / NEW_GAME / ENROLL', () => {
+    expect(['STARTED', 'PAUSED', 'REVEALED', 'COUNTDOWN', 'PREPARE', 'READY'].every(isQuestionRunning)).toBe(true)
+    expect(['STOPPED', 'NEW_GAME', 'ENROLL', undefined, ''].some(isQuestionRunning)).toBe(false)
   })
   it('vitesse : format et plafond', () => {
     expect(formatSpeed(0.75)).toBe('×0,75')

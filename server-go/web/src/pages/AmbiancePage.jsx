@@ -13,7 +13,7 @@ import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
 import { groupLabelForLight, groupPillText, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
-import { configKeyFor, configPatchFor, globalEffect, globalSpeed, zoneGroupCounts, MOMENTS, ZONES, TRY_SECONDS, TRY_REFUSALS } from '../utils/lightEffects'
+import { configKeyFor, configPatchFor, globalEffect, globalSpeed, zoneGroupCounts, MOMENTS, ZONES, TRY_SECONDS, TRY_REFUSALS, isQuestionRunning } from '../utils/lightEffects'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -189,7 +189,7 @@ const roleFromSelectValue = (value) =>
   value.startsWith(TEAM_SELECT_PREFIX) ? { role: 'team', team: value.slice(TEAM_SELECT_PREFIX.length) } : { role: 'general' }
 
 export default function AmbiancePage() {
-  const { teams } = useGame()
+  const { teams, gameState } = useGame()
   const { status, refresh: refreshStatus } = useLightingStatus()
   // #230 — jumeau du hook ci-dessus pour la pastille de l'onglet Son
   // (contracts/http-endpoints.md §Sound, GET /api/sound/status). Appelé
@@ -416,11 +416,11 @@ export default function AmbiancePage() {
   const handleStopTry = async () => {
     try { await postJson('/api/lighting/effects/try/stop') } catch { /* best effort : le test s'arrête seul au bout de 10 s */ }
   }
-  // Raison d'indisponibilité du bouton « Tester » d'une zone (la question en cours et l'effet inapplicable sont
-  // refusés par le serveur, 409 `game` / `not_applicable`).
+  // Raison d'indisponibilité du bouton « Tester » d'une zone ; le serveur reste juge (409 `game` / `not_applicable` → toast).
   const tryUnavailable = (zone) => {
     if (!lighting.enabled) return "Éclairage d'ambiance désactivé"
     if (frozen) return 'Pont injoignable ou association refusée'
+    if (isQuestionRunning(gameState?.phase)) return 'Une question est en cours'
     if (zone === 'ambiance' && (status.mode !== 'AUTO' || status.flash)) return "L'éclairage est forcé sur ON / OFF ou le Flash est actif"
     return ''
   }
