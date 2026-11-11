@@ -1,6 +1,24 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — sémantique du motif `gradient` (#223, LOT-2 Batch 2.1)
+
+Deux interprétations remontées par `test-writer` sur l'implémentation 1bc18a87 ; règle fixée en `light-effects.md` §4.3.1.
+
+- **[CHANGED]** `travel: none` — dégradé **fixe du premier au dernier arrêt** (groupe 1 = premier arrêt, dernier groupe =
+  dernier arrêt) ; `repeat` n'a aucun effet et le dégradé ne reboucle **jamais** sur le premier arrêt. Le rendu actuel
+  (rebouclage) est **non conforme**.
+- **[CHANGED]** `travel: outward` (et `forward` / `backward` avec `repeat: false`) — **propagation dans le temps** depuis
+  un groupe de départ : front à la distance d au pas d, chaque groupe atteint parcourt les arrêts un par pas puis reste
+  sur le dernier (`repeat: false`) ou reboucle (`repeat: true`). L'atténuation selon la distance à l'origine de
+  l'implémentation actuelle est **non conforme** à l'intention de la vague (#301).
+- **[CHANGED]** `travel: forward` / `backward` avec `repeat: true` — anneau fermé qui tourne d'un groupe par pas.
+- **[NEW]** paramètre optionnel `rest: look` du motif `gradient` (apparence des groupes non encore atteints ; absent ⇒
+  aucun état émis, le groupe garde la scène de salle). Validation : `rest` / `origin` réservés à la propagation.
+- **[CHANGED]** §9 — natifs `vague` (crête blanche puis couleur de l'équipe, `rest` explicite), `vague-lente` (anneau),
+  `degrade` (premier → dernier arrêt) précisés.
+
+---
 ## [20261111] — v11.7.0 — applicabilité d'un effet `target: all` (#223, LOT-2)
 
 - **[CHANGED]** `light-effects.md` §4.6 — levée d'une ambiguïté (remontée par `test-writer`) : un effet `target: all` est

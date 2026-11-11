@@ -229,7 +229,47 @@ serveur ; tout le reste se fait dans le fichier.
 | `shift` | `cells: [look…]`, `rest: look`, `step_ms`, `wrap` (défaut `true`), `direction` (`forward` \| `backward` \| `bounce`, défaut `forward`) | Le bloc `cells` se déplace d'un groupe par pas ; les autres groupes montrent `rest`. |
 | `gauge` | `source` (`remaining` \| `elapsed`), `on: look`, `off: look`, `edge: look` (optionnel), `direction` | Les groupes allumés sont au prorata de la source (part du chronomètre restant ou écoulé) ; `edge` est le groupe frontière. Recalcul à chaque seconde du chronomètre. |
 | `random` | `step_ms`, `count` (nombre de groupes en `on`, ou `ratio` 0-1), `on: look`, `off: look` | À chaque pas, un tirage de groupes passe en `on`, les autres en `off`. Générateur à graine : déterministe pour une graine donnée. |
-| `gradient` | `stops: [look…]` (2 à 6), `step_ms`, `travel` (`none` \| `forward` \| `backward` \| `outward`), `origin` (`first` \| `last` \| `center` \| `team`), `repeat` (défaut `true`) | Dégradé réparti sur les groupes (interpolation RGB linéaire entre `stops`). `travel` le fait glisser d'un groupe par pas ; `outward` le propage depuis `origin` vers les deux bords. `travel: none` = dégradé fixe. |
+| `gradient` | `stops: [look…]` (2 à 6), `step_ms`, `travel` (`none` \| `forward` \| `backward` \| `outward`), `origin` (`first` \| `last` \| `center` \| `team`), `repeat` (défaut `true`), `rest: look` (optionnel) | Dégradé réparti sur les groupes, fixe ou en mouvement. **Sémantique exacte au §4.3.1.** |
+
+#### 4.3.1 Motif `gradient` — sémantique exacte *(amendement du 2026-11-11, LOT-2 Batch 2.1)*
+
+Notations : `stops` = S₀…S₍k−1₎ ; N groupes rendus, positions p = 0…N−1 dans l'ordre de parcours ; s = numéro du pas
+(0 au démarrage de l'effet, +1 tous les `step_ms`). « Interpoler » = interpolation linéaire RGB **et** intensité entre
+deux arrêts consécutifs ; `fade_ms` d'une position = celui de l'arrêt le plus proche.
+
+**1. `travel: none` — dégradé fixe, du premier au dernier arrêt.** Le groupe 1 montre S₀, le dernier groupe montre
+S₍k−1₎, les groupes intermédiaires sont interpolés : abscisse x = p / (N−1) × (k−1). N = 1 ⇒ S₀. **Jamais de retour vers
+S₀** : `repeat` n'a aucun effet avec `travel: none`. `step_ms` et `origin` sont sans effet.
+
+**2. `travel: forward` / `backward`, `repeat: true` (défaut) — anneau qui tourne.** Le dégradé est **fermé** : après
+S₍k−1₎ il revient vers S₀, réparti sur un tour complet des N groupes ; il avance d'un groupe par pas, sans couture.
+x = ((p − s) mod N) / N × k pour `forward` (p + s pour `backward`) ; interpolation entre S₍⌊x⌋₎ et S₍(⌊x⌋+1) mod k₎.
+
+**3. Propagation — `travel: outward`, ou `forward` / `backward` avec `repeat: false`.** Le dégradé se **propage dans
+le temps** à partir d'un groupe de départ ; ce n'est **pas** une atténuation selon la distance.
+- Départ : `outward` ⇒ le groupe `origin` (`first`, `last`, `center` = position ⌊(N−1)/2⌋, `team` = §4.5), propagation
+  vers les deux bords ; `forward` ⇒ premier groupe ; `backward` ⇒ dernier groupe.
+- d = distance en groupes entre p et le départ. Le front atteint la distance d au pas s = d.
+- **Groupe non encore atteint** (d > s) : apparence `rest` ; si `rest` est absent, aucun état n'est émis pour ce groupe
+  (il garde la scène de salle, entrée `Group 0`).
+- **Groupe atteint** (d ≤ s), âge a = s − d : il montre S₍a₎ — il parcourt les arrêts **un par pas**, dans l'ordre, sans
+  interpolation (le fondu éventuel est celui de `fade_ms`).
+  - `repeat: false` : au-delà du dernier arrêt, il **reste sur S₍k−1₎** (a plafonné à k−1). La propagation est terminée
+    au pas (distance maximale) + k − 1 ; l'état est ensuite tenu jusqu'à la fin de l'effet (`duration_ms` ou fin du moment).
+  - `repeat: true` : il reboucle (S₍a mod k₎) : ondes successives qui partent du même point.
+
+Exemple (`vague`, 5 groupes, départ au groupe 2, `stops: [crete, equipe]`, `repeat: false`, `rest: fond`) :
+
+```
+pas 0 :  fond   CRETE  fond   fond   fond
+pas 1 :  CRETE  equipe CRETE  fond   fond
+pas 2 :  equipe equipe equipe CRETE  fond
+pas 3 :  equipe equipe equipe equipe CRETE
+pas 4 :  equipe equipe equipe equipe equipe   (tenu)
+```
+
+Validation : `rest` doit nommer une apparence de `looks` ; `rest` et `origin` ne sont acceptés que pour une propagation
+(point 3), `origin` seulement avec `outward` ; sinon erreur de validation.
 
 Contraintes communes : `step_ms` ≥ 250 (cadence de l'écrivain, `hue-bridge.md` §5.4) et ≤ 60 000 ; chaque `ms` de `phases`
 ≥ 250. Une apparence citée doit exister dans `looks`.
@@ -459,9 +499,9 @@ régularité à l'œil ; seuil `SubGroupMinLights` (3 par défaut). Le banc `hue
 | `pulsation` | `uniform`, `target: all` | chrono | existant (#212) | Respiration de toute la salle, orange puis rouge en fin de chrono |
 | `chenillard` | `shift` | chrono | #223 | Tête `urgency`, traînée à 50 %, fond au thème ; sans traînée sous 5 groupes |
 | `remplissage` | `gauge` | chrono | #300 | Groupes éteints au prorata du temps écoulé ; rouge et clignotement du groupe frontière à 5 s ou moins |
-| `vague` | `gradient`, `travel: outward`, `origin: team` | score | #301 | La couleur de l'équipe créditée se propage depuis son groupe |
-| `vague-lente` | `gradient`, `travel: forward`, `fade_ms` long, intensité basse | calm | #301 | Dégradé doux qui balaie la salle en fond |
-| `degrade` | `gradient`, `travel: none` | calm | #211 | Dégradé fixe multi-couleurs sur l'ensemble des groupes |
+| `vague` | `gradient`, `travel: outward`, `origin: team`, `repeat: false`, `stops: [crête blanche, couleur de l'équipe]`, `rest` = thème atténué | score | #301 | Une crête blanche part du groupe de l'équipe créditée et gagne les bords ; derrière elle la salle prend la couleur de l'équipe (§4.3.1 point 3). `rest` est explicite : la scène SCORE ordinaire est déjà à la couleur de l'équipe, la vague serait invisible sans lui |
+| `vague-lente` | `gradient`, `travel: forward`, `repeat: true`, `fade_ms` long, intensité basse | calm | #301 | Dégradé fermé qui tourne lentement dans la salle, sans couture (§4.3.1 point 2) |
+| `degrade` | `gradient`, `travel: none` | calm | #211 | Dégradé fixe multi-couleurs : premier arrêt sur le groupe 1, dernier arrêt sur le dernier groupe (§4.3.1 point 1) |
 | `scintillement` | `random` | calm | #302 | Quelques groupes s'allument doucement au hasard sur la teinte de la scène |
 | `couleur-equipe` | `uniform`, `target: all`, `duration_ms` = durée de l'impulsion SCORE | score | #211 (groupe animateur) | Couleur de l'équipe créditée, fixe, le temps de l'attribution — pensé pour le groupe animateur, utilisable en salle |
 
