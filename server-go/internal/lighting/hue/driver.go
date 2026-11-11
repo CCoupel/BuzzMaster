@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -98,6 +99,10 @@ type LightSpec struct {
 	Name string    `json:"name"`
 	Role LightRole `json:"role"`
 	Team string    `json:"team,omitempty"`
+	// Group (v11.7.0, #225, hue-bridge.md §11): ambiance group of a general
+	// light — 0 = none, n >= 1 = salle group n, lighting.GroupHost (-1) = the
+	// animateur group. Ignored for team lights.
+	Group int `json:"group,omitempty"`
 }
 
 // Config of a Driver — filled by #207 from config.json's `lighting` section.
@@ -447,8 +452,15 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 		want  applied
 		dirty bool
 	}
-	buckets := map[string][]bucketEntry{}
-	order := make([]string, 0, len(d.cfg.Lights))
+	// v11.7.0 (#225, hue-bridge.md §11): general lights may belong to an
+	// ambiance group and so carry their own target state. First collect every
+	// light's target, then decide the bucketing.
+	type cand struct {
+		lc   LightSpec
+		rl   resolvedLight
+		want applied
+	}
+	cands := make([]cand, 0, len(d.cfg.Lights))
 	for _, lc := range d.cfg.Lights {
 		rl, ok := d.resolved[lc.Name]
 		if !ok {
@@ -458,16 +470,41 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 		if !ok {
 			continue // zone without configured lights or light without zone: non-event
 		}
-		want := desired(zs)
-		key := ""
-		if lc.Role == RoleTeam {
-			key = lc.Team
+		cands = append(cands, cand{lc: lc, rl: rl, want: desired(zs)})
+	}
+	// Débit préservé: when every (non-animateur) general light has the same
+	// target — any scene without a distributed effect — they all stay in ONE
+	// bucket, written through buzzmaster-general exactly as in v11.6.0.
+	uniform := true
+	var first *applied
+	for i := range cands {
+		c := &cands[i]
+		if c.lc.Role == RoleTeam || c.lc.Group == lighting.GroupHost {
+			continue
+		}
+		if first == nil {
+			first = &c.want
+		} else if *first != c.want {
+			uniform = false
+		}
+	}
+	buckets := map[string][]bucketEntry{}
+	order := make([]string, 0, len(cands))
+	for _, c := range cands {
+		key := bucketGeneral
+		switch {
+		case c.lc.Role == RoleTeam:
+			key = bucketTeamPfx + c.lc.Team
+		case c.lc.Group == lighting.GroupHost:
+			key = bucketHost
+		case !uniform && c.lc.Group > 0:
+			key = bucketGroupPfx + strconv.Itoa(c.lc.Group)
 		}
 		if _, seen := buckets[key]; !seen {
 			order = append(order, key)
 		}
-		prev, hadPrev := d.appliedState[lc.Name]
-		buckets[key] = append(buckets[key], bucketEntry{name: lc.Name, id: rl.id, want: want, dirty: !hadPrev || prev != want})
+		prev, hadPrev := d.appliedState[c.lc.Name]
+		buckets[key] = append(buckets[key], bucketEntry{name: c.lc.Name, id: c.rl.id, want: c.want, dirty: !hadPrev || prev != c.want})
 	}
 
 	var plan []plannedWrite
@@ -484,16 +521,13 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 			d.stats.Skipped += len(entries)
 			continue
 		}
-		groupName := groupNameGeneral
-		if key != "" {
-			groupName = groupNameForTeam(key)
-		}
+		groupName, minMembers := bucketGroupName(key)
 		g, hasGroup := d.groups[groupName]
 		ids := make([]string, len(entries))
 		for i, e := range entries {
 			ids[i] = e.id
 		}
-		useGroup := !d.disableGroupsForTest && hasGroup && len(entries) >= 2 && sameIDSet(g.members, ids)
+		useGroup := !d.disableGroupsForTest && hasGroup && len(entries) >= minMembers && sameIDSet(g.members, ids)
 		if useGroup {
 			members := make([]plannedWrite, len(entries))
 			for i, e := range entries {
@@ -607,6 +641,10 @@ type groupPlannedWrite struct {
 
 // zoneFor picks the ZoneState a light follows (contract §5.2): a team light
 // follows its team's zone when present in st, otherwise the general zone.
+// A general light of ambiance group n follows the {general, Group n} entry
+// when present, else the plain general entry (Group 0); an animateur light
+// follows ONLY the GroupHost entry — it never receives the Group 0 one
+// (light-effects.md §2.5).
 func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 	if lc.Role == RoleTeam {
 		for _, z := range st.Zones {
@@ -615,8 +653,18 @@ func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 			}
 		}
 	}
+	if lc.Role != RoleTeam && lc.Group != 0 {
+		for _, z := range st.Zones {
+			if z.Zone == lighting.ZoneGeneral && z.Group == lc.Group {
+				return z, true
+			}
+		}
+		if lc.Group == lighting.GroupHost {
+			return lighting.ZoneState{}, false
+		}
+	}
 	for _, z := range st.Zones {
-		if z.Zone == lighting.ZoneGeneral {
+		if z.Zone == lighting.ZoneGeneral && z.Group == 0 {
 			return z, true
 		}
 	}
@@ -973,6 +1021,32 @@ func (d *Driver) RefreshInventory(ctx context.Context) error {
 // UNCHANGED — it means exactly the saved selection, never "everything the
 // bridge reports".
 func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration, sleep func(time.Duration)) error {
+	if name == "" {
+		return d.testFlashNames(ctx, nil, hold, sleep)
+	}
+	return d.testFlashNames(ctx, []string{name}, hold, sleep)
+}
+
+// TestFlashLights flashes the given configured lights together (group test,
+// light-effects.md §2.4) — same rendering and restore as TestFlash. names must
+// be non-empty: an empty list is an error, never "every light".
+func (d *Driver) TestFlashLights(ctx context.Context, names []string, hold time.Duration, sleep func(time.Duration)) error {
+	if len(names) == 0 {
+		return errors.New("hue: no light to test")
+	}
+	return d.testFlashNames(ctx, names, hold, sleep)
+}
+
+// testFlashNames: names == nil means "every configured light" (TestFlash("")).
+func (d *Driver) testFlashNames(ctx context.Context, names []string, hold time.Duration, sleep func(time.Duration)) error {
+	name := ""
+	if len(names) == 1 {
+		name = names[0]
+	}
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
 	if sleep == nil {
 		sleep = time.Sleep
 	}
@@ -989,7 +1063,7 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 	d.mu.Lock()
 	var targets []plannedWrite
 	for _, lc := range d.cfg.Lights {
-		if name != "" && lc.Name != name {
+		if names != nil && !want[lc.Name] {
 			continue
 		}
 		if rl, ok := d.resolved[lc.Name]; ok {
@@ -1003,7 +1077,7 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 		}
 	}
 	if len(targets) == 0 {
-		return fmt.Errorf("hue: no resolved light matches %q", name)
+		return fmt.Errorf("hue: no resolved light matches %q", strings.Join(names, ", "))
 	}
 	white := applied{on: true, bri: 254, xy: rgbToXY(255, 255, 255)}
 	var firstErr error

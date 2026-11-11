@@ -32,14 +32,47 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+
+	"buzzcontrol/internal/lighting"
 )
 
 const (
 	groupNameAmbiance = "buzzmaster-ambiance"
 	groupNameGeneral  = "buzzmaster-general"
 	groupNameTeamPfx  = "buzzmaster-team-"
+	groupNameHost     = "buzzmaster-general-host"
+	groupNameSubPfx   = "buzzmaster-general-" // + ambiance group number (v11.7.0, #225)
 )
+
+// SubGroupMinLights is the smallest ambiance group (or animateur group) that
+// is addressed as a Hue LightGroup; below it, one write per bulb
+// (hue-bridge.md §11). Provisional until the §8.2 measurement.
+const SubGroupMinLights = 3
+
+// Apply bucket keys (see Driver.Apply).
+const (
+	bucketGeneral  = ""
+	bucketTeamPfx  = "t:"
+	bucketGroupPfx = "g:"
+	bucketHost     = "host"
+)
+
+// bucketGroupName maps an Apply bucket to its Hue group name and the minimum
+// member count for writing it as a group.
+func bucketGroupName(key string) (string, int) {
+	switch {
+	case key == bucketGeneral:
+		return groupNameGeneral, 2
+	case key == bucketHost:
+		return groupNameHost, SubGroupMinLights
+	case strings.HasPrefix(key, bucketGroupPfx):
+		return groupNameSubPfx + strings.TrimPrefix(key, bucketGroupPfx), SubGroupMinLights
+	default:
+		return groupNameForTeam(strings.TrimPrefix(key, bucketTeamPfx)), 2
+	}
+}
 
 func groupNameForTeam(team string) string { return groupNameTeamPfx + team }
 
@@ -199,6 +232,7 @@ func desiredGroups(lights []LightSpec, resolved map[string]resolvedLight) map[st
 	out := map[string][]string{}
 	var all, general []string
 	byTeam := map[string][]string{}
+	bySub := map[int][]string{} // ambiance group number -> light ids (host = GroupHost)
 	for _, lc := range lights {
 		rl, ok := resolved[lc.Name]
 		if !ok {
@@ -208,7 +242,24 @@ func desiredGroups(lights []LightSpec, resolved map[string]resolvedLight) map[st
 		if lc.Role == RoleTeam {
 			byTeam[lc.Team] = append(byTeam[lc.Team], rl.id)
 		} else {
-			general = append(general, rl.id)
+			// The animateur group never belongs to buzzmaster-general: a write
+			// to that group must not reach it (light-effects.md §2.5).
+			if lc.Group != lighting.GroupHost {
+				general = append(general, rl.id)
+			}
+			if lc.Group != 0 {
+				bySub[lc.Group] = append(bySub[lc.Group], rl.id)
+			}
+		}
+	}
+	for n, ids := range bySub {
+		if len(ids) < SubGroupMinLights {
+			continue
+		}
+		if n == lighting.GroupHost {
+			out[groupNameHost] = sortedIDs(ids)
+		} else {
+			out[groupNameSubPfx+strconv.Itoa(n)] = sortedIDs(ids)
 		}
 	}
 	if len(all) > 0 {

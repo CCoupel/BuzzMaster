@@ -88,6 +88,27 @@ type LightingConfig struct {
 	// selector ("ON" | "AUTO" | "OFF"); absent ⇒ "AUTO". Read ONLY through the
 	// ambiance adapter (cmd/server/round_ambiance.go FromConfig).
 	DefaultMode string `json:"default_mode,omitempty"`
+	// Groups (v11.7.0, #225 — contracts/light-effects.md §2.1): ordered
+	// ambiance groups of role=general bulbs. Order = group number among the
+	// "salle" groups. Absent/empty ⇒ v11.6.0 behaviour exactly.
+	Groups []LightingGroupEntry `json:"groups"`
+}
+
+// Lighting group roles (contracts/light-effects.md §2.1).
+const (
+	GroupRoleSalle     = "salle"
+	GroupRoleAnimateur = "animateur"
+)
+
+// MaxLightingGroups is the cap on ambiance groups (§2.1: "plus de 12 groupes").
+const MaxLightingGroups = 12
+
+// LightingGroupEntry is one ambiance group. Role "" means "salle".
+type LightingGroupEntry struct {
+	Name      string   `json:"name"`
+	Role      string   `json:"role"`
+	Lights    []string `json:"lights"`
+	NearTeams []string `json:"near_teams"`
 }
 
 // LightingLightEntry is one bulb, addressed by NAME (Hue ids are reassignable).
@@ -459,6 +480,21 @@ func ApplyDefaults(cfg *Config) {
 		if cfg.Lighting.Lights[i].Role == "" {
 			cfg.Lighting.Lights[i].Role = "general"
 		}
+	}
+	for i := range cfg.Lighting.Groups {
+		g := &cfg.Lighting.Groups[i]
+		if g.Role == "" {
+			g.Role = GroupRoleSalle
+		}
+		if g.Lights == nil {
+			g.Lights = []string{}
+		}
+		if g.NearTeams == nil {
+			g.NearTeams = []string{}
+		}
+	}
+	if cfg.Lighting.Groups == nil {
+		cfg.Lighting.Groups = []LightingGroupEntry{}
 	}
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}

@@ -67,7 +67,16 @@ type ZoneState struct {
 	Color        [3]int
 	Intensity    int
 	TransitionMs int
+	// Group (v11.7.0, #225, contracts/light-effects.md §2.2): 0 = the whole
+	// zone (v11.6.0 behaviour, the zero value every existing caller keeps);
+	// n >= 1 with Zone == ZoneGeneral = ambiance group n; GroupHost = the
+	// animateur group.
+	Group int
 }
+
+// GroupHost addresses the animateur ambiance group (light-effects.md §2.5):
+// {Zone: ZoneGeneral, Group: GroupHost}.
+const GroupHost = -1
 
 // ZoneGeneral is the single zone name used by #205.
 const ZoneGeneral = "general"

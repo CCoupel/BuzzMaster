@@ -489,6 +489,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/lighting/register", h.handleLightingRegister)
 	h.mux.HandleFunc("/api/lighting/lights", h.handleLightingLights)
 	h.mux.HandleFunc("/api/lighting/test", h.handleLightingTest)
+	h.mux.HandleFunc("/api/lighting/groups/test", h.handleLightingGroupTest)
 	h.mux.HandleFunc("/api/lighting/preview", h.handleLightingPreview)
 	// Conduite manuelle — sélecteur tri-état + Flash (#208, contract §10.1)
 	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
@@ -1894,6 +1895,9 @@ func maskedConfigJSON(cfg *config.Config) ([]byte, error) {
 	if resp.Lighting.Lights == nil {
 		resp.Lighting.Lights = []config.LightingLightEntry{} // [] not null for the frontend
 	}
+	if resp.Lighting.Groups == nil {
+		resp.Lighting.Groups = []config.LightingGroupEntry{}
+	}
 	return json.MarshalIndent(&resp, "", "  ")
 }
 
@@ -2174,6 +2178,26 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 					lights = append(lights, l)
 				}
 				cfg.Lighting.Lights = lights
+				// v11.7.0 #225 (light-effects.md §2.1): a bulb removed or switched
+				// to role=team leaves its group in the same write.
+				cfg.Lighting.Groups = config.PruneLightingGroups(cfg.Lighting.Groups, lights)
+			}
+			// v11.7.0, #225: full replacement of the ambiance groups, validated
+			// against the bulb list as it will be after this very write.
+			if _, ok := lRaw["groups"]; ok {
+				incomingGroups := make([]config.LightingGroupEntry, 0, len(incoming.Groups))
+				for _, g := range incoming.Groups {
+					for i, ln := range g.Lights {
+						g.Lights[i] = hue.NormalizeLightName(ln)
+					}
+					incomingGroups = append(incomingGroups, g)
+				}
+				groups, gerr := config.ValidateLightingGroups(incomingGroups, cfg.Lighting.Lights)
+				if gerr != nil {
+					http.Error(w, gerr.Error(), http.StatusBadRequest)
+					return
+				}
+				cfg.Lighting.Groups = groups
 			}
 			// The secret: absent or empty preserves, clear_api_key erases,
 			// a non-empty value replaces. Derived/request-only flags never persist.

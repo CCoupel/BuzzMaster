@@ -348,7 +348,101 @@ func (h *HTTPServer) handleLightingLights(w http.ResponseWriter, r *http.Request
 		writeLightingError(w, err)
 		return
 	}
-	writeLightingJSON(w, http.StatusOK, map[string]any{"lights": lights})
+	// v11.7.0, #225 (light-effects.md §2.4): each bulb carries its ambiance
+	// group — the salle group number, "host" for the animateur group, 0 when
+	// it belongs to none (team bulbs and unassigned bulbs).
+	num, host := config.Get().Lighting.GroupAssignment()
+	type lightWithGroup struct {
+		hue.LightInfo
+		Group any `json:"group"`
+	}
+	out := make([]lightWithGroup, 0, len(lights))
+	for _, l := range lights {
+		n := hue.NormalizeLightName(l.Name)
+		var g any = 0
+		switch {
+		case host[n]:
+			g = "host"
+		case num[n] > 0:
+			g = num[n]
+		}
+		out = append(out, lightWithGroup{LightInfo: l, Group: g})
+	}
+	writeLightingJSON(w, http.StatusOK, map[string]any{"lights": out})
+}
+
+// handleLightingGroupTest — POST /api/lighting/groups/test {"group": n|"host"}
+// (v11.7.0, #225, light-effects.md §2.4): white blink of the group's bulbs,
+// then the live state is restored. 400 unknown/empty group, 409 lighting off,
+// 502 bridge errors (same shapes as /api/lighting/test).
+func (h *HTTPServer) handleLightingGroupTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var req struct {
+		Group json.RawMessage `json:"group"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Group) == 0 {
+		http.Error(w, "group attendu : numéro de groupe ou \"host\"", http.StatusBadRequest)
+		return
+	}
+	lc := config.Get().Lighting
+	var names []string
+	var hostName string
+	if json.Unmarshal(req.Group, &hostName) == nil {
+		g, ok := lc.HostGroup()
+		if hostName != "host" || !ok {
+			http.Error(w, "groupe inconnu", http.StatusBadRequest)
+			return
+		}
+		names = g.Lights
+	} else {
+		var n int
+		if json.Unmarshal(req.Group, &n) != nil || n < 1 {
+			http.Error(w, "groupe inconnu", http.StatusBadRequest)
+			return
+		}
+		rank := 0
+		found := false
+		for _, g := range lc.Groups {
+			if g.Role == config.GroupRoleAnimateur {
+				continue
+			}
+			rank++
+			if rank == n {
+				names, found = g.Lights, true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "groupe inconnu", http.StatusBadRequest)
+			return
+		}
+	}
+	if len(names) == 0 {
+		http.Error(w, "groupe vide", http.StatusBadRequest)
+		return
+	}
+	d := h.lightingDriver()
+	if d == nil {
+		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
+		return
+	}
+	release, ok := lightingBusy.acquire(&lightingBusy.test)
+	if !ok {
+		writeLightingJSON(w, http.StatusTooManyRequests, map[string]string{"result": "busy", "reason": "test_in_progress"})
+		return
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(r.Context(), lightingRequestTimeout)
+	defer cancel()
+	if err := d.TestFlashLights(ctx, names, lightingTestFlashHold, nil); err != nil {
+		writeLightingError(w, err)
+		return
+	}
+	writeLightingJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 // handleLightingTest — POST /api/lighting/test {"name"} (or {} for every

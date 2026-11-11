@@ -140,8 +140,18 @@ func (c *Controller) BuildHueDriverOpt(requireEnabled bool) *hue.Driver {
 		return nil
 	}
 	specs := make([]hue.LightSpec, 0, len(lc.Lights))
+	groupNum, hostLights := lc.GroupAssignment() // v11.7.0, #225
 	for _, l := range lc.Lights {
-		specs = append(specs, hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team})
+		spec := hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team}
+		if l.Role != string(hue.RoleTeam) {
+			switch {
+			case hostLights[l.Name]:
+				spec.Group = lighting.GroupHost
+			default:
+				spec.Group = groupNum[l.Name]
+			}
+		}
+		specs = append(specs, spec)
 	}
 	d, err := hue.New(hue.Config{
 		BridgeIP: lc.BridgeIP,
@@ -840,6 +850,18 @@ func (c *Controller) Scene(ev lighting.Event) lighting.State {
 			Zone:      teamName,
 			Color:     rgb,
 			Intensity: teamIntensity,
+		})
+	}
+	// v11.7.0 (#225, light-effects.md §2.5): the animateur group shows a fixed
+	// white, whatever the game does — emitted AFTER the override above, which
+	// never touches it (ON / OFF / Flash / pulse act on the room only). Only
+	// the master switch and the shutdown extinction turn it off.
+	if g, ok := config.Get().Lighting.HostGroup(); ok && len(g.Lights) > 0 {
+		zones = append(zones, lighting.ZoneState{
+			Zone:      lighting.ZoneGeneral,
+			Group:     lighting.GroupHost,
+			Color:     [3]int{255, 255, 255},
+			Intensity: 255,
 		})
 	}
 	return lighting.State{Zones: zones}
