@@ -635,3 +635,12 @@ identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
 - **Nommage des clés d'effet** (précision du 2026-11-11) : ce contrat décrit `config.json`, donc `lighting.effects` et
   `lighting.host_effects`. Les mêmes réglages s'écrivent `light.effects` et `light.host_effects` dans le modèle de
   réglages (manche, API, état de jeu). Table de correspondance normative : `light-effects.md` §6.
+- **Révision du GATE LOT-1 (2026-11-11) — plusieurs groupes animateur** : `lighting.groups[].id` (identifiant stable) ;
+  plusieurs groupes `role: "animateur"` (4 au plus, 12 groupes de salle au plus) ; `LightSpec.Group = -k` pour le groupe
+  animateur de rang k ; un groupe Hue `buzzmaster-general-host<k>` par groupe animateur de `SubGroupMinLights` ampoules
+  ou plus (l'ancien `buzzmaster-general-host` est supprimé à la réconciliation) ; `buzzmaster-general` exclut les
+  ampoules de **tous** les groupes animateur. `GET /api/lighting/lights` : `group` = `0` | `n` | `"host<k>"`. Dans
+  `config.json`, `lighting.host_effects` devient une table par `id` de groupe animateur (`light-effects.md` §6).
+- **Essai d'un groupe** (GATE LOT-1) : séquence de 6 pas d'une seconde (éteint, blanc 50 %, blanc 100 %, rouge, vert,
+  bleu) portée par l'écrivain — au plus une écriture de groupe par seconde, dans le plafond `/groups` du §5.8
+  (`light-effects.md` §2.4).

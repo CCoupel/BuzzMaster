@@ -82,6 +82,10 @@
 
 ## ambiance_page
 - L'interrupteur général « Éclairage d'ambiance activé » est persisté ; éteint, aucune commande n'atteint les ampoules. _(v11.4.0, #286, 2026-11-05)_
+- Page Groupes : pas de bouton de création automatique d'un groupe par ampoule (« Créer un groupe par ampoule » retiré) ; on crée un groupe, puis on y glisse des ampoules. _(v11.7.0, light_groups_multi_host, #225, GATE LOT-1 du 2026-11-11)_
+- « Tester le groupe » joue une séquence visible — éteint, blanc 50 %, blanc 100 %, rouge, vert, bleu, une seconde par étape — puis le groupe retrouve son éclairage d'avant ; jamais un simple clignotement blanc. Vaut pour les groupes de salle et les groupes animateur. _(v11.7.0, light_groups_multi_host, #225, GATE LOT-1 du 2026-11-11)_
+- Plusieurs groupes animateur (4 au plus), créés et gérés comme les groupes de salle, chacun avec ses propres effets par moment ; jamais « un seul groupe animateur ». _(v11.7.0, light_groups_multi_host / light_effects_multi_host, #225 #223, GATE LOT-1 du 2026-11-11)_
+- « Équipes à proximité » est conservé sur les groupes de salle (origine de l'effet Vague), avec une infobulle qui l'explique ; absent des groupes animateur. _(v11.7.0, light_groups_multi_host, #225 #301, GATE LOT-1 du 2026-11-11)_
 
 ## admin_game_award
 - Le bouton d'attribution ne porte jamais de compteur et tient sur une ligne ; le compteur « x joueurs · y équipes » / « y équipes » / « Aucune sélection » occupe sa propre ligne. _(v11.4.0, selection_lines, #289, 2026-11-05)_

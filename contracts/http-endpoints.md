@@ -1440,10 +1440,11 @@ puisse l'indiquer.
 | Méthode | Chemin | Rôle | Lot |
 |---|---|---|---|
 | POST | `/config.json` `{"lighting":{"groups":[…]}}` | Groupes d'ambiance (remplacement complet, validation §2.1) | LOT-1 |
-| GET | `/api/lighting/lights` | Champ additif `group` par ampoule | LOT-1 |
-| POST | `/api/lighting/groups/test` | Essai d'un groupe | LOT-1 |
+| GET | `/api/lighting/lights` | Champ additif `group` par ampoule (`0` \| `n` \| `"host<k>"`) | LOT-1 |
+| POST | `/api/lighting/groups/test/stop` | Arrête l'essai de groupe en cours (révision du GATE LOT-1) | LOT-1 |
+| POST | `/api/lighting/groups/test` | Essai d'un groupe : séquence visible de 6 s, réponse immédiate `{"ok":true,"duration_ms":6000}`, `group` = `n` ou `"host<k>"` (révision du GATE LOT-1, `light-effects.md` §2.4) | LOT-1 |
 | POST | `/config.json` `{"lighting":{"effects":{…}}}` | Effet par moment, global | LOT-2 |
-| POST | `/config.json` `{"lighting":{"host_effects":{…}}}` | Effet par moment du groupe animateur, global | LOT-2 |
+| POST | `/config.json` `{"lighting":{"host_effects":{"<id>":{…}}}}` | Effets par moment de chaque groupe animateur, global (table par `id` de groupe, révision du GATE LOT-1) | LOT-2 |
 | GET | `/api/ambiance/settings` | `light.effects` et `light.host_effects` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
 | GET | `/api/lighting/effects` | Catalogue, erreurs de fichiers, réglages non résolus | LOT-2 |
 | POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |

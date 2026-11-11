@@ -362,3 +362,8 @@ chemins (§6) couvre `sound.files.*`.
 - **Groupe animateur** (amendement du GATE 2) : `LightHostEffects` — `light.host_effects.{chrono,calm,score}`, source
   globale `lighting.host_effects.*`, défaut `""` (blanc fixe), surchargeable par manche ; mêmes règles que
   `light.effects` (`light-effects.md` §2.5, §6). Le test de parité couvre aussi ces trois chemins.
+- **Révision du GATE LOT-1 (2026-11-11)** : `LightHostEffects` est indexé **par groupe animateur** —
+  `light.host_effects.<id du groupe>.{chrono,calm,score}` (source globale `lighting.host_effects.<id>.*`). Forme complète :
+  une entrée par groupe animateur existant ; `Partial` : groupes et moments surchargés seulement ; `id` de groupe inconnu
+  écarté sans erreur ; chemins éditables du composant React = un jeu de trois chemins par groupe animateur
+  (`light-effects.md` §6).

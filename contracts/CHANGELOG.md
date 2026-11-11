@@ -1,6 +1,32 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — corrections du GATE LOT-1 refusé (#225, impacts #223)
+
+Retour utilisateur sur la QUALIF 11.7.0.2. **Aucun de ces points n'a été livré en PROD** ; les marques **[BREAKING]**
+ci-dessous valent **par rapport au code déjà livré sur la branche** (LOT-1, LOT-2 Batch 2.1 / 2.2), à reprendre.
+
+- **[BREAKING]** Groupes animateur **multiples** : la limite « un seul » est levée (4 au plus, 12 groupes de salle au
+  plus). Rang propre A1, A2… ; `ZoneState.Group = -k` (`lighting.HostGroup(k)`, remplace la constante unique
+  `GroupHost`) ; groupes Hue `buzzmaster-general-host<k>` (remplace `buzzmaster-general-host`). `light-effects.md` §2.1,
+  §2.2, §2.5 ; `hue-bridge.md` §11.
+- **[BREAKING]** Forme de `group` (`GET /api/lighting/lights`, `POST /api/lighting/groups/test`) : `"host"` devient
+  `"host<k>"` (`"host1"`, `"host2"`…). `light-effects.md` §2.4.
+- **[BREAKING]** `lighting.host_effects` / `light.host_effects` : de `{chrono, calm, score}` à une **table par groupe
+  animateur** `{"<id>": {chrono, calm, score}}` ; `Sources` de même forme ; `id` de groupe inconnu écarté sans erreur ;
+  ancienne forme plate ignorée à la lecture. `light-effects.md` §6, `ambiance-settings.md` §10.
+- **[NEW]** `lighting.groups[].id` — identifiant stable, attribué par le serveur s'il est absent. `light-effects.md` §2.1.
+- **[BREAKING]** `POST /api/lighting/groups/test` — **séquence visible** en 6 pas d'une seconde (éteint, blanc 50 %, blanc
+  100 %, rouge, vert, bleu) puis retour à l'état vivant ; réponse **immédiate** `{"ok":true,"duration_ms":6000}` ;
+  portée par `Scene()` et l'écrivain (aucune écriture directe au pilote) ; un nouvel essai remplace le précédent ; `429`
+  et `500` ne sont plus renvoyés (`400`, `409`, `503` conservés). `light-effects.md` §2.4.
+- **[NEW]** `POST /api/lighting/groups/test/stop` — arrête l'essai en cours. `light-effects.md` §2.4.
+- **[CHANGED]** Lecteur d'effets : une trame indépendante **par** groupe animateur non vide. `light-effects.md` §5.3.
+- Sans changement : `near_teams` (origine de la vague, groupes de salle seulement) ; l'essai d'un effet du catalogue
+  (§7.4) ne joue jamais sur un groupe animateur.
+- Interface : bouton « Créer un groupe par ampoule » supprimé (maquette `ambiance_page__light_groups_multi_host`).
+
+---
 ## [20261111] — v11.7.0 — sémantique du motif `gradient` (#223, LOT-2 Batch 2.1)
 
 Deux interprétations remontées par `test-writer` sur l'implémentation 1bc18a87 ; règle fixée en `light-effects.md` §4.3.1.
