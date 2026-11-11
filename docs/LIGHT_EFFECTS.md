@@ -200,7 +200,7 @@ dernier:
 | `public` | rôle `public` | toutes les ampoules des groupes public | **rien** : la zone n'est pas pilotée |
 
 - Un **chenillard** peut tourner sur les groupes de la zone animateur, comme dans la salle.
-- Une zone **sans groupe non vide** n'existe pas : son réglage est conservé, sans effet.
+- Une zone **Animateur ou Public sans groupe non vide** n'existe pas : son réglage est conservé, sans effet. La zone **Ambiance** existe toujours.
 - `groupes_min` compte les groupes **non vides de la zone** : un effet qui demande 3 groupes est grisé dans une zone qui
   n'en a que 2, avec la raison affichée (« demande 3 groupes, 2 dans cette zone »).
 - Une ampoule n'entre dans les zones `animateur` ou `public` **que par son groupe**.
@@ -285,4 +285,4 @@ Effets livrés à ce jour : `pulsation`, `chenillard`, `chenillard-traine`, `cou
 - **Catalogue** : Ambiance › Lumière › Effets. Un effet inapplicable à une zone est grisé, avec sa raison.
 - **Erreurs** : `GET /api/lighting/effects` (champ `errors`) ou le journal du serveur.
 - **Essai** : le bouton « Tester » (à côté du choix d'effet) joue l'effet dix secondes sur sa zone, à la vitesse réglée.
-  « Arrêter » l'interrompt. Pendant une question, l'essai est refusé (`game`).
+  « Arrêter » l'interrompt. Pendant une question, le bouton est grisé, et le serveur refuse l'essai (409 `game`).

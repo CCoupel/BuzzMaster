@@ -46,7 +46,7 @@ vitesse par moment et par zone. Les effets #300 (remplissage), #301 (vague) et #
 - **Réglages d'effets des groupes animateur** (`host_effects`, `host_speeds`, anciennes clés par `id`) : **ignorés**. La zone Animateur revient au blanc fixe ; refaire le réglage dans Effets › Animateur.
 - **Anciennes formes à plat** (`lighting.effects.{chrono,calm,score}`) : lues comme celles de la zone Ambiance, réécrites au prochain enregistrement.
 - **Anciens fichiers d'effets** (`version: 1`, motifs calculés) : **refusés** avec le message « format d'effet de la version précédente : réécrire en pas à pas ». Repartir d'un natif (`docs/LIGHT_EFFECTS.md`, « Créer un effet »).
-- **Groupes Hue renommés** : les anciens `buzzmaster-general-host<k>` disparaissent à la réconciliation ; le groupe animateur 1 devient `buzzmaster-host-1`.
+- **Groupes Hue renommés** : les anciens `buzzmaster-general-host<k>` disparaissent à la réconciliation ; la zone Animateur utilise `buzzmaster-host` (dès 2 ampoules) et `buzzmaster-host-<n>` par groupe (dès 3 ampoules).
 - **Pulsation** : rendu différent de la v11.6.0 (voir Changed).
 - Aucune version publiée (PROD) n'est concernée par les éléments de la v11.7.0.
 
