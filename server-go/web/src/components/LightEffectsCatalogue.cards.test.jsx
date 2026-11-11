@@ -3,12 +3,12 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 
 vi.mock('./LightEffectsCatalogue.css', () => ({}))
 import LightEffectsCatalogue, { usedBy } from './LightEffectsCatalogue'
-import { frameAt, paintStyle } from './LightEffectPreview'
+import { frameAt, paintStyle, stepLabel, chronoRemaining } from './LightEffectPreview'
 
 const CATALOG = {
   groups: { ambiance: 3, animateur: 2, public: 0 },
   effects: [
-    { id: 'pulsation', name: 'Pulsation', description: 'Toute la zone respire.', moments: ['chrono'], origin: 'native', file: 'natifs/pulsation.yaml', min_groups: 0, tick_ms: 500, applicable: { ambiance: true, animateur: true, public: false } },
+    { id: 'pulsation', name: 'Pulsation', description: 'Toute la zone respire.', moments: ['chrono'], origin: 'native', file: 'natifs/pulsation.yaml', min_groups: 0, tick_ms: 500, steps: 2, applicable: { ambiance: true, animateur: true, public: false } },
     { id: 'chenillard-traine', name: 'Chenillard avec traînée', description: '', moments: ['chrono'], origin: 'native', file: 'natifs/chenillard-traine.yaml', min_groups: 5, tick_ms: 1000, applicable: { ambiance: false, animateur: false, public: false } },
     { id: 'couleur-equipe', name: "Couleur de l'équipe", description: '', moments: ['score'], origin: 'native', file: 'natifs/couleur-equipe.yaml', min_groups: 0, tick_ms: 1000, applicable: { ambiance: true, animateur: true, public: false } },
     { id: 'degrade', name: 'Dégradé', description: '', moments: ['calm'], origin: 'override', file: 'degrade.yaml', min_groups: 2, tick_ms: 1000, applicable: { ambiance: true, animateur: true, public: false } },
@@ -39,7 +39,7 @@ describe('LightEffectsCatalogue — cartes (#299)', () => {
     expect(card('aller-retour').getByText('Phases calmes')).toBeInTheDocument()
     expect(card('degrade').getByText('natif modifié')).toBeInTheDocument()
     expect(screen.getByTestId('fx-degrade')).toHaveTextContent('remplace natifs/degrade.yaml')
-    expect(screen.getByTestId('fx-pulsation')).toHaveTextContent('natifs/pulsation.yaml · tick de 0,5 s')
+    expect(screen.getByTestId('fx-pulsation')).toHaveTextContent('natifs/pulsation.yaml · 2 pas · tick de 0,5 s')
     expect(screen.getByTestId('fx-chenillard-traine')).toHaveTextContent('demande 5 groupes dans la zone')
   })
 
@@ -73,20 +73,22 @@ describe('LightEffectsCatalogue — cartes (#299)', () => {
 })
 
 describe('LightEffectsCatalogue — « Essayer sur la salle » (#299)', () => {
-  it('essai sans zone ni vitesse (10 s par défaut) ; « ■ Arrêter l\'essai » appelle onStopTry', async () => {
+  it('essai sans zone ni vitesse, corps vide : la durée vient du serveur (aucune durée codée en dur) ; « ■ Arrêter l\'essai » → onStopTry', async () => {
     const props = { onTry: vi.fn().mockResolvedValue({ ok: true, duration_ms: 10000 }), onStopTry: vi.fn() }
     mount(props)
-    fireEvent.click(card('pulsation').getByRole('button', { name: /Essayer sur la salle \(10 s\)/ }))
-    await waitFor(() => expect(props.onTry).toHaveBeenCalledWith('pulsation', undefined))
+    const btn = card('pulsation').getByRole('button', { name: /Essayer sur la salle$/ })
+    expect(btn.textContent).not.toMatch(/\d+ s/)
+    fireEvent.click(btn)
+    await waitFor(() => expect(props.onTry).toHaveBeenCalledWith('pulsation'))
     fireEvent.click(await card('pulsation').findByRole('button', { name: /Arrêter l'essai/ }))
     expect(props.onStopTry).toHaveBeenCalled()
   })
 
-  it('effet de score seul : 5 s', async () => {
+  it('effet de score seul : même appel, le serveur fixe 5 s et le renvoie dans duration_ms', async () => {
     const onTry = vi.fn().mockResolvedValue({ ok: true, duration_ms: 5000 })
     mount({ onTry })
-    fireEvent.click(card('couleur-equipe').getByRole('button', { name: /Essayer sur la salle \(5 s\)/ }))
-    await waitFor(() => expect(onTry).toHaveBeenCalledWith('couleur-equipe', 5))
+    fireEvent.click(card('couleur-equipe').getByRole('button', { name: /Essayer sur la salle$/ }))
+    await waitFor(() => expect(onTry).toHaveBeenCalledWith('couleur-equipe'))
   })
 
   it('grisé avec la raison : effet qui demande plus de groupes, éclairage / pont / forçage / question', () => {
@@ -111,9 +113,12 @@ describe('LightEffectsCatalogue — « Essayer sur la salle » (#299)', () => {
 })
 
 describe('LightEffectsCatalogue — aperçu simulé (#299)', () => {
-  const PREVIEW = { id: 'pulsation', groups: 3, duration_ms: 2000, loop: true, frames: [
-    { at_ms: 0, step: 'PRE', groups: [{ color: [79, 70, 229], intensity: 255, fade_ms: 0 }, { color: [79, 70, 229], intensity: 128, fade_ms: 0 }, { color: [0, 0, 0], intensity: 0, fade_ms: 0 }] },
-    { at_ms: 1000, step: 'pas 1', groups: [{ color: [255, 0, 0], intensity: 255, fade_ms: 0 }, { color: [255, 0, 0], intensity: 255, fade_ms: 0 }, { color: [255, 0, 0], intensity: 255, fade_ms: 0 }] },
+  const g = (c, k) => ({ color: c, intensity: k })
+  const PREVIEW = { id: 'pulsation', moment: 'chrono', groups: 3, tick_ms: 1000, duration_ms: 4000, chrono_s: 20, loop: true, frames: [
+    { at_ms: 0, tick: 0, step: 'pre', groups: [g([79, 70, 229], 255), g([79, 70, 229], 128), g([0, 0, 0], 0)] },
+    { at_ms: 1000, tick: 1, step: 'pas:0', groups: [g([255, 0, 0], 255), g([255, 0, 0], 255), g([255, 0, 0], 255)] },
+    { at_ms: 2000, tick: 2, step: 'pas:1', groups: [g([255, 0, 0], 255), g([255, 0, 0], 255), g([255, 0, 0], 255)] },
+    { at_ms: 3000, tick: 3, step: 'dernier', groups: [g([255, 0, 0], 255), g([255, 0, 0], 255), g([255, 0, 0], 255)] },
   ] }
 
   it('« Aperçu » demande les trames au serveur (groupes de la zone Ambiance), un seul aperçu à la fois', async () => {
@@ -121,7 +126,7 @@ describe('LightEffectsCatalogue — aperçu simulé (#299)', () => {
     mount()
     fireEvent.click(card('pulsation').getByRole('button', { name: /Aperçu/ }))
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/lighting/effects/pulsation/preview?groups=3&moment=chrono'))
-    expect(await card('pulsation').findByText(/tick 0 · PRE/)).toBeInTheDocument()
+    expect(await card('pulsation').findByText(/tick 0 · PRE · chronomètre simulé : 20 s/)).toBeInTheDocument()
     expect(card('pulsation').getByRole('button', { name: /■ Arrêter/ })).toBeInTheDocument()
     fireEvent.click(card('aller-retour').getByRole('button', { name: /Aperçu/ }))
     await waitFor(() => expect(card('pulsation').getByRole('button', { name: /Aperçu/ })).toBeInTheDocument())
@@ -143,13 +148,29 @@ describe('LightEffectsCatalogue — aperçu simulé (#299)', () => {
   })
 
   it('frameAt : dernière trame ≤ t, rebouclage sur duration_ms ; paintStyle assombrit selon l\'intensité', () => {
-    expect(frameAt(PREVIEW, 0).frame.step).toBe('PRE')
-    expect(frameAt(PREVIEW, 999).frame.step).toBe('PRE')
-    expect(frameAt(PREVIEW, 1500).frame.step).toBe('pas 1')
-    expect(frameAt(PREVIEW, 2100).frame.step).toBe('PRE') // 2100 mod 2000 = 100
-    expect(frameAt({ ...PREVIEW, loop: false }, 9000).frame.step).toBe('pas 1')
+    expect(frameAt(PREVIEW, 0).frame.step).toBe('pre')
+    expect(frameAt(PREVIEW, 999).frame.tick).toBe(0)
+    expect(frameAt(PREVIEW, 1500).frame.tick).toBe(1)
+    expect(frameAt(PREVIEW, 4100).frame.tick).toBe(0) // 4100 mod 4000 = 100 : la durée est celle du serveur
+    expect(frameAt({ ...PREVIEW, loop: false }, 9000).frame.step).toBe('dernier')
     expect(frameAt({ frames: [] }, 0)).toBeNull()
     expect(paintStyle([255, 0, 0], 255).backgroundColor).toBe('rgb(255,0,0)')
     expect(paintStyle([255, 0, 0], 0).boxShadow).toBe('none')
+  })
+
+  it('pas joué et compte à rebours d\'après chrono_s (0 = pas de chronomètre)', () => {
+    expect(['pre', 'pas:0', 'pas:12', 'dernier'].map(stepLabel)).toEqual(['PRE', 'pas 0', 'pas 12', 'dernier'])
+    expect(chronoRemaining(PREVIEW, 0)).toBe(20)
+    expect(chronoRemaining(PREVIEW, 3000)).toBe(17)
+    expect(chronoRemaining(PREVIEW, 25000)).toBe(0)
+    expect(chronoRemaining({ ...PREVIEW, chrono_s: 0 }, 1000)).toBeNull()
+  })
+
+  it('moment sans chronomètre (calm, score) : aucun compte à rebours affiché', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ...PREVIEW, moment: 'score', chrono_s: 0, duration_ms: 5000 }) }))
+    mount()
+    fireEvent.click(card('couleur-equipe').getByRole('button', { name: /Aperçu/ }))
+    expect(await card('couleur-equipe').findByText('tick 0 · PRE')).toBeInTheDocument()
+    expect(global.fetch).toHaveBeenCalledWith('/api/lighting/effects/couleur-equipe/preview?groups=3&moment=score')
   })
 })

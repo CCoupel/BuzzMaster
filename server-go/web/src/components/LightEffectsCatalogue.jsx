@@ -8,7 +8,7 @@ import './LightEffectsCatalogue.css'
 
 // #299 (v11.7.0, LOT-3) — catalogue des effets (sous-onglet Effets de Ambiance › Lumière).
 // Maquette : docs/mockup/v11.7.0/ui/ambiance_page__effects_catalogue_zones.html. Contrat : contracts/light-effects.md
-// §7.1 (catalogue), §7.2 (rechargement), §7.3 (aperçu), §7.4 (essai).
+// §7.1 (catalogue, `steps`, `tick_ms`), §7.2 (rechargement), §7.3 (aperçu : `tick`, `step`, `duration_ms`, `chrono_s`), §7.4 (essai).
 //
 // Props :
 //   catalog        GET /api/lighting/effects normalisé (useLightEffects)
@@ -64,8 +64,6 @@ export default function LightEffectsCatalogue({
     document.getElementById(`fx-card-${focus.id}`)?.scrollIntoView?.({ block: 'center' })
   }, [focus])
 
-  const secondsFor = (e) => (e.moments?.length === 1 && e.moments[0] === 'score' ? 5 : TRY_SECONDS)
-
   const toggleTry = async (e) => {
     if (trying?.id === e.id) {
       clearTimeout(timer.current)
@@ -75,12 +73,12 @@ export default function LightEffectsCatalogue({
     }
     setStarting(e.id)
     try {
-      const secs = secondsFor(e)
-      // Essai « sans zone ni vitesse » : zone Ambiance, vitesse ×1 (§7.4) ; la durée n'est envoyée que si elle diffère de 10 s.
-      const res = await onTry(e.id, secs === TRY_SECONDS ? undefined : secs)
+      // Essai « sans zone ni vitesse » (corps vide) : zone Ambiance, vitesse ×1, durée choisie par le serveur (§7.4 :
+      // 5 s pour un effet qui ne déclare que « score », 10 s sinon) ; la réponse donne `duration_ms`.
+      const res = await onTry(e.id)
       if (res?.ok) {
         window.dispatchEvent(new CustomEvent(TRY_EVENT, { detail: { source: 'catalogue' } }))
-        const durationMs = Number.isFinite(res.duration_ms) ? res.duration_ms : secs * 1000
+        const durationMs = Number.isFinite(res.duration_ms) ? res.duration_ms : TRY_SECONDS * 1000
         clearTimeout(timer.current)
         setTrying({ id: e.id, durationMs })
         timer.current = setTimeout(() => setTrying(null), durationMs)
@@ -134,7 +132,6 @@ export default function LightEffectsCatalogue({
           const applicable = e.applicable && typeof e.applicable === 'object' ? e.applicable.ambiance !== false : e.applicable !== false
           const min = e.min_groups || 0
           const isTrying = trying?.id === e.id
-          const secs = secondsFor(e)
           const unavailable = isTrying ? '' : !applicable ? `Demande ${min} groupe${min > 1 ? 's' : ''}` : tryUnavailable()
           const simGroups = applicable ? (nAmb > 0 ? nAmb : 6) : Math.min(12, Math.max(6, min))
           const moment = e.moments?.includes('chrono') ? 'chrono' : (e.moments?.[0] || 'chrono')
@@ -155,7 +152,7 @@ export default function LightEffectsCatalogue({
                 </div>
               )}
               <LightEffectPreview
-                id={e.id} groups={simGroups} moment={moment} tickMs={e.tick_ms} chrono={moment === 'chrono'}
+                id={e.id} groups={simGroups} moment={moment}
                 playing={playing} onUnavailable={() => setPreviewId(null)}
               />
               {!applicable && playing && <p className="lfx-sim">simulation avec {simGroups} groupes</p>}
@@ -166,10 +163,10 @@ export default function LightEffectsCatalogue({
                 <Button
                   variant="secondary" size="sm"
                   disabled={!!unavailable || starting === e.id}
-                  title={unavailable || `Joue l'effet sur la zone Ambiance, à la vitesse ×1, pendant ${secs} s`}
+                  title={unavailable || "Joue l'effet sur la zone Ambiance, à la vitesse ×1, puis l'éclairage revient à son état normal"}
                   onClick={() => toggleTry(e)}
                 >
-                  {isTrying ? "■ Arrêter l'essai" : `💡 Essayer sur la salle (${secs} s)`}
+                  {isTrying ? "■ Arrêter l'essai" : '💡 Essayer sur la salle'}
                 </Button>
               </div>
               <div className="lfx-file">
@@ -177,6 +174,7 @@ export default function LightEffectsCatalogue({
                 {e.origin === 'override'
                   ? <><code>{baseName(e.file)}</code> remplace <code>natifs/{baseName(e.file)}</code>. Supprimez-le pour revenir à l'effet d'origine.</>
                   : <code>{e.file}</code>}
+                {e.steps > 0 && ` · ${e.steps} pas`}
                 {e.tick_ms > 0 && ` · tick de ${tickText(e.tick_ms)}`}
                 {min > 0 && ` · demande ${min} groupe${min > 1 ? 's' : ''} dans la zone`}
               </div>

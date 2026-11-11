@@ -397,8 +397,8 @@ export default function AmbiancePage() {
   // Bouton « Tester » (contrat §7.4) : POST /api/lighting/effects/{id}/try {zone, speed, seconds} ; réponse immédiate
   // `{ok, duration_ms}` ; 409 `reason` : disabled | game | not_applicable | mode ; 503 pont injoignable ; 404 / 400.
   const handleTryEffect = async ({ zone, id, speed }) => tryEffect(id, { zone, speed, seconds: TRY_SECONDS })
-  // Bouton « Essayer sur la salle » du catalogue : essai SANS zone ni vitesse (zone ambiance, ×1, §7.4), 10 s par défaut.
-  const handleCatalogueTry = (id, seconds) => tryEffect(id, seconds ? { seconds } : {})
+  // Bouton « Essayer sur la salle » du catalogue : essai SANS zone ni vitesse (zone ambiance, ×1, §7.4), durée fixée par le serveur.
+  const handleCatalogueTry = (id) => tryEffect(id, {})
   const tryEffect = async (id, body) => {
     try {
       const res = await postJson(`/api/lighting/effects/${encodeURIComponent(id)}/try`, body)

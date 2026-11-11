@@ -5,8 +5,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 // Ampoules dessinées, une par groupe, étiquetées g1, g2… ; sous elles le numéro du tick et le pas joué
 // (« PRE », « pas 0 », « dernier »…), puis, pour un effet de chronomètre, un compte à rebours simulé de 20 s.
 //
-// La réponse ne liste une trame que si elle diffère de la précédente ; le tick est déduit de `at_ms` ÷ `tick_ms` et le
-// pas est repris de `frame.step` s'il est fourni (champ facultatif).
+// Une trame par tick (`tick`, `step` : « pre » | « pas:<n> » | « dernier », §7.3) ; durée de l'aperçu (`duration_ms`) et
+// compte à rebours (`chrono_s`, 0 = pas de chronomètre) lus dans la réponse — l'interface ne fixe rien elle-même.
 
 const DARK = [30, 41, 59]
 
@@ -19,6 +19,16 @@ export function paintStyle(color, intensity) {
   }
 }
 
+// Pas joué : « pre » → « PRE », « pas:0 » → « pas 0 », « dernier » → « dernier ».
+export function stepLabel(step) {
+  if (step === 'pre') return 'PRE'
+  const m = /^pas:(\d+)$/.exec(step || '')
+  return m ? `pas ${m[1]}` : (step || '')
+}
+
+// Temps restant du chronomètre simulé (s) : chrono_s − at_ms / 1000, jamais négatif ; null sans chronomètre.
+export const chronoRemaining = (preview, atMs) => (preview?.chrono_s > 0 ? Math.max(0, Math.ceil(preview.chrono_s - atMs / 1000)) : null)
+
 // Trame courante à l'instant t (ms) : la dernière dont `at_ms` ≤ t ; boucle sur `duration_ms` si l'effet boucle.
 export function frameAt(preview, t) {
   const frames = preview?.frames
@@ -30,7 +40,7 @@ export function frameAt(preview, t) {
   return { frame: cur, at: tt }
 }
 
-export default function LightEffectPreview({ id, groups, moment, tickMs, chrono, playing, onUnavailable = () => {} }) {
+export default function LightEffectPreview({ id, groups, moment, playing, onUnavailable = () => {} }) {
   const [preview, setPreview] = useState(null)
   const [error, setError] = useState(false)
   const [now, setNow] = useState(0) // ms écoulées depuis le début de la lecture
@@ -66,8 +76,7 @@ export default function LightEffectPreview({ id, groups, moment, tickMs, chrono,
     const g = current?.frame?.groups?.[i]
     return g ? paintStyle(g.color, g.intensity) : undefined
   })
-  const tick = current ? (Number.isFinite(current.frame.tick) ? current.frame.tick : (tickMs > 0 ? Math.floor(current.at / tickMs) : 0)) : null
-  const rem = 20 - (Math.floor((current?.at ?? 0) / 1000) % 21)
+  const rem = current ? chronoRemaining(preview, current.at) : null
 
   return (
     <div className="lfx-stage" data-testid={`preview-${id}`}>
@@ -78,7 +87,7 @@ export default function LightEffectPreview({ id, groups, moment, tickMs, chrono,
       <div className="lfx-clock" aria-live="off">
         {error ? 'Aperçu indisponible'
           : current
-            ? `tick ${tick}${current.frame.step ? ` · ${current.frame.step}` : ''}${chrono ? ` · chronomètre simulé : ${rem} s` : ''}`
+            ? `tick ${current.frame.tick ?? 0}${current.frame.step ? ` · ${stepLabel(current.frame.step)}` : ''}${rem !== null ? ` · chronomètre simulé : ${rem} s` : ''}`
             : ''}
       </div>
     </div>
