@@ -195,7 +195,9 @@ func TestTW225_Config_GroupsValidation_Refusals(t *testing.T) {
 		{"ampoule de rôle équipe", `{"lighting":{"groups":[{"lights":["T1"]}]}}`},
 		{"ampoule dans deux groupes", `{"lighting":{"groups":[{"lights":["L1"]},{"lights":["L1"]}]}}`},
 		{"rôle inconnu", `{"lighting":{"groups":[{"role":"vip","lights":["L1"]}]}}`},
-		{"cinq groupes animateur", `{"lighting":{"groups":[` + strings.Join(tw225Hosts(5), ",") + `]}}`},
+		{"treize groupes animateur", `{"lighting":{"groups":[` + strings.Join(tw225Zone("animateur", 13), ",") + `]}}`},
+		{"treize groupes public", `{"lighting":{"groups":[` + strings.Join(tw225Zone("public", 13), ",") + `]}}`},
+		{"ampoule dans deux zones", `{"lighting":{"groups":[{"lights":["L1"]},{"role":"public","lights":["L1"]}]}}`},
 		{"id mal formé (majuscules)", `{"lighting":{"groups":[{"id":"ABC","lights":["L1"]}]}}`},
 		{"id mal formé (trop long)", `{"lighting":{"groups":[{"id":"abcdefghijklm","lights":["L1"]}]}}`},
 		{"id mal formé (caractères)", `{"lighting":{"groups":[{"id":"a-b","lights":["L1"]}]}}`},
@@ -248,14 +250,16 @@ func TestTW225_Config_OneHostGroupAccepted_WithoutNumbering(t *testing.T) {
 	}
 }
 
-// tw225Hosts fabrique n groupes animateur vides (noms distincts).
-func tw225Hosts(n int) []string {
+// tw225Zone fabrique n groupes vides du rôle donné ; tw225Hosts, n groupes animateur vides.
+func tw225Zone(role string, n int) []string {
 	out := make([]string, n)
 	for i := range out {
-		out[i] = `{"role":"animateur","lights":[]}`
+		out[i] = `{"role":"` + role + `","lights":[]}`
 	}
 	return out
 }
+
+func tw225Hosts(n int) []string { return tw225Zone("animateur", n) }
 
 func tw225GetGroupsRaw(t *testing.T, srv *HTTPServer) []map[string]any {
 	t.Helper()
@@ -277,29 +281,31 @@ func tw225GetGroupsRaw(t *testing.T, srv *HTTPServer) []map[string]any {
 // Révision du GATE LOT-1 : plusieurs groupes animateur, plafonds 12 / 4, `id` stable
 // ---------------------------------------------------------------------------
 
-func TestTW225_Config_SeveralHostGroups_UpToFourAccepted(t *testing.T) {
+func TestTW225_Config_SeveralGroupsPerZone_UpToTwelveAccepted(t *testing.T) {
 	srv, _ := setupTestHTTPServer(t)
 	tw225Seed(t, srv)
-	for n := 1; n <= 4; n++ {
-		if code, out := tw225Post(t, srv, `{"lighting":{"groups":[`+strings.Join(tw225Hosts(n), ",")+`]}}`); code != 200 {
-			t.Fatalf("%d groupes animateur acceptés : %d %s", n, code, out)
+	for _, role := range []string{"animateur", "public"} {
+		for _, n := range []int{1, 4, 12} {
+			if code, out := tw225Post(t, srv, `{"lighting":{"groups":[`+strings.Join(tw225Zone(role, n), ",")+`]}}`); code != 200 {
+				t.Fatalf("%d groupes %s acceptés : %d %s", n, role, code, out)
+			}
 		}
-	}
-	if got := tw225GetGroups(t, srv); len(got) != 4 {
-		t.Fatalf("4 groupes animateur conservés : %+v", got)
+		if got := tw225GetGroups(t, srv); len(got) != 12 {
+			t.Fatalf("12 groupes %s conservés : %+v", role, got)
+		}
 	}
 }
 
-func TestTW225_Config_Caps_TwelveRoomAndFourHostIndependent(t *testing.T) {
+func TestTW225_Config_Caps_TwelvePerZoneIndependent(t *testing.T) {
 	srv, _ := setupTestHTTPServer(t)
 	tw225Seed(t, srv)
 	room := make([]string, 12)
 	for i := range room {
 		room[i] = `{"lights":[]}`
 	}
-	all := append(append([]string{}, room...), tw225Hosts(4)...)
+	all := append(append(append([]string{}, room...), tw225Zone("animateur", 12)...), tw225Zone("public", 12)...)
 	if code, out := tw225Post(t, srv, `{"lighting":{"groups":[`+strings.Join(all, ",")+`]}}`); code != 200 {
-		t.Fatalf("12 groupes de salle + 4 groupes animateur : les deux plafonds sont indépendants : %d %s", code, out)
+		t.Fatalf("12 groupes dans chacune des trois zones : les plafonds sont indépendants : %d %s", code, out)
 	}
 	over := append(append([]string{}, room...), `{"lights":[]}`)
 	if code, _ := tw225Post(t, srv, `{"lighting":{"groups":[`+strings.Join(over, ",")+`]}}`); code != 400 {
@@ -367,25 +373,20 @@ func TestTW225_Config_ID_KeptWhenSavingOtherSections(t *testing.T) {
 	}
 }
 
-func TestTW225_Config_SavingGroups_PurgesHostEffectsOfVanishedIds(t *testing.T) {
+func TestTW225_Config_SavingGroups_DoesNotTouchEffectSettings_IdIsNoLongerAKey(t *testing.T) {
 	srv, _ := setupTestHTTPServer(t)
 	tw225Seed(t, srv)
-	tw225Post(t, srv, `{"lighting":{"groups":[{"id":"ga1","role":"animateur","lights":["L1"]},{"id":"gb2","role":"animateur","lights":["L2"]}]}}`)
+	tw225Post(t, srv, `{"lighting":{"groups":[{"id":"ga1","role":"animateur","lights":["L1"]},{"id":"gb2","role":"public","lights":["L2"]}]}}`)
 	cfg := config.Get()
-	cfg.Lighting.HostEffects = map[string]map[string]string{
-		"ga1": {"chrono": "", "calm": "", "score": ""}, "gb2": {"chrono": "", "calm": "", "score": ""},
-	}
+	cfg.Lighting.Effects = map[string]map[string]string{"animateur": {"chrono": "", "calm": "pulsation", "score": ""}, "public": {"chrono": "", "calm": "pulsation", "score": ""}}
 	config.SetInstance(cfg)
-	// on supprime le groupe gb2
+	// on supprime le groupe public gb2 : les réglages par zone ne dépendent d'aucun id de groupe
 	if code, out := tw225Post(t, srv, `{"lighting":{"groups":[{"id":"ga1","role":"animateur","lights":["L1"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
 	}
-	he := config.Get().Lighting.HostEffects
-	if _, ok := he["gb2"]; ok {
-		t.Errorf("enregistrer lighting.groups purge host_effects des id disparus : %v", he)
-	}
-	if _, ok := he["ga1"]; !ok {
-		t.Errorf("l'entrée du groupe conservé reste : %v", he)
+	eff := config.Get().Lighting.Effects
+	if eff["animateur"]["calm"] != "pulsation" || eff["public"]["calm"] != "pulsation" {
+		t.Errorf("supprimer un groupe ne purge aucun réglage (conservés même pour une zone sans groupe) : %v", eff)
 	}
 }
 
@@ -453,7 +454,7 @@ func tw225ServerWithDriver(t *testing.T) (*HTTPServer, *devHueBridge) {
 }
 
 // tw225Provider : le fournisseur de développement + l'essai de groupe (GroupTester) simulé, qui reproduit la résolution
-// de référence de la production (n = salle, "host<k>" = animateur de rang k ; inconnu ou vide ⇒ erreur) et enregistre les appels.
+// de référence de la production (n = zone ambiance, "host<k>" = zone animateur, "public<k>" = zone public, k = rang dans la zone ; inconnu ou vide ⇒ erreur) et enregistre les appels.
 type tw225Provider struct {
 	*devProvider
 	started []string
@@ -462,38 +463,24 @@ type tw225Provider struct {
 
 func (p *tw225Provider) CheckGroup(ref string) error {
 	lc := config.Get().Lighting
+	zone, num := config.ZoneAmbiance, ref
 	if k, ok := strings.CutPrefix(ref, "host"); ok {
-		rank, err := strconv.Atoi(k)
-		if err != nil || rank < 1 {
-			return errors.New("groupe inconnu")
-		}
-		hosts := lc.HostGroups()
-		if rank > len(hosts) {
-			return errors.New("groupe inconnu")
-		}
-		if len(hosts[rank-1].Lights) == 0 {
-			return errors.New("groupe vide")
-		}
-		return nil
+		zone, num = config.ZoneAnimateur, k
+	} else if k, ok := strings.CutPrefix(ref, "public"); ok {
+		zone, num = config.ZonePublic, k
 	}
-	n, err := strconv.Atoi(ref)
+	n, err := strconv.Atoi(num)
 	if err != nil || n < 1 {
 		return errors.New("groupe inconnu")
 	}
-	rank := 0
-	for _, g := range lc.Groups {
-		if g.Role == config.GroupRoleAnimateur {
-			continue
-		}
-		rank++
-		if rank == n {
-			if len(g.Lights) == 0 {
-				return errors.New("groupe vide")
-			}
-			return nil
-		}
+	groups := lc.ZoneGroups(zone)
+	if n > len(groups) {
+		return errors.New("groupe inconnu")
 	}
-	return errors.New("groupe inconnu")
+	if len(groups[n-1].Lights) == 0 {
+		return errors.New("groupe vide")
+	}
+	return nil
 }
 func (p *tw225Provider) StartGroupTest(ref string) error {
 	if err := p.CheckGroup(ref); err != nil {
@@ -578,6 +565,27 @@ func TestTW225_Lights_GroupField_RankAmongSalleGroups_HostIsStringWithRank(t *te
 	if v := tw225LightsGroupField(t, srv); v != "host2" {
 		t.Fatalf("rang propre des animateurs, vides compris : \"host2\", obtenu %v", v)
 	}
+	// Zone public : "public<k>", rang propre à la zone.
+	cfg = config.Get()
+	cfg.Lighting.Groups = []config.LightingGroupEntry{
+		{ID: "ha", Role: "animateur", Lights: []string{"BuzzHue1"}},
+		{ID: "pa", Role: "public", Lights: []string{}},
+		{ID: "pb", Role: "public", Lights: []string{}},
+	}
+	config.SetInstance(cfg)
+	if v := tw225LightsGroupField(t, srv); v != "host1" {
+		t.Fatalf("les groupes public ne décalent pas la zone animateur : %v", v)
+	}
+	cfg = config.Get()
+	cfg.Lighting.Groups = []config.LightingGroupEntry{
+		{ID: "ha", Role: "animateur", Lights: []string{}},
+		{ID: "pa", Role: "public", Lights: []string{}},
+		{ID: "pb", Role: "public", Lights: []string{"BuzzHue1"}},
+	}
+	config.SetInstance(cfg)
+	if v := tw225LightsGroupField(t, srv); v != "public2" {
+		t.Fatalf("ampoule du groupe public de rang 2 ⇒ \"public2\", obtenu %v", v)
+	}
 }
 
 func TestTW225_Lights_TeamBulbCarriesZero(t *testing.T) {
@@ -624,18 +632,23 @@ func TestTW225_GroupsTest_Refusals400(t *testing.T) {
 	srv, _, prov := tw225ServerWithTester(t)
 	tw225ConfigureGroups(tw225Salle("BuzzHue1"),
 		config.LightingGroupEntry{ID: "s2", Role: "salle", Lights: []string{}},
-		tw225Anim("h1", "BuzzHue1x"), tw225Anim("h2"))
+		tw225Anim("h1", "BuzzHue1x"), tw225Anim("h2"),
+		config.LightingGroupEntry{ID: "p1", Role: "public", Lights: []string{"BuzzHue1y"}}, config.LightingGroupEntry{ID: "p2", Role: "public", Lights: []string{}})
 	for name, body := range map[string]string{
-		"numéro inconnu":                    `{"group": 9}`,
-		"numéro 0":                          `{"group": 0}`,
-		"ancienne forme \"host\" sans rang": `{"group": "host"}`,
-		"rang animateur inexistant":         `{"group": "host3"}`,
-		"rang animateur 0":                  `{"group": "host0"}`,
-		"groupe animateur vide":             `{"group": "host2"}`,
-		"corps sans groupe":                 `{}`,
-		"corps illisible":                   `pas du json`,
-		"groupe de salle vide":              `{"group": 2}`,
-		"chaîne autre que host<k>":          `{"group": "salle"}`,
+		"numéro inconnu":                      `{"group": 9}`,
+		"numéro 0":                            `{"group": 0}`,
+		"ancienne forme \"host\" sans rang":   `{"group": "host"}`,
+		"rang animateur inexistant":           `{"group": "host3"}`,
+		"rang animateur 0":                    `{"group": "host0"}`,
+		"groupe animateur vide":               `{"group": "host2"}`,
+		"corps sans groupe":                   `{}`,
+		"corps illisible":                     `pas du json`,
+		"groupe de salle vide":                `{"group": 2}`,
+		"chaîne autre que host<k>/public<k>":  `{"group": "salle"}`,
+		"ancienne forme \"public\" sans rang": `{"group": "public"}`,
+		"rang public inexistant":              `{"group": "public4"}`,
+		"rang public 0":                       `{"group": "public0"}`,
+		"groupe public vide":                  `{"group": "public2"}`,
 	} {
 		if code, out := devDo(t, srv, "POST", "/api/lighting/groups/test", body); code != http.StatusBadRequest {
 			t.Errorf("%s : 400 attendu, obtenu %d %v", name, code, out)
@@ -648,8 +661,8 @@ func TestTW225_GroupsTest_Refusals400(t *testing.T) {
 
 func TestTW225_GroupsTest_NoLongerAnswers429_NewTestReplacesPrevious(t *testing.T) {
 	srv, _, prov := tw225ServerWithTester(t)
-	tw225ConfigureGroups(tw225Salle("BuzzHue1"), tw225Anim("h1", "BuzzHue1x"))
-	for _, body := range []string{`{"group": 1}`, `{"group": 1}`, `{"group": "host1"}`} {
+	tw225ConfigureGroups(tw225Salle("BuzzHue1"), tw225Anim("h1", "BuzzHue1x"), config.LightingGroupEntry{ID: "p1", Role: "public", Lights: []string{"BuzzHue1y"}})
+	for _, body := range []string{`{"group": 1}`, `{"group": 1}`, `{"group": "host1"}`, `{"group": "public1"}`} {
 		code, out := devDo(t, srv, "POST", "/api/lighting/groups/test", body)
 		if code == http.StatusTooManyRequests {
 			t.Fatalf("un nouvel essai remplace le précédent, jamais 429 : %v", out)
@@ -658,7 +671,7 @@ func TestTW225_GroupsTest_NoLongerAnswers429_NewTestReplacesPrevious(t *testing.
 			t.Fatalf("%s : %d %v", body, code, out)
 		}
 	}
-	if strings.Join(prov.started, ",") != "1,1,host1" {
+	if strings.Join(prov.started, ",") != "1,1,host1,public1" {
 		t.Errorf("chaque appel démarre un essai (le précédent est remplacé) : %v", prov.started)
 	}
 }
@@ -697,14 +710,14 @@ func TestTW225_GroupsTest_BridgeUnreachable_503(t *testing.T) {
 
 func TestTW225_GroupsTest_Immediate200_NoDirectBridgeWrite(t *testing.T) {
 	srv, bridge, prov := tw225ServerWithTester(t)
-	tw225ConfigureGroups(tw225Salle("BuzzHue1"), tw225Anim("h1", "BuzzHue1x"))
-	for name, body := range map[string]string{"salle": `{"group": 1}`, "animateur": `{"group": "host1"}`} {
+	tw225ConfigureGroups(tw225Salle("BuzzHue1"), tw225Anim("h1", "BuzzHue1x"), config.LightingGroupEntry{ID: "p1", Role: "public", Lights: []string{"BuzzHue1y"}})
+	for name, body := range map[string]string{"salle": `{"group": 1}`, "animateur": `{"group": "host1"}`, "public": `{"group": "public1"}`} {
 		code, out := devDo(t, srv, "POST", "/api/lighting/groups/test", body)
 		if code != 200 || out["ok"] != true || out["duration_ms"] != float64(6000) {
 			t.Fatalf("%s : réponse immédiate {\"ok\":true,\"duration_ms\":6000} : %d %v", name, code, out)
 		}
 	}
-	if len(prov.started) != 2 {
+	if len(prov.started) != 3 {
 		t.Errorf("la séquence est confiée au contrôleur : %v", prov.started)
 	}
 	// La séquence est portée par l'écrivain via Scene() : le gestionnaire HTTP n'écrit jamais au pont lui-même.
