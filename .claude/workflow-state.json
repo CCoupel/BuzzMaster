@@ -1,99 +1,159 @@
 {
-  "type": "MILESTONE",
-  "version": "11.5.0",
-  "description": "v11.5.0 — Optimisation des tests",
-  "branch": "main",
-  "milestone_num": 44,
+  "type": "FEATURE",
+  "version": "11.6.0",
+  "description": "v11.6.0 — Ambiance : portée étendue (son, types de question, manches)",
+  "branch": "milestone/v11.6.0",
+  "milestone_num": 36,
   "issue_nums": [
-    280,
-    291,
-    292,
-    293,
-    294,
-    295
+    235,
+    231,
+    290,
+    232,
+    283
   ],
   "status": "completed",
-  "started_at": "2026-11-08T17:00:00Z",
-  "updated_at": "2026-11-09T10:50:00Z",
+  "started_at": "2026-11-09T12:35:00Z",
+  "updated_at": "2026-11-11T08:50:00Z",
   "cycles": 2,
-  "plan": ".claude/workflow/plan-11.5.0.md",
+  "plan": ".claude/workflow/plan-11.6.0.md",
+  "intensite_depart": "complet",
   "phases": {
     "clarification": {
       "status": "completed"
     },
     "plan": {
       "status": "completed",
-      "report": "_work/reports/planner-plan-v11.5.0.md",
-      "revision": "Révision 2 : LOT-4 LED + ambiance + Option P (oui), Option F (non)"
+      "report": "_work/reports/planner-plan-v11.6.0.md",
+      "revision": "Révision 2 : Q1 élargie (réglages mutualisés), Q3 les deux, D1′/D7/D8/D9 validés",
+      "gate2": "2026-11-09"
+    },
+    "init": {
+      "status": "completed",
+      "report": "_work/reports/deployer-milestone-start-v11.6.0.md"
+    },
+    "contracts": {
+      "status": "completed",
+      "commits": [
+        "a8cfe72b",
+        "09626783"
+      ],
+      "report": "_work/reports/planner-contrats-v11.6.0.md"
     },
     "dev": {
       "status": "completed",
-      "handoff": "_work/handoff/dev-backend-lot4-v11.5.0.md"
+      "lot": "LOT-4b",
+      "commits": [
+        "ecf94ae9",
+        "919d03ef",
+        "75b68755",
+        "68d952da",
+        "6f0166b2",
+        "6d15effe",
+        "08232343"
+      ]
     },
     "review": {
       "status": "completed",
-      "report": "_work/reports/code-reviewer-lot4-v11.5.0.md"
+      "lot": "LOT-4b",
+      "verdict": "APPROUVE AVEC RESERVES",
+      "report": "_work/reports/code-reviewer-lot4b-v11.6.0.md",
+      "fixes": "m1 dev-frontend, m2+m3 planner — avant QA"
     },
     "qa": {
       "status": "completed",
-      "report": "_work/reports/qa-lot4-v11.5.0-20261109-090459.md"
+      "lot": "LOT-4b",
+      "verdict": "VALIDATED WITH RESERVATIONS",
+      "report": "_work/reports/qa-lot4b-v11.6.0-20261109-192413.md",
+      "reserve": "internal/server 68.2% par paquet (72.8% cumulé -coverpkg) — accepté"
+    },
+    "integration_fixes": {
+      "status": "completed",
+      "lot": "LOT-3",
+      "commits_tmp": [
+        "d2a936fc",
+        "9683d019",
+        "1f9a64ab",
+        "4d65fcf5"
+      ]
+    },
+    "qa_delta": {
+      "status": "completed",
+      "lot": "LOT-4",
+      "verdict": "VALIDATED",
+      "report": "_work/reports/qa-lot4-delta-front-v11.6.0-20261109-163110.md"
     },
     "doc": {
       "status": "completed",
+      "lot": "LOT-4b",
       "commits": [
-        "5c1110e7",
-        "3ac4d717",
-        "a268c482",
-        "573643ec"
+        "49d3edbd",
+        "b3a148bf",
+        "faffeaee"
       ],
-      "review": "_work/reports/code-reviewer-docfinal-v11.5.0.md"
+      "review": "_work/reports/code-reviewer-doc-lot4b-v11.6.0-r2.md"
     },
     "deploy-qualif": {
-      "status": "skipped",
-      "reason": "qualif false"
+      "status": "completed",
+      "lot": "LOT-4 r3",
+      "version": "11.6.0.24",
+      "mode": "manuel",
+      "report": "_work/reports/deployer-qualif-lot4b-v11.6.0.md",
+      "ci_run": 42684149511,
+      "ci_sha": "853e4876",
+      "ci": "green"
+    },
+    "plan_revision": {
+      "status": "completed",
+      "lot": "LOT-4",
+      "validated": "2026-11-09",
+      "report": "_work/reports/planner-plan-v11.6.0-r3-lot4.md"
+    },
+    "coverage_fix": {
+      "status": "completed",
+      "sha": "853e4876",
+      "internal_server": "71.1%"
     },
     "gate4": {
       "status": "completed",
       "validated": "2026-11-09",
-      "candidate": "11.5.0.28",
-      "sha": "5c1110e7"
+      "candidate": "11.6.0.24",
+      "sha": "853e4876"
     },
     "deploy-prod": {
       "status": "completed",
-      "report": "_work/reports/deployer-prod-v11.5.0.md",
-      "merge": "6c826cd3",
-      "tag": "v11.5.0",
-      "release_run": 42598655680
-    },
-    "build": {
-      "status": "completed",
-      "report": "_work/reports/deployer-build-v11.5.0.md"
+      "tag": "v11.6.0",
+      "tag_sha": "37b228b1",
+      "bump_sha": "f901bf26",
+      "release_run": 42861022331,
+      "final_merge": "6ba25995"
     },
     "marketing": {
       "status": "completed",
-      "commit": "6719d96b"
+      "mode": "PREPARE (GATE 4d)"
     }
   },
+  "start_sha": "beba8ee8",
   "cadrage": {
     "intensite": "complet",
-    "test_writer": false,
+    "test_writer": true,
     "review": true,
-    "qualif": false,
+    "qualif": true,
     "doc": "agent",
     "team": [
       "dev-backend",
       "dev-frontend",
+      "test-writer",
       "code-reviewer",
       "qa",
       "doc-updater"
     ],
     "ponctuel": [
-      "infra"
+      "marketing"
     ],
     "qa_parallelizable": {
       "LOT-1": true,
-      "LOT-2": true,
-      "LOT-3": false,
+      "LOT-2": false,
+      "LOT-3": true,
       "LOT-4": false
     }
   },
@@ -103,43 +163,51 @@
       "LOT-1": {
         "status": "completed",
         "issues": [
-          292,
-          293,
-          294
+          283,
+          232
         ],
-        "ci_sha": "9b15045c",
-        "ci_run": 42507148899
+        "valid_humaine": true,
+        "gate_lot": "2026-11-09 validé utilisateur (QUALIF 11.6.0.6)",
+        "ci_sha": "c974038d",
+        "ci_run": 42638314124,
+        "closed": true
       },
       "LOT-2": {
         "status": "completed",
         "issues": [
-          280
+          235
         ],
-        "ci_sha": "c2410bfb",
-        "ci_run": 42509335812
+        "valid_humaine": true,
+        "gate_lot": "2026-11-09 validé utilisateur (QUALIF 11.6.0.11)",
+        "ci_run": 42641731932,
+        "ci_sha": "fb256e14"
       },
       "LOT-3": {
         "status": "completed",
         "issues": [
-          291
+          231
         ],
-        "ci_sha": "536b4016",
-        "ci_run": 42515018774,
-        "ecarts_acceptes": "cmd/server 100,5 s CI (cible 90), main.go 7029 (cible 6000) — reportés LOT-4"
+        "valid_humaine": true,
+        "ci_run": 42648443852,
+        "ci_sha": "99c4e54d",
+        "gate_lot": "2026-11-09 validé utilisateur (QUALIF 11.6.0.16)"
       },
       "LOT-4": {
         "status": "completed",
         "issues": [
-          295
+          290
         ],
-        "ci_sha": "0d2ca78b",
-        "ci_run": 42593507449,
-        "ecart_accepte": "cmd/server 86,6-90,9 s CI (cible 75)"
+        "valid_humaine": true,
+        "gate_lot_refused": "2026-11-09 QUALIF 11.6.0.21 : ajouter fichiers de son par manche (bruitages + décompte) ; D7 « fichiers hors surcharge » annulé",
+        "gate_lot": "2026-11-09 validé utilisateur (QUALIF 11.6.0.24)",
+        "ci_run": 42684149511,
+        "ci_sha": "853e4876"
       }
     }
   },
-  "final_report": {
-    "requested": "2026-11-08",
-    "content": "rapport gains de temps (vitest, go test par paquet, ci.sh, CI) et découpage des tests/paquets, avant/après"
-  }
+  "notes_lot4": [
+    "Section Décompte non rendue par AmbianceSettingsPanel en LOT-3 (reste dans « Sons longs », 6+ tests existants) : à intégrer au panel en LOT-4 (D7 : décompte surchargeable par manche)",
+    "Section Lumière masquée en LOT-3, à activer en LOT-4 (lighting.default_mode)"
+  ],
+  "plan_r3": ".claude/workflow/plan-11.6.0-r3-lot4.md"
 }
