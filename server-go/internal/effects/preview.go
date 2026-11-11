@@ -13,8 +13,10 @@ var (
 )
 
 const (
-	// PreviewSpan is the length covered by a preview: PRE, then the loops over 20 s.
-	PreviewSpan = 20 * time.Second
+	// PreviewSpanChrono / PreviewSpanScore are the lengths covered by a preview, fixed by the
+	// moment (§7.3): 20 s for chrono and calm, 5 s for score.
+	PreviewSpanChrono = 20 * time.Second
+	PreviewSpanScore  = 5 * time.Second
 	// PreviewMaxFrames caps the number of listed frames.
 	PreviewMaxFrames = 400
 	// previewSceneIntensity is the intensity shown for a group the effect never wrote (the
@@ -22,26 +24,56 @@ const (
 	previewSceneIntensity = 200
 )
 
-// PreviewFrame is one listed frame: the state of every group from AtMs on.
+// PreviewSpanOf is the duration of a preview at moment m.
+func PreviewSpanOf(m Moment) time.Duration {
+	if m == MomentScore {
+		return PreviewSpanScore
+	}
+	return PreviewSpanChrono
+}
+
+// PreviewChronoS is the simulated chrono, in seconds: 20 at the chrono moment, 0 elsewhere.
+func PreviewChronoS(m Moment) int {
+	if m == MomentChrono {
+		return int(PreviewSpanChrono / time.Second)
+	}
+	return 0
+}
+
+// PreviewGroup is the state of one group in a preview: resolved RGB and intensity 0-255.
+type PreviewGroup struct {
+	Color     [3]int `json:"color"`
+	Intensity int    `json:"intensity"`
+}
+
+// PreviewFrame is one listed frame: the state of every group from AtMs on, the tick it belongs
+// to and the step played at that tick ("pre", "pas:<n>" or "dernier" — never "post").
 type PreviewFrame struct {
-	AtMs   int         `json:"at_ms"`
-	Groups []GroupLook `json:"groups"`
+	AtMs   int            `json:"at_ms"`
+	Tick   int            `json:"tick"`
+	Step   string         `json:"step"`
+	Groups []PreviewGroup `json:"groups"`
 }
 
 // PreviewResult is the answer of GET /api/lighting/effects/{id}/preview.
 type PreviewResult struct {
 	ID         string         `json:"id"`
+	Moment     string         `json:"moment"`
 	Groups     int            `json:"groups"`
+	TickMs     int            `json:"tick_ms"`
 	DurationMs int            `json:"duration_ms"`
+	ChronoS    int            `json:"chrono_s"`
 	Loop       bool           `json:"loop"`
 	Frames     []PreviewFrame `json:"frames"`
 }
 
-// Preview renders e for n groups at moment m over PreviewSpan (or one round for a `boucle: non`
-// effect). A frame is listed only when it differs from the previous one; at most
-// PreviewMaxFrames. Speed is ×1 (the catalogue previews the effect as written).
+// Preview renders e for n groups at moment m (contract §7.3): ONE frame per tick, in order,
+// even when identical to the previous one, plus an extra frame (same tick, same step) when a
+// named colour changes between two ticks — the urgency colour at 10 s and 5 s of the simulated
+// chrono. The span is fixed by the moment; a `boucle: non` effect stops after its round. At most
+// PreviewMaxFrames (the preview is then truncated and its duration shortened). Speed is ×1.
 func Preview(e Effect, n int, m Moment) PreviewResult {
-	res := PreviewResult{ID: e.ID, Groups: n, Loop: e.Loop, Frames: []PreviewFrame{}}
+	res := PreviewResult{ID: e.ID, Moment: string(m), Groups: n, TickMs: e.TickMs, ChronoS: PreviewChronoS(m), Loop: e.Loop, Frames: []PreviewFrame{}}
 	tick := time.Duration(e.TickMs) * time.Millisecond
 	if tick <= 0 {
 		tick = time.Second
@@ -51,50 +83,87 @@ func Preview(e Effect, n int, m Moment) PreviewResult {
 		nums[i] = i + 1
 	}
 	live := e.liveSteps(nums)
-	last := int(PreviewSpan / tick)
+	span := PreviewSpanOf(m)
 	if !e.Loop && len(live) > 0 {
-		if lt := e.lastTick(live); lt < last {
-			last = lt
+		if round := time.Duration(e.lastTick(live)+1) * tick; round < span {
+			span = round
 		}
 	}
-	span := PreviewSpan
-	if !e.Loop && time.Duration(last+1)*tick < span {
-		span = time.Duration(last+1) * tick
-	}
 	res.DurationMs = int(span / time.Millisecond)
+	if len(live) == 0 {
+		return res
+	}
 
-	var prev []GroupLook
-	for t := 0; t <= last && len(res.Frames) < PreviewMaxFrames; t++ {
+	chronoTotal := time.Duration(res.ChronoS) * time.Second
+	render := func(t int, atTime time.Duration) []PreviewGroup {
+		ctx := Context{Groups: n, Nums: nums, Moment: m, Total: chronoTotal,
+			Scene: [3]int{255, 255, 255}, Theme: PreviewTheme, Team: PreviewTeam}
+		if chronoTotal > 0 {
+			if ctx.Remaining = chronoTotal - atTime; ctx.Remaining < 0 {
+				ctx.Remaining = 0
+			}
+		}
+		return previewGroups(Render(e, ctx, t), n)
+	}
+	// Instants where a named colour changes (urgency: 10 s and 5 s remaining).
+	var changes []time.Duration
+	if m == MomentChrono {
+		changes = []time.Duration{chronoTotal - 10*time.Second, chronoTotal - 5*time.Second}
+	}
+
+	for t := 0; ; t++ {
 		at := time.Duration(t) * tick
 		if at >= span {
 			break
 		}
-		ctx := Context{
-			Groups: n, Nums: nums, Moment: m,
-			Remaining: PreviewSpan - at, Total: PreviewSpan,
-			Scene: [3]int{255, 255, 255}, Theme: PreviewTheme, Team: PreviewTeam,
+		if len(res.Frames) >= PreviewMaxFrames {
+			res.DurationMs = int(at / time.Millisecond) // truncated: shortened accordingly
+			break
 		}
-		if ctx.Remaining < 0 {
-			ctx.Remaining = 0
+		step := e.stepName(e.playedAt(t, live))
+		base := render(t, at)
+		res.Frames = append(res.Frames, PreviewFrame{AtMs: int(at / time.Millisecond), Tick: t, Step: step, Groups: base})
+		for _, c := range changes {
+			if c > at && c < at+tick && c < span && len(res.Frames) < PreviewMaxFrames {
+				if g := render(t, c); !samePreview(g, base) {
+					res.Frames = append(res.Frames, PreviewFrame{AtMs: int(c / time.Millisecond), Tick: t, Step: step, Groups: g})
+					base = g
+				}
+			}
 		}
-		f := Render(e, ctx, t)
-		if f.Base == nil && f.Groups == nil {
-			break // not applicable to this number of groups: nothing to show
-		}
-		cur := effectiveGroups(f, n)
-		if prev != nil && sameLooks(prev, cur) {
-			continue
-		}
-		res.Frames = append(res.Frames, PreviewFrame{AtMs: int(at / time.Millisecond), Groups: cur})
-		prev = cur
 	}
 	return res
 }
 
-// effectiveGroups gives, for every group, the state it shows: its own, else the state of g0,
+// stepName names what a tick plays (§7.3).
+func (e Effect) stepName(p playedTick) string {
+	switch p.kind {
+	case 'P':
+		return "pre"
+	case 'L':
+		return "dernier"
+	}
+	return "pas:" + itoaInt(p.step)
+}
+
+func itoaInt(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(b[i:])
+}
+
+// previewGroups gives, for every group, the state it shows: its own, else the state of g0,
 // else the ordinary scene.
-func effectiveGroups(f Frame, n int) []GroupLook {
-	out := make([]GroupLook, n)
+func previewGroups(f Frame, n int) []PreviewGroup {
+	out := make([]PreviewGroup, n)
 	for i := 0; i < n; i++ {
 		var g GroupLook
 		switch {
@@ -105,13 +174,12 @@ func effectiveGroups(f Frame, n int) []GroupLook {
 		default:
 			g = GroupLook{Color: [3]int{255, 255, 255}, Intensity: previewSceneIntensity}
 		}
-		g.Absent = false
-		out[i] = g
+		out[i] = PreviewGroup{Color: g.Color, Intensity: g.Intensity}
 	}
 	return out
 }
 
-func sameLooks(a, b []GroupLook) bool {
+func samePreview(a, b []PreviewGroup) bool {
 	if len(a) != len(b) {
 		return false
 	}

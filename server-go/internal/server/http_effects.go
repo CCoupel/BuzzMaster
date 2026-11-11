@@ -51,6 +51,7 @@ type effectEntryJSON struct {
 	File        string          `json:"file"`
 	MinGroups   int             `json:"min_groups"`
 	TickMs      int             `json:"tick_ms"`
+	Steps       int             `json:"steps"`
 	Applicable  map[string]bool `json:"applicable"`
 }
 
@@ -102,7 +103,7 @@ func (h *HTTPServer) effectsView() map[string]any {
 		}
 		list = append(list, effectEntryJSON{
 			ID: e.ID, Name: e.Name, Description: e.Description, Moments: moments, Origin: en.Origin, File: en.File,
-			MinGroups: e.MinGroups, TickMs: e.TickMs, Applicable: app,
+			MinGroups: e.MinGroups, TickMs: e.TickMs, Steps: len(e.Steps), Applicable: app,
 		})
 	}
 	errs := cat.Errors()
@@ -213,7 +214,7 @@ func (h *HTTPServer) handleEffectTrial(w http.ResponseWriter, r *http.Request, i
 		Zone    string  `json:"zone"`
 		Speed   float64 `json:"speed"`
 		Seconds int     `json:"seconds"`
-	}{Zone: ambiancecfg.ZoneAmbiance, Speed: 1, Seconds: 10}
+	}{Zone: ambiancecfg.ZoneAmbiance, Speed: 1}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		http.Error(w, "corps JSON invalide", http.StatusBadRequest)
 		return
@@ -224,10 +225,7 @@ func (h *HTTPServer) handleEffectTrial(w http.ResponseWriter, r *http.Request, i
 	if req.Speed == 0 {
 		req.Speed = 1
 	}
-	if req.Seconds == 0 {
-		req.Seconds = 10
-	}
-	if !ambiancecfg.ValidZone(req.Zone) || !ambiancecfg.ValidSpeed(req.Speed) || req.Seconds < 1 || req.Seconds > 20 {
+	if !ambiancecfg.ValidZone(req.Zone) || !ambiancecfg.ValidSpeed(req.Speed) || req.Seconds < 0 || req.Seconds > 20 {
 		http.Error(w, "zone (ambiance, animateur, public), speed (0,5 ; 0,75 ; 1 ; 1,5 ; 2) ou seconds (1 à 20) invalide", http.StatusBadRequest)
 		return
 	}
@@ -235,9 +233,13 @@ func (h *HTTPServer) handleEffectTrial(w http.ResponseWriter, r *http.Request, i
 		http.Error(w, "effet inconnu", http.StatusNotFound)
 		return
 	}
-	if _, ok := h.Effects.EffectsCatalogue().Get(id); !ok {
+	en, ok := h.Effects.EffectsCatalogue().Get(id)
+	if !ok {
 		http.Error(w, "effet inconnu", http.StatusNotFound)
 		return
+	}
+	if req.Seconds == 0 { // default: 5 s for an effect that only declares the score moment, else 10 s
+		req.Seconds = trialDefaultSeconds(en.Effect)
 	}
 	d, t := h.lightingDriver(), h.effectTrialer()
 	if d == nil || t == nil {
@@ -301,11 +303,20 @@ func (h *HTTPServer) handleEffectPreview(w http.ResponseWriter, r *http.Request,
 		moment = effects.Moment(en.Effect.Moments[0])
 	}
 	if v := r.URL.Query().Get("moment"); v != "" {
-		if !effects.Moment(v).Valid() {
-			http.Error(w, "moment : chrono, calm ou score", http.StatusBadRequest)
+		if !effects.Moment(v).Valid() || !en.Effect.HasMoment(effects.Moment(v)) {
+			http.Error(w, "moment : un moment déclaré par l'effet (chrono, calm ou score)", http.StatusBadRequest)
 			return
 		}
 		moment = effects.Moment(v)
 	}
 	writeEffectsJSON(w, effects.Preview(en.Effect, n, moment))
+}
+
+// trialDefaultSeconds is the default length of a trial (§7.4): 5 s for an effect that declares
+// only the score moment, 10 s otherwise.
+func trialDefaultSeconds(e effects.Effect) int {
+	if len(e.Moments) == 1 && e.HasMoment(effects.MomentScore) {
+		return 5
+	}
+	return 10
 }

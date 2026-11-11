@@ -80,7 +80,7 @@ func TestAPIEffects_CatalogueByZoneAndReload_Dev(t *testing.T) {
 	}
 	e := list[0].(map[string]any)
 	app := e["applicable"].(map[string]any)
-	if e["tick_ms"].(float64) != 1000 || e["min_groups"].(float64) != 0 || app["ambiance"] != true || app["public"] != true || app["animateur"] != false {
+	if e["steps"].(float64) != 1 || e["tick_ms"].(float64) != 1000 || e["min_groups"].(float64) != 0 || app["ambiance"] != true || app["public"] != true || app["animateur"] != false {
 		t.Fatalf("applicabilité par zone (animateur n'existe pas) et tick_ms : %+v", e)
 	}
 	for _, gone := range []string{"target", "reason", "host_applicable"} {
@@ -228,12 +228,17 @@ func TestEffectPreviewEndpoint_Dev(t *testing.T) {
 		return w.Code, m
 	}
 	code, v := get("/api/lighting/effects/cal/preview?groups=4&moment=calm")
-	if code != 200 || v["id"] != "cal" || v["groups"].(float64) != 4 || v["duration_ms"].(float64) != 20000 || v["loop"] != true {
+	if code != 200 || v["id"] != "cal" || v["moment"] != "calm" || v["groups"].(float64) != 4 || v["tick_ms"].(float64) != 1000 ||
+		v["duration_ms"].(float64) != 20000 || v["chrono_s"].(float64) != 0 || v["loop"] != true {
 		t.Fatalf("aperçu : %d %+v", code, v)
 	}
 	frames := v["frames"].([]any)
-	if len(frames) < 1 || len(frames[0].(map[string]any)["groups"].([]any)) != 4 {
-		t.Fatalf("trames : %+v", frames)
+	f0 := frames[0].(map[string]any)
+	if len(frames) != 20 || f0["tick"].(float64) != 0 || f0["step"] != "pas:0" || len(f0["groups"].([]any)) != 4 {
+		t.Fatalf("trames (une par tick) : %d %+v", len(frames), f0)
+	}
+	if _, has := f0["groups"].([]any)[0].(map[string]any)["fade_ms"]; has {
+		t.Fatal("fade_ms retiré des états de groupe")
 	}
 	code, v = get("/api/lighting/effects/cal/preview")
 	if code != 200 || v["groups"].(float64) != 6 {
@@ -248,6 +253,8 @@ func TestEffectPreviewEndpoint_Dev(t *testing.T) {
 		{"/api/lighting/effects/cal/preview?groups=13", 400},
 		{"/api/lighting/effects/cal/preview?groups=x", 400},
 		{"/api/lighting/effects/cal/preview?moment=nuit", 400},
+		{"/api/lighting/effects/cal/preview?moment=chrono", 400}, // cal ne déclare que calm
+		{"/api/lighting/effects/cal/preview?moment=chrono", 400}, // cal ne déclare que calm
 	} {
 		if got, _ := get(c.path); got != c.want {
 			t.Errorf("%s : %d, attendu %d", c.path, got, c.want)
@@ -257,5 +264,13 @@ func TestEffectPreviewEndpoint_Dev(t *testing.T) {
 	srv.mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/lighting/effects/cal/preview", nil))
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST : %d", w.Code)
+	}
+}
+
+func TestEffectTrial_DefaultSecondsDependOnMoments_Dev(t *testing.T) {
+	score := effects.Effect{Moments: []string{"score"}}
+	if trialDefaultSeconds(score) != 5 || trialDefaultSeconds(effects.Effect{Moments: []string{"score", "calm"}}) != 10 ||
+		trialDefaultSeconds(effects.Effect{Moments: []string{"chrono"}}) != 10 {
+		t.Fatal("5 s pour un effet qui ne déclare que score, 10 s sinon")
 	}
 }
