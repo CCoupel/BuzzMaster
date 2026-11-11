@@ -17,19 +17,19 @@ var (
 // Applicable reports whether e can play with n groups (§4.6) and, when it
 // cannot, why (in French, for the catalogue).
 func (e Effect) Applicable(n int) (bool, string) {
+	if e.Target == TargetAll {
+		// One state for the whole general zone, always applicable — with no
+		// group at all too (the pulsation worked without any in v11.6.0).
+		return true, ""
+	}
 	min := e.MinGroups
 	if min < 1 {
 		min = 1
 	}
-	if e.Target == TargetAll && min == 1 {
-		// A `target: all` effect drives the whole general zone with one state:
-		// it needs no group (the pulsation worked with none in v11.6.0).
-		min = 0
-	}
 	if n < min {
 		return false, fmt.Sprintf("demande %d groupe(s), %d configuré(s)", min, n)
 	}
-	if e.Target != TargetAll && n == 0 {
+	if n == 0 {
 		return false, "aucun groupe configuré"
 	}
 	return true, ""

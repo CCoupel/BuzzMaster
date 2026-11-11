@@ -127,3 +127,28 @@ func fstestMap(files map[string]string) fstest.MapFS {
 	}
 	return m
 }
+
+func TestValidate_TargetAllRules_Dev(t *testing.T) {
+	t.Parallel()
+	base := "id: x\nname: X\nversion: 1\nmoments: [calm]\ntarget: all\nlooks: { a: { color: scene } }\n"
+	uni := "pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }\n"
+	cases := []struct {
+		name, src, want string
+	}{
+		{"min_groups>1", base + "min_groups: 2\n" + uni, "min_groups"},
+		{"shift", base + "pattern: { type: shift, step_ms: 1000, cells: [a], rest: a }\n", "uniform"},
+		{"groups_lt", base + uni + "stages:\n  - when: { groups_lt: 3 }\n    looks: { a: { color: team } }\n", "groups_lt"},
+	}
+	for _, c := range cases {
+		if _, errs := Parse([]byte(c.src)); len(errs) == 0 || !strings.Contains(errs[0].Message, c.want) {
+			t.Errorf("%s : erreur attendue sur %q, obtenu %+v", c.name, c.want, errs)
+		}
+	}
+	e, errs := Parse([]byte(base + "min_groups: 1\n" + uni))
+	if len(errs) > 0 {
+		t.Fatalf("valide : %+v", errs)
+	}
+	if ok, _ := e.Applicable(0); !ok {
+		t.Error("target all applicable sans groupe")
+	}
+}

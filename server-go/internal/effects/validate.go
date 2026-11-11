@@ -66,7 +66,9 @@ func validate(file string, e *Effect, lines map[string]int) []Error {
 	if e.MinGroups == 0 {
 		e.MinGroups = 1
 	}
-	if e.MinGroups < 1 || e.MinGroups > MaxGroups {
+	if e.Target == TargetAll && e.MinGroups > 1 {
+		v.add("min_groups", "min_groups n'a pas de sens avec target: all")
+	} else if e.MinGroups < 1 || e.MinGroups > MaxGroups {
 		v.add("min_groups", "min_groups doit être compris entre 1 et %d", MaxGroups)
 	}
 	if e.DurationMs < 0 || e.DurationMs > MaxDurationMs {
@@ -85,6 +87,7 @@ func validate(file string, e *Effect, lines map[string]int) []Error {
 		v.add("pattern", "« pattern » est obligatoire (avec un « type »)")
 	} else {
 		v.pattern("pattern", e.Pattern, e.Looks)
+		v.allPattern("pattern", *e)
 	}
 	if len(e.Stages) > MaxStages {
 		v.add("stages", "%d étapes au plus", MaxStages)
@@ -100,9 +103,13 @@ func validate(file string, e *Effect, lines map[string]int) []Error {
 		for name, l := range st.Looks {
 			v.look(p+".looks."+name, name, l)
 		}
+		if e.Target == TargetAll && (st.When.GroupsLT != nil || st.When.GroupsGTE != nil) {
+			v.add(p+".when", "groups_lt et groups_gte n'ont pas de sens avec target: all")
+		}
 		if len(st.Looks) > 0 || !isZeroPattern(st.Pattern) {
 			looks, pat := applyStage(e.Looks, e.Pattern, st)
 			v.pattern(p+".pattern", pat, looks)
+			v.allPattern(p+".pattern", Effect{Target: e.Target, Pattern: pat})
 		}
 	}
 	return v.errs
@@ -311,4 +318,11 @@ func applyStage(baseLooks map[string]Appearance, base Pattern, st Stage) (map[st
 		p.Repeat = o.Repeat
 	}
 	return looks, p
+}
+
+// allPattern enforces that `target: all` only uses the uniform pattern (§4.6).
+func (v *validator) allPattern(path string, e Effect) {
+	if e.Target == TargetAll && e.Pattern.Type != "" && e.Pattern.Type != PatternUniform {
+		v.add(path+".type", "target: all n'accepte que le motif uniform (« %s » demande des groupes)", e.Pattern.Type)
+	}
 }
