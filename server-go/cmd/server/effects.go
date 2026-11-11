@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 
 	"buzzcontrol/assets"
+	"buzzcontrol/internal/ambiancecfg"
+	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/effects"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/server"
@@ -71,8 +73,49 @@ func (a *App) EffectExists(moment, id string) bool {
 }
 
 // EffectSettings implements ambiance.EffectsSource: the RESOLVED effect id per moment
-// (global ← round) for the room and for the animateur group.
+// (global ← round) for the room and, by group id, for the animateur groups. It runs at the
+// reader's 10 Hz, so when no effect is configured anywhere (global or in a round) it
+// answers from the config alone, without resolving the whole settings model.
 func (a *App) EffectSettings() (room map[string]string, host map[string]map[string]string) {
+	lc := config.Get().Lighting
+	if !effectsConfigured(lc) && !a.anyRoundEffects() {
+		room = map[string]string{}
+		for _, m := range ambiancecfg.Moments {
+			room[m] = lc.Effects[m]
+		}
+		return room, map[string]map[string]string{}
+	}
 	s := a.ambianceSettings()
 	return s.LightEffects, s.LightHostEffects
+}
+
+// effectsConfigured reports whether the global config selects any effect the reader plays
+// (the legacy "pulsation" is owned by RunChronoPulse).
+func effectsConfigured(lc config.LightingConfig) bool {
+	for _, id := range lc.Effects {
+		if id != "" && id != ambiancecfg.PulsationID {
+			return true
+		}
+	}
+	for _, mm := range lc.HostEffects {
+		for _, id := range mm {
+			if id != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// anyRoundEffects reports whether any round overrides an effect.
+func (a *App) anyRoundEffects() bool {
+	if a.engine == nil {
+		return false
+	}
+	for _, r := range a.engine.GetRounds() {
+		if len(r.Ambiance.LightEffects) > 0 || len(r.Ambiance.LightHostEffects) > 0 {
+			return true
+		}
+	}
+	return false
 }

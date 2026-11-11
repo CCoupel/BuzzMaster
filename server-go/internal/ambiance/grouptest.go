@@ -140,27 +140,30 @@ func (c *Controller) StartGroupTest(ref string) error {
 	ctx, cancel := context.WithCancel(parent)
 	c.groupTest.cancel = cancel
 	epoch := c.groupTest.epoch.Add(1)
-	c.groupTest.state.Store(&groupTestState{addr: addr, start: c.effectsNow(), step: step})
+	st := &groupTestState{addr: addr, start: c.effectsNow(), step: step}
+	c.groupTest.state.Store(st)
 	c.ambianceMu.Unlock()
 	c.Writer().NotifyState()
-	go c.runGroupTest(ctx, epoch, step)
+	go c.runGroupTest(ctx, epoch, st)
 	return nil
 }
 
 // runGroupTest only wakes the writer at each step boundary and clears the state at the
 // end; what Scene() shows is computed from the clock.
-func (c *Controller) runGroupTest(ctx context.Context, epoch int64, step time.Duration) {
+func (c *Controller) runGroupTest(ctx context.Context, epoch int64, st *groupTestState) {
 	for i := 1; i <= GroupTestSteps; i++ {
 		select {
 		case <-ctx.Done():
 			return // replaced or stopped: whoever cancelled already notified
-		case <-time.After(step):
+		case <-time.After(st.step):
 		}
 		if c.groupTest.epoch.Load() != epoch {
 			return
 		}
 		if i == GroupTestSteps {
-			c.groupTest.state.Store(nil) // end: back to the live state
+			// End: back to the live state — only if THIS sequence is still the published one
+			// (a replacement or a stop between the epoch check and here must not be erased).
+			c.groupTest.state.CompareAndSwap(st, nil)
 		}
 		c.Writer().NotifyState()
 	}

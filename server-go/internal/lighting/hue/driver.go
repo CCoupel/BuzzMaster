@@ -1027,16 +1027,6 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 	return d.testFlashNames(ctx, []string{name}, hold, sleep)
 }
 
-// TestFlashLights flashes the given configured lights together (group test,
-// light-effects.md §2.4) — same rendering and restore as TestFlash. names must
-// be non-empty: an empty list is an error, never "every light".
-func (d *Driver) TestFlashLights(ctx context.Context, names []string, hold time.Duration, sleep func(time.Duration)) error {
-	if len(names) == 0 {
-		return errors.New("hue: no light to test")
-	}
-	return d.testFlashNames(ctx, names, hold, sleep)
-}
-
 // testFlashNames: names == nil means "every configured light" (TestFlash("")).
 func (d *Driver) testFlashNames(ctx context.Context, names []string, hold time.Duration, sleep func(time.Duration)) error {
 	name := ""
