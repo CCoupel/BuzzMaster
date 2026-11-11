@@ -37,7 +37,8 @@ func newTW225Bridge(t *testing.T) *tw225Bridge {
 		case strings.HasSuffix(p, "/lights") && r.Method == "GET":
 			_, _ = w.Write([]byte(`{"8":{"name":"General1","state":{"on":true,"bri":100,"xy":[0.3,0.3],"reachable":true}},` +
 				`"9":{"name":"Team1","state":{"on":true,"bri":100,"xy":[0.3,0.3],"reachable":true}},` +
-				`"10":{"name":"Host1","state":{"on":true,"bri":254,"xy":[0.3,0.3],"reachable":true}}}`))
+				`"10":{"name":"Host1","state":{"on":true,"bri":254,"xy":[0.3,0.3],"reachable":true}},` +
+				`"11":{"name":"Host2","state":{"on":true,"bri":254,"xy":[0.3,0.3],"reachable":true}}}`))
 		case strings.HasSuffix(p, "/state") && r.Method == "PUT":
 			parts := strings.Split(strings.Trim(p, "/"), "/") // api/<key>/lights/<id>/state
 			body, _ := io.ReadAll(r.Body)
@@ -78,11 +79,13 @@ func tw225ConfigureHost(t *testing.T, b *tw225Bridge, enabled bool, withHost boo
 			{Name: "General1", Role: "general"},
 			{Name: "Team1", Role: "team", Team: "TeamA"},
 			{Name: "Host1", Role: "general"},
+			{Name: "Host2", Role: "general"},
 		},
 	}
 	if withHost {
 		cfg.Lighting.Groups = []config.LightingGroupEntry{
-			{Name: "Pupitre", Role: "animateur", Lights: []string{"Host1"}, NearTeams: []string{}},
+			{ID: "ha", Name: "Pupitre", Role: "animateur", Lights: []string{"Host1"}, NearTeams: []string{}},
+			{ID: "hb", Name: "Régie", Role: "animateur", Lights: []string{"Host2"}, NearTeams: []string{}},
 		}
 	}
 	config.SetInstance(&cfg)
@@ -97,7 +100,7 @@ func TestTW225_ShutdownExtinguish_SwitchesHostGroupOff(t *testing.T) {
 		t.Fatal("pilote attendu depuis une configuration valide")
 	}
 	app.shutdownExtinguishHueLighting()
-	for id, name := range map[string]string{"8": "salle", "9": "équipe", "10": "animateur"} {
+	for id, name := range map[string]string{"8": "salle", "9": "équipe", "10": "animateur A1", "11": "animateur A2"} {
 		if !b.wroteOff(id) {
 			t.Errorf("l'arrêt doit écrire on:false sur l'ampoule %s (%s) ; écritures : %v", id, name, b.puts[id])
 		}
@@ -111,7 +114,7 @@ func TestTW225_ShutdownExtinguish_NoHostGroup_HostNamedBulbIsJustGeneral(t *test
 	tw225ConfigureHost(t, b, true, false)
 	app.setupAmbiance()
 	app.shutdownExtinguishHueLighting()
-	if !b.wroteOff("10") || !b.wroteOff("8") {
+	if !b.wroteOff("10") || !b.wroteOff("11") || !b.wroteOff("8") {
 		t.Fatal("sans groupe animateur, toutes les ampoules générales sont éteintes à l'arrêt")
 	}
 }
@@ -133,13 +136,15 @@ func TestTW225_MasterSwitchOff_SwitchesHostGroupOff(t *testing.T) {
 	app.extinguishOnLightingDisabled() // l'écriture réseau part en arrière-plan
 
 	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && !(b.wroteOff("10") && b.wroteOff("8")) {
+	for time.Now().Before(deadline) && !(b.wroteOff("10") && b.wroteOff("11") && b.wroteOff("8")) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	if !b.wroteOff("8") {
 		t.Error("l'interrupteur général doit éteindre les ampoules de salle")
 	}
-	if !b.wroteOff("10") {
-		t.Errorf("l'interrupteur général doit AUSSI éteindre le groupe animateur (contrat §2.5) ; écritures : %v", b.puts["10"])
+	for id, name := range map[string]string{"10": "A1", "11": "A2"} {
+		if !b.wroteOff(id) {
+			t.Errorf("l'interrupteur général doit AUSSI éteindre le groupe animateur %s (contrat §2.5) ; écritures : %v", name, b.puts[id])
+		}
 	}
 }

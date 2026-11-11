@@ -21,7 +21,7 @@ const TEAMS = { Rouges: { COLOR: [255, 26, 26], SCORE: 0 }, Bleus: { COLOR: [26,
 const INVENTORY = ['BuzzHue1', 'BuzzHue2', 'BuzzHue3', 'BuzzHue4'].map((name, i) => ({ id: String(i + 1), name, reachable: true, on: false }))
 
 function makeServer({ lighting = {}, bridge = true, testStatus = 200, saveStatus = 200, saveBody = { status: 'ok' } } = {}) {
-  const state = { posts: [], tests: [] }
+  const state = { posts: [], tests: [], stops: 0 }
   const base = {
     enabled: true,
     bridge_ip: bridge ? '10.0.0.2' : '',
@@ -36,9 +36,13 @@ function makeServer({ lighting = {}, bridge = true, testStatus = 200, saveStatus
       state.posts.push(JSON.parse(opts.body))
       return json(saveBody, saveStatus)
     }
+    if (opts.method === 'POST' && url === '/api/lighting/groups/test/stop') {
+      state.stops += 1
+      return json({ ok: true })
+    }
     if (opts.method === 'POST' && url === '/api/lighting/groups/test') {
       state.tests.push(JSON.parse(opts.body))
-      return json({ ok: true }, testStatus)
+      return json(testStatus < 400 ? { ok: true, duration_ms: 6000 } : { ok: false }, testStatus)
     }
     if (url === '/config.json') return json({ lighting: base, sound: { enabled: true } })
     if (url === '/api/lighting/status') return json({ state: 'ok', enabled: true })
@@ -100,21 +104,22 @@ describe('AmbiancePage › Lumière — sous-onglets (#225)', () => {
 })
 
 describe('AmbiancePage › Lumière — colonne « Groupe » (#225)', () => {
-  it('affiche « hors groupe », « n · nom » et « 🎤 nom (animateur) » selon la configuration', async () => {
+  it('affiche « hors groupe », « n · nom » et « 🎤 A<k> · nom » selon la configuration', async () => {
     makeServer({ lighting: { groups: [
-      { name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] },
-      { name: 'Pupitre', role: 'animateur', lights: ['BuzzHue2'], near_teams: [] },
+      { id: 'a1', name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] },
+      { id: 'b2', name: 'Pupitre', role: 'animateur', lights: ['BuzzHue2'], near_teams: [] },
+      { id: 'c3', name: 'Régie', role: 'animateur', lights: ['BuzzHue3'], near_teams: [] },
     ] } })
     render(<AmbiancePage />)
     expect(await screen.findByLabelText('Groupe de BuzzHue1')).toHaveTextContent('1 · Scène')
-    expect(screen.getByLabelText('Groupe de BuzzHue2')).toHaveTextContent('🎤 Pupitre (animateur)')
-    expect(screen.getByLabelText('Groupe de BuzzHue3')).toHaveTextContent('hors groupe')
+    expect(screen.getByLabelText('Groupe de BuzzHue2')).toHaveTextContent('🎤 A1 · Pupitre')
+    expect(screen.getByLabelText('Groupe de BuzzHue3')).toHaveTextContent('🎤 A2 · Régie')
   })
 
-  it('la numérotation ignore le groupe animateur (rang parmi les groupes de salle)', async () => {
+  it('la numérotation de salle ignore les groupes animateur (rang parmi les groupes de salle)', async () => {
     makeServer({ lighting: { groups: [
-      { name: 'Pupitre', role: 'animateur', lights: ['BuzzHue2'], near_teams: [] },
-      { name: 'Salle', role: 'salle', lights: ['BuzzHue1'], near_teams: [] },
+      { id: 'b2', name: 'Pupitre', role: 'animateur', lights: ['BuzzHue2'], near_teams: [] },
+      { id: 'a1', name: 'Salle', role: 'salle', lights: ['BuzzHue1'], near_teams: [] },
     ] } })
     render(<AmbiancePage />)
     expect(await screen.findByLabelText('Groupe de BuzzHue1')).toHaveTextContent('1 · Salle')
@@ -129,16 +134,20 @@ describe('AmbiancePage › Lumière — colonne « Groupe » (#225)', () => {
 })
 
 describe('AmbiancePage › Lumière — enregistrer et tester les groupes (#225)', () => {
-  it('« Enregistrer les groupes » poste le remplacement complet dans lighting.groups', async () => {
-    const srv = makeServer()
+  it('« Enregistrer les groupes » poste le remplacement complet dans lighting.groups (id conservés)', async () => {
+    const srv = makeServer({ lighting: { groups: [{ id: 'ga1', name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
     render(<AmbiancePage />)
     fireEvent.click(await subtab('Groupes'))
-    fireEvent.click(await screen.findByRole('button', { name: 'Créer un groupe par ampoule' }))
+    fireEvent.click(await screen.findByRole('button', { name: '+ Nouveau groupe' }))
+    fireEvent.click(screen.getByRole('button', { name: /Nouveau groupe animateur/ }))
     fireEvent.click(screen.getByRole('button', { name: /Enregistrer les groupes/ }))
     await waitFor(() => expect(srv.posts.some(p => p.lighting && Array.isArray(p.lighting.groups))).toBe(true))
     const groups = srv.posts.find(p => p.lighting && p.lighting.groups).lighting.groups
-    expect(groups.map(g => g.name)).toEqual(['BuzzHue1', 'BuzzHue2', 'BuzzHue3'])
-    expect(groups.every(g => g.role === 'salle' && Array.isArray(g.near_teams))).toBe(true)
+    expect(groups).toHaveLength(3)
+    expect(groups[0]).toMatchObject({ id: 'ga1', name: 'Scène', role: 'salle' })
+    expect(groups[1]).toMatchObject({ role: 'salle' })
+    expect('id' in groups[1]).toBe(false) // nouveau groupe : l'id est attribué par le serveur
+    expect(groups[2]).toMatchObject({ role: 'animateur', near_teams: [] })
   })
 
   it('un refus 400 du serveur est montré à l\'utilisateur', async () => {
@@ -158,12 +167,12 @@ describe('AmbiancePage › Lumière — enregistrer et tester les groupes (#225)
     await waitFor(() => expect(srv.tests).toEqual([{ group: 1 }]))
   })
 
-  it('« Tester le groupe » du groupe animateur poste {group:"host"}', async () => {
+  it('« Tester le groupe » du groupe animateur poste {group:"host1"}', async () => {
     const srv = makeServer({ lighting: { groups: [{ name: 'Pupitre', role: 'animateur', lights: ['BuzzHue1'], near_teams: [] }] } })
     render(<AmbiancePage />)
     fireEvent.click(await subtab('Groupes'))
     fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
-    await waitFor(() => expect(srv.tests).toEqual([{ group: 'host' }]))
+    await waitFor(() => expect(srv.tests).toEqual([{ group: 'host1' }]))
   })
 
   it('un essai sur pont injoignable (503) est expliqué', async () => {
@@ -174,14 +183,22 @@ describe('AmbiancePage › Lumière — enregistrer et tester les groupes (#225)
     expect(await screen.findByText(/Pont injoignable/)).toBeInTheDocument()
   })
 
-  it('un essai déjà en cours (429) est expliqué, l\'interface reste utilisable', async () => {
-    const srv = makeServer({ testStatus: 429, lighting: { groups: [{ name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
+  it('l\'essai démarre, le bouton devient « Arrêter l\'essai » ; l\'arrêt poste /api/lighting/groups/test/stop', async () => {
+    const srv = makeServer({ lighting: { groups: [{ id: 'ga1', name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
     render(<AmbiancePage />)
     fireEvent.click(await subtab('Groupes'))
     fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
-    expect(await screen.findByText(/essai est déjà en cours/i)).toBeInTheDocument()
-    await waitFor(() => expect(srv.tests).toEqual([{ group: 1 }]))
-    expect(screen.getByRole('button', { name: 'Tester le groupe' })).toBeEnabled() // pas de blocage après le refus
+    fireEvent.click(await screen.findByRole('button', { name: /Arrêter l'essai/ }))
+    await waitFor(() => expect(srv.stops).toBe(1))
+    expect(await screen.findByRole('button', { name: 'Tester le groupe' })).toBeInTheDocument()
+  })
+
+  it('un essai refusé (503 pont injoignable) est expliqué', async () => {
+    makeServer({ testStatus: 503, lighting: { groups: [{ id: 'ga1', name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
+    render(<AmbiancePage />)
+    fireEvent.click(await subtab('Groupes'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
+    expect(await screen.findByText(/Pont injoignable/)).toBeInTheDocument()
   })
 
   it('un essai refusé (409 éclairage désactivé) est expliqué', async () => {

@@ -3,7 +3,7 @@ package hue
 // Tests de spécification v11.7.0 LOT-1 (#225) — groupes d'ambiance et groupe
 // animateur dans le pilote Hue. Écrits depuis contracts/light-effects.md §2.2,
 // §2.3, §2.5 et contracts/hue-bridge.md §11, AVANT l'implémentation (TDD) :
-// ils sont ROUGES (compilation comprise : LightSpec.Group, lighting.GroupHost,
+// ils sont ROUGES (compilation comprise : LightSpec.Group, lighting.HostGroup(1),
 // ZoneState.Group, SubGroupMinLights) tant que dev-backend n'a pas livré.
 //
 // Réutilise les aides de driver_dev_test.go (devBridge, newDevGroupsEnabled…).
@@ -290,7 +290,7 @@ func TestTW225_NoGroups_BehaviourIdenticalToV1160(t *testing.T) {
 	if st := d.Status(); st.Stats.GroupWrites != 3 {
 		t.Errorf("les 3 écritures passent par buzzmaster-general, GroupWrites = %d", st.Stats.GroupWrites)
 	}
-	for _, name := range []string{"buzzmaster-general-1", "buzzmaster-general-host"} {
+	for _, name := range []string{"buzzmaster-general-1", "buzzmaster-general-host1"} {
 		if _, ok := tw225GroupIDByName(f, name); ok {
 			t.Errorf("sans groupe d'ambiance, le groupe Hue %s ne doit pas exister", name)
 		}
@@ -333,9 +333,12 @@ func TestTW225_SubGroupWrite_KeepsPerLightCacheHonest(t *testing.T) {
 // §2.5 — groupe animateur
 // ---------------------------------------------------------------------------
 
-func TestTW225_Host_GroupHostIsMinusOne(t *testing.T) {
-	if lighting.GroupHost != -1 {
-		t.Fatalf("lighting.GroupHost = %d, le contrat §2.2 fixe -1", lighting.GroupHost)
+func TestTW225_Host_HostGroupIsMinusRank(t *testing.T) {
+	// §2.2 (révision du GATE LOT-1) : A1 ⇒ -1, A2 ⇒ -2… ; HostGroup(1) reste la valeur de l'ancien GroupHost.
+	for k := 1; k <= 4; k++ {
+		if got := lighting.HostGroup(k); got != -k {
+			t.Errorf("HostGroup(%d) = %d, attendu %d", k, got, -k)
+		}
 	}
 }
 
@@ -343,7 +346,7 @@ func TestTW225_Host_NeverReceivesGroupZeroEntry(t *testing.T) {
 	// Salle (2 ampoules) + animateur (1 ampoule). L'état n'émet que Group 0 :
 	// l'ampoule de l'animateur ne doit JAMAIS être touchée (contrat §2.5).
 	f := newDevBridge(t, "S1", "S2", "H1")
-	d, _ := newDevGroupsEnabled(t, f, tw225Spec("S1", 1), tw225Spec("S2", 1), tw225Spec("H1", lighting.GroupHost))
+	d, _ := newDevGroupsEnabled(t, f, tw225Spec("S1", 1), tw225Spec("S2", 1), tw225Spec("H1", lighting.HostGroup(1)))
 	ctx := context.Background()
 	if err := d.RefreshInventory(ctx); err != nil {
 		t.Fatal(err)
@@ -366,12 +369,12 @@ func TestTW225_Host_NeverReceivesGroupZeroEntry(t *testing.T) {
 
 func TestTW225_Host_WrittenOnlyByItsOwnEntry_WhiteStaysWhenRoomChanges(t *testing.T) {
 	f := newDevBridge(t, "S1", "S2", "H1")
-	d, _ := newDevGroupsEnabled(t, f, tw225Spec("S1", 1), tw225Spec("S2", 1), tw225Spec("H1", lighting.GroupHost))
+	d, _ := newDevGroupsEnabled(t, f, tw225Spec("S1", 1), tw225Spec("S2", 1), tw225Spec("H1", lighting.HostGroup(1)))
 	ctx := context.Background()
 	if err := d.RefreshInventory(ctx); err != nil {
 		t.Fatal(err)
 	}
-	host := tw225Zone(lighting.GroupHost, tw225White, 255)
+	host := tw225Zone(lighting.HostGroup(1), tw225White, 255)
 	if err := d.Apply(ctx, lighting.State{Zones: []lighting.ZoneState{tw225Zone(0, tw225Red, 200), host}}); err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +404,7 @@ func TestTW225_Host_HueGroupFromThreeLights_ExcludedFromGeneral(t *testing.T) {
 	f := newDevBridge(t, "S1", "S2", "S3", "H1", "H2", "H3")
 	d, _ := newDevGroupsEnabled(t, f,
 		tw225Spec("S1", 1), tw225Spec("S2", 1), tw225Spec("S3", 1),
-		tw225Spec("H1", lighting.GroupHost), tw225Spec("H2", lighting.GroupHost), tw225Spec("H3", lighting.GroupHost))
+		tw225Spec("H1", lighting.HostGroup(1)), tw225Spec("H2", lighting.HostGroup(1)), tw225Spec("H3", lighting.HostGroup(1)))
 	if err := d.RefreshInventory(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -411,8 +414,8 @@ func TestTW225_Host_HueGroupFromThreeLights_ExcludedFromGeneral(t *testing.T) {
 	for _, g := range f.groups {
 		byName[g.name] = twBSortedCopy(g.lights)
 	}
-	if got := fmt.Sprint(byName["buzzmaster-general-host"]); got != "[4 5 6]" {
-		t.Errorf("buzzmaster-general-host = %v, attendu [4 5 6]", byName["buzzmaster-general-host"])
+	if got := fmt.Sprint(byName["buzzmaster-general-host1"]); got != "[4 5 6]" {
+		t.Errorf("buzzmaster-general-host = %v, attendu [4 5 6]", byName["buzzmaster-general-host1"])
 	}
 	if got := fmt.Sprint(byName["buzzmaster-general"]); got != "[1 2 3]" {
 		t.Errorf("buzzmaster-general doit EXCLURE les ampoules de l'animateur : %v, attendu [1 2 3]", byName["buzzmaster-general"])
@@ -423,16 +426,16 @@ func TestTW225_Host_UnderThreshold_NoHueGroup_PerLightWrite(t *testing.T) {
 	f := newDevBridge(t, "S1", "S2", "H1", "H2")
 	d, _ := newDevGroupsEnabled(t, f,
 		tw225Spec("S1", 0), tw225Spec("S2", 0),
-		tw225Spec("H1", lighting.GroupHost), tw225Spec("H2", lighting.GroupHost))
+		tw225Spec("H1", lighting.HostGroup(1)), tw225Spec("H2", lighting.HostGroup(1)))
 	ctx := context.Background()
 	if err := d.RefreshInventory(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := tw225GroupIDByName(f, "buzzmaster-general-host"); ok {
-		t.Error("2 ampoules < SubGroupMinLights : pas de groupe Hue buzzmaster-general-host")
+	if _, ok := tw225GroupIDByName(f, "buzzmaster-general-host1"); ok {
+		t.Error("2 ampoules < SubGroupMinLights : pas de groupe Hue buzzmaster-general-host1")
 	}
 	if err := d.Apply(ctx, lighting.State{Zones: []lighting.ZoneState{
-		tw225Zone(0, tw225Red, 200), tw225Zone(lighting.GroupHost, tw225White, 255)}}); err != nil {
+		tw225Zone(0, tw225Red, 200), tw225Zone(lighting.HostGroup(1), tw225White, 255)}}); err != nil {
 		t.Fatal(err)
 	}
 	if tw225Bri(f, "3") < 250 || tw225Bri(f, "4") < 250 {
@@ -445,13 +448,13 @@ func TestTW225_Host_NoHostEntry_LeavesHostBulbsUntouched_AtShutdownStyleGeneralO
 	// seul l'interrupteur général / l'arrêt le font, en émettant EXPLICITEMENT
 	// une entrée GroupHost éteinte (§2.5).
 	f := newDevBridge(t, "S1", "S2", "H1")
-	d, _ := newDevGroupsEnabled(t, f, tw225Spec("S1", 0), tw225Spec("S2", 0), tw225Spec("H1", lighting.GroupHost))
+	d, _ := newDevGroupsEnabled(t, f, tw225Spec("S1", 0), tw225Spec("S2", 0), tw225Spec("H1", lighting.HostGroup(1)))
 	ctx := context.Background()
 	if err := d.RefreshInventory(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.Apply(ctx, lighting.State{Zones: []lighting.ZoneState{
-		tw225Zone(0, tw225White, 255), tw225Zone(lighting.GroupHost, tw225White, 255)}}); err != nil {
+		tw225Zone(0, tw225White, 255), tw225Zone(lighting.HostGroup(1), tw225White, 255)}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.Apply(ctx, lighting.State{Zones: []lighting.ZoneState{tw225Zone(0, tw225White, 0)}}); err != nil {
@@ -465,7 +468,7 @@ func TestTW225_Host_NoHostEntry_LeavesHostBulbsUntouched_AtShutdownStyleGeneralO
 	}
 	// Extinction explicite du groupe animateur.
 	if err := d.Apply(ctx, lighting.State{Zones: []lighting.ZoneState{
-		tw225Zone(0, tw225White, 0), tw225Zone(lighting.GroupHost, tw225White, 0)}}); err != nil {
+		tw225Zone(0, tw225White, 0), tw225Zone(lighting.HostGroup(1), tw225White, 0)}}); err != nil {
 		t.Fatal(err)
 	}
 	f.mu.Lock()
