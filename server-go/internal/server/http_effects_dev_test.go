@@ -104,7 +104,7 @@ func TestConfig_LightingEffects_PartialPatchesMergeAndValidate_Dev(t *testing.T)
 	if eff["calm"] != "cal" || eff["chrono"] != "pul" || eff["score"] != "" {
 		t.Fatalf("un patch d'un moment n'écrase pas les autres : %+v", eff)
 	}
-	if code, out := devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"H1","role":"general"}],"groups":[{"id":"p1","name":"Pupitre","role":"animateur","lights":["H1"]}]}}`); code != 200 {
+	if code, out := devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"H1","role":"general"}],"groups":[{"id":"p1","role":"animateur","lights":["H1"]}]}}`); code != 200 {
 		t.Fatalf("groupe animateur : %d %s", code, out)
 	}
 	if code, out := devPostCfg(t, srv, `{"lighting":{"host_effects":{"p1":{"calm":"cal"},"ghost":{"calm":"cal"}}}}`); code != 200 || config.Get().Lighting.HostEffects["p1"]["calm"] != "cal" {
@@ -142,5 +142,21 @@ func TestConfig_LightingEffects_PartialPatchesMergeAndValidate_Dev(t *testing.T)
 func TestBackup_EffectsDirWithoutNatifs_Dev(t *testing.T) {
 	if !isEffectsReferencePath("files/effects/natifs/a.yaml") || !isEffectsReferencePath("effects/natifs") || isEffectsReferencePath("files/effects/mon.yaml") || isEffectsReferencePath("files/effects/natifsX/a.yaml") {
 		t.Fatal("isEffectsReferencePath")
+	}
+}
+
+func TestConfig_GroupsRefuseNameAndNearTeams_Dev(t *testing.T) {
+	srv, _ := devEffectsServer(t)
+	devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"L1","role":"general"}]}}`)
+	for _, body := range []string{
+		`{"lighting":{"groups":[{"name":"Scène","role":"salle","lights":["L1"]}]}}`,
+		`{"lighting":{"groups":[{"role":"salle","lights":["L1"],"near_teams":["Rouges"]}]}}`,
+	} {
+		if code, _ := devPostCfg(t, srv, body); code != http.StatusBadRequest {
+			t.Errorf("name / near_teams refusés à l'écriture : %d pour %s", code, body)
+		}
+	}
+	if code, out := devPostCfg(t, srv, `{"lighting":{"groups":[{"role":"salle","lights":["L1"]}]}}`); code != 200 {
+		t.Fatalf("un groupe n'a plus que id, role et lights : %d %s", code, out)
 	}
 }

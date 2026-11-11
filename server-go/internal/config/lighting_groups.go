@@ -1,12 +1,11 @@
 package config
 
 import (
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"regexp"
-	"strings"
-	"unicode/utf8"
 )
 
 // Caps (light-effects.md §2.1): 12 salle groups, 4 animateur groups.
@@ -17,11 +16,11 @@ const (
 
 var reGroupID = regexp.MustCompile(`^[a-z0-9]{1,12}$`)
 
-// deriveGroupID builds a stable id from a group name ("g" + 6 hex of its SHA-1), made
-// unique against used. Deterministic on purpose: a config.json predating the ids gets
-// the same ids at every start.
-func deriveGroupID(name string, used map[string]bool) string {
-	sum := sha1.Sum([]byte(strings.ToLower(name)))
+// deriveGroupID builds a stable id from a seed ("g" + 6 hex of its SHA-1), made unique
+// against used. Deterministic on purpose: a config.json that predates the ids gets the
+// same ids at every start (seed = role and position, groups have no name any more).
+func deriveGroupID(seed string, used map[string]bool) string {
+	sum := sha1.Sum([]byte(seed))
 	base := "g" + hex.EncodeToString(sum[:])[:6]
 	id := base
 	for i := 2; used[id]; i++ {
@@ -30,8 +29,19 @@ func deriveGroupID(name string, used map[string]bool) string {
 	return id
 }
 
-// AssignGroupIDs gives an id to every group that has none (or an invalid/duplicate one is
-// left to ValidateLightingGroups to refuse). Used when loading a config.json.
+// randomGroupID gives a fresh id to a group created through the API.
+func randomGroupID(used map[string]bool) string {
+	for {
+		var b [3]byte
+		_, _ = rand.Read(b[:])
+		id := "g" + hex.EncodeToString(b[:])
+		if !used[id] {
+			return id
+		}
+	}
+}
+
+// AssignGroupIDs gives an id to every group that has none. Used when loading a config.json.
 func AssignGroupIDs(groups []LightingGroupEntry) {
 	used := map[string]bool{}
 	for _, g := range groups {
@@ -41,7 +51,11 @@ func AssignGroupIDs(groups []LightingGroupEntry) {
 	}
 	for i := range groups {
 		if groups[i].ID == "" {
-			groups[i].ID = deriveGroupID(groups[i].Name, used)
+			role := groups[i].Role
+			if role == "" {
+				role = GroupRoleSalle
+			}
+			groups[i].ID = deriveGroupID(fmt.Sprintf("%s#%d", role, i), used)
 			used[groups[i].ID] = true
 		}
 	}
@@ -64,9 +78,7 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 		role[l.Name] = r
 	}
 	out := make([]LightingGroupEntry, 0, len(groups))
-	names := map[string]bool{}
 	usedLight := map[string]string{}
-	usedTeam := map[string]string{}
 	hosts, salles := 0, 0
 	usedID := map[string]bool{}
 	for _, g := range groups {
@@ -81,15 +93,6 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 		}
 	}
 	for _, g := range groups {
-		g.Name = strings.TrimSpace(g.Name)
-		if n := utf8.RuneCountInString(g.Name); n < 1 || n > 40 {
-			return nil, fmt.Errorf("lighting.groups : le nom d'un groupe doit compter de 1 à 40 caractères")
-		}
-		key := strings.ToLower(g.Name)
-		if names[key] {
-			return nil, fmt.Errorf("lighting.groups : nom de groupe en double (%q)", g.Name)
-		}
-		names[key] = true
 		switch g.Role {
 		case "":
 			g.Role = GroupRoleSalle
@@ -101,9 +104,6 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 			if hosts > MaxHostGroups {
 				return nil, fmt.Errorf("lighting.groups : %d groupes animateur au maximum", MaxHostGroups)
 			}
-			if len(g.NearTeams) > 0 {
-				return nil, fmt.Errorf("lighting.groups : le groupe animateur n'a pas d'équipes à proximité (near_teams)")
-			}
 		default:
 			return nil, fmt.Errorf("lighting.groups : rôle de groupe inconnu %q (salle ou animateur)", g.Role)
 		}
@@ -112,28 +112,19 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 			r, ok := role[ln]
 			switch {
 			case !ok:
-				return nil, fmt.Errorf("lighting.groups : ampoule inconnue %q dans le groupe %q", ln, g.Name)
+				return nil, fmt.Errorf("lighting.groups : ampoule inconnue %q", ln)
 			case r != "general":
 				return nil, fmt.Errorf("lighting.groups : l'ampoule %q est de rôle équipe, elle ne peut pas être dans un groupe", ln)
 			}
-			if other, dup := usedLight[ln]; dup {
-				return nil, fmt.Errorf("lighting.groups : l'ampoule %q est dans deux groupes (%q et %q)", ln, other, g.Name)
+			if _, dup := usedLight[ln]; dup {
+				return nil, fmt.Errorf("lighting.groups : l'ampoule %q est dans deux groupes", ln)
 			}
-			usedLight[ln] = g.Name
+			usedLight[ln] = g.ID
 			lst = append(lst, ln)
 		}
 		g.Lights = lst
-		teams := make([]string, 0, len(g.NearTeams))
-		for _, t := range g.NearTeams {
-			if other, dup := usedTeam[t]; dup {
-				return nil, fmt.Errorf("lighting.groups : l'équipe %q est près de deux groupes (%q et %q)", t, other, g.Name)
-			}
-			usedTeam[t] = g.Name
-			teams = append(teams, t)
-		}
-		g.NearTeams = teams
 		if g.ID == "" {
-			g.ID = deriveGroupID(g.Name, usedID)
+			g.ID = randomGroupID(usedID)
 			usedID[g.ID] = true
 		}
 		out = append(out, g)
@@ -172,7 +163,6 @@ func PruneLightingGroups(groups []LightingGroupEntry, lights []LightingLightEntr
 // empty ones included) — light-effects.md §2.5.
 type HostGroup struct {
 	ID     string
-	Name   string
 	Rank   int // 1-based; the state address is -Rank (lighting.HostGroupAddr)
 	Lights []string
 }
@@ -182,7 +172,7 @@ func (l LightingConfig) HostGroups() []HostGroup {
 	var out []HostGroup
 	for _, g := range l.Groups {
 		if g.Role == GroupRoleAnimateur {
-			out = append(out, HostGroup{ID: g.ID, Name: g.Name, Rank: len(out) + 1, Lights: g.Lights})
+			out = append(out, HostGroup{ID: g.ID, Rank: len(out) + 1, Lights: g.Lights})
 		}
 	}
 	return out
@@ -213,10 +203,9 @@ func (l LightingConfig) GroupAssignment() (num map[string]int, host map[string]i
 }
 
 // RoomGroup is one non-empty salle group: its real number (1-based rank among all
-// salle groups, never renumbered) and the teams installed near it.
+// salle groups, never renumbered).
 type RoomGroup struct {
-	Num       int
-	NearTeams []string
+	Num int
 }
 
 // RoomGroups lists the non-empty salle groups in order — the N groups an effect
@@ -230,7 +219,7 @@ func (l LightingConfig) RoomGroups() []RoomGroup {
 		}
 		n++
 		if len(g.Lights) > 0 {
-			out = append(out, RoomGroup{Num: n, NearTeams: g.NearTeams})
+			out = append(out, RoomGroup{Num: n})
 		}
 	}
 	return out

@@ -120,9 +120,9 @@ func TestEffectsReader_CalmRoomEffect_TargetAll_AndModePrecedence_Dev(t *testing
 
 func TestEffectsReader_Groups_RealNumbersEmptyGroupSkipped_Dev(t *testing.T) {
 	r := newDevRig(t, []config.LightingGroupEntry{
-		{Name: "A", Role: "salle", Lights: []string{"l1"}},
-		{Name: "Vide", Role: "salle", Lights: []string{}},
-		{Name: "C", Role: "salle", Lights: []string{"l2"}},
+		{Role: "salle", Lights: []string{"l1"}},
+		{Role: "salle", Lights: []string{}},
+		{Role: "salle", Lights: []string{"l2"}},
 	})
 	r.src.room["calm"] = "tour" // min_groups 2 : 2 non-empty groups suffice
 	r.c.EffectsStep()
@@ -158,8 +158,8 @@ func TestEffectsReader_Groups_RealNumbersEmptyGroupSkipped_Dev(t *testing.T) {
 
 func TestEffectsReader_HostGroups_EachOwnEffect_IgnoresModeAndFlash_Dev(t *testing.T) {
 	r := newDevRig(t, []config.LightingGroupEntry{
-		{ID: "p1", Name: "Pupitre", Role: "animateur", Lights: []string{"h1"}},
-		{ID: "p2", Name: "Régie", Role: "animateur", Lights: []string{"h2"}},
+		{ID: "p1", Role: "animateur", Lights: []string{"h1"}},
+		{ID: "p2", Role: "animateur", Lights: []string{"h2"}},
 	})
 	idle := lighting.Event{Kind: lighting.KindIdle}
 	for _, k := range []int{1, 2} {
@@ -189,9 +189,9 @@ func TestEffectsReader_HostGroups_EachOwnEffect_IgnoresModeAndFlash_Dev(t *testi
 
 func TestGroupTest_SequenceReplaceStopAndQuiesce_Dev(t *testing.T) {
 	r := newDevRig(t, []config.LightingGroupEntry{
-		{ID: "a", Name: "A", Role: "salle", Lights: []string{"l1"}},
-		{ID: "v", Name: "Vide", Role: "salle", Lights: []string{}},
-		{ID: "p1", Name: "Pupitre", Role: "animateur", Lights: []string{"h1"}},
+		{ID: "a", Role: "salle", Lights: []string{"l1"}},
+		{ID: "v", Role: "salle", Lights: []string{}},
+		{ID: "p1", Role: "animateur", Lights: []string{"h1"}},
 	})
 	defer r.c.StopGroupTest()
 	idle := lighting.Event{Kind: lighting.KindIdle}

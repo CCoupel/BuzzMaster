@@ -257,7 +257,7 @@ func (c *Controller) computeFrames() *effectFrames {
 				rctx := ctx
 				rctx.Groups = len(groups)
 				rctx.Seed = start.UnixMilli()
-				rctx.Origin = originIndex(groups, scoreTeam)
+				rctx.Origin = 1
 				if f := effects.Render(en.Effect, rctx, elapsed); f != nil {
 					out.room = f
 					out.roomAll = en.Effect.Target == effects.TargetAll
@@ -342,22 +342,6 @@ func itoa(u uint64) string {
 		}
 	}
 	return string(b[i:])
-}
-
-// originIndex is the 1-based index, among the rendered groups, of the group installed
-// near team (default 1, §4.5).
-func originIndex(groups []config.RoomGroup, team string) int {
-	if team == "" {
-		return 1
-	}
-	for i, g := range groups {
-		for _, t := range g.NearTeams {
-			if t == team {
-				return i + 1
-			}
-		}
-	}
-	return 1
 }
 
 // applyEffectFrames adds the published frames to the zones of Scene(ev): the room frame

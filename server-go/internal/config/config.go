@@ -133,11 +133,9 @@ const (
 type LightingGroupEntry struct {
 	// ID is the stable identifier of the group (light-effects.md §2.1): assigned by the
 	// server when absent, the key of the animateur groups' effects.
-	ID   string `json:"id"`
-	Name      string   `json:"name"`
-	Role      string   `json:"role"`
-	Lights    []string `json:"lights"`
-	NearTeams []string `json:"near_teams"`
+	ID     string   `json:"id"`
+	Role   string   `json:"role"`
+	Lights []string `json:"lights"`
 }
 
 // LightingLightEntry is one bulb, addressed by NAME (Hue ids are reassignable).
@@ -231,9 +229,9 @@ type AIConfig struct {
 	// the damage to one batch instead of the entire request. Defaults applied
 	// in ApplyDefaults (contract ai-multi-provider.md §2-§4).
 	BatchSize              int `json:"batch_size"`               // default 20, bounds 1..50
-	InterBatchDelayMs      int `json:"inter_batch_delay_ms"`      // default 60000
-	ContextTokenBudget     int `json:"context_token_budget"`      // default 1500 (character/4 estimate)
-	MaxConsecutiveFailures int `json:"max_consecutive_failures"`  // default 2
+	InterBatchDelayMs      int `json:"inter_batch_delay_ms"`     // default 60000
+	ContextTokenBudget     int `json:"context_token_budget"`     // default 1500 (character/4 estimate)
+	MaxConsecutiveFailures int `json:"max_consecutive_failures"` // default 2
 
 	// Multi-provider selection (v6.1.0, #137 Phase 3) — "anthropic" | "groq".
 	// The Groq key follows exactly the same secret rules as AnthropicAPIKey
@@ -247,9 +245,9 @@ type AIConfig struct {
 	// key nobody has supplied to this environment yet). Selecting
 	// provider="groq" without ai_groq.go implemented is inert until that
 	// lands; it does not by itself cause any outbound Groq request.
-	Provider             string `json:"provider"`               // default "anthropic"
+	Provider             string `json:"provider"` // default "anthropic"
 	GroqAPIKey           string `json:"groq_api_key"`
-	GroqModel            string `json:"groq_model"`             // default "openai/gpt-oss-120b"
+	GroqModel            string `json:"groq_model"` // default "openai/gpt-oss-120b"
 	GroqAPIKeyConfigured bool   `json:"groq_api_key_configured,omitempty"`
 	ClearGroqAPIKey      bool   `json:"clear_groq_api_key,omitempty"`
 
@@ -330,8 +328,8 @@ type ServerConfig struct {
 	HTTPPort         int    `json:"http_port"`
 	WebSocketPath    string `json:"websocket_path"`
 	AutoOpenBrowsers bool   `json:"auto_open_browsers"` // Auto-open browsers on startup
-	Debug            bool   `json:"debug"`               // Enable debug mode (includes /logs)
-	AutoCheckUpdates bool   `json:"auto_check_updates"`  // Auto-check for updates on startup
+	Debug            bool   `json:"debug"`              // Enable debug mode (includes /logs)
+	AutoCheckUpdates bool   `json:"auto_check_updates"` // Auto-check for updates on startup
 	// ACK protocol settings (added in v3.8.0)
 	AckTimeoutMs  int `json:"ack_timeout_ms"`  // Milliseconds before retrying an unacknowledged message (default 2000)
 	AckMaxRetries int `json:"ack_max_retries"` // Maximum retry attempts before giving up (default 3)
@@ -518,9 +516,6 @@ func ApplyDefaults(cfg *Config) {
 		if g.Lights == nil {
 			g.Lights = []string{}
 		}
-		if g.NearTeams == nil {
-			g.NearTeams = []string{}
-		}
 	}
 	if cfg.Lighting.Groups == nil {
 		cfg.Lighting.Groups = []LightingGroupEntry{}
@@ -658,7 +653,6 @@ func Save(cfg *Config) error {
 	}
 	return nil
 }
-
 
 // fillMoments returns m with every key of def present (missing ones take the default).
 func fillMoments(m, def map[string]string) map[string]string {

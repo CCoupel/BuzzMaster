@@ -15,18 +15,14 @@ func TestValidateLightingGroups(t *testing.T) {
 		groups  []LightingGroupEntry
 		wantErr string
 	}{
-		{"ok", []LightingGroupEntry{{Name: "G1", Lights: []string{"A"}}, {Name: "Pupitre", Role: "animateur", Lights: []string{"B"}}}, ""},
-		{"unknown light", []LightingGroupEntry{{Name: "G1", Lights: []string{"Z"}}}, "inconnue"},
-		{"team light", []LightingGroupEntry{{Name: "G1", Lights: []string{"T"}}}, "équipe"},
-		{"light twice", []LightingGroupEntry{{Name: "G1", Lights: []string{"A"}}, {Name: "G2", Lights: []string{"A"}}}, "deux groupes"},
-		{"dup name", []LightingGroupEntry{{Name: "G1"}, {Name: "g1"}}, "double"},
-		{"five hosts", []LightingGroupEntry{{Name: "H1", Role: "animateur"}, {Name: "H2", Role: "animateur"}, {Name: "H3", Role: "animateur"}, {Name: "H4", Role: "animateur"}, {Name: "H5", Role: "animateur"}}, "4 groupes animateur"},
-		{"id invalide", []LightingGroupEntry{{ID: "Bad Id", Name: "G1"}}, "identifiant"},
-		{"id en double", []LightingGroupEntry{{ID: "x1", Name: "G1"}, {ID: "x1", Name: "G2"}}, "double"},
-		{"host near teams", []LightingGroupEntry{{Name: "H1", Role: "animateur", NearTeams: []string{"Rouges"}}}, "near_teams"},
-		{"bad role", []LightingGroupEntry{{Name: "G1", Role: "x"}}, "rôle"},
-		{"empty name", []LightingGroupEntry{{Name: " "}}, "nom"},
-		{"team near two", []LightingGroupEntry{{Name: "G1", NearTeams: []string{"Rouges"}}, {Name: "G2", NearTeams: []string{"Rouges"}}}, "deux groupes"},
+		{"ok", []LightingGroupEntry{{Lights: []string{"A"}}, {Role: "animateur", Lights: []string{"B"}}}, ""},
+		{"unknown light", []LightingGroupEntry{{Lights: []string{"Z"}}}, "inconnue"},
+		{"team light", []LightingGroupEntry{{Lights: []string{"T"}}}, "équipe"},
+		{"light twice", []LightingGroupEntry{{Lights: []string{"A"}}, {Lights: []string{"A"}}}, "deux groupes"},
+		{"five hosts", []LightingGroupEntry{{Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}}, "4 groupes animateur"},
+		{"id invalide", []LightingGroupEntry{{ID: "Bad Id"}}, "identifiant"},
+		{"id en double", []LightingGroupEntry{{ID: "x1"}, {ID: "x1"}}, "double"},
+		{"bad role", []LightingGroupEntry{{Role: "x"}}, "rôle"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -48,7 +44,7 @@ func TestValidateLightingGroups(t *testing.T) {
 	}
 	many := make([]LightingGroupEntry, MaxSalleGroups+1)
 	for i := range many {
-		many[i] = LightingGroupEntry{Name: string(rune('a' + i))}
+		many[i] = LightingGroupEntry{}
 	}
 	if _, err := ValidateLightingGroups(many, lights); err == nil {
 		t.Fatal("13 groupes de salle refusés")
@@ -56,10 +52,10 @@ func TestValidateLightingGroups(t *testing.T) {
 	// Four animateur groups + twelve salle groups are fine; ids are assigned and stable.
 	ok := make([]LightingGroupEntry, 0, 16)
 	for i := 0; i < MaxSalleGroups; i++ {
-		ok = append(ok, LightingGroupEntry{Name: string(rune('a' + i))})
+		ok = append(ok, LightingGroupEntry{})
 	}
 	for i := 0; i < MaxHostGroups; i++ {
-		ok = append(ok, LightingGroupEntry{Name: "H" + string(rune('a'+i)), Role: GroupRoleAnimateur})
+		ok = append(ok, LightingGroupEntry{Role: GroupRoleAnimateur})
 	}
 	out, err := ValidateLightingGroups(ok, lights)
 	if err != nil {
@@ -83,10 +79,10 @@ func TestValidateLightingGroups(t *testing.T) {
 func TestPruneAndAssignment(t *testing.T) {
 	t.Parallel()
 	groups := []LightingGroupEntry{
-		{Name: "G1", Role: "salle", Lights: []string{"A", "T"}},
-		{ID: "h1", Name: "H", Role: "animateur", Lights: []string{"B"}},
-		{Name: "G2", Role: "salle", Lights: []string{"C"}},
-		{ID: "h2", Name: "H2", Role: "animateur", Lights: []string{"D"}},
+		{Role: "salle", Lights: []string{"A", "T"}},
+		{ID: "h1", Role: "animateur", Lights: []string{"B"}},
+		{Role: "salle", Lights: []string{"C"}},
+		{ID: "h2", Role: "animateur", Lights: []string{"D"}},
 	}
 	lights := []LightingLightEntry{{Name: "A", Role: "general"}, {Name: "B", Role: "general"}, {Name: "D", Role: "general"}, {Name: "T", Role: "team", Team: "x"}}
 	pruned := PruneLightingGroups(groups, lights)
@@ -131,5 +127,20 @@ func TestLoad_LegacyQualifHostGroupAndFlatHostEffects_Tolerated(t *testing.T) {
 	cfg2, _ := Load(path)
 	if cfg2.Lighting.Groups[0].ID != hg[0].ID {
 		t.Fatal("l'id attribué est stable d'un démarrage à l'autre")
+	}
+}
+
+// A group created through the API gets a random id; a config.json without ids gets stable ones.
+func TestAssignGroupIDs_StableByRoleAndPosition(t *testing.T) {
+	a := []LightingGroupEntry{{Role: "salle"}, {Role: "animateur"}, {Role: ""}}
+	b := []LightingGroupEntry{{Role: "salle"}, {Role: "animateur"}, {Role: ""}}
+	AssignGroupIDs(a)
+	AssignGroupIDs(b)
+	seen := map[string]bool{}
+	for i := range a {
+		if a[i].ID == "" || a[i].ID != b[i].ID || seen[a[i].ID] {
+			t.Fatalf("ids stables et distincts : %+v / %+v", a, b)
+		}
+		seen[a[i].ID] = true
 	}
 }

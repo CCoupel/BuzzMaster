@@ -2189,7 +2189,20 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			// v11.7.0, #225: full replacement of the ambiance groups, validated
 			// against the bulb list as it will be after this very write.
-			if _, ok := lRaw["groups"]; ok {
+			if rawGroups, ok := lRaw["groups"]; ok {
+				// Révision 3 (light-effects.md §2.1): groups have no name and no near_teams any
+				// more — refused on write (a config.json of an older build is read leniently).
+				var probe []map[string]json.RawMessage
+				if json.Unmarshal(rawGroups, &probe) == nil {
+					for _, g := range probe {
+						for _, k := range []string{"name", "near_teams"} {
+							if _, has := g[k]; has {
+								http.Error(w, "lighting.groups : la clé « "+k+" » n'est plus acceptée (un groupe n'a plus que id, role et lights)", http.StatusBadRequest)
+								return
+							}
+						}
+					}
+				}
 				incomingGroups := make([]config.LightingGroupEntry, 0, len(incoming.Groups))
 				for _, g := range incoming.Groups {
 					for i, ln := range g.Lights {

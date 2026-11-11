@@ -136,7 +136,7 @@ func TestScene_HostGroupFixedWhiteIgnoresOverride_225(t *testing.T) {
 		t.Fatalf("sans groupe animateur, aucune entrée GroupHost : %+v", got)
 	}
 
-	cfg.Lighting.Groups = []config.LightingGroupEntry{{Name: "Pupitre", Role: config.GroupRoleAnimateur, Lights: []string{"B"}}}
+	cfg.Lighting.Groups = []config.LightingGroupEntry{{Role: config.GroupRoleAnimateur, Lights: []string{"B"}}}
 	if err := c.SetLightingMode("OFF"); err != nil {
 		t.Fatal(err)
 	}
