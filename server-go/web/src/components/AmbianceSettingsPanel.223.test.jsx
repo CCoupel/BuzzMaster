@@ -6,7 +6,8 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 // AmbianceSettingsPanel (page Ambiance en mode global, éditeur de manche en mode override).
 // Écrit depuis contracts/light-effects.md §6, §7.1, §2.5 et la maquette
 // docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects.html.
-// Champs émis : light.effects.<moment> et light.host_effects.<moment> (jamais lighting.*).
+// Champs émis : light.effects.<moment> et light.host_effects.<id du groupe>.<moment> (jamais lighting.*).
+// Révision du GATE LOT-1 : un bloc de trois sélecteurs PAR groupe animateur (prop hostGroups [{id, name, rank, empty}]).
 // ---------------------------------------------------------------------------
 
 vi.mock('./AmbianceSettingsPanel.css', () => ({}))
@@ -32,7 +33,8 @@ const CATALOG = {
 }
 
 const room = (c) => document.getElementById(`asp-eff-room-${c}`)
-const host = (c) => document.getElementById(`asp-eff-host-${c}`)
+const host = (id, c) => document.getElementById(`asp-eff-host-${id}-${c}`)
+const HOSTS = [{ id: 'ha', name: 'Pupitre', rank: 1, empty: false }, { id: 'hb', name: 'Régie', rank: 2, empty: false }]
 const optionTexts = (el) => Array.from(el.querySelectorAll('option')).map(o => o.textContent)
 
 function setup(props = {}) {
@@ -43,7 +45,7 @@ function setup(props = {}) {
       sections={['lightEffects']}
       value={{}}
       catalog={CATALOG}
-      hostGroup={null}
+      hostGroups={[]}
       onChange={onChange}
       {...props}
     />
@@ -168,76 +170,113 @@ describe('AmbianceSettingsPanel › effets lumière — effet inapplicable et in
   })
 })
 
-describe('AmbianceSettingsPanel › effets lumière — bloc « Groupe animateur » (§2.5)', () => {
-  it('sans groupe animateur : pas de sélecteurs animateur, invitation à en créer un (global)', () => {
+describe('AmbianceSettingsPanel › effets lumière — un bloc par groupe animateur (§2.5, §6)', () => {
+  it('sans groupe animateur : pas de bloc, invitation à en créer un (global)', () => {
     const onCreateHost = vi.fn()
     setup({ onCreateHost })
-    expect(host('chrono')).toBeNull()
+    expect(host('ha', 'chrono')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /en créer un/ }))
     expect(onCreateHost).toHaveBeenCalled()
   })
 
-  it('avec un groupe animateur : trois sélecteurs dédiés, « Blanc fixe » par défaut', () => {
-    setup({ hostGroup: { name: 'Pupitre' } })
-    expect(screen.getByText(/Groupe animateur « Pupitre »/)).toBeInTheDocument()
-    for (const c of ['chrono', 'calm', 'score']) {
-      expect(host(c)).toHaveValue('')
-      expect(optionTexts(host(c))[0]).toMatch(/^Blanc fixe/)
+  it('un bloc de trois sélecteurs par groupe animateur, titré 🎤k · nom, « Blanc fixe » par défaut', () => {
+    setup({ hostGroups: HOSTS })
+    expect(within(screen.getByTestId('asp-host-ha')).getByText(/🎤1 · Pupitre/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('asp-host-hb')).getByText(/🎤2 · Régie/)).toBeInTheDocument()
+    for (const id of ['ha', 'hb']) {
+      for (const c of ['chrono', 'calm', 'score']) {
+        expect(host(id, c)).toHaveValue('')
+        expect(optionTexts(host(id, c))[0]).toMatch(/^Blanc fixe/)
+      }
     }
   })
 
-  it('les effets à plusieurs groupes sont grisés pour l\'animateur, pas les effets à un groupe', () => {
-    setup({ hostGroup: { name: 'Pupitre' } })
-    const opts = (c) => Array.from(host(c).querySelectorAll('option'))
-    const chenillard = opts('chrono').find(o => /Chenillard/.test(o.textContent))
-    const pulsation = opts('chrono').find(o => /Pulsation/.test(o.textContent))
-    expect(chenillard).toBeDisabled()
-    expect(chenillard.textContent).toMatch(/plusieurs groupes/)
-    expect(pulsation).not.toBeDisabled()
-    expect(opts('score').find(o => /Couleur de l'équipe/.test(o.textContent))).not.toBeDisabled()
-    expect(opts('calm').find(o => /Vague lente/.test(o.textContent))).toBeDisabled()
+  it('un groupe vide est signalé dans son titre', () => {
+    setup({ hostGroups: [{ id: 'ha', name: 'Pupitre', rank: 1, empty: true }] })
+    expect(within(screen.getByTestId('asp-host-ha')).getByText(/groupe vide/)).toBeInTheDocument()
   })
 
-  it('choisir un effet émet light.host_effects.<moment> (jamais light.effects)', () => {
-    const { onChange } = setup({ hostGroup: { name: 'Pupitre' } })
-    fireEvent.change(host('score'), { target: { value: 'couleur-equipe' } })
-    expect(onChange).toHaveBeenCalledWith('light.host_effects.score', 'couleur-equipe')
+  it('les effets à plusieurs groupes sont grisés pour chaque animateur, pas les effets à un groupe', () => {
+    setup({ hostGroups: HOSTS })
+    for (const id of ['ha', 'hb']) {
+      const opts = (c) => Array.from(host(id, c).querySelectorAll('option'))
+      const chenillard = opts('chrono').find(o => /Chenillard/.test(o.textContent))
+      expect(chenillard).toBeDisabled()
+      expect(chenillard.textContent).toMatch(/plusieurs groupes/)
+      expect(opts('chrono').find(o => /Pulsation/.test(o.textContent))).not.toBeDisabled()
+      expect(opts('score').find(o => /Couleur de l'équipe/.test(o.textContent))).not.toBeDisabled()
+      expect(opts('calm').find(o => /Vague lente/.test(o.textContent))).toBeDisabled()
+    }
+  })
+
+  it('choisir un effet émet light.host_effects.<id>.<moment> — chaque groupe a son propre chemin', () => {
+    const { onChange } = setup({ hostGroups: HOSTS })
+    fireEvent.change(host('hb', 'score'), { target: { value: 'couleur-equipe' } })
+    expect(onChange).toHaveBeenCalledWith('light.host_effects.hb.score', 'couleur-equipe')
+    fireEvent.change(host('ha', 'chrono'), { target: { value: 'pulsation' } })
+    expect(onChange).toHaveBeenCalledWith('light.host_effects.ha.chrono', 'pulsation')
     expect(onChange).not.toHaveBeenCalledWith('light.effects.score', expect.anything())
   })
 
-  it('une valeur d\'animateur enregistrée est affichée', () => {
-    setup({ hostGroup: { name: 'Pupitre' }, value: { light: { host_effects: { chrono: 'pulsation' } } } })
-    expect(host('chrono')).toHaveValue('pulsation')
+  it('les valeurs enregistrées sont affichées par groupe', () => {
+    setup({ hostGroups: HOSTS, value: { light: { host_effects: { ha: { chrono: 'pulsation' }, hb: { score: 'couleur-equipe' } } } } })
+    expect(host('ha', 'chrono')).toHaveValue('pulsation')
+    expect(host('ha', 'score')).toHaveValue('')
+    expect(host('hb', 'score')).toHaveValue('couleur-equipe')
+    expect(host('hb', 'chrono')).toHaveValue('')
   })
 
-  it('rappelle que l\'animateur ignore ON / OFF et le Flash', () => {
-    setup({ hostGroup: { name: 'Pupitre' } })
+  it('rappelle que les animateurs ignorent ON / OFF et le Flash', () => {
+    setup({ hostGroups: HOSTS })
     expect(screen.getByText(/ni par le Flash/)).toBeInTheDocument()
   })
 
-  it('un effet d\'animateur inapplicable avertit qu\'il reste en blanc fixe', () => {
-    setup({ hostGroup: { name: 'Pupitre' }, value: { light: { host_effects: { chrono: 'chenillard' } } } })
-    expect(screen.getByRole('status')).toHaveTextContent(/blanc fixe/)
+  it('un effet d\'animateur inapplicable avertit, sous le sélecteur du groupe concerné seulement', () => {
+    setup({ hostGroups: HOSTS, value: { light: { host_effects: { ha: { chrono: 'chenillard' } } } } })
+    expect(within(screen.getByTestId('asp-host-ha')).getByRole('status')).toHaveTextContent(/blanc fixe/)
+    expect(within(screen.getByTestId('asp-host-hb')).queryByRole('status')).toBeNull()
+  })
+
+  it('le groupe ciblé par « Choisir ses effets » (focusHostId) est mis en évidence', () => {
+    setup({ hostGroups: HOSTS, focusHostId: 'hb' })
+    expect(screen.getByTestId('asp-host-hb').className).toMatch(/is-focus/)
+    expect(screen.getByTestId('asp-host-ha').className).not.toMatch(/is-focus/)
   })
 })
 
 describe('AmbianceSettingsPanel › effets lumière — mode surcharge de manche (« Hérité »)', () => {
-  const base = { light: { effects: { chrono: 'pulsation', calm: 'mon-effet', score: '' }, host_effects: { chrono: '', calm: '', score: 'couleur-equipe' } } }
+  const base = {
+    light: {
+      effects: { chrono: 'pulsation', calm: 'mon-effet', score: '' },
+      host_effects: { ha: { chrono: '', calm: '', score: 'couleur-equipe' }, hb: { chrono: 'pulsation', calm: '', score: '' } },
+    },
+  }
 
   it('clé absente du Partial ⇒ « Hérité » sélectionné, valeur globale affichée entre parenthèses', () => {
-    setup({ mode: 'override', value: {}, base, hostGroup: { name: 'Pupitre' } })
+    setup({ mode: 'override', value: {}, base, hostGroups: HOSTS })
     expect(room('chrono')).toHaveValue('__inherit__')
     expect(optionTexts(room('chrono'))[0]).toBe('Hérité (Pulsation)')
     expect(optionTexts(room('calm'))[0]).toBe('Hérité (Mon effet (personnalisé))')
     expect(optionTexts(room('score'))[0]).toBe('Hérité (Aucun effet)')
-    expect(optionTexts(host('chrono'))[0]).toBe('Hérité (Blanc fixe)')
-    expect(optionTexts(host('score'))[0]).toBe('Hérité (Couleur de l\'équipe)')
+    expect(optionTexts(host('ha', 'chrono'))[0]).toBe('Hérité (Blanc fixe)')
+    expect(optionTexts(host('ha', 'score'))[0]).toBe('Hérité (Couleur de l\'équipe)')
+    expect(optionTexts(host('hb', 'chrono'))[0]).toBe('Hérité (Pulsation)')
   })
 
-  it('« Hérité » retire la surcharge : onChange(field, null)', () => {
-    const { onChange } = setup({ mode: 'override', value: { light: { effects: { chrono: 'chenillard' } } }, base })
+  it('« Hérité » retire la surcharge : onChange(field, null), par groupe', () => {
+    const { onChange } = setup({ mode: 'override', value: { light: { effects: { chrono: 'chenillard' }, host_effects: { hb: { score: 'couleur-equipe' } } } }, base, hostGroups: HOSTS })
     fireEvent.change(room('chrono'), { target: { value: '__inherit__' } })
     expect(onChange).toHaveBeenCalledWith('light.effects.chrono', null)
+    fireEvent.change(host('hb', 'score'), { target: { value: '__inherit__' } })
+    expect(onChange).toHaveBeenCalledWith('light.host_effects.hb.score', null)
+  })
+
+  it('surcharger un seul groupe animateur laisse l\'autre en « Hérité »', () => {
+    setup({ mode: 'override', value: { light: { host_effects: { ha: { score: 'pulsation' } } } }, base, hostGroups: HOSTS })
+    expect(host('ha', 'score')).toHaveValue('pulsation')
+    expect(within(host('ha', 'score').closest('.asp-row')).getByText('manche')).toBeInTheDocument()
+    expect(host('hb', 'score')).toHaveValue('__inherit__')
+    expect(host('ha', 'chrono')).toHaveValue('__inherit__')
   })
 
   it('choisir un effet de manche émet la valeur et affiche l\'étiquette « manche »', () => {
@@ -245,7 +284,7 @@ describe('AmbianceSettingsPanel › effets lumière — mode surcharge de manche
     fireEvent.change(room('calm'), { target: { value: '' } })
     expect(onChange).toHaveBeenCalledWith('light.effects.calm', '')
     rerender(
-      <AmbianceSettingsPanel mode="override" sections={['lightEffects']} value={{ light: { effects: { calm: '' } } }} base={base} catalog={CATALOG} hostGroup={null} onChange={onChange} />
+      <AmbianceSettingsPanel mode="override" sections={['lightEffects']} value={{ light: { effects: { calm: '' } } }} base={base} catalog={CATALOG} hostGroups={[]} onChange={onChange} />
     )
     expect(room('calm')).toHaveValue('')
     expect(within(room('calm').closest('.asp-row')).getByText('manche')).toBeInTheDocument()
@@ -262,17 +301,17 @@ describe('AmbianceSettingsPanel › effets lumière — mode surcharge de manche
     expect(within(room('chrono').closest('.asp-row')).getByText(/Valeur globale appliquée/)).toBeInTheDocument()
   })
 
-  it('en surcharge sans groupe animateur : aucun bloc animateur ni invitation à en créer', () => {
-    setup({ mode: 'override', value: {}, base, hostGroup: null, onCreateHost: vi.fn() })
-    expect(host('chrono')).toBeNull()
+  it('en surcharge sans groupe animateur : aucun bloc ni invitation à en créer', () => {
+    setup({ mode: 'override', value: {}, base, hostGroups: [], onCreateHost: vi.fn() })
+    expect(host('ha', 'chrono')).toBeNull()
     expect(screen.queryByRole('button', { name: /en créer un/ })).toBeNull()
   })
 
   it('en mode global il n\'y a pas d\'état « Hérité »', () => {
-    setup({ mode: 'global', value: {}, hostGroup: { name: 'Pupitre' } })
+    setup({ mode: 'global', value: {}, hostGroups: HOSTS })
     for (const c of ['chrono', 'calm', 'score']) {
       expect(optionTexts(room(c)).some(x => /Hérité/.test(x))).toBe(false)
-      expect(optionTexts(host(c)).some(x => /Hérité/.test(x))).toBe(false)
+      expect(optionTexts(host('ha', c)).some(x => /Hérité/.test(x))).toBe(false)
     }
   })
 

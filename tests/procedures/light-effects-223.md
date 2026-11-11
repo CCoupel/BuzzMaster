@@ -1,17 +1,17 @@
 # Procédure de Test — Effets lumière en fichiers, séquenceur et chenillard (#223, milestone v11.7.0, LOT-2)
 
 **Version** : v11.7.0.x (QUALIF)
-**Date** : 2026-11-11
+**Date** : 2026-11-11 (révisée après le refus du GATE LOT-1 : effets réglés par groupe animateur, clé = `id` du groupe)
 **Testeur** : QA (scénarios AUTO) / Utilisateur (scénarios HUMAIN)
 **Contrat** : `contracts/light-effects.md` §3 à §7, §9 ; `contracts/ambiance-settings.md` §10
-**Maquette** : `docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects.html`
+**Maquette** : `docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects_multi_host.html`
 **Plan** : `.claude/workflow/plan-11.7.0.md` (LOT-2, tâches 8 à 17)
 
 ## Prerequis
 
 - [ ] Environnement : QUALIF (binaire Windows, pont Hue réel pour le volet « ampoules réelles »)
 - [ ] Données : au moins 8 ampoules générales, dont 4 à 8 rangées en groupes de salle (cf. `light-groups-225.md`),
-      un groupe animateur (1 ampoule), équipes « Rouges » et « Bleus », un quiz avec une question chronométrée de 30 s
+      **deux groupes animateur** (1 ampoule chacun, « Pupitre » et « Régie »), équipes « Rouges » et « Bleus », un quiz avec une question chronométrée de 30 s
 - [ ] Accès : page Ambiance › Lumière › Effets ; accès au dossier `data/files/effects/` de la QUALIF (explorateur de fichiers)
 - [ ] Un éditeur de texte ordinaire (Bloc-notes)
 
@@ -27,7 +27,7 @@
 |-------|--------|-----------------|----------------|------|
 | 1 | `cd server-go && go test -race ./internal/effects ./internal/ambiancecfg ./internal/ambiance -count=1` | Tous verts | | |
 | 2 | `cd server-go && go test -race ./internal/server -run 'TW223' -count=1` | Tous verts (réglages, `/api/lighting/effects`, sauvegarde) | | |
-| 3 | `cd server-go/web && npx vitest run src/components/AmbianceSettingsPanel.223.test.jsx` | Tous verts | | |
+| 3 | `cd server-go/web && npx vitest run src/components/AmbianceSettingsPanel.223.test.jsx src/utils/lightEffects.223.parity.test.js` | Tous verts | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -99,6 +99,7 @@
 | 5 | Surcharger le chronomètre de la manche par « Pulsation » | Badge « manche » ; la question de cette manche pulse, les autres jouent le chenillard | | |
 | 6 | Repasser en « Hérité » | La surcharge disparaît | | |
 | 7 | Supprimer le fichier d'un effet choisi | Avertissement « absent ou invalide », valeur conservée « (introuvable) », aucun effet joué | | |
+| 8 | Voir la section « 🎤 Groupes animateur » (global et manche) | **Un bloc de trois sélecteurs par groupe animateur** (🎤1 · Pupitre, 🎤2 · Régie), « Blanc fixe » par défaut ; en manche, chaque sélecteur a son « Hérité (…) » ; pas de bloc (et pas de lien de création) en manche s'il n'y a aucun groupe animateur | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -141,19 +142,24 @@ Relevés : pas mesuré à 4 groupes = ___ s ; 6 = ___ s ; 8 = ___ s ; régularit
 
 ---
 
-### Scenario 8 — Groupe animateur : effet par moment et réaction au score
+### Scenario 8 — Groupes animateur : un effet par moment et par groupe, réaction au score
 
 **Validation** : HUMAIN — **Issues** : #223 (besoin issu de #211)
 
+**Objectif** : chaque groupe animateur a ses propres effets, indépendants des autres groupes animateur et de la salle (contrat §5.3, §6).
+
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Page Effets, bloc « Groupe animateur » : ouvrir la liste du chronomètre | « Blanc fixe » par défaut ; le chenillard est grisé (« plusieurs groupes »), la pulsation et « Couleur de l'équipe » sont proposées | | |
-| 2 | Choisir « Couleur de l'équipe » pour « Quand une équipe marque », enregistrer | — | | |
-| 3 | Attribuer des points à « Rouges » | L'ampoule de l'animateur prend la couleur des Rouges le temps de l'attribution, puis redevient blanche ; la salle suit sa propre scène SCORE | | |
-| 4 | Choisir « Pulsation » pour son chronomètre | L'animateur pulse pendant la question, la salle suit son propre effet | | |
-| 5 | OFF / Flash dans le popover | L'animateur n'est pas modifié | | |
-| 6 | Essai d'un effet depuis le catalogue (LOT-3, si livré) | Ne joue jamais sur l'animateur | | |
-| 7 | Même réglage par manche (mode surcharge, bloc « Groupe animateur ») | Valeur de manche prioritaire, « Hérité » sinon ; pas de bloc si aucun groupe animateur (lien) | | |
+| 1 | Page Effets, bloc « 🎤1 · Pupitre » : ouvrir la liste du chronomètre | « Blanc fixe » par défaut ; le chenillard est grisé (« plusieurs groupes »), la pulsation et « Couleur de l'équipe » sont proposées | | |
+| 2 | Pupitre : « Quand une équipe marque » = « Couleur de l'équipe » ; Régie : laisser « Blanc fixe » ; enregistrer | — | | |
+| 3 | Attribuer des points à « Rouges » | **Seule** l'ampoule du Pupitre prend la couleur des Rouges le temps de l'attribution, puis redevient blanche ; la Régie reste blanche fixe ; la salle suit sa propre scène SCORE | | |
+| 4 | Régie : « Quand une équipe marque » = « Couleur de l'équipe » aussi | Les deux groupes réagissent, chacun avec son réglage | | |
+| 5 | Réordonner les deux groupes animateur dans la page Groupes | Les réglages **suivent le groupe** (identifiant stable) : le Pupitre garde son effet même devenu 🎤2 | | |
+| 6 | Supprimer le groupe Régie, enregistrer, recréer un groupe « Régie » | Les réglages de l'ancien groupe ont disparu (le nouveau est en « Blanc fixe ») ; ceux du Pupitre restent | | |
+| 7 | OFF / ON / Flash dans le popover | Aucun groupe animateur n'est modifié | | |
+| 8 | Essai d'un effet depuis le catalogue (LOT-3, si livré) | Ne joue jamais sur un groupe animateur | | |
+| 9 | Même réglage par manche (mode surcharge, blocs « 🎤k · nom ») | Valeur de manche prioritaire par groupe et par moment, « Hérité » sinon ; le badge de manche compte les réglages (infobulle « 🎤1 · nom ») | | |
+| 10 | Config / rounds.json issus de la QUALIF 11.7.0.2 (ancienne forme de `host_effects`) | Le serveur démarre, l'ancienne forme est ignorée sans erreur ; les groupes animateur existants sont en « Blanc fixe » | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -189,7 +195,7 @@ Relevés : pas mesuré à 4 groupes = ___ s ; 6 = ___ s ; 8 = ___ s ; régularit
 - [ ] Créer un effet par copie, le casser (message fichier + ligne), le restaurer : sans redémarrage
 - [ ] Chenillard conforme à #223 à 4, 6 et 8 groupes ; relevés §8.2 consignés
 - [ ] Précédence ON / OFF / Flash respectée, aucune écriture fantôme à l'arrêt
-- [ ] Groupe animateur : blanc fixe par défaut, effet par moment, insensible à la salle
+- [ ] Groupes animateur : blanc fixe par défaut, effet par moment **et par groupe**, insensibles à la salle et entre eux
 - [ ] Aucune régression avec les réglages par défaut
 
 ## Notes QA

@@ -19,12 +19,13 @@ import (
 )
 
 type tw223Source struct {
-	cat        effects.Catalogue
-	room, host map[string]string
+	cat  effects.Catalogue
+	room map[string]string
+	host map[string]map[string]string // id de groupe animateur → moment → id d'effet
 }
 
 func (s *tw223Source) EffectsCatalogue() effects.Catalogue { return s.cat }
-func (s *tw223Source) EffectSettings() (map[string]string, map[string]string) {
+func (s *tw223Source) EffectSettings() (map[string]string, map[string]map[string]string) {
 	return s.room, s.host
 }
 
@@ -72,7 +73,7 @@ func tw223New(t *testing.T) *tw223Env {
 	env := &tw223Env{c: c, eng: eng, dir: dir, now: time.Unix(1_800_000_000, 0)}
 	c.EffectsClock = func() time.Time { return env.now }
 	c.LightingWriter.Store(lighting.NewWriter(lighting.Config{Driver: lighting.NewFakeDriver(), Derive: c.DeriveEvent, Scene: c.Scene}))
-	env.src = &tw223Source{room: map[string]string{"chrono": "pulsation", "calm": "", "score": ""}, host: map[string]string{"chrono": "", "calm": "", "score": ""}}
+	env.src = &tw223Source{room: map[string]string{"chrono": "pulsation", "calm": "", "score": ""}, host: map[string]map[string]string{"h1": {"chrono": "", "calm": "", "score": ""}}}
 	c.SetEffectsSource(env.src)
 	env.setup = func(groups []config.LightingGroupEntry) {
 		next := *config.Get()
@@ -97,12 +98,20 @@ func (e *tw223Env) reload() {
 
 func (e *tw223Env) step() { e.c.EffectsStep() }
 
+// setHost règle l'effet d'un moment pour le groupe animateur d'identifiant id (réglage global ← manche, déjà résolu).
+func (e *tw223Env) setHost(id, moment, effect string) {
+	if e.src.host[id] == nil {
+		e.src.host[id] = map[string]string{"chrono": "", "calm": "", "score": ""}
+	}
+	e.src.host[id][moment] = effect
+}
+
 func grp(n int, lights ...string) config.LightingGroupEntry {
 	return config.LightingGroupEntry{Name: "G" + string(rune('A'+n)), Role: config.GroupRoleSalle, Lights: lights, NearTeams: []string{}}
 }
 
 func hostGrp() config.LightingGroupEntry {
-	return config.LightingGroupEntry{Name: "Pupitre", Role: config.GroupRoleAnimateur, Lights: []string{"H"}, NearTeams: []string{}}
+	return config.LightingGroupEntry{ID: "h1", Name: "Pupitre", Role: config.GroupRoleAnimateur, Lights: []string{"H"}, NearTeams: []string{}}
 }
 
 func zonesWithGroup(st lighting.State, pred func(int) bool) []lighting.ZoneState {
@@ -120,7 +129,7 @@ func roomGroups(st lighting.State) []lighting.ZoneState {
 }
 
 func hostEntry(st lighting.State) (lighting.ZoneState, bool) {
-	z := zonesWithGroup(st, func(g int) bool { return g == lighting.GroupHost })
+	z := zonesWithGroup(st, func(g int) bool { return g == lighting.HostGroup(1) })
 	if len(z) == 0 {
 		return lighting.ZoneState{}, false
 	}
@@ -402,7 +411,7 @@ func TestEffects223_Host_EffectPerMoment_WhiteSceneColour(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.src.host["calm"] = "host-fx"
+	env.setHost("h1", "calm", "host-fx")
 	env.step()
 	z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))
 	if !ok || z.Color != [3]int{0, 255, 0} {
@@ -423,7 +432,7 @@ func TestEffects223_Host_UsesSceneColourWhite_ForSceneLooks(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-scene", "calm", "all", 1, "scene"))
-	env.src.host["calm"] = "host-scene"
+	env.setHost("h1", "calm", "host-scene")
 	env.step()
 	z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))
 	if !ok || z.Color != [3]int{255, 255, 255} {
@@ -435,7 +444,7 @@ func TestEffects223_Host_InsensitiveToOnOffFlash_StillPlaysItsEffect(t *testing.
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.src.host["calm"] = "host-fx"
+	env.setHost("h1", "calm", "host-fx")
 	for _, mode := range []string{"OFF", "ON"} {
 		if err := env.c.SetLightingMode(mode); err != nil {
 			t.Fatal(err)
@@ -462,7 +471,7 @@ func TestEffects223_Host_FallbackToFixedWhite_AbsentInvalidInapplicable(t *testi
 	env.writeUser(t, "cassé.yaml", "id: casse\nbidule: 1\n")
 	env.writeUser(t, "multi.yaml", tw223Effect("multi", "calm", "groups", 3, "#FF0000")) // plusieurs groupes : inapplicable à l'animateur
 	for name, id := range map[string]string{"absent": "nope", "invalide": "casse", "plusieurs groupes": "multi"} {
-		env.src.host["calm"] = id
+		env.setHost("h1", "calm", id)
 		env.step()
 		z, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))
 		if !ok || z.Color != [3]int{255, 255, 255} || z.Intensity != 255 {
@@ -475,7 +484,7 @@ func TestEffects223_Host_TargetGroupsWithMinOneIsApplicable(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
 	env.writeUser(t, "uni.yaml", tw223Effect("uni", "calm", "groups", 1, "#0000FF"))
-	env.src.host["calm"] = "uni"
+	env.setHost("h1", "calm", "uni")
 	env.step()
 	if z, _ := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); z.Color != [3]int{0, 0, 255} {
 		t.Errorf("target: groups avec min_groups ≤ 1 : applicable à l'animateur : %+v", z)
@@ -485,7 +494,7 @@ func TestEffects223_Host_TargetGroupsWithMinOneIsApplicable(t *testing.T) {
 func TestEffects223_Host_ScoreEffect_TeamColour_BoundedToThePulse(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
-	env.src.host["score"] = "couleur-equipe" // natif target: all
+	env.setHost("h1", "score", "couleur-equipe") // natif target: all
 	env.step()
 	env.c.StartScoreFlash("Rouges", 5)
 	t.Cleanup(func() { env.c.StartScoreFlash("", 0) })
@@ -506,7 +515,7 @@ func TestEffects223_Host_WithoutHostGroup_SettingsKeptButNoEntry(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A")})
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.src.host["calm"] = "host-fx"
+	env.setHost("h1", "calm", "host-fx")
 	env.step()
 	if _, ok := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); ok {
 		t.Error("sans groupe animateur, les réglages sont conservés mais sans effet : aucune entrée GroupHost")
@@ -520,7 +529,8 @@ func TestEffects223_Quiesce_ReaderStopsPublishing_NoGhostWrite(t *testing.T) {
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A"), grp(1, "B")})
 	env.writeUser(t, "calm.yaml", tw223Effect("calm-fx", "calm", "groups", 1, "#FF0000"))
 	env.writeUser(t, "host.yaml", tw223Effect("host-fx", "calm", "all", 1, "#00FF00"))
-	env.src.room["calm"], env.src.host["calm"] = "calm-fx", "host-fx"
+	env.src.room["calm"] = "calm-fx"
+	env.setHost("h1", "calm", "host-fx")
 	env.step()
 	if len(roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindIdle}))) != 2 {
 		t.Fatal("effet actif avant l'arrêt")

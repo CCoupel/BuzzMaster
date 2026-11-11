@@ -70,9 +70,19 @@ func tw223WriteEffect(t *testing.T, prov *tw223Provider, name, src string) {
 	prov.m.Reload()
 }
 
+// tw223Hosts crée deux groupes animateur d'id « ha » et « hb » (et leurs ampoules) pour les réglages par groupe.
+func tw223Hosts(t *testing.T, srv *HTTPServer) {
+	t.Helper()
+	code, out := tw223Post(t, srv, `{"lighting":{"lights":[{"name":"P","role":"general"},{"name":"R","role":"general"}],`+
+		`"groups":[{"id":"ha","name":"Pupitre","role":"animateur","lights":["P"]},{"id":"hb","name":"Régie","role":"animateur","lights":["R"]}]}}`)
+	if code != 200 {
+		t.Fatalf("groupes animateur : %d %s", code, out)
+	}
+}
+
 type tw223Settings struct {
-	Effects     map[string]string `json:"effects"`
-	HostEffects map[string]string `json:"host_effects"`
+	Effects     map[string]string            `json:"effects"`
+	HostEffects map[string]map[string]string `json:"host_effects"` // id de groupe animateur → moment → effet
 }
 
 func tw223Lighting(t *testing.T, srv *HTTPServer) tw223Settings {
@@ -107,11 +117,11 @@ func TestTW223_Config_Defaults_V1160Behaviour(t *testing.T) {
 	if l.Effects["chrono"] != "pulsation" || l.Effects["calm"] != "" || l.Effects["score"] != "" {
 		t.Errorf("défauts salle : chrono=pulsation, calm et score vides : %+v", l.Effects)
 	}
-	if l.HostEffects["chrono"] != "" || l.HostEffects["calm"] != "" || l.HostEffects["score"] != "" {
-		t.Errorf("défauts animateur : blanc fixe (vides) : %+v", l.HostEffects)
+	if len(l.HostEffects) != 0 {
+		t.Errorf("aucun groupe animateur ⇒ host_effects = {} : %+v", l.HostEffects)
 	}
-	if len(l.Effects) != 3 || len(l.HostEffects) != 3 {
-		t.Errorf("les trois clés sont toujours sérialisées : %+v", l)
+	if len(l.Effects) != 3 {
+		t.Errorf("les trois clés de effects sont toujours sérialisées : %+v", l)
 	}
 }
 
@@ -141,20 +151,71 @@ func TestTW223_Config_PartialPatchesMergeOneMomentAtATime(t *testing.T) {
 	}
 }
 
-func TestTW223_Config_HostEffectsMergeIndependently(t *testing.T) {
+func TestTW223_Config_HostEffectsMergeByGroupIdAndMoment(t *testing.T) {
 	srv, _, _ := tw223Server(t)
-	if code, out := tw223Post(t, srv, `{"lighting":{"host_effects":{"score":"couleur-equipe"}}}`); code != 200 {
-		t.Fatalf("%d %s", code, out)
+	tw223Hosts(t, srv)
+	for _, body := range []string{
+		`{"lighting":{"host_effects":{"ha":{"score":"couleur-equipe"}}}}`,
+		`{"lighting":{"host_effects":{"hb":{"chrono":"pulsation"}}}}`,
+		`{"lighting":{"host_effects":{"ha":{"chrono":"pulsation"}}}}`,
+		`{"lighting":{"effects":{"chrono":"chenillard"}}}`,
+	} {
+		if code, out := tw223Post(t, srv, body); code != 200 {
+			t.Fatalf("%s : %d %s", body, code, out)
+		}
 	}
-	if code, out := tw223Post(t, srv, `{"lighting":{"effects":{"chrono":"chenillard"}}}`); code != 200 {
+	l := tw223Lighting(t, srv)
+	if l.HostEffects["ha"]["score"] != "couleur-equipe" || l.HostEffects["ha"]["chrono"] != "pulsation" {
+		t.Errorf("groupe ha : chaque patch ne touche que son moment : %+v", l.HostEffects["ha"])
+	}
+	if l.HostEffects["hb"]["chrono"] != "pulsation" || l.HostEffects["hb"]["score"] == "couleur-equipe" {
+		t.Errorf("groupe hb indépendant de ha : %+v", l.HostEffects["hb"])
+	}
+	if l.Effects["chrono"] != "chenillard" {
+		t.Errorf("effects (salle) : %+v", l.Effects)
+	}
+}
+
+func TestTW223_Config_HostEffects_UnknownGroupId_DroppedWithoutError(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	tw223Hosts(t, srv)
+	code, out := tw223Post(t, srv, `{"lighting":{"host_effects":{"disparu":{"score":"couleur-equipe"},"ha":{"calm":""}}}}`)
+	if code != 200 {
+		t.Fatalf("un id de groupe inconnu est écarté sans erreur (exception voulue §6) : %d %s", code, out)
+	}
+	l := tw223Lighting(t, srv)
+	if _, ok := l.HostEffects["disparu"]; ok {
+		t.Errorf("l'entrée d'un groupe inexistant n'est pas conservée : %+v", l.HostEffects)
+	}
+}
+
+func TestTW223_Config_HostEffects_OldFlatFormRefusedAtWrite(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	tw223Hosts(t, srv)
+	for _, body := range []string{
+		`{"lighting":{"host_effects":{"score":"couleur-equipe"}}}`,
+		`{"lighting":{"host_effects":{"chrono":"","calm":"","score":""}}}`,
+	} {
+		if code, _ := tw223Post(t, srv, body); code != http.StatusBadRequest {
+			t.Errorf("l'ancienne forme à plat n'est plus acceptée à l'écriture : %s → %d", body, code)
+		}
+	}
+}
+
+func TestTW223_Config_HostEffects_FullFormHasOneEntryPerHostGroup_AfterSavingGroupsPurgesOthers(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	tw223Hosts(t, srv)
+	tw223Post(t, srv, `{"lighting":{"host_effects":{"ha":{"score":"couleur-equipe"},"hb":{"score":"couleur-equipe"}}}}`)
+	// on supprime le groupe hb : sa clé disparaît de host_effects, celle de ha reste
+	if code, out := tw223Post(t, srv, `{"lighting":{"groups":[{"id":"ha","name":"Pupitre","role":"animateur","lights":["P"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
 	}
 	l := tw223Lighting(t, srv)
-	if l.HostEffects["score"] != "couleur-equipe" || l.HostEffects["chrono"] != "" {
-		t.Errorf("host_effects : %+v", l.HostEffects)
+	if _, ok := l.HostEffects["hb"]; ok {
+		t.Errorf("enregistrer lighting.groups purge host_effects des id disparus : %+v", l.HostEffects)
 	}
-	if l.Effects["chrono"] != "chenillard" {
-		t.Errorf("effects : %+v", l.Effects)
+	if l.HostEffects["ha"]["score"] != "couleur-equipe" {
+		t.Errorf("l'entrée du groupe conservé reste : %+v", l.HostEffects)
 	}
 }
 
@@ -173,14 +234,15 @@ func TestTW223_Config_Refusals400_NothingChanged(t *testing.T) {
 		"moment inconnu":                     `{"lighting":{"effects":{"bidule":"chenillard"}}}`,
 		"id inexistant":                      `{"lighting":{"effects":{"chrono":"n-existe-pas"}}}`,
 		"effet qui ne déclare pas le moment": `{"lighting":{"effects":{"calm":"chenillard"}}}`,
-		"animateur : moment inconnu":         `{"lighting":{"host_effects":{"bidule":"couleur-equipe"}}}`,
-		"animateur : id inexistant":          `{"lighting":{"host_effects":{"calm":"n-existe-pas"}}}`,
-		"animateur : mauvais moment":         `{"lighting":{"host_effects":{"chrono":"couleur-equipe"}}}`,
+		"animateur : moment inconnu":         `{"lighting":{"host_effects":{"ha":{"bidule":"couleur-equipe"}}}}`,
+		"animateur : id d'effet inexistant":  `{"lighting":{"host_effects":{"ha":{"calm":"n-existe-pas"}}}}`,
+		"animateur : mauvais moment":         `{"lighting":{"host_effects":{"ha":{"chrono":"couleur-equipe"}}}}`,
 		"un bon moment et un mauvais":        `{"lighting":{"effects":{"chrono":"chenillard","calm":"chenillard"}}}`,
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			srv, _, _ := tw223Server(t)
+			tw223Hosts(t, srv)
 			before := tw223Lighting(t, srv)
 			code, out := tw223Post(t, srv, body)
 			if code != http.StatusBadRequest {
@@ -209,13 +271,14 @@ func TestTW223_Config_WithoutCatalogue_NonEmptyIdRefused(t *testing.T) {
 
 func TestTW223_Config_SavingOtherSectionsNeverWipesEffects(t *testing.T) {
 	srv, _, _ := tw223Server(t)
-	tw223Post(t, srv, `{"lighting":{"effects":{"chrono":"chenillard"},"host_effects":{"score":"couleur-equipe"}}}`)
-	for _, body := range []string{`{"server":{"debug":true}}`, `{"lighting":{"enabled":false}}`, `{"lighting":{"groups":[]}}`} {
+	tw223Hosts(t, srv)
+	tw223Post(t, srv, `{"lighting":{"effects":{"chrono":"chenillard"},"host_effects":{"ha":{"score":"couleur-equipe"}}}}`)
+	for _, body := range []string{`{"server":{"debug":true}}`, `{"lighting":{"enabled":false}}`} {
 		if code, out := tw223Post(t, srv, body); code != 200 {
 			t.Fatalf("%s : %d %s", body, code, out)
 		}
 		l := tw223Lighting(t, srv)
-		if l.Effects["chrono"] != "chenillard" || l.HostEffects["score"] != "couleur-equipe" {
+		if l.Effects["chrono"] != "chenillard" || l.HostEffects["ha"]["score"] != "couleur-equipe" {
 			t.Fatalf("POST %s a modifié les effets : %+v", body, l)
 		}
 	}
@@ -267,6 +330,7 @@ type tw223EffectsView struct {
 		ID     string `json:"id"`
 		Scope  string `json:"scope"`
 		Host   bool   `json:"host"`
+		Group  string `json:"group"`
 	} `json:"unresolved"`
 	Dir string `json:"dir"`
 }
@@ -418,10 +482,11 @@ func TestTW223_Effects_OverrideOrigin_ThenRestoredByRemoval(t *testing.T) {
 func TestTW223_Effects_UnresolvedListsGlobalSettingsOnly(t *testing.T) {
 	srv, _, prov := tw223Server(t)
 	tw223WriteEffect(t, prov, "mon-effet.yaml", tw223UserEffect)
-	if code, out := tw223Post(t, srv, `{"lighting":{"lights":[{"name":"A","role":"general"}],"groups":[{"name":"G1","lights":["A"]}]}}`); code != 200 {
+	if code, out := tw223Post(t, srv, `{"lighting":{"lights":[{"name":"A","role":"general"},{"name":"P","role":"general"}],`+
+		`"groups":[{"name":"G1","lights":["A"]},{"id":"ha","name":"Pupitre","role":"animateur","lights":["P"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
 	}
-	tw223Post(t, srv, `{"lighting":{"effects":{"calm":"mon-effet"},"host_effects":{"score":"couleur-equipe"}}}`)
+	tw223Post(t, srv, `{"lighting":{"effects":{"calm":"mon-effet"},"host_effects":{"ha":{"score":"couleur-equipe"}}}}`)
 	_, v, _ := tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
 	if len(v.Unresolved) != 0 {
 		t.Fatalf("tous les réglages se résolvent : %+v", v.Unresolved)
@@ -433,6 +498,23 @@ func TestTW223_Effects_UnresolvedListsGlobalSettingsOnly(t *testing.T) {
 	_, v, _ = tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
 	if len(v.Unresolved) != 1 || v.Unresolved[0].Moment != "calm" || v.Unresolved[0].ID != "mon-effet" || v.Unresolved[0].Scope != "global" || v.Unresolved[0].Host {
 		t.Errorf("unresolved : le réglage global dont le fichier a disparu : %+v", v.Unresolved)
+	}
+}
+
+func TestTW223_Effects_UnresolvedHostEntryCarriesGroupId(t *testing.T) {
+	srv, _, prov := tw223Server(t)
+	tw223WriteEffect(t, prov, "mon-effet.yaml", tw223UserEffect)
+	tw223Hosts(t, srv)
+	if code, out := tw223Post(t, srv, `{"lighting":{"host_effects":{"hb":{"calm":"mon-effet"}}}}`); code != 200 {
+		t.Fatalf("%d %s", code, out)
+	}
+	if err := os.Remove(filepath.Join(prov.dir, "mon-effet.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	prov.m.Reload()
+	_, v, _ := tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
+	if len(v.Unresolved) != 1 || !v.Unresolved[0].Host || v.Unresolved[0].Group != "hb" || v.Unresolved[0].Moment != "calm" {
+		t.Errorf("unresolved d'un groupe animateur : host=true et group = id du groupe : %+v", v.Unresolved)
 	}
 }
 
