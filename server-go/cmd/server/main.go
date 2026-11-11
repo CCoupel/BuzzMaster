@@ -8,6 +8,7 @@ import (
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/demo"
 	"buzzcontrol/internal/diag"
+	"buzzcontrol/internal/effects"
 	"buzzcontrol/internal/game"
 	"buzzcontrol/internal/led"
 	"buzzcontrol/internal/lighting"
@@ -63,6 +64,8 @@ type App struct {
 	soundEngine atomic.Pointer[audio.Engine]
 	// soundBoot : état de la sortie audio figé à setupSound (#283), lu par GET /api/sound/status.
 	soundBoot atomic.Pointer[soundBootState]
+	// effects : light-effect catalogue with hot reload (v11.7.0, #223), nil if the natives could not be read.
+	effects *effects.Manager
 	// ambLayers : round + direct layers of the ambiance settings (#290, round_ambiance.go).
 	ambLayers ambianceLayers
 	// soundPhase is the sound layer's own front-detection memory (contract
@@ -505,6 +508,7 @@ func (a *App) init() {
 
 	// Ambiance lighting writer (#205) — nil unless configured (ambiance.go).
 	a.setupAmbiance()
+	a.setupEffects()
 	a.httpServer.Lighting = a // /api/lighting/* read the live driver (#207)
 	a.httpServer.Sound = a    // /api/sounds/*, /api/sound/status (#230)
 
@@ -1229,6 +1233,7 @@ func (a *App) start() error {
 	// for the QUALIF round-2 bugfix this now carries (bug 2 — "pont
 	// toujours injoignable après relance").
 	a.startAmbianceWriter()
+	a.startEffects()
 
 	// Sound bruitage engine (#227/#228): same lifecycle as AckManager/the
 	// ambiance writer, stopped by a.cancelCtx() in stop(). `sound.enabled:

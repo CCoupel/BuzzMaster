@@ -1,0 +1,27 @@
+# Chenillard — un point lumineux fait le tour de la salle, une position par seconde.
+id: chenillard
+name: Chenillard
+description: >
+  Un point lumineux fait le tour de la salle pendant le chronomètre.
+  Il passe à l'orange puis au rouge quand le temps presse.
+version: 1
+moments: [chrono]
+target: groups
+min_groups: 3
+
+looks:
+  fond:    { color: theme,   intensity: 100 }
+  trainee: { color: theme,   intensity: 50 }
+  tete:    { color: urgency, intensity: 100 }
+
+pattern:
+  type: shift
+  step_ms: 1000
+  cells: [trainee, tete, trainee]
+  rest: fond
+  wrap: true
+
+stages:
+  # Sous 5 groupes, la traînée gênerait la lecture : la tête seule.
+  - when: { groups_lt: 5 }
+    pattern: { cells: [tete] }

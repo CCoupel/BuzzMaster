@@ -1,0 +1,35 @@
+# Pulsation — toute la salle respire au rythme du chronomètre.
+# Rendu identique à la pulsation d'origine (v10.0.0) : cycle d'une seconde,
+# orange à 10 s ou moins, rouge à 5 s ou moins (battement plus bref).
+id: pulsation
+name: Pulsation
+description: >
+  Toute la salle respire pendant le chronomètre, sur la couleur du thème de la
+  question. Elle passe à l'orange à 10 secondes ou moins, puis au rouge à 5
+  secondes ou moins.
+version: 1
+moments: [chrono]
+target: all
+min_groups: 1
+
+looks:
+  haut: { color: theme, intensity: 100 }
+  bas:  { color: theme, intensity: 50 }
+
+pattern:
+  type: uniform
+  phases:
+    - { look: haut, ms: 500 }
+    - { look: bas,  ms: 500 }
+
+stages:
+  - when: { remaining_lte: 5 }
+    looks:
+      bas: { color: "#E61E1E", intensity: 30 }
+    pattern:
+      phases:
+        - { look: haut, ms: 250 }
+        - { look: bas,  ms: 750 }
+  - when: { remaining_lte: 10 }
+    looks:
+      bas: { color: "#FFAA00", intensity: 50 }
