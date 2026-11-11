@@ -2234,9 +2234,14 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "lighting.effects : table zone → moment → effet attendue (ambiance, animateur, public)", http.StatusBadRequest)
 					return
 				}
-				merged := cfg.Lighting.Effects
-				if merged == nil {
-					merged = config.ZoneEffects{}
+				// Deep copy: cfg is a shallow copy of the live config, so merging in place would
+				// change it even when a later key of the same patch is refused (a 400 changes nothing).
+				merged := config.ZoneEffects{}
+				for z, mm := range cfg.Lighting.Effects {
+					merged[z] = map[string]string{}
+					for m, id := range mm {
+						merged[z][m] = id
+					}
 				}
 				for zone, mm := range in {
 					if !ambiancecfg.ValidZone(zone) {
@@ -2266,9 +2271,12 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 					http.Error(w, "lighting.speeds : table zone → moment → vitesse attendue (ambiance, animateur, public)", http.StatusBadRequest)
 					return
 				}
-				merged := cfg.Lighting.Speeds
-				if merged == nil {
-					merged = config.ZoneSpeeds{}
+				merged := config.ZoneSpeeds{}
+				for z, mm := range cfg.Lighting.Speeds {
+					merged[z] = map[string]float64{}
+					for m, v := range mm {
+						merged[z][m] = v
+					}
 				}
 				for zone, mm := range in {
 					if !ambiancecfg.ValidZone(zone) {
