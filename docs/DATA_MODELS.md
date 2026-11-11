@@ -1033,7 +1033,7 @@ Tableau ordonné ; l'ordre du tableau donne le **numéro** du groupe de salle (1
 | `lights` | Array of String | `[]` | Noms d'ampoules de rôle `general`, chacune dans un seul groupe |
 | `near_teams` | Array of String | `[]` | Équipes installées près du groupe (refusé sur le groupe animateur) ; une équipe dans un seul groupe au plus |
 
-- `groups` absent ou `[]` ⇒ comportement v11.6.0 exact. Plus de 12 groupes de salle ⇒ refus.
+- `groups` absent ou `[]` ⇒ comportement v11.6.0 exact. Plus de 12 groupes (animateur compris) ⇒ refus.
 - Écriture : remplacement complet du tableau (`POST /config.json`), refus `400` avec message lisible (ampoule inconnue, ampoule de rôle `team`, ampoule dans deux groupes, nom en double, plus de 12 groupes).
 - Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe dans la même écriture.
 - Go : `config.LightingGroupEntry {Name, Role, Lights, NearTeams}` ; constantes `GroupRoleSalle = "salle"`, `GroupRoleAnimateur = "animateur"` ; `MaxLightingGroups = 12`.

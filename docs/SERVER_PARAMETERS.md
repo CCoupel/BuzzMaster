@@ -430,7 +430,7 @@ Les groupes se règlent dans `/admin/ambiance` › Lumière › Groupes (écritu
 }
 ```
 
-- Le **numéro** d'un groupe de salle est son rang dans le tableau parmi les groupes `salle` (groupes vides compris). Maximum **12** groupes de salle.
+- Le **numéro** d'un groupe de salle est son rang dans le tableau parmi les groupes `salle` (groupes vides compris). Maximum **12** groupes au total, groupe animateur compris.
 - `role` : `"salle"` (défaut si absent ou vide) ou `"animateur"` (un seul au plus, sans numéro ni `near_teams`).
 - Chaque ampoule citée doit exister dans `lights` avec `role: "general"` et n'appartenir qu'à **un** groupe.
 - Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe à l'écriture.

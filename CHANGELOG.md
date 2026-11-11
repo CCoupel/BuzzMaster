@@ -8,10 +8,10 @@ Première étape de la v11.7.0 : la salle peut être découpée en **groupes d'a
 
 ### Added
 
-- **Groupes d'ampoules (#225)** — sous-onglet **Groupes** de `/admin/ambiance` › Lumière : bac « hors groupe », groupes de salle ordonnés (glisser-déposer ou Monter / Descendre), équipes à proximité, « Créer un groupe par ampoule », essai d'un groupe (clignotement blanc), enregistrement. Maximum 12 groupes de salle. Voir `docs/ADMIN_GUIDE.md`.
+- **Groupes d'ampoules (#225)** — sous-onglet **Groupes** de `/admin/ambiance` › Lumière : bac « hors groupe », groupes de salle ordonnés (glisser-déposer ou Monter / Descendre), équipes à proximité, « Créer un groupe par ampoule », essai d'un groupe (clignotement blanc), enregistrement. Maximum 12 groupes au total, groupe animateur compris. Voir `docs/ADMIN_GUIDE.md`.
 - **Groupe animateur (#225)** — un groupe de rôle `animateur` (un seul), sans numéro ni équipes à proximité. Il reste en blanc fixe dès que l'éclairage est actif ; ON / OFF, Flash et effets de salle ne le modifient pas. Seuls l'interrupteur général et l'arrêt du serveur l'éteignent.
 - **Configuration `lighting.groups` (`config.json`)** — tableau ordonné `{name, role, lights, near_teams}`, absent ou `[]` = comportement v11.6.0. Validation à l'écriture (`POST /config.json`, refus `400`). Voir `docs/SERVER_PARAMETERS.md` et `docs/DATA_MODELS.md`.
-- **`POST /api/lighting/groups/test`** — essai d'un groupe (`{"group": n}` ou `{"group": "host"}`), mêmes erreurs que `POST /api/lighting/test`.
+- **`POST /api/lighting/groups/test`** — essai d'un groupe (`{"group": n}` ou `{"group": "host"}`). Erreurs : `400` (groupe absent, inconnu ou vide), `409` (éclairage désactivé, pilote absent ou clé refusée), `429` (essai déjà en cours), `503` (pont injoignable), `500` (autre).
 - **Champ `group` dans `GET /api/lighting/lights`** — `0` (hors groupe ou équipe), `n` (groupe de salle) ou `"host"` (groupe animateur).
 - **Groupes Hue (#225)** — `buzzmaster-general-<n>` par groupe de salle et `buzzmaster-general-host` pour le groupe animateur, à partir de 3 ampoules ; en dessous, écriture par ampoule.
 

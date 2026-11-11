@@ -2353,7 +2353,7 @@ Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de s
 
 Le sous-onglet **Groupes** de `/admin/ambiance` › **Lumière** (à côté de « Pont et ampoules » et « Effets ») range les ampoules générales en **groupes** d'ambiance. Il ne sert qu'une fois le pont associé et les ampoules choisies.
 
-- **Groupes de salle** : chaque groupe est numéroté selon son rang dans la liste (1, 2, 3…). Un groupe peut porter des **équipes à proximité** (pour un futur effet d'origine par équipe). Maximum **12 groupes** de salle. Un groupe vide garde son numéro mais n'est pas utilisé.
+- **Groupes de salle** : chaque groupe est numéroté selon son rang dans la liste (1, 2, 3…). Un groupe peut porter des **équipes à proximité** (pour un futur effet d'origine par équipe). Maximum **12 groupes au total**, groupe animateur compris (donc 11 groupes de salle s'il existe un groupe animateur). Un groupe vide garde son numéro mais n'est pas utilisé.
 - **Ampoules hors groupe** : elles restent sur la scène de salle ordinaire, comme avant v11.7.0. Une ampoule ne peut être que dans **un seul** groupe.
 - **Enregistrement** : les modifications ne sont prises en compte qu'après **Enregistrer**. Une ampoule groupée qui passe en rôle équipe est retirée de son groupe automatiquement.
 - **Essai** : un groupe enregistré clignote en blanc sur le pont, puis reprend son état de jeu. L'essai est désactivé si le brouillon n'est pas enregistré, si le groupe est vide ou si l'éclairage est désactivé.
