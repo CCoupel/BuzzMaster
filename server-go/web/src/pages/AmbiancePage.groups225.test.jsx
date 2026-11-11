@@ -89,13 +89,13 @@ describe('AmbiancePage › Lumière — sous-onglets (#225)', () => {
     expect(screen.queryByText("Groupes d'ambiance")).toBeNull()
   })
 
-  it('« Effets » est annoncé « bientôt » jusqu\'au LOT-2 (aucun catalogue)', async () => {
+  it('« Effets » (LOT-2) : sélecteurs par moment à la place de « bientôt »', async () => {
     makeServer()
     render(<AmbiancePage />)
     const tab = await subtab('Effets')
-    expect(within(tab).getByText(/bientôt/i)).toBeInTheDocument()
+    expect(within(tab).queryByText(/bientôt/i)).toBeNull()
     fireEvent.click(tab)
-    expect(await screen.findByText(/Bientôt/)).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('#asp-eff-room-chrono')).not.toBeNull())
   })
 })
 
@@ -179,6 +179,6 @@ describe('AmbiancePage › Lumière — enregistrer et tester les groupes (#225)
     render(<AmbiancePage />)
     fireEvent.click(await subtab('Groupes'))
     fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
-    expect(await screen.findByText(/désactivé/i)).toBeInTheDocument()
+    expect(await screen.findByText(/désactivé, ou le pont n'est pas associé ou a refusé la clé/i)).toBeInTheDocument()
   })
 })

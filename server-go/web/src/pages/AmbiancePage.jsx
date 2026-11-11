@@ -12,6 +12,8 @@ import SoundsManager from '../components/SoundsManager'
 import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
 import { groupLabelForLight, teamRoleWarning } from '../utils/lightGroups'
+import { useLightEffects } from '../hooks/useLightEffects'
+import { configKeyFor, globalEffect, findHostGroup, MOMENTS } from '../utils/lightEffects'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -204,6 +206,8 @@ export default function AmbiancePage() {
   const [activeTab, setActiveTab] = useState('light')
   // #225 — sous-onglets de Lumière (pont associé seulement) : 'bridge' | 'groups' | 'effects'.
   const [lightSubTab, setLightSubTab] = useState('bridge')
+  // #223 — catalogue d'effets (sous-onglet Effets) ; relu à chaque ouverture du sous-onglet.
+  const { catalog, refresh: refreshCatalog } = useLightEffects()
   const [configLoaded, setConfigLoaded] = useState(false)
 
   // Étape 1 — découverte.
@@ -355,6 +359,38 @@ export default function AmbiancePage() {
       setSavingDefaultMode(false)
     }
   }
+
+  // #223 — effet lumière par moment (global) : `light.effects.<moment>` / `light.host_effects.<moment>`
+  // du composant mutualisé -> `lighting.effects.<moment>` / `lighting.host_effects.<moment>` de config.json
+  // (contracts/light-effects.md §6). Persisté à chaque changement ; jamais optimiste (valeur relue).
+  const [savingEffect, setSavingEffect] = useState(false)
+  const handleEffectChange = async (field, value) => {
+    const key = configKeyFor(field)
+    if (!key || value === null || value === undefined) return
+    setSavingEffect(true)
+    try {
+      const res = await saveLighting({ [key.section]: { [key.moment]: value } })
+      if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`)
+      const roundScope = await isRoundScope(res)
+      await afterSave()
+      refreshCatalog()
+      if (roundScope) setToast({ message: ROUND_SCOPE_MESSAGE, type: 'warning' })
+    } catch (error) {
+      console.error('Set lighting effect failed:', error)
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+    } finally {
+      setSavingEffect(false)
+    }
+  }
+  const effectsSettings = useMemo(() => ({
+    light: {
+      mode: lighting.default_mode || 'AUTO',
+      effects: Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, false, m.key)])),
+      host_effects: Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, true, m.key)])),
+    },
+  }), [lighting])
+  const hostGroupConfigured = useMemo(() => findHostGroup(lighting.groups), [lighting.groups])
+  const openSubTab = (key) => { setLightSubTab(key); if (key === 'effects') refreshCatalog() }
 
   // ---- Étape 1 : découverte ------------------------------------------------
   const handleDiscover = async () => {
@@ -650,7 +686,7 @@ export default function AmbiancePage() {
     try {
       const res = await postJson('/api/lighting/groups/test', { group: ref })
       if (res.ok) return { ok: true }
-      const message = res.status === 409 ? "L'éclairage d'ambiance est désactivé."
+      const message = res.status === 409 ? "Essai refusé : l'éclairage d'ambiance est désactivé, ou le pont n'est pas associé ou a refusé la clé."
         : res.status === 429 ? 'Un essai est déjà en cours — patientez un instant.'
         : (res.status === 503 || res.status === 502) ? 'Pont injoignable ou refusé — impossible de tester le groupe.'
         : res.status === 400 ? 'Groupe inconnu — enregistrez d\'abord les groupes.'
@@ -1122,11 +1158,10 @@ export default function AmbiancePage() {
                 role="tab"
                 aria-selected={lightSubTab === t.key}
                 className={`ambiance-subtab ${lightSubTab === t.key ? 'active' : ''}`}
-                onClick={() => setLightSubTab(t.key)}
+                onClick={() => openSubTab(t.key)}
               >
                 {t.label}
                 {t.key === 'groups' && <span className="ambiance-subtab-n" aria-label={`${groupsConfigured.length} groupes`}>{groupsConfigured.length}</span>}
-                {t.key === 'effects' && <span className="ambiance-soon-badge">bientôt</span>}
               </button>
             ))}
           </div>
@@ -1143,13 +1178,28 @@ export default function AmbiancePage() {
             onSave={handleSaveGroups}
             onTest={handleTestGroup}
             onNotify={setToast}
+            onChooseEffects={() => openSubTab('effects')}
           />
         )}
 
         {configLoaded && step === 3 && lightSubTab === 'effects' && (
           <section className="ambiance-step" aria-labelledby="ambiance-effects-title">
             <h2 id="ambiance-effects-title" className="ambiance-step-title">Effets</h2>
-            <p className="ambiance-hint">Bientôt : le catalogue d'effets et le choix de l'effet par moment arriveront dans une prochaine étape.</p>
+            <AmbianceSettingsPanel
+              mode="global"
+              value={effectsSettings}
+              onChange={(field, value) => (field === 'light.mode' ? handleDefaultModeChange(field, value) : handleEffectChange(field, value))}
+              sections={['light', 'lightEffects']}
+              catalog={catalog}
+              hostGroup={hostGroupConfigured}
+              onManageGroups={() => openSubTab('groups')}
+              onCreateHost={() => openSubTab('groups')}
+              disabled={savingDefaultMode || savingEffect}
+            />
+            <p className="ambiance-hint">
+              Enregistré à chaque changement, comme le mode d'éclairage. Les valeurs « (actuel) » reproduisent le
+              comportement de la version précédente.{!lighting.enabled && " Éclairage d'ambiance désactivé : le réglage est conservé."}
+            </p>
           </section>
         )}
 

@@ -8,6 +8,13 @@ export const SETTINGS_FIELD_PATHS = [
   'sound.countdown.enabled',
   'sound.countdown.loop',
   'light.mode',
+  // #223 (v11.7.0, LOT-2) — effet lumière par moment : salle (`effects`) et groupe animateur (`host_effects`).
+  'light.effects.chrono',
+  'light.effects.calm',
+  'light.effects.score',
+  'light.host_effects.chrono',
+  'light.host_effects.calm',
+  'light.host_effects.score',
 ]
 export const CUE_PATH_PREFIX = 'sound.cues.'
 
@@ -57,6 +64,15 @@ export function overriddenFields(partial) {
     if (isObj(s.cues)) Object.entries(s.cues).forEach(([cue, v]) => out.push({ path: CUE_PATH_PREFIX + cue, value: v }))
   }
   if (isObj(partial.light) && partial.light.mode !== undefined) out.push({ path: 'light.mode', value: partial.light.mode })
+  if (isObj(partial.light)) {
+    for (const branch of ['effects', 'host_effects']) {
+      const m = partial.light[branch]
+      if (!isObj(m)) continue
+      for (const moment of ['chrono', 'calm', 'score']) {
+        if (m[moment] !== undefined) out.push({ path: `light.${branch}.${moment}`, value: m[moment] })
+      }
+    }
+  }
   return out
 }
 
@@ -68,6 +84,11 @@ export function describeOverride({ path, value }, cueLabel = (c) => c) {
   if (path === 'sound.countdown.enabled') return `Décompte : ${value ? 'actif' : 'inactif'}`
   if (path === 'sound.countdown.loop') return `Décompte : ${value ? 'en boucle' : 'une fois'}`
   if (path === 'light.mode') return `Lumière : ${value}`
+  const eff = /^light\.(effects|host_effects)\.(chrono|calm|score)$/.exec(path)
+  if (eff) {
+    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[2]]
+    return `${eff[1] === 'host_effects' ? 'Animateur' : 'Effet'} (${moment}) : ${value || 'aucun'}`
+  }
   if (path.startsWith(CUE_PATH_PREFIX)) return `${cueLabel(path.slice(CUE_PATH_PREFIX.length))} : ${value ? 'actif' : 'inactif'}`
   return path
 }

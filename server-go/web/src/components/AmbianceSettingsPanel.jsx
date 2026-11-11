@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import { CUE_TABS, cueMeta } from '../utils/soundCues'
+import {
+  MOMENTS, DEFAULT_EFFECTS, DEFAULT_HOST_EFFECTS, INHERIT, effectsPath, buildOptions, optionLabel, effectWarning,
+} from '../utils/lightEffects'
 import './AmbianceSettingsPanel.css'
 
 // #231 / #290 (D7) — composant MUTUALISÉ « Réglages d'ambiance » : édite les
@@ -20,7 +23,12 @@ import './AmbianceSettingsPanel.css'
 //   onChange  (field, value|null) — field ∈ 'sound.muted' | 'sound.countdown.enabled'
 //             | 'sound.countdown.loop' | 'sound.cues.<cue>' | 'light.mode'
 //   cues      [{ cue, type }] — registre ordonné (GET /api/sounds : global puis par type)
-//   sections  sous-ensemble de ['sound','countdown','cues','light'] (défaut : toutes)
+//   sections  sous-ensemble de ['sound','countdown','cues','light','lightEffects'] (défaut : toutes)
+//             'lightEffects' (#223, v11.7.0) : un effet lumière par moment (salle) + ceux du groupe animateur ;
+//             champs 'light.effects.<moment>' et 'light.host_effects.<moment>' (contracts/light-effects.md §6).
+//   catalog   catalogue d'effets (GET /api/lighting/effects normalisé, voir useLightEffects) ; indéfini = section masquée
+//   hostGroup {name} | null — groupe animateur configuré (bloc affiché seulement s'il existe)
+//   onManageGroups / onOpenCatalogue / onCreateHost   liens des avertissements (facultatifs)
 //   renderCatalogue(cue)   mode global : cellules <td> catalogue de la ligne
 //   catalogueColumns       [<th>…] en-têtes correspondants
 //   renderExtraRows(tabKey) lignes <tr> supplémentaires d'un onglet (ex. sons longs, onglet Global)
@@ -31,7 +39,7 @@ import './AmbianceSettingsPanel.css'
 //   disabled  fige tous les contrôles
 
 const get = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj)
-const ALL_SECTIONS = ['sound', 'countdown', 'cues', 'light']
+const ALL_SECTIONS = ['sound', 'countdown', 'cues', 'light', 'lightEffects']
 
 function Tri({ options, selected, onSelect, label, disabled }) {
   return (
@@ -66,6 +74,11 @@ export default function AmbianceSettingsPanel({
   emptyRow = null,
   renderFile = null,
   files = null,
+  catalog,
+  hostGroup = null,
+  onManageGroups = null,
+  onOpenCatalogue = null,
+  onCreateHost = null,
   disabled = false,
 }) {
   const override = mode === 'override'
@@ -95,6 +108,47 @@ export default function AmbianceSettingsPanel({
   const fileCol = override && !!renderFile
 
   const onoff = (v) => (v ? 'actif' : 'inactif')
+
+  // #223 — une ligne « moment » : liste d'effets (salle ou groupe animateur).
+  const renderEffectRow = (m, host) => {
+    const field = effectsPath(host, m.key)
+    const dflt = (host ? DEFAULT_HOST_EFFECTS : DEFAULT_EFFECTS)[m.key]
+    const raw = get(value, field)
+    const current = raw === undefined ? (override ? INHERIT : dflt) : raw
+    const baseRaw = get(base, field)
+    const baseValue = baseRaw === undefined ? dflt : baseRaw
+    const effective = current === INHERIT ? baseValue : current
+    const options = buildOptions(catalog, m.key, { host, selected: effective, defaultValue: override ? null : dflt })
+    const warning = effectWarning(catalog, m.key, effective, { host })
+    const id = `asp-eff-${host ? 'host' : 'room'}-${m.key}`
+    return (
+      <div className="asp-row asp-effect-row" key={id}>
+        <label className="asp-label" htmlFor={id}>
+          {m.label}
+          {!host && <small className="asp-sub">{m.sub}</small>}
+        </label>
+        <select
+          id={id}
+          className="asp-select"
+          value={current}
+          disabled={disabled}
+          onChange={e => setField(field, e.target.value === INHERIT ? null : e.target.value)}
+        >
+          {override && <option value={INHERIT}>Hérité ({optionLabel(options, baseValue)})</option>}
+          {options.map(o => <option key={o.value || '__none'} value={o.value} disabled={o.disabled}>{o.text}</option>)}
+        </select>
+        {override && current !== INHERIT && <span className="asp-file-badge">manche</span>}
+        {override && current === INHERIT && <span className="asp-inherit">Valeur globale appliquée.</span>}
+        {warning && (
+          <span className="asp-warn" role="status" data-kind={warning.kind}>
+            {warning.text}{' '}
+            {warning.kind === 'inapplicable' && onManageGroups && <button type="button" className="asp-link" onClick={onManageGroups}>Gérer les groupes</button>}
+            {warning.kind === 'missing' && onOpenCatalogue && <button type="button" className="asp-link" onClick={onOpenCatalogue}>Voir le catalogue</button>}
+          </span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="ambiance-settings-panel" data-mode={mode}>
@@ -219,6 +273,26 @@ export default function AmbianceSettingsPanel({
             </table>
           </div>
         </>
+      )}
+
+      {has('lightEffects') && catalog !== undefined && (
+        <div className="asp-effects" data-testid="asp-light-effects">
+          <h4 className="asp-title">Effets lumière</h4>
+          {MOMENTS.map(m => renderEffectRow(m, false))}
+          {hostGroup ? (
+            <>
+              <h4 className="asp-title asp-host-title">🎤 Groupe animateur{hostGroup.name ? ` « ${hostGroup.name} »` : ''}</h4>
+              {MOMENTS.map(m => renderEffectRow(m, true))}
+              <p className="asp-inherit">
+                Les listes ne proposent que les effets jouables sur un seul groupe. Le groupe animateur n'est concerné ni par le mode ON / AUTO / OFF, ni par le Flash.
+              </p>
+            </>
+          ) : (!override && (
+            <p className="asp-inherit">
+              Aucun groupe animateur{onCreateHost && <> — <button type="button" className="asp-link" onClick={onCreateHost}>en créer un</button></>}.
+            </p>
+          ))}
+        </div>
       )}
 
       {has('light') && (

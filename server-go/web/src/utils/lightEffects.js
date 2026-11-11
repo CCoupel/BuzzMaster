@@ -1,0 +1,110 @@
+// #223 (v11.7.0, LOT-2) — helpers PURS des sélecteurs « effet lumière par moment ».
+// Contrats : contracts/light-effects.md §6 (réglages), §7.1 (catalogue), §2.5 (groupe animateur) ;
+// contracts/ambiance-settings.md §10. Maquette : ambiance_settings_panel__light_effects.
+
+export const MOMENTS = [
+  { key: 'chrono', label: 'Pendant le chronomètre', sub: 'Question chronométrée en cours' },
+  { key: 'calm', label: 'Phases calmes', sub: 'Hors partie, pause, entracte' },
+  { key: 'score', label: 'Quand une équipe marque', sub: 'Attribution de points' },
+]
+
+// Valeurs par défaut globales (§6) : reproduisent le comportement v11.6.0.
+export const DEFAULT_EFFECTS = Object.freeze({ chrono: 'pulsation', calm: '', score: '' })
+export const DEFAULT_HOST_EFFECTS = Object.freeze({ chrono: '', calm: '', score: '' })
+
+export const EMPTY_CATALOG = Object.freeze({ groups: 0, effects: [], errors: [], unresolved: [], dir: '' })
+
+export const INHERIT = '__inherit__'
+export const NONE = ''
+
+export const effectsPath = (host, moment) => `light.${host ? 'host_effects' : 'effects'}.${moment}`
+
+// Chemin `lighting.*` de config.json correspondant (§6, table de correspondance).
+export const configKeyFor = (field) => {
+  const m = /^light\.(effects|host_effects)\.(chrono|calm|score)$/.exec(field)
+  return m ? { section: m[1], moment: m[2] } : null
+}
+
+const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
+
+export function normalizeCatalog(data) {
+  if (!isObj(data)) return EMPTY_CATALOG
+  return {
+    groups: Number.isFinite(data.groups) ? data.groups : 0,
+    effects: Array.isArray(data.effects) ? data.effects.filter(e => isObj(e) && typeof e.id === 'string') : [],
+    errors: Array.isArray(data.errors) ? data.errors : [],
+    unresolved: Array.isArray(data.unresolved) ? data.unresolved : [],
+    dir: typeof data.dir === 'string' ? data.dir : '',
+  }
+}
+
+export const effectLabel = (e) => (e.origin === 'native' ? e.name : `${e.name} (personnalisé)`)
+
+const byName = (a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+
+// Raison d'inapplicabilité d'un effet pour la salle ou pour le groupe animateur (un seul groupe).
+export function inapplicableReason(e, { host, groups }) {
+  if (host) return (e.min_groups || 0) > 1 ? 'demande plusieurs groupes' : ''
+  if (e.applicable === false) {
+    if (e.reason) return e.reason
+    return `demande ${e.min_groups} groupe${e.min_groups > 1 ? 's' : ''}, ${groups} configuré${groups > 1 ? 's' : ''}`
+  }
+  return ''
+}
+
+// Liste d'un moment : « Aucun effet » (ou « Blanc fixe » pour le groupe animateur), puis les effets du
+// catalogue qui déclarent ce moment — natifs d'abord, personnalisés ensuite par ordre alphabétique.
+// Un effet inapplicable reste visible, grisé, avec sa raison. Une valeur sélectionnée absente du catalogue
+// est ajoutée « (introuvable) ». `defaultValue` marque l'option « (actuel) » (mode global).
+export function buildOptions(catalog, moment, { host = false, selected = null, defaultValue = null } = {}) {
+  const cat = catalog || EMPTY_CATALOG
+  const wanted = cat.effects.filter(e => Array.isArray(e.moments) && e.moments.includes(moment))
+  const natives = wanted.filter(e => e.origin === 'native')
+  const others = wanted.filter(e => e.origin !== 'native').sort(byName)
+  const noneLabel = host ? 'Blanc fixe' : 'Aucun effet'
+  const options = [{ value: NONE, label: noneLabel, disabled: false, reason: '' }]
+  for (const e of [...natives, ...others]) {
+    const reason = inapplicableReason(e, { host, groups: cat.groups })
+    options.push({ value: e.id, label: effectLabel(e), disabled: !!reason, reason })
+  }
+  if (selected && selected !== INHERIT && !options.some(o => o.value === selected)) {
+    options.push({ value: selected, label: `${selected} (introuvable)`, disabled: false, reason: '', missing: true })
+  }
+  return options.map(o => {
+    const label = defaultValue !== null && o.value === defaultValue ? `${o.label} (actuel)` : o.label
+    return { ...o, label, text: o.disabled ? `${label} — ${o.reason}` : label }
+  })
+}
+
+export const optionLabel = (options, value) => options.find(o => o.value === value)?.label.replace(/ \(actuel\)$/, '') ?? value
+
+// Avertissement affiché sous le sélecteur salle : effet inapplicable (repli sur la pulsation) ou introuvable.
+export function effectWarning(catalog, moment, value, { host = false } = {}) {
+  if (!value) return null
+  const cat = catalog || EMPTY_CATALOG
+  const e = cat.effects.find(x => x.id === value)
+  if (!e || !Array.isArray(e.moments) || !e.moments.includes(moment)) {
+    return { kind: 'missing', text: 'Le fichier de cet effet est absent ou invalide : aucun effet n\'est joué.' }
+  }
+  const reason = inapplicableReason(e, { host, groups: cat.groups })
+  if (!reason) return null
+  if (host) return { kind: 'inapplicable', text: 'Cet effet demande plusieurs groupes : le groupe animateur reste en blanc fixe.' }
+  return {
+    kind: 'inapplicable',
+    text: `Cet effet demande ${e.min_groups} groupe${e.min_groups > 1 ? 's' : ''} et ${cat.groups} ${cat.groups > 1 ? 'sont configurés' : 'est configuré'} : ${moment === 'chrono' ? 'la pulsation est jouée à la place' : 'aucun effet n\'est joué'}.`,
+  }
+}
+
+// Valeur globale effective d'un moment depuis la section `lighting` de config.json.
+export function globalEffect(lighting, host, moment) {
+  const src = host ? lighting?.host_effects : lighting?.effects
+  const dflt = host ? DEFAULT_HOST_EFFECTS : DEFAULT_EFFECTS
+  const v = isObj(src) ? src[moment] : undefined
+  return typeof v === 'string' ? v : dflt[moment]
+}
+
+// Groupe animateur configuré : {name} | null.
+export function findHostGroup(groups) {
+  const g = Array.isArray(groups) ? groups.find(x => x && x.role === 'animateur') : null
+  return g ? { name: typeof g.name === 'string' ? g.name : '' } : null
+}

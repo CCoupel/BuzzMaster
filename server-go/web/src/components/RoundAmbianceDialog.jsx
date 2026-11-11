@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import AmbianceSettingsPanel from './AmbianceSettingsPanel'
 import { setPartialPath, countOverrides } from '../utils/ambianceSettings'
+import { useLightEffects } from '../hooks/useLightEffects'
 import { soundUploadMessage } from '../utils/soundState'
 import { cueMeta } from '../utils/soundCues'
 import './RoundGroup.css'
@@ -214,6 +215,8 @@ export default function RoundAmbianceDialog({ roundId = null, roundName, value, 
     onChange('*', null)
   }
 
+  // #223 (v11.7.0) — catalogue d'effets lumière + présence du groupe animateur (sélecteurs par moment).
+  const { catalog, hostGroup } = useLightEffects({ withHost: true })
   const n = countOverrides(draft)
   const onChange = (path, v) => setDraft(prev => setPartialPath(prev, path, v))
 
@@ -264,6 +267,8 @@ export default function RoundAmbianceDialog({ roundId = null, roundName, value, 
           cues={cues}
           onChange={onChange}
           files={files}
+          catalog={catalog}
+          hostGroup={hostGroup}
           renderFile={roundId ? renderFile : null}
         />
         {notice && (
