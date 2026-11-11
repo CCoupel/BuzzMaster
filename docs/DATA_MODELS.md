@@ -1018,6 +1018,59 @@ Toujours sérialisé, sans persistance (dérivé). Recalculé à chaque changeme
 
 `config.json` existants restent valides : clé absente ⇒ `AUTO`.
 
+## Groupes d'ambiance — v11.7.0 (#225)
+
+Référence : `contracts/light-effects.md` §2, `contracts/hue-bridge.md` §11.
+
+### config.json — `lighting.groups`
+
+Tableau ordonné ; l'ordre du tableau donne le **numéro** du groupe de salle (1-based, rang parmi les groupes de rôle `salle`, groupes vides compris).
+
+| Champ | Type | Défaut | Description |
+|-------|------|--------|-------------|
+| `name` | String | — | Libellé (1 à 40 caractères), unique sans tenir compte de la casse |
+| `role` | String | `"salle"` (absent ou vide) | `"salle"` ou `"animateur"` (un seul groupe animateur au plus) |
+| `lights` | Array of String | `[]` | Noms d'ampoules de rôle `general`, chacune dans un seul groupe |
+| `near_teams` | Array of String | `[]` | Équipes installées près du groupe (refusé sur le groupe animateur) ; une équipe dans un seul groupe au plus |
+
+- `groups` absent ou `[]` ⇒ comportement v11.6.0 exact. Plus de 12 groupes de salle ⇒ refus.
+- Écriture : remplacement complet du tableau (`POST /config.json`), refus `400` avec message lisible (ampoule inconnue, ampoule de rôle `team`, ampoule dans deux groupes, nom en double, plus de 12 groupes).
+- Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe dans la même écriture.
+- Go : `config.LightingGroupEntry {Name, Role, Lights, NearTeams}` ; constantes `GroupRoleSalle = "salle"`, `GroupRoleAnimateur = "animateur"` ; `MaxLightingGroups = 12`.
+
+Exemple :
+
+```json
+"lighting": {
+  "groups": [
+    { "name": "Scène gauche", "role": "salle", "lights": ["BuzzHue1", "BuzzHue4"], "near_teams": ["Rouges"] },
+    { "name": "Bar", "role": "salle", "lights": ["BuzzHue2"], "near_teams": [] },
+    { "name": "Pupitre", "role": "animateur", "lights": ["BuzzHue8"], "near_teams": [] }
+  ]
+}
+```
+
+### `lighting.ZoneState.Group` (Go, `internal/lighting/event.go`)
+
+| Valeur de `Group` | Sens (avec `Zone == "general"`) |
+|-------------------|----------------------------------|
+| `0` (zéro, défaut) | Toute la zone : ampoules hors groupe et repli. Toujours émise en premier |
+| `n ≥ 1` | Groupe de salle numéro n (précise l'entrée `Group 0` pour ses ampoules) |
+| `lighting.GroupHost` (`-1`) | Groupe animateur : `{Zone:"general", Group:GroupHost}` |
+
+En v11.7.0 LOT-1, `Scene()` n'émet aucune entrée `Group ≥ 1` : la scène de salle reste `Group 0`, et seule l'entrée `GroupHost` (blanc fixe, 255) est ajoutée. Les entrées par groupe de salle arrivent avec le séquenceur (LOT-2).
+
+### `hue.LightSpec.Group` (pilote Hue)
+
+- `Group int` : groupe d'ambiance d'une ampoule `general` (0 = hors groupe). Pour l'ampoule du groupe animateur, `Group = lighting.GroupHost`.
+- Clé de regroupement d'`Apply` : (rôle, équipe, groupe).
+- Groupes Hue : `buzzmaster-general-<n>` pour un groupe de salle, `buzzmaster-general-host` pour le groupe animateur, à partir de `hue.SubGroupMinLights` (3) ampoules ; en dessous, écriture par ampoule.
+- `buzzmaster-general` exclut les ampoules du groupe animateur ; `buzzmaster-ambiance` les inclut toujours.
+
+### `GET /api/lighting/lights` — champ `group`
+
+Chaque ampoule porte `group` : `0` (hors groupe ou ampoule d'équipe), entier `n ≥ 1` (groupe de salle), ou `"host"` (groupe animateur).
+
 ## Game Flow
 
 > **Documentation complète**: Voir [GAME_STATE_MACHINE.md](GAME_STATE_MACHINE.md) pour la spécification détaillée.

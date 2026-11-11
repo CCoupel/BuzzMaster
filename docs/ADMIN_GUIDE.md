@@ -2349,6 +2349,35 @@ Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de s
 - Les Rouges jouent : l'ampoule rouge reste allumée en couleur rouge (équipe active)
 - Au retour sur AUTO : les 2 ampoules salle reprennent leur scène de jeu
 
+### Groupes d'ampoules et groupe animateur (v11.7.0, #225)
+
+Le sous-onglet **Groupes** de `/admin/ambiance` › **Lumière** (à côté de « Pont et ampoules » et « Effets ») range les ampoules générales en **groupes** d'ambiance. Il ne sert qu'une fois le pont associé et les ampoules choisies.
+
+- **Groupes de salle** : chaque groupe est numéroté selon son rang dans la liste (1, 2, 3…). Un groupe peut porter des **équipes à proximité** (pour un futur effet d'origine par équipe). Maximum **12 groupes** de salle. Un groupe vide garde son numéro mais n'est pas utilisé.
+- **Ampoules hors groupe** : elles restent sur la scène de salle ordinaire, comme avant v11.7.0. Une ampoule ne peut être que dans **un seul** groupe.
+- **Enregistrement** : les modifications ne sont prises en compte qu'après **Enregistrer**. Une ampoule groupée qui passe en rôle équipe est retirée de son groupe automatiquement.
+- **Essai** : un groupe enregistré clignote en blanc sur le pont, puis reprend son état de jeu. L'essai est désactivé si le brouillon n'est pas enregistré, si le groupe est vide ou si l'éclairage est désactivé.
+
+#### Groupe animateur
+
+Le **groupe animateur** éclaire l'animateur (pupitre, régie). Il est distinct de la salle :
+
+- Un seul groupe animateur au plus, sans numéro et sans équipes à proximité.
+- Il reste en **blanc fixe** dès que l'éclairage est actif, quelle que soit la phase de jeu.
+- **Les réglages de la salle ne l'atteignent pas** : ni ON, ni OFF, ni le Flash, ni les effets de salle ne le modifient.
+- Il est éteint seulement par l'**interrupteur général** « Éclairage d'ambiance activé » et par l'**arrêt du serveur**.
+- Dans la colonne « Groupe » de la liste des ampoules, il est signalé par « 🎤 … (animateur) ».
+- Le lien « Choisir ses effets » est présent mais inactif (« bientôt ») : les effets du groupe animateur arrivent avec le sous-onglet **Effets**.
+
+#### Ce qu'éteint chaque commande
+
+| Commande | Ampoules de salle (groupes et hors groupe) | Groupe animateur |
+|---|---|---|
+| Sélecteur ON / AUTO / OFF | Oui | Non |
+| Flash | Oui | Non |
+| Interrupteur général « Éclairage d'ambiance activé » | Oui (éteint) | Oui (éteint) |
+| Arrêt du serveur | Oui | Oui |
+
 ### Comportement à l'arrêt du serveur
 
 À l'arrêt du serveur BuzzControl, **l'éclairage de salle s'éteint complètement** (ampoules générales + ampoules d'équipe). À la relance, un nouvel état de jeu redémarre depuis zéro — aucun mode manuel n'est persisté entre redémarrages.

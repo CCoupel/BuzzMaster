@@ -2044,19 +2044,21 @@ La page utilise une **barre d'onglets** (`role="tablist"`) avec deux positions m
 
 | Onglet | Contenu | Statut |
 |---|---|---|
-| 🔆 **Lumière** | Configuration Philips Hue (pont, ampoules, sélecteur ON/AUTO/OFF) | Actif par défaut |
+| 🔆 **Lumière** | Configuration Philips Hue (pont, ampoules, groupes, sélecteur ON/AUTO/OFF) | Actif par défaut |
 | 🔊 **Son** | Gestion des bruitages (15 depuis v11.6.0, répartis en onglets par type de jeu), interrupteur général | v11.0 (#230) ; onglets v11.6.0 (#231) |
 
 #### Mécanique des onglets
 
 ```jsx
 const TABS = [
-  { id: "lighting", label: "Lumière", icon: "💡" },
-  { id: "sound", label: "Son", icon: "🔊" }
-];
+  { key: 'light', label: 'Lumière', icon: '🔆' },
+  { key: 'sound', label: 'Son', icon: '🔊' },
+]
 
-const [activeTab, setActiveTab] = useState("lighting");
+const [activeTab, setActiveTab] = useState('light')
 ```
+
+*(Correction v11.7.0, #225 : la clé de l'onglet Lumière est `key: 'light'`, et non `id: "lighting"` comme l'indiquait l'ancienne version de cette section.)*
 
 Rendu :
 - Un seul onglet est actif à la fois
@@ -2084,6 +2086,29 @@ Réutilise intégralement le contenu existant de `AmbiancePage` (v10.0.0+). Voir
 - Appairage (étape 2)
 - Gestion des ampoules et des scènes (étape 3)
 - Sélecteur ON/AUTO/OFF pour la conduite en direct
+
+#### Sous-onglets de Lumière (v11.7.0, #225)
+
+Une seconde barre d'onglets (`LIGHT_SUBTABS`, état `lightSubTab`, défaut `bridge`) sous l'onglet Lumière, visible à l'étape 3 (pont associé) seulement :
+
+| `key` | Libellé | Contenu |
+|---|---|---|
+| `bridge` | Pont et ampoules | Contenu existant : pont, ampoules, scènes, sélecteur ON/AUTO/OFF |
+| `groups` | Groupes | Composant `LightGroupsManager` (compteur de groupes affiché) |
+| `effects` | Effets | Emplacement « bientôt » jusqu'au LOT-2 (badge `ambiance-soon-badge`) |
+
+#### `LightGroupsManager` — groupes d'ambiance (#225)
+
+**Fichiers** : `web/src/components/LightGroupsManager.jsx` + `LightGroupsManager.css` ; fonctions pures dans `web/src/utils/lightGroups.js` (brouillon `{groups, host}`).
+
+**Rôle** : édite `lighting.groups` (config) ; le brouillon est enregistré par `POST /config.json` (`{lighting:{groups:[…]}}`, remplacement complet, groupe animateur placé en dernier), et l'essai appelle `POST /api/lighting/groups/test` avec `{group: n}` ou `{group: "host"}`.
+
+- **Bac « hors groupe »** et **groupes de salle ordonnés** : glisser-déposer natif et alternative clavier (Monter / Descendre, « Déplacer vers… »).
+- **Équipes à proximité** par groupe de salle ; action « Créer un groupe par ampoule ».
+- **Bloc « Animateur »** : création, nom, ampoules, essai, suppression ; sans numéro ni équipes à proximité. Son lien « Choisir ses effets » reçoit `onChooseEffects=null` jusqu'au LOT-2 et reste alors inactif (« bientôt »).
+- **Colonne « Groupe »** de la liste d'ampoules : calculée depuis `lighting.groups` (config), et non depuis le champ `group` de `GET /api/lighting/lights`. Pastille « 🎤 … (animateur) » pour le groupe animateur.
+- **Avertissement** avant enregistrement si une ampoule groupée passe en rôle équipe.
+- **Essai** désactivé si le brouillon n'est pas enregistré, si le groupe est vide, ou si l'éclairage est désactivé.
 
 ### Onglet Son — Bruitages d'événement
 

@@ -366,6 +366,7 @@ La clé peut être définie/modifiée via :
 | `bridge_ip` | String | Adresse IP du bridge Hue (ex. `"192.168.1.101"`) — auto-mise à jour en cas DHCP |
 | `bridge_id` | String | Identifiant unique du bridge (ex. `"001788fffea0591e"`) — immuable, résiste aux changements d'IP |
 | `lights` | Array | Liste des ampoules à piloter, chacune avec `name` (exact), `role` (`"general"` ou `"team"`), et optionnellement `team` (nom d'équipe) |
+| `groups` | Array | Groupes d'ambiance (v11.7.0, #225), ordonnés : `name`, `role` (`"salle"` par défaut, ou `"animateur"`), `lights` (noms), `near_teams` (noms d'équipes). Absent ou `[]` = comportement v11.6.0 |
 
 **Débit et timeouts** :
 
@@ -413,6 +414,28 @@ Pour supprimer la clé de `config.json` (dissociation) : utiliser l'API ou re-in
   }
 }
 ```
+
+#### Groupes d'ambiance (`lighting.groups`, v11.7.0, #225)
+
+Les groupes se règlent dans `/admin/ambiance` › Lumière › Groupes (écriture par `POST /config.json`, validée par le serveur).
+
+```json
+{
+  "lighting": {
+    "groups": [
+      { "name": "Scène gauche", "role": "salle", "lights": ["Salle", "Entrée"], "near_teams": ["Rouges"] },
+      { "name": "Pupitre", "role": "animateur", "lights": ["Bureau Animateur"], "near_teams": [] }
+    ]
+  }
+}
+```
+
+- Le **numéro** d'un groupe de salle est son rang dans le tableau parmi les groupes `salle` (groupes vides compris). Maximum **12** groupes de salle.
+- `role` : `"salle"` (défaut si absent ou vide) ou `"animateur"` (un seul au plus, sans numéro ni `near_teams`).
+- Chaque ampoule citée doit exister dans `lights` avec `role: "general"` et n'appartenir qu'à **un** groupe.
+- Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe à l'écriture.
+- Refus `400` avec un message lisible si la règle n'est pas respectée.
+- Groupes Hue créés sur le pont : `buzzmaster-general-<n>` (salle) et `buzzmaster-general-host` (animateur), à partir de 3 ampoules.
 
 #### Résolution des noms d'ampoules
 

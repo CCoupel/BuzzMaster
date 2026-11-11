@@ -2,6 +2,24 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.7.0] - en cours — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#225, LOT-1)
+
+Première étape de la v11.7.0 : la salle peut être découpée en **groupes d'ampoules**, et un **groupe animateur** éclaire le pupitre en blanc fixe. Les effets répartis sur les groupes viendront avec les lots suivants.
+
+### Added
+
+- **Groupes d'ampoules (#225)** — sous-onglet **Groupes** de `/admin/ambiance` › Lumière : bac « hors groupe », groupes de salle ordonnés (glisser-déposer ou Monter / Descendre), équipes à proximité, « Créer un groupe par ampoule », essai d'un groupe (clignotement blanc), enregistrement. Maximum 12 groupes de salle. Voir `docs/ADMIN_GUIDE.md`.
+- **Groupe animateur (#225)** — un groupe de rôle `animateur` (un seul), sans numéro ni équipes à proximité. Il reste en blanc fixe dès que l'éclairage est actif ; ON / OFF, Flash et effets de salle ne le modifient pas. Seuls l'interrupteur général et l'arrêt du serveur l'éteignent.
+- **Configuration `lighting.groups` (`config.json`)** — tableau ordonné `{name, role, lights, near_teams}`, absent ou `[]` = comportement v11.6.0. Validation à l'écriture (`POST /config.json`, refus `400`). Voir `docs/SERVER_PARAMETERS.md` et `docs/DATA_MODELS.md`.
+- **`POST /api/lighting/groups/test`** — essai d'un groupe (`{"group": n}` ou `{"group": "host"}`), mêmes erreurs que `POST /api/lighting/test`.
+- **Champ `group` dans `GET /api/lighting/lights`** — `0` (hors groupe ou équipe), `n` (groupe de salle) ou `"host"` (groupe animateur).
+- **Groupes Hue (#225)** — `buzzmaster-general-<n>` par groupe de salle et `buzzmaster-general-host` pour le groupe animateur, à partir de 3 ampoules ; en dessous, écriture par ampoule.
+
+### Changed
+
+- **Sous-onglets de Lumière (#225)** — « Pont et ampoules », « Groupes » et « Effets » (ce dernier vide, « bientôt », jusqu'au LOT-2). Visibles une fois le pont associé.
+- **Pilote Hue (#225)** — `buzzmaster-general` ne contient plus les ampoules du groupe animateur. Si toutes les ampoules générales ont le même état, une seule écriture comme avant (pas de régression de débit).
+
 ## [11.6.0] - 2026-11-10 — Milestone v11.6.0 « Ambiance : portée étendue » (#283, #232, #235, #231, #290)
 
 Son et éclairage d'ambiance deviennent réglables **par manche**, et les bruitages sont étendus aux types de jeu (QCM, MEMORY, MEMOTION, RAFALE) et aux médias de question (MEMORY, MEMOTION, ENTRACTE).
