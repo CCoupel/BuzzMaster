@@ -174,6 +174,16 @@ describe('AmbiancePage › Lumière — enregistrer et tester les groupes (#225)
     expect(await screen.findByText(/Pont injoignable/)).toBeInTheDocument()
   })
 
+  it('un essai déjà en cours (429) est expliqué, l\'interface reste utilisable', async () => {
+    const srv = makeServer({ testStatus: 429, lighting: { groups: [{ name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
+    render(<AmbiancePage />)
+    fireEvent.click(await subtab('Groupes'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
+    expect(await screen.findByText(/essai est déjà en cours/i)).toBeInTheDocument()
+    await waitFor(() => expect(srv.tests).toEqual([{ group: 1 }]))
+    expect(screen.getByRole('button', { name: 'Tester le groupe' })).toBeEnabled() // pas de blocage après le refus
+  })
+
   it('un essai refusé (409 éclairage désactivé) est expliqué', async () => {
     makeServer({ testStatus: 409, lighting: { groups: [{ name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
     render(<AmbiancePage />)
