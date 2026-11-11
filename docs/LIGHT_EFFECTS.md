@@ -289,7 +289,7 @@ Effets livrés à ce jour : `pulsation`, `chenillard`, `chenillard-traine`, `cou
 - **Aperçu** : « ▶ Aperçu » rejoue l'effet sur des ampoules dessinées g1, g2… ; le numéro du tick et le pas joué
   (PRE, pas 0, dernier) s'affichent. L'aperçu ne simule ni la fin du moment ni la vitesse.
 - **Essai sur la salle** : « 💡 Essayer sur la salle » joue l'effet sur la zone ambiance, à la vitesse ×1, pendant
-  10 secondes (5 secondes pour un effet de score seul). « ■ Arrêter l'essai » l'interrompt.
+  la durée par défaut du serveur (10 secondes, 5 secondes pour un effet de score seul). « ■ Arrêter l'essai » l'interrompt.
 - **Tester** (réglages) : joue l'effet sur sa zone, à la vitesse réglée pour ce moment. Le dernier essai lancé remplace
   l'autre.
 - **Grisage** : l'essai est grisé pendant une question en cours, et le serveur refuse un essai pendant une question
