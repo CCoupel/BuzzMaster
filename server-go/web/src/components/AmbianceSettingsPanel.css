@@ -37,3 +37,11 @@
 .asp-host-name { margin: 0.4rem 0 0.2rem; font-size: 0.86rem; }
 
 .asp-speed { min-width: 5.5rem; }
+
+/* Révision 4 — blocs par zone et bouton « Tester » */
+.asp-zone { margin: 0.6rem 0; padding: 0.2rem 0.6rem; border-radius: 0.5rem; border: 1px solid transparent; }
+.asp-zone.is-focus { border-color: #c7d2fe; background: #f5f7ff; }
+.asp-zone-title { margin-top: 0.7rem; }
+.asp-try { font: inherit; font-size: 0.78rem; padding: 0.3rem 0.65rem; border-radius: 0.4rem; border: 1px solid var(--gray-300, #d1d5db); background: #fff; color: var(--gray-700, #374151); cursor: pointer; }
+.asp-try:disabled { opacity: 0.5; cursor: not-allowed; }
+.asp-try.is-running { background: #fee2e2; border-color: #fecaca; color: #991b1b; }

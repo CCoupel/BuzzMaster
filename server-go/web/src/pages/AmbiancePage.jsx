@@ -13,7 +13,7 @@ import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
 import { groupLabelForLight, groupPillText, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
-import { configKeyFor, configPatchFor, globalEffect, globalSpeed, findHostGroups, MOMENTS } from '../utils/lightEffects'
+import { configKeyFor, configPatchFor, globalEffect, globalSpeed, zoneGroupCounts, MOMENTS, ZONES, TRY_SECONDS, TRY_REFUSALS } from '../utils/lightEffects'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -382,20 +382,51 @@ export default function AmbiancePage() {
       setSavingEffect(false)
     }
   }
-  const hostGroupsConfigured = useMemo(() => findHostGroups(lighting.groups), [lighting.groups])
-  const [focusHostId, setFocusHostId] = useState(null)
+  const zoneGroups = useMemo(() => zoneGroupCounts(lighting.groups), [lighting.groups])
+  const [focusZone, setFocusZone] = useState(null)
   const effectsSettings = useMemo(() => ({
     light: {
       mode: lighting.default_mode || 'AUTO',
-      effects: Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, false, m.key)])),
-      host_effects: Object.fromEntries(hostGroupsConfigured.map(g => [g.id, Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, g.id, m.key)]))])),
-      speeds: Object.fromEntries(MOMENTS.map(m => [m.key, globalSpeed(lighting, false, m.key)])),
-      host_speeds: Object.fromEntries(hostGroupsConfigured.map(g => [g.id, Object.fromEntries(MOMENTS.map(m => [m.key, globalSpeed(lighting, g.id, m.key)]))])),
+      effects: Object.fromEntries(ZONES.map(z => [z, Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, z, m.key)]))])),
+      speeds: Object.fromEntries(ZONES.map(z => [z, Object.fromEntries(MOMENTS.map(m => [m.key, globalSpeed(lighting, z, m.key)]))])),
     },
-  }), [lighting, hostGroupsConfigured])
-  const openSubTab = (key, hostId = null) => {
+  }), [lighting])
+
+  // Bouton « Tester » (contrat §7.4) : POST /api/lighting/effects/{id}/try {zone, speed, seconds} ; réponse immédiate
+  // `{ok, duration_ms}` ; 409 `reason` : disabled | game | not_applicable | mode ; 503 pont injoignable ; 404 / 400.
+  const handleTryEffect = async ({ zone, id, speed }) => {
+    try {
+      const res = await postJson(`/api/lighting/effects/${encodeURIComponent(id)}/try`, { zone, speed, seconds: TRY_SECONDS })
+      if (res.ok) {
+        const body = await readJsonSafe(res)
+        return { ok: true, duration_ms: body?.duration_ms }
+      }
+      const body = await readJsonSafe(res)
+      const message = res.status === 409 ? (TRY_REFUSALS[body?.reason] || 'Test refusé.')
+        : res.status === 503 ? 'Pont injoignable — impossible de tester l\'effet.'
+        : res.status === 404 ? 'Effet inconnu — rechargez le catalogue.'
+        : `Test impossible (HTTP ${res.status}).`
+      setToast({ message, type: 'warning' })
+      return { ok: false, message }
+    } catch (error) {
+      setToast({ message: 'Erreur : ' + error.message, type: 'error' })
+      return { ok: false, message: error.message }
+    }
+  }
+  const handleStopTry = async () => {
+    try { await postJson('/api/lighting/effects/try/stop') } catch { /* best effort : le test s'arrête seul au bout de 10 s */ }
+  }
+  // Raison d'indisponibilité du bouton « Tester » d'une zone (la question en cours et l'effet inapplicable sont
+  // refusés par le serveur, 409 `game` / `not_applicable`).
+  const tryUnavailable = (zone) => {
+    if (!lighting.enabled) return "Éclairage d'ambiance désactivé"
+    if (frozen) return 'Pont injoignable ou association refusée'
+    if (zone === 'ambiance' && (status.mode !== 'AUTO' || status.flash)) return "L'éclairage est forcé sur ON / OFF ou le Flash est actif"
+    return ''
+  }
+  const openSubTab = (key, zone = null) => {
     setLightSubTab(key)
-    setFocusHostId(key === 'effects' ? hostId : null)
+    setFocusZone(key === 'effects' ? zone : null)
     if (key === 'effects') refreshCatalog()
   }
 
@@ -1210,10 +1241,13 @@ export default function AmbiancePage() {
               onChange={(field, value) => (field === 'light.mode' ? handleDefaultModeChange(field, value) : handleEffectChange(field, value))}
               sections={['light', 'lightEffects']}
               catalog={catalog}
-              hostGroups={hostGroupsConfigured}
-              focusHostId={focusHostId}
+              zoneGroups={zoneGroups}
+              focusZone={focusZone}
+              onTryEffect={handleTryEffect}
+              onStopTry={handleStopTry}
+              tryUnavailable={tryUnavailable}
               onManageGroups={() => openSubTab('groups')}
-              onCreateHost={() => openSubTab('groups')}
+              onCreateZone={() => openSubTab('groups')}
               disabled={savingDefaultMode || savingEffect}
             />
             <p className="ambiance-hint">

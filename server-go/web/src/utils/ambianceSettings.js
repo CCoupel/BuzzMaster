@@ -3,24 +3,17 @@
 // { sound: { muted, countdown: { enabled, loop }, cues: { <cue>: bool } }, light: { mode } }.
 
 /** Chemins éditables hors cues — doivent rester alignés sur `Settings` (§2). */
+const LIGHT_ZONES = ['ambiance', 'animateur', 'public']
+const LIGHT_MOMENTS = ['chrono', 'calm', 'score']
 export const SETTINGS_FIELD_PATHS = [
   'sound.muted',
   'sound.countdown.enabled',
   'sound.countdown.loop',
   'light.mode',
-  // #223 (v11.7.0, LOT-2) — effet lumière par moment : salle (`effects`) et groupe animateur (`host_effects`).
-  'light.effects.chrono',
-  'light.effects.calm',
-  'light.effects.score',
-  // Vitesse des effets (révision 3) : salle ; les groupes animateur ont `light.host_speeds.<id>.<moment>` (hostSpeedPaths).
-  'light.speeds.chrono',
-  'light.speeds.calm',
-  'light.speeds.score',
+  // #223 (v11.7.0, révision 4) — effet et vitesse lumière par zone et par moment : `light.effects.<zone>.<moment>`,
+  // `light.speeds.<zone>.<moment>` (18 chemins ; contracts/light-effects.md §6).
+  ...LIGHT_ZONES.flatMap(z => LIGHT_MOMENTS.flatMap(m => [`light.effects.${z}.${m}`, `light.speeds.${z}.${m}`])),
 ]
-// Groupes animateur : chemins `light.host_effects.<id>.<moment>` (un par groupe), construits à la volée
-// (hostEffectPaths) — la liste des `id` vit dans la configuration, pas ici.
-export const hostEffectPaths = (ids) => ids.flatMap(id => ['chrono', 'calm', 'score'].map(m => `light.host_effects.${id}.${m}`))
-export const hostSpeedPaths = (ids) => ids.flatMap(id => ['chrono', 'calm', 'score'].map(m => `light.host_speeds.${id}.${m}`))
 export const CUE_PATH_PREFIX = 'sound.cues.'
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
@@ -70,26 +63,14 @@ export function overriddenFields(partial) {
   }
   if (isObj(partial.light) && partial.light.mode !== undefined) out.push({ path: 'light.mode', value: partial.light.mode })
   if (isObj(partial.light)) {
-    const room = partial.light.effects
-    if (isObj(room)) {
-      for (const moment of ['chrono', 'calm', 'score']) {
-        if (room[moment] !== undefined) out.push({ path: `light.effects.${moment}`, value: room[moment] })
-      }
-    }
-    const speeds = partial.light.speeds
-    if (isObj(speeds)) {
-      for (const moment of ['chrono', 'calm', 'score']) {
-        if (speeds[moment] !== undefined) out.push({ path: `light.speeds.${moment}`, value: speeds[moment] })
-      }
-    }
-    // Un réglage compte pour chaque (groupe animateur, moment) surchargé, effet et vitesse séparément.
-    for (const branch of ['host_effects', 'host_speeds']) {
-      const hosts = partial.light[branch]
-      if (!isObj(hosts)) continue
-      for (const [id, byMoment] of Object.entries(hosts)) {
-        if (!isObj(byMoment)) continue
-        for (const moment of ['chrono', 'calm', 'score']) {
-          if (byMoment[moment] !== undefined) out.push({ path: `light.${branch}.${id}.${moment}`, value: byMoment[moment] })
+    // Un réglage compte pour chaque (zone, moment) surchargé, effet et vitesse séparément.
+    for (const branch of ['effects', 'speeds']) {
+      const byZone = partial.light[branch]
+      if (!isObj(byZone)) continue
+      for (const zone of LIGHT_ZONES) {
+        if (!isObj(byZone[zone])) continue
+        for (const moment of LIGHT_MOMENTS) {
+          if (byZone[zone][moment] !== undefined) out.push({ path: `light.${branch}.${zone}.${moment}`, value: byZone[zone][moment] })
         }
       }
     }
@@ -100,19 +81,18 @@ export function overriddenFields(partial) {
 export const countOverrides = (partial) => overriddenFields(partial).length
 
 /** Libellé court d'un champ surchargé (info-bulle du badge). */
-export function describeOverride({ path, value }, cueLabel = (c) => c, hostLabel = (id) => id) {
+export function describeOverride({ path, value }, cueLabel = (c) => c) {
   if (path === 'sound.muted') return `Son : ${value ? 'coupé' : 'ON'}`
   if (path === 'sound.countdown.enabled') return `Décompte : ${value ? 'actif' : 'inactif'}`
   if (path === 'sound.countdown.loop') return `Décompte : ${value ? 'en boucle' : 'une fois'}`
   if (path === 'light.mode') return `Lumière : ${value}`
-  const eff = /^light\.(?:(effects|speeds)\.(chrono|calm|score)|(host_effects|host_speeds)\.([a-z0-9]{1,12})\.(chrono|calm|score))$/.exec(path)
+  const eff = /^light\.(effects|speeds)\.(ambiance|animateur|public)\.(chrono|calm|score)$/.exec(path)
   if (eff) {
-    const branch = eff[1] || eff[3]
-    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[2] || eff[5]]
-    const val = branch.endsWith('speeds') ? `×${String(value).replace('.', ',')}` : (value || 'aucun')
-    if (branch === 'effects') return `Effet (${moment}) : ${val}`
-    if (branch === 'speeds') return `Vitesse (${moment}) : ${val}`
-    return `${hostLabel(eff[4])}${branch === 'host_speeds' ? ' — vitesse' : ''} (${moment}) : ${val}`
+    const zone = { ambiance: 'Ambiance', animateur: 'Animateur', public: 'Public' }[eff[2]]
+    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[3]]
+    return eff[1] === 'speeds'
+      ? `Vitesse ${zone} (${moment}) : ×${String(value).replace('.', ',')}`
+      : `Effet ${zone} (${moment}) : ${value || 'aucun'}`
   }
   if (path.startsWith(CUE_PATH_PREFIX)) return `${cueLabel(path.slice(CUE_PATH_PREFIX.length))} : ${value ? 'actif' : 'inactif'}`
   return path

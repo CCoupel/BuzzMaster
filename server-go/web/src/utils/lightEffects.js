@@ -1,6 +1,6 @@
-// #223 (v11.7.0, LOT-2) — helpers PURS des sélecteurs « effet lumière par moment ».
-// Contrats : contracts/light-effects.md §6 (réglages), §7.1 (catalogue), §2.5 (groupes animateur), vitesses §6 ;
-// contracts/ambiance-settings.md §10. Maquette : ambiance_settings_panel__light_effects_numbered (révision 3).
+// #223 (v11.7.0, LOT-2) — helpers PURS des sélecteurs « effet et vitesse lumière par moment et par zone » (révision 4).
+// Contrats : contracts/light-effects.md §6 (réglages), §7.1 (catalogue par zone), §7.4 (essai), §2.5 (zones) ;
+// contracts/ambiance-settings.md §10. Maquette : ambiance_settings_panel__light_effects_zones.
 
 export const MOMENTS = [
   { key: 'chrono', label: 'Pendant le chronomètre', sub: 'Question chronométrée en cours' },
@@ -8,58 +8,58 @@ export const MOMENTS = [
   { key: 'score', label: 'Quand une équipe marque', sub: 'Attribution de points' },
 ]
 
-// Valeurs par défaut globales (§6) : reproduisent le comportement v11.6.0.
-export const DEFAULT_EFFECTS = Object.freeze({ chrono: 'pulsation', calm: '', score: '' })
-// Groupes animateur (révision du GATE LOT-1) : une entrée par `id` de groupe, blanc fixe aux trois moments par défaut.
-export const DEFAULT_HOST_EFFECTS = Object.freeze({ chrono: '', calm: '', score: '' })
+// Trois zones : Ambiance (la salle), Animateur, Public.
+export const ZONES = Object.freeze(['ambiance', 'animateur', 'public'])
+export const ZONE_LABEL = Object.freeze({ ambiance: 'Ambiance', animateur: 'Animateur', public: 'Public' })
+export const ZONE_ICON = Object.freeze({ ambiance: '💡', animateur: '🎤', public: '👥' })
+export const ZONE_ROLE = Object.freeze({ ambiance: 'salle', animateur: 'animateur', public: 'public' })
 
-export const EMPTY_CATALOG = Object.freeze({ groups: 0, effects: [], errors: [], unresolved: [], dir: '' })
+// Valeurs par défaut globales (§6) : `pulsation` pour ambiance.chrono (comportement v11.6.0), `""` partout ailleurs.
+export const defaultEffect = (zone, moment) => (zone === 'ambiance' && moment === 'chrono' ? 'pulsation' : '')
+
+export const EMPTY_GROUPS = Object.freeze({ ambiance: 0, animateur: 0, public: 0 })
+export const EMPTY_CATALOG = Object.freeze({ groups: EMPTY_GROUPS, effects: [], errors: [], unresolved: [], dir: '' })
 
 export const INHERIT = '__inherit__'
 export const NONE = ''
 
-// Chemin éditable d'un effet : salle `light.effects.<moment>` ; groupe animateur `light.host_effects.<id>.<moment>`
-// (clé = `id` stable du groupe, contracts/light-effects.md §6).
-export const effectsPath = (host, moment) => (host
-  ? `light.host_effects.${host}.${moment}`
-  : `light.effects.${moment}`)
+// Chemins éditables (`light.*` du modèle de réglages) : `light.effects.<zone>.<moment>`, `light.speeds.<zone>.<moment>`.
+export const effectsPath = (zone, moment) => `light.effects.${zone}.${moment}`
 
-// Vitesse des effets (révision 3) : multiplicateur par moment, salle et par groupe animateur.
-// Chemins `light.speeds.<moment>` / `light.host_speeds.<id>.<moment>` ; `lighting.*` en config.json.
+// Vitesse des effets : multiplicateur par zone et moment.
 export const SPEEDS = Object.freeze([0.5, 0.75, 1, 1.5, 2])
 export const DEFAULT_SPEED = 1
 export const MIN_TICK_MS = 250
-export const speedPath = (host, moment) => (host
-  ? `light.host_speeds.${host}.${moment}`
-  : `light.speeds.${moment}`)
+export const speedPath = (zone, moment) => `light.speeds.${zone}.${moment}`
 export const formatSpeed = (v) => `×${String(v).replace('.', ',')}`
-// Vitesse « plafonnée » : le tick (`tick_ms` du catalogue, s'il est fourni) ÷ vitesse tomberait sous 250 ms.
+// Vitesse « plafonnée » : le tick (`tick_ms` du catalogue) ÷ vitesse tomberait sous 250 ms.
 export const isSpeedCapped = (tickMs, speed) => Number.isFinite(tickMs) && tickMs > 0 && tickMs / speed < MIN_TICK_MS
+
+// Tous les chemins éditables d'effet et de vitesse (parité avec ambianceSettings.SETTINGS_FIELD_PATHS).
+export const effectFieldPaths = () => ZONES.flatMap(z => MOMENTS.flatMap(m => [effectsPath(z, m.key), speedPath(z, m.key)]))
 
 // Chemin `lighting.*` de config.json correspondant (§6, table de correspondance).
 export const configKeyFor = (field) => {
-  const room = /^light\.effects\.(chrono|calm|score)$/.exec(field)
-  if (room) return { section: 'effects', moment: room[1] }
-  const host = /^light\.host_effects\.([a-z0-9]{1,12})\.(chrono|calm|score)$/.exec(field)
-  if (host) return { section: 'host_effects', id: host[1], moment: host[2] }
-  const speed = /^light\.speeds\.(chrono|calm|score)$/.exec(field)
-  if (speed) return { section: 'speeds', moment: speed[1] }
-  const hostSpeed = /^light\.host_speeds\.([a-z0-9]{1,12})\.(chrono|calm|score)$/.exec(field)
-  return hostSpeed ? { section: 'host_speeds', id: hostSpeed[1], moment: hostSpeed[2] } : null
+  const m = /^light\.(effects|speeds)\.(ambiance|animateur|public)\.(chrono|calm|score)$/.exec(field)
+  return m ? { section: m[1], zone: m[2], moment: m[3] } : null
 }
 
-// Corps `lighting` de POST /config.json pour un changement d'effet : salle `{effects:{m:v}}`,
-// groupe animateur `{host_effects:{<id>:{m:v}}}`.
-export const configPatchFor = (key, value) => (key.id
-  ? { [key.section]: { [key.id]: { [key.moment]: value } } }
-  : { [key.section]: { [key.moment]: value } })
+// Corps `lighting` de POST /config.json pour un changement d'effet ou de vitesse : `{effects:{<zone>:{<moment>:v}}}`.
+export const configPatchFor = (key, value) => ({ [key.section]: { [key.zone]: { [key.moment]: value } } })
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
+const count = (v) => (Number.isFinite(v) ? v : 0)
 
+// Catalogue (GET /api/lighting/effects, §7.1) : `groups` par zone, `applicable` par zone, `tick_ms`. Tolère un
+// catalogue antérieur (`groups` numérique ⇒ zone ambiance ; `applicable` booléen ⇒ toutes les zones).
 export function normalizeCatalog(data) {
   if (!isObj(data)) return EMPTY_CATALOG
+  const g = data.groups
+  const groups = isObj(g)
+    ? { ambiance: count(g.ambiance), animateur: count(g.animateur), public: count(g.public) }
+    : { ...EMPTY_GROUPS, ambiance: count(g) }
   return {
-    groups: Number.isFinite(data.groups) ? data.groups : 0,
+    groups,
     effects: Array.isArray(data.effects) ? data.effects.filter(e => isObj(e) && typeof e.id === 'string') : [],
     errors: Array.isArray(data.errors) ? data.errors : [],
     unresolved: Array.isArray(data.unresolved) ? data.unresolved : [],
@@ -71,93 +71,111 @@ export const effectLabel = (e) => (e.origin === 'native' ? e.name : `${e.name} (
 
 const byName = (a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
 
-// Raison d'inapplicabilité d'un effet pour la salle ou pour un groupe animateur (`target` abandonné, révision 3).
-export function inapplicableReason(e, { host, groups }) {
-  if (host) {
-    // `host_applicable` (§7.1) fait foi : l'effet n'écrit que g0. Repli sur min_groups pour un catalogue qui ne le porte pas.
-    const ok = typeof e.host_applicable === 'boolean' ? e.host_applicable : (e.min_groups || 0) <= 1
-    return ok ? '' : 'anime plusieurs groupes'
-  }
-  const ok = typeof e.applicable === 'boolean' ? e.applicable : groups >= (e.min_groups || 0)
-  if (ok) return ''
-  if (e.reason) return e.reason
-  return `demande ${e.min_groups} groupe${e.min_groups > 1 ? 's' : ''}, ${groups} configuré${groups > 1 ? 's' : ''}`
+// Applicabilité d'un effet à une zone : table `applicable` par zone ; repli (catalogue sans table) : N ≥ min_groups.
+function isApplicable(e, zone, groups) {
+  if (isObj(e.applicable)) return e.applicable[zone] === true
+  if (typeof e.applicable === 'boolean') return e.applicable
+  return groups[zone] >= (e.min_groups || 0)
 }
 
-// Liste d'un moment : « Aucun effet » (ou « Blanc fixe » pour le groupe animateur), puis les effets du
-// catalogue qui déclarent ce moment — natifs d'abord, personnalisés ensuite par ordre alphabétique.
-// Un effet inapplicable reste visible, grisé, avec sa raison. Une valeur sélectionnée absente du catalogue
-// est ajoutée « (introuvable) ». `defaultValue` marque l'option « (par défaut) » (mode global).
-export function buildOptions(catalog, moment, { host = false, selected = null, defaultValue = null } = {}) {
+// Raison d'inapplicabilité d'un effet pour une zone, déduite de `min_groups` et de `groups` (le serveur ne la renvoie
+// plus) : « demande 5 groupes, 2 dans cette zone ». '' = applicable.
+export function inapplicableReason(e, zone, groups = EMPTY_GROUPS) {
+  if (isApplicable(e, zone, groups)) return ''
+  const n = groups[zone] ?? 0
+  const min = e.min_groups || 0
+  return `demande ${min} groupe${min > 1 ? 's' : ''}, ${n} dans cette zone`
+}
+
+const noneLabelOf = (zone) => (zone === 'animateur' ? 'Aucun effet (blanc fixe)' : 'Aucun effet')
+
+// Liste d'un moment pour une zone : « Aucun effet » (« Aucun effet (blanc fixe) » pour la zone Animateur), puis les
+// effets du catalogue qui déclarent ce moment — natifs d'abord, personnalisés ensuite par ordre alphabétique. Un effet
+// inapplicable à la zone reste visible, grisé, avec sa raison. Une valeur sélectionnée absente du catalogue est ajoutée
+// « (introuvable) ». `defaultValue` marque l'option « (par défaut) » (mode global, zones Ambiance et Public).
+export function buildOptions(catalog, moment, { zone = 'ambiance', selected = null, defaultValue = null } = {}) {
   const cat = catalog || EMPTY_CATALOG
   const wanted = cat.effects.filter(e => Array.isArray(e.moments) && e.moments.includes(moment))
   const natives = wanted.filter(e => e.origin === 'native')
   const others = wanted.filter(e => e.origin !== 'native').sort(byName)
-  const noneLabel = host ? 'Blanc fixe' : 'Aucun effet'
-  const options = [{ value: NONE, label: noneLabel, disabled: false, reason: '' }]
+  const options = [{ value: NONE, label: noneLabelOf(zone), disabled: false, reason: '' }]
   for (const e of [...natives, ...others]) {
-    const reason = inapplicableReason(e, { host, groups: cat.groups })
+    const reason = inapplicableReason(e, zone, cat.groups)
     options.push({ value: e.id, label: effectLabel(e), disabled: !!reason, reason })
   }
   if (selected && selected !== INHERIT && !options.some(o => o.value === selected)) {
     options.push({ value: selected, label: `${selected} (introuvable)`, disabled: false, reason: '', missing: true })
   }
+  const marks = defaultValue !== null && zone !== 'animateur'
   return options.map(o => {
-    const label = defaultValue !== null && o.value === defaultValue ? `${o.label} (par défaut)` : o.label
+    const label = marks && o.value === defaultValue ? `${o.label} (par défaut)` : o.label
     return { ...o, label, text: o.disabled ? `${label} — ${o.reason}` : label }
   })
 }
 
 export const optionLabel = (options, value) => options.find(o => o.value === value)?.label.replace(/ \(par défaut\)$/, '') ?? value
 
-// Avertissement affiché sous le sélecteur salle : effet inapplicable (repli sur la pulsation) ou introuvable.
-export function effectWarning(catalog, moment, value, { host = false } = {}) {
+// Ce que la zone fait quand son effet n'est pas joué (introuvable ou inapplicable).
+const FALLBACK = {
+  ambiance: "aucun effet n'est joué",
+  animateur: 'la zone reste en blanc fixe',
+  public: "rien n'est envoyé aux lampes du public",
+}
+
+// Avertissement affiché sous un sélecteur : effet inapplicable à la zone ou introuvable.
+export function effectWarning(catalog, moment, value, { zone = 'ambiance' } = {}) {
   if (!value) return null
   const cat = catalog || EMPTY_CATALOG
   const e = cat.effects.find(x => x.id === value)
   if (!e || !Array.isArray(e.moments) || !e.moments.includes(moment)) {
-    return { kind: 'missing', text: 'Le fichier de cet effet est absent ou invalide : aucun effet n\'est joué.' }
+    return { kind: 'missing', text: `Le fichier de cet effet est absent ou invalide : ${FALLBACK[zone]}.` }
   }
-  const reason = inapplicableReason(e, { host, groups: cat.groups })
-  if (!reason) return null
-  if (host) return { kind: 'inapplicable', text: 'Cet effet anime plusieurs groupes : le groupe animateur reste en blanc fixe.' }
+  if (!inapplicableReason(e, zone, cat.groups)) return null
+  const min = e.min_groups || 0
+  const n = cat.groups[zone] ?? 0
+  const fallback = zone === 'ambiance' && moment === 'chrono' ? 'la pulsation est jouée à la place' : FALLBACK[zone]
   return {
     kind: 'inapplicable',
-    text: `Cet effet demande ${e.min_groups} groupe${e.min_groups > 1 ? 's' : ''} et ${cat.groups} ${cat.groups > 1 ? 'sont configurés' : 'est configuré'} : ${moment === 'chrono' ? 'la pulsation est jouée à la place' : 'aucun effet n\'est joué'}.`,
+    text: `Cet effet demande ${min} groupe${min > 1 ? 's' : ''} et la zone en a ${n} : ${fallback}.`,
   }
 }
 
-// Valeur globale effective d'un moment depuis la section `lighting` de config.json.
-// `host` : `id` d'un groupe animateur (falsy = salle).
-export function globalEffect(lighting, host, moment) {
-  const src = host ? (isObj(lighting?.host_effects) ? lighting.host_effects[host] : undefined) : lighting?.effects
-  const dflt = host ? DEFAULT_HOST_EFFECTS : DEFAULT_EFFECTS
-  const v = isObj(src) ? src[moment] : undefined
-  return typeof v === 'string' ? v : dflt[moment]
+// Valeur globale effective (config.json `lighting.effects.<zone>.<moment>`). Lecture tolérante d'une forme antérieure
+// à plat (`lighting.effects.<moment>`), lue comme celle de la zone ambiance (§6).
+export function globalEffect(lighting, zone, moment) {
+  const src = lighting?.effects
+  let v = isObj(src) && isObj(src[zone]) ? src[zone][moment] : undefined
+  if (v === undefined && zone === 'ambiance' && isObj(src)) v = src[moment]
+  return typeof v === 'string' ? v : defaultEffect(zone, moment)
 }
 
-// Vitesse globale d'un moment depuis la section `lighting` de config.json (`host` = id d'un groupe animateur, falsy = salle).
-export function globalSpeed(lighting, host, moment) {
-  const src = host ? (isObj(lighting?.host_speeds) ? lighting.host_speeds[host] : undefined) : lighting?.speeds
-  const v = isObj(src) ? src[moment] : undefined
+export function globalSpeed(lighting, zone, moment) {
+  const src = lighting?.speeds
+  let v = isObj(src) && isObj(src[zone]) ? src[zone][moment] : undefined
+  if (v === undefined && zone === 'ambiance' && isObj(src)) v = src[moment]
   return SPEEDS.includes(v) ? v : DEFAULT_SPEED
 }
 
-// Groupes animateur configurés, dans l'ordre de la page Groupes : [{id, rank, empty}] (rang k = 1, 2… ; aucun nom).
-// Un groupe sans `id` (jamais enregistré) est ignoré : ses effets ne sont réglables qu'après enregistrement.
-export function findHostGroups(groups) {
-  if (!Array.isArray(groups)) return []
-  const out = []
-  let rank = 0
+// Nombre de groupes par zone d'après `lighting.groups` : { ambiance, animateur, public } (groupes vides compris).
+// Une zone Animateur ou Public sans groupe « n'existe pas » : pas de bloc d'effets.
+export function zoneGroupCounts(groups) {
+  const out = { ambiance: 0, animateur: 0, public: 0 }
+  if (!Array.isArray(groups)) return out
   for (const g of groups) {
-    if (!g || g.role !== 'animateur') continue
-    rank += 1
-    if (typeof g.id !== 'string' || !g.id) continue
-    out.push({
-      id: g.id,
-      rank,
-      empty: !Array.isArray(g.lights) || g.lights.length === 0,
-    })
+    if (!g || typeof g !== 'object') continue
+    out[g.role === 'animateur' ? 'animateur' : g.role === 'public' ? 'public' : 'ambiance'] += 1
   }
   return out
+}
+
+// Zones dont le bloc est affiché : Ambiance toujours, Animateur et Public si elles ont au moins un groupe.
+export const visibleZones = (counts) => ZONES.filter(z => z === 'ambiance' || (counts?.[z] ?? 0) > 0)
+
+// Durée d'un test (§7.4) et messages des refus 409 (`reason`).
+export const TRY_SECONDS = 10
+export const TRY_REFUSALS = {
+  disabled: "L'éclairage d'ambiance est désactivé, ou le pont a refusé la clé.",
+  game: 'Une question est en cours : le test est refusé.',
+  not_applicable: "Cet effet n'est pas applicable à cette zone.",
+  mode: "L'éclairage est forcé sur ON / OFF ou le Flash est actif : le test de la zone Ambiance est refusé.",
 }

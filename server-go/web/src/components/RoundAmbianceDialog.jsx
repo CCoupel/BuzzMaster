@@ -215,8 +215,8 @@ export default function RoundAmbianceDialog({ roundId = null, roundName, value, 
     onChange('*', null)
   }
 
-  // #223 (v11.7.0) — catalogue d'effets lumière + présence du groupe animateur (sélecteurs par moment).
-  const { catalog, hostGroups } = useLightEffects({ withHost: true })
+  // #223 (v11.7.0) — catalogue d'effets lumière + zones existantes (un bloc de sélecteurs par zone).
+  const { catalog, zoneGroups } = useLightEffects({ withGroups: true })
   const n = countOverrides(draft)
   const onChange = (path, v) => setDraft(prev => setPartialPath(prev, path, v))
 
@@ -268,7 +268,7 @@ export default function RoundAmbianceDialog({ roundId = null, roundName, value, 
           onChange={onChange}
           files={files}
           catalog={catalog}
-          hostGroups={hostGroups}
+          zoneGroups={zoneGroups}
           renderFile={roundId ? renderFile : null}
         />
         {notice && (

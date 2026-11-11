@@ -34,7 +34,6 @@ import RoundGroup from '../components/RoundGroup'
 import RoundDeleteDialog from '../components/RoundDeleteDialog'
 import RoundAmbianceDialog from '../components/RoundAmbianceDialog'
 import { overriddenFields, describeOverride, fileOverrides } from '../utils/ambianceSettings'
-import { findHostGroups } from '../utils/lightEffects'
 import { cueMeta } from '../utils/soundCues'
 import RafalePage from './RafalePage'
 import './QuestionsPage.css'
@@ -293,11 +292,6 @@ export default function QuestionsPage() {
   // (motif ConfigPage.jsx) plutôt qu'une chaîne .then() : protège aussi
   // contre un environnement où fetch() ne retournerait pas une Promise
   // valide (ex. mock de test partiel), pas seulement contre un rejet réseau.
-  const [hostGroups, setHostGroups] = useState([])
-  const hostLabel = (id) => {
-    const g = hostGroups.find(h => h.id === id)
-    return g ? `🎤 Groupe animateur ${g.rank}` : `🎤 ${id}`
-  }
   useEffect(() => {
     let cancelled = false
     const fetchAiStatus = async () => {
@@ -305,8 +299,6 @@ export default function QuestionsPage() {
         const res = await fetch('/config.json')
         if (!res.ok) return
         const data = await res.json()
-        // #223 — groupes animateur (nom dans l'infobulle du badge d'ambiance d'une manche) ; même lecture, pas de 2e GET.
-        if (!cancelled) setHostGroups(findHostGroups(data?.lighting?.groups))
         if (!cancelled && data?.ai) {
           setAiConfig({
             provider: data.ai.provider || 'anthropic',
@@ -2303,7 +2295,7 @@ export default function QuestionsPage() {
                         onAmbiance: (e) => { ambianceOpenerRef.current = e?.currentTarget || document.activeElement; setAmbianceRound(r.id) },
                         ambianceCount: overriddenFields(r.ambiance).length + fileOverrides(r.ambiance).length,
                         ambianceTitle: [
-                          ...overriddenFields(r.ambiance).map(f => describeOverride(f, c => cueMeta(c).label, hostLabel)),
+                          ...overriddenFields(r.ambiance).map(f => describeOverride(f, c => cueMeta(c).label)),
                           ...fileOverrides(r.ambiance).map(c => `Fichier ${cueMeta(c).label === c && c === 'decompte' ? 'Décompte' : cueMeta(c).label} : propre à la manche`),
                         ].join(' · '),
                         onAddQuestion: () => {
