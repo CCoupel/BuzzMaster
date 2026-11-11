@@ -47,7 +47,9 @@ server-go/
 │   ├── diag/                 # Journalisation sûre des valeurs client, séquence ARDOISE (#291)
 │   ├── demo/                 # Données de démo et de développement (#291)
 │   ├── led/                  # LED_SET vers les buzzers (#291/#295)
-│   └── ambiance/             # Couche d'ambiance lumineuse (#205, #295)
+│   ├── ambiance/             # Couche d'ambiance lumineuse (#205, #295)
+│   ├── ambiancecfg/          # Réglages d'ambiance : Settings, Partial, Sources, effets par moment (#290, #223)
+│   └── effects/              # Effets lumière : schéma YAML, validation, rendu, catalogue, rechargement (#223)
 ├── data/
 │   └── files/
 │       └── questions/        # Question storage (mirrors ESP32 structure)
@@ -103,6 +105,17 @@ L'`App` implémente ces interfaces dans `cmd/server/hosts.go`. Les paquets `vpla
 Deux modèles coexistent, à ne pas mélanger :
 - **LED** (`internal/led`) : l'état (`bumperLEDState`, `bumperBuzzState`, `ledStateMu`) reste dans l'`App`. Le `Controller` le partage par pointeur (`*map`, `*sync.RWMutex`), car une partie des tests réassigne ces maps.
 - **Ambiance** (`internal/ambiance`) : le `Controller` **possède** son état (writer, pilote Hue, verrou, atomics flash/score/chrono). Les champs ont été retirés de l'`App` ; `*App` ne fait que déléguer en une ligne (`ambiance_delegates.go`).
+
+### Moteur d'effets `internal/effects` (v11.7.0, #223)
+
+- **Pur** : pas de goroutine ni d'E/S réseau, n'importe ni `internal/game` ni `internal/lighting/hue`. `Render(effet, contexte, temps)` est déterministe.
+- **Découpage** (`light-effects.md` §5.1) : `effects` fournit le schéma, `Parse` / `ParseFile` (YAML strict), la validation, `Render`, `LoadDir` (catalogue) et `Manager` (`NewManager`, `Run` : signature du dossier toutes les 2 s, `ReloadInterval`). Le **lecteur** (`runEffects`, une goroutine sur `Host.Ctx()`, tic de 100 ms) vit dans `internal/ambiance/effects.go` ; il publie la trame du moment et appelle `Writer().NotifyState()`.
+- **Natifs** : lus depuis `assets/effects/*.yaml` (`go:embed`, `assets/embed.go`). Une copie de référence est écrite dans `data/files/effects/natifs/` au démarrage (`EnsureDirs`).
+- **Horloge injectable** : `Controller.EffectsClock` et `EffectsTick` (par instance, jamais au niveau du paquet) ; `EffectsStep()` pour les tests sans ticker.
+- **Précédence** : `ON` / `OFF` / Flash ⇒ aucune trame ; l'essai d'un effet prime sur le moment vivant ; l'arrêt annule le lecteur (`quiesceAmbiance`).
+- **Groupes animateur** : une trame par groupe animateur non vide, écrite sur `Group = lighting.HostGroup(k)`.
+- **Dépendance** : `go.yaml.in/yaml/v4` (déjà indirecte, désormais directe) — pas de nouvelle dépendance tierce ; `TestCA7_NoNewThirdPartyDependency` la liste.
+- **Pulsation** : l'`id` `pulsation` reste servi par le code historique `RunChronoPulse` jusqu'à sa migration (dernier lot de LOT-2) ; le lecteur ne la joue pas.
 
 ### Règles pour les tests
 

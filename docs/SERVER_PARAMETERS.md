@@ -423,19 +423,38 @@ Les groupes se règlent dans `/admin/ambiance` › Lumière › Groupes (écritu
 {
   "lighting": {
     "groups": [
-      { "name": "Scène gauche", "role": "salle", "lights": ["Salle", "Entrée"], "near_teams": ["Rouges"] },
-      { "name": "Pupitre", "role": "animateur", "lights": ["Bureau Animateur"], "near_teams": [] }
+      { "id": "g3f9a1", "name": "Scène gauche", "role": "salle", "lights": ["Salle", "Entrée"], "near_teams": ["Rouges"] },
+      { "id": "g5d7e4", "name": "Pupitre", "role": "animateur", "lights": ["Bureau Animateur"], "near_teams": [] }
     ]
   }
 }
 ```
 
-- Le **numéro** d'un groupe de salle est son rang dans le tableau parmi les groupes `salle` (groupes vides compris). Maximum **12** groupes au total, groupe animateur compris.
-- `role` : `"salle"` (défaut si absent ou vide) ou `"animateur"` (un seul au plus, sans numéro ni `near_teams`).
+- Le **numéro** d'un groupe de salle est son rang dans le tableau parmi les groupes `salle` (groupes vides compris). **12 groupes de salle au maximum.**
+- `role` : `"salle"` (défaut si absent ou vide) ou `"animateur"`. **4 groupes animateur au maximum**, numérotés A1 à A4 selon leur ordre ; sans `near_teams`.
+- `id` : identifiant stable (`[a-z0-9]{1,12}`, unique). Attribué par le serveur à l'enregistrement s'il est absent ; le client le renvoie ensuite. Renommer un groupe ne change pas son `id`.
 - Chaque ampoule citée doit exister dans `lights` avec `role: "general"` et n'appartenir qu'à **un** groupe.
 - Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe à l'écriture.
 - Refus `400` avec un message lisible si la règle n'est pas respectée.
-- Groupes Hue créés sur le pont : `buzzmaster-general-<n>` (salle) et `buzzmaster-general-host` (animateur), à partir de 3 ampoules.
+- Groupes Hue créés sur le pont : `buzzmaster-general-<n>` (salle) et `buzzmaster-general-host<k>` (animateur de rang k), à partir de 3 ampoules.
+
+#### Effets par moment (`lighting.effects`, `lighting.host_effects`, v11.7.0, #223)
+
+```json
+{
+  "lighting": {
+    "effects": { "chrono": "pulsation", "calm": "", "score": "" },
+    "host_effects": {
+      "g5d7e4": { "chrono": "", "calm": "", "score": "couleur-equipe" }
+    }
+  }
+}
+```
+
+- `effects` : effet de la salle par moment (`chrono`, `calm`, `score`). `""` = aucun effet. Défauts : `pulsation` pour `chrono`, `""` pour les deux autres.
+- `host_effects` : un bloc par `id` de groupe animateur. `""` = blanc fixe. Un `id` inconnu est ignoré sans erreur.
+- Valeur : `""` ou l'`id` d'un effet du dossier `data/files/effects/` (ou des natifs) qui déclare le moment. Sinon `400`.
+- Les effets sont des fichiers `.yaml` : le dossier se recharge à chaud, sans redémarrage (voir `docs/LIGHT_EFFECTS.md`).
 
 #### Résolution des noms d'ampoules
 

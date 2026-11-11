@@ -2,23 +2,36 @@
 
 Historique des versions du projet BuzzControl.
 
-## [11.7.0] - en cours — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#225, LOT-1)
+## [11.7.0] - en cours — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#225, #223)
 
-Première étape de la v11.7.0 : la salle peut être découpée en **groupes d'ampoules**, et un **groupe animateur** éclaire le pupitre en blanc fixe. Les effets répartis sur les groupes viendront avec les lots suivants.
+La salle peut être découpée en **groupes d'ampoules**, et jusqu'à **4 groupes animateur** éclairent le pupitre, chacun avec ses propres effets. Les effets lumière deviennent des **fichiers éditables** : le moteur d'effets est en place (LOT-2 en cours).
 
 ### Added
 
-- **Groupes d'ampoules (#225)** — sous-onglet **Groupes** de `/admin/ambiance` › Lumière : bac « hors groupe », groupes de salle ordonnés (glisser-déposer ou Monter / Descendre), équipes à proximité, « Créer un groupe par ampoule », essai d'un groupe (clignotement blanc), enregistrement. Maximum 12 groupes au total, groupe animateur compris. Voir `docs/ADMIN_GUIDE.md`.
-- **Groupe animateur (#225)** — un groupe de rôle `animateur` (un seul), sans numéro ni équipes à proximité. Il reste en blanc fixe dès que l'éclairage est actif ; ON / OFF, Flash et effets de salle ne le modifient pas. Seuls l'interrupteur général et l'arrêt du serveur l'éteignent.
-- **Configuration `lighting.groups` (`config.json`)** — tableau ordonné `{name, role, lights, near_teams}`, absent ou `[]` = comportement v11.6.0. Validation à l'écriture (`POST /config.json`, refus `400`). Voir `docs/SERVER_PARAMETERS.md` et `docs/DATA_MODELS.md`.
-- **`POST /api/lighting/groups/test`** — essai d'un groupe (`{"group": n}` ou `{"group": "host"}`). Erreurs : `400` (groupe absent, inconnu ou vide), `409` (éclairage désactivé, pilote absent ou clé refusée), `429` (essai déjà en cours), `503` (pont injoignable), `500` (autre).
-- **Champ `group` dans `GET /api/lighting/lights`** — `0` (hors groupe ou équipe), `n` (groupe de salle) ou `"host"` (groupe animateur).
-- **Groupes Hue (#225)** — `buzzmaster-general-<n>` par groupe de salle et `buzzmaster-general-host` pour le groupe animateur, à partir de 3 ampoules ; en dessous, écriture par ampoule.
+- **Groupes d'ampoules (#225)** — sous-onglet **Groupes** de `/admin/ambiance` › Lumière : bac « hors groupe », groupes de salle ordonnés (glisser-déposer ou Monter / Descendre), équipes à proximité (origine de la vague d'un effet réparti), enregistrement. **12 groupes de salle au maximum.** Voir `docs/ADMIN_GUIDE.md`.
+- **Essai d'un groupe en séquence (#225)** — six pas d'une seconde sur les ampoules du groupe : éteint, blanc 50 %, blanc 100 %, rouge, vert, bleu, puis retour à l'état de jeu. Bouton « Arrêter l'essai ». Un nouvel essai remplace le précédent.
+- **Groupes animateur (#225)** — **4 groupes au maximum**, numérotés A1 à A4. Blanc fixe par défaut, un effet par moment au choix. ON / OFF, Flash et effets de salle ne les modifient pas ; seuls l'interrupteur général et l'arrêt du serveur les éteignent.
+- **Configuration `lighting.groups` (`config.json`)** — tableau ordonné `{id, name, role, lights, near_teams}`, absent ou `[]` = comportement v11.6.0. Identifiant stable `id` attribué par le serveur. Validation à l'écriture (`POST /config.json`, refus `400`). Voir `docs/SERVER_PARAMETERS.md` et `docs/DATA_MODELS.md`.
+- **`POST /api/lighting/groups/test`** et **`POST /api/lighting/groups/test/stop`** — essai d'un groupe (`{"group": n}` ou `{"group": "host<k>"}`), réponse immédiate `{"ok": true, "duration_ms": 6000}`. Erreurs : `400` (groupe inconnu ou vide), `409` (éclairage désactivé ou clé refusée), `503` (pont injoignable).
+- **Champ `group` dans `GET /api/lighting/lights`** — `0` (hors groupe ou équipe), `n` (groupe de salle) ou `"host<k>"` (groupe animateur).
+- **Groupes Hue (#225)** — `buzzmaster-general-<n>` par groupe de salle et `buzzmaster-general-host<k>` par groupe animateur, à partir de 3 ampoules ; en dessous, écriture par ampoule.
+- **Moteur d'effets (#223, en cours)** — nouveau paquet `internal/effects`. Un effet est un fichier YAML (`id`, moments `chrono` / `calm` / `score`, cible `groups` ou `all`, apparences, motif, étapes). Motifs : `uniform`, `shift`, `gauge`, `random`, `gradient`. Décodage strict : une clé inconnue est une erreur. Voir `docs/LIGHT_EFFECTS.md` (« Écrire un effet »).
+- **Dossier `data/files/effects/` (#223)** — effets de l'utilisateur. Le dossier `natifs/` contient une copie de référence, réécrite à chaque démarrage (à ne pas modifier). Un fichier de même `id` qu'un natif le surcharge ; le supprimer restaure le natif. Rechargement à chaud toutes les 2 secondes ; un fichier invalide est écarté, son erreur (fichier, ligne, message) est signalée, et les autres effets restent disponibles.
+- **Effets natifs livrés à ce jour (#223)** — `pulsation` (chronomètre, respiration de la salle ; le code historique la joue encore, sa migration vers le moteur est le dernier lot de LOT-2), `chenillard` (chronomètre, un point fait le tour de la salle), `couleur-equipe` (score, couleur de l'équipe créditée).
+- **Réglage « effet par moment » (#223)** — `lighting.effects.<moment>` et `lighting.host_effects.<id>.<moment>` dans `config.json` ; `light.effects` et `light.host_effects` dans les réglages (salle, groupe animateur, surcharge de manche). Sous-onglet **Effets** de `/admin/ambiance` › Lumière, dialogue « Ambiance de la manche ».
+- **`GET /api/lighting/effects`** (catalogue, erreurs, effets non résolus) et **`POST /api/lighting/effects/reload`** (#223).
+- **Sauvegarde et restauration (#223)** — `data/files/effects/` (sans `natifs/`) est inclus dans la catégorie `ambiance` de `/backup-select`, dans `/game-backup` et dans `/restore`.
 
 ### Changed
 
-- **Sous-onglets de Lumière (#225)** — « Pont et ampoules », « Groupes » et « Effets » (ce dernier vide, « bientôt », jusqu'au LOT-2). Visibles une fois le pont associé.
-- **Pilote Hue (#225)** — `buzzmaster-general` ne contient plus les ampoules du groupe animateur. Si toutes les ampoules générales ont le même état, une seule écriture comme avant (pas de régression de débit).
+- **Sous-onglets de Lumière (#225, #223)** — « Pont et ampoules », « Groupes » et « Effets ». Visibles une fois le pont associé.
+- **Pilote Hue (#225)** — `buzzmaster-general` ne contient plus les ampoules des groupes animateur. Si toutes les ampoules générales ont le même état, une seule écriture comme avant (pas de régression de débit).
+- **Nom du groupe Hue animateur** — l'ancien groupe Hue `buzzmaster-general-host` disparaît à la réconciliation ; le groupe animateur A1 s'appelle désormais `buzzmaster-general-host1`.
+
+### Migration
+
+- **Depuis une version de développement antérieure (QUALIF 11.7.0.x)** : l'ancien groupe animateur unique reçoit un `id` stable, et les réglages d'effets de l'ancienne forme plate (`lighting.host_effects` à plat, `{chrono, calm, score}`) sont **ignorés** : le groupe repasse en blanc fixe. Les réglages d'effets de salle (`lighting.effects`) ne sont pas concernés. Refaire le réglage dans Ambiance › Lumière › Effets.
+- Aucune version publiée (PROD) n'est concernée : le groupe animateur et les effets sont introduits par cette version.
 
 ## [11.6.0] - 2026-11-10 — Milestone v11.6.0 « Ambiance : portée étendue » (#283, #232, #235, #231, #290)
 

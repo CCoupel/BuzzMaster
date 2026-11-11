@@ -1028,27 +1028,45 @@ Tableau ordonné ; l'ordre du tableau donne le **numéro** du groupe de salle (1
 
 | Champ | Type | Défaut | Description |
 |-------|------|--------|-------------|
+| `id` | String | attribué par le serveur | Identifiant **stable** (`[a-z0-9]{1,12}`, unique). Absent ou vide à l'enregistrement ⇒ le serveur en attribue un (`g` + 6 hex du SHA-1 du nom). Le client le renvoie ensuite tel quel : renommer ou déplacer un groupe ne le change pas. Clé des réglages d'effet des groupes animateur. Doublon ou format invalide ⇒ `400` |
 | `name` | String | — | Libellé (1 à 40 caractères), unique sans tenir compte de la casse |
-| `role` | String | `"salle"` (absent ou vide) | `"salle"` ou `"animateur"` (un seul groupe animateur au plus) |
+| `role` | String | `"salle"` (absent ou vide) | `"salle"` ou `"animateur"` |
 | `lights` | Array of String | `[]` | Noms d'ampoules de rôle `general`, chacune dans un seul groupe |
 | `near_teams` | Array of String | `[]` | Équipes installées près du groupe (refusé sur le groupe animateur) ; une équipe dans un seul groupe au plus |
 
-- `groups` absent ou `[]` ⇒ comportement v11.6.0 exact. Plus de 12 groupes (animateur compris) ⇒ refus.
-- Écriture : remplacement complet du tableau (`POST /config.json`), refus `400` avec message lisible (ampoule inconnue, ampoule de rôle `team`, ampoule dans deux groupes, nom en double, plus de 12 groupes).
+- `groups` absent ou `[]` ⇒ comportement v11.6.0 exact. Plafonds : **12 groupes de salle** et **4 groupes animateur**.
+- Écriture : remplacement complet du tableau (`POST /config.json`), refus `400` avec message lisible (ampoule inconnue, ampoule de rôle `team`, ampoule dans deux groupes, nom en double, `id` en double ou mal formé, plus de 12 groupes de salle, plus de 4 groupes animateur, `near_teams` sur un groupe animateur).
 - Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe dans la même écriture.
-- Go : `config.LightingGroupEntry {Name, Role, Lights, NearTeams}` ; constantes `GroupRoleSalle = "salle"`, `GroupRoleAnimateur = "animateur"` ; `MaxLightingGroups = 12`.
+- L'enregistrement des groupes purge de `lighting.host_effects` les `id` de groupes disparus.
+- Go : `config.LightingGroupEntry {ID, Name, Role, Lights, NearTeams}` ; constantes `GroupRoleSalle = "salle"`, `GroupRoleAnimateur = "animateur"`, `MaxSalleGroups = 12`, `MaxHostGroups = 4` ; `LightingConfig.HostGroups()` liste les groupes animateur (rang k = A<k>).
 
 Exemple :
 
 ```json
 "lighting": {
   "groups": [
-    { "name": "Scène gauche", "role": "salle", "lights": ["BuzzHue1", "BuzzHue4"], "near_teams": ["Rouges"] },
-    { "name": "Bar", "role": "salle", "lights": ["BuzzHue2"], "near_teams": [] },
-    { "name": "Pupitre", "role": "animateur", "lights": ["BuzzHue8"], "near_teams": [] }
+    { "id": "g3f9a1", "name": "Scène gauche", "role": "salle", "lights": ["BuzzHue1", "BuzzHue4"], "near_teams": ["Rouges"] },
+    { "id": "g81c02", "name": "Bar", "role": "salle", "lights": ["BuzzHue2"], "near_teams": [] },
+    { "id": "g5d7e4", "name": "Pupitre", "role": "animateur", "lights": ["BuzzHue8"], "near_teams": [] },
+    { "id": "g0b6c9", "name": "Régie", "role": "animateur", "lights": ["BuzzHue9"], "near_teams": [] }
   ]
 }
 ```
+
+### config.json — `lighting.effects` et `lighting.host_effects` (v11.7.0, #223)
+
+Réglage **global** de l'effet par moment (`light-effects.md` §6). Deux chemins, selon le fichier : ici `lighting.*` ; dans les réglages de salle et de manche, `light.*` (voir ci-dessous).
+
+| Clé | Type | Défaut | Description |
+|-----|------|--------|-------------|
+| `lighting.effects.<moment>` | String | `chrono` : `"pulsation"`, `calm` et `score` : `""` | Effet de la salle pour `chrono`, `calm`, `score`. `""` = aucun effet |
+| `lighting.host_effects.<id>.<moment>` | String | `""` (blanc fixe) | Effet d'un groupe animateur, clé = `id` du groupe. `""` = blanc fixe |
+
+- Valeur : `""` ou l'`id` d'un effet du catalogue qui déclare le moment. Validation à l'écriture (`POST /config.json`) : `400` si l'effet est inconnu ou ne déclare pas le moment, ou si la forme est plate (`{chrono, calm, score}` au niveau du groupe animateur).
+- Un `id` de groupe animateur inconnu est **écarté sans erreur** (un `id` meurt avec son groupe).
+- Fusion par moment à l'écriture. Un `config.json` sans ces clés se charge avec les défauts ci-dessus.
+- **Modèle de réglages** (`rounds.json` → `Round.AMBIANCE`, `ROUNDS_UPDATE`, `GET /api/ambiance/settings`, `GameState.AMBIANCE_EFFECTIVE`) : `light.effects.<moment>` et `light.host_effects.<id>.<moment>`, forme complète toujours sérialisée (`light-effects.md` §6). La conversion `lighting.*` ↔ `light.*` se fait une seule fois, dans `ambiancecfg.FromConfig` / `ToConfigPatch`. `lighting.*` n'apparaît jamais dans `rounds.json` ni dans `AMBIANCE_EFFECTIVE`.
+- Forme de l'ancien groupe animateur unique (`lighting.host_effects` plat, QUALIF de développement) : refusée à l'écriture, et lue sans erreur mais **ignorée** (voir le CHANGELOG, note de migration).
 
 ### `lighting.ZoneState.Group` (Go, `internal/lighting/event.go`)
 
@@ -1056,20 +1074,29 @@ Exemple :
 |-------------------|----------------------------------|
 | `0` (zéro, défaut) | Toute la zone : ampoules hors groupe et repli. Toujours émise en premier |
 | `n ≥ 1` | Groupe de salle numéro n (précise l'entrée `Group 0` pour ses ampoules) |
-| `lighting.GroupHost` (`-1`) | Groupe animateur : `{Zone:"general", Group:GroupHost}` |
+| `lighting.HostGroup(k)` = `-k` | Groupe animateur de rang k (A1 ⇒ `-1`, A2 ⇒ `-2`…) : `{Zone:"general", Group:-k}` |
 
-En v11.7.0 LOT-1, `Scene()` n'émet aucune entrée `Group ≥ 1` : la scène de salle reste `Group 0`, et seule l'entrée `GroupHost` (blanc fixe, 255) est ajoutée. Les entrées par groupe de salle arrivent avec le séquenceur (LOT-2).
+- `lighting.HostGroup(k) = -k` remplace l'ancienne constante `GroupHost` (qui reste la valeur de A1, `-1`).
+- `Scene()` émet le blanc fixe (255) pour **chaque** groupe animateur non vide. En v11.7.0, `Scene()` n'émet aucune entrée `Group ≥ 1` : la scène de salle reste `Group 0`. Les entrées par groupe de salle arrivent avec le séquenceur d'effets (LOT-2).
 
 ### `hue.LightSpec.Group` (pilote Hue)
 
-- `Group int` : groupe d'ambiance d'une ampoule `general` (0 = hors groupe). Pour l'ampoule du groupe animateur, `Group = lighting.GroupHost`.
+- `Group int` : groupe d'ambiance d'une ampoule `general` (0 = hors groupe). Pour une ampoule du groupe animateur k, `Group = lighting.HostGroup(k)` (négatif).
 - Clé de regroupement d'`Apply` : (rôle, équipe, groupe).
-- Groupes Hue : `buzzmaster-general-<n>` pour un groupe de salle, `buzzmaster-general-host` pour le groupe animateur, à partir de `hue.SubGroupMinLights` (3) ampoules ; en dessous, écriture par ampoule.
-- `buzzmaster-general` exclut les ampoules du groupe animateur ; `buzzmaster-ambiance` les inclut toujours.
+- Groupes Hue : `buzzmaster-general-<n>` pour un groupe de salle, `buzzmaster-general-host<k>` pour le groupe animateur de rang k, à partir de `hue.SubGroupMinLights` (3) ampoules ; en dessous, écriture par ampoule. L'ancien `buzzmaster-general-host` disparaît à la réconciliation (préfixe `buzzmaster-`).
+- `buzzmaster-general` exclut les ampoules de **tous** les groupes animateur ; `buzzmaster-ambiance` les inclut toujours.
 
 ### `GET /api/lighting/lights` — champ `group`
 
-Chaque ampoule porte `group` : `0` (hors groupe ou ampoule d'équipe), entier `n ≥ 1` (groupe de salle), ou `"host"` (groupe animateur).
+Chaque ampoule porte `group` : `0` (hors groupe ou ampoule d'équipe), entier `n ≥ 1` (groupe de salle), ou `"host<k>"` (`"host1"`, `"host2"`… groupe animateur de rang k).
+
+### `GET /api/lighting/effects` — catalogue (v11.7.0, #223)
+
+Réponse (`light-effects.md` §7.1) : `groups` (nombre N de groupes de salle non vides, sur lequel l'applicabilité est calculée), `effects[]` (`id`, `name`, `description`, `moments`, `origin` = `native` | `user` | `override`, `target`, `min_groups`, `applicable`, `host_applicable`, `reason`), `errors[]` (`file`, `line`, `message`), `unresolved[]` (réglages globaux dont l'effet est absent ou inapplicable), `dir`.
+
+### `internal/effects` — effets lumière (Go, #223)
+
+Paquet pur (sans goroutine ni E/S réseau) : types `Effect`, `Appearance`, `Pattern`, `Stage`, `Error {File, Line, Message}` ; `Parse` / `ParseFile` (YAML décodé en mode strict : clé inconnue = erreur), validation interne (`validate`), `Render(effet, contexte, temps)` (déterministe), `LoadDir` (catalogue), `NewManager` / `Run` (signature du dossier vérifiée toutes les 2 s, `ReloadInterval`). Limites : 64 Ko par fichier (`MaxFileBytes`), 100 fichiers (`MaxFiles`), 12 groupes (`MaxGroups`), 6 étapes (`MaxStages`), 8 phases (`MaxPhases`), `id` et `name` de 40 caractères au plus, `description` 500, `duration_ms` ≤ 600 000, pas (`step_ms`, `ms`) entre 250 et 60 000, fondu `fade_ms` ≤ 5 000. Format et schéma : `docs/LIGHT_EFFECTS.md`.
 
 ## Game Flow
 

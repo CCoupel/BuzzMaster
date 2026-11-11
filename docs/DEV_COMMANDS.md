@@ -77,7 +77,7 @@ Les procédures détaillées sont documentées dans des fichiers séparés.
 
 Les agents tournent dans le conteneur Claude-Launcher : Ubuntu 24.04, Linux natif. Le dépôt est sur le partage `/share/MFS` (MooseFS) ; il n'y a ni WSL ni `/mnt/c`.
 
-- **Go** : Go 1.26.10 est sur le PATH (`~/.local/bin/go`, lien vers `~/.local/go/bin/go`) ; aucun export ni `GOTOOLCHAIN` requis (`go.mod` en 1.26.10).
+- **Go** : Go 1.26.11 est sur le PATH (`~/.local/bin/go`, lien vers `~/.local/go/bin/go`) ; aucun export ni `GOTOOLCHAIN` requis (`go.mod` en 1.26.11).
 - **Node** : Node **Linux** v22.23.3 (`~/.local/bin/node`), `node_modules` natif Linux.
 - **PlatformIO** : `pio` Linux (build firmware depuis le conteneur).
 - **`server-go/build.ps1`** reste un script Windows destiné à l'utilisateur ; s'il est lancé depuis Windows, il faut un `npm ci` Windows.

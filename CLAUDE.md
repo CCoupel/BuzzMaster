@@ -101,6 +101,7 @@ cd server-go && ./build.ps1  # Build portable Windows/Linux (script Windows, lan
 - `server-go/internal/server/ack_manager.go` — registre ACK (v3.8.0)
 - `server-go/internal/led/led.go` — envoi des LED_SET aux buzzers (règles par phase, COMET, ACK) ; interface `Host`
 - `server-go/internal/ambiance/ambiance.go` — couche d'ambiance lumineuse (writer, scènes, override Flash/SCORE) ; interface `Host`
+- `server-go/internal/effects/` — moteur d'effets lumière (schéma YAML, validation, rendu, catalogue, rechargement) ; lecteur dans `internal/ambiance/effects.go` ; guide `docs/LIGHT_EFFECTS.md`
 - `server-go/internal/vplayer/vplayer.go` — payloads UPDATE individualisés VPlayer
 - `server-go/internal/rounds/rounds.go` — logique des manches (ROUNDS_UPDATE)
 

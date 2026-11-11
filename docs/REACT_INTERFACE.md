@@ -2095,20 +2095,31 @@ Une seconde barre d'onglets (`LIGHT_SUBTABS`, état `lightSubTab`, défaut `brid
 |---|---|---|
 | `bridge` | Pont et ampoules | Contenu existant : pont, ampoules, scènes, sélecteur ON/AUTO/OFF |
 | `groups` | Groupes | Composant `LightGroupsManager` (compteur de groupes affiché) |
-| `effects` | Effets | Emplacement « bientôt » jusqu'au LOT-2 (badge `ambiance-soon-badge`) |
+| `effects` | Effets | `AmbianceSettingsPanel` (sections `light` + `lightEffects`) : sélecteurs d'effet par moment, salle et groupes animateur. Le badge « bientôt » a disparu. |
+
+#### Sous-onglet Effets — `AmbianceSettingsPanel` (v11.7.0, #223, LOT-2 en cours)
+
+Le sous-onglet Effets rend le composant **mutualisé** `AmbianceSettingsPanel` (mode `global`), le même que le dialogue « Ambiance de la manche » (mode surcharge).
+
+- **Fichiers** : `web/src/components/AmbianceSettingsPanel.jsx` ; helpers purs `web/src/utils/lightEffects.js` (chemins éditables, options, « (actuel) », inapplicabilité) ; `web/src/utils/ambianceSettings.js` ; hook `useLightEffects.js`.
+- **Props utiles** : `sections={['light', 'lightEffects']}`, `catalog` (réponse de `GET /api/lighting/effects`), `hostGroups` (`[{id, name, rank, empty}]`, un bloc par groupe animateur), `focusHostId` (met en vue le bloc d'un groupe : lien « Choisir ses effets » de la page Groupes), `onManageGroups`, `onCreateHost`.
+- **Chemins édités** : salle `light.effects.<moment>` ; groupe animateur `light.host_effects.<id>.<moment>`, `<id>` = `id` du groupe (et non son rang). En mode global, la page écrit `POST /config.json {lighting:{effects:{…}}}` ou `{lighting:{host_effects:{<id>:{<moment>:v}}}}` (`light-effects.md` §6).
+- **Badge de manche** : compte chaque couple (groupe, moment) surchargé.
+- **Valeur relue** : le réglage est affiché d'après la réponse serveur, jamais optimiste.
 
 #### `LightGroupsManager` — groupes d'ambiance (#225)
 
-**Fichiers** : `web/src/components/LightGroupsManager.jsx` + `LightGroupsManager.css` ; fonctions pures dans `web/src/utils/lightGroups.js` (brouillon `{groups, host}`).
+**Fichiers** : `web/src/components/LightGroupsManager.jsx` + `LightGroupsManager.css` ; fonctions pures dans `web/src/utils/lightGroups.js` (brouillon `{groups, hosts}`).
 
-**Rôle** : édite `lighting.groups` (config) ; le brouillon est enregistré par `POST /config.json` (`{lighting:{groups:[…]}}`, remplacement complet, groupe animateur placé en dernier), et l'essai appelle `POST /api/lighting/groups/test` avec `{group: n}` ou `{group: "host"}`.
+**Rôle** : édite `lighting.groups` (config) ; le brouillon est enregistré par `POST /config.json` (`{lighting:{groups:[…]}}`, remplacement complet, groupes animateur placés en dernier). Le champ `id` d'un groupe est conservé ; il est omis tant qu'il est vide, et le serveur l'attribue. L'essai appelle `POST /api/lighting/groups/test` avec `{group: n}` ou `{group: "host<k>"}` (`"host1"`…), et l'arrêt `POST /api/lighting/groups/test/stop`.
 
 - **Bac « hors groupe »** et **groupes de salle ordonnés** : glisser-déposer natif et alternative clavier (Monter / Descendre, « Déplacer vers… »).
-- **Équipes à proximité** par groupe de salle ; action « Créer un groupe par ampoule ».
-- **Bloc « Animateur »** : création, nom, ampoules, essai, suppression ; sans numéro ni équipes à proximité. Son lien « Choisir ses effets » reçoit `onChooseEffects=null` jusqu'au LOT-2 et reste alors inactif (« bientôt »).
-- **Colonne « Groupe »** de la liste d'ampoules : calculée depuis `lighting.groups` (config), et non depuis le champ `group` de `GET /api/lighting/lights`. Pastille « 🎤 … (animateur) » pour le groupe animateur.
+- **Équipes à proximité** par groupe de salle, avec une infobulle « ? ». Elles servent d'origine à la vague d'un effet réparti.
+- **Liste des groupes animateur** (4 au maximum) : création, nom, ampoules, ordre, suppression. Numérotation A1 à A4 (pastille « 🎤 A1 · nom »). Le bouton « Créer un groupe par ampoule » est **supprimé**.
+- **Essai en séquence** : bouton « ■ Arrêter l'essai » pendant la séquence de 6 pas (infobulle « Étape i/6 »). Un essai remplace celui en cours. Les infobulles de désactivation indiquent la cause (« Enregistrez d'abord », « Groupe vide », « Éclairage d'ambiance désactivé », pont injoignable).
+- **Colonne « Groupe »** de la liste d'ampoules : calculée depuis `lighting.groups` (config), et non depuis le champ `group` de `GET /api/lighting/lights`.
 - **Avertissement** avant enregistrement si une ampoule groupée passe en rôle équipe.
-- **Essai** désactivé si le brouillon n'est pas enregistré, si le groupe est vide, ou si l'éclairage est désactivé.
+- **Pont injoignable** : seul l'essai est indisponible ; l'édition des groupes reste possible.
 
 ### Onglet Son — Bruitages d'événement
 

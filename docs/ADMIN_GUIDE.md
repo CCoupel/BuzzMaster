@@ -2353,30 +2353,46 @@ Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de s
 
 Le sous-onglet **Groupes** de `/admin/ambiance` › **Lumière** (à côté de « Pont et ampoules » et « Effets ») range les ampoules générales en **groupes** d'ambiance. Il ne sert qu'une fois le pont associé et les ampoules choisies.
 
-- **Groupes de salle** : chaque groupe est numéroté selon son rang dans la liste (1, 2, 3…). Un groupe peut porter des **équipes à proximité** (pour un futur effet d'origine par équipe). Maximum **12 groupes au total**, groupe animateur compris (donc 11 groupes de salle s'il existe un groupe animateur). Un groupe vide garde son numéro mais n'est pas utilisé.
+- **Groupes de salle** : **12 au maximum**. Chaque groupe est numéroté selon son rang parmi les groupes de salle (1, 2, 3…). Un groupe peut porter des **équipes à proximité** : c'est l'origine de la vague d'un effet réparti, quand l'équipe créditée joue près de ce groupe. Un groupe vide garde son numéro mais n'est pas utilisé.
+- **Groupes animateur** : **4 au maximum**, numérotés A1 à A4 selon leur ordre. Voir la section suivante.
 - **Ampoules hors groupe** : elles restent sur la scène de salle ordinaire, comme avant v11.7.0. Une ampoule ne peut être que dans **un seul** groupe.
-- **Enregistrement** : les modifications ne sont prises en compte qu'après **Enregistrer**. Une ampoule groupée qui passe en rôle équipe est retirée de son groupe automatiquement.
-- **Essai** : un groupe enregistré clignote en blanc sur le pont, puis reprend son état de jeu. L'essai est désactivé si le brouillon n'est pas enregistré, si le groupe est vide ou si l'éclairage est désactivé.
+- **Enregistrement** : les modifications ne sont prises en compte qu'après **Enregistrer**. Chaque groupe garde son identifiant à l'enregistrement, même après un renommage ou un déplacement. Une ampoule groupée qui passe en rôle équipe est retirée de son groupe automatiquement.
+- **Essai** : le bouton d'essai d'un groupe enregistré joue une **séquence visible de 6 secondes** sur ses ampoules : éteint, blanc à 50 %, blanc à 100 %, rouge, vert, bleu, un pas par seconde. Le groupe revient ensuite à son état de jeu. « Arrêter l'essai » interrompt la séquence. Un nouvel essai remplace celui qui tourne. L'essai est indisponible si le brouillon n'est pas enregistré, si le groupe est vide, si l'éclairage est désactivé ou si le pont est injoignable (une infobulle indique la raison).
 
-#### Groupe animateur
+#### Groupes animateur
 
-Le **groupe animateur** éclaire l'animateur (pupitre, régie). Il est distinct de la salle :
+Un **groupe animateur** éclaire l'animateur (pupitre, régie). Il est distinct de la salle :
 
-- Un seul groupe animateur au plus, sans numéro et sans équipes à proximité.
-- Il reste en **blanc fixe** dès que l'éclairage est actif, quelle que soit la phase de jeu.
+- Jusqu'à **4 groupes animateur**, numérotés A1 à A4 (pastille « 🎤 A1 · nom » dans la colonne Groupe). Ils n'ont ni numéro de salle ni équipes à proximité.
+- Chaque groupe animateur a **ses propres effets par moment** (voir « Effets » ci-dessous), indépendants des autres. Sans effet choisi, il reste en **blanc fixe** dès que l'éclairage est actif.
 - **Les réglages de la salle ne l'atteignent pas** : ni ON, ni OFF, ni le Flash, ni les effets de salle ne le modifient.
 - Il est éteint seulement par l'**interrupteur général** « Éclairage d'ambiance activé » et par l'**arrêt du serveur**.
-- Dans la colonne « Groupe » de la liste des ampoules, il est signalé par « 🎤 … (animateur) ».
-- Le lien « Choisir ses effets » est présent mais inactif (« bientôt ») : les effets du groupe animateur arrivent avec le sous-onglet **Effets**.
 
 #### Ce qu'éteint chaque commande
 
-| Commande | Ampoules de salle (groupes et hors groupe) | Groupe animateur |
+| Commande | Ampoules de salle (groupes et hors groupe) | Groupes animateur |
 |---|---|---|
 | Sélecteur ON / AUTO / OFF | Oui | Non |
 | Flash | Oui | Non |
 | Interrupteur général « Éclairage d'ambiance activé » | Oui (éteint) | Oui (éteint) |
 | Arrêt du serveur | Oui | Oui |
+
+#### Sous-onglet Effets (v11.7.0, #223 — en cours)
+
+Le sous-onglet **Effets** de `/admin/ambiance` › Lumière choisit, pour chaque **moment**, l'effet joué :
+
+| Moment | Quand il s'applique |
+|---|---|
+| **Chronomètre** (`chrono`) | Pendant le décompte d'une question |
+| **Calme** (`calm`) | Attente, pause et entracte |
+| **Score** (`score`) | Pendant l'attribution des points |
+
+- **Salle** : un bloc de trois sélecteurs (« Aucun effet » par défaut sauf pour le chronomètre, qui garde la **pulsation** actuelle). Les options sont celles du catalogue ; l'option « (actuel) » marque la valeur par défaut.
+- **Chaque groupe animateur** : un bloc de trois sélecteurs à son nom, avec « Blanc fixe » pour valeur par défaut. Un groupe vide le signale.
+- Un effet qui ne peut pas jouer sur un groupe (par exemple un effet qui demande plusieurs groupes, appliqué à un groupe animateur) reste grisé avec son motif. Un effet absent ou invalide joue la valeur par défaut du moment.
+- Le réglage s'enregistre à chaque changement. Il se règle aussi **par manche** (dialogue « Ambiance de la manche », valeur « Hérité » pour suivre le réglage global).
+- Les effets proviennent de fichiers `.yaml` du dossier `data/files/effects/`. Un fichier modifié est rechargé en 2 secondes, sans redémarrer le serveur. Un fichier invalide est écarté et son erreur est signalée (fichier, ligne, message). Les effets livrés avec BuzzControl se trouvent dans `data/files/effects/natifs/` : ce dossier est une copie de référence **à ne pas modifier**, réécrite à chaque démarrage. Pour une variante, copiez le fichier dans le dossier parent et changez son `id`. Pour revenir à l'effet d'origine, supprimez le fichier qui le surcharge.
+- Effets livrés à ce jour : **pulsation** (chronomètre : respiration de la salle, orange puis rouge en fin de chrono), **chenillard** (chronomètre : un point lumineux fait le tour de la salle) et **couleur-équipe** (score : couleur de l'équipe créditée). Les autres effets prévus seront ajoutés dans les lots suivants.
 
 ### Comportement à l'arrêt du serveur
 
