@@ -15,17 +15,18 @@ vi.mock('./AmbianceSettingsPanel.css', () => ({}))
 import AmbianceSettingsPanel from './AmbianceSettingsPanel'
 
 const eff = (id, name, moments, extra = {}) => ({
-  id, name, description: '', moments, origin: 'native', file: `natifs/${id}.yaml`, min_groups: 1, applicable: true, reason: '', ...extra,
+  id, name, description: '', moments, origin: 'native', file: `natifs/${id}.yaml`, min_groups: 1, applicable: true, reason: '', host_applicable: true, ...extra,
 })
 
 const CATALOG = {
   groups: 4,
   effects: [
-    eff('pulsation', 'Pulsation', ['chrono']),
-    eff('chenillard', 'Chenillard', ['chrono'], { min_groups: 3 }),
-    eff('couleur-equipe', 'Couleur de l\'équipe', ['score']),
+    eff('pulsation', 'Pulsation', ['chrono'], { min_groups: 0, tick_ms: 500 }),
+    eff('chenillard', 'Chenillard', ['chrono'], { min_groups: 3, host_applicable: false, tick_ms: 1000 }),
+    eff('couleur-equipe', 'Couleur de l\'équipe', ['score'], { min_groups: 0, tick_ms: 1000 }),
     eff('mon-effet', 'Mon effet', ['chrono', 'calm'], { origin: 'user', file: 'mon-effet.yaml' }),
-    eff('vague-lente', 'Vague lente', ['calm'], { min_groups: 2 }),
+    eff('degrade', 'Dégradé', ['calm'], { min_groups: 2, host_applicable: false, tick_ms: 60000 }),
+    eff('rapide', 'Rapide', ['calm'], { min_groups: 0, tick_ms: 400 }),
   ],
   errors: [],
   unresolved: [],
@@ -34,7 +35,7 @@ const CATALOG = {
 
 const room = (c) => document.getElementById(`asp-eff-room-${c}`)
 const host = (id, c) => document.getElementById(`asp-eff-host-${id}-${c}`)
-const HOSTS = [{ id: 'ha', name: 'Pupitre', rank: 1, empty: false }, { id: 'hb', name: 'Régie', rank: 2, empty: false }]
+const HOSTS = [{ id: 'ha', rank: 1, empty: false }, { id: 'hb', rank: 2, empty: false }]
 const optionTexts = (el) => Array.from(el.querySelectorAll('option')).map(o => o.textContent)
 
 function setup(props = {}) {
@@ -80,7 +81,7 @@ describe('AmbianceSettingsPanel › effets lumière — trois sélecteurs de sal
   it('chaque liste ne propose que les effets qui déclarent le moment, « Aucun effet » en tête', () => {
     setup()
     expect(optionTexts(room('chrono')).join('|')).toMatch(/^Aucun effet\|.*Pulsation.*\|.*Chenillard.*\|.*Mon effet/)
-    expect(optionTexts(room('chrono')).join('|')).not.toMatch(/Vague lente|Couleur de l'équipe/)
+    expect(optionTexts(room('chrono')).join('|')).not.toMatch(/Dégradé|Couleur de l'équipe/)
     expect(optionTexts(room('calm')).join('|')).toMatch(/Mon effet/)
     expect(optionTexts(room('calm')).join('|')).not.toMatch(/Pulsation|Chenillard/)
     expect(optionTexts(room('score')).join('|')).toMatch(/Couleur de l'équipe/)
@@ -93,9 +94,9 @@ describe('AmbianceSettingsPanel › effets lumière — trois sélecteurs de sal
     expect(t.find(x => /Mon effet/.test(x))).toMatch(/personnalisé/)
   })
 
-  it('l\'option par défaut du moment est marquée « (actuel) » en mode global', () => {
+  it('l\'option par défaut du moment est marquée « (par défaut) » en mode global', () => {
     setup()
-    expect(optionTexts(room('chrono')).some(x => /Pulsation.*\(actuel\)/.test(x))).toBe(true)
+    expect(optionTexts(room('chrono')).some(x => /Pulsation.*\(par défaut\)/.test(x))).toBe(true)
   })
 
   it('choisir un effet émet light.effects.<moment> avec son id', () => {
@@ -179,10 +180,11 @@ describe('AmbianceSettingsPanel › effets lumière — un bloc par groupe anima
     expect(onCreateHost).toHaveBeenCalled()
   })
 
-  it('un bloc de trois sélecteurs par groupe animateur, titré 🎤k · nom, « Blanc fixe » par défaut', () => {
+  it('un bloc de trois sélecteurs par groupe animateur, titré « 🎤 Groupe animateur k » (sans nom), « Blanc fixe » par défaut', () => {
     setup({ hostGroups: HOSTS })
-    expect(within(screen.getByTestId('asp-host-ha')).getByText(/🎤1 · Pupitre/)).toBeInTheDocument()
-    expect(within(screen.getByTestId('asp-host-hb')).getByText(/🎤2 · Régie/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('asp-host-ha')).getByText(/🎤 Groupe animateur 1/)).toBeInTheDocument()
+    expect(within(screen.getByTestId('asp-host-hb')).getByText(/🎤 Groupe animateur 2/)).toBeInTheDocument()
+    expect(screen.queryByText(/Pupitre|Régie/)).toBeNull() // plus de nom de groupe
     for (const id of ['ha', 'hb']) {
       for (const c of ['chrono', 'calm', 'score']) {
         expect(host(id, c)).toHaveValue('')
@@ -192,7 +194,7 @@ describe('AmbianceSettingsPanel › effets lumière — un bloc par groupe anima
   })
 
   it('un groupe vide est signalé dans son titre', () => {
-    setup({ hostGroups: [{ id: 'ha', name: 'Pupitre', rank: 1, empty: true }] })
+    setup({ hostGroups: [{ id: 'ha', rank: 1, empty: true }] })
     expect(within(screen.getByTestId('asp-host-ha')).getByText(/groupe vide/)).toBeInTheDocument()
   })
 
@@ -202,10 +204,10 @@ describe('AmbianceSettingsPanel › effets lumière — un bloc par groupe anima
       const opts = (c) => Array.from(host(id, c).querySelectorAll('option'))
       const chenillard = opts('chrono').find(o => /Chenillard/.test(o.textContent))
       expect(chenillard).toBeDisabled()
-      expect(chenillard.textContent).toMatch(/plusieurs groupes/)
+      expect(chenillard.textContent).toMatch(/anime plusieurs groupes/)
       expect(opts('chrono').find(o => /Pulsation/.test(o.textContent))).not.toBeDisabled()
       expect(opts('score').find(o => /Couleur de l'équipe/.test(o.textContent))).not.toBeDisabled()
-      expect(opts('calm').find(o => /Vague lente/.test(o.textContent))).toBeDisabled()
+      expect(opts('calm').find(o => /Dégradé/.test(o.textContent))).toBeDisabled()
     }
   })
 
@@ -318,5 +320,119 @@ describe('AmbianceSettingsPanel › effets lumière — mode surcharge de manche
   it('la valeur héritée introuvable reste lisible dans « Hérité (…) »', () => {
     setup({ mode: 'override', value: {}, base: { light: { effects: { chrono: 'disparu' } } } })
     expect(optionTexts(room('chrono'))[0]).toMatch(/^Hérité \(disparu/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Vitesse réglable (R14) : un multiplicateur par moment à côté de chaque choix d'effet (salle et chaque groupe animateur),
+// ×0,5 · ×0,75 · ×1 · ×1,5 · ×2, défaut ×1 ; « plafonné » sous 250 ms par tick ; global et manche (« Hérité (…) »).
+// Contrat light-effects.md §6 ; chemins light.speeds.<moment> et light.host_speeds.<id>.<moment>.
+// ---------------------------------------------------------------------------
+
+const speed = (c) => document.getElementById(`asp-spd-room-${c}`)
+const hostSpeed = (id, c) => document.getElementById(`asp-spd-host-${id}-${c}`)
+
+describe('AmbianceSettingsPanel › effets lumière — vitesse', () => {
+  it('un sélecteur de vitesse par moment, avec les cinq valeurs ×0,5 · ×0,75 · ×1 · ×1,5 · ×2', () => {
+    setup()
+    for (const c of ['chrono', 'calm', 'score']) {
+      expect(speed(c)).toBeInTheDocument()
+      expect(optionTexts(speed(c))).toEqual(['×0,5', '×0,75', '×1', '×1,5', '×2'])
+    }
+  })
+
+  it('défaut ×1 partout (global), pour la salle et pour chaque groupe animateur', () => {
+    setup({ hostGroups: HOSTS })
+    for (const c of ['chrono', 'calm', 'score']) {
+      expect(speed(c)).toHaveValue('1')
+      expect(hostSpeed('ha', c)).toHaveValue('1')
+      expect(hostSpeed('hb', c)).toHaveValue('1')
+    }
+  })
+
+  it('une valeur enregistrée est affichée, par moment et par groupe animateur', () => {
+    setup({ hostGroups: HOSTS, value: { light: { effects: { chrono: 'pulsation' }, speeds: { chrono: 2, calm: 0.5 }, host_speeds: { ha: { score: 1.5 }, hb: { chrono: 0.75 } } } } })
+    expect(speed('chrono')).toHaveValue('2')
+    expect(speed('calm')).toHaveValue('0.5')
+    expect(hostSpeed('ha', 'score')).toHaveValue('1.5')
+    expect(hostSpeed('hb', 'chrono')).toHaveValue('0.75')
+    expect(hostSpeed('ha', 'chrono')).toHaveValue('1')
+  })
+
+  it('choisir une vitesse émet light.speeds.<moment> avec un NOMBRE', () => {
+    const { onChange } = setup({ value: { light: { effects: { chrono: 'pulsation' } } } })
+    fireEvent.change(speed('chrono'), { target: { value: '2' } })
+    expect(onChange).toHaveBeenCalledWith('light.speeds.chrono', 2)
+    fireEvent.change(speed('chrono'), { target: { value: '0.75' } })
+    expect(onChange).toHaveBeenCalledWith('light.speeds.chrono', 0.75)
+  })
+
+  it('choisir une vitesse pour un groupe animateur émet light.host_speeds.<id>.<moment>', () => {
+    const { onChange } = setup({ hostGroups: HOSTS, value: { light: { host_effects: { hb: { score: 'couleur-equipe' } } } } })
+    fireEvent.change(hostSpeed('hb', 'score'), { target: { value: '0.5' } })
+    expect(onChange).toHaveBeenCalledWith('light.host_speeds.hb.score', 0.5)
+    expect(onChange).not.toHaveBeenCalledWith('light.speeds.score', expect.anything())
+  })
+
+  it('sans effet joué, le sélecteur de vitesse est grisé (la vitesse vaut pour le moment, elle reste enregistrée)', () => {
+    setup({ hostGroups: HOSTS, value: { light: { effects: { chrono: 'chenillard' }, speeds: { calm: 2 } } } })
+    expect(speed('chrono')).toBeEnabled()
+    expect(speed('calm')).toBeDisabled() // « Aucun effet » en phases calmes
+    expect(speed('calm')).toHaveValue('2') // la valeur n'est pas perdue
+    expect(hostSpeed('ha', 'chrono')).toBeDisabled() // « Blanc fixe »
+  })
+
+  it('la vitesse vaut pour le moment quel que soit l\'effet : changer d\'effet ne la change pas', () => {
+    const { onChange } = setup({ value: { light: { effects: { chrono: 'pulsation' }, speeds: { chrono: 2 } } } })
+    fireEvent.change(room('chrono'), { target: { value: 'chenillard' } })
+    expect(onChange).toHaveBeenCalledWith('light.effects.chrono', 'chenillard')
+    expect(onChange).not.toHaveBeenCalledWith('light.speeds.chrono', expect.anything())
+    expect(speed('chrono')).toHaveValue('2')
+  })
+
+  it('« plafonné » apparaît quand le tick de l\'effet ÷ la vitesse tombe sous 250 ms (400 ms × 2 = 200 ms), pas à 250 ms pile', () => {
+    setup({ value: { light: { effects: { calm: 'rapide', chrono: 'pulsation' }, speeds: { calm: 2, chrono: 2 } } } })
+    expect(within(speed('calm').closest('.asp-row')).getByText('plafonné')).toBeInTheDocument()
+    // pulsation : 500 ms ÷ 2 = 250 ms : exactement le plancher, pas plafonné
+    expect(within(speed('chrono').closest('.asp-row')).queryByText('plafonné')).toBeNull()
+  })
+
+  it('pas de « plafonné » à vitesse ×1', () => {
+    setup({ value: { light: { effects: { calm: 'rapide' }, speeds: { calm: 1 } } } })
+    expect(within(speed('calm').closest('.asp-row')).queryByText('plafonné')).toBeNull()
+  })
+
+  it('mode surcharge : « Hérité (×n) » avec la vitesse globale ; « Hérité » émet null', () => {
+    const base = { light: { effects: { chrono: 'pulsation' }, speeds: { chrono: 1.5 }, host_effects: { ha: { score: 'couleur-equipe' } }, host_speeds: { ha: { score: 0.5 } } } }
+    const { onChange } = setup({ mode: 'override', value: { light: { speeds: { chrono: 2 }, host_speeds: { ha: { score: 1 } } } }, base, hostGroups: [HOSTS[0]] })
+    expect(optionTexts(speed('score'))[0]).toBe('Hérité (×1)') // vitesse héritée par défaut ×1
+    expect(optionTexts(speed('chrono'))[0]).toBe('Hérité (×1,5)')
+    expect(optionTexts(hostSpeed('ha', 'score'))[0]).toBe('Hérité (×0,5)')
+    expect(speed('chrono')).toHaveValue('2') // surchargée
+    fireEvent.change(speed('chrono'), { target: { value: '__inherit__' } })
+    expect(onChange).toHaveBeenCalledWith('light.speeds.chrono', null)
+    fireEvent.change(hostSpeed('ha', 'score'), { target: { value: '__inherit__' } })
+    expect(onChange).toHaveBeenCalledWith('light.host_speeds.ha.score', null)
+  })
+
+  it('mode surcharge : seule une vitesse surchargée affiche l\'étiquette « manche »', () => {
+    const base = { light: { effects: { chrono: 'pulsation' } } }
+    setup({ mode: 'override', value: { light: { speeds: { chrono: 2 } } }, base })
+    expect(within(speed('chrono').closest('.asp-row')).getByText('manche')).toBeInTheDocument()
+    expect(within(speed('calm').closest('.asp-row')).queryByText('manche')).toBeNull()
+  })
+
+  it('en mode global il n\'y a pas d\'état « Hérité » pour la vitesse', () => {
+    setup({ mode: 'global', hostGroups: HOSTS })
+    for (const c of ['chrono', 'calm', 'score']) {
+      expect(optionTexts(speed(c)).some(x => /Hérité/.test(x))).toBe(false)
+      expect(optionTexts(hostSpeed('ha', c)).some(x => /Hérité/.test(x))).toBe(false)
+    }
+  })
+
+  it('désactivé : tous les sélecteurs de vitesse sont figés', () => {
+    setup({ disabled: true, hostGroups: HOSTS, value: { light: { effects: { chrono: 'pulsation' } } } })
+    expect(speed('chrono')).toBeDisabled()
+    expect(hostSpeed('ha', 'chrono')).toBeDisabled()
   })
 })

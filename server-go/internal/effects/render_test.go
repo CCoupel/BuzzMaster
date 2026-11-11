@@ -1,511 +1,377 @@
 package effects
 
-// Tables de trames de référence par motif — contracts/light-effects.md §4.2 à §4.6.
-// Écrit avant l'implémentation (TDD). Aucune attente réelle : le temps est un paramètre.
+// Rendu pas à pas — contracts/light-effects.md §4.2 à §4.6 : variables (progression, incrément négatif, liste, voisins,
+// rebouclage pour N = 1, 4, 8, 12), groupe absent, pas sauté, état conservé, ordre des actions, boucle: non, couleurs
+// nommées vivantes, trame réduite à Group 0. Aucune attente : le temps est le numéro de tick.
+// Jetons (helpers_test.go) : W blanc, R rouge, G vert, B bleu plein, b bleu doux, « . » éteint, « _ » aucun état.
 
 import (
-	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
 
-var (
-	white  = [3]int{255, 255, 255}
-	orange = [3]int{255, 170, 0}
-	red    = [3]int{230, 30, 30}
-	theme  = [3]int{79, 70, 229}
-	team   = [3]int{229, 57, 53}
-	black  = [3]int{0, 0, 0}
-)
-
-func near(a, b, tol int) bool {
-	d := a - b
-	if d < 0 {
-		d = -d
-	}
-	return d <= tol
+func headSrc(decl string) string {
+	// un seul pas : toute la salle bleu doux, puis la variable gA en blanc
+	return fx("variables:\n  " + decl + "\npas:\n  - { g0: [\"#0000FF\", 40], gA: [\"#FFFFFF\", 100] }\n")
 }
 
-func nearLook(a, b Lk) bool {
-	return a.Color == b.Color && near(a.Intensity, b.Intensity, 1) && a.FadeMs == b.FadeMs
+func headRow(n, pos int) string { // n groupes, le blanc en position pos (1-based)
+	return strings.Repeat("b", pos-1) + "W" + strings.Repeat("b", n-pos)
 }
 
-const chenillardSrc = `
-id: chenillard
-name: Chenillard
-version: 1
-moments: [chrono]
-target: groups
-min_groups: 3
-looks:
-  fond:    { color: theme,   intensity: 100 }
-  trainee: { color: theme,   intensity: 50 }
-  tete:    { color: urgency, intensity: 100 }
-pattern:
-  type: shift
-  step_ms: 1000
-  cells: [trainee, tete, trainee]
-  rest: fond
-  wrap: true
-stages:
-  - when: { groups_lt: 5 }
-    pattern: { cells: [tete] }
-`
+// ---------- progression, rebouclage sur N groupes non vides ----------
 
-func chrono(n int, remaining time.Duration) Ctx {
-	return Ctx{N: n, Remaining: remaining, Total: 20 * time.Second, Scene: white, Theme: theme, Team: team, Origin: 1, Seed: 1}
-}
-
-// ---------- longueur de la trame : N positions, bornes N = 1 et 12 ----------
-
-func TestRender_FrameHasOnePositionPerGroup(t *testing.T) {
-	e := mustParse(t, `
-id: u
-name: U
-version: 1
-moments: [calm]
-looks: { a: { color: scene } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
-`)
-	for _, n := range []int{1, 3, 6, 12} {
-		if got := len(render(e, Ctx{N: n, Scene: white}, 0)); got != n {
-			t.Errorf("N=%d : %d positions, attendu %d", n, got, n)
-		}
-	}
-}
-
-func TestRender_TargetAll_SingleState(t *testing.T) {
-	e := mustParse(t, `
-id: all
-name: All
-version: 1
-moments: [chrono]
-target: all
-looks: { a: { color: scene } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
-`)
-	// N = 0 : voir TestNatives_Pulsation_Declaration_AppliesWithoutGroups (applicabilité à trancher).
-	for _, n := range []int{1, 6, 12} {
-		if got := len(render(e, Ctx{N: n, Scene: white}, 0)); got != 1 {
-			t.Errorf("target: all, N=%d : un seul état attendu, obtenu %d", n, got)
-		}
-	}
-}
-
-// ---------- uniform : alternance calée sur l'horloge murale ----------
-
-const uniformSrc = `
-id: resp
-name: Resp
-version: 1
-moments: [chrono]
-target: all
-looks:
-  haut: { color: "#FF0000", intensity: 100 }
-  bas:  { color: "#0000FF", intensity: 50 }
-pattern:
-  type: uniform
-  phases: [ { look: haut, ms: 250 }, { look: bas, ms: 750 } ]
-`
-
-func TestRender_Uniform_PhasesFollowWallClockModCycle(t *testing.T) {
-	e := mustParse(t, uniformSrc)
-	c := Ctx{N: 3, Scene: white}
-	cases := []struct {
-		at   time.Duration
-		want Lk
-	}{
-		{0, Lk{Color: [3]int{255, 0, 0}, Intensity: 255}},
-		{249 * time.Millisecond, Lk{Color: [3]int{255, 0, 0}, Intensity: 255}},
-		{250 * time.Millisecond, Lk{Color: [3]int{0, 0, 255}, Intensity: 128}},
-		{999 * time.Millisecond, Lk{Color: [3]int{0, 0, 255}, Intensity: 128}},
-		{1000 * time.Millisecond, Lk{Color: [3]int{255, 0, 0}, Intensity: 255}}, // cycle suivant
-		{12250 * time.Millisecond, Lk{Color: [3]int{0, 0, 255}, Intensity: 128}},
-	}
-	for _, tc := range cases {
-		got := render(e, c, tc.at)
-		if len(got) != 1 || !nearLook(got[0], tc.want) {
-			t.Errorf("t=%s : %+v, attendu %+v", tc.at, got, tc.want)
-		}
-	}
-}
-
-func TestRender_IsDeterministic_SameInputsSameFrame(t *testing.T) {
-	e := mustParse(t, chenillardSrc)
-	c := chrono(6, 12*time.Second)
-	a, b := render(e, c, 3500*time.Millisecond), render(e, c, 3500*time.Millisecond)
-	if !reflect.DeepEqual(a, b) {
-		t.Fatal("Render doit être déterministe")
-	}
-}
-
-// ---------- shift : chenillard ----------
-
-func headIndex(t *testing.T, fr []Lk, headColor [3]int) int {
-	t.Helper()
-	idx := -1
-	for i, l := range fr {
-		if l.Color == headColor && l.Intensity >= 254 {
-			if idx != -1 {
-				t.Fatalf("une seule tête attendue : %+v", fr)
-			}
-			idx = i
-		}
-	}
-	return idx
-}
-
-func TestRender_Shift_Chenillard_HeadTrailAndBackground(t *testing.T) {
-	e := mustParse(t, chenillardSrc)
-	fr := render(e, chrono(6, 12*time.Second), 0) // > 10 s : urgence blanche
-	h := headIndex(t, fr, white)
-	if h < 0 {
-		t.Fatalf("tête (urgence blanche à plus de 10 s) introuvable : %+v", fr)
-	}
-	prev, next := (h+5)%6, (h+1)%6
-	for i, l := range fr {
-		switch i {
-		case h:
-		case prev, next:
-			if l.Color != theme || !near(l.Intensity, 128, 1) {
-				t.Errorf("traînée (position %d) = %+v, attendu thème à 50 %%", i, l)
-			}
-		default:
-			if l.Color != theme || l.Intensity != 255 {
-				t.Errorf("fond (position %d) = %+v, attendu thème à 100 %%", i, l)
+func TestVariables_Progression_LoopsOnNGroups_ForN_1_4_8_12(t *testing.T) {
+	for _, n := range []int{1, 4, 8, 12} {
+		got := rows(t, headSrc("gA: g1; +1"), ctxN(n), 2*n+1)
+		for tick := range got {
+			if want := headRow(n, tick%n+1); got[tick] != want {
+				t.Fatalf("N=%d tick %d : %q, attendu %q (un groupe par tick, retour au premier après le dernier)", n, tick, got[tick], want)
 			}
 		}
 	}
 }
 
-func TestRender_Shift_AdvancesOneGroupPerStepAndWraps(t *testing.T) {
-	e := mustParse(t, chenillardSrc)
-	c := chrono(6, 15*time.Second)
-	h0 := headIndex(t, render(e, c, 0), white)
-	for step := 1; step <= 7; step++ {
-		got := headIndex(t, render(e, c, time.Duration(step)*time.Second), white)
-		if want := (h0 + step) % 6; got != want {
-			t.Fatalf("pas %d : tête en %d, attendu %d (un groupe par seconde, retour au premier)", step, got, want)
-		}
+func TestVariables_StartGroupAndIncrement(t *testing.T) {
+	// gB: g2; +2 — N = 4 : g2, g4, g2, g4…
+	got := rows(t, headSrc("gA: g2; +2"), ctxN(4), 5)
+	eqRows(t, "g2; +2", got, []string{"bWbb", "bbbW", "bWbb", "bbbW", "bWbb"})
+	// +3 sur 4 groupes : g1, g4, g3, g2, g1
+	eqRows(t, "g1; +3", rows(t, headSrc("gA: g1; +3"), ctxN(4), 5), []string{"Wbbb", "bbbW", "bbWb", "bWbb", "Wbbb"})
+}
+
+func TestVariables_NegativeIncrement_FromLastGroup(t *testing.T) {
+	// gD: gN; -1 : part du dernier groupe et recule, avec rebouclage
+	eqRows(t, "gN; -1", rows(t, headSrc("gA: gN; -1"), ctxN(4), 6), []string{"bbbW", "bbWb", "bWbb", "Wbbb", "bbbW", "bbWb"})
+	// -2 sur 5 groupes depuis g2 : g2, g5, g3, g1, g4
+	eqRows(t, "g2; -2", rows(t, headSrc("gA: g2; -2"), ctxN(5), 5), []string{"bWbbb", "bbbbW", "bbWbb", "Wbbbb", "bbbWb"})
+}
+
+func TestVariables_NZeroIncrementIsConstant(t *testing.T) {
+	got := rows(t, headSrc("gA: g3; 0"), ctxN(4), 4)
+	eqRows(t, "g3; 0", got, []string{"bbWb", "bbWb", "bbWb", "bbWb"})
+}
+
+func TestVariables_StartBeyondN_LoopsOnN(t *testing.T) {
+	// g7 avec N = 4 ⇒ position 3 ; avec N = 12 ⇒ position 7
+	if got := rows(t, headSrc("gA: g7; 0"), ctxN(4), 1)[0]; got != "bbWb" {
+		t.Errorf("g7 avec N = 4 : position 3 : %q", got)
 	}
-	// dans un même pas, la trame ne bouge pas
-	if !reflect.DeepEqual(render(e, c, 2000*time.Millisecond), render(e, c, 2999*time.Millisecond)) {
-		t.Error("la trame est constante à l'intérieur d'un pas")
+	if got := rows(t, headSrc("gA: g7; 0"), ctxN(12), 1)[0]; got != headRow(12, 7) {
+		t.Errorf("g7 avec N = 12 : %q", got)
 	}
 }
 
-func TestRender_Shift_Chenillard_NoTrailBelowFiveGroups(t *testing.T) {
-	e := mustParse(t, chenillardSrc)
-	fr := render(e, chrono(4, 15*time.Second), 0)
-	heads, bg := 0, 0
-	for _, l := range fr {
-		if l.Color == white && l.Intensity >= 254 {
-			heads++
-		} else if l.Color == theme && l.Intensity == 255 {
-			bg++
-		}
-	}
-	if heads != 1 || bg != 3 {
-		t.Fatalf("sous 5 groupes : 1 tête et 3 fonds, sans traînée (étape groups_lt 5) : %+v", fr)
-	}
-	fr5 := render(e, chrono(5, 15*time.Second), 0)
-	trail := 0
-	for _, l := range fr5 {
-		if l.Color == theme && near(l.Intensity, 128, 1) {
-			trail++
-		}
-	}
-	if trail != 2 {
-		t.Fatalf("à 5 groupes la traînée est conservée (2 cases) : %+v", fr5)
-	}
-}
-
-func TestRender_Urgency_Thresholds(t *testing.T) {
-	e := mustParse(t, chenillardSrc)
-	cases := []struct {
-		rem  time.Duration
-		want [3]int
-	}{
-		{15 * time.Second, white},
-		{10*time.Second + time.Millisecond, white},
-		{10 * time.Second, orange},
-		{5*time.Second + time.Millisecond, orange},
-		{5 * time.Second, red},
-		{1 * time.Second, red},
-	}
-	for _, tc := range cases {
-		fr := render(e, chrono(6, tc.rem), 0)
-		if headIndex(t, fr, tc.want) < 0 {
-			t.Errorf("reste %s : tête %v attendue, trame %+v", tc.rem, tc.want, fr)
+func TestVariables_IncrementBounds_Plus12Minus12(t *testing.T) {
+	for _, decl := range []string{"gA: g1; +12", "gA: g1; -12"} {
+		if _, errs := parseEffect(headSrc(decl)); len(errs) != 0 {
+			t.Errorf("%s : incrément dans les bornes ±12 : %+v", decl, errs)
 		}
 	}
 }
 
-func TestRender_Shift_DirectionBackward(t *testing.T) {
-	e := mustParse(t, `
-id: back
-name: Back
-version: 1
-moments: [chrono]
-looks: { on: { color: "#FFFFFF" }, off: { color: "#000000", intensity: 0 } }
-pattern: { type: shift, step_ms: 1000, cells: [on], rest: off, wrap: true, direction: backward }
-`)
-	c := Ctx{N: 4, Scene: white, Remaining: 15 * time.Second, Total: 20 * time.Second}
-	idx := func(at time.Duration) int {
-		for i, l := range render(e, c, at) {
-			if l.Intensity == 255 {
-				return i
-			}
-		}
-		return -1
+// ---------- liste ----------
+
+func TestVariables_List_OneElementPerCran_RestartsAtTheStart(t *testing.T) {
+	got := rows(t, headSrc("gA: [g1, g4, g3, g7]"), ctxN(8), 9)
+	// N = 8 : g1, g4, g3, g7 puis reprise au début
+	want := []string{headRow(8, 1), headRow(8, 4), headRow(8, 3), headRow(8, 7), headRow(8, 1), headRow(8, 4), headRow(8, 3), headRow(8, 7), headRow(8, 1)}
+	eqRows(t, "liste", got, want)
+}
+
+func TestVariables_List_AbsentGroupsRemoved(t *testing.T) {
+	// N = 4 : g7 n'existe pas, il est retiré de la liste → g1, g4, g3 puis reprise
+	got := rows(t, headSrc("gA: [g1, g4, g3, g7]"), ctxN(4), 7)
+	eqRows(t, "liste N=4", got, []string{"Wbbb", "bbbW", "bbWb", "Wbbb", "bbbW", "bbWb", "Wbbb"})
+}
+
+func TestVariables_EmptyList_ActionsOnVariableIgnored(t *testing.T) {
+	// aucun élément de la liste n'existe (N = 2, g5 et g6) : les actions sur gA sont ignorées, g0 s'applique
+	got := rows(t, headSrc("gA: [g5, g6]"), ctxN(2), 2)
+	eqRows(t, "liste vide", got, []string{"bb", "bb"})
+}
+
+func TestVariables_NZero_ActionsOnVariablesIgnored_G0Works(t *testing.T) {
+	e := mustParse(t, headSrc("gA: g1; +1"))
+	v := renderView(e, ctxN(0), 0)
+	if v.Base == nil || tok(*v.Base) != "b" {
+		t.Errorf("N = 0 : g0 s'applique (zone entière), gA est ignorée : %+v", v)
 	}
-	a, b := idx(0), idx(time.Second)
-	if (a+4-b)%4 != 1 {
-		t.Fatalf("direction backward : la tête doit reculer d'un groupe par pas (%d puis %d)", a, b)
+	if len(v.Groups) != 0 {
+		t.Errorf("N = 0 : aucune entrée de groupe : %+v", v.Groups)
 	}
 }
 
-// ---------- gauge : remplissage ----------
+// ---------- voisins ----------
 
-const gaugeSrc = `
-id: jauge
-name: Jauge
-version: 1
-moments: [chrono]
-looks:
-  on:  { color: scene, intensity: 100 }
-  off: { color: scene, intensity: 0 }
-pattern: { type: gauge, source: remaining, on: on, off: off }
-`
-
-func countOn(fr []Lk) int {
-	n := 0
-	for _, l := range fr {
-		if l.Intensity > 0 {
-			n++
-		}
-	}
-	return n
+func TestNeighbours_PlusMinusOne_WrapAround(t *testing.T) {
+	src := fx("variables:\n  gA: g1; +1\npas:\n  - { g0: [\"#0000FF\", 40], gA-1: [\"#00FF00\", 100], gA+1: [\"#FF0000\", 100], gA: [\"#FFFFFF\", 100] }\n")
+	got := rows(t, src, ctxN(5), 6)
+	// tête g1 : voisins g5 (avant, vert) et g2 (après, rouge) ; tête g5 : g4 vert, g1 rouge
+	eqRows(t, "voisins", got, []string{"WRbbG", "GWRbb", "bGWRb", "bbGWR", "RbbGW", "WRbbG"})
 }
 
-func TestRender_Gauge_RemainingIsProportional(t *testing.T) {
-	e := mustParse(t, gaugeSrc)
-	cases := []struct {
-		rem  time.Duration
-		want int
-	}{{20 * time.Second, 6}, {10 * time.Second, 3}, {0, 0}}
-	for _, tc := range cases {
-		c := chrono(6, tc.rem)
-		if got := countOn(render(e, c, 0)); got != tc.want {
-			t.Errorf("reste %s sur 20 s, 6 groupes : %d allumés, attendu %d", tc.rem, got, tc.want)
-		}
+func TestNeighbours_SingleGroup_NeighbourIsTheGroupItself(t *testing.T) {
+	src := fx("variables:\n  gA: g1; +1\npas:\n  - { gA+1: [\"#FF0000\", 100], gA: [\"#FFFFFF\", 100] }\n")
+	if got := rows(t, src, ctxN(1), 1)[0]; got != "W" {
+		t.Errorf("N = 1 : le voisin est le groupe lui-même, la dernière action gagne : %q", got)
 	}
 }
 
-func TestRender_Gauge_LitGroupsAreContiguousFromTheFirst(t *testing.T) {
-	e := mustParse(t, gaugeSrc)
-	fr := render(e, chrono(6, 10*time.Second), 0)
-	for i := 0; i < len(fr); i++ {
-		if (i < 3) != (fr[i].Intensity > 0) {
-			t.Fatalf("les groupes allumés forment un bloc depuis le groupe 1 : %+v", fr)
-		}
+func TestNeighbours_PlusTwo(t *testing.T) {
+	src := fx("variables:\n  gA: g1; +1\npas:\n  - { g0: [\"#0000FF\", 40], gA+2: [\"#FFFFFF\", 100] }\n")
+	eqRows(t, "gA+2", rows(t, src, ctxN(4), 5), []string{"bbWb", "bbbW", "Wbbb", "bWbb", "bbWb"})
+}
+
+// ---------- cibles ----------
+
+func TestTargets_FixedGroup_AbsentOrEmptyIgnored(t *testing.T) {
+	// g9 n'existe pas avec N = 4 : cette action est ignorée, g2 s'applique
+	src := fx("pas:\n  - { g0: [\"#0000FF\", 40], g9: [\"#FF0000\", 100], g2: [\"#FFFFFF\", 100] }\n")
+	if got := rows(t, src, ctxN(4), 1)[0]; got != "bWbb" {
+		t.Errorf("g9 ignoré, g2 blanc : %q", got)
 	}
 }
 
-func TestRender_Gauge_ElapsedIsComplement(t *testing.T) {
-	e := mustParse(t, `
-id: jauge2
-name: Jauge2
-version: 1
-moments: [chrono]
-looks: { on: { color: scene }, off: { color: scene, intensity: 0 } }
-pattern: { type: gauge, source: elapsed, on: on, off: off }
-`)
-	if got := countOn(render(e, chrono(6, 15*time.Second), 0)); got != 1 && got != 2 {
-		t.Errorf("source elapsed : 5 s écoulées sur 20 s ⇒ ~1,5/6 groupes, obtenu %d", got)
-	}
-	if got := countOn(render(e, chrono(6, 0), 0)); got != 6 {
-		t.Errorf("source elapsed, tout écoulé ⇒ 6 allumés, obtenu %d", got)
-	}
-}
-
-func TestRender_Gauge_EdgeLookOnBoundaryGroup(t *testing.T) {
-	e := mustParse(t, `
-id: jauge3
-name: Jauge3
-version: 1
-moments: [chrono]
-looks:
-  on: { color: scene }
-  off: { color: scene, intensity: 0 }
-  edge: { color: "#FF0000" }
-pattern: { type: gauge, source: remaining, on: on, off: off, edge: edge }
-`)
-	red := 0
-	for _, l := range render(e, chrono(6, 12*time.Second), 0) { // 3,6 groupes allumés ⇒ frontière au 4e
-		if l.Color == [3]int{255, 0, 0} {
-			red++
-		}
-	}
-	if red != 1 {
-		t.Errorf("un seul groupe frontière attendu, obtenu %d", red)
-	}
-}
-
-// ---------- random : graine fixe ----------
-
-const randomSrc = `
-id: hasard
-name: Hasard
-version: 1
-moments: [calm]
-looks: { on: { color: scene, intensity: 100 }, off: { color: scene, intensity: 0 } }
-pattern: { type: random, step_ms: 1000, count: 3, on: on, off: off }
-`
-
-func TestRender_Random_FixedSeedIsDeterministicAndCountRespected(t *testing.T) {
-	e := mustParse(t, randomSrc)
-	c := Ctx{N: 8, Scene: theme, Seed: 42}
-	for step := 0; step < 10; step++ {
-		at := time.Duration(step) * time.Second
-		a, b := render(e, c, at), render(e, c, at)
-		if !reflect.DeepEqual(a, b) {
-			t.Fatalf("pas %d : même graine, même trame exigée", step)
-		}
-		if got := countOn(a); got != 3 {
-			t.Fatalf("pas %d : %d groupes allumés, attendu count=3", step, got)
+func TestTargets_LastGroup_gN(t *testing.T) {
+	src := fx("pas:\n  - { g0: [\"#0000FF\", 40], gN: [\"#FFFFFF\", 100] }\n")
+	for _, n := range []int{1, 4, 12} {
+		if got := rows(t, src, ctxN(n), 1)[0]; got != headRow(n, n) {
+			t.Errorf("gN avec N = %d : le dernier groupe : %q", n, got)
 		}
 	}
 }
 
-func TestRender_Random_DifferentSeedsOrStepsGiveDifferentFrames(t *testing.T) {
-	e := mustParse(t, randomSrc)
-	c := Ctx{N: 12, Scene: theme, Seed: 1}
-	seen := map[string]bool{}
-	for step := 0; step < 8; step++ {
-		fr := render(e, c, time.Duration(step)*time.Second)
-		key := ""
-		for _, l := range fr {
-			if l.Intensity > 0 {
-				key += "1"
-			} else {
-				key += "0"
-			}
+func TestTargets_G0IsTheWholeZone_IncludingUngroupedBulbs_BaseOnly(t *testing.T) {
+	// trame réduite : un effet qui n'écrit que g0 ne produit qu'une base, aucun état de groupe propre (§4.6)
+	e := mustParse(t, fx("pas:\n  - { g0: [\"#FFFFFF\", 100] }\n"))
+	v := renderView(e, ctxN(6), 0)
+	if v.Base == nil || tok(*v.Base) != "W" {
+		t.Fatalf("base = g0 en blanc : %+v", v.Base)
+	}
+	for i, g := range v.Groups {
+		if !g.Absent {
+			t.Errorf("groupe %d : aucun état propre pour un effet qui n'écrit que g0 (une seule écriture buzzmaster-general) : %+v", i+1, g)
 		}
-		seen[key] = true
-	}
-	if len(seen) < 3 {
-		t.Errorf("un tirage doit varier d'un pas à l'autre (%d trames distinctes sur 8)", len(seen))
-	}
-	other := render(e, Ctx{N: 12, Scene: theme, Seed: 999}, 0)
-	same := render(e, c, 0)
-	if reflect.DeepEqual(other, same) {
-		t.Log("graines différentes, même tirage au pas 0 : possible mais improbable")
 	}
 }
 
-func TestRender_Random_StableWithinAStep(t *testing.T) {
-	e := mustParse(t, randomSrc)
-	c := Ctx{N: 8, Scene: theme, Seed: 7}
-	if !reflect.DeepEqual(render(e, c, 2000*time.Millisecond), render(e, c, 2900*time.Millisecond)) {
-		t.Error("le tirage ne change qu'à chaque step_ms")
+func TestFrame_GroupActionWithoutG0_BaseStaysUnwritten(t *testing.T) {
+	e := mustParse(t, fx("pas:\n  - { g2: [\"#FFFFFF\", 100] }\n"))
+	v := renderView(e, ctxN(4), 0)
+	if v.Base != nil {
+		t.Errorf("g0 jamais écrit : pas de base, la scène ordinaire s'applique : %+v", *v.Base)
+	}
+	if row(v, 4) != "_W__" {
+		t.Errorf("seul g2 a un état : %q", row(v, 4))
 	}
 }
 
-// ---------- gradient : voir gradient_test.go (sémantique figée §4.3.1) ----------
+func TestFrame_GroupsDifferingFromBaseOnly(t *testing.T) {
+	// g0 bleu doux puis g1 blanc : seul g1 diffère de la base ; g0 repeint ensuite tout : plus aucun état de groupe
+	e := mustParse(t, fx("pas:\n  - { g0: [\"#0000FF\", 40], g1: [\"#FFFFFF\", 100] }\n  - { g0: [\"#0000FF\", 40] }\n"))
+	v0, v1 := renderView(e, ctxN(3), 0), renderView(e, ctxN(3), 1)
+	if v0.Groups[0].Absent || !v0.Groups[1].Absent || !v0.Groups[2].Absent {
+		t.Errorf("tick 0 : seul g1 a un état propre : %+v", v0.Groups)
+	}
+	for i, g := range v1.Groups {
+		if !g.Absent {
+			t.Errorf("tick 1 : g0 repeint toute la zone, le groupe %d n'a plus d'état propre : %+v", i+1, g)
+		}
+	}
+}
 
-// ---------- étapes (stages) ----------
+// ---------- pas sauté, état conservé, ordre ----------
 
-func TestRender_Stages_FirstMatchingStageWins_RemainingConditions(t *testing.T) {
-	e := mustParse(t, `
-id: etapes
-name: Etapes
-version: 1
-moments: [chrono]
-target: all
-looks:
-  calme: { color: "#00FF00" }
-  alerte: { color: "#FFAA00" }
-  rouge: { color: "#FF0000" }
-pattern: { type: uniform, phases: [ { look: calme, ms: 1000 } ] }
-stages:
-  - when: { remaining_lte: 5 }
-    pattern: { phases: [ { look: rouge, ms: 1000 } ] }
-  - when: { remaining_lte: 10 }
-    pattern: { phases: [ { look: alerte, ms: 1000 } ] }
-`)
+func TestSkippedStep_DoesNotConsumeATick_NorAdvanceVariables(t *testing.T) {
+	// le premier pas ne vise que g9 (absent avec N = 4) : il est sauté ; il ne consomme aucun tick
+	src := fx("variables:\n  gA: g1; +1\npas:\n  - { g9: [\"#FF0000\", 100] }\n  - { g0: [\"#0000FF\", 40], gA: [\"#FFFFFF\", 100] }\n")
+	eqRows(t, "pas sauté", rows(t, src, ctxN(4), 5), []string{"Wbbb", "bWbb", "bbWb", "bbbW", "Wbbb"})
+}
+
+func TestSkippedStep_BecomesPlayedWhenTheGroupExists(t *testing.T) {
+	src := fx("pas:\n  - { g0: [\"#0000FF\", 40] }\n  - { g6: [\"#FF0000\", 100] }\n")
+	if got := rows(t, src, ctxN(4), 2); got[0] != "bbbb" || got[1] != "bbbb" {
+		t.Errorf("N = 4 : g6 absent, 2e pas sauté, le 1er se rejoue à chaque tick : %v", got)
+	}
+	if got := rows(t, src, ctxN(6), 2); got[1] != "bbbbbR" {
+		t.Errorf("N = 6 : g6 existe, le 2e pas est joué au tick 1 : %v", got)
+	}
+}
+
+func TestGroupNotCited_KeepsItsState(t *testing.T) {
+	src := fx("pas:\n  - { g1: [\"#FF0000\", 100] }\n  - { g2: [\"#00FF00\", 100] }\n")
+	got := rows(t, src, ctxN(3), 3)
+	eqRows(t, "état conservé", got, []string{"R__", "RG_", "RG_"}) // 3e tick : le pas 0 rejoue g1, g2 garde le vert
+}
+
+func TestActions_AppliedInWrittenOrder_LastWinsOnSameBulb(t *testing.T) {
+	a := rows(t, fx("variables:\n  gA: g2; 0\npas:\n  - { g0: [\"#0000FF\", 40], gA: [\"#FFFFFF\", 100] }\n"), ctxN(3), 1)[0]
+	b := rows(t, fx("variables:\n  gA: g2; 0\npas:\n  - { gA: [\"#FFFFFF\", 100], g0: [\"#0000FF\", 40] }\n"), ctxN(3), 1)[0]
+	if a != "bWb" {
+		t.Errorf("g0 puis gA : gA repeint son groupe : %q", a)
+	}
+	if b != "bbb" {
+		t.Errorf("gA puis g0 : g0 repeint tout : %q", b)
+	}
+}
+
+func TestActions_SameBulbTwiceInOneStep_LastWins(t *testing.T) {
+	if got := rows(t, fx("pas:\n  - { g1: [\"#FF0000\", 100], gN: [\"#00FF00\", 100] }\n"), ctxN(1), 1)[0]; got != "G" {
+		t.Errorf("g1 = gN avec N = 1 : la dernière action gagne : %q", got)
+	}
+}
+
+// ---------- boucle: non ----------
+
+func TestLoopNo_OneRound_ThenStateHeldUntilEndOfMoment(t *testing.T) {
+	src := fx("boucle: non\nvariables:\n  gA: g1; +1\npas:\n  - { g0: [\"#0000FF\", 40], gA: [\"#FFFFFF\", 100] }\n  - { gA: [\"#FF0000\", 100] }\ndernier:\n  { g1: [\"#00FF00\", 100] }\n")
+	got := rows(t, src, ctxN(4), 8)
+	// tick 0 : pas 0 (gA = g1) ; tick 1 : pas 1 (gA = g2) ; tick 2 : dernier ; puis l'état du dernier est tenu
+	want := []string{"Wbbb", "WRbb", "GRbb", "GRbb", "GRbb", "GRbb", "GRbb", "GRbb"}
+	eqRows(t, "boucle: non", got, want)
+}
+
+func TestLoopYes_IsTheDefault(t *testing.T) {
+	src := fx("variables:\n  gA: g1; +1\npas:\n  - { g0: [\"#0000FF\", 40], gA: [\"#FFFFFF\", 100] }\n")
+	if rows(t, src, ctxN(4), 5)[4] != "Wbbb" {
+		t.Error("sans clé boucle, l'effet tourne (défaut : oui)")
+	}
+}
+
+// ---------- couleurs et intensités ----------
+
+func TestColours_HexAndIntensityPercentToScale255(t *testing.T) {
+	e := mustParse(t, fx("pas:\n  - { g1: [\"#102030\", 40] }\n"))
+	l := renderView(e, ctxN(2), 0).effective(1)
+	if l.Color != [3]int{16, 32, 48} || !near(l.Intensity, 102, 1) {
+		t.Errorf("#102030 à 40 %% → intensité ~102/255 : %+v", l)
+	}
+	e = mustParse(t, fx("pas:\n  - { g1: [\"#FFFFFF\", 100], g2: [\"#FFFFFF\", 50] }\n"))
+	v := renderView(e, ctxN(2), 0)
+	if v.effective(1).Intensity != 255 || !near(v.effective(2).Intensity, 128, 1) {
+		t.Errorf("100 %% → 255, 50 %% → ~128 : %+v", v.Groups)
+	}
+}
+
+func TestColours_Eteint_IntensityZero(t *testing.T) {
+	e := mustParse(t, fx("pas:\n  - { g0: [\"#FFFFFF\", 100], g2: [eteint] }\n"))
+	v := renderView(e, ctxN(3), 0)
+	if row(v, 3) != "W.W" {
+		t.Errorf("[eteint] éteint le groupe : %q", row(v, 3))
+	}
+}
+
+func TestColours_Named_ThemeSceneTeam_ResolvedAtRender(t *testing.T) {
+	e := mustParse(t, "id: t\nnom: T\nversion: 2\nmoments: [score]\nduree_tick_ms: 1000\npas:\n  - { g1: [theme, 100], g2: [scene, 100], g3: [equipe, 100] }\n")
+	c := ctxN(3)
+	c.Moment = "score"
+	v := renderView(e, c, 0)
+	if v.effective(1).Color != cT || v.effective(2).Color != cScn || v.effective(3).Color != cTeam {
+		t.Errorf("theme, scene, equipe : %+v", v.Groups)
+	}
+}
+
+func TestColours_Equipe_WhiteOutsideScoreMoment(t *testing.T) {
+	e := mustParse(t, fx("pas:\n  - { g1: [equipe, 100] }\n"))
+	if got := renderView(e, ctxN(2), 0).effective(1).Color; got != cW {
+		t.Errorf("equipe hors moment score : blanc : %v", got)
+	}
+}
+
+func TestColours_Urgence_WhiteOrangeRed_LiveAtEveryRender(t *testing.T) {
+	e := mustParse(t, fx("variables:\n  gA: g1; +1\npas:\n  - { g0: [theme, 100], gA: [urgence, 100] }\n"))
 	cases := []struct {
 		rem  time.Duration
 		want [3]int
-	}{{20 * time.Second, [3]int{0, 255, 0}}, {10 * time.Second, [3]int{255, 170, 0}}, {5 * time.Second, [3]int{255, 0, 0}}, {3 * time.Second, [3]int{255, 0, 0}}}
+	}{
+		{20 * time.Second, cW}, {10*time.Second + time.Millisecond, cW}, {10 * time.Second, cOr},
+		{5*time.Second + time.Millisecond, cOr}, {5 * time.Second, cRed}, {time.Second, cRed},
+	}
 	for _, tc := range cases {
-		fr := render(e, chrono(3, tc.rem), 0)
-		if fr[0].Color != tc.want {
-			t.Errorf("reste %s : %v, attendu %v (première étape vraie)", tc.rem, fr[0].Color, tc.want)
+		c := ctxN(4)
+		c.Remaining = tc.rem
+		if got := renderView(e, c, 0).effective(1).Color; got != tc.want {
+			t.Errorf("reste %s : tête %v, attendu %v", tc.rem, got, tc.want)
 		}
 	}
 }
 
-func TestRender_Stages_GroupsConditions(t *testing.T) {
-	e := mustParse(t, `
-id: g
-name: G
-version: 1
-moments: [calm]
-looks: { a: { color: "#FF0000" }, b: { color: "#00FF00" } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
-stages:
-  - when: { groups_gte: 6 }
-    pattern: { phases: [ { look: b, ms: 1000 } ] }
-`)
-	if got := render(e, Ctx{N: 5, Scene: white}, 0)[0].Color; got != [3]int{255, 0, 0} {
-		t.Errorf("N=5 : base, obtenu %v", got)
-	}
-	if got := render(e, Ctx{N: 6, Scene: white}, 0)[0].Color; got != [3]int{0, 255, 0} {
-		t.Errorf("N=6 : étape groups_gte, obtenu %v", got)
+func TestColours_Urgence_IsLive_PaintedGroupTurnsOnItsOwn(t *testing.T) {
+	// un groupe peint en urgence au tick 0 vire à l'orange / rouge sans nouvelle action : même tick, contexte différent
+	e := mustParse(t, fx("pas:\n  - { g1: [urgence, 100] }\n"))
+	early, late := ctxN(2), ctxN(2)
+	late.Remaining = 4 * time.Second
+	if renderView(e, early, 3).effective(1).Color != cW || renderView(e, late, 3).effective(1).Color != cRed {
+		t.Error("les couleurs nommées sont résolues à chaque rendu")
 	}
 }
 
-func TestRender_Stages_RemainingConditionIsFalseOutsideChrono(t *testing.T) {
-	e := mustParse(t, `
-id: r
-name: R
-version: 1
-moments: [calm]
-looks: { a: { color: "#FF0000" }, b: { color: "#00FF00" } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
-stages:
-  - when: { remaining_lte: 100 }
-    pattern: { phases: [ { look: b, ms: 1000 } ] }
-`)
-	// moment calm : pas de temps restant ⇒ condition fausse (§4.4)
-	if got := render(e, Ctx{N: 3, Scene: white}, 0)[0].Color; got != [3]int{255, 0, 0} {
-		t.Errorf("remaining_* est faux hors chrono, obtenu %v", got)
+func TestColours_Urgence_WhiteOutsideChronoMoment(t *testing.T) {
+	e := mustParse(t, fx("pas:\n  - { g1: [urgence, 100] }\n"))
+	c := ctxN(2)
+	c.Moment = "calm"
+	c.Remaining = 3 * time.Second
+	if got := renderView(e, c, 0).effective(1).Color; got != cW {
+		t.Errorf("urgence hors chrono : blanc : %v", got)
 	}
 }
 
-// ---------- apparence : fondu et pourcentage ----------
+// ---------- applicabilité §4.7 ----------
 
-func TestRender_Look_FadeAndIntensityPercent(t *testing.T) {
-	e := mustParse(t, `
-id: f
-name: F
-version: 1
-moments: [calm]
-looks: { a: { color: "#102030", intensity: 40, fade_ms: 1500 } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
-`)
-	l := render(e, Ctx{N: 2, Scene: white}, 0)[0]
-	if l.Color != [3]int{16, 32, 48} || !near(l.Intensity, 102, 1) || l.FadeMs != 1500 {
-		t.Errorf("couleur, intensité 40 %% → ~102/255, fondu 1500 ms : %+v", l)
-	}
-}
-
-func TestRender_Colors_SceneThemeTeamResolved(t *testing.T) {
-	for name, want := range map[string][3]int{"scene": white, "theme": theme, "team": team} {
-		e := mustParse(t, "id: c\nname: C\nversion: 1\nmoments: [score]\nduration_ms: 1000\nlooks: { a: { color: "+name+" } }\npattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }\n")
-		if got := render(e, Ctx{N: 1, Scene: white, Theme: theme, Team: team}, 0)[0].Color; got != want {
-			t.Errorf("couleur %s : %v, attendu %v", name, got, want)
+func TestApplicability_GroupesMin_AndAllStepsSkipped(t *testing.T) {
+	e := mustParse(t, "id: t\nnom: T\nversion: 2\nmoments: [chrono]\ngroupes_min: 3\nduree_tick_ms: 1000\npas:\n  - { g1: [\"#FFFFFF\", 100] }\n")
+	for n, want := range map[int]bool{0: false, 1: false, 2: false, 3: true, 12: true} {
+		ok, reason := applicable(e, n)
+		if ok != want {
+			t.Errorf("groupes_min 3, N = %d : applicable = %v, attendu %v", n, ok, want)
 		}
+		if !ok && reason == "" {
+			t.Errorf("N = %d : une raison est exigée (« demande 3 groupes, %d configurés »)", n, n)
+		}
+	}
+	// tous les pas de la boucle sont sautés quand N < 5 : inapplicable
+	skip := mustParse(t, fx("pas:\n  - { g5: [\"#FFFFFF\", 100] }\n"))
+	if ok, reason := applicable(skip, 4); ok || reason == "" {
+		t.Errorf("g5 avec N = 4 : tous les pas sautés ⇒ inapplicable avec une raison : %v %q", ok, reason)
+	}
+	if ok, _ := applicable(skip, 5); !ok {
+		t.Error("g5 avec N = 5 : applicable")
+	}
+}
+
+func TestApplicability_G0OnlyEffect_AlwaysApplicable_EvenAtN0_AndOnHostGroup(t *testing.T) {
+	e := mustParse(t, fx("pas:\n  - { g0: [\"#FFFFFF\", 100] }\n"))
+	for _, n := range []int{0, 1, 12} {
+		if ok, reason := applicable(e, n); !ok {
+			t.Errorf("N = %d : un effet qui n'écrit que g0 est applicable : %q", n, reason)
+		}
+	}
+	if !hostApplicable(e) {
+		t.Error("groupe animateur : un effet qui n'écrit que g0 lui est applicable")
+	}
+}
+
+func TestApplicability_HostRequiresG0Only_AcrossPreStepsLastPost(t *testing.T) {
+	for name, body := range map[string]string{
+		"pas":      "pas:\n  - { g0: [\"#FFFFFF\", 100], g1: [\"#FF0000\", 100] }\n",
+		"pre":      "pre:\n  { g2: [\"#FF0000\", 100] }\npas:\n  - { g0: [\"#FFFFFF\", 100] }\n",
+		"dernier":  "pas:\n  - { g0: [\"#FFFFFF\", 100] }\ndernier:\n  { gN: [\"#FF0000\", 100] }\n",
+		"post":     "pas:\n  - { g0: [\"#FFFFFF\", 100] }\npost:\n  { g1: [\"#FF0000\", 100] }\n",
+		"variable": "variables:\n  gA: g1; +1\npas:\n  - { g0: [\"#FFFFFF\", 100], gA: [\"#FF0000\", 100] }\n",
+	} {
+		if hostApplicable(mustParse(t, fx(body))) {
+			t.Errorf("%s : une autre cible que g0 rend l'effet inapplicable à un groupe animateur", name)
+		}
+	}
+}
+
+func TestRender_ChronoMoment_N1_SingleGroupEffects(t *testing.T) {
+	// pour un groupe animateur : g0 = g1 = ce groupe, N = 1
+	e := mustParse(t, fx("pas:\n  - { g0: [\"#FFFFFF\", 100] }\n"))
+	v := renderView(e, ctxN(1), 0)
+	if v.effective(1).Color != cW {
+		t.Errorf("N = 1 : %+v", v)
 	}
 }

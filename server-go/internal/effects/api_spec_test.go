@@ -1,64 +1,60 @@
 package effects
 
-// SURFACE D'API ATTENDUE par les tests du paquet (v11.7.0 LOT-2, #223).
-// Le contrat light-effects.md §5.1 fixe Parse / LoadDir / Render / Context / Frame
-// mais pas leurs champs : tout appel dépendant de la forme est ISOLÉ ICI. Si
-// dev-backend nomme autrement, il n'adapte que ce fichier ; les tests
-// (render_test.go, validate_test.go, natives_test.go) ne changent pas.
+// SURFACE D'API ATTENDUE par les tests du paquet (v11.7.0, révision 3 : effets pas à pas, #223).
+// Le contrat light-effects.md §5.1 fixe `Parse([]byte)`, `LoadDir`, `Render(e, ctx, tick int) Frame` mais pas la forme de
+// `Frame` ni de `Context` : tout appel dépendant de la forme est isolé ICI. Si dev-backend nomme autrement, il n'adapte
+// que ce fichier ; les tests (chronogram_test.go, render_test.go, validate_test.go, natives_test.go, speed_test.go) ne
+// changent pas.
 //
 // Forme supposée :
 //
 //	type Context struct {
-//	    Groups    int           // N : groupes de salle non vides
-//	    Remaining time.Duration // temps restant (moment chrono)
-//	    Total     time.Duration // durée totale
+//	    Groups    int           // N : groupes de salle non vides (0 possible)
+//	    Moment    Moment
+//	    Remaining time.Duration // chrono : temps restant
+//	    Total     time.Duration
 //	    Scene, Theme, Team [3]int
-//	    Origin    int           // groupe d'origine (1-based) pour origin: team
-//	    Seed      int64
 //	}
-//	type GroupLook struct{ Color [3]int; Intensity, FadeMs int }   // Intensity 0-255
-//	type Frame []GroupLook          // un élément par position ; target: all => 1 élément
-//	type Error struct{ File string; Line int; Message string }
-//	func Parse(data []byte) (Effect, []Error)
-//	func LoadDir(embedded fs.FS, dir string) Catalogue
-//	func (c Catalogue) Get(id string) (Entry, bool)   // Entry{Effect; Origin ("native"|"user"|"override"); File}
-//	func (c Catalogue) Errors() []Error
-//	func Render(e Effect, ctx Context, elapsed time.Duration) Frame
-//	func (e Effect) Applicable(n int) (ok bool, reason string)
-//	Effect : ID, Name string ; Moments []string ; MinGroups, DurationMs int ; Target string
+//	// Frame : état des groupes APRÈS le tick `tick` (le déroulement est une fonction pure du tick).
+//	type Frame struct {
+//	    Base   *GroupLook  // état de g0 ; nil tant que g0 n'a pas été écrit (scène ordinaire)
+//	    Groups []GroupLook // N entrées (position i+1) ; Absent=true : le groupe n'a pas d'état propre, il suit Base
+//	}
+//	func Render(e Effect, ctx Context, tick int) Frame
+//	func RenderPost(e Effect, ctx Context, lastTick int) (Frame, bool) // POST (§4.5 point 5), variables à leur dernière valeur ; false si pas de post
+//	func (e Effect) Applicable(n int) (ok bool, reason string)         // salle
+//	func (e Effect) HostApplicable() bool                              // groupe animateur : n'écrit que g0
+//	func TickDuration(tickMs int, speed float64) time.Duration         // tickMs ÷ speed, jamais sous 250 ms
+//	Effect : ID, Name string ; Moments []string ; MinGroups int (groupes_min) ; TickMs int (duree_tick_ms)
 
 import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"testing/fstest"
 	"time"
 )
 
-// Lk : forme neutre utilisée par les tests (indépendante de GroupLook).
+// Lk : forme neutre des tests (indépendante de GroupLook).
 type Lk struct {
 	Color     [3]int
 	Intensity int
-	FadeMs    int
-	Absent    bool // aucun état émis pour ce groupe (§4.3.1 point 3, `rest` absent)
+	Absent    bool // aucun état : la zone garde la scène ordinaire
 }
 
 // Ctx : contexte de rendu des tests.
 type Ctx struct {
 	N         int
+	Moment    string
 	Remaining time.Duration
 	Total     time.Duration
 	Scene     [3]int
 	Theme     [3]int
 	Team      [3]int
-	Origin    int
-	Seed      int64
-	Moment    string // vide : premier moment de l'effet
 }
 
-func (c Ctx) toContext(e Effect, at time.Duration) Context {
+func (c Ctx) toContext(e Effect) Context {
 	m := Moment("")
 	if len(e.Moments) > 0 {
 		m = Moment(e.Moments[0])
@@ -66,12 +62,29 @@ func (c Ctx) toContext(e Effect, at time.Duration) Context {
 	if c.Moment != "" {
 		m = Moment(c.Moment)
 	}
-	// WallMs : l'horloge murale des motifs « uniform » est le temps du test.
-	return Context{Groups: c.N, Moment: m, Remaining: c.Remaining, Total: c.Total, Scene: c.Scene, Theme: c.Theme,
-		Team: c.Team, Origin: c.Origin, Seed: c.Seed, WallMs: at.Milliseconds()}
+	return Context{Groups: c.N, Moment: m, Remaining: c.Remaining, Total: c.Total, Scene: c.Scene, Theme: c.Theme, Team: c.Team}
 }
 
-// parseEffect décode un effet ; retourne les messages d'erreur (vide si valide).
+// View : ce qu'un tick montre. Base nil = g0 jamais écrit ; Groups[i] = état effectif propre du groupe i+1 (Absent = suit Base).
+type View struct {
+	Base   *Lk
+	Groups []Lk
+}
+
+func toLk(g GroupLook) Lk { return Lk{Color: g.Color, Intensity: g.Intensity, Absent: g.Absent} }
+
+func toView(f Frame) View {
+	v := View{Groups: make([]Lk, len(f.Groups))}
+	if f.Base != nil {
+		b := toLk(*f.Base)
+		v.Base = &b
+	}
+	for i, g := range f.Groups {
+		v.Groups[i] = toLk(g)
+	}
+	return v
+}
+
 func parseEffect(src string) (Effect, []Error) { return Parse([]byte(src)) }
 
 func mustParse(t *testing.T, src string) Effect {
@@ -83,21 +96,35 @@ func mustParse(t *testing.T, src string) Effect {
 	return e
 }
 
-func render(e Effect, c Ctx, at time.Duration) []Lk {
-	f := Render(e, c.toContext(e, at), at)
-	out := make([]Lk, len(f))
-	for i, g := range f {
-		out[i] = Lk{Color: g.Color, Intensity: g.Intensity, FadeMs: g.FadeMs, Absent: isAbsent(g)}
-	}
-	return out
+func renderView(e Effect, c Ctx, tick int) View { return toView(Render(e, c.toContext(e), tick)) }
+
+func renderPostView(e Effect, c Ctx, lastTick int) (View, bool) {
+	f, ok := RenderPost(e, c.toContext(e), lastTick)
+	return toView(f), ok
 }
 
 func applicable(e Effect, n int) (bool, string) { return e.Applicable(n) }
-
-// catalogue décrit le contenu d'un chargement.
-type catalogue struct {
-	c Catalogue
+func hostApplicable(e Effect) bool              { return e.HostApplicable() }
+func tickDuration(tickMs int, speed float64) time.Duration {
+	return TickDuration(tickMs, speed)
 }
+
+// effective : état visible d'un groupe (position 1-based) : son état propre, sinon la base ; Absent si ni l'un ni l'autre.
+func (v View) effective(pos int) Lk {
+	if pos < 1 || pos > len(v.Groups) {
+		return Lk{Absent: true}
+	}
+	if g := v.Groups[pos-1]; !g.Absent {
+		return g
+	}
+	if v.Base != nil {
+		return *v.Base
+	}
+	return Lk{Absent: true}
+}
+
+// catalogue : lecture du catalogue.
+type catalogue struct{ c Catalogue }
 
 func (k catalogue) get(id string) (origin, file string, ok bool) {
 	e, ok := k.c.Get(id)
@@ -109,7 +136,6 @@ func (k catalogue) effect(id string) (Effect, bool) {
 	return e.Effect, ok
 }
 
-// loadFS charge `native` (effets natifs, fichiers à la racine) et le dossier utilisateur `dir`.
 func loadFS(native fs.FS, dir string) catalogue { return catalogue{LoadDir(native, dir)} }
 
 // nativeFS : natifs embarqués du dépôt (server-go/assets/effects).
@@ -122,7 +148,6 @@ func nativeFS(t *testing.T) fs.FS {
 	return sub
 }
 
-// memNative : natifs de test en mémoire.
 func memNative(files map[string]string) fs.FS {
 	m := fstest.MapFS{}
 	for n, s := range files {
@@ -131,23 +156,9 @@ func memNative(files map[string]string) fs.FS {
 	return m
 }
 
-// writeUser écrit un fichier dans le dossier utilisateur.
 func writeUser(t *testing.T, dir, name, src string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// isAbsent : « aucun état émis pour ce groupe » (contrat §4.3.1 point 3). La forme n'est pas fixée par le
-// contrat : on accepte un booléen nommé Absent|Skip|None|Unset|Inherit sur GroupLook, sinon Intensity < 0.
-// Adapter ici si dev-backend choisit une autre représentation.
-func isAbsent(g GroupLook) bool {
-	v := reflect.ValueOf(g)
-	for _, name := range []string{"Absent", "Skip", "None", "Unset", "Inherit"} {
-		if f := v.FieldByName(name); f.IsValid() && f.Kind() == reflect.Bool {
-			return f.Bool()
-		}
-	}
-	return g.Intensity < 0
 }

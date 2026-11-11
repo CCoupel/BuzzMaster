@@ -43,8 +43,8 @@ func tw223HostGroups(t *testing.T) {
 	t.Helper()
 	cfg := config.Get()
 	cfg.Lighting.Groups = []config.LightingGroupEntry{
-		{ID: "ha", Name: "Pupitre", Role: config.GroupRoleAnimateur, Lights: []string{"P"}, NearTeams: []string{}},
-		{ID: "hb", Name: "Régie", Role: config.GroupRoleAnimateur, Lights: []string{"R"}, NearTeams: []string{}},
+		{ID: "ha", Role: config.GroupRoleAnimateur, Lights: []string{"P"}},
+		{ID: "hb", Role: config.GroupRoleAnimateur, Lights: []string{"R"}},
 	}
 	config.SetInstance(cfg)
 }
@@ -281,3 +281,138 @@ func TestTW223_RoundOldFlatHostEffectsInRoundsJson_IgnoredAtLoad(t *testing.T) {
 }
 
 func tw223Path(m map[string]interface{}, path ...string) interface{} { return tw290Path(m, path...) }
+
+// ---------------------------------------------------------------------------
+// Vitesse réglable (R13) : light.speeds.<moment> et light.host_speeds.<id>.<moment> par manche
+// ---------------------------------------------------------------------------
+
+func tw223AmbSpeeds(speeds, host string) interface{} {
+	return tw223From(`{"light":{"speeds":` + speeds + `,"host_speeds":` + host + `}}`)
+}
+
+func TestTW223_RoundsUpdate_ValidSpeeds_StoredPerMomentAndGroup(t *testing.T) {
+	e := tw223Env(t)
+	tw223HostGroups(t)
+	e.twoRounds(t, tw223AmbSpeeds(`{"chrono":2}`, `{"ha":{"score":0.5}}`))
+	amb, _ := e.roundsFile(t)[0]["AMBIANCE"].(map[string]interface{})
+	if tw223Path(amb, "light", "speeds", "chrono") != float64(2) {
+		t.Errorf("light.speeds.chrono conservé : %v", amb)
+	}
+	if tw223Path(amb, "light", "host_speeds", "ha", "score") != 0.5 {
+		t.Errorf("light.host_speeds.<id>.<moment> conservé : %v", amb)
+	}
+	if tw223Path(amb, "light", "speeds", "calm") != nil {
+		t.Errorf("seules les vitesses surchargées sont stockées : %v", amb)
+	}
+}
+
+func TestTW223_RoundsUpdate_InvalidSpeed_RefusedAtomically_InvalidAmbiance(t *testing.T) {
+	cases := map[string]interface{}{
+		"vitesse hors liste":             tw223AmbSpeeds(`{"chrono":3}`, `{}`),
+		"vitesse zéro":                   tw223AmbSpeeds(`{"calm":0}`, `{}`),
+		"vitesse en chaîne":              tw223AmbSpeeds(`{"calm":"2"}`, `{}`),
+		"moment inconnu":                 tw223AmbSpeeds(`{"bidule":1}`, `{}`),
+		"animateur : vitesse hors liste": tw223AmbSpeeds(`{}`, `{"ha":{"chrono":1.25}}`),
+		"animateur : moment inconnu":     tw223AmbSpeeds(`{}`, `{"ha":{"bidule":1}}`),
+	}
+	for name, amb := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := tw223Env(t)
+			tw223HostGroups(t)
+			for i, id := range []string{"1", "2"} {
+				e.writeQ(t, id, i)
+			}
+			payload := `{"ROUNDS":[{"NAME":"R","QUESTIONS":["1","2"],"ENTRACTES":false,"AMBIANCE":` + tw223JSON(amb) + `}],"UNASSIGNED":[]}`
+			status, reason := tw290ApplyResult(t, e, payload)
+			if status != "REFUSED" || reason != "INVALID_AMBIANCE" {
+				t.Fatalf("attendu REFUSED/INVALID_AMBIANCE, obtenu %s/%s", status, reason)
+			}
+			if _, err := os.Stat(filepath.Join(e.dir, "rounds.json")); err == nil {
+				t.Error("un refus ne doit rien écrire (rounds.json créé)")
+			}
+		})
+	}
+}
+
+func TestTW223_RoundsUpdate_UnknownHostGroupIdInSpeeds_DroppedWithoutError(t *testing.T) {
+	e := tw223Env(t)
+	tw223HostGroups(t)
+	for i, id := range []string{"1", "2"} {
+		e.writeQ(t, id, i)
+	}
+	payload := `{"ROUNDS":[{"NAME":"R","QUESTIONS":["1","2"],"ENTRACTES":false,"AMBIANCE":` +
+		tw223JSON(tw223AmbSpeeds(`{}`, `{"disparu":{"chrono":2},"ha":{"calm":2}}`)) + `}],"UNASSIGNED":[]}`
+	if status, reason := tw290ApplyResult(t, e, payload); status == "REFUSED" {
+		t.Fatalf("un id de groupe inconnu est écarté sans erreur : %s/%s", status, reason)
+	}
+	amb, _ := e.roundsFile(t)[0]["AMBIANCE"].(map[string]interface{})
+	if tw223Path(amb, "light", "host_speeds", "disparu", "chrono") != nil {
+		t.Errorf("l'entrée du groupe inexistant n'est pas conservée : %v", amb)
+	}
+}
+
+func TestTW223_EnteringRound_EffectiveSpeedsWithSources_ThenGlobalAfterExit(t *testing.T) {
+	e := tw223Env(t)
+	tw223HostGroups(t)
+	e.twoRounds(t, tw223AmbSpeeds(`{"chrono":2}`, `{"ha":{"score":0.5}}`))
+	e.ready(t, "1")
+	m := e.settings(t)
+	sp := func(kind string, path ...string) interface{} {
+		return tw290Path(m, append([]string{kind, "light"}, path...)...)
+	}
+	if sp("effective", "speeds", "chrono") != float64(2) || sp("sources", "speeds", "chrono") != "round" {
+		t.Errorf("chrono ×2 imposé par la manche : %v / %v", sp("effective", "speeds", "chrono"), sp("sources", "speeds", "chrono"))
+	}
+	if sp("effective", "speeds", "calm") != float64(1) || sp("sources", "speeds", "calm") != "global" {
+		t.Errorf("calm hérité (×1) : %v / %v", sp("effective", "speeds", "calm"), sp("sources", "speeds", "calm"))
+	}
+	if sp("effective", "host_speeds", "ha", "score") != 0.5 || sp("sources", "host_speeds", "ha", "score") != "round" {
+		t.Errorf("ha.score ×0,5 imposé : %v", sp("effective", "host_speeds", "ha", "score"))
+	}
+	if sp("effective", "host_speeds", "hb", "score") != float64(1) || sp("sources", "host_speeds", "hb", "score") != "global" {
+		t.Errorf("le groupe hb n'est pas touché : %v", sp("effective", "host_speeds", "hb", "score"))
+	}
+	e.ready(t, "4") // hors manche
+	if got := tw290Path(e.settings(t), "effective", "light", "speeds", "chrono"); got != float64(1) {
+		t.Errorf("sortie de manche : retour au global (×1) : %v", got)
+	}
+}
+
+func TestTW223_Defaults_SpeedsOneEverywhere_AlwaysSerialisedInAmbianceEffective(t *testing.T) {
+	e := tw223Env(t)
+	tw223HostGroups(t)
+	m := e.settings(t)
+	for _, mo := range []string{"chrono", "calm", "score"} {
+		if got := tw290Path(m, "effective", "light", "speeds", mo); got != float64(1) {
+			t.Errorf("speeds.%s par défaut ×1 : %v", mo, got)
+		}
+		for _, id := range []string{"ha", "hb"} {
+			if got := tw290Path(m, "effective", "light", "host_speeds", id, mo); got != float64(1) {
+				t.Errorf("host_speeds.%s.%s par défaut ×1 : %v", id, mo, got)
+			}
+		}
+	}
+	ae := tw290Path(e.gameJSON(t), "AMBIANCE_EFFECTIVE", "SETTINGS", "light", "speeds")
+	if mm, ok := ae.(map[string]interface{}); !ok || len(mm) != 3 {
+		t.Errorf("AMBIANCE_EFFECTIVE.SETTINGS.light.speeds toujours sérialisé (3 moments) : %v", ae)
+	}
+}
+
+func TestTW223_GlobalSpeedFromConfig_IsTheEffective_RoundOverrideBeatsIt(t *testing.T) {
+	e := tw223Env(t)
+	if code, out := e.post(t, "/config.json", `{"lighting":{"speeds":{"calm":0.5}}}`); code != 200 {
+		t.Fatalf("%d %v", code, out)
+	}
+	if got := tw290Path(e.settings(t), "effective", "light", "speeds", "calm"); got != 0.5 {
+		t.Errorf("le global écrit par /config.json est l'effectif : %v", got)
+	}
+	e.twoRounds(t, tw223AmbSpeeds(`{"calm":2}`, `{}`))
+	e.ready(t, "1")
+	if got := tw290Path(e.settings(t), "effective", "light", "speeds", "calm"); got != float64(2) {
+		t.Errorf("la manche l'emporte sur le global : %v", got)
+	}
+	e.ready(t, "4")
+	if got := tw290Path(e.settings(t), "effective", "light", "speeds", "calm"); got != 0.5 {
+		t.Errorf("sortie de manche : retour au global (×0,5) : %v", got)
+	}
+}

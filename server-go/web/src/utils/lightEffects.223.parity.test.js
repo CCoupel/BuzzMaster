@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { effectsPath, configKeyFor, configPatchFor, MOMENTS } from './lightEffects'
+import { effectsPath, configKeyFor, configPatchFor, MOMENTS, speedPath, SPEEDS, DEFAULT_SPEED, formatSpeed, isSpeedCapped } from './lightEffects'
 import { overriddenFields, setPartialPath } from './ambianceSettings'
 
 // #223 (révision du GATE LOT-1) — parité des chemins éditables avec le serveur (contracts/light-effects.md §6,
@@ -66,5 +66,56 @@ describe('chemins éditables des effets — parité front / serveur', () => {
     partial = setPartialPath(partial, 'light.host_effects.ha1.score', null)
     expect(overriddenFields(partial)).toHaveLength(0)
     expect(JSON.stringify(partial)).not.toContain('ha1')
+  })
+
+  // ---- vitesse (R13 / R14) ----
+
+  it('les cinq vitesses du composant sont exactement celles du serveur (ambiancecfg.SpeedValues), défaut ×1', () => {
+    expect([...SPEEDS]).toEqual([0.5, 0.75, 1, 1.5, 2])
+    expect(DEFAULT_SPEED).toBe(1)
+    expect(SPEEDS.map(formatSpeed)).toEqual(['×0,5', '×0,75', '×1', '×1,5', '×2'])
+  })
+
+  it('chemins de vitesse : light.speeds.<moment> et light.host_speeds.<id>.<moment>', () => {
+    for (const m of MOMENT_KEYS) {
+      expect(speedPath(false, m)).toBe(`light.speeds.${m}`)
+      expect(speedPath('g5d7e4', m)).toBe(`light.host_speeds.g5d7e4.${m}`)
+    }
+  })
+
+  it('configKeyFor / configPatchFor couvrent les vitesses (lighting.speeds, lighting.host_speeds)', () => {
+    expect(configKeyFor('light.speeds.chrono')).toEqual({ section: 'speeds', moment: 'chrono' })
+    expect(configKeyFor('light.host_speeds.ha1.calm')).toEqual({ section: 'host_speeds', id: 'ha1', moment: 'calm' })
+    expect(configKeyFor('light.host_speeds.calm')).toBeNull()
+    expect(configKeyFor('lighting.speeds.chrono')).toBeNull()
+    expect(configPatchFor({ section: 'speeds', moment: 'chrono' }, 2)).toEqual({ speeds: { chrono: 2 } })
+    expect(configPatchFor({ section: 'host_speeds', id: 'ha1', moment: 'score' }, 0.5)).toEqual({ host_speeds: { ha1: { score: 0.5 } } })
+  })
+
+  it('aller-retour de tous les chemins de vitesse', () => {
+    for (const m of MOMENT_KEYS) {
+      for (const host of [false, 'ha1']) {
+        const key = configKeyFor(speedPath(host, m))
+        expect(key).not.toBeNull()
+        expect(key.moment).toBe(m)
+        expect(key.section).toBe(host ? 'host_speeds' : 'speeds')
+      }
+    }
+  })
+
+  it('« plafonné » : le tick ÷ la vitesse tombe sous 250 ms (même règle que le serveur : jamais sous 250 ms)', () => {
+    expect(isSpeedCapped(400, 2)).toBe(true) // 200 ms
+    expect(isSpeedCapped(500, 2)).toBe(false) // 250 ms pile
+    expect(isSpeedCapped(1000, 2)).toBe(false)
+    expect(isSpeedCapped(250, 1.5)).toBe(true)
+    expect(isSpeedCapped(undefined, 2)).toBe(false) // durée de tick inconnue : jamais « plafonné »
+  })
+
+  it('une surcharge de vitesse de manche est comptée comme un réglage', () => {
+    let partial = setPartialPath({}, 'light.speeds.chrono', 2)
+    partial = setPartialPath(partial, 'light.host_speeds.ha1.score', 0.5)
+    const paths = overriddenFields(partial).map(f => f.path)
+    expect(paths).toEqual(expect.arrayContaining(['light.speeds.chrono', 'light.host_speeds.ha1.score']))
+    expect(setPartialPath(partial, 'light.speeds.chrono', null)).not.toHaveProperty('light.speeds.chrono')
   })
 })

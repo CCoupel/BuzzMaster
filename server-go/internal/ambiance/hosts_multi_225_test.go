@@ -5,6 +5,7 @@ package ambiance
 // Réutilise tw223New et les aides de effects_223_test.go.
 
 import (
+	"strings"
 	"testing"
 
 	"buzzcontrol/internal/config"
@@ -12,7 +13,7 @@ import (
 )
 
 func tw225Host(name string, lights ...string) config.LightingGroupEntry {
-	return config.LightingGroupEntry{Name: name, Role: config.GroupRoleAnimateur, Lights: lights, NearTeams: []string{}}
+	return config.LightingGroupEntry{ID: strings.ToLower(name), Role: config.GroupRoleAnimateur, Lights: lights}
 }
 
 func tw225HostEntries(st lighting.State) map[int]lighting.ZoneState {

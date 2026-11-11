@@ -9,6 +9,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +24,9 @@ type tw223Source struct {
 	cat  effects.Catalogue
 	room map[string]string
 	host map[string]map[string]string // id de groupe animateur → moment → id d'effet
+	// vitesses (R13) — voir effects_speed_api_spec_test.go
+	speeds     map[string]float64
+	hostSpeeds map[string]map[string]float64
 }
 
 func (s *tw223Source) EffectsCatalogue() effects.Catalogue { return s.cat }
@@ -38,25 +43,28 @@ type tw223Env struct {
 	setup func(groups []config.LightingGroupEntry)
 }
 
-const tw223Calm = `
-id: %s
-name: Test
-version: 1
-moments: [calm]
-target: groups
-looks: { a: { color: "#FF0000" } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
-`
-
+// tw223Effect : effet utilisateur au format pas à pas (version: 2). target « all » : une action sur g0 (jouable sur un groupe
+// animateur) ; « groups » : une action sur chacun des groupes g1…g12 (les absents sont ignorés ; inapplicable à un animateur).
+// minGroups > 1 ⇒ groupes_min. `color` : « #RRGGBB » ou une couleur nommée.
 func tw223Effect(id, moments, target string, minGroups int, color string) string {
-	src := "id: " + id + "\nname: Test\nversion: 1\nmoments: [" + moments + "]\ntarget: " + target + "\n"
+	col := color
+	if len(col) > 0 && col[0] == '#' {
+		col = `"` + col + `"`
+	}
+	act := "[" + col + ", 100]"
+	body := "g0: " + act
+	if target == "groups" {
+		parts := make([]string, 12)
+		for i := range parts {
+			parts[i] = "g" + strconv.Itoa(i+1) + ": " + act
+		}
+		body = strings.Join(parts, ", ")
+	}
+	src := "id: " + id + "\nnom: Test\nversion: 2\nmoments: [" + moments + "]\n"
 	if minGroups > 1 {
-		src += "min_groups: " + string(rune('0'+minGroups)) + "\n"
+		src += "groupes_min: " + strconv.Itoa(minGroups) + "\n"
 	}
-	if moments == "score" {
-		src += "duration_ms: 3000\n"
-	}
-	return src + "looks: { a: { color: \"" + color + "\" } }\npattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }\n"
+	return src + "duree_tick_ms: 1000\npas:\n  - { " + body + " }\n"
 }
 
 func tw223New(t *testing.T) *tw223Env {
@@ -107,11 +115,11 @@ func (e *tw223Env) setHost(id, moment, effect string) {
 }
 
 func grp(n int, lights ...string) config.LightingGroupEntry {
-	return config.LightingGroupEntry{Name: "G" + string(rune('A'+n)), Role: config.GroupRoleSalle, Lights: lights, NearTeams: []string{}}
+	return config.LightingGroupEntry{ID: "g" + string(rune(0x61+n)), Role: config.GroupRoleSalle, Lights: lights}
 }
 
 func hostGrp() config.LightingGroupEntry {
-	return config.LightingGroupEntry{ID: "h1", Name: "Pupitre", Role: config.GroupRoleAnimateur, Lights: []string{"H"}, NearTeams: []string{}}
+	return config.LightingGroupEntry{ID: "h1", Role: config.GroupRoleAnimateur, Lights: []string{"H"}}
 }
 
 func zonesWithGroup(st lighting.State, pred func(int) bool) []lighting.ZoneState {
@@ -169,16 +177,24 @@ func TestEffects223_NoGroupsNoSettings_StateIdenticalToV1160(t *testing.T) {
 	}
 }
 
-func TestEffects223_GroupsButDefaultSettings_NoEntryAdded_PulsationStaysLegacy(t *testing.T) {
+func TestEffects223_GroupsButDefaultSettings_PulsationPlayedByReader_OnG0Only(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B"), grp(2, "C"), grp(3, "D")})
-	// chrono = « pulsation » (défaut) : le code existant RunChronoPulse reste seul actif
+	// chrono = « pulsation » (défaut) : effet natif joué par le lecteur, qui n'écrit que g0 (révision 3, §5.5)
 	env.eng.StartImmediate(20)
 	t.Cleanup(func() { env.eng.SetPhase(game.PhaseStopped) })
 	env.step()
 	st := env.c.Scene(lighting.Event{Kind: lighting.KindRunning})
 	if g := roomGroups(st); len(g) != 0 {
-		t.Errorf("la pulsation (défaut) n'ajoute aucune entrée de groupe : %+v", g)
+		t.Errorf("la pulsation n'écrit que g0 : aucune entrée de groupe : %+v", g)
+	}
+	if st.Zones[0].Group != 0 || st.Zones[0].Intensity != 255 {
+		t.Errorf("tick 0 : phase haute au thème à 100 %% sur l'entrée Group 0 : %+v", st.Zones[0])
+	}
+	env.now = env.now.Add(500 * time.Millisecond) // tick de 500 ms : phase basse
+	env.step()
+	if z := env.c.Scene(lighting.Event{Kind: lighting.KindRunning}).Zones[0]; z.Intensity < 126 || z.Intensity > 130 {
+		t.Errorf("tick 1 : phase basse à 50 %% : %+v", z)
 	}
 }
 
@@ -224,17 +240,17 @@ func TestEffects223_HostGroupNeverCountsInN(t *testing.T) {
 
 // ---------- moments ----------
 
-func TestEffects223_ChronoMoment_NativeChenillard_SixGroups(t *testing.T) {
+func TestEffects223_ChronoMoment_NativeChenillardTraine_SixGroups_AdvancesWithInjectedClock(t *testing.T) {
 	env := tw223New(t)
 	// 6 groupes : traînée à 50 % visible (thème blanc par défaut dans ce harnais)
 	env.setup([]config.LightingGroupEntry{grp(0, "A"), grp(1, "B"), grp(2, "C"), grp(3, "D"), grp(4, "E"), grp(5, "F")})
-	env.src.room["chrono"] = "chenillard"
+	env.src.room["chrono"] = "chenillard-traine"
 	env.eng.StartImmediate(20)
 	t.Cleanup(func() { env.eng.SetPhase(game.PhaseStopped) })
 	env.step()
 	g := roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindRunning}))
-	if len(g) != 6 {
-		t.Fatalf("chenillard à 6 groupes : une entrée par groupe, obtenu %+v", g)
+	if len(g) == 0 {
+		t.Fatalf("chenillard-traine à 6 groupes : des entrées de groupe pour la traînée : %+v", g)
 	}
 	dim := 0
 	for _, z := range g {
@@ -245,20 +261,22 @@ func TestEffects223_ChronoMoment_NativeChenillard_SixGroups(t *testing.T) {
 	if dim != 2 {
 		t.Errorf("traînée à 50 %% : 2 groupes atténués autour de la tête, obtenu %d : %+v", dim, g)
 	}
-	// l'effet avance avec l'horloge injectée (un groupe par seconde) sans attente réelle
-	first := g
+	// un groupe par tick de 1 s, sans attente réelle
+	first := tw223GroupsSnapshot(env)
 	env.now = env.now.Add(time.Second)
 	env.step()
-	second := roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindRunning}))
-	same := true
-	for i := range first {
-		if first[i] != second[i] {
-			same = false
-		}
+	if tw223GroupsSnapshot(env) == first {
+		t.Error("une seconde plus tard (horloge injectée), la tête du chenillard a avancé d'un groupe")
 	}
-	if same {
-		t.Error("une seconde plus tard (horloge injectée), la tête du chenillard a avancé")
+}
+
+// tw223GroupsSnapshot : la trame de salle sous forme de chaîne comparable.
+func tw223GroupsSnapshot(env *tw223Env) string {
+	var b strings.Builder
+	for _, z := range roomGroups(env.c.Scene(lighting.Event{Kind: lighting.KindRunning})) {
+		b.WriteString(strconv.Itoa(z.Group) + ":" + strconv.Itoa(z.Intensity) + ";")
 	}
+	return b.String()
 }
 
 func TestEffects223_CalmMoment_AppliesToIdleReady_NotToOtherMoments(t *testing.T) {
@@ -480,14 +498,20 @@ func TestEffects223_Host_FallbackToFixedWhite_AbsentInvalidInapplicable(t *testi
 	}
 }
 
-func TestEffects223_Host_TargetGroupsWithMinOneIsApplicable(t *testing.T) {
+func TestEffects223_Host_EffectWritingGroupsIsInapplicable_FixedWhite_G0OnlyIsApplicable(t *testing.T) {
 	env := tw223New(t)
 	env.setup([]config.LightingGroupEntry{hostGrp(), grp(0, "A")})
-	env.writeUser(t, "uni.yaml", tw223Effect("uni", "calm", "groups", 1, "#0000FF"))
+	env.writeUser(t, "uni.yaml", tw223Effect("uni", "calm", "groups", 1, "#0000FF")) // écrit g1…g12
 	env.setHost("h1", "calm", "uni")
 	env.step()
+	if z, _ := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); z.Color != [3]int{255, 255, 255} {
+		t.Errorf("seul un effet qui n'écrit que g0 est applicable à un groupe animateur : blanc fixe attendu : %+v", z)
+	}
+	env.writeUser(t, "all.yaml", tw223Effect("tout", "calm", "all", 1, "#0000FF")) // g0 seul
+	env.setHost("h1", "calm", "tout")
+	env.step()
 	if z, _ := hostEntry(env.c.Scene(lighting.Event{Kind: lighting.KindIdle})); z.Color != [3]int{0, 0, 255} {
-		t.Errorf("target: groups avec min_groups ≤ 1 : applicable à l'animateur : %+v", z)
+		t.Errorf("un effet g0 seul est joué par le groupe animateur : %+v", z)
 	}
 }
 

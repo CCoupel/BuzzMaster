@@ -84,8 +84,8 @@ func tw225ConfigureHost(t *testing.T, b *tw225Bridge, enabled bool, withHost boo
 	}
 	if withHost {
 		cfg.Lighting.Groups = []config.LightingGroupEntry{
-			{ID: "ha", Name: "Pupitre", Role: "animateur", Lights: []string{"Host1"}, NearTeams: []string{}},
-			{ID: "hb", Name: "Régie", Role: "animateur", Lights: []string{"Host2"}, NearTeams: []string{}},
+			{ID: "ha", Role: "animateur", Lights: []string{"Host1"}},
+			{ID: "hb", Role: "animateur", Lights: []string{"Host2"}},
 		}
 	}
 	config.SetInstance(&cfg)

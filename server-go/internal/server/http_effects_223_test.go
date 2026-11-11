@@ -52,14 +52,13 @@ func tw223Server(t *testing.T) (*HTTPServer, string, *tw223Provider) {
 }
 
 const tw223UserEffect = `id: mon-effet
-name: Mon effet
+nom: Mon effet
 description: effet de test
-version: 1
+version: 2
 moments: [calm, score]
-duration_ms: 3000
-target: groups
-looks: { a: { color: "#FF0000" } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
+duree_tick_ms: 1000
+pas:
+  - { g1: ["#FF0000", 100] }
 `
 
 func tw223WriteEffect(t *testing.T, prov *tw223Provider, name, src string) {
@@ -74,7 +73,7 @@ func tw223WriteEffect(t *testing.T, prov *tw223Provider, name, src string) {
 func tw223Hosts(t *testing.T, srv *HTTPServer) {
 	t.Helper()
 	code, out := tw223Post(t, srv, `{"lighting":{"lights":[{"name":"P","role":"general"},{"name":"R","role":"general"}],`+
-		`"groups":[{"id":"ha","name":"Pupitre","role":"animateur","lights":["P"]},{"id":"hb","name":"Régie","role":"animateur","lights":["R"]}]}}`)
+		`"groups":[{"id":"ha","role":"animateur","lights":["P"]},{"id":"hb","role":"animateur","lights":["R"]}]}}`)
 	if code != 200 {
 		t.Fatalf("groupes animateur : %d %s", code, out)
 	}
@@ -207,7 +206,7 @@ func TestTW223_Config_HostEffects_FullFormHasOneEntryPerHostGroup_AfterSavingGro
 	tw223Hosts(t, srv)
 	tw223Post(t, srv, `{"lighting":{"host_effects":{"ha":{"score":"couleur-equipe"},"hb":{"score":"couleur-equipe"}}}}`)
 	// on supprime le groupe hb : sa clé disparaît de host_effects, celle de ha reste
-	if code, out := tw223Post(t, srv, `{"lighting":{"groups":[{"id":"ha","name":"Pupitre","role":"animateur","lights":["P"]}]}}`); code != 200 {
+	if code, out := tw223Post(t, srv, `{"lighting":{"groups":[{"id":"ha","role":"animateur","lights":["P"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
 	}
 	l := tw223Lighting(t, srv)
@@ -314,7 +313,6 @@ type tw223EffectsView struct {
 		Moments        []string `json:"moments"`
 		Origin         string   `json:"origin"`
 		File           string   `json:"file"`
-		Target         string   `json:"target"`
 		MinGroups      int      `json:"min_groups"`
 		Applicable     bool     `json:"applicable"`
 		Reason         string   `json:"reason"`
@@ -360,7 +358,7 @@ func TestTW223_Effects_SmokeListsNatives(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("%d %s", code, raw)
 	}
-	for _, id := range []string{"pulsation", "chenillard", "couleur-equipe"} {
+	for _, id := range []string{"pulsation", "chenillard", "chenillard-traine", "couleur-equipe", "degrade"} {
 		i, ok := tw223Find(v, id)
 		if !ok {
 			t.Fatalf("natif %s attendu", id)
@@ -382,14 +380,17 @@ func TestTW223_Effects_SmokeListsNatives(t *testing.T) {
 
 func TestTW223_Effects_NativesInContractOrder_ThenUserByName(t *testing.T) {
 	srv, _, prov := tw223Server(t)
-	tw223WriteEffect(t, prov, "z.yaml", strings.Replace(tw223UserEffect, "id: mon-effet\nname: Mon effet", "id: zz\nname: Zebre", 1))
-	tw223WriteEffect(t, prov, "a.yaml", strings.Replace(tw223UserEffect, "id: mon-effet\nname: Mon effet", "id: aa\nname: Abeille", 1))
+	tw223WriteEffect(t, prov, "z.yaml", strings.Replace(tw223UserEffect, "id: mon-effet\nnom: Mon effet", "id: zz\nnom: Zebre", 1))
+	tw223WriteEffect(t, prov, "a.yaml", strings.Replace(tw223UserEffect, "id: mon-effet\nnom: Mon effet", "id: aa\nnom: Abeille", 1))
 	_, v, _ := tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
 	pos := func(id string) int { i, _ := tw223Find(v, id); return i }
-	if !(pos("pulsation") < pos("chenillard") && pos("chenillard") < pos("couleur-equipe")) {
-		t.Errorf("natifs dans l'ordre du §9 (pulsation, chenillard, … couleur-equipe) : %+v", v.Effects)
+	order := []string{"pulsation", "chenillard", "chenillard-traine", "couleur-equipe", "degrade"}
+	for i := 1; i < len(order); i++ {
+		if pos(order[i-1]) >= pos(order[i]) {
+			t.Errorf("natifs dans l'ordre du §9 (%v) : %+v", order, v.Effects)
+		}
 	}
-	if !(pos("couleur-equipe") < pos("aa") && pos("aa") < pos("zz")) {
+	if !(pos("degrade") < pos("aa") && pos("aa") < pos("zz")) {
 		t.Errorf("effets de l'utilisateur après les natifs, par nom : %+v", v.Effects)
 	}
 	if i := pos("aa"); v.Effects[i].Origin != "user" || v.Effects[i].File != "a.yaml" {
@@ -397,27 +398,37 @@ func TestTW223_Effects_NativesInContractOrder_ThenUserByName(t *testing.T) {
 	}
 }
 
-func TestTW223_Effects_TargetMinGroupsAndHostApplicable(t *testing.T) {
+func TestTW223_Effects_MinGroupsHostApplicableAndNoTargetField(t *testing.T) {
 	srv, _, _ := tw223Server(t)
-	_, v, _ := tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
-	ch, _ := tw223Find(v, "chenillard")
-	if e := v.Effects[ch]; e.Target != "groups" || e.MinGroups < 3 || e.HostApplicable {
-		t.Errorf("chenillard : target groups, min_groups ≥ 3, inapplicable à l'animateur : %+v", e)
+	_, v, raw := tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
+	if strings.Contains(raw, `"target"`) {
+		t.Errorf("le champ `target` est supprimé (révision 3, §7.1) : %s", raw)
+	}
+	want := map[string]struct {
+		min  int
+		host bool
+	}{
+		"pulsation": {0, true}, "chenillard": {3, false}, "chenillard-traine": {5, false}, "couleur-equipe": {0, true}, "degrade": {2, false},
+	}
+	for id, w := range want {
+		i, ok := tw223Find(v, id)
+		if !ok {
+			t.Fatalf("natif %s attendu", id)
+		}
+		if e := v.Effects[i]; e.MinGroups != w.min || e.HostApplicable != w.host {
+			t.Errorf("%s : min_groups = groupes_min (%d), host_applicable = n'écrit que g0 (%v) : %+v", id, w.min, w.host, e)
+		}
 	}
 	pu, _ := tw223Find(v, "pulsation")
-	if e := v.Effects[pu]; e.Target != "all" || e.MinGroups != 0 || !e.HostApplicable || !e.Applicable {
-		t.Errorf("pulsation : target all, min_groups = 0, applicable partout (même sans groupe) : %+v", e)
-	}
-	ce, _ := tw223Find(v, "couleur-equipe")
-	if e := v.Effects[ce]; e.Target != "all" || e.MinGroups != 0 || !e.HostApplicable {
-		t.Errorf("couleur-equipe : target all : %+v", e)
+	if e := v.Effects[pu]; !e.Applicable {
+		t.Errorf("pulsation applicable sans groupe : %+v", e)
 	}
 }
 
 func TestTW223_Effects_ApplicabilityFollowsNonEmptyRoomGroups(t *testing.T) {
 	srv, _, _ := tw223Server(t)
 	if code, out := tw223Post(t, srv, `{"lighting":{"lights":[{"name":"A","role":"general"},{"name":"B","role":"general"},{"name":"C","role":"general"},{"name":"H","role":"general"}],`+
-		`"groups":[{"name":"G1","lights":["A"]},{"name":"G2","lights":[]},{"name":"G3","lights":["B"]},{"name":"Pupitre","role":"animateur","lights":["H"]}]}}`); code != 200 {
+		`"groups":[{"lights":["A"]},{"lights":[]},{"lights":["B"]},{"role":"animateur","lights":["H"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
 	}
 	_, v, _ := tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
@@ -428,7 +439,7 @@ func TestTW223_Effects_ApplicabilityFollowsNonEmptyRoomGroups(t *testing.T) {
 	if e := v.Effects[ch]; e.Applicable || e.Reason == "" {
 		t.Errorf("chenillard (3 groupes) avec N = 2 : inapplicable avec une raison : %+v", e)
 	}
-	if code, out := tw223Post(t, srv, `{"lighting":{"groups":[{"name":"G1","lights":["A"]},{"name":"G2","lights":["B"]},{"name":"G3","lights":["C"]}]}}`); code != 200 {
+	if code, out := tw223Post(t, srv, `{"lighting":{"groups":[{"lights":["A"]},{"lights":["B"]},{"lights":["C"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
 	}
 	_, v, _ = tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
@@ -440,11 +451,11 @@ func TestTW223_Effects_ApplicabilityFollowsNonEmptyRoomGroups(t *testing.T) {
 
 func TestTW223_Effects_InvalidFilesListedWithFileAndLine_OthersAvailable(t *testing.T) {
 	srv, _, prov := tw223Server(t)
-	tw223WriteEffect(t, prov, "casse.yaml", "id: casse\nname: C\nversion: 1\nmoments: [calm]\nlooks: { a: { color: scene } }\n"+
-		"pattern: { type: uniform, phases: [ { look: teet, ms: 1000 } ] }\n")
+	tw223WriteEffect(t, prov, "casse.yaml", "id: casse\nnom: C\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\nvariables:\n  gA: g1; +1\n"+
+		"pas:\n  - { gA: [scene, 100],\n      gB: [scene, 100] }\n")
 	tw223WriteEffect(t, prov, "bon.yaml", tw223UserEffect)
 	_, v, _ := tw223GetEffects(t, srv, "GET", "/api/lighting/effects")
-	if len(v.Errors) != 1 || v.Errors[0].File != "casse.yaml" || v.Errors[0].Line <= 0 || !strings.Contains(v.Errors[0].Message, "teet") {
+	if len(v.Errors) != 1 || v.Errors[0].File != "casse.yaml" || v.Errors[0].Line <= 0 || !strings.Contains(v.Errors[0].Message, "gB") {
 		t.Fatalf("erreur {file, line, message} : %+v", v.Errors)
 	}
 	if _, ok := tw223Find(v, "casse"); ok {
@@ -483,7 +494,7 @@ func TestTW223_Effects_UnresolvedListsGlobalSettingsOnly(t *testing.T) {
 	srv, _, prov := tw223Server(t)
 	tw223WriteEffect(t, prov, "mon-effet.yaml", tw223UserEffect)
 	if code, out := tw223Post(t, srv, `{"lighting":{"lights":[{"name":"A","role":"general"},{"name":"P","role":"general"}],`+
-		`"groups":[{"name":"G1","lights":["A"]},{"id":"ha","name":"Pupitre","role":"animateur","lights":["P"]}]}}`); code != 200 {
+		`"groups":[{"lights":["A"]},{"id":"ha","role":"animateur","lights":["P"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)
 	}
 	tw223Post(t, srv, `{"lighting":{"effects":{"calm":"mon-effet"},"host_effects":{"ha":{"score":"couleur-equipe"}}}}`)
@@ -696,5 +707,153 @@ func TestTW223_Restore_NoEffectsInArchive_LeavesExistingEffectsUntouched(t *test
 	srv.mux.ServeHTTP(httptest.NewRecorder(), req)
 	if _, err := os.Stat(filepath.Join(dataDir, "files", "effects", "mon-effet.yaml")); err != nil {
 		t.Errorf("une restauration sans effets ne touche pas les effets existants : %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Vitesse réglable (§6, R13) : lighting.speeds.<moment> et lighting.host_speeds.<id>.<moment>
+// ---------------------------------------------------------------------------
+
+type tw223Speeds struct {
+	Speeds     map[string]float64            `json:"speeds"`
+	HostSpeeds map[string]map[string]float64 `json:"host_speeds"`
+}
+
+func tw223GetSpeeds(t *testing.T, srv *HTTPServer) tw223Speeds {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/config.json", nil)
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, req)
+	var parsed struct {
+		Lighting tw223Speeds `json:"lighting"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &parsed); err != nil {
+		t.Fatalf("JSON invalide : %v", err)
+	}
+	return parsed.Lighting
+}
+
+func TestTW223_Speeds_DefaultIsOne_HostSpeedsEmptyWithoutHostGroup(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	sp := tw223GetSpeeds(t, srv)
+	for _, m := range []string{"chrono", "calm", "score"} {
+		// config.json : une vitesse absente vaut 1 (« absents de config.json ⇒ vitesse 1 partout », §6) ; la forme complète
+		// (trois moments toujours présents) est celle de l'API des réglages (AMBIANCE_EFFECTIVE), testée dans cmd/server.
+		if v, ok := sp.Speeds[m]; ok && v != 1 {
+			t.Errorf("speeds.%s par défaut = 1 : %v", m, v)
+		}
+	}
+	if sp.HostSpeeds == nil || len(sp.HostSpeeds) != 0 {
+		t.Errorf("aucun groupe animateur ⇒ host_speeds = {} : %v", sp.HostSpeeds)
+	}
+}
+
+func TestTW223_Speeds_AllFiveValuesAccepted(t *testing.T) {
+	for _, v := range []string{"0.5", "0.75", "1", "1.5", "2"} {
+		srv, _, _ := tw223Server(t)
+		if code, out := tw223Post(t, srv, `{"lighting":{"speeds":{"chrono":`+v+`}}}`); code != 200 {
+			t.Errorf("vitesse %s acceptée : %d %s", v, code, out)
+		}
+	}
+}
+
+func TestTW223_Speeds_OtherValuesRefused400_NothingChanged(t *testing.T) {
+	for _, v := range []string{"0", "0.25", "3", "-1", "1.25", `"2"`, "null", `"rapide"`, "true"} {
+		srv, _, _ := tw223Server(t)
+		tw223Post(t, srv, `{"lighting":{"speeds":{"calm":2}}}`)
+		code, out := tw223Post(t, srv, `{"lighting":{"speeds":{"chrono":`+v+`,"calm":0.5}}}`)
+		if code != http.StatusBadRequest || strings.TrimSpace(out) == "" {
+			t.Errorf("vitesse %s : 400 avec message attendu, obtenu %d %q", v, code, out)
+		}
+		if got := tw223GetSpeeds(t, srv).Speeds; got["chrono"] != 1 || got["calm"] != 2 {
+			t.Errorf("vitesse %s : un refus ne change rien (écriture atomique) : %v", v, got)
+		}
+	}
+}
+
+func TestTW223_Speeds_UnknownMomentRefused(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	if code, _ := tw223Post(t, srv, `{"lighting":{"speeds":{"bidule":2}}}`); code != 400 {
+		t.Errorf("moment inconnu : 400, obtenu %d", code)
+	}
+}
+
+func TestTW223_Speeds_PartialPatchesMergeOneMomentAtATime(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	for _, body := range []string{`{"lighting":{"speeds":{"chrono":2}}}`, `{"lighting":{"speeds":{"calm":0.5}}}`, `{"lighting":{"speeds":{"chrono":1.5}}}`} {
+		if code, out := tw223Post(t, srv, body); code != 200 {
+			t.Fatalf("%s : %d %s", body, code, out)
+		}
+	}
+	sp := tw223GetSpeeds(t, srv).Speeds
+	if sp["chrono"] != 1.5 || sp["calm"] != 0.5 || sp["score"] != 1 {
+		t.Errorf("fusion par moment : %v", sp)
+	}
+}
+
+func TestTW223_HostSpeeds_ByGroupId_MergedPerMoment_UnknownIdDroppedWithoutError(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	tw223Hosts(t, srv)
+	for _, body := range []string{
+		`{"lighting":{"host_speeds":{"ha":{"score":2}}}}`,
+		`{"lighting":{"host_speeds":{"hb":{"chrono":0.75}}}}`,
+		`{"lighting":{"host_speeds":{"ha":{"chrono":1.5},"disparu":{"calm":2}}}}`,
+	} {
+		if code, out := tw223Post(t, srv, body); code != 200 {
+			t.Fatalf("%s : %d %s", body, code, out)
+		}
+	}
+	hs := tw223GetSpeeds(t, srv).HostSpeeds
+	if hs["ha"]["score"] != 2 || hs["ha"]["chrono"] != 1.5 || hs["hb"]["chrono"] != 0.75 {
+		t.Errorf("host_speeds par id et par moment : %v", hs)
+	}
+	if _, ok := hs["disparu"]; ok {
+		t.Errorf("l'entrée d'un groupe inexistant est écartée sans erreur : %v", hs)
+	}
+}
+
+func TestTW223_HostSpeeds_InvalidValueRefused_And_PurgedWithTheGroup(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	tw223Hosts(t, srv)
+	if code, _ := tw223Post(t, srv, `{"lighting":{"host_speeds":{"ha":{"chrono":3}}}}`); code != 400 {
+		t.Errorf("vitesse hors liste pour un groupe animateur : 400, obtenu %d", code)
+	}
+	tw223Post(t, srv, `{"lighting":{"host_speeds":{"ha":{"chrono":2},"hb":{"chrono":2}}}}`)
+	if code, out := tw223Post(t, srv, `{"lighting":{"groups":[{"id":"ha","role":"animateur","lights":["P"]}]}}`); code != 200 {
+		t.Fatalf("%d %s", code, out)
+	}
+	hs := tw223GetSpeeds(t, srv).HostSpeeds
+	if _, ok := hs["hb"]; ok {
+		t.Errorf("enregistrer lighting.groups purge host_speeds des id disparus : %v", hs)
+	}
+	if hs["ha"]["chrono"] != 2 {
+		t.Errorf("l'entrée du groupe conservé reste : %v", hs)
+	}
+}
+
+func TestTW223_Speeds_NeverWipedBySavingOtherSections(t *testing.T) {
+	srv, _, _ := tw223Server(t)
+	tw223Hosts(t, srv)
+	tw223Post(t, srv, `{"lighting":{"speeds":{"chrono":2},"host_speeds":{"ha":{"calm":0.5}}}}`)
+	for _, body := range []string{`{"server":{"debug":true}}`, `{"lighting":{"enabled":false}}`} {
+		if code, out := tw223Post(t, srv, body); code != 200 {
+			t.Fatalf("%s : %d %s", body, code, out)
+		}
+		sp := tw223GetSpeeds(t, srv)
+		if sp.Speeds["chrono"] != 2 || sp.HostSpeeds["ha"]["calm"] != 0.5 {
+			t.Fatalf("POST %s a modifié les vitesses : %+v", body, sp)
+		}
+	}
+}
+
+func TestTW223_Speeds_IndependentOfTheEffectChoice(t *testing.T) {
+	// la vitesse vaut pour le moment, quel que soit l'effet choisi — et reste enregistrée quand aucun effet n'est joué
+	srv, _, _ := tw223Server(t)
+	tw223Post(t, srv, `{"lighting":{"effects":{"chrono":""}}}`) // aucun effet pendant le chrono
+	if code, out := tw223Post(t, srv, `{"lighting":{"speeds":{"chrono":2}}}`); code != 200 {
+		t.Fatalf("%d %s", code, out)
+	}
+	if got := tw223GetSpeeds(t, srv).Speeds["chrono"]; got != 2 {
+		t.Errorf("la vitesse est conservée sans effet : %v", got)
 	}
 }

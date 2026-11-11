@@ -1,7 +1,7 @@
 package effects
 
-// Effets natifs du LOT-2 (contracts/light-effects.md §9 : chenillard, pulsation, couleur-equipe)
-// et budget d'écriture §5.4. Lit les fichiers réels de server-go/assets/effects.
+// Effets natifs (révision 3, contrat §9) : pulsation, chenillard, chenillard-traine, couleur-equipe, degrade — valides,
+// applicables selon groupes_min et §4.7, rendu conforme, budget d'écriture §5.4 (≤ 6 par pas, ≤ 10 par seconde, 12 groupes).
 
 import (
 	"testing"
@@ -26,15 +26,6 @@ func nativeEffect(t *testing.T, id string) Effect {
 	return e
 }
 
-func TestNatives_LOT2Set_PresentAndNative(t *testing.T) {
-	k := loadNatives(t)
-	for _, id := range []string{"chenillard", "pulsation", "couleur-equipe"} {
-		if o, _, ok := k.get(id); !ok || o != "native" {
-			t.Errorf("%s : natif attendu (%q, %v)", id, o, ok)
-		}
-	}
-}
-
 func hasMoment(e Effect, m string) bool {
 	for _, x := range e.Moments {
 		if x == m {
@@ -44,190 +35,310 @@ func hasMoment(e Effect, m string) bool {
 	return false
 }
 
-func TestNatives_Chenillard_Declaration(t *testing.T) {
-	e := nativeEffect(t, "chenillard")
-	if !hasMoment(e, "chrono") || e.MinGroups < 3 || e.Target != "groups" {
-		t.Errorf("chenillard : moment chrono, min_groups ≥ 3 (#223), target groups : %+v", e)
-	}
-}
-
-func TestNatives_Chenillard_RendersLikeIssue223(t *testing.T) {
-	e := nativeEffect(t, "chenillard")
-	// tête urgence, traînée à 50 %, fond thème, un groupe par seconde, sans traînée sous 5 groupes
-	c := chrono(6, 15*time.Second)
-	h0 := headIndex(t, render(e, c, 0), white)
-	if h0 < 0 {
-		t.Fatal("tête à la couleur d'urgence introuvable")
-	}
-	if got := headIndex(t, render(e, c, time.Second), white); got != (h0+1)%6 {
-		t.Errorf("un groupe par seconde : %d puis %d", h0, got)
-	}
-	fr := render(e, c, 0)
-	trail := 0
-	for _, l := range fr {
-		if l.Color == theme && near(l.Intensity, 128, 1) {
-			trail++
+func TestNatives_Set_AllPresentValidAndNative(t *testing.T) {
+	k := loadNatives(t)
+	for _, id := range []string{"pulsation", "chenillard", "chenillard-traine", "couleur-equipe", "degrade"} {
+		if o, f, ok := k.get(id); !ok || o != "native" || f == "" {
+			t.Errorf("%s : natif attendu (%q %q %v)", id, o, f, ok)
 		}
 	}
-	if trail != 2 {
-		t.Errorf("traînée de 2 cases à 50 %% pour 6 groupes : %+v", fr)
-	}
-	if headIndex(t, render(e, chrono(6, 4*time.Second), 0), red) < 0 {
-		t.Error("tête rouge à 5 s ou moins")
-	}
-	f4 := render(e, chrono(4, 15*time.Second), 0)
-	for _, l := range f4 {
-		if l.Color == theme && near(l.Intensity, 128, 1) {
-			t.Errorf("aucune traînée sous 5 groupes : %+v", f4)
+	for _, gone := range []string{"remplissage", "scintillement", "vague", "vague-lente"} {
+		if _, _, ok := k.get(gone); ok {
+			t.Errorf("%s est sorti de v11.7.0 (noyau seul)", gone)
 		}
 	}
 }
 
-func TestNatives_Pulsation_Declaration_AppliesWithoutGroups(t *testing.T) {
-	e := nativeEffect(t, "pulsation")
-	if !hasMoment(e, "chrono") || e.Target != "all" {
-		t.Errorf("pulsation : moment chrono, target all : %+v", e)
+func TestNatives_Declarations_MomentsMinGroupsTick(t *testing.T) {
+	type decl struct {
+		moment string
+		min    int
+		tick   int
 	}
-	// Non-régression v11.6.0 : sans aucun groupe, la pulsation de salle fonctionnait.
-	if ok, reason := applicable(e, 0); !ok {
-		t.Errorf("pulsation doit rester applicable avec N = 0 (comportement v11.6.0) : %q", reason)
-	}
-	if ok, _ := applicable(e, 12); !ok {
-		t.Error("applicable avec 12 groupes")
-	}
-}
-
-func TestNatives_Pulsation_ShapeMatchesLegacyCycle(t *testing.T) {
-	// Contrat §5.5 : cycle de 1 s, intensités 255 / 128 / 77 selon le palier, fondu 0, une trame d'un seul état.
-	e := nativeEffect(t, "pulsation")
-	for _, rem := range []time.Duration{15 * time.Second, 8 * time.Second, 3 * time.Second} {
-		for _, at := range []time.Duration{0, 100 * time.Millisecond, 400 * time.Millisecond, 600 * time.Millisecond, 900 * time.Millisecond} {
-			fr := render(e, chrono(6, rem), at)
-			if len(fr) != 1 {
-				t.Fatalf("pulsation : un seul état (target all), obtenu %d", len(fr))
-			}
-			if fr[0].FadeMs != 0 {
-				t.Errorf("fondu 0 (instantané, v10.0.0.17) : %+v", fr[0])
-			}
-			if i := fr[0].Intensity; i != 255 && !near(i, 128, 1) && !near(i, 77, 1) {
-				t.Errorf("intensité ∈ {255,128,77} : %d (reste %s, t=%s)", i, rem, at)
-			}
-		}
-	}
-	// Alternance : sur un cycle de 1 s, deux apparences au moins.
-	seen := map[Lk]bool{}
-	for ms := 0; ms < 1000; ms += 50 {
-		seen[render(e, chrono(6, 15*time.Second), time.Duration(ms)*time.Millisecond)[0]] = true
-	}
-	if len(seen) != 2 {
-		t.Errorf("deux phases par cycle : %d apparence(s)", len(seen))
-	}
-}
-
-func TestNatives_Pulsation_Tier3Is250msTheme750msRed(t *testing.T) {
-	e := nativeEffect(t, "pulsation")
-	c := chrono(6, 3*time.Second) // palier 3 : ≤ 5 s
-	at := func(ms int) Lk { return render(e, c, time.Duration(ms)*time.Millisecond)[0] }
-	if at(100).Color != theme {
-		t.Errorf("0–250 ms : thème, obtenu %v", at(100).Color)
-	}
-	if got := at(250).Color; got == theme {
-		t.Errorf("à partir de 250 ms : rouge dominant, obtenu %v", got)
-	}
-	if at(999).Color != at(300).Color {
-		t.Error("250–1000 ms : même apparence (750 ms)")
-	}
-}
-
-func TestNatives_CouleurEquipe_Declaration(t *testing.T) {
-	e := nativeEffect(t, "couleur-equipe")
-	if !hasMoment(e, "score") || e.DurationMs <= 0 || e.MinGroups != 1 {
-		t.Errorf("couleur-equipe : moment score, duration_ms > 0, min_groups 1 : %+v", e)
-	}
-	for _, n := range []int{1, 3, 12} {
-		if ok, reason := applicable(e, n); !ok {
-			t.Errorf("N=%d : %q", n, reason)
-		}
-	}
-}
-
-func TestNatives_CouleurEquipe_FixedTeamColourOnEveryGroup(t *testing.T) {
-	e := nativeEffect(t, "couleur-equipe")
-	for _, n := range []int{1, 6} {
-		for _, at := range []time.Duration{0, 700 * time.Millisecond} {
-			for i, l := range render(e, Ctx{N: n, Scene: white, Theme: theme, Team: team}, at) {
-				if l.Color != team || l.Intensity < 250 {
-					t.Errorf("N=%d t=%s groupe %d : %+v, attendu la couleur de l'équipe à pleine intensité", n, at, i+1, l)
-				}
-			}
-		}
-	}
-}
-
-// ---------- budget d'écriture §5.4 : ≤ 6 par pas, ≤ 10 par seconde, 12 groupes ----------
-
-// changes compte les groupes dont l'état diffère de la trame précédente.
-func changes(prev, cur []Lk) int {
-	if prev == nil {
-		return len(cur)
-	}
-	n := 0
-	for i := range cur {
-		if cur[i] != prev[i] {
-			n++
-		}
-	}
-	return n
-}
-
-func TestNatives_WriteBudget_PerStepAndPerSecond_12Groups(t *testing.T) {
-	const step = 250 * time.Millisecond // cadence de l'écrivain
-	moments := map[string]Ctx{
-		"chrono": chrono(12, 20*time.Second),
-		"score":  {N: 12, Scene: white, Theme: theme, Team: team, Origin: 1, Seed: 1},
-	}
-	for _, id := range []string{"chenillard", "pulsation", "couleur-equipe"} {
+	for id, d := range map[string]decl{
+		"pulsation": {"chrono", 0, 500}, "chenillard": {"chrono", 3, 1000}, "chenillard-traine": {"chrono", 5, 0},
+		"couleur-equipe": {"score", 0, 1000}, "degrade": {"calm", 2, 60000},
+	} {
 		e := nativeEffect(t, id)
-		for _, m := range e.Moments {
-			c, ok := moments[m]
-			if !ok {
-				continue
+		if !hasMoment(e, d.moment) {
+			t.Errorf("%s : moment %s attendu : %v", id, d.moment, e.Moments)
+		}
+		if e.MinGroups != d.min {
+			t.Errorf("%s : groupes_min %d, attendu %d", id, e.MinGroups, d.min)
+		}
+		if d.tick > 0 && e.TickMs != d.tick {
+			t.Errorf("%s : duree_tick_ms %d, attendu %d", id, e.TickMs, d.tick)
+		}
+		if e.TickMs < 250 {
+			t.Errorf("%s : tick ≥ 250 ms", id)
+		}
+	}
+}
+
+func TestNatives_Applicability(t *testing.T) {
+	for id, cases := range map[string]map[int]bool{
+		"pulsation":         {0: true, 1: true, 12: true},
+		"chenillard":        {0: false, 2: false, 3: true, 12: true},
+		"chenillard-traine": {3: false, 4: false, 5: true, 12: true},
+		"couleur-equipe":    {0: true, 1: true, 12: true},
+		"degrade":           {0: false, 1: false, 2: true, 12: true},
+	} {
+		e := nativeEffect(t, id)
+		for n, want := range cases {
+			ok, reason := applicable(e, n)
+			if ok != want {
+				t.Errorf("%s N=%d : applicable=%v, attendu %v", id, n, ok, want)
 			}
-			var prev []Lk
-			perSecond := 0
-			worstStep := 0
-			total := 20 * time.Second
-			if m == "score" {
-				total = time.Duration(e.DurationMs) * time.Millisecond
+			if !ok && reason == "" {
+				t.Errorf("%s N=%d : une raison est exigée", id, n)
 			}
-			for at := time.Duration(0); at < total; at += step {
-				cc := c
-				if m == "chrono" {
-					cc.Remaining = c.Remaining - at
-					if cc.Remaining < 0 {
-						cc.Remaining = 0
-					}
+		}
+	}
+}
+
+func TestNatives_HostApplicable_OnlyG0Effects(t *testing.T) {
+	for id, want := range map[string]bool{"pulsation": true, "couleur-equipe": true, "chenillard": false, "chenillard-traine": false, "degrade": false} {
+		if got := hostApplicable(nativeEffect(t, id)); got != want {
+			t.Errorf("%s : jouable sur un groupe animateur = %v, attendu %v (seuls les effets qui n'écrivent que g0)", id, got, want)
+		}
+	}
+}
+
+// ---------- chenillard ----------
+
+func headAt(v View, n int) int { // position (1-based) du groupe à la couleur d'urgence à pleine intensité, ou -1
+	idx := -1
+	for p := 1; p <= n; p++ {
+		l := v.effective(p)
+		if l.Color != cT && l.Intensity >= 254 {
+			if idx != -1 {
+				return -2 // plusieurs têtes
+			}
+			idx = p
+		}
+	}
+	return idx
+}
+
+func TestNatives_Chenillard_HeadWalksOneGroupPerTick_4And8Groups(t *testing.T) {
+	e := nativeEffect(t, "chenillard")
+	for _, n := range []int{4, 8} {
+		for tick := 0; tick < 2*n+2; tick++ {
+			v := renderView(e, ctxN(n), tick)
+			if h := headAt(v, n); h != tick%n+1 {
+				t.Fatalf("N=%d tick %d : tête en %d, attendu %d (un groupe par tick, départ g1, retour au premier)", n, tick, h, tick%n+1)
+			}
+			for p := 1; p <= n; p++ {
+				if p != tick%n+1 && (v.effective(p).Color != cT || v.effective(p).Intensity != 255) {
+					t.Errorf("N=%d tick %d : fond au thème à 100 %% sur le groupe %d : %+v", n, tick, p, v.effective(p))
 				}
-				cur := render(e, cc, at)
-				// une trame « target: all » compte pour 1 écriture de groupe Hue, quel que soit N
-				n := changes(prev, cur)
-				if prev != nil {
-					if n > worstStep {
-						worstStep = n
-					}
-					perSecond += n
-				}
-				prev = cur
-				if (at+step)%time.Second == 0 {
-					if perSecond > 10 {
-						t.Errorf("%s/%s : %d écritures dans la seconde finissant à %s (max 10)", id, m, perSecond, at+step)
-					}
-					perSecond = 0
+			}
+		}
+	}
+}
+
+func TestNatives_Chenillard_HeadColourIsUrgency_LiveWithRemainingTime(t *testing.T) {
+	e := nativeEffect(t, "chenillard")
+	for _, c := range []struct {
+		rem  time.Duration
+		want [3]int
+	}{{20 * time.Second, cW}, {10 * time.Second, cOr}, {5 * time.Second, cRed}} {
+		cx := ctxN(4)
+		cx.Remaining = c.rem
+		if got := renderView(e, cx, 2).effective(3).Color; got != c.want {
+			t.Errorf("reste %s : tête %v, attendu %v", c.rem, got, c.want)
+		}
+	}
+}
+
+func TestNatives_ChenillardTraine_HeadWithHalfIntensityTrail_5And8Groups(t *testing.T) {
+	e := nativeEffect(t, "chenillard-traine")
+	for _, n := range []int{5, 8} {
+		for tick := 0; tick < 2*n; tick++ {
+			v := renderView(e, ctxN(n), tick)
+			head := tick%n + 1
+			prev, next := (head+n-2)%n+1, head%n+1
+			if headAt(v, n) != head {
+				t.Fatalf("N=%d tick %d : tête en %d : %v", n, tick, headAt(v, n), v.Groups)
+			}
+			for _, p := range []int{prev, next} {
+				l := v.effective(p)
+				if l.Color != cT || !near(l.Intensity, 128, 1) {
+					t.Errorf("N=%d tick %d : traînée au thème à 50 %% sur %d : %+v", n, tick, p, l)
 				}
 			}
-			if worstStep > 6 {
-				t.Errorf("%s/%s : %d écritures en un pas (max 6)", id, m, worstStep)
+			for p := 1; p <= n; p++ {
+				if p == head || p == prev || p == next {
+					continue
+				}
+				if l := v.effective(p); l.Color != cT || l.Intensity != 255 {
+					t.Errorf("N=%d tick %d : fond au thème à 100 %% sur %d : %+v", n, tick, p, l)
+				}
 			}
+		}
+	}
+}
+
+// ---------- pulsation (§5.5) ----------
+
+func TestNatives_Pulsation_HighPhaseThemeFull_LowPhaseUrgencyHalf_500ms(t *testing.T) {
+	e := nativeEffect(t, "pulsation")
+	if e.TickMs != 500 {
+		t.Fatalf("tick de 500 ms : %d", e.TickMs)
+	}
+	for _, c := range []struct {
+		rem  time.Duration
+		want [3]int
+	}{{20 * time.Second, cW}, {8 * time.Second, cOr}, {3 * time.Second, cRed}} {
+		cx := ctxN(6)
+		cx.Remaining = c.rem
+		hi, lo := renderView(e, cx, 0), renderView(e, cx, 1)
+		if hi.Base == nil || lo.Base == nil {
+			t.Fatalf("la pulsation n'écrit que g0 : une base à chaque tick")
+		}
+		if hi.Base.Color != cT || hi.Base.Intensity != 255 {
+			t.Errorf("reste %s, phase haute : thème à 100 %% : %+v", c.rem, *hi.Base)
+		}
+		if lo.Base.Color != c.want || !near(lo.Base.Intensity, 128, 1) {
+			t.Errorf("reste %s, phase basse : %v à 50 %% : %+v", c.rem, c.want, *lo.Base)
+		}
+		// cycle de 2 ticks (1 s) : 500 / 500 ms, y compris à 5 s ou moins (plus de battement 250 / 750)
+		if renderView(e, cx, 2).Base.Intensity != 255 || !near(renderView(e, cx, 3).Base.Intensity, 128, 1) {
+			t.Errorf("reste %s : alternance régulière", c.rem)
+		}
+	}
+}
+
+func TestNatives_Pulsation_WritesOnlyG0_NoGroupState_AtAnyN(t *testing.T) {
+	e := nativeEffect(t, "pulsation")
+	for _, n := range []int{0, 1, 4, 12} {
+		for tick := 0; tick < 4; tick++ {
+			v := renderView(e, ctxN(n), tick)
+			for i, g := range v.Groups {
+				if !g.Absent {
+					t.Errorf("N=%d tick %d : groupe %d avec état propre : une seule écriture de groupe par phase", n, tick, i+1)
+				}
+			}
+		}
+	}
+}
+
+func TestNatives_Pulsation_NewRenderingIsNotTheLegacyOne(t *testing.T) {
+	// décision utilisateur (§5.5) : à plus de 10 s la phase basse est BLANCHE à 50 % (v11.6.0 : thème à 50 %) ;
+	// à 5 s ou moins rouge à 50 % (v11.6.0 : 30 %).
+	e := nativeEffect(t, "pulsation")
+	cx := ctxN(4)
+	if l := renderView(e, cx, 1).Base; l.Color != cW {
+		t.Errorf("plus de 10 s : phase basse blanche : %+v", *l)
+	}
+	cx.Remaining = 4 * time.Second
+	if l := renderView(e, cx, 1).Base; !near(l.Intensity, 128, 1) {
+		t.Errorf("5 s ou moins : rouge à 50 %% (pas 30 %%) : %+v", *l)
+	}
+}
+
+// ---------- couleur-equipe ----------
+
+func TestNatives_CouleurEquipe_TeamColourOnWholeZone(t *testing.T) {
+	e := nativeEffect(t, "couleur-equipe")
+	for _, n := range []int{0, 1, 6} {
+		cx := ctxN(n)
+		cx.Moment = "score"
+		v := renderView(e, cx, 0)
+		if v.Base == nil || v.Base.Color != cTeam || v.Base.Intensity != 255 {
+			t.Errorf("N=%d : couleur de l'équipe créditée à 100 %% sur g0 : %+v", n, v.Base)
+		}
+	}
+}
+
+// ---------- dégradé (#211) ----------
+
+func TestNatives_Degrade_OneColourPerGroup_CycleOfFour_StartOfPaletteForSmallRooms(t *testing.T) {
+	e := nativeEffect(t, "degrade")
+	cx := ctxN(12)
+	cx.Moment = "calm"
+	big := renderView(e, cx, 0)
+	for p := 1; p <= 12; p++ {
+		if l := big.effective(p); l.Absent || l.Intensity == 0 {
+			t.Errorf("groupe %d : une couleur visible : %+v", p, l)
+		}
+	}
+	seen := map[[3]int]bool{}
+	for p := 1; p <= 4; p++ {
+		seen[big.effective(p).Color] = true
+	}
+	if len(seen) != 4 {
+		t.Errorf("cycle de 4 couleurs distinctes sur g1…g4 : %v", seen)
+	}
+	for p := 1; p <= 8; p++ {
+		if big.effective(p).Color != big.effective(p+4).Color {
+			t.Errorf("le cycle se répète tous les 4 groupes : g%d / g%d", p, p+4)
+		}
+	}
+	small := ctxN(2)
+	small.Moment = "calm"
+	sv := renderView(e, small, 0)
+	for p := 1; p <= 2; p++ {
+		if sv.effective(p).Color != big.effective(p).Color {
+			t.Errorf("une salle plus petite montre le début de la palette : groupe %d", p)
+		}
+	}
+	// scène fixe : identique à tous les ticks
+	if renderView(e, cx, 5).effective(7) != big.effective(7) {
+		t.Error("le dégradé est fixe dans le temps")
+	}
+}
+
+// ---------- budget d'écriture §5.4 ----------
+
+// writes : nombre d'écritures pour passer de prev à cur — 1 si toute la zone change ensemble (une écriture
+// buzzmaster-general), sinon une par groupe dont l'état effectif change.
+func writes(prev, cur View, n int) int {
+	changed, allSame := 0, true
+	for p := 1; p <= n; p++ {
+		if cur.effective(p) != cur.effective(1) {
+			allSame = false
+		}
+		if prev.effective(p) != cur.effective(p) {
+			changed++
+		}
+	}
+	if allSame {
+		if changed > 0 {
+			return 1
+		}
+		return 0
+	}
+	return changed
+}
+
+func TestNatives_WriteBudget_PerTickAndPerSecond_12Groups(t *testing.T) {
+	for _, id := range []string{"pulsation", "chenillard", "chenillard-traine", "couleur-equipe", "degrade"} {
+		e := nativeEffect(t, id)
+		cx := ctxN(12)
+		cx.Moment = e.Moments[0]
+		tick := time.Duration(e.TickMs) * time.Millisecond
+		if tick < 250*time.Millisecond {
+			tick = 250 * time.Millisecond
+		}
+		perSecond, worst := 0.0, 0
+		prev := renderView(e, cx, 0)
+		for k := 1; k < 40; k++ {
+			cur := renderView(e, cx, k)
+			w := writes(prev, cur, 12)
+			if w > worst {
+				worst = w
+			}
+			if r := float64(w) * float64(time.Second) / float64(tick); r > perSecond {
+				perSecond = r
+			}
+			prev = cur
+		}
+		if worst > 6 {
+			t.Errorf("%s : %d écritures en un tick (max 6)", id, worst)
+		}
+		if perSecond > 10 {
+			t.Errorf("%s : %.1f écritures par seconde en régime établi (max 10)", id, perSecond)
 		}
 	}
 }

@@ -1,8 +1,8 @@
 package config
 
-// Tests de spécification v11.7.0 LOT-1 (#225) — contracts/light-effects.md §2.1
-// et §2.5 : validation de lighting.groups, rôle animateur unique, near_teams
-// refusé sur l'animateur, retrait automatique, numérotation. Aides tw225*.
+// Tests de spécification v11.7.0 LOT-1 (#225), révision 3 — contracts/light-effects.md §2.1, §2.5 : groupes SANS NOM ni
+// `near_teams` (un groupe n'a qu'un rang), `id` stable, plusieurs groupes animateur (4) et 12 groupes de salle,
+// retrait automatique, numérotation, lecture tolérante de l'ancienne configuration (name / near_teams ignorés).
 
 import (
 	"encoding/json"
@@ -25,19 +25,55 @@ func TestTW225_ApplyDefaults_GroupsNeverNull_RoleSalle(t *testing.T) {
 	if !strings.Contains(string(b), `"groups":[]`) {
 		t.Fatalf("lighting.groups doit être sérialisé en [] par défaut : %s", b)
 	}
-	cfg.Lighting.Groups = []LightingGroupEntry{{Name: "A"}}
+	cfg.Lighting.Groups = []LightingGroupEntry{{}}
 	ApplyDefaults(&cfg)
-	g := cfg.Lighting.Groups[0]
-	if g.Role != "salle" || g.Lights == nil || g.NearTeams == nil {
-		t.Fatalf("rôle absent ⇒ salle, listes jamais nil : %+v", g)
+	if g := cfg.Lighting.Groups[0]; g.Role != "salle" || g.Lights == nil {
+		t.Fatalf("rôle absent ⇒ salle, liste jamais nil : %+v", g)
+	}
+}
+
+func TestTW225_GroupHasNoNameNorNearTeamsKey_InJSON(t *testing.T) {
+	b, err := json.Marshal(LightingGroupEntry{ID: "a1", Role: "salle", Lights: []string{"L1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, gone := range []string{`"name"`, `"near_teams"`} {
+		if strings.Contains(s, gone) {
+			t.Errorf("révision 3 : la clé %s n'existe plus dans un groupe : %s", gone, s)
+		}
+	}
+	for _, want := range []string{`"id":"a1"`, `"role":"salle"`, `"lights":["L1"]`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("clé %s attendue : %s", want, s)
+		}
+	}
+}
+
+func TestTW225_OldGroupsWithNameAndNearTeams_ReadWithoutError_KeysDropped(t *testing.T) {
+	// config.json de QUALIF antérieure : name / near_teams présents. Lecture tolérante : ignorés, rien ne casse,
+	// et ils disparaissent au prochain enregistrement.
+	var cfg Config
+	raw := `{"lighting":{"lights":[{"name":"L1","role":"general"}],"groups":[` +
+		`{"name":"Scène gauche","role":"salle","lights":["L1"],"near_teams":["Rouges"]}]}}`
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("l'ancienne configuration se lit sans erreur : %v", err)
+	}
+	ApplyDefaults(&cfg)
+	if len(cfg.Lighting.Groups) != 1 || len(cfg.Lighting.Groups[0].Lights) != 1 {
+		t.Fatalf("le groupe est conservé : %+v", cfg.Lighting.Groups)
+	}
+	out, _ := json.Marshal(cfg.Lighting.Groups)
+	if strings.Contains(string(out), "Scène") || strings.Contains(string(out), "near_teams") || strings.Contains(string(out), `"name"`) {
+		t.Errorf("name et near_teams disparaissent à l'enregistrement : %s", out)
 	}
 }
 
 func TestTW225_Validate_Accepts(t *testing.T) {
 	out, err := ValidateLightingGroups([]LightingGroupEntry{
-		{Name: "Scène", Lights: []string{"L1"}, NearTeams: []string{"Rouges"}},
-		{Name: "Pupitre", Role: "animateur", Lights: []string{"L2", "L3"}},
-		{Name: "Vide"},
+		{Lights: []string{"L1"}},
+		{Role: "animateur", Lights: []string{"L2", "L3"}},
+		{},
 	}, tw225Lights())
 	if err != nil {
 		t.Fatalf("configuration valide refusée : %v", err)
@@ -49,26 +85,19 @@ func TestTW225_Validate_Accepts(t *testing.T) {
 
 func TestTW225_Validate_Refuses(t *testing.T) {
 	many := make([]LightingGroupEntry, 13)
-	for i := range many {
-		many[i] = LightingGroupEntry{Name: "G" + string(rune('A'+i))}
-	}
 	cases := map[string][]LightingGroupEntry{
-		"treize groupes":           many,
-		"ampoule inconnue":         {{Name: "A", Lights: []string{"Z"}}},
-		"ampoule d'équipe":         {{Name: "A", Lights: []string{"T1"}}},
-		"ampoule en double":        {{Name: "A", Lights: []string{"L1"}}, {Name: "B", Lights: []string{"L1"}}},
-		"ampoule répétée":          {{Name: "A", Lights: []string{"L1", "L1"}}},
-		"nom en double":            {{Name: "A"}, {Name: "a"}},
-		"nom vide":                 {{Name: "  "}},
-		"nom trop long":            {{Name: strings.Repeat("é", 41)}},
-		"rôle inconnu":             {{Name: "A", Role: "x"}},
-		"cinq animateurs":          {{Name: "A", Role: "animateur"}, {Name: "B", Role: "animateur"}, {Name: "C", Role: "animateur"}, {Name: "D", Role: "animateur"}, {Name: "E", Role: "animateur"}},
-		"id majuscules":            {{ID: "ABC", Name: "A"}},
-		"id trop long":             {{ID: "abcdefghijklm", Name: "A"}},
-		"id avec tiret":            {{ID: "a-b", Name: "A"}},
-		"id en double":             {{ID: "x1", Name: "A"}, {ID: "x1", Name: "B"}},
-		"near_teams animateur":     {{Name: "A", Role: "animateur", NearTeams: []string{"Rouges"}}},
-		"équipe près de 2 groupes": {{Name: "A", NearTeams: []string{"R"}}, {Name: "B", NearTeams: []string{"R"}}},
+		"treize groupes de salle":  many,
+		"ampoule inconnue":         {{Lights: []string{"Z"}}},
+		"ampoule d'équipe":         {{Lights: []string{"T1"}}},
+		"ampoule en double":        {{Lights: []string{"L1"}}, {Lights: []string{"L1"}}},
+		"ampoule répétée":          {{Lights: []string{"L1", "L1"}}},
+		"rôle inconnu":             {{Role: "x"}},
+		"cinq animateurs":          {{Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}},
+		"id majuscules":            {{ID: "ABC"}},
+		"id trop long":             {{ID: "abcdefghijklm"}},
+		"id avec tiret":            {{ID: "a-b"}},
+		"id en double":             {{ID: "x1"}, {ID: "x1"}},
+		"id en double salle/anim.": {{ID: "x1"}, {ID: "x1", Role: "animateur"}},
 	}
 	for name, groups := range cases {
 		if _, err := ValidateLightingGroups(groups, tw225Lights()); err == nil {
@@ -79,50 +108,31 @@ func TestTW225_Validate_Refuses(t *testing.T) {
 	}
 }
 
-func TestTW225_Validate_NameLengthCountsCharactersNotBytes(t *testing.T) {
-	if _, err := ValidateLightingGroups([]LightingGroupEntry{{Name: strings.Repeat("é", 40)}}, tw225Lights()); err != nil {
-		t.Fatalf("40 caractères (accentués) acceptés : %v", err)
-	}
-}
-
-func TestTW225_Prune_RemovesBulbsNoLongerGeneral_KeepsGroups(t *testing.T) {
-	groups := []LightingGroupEntry{{Name: "A", Lights: []string{"L1", "L2"}}, {Name: "B", Lights: []string{"L3"}}}
-	lights := []LightingLightEntry{{Name: "L1", Role: "team", Team: "R"}, {Name: "L2", Role: "general"}}
-	out := PruneLightingGroups(groups, lights)
-	if len(out) != 2 {
-		t.Fatalf("les groupes sont conservés : %+v", out)
-	}
-	if len(out[0].Lights) != 1 || out[0].Lights[0] != "L2" {
-		t.Errorf("L1 (équipe) doit quitter A : %+v", out[0])
-	}
-	if len(out[1].Lights) != 0 || out[1].Lights == nil {
-		t.Errorf("L3 (supprimée) doit quitter B, liste vide non nil : %+v", out[1])
-	}
-	if len(groups[0].Lights) != 2 {
-		t.Error("l'entrée ne doit pas être modifiée en place")
+func TestTW225_Validate_NoNameRules_ManyUnnamedGroupsAccepted(t *testing.T) {
+	// plus de nom : ni unicité, ni longueur, ni « nom vide » ne peuvent refuser des groupes
+	groups := []LightingGroupEntry{{}, {}, {}, {Role: "animateur"}, {Role: "animateur"}}
+	if _, err := ValidateLightingGroups(groups, tw225Lights()); err != nil {
+		t.Errorf("des groupes sans nom sont valides : %v", err)
 	}
 }
 
 func TestTW225_Validate_SeveralHostGroups_UpToFour_CapsIndependent(t *testing.T) {
-	hosts := []LightingGroupEntry{{Name: "A", Role: "animateur"}, {Name: "B", Role: "animateur"}, {Name: "C", Role: "animateur"}, {Name: "D", Role: "animateur"}}
+	hosts := []LightingGroupEntry{{Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}}
 	if _, err := ValidateLightingGroups(hosts, tw225Lights()); err != nil {
 		t.Fatalf("4 groupes animateur acceptés : %v", err)
 	}
 	room := make([]LightingGroupEntry, 12)
-	for i := range room {
-		room[i] = LightingGroupEntry{Name: "S" + string(rune('A'+i))}
-	}
 	if _, err := ValidateLightingGroups(append(append([]LightingGroupEntry{}, room...), hosts...), tw225Lights()); err != nil {
 		t.Errorf("12 groupes de salle + 4 animateur : plafonds indépendants : %v", err)
 	}
-	if _, err := ValidateLightingGroups(append(room, LightingGroupEntry{Name: "Trop"}), tw225Lights()); err == nil {
+	if _, err := ValidateLightingGroups(append(room, LightingGroupEntry{}), tw225Lights()); err == nil {
 		t.Error("13 groupes de salle refusés")
 	}
 }
 
 func TestTW225_Validate_AssignsWellFormedUniqueIDs_KeepsGivenOnes(t *testing.T) {
 	out, err := ValidateLightingGroups([]LightingGroupEntry{
-		{ID: "keep1", Name: "A"}, {Name: "B"}, {Name: "C", Role: "animateur"}, {Name: "D", Role: "animateur"},
+		{ID: "keep1"}, {}, {}, {Role: "animateur"}, {Role: "animateur"},
 	}, tw225Lights())
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +141,7 @@ func TestTW225_Validate_AssignsWellFormedUniqueIDs_KeepsGivenOnes(t *testing.T) 
 	seen := map[string]bool{}
 	for _, g := range out {
 		if !re.MatchString(g.ID) || seen[g.ID] {
-			t.Errorf("id [a-z0-9]{1,12} unique : %q (%+v)", g.ID, out)
+			t.Errorf("id [a-z0-9]{1,12} unique (groupes sans nom : plusieurs ids distincts) : %q (%+v)", g.ID, out)
 		}
 		seen[g.ID] = true
 	}
@@ -140,25 +150,44 @@ func TestTW225_Validate_AssignsWellFormedUniqueIDs_KeepsGivenOnes(t *testing.T) 
 	}
 }
 
-func TestTW225_Validate_IDStableAcrossReorderAndRename(t *testing.T) {
-	first, _ := ValidateLightingGroups([]LightingGroupEntry{{Name: "A"}, {Name: "B", Role: "animateur"}}, tw225Lights())
-	back := []LightingGroupEntry{first[1], first[0]}
-	back[0].Name, back[1].Name = "Régie", "Scène"
-	second, err := ValidateLightingGroups(back, tw225Lights())
+func TestTW225_Validate_IDStableAcrossReorder(t *testing.T) {
+	first, err := ValidateLightingGroups([]LightingGroupEntry{{}, {Role: "animateur"}}, tw225Lights())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ValidateLightingGroups([]LightingGroupEntry{first[1], first[0]}, tw225Lights())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if second[0].ID != first[1].ID || second[1].ID != first[0].ID {
-		t.Errorf("renommer et réordonner ne change aucun id : %+v → %+v", first, second)
+		t.Errorf("réordonner ne change aucun id : %+v → %+v", first, second)
+	}
+}
+
+func TestTW225_Prune_RemovesBulbsNoLongerGeneral_KeepsGroups(t *testing.T) {
+	groups := []LightingGroupEntry{{Lights: []string{"L1", "L2"}}, {Lights: []string{"L3"}}}
+	lights := []LightingLightEntry{{Name: "L1", Role: "team", Team: "R"}, {Name: "L2", Role: "general"}}
+	out := PruneLightingGroups(groups, lights)
+	if len(out) != 2 {
+		t.Fatalf("les groupes sont conservés : %+v", out)
+	}
+	if len(out[0].Lights) != 1 || out[0].Lights[0] != "L2" {
+		t.Errorf("L1 (équipe) doit quitter son groupe : %+v", out[0])
+	}
+	if len(out[1].Lights) != 0 || out[1].Lights == nil {
+		t.Errorf("L3 (supprimée) doit quitter son groupe, liste vide non nil : %+v", out[1])
+	}
+	if len(groups[0].Lights) != 2 {
+		t.Error("l'entrée ne doit pas être modifiée en place")
 	}
 }
 
 func TestTW225_HostGroups_OwnRankIncludingEmptyOnes_NotInRoomNumbering(t *testing.T) {
 	l := LightingConfig{Groups: []LightingGroupEntry{
-		{ID: "a1", Name: "Pupitre", Role: "animateur", Lights: []string{}},
-		{ID: "s1", Name: "A", Role: "salle", Lights: []string{"L1"}},
-		{ID: "a2", Name: "Régie", Role: "animateur", Lights: []string{"H"}},
-		{ID: "s2", Name: "B", Lights: []string{"L2"}},
+		{ID: "a1", Role: "animateur", Lights: []string{}},
+		{ID: "s1", Role: "salle", Lights: []string{"L1"}},
+		{ID: "a2", Role: "animateur", Lights: []string{"H"}},
+		{ID: "s2", Lights: []string{"L2"}},
 	}}
 	hosts := l.HostGroups()
 	if len(hosts) != 2 || hosts[0].ID != "a1" || hosts[0].Rank != 1 || hosts[1].ID != "a2" || hosts[1].Rank != 2 {
@@ -176,8 +205,17 @@ func TestTW225_HostGroups_OwnRankIncludingEmptyOnes_NotInRoomNumbering(t *testin
 	}
 }
 
+func TestTW225_RoomGroups_NonEmptyOnly_RealNumbers(t *testing.T) {
+	l := LightingConfig{Groups: []LightingGroupEntry{
+		{Lights: []string{"A"}}, {Lights: []string{}}, {Role: "animateur", Lights: []string{"H"}}, {Lights: []string{"C"}},
+	}}
+	got := l.RoomGroups()
+	if len(got) != 2 || got[0].Num != 1 || got[1].Num != 3 {
+		t.Errorf("N = groupes de salle non vides, avec leur numéro réel (1 et 3) : %+v", got)
+	}
+}
+
 func TestTW225_OldConfigWithSingleHostGroupWithoutID_StillValidAndGetsAnID(t *testing.T) {
-	// config.json de QUALIF 11.7.0.2 : un groupe animateur, aucun `id`.
 	var cfg Config
 	raw := `{"lighting":{"lights":[{"name":"L1","role":"general"}],"groups":[{"name":"Pupitre","role":"animateur","lights":["L1"],"near_teams":[]}],` +
 		`"host_effects":{"chrono":"","calm":"","score":"couleur-equipe"}}}`
@@ -192,11 +230,21 @@ func TestTW225_OldConfigWithSingleHostGroupWithoutID_StillValidAndGetsAnID(t *te
 	if cfg.Lighting.Groups[0].ID == "" {
 		t.Error("un id est attribué au groupe sans id")
 	}
-	if len(cfg.Lighting.HostEffects) != 0 {
-		for k := range cfg.Lighting.HostEffects {
-			if k == "chrono" || k == "calm" || k == "score" {
-				t.Errorf("l'ancienne forme plate est ignorée, jamais prise pour un id de groupe : %v", cfg.Lighting.HostEffects)
-			}
+	for k := range cfg.Lighting.HostEffects {
+		if k == "chrono" || k == "calm" || k == "score" {
+			t.Errorf("l'ancienne forme plate est ignorée, jamais prise pour un id de groupe : %v", cfg.Lighting.HostEffects)
 		}
+	}
+}
+
+func TestTW225_AssignGroupIDs_UnnamedGroupsGetDistinctIDs(t *testing.T) {
+	groups := []LightingGroupEntry{{}, {}, {}}
+	AssignGroupIDs(groups)
+	seen := map[string]bool{}
+	for _, g := range groups {
+		if g.ID == "" || seen[g.ID] {
+			t.Errorf("ids distincts pour des groupes sans nom : %+v", groups)
+		}
+		seen[g.ID] = true
 	}
 }

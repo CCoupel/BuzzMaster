@@ -11,7 +11,7 @@ import (
 )
 
 func tw223Host2(id, name string, lights ...string) config.LightingGroupEntry {
-	return config.LightingGroupEntry{ID: id, Name: name, Role: config.GroupRoleAnimateur, Lights: lights, NearTeams: []string{}}
+	return config.LightingGroupEntry{ID: id, Role: config.GroupRoleAnimateur, Lights: lights}
 }
 
 func TestHostsEffects223_EachHostHasItsOwnEffect_OnItsOwnAddress(t *testing.T) {

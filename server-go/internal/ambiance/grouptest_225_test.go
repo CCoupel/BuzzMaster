@@ -109,7 +109,7 @@ func TestGroupTest225_HostGroup_SequenceOnItsOwnAddress_ThenFixedWhite(t *testin
 }
 
 func TestGroupTest225_SecondHostGroup_UsesAddressMinusTwo(t *testing.T) {
-	env := tw225TestEnv(t, hostGrp(), config.LightingGroupEntry{Name: "Régie", Role: config.GroupRoleAnimateur, Lights: []string{"R"}, NearTeams: []string{}})
+	env := tw225TestEnv(t, hostGrp(), config.LightingGroupEntry{Role: config.GroupRoleAnimateur, Lights: []string{"R"}})
 	start := env.now
 	if err := tw225StartTest(env.c, "host2"); err != nil {
 		t.Fatal(err)
@@ -168,7 +168,7 @@ func TestGroupTest225_Stop_GroupBackToLiveImmediately_StopWithoutTestIsHarmless(
 }
 
 func TestGroupTest225_UnknownOrEmptyGroup_Refused_NothingStarted(t *testing.T) {
-	env := tw225TestEnv(t, grp(0, "A"), grp(1), hostGrp(), config.LightingGroupEntry{Name: "Vide", Role: config.GroupRoleAnimateur, Lights: []string{}, NearTeams: []string{}})
+	env := tw225TestEnv(t, grp(0, "A"), grp(1), hostGrp(), config.LightingGroupEntry{Role: config.GroupRoleAnimateur, Lights: []string{}})
 	for _, ref := range []string{"9", "0", "2", "host3", "host2", "host", "salle", ""} {
 		if err := tw225StartTest(env.c, ref); err == nil {
 			t.Errorf("groupe %q inconnu ou vide : refus attendu", ref)

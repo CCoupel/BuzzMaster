@@ -1,10 +1,10 @@
 # Procédure de Test — Groupes d'ambiance et groupes animateur (#225, milestone v11.7.0, LOT-1)
 
 **Version** : v11.7.0.x (QUALIF)
-**Date** : 2026-11-11 (révisée après le refus du GATE LOT-1 : groupes animateur multiples, `id` stable, essai en séquence)
+**Date** : 2026-11-11 (révision 3 : groupes **sans nom** ni « équipes à proximité », groupes animateur multiples, `id` stable, essai en séquence)
 **Testeur** : QA (scénarios AUTO) / Utilisateur (scénarios HUMAIN)
 **Contrat** : `contracts/light-effects.md` §2 (dont §2.5), `contracts/hue-bridge.md` §11, `contracts/http-endpoints.md`
-**Maquette** : `docs/mockup/v11.7.0/ui/ambiance_page__light_groups_multi_host.html`
+**Maquette** : `docs/mockup/v11.7.0/ui/ambiance_page__light_groups_numbered.html`
 **Plan** : `.claude/workflow/plan-11.7.0.md` (LOT-1, tâches 2 à 6, 32, corrections C1 à C6)
 
 ## Prerequis
@@ -43,7 +43,7 @@
 |-------|--------|-----------------|----------------|------|
 | 1 | Ouvrir Ambiance › Lumière sans pont associé | Étapes 1 et 2 (recherche, association) inchangées, **aucun** sous-onglet | | |
 | 2 | Pont associé : ouvrir Lumière | Trois sous-onglets « Pont et ampoules » (actif), « Groupes » (avec le nombre de groupes), « Effets » (« bientôt ») | | |
-| 3 | Sous-onglet « Pont et ampoules » | Contenu d'avant inchangé, plus une colonne « Groupe » (« hors groupe » au départ ; « — » pour une ampoule d'équipe ; « n · nom » pour la salle ; « 🎤 A1 · nom » pour un groupe animateur) | | |
+| 3 | Sous-onglet « Pont et ampoules » | Contenu d'avant inchangé, plus une colonne « Groupe » (« hors groupe » au départ ; « — » pour une ampoule d'équipe ; « Groupe n » pour la salle ; « 🎤 Animateur k » pour un groupe animateur) | | |
 | 4 | Cliquer sur « hors groupe » d'une ampoule | Bascule sur le sous-onglet « Groupes » | | |
 | 5 | Sous-onglet « Effets » | Message « Bientôt », aucun réglage | | |
 
@@ -51,7 +51,7 @@
 
 ---
 
-### Scenario 3 — Créer, nommer, ordonner et supprimer des groupes
+### Scenario 3 — Créer, ordonner et supprimer des groupes (sans nom)
 
 **Validation** : HUMAIN — **Issues** : #225
 
@@ -60,15 +60,14 @@
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Sous-onglet Groupes, aucun groupe : lire le texte d'aide | Boutons « + Nouveau groupe » et « 🎤 + Nouveau groupe animateur » ; **aucun** bouton « Créer un groupe par ampoule » (supprimé) | | |
-| 2 | « + Nouveau groupe » quatre fois, nommer chaque groupe | Groupes numérotés 1…4 ; « Enregistrer » actif | | |
+| 2 | « + Nouveau groupe » quatre fois | Groupes « Groupe 1 »…« Groupe 4 », **sans champ de nom** ; « Enregistrer » actif | | |
 | 3 | Glisser une ampoule d'un groupe vers un autre | L'ampoule change de groupe, elle n'est jamais dans deux groupes | | |
 | 4 | Glisser un groupe par sa poignée ⠿ | Son rang change, **les numéros se recalculent** ; « Ordre de parcours » se met à jour | | |
 | 5 | Sans souris : « Déplacer vers… » (liste) et ↑ / ↓ | Même résultat qu'au glisser-déposer | | |
-| 6 | Saisir deux fois le même nom (casse différente), puis un nom vide | Message d'erreur sous le champ, « Enregistrer » grisé | | |
-| 7 | Ajouter l'équipe « Rouges » à un groupe | Elle disparaît de la liste des autres groupes | | |
+| 6 | Chercher un champ de nom ou « Équipes à proximité » | **Aucun** : un groupe est son numéro (« Groupe n »), l'ordre de parcours s'écrit g1 → g2 → … → retour à g1 | | |
+| 7 | Réordonner deux groupes déjà enregistrés (poignée ⠿ ou ↑ / ↓) | Un avertissement « g1, g2… désignent maintenant d'autres groupes dans les effets » apparaît ; « Annuler les modifications » le fait disparaître | | |
 | 8 | « Annuler les modifications » | Retour à l'état enregistré | | |
-| 9 | Enregistrer, recharger la page (F5) | Les groupes, leur ordre et leurs équipes sont conservés (leur identifiant ne change pas : renommer ou réordonner un groupe ne casse rien) | | |
-| 9b | Survoler le « ? » d'« Équipes à proximité » | Infobulle : la vague part du groupe qui cite l'équipe, sinon du groupe 1 | | |
+| 9 | Enregistrer, recharger la page (F5) | Les groupes et leur ordre sont conservés (leur identifiant ne change pas : réordonner un groupe ne casse pas ses réglages d'effet) | | |
 | 10 | Supprimer un groupe, enregistrer | Ses ampoules reviennent dans « hors groupe », les numéros se tassent | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
@@ -83,7 +82,7 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Ranger l'ampoule A dans un groupe et enregistrer | Pastille « n · nom » dans « Pont et ampoules » | | |
+| 1 | Ranger l'ampoule A dans un groupe et enregistrer | Pastille « Groupe n » dans « Pont et ampoules » | | |
 | 2 | Passer A au rôle « Équipe Rouges » : lire l'avertissement avant d'enregistrer | Message indiquant qu'elle sera retirée de son groupe | | |
 | 3 | Enregistrer | A n'est plus dans aucun groupe ; le groupe (éventuellement vide) est conservé | | |
 
@@ -99,8 +98,8 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | « 🎤 + Nouveau groupe animateur » deux fois, nommer « Pupitre » et « Régie » | Deux blocs numérotés 🎤1 et 🎤2, sans numéro de salle ni « équipes à proximité » | | |
-| 2 | Y glisser une ampoule générale chacun, enregistrer | Pastilles « 🎤 A1 · Pupitre » et « 🎤 A2 · Régie » dans « Pont et ampoules » ; la numérotation des groupes de salle n'est pas décalée | | |
+| 1 | « 🎤 + Nouveau groupe animateur » deux fois | Deux blocs « Groupe animateur 1 » et « Groupe animateur 2 » (🎤1, 🎤2), sans numéro de salle ni nom | | |
+| 2 | Y glisser une ampoule générale chacun, enregistrer | Pastilles « 🎤 Animateur 1 » et « 🎤 Animateur 2 » dans « Pont et ampoules » ; la numérotation des groupes de salle n'est pas décalée | | |
 | 3 | Réordonner les deux groupes animateur (↑ / ↓) | Les rangs 🎤1 / 🎤2 s'inversent, leurs réglages d'effets suivent leur groupe (identifiant stable) | | |
 | 4 | Créer un 3e et un 4e groupe animateur | Le bouton de création se grise au 4e, message « 4 groupes animateur au plus » | | |
 | 5 | Créer 12 groupes de salle en plus | Le plafond de 12 ne compte que les groupes de salle : 12 salles + 4 animateurs sont possibles | | |
@@ -139,12 +138,12 @@
 
 **Validation** : HUMAIN — **Issues** : #225
 
-**Objectif** : aucun changement visible ni de débit tant qu'aucun groupe n'existe (critère d'acceptation).
+**Objectif** : aucun changement visible, hors le nouveau rendu de la pulsation, ni de débit tant qu'aucun groupe n'existe (critère d'acceptation).
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Supprimer tous les groupes, enregistrer | Aucun groupe | | |
-| 2 | Dérouler une partie : attente, question chronométrée (pulsation de fin de chrono), buzz, révélation, score, entracte | Mêmes scènes, même pulsation, même clignotement or de l'équipe créditée qu'en v11.6.0 | | |
+| 2 | Dérouler une partie : attente, question chronométrée (pulsation de fin de chrono), buzz, révélation, score, entracte | Mêmes scènes et même clignotement or de l'équipe créditée qu'en v11.6.0 ; la pulsation de fin de chrono suit le **nouveau rendu** de la v11.7.0 (phase haute au thème, phase basse blanche à 50 % puis orange puis rouge, 500 ms chacune) : ce n'est plus identique à v11.6.0 (décision) | | |
 | 3 | Popover Ambiance : ON, OFF, AUTO, Flash | Mêmes effets qu'en v11.6.0 sur toute la salle | | |
 | 4 | Couper le serveur (`/shutdown`) | Toutes les ampoules s'éteignent | | |
 

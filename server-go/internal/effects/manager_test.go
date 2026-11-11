@@ -34,7 +34,7 @@ func TestManager_Reload_PicksUpNewEditedAndDeletedFiles_GenerationIncreases(t *t
 	if _, ok := c.Get("nouveau"); !ok || c.Generation <= g0 {
 		t.Fatalf("un fichier ajouté est pris en compte sans redémarrage ; génération %d → %d", g0, c.Generation)
 	}
-	writeUser(t, dir, "nouveau.yaml", strings.Replace(userEffect("nouveau"), "name: Nouveau", "name: Renomme", 1))
+	writeUser(t, dir, "nouveau.yaml", strings.Replace(userEffect("nouveau"), "nom: Nouveau", "nom: Renomme", 1))
 	if e, _ := m.Reload().Get("nouveau"); e.Effect.Name != "Renomme" {
 		t.Errorf("fichier modifié rechargé : %q", e.Effect.Name)
 	}
@@ -51,7 +51,7 @@ func TestManager_UserFileBecomesInvalid_PreviousValidDefinitionKept(t *testing.T
 	m, _ := newMgr(t, dir)
 	writeUser(t, dir, "mien.yaml", userEffect("mien"))
 	m.Reload()
-	writeUser(t, dir, "mien.yaml", "id: mien\nname: Casse\nbidule: 1\n")
+	writeUser(t, dir, "mien.yaml", "id: mien\nnom: Casse\nbidule: 1\n")
 	c := m.Reload()
 	e, ok := c.Get("mien")
 	if !ok || e.Effect.Name != "Mien" {
@@ -65,7 +65,7 @@ func TestManager_UserFileBecomesInvalid_PreviousValidDefinitionKept(t *testing.T
 func TestManager_UserOverrideBecomesInvalid_OverrideDefinitionKept_NotNative(t *testing.T) {
 	dir := t.TempDir()
 	m, _ := newMgr(t, dir)
-	writeUser(t, dir, "base2.yaml", strings.Replace(goodNative, "name: Base", "name: Perso", 1))
+	writeUser(t, dir, "base2.yaml", strings.Replace(goodNative, "nom: Base", "nom: Perso", 1))
 	m.Reload()
 	writeUser(t, dir, "base2.yaml", "id: base\nbidule: 1\n")
 	e, _ := m.Reload().Get("base")
@@ -123,7 +123,7 @@ func TestEnsureDirs_WritesReferenceCopyWithHeader_AndServerNeverReadsIt(t *testi
 		t.Errorf("copie de référence avec en-tête « ne pas modifier ici » : %q", s[:min(len(s), 200)])
 	}
 	// modifier la copie est sans effet : les natifs viennent du binaire
-	if err := os.WriteFile(filepath.Join(dir, "natifs", "base.yaml"), []byte("id: base\nname: Piege\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "natifs", "base.yaml"), []byte("id: base\nnom: Piege\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if e, _ := NewManager(native, dir, nil).Catalogue().Get("base"); e.Effect.Name != "Base" {
@@ -133,7 +133,7 @@ func TestEnsureDirs_WritesReferenceCopyWithHeader_AndServerNeverReadsIt(t *testi
 	if err := EnsureDirs(native, dir); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(filepath.Join(dir, "natifs", "base.yaml")); !strings.Contains(string(b), "id: base\nname: Base") {
+	if b, _ := os.ReadFile(filepath.Join(dir, "natifs", "base.yaml")); !strings.Contains(string(b), "id: base\nnom: Base") {
 		t.Error("la copie de référence est réécrite au démarrage")
 	}
 }
