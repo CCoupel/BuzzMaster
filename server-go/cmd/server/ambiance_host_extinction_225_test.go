@@ -67,7 +67,6 @@ func (b *tw225Bridge) wroteOff(id string) bool {
 	return false
 }
 
-
 func tw225ConfigureHost(t *testing.T, b *tw225Bridge, enabled bool, withHost bool) {
 	t.Helper()
 	saved := *config.Get()
