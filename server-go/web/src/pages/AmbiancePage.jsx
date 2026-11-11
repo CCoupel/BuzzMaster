@@ -644,13 +644,15 @@ export default function AmbiancePage() {
     }
   }
 
-  // POST /api/lighting/groups/test — 400 numéro inconnu, 409 éclairage désactivé, 502 pont injoignable.
+  // POST /api/lighting/groups/test — 400 numéro inconnu, 409 éclairage désactivé, 429 essai déjà en cours,
+  // 503 pont injoignable, 500 erreur (502 gardé par tolérance).
   const handleTestGroup = async (ref) => {
     try {
       const res = await postJson('/api/lighting/groups/test', { group: ref })
       if (res.ok) return { ok: true }
       const message = res.status === 409 ? "L'éclairage d'ambiance est désactivé."
-        : res.status === 502 ? 'Pont injoignable ou refusé — impossible de tester le groupe.'
+        : res.status === 429 ? 'Un essai est déjà en cours — patientez un instant.'
+        : (res.status === 503 || res.status === 502) ? 'Pont injoignable ou refusé — impossible de tester le groupe.'
         : res.status === 400 ? 'Groupe inconnu — enregistrez d\'abord les groupes.'
         : `Essai impossible (HTTP ${res.status}).`
       return { ok: false, message }

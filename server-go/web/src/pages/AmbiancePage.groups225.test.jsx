@@ -166,6 +166,14 @@ describe('AmbiancePage › Lumière — enregistrer et tester les groupes (#225)
     await waitFor(() => expect(srv.tests).toEqual([{ group: 'host' }]))
   })
 
+  it('un essai sur pont injoignable (503) est expliqué', async () => {
+    makeServer({ testStatus: 503, lighting: { groups: [{ name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
+    render(<AmbiancePage />)
+    fireEvent.click(await subtab('Groupes'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
+    expect(await screen.findByText(/Pont injoignable/)).toBeInTheDocument()
+  })
+
   it('un essai refusé (409 éclairage désactivé) est expliqué', async () => {
     makeServer({ testStatus: 409, lighting: { groups: [{ name: 'Scène', role: 'salle', lights: ['BuzzHue1'], near_teams: [] }] } })
     render(<AmbiancePage />)
