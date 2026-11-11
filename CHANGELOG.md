@@ -2,11 +2,11 @@
 
 Historique des versions du projet BuzzControl.
 
-## [11.7.0] - en cours — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#225, #223)
+## [11.7.0] - 2026-11-12 — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#225, #223, #299)
 
 La lumière d'ambiance se règle par **trois zones** — la salle, l'animateur et le public — découpées en groupes numérotés
 (sans nom). Les effets sont des **fichiers de pas** éditables à la main, joués sur une zone à la fois, avec un effet et une
-vitesse par moment et par zone. Les effets #300 (remplissage), #301 (vague) et #302 (scintillement) sortent de la v11.7.0.
+vitesse par moment et par zone. Un catalogue présente les effets, avec aperçu animé et essai sur la salle. Les effets #300 (remplissage), #301 (vague) et #302 (scintillement) sortent de la v11.7.0 : ils passent au backlog.
 
 ### Added
 
@@ -35,6 +35,8 @@ vitesse par moment et par zone. Les effets #300 (remplissage), #301 (vague) et #
 - **Pulsation (#223, décision utilisateur)** — la pulsation devient un effet natif joué par le moteur. **Son rendu change** : phase haute au thème à 100 %, phase basse à **blanc** 50 % au-dessus de 10 s (au lieu du thème à 50 %) ; sous 5 s, rouge à **50 %** (au lieu de 30 %), battement de **500 / 500 ms** (au lieu de 250 / 750 ms). Le tableau de l'ancien rendu est dans `contracts/light-effects.md` §5.5.
 - **Sous-onglets de Lumière (#225, #223)** — « Pont et ampoules », « Groupes » et « Effets ». Visibles une fois le pont associé.
 - **Pilote Hue (#225)** — `buzzmaster-general` ne contient plus les ampoules des zones animateur et public. Si toutes les ampoules d'une zone ont le même état, une seule écriture comme avant.
+- **Bouton « Tester » aligné sur le serveur** — la durée de l'essai est celle que le serveur applique par défaut (10 s, 5 s pour un effet de score seul) ; elle est lue dans la réponse.
+- **Toolchain Go 1.26.11** (`go.mod`, environnement de développement) — aucun effet pour l'utilisateur.
 - **Essai de groupe (#225)** — la réponse est immédiate ; un essai en remplace un autre ; la route ne renvoie plus `429`.
 
 ### Removed
