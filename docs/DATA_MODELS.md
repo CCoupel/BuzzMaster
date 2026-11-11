@@ -1077,7 +1077,7 @@ Réglage **global** de l'effet par moment (`light-effects.md` §6). Deux chemins
 | `lighting.HostGroup(k)` = `-k` | Groupe animateur de rang k (A1 ⇒ `-1`, A2 ⇒ `-2`…) : `{Zone:"general", Group:-k}` |
 
 - `lighting.HostGroup(k) = -k` remplace l'ancienne constante `GroupHost` (qui reste la valeur de A1, `-1`).
-- `Scene()` émet le blanc fixe (255) pour **chaque** groupe animateur non vide. En v11.7.0, `Scene()` n'émet aucune entrée `Group ≥ 1` : la scène de salle reste `Group 0`. Les entrées par groupe de salle arrivent avec le séquenceur d'effets (LOT-2).
+- `Scene()` émet le blanc fixe (255) pour **chaque** groupe animateur non vide. `Scene()` émet l'entrée `Group 0` (scène de salle) ; des entrées `Group n ≥ 1` ne sont ajoutées, pour les groupes de salle non vides, que lorsqu'un effet réparti (`target: groups`) est joué sur la salle (`applyEffectFrames`, `internal/ambiance/effects.go`). `target: all` modifie l'entrée `Group 0`.
 
 ### `hue.LightSpec.Group` (pilote Hue)
 

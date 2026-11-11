@@ -109,10 +109,10 @@ Deux modèles coexistent, à ne pas mélanger :
 ### Moteur d'effets `internal/effects` (v11.7.0, #223)
 
 - **Pur** : pas de goroutine ni d'E/S réseau, n'importe ni `internal/game` ni `internal/lighting/hue`. `Render(effet, contexte, temps)` est déterministe.
-- **Découpage** (`light-effects.md` §5.1) : `effects` fournit le schéma, `Parse` / `ParseFile` (YAML strict), la validation, `Render`, `LoadDir` (catalogue) et `Manager` (`NewManager`, `Run` : signature du dossier toutes les 2 s, `ReloadInterval`). Le **lecteur** (`runEffects`, une goroutine sur `Host.Ctx()`, tic de 100 ms) vit dans `internal/ambiance/effects.go` ; il publie la trame du moment et appelle `Writer().NotifyState()`.
+- **Découpage** (`light-effects.md` §5.1) : `effects` fournit le schéma, `Parse` / `ParseFile` (YAML strict), la validation, `Render`, `LoadDir` (catalogue) et `Manager` (`NewManager`, `Run` : signature du dossier toutes les 2 s, `ReloadInterval`). Le **lecteur** (`RunEffects`, une goroutine sur `Host.Ctx()`, tic de 100 ms) vit dans `internal/ambiance/effects.go` ; il publie la trame du moment et appelle `Writer().NotifyState()`.
 - **Natifs** : lus depuis `assets/effects/*.yaml` (`go:embed`, `assets/embed.go`). Une copie de référence est écrite dans `data/files/effects/natifs/` au démarrage (`EnsureDirs`).
 - **Horloge injectable** : `Controller.EffectsClock` et `EffectsTick` (par instance, jamais au niveau du paquet) ; `EffectsStep()` pour les tests sans ticker.
-- **Précédence** : `ON` / `OFF` / Flash ⇒ aucune trame ; l'essai d'un effet prime sur le moment vivant ; l'arrêt annule le lecteur (`quiesceAmbiance`).
+- **Précédence** : `ON` / `OFF` / Flash suspendent les trames de la **salle** seulement ; les groupes animateur ne sont pas concernés. L'essai d'un groupe (`grouptest.go`) prime sur tout pour ce groupe. L'arrêt et l'interrupteur général annulent le lecteur (`quiesceAmbiance`).
 - **Groupes animateur** : une trame par groupe animateur non vide, écrite sur `Group = lighting.HostGroup(k)`.
 - **Dépendance** : `go.yaml.in/yaml/v4` (déjà indirecte, désormais directe) — pas de nouvelle dépendance tierce ; `TestCA7_NoNewThirdPartyDependency` la liste.
 - **Pulsation** : l'`id` `pulsation` reste servi par le code historique `RunChronoPulse` jusqu'à sa migration (dernier lot de LOT-2) ; le lecteur ne la joue pas.

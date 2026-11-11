@@ -191,7 +191,8 @@ pattern:
 Sémantique exacte :
 
 - **`travel: none`** — dégradé **fixe** : le premier groupe montre le premier arrêt, le dernier groupe le dernier arrêt,
-  les autres sont interpolés. Pas de retour au début ; `repeat`, `step_ms` et `origin` sont sans effet.
+  les autres sont interpolés. Pas de retour au début ; `repeat` et `step_ms` sont sans effet. `origin` et `rest` sont
+  **refusés** avec `travel: none` (erreur de validation : le fichier est écarté).
 - **`travel: forward` ou `backward`, `repeat: true`** (défaut) — **anneau qui tourne** : le dégradé est fermé (après le
   dernier arrêt, il revient au premier), réparti sur un tour complet des groupes, sans couture. Il avance d'un groupe
   par pas.
@@ -298,7 +299,7 @@ version précédente du même `id` reste active si elle existe en mémoire ; sin
 
 | `id` | Motif | Moments | Rendu |
 |------|-------|---------|-------|
-| `pulsation` | `uniform`, `target: all` | chrono | Respiration de la salle, orange puis rouge en fin de chrono (rendu identique à la pulsation d'origine ; le code historique la joue encore, sa migration vers le moteur est le dernier lot de la v11.7.0) |
+| `pulsation` | `uniform`, `target: all` | chrono | Respiration de la salle, orange puis rouge en fin de chrono (rendu identique à la pulsation d'origine ; le code historique la joue encore, sa migration vers le moteur est le dernier point du LOT-2) |
 | `chenillard` | `shift`, `target: groups`, `min_groups: 3` | chrono | Une tête `urgency` et une traînée à 50 % sur le fond du thème ; sans traînée sous 5 groupes |
 | `couleur-equipe` | `uniform`, `target: all` | score | Couleur de l'équipe créditée, fixe, le temps de l'impulsion SCORE |
 
