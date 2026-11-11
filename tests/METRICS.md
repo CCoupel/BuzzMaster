@@ -14,3 +14,4 @@
 | 2026-11-11 | v11.7.0 | #225/#223 LOT-1 corrigé Batch C + NR complète | QA 2 (33ebebd2) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
 | 2026-11-12 | v11.7.0 | #225/#223/#211 LOT-1+LOT-2 (Batch 2.3, R, Z) + NR complète | QA 3 (577c3376) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
 | 2026-11-12 | v11.7.0 | #299 catalogue d'effets (LOT-3) + NR complète | QA 0 (6a7c9ce2) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
+| 2026-11-12 | v11.7.0 | delta config copy-on-write + Tester sans durée en dur (candidat 11.7.0.5) | QA 0 (97dd12f3) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
