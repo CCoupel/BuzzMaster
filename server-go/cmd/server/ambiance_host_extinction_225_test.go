@@ -1,18 +1,20 @@
 package main
 
-// Réserve de revue LOT-1 (#225, code-review-lot1-20261111-150000.md) :
+// Réserve de revue LOT-1 (#225, code-review-lot1-20261111-150000.md), révision 4 :
 // contracts/light-effects.md §2.5 — seuls l'interrupteur général
-// (lighting.enabled → false) et l'arrêt du serveur éteignent le groupe
-// animateur. Faux pont HTTP, pilote Hue réel (même patron que
+// (lighting.enabled → false) et l'arrêt du serveur éteignent la zone animateur
+// et la zone public ; une zone public sans effet n'est jamais écrite. Faux pont HTTP, pilote Hue réel (même patron que
 // TestDevShutdownExtinguishHueLighting_AppliesOffToEveryConfiguredZone).
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +26,8 @@ type tw225Bridge struct {
 	mu  sync.Mutex
 	// light id -> corps de chaque PUT /lights/<id>/state reçu
 	puts map[string][]map[string]any
+	// failLights : GET /lights répond 500 (lecture de l'état impossible)
+	failLights atomic.Bool
 }
 
 func newTW225Bridge(t *testing.T) *tw225Bridge {
@@ -34,11 +38,13 @@ func newTW225Bridge(t *testing.T) *tw225Bridge {
 		switch {
 		case strings.HasSuffix(p, "/config"):
 			_, _ = w.Write([]byte(`{"bridgeid":"fffe0000deadbeef","modelid":"BSB002"}`))
+		case strings.HasSuffix(p, "/lights") && r.Method == "GET" && b.failLights.Load():
+			w.WriteHeader(500)
 		case strings.HasSuffix(p, "/lights") && r.Method == "GET":
 			_, _ = w.Write([]byte(`{"8":{"name":"General1","state":{"on":true,"bri":100,"xy":[0.3,0.3],"reachable":true}},` +
 				`"9":{"name":"Team1","state":{"on":true,"bri":100,"xy":[0.3,0.3],"reachable":true}},` +
 				`"10":{"name":"Host1","state":{"on":true,"bri":254,"xy":[0.3,0.3],"reachable":true}},` +
-				`"11":{"name":"Host2","state":{"on":true,"bri":254,"xy":[0.3,0.3],"reachable":true}}}`))
+				`"11":{"name":"Host2","state":{"on":true,"bri":180,"xy":[0.45,0.41],"reachable":true}}}`))
 		case strings.HasSuffix(p, "/state") && r.Method == "PUT":
 			parts := strings.Split(strings.Trim(p, "/"), "/") // api/<key>/lights/<id>/state
 			body, _ := io.ReadAll(r.Body)
@@ -68,6 +74,13 @@ func (b *tw225Bridge) wroteOff(id string) bool {
 	return false
 }
 
+// wrote : une écriture (quelconque) a-t-elle été reçue pour cette ampoule ?
+func (b *tw225Bridge) wrote(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.puts[id]) > 0
+}
+
 func tw225ConfigureHost(t *testing.T, b *tw225Bridge, enabled bool, withHost bool) {
 	t.Helper()
 	saved := *config.Get()
@@ -85,13 +98,13 @@ func tw225ConfigureHost(t *testing.T, b *tw225Bridge, enabled bool, withHost boo
 	if withHost {
 		cfg.Lighting.Groups = []config.LightingGroupEntry{
 			{ID: "ha", Role: "animateur", Lights: []string{"Host1"}},
-			{ID: "hb", Role: "animateur", Lights: []string{"Host2"}},
+			{ID: "pb", Role: "public", Lights: []string{"Host2"}},
 		}
 	}
 	config.SetInstance(&cfg)
 }
 
-func TestTW225_ShutdownExtinguish_SwitchesHostGroupOff(t *testing.T) {
+func TestTW225_ShutdownExtinguish_SwitchesAnimateurAndPublicZonesOff(t *testing.T) {
 	b := newTW225Bridge(t)
 	app := newTestApp(t)
 	tw225ConfigureHost(t, b, true, true)
@@ -100,7 +113,7 @@ func TestTW225_ShutdownExtinguish_SwitchesHostGroupOff(t *testing.T) {
 		t.Fatal("pilote attendu depuis une configuration valide")
 	}
 	app.shutdownExtinguishHueLighting()
-	for id, name := range map[string]string{"8": "salle", "9": "équipe", "10": "animateur A1", "11": "animateur A2"} {
+	for id, name := range map[string]string{"8": "salle", "9": "équipe", "10": "zone animateur", "11": "zone public"} {
 		if !b.wroteOff(id) {
 			t.Errorf("l'arrêt doit écrire on:false sur l'ampoule %s (%s) ; écritures : %v", id, name, b.puts[id])
 		}
@@ -119,7 +132,7 @@ func TestTW225_ShutdownExtinguish_NoHostGroup_HostNamedBulbIsJustGeneral(t *test
 	}
 }
 
-func TestTW225_MasterSwitchOff_SwitchesHostGroupOff(t *testing.T) {
+func TestTW225_MasterSwitchOff_SwitchesAnimateurAndPublicZonesOff(t *testing.T) {
 	// Interrupteur général runtime : lighting.enabled passe à false, puis le
 	// serveur appelle extinguishOnLightingDisabled (main.go OnLightingEnabledChange).
 	b := newTW225Bridge(t)
@@ -142,9 +155,74 @@ func TestTW225_MasterSwitchOff_SwitchesHostGroupOff(t *testing.T) {
 	if !b.wroteOff("8") {
 		t.Error("l'interrupteur général doit éteindre les ampoules de salle")
 	}
-	for id, name := range map[string]string{"10": "A1", "11": "A2"} {
+	for id, name := range map[string]string{"10": "animateur", "11": "public"} {
 		if !b.wroteOff(id) {
-			t.Errorf("l'interrupteur général doit AUSSI éteindre le groupe animateur %s (contrat §2.5) ; écritures : %v", name, b.puts[id])
+			t.Errorf("l'interrupteur général doit AUSSI éteindre la zone %s (contrat §2.5) ; écritures : %v", name, b.puts[id])
 		}
 	}
+}
+
+// lastPut : le dernier corps PUT reçu pour cette ampoule (nil si aucun) et le nombre d'écritures.
+func (b *tw225Bridge) lastPut(id string) (map[string]any, int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	n := len(b.puts[id])
+	if n == 0 {
+		return nil, 0
+	}
+	return b.puts[id][n-1], n
+}
+
+// tw225PublicTest lance l'essai du groupe 1 de la zone public (pas de 40 ms) et attend, par sondage borné, que la séquence de six
+// pas soit finie ET que l'état rendu ait été réécrit : prédicat sur la dernière écriture de l'ampoule publique (« Host2 », id 11).
+func tw225PublicTest(t *testing.T, b *tw225Bridge, beforeTest func(), done func(last map[string]any) bool) {
+	t.Helper()
+	app := newTestApp(t)
+	tw225ConfigureHost(t, b, true, true)
+	app.setupAmbiance()
+	if app.LightingDriver() == nil {
+		t.Fatal("pilote attendu")
+	}
+	// l'état des lampes doit être connu du pilote (inventaire) avant l'essai, comme en production après le démarrage
+	if err := app.LightingDriver().RefreshInventory(context.Background()); err != nil {
+		t.Fatalf("inventaire : %v", err)
+	}
+	if beforeTest != nil {
+		beforeTest()
+	}
+	ctl := app.ambCtl()
+	ctl.GroupTestStep = 40 * time.Millisecond
+	t.Cleanup(ctl.StopGroupTest)
+	if err := app.StartGroupTest("public1"); err != nil {
+		t.Fatalf("essai du groupe 1 de la zone public : %v", err)
+	}
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		if last, n := b.lastPut("11"); n >= 1 && done(last) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	last, n := b.lastPut("11")
+	t.Fatalf("zone public : état attendu non rétabli après l'essai (%d écritures, dernière : %v)", n, last)
+}
+
+func TestTW225_PublicGroupTest_StateReadOnTheBridge_ThenWrittenBack(t *testing.T) {
+	// §2.5 : la zone public sans effet n'est jamais pilotée ; après l'essai, l'état LU sur le pont avant l'essai est réécrit.
+	// Le faux pont annonce « Host2 » allumée à bri 180 : c'est cet état qui doit revenir (pas un blanc fixe, pas éteint).
+	b := newTW225Bridge(t)
+	tw225PublicTest(t, b, nil, func(last map[string]any) bool {
+		on, _ := last["on"].(bool)
+		bri, _ := last["bri"].(float64)
+		return on && bri == 180
+	})
+}
+
+func TestTW225_PublicGroupTest_StateUnreadable_BulbsSwitchedOff(t *testing.T) {
+	// lecture impossible (le pont répond 500 à GET /lights au début de l'essai) ⇒ lampes éteintes à la fin
+	b := newTW225Bridge(t)
+	tw225PublicTest(t, b, func() { b.failLights.Store(true) }, func(last map[string]any) bool {
+		on, ok := last["on"].(bool)
+		return ok && !on
+	})
 }
