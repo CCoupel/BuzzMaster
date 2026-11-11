@@ -11,7 +11,7 @@ import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
 import SoundsManager from '../components/SoundsManager'
 import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
-import { groupLabelForLight, teamRoleWarning } from '../utils/lightGroups'
+import { groupLabelForLight, groupPillText, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
 import { configKeyFor, configPatchFor, globalEffect, globalSpeed, findHostGroups, MOMENTS } from '../utils/lightEffects'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
@@ -1197,7 +1197,7 @@ export default function AmbiancePage() {
             onTest={handleTestGroup}
             onStopTest={handleStopGroupTest}
             onNotify={setToast}
-            onChooseEffects={(hostId) => openSubTab('effects', hostId)}
+            onChooseEffects={(zone) => openSubTab('effects', zone)}
           />
         )}
 
@@ -1425,7 +1425,7 @@ export default function AmbiancePage() {
                             onClick={() => setLightSubTab('groups')}
                             aria-label={`Groupe de ${row.name}`}
                           >
-                            {label ? (label.kind === 'host' ? `🎤 Animateur ${label.rank}` : `Groupe ${label.n}`) : 'hors groupe'}
+                            {label ? (groupPillText(label)) : 'hors groupe'}
                           </button>
                         )
                       })()}

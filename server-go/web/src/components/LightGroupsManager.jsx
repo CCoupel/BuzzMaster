@@ -1,17 +1,16 @@
 import { useState, useMemo, useEffect } from 'react'
 import Button from './Button'
 import {
-  MAX_ROOM_GROUPS, MAX_HOST_GROUPS, EMPTY_DRAFT, TEST_STEPS, testStepAt,
+  ZONES, ZONE_LABEL, ZONE_ICON, MAX_GROUPS_PER_ZONE, EMPTY_DRAFT, TEST_STEPS, testStepAt,
   draftFromConfig, draftToPayload, draftsEqual, groupCount, pruneToGeneral,
   unassignedLights, locateLight, moveLight, addGroup, removeGroup, moveGroup,
-  addHost, removeHost, moveHost, validateDraft, summarize, groupName, hostName, orderChanged,
+  validateDraft, summarize, groupName, testRef, orderChanged,
 } from '../utils/lightGroups'
 import './LightGroupsManager.css'
 
-// #225 (v11.7.0, LOT-1) — sous-onglet « Groupes » de Lumière : rassemble les ampoules de
-// l'éclairage général en groupes ordonnés + bloc « Groupe animateur ».
-// Maquette : docs/mockup/v11.7.0/ui/ambiance_page__light_groups_numbered.html (révision 3 : groupes sans nom,
-// « Équipes à proximité » retiré).
+// #225 (v11.7.0, LOT-1) — sous-onglet « Groupes » de Lumière : rassemble les ampoules de l'éclairage général en
+// groupes, dans l'une des trois zones (Ambiance, Animateur, Public ; révision 4).
+// Maquette : docs/mockup/v11.7.0/ui/ambiance_page__light_groups_zones.html.
 // Contrat : contracts/light-effects.md §2.1, §2.4, §2.5.
 //
 // Props :
@@ -20,15 +19,31 @@ import './LightGroupsManager.css'
 //   enabled        éclairage d'ambiance activé (l'essai est refusé sinon : 409)
 //   testUnavailableReason  raison d'indisponibilité de l'essai (pont injoignable…), '' si disponible
 //   onSave(payload) -> Promise<{ok, message?}>
-//   onTest(n | 'host<k>') -> Promise<{ok, duration_ms?, message?}>   essai en séquence (6 pas d'1 s), réponse immédiate
-//   onStopTest() -> Promise<{ok, message?}>                          POST …/groups/test/stop
-//   onChooseEffects(hostId)  lien « Choisir ses effets » d'un groupe animateur (null : inactif)
+//   onTest(n | 'host<k>' | 'public<k>') -> Promise<{ok, duration_ms?, message?}>   essai en séquence (6 pas d'1 s)
+//   onStopTest() -> Promise<{ok, message?}>                                        POST …/groups/test/stop
+//   onChooseEffects(zone)  lien « Choisir les effets de la zone » (null : inactif)
 //   onNotify({message,type}) toast de la page
 //
-// Glisser-déposer natif (dataTransfer), comme les fonds d'écran et les manches ; alternative
-// clavier : « Déplacer vers… » par ampoule, « Monter » / « Descendre » par groupe.
+// Glisser-déposer natif (dataTransfer), comme les fonds d'écran et les manches ; une ampoule peut passer d'un groupe à
+// un autre, d'une zone à l'autre ; un groupe se réordonne dans sa zone. Alternative clavier : « Déplacer vers… » par
+// ampoule, « Monter » / « Descendre » par groupe.
 
 const DND_TYPE = 'application/x-buzz-lightgroups'
+
+const ZONE_BLURB = {
+  ambiance: 'sans effet : scène de la salle',
+  animateur: 'sans effet : blanc fixe',
+  public: 'sans effet : non pilotée',
+}
+const ZONE_NEW = {
+  ambiance: '+ Nouveau groupe',
+  animateur: '🎤 + Nouveau groupe animateur',
+  public: '👥 + Nouveau groupe public',
+}
+const ZONE_HINT = {
+  animateur: "La zone Animateur éclaire le pupitre, la régie, la table de l'animateur… Elle n'est entraînée ni par l'éclairage de la salle, ni par ON / OFF, ni par le Flash. Sans effet choisi, elle reste en blanc fixe.",
+  public: "La zone Public rassemble les lampes placées côté public. Tant qu'aucun effet ne lui est attribué, BuzzControl ne lui envoie rien : ces lampes restent comme vous les avez réglées. Elle n'est concernée ni par ON / OFF, ni par le Flash. Sans groupe public, rien ne change.",
+}
 
 function readDrag(e) {
   try { return JSON.parse(e.dataTransfer.getData(DND_TYPE) || 'null') } catch { return null }
@@ -60,8 +75,6 @@ export default function LightGroupsManager({
   const free = unassignedLights(draft, generalLights)
   const summary = summarize(draft, generalLights)
   const total = groupCount(draft)
-  const atMaxRoom = draft.groups.length >= MAX_ROOM_GROUPS
-  const atMaxHost = draft.hosts.length >= MAX_HOST_GROUPS
 
   // La séquence se termine d'elle-même au bout de `duration_ms` ; un tic de 250 ms met l'étape en cours à jour.
   useEffect(() => {
@@ -77,7 +90,7 @@ export default function LightGroupsManager({
   if (generalLights.length === 0 && total === 0) {
     return (
       <section className="lgm" aria-labelledby="lgm-title">
-        <h2 id="lgm-title" className="ambiance-step-title">Groupes d'ambiance</h2>
+        <h2 id="lgm-title" className="ambiance-step-title">Groupes</h2>
         <p className="ambiance-hint">
           Aucune ampoule n'a le rôle « Éclairage général ». Attribuez ce rôle dans « Pont et ampoules »
           pour créer des groupes.
@@ -97,15 +110,17 @@ export default function LightGroupsManager({
     e.dataTransfer.dropEffect = 'move'
     if (dragOver !== key) setDragOver(key)
   }
-  const dropOn = (target, groupIndex) => (e) => {
+  // Dépôt sur un groupe (ou le bac) : une ampoule y est rangée ; un groupe de la même zone prend son rang.
+  const dropOn = (target) => (e) => {
     e.preventDefault()
     setDragOver(null)
     if (disabled) return
     const data = readDrag(e)
     if (!data) return
-    if (data.type === 'light' && !String(target).endsWith('card')) update(d => moveLight(d, data.name, groupIndex))
-    if (data.type === 'group' && target === 'groupcard') update(d => moveGroup(d, data.index, groupIndex.index))
-    if (data.type === 'host' && target === 'hostcard') update(d => moveHost(d, data.index, groupIndex.index))
+    if (data.type === 'light') update(d => moveLight(d, data.name, target))
+    else if (data.type === 'group' && target.kind === 'group' && data.zone === target.zone) {
+      update(d => moveGroup(d, data.zone, data.index, target.index))
+    }
   }
   const poolTarget = { kind: 'pool' }
 
@@ -143,11 +158,13 @@ export default function LightGroupsManager({
 
   const moveSelectValue = (name) => {
     const loc = locateLight(draft, name)
-    return loc.kind === 'group' ? `g${loc.index}` : loc.kind === 'host' ? `h${loc.index}` : 'pool'
+    return loc.kind === 'group' ? `${loc.zone}:${loc.index}` : 'pool'
   }
   const onMoveSelect = (name) => (e) => {
     const v = e.target.value
-    update(d => moveLight(d, name, v === 'pool' ? poolTarget : { kind: v[0] === 'h' ? 'host' : 'group', index: Number(v.slice(1)) }))
+    if (v === 'pool') { update(d => moveLight(d, name, poolTarget)); return }
+    const [zone, index] = v.split(':')
+    update(d => moveLight(d, name, { kind: 'group', zone, index: Number(index) }))
   }
 
   const renderChip = (name) => (
@@ -168,8 +185,9 @@ export default function LightGroupsManager({
         aria-label={`Déplacer ${name} vers…`}
       >
         <option value="pool">Hors groupe</option>
-        {draft.groups.map((g, i) => <option key={i} value={`g${i}`}>{groupName(i)}</option>)}
-        {draft.hosts.map((g, i) => <option key={`h${i}`} value={`h${i}`}>🎤 {hostName(i)}</option>)}
+        {ZONES.flatMap(zone => draft[zone].map((_, i) => (
+          <option key={`${zone}:${i}`} value={`${zone}:${i}`}>{ZONE_ICON[zone]} {ZONE_LABEL[zone]} · {groupName(i)}</option>
+        )))}
       </select>
       {moveSelectValue(name) !== 'pool' && (
         <button
@@ -199,27 +217,89 @@ export default function LightGroupsManager({
     )
   }
 
+  const renderGroup = (zone, g, i) => (
+    <div
+      key={i}
+      className={`lgm-grp lgm-grp-${zone}${g.lights.length === 0 ? ' is-empty' : ''}${dragOver === `${zone}${i}` ? ' is-over' : ''}`}
+      onDragOver={allowDrop(`${zone}${i}`)} onDragLeave={() => setDragOver(null)}
+      onDrop={dropOn({ kind: 'group', zone, index: i })}
+      data-testid={`lgm-${zone}-${i + 1}`}
+    >
+      <div className="lgm-handle-col">
+        <span
+          className="lgm-handle" draggable={!disabled} title="Glisser pour changer l'ordre"
+          onDragStart={startDrag({ type: 'group', zone, index: i })} aria-hidden="true"
+        >⠿</span>
+        <button type="button" className="lgm-mini" disabled={disabled || i === 0}
+          aria-label={`Monter le groupe ${i + 1} de la zone ${ZONE_LABEL[zone]}`} onClick={() => update(d => moveGroup(d, zone, i, i - 1))}>↑</button>
+        <button type="button" className="lgm-mini" disabled={disabled || i === draft[zone].length - 1}
+          aria-label={`Descendre le groupe ${i + 1} de la zone ${ZONE_LABEL[zone]}`} onClick={() => update(d => moveGroup(d, zone, i, i + 1))}>↓</button>
+      </div>
+      <span className={`lgm-num lgm-num-${zone}`} aria-label={`Groupe ${i + 1}, zone ${ZONE_LABEL[zone]}`}>{i + 1}</span>
+      <div className="lgm-body">
+        <strong className="lgm-title">{groupName(i)}</strong>
+        <div className="lgm-drop">
+          {g.lights.length > 0
+            ? g.lights.map(renderChip)
+            : <span className="lgm-drop-empty">Aucune ampoule — glissez-en une ici. Un groupe vide est ignoré par les effets.</span>}
+        </div>
+      </div>
+      <div className="lgm-actions">
+        {renderTest(testRef(zone, i), g.lights.length === 0)}
+        <Button variant="ghost" size="sm" disabled={disabled}
+          aria-label={`Supprimer le groupe ${i + 1} de la zone ${ZONE_LABEL[zone]}`}
+          onClick={() => update(d => removeGroup(d, zone, i))}>Supprimer</Button>
+      </div>
+    </div>
+  )
+
+  const renderZone = (zone) => {
+    const list = draft[zone]
+    const atMax = list.length >= MAX_GROUPS_PER_ZONE
+    return (
+      <section key={zone} className={`lgm-zone lgm-zone-${zone}`} aria-label={`Zone ${ZONE_LABEL[zone]}`} data-testid={`lgm-zone-${zone}`}>
+        <h3 className="lgm-h lgm-zone-title">
+          {ZONE_ICON[zone]} Zone {ZONE_LABEL[zone]} — {list.length} groupe{list.length > 1 ? 's' : ''}
+        </h3>
+        <div className="lgm-order" aria-label={`Ordre de parcours, zone ${ZONE_LABEL[zone]}`}>
+          {list.length > 0 && <>Ordre de parcours :{' '}</>}
+          {list.map((_, i) => (
+            <span key={i}>{i > 0 && ' → '}<span className="lgm-order-item">g{i + 1}</span></span>
+          ))}
+          {list.length > 1 && ' → retour à g1'}
+          {list.length > 0 && ' · '}{ZONE_BLURB[zone]}
+          {zone !== 'ambiance' && list.length > 0 && (
+            <>
+              {' · '}
+              {onChooseEffects && !dirty && list.every(g => g.id)
+                ? <button type="button" className="lgm-link" onClick={() => onChooseEffects(zone)}>Choisir les effets de la zone</button>
+                : <span className="lgm-soon" title="Enregistrez d'abord les groupes">Choisir les effets de la zone</span>}
+            </>
+          )}
+        </div>
+        {list.map((g, i) => renderGroup(zone, g, i))}
+        <div className="lgm-row">
+          <Button variant={zone === 'ambiance' && list.length === 0 ? 'primary' : 'ghost'} size="sm" disabled={disabled || atMax}
+            onClick={() => update(d => addGroup(d, zone))}>
+            {ZONE_NEW[zone]}
+          </Button>
+        </div>
+        {atMax && <p className="ambiance-hint">{MAX_GROUPS_PER_ZONE} groupes au plus dans la zone {ZONE_LABEL[zone]}.</p>}
+        {ZONE_HINT[zone] && <p className="ambiance-hint">{ZONE_HINT[zone]}</p>}
+      </section>
+    )
+  }
+
   return (
     <section className="lgm" aria-labelledby="lgm-title">
-      <h2 id="lgm-title" className="ambiance-step-title">Groupes d'ambiance</h2>
+      <h2 id="lgm-title" className="ambiance-step-title">Groupes</h2>
       <p className="ambiance-hint">
-        Rassemblez les ampoules de l'éclairage général en groupes. Les effets de salle (chenillard…) désignent
-        les groupes par leur numéro, du groupe 1 au dernier : rangez-les dans l'ordre où ils se suivent dans la
-        salle. Dans un fichier d'effet, <code>g1</code> est le groupe 1 et <code>g0</code> toute la salle. Les
-        ampoules d'équipe gardent la couleur de leur équipe et ne figurent pas ici.
+        Rassemblez les ampoules de l'éclairage général en groupes, dans l'une des trois zones : Ambiance (la salle),
+        Animateur, Public. Les effets (chenillard…) désignent les groupes par leur numéro, du groupe 1 au dernier :
+        rangez-les dans l'ordre où ils se suivent dans la salle. Dans un fichier d'effet, <code>g1</code> est le
+        groupe 1 et <code>g0</code> toute la zone. Les ampoules d'équipe gardent la couleur de leur équipe et ne
+        figurent pas ici.
       </p>
-
-      {draft.groups.length > 0 && (
-        <div className="lgm-order" aria-label="Ordre de parcours">
-          Ordre de parcours :{' '}
-          {draft.groups.map((g, i) => (
-            <span key={i}>
-              {i > 0 && ' → '}<span className="lgm-order-item">g{i + 1}</span>
-            </span>
-          ))}
-          {draft.groups.length > 1 && ' → retour à g1'}
-        </div>
-      )}
       {reordered && (
         <div className="lgm-warn" role="status">
           L'ordre a changé : <code>g1</code>, <code>g2</code>… désignent maintenant d'autres groupes dans les effets.
@@ -229,138 +309,25 @@ export default function LightGroupsManager({
       <div className="lgm-cols">
         <div
           className={`lgm-pool${dragOver === 'pool' ? ' is-over' : ''}`}
-          onDragOver={allowDrop('pool')} onDragLeave={() => setDragOver(null)} onDrop={dropOn('pool', poolTarget)}
+          onDragOver={allowDrop('pool')} onDragLeave={() => setDragOver(null)} onDrop={dropOn(poolTarget)}
           data-testid="lgm-pool"
         >
           <h3 className="lgm-h">Ampoules générales hors groupe ({free.length})</h3>
           <div>{free.map(renderChip)}</div>
           <p className="ambiance-hint">
-            Glissez une ampoule vers un groupe. Une ampoule hors groupe garde l'éclairage de la salle mais
-            ne participe pas aux effets répartis.
+            Glissez une ampoule vers un groupe. Une ampoule hors groupe fait partie de la zone Ambiance : elle garde
+            l'éclairage de la salle mais ne participe pas aux effets répartis.
           </p>
         </div>
 
         <div className="lgm-main">
           {total === 0 && (
             <p className="ambiance-hint">
-              Aucun groupe pour l'instant : l'éclairage se comporte comme avant. Les effets répartis
-              (chenillard…) demandent des groupes.
+              Aucun groupe pour l'instant : l'éclairage se comporte comme avant. Les effets répartis (chenillard…)
+              demandent des groupes. Créez un groupe, puis glissez-y des ampoules.
             </p>
           )}
-
-          {draft.groups.map((g, i) => {
-            return (
-              <div
-                key={i}
-                className={`lgm-grp${g.lights.length === 0 ? ' is-empty' : ''}${dragOver === `grp${i}` ? ' is-over' : ''}`}
-                onDragOver={allowDrop(`grp${i}`)} onDragLeave={() => setDragOver(null)}
-                onDrop={(e) => {
-                  const data = readDrag(e)
-                  if (data?.type === 'group') dropOn('groupcard', { index: i })(e)
-                  else dropOn('group', { kind: 'group', index: i })(e)
-                }}
-                data-testid={`lgm-group-${i + 1}`}
-              >
-                <div className="lgm-handle-col">
-                  <span
-                    className="lgm-handle" draggable={!disabled} title="Glisser pour changer l'ordre"
-                    onDragStart={startDrag({ type: 'group', index: i })} aria-hidden="true"
-                  >⠿</span>
-                  <button type="button" className="lgm-mini" disabled={disabled || i === 0}
-                    aria-label={`Monter le groupe ${i + 1}`} onClick={() => update(d => moveGroup(d, i, i - 1))}>↑</button>
-                  <button type="button" className="lgm-mini" disabled={disabled || i === draft.groups.length - 1}
-                    aria-label={`Descendre le groupe ${i + 1}`} onClick={() => update(d => moveGroup(d, i, i + 1))}>↓</button>
-                </div>
-                <span className="lgm-num" aria-label={`Groupe ${i + 1}`}>{i + 1}</span>
-                <div className="lgm-body">
-                  <strong className="lgm-title">{groupName(i)}</strong>
-                  <div className="lgm-drop">
-                    {g.lights.length > 0
-                      ? g.lights.map(renderChip)
-                      : <span className="lgm-drop-empty">Aucune ampoule — glissez-en une ici. Un groupe vide est ignoré par les effets.</span>}
-                  </div>
-                </div>
-                <div className="lgm-actions">
-                  {renderTest(i + 1, g.lights.length === 0)}
-                  <Button variant="ghost" size="sm" disabled={disabled}
-                    aria-label={`Supprimer le groupe ${i + 1}`}
-                    onClick={() => update(d => removeGroup(d, i))}>Supprimer</Button>
-                </div>
-              </div>
-            )
-          })}
-
-          <div className="lgm-row">
-            <Button variant="ghost" size="sm" disabled={disabled || atMaxRoom} onClick={() => update(addGroup)}>
-              + Nouveau groupe
-            </Button>
-          </div>
-          {atMaxRoom && <p className="ambiance-hint">{MAX_ROOM_GROUPS} groupes de salle au plus.</p>}
-          {draft.groups.length === 0 && draft.hosts.length === 0 && (
-            <p className="ambiance-hint">Créez un groupe, nommez-le, puis glissez-y des ampoules.</p>
-          )}
-
-          <div className="lgm-host-wrap">
-            <h3 className="lgm-h">Groupes animateur ({draft.hosts.length})</h3>
-            {draft.hosts.map((g, i) => {
-              return (
-                <div
-                  key={i}
-                  className={`lgm-grp lgm-host${g.lights.length === 0 ? ' is-empty' : ''}${dragOver === `host${i}` ? ' is-over' : ''}`}
-                  onDragOver={allowDrop(`host${i}`)} onDragLeave={() => setDragOver(null)}
-                  onDrop={(e) => {
-                    const data = readDrag(e)
-                    if (data?.type === 'host') dropOn('hostcard', { index: i })(e)
-                    else dropOn('host', { kind: 'host', index: i })(e)
-                  }}
-                  data-testid={`lgm-host-${i + 1}`}
-                >
-                  <div className="lgm-handle-col">
-                    <span
-                      className="lgm-handle" draggable={!disabled} title="Glisser pour changer l'ordre"
-                      onDragStart={startDrag({ type: 'host', index: i })} aria-hidden="true"
-                    >⠿</span>
-                    <button type="button" className="lgm-mini" disabled={disabled || i === 0}
-                      aria-label={`Monter le groupe animateur ${i + 1}`} onClick={() => update(d => moveHost(d, i, i - 1))}>↑</button>
-                    <button type="button" className="lgm-mini" disabled={disabled || i === draft.hosts.length - 1}
-                      aria-label={`Descendre le groupe animateur ${i + 1}`} onClick={() => update(d => moveHost(d, i, i + 1))}>↓</button>
-                  </div>
-                  <span className="lgm-num lgm-num-host" aria-label={`Groupe animateur ${i + 1}`}>🎤{i + 1}</span>
-                  <div className="lgm-body">
-                    <strong className="lgm-title">{hostName(i)}</strong>
-                    <div className="lgm-drop">
-                      {g.lights.length > 0
-                        ? g.lights.map(renderChip)
-                        : <span className="lgm-drop-empty">Aucune ampoule — glissez-en une ici.</span>}
-                    </div>
-                    <div className="lgm-line">
-                      Blanc fixe par défaut ·{' '}
-                      {onChooseEffects && g.id && !dirty
-                        ? <button type="button" className="lgm-link" onClick={() => onChooseEffects(g.id)}>Choisir ses effets</button>
-                        : <span className="lgm-soon" title="Enregistrez d'abord les groupes">Choisir ses effets</span>}
-                    </div>
-                  </div>
-                  <div className="lgm-actions">
-                    {renderTest(`host${i + 1}`, g.lights.length === 0)}
-                    <Button variant="ghost" size="sm" disabled={disabled}
-                      aria-label={`Supprimer le groupe animateur ${i + 1}`}
-                      onClick={() => update(d => removeHost(d, i))}>Supprimer</Button>
-                  </div>
-                </div>
-              )
-            })}
-            <div className="lgm-row">
-              <Button variant="ghost" size="sm" disabled={disabled || atMaxHost} onClick={() => update(addHost)}>
-                🎤 + Nouveau groupe animateur
-              </Button>
-            </div>
-            {atMaxHost && <p className="ambiance-hint">{MAX_HOST_GROUPS} groupes animateur au plus.</p>}
-            <p className="ambiance-hint">
-              Les groupes animateur éclairent le pupitre, la régie, la table de l'animateur… Ils ne sont entraînés ni
-              par les effets de salle, ni par ON / OFF, ni par le Flash : chacun reste en blanc fixe, sauf si vous lui
-              choisissez un effet par moment (sous-onglet Effets). {MAX_HOST_GROUPS} groupes animateur au plus.
-            </p>
-          </div>
+          {ZONES.map(renderZone)}
         </div>
       </div>
 
@@ -368,8 +335,8 @@ export default function LightGroupsManager({
         <div className="lgm-warn" role="status">
           {[
             summary.free > 0 && `${summary.free} ampoule${summary.free > 1 ? 's' : ''} générale${summary.free > 1 ? 's sont' : ' est'} hors groupe`,
-            summary.empty > 0 && `${summary.empty} groupe${summary.empty > 1 ? 's sont vides' : ' est vide'}`,
-          ].filter(Boolean).join(' et ')} : les effets répartis animeront {summary.active} groupe{summary.active > 1 ? 's' : ''}.
+            summary.empty > 0 && `${summary.empty} groupe${summary.empty > 1 ? 's' : ''} d'ambiance ${summary.empty > 1 ? 'sont vides' : 'est vide'}`,
+          ].filter(Boolean).join(' et ')} : les effets répartis animeront {summary.active} groupe{summary.active > 1 ? 's' : ''} dans la zone Ambiance.
         </div>
       )}
       {errors.global.map(m => <div key={m} className="lgm-warn is-error" role="alert">{m}</div>)}

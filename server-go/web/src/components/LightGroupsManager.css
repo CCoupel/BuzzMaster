@@ -54,3 +54,11 @@
 .lgm-help { display: inline-flex; align-items: center; justify-content: center; width: 1rem; height: 1rem; border-radius: 50%; background: var(--gray-200); color: var(--gray-700); font-size: 0.68rem; font-weight: 700; cursor: help; }
 
 .lgm-title { font-size: 0.88rem; }
+
+/* Révision 4 — trois zones */
+.lgm-zone { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.lgm-zone-title { margin-top: var(--space-2); font-size: 0.88rem; }
+.lgm-grp-animateur { border-color: #c7d2fe; background: #f5f7ff; }
+.lgm-grp-public { border-color: #bbf7d0; background: #f6fef9; }
+.lgm-num-animateur { background: #fff; color: var(--primary-500, #4f46e5); border: 2px solid var(--primary-500, #4f46e5); }
+.lgm-num-public { background: #fff; color: #166534; border: 2px solid #16a34a; }
