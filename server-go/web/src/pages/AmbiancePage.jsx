@@ -10,6 +10,8 @@ import { soundStateLabel } from '../utils/soundState'
 import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
 import SoundsManager from '../components/SoundsManager'
 import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
+import LightGroupsManager from '../components/LightGroupsManager'
+import { groupLabelForLight, teamRoleWarning } from '../utils/lightGroups'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -72,6 +74,7 @@ const EMPTY_LIGHTING = Object.freeze({
   bridge_id: '',
   api_key_configured: false,
   lights: [],
+  groups: [],
 })
 
 // #230 — section `sound` de config.json, jumelle de EMPTY_LIGHTING ci-dessus
@@ -94,6 +97,13 @@ const EMPTY_SOUND = Object.freeze({
 const TABS = [
   { key: 'light', label: 'Lumière', icon: '🔆' },
   { key: 'sound', label: 'Son', icon: '🔊' },
+]
+
+// #225 — sous-onglets de Lumière (le dernier est un emplacement jusqu'au LOT-2).
+const LIGHT_SUBTABS = [
+  { key: 'bridge', label: 'Pont et ampoules' },
+  { key: 'groups', label: 'Groupes' },
+  { key: 'effects', label: 'Effets' },
 ]
 
 const postJson = (url, body) =>
@@ -192,6 +202,8 @@ export default function AmbiancePage() {
   const [sound, setSound] = useState(EMPTY_SOUND)
   const [savingSound, setSavingSound] = useState(false)
   const [activeTab, setActiveTab] = useState('light')
+  // #225 — sous-onglets de Lumière (pont associé seulement) : 'bridge' | 'groups' | 'effects'.
+  const [lightSubTab, setLightSubTab] = useState('bridge')
   const [configLoaded, setConfigLoaded] = useState(false)
 
   // Étape 1 — découverte.
@@ -600,6 +612,52 @@ export default function AmbiancePage() {
   // ci-dessus, pas de `effectiveSelected` — même correction que le handler.
   const anyGeneralAssigned = currentlyAssignedNames.some(name => roleFor(name).role === 'general')
   const anyTeamAssigned = currentlyAssignedNames.some(name => roleFor(name).role === 'team')
+
+  // ---- #225 : groupes d'ambiance --------------------------------------------
+  const groupsConfigured = useMemo(
+    () => (Array.isArray(lighting.groups) ? lighting.groups : []),
+    [lighting.groups]
+  )
+  // Ampoules de rôle « general » ENREGISTRÉ, dans l'ordre de la liste des ampoules.
+  const generalLightNames = useMemo(
+    () => rows.filter(r => existingLights.has(r.name) && roleOf(existingLights.get(r.name)).role === 'general').map(r => r.name),
+    [rows, existingLights]
+  )
+  // Ampoules rangées dans un groupe dont le rôle passe à « équipe » : retirées à l'enregistrement.
+  const groupedLightsLeaving = useMemo(
+    () => generalLightNames.filter(n => roleFor(n).role === 'team' && groupLabelForLight(groupsConfigured, n)),
+    [generalLightNames, roleFor, groupsConfigured]
+  )
+  const groupLabelFor = (name) => groupLabelForLight(groupsConfigured, name)
+
+  const handleSaveGroups = async (payload) => {
+    try {
+      const res = await saveLighting({ groups: payload })
+      if (!res.ok) {
+        const text = (await res.text()).trim()
+        return { ok: false, message: text || `Enregistrement impossible (HTTP ${res.status})` }
+      }
+      await afterSave()
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, message: 'Erreur : ' + error.message }
+    }
+  }
+
+  // POST /api/lighting/groups/test — 400 numéro inconnu, 409 éclairage désactivé, 502 pont injoignable.
+  const handleTestGroup = async (ref) => {
+    try {
+      const res = await postJson('/api/lighting/groups/test', { group: ref })
+      if (res.ok) return { ok: true }
+      const message = res.status === 409 ? "L'éclairage d'ambiance est désactivé."
+        : res.status === 502 ? 'Pont injoignable ou refusé — impossible de tester le groupe.'
+        : res.status === 400 ? 'Groupe inconnu — enregistrez d\'abord les groupes.'
+        : `Essai impossible (HTTP ${res.status}).`
+      return { ok: false, message }
+    } catch (error) {
+      return { ok: false, message: 'Erreur : ' + error.message }
+    }
+  }
 
   const toggleName = (name, checked) => {
     setSelectedNames(prev => {
@@ -1051,9 +1109,51 @@ export default function AmbiancePage() {
           </section>
         )}
 
+        {/* #225 (v11.7.0) — sous-onglets de Lumière, pont associé seulement : les étapes 1 et 2
+            (recherche et association du pont) n'en portent pas. Maquette ambiance_page__light_groups. */}
+        {configLoaded && step === 3 && (
+          <div className="ambiance-subtabs" role="tablist" aria-label="Sections Lumière">
+            {LIGHT_SUBTABS.map(t => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={lightSubTab === t.key}
+                className={`ambiance-subtab ${lightSubTab === t.key ? 'active' : ''}`}
+                onClick={() => setLightSubTab(t.key)}
+              >
+                {t.label}
+                {t.key === 'groups' && <span className="ambiance-subtab-n" aria-label={`${groupsConfigured.length} groupes`}>{groupsConfigured.length}</span>}
+                {t.key === 'effects' && <span className="ambiance-soon-badge">bientôt</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {configLoaded && step === 3 && lightSubTab === 'groups' && (
+          <LightGroupsManager
+            generalLights={generalLightNames}
+            teams={teamNames}
+            teamColor={teamSwatchColor}
+            groups={lighting.groups}
+            enabled={!!lighting.enabled}
+            disabled={frozen}
+            onSave={handleSaveGroups}
+            onTest={handleTestGroup}
+            onNotify={setToast}
+          />
+        )}
+
+        {configLoaded && step === 3 && lightSubTab === 'effects' && (
+          <section className="ambiance-step" aria-labelledby="ambiance-effects-title">
+            <h2 id="ambiance-effects-title" className="ambiance-step-title">Effets</h2>
+            <p className="ambiance-hint">Bientôt : le catalogue d'effets et le choix de l'effet par moment arriveront dans une prochaine étape.</p>
+          </section>
+        )}
+
         {/* #286 — interrupteur général « Éclairage d'ambiance activé » (en tête
             de l'onglet Lumière, pont associé) — maquette admin_navbar__ambiance_popover. */}
-        {configLoaded && step === 3 && (
+        {configLoaded && step === 3 && lightSubTab === 'bridge' && (
           <section className="ambiance-step ambiance-master" aria-labelledby="ambiance-master-title">
             <h2 id="ambiance-master-title" className="ambiance-step-title">Éclairage d'ambiance</h2>
             <div className="sound-master-row ambiance-master-row">
@@ -1077,7 +1177,7 @@ export default function AmbiancePage() {
           </section>
         )}
 
-        {configLoaded && step === 3 && (
+        {configLoaded && step === 3 && lightSubTab === 'bridge' && (
           <section className="ambiance-step" aria-labelledby="ambiance-default-mode-title">
             <h2 id="ambiance-default-mode-title" className="ambiance-step-title">Réglages d'ambiance — Lumière</h2>
             <AmbianceSettingsPanel
@@ -1094,7 +1194,7 @@ export default function AmbiancePage() {
         )}
 
         {/* ---------------- Étape 3 : choisir et tester les ampoules ---------------- */}
-        {configLoaded && step === 3 && (
+        {configLoaded && step === 3 && lightSubTab === 'bridge' && (
           <section
             className={`ambiance-step ambiance-step-lights${lighting.enabled ? '' : ' is-dimmed'}`}
             aria-labelledby="ambiance-step3-title"
@@ -1242,6 +1342,21 @@ export default function AmbiancePage() {
                           ))}
                         </select>
                       </span>
+                      {/* #225 — colonne « Groupe » en lecture seule ; un clic ouvre le sous-onglet Groupes. */}
+                      {(() => {
+                        if (roleFor(row.name).role === 'team') return <span className="ambiance-group-none" aria-label="Aucun groupe (ampoule d'équipe)">—</span>
+                        const label = existingLights.has(row.name) ? groupLabelFor(row.name) : null
+                        return (
+                          <button
+                            type="button"
+                            className={`ambiance-group-pill${label ? '' : ' is-none'}`}
+                            onClick={() => setLightSubTab('groups')}
+                            aria-label={`Groupe de ${row.name}`}
+                          >
+                            {label ? (label.kind === 'host' ? `🎤 ${label.name} (animateur)` : `${label.n} · ${label.name}`) : 'hors groupe'}
+                          </button>
+                        )
+                      })()}
                       <Button
                         variant="secondary"
                         size="sm"
@@ -1255,6 +1370,12 @@ export default function AmbiancePage() {
                   )
                 })}
               </ul>
+            )}
+
+            {groupedLightsLeaving.length > 0 && (
+              <div className="ambiance-notice" role="status">
+                <span>{teamRoleWarning(groupedLightsLeaving)}</span>
+              </div>
             )}
 
             <div className="ambiance-actions">
