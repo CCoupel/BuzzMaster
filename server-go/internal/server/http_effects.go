@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"buzzcontrol/internal/ambiancecfg"
@@ -182,6 +183,8 @@ func (h *HTTPServer) handleLightingEffectsSub(w http.ResponseWriter, r *http.Req
 	switch {
 	case rest == "try/stop":
 		h.handleEffectTrialStop(w, r)
+	case strings.HasSuffix(rest, "/preview") && !strings.Contains(strings.TrimSuffix(rest, "/preview"), "/"):
+		h.handleEffectPreview(w, r, strings.TrimSuffix(rest, "/preview"))
 	case strings.HasSuffix(rest, "/try") && !strings.Contains(strings.TrimSuffix(rest, "/try"), "/"):
 		h.handleEffectTrial(w, r, strings.TrimSuffix(rest, "/try"))
 	default:
@@ -261,4 +264,48 @@ func (h *HTTPServer) handleEffectTrial(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 	writeLightingJSON(w, http.StatusOK, map[string]any{"ok": true, "duration_ms": ms})
+}
+
+// handleEffectPreview serves GET /api/lighting/effects/{id}/preview?groups=N&moment=chrono
+// (light-effects.md §7.3): the frames computed by effects.Preview, nothing is played. groups: 1 to
+// 12 (default: the room's configured groups, 6 when there is none); moment: one of the effect's
+// moments (default: its first). 404 unknown effect, 400 invalid parameter.
+func (h *HTTPServer) handleEffectPreview(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.Effects == nil {
+		http.Error(w, "effet inconnu", http.StatusNotFound)
+		return
+	}
+	en, ok := h.Effects.EffectsCatalogue().Get(id)
+	if !ok {
+		http.Error(w, "effet inconnu", http.StatusNotFound)
+		return
+	}
+	n := len(config.Get().Lighting.NonEmptyGroups(config.ZoneAmbiance))
+	if n == 0 {
+		n = 6
+	}
+	if v := r.URL.Query().Get("groups"); v != "" {
+		g, err := strconv.Atoi(v)
+		if err != nil || g < 1 || g > effects.MaxGroups {
+			http.Error(w, "groups : entier de 1 à 12", http.StatusBadRequest)
+			return
+		}
+		n = g
+	}
+	moment := effects.Moment("")
+	if len(en.Effect.Moments) > 0 {
+		moment = effects.Moment(en.Effect.Moments[0])
+	}
+	if v := r.URL.Query().Get("moment"); v != "" {
+		if !effects.Moment(v).Valid() {
+			http.Error(w, "moment : chrono, calm ou score", http.StatusBadRequest)
+			return
+		}
+		moment = effects.Moment(v)
+	}
+	writeEffectsJSON(w, effects.Preview(en.Effect, n, moment))
 }

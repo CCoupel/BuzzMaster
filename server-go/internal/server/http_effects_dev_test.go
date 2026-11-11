@@ -217,3 +217,45 @@ func TestBackup_EffectsDirWithoutNatifs_Dev(t *testing.T) {
 		t.Fatal("isEffectsReferencePath")
 	}
 }
+
+func TestEffectPreviewEndpoint_Dev(t *testing.T) {
+	srv, _ := devEffectsServer(t)
+	get := func(path string) (int, map[string]any) {
+		w := httptest.NewRecorder()
+		srv.mux.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		var m map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &m)
+		return w.Code, m
+	}
+	code, v := get("/api/lighting/effects/cal/preview?groups=4&moment=calm")
+	if code != 200 || v["id"] != "cal" || v["groups"].(float64) != 4 || v["duration_ms"].(float64) != 20000 || v["loop"] != true {
+		t.Fatalf("aperçu : %d %+v", code, v)
+	}
+	frames := v["frames"].([]any)
+	if len(frames) < 1 || len(frames[0].(map[string]any)["groups"].([]any)) != 4 {
+		t.Fatalf("trames : %+v", frames)
+	}
+	code, v = get("/api/lighting/effects/cal/preview")
+	if code != 200 || v["groups"].(float64) != 6 {
+		t.Fatalf("défaut : 6 groupes quand aucun n'est configuré : %d %+v", code, v)
+	}
+	for _, c := range []struct {
+		path string
+		want int
+	}{
+		{"/api/lighting/effects/nope/preview", 404},
+		{"/api/lighting/effects/cal/preview?groups=0", 400},
+		{"/api/lighting/effects/cal/preview?groups=13", 400},
+		{"/api/lighting/effects/cal/preview?groups=x", 400},
+		{"/api/lighting/effects/cal/preview?moment=nuit", 400},
+	} {
+		if got, _ := get(c.path); got != c.want {
+			t.Errorf("%s : %d, attendu %d", c.path, got, c.want)
+		}
+	}
+	w := httptest.NewRecorder()
+	srv.mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/lighting/effects/cal/preview", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST : %d", w.Code)
+	}
+}
