@@ -43,7 +43,6 @@ type effectEntryJSON struct {
 	Moments        []string `json:"moments"`
 	Origin         string   `json:"origin"`
 	File           string   `json:"file"`
-	Target         string   `json:"target"`
 	MinGroups      int      `json:"min_groups"`
 	Applicable     bool     `json:"applicable"`
 	Reason         string   `json:"reason"`
@@ -83,20 +82,14 @@ func (h *HTTPServer) effectsView() map[string]any {
 	for _, en := range cat.List() {
 		e := en.Effect
 		ok, reason := e.Applicable(n)
-		min := e.MinGroups
-		hostOK := true
-		if e.Target == effects.TargetAll {
-			min = 0
-		} else {
-			hostOK, _ = e.Applicable(1)
-		}
+		hostOK := e.HostApplicable()
 		moments := e.Moments
 		if moments == nil {
 			moments = []string{}
 		}
 		list = append(list, effectEntryJSON{
 			ID: e.ID, Name: e.Name, Description: e.Description, Moments: moments, Origin: en.Origin, File: en.File,
-			Target: e.Target, MinGroups: min, Applicable: ok, Reason: reason, HostApplicable: hostOK,
+			MinGroups: e.MinGroups, Applicable: ok, Reason: reason, HostApplicable: hostOK,
 		})
 	}
 	errs := cat.Errors()
@@ -114,7 +107,7 @@ func (h *HTTPServer) effectsView() map[string]any {
 			bad := !ok || !en.Effect.HasMoment(effects.Moment(m))
 			if !bad {
 				if host {
-					bad = !boolOnly(en.Effect.Applicable(1))
+					bad = !en.Effect.HostApplicable()
 				} else {
 					bad = !boolOnly(en.Effect.Applicable(n))
 				}

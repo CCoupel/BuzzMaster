@@ -472,7 +472,7 @@ func waitForPulseLow(t *testing.T, f *lighting.FakeDriver, color [3]int, intensi
 }
 
 var (
-	pulseWhiteLow = [3]int{255, 255, 255} // tier 1 low phase = theme (white here)
+	pulseWhiteLow = [3]int{255, 255, 255} // tier 1 low phase = urgence (white above 10 s)
 	pulseAmber    = [3]int{255, 170, 0}   // tier 2 low phase
 	pulseRed      = [3]int{230, 30, 30}   // tier 3 low phase
 )
@@ -498,7 +498,7 @@ func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 	}{
 		{15, pulseWhiteLow, 128}, // > 10 s remaining: tier 1, low phase = theme at 50 %
 		{10, pulseAmber, 128},    // <= 10 s: tier 2, amber at 50 %
-		{5, pulseRed, 77},        // <= 5 s: tier 3, red at 30 %
+		{5, pulseRed, 128},       // <= 5 s: red at 50 % (revision 3, light-effects.md §5.5)
 	} {
 		qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
 		app.engine.Ready(qcm.ID, qcm)
@@ -554,7 +554,7 @@ func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *test
 	app.engine.Ready(qcm.ID, qcm)
 	app.engine.StartImmediate(4) // tier 3 immediately: theme <-> red
 	defer app.engine.Stop()
-	waitForPulseLow(t, fake, pulseRed, 77)
+	waitForPulseLow(t, fake, pulseRed, 128)
 
 	white := [3]int{255, 255, 255}
 	sawHighWhiteFull, sawLowRedDim := false, false
@@ -571,7 +571,7 @@ func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *test
 			if z.Color == white && z.Intensity == 255 {
 				sawHighWhiteFull = true
 			}
-			if z.Color == pulseRed && z.Intensity == 77 {
+			if z.Color == pulseRed && z.Intensity == 128 {
 				sawLowRedDim = true
 			}
 		}
@@ -657,7 +657,7 @@ func TestDevChronoPulse_SuppressedBySelector_ON(t *testing.T) {
 	app.engine.Ready(qcm.ID, qcm)
 	app.engine.StartImmediate(15)
 	defer app.engine.Stop()
-	waitForPulseLow(t, fake, geography, 128)
+	waitForPulseLow(t, fake, pulseWhiteLow, 128) // revision 3: the low phase is the urgency colour (white), not the theme
 	if got := app.ambianceThemeColor(); got != geography {
 		t.Fatalf("setup invalide : thème attendu GEOGRAPHY %v, got %v", geography, got)
 	}

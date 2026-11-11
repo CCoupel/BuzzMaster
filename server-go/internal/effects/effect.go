@@ -1,13 +1,11 @@
-// Package effects is the declarative light-effect engine of BuzzControl
-// (v11.7.0, #223 — contracts/light-effects.md §3 to §5): effect files (YAML),
-// strict parsing and validation, the catalogue with hot reload, and the pure,
-// deterministic Render function that turns an effect into a frame (one look
-// per ambiance group).
+// Package effects is the declarative light-effect engine of BuzzControl (v11.7.0, #223 —
+// contracts/light-effects.md §3 to §5, revision 3: step-by-step effects): effect files
+// (YAML, `version: 2`), strict parsing and validation, the catalogue with hot reload, and
+// the pure, deterministic Render function that unrolls an effect tick by tick.
 //
-// The package is pure: no goroutine besides the optional Manager.Run loop, no
-// network I/O, and it imports neither internal/game nor internal/lighting nor
-// the Hue driver (contract §5.1). The ambiance layer feeds it a Context and
-// reads Frames.
+// The package is pure: no goroutine besides the optional Manager.Run loop, no network
+// I/O, and it imports neither internal/game nor internal/lighting nor the Hue driver
+// (contract §5.1). The ambiance layer feeds it a Context and reads Frames.
 package effects
 
 import (
@@ -16,22 +14,22 @@ import (
 )
 
 // SchemaVersion is the only accepted value of the `version` key.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Limits (contract §3.2, §4).
 const (
-	MaxFileBytes  = 64 << 10
-	MaxFiles      = 100
-	MaxGroups     = 12
-	MinStepMs     = 250
-	MaxStepMs     = 60000
-	MaxFadeMs     = 5000
-	MaxStages     = 6
-	MaxPhases     = 8
-	MaxIDLen      = 40
-	MaxNameLen    = 40
-	MaxDescLen    = 500
-	MaxDurationMs = 600000
+	MaxFileBytes = 64 << 10
+	MaxFiles     = 100
+	MaxGroups    = 12
+	MinTickMs    = 250
+	MaxTickMs    = 60000
+	MaxSteps     = 200
+	MaxActions   = 16
+	MaxVars      = 8
+	MaxIncr      = 12
+	MaxIDLen     = 40
+	MaxNameLen   = 40
+	MaxDescLen   = 500
 )
 
 // Moment is a situation of the game for which an effect is chosen (§6).
@@ -48,40 +46,77 @@ func (m Moment) Valid() bool {
 	return m == MomentChrono || m == MomentCalm || m == MomentScore
 }
 
-// notChrono reports whether m is explicitly another moment than chrono. The
-// zero value (no moment declared) behaves as chrono: remaining-time stages and
-// the urgency colour then apply.
+// notChrono reports whether m is explicitly another moment than chrono. The zero value
+// (no moment declared) behaves as chrono: the `urgence` colour then follows the timer.
 func (m Moment) notChrono() bool { return m == MomentCalm || m == MomentScore }
 
-// Targets of an effect.
+// TargetKind says what a target designates.
+type TargetKind int
+
 const (
-	TargetGroups = "groups"
-	TargetAll    = "all"
+	TargetG0  TargetKind = iota // g0 — the whole zone
+	TargetGn                    // g1, g2… — the salle group of that number
+	TargetGN                    // gN — the last non-empty group
+	TargetVar                   // gA, gB… (+ neighbour offset) — a declared variable
 )
 
-// Pattern types (§4.3).
-const (
-	PatternUniform  = "uniform"
-	PatternShift    = "shift"
-	PatternGauge    = "gauge"
-	PatternRandom   = "random"
-	PatternGradient = "gradient"
-)
+// Target is the left side of an action (§4.3).
+type Target struct {
+	Kind   TargetKind
+	N      int    // TargetGn: the group number
+	Var    string // TargetVar: the variable name ("gA")
+	Offset int    // TargetVar: neighbour rank (gA+1 → 1, gA-2 → -2)
+}
 
-// Effect is one effect file (§4). The yaml tags are the file's keys; decoding
-// is strict, an unknown key is an error.
+// Color is a named colour (theme, equipe, urgence, scene — resolved at every render) or a
+// fixed RGB value.
+type Color struct {
+	Name string // "" = fixed RGB
+	RGB  [3]int
+}
+
+// Action is one `target: [colour, intensity]` entry of a step (§4.2).
+type Action struct {
+	Target Target
+	Off    bool // [eteint]
+	Color  Color
+	Pct    int // 0-100
+	Line   int
+}
+
+// Step is an ordered list of actions (1 to 16): the order written is the order applied.
+type Step []Action
+
+// Var is a group variable (§4.4): a progression (start, increment) or a list.
+type Var struct {
+	Name   string
+	Start  Target // TargetGn or TargetGN (progression)
+	Incr   int
+	IsList bool
+	List   []Target // TargetGn elements
+	Line   int
+}
+
+// Effect is one effect file after parsing and validation.
 type Effect struct {
-	ID          string                `yaml:"id" json:"id"`
-	Name        string                `yaml:"name" json:"name"`
-	Description string                `yaml:"description" json:"description"`
-	Version     int                   `yaml:"version" json:"version"`
-	Moments     []string              `yaml:"moments" json:"moments"`
-	Target      string                `yaml:"target" json:"target"`
-	MinGroups   int                   `yaml:"min_groups" json:"min_groups"`
-	DurationMs  int                   `yaml:"duration_ms" json:"duration_ms"`
-	Looks       map[string]Appearance `yaml:"looks" json:"looks"`
-	Pattern     Pattern               `yaml:"pattern" json:"pattern"`
-	Stages      []Stage               `yaml:"stages" json:"stages"`
+	ID          string
+	Name        string // `nom`
+	Description string
+	Version     int
+	Moments     []string
+	MinGroups   int // `groupes_min`
+	TickMs      int // `duree_tick_ms`
+	Loop        bool
+	Vars        []Var
+	Pre         Step
+	HasPre      bool
+	Steps       []Step
+	Last        Step
+	HasLast     bool
+	Post        Step
+	HasPost     bool
+
+	onlyG0 bool
 }
 
 // HasMoment reports whether the effect declares moment m.
@@ -94,68 +129,12 @@ func (e Effect) HasMoment(m Moment) bool {
 	return false
 }
 
-// Appearance is a named appearance (a "look" in the file) (§4.2). Intensity is a pointer: absent means 100,
-// an explicit 0 means off.
-type Appearance struct {
-	Color     string `yaml:"color" json:"color"`
-	Intensity *int   `yaml:"intensity" json:"intensity"`
-	FadeMs    int    `yaml:"fade_ms" json:"fade_ms"`
-}
+// HostApplicable reports whether the effect can play on an animateur group: it writes
+// only `g0` (§4.7).
+func (e Effect) HostApplicable() bool { return e.onlyG0 }
 
-// Phase is one step of a `uniform` pattern.
-type Phase struct {
-	Appearance string `yaml:"look" json:"look"`
-	Ms         int    `yaml:"ms" json:"ms"`
-}
-
-// Pattern holds the parameters of every pattern type; only the ones of Type
-// are read. In a stage, a zero value means "not overridden".
-type Pattern struct {
-	Type string `yaml:"type" json:"type"`
-
-	Phases []Phase `yaml:"phases" json:"phases,omitempty"` // uniform
-
-	Cells     []string `yaml:"cells" json:"cells,omitempty"` // shift
-	Rest      string   `yaml:"rest" json:"rest,omitempty"`
-	StepMs    int      `yaml:"step_ms" json:"step_ms,omitempty"` // shift, random, gradient
-	Wrap      *bool    `yaml:"wrap" json:"wrap,omitempty"`
-	Direction string   `yaml:"direction" json:"direction,omitempty"` // shift, gauge
-
-	Source string `yaml:"source" json:"source,omitempty"` // gauge
-	On     string `yaml:"on" json:"on,omitempty"`         // gauge, random
-	Off    string `yaml:"off" json:"off,omitempty"`
-	Edge   string `yaml:"edge" json:"edge,omitempty"`
-
-	Count *int     `yaml:"count" json:"count,omitempty"` // random
-	Ratio *float64 `yaml:"ratio" json:"ratio,omitempty"`
-
-	Stops  []string `yaml:"stops" json:"stops,omitempty"` // gradient
-	Travel string   `yaml:"travel" json:"travel,omitempty"`
-	Origin string   `yaml:"origin" json:"origin,omitempty"`
-	Repeat *bool    `yaml:"repeat" json:"repeat,omitempty"`
-}
-
-// When is the condition of a stage (§4.4); every given key must hold.
-type When struct {
-	RemainingLTE *float64 `yaml:"remaining_lte" json:"remaining_lte,omitempty"`
-	RemainingGT  *float64 `yaml:"remaining_gt" json:"remaining_gt,omitempty"`
-	GroupsLT     *int     `yaml:"groups_lt" json:"groups_lt,omitempty"`
-	GroupsGTE    *int     `yaml:"groups_gte" json:"groups_gte,omitempty"`
-}
-
-func (w When) empty() bool {
-	return w.RemainingLTE == nil && w.RemainingGT == nil && w.GroupsLT == nil && w.GroupsGTE == nil
-}
-
-// Stage is a variant selected by its condition (§4.4).
-type Stage struct {
-	When    When                  `yaml:"when" json:"when"`
-	Looks   map[string]Appearance `yaml:"looks" json:"looks,omitempty"`
-	Pattern Pattern               `yaml:"pattern" json:"pattern"`
-}
-
-// Error is a validation problem localised in a file (§4.7). Message is a
-// sentence in French without the file/line prefix; Error() adds it.
+// Error is a validation problem localised in a file (§4.8). Message is a sentence in
+// French without the file/line prefix; Error() adds it.
 type Error struct {
 	File    string `json:"file"`
 	Line    int    `json:"line"`
@@ -169,32 +148,48 @@ func (e Error) Error() string {
 	return fmt.Sprintf("%s : %s", e.File, e.Message)
 }
 
-// Context is what the server provides to Render (§4.5). Every field is an
-// input: Render never reads a clock or a random source of its own.
+// Context is what the server provides to Render (§4.5, §5.1). Every field is an input:
+// Render never reads a clock or a random source of its own.
 type Context struct {
-	Groups    int           // N: non-empty salle groups (1 for the animateur group)
-	Moment    Moment        // chrono, calm, score
+	// Groups is N, the number of non-empty salle groups (0 possible). Nums, when set, gives
+	// their real numbers in order (len == N); otherwise they are 1..Groups.
+	Groups    int
+	Nums      []int
+	Moment    Moment
 	Remaining time.Duration // chrono: GameState.CurrentTime
 	Total     time.Duration // chrono: GameState.Delay
-	Scene     [3]int        // colour "scene"
-	Theme     [3]int        // colour "theme" (colWhite when none)
-	Team      [3]int        // colour "team" (credited team, moment score)
-	Origin    int           // 1-based index, among the N rendered groups, of the credited team's group
-	WallMs    int64         // wall clock (Unix ms), for `uniform`
-	Seed      int64         // effect start timestamp, for `random`
+	Scene     [3]int        // colour "scene" (white for an animateur group)
+	Theme     [3]int        // colour "theme" (white when none)
+	Team      [3]int        // colour "equipe" (credited team, moment score)
 }
 
 // GroupLook is the rendering of one group: RGB, intensity 0-255 (the scale of
-// lighting.ZoneState) and the fade handed to the bridge.
+// lighting.ZoneState) and the fade handed to the bridge (always 0 since revision 3).
 type GroupLook struct {
 	Color     [3]int `json:"color"`
 	Intensity int    `json:"intensity"`
 	FadeMs    int    `json:"fade_ms"`
-	// Absent: no state is emitted for this group, it keeps the ordinary room scene
-	// (gradient propagation not yet reached, without `rest` — §4.3.1 point 3).
+	// Absent: the group has no state of its own — it follows Base (or, when Base is nil,
+	// the ordinary room scene).
 	Absent bool `json:"absent,omitempty"`
 }
 
-// Frame is one look per rendered group, in order; a single entry for
-// `target: all`. A nil Frame means "not applicable".
-type Frame []GroupLook
+// Frame is the state of the zone after a tick (§4.6): the state of g0 (nil until g0 was
+// written) and one look per position 1..N.
+type Frame struct {
+	Base   *GroupLook
+	Groups []GroupLook
+}
+
+// TickDuration is the real duration of one tick: tickMs ÷ speed, never under 250 ms (the
+// writer's cadence) — §6.
+func TickDuration(tickMs int, speed float64) time.Duration {
+	if speed <= 0 {
+		speed = 1
+	}
+	d := time.Duration(float64(tickMs) / speed * float64(time.Millisecond))
+	if d < MinTickMs*time.Millisecond {
+		d = MinTickMs * time.Millisecond
+	}
+	return d
+}

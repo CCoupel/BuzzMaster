@@ -18,6 +18,12 @@ type devEffectsSource struct {
 	cat  effects.Catalogue
 	room map[string]string
 	host map[string]map[string]string
+	// speeds: speed multiplier per moment for the room (nil = ×1)
+	speeds map[string]float64
+}
+
+func (s devEffectsSource) EffectSpeeds() (map[string]float64, map[string]map[string]float64) {
+	return s.speeds, nil
 }
 
 func (s devEffectsSource) EffectsCatalogue() effects.Catalogue { return s.cat }
@@ -26,25 +32,35 @@ func (s devEffectsSource) EffectSettings() (map[string]string, map[string]map[st
 }
 
 const devAllEffect = `id: fixe
-name: Fixe
-version: 1
+nom: Fixe
+version: 2
 moments: [calm, score]
-target: all
-duration_ms: 4800
-looks: { a: { color: "#112233", intensity: 50 } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
+duree_tick_ms: 1000
+pas:
+  - { g0: ["#112233", 50] }
 `
 
 const devShiftEffect = `id: tour
-name: Tour
-version: 1
+nom: Tour
+version: 2
 moments: [calm]
-target: groups
-min_groups: 2
-looks:
-  on:  { color: "#FF0000" }
-  off: { color: "#000000", intensity: 0 }
-pattern: { type: shift, step_ms: 1000, cells: [on], rest: off }
+groupes_min: 2
+duree_tick_ms: 1000
+variables:
+  gA: g1; +1
+pas:
+  - { g0: ["#000000", 0], gA: ["#FF0000", 100] }
+`
+
+const devPostEffect = `id: avecpost
+nom: Avec post
+version: 2
+moments: [calm]
+duree_tick_ms: 1000
+pas:
+  - { g0: ["#112233", 50] }
+post:
+  { g0: ["#00FF00", 100] }
 `
 
 type devRig struct {
@@ -64,8 +80,9 @@ func newDevRig(t *testing.T, groups []config.LightingGroupEntry) *devRig {
 	c := New(fakeHost{engine: game.NewEngine()})
 	c.LightingWriter.Store(c.NewWriter(lighting.NewFakeDriver()))
 	fs := fstest.MapFS{
-		"fixe.yaml": {Data: []byte(devAllEffect)},
-		"tour.yaml": {Data: []byte(devShiftEffect)},
+		"fixe.yaml":     {Data: []byte(devAllEffect)},
+		"tour.yaml":     {Data: []byte(devShiftEffect)},
+		"avecpost.yaml": {Data: []byte(devPostEffect)},
 	}
 	r := &devRig{c: c, now: time.Unix(1_700_000_000, 0)}
 	r.src = &devEffectsSource{cat: effects.LoadDir(fs, ""), room: map[string]string{}, host: map[string]map[string]string{}}
@@ -124,35 +141,86 @@ func TestEffectsReader_Groups_RealNumbersEmptyGroupSkipped_Dev(t *testing.T) {
 		{Role: "salle", Lights: []string{}},
 		{Role: "salle", Lights: []string{"l2"}},
 	})
-	r.src.room["calm"] = "tour" // min_groups 2 : 2 non-empty groups suffice
+	r.src.room["calm"] = "tour" // groupes_min 2 : 2 groupes non vides suffisent
 	r.c.EffectsStep()
 	st := r.c.Scene(lighting.Event{Kind: lighting.KindIdle})
-	if _, ok := zoneFor(st, 1); !ok {
-		t.Fatalf("groupe 1 attendu : %+v", st.Zones)
+	if z, _ := zoneFor(st, 0); z.Intensity != 0 {
+		t.Fatalf("g0 = éteint : la zone générale reçoit l'état de base : %+v", z)
+	}
+	if z, ok := zoneFor(st, 1); !ok || z.Color != [3]int{255, 0, 0} {
+		t.Fatalf("la tête est sur le premier groupe non vide (groupe 1) : %+v %v", z, ok)
 	}
 	if _, ok := zoneFor(st, 2); ok {
 		t.Fatal("le groupe vide (numéro 2) ne reçoit aucune entrée")
 	}
-	if z, ok := zoneFor(st, 3); !ok || z.Intensity != 0 {
-		t.Fatalf("groupe 3 = repos du chenillard (rest) : %+v %v", z, ok)
+	if _, ok := zoneFor(st, 3); ok {
+		t.Fatal("un groupe dont l'état est celui de la base n'a pas d'entrée propre")
 	}
-	if z, _ := zoneFor(st, 1); z.Color != [3]int{255, 0, 0} {
-		t.Fatalf("la tête est sur le premier groupe non vide : %+v", z)
-	}
-	// One second later the head moves to the next NON-EMPTY group (3), not the empty one.
+	// One tick (1 s) later the head moves to the next NON-EMPTY group (3), not the empty one.
 	r.now = r.now.Add(time.Second)
 	r.c.EffectsStep()
 	st = r.c.Scene(lighting.Event{Kind: lighting.KindIdle})
 	if z, _ := zoneFor(st, 3); z.Color != [3]int{255, 0, 0} {
 		t.Fatalf("la tête passe au groupe 3 : %+v", st.Zones)
 	}
-	// Not applicable with a single group: ordinary scene, no Group entry.
-	r.src.room["calm"] = "tour"
+	if _, ok := zoneFor(st, 1); ok {
+		t.Fatal("le groupe 1 a repris l'état de base")
+	}
+	// Not applicable with a single group: ordinary scene, no frame.
 	cfg := config.Get()
 	cfg.Lighting.Groups = cfg.Lighting.Groups[:1]
 	r.c.EffectsStep()
 	if r.c.effectFrames.Load() != nil {
 		t.Fatal("effet inapplicable ⇒ valeur par défaut du moment (aucune trame)")
+	}
+}
+
+func TestEffectsReader_SpeedPostAndRestartRules_Dev(t *testing.T) {
+	r := newDevRig(t, []config.LightingGroupEntry{{Role: "salle", Lights: []string{"l1"}}, {Role: "salle", Lights: []string{"l2"}}})
+	r.src.room["calm"] = "tour"
+	r.src.speeds = map[string]float64{"calm": 2} // tick = 500 ms
+	r.c.EffectsStep()
+	if _, ok := zoneFor(r.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 1); !ok {
+		t.Fatal("tick 0 : tête sur le groupe 1")
+	}
+	r.now = r.now.Add(500 * time.Millisecond)
+	r.c.EffectsStep()
+	if _, ok := zoneFor(r.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 2); !ok {
+		t.Fatal("×2 : un tick dure 500 ms, la tête est au groupe 2")
+	}
+	// A speed change is taken at the next tick, without restarting the effect.
+	r.src.speeds = map[string]float64{"calm": 0.5} // tick = 2 s
+	r.now = r.now.Add(500 * time.Millisecond)      // tick 2 reached with the old duration
+	r.c.EffectsStep()
+	if _, ok := zoneFor(r.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 1); !ok {
+		t.Fatal("tick 2 : la tête revient au groupe 1 (l'effet n'a pas redémarré)")
+	}
+	r.now = r.now.Add(1900 * time.Millisecond) // < 2 s since the last tick: no new tick
+	r.c.EffectsStep()
+	if _, ok := zoneFor(r.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 1); !ok {
+		t.Fatal("×0,5 : un tick dure 2 s")
+	}
+	// Floor: an effect at 400 ms ×2 never runs under 250 ms.
+	if d := effects.TickDuration(400, 2); d != 250*time.Millisecond {
+		t.Fatalf("plancher 250 ms : %v", d)
+	}
+
+	// POST: published once when the effect ends, never applied over the next scene.
+	r.src.room["calm"] = "avecpost"
+	r.src.speeds = nil
+	r.c.EffectsStep()
+	r.src.room["calm"] = ""
+	r.c.EffectsStep()
+	fr := r.c.effectFrames.Load()
+	if fr == nil || fr.post == nil || fr.post.Base == nil || fr.post.Base.Color != [3]int{0, 255, 0} {
+		t.Fatalf("POST publié à la fin de l'effet : %+v", fr)
+	}
+	if z, _ := zoneFor(r.c.Scene(lighting.Event{Kind: lighting.KindIdle}), 0); z.Color == [3]int{0, 255, 0} {
+		t.Fatal("le POST ne recouvre jamais la scène suivante")
+	}
+	r.c.EffectsStep()
+	if r.c.effectFrames.Load() != nil {
+		t.Fatal("le POST n'est publié qu'une fois")
 	}
 }
 

@@ -4,336 +4,286 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"unicode/utf8"
+
+	"go.yaml.in/yaml/v4"
 )
 
 var (
-	reID    = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
-	reColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+	reID      = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
+	reHex     = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
+	reGn      = regexp.MustCompile(`^g([1-9][0-9]?)$`)
+	reVarName = regexp.MustCompile(`^g[A-MO-Z][A-Za-z0-9]*$`)
+	reVarRef  = regexp.MustCompile(`^(g[A-MO-Z][A-Za-z0-9]*)([+-][0-9]+)?$`)
 )
 
-var colorKeywords = map[string]bool{"scene": true, "theme": true, "team": true, "urgency": true}
+var namedColors = map[string]bool{"theme": true, "equipe": true, "urgence": true, "scene": true}
 
 type validator struct {
-	file  string
-	lines map[string]int
-	errs  []Error
+	file string
+	errs []Error
+	vars map[string]bool
 }
 
-func (v *validator) add(path, format string, args ...any) {
-	v.errs = append(v.errs, Error{File: v.file, Line: lineOf(v.lines, path), Message: fmt.Sprintf(format, args...)})
+func (v *validator) add(line int, format string, args ...any) {
+	v.errs = append(v.errs, Error{File: v.file, Line: line, Message: fmt.Sprintf(format, args...)})
 }
 
-// validate checks e against the schema of §4 and fills its defaults
-// (target, min_groups). The effective pattern of every stage is validated too.
-func validate(file string, e *Effect, lines map[string]int) []Error {
-	v := &validator{file: file, lines: lines}
-
-	switch {
-	case e.ID == "":
-		v.add("id", "la clé « id » est obligatoire")
-	case !reID.MatchString(e.ID):
-		v.add("id", "l'identifiant « %s » est invalide : 1 à %d caractères parmi a-z, 0-9 et -", e.ID, MaxIDLen)
+// build checks the decoded file against the schema of §4 and returns the effect.
+func (v *validator) build(r *rawEffect, present map[string]int) Effect {
+	e := Effect{ID: r.ID, Name: r.Nom, Description: r.Description, Version: r.Version, Moments: r.Moments,
+		MinGroups: r.GroupesMin, TickMs: r.DureeTickMs, Loop: true}
+	for _, k := range []string{"id", "nom", "version", "moments", "duree_tick_ms", "pas"} {
+		if _, ok := present[k]; !ok {
+			v.add(0, "la clé « %s » est obligatoire", k)
+		}
 	}
-	if n := utf8.RuneCountInString(e.Name); n < 1 || n > MaxNameLen {
-		v.add("name", "la clé « name » est obligatoire et compte de 1 à %d caractères", MaxNameLen)
+	if line, ok := present["id"]; ok && !reID.MatchString(e.ID) {
+		v.add(line, "l'identifiant « %s » est invalide : 1 à %d caractères parmi a-z, 0-9 et -", e.ID, MaxIDLen)
+	}
+	if line, ok := present["nom"]; ok {
+		if n := utf8.RuneCountInString(e.Name); n < 1 || n > MaxNameLen {
+			v.add(line, "« nom » compte de 1 à %d caractères", MaxNameLen)
+		}
 	}
 	if utf8.RuneCountInString(e.Description) > MaxDescLen {
-		v.add("description", "la description dépasse %d caractères", MaxDescLen)
+		v.add(present["description"], "la description dépasse %d caractères", MaxDescLen)
 	}
-	switch e.Version {
-	case 0:
-		v.add("version", "la clé « version » est obligatoire")
-	case SchemaVersion:
-	default:
-		v.add("version", "la version %d du format n'est pas prise en charge (seule la version %d l'est)", e.Version, SchemaVersion)
+	if line, ok := present["version"]; ok && e.Version != SchemaVersion {
+		v.add(line, "la version %d du format n'est pas prise en charge (seule la version %d l'est)", e.Version, SchemaVersion)
 	}
-	if len(e.Moments) == 0 {
-		v.add("moments", "« moments » est obligatoire et ne peut pas être vide (chrono, calm, score)")
-	}
-	for i, m := range e.Moments {
-		if !Moment(m).Valid() {
-			v.add("moments."+strconv.Itoa(i), "le moment « %s » est inconnu (chrono, calm ou score)", m)
+	if line, ok := present["moments"]; ok {
+		if len(e.Moments) == 0 {
+			v.add(line, "« moments » ne peut pas être vide (chrono, calm, score)")
 		}
-	}
-	switch e.Target {
-	case "":
-		e.Target = TargetGroups
-	case TargetGroups, TargetAll:
-	default:
-		v.add("target", "target « %s » inconnu (groups ou all)", e.Target)
-	}
-	if e.MinGroups == 0 {
-		e.MinGroups = 1
-	}
-	if e.Target == TargetAll && e.MinGroups > 1 {
-		v.add("min_groups", "min_groups n'a pas de sens avec target: all")
-	} else if e.MinGroups < 1 || e.MinGroups > MaxGroups {
-		v.add("min_groups", "min_groups doit être compris entre 1 et %d", MaxGroups)
-	}
-	if e.DurationMs < 0 || e.DurationMs > MaxDurationMs {
-		v.add("duration_ms", "duration_ms doit être compris entre 0 et %d", MaxDurationMs)
-	}
-	if e.HasMoment(MomentScore) && e.DurationMs <= 0 {
-		v.add("duration_ms", "duration_ms est obligatoire (supérieur à 0) pour un effet du moment score")
-	}
-	if len(e.Looks) == 0 {
-		v.add("looks", "« looks » est obligatoire : au moins une apparence")
-	}
-	for name, l := range e.Looks {
-		v.look("looks."+name, name, l)
-	}
-	if e.Pattern.Type == "" {
-		v.add("pattern", "« pattern » est obligatoire (avec un « type »)")
-	} else {
-		v.pattern("pattern", e.Pattern, e.Looks)
-		v.allPattern("pattern", *e)
-	}
-	if len(e.Stages) > MaxStages {
-		v.add("stages", "%d étapes au plus", MaxStages)
-	}
-	for i, st := range e.Stages {
-		p := "stages." + strconv.Itoa(i)
-		if st.When.empty() {
-			v.add(p+".when", "l'étape %d n'a aucune condition (remaining_lte, remaining_gt, groups_lt, groups_gte)", i+1)
-		}
-		if st.When.GroupsLT != nil && *st.When.GroupsLT < 0 || st.When.GroupsGTE != nil && *st.When.GroupsGTE < 0 {
-			v.add(p+".when", "les conditions sur les groupes ne peuvent pas être négatives")
-		}
-		for name, l := range st.Looks {
-			v.look(p+".looks."+name, name, l)
-		}
-		if e.Target == TargetAll && (st.When.GroupsLT != nil || st.When.GroupsGTE != nil) {
-			v.add(p+".when", "groups_lt et groups_gte n'ont pas de sens avec target: all")
-		}
-		if len(st.Looks) > 0 || !isZeroPattern(st.Pattern) {
-			looks, pat := applyStage(e.Looks, e.Pattern, st)
-			v.pattern(p+".pattern", pat, looks)
-			v.allPattern(p+".pattern", Effect{Target: e.Target, Pattern: pat})
-		}
-	}
-	return v.errs
-}
-
-func isZeroPattern(p Pattern) bool {
-	return p.Type == "" && p.Phases == nil && p.Cells == nil && p.Rest == "" && p.StepMs == 0 && p.Wrap == nil &&
-		p.Direction == "" && p.Source == "" && p.On == "" && p.Off == "" && p.Edge == "" && p.Count == nil &&
-		p.Ratio == nil && p.Stops == nil && p.Travel == "" && p.Origin == "" && p.Repeat == nil
-}
-
-func (v *validator) look(path, name string, l Appearance) {
-	if l.Color != "" && !colorKeywords[l.Color] && !reColor.MatchString(l.Color) {
-		v.add(path+".color", "la couleur « %s » de l'apparence « %s » est invalide (scene, theme, team, urgency ou #RRGGBB)", l.Color, name)
-	}
-	if l.Intensity != nil && (*l.Intensity < 0 || *l.Intensity > 100) {
-		v.add(path+".intensity", "l'intensité de l'apparence « %s » doit être comprise entre 0 et 100", name)
-	}
-	if l.FadeMs < 0 || l.FadeMs > MaxFadeMs {
-		v.add(path+".fade_ms", "fade_ms de l'apparence « %s » doit être compris entre 0 et %d", name, MaxFadeMs)
-	}
-}
-
-func (v *validator) ref(path, name string, looks map[string]Appearance) {
-	if _, ok := looks[name]; !ok {
-		v.add(path, "l'apparence « %s » n'est pas définie dans looks", name)
-	}
-}
-
-func (v *validator) step(path string, ms int) {
-	if ms < MinStepMs || ms > MaxStepMs {
-		v.add(path, "%s doit être compris entre %d et %d ms", lastKey(path), MinStepMs, MaxStepMs)
-	}
-}
-
-func lastKey(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '.' {
-			return path[i+1:]
-		}
-	}
-	return path
-}
-
-func oneOf(s string, allowed ...string) bool {
-	for _, a := range allowed {
-		if s == a {
-			return true
-		}
-	}
-	return false
-}
-
-// pattern validates the effective pattern p (base, or base overridden by a
-// stage) against the effective looks.
-func (v *validator) pattern(path string, p Pattern, looks map[string]Appearance) {
-	switch p.Type {
-	case PatternUniform:
-		if n := len(p.Phases); n < 1 || n > MaxPhases {
-			v.add(path+".phases", "uniform demande de 1 à %d phases", MaxPhases)
-		}
-		for i, ph := range p.Phases {
-			pp := path + ".phases." + strconv.Itoa(i)
-			v.ref(pp+".look", ph.Appearance, looks)
-			if ph.Ms < MinStepMs || ph.Ms > MaxStepMs {
-				v.add(pp+".ms", "la durée d'une phase doit être comprise entre %d et %d ms", MinStepMs, MaxStepMs)
+		for _, m := range e.Moments {
+			if !Moment(m).Valid() {
+				v.add(line, "le moment « %s » est inconnu (chrono, calm ou score)", m)
 			}
 		}
-	case PatternShift:
-		if n := len(p.Cells); n < 1 || n > MaxGroups {
-			v.add(path+".cells", "shift demande de 1 à %d cellules", MaxGroups)
+	}
+	if line, ok := present["groupes_min"]; ok && (e.MinGroups < 0 || e.MinGroups > MaxGroups) {
+		v.add(line, "groupes_min doit être compris entre 0 et %d", MaxGroups)
+	}
+	if line, ok := present["duree_tick_ms"]; ok && (e.TickMs < MinTickMs || e.TickMs > MaxTickMs) {
+		v.add(line, "duree_tick_ms doit être compris entre %d et %d ms", MinTickMs, MaxTickMs)
+	}
+	if r.Boucle.Kind != 0 {
+		switch strings.ToLower(r.Boucle.Value) {
+		case "oui", "true", "yes":
+			e.Loop = true
+		case "non", "false", "no":
+			e.Loop = false
+		default:
+			v.add(r.Boucle.Line, "« boucle » doit valoir oui ou non")
 		}
-		for i, c := range p.Cells {
-			v.ref(path+".cells."+strconv.Itoa(i), c, looks)
-		}
-		if p.Rest == "" {
-			v.add(path, "shift demande « rest » (l'apparence des groupes hors du bloc)")
+	}
+	v.vars = map[string]bool{}
+	if r.Variables.Kind != 0 {
+		e.Vars = v.variables(&r.Variables)
+	}
+	if r.Pre.Kind != 0 {
+		e.Pre, e.HasPre = v.step(&r.Pre, "pre"), true
+	}
+	if r.Pas.Kind != 0 {
+		if r.Pas.Kind != yaml.SequenceNode {
+			v.add(r.Pas.Line, "« pas » doit être une liste de pas")
 		} else {
-			v.ref(path+".rest", p.Rest, looks)
-		}
-		v.step(path+".step_ms", p.StepMs)
-		if !oneOf(p.Direction, "", "forward", "backward", "bounce") {
-			v.add(path+".direction", "direction « %s » inconnue (forward, backward ou bounce)", p.Direction)
-		}
-	case PatternGauge:
-		if !oneOf(p.Source, "remaining", "elapsed") {
-			v.add(path+".source", "gauge demande source: remaining ou elapsed")
-		}
-		for _, k := range []struct{ key, val string }{{"on", p.On}, {"off", p.Off}} {
-			if k.val == "" {
-				v.add(path, "gauge demande « %s » (une apparence)", k.key)
-			} else {
-				v.ref(path+"."+k.key, k.val, looks)
+			if n := len(r.Pas.Content); n < 1 || n > MaxSteps {
+				v.add(r.Pas.Line, "« pas » compte de 1 à %d pas", MaxSteps)
+			}
+			for _, n := range r.Pas.Content {
+				e.Steps = append(e.Steps, v.step(n, "pas"))
 			}
 		}
-		if p.Edge != "" {
-			v.ref(path+".edge", p.Edge, looks)
-		}
-		if !oneOf(p.Direction, "", "forward", "backward") {
-			v.add(path+".direction", "direction « %s » inconnue pour gauge (forward ou backward)", p.Direction)
-		}
-	case PatternRandom:
-		v.step(path+".step_ms", p.StepMs)
-		for _, k := range []struct{ key, val string }{{"on", p.On}, {"off", p.Off}} {
-			if k.val == "" {
-				v.add(path, "random demande « %s » (une apparence)", k.key)
-			} else {
-				v.ref(path+"."+k.key, k.val, looks)
+	}
+	if r.Dernier.Kind != 0 {
+		e.Last, e.HasLast = v.step(&r.Dernier, "dernier"), true
+	}
+	if r.Post.Kind != 0 {
+		e.Post, e.HasPost = v.step(&r.Post, "post"), true
+	}
+	e.onlyG0 = onlyG0(&e)
+	return e
+}
+
+func onlyG0(e *Effect) bool {
+	check := func(s Step) bool {
+		for _, a := range s {
+			if a.Target.Kind != TargetG0 {
+				return false
 			}
 		}
+		return true
+	}
+	if !check(e.Pre) || !check(e.Last) || !check(e.Post) {
+		return false
+	}
+	for _, s := range e.Steps {
+		if !check(s) {
+			return false
+		}
+	}
+	return true
+}
+
+// variables parses the `variables` table (§4.4).
+func (v *validator) variables(n *yaml.Node) []Var {
+	if n.Kind != yaml.MappingNode {
+		v.add(n.Line, "« variables » doit être une table « gA: g1; +1 »")
+		return nil
+	}
+	if len(n.Content)/2 > MaxVars {
+		v.add(n.Line, "%d variables au plus", MaxVars)
+	}
+	var out []Var
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, val := n.Content[i], n.Content[i+1]
+		if !reVarName.MatchString(k.Value) {
+			v.add(k.Line, "le nom de variable « %s » est invalide : « g » suivi d'une lettre majuscule autre que N, puis de lettres ou de chiffres", k.Value)
+			continue
+		}
+		if v.vars[k.Value] {
+			v.add(k.Line, "la variable « %s » est déclarée deux fois", k.Value)
+			continue
+		}
+		vr := Var{Name: k.Value, Line: k.Line}
+		switch val.Kind {
+		case yaml.ScalarNode:
+			parts := strings.Split(val.Value, ";")
+			if len(parts) != 2 {
+				v.add(val.Line, "la déclaration de « %s » est mal écrite : « g1; +1 » (départ, puis incrément)", k.Value)
+				continue
+			}
+			start, ok := parseGroupStart(strings.TrimSpace(parts[0]))
+			incr, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(parts[1]), "+"))
+			if !ok || err != nil {
+				v.add(val.Line, "la déclaration de « %s » est mal écrite : « g1; +1 » (départ g1, g2… ou gN, puis incrément)", k.Value)
+				continue
+			}
+			if incr < -MaxIncr || incr > MaxIncr {
+				v.add(val.Line, "l'incrément de « %s » doit être compris entre -%d et %d", k.Value, MaxIncr, MaxIncr)
+				continue
+			}
+			vr.Start, vr.Incr = start, incr
+		case yaml.SequenceNode:
+			vr.IsList = true
+			if len(val.Content) == 0 {
+				v.add(val.Line, "la liste de « %s » est vide", k.Value)
+				continue
+			}
+			bad := false
+			for _, it := range val.Content {
+				m := reGn.FindStringSubmatch(it.Value)
+				if it.Kind != yaml.ScalarNode || m == nil {
+					v.add(it.Line, "l'élément « %s » de la liste « %s » doit être un groupe g1, g2…", it.Value, k.Value)
+					bad = true
+					continue
+				}
+				nn, _ := strconv.Atoi(m[1])
+				vr.List = append(vr.List, Target{Kind: TargetGn, N: nn})
+			}
+			if bad {
+				continue
+			}
+		default:
+			v.add(val.Line, "la déclaration de « %s » est mal écrite : « g1; +1 » ou une liste [g1, g3]", k.Value)
+			continue
+		}
+		v.vars[k.Value] = true
+		out = append(out, vr)
+	}
+	return out
+}
+
+func parseGroupStart(s string) (Target, bool) {
+	if s == "gN" {
+		return Target{Kind: TargetGN}, true
+	}
+	if m := reGn.FindStringSubmatch(s); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		return Target{Kind: TargetGn, N: n}, true
+	}
+	return Target{}, false
+}
+
+// parseTarget reads the left side of an action; ok=false on a malformed write.
+func parseTarget(s string) (Target, bool, string) {
+	switch {
+	case s == "g0":
+		return Target{Kind: TargetG0}, true, ""
+	case s == "gN":
+		return Target{Kind: TargetGN}, true, ""
+	}
+	if m := reGn.FindStringSubmatch(s); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		return Target{Kind: TargetGn, N: n}, true, ""
+	}
+	if m := reVarRef.FindStringSubmatch(s); m != nil {
+		off := 0
+		if m[2] != "" {
+			off, _ = strconv.Atoi(m[2])
+		}
+		return Target{Kind: TargetVar, Var: m[1], Offset: off}, true, m[1]
+	}
+	return Target{}, false, ""
+}
+
+// step parses one step table (pre, an element of pas, dernier, post): `cible: action`.
+func (v *validator) step(n *yaml.Node, where string) Step {
+	if n.Kind != yaml.MappingNode {
+		v.add(n.Line, "un pas de « %s » doit être une table « g0: [theme, 100] »", where)
+		return nil
+	}
+	if c := len(n.Content) / 2; c < 1 || c > MaxActions {
+		v.add(n.Line, "un pas compte de 1 à %d actions", MaxActions)
+	}
+	var out Step
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, val := n.Content[i], n.Content[i+1]
+		tg, ok, varName := parseTarget(k.Value)
+		if !ok {
+			v.add(k.Line, "la cible « %s » est mal écrite (g0, g1…, gN, ou une variable comme gA, gA+1)", k.Value)
+			continue
+		}
+		if varName != "" && !v.vars[varName] {
+			v.add(k.Line, "la variable « %s » n'est pas déclarée dans variables", varName)
+			continue
+		}
+		act := Action{Target: tg, Line: k.Line}
+		if val.Kind != yaml.SequenceNode || len(val.Content) == 0 {
+			v.add(val.Line, "l'action de « %s » doit être [couleur, intensité] ou [eteint]", k.Value)
+			continue
+		}
+		if len(val.Content) == 1 && val.Content[0].Value == "eteint" {
+			act.Off = true
+			out = append(out, act)
+			continue
+		}
+		if len(val.Content) != 2 {
+			v.add(val.Line, "l'action de « %s » doit être [couleur, intensité] ou [eteint]", k.Value)
+			continue
+		}
+		col := val.Content[0].Value
 		switch {
-		case p.Count == nil && p.Ratio == nil:
-			v.add(path, "random demande « count » ou « ratio »")
-		case p.Count != nil && p.Ratio != nil:
-			v.add(path+".ratio", "random n'accepte pas « count » et « ratio » ensemble")
-		case p.Count != nil && (*p.Count < 0 || *p.Count > MaxGroups):
-			v.add(path+".count", "count doit être compris entre 0 et %d", MaxGroups)
-		case p.Ratio != nil && (*p.Ratio < 0 || *p.Ratio > 1):
-			v.add(path+".ratio", "ratio doit être compris entre 0 et 1")
+		case namedColors[col]:
+			act.Color = Color{Name: col}
+		case reHex.MatchString(col):
+			var r, g, b int
+			_, _ = fmt.Sscanf(col, "#%02x%02x%02x", &r, &g, &b)
+			act.Color = Color{RGB: [3]int{r, g, b}}
+		default:
+			v.add(val.Content[0].Line, "la couleur « %s » est invalide (theme, equipe, urgence, scene ou #RRGGBB)", col)
+			continue
 		}
-	case PatternGradient:
-		if n := len(p.Stops); n < 2 || n > 6 {
-			v.add(path+".stops", "gradient demande de 2 à 6 apparences dans stops")
+		pct, err := strconv.Atoi(val.Content[1].Value)
+		if err != nil || pct < 0 || pct > 100 {
+			v.add(val.Content[1].Line, "l'intensité de « %s » doit être un entier de 0 à 100", k.Value)
+			continue
 		}
-		for i, s := range p.Stops {
-			v.ref(path+".stops."+strconv.Itoa(i), s, looks)
-		}
-		if !oneOf(p.Travel, "", "none", "forward", "backward", "outward") {
-			v.add(path+".travel", "travel « %s » inconnu (none, forward, backward ou outward)", p.Travel)
-		} else if p.Travel != "" && p.Travel != "none" {
-			v.step(path+".step_ms", p.StepMs)
-		}
-		if !oneOf(p.Origin, "", "first", "last", "center", "team") {
-			v.add(path+".origin", "origin « %s » inconnue (first, last, center ou team)", p.Origin)
-		}
-		propagation := p.Travel == "outward" || ((p.Travel == "forward" || p.Travel == "backward") && p.Repeat != nil && !*p.Repeat)
-		if p.Rest != "" {
-			if !propagation {
-				v.add(path+".rest", "rest n'a de sens que pour une propagation (travel: outward, ou forward/backward avec repeat: false)")
-			} else {
-				v.ref(path+".rest", p.Rest, looks)
-			}
-		}
-		if p.Origin != "" && p.Travel != "outward" {
-			v.add(path+".origin", "origin n'a de sens qu'avec travel: outward")
-		}
-	default:
-		v.add(path+".type", "le type de motif « %s » est inconnu (uniform, shift, gauge, random ou gradient)", p.Type)
+		act.Pct = pct
+		out = append(out, act)
 	}
-}
-
-// applyStage returns the looks and pattern in force when stage st applies: its
-// looks replace the base ones of the same name, the non-zero keys of its
-// pattern replace those of the base pattern (§4.4).
-func applyStage(baseLooks map[string]Appearance, base Pattern, st Stage) (map[string]Appearance, Pattern) {
-	looks := baseLooks
-	if len(st.Looks) > 0 {
-		looks = make(map[string]Appearance, len(baseLooks)+len(st.Looks))
-		for k, l := range baseLooks {
-			looks[k] = l
-		}
-		for k, l := range st.Looks {
-			looks[k] = l
-		}
-	}
-	p := base
-	o := st.Pattern
-	if o.Type != "" {
-		p.Type = o.Type
-	}
-	if o.Phases != nil {
-		p.Phases = o.Phases
-	}
-	if o.Cells != nil {
-		p.Cells = o.Cells
-	}
-	if o.Rest != "" {
-		p.Rest = o.Rest
-	}
-	if o.StepMs != 0 {
-		p.StepMs = o.StepMs
-	}
-	if o.Wrap != nil {
-		p.Wrap = o.Wrap
-	}
-	if o.Direction != "" {
-		p.Direction = o.Direction
-	}
-	if o.Source != "" {
-		p.Source = o.Source
-	}
-	if o.On != "" {
-		p.On = o.On
-	}
-	if o.Off != "" {
-		p.Off = o.Off
-	}
-	if o.Edge != "" {
-		p.Edge = o.Edge
-	}
-	if o.Count != nil {
-		p.Count = o.Count
-	}
-	if o.Ratio != nil {
-		p.Ratio = o.Ratio
-	}
-	if o.Stops != nil {
-		p.Stops = o.Stops
-	}
-	if o.Travel != "" {
-		p.Travel = o.Travel
-	}
-	if o.Origin != "" {
-		p.Origin = o.Origin
-	}
-	if o.Repeat != nil {
-		p.Repeat = o.Repeat
-	}
-	return looks, p
-}
-
-// allPattern enforces that `target: all` only uses the uniform pattern (§4.6).
-func (v *validator) allPattern(path string, e Effect) {
-	if e.Target == TargetAll && e.Pattern.Type != "" && e.Pattern.Type != PatternUniform {
-		v.add(path+".type", "target: all n'accepte que le motif uniform (« %s » demande des groupes)", e.Pattern.Type)
-	}
+	return out
 }

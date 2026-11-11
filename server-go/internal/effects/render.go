@@ -2,173 +2,201 @@ package effects
 
 import (
 	"fmt"
-	"math"
-	"math/rand"
-	"time"
 )
 
-// Urgency colours — lighting.md §8.2 (same values as ambiance.ChronoPulse*).
+// Urgency colours — lighting.md §8.2 (same values as the former ambiance.ChronoPulse*).
 var (
 	colOrange = [3]int{255, 170, 0}
 	colRed    = [3]int{230, 30, 30}
 	colWhite  = [3]int{255, 255, 255}
 )
 
-// Applicable reports whether e can play with n groups (§4.6) and, when it
-// cannot, why (in French, for the catalogue).
-func (e Effect) Applicable(n int) (bool, string) {
-	if e.Target == TargetAll {
-		// One state for the whole general zone, always applicable — with no
-		// group at all too (the pulsation worked without any in v11.6.0).
-		return true, ""
+// groupNums returns the real numbers of the non-empty groups for ctx (1..Groups by default).
+func (c Context) groupNums() []int {
+	if c.Nums != nil {
+		return c.Nums
 	}
-	min := e.MinGroups
-	if min < 1 {
-		min = 1
+	out := make([]int, c.Groups)
+	for i := range out {
+		out[i] = i + 1
 	}
-	if n < min {
-		return false, fmt.Sprintf("demande %d groupe(s), %d configuré(s)", min, n)
-	}
-	if n == 0 {
-		return false, "aucun groupe configuré"
-	}
-	return true, ""
+	return out
 }
 
-// Render computes the frame of e at elapsed time since the effect started. It
-// is deterministic: same inputs, same frame. It returns nil when the effect is
-// not applicable to ctx.Groups. The frame has ctx.Groups entries, or a single
-// one for `target: all`.
-func Render(e Effect, ctx Context, elapsed time.Duration) Frame {
-	if ok, _ := e.Applicable(ctx.Groups); !ok {
-		return nil
-	}
-	n := ctx.Groups
-	if e.Target == TargetAll {
-		n = 1
-	}
-	looks, pat := effective(e, ctx)
-	rl := func(name string) GroupLook { return resolveLook(looks[name], ctx) }
-	if elapsed < 0 {
-		elapsed = 0
-	}
-	frame := make(Frame, n)
-	switch pat.Type {
-	case PatternUniform:
-		g := rl(uniformPhase(pat.Phases, ctx.WallMs))
-		for i := range frame {
-			frame[i] = g
+// exists reports whether target t designates something with n groups numbered nums (for the
+// skip rule of §4.3 — a step none of whose actions aims at an existing target is skipped).
+func (e Effect) targetExists(t Target, nums []int) bool {
+	switch t.Kind {
+	case TargetG0:
+		return true
+	case TargetGn:
+		return indexOf(nums, t.N) >= 0
+	case TargetGN:
+		return len(nums) > 0
+	case TargetVar:
+		if len(nums) == 0 {
+			return false
 		}
-	case PatternShift:
-		renderShift(frame, pat, rl, elapsed)
-	case PatternGauge:
-		renderGauge(frame, pat, rl, ctx)
-	case PatternRandom:
-		renderRandom(frame, pat, rl, ctx, elapsed)
-	case PatternGradient:
-		renderGradient(frame, pat, rl, ctx, elapsed)
-	default:
-		return nil
+		for _, v := range e.Vars {
+			if v.Name == t.Var && v.IsList {
+				return len(listPositions(v, nums)) > 0
+			}
+		}
+		return true
 	}
-	return frame
+	return false
 }
 
-// effective returns the looks and pattern in force: the first stage whose
-// condition holds is applied over the base definition (§4.4).
-func effective(e Effect, ctx Context) (map[string]Appearance, Pattern) {
-	for _, st := range e.Stages {
-		if stageApplies(st.When, ctx) {
-			return applyStage(e.Looks, e.Pattern, st)
+func indexOf(nums []int, n int) int {
+	for i, x := range nums {
+		if x == n {
+			return i
 		}
 	}
-	return e.Looks, e.Pattern
+	return -1
 }
 
-func stageApplies(w When, ctx Context) bool {
-	if w.RemainingLTE != nil || w.RemainingGT != nil {
-		if ctx.Moment.notChrono() {
-			return false
-		}
-		sec := ctx.Remaining.Seconds()
-		if w.RemainingLTE != nil && !(sec <= *w.RemainingLTE) {
-			return false
-		}
-		if w.RemainingGT != nil && !(sec > *w.RemainingGT) {
-			return false
+// listPositions returns the positions (0-based) of the list elements that exist.
+func listPositions(v Var, nums []int) []int {
+	var out []int
+	for _, t := range v.List {
+		if i := indexOf(nums, t.N); i >= 0 {
+			out = append(out, i)
 		}
 	}
-	if w.GroupsLT != nil && !(ctx.Groups < *w.GroupsLT) {
-		return false
-	}
-	if w.GroupsGTE != nil && !(ctx.Groups >= *w.GroupsGTE) {
-		return false
+	return out
+}
+
+func (e Effect) stepSkipped(s Step, nums []int) bool {
+	for _, a := range s {
+		if e.targetExists(a.Target, nums) {
+			return false
+		}
 	}
 	return true
 }
 
-func resolveLook(l Appearance, ctx Context) GroupLook {
-	var c [3]int
-	switch l.Color {
-	case "", "scene":
-		c = ctx.Scene
-	case "theme":
-		c = ctx.Theme
-	case "team":
-		c = ctx.Team
-	case "urgency":
-		c = colWhite
-		if !ctx.Moment.notChrono() {
-			switch sec := ctx.Remaining.Seconds(); {
-			case sec <= 5:
-				c = colRed
-			case sec <= 10:
-				c = colOrange
+// liveSteps lists the indexes of the loop steps that are not skipped for these groups.
+func (e Effect) liveSteps(nums []int) []int {
+	var out []int
+	for i, s := range e.Steps {
+		if !e.stepSkipped(s, nums) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// Applicable reports whether e can play in a room with n groups (§4.7) and, when it
+// cannot, why (in French, for the catalogue).
+func (e Effect) Applicable(n int) (bool, string) {
+	if n < e.MinGroups {
+		return false, fmt.Sprintf("demande %d groupe(s), %d configuré(s)", e.MinGroups, n)
+	}
+	nums := make([]int, n)
+	for i := range nums {
+		nums[i] = i + 1
+	}
+	if len(e.liveSteps(nums)) == 0 {
+		return false, "aucun pas ne vise un groupe existant"
+	}
+	return true, ""
+}
+
+// schedule says what is played at tick t (§4.5): kind 'P' (PRE), 'S' (loop step j), 'L'
+// (LAST) or 'H' (a one-round effect holding its final state), with the cran k.
+type playedTick struct {
+	kind byte
+	step int // index in e.Steps for 'S'
+	k    int
+}
+
+func (e Effect) playedAt(tick int, live []int) playedTick {
+	pre := 0
+	if e.HasPre {
+		pre = 1
+	}
+	if tick < pre {
+		return playedTick{kind: 'P'}
+	}
+	m := len(live)
+	cycle := m
+	if e.HasLast {
+		cycle++
+	}
+	t := tick - pre
+	round, idx := t/cycle, t%cycle
+	if idx < m {
+		return playedTick{kind: 'S', step: live[idx], k: round*m + idx}
+	}
+	return playedTick{kind: 'L', k: round*m + m - 1}
+}
+
+// lastTick is the last tick a one-round effect plays; later ticks hold that state.
+func (e Effect) lastTick(live []int) int {
+	pre := 0
+	if e.HasPre {
+		pre = 1
+	}
+	cycle := len(live)
+	if e.HasLast {
+		cycle++
+	}
+	return pre + cycle - 1
+}
+
+// look is the state written by an action: resolved only when the frame is built.
+type look struct {
+	col Color
+	pct int
+	off bool
+}
+
+type zoneState struct {
+	base    look
+	baseSet bool
+	groups  []look
+	set     []bool
+}
+
+// position resolves a target to the positions (0-based) it designates at cran k.
+func (e Effect) positions(t Target, k int, nums []int) []int {
+	n := len(nums)
+	switch t.Kind {
+	case TargetGn:
+		if i := indexOf(nums, t.N); i >= 0 {
+			return []int{i}
+		}
+	case TargetGN:
+		if n > 0 {
+			return []int{n - 1}
+		}
+	case TargetVar:
+		if n == 0 {
+			return nil
+		}
+		for _, v := range e.Vars {
+			if v.Name != t.Var {
+				continue
 			}
+			var pos int
+			if v.IsList {
+				lp := listPositions(v, nums)
+				if len(lp) == 0 {
+					return nil
+				}
+				pos = lp[k%len(lp)]
+			} else {
+				start := v.Start.N
+				if v.Start.Kind == TargetGN {
+					start = n
+				}
+				pos = posMod(start-1+v.Incr*k, n)
+			}
+			return []int{posMod(pos+t.Offset, n)}
 		}
-	default:
-		c = parseHex(l.Color)
 	}
-	pct := 100
-	if l.Intensity != nil {
-		pct = *l.Intensity
-	}
-	return GroupLook{Color: c, Intensity: int(float64(pct)*255/100 + 0.5), FadeMs: l.FadeMs}
-}
-
-func parseHex(s string) [3]int {
-	var r, g, b int
-	if _, err := fmt.Sscanf(s, "#%02x%02x%02x", &r, &g, &b); err != nil {
-		return colWhite
-	}
-	return [3]int{r, g, b}
-}
-
-func uniformPhase(phases []Phase, wallMs int64) string {
-	var cycle int64
-	for _, p := range phases {
-		cycle += int64(p.Ms)
-	}
-	if cycle <= 0 || len(phases) == 0 {
-		return ""
-	}
-	t := wallMs % cycle
-	if t < 0 {
-		t += cycle
-	}
-	for _, p := range phases {
-		if t < int64(p.Ms) {
-			return p.Appearance
-		}
-		t -= int64(p.Ms)
-	}
-	return phases[len(phases)-1].Appearance
-}
-
-func stepIndex(elapsed time.Duration, stepMs int) int {
-	if stepMs <= 0 {
-		return 0
-	}
-	return int(elapsed / (time.Duration(stepMs) * time.Millisecond))
+	return nil
 }
 
 func posMod(a, m int) int {
@@ -178,228 +206,129 @@ func posMod(a, m int) int {
 	return ((a % m) + m) % m
 }
 
-func renderShift(frame Frame, p Pattern, rl func(string) GroupLook, elapsed time.Duration) {
-	n, l := len(frame), len(p.Cells)
-	rest := rl(p.Rest)
-	for i := range frame {
-		frame[i] = rest
-	}
-	if n == 0 || l == 0 {
-		return
-	}
-	step := stepIndex(elapsed, p.StepMs)
-	wrap := p.Wrap == nil || *p.Wrap
-	var start int
-	switch p.Direction {
-	case "bounce":
-		m := n - l
-		if m < 0 {
-			m = 0
-		}
-		if m == 0 {
-			start = 0
-		} else {
-			s := step % (2 * m)
-			if s > m {
-				s = 2*m - s
+func (e Effect) apply(z *zoneState, s Step, k int, nums []int) {
+	for _, a := range s {
+		l := look{col: a.Color, pct: a.Pct, off: a.Off}
+		if a.Target.Kind == TargetG0 {
+			z.base, z.baseSet = l, true
+			for i := range z.groups {
+				z.groups[i], z.set[i] = l, true
 			}
-			start = s
-		}
-		wrap = false
-	default:
-		if wrap {
-			start = posMod(step, n)
-		} else {
-			start = posMod(step, n+l-1) - (l - 1)
-		}
-	}
-	for k, c := range p.Cells {
-		idx := start + k
-		if wrap && p.Direction != "bounce" {
-			idx = posMod(idx, n)
-		}
-		if idx < 0 || idx >= n {
 			continue
 		}
-		if p.Direction == "backward" {
-			idx = n - 1 - idx
-		}
-		frame[idx] = rl(c)
-	}
-}
-
-func renderGauge(frame Frame, p Pattern, rl func(string) GroupLook, ctx Context) {
-	n := len(frame)
-	frac := 0.0
-	if ctx.Total > 0 {
-		frac = float64(ctx.Remaining) / float64(ctx.Total)
-		if p.Source == "elapsed" {
-			frac = 1 - frac
-		}
-	}
-	frac = math.Max(0, math.Min(1, frac))
-	x := frac * float64(n)
-	full := int(math.Floor(x + 1e-9))
-	partial := x-float64(full) > 1e-9
-	on, off := rl(p.On), rl(p.Off)
-	for i := range frame {
-		var g GroupLook
-		switch {
-		case i < full:
-			g = on
-		case i == full && partial && p.Edge != "":
-			g = rl(p.Edge)
-		default:
-			g = off
-		}
-		idx := i
-		if p.Direction == "backward" {
-			idx = n - 1 - i
-		}
-		frame[idx] = g
-	}
-}
-
-func renderRandom(frame Frame, p Pattern, rl func(string) GroupLook, ctx Context, elapsed time.Duration) {
-	n := len(frame)
-	count := 0
-	switch {
-	case p.Count != nil:
-		count = *p.Count
-	case p.Ratio != nil:
-		count = int(math.Round(*p.Ratio * float64(n)))
-	}
-	if count > n {
-		count = n
-	}
-	if count < 0 {
-		count = 0
-	}
-	step := int64(stepIndex(elapsed, p.StepMs))
-	rng := rand.New(rand.NewSource(ctx.Seed*1000003 + step))
-	perm := rng.Perm(n)
-	off, on := rl(p.Off), rl(p.On)
-	for i := range frame {
-		frame[i] = off
-	}
-	for _, idx := range perm[:count] {
-		frame[idx] = on
-	}
-}
-
-// renderGradient implements contracts/light-effects.md §4.3.1: a fixed gradient
-// (travel none), a rotating ring (forward/backward, repeat true) or a propagation in
-// time from a starting group (outward, or forward/backward with repeat false).
-func renderGradient(frame Frame, p Pattern, rl func(string) GroupLook, ctx Context, elapsed time.Duration) {
-	n := len(frame)
-	stops := make([]GroupLook, len(p.Stops))
-	for i, s := range p.Stops {
-		stops[i] = rl(s)
-	}
-	k := len(stops)
-	if n == 0 || k == 0 {
-		return
-	}
-	repeat := p.Repeat == nil || *p.Repeat
-	s := stepIndex(elapsed, p.StepMs)
-
-	switch {
-	case p.Travel == "" || p.Travel == "none":
-		for i := range frame {
-			x := 0.0
-			if n > 1 {
-				x = float64(i) / float64(n-1) * float64(k-1)
-			}
-			frame[i] = interpStops(stops, x, false)
-		}
-	case p.Travel != "outward" && repeat: // rotating closed ring
-		for i := range frame {
-			shifted := i - s
-			if p.Travel == "backward" {
-				shifted = i + s
-			}
-			x := float64(posMod(shifted, n)) / float64(n) * float64(k)
-			frame[i] = interpStops(stops, x, true)
-		}
-	default: // propagation
-		start := 0
-		switch p.Travel {
-		case "backward":
-			start = n - 1
-		case "outward":
-			switch p.Origin {
-			case "last":
-				start = n - 1
-			case "center":
-				start = (n - 1) / 2
-			case "team":
-				o := ctx.Origin
-				if o < 1 || o > n {
-					o = 1
-				}
-				start = o - 1
-			}
-		}
-		var rest *GroupLook
-		if p.Rest != "" {
-			r := rl(p.Rest)
-			rest = &r
-		}
-		for i := range frame {
-			d := i - start
-			if d < 0 {
-				d = -d
-			}
-			if d > s {
-				if rest != nil {
-					frame[i] = *rest
-				} else {
-					frame[i] = GroupLook{Absent: true}
-				}
-				continue
-			}
-			a := s - d
-			if repeat {
-				a %= k
-			} else if a > k-1 {
-				a = k - 1
-			}
-			frame[i] = stops[a]
+		for _, p := range e.positions(a.Target, k, nums) {
+			z.groups[p], z.set[p] = l, true
 		}
 	}
 }
 
-// interpStops samples the stops at abscissa x (0 = first stop, k-1 = last). With closed
-// set, the gradient comes back from the last stop to the first one (x in [0, k)).
-// The fade of a position is the one of the nearest stop.
-func interpStops(stops []GroupLook, x float64, closed bool) GroupLook {
-	k := len(stops)
-	i := int(math.Floor(x + 1e-9))
-	f := x - float64(i)
-	if f < 1e-9 {
-		f = 0
+// replay plays ticks 0..tick on a fresh zone and returns it with the cran of the last tick.
+func (e Effect) replay(tick int, nums []int) (z zoneState, k int, ok bool) {
+	live := e.liveSteps(nums)
+	if len(live) == 0 {
+		return zoneState{}, 0, false
 	}
-	var a, b GroupLook
-	switch {
-	case closed:
-		i = posMod(i, k)
-		a, b = stops[i], stops[(i+1)%k]
-	case i >= k-1:
-		return stops[k-1]
-	default:
-		a, b = stops[i], stops[i+1]
+	if !e.Loop {
+		if lt := e.lastTick(live); tick > lt {
+			tick = lt
+		}
 	}
-	if f == 0 {
-		return a
+	if tick < 0 {
+		tick = 0
 	}
-	lerp := func(u, v int) int { return int(math.Round(float64(u) + (float64(v)-float64(u))*f)) }
-	out := GroupLook{
-		Color:     [3]int{lerp(a.Color[0], b.Color[0]), lerp(a.Color[1], b.Color[1]), lerp(a.Color[2], b.Color[2])},
-		Intensity: lerp(a.Intensity, b.Intensity),
-		FadeMs:    a.FadeMs,
+	z = zoneState{groups: make([]look, len(nums)), set: make([]bool, len(nums))}
+	for t := 0; t <= tick; t++ {
+		p := e.playedAt(t, live)
+		k = p.k
+		switch p.kind {
+		case 'P':
+			e.apply(&z, e.Pre, 0, nums)
+		case 'S':
+			e.apply(&z, e.Steps[p.step], p.k, nums)
+		case 'L':
+			e.apply(&z, e.Last, p.k, nums)
+		}
 	}
-	if f >= 0.5 {
-		out.FadeMs = b.FadeMs
+	return z, k, true
+}
+
+// Render computes the frame after tick `tick` (§4.5, §4.6). It is deterministic: the
+// unrolling is a pure function of the tick. A zero Frame means "not applicable".
+func Render(e Effect, ctx Context, tick int) Frame {
+	nums := ctx.groupNums()
+	z, _, ok := e.replay(tick, nums)
+	if !ok {
+		return Frame{}
 	}
-	return out
+	return z.frame(ctx)
+}
+
+// RenderPost computes the POST frame of §4.5 point 5, with the variables at their last
+// value, after the effect last played tick lastTick. false when the effect has no POST.
+func RenderPost(e Effect, ctx Context, lastTick int) (Frame, bool) {
+	if !e.HasPost {
+		return Frame{}, false
+	}
+	nums := ctx.groupNums()
+	z, k, ok := e.replay(lastTick, nums)
+	if !ok {
+		return Frame{}, false
+	}
+	e.apply(&z, e.Post, k, nums)
+	return z.frame(ctx), true
+}
+
+func (z zoneState) frame(ctx Context) Frame {
+	f := Frame{Groups: make([]GroupLook, len(z.groups))}
+	var base GroupLook
+	if z.baseSet {
+		base = resolve(z.base, ctx)
+		b := base
+		f.Base = &b
+	}
+	for i := range z.groups {
+		if !z.set[i] {
+			f.Groups[i] = GroupLook{Absent: true}
+			continue
+		}
+		g := resolve(z.groups[i], ctx)
+		if z.baseSet && g == base {
+			f.Groups[i] = GroupLook{Absent: true}
+			continue
+		}
+		f.Groups[i] = g
+	}
+	return f
+}
+
+// resolve gives a look its concrete colour for ctx (named colours are live).
+func resolve(l look, ctx Context) GroupLook {
+	if l.off {
+		return GroupLook{}
+	}
+	var c [3]int
+	switch l.col.Name {
+	case "":
+		c = l.col.RGB
+	case "theme":
+		c = ctx.Theme
+	case "scene":
+		c = ctx.Scene
+	case "equipe":
+		c = colWhite
+		if ctx.Moment == MomentScore {
+			c = ctx.Team
+		}
+	case "urgence":
+		c = colWhite
+		if !ctx.Moment.notChrono() {
+			switch sec := ctx.Remaining.Seconds(); {
+			case sec <= 5:
+				c = colRed
+			case sec <= 10:
+				c = colOrange
+			}
+		}
+	}
+	return GroupLook{Color: c, Intensity: int(float64(l.pct)*255/100 + 0.5)}
 }

@@ -1,0 +1,14 @@
+# Dégradé — une scène multicolore fixe : une couleur par groupe, cycle de 4 couleurs.
+# Une salle de moins de 12 groupes en montre le début.
+id: degrade
+nom: Dégradé
+description: >
+  Une scène multicolore fixe pendant les phases calmes : chaque groupe a sa couleur,
+  en cycle de quatre couleurs. Une salle plus petite en montre le début.
+version: 2
+moments: [calm]
+groupes_min: 2
+duree_tick_ms: 60000
+
+pas:
+  - { g1: ["#FF3B30", 70], g2: ["#FFCC00", 70], g3: ["#34C759", 70], g4: ["#0A84FF", 70], g5: ["#FF3B30", 70], g6: ["#FFCC00", 70], g7: ["#34C759", 70], g8: ["#0A84FF", 70], g9: ["#FF3B30", 70], g10: ["#FFCC00", 70], g11: ["#34C759", 70], g12: ["#0A84FF", 70] }

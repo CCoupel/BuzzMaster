@@ -18,12 +18,29 @@ var (
 	reLine         = regexp.MustCompile(`line (\d+)`)
 )
 
-// Parse decodes and validates one effect (contract §5.1); errors carry no file
-// name. See ParseFile.
+// Parse decodes and validates one effect (contract §5.1); errors carry no file name. See
+// ParseFile.
 func Parse(data []byte) (Effect, []Error) { return ParseFile("", data) }
 
-// ParseFile decodes and validates one effect file. file only labels the
-// errors. The decoding is strict (§3.1): an unknown key is an error. On any
+// rawEffect is the strict top-level decoding: unknown keys are refused; the step tables
+// stay yaml nodes so that their order and their lines are kept.
+type rawEffect struct {
+	ID          string    `yaml:"id"`
+	Nom         string    `yaml:"nom"`
+	Description string    `yaml:"description"`
+	Version     int       `yaml:"version"`
+	Moments     []string  `yaml:"moments"`
+	GroupesMin  int       `yaml:"groupes_min"`
+	DureeTickMs int       `yaml:"duree_tick_ms"`
+	Boucle      yaml.Node `yaml:"boucle"`
+	Variables   yaml.Node `yaml:"variables"`
+	Pre         yaml.Node `yaml:"pre"`
+	Pas         yaml.Node `yaml:"pas"`
+	Dernier     yaml.Node `yaml:"dernier"`
+	Post        yaml.Node `yaml:"post"`
+}
+
+// ParseFile decodes and validates one effect file. file only labels the errors. On any
 // error the returned Effect must not be used.
 func ParseFile(file string, data []byte) (Effect, []Error) {
 	if len(data) > MaxFileBytes {
@@ -36,19 +53,27 @@ func ParseFile(file string, data []byte) (Effect, []Error) {
 	if root.Kind == 0 || len(root.Content) == 0 {
 		return Effect{}, []Error{{File: file, Message: "fichier vide"}}
 	}
-	if root.Content[0].Kind != yaml.MappingNode {
-		return Effect{}, []Error{{File: file, Line: root.Content[0].Line, Message: "le fichier doit être une suite de clés (id, name, looks, pattern…)"}}
+	top := root.Content[0]
+	if top.Kind != yaml.MappingNode {
+		return Effect{}, []Error{{File: file, Line: top.Line, Message: "le fichier doit être une suite de clés (id, nom, version, pas…)"}}
 	}
-	var e Effect
+	present := map[string]int{}
+	for i := 0; i+1 < len(top.Content); i += 2 {
+		present[top.Content[i].Value] = top.Content[i].Line
+		if top.Content[i].Value == "version" && top.Content[i+1].Value == "1" {
+			return Effect{}, []Error{{File: file, Line: top.Content[i].Line, Message: "format d'effet de la version précédente : réécrire en pas à pas"}}
+		}
+	}
+	var raw rawEffect
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
-	if err := dec.Decode(&e); err != nil && !errors.Is(err, io.EOF) {
+	if err := dec.Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
 		return Effect{}, decodeErrors(file, err)
 	}
-	lines := indexLines(&root)
-	errs := validate(file, &e, lines)
-	if len(errs) > 0 {
-		return Effect{}, errs
+	v := &validator{file: file}
+	e := v.build(&raw, present)
+	if len(v.errs) > 0 {
+		return Effect{}, v.errs
 	}
 	return e, nil
 }

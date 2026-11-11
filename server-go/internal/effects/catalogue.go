@@ -17,7 +17,7 @@ const (
 
 // NativeOrder is the display order of the native effects (contract §9). A
 // native not listed here follows, alphabetically.
-var NativeOrder = []string{"pulsation", "chenillard", "remplissage", "vague", "vague-lente", "degrade", "scintillement", "couleur-equipe"}
+var NativeOrder = []string{"pulsation", "chenillard", "chenillard-traine", "degrade", "couleur-equipe"}
 
 // Entry is one effect of the catalogue.
 type Entry struct {
