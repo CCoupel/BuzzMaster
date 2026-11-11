@@ -2342,7 +2342,7 @@ Ce bandeau reste visible tant que le mode n'est pas désactivé — c'est votre 
 
 #### Ampoules d'équipe (v10.0.0 + #213)
 
-Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de salle). À l'avenir (#213), une ampoule peut être affectée à une équipe spécifique : ces ampoules **restent toujours pilotées par le jeu** (couleur de l'équipe active), jamais éteintes ou forcées par le sélecteur général.
+Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de salle). Une ampoule peut être affectée à une équipe spécifique (rôle « équipe ») : ces ampoules **restent toujours pilotées par le jeu** (couleur de l'équipe active), jamais éteintes ou forcées par le sélecteur général.
 
 **Exemple** : vous avez 2 ampoules salle (zone générale) et 1 ampoule rouge dédiée à l'équipe « Les Rouges »
 - Mode OFF : les 2 ampoules salle s'éteignent
