@@ -1445,7 +1445,7 @@ puisse l'indiquer.
 | POST | `/api/lighting/groups/test/stop` | Arrête l'essai de groupe en cours | LOT-1 |
 | POST | `/config.json` `{"lighting":{"effects":{"<zone>":{…}},"speeds":{"<zone>":{…}}}}` | Effet et vitesse par moment et par zone, global (§6) | LOT-2 |
 | GET | `/api/ambiance/settings` | `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
-| GET | `/api/lighting/effects` | Catalogue : `groups` par zone, `applicable` par zone, `tick_ms`, erreurs de fichiers (§7.1) | LOT-2 |
+| GET | `/api/lighting/effects` | Catalogue : `groups` par zone, `applicable` par zone, `tick_ms`, `steps`, erreurs de fichiers (§7.1) | LOT-2 |
 | POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |
 | POST | `/api/lighting/effects/{id}/try`, `/api/lighting/effects/try/stop` | Essai d'un effet sur une zone, à une vitesse donnée : bouton « Tester » de l'onglet Effets et essai du catalogue (§7.4) | LOT-2 |
-| GET | `/api/lighting/effects/{id}/preview` | Trames simulées (§7.3) | LOT-3 |
+| GET | `/api/lighting/effects/{id}/preview` | Aperçu simulé : une trame par tick avec `tick`, `step` (`"pre"` \| `"pas:<n>"` \| `"dernier"`), `groups` ; `duration_ms` (20 000 ou 5 000 pour `score`), `chrono_s`, `tick_ms` (§7.3) | LOT-3 |

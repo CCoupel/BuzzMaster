@@ -1,6 +1,22 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — compléments de l'API pour le catalogue (#299, LOT-3)
+
+Relevés par `dev-frontend` (`_work/handoff/dev-frontend-20261111-182000.md`) pour couvrir la maquette
+`ambiance_page__effects_catalogue_zones`. Champs additifs, **aucun BREAKING** (l'aperçu n'est pas encore livré).
+
+- **[NEW]** `GET /api/lighting/effects/{id}/preview` (`light-effects.md` §7.3) — par trame : `tick` (numéro du tick) et
+  `step` (`"pre"` | `"pas:<n>"` | `"dernier"`, n à partir de 0 ; jamais `"post"`). **Une trame par tick**, même identique
+  à la précédente (remplace « seulement si elle diffère »), plus une trame quand une couleur nommée change entre deux
+  ticks. Au niveau de la réponse : `moment`, `tick_ms`, `chrono_s` (20 pour `chrono`, 0 sinon).
+- **[CHANGED]** Durée de l'aperçu fixée au contrat et renvoyée dans `duration_ms` : 20 000 ms pour `chrono` et `calm`,
+  **5 000 ms pour `score`** ; l'interface lit cette valeur. `fade_ms` retiré des états de groupe (pas de fondu).
+- **[NEW]** `GET /api/lighting/effects` (§7.1) — `steps` : nombre de pas de la boucle de l'effet.
+- **[CHANGED]** `POST /api/lighting/effects/{id}/try` (§7.4) — `seconds` par défaut : 5 pour un effet qui ne déclare que
+  le moment `score`, 10 sinon.
+
+---
 ## [20261111] — v11.7.0 — révision 4 : trois zones symétriques (ambiance, animateur, public), test à la vitesse réglée
 
 Retour utilisateur sur la maquette du catalogue. **Rien n'est en PROD** ; les marques **[BREAKING]** valent par rapport

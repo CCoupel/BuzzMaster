@@ -512,7 +512,7 @@ balayage : thèmes × temps restant × horloge). Une seule écriture de groupe p
   "groups": { "ambiance": 4, "animateur": 2, "public": 0 },
   "effects": [
     { "id": "chenillard", "name": "Chenillard", "description": "…", "moments": ["chrono"],
-      "origin": "native", "file": "natifs/chenillard.yaml", "min_groups": 3, "tick_ms": 1000,
+      "origin": "native", "file": "natifs/chenillard.yaml", "min_groups": 3, "tick_ms": 1000, "steps": 1,
       "applicable": { "ambiance": true, "animateur": false, "public": false } }
   ],
   "errors": [ { "file": "mon-effet.yaml", "line": 12, "message": "la variable « gB » n'est pas déclarée dans variables" } ],
@@ -521,6 +521,8 @@ balayage : thèmes × temps restant × horloge). Une seule écriture de groupe p
 }
 ```
 
+**`steps`** *(complément du LOT-3)* : nombre de pas de la boucle (longueur de `pas`, sans compter `pre`, `dernier` ni
+`post`) — affiché « 2 pas » sur la ligne « Fichier » du catalogue.
 Les noms de champs de l'API restent en anglais : `name` = `nom` du fichier, `min_groups` = `groupes_min` (0 par défaut),
 **`tick_ms` = `duree_tick_ms`** *(ajout du Batch R : sert à l'indication « plafonné » de la vitesse)*. *(Révision 4)*
 `groups` donne le nombre de groupes non vides **par zone** ; `applicable` est une table **par zone** (§4.7 ; zone
@@ -535,22 +537,47 @@ Recharge le dossier. Réponse : celle du §7.1.
 ### 7.3 `GET /api/lighting/effects/{id}/preview?groups=N&moment=chrono`
 
 Trames calculées par le serveur avec `effects.Render` — le navigateur ne fait que les rejouer (aucun second
-interpréteur). `groups` : 1 à 12 (défaut : nombre configuré, 6 s'il vaut 0). Contexte simulé : chronomètre de 20 s pour
-`chrono`, thème `#4F46E5`, équipe `#E53935`. La réponse couvre PRE, puis les tours de la boucle sur 20 s.
+interpréteur). `groups` : 1 à 12 (défaut : nombre de groupes de la zone ambiance, 6 s'il vaut 0). `moment` : l'un des
+moments déclarés par l'effet (défaut : le premier). Vitesse ×1. Contexte simulé : thème `#4F46E5`, équipe `#E53935`,
+couleur `scene` blanche ; pour `chrono`, un chronomètre qui descend de `chrono_s` secondes.
 
 ```json
-{ "id": "chenillard", "groups": 6, "duration_ms": 20000, "loop": true,
-  "frames": [ { "at_ms": 0, "groups": [ { "color": [79,70,229], "intensity": 128, "fade_ms": 0 }, … ] }, … ] }
+{ "id": "chenillard", "moment": "chrono", "groups": 6, "tick_ms": 1000,
+  "duration_ms": 20000, "chrono_s": 20, "loop": true,
+  "frames": [
+    { "at_ms": 0,    "tick": 0, "step": "pas:0",
+      "groups": [ { "color": [255,255,255], "intensity": 255 }, { "color": [79,70,229], "intensity": 255 }, … ] },
+    { "at_ms": 1000, "tick": 1, "step": "pas:0", "groups": [ … ] }
+  ] }
 ```
 
-Une trame n'est listée que si elle diffère de la précédente ; 400 trames au plus. `404` effet inconnu ; `400`
-paramètre invalide.
+*(Compléments du LOT-3, 2026-11-11 — champs additifs, pour couvrir la maquette `ambiance_page__effects_catalogue_zones`.)*
+
+- **Une trame par tick**, dans l'ordre, **même si elle est identique à la précédente** : c'est ce qui permet d'afficher le
+  numéro du tick et le pas joué à chaque battement. (Remplace « une trame n'est listée que si elle diffère ».) Si une
+  couleur nommée change entre deux ticks (`urgence` à 10 s et à 5 s), une trame supplémentaire est insérée à cet instant,
+  avec le même `tick` et le même `step`.
+- **`tick`** (entier ≥ 0) : numéro du tick depuis le début de l'effet (§4.5).
+- **`step`** (chaîne) : le pas joué à ce tick — **`"pre"`**, **`"pas:<n>"`** (n = rang du pas dans `pas`, à partir de 0 :
+  `"pas:0"`, `"pas:1"`…) ou **`"dernier"`**. Un pas sauté (§4.3) n'apparaît pas, puisqu'il ne consomme pas de tick.
+  `"post"` n'apparaît jamais : l'aperçu ne simule pas la fin du moment.
+- **`at_ms`** : instant de la trame depuis le début de l'aperçu (`tick` × `tick_ms` pour une trame de tick).
+- **`groups`** : un état par groupe, dans l'ordre `g1`…`gN` : `color` (RGB résolu), `intensity` (0-255). Le champ
+  `fade_ms` est supprimé (pas de fondu, §4.2).
+- **`duration_ms`** — durée de l'aperçu, **fixée par le moment** : **20 000** pour `chrono` et `calm`, **5 000** pour
+  `score`. L'interface lit cette valeur ; elle ne la fixe pas elle-même. `loop: true` : l'aperçu se rejoue depuis le
+  début après `duration_ms`.
+- **`chrono_s`** : durée du chronomètre simulé en secondes — `20` pour `chrono`, `0` pour les autres moments (pas de
+  compte à rebours à afficher). Temps restant affiché = `chrono_s` − `at_ms` / 1000.
+- **`tick_ms`** : durée d'un tick de l'effet (`duree_tick_ms`).
+- 400 trames au plus (au-delà, l'aperçu est tronqué et `duration_ms` raccourci d'autant). `404` effet inconnu ; `400`
+  paramètre invalide ou moment non déclaré par l'effet.
 
 ### 7.4 `POST /api/lighting/effects/{id}/try` et `POST /api/lighting/effects/try/stop` (révision 4)
 
 Joue l'effet sur les ampoules d'**une zone**, puis rend la zone à son état vivant. Corps :
 `{"zone": "ambiance", "speed": 1, "seconds": 10}` — `zone` ∈ `ambiance` (défaut), `animateur`, `public` ; `speed` ∈ valeurs
-du §6 (défaut `1`) ; `seconds` de 1 à 20 (défaut 10). Deux appelants :
+du §6 (défaut `1`) ; `seconds` de 1 à 20 (défaut **10**, ou **5** si l'effet ne déclare que le moment `score`). Deux appelants :
 
 | Appelant | Appel | Rendu |
 |---|---|---|
