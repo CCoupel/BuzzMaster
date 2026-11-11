@@ -31,5 +31,15 @@ export function useLightEffects({ withGroups = false } = {}) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  return { catalog, zoneGroups, loaded, refresh }
+  // POST /api/lighting/effects/reload (§7.2) : relit le dossier ; la réponse est celle du catalogue (§7.1).
+  const reload = useCallback(async () => {
+    try {
+      const res = await fetch('/api/lighting/effects/reload', { method: 'POST' })
+      if (res.ok) { setCatalog(normalizeCatalog(await res.json())); return true }
+    } catch { /* repli ci-dessous */ }
+    await refresh()
+    return false
+  }, [refresh])
+
+  return { catalog, zoneGroups, loaded, refresh, reload }
 }

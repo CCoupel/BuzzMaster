@@ -11,6 +11,7 @@ import SoundSpeakerIcon from '../components/SoundSpeakerIcon'
 import SoundsManager from '../components/SoundsManager'
 import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
+import LightEffectsCatalogue from '../components/LightEffectsCatalogue'
 import { groupLabelForLight, groupPillText, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
 import { configKeyFor, configPatchFor, globalEffect, globalSpeed, zoneGroupCounts, MOMENTS, ZONES, TRY_SECONDS, TRY_REFUSALS, isQuestionRunning } from '../utils/lightEffects'
@@ -207,7 +208,7 @@ export default function AmbiancePage() {
   // #225 — sous-onglets de Lumière (pont associé seulement) : 'bridge' | 'groups' | 'effects'.
   const [lightSubTab, setLightSubTab] = useState('bridge')
   // #223 — catalogue d'effets (sous-onglet Effets) ; relu à chaque ouverture du sous-onglet.
-  const { catalog, refresh: refreshCatalog } = useLightEffects()
+  const { catalog, refresh: refreshCatalog, reload: reloadCatalog } = useLightEffects()
   const [configLoaded, setConfigLoaded] = useState(false)
 
   // Étape 1 — découverte.
@@ -384,6 +385,7 @@ export default function AmbiancePage() {
   }
   const zoneGroups = useMemo(() => zoneGroupCounts(lighting.groups), [lighting.groups])
   const [focusZone, setFocusZone] = useState(null)
+  const [focusEffect, setFocusEffect] = useState(null)
   const effectsSettings = useMemo(() => ({
     light: {
       mode: lighting.default_mode || 'AUTO',
@@ -394,15 +396,18 @@ export default function AmbiancePage() {
 
   // Bouton « Tester » (contrat §7.4) : POST /api/lighting/effects/{id}/try {zone, speed, seconds} ; réponse immédiate
   // `{ok, duration_ms}` ; 409 `reason` : disabled | game | not_applicable | mode ; 503 pont injoignable ; 404 / 400.
-  const handleTryEffect = async ({ zone, id, speed }) => {
+  const handleTryEffect = async ({ zone, id, speed }) => tryEffect(id, { zone, speed, seconds: TRY_SECONDS })
+  // Bouton « Essayer sur la salle » du catalogue : essai SANS zone ni vitesse (zone ambiance, ×1, §7.4), 10 s par défaut.
+  const handleCatalogueTry = (id, seconds) => tryEffect(id, seconds ? { seconds } : {})
+  const tryEffect = async (id, body) => {
     try {
-      const res = await postJson(`/api/lighting/effects/${encodeURIComponent(id)}/try`, { zone, speed, seconds: TRY_SECONDS })
+      const res = await postJson(`/api/lighting/effects/${encodeURIComponent(id)}/try`, body)
       if (res.ok) {
-        const body = await readJsonSafe(res)
-        return { ok: true, duration_ms: body?.duration_ms }
+        const out = await readJsonSafe(res)
+        return { ok: true, duration_ms: out?.duration_ms }
       }
-      const body = await readJsonSafe(res)
-      const message = res.status === 409 ? (TRY_REFUSALS[body?.reason] || 'Test refusé.')
+      const out = await readJsonSafe(res)
+      const message = res.status === 409 ? (TRY_REFUSALS[out?.reason] || 'Test refusé.')
         : res.status === 503 ? 'Pont injoignable — impossible de tester l\'effet.'
         : res.status === 404 ? 'Effet inconnu — rechargez le catalogue.'
         : `Test impossible (HTTP ${res.status}).`
@@ -1248,12 +1253,24 @@ export default function AmbiancePage() {
               tryUnavailable={tryUnavailable}
               onManageGroups={() => openSubTab('groups')}
               onCreateZone={() => openSubTab('groups')}
+              onShowEffect={(id) => setFocusEffect({ id, n: Date.now() })}
               disabled={savingDefaultMode || savingEffect}
             />
             <p className="ambiance-hint">
-              Enregistré à chaque changement, comme le mode d'éclairage. Les valeurs « (actuel) » reproduisent le
-              comportement de la version précédente.{!lighting.enabled && " Éclairage d'ambiance désactivé : le réglage est conservé."}
+              Enregistré à chaque changement, comme le mode d'éclairage. Les valeurs « (par défaut) » sont celles d'une
+              installation neuve.{!lighting.enabled && " Éclairage d'ambiance désactivé : le réglage est conservé."}
             </p>
+            <LightEffectsCatalogue
+              catalog={catalog}
+              lighting={lighting}
+              zoneGroups={zoneGroups}
+              onReload={reloadCatalog}
+              onTry={handleCatalogueTry}
+              onStopTry={handleStopTry}
+              tryUnavailable={() => (isQuestionRunning(gameState?.phase) ? 'Une question est en cours : l\'essai est possible hors question.' : tryUnavailable('ambiance'))}
+              onManageGroups={() => openSubTab('groups')}
+              focus={focusEffect}
+            />
           </section>
         )}
 

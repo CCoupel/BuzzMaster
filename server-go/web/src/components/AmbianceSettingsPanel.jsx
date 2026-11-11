@@ -33,6 +33,7 @@ import './AmbianceSettingsPanel.css'
 //             sans groupe n'est pas affiché (une ligne « Aucun groupe … — en créer un » le remplace en mode global)
 //   focusZone zone dont le bloc est mis en vue (lien « Choisir les effets de la zone » de la page Groupes)
 //   onManageGroups / onOpenCatalogue / onCreateZone(zone)   liens des avertissements (facultatifs)
+//   onShowEffect(id)  lien « Voir l'aperçu » d'un effet choisi (fait défiler jusqu'à sa carte du catalogue)
 //   onTryEffect({zone, moment, id, speed}) -> Promise<{ok, duration_ms?, message?}>  bouton « Tester » (mode global
 //             seulement, jamais en mode surcharge) ; onStopTry() -> Promise ; tryUnavailable(zone) -> raison '' | texte
 //   renderCatalogue(cue)   mode global : cellules <td> catalogue de la ligne
@@ -89,6 +90,7 @@ export default function AmbianceSettingsPanel({
   onManageGroups = null,
   onOpenCatalogue = null,
   onCreateZone = null,
+  onShowEffect = null,
   disabled = false,
 }) {
   const override = mode === 'override'
@@ -131,6 +133,12 @@ export default function AmbianceSettingsPanel({
   // Test d'un effet (bouton « Tester », mode global) : un seul à la fois, 10 s, arrêté par tout changement de réglage.
   const [trying, setTrying] = useState(null) // { key, startedAt, durationMs, speed } | null
   const [tryStarting, setTryStarting] = useState(null)
+  // Un essai du catalogue (« Essayer sur la salle ») qui démarre remplace ce test.
+  useEffect(() => {
+    const onOther = (e) => { if (e.detail?.source !== 'panel') setTrying(null) }
+    window.addEventListener('buzzcontrol:effect-try', onOther)
+    return () => window.removeEventListener('buzzcontrol:effect-try', onOther)
+  }, [])
   useEffect(() => {
     if (!trying) return undefined
     const t = setTimeout(() => setTrying(null), trying.durationMs)
@@ -144,6 +152,7 @@ export default function AmbianceSettingsPanel({
     setTryStarting(key)
     try {
       const res = await onTryEffect({ zone, moment, id, speed })
+      if (res?.ok) window.dispatchEvent(new CustomEvent('buzzcontrol:effect-try', { detail: { source: 'panel' } }))
       if (res?.ok) setTrying({ key, durationMs: Number.isFinite(res.duration_ms) ? res.duration_ms : TRY_SECONDS * 1000, speed })
     } finally { setTryStarting(null) }
   }
@@ -214,6 +223,9 @@ export default function AmbianceSettingsPanel({
           </button>
         )}
         {isTrying && <span className="asp-inherit">Test en cours sur la zone {ZONE_LABEL[zone]}, à la vitesse {formatSpeed(trying.speed)}…</span>}
+        {effective && onShowEffect && catalog?.effects?.some(e => e.id === effective) && (
+          <button type="button" className="asp-link" onClick={() => onShowEffect(effective)}>Voir l'aperçu</button>
+        )}
         {capped && <span className="asp-inherit" title="Un effet ne descend jamais sous 4 changements par seconde">plafonné</span>}
         {override && (current !== INHERIT || sCurrent !== INHERIT) && <span className="asp-file-badge">manche</span>}
         {override && current === INHERIT && sCurrent === INHERIT && <span className="asp-inherit">Valeurs globales appliquées.</span>}

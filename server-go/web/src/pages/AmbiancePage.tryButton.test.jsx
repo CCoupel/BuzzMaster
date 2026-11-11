@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 // #223 — bouton « Tester » (page Ambiance › Lumière › Effets) : grisé pendant une question, filet 409 `game`.
 vi.mock('./AmbiancePage.css', () => ({}))
 vi.mock('../components/LightGroupsManager.css', () => ({}))
+vi.mock('../components/LightEffectsCatalogue.css', () => ({}))
 vi.mock('../hooks/GameContext', () => ({ useGame: vi.fn(), GameProvider: ({ children }) => children }))
 
 import AmbiancePage from './AmbiancePage'
@@ -76,5 +77,23 @@ describe('AmbiancePage › Effets — bouton « Tester »', () => {
     await open()
     expect(screen.queryByTestId('asp-zone-public')).toBeNull()
     expect(screen.queryByTestId('asp-zone-animateur')).toBeNull()
+  })
+
+  it('catalogue sous les réglages : « Essayer sur la salle » poste un corps sans zone ni vitesse', async () => {
+    const calls = server()
+    render(<AmbiancePage />)
+    await open()
+    const card = await screen.findByTestId('fx-pulsation')
+    fireEvent.click(card.querySelector('button[title^="Joue l\'effet sur la zone Ambiance"]'))
+    await waitFor(() => expect(calls.at(-1)).toEqual({ url: '/api/lighting/effects/pulsation/try', body: {} }))
+  })
+
+  it('catalogue : essai grisé pendant une question', async () => {
+    useGame.mockReturnValue({ teams: {}, gameState: { phase: 'STARTED' } })
+    server()
+    render(<AmbiancePage />)
+    await open()
+    const card = await screen.findByTestId('fx-pulsation')
+    await waitFor(() => expect(card.querySelector('button[title^="Une question est en cours"]')).toBeDisabled())
   })
 })
