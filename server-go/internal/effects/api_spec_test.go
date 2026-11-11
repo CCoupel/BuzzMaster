@@ -31,6 +31,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -41,6 +42,7 @@ type Lk struct {
 	Color     [3]int
 	Intensity int
 	FadeMs    int
+	Absent    bool // aucun état émis pour ce groupe (§4.3.1 point 3, `rest` absent)
 }
 
 // Ctx : contexte de rendu des tests.
@@ -85,7 +87,7 @@ func render(e Effect, c Ctx, at time.Duration) []Lk {
 	f := Render(e, c.toContext(e, at), at)
 	out := make([]Lk, len(f))
 	for i, g := range f {
-		out[i] = Lk{Color: g.Color, Intensity: g.Intensity, FadeMs: g.FadeMs}
+		out[i] = Lk{Color: g.Color, Intensity: g.Intensity, FadeMs: g.FadeMs, Absent: isAbsent(g)}
 	}
 	return out
 }
@@ -135,4 +137,17 @@ func writeUser(t *testing.T, dir, name, src string) {
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// isAbsent : « aucun état émis pour ce groupe » (contrat §4.3.1 point 3). La forme n'est pas fixée par le
+// contrat : on accepte un booléen nommé Absent|Skip|None|Unset|Inherit sur GroupLook, sinon Intensity < 0.
+// Adapter ici si dev-backend choisit une autre représentation.
+func isAbsent(g GroupLook) bool {
+	v := reflect.ValueOf(g)
+	for _, name := range []string{"Absent", "Skip", "None", "Unset", "Inherit"} {
+		if f := v.FieldByName(name); f.IsValid() && f.Kind() == reflect.Bool {
+			return f.Bool()
+		}
+	}
+	return g.Intensity < 0
 }

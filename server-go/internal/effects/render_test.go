@@ -412,77 +412,7 @@ func TestRender_Random_StableWithinAStep(t *testing.T) {
 	}
 }
 
-// ---------- gradient ----------
-
-func TestRender_Gradient_FixedLinearRGB(t *testing.T) {
-	e := mustParse(t, `
-id: deg
-name: Deg
-version: 1
-moments: [calm]
-looks:
-  a: { color: "#FF0000" }
-  b: { color: "#0000FF" }
-pattern: { type: gradient, stops: [a, b], travel: none, repeat: false }
-`)
-	fr := render(e, Ctx{N: 3, Scene: white}, 0)
-	if fr[0].Color != [3]int{255, 0, 0} || fr[2].Color != [3]int{0, 0, 255} {
-		t.Fatalf("extrémités = premier et dernier arrêt : %+v", fr)
-	}
-	mid := fr[1].Color
-	if !near(mid[0], 128, 1) || mid[1] != 0 || !near(mid[2], 128, 1) {
-		t.Errorf("milieu = interpolation RGB linéaire (128,0,128), obtenu %v", mid)
-	}
-	// travel none : fixe dans le temps
-	if !reflect.DeepEqual(fr, render(e, Ctx{N: 3, Scene: white}, 30*time.Second)) {
-		t.Error("travel: none ⇒ dégradé fixe")
-	}
-}
-
-func TestRender_Gradient_SingleGroupTakesFirstStop(t *testing.T) {
-	e := mustParse(t, `
-id: deg1
-name: Deg1
-version: 1
-moments: [calm]
-looks: { a: { color: "#FF0000" }, b: { color: "#0000FF" } }
-pattern: { type: gradient, stops: [a, b], travel: none, repeat: false }
-`)
-	fr := render(e, Ctx{N: 1, Scene: white}, 0)
-	if len(fr) != 1 || fr[0].Color != [3]int{255, 0, 0} {
-		t.Fatalf("N=1 : premier arrêt, obtenu %+v", fr)
-	}
-}
-
-func TestRender_Gradient_OutwardStartsAtTeamOrigin(t *testing.T) {
-	e := mustParse(t, `
-id: vague
-name: Vague
-version: 1
-moments: [score]
-duration_ms: 3000
-looks: { eq: { color: team }, fond: { color: "#000000", intensity: 0 } }
-pattern: { type: gradient, stops: [eq, fond], step_ms: 500, travel: outward, origin: team, repeat: false }
-`)
-	c := Ctx{N: 6, Scene: white, Team: team, Origin: 3, Seed: 1}
-	fr := render(e, c, 0)
-	if fr[2].Color != team {
-		t.Errorf("au pas 0 la couleur de l'équipe est sur le groupe d'origine (3) : %+v", fr)
-	}
-	// la couleur s'atténue en s'éloignant de l'origine (propagation vers les deux bords)
-	for i := 0; i < 6; i++ {
-		d := i - 2
-		if d < 0 {
-			d = -d
-		}
-		if i != 2 && fr[i].Intensity >= fr[2].Intensity {
-			t.Errorf("le groupe %d (distance %d) doit être plus atténué que l'origine : %+v", i+1, d, fr)
-		}
-	}
-	if fr[0].Intensity < fr[5].Intensity-255 { // garde-fou de forme, jamais négatif
-		t.Fatal("intensités incohérentes")
-	}
-}
+// ---------- gradient : voir gradient_test.go (sémantique figée §4.3.1) ----------
 
 // ---------- étapes (stages) ----------
 
