@@ -8,6 +8,7 @@ const CAT = normalizeCatalog({
     { id: 'zzz', name: 'Zèbre', moments: ['chrono'], origin: 'user', min_groups: 1, applicable: true },
     { id: 'chenillard', name: 'Chenillard', moments: ['chrono'], origin: 'native', min_groups: 3, applicable: false, reason: '' },
     { id: 'pulsation', name: 'Pulsation', moments: ['chrono', 'calm'], origin: 'native', min_groups: 1, applicable: true },
+    { id: 'tout', name: 'Tout', moments: ['calm'], origin: 'native', target: 'all', min_groups: 0, applicable: true, host_applicable: true },
     { id: 'aaa', name: 'Arc', moments: ['chrono'], origin: 'override', min_groups: 1, applicable: true },
   ],
 })
@@ -38,6 +39,16 @@ describe('lightEffects — listes par moment (#223)', () => {
     expect(effectWarning(CAT, 'chrono', 'nope').kind).toBe('missing')
     expect(effectWarning(CAT, 'chrono', 'pulsation')).toBeNull()
     expect(effectWarning(CAT, 'chrono', '')).toBeNull()
+  })
+  it('host_applicable filtre le groupe animateur ; target all toujours applicable en salle', () => {
+    const cat = normalizeCatalog({ groups: 0, effects: [
+      { id: 'a', name: 'A', moments: ['calm'], origin: 'native', target: 'all', min_groups: 0, host_applicable: true },
+      { id: 'b', name: 'B', moments: ['calm'], origin: 'native', target: 'groups', min_groups: 1, host_applicable: false },
+    ] })
+    expect(buildOptions(cat, 'calm').find(o => o.value === 'a').disabled).toBe(false)
+    const host = buildOptions(cat, 'calm', { host: true })
+    expect(host.find(o => o.value === 'a').disabled).toBe(false)
+    expect(host.find(o => o.value === 'b')).toMatchObject({ disabled: true, reason: 'demande plusieurs groupes' })
   })
   it('valeurs globales par défaut, correspondance config.json et groupe animateur', () => {
     expect(globalEffect({}, false, 'chrono')).toBe('pulsation')

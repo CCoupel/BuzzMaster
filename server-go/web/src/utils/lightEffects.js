@@ -44,12 +44,16 @@ const byName = (a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base
 
 // Raison d'inapplicabilité d'un effet pour la salle ou pour le groupe animateur (un seul groupe).
 export function inapplicableReason(e, { host, groups }) {
-  if (host) return (e.min_groups || 0) > 1 ? 'demande plusieurs groupes' : ''
-  if (e.applicable === false) {
-    if (e.reason) return e.reason
-    return `demande ${e.min_groups} groupe${e.min_groups > 1 ? 's' : ''}, ${groups} configuré${groups > 1 ? 's' : ''}`
+  if (host) {
+    // `host_applicable` (§7.1, §4.6) fait foi ; repli sur min_groups pour un catalogue qui ne le porte pas.
+    const ok = typeof e.host_applicable === 'boolean' ? e.host_applicable : (e.min_groups || 0) <= 1
+    return ok ? '' : 'demande plusieurs groupes'
   }
-  return ''
+  // Salle : `target: all` toujours applicable ; `target: groups` si N >= min_groups (le serveur le calcule dans `applicable`).
+  const ok = typeof e.applicable === 'boolean' ? e.applicable : (e.target === 'all' || groups >= (e.min_groups || 0))
+  if (ok) return ''
+  if (e.reason) return e.reason
+  return `demande ${e.min_groups} groupe${e.min_groups > 1 ? 's' : ''}, ${groups} configuré${groups > 1 ? 's' : ''}`
 }
 
 // Liste d'un moment : « Aucun effet » (ou « Blanc fixe » pour le groupe animateur), puis les effets du
