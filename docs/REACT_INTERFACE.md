@@ -2087,39 +2087,43 @@ Réutilise intégralement le contenu existant de `AmbiancePage` (v10.0.0+). Voir
 - Gestion des ampoules et des scènes (étape 3)
 - Sélecteur ON/AUTO/OFF pour la conduite en direct
 
-#### Sous-onglets de Lumière (v11.7.0, #225)
+#### Sous-onglets de Lumière (v11.7.0, #225, #223)
 
 Une seconde barre d'onglets (`LIGHT_SUBTABS`, état `lightSubTab`, défaut `bridge`) sous l'onglet Lumière, visible à l'étape 3 (pont associé) seulement :
 
 | `key` | Libellé | Contenu |
 |---|---|---|
-| `bridge` | Pont et ampoules | Contenu existant : pont, ampoules, scènes, sélecteur ON/AUTO/OFF |
-| `groups` | Groupes | Composant `LightGroupsManager` (compteur de groupes affiché) |
-| `effects` | Effets | `AmbianceSettingsPanel` (sections `light` + `lightEffects`) : sélecteurs d'effet par moment, salle et groupes animateur. Le badge « bientôt » a disparu. |
+| `bridge` | Pont et ampoules | Pont, ampoules, scènes, sélecteur ON/AUTO/OFF |
+| `groups` | Groupes | Composant `LightGroupsManager` (trois zones) |
+| `effects` | Effets | Composant `AmbianceSettingsPanel` (effet et vitesse par zone et par moment) |
 
-#### Sous-onglet Effets — `AmbianceSettingsPanel` (v11.7.0, #223, LOT-2 en cours)
+#### `LightGroupsManager` — groupes à trois zones (#225, révision 4)
 
-Le sous-onglet Effets rend le composant **mutualisé** `AmbianceSettingsPanel` (mode `global`), le même que le dialogue « Ambiance de la manche » (mode surcharge).
+**Fichiers** : `web/src/components/LightGroupsManager.jsx` + `LightGroupsManager.css` ; fonctions pures dans `web/src/utils/lightGroups.js` (brouillon `{ambiance, animateur, public}`, 12 groupes par zone).
 
-- **Fichiers** : `web/src/components/AmbianceSettingsPanel.jsx` ; helpers purs `web/src/utils/lightEffects.js` (chemins éditables, options, « (actuel) », inapplicabilité) ; `web/src/utils/ambianceSettings.js` ; hook `useLightEffects.js`.
-- **Props utiles** : `sections={['light', 'lightEffects']}`, `catalog` (réponse de `GET /api/lighting/effects`), `hostGroups` (`[{id, name, rank, empty}]`, un bloc par groupe animateur), `focusHostId` (met en vue le bloc d'un groupe : lien « Choisir ses effets » de la page Groupes), `onManageGroups`, `onCreateHost`.
-- **Chemins édités** : salle `light.effects.<moment>` ; groupe animateur `light.host_effects.<id>.<moment>`, `<id>` = `id` du groupe (et non son rang). En mode global, la page écrit `POST /config.json {lighting:{effects:{…}}}` ou `{lighting:{host_effects:{<id>:{<moment>:v}}}}` (`light-effects.md` §6).
-- **Badge de manche** : compte chaque couple (groupe, moment) surchargé.
-- **Valeur relue** : le réglage est affiché d'après la réponse serveur, jamais optimiste.
+**Rôle** : édite `lighting.groups` (config). Le brouillon est enregistré par `POST /config.json` (`{lighting:{groups:[…]}}`, remplacement complet). Le champ `id` d'un groupe est conservé ; il est omis tant qu'il est vide, et le serveur l'attribue. L'essai appelle `POST /api/lighting/groups/test` avec `{group: n}` (zone ambiance), `{group: "host<k>"}` (zone animateur) ou `{group: "public<k>"}` (zone public), et l'arrêt `POST /api/lighting/groups/test/stop`.
 
-#### `LightGroupsManager` — groupes d'ambiance (#225)
-
-**Fichiers** : `web/src/components/LightGroupsManager.jsx` + `LightGroupsManager.css` ; fonctions pures dans `web/src/utils/lightGroups.js` (brouillon `{groups, hosts}`).
-
-**Rôle** : édite `lighting.groups` (config) ; le brouillon est enregistré par `POST /config.json` (`{lighting:{groups:[…]}}`, remplacement complet, groupes animateur placés en dernier). Le champ `id` d'un groupe est conservé ; il est omis tant qu'il est vide, et le serveur l'attribue. L'essai appelle `POST /api/lighting/groups/test` avec `{group: n}` ou `{group: "host<k>"}` (`"host1"`…), et l'arrêt `POST /api/lighting/groups/test/stop`.
-
-- **Bac « hors groupe »** et **groupes de salle ordonnés** : glisser-déposer natif et alternative clavier (Monter / Descendre, « Déplacer vers… »).
-- **Équipes à proximité** par groupe de salle, avec une infobulle « ? ». Elles servent d'origine à la vague d'un effet réparti.
-- **Liste des groupes animateur** (4 au maximum) : création, nom, ampoules, ordre, suppression. Numérotation A1 à A4 (pastille « 🎤 A1 · nom »). Le bouton « Créer un groupe par ampoule » est **supprimé**.
-- **Essai en séquence** : bouton « ■ Arrêter l'essai » pendant la séquence de 6 pas (infobulle « Étape i/6 »). Un essai remplace celui en cours. Les infobulles de désactivation indiquent la cause (« Enregistrez d'abord », « Groupe vide », « Éclairage d'ambiance désactivé », pont injoignable).
+- **Trois sections de zone**, groupes ordonnés `g1` → `gN`, sans nom ; pastilles « Ambiance · g1 », « 🎤 Animateur · g1 », « 👥 Public · g1 ».
+- **Création par zone**, réordonnancement des groupes dans leur zone (glisser-déposer ou flèches), déplacement d'ampoules entre groupes et zones (glisser-déposer).
+- **Essai en séquence** : pendant les 6 pas, le bouton devient « ■ Arrêter l'essai » (infobulle « Étape i/6 »). Un essai remplace celui en cours.
+- **« Choisir les effets de la zone »** (zones animateur et public) : ouvre le sous-onglet Effets sur cette zone.
+- **Infobulles de désactivation** : « Enregistrez d'abord », « Groupe vide », « Éclairage d'ambiance désactivé », pont injoignable.
 - **Colonne « Groupe »** de la liste d'ampoules : calculée depuis `lighting.groups` (config), et non depuis le champ `group` de `GET /api/lighting/lights`.
 - **Avertissement** avant enregistrement si une ampoule groupée passe en rôle équipe.
 - **Pont injoignable** : seul l'essai est indisponible ; l'édition des groupes reste possible.
+
+#### Sous-onglet Effets — `AmbianceSettingsPanel` (v11.7.0, #223)
+
+Le sous-onglet Effets rend le composant **mutualisé** `AmbianceSettingsPanel` (mode `global`), le même que le dialogue « Ambiance de la manche » (mode surcharge).
+
+- **Fichiers** : `web/src/components/AmbianceSettingsPanel.jsx` ; helpers purs `web/src/utils/lightEffects.js` (chemins éditables, options, « (actuel) », applicabilité par zone) ; `web/src/utils/ambianceSettings.js` ; hook `web/src/hooks/useLightEffects.js`.
+- **Un bloc par zone existante** : la zone ambiance, puis les zones animateur et public si elles ont au moins un groupe non vide. Chaque bloc a, pour chacun des trois moments, un sélecteur d'effet, un sélecteur de vitesse, et le bouton « ▶ Tester ».
+- **Props utiles** : `sections={['light', 'lightEffects']}`, `catalog` (réponse de `GET /api/lighting/effects`), `zoneGroups` (nombre de groupes non vides par zone), `focusZone` (met en vue le bloc d'une zone), `onManageGroups`.
+- **Chemins édités** : `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>`. En mode global, la page écrit `POST /config.json {lighting:{effects:{<zone>:{<moment>:v}}}}` (ou `speeds`).
+- **Tester** : `POST /api/lighting/effects/{id}/try` avec `{zone, speed, seconds: 10}`, puis `…/try/stop`. Les refus 409 (`reason` : `disabled`, `game`, `not_applicable`, `mode`) et 503 s'affichent en message. Le bouton est grisé avec infobulle quand aucun effet n'est choisi, quand l'effet ne s'applique pas à la zone, ou quand l'éclairage est désactivé, pont injoignable ou forcé (ON, OFF, Flash).
+- **Badge de manche** : compte chaque couple (zone, moment) surchargé.
+- **Valeur relue** : le réglage est affiché d'après la réponse serveur, jamais optimiste.
+- **Vitesse « plafonnée »** : indiquée quand la durée d'un tick passerait sous 250 ms (champ `tick_ms` du catalogue).
 
 ### Onglet Son — Bruitages d'événement
 

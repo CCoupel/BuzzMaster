@@ -1,314 +1,288 @@
 # Écrire un effet lumière
 
-> **Version** : v11.7.0 (#223), guide en cours — les effets livrés et le schéma sont ceux du serveur courant.
-> **Référence normative** : `contracts/light-effects.md` (§3 à §4). Ce guide en est la version pratique.
-> **Interface** : Ambiance › Lumière › **Effets** (`/admin/ambiance`), voir `docs/ADMIN_GUIDE.md`.
+> **Version** : v11.7.0 (#223, format pas à pas, modèle à trois zones).
+> **Référence normative** : `contracts/light-effects.md` (§2 zones, §4 format, §6 réglages, §9 natifs).
+> **Où régler** : Ambiance › Lumière › **Effets** (`/admin/ambiance`), voir `docs/ADMIN_GUIDE.md`.
 
-Un **effet** décrit ce que font les ampoules pendant un moment du jeu : le chronomètre (`chrono`), l'attente
-et les pauses (`calm`), l'attribution des points (`score`). Il s'écrit dans un fichier texte, sans recompiler le
-serveur. Le moteur interprète le fichier ; vous ne programmez rien.
+Un **effet** dit, pas à pas, ce que font les ampoules pendant un moment du jeu : le chronomètre (`chrono`), l'attente
+et les pauses (`calm`), l'attribution des points (`score`). Il s'écrit dans un fichier texte, sans recompiler le serveur.
+Un fichier = un effet. Le moteur interprète le fichier ; vous ne programmez rien.
 
 ---
 
-## 1. Où sont les fichiers
+## 1. Les notions
+
+| Mot | Sens |
+|-----|------|
+| **Zone** | Un ensemble de groupes : `ambiance` (la salle), `animateur` (pupitre, régie), `public`. |
+| **Groupe** | Un sous-ensemble d'ampoules d'une zone, **numéroté** (`g1`, `g2`…) et **sans nom**. |
+| **g0** | Toute la zone. |
+| **Tick** | Un battement de l'horloge de l'effet. Un pas dure toujours un tick. |
+| **Pas** | Ce qui est écrit sur les groupes à un tick : une table « cible : action ». |
+| **Variable** | Un groupe qui avance d'un tick à l'autre (`gA`), pour faire tourner une lumière dans la salle. |
+
+Un même fichier d'effet sert aux trois zones : c'est le **numéro** du groupe qui décide ce qui est allumé, dans la zone
+où l'effet est joué.
+
+## 2. Où sont les fichiers
 
 ```
 data/files/effects/              ← VOS effets (un fichier .yaml par effet)
 data/files/effects/natifs/       ← copies de référence des effets livrés (NE PAS MODIFIER)
 ```
 
-- Le dossier `natifs/` est **réécrit à chaque démarrage** : toute modification y est perdue. Il sert de référence.
-- Les effets livrés sont lus **dans le serveur**, pas dans `natifs/`. Une mise à jour de BuzzControl met donc les
-  effets livrés à jour.
-- Les fichiers de `data/files/effects/` (hors `natifs/`) sont **les vôtres**. Ils sont sauvegardés avec la catégorie
-  « ambiance » des sauvegardes.
-- Un fichier est lu s'il est directement dans `effects/` et se termine par `.yaml`. Les sous-dossiers sont ignorés.
-  Limites : **64 Ko** par fichier, **100** fichiers.
-- Le nom du fichier est libre ; c'est le champ `id` qui identifie l'effet.
+- Le dossier `natifs/` est **réécrit à chaque démarrage** : toute modification y est perdue. Les effets livrés sont lus
+  **dans le serveur** ; une mise à jour de BuzzControl met donc les effets livrés à jour.
+- Les fichiers directement dans `data/files/effects/` (sous-dossiers ignorés) sont **les vôtres**. Ils sont sauvegardés
+  avec la catégorie « ambiance » des sauvegardes.
+- Limites : **64 Ko** par fichier, **100** fichiers. Le nom du fichier est libre ; c'est le champ `id` qui identifie l'effet.
 
-## 2. Créer un effet : copier un effet livré
+## 3. Créer un effet : copier un effet livré
 
-Le plus simple est de partir d'un effet livré :
+1. Copiez `data/files/effects/natifs/chenillard.yaml` dans `data/files/effects/`, par exemple `mon-chenillard.yaml`.
+2. **Changez la clé `id`** (`id: mon-chenillard`). Un `id` différent crée un **nouvel** effet, qui s'ajoute au catalogue.
+3. Modifiez les pas, les variables, la durée du tick (`duree_tick_ms`).
+4. Enregistrez. Le serveur recharge le dossier dans les 2 secondes ; rien à redémarrer.
+5. L'effet apparaît dans Ambiance › Lumière › Effets, dans la liste de ses moments.
 
-1. Copiez `data/files/effects/natifs/chenillard.yaml` dans `data/files/effects/`, par exemple sous le nom `mon-chenillard.yaml`.
-2. **Changez la clé `id`** (par exemple `id: mon-chenillard`). Un `id` différent crée un **nouvel** effet, qui
-   s'ajoute au catalogue.
-3. Modifiez les apparences (`looks`), la vitesse (`step_ms`), les étapes (`stages`).
-4. Enregistrez le fichier. Le serveur le recharge dans les 2 secondes ; rien à redémarrer.
-5. Dans Ambiance › Lumière › Effets, l'effet apparaît dans la liste de son moment.
+> **Attention** : si vous gardez l'`id` d'un effet livré, votre fichier **remplace** l'effet livré (origine « surcharge »).
+> Pour revenir à l'effet d'origine, supprimez votre fichier.
 
-> **Attention** : si vous gardez l'`id` d'un effet livré, votre fichier **remplace** l'effet livré (origine
-> « surcharge »). Pour revenir à l'effet d'origine, supprimez votre fichier : le serveur reprend le natif.
-
-## 3. Structure d'un fichier
+## 4. Structure d'un fichier
 
 ```yaml
 # Commentaires : une ligne qui commence par #.
-id: mon-effet               # identifiant : a-z, 0-9, tiret, 1 à 40 caractères, unique
-name: Mon effet             # libellé du catalogue, 1 à 40 caractères
-description: >              # texte du catalogue, 500 caractères au plus
+id: mon-effet               # [a-z0-9-], 1 à 40 caractères, unique
+nom: Mon effet              # libellé du catalogue, 1 à 40 caractères
+description: >              # 500 caractères au plus
   Une phrase qui dit ce que voit la salle.
-version: 1                  # toujours 1 pour l'instant
-moments: [chrono]           # où l'effet est proposé : chrono, calm, score (au moins un)
-target: groups              # groups (un état par groupe) ou all (un état pour toute la zone)
-min_groups: 3               # target: groups seulement ; défaut 1 ; 1 à 12
-duration_ms: 0              # 0 = dure tout le moment ; > 0 = s'arrête seul (obligatoire pour score)
+version: 2                  # seule la valeur 2 est acceptée
+moments: [chrono]           # chrono, calm, score (au moins un)
+groupes_min: 3              # facultatif : nombre de groupes non vides à partir duquel la zone peut le jouer (défaut 0)
+duree_tick_ms: 1000         # durée d'un tick, donc d'un pas : 250 à 60 000 ms
+boucle: oui                 # oui (défaut) | non
 
-looks:                      # apparences nommées, réutilisées par les motifs
-  fond:    { color: theme,   intensity: 100 }
-  tete:    { color: urgency, intensity: 100, fade_ms: 300 }
+variables:                  # facultatif, 8 au plus
+  gA: g1; +1                # la tête : part du groupe 1, avance d'un groupe par tick
 
-pattern:                    # un seul motif de base
-  type: shift
-  step_ms: 1000
-  cells: [tete]
-  rest: fond
-
-stages:                     # variantes conditionnelles (6 au plus) ; facultatif
-  - when: { groups_lt: 5 }
-    pattern: { cells: [tete] }
+pre:                        # facultatif : joué une fois au début du moment
+  { g0: [theme, 100] }
+pas:                        # obligatoire, 1 à 200 pas : la boucle, un pas par tick
+  - { g0: [theme, 100], gA: [urgence, 100] }
+dernier:                    # facultatif : joué à la fin de chaque tour (avant de recommencer)
+  { g0: [theme, 100] }
+post:                       # facultatif : joué à la fin du moment
+  { g0: [scene, 100] }
 ```
 
-Clés de premier niveau : `id`, `name`, `description`, `version`, `moments`, `target`, `min_groups`, `duration_ms`,
-`looks`, `pattern`, `stages`. Obligatoires : `id`, `name`, `version`, `moments`, `looks`, `pattern`.
-**Une clé inconnue est une erreur**, jamais un réglage ignoré en silence : vérifiez l'orthographe.
+Clés de premier niveau : `id`, `nom`, `description`, `version`, `moments`, `groupes_min`, `duree_tick_ms`, `boucle`,
+`variables`, `pre`, `pas`, `dernier`, `post`. Obligatoires : `id`, `nom`, `version`, `moments`, `duree_tick_ms`, `pas`.
+**Une clé inconnue est une erreur**, jamais un réglage ignoré en silence.
 
-### 3.1 Moments (`moments`)
+Les mots-clés sont en français : `pre` (départ), `pas` (la boucle), `dernier` (fin de tour), `post` (fin du moment).
+
+### 4.1 Moments
 
 | Moment | Quand l'effet joue |
 |--------|--------------------|
 | `chrono` | Pendant le décompte d'une question |
 | `calm` | Attente, pause, entracte |
-| `score` | Pendant l'attribution des points (durée `duration_ms` ou durée de l'impulsion SCORE) |
+| `score` | Pendant l'attribution des points (durée de l'impulsion SCORE) |
 
-`score` prime sur `chrono` et `calm` pendant sa durée.
+## 5. Un pas, une action
 
-### 3.2 Cible (`target`) et nombre de groupes (`min_groups`)
-
-| `target` | Ce qui est piloté | Applicable quand |
-|----------|-------------------|------------------|
-| `all` | **Toute** la zone générale, un seul état | Toujours (même sans groupe) |
-| `groups` | **Chaque** groupe de salle non vide reçoit son propre état | Le nombre de groupes de salle non vides est ≥ `min_groups` |
-
-- `min_groups` ne concerne que `target: groups`. Avec `target: all`, la clé doit être absente ou valoir 1.
-- Un effet `target: groups` **n'est pas applicable** au groupe animateur si `min_groups` vaut plus de 1 ; il est alors
-  grisé dans le sélecteur, avec son motif.
-- Avec `target: all`, seul le motif `uniform` est accepté. Les conditions `groups_lt` et `groups_gte` sont refusées.
-- Un effet inapplicable joue la valeur par défaut du moment (`pulsation` pour `chrono`, rien pour `calm` et `score`).
-
-### 3.3 Apparences (`looks`)
-
-Une apparence est une couleur et une intensité, nommée pour être réutilisée.
+Un pas (`pre`, un élément de `pas`, `dernier`, `post`) est une table **« cible : action »**, 1 à 16 actions.
 
 ```yaml
-looks:
-  fond:    { color: theme,   intensity: 100 }   # couleur du thème de la question
-  pale:    { color: "#FFAA00", intensity: 60, fade_ms: 500 }   # couleur fixe, fondu de 500 ms
+- { g0: [theme, 100], gA: [urgence, 100] }   # sur toute la zone, le thème ; sur gA, la couleur d'urgence
+- { g2: [eteint] }                           # le groupe 2 s'éteint
+- { g0: ["#0A84FF", 60] }                    # bleu fixe à 60 %
 ```
 
-| Clé | Valeurs | Défaut |
-|-----|---------|--------|
-| `color` | `scene` (couleur de la scène de salle du moment), `theme` (thème de la question ; blanc à défaut), `team` (équipe créditée, moment `score`), `urgency` (pendant le chronomètre : blanc, orange `#FFAA00` à 10 s ou moins, rouge `#E61E1E` à 5 s ou moins ; hors chronomètre : blanc), ou `"#RRGGBB"` | `scene` |
-| `intensity` | 0 à 100 (pourcentage ; 0 = éteint) | 100 |
-| `fade_ms` | 0 à 5000 : fondu confié au pont | 0 |
+- **Action** : `[couleur, intensité]`, intensité de 0 à 100 (0 = éteint), ou `[eteint]`. Le fondu est toujours nul.
+- **Couleurs** : `"#RRGGBB"`, ou un nom :
 
-Un `fade_ms` élevé entre deux teintes éloignées peut délaver la couleur (interpolation du pont). Ce n'est pas une
-erreur, mais testez sur les ampoules.
+| Nom | Vaut |
+|-----|------|
+| `theme` | le thème de la question (blanc à défaut) |
+| `equipe` | l'équipe créditée (moment `score` ; blanc hors de ce moment) |
+| `urgence` | blanc ; **orange `#FFAA00` à 10 s ou moins** ; **rouge `#E61E1E` à 5 s ou moins** (hors chronomètre : blanc) |
+| `scene` | la couleur de la scène de salle du moment (blanc pour la zone animateur) |
 
-### 3.4 Motifs (`pattern.type`)
+Les couleurs nommées sont **vivantes** : elles sont recalculées à chaque tick. Un groupe peint en `urgence` vire donc
+seul à l'orange, puis au rouge.
 
-Un motif décide **comment** les apparences se répartissent dans le temps et entre les groupes. Les durées de pas
-(`step_ms`, `ms`) vont de 250 à 60 000 ms.
+- Les actions d'un pas s'appliquent **dans l'ordre écrit** : si deux visent la même ampoule, la dernière gagne.
+- **Un groupe non cité garde son état** du pas précédent. Avant toute action, la zone a sa scène ordinaire.
 
-#### `uniform` — toute la salle alterne
+## 6. Cibles
+
+| Écriture | Désigne |
+|----------|---------|
+| `g0` | **toute la zone** où l'effet est joué. Pour `ambiance` : toutes les ampoules de la salle, groupées ou non. Pour `animateur` et `public` : toutes les ampoules de leurs groupes. Jamais une ampoule d'une autre zone ni d'une équipe. |
+| `g1`, `g2`… | le groupe de ce **numéro réel** dans la zone. **Absent ou vide ⇒ l'action est ignorée.** |
+| `gN` | le dernier groupe non vide |
+| `gA`, `gB`… | une **variable** déclarée dans `variables` |
+| `gA+1`, `gA-2` | le **voisin** du groupe que désigne `gA`, à m rangs (après le dernier, on revient au premier) |
+
+- **N** = nombre de groupes **non vides** de la zone où l'effet est joué. Les rangs 1…N sont la suite ordonnée de ces
+  groupes ; tout calcul reboucle sur N. Le fichier ignore la taille de la zone.
+- **Numéro réel et rang** : `g3` désigne le groupe numéro 3. Le **départ** d'une variable et ses positions sont des
+  **rangs** parmi les groupes non vides : avec les groupes 1, 2 (vide), 3, `gA: g2; 0` désigne le 2e groupe non vide,
+  c'est-à-dire le groupe 3. Une **liste** cite des numéros réels ; les groupes absents ou vides en sont retirés.
+- **Pas sauté** : un pas dont **aucune** action ne vise une cible existante est sauté. Il ne consomme pas de tick et ne
+  fait pas avancer les variables. Si tous les pas sont sautés, l'effet est inapplicable à la zone.
+
+## 7. Variables de groupe
+
+| Déclaration | Sens |
+|-------------|------|
+| `gA: g1; +1` | progression : départ au groupe 1, un groupe de plus à chaque tick |
+| `gB: g2; +2` | départ au groupe 2, deux groupes de plus par tick |
+| `gD: gN; -1` | départ au dernier groupe, recule d'un groupe par tick |
+| `gE: g3; 0` | désigne toujours le groupe 3 |
+| `gC: [g1, g4, g3, g7]` | liste : un élément par tick, reprise au début après le dernier ; les groupes absents sont retirés (liste vide ⇒ actions ignorées) |
+
+- Au cran k, une progression désigne la position `((départ − 1 + incrément × k) mod N) + 1`. Un départ au-delà de N
+  reboucle (`g7` avec N = 4 ⇒ position 3). Incrément entre −12 et +12.
+- Le nom d'une variable est `g` suivi d'une lettre majuscule (autre que `N`), puis lettres ou chiffres : `gA`, `gB2`…
+
+## 8. Déroulement et règle d'avance
+
+1. **Démarrage** (début du moment, ou de l'essai) : le compteur de tour k vaut 0. Si `pre` existe, il est joué au tick 0.
+2. **Boucle** : sans `pre`, le pas 0 est joué au tick 0 ; avec `pre`, il est joué au tick 1. Puis un pas par tick. Après
+   le dernier pas, `dernier` (s'il existe) occupe un tick ; puis retour au pas 0.
+3. **Avance des variables** : `pre` et le **premier** pas voient les variables à leur départ (k = 0). Ensuite k augmente
+   de 1 **à chaque pas de la boucle joué**. `pre`, `dernier` et `post` **ne font pas avancer** : `dernier` voit les mêmes
+   valeurs que le pas qui le précède. k ne revient jamais à 0 quand la boucle recommence.
+4. `boucle: non` : un seul tour (`pas`, puis `dernier`), puis l'état est tenu jusqu'à la fin du moment.
+5. **Fin du moment** : `post` est joué immédiatement, sans attendre un tick. Dans les zones `ambiance` et `animateur`,
+   l'état suivant repeint toute la zone : `post` n'y a pas d'effet visible. Dans la zone `public`, rien ne le recouvre :
+   `post` reste appliqué jusqu'au prochain effet.
+
+**Exemple de chronogramme** (4 groupes, `gA: g1; +1`, `gB: g2; +2`, un `pre`, deux pas, un `dernier`) :
 
 ```yaml
-pattern:
-  type: uniform
-  phases:                   # 1 à 8 phases, durées de 250 ms au moins
-    - { look: haut, ms: 500 }
-    - { look: bas,  ms: 500 }
+id: exemple-chronogramme
+nom: Exemple
+version: 2
+moments: [chrono]
+duree_tick_ms: 1000
+variables:
+  gA: g1; +1
+  gB: g2; +2
+pre:
+  { g0: [scene, 100] }
+pas:
+  - { gA: [urgence, 100], gB: [theme, 100] }
+  - { gA: [theme, 100], gB: [urgence, 100] }
+dernier:
+  { g0: [scene, 100] }
 ```
 
-Tous les groupes (ou toute la zone si `target: all`) montrent la même apparence, qui alterne selon `phases`. Le
-cycle est calé sur l'horloge murale, comme la pulsation.
+| Tick | Joué | k | gA | gB |
+|------|------|---|----|----|
+| 0 | `pre` | 0 | g1 | g2 |
+| 1 | pas 0 | 0 | g1 | g2 |
+| 2 | pas 1 | 1 | g2 | g4 |
+| 3 | `dernier` | 1 | g2 | g4 |
+| 4 | pas 0 | 2 | g3 | g2 |
+| 5 | pas 1 | 3 | g4 | g4 |
+| 6 | `dernier` | 3 | g4 | g4 |
+| 7 | pas 0 | 4 | g1 | g2 |
 
-#### `shift` — un bloc se déplace
+## 9. Trois zones, un même fichier
 
-```yaml
-pattern:
-  type: shift
-  step_ms: 1000
-  cells: [trainee, tete, trainee]   # 1 à 12 apparences : le bloc qui se déplace
-  rest: fond                        # apparence des groupes hors du bloc (obligatoire)
-  wrap: true                        # true (défaut) : le bloc revient de l'autre côté
-  direction: forward                # forward (défaut), backward ou bounce
-```
+| Zone | Groupes | Ce que `g0` désigne | Sans effet pour le moment |
+|------|---------|---------------------|---------------------------|
+| `ambiance` | rôle `salle` | toutes les ampoules de la salle | scène de salle ordinaire |
+| `animateur` | rôle `animateur` | toutes les ampoules des groupes animateur | **blanc fixe** |
+| `public` | rôle `public` | toutes les ampoules des groupes public | **rien** : la zone n'est pas pilotée |
 
-Le bloc `cells` avance d'un groupe à chaque pas ; les autres groupes montrent `rest`.
+- Un **chenillard** peut tourner sur les groupes de la zone animateur, comme dans la salle.
+- Une zone **sans groupe non vide** n'existe pas : son réglage est conservé, sans effet.
+- `groupes_min` compte les groupes **non vides de la zone** : un effet qui demande 3 groupes est grisé dans une zone qui
+  n'en a que 2, avec la raison affichée (« demande 3 groupes, 2 dans cette zone »).
+- Une ampoule n'entre dans les zones `animateur` ou `public` **que par son groupe**.
 
-#### `gauge` — une jauge qui se remplit ou se vide
-
-```yaml
-pattern:
-  type: gauge
-  source: remaining        # remaining (temps restant) ou elapsed (temps écoulé)
-  on: tete                 # apparence des groupes allumés
-  off: fond                # apparence des groupes éteints
-  edge: pale               # facultatif : apparence du groupe frontière
-  direction: backward      # forward ou backward
-```
-
-Les groupes allumés sont au prorata de la source. Recalcul à chaque seconde du chronomètre.
-
-#### `random` — des groupes qui s'allument au hasard
-
-```yaml
-pattern:
-  type: random
-  step_ms: 800
-  ratio: 0.3               # OU count: 3 (jamais les deux)
-  on: pale
-  off: fond
-```
-
-À chaque pas, un tirage choisit les groupes `on` ; les autres sont `off`. Le tirage est déterministe pour une graine
-donnée.
-
-#### `gradient` — un dégradé réparti sur les groupes
-
-```yaml
-pattern:
-  type: gradient
-  stops: [crete, equipe]   # 2 à 6 apparences
-  step_ms: 1000
-  travel: outward          # none, forward, backward ou outward
-  origin: team             # first, last, center ou team (origin n'existe qu'avec outward)
-  repeat: false
-  rest: fond               # accepté seulement pour une propagation
-```
-
-Sémantique exacte :
-
-- **`travel: none`** — dégradé **fixe** : le premier groupe montre le premier arrêt, le dernier groupe le dernier arrêt,
-  les autres sont interpolés. Pas de retour au début ; `repeat` et `step_ms` sont sans effet. `origin` et `rest` sont
-  **refusés** avec `travel: none` (erreur de validation : le fichier est écarté).
-- **`travel: forward` ou `backward`, `repeat: true`** (défaut) — **anneau qui tourne** : le dégradé est fermé (après le
-  dernier arrêt, il revient au premier), réparti sur un tour complet des groupes, sans couture. Il avance d'un groupe
-  par pas.
-- **Propagation** — `travel: outward`, ou `forward` / `backward` avec `repeat: false` : le dégradé se **propage dans le
-  temps** à partir d'un groupe de départ (`origin`). Ce n'est pas une atténuation selon la distance :
-  - un groupe encore non atteint montre `rest` (s'il n'y a pas de `rest`, il garde la scène de salle) ;
-  - un groupe atteint parcourt les arrêts **un par pas**, dans l'ordre ;
-  - `repeat: false` : au-delà du dernier arrêt, il reste dessus ;
-  - `repeat: true` : il reboucle, et des ondes successives partent du même point.
-
-Exemple de propagation (5 groupes, départ au groupe 2, arrêts `crete` puis `equipe`, `repeat: false`, `rest: fond`) :
-
-```
-pas 0 :  fond   CRETE  fond   fond   fond
-pas 1 :  CRETE  equipe CRETE  fond   fond
-pas 2 :  equipe equipe equipe CRETE  fond
-pas 3 :  equipe equipe equipe equipe CRETE
-pas 4 :  equipe equipe equipe equipe equipe   (tenu)
-```
-
-### 3.5 Étapes (`stages`)
-
-Une étape remplace des parties du motif quand une **condition** est vraie. Elle est écrite comme une liste, et **la
-première dont toutes les conditions sont vraies** s'applique (6 étapes au plus).
-
-```yaml
-stages:
-  - when: { remaining_lte: 5 }          # 5 secondes ou moins avant la fin du chrono
-    looks:
-      fond: { color: "#E61E1E", intensity: 30 }   # remplace l'apparence « fond »
-    pattern:
-      step_ms: 250                      # remplace la clé du motif de base
-  - when: { groups_lt: 5 }
-    pattern: { cells: [tete] }
-```
-
-Conditions (`when`) :
-
-| Condition | Vraie quand |
-|-----------|-------------|
-| `remaining_lte: <s>` | Le temps restant est ≤ `<s>` secondes (chrono seulement) |
-| `remaining_gt: <s>` | Le temps restant est > `<s>` secondes (chrono seulement) |
-| `groups_lt: <n>` | Le nombre de groupes de salle non vides est < `<n>` |
-| `groups_gte: <n>` | Le nombre de groupes de salle non vides est ≥ `<n>` |
-
-Hors `chrono`, les conditions `remaining_*` sont fausses. Aucune étape vraie ⇒ le motif de base.
-
-### 3.6 Contexte fourni par le serveur
-
-Vos effets n'ont pas à le déclarer ; il est fourni automatiquement :
-
-- **N** : le nombre de groupes de salle **non vides** (un groupe vide est ignoré).
-- **Temps restant et durée** du chronomètre (moment `chrono`).
-- **Couleurs** : `scene`, `theme` (thème de la question), `team` (équipe créditée).
-- **Groupe d'origine** (`origin: team`) : le groupe dont `near_teams` contient l'équipe créditée ; à défaut, le groupe 1.
-- **Graine** : l'heure de démarrage de l'effet (pour `random`).
-
-Un groupe animateur est rendu seul (N = 1). Son effet ne peut donc utiliser que `target: all` ou un `min_groups` de 1.
-
-## 4. Erreurs de validation
+## 10. Erreurs de validation
 
 Une erreur porte le **fichier**, la **ligne** et un **message en français** :
 
 ```
-mon-effet.yaml, ligne 14 : l'apparence « tete » n'est pas définie dans looks
+mon-effet.yaml, ligne 12 : la variable « gB » n'est pas déclarée dans variables
 ```
-
-Erreurs les plus fréquentes :
 
 | Message (type) | Cause |
 |----------------|-------|
-| YAML illisible | Indentation ou deux-points mal placés |
-| clé inconnue | Faute de frappe dans une clé |
-| clé obligatoire absente | `id`, `name`, `version`, `moments`, `looks` ou `pattern` manque |
-| `id` invalide ou en double | Caractères hors a-z, 0-9, tiret ; ou même `id` que deux fichiers utilisateur |
-| `version` non prise en charge | Seule `version: 1` existe |
-| `moments` vide ou valeur inconnue | Utiliser `chrono`, `calm` ou `score` |
-| type de motif inconnu | Utiliser `uniform`, `shift`, `gauge`, `random` ou `gradient` |
-| paramètre hors bornes | Pas < 250 ms, `intensity` > 100, `fade_ms` > 5000, `ratio` hors de 0–1 |
-| apparence non définie | Un nom cité dans un motif ou une étape n'existe pas dans `looks` |
-| couleur invalide | Ni `scene`, `theme`, `team`, `urgency`, ni `"#RRGGBB"` |
-| `duration_ms` absent pour `score` | Un effet `score` doit dire combien de temps il dure |
-| fichier trop gros | Plus de 64 Ko |
+| format de la version précédente | `version: 1` (motifs calculés) : réécrire en pas à pas |
+| YAML illisible | indentation ou deux-points mal placés |
+| clé inconnue | faute de frappe dans une clé |
+| clé obligatoire absente | `id`, `nom`, `version`, `moments`, `duree_tick_ms` ou `pas` manque |
+| `id` invalide ou en double | caractères hors a-z, 0-9, tiret ; ou deux fichiers utilisateur de même `id` |
+| `moments` vide ou valeur inconnue | utiliser `chrono`, `calm` ou `score` |
+| `duree_tick_ms` hors bornes | entre 250 et 60 000 ms |
+| `pas` vide ou trop long | 1 à 200 pas |
+| cible mal écrite | voir §6 |
+| variable non déclarée | `gB` utilisé sans `gB:` dans `variables` |
+| déclaration de variable mal écrite | voir §7 |
+| couleur invalide | ni `"#RRGGBB"`, ni `theme`, `equipe`, `urgence`, `scene` |
+| intensité hors 0-100 | corriger la valeur |
+| fichier trop gros | plus de 64 Ko |
 
-**Un fichier invalide ne casse rien** : il est écarté, son erreur est signalée (dans la réponse de
-`GET /api/lighting/effects`, champ `errors`, et une ligne de journal), et les autres effets restent disponibles. La
-version précédente du même `id` reste active si elle existe en mémoire ; sinon le natif de même `id`.
+**Un fichier invalide ne casse rien** : il est écarté et son erreur est signalée (`GET /api/lighting/effects`, champ
+`errors`, et une ligne de journal). La version précédente du même `id` reste active si elle existe en mémoire ; sinon le
+natif de même `id`.
 
-## 5. Rechargement
+## 11. Rechargement et vitesse
 
-- Le serveur vérifie le dossier **toutes les 2 secondes** et recharge en cas de changement (nom, taille ou date).
-- `POST /api/lighting/effects/reload` force un rechargement immédiat.
-- Le rechargement est atomique. Un effet en cours repart du début avec sa nouvelle définition.
-- Pas besoin de redémarrer le serveur.
+- Le serveur vérifie le dossier **toutes les 2 secondes** et recharge en cas de changement. Pas besoin de redémarrer.
+- `POST /api/lighting/effects/reload` force un rechargement immédiat. Le rechargement est atomique.
+- **La vitesse ne s'écrit pas dans le fichier.** Elle se règle dans Ambiance › Lumière › Effets, par moment et par zone :
+  `0.5`, `0.75`, `1`, `1.5` ou `2`. La durée réelle d'un tick est `duree_tick_ms` ÷ vitesse, **jamais sous 250 ms**. Un
+  changement de vitesse prend effet au tick suivant, sans faire repartir l'effet.
+- Un effet très rapide peut donc être plafonné : l'interface l'indique.
 
-## 6. Revenir à l'effet d'origine
+## 12. Exemples livrés
+
+**Chenillard** (`natifs/chenillard.yaml`) : une tête à la couleur d'urgence, le reste au thème, un groupe par seconde.
+
+```yaml
+id: chenillard
+nom: Chenillard
+version: 2
+moments: [chrono]
+groupes_min: 3
+duree_tick_ms: 1000
+variables:
+  gA: g1; +1
+pas:
+  - { g0: [theme, 100], gA: [urgence, 100] }
+```
+
+**Chenillard avec traînée** (`natifs/chenillard-traine.yaml`) : le même, avec une traînée à 50 % de chaque côté
+(`gA-1`, `gA+1`). Proposé à partir de 5 groupes.
+
+**Pulsation** (`natifs/pulsation.yaml`) : deux pas de 500 ms, thème à 100 %, puis couleur d'urgence à 50 %.
+
+**Couleur d'équipe** (`natifs/couleur-equipe.yaml`) : `g0: [equipe, 100]`, fixe pendant l'attribution des points.
+
+**Dégradé** (`natifs/degrade.yaml`) : une couleur par groupe, en cycle de quatre couleurs, fixe pendant les phases
+calmes. Une salle plus petite en montre le début.
+
+Effets livrés à ce jour : `pulsation`, `chenillard`, `chenillard-traine`, `couleur-equipe`, `degrade`. Les effets
+`remplissage`, `scintillement`, `vague` et `vague-lente` sont sortis de la v11.7.0 et restent au backlog.
+
+## 13. Revenir à l'effet d'origine
 
 - **Effet livré** : supprimez (ou renommez hors `.yaml`) votre fichier qui porte le même `id`. Le natif reprend au
   rechargement suivant.
 - **Effet à vous** : supprimez son fichier. Un moment qui le réglait joue alors sa valeur par défaut (`pulsation` pour
-  `chrono`, aucun effet pour `calm` et `score`).
+  `chrono` dans la salle, aucun effet ailleurs).
 
-## 7. Effets livrés à ce jour
+## 14. Vérifier son effet
 
-| `id` | Motif | Moments | Rendu |
-|------|-------|---------|-------|
-| `pulsation` | `uniform`, `target: all` | chrono | Respiration de la salle, orange puis rouge en fin de chrono (rendu identique à la pulsation d'origine ; le code historique la joue encore, sa migration vers le moteur est le dernier point du LOT-2) |
-| `chenillard` | `shift`, `target: groups`, `min_groups: 3` | chrono | Une tête `urgency` et une traînée à 50 % sur le fond du thème ; sans traînée sous 5 groupes |
-| `couleur-equipe` | `uniform`, `target: all` | score | Couleur de l'équipe créditée, fixe, le temps de l'impulsion SCORE |
-
-Les autres effets prévus (`remplissage`, `vague`, `vague-lente`, `degrade`, `scintillement`) arrivent dans les lots
-suivants. Le motif `gradient` est déjà disponible dans le moteur : un effet utilisateur peut l'employer dès maintenant.
-
-## 8. Vérifier son effet
-
-- **Catalogue** : Ambiance › Lumière › Effets. L'effet apparaît dans la liste de ses moments ; une raison s'affiche
-  s'il est inapplicable (« demande 3 groupes, 2 configurés »).
+- **Catalogue** : Ambiance › Lumière › Effets. Un effet inapplicable à une zone est grisé, avec sa raison.
 - **Erreurs** : `GET /api/lighting/effects` (champ `errors`) ou le journal du serveur.
-- **Essai et aperçu** : prévus dans les lots suivants (essai d'un effet, aperçu simulé).
+- **Essai** : le bouton « Tester » (à côté du choix d'effet) joue l'effet dix secondes sur sa zone, à la vitesse réglée.
+  « Arrêter » l'interrompt. Pendant une question, l'essai est refusé (`game`).

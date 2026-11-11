@@ -366,7 +366,7 @@ La clé peut être définie/modifiée via :
 | `bridge_ip` | String | Adresse IP du bridge Hue (ex. `"192.168.1.101"`) — auto-mise à jour en cas DHCP |
 | `bridge_id` | String | Identifiant unique du bridge (ex. `"001788fffea0591e"`) — immuable, résiste aux changements d'IP |
 | `lights` | Array | Liste des ampoules à piloter, chacune avec `name` (exact), `role` (`"general"` ou `"team"`), et optionnellement `team` (nom d'équipe) |
-| `groups` | Array | Groupes d'ambiance (v11.7.0, #225), ordonnés : `name`, `role` (`"salle"` par défaut, ou `"animateur"`), `lights` (noms), `near_teams` (noms d'équipes). Absent ou `[]` = comportement v11.6.0 |
+| `groups` | Array | Groupes d'ambiance (v11.7.0, #225) : `id`, `role` (`"salle"` par défaut, `"animateur"` ou `"public"`), `lights` (noms). 12 groupes au plus par zone. Absent ou `[]` = comportement v11.6.0 |
 
 **Débit et timeouts** :
 
@@ -423,37 +423,45 @@ Les groupes se règlent dans `/admin/ambiance` › Lumière › Groupes (écritu
 {
   "lighting": {
     "groups": [
-      { "id": "g3f9a1", "name": "Scène gauche", "role": "salle", "lights": ["Salle", "Entrée"], "near_teams": ["Rouges"] },
-      { "id": "g5d7e4", "name": "Pupitre", "role": "animateur", "lights": ["Bureau Animateur"], "near_teams": [] }
+      { "id": "g3f9a1", "role": "salle",     "lights": ["Salle", "Entrée"] },
+      { "id": "g5d7e4", "role": "animateur", "lights": ["Bureau Animateur"] },
+      { "id": "g7a2d1", "role": "public",    "lights": ["Scène public"] }
     ]
   }
 }
 ```
 
-- Le **numéro** d'un groupe de salle est son rang dans le tableau parmi les groupes `salle` (groupes vides compris). **12 groupes de salle au maximum.**
-- `role` : `"salle"` (défaut si absent ou vide) ou `"animateur"`. **4 groupes animateur au maximum**, numérotés A1 à A4 selon leur ordre ; sans `near_teams`.
-- `id` : identifiant stable (`[a-z0-9]{1,12}`, unique). Attribué par le serveur à l'enregistrement s'il est absent ; le client le renvoie ensuite. Renommer un groupe ne change pas son `id`.
+- Trois **zones** : `salle` (zone ambiance, défaut si absent ou vide), `animateur` et `public`. Chaque zone compte **12 groupes au maximum**.
+- Les groupes sont numérotés par zone (rang, groupes vides compris) : « Groupe 1 », « Groupe 2 »… Ils **n'ont pas de nom** et pas de `near_teams`.
+- `id` : identifiant stable (`[a-z0-9]{1,12}`, unique). Attribué par le serveur à l'enregistrement s'il est absent ; le client le renvoie ensuite.
 - Chaque ampoule citée doit exister dans `lights` avec `role: "general"` et n'appartenir qu'à **un** groupe.
 - Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe à l'écriture.
-- Refus `400` avec un message lisible si la règle n'est pas respectée.
-- Groupes Hue créés sur le pont : `buzzmaster-general-<n>` (salle) et `buzzmaster-general-host<k>` (animateur de rang k), à partir de 3 ampoules.
+- Refus `400` avec un message lisible si la règle n'est pas respectée. Les clés `name` et `near_teams` sont refusées.
+- Groupes Hue créés sur le pont : `buzzmaster-general` et `buzzmaster-general-<n>` (salle) ; `buzzmaster-host` et `buzzmaster-host-<n>` (animateur) ; `buzzmaster-public` et `buzzmaster-public-<n>` (public). Une zone a un groupe Hue à partir de 2 ampoules, un groupe à partir de 3.
 
-#### Effets par moment (`lighting.effects`, `lighting.host_effects`, v11.7.0, #223)
+#### Effets et vitesses par zone et par moment (`lighting.effects`, `lighting.speeds`, v11.7.0, #223)
 
 ```json
 {
   "lighting": {
-    "effects": { "chrono": "pulsation", "calm": "", "score": "" },
-    "host_effects": {
-      "g5d7e4": { "chrono": "", "calm": "", "score": "couleur-equipe" }
+    "effects": {
+      "ambiance":  { "chrono": "pulsation", "calm": "", "score": "" },
+      "animateur": { "chrono": "", "calm": "", "score": "couleur-equipe" },
+      "public":    { "chrono": "", "calm": "", "score": "" }
+    },
+    "speeds": {
+      "ambiance":  { "chrono": 1, "calm": 1, "score": 1 },
+      "animateur": { "chrono": 1, "calm": 1, "score": 1 },
+      "public":    { "chrono": 1, "calm": 1, "score": 1 }
     }
   }
 }
 ```
 
-- `effects` : effet de la salle par moment (`chrono`, `calm`, `score`). `""` = aucun effet. Défauts : `pulsation` pour `chrono`, `""` pour les deux autres.
-- `host_effects` : un bloc par `id` de groupe animateur. `""` = blanc fixe. Un `id` inconnu est ignoré sans erreur.
-- Valeur : `""` ou l'`id` d'un effet du dossier `data/files/effects/` (ou des natifs) qui déclare le moment. Sinon `400`.
+- `effects.<zone>.<moment>` : effet joué. `""` = aucun effet (salle : scène ordinaire ; animateur : blanc fixe ; public : zone non pilotée). Défauts : `pulsation` pour `ambiance.chrono`, `""` ailleurs.
+- `speeds.<zone>.<moment>` : `0.5`, `0.75`, `1`, `1.5` ou `2`. Défaut `1`.
+- Valeur d'effet : `""` ou l'`id` d'un effet du dossier `data/files/effects/` (ou des natifs) qui déclare le moment. Sinon `400`.
+- Forme à plat et `host_effects` / `host_speeds` refusés (`400`) ; lus sans erreur dans une configuration de QUALIF antérieure, où ils sont ignorés.
 - Les effets sont des fichiers `.yaml` : le dossier se recharge à chaud, sans redémarrage (voir `docs/LIGHT_EFFECTS.md`).
 
 #### Résolution des noms d'ampoules
