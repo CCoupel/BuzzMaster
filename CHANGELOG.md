@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [11.7.0] - 2026-11-12 — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#225, #223, #299)
+## [11.7.0] - 2026-11-12 — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#211, #225, #223, #299)
 
 La lumière d'ambiance se règle par **trois zones** — la salle, l'animateur et le public — découpées en groupes numérotés
 (sans nom). Les effets sont des **fichiers de pas** éditables à la main, joués sur une zone à la fois, avec un effet et une
@@ -16,7 +16,7 @@ vitesse par moment et par zone. Un catalogue présente les effets, avec aperçu 
 - **Zone Public (#225)** — rien n'est envoyé à ces ampoules sans effet choisi ; elles gardent leur état. Un effet peut y jouer ; sa fin peut laisser un état (`post`). Éteinte par l'interrupteur général et à l'arrêt. Après un essai, l'état lu sur le pont est réécrit.
 - **Moteur d'effets pas à pas (#223)** — nouveau paquet `internal/effects`. Un effet est un fichier YAML (`version: 2`) : `pre` (départ), `pas` (la boucle, un pas par tick), `dernier` (fin de tour), `post` (fin du moment). Cibles `g0` (toute la zone), `g1`… (numéro réel), variables de groupe (`gA: g1; +1`, listes, voisins `gA+1`), couleurs nommées vivantes (`theme`, `equipe`, `urgence`, `scene`). Voir `docs/LIGHT_EFFECTS.md`.
 - **Dossier `data/files/effects/` (#223)** — effets de l'utilisateur. Le dossier `natifs/` contient une copie de référence réécrite à chaque démarrage. Un fichier de même `id` qu'un natif le surcharge ; le supprimer restaure le natif. Rechargement à chaud toutes les 2 secondes. Un fichier invalide est écarté : son erreur (fichier, ligne, message) est signalée, les autres effets restent disponibles.
-- **Effets natifs (#223)** — `pulsation` (chronomètre), `chenillard` (chronomètre, un groupe par seconde), `chenillard-traine` (chronomètre, à partir de 5 groupes), `couleur-equipe` (score), `degrade` (calme, une couleur par groupe).
+- **Effets natifs (#223)** — `pulsation` (chronomètre), `chenillard` (chronomètre, un groupe par seconde), `chenillard-traine` (chronomètre, à partir de 5 groupes), `couleur-equipe` (score), `degrade` (calme, une couleur par groupe, #211).
 - **Réglages par zone et par moment (#223)** — `lighting.effects.<zone>.<moment>` et `lighting.speeds.<zone>.<moment>` dans `config.json` ; `light.effects` et `light.speeds` dans les réglages (salle, zones, surcharge de manche). Sous-onglet **Effets** de `/admin/ambiance` › Lumière, et dialogue « Ambiance de la manche ».
 - **Vitesse (#223)** — `0.5`, `0.75`, `1`, `1.5` ou `2`. La durée d'un tick est `duree_tick_ms` ÷ vitesse, jamais sous 250 ms.
 - **Bouton « Tester » (#223)** — joue un effet sur sa zone, à la vitesse réglée, pendant la durée par défaut du serveur (10 s, 5 s pour un effet de score seul). `POST /api/lighting/effects/{id}/try` (`zone`, `speed`, `seconds`) et `POST /api/lighting/effects/try/stop`. Réponse immédiate `{"ok": true, "duration_ms": 10000}`.
@@ -35,16 +35,7 @@ vitesse par moment et par zone. Un catalogue présente les effets, avec aperçu 
 - **Pulsation (#223, décision utilisateur)** — la pulsation devient un effet natif joué par le moteur. **Son rendu change** : phase haute au thème à 100 %, phase basse à **blanc** 50 % au-dessus de 10 s (au lieu du thème à 50 %) ; sous 5 s, rouge à **50 %** (au lieu de 30 %), battement de **500 / 500 ms** (au lieu de 250 / 750 ms). Le tableau de l'ancien rendu est dans `contracts/light-effects.md` §5.5.
 - **Sous-onglets de Lumière (#225, #223)** — « Pont et ampoules », « Groupes » et « Effets ». Visibles une fois le pont associé.
 - **Pilote Hue (#225)** — `buzzmaster-general` ne contient plus les ampoules des zones animateur et public. Si toutes les ampoules d'une zone ont le même état, une seule écriture comme avant.
-- **Bouton « Tester » aligné sur le serveur** — la durée de l'essai est celle que le serveur applique par défaut (10 s, 5 s pour un effet de score seul) ; elle est lue dans la réponse.
 - **Toolchain Go 1.26.11** (`go.mod`, environnement de développement) — aucun effet pour l'utilisateur.
-- **Essai de groupe (#225)** — la réponse est immédiate ; un essai en remplace un autre ; la route ne renvoie plus `429`.
-
-### Removed
-
-- **Effets #300 (remplissage), #301 (vague, vague lente), #302 (scintillement)** — sortis de la v11.7.0, backlog.
-- **Motifs calculés** (`uniform`, `shift`, `gauge`, `random`, `gradient`), `target`, `looks`, `stages` — remplacés par le format pas à pas.
-- **Noms de groupes et `near_teams`** — un groupe n'a qu'un numéro.
-- **Bouton « Créer un groupe par ampoule »** — supprimé de la page Groupes.
 
 ### Migration
 
