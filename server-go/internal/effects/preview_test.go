@@ -1,7 +1,8 @@
 package effects
 
-// Aperçu calculé par le serveur (#299, contrat light-effects.md §7.3) : les trames viennent de `Render`, le navigateur ne fait
-// que les rejouer (aucun second interpréteur). Contexte simulé : chronomètre de 20 s, thème #4F46E5, équipe #E53935, tick ×1.
+// Aperçu calculé par le serveur (#299, contrat light-effects.md §7.3 compléments e9d86cd7) : les trames viennent de `Render`, le
+// navigateur ne fait que les rejouer (aucun second interpréteur). UNE TRAME PAR TICK (`tick`, `step`), durée fixée par le moment
+// (20 s ; 5 s pour score), `chrono_s`, `tick_ms`, `moment`. Contexte simulé : thème #4F46E5, équipe #E53935, tick ×1.
 // Aucune attente : calcul pur.
 
 import (
@@ -19,18 +20,29 @@ func pvAt(r pvResult, ms int) []Lk { // état affiché à l'instant ms : la dern
 	return cur
 }
 
+func pvSteps(r pvResult) []string {
+	out := make([]string, len(r.Frames))
+	for i, f := range r.Frames {
+		out[i] = f.Step
+	}
+	return out
+}
+
 func TestPreview_Chenillard4_OneFramePerTick_HeadWalksFromG1_FundAtTheme(t *testing.T) {
 	e := nativeEffect(t, "chenillard")
 	r := preview(e, 4, "chrono")
-	if r.Groups != 4 || r.DurationMs != previewTotalMs || !r.Loop {
-		t.Fatalf("groups=4, duration_ms=20000, loop=true : %+v", r)
+	if r.ID != "chenillard" || r.Moment != "chrono" || r.Groups != 4 || r.TickMs != 1000 || r.DurationMs != previewTotalMs || r.ChronoS != 20 || !r.Loop {
+		t.Fatalf("{id, moment: chrono, groups: 4, tick_ms: 1000, duration_ms: 20000, chrono_s: 20, loop: true} : %+v", r)
 	}
 	if len(r.Frames) != 20 {
-		t.Fatalf("une trame par tick de 1 s sur 20 s (chaque tick diffère du précédent) : %d", len(r.Frames))
+		t.Fatalf("une trame par tick de 1 s sur 20 s : %d", len(r.Frames))
 	}
 	for k, f := range r.Frames {
-		if f.At != k*1000 {
-			t.Fatalf("trame %d à %d ms, attendu %d", k, f.At, k*1000)
+		if f.At != k*1000 || f.Tick != k {
+			t.Fatalf("trame %d : at_ms %d / tick %d, attendu %d / %d", k, f.At, f.Tick, k*1000, k)
+		}
+		if f.Step != "pas:0" {
+			t.Fatalf("trame %d : un seul pas dans la boucle ⇒ « pas:0 », obtenu %q", k, f.Step)
 		}
 		if len(f.Groups) != 4 {
 			t.Fatalf("trame %d : une entrée par groupe (4) : %d", k, len(f.Groups))
@@ -62,6 +74,52 @@ func TestPreview_Chenillard_HeadColourFollowsTheSimulatedChrono_White_Orange_Red
 	}
 }
 
+func TestPreview_StepNames_Pre_PasN_Dernier_NeverPost_FollowTheReferenceChronogram(t *testing.T) {
+	// chronogramme de référence §4.5 : PRE, pas 0, pas 1, LAST, pas 0, pas 1, LAST, pas 0…
+	e := mustParse(t, "id: ref\nnom: Ref\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\nvariables:\n  gA: g1; +1\n"+
+		"pre: { g0: [\"#0000FF\", 100] }\npas:\n  - { gA: [\"#FF0000\", 100] }\n  - { gA: [\"#00FF00\", 100] }\ndernier: { g0: [\"#FFFFFF\", 100] }\npost: { g0: [\"#000000\", 100] }\n")
+	r := preview(e, 4, "calm")
+	want := []string{"pre", "pas:0", "pas:1", "dernier", "pas:0", "pas:1", "dernier", "pas:0"}
+	got := pvSteps(r)
+	if len(got) < len(want) {
+		t.Fatalf("pas joués : %v", got)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Fatalf("tick %d : step %q, attendu %q (suite : %v)", i, got[i], w, got)
+		}
+		if r.Frames[i].Tick != i {
+			t.Errorf("trame %d : tick %d", i, r.Frames[i].Tick)
+		}
+	}
+	for _, s := range got {
+		if s == "post" {
+			t.Errorf("« post » n'apparaît jamais dans l'aperçu : %v", got)
+		}
+	}
+}
+
+func TestPreview_SkippedStepIsAbsent_StepNumberIsTheRankInPas(t *testing.T) {
+	// 3 groupes : le pas 1 vise g5 (absent) ⇒ sauté, il ne consomme pas de tick ; les pas gardent leur rang (« pas:2 »)
+	e := mustParse(t, "id: saute\nnom: Saute\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npas:\n  - { g1: [\"#FF0000\", 100] }\n"+
+		"  - { g5: [\"#00FF00\", 100] }\n  - { g2: [\"#0000FF\", 100] }\n")
+	r := preview(e, 3, "calm")
+	got := pvSteps(r)
+	for i, w := range []string{"pas:0", "pas:2", "pas:0", "pas:2"} {
+		if got[i] != w {
+			t.Fatalf("pas joués : %v (le pas sauté n'apparaît pas, ticks consécutifs)", got)
+		}
+		if r.Frames[i].Tick != i {
+			t.Errorf("trame %d : tick %d, consécutifs", i, r.Frames[i].Tick)
+		}
+	}
+	for _, s := range got {
+		if s == "pas:1" {
+			t.Errorf("le pas sauté n'apparaît pas : %v", got)
+		}
+	}
+}
+
 func TestPreview_FramesAreExactlyRender_NoSecondInterpreter_AllNativesAllSizes(t *testing.T) {
 	for _, id := range []string{"pulsation", "chenillard", "chenillard-traine", "couleur-equipe", "degrade"} {
 		e := nativeEffect(t, id)
@@ -69,11 +127,10 @@ func TestPreview_FramesAreExactlyRender_NoSecondInterpreter_AllNativesAllSizes(t
 		for _, n := range []int{1, 3, 4, 6, 8, 12} {
 			r := preview(e, n, moment)
 			for _, f := range r.Frames {
-				tick := f.At / e.TickMs
-				if f.At%e.TickMs != 0 {
-					t.Fatalf("%s N=%d : trame hors d'un début de tick (%d ms, tick %d ms)", id, n, f.At, e.TickMs)
+				if f.At != f.Tick*e.TickMs {
+					t.Fatalf("%s N=%d : trame de tick %d à %d ms (tick de %d ms)", id, n, f.Tick, f.At, e.TickMs)
 				}
-				v := renderView(e, previewCtx(n, moment, f.At), tick)
+				v := renderView(e, previewCtx(n, moment, f.At), f.Tick)
 				if len(f.Groups) != n {
 					t.Fatalf("%s N=%d @%d : %d entrées", id, n, f.At, len(f.Groups))
 				}
@@ -92,34 +149,105 @@ func TestPreview_FramesAreExactlyRender_NoSecondInterpreter_AllNativesAllSizes(t
 	}
 }
 
-func TestPreview_FrameListedOnlyWhenItDiffersFromThePrevious(t *testing.T) {
-	// un effet constant : une seule trame, à 0
+func TestPreview_OneFramePerTick_EvenWhenIdenticalToThePrevious(t *testing.T) {
+	// un effet constant : une trame par tick quand même (le numéro du tick s'affiche à chaque battement)
 	e := mustParse(t, "id: fixe\nnom: Fixe\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npas:\n  - { g0: [\"#FF0000\", 100] }\n")
 	r := preview(e, 3, "calm")
-	if len(r.Frames) != 1 || r.Frames[0].At != 0 {
-		t.Fatalf("effet constant : une trame à 0 : %+v", r.Frames)
+	if len(r.Frames) != 20 {
+		t.Fatalf("20 ticks sur 20 s : 20 trames, même identiques : %d", len(r.Frames))
 	}
-	// deux pas alternés : une trame à chaque tick
-	e2 := mustParse(t, "id: alt\nnom: Alt\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npas:\n  - { g0: [\"#FF0000\", 100] }\n  - { g0: [\"#00FF00\", 100] }\n")
-	if r := preview(e2, 3, "calm"); len(r.Frames) != 20 {
-		t.Errorf("alternance à chaque tick : 20 trames sur 20 s : %d", len(r.Frames))
+	for k, f := range r.Frames {
+		if f.Tick != k || f.At != k*1000 {
+			t.Fatalf("trame %d : %+v", k, f)
+		}
 	}
-	// deux pas identiques : aucune trame de plus
+	// deux pas identiques : toujours une trame par tick
 	e3 := mustParse(t, "id: idem\nnom: Idem\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npas:\n  - { g0: [\"#FF0000\", 100] }\n  - { g0: [\"#FF0000\", 100] }\n")
-	if r := preview(e3, 3, "calm"); len(r.Frames) != 1 {
-		t.Errorf("pas identiques : une trame : %d", len(r.Frames))
+	if r := preview(e3, 3, "calm"); len(r.Frames) != 20 {
+		t.Errorf("pas identiques : 20 trames : %d", len(r.Frames))
 	}
 }
 
-func TestPreview_AtMost400Frames_ShortestTickGivesAnAlternationEvery250ms(t *testing.T) {
+func TestPreview_LongTickEffect_OneFrameOnlyWithinTheDuration(t *testing.T) {
+	// dégradé : tick de 60 s > 20 s : un seul tick dans l'aperçu ⇒ une trame
+	d := preview(nativeEffect(t, "degrade"), 6, "calm")
+	if len(d.Frames) != 1 || d.Frames[0].Tick != 0 || d.Frames[0].Step != "pas:0" || d.TickMs != 60000 || d.DurationMs != 20000 || d.ChronoS != 0 {
+		t.Fatalf("dégradé : une trame (tick 0, pas:0), tick_ms 60000, duration_ms 20000, chrono_s 0 : %+v", d)
+	}
+	g := d.Frames[0].Groups
+	if g[0].Color == g[1].Color || g[0].Color != g[4].Color || g[1].Color != g[5].Color {
+		t.Errorf("une couleur par groupe, cycle de 4 : %+v", g)
+	}
+}
+
+func TestPreview_NamedColourChangingBetweenTwoTicks_AddsAFrameWithTheSameTickAndStep(t *testing.T) {
+	// tick de 1,5 s : la couleur `urgence` passe à l'orange à 10 s restantes (at = 10 000 ms), entre le tick 6 (9 000) et le tick 7 (10 500)
+	e := mustParse(t, "id: urg\nnom: Urg\nversion: 2\nmoments: [chrono]\nduree_tick_ms: 1500\npas:\n  - { g0: [urgence, 100] }\n")
+	r := preview(e, 3, "chrono")
+	var before, at *pvFrame
+	for i := range r.Frames {
+		switch r.Frames[i].At {
+		case 9000:
+			before = &r.Frames[i]
+		case 10000:
+			at = &r.Frames[i]
+		}
+	}
+	if before == nil || at == nil {
+		t.Fatalf("trames à 9 000 et 10 000 ms attendues : %+v", r.Frames)
+	}
+	if at.Tick != before.Tick || at.Step != before.Step || at.Tick != 6 {
+		t.Errorf("trame supplémentaire : même tick (6) et même step : %+v / %+v", before, at)
+	}
+	if before.Groups[0].Color != cW || at.Groups[0].Color != cOr {
+		t.Errorf("blanc avant, orange à 10 s restantes : %v → %v", before.Groups[0].Color, at.Groups[0].Color)
+	}
+}
+
+func TestPreview_AtMost400Frames_ShortestTickGivesTheMostFrames(t *testing.T) {
 	e := mustParse(t, "id: vite\nnom: Vite\nversion: 2\nmoments: [calm]\nduree_tick_ms: 250\npas:\n  - { g0: [\"#FF0000\", 100] }\n  - { g0: [\"#00FF00\", 100] }\n")
 	r := preview(e, 4, "calm")
 	if len(r.Frames) != 80 || len(r.Frames) > previewMaxFrames {
-		t.Errorf("20 s à 250 ms : 80 trames, jamais plus de 400 : %d", len(r.Frames))
+		t.Errorf("20 s à 250 ms : 80 trames (une par tick), jamais plus de 400 : %d", len(r.Frames))
 	}
 }
 
-func TestPreview_ChronoMomentSimulatesTwentySeconds_CalmIsTimeless(t *testing.T) {
+func TestPreview_DurationIsFixedByTheMoment_20s_20s_5s_AndChronoSecondsOnlyForChrono(t *testing.T) {
+	for _, c := range []struct {
+		effect, moment      string
+		duration, chrono, n int
+	}{
+		{"pulsation", "chrono", 20000, 20, 20 * 2}, // tick 500 ms
+		{"degrade", "calm", 20000, 0, 1},
+		{"couleur-equipe", "score", 5000, 0, 5},
+	} {
+		r := preview(nativeEffect(t, c.effect), 4, c.moment)
+		if r.Moment != c.moment || r.DurationMs != c.duration || r.ChronoS != c.chrono {
+			t.Errorf("%s/%s : duration_ms %d (attendu %d), chrono_s %d (attendu %d), moment %q", c.effect, c.moment, r.DurationMs, c.duration, r.ChronoS, c.chrono, r.Moment)
+		}
+		if len(r.Frames) < c.n {
+			t.Errorf("%s/%s : au moins %d trames (une par tick) : %d", c.effect, c.moment, c.n, len(r.Frames))
+		}
+		for _, f := range r.Frames {
+			if f.At >= c.duration {
+				t.Errorf("%s/%s : aucune trame au-delà de la durée : %+v", c.effect, c.moment, f)
+			}
+		}
+	}
+}
+
+func TestPreview_ExplicitMomentIsEchoedAndSetsTheDuration(t *testing.T) {
+	// (le moment par défaut — le premier déclaré — est résolu par le serveur : testé dans http_effects_preview_299_test.go)
+	e := mustParse(t, "id: deux\nnom: Deux\nversion: 2\nmoments: [score, calm]\nduree_tick_ms: 1000\npas:\n  - { g0: [\"#FF0000\", 100] }\n")
+	if r := Preview(e, 3, Moment("score")); r.Moment != "score" || r.DurationMs != 5000 {
+		t.Errorf("score : 5 s : %q %d", r.Moment, r.DurationMs)
+	}
+	if r := Preview(e, 3, Moment("calm")); r.Moment != "calm" || r.DurationMs != 20000 {
+		t.Errorf("calm : 20 s : %q %d", r.Moment, r.DurationMs)
+	}
+}
+
+func TestPreview_ChronoMomentSimulatesTwentySeconds(t *testing.T) {
 	// pulsation (chrono) : la phase basse change de couleur avec le temps restant (blanc, orange, rouge)
 	r := preview(nativeEffect(t, "pulsation"), 4, "chrono")
 	seen := map[[3]int]bool{}
@@ -128,15 +256,6 @@ func TestPreview_ChronoMomentSimulatesTwentySeconds_CalmIsTimeless(t *testing.T)
 	}
 	if !seen[cW] || !seen[cOr] || !seen[cRed] {
 		t.Errorf("le chronomètre simulé de 20 s fait passer la phase basse par blanc, orange et rouge : %v", seen)
-	}
-	// dégradé (calm) : tick de 60 s > 20 s : une seule trame, une couleur par groupe, cycle de 4 couleurs
-	d := preview(nativeEffect(t, "degrade"), 6, "calm")
-	if len(d.Frames) != 1 {
-		t.Fatalf("dégradé : scène fixe, une trame : %d", len(d.Frames))
-	}
-	g := d.Frames[0].Groups
-	if g[0].Color == g[1].Color || g[0].Color != g[4].Color || g[1].Color != g[5].Color {
-		t.Errorf("une couleur par groupe, cycle de 4 : %+v", g)
 	}
 }
 
@@ -156,38 +275,15 @@ func TestPreview_NoLoop_EffectStopsAtItsLastTick_LoopFalse(t *testing.T) {
 	if r.Loop {
 		t.Error("boucle: non ⇒ loop=false")
 	}
-	if len(r.Frames) != 3 || r.Frames[2].At != 2000 {
+	if len(r.Frames) != 3 || r.Frames[2].At != 2000 || r.Frames[2].Step != "pas:2" {
 		t.Errorf("trois pas puis l'état final tenu (pas de nouvelle trame) : %+v", r.Frames)
 	}
 }
 
-func TestPreview_PreComesFirst_ThenTheLoop(t *testing.T) {
-	e := mustParse(t, "id: avecpre\nnom: Avec PRE\nversion: 2\nmoments: [calm]\nduree_tick_ms: 1000\npre: { g0: [\"#0000FF\", 100] }\npas:\n  - { g1: [\"#FF0000\", 100] }\n  - { g1: [\"#00FF00\", 100] }\n")
-	r := preview(e, 2, "calm")
-	if len(r.Frames) < 2 || r.Frames[0].At != 0 {
-		t.Fatalf("trames : %+v", r.Frames)
-	}
-	// PRE puis pas 0 sans pas 0 à 0 s (§4.5 : sans PRE... avec PRE le premier pas suit le tick 0) : la première trame porte le fond du PRE
-	if g := r.Frames[0].Groups; g[1].Color != [3]int{0, 0, 255} {
-		t.Errorf("PRE appliqué au démarrage : g2 au fond bleu : %+v", g)
-	}
-}
-
-func TestPreview_Deterministic_SameInputSameOutput_NeverWritesAnything(t *testing.T) {
+func TestPreview_Deterministic_SameInputSameOutput(t *testing.T) {
 	e := nativeEffect(t, "chenillard")
 	a, b := preview(e, 6, "chrono"), preview(e, 6, "chrono")
 	if fmt.Sprint(a) != fmt.Sprint(b) {
 		t.Error("l'aperçu est une fonction pure de (effet, groupes, moment)")
-	}
-}
-
-func TestPreview_FadeIsAlwaysZero(t *testing.T) {
-	e := nativeEffect(t, "chenillard")
-	for _, f := range Preview(e, 4, Moment("chrono")).Frames {
-		for _, g := range f.Groups {
-			if g.FadeMs != 0 {
-				t.Fatalf("fade_ms = 0 (révision 3) : %+v", g)
-			}
-		}
 	}
 }

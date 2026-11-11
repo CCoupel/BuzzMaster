@@ -26,8 +26,8 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | `cd server-go && go test -race ./internal/effects -run Preview -count=1` | Verts : une trame par tick, tête du chenillard de g1 à gN, couleur d'urgence selon le chrono simulé de 20 s, trames identiques à `Render` pour chaque natif et 1 à 12 groupes, 400 trames au plus, `boucle: non` ⇒ `loop` faux | | |
-| 2 | `cd server-go && go test -race ./internal/server -run TW299 -count=1` | Verts : forme de `/preview`, groupes par défaut (configurés, sinon 6), 400 / 404 / 405, aucune E/S vers le pont, essai du catalogue (corps vide ⇒ zone ambiance, ×1, 10 s) | | |
+| 1 | `cd server-go && go test -race ./internal/effects -run Preview -count=1` | Verts : une trame par tick (`tick`, `step` pre / pas:n / dernier), durée 20 s ou 5 s (score), `chrono_s`, tête du chenillard de g1 à gN, couleur d'urgence selon le chrono simulé de 20 s, trames identiques à `Render` pour chaque natif et 1 à 12 groupes, 400 trames au plus, `boucle: non` ⇒ `loop` faux | | |
+| 2 | `cd server-go && go test -race ./internal/server -run TW299 -count=1` | Verts : forme de `/preview` (dont `tick`, `step`, `moment`, `tick_ms`, `chrono_s`, plus de `fade_ms`), `steps` du catalogue, `seconds` par défaut de l'essai, groupes par défaut (configurés, sinon 6), 400 / 404 / 405, aucune E/S vers le pont, essai du catalogue (corps vide ⇒ zone ambiance, ×1, 10 s) | | |
 | 3 | `cd server-go/web && npx vitest run src/components/LightEffectsCatalogue` | Verts : cartes, aperçu rejoué (tick, chronomètre simulé), essai, « utilisé : … », erreurs | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
@@ -41,7 +41,7 @@
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Ouvrir Ambiance › Lumière › Effets, descendre au catalogue | Une carte par effet : Pulsation, Chenillard, Chenillard avec traînée, Couleur de l'équipe, Dégradé, puis les effets de l'utilisateur ; sous chaque nom l'étiquette **natif**, **personnalisé** ou **natif modifié** et le ou les moments (Chronomètre, Phases calmes, Équipe qui marque) | | |
-| 2 | Lire la ligne « Fichier » | Nom du fichier, durée du tick (« tick de 1 s »), nombre de groupes demandé dans la zone (« demande 5 groupes ») | | |
+| 2 | Lire la ligne « Fichier » | Nom du fichier, nombre de pas de la boucle (« 2 pas »), durée du tick (« tick de 1 s »), nombre de groupes demandé dans la zone (« demande 5 groupes ») | | |
 | 3 | Copier un natif sous un autre `id` | La carte apparaît en quelques secondes, étiquette « personnalisé » | | |
 | 4 | Copier `chenillard.yaml` en gardant `id: chenillard` | La carte du chenillard passe à « natif modifié » avec « remplace natifs/… — supprimez-le pour revenir à l'effet d'origine » | | |
 | 5 | Chercher un bouton pour créer, modifier ou supprimer un effet | **Aucun** (l'éditeur est prévu en v11.8.0) | | |
@@ -59,14 +59,14 @@
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | « ▶ Aperçu » sur le **Chenillard** (zone Ambiance à 4 groupes) | Quatre ampoules dessinées étiquetées g1…g4 ; le point lumineux va de g1 à g4 puis repart, **un groupe par seconde** ; sous les ampoules « tick n » et un compte à rebours « chronomètre simulé : 20 s » qui descend | | |
+| 1 | « ▶ Aperçu » sur le **Chenillard** (zone Ambiance à 4 groupes) | Quatre ampoules dessinées étiquetées g1…g4 ; le point lumineux va de g1 à g4 puis repart, **un groupe par seconde** ; sous les ampoules « tick n · pas 0 » (le pas joué : « PRE », « pas n », « dernier » ; jamais « post ») **à chaque tick**, même quand les ampoules ne changent pas, et un compte à rebours « chronomètre simulé : 20 s » qui descend | | |
 | 2 | Observer la couleur de la tête | Blanche, puis **orange** sous 10 s, puis **rouge** sous 5 s du compte à rebours simulé | | |
 | 3 | Pendant l'aperçu, regarder les **vraies ampoules** | Elles ne bougent pas (aperçu purement visuel) | | |
 | 4 | Lancer l'aperçu d'un autre effet | Le premier s'arrête : **un seul aperçu à la fois** ; le bouton redevient « ▶ Aperçu » | | |
 | 5 | « ■ Arrêter » | L'aperçu s'arrête | | |
 | 6 | Aperçu du **Chenillard avec traînée** alors que la zone n'a que 3 groupes | Bouton « Essayer » grisé (« Demande 5 groupes ») mais l'**aperçu reste disponible** : « simulation avec 6 groupes » | | |
-| 7 | Aperçu du **Dégradé** (phases calmes) | Une couleur par groupe, scène fixe, pas de compte à rebours | | |
-| 8 | Aperçu de **Couleur de l'équipe** | Toutes les ampoules à la couleur de l'équipe simulée (rouge) | | |
+| 7 | Aperçu du **Dégradé** (phases calmes) | Une couleur par groupe, scène fixe, « tick 0 · pas 0 », **pas** de compte à rebours (aucun chronomètre hors chronomètre) | | |
+| 8 | Aperçu de **Couleur de l'équipe** (moment score) | Toutes les ampoules à la couleur de l'équipe simulée (rouge) ; l'aperçu dure **5 s** puis recommence (les autres : 20 s) | | |
 | 9 | Aperçu d'un effet `boucle: non` (à créer) | Il joue une fois puis garde son état final | | |
 | 10 | Casser le fichier de l'effet, recharger, demander l'aperçu | L'effet reste prévisualisable avec sa dernière version valide, ou « Aperçu indisponible » s'il a disparu ; l'interface reste utilisable | | |
 
@@ -118,7 +118,7 @@
 | 2 | Observer la couleur de la tête pendant l'essai de 10 s | Blanc puis orange puis rouge (chronomètre simulé qui descend de 15 s) | | |
 | 3 | Fin de l'essai | La zone Ambiance revient à sa scène normale ; le bouton redevient « 💡 Essayer… » | | |
 | 4 | « ■ Arrêter l'essai » en cours | Retour immédiat à l'état normal | | |
-| 5 | « Essayer » sur **Couleur de l'équipe** | Essai de **5 s** (effet de score) : toute la zone Ambiance prend la couleur de l'équipe simulée | | |
+| 5 | « Essayer » sur **Couleur de l'équipe** | Essai de **5 s** (durée choisie par le serveur pour un effet de score seul ; 10 s pour les autres) : toute la zone Ambiance prend la couleur de l'équipe simulée | | |
 | 6 | Lancer un essai du catalogue puis le bouton « ▶ Tester » d'un réglage | Le test remplace l'essai : **un seul** à la fois ; et inversement | | |
 | 7 | Chenillard avec traînée sur 3 groupes | Bouton grisé « Demande 5 groupes » | | |
 | 8 | Popover Ambiance sur ON / OFF, ou Flash actif | Bouton grisé : « L'éclairage est forcé sur ON ou OFF, ou le Flash est actif : repassez en AUTO » ; l'aperçu reste disponible | | |
