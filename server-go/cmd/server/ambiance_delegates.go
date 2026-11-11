@@ -36,8 +36,6 @@ func (a *App) ambianceCorrectTeams(state game.GameState) []string {
 	return a.ambCtl().CorrectTeams(state)
 }
 
-func (a *App) runChronoPulse(ctx context.Context) { a.ambCtl().RunChronoPulse(ctx) }
-
 func (a *App) currentScoreFlashTeam() string { return a.ambCtl().CurrentScoreFlashTeam() }
 
 func (a *App) ambianceScene(ev lighting.Event) lighting.State { return a.ambCtl().Scene(ev) }
@@ -73,33 +71,28 @@ type (
 )
 
 const (
-	lightingModeAuto         = ambiance.ModeAuto
-	lightingModeOn           = ambiance.ModeOn
-	lightingModeOff          = ambiance.ModeOff
-	lightingOnIntensity      = ambiance.OnIntensity
-	lightingFlashOnPhase     = ambiance.FlashOnPhase
-	lightingFlashOffPhase    = ambiance.FlashOffPhase
-	scoreFlashGoldPhase      = ambiance.ScoreFlashGoldPhase
-	scoreFlashTeamPhase      = ambiance.ScoreFlashTeamPhase
-	chronoPulseTransitionMs  = ambiance.ChronoPulseTransitionMs
-	chronoPulseIntensityFull = ambiance.ChronoPulseIntensityFull
-	chronoPulseIntensityLow  = ambiance.ChronoPulseIntensityLow
+	lightingModeAuto      = ambiance.ModeAuto
+	lightingModeOn        = ambiance.ModeOn
+	lightingModeOff       = ambiance.ModeOff
+	lightingOnIntensity   = ambiance.OnIntensity
+	lightingFlashOnPhase  = ambiance.FlashOnPhase
+	lightingFlashOffPhase = ambiance.FlashOffPhase
+	scoreFlashGoldPhase   = ambiance.ScoreFlashGoldPhase
+	scoreFlashTeamPhase   = ambiance.ScoreFlashTeamPhase
 )
 
 var (
-	lightingOnColor          = ambiance.OnColor
-	lightingFlashColor       = ambiance.FlashColor
-	ambianceWarmWhite        = ambiance.WarmWhite
-	ambianceScoreGold        = ambiance.ScoreGold
-	ambianceSceneIdle        = ambiance.SceneIdle
-	ambianceSceneReady       = ambiance.SceneReady
-	ambianceSceneRunning     = ambiance.SceneRunning
-	ambianceSceneTeamTurn    = ambiance.SceneTeamTurn
-	ambianceChronoPulseRed   = ambiance.ChronoPulseRed
-	ambianceActiveTeam       = ambiance.ActiveTeam
-	ambianceSceneFor         = ambiance.SceneFor
-	ambianceChronoPulseColor = ambiance.ChronoPulseColor
-	orDefault                = ambiance.OrDefault
+	lightingOnColor       = ambiance.OnColor
+	lightingFlashColor    = ambiance.FlashColor
+	ambianceWarmWhite     = ambiance.WarmWhite
+	ambianceScoreGold     = ambiance.ScoreGold
+	ambianceSceneIdle     = ambiance.SceneIdle
+	ambianceSceneReady    = ambiance.SceneReady
+	ambianceSceneRunning  = ambiance.SceneRunning
+	ambianceSceneTeamTurn = ambiance.SceneTeamTurn
+	ambianceActiveTeam    = ambiance.ActiveTeam
+	ambianceSceneFor      = ambiance.SceneFor
+	orDefault             = ambiance.OrDefault
 )
 
 var _ = context.Background

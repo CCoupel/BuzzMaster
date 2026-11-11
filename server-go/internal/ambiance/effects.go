@@ -149,11 +149,11 @@ func momentOfEvent(k lighting.EventKind) effects.Moment {
 	return ""
 }
 
-// resolveEffect returns the catalogue entry to play for the setting id, or false (default
-// of the moment). The legacy pulsation (RunChronoPulse) stays the owner of "pulsation"
-// until its migration (Batch 2.3), so it is never played by the reader.
+// resolveEffect returns the catalogue entry to play for the setting id, or false: absent,
+// not declaring the moment, or not applicable to n groups (the caller then falls back to
+// the default of the moment, §3.3). "" means no effect.
 func resolveEffect(cat effects.Catalogue, id string, m effects.Moment, n int) (effects.Entry, bool) {
-	if id == "" || id == ambiancecfg.PulsationID {
+	if id == "" {
 		return effects.Entry{}, false
 	}
 	en, ok := cat.Get(id)
@@ -164,6 +164,19 @@ func resolveEffect(cat effects.Catalogue, id string, m effects.Moment, n int) (e
 		return effects.Entry{}, false
 	}
 	return en, true
+}
+
+// resolveRoomEffect is resolveEffect with the fallback of §3.3: a moment set to an absent,
+// invalid or inapplicable effect plays its default (the pulsation at the chrono moment, no
+// effect elsewhere). A moment explicitly set to "" plays nothing.
+func resolveRoomEffect(cat effects.Catalogue, id string, m effects.Moment, n int) (effects.Entry, bool) {
+	if en, ok := resolveEffect(cat, id, m, n); ok {
+		return en, true
+	}
+	if id != "" && m == effects.MomentChrono && id != ambiancecfg.PulsationID {
+		return resolveEffect(cat, ambiancecfg.PulsationID, m, n)
+	}
+	return effects.Entry{}, false
 }
 
 // runFor returns the start of the run of key, restarting it when the key changes.
@@ -230,7 +243,7 @@ func (c *Controller) computeFrames() *effectFrames {
 
 	// Room: only in AUTO mode without Flash (§5.3 point 2).
 	if c.lightingMode() == ModeAuto && !c.isLightingFlashOn() {
-		if en, ok := resolveEffect(cat, roomSet[string(moment)], moment, len(groups)); ok {
+		if en, ok := resolveRoomEffect(cat, roomSet[string(moment)], moment, len(groups)); ok {
 			key := string(moment) + "|" + en.Effect.ID + "|" + itoa(cat.Generation)
 			if moment == effects.MomentScore {
 				key += "|" + scoreStart.String()

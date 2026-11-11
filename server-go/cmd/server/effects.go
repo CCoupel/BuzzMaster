@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"sync"
 
 	"buzzcontrol/assets"
 	"buzzcontrol/internal/ambiancecfg"
@@ -46,13 +47,25 @@ func (a *App) startEffects() {
 	}
 }
 
-// EffectsCatalogue implements server.EffectsProvider.
+// EffectsCatalogue implements server.EffectsProvider. Without a manager (natives could not
+// be prepared, or a bare test App) it answers with the embedded natives alone, so the
+// pulsation — now a native effect — is always available to the reader.
 func (a *App) EffectsCatalogue() effects.Catalogue {
 	if a.effects == nil {
-		return effects.Catalogue{}
+		nativesOnce.Do(func() {
+			if sub, err := fs.Sub(assets.EffectsAssets, "effects"); err == nil {
+				nativesOnly = effects.LoadDir(sub, "")
+			}
+		})
+		return nativesOnly
 	}
 	return a.effects.Catalogue()
 }
+
+var (
+	nativesOnce sync.Once
+	nativesOnly effects.Catalogue
+)
 
 // EffectsReload implements server.EffectsProvider.
 func (a *App) EffectsReload() effects.Catalogue {
@@ -90,7 +103,7 @@ func (a *App) EffectSettings() (room map[string]string, host map[string]map[stri
 }
 
 // effectsConfigured reports whether the global config selects any effect the reader plays
-// (the legacy "pulsation" is owned by RunChronoPulse).
+// (the default pulsation is answered from the config like any other global setting).
 func effectsConfigured(lc config.LightingConfig) bool {
 	for _, id := range lc.Effects {
 		if id != "" && id != ambiancecfg.PulsationID {

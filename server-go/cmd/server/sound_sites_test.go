@@ -14,7 +14,7 @@
 //   - une entrée du registre sans appel réel correspondant (registre
 //     stale) ;
 //   - LE DÉFAUT CRITIQUE identifié par le plan (§3.3, risque R.1) : un appel
-//     à notifySound() glissé dans runChronoPulse (pulsation 100 ms),
+//     à notifySound() glissé dans RunEffects (pulsation 100 ms),
 //     setLightingMode/setLightingFlash/runLightingFlash (sélecteur/Flash
 //     manuel), runScoreFlash (célébration lumineuse, pas un nouvel
 //     événement), buildHueDriver (callback OnReconnect — resynchronisation,
@@ -77,7 +77,7 @@ var soundForbiddenFuncs227 = map[string]string{
 	"buildHueDriver":      "reconnexion du pont (callback OnReconnect) — resynchronisation, pas un événement nouveau",
 	"startAmbianceWriter": "cycle de vie de l'écrivain lumière — premier rafraîchissement au démarrage",
 	"reconfigureAmbiance": "cycle de vie de l'écrivain lumière — rafraîchissement à la reconfiguration",
-	"runChronoPulse":      "pulsation du chronomètre — notifie toutes les 100 ms (contract §6.1, ABSOLUMENT JAMAIS)",
+	"RunEffects":          "lecteur d'effets (dont la pulsation du chronomètre) — notifie toutes les 100 ms (contract §6.1, ABSOLUMENT JAMAIS)",
 }
 
 // cmdServerDir227 locates the cmd/server directory relative to this test
@@ -305,28 +305,28 @@ func TestSoundSites_ForbiddenFamiliesNeverCallSoundFanOut(t *testing.T) {
 
 // TestSoundSites_ForbiddenCheck_CatchesInjectedViolation proves the
 // forbidden-family mechanism would actually catch a real regression — a
-// synthetic call to notifySound() injected inside runChronoPulse's body,
+// synthetic call to notifySound() injected inside RunEffects's body,
 // exactly the failure mode the plan's risk R.1 describes, WITHOUT touching
 // real source.
 func TestSoundSites_ForbiddenCheck_CatchesInjectedViolation(t *testing.T) {
 	const src = `package main
 
-func runChronoPulse(a *App) {
+func RunEffects(a *App) {
 	a.notifySound(audio.CueGagne) // régression hypothétique : dix sons par seconde
 }
 `
 	found := scanSoundSitePairs227(t, "synthetic_227.go", src)
-	if !found["runChronoPulse"] {
-		t.Fatal("setup invalide : le scan n'a pas trouvé l'appel synthétique dans runChronoPulse")
+	if !found["RunEffects"] {
+		t.Fatal("setup invalide : le scan n'a pas trouvé l'appel synthétique dans RunEffects")
 	}
-	reason, forbidden := soundForbiddenFuncs227["runChronoPulse"]
+	reason, forbidden := soundForbiddenFuncs227["RunEffects"]
 	if !forbidden {
-		t.Fatal("setup invalide : runChronoPulse doit figurer dans soundForbiddenFuncs227")
+		t.Fatal("setup invalide : RunEffects doit figurer dans soundForbiddenFuncs227")
 	}
 	// Reproduit la détection réelle de TestSoundSites_ForbiddenFamiliesNeverCallSoundFanOut,
 	// isolée au seul nom injecté : found[fn] && forbidden => violation à rapporter.
-	if !found["runChronoPulse"] {
-		t.Fatalf("le mécanisme n'a pas détecté la violation injectée dans runChronoPulse (%s)", reason)
+	if !found["RunEffects"] {
+		t.Fatalf("le mécanisme n'a pas détecté la violation injectée dans RunEffects (%s)", reason)
 	}
 }
 
@@ -337,7 +337,7 @@ func runChronoPulse(a *App) {
 // TestSoundSites_ForbiddenFamiliesNeverCallSoundFanOut would pass for the
 // wrong reason (nothing named that way exists to violate the rule).
 func TestSoundForbiddenFuncs227_AllTargetsStillExistInSource(t *testing.T) {
-	// #295 : la couche ambiance (runChronoPulse, runLightingFlash, runScoreFlash…) vit désormais dans
+	// #295 : la couche ambiance (RunEffects, runLightingFlash, runScoreFlash…) vit désormais dans
 	// internal/ambiance ; les noms interdits y sont cherchés aussi (cmd/server ne garde que des délégués).
 	declared := map[string]bool{}
 	fset := token.NewFileSet()
