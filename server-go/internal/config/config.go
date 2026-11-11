@@ -100,6 +100,10 @@ type LightingConfig struct {
 	// HostEffects is a table by animateur group id, then moment (light-effects.md §6). The
 	// old flat form {chrono, calm, score} of a QUALIF config.json is ignored on reading.
 	HostEffects HostEffectsTable `json:"host_effects"`
+	// Speeds / HostSpeeds (R13 — light-effects.md §6): the speed multiplier of the effect of
+	// each moment, for the room and by animateur group id (0.5, 0.75, 1, 1.5, 2; default 1).
+	Speeds     map[string]float64            `json:"speeds"`
+	HostSpeeds map[string]map[string]float64 `json:"host_speeds"`
 }
 
 // HostEffectsTable is lighting.host_effects: group id → moment → effect id.
@@ -524,6 +528,12 @@ func ApplyDefaults(cfg *Config) {
 	cfg.Lighting.Effects = fillMoments(cfg.Lighting.Effects, map[string]string{"chrono": "pulsation", "calm": "", "score": ""})
 	if cfg.Lighting.HostEffects == nil {
 		cfg.Lighting.HostEffects = HostEffectsTable{}
+	}
+	if cfg.Lighting.Speeds == nil {
+		cfg.Lighting.Speeds = map[string]float64{}
+	}
+	if cfg.Lighting.HostSpeeds == nil {
+		cfg.Lighting.HostSpeeds = map[string]map[string]float64{}
 	}
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}

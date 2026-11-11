@@ -2229,6 +2229,11 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 						delete(cfg.Lighting.HostEffects, gid)
 					}
 				}
+				for gid := range cfg.Lighting.HostSpeeds {
+					if !live[gid] {
+						delete(cfg.Lighting.HostSpeeds, gid)
+					}
+				}
 			}
 			// v11.7.0, #223 (light-effects.md §6): per-moment effect, PARTIAL patches — the
 			// front writes one moment at a time, so the incoming keys are merged over the
@@ -2250,6 +2255,53 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 					merged[m] = id
 				}
 				cfg.Lighting.Effects = merged
+			}
+			// speeds (R13): PATCH-merged moment by moment; only 0.5, 0.75, 1, 1.5, 2.
+			if _, ok := lRaw["speeds"]; ok {
+				merged := ambiancecfg.DefaultLightSpeeds()
+				for m, v := range cfg.Lighting.Speeds {
+					merged[m] = v
+				}
+				for m, v := range incoming.Speeds {
+					if !ambiancecfg.ValidMoment(m) || !ambiancecfg.ValidSpeed(v) {
+						http.Error(w, "lighting.speeds."+m+" : vitesse invalide (0,5 ; 0,75 ; 1 ; 1,5 ou 2)", http.StatusBadRequest)
+						return
+					}
+					merged[m] = v
+				}
+				cfg.Lighting.Speeds = merged
+			}
+			// host_speeds: by animateur group id then moment; an unknown id is dropped without error.
+			if _, ok := lRaw["host_speeds"]; ok {
+				live := map[string]bool{}
+				for _, g := range cfg.Lighting.HostGroups() {
+					live[g.ID] = true
+				}
+				merged := map[string]map[string]float64{}
+				for gid, mm := range cfg.Lighting.HostSpeeds {
+					if live[gid] {
+						merged[gid] = map[string]float64{}
+						for m, v := range mm {
+							merged[gid][m] = v
+						}
+					}
+				}
+				for gid, mm := range incoming.HostSpeeds {
+					for m, v := range mm {
+						if !ambiancecfg.ValidMoment(m) || !ambiancecfg.ValidSpeed(v) {
+							http.Error(w, "lighting.host_speeds."+gid+"."+m+" : vitesse invalide (0,5 ; 0,75 ; 1 ; 1,5 ou 2)", http.StatusBadRequest)
+							return
+						}
+						if !live[gid] {
+							continue
+						}
+						if merged[gid] == nil {
+							merged[gid] = map[string]float64{}
+						}
+						merged[gid][m] = v
+					}
+				}
+				cfg.Lighting.HostSpeeds = merged
 			}
 			// host_effects: a table by animateur group id, PATCH-merged group by group and
 			// moment by moment (the front writes one moment at a time). The old flat form

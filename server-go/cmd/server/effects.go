@@ -102,6 +102,46 @@ func (a *App) EffectSettings() (room map[string]string, host map[string]map[stri
 	return s.LightEffects, s.LightHostEffects
 }
 
+// EffectSpeeds implements ambiance.EffectSpeedSource: the RESOLVED speed multiplier per
+// moment (global ← round), for the room and by animateur group id. Answered from the config
+// alone when every speed is the default ×1 and no round overrides one.
+func (a *App) EffectSpeeds() (room map[string]float64, host map[string]map[string]float64) {
+	lc := config.Get().Lighting
+	if !speedsConfigured(lc) && !a.anyRoundSpeeds() {
+		return nil, nil // ×1 everywhere
+	}
+	s := a.ambianceSettings()
+	return s.LightSpeeds, s.LightHostSpeeds
+}
+
+func speedsConfigured(lc config.LightingConfig) bool {
+	for _, v := range lc.Speeds {
+		if v != 1 {
+			return true
+		}
+	}
+	for _, mm := range lc.HostSpeeds {
+		for _, v := range mm {
+			if v != 1 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (a *App) anyRoundSpeeds() bool {
+	if a.engine == nil {
+		return false
+	}
+	for _, r := range a.engine.GetRounds() {
+		if len(r.Ambiance.LightSpeeds) > 0 || len(r.Ambiance.LightHostSpeeds) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // effectsConfigured reports whether the global config selects any effect the reader plays
 // (the default pulsation is answered from the config like any other global setting).
 func effectsConfigured(lc config.LightingConfig) bool {

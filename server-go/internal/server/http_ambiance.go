@@ -80,6 +80,22 @@ func AmbianceFromConfig(cfg *config.Config) ambiancecfg.Settings {
 		}
 		s.LightHostEffects[g.ID] = moments
 	}
+	// Speeds (R13): ×1 by default; one entry per existing animateur group.
+	s.LightSpeeds, s.LightHostSpeeds = ambiancecfg.DefaultLightSpeeds(), map[string]map[string]float64{}
+	for _, m := range ambiancecfg.Moments {
+		if v, ok := cfg.Lighting.Speeds[m]; ok && ambiancecfg.ValidSpeed(v) {
+			s.LightSpeeds[m] = v
+		}
+	}
+	for _, g := range cfg.Lighting.HostGroups() {
+		moments := ambiancecfg.DefaultLightSpeeds()
+		for _, m := range ambiancecfg.Moments {
+			if v, ok := cfg.Lighting.HostSpeeds[g.ID][m]; ok && ambiancecfg.ValidSpeed(v) {
+				moments[m] = v
+			}
+		}
+		s.LightHostSpeeds[g.ID] = moments
+	}
 	return s
 }
 

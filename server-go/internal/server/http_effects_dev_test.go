@@ -23,12 +23,12 @@ func (p devEffectsProv) EffectsReload() effects.Catalogue    { return p.m.Reload
 func (p devEffectsProv) EffectsDir() string                  { return "data/files/effects" }
 
 const devEffSrc = `id: %ID%
-name: Effet %ID%
-version: 1
+nom: Effet %ID%
+version: 2
 moments: [%M%]
-target: all
-looks: { a: { color: scene } }
-pattern: { type: uniform, phases: [ { look: a, ms: 1000 } ] }
+duree_tick_ms: 1000
+pas:
+  - { g0: [scene, 100] }
 `
 
 func devEff(id, moment string) string {
@@ -74,7 +74,7 @@ func TestAPIEffects_CatalogueShapeAndReload_Dev(t *testing.T) {
 		t.Fatalf("forme §7.1 : %+v", v)
 	}
 	e := list[0].(map[string]any)
-	if e["target"] != "all" || e["min_groups"].(float64) != 0 || e["applicable"] != true || e["host_applicable"] != true || e["origin"] != "native" {
+	if _, hasTarget := e["target"]; hasTarget || e["min_groups"].(float64) != 0 || e["applicable"] != true || e["host_applicable"] != true || e["origin"] != "native" {
 		t.Fatalf("entrée target all : %+v", e)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("id: ["), 0o644); err != nil {
@@ -158,5 +158,40 @@ func TestConfig_GroupsRefuseNameAndNearTeams_Dev(t *testing.T) {
 	}
 	if code, out := devPostCfg(t, srv, `{"lighting":{"groups":[{"role":"salle","lights":["L1"]}]}}`); code != 200 {
 		t.Fatalf("un groupe n'a plus que id, role et lights : %d %s", code, out)
+	}
+}
+
+func TestConfig_LightingSpeeds_PartialMergeValidateAndPurge_Dev(t *testing.T) {
+	srv, _ := devEffectsServer(t)
+	if code, out := devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"H1","role":"general"}],"groups":[{"id":"p1","role":"animateur","lights":["H1"]}]}}`); code != 200 {
+		t.Fatalf("groupe animateur : %d %s", code, out)
+	}
+	if code, out := devPostCfg(t, srv, `{"lighting":{"speeds":{"chrono":2}}}`); code != 200 {
+		t.Fatalf("speeds : %d %s", code, out)
+	}
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"speeds":{"calm":0.5}}}`); code != 200 {
+		t.Fatal("un patch d'un moment")
+	}
+	sp := config.Get().Lighting.Speeds
+	if sp["chrono"] != 2 || sp["calm"] != 0.5 || sp["score"] != 1 {
+		t.Fatalf("fusion par moment, défaut ×1 : %+v", sp)
+	}
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"host_speeds":{"p1":{"score":1.5},"ghost":{"score":2}}}}`); code != 200 {
+		t.Fatal("host_speeds")
+	}
+	hs := config.Get().Lighting.HostSpeeds
+	if hs["p1"]["score"] != 1.5 || len(hs) != 1 {
+		t.Fatalf("id inconnu écarté sans erreur : %+v", hs)
+	}
+	for _, body := range []string{`{"lighting":{"speeds":{"chrono":3}}}`, `{"lighting":{"speeds":{"nuit":1}}}`, `{"lighting":{"host_speeds":{"p1":{"calm":0.6}}}}`} {
+		if code, _ := devPostCfg(t, srv, body); code != http.StatusBadRequest {
+			t.Errorf("400 attendu : %s", body)
+		}
+	}
+	if config.Get().Lighting.Speeds["chrono"] != 2 {
+		t.Fatal("un refus ne modifie rien")
+	}
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"groups":[]}}`); code != 200 || len(config.Get().Lighting.HostSpeeds) != 0 {
+		t.Fatalf("la suppression du groupe purge ses vitesses : %+v", config.Get().Lighting.HostSpeeds)
 	}
 }

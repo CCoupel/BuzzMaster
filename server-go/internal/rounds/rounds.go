@@ -262,6 +262,17 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 					}
 				}
 			}
+			if len(p.LightHostSpeeds) > 0 {
+				live := map[string]bool{}
+				for _, g := range config.Get().Lighting.HostGroups() {
+					live[g.ID] = true
+				}
+				for gid := range p.LightHostSpeeds {
+					if !live[gid] {
+						delete(p.LightHostSpeeds, gid)
+					}
+				}
+			}
 			// v11.7.0 (#223): an effect id must exist in the catalogue for its moment.
 			if ec, ok := h.(EffectChecker); ok {
 				bad = p.InvalidEffects(func(moment, id string, _ bool) bool { return ec.EffectExists(moment, id) })

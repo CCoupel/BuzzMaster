@@ -207,6 +207,25 @@ func ambianceEffectiveEqual(x, y ambiancecfg.Effective) bool {
 			return false
 		}
 	}
+	for _, m := range ambiancecfg.Moments { // R13: speeds and where they come from
+		if xs.LightSpeeds[m] != ys.LightSpeeds[m] || x.Sources.LightSpeeds[m] != y.Sources.LightSpeeds[m] {
+			return false
+		}
+	}
+	if len(xs.LightHostSpeeds) != len(ys.LightHostSpeeds) {
+		return false
+	}
+	for id, xm := range xs.LightHostSpeeds {
+		ym, ok := ys.LightHostSpeeds[id]
+		if !ok {
+			return false
+		}
+		for _, m := range ambiancecfg.Moments {
+			if xm[m] != ym[m] || x.Sources.LightHostSpeeds[id][m] != y.Sources.LightHostSpeeds[id][m] {
+				return false
+			}
+		}
+	}
 	if len(xs.LightHostEffects) != len(ys.LightHostEffects) {
 		return false
 	}

@@ -24,7 +24,8 @@ func tw290aGlobal() Settings {
 		cues[c] = true
 	}
 	return Settings{SoundMuted: false, CountdownEnabled: true, CountdownLoop: true, CuesEnabled: cues, LightMode: LightMode("AUTO"),
-		LightEffects: DefaultLightEffects(), LightHostEffects: map[string]map[string]string{}} // v11.7.0 : forme complète
+		LightEffects: DefaultLightEffects(), LightHostEffects: map[string]map[string]string{},
+		LightSpeeds: DefaultLightSpeeds(), LightHostSpeeds: map[string]map[string]float64{}} // v11.7.0 : forme complète
 }
 
 func tw290aB(v bool) *bool { return &v }

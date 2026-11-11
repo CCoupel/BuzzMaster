@@ -61,3 +61,49 @@ func TestLightEffects_ResolveSourcesJSONAndValidation_Dev(t *testing.T) {
 		t.Fatalf("InvalidEffects : %v", bad)
 	}
 }
+
+func TestLightSpeeds_ResolveSourcesJSONAndValidation_Dev(t *testing.T) {
+	t.Parallel()
+	g := Settings{CuesEnabled: map[string]bool{}, LightMode: LightAuto, LightEffects: DefaultLightEffects(),
+		LightHostEffects: map[string]map[string]string{}, LightSpeeds: DefaultLightSpeeds(),
+		LightHostSpeeds: map[string]map[string]float64{"g1": DefaultLightSpeeds()}}
+	round := Partial{LightSpeeds: map[string]float64{"chrono": 2}, LightHostSpeeds: map[string]map[string]float64{"g1": {"calm": 0.5}, "ghost": {"calm": 2}}}
+	eff, src := Resolve(g, round)
+	if eff.LightSpeeds["chrono"] != 2 || eff.LightSpeeds["calm"] != 1 || eff.LightHostSpeeds["g1"]["calm"] != 0.5 {
+		t.Fatalf("surcharge de manche par moment : %+v", eff)
+	}
+	if _, ok := eff.LightHostSpeeds["ghost"]; ok {
+		t.Fatal("un id de groupe inconnu est ignoré")
+	}
+	if src.LightSpeeds["chrono"] != SourceRound || src.LightSpeeds["calm"] != SourceGlobal || src.LightHostSpeeds["g1"]["calm"] != SourceRound {
+		t.Fatalf("sources : %+v", src)
+	}
+	raw, _ := json.Marshal(Settings{CuesEnabled: map[string]bool{}, LightMode: LightAuto, LightHostSpeeds: map[string]map[string]float64{"g1": {"calm": 1.5}}})
+	for _, want := range []string{`"speeds":{"calm":1,"chrono":1,"score":1}`, `"host_speeds":{"g1":{"calm":1.5,"chrono":1,"score":1}}`} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("%s absent de %s", want, raw)
+		}
+	}
+	for name, body := range map[string]string{
+		"valeur hors liste": `{"light":{"speeds":{"chrono":3}}}`,
+		"pas un nombre":     `{"light":{"speeds":{"chrono":"2"}}}`,
+		"moment inconnu":    `{"light":{"speeds":{"nuit":1}}}`,
+		"hôte hors liste":   `{"light":{"host_speeds":{"g1":{"calm":0.6}}}}`,
+		"hôte pas un objet": `{"light":{"host_speeds":{"g1":2}}}`,
+	} {
+		if bad := ValidateRaw([]byte(body), nil); len(bad) == 0 {
+			t.Errorf("%s : refus attendu", name)
+		}
+	}
+	for _, v := range []float64{0.5, 0.75, 1, 1.5, 2} {
+		if !ValidSpeed(v) {
+			t.Errorf("%v doit être permise", v)
+		}
+	}
+	if bad := ValidateRaw([]byte(`{"light":{"speeds":{"calm":0.75},"host_speeds":{"inconnu":{"score":2}}}}`), nil); len(bad) != 0 {
+		t.Fatalf("forme valide refusée : %v", bad)
+	}
+	if bad := (Partial{LightSpeeds: map[string]float64{"calm": 9}}).InvalidPaths(nil); len(bad) != 1 {
+		t.Fatalf("InvalidPaths : %v", bad)
+	}
+}
