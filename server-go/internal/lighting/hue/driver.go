@@ -100,8 +100,8 @@ type LightSpec struct {
 	Role LightRole `json:"role"`
 	Team string    `json:"team,omitempty"`
 	// Group (v11.7.0, #225, hue-bridge.md §11): ambiance group of a general
-	// light — 0 = none, n >= 1 = salle group n, lighting.GroupHost (-1) = the
-	// animateur group. Ignored for team lights.
+	// light — 0 = none, n >= 1 = salle group n, a negative
+	// number -k = the animateur group of rank k (lighting.HostGroup(k)). Ignored for team lights.
 	Group int `json:"group,omitempty"`
 }
 
@@ -479,7 +479,7 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 	var first *applied
 	for i := range cands {
 		c := &cands[i]
-		if c.lc.Role == RoleTeam || c.lc.Group == lighting.GroupHost {
+		if c.lc.Role == RoleTeam || c.lc.Group < 0 {
 			continue
 		}
 		if first == nil {
@@ -495,8 +495,8 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 		switch {
 		case c.lc.Role == RoleTeam:
 			key = bucketTeamPfx + c.lc.Team
-		case c.lc.Group == lighting.GroupHost:
-			key = bucketHost
+		case c.lc.Group < 0:
+			key = bucketHostPfx + strconv.Itoa(-c.lc.Group)
 		case !uniform && c.lc.Group > 0:
 			key = bucketGroupPfx + strconv.Itoa(c.lc.Group)
 		}
@@ -643,7 +643,7 @@ type groupPlannedWrite struct {
 // follows its team's zone when present in st, otherwise the general zone.
 // A general light of ambiance group n follows the {general, Group n} entry
 // when present, else the plain general entry (Group 0); an animateur light
-// follows ONLY the GroupHost entry — it never receives the Group 0 one
+// follows ONLY its own host-group entry (-k) — it never receives the Group 0 one
 // (light-effects.md §2.5).
 func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 	if lc.Role == RoleTeam {
@@ -659,7 +659,7 @@ func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 				return z, true
 			}
 		}
-		if lc.Group == lighting.GroupHost {
+		if lc.Group < 0 {
 			return lighting.ZoneState{}, false
 		}
 	}

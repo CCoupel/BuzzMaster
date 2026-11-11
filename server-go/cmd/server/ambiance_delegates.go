@@ -106,3 +106,9 @@ var _ = context.Background
 var _ game.GamePhase
 var _ lighting.Event
 var _ *hue.Driver
+
+// StartGroupTest / StopGroupTest implement server.GroupTester (#225, §2.4).
+func (a *App) StartGroupTest(ref string) error { return a.ambCtl().StartGroupTest(ref) }
+func (a *App) GroupTestDurationMs() int        { return a.ambCtl().GroupTestDurationMs() }
+func (a *App) StopGroupTest()                  { a.ambCtl().StopGroupTest() }
+func (a *App) CheckGroup(ref string) error     { return ambiance.CheckGroupRef(ref) }

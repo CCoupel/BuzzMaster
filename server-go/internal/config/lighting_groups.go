@@ -1,10 +1,51 @@
 package config
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
+
+// Caps (light-effects.md §2.1): 12 salle groups, 4 animateur groups.
+const (
+	MaxSalleGroups = 12
+	MaxHostGroups  = 4
+)
+
+var reGroupID = regexp.MustCompile(`^[a-z0-9]{1,12}$`)
+
+// deriveGroupID builds a stable id from a group name ("g" + 6 hex of its SHA-1), made
+// unique against used. Deterministic on purpose: a config.json predating the ids gets
+// the same ids at every start.
+func deriveGroupID(name string, used map[string]bool) string {
+	sum := sha1.Sum([]byte(strings.ToLower(name)))
+	base := "g" + hex.EncodeToString(sum[:])[:6]
+	id := base
+	for i := 2; used[id]; i++ {
+		id = fmt.Sprintf("%s%d", base, i)
+	}
+	return id
+}
+
+// AssignGroupIDs gives an id to every group that has none (or an invalid/duplicate one is
+// left to ValidateLightingGroups to refuse). Used when loading a config.json.
+func AssignGroupIDs(groups []LightingGroupEntry) {
+	used := map[string]bool{}
+	for _, g := range groups {
+		if g.ID != "" {
+			used[g.ID] = true
+		}
+	}
+	for i := range groups {
+		if groups[i].ID == "" {
+			groups[i].ID = deriveGroupID(groups[i].Name, used)
+			used[groups[i].ID] = true
+		}
+	}
+}
 
 // ValidateLightingGroups checks a full replacement of lighting.groups against
 // the (already normalised) bulb list — contracts/light-effects.md §2.1. It
@@ -14,9 +55,6 @@ import (
 // Light names are compared as given: callers pass names already normalised
 // the same way as LightingLightEntry.Name (hue.NormalizeLightName).
 func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightEntry) ([]LightingGroupEntry, error) {
-	if len(groups) > MaxLightingGroups {
-		return nil, fmt.Errorf("lighting.groups : %d groupes au maximum", MaxLightingGroups)
-	}
 	role := make(map[string]string, len(lights))
 	for _, l := range lights {
 		r := l.Role
@@ -29,7 +67,19 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 	names := map[string]bool{}
 	usedLight := map[string]string{}
 	usedTeam := map[string]string{}
-	hosts := 0
+	hosts, salles := 0, 0
+	usedID := map[string]bool{}
+	for _, g := range groups {
+		if g.ID != "" {
+			if !reGroupID.MatchString(g.ID) {
+				return nil, fmt.Errorf("lighting.groups : identifiant de groupe invalide %q (1 à 12 caractères a-z, 0-9)", g.ID)
+			}
+			if usedID[g.ID] {
+				return nil, fmt.Errorf("lighting.groups : identifiant de groupe en double (%q)", g.ID)
+			}
+			usedID[g.ID] = true
+		}
+	}
 	for _, g := range groups {
 		g.Name = strings.TrimSpace(g.Name)
 		if n := utf8.RuneCountInString(g.Name); n < 1 || n > 40 {
@@ -43,11 +93,13 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 		switch g.Role {
 		case "":
 			g.Role = GroupRoleSalle
+			salles++
 		case GroupRoleSalle:
+			salles++
 		case GroupRoleAnimateur:
 			hosts++
-			if hosts > 1 {
-				return nil, fmt.Errorf("lighting.groups : un seul groupe animateur est autorisé")
+			if hosts > MaxHostGroups {
+				return nil, fmt.Errorf("lighting.groups : %d groupes animateur au maximum", MaxHostGroups)
 			}
 			if len(g.NearTeams) > 0 {
 				return nil, fmt.Errorf("lighting.groups : le groupe animateur n'a pas d'équipes à proximité (near_teams)")
@@ -80,7 +132,14 @@ func ValidateLightingGroups(groups []LightingGroupEntry, lights []LightingLightE
 			teams = append(teams, t)
 		}
 		g.NearTeams = teams
+		if g.ID == "" {
+			g.ID = deriveGroupID(g.Name, usedID)
+			usedID[g.ID] = true
+		}
 		out = append(out, g)
+	}
+	if salles > MaxSalleGroups {
+		return nil, fmt.Errorf("lighting.groups : %d groupes de salle au maximum", MaxSalleGroups)
 	}
 	return out, nil
 }
@@ -109,33 +168,45 @@ func PruneLightingGroups(groups []LightingGroupEntry, lights []LightingLightEntr
 	return out
 }
 
-// HostGroup returns the animateur group, if any.
-func (l LightingConfig) HostGroup() (LightingGroupEntry, bool) {
-	for _, g := range l.Groups {
-		if g.Role == GroupRoleAnimateur {
-			return g, true
-		}
-	}
-	return LightingGroupEntry{}, false
+// HostGroup is one animateur group with its own rank (A1, A2… among the animateur groups,
+// empty ones included) — light-effects.md §2.5.
+type HostGroup struct {
+	ID     string
+	Name   string
+	Rank   int // 1-based; the state address is -Rank (lighting.HostGroupAddr)
+	Lights []string
 }
 
-// GroupAssignment maps each general bulb name to its salle group number
-// (1-based rank among ALL "salle" groups in array order — an empty group keeps
-// its number, it simply has no bulb) and returns the set of host bulb names.
-func (l LightingConfig) GroupAssignment() (num map[string]int, host map[string]bool) {
+// HostGroups lists the animateur groups in order.
+func (l LightingConfig) HostGroups() []HostGroup {
+	var out []HostGroup
+	for _, g := range l.Groups {
+		if g.Role == GroupRoleAnimateur {
+			out = append(out, HostGroup{ID: g.ID, Name: g.Name, Rank: len(out) + 1, Lights: g.Lights})
+		}
+	}
+	return out
+}
+
+// GroupAssignment maps each general bulb name to its salle group number (1-based rank
+// among ALL "salle" groups — an empty group keeps its number, it simply has no bulb) and
+// to the rank k of its animateur group.
+func (l LightingConfig) GroupAssignment() (num map[string]int, host map[string]int) {
 	num = map[string]int{}
-	host = map[string]bool{}
+	host = map[string]int{}
 	n := 0
 	for _, g := range l.Groups {
 		if g.Role == GroupRoleAnimateur {
-			for _, ln := range g.Lights {
-				host[ln] = true
-			}
 			continue
 		}
 		n++
 		for _, ln := range g.Lights {
 			num[ln] = n
+		}
+	}
+	for _, h := range l.HostGroups() {
+		for _, ln := range h.Lights {
+			host[ln] = h.Rank
 		}
 	}
 	return num, host

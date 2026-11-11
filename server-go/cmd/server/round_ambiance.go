@@ -203,9 +203,22 @@ func ambianceEffectiveEqual(x, y ambiancecfg.Effective) bool {
 		}
 	}
 	for _, m := range ambiancecfg.Moments { // v11.7.0 (#223): effects and where they come from
-		if xs.LightEffects[m] != ys.LightEffects[m] || xs.LightHostEffects[m] != ys.LightHostEffects[m] ||
-			x.Sources.LightEffects[m] != y.Sources.LightEffects[m] || x.Sources.LightHostEffects[m] != y.Sources.LightHostEffects[m] {
+		if xs.LightEffects[m] != ys.LightEffects[m] || x.Sources.LightEffects[m] != y.Sources.LightEffects[m] {
 			return false
+		}
+	}
+	if len(xs.LightHostEffects) != len(ys.LightHostEffects) {
+		return false
+	}
+	for id, xm := range xs.LightHostEffects {
+		ym, ok := ys.LightHostEffects[id]
+		if !ok {
+			return false
+		}
+		for _, m := range ambiancecfg.Moments {
+			if xm[m] != ym[m] || x.Sources.LightHostEffects[id][m] != y.Sources.LightHostEffects[id][m] {
+				return false
+			}
 		}
 	}
 	xo, yo := x.Sources, y.Sources

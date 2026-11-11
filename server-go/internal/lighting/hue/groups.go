@@ -34,16 +34,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"buzzcontrol/internal/lighting"
 )
 
 const (
 	groupNameAmbiance = "buzzmaster-ambiance"
 	groupNameGeneral  = "buzzmaster-general"
 	groupNameTeamPfx  = "buzzmaster-team-"
-	groupNameHost     = "buzzmaster-general-host"
-	groupNameSubPfx   = "buzzmaster-general-" // + ambiance group number (v11.7.0, #225)
+	groupNameHostPfx  = "buzzmaster-general-host" // + animateur rank k (v11.7.0, light-effects.md §2.5)
+	groupNameSubPfx   = "buzzmaster-general-"     // + ambiance group number (v11.7.0, #225)
 )
 
 // SubGroupMinLights is the smallest ambiance group (or animateur group) that
@@ -56,7 +54,7 @@ const (
 	bucketGeneral  = ""
 	bucketTeamPfx  = "t:"
 	bucketGroupPfx = "g:"
-	bucketHost     = "host"
+	bucketHostPfx  = "h:"
 )
 
 // bucketGroupName maps an Apply bucket to its Hue group name and the minimum
@@ -65,8 +63,8 @@ func bucketGroupName(key string) (string, int) {
 	switch {
 	case key == bucketGeneral:
 		return groupNameGeneral, 2
-	case key == bucketHost:
-		return groupNameHost, SubGroupMinLights
+	case strings.HasPrefix(key, bucketHostPfx):
+		return groupNameHostPfx + strings.TrimPrefix(key, bucketHostPfx), SubGroupMinLights
 	case strings.HasPrefix(key, bucketGroupPfx):
 		return groupNameSubPfx + strings.TrimPrefix(key, bucketGroupPfx), SubGroupMinLights
 	default:
@@ -244,7 +242,7 @@ func desiredGroups(lights []LightSpec, resolved map[string]resolvedLight) map[st
 		} else {
 			// The animateur group never belongs to buzzmaster-general: a write
 			// to that group must not reach it (light-effects.md §2.5).
-			if lc.Group != lighting.GroupHost {
+			if lc.Group >= 0 {
 				general = append(general, rl.id)
 			}
 			if lc.Group != 0 {
@@ -256,8 +254,8 @@ func desiredGroups(lights []LightSpec, resolved map[string]resolvedLight) map[st
 		if len(ids) < SubGroupMinLights {
 			continue
 		}
-		if n == lighting.GroupHost {
-			out[groupNameHost] = sortedIDs(ids)
+		if n < 0 {
+			out[groupNameHostPfx+strconv.Itoa(-n)] = sortedIDs(ids)
 		} else {
 			out[groupNameSubPfx+strconv.Itoa(n)] = sortedIDs(ids)
 		}

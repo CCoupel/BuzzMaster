@@ -15,12 +15,13 @@ import (
 // an injected clock. They swap the config singleton, so none is parallel.
 
 type devEffectsSource struct {
-	cat        effects.Catalogue
-	room, host map[string]string
+	cat  effects.Catalogue
+	room map[string]string
+	host map[string]map[string]string
 }
 
 func (s devEffectsSource) EffectsCatalogue() effects.Catalogue { return s.cat }
-func (s devEffectsSource) EffectSettings() (map[string]string, map[string]string) {
+func (s devEffectsSource) EffectSettings() (map[string]string, map[string]map[string]string) {
 	return s.room, s.host
 }
 
@@ -67,7 +68,7 @@ func newDevRig(t *testing.T, groups []config.LightingGroupEntry) *devRig {
 		"tour.yaml": {Data: []byte(devShiftEffect)},
 	}
 	r := &devRig{c: c, now: time.Unix(1_700_000_000, 0)}
-	r.src = &devEffectsSource{cat: effects.LoadDir(fs, ""), room: map[string]string{}, host: map[string]string{}}
+	r.src = &devEffectsSource{cat: effects.LoadDir(fs, ""), room: map[string]string{}, host: map[string]map[string]string{}}
 	c.SetEffectsSource(r.src)
 	c.EffectsClock = func() time.Time { return r.now }
 	return r
@@ -155,26 +156,92 @@ func TestEffectsReader_Groups_RealNumbersEmptyGroupSkipped_Dev(t *testing.T) {
 	}
 }
 
-func TestEffectsReader_HostGroup_OwnEffect_IgnoresModeAndFlash_Dev(t *testing.T) {
-	r := newDevRig(t, []config.LightingGroupEntry{{Name: "Pupitre", Role: "animateur", Lights: []string{"h1"}}})
+func TestEffectsReader_HostGroups_EachOwnEffect_IgnoresModeAndFlash_Dev(t *testing.T) {
+	r := newDevRig(t, []config.LightingGroupEntry{
+		{ID: "p1", Name: "Pupitre", Role: "animateur", Lights: []string{"h1"}},
+		{ID: "p2", Name: "Régie", Role: "animateur", Lights: []string{"h2"}},
+	})
 	idle := lighting.Event{Kind: lighting.KindIdle}
-	if z, _ := zoneFor(r.c.Scene(idle), lighting.GroupHost); z.Color != [3]int{255, 255, 255} || z.Intensity != 255 {
-		t.Fatalf("blanc fixe par défaut : %+v", z)
+	for _, k := range []int{1, 2} {
+		if z, _ := zoneFor(r.c.Scene(idle), lighting.HostGroup(k)); z.Color != [3]int{255, 255, 255} || z.Intensity != 255 {
+			t.Fatalf("blanc fixe par défaut pour l'animateur %d : %+v", k, z)
+		}
 	}
-	r.src.host["calm"] = "fixe"
+	r.src.host["p1"] = map[string]string{"calm": "fixe"} // p2 has no entry: stays white
 	_ = r.c.SetLightingMode("OFF")
 	r.c.SetLightingFlash(true)
 	defer r.c.SetLightingFlash(false)
 	r.c.EffectsStep()
-	z, ok := zoneFor(r.c.Scene(idle), lighting.GroupHost)
-	if !ok || z.Color != [3]int{0x11, 0x22, 0x33} || z.Intensity != 128 {
-		t.Fatalf("l'effet du groupe animateur s'applique malgré OFF + Flash : %+v %v", z, ok)
+	st := r.c.Scene(idle)
+	z1, ok := zoneFor(st, lighting.HostGroup(1))
+	if !ok || z1.Color != [3]int{0x11, 0x22, 0x33} || z1.Intensity != 128 {
+		t.Fatalf("l'effet de l'animateur 1 s'applique malgré OFF + Flash : %+v %v", z1, ok)
 	}
-	// Unknown effect ⇒ fixed white again.
-	r.src.host["calm"] = "inconnu"
+	if z2, _ := zoneFor(st, lighting.HostGroup(2)); z2.Intensity != 255 {
+		t.Fatalf("l'animateur 2 n'est pas entraîné par l'effet du 1 : %+v", z2)
+	}
+	r.src.host["p1"]["calm"] = "inconnu"
 	r.c.EffectsStep()
-	if z, _ := zoneFor(r.c.Scene(idle), lighting.GroupHost); z.Intensity != 255 {
+	if z, _ := zoneFor(r.c.Scene(idle), lighting.HostGroup(1)); z.Intensity != 255 {
 		t.Fatalf("effet absent ⇒ blanc fixe : %+v", z)
+	}
+}
+
+func TestGroupTest_SequenceReplaceStopAndQuiesce_Dev(t *testing.T) {
+	r := newDevRig(t, []config.LightingGroupEntry{
+		{ID: "a", Name: "A", Role: "salle", Lights: []string{"l1"}},
+		{ID: "v", Name: "Vide", Role: "salle", Lights: []string{}},
+		{ID: "p1", Name: "Pupitre", Role: "animateur", Lights: []string{"h1"}},
+	})
+	defer r.c.StopGroupTest()
+	idle := lighting.Event{Kind: lighting.KindIdle}
+	for ref, want := range map[string]error{"9": ErrUnknownGroup, "host2": ErrUnknownGroup, "x": ErrUnknownGroup, "2": ErrEmptyGroup} {
+		if err := r.c.StartGroupTest(ref); err != want {
+			t.Fatalf("%q : %v, attendu %v", ref, err, want)
+		}
+	}
+	if r.c.GroupTestDurationMs() != 6000 {
+		t.Fatalf("6 pas d'1 s : %d", r.c.GroupTestDurationMs())
+	}
+	if err := r.c.StartGroupTest("1"); err != nil {
+		t.Fatal(err)
+	}
+	// Every step, in order, is visible through Scene() on the tested group only (clock injected).
+	want := [][3]int{{0, 0, 0}, {255, 255, 255}, {255, 255, 255}, {255, 0, 0}, {0, 255, 0}, {0, 0, 255}}
+	wantI := []int{0, 128, 255, 255, 255, 255}
+	for i := range want {
+		z, ok := zoneFor(r.c.Scene(idle), 1)
+		if !ok || z.Color != want[i] || z.Intensity != wantI[i] || z.TransitionMs != 0 {
+			t.Fatalf("pas %d : %+v", i+1, z)
+		}
+		if h, _ := zoneFor(r.c.Scene(idle), lighting.HostGroup(1)); h.Intensity != 255 {
+			t.Fatalf("pas %d : le groupe animateur n'est pas touché : %+v", i+1, h)
+		}
+		r.now = r.now.Add(time.Second)
+	}
+	if _, ok := zoneFor(r.c.Scene(idle), 1); ok || r.c.GroupTestRunning() {
+		t.Fatal("après 6 s : retour à l'état vivant")
+	}
+
+	// Replacement, on the animateur group too, then stop.
+	r.c.StartGroupTest("1")
+	r.c.StartGroupTest("host1")
+	st := r.c.Scene(idle)
+	if _, ok := zoneFor(st, 1); ok {
+		t.Fatal("le nouvel essai remplace l'ancien")
+	}
+	if z, _ := zoneFor(st, -1); z.Intensity != 0 {
+		t.Fatalf("pas 1 = éteint sur le groupe animateur : %+v", z)
+	}
+	r.c.StopGroupTest()
+	r.c.StopGroupTest() // harmless when nothing runs
+	if z, _ := zoneFor(r.c.Scene(idle), -1); z.Intensity != 255 {
+		t.Fatalf("après l'arrêt : blanc fixe : %+v", z)
+	}
+	r.c.StartGroupTest("1")
+	r.c.quiesceAmbiance()
+	if r.c.GroupTestRunning() {
+		t.Fatal("l'arrêt du serveur annule l'essai")
 	}
 }
 

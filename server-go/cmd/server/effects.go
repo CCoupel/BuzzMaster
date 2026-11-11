@@ -72,7 +72,7 @@ func (a *App) EffectExists(moment, id string) bool {
 
 // EffectSettings implements ambiance.EffectsSource: the RESOLVED effect id per moment
 // (global ← round) for the room and for the animateur group.
-func (a *App) EffectSettings() (room, host map[string]string) {
+func (a *App) EffectSettings() (room map[string]string, host map[string]map[string]string) {
 	s := a.ambianceSettings()
 	return s.LightEffects, s.LightHostEffects
 }

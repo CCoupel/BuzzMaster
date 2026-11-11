@@ -104,14 +104,23 @@ func TestConfig_LightingEffects_PartialPatchesMergeAndValidate_Dev(t *testing.T)
 	if eff["calm"] != "cal" || eff["chrono"] != "pul" || eff["score"] != "" {
 		t.Fatalf("un patch d'un moment n'écrase pas les autres : %+v", eff)
 	}
-	if code, out := devPostCfg(t, srv, `{"lighting":{"host_effects":{"calm":"cal"}}}`); code != 200 || config.Get().Lighting.HostEffects["calm"] != "cal" {
+	if code, out := devPostCfg(t, srv, `{"lighting":{"lights":[{"name":"H1","role":"general"}],"groups":[{"id":"p1","name":"Pupitre","role":"animateur","lights":["H1"]}]}}`); code != 200 {
+		t.Fatalf("groupe animateur : %d %s", code, out)
+	}
+	if code, out := devPostCfg(t, srv, `{"lighting":{"host_effects":{"p1":{"calm":"cal"},"ghost":{"calm":"cal"}}}}`); code != 200 || config.Get().Lighting.HostEffects["p1"]["calm"] != "cal" {
 		t.Fatalf("host_effects : %d %s", code, out)
+	}
+	if _, ok := config.Get().Lighting.HostEffects["ghost"]; ok {
+		t.Fatal("un id inconnu est écarté sans erreur")
+	}
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"host_effects":{"calm":"cal"}}}`); code != http.StatusBadRequest {
+		t.Fatal("l'ancienne forme plate n'est plus acceptée à l'écriture")
 	}
 	for name, body := range map[string]string{
 		"id inconnu":      `{"lighting":{"effects":{"calm":"nope"}}}`,
 		"mauvais moment":  `{"lighting":{"effects":{"calm":"pul"}}}`,
 		"moment inconnu":  `{"lighting":{"effects":{"zzz":""}}}`,
-		"hôte id inconnu": `{"lighting":{"host_effects":{"score":"nope"}}}`,
+		"hôte id inconnu": `{"lighting":{"host_effects":{"p1":{"score":"nope"}}}}`,
 	} {
 		if code, _ := devPostCfg(t, srv, body); code != http.StatusBadRequest {
 			t.Errorf("%s : 400 attendu, obtenu %d", name, code)
@@ -119,6 +128,10 @@ func TestConfig_LightingEffects_PartialPatchesMergeAndValidate_Dev(t *testing.T)
 	}
 	if config.Get().Lighting.Effects["calm"] != "cal" {
 		t.Fatal("un refus ne modifie rien")
+	}
+	// Deleting the group purges its effects.
+	if code, _ := devPostCfg(t, srv, `{"lighting":{"groups":[]}}`); code != 200 || len(config.Get().Lighting.HostEffects) != 0 {
+		t.Fatalf("la purge suit la suppression du groupe : %+v", config.Get().Lighting.HostEffects)
 	}
 	// "" clears back to the default of the moment's "no effect".
 	if code, _ := devPostCfg(t, srv, `{"lighting":{"effects":{"calm":""}}}`); code != 200 || config.Get().Lighting.Effects["calm"] != "" {

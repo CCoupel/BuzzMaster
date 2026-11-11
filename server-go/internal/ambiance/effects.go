@@ -29,16 +29,17 @@ type EffectsSource interface {
 	EffectsCatalogue() effects.Catalogue
 	// EffectSettings returns the resolved effect id per moment for the room and for the
 	// animateur group (ambiancecfg Settings.LightEffects / LightHostEffects).
-	EffectSettings() (room, host map[string]string)
+	// host is a table by animateur group id, then moment.
+	EffectSettings() (room map[string]string, host map[string]map[string]string)
 }
 
 // effectFrames is the published result of one reader step.
 type effectFrames struct {
 	moment   effects.Moment
-	room     effects.Frame // nil = no room effect (ordinary scene)
-	roomAll  bool          // target: all — one state for the whole zone
-	roomNums []int         // real group numbers of the frame entries (target: groups)
-	host     effects.Frame // nil = fixed white
+	room     effects.Frame         // nil = no room effect (ordinary scene)
+	roomAll  bool                  // target: all — one state for the whole zone
+	roomNums []int                 // real group numbers of the frame entries (target: groups)
+	host     map[int]effects.Frame // by animateur rank k; a missing rank = fixed white
 }
 
 type effectRun struct {
@@ -50,7 +51,7 @@ type effectRun struct {
 type effectsState struct {
 	mu    sync.Mutex
 	room  effectRun
-	host  effectRun
+	host  map[int]*effectRun // by animateur rank
 	score struct {
 		start time.Time
 		team  string
@@ -199,7 +200,8 @@ func (c *Controller) computeFrames() *effectFrames {
 	moment, scoreStart, scoreTeam, ok := c.liveMoment(ev, state, now)
 	if !ok {
 		c.effects.mu.Lock()
-		c.effects.room.key, c.effects.host.key = "", ""
+		c.effects.room.key = ""
+		c.effects.host = nil
 		c.effects.mu.Unlock()
 		return nil
 	}
@@ -260,30 +262,54 @@ func (c *Controller) computeFrames() *effectFrames {
 		c.effects.room.key = ""
 	}
 
-	// Animateur group: independent of mode, Flash and trial (§2.5, §5.3).
-	if g, ok := lc.HostGroup(); ok && len(g.Lights) > 0 {
-		if en, ok := resolveEffect(cat, hostSet[string(moment)], moment, 1); ok {
-			key := string(moment) + "|" + en.Effect.ID + "|" + itoa(cat.Generation)
-			if moment == effects.MomentScore {
-				key += "|" + scoreStart.String()
+	// Animateur groups: each independent of the others, of mode, Flash and trial (§2.5, §5.3).
+	live := map[int]bool{}
+	for _, g := range lc.HostGroups() {
+		if len(g.Lights) == 0 {
+			continue
+		}
+		live[g.Rank] = true
+		en, ok := resolveEffect(cat, hostSet[g.ID][string(moment)], moment, 1)
+		if !ok {
+			delete(c.effects.host, g.Rank)
+			continue
+		}
+		if c.effects.host == nil {
+			c.effects.host = map[int]*effectRun{}
+		}
+		run := c.effects.host[g.Rank]
+		if run == nil {
+			run = &effectRun{}
+			c.effects.host[g.Rank] = run
+		}
+		key := string(moment) + "|" + en.Effect.ID + "|" + itoa(cat.Generation)
+		if moment == effects.MomentScore {
+			key += "|" + scoreStart.String()
+		}
+		start := runFor(run, key, now)
+		elapsed := now.Sub(start)
+		if moment == effects.MomentScore {
+			elapsed = now.Sub(scoreStart)
+		}
+		if en.Effect.DurationMs != 0 && elapsed >= time.Duration(en.Effect.DurationMs)*time.Millisecond {
+			continue
+		}
+		hctx := ctx
+		hctx.Groups = 1
+		hctx.Scene = [3]int{255, 255, 255} // "scene" is white for an animateur group (§2.5)
+		hctx.Seed = start.UnixMilli()
+		hctx.Origin = 1
+		if f := effects.Render(en.Effect, hctx, elapsed); f != nil {
+			if out.host == nil {
+				out.host = map[int]effects.Frame{}
 			}
-			start := runFor(&c.effects.host, key, now)
-			elapsed := now.Sub(start)
-			if moment == effects.MomentScore {
-				elapsed = now.Sub(scoreStart)
-			}
-			if en.Effect.DurationMs == 0 || elapsed < time.Duration(en.Effect.DurationMs)*time.Millisecond {
-				hctx := ctx
-				hctx.Groups = 1
-				hctx.Scene = [3]int{255, 255, 255} // "scene" is white for this group (§2.5)
-				hctx.Seed = start.UnixMilli()
-				hctx.Origin = 1
-				out.host = effects.Render(en.Effect, hctx, elapsed)
-			}
+			out.host[g.Rank] = f
 		}
 	}
-	if out.host == nil {
-		c.effects.host.key = ""
+	for rank := range c.effects.host { // a group that disappeared drops its run
+		if !live[rank] {
+			delete(c.effects.host, rank)
+		}
 	}
 	if out.room == nil && out.host == nil {
 		return nil
@@ -352,14 +378,18 @@ func (c *Controller) applyEffectFrames(ev lighting.Event, zones []lighting.ZoneS
 }
 
 // hostEffectState returns the published animateur frame for ev's moment, if any.
-func (c *Controller) hostEffectState(ev lighting.Event) (lighting.ZoneState, bool) {
+func (c *Controller) hostEffectState(ev lighting.Event, rank int) (lighting.ZoneState, bool) {
 	fr := c.effectFrames.Load()
 	if fr == nil || fr.host == nil || fr.moment != momentOfEvent(ev.Kind) {
 		return lighting.ZoneState{}, false
 	}
-	g := fr.host[0]
+	f, ok := fr.host[rank]
+	if !ok || len(f) == 0 {
+		return lighting.ZoneState{}, false
+	}
+	g := f[0]
 	if g.Absent {
 		return lighting.ZoneState{}, false
 	}
-	return lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: lighting.GroupHost, Color: g.Color, Intensity: g.Intensity, TransitionMs: g.FadeMs}, true
+	return lighting.ZoneState{Zone: lighting.ZoneGeneral, Group: lighting.HostGroup(rank), Color: g.Color, Intensity: g.Intensity, TransitionMs: g.FadeMs}, true
 }

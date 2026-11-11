@@ -8,13 +8,13 @@ import (
 
 func TestLightEffects_ResolveSourcesJSONAndValidation_Dev(t *testing.T) {
 	t.Parallel()
-	g := Settings{CuesEnabled: map[string]bool{}, LightMode: LightAuto, LightEffects: DefaultLightEffects(), LightHostEffects: DefaultLightHostEffects()}
-	round := Partial{LightEffects: map[string]string{"calm": "vague-lente"}, LightHostEffects: map[string]string{"score": "couleur-equipe"}}
+	g := Settings{CuesEnabled: map[string]bool{}, LightMode: LightAuto, LightEffects: DefaultLightEffects(), LightHostEffects: map[string]map[string]string{"g1": DefaultHostMoments(), "g2": DefaultHostMoments()}}
+	round := Partial{LightEffects: map[string]string{"calm": "vague-lente"}, LightHostEffects: map[string]map[string]string{"g1": {"score": "couleur-equipe"}, "ghost": {"calm": "x"}}}
 	eff, src := Resolve(g, round)
-	if eff.LightEffects["calm"] != "vague-lente" || eff.LightEffects["chrono"] != "pulsation" || eff.LightHostEffects["score"] != "couleur-equipe" {
+	if eff.LightEffects["calm"] != "vague-lente" || eff.LightEffects["chrono"] != "pulsation" || eff.LightHostEffects["g1"]["score"] != "couleur-equipe" || eff.LightHostEffects["g2"]["score"] != "" {
 		t.Fatalf("surcharge manche par moment : %+v", eff)
 	}
-	if src.LightEffects["calm"] != SourceRound || src.LightEffects["chrono"] != SourceGlobal || src.LightHostEffects["score"] != SourceRound {
+	if src.LightEffects["calm"] != SourceRound || src.LightEffects["chrono"] != SourceGlobal || src.LightHostEffects["g1"]["score"] != SourceRound || src.LightHostEffects["g2"]["score"] != SourceGlobal {
 		t.Fatalf("sources : %+v", src)
 	}
 	if g.LightEffects["calm"] != "" {
@@ -22,8 +22,8 @@ func TestLightEffects_ResolveSourcesJSONAndValidation_Dev(t *testing.T) {
 	}
 
 	// Complete form always carries the three moments, never omitted.
-	raw, _ := json.Marshal(Settings{CuesEnabled: map[string]bool{}, LightMode: LightAuto})
-	for _, want := range []string{`"effects":{"calm":"","chrono":"pulsation","score":""}`, `"host_effects":{"calm":"","chrono":"","score":""}`} {
+	raw, _ := json.Marshal(Settings{CuesEnabled: map[string]bool{}, LightMode: LightAuto, LightHostEffects: map[string]map[string]string{"g1": {"score": "x"}}})
+	for _, want := range []string{`"effects":{"calm":"","chrono":"pulsation","score":""}`, `"host_effects":{"g1":{"calm":"","chrono":"","score":"x"}}`} {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("%s absent de %s", want, raw)
 		}
@@ -40,13 +40,19 @@ func TestLightEffects_ResolveSourcesJSONAndValidation_Dev(t *testing.T) {
 		"moment inconnu":   `{"light":{"effects":{"nuit":"x"}}}`,
 		"valeur non texte": `{"light":{"effects":{"calm":3}}}`,
 		"clé inconnue":     `{"light":{"effect":{}}}`,
+		"hôte moment":      `{"light":{"host_effects":{"g1":{"nuit":"x"}}}}`,
 	} {
 		if bad := ValidateRaw([]byte(body), nil); len(bad) == 0 {
 			t.Errorf("%s : refus attendu", name)
 		}
 	}
-	if bad := ValidateRaw([]byte(`{"light":{"effects":{"calm":"x"},"host_effects":{"score":""}}}`), nil); len(bad) != 0 {
-		t.Fatalf("forme valide refusée : %v", bad)
+	if bad := ValidateRaw([]byte(`{"light":{"effects":{"calm":"x"},"host_effects":{"g1":{"score":""},"inconnu":{"calm":"y"}}}}`), nil); len(bad) != 0 {
+		t.Fatalf("forme valide refusée (id inconnu toléré) : %v", bad)
+	}
+	// The old flat form is read as nothing, never an error.
+	var legacy Partial
+	if err := json.Unmarshal([]byte(`{"light":{"host_effects":{"chrono":"","calm":"x","score":""}}}`), &legacy); err != nil || len(legacy.LightHostEffects) != 0 {
+		t.Fatalf("ancienne forme plate ignorée : %v %+v", err, legacy)
 	}
 	// Catalogue check.
 	p := Partial{LightEffects: map[string]string{"calm": "ok", "score": "ko", "chrono": ""}}

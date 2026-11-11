@@ -104,6 +104,11 @@ type Controller struct {
 	effectsQuiet   atomic.Bool
 	effectFrames   atomic.Pointer[effectFrames]
 	effects        effectsState
+
+	// Group test sequence (v11.7.0, #225, grouptest.go). GroupTestStep is injectable per
+	// instance (0 = 1 s).
+	GroupTestStep time.Duration
+	groupTest     groupTestRuntime
 }
 
 // New builds a Controller over the given Host.
@@ -154,8 +159,8 @@ func (c *Controller) BuildHueDriverOpt(requireEnabled bool) *hue.Driver {
 		spec := hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team}
 		if l.Role != string(hue.RoleTeam) {
 			switch {
-			case hostLights[l.Name]:
-				spec.Group = lighting.GroupHost
+			case hostLights[l.Name] > 0:
+				spec.Group = lighting.HostGroup(hostLights[l.Name])
 			default:
 				spec.Group = groupNum[l.Name]
 			}
@@ -853,22 +858,26 @@ func (c *Controller) Scene(ev lighting.Event) lighting.State {
 			Intensity: teamIntensity,
 		})
 	}
-	// v11.7.0 (#225, light-effects.md §2.5): the animateur group shows a fixed
-	// white, whatever the game does — emitted AFTER the override above, which
-	// never touches it (ON / OFF / Flash / pulse act on the room only). Only
-	// the master switch and the shutdown extinction turn it off.
-	if g, ok := config.Get().Lighting.HostGroup(); ok && len(g.Lights) > 0 {
+	// v11.7.0 (#225, light-effects.md §2.5): every animateur group shows a fixed white,
+	// whatever the game does — emitted AFTER the override above, which never touches it
+	// (ON / OFF / Flash / pulse act on the room only) — unless its own effect is live
+	// (effects.go). Only the master switch and the shutdown extinction turn it off.
+	for _, g := range config.Get().Lighting.HostGroups() {
+		if len(g.Lights) == 0 {
+			continue
+		}
 		host := lighting.ZoneState{
 			Zone:      lighting.ZoneGeneral,
-			Group:     lighting.GroupHost,
+			Group:     lighting.HostGroup(g.Rank),
 			Color:     [3]int{255, 255, 255},
 			Intensity: 255,
 		}
-		if hz, ok := c.hostEffectState(ev); ok { // #223: the animateur group's own effect, else fixed white
+		if hz, ok := c.hostEffectState(ev, g.Rank); ok {
 			host = hz
 		}
 		zones = append(zones, host)
 	}
+	zones = c.applyGroupTest(zones) // #225 §2.4: the test sequence of one group, over everything else
 	return lighting.State{Zones: zones}
 }
 

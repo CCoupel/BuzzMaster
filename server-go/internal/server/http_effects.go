@@ -55,6 +55,8 @@ type unresolvedJSON struct {
 	ID     string `json:"id"`
 	Scope  string `json:"scope"`
 	Host   bool   `json:"host"`
+	// Group is the id of the animateur group the setting belongs to ("" for the room).
+	Group string `json:"group,omitempty"`
 }
 
 // roomGroupCount is N: the number of non-empty salle groups (§2.1).
@@ -102,7 +104,7 @@ func (h *HTTPServer) effectsView() map[string]any {
 		errs = []effects.Error{}
 	}
 	unresolved := []unresolvedJSON{}
-	check := func(set map[string]string, host bool) {
+	check := func(set map[string]string, host bool, group string) {
 		for _, m := range ambiancecfg.Moments {
 			id := set[m]
 			if id == "" {
@@ -118,12 +120,14 @@ func (h *HTTPServer) effectsView() map[string]any {
 				}
 			}
 			if bad {
-				unresolved = append(unresolved, unresolvedJSON{Moment: m, ID: id, Scope: "global", Host: host})
+				unresolved = append(unresolved, unresolvedJSON{Moment: m, ID: id, Scope: "global", Host: host, Group: group})
 			}
 		}
 	}
-	check(lc.Effects, false)
-	check(lc.HostEffects, true)
+	check(lc.Effects, false, "")
+	for _, g := range lc.HostGroups() { // one table per animateur group
+		check(lc.HostEffects[g.ID], true, g.ID)
+	}
 	if dir != "" {
 		dir = filepath.ToSlash(dir)
 	}

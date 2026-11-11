@@ -13,6 +13,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -361,8 +362,8 @@ func (h *HTTPServer) handleLightingLights(w http.ResponseWriter, r *http.Request
 		n := hue.NormalizeLightName(l.Name)
 		var g any = 0
 		switch {
-		case host[n]:
-			g = "host"
+		case host[n] > 0:
+			g = "host" + strconv.Itoa(host[n])
 		case num[n] > 0:
 			g = num[n]
 		}
@@ -371,12 +372,31 @@ func (h *HTTPServer) handleLightingLights(w http.ResponseWriter, r *http.Request
 	writeLightingJSON(w, http.StatusOK, map[string]any{"lights": out})
 }
 
-// handleLightingGroupTest — POST /api/lighting/groups/test {"group": n|"host"}
-// (v11.7.0, #225, light-effects.md §2.4): white blink of the group's bulbs,
-// then the live state is restored. 400 unknown/empty/missing group, 409
-// lighting off or bridge refused, 429 a test already in progress, 503 bridge
-// unreachable, 500 other (same shapes as /api/lighting/test, via
-// writeLightingError).
+// GroupTester is optionally implemented by the LightingProvider (the App): the group test
+// sequence of light-effects.md §2.4, carried by the ambiance controller.
+type GroupTester interface {
+	// StartGroupTest starts the six-step sequence on the group ref ("2" salle, "host1"
+	// animateur), replacing a running one; an error for an unknown or empty group.
+	StartGroupTest(ref string) error
+	// GroupTestDurationMs is the total duration of a sequence.
+	GroupTestDurationMs() int
+	// StopGroupTest stops it; harmless when none runs.
+	StopGroupTest()
+}
+
+func (h *HTTPServer) groupTester() GroupTester {
+	if h.Lighting == nil {
+		return nil
+	}
+	gt, _ := h.Lighting.(GroupTester)
+	return gt
+}
+
+// handleLightingGroupTest — POST /api/lighting/groups/test {"group": n | "host<k>"}
+// (v11.7.0, #225, light-effects.md §2.4): starts the six-step visible sequence on the
+// group and answers at once {"ok":true,"duration_ms":6000}. A new call replaces a running
+// test. 400 unknown/empty/missing group, 409 lighting off or key refused, 503 bridge
+// unreachable (driver state, no I/O) — same shapes as /api/lighting/test.
 func (h *HTTPServer) handleLightingGroupTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -387,62 +407,56 @@ func (h *HTTPServer) handleLightingGroupTest(w http.ResponseWriter, r *http.Requ
 		Group json.RawMessage `json:"group"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Group) == 0 {
-		http.Error(w, "group attendu : numéro de groupe ou \"host\"", http.StatusBadRequest)
+		http.Error(w, "group attendu : numéro de groupe ou \"host<k>\"", http.StatusBadRequest)
 		return
 	}
-	lc := config.Get().Lighting
-	var names []string
-	var hostName string
-	if json.Unmarshal(req.Group, &hostName) == nil {
-		g, ok := lc.HostGroup()
-		if hostName != "host" || !ok {
-			http.Error(w, "groupe inconnu", http.StatusBadRequest)
-			return
-		}
-		names = g.Lights
-	} else {
-		var n int
-		if json.Unmarshal(req.Group, &n) != nil || n < 1 {
-			http.Error(w, "groupe inconnu", http.StatusBadRequest)
-			return
-		}
-		rank := 0
-		found := false
-		for _, g := range lc.Groups {
-			if g.Role == config.GroupRoleAnimateur {
-				continue
-			}
-			rank++
-			if rank == n {
-				names, found = g.Lights, true
-				break
-			}
-		}
-		if !found {
-			http.Error(w, "groupe inconnu", http.StatusBadRequest)
-			return
-		}
-	}
-	if len(names) == 0 {
-		http.Error(w, "groupe vide", http.StatusBadRequest)
+	var ref string
+	var tag string
+	var n int
+	switch {
+	case json.Unmarshal(req.Group, &tag) == nil:
+		ref = tag
+	case json.Unmarshal(req.Group, &n) == nil:
+		ref = strconv.Itoa(n)
+	default:
+		http.Error(w, "groupe inconnu", http.StatusBadRequest)
 		return
 	}
-	d := h.lightingDriver()
-	if d == nil {
+	d, gt := h.lightingDriver(), h.groupTester()
+	if gc, ok := gt.(interface{ CheckGroup(ref string) error }); ok { // 400 first: an unknown or empty group is a request error, whatever the bridge says
+		if err := gc.CheckGroup(ref); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	if d == nil || gt == nil {
 		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "not_configured"})
 		return
 	}
-	release, ok := lightingBusy.acquire(&lightingBusy.test)
-	if !ok {
-		writeLightingJSON(w, http.StatusTooManyRequests, map[string]string{"result": "busy", "reason": "test_in_progress"})
+	switch d.Status().State {
+	case hue.StateRefused:
+		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "api_key_refused"})
+		return
+	case hue.StateUnreachable:
+		writeLightingJSON(w, http.StatusServiceUnavailable, map[string]string{"result": "unreachable"})
 		return
 	}
-	defer release()
-	ctx, cancel := context.WithTimeout(r.Context(), lightingRequestTimeout)
-	defer cancel()
-	if err := d.TestFlashLights(ctx, names, lightingTestFlashHold, nil); err != nil {
-		writeLightingError(w, err)
+	if err := gt.StartGroupTest(ref); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest) // unknown or empty group
 		return
+	}
+	writeLightingJSON(w, http.StatusOK, map[string]any{"ok": true, "duration_ms": gt.GroupTestDurationMs()})
+}
+
+// handleLightingGroupTestStop — POST /api/lighting/groups/test/stop: stops the running
+// group test and gives the group back its live state. 200 {"ok":true} even when none runs.
+func (h *HTTPServer) handleLightingGroupTestStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if gt := h.groupTester(); gt != nil {
+		gt.StopGroupTest()
 	}
 	writeLightingJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

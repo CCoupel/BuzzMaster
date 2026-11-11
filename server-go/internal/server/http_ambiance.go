@@ -63,14 +63,22 @@ func AmbianceFromConfig(cfg *config.Config) ambiancecfg.Settings {
 		s.LightMode = m
 	}
 	// v11.7.0 (#223): the per-moment effects, missing keys taking the default of the moment.
-	s.LightEffects, s.LightHostEffects = ambiancecfg.DefaultLightEffects(), ambiancecfg.DefaultLightHostEffects()
+	s.LightEffects, s.LightHostEffects = ambiancecfg.DefaultLightEffects(), map[string]map[string]string{}
 	for _, m := range ambiancecfg.Moments {
 		if v, ok := cfg.Lighting.Effects[m]; ok {
 			s.LightEffects[m] = v
 		}
-		if v, ok := cfg.Lighting.HostEffects[m]; ok {
-			s.LightHostEffects[m] = v
+	}
+	// One entry per existing animateur group (ids of deleted groups are ignored), the
+	// three moments always present.
+	for _, g := range cfg.Lighting.HostGroups() {
+		moments := ambiancecfg.DefaultHostMoments()
+		for _, m := range ambiancecfg.Moments {
+			if v, ok := cfg.Lighting.HostEffects[g.ID][m]; ok {
+				moments[m] = v
+			}
 		}
+		s.LightHostEffects[g.ID] = moments
 	}
 	return s
 }

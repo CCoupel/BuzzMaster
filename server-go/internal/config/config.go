@@ -96,8 +96,31 @@ type LightingConfig struct {
 	// moment (chrono, calm, score) for the room and for the animateur group. Read ONLY
 	// through the ambiance adapter (server.AmbianceFromConfig). Absent keys take the
 	// default of the moment (chrono → "pulsation", else "").
-	Effects     map[string]string `json:"effects"`
-	HostEffects map[string]string `json:"host_effects"`
+	Effects map[string]string `json:"effects"`
+	// HostEffects is a table by animateur group id, then moment (light-effects.md §6). The
+	// old flat form {chrono, calm, score} of a QUALIF config.json is ignored on reading.
+	HostEffects HostEffectsTable `json:"host_effects"`
+}
+
+// HostEffectsTable is lighting.host_effects: group id → moment → effect id.
+type HostEffectsTable map[string]map[string]string
+
+// UnmarshalJSON is tolerant: an entry that is not an object (old flat form) is dropped.
+func (h *HostEffectsTable) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		*h = nil
+		return nil
+	}
+	out := make(HostEffectsTable, len(raw))
+	for id, v := range raw {
+		var m map[string]string
+		if json.Unmarshal(v, &m) == nil {
+			out[id] = m
+		}
+	}
+	*h = out
+	return nil
 }
 
 // Lighting group roles (contracts/light-effects.md §2.1).
@@ -106,11 +129,11 @@ const (
 	GroupRoleAnimateur = "animateur"
 )
 
-// MaxLightingGroups is the cap on ambiance groups (§2.1: "plus de 12 groupes").
-const MaxLightingGroups = 12
-
 // LightingGroupEntry is one ambiance group. Role "" means "salle".
 type LightingGroupEntry struct {
+	// ID is the stable identifier of the group (light-effects.md §2.1): assigned by the
+	// server when absent, the key of the animateur groups' effects.
+	ID   string `json:"id"`
 	Name      string   `json:"name"`
 	Role      string   `json:"role"`
 	Lights    []string `json:"lights"`
@@ -502,8 +525,11 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.Lighting.Groups == nil {
 		cfg.Lighting.Groups = []LightingGroupEntry{}
 	}
+	AssignGroupIDs(cfg.Lighting.Groups)
 	cfg.Lighting.Effects = fillMoments(cfg.Lighting.Effects, map[string]string{"chrono": "pulsation", "calm": "", "score": ""})
-	cfg.Lighting.HostEffects = fillMoments(cfg.Lighting.HostEffects, map[string]string{"chrono": "", "calm": "", "score": ""})
+	if cfg.Lighting.HostEffects == nil {
+		cfg.Lighting.HostEffects = HostEffectsTable{}
+	}
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}
 	}

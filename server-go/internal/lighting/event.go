@@ -74,8 +74,11 @@ type ZoneState struct {
 	Group int
 }
 
-// GroupHost addresses the animateur ambiance group (light-effects.md §2.5):
-// {Zone: ZoneGeneral, Group: GroupHost}.
+// HostGroup is the state address of the animateur group of rank k (A1, A2…):
+// {Zone: ZoneGeneral, Group: HostGroup(k)} = -k (light-effects.md §2.2, §2.5).
+func HostGroup(k int) int { return -k }
+
+// GroupHost is the address of the first animateur group (A1).
 const GroupHost = -1
 
 // ZoneGeneral is the single zone name used by #205.

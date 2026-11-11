@@ -492,6 +492,7 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/lighting/lights", h.handleLightingLights)
 	h.mux.HandleFunc("/api/lighting/test", h.handleLightingTest)
 	h.mux.HandleFunc("/api/lighting/groups/test", h.handleLightingGroupTest)
+	h.mux.HandleFunc("/api/lighting/groups/test/stop", h.handleLightingGroupTestStop)
 	h.mux.HandleFunc("/api/lighting/effects", h.handleLightingEffects)
 	h.mux.HandleFunc("/api/lighting/effects/reload", h.handleLightingEffectsReload)
 	h.mux.HandleFunc("/api/lighting/preview", h.handleLightingPreview)
@@ -2203,41 +2204,89 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 				}
 				cfg.Lighting.Groups = groups
 			}
+			// Saving the groups purges the effects of animateur groups that no longer exist
+			// (light-effects.md §6): an id dies with its group.
+			if _, gok := lRaw["groups"]; gok {
+				live := map[string]bool{}
+				for _, g := range cfg.Lighting.HostGroups() {
+					live[g.ID] = true
+				}
+				for gid := range cfg.Lighting.HostEffects {
+					if !live[gid] {
+						delete(cfg.Lighting.HostEffects, gid)
+					}
+				}
+			}
 			// v11.7.0, #223 (light-effects.md §6): per-moment effect, PARTIAL patches — the
 			// front writes one moment at a time, so the incoming keys are merged over the
 			// stored ones, never replacing the other moments.
-			for _, ek := range []struct {
-				key      string
-				in       map[string]string
-				dst      *map[string]string
-				host     bool
-				defaults map[string]string
-			}{
-				{"effects", incoming.Effects, &cfg.Lighting.Effects, false, ambiancecfg.DefaultLightEffects()},
-				{"host_effects", incoming.HostEffects, &cfg.Lighting.HostEffects, true, ambiancecfg.DefaultLightHostEffects()},
-			} {
-				if _, ok := lRaw[ek.key]; !ok {
-					continue
-				}
-				merged := make(map[string]string, len(ek.defaults))
-				for m, v := range ek.defaults {
+			if _, ok := lRaw["effects"]; ok {
+				merged := ambiancecfg.DefaultLightEffects()
+				for m, v := range cfg.Lighting.Effects {
 					merged[m] = v
 				}
-				for m, v := range *ek.dst {
-					merged[m] = v
-				}
-				for m, id := range ek.in {
+				for m, id := range incoming.Effects {
 					if !ambiancecfg.ValidMoment(m) {
-						http.Error(w, "lighting."+ek.key+" : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
+						http.Error(w, "lighting.effects : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
 						return
 					}
 					if id != "" && !h.effectExists(m, id) {
-						http.Error(w, "lighting."+ek.key+"."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
+						http.Error(w, "lighting.effects."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
 						return
 					}
 					merged[m] = id
 				}
-				*ek.dst = merged
+				cfg.Lighting.Effects = merged
+			}
+			// host_effects: a table by animateur group id, PATCH-merged group by group and
+			// moment by moment (the front writes one moment at a time). The old flat form
+			// is refused; an id that is not an animateur group is dropped without error.
+			if rawHost, ok := lRaw["host_effects"]; ok {
+				var probe map[string]json.RawMessage
+				if json.Unmarshal(rawHost, &probe) != nil {
+					http.Error(w, "lighting.host_effects : table par identifiant de groupe animateur attendue", http.StatusBadRequest)
+					return
+				}
+				for gid, v := range probe {
+					var obj map[string]json.RawMessage
+					if json.Unmarshal(v, &obj) != nil || obj == nil {
+						http.Error(w, "lighting.host_effects : « "+gid+" » doit être un objet {chrono, calm, score} (l'ancienne forme à plat n'est plus acceptée)", http.StatusBadRequest)
+						return
+					}
+				}
+				live := map[string]bool{}
+				for _, g := range cfg.Lighting.HostGroups() {
+					live[g.ID] = true
+				}
+				merged := config.HostEffectsTable{}
+				for gid, mm := range cfg.Lighting.HostEffects {
+					if live[gid] {
+						merged[gid] = map[string]string{}
+						for m, v := range mm {
+							merged[gid][m] = v
+						}
+					}
+				}
+				for gid, mm := range incoming.HostEffects {
+					if !live[gid] {
+						continue
+					}
+					for m, id := range mm {
+						if !ambiancecfg.ValidMoment(m) {
+							http.Error(w, "lighting.host_effects : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
+							return
+						}
+						if id != "" && !h.effectExists(m, id) {
+							http.Error(w, "lighting.host_effects."+gid+"."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
+							return
+						}
+						if merged[gid] == nil {
+							merged[gid] = map[string]string{}
+						}
+						merged[gid][m] = id
+					}
+				}
+				cfg.Lighting.HostEffects = merged
 			}
 			// The secret: absent or empty preserves, clear_api_key erases,
 			// a non-empty value replaces. Derived/request-only flags never persist.
