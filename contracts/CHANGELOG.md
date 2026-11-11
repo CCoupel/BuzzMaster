@@ -1,6 +1,18 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — applicabilité d'un effet `target: all` (#223, LOT-2)
+
+- **[CHANGED]** `light-effects.md` §4.6 — levée d'une ambiguïté (remontée par `test-writer`) : un effet `target: all` est
+  **toujours applicable**, même sans aucun groupe (N = 0) ; il écrit un seul état sur la zone générale entière
+  (`Group 0`). `min_groups` ne concerne que `target: groups` (absent ou 1 avec `target: all`, sinon erreur de validation) ;
+  `target: all` n'accepte que le motif `uniform`. Non-régression v11.6.0 : `pulsation` jouée sans groupe.
+- **[CHANGED]** Groupe animateur (§2.5, §9) : un effet `target: all` lui est toujours applicable ; `target: groups` si
+  `min_groups` ≤ 1. `couleur-equipe` devient `target: all` (jouable en salle sans groupe).
+- **[CHANGED]** `GET /api/lighting/effects` (§7.1) — champs additifs `target` et `host_applicable` ; `min_groups` = 0 pour
+  un effet `target: all`.
+
+---
 ## [20261111] — v11.7.0 — nommage des clés d'effet figé avant le LOT-2 (#223)
 
 - **[CHANGED]** Précision, sans changement de comportement : `light-effects.md` §2.5 écrivait `light.host_effects` et

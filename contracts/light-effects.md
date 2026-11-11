@@ -100,7 +100,8 @@ Un groupe de rôle `animateur` éclaire l'animateur (pupitre, régie). Il rempla
   le modèle de réglages (manche, API, état de jeu), `lighting.host_effects.{chrono,calm,score}` dans `config.json` pour la
   valeur globale ; global et par manche.
   `""` = blanc fixe. L'effet est rendu par le même séquenceur, **sur ce seul groupe** (N = 1) : un effet dont
-  `min_groups` > 1 est inapplicable au groupe animateur et reste grisé dans ses sélecteurs. La couleur `scene` vaut blanc
+  `target` vaut `groups` et `min_groups` > 1 est inapplicable au groupe animateur et reste grisé dans ses sélecteurs ; un
+  effet `target: all` lui est toujours applicable (§4.6). La couleur `scene` vaut blanc
   pour ce groupe. Effet absent, invalide ou inapplicable ⇒ blanc fixe.
 - **Pilote** : `LightSpec.Group = GroupHost` ; groupe Hue `buzzmaster-general-host` à partir de `SubGroupMinLights`
   ampoules, écriture par ampoule en dessous. Une ampoule du groupe animateur ne reçoit jamais l'entrée `Group 0`.
@@ -181,7 +182,7 @@ description: >            # texte du catalogue (500 caractères au plus)
 version: 1                # version du schéma ; seule la valeur 1 est acceptée
 moments: [chrono]         # moments où l'effet est proposé : chrono, calm, score
 target: groups            # groups = un état par groupe ; all = un seul état pour toute la zone générale
-min_groups: 3             # en dessous, l'effet est inapplicable (repli, §4.6) ; défaut 1
+min_groups: 3             # target: groups seulement — en dessous, l'effet est inapplicable (§4.6) ; défaut 1
 duration_ms: 0            # 0 = dure autant que le moment ; > 0 = s'arrête seul (obligatoire pour score)
 
 looks:                    # apparences nommées, utilisées par les motifs
@@ -254,8 +255,21 @@ Conditions (`when`) : `remaining_lte: <secondes>`, `remaining_gt: <secondes>`, `
 
 ### 4.6 Applicabilité et repli
 
-Un effet est **inapplicable** si N < `min_groups`, ou si `target: groups` et N = 0. Le moment joue alors sa valeur par
-défaut (§3.3). Le catalogue et le sélecteur l'indiquent (« demande 3 groupes, 2 configurés »).
+L'applicabilité dépend de `target` *(amendement du 2026-11-11, LOT-2)* :
+
+| `target` | Salle (N = groupes de salle non vides) | Groupe animateur |
+|---|---|---|
+| `all` | **Toujours applicable, même avec N = 0.** L'effet produit un seul état, écrit sur la zone générale entière (`ZoneState{Zone:"general", Group:0}`) : il ne dépend pas des groupes. | Toujours applicable (un seul état, écrit sur `GroupHost`). |
+| `groups` | Applicable si N ≥ `min_groups` (défaut 1, donc jamais avec N = 0). | Applicable si `min_groups` ≤ 1 (rendu avec N = 1). |
+
+- **`min_groups` ne concerne que `target: groups`.** Avec `target: all`, la clé doit être absente ou valoir 1 ; une valeur
+  supérieure est une erreur de validation (« min_groups n'a pas de sens avec target: all »), jamais une clé ignorée.
+- **`target: all` n'accepte que le motif `uniform`** (les autres motifs répartissent des états entre groupes) ; les
+  conditions `groups_lt` / `groups_gte` y sont refusées. Erreur de validation sinon.
+- Non-régression v11.6.0 : `pulsation` (`target: all`) reste jouée sans aucun groupe configuré.
+
+Un effet inapplicable fait jouer au moment sa valeur par défaut (§3.3). Le catalogue et le sélecteur l'indiquent
+(« demande 3 groupes, 2 configurés »).
 
 ### 4.7 Erreurs de validation
 
@@ -372,7 +386,8 @@ migration, `pulsation` est un effet natif (`uniform`, `target: all`, trois étap
   "groups": 4,
   "effects": [
     { "id": "chenillard", "name": "Chenillard", "description": "…", "moments": ["chrono"],
-      "origin": "native", "file": "natifs/chenillard.yaml", "min_groups": 3, "applicable": true, "reason": "" }
+      "origin": "native", "file": "natifs/chenillard.yaml", "target": "groups", "min_groups": 3,
+      "applicable": true, "reason": "", "host_applicable": false }
   ],
   "errors": [ { "file": "mon-effet.yaml", "line": 14, "message": "l'apparence « tete » n'est pas définie dans looks" } ],
   "unresolved": [ { "moment": "calm", "id": "mon-effet", "scope": "global" } ],
@@ -380,7 +395,8 @@ migration, `pulsation` est un effet natif (`uniform`, `target: all`, trois étap
 }
 ```
 
-`origin` ∈ `native` | `user` | `override` (fichier utilisateur qui surcharge un natif). `reason` explique
+`target` ∈ `groups` | `all` ; `min_groups` vaut `0` pour un effet `target: all`. `applicable` concerne la salle,
+`host_applicable` le groupe animateur (§4.6). `origin` ∈ `native` | `user` | `override` (fichier utilisateur qui surcharge un natif). `reason` explique
 `applicable: false`. Ordre : natifs (ordre du §9), puis utilisateur par `name`. Aucune E/S vers le pont.
 
 ### 7.2 `POST /api/lighting/effects/reload`
@@ -421,7 +437,7 @@ clé refusée, pilote occupé : formes de `/api/lighting/test` (§2.4), jamais `
 
 - `effects.Render` : cas de référence par motif (table de trames attendues), bornes (N = 1, N = 12), déterminisme de
   `random` à graine fixe.
-- Chaque natif : valide, applicable selon `min_groups`, budget du §5.4.
+- Chaque natif : valide, applicable selon `target` et `min_groups` (§4.6 — `pulsation` applicable avec N = 0), budget du §5.4.
 - Fichier invalide : chacune des erreurs du §4.7 produit un message avec fichier et ligne ; le serveur démarre et les
   autres effets restent disponibles.
 - Surcharge et restauration : fichier utilisateur de même `id` ⇒ `origin: override` ; fichier supprimé ⇒ retour au natif
@@ -447,10 +463,10 @@ régularité à l'œil ; seuil `SubGroupMinLights` (3 par défaut). Le banc `hue
 | `vague-lente` | `gradient`, `travel: forward`, `fade_ms` long, intensité basse | calm | #301 | Dégradé doux qui balaie la salle en fond |
 | `degrade` | `gradient`, `travel: none` | calm | #211 | Dégradé fixe multi-couleurs sur l'ensemble des groupes |
 | `scintillement` | `random` | calm | #302 | Quelques groupes s'allument doucement au hasard sur la teinte de la scène |
-| `couleur-equipe` | `uniform`, `min_groups: 1`, `duration_ms` = durée de l'impulsion SCORE | score | #211 (groupe animateur) | Couleur de l'équipe créditée, fixe, le temps de l'attribution — pensé pour le groupe animateur, utilisable en salle |
+| `couleur-equipe` | `uniform`, `target: all`, `duration_ms` = durée de l'impulsion SCORE | score | #211 (groupe animateur) | Couleur de l'équipe créditée, fixe, le temps de l'attribution — pensé pour le groupe animateur, utilisable en salle |
 
-Effets applicables au groupe animateur (N = 1) en v11.7.0 : `pulsation`, `couleur-equipe`, et tout effet utilisateur dont
-`min_groups` vaut 1.
+Effets applicables au groupe animateur en v11.7.0 : `pulsation` et `couleur-equipe` (`target: all`), et tout effet
+utilisateur `target: all` ou `target: groups` avec `min_groups` ≤ 1 (§4.6).
 
 Les valeurs exactes (durées, intensités) sont dans les fichiers `assets/effects/*.yaml` ; elles peuvent être ajustées
 après l'essai sur matériel sans changer ce contrat.
