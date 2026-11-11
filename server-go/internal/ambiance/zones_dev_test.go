@@ -1,6 +1,7 @@
 package ambiance
 
 import (
+	"context"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -230,5 +231,34 @@ func TestZones_GroupTestAddressesAreaAndGroup_Dev(t *testing.T) {
 	r.c.StopGroupTest()
 	if areaCount(r.c.Scene(zdIdle), lighting.AreaPublic) != 0 {
 		t.Fatal("après l'arrêt, la zone public n'est plus écrite")
+	}
+}
+
+// Shutdown / master switch: the public bulbs are NOT given their saved state back (a late restore
+// could light them again after the extinction) and a restore already in flight is aborted.
+func TestZones_QuiesceAbandonsPublicRestore_Dev(t *testing.T) {
+	r := newZdRig(t, []config.LightingGroupEntry{{ID: "p", Role: "public", Lights: []string{"p1"}}})
+	r.c.public.mu.Lock()
+	r.c.public.held, r.c.public.read = true, true
+	r.c.public.mu.Unlock()
+	slow, cancel := context.WithTimeout(context.Background(), time.Minute) // a slow restore in flight
+	r.c.public.mu.Lock()
+	r.c.public.cancel = cancel
+	r.c.public.mu.Unlock()
+
+	r.c.quiesceAmbiance()
+
+	if slow.Err() == nil {
+		t.Fatal("la restauration en cours est annulée à l'arrêt")
+	}
+	r.c.public.mu.Lock()
+	held := r.c.public.held
+	r.c.public.mu.Unlock()
+	if held {
+		t.Fatal("l'état mémorisé est abandonné : plus aucune restauration possible")
+	}
+	r.c.releasePublicIfIdle() // nothing left to restore, must not panic nor write
+	if _, err := r.c.StartEffectTrial("plein", "public", 1, 10); err == nil {
+		t.Fatal("après l'arrêt, plus d'essai (éclairage coupé)")
 	}
 }

@@ -245,6 +245,8 @@ type publicHold struct {
 	held  bool
 	snaps []hue.LightSnapshot
 	read  bool // the snapshot was read successfully
+	// cancel aborts a restore write in flight (abandonPublic).
+	cancel context.CancelFunc
 }
 
 func publicLightNames() []string {
@@ -309,8 +311,11 @@ func (c *Controller) releasePublicIfIdle() {
 		return
 	}
 	names := publicLightNames()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	c.public.mu.Lock()
+	c.public.cancel = cancel
+	c.public.mu.Unlock()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		if read {
 			_ = drv.RestoreLights(ctx, snaps, nil)
@@ -318,4 +323,19 @@ func (c *Controller) releasePublicIfIdle() {
 			_ = drv.RestoreLights(ctx, nil, names) // unreadable: switched off
 		}
 	}()
+}
+
+// abandonPublic drops the public zone's hold WITHOUT giving the bulbs back their state, and
+// aborts a restore already in flight: used by the shutdown and the master switch, where the
+// extinction must be the last word on the public bulbs (a late restore could otherwise light
+// them again).
+func (c *Controller) abandonPublic() {
+	c.public.mu.Lock()
+	c.public.held, c.public.snaps, c.public.read = false, nil, false
+	cancel := c.public.cancel
+	c.public.cancel = nil
+	c.public.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
