@@ -367,3 +367,7 @@ chemins (§6) couvre `sound.files.*`.
   une entrée par groupe animateur existant ; `Partial` : groupes et moments surchargés seulement ; `id` de groupe inconnu
   écarté sans erreur ; chemins éditables du composant React = un jeu de trois chemins par groupe animateur
   (`light-effects.md` §6).
+- **Vitesse des effets** (ajout du 2026-11-11) : `LightSpeeds` — `light.speeds.{chrono,calm,score}` (global
+  `lighting.speeds.*`) et `LightHostSpeeds` — `light.host_speeds.<id du groupe>.{chrono,calm,score}` (global
+  `lighting.host_speeds.<id>.*`). Valeurs `0.5 | 0.75 | 1 | 1.5 | 2`, défaut `1`, surchargeables par manche ; mêmes
+  règles de résolution et de sources que les effets. Le test de parité couvre ces chemins (`light-effects.md` §6).

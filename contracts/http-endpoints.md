@@ -1445,7 +1445,8 @@ puisse l'indiquer.
 | POST | `/api/lighting/groups/test` | Essai d'un groupe : séquence visible de 6 s, réponse immédiate `{"ok":true,"duration_ms":6000}`, `group` = `n` ou `"host<k>"` (révision du GATE LOT-1, `light-effects.md` §2.4) | LOT-1 |
 | POST | `/config.json` `{"lighting":{"effects":{…}}}` | Effet par moment, global | LOT-2 |
 | POST | `/config.json` `{"lighting":{"host_effects":{"<id>":{…}}}}` | Effets par moment de chaque groupe animateur, global (table par `id` de groupe, révision du GATE LOT-1) | LOT-2 |
-| GET | `/api/ambiance/settings` | `light.effects` et `light.host_effects` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
+| POST | `/config.json` `{"lighting":{"speeds":{…},"host_speeds":{"<id>":{…}}}}` | Vitesse des effets par moment, salle et groupes animateur, global (`0.5` à `2`) | LOT-2 |
+| GET | `/api/ambiance/settings` | `light.effects`, `light.host_effects`, `light.speeds`, `light.host_speeds` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
 | GET | `/api/lighting/effects` | Catalogue, erreurs de fichiers, réglages non résolus | LOT-2 |
 | POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |
 | GET | `/api/lighting/effects/{id}/preview` | Trames simulées | LOT-3 |

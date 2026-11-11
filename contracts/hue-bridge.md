@@ -646,3 +646,6 @@ identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
 - **Essai d'un groupe** (GATE LOT-1) : séquence de 6 pas d'une seconde (éteint, blanc 50 %, blanc 100 %, rouge, vert,
   bleu) portée par l'écrivain — au plus une écriture de groupe par seconde, dans le plafond `/groups` du §5.8
   (`light-effects.md` §2.4).
+- **Révision 3 (2026-11-11, modèle figé)** : `lighting.groups[]` ne porte plus ni `name` ni `near_teams` — un groupe est
+  `{id, role, lights[]}`, désigné par son rang (g1…gN pour la salle, rang k pour un groupe animateur). Le reste de cette
+  section (adressage `Group`, groupes Hue, essai en séquence) est inchangé (`light-effects.md` §2.1).

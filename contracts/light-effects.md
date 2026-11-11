@@ -7,6 +7,13 @@
 > Contrainte d'architecture (non négociable) : un effet est un **fichier descriptif éditable à la main**, interprété par un
 > séquenceur commun. L'éditeur de scènes v11.8.0 (#210) écrira ce même format.
 > Contrats liés : `lighting.md` (écrivain, scènes), `hue-bridge.md` (pilote), `ambiance-settings.md` (réglages).
+>
+> **Révision 3 (2026-11-11, 2e refus du GATE LOT-1) — modèle figé par l'utilisateur.** Les groupes sont **numérotés, sans
+> nom** ; un effet est écrit **pas à pas** (format unique, §4), avec des **variables de groupe** ; les motifs calculés
+> (`uniform`, `shift`, `gauge`, `random`, `gradient`), `target`, `looks`, `stages` sont **abandonnés**. Noyau seul : pas de
+> variante selon le temps restant, pas de hasard, pas d'étalement sur le chronomètre, pas de départ depuis l'équipe.
+> **#300 (remplissage), #301 (vague), #302 (scintillement) sortent de v11.7.0.** Références de la décision :
+> `_work/reports/effects-format-proposal-20261111-213000.md`, `_work/reports/effects-chronogram-r2-20261111-223000.md`.
 
 ---
 
@@ -14,9 +21,10 @@
 
 | Terme | Définition |
 |---|---|
-| **Groupe d'ambiance** | Sous-ensemble **ordonné et numéroté** (1…N) des ampoules de rôle `general`. Unité que pilote un effet. |
+| **Groupe d'ambiance** | Sous-ensemble **ordonné et numéroté** (g1…gN) des ampoules de rôle `general`, **sans nom**. Unité que pilote un effet. `g0` désigne toute la zone. |
 | **Groupe animateur** | Groupe d'ambiance portant le rôle `animateur` (**plusieurs possibles**, §2.5, révision du GATE LOT-1) : numéroté à part (A1, A2…), jamais entraîné par les effets de salle, blanc fixe par défaut, avec ses propres effets par moment. |
-| **Effet** | Description déclarative de ce que montre chaque groupe au fil du temps. Un fichier = un effet. |
+| **Effet** | Liste de **pas** : à chaque tick d'horloge, un pas écrit une couleur et une intensité sur un ou plusieurs groupes. Un fichier = un effet. |
+| **Tick** | Battement de l'horloge de l'effet (`duree_tick_ms`). Un pas dure toujours un tick. |
 | **Moment** | Situation de jeu pour laquelle on choisit un effet : `chrono`, `calm`, `score` (§6). |
 | **Séquenceur** | Interprète unique des effets : calcule une **trame** (un état par groupe) à chaque pas. |
 | **Trame** | `[]GroupLook` : pour chaque groupe, couleur RGB, intensité 0-255, fondu en ms. |
@@ -34,10 +42,10 @@ Les ampoules de rôle `team` ne font partie d'aucun groupe : elles montrent touj
 "lighting": {
   "lights": [ { "name": "BuzzHue1", "role": "general" }, … ],   // inchangé
   "groups": [                                                    // NOUVEAU — ordre du tableau = numéro (1-based)
-    { "id": "g3f9a1", "name": "Scène gauche", "role": "salle", "lights": ["BuzzHue1", "BuzzHue4"], "near_teams": ["Rouges"] },
-    { "id": "g81c02", "name": "Bar",          "role": "salle", "lights": ["BuzzHue2"],             "near_teams": [] },
-    { "id": "g5d7e4", "name": "Pupitre",      "role": "animateur", "lights": ["BuzzHue8"],         "near_teams": [] },
-    { "id": "g0b6c9", "name": "Régie",        "role": "animateur", "lights": ["BuzzHue9"],         "near_teams": [] }
+    { "id": "g3f9a1", "role": "salle",     "lights": ["BuzzHue1", "BuzzHue4"] },   // g1
+    { "id": "g81c02", "role": "salle",     "lights": ["BuzzHue2"] },               // g2
+    { "id": "g5d7e4", "role": "animateur", "lights": ["BuzzHue8"] },               // groupe animateur 1
+    { "id": "g0b6c9", "role": "animateur", "lights": ["BuzzHue9"] }                // groupe animateur 2
   ]
 }
 ```
@@ -46,28 +54,28 @@ Les ampoules de rôle `team` ne font partie d'aucun groupe : elles montrent touj
   permis** *(révision du GATE LOT-1 : la limite « un seul » est levée)*.
   Le **numéro** d'un groupe de salle est son rang parmi **tous** les groupes de rôle `salle`, vides compris. Un groupe
   animateur a son **propre rang** parmi les groupes de rôle `animateur` (A1, A2…, vides compris) et ne compte jamais dans
-  N. `near_teams` est refusé sur un groupe animateur.
+  N.
+- **Révision 3 — `name` et `near_teams` sont supprimés.** Un groupe n'a qu'un numéro (son rang) ; l'interface l'appelle
+  « Groupe 1 », « Groupe animateur 1 ». `near_teams` ne servait qu'à l'effet Vague (#301), sorti du milestone. Les deux
+  clés ne sont plus acceptées à l'écriture (`400`) ; lues dans un `config.json` de QUALIF antérieur, elles sont ignorées
+  et disparaissent au prochain enregistrement.
 - `id` *(révision du GATE LOT-1)* : identifiant **stable** du groupe (`[a-z0-9]{1,12}`), unique. Attribué par le serveur à
   l'enregistrement quand il est absent ou vide ; le client le renvoie tel quel ensuite (renommer ou déplacer un groupe ne
   change pas son `id`). Il sert de clé aux effets des groupes animateur (§6). Un `id` en double ou mal formé ⇒ `400`.
 - Plafonds : **12 groupes de salle** et **4 groupes animateur**.
-- `name` : libellé libre (1 à 40 caractères), unique sans tenir compte de la casse. Sert à l'affichage ; les effets
-  n'utilisent que le **numéro**.
 - `lights` : noms d'ampoules, chacune de rôle `general` et présente dans **un seul** groupe. Un groupe vide est accepté :
   il **garde son numéro** (numéros stables pour l'interface et pour `GET /api/lighting/lights`) mais est **ignoré du
   séquenceur**. **N = nombre de groupes de salle non vides.** Le séquenceur calcule sa trame sur la suite ordonnée des
   groupes non vides (positions 1…N, sans renuméroter la configuration) et émet chaque état avec le **numéro réel** du
   groupe (`ZoneState.Group`). Exemple : groupes 1, 2 (vide), 3 ⇒ N = 2, la trame a deux positions, écrites sur
   `Group 1` et `Group 3`. *(Amendement du 2026-11-11, revue LOT-1, écart 2.)*
-- `near_teams` : équipes installées près de ce groupe (optionnel). Sert d'origine à un effet `origin: team` (§4.5).
-  Une équipe figure dans un seul groupe au plus.
 - Absent ou `[]` ⇒ aucun groupe : comportement v11.6.0 exact.
 - Écriture : `POST /config.json {"lighting": {"groups": [...]}}`, remplacement complet du tableau. Refus `400` avec un
-  message lisible : ampoule inconnue de `lights`, ampoule de rôle `team`, ampoule dans deux groupes, nom en double,
-  plus de 12 groupes de salle, plus de 4 groupes animateur.
+  message lisible : ampoule inconnue de `lights`, ampoule de rôle `team`, ampoule dans deux groupes, plus de 12 groupes
+  de salle, plus de 4 groupes animateur.
 - Changer le rôle d'une ampoule en `team`, ou la retirer de `lights`, la retire de son groupe dans la même écriture.
-- **Ampoule générale hors groupe** : elle garde la scène de salle ordinaire et ne participe pas aux effets répartis.
-  Elle participe aux effets `target: all`.
+- **Ampoule générale hors groupe** : elle fait partie de `g0` (toute la zone) et suit donc les actions écrites sur `g0` ;
+  elle n'est jamais visée par `g1`…`gN` ni par une variable.
 
 ### 2.2 Modèle d'état — `lighting.ZoneState.Group` (amendement de `lighting.md` §3)
 
@@ -114,10 +122,10 @@ Un groupe de rôle `animateur` éclaire l'animateur (pupitre, régie). Il rempla
 - **Effet par moment — livré au LOT-2** : réglage `LightHostEffects` (§6) — `light.host_effects.{chrono,calm,score}` dans
   le modèle de réglages (manche, API, état de jeu), `lighting.host_effects.{chrono,calm,score}` dans `config.json` pour la
   valeur globale ; global et par manche.
-  `""` = blanc fixe. L'effet est rendu par le même séquenceur, **sur ce seul groupe** (N = 1) : un effet dont
-  `target` vaut `groups` et `min_groups` > 1 est inapplicable au groupe animateur et reste grisé dans ses sélecteurs ; un
-  effet `target: all` lui est toujours applicable (§4.6). La couleur `scene` vaut blanc
-  pour ce groupe. Effet absent, invalide ou inapplicable ⇒ blanc fixe.
+  `""` = blanc fixe. L'effet est rendu par le même séquenceur, **sur ce seul groupe** : pour lui, `g0` = `g1` = ce
+  groupe, et N = 1. *(Révision 3)* Seul un effet **qui n'écrit que `g0`** lui est applicable (§4.7) ; les autres restent
+  grisés dans ses sélecteurs. La couleur `scene` vaut blanc pour ce groupe. Effet absent, invalide ou inapplicable ⇒
+  blanc fixe.
 - **Pilote** : `LightSpec.Group = -k` ; groupe Hue `buzzmaster-general-host<k>` à partir de `SubGroupMinLights`
   ampoules, écriture par ampoule en dessous. Une ampoule d'un groupe animateur ne reçoit jamais l'entrée `Group 0`.
   L'ancien groupe Hue `buzzmaster-general-host` est supprimé par la réconciliation (préfixe `buzzmaster-`).
@@ -182,6 +190,8 @@ Alternative écartée : JSON avec commentaires (aucune dépendance, mais virgule
 main, et un analyseur de commentaires à écrire et maintenir). Si la version candidate du module YAML posait un problème
 bloquant, c'est le repli prévu ; le schéma du §4 ne change pas.
 
+Les **mots-clés des fichiers sont en français** (révision 3), comme les couleurs nommées.
+
 ### 3.2 Emplacements
 
 | Emplacement | Contenu | Écrit par |
@@ -209,160 +219,140 @@ bloquant, c'est le repli prévu ; le schéma du §4 ne change pas.
 - **Un fichier invalide ne casse rien** : il est écarté et signalé (§7.1 `errors[]`, une ligne de journal par changement
   d'état du fichier, jamais une ligne par cycle). La version précédente de cet `id` reste active si elle existe en
   mémoire ; sinon le natif de même `id` ; sinon l'effet est absent.
-- Un moment réglé sur un effet absent, invalide ou inapplicable (§4.6) joue la **valeur par défaut du moment** (§6 :
+- Un moment réglé sur un effet absent, invalide ou inapplicable (§4.7) joue la **valeur par défaut du moment** (§6 :
   `pulsation` pour `chrono`, aucun effet pour `calm` et `score`) et l'écart est visible dans
   `GET /api/lighting/effects` (`unresolved[]`).
 
 ---
 
-## 4. Schéma d'un effet — normatif
+## 4. Schéma d'un effet — normatif (révision 3 : format pas à pas)
 
 ```yaml
-# Chenillard — un point lumineux fait le tour de la salle, une position par seconde.
-id: chenillard            # [a-z0-9-], 1 à 40 caractères, unique
-name: Chenillard          # libellé du catalogue (1 à 40 caractères)
-description: >            # texte du catalogue (500 caractères au plus)
+# Chenillard — un point lumineux fait le tour de la salle, un groupe par seconde.
+id: chenillard               # [a-z0-9-], 1 à 40 caractères, unique
+nom: Chenillard              # libellé du catalogue (1 à 40 caractères)
+description: >               # texte du catalogue (500 caractères au plus)
   Un point lumineux fait le tour de la salle pendant le chronomètre.
-  Il passe à l'orange puis au rouge quand le temps presse.
-version: 1                # version du schéma ; seule la valeur 1 est acceptée
-moments: [chrono]         # moments où l'effet est proposé : chrono, calm, score
-target: groups            # groups = un état par groupe ; all = un seul état pour toute la zone générale
-min_groups: 3             # target: groups seulement — en dessous, l'effet est inapplicable (§4.6) ; défaut 1
-duration_ms: 0            # 0 = dure autant que le moment ; > 0 = s'arrête seul (obligatoire pour score)
-
-looks:                    # apparences nommées, utilisées par les motifs
-  fond:    { color: theme,   intensity: 100 }
-  trainee: { color: theme,   intensity: 50 }
-  tete:    { color: urgency, intensity: 100 }
-
-pattern:                  # un seul motif par étape
-  type: shift
-  step_ms: 1000
-  cells: [trainee, tete, trainee]
-  rest: fond
-  wrap: true
-
-stages:                   # variantes selon une condition ; la première qui s'applique remplace les clés données
-  - when: { groups_lt: 5 }
-    pattern: { cells: [tete] }
+version: 2                   # version du format ; seule la valeur 2 est acceptée
+moments: [chrono]            # moments où l'effet est proposé : chrono, calm, score
+groupes_min: 3               # facultatif : en dessous, l'effet n'est pas applicable à la salle (défaut 0)
+duree_tick_ms: 1000          # durée d'un tick, donc d'un pas
+boucle: oui                  # oui (défaut) | non
+variables:                   # facultatif
+  gA: g1; +1                 # part de g1, avance d'un groupe
+pre:                         # facultatif — PRE : joué une fois au démarrage, hors boucle
+  { g0: [theme, 100] }
+pas:                         # la boucle : un pas par tick, dans l'ordre
+  - { g0: [theme, 100], gA: [urgence, 100] }
+dernier:                     # facultatif — LAST : joué à la fin de chaque tour, avant de revenir au pas 0
+  { g0: [theme, 100] }
+post:                        # facultatif — POST : appliqué à la fin du moment
+  { g0: [scene, 100] }
 ```
 
 ### 4.1 Clés de premier niveau
 
-`id`, `name`, `description`, `version`, `moments`, `target`, `min_groups`, `duration_ms`, `looks`, `pattern`, `stages`.
-Obligatoires : `id`, `name`, `version`, `moments`, `looks`, `pattern`. Toute autre clé est refusée.
+`id`, `nom`, `description`, `version`, `moments`, `groupes_min`, `duree_tick_ms`, `boucle`, `variables`, `pre`, `pas`,
+`dernier`, `post`. Obligatoires : `id`, `nom`, `version`, `moments`, `duree_tick_ms`, `pas` (1 à 200 pas). Toute autre clé
+est refusée. `duree_tick_ms` : 250 à 60 000. Un fichier `version: 1` (motifs calculés) est refusé avec le message
+« format d'effet de la version précédente : réécrire en pas à pas ».
 
-### 4.2 Apparence (`looks.<nom>`)
+### 4.2 Un pas, une action
 
-| Clé | Valeurs | Défaut |
-|---|---|---|
-| `color` | `scene` (couleur de la scène de salle du moment), `theme` (thème de la question, blanc à défaut), `team` (équipe créditée, moment `score`), `urgency` (blanc, orange `#FFAA00` à 10 s ou moins, rouge `#E61E1E` à 5 s ou moins — couleurs de `lighting.md` §8.2), ou `"#RRGGBB"` | `scene` |
-| `intensity` | 0 à 100 (pourcentage ; 0 = éteint) | 100 |
-| `fade_ms` | 0 à 5000 : fondu confié au pont (`ZoneState.TransitionMs`) | 0 |
+Un pas (`pre`, chaque élément de `pas`, `dernier`, `post`) est une table `cible: action`, 1 à 16 actions.
 
-`fade_ms > 0` entre deux teintes éloignées peut délaver la couleur (interpolation du pont, `lighting.md` §8.2) : la
-documentation utilisateur le signale ; ce n'est pas une erreur de validation.
+- **Action** : `[couleur, intensité]` — intensité de 0 à 100 (pourcentage ; 0 = éteint) — ou `[eteint]`. Fondu toujours
+  nul (`TransitionMs = 0`).
+- **Couleur** : `"#RRGGBB"`, ou un nom : `theme` (thème de la question, blanc à défaut), `equipe` (équipe créditée,
+  moment `score` ; blanc hors de ce moment), `urgence` (blanc ; orange `#FFAA00` à 10 s ou moins ; rouge `#E61E1E` à 5 s
+  ou moins — hors moment `chrono` : blanc), `scene` (couleur de la scène de salle du moment ; blanc pour un groupe
+  animateur). Les couleurs nommées sont **vivantes** : elles sont résolues à chaque rendu, pas au moment où le pas est
+  joué — un groupe peint en `urgence` vire de lui-même à l'orange puis au rouge.
+- Les actions d'un pas s'appliquent **dans l'ordre écrit** ; si deux actions touchent la même ampoule, la dernière gagne
+  (`g0` puis `gA` : `gA` repeint son groupe).
+- **Un groupe non cité garde l'état** reçu aux pas précédents. Avant toute action, la zone a sa scène ordinaire.
 
-### 4.3 Motifs (`pattern.type`) — le vocabulaire du séquenceur
+### 4.3 Cibles
 
-Un effet **compose** ces motifs avec ses apparences et ses paramètres. Ajouter un motif demande une évolution du
-serveur ; tout le reste se fait dans le fichier.
-
-| Type | Paramètres | Rendu |
-|---|---|---|
-| `uniform` | `phases: [{look, ms}]` (1 à 8) | Tous les groupes (ou toute la zone si `target: all`) montrent la même apparence, qui alterne selon `phases`. Calé sur l'horloge murale (`maintenant mod cycle`), comme la pulsation actuelle. |
-| `shift` | `cells: [look…]`, `rest: look`, `step_ms`, `wrap` (défaut `true`), `direction` (`forward` \| `backward` \| `bounce`, défaut `forward`) | Le bloc `cells` se déplace d'un groupe par pas ; les autres groupes montrent `rest`. |
-| `gauge` | `source` (`remaining` \| `elapsed`), `on: look`, `off: look`, `edge: look` (optionnel), `direction` | Les groupes allumés sont au prorata de la source (part du chronomètre restant ou écoulé) ; `edge` est le groupe frontière. Recalcul à chaque seconde du chronomètre. |
-| `random` | `step_ms`, `count` (nombre de groupes en `on`, ou `ratio` 0-1), `on: look`, `off: look` | À chaque pas, un tirage de groupes passe en `on`, les autres en `off`. Générateur à graine : déterministe pour une graine donnée. |
-| `gradient` | `stops: [look…]` (2 à 6), `step_ms`, `travel` (`none` \| `forward` \| `backward` \| `outward`), `origin` (`first` \| `last` \| `center` \| `team`), `repeat` (défaut `true`), `rest: look` (optionnel) | Dégradé réparti sur les groupes, fixe ou en mouvement. **Sémantique exacte au §4.3.1.** |
-
-#### 4.3.1 Motif `gradient` — sémantique exacte *(amendement du 2026-11-11, LOT-2 Batch 2.1)*
-
-Notations : `stops` = S₀…S₍k−1₎ ; N groupes rendus, positions p = 0…N−1 dans l'ordre de parcours ; s = numéro du pas
-(0 au démarrage de l'effet, +1 tous les `step_ms`). « Interpoler » = interpolation linéaire RGB **et** intensité entre
-deux arrêts consécutifs ; `fade_ms` d'une position = celui de l'arrêt le plus proche.
-
-**1. `travel: none` — dégradé fixe, du premier au dernier arrêt.** Le groupe 1 montre S₀, le dernier groupe montre
-S₍k−1₎, les groupes intermédiaires sont interpolés : abscisse x = p / (N−1) × (k−1). N = 1 ⇒ S₀. **Jamais de retour vers
-S₀** : `repeat` n'a aucun effet avec `travel: none`. `step_ms` et `origin` sont sans effet.
-
-**2. `travel: forward` / `backward`, `repeat: true` (défaut) — anneau qui tourne.** Le dégradé est **fermé** : après
-S₍k−1₎ il revient vers S₀, réparti sur un tour complet des N groupes ; il avance d'un groupe par pas, sans couture.
-x = ((p − s) mod N) / N × k pour `forward` (p + s pour `backward`) ; interpolation entre S₍⌊x⌋₎ et S₍(⌊x⌋+1) mod k₎.
-
-**3. Propagation — `travel: outward`, ou `forward` / `backward` avec `repeat: false`.** Le dégradé se **propage dans
-le temps** à partir d'un groupe de départ ; ce n'est **pas** une atténuation selon la distance.
-- Départ : `outward` ⇒ le groupe `origin` (`first`, `last`, `center` = position ⌊(N−1)/2⌋, `team` = §4.5), propagation
-  vers les deux bords ; `forward` ⇒ premier groupe ; `backward` ⇒ dernier groupe.
-- d = distance en groupes entre p et le départ. Le front atteint la distance d au pas s = d.
-- **Groupe non encore atteint** (d > s) : apparence `rest` ; si `rest` est absent, aucun état n'est émis pour ce groupe
-  (il garde la scène de salle, entrée `Group 0`).
-- **Groupe atteint** (d ≤ s), âge a = s − d : il montre S₍a₎ — il parcourt les arrêts **un par pas**, dans l'ordre, sans
-  interpolation (le fondu éventuel est celui de `fade_ms`).
-  - `repeat: false` : au-delà du dernier arrêt, il **reste sur S₍k−1₎** (a plafonné à k−1). La propagation est terminée
-    au pas (distance maximale) + k − 1 ; l'état est ensuite tenu jusqu'à la fin de l'effet (`duration_ms` ou fin du moment).
-  - `repeat: true` : il reboucle (S₍a mod k₎) : ondes successives qui partent du même point.
-
-Exemple (`vague`, 5 groupes, départ au groupe 2, `stops: [crete, equipe]`, `repeat: false`, `rest: fond`) :
-
-```
-pas 0 :  fond   CRETE  fond   fond   fond
-pas 1 :  CRETE  equipe CRETE  fond   fond
-pas 2 :  equipe equipe equipe CRETE  fond
-pas 3 :  equipe equipe equipe equipe CRETE
-pas 4 :  equipe equipe equipe equipe equipe   (tenu)
-```
-
-Validation : `rest` doit nommer une apparence de `looks` ; `rest` et `origin` ne sont acceptés que pour une propagation
-(point 3), `origin` seulement avec `outward` ; sinon erreur de validation.
-
-Contraintes communes : `step_ms` ≥ 250 (cadence de l'écrivain, `hue-bridge.md` §5.4) et ≤ 60 000 ; chaque `ms` de `phases`
-≥ 250. Une apparence citée doit exister dans `looks`.
-
-### 4.4 Étapes (`stages`)
-
-Liste ordonnée d'au plus 6 entrées `{ when, looks?, pattern? }`. À chaque pas, la **première** entrée dont toutes les
-conditions sont vraies s'applique : ses `looks` remplacent les apparences de même nom, les clés de son `pattern`
-remplacent celles du motif de base (`type` compris, s'il est donné). Aucune entrée vraie ⇒ définition de base.
-
-Conditions (`when`) : `remaining_lte: <secondes>`, `remaining_gt: <secondes>`, `groups_lt: <n>`, `groups_gte: <n>`.
-`remaining_*` n'a de sens que pour le moment `chrono` ; ailleurs la condition est fausse.
-
-### 4.5 Contexte fourni par le serveur
-
-| Variable | Source |
+| Écriture | Désigne |
 |---|---|
-| nombre de groupes N | groupes de **salle non vides** de `lighting.groups` (§2.1 ; chaque groupe animateur est rendu à part, N = 1) |
-| temps restant, durée totale | `GameState.CurrentTime`, `GameState.Delay` (moment `chrono`) |
-| couleurs `scene`, `theme`, `team` | mêmes fonctions que la table de scènes (`ambiance.Scene`, `ThemeColor`, `TeamNameColor`) |
-| groupe d'origine `team` | groupe dont `near_teams` contient l'équipe créditée ; à défaut le groupe 1 |
-| graine | horodatage de démarrage de l'effet |
+| `g0` | toute la zone : dans la salle, toutes les ampoules d'ambiance, groupées ou non (jamais celles des groupes animateur ni des équipes) |
+| `g1`, `g2`… | le groupe de salle de ce numéro (numéro réel, §2.1) ; **absent ou vide ⇒ action ignorée** |
+| `gN` | le dernier groupe non vide |
+| `gA`, `gB`… (`g` + une lettre majuscule autre que `N`, puis lettres ou chiffres) | une variable déclarée dans `variables` |
+| `gA+1`, `gA-2` | le voisin du groupe que désigne `gA`, à m rangs ; après le dernier groupe on revient au premier |
 
-### 4.6 Applicabilité et repli
+N = nombre de groupes de salle **non vides**. Les positions 1…N sont la suite ordonnée de ces groupes ; tout calcul
+reboucle sur N (le fichier ne connaît pas la taille de la salle).
 
-L'applicabilité dépend de `target` *(amendement du 2026-11-11, LOT-2)* :
+**Pas sauté** : un pas de la boucle dont **aucune** action ne vise une cible existante est sauté — il ne consomme pas de
+tick et ne fait pas avancer les variables. Si tous les pas de la boucle sont sautés, l'effet est inapplicable (§4.7).
 
-| `target` | Salle (N = groupes de salle non vides) | Groupe animateur |
-|---|---|---|
-| `all` | **Toujours applicable, même avec N = 0.** L'effet produit un seul état, écrit sur la zone générale entière (`ZoneState{Zone:"general", Group:0}`) : il ne dépend pas des groupes. | Toujours applicable (un seul état, écrit sur `GroupHost`). |
-| `groups` | Applicable si N ≥ `min_groups` (défaut 1, donc jamais avec N = 0). | Applicable si `min_groups` ≤ 1 (rendu avec N = 1). |
+### 4.4 Variables de groupe
 
-- **`min_groups` ne concerne que `target: groups`.** Avec `target: all`, la clé doit être absente ou valoir 1 ; une valeur
-  supérieure est une erreur de validation (« min_groups n'a pas de sens avec target: all »), jamais une clé ignorée.
-- **`target: all` n'accepte que le motif `uniform`** (les autres motifs répartissent des états entre groupes) ; les
-  conditions `groups_lt` / `groups_gte` y sont refusées. Erreur de validation sinon.
-- Non-régression v11.6.0 : `pulsation` (`target: all`) reste jouée sans aucun groupe configuré.
+| Déclaration | Sens |
+|---|---|
+| `gA: g1; +1` | progression : départ au groupe 1, +1 groupe par cran |
+| `gB: g2; +2` | départ au groupe 2, +2 par cran |
+| `gD: gN; -1` | départ au dernier groupe, recule d'un groupe par cran |
+| `gE: g3; 0` | désigne toujours le groupe 3 |
+| `gC: [g1, g4, g3, g7]` | liste : un élément par cran, reprise au début après le dernier ; les groupes absents sont retirés de la liste (liste vide ⇒ actions sur `gC` ignorées) |
+
+- Progression : au cran k, la variable désigne la position `((départ − 1 + incrément × k) mod N) + 1`. Un départ au-delà
+  de N reboucle (`g7` avec N = 4 ⇒ position 3). Incrément : entier de −12 à +12.
+- 8 variables au plus par effet. N = 0 ⇒ toute action sur une variable est ignorée.
+
+### 4.5 Déroulement et règle d'avance — normatif
+
+1. **Démarrage** (début du moment, ou de l'essai) : cran k = 0. Si `pre` existe, il est joué au tick 0.
+2. **Boucle** : au tick suivant, pas 0, puis un pas par tick. Après le dernier pas de `pas`, `dernier` (s'il existe)
+   occupe un tick ; puis retour au pas 0.
+3. **Avance des variables** : PRE et le **premier** pas 0 voient les variables à leur départ (k = 0). Ensuite k augmente
+   de 1 **à chaque pas de la boucle joué**. **PRE, `dernier` (LAST) et POST ne font pas avancer** : `dernier` voit les
+   mêmes valeurs que le pas qui le précède. k ne revient jamais à 0 quand la boucle recommence.
+4. `boucle: non` : un seul tour (`pas`, puis `dernier`), puis l'état est tenu jusqu'à la fin du moment.
+5. **Fin du moment** : `post` (s'il existe) est appliqué **immédiatement**, sans attendre un tick, avec les variables à
+   leur dernière valeur ; l'état suivant (scène, autre effet) le recouvre aussitôt. POST ne retarde jamais la scène
+   suivante ; il n'est visible que sur les ampoules que celle-ci ne repeint pas.
+
+Chronogramme de référence (4 groupes, `gA: g1; +1`, `gB: g2; +2`, `pre`, deux pas, `dernier`) :
+
+| Tick | Joué | k | gA | gB |
+|---|---|---|---|---|
+| 0 | PRE | 0 | g1 | g2 |
+| 1 | pas 0 | 0 | g1 | g2 |
+| 2 | pas 1 | 1 | g2 | g4 |
+| 3 | LAST | 1 | g2 | g4 |
+| 4 | pas 0 | 2 | g3 | g2 |
+| 5 | pas 1 | 3 | g4 | g4 |
+| 6 | LAST | 3 | g4 | g4 |
+| 7 | pas 0 | 4 | g1 | g2 |
+
+### 4.6 Rendu vers l'écrivain
+
+Le séquenceur tient, pour la zone, un **état de base** (dernière action sur `g0`) et un état par groupe. La trame émise
+est : une entrée `{Zone:"general", Group:0}` portant l'état de base (ou la scène ordinaire tant que `g0` n'a pas été
+écrit), puis une entrée `Group:n` pour chaque groupe dont l'état diffère de la base. **Un effet qui n'écrit que `g0`
+produit donc une seule entrée `Group 0`** — une seule écriture `buzzmaster-general`, comme la pulsation d'origine.
+Pour un groupe animateur de rang k, tout est écrit sur `Group = -k`.
+
+### 4.7 Applicabilité et repli
+
+| Cible de l'effet | Applicable si |
+|---|---|
+| Salle | N ≥ `groupes_min`, et au moins un pas de la boucle n'est pas sauté (§4.3) |
+| Groupe animateur | l'effet **n'écrit que `g0`** (aucune autre cible dans `pre`, `pas`, `dernier`, `post`) |
 
 Un effet inapplicable fait jouer au moment sa valeur par défaut (§3.3). Le catalogue et le sélecteur l'indiquent
-(« demande 3 groupes, 2 configurés »).
+(« demande 5 groupes, 3 configurés » ; « anime plusieurs groupes »).
 
-### 4.7 Erreurs de validation
+### 4.8 Erreurs de validation
 
 Chaque erreur porte `file`, `line` (0 si inconnue), `message` en français, sans jargon :
-`"chenillard.yaml, ligne 14 : l'apparence « tete » n'est pas définie dans looks"`. Liste minimale : YAML illisible, clé
+`"mon-effet.yaml, ligne 12 : la variable « gB » n'est pas déclarée dans variables"`. Liste minimale : YAML illisible, clé
 inconnue, clé obligatoire absente, `id` invalide ou en double, `version` non prise en charge, `moments` vide ou valeur
-inconnue, `type` de motif inconnu, paramètre hors bornes, apparence non définie, couleur invalide, `duration_ms` absent
-pour un effet `score`, fichier trop gros.
+inconnue, `duree_tick_ms` hors bornes, `pas` vide ou trop long, cible mal écrite, variable non déclarée, déclaration de
+variable mal écrite, couleur invalide, intensité hors 0-100, fichier trop gros.
 
 ---
 
@@ -372,7 +362,9 @@ pour un effet `score`, fichier trop gros.
 
 - **`internal/effects`** (nouveau, pur, sans goroutine ni E/S réseau) : types, `Parse([]byte) (Effect, []Error)`,
   `LoadDir(embedded fs.FS, dir string) Catalogue`, et la fonction de rendu
-  `Render(e Effect, ctx Context, elapsed time.Duration) Frame`. `Render` est **déterministe** : mêmes entrées, même trame.
+  `Render(e Effect, ctx Context, tick int) Frame` (révision 3 : rendu des pas du §4.5 / §4.6 ; `ctx` porte N, les
+  numéros réels des groupes non vides et les couleurs nommées résolues). `Render` est **déterministe** : mêmes entrées,
+  même trame.
   N'importe ni `internal/game` ni `internal/lighting/hue`.
 - **`internal/ambiance`** : `Controller` gagne le lecteur (`runEffects`), une goroutine unique sur `Host.Ctx()`, sur le
   modèle de `RunChronoPulse` : à chaque tic (100 ms, jamais une cadence d'écriture) elle détermine le moment vivant et
@@ -389,7 +381,7 @@ Déterminé à partir de `DeriveEvent()` (jamais d'un état mémorisé à part) 
 |---|---|
 | `chrono` | `KindRunning` et `GameState.Delay > 0` (condition actuelle de la pulsation) |
 | `calm` | `KindIdle`, `KindPauseAll` ou `KindEntracte` |
-| `score` | pendant `duration_ms` après un `NotifyPulse(KindScore)` (les 6 sites existants), borné à la durée de l'impulsion SCORE |
+| `score` | pendant la durée de l'impulsion SCORE (`ScorePulseDuration`) après un `NotifyPulse(KindScore)` (les 6 sites existants) |
 | aucun | tout autre cas : pas de trame, scène ordinaire |
 
 `score` prime sur `chrono` et `calm` pendant sa durée.
@@ -414,12 +406,20 @@ Le séquenceur ne publie qu'une trame **différente** de la précédente, et l'�
 réel est celui des groupes dont l'état change (§2.3). Les effets natifs respectent : au plus 6 écritures par pas, au plus
 10 écritures par seconde en régime établi, pour 12 groupes. Un test calcule ce coût pour chaque natif (pilote factice).
 
-### 5.5 Pulsation existante
+### 5.5 Pulsation (révision 3)
 
-Jusqu'à sa migration (LOT-2, dernier batch), l'`id` réservé `pulsation` désigne le code actuel (`RunChronoPulse`). Après
-migration, `pulsation` est un effet natif (`uniform`, `target: all`, trois étapes) et le code dédié est retiré. Exigence :
-**rendu identique** (couleurs, intensités 255 / 128 / 77, cycle 1 s, découpe 250 / 750 ms à 5 s ou moins, fondu 0, une
-écriture de groupe par phase) — prouvé par un test qui compare les trames à `ChronoPulseColor` sur toute la plage.
+`pulsation` est un effet natif joué par le lecteur (commit `7a7a33aa`, conservé) ; le code dédié reste retiré. Avec le
+noyau seul, **le rendu n'est plus identique à v11.6.0** (décision utilisateur) : phase haute au thème à 100 %, phase
+basse à la couleur `urgence` à 50 %, 500 ms chacune.
+
+| Temps restant | v11.6.0 | Révision 3 |
+|---|---|---|
+| plus de 10 s | thème 100 % / thème 50 % | thème 100 % / **blanc** 50 % |
+| 10 s ou moins | thème 100 % / orange 50 % | identique |
+| 5 s ou moins | thème 100 % / rouge 30 %, battement 250 / 750 ms | thème 100 % / rouge **50 %**, battement **500 / 500 ms** |
+
+Le test d'identité `internal/ambiance/pulsation_identity_test.go` est **remplacé** par un test du rendu ci-dessus (même
+balayage : thèmes × temps restant × horloge). Une seule écriture de groupe par phase (§4.6).
 
 ---
 
@@ -464,6 +464,26 @@ migration, `pulsation` est un effet natif (`uniform`, `target: all`, trois étap
     d'effet, lui, reste validé (`400` / `INVALID_AMBIANCE`).
   - L'ancienne forme plate `{chrono, calm, score}` (codée au LOT-2, jamais livrée en PROD) n'est plus acceptée à
     l'écriture ; lue dans un `config.json` ou un `rounds.json` de QUALIF, elle est ignorée sans erreur.
+- **Vitesse réglable à l'usage** *(ajout à la validation de la révision 3, 2026-11-11)* — un **multiplicateur de vitesse
+  par moment**, à côté de chaque choix d'effet, pour la salle et pour chaque groupe animateur, en global et par manche.
+  Le fichier d'effet n'est jamais modifié : `duree_tick_ms` reste la durée de référence.
+
+  | Champ (`Settings`) | JSON (manche, API, état de jeu) | `config.json` (valeur globale) | Défaut |
+  |---|---|---|---|
+  | `LightSpeeds[<moment>]` | `light.speeds.<moment>` | `lighting.speeds.<moment>` | `1` |
+  | `LightHostSpeeds[<id>][<moment>]` | `light.host_speeds.<id>.<moment>` | `lighting.host_speeds.<id>.<moment>` | `1` |
+
+  - Valeurs permises : **`0.5`, `0.75`, `1`, `1.5`, `2`** (nombre JSON). Toute autre valeur ⇒ `400` / `INVALID_AMBIANCE`.
+  - **Durée réelle d'un tick = `duree_tick_ms` ÷ vitesse, jamais sous 250 ms** (cadence de l'écrivain) : un effet à
+    400 ms en ×2 tourne à 250 ms, pas à 200 ms. La vitesse n'agit que sur l'horloge : pas, variables et couleurs sont
+    inchangés.
+  - Mêmes règles que les effets : forme complète (les trois moments toujours présents ; une entrée par groupe animateur
+    existant), `Partial` (valeurs surchargées seulement), `Sources.light.speeds.<moment>` et
+    `Sources.light.host_speeds.<id>.<moment>` ∈ `global | round`, sérialisation sans `omitempty` dans
+    `AMBIANCE_EFFECTIVE`, `id` de groupe inconnu écarté sans erreur, purge à l'enregistrement des groupes.
+  - Le réglage vaut pour le moment, quel que soit l'effet choisi ; il est sans effet quand aucun effet n'est joué. Un
+    changement de vitesse s'applique au tick suivant, sans faire repartir l'effet.
+  - Absents de `config.json` et de `rounds.json` ⇒ vitesse 1 partout.
 - Valeur : `""` ou un `id` d'effet. `"chrono": ""` = aucune animation pendant le chronomètre (scène fixe).
 - Validation à l'écriture (`POST /config.json`, `ROUNDS_UPDATE`) : l'`id` doit exister dans le catalogue et déclarer ce
   moment ; sinon `400` / `INVALID_AMBIANCE`. Un `id` devenu absent après coup n'invalide pas la configuration (§3.3).
@@ -486,17 +506,18 @@ migration, `pulsation` est un effet natif (`uniform`, `target: all`, trois étap
   "groups": 4,
   "effects": [
     { "id": "chenillard", "name": "Chenillard", "description": "…", "moments": ["chrono"],
-      "origin": "native", "file": "natifs/chenillard.yaml", "target": "groups", "min_groups": 3,
+      "origin": "native", "file": "natifs/chenillard.yaml", "min_groups": 3,
       "applicable": true, "reason": "", "host_applicable": false }
   ],
-  "errors": [ { "file": "mon-effet.yaml", "line": 14, "message": "l'apparence « tete » n'est pas définie dans looks" } ],
+  "errors": [ { "file": "mon-effet.yaml", "line": 12, "message": "la variable « gB » n'est pas déclarée dans variables" } ],
   "unresolved": [ { "moment": "calm", "id": "mon-effet", "scope": "global" } ],
   "dir": "data/files/effects"
 }
 ```
 
-`target` ∈ `groups` | `all` ; `min_groups` vaut `0` pour un effet `target: all`. `applicable` concerne la salle,
-`host_applicable` le groupe animateur (§4.6). `origin` ∈ `native` | `user` | `override` (fichier utilisateur qui surcharge un natif). `reason` explique
+Les noms de champs de l'API restent en anglais : `name` = `nom` du fichier, `min_groups` = `groupes_min` (0 par défaut).
+Le champ `target` est **supprimé** (révision 3). `applicable` concerne la salle, `host_applicable` les groupes animateur
+(§4.7). `origin` ∈ `native` | `user` | `override` (fichier utilisateur qui surcharge un natif). `reason` explique
 `applicable: false`. Ordre : natifs (ordre du §9), puis utilisateur par `name`. Aucune E/S vers le pont.
 
 ### 7.2 `POST /api/lighting/effects/reload`
@@ -507,7 +528,7 @@ Recharge le dossier. Réponse : celle du §7.1.
 
 Trames calculées par le serveur avec `effects.Render` — le navigateur ne fait que les rejouer (aucun second
 interpréteur). `groups` : 1 à 12 (défaut : nombre configuré, 6 s'il vaut 0). Contexte simulé : chronomètre de 20 s pour
-`chrono`, thème `#4F46E5`, équipe `#E53935`, groupe d'origine 1.
+`chrono`, thème `#4F46E5`, équipe `#E53935`. La réponse couvre PRE, puis les tours de la boucle sur 20 s.
 
 ```json
 { "id": "chenillard", "groups": 6, "duration_ms": 20000, "loop": true,
@@ -526,8 +547,8 @@ clé refusée, pilote occupé : formes de `/api/lighting/test` (§2.4), jamais `
 
 ### 7.5 Existants modifiés
 
-`POST /config.json` : `lighting.groups`, `lighting.effects`, `lighting.host_effects` (§2.1, §6). `GET /api/ambiance/settings` et `ROUNDS_UPDATE` :
-`light.effects`, `light.host_effects`. `GET /api/lighting/lights` : chaque ampoule porte `group` (`0` | `n` | `"host<k>"`, §2.4).
+`POST /config.json` : `lighting.groups`, `lighting.effects`, `lighting.host_effects`, `lighting.speeds`, `lighting.host_speeds` (§2.1, §6). `GET /api/ambiance/settings` et `ROUNDS_UPDATE` :
+`light.effects`, `light.host_effects`, `light.speeds`, `light.host_speeds`. `GET /api/lighting/lights` : chaque ampoule porte `group` (`0` | `n` | `"host<k>"`, §2.4).
 
 ---
 
@@ -535,11 +556,16 @@ clé refusée, pilote occupé : formes de `/api/lighting/test` (§2.4), jamais `
 
 ### 8.1 Tests exigés
 
-- `effects.Render` : cas de référence par motif (table de trames attendues), bornes (N = 1, N = 12), déterminisme de
-  `random` à graine fixe.
-- Chaque natif : valide, applicable selon `target` et `min_groups` (§4.6 — `pulsation` applicable avec N = 0), budget du §5.4.
-- Fichier invalide : chacune des erreurs du §4.7 produit un message avec fichier et ligne ; le serveur démarre et les
-  autres effets restent disponibles.
+- `effects.Render` (révision 3) : le **chronogramme de référence du §4.5** tick par tick (variables et couleur de chaque
+  groupe) ; progression, incrément négatif, liste, voisins, rebouclage (N = 1, 4, 8, 12) ; groupe absent ignoré, pas
+  sauté ; groupe non cité = état conservé ; ordre des actions ; `boucle: non` ; couleurs nommées vivantes ; trame réduite
+  à `Group 0` pour un effet qui n'écrit que `g0`.
+- Lecteur : PRE au démarrage du moment, POST publié à la fin du moment sans retarder la scène suivante ; vitesse — tick
+  divisé par le multiplicateur, plancher de 250 ms, changement pris au tick suivant.
+- Chaque natif : valide, applicable selon `groupes_min` et §4.7 (`pulsation` applicable avec N = 0 et sur un groupe
+  animateur), budget du §5.4.
+- Fichier invalide : chacune des erreurs du §4.8 produit un message avec fichier et ligne ; un fichier `version: 1` est
+  refusé avec son message ; le serveur démarre et les autres effets restent disponibles.
 - Surcharge et restauration : fichier utilisateur de même `id` ⇒ `origin: override` ; fichier supprimé ⇒ retour au natif
   à chaud.
 - Non-régression : sans groupes ni réglage d'effet, la suite `State` émise est identique à v11.6.0 (scènes, pulsation,
@@ -552,30 +578,30 @@ régularité à l'œil ; seuil `SubGroupMinLights` (3 par défaut). Le banc `hue
 
 ---
 
-## 9. Effets natifs v11.7.0
+## 9. Effets natifs v11.7.0 (révision 3)
 
-| `id` | Motif | Moments | Issue | Rendu |
-|---|---|---|---|---|
-| `pulsation` | `uniform`, `target: all` | chrono | existant (#212) | Respiration de toute la salle, orange puis rouge en fin de chrono |
-| `chenillard` | `shift` | chrono | #223 | Tête `urgency`, traînée à 50 %, fond au thème ; sans traînée sous 5 groupes |
-| `remplissage` | `gauge` | chrono | #300 | Groupes éteints au prorata du temps écoulé ; rouge et clignotement du groupe frontière à 5 s ou moins |
-| `vague` | `gradient`, `travel: outward`, `origin: team`, `repeat: false`, `stops: [crête blanche, couleur de l'équipe]`, `rest` = thème atténué | score | #301 | Une crête blanche part du groupe de l'équipe créditée et gagne les bords ; derrière elle la salle prend la couleur de l'équipe (§4.3.1 point 3). `rest` est explicite : la scène SCORE ordinaire est déjà à la couleur de l'équipe, la vague serait invisible sans lui |
-| `vague-lente` | `gradient`, `travel: forward`, `repeat: true`, `fade_ms` long, intensité basse | calm | #301 | Dégradé fermé qui tourne lentement dans la salle, sans couture (§4.3.1 point 2) |
-| `degrade` | `gradient`, `travel: none` | calm | #211 | Dégradé fixe multi-couleurs : premier arrêt sur le groupe 1, dernier arrêt sur le dernier groupe (§4.3.1 point 1) |
-| `scintillement` | `random` | calm | #302 | Quelques groupes s'allument doucement au hasard sur la teinte de la scène |
-| `couleur-equipe` | `uniform`, `target: all`, `duration_ms` = durée de l'impulsion SCORE | score | #211 (groupe animateur) | Couleur de l'équipe créditée, fixe, le temps de l'attribution — pensé pour le groupe animateur, utilisable en salle |
+| `id` | Moments | `groupes_min` | Issue | Pas | Rendu |
+|---|---|---|---|---|---|
+| `pulsation` | chrono | 0 | existant (#212) | `g0: [theme, 100]` puis `g0: [urgence, 50]`, tick 500 ms | Toute la salle respire ; la phase basse passe à l'orange puis au rouge (§5.5). Jouable sur un groupe animateur |
+| `chenillard` | chrono | 3 | #223 | `gA: g1; +1` ; un pas `g0: [theme, 100], gA: [urgence, 100]`, tick 1000 ms | Tête à la couleur d'urgence, fond au thème, un groupe par seconde |
+| `chenillard-traine` | chrono | 5 | #223 | même variable ; un pas `g0: [theme, 100], gA-1: [theme, 50], gA+1: [theme, 50], gA: [urgence, 100]` | Le même avec une traînée à 50 % de part et d'autre de la tête |
+| `couleur-equipe` | score | 0 | #211 (groupes animateur) | un pas `g0: [equipe, 100]`, tick 1000 ms | Couleur de l'équipe créditée le temps de l'attribution. Jouable sur un groupe animateur |
+| `degrade` | calm | 2 | #211 | un pas qui donne une couleur à chacun des groupes `g1` à `g12` (cycle de 4 couleurs), tick 60 000 ms | Scène multicolore fixe, une couleur par groupe ; une salle plus petite en montre le début |
 
-Effets applicables au groupe animateur en v11.7.0 : `pulsation` et `couleur-equipe` (`target: all`), et tout effet
-utilisateur `target: all` ou `target: groups` avec `min_groups` ≤ 1 (§4.6).
+#223 demandait « pas de traînée sous 5 groupes » dans un seul effet : sans variante, la règle devient **deux effets
+natifs**, `chenillard-traine` n'étant proposé qu'à partir de 5 groupes.
 
-Les valeurs exactes (durées, intensités) sont dans les fichiers `assets/effects/*.yaml` ; elles peuvent être ajustées
-après l'essai sur matériel sans changer ce contrat.
+Sortis de v11.7.0 (noyau seul) : `remplissage` (#300), `scintillement` (#302), `vague` et `vague-lente` (#301).
+
+Les valeurs exactes (durées, couleurs, intensités) sont dans les fichiers `assets/effects/*.yaml` ; elles peuvent être
+ajustées après l'essai sur matériel sans changer ce contrat.
 
 ## 10. Hors de ce contrat
 
 | Sujet | Où |
 |---|---|
-| Éditeur de scènes et d'effets dans l'interface | v11.8.0 (#210) — écrit le format du §4 |
+| Éditeur de scènes et d'effets dans l'interface | v11.8.0 (#210) — écrit le format du §4 (grille ticks × groupes) |
+| Remplissage (#300), vague (#301), scintillement (#302) ; variantes selon le temps restant, hasard, étalement sur le chronomètre, départ depuis l'équipe, fondu | hors v11.7.0 (révision 3) — backlog |
 | Rôles fins par ampoule (accentuation, fond) | hors v11.7.0 (décision D3) ; le besoin « animateur » est couvert par le groupe animateur (§2.5) |
 | Effets sur les ampoules d'équipe, effets des buzzers | inchangés (`hue-bridge.md` §5.2, `LED_SET_PROTOCOL.md`) |
 | Geste direct de choix d'effet depuis le popover | non prévu |

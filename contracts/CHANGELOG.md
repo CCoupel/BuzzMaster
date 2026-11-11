@@ -1,6 +1,41 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — révision 3 : effets écrits pas à pas, groupes sans nom (#223, #225 — 2e refus du GATE LOT-1)
+
+Modèle figé par l'utilisateur (`_work/reports/effects-chronogram-r2-20261111-223000.md`). **Rien n'est en PROD** ; les
+marques **[BREAKING]** valent par rapport au code de la branche (LOT-1 Batch C, LOT-2 Batch 2.1 à 2.3).
+
+- **[BREAKING]** Format d'effet (`light-effects.md` §4, réécrit) : **format unique pas à pas**, `version: 2`, mots-clés
+  français — `nom`, `groupes_min`, `duree_tick_ms`, `boucle`, `variables`, `pre`, `pas`, `dernier`, `post`. Les motifs
+  calculés (`uniform`, `shift`, `gauge`, `random`, `gradient`), `target`, `min_groups`, `looks`, `pattern`, `stages`,
+  `duration_ms`, `fade_ms` sont **supprimés** ; un fichier `version: 1` est refusé.
+- **[NEW]** Variables de groupe : progression `gA: g1; +1`, liste `gC: [g1, g4, g3, g7]`, voisins `gA+1` / `gA-1`, `gN`,
+  rebouclage sur le nombre réel de groupes non vides. Règle d'avance : PRE et le premier pas 0 au départ, puis un cran
+  par pas de la boucle joué ; PRE, `dernier` (LAST) et POST ne font pas avancer (§4.5, chronogramme de référence).
+- **[NEW]** Sémantique des pas : un pas = un tick ; `g0` = toute la zone ; actions dans l'ordre écrit ; groupe non cité =
+  état conservé ; groupe absent = action ignorée ; pas ne visant aucune cible existante = sauté ; LAST à chaque tour ;
+  POST appliqué à la fin du moment sans retarder la scène suivante. Couleurs `#RRGGBB` ou `theme`, `equipe`, `urgence`,
+  `scene`, résolues à chaque rendu.
+- **[BREAKING]** Applicabilité (§4.7) : salle = `groupes_min` ; groupe animateur = effet qui n'écrit que `g0`.
+  `GET /api/lighting/effects` : champ `target` supprimé, `min_groups` = `groupes_min`.
+- **[BREAKING]** `lighting.groups[]` : `name` et `near_teams` **supprimés** (groupes désignés par leur rang) ; ignorés à la
+  lecture d'un `config.json` antérieur, refusés à l'écriture. `light-effects.md` §2.1, `hue-bridge.md` §11.
+- **[BREAKING]** Pulsation (§5.5) : effet natif pas à pas, **rendu non identique à v11.6.0** (phase basse blanche au-dessus
+  de 10 s ; à 5 s, rouge à 50 % et battement régulier). Le test d'identité de `7a7a33aa` est remplacé.
+- **[CHANGED]** Effets natifs (§9) : `pulsation`, `chenillard`, `chenillard-traine` (à partir de 5 groupes),
+  `couleur-equipe`, `degrade`. **Retirés du milestone** : `remplissage` (#300), `vague` et `vague-lente` (#301),
+  `scintillement` (#302).
+- **[NEW]** *(ajout à la validation)* Vitesse réglable à l'usage : `lighting.speeds.<moment>` et
+  `lighting.host_speeds.<id>.<moment>` (`config.json`) ; `light.speeds.<moment>` et `light.host_speeds.<id>.<moment>`
+  (réglages de manche, `GET /api/ambiance/settings`, `AMBIANCE_EFFECTIVE`) ; valeurs `0.5 | 0.75 | 1 | 1.5 | 2`, défaut `1` ;
+  tick réel = `duree_tick_ms` ÷ vitesse, plancher 250 ms ; le fichier d'effet n'est pas modifié. `light-effects.md` §6,
+  `ambiance-settings.md` §10.
+- Sans changement : dossier d'effets, natifs embarqués, surcharge par `id`, rechargement à chaud, erreurs fichier / ligne
+  (§3) ; lecteur, moments, précédence (§5.1 à §5.4) ; réglages par moment, salle et par groupe animateur (§6) ; groupes
+  animateur multiples et essai de groupe en séquence (§2.4, §2.5) ; aperçu calculé par le serveur et essai d'effet (§7).
+
+---
 ## [20261111] — v11.7.0 — `hue-bridge.md` §11 aligné sur les groupes animateur multiples (#225, #223)
 
 - **[CHANGED]** Correction rédactionnelle, sans changement de comportement : le §11 de `hue-bridge.md` gardait trois
