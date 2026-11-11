@@ -94,10 +94,10 @@ func tw231SetCuesDisabled(t *testing.T, names ...string) {
 		m[n] = true
 	}
 	raw, _ := json.Marshal(map[string]interface{}{"sound": map[string]interface{}{"cues_disabled": m}})
-	if err := json.Unmarshal(raw, config.Get()); err != nil {
+	if err := config.PatchJSON(raw); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { config.Get().Sound.CuesDisabled = nil })
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil }) })
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ func tw231SetCuesDisabled(t *testing.T, names ...string) {
 // ---------------------------------------------------------------------------
 
 func TestSounds231_QCMHint_PlaysQcmIndiceOnce(t *testing.T) {
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := tw231Wire(t)
 	app.broadcastQCMHint("RED", 2)
 	got := tw231Settle(fake, tw231QCMIndice)
@@ -124,12 +124,12 @@ func TestSounds231_QCMHint_CueDisabled_Silent_OthersUnaffected(t *testing.T) {
 }
 
 func TestSounds231_QCMHint_Muted_Silent(t *testing.T) {
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := tw231Wire(t)
-	if err := json.Unmarshal([]byte(`{"sound":{"muted":true}}`), config.Get()); err != nil {
+	if err := config.PatchJSON([]byte(`{"sound":{"muted":true}}`)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = json.Unmarshal([]byte(`{"sound":{"muted":false}}`), config.Get()) })
+	t.Cleanup(func() { _ = config.PatchJSON([]byte(`{"sound":{"muted":false}}`)) })
 	app.broadcastQCMHint("RED", 2)
 	if got := tw231Settle(fake); len(got) != 0 {
 		t.Fatalf("son coupé : aucune cue attendue, got %v", got)
@@ -142,7 +142,7 @@ func TestSounds231_QCMHint_Muted_Silent(t *testing.T) {
 
 func tw231MemoryApp(t *testing.T) (*App, *audio.FakeOutput) {
 	t.Helper()
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := tw231Wire(t)
 	q := &game.Question{
 		ID: "q1", Type: game.QuestionTypeMemory,
@@ -239,7 +239,7 @@ func TestSounds231_Memory_CueDisabled_Silent(t *testing.T) {
 
 func tw231MemotionApp(t *testing.T) (*App, *audio.FakeOutput) {
 	t.Helper()
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := tw231Wire(t)
 	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red", Color: []int{255, 0, 0}}})
 	card := func(id string) game.MotionCard { return game.MotionCard{ID: id, RectoTheme: id, Difficulty: 1} }
@@ -315,7 +315,7 @@ func TestSounds231_Memotion_CueDisabled_Silent(t *testing.T) {
 
 func tw231RafaleApp(t *testing.T, maxQuestions int, startDelay ...int) (*App, *audio.FakeOutput) {
 	t.Helper()
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := tw231Wire(t)
 	app.engine.SetTeams(map[string]*game.Team{"red": {Name: "red", Color: []int{255, 0, 0}}})
 	for i := 1; i <= 10; i++ {
@@ -427,7 +427,7 @@ func TestSounds231_Rafale_CueDisabled_Silent(t *testing.T) {
 
 // Les 7 cues historiques ne changent pas de site : un indice QCM ne joue aucune cue globale en plus.
 func TestSounds231_QCMHint_DoesNotAlsoPlayGlobalCue(t *testing.T) {
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := tw231Wire(t)
 	app.broadcastQCMHint("BLUE", 1)
 	for _, c := range tw231Settle(fake, tw231QCMIndice) {

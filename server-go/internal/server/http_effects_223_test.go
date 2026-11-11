@@ -47,9 +47,7 @@ func tw223Server(t *testing.T) (*HTTPServer, string, *tw223Provider) {
 	prov := &tw223Provider{m: effects.NewManager(os.DirFS(natives), dir, nil), dir: dir}
 	srv.Effects = prov
 	// le serveur de test part d'une config vide : appliquer les défauts comme au chargement réel de config.json
-	cfg := config.Get()
-	config.ApplyDefaults(cfg)
-	config.SetInstance(cfg)
+	config.Mutate(config.ApplyDefaults)
 	return srv, dataDir, prov
 }
 

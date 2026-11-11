@@ -112,8 +112,7 @@ func TestZones_PublicNeverWrittenWithoutEffect_HostWhiteFixed_Dev(t *testing.T) 
 		t.Fatalf("zone animateur : blanc fixe malgré OFF + Flash : %+v %v", z, ok)
 	}
 	// Without a public or animateur group nothing of those zones exists.
-	cfg := config.Get()
-	cfg.Lighting.Groups = cfg.Lighting.Groups[:1]
+	config.Mutate(func(cfg *config.Config) { cfg.Lighting.Groups = cfg.Lighting.Groups[:1] })
 	st = r.c.Scene(zdIdle)
 	if areaCount(st, lighting.AreaHost)+areaCount(st, lighting.AreaPublic) != 0 {
 		t.Fatalf("sans groupe animateur ni public, rien ne change : %+v", st.Zones)

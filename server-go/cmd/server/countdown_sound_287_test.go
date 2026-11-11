@@ -84,7 +84,7 @@ func (f *tw287Fake) reset() { f.mu.Lock(); f.calls = nil; f.mu.Unlock() }
 func tw287Config(t *testing.T, raw string) {
 	t.Helper()
 	apply := func(s string) {
-		if err := json.Unmarshal([]byte(s), config.Get()); err != nil {
+		if err := config.PatchJSON([]byte(s)); err != nil {
 			t.Fatalf("setup invalide : %v", err)
 		}
 	}

@@ -232,10 +232,10 @@ func TestRoundAmbiance290_Defaults_EffectiveEqualsGlobal_AllSourcesGlobal_LightA
 
 func TestRoundAmbiance290_GlobalConfig_FeedsGlobalLayer(t *testing.T) {
 	e := tw290New(t)
-	if err := json.Unmarshal([]byte(`{"sound":{"muted":true,"cues_disabled":{"reveal":true,"rafale-fin-lot":true},"countdown_disabled":true,"countdown_once":true}}`), config.Get()); err != nil {
+	if err := config.PatchJSON([]byte(`{"sound":{"muted":true,"cues_disabled":{"reveal":true,"rafale-fin-lot":true},"countdown_disabled":true,"countdown_once":true}}`)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { config.Get().Sound = config.SoundConfig{} })
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound = config.SoundConfig{} }) })
 	m := e.settings(t)
 	if tw290Path(m, "global", "sound", "muted") != true {
 		t.Error("global.sound.muted=true attendu (sound.muted)")
@@ -656,8 +656,10 @@ func tw290Lighting(t *testing.T, e *tw290Env) {
 	t.Cleanup(cancel)
 	e.app.ctx = ctx
 	e.app.httpServer.Lighting = e.app // câblé par setup() en production (main.go), pas par setupCallbacks
-	config.Get().Lighting = config.LightingConfig{Enabled: true, BridgeIP: srv.URL, BridgeID: "fffe0000deadbeef", APIKey: "k",
-		Lights: []config.LightingLightEntry{{Name: "L1", Role: "general"}}}
+	config.Mutate(func(c *config.Config) {
+		c.Lighting = config.LightingConfig{Enabled: true, BridgeIP: srv.URL, BridgeID: "fffe0000deadbeef", APIKey: "k",
+			Lights: []config.LightingLightEntry{{Name: "L1", Role: "general"}}}
+	})
 	e.app.httpServer.OnConfigUpdate()
 	tw286WaitDriver(t, e.app, false)
 }

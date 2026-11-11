@@ -377,9 +377,9 @@ func TestTW225_Config_SavingGroups_DoesNotTouchEffectSettings_IdIsNoLongerAKey(t
 	srv, _ := setupTestHTTPServer(t)
 	tw225Seed(t, srv)
 	tw225Post(t, srv, `{"lighting":{"groups":[{"id":"ga1","role":"animateur","lights":["L1"]},{"id":"gb2","role":"public","lights":["L2"]}]}}`)
-	cfg := config.Get()
-	cfg.Lighting.Effects = map[string]map[string]string{"animateur": {"chrono": "", "calm": "pulsation", "score": ""}, "public": {"chrono": "", "calm": "pulsation", "score": ""}}
-	config.SetInstance(cfg)
+	config.Mutate(func(cfg *config.Config) {
+		cfg.Lighting.Effects = map[string]map[string]string{"animateur": {"chrono": "", "calm": "pulsation", "score": ""}, "public": {"chrono": "", "calm": "pulsation", "score": ""}}
+	})
 	// on supprime le groupe public gb2 : les réglages par zone ne dépendent d'aucun id de groupe
 	if code, out := tw225Post(t, srv, `{"lighting":{"groups":[{"id":"ga1","role":"animateur","lights":["L1"]}]}}`); code != 200 {
 		t.Fatalf("%d %s", code, out)

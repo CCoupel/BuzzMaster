@@ -49,13 +49,13 @@ func tw223AmbSpeeds(speeds string) interface{} {
 // tw223Zones3 configure les trois zones dans la configuration vivante : un groupe de salle, un animateur, un public.
 func tw223Zones3(t *testing.T) {
 	t.Helper()
-	cfg := config.Get()
-	cfg.Lighting.Groups = []config.LightingGroupEntry{
-		{ID: "sa", Role: config.GroupRoleSalle, Lights: []string{"A"}},
-		{ID: "ha", Role: config.GroupRoleAnimateur, Lights: []string{"P"}},
-		{ID: "pa", Role: "public", Lights: []string{"R"}},
-	}
-	config.SetInstance(cfg)
+	config.Mutate(func(cfg *config.Config) {
+		cfg.Lighting.Groups = []config.LightingGroupEntry{
+			{ID: "sa", Role: config.GroupRoleSalle, Lights: []string{"A"}},
+			{ID: "ha", Role: config.GroupRoleAnimateur, Lights: []string{"P"}},
+			{ID: "pa", Role: "public", Lights: []string{"R"}},
+		}
+	})
 }
 
 func tw223Path(m map[string]interface{}, path ...string) interface{} { return tw290Path(m, path...) }

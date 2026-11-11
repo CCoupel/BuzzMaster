@@ -29,10 +29,10 @@ type tw290sEnv struct {
 func tw290sNew(t *testing.T, cfgJSON string) *tw290sEnv {
 	t.Helper()
 	e := tw290New(t)
-	if err := json.Unmarshal([]byte(cfgJSON), config.Get()); err != nil {
+	if err := config.PatchJSON([]byte(cfgJSON)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { config.Get().Sound = config.SoundConfig{} })
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound = config.SoundConfig{} }) })
 	s := &tw290sEnv{tw290Env: e, cues: audio.NewFakeOutput(), media: &tw235Player{}, countdown: &tw287Fake{}}
 	e.app.soundEngine.Store(e.app.newSoundEngine(s.cues))
 	ctx, cancel := context.WithCancel(context.Background())
