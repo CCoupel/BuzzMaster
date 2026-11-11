@@ -19,7 +19,8 @@ func TestValidateLightingGroups(t *testing.T) {
 		{"unknown light", []LightingGroupEntry{{Lights: []string{"Z"}}}, "inconnue"},
 		{"team light", []LightingGroupEntry{{Lights: []string{"T"}}}, "équipe"},
 		{"light twice", []LightingGroupEntry{{Lights: []string{"A"}}, {Lights: []string{"A"}}}, "deux groupes"},
-		{"five hosts", []LightingGroupEntry{{Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}}, "4 groupes animateur"},
+		{"thirteen hosts", repeatRole("animateur", 13), "12 groupes"},
+		{"thirteen public", repeatRole("public", 13), "12 groupes"},
 		{"id invalide", []LightingGroupEntry{{ID: "Bad Id"}}, "identifiant"},
 		{"id en double", []LightingGroupEntry{{ID: "x1"}, {ID: "x1"}}, "double"},
 		{"bad role", []LightingGroupEntry{{Role: "x"}}, "rôle"},
@@ -42,24 +43,11 @@ func TestValidateLightingGroups(t *testing.T) {
 			}
 		})
 	}
-	many := make([]LightingGroupEntry, MaxSalleGroups+1)
-	for i := range many {
-		many[i] = LightingGroupEntry{}
-	}
-	if _, err := ValidateLightingGroups(many, lights); err == nil {
-		t.Fatal("13 groupes de salle refusés")
-	}
-	// Four animateur groups + twelve salle groups are fine; ids are assigned and stable.
-	ok := make([]LightingGroupEntry, 0, 16)
-	for i := 0; i < MaxSalleGroups; i++ {
-		ok = append(ok, LightingGroupEntry{})
-	}
-	for i := 0; i < MaxHostGroups; i++ {
-		ok = append(ok, LightingGroupEntry{Role: GroupRoleAnimateur})
-	}
+	// 12 groups in each of the three zones are fine; ids are assigned and stable.
+	ok := append(append(repeatRole("salle", MaxGroupsPerZone), repeatRole("animateur", MaxGroupsPerZone)...), repeatRole("public", MaxGroupsPerZone)...)
 	out, err := ValidateLightingGroups(ok, lights)
 	if err != nil {
-		t.Fatalf("12 + 4 groupes : %v", err)
+		t.Fatalf("12 groupes par zone : %v", err)
 	}
 	seen := map[string]bool{}
 	for _, g := range out {
@@ -89,12 +77,12 @@ func TestPruneAndAssignment(t *testing.T) {
 	if len(pruned[0].Lights) != 1 || pruned[0].Lights[0] != "A" || len(pruned[2].Lights) != 0 {
 		t.Fatalf("prune wrong: %+v", pruned)
 	}
-	num, host := LightingConfig{Groups: pruned}.GroupAssignment()
-	if num["A"] != 1 || host["B"] != 1 || host["D"] != 2 || len(num) != 1 {
-		t.Fatalf("assignment wrong: %v %v", num, host)
+	got := LightingConfig{Groups: pruned}.GroupOfLight()
+	if got["A"] != (LightRef{Zone: "ambiance", Num: 1}) || got["B"] != (LightRef{Zone: "animateur", Num: 1}) || got["D"] != (LightRef{Zone: "animateur", Num: 2}) || len(got) != 3 {
+		t.Fatalf("assignment wrong: %v", got)
 	}
-	hg := (LightingConfig{Groups: pruned}).HostGroups()
-	if len(hg) != 2 || hg[0].ID != "h1" || hg[1].Rank != 2 {
+	hg := (LightingConfig{Groups: pruned}).ZoneGroups("animateur")
+	if len(hg) != 2 || hg[0].ID != "h1" || hg[1].Num != 2 {
 		t.Fatalf("groupes animateur : %+v", hg)
 	}
 }
@@ -114,15 +102,15 @@ func TestLoad_LegacyQualifHostGroupAndFlatHostEffects_Tolerated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("le serveur doit démarrer : %v", err)
 	}
-	hg := cfg.Lighting.HostGroups()
-	if len(hg) != 1 || !reGroupID.MatchString(hg[0].ID) || hg[0].Rank != 1 {
+	hg := cfg.Lighting.ZoneGroups("animateur")
+	if len(hg) != 1 || !reGroupID.MatchString(hg[0].ID) || hg[0].Num != 1 {
 		t.Fatalf("id attribué à l'ancien groupe animateur : %+v", hg)
 	}
-	if len(cfg.Lighting.HostEffects) != 0 {
-		t.Fatalf("l'ancienne forme plate est ignorée : %+v", cfg.Lighting.HostEffects)
+	if cfg.Lighting.Effects["animateur"]["calm"] != "" || cfg.Lighting.Effects["animateur"]["score"] != "" {
+		t.Fatalf("host_effects ignoré : %+v", cfg.Lighting.Effects)
 	}
-	if cfg.Lighting.Effects["calm"] != "" || cfg.Lighting.Effects["chrono"] != "pulsation" {
-		t.Fatalf("effets de salle conservés / complétés : %+v", cfg.Lighting.Effects)
+	if cfg.Lighting.Effects["ambiance"]["calm"] != "" || cfg.Lighting.Effects["ambiance"]["chrono"] != "pulsation" {
+		t.Fatalf("effets plats lus comme zone ambiance, complétés : %+v", cfg.Lighting.Effects)
 	}
 	cfg2, _ := Load(path)
 	if cfg2.Lighting.Groups[0].ID != hg[0].ID {

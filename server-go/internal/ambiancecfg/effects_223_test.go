@@ -1,13 +1,10 @@
 package ambiancecfg
 
-// #223 (v11.7.0, LOT-2) — effet lumière par moment dans le modèle mutualisé.
+// #223 (v11.7.0, LOT-2) — effets lumière PAR ZONE et par moment dans le modèle mutualisé (révision 4).
 // Source : contracts/ambiance-settings.md §10, contracts/light-effects.md §6.
-// Écrit AVANT le code (TDD) : forme supposée, calquée sur `CuesEnabled` —
-//   Settings.LightEffects                         map[string]string  (clés chrono|calm|score)
-//   Settings.LightHostEffects                     map[id de groupe animateur]map[moment]string  (révision du GATE LOT-1, §6)
-//   Partial.*                                     idem, partielles : seuls les groupes et moments surchargés
-//   Sources.LightEffects / LightHostEffects       map[string]Source / map[id]map[moment]Source  (global | round)
-// Aides préfixées tw223.
+// Forme : Settings.LightEffects map[zone]map[moment]string (zones ambiance|animateur|public ; moments chrono|calm|score),
+// Partial idem (partielle), Sources.LightEffects map[zone]map[moment]Source ; JSON light.effects.<zone>.<moment>.
+// Plus de LightHostEffects, plus d'id de groupe : le groupe n'est la clé d'aucun réglage. Aides préfixées tw223.
 
 import (
 	"encoding/json"
@@ -17,14 +14,12 @@ import (
 )
 
 var tw223Moments = []string{"chrono", "calm", "score"}
+var tw223Zones = []string{"ambiance", "animateur", "public"}
 
 func tw223Global() Settings {
 	g := tw290aGlobal()
-	g.LightEffects = map[string]string{"chrono": "pulsation", "calm": "", "score": ""}
-	g.LightHostEffects = map[string]map[string]string{
-		"h1": {"chrono": "", "calm": "", "score": ""},
-		"h2": {"chrono": "", "calm": "", "score": ""},
-	}
+	g.LightEffects = DefaultLightEffects()
+	g.LightSpeeds = DefaultLightSpeeds()
 	return g
 }
 
@@ -53,150 +48,166 @@ func tw223Dig(m map[string]interface{}, path ...string) interface{} {
 	return cur
 }
 
-// ---------- Resolve ----------
+func tw223Eff(zone, moment, id string) map[string]map[string]string {
+	return map[string]map[string]string{zone: {moment: id}}
+}
 
-func TestResolve223_NoLayer_GlobalEffects_AllSourcesGlobal(t *testing.T) {
-	got, src := Resolve(tw223Global())
-	for _, m := range tw223Moments {
-		if got.LightEffects[m] != tw223Global().LightEffects[m] {
-			t.Errorf("effects[%s] = %q", m, got.LightEffects[m])
+// ---------- défauts ----------
+
+func TestDefaults223_PulsationForAmbianceChrono_NothingElsewhere(t *testing.T) {
+	d := DefaultLightEffects()
+	for _, z := range tw223Zones {
+		if len(d[z]) != 3 {
+			t.Fatalf("zone %s : trois moments toujours présents : %v", z, d[z])
 		}
-		if string(src.LightEffects[m]) != "global" {
-			t.Errorf("source de %s : %q, attendu global", m, src.LightEffects[m])
-		}
-		for _, id := range []string{"h1", "h2"} {
-			if string(src.LightHostEffects[id][m]) != "global" {
-				t.Errorf("source host_effects.%s.%s : %q, attendu global", id, m, src.LightHostEffects[id][m])
+		for _, m := range tw223Moments {
+			want := ""
+			if z == "ambiance" && m == "chrono" {
+				want = "pulsation"
+			}
+			if d[z][m] != want {
+				t.Errorf("défaut %s.%s = %q, attendu %q", z, m, d[z][m], want)
 			}
 		}
 	}
 }
 
-func TestResolve223_RoundOverridesOneMomentOnly(t *testing.T) {
-	round := Partial{LightEffects: map[string]string{"calm": "scintillement"}}
-	got, src := Resolve(tw223Global(), round)
-	if got.LightEffects["calm"] != "scintillement" || got.LightEffects["chrono"] != "pulsation" || got.LightEffects["score"] != "" {
-		t.Errorf("seul calm est surchargé : %+v", got.LightEffects)
+// ---------- Resolve ----------
+
+func TestResolve223_NoLayer_GlobalEffects_AllSourcesGlobal(t *testing.T) {
+	got, src := Resolve(tw223Global())
+	for _, z := range tw223Zones {
+		for _, m := range tw223Moments {
+			if got.LightEffects[z][m] != tw223Global().LightEffects[z][m] {
+				t.Errorf("effects[%s][%s] = %q", z, m, got.LightEffects[z][m])
+			}
+			if string(src.LightEffects[z][m]) != "global" {
+				t.Errorf("source de %s.%s : %q, attendu global", z, m, src.LightEffects[z][m])
+			}
+		}
 	}
-	if string(src.LightEffects["calm"]) != "round" || string(src.LightEffects["chrono"]) != "global" {
+}
+
+func TestResolve223_RoundOverridesOneZoneAndMomentOnly(t *testing.T) {
+	got, src := Resolve(tw223Global(), Partial{LightEffects: tw223Eff("animateur", "calm", "scintillement")})
+	if got.LightEffects["animateur"]["calm"] != "scintillement" {
+		t.Errorf("animateur.calm surchargé : %+v", got.LightEffects)
+	}
+	if got.LightEffects["ambiance"]["chrono"] != "pulsation" || got.LightEffects["ambiance"]["calm"] != "" || got.LightEffects["public"]["calm"] != "" {
+		t.Errorf("les autres zones et moments restent hérités : %+v", got.LightEffects)
+	}
+	if string(src.LightEffects["animateur"]["calm"]) != "round" || string(src.LightEffects["animateur"]["chrono"]) != "global" || string(src.LightEffects["ambiance"]["calm"]) != "global" {
 		t.Errorf("sources : %+v", src.LightEffects)
-	}
-	if !reflect.DeepEqual(got.LightHostEffects, tw223Global().LightHostEffects) {
-		t.Errorf("les groupes animateur restent hérités : %+v", got.LightHostEffects)
 	}
 }
 
 func TestResolve223_EmptyStringIsAnOverride_NotInherited(t *testing.T) {
 	// « Aucun effet » pendant le chrono dans la manche : "" ≠ clé absente.
-	got, src := Resolve(tw223Global(), Partial{LightEffects: map[string]string{"chrono": ""}})
-	if got.LightEffects["chrono"] != "" || string(src.LightEffects["chrono"]) != "round" {
-		t.Errorf("\"\" surcharge la valeur globale « pulsation » : %q (%s)", got.LightEffects["chrono"], src.LightEffects["chrono"])
+	got, src := Resolve(tw223Global(), Partial{LightEffects: tw223Eff("ambiance", "chrono", "")})
+	if got.LightEffects["ambiance"]["chrono"] != "" || string(src.LightEffects["ambiance"]["chrono"]) != "round" {
+		t.Errorf("\"\" surcharge la valeur globale « pulsation » : %q (%s)", got.LightEffects["ambiance"]["chrono"], src.LightEffects["ambiance"]["chrono"])
 	}
 }
 
-func TestResolve223_HostEffectsIndependentFromRoomEffects(t *testing.T) {
-	round := Partial{LightHostEffects: map[string]map[string]string{"h1": {"score": "couleur-equipe"}}}
+func TestResolve223_ZonesAreIndependent_SameMoment(t *testing.T) {
+	round := Partial{LightEffects: map[string]map[string]string{"public": {"score": "couleur-equipe"}, "animateur": {"score": "x"}}}
 	got, src := Resolve(tw223Global(), round)
-	if got.LightHostEffects["h1"]["score"] != "couleur-equipe" || string(src.LightHostEffects["h1"]["score"]) != "round" {
-		t.Errorf("host_effects.h1.score : %+v / %+v", got.LightHostEffects, src.LightHostEffects)
+	if got.LightEffects["public"]["score"] != "couleur-equipe" || got.LightEffects["animateur"]["score"] != "x" || got.LightEffects["ambiance"]["score"] != "" {
+		t.Errorf("chaque zone résout son propre moment : %+v", got.LightEffects)
 	}
-	if got.LightEffects["score"] != "" || string(src.LightEffects["score"]) != "global" {
-		t.Errorf("effects.score inchangé : %+v", got.LightEffects)
+	if string(src.LightEffects["public"]["score"]) != "round" || string(src.LightEffects["ambiance"]["score"]) != "global" {
+		t.Errorf("sources : %+v", src.LightEffects)
 	}
 }
 
 func TestResolve223_LastLayerWins_FieldByField(t *testing.T) {
-	r := Partial{LightEffects: map[string]string{"chrono": "chenillard", "calm": "a"}}
-	d := Partial{LightEffects: map[string]string{"calm": "b"}}
+	r := Partial{LightEffects: map[string]map[string]string{"ambiance": {"chrono": "chenillard", "calm": "a"}}}
+	d := Partial{LightEffects: tw223Eff("ambiance", "calm", "b")}
 	got, _ := Resolve(tw223Global(), r, d)
-	if got.LightEffects["chrono"] != "chenillard" || got.LightEffects["calm"] != "b" {
+	if got.LightEffects["ambiance"]["chrono"] != "chenillard" || got.LightEffects["ambiance"]["calm"] != "b" {
 		t.Errorf("%+v", got.LightEffects)
 	}
 }
 
 func TestResolve223_PureFunction_NoMutationOfInputs(t *testing.T) {
 	g := tw223Global()
-	p := Partial{LightEffects: map[string]string{"chrono": "chenillard"}}
+	p := Partial{LightEffects: tw223Eff("ambiance", "chrono", "chenillard")}
 	gBefore, pBefore := g.Clone(), p.Clone()
 	got, _ := Resolve(g, p)
-	got.LightEffects["calm"] = "modifie"
+	got.LightEffects["ambiance"]["calm"] = "modifie"
 	if !reflect.DeepEqual(g, gBefore) || !reflect.DeepEqual(p, pBefore) {
 		t.Error("Resolve ne modifie ni le global ni la couche")
+	}
+}
+
+func TestResolve223_SettingsWithoutEffects_GetTheThreeByThreeDefaults(t *testing.T) {
+	g := tw290aGlobal() // construit sans effets : anciens appelants
+	got, _ := Resolve(g)
+	for _, z := range tw223Zones {
+		if len(got.LightEffects[z]) != 3 || len(got.LightSpeeds[z]) != 3 {
+			t.Errorf("forme complète 3 × 3 toujours résolue : %s %v %v", z, got.LightEffects[z], got.LightSpeeds[z])
+		}
+	}
+	if got.LightEffects["ambiance"]["chrono"] != "pulsation" {
+		t.Errorf("défaut pulsation : %v", got.LightEffects)
 	}
 }
 
 func TestClone223_DeepCopiesEffectMaps(t *testing.T) {
 	s := tw223Global()
 	c := s.Clone()
-	c.LightEffects["chrono"] = "x"
-	c.LightHostEffects["h1"]["calm"] = "y"
-	if s.LightEffects["chrono"] != "pulsation" || s.LightHostEffects["h1"]["calm"] != "" {
+	c.LightEffects["animateur"]["calm"] = "y"
+	if s.LightEffects["animateur"]["calm"] != "" {
 		t.Error("Settings.Clone doit copier en profondeur les cartes d'effets")
 	}
-	p := Partial{LightEffects: map[string]string{"chrono": "a"}, LightHostEffects: map[string]map[string]string{"h1": {"calm": "b"}}}
+	p := Partial{LightEffects: tw223Eff("public", "calm", "b")}
 	pc := p.Clone()
-	pc.LightEffects["chrono"] = "z"
-	pc.LightHostEffects["h1"]["calm"] = "z"
-	if p.LightEffects["chrono"] != "a" || p.LightHostEffects["h1"]["calm"] != "b" {
+	pc.LightEffects["public"]["calm"] = "z"
+	if p.LightEffects["public"]["calm"] != "b" {
 		t.Error("Partial.Clone doit copier en profondeur")
 	}
 }
 
 func TestPartial223_IsEmptyAndMerge(t *testing.T) {
-	if !(Partial{LightEffects: map[string]string{}, LightHostEffects: map[string]map[string]string{}}).IsEmpty() {
+	if !(Partial{LightEffects: map[string]map[string]string{}}).IsEmpty() {
 		t.Error("des cartes d'effets vides = Partial vide")
 	}
-	if (Partial{LightEffects: map[string]string{"calm": ""}}).IsEmpty() {
+	if (Partial{LightEffects: tw223Eff("ambiance", "calm", "")}).IsEmpty() {
 		t.Error("un effet surchargé à \"\" n'est pas vide")
 	}
-	a := Partial{LightEffects: map[string]string{"chrono": "a", "calm": "a"}}
-	b := Partial{LightEffects: map[string]string{"calm": "b"}, LightHostEffects: map[string]map[string]string{"h2": {"score": "c"}}}
+	a := Partial{LightEffects: map[string]map[string]string{"ambiance": {"chrono": "a", "calm": "a"}}}
+	b := Partial{LightEffects: map[string]map[string]string{"ambiance": {"calm": "b"}, "public": {"score": "c"}}}
 	m := a.Merge(b)
-	if m.LightEffects["chrono"] != "a" || m.LightEffects["calm"] != "b" || m.LightHostEffects["h2"]["score"] != "c" {
-		t.Errorf("Merge clé par clé, le second l'emporte : %+v", m)
+	if m.LightEffects["ambiance"]["chrono"] != "a" || m.LightEffects["ambiance"]["calm"] != "b" || m.LightEffects["public"]["score"] != "c" {
+		t.Errorf("Merge zone par zone, moment par moment, le second l'emporte : %+v", m)
 	}
 }
 
 // ---------- JSON ----------
 
-func TestJSON223_Settings_CompleteFormAlwaysThreeKeys(t *testing.T) {
+func TestJSON223_Settings_CompleteFormAlwaysThreeZonesByThreeMoments(t *testing.T) {
 	m := tw223JSON(t, tw223Global())
-	eff, _ := tw223Dig(m, "light", "effects").(map[string]interface{})
-	if len(eff) != 3 {
-		t.Fatalf("light.effects : trois clés toujours présentes (pas d'omitempty) : %v", eff)
-	}
-	hosts, _ := tw223Dig(m, "light", "host_effects").(map[string]interface{})
-	if len(hosts) != 2 {
-		t.Fatalf("light.host_effects : une entrée par groupe animateur existant : %v", hosts)
-	}
-	for _, id := range []string{"h1", "h2"} {
-		g, _ := hosts[id].(map[string]interface{})
-		if len(g) != 3 {
-			t.Errorf("light.host_effects.%s : trois moments toujours présents : %v", id, g)
+	for _, z := range tw223Zones {
+		zm, _ := tw223Dig(m, "light", "effects", z).(map[string]interface{})
+		if len(zm) != 3 {
+			t.Fatalf("light.effects.%s : trois moments toujours présents (pas d'omitempty) : %v", z, zm)
 		}
 	}
-	if tw223Dig(m, "light", "effects", "chrono") != "pulsation" || tw223Dig(m, "light", "effects", "calm") != "" {
+	if tw223Dig(m, "light", "effects", "ambiance", "chrono") != "pulsation" || tw223Dig(m, "light", "effects", "ambiance", "calm") != "" {
 		t.Errorf("valeurs : %v", tw223Dig(m, "light", "effects"))
 	}
 	if tw223Dig(m, "light", "mode") != "AUTO" {
 		t.Error("light.mode conservé à côté des effets")
 	}
-}
-
-func TestJSON223_Settings_NoHostGroup_HostEffectsIsEmptyObject(t *testing.T) {
-	g := tw223Global()
-	g.LightHostEffects = map[string]map[string]string{}
-	m := tw223JSON(t, g)
-	hosts, ok := tw223Dig(m, "light", "host_effects").(map[string]interface{})
-	if !ok || len(hosts) != 0 {
-		t.Errorf("aucun groupe animateur ⇒ {} (jamais absent ni null) : %v", tw223Dig(m, "light", "host_effects"))
+	if _, present := tw223Dig(m, "light").(map[string]interface{})["host_effects"]; present {
+		t.Error("light.host_effects n'existe plus")
 	}
 }
 
 func TestJSON223_Settings_RoundTrip(t *testing.T) {
 	s := tw223Global()
-	s.LightEffects["calm"] = "scintillement"
-	s.LightHostEffects["h2"]["score"] = "couleur-equipe"
+	s.LightEffects["ambiance"]["calm"] = "scintillement"
+	s.LightEffects["public"]["score"] = "couleur-equipe"
 	raw, _ := json.Marshal(s)
 	var back Settings
 	if err := json.Unmarshal(raw, &back); err != nil {
@@ -208,33 +219,33 @@ func TestJSON223_Settings_RoundTrip(t *testing.T) {
 }
 
 func TestJSON223_Partial_OnlyOverriddenKeys_EmptyMapsOmitted(t *testing.T) {
-	raw, _ := json.Marshal(Partial{LightEffects: map[string]string{"calm": ""}})
+	raw, _ := json.Marshal(Partial{LightEffects: tw223Eff("animateur", "calm", "")})
 	var got, want interface{}
 	_ = json.Unmarshal(raw, &got)
-	_ = json.Unmarshal([]byte(`{"light":{"effects":{"calm":""}}}`), &want)
+	_ = json.Unmarshal([]byte(`{"light":{"effects":{"animateur":{"calm":""}}}}`), &want)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %s", raw)
 	}
-	raw, _ = json.Marshal(Partial{LightEffects: map[string]string{}, LightHostEffects: map[string]map[string]string{}})
+	raw, _ = json.Marshal(Partial{LightEffects: map[string]map[string]string{}})
 	if strings.TrimSpace(string(raw)) != "{}" {
 		t.Errorf("cartes vides omises : %s", raw)
 	}
 }
 
-func TestJSON223_Partial_FromContract_BothBranches(t *testing.T) {
-	const doc = `{"light":{"mode":"ON","effects":{"chrono":"chenillard"},"host_effects":{"g5d7e4":{"score":"couleur-equipe"}}}}`
+func TestJSON223_Partial_FromContract(t *testing.T) {
+	const doc = `{"light":{"mode":"ON","effects":{"ambiance":{"chrono":"chenillard"},"public":{"score":"couleur-equipe"}}}}`
 	var p Partial
 	if err := json.Unmarshal([]byte(doc), &p); err != nil {
 		t.Fatal(err)
 	}
-	if p.LightEffects["chrono"] != "chenillard" || p.LightHostEffects["g5d7e4"]["score"] != "couleur-equipe" || p.LightMode == nil {
+	if p.LightEffects["ambiance"]["chrono"] != "chenillard" || p.LightEffects["public"]["score"] != "couleur-equipe" || p.LightMode == nil {
 		t.Errorf("%+v", p)
 	}
-	if _, ok := p.LightEffects["calm"]; ok {
+	if _, ok := p.LightEffects["ambiance"]["calm"]; ok {
 		t.Error("clé absente ⇒ héritée, pas de valeur zéro inventée")
 	}
-	if _, ok := p.LightHostEffects["g5d7e4"]["chrono"]; ok {
-		t.Error("seuls les moments surchargés figurent dans le Partial d'un groupe")
+	if _, ok := p.LightEffects["animateur"]; ok {
+		t.Error("zone absente ⇒ héritée")
 	}
 	raw, _ := json.Marshal(p)
 	var back Partial
@@ -243,103 +254,87 @@ func TestJSON223_Partial_FromContract_BothBranches(t *testing.T) {
 	}
 }
 
-func TestJSON223_OldFlatHostEffects_IgnoredWithoutError(t *testing.T) {
-	// forme codée au LOT-2 et jamais livrée en PROD : {chrono, calm, score} à plat — lue dans un rounds.json de QUALIF
+func TestJSON223_OldFlatEffects_ReadAsAmbianceZone_HostKeysIgnored(t *testing.T) {
+	// forme à plat d'un rounds.json de QUALIF : les moments à plat sont la zone ambiance ; host_effects est ignoré
 	var p Partial
-	if err := json.Unmarshal([]byte(`{"light":{"host_effects":{"chrono":"","calm":"","score":"couleur-equipe"}}}`), &p); err != nil {
-		t.Fatalf("l'ancienne forme plate est ignorée sans erreur : %v", err)
+	doc := `{"light":{"effects":{"chrono":"chenillard","calm":""},"host_effects":{"g5d7e4":{"score":"couleur-equipe"}}}}`
+	if err := json.Unmarshal([]byte(doc), &p); err != nil {
+		t.Fatalf("l'ancienne forme se lit sans erreur : %v", err)
 	}
-	if len(p.LightHostEffects) != 0 {
-		t.Errorf("la forme plate n'est jamais prise pour des id de groupe : %+v", p.LightHostEffects)
+	if p.LightEffects["ambiance"]["chrono"] != "chenillard" {
+		t.Errorf("effets à plat ⇒ zone ambiance : %+v", p.LightEffects)
+	}
+	if _, ok := p.LightEffects["animateur"]; ok {
+		t.Errorf("host_effects ignoré, jamais repris dans une zone : %+v", p.LightEffects)
 	}
 	var s Settings
-	if err := json.Unmarshal([]byte(`{"light":{"mode":"AUTO","host_effects":{"chrono":"","score":"x"}}}`), &s); err != nil {
+	if err := json.Unmarshal([]byte(`{"light":{"mode":"AUTO","effects":{"chrono":"a"},"host_effects":{"chrono":"","score":"x"}}}`), &s); err != nil {
 		t.Fatalf("idem pour Settings : %v", err)
 	}
-	if len(s.LightHostEffects) != 0 {
-		t.Errorf("%+v", s.LightHostEffects)
-	}
-}
-
-func TestResolve223_UnknownHostIdInLayer_IgnoredAtResolution(t *testing.T) {
-	round := Partial{LightHostEffects: map[string]map[string]string{"disparu": {"score": "couleur-equipe"}, "h1": {"calm": "x"}}}
-	got, src := Resolve(tw223Global(), round)
-	if _, ok := got.LightHostEffects["disparu"]; ok {
-		t.Errorf("un id absent du global (groupe supprimé) est ignoré, sans erreur : %+v", got.LightHostEffects)
-	}
-	if got.LightHostEffects["h1"]["calm"] != "x" || string(src.LightHostEffects["h1"]["calm"]) != "round" {
-		t.Errorf("l'id connu est résolu : %+v", got.LightHostEffects)
-	}
-}
-
-func TestResolve223_RoundOverridesTwoHostGroupsIndependently(t *testing.T) {
-	round := Partial{LightHostEffects: map[string]map[string]string{"h1": {"chrono": "a"}, "h2": {"score": "b"}}}
-	got, src := Resolve(tw223Global(), round)
-	if got.LightHostEffects["h1"]["chrono"] != "a" || got.LightHostEffects["h1"]["score"] != "" ||
-		got.LightHostEffects["h2"]["score"] != "b" || got.LightHostEffects["h2"]["chrono"] != "" {
-		t.Errorf("chaque groupe animateur résout ses propres moments : %+v", got.LightHostEffects)
-	}
-	if string(src.LightHostEffects["h1"]["chrono"]) != "round" || string(src.LightHostEffects["h1"]["score"]) != "global" ||
-		string(src.LightHostEffects["h2"]["score"]) != "round" {
-		t.Errorf("sources par groupe et moment : %+v", src.LightHostEffects)
+	got, _ := Resolve(s)
+	if got.LightEffects["ambiance"]["chrono"] != "a" || got.LightEffects["animateur"]["score"] != "" {
+		t.Errorf("%+v", got.LightEffects)
 	}
 }
 
 func TestJSON223_Sources_Form(t *testing.T) {
-	_, src := Resolve(tw223Global(), Partial{LightEffects: map[string]string{"calm": "a"}, LightHostEffects: map[string]map[string]string{"h1": {"chrono": "b"}}})
+	_, src := Resolve(tw223Global(), Partial{LightEffects: map[string]map[string]string{"ambiance": {"calm": "a"}, "public": {"chrono": "b"}}})
 	m := tw223JSON(t, src)
-	if tw223Dig(m, "light", "effects", "calm") != "round" || tw223Dig(m, "light", "effects", "chrono") != "global" ||
-		tw223Dig(m, "light", "host_effects", "h1", "chrono") != "round" || tw223Dig(m, "light", "host_effects", "h2", "chrono") != "global" {
-		t.Errorf("Sources.light.effects.<moment> ∈ global|round : %v", m)
+	if tw223Dig(m, "light", "effects", "ambiance", "calm") != "round" || tw223Dig(m, "light", "effects", "ambiance", "chrono") != "global" ||
+		tw223Dig(m, "light", "effects", "public", "chrono") != "round" || tw223Dig(m, "light", "effects", "animateur", "chrono") != "global" {
+		t.Errorf("Sources.light.effects.<zone>.<moment> ∈ global|round : %v", m)
 	}
 }
 
 // ---------- validation de forme (l'existence de l'id dans le catalogue est vérifiée côté serveur) ----------
 
-func TestValidate223_UnknownMomentRefused_NamedInError(t *testing.T) {
-	for _, kind := range []map[string]string{{"bidule": "x"}, {"": "x"}, {"CHRONO": "x"}} {
-		if err := (Partial{LightEffects: kind}).Validate(tw290aKnown); err == nil {
-			t.Errorf("moment inconnu %v : refus attendu", kind)
-		}
-		if err := (Partial{LightHostEffects: map[string]map[string]string{"h1": kind}}).Validate(tw290aKnown); err == nil {
-			t.Errorf("moment inconnu (animateur) %v : refus attendu", kind)
+func TestValidate223_UnknownMomentOrZoneRefused_NamedInError(t *testing.T) {
+	for _, p := range []Partial{
+		{LightEffects: tw223Eff("ambiance", "bidule", "x")},
+		{LightEffects: tw223Eff("ambiance", "", "x")},
+		{LightEffects: tw223Eff("ambiance", "CHRONO", "x")},
+		{LightEffects: tw223Eff("salle", "chrono", "x")},
+		{LightEffects: tw223Eff("g5d7e4", "chrono", "x")},
+	} {
+		if err := p.Validate(tw290aKnown); err == nil {
+			t.Errorf("zone ou moment inconnu %v : refus attendu", p.LightEffects)
 		}
 	}
-	err := (Partial{LightEffects: map[string]string{"bidule": "x"}}).Validate(tw290aKnown)
+	err := (Partial{LightEffects: tw223Eff("ambiance", "bidule", "x")}).Validate(tw290aKnown)
 	if err == nil || !strings.Contains(err.Error(), "bidule") {
 		t.Errorf("l'erreur nomme le champ fautif : %v", err)
 	}
 }
 
-func TestValidate223_ThreeMomentsAndEmptyIdAccepted(t *testing.T) {
-	p := Partial{
-		LightEffects:     map[string]string{"chrono": "chenillard", "calm": "", "score": "couleur-equipe"},
-		LightHostEffects: map[string]map[string]string{"h1": {"chrono": "", "calm": "", "score": ""}, "h2": {"score": "couleur-equipe"}},
-	}
+func TestValidate223_ThreeZonesThreeMomentsAndEmptyIdAccepted(t *testing.T) {
+	p := Partial{LightEffects: map[string]map[string]string{
+		"ambiance":  {"chrono": "chenillard", "calm": "", "score": "couleur-equipe"},
+		"animateur": {"chrono": "", "calm": "", "score": ""},
+		"public":    {"score": "couleur-equipe"},
+	}}
 	if err := p.Validate(tw290aKnown); err != nil {
-		t.Errorf("trois moments, id d'effet ou chaîne vide : %v", err)
+		t.Errorf("trois zones, trois moments, id d'effet ou chaîne vide : %v", err)
 	}
 }
 
 func TestValidate223_InvalidPathsListsLightEffectPaths(t *testing.T) {
-	bad := (Partial{LightEffects: map[string]string{"bidule": "x"}}).InvalidPaths(tw290aKnown)
-	if len(bad) != 1 || bad[0] != "light.effects.bidule" {
+	bad := (Partial{LightEffects: tw223Eff("ambiance", "bidule", "x")}).InvalidPaths(tw290aKnown)
+	if len(bad) != 1 || bad[0] != "light.effects.ambiance.bidule" {
 		t.Errorf("chemin JSON fautif : %v", bad)
 	}
-	bad = (Partial{LightHostEffects: map[string]map[string]string{"h1": {"bidule": "x"}}}).InvalidPaths(tw290aKnown)
-	if len(bad) != 1 || bad[0] != "light.host_effects.h1.bidule" {
-		t.Errorf("chemin JSON fautif (animateur, par id) : %v", bad)
+	bad = (Partial{LightEffects: tw223Eff("salle", "chrono", "x")}).InvalidPaths(tw290aKnown)
+	if len(bad) != 1 || bad[0] != "light.effects.salle.chrono" {
+		t.Errorf("chemin JSON fautif (zone inconnue) : %v", bad)
 	}
 }
 
-func TestValidate223_EditablePathsParity_RoomAndHostPerGroup(t *testing.T) {
-	// parité avec le composant React : light.effects.<m> et light.host_effects.<id>.<m>, trois moments chacun
-	for _, m := range tw223Moments {
-		if bad := (Partial{LightEffects: map[string]string{m: ""}}).InvalidPaths(tw290aKnown); len(bad) != 0 {
-			t.Errorf("light.effects.%s éditable : %v", m, bad)
-		}
-		if bad := (Partial{LightHostEffects: map[string]map[string]string{"g5d7e4": {m: ""}}}).InvalidPaths(tw290aKnown); len(bad) != 0 {
-			t.Errorf("light.host_effects.<id>.%s éditable : %v", m, bad)
+func TestValidate223_EditablePathsParity_ThreeZonesByThreeMoments(t *testing.T) {
+	// parité avec le composant React : light.effects.<zone>.<moment>, 9 chemins éditables
+	for _, z := range tw223Zones {
+		for _, m := range tw223Moments {
+			if bad := (Partial{LightEffects: tw223Eff(z, m, "")}).InvalidPaths(tw290aKnown); len(bad) != 0 {
+				t.Errorf("light.effects.%s.%s éditable : %v", z, m, bad)
+			}
 		}
 	}
 }

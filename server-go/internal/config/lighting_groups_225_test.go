@@ -1,8 +1,8 @@
 package config
 
-// Tests de spécification v11.7.0 LOT-1 (#225), révision 3 — contracts/light-effects.md §2.1, §2.5 : groupes SANS NOM ni
-// `near_teams` (un groupe n'a qu'un rang), `id` stable, plusieurs groupes animateur (4) et 12 groupes de salle,
-// retrait automatique, numérotation, lecture tolérante de l'ancienne configuration (name / near_teams ignorés).
+// Tests de spécification v11.7.0 LOT-1 (#225), révision 4 — contracts/light-effects.md §2.1, §2.5 : trois zones (ambiance = rôle salle,
+// animateur, public), groupes SANS NOM ni `near_teams`, `id` stable, 12 groupes par zone (plafonds indépendants),
+// rang par zone (vides compris), zone sans groupe non vide inexistante, lecture tolérante de l'ancienne configuration.
 
 import (
 	"encoding/json"
@@ -87,17 +87,20 @@ func TestTW225_Validate_Refuses(t *testing.T) {
 	many := make([]LightingGroupEntry, 13)
 	cases := map[string][]LightingGroupEntry{
 		"treize groupes de salle":  many,
+		"treize groupes animateur": repeatRole("animateur", 13),
+		"treize groupes public":    repeatRole("public", 13),
 		"ampoule inconnue":         {{Lights: []string{"Z"}}},
 		"ampoule d'équipe":         {{Lights: []string{"T1"}}},
 		"ampoule en double":        {{Lights: []string{"L1"}}, {Lights: []string{"L1"}}},
 		"ampoule répétée":          {{Lights: []string{"L1", "L1"}}},
 		"rôle inconnu":             {{Role: "x"}},
-		"cinq animateurs":          {{Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}},
 		"id majuscules":            {{ID: "ABC"}},
 		"id trop long":             {{ID: "abcdefghijklm"}},
 		"id avec tiret":            {{ID: "a-b"}},
 		"id en double":             {{ID: "x1"}, {ID: "x1"}},
 		"id en double salle/anim.": {{ID: "x1"}, {ID: "x1", Role: "animateur"}},
+		"id en double anim/public": {{ID: "x1", Role: "animateur"}, {ID: "x1", Role: "public"}},
+		"ampoule dans deux zones":  {{Lights: []string{"L1"}}, {Role: "public", Lights: []string{"L1"}}},
 	}
 	for name, groups := range cases {
 		if _, err := ValidateLightingGroups(groups, tw225Lights()); err == nil {
@@ -116,23 +119,37 @@ func TestTW225_Validate_NoNameRules_ManyUnnamedGroupsAccepted(t *testing.T) {
 	}
 }
 
-func TestTW225_Validate_SeveralHostGroups_UpToFour_CapsIndependent(t *testing.T) {
-	hosts := []LightingGroupEntry{{Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}, {Role: "animateur"}}
-	if _, err := ValidateLightingGroups(hosts, tw225Lights()); err != nil {
-		t.Fatalf("4 groupes animateur acceptés : %v", err)
+func repeatRole(role string, n int) []LightingGroupEntry {
+	out := make([]LightingGroupEntry, n)
+	for i := range out {
+		out[i].Role = role
 	}
-	room := make([]LightingGroupEntry, 12)
-	if _, err := ValidateLightingGroups(append(append([]LightingGroupEntry{}, room...), hosts...), tw225Lights()); err != nil {
-		t.Errorf("12 groupes de salle + 4 animateur : plafonds indépendants : %v", err)
+	return out
+}
+
+func TestTW225_Validate_TwelveGroupsPerZone_CapsIndependent(t *testing.T) {
+	all := append(append(repeatRole("salle", 12), repeatRole("animateur", 12)...), repeatRole("public", 12)...)
+	if _, err := ValidateLightingGroups(all, tw225Lights()); err != nil {
+		t.Fatalf("12 groupes dans chacune des trois zones (36 au total) acceptés : %v", err)
 	}
-	if _, err := ValidateLightingGroups(append(room, LightingGroupEntry{}), tw225Lights()); err == nil {
-		t.Error("13 groupes de salle refusés")
+	for _, role := range []string{"salle", "animateur", "public"} {
+		over := append(append([]LightingGroupEntry{}, all...), LightingGroupEntry{Role: role})
+		if _, err := ValidateLightingGroups(over, tw225Lights()); err == nil {
+			t.Errorf("un 13e groupe de la zone %s est refusé", role)
+		}
+	}
+}
+
+func TestTW225_Validate_PublicRoleAccepted(t *testing.T) {
+	out, err := ValidateLightingGroups([]LightingGroupEntry{{Role: "public", Lights: []string{"L1"}}}, tw225Lights())
+	if err != nil || len(out) != 1 || out[0].Role != "public" {
+		t.Fatalf("rôle public valide : %+v %v", out, err)
 	}
 }
 
 func TestTW225_Validate_AssignsWellFormedUniqueIDs_KeepsGivenOnes(t *testing.T) {
 	out, err := ValidateLightingGroups([]LightingGroupEntry{
-		{ID: "keep1"}, {}, {}, {Role: "animateur"}, {Role: "animateur"},
+		{ID: "keep1"}, {}, {}, {Role: "animateur"}, {Role: "animateur"}, {Role: "public"},
 	}, tw225Lights())
 	if err != nil {
 		t.Fatal(err)
@@ -182,40 +199,91 @@ func TestTW225_Prune_RemovesBulbsNoLongerGeneral_KeepsGroups(t *testing.T) {
 	}
 }
 
-func TestTW225_HostGroups_OwnRankIncludingEmptyOnes_NotInRoomNumbering(t *testing.T) {
-	l := LightingConfig{Groups: []LightingGroupEntry{
+func tw225ThreeZones() LightingConfig {
+	return LightingConfig{Groups: []LightingGroupEntry{
 		{ID: "a1", Role: "animateur", Lights: []string{}},
 		{ID: "s1", Role: "salle", Lights: []string{"L1"}},
+		{ID: "p1", Role: "public", Lights: []string{"P"}},
 		{ID: "a2", Role: "animateur", Lights: []string{"H"}},
-		{ID: "s2", Lights: []string{"L2"}},
+		{ID: "s2", Lights: []string{}},
+		{ID: "s3", Lights: []string{"L2"}},
 	}}
-	hosts := l.HostGroups()
-	if len(hosts) != 2 || hosts[0].ID != "a1" || hosts[0].Rank != 1 || hosts[1].ID != "a2" || hosts[1].Rank != 2 {
-		t.Errorf("rang propre des animateurs, vides compris : %+v", hosts)
+}
+
+func TestTW225_ZoneGroups_OwnRankPerZone_EmptyOnesKeepTheirNumber(t *testing.T) {
+	l := tw225ThreeZones()
+	host := l.ZoneGroups("animateur")
+	if len(host) != 2 || host[0].ID != "a1" || host[0].Num != 1 || host[1].ID != "a2" || host[1].Num != 2 {
+		t.Errorf("rang propre à la zone animateur, vide compris : %+v", host)
 	}
-	num, host := l.GroupAssignment()
-	if num["L1"] != 1 || num["L2"] != 2 || num["H"] != 0 {
-		t.Errorf("numéros de salle : rang parmi les groupes de salle, animateurs exclus : %v", num)
+	room := l.ZoneGroups("ambiance")
+	if len(room) != 3 || room[2].ID != "s3" || room[2].Num != 3 {
+		t.Errorf("rang propre à la zone ambiance (rôle salle), vide compris : %+v", room)
 	}
-	if host["H"] != 2 {
-		t.Errorf("H est dans le groupe animateur de rang 2 : %v", host)
+	pub := l.ZoneGroups("public")
+	if len(pub) != 1 || pub[0].Num != 1 {
+		t.Errorf("zone public : %+v", pub)
 	}
-	if len((LightingConfig{}).HostGroups()) != 0 {
-		t.Error("sans groupe animateur, liste vide")
+	if len((LightingConfig{}).ZoneGroups("animateur")) != 0 {
+		t.Error("sans groupe, liste vide")
 	}
 }
 
-func TestTW225_RoomGroups_NonEmptyOnly_RealNumbers(t *testing.T) {
-	l := LightingConfig{Groups: []LightingGroupEntry{
-		{Lights: []string{"A"}}, {Lights: []string{}}, {Role: "animateur", Lights: []string{"H"}}, {Lights: []string{"C"}},
-	}}
-	got := l.RoomGroups()
-	if len(got) != 2 || got[0].Num != 1 || got[1].Num != 3 {
-		t.Errorf("N = groupes de salle non vides, avec leur numéro réel (1 et 3) : %+v", got)
+func TestTW225_NonEmptyGroups_RealNumbers_PerZone(t *testing.T) {
+	l := tw225ThreeZones()
+	room := l.NonEmptyGroups("ambiance")
+	if len(room) != 2 || room[0].Num != 1 || room[1].Num != 3 {
+		t.Errorf("N = groupes non vides de la zone, avec leur numéro réel (1 et 3) : %+v", room)
+	}
+	host := l.NonEmptyGroups("animateur")
+	if len(host) != 1 || host[0].Num != 2 {
+		t.Errorf("le groupe animateur vide est écarté, le suivant garde le numéro 2 : %+v", host)
 	}
 }
 
-func TestTW225_OldConfigWithSingleHostGroupWithoutID_StillValidAndGetsAnID(t *testing.T) {
+func TestTW225_ZoneExists_NeedsANonEmptyGroup_AmbianceAlways(t *testing.T) {
+	var none LightingConfig
+	if !none.ZoneExists("ambiance") {
+		t.Error("la zone ambiance existe toujours (ampoules générales hors groupe)")
+	}
+	if none.ZoneExists("animateur") || none.ZoneExists("public") {
+		t.Error("sans groupe, ni animateur ni public n'existent")
+	}
+	onlyEmpty := LightingConfig{Groups: []LightingGroupEntry{{Role: "public", Lights: []string{}}}}
+	if onlyEmpty.ZoneExists("public") {
+		t.Error("un groupe vide ne fait pas exister la zone")
+	}
+	l := tw225ThreeZones()
+	if !l.ZoneExists("animateur") || !l.ZoneExists("public") {
+		t.Error("une zone avec un groupe non vide existe")
+	}
+}
+
+func TestTW225_GroupOfLight_ZoneAndNumber(t *testing.T) {
+	got := tw225ThreeZones().GroupOfLight()
+	if r := got["L2"]; r.Zone != "ambiance" || r.Num != 3 {
+		t.Errorf("L2 : %+v", r)
+	}
+	if r := got["H"]; r.Zone != "animateur" || r.Num != 2 {
+		t.Errorf("H : %+v", r)
+	}
+	if r := got["P"]; r.Zone != "public" || r.Num != 1 {
+		t.Errorf("P : %+v", r)
+	}
+	if _, ok := got["Z"]; ok {
+		t.Error("une ampoule hors groupe est absente (zone ambiance, groupe 0)")
+	}
+}
+
+func TestTW225_ZoneOfRole(t *testing.T) {
+	for role, want := range map[string]string{"": "ambiance", "salle": "ambiance", "animateur": "animateur", "public": "public"} {
+		if got := ZoneOfRole(role); got != want {
+			t.Errorf("ZoneOfRole(%q) = %q, attendu %q", role, got, want)
+		}
+	}
+}
+
+func TestTW225_OldConfigWithSingleHostGroupWithoutID_StillValidAndGetsAnID_HostEffectsIgnored(t *testing.T) {
 	var cfg Config
 	raw := `{"lighting":{"lights":[{"name":"L1","role":"general"}],"groups":[{"name":"Pupitre","role":"animateur","lights":["L1"],"near_teams":[]}],` +
 		`"host_effects":{"chrono":"","calm":"","score":"couleur-equipe"}}}`
@@ -230,10 +298,8 @@ func TestTW225_OldConfigWithSingleHostGroupWithoutID_StillValidAndGetsAnID(t *te
 	if cfg.Lighting.Groups[0].ID == "" {
 		t.Error("un id est attribué au groupe sans id")
 	}
-	for k := range cfg.Lighting.HostEffects {
-		if k == "chrono" || k == "calm" || k == "score" {
-			t.Errorf("l'ancienne forme plate est ignorée, jamais prise pour un id de groupe : %v", cfg.Lighting.HostEffects)
-		}
+	if cfg.Lighting.Effects["animateur"]["score"] != "" || cfg.Lighting.Effects["ambiance"]["score"] != "" {
+		t.Errorf("l'ancien `host_effects` est ignoré (jamais repris dans une zone) : %v", cfg.Lighting.Effects)
 	}
 }
 
@@ -246,5 +312,71 @@ func TestTW225_AssignGroupIDs_UnnamedGroupsGetDistinctIDs(t *testing.T) {
 			t.Errorf("ids distincts pour des groupes sans nom : %+v", groups)
 		}
 		seen[g.ID] = true
+	}
+}
+
+// ── Réglages par zone (contrats §6) : formes complètes, défauts, lecture tolérante ──
+
+func TestTW225_ApplyDefaults_EffectsAndSpeeds_ThreeZonesByThreeMoments(t *testing.T) {
+	var cfg Config
+	ApplyDefaults(&cfg)
+	for _, z := range []string{"ambiance", "animateur", "public"} {
+		for _, m := range []string{"chrono", "calm", "score"} {
+			id, ok := cfg.Lighting.Effects[z][m]
+			if !ok {
+				t.Errorf("effects.%s.%s absent : la forme est toujours complète", z, m)
+			}
+			want := ""
+			if z == "ambiance" && m == "chrono" {
+				want = "pulsation"
+			}
+			if id != want {
+				t.Errorf("effects.%s.%s = %q, attendu %q", z, m, id, want)
+			}
+			if sp, ok := cfg.Lighting.Speeds[z][m]; !ok || sp != 1 {
+				t.Errorf("speeds.%s.%s = %v (%v), attendu 1", z, m, sp, ok)
+			}
+		}
+	}
+}
+
+func TestTW225_OldFlatEffectsAndSpeeds_ReadAsAmbianceZone_HostKeysIgnored(t *testing.T) {
+	var cfg Config
+	raw := `{"lighting":{"effects":{"chrono":"x","calm":"y","score":""},"speeds":{"chrono":2,"calm":0.5,"score":1},` +
+		`"host_effects":{"g1":{"calm":"z"}},"host_speeds":{"g1":{"calm":2}}}}`
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("l'ancienne forme plate se lit sans erreur : %v", err)
+	}
+	ApplyDefaults(&cfg)
+	if cfg.Lighting.Effects["ambiance"]["chrono"] != "x" || cfg.Lighting.Effects["ambiance"]["calm"] != "y" {
+		t.Errorf("valeurs plates ⇒ zone ambiance : %v", cfg.Lighting.Effects)
+	}
+	if cfg.Lighting.Speeds["ambiance"]["chrono"] != 2 || cfg.Lighting.Speeds["ambiance"]["calm"] != 0.5 {
+		t.Errorf("vitesses plates ⇒ zone ambiance : %v", cfg.Lighting.Speeds)
+	}
+	if cfg.Lighting.Effects["animateur"]["calm"] != "" || cfg.Lighting.Speeds["animateur"]["calm"] != 1 {
+		t.Errorf("host_effects / host_speeds ignorés : %v %v", cfg.Lighting.Effects, cfg.Lighting.Speeds)
+	}
+}
+
+func TestTW225_NewEffectsAndSpeeds_ByZone_RoundTrip(t *testing.T) {
+	var cfg Config
+	raw := `{"lighting":{"effects":{"animateur":{"score":"couleur-equipe"},"public":{"calm":"chenillard"}},` +
+		`"speeds":{"public":{"calm":1.5},"zone-inconnue":{"calm":2}}}}`
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	ApplyDefaults(&cfg)
+	if cfg.Lighting.Effects["animateur"]["score"] != "couleur-equipe" || cfg.Lighting.Effects["public"]["calm"] != "chenillard" {
+		t.Errorf("effets par zone conservés : %v", cfg.Lighting.Effects)
+	}
+	if cfg.Lighting.Effects["ambiance"]["chrono"] != "pulsation" || cfg.Lighting.Effects["animateur"]["chrono"] != "" {
+		t.Errorf("le reste reçoit les défauts : %v", cfg.Lighting.Effects)
+	}
+	if cfg.Lighting.Speeds["public"]["calm"] != 1.5 {
+		t.Errorf("vitesse de la zone public : %v", cfg.Lighting.Speeds)
+	}
+	if _, ok := cfg.Lighting.Speeds["zone-inconnue"]; ok {
+		t.Error("une zone inconnue est écartée")
 	}
 }

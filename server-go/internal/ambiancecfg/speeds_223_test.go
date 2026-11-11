@@ -1,9 +1,9 @@
 package ambiancecfg
 
-// Vitesse réglable à l'usage (contrat light-effects.md §6, ambiance-settings.md §10, tâche R13) : un multiplicateur par
-// moment (0.5, 0.75, 1, 1.5, 2 ; défaut 1) pour la salle et par groupe animateur, global ← manche, sources, formes JSON
-// complète / Partial, validation. Forme : Settings.LightSpeeds map[moment]float64, LightHostSpeeds map[id]map[moment]float64,
-// Partial idem (partielle), Sources.LightSpeeds / LightHostSpeeds map[...]Source. Aides tw223 de effects_223_test.go.
+// Vitesse réglable à l'usage (contrat light-effects.md §6, ambiance-settings.md §10, révision 4) : un multiplicateur par
+// zone et par moment (0.5, 0.75, 1, 1.5, 2 ; défaut 1), global ← manche, sources, formes JSON complète / Partial,
+// validation. Forme : Settings.LightSpeeds map[zone]map[moment]float64, Partial idem (partielle),
+// Sources.LightSpeeds map[zone]map[moment]Source ; JSON light.speeds.<zone>.<moment>. Aides tw223 de effects_223_test.go.
 
 import (
 	"encoding/json"
@@ -11,14 +11,8 @@ import (
 	"testing"
 )
 
-func tw223SpeedGlobal() Settings {
-	g := tw223Global()
-	g.LightSpeeds = map[string]float64{"chrono": 1, "calm": 1, "score": 1}
-	g.LightHostSpeeds = map[string]map[string]float64{
-		"h1": {"chrono": 1, "calm": 1, "score": 1},
-		"h2": {"chrono": 1, "calm": 1, "score": 1},
-	}
-	return g
+func tw223Spd(zone, moment string, v float64) map[string]map[string]float64 {
+	return map[string]map[string]float64{zone: {moment: v}}
 }
 
 func TestSpeeds223_AllowedValues_ExactlyFive(t *testing.T) {
@@ -34,199 +28,181 @@ func TestSpeeds223_AllowedValues_ExactlyFive(t *testing.T) {
 	}
 }
 
-func TestSpeeds223_Defaults_OneAtEveryMoment(t *testing.T) {
+func TestSpeeds223_Defaults_OneInEveryZoneAndMoment(t *testing.T) {
 	d := DefaultLightSpeeds()
-	if len(d) != 3 || d["chrono"] != 1 || d["calm"] != 1 || d["score"] != 1 {
-		t.Errorf("défaut ×1 aux trois moments : %v", d)
+	for _, z := range tw223Zones {
+		for _, m := range tw223Moments {
+			if d[z][m] != 1 {
+				t.Errorf("défaut ×1 : %s.%s = %v", z, m, d[z][m])
+			}
+		}
 	}
 }
 
-func TestSpeeds223_Resolve_RoundOverridesOneMomentOnly_SourcesFollow(t *testing.T) {
-	round := Partial{LightSpeeds: map[string]float64{"chrono": 2}}
-	got, src := Resolve(tw223SpeedGlobal(), round)
-	if got.LightSpeeds["chrono"] != 2 || got.LightSpeeds["calm"] != 1 || got.LightSpeeds["score"] != 1 {
-		t.Errorf("seul chrono est surchargé : %v", got.LightSpeeds)
+func TestSpeeds223_Resolve_RoundOverridesOneZoneAndMomentOnly_SourcesFollow(t *testing.T) {
+	got, src := Resolve(tw223Global(), Partial{LightSpeeds: tw223Spd("ambiance", "chrono", 2)})
+	if got.LightSpeeds["ambiance"]["chrono"] != 2 || got.LightSpeeds["ambiance"]["calm"] != 1 || got.LightSpeeds["animateur"]["chrono"] != 1 {
+		t.Errorf("seul ambiance.chrono est surchargé : %v", got.LightSpeeds)
 	}
-	if string(src.LightSpeeds["chrono"]) != "round" || string(src.LightSpeeds["calm"]) != "global" {
+	if string(src.LightSpeeds["ambiance"]["chrono"]) != "round" || string(src.LightSpeeds["ambiance"]["calm"]) != "global" || string(src.LightSpeeds["public"]["chrono"]) != "global" {
 		t.Errorf("sources : %v", src.LightSpeeds)
 	}
-	if !reflect.DeepEqual(got.LightHostSpeeds, tw223SpeedGlobal().LightHostSpeeds) {
-		t.Errorf("les vitesses des groupes animateur restent héritées : %v", got.LightHostSpeeds)
-	}
 }
 
-func TestSpeeds223_Resolve_HostSpeedsPerGroupIdAndMoment_Independent(t *testing.T) {
-	round := Partial{LightHostSpeeds: map[string]map[string]float64{"h1": {"score": 0.5}, "h2": {"chrono": 1.5}}}
-	got, src := Resolve(tw223SpeedGlobal(), round)
-	if got.LightHostSpeeds["h1"]["score"] != 0.5 || got.LightHostSpeeds["h1"]["chrono"] != 1 ||
-		got.LightHostSpeeds["h2"]["chrono"] != 1.5 || got.LightHostSpeeds["h2"]["score"] != 1 {
-		t.Errorf("chaque groupe résout ses propres moments : %v", got.LightHostSpeeds)
+func TestSpeeds223_Resolve_ZonesIndependent(t *testing.T) {
+	round := Partial{LightSpeeds: map[string]map[string]float64{"animateur": {"score": 0.5}, "public": {"chrono": 1.5}}}
+	got, src := Resolve(tw223Global(), round)
+	if got.LightSpeeds["animateur"]["score"] != 0.5 || got.LightSpeeds["animateur"]["chrono"] != 1 ||
+		got.LightSpeeds["public"]["chrono"] != 1.5 || got.LightSpeeds["public"]["score"] != 1 || got.LightSpeeds["ambiance"]["chrono"] != 1 {
+		t.Errorf("chaque zone résout ses propres moments : %v", got.LightSpeeds)
 	}
-	if string(src.LightHostSpeeds["h1"]["score"]) != "round" || string(src.LightHostSpeeds["h1"]["chrono"]) != "global" ||
-		string(src.LightHostSpeeds["h2"]["chrono"]) != "round" {
-		t.Errorf("sources par groupe et moment : %v", src.LightHostSpeeds)
-	}
-	if got.LightSpeeds["chrono"] != 1 {
-		t.Errorf("la vitesse de la salle n'est pas touchée : %v", got.LightSpeeds)
-	}
-}
-
-func TestSpeeds223_Resolve_UnknownHostIdIgnoredWithoutError(t *testing.T) {
-	round := Partial{LightHostSpeeds: map[string]map[string]float64{"disparu": {"chrono": 2}, "h1": {"calm": 2}}}
-	got, _ := Resolve(tw223SpeedGlobal(), round)
-	if _, ok := got.LightHostSpeeds["disparu"]; ok {
-		t.Errorf("un id absent du global (groupe supprimé) est ignoré : %v", got.LightHostSpeeds)
-	}
-	if got.LightHostSpeeds["h1"]["calm"] != 2 {
-		t.Errorf("l'id connu est résolu : %v", got.LightHostSpeeds)
+	if string(src.LightSpeeds["animateur"]["score"]) != "round" || string(src.LightSpeeds["animateur"]["chrono"]) != "global" ||
+		string(src.LightSpeeds["public"]["chrono"]) != "round" {
+		t.Errorf("sources par zone et moment : %v", src.LightSpeeds)
 	}
 }
 
 func TestSpeeds223_SpeedIsIndependentOfTheEffectChoice(t *testing.T) {
 	// la vitesse du moment vaut quel que soit l'effet, y compris « aucun effet »
-	round := Partial{LightEffects: map[string]string{"chrono": ""}, LightSpeeds: map[string]float64{"chrono": 2}}
-	got, _ := Resolve(tw223SpeedGlobal(), round)
-	if got.LightEffects["chrono"] != "" || got.LightSpeeds["chrono"] != 2 {
+	round := Partial{LightEffects: tw223Eff("ambiance", "chrono", ""), LightSpeeds: tw223Spd("ambiance", "chrono", 2)}
+	got, _ := Resolve(tw223Global(), round)
+	if got.LightEffects["ambiance"]["chrono"] != "" || got.LightSpeeds["ambiance"]["chrono"] != 2 {
 		t.Errorf("effet et vitesse se résolvent séparément : %v / %v", got.LightEffects, got.LightSpeeds)
 	}
 }
 
 func TestSpeeds223_ClonePartialMergeIsEmpty(t *testing.T) {
-	s := tw223SpeedGlobal()
+	s := tw223Global()
 	c := s.Clone()
-	c.LightSpeeds["chrono"] = 2
-	c.LightHostSpeeds["h1"]["calm"] = 2
-	if s.LightSpeeds["chrono"] != 1 || s.LightHostSpeeds["h1"]["calm"] != 1 {
+	c.LightSpeeds["animateur"]["calm"] = 2
+	if s.LightSpeeds["animateur"]["calm"] != 1 {
 		t.Error("Settings.Clone copie en profondeur les vitesses")
 	}
-	p := Partial{LightSpeeds: map[string]float64{"chrono": 2}, LightHostSpeeds: map[string]map[string]float64{"h1": {"calm": 2}}}
+	p := Partial{LightSpeeds: tw223Spd("public", "calm", 2)}
 	pc := p.Clone()
-	pc.LightSpeeds["chrono"] = 0.5
-	pc.LightHostSpeeds["h1"]["calm"] = 0.5
-	if p.LightSpeeds["chrono"] != 2 || p.LightHostSpeeds["h1"]["calm"] != 2 {
+	pc.LightSpeeds["public"]["calm"] = 0.5
+	if p.LightSpeeds["public"]["calm"] != 2 {
 		t.Error("Partial.Clone copie en profondeur")
 	}
-	if !(Partial{LightSpeeds: map[string]float64{}, LightHostSpeeds: map[string]map[string]float64{}}).IsEmpty() {
+	if !(Partial{LightSpeeds: map[string]map[string]float64{}}).IsEmpty() {
 		t.Error("des cartes de vitesses vides = Partial vide")
 	}
-	if (Partial{LightSpeeds: map[string]float64{"calm": 1}}).IsEmpty() {
+	if (Partial{LightSpeeds: tw223Spd("ambiance", "calm", 1)}).IsEmpty() {
 		t.Error("une vitesse surchargée à 1 n'est pas vide : 1 est une valeur, pas « hérité »")
 	}
-	m := Partial{LightSpeeds: map[string]float64{"chrono": 2, "calm": 2}}.Merge(Partial{LightSpeeds: map[string]float64{"calm": 0.5}, LightHostSpeeds: map[string]map[string]float64{"h2": {"score": 1.5}}})
-	if m.LightSpeeds["chrono"] != 2 || m.LightSpeeds["calm"] != 0.5 || m.LightHostSpeeds["h2"]["score"] != 1.5 {
+	m := Partial{LightSpeeds: map[string]map[string]float64{"ambiance": {"chrono": 2, "calm": 2}}}.Merge(
+		Partial{LightSpeeds: map[string]map[string]float64{"ambiance": {"calm": 0.5}, "public": {"score": 1.5}}})
+	if m.LightSpeeds["ambiance"]["chrono"] != 2 || m.LightSpeeds["ambiance"]["calm"] != 0.5 || m.LightSpeeds["public"]["score"] != 1.5 {
 		t.Errorf("Merge clé par clé, le second l'emporte : %+v", m)
 	}
 }
 
-func TestSpeeds223_JSON_CompleteFormAlwaysThreeMoments_HostSpeedsOnePerGroup(t *testing.T) {
-	m := tw223JSON(t, tw223SpeedGlobal())
-	sp, _ := tw223Dig(m, "light", "speeds").(map[string]interface{})
-	if len(sp) != 3 || sp["chrono"] != float64(1) {
-		t.Fatalf("light.speeds : trois moments toujours présents, ×1 : %v", sp)
-	}
-	hs, _ := tw223Dig(m, "light", "host_speeds").(map[string]interface{})
-	if len(hs) != 2 {
-		t.Fatalf("light.host_speeds : une entrée par groupe animateur : %v", hs)
-	}
-	for _, id := range []string{"h1", "h2"} {
-		if g, _ := hs[id].(map[string]interface{}); len(g) != 3 {
-			t.Errorf("light.host_speeds.%s : trois moments : %v", id, g)
+func TestSpeeds223_JSON_CompleteFormAlwaysThreeZonesByThreeMoments(t *testing.T) {
+	m := tw223JSON(t, tw223Global())
+	for _, z := range tw223Zones {
+		sp, _ := tw223Dig(m, "light", "speeds", z).(map[string]interface{})
+		if len(sp) != 3 || sp["chrono"] != float64(1) {
+			t.Fatalf("light.speeds.%s : trois moments toujours présents, ×1 : %v", z, sp)
 		}
 	}
-	g := tw223SpeedGlobal()
-	g.LightHostSpeeds = map[string]map[string]float64{}
-	if hs, ok := tw223Dig(tw223JSON(t, g), "light", "host_speeds").(map[string]interface{}); !ok || len(hs) != 0 {
-		t.Errorf("aucun groupe animateur ⇒ {} (jamais absent ni null) : %v", tw223Dig(tw223JSON(t, g), "light", "host_speeds"))
+	if _, present := tw223Dig(m, "light").(map[string]interface{})["host_speeds"]; present {
+		t.Error("light.host_speeds n'existe plus")
 	}
 }
 
 func TestSpeeds223_JSON_RoundTrip_AndPartialOnlyOverriddenKeys(t *testing.T) {
-	s := tw223SpeedGlobal()
-	s.LightSpeeds["calm"] = 0.75
-	s.LightHostSpeeds["h2"]["score"] = 1.5
+	s := tw223Global()
+	s.LightSpeeds["ambiance"]["calm"] = 0.75
+	s.LightSpeeds["public"]["score"] = 1.5
 	raw, _ := json.Marshal(s)
 	var back Settings
 	if err := json.Unmarshal(raw, &back); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(back.LightSpeeds, s.LightSpeeds) || !reflect.DeepEqual(back.LightHostSpeeds, s.LightHostSpeeds) {
+	if !reflect.DeepEqual(back.LightSpeeds, s.LightSpeeds) {
 		t.Errorf("aller-retour infidèle : %+v", back)
 	}
-	praw, _ := json.Marshal(Partial{LightSpeeds: map[string]float64{"chrono": 2}, LightHostSpeeds: map[string]map[string]float64{"h1": {"score": 0.5}}})
+	praw, _ := json.Marshal(Partial{LightSpeeds: tw223Spd("animateur", "score", 0.5)})
 	var got, want interface{}
 	_ = json.Unmarshal(praw, &got)
-	_ = json.Unmarshal([]byte(`{"light":{"speeds":{"chrono":2},"host_speeds":{"h1":{"score":0.5}}}}`), &want)
+	_ = json.Unmarshal([]byte(`{"light":{"speeds":{"animateur":{"score":0.5}}}}`), &want)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Partial : seules les clés surchargées : %s", praw)
 	}
-	praw, _ = json.Marshal(Partial{LightSpeeds: map[string]float64{}, LightHostSpeeds: map[string]map[string]float64{}})
+	praw, _ = json.Marshal(Partial{LightSpeeds: map[string]map[string]float64{}})
 	if string(praw) != "{}" {
 		t.Errorf("cartes vides omises : %s", praw)
 	}
 }
 
+func TestSpeeds223_JSON_OldFlatSpeeds_ReadAsAmbianceZone_HostSpeedsIgnored(t *testing.T) {
+	var p Partial
+	if err := json.Unmarshal([]byte(`{"light":{"speeds":{"chrono":2},"host_speeds":{"g1":{"calm":2}}}}`), &p); err != nil {
+		t.Fatalf("lecture tolérante : %v", err)
+	}
+	if p.LightSpeeds["ambiance"]["chrono"] != 2 || len(p.LightSpeeds["animateur"]) != 0 {
+		t.Errorf("à plat ⇒ zone ambiance ; host_speeds ignoré : %+v", p.LightSpeeds)
+	}
+}
+
 func TestSpeeds223_JSON_SourcesForm(t *testing.T) {
-	_, src := Resolve(tw223SpeedGlobal(), Partial{LightSpeeds: map[string]float64{"calm": 2}, LightHostSpeeds: map[string]map[string]float64{"h1": {"chrono": 2}}})
+	_, src := Resolve(tw223Global(), Partial{LightSpeeds: map[string]map[string]float64{"ambiance": {"calm": 2}, "animateur": {"chrono": 2}}})
 	m := tw223JSON(t, src)
-	if tw223Dig(m, "light", "speeds", "calm") != "round" || tw223Dig(m, "light", "speeds", "chrono") != "global" ||
-		tw223Dig(m, "light", "host_speeds", "h1", "chrono") != "round" || tw223Dig(m, "light", "host_speeds", "h2", "chrono") != "global" {
-		t.Errorf("Sources.light.speeds.<moment> et host_speeds.<id>.<moment> ∈ global|round : %v", m)
+	if tw223Dig(m, "light", "speeds", "ambiance", "calm") != "round" || tw223Dig(m, "light", "speeds", "ambiance", "chrono") != "global" ||
+		tw223Dig(m, "light", "speeds", "animateur", "chrono") != "round" || tw223Dig(m, "light", "speeds", "public", "chrono") != "global" {
+		t.Errorf("Sources.light.speeds.<zone>.<moment> ∈ global|round : %v", m)
 	}
 }
 
 func TestSpeeds223_Validate_OnlyTheFiveValues_PathsNamed(t *testing.T) {
 	for _, v := range []float64{0, 0.25, 3, 1.25, -1} {
-		p := Partial{LightSpeeds: map[string]float64{"chrono": v}}
-		if err := p.Validate(tw290aKnown); err == nil {
-			t.Errorf("vitesse %v refusée", v)
-		}
-		if bad := p.InvalidPaths(tw290aKnown); len(bad) != 1 || bad[0] != "light.speeds.chrono" {
-			t.Errorf("vitesse %v : chemin JSON fautif light.speeds.chrono : %v", v, bad)
-		}
-		ph := Partial{LightHostSpeeds: map[string]map[string]float64{"h1": {"score": v}}}
-		if bad := ph.InvalidPaths(tw290aKnown); len(bad) != 1 || bad[0] != "light.host_speeds.h1.score" {
-			t.Errorf("vitesse %v (animateur) : chemin fautif par id : %v", v, bad)
+		for _, z := range tw223Zones {
+			p := Partial{LightSpeeds: tw223Spd(z, "chrono", v)}
+			if err := p.Validate(tw290aKnown); err == nil {
+				t.Errorf("vitesse %v refusée (%s)", v, z)
+			}
+			if bad := p.InvalidPaths(tw290aKnown); len(bad) != 1 || bad[0] != "light.speeds."+z+".chrono" {
+				t.Errorf("vitesse %v : chemin JSON fautif light.speeds.%s.chrono : %v", v, z, bad)
+			}
 		}
 	}
 	for _, v := range []float64{0.5, 0.75, 1, 1.5, 2} {
-		p := Partial{LightSpeeds: map[string]float64{"calm": v}, LightHostSpeeds: map[string]map[string]float64{"h1": {"score": v}}}
+		p := Partial{LightSpeeds: map[string]map[string]float64{"ambiance": {"calm": v}, "animateur": {"score": v}, "public": {"chrono": v}}}
 		if err := p.Validate(tw290aKnown); err != nil {
 			t.Errorf("vitesse %v acceptée : %v", v, err)
 		}
 	}
 }
 
-func TestSpeeds223_Validate_UnknownMomentRefused(t *testing.T) {
-	if err := (Partial{LightSpeeds: map[string]float64{"bidule": 1}}).Validate(tw290aKnown); err == nil {
+func TestSpeeds223_Validate_UnknownMomentOrZoneRefused(t *testing.T) {
+	if err := (Partial{LightSpeeds: tw223Spd("ambiance", "bidule", 1)}).Validate(tw290aKnown); err == nil {
 		t.Error("moment inconnu refusé")
 	}
-	if err := (Partial{LightHostSpeeds: map[string]map[string]float64{"h1": {"bidule": 1}}}).Validate(tw290aKnown); err == nil {
-		t.Error("moment inconnu refusé (animateur)")
+	if err := (Partial{LightSpeeds: tw223Spd("salle", "chrono", 1)}).Validate(tw290aKnown); err == nil {
+		t.Error("zone inconnue refusée")
 	}
 }
 
-func TestSpeeds223_EditablePathsParity_RoomAndHostPerGroup(t *testing.T) {
-	// parité avec le composant React : light.speeds.<m> et light.host_speeds.<id>.<m>
-	for _, m := range tw223Moments {
-		if bad := (Partial{LightSpeeds: map[string]float64{m: 1}}).InvalidPaths(tw290aKnown); len(bad) != 0 {
-			t.Errorf("light.speeds.%s éditable : %v", m, bad)
-		}
-		if bad := (Partial{LightHostSpeeds: map[string]map[string]float64{"g5d7e4": {m: 1}}}).InvalidPaths(tw290aKnown); len(bad) != 0 {
-			t.Errorf("light.host_speeds.<id>.%s éditable : %v", m, bad)
+func TestSpeeds223_EditablePathsParity_ThreeZonesByThreeMoments(t *testing.T) {
+	for _, z := range tw223Zones {
+		for _, m := range tw223Moments {
+			if bad := (Partial{LightSpeeds: tw223Spd(z, m, 1)}).InvalidPaths(tw290aKnown); len(bad) != 0 {
+				t.Errorf("light.speeds.%s.%s éditable : %v", z, m, bad)
+			}
 		}
 	}
 }
 
 func TestSpeeds223_OldPartialWithoutSpeeds_ReadsAsInheritedEverywhere(t *testing.T) {
 	var p Partial
-	if err := json.Unmarshal([]byte(`{"light":{"mode":"ON","effects":{"chrono":"chenillard"}}}`), &p); err != nil {
+	if err := json.Unmarshal([]byte(`{"light":{"mode":"ON","effects":{"ambiance":{"chrono":"chenillard"}}}}`), &p); err != nil {
 		t.Fatal(err)
 	}
-	if len(p.LightSpeeds) != 0 || len(p.LightHostSpeeds) != 0 {
+	if len(p.LightSpeeds) != 0 {
 		t.Errorf("absent de rounds.json ⇒ vitesse 1 partout (rien surchargé) : %+v", p)
 	}
-	got, _ := Resolve(tw223SpeedGlobal(), p)
-	if got.LightSpeeds["chrono"] != 1 {
+	got, _ := Resolve(tw223Global(), p)
+	if got.LightSpeeds["ambiance"]["chrono"] != 1 {
 		t.Errorf("héritée : ×1 : %v", got.LightSpeeds)
 	}
 }
