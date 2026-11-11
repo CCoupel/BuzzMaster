@@ -3,35 +3,19 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-09) — v11.5.0 en PROD
+## État courant (2026-11-11) — v11.6.0 en PROD
 
-- **PROD = v11.5.0** « Optimisation des tests » : version officielle `d5095ce8`, merge `main` `6c826cd3` (`--no-ff`), tag `v11.5.0` (sur `6c826cd3`), Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.5.0 (4 assets), `release.yml` run 42598655680 vert. Notes + posts : `6719d96b` (`docs/releases/v11.5.0/`). Milestone #44 clôturé 6/6. Branche milestone supprimée (local + remote). Branche courante : `main`.
-- **Pas de QUALIF** (`qualif: false`, décision utilisateur) : GATE 4 validé sur l'exe candidat 11.5.0.28 (`build/candidate_v11.5.0/`). La QUALIF n'est plus exécutable depuis le conteneur : l'exe est lancé par l'utilisateur sous Windows (`deploy.qualif.md`, `access.verified = failed`).
-- Site `gh-pages` laissé en v11.2.2 (GATE 4d : pas de nouveauté fonctionnelle, comme v11.2.3). Posts réseaux à publier par l'utilisateur.
+- **PROD = v11.6.0** « Ambiance : portée étendue (son, types de question, manches) » : bump `f901bf26` (alignement des fichiers de version), merge `main` `37b228b1` (`--no-ff`), tag `v11.6.0` annoté sur `37b228b1` (recréé le 2026-11-10), Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.6.0 (4 assets : firmware merged, linux-arm64, windows-amd64, SHA256SUMS), `release.yml` run 42861022331 vert. Notes + posts : `97f4d338` (`docs/releases/v11.6.0/`), merge final `6ba25995`. Milestone #36 clôturé 5/5. Branche milestone supprimée. Branche courante : `main` (état final workflow `63dad491`).
+- Site `gh-pages` mis à jour v11.2.2 → v11.6.0 (`6d2b8c4b`, carte « Ambiance par manche » badge Nouveau v11.6.0) ; posts réseaux à publier par l'utilisateur ; rendu en ligne non vérifié par un agent.
 
-### Livré (4 lots, auto-validés QA + CI, sans VALID-HUMAINE)
-- LOT-1 #292 #293 #294 : environnement conteneur Claude-Launcher constaté et documenté (Linux natif, pas de WSL ni `/mnt/c`, Go 1.26.10 / Node 22.23.3 / `pio` dans `~/.local/bin`), `commands.test_targeted`, firmware compilé dans `ci-branch.yml` via le script commun `scripts/build-firmware.sh` (appelé par `scripts/ci.sh` étape [1/8], par la CI, `release.yml` et BUILD ; `SKIP_FIRMWARE=1` en CI). `scripts/ci.sh` = **8 étapes** (vitest [3/8], Go [6/8]).
-- LOT-2 #280 : vitest `pool: vmThreads` + environnement `node` pour 33 fichiers sans DOM : vitest CI 155 s → 30–53 s.
-- LOT-3 #291 : Phase A (durées injectables **par instance**, barrières positives) + Phase B (7 paquets `internal/{vplayer,colors,coalesce,rounds,startup,diag,demo}`) : `cmd/server` CI 221 s → 100,5 s ; écarts acceptés (cibles 90 s et `main.go` 6 000).
-- LOT-4 #295 : `internal/led` + `internal/ambiance`, Option P (15 tests `t.Parallel` ajoutés, 27 au total) ; `main.go` 8 701 → 6 217 lignes ; `cmd/server` CI 86,6–90,9 s (cible 75 s non atteinte, écart accepté).
-- Bilan : job CI complet 7 min 23–8 min 07 → 3 min 32–3 min 38 ; `go test -race ./...` local 266 s → 114–123 s ; 9 → 18 paquets testés ; 2 595 → 2 612 tests de premier niveau, aucun disparu.
+### Livré (4 lots, tous VALID-HUMAINE, GATE LOT validés sur QUALIF)
+- LOT-1 #283 #232 (QUALIF 11.6.0.6) ; LOT-2 #235 (11.6.0.11) ; LOT-3 #231 (11.6.0.16) ; LOT-4 #290 sons et ambiance par manche (refusé une fois en 11.6.0.21 — ajout des fichiers de son par manche —, validé en 11.6.0.24).
+- QA LOT-4 validée avec réserves (couverture `internal/audio` 65,8 %, durées > budget, suivies par #291/#296-#298) ; `internal/server` remonté à 71,1 %.
 
-### Décisions techniques
-- Durées de test injectées **par instance** (`Engine.SetTickInterval`, `SetConnGreenMinDuration`, `watchdogDelay`, `flashPhases`), jamais par variable de paquet (`t.Parallel` les partagerait).
-- Barrière positive (`settle_barrier_291_test.go`) au lieu des fenêtres « aucun message » ; marge 250 ms après une action client (HELLO / PLAYER_CONNECT).
-- Cadences de test > 2 × le pacing du writer lumière (`MinInterval` 100 ms) ; ne pas comparer deux `Last()` successifs (cause des 2 CI rouges du LOT-4, corrigées `465a8590` et `0d2ca78b`).
-- Cadences de production verrouillées par `TestFlashCadenceConstants_291`.
-- `version.txt` : chaque BUILD commite la valeur candidate `X.Y.Z.a` ; la PROD pose `X.Y.Z` dans un commit séparé.
-- Propriété de l'état : LED → l'`App` (partagé par pointeur) ; ambiance → le `Controller` (détails dans `docs/GO_SERVER.md`).
-
-### Incidents / leçons (v11.5.0)
-1. Le partage `/share/MFS` a `core.fileMode=false` et perd le bit exécutable : un nouveau script passe par `git update-index --chmod=+x` (vérifier `git ls-tree`) et est appelé via `bash <script>`.
-2. Ne jamais lier `node_modules` par symlink dans un worktree jetable : `git worktree remove --force` suit le lien et vide `server-go/web/node_modules` du dépôt principal (restauré par `npm ci`).
-3. Pendant une QA dans le dépôt principal, les devs travaillent en worktree `tmp/*` puis cherry-pick après le verdict (appliqué 3 fois, sans incident).
-4. Identité git : `.git/config` portait la coquille `user.mail` → les commits du milestone (mesure `8dc81b23..HEAD` : 43 commits, dont le tag `v11.5.0`) ont l'e-mail du conteneur (`ubuntu@…svc.cluster.local`). Corrigé en fin de session (`user.email` dans `PRIVATE/gitconfig`, inclus par `~/.gitconfig`) ; pas de réécriture d'historique.
-5. Les reviewers et devs ne lancent pas de suite complète (règle rappelée à code-reviewer : son run vitest pendant la QA a faussé une mesure).
-6. Label `ci` créé par deployer alors que `ci-cd` existait : doublon à fusionner un jour.
-7. Documentation : la relecture factuelle a trouvé des erreurs à chaque passe (E1–E3 de la relecture finale : chiffres de baseline, décompte `t.Parallel`, description du job firmware) : re-relecture après chaque correction, comme prévu.
+### Incidents / leçons (v11.6.0)
+1. Le commit « Release 11.6.0 » n'avait posé la version que dans `server-go/config.json` ; 4 fichiers restaient à 11.5.0 (`server-go/internal/server/config.json`, `server-go/web/package.json`, `platformio.ini` VERSION+FIRMWARE_VERSION, `server-go/assets/firmware/version.txt`) → job Checking de `release.yml` en échec après le tag. `ci-branch.yml` ne contrôle pas cette cohérence. Résolution validée par l'utilisateur : bump, re-merge, suppression puis recréation du tag (aucune Release n'existait). Suivi : **#304**. Règle : en PUBLISH PROD, vérifier les 5 fichiers de version avec la logique du job Checking **avant** de poser le tag.
+2. Interruption de session pendant la PUBLISH PROD : reprise via `.claude/workflow-state.json` sans perte ; le fichier est commité à l'état final de chaque milestone (`chore(workflow): état final …`).
+3. Template à jour : v5.5.0 (`b26c5a94` / `ebfe1fb1`).
 
 ### Règles permanentes (adoptées par l'utilisateur)
 1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
@@ -40,11 +24,32 @@
 4. Jamais d'amend ni de réécriture dans le dépôt principal.
 
 ### Backlog / suite
-- Suites v11.5.0 : **#296** attentes fixes `internal/game` (118 s), **#297** attentes fixes `internal/server` (110 s), **#298** logger + config par `App` pour paralléliser `cmd/server` — prochain levier pour l'étape Go de la CI (134–137 s).
-- **#36 v11.6.0 Ambiance** : #290, #231, #232, #235. Milestones v12.0/v12.1 (Roue), v13.0 (Pictionary), v15.0, vX (DNS #65), vx (#12).
-- Toujours : #283 (observabilité audio, PLANNING, sans milestone), #259, #281, #209 en backlog.
-- Template : nouvelle version disponible (`c3faa5c` vs `b80b912` local) — l'utilisateur a continué sans sync ; à faire via `/init-project` (option d).
+- Milestones ouverts : v11.7.0 (effets lumière de salle : #211 #223 #225 #299-#302, effets déclaratifs), v11.8.0 (#210 éditeur de scènes), v12.0/v12.1 Roue, v13.0 PICTIONARY ; hors milestone #209 #259 #281 #296 #297 #298 #303 #304.
+- Stash : 18 entrées anciennes (v2.x–v7.0.0) jamais nettoyées.
 - Toujours valables : panneau milestone-panel (sélection PLANNING), liste « Nommage des Agents » du bloc template.
+
+## État précédent (2026-11-09) — v11.5.0 en PROD (archivé)
+
+- **PROD = v11.5.0** « Optimisation des tests » : merge `main` `6c826cd3`, tag `v11.5.0`, Release v11.5.0 (4 assets), milestone #44 clôturé 6/6. Notes + posts `6719d96b`. Détail : historique git de ce fichier.
+
+#### Leçons conservées (v11.5.0)
+
+##### Décisions techniques
+- Durées de test injectées **par instance** (`Engine.SetTickInterval`, `SetConnGreenMinDuration`, `watchdogDelay`, `flashPhases`), jamais par variable de paquet (`t.Parallel` les partagerait).
+- Barrière positive (`settle_barrier_291_test.go`) au lieu des fenêtres « aucun message » ; marge 250 ms après une action client (HELLO / PLAYER_CONNECT).
+- Cadences de test > 2 × le pacing du writer lumière (`MinInterval` 100 ms) ; ne pas comparer deux `Last()` successifs (cause des 2 CI rouges du LOT-4, corrigées `465a8590` et `0d2ca78b`).
+- Cadences de production verrouillées par `TestFlashCadenceConstants_291`.
+- `version.txt` : chaque BUILD commite la valeur candidate `X.Y.Z.a` ; la PROD pose `X.Y.Z` dans un commit séparé.
+- Propriété de l'état : LED → l'`App` (partagé par pointeur) ; ambiance → le `Controller` (détails dans `docs/GO_SERVER.md`).
+
+##### Incidents / leçons (v11.5.0)
+1. Le partage `/share/MFS` a `core.fileMode=false` et perd le bit exécutable : un nouveau script passe par `git update-index --chmod=+x` (vérifier `git ls-tree`) et est appelé via `bash <script>`.
+2. Ne jamais lier `node_modules` par symlink dans un worktree jetable : `git worktree remove --force` suit le lien et vide `server-go/web/node_modules` du dépôt principal (restauré par `npm ci`).
+3. Pendant une QA dans le dépôt principal, les devs travaillent en worktree `tmp/*` puis cherry-pick après le verdict (appliqué 3 fois, sans incident).
+4. Identité git : `.git/config` portait la coquille `user.mail` → les commits du milestone (mesure `8dc81b23..HEAD` : 43 commits, dont le tag `v11.5.0`) ont l'e-mail du conteneur (`ubuntu@…svc.cluster.local`). Corrigé en fin de session (`user.email` dans `PRIVATE/gitconfig`, inclus par `~/.gitconfig`) ; pas de réécriture d'historique.
+5. Les reviewers et devs ne lancent pas de suite complète (règle rappelée à code-reviewer : son run vitest pendant la QA a faussé une mesure).
+6. Label `ci` créé par deployer alors que `ci-cd` existait : doublon à fusionner un jour.
+7. Documentation : la relecture factuelle a trouvé des erreurs à chaque passe (E1–E3 de la relecture finale : chiffres de baseline, décompte `t.Parallel`, description du job firmware) : re-relecture après chaque correction, comme prévu.
 
 ## État précédent (2026-11-06) — v11.4.0 en PROD (archivé)
 

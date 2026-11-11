@@ -2,7 +2,7 @@
 
 Historique des versions du projet BuzzControl.
 
-## [11.6.0] - 2026-11-09 — Milestone v11.6.0 « Ambiance : portée étendue » (#283, #232, #235, #231, #290)
+## [11.6.0] - 2026-11-10 — Milestone v11.6.0 « Ambiance : portée étendue » (#283, #232, #235, #231, #290)
 
 Son et éclairage d'ambiance deviennent réglables **par manche**, et les bruitages sont étendus aux types de jeu (QCM, MEMORY, MEMOTION, RAFALE) et aux médias de question (MEMORY, MEMOTION, ENTRACTE).
 
