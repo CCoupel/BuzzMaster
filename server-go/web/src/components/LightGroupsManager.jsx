@@ -1,22 +1,21 @@
 import { useState, useMemo, useEffect } from 'react'
 import Button from './Button'
 import {
-  MAX_ROOM_GROUPS, MAX_HOST_GROUPS, MAX_NAME_LENGTH, EMPTY_DRAFT, TEST_STEPS, testStepAt,
-  draftFromConfig, draftToPayload, draftsEqual, groupCount, pruneToGeneral, pruneTeams,
-  unassignedLights, locateLight, moveLight, addGroup, removeGroup, renameGroup, moveGroup,
-  addNearTeam, removeNearTeam, availableTeams, addHost, removeHost, renameHost, moveHost,
-  validateDraft, summarize,
+  MAX_ROOM_GROUPS, MAX_HOST_GROUPS, EMPTY_DRAFT, TEST_STEPS, testStepAt,
+  draftFromConfig, draftToPayload, draftsEqual, groupCount, pruneToGeneral,
+  unassignedLights, locateLight, moveLight, addGroup, removeGroup, moveGroup,
+  addHost, removeHost, moveHost, validateDraft, summarize, groupName, hostName, orderChanged,
 } from '../utils/lightGroups'
 import './LightGroupsManager.css'
 
 // #225 (v11.7.0, LOT-1) — sous-onglet « Groupes » de Lumière : rassemble les ampoules de
 // l'éclairage général en groupes ordonnés + bloc « Groupe animateur ».
-// Maquette : docs/mockup/v11.7.0/ui/ambiance_page__light_groups.html (sections 02 à 04).
+// Maquette : docs/mockup/v11.7.0/ui/ambiance_page__light_groups_numbered.html (révision 3 : groupes sans nom,
+// « Équipes à proximité » retiré).
 // Contrat : contracts/light-effects.md §2.1, §2.4, §2.5.
 //
 // Props :
 //   generalLights  noms des ampoules de rôle « general », dans l'ordre de la liste des ampoules
-//   teams          noms d'équipes ; teamColor(name) -> couleur CSS ou null
 //   groups         `lighting.groups` enregistré (tableau, éventuellement absent)
 //   enabled        éclairage d'ambiance activé (l'essai est refusé sinon : 409)
 //   testUnavailableReason  raison d'indisponibilité de l'essai (pont injoignable…), '' si disponible
@@ -36,12 +35,12 @@ function readDrag(e) {
 }
 
 export default function LightGroupsManager({
-  generalLights = [], teams = [], teamColor = () => null, groups, enabled = true,
+  generalLights = [], groups, enabled = true,
   disabled = false, testUnavailableReason = '', onSave, onTest, onStopTest, onChooseEffects = null, onNotify = () => {},
 }) {
   const saved = useMemo(
-    () => pruneTeams(pruneToGeneral(draftFromConfig(groups), generalLights), teams),
-    [groups, generalLights, teams]
+    () => pruneToGeneral(draftFromConfig(groups), generalLights),
+    [groups, generalLights]
   )
   // null = « suit l'enregistré » (dérivé dans le même rendu, jamais fixé par un effet).
   const [edited, setEdited] = useState(null)
@@ -56,7 +55,8 @@ export default function LightGroupsManager({
 
   const update = (fn) => setEdited(prev => fn(prev ?? saved))
   const errors = useMemo(() => validateDraft(draft), [draft])
-  const valid = errors.global.length === 0 && Object.keys(errors.byGroup).length === 0
+  const valid = errors.global.length === 0
+  const reordered = edited !== null && orderChanged(edited, saved)
   const free = unassignedLights(draft, generalLights)
   const summary = summarize(draft, generalLights)
   const total = groupCount(draft)
@@ -168,8 +168,8 @@ export default function LightGroupsManager({
         aria-label={`Déplacer ${name} vers…`}
       >
         <option value="pool">Hors groupe</option>
-        {draft.groups.map((g, i) => <option key={i} value={`g${i}`}>{i + 1} · {g.name || `Groupe ${i + 1}`}</option>)}
-        {draft.hosts.map((g, i) => <option key={`h${i}`} value={`h${i}`}>🎤{i + 1} · {g.name || `Animateur ${i + 1}`}</option>)}
+        {draft.groups.map((g, i) => <option key={i} value={`g${i}`}>{groupName(i)}</option>)}
+        {draft.hosts.map((g, i) => <option key={`h${i}`} value={`h${i}`}>🎤 {hostName(i)}</option>)}
       </select>
       {moveSelectValue(name) !== 'pool' && (
         <button
@@ -203,10 +203,10 @@ export default function LightGroupsManager({
     <section className="lgm" aria-labelledby="lgm-title">
       <h2 id="lgm-title" className="ambiance-step-title">Groupes d'ambiance</h2>
       <p className="ambiance-hint">
-        Rassemblez les ampoules de l'éclairage général en groupes. Les effets de salle (chenillard,
-        remplissage, vague…) animent les groupes dans l'ordre de cette liste, du groupe 1 au dernier :
-        rangez-les dans l'ordre où ils se suivent dans la salle. Les ampoules d'équipe gardent la couleur
-        de leur équipe et ne figurent pas ici.
+        Rassemblez les ampoules de l'éclairage général en groupes. Les effets de salle (chenillard…) désignent
+        les groupes par leur numéro, du groupe 1 au dernier : rangez-les dans l'ordre où ils se suivent dans la
+        salle. Dans un fichier d'effet, <code>g1</code> est le groupe 1 et <code>g0</code> toute la salle. Les
+        ampoules d'équipe gardent la couleur de leur équipe et ne figurent pas ici.
       </p>
 
       {draft.groups.length > 0 && (
@@ -214,10 +214,15 @@ export default function LightGroupsManager({
           Ordre de parcours :{' '}
           {draft.groups.map((g, i) => (
             <span key={i}>
-              {i > 0 && ' → '}<span className="lgm-order-item">{i + 1} {g.name}</span>
+              {i > 0 && ' → '}<span className="lgm-order-item">g{i + 1}</span>
             </span>
           ))}
-          {draft.groups.length > 1 && ' → retour au 1'}
+          {draft.groups.length > 1 && ' → retour à g1'}
+        </div>
+      )}
+      {reordered && (
+        <div className="lgm-warn" role="status">
+          L'ordre a changé : <code>g1</code>, <code>g2</code>… désignent maintenant d'autres groupes dans les effets.
         </div>
       )}
 
@@ -239,13 +244,11 @@ export default function LightGroupsManager({
           {total === 0 && (
             <p className="ambiance-hint">
               Aucun groupe pour l'instant : l'éclairage se comporte comme avant. Les effets répartis
-              (chenillard, remplissage, vague, scintillement) demandent des groupes.
+              (chenillard…) demandent des groupes.
             </p>
           )}
 
           {draft.groups.map((g, i) => {
-            const teamOptions = availableTeams(draft, teams)
-            const err = errors.byGroup[i]
             return (
               <div
                 key={i}
@@ -270,41 +273,11 @@ export default function LightGroupsManager({
                 </div>
                 <span className="lgm-num" aria-label={`Groupe ${i + 1}`}>{i + 1}</span>
                 <div className="lgm-body">
-                  <input
-                    className={`lgm-name${err ? ' is-invalid' : ''}`} value={g.name} maxLength={MAX_NAME_LENGTH + 10}
-                    disabled={disabled} aria-label={`Nom du groupe ${i + 1}`} aria-invalid={!!err}
-                    onChange={e => update(d => renameGroup(d, i, e.target.value))}
-                  />
-                  {err && <span className="lgm-err" role="alert">{err}</span>}
+                  <strong className="lgm-title">{groupName(i)}</strong>
                   <div className="lgm-drop">
                     {g.lights.length > 0
                       ? g.lights.map(renderChip)
                       : <span className="lgm-drop-empty">Aucune ampoule — glissez-en une ici. Un groupe vide est ignoré par les effets.</span>}
-                  </div>
-                  <div className="lgm-line">
-                    Équipes à proximité{' '}
-                    <span
-                      className="lgm-help" role="img" tabIndex={0} aria-label="Aide : équipes à proximité"
-                      title="Quand une équipe marque, l'effet « Vague » part du groupe qui la cite ; sans indication, il part du groupe 1. Une équipe n'est citée que dans un groupe."
-                    >?</span> :{' '}
-                    {g.near_teams.length === 0 && <span className="lgm-none">aucune</span>}
-                    {g.near_teams.map(t => (
-                      <span key={t} className="lgm-chip lgm-chip-team">
-                        <span className="lgm-dot" style={{ backgroundColor: teamColor(t) || 'var(--gray-300)' }} aria-hidden="true" />
-                        {t}
-                        <button type="button" className="lgm-x" disabled={disabled}
-                          aria-label={`Retirer l'équipe ${t} du groupe ${i + 1}`}
-                          onClick={() => update(d => removeNearTeam(d, i, t))}>✕</button>
-                      </span>
-                    ))}
-                    <select
-                      className="lgm-select" value="" disabled={disabled || teamOptions.length === 0}
-                      aria-label={`Ajouter une équipe au groupe ${i + 1}`}
-                      onChange={e => { if (e.target.value) update(d => addNearTeam(d, i, e.target.value)) }}
-                    >
-                      <option value="">+ Ajouter une équipe</option>
-                      {teamOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
                   </div>
                 </div>
                 <div className="lgm-actions">
@@ -330,7 +303,6 @@ export default function LightGroupsManager({
           <div className="lgm-host-wrap">
             <h3 className="lgm-h">Groupes animateur ({draft.hosts.length})</h3>
             {draft.hosts.map((g, i) => {
-              const err = errors.byGroup[`h${i}`]
               return (
                 <div
                   key={i}
@@ -355,12 +327,7 @@ export default function LightGroupsManager({
                   </div>
                   <span className="lgm-num lgm-num-host" aria-label={`Groupe animateur ${i + 1}`}>🎤{i + 1}</span>
                   <div className="lgm-body">
-                    <input
-                      className={`lgm-name${err ? ' is-invalid' : ''}`} value={g.name} maxLength={MAX_NAME_LENGTH + 10}
-                      disabled={disabled} aria-label={`Nom du groupe animateur ${i + 1}`} aria-invalid={!!err}
-                      onChange={e => update(d => renameHost(d, i, e.target.value))}
-                    />
-                    {err && <span className="lgm-err" role="alert">{err}</span>}
+                    <strong className="lgm-title">{hostName(i)}</strong>
                     <div className="lgm-drop">
                       {g.lights.length > 0
                         ? g.lights.map(renderChip)
