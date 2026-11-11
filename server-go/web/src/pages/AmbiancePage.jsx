@@ -13,7 +13,7 @@ import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
 import { groupLabelForLight, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
-import { configKeyFor, globalEffect, findHostGroup, MOMENTS } from '../utils/lightEffects'
+import { configKeyFor, configPatchFor, globalEffect, findHostGroups, MOMENTS } from '../utils/lightEffects'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -369,7 +369,7 @@ export default function AmbiancePage() {
     if (!key || value === null || value === undefined) return
     setSavingEffect(true)
     try {
-      const res = await saveLighting({ [key.section]: { [key.moment]: value } })
+      const res = await saveLighting(configPatchFor(key, value))
       if (!res.ok) throw new Error((await res.text()).trim() || `HTTP ${res.status}`)
       const roundScope = await isRoundScope(res)
       await afterSave()
@@ -382,15 +382,20 @@ export default function AmbiancePage() {
       setSavingEffect(false)
     }
   }
+  const hostGroupsConfigured = useMemo(() => findHostGroups(lighting.groups), [lighting.groups])
+  const [focusHostId, setFocusHostId] = useState(null)
   const effectsSettings = useMemo(() => ({
     light: {
       mode: lighting.default_mode || 'AUTO',
       effects: Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, false, m.key)])),
-      host_effects: Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, true, m.key)])),
+      host_effects: Object.fromEntries(hostGroupsConfigured.map(g => [g.id, Object.fromEntries(MOMENTS.map(m => [m.key, globalEffect(lighting, g.id, m.key)]))])),
     },
-  }), [lighting])
-  const hostGroupConfigured = useMemo(() => findHostGroup(lighting.groups), [lighting.groups])
-  const openSubTab = (key) => { setLightSubTab(key); if (key === 'effects') refreshCatalog() }
+  }), [lighting, hostGroupsConfigured])
+  const openSubTab = (key, hostId = null) => {
+    setLightSubTab(key)
+    setFocusHostId(key === 'effects' ? hostId : null)
+    if (key === 'effects') refreshCatalog()
+  }
 
   // ---- Étape 1 : découverte ------------------------------------------------
   const handleDiscover = async () => {
@@ -680,18 +685,31 @@ export default function AmbiancePage() {
     }
   }
 
-  // POST /api/lighting/groups/test — 400 numéro inconnu, 409 éclairage désactivé, 429 essai déjà en cours,
-  // 503 pont injoignable, 500 erreur (502 gardé par tolérance).
+  // POST /api/lighting/groups/test — séquence de 6 s (contrat §2.4) : réponse immédiate `{ok, duration_ms}` ;
+  // 400 groupe inconnu ou vide, 409 éclairage désactivé / clé refusée, 503 pont injoignable, 500 autre.
+  // Un nouvel essai remplace celui en cours (plus de 429).
   const handleTestGroup = async (ref) => {
     try {
       const res = await postJson('/api/lighting/groups/test', { group: ref })
-      if (res.ok) return { ok: true }
+      if (res.ok) {
+        const body = await readJsonSafe(res)
+        return { ok: true, duration_ms: body?.duration_ms }
+      }
       const message = res.status === 409 ? "Essai refusé : l'éclairage d'ambiance est désactivé, ou le pont n'est pas associé ou a refusé la clé."
-        : res.status === 429 ? 'Un essai est déjà en cours — patientez un instant.'
-        : (res.status === 503 || res.status === 502) ? 'Pont injoignable ou refusé — impossible de tester le groupe.'
-        : res.status === 400 ? 'Groupe inconnu — enregistrez d\'abord les groupes.'
+        : (res.status === 503 || res.status === 502) ? 'Pont injoignable — impossible de tester le groupe.'
+        : res.status === 400 ? 'Groupe inconnu ou vide — enregistrez d\'abord les groupes.'
         : `Essai impossible (HTTP ${res.status}).`
       return { ok: false, message }
+    } catch (error) {
+      return { ok: false, message: 'Erreur : ' + error.message }
+    }
+  }
+
+  // POST /api/lighting/groups/test/stop — arrête l'essai en cours ; 200 même si aucun essai ne tourne.
+  const handleStopGroupTest = async () => {
+    try {
+      const res = await postJson('/api/lighting/groups/test/stop')
+      return res.ok ? { ok: true } : { ok: false, message: `Arrêt de l'essai impossible (HTTP ${res.status}).` }
     } catch (error) {
       return { ok: false, message: 'Erreur : ' + error.message }
     }
@@ -1174,11 +1192,12 @@ export default function AmbiancePage() {
             teamColor={teamSwatchColor}
             groups={lighting.groups}
             enabled={!!lighting.enabled}
-            disabled={frozen}
+            testUnavailableReason={frozen ? 'Pont injoignable ou association refusée' : ''}
             onSave={handleSaveGroups}
             onTest={handleTestGroup}
+            onStopTest={handleStopGroupTest}
             onNotify={setToast}
-            onChooseEffects={() => openSubTab('effects')}
+            onChooseEffects={(hostId) => openSubTab('effects', hostId)}
           />
         )}
 
@@ -1191,7 +1210,8 @@ export default function AmbiancePage() {
               onChange={(field, value) => (field === 'light.mode' ? handleDefaultModeChange(field, value) : handleEffectChange(field, value))}
               sections={['light', 'lightEffects']}
               catalog={catalog}
-              hostGroup={hostGroupConfigured}
+              hostGroups={hostGroupsConfigured}
+              focusHostId={focusHostId}
               onManageGroups={() => openSubTab('groups')}
               onCreateHost={() => openSubTab('groups')}
               disabled={savingDefaultMode || savingEffect}
@@ -1405,7 +1425,7 @@ export default function AmbiancePage() {
                             onClick={() => setLightSubTab('groups')}
                             aria-label={`Groupe de ${row.name}`}
                           >
-                            {label ? (label.kind === 'host' ? `🎤 ${label.name} (animateur)` : `${label.n} · ${label.name}`) : 'hors groupe'}
+                            {label ? (label.kind === 'host' ? `🎤 A${label.rank} · ${label.name}` : `${label.n} · ${label.name}`) : 'hors groupe'}
                           </button>
                         )
                       })()}

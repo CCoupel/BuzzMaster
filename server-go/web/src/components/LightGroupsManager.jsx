@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Button from './Button'
 import {
-  MAX_GROUPS, MAX_NAME_LENGTH, EMPTY_DRAFT,
+  MAX_ROOM_GROUPS, MAX_HOST_GROUPS, MAX_NAME_LENGTH, EMPTY_DRAFT, TEST_STEPS, testStepAt,
   draftFromConfig, draftToPayload, draftsEqual, groupCount, pruneToGeneral, pruneTeams,
   unassignedLights, locateLight, moveLight, addGroup, removeGroup, renameGroup, moveGroup,
-  addNearTeam, removeNearTeam, availableTeams, addHost, removeHost, renameHost,
-  createGroupPerLight, validateDraft, summarize,
+  addNearTeam, removeNearTeam, availableTeams, addHost, removeHost, renameHost, moveHost,
+  validateDraft, summarize,
 } from '../utils/lightGroups'
 import './LightGroupsManager.css'
 
@@ -19,8 +19,11 @@ import './LightGroupsManager.css'
 //   teams          noms d'équipes ; teamColor(name) -> couleur CSS ou null
 //   groups         `lighting.groups` enregistré (tableau, éventuellement absent)
 //   enabled        éclairage d'ambiance activé (l'essai est refusé sinon : 409)
-//   onSave(payload) -> Promise<{ok, message?}>  ; onTest('host' | n) -> Promise<{ok, message?}>
-//   onChooseEffects  null jusqu'au LOT-2 (lien inactif « bientôt »)
+//   testUnavailableReason  raison d'indisponibilité de l'essai (pont injoignable…), '' si disponible
+//   onSave(payload) -> Promise<{ok, message?}>
+//   onTest(n | 'host<k>') -> Promise<{ok, duration_ms?, message?}>   essai en séquence (6 pas d'1 s), réponse immédiate
+//   onStopTest() -> Promise<{ok, message?}>                          POST …/groups/test/stop
+//   onChooseEffects(hostId)  lien « Choisir ses effets » d'un groupe animateur (null : inactif)
 //   onNotify({message,type}) toast de la page
 //
 // Glisser-déposer natif (dataTransfer), comme les fonds d'écran et les manches ; alternative
@@ -34,7 +37,7 @@ function readDrag(e) {
 
 export default function LightGroupsManager({
   generalLights = [], teams = [], teamColor = () => null, groups, enabled = true,
-  disabled = false, onSave, onTest, onChooseEffects = null, onNotify = () => {},
+  disabled = false, testUnavailableReason = '', onSave, onTest, onStopTest, onChooseEffects = null, onNotify = () => {},
 }) {
   const saved = useMemo(
     () => pruneTeams(pruneToGeneral(draftFromConfig(groups), generalLights), teams),
@@ -45,7 +48,10 @@ export default function LightGroupsManager({
   const draft = edited ?? saved
   const dirty = edited !== null && !draftsEqual(edited, saved)
   const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState(null) // 'host' | n
+  // Essai en séquence : { ref, startedAt, durationMs } tant que la séquence tourne ; `starting` = requête en vol.
+  const [running, setRunning] = useState(null)
+  const [starting, setStarting] = useState(null)
+  const [now, setNow] = useState(() => Date.now())
   const [dragOver, setDragOver] = useState(null)
 
   const update = (fn) => setEdited(prev => fn(prev ?? saved))
@@ -54,7 +60,19 @@ export default function LightGroupsManager({
   const free = unassignedLights(draft, generalLights)
   const summary = summarize(draft, generalLights)
   const total = groupCount(draft)
-  const atMax = total >= MAX_GROUPS
+  const atMaxRoom = draft.groups.length >= MAX_ROOM_GROUPS
+  const atMaxHost = draft.hosts.length >= MAX_HOST_GROUPS
+
+  // La séquence se termine d'elle-même au bout de `duration_ms` ; un tic de 250 ms met l'étape en cours à jour.
+  useEffect(() => {
+    if (!running) return undefined
+    const tick = setInterval(() => {
+      const t = Date.now()
+      setNow(t)
+      if (t - running.startedAt >= running.durationMs) setRunning(null)
+    }, 250)
+    return () => clearInterval(tick)
+  }, [running])
 
   if (generalLights.length === 0 && total === 0) {
     return (
@@ -85,11 +103,11 @@ export default function LightGroupsManager({
     if (disabled) return
     const data = readDrag(e)
     if (!data) return
-    if (data.type === 'light' && target !== 'groupcard') update(d => moveLight(d, data.name, groupIndex))
+    if (data.type === 'light' && !String(target).endsWith('card')) update(d => moveLight(d, data.name, groupIndex))
     if (data.type === 'group' && target === 'groupcard') update(d => moveGroup(d, data.index, groupIndex.index))
+    if (data.type === 'host' && target === 'hostcard') update(d => moveHost(d, data.index, groupIndex.index))
   }
   const poolTarget = { kind: 'pool' }
-  const hostTarget = { kind: 'host' }
 
   // ---- actions ----
   const handleSave = async () => {
@@ -101,23 +119,35 @@ export default function LightGroupsManager({
     } finally { setSaving(false) }
   }
   const handleTest = async (ref) => {
-    setTesting(ref)
+    // Un clic sur le groupe en cours d'essai l'arrête (bouton « ■ Arrêter l'essai »).
+    if (running?.ref === ref) {
+      setRunning(null)
+      const res = await onStopTest?.()
+      if (res && !res.ok) onNotify({ message: res.message || "Arrêt de l'essai impossible", type: 'warning' })
+      return
+    }
+    setStarting(ref)
     try {
       const res = await onTest(ref)
-      if (!res?.ok) onNotify({ message: res?.message || 'Essai impossible', type: 'warning' })
-    } finally { setTesting(null) }
+      if (res?.ok) {
+        const durationMs = Number.isFinite(res.duration_ms) ? res.duration_ms : TEST_STEPS.length * 1000
+        setNow(Date.now())
+        setRunning({ ref, startedAt: Date.now(), durationMs }) // remplace l'essai d'un autre groupe
+      } else onNotify({ message: res?.message || 'Essai impossible', type: 'warning' })
+    } finally { setStarting(null) }
   }
 
+  // Raison d'indisponibilité de l'essai (infobulle) ; '' = disponible.
   const testDisabledReason = (empty) =>
-    dirty ? 'Enregistrez d\'abord' : empty ? 'Groupe vide' : !enabled ? 'Éclairage d\'ambiance désactivé' : ''
+    dirty ? "Enregistrez d'abord" : empty ? 'Groupe vide' : !enabled ? "Éclairage d'ambiance désactivé" : testUnavailableReason
 
   const moveSelectValue = (name) => {
     const loc = locateLight(draft, name)
-    return loc.kind === 'group' ? `g${loc.index}` : loc.kind === 'host' ? 'host' : 'pool'
+    return loc.kind === 'group' ? `g${loc.index}` : loc.kind === 'host' ? `h${loc.index}` : 'pool'
   }
   const onMoveSelect = (name) => (e) => {
     const v = e.target.value
-    update(d => moveLight(d, name, v === 'pool' ? poolTarget : v === 'host' ? hostTarget : { kind: 'group', index: Number(v.slice(1)) }))
+    update(d => moveLight(d, name, v === 'pool' ? poolTarget : { kind: v[0] === 'h' ? 'host' : 'group', index: Number(v.slice(1)) }))
   }
 
   const renderChip = (name) => (
@@ -139,7 +169,7 @@ export default function LightGroupsManager({
       >
         <option value="pool">Hors groupe</option>
         {draft.groups.map((g, i) => <option key={i} value={`g${i}`}>{i + 1} · {g.name || `Groupe ${i + 1}`}</option>)}
-        {draft.host && <option value="host">🎤 {draft.host.name || 'Animateur'}</option>}
+        {draft.hosts.map((g, i) => <option key={`h${i}`} value={`h${i}`}>🎤{i + 1} · {g.name || `Animateur ${i + 1}`}</option>)}
       </select>
       {moveSelectValue(name) !== 'pool' && (
         <button
@@ -152,16 +182,19 @@ export default function LightGroupsManager({
   )
 
   const renderTest = (ref, empty) => {
-    const reason = testDisabledReason(empty)
+    const isRunning = running?.ref === ref
+    const reason = isRunning ? '' : testDisabledReason(empty)
+    const step = isRunning ? testStepAt(now - running.startedAt) : 0
+    const title = isRunning ? `Étape ${step + 1}/${TEST_STEPS.length} : ${TEST_STEPS[step]}` : (reason || 'Joue une séquence de 6 secondes sur les ampoules du groupe')
     return (
       <Button
         variant="secondary" size="sm"
-        disabled={disabled || !!reason || testing !== null}
-        loading={testing === ref}
-        title={reason || undefined}
+        disabled={disabled || (!isRunning && !!reason) || (starting !== null && starting !== ref)}
+        loading={starting === ref}
+        title={title}
         onClick={() => handleTest(ref)}
       >
-        Tester le groupe
+        {isRunning ? "■ Arrêter l'essai" : 'Tester le groupe'}
       </Button>
     )
   }
@@ -249,7 +282,11 @@ export default function LightGroupsManager({
                       : <span className="lgm-drop-empty">Aucune ampoule — glissez-en une ici. Un groupe vide est ignoré par les effets.</span>}
                   </div>
                   <div className="lgm-line">
-                    Équipes à proximité :{' '}
+                    Équipes à proximité{' '}
+                    <span
+                      className="lgm-help" role="img" tabIndex={0} aria-label="Aide : équipes à proximité"
+                      title="Quand une équipe marque, l'effet « Vague » part du groupe qui la cite ; sans indication, il part du groupe 1. Une équipe n'est citée que dans un groupe."
+                    >?</span> :{' '}
                     {g.near_teams.length === 0 && <span className="lgm-none">aucune</span>}
                     {g.near_teams.map(t => (
                       <span key={t} className="lgm-chip lgm-chip-team">
@@ -281,73 +318,82 @@ export default function LightGroupsManager({
           })}
 
           <div className="lgm-row">
-            {draft.groups.length === 0 && free.length > 0 && (
-              <Button variant="primary" size="sm" disabled={disabled || atMax}
-                onClick={() => update(d => createGroupPerLight(d, generalLights))}>
-                Créer un groupe par ampoule
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" disabled={disabled || atMax} onClick={() => update(addGroup)}>
+            <Button variant="ghost" size="sm" disabled={disabled || atMaxRoom} onClick={() => update(addGroup)}>
               + Nouveau groupe
             </Button>
-            {!draft.host && (
-              <Button variant="ghost" size="sm" disabled={disabled || atMax} onClick={() => update(addHost)}>
-                🎤 + Créer le groupe animateur
-              </Button>
-            )}
           </div>
-          {draft.groups.length === 0 && free.length > 0 && (
-            <p className="ambiance-hint">
-              « Créer un groupe par ampoule » prépare {free.length} groupe{free.length > 1 ? 's' : ''} dans
-              l'ordre de la liste des ampoules ; il reste à les ranger dans l'ordre de la salle, puis à enregistrer.
-            </p>
+          {atMaxRoom && <p className="ambiance-hint">{MAX_ROOM_GROUPS} groupes de salle au plus.</p>}
+          {draft.groups.length === 0 && draft.hosts.length === 0 && (
+            <p className="ambiance-hint">Créez un groupe, nommez-le, puis glissez-y des ampoules.</p>
           )}
-          {atMax && <p className="ambiance-hint">{MAX_GROUPS} groupes au plus.</p>}
 
-          {draft.host && (
-            <div className="lgm-host-wrap">
-              <h3 className="lgm-h">Groupe animateur</h3>
-              <div
-                className={`lgm-grp lgm-host${dragOver === 'host' ? ' is-over' : ''}`}
-                onDragOver={allowDrop('host')} onDragLeave={() => setDragOver(null)} onDrop={dropOn('host', hostTarget)}
-                data-testid="lgm-host"
-              >
-                <span />
-                <span className="lgm-num lgm-num-host" aria-label="Groupe animateur">🎤</span>
-                <div className="lgm-body">
-                  <input
-                    className={`lgm-name${errors.byGroup.host ? ' is-invalid' : ''}`} value={draft.host.name}
-                    maxLength={MAX_NAME_LENGTH + 10} disabled={disabled} aria-label="Nom du groupe animateur"
-                    aria-invalid={!!errors.byGroup.host}
-                    onChange={e => update(d => renameHost(d, e.target.value))}
-                  />
-                  {errors.byGroup.host && <span className="lgm-err" role="alert">{errors.byGroup.host}</span>}
-                  <div className="lgm-drop">
-                    {draft.host.lights.length > 0
-                      ? draft.host.lights.map(renderChip)
-                      : <span className="lgm-drop-empty">Aucune ampoule — glissez-en une ici.</span>}
+          <div className="lgm-host-wrap">
+            <h3 className="lgm-h">Groupes animateur ({draft.hosts.length})</h3>
+            {draft.hosts.map((g, i) => {
+              const err = errors.byGroup[`h${i}`]
+              return (
+                <div
+                  key={i}
+                  className={`lgm-grp lgm-host${g.lights.length === 0 ? ' is-empty' : ''}${dragOver === `host${i}` ? ' is-over' : ''}`}
+                  onDragOver={allowDrop(`host${i}`)} onDragLeave={() => setDragOver(null)}
+                  onDrop={(e) => {
+                    const data = readDrag(e)
+                    if (data?.type === 'host') dropOn('hostcard', { index: i })(e)
+                    else dropOn('host', { kind: 'host', index: i })(e)
+                  }}
+                  data-testid={`lgm-host-${i + 1}`}
+                >
+                  <div className="lgm-handle-col">
+                    <span
+                      className="lgm-handle" draggable={!disabled} title="Glisser pour changer l'ordre"
+                      onDragStart={startDrag({ type: 'host', index: i })} aria-hidden="true"
+                    >⠿</span>
+                    <button type="button" className="lgm-mini" disabled={disabled || i === 0}
+                      aria-label={`Monter le groupe animateur ${i + 1}`} onClick={() => update(d => moveHost(d, i, i - 1))}>↑</button>
+                    <button type="button" className="lgm-mini" disabled={disabled || i === draft.hosts.length - 1}
+                      aria-label={`Descendre le groupe animateur ${i + 1}`} onClick={() => update(d => moveHost(d, i, i + 1))}>↓</button>
                   </div>
-                  <div className="lgm-line">
-                    Hors des effets de salle · blanc fixe par défaut ·{' '}
-                    {onChooseEffects
-                      ? <button type="button" className="lgm-link" onClick={onChooseEffects}>Choisir ses effets</button>
-                      : <span className="lgm-soon" title="Disponible avec le sous-onglet Effets">Choisir ses effets (bientôt)</span>}
+                  <span className="lgm-num lgm-num-host" aria-label={`Groupe animateur ${i + 1}`}>🎤{i + 1}</span>
+                  <div className="lgm-body">
+                    <input
+                      className={`lgm-name${err ? ' is-invalid' : ''}`} value={g.name} maxLength={MAX_NAME_LENGTH + 10}
+                      disabled={disabled} aria-label={`Nom du groupe animateur ${i + 1}`} aria-invalid={!!err}
+                      onChange={e => update(d => renameHost(d, i, e.target.value))}
+                    />
+                    {err && <span className="lgm-err" role="alert">{err}</span>}
+                    <div className="lgm-drop">
+                      {g.lights.length > 0
+                        ? g.lights.map(renderChip)
+                        : <span className="lgm-drop-empty">Aucune ampoule — glissez-en une ici.</span>}
+                    </div>
+                    <div className="lgm-line">
+                      Blanc fixe par défaut ·{' '}
+                      {onChooseEffects && g.id && !dirty
+                        ? <button type="button" className="lgm-link" onClick={() => onChooseEffects(g.id)}>Choisir ses effets</button>
+                        : <span className="lgm-soon" title="Enregistrez d'abord les groupes">Choisir ses effets</span>}
+                    </div>
+                  </div>
+                  <div className="lgm-actions">
+                    {renderTest(`host${i + 1}`, g.lights.length === 0)}
+                    <Button variant="ghost" size="sm" disabled={disabled}
+                      aria-label={`Supprimer le groupe animateur ${i + 1}`}
+                      onClick={() => update(d => removeHost(d, i))}>Supprimer</Button>
                   </div>
                 </div>
-                <div className="lgm-actions">
-                  {renderTest('host', draft.host.lights.length === 0)}
-                  <Button variant="ghost" size="sm" disabled={disabled}
-                    aria-label="Supprimer le groupe animateur"
-                    onClick={() => update(removeHost)}>Supprimer</Button>
-                </div>
-              </div>
-              <p className="ambiance-hint">
-                Le groupe animateur éclaire le pupitre ou la régie. Il n'est entraîné ni par les effets de
-                salle, ni par ON / OFF, ni par le Flash : il reste en blanc fixe, sauf si vous lui choisissez
-                un effet par moment (sous-onglet Effets).
-              </p>
+              )
+            })}
+            <div className="lgm-row">
+              <Button variant="ghost" size="sm" disabled={disabled || atMaxHost} onClick={() => update(addHost)}>
+                🎤 + Nouveau groupe animateur
+              </Button>
             </div>
-          )}
+            {atMaxHost && <p className="ambiance-hint">{MAX_HOST_GROUPS} groupes animateur au plus.</p>}
+            <p className="ambiance-hint">
+              Les groupes animateur éclairent le pupitre, la régie, la table de l'animateur… Ils ne sont entraînés ni
+              par les effets de salle, ni par ON / OFF, ni par le Flash : chacun reste en blanc fixe, sauf si vous lui
+              choisissez un effet par moment (sous-onglet Effets). {MAX_HOST_GROUPS} groupes animateur au plus.
+            </p>
+          </div>
         </div>
       </div>
 

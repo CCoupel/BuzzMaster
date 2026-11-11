@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOptions, effectWarning, normalizeCatalog, globalEffect, findHostGroup, configKeyFor, INHERIT } from './lightEffects'
+import { buildOptions, effectWarning, normalizeCatalog, globalEffect, findHostGroups, configKeyFor, configPatchFor, effectsPath, INHERIT } from './lightEffects'
 import { overriddenFields, setPartialPath, describeOverride } from './ambianceSettings'
 
 const CAT = normalizeCatalog({
@@ -52,11 +52,21 @@ describe('lightEffects — listes par moment (#223)', () => {
   })
   it('valeurs globales par défaut, correspondance config.json et groupe animateur', () => {
     expect(globalEffect({}, false, 'chrono')).toBe('pulsation')
-    expect(globalEffect({ host_effects: { score: 'couleur-equipe' } }, true, 'score')).toBe('couleur-equipe')
-    expect(globalEffect({}, true, 'chrono')).toBe('')
-    expect(configKeyFor('light.host_effects.calm')).toEqual({ section: 'host_effects', moment: 'calm' })
+    expect(globalEffect({ host_effects: { g5d7e4: { score: 'couleur-equipe' } } }, 'g5d7e4', 'score')).toBe('couleur-equipe')
+    expect(globalEffect({ host_effects: { g5d7e4: { score: 'x' } } }, 'g0b6c9', 'score')).toBe('')
+    expect(globalEffect({}, 'g5d7e4', 'chrono')).toBe('')
+    expect(effectsPath('g5d7e4', 'calm')).toBe('light.host_effects.g5d7e4.calm')
+    expect(effectsPath(null, 'calm')).toBe('light.effects.calm')
+    const key = configKeyFor('light.host_effects.g5d7e4.calm')
+    expect(key).toEqual({ section: 'host_effects', id: 'g5d7e4', moment: 'calm' })
+    expect(configPatchFor(key, 'pulsation')).toEqual({ host_effects: { g5d7e4: { calm: 'pulsation' } } })
+    expect(configPatchFor(configKeyFor('light.effects.chrono'), '')).toEqual({ effects: { chrono: '' } })
+    expect(configKeyFor('light.host_effects.calm')).toBeNull()
     expect(configKeyFor('light.mode')).toBeNull()
-    expect(findHostGroup([{ name: 'S', role: 'salle' }, { name: 'P', role: 'animateur' }])).toEqual({ name: 'P' })
+    expect(findHostGroups([
+      { id: 's1', name: 'S', role: 'salle' }, { id: 'a1', name: 'P', role: 'animateur', lights: ['L'] },
+      { name: 'sans id', role: 'animateur' }, { id: 'a2', name: 'R', role: 'animateur', lights: [] },
+    ])).toEqual([{ id: 'a1', name: 'P', rank: 1, empty: false }, { id: 'a2', name: 'R', rank: 3, empty: true }])
     expect(INHERIT).toBe('__inherit__')
   })
 })
@@ -64,9 +74,10 @@ describe('lightEffects — listes par moment (#223)', () => {
 describe('ambianceSettings — champs d\'effet (#223)', () => {
   it('compte et décrit les effets surchargés, retire la surcharge avec null', () => {
     let p = setPartialPath({}, 'light.effects.calm', 'scintillement')
-    p = setPartialPath(p, 'light.host_effects.score', '')
-    expect(overriddenFields(p).map(f => f.path)).toEqual(['light.effects.calm', 'light.host_effects.score'])
+    p = setPartialPath(p, 'light.host_effects.a1.score', '')
+    expect(overriddenFields(p).map(f => f.path)).toEqual(['light.effects.calm', 'light.host_effects.a1.score'])
     expect(describeOverride({ path: 'light.effects.calm', value: 'scintillement' })).toContain('phases calmes')
-    expect(setPartialPath(p, 'light.effects.calm', null)).toEqual({ light: { host_effects: { score: '' } } })
+    expect(describeOverride({ path: 'light.host_effects.a1.score', value: '' }, c => c, id => `🎤 ${id}`)).toContain('🎤 a1')
+    expect(setPartialPath(p, 'light.effects.calm', null)).toEqual({ light: { host_effects: { a1: { score: '' } } } })
   })
 })

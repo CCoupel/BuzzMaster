@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CUE_TABS, cueMeta } from '../utils/soundCues'
 import {
   MOMENTS, DEFAULT_EFFECTS, DEFAULT_HOST_EFFECTS, INHERIT, effectsPath, buildOptions, optionLabel, effectWarning,
@@ -27,7 +27,9 @@ import './AmbianceSettingsPanel.css'
 //             'lightEffects' (#223, v11.7.0) : un effet lumière par moment (salle) + ceux du groupe animateur ;
 //             champs 'light.effects.<moment>' et 'light.host_effects.<moment>' (contracts/light-effects.md §6).
 //   catalog   catalogue d'effets (GET /api/lighting/effects normalisé, voir useLightEffects) ; indéfini = section masquée
-//   hostGroup {name} | null — groupe animateur configuré (bloc affiché seulement s'il existe)
+//   hostGroups [{id, name, rank, empty}] — groupes animateur configurés (un bloc de trois sélecteurs chacun ;
+//             chemins `light.host_effects.<id>.<moment>`, clé = `id` stable du groupe, contracts/light-effects.md §6)
+//   focusHostId  `id` du groupe animateur dont le bloc est mis en vue (lien « Choisir ses effets » de la page Groupes)
 //   onManageGroups / onOpenCatalogue / onCreateHost   liens des avertissements (facultatifs)
 //   renderCatalogue(cue)   mode global : cellules <td> catalogue de la ligne
 //   catalogueColumns       [<th>…] en-têtes correspondants
@@ -75,7 +77,8 @@ export default function AmbianceSettingsPanel({
   renderFile = null,
   files = null,
   catalog,
-  hostGroup = null,
+  hostGroups = [],
+  focusHostId = null,
   onManageGroups = null,
   onOpenCatalogue = null,
   onCreateHost = null,
@@ -109,23 +112,32 @@ export default function AmbianceSettingsPanel({
 
   const onoff = (v) => (v ? 'actif' : 'inactif')
 
+  // Met en vue le bloc du groupe animateur demandé (lien « Choisir ses effets »).
+  useEffect(() => {
+    if (!focusHostId) return
+    const el = document.getElementById(`asp-host-block-${focusHostId}`)
+    el?.scrollIntoView?.({ block: 'center' })
+  }, [focusHostId, hostGroups.length])
+
   // #223 — une ligne « moment » : liste d'effets (salle ou groupe animateur).
   const renderEffectRow = (m, host) => {
     const field = effectsPath(host, m.key)
+    // `host` : `id` du groupe animateur (falsy = salle).
     const dflt = (host ? DEFAULT_HOST_EFFECTS : DEFAULT_EFFECTS)[m.key]
     const raw = get(value, field)
     const current = raw === undefined ? (override ? INHERIT : dflt) : raw
     const baseRaw = get(base, field)
     const baseValue = baseRaw === undefined ? dflt : baseRaw
     const effective = current === INHERIT ? baseValue : current
-    const options = buildOptions(catalog, m.key, { host, selected: effective, defaultValue: override ? null : dflt })
-    const warning = effectWarning(catalog, m.key, effective, { host })
-    const id = `asp-eff-${host ? 'host' : 'room'}-${m.key}`
+    const isHost = !!host
+    const options = buildOptions(catalog, m.key, { host: isHost, selected: effective, defaultValue: override ? null : dflt })
+    const warning = effectWarning(catalog, m.key, effective, { host: isHost })
+    const id = `asp-eff-${isHost ? `host-${host}` : 'room'}-${m.key}`
     return (
       <div className="asp-row asp-effect-row" key={id}>
         <label className="asp-label" htmlFor={id}>
           {m.label}
-          {!host && <small className="asp-sub">{m.sub}</small>}
+          {!isHost && <small className="asp-sub">{m.sub}</small>}
         </label>
         <select
           id={id}
@@ -279,12 +291,18 @@ export default function AmbianceSettingsPanel({
         <div className="asp-effects" data-testid="asp-light-effects">
           <h4 className="asp-title">Effets lumière</h4>
           {MOMENTS.map(m => renderEffectRow(m, false))}
-          {hostGroup ? (
+          <h4 className="asp-title asp-host-title">🎤 Groupes animateur</h4>
+          {hostGroups.length > 0 ? (
             <>
-              <h4 className="asp-title asp-host-title">🎤 Groupe animateur{hostGroup.name ? ` « ${hostGroup.name} »` : ''}</h4>
-              {MOMENTS.map(m => renderEffectRow(m, true))}
+              <p className="asp-inherit">Un bloc par groupe animateur, dans l'ordre de la page Groupes. Chaque groupe a ses propres effets.</p>
+              {hostGroups.map(g => (
+                <div key={g.id} id={`asp-host-block-${g.id}`} className={`asp-host-block${focusHostId === g.id ? ' is-focus' : ''}`} data-testid={`asp-host-${g.id}`}>
+                  <h5 className="asp-host-name">🎤{g.rank} · {g.name || `Animateur ${g.rank}`}{g.empty && <span className="asp-inherit"> (groupe vide)</span>}</h5>
+                  {MOMENTS.map(m => renderEffectRow(m, g.id))}
+                </div>
+              ))}
               <p className="asp-inherit">
-                Les listes ne proposent que les effets jouables sur un seul groupe. Le groupe animateur n'est concerné ni par le mode ON / AUTO / OFF, ni par le Flash.
+                Les listes ne proposent que les effets jouables sur un seul groupe. Les groupes animateur ne sont concernés ni par le mode ON / AUTO / OFF, ni par le Flash.
               </p>
             </>
           ) : (!override && (

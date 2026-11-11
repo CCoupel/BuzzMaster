@@ -10,6 +10,7 @@ export const MOMENTS = [
 
 // Valeurs par défaut globales (§6) : reproduisent le comportement v11.6.0.
 export const DEFAULT_EFFECTS = Object.freeze({ chrono: 'pulsation', calm: '', score: '' })
+// Groupes animateur (révision du GATE LOT-1) : une entrée par `id` de groupe, blanc fixe aux trois moments par défaut.
 export const DEFAULT_HOST_EFFECTS = Object.freeze({ chrono: '', calm: '', score: '' })
 
 export const EMPTY_CATALOG = Object.freeze({ groups: 0, effects: [], errors: [], unresolved: [], dir: '' })
@@ -17,13 +18,25 @@ export const EMPTY_CATALOG = Object.freeze({ groups: 0, effects: [], errors: [],
 export const INHERIT = '__inherit__'
 export const NONE = ''
 
-export const effectsPath = (host, moment) => `light.${host ? 'host_effects' : 'effects'}.${moment}`
+// Chemin éditable d'un effet : salle `light.effects.<moment>` ; groupe animateur `light.host_effects.<id>.<moment>`
+// (clé = `id` stable du groupe, contracts/light-effects.md §6).
+export const effectsPath = (host, moment) => (host
+  ? `light.host_effects.${host}.${moment}`
+  : `light.effects.${moment}`)
 
 // Chemin `lighting.*` de config.json correspondant (§6, table de correspondance).
 export const configKeyFor = (field) => {
-  const m = /^light\.(effects|host_effects)\.(chrono|calm|score)$/.exec(field)
-  return m ? { section: m[1], moment: m[2] } : null
+  const room = /^light\.effects\.(chrono|calm|score)$/.exec(field)
+  if (room) return { section: 'effects', moment: room[1] }
+  const host = /^light\.host_effects\.([a-z0-9]{1,12})\.(chrono|calm|score)$/.exec(field)
+  return host ? { section: 'host_effects', id: host[1], moment: host[2] } : null
 }
+
+// Corps `lighting` de POST /config.json pour un changement d'effet : salle `{effects:{m:v}}`,
+// groupe animateur `{host_effects:{<id>:{m:v}}}`.
+export const configPatchFor = (key, value) => (key.section === 'effects'
+  ? { effects: { [key.moment]: value } }
+  : { host_effects: { [key.id]: { [key.moment]: value } } })
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
 
@@ -100,15 +113,30 @@ export function effectWarning(catalog, moment, value, { host = false } = {}) {
 }
 
 // Valeur globale effective d'un moment depuis la section `lighting` de config.json.
+// `host` : `id` d'un groupe animateur (falsy = salle).
 export function globalEffect(lighting, host, moment) {
-  const src = host ? lighting?.host_effects : lighting?.effects
+  const src = host ? (isObj(lighting?.host_effects) ? lighting.host_effects[host] : undefined) : lighting?.effects
   const dflt = host ? DEFAULT_HOST_EFFECTS : DEFAULT_EFFECTS
   const v = isObj(src) ? src[moment] : undefined
   return typeof v === 'string' ? v : dflt[moment]
 }
 
-// Groupe animateur configuré : {name} | null.
-export function findHostGroup(groups) {
-  const g = Array.isArray(groups) ? groups.find(x => x && x.role === 'animateur') : null
-  return g ? { name: typeof g.name === 'string' ? g.name : '' } : null
+// Groupes animateur configurés, dans l'ordre de la page Groupes : [{id, name, rank, empty}] (rang k = A1, A2…).
+// Un groupe sans `id` (jamais enregistré) est ignoré : ses effets ne sont réglables qu'après enregistrement.
+export function findHostGroups(groups) {
+  if (!Array.isArray(groups)) return []
+  const out = []
+  let rank = 0
+  for (const g of groups) {
+    if (!g || g.role !== 'animateur') continue
+    rank += 1
+    if (typeof g.id !== 'string' || !g.id) continue
+    out.push({
+      id: g.id,
+      name: typeof g.name === 'string' ? g.name : '',
+      rank,
+      empty: !Array.isArray(g.lights) || g.lights.length === 0,
+    })
+  }
+  return out
 }

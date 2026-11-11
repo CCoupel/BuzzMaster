@@ -12,10 +12,10 @@ export const SETTINGS_FIELD_PATHS = [
   'light.effects.chrono',
   'light.effects.calm',
   'light.effects.score',
-  'light.host_effects.chrono',
-  'light.host_effects.calm',
-  'light.host_effects.score',
 ]
+// Groupes animateur : chemins `light.host_effects.<id>.<moment>` (un par groupe), construits à la volée
+// (hostEffectPaths) — la liste des `id` vit dans la configuration, pas ici.
+export const hostEffectPaths = (ids) => ids.flatMap(id => ['chrono', 'calm', 'score'].map(m => `light.host_effects.${id}.${m}`))
 export const CUE_PATH_PREFIX = 'sound.cues.'
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v)
@@ -65,11 +65,20 @@ export function overriddenFields(partial) {
   }
   if (isObj(partial.light) && partial.light.mode !== undefined) out.push({ path: 'light.mode', value: partial.light.mode })
   if (isObj(partial.light)) {
-    for (const branch of ['effects', 'host_effects']) {
-      const m = partial.light[branch]
-      if (!isObj(m)) continue
+    const room = partial.light.effects
+    if (isObj(room)) {
       for (const moment of ['chrono', 'calm', 'score']) {
-        if (m[moment] !== undefined) out.push({ path: `light.${branch}.${moment}`, value: m[moment] })
+        if (room[moment] !== undefined) out.push({ path: `light.effects.${moment}`, value: room[moment] })
+      }
+    }
+    // Un réglage compte pour chaque (groupe animateur, moment) surchargé.
+    const hosts = partial.light.host_effects
+    if (isObj(hosts)) {
+      for (const [id, byMoment] of Object.entries(hosts)) {
+        if (!isObj(byMoment)) continue
+        for (const moment of ['chrono', 'calm', 'score']) {
+          if (byMoment[moment] !== undefined) out.push({ path: `light.host_effects.${id}.${moment}`, value: byMoment[moment] })
+        }
       }
     }
   }
@@ -79,15 +88,15 @@ export function overriddenFields(partial) {
 export const countOverrides = (partial) => overriddenFields(partial).length
 
 /** Libellé court d'un champ surchargé (info-bulle du badge). */
-export function describeOverride({ path, value }, cueLabel = (c) => c) {
+export function describeOverride({ path, value }, cueLabel = (c) => c, hostLabel = (id) => id) {
   if (path === 'sound.muted') return `Son : ${value ? 'coupé' : 'ON'}`
   if (path === 'sound.countdown.enabled') return `Décompte : ${value ? 'actif' : 'inactif'}`
   if (path === 'sound.countdown.loop') return `Décompte : ${value ? 'en boucle' : 'une fois'}`
   if (path === 'light.mode') return `Lumière : ${value}`
-  const eff = /^light\.(effects|host_effects)\.(chrono|calm|score)$/.exec(path)
+  const eff = /^light\.(?:effects\.(chrono|calm|score)|host_effects\.([a-z0-9]{1,12})\.(chrono|calm|score))$/.exec(path)
   if (eff) {
-    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[2]]
-    return `${eff[1] === 'host_effects' ? 'Animateur' : 'Effet'} (${moment}) : ${value || 'aucun'}`
+    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[1] || eff[3]]
+    return `${eff[2] ? `Animateur ${hostLabel(eff[2])}` : 'Effet'} (${moment}) : ${value || 'aucun'}`
   }
   if (path.startsWith(CUE_PATH_PREFIX)) return `${cueLabel(path.slice(CUE_PATH_PREFIX.length))} : ${value ? 'actif' : 'inactif'}`
   return path
