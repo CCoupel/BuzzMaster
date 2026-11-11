@@ -649,3 +649,13 @@ identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
 - **Révision 3 (2026-11-11, modèle figé)** : `lighting.groups[]` ne porte plus ni `name` ni `near_teams` — un groupe est
   `{id, role, lights[]}`, désigné par son rang (g1…gN pour la salle, rang k pour un groupe animateur). Le reste de cette
   section (adressage `Group`, groupes Hue, essai en séquence) est inchangé (`light-effects.md` §2.1).
+- **Révision 4 (2026-11-11) — trois zones** : `lighting.groups[].role` ∈ `salle` | `animateur` | `public` ; 12 groupes par
+  zone. `LightSpec` porte `Area` (ambiance, animateur, public) et `Group` ; l'adressage par numéros négatifs
+  (`HostGroup(k)`) est remplacé. Groupes Hue : `buzzmaster-general` (zone ambiance seule) et `buzzmaster-general-<n>`,
+  `buzzmaster-host` et `buzzmaster-host-<n>`, `buzzmaster-public` et `buzzmaster-public-<n>` ; les
+  `buzzmaster-general-host<k>` disparaissent à la réconciliation. `buzzmaster-ambiance` (toutes les ampoules assignées :
+  interrupteur général, extinction à l'arrêt) inclut les trois zones. **Une ampoule de la zone public n'est écrite que
+  par un effet ou un essai** : jamais par la scène de salle, `ON` / `OFF`, ni le Flash ; autour d'un essai, son état est
+  lu sur le pont puis réécrit (`light-effects.md` §2.5). `GET /api/lighting/lights` : `group` = `0` | `n` | `"host<k>"` |
+  `"public<k>"`. Dans `config.json` : `lighting.effects.<zone>.<moment>` et `lighting.speeds.<zone>.<moment>` ; les clés
+  `host_effects` et `host_speeds` sont supprimées.

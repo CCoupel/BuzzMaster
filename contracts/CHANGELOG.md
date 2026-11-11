@@ -1,6 +1,37 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — révision 4 : trois zones symétriques (ambiance, animateur, public), test à la vitesse réglée
+
+Retour utilisateur sur la maquette du catalogue. **Rien n'est en PROD** ; les marques **[BREAKING]** valent par rapport
+au code de la branche (Batch R : `34ced5bf`, `c25b1b13`, `2ce84d3b`, `d2104208`, `beb68938`).
+
+- **[NEW]** Zones : `lighting.groups[].role` gagne `public` ; chaque zone a ses groupes `g1`…`gN` et son `g0` ; 12 groupes
+  par zone. Zone public : non pilotée sans effet (ni scène, ni blanc fixe, rien au démarrage), insensible à ON / OFF /
+  Flash, éteinte par l'interrupteur général et à l'arrêt, POST appliqué et tenu, état lu puis réécrit autour d'un essai.
+  `light-effects.md` §2.1, §2.5.
+- **[BREAKING]** Zone animateur : **un effet pour la zone**, rendu sur ses N groupes — plus un effet par groupe.
+  Applicabilité (§4.7) : même règle pour les trois zones ; la règle « n'écrit que `g0` » est supprimée.
+- **[BREAKING]** Réglages (§6, réécrit) : `lighting.effects.<zone>.<moment>` et `lighting.speeds.<zone>.<moment>`
+  (`config.json`) ; `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` (manche, API, état de jeu). Les clés
+  `host_effects`, `host_speeds` et les formes à plat `effects.<moment>` / `speeds.<moment>` sont supprimées (la forme à
+  plat d'une configuration antérieure est lue comme la zone `ambiance`).
+- **[BREAKING]** Adressage d'état (§2.2) : `ZoneState.Area` + `Group` remplace les numéros négatifs `HostGroup(k)` ;
+  groupes Hue `buzzmaster-host[-<n>]`, `buzzmaster-public[-<n>]` (remplacent `buzzmaster-general-host<k>`).
+  `hue-bridge.md` §11.
+- **[BREAKING]** `GET /api/lighting/effects` (§7.1) : `groups` et `applicable` deviennent des tables par zone ;
+  `host_applicable` et `reason` supprimés ; `unresolved[].zone` ajouté.
+- **[NEW]** `GET /api/lighting/effects` : `tick_ms` par effet (indication « plafonné » de la vitesse).
+- **[CHANGED]** `POST /api/lighting/effects/{id}/try` (§7.4) : corps `{zone, speed, seconds}` ; sert au bouton « Tester »
+  de l'onglet Effets (zone et vitesse du réglage) et à l'essai du catalogue (×1, zone ambiance) ; refus `mode` pour la
+  seule zone ambiance. Passe du LOT-3 au LOT-2.
+- **[CHANGED]** Forme de `group` : ajout de `"public<k>"` (`GET /api/lighting/lights`, `POST /api/lighting/groups/test`).
+- **[CHANGED]** Précisions issues du Batch R, sans changement de comportement : numéro réel pour une cible directe, rangs
+  parmi les groupes non vides pour les variables (§4.3) ; sans `pre`, le pas 0 est au tick 0 (§4.5) ; POST sans effet
+  visible en zones ambiance et animateur (§4.5) ; changement de vitesse au tick suivant (§6) ; `degrade` livré avec le
+  LOT-2 (§9).
+
+---
 ## [20261111] — v11.7.0 — révision 3 : effets écrits pas à pas, groupes sans nom (#223, #225 — 2e refus du GATE LOT-1)
 
 Modèle figé par l'utilisateur (`_work/reports/effects-chronogram-r2-20261111-223000.md`). **Rien n'est en PROD** ; les

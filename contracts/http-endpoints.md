@@ -1433,21 +1433,19 @@ puisse l'indiquer.
 
 ---
 
-## Lighting — groupes et effets (v11.7.0, #225, #223, #299)
+## Lighting — groupes et effets (v11.7.0, #225, #223, #299, #211)
 
-> Détail normatif : `contracts/light-effects.md` §2.4 et §7.
+> Détail normatif : `contracts/light-effects.md` (révision 4 : trois zones `ambiance`, `animateur`, `public`).
 
 | Méthode | Chemin | Rôle | Lot |
 |---|---|---|---|
-| POST | `/config.json` `{"lighting":{"groups":[…]}}` | Groupes d'ambiance (remplacement complet, validation §2.1) | LOT-1 |
-| GET | `/api/lighting/lights` | Champ additif `group` par ampoule (`0` \| `n` \| `"host<k>"`) | LOT-1 |
-| POST | `/api/lighting/groups/test/stop` | Arrête l'essai de groupe en cours (révision du GATE LOT-1) | LOT-1 |
-| POST | `/api/lighting/groups/test` | Essai d'un groupe : séquence visible de 6 s, réponse immédiate `{"ok":true,"duration_ms":6000}`, `group` = `n` ou `"host<k>"` (révision du GATE LOT-1, `light-effects.md` §2.4) | LOT-1 |
-| POST | `/config.json` `{"lighting":{"effects":{…}}}` | Effet par moment, global | LOT-2 |
-| POST | `/config.json` `{"lighting":{"host_effects":{"<id>":{…}}}}` | Effets par moment de chaque groupe animateur, global (table par `id` de groupe, révision du GATE LOT-1) | LOT-2 |
-| POST | `/config.json` `{"lighting":{"speeds":{…},"host_speeds":{"<id>":{…}}}}` | Vitesse des effets par moment, salle et groupes animateur, global (`0.5` à `2`) | LOT-2 |
-| GET | `/api/ambiance/settings` | `light.effects`, `light.host_effects`, `light.speeds`, `light.host_speeds` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
-| GET | `/api/lighting/effects` | Catalogue, erreurs de fichiers, réglages non résolus | LOT-2 |
+| POST | `/config.json` `{"lighting":{"groups":[…]}}` | Groupes `{id, role, lights[]}`, rôle `salle` \| `animateur` \| `public`, 12 par zone (§2.1) | LOT-1 |
+| GET | `/api/lighting/lights` | Champ additif `group` par ampoule (`0` \| `n` \| `"host<k>"` \| `"public<k>"`) | LOT-1 |
+| POST | `/api/lighting/groups/test` | Essai d'un groupe : séquence visible de 6 s, réponse immédiate, `group` = `n`, `"host<k>"` ou `"public<k>"` (§2.4) | LOT-1 |
+| POST | `/api/lighting/groups/test/stop` | Arrête l'essai de groupe en cours | LOT-1 |
+| POST | `/config.json` `{"lighting":{"effects":{"<zone>":{…}},"speeds":{"<zone>":{…}}}}` | Effet et vitesse par moment et par zone, global (§6) | LOT-2 |
+| GET | `/api/ambiance/settings` | `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
+| GET | `/api/lighting/effects` | Catalogue : `groups` par zone, `applicable` par zone, `tick_ms`, erreurs de fichiers (§7.1) | LOT-2 |
 | POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |
-| GET | `/api/lighting/effects/{id}/preview` | Trames simulées | LOT-3 |
-| POST | `/api/lighting/effects/{id}/try`, `/api/lighting/effects/try/stop` | Essai sur les ampoules | LOT-3 |
+| POST | `/api/lighting/effects/{id}/try`, `/api/lighting/effects/try/stop` | Essai d'un effet sur une zone, à une vitesse donnée : bouton « Tester » de l'onglet Effets et essai du catalogue (§7.4) | LOT-2 |
+| GET | `/api/lighting/effects/{id}/preview` | Trames simulées (§7.3) | LOT-3 |

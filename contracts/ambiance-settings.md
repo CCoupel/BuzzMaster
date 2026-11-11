@@ -371,3 +371,8 @@ chemins (§6) couvre `sound.files.*`.
   `lighting.speeds.*`) et `LightHostSpeeds` — `light.host_speeds.<id du groupe>.{chrono,calm,score}` (global
   `lighting.host_speeds.<id>.*`). Valeurs `0.5 | 0.75 | 1 | 1.5 | 2`, défaut `1`, surchargeables par manche ; mêmes
   règles de résolution et de sources que les effets. Le test de parité couvre ces chemins (`light-effects.md` §6).
+- **Révision 4 (2026-11-11) — réglages par zone** : `LightEffects[<zone>][<moment>]` et `LightSpeeds[<zone>][<moment>]`,
+  JSON `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` (global `lighting.effects.*`, `lighting.speeds.*`),
+  zone ∈ `ambiance` | `animateur` | `public`. Remplace les lignes de cette section sur `light.effects.<moment>`,
+  `LightHostEffects`, `LightSpeeds[<moment>]` et `LightHostSpeeds` ; forme complète = trois zones × trois moments ; le
+  test de parité couvre ces 18 chemins. Détail : `light-effects.md` §6.
