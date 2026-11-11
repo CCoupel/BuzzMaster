@@ -86,11 +86,12 @@ describe('AmbiancePage › Lumière — sous-onglets (#225)', () => {
   it('« Groupes » affiche la page de gestion ; « Pont et ampoules » masque alors la liste des groupes', async () => {
     makeServer()
     render(<AmbiancePage />)
-    expect(screen.queryByText("Groupes d'ambiance")).toBeNull()
+    expect(screen.queryByTestId('lgm-pool')).toBeNull()
     fireEvent.click(await subtab('Groupes'))
-    expect(await screen.findByText("Groupes d'ambiance")).toBeInTheDocument()
+    expect(await screen.findByTestId('lgm-pool')).toBeInTheDocument()
+    for (const z of ['ambiance', 'animateur', 'public']) expect(screen.getByTestId(`lgm-zone-${z}`)).toBeInTheDocument()
     fireEvent.click(await subtab('Pont et ampoules'))
-    expect(screen.queryByText("Groupes d'ambiance")).toBeNull()
+    expect(screen.queryByTestId('lgm-pool')).toBeNull()
   })
 
   it('« Effets » (LOT-2) : sélecteurs par moment à la place de « bientôt »', async () => {
@@ -99,37 +100,45 @@ describe('AmbiancePage › Lumière — sous-onglets (#225)', () => {
     const tab = await subtab('Effets')
     expect(within(tab).queryByText(/bientôt/i)).toBeNull()
     fireEvent.click(tab)
-    await waitFor(() => expect(document.querySelector('#asp-eff-room-chrono')).not.toBeNull())
+    await waitFor(() => expect(document.querySelector('#asp-eff-ambiance-chrono')).not.toBeNull())
   })
 })
 
 describe('AmbiancePage › Lumière — colonne « Groupe » (#225)', () => {
-  it('affiche « hors groupe », « Groupe n » et « 🎤 Animateur k » (sans nom) selon la configuration', async () => {
+  it('affiche la zone et le numéro du groupe : « Ambiance · g1 », « Animateur · g1 », « Public · g1 », ou « hors groupe » (sans nom)', async () => {
     makeServer({ lighting: { groups: [
       { id: 'a1', role: 'salle', lights: ['BuzzHue1'] },
       { id: 'b2', role: 'animateur', lights: ['BuzzHue2'] },
-      { id: 'c3', role: 'animateur', lights: ['BuzzHue3'] },
+      { id: 'p3', role: 'public', lights: ['BuzzHue3'] },
     ] } })
     render(<AmbiancePage />)
-    expect(await screen.findByLabelText('Groupe de BuzzHue1')).toHaveTextContent('Groupe 1')
-    expect(screen.getByLabelText('Groupe de BuzzHue2')).toHaveTextContent('🎤 Animateur 1')
-    expect(screen.getByLabelText('Groupe de BuzzHue3')).toHaveTextContent('🎤 Animateur 2')
+    expect(await screen.findByLabelText('Groupe de BuzzHue1')).toHaveTextContent('Ambiance · g1')
+    expect(screen.getByLabelText('Groupe de BuzzHue2')).toHaveTextContent('Animateur · g1')
+    expect(screen.getByLabelText('Groupe de BuzzHue3')).toHaveTextContent('Public · g1')
   })
 
-  it('la numérotation de salle ignore les groupes animateur (rang parmi les groupes de salle)', async () => {
+  it('le rang du groupe est propre à sa zone (deux groupes animateur : g1 et g2 ; un groupe de salle reste g1)', async () => {
     makeServer({ lighting: { groups: [
       { id: 'b2', role: 'animateur', lights: ['BuzzHue2'] },
+      { id: 'c3', role: 'animateur', lights: ['BuzzHue3'] },
       { id: 'a1', role: 'salle', lights: ['BuzzHue1'] },
     ] } })
     render(<AmbiancePage />)
-    expect(await screen.findByLabelText('Groupe de BuzzHue1')).toHaveTextContent('Groupe 1')
+    expect(await screen.findByLabelText('Groupe de BuzzHue1')).toHaveTextContent('Ambiance · g1')
+    expect(screen.getByLabelText('Groupe de BuzzHue3')).toHaveTextContent('Animateur · g2')
+  })
+
+  it('une ampoule générale sans groupe affiche « hors groupe »', async () => {
+    makeServer({ lighting: { groups: [{ id: 'a1', role: 'salle', lights: ['BuzzHue1'] }] } })
+    render(<AmbiancePage />)
+    expect(await screen.findByLabelText('Groupe de BuzzHue2')).toHaveTextContent('hors groupe')
   })
 
   it('cliquer la pastille ouvre le sous-onglet Groupes', async () => {
     makeServer()
     render(<AmbiancePage />)
     fireEvent.click(await screen.findByLabelText('Groupe de BuzzHue1'))
-    expect(await screen.findByText("Groupes d'ambiance")).toBeInTheDocument()
+    expect(await screen.findByTestId('lgm-pool')).toBeInTheDocument()
   })
 })
 
@@ -173,6 +182,34 @@ describe('AmbiancePage › Lumière — enregistrer et tester les groupes (#225)
     fireEvent.click(await subtab('Groupes'))
     fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
     await waitFor(() => expect(srv.tests).toEqual([{ group: 'host1' }]))
+  })
+
+  it('« Tester le groupe » du groupe public poste {group:"public1"}', async () => {
+    const srv = makeServer({ lighting: { groups: [{ role: 'public', lights: ['BuzzHue1'] }] } })
+    render(<AmbiancePage />)
+    fireEvent.click(await subtab('Groupes'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Tester le groupe' }))
+    await waitFor(() => expect(srv.tests).toEqual([{ group: 'public1' }]))
+  })
+
+  it('« Enregistrer les groupes » poste aussi un groupe de la zone public (rôle public)', async () => {
+    const srv = makeServer({ lighting: { groups: [{ id: 'ga1', role: 'salle', lights: ['BuzzHue1'] }] } })
+    render(<AmbiancePage />)
+    fireEvent.click(await subtab('Groupes'))
+    fireEvent.click(await screen.findByRole('button', { name: '👥 + Nouveau groupe public' }))
+    fireEvent.click(screen.getByRole('button', { name: /Enregistrer les groupes/ }))
+    await waitFor(() => expect(srv.posts.some(p => p.lighting && Array.isArray(p.lighting.groups))).toBe(true))
+    expect(srv.posts.find(p => p.lighting && p.lighting.groups).lighting.groups.at(-1)).toEqual({ role: 'public', lights: [] })
+  })
+
+  it('« Choisir les effets de la zone » ouvre le sous-onglet Effets sur le bloc de la zone', async () => {
+    makeServer({ lighting: { groups: [{ id: 'ga1', role: 'salle', lights: ['BuzzHue1'] }, { id: 'hp1', role: 'animateur', lights: ['BuzzHue2'] }] } })
+    render(<AmbiancePage />)
+    fireEvent.click(await subtab('Groupes'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Choisir les effets de la zone' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Effets/ })).toHaveAttribute('aria-selected', 'true'))
+    await waitFor(() => expect(document.querySelector('#asp-eff-animateur-chrono')).not.toBeNull())
+    expect(screen.getByTestId('asp-zone-animateur').className).toMatch(/is-focus/)
   })
 
   it('un essai sur pont injoignable (503) est expliqué', async () => {

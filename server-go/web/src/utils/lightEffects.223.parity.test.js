@@ -1,71 +1,66 @@
 import { describe, it, expect } from 'vitest'
-import { effectsPath, configKeyFor, configPatchFor, MOMENTS, speedPath, SPEEDS, DEFAULT_SPEED, formatSpeed, isSpeedCapped } from './lightEffects'
+import { effectsPath, configKeyFor, configPatchFor, MOMENTS, ZONES, speedPath, SPEEDS, DEFAULT_SPEED, formatSpeed, isSpeedCapped } from './lightEffects'
 import { overriddenFields, setPartialPath } from './ambianceSettings'
 
-// #223 (révision du GATE LOT-1) — parité des chemins éditables avec le serveur (contracts/light-effects.md §6,
-// ambiance-settings.md §10) : `light.effects.<m>` et `light.host_effects.<id>.<m>` côté modèle/manche/API,
-// `lighting.effects.<m>` et `lighting.host_effects.<id>.<m>` côté config.json. Le serveur (ambiancecfg.InvalidPaths)
-// formate exactement les mêmes chemins ; ce test fige le côté React.
+// #223 (révision 4) — parité des chemins éditables avec le serveur (contracts/light-effects.md §6, ambiance-settings.md §10) :
+// `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` côté modèle/manche/API (3 zones × 3 moments),
+// `lighting.effects.<zone>.<moment>` et `lighting.speeds.<zone>.<moment>` côté config.json. Le serveur
+// (ambiancecfg.InvalidPaths) formate exactement les mêmes chemins ; ce test fige le côté React.
+// Plus de `host_effects` ni d'id de groupe : le groupe n'est la clé d'aucun réglage.
 
 const MOMENT_KEYS = ['chrono', 'calm', 'score']
+const ZONE_KEYS = ['ambiance', 'animateur', 'public']
 
 describe('chemins éditables des effets — parité front / serveur', () => {
-  it('les trois moments du composant sont ceux du serveur', () => {
+  it('les trois moments et les trois zones du composant sont ceux du serveur', () => {
     expect(MOMENTS.map(m => m.key)).toEqual(MOMENT_KEYS)
+    expect([...ZONES]).toEqual(ZONE_KEYS)
   })
 
-  it('salle : light.effects.<moment>', () => {
-    for (const m of MOMENT_KEYS) expect(effectsPath(false, m)).toBe(`light.effects.${m}`)
-  })
-
-  it('groupe animateur : light.host_effects.<id>.<moment> (clé = id stable du groupe)', () => {
-    for (const m of MOMENT_KEYS) expect(effectsPath('g5d7e4', m)).toBe(`light.host_effects.g5d7e4.${m}`)
+  it('light.effects.<zone>.<moment> pour chacune des neuf cases', () => {
+    for (const z of ZONE_KEYS) for (const m of MOMENT_KEYS) expect(effectsPath(z, m)).toBe(`light.effects.${z}.${m}`)
   })
 
   it('configKeyFor convertit une fois light.* → lighting.* (jamais l\'inverse)', () => {
-    expect(configKeyFor('light.effects.calm')).toEqual({ section: 'effects', moment: 'calm' })
-    expect(configKeyFor('light.host_effects.ha1.score')).toEqual({ section: 'host_effects', id: 'ha1', moment: 'score' })
-    expect(configKeyFor('lighting.effects.calm')).toBeNull()
-    expect(configKeyFor('light.host_effects.score')).toBeNull() // ancienne forme à plat : plus un chemin éditable
-    expect(configKeyFor('light.host_effects.HA1.score')).toBeNull() // id [a-z0-9]{1,12}
-    expect(configKeyFor('light.host_effects.abcdefghijklm.score')).toBeNull()
-    expect(configKeyFor('light.effects.bidule')).toBeNull()
+    expect(configKeyFor('light.effects.ambiance.calm')).toEqual({ section: 'effects', zone: 'ambiance', moment: 'calm' })
+    expect(configKeyFor('light.effects.public.score')).toEqual({ section: 'effects', zone: 'public', moment: 'score' })
+    expect(configKeyFor('lighting.effects.ambiance.calm')).toBeNull()
+    expect(configKeyFor('light.effects.calm')).toBeNull() // ancienne forme à plat : plus un chemin éditable
+    expect(configKeyFor('light.host_effects.ha1.score')).toBeNull() // host_effects n'existe plus
+    expect(configKeyFor('light.effects.salle.calm')).toBeNull() // zone inconnue
+    expect(configKeyFor('light.effects.ambiance.bidule')).toBeNull()
   })
 
-  it('configPatchFor : un moment à la fois (patch fusionné par le serveur)', () => {
-    expect(configPatchFor({ section: 'effects', moment: 'chrono' }, 'chenillard')).toEqual({ effects: { chrono: 'chenillard' } })
-    expect(configPatchFor({ section: 'host_effects', id: 'ha1', moment: 'score' }, 'couleur-equipe')).toEqual({ host_effects: { ha1: { score: 'couleur-equipe' } } })
-    expect(configPatchFor({ section: 'effects', moment: 'calm' }, '')).toEqual({ effects: { calm: '' } })
+  it('configPatchFor : une zone et un moment à la fois (patch fusionné par le serveur)', () => {
+    expect(configPatchFor({ section: 'effects', zone: 'ambiance', moment: 'chrono' }, 'chenillard')).toEqual({ effects: { ambiance: { chrono: 'chenillard' } } })
+    expect(configPatchFor({ section: 'effects', zone: 'animateur', moment: 'score' }, 'couleur-equipe')).toEqual({ effects: { animateur: { score: 'couleur-equipe' } } })
+    expect(configPatchFor({ section: 'effects', zone: 'public', moment: 'calm' }, '')).toEqual({ effects: { public: { calm: '' } } })
   })
 
-  it('aller-retour : chaque chemin de salle et d\'animateur est reconnu et reconstruit à l\'identique', () => {
-    for (const m of MOMENT_KEYS) {
-      for (const host of [false, 'ha1', 'zz9']) {
-        const path = effectsPath(host, m)
-        const key = configKeyFor(path)
-        expect(key).not.toBeNull()
-        expect(key.moment).toBe(m)
-        expect(key.section).toBe(host ? 'host_effects' : 'effects')
-        if (host) expect(key.id).toBe(host)
+  it('aller-retour : chacun des neuf chemins est reconnu et reconstruit à l\'identique', () => {
+    for (const z of ZONE_KEYS) {
+      for (const m of MOMENT_KEYS) {
+        const key = configKeyFor(effectsPath(z, m))
+        expect(key).toEqual({ section: 'effects', zone: z, moment: m })
       }
     }
   })
 
-  it('une surcharge de manche d\'un groupe animateur est comptée comme un réglage (badge « N réglages »)', () => {
+  it('une surcharge de manche est comptée comme un réglage (badge « N réglages »), par zone et par moment', () => {
     let partial = {}
-    partial = setPartialPath(partial, 'light.host_effects.ha1.score', 'couleur-equipe')
-    partial = setPartialPath(partial, 'light.host_effects.hb2.chrono', '')
-    partial = setPartialPath(partial, 'light.effects.calm', 'scintillement')
+    partial = setPartialPath(partial, 'light.effects.animateur.score', 'couleur-equipe')
+    partial = setPartialPath(partial, 'light.effects.public.chrono', '')
+    partial = setPartialPath(partial, 'light.effects.ambiance.calm', 'scintillement')
     const paths = overriddenFields(partial).map(f => f.path)
-    expect(paths).toEqual(expect.arrayContaining(['light.host_effects.ha1.score', 'light.host_effects.hb2.chrono', 'light.effects.calm']))
+    expect(paths).toEqual(expect.arrayContaining(['light.effects.animateur.score', 'light.effects.public.chrono', 'light.effects.ambiance.calm']))
     expect(paths).toHaveLength(3)
   })
 
-  it('« Hérité » (null) retire la clé, et le groupe quand il n\'a plus de moment surchargé', () => {
-    let partial = setPartialPath({}, 'light.host_effects.ha1.score', 'couleur-equipe')
-    partial = setPartialPath(partial, 'light.host_effects.ha1.score', null)
+  it('« Hérité » (null) retire la clé, et la zone quand elle n\'a plus de moment surchargé', () => {
+    let partial = setPartialPath({}, 'light.effects.animateur.score', 'couleur-equipe')
+    partial = setPartialPath(partial, 'light.effects.animateur.score', null)
     expect(overriddenFields(partial)).toHaveLength(0)
-    expect(JSON.stringify(partial)).not.toContain('ha1')
+    expect(JSON.stringify(partial)).not.toContain('animateur')
   })
 
   // ---- vitesse (R13 / R14) ----
@@ -76,29 +71,24 @@ describe('chemins éditables des effets — parité front / serveur', () => {
     expect(SPEEDS.map(formatSpeed)).toEqual(['×0,5', '×0,75', '×1', '×1,5', '×2'])
   })
 
-  it('chemins de vitesse : light.speeds.<moment> et light.host_speeds.<id>.<moment>', () => {
-    for (const m of MOMENT_KEYS) {
-      expect(speedPath(false, m)).toBe(`light.speeds.${m}`)
-      expect(speedPath('g5d7e4', m)).toBe(`light.host_speeds.g5d7e4.${m}`)
-    }
+  it('chemins de vitesse : light.speeds.<zone>.<moment>', () => {
+    for (const z of ZONE_KEYS) for (const m of MOMENT_KEYS) expect(speedPath(z, m)).toBe(`light.speeds.${z}.${m}`)
   })
 
-  it('configKeyFor / configPatchFor couvrent les vitesses (lighting.speeds, lighting.host_speeds)', () => {
-    expect(configKeyFor('light.speeds.chrono')).toEqual({ section: 'speeds', moment: 'chrono' })
-    expect(configKeyFor('light.host_speeds.ha1.calm')).toEqual({ section: 'host_speeds', id: 'ha1', moment: 'calm' })
-    expect(configKeyFor('light.host_speeds.calm')).toBeNull()
-    expect(configKeyFor('lighting.speeds.chrono')).toBeNull()
-    expect(configPatchFor({ section: 'speeds', moment: 'chrono' }, 2)).toEqual({ speeds: { chrono: 2 } })
-    expect(configPatchFor({ section: 'host_speeds', id: 'ha1', moment: 'score' }, 0.5)).toEqual({ host_speeds: { ha1: { score: 0.5 } } })
+  it('configKeyFor / configPatchFor couvrent les vitesses (lighting.speeds.<zone>.<moment>)', () => {
+    expect(configKeyFor('light.speeds.ambiance.chrono')).toEqual({ section: 'speeds', zone: 'ambiance', moment: 'chrono' })
+    expect(configKeyFor('light.speeds.public.calm')).toEqual({ section: 'speeds', zone: 'public', moment: 'calm' })
+    expect(configKeyFor('light.speeds.chrono')).toBeNull()
+    expect(configKeyFor('light.host_speeds.ha1.calm')).toBeNull()
+    expect(configKeyFor('lighting.speeds.ambiance.chrono')).toBeNull()
+    expect(configPatchFor({ section: 'speeds', zone: 'ambiance', moment: 'chrono' }, 2)).toEqual({ speeds: { ambiance: { chrono: 2 } } })
+    expect(configPatchFor({ section: 'speeds', zone: 'animateur', moment: 'score' }, 0.5)).toEqual({ speeds: { animateur: { score: 0.5 } } })
   })
 
   it('aller-retour de tous les chemins de vitesse', () => {
-    for (const m of MOMENT_KEYS) {
-      for (const host of [false, 'ha1']) {
-        const key = configKeyFor(speedPath(host, m))
-        expect(key).not.toBeNull()
-        expect(key.moment).toBe(m)
-        expect(key.section).toBe(host ? 'host_speeds' : 'speeds')
+    for (const z of ZONE_KEYS) {
+      for (const m of MOMENT_KEYS) {
+        expect(configKeyFor(speedPath(z, m))).toEqual({ section: 'speeds', zone: z, moment: m })
       }
     }
   })
@@ -112,10 +102,10 @@ describe('chemins éditables des effets — parité front / serveur', () => {
   })
 
   it('une surcharge de vitesse de manche est comptée comme un réglage', () => {
-    let partial = setPartialPath({}, 'light.speeds.chrono', 2)
-    partial = setPartialPath(partial, 'light.host_speeds.ha1.score', 0.5)
+    let partial = setPartialPath({}, 'light.speeds.ambiance.chrono', 2)
+    partial = setPartialPath(partial, 'light.speeds.animateur.score', 0.5)
     const paths = overriddenFields(partial).map(f => f.path)
-    expect(paths).toEqual(expect.arrayContaining(['light.speeds.chrono', 'light.host_speeds.ha1.score']))
-    expect(setPartialPath(partial, 'light.speeds.chrono', null)).not.toHaveProperty('light.speeds.chrono')
+    expect(paths).toEqual(expect.arrayContaining(['light.speeds.ambiance.chrono', 'light.speeds.animateur.score']))
+    expect(overriddenFields(setPartialPath(partial, 'light.speeds.ambiance.chrono', null)).map(f => f.path)).toEqual(['light.speeds.animateur.score'])
   })
 })
