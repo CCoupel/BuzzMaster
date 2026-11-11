@@ -1,18 +1,19 @@
-# Procédure de Test — Effets lumière pas à pas, vitesse et chenillard (#223, milestone v11.7.0, LOT-2, révision 3)
+# Procédure de Test — Effets lumière pas à pas, par zone, vitesse et « Tester » (#223, milestone v11.7.0, LOT-2, révision 4)
 
 **Version** : v11.7.0.x (QUALIF)
-**Date** : 2026-11-11 (révision 3 : format d'effet « pas à pas » à variables de groupe, vitesse réglable, groupes sans nom)
+**Date** : 2026-11-11 (révision 4 : un effet et une vitesse par **zone** (Ambiance, Animateur, Public) et par moment, bouton « Tester », zone Public)
 **Testeur** : QA (scénarios AUTO) / Utilisateur (scénarios HUMAIN)
 **Contrat** : `contracts/light-effects.md` §3 à §7, §9 ; `contracts/ambiance-settings.md` §10
-**Maquette** : `docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects_numbered.html`
-**Plan** : `.claude/workflow/plan-11.7.0.md` (LOT-2, tâches R5 à R14)
+**Maquette** : `docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects_zones.html`
+**Plan** : `.claude/workflow/plan-11.7.0.md` (LOT-2, tâches Z5 à Z11)
+**Procédure complémentaire** : `light-effects-211.md` (chenillard 4/6/8 groupes, vitesse, « Tester » ×2, zone Public, dégradé)
 **Guide** : `docs/LIGHT_EFFECTS.md` (« Écrire un effet »)
 
 ## Prerequis
 
 - [ ] Environnement : QUALIF (binaire Windows, pont Hue réel pour le volet « ampoules réelles »)
 - [ ] Données : au moins 8 ampoules générales, rangées en **8 groupes de salle** (cf. `light-groups-225.md`, groupes sans nom), puis
-      réductibles à 4 et 6 groupes ; **deux groupes animateur** (1 ampoule chacun) ; équipes « Rouges » et « Bleus » ;
+      réductibles à 4 et 6 groupes ; **deux groupes de la zone Animateur** (1 ampoule chacun) et **un groupe de la zone Public** (1 ampoule, réglée à la main) ; équipes « Rouges » et « Bleus » ;
       un quiz avec une question chronométrée de 30 s
 - [ ] Accès : page Ambiance › Lumière › Effets ; accès au dossier `data/files/effects/` de la QUALIF (explorateur de fichiers)
 - [ ] Un éditeur de texte ordinaire (Bloc-notes) ; le guide `docs/LIGHT_EFFECTS.md` ouvert
@@ -28,8 +29,8 @@
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | `cd server-go && go test -race ./internal/effects ./internal/ambiancecfg ./internal/ambiance -count=1` | Tous verts, dont `TestChronogram_ReferenceTable_TickByTick` (chronogramme de référence du §4.5) | | |
-| 2 | `cd server-go && go test -race ./internal/server ./cmd/server -run 'TW223' -count=1` | Tous verts (réglages, vitesses, `/api/lighting/effects`, sauvegarde, `ROUNDS_UPDATE`) | | |
-| 3 | `cd server-go/web && npx vitest run src/components/AmbianceSettingsPanel.223.test.jsx src/utils/lightEffects.223.parity.test.js` | Tous verts | | |
+| 2 | `cd server-go && go test -race ./internal/server ./cmd/server -run 'TW223' -count=1` | Tous verts (réglages par zone, vitesses, `/api/lighting/effects` par zone, `…/try` et `…/try/stop`, sauvegarde, `ROUNDS_UPDATE`) | | |
+| 3 | `cd server-go/web && npx vitest run src/components/AmbianceSettingsPanel src/utils/lightEffects src/pages/AmbiancePage.tryButton.test.jsx` | Tous verts | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -42,9 +43,10 @@
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
 | 1 | Page Effets, listes d'effets | Natifs proposés : **Pulsation**, **Chenillard** (dès 3 groupes), **Chenillard avec traînée** (dès 5 groupes), **Couleur de l'équipe**, **Dégradé** (dès 2 groupes) ; plus de Remplissage, Scintillement, Vague | | |
-| 2 | Avec 2 groupes configurés, ouvrir la liste « Pendant le chronomètre » | Chenillard et Chenillard avec traînée grisés avec « demande 3 groupes, 2 configurés » / « demande 5 groupes… » | | |
-| 3 | Bloc d'un groupe animateur | Seuls **Pulsation** et **Couleur de l'équipe** sont proposés ; les autres grisés « anime plusieurs groupes » | | |
+| 2 | Avec 2 groupes dans la zone Ambiance, ouvrir la liste « Pendant le chronomètre » | Chenillard et Chenillard avec traînée grisés avec « demande 3 groupes, 2 dans cette zone » / « demande 5 groupes, 2 dans cette zone » | | |
+| 3 | Mêmes listes dans le bloc de la zone Animateur (1 groupe) puis de la zone Public | La raison cite le nombre de groupes **de cette zone** ; **tous** les effets sont proposés à chaque zone (plus de limitation « g0 seul » pour l'animateur), grisés seulement si la zone a trop peu de groupes | | |
 | 4 | Ouvrir `data/files/effects/natifs/` | Copies de référence en français (`nom:`, `pas:`…), en-tête « ne pas modifier ici » | | |
+| 5 | Chaque effet du catalogue | Une durée de tick (`tick_ms`) est affichée ou utilisée pour l'étiquette « plafonné » (scénario 6) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
@@ -102,71 +104,68 @@
 
 ---
 
-### Scenario 6 — Effet et vitesse par moment, global et par manche
+### Scenario 6 — Effet et vitesse par zone et par moment, global et par manche
 
 **Validation** : HUMAIN — **Issues** : #223
 
-**Objectif** : trois sélecteurs d'effet, chacun avec sa vitesse (maquette `numbered`).
+**Objectif** : un bloc par zone, chacun de trois sélecteurs d'effet avec sa vitesse (maquette `zones`).
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Page Effets, réglages globaux | Chronomètre = « Pulsation (par défaut) », Phases calmes = « Aucun effet », Équipe qui marque = « Aucun effet » ; à côté de chacun un sélecteur de vitesse sur **×1** (grisé quand aucun effet n'est joué) | | |
-| 2 | Choisir le Chenillard pour le chronomètre, enregistrer, F5 | Choix conservé | | |
-| 3 | Ouvrir la liste des vitesses | ×0,5 · ×0,75 · ×1 · ×1,5 · ×2 | | |
-| 4 | Choisir **×2** pour le chronomètre, enregistrer, F5 | La vitesse est conservée ; changer d'effet ne la change pas | | |
-| 5 | Choisir un effet à tick de 400 ms (copie d'un natif, `duree_tick_ms: 400`) en ×2 | Étiquette « plafonné » : un effet ne descend jamais sous 250 ms par tick | | |
-| 6 | « Ambiance de la manche » : sélecteurs en « Hérité (Chenillard) » et vitesse « Hérité (×2) » | Les valeurs globales sont affichées entre parenthèses | | |
-| 7 | Surcharger le chronomètre de la manche par « Pulsation » ×0,5 | Badge « manche » ; la question de cette manche pulse lentement, les autres jouent le chenillard rapide | | |
-| 8 | Repasser en « Hérité » | La surcharge disparaît | | |
-| 9 | Supprimer le fichier d'un effet choisi | Avertissement « absent ou invalide », valeur conservée « (introuvable) », aucun effet joué | | |
-| 10 | Voir la section « 🎤 Groupes animateur » | Un bloc de trois sélecteurs (effet + vitesse) par « Groupe animateur k » ; pas de bloc ni de lien de création en manche s'il n'y a aucun groupe animateur | | |
+| 1 | Page Effets, réglages globaux, zone Ambiance | Chronomètre = « Pulsation (par défaut) », Phases calmes = « Aucun effet », Équipe qui marque = « Aucun effet » ; à côté de chacun un sélecteur de vitesse sur **×1** (grisé quand aucun effet n'est joué) | | |
+| 2 | Blocs « Zone Animateur » et « Zone Public » (avec au moins un groupe chacune) | Chaque bloc a ses trois moments ; première option « Aucun effet (blanc fixe) » pour l'animateur, « Aucun effet » pour le public ; mention « sans effet : blanc fixe » / « sans effet : non pilotée » | | |
+| 3 | Retirer tous les groupes publics (page Groupes), revenir aux Effets | Le bloc « Zone Public » disparaît, remplacé par « Aucun groupe public — en créer un » ; les réglages déjà faits pour cette zone sont **conservés** (ils reviennent avec le premier groupe public) | | |
+| 4 | Choisir le Chenillard pour le chronomètre de la zone Ambiance, enregistrer, F5 | Choix conservé, **sans toucher** aux deux autres zones | | |
+| 5 | Ouvrir la liste des vitesses | ×0,5 · ×0,75 · ×1 · ×1,5 · ×2 | | |
+| 6 | Choisir **×2** pour le chronomètre de l'ambiance, enregistrer, F5 | La vitesse est conservée ; changer d'effet ne la change pas ; les vitesses des autres zones restent ×1 | | |
+| 7 | Choisir un effet à tick de 400 ms (copie d'un natif, `duree_tick_ms: 400`) en ×2 | Étiquette « plafonné » : un effet ne descend jamais sous 250 ms par tick | | |
+| 8 | « Ambiance de la manche » : sélecteurs en « Hérité (Chenillard) » et vitesse « Hérité (×2) », pour chaque zone | Les valeurs globales de la zone sont affichées entre parenthèses ; **aucun** bouton « Tester » dans cet éditeur | | |
+| 9 | Surcharger le chronomètre de la manche par « Pulsation » ×0,5 (zone Ambiance) | Badge « manche » ; la question de cette manche pulse lentement, les autres jouent le chenillard rapide | | |
+| 10 | Repasser en « Hérité » | La surcharge disparaît | | |
+| 11 | Supprimer le fichier d'un effet choisi | Avertissement « absent ou invalide », valeur conservée « (introuvable) » ; le repli dépend de la zone : aucun effet (ambiance), blanc fixe (animateur), rien d'envoyé (public) | | |
+| 12 | Réordonner ou supprimer un groupe de la zone Animateur | Les réglages d'effet de la zone **ne changent pas** (le groupe n'est plus la clé d'aucun réglage) | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
-### Scenario 7 — Volet « ampoules réelles » : chenillard sur 4, 6 et 8 groupes, vitesse ×0,5 / ×2 visible (contrat §8.2)
+### Scenario 6b — Bouton « Tester » (à côté de chaque choix d'effet)
 
 **Validation** : HUMAIN — **Issues** : #223
 
-**Objectif** : conformité à #223 et mesure de la régularité sur le pont réel. À consigner dans le rapport de QUALIF.
+**Objectif** : essayer un effet, tel qu'il sera joué (zone, vitesse réglée), sans lancer de partie (contrat §7.4).
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | 4 groupes, chrono 30 s, **Chenillard**, vitesse ×1 | Un seul groupe à la couleur d'urgence, le fond au thème, **un groupe par seconde**, départ au groupe 1. **Relever** la durée réelle d'un pas | | |
-| 2 | 6 groupes, même question | Idem sur 6 groupes. **Relever** la durée d'un pas et la régularité à l'œil | | |
-| 3 | 8 groupes, même question | Idem sur 8 groupes (départ g1, tour complet). **Relever** | | |
-| 4 | 5 groupes ou plus, **Chenillard avec traînée** | Tête + un groupe de part et d'autre à 50 % (avec rebouclage aux extrémités) | | |
-| 5 | Vitesse **×2** | Le point va **deux fois plus vite** (≈ 500 ms par groupe) ; **relever** la durée réelle | | |
-| 6 | Vitesse **×0,5** | Le point va **deux fois moins vite** (≈ 2 s par groupe) ; **relever** | | |
-| 7 | Changer la vitesse **pendant** la question | Prise en compte au tick suivant, sans que le chenillard reparte du groupe 1 | | |
-| 8 | Passer sous 10 s puis 5 s restantes | Tête orange puis rouge (couleur d'urgence vivante) | | |
-| 9 | Groupes de 3 ampoules et plus vs groupes de 2 | Noter si les ampoules d'un groupe de 2 sont visiblement décalées (seuil `SubGroupMinLights`) | | |
-| 10 | Fin du chrono, entracte, nouvelle question | Retour aux scènes ordinaires sans résidu de l'effet ; l'effet repart du groupe 1 | | |
-
-Relevés : pas mesuré à 4 groupes = ___ s ; 6 = ___ s ; 8 = ___ s ; ×2 = ___ s ; ×0,5 = ___ s ; régularité : ___ ; décalage groupes de 2 : ___.
+| 1 | Zone Ambiance, chronomètre = Chenillard ×1, cliquer « ▶ Tester » | Réponse immédiate ; l'effet joue environ 10 s sur les ampoules **de la zone Ambiance seulement** ; le bouton devient « ■ Arrêter » (infobulle : zone et vitesse) | | |
+| 2 | Pendant le test, changer la vitesse (×2) | Le test s'arrête ; relancer : le point va deux fois plus vite | | |
+| 3 | Lancer un test dans une autre zone pendant le premier | **Un seul** test à la fois : le second remplace le premier ; l'ancienne zone retrouve son état vivant | | |
+| 4 | « ■ Arrêter » | La zone retrouve aussitôt son état vivant (scène, blanc fixe pour l'animateur) | | |
+| 5 | Test d'un effet inapplicable à la zone, ou sans effet choisi | Bouton grisé avec la raison (« Effet inapplicable à cette zone », « Aucun effet choisi ») | | |
+| 6 | Popover Ambiance sur ON / OFF ou Flash actif, tester la zone **Ambiance** | Refusé : bouton grisé / message « L'éclairage est forcé sur ON / OFF ou le Flash est actif » ; la zone **Animateur** reste testable | | |
+| 7 | Lancer une question, revenir sur la page Effets | Boutons « Tester » grisés (« Une question est en cours ») ; réactivés à la fin | | |
+| 8 | Éclairage d'ambiance désactivé, ou pont éteint | Bouton grisé (désactivé) / message « Pont injoignable » ; l'interface reste utilisable | | |
+| 9 | Test en zone Public (lampe réglée à la main avant) | L'effet joue sur la lampe du public ; **à la fin la lampe retrouve exactement son réglage d'avant** (lu sur le pont puis réécrit) ; éteinte si la lecture était impossible | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
-### Scenario 8 — Pulsation au nouveau rendu, dégradé et couleur de l'équipe
+### Scenario 7 — Chenillard, vitesse, dégradé : voir `light-effects-211.md`
 
 **Validation** : HUMAIN — **Issues** : #223, #211
 
+Les scénarios « ampoules réelles » des effets natifs (chenillard sur 4, 6 et 8 groupes avec relevés §8.2, vitesse ×0,5 / ×2, pulsation au nouveau rendu, couleur de l'équipe, dégradé, essai ×1 du catalogue, zone Public) sont dans `tests/procedures/light-effects-211.md`.
+
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Chronomètre sur « Pulsation » (défaut), question chronométrée | Respiration de toute la salle : phase haute au **thème à 100 %**, phase basse **blanche à 50 %** (au-delà de 10 s), 500 ms chacune | | |
-| 2 | Sous 10 s, puis 5 s | Phase basse **orange à 50 %** puis **rouge à 50 %**, cycle toujours 500 / 500 ms (plus de battement 250 / 750) | | |
-| 3 | Sans aucun groupe configuré | La pulsation joue sur toute la salle (applicable sans groupe) | | |
-| 4 | Phases calmes sur « Dégradé » (2 groupes ou plus) | Scène fixe : une couleur par groupe (cycle de 4 couleurs) ; une salle plus petite en montre le début | | |
-| 5 | « Équipe qui marque » sur « Couleur de l'équipe », attribuer des points aux Rouges | Toute la salle prend la couleur des Rouges le temps de l'attribution puis revient à la scène | | |
+| 1 | Jouer `light-effects-211.md` | Verdict consigné dans cette procédure-là | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
-### Scenario 9 — Précédence : ON / OFF / Flash priment sur l'effet
+### Scenario 8 — Précédence : ON / OFF / Flash priment sur l'effet
 
 **Validation** : HUMAIN — **Issues** : #223
 
@@ -176,34 +175,36 @@ Relevés : pas mesuré à 4 groupes = ___ s ; 6 = ___ s ; 8 = ___ s ; ×2 = ___ 
 | 2 | AUTO | L'effet reprend (état vivant) | | |
 | 3 | ON puis Flash | Salle blanche / clignotante, pas de chenillard | | |
 | 4 | Ampoule d'équipe pendant l'effet | Garde la couleur de son équipe, jamais modifiée par l'effet | | |
-| 5 | Ampoule générale **hors groupe** pendant un chenillard | Suit `g0` (le fond), jamais la tête | | |
-| 6 | Interrupteur général désactivé en plein effet, puis arrêt du serveur | Tout s'éteint, aucune ampoule ne se rallume toute seule | | |
+| 4b | Effet joué sur la zone Animateur et sur la zone Public pendant ON / OFF / Flash | Ni ON, ni OFF, ni Flash ne touchent ces deux zones : leur effet continue | | |
+| 5 | Ampoule générale **hors groupe** pendant un chenillard | Appartient à la zone Ambiance : suit `g0` (le fond), jamais la tête | | |
+| 6 | Interrupteur général désactivé en plein effet, puis arrêt du serveur | Tout s'éteint (zones Animateur et Public comprises), aucune ampoule ne se rallume toute seule | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
-### Scenario 10 — Groupes animateur : un effet et une vitesse par moment et par groupe
+### Scenario 9 — Zones Animateur et Public : un effet et une vitesse par moment et par zone
 
-**Validation** : HUMAIN — **Issues** : #223 (besoin issu de #211)
+**Validation** : HUMAIN — **Issues** : #223
 
 | Etape | Action | Resultat Attendu | Resultat Obtenu | OK ? |
 |-------|--------|-----------------|----------------|------|
-| 1 | Bloc « Groupe animateur 1 », liste du chronomètre | « Blanc fixe » par défaut ; Pulsation et Couleur de l'équipe proposées, les effets de répartition grisés | | |
-| 2 | Groupe animateur 1 : « Quand une équipe marque » = « Couleur de l'équipe » ; groupe animateur 2 : « Blanc fixe » ; enregistrer | — | | |
-| 3 | Attribuer des points à « Rouges » | **Seule** l'ampoule du groupe animateur 1 prend la couleur des Rouges, puis redevient blanche ; l'autre reste blanche fixe ; la salle suit son propre effet | | |
-| 4 | Groupe animateur 2 : « Pulsation » pendant le chrono, **×2** ; groupe animateur 1 : « Pulsation » ×0,5 | Les deux pulsent à des vitesses différentes, indépendamment de la salle | | |
-| 5 | Réordonner les deux groupes animateur | Les réglages (effets et vitesses) **suivent le groupe** (identifiant stable) | | |
-| 6 | Supprimer le groupe animateur 2, enregistrer, en recréer un | Les réglages de l'ancien groupe ont disparu (le nouveau est en « Blanc fixe », ×1) ; ceux de l'autre restent | | |
-| 7 | OFF / ON / Flash dans le popover | Aucun groupe animateur n'est modifié | | |
-| 8 | Même réglage par manche (mode surcharge) | Valeur de manche prioritaire par groupe, par moment et par réglage (effet / vitesse), « Hérité » sinon | | |
-| 9 | Config / rounds.json issus de la QUALIF 11.7.0.x antérieure (ancienne forme de `host_effects`, groupes avec `name` / `near_teams`) | Le serveur démarre, les anciennes formes sont ignorées sans erreur ; les groupes animateur existants sont en « Blanc fixe » | | |
+| 1 | Bloc « Zone Animateur », liste du chronomètre | « Aucun effet (blanc fixe) » par défaut ; tous les effets proposés, grisés seulement si la zone a trop peu de groupes | | |
+| 2 | Zone Animateur : « Quand une équipe marque » = « Couleur de l'équipe » ; zone Public : « Aucun effet » ; enregistrer | — | | |
+| 3 | Attribuer des points à « Rouges » | **Toute** la zone Animateur (ses deux groupes) prend la couleur des Rouges, puis redevient blanche ; la zone Public ne change pas ; la salle suit son propre effet | | |
+| 4 | Zone Animateur : « Pulsation » ×2 ; zone Ambiance : « Pulsation » ×0,5 ; zone Public : « Pulsation » ×1 | Les trois zones pulsent à des vitesses différentes, **indépendamment** | | |
+| 5 | Zone Public : un effet « Couleur de l'équipe » ; attribuer des points | La lampe du public prend la couleur de l'équipe ; **à la fin du moment, l'état posé par l'effet (POST) est tenu** (c'est la seule zone où il est visible) ; sans effet, plus rien n'est envoyé à cette zone | | |
+| 6 | Réordonner les groupes de la zone Animateur | Les réglages d'effet et de vitesse **ne changent pas** (aucune dépendance au groupe) | | |
+| 7 | Supprimer tous les groupes de la zone Public, enregistrer, recréer un groupe public | Les réglages de la zone Public sont conservés ; sans effet, la zone redevient non pilotée | | |
+| 8 | OFF / ON / Flash dans le popover | Aucune des deux zones n'est modifiée | | |
+| 9 | Même réglage par manche (mode surcharge) | Valeur de manche prioritaire par zone, par moment et par réglage (effet / vitesse), « Hérité » sinon | | |
+| 10 | Config / rounds.json issus de la QUALIF 11.7.0.x antérieure (`effects` à plat, `host_effects`, `host_speeds`) | Le serveur démarre ; les valeurs à plat sont lues comme la zone Ambiance, les `host_*` ignorés sans erreur ; les groupes animateur existants sont en blanc fixe | | |
 
 **Verdict** : [ ] PASS  [ ] FAIL
 
 ---
 
-### Scenario 11 — Sauvegarde et restauration des fichiers d'effets
+### Scenario 10 — Sauvegarde et restauration des fichiers d'effets
 
 **Validation** : AUTO — **Issues** : #223
 
@@ -218,12 +219,12 @@ Relevés : pas mesuré à 4 groupes = ___ s ; 6 = ___ s ; 8 = ___ s ; ×2 = ___ 
 ## Criteres de Validation
 
 - [ ] Écrire un effet avec une variable par copie, le casser (message fichier + ligne), le restaurer : sans redémarrage
-- [ ] Chenillard conforme à #223 à 4, 6 et 8 groupes ; relevés §8.2 consignés
-- [ ] Vitesse ×0,5 / ×2 visible, « plafonné » sous 250 ms, changement pris au tick suivant
+- [ ] Effet et vitesse réglables par zone et par moment, global et par manche ; « plafonné » sous 250 ms
+- [ ] Bouton « Tester » : un seul à la fois, à la vitesse réglée, refusé pendant une question, état rétabli en zone Public
+- [ ] Chenillard, vitesse, dégradé sur ampoules réelles : voir `light-effects-211.md`
 - [ ] Précédence ON / OFF / Flash respectée, aucune écriture fantôme à l'arrêt
-- [ ] Groupes animateur : blanc fixe par défaut, effet et vitesse par moment **et par groupe**, insensibles à la salle et entre eux
-- [ ] Pulsation au nouveau rendu (§5.5), dégradé et couleur de l'équipe
+- [ ] Zones Animateur et Public : effet et vitesse par moment et par zone, insensibles à la salle, à ON / OFF / Flash et entre elles
 
 ## Notes QA
 
-[Espace pour observations — noter les relevés du scénario 7.]
+[Espace pour observations.]
