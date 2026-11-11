@@ -373,8 +373,10 @@ func (h *HTTPServer) handleLightingLights(w http.ResponseWriter, r *http.Request
 
 // handleLightingGroupTest — POST /api/lighting/groups/test {"group": n|"host"}
 // (v11.7.0, #225, light-effects.md §2.4): white blink of the group's bulbs,
-// then the live state is restored. 400 unknown/empty group, 409 lighting off,
-// 502 bridge errors (same shapes as /api/lighting/test).
+// then the live state is restored. 400 unknown/empty/missing group, 409
+// lighting off or bridge refused, 429 a test already in progress, 503 bridge
+// unreachable, 500 other (same shapes as /api/lighting/test, via
+// writeLightingError).
 func (h *HTTPServer) handleLightingGroupTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
