@@ -53,7 +53,7 @@
               "target-dir (build/ writable) : ok",
               "local-shell (powershell.exe/cmd.exe//mnt/c) : failed — absents du conteneur Claude-Launcher ; exe Windows lance par l utilisateur (deploy.qualif.md), etat normal de ce mode",
               "port 9090 depuis le conteneur (localhost/172.17.0.1/host.docker.internal) : failed — QUALIF_BASE_URL non defini, smoke tests cote utilisateur",
-              "toolchain (go1.26.10, node v22.23.3, pio) : ok"
+              "toolchain (go1.26.11, node v22.23.3, pio) : ok"
             ]
           }
         }
@@ -112,7 +112,7 @@
     "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
     "ci": "scripts/ci.sh",
     "test_related": "cd server-go/web && npx vitest related --run {FILES}",
-    "env": "export PATH=$HOME/.local/bin:$HOME/go/bin:$PATH GOTOOLCHAIN=go1.26.10",
+    "env": "export PATH=$HOME/.local/bin:$HOME/go/bin:$PATH GOTOOLCHAIN=go1.26.11",
     "test_targeted": "cd server-go && go test {TARGETS}"
   },
   "extended_commands": {

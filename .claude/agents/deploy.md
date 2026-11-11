@@ -33,7 +33,7 @@ cd "$REPO_ROOT"
 # identique a la CI/CD PROD -> garantit le BORE QUALIF <-> PROD
 
 # Environnement : conteneur Claude-Launcher Linux (commands.env de project-config.json :
-# node, go, pio dans ~/.local/bin, GOTOOLCHAIN=go1.26.10). Plus de powershell.exe ni de /mnt/c.
+# node, go, pio dans ~/.local/bin, GOTOOLCHAIN=go1.26.11). Plus de powershell.exe ni de /mnt/c.
 eval "$(jq -r .commands.env .claude/project-config.json)"
 
 # 1a+1b. Compiler + merger + bornes de taille : script unique scripts/build-firmware.sh
