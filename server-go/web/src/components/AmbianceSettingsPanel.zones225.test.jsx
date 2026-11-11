@@ -70,9 +70,19 @@ describe('AmbianceSettingsPanel — un bloc par zone, vitesse, « Tester » (#22
     await waitFor(() => expect(onTryEffect).toHaveBeenCalledWith({ zone: 'animateur', moment: 'chrono', id: 'pulsation', speed: 1.5 }))
     const stop = await screen.findByRole('button', { name: '■ Arrêter' })
     expect(stop.title).toMatch(/zone Animateur, à la vitesse ×1,5/)
+    expect(onTryEffect.mock.calls[0][0]).not.toHaveProperty('seconds')
     fireEvent.change($('asp-spd-animateur-chrono'), { target: { value: '2' } })
     await waitFor(() => expect(onStopTry).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByRole('button', { name: '■ Arrêter' })).toBeNull())
+  })
+
+  it('« Tester » : infobulle sans durée en dur ; la durée du test suit `duration_ms` de la réponse (5 s côté serveur)', async () => {
+    const onTryEffect = vi.fn().mockResolvedValue({ ok: true, duration_ms: 300 }) // durée renvoyée par le serveur
+    mount({ value: FULL({ effects: { animateur: { chrono: 'pulsation', calm: '', score: '' } } }), onTryEffect })
+    expect($('asp-try-animateur-chrono').title).not.toMatch(/\d+ s\b/)
+    fireEvent.click($('asp-try-animateur-chrono'))
+    await screen.findByRole('button', { name: '■ Arrêter' })
+    await waitFor(() => expect(screen.queryByRole('button', { name: '■ Arrêter' })).toBeNull(), { timeout: 2000 })
   })
 
   it('« Tester » grisé avec la raison : aucun effet, effet inapplicable, indisponibilité de la page', () => {

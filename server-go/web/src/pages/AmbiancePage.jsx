@@ -14,7 +14,7 @@ import LightGroupsManager from '../components/LightGroupsManager'
 import LightEffectsCatalogue from '../components/LightEffectsCatalogue'
 import { groupLabelForLight, groupPillText, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
-import { configKeyFor, configPatchFor, globalEffect, globalSpeed, zoneGroupCounts, MOMENTS, ZONES, TRY_SECONDS, TRY_REFUSALS, isQuestionRunning } from '../utils/lightEffects'
+import { configKeyFor, configPatchFor, globalEffect, globalSpeed, zoneGroupCounts, MOMENTS, ZONES, TRY_REFUSALS, isQuestionRunning } from '../utils/lightEffects'
 import { isRoundScope, ROUND_SCOPE_MESSAGE } from '../utils/ambianceScope'
 import { findTeamColor } from '../constants/colors'
 import './AmbiancePage.css'
@@ -394,9 +394,9 @@ export default function AmbiancePage() {
     },
   }), [lighting])
 
-  // Bouton « Tester » (contrat §7.4) : POST /api/lighting/effects/{id}/try {zone, speed, seconds} ; réponse immédiate
+  // Bouton « Tester » (contrat §7.4) : POST /api/lighting/effects/{id}/try {zone, speed} (durée : défaut du serveur, §7.4) ; réponse immédiate
   // `{ok, duration_ms}` ; 409 `reason` : disabled | game | not_applicable | mode ; 503 pont injoignable ; 404 / 400.
-  const handleTryEffect = async ({ zone, id, speed }) => tryEffect(id, { zone, speed, seconds: TRY_SECONDS })
+  const handleTryEffect = async ({ zone, id, speed }) => tryEffect(id, { zone, speed })
   // Bouton « Essayer sur la salle » du catalogue : essai SANS zone ni vitesse (zone ambiance, ×1, §7.4), durée fixée par le serveur.
   const handleCatalogueTry = (id) => tryEffect(id, {})
   const tryEffect = async (id, body) => {

@@ -44,13 +44,13 @@ beforeEach(() => { useGame.mockReturnValue({ teams: {}, gameState: { phase: 'STO
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('AmbiancePage › Effets — bouton « Tester »', () => {
-  it('actif hors question : poste zone, vitesse réglée et 10 s', async () => {
+  it('actif hors question : poste zone et vitesse réglée, sans durée (le serveur applique son défaut)', async () => {
     const calls = server()
     render(<AmbiancePage />)
     await open()
     await waitFor(() => expect(tryBtn('ambiance')).not.toBeDisabled())
     fireEvent.click(tryBtn('ambiance'))
-    await waitFor(() => expect(calls.at(-1)).toEqual({ url: '/api/lighting/effects/pulsation/try', body: { zone: 'ambiance', speed: 1, seconds: 10 } }))
+    await waitFor(() => expect(calls.at(-1)).toEqual({ url: '/api/lighting/effects/pulsation/try', body: { zone: 'ambiance', speed: 1 } }))
   })
 
   it.each(['STARTED', 'PAUSED', 'REVEALED', 'COUNTDOWN'])('grisé avec infobulle pendant une question (%s)', async (phase) => {

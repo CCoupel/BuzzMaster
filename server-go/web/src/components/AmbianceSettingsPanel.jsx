@@ -216,7 +216,7 @@ export default function AmbianceSettingsPanel({
             className={`asp-try${isTrying ? ' is-running' : ''}`}
             id={`asp-try-${zone}-${m.key}`}
             disabled={disabled || tryStarting === key || (!isTrying && !!tryReason)}
-            title={isTrying ? `Test en cours sur la zone ${ZONE_LABEL[zone]}, à la vitesse ${formatSpeed(trying.speed)}` : (tryReason || `Joue l'effet ${TRY_SECONDS} s sur la zone ${ZONE_LABEL[zone]}, à la vitesse réglée`)}
+            title={isTrying ? `Test en cours sur la zone ${ZONE_LABEL[zone]}, à la vitesse ${formatSpeed(trying.speed)}` : (tryReason || `Joue l'effet sur la zone ${ZONE_LABEL[zone]}, à la vitesse réglée, puis la zone revient à son état normal`)}
             onClick={() => toggleTry(zone, m.key, effective, sEffective)}
           >
             {isTrying ? '■ Arrêter' : '▶ Tester'}

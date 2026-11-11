@@ -180,7 +180,8 @@ export const isQuestionRunning = (phase) => typeof phase === 'string' && phase !
 // réglages ↔ « Essayer sur la salle » du catalogue). detail.source : 'panel' | 'catalogue'.
 export const TRY_EVENT = 'buzzcontrol:effect-try'
 
-// Durée d'un test (§7.4) et messages des refus 409 (`reason`).
+// Durée de REPLI d'un test (§7.4) si la réponse ne porte pas `duration_ms` : le serveur fixe la durée (5 s pour un effet
+// qui ne déclare que « score », 10 s sinon) et la renvoie ; l'interface ne l'envoie plus. Messages des refus 409 (`reason`).
 export const TRY_SECONDS = 10
 export const TRY_REFUSALS = {
   disabled: "L'éclairage d'ambiance est désactivé, ou le pont a refusé la clé.",
