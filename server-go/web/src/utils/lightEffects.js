@@ -176,6 +176,10 @@ export const visibleZones = (counts) => ZONES.filter(z => z === 'ambiance' || (c
 const IDLE_PHASES = ['STOPPED', 'NEW_GAME', 'ENROLL']
 export const isQuestionRunning = (phase) => typeof phase === 'string' && phase !== '' && !IDLE_PHASES.includes(phase)
 
+// Événement fenêtre émis quand un essai / test d'effet démarre : le dernier lancé remplace l'autre (bouton « Tester » des
+// réglages ↔ « Essayer sur la salle » du catalogue). detail.source : 'panel' | 'catalogue'.
+export const TRY_EVENT = 'buzzcontrol:effect-try'
+
 // Durée d'un test (§7.4) et messages des refus 409 (`reason`).
 export const TRY_SECONDS = 10
 export const TRY_REFUSALS = {

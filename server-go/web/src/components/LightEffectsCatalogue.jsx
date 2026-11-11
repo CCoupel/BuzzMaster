@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Button from './Button'
 import LightEffectPreview from './LightEffectPreview'
 import {
-  MOMENTS, ZONE_LABEL, TRY_SECONDS, formatSpeed, globalEffect, globalSpeed, visibleZones,
+  MOMENTS, ZONE_LABEL, TRY_SECONDS, TRY_EVENT, formatSpeed, globalEffect, globalSpeed, visibleZones,
 } from '../utils/lightEffects'
 import './LightEffectsCatalogue.css'
 
@@ -21,7 +21,6 @@ import './LightEffectsCatalogue.css'
 // Un seul aperçu à la fois ; un seul essai à la fois ; un essai et un test (bouton « Tester » des réglages) ne tournent
 // jamais ensemble : le dernier lancé remplace l'autre (événement fenêtre TRY_EVENT).
 
-export const TRY_EVENT = 'buzzcontrol:effect-try'
 const MOMENT_LABEL = { chrono: 'Chronomètre', calm: 'Phases calmes', score: 'Équipe qui marque' }
 const MOMENT_SHORT = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }
 const ORIGIN_BADGE = { native: 'natif', user: 'personnalisé', override: 'natif modifié' }

@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 
 vi.mock('./LightEffectsCatalogue.css', () => ({}))
 import LightEffectsCatalogue, { usedBy } from './LightEffectsCatalogue'
+import { TRY_EVENT } from '../utils/lightEffects'
 import { frameAt, paintStyle, stepLabel, chronoRemaining } from './LightEffectPreview'
 
 const CATALOG = {
@@ -108,7 +109,7 @@ describe('LightEffectsCatalogue — « Essayer sur la salle » (#299)', () => {
     mount()
     fireEvent.click(card('pulsation').getByRole('button', { name: /Essayer sur la salle/ }))
     await card('pulsation').findByRole('button', { name: /Arrêter l'essai/ })
-    act(() => { window.dispatchEvent(new CustomEvent('buzzcontrol:effect-try', { detail: { source: 'panel' } })) })
+    act(() => { window.dispatchEvent(new CustomEvent(TRY_EVENT, { detail: { source: 'panel' } })) })
     await waitFor(() => expect(card('pulsation').queryByRole('button', { name: /Arrêter l'essai/ })).toBeNull())
   })
 })

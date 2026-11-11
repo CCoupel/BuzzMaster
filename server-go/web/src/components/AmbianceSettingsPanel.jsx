@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CUE_TABS, cueMeta } from '../utils/soundCues'
 import {
-  MOMENTS, ZONE_LABEL, ZONE_ICON, DEFAULT_SPEED, SPEEDS, INHERIT, TRY_SECONDS, effectsPath, speedPath, defaultEffect,
+  MOMENTS, ZONE_LABEL, ZONE_ICON, DEFAULT_SPEED, SPEEDS, INHERIT, TRY_SECONDS, TRY_EVENT, effectsPath, speedPath, defaultEffect,
   formatSpeed, isSpeedCapped, buildOptions, optionLabel, effectWarning, visibleZones,
 } from '../utils/lightEffects'
 import './AmbianceSettingsPanel.css'
@@ -136,8 +136,8 @@ export default function AmbianceSettingsPanel({
   // Un essai du catalogue (« Essayer sur la salle ») qui démarre remplace ce test.
   useEffect(() => {
     const onOther = (e) => { if (e.detail?.source !== 'panel') setTrying(null) }
-    window.addEventListener('buzzcontrol:effect-try', onOther)
-    return () => window.removeEventListener('buzzcontrol:effect-try', onOther)
+    window.addEventListener(TRY_EVENT, onOther)
+    return () => window.removeEventListener(TRY_EVENT, onOther)
   }, [])
   useEffect(() => {
     if (!trying) return undefined
@@ -152,7 +152,7 @@ export default function AmbianceSettingsPanel({
     setTryStarting(key)
     try {
       const res = await onTryEffect({ zone, moment, id, speed })
-      if (res?.ok) window.dispatchEvent(new CustomEvent('buzzcontrol:effect-try', { detail: { source: 'panel' } }))
+      if (res?.ok) window.dispatchEvent(new CustomEvent(TRY_EVENT, { detail: { source: 'panel' } }))
       if (res?.ok) setTrying({ key, durationMs: Number.isFinite(res.duration_ms) ? res.duration_ms : TRY_SECONDS * 1000, speed })
     } finally { setTryStarting(null) }
   }
