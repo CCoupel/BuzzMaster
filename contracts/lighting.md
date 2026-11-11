@@ -937,3 +937,22 @@ scène READY/RUNNING au lieu de passer en `KindEntracte`.
 - Non-régression : `config.json` sans `default_mode` et `rounds.json` sans `AMBIANCE` ⇒ comportement v11.5.0 exact
   (AUTO au démarrage, popover persistant jusqu'au retour manuel).
 
+
+---
+
+## 13. Groupes d'ambiance et effets déclaratifs — normatif (v11.7.0, #225, #223)
+
+> Référence : `contracts/light-effects.md`. Cette section ne fait que rattacher ce contrat-ci au nouveau.
+
+- **`ZoneState.Group int`** (amendement du §3) : `0` = toute la zone (comportement actuel, valeur zéro de tout appelant
+  existant) ; `n ≥ 1` avec `Zone == "general"` = groupe d'ambiance n (`light-effects.md` §2.2). L'entrée `Group 0` de
+  `general` reste toujours émise en premier.
+- **Séquenceur** : une goroutine de `ambiance.Controller` publie une trame lue par `Scene()` et notifie par
+  `NotifyState()` — même patron que la pulsation chronomètre (§8.2). Aucune nouvelle voie d'écriture, l'écrivain et sa
+  cadence sont inchangés (`light-effects.md` §5).
+- **Pulsation chronomètre (§8.2)** : devient l'effet natif `pulsation`, rendu identique exigé (`light-effects.md` §5.5).
+  Elle n'est plus le seul rendu possible du chronomètre : `light.effects.chrono` choisit l'effet (`light-effects.md` §6).
+- **Précédence (§10.1)** : inchangée. Mode `ON` / `OFF` et Flash priment sur tout effet ; un effet n'atteint jamais une
+  ampoule d'équipe.
+- Le §11 « Hors de ce contrat » (effets répartis, v10.1) est caduc pour #211 / #223 : ils sont couverts par
+  `light-effects.md`. L'édition des scènes (#210) reste hors contrat.

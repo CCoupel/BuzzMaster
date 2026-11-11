@@ -602,3 +602,28 @@ identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
 | Conduite manuelle depuis `/anim`, restitution d'état à l'arrêt | #208 |
 | Édition des scènes, effets répartis, synchronisation minuteur | v10.1 (#210, #211, #212) |
 | Migration vers l'API Hue v2 | candidat v10.1 (§3) |
+
+---
+
+## 11. Groupes d'ambiance — normatif (v11.7.0, #225)
+
+> Référence : `contracts/light-effects.md` §2. Amende les §5.2, §5.3, §5.8 et §6.
+
+- **Configuration (§6)** : `lighting.groups[] {name, lights[], near_teams[]}`, ordre du tableau = numéro du groupe.
+  `lighting.effects {chrono, calm, score}` (`light-effects.md` §6). Absents ⇒ comportement v11.6.0.
+- **`LightSpec.Group`** : numéro du groupe d'ambiance d'une ampoule `general` (0 = hors groupe). Clé de regroupement
+  d'`Apply` : (rôle, équipe, groupe).
+- **Cible d'une ampoule générale du groupe n** : l'entrée `ZoneState{Zone:"general", Group:n}` si elle existe, sinon
+  l'entrée `Group 0`. Une ampoule d'équipe n'est jamais concernée.
+- **Débit préservé** : si toutes les ampoules générales ont le même état cible, une seule écriture sur
+  `buzzmaster-general`, comme avant. Sinon, par groupe d'ambiance dont l'état change : `buzzmaster-general-<n>` s'il
+  compte au moins `SubGroupMinLights` (3) ampoules, écriture par ampoule en dessous.
+- **Groupes Hue** : `buzzmaster-general-<n>` s'ajoute aux trois groupes du §5.8, mêmes règles de cycle de vie
+  (réconciliation à l'inventaire et après enregistrement de la configuration, jamais sur un événement de jeu, repli par
+  ampoule, invalidation du cache des membres).
+- **`GET /api/lighting/lights`** : chaque ampoule porte `group`. **`POST /api/lighting/groups/test`** : essai d'un
+  groupe (`light-effects.md` §2.4).
+- **Groupe animateur** (amendement du GATE 2) : `lighting.groups[].role = "animateur"` (un seul), `LightSpec.Group =
+  lighting.GroupHost (-1)`, groupe Hue `buzzmaster-general-host` ; ses ampoules ne reçoivent jamais l'entrée `Group 0` et
+  ne sont touchées ni par `ON` / `OFF`, ni par le Flash (`light-effects.md` §2.5). `lighting.host_effects {chrono, calm,
+  score}` : effet par moment de ce groupe.

@@ -1,0 +1,210 @@
+<!--
+mockup:
+  composant: ambiance_page
+  feature: effects_catalogue
+  version: 11.7.0
+  type: ui
+  issue: "#299 #223 #211"
+  validee_le: 2026-11-11
+  complete: [docs/mockup/v11.7.0/ui/ambiance_page__light_groups.html, docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambiance › Lumière › Effets — catalogue, aperçu simulé, essai sur les ampoules (#299)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; font-size:.8rem; } .mock-bar strong { color:#fff; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1100px; margin:1.4rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.4rem 0 .9rem; }
+.subtab { padding:.4rem .8rem; font-size:.84rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; } .subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+.btn { font:inherit; font-size:.78rem; padding:.32rem .65rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; cursor:pointer; }
+.btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); } .btn[disabled] { opacity:.5; cursor:not-allowed; }
+.hint { font-size:.77rem; color:var(--gray-500); margin:.35rem 0; line-height:1.45; } .hint code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.err { font-size:.79rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--error); }
+.err ul { margin:.3rem 0 0 1.1rem; padding:0; } .err code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+.warn { font-size:.79rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--warning); }
+.head { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.grid { display:grid; grid-template-columns: 1fr 1fr; gap:.8rem; margin-top:.7rem; }
+.fx { border:1px solid var(--gray-200); border-radius:.6rem; padding:.75rem .8rem; }
+.fx h4 { margin:0 0 .25rem; font-size:.92rem; display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+.fx p { margin:.25rem 0 .5rem; font-size:.79rem; color:var(--gray-600); line-height:1.4; }
+.b { font-size:.64rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:.1rem .4rem; border-radius:.3rem; background:var(--gray-200); color:var(--gray-600); }
+.b.user { background:#dcfce7; color:#166534; } .b.over { background:var(--amberbg); color:var(--amber); } .b.use { background:var(--primary-100); color:#3730a3; text-transform:none; letter-spacing:0; }
+.m { font-size:.7rem; padding:.1rem .45rem; border-radius:999px; border:1px solid var(--gray-300); color:var(--gray-600); }
+.stage { background:#0f172a; border-radius:.5rem; padding:.9rem .6rem .55rem; margin:.4rem 0 .5rem; }
+.bulbs { display:flex; justify-content:space-around; align-items:center; }
+.bulb { width:2rem; height:2rem; border-radius:50%; background:#1e293b; transition: background-color .15s linear, box-shadow .15s linear; }
+.bulb.soft { transition: background-color .9s linear, box-shadow .9s linear; }
+.nums { display:flex; justify-content:space-around; margin-top:.35rem; font-size:.62rem; color:#64748b; }
+.clock { text-align:center; font-size:.68rem; color:#94a3b8; margin-top:.3rem; font-variant-numeric: tabular-nums; min-height:1em; }
+.file { font-size:.7rem; color:var(--gray-500); margin-top:.35rem; } .file code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.fx.na .stage { opacity:.45; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette v11.7.0 — #299, #223</strong> · Ambiance › Lumière › Effets : catalogue. Les aperçus de cette maquette sont animés (boutons « Aperçu »).</div>
+
+<p class="mock-note"><b>Place dans la page.</b> Sous-onglet <b>Effets</b> de Ambiance › Lumière. En haut, la section « Réglages d'ambiance — Lumière » (maquette <code>ambiance_settings_panel__light_effects</code>, non redessinée ici) ; en dessous, le <b>catalogue</b> ci-dessous. Le lien « Voir l'aperçu » d'un sélecteur fait défiler jusqu'à la carte de l'effet.</p>
+
+<h2 class="mock-h">01 — Catalogue des effets</h2>
+<div class="card">
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab">Groupes <span style="font-size:.68rem;background:var(--gray-200);border-radius:999px;padding:0 .3rem">6</span></span><span class="subtab active">Effets</span></div>
+  <p class="hint">(Section « Réglages d'ambiance — Lumière » : mode par défaut et effet par moment — voir la maquette dédiée.)</p>
+
+  <div class="head"><h3 style="margin:0">Catalogue des effets</h3><span style="flex:1"></span><button class="btn">↻ Recharger les fichiers</button></div>
+  <p class="hint">Chaque effet est un fichier texte dans le dossier <code>data/files/effects</code> du serveur. Pour créer un effet, copiez un fichier du sous-dossier <code>natifs</code> dans ce dossier, changez son identifiant et modifiez-le : il apparaît ici en quelques secondes. <a style="color:var(--primary);text-decoration:underline">Comment écrire un effet</a></p>
+
+  <div class="err"><b>1 fichier n'a pas pu être chargé.</b> Les autres effets ne sont pas touchés.
+    <ul><li><code>mon-chenillard.yaml</code>, ligne 14 : l'apparence « tete » n'est pas définie dans <code>looks</code>.</li></ul>
+  </div>
+
+  <div class="grid">
+    <div class="fx" data-fx="pulse">
+      <h4>Pulsation <span class="b">natif</span><span class="m">Chronomètre</span><span class="b use">utilisé : chronomètre (global)</span></h4>
+      <p>Toute la salle respire au rythme des secondes, dans la couleur du thème. Elle passe à l'orange à 10 secondes, au rouge à 5 secondes.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (10 s)</button>
+      <div class="file">Fichier : <code>natifs/pulsation.yaml</code></div>
+    </div>
+    <div class="fx" data-fx="chase">
+      <h4>Chenillard <span class="b">natif</span><span class="m">Chronomètre</span></h4>
+      <p>Un point lumineux fait le tour de la salle, un groupe par seconde, suivi d'une traînée. Il passe à l'orange puis au rouge quand le temps presse.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (10 s)</button>
+      <div class="file">Fichier : <code>natifs/chenillard.yaml</code> · demande 3 groupes</div>
+    </div>
+    <div class="fx" data-fx="gauge">
+      <h4>Remplissage <span class="b">natif</span><span class="m">Chronomètre</span></h4>
+      <p>Une jauge de temps : les groupes s'éteignent un à un à mesure que le chronomètre avance. Le dernier groupe allumé vire au rouge et clignote dans les 5 dernières secondes.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (10 s)</button>
+      <div class="file">Fichier : <code>natifs/remplissage.yaml</code> · demande 2 groupes</div>
+    </div>
+    <div class="fx" data-fx="sparkle">
+      <h4>Scintillement <span class="b">natif</span><span class="m">Phases calmes</span></h4>
+      <p>Quelques groupes s'allument doucement au hasard, les autres restent en veilleuse. Pour les pauses et l'attente entre deux parties.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (10 s)</button>
+      <div class="file">Fichier : <code>natifs/scintillement.yaml</code> · demande 2 groupes</div>
+    </div>
+    <div class="fx" data-fx="wave">
+      <h4>Vague <span class="b">natif</span><span class="m">Équipe qui marque</span></h4>
+      <p>La couleur de l'équipe qui marque part du groupe le plus proche d'elle et se propage jusqu'aux bords de la salle.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (5 s)</button>
+      <div class="file">Fichier : <code>natifs/vague.yaml</code> · demande 3 groupes</div>
+    </div>
+    <div class="fx" data-fx="slow">
+      <h4>Vague lente <span class="b over">natif modifié</span><span class="m">Phases calmes</span></h4>
+      <p>Un dégradé doux et peu lumineux balaie lentement la salle, en fond.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (10 s)</button>
+      <div class="file">Fichier : <code>vague-lente.yaml</code> remplace <code>natifs/vague-lente.yaml</code>. Supprimez-le pour revenir à l'effet d'origine.</div>
+    </div>
+    <div class="fx" data-fx="gradient">
+      <h4>Dégradé <span class="b">natif</span><span class="m">Phases calmes</span></h4>
+      <p>Un dégradé fixe de plusieurs couleurs réparti sur l'ensemble des groupes.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (10 s)</button>
+      <div class="file">Fichier : <code>natifs/degrade.yaml</code> · demande 2 groupes</div>
+    </div>
+    <div class="fx">
+      <h4>Couleur de l'équipe <span class="b">natif</span><span class="m">Équipe qui marque</span><span class="b use">utilisé : groupe animateur (global)</span></h4>
+      <p>Couleur fixe de l'équipe qui marque, le temps de l'attribution. Jouable sur un seul groupe : pensé pour le groupe animateur.</p>
+      <button class="btn" disabled>▶ Aperçu</button><button class="btn" disabled>💡 Essayer sur les ampoules</button>
+      <div class="file">Fichier : <code>natifs/couleur-equipe.yaml</code> · (carte non animée dans cette maquette)</div>
+    </div>
+    <div class="fx" data-fx="chase2">
+      <h4>Aller-retour <span class="b user">personnalisé</span><span class="m">Chronomètre</span><span class="m">Phases calmes</span></h4>
+      <p>Exemple d'effet écrit par l'utilisateur : un point blanc va et vient d'un bout à l'autre de la salle.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur les ampoules (10 s)</button>
+      <div class="file">Fichier : <code>aller-retour.yaml</code></div>
+    </div>
+  </div>
+</div>
+
+<p class="mock-note"><b>Comportement.</b><br>
+• <b>Aperçu</b> : anime les ampoules dessinées, une par groupe configuré (6 dans la maquette ; 6 par défaut si aucun groupe n'existe). Les trames sont calculées par le serveur à partir du fichier de l'effet : l'aperçu montre exactement ce que jouera la salle. Pour un effet de chronomètre, un compte à rebours simulé de 20 secondes s'affiche sous les ampoules. Le bouton devient « ■ Arrêter » ; un seul aperçu tourne à la fois.<br>
+• <b>Essayer sur les ampoules</b> : joue l'effet sur les vraies ampoules pendant la durée indiquée, puis l'éclairage revient à son état normal. Le bouton devient « ■ Arrêter l'essai ».<br>
+• <b>Étiquettes</b> : « natif » (livré avec BuzzControl), « personnalisé » (fichier de l'utilisateur), « natif modifié » (un fichier de l'utilisateur remplace l'effet d'origine). « utilisé : … » rappelle le ou les moments réglés sur cet effet (global ; les manches ne sont pas listées). Le groupe animateur y figure aussi (« utilisé : groupe animateur »). L'essai sur les ampoules joue toujours sur les groupes de salle, jamais sur le groupe animateur.<br>
+• <b>Recharger les fichiers</b> : relit le dossier tout de suite. Sans ce bouton, un fichier modifié est pris en compte en quelques secondes.<br>
+• <b>Fichier en erreur</b> : listé dans le bandeau rouge avec le nom du fichier, la ligne et la cause. Si l'effet existait déjà, sa dernière version valide reste jouée.<br>
+• Le catalogue n'a pas de bouton de création, de modification ni de suppression : l'éditeur d'effets est prévu pour la version suivante (v11.8.0).</p>
+
+<h2 class="mock-h">02 — Cas particuliers</h2>
+<div class="card">
+  <div class="grid">
+    <div class="fx na">
+      <h4>Chenillard <span class="b">natif</span><span class="m">Chronomètre</span></h4>
+      <div class="warn" style="margin:.3rem 0">Demande 3 groupes, 2 sont configurés. <a style="text-decoration:underline">Gérer les groupes</a></div>
+      <button class="btn">▶ Aperçu</button><button class="btn" disabled title="Demande 3 groupes">💡 Essayer sur les ampoules</button>
+      <p class="hint">L'aperçu reste disponible (simulé avec 6 groupes, mention « simulation avec 6 groupes » sous les ampoules).</p>
+    </div>
+    <div class="fx">
+      <h4>Essai indisponible</h4>
+      <p>Le bouton « Essayer sur les ampoules » est désactivé, avec une infobulle qui donne la raison :</p>
+      <p class="hint">• « L'éclairage d'ambiance est désactivé. »<br>• « Aucun pont associé » / « Pont injoignable ».<br>• « L'éclairage est forcé sur ON ou OFF, ou le Flash est actif : repassez en AUTO. »<br>• « Une question est en cours : l'essai est possible hors question. »</p>
+    </div>
+  </div>
+  <p class="hint">Catalogue vide (dossier illisible) : « Aucun effet disponible » et le bandeau d'erreur ; la pulsation d'origine reste jouée pendant le chronomètre.</p>
+</div>
+
+<script>
+// Animation de démonstration de la maquette (dans le produit, les trames viennent du serveur).
+(function () {
+  var N = 6, THEME = [79,70,229], TEAM = [229,57,53], WHITE = [255,255,255], ORANGE = [255,170,0], RED = [230,30,30];
+  var STOPS = [[79,70,229],[20,184,166],[245,158,11],[236,72,153]];
+  function mix(a, b, t) { return [0,1,2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); }); }
+  function paint(el, rgb, pct) {
+    var k = pct / 100, c = rgb.map(function (v) { return Math.round(30 + (v - 30) * k); });
+    el.style.backgroundColor = 'rgb(' + c.join(',') + ')';
+    el.style.boxShadow = k > 0.15 ? '0 0 ' + (4 + 14 * k) + 'px rgba(' + rgb.join(',') + ',' + (0.75 * k) + ')' : 'none';
+  }
+  function urgency(rem) { return rem <= 5 ? RED : rem <= 10 ? ORANGE : WHITE; }
+  // Chaque effet : fonction (pas de 250 ms, temps restant) -> [couleur, intensité %] par groupe.
+  var FX = {
+    pulse: { chrono: true, f: function (s, rem) { var hi = rem <= 5 ? (s % 4) < 1 : (s % 4) < 2; var low = rem <= 5 ? [RED, 30] : rem <= 10 ? [ORANGE, 50] : [THEME, 50];
+      return Array.from({length: N}, function () { return hi ? [THEME, 100] : low; }); } },
+    chase: { chrono: true, f: function (s, rem) { var p = Math.floor(s / 4) % N; return Array.from({length: N}, function (_, i) {
+      if (i === p) return [urgency(rem), 100]; if (i === (p + 1) % N || i === (p + N - 1) % N) return [THEME, 45]; return [THEME, 100]; }); } },
+    gauge: { chrono: true, f: function (s, rem) { var lit = Math.ceil(N * rem / 20); return Array.from({length: N}, function (_, i) {
+      if (i >= lit) return [THEME, 0]; if (i === lit - 1 && rem <= 5) return [RED, (s % 2) ? 100 : 25]; return [rem <= 5 ? RED : THEME, 100]; }); } },
+    sparkle: { soft: true, f: function (s) { var k = Math.floor(s / 4); return Array.from({length: N}, function (_, i) { var r = Math.abs(Math.sin((i + 1) * 12.9898 + k * 78.233) * 43758.5453) % 1; return [WHITE, r > 0.66 ? 70 : 12]; }); } },
+    wave: { once: 20, f: function (s) { var d = Math.floor(s / 2); return Array.from({length: N}, function (_, i) { var dist = Math.abs(i - 1);
+      if (s >= 16) return [TEAM, 100]; if (dist === d) return [WHITE, 100]; return dist < d ? [TEAM, 100] : [THEME, 60]; }); } },
+    slow: { soft: true, f: function (s) { var k = Math.floor(s / 4); return Array.from({length: N}, function (_, i) { var t = ((i + k) % N) / (N - 1); return [mix(THEME, [20,184,166], t), 30]; }); } },
+    gradient: { f: function () { return Array.from({length: N}, function (_, i) { var x = i / (N - 1) * (STOPS.length - 1), a = Math.floor(x); return [mix(STOPS[a], STOPS[Math.min(a + 1, STOPS.length - 1)], x - a), 85]; }); } },
+    chase2: { f: function (s) { var k = Math.floor(s / 2) % (2 * N - 2), p = k < N ? k : 2 * N - 2 - k; return Array.from({length: N}, function (_, i) { return i === p ? [WHITE, 100] : [THEME, 35]; }); } }
+  };
+  var running = null;
+  document.querySelectorAll('.fx[data-fx]').forEach(function (card) {
+    var fx = FX[card.dataset.fx], bulbs = card.querySelector('.bulbs'), nums = card.querySelector('.nums'), clock = card.querySelector('.clock'), btn = card.querySelector('.play');
+    for (var i = 0; i < N; i++) { var b = document.createElement('div'); b.className = 'bulb' + (fx.soft ? ' soft' : ''); bulbs.appendChild(b); var n = document.createElement('span'); n.textContent = i + 1; nums.appendChild(n); }
+    var els = bulbs.children;
+    function draw(s) { var rem = 20 - (Math.floor(s / 4) % 21); fx.f(s, rem).forEach(function (g, i) { paint(els[i], g[0], g[1]); });
+      clock.textContent = fx.chrono ? 'chronomètre simulé : ' + rem + ' s' : ''; }
+    draw(0);
+    function stop() { clearInterval(card._t); card._t = null; btn.textContent = '▶ Aperçu'; if (running === card) running = null; }
+    btn.addEventListener('click', function () {
+      if (card._t) { stop(); return; }
+      if (running) running._stop();
+      var s = 0; running = card; btn.textContent = '■ Arrêter';
+      card._t = setInterval(function () { s++; if (fx.once && s > fx.once + 6) { s = 0; } draw(s); }, 250);
+    });
+    card._stop = stop;
+    card.querySelector('.try').addEventListener('click', function () { this.textContent = this.textContent.indexOf('■') === 0 ? '💡 Essayer sur les ampoules (10 s)' : '■ Arrêter l\'essai'; });
+  });
+})();
+</script>
+</body>
+</html>

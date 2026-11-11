@@ -1,0 +1,189 @@
+<!--
+mockup:
+  composant: ambiance_page
+  feature: light_groups
+  version: 11.7.0
+  type: ui
+  issue: "#225 #211"
+  validee_le: 2026-11-11
+  complete: [docs/mockup/v11.4.0/ui/admin_navbar__ambiance_popover.html, docs/mockup/v11.6.0/ui/ambiance_settings_panel__global_per_type_tabs.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambiance › Lumière — sous-onglets et page « Groupes » (#225)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; font-size:.8rem; }
+.mock-bar strong { color:#fff; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; }
+.mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1100px; margin:1.4rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.tabs { display:flex; gap:.4rem; margin:.2rem 0 .7rem; }
+.tab { padding:.4rem .8rem; border-radius:.45rem; font-size:.85rem; background:var(--gray-100); color:var(--gray-600); }
+.tab.active { background:var(--primary); color:#fff; font-weight:700; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.4rem 0 .9rem; }
+.subtab { padding:.4rem .8rem; font-size:.84rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; }
+.subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+.subtab .n { display:inline-block; min-width:1.1rem; padding:0 .3rem; margin-left:.3rem; border-radius:999px; background:var(--gray-200); font-size:.68rem; text-align:center; color:var(--gray-700); }
+.new { display:inline-block; margin-left:.4rem; font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.1rem .35rem; border-radius:.3rem; background:#dcfce7; color:#166534; vertical-align:middle; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th, td { text-align:left; padding:.45rem .5rem; border-bottom:1px solid var(--gray-200); vertical-align:middle; }
+th { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--gray-500); }
+.btn { font:inherit; font-size:.78rem; padding:.32rem .65rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; }
+.btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); } .btn.ghost { border-style:dashed; } .btn.danger { color:#991b1b; border-color:#fecaca; }
+.hint { font-size:.77rem; color:var(--gray-500); margin:.35rem 0; line-height:1.45; }
+.warn { font-size:.79rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--warning); }
+.sel { font:inherit; font-size:.8rem; padding:.25rem .4rem; border:1px solid var(--gray-300); border-radius:.35rem; background:#fff; }
+.inp { font:inherit; font-size:.85rem; font-weight:600; padding:.25rem .45rem; border:1px solid var(--gray-300); border-radius:.35rem; width:13rem; }
+.cols { display:grid; grid-template-columns: 250px 1fr; gap:1rem; align-items:start; }
+.pool { background:var(--gray-50); border:1px dashed var(--gray-300); border-radius:.6rem; padding:.7rem; min-height:9rem; }
+.pool h4, .grp h4 { margin:0 0 .5rem; font-size:.8rem; color:var(--gray-700); }
+.chip { display:inline-flex; align-items:center; gap:.35rem; margin:.15rem .25rem .15rem 0; padding:.28rem .55rem; border-radius:999px; background:#fff; border:1px solid var(--gray-300); font-size:.8rem; cursor:grab; }
+.chip::before { content:'⠿'; color:var(--gray-400); font-size:.75rem; }
+.chip .x { color:var(--gray-400); margin-left:.15rem; }
+.chip.team { cursor:default; background:var(--gray-50); } .chip.team::before { content:''; width:.6rem; height:.6rem; border-radius:50%; background:var(--c, #e53935); }
+.grp { display:grid; grid-template-columns: 2rem 2.4rem 1fr auto; gap:.6rem; align-items:start; border:1px solid var(--gray-200); border-radius:.6rem; padding:.65rem .7rem; margin-bottom:.55rem; background:#fff; }
+.grp .handle { color:var(--gray-400); font-size:1.1rem; cursor:grab; padding-top:.2rem; text-align:center; }
+.grp .num { width:2.2rem; height:2.2rem; border-radius:50%; background:var(--primary); color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; }
+.grp .line { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin-top:.4rem; font-size:.78rem; color:var(--gray-600); }
+.grp .drop { min-height:2rem; }
+.grp.empty .drop { border:1px dashed var(--gray-300); border-radius:.4rem; padding:.35rem .5rem; color:var(--gray-400); font-size:.78rem; }
+.order { display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; margin:.5rem 0 .2rem; font-size:.78rem; color:var(--gray-600); }
+.order .o { padding:.15rem .5rem; border-radius:.35rem; background:var(--primary-100); color:#3730a3; font-weight:700; }
+.foot { display:flex; align-items:center; gap:.5rem; margin-top:.8rem; padding-top:.7rem; border-top:1px solid var(--gray-200); }
+.pill { font-size:.72rem; font-weight:700; padding:.12rem .45rem; border-radius:999px; background:var(--primary-100); color:#3730a3; }
+.pill.none { background:var(--gray-200); color:var(--gray-600); }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette v11.7.0 — #225</strong> · Ambiance › Lumière : trois sous-onglets, page « Groupes ».</div>
+
+<p class="mock-note"><b>Ce qui change.</b> L'onglet Lumière (étape 3, pont associé) est découpé en trois sous-onglets : <b>Pont et ampoules</b> (contenu actuel, inchangé, plus une colonne « Groupe » en lecture), <b>Groupes</b> (nouveau, cette maquette) et <b>Effets</b> (maquettes <code>ambiance_page__effects_catalogue</code> et <code>ambiance_settings_panel__light_effects</code>). Les étapes 1 et 2 (recherche et association du pont) ne changent pas et n'affichent pas les sous-onglets.</p>
+
+<h2 class="mock-h">01 — Sous-onglet « Pont et ampoules » (existant, une colonne ajoutée)</h2>
+<div class="card">
+  <div class="tabs"><span class="tab active">🔆 Lumière</span><span class="tab">🔊 Son</span></div>
+  <div class="subtabs"><span class="subtab active">Pont et ampoules</span><span class="subtab">Groupes <span class="n">4</span><span class="new">nouveau</span></span><span class="subtab">Effets<span class="new">nouveau</span></span></div>
+  <p class="hint">Inchangé : interrupteur général « Éclairage d'ambiance activé », pont associé, « Dissocier ce pont », liste des ampoules avec case d'aperçu, rôle, « Tester », « Enregistrer », « Tester toutes les ampoules », « Actualiser la liste », « Remettre à Libre ».</p>
+  <h3>Ampoules du pont</h3>
+  <table>
+    <tr><th></th><th>Ampoule</th><th>Rôle</th><th>Groupe <span class="new">nouveau</span></th><th></th></tr>
+    <tr><td>☑</td><td>BuzzHue1</td><td><select class="sel"><option>Éclairage général</option></select></td><td><span class="pill">1 · Scène gauche</span></td><td><button class="btn">Tester</button></td></tr>
+    <tr><td>☑</td><td>BuzzHue2</td><td><select class="sel"><option>Éclairage général</option></select></td><td><span class="pill">3 · Bar</span></td><td><button class="btn">Tester</button></td></tr>
+    <tr><td>☑</td><td>BuzzHue8</td><td><select class="sel"><option>Éclairage général</option></select></td><td><span class="pill">🎤 Pupitre (animateur)</span></td><td><button class="btn">Tester</button></td></tr>
+    <tr><td>☑</td><td>BuzzHue5</td><td><select class="sel"><option>Éclairage général</option></select></td><td><span class="pill none">hors groupe</span></td><td><button class="btn">Tester</button></td></tr>
+    <tr><td>☑</td><td>BuzzHue6</td><td><select class="sel"><option>Équipe — Rouges</option></select></td><td><span style="color:var(--gray-400)">—</span></td><td><button class="btn">Tester</button></td></tr>
+  </table>
+  <p class="hint">La colonne « Groupe » est en lecture seule ; un clic ouvre le sous-onglet Groupes. Passer une ampoule d'« Éclairage général » à une équipe la retire de son groupe à l'enregistrement (un message le dit avant d'enregistrer).</p>
+</div>
+
+<h2 class="mock-h">02 — Sous-onglet « Groupes » : quatre groupes définis</h2>
+<div class="card">
+  <div class="tabs"><span class="tab active">🔆 Lumière</span><span class="tab">🔊 Son</span></div>
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab active">Groupes <span class="n">4</span></span><span class="subtab">Effets</span></div>
+  <h3>Groupes d'ambiance</h3>
+  <p class="hint">Rassemblez les ampoules de l'éclairage général en groupes. Les effets de salle (chenillard, remplissage, vague…) animent les groupes dans l'ordre de cette liste, du groupe 1 au dernier : rangez-les dans l'ordre où ils se suivent dans la salle. Les ampoules d'équipe gardent la couleur de leur équipe et ne figurent pas ici.</p>
+  <div class="order">Ordre de parcours : <span class="o">1 Scène gauche</span> → <span class="o">2 Scène droite</span> → <span class="o">3 Bar</span> → <span class="o">4 Fond de salle</span> → retour au 1</div>
+
+  <div class="cols" style="margin-top:.7rem">
+    <div class="pool">
+      <h4>Ampoules générales hors groupe (1)</h4>
+      <span class="chip">BuzzHue5</span>
+      <p class="hint">Glissez une ampoule vers un groupe. Une ampoule hors groupe garde l'éclairage de la salle mais ne participe pas aux effets répartis.</p>
+    </div>
+    <div>
+      <div class="grp">
+        <span class="handle" title="Glisser pour changer l'ordre">⠿</span><span class="num">1</span>
+        <div>
+          <input class="inp" value="Scène gauche">
+          <div class="drop"><span class="chip">BuzzHue1 <span class="x">✕</span></span><span class="chip">BuzzHue4 <span class="x">✕</span></span></div>
+          <div class="line">Équipes à proximité : <span class="chip team" style="--c:#e53935">Rouges <span class="x">✕</span></span> <select class="sel"><option>+ Ajouter une équipe</option></select></div>
+        </div>
+        <div><button class="btn">Tester le groupe</button><button class="btn danger">Supprimer</button></div>
+      </div>
+      <div class="grp">
+        <span class="handle">⠿</span><span class="num">2</span>
+        <div>
+          <input class="inp" value="Scène droite">
+          <div class="drop"><span class="chip">BuzzHue3 <span class="x">✕</span></span><span class="chip">BuzzHue7 <span class="x">✕</span></span></div>
+          <div class="line">Équipes à proximité : <span class="chip team" style="--c:#1e88e5">Bleus <span class="x">✕</span></span> <select class="sel"><option>+ Ajouter une équipe</option></select></div>
+        </div>
+        <div><button class="btn">Tester le groupe</button><button class="btn danger">Supprimer</button></div>
+      </div>
+      <div class="grp">
+        <span class="handle">⠿</span><span class="num">3</span>
+        <div>
+          <input class="inp" value="Bar">
+          <div class="drop"><span class="chip">BuzzHue2 <span class="x">✕</span></span></div>
+          <div class="line">Équipes à proximité : <span style="color:var(--gray-400)">aucune</span> <select class="sel"><option>+ Ajouter une équipe</option></select></div>
+        </div>
+        <div><button class="btn">Tester le groupe</button><button class="btn danger">Supprimer</button></div>
+      </div>
+      <div class="grp empty">
+        <span class="handle">⠿</span><span class="num">4</span>
+        <div>
+          <input class="inp" value="Fond de salle">
+          <div class="drop">Aucune ampoule — glissez-en une ici. Un groupe vide est ignoré par les effets.</div>
+          <div class="line">Équipes à proximité : <span style="color:var(--gray-400)">aucune</span> <select class="sel"><option>+ Ajouter une équipe</option></select></div>
+        </div>
+        <div><button class="btn" disabled>Tester le groupe</button><button class="btn danger">Supprimer</button></div>
+      </div>
+      <button class="btn ghost">+ Nouveau groupe</button>
+
+      <h4 style="margin:1.1rem 0 .4rem;font-size:.85rem;color:var(--gray-700)">Groupe animateur</h4>
+      <div class="grp" style="border-color:#c7d2fe;background:#f5f7ff">
+        <span></span><span class="num" style="background:#fff;color:var(--primary);border:2px solid var(--primary)">🎤</span>
+        <div>
+          <input class="inp" value="Pupitre">
+          <div class="drop"><span class="chip">BuzzHue8 <span class="x">✕</span></span></div>
+          <div class="line">Hors des effets de salle · blanc fixe par défaut · <a style="color:var(--primary);text-decoration:underline">Choisir ses effets</a></div>
+        </div>
+        <div><button class="btn">Tester le groupe</button><button class="btn danger">Supprimer</button></div>
+      </div>
+      <p class="hint">Le groupe animateur éclaire le pupitre ou la régie. Il n'est entraîné ni par les effets de salle, ni par ON / OFF, ni par le Flash : il reste en blanc fixe, sauf si vous lui choisissez un effet par moment (sous-onglet Effets).</p>
+    </div>
+  </div>
+  <div class="warn">1 ampoule générale est hors groupe et 1 groupe est vide : les effets répartis animeront 3 groupes.</div>
+  <div class="foot"><button class="btn primary">Enregistrer les groupes</button><button class="btn">Annuler les modifications</button><span class="hint" style="margin:0">Modifications non enregistrées</span></div>
+</div>
+
+<p class="mock-note"><b>Comportement.</b><br>
+• <b>Glisser une ampoule</b> (pastille ⠿) : du bac « hors groupe » vers un groupe, d'un groupe à un autre, ou vers le bac. Le ✕ renvoie l'ampoule au bac. Une ampoule n'est que dans un groupe.<br>
+• <b>Glisser un groupe</b> (poignée ⠿ à gauche) : change son rang. Les numéros se recalculent ; le numéro est le rang, on ne le saisit pas.<br>
+• <b>Nom</b> : libre, 40 caractères au plus, deux groupes ne portent pas le même nom. Proposé par défaut : « Groupe 1 », « Groupe 2 »…<br>
+• <b>Équipes à proximité</b> (facultatif) : les équipes assises près de ce groupe. L'effet « Vague » part du groupe de l'équipe qui marque ; sans indication, il part du groupe 1. Une équipe n'est proposée que dans un groupe.<br>
+• <b>Groupe animateur</b> : un seul, sans numéro, hors de l'ordre de parcours et sans « équipes à proximité ». Tant qu'il n'existe pas, un bouton « + Créer le groupe animateur » occupe sa place (section 03). On y glisse des ampoules générales comme dans un autre groupe. Dès l'enregistrement, ses ampoules passent en blanc fixe et ne suivent plus la salle. « Choisir ses effets » ouvre le sous-onglet Effets (lien affiché « bientôt » tant que ce sous-onglet n'est pas livré).<br>
+• <b>Tester le groupe</b> : fait clignoter en blanc les ampoules du groupe, tel qu'il est enregistré (désactivé tant que le groupe est vide ou modifié sans enregistrement, avec l'infobulle « Enregistrez d'abord »).<br>
+• <b>Supprimer</b> : renvoie les ampoules du groupe au bac, sans confirmation (rien n'est perdu avant « Enregistrer »).<br>
+• <b>Enregistrer les groupes</b> : écrit la configuration et met à jour les groupes sur le pont. 12 groupes au plus.<br>
+• Glisser-déposer natif du navigateur, comme pour les fonds d'écran et les manches ; au clavier, chaque pastille et chaque groupe ont « Monter » / « Descendre » et un menu « Déplacer vers… ».</p>
+
+<h2 class="mock-h">03 — Sous-onglet « Groupes » : aucun groupe (état initial après mise à jour)</h2>
+<div class="card">
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab active">Groupes <span class="n">0</span></span><span class="subtab">Effets</span></div>
+  <h3>Groupes d'ambiance</h3>
+  <p class="hint">Aucun groupe pour l'instant : l'éclairage se comporte comme avant. Les effets répartis (chenillard, remplissage, vague, scintillement) demandent des groupes.</p>
+  <div class="cols">
+    <div class="pool"><h4>Ampoules générales hors groupe (5)</h4><span class="chip">BuzzHue1</span><span class="chip">BuzzHue2</span><span class="chip">BuzzHue3</span><span class="chip">BuzzHue4</span><span class="chip">BuzzHue5</span></div>
+    <div>
+      <button class="btn primary">Créer un groupe par ampoule</button><button class="btn ghost">+ Nouveau groupe</button><button class="btn ghost">🎤 + Créer le groupe animateur</button>
+      <p class="hint">« Créer un groupe par ampoule » prépare 5 groupes dans l'ordre de la liste des ampoules ; il reste à les ranger dans l'ordre de la salle, puis à enregistrer.</p>
+    </div>
+  </div>
+</div>
+
+<h2 class="mock-h">04 — Sous-onglet « Groupes » : aucune ampoule générale</h2>
+<div class="card">
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab active">Groupes <span class="n">0</span></span><span class="subtab">Effets</span></div>
+  <p class="hint">Aucune ampoule n'a le rôle « Éclairage général ». Attribuez ce rôle dans « Pont et ampoules » pour créer des groupes.</p>
+</div>
+</body>
+</html>

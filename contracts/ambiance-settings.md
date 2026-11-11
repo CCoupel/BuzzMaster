@@ -342,3 +342,23 @@ fichier de manche = nom + durée + badge « manche » + Remplacer… / Revenir a
 Remplacer / Revenir sont immédiats, Enregistrer / Annuler ne portent que sur les tri-états et le mode. Le test de parité des
 chemins (§6) couvre `sound.files.*`.
 
+
+---
+
+## 10. Effet lumière par moment — normatif (v11.7.0, #223, application du §7)
+
+> Référence : `contracts/light-effects.md` §6.
+
+| Champ (`Settings`) | JSON (manche et API) | Source globale (`config.json`) | Zéro / défaut | Surchargeable |
+|---|---|---|---|---|
+| `LightEffects["chrono"]` | `light.effects.chrono` | `lighting.effects.chrono` | `"pulsation"` | ✅ |
+| `LightEffects["calm"]` | `light.effects.calm` | `lighting.effects.calm` | `""` | ✅ |
+| `LightEffects["score"]` | `light.effects.score` | `lighting.effects.score` | `""` | ✅ |
+
+- `Partial.LightEffects` : map partielle (même forme que `cues`). `Sources.light.effects.<moment>` ∈ `global | round`.
+- Validation : `""` ou `id` d'un effet du catalogue déclarant ce moment ; sinon refus (`INVALID_AMBIANCE`, `400`).
+- Composant `AmbianceSettingsPanel`, section `light` : trois sélecteurs (mode global), « Hérité / … » (mode surcharge).
+  Le test de parité du §6 couvre les trois chemins `light.effects.*`.
+- **Groupe animateur** (amendement du GATE 2) : `LightHostEffects` — `light.host_effects.{chrono,calm,score}`, source
+  globale `lighting.host_effects.*`, défaut `""` (blanc fixe), surchargeable par manche ; mêmes règles que
+  `light.effects` (`light-effects.md` §2.5, §6). Le test de parité couvre aussi ces trois chemins.

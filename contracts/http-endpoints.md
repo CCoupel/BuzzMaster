@@ -1430,3 +1430,21 @@ ne surcharge pas le champ**, le global persisté (comportement v11.4.0 conservé
 réponse `200` porte `{"status":"ok","scope":"round"}` (additif ; `"scope":"global"` sinon) pour que la page Ambiance
 puisse l'indiquer.
 
+
+---
+
+## Lighting — groupes et effets (v11.7.0, #225, #223, #299)
+
+> Détail normatif : `contracts/light-effects.md` §2.4 et §7.
+
+| Méthode | Chemin | Rôle | Lot |
+|---|---|---|---|
+| POST | `/config.json` `{"lighting":{"groups":[…]}}` | Groupes d'ambiance (remplacement complet, validation §2.1) | LOT-1 |
+| GET | `/api/lighting/lights` | Champ additif `group` par ampoule | LOT-1 |
+| POST | `/api/lighting/groups/test` | Essai d'un groupe | LOT-1 |
+| POST | `/config.json` `{"lighting":{"effects":{…}}}` | Effet par moment, global | LOT-2 |
+| GET | `/api/ambiance/settings` | `light.effects` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
+| GET | `/api/lighting/effects` | Catalogue, erreurs de fichiers, réglages non résolus | LOT-2 |
+| POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |
+| GET | `/api/lighting/effects/{id}/preview` | Trames simulées | LOT-3 |
+| POST | `/api/lighting/effects/{id}/try`, `/api/lighting/effects/try/stop` | Essai sur les ampoules | LOT-3 |

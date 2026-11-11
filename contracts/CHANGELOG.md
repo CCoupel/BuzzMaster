@@ -1,6 +1,38 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — Ambiance lumière : groupes d'ambiance et effets déclaratifs (#225, #223, #299, #300, #301, #302, #211)
+
+- **[NEW]** `contracts/light-effects.md` — groupes d'ambiance (`lighting.groups[]`), fichiers d'effets YAML
+  (`data/files/effects/`, natifs embarqués, surcharge par `id`, rechargement à chaud, fichier invalide écarté et signalé),
+  schéma d'un effet (apparences, motifs `uniform` / `shift` / `gauge` / `random` / `gradient`, étapes), séquenceur
+  (`internal/effects` + lecteur dans `internal/ambiance`), précédence, budget d'écriture, 7 effets natifs.
+- **[NEW]** `lighting.groups[] {name, lights[], near_teams[]}` (`config.json`) ; `POST /api/lighting/groups/test`. LOT-1.
+- **[NEW]** `lighting.effects {chrono, calm, score}` (`config.json`) ; `Settings.LightEffects` / `Partial.LightEffects`,
+  JSON `light.effects.<moment>` (global ← manche) ; `GameState.AMBIANCE_EFFECTIVE.SETTINGS.light.effects` toujours
+  sérialisé ; `Round.AMBIANCE.light.effects` accepté par `ROUNDS_UPDATE` (refus `INVALID_AMBIANCE` si `id` inconnu ou
+  moment non déclaré). `ambiance-settings.md` §10. LOT-2 (`chrono`), LOT-4 (`calm`), LOT-5 (`score`).
+- **[NEW]** `GET /api/lighting/effects`, `POST /api/lighting/effects/reload` (LOT-2) ;
+  `GET /api/lighting/effects/{id}/preview`, `POST /api/lighting/effects/{id}/try`, `POST /api/lighting/effects/try/stop`
+  (LOT-3). `http-endpoints.md` §Lighting — groupes et effets.
+- **[NEW]** *(amendement du GATE 2)* Groupe animateur : `lighting.groups[].role` (`salle` | `animateur`, un seul
+  animateur), constante `lighting.GroupHost = -1`, blanc fixe par défaut, hors effets de salle, hors `ON` / `OFF` / Flash
+  (LOT-1) ; `lighting.host_effects {chrono, calm, score}` / `light.host_effects.<moment>` global ← manche (LOT-2) ; effet
+  natif `couleur-equipe` ; `POST /api/lighting/groups/test {"group":"host"}`. `light-effects.md` §2.5.
+- **[CHANGED]** `lighting.ZoneState` — champ additif `Group int` (0 = toute la zone, comportement actuel).
+  `lighting.md` §13.
+- **[CHANGED]** `hue.LightSpec` — champ additif `Group` ; groupes Hue `buzzmaster-general-<n>` ; une seule écriture
+  `buzzmaster-general` conservée quand toutes les ampoules générales ont le même état. `hue-bridge.md` §11.
+- **[CHANGED]** `GET /api/lighting/lights` — champ additif `group` par ampoule.
+- **[CHANGED]** Pulsation chronomètre (`lighting.md` §8.2) — devient l'effet natif `pulsation`, rendu identique exigé ;
+  n'est plus le seul rendu du chronomètre (`light.effects.chrono`).
+- **[CHANGED]** `go.mod` — `go.yaml.in/yaml/v4` passe de dépendance indirecte à directe (déjà dans la liste de
+  `TestCA7_NoNewThirdPartyDependency`, aucun nouveau module).
+- **[CHANGED]** Sauvegarde / restauration — `data/files/effects/` (hors `natifs/`) inclus dans la catégorie `ambiance`.
+- Aucun **BREAKING** : `config.json` sans `lighting.groups` ni `lighting.effects`, `rounds.json` sans `light.effects`
+  ⇒ comportement v11.6.0 exact ; protocole buzzer inchangé.
+
+---
 ## [20261109] — v11.6.0 révision 3 — fichiers de son par manche (#290, LOT-4 Batch 2, GATE LOT-4 refusé)
 
 - **[CHANGED]** `ambiance-settings.md` §2 — **D7′** : annule « les fichiers des sons sont hors surcharge » ; les 15 bruitages et le
