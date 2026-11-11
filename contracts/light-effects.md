@@ -96,7 +96,9 @@ Un groupe de rôle `animateur` éclaire l'animateur (pupitre, régie). Il rempla
 - **Comportement par défaut — livré au LOT-1** : **blanc fixe** (`#FFFFFF`, intensité 255), à tout moment, dès que
   l'éclairage est actif. `Scene()` émet `{Zone:"general", Group:GroupHost}` avec cet état si le groupe existe et n'est pas
   vide.
-- **Effet par moment — livré au LOT-2** : réglage `light.host_effects.{chrono,calm,score}` (§6), global et par manche.
+- **Effet par moment — livré au LOT-2** : réglage `LightHostEffects` (§6) — `light.host_effects.{chrono,calm,score}` dans
+  le modèle de réglages (manche, API, état de jeu), `lighting.host_effects.{chrono,calm,score}` dans `config.json` pour la
+  valeur globale ; global et par manche.
   `""` = blanc fixe. L'effet est rendu par le même séquenceur, **sur ce seul groupe** (N = 1) : un effet dont
   `min_groups` > 1 est inapplicable au groupe animateur et reste grisé dans ses sélecteurs. La couleur `scene` vaut blanc
   pour ce groupe. Effet absent, invalide ou inapplicable ⇒ blanc fixe.
@@ -324,6 +326,18 @@ migration, `pulsation` est un effet natif (`uniform`, `target: all`, trois étap
 
 ## 6. Réglages — effet par moment (amendement de `ambiance-settings.md` §2, §3)
 
+> **Deux écritures, une seule règle — normatif (2026-11-11).** Chaque réglage d'effet a **deux chemins**, selon le fichier :
+>
+> | Où | Chemin (salle) | Chemin (groupe animateur) |
+> |---|---|---|
+> | `config.json` (valeur **globale**), `POST /config.json` | `lighting.effects.<moment>` | `lighting.host_effects.<moment>` |
+> | Modèle `Settings` / `Partial` : `rounds.json` → `Round.AMBIANCE`, `ROUNDS_UPDATE`, `GET /api/ambiance/settings`, `GameState.AMBIANCE_EFFECTIVE` | `light.effects.<moment>` | `light.host_effects.<moment>` |
+>
+> C'est la règle déjà en place pour le mode : `lighting.default_mode` (`config.json`) ↔ `light.mode` (`Settings`),
+> `ambiance-settings.md` §2. La section de `config.json` s'appelle `lighting` ; la branche du modèle de réglages s'appelle
+> `light`. La conversion se fait une seule fois, dans `ambiancecfg.FromConfig` / `ToConfigPatch`. **`lighting.*` n'apparaît
+> jamais dans `rounds.json` ni dans `AMBIANCE_EFFECTIVE` ; `light.*` n'apparaît jamais dans `config.json`.**
+
 | Champ (`Settings`) | JSON | Source globale (`config.json`) | Défaut | Surchargeable par manche |
 |---|---|---|---|---|
 | `LightEffects["chrono"]` | `light.effects.chrono` | `lighting.effects.chrono` | `"pulsation"` | oui |
@@ -396,8 +410,8 @@ clé refusée, pilote occupé : formes de `/api/lighting/test` (§2.4), jamais `
 
 ### 7.5 Existants modifiés
 
-`POST /config.json` : `lighting.groups`, `lighting.effects` (§2.1, §6). `GET /api/ambiance/settings` et `ROUNDS_UPDATE` :
-`light.effects`. `GET /api/lighting/lights` : chaque ampoule porte `group` (`0` | `n` | `"host"`, §2.4).
+`POST /config.json` : `lighting.groups`, `lighting.effects`, `lighting.host_effects` (§2.1, §6). `GET /api/ambiance/settings` et `ROUNDS_UPDATE` :
+`light.effects`, `light.host_effects`. `GET /api/lighting/lights` : chaque ampoule porte `group` (`0` | `n` | `"host"`, §2.4).
 
 ---
 

@@ -1443,7 +1443,8 @@ puisse l'indiquer.
 | GET | `/api/lighting/lights` | Champ additif `group` par ampoule | LOT-1 |
 | POST | `/api/lighting/groups/test` | Essai d'un groupe | LOT-1 |
 | POST | `/config.json` `{"lighting":{"effects":{…}}}` | Effet par moment, global | LOT-2 |
-| GET | `/api/ambiance/settings` | `light.effects` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
+| POST | `/config.json` `{"lighting":{"host_effects":{…}}}` | Effet par moment du groupe animateur, global | LOT-2 |
+| GET | `/api/ambiance/settings` | `light.effects` et `light.host_effects` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
 | GET | `/api/lighting/effects` | Catalogue, erreurs de fichiers, réglages non résolus | LOT-2 |
 | POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |
 | GET | `/api/lighting/effects/{id}/preview` | Trames simulées | LOT-3 |

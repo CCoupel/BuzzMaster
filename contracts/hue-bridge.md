@@ -626,9 +626,12 @@ identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
   groupe (`light-effects.md` §2.4).
 - **Groupe animateur** (amendement du GATE 2) : `lighting.groups[].role = "animateur"` (un seul), `LightSpec.Group =
   lighting.GroupHost (-1)`, groupe Hue `buzzmaster-general-host` ; ses ampoules ne reçoivent jamais l'entrée `Group 0` et
-  ne sont touchées ni par `ON` / `OFF`, ni par le Flash (`light-effects.md` §2.5). `lighting.host_effects {chrono, calm,
+  ne sont touchées ni par `ON` / `OFF`, ni par le Flash (`light-effects.md` §2.5). Dans `config.json` : `lighting.host_effects {chrono, calm,
   score}` : effet par moment de ce groupe.
 - **`buzzmaster-general` exclut les ampoules du groupe animateur** (amendement du 2026-11-11, revue LOT-1 ; précise le
   §5.8) : membres = ampoules de rôle `general` hors groupe animateur. `buzzmaster-ambiance` (toutes les ampoules
   assignées : All OFF de l'interrupteur général, extinction à l'arrêt) les **inclut** toujours.
 - **Erreurs de `POST /api/lighting/groups/test`** : celles de `/api/lighting/test` (`400`, `409`, `429`, `500`, `503`).
+- **Nommage des clés d'effet** (précision du 2026-11-11) : ce contrat décrit `config.json`, donc `lighting.effects` et
+  `lighting.host_effects`. Les mêmes réglages s'écrivent `light.effects` et `light.host_effects` dans le modèle de
+  réglages (manche, API, état de jeu). Table de correspondance normative : `light-effects.md` §6.

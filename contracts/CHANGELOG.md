@@ -1,6 +1,17 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — nommage des clés d'effet figé avant le LOT-2 (#223)
+
+- **[CHANGED]** Précision, sans changement de comportement : `light-effects.md` §2.5 écrivait `light.host_effects` et
+  `hue-bridge.md` §11 `lighting.host_effects`. Les **deux sont exacts**, chacun dans son fichier : `config.json` porte
+  `lighting.effects.<moment>` et `lighting.host_effects.<moment>` (valeur globale) ; le modèle de réglages (`rounds.json`
+  → `Round.AMBIANCE`, `ROUNDS_UPDATE`, `GET /api/ambiance/settings`, `AMBIANCE_EFFECTIVE`) porte `light.effects.<moment>`
+  et `light.host_effects.<moment>`. Même règle que `lighting.default_mode` ↔ `light.mode` (v11.6.0). Table normative
+  ajoutée à `light-effects.md` §6 ; §2.5, §7.5, `hue-bridge.md` §11 et `http-endpoints.md` alignés (ligne
+  `POST /config.json {"lighting":{"host_effects"}}` ajoutée).
+
+---
 ## [20261111] — v11.7.0 — amendements après la revue LOT-1 (#225)
 
 Source : `_work/reports/code-review-lot1-20261111-150000.md`, « Arbitrage des écarts » 1 à 4. Le code livré fait foi ; le
