@@ -96,7 +96,7 @@ export function describeOverride({ path, value }, cueLabel = (c) => c, hostLabel
   const eff = /^light\.(?:effects\.(chrono|calm|score)|host_effects\.([a-z0-9]{1,12})\.(chrono|calm|score))$/.exec(path)
   if (eff) {
     const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[1] || eff[3]]
-    return `${eff[2] ? `Animateur ${hostLabel(eff[2])}` : 'Effet'} (${moment}) : ${value || 'aucun'}`
+    return `${eff[2] ? hostLabel(eff[2]) : 'Effet'} (${moment}) : ${value || 'aucun'}`
   }
   if (path.startsWith(CUE_PATH_PREFIX)) return `${cueLabel(path.slice(CUE_PATH_PREFIX.length))} : ${value ? 'actif' : 'inactif'}`
   return path
