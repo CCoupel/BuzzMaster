@@ -12,7 +12,8 @@ import { render, screen, fireEvent, waitFor, within, act } from '@testing-librar
 // ---------------------------------------------------------------------------
 
 vi.mock('./LightEffectsCatalogue.css', () => ({}))
-import LightEffectsCatalogue, { usedBy, TRY_EVENT } from './LightEffectsCatalogue'
+import LightEffectsCatalogue, { usedBy } from './LightEffectsCatalogue'
+import { TRY_EVENT } from '../utils/lightEffects'
 
 const ALL = { ambiance: true, animateur: true, public: true }
 const fx = (id, name, moments, extra = {}) => ({
