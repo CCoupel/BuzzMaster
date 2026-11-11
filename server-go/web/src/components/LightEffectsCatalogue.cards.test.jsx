@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { StrictMode } from 'react'
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 
 vi.mock('./LightEffectsCatalogue.css', () => ({}))
@@ -138,6 +139,50 @@ describe('LightEffectsCatalogue — aperçu simulé (#299)', () => {
     fireEvent.click(card('chenillard-traine').getByRole('button', { name: /Aperçu/ }))
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/lighting/effects/chenillard-traine/preview?groups=6&moment=chrono'))
     expect(await card('chenillard-traine').findByText('simulation avec 6 groupes')).toBeInTheDocument()
+  })
+
+  it('R2 — sous React.StrictMode (double montage), l\'aperçu se charge et s\'anime', async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => PREVIEW }))
+    render(<StrictMode><LightEffectsCatalogue catalog={CATALOG} lighting={LIGHTING} zoneGroups={GROUPS} onTry={vi.fn()} /></StrictMode>)
+    fireEvent.click(card('pulsation').getByRole('button', { name: /Aperçu/ }))
+    expect(await card('pulsation').findByText(/tick 0 · PRE/)).toBeInTheDocument()
+  })
+
+  it('R2 — Stop avant la réponse puis nouvelle lecture : l\'aperçu est redemandé et s\'affiche', async () => {
+    let resolveFirst
+    global.fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise((r) => { resolveFirst = r }))
+      .mockImplementation(async () => ({ ok: true, status: 200, json: async () => PREVIEW }))
+    mount()
+    fireEvent.click(card('pulsation').getByRole('button', { name: /▶ Aperçu/ }))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+    fireEvent.click(card('pulsation').getByRole('button', { name: /■ Arrêter/ })) // arrêt avant la réponse
+    await act(async () => { resolveFirst({ ok: true, status: 200, json: async () => PREVIEW }) }) // réponse périmée ignorée
+    fireEvent.click(card('pulsation').getByRole('button', { name: /▶ Aperçu/ }))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+    expect(await card('pulsation').findByText(/tick 0 · PRE/)).toBeInTheDocument()
+  })
+
+  it('R1 — le rechargement du catalogue invalide l\'aperçu en cache (trames périmées jamais resservies)', async () => {
+    const OLD = { ...PREVIEW, frames: PREVIEW.frames.map(f => ({ ...f, step: f.step === 'pre' ? 'pre' : f.step })) }
+    const NEW = { ...PREVIEW, frames: [{ ...PREVIEW.frames[0], step: 'pas:0' }, ...PREVIEW.frames.slice(1)] }
+    global.fetch = vi.fn()
+      .mockImplementationOnce(async () => ({ ok: true, status: 200, json: async () => OLD }))
+      .mockImplementation(async () => ({ ok: true, status: 200, json: async () => NEW }))
+    const { rerender } = mount()
+    fireEvent.click(card('pulsation').getByRole('button', { name: /▶ Aperçu/ }))
+    expect(await card('pulsation').findByText(/tick 0 · PRE/)).toBeInTheDocument()
+    fireEvent.click(card('pulsation').getByRole('button', { name: /■ Arrêter/ }))
+    // lecture suivante SANS rechargement : cache réutilisé, pas de nouvel appel
+    fireEvent.click(card('pulsation').getByRole('button', { name: /▶ Aperçu/ }))
+    await card('pulsation').findByText(/tick 0 · PRE/)
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    fireEvent.click(card('pulsation').getByRole('button', { name: /■ Arrêter/ }))
+    // rechargement des fichiers : nouveau catalogue (objet) ⇒ aperçu redemandé, trames à jour
+    rerender(<LightEffectsCatalogue catalog={{ ...CATALOG }} lighting={LIGHTING} zoneGroups={GROUPS} onTry={vi.fn()} />)
+    fireEvent.click(card('pulsation').getByRole('button', { name: /▶ Aperçu/ }))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+    expect(await card('pulsation').findByText(/tick 0 · pas 0/)).toBeInTheDocument()
   })
 
   it('aperçu indisponible (erreur serveur) : message, bouton rendu', async () => {

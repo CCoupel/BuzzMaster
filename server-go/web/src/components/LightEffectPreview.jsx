@@ -40,25 +40,27 @@ export function frameAt(preview, t) {
   return { frame: cur, at: tt }
 }
 
-export default function LightEffectPreview({ id, groups, moment, playing, onUnavailable = () => {} }) {
+// `version` : change à chaque rechargement du catalogue (fichier édité, ajouté, retiré) et invalide l'aperçu mis en cache.
+export default function LightEffectPreview({ id, groups, moment, version = 0, playing, onUnavailable = () => {} }) {
   const [preview, setPreview] = useState(null)
   const [error, setError] = useState(false)
   const [now, setNow] = useState(0) // ms écoulées depuis le début de la lecture
-  const loaded = useRef(null) // clé (id|groups|moment) de l'aperçu chargé
+  const loaded = useRef(null) // clé (id|groups|moment|version) de l'aperçu CHARGÉ (réponse reçue), jamais d'une requête en vol
 
-  const key = `${id}|${groups}|${moment}`
+  const key = `${id}|${groups}|${moment}|${version}`
   useEffect(() => {
     if (!playing || loaded.current === key) return undefined
     let cancelled = false
-    loaded.current = key
     setError(false)
     fetch(`/api/lighting/effects/${encodeURIComponent(id)}/preview?groups=${groups}&moment=${encodeURIComponent(moment)}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.json()
       })
-      .then((data) => { if (!cancelled) setPreview(data) })
-      .catch(() => { if (!cancelled) { loaded.current = null; setError(true); onUnavailable() } })
+      .then((data) => { if (!cancelled) { loaded.current = key; setPreview(data) } })
+      .catch(() => { if (!cancelled) { setError(true); onUnavailable() } })
+    // Nettoyage (arrêt avant la réponse, double montage de React.StrictMode) : la réponse en vol est ignorée et rien
+    // n'est marqué « chargé » — la prochaine lecture redemande l'aperçu.
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, key])

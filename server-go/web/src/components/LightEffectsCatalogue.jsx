@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Button from './Button'
 import LightEffectPreview from './LightEffectPreview'
 import {
@@ -51,6 +51,9 @@ export default function LightEffectsCatalogue({
   const [starting, setStarting] = useState(null)
   const [reloading, setReloading] = useState(false)
   const timer = useRef(null)
+  // Version du catalogue : change à chaque (re)chargement ; invalide les aperçus en cache (trames périmées).
+  const versionRef = useRef(0)
+  const version = useMemo(() => { versionRef.current += 1; return versionRef.current }, [catalog])
 
   // Un test des réglages (bouton « Tester ») qui démarre remplace l'essai du catalogue.
   useEffect(() => {
@@ -152,7 +155,7 @@ export default function LightEffectsCatalogue({
                 </div>
               )}
               <LightEffectPreview
-                id={e.id} groups={simGroups} moment={moment}
+                id={e.id} groups={simGroups} moment={moment} version={version}
                 playing={playing} onUnavailable={() => setPreviewId(null)}
               />
               {!applicable && playing && <p className="lfx-sim">simulation avec {simGroups} groupes</p>}
