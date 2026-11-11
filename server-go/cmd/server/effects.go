@@ -43,3 +43,36 @@ func (a *App) startEffects() {
 		go a.effects.Run(a.ctx)
 	}
 }
+
+// EffectsCatalogue implements server.EffectsProvider.
+func (a *App) EffectsCatalogue() effects.Catalogue {
+	if a.effects == nil {
+		return effects.Catalogue{}
+	}
+	return a.effects.Catalogue()
+}
+
+// EffectsReload implements server.EffectsProvider.
+func (a *App) EffectsReload() effects.Catalogue {
+	if a.effects == nil {
+		return effects.Catalogue{}
+	}
+	return a.effects.Reload()
+}
+
+// EffectsDir implements server.EffectsProvider.
+func (a *App) EffectsDir() string { return a.effectsDir() }
+
+// EffectExists reports whether the catalogue holds this effect for the moment
+// (ROUNDS_UPDATE validation, rounds.EffectChecker).
+func (a *App) EffectExists(moment, id string) bool {
+	en, ok := a.EffectsCatalogue().Get(id)
+	return ok && en.Effect.HasMoment(effects.Moment(moment))
+}
+
+// EffectSettings implements ambiance.EffectsSource: the RESOLVED effect id per moment
+// (global ← round) for the room and for the animateur group.
+func (a *App) EffectSettings() (room, host map[string]string) {
+	s := a.ambianceSettings()
+	return s.LightEffects, s.LightHostEffects
+}

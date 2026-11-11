@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 func TestValidateLightingGroups(t *testing.T) {
 	t.Parallel()
 	lights := []LightingLightEntry{{Name: "A", Role: "general"}, {Name: "B", Role: "general"}, {Name: "T", Role: "team", Team: "Rouges"}}

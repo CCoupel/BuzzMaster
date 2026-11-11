@@ -140,3 +140,27 @@ func (l LightingConfig) GroupAssignment() (num map[string]int, host map[string]b
 	}
 	return num, host
 }
+
+// RoomGroup is one non-empty salle group: its real number (1-based rank among all
+// salle groups, never renumbered) and the teams installed near it.
+type RoomGroup struct {
+	Num       int
+	NearTeams []string
+}
+
+// RoomGroups lists the non-empty salle groups in order — the N groups an effect
+// renders on (light-effects.md §2.1, §4.5).
+func (l LightingConfig) RoomGroups() []RoomGroup {
+	var out []RoomGroup
+	n := 0
+	for _, g := range l.Groups {
+		if g.Role == GroupRoleAnimateur {
+			continue
+		}
+		n++
+		if len(g.Lights) > 0 {
+			out = append(out, RoomGroup{Num: n, NearTeams: g.NearTeams})
+		}
+	}
+	return out
+}

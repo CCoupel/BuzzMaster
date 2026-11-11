@@ -95,6 +95,15 @@ type Controller struct {
 	ChronoPulseTier    atomic.Int32
 	chronoPulseHigh    atomic.Bool
 	chronoPulseStarted atomic.Bool
+
+	// Light-effect reader (v11.7.0, #223, effects.go). EffectsClock / EffectsTick are
+	// injectable per instance (nil / 0 = production), never package-level.
+	EffectsClock   func() time.Time
+	EffectsTick    time.Duration
+	effectsStarted atomic.Bool
+	effectsQuiet   atomic.Bool
+	effectFrames   atomic.Pointer[effectFrames]
+	effects        effectsState
 }
 
 // New builds a Controller over the given Host.
@@ -249,6 +258,7 @@ func (c *Controller) StartWriter() {
 	if w != nil {
 		go w.Start(c.h.Ctx())
 		go c.RunChronoPulse(c.h.Ctx()) // idempotent (chronoPulseStarted) — see its own doc comment
+		go c.RunEffects(c.h.Ctx())     // idempotent (effectsStarted) — #223
 	}
 	w.NotifyState()
 }
@@ -278,11 +288,13 @@ func (c *Controller) Reconfigure() {
 		if c.h.Ctx() != nil {
 			go w.Start(c.h.Ctx())
 			go c.RunChronoPulse(c.h.Ctx()) // idempotent (chronoPulseStarted) — see its own doc comment
+			go c.RunEffects(c.h.Ctx())     // idempotent (effectsStarted) — #223
 		}
 		w.NotifyState()
 		return
 	}
 	c.hueDriver.Store(d)
+	c.effectsQuiet.Store(false)
 	// A nil *hue.Driver must become a nil INTERFACE (a typed nil would count
 	// as an attached driver and panic on Close).
 	var drv lighting.Driver
@@ -782,19 +794,7 @@ func (c *Controller) CurrentScoreFlashTeam() string {
 // replacing it with another team's or the room's. It is the only exception
 // to that rule besides §10.4's shutdown extinction.
 func (c *Controller) Scene(ev lighting.Event) lighting.State {
-	def := SceneFor(ev)
-	color := def.Color
-	intensity := def.Intensity
-	switch {
-	case def.UseTeamColor:
-		team := ""
-		if len(ev.Teams) > 0 {
-			team = ev.Teams[0]
-		}
-		color = c.h.TeamNameColor(team)
-	case def.UseThemeColor:
-		color = c.ThemeColor()
-	}
+	color, intensity := c.baseSceneColor(ev)
 	// Chrono-pulse (2026-09-08): only for the LIVE KindRunning scene, and
 	// only when the selector is in AUTO with Flash off — checked with the
 	// EXACT SAME two primitives lightingOverrideGeneral (below) is built
@@ -820,6 +820,7 @@ func (c *Controller) Scene(ev lighting.Event) lighting.State {
 		Intensity:    intensity,
 		TransitionMs: transitionMs,
 	}}
+	zones = c.applyEffectFrames(ev, zones)              // v11.7.0 (#223): the room effect frame, when one is live
 	seen := map[string]bool{lighting.ZoneGeneral: true} // defensive: a team literally named "general" must never shadow it
 	distinguished := make(map[string]bool, len(ev.Teams))
 	for _, team := range ev.Teams {
@@ -857,14 +858,36 @@ func (c *Controller) Scene(ev lighting.Event) lighting.State {
 	// never touches it (ON / OFF / Flash / pulse act on the room only). Only
 	// the master switch and the shutdown extinction turn it off.
 	if g, ok := config.Get().Lighting.HostGroup(); ok && len(g.Lights) > 0 {
-		zones = append(zones, lighting.ZoneState{
+		host := lighting.ZoneState{
 			Zone:      lighting.ZoneGeneral,
 			Group:     lighting.GroupHost,
 			Color:     [3]int{255, 255, 255},
 			Intensity: 255,
-		})
+		}
+		if hz, ok := c.hostEffectState(ev); ok { // #223: the animateur group's own effect, else fixed white
+			host = hz
+		}
+		zones = append(zones, host)
 	}
 	return lighting.State{Zones: zones}
+}
+
+// baseSceneColor is the colour and intensity of the ordinary scene of ev (before the
+// chrono pulse and the override) — also the "scene" colour handed to the effects.
+func (c *Controller) baseSceneColor(ev lighting.Event) ([3]int, int) {
+	def := SceneFor(ev)
+	color := def.Color
+	switch {
+	case def.UseTeamColor:
+		team := ""
+		if len(ev.Teams) > 0 {
+			team = ev.Teams[0]
+		}
+		color = c.h.TeamNameColor(team)
+	case def.UseThemeColor:
+		color = c.ThemeColor()
+	}
+	return color, def.Intensity
 }
 
 // ambianceThemeColor resolves the CURRENT question's category theme colour

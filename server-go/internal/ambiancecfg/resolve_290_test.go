@@ -23,7 +23,8 @@ func tw290aGlobal() Settings {
 	for _, c := range tw290aCues {
 		cues[c] = true
 	}
-	return Settings{SoundMuted: false, CountdownEnabled: true, CountdownLoop: true, CuesEnabled: cues, LightMode: LightMode("AUTO")}
+	return Settings{SoundMuted: false, CountdownEnabled: true, CountdownLoop: true, CuesEnabled: cues, LightMode: LightMode("AUTO"),
+		LightEffects: DefaultLightEffects(), LightHostEffects: DefaultLightHostEffects()} // v11.7.0 : forme complète
 }
 
 func tw290aB(v bool) *bool { return &v }

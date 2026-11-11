@@ -89,6 +89,8 @@ type HTTPServer struct {
 	// Lighting gives the /api/lighting/* handlers the live Hue driver (#207,
 	// contracts/hue-bridge.md §7); nil provider or nil driver = "disabled".
 	Lighting LightingProvider
+	// Effects serves the light-effect catalogue (v11.7.0, #223); nil = no catalogue.
+	Effects EffectsProvider
 	// Sound gives the /api/sounds/*, /api/sound/status handlers access to
 	// the live sound engine (#230, contracts/http-endpoints.md §Sound); nil
 	// provider is never expected in production (cmd/server always sets it,
@@ -490,6 +492,8 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/lighting/lights", h.handleLightingLights)
 	h.mux.HandleFunc("/api/lighting/test", h.handleLightingTest)
 	h.mux.HandleFunc("/api/lighting/groups/test", h.handleLightingGroupTest)
+	h.mux.HandleFunc("/api/lighting/effects", h.handleLightingEffects)
+	h.mux.HandleFunc("/api/lighting/effects/reload", h.handleLightingEffectsReload)
 	h.mux.HandleFunc("/api/lighting/preview", h.handleLightingPreview)
 	// Conduite manuelle — sélecteur tri-état + Flash (#208, contract §10.1)
 	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
@@ -2199,6 +2203,42 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 				}
 				cfg.Lighting.Groups = groups
 			}
+			// v11.7.0, #223 (light-effects.md §6): per-moment effect, PARTIAL patches — the
+			// front writes one moment at a time, so the incoming keys are merged over the
+			// stored ones, never replacing the other moments.
+			for _, ek := range []struct {
+				key      string
+				in       map[string]string
+				dst      *map[string]string
+				host     bool
+				defaults map[string]string
+			}{
+				{"effects", incoming.Effects, &cfg.Lighting.Effects, false, ambiancecfg.DefaultLightEffects()},
+				{"host_effects", incoming.HostEffects, &cfg.Lighting.HostEffects, true, ambiancecfg.DefaultLightHostEffects()},
+			} {
+				if _, ok := lRaw[ek.key]; !ok {
+					continue
+				}
+				merged := make(map[string]string, len(ek.defaults))
+				for m, v := range ek.defaults {
+					merged[m] = v
+				}
+				for m, v := range *ek.dst {
+					merged[m] = v
+				}
+				for m, id := range ek.in {
+					if !ambiancecfg.ValidMoment(m) {
+						http.Error(w, "lighting."+ek.key+" : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
+						return
+					}
+					if id != "" && !h.effectExists(m, id) {
+						http.Error(w, "lighting."+ek.key+"."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
+						return
+					}
+					merged[m] = id
+				}
+				*ek.dst = merged
+			}
 			// The secret: absent or empty preserves, clear_api_key erases,
 			// a non-empty value replaces. Derived/request-only flags never persist.
 			preservedHueKey := cfg.Lighting.APIKey
@@ -3137,6 +3177,13 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		if _, err := os.Stat(gameConfigPath); err == nil {
 			h.addFileToTAR(tw, gameConfigPath, "config/game-config.json")
 		}
+		// v11.7.0, #223 (light-effects.md §3.2): the user's light effects
+		// (files/effects/, without the natifs/ reference copy) belong to the
+		// "ambiance" category.
+		effectsDir := filepath.Join(filesDir, "effects")
+		if _, err := os.Stat(effectsDir); err == nil {
+			h.addEffectsDirToTAR(tw, effectsDir, "files/effects")
+		}
 	}
 
 	// Add game_state.json (#141) — quiz metadata (name/theme/notes/
@@ -3197,6 +3244,52 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 	}
 
 	log.Printf("[HTTP] Selective backup completed")
+}
+
+// isEffectsReferencePath reports whether rel (slash-separated, relative to the data or
+// files directory) is inside the native-effects reference copy.
+func isEffectsReferencePath(rel string) bool {
+	for _, p := range []string{"files/effects/natifs", "effects/natifs"} {
+		if rel == p || strings.HasPrefix(rel, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// addEffectsDirToTAR archives the user effects directory except its natifs/ subfolder.
+func (h *HTTPServer) addEffectsDirToTAR(tw *tar.Writer, sourceDir, tarPrefix string) {
+	_ = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, rerr := filepath.Rel(sourceDir, path)
+		if rerr != nil || rel == "." {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "natifs" || strings.HasPrefix(rel, "natifs/") {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		header, herr := tar.FileInfoHeader(info, "")
+		if herr != nil {
+			return nil
+		}
+		header.Name = tarPrefix + "/" + rel
+		if tw.WriteHeader(header) != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			if f, oerr := os.Open(path); oerr == nil {
+				defer f.Close()
+				_, _ = io.Copy(tw, f)
+			}
+		}
+		return nil
+	})
 }
 
 // addFileToTAR adds a single file to TAR archive
@@ -3484,6 +3577,15 @@ func (h *HTTPServer) createTARBackup(w http.ResponseWriter, r *http.Request, sou
 			return nil
 		}
 
+		// v11.7.0 (#223, light-effects.md §3.2): the reference copy of the native
+		// effects is rewritten at every start and never read back — not archived.
+		if isEffectsReferencePath(filepath.ToSlash(relPath)) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		// Create TAR header
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
@@ -3604,6 +3706,12 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		case strings.HasPrefix(tarPath, "files/sounds/"):
 			// v11.0, #229 — ne pas reproduire le trou #152.
 			if detected["sounds"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
+		case strings.HasPrefix(tarPath, "files/effects/"):
+			// v11.7.0, #223 — the natifs/ reference copy is never restored.
+			if detected["effects"] && !isEffectsReferencePath(tarPath) {
 				targetPath = filepath.Join(h.dataDir, tarPath)
 				allowed = true
 			}
@@ -3757,6 +3865,14 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Restore: Sounds restored")
 	}
 
+	if detected["effects"] {
+		restoredMap["effects"] = true
+		if h.Effects != nil {
+			h.Effects.EffectsReload() // the catalogue follows the restored files at once
+		}
+		log.Printf("[HTTP] Restore: Light effects restored")
+	}
+
 	if detected["gameConfig"] {
 		// #150 — reload from the just-extracted file (same path
 		// GameConfigPath() already resolves to, set once at startup) and
@@ -3829,6 +3945,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"gameState":   false, // #141 — game_state.json (quiz metadata)
 		"rafale":      false, // #197 (v8.0.0) — files/rafale/ + config/rafale_used.json
 		"sounds":      false, // v11.0, #229 — files/sounds/ (bruitage d'événement)
+		"effects":     false, // v11.7.0, #223 — files/effects/ (effets lumière de l'utilisateur, sans natifs/)
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -3851,6 +3968,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["entracte"] = true
 		case strings.HasPrefix(tarPath, "files/sounds/"):
 			detected["sounds"] = true
+		case strings.HasPrefix(tarPath, "files/effects/") && !isEffectsReferencePath(tarPath):
+			detected["effects"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
 		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":

@@ -62,6 +62,16 @@ func AmbianceFromConfig(cfg *config.Config) ambiancecfg.Settings {
 	if m := ambiancecfg.LightMode(cfg.Lighting.DefaultMode); m.Valid() {
 		s.LightMode = m
 	}
+	// v11.7.0 (#223): the per-moment effects, missing keys taking the default of the moment.
+	s.LightEffects, s.LightHostEffects = ambiancecfg.DefaultLightEffects(), ambiancecfg.DefaultLightHostEffects()
+	for _, m := range ambiancecfg.Moments {
+		if v, ok := cfg.Lighting.Effects[m]; ok {
+			s.LightEffects[m] = v
+		}
+		if v, ok := cfg.Lighting.HostEffects[m]; ok {
+			s.LightHostEffects[m] = v
+		}
+	}
 	return s
 }
 

@@ -92,6 +92,12 @@ type LightingConfig struct {
 	// ambiance groups of role=general bulbs. Order = group number among the
 	// "salle" groups. Absent/empty ⇒ v11.6.0 behaviour exactly.
 	Groups []LightingGroupEntry `json:"groups"`
+	// Effects / HostEffects (v11.7.0, #223 — light-effects.md §6): global effect id per
+	// moment (chrono, calm, score) for the room and for the animateur group. Read ONLY
+	// through the ambiance adapter (server.AmbianceFromConfig). Absent keys take the
+	// default of the moment (chrono → "pulsation", else "").
+	Effects     map[string]string `json:"effects"`
+	HostEffects map[string]string `json:"host_effects"`
 }
 
 // Lighting group roles (contracts/light-effects.md §2.1).
@@ -496,6 +502,8 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.Lighting.Groups == nil {
 		cfg.Lighting.Groups = []LightingGroupEntry{}
 	}
+	cfg.Lighting.Effects = fillMoments(cfg.Lighting.Effects, map[string]string{"chrono": "pulsation", "calm": "", "score": ""})
+	cfg.Lighting.HostEffects = fillMoments(cfg.Lighting.HostEffects, map[string]string{"chrono": "", "calm": "", "score": ""})
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}
 	}
@@ -625,3 +633,15 @@ func Save(cfg *Config) error {
 	return nil
 }
 
+
+// fillMoments returns m with every key of def present (missing ones take the default).
+func fillMoments(m, def map[string]string) map[string]string {
+	out := make(map[string]string, len(def))
+	for k, v := range def {
+		out[k] = v
+	}
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}

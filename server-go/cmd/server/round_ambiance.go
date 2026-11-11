@@ -202,6 +202,12 @@ func ambianceEffectiveEqual(x, y ambiancecfg.Effective) bool {
 			return false
 		}
 	}
+	for _, m := range ambiancecfg.Moments { // v11.7.0 (#223): effects and where they come from
+		if xs.LightEffects[m] != ys.LightEffects[m] || xs.LightHostEffects[m] != ys.LightHostEffects[m] ||
+			x.Sources.LightEffects[m] != y.Sources.LightEffects[m] || x.Sources.LightHostEffects[m] != y.Sources.LightHostEffects[m] {
+			return false
+		}
+	}
 	xo, yo := x.Sources, y.Sources
 	return xo.SoundMuted == yo.SoundMuted && xo.CountdownEnabled == yo.CountdownEnabled &&
 		xo.CountdownLoop == yo.CountdownLoop && xo.LightMode == yo.LightMode
