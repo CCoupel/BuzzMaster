@@ -11,3 +11,4 @@
 | 2026-10-15 | v11.2.3 | #278 refus sans trace + #275 NETWORK admin seul (LOT-2) | QA 1 (4cc7b271, docs 64ce3679) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
 | 2026-10-15 | v11.2.3 | #277 react-router 7 (LOT-3) | QA 1 (bc81790a) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
 | 2026-11-11 | v11.7.0 | #225 groupes d'ampoules (LOT-1) | QA 0 (e026931b) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
+| 2026-11-11 | v11.7.0 | #225/#223 LOT-1 corrigé Batch C + NR complète | QA 2 (33ebebd2) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
