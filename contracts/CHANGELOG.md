@@ -1,6 +1,23 @@
 # Changelog des Contrats API
 
 ---
+## [20261111] — v11.7.0 — amendements après la revue LOT-1 (#225)
+
+Source : `_work/reports/code-review-lot1-20261111-150000.md`, « Arbitrage des écarts » 1 à 4. Le code livré fait foi ; le
+contrat est aligné.
+
+- **[CHANGED]** `GET /api/lighting/lights` et `POST /api/lighting/groups/test` — forme de `group` figée : `0` (hors
+  groupe) | `n ≥ 1` (groupe de salle) | `"host"` (groupe animateur). `light-effects.md` §2.4, `hue-bridge.md` §11.
+- **[CHANGED]** Groupes vides (`light-effects.md` §2.1) — levée d'une contradiction : un groupe vide **garde son
+  numéro** et est **ignoré du séquenceur** ; N = nombre de groupes de salle **non vides** ; le séquenceur rend sur la
+  suite des groupes non vides et écrit avec les numéros réels. **À respecter au LOT-2** (tâches 9 et 12).
+- **[CHANGED]** `POST /api/lighting/groups/test` — erreurs = formes de `/api/lighting/test` (`400`, `409`, `429`, `500`,
+  `503`) ; « `502` » retiré. Même règle annoncée pour `POST /api/lighting/effects/{id}/try` (LOT-3).
+- **[CHANGED]** Groupe Hue `buzzmaster-general` — exclut les ampoules du groupe animateur ; `buzzmaster-ambiance` les
+  inclut toujours. `light-effects.md` §2.3, `hue-bridge.md` §11.
+- Aucun **BREAKING** (API non encore publiée en PROD).
+
+---
 ## [20261111] — v11.7.0 — Ambiance lumière : groupes d'ambiance et effets déclaratifs (#225, #223, #299, #300, #301, #302, #211)
 
 - **[NEW]** `contracts/light-effects.md` — groupes d'ambiance (`lighting.groups[]`), fichiers d'effets YAML

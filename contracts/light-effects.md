@@ -42,12 +42,16 @@ Les ampoules de rôle `team` ne font partie d'aucun groupe : elles montrent touj
 ```
 
 - `role` : `"salle"` (défaut, valeur absente ou vide) ou `"animateur"` (§2.5). **Un seul** groupe `animateur` au plus.
-  Le **numéro** d'un groupe de salle est son rang parmi les groupes de rôle `salle` ; le groupe animateur n'a pas de numéro
-  et ne compte pas dans N. `near_teams` est refusé sur le groupe animateur.
+  Le **numéro** d'un groupe de salle est son rang parmi **tous** les groupes de rôle `salle`, vides compris ; le groupe
+  animateur n'a pas de numéro et ne compte pas dans N. `near_teams` est refusé sur le groupe animateur.
 - `name` : libellé libre (1 à 40 caractères), unique sans tenir compte de la casse. Sert à l'affichage ; les effets
   n'utilisent que le **numéro**.
-- `lights` : noms d'ampoules, chacune de rôle `general` et présente dans **un seul** groupe. Un groupe vide est accepté
-  (il est alors ignoré par le séquenceur et ne compte pas dans N).
+- `lights` : noms d'ampoules, chacune de rôle `general` et présente dans **un seul** groupe. Un groupe vide est accepté :
+  il **garde son numéro** (numéros stables pour l'interface et pour `GET /api/lighting/lights`) mais est **ignoré du
+  séquenceur**. **N = nombre de groupes de salle non vides.** Le séquenceur calcule sa trame sur la suite ordonnée des
+  groupes non vides (positions 1…N, sans renuméroter la configuration) et émet chaque état avec le **numéro réel** du
+  groupe (`ZoneState.Group`). Exemple : groupes 1, 2 (vide), 3 ⇒ N = 2, la trame a deux positions, écrites sur
+  `Group 1` et `Group 3`. *(Amendement du 2026-11-11, revue LOT-1, écart 2.)*
 - `near_teams` : équipes installées près de ce groupe (optionnel). Sert d'origine à un effet `origin: team` (§4.5).
   Une équipe figure dans un seul groupe au plus.
 - Absent ou `[]` ⇒ aucun groupe : comportement v11.6.0 exact.
@@ -70,6 +74,9 @@ Le groupe animateur est adressé par la constante `lighting.GroupHost = -1` : `{
 - `LightSpec` gagne `Group int` (0 = hors groupe). La clé de regroupement d'`Apply` devient (rôle, équipe, groupe).
 - Résolution de l'état cible d'une ampoule générale du groupe n : l'entrée `Group == n` si elle existe, sinon l'entrée
   `Group == 0`.
+- **`buzzmaster-general` exclut les ampoules du groupe animateur** (§2.5 : jamais entraîné par la salle). Ses membres
+  sont les ampoules de rôle `general` hors groupe animateur ; « toutes les ampoules générales » ci-dessous s'entend de
+  même. *(Amendement du 2026-11-11, revue LOT-1, écart 4.)*
 - **Quand toutes les ampoules générales ont le même état cible**, le pilote écrit `buzzmaster-general` comme aujourd'hui
   (une écriture). C'est le cas de toute scène sans effet réparti : **aucune régression de débit**.
 - Groupes Hue : un `LightGroup` `buzzmaster-general-<n>` par groupe d'ambiance de **3 ampoules ou plus**. En dessous,
@@ -100,8 +107,13 @@ Un groupe de rôle `animateur` éclaire l'animateur (pupitre, régie). Il rempla
 ### 2.4 Essai d'un groupe — `POST /api/lighting/groups/test`
 
 `{"group": 2}` (ou `{"group": "host"}` pour le groupe animateur) ⇒ clignotement blanc des ampoules du groupe (même rendu que `POST /api/lighting/test`), puis retour à
-l'état vivant. `200 {"ok":true}` ; `400` numéro inconnu ; `409` éclairage désactivé ; `502` pont injoignable ou refusé
-(mêmes formes que `/api/lighting/test`).
+l'état vivant. `200 {"ok":true}`. Erreurs : **exactement les formes de `/api/lighting/test`** (`writeLightingError`) —
+`400` groupe inconnu ou vide, `409` éclairage désactivé ou clé refusée, `503` pont injoignable, `429` pilote occupé,
+`500` autre. *(Amendement du 2026-11-11, revue LOT-1, écart 3 : la mention « 502 » est retirée.)*
+
+**Forme de `group`** (requête ici, et champ `group` de chaque ampoule dans `GET /api/lighting/lights`) : `0` = hors
+groupe (réponse seulement), entier `n ≥ 1` = groupe de salle numéro n, chaîne `"host"` = groupe animateur. Une ampoule
+de rôle `team` porte `0`. *(Amendement du 2026-11-11, revue LOT-1, écart 1.)*
 
 ---
 
@@ -232,7 +244,7 @@ Conditions (`when`) : `remaining_lte: <secondes>`, `remaining_gt: <secondes>`, `
 
 | Variable | Source |
 |---|---|
-| nombre de groupes N | groupes non vides de `lighting.groups` |
+| nombre de groupes N | groupes de **salle non vides** de `lighting.groups` (§2.1 ; le groupe animateur est rendu à part, N = 1) |
 | temps restant, durée totale | `GameState.CurrentTime`, `GameState.Delay` (moment `chrono`) |
 | couleurs `scene`, `theme`, `team` | mêmes fonctions que la table de scènes (`ambiance.Scene`, `ThemeColor`, `TeamNameColor`) |
 | groupe d'origine `team` | groupe dont `near_teams` contient l'équipe créditée ; à défaut le groupe 1 |
@@ -379,13 +391,13 @@ paramètre invalide.
 
 `{"seconds": 10}` (1 à 20, défaut 10) : joue l'effet sur les ampoules, puis retour à l'état vivant. Un nouvel essai
 remplace le précédent. `409` avec `reason` : `disabled` (éclairage désactivé), `mode` (mode `ON`/`OFF` ou Flash),
-`game` (une question est en cours : phase autre que STOPPED / NEW_GAME / ENROLL), `not_applicable`. `502` pont
-injoignable ou refusé. L'état de l'essai n'est pas persisté.
+`game` (une question est en cours : phase autre que STOPPED / NEW_GAME / ENROLL), `not_applicable`. Pont injoignable,
+clé refusée, pilote occupé : formes de `/api/lighting/test` (§2.4), jamais `502`. L'état de l'essai n'est pas persisté.
 
 ### 7.5 Existants modifiés
 
 `POST /config.json` : `lighting.groups`, `lighting.effects` (§2.1, §6). `GET /api/ambiance/settings` et `ROUNDS_UPDATE` :
-`light.effects`. `GET /api/lighting/lights` : chaque ampoule porte `group` (0 = hors groupe).
+`light.effects`. `GET /api/lighting/lights` : chaque ampoule porte `group` (`0` | `n` | `"host"`, §2.4).
 
 ---
 

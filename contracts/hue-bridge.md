@@ -621,9 +621,14 @@ identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
 - **Groupes Hue** : `buzzmaster-general-<n>` s'ajoute aux trois groupes du §5.8, mêmes règles de cycle de vie
   (réconciliation à l'inventaire et après enregistrement de la configuration, jamais sur un événement de jeu, repli par
   ampoule, invalidation du cache des membres).
-- **`GET /api/lighting/lights`** : chaque ampoule porte `group`. **`POST /api/lighting/groups/test`** : essai d'un
+- **`GET /api/lighting/lights`** : chaque ampoule porte `group` — `0` (hors groupe ou ampoule d'équipe), entier `n ≥ 1`
+  (groupe de salle, numéro stable même si un groupe précédent est vide) ou `"host"` (groupe animateur). **`POST /api/lighting/groups/test`** : essai d'un
   groupe (`light-effects.md` §2.4).
 - **Groupe animateur** (amendement du GATE 2) : `lighting.groups[].role = "animateur"` (un seul), `LightSpec.Group =
   lighting.GroupHost (-1)`, groupe Hue `buzzmaster-general-host` ; ses ampoules ne reçoivent jamais l'entrée `Group 0` et
   ne sont touchées ni par `ON` / `OFF`, ni par le Flash (`light-effects.md` §2.5). `lighting.host_effects {chrono, calm,
   score}` : effet par moment de ce groupe.
+- **`buzzmaster-general` exclut les ampoules du groupe animateur** (amendement du 2026-11-11, revue LOT-1 ; précise le
+  §5.8) : membres = ampoules de rôle `general` hors groupe animateur. `buzzmaster-ambiance` (toutes les ampoules
+  assignées : All OFF de l'interrupteur général, extinction à l'arrêt) les **inclut** toujours.
+- **Erreurs de `POST /api/lighting/groups/test`** : celles de `/api/lighting/test` (`400`, `409`, `429`, `500`, `503`).
