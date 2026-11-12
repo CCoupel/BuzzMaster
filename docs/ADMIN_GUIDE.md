@@ -2432,7 +2432,8 @@ Sous les réglages du sous-onglet Effets, le **catalogue** liste chaque effet di
 - **⭱ Importer…** (ou glisser-déposer sur le catalogue) : un ou plusieurs fichiers `.yaml` / `.yml`, 20 au plus, 64 Ko chacun. Le panneau de résultat indique pour chaque fichier **importé**, **remplacé**, **gardé en double** ou **refusé**, avec la ligne et la cause. Un fichier refusé n'est jamais écrit et n'empêche pas les autres.
 - **Même identifiant qu'un effet à vous** : fenêtre **Remplacer / Garder les deux / Annuler**, posée fichier par fichier. « Garder les deux » importe sous un identifiant suffixé sans toucher au reste du fichier.
 - **Identifiant d'un effet livré** : refusé avec un message clair ; aucun fichier n'est écrit.
-- **⭳ Télécharger** : donne le fichier `<id>.yaml` de tout effet, livrés compris (identique au fichier du serveur).
+- **Règle d'identifiant** : l'`id` sert de nom de fichier. Il ne peut pas être un mot réservé du serveur (`reload`, `try`, `draft`, `import`) ni un nom réservé par Windows (`con`, `prn`, `aux`, `nul`, `com1` à `com9`, `lpt1` à `lpt9`) ; un fichier qui en porte un est refusé à l'import.
+- **⭳ Télécharger** : donne le fichier `<id>.yaml` de tout effet, livrés compris (identique au fichier du serveur). Si le stockage des effets n'est pas disponible, le serveur répond « stockage des effets indisponible » (503) au lieu du fichier.
 - **🗑 Supprimer** (effet à vous) : après confirmation, la fenêtre cite où l'effet est utilisé (« utilisé : … ») et propose de télécharger le fichier avant. **↺ Revenir à l'effet d'origine** (natif modifié) : même confirmation, le natif reprend. Un effet livré n'a ni l'un ni l'autre.
 - Un effet importé ou supprimé apparaît ou disparaît aussitôt dans le catalogue et dans les sélecteurs des réglages.
 - Le détail des règles (formats refusés, alias YAML, identifiants réservés) est dans `docs/LIGHT_EFFECTS.md`, §15.

@@ -1144,12 +1144,12 @@ Corps : `{"zone": "ambiance", "speed": 1, "seconds": 10}` (`zone` par défaut `a
 
 Détail normatif : `contracts/light-effects.md` §11.5 à §11.7. Routes : `contracts/http-endpoints.md`.
 
-- **Télécharger** : `200` avec le texte du fichier (`yaml` au §11.2), natifs compris. `Content-Type: application/yaml; charset=utf-8`, `Content-Disposition: attachment; filename="<id>.yaml"`. `404` effet inconnu. `405` hors GET.
+- **Télécharger** : `200` avec le texte du fichier (`yaml` au §11.2), natifs compris. `Content-Type: application/yaml; charset=utf-8`, `Content-Disposition: attachment; filename="<id>.yaml"`, `X-Content-Type-Options: nosniff`. `404` effet inconnu. `405` hors GET. `503` texte brut « stockage des effets indisponible » (pas de stockage derrière le gestionnaire).
 - **Importer** : `multipart/form-data`, champ `files` répété (1 à 20 fichiers `.yaml` / `.yml`, 64 Ko chacun, 2 Mo au total), champ facultatif `on_conflict` = `ask` (défaut) | `replace` | `keep_both`. Réponse `200` : `{ "results": [ { "file", "status", … } ], "catalogue": {…} }`.
-  - `status` ∈ `imported`, `replaced`, `renamed` (avec `new_id`), `conflict` (avec `existing`, fichier non écrit), `native` (`id` d'un effet livré, toujours refusé), `invalid` (`errors[]` : `line`, `message`), `too_big`, `limit`.
+  - `status` ∈ `imported`, `replaced`, `renamed` (avec `new_id`), `conflict` (avec `existing`, fichier non écrit), `native` (`id` d'un effet livré, toujours refusé), `invalid` (`errors[]` : `line`, `message` ; couvre aussi les mots réservés et les noms réservés Windows `con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`), `too_big`, `limit`.
   - Chaque fichier est traité seul ; un seul rechargement en fin de traitement. Le nom envoyé ne sert jamais de chemin.
-  - Refus global : `400` texte brut (envoi illisible, aucun fichier, plus de 20 fichiers, extension refusée, `on_conflict` invalide) ; `413` texte brut (plus de 2 Mo) ; `503` si l'import est indisponible.
-- **Supprimer** : `200 {"ok": true, "catalogue": {…}}`. Un effet à vous, ou le fichier qui surcharge un natif (le natif reprend). `409 {"reason": "native"}` pour un natif. `404` effet inconnu (texte brut). Les réglages qui citaient l'effet ne sont pas modifiés (`unresolved[]`).
+  - Refus global : `400` texte brut (envoi illisible, aucun fichier, plus de 20 fichiers, extension refusée, `on_conflict` invalide) ; `413` texte brut (plus de 2 Mo) ; `503` texte brut « stockage des effets indisponible » (pas de stockage derrière le gestionnaire).
+- **Supprimer** : `200 {"ok": true, "catalogue": {…}}`. Un effet à vous, ou le fichier qui surcharge un natif (le natif reprend). `409 {"reason": "native"}` pour un natif. `404` effet inconnu (texte brut). `503` texte brut « stockage des effets indisponible » (pas de stockage derrière le gestionnaire). Les réglages qui citaient l'effet ne sont pas modifiés (`unresolved[]`).
 
 ### `GET /api/lighting/effects/{id}/preview` — aperçu (v11.7.0, #299)
 

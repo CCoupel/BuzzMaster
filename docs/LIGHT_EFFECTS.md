@@ -294,8 +294,10 @@ Référence normative : `contracts/light-effects.md` §11.5 à §11.7 ; routes d
   - **gardé en double** : importé sous un identifiant suffixé (`<id>-2`…) ; seule la valeur de la clé `id` est modifiée,
     le reste du fichier (commentaires compris) est intact (choix « Garder les deux ») ;
   - **refusé** : la ligne et la cause sont indiquées. Cas courants : fichier en `version: 1`, YAML illisible, `id` réservé
-    (`reload`, `try`, `draft`, `import`), **alias YAML** (`*nom`) — écrivez les valeurs en toutes lettres, un alias pouvant
-    faire grossir un petit fichier de façon démesurée — ou fichier trop lourd.
+    (`reload`, `try`, `draft`, `import`), **nom réservé par Windows** (`con`, `prn`, `aux`, `nul`, `com1` à `com9`,
+    `lpt1` à `lpt9`, car l'`id` sert de nom de fichier et le serveur tourne aussi sous Windows), **alias YAML** (`*nom`) —
+    écrivez les valeurs en toutes lettres, un alias pouvant faire grossir un petit fichier de façon démesurée — ou fichier
+    trop lourd.
 - **Même `id` qu'un effet à vous** : une fenêtre demande **Remplacer**, **Garder les deux** ou **Annuler**. Elle est posée
   fichier par fichier, après le traitement des autres. « Annuler » ignore ce fichier.
 - **Effet livré** : un fichier qui porte l'`id` d'un effet livré est **refusé** (ligne « pulsation.yaml », message clair
