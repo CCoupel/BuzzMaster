@@ -78,6 +78,32 @@ func (a *App) EffectsReload() effects.Catalogue {
 // EffectsDir implements server.EffectsProvider.
 func (a *App) EffectsDir() string { return a.effectsDir() }
 
+// EffectsSource / EffectsDelete / EffectsImport implement server.EffectsStore (#305, §11.5 to
+// §11.7). Without a manager (natives could not be prepared) nothing can be written.
+func (a *App) EffectsSource(id string) ([]byte, effects.Entry, error) {
+	if a.effects == nil {
+		if en, ok := a.EffectsCatalogue().Get(id); ok {
+			return nil, en, &effects.StoreError{Code: effects.ReasonIO}
+		}
+		return nil, effects.Entry{}, &effects.StoreError{Code: effects.ReasonNotFound}
+	}
+	return a.effects.Source(id)
+}
+
+func (a *App) EffectsDelete(id string) (effects.Catalogue, error) {
+	if a.effects == nil {
+		return effects.Catalogue{}, &effects.StoreError{Code: effects.ReasonNotFound}
+	}
+	return a.effects.Delete(id)
+}
+
+func (a *App) EffectsImport(files []effects.ImportFile, onConflict string) ([]effects.ImportResult, effects.Catalogue) {
+	if a.effects == nil {
+		return nil, effects.Catalogue{}
+	}
+	return a.effects.Import(files, onConflict)
+}
+
 // EffectExists reports whether the catalogue holds this effect for the moment
 // (ROUNDS_UPDATE validation, rounds.EffectChecker).
 func (a *App) EffectExists(moment, id string) bool {
