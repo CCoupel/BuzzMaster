@@ -3,19 +3,18 @@
 > Règles techniques et workflows : `.claude/commands/context/COMMON.template.md` (chargé automatiquement par les commandes)
 > Architecture projet : `CLAUDE.md` (chargé automatiquement)
 
-## État courant (2026-11-12) — v11.7.0 en PROD
+## État courant (2026-11-12) — v11.8.0 en PROD
 
-- **PROD = v11.7.0** « Ambiance lumière : nouveaux effets de salle » : bump `ba34f440` (6 emplacements à 11.7.0, job Checking rejoué en local avant tag), merge `main` `32969267` (`--no-ff`), tag `v11.7.0` annoté, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.7.0 (4 assets), `release.yml` run 43184530829 vert. Notes `docs/releases/v11.7.0/release-notes.md` (`36db98b2`, pas de posts), merge final `80637f80`. Site gh-pages `5d92da58` (schéma animé des zones). Milestone #45 clôturé (5 issues fermées). Branche courante : `main` (`f935ed25`), branche milestone supprimée.
-- **Livré** : LOT-1 #225 (groupes à trois zones Ambiance / Animateur / Public, sans nom, 12 par zone, essai en séquence 6 s) ; LOT-2 #223 + #211 (effets en fichiers YAML pas à pas dans `data/files/effects/`, variables de groupe `gA: g1; +1` / listes, `pre` / `pas` / `dernier` / `post`, PRE/LAST/POST n'avancent pas les variables, un effet + une vitesse ×0,5–×2 par moment et par zone, « Tester », 5 natifs pulsation / chenillard / chenillard-traine / couleur-equipe / degrade) ; LOT-3 #299 (catalogue, aperçu calculé par le serveur tick par tick, essai sur la salle). QUALIF validées : 11.7.0.4 (LOT-1+2), 11.7.0.5 (LOT-3).
-- **Sortis du milestone, à replanifier** : #300 remplissage, #301 vague, #302 scintillement (format « noyau seul », sans variantes 10 s/5 s, hasard, étalement chrono, départ équipe).
-- **Décisions techniques** : modèle des effets figé par chronogramme validé par l'utilisateur (`docs/LIGHT_EFFECTS.md`, contrat `contracts/light-effects.md` révision 4) ; pulsation au nouveau rendu (non identique à v11.6.0, décision utilisateur) ; zone Public non pilotée sans effet et hors ON/OFF/Flash ; Go 1.26.11 (GO-2026-6859) ; helpers de test `config.Mutate` / `config.PatchJSON` (copy-on-write, jamais d'écriture en place dans `config.Get()`).
+- **PROD = v11.8.0** « Ambiance : définir ses propres scènes » (éditeur d'effets + import/export) : bump `7d495d9b` (5 emplacements à 11.8.0), merge `main` `f681ed0b`, tag `v11.8.0`, Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.8.0 (4 assets, description = notes), `release.yml` run 43226962934 vert. Notes `docs/releases/v11.8.0/release-notes.md` (`6b6e4165`), merge final `4cf41a35`. Site gh-pages `c33232f8`. Milestone #46 clos 2/2. Branche courante `main`, branche milestone supprimée.
+- **Livré** : LOT-1 #305 (import multi-fichiers + conflit Remplacer / Garder les deux, télécharger, supprimer, revenir à l'origine, essai sur la salle avec choix de zone) ; LOT-2 #210 (éditeur pas à pas : grille à groupes réglables 6 par défaut / 12 max, dernière ligne `g*` ; variables en haut, « Avance régulière » / « Suite de groupes », expressions en `N` (division tronquée, rebouclage, suivre `gB: gA+1` / partir `gB: gA+1; +2`), 24 variables / 40 actions ; pinceaux avec info-bulles, roue chromatique maison, onglet Texte (commentaires conservés tant que la grille n'est pas modifiée) ; simulateur 1/3/6/12 + zones réelles pas à pas ; essai du brouillon par zone (`draft/try`) ; garde « modifications non enregistrées » (lien interne, Précédent, beforeunload)). QUALIF validées : 11.8.0.1 (LOT-1), 11.8.0.2 (LOT-1 + LOT-2).
+- **Décisions techniques** : format effets révision 7 (contrat `contracts/light-effects.md`) — `g*` = dernier groupe, `gN` non déclarée **refusée** (BREAKING, fichiers utilisateur v11.7.0 seulement) ; voisins `gA±1` convertis en variables « suivre » à l'ouverture ; natifs en lecture seule (Dupliquer) ; fichier régénéré depuis la grille ; plafond des expressions ±1 000 000 en int64 (même rang 32/64 bits) ; un seul évaluateur côté serveur (le navigateur n'analyse ni YAML ni expression) ; rejeu à rebours (≈ 5-15 µs/appel pire cas ; cas O(tick) sans g0 documenté) ; golden des natifs v11.7.0 `internal/effects/testdata/natives_v1170_golden.json` **jamais régénéré** ; ids réservés (reload/try/draft/import) et noms Windows refusés à l'import / PUT / brouillon ; alias YAML refusés à l'import / PUT.
 
-### Incidents / leçons (v11.7.0) — à formuler en règles courtes
-1. **Modèle mal compris au cadrage** : GATE LOT-1 refusé 2 fois (11.7.0.2, 11.7.0.3), plan révisé 4 fois (motifs calculés → pas à pas ; groupe animateur unique → multiple → zones). Leçon : pour un format ou un modèle de données nouveau, faire valider un **exemple concret** (fichier + chronogramme) au GATE 1.5, avant toute maquette d'écran.
-2. **CI des pushes intermédiaires non surveillée** : 5 runs `ci-branch.yml` rouges sont passés inaperçus (data race de test, tests transitoires). Leçon : après chaque push d'un agent, vérifier le run `ci-branch.yml` du SHA.
-3. **Data race de test** : `json.Unmarshal(..., config.Get())` dans des tests écrit dans la config vivante → course avec le writer d'ambiance ; corrigé par `config.Mutate` / `PatchJSON`. Règle : un test publie une copie (SetInstance), jamais d'écriture en place.
-4. **Version PROD** : 4 fichiers + FIRMWARE_VERSION encore à 11.7.0.0 avant le tag, détecté par infra avant tout tag ; règle inscrite dans `.claude/agents/environments/publish.prod.md` (EC-02 context-audit, `f935ed25`). #304 toujours au backlog.
-5. **Ordres d'arrêt trop tardifs** : deux fois un STOP est arrivé après que les agents avaient commité (Batch 2.3, Batch R). Pas de revert ; adapter le plan au code livré.
+### Incidents / leçons (v11.8.0) — règles courtes
+1. **Maquette itérée 4 fois au GATE 2** (voisins, variables en haut, g*, expressions, zone d'essai) : poser les questions de modèle par **exemple concret ASCII** dès le GATE 1.5 ; une question jugée « je ne comprends pas » doit être reformulée avec un exemple.
+2. **Tests instables préexistants** (AmbiancePage.groups225 : clic sur nœud détaché par re-rendu `cfg-`→`inv-` ; « pont débranché » : assertion synchrone sur un état d'une 2e requête) : un premier correctif par timeout n'a rien changé → **instrumenter avant de corriger** (trace `isConnected`, reproduction suite complète sous `taskset -c 0,1`). QA = au moins une passe vitest complète sous 2 CPU.
+3. **Doubles de test TDD non rapprochés** : 24 tests `TestTW305` rouges (double sans l'interface optionnelle `EffectsStore`) — test-writer rapproche ses adaptateurs des signatures réelles **avant** son DONE.
+4. **Relecture factuelle des docs** : 4 + 7 + 1 erreurs trouvées sur 3 passes (dont une introduite par la relecture elle-même) — re-relecture après chaque correction maintenue.
+5. **Push CI** : chaque push (y compris commit de version) suivi jusqu'au verdict ; aucun rouge non traité ce cycle.
 
 ### Règles permanentes (adoptées par l'utilisateur)
 1. dev-* et test-writer ne lancent que les tests touchés ; `qa` et la CI seuls lancent les suites complètes.
@@ -23,9 +22,16 @@
 3. Maquettes ouvertes avec `cmd.exe /c start chrome <chemin Windows>`.
 4. Jamais d'amend ni de réécriture dans le dépôt principal.
 
+## État précédent (2026-11-12) — v11.7.0 en PROD (archivé)
+
+- **PROD = v11.7.0** « Ambiance lumière : nouveaux effets de salle » (tag `v11.7.0`, milestone #45 clôturé). Détail : historique git de ce fichier.
+
 ## Backlog / suite
-- Milestones ouverts : v11.8.0 (#210 éditeur de scènes, à baser sur le format pas à pas : grille ticks × groupes), v12.0 / v12.1 Roue, v13.0 PICTIONARY, vX.0.x DNS, vx.x.x Scoring MEMORY ; hors milestone #209 #259 #281 #296 #297 #298 #300 #301 #302 #303 #304.
-- À remonter au template : Go 1.26.11 dans `env-template.yaml` (puis retirer l'étape projet de `.claude-launcher/env.yaml`) ; défauts relevés par infra dans les modèles de procédure (messages d'échec adressés à `"main"` au lieu de `"team-lead"`, suivi CI à viser `release.yml`, contrôle CHANGELOG cherchant `X.Y.Z.a`).
+
+- **Issues créées** : **#306** (chargeur du dossier d'effets : mêmes refus que l'import — alias, ids réservés) ; **#307** (sauvegarde : case « Effets lumière » cochée par défaut, effets joints aux questions, restauration contrôlée ; niveau B choix global `lighting.effects/speeds` à trancher, jamais la clé du pont).
+- Point UX non bloquant : écran Groupes — lignes provisoires `cfg-` remplacées à l'arrivée de l'inventaire (clic perdu possible en théorie).
+- À remonter au template : Go 1.26.11 dans `env-template.yaml` (puis retirer l'étape projet de `.claude-launcher/env.yaml`) ; défauts des modèles de procédure (messages d'échec adressés à `"main"` au lieu de `"team-lead"`, suivi CI à viser `release.yml`, contrôle CHANGELOG cherchant `X.Y.Z.a`) ; `deploy.md` compagnon devrait écrire l'exception QUALIF `access.verified` failed limitée à `local-shell` / `port 9090` (rapport infra 2026-11-12).
+- Milestones ouverts : v12.0 / v12.1 Roue, v13.0 PICTIONARY, vX.0.x DNS, vx.x.x Scoring MEMORY ; hors milestone : #209 #259 #281 #296 #297 #298 #300 #301 #302 #303 #304 #306 #307.
 - Site marketing : règle des badges « Nouveau » = majeure en cours + 2 dernières mineures, retrait à chaque republication (`.claude/agents/marketing-release.md`).
 - Stash : 18 entrées anciennes toujours non nettoyées.
 - Toujours valables : panneau milestone-panel (sélection PLANNING), liste « Nommage des Agents » du bloc template.
