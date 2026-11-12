@@ -428,10 +428,10 @@ func TestMemotionHostGate235_IgnoresCardSoundFiles(t *testing.T) {
 func TestMemotionCardSound235_Muted_NoPlay(t *testing.T) {
 	app, fake := tw235App(t)
 	tw235WriteSound(t, app, "mq1", "card1.wav")
-	if err := json.Unmarshal([]byte(`{"sound":{"muted":true}}`), config.Get()); err != nil {
+	if err := config.PatchJSON([]byte(`{"sound":{"muted":true}}`)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = json.Unmarshal([]byte(`{"sound":{"muted":false}}`), config.Get()) })
+	t.Cleanup(func() { _ = config.PatchJSON([]byte(`{"sound":{"muted":false}}`)) })
 	tw235StartMemotion(t, app, tw235Memotion(t, tw235TwoCards, ""))
 	tw235Select(t, app, "c1")
 	tw235Flip(t, app)
@@ -580,10 +580,10 @@ func TestEntracteSound235_StopAndNewGameRefusedDuringEntracte_SoundKeepsPlaying(
 func TestEntracteSound235_Muted_NoPlay(t *testing.T) {
 	app, fake := tw235App(t)
 	tw235WriteSound(t, app, "ent1", "pause.wav")
-	if err := json.Unmarshal([]byte(`{"sound":{"muted":true}}`), config.Get()); err != nil {
+	if err := config.PatchJSON([]byte(`{"sound":{"muted":true}}`)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = json.Unmarshal([]byte(`{"sound":{"muted":false}}`), config.Get()) })
+	t.Cleanup(func() { _ = config.PatchJSON([]byte(`{"sound":{"muted":false}}`)) })
 	q := tw235Entracte(t, `{"SOUND":"/question/ent1/pause.wav"}`)
 	app.engine.Ready(q.ID, q)
 	app.handleEntracteSet(entracteSetMsg(true))

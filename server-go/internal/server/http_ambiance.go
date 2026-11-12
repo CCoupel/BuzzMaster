@@ -62,6 +62,19 @@ func AmbianceFromConfig(cfg *config.Config) ambiancecfg.Settings {
 	if m := ambiancecfg.LightMode(cfg.Lighting.DefaultMode); m.Valid() {
 		s.LightMode = m
 	}
+	// v11.7.0 (#223, revision 4): the effect and the speed of each moment, by zone — the three
+	// zones and the three moments always present, missing keys taking the default.
+	s.LightEffects, s.LightSpeeds = ambiancecfg.DefaultLightEffects(), ambiancecfg.DefaultLightSpeeds()
+	for _, z := range ambiancecfg.Zones {
+		for _, m := range ambiancecfg.Moments {
+			if v, ok := cfg.Lighting.Effects[z][m]; ok {
+				s.LightEffects[z][m] = v
+			}
+			if v, ok := cfg.Lighting.Speeds[z][m]; ok && ambiancecfg.ValidSpeed(v) {
+				s.LightSpeeds[z][m] = v
+			}
+		}
+	}
 	return s
 }
 

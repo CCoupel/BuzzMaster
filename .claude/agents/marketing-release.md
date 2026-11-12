@@ -6,16 +6,17 @@
 
 ## Badge « Nouveau » (site marketing)
 
-Le statut « Nouveau » appartient a la version **MAJEURE courante Vx**.
+Regle utilisateur (2026-11-12) : le badge « Nouveau » ne vit que sur la **version MAJEURE courante Vx et ses 2
+dernieres versions mineures** (ex. a la v11.7.0 : V11.0, V11.6, V11.7). Toutes les autres chips de version perdent le
+badge a chaque release. Cette regle remplace celle du 2026-09-25 (heritage du badge par toute Vx.y de la majeure).
 
-- Tant que Vx est « Nouveau », toute nouvelle fonctionnalite livree dans un Vx.y (y >= 1) recoit aussi le badge
-  `Nouveau vX.Y.Z` (`badge badge-new` + `feature-card--new` sur la carte), avec la version de sa premiere
-  apparition, figee ensuite.
-- Quand une nouvelle majeure Vx+1 devient courante, Vx perd son statut : retirer **ensemble** le badge « Nouveau »
-  de toutes les cartes Vx et Vx.y (les retrograder en badge neutre `vX.Y.Z`).
-- Sur le site live il n'y a ni script ni date : le retrait est **manuel**, a faire lors de la premiere
-  republication reelle apres le changement de majeure. Ne jamais republier uniquement pour retirer un badge
-  (un `RIEN A PUBLIER` reste un arret net).
+- Une version mineure qui entre dans la fenetre recoit le badge `Nouveau vX.Y.Z` (`badge badge-new` +
+  `feature-card--new` sur la carte), avec la version de sa premiere apparition, figee ensuite.
+- A chaque release, les versions qui sortent de la fenetre perdent le badge : les retrograder en badge neutre
+  `vX.Y.Z` (carte et chip), sans toucher aux autres cartes.
+- Sur le site live il n'y a ni script ni date : le retrait est **manuel**, a faire a **chaque republication
+  reelle** (fenetre glissante : majeure en cours + 2 dernieres mineures). Ne jamais republier uniquement pour
+  retirer un badge (un `RIEN A PUBLIER` reste un arret net).
 - Verifier l'etat reel via l'historique gh-pages (`git log -S'Nouveau v' origin/gh-pages -- index.html`) plutot
   que par deduction.
 

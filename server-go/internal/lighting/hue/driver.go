@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -98,6 +99,11 @@ type LightSpec struct {
 	Name string    `json:"name"`
 	Role LightRole `json:"role"`
 	Team string    `json:"team,omitempty"`
+	// Area and Group (v11.7.0, #225, hue-bridge.md §11, revision 4): the area of a general
+	// light (the room by default, the animateur or the public area) and its group number in
+	// that area (0 = in no group). Ignored for team lights.
+	Area  lighting.Area `json:"area,omitempty"`
+	Group int           `json:"group,omitempty"`
 }
 
 // Config of a Driver — filled by #207 from config.json's `lighting` section.
@@ -447,8 +453,16 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 		want  applied
 		dirty bool
 	}
-	buckets := map[string][]bucketEntry{}
-	order := make([]string, 0, len(d.cfg.Lights))
+	// v11.7.0 (#225, hue-bridge.md §11, revision 4): general lights sit in one of three areas
+	// (the room, the animateur area, the public area), possibly in a group of it, and carry
+	// their own target state. First collect every light's target, then decide the bucketing.
+	// A light of the animateur or public area with no entry emitted is NOT written.
+	type cand struct {
+		lc   LightSpec
+		rl   resolvedLight
+		want applied
+	}
+	cands := make([]cand, 0, len(d.cfg.Lights))
 	for _, lc := range d.cfg.Lights {
 		rl, ok := d.resolved[lc.Name]
 		if !ok {
@@ -458,16 +472,41 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 		if !ok {
 			continue // zone without configured lights or light without zone: non-event
 		}
-		want := desired(zs)
-		key := ""
-		if lc.Role == RoleTeam {
-			key = lc.Team
+		cands = append(cands, cand{lc: lc, rl: rl, want: desired(zs)})
+	}
+	// Débit préservé: when every light of an area has the same target — any scene without a
+	// distributed effect — they all stay in ONE bucket, written through the area's Hue group
+	// (buzzmaster-general for the room) exactly as in v11.6.0.
+	uniform := map[lighting.Area]bool{lighting.AreaAmbiance: true, lighting.AreaHost: true, lighting.AreaPublic: true}
+	firstWant := map[lighting.Area]*applied{}
+	for i := range cands {
+		c := &cands[i]
+		if c.lc.Role == RoleTeam {
+			continue
+		}
+		if f := firstWant[c.lc.Area]; f == nil {
+			firstWant[c.lc.Area] = &c.want
+		} else if *f != c.want {
+			uniform[c.lc.Area] = false
+		}
+	}
+	buckets := map[string][]bucketEntry{}
+	order := make([]string, 0, len(cands))
+	for _, c := range cands {
+		var key string
+		switch {
+		case c.lc.Role == RoleTeam:
+			key = bucketTeamPfx + c.lc.Team
+		case !uniform[c.lc.Area] && c.lc.Group > 0:
+			key = bucketGroupPfx + strconv.Itoa(int(c.lc.Area)) + ":" + strconv.Itoa(c.lc.Group)
+		default:
+			key = bucketAreaPfx + strconv.Itoa(int(c.lc.Area))
 		}
 		if _, seen := buckets[key]; !seen {
 			order = append(order, key)
 		}
-		prev, hadPrev := d.appliedState[lc.Name]
-		buckets[key] = append(buckets[key], bucketEntry{name: lc.Name, id: rl.id, want: want, dirty: !hadPrev || prev != want})
+		prev, hadPrev := d.appliedState[c.lc.Name]
+		buckets[key] = append(buckets[key], bucketEntry{name: c.lc.Name, id: c.rl.id, want: c.want, dirty: !hadPrev || prev != c.want})
 	}
 
 	var plan []plannedWrite
@@ -484,16 +523,13 @@ func (d *Driver) Apply(ctx context.Context, st lighting.State) error {
 			d.stats.Skipped += len(entries)
 			continue
 		}
-		groupName := groupNameGeneral
-		if key != "" {
-			groupName = groupNameForTeam(key)
-		}
+		groupName, minMembers := bucketGroupName(key)
 		g, hasGroup := d.groups[groupName]
 		ids := make([]string, len(entries))
 		for i, e := range entries {
 			ids[i] = e.id
 		}
-		useGroup := !d.disableGroupsForTest && hasGroup && len(entries) >= 2 && sameIDSet(g.members, ids)
+		useGroup := !d.disableGroupsForTest && hasGroup && len(entries) >= minMembers && sameIDSet(g.members, ids)
 		if useGroup {
 			members := make([]plannedWrite, len(entries))
 			for i, e := range entries {
@@ -605,8 +641,12 @@ type groupPlannedWrite struct {
 	members   []plannedWrite
 }
 
-// zoneFor picks the ZoneState a light follows (contract §5.2): a team light
-// follows its team's zone when present in st, otherwise the general zone.
+// zoneFor picks the ZoneState a light follows (contract §5.2): a team light follows its
+// team's zone when present in st, otherwise the general zone. A general light of group n in
+// an area follows the {general, Area, Group n} entry when present, else the area's plain
+// {general, Area, Group 0} entry. The room always has its Group 0 entry; the animateur and
+// public areas have an entry only when something drives them — a light of those areas with
+// none is not written (light-effects.md §2.5).
 func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 	if lc.Role == RoleTeam {
 		for _, z := range st.Zones {
@@ -615,8 +655,15 @@ func zoneFor(lc LightSpec, st lighting.State) (lighting.ZoneState, bool) {
 			}
 		}
 	}
+	if lc.Group != 0 {
+		for _, z := range st.Zones {
+			if z.Zone == lighting.ZoneGeneral && z.Area == lc.Area && z.Group == lc.Group {
+				return z, true
+			}
+		}
+	}
 	for _, z := range st.Zones {
-		if z.Zone == lighting.ZoneGeneral {
+		if z.Zone == lighting.ZoneGeneral && z.Area == lc.Area && z.Group == 0 {
 			return z, true
 		}
 	}
@@ -973,6 +1020,22 @@ func (d *Driver) RefreshInventory(ctx context.Context) error {
 // UNCHANGED — it means exactly the saved selection, never "everything the
 // bridge reports".
 func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration, sleep func(time.Duration)) error {
+	if name == "" {
+		return d.testFlashNames(ctx, nil, hold, sleep)
+	}
+	return d.testFlashNames(ctx, []string{name}, hold, sleep)
+}
+
+// testFlashNames: names == nil means "every configured light" (TestFlash("")).
+func (d *Driver) testFlashNames(ctx context.Context, names []string, hold time.Duration, sleep func(time.Duration)) error {
+	name := ""
+	if len(names) == 1 {
+		name = names[0]
+	}
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
 	if sleep == nil {
 		sleep = time.Sleep
 	}
@@ -989,7 +1052,7 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 	d.mu.Lock()
 	var targets []plannedWrite
 	for _, lc := range d.cfg.Lights {
-		if name != "" && lc.Name != name {
+		if names != nil && !want[lc.Name] {
 			continue
 		}
 		if rl, ok := d.resolved[lc.Name]; ok {
@@ -1003,7 +1066,7 @@ func (d *Driver) TestFlash(ctx context.Context, name string, hold time.Duration,
 		}
 	}
 	if len(targets) == 0 {
-		return fmt.Errorf("hue: no resolved light matches %q", name)
+		return fmt.Errorf("hue: no resolved light matches %q", strings.Join(names, ", "))
 	}
 	white := applied{on: true, bri: 254, xy: rgbToXY(255, 255, 255)}
 	var firstErr error
@@ -1125,6 +1188,93 @@ func (d *Driver) SetLightDirect(ctx context.Context, name string, on bool, color
 	d.mu.Lock()
 	delete(d.appliedState, name)
 	d.mu.Unlock()
+	d.ok()
+	return nil
+}
+
+// LightSnapshot is the state of one bulb as read on the bridge (on/off, brightness,
+// colour) — what the public area is given back after a test or a trial
+// (light-effects.md §2.5).
+type LightSnapshot struct {
+	Name  string
+	On    bool
+	Bri   int
+	XY    [2]float64
+	HasXY bool
+}
+
+// SnapshotLights reads the state of the given configured lights on the bridge (GET only).
+// A light that cannot be resolved or read is simply left out; an error means the bridge
+// could not be read at all.
+func (d *Driver) SnapshotLights(ctx context.Context, names []string) ([]LightSnapshot, error) {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return nil, d.fail(err)
+	}
+	c, _ := d.conn()
+	lights, err := c.lights(ctx)
+	if err != nil {
+		return nil, d.fail(err)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var out []LightSnapshot
+	for _, n := range names {
+		rl, ok := d.resolved[n]
+		if !ok {
+			continue
+		}
+		l, ok := lights[rl.id]
+		if !ok {
+			continue
+		}
+		sn := LightSnapshot{Name: n, On: l.State.On, Bri: l.State.Bri}
+		if len(l.State.XY) == 2 {
+			sn.XY, sn.HasXY = [2]float64{l.State.XY[0], l.State.XY[1]}, true
+		}
+		out = append(out, sn)
+	}
+	return out, nil
+}
+
+// RestoreLights writes snapshots back (on/off, brightness, colour). Every name in off is
+// switched off — the fallback when the state could not be read. Goes through the same
+// guarded write as Apply and keeps the dedup cache honest.
+func (d *Driver) RestoreLights(ctx context.Context, snaps []LightSnapshot, off []string) error {
+	d.opMu.Lock()
+	defer d.opMu.Unlock()
+	if err := d.ensureResolved(ctx, false); err != nil {
+		return d.fail(err)
+	}
+	c, _ := d.conn()
+	write := func(name string, want applied) error {
+		d.mu.Lock()
+		rl, ok := d.resolved[name]
+		d.mu.Unlock()
+		if !ok {
+			return nil
+		}
+		return d.writeOne(ctx, c, name, rl.id, want)
+	}
+	for _, sn := range snaps {
+		want := applied{on: sn.On}
+		if sn.On {
+			want.bri = clamp(sn.Bri, 1, 254)
+			want.xy = sn.XY
+			if !sn.HasXY {
+				want.xy = rgbToXY(255, 214, 170)
+			}
+		}
+		if err := write(sn.Name, want); err != nil {
+			return d.fail(err)
+		}
+	}
+	for _, n := range off {
+		if err := write(n, applied{on: false}); err != nil {
+			return d.fail(err)
+		}
+	}
 	d.ok()
 	return nil
 }

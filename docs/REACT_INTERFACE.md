@@ -2044,19 +2044,21 @@ La page utilise une **barre d'onglets** (`role="tablist"`) avec deux positions m
 
 | Onglet | Contenu | Statut |
 |---|---|---|
-| 🔆 **Lumière** | Configuration Philips Hue (pont, ampoules, sélecteur ON/AUTO/OFF) | Actif par défaut |
+| 🔆 **Lumière** | Configuration Philips Hue (pont, ampoules, groupes, sélecteur ON/AUTO/OFF) | Actif par défaut |
 | 🔊 **Son** | Gestion des bruitages (15 depuis v11.6.0, répartis en onglets par type de jeu), interrupteur général | v11.0 (#230) ; onglets v11.6.0 (#231) |
 
 #### Mécanique des onglets
 
 ```jsx
 const TABS = [
-  { id: "lighting", label: "Lumière", icon: "💡" },
-  { id: "sound", label: "Son", icon: "🔊" }
-];
+  { key: 'light', label: 'Lumière', icon: '🔆' },
+  { key: 'sound', label: 'Son', icon: '🔊' },
+]
 
-const [activeTab, setActiveTab] = useState("lighting");
+const [activeTab, setActiveTab] = useState('light')
 ```
+
+*(Correction v11.7.0, #225 : la clé de l'onglet Lumière est `key: 'light'`, et non `id: "lighting"` comme l'indiquait l'ancienne version de cette section.)*
 
 Rendu :
 - Un seul onglet est actif à la fois
@@ -2084,6 +2086,55 @@ Réutilise intégralement le contenu existant de `AmbiancePage` (v10.0.0+). Voir
 - Appairage (étape 2)
 - Gestion des ampoules et des scènes (étape 3)
 - Sélecteur ON/AUTO/OFF pour la conduite en direct
+
+#### Sous-onglets de Lumière (v11.7.0, #225, #223)
+
+Une seconde barre d'onglets (`LIGHT_SUBTABS`, état `lightSubTab`, défaut `bridge`) sous l'onglet Lumière, visible à l'étape 3 (pont associé) seulement :
+
+| `key` | Libellé | Contenu |
+|---|---|---|
+| `bridge` | Pont et ampoules | Pont, ampoules, scènes, sélecteur ON/AUTO/OFF |
+| `groups` | Groupes | Composant `LightGroupsManager` (trois zones) |
+| `effects` | Effets | Composant `AmbianceSettingsPanel` (effet et vitesse par zone et par moment) |
+
+#### `LightGroupsManager` — groupes à trois zones (#225, révision 4)
+
+**Fichiers** : `web/src/components/LightGroupsManager.jsx` + `LightGroupsManager.css` ; fonctions pures dans `web/src/utils/lightGroups.js` (brouillon `{ambiance, animateur, public}`, 12 groupes par zone).
+
+**Rôle** : édite `lighting.groups` (config). Le brouillon est enregistré par `POST /config.json` (`{lighting:{groups:[…]}}`, remplacement complet). Le champ `id` d'un groupe est conservé ; il est omis tant qu'il est vide, et le serveur l'attribue. L'essai appelle `POST /api/lighting/groups/test` avec `{group: n}` (zone ambiance), `{group: "host<k>"}` (zone animateur) ou `{group: "public<k>"}` (zone public), et l'arrêt `POST /api/lighting/groups/test/stop`.
+
+- **Trois sections de zone**, groupes ordonnés `g1` → `gN`, sans nom ; pastilles « Ambiance · g1 », « 🎤 Animateur · g1 », « 👥 Public · g1 ».
+- **Création par zone**, réordonnancement des groupes dans leur zone (glisser-déposer ou flèches), déplacement d'ampoules entre groupes et zones (glisser-déposer).
+- **Essai en séquence** : pendant les 6 pas, le bouton devient « ■ Arrêter l'essai » (infobulle « Étape i/6 »). Un essai remplace celui en cours.
+- **« Choisir les effets de la zone »** (zones animateur et public) : ouvre le sous-onglet Effets sur cette zone.
+- **Infobulles de désactivation** : « Enregistrez d'abord », « Groupe vide », « Éclairage d'ambiance désactivé », pont injoignable.
+- **Colonne « Groupe »** de la liste d'ampoules : calculée depuis `lighting.groups` (config), et non depuis le champ `group` de `GET /api/lighting/lights`.
+- **Avertissement** avant enregistrement si une ampoule groupée passe en rôle équipe.
+- **Pont injoignable** : seul l'essai est indisponible ; l'édition des groupes reste possible.
+
+#### Sous-onglet Effets — `AmbianceSettingsPanel` (v11.7.0, #223)
+
+Le sous-onglet Effets rend le composant **mutualisé** `AmbianceSettingsPanel` (mode `global`), le même que le dialogue « Ambiance de la manche » (mode surcharge).
+
+- **Fichiers** : `web/src/components/AmbianceSettingsPanel.jsx` ; helpers purs `web/src/utils/lightEffects.js` (chemins éditables, options, « (actuel) », applicabilité par zone) ; `web/src/utils/ambianceSettings.js` ; hook `web/src/hooks/useLightEffects.js`.
+- **Un bloc par zone existante** : la zone ambiance, puis les zones animateur et public si elles ont au moins un groupe non vide. Chaque bloc a, pour chacun des trois moments, un sélecteur d'effet, un sélecteur de vitesse, et le bouton « ▶ Tester ».
+- **Props utiles** : `sections={['light', 'lightEffects']}`, `catalog` (réponse de `GET /api/lighting/effects`), `zoneGroups` (nombre de groupes non vides par zone), `focusZone` (met en vue le bloc d'une zone), `onManageGroups`.
+- **Chemins édités** : `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>`. En mode global, la page écrit `POST /config.json {lighting:{effects:{<zone>:{<moment>:v}}}}` (ou `speeds`).
+- **Tester** : `POST /api/lighting/effects/{id}/try` avec `{zone, speed}` (`seconds` omis : le serveur applique sa durée par défaut, 5 s pour un effet de score seul, 10 s sinon ; la durée est lue dans la réponse `duration_ms`), puis `…/try/stop`. Les refus 409 (`reason` : `disabled`, `game`, `not_applicable`, `mode`) et 503 s'affichent en message. Le bouton est grisé avec infobulle quand aucun effet n'est choisi, quand l'effet ne s'applique pas à la zone, quand l'éclairage est désactivé, quand le pont est injoignable, et pendant une question en cours (phase autre que STOPPED / NEW_GAME / ENROLL, lue dans `GameContext`). Pour la zone ambiance seulement, il est aussi grisé quand le mode est forcé (ON, OFF) ou que le Flash est actif. `tryUnavailable(zone)` (`AmbiancePage.jsx`) fait foi ; le 409 `game` n'est qu'un filet de sécurité.
+- **Badge de manche** : compte chaque couple (zone, moment) surchargé.
+- **Valeur relue** : le réglage est affiché d'après la réponse serveur, jamais optimiste.
+- **Vitesse « plafonnée »** : indiquée quand la durée d'un tick passerait sous 250 ms (champ `tick_ms` du catalogue).
+- **Lien « Voir l'aperçu »** : sous le choix d'un effet, appelle `onShowEffect(id)` pour mettre en vue la carte du catalogue.
+
+#### Catalogue des effets — `LightEffectsCatalogue` et `LightEffectPreview` (v11.7.0, #299)
+
+**Fichiers** : `web/src/components/LightEffectsCatalogue.jsx` + `.css` (cartes, bandeau d'erreurs, recharger, essai) ; `web/src/components/LightEffectPreview.jsx` (aperçu animé) ; `web/src/utils/lightEffects.js` (`TRY_EVENT`, `TRY_SECONDS`, `visibleZones`, `formatSpeed`).
+
+- **Props de `LightEffectsCatalogue`** : `catalog` (réponse normalisée de `GET /api/lighting/effects`, via `useLightEffects`), `lighting` (section `lighting` de `config.json`, pour « utilisé : … » d'après les réglages globaux), `zoneGroups` (groupes non vides par zone), `onReload()` (`POST /api/lighting/effects/reload`), `onTry(id)` (`POST /api/lighting/effects/{id}/try`, corps `{}` : zone ambiance, vitesse ×1, durée par défaut du serveur), `onStopTry()` (`…/try/stop`), `tryUnavailable()` (raison ou `''`), `onManageGroups()`, `focus` (`{id, n}` : carte à mettre en vue).
+- **Un seul aperçu et un seul essai à la fois** : un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble. Le dernier lancé remplace l'autre : l'événement fenêtre `TRY_EVENT` (`'buzzcontrol:effect-try'`) prévient l'autre composant.
+- **`LightEffectPreview`** : rejoue les trames de `GET /api/lighting/effects/{id}/preview?groups=N&moment=…`. Le navigateur ne calcule rien : il lit `frames[]` (`at_ms`, `tick`, `step`, `groups[]` avec `color` et `intensity`) à partir de `at_ms`. `stepLabel(step)` traduit `pre` en « PRE », `pas:<n>` en « pas n », `dernier` en « dernier ». Le cache de l'aperçu est invalidé par un numéro de version du catalogue, qui change à chaque rechargement.
+- **Étiquettes d'origine** : `ORIGIN_BADGE` — `native` → « natif », `user` → « personnalisé », `override` → « natif modifié ».
+- Pas de `fade_ms` dans les trames de l'aperçu : pas de fondu (§4.2).
 
 ### Onglet Son — Bruitages d'événement
 

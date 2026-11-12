@@ -7,7 +7,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,7 +26,7 @@ func tw286SetMuted(t *testing.T, muted bool) {
 		if v {
 			raw = `{"sound":{"muted":true}}`
 		}
-		if err := json.Unmarshal([]byte(raw), config.Get()); err != nil {
+		if err := config.PatchJSON([]byte(raw)); err != nil {
 			t.Fatalf("setup invalide : %v", err)
 		}
 	}
@@ -37,7 +36,7 @@ func tw286SetMuted(t *testing.T, muted bool) {
 
 // §11.2 « Cues » : muet ⇒ aucune cue n'atteint le moteur (garde en tête de notifySound).
 func TestSoundMuted286_Cues_Muted_NoCuePlayed(t *testing.T) {
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := twa227WireSound(t)
 	tw286SetMuted(t, true)
 
@@ -54,7 +53,7 @@ func TestSoundMuted286_Cues_Muted_NoCuePlayed(t *testing.T) {
 
 // §11.2 « Passage à false ⇒ rien n'est repris » mais les cues suivantes sonnent de nouveau, sans redémarrage.
 func TestSoundMuted286_Cues_Unmuted_PlaysAgainImmediately(t *testing.T) {
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 	app, fake := twa227WireSound(t)
 	tw286SetMuted(t, true)
 	tw286SetMuted(t, false) // rétablissement : le cleanup du premier appel restaure aussi false

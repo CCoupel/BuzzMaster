@@ -10,3 +10,8 @@
 | 2026-10-15 | v11.2.3 | #273 vitest en CI + #274 dials de test (LOT-1) | QA 1 (ae865d1a, docs 96ed0010) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 2 | 0 |
 | 2026-10-15 | v11.2.3 | #278 refus sans trace + #275 NETWORK admin seul (LOT-2) | QA 1 (4cc7b271, docs 64ce3679) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
 | 2026-10-15 | v11.2.3 | #277 react-router 7 (LOT-3) | QA 1 (bc81790a) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
+| 2026-11-11 | v11.7.0 | #225 groupes d'ampoules (LOT-1) | QA 0 (e026931b) | VALIDATED WITH RESERVATIONS | 0 | 0 | 0 | 0 | 0 |
+| 2026-11-11 | v11.7.0 | #225/#223 LOT-1 corrigé Batch C + NR complète | QA 2 (33ebebd2) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
+| 2026-11-12 | v11.7.0 | #225/#223/#211 LOT-1+LOT-2 (Batch 2.3, R, Z) + NR complète | QA 3 (577c3376) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
+| 2026-11-12 | v11.7.0 | #299 catalogue d'effets (LOT-3) + NR complète | QA 0 (6a7c9ce2) | VALIDATED | 0 | 0 | 0 | 0 | 0 |
+| 2026-11-12 | v11.7.0 | delta config copy-on-write + Tester sans durée en dur (candidat 11.7.0.5) | QA 0 (97dd12f3) | VALIDATED | 0 | 0 | 0 | 0 | 0 |

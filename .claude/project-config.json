@@ -48,10 +48,12 @@
           "credentials_env": [],
           "verified": {
             "status": "failed",
-            "at": "2026-11-08T17:25:27Z",
+            "at": "2026-11-11T14:50:00Z",
             "checks": [
               "target-dir (build/ writable) : ok",
-              "local-shell (powershell.exe) : failed — absent du conteneur Claude-Launcher (pas de /mnt/c) ; l exe Windows est lance par l utilisateur depuis Windows (deploy.qualif.md)"
+              "local-shell (powershell.exe/cmd.exe//mnt/c) : failed — absents du conteneur Claude-Launcher ; exe Windows lance par l utilisateur (deploy.qualif.md), etat normal de ce mode",
+              "port 9090 depuis le conteneur (localhost/172.17.0.1/host.docker.internal) : failed — QUALIF_BASE_URL non defini, smoke tests cote utilisateur",
+              "toolchain (go1.26.11, node v22.23.3, pio) : ok"
             ]
           }
         }
@@ -74,9 +76,13 @@
           "credentials_env": [],
           "verified": {
             "status": "ok",
-            "at": "2026-10-27T13:57:43Z",
+            "at": "2026-11-12T08:18:29Z",
             "checks": [
-              "repo-push (gh api permissions.push=true)"
+              "gh-auth (CCoupel via GH_TOKEN, scopes repo+workflow) : ok",
+              "repo-push (gh api permissions.push=true) : ok",
+              "pipeline (.github/workflows/release.yml + ci-branch.yml presents, actifs, declencheur tags v*) : ok",
+              "tag v11.7.0 / Release v11.7.0 : absents (attendu avant PUBLISH PROD)",
+              "branche main : sans protection ni ruleset (push direct possible)"
             ]
           }
         }
@@ -110,7 +116,7 @@
     "coverage": "cd server-go && go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out",
     "ci": "scripts/ci.sh",
     "test_related": "cd server-go/web && npx vitest related --run {FILES}",
-    "env": "export PATH=$HOME/.local/bin:$HOME/go/bin:$PATH GOTOOLCHAIN=go1.26.10",
+    "env": "export PATH=$HOME/.local/bin:$HOME/go/bin:$PATH GOTOOLCHAIN=go1.26.11",
     "test_targeted": "cd server-go && go test {TARGETS}"
   },
   "extended_commands": {

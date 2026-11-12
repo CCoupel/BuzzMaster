@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/game"
+	"buzzcontrol/internal/lighting"
 )
 
 // #295 C5 — tests déplacés de cmd/server (fonctions pures, sans App) + tests du Controller avec un Host factice.
@@ -107,5 +109,52 @@ func TestController_FlashToggleIsServerDriven(t *testing.T) {
 	c.SetLightingFlash(false)
 	if c.LightingFlash() {
 		t.Fatal("Flash désengagé")
+	}
+}
+
+// v11.7.0, #225 (light-effects.md §2.5): the animateur group is a fixed white,
+// untouched by the room override (OFF here) and absent when no such group.
+// Not parallel: it swaps the config singleton.
+func TestScene_HostGroupFixedWhiteIgnoresOverride_225(t *testing.T) {
+	prev := config.Get()
+	t.Cleanup(func() { config.SetInstance(prev) })
+	cfg := *prev
+	cfg.Lighting.Groups = nil
+	config.SetInstance(&cfg)
+
+	c := New(fakeHost{engine: game.NewEngine()})
+	hostEntries := func(st lighting.State) []lighting.ZoneState {
+		var out []lighting.ZoneState
+		for _, z := range st.Zones {
+			if z.Area == lighting.AreaHost {
+				out = append(out, z)
+			}
+		}
+		return out
+	}
+	if got := hostEntries(c.Scene(lighting.Event{Kind: lighting.KindIdle})); len(got) != 0 {
+		t.Fatalf("sans groupe animateur, aucune entrée GroupHost : %+v", got)
+	}
+
+	cfg.Lighting.Groups = []config.LightingGroupEntry{{Role: config.GroupRoleAnimateur, Lights: []string{"B"}}}
+	if err := c.SetLightingMode("OFF"); err != nil {
+		t.Fatal(err)
+	}
+	st := c.Scene(lighting.Event{Kind: lighting.KindIdle})
+	if st.Zones[0].Zone != lighting.ZoneGeneral || st.Zones[0].Group != 0 || st.Zones[0].Intensity != 0 {
+		t.Fatalf("la salle reste pilotée par l'override OFF, entrée Group 0 en tête : %+v", st.Zones[0])
+	}
+	got := hostEntries(st)
+	if len(got) != 1 || got[0].Zone != lighting.ZoneGeneral || got[0].Color != [3]int{255, 255, 255} || got[0].Intensity != 255 {
+		t.Fatalf("blanc fixe attendu malgré OFF : %+v", got)
+	}
+	if err := c.SetLightingMode("ON"); err != nil {
+		t.Fatal(err)
+	}
+	c.SetLightingFlash(true)
+	got = hostEntries(c.Scene(lighting.Event{Kind: lighting.KindRunning}))
+	c.SetLightingFlash(false)
+	if len(got) != 1 || got[0].Intensity != 255 {
+		t.Fatalf("ni ON ni Flash ne touchent le groupe animateur : %+v", got)
 	}
 }

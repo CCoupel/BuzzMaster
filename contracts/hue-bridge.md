@@ -602,3 +602,60 @@ identique à `protocol.LEDSetPayload` (RGB `[3]int` 0-255).
 | Conduite manuelle depuis `/anim`, restitution d'état à l'arrêt | #208 |
 | Édition des scènes, effets répartis, synchronisation minuteur | v10.1 (#210, #211, #212) |
 | Migration vers l'API Hue v2 | candidat v10.1 (§3) |
+
+---
+
+## 11. Groupes d'ambiance — normatif (v11.7.0, #225)
+
+> Référence : `contracts/light-effects.md` §2. Amende les §5.2, §5.3, §5.8 et §6.
+
+- **Configuration (§6)** : `lighting.groups[] {name, lights[], near_teams[]}`, ordre du tableau = numéro du groupe.
+  `lighting.effects {chrono, calm, score}` (`light-effects.md` §6). Absents ⇒ comportement v11.6.0.
+- **`LightSpec.Group`** : numéro du groupe d'ambiance d'une ampoule `general` (0 = hors groupe). Clé de regroupement
+  d'`Apply` : (rôle, équipe, groupe).
+- **Cible d'une ampoule générale du groupe n** : l'entrée `ZoneState{Zone:"general", Group:n}` si elle existe, sinon
+  l'entrée `Group 0`. Une ampoule d'équipe n'est jamais concernée.
+- **Débit préservé** : si toutes les ampoules générales ont le même état cible, une seule écriture sur
+  `buzzmaster-general`, comme avant. Sinon, par groupe d'ambiance dont l'état change : `buzzmaster-general-<n>` s'il
+  compte au moins `SubGroupMinLights` (3) ampoules, écriture par ampoule en dessous.
+- **Groupes Hue** : `buzzmaster-general-<n>` s'ajoute aux trois groupes du §5.8, mêmes règles de cycle de vie
+  (réconciliation à l'inventaire et après enregistrement de la configuration, jamais sur un événement de jeu, repli par
+  ampoule, invalidation du cache des membres).
+- **`GET /api/lighting/lights`** : chaque ampoule porte `group` — `0` (hors groupe ou ampoule d'équipe), entier `n ≥ 1`
+  (groupe de salle, numéro stable même si un groupe précédent est vide) ou `"host<k>"` (groupe animateur de rang k : `"host1"`, `"host2"`…). **`POST /api/lighting/groups/test`** : essai d'un
+  groupe (`light-effects.md` §2.4).
+- **Groupes animateur** (amendement du GATE 2, révisé au GATE LOT-1) : `lighting.groups[].role = "animateur"`, **plusieurs
+  possibles** (4 au plus), chacun avec un `id` stable et un rang k ; `LightSpec.Group = lighting.HostGroup(k) = -k` ; groupe
+  Hue `buzzmaster-general-host<k>` ; leurs ampoules ne reçoivent jamais l'entrée `Group 0` et ne sont touchées ni par
+  `ON` / `OFF`, ni par le Flash (`light-effects.md` §2.5). Dans `config.json`, les effets par moment sont une **table par
+  `id` de groupe animateur** : `lighting.host_effects { "<id>": { chrono, calm, score } }` — jamais la forme plate
+  `{chrono, calm, score}` (`light-effects.md` §6).
+- **`buzzmaster-general` exclut les ampoules de tous les groupes animateur** (amendement du 2026-11-11, revue LOT-1 ; précise le
+  §5.8) : membres = ampoules de rôle `general` hors groupe animateur. `buzzmaster-ambiance` (toutes les ampoules
+  assignées : All OFF de l'interrupteur général, extinction à l'arrêt) les **inclut** toujours.
+- **Erreurs de `POST /api/lighting/groups/test`** : celles de `/api/lighting/test` (`400`, `409`, `429`, `500`, `503`).
+- **Nommage des clés d'effet** (précision du 2026-11-11) : ce contrat décrit `config.json`, donc `lighting.effects` et
+  `lighting.host_effects`. Les mêmes réglages s'écrivent `light.effects` et `light.host_effects` dans le modèle de
+  réglages (manche, API, état de jeu). Table de correspondance normative : `light-effects.md` §6.
+- **Révision du GATE LOT-1 (2026-11-11) — plusieurs groupes animateur** : `lighting.groups[].id` (identifiant stable) ;
+  plusieurs groupes `role: "animateur"` (4 au plus, 12 groupes de salle au plus) ; `LightSpec.Group = -k` pour le groupe
+  animateur de rang k ; un groupe Hue `buzzmaster-general-host<k>` par groupe animateur de `SubGroupMinLights` ampoules
+  ou plus (l'ancien `buzzmaster-general-host` est supprimé à la réconciliation) ; `buzzmaster-general` exclut les
+  ampoules de **tous** les groupes animateur. `GET /api/lighting/lights` : `group` = `0` | `n` | `"host<k>"`. Dans
+  `config.json`, `lighting.host_effects` devient une table par `id` de groupe animateur (`light-effects.md` §6).
+- **Essai d'un groupe** (GATE LOT-1) : séquence de 6 pas d'une seconde (éteint, blanc 50 %, blanc 100 %, rouge, vert,
+  bleu) portée par l'écrivain — au plus une écriture de groupe par seconde, dans le plafond `/groups` du §5.8
+  (`light-effects.md` §2.4).
+- **Révision 3 (2026-11-11, modèle figé)** : `lighting.groups[]` ne porte plus ni `name` ni `near_teams` — un groupe est
+  `{id, role, lights[]}`, désigné par son rang (g1…gN pour la salle, rang k pour un groupe animateur). Le reste de cette
+  section (adressage `Group`, groupes Hue, essai en séquence) est inchangé (`light-effects.md` §2.1).
+- **Révision 4 (2026-11-11) — trois zones** : `lighting.groups[].role` ∈ `salle` | `animateur` | `public` ; 12 groupes par
+  zone. `LightSpec` porte `Area` (ambiance, animateur, public) et `Group` ; l'adressage par numéros négatifs
+  (`HostGroup(k)`) est remplacé. Groupes Hue : `buzzmaster-general` (zone ambiance seule) et `buzzmaster-general-<n>`,
+  `buzzmaster-host` et `buzzmaster-host-<n>`, `buzzmaster-public` et `buzzmaster-public-<n>` ; les
+  `buzzmaster-general-host<k>` disparaissent à la réconciliation. `buzzmaster-ambiance` (toutes les ampoules assignées :
+  interrupteur général, extinction à l'arrêt) inclut les trois zones. **Une ampoule de la zone public n'est écrite que
+  par un effet ou un essai** : jamais par la scène de salle, `ON` / `OFF`, ni le Flash ; autour d'un essai, son état est
+  lu sur le pont puis réécrit (`light-effects.md` §2.5). `GET /api/lighting/lights` : `group` = `0` | `n` | `"host<k>"` |
+  `"public<k>"`. Dans `config.json` : `lighting.effects.<zone>.<moment>` et `lighting.speeds.<zone>.<moment>` ; les clés
+  `host_effects` et `host_speeds` sont supprimées.

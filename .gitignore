@@ -206,3 +206,6 @@ MARKETING/
 /data/WEAPSwrd_Epee (ID 0129)_LaSonotheque.fr.wav
 PRIVATE/
 /PRIVATE
+
+# Effets lumière locaux (v11.7.0, #225)
+server-go/data/files/effects/*

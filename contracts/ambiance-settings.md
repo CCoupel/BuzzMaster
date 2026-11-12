@@ -342,3 +342,37 @@ fichier de manche = nom + durée + badge « manche » + Remplacer… / Revenir a
 Remplacer / Revenir sont immédiats, Enregistrer / Annuler ne portent que sur les tri-états et le mode. Le test de parité des
 chemins (§6) couvre `sound.files.*`.
 
+
+---
+
+## 10. Effet lumière par moment — normatif (v11.7.0, #223, application du §7)
+
+> Référence : `contracts/light-effects.md` §6.
+
+| Champ (`Settings`) | JSON (manche et API) | Source globale (`config.json`) | Zéro / défaut | Surchargeable |
+|---|---|---|---|---|
+| `LightEffects["chrono"]` | `light.effects.chrono` | `lighting.effects.chrono` | `"pulsation"` | ✅ |
+| `LightEffects["calm"]` | `light.effects.calm` | `lighting.effects.calm` | `""` | ✅ |
+| `LightEffects["score"]` | `light.effects.score` | `lighting.effects.score` | `""` | ✅ |
+
+- `Partial.LightEffects` : map partielle (même forme que `cues`). `Sources.light.effects.<moment>` ∈ `global | round`.
+- Validation : `""` ou `id` d'un effet du catalogue déclarant ce moment ; sinon refus (`INVALID_AMBIANCE`, `400`).
+- Composant `AmbianceSettingsPanel`, section `light` : trois sélecteurs (mode global), « Hérité / … » (mode surcharge).
+  Le test de parité du §6 couvre les trois chemins `light.effects.*`.
+- **Groupe animateur** (amendement du GATE 2) : `LightHostEffects` — `light.host_effects.{chrono,calm,score}`, source
+  globale `lighting.host_effects.*`, défaut `""` (blanc fixe), surchargeable par manche ; mêmes règles que
+  `light.effects` (`light-effects.md` §2.5, §6). Le test de parité couvre aussi ces trois chemins.
+- **Révision du GATE LOT-1 (2026-11-11)** : `LightHostEffects` est indexé **par groupe animateur** —
+  `light.host_effects.<id du groupe>.{chrono,calm,score}` (source globale `lighting.host_effects.<id>.*`). Forme complète :
+  une entrée par groupe animateur existant ; `Partial` : groupes et moments surchargés seulement ; `id` de groupe inconnu
+  écarté sans erreur ; chemins éditables du composant React = un jeu de trois chemins par groupe animateur
+  (`light-effects.md` §6).
+- **Vitesse des effets** (ajout du 2026-11-11) : `LightSpeeds` — `light.speeds.{chrono,calm,score}` (global
+  `lighting.speeds.*`) et `LightHostSpeeds` — `light.host_speeds.<id du groupe>.{chrono,calm,score}` (global
+  `lighting.host_speeds.<id>.*`). Valeurs `0.5 | 0.75 | 1 | 1.5 | 2`, défaut `1`, surchargeables par manche ; mêmes
+  règles de résolution et de sources que les effets. Le test de parité couvre ces chemins (`light-effects.md` §6).
+- **Révision 4 (2026-11-11) — réglages par zone** : `LightEffects[<zone>][<moment>]` et `LightSpeeds[<zone>][<moment>]`,
+  JSON `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` (global `lighting.effects.*`, `lighting.speeds.*`),
+  zone ∈ `ambiance` | `animateur` | `public`. Remplace les lignes de cette section sur `light.effects.<moment>`,
+  `LightHostEffects`, `LightSpeeds[<moment>]` et `LightHostSpeeds` ; forme complète = trois zones × trois moments ; le
+  test de parité couvre ces 18 chemins. Détail : `light-effects.md` §6.

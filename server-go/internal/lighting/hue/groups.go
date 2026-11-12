@@ -27,19 +27,60 @@ package hue
 // falls back to writing every light individually (rule 5).
 
 import (
+	"buzzcontrol/internal/lighting"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 const (
-	groupNameAmbiance = "buzzmaster-ambiance"
-	groupNameGeneral  = "buzzmaster-general"
+	groupNameAmbiance = "buzzmaster-ambiance" // every assigned light (master switch, shutdown)
 	groupNameTeamPfx  = "buzzmaster-team-"
 )
+
+// SubGroupMinLights is the smallest group of an area that is addressed as a Hue LightGroup;
+// below it, one write per bulb (hue-bridge.md §11). Provisional until the §8.2 measurement.
+const SubGroupMinLights = 3
+
+// AreaGroupMinLights is the smallest area addressed as one Hue LightGroup in a uniform write.
+const AreaGroupMinLights = 2
+
+// Apply bucket keys (see Driver.Apply).
+const (
+	bucketTeamPfx  = "t:"
+	bucketAreaPfx  = "a:" // + area (0 room, 1 animateur, 2 public)
+	bucketGroupPfx = "g:" // + area + ":" + group number
+)
+
+// areaStem is the Hue group name stem of an area.
+func areaStem(a int) string {
+	switch a {
+	case int(lighting.AreaHost):
+		return "buzzmaster-host"
+	case int(lighting.AreaPublic):
+		return "buzzmaster-public"
+	}
+	return "buzzmaster-general"
+}
+
+// bucketGroupName maps an Apply bucket to its Hue group name and the minimum member count
+// for writing it as a group.
+func bucketGroupName(key string) (string, int) {
+	switch {
+	case strings.HasPrefix(key, bucketAreaPfx):
+		a, _ := strconv.Atoi(strings.TrimPrefix(key, bucketAreaPfx))
+		return areaStem(a), AreaGroupMinLights
+	case strings.HasPrefix(key, bucketGroupPfx):
+		parts := strings.SplitN(strings.TrimPrefix(key, bucketGroupPfx), ":", 2)
+		a, _ := strconv.Atoi(parts[0])
+		return areaStem(a) + "-" + parts[1], SubGroupMinLights
+	}
+	return groupNameForTeam(strings.TrimPrefix(key, bucketTeamPfx)), 2
+}
 
 func groupNameForTeam(team string) string { return groupNameTeamPfx + team }
 
@@ -197,8 +238,10 @@ func (c *client) setGroupState(ctx context.Context, id string, st stateV1) error
 // decides, per write, whether a target is worth addressing as a group.
 func desiredGroups(lights []LightSpec, resolved map[string]resolvedLight) map[string][]string {
 	out := map[string][]string{}
-	var all, general []string
+	var all []string
 	byTeam := map[string][]string{}
+	byArea := map[int][]string{}
+	bySub := map[[2]int][]string{} // (area, group number) -> light ids
 	for _, lc := range lights {
 		rl, ok := resolved[lc.Name]
 		if !ok {
@@ -207,15 +250,28 @@ func desiredGroups(lights []LightSpec, resolved map[string]resolvedLight) map[st
 		all = append(all, rl.id)
 		if lc.Role == RoleTeam {
 			byTeam[lc.Team] = append(byTeam[lc.Team], rl.id)
-		} else {
-			general = append(general, rl.id)
+			continue
+		}
+		a := int(lc.Area)
+		byArea[a] = append(byArea[a], rl.id)
+		if lc.Group != 0 {
+			bySub[[2]int{a, lc.Group}] = append(bySub[[2]int{a, lc.Group}], rl.id)
 		}
 	}
 	if len(all) > 0 {
 		out[groupNameAmbiance] = sortedIDs(all)
 	}
-	if len(general) > 0 {
-		out[groupNameGeneral] = sortedIDs(general)
+	for a, ids := range byArea {
+		// The room keeps its group from one bulb (buzzmaster-general, as in v11.6.0); the
+		// animateur and public areas have one from 2 bulbs (contract §2.3).
+		if a == int(lighting.AreaAmbiance) || len(ids) >= AreaGroupMinLights {
+			out[areaStem(a)] = sortedIDs(ids)
+		}
+	}
+	for k, ids := range bySub {
+		if len(ids) >= SubGroupMinLights {
+			out[areaStem(k[0])+"-"+strconv.Itoa(k[1])] = sortedIDs(ids)
+		}
 	}
 	for team, ids := range byTeam {
 		if len(ids) >= 2 {

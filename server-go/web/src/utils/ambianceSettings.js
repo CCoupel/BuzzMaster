@@ -3,11 +3,16 @@
 // { sound: { muted, countdown: { enabled, loop }, cues: { <cue>: bool } }, light: { mode } }.
 
 /** Chemins éditables hors cues — doivent rester alignés sur `Settings` (§2). */
+const LIGHT_ZONES = ['ambiance', 'animateur', 'public']
+const LIGHT_MOMENTS = ['chrono', 'calm', 'score']
 export const SETTINGS_FIELD_PATHS = [
   'sound.muted',
   'sound.countdown.enabled',
   'sound.countdown.loop',
   'light.mode',
+  // #223 (v11.7.0, révision 4) — effet et vitesse lumière par zone et par moment : `light.effects.<zone>.<moment>`,
+  // `light.speeds.<zone>.<moment>` (18 chemins ; contracts/light-effects.md §6).
+  ...LIGHT_ZONES.flatMap(z => LIGHT_MOMENTS.flatMap(m => [`light.effects.${z}.${m}`, `light.speeds.${z}.${m}`])),
 ]
 export const CUE_PATH_PREFIX = 'sound.cues.'
 
@@ -57,6 +62,19 @@ export function overriddenFields(partial) {
     if (isObj(s.cues)) Object.entries(s.cues).forEach(([cue, v]) => out.push({ path: CUE_PATH_PREFIX + cue, value: v }))
   }
   if (isObj(partial.light) && partial.light.mode !== undefined) out.push({ path: 'light.mode', value: partial.light.mode })
+  if (isObj(partial.light)) {
+    // Un réglage compte pour chaque (zone, moment) surchargé, effet et vitesse séparément.
+    for (const branch of ['effects', 'speeds']) {
+      const byZone = partial.light[branch]
+      if (!isObj(byZone)) continue
+      for (const zone of LIGHT_ZONES) {
+        if (!isObj(byZone[zone])) continue
+        for (const moment of LIGHT_MOMENTS) {
+          if (byZone[zone][moment] !== undefined) out.push({ path: `light.${branch}.${zone}.${moment}`, value: byZone[zone][moment] })
+        }
+      }
+    }
+  }
   return out
 }
 
@@ -68,6 +86,14 @@ export function describeOverride({ path, value }, cueLabel = (c) => c) {
   if (path === 'sound.countdown.enabled') return `Décompte : ${value ? 'actif' : 'inactif'}`
   if (path === 'sound.countdown.loop') return `Décompte : ${value ? 'en boucle' : 'une fois'}`
   if (path === 'light.mode') return `Lumière : ${value}`
+  const eff = /^light\.(effects|speeds)\.(ambiance|animateur|public)\.(chrono|calm|score)$/.exec(path)
+  if (eff) {
+    const zone = { ambiance: 'Ambiance', animateur: 'Animateur', public: 'Public' }[eff[2]]
+    const moment = { chrono: 'chronomètre', calm: 'phases calmes', score: 'équipe qui marque' }[eff[3]]
+    return eff[1] === 'speeds'
+      ? `Vitesse ${zone} (${moment}) : ×${String(value).replace('.', ',')}`
+      : `Effet ${zone} (${moment}) : ${value || 'aucun'}`
+  }
   if (path.startsWith(CUE_PATH_PREFIX)) return `${cueLabel(path.slice(CUE_PATH_PREFIX.length))} : ${value ? 'actif' : 'inactif'}`
   return path
 }

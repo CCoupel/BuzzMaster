@@ -2342,12 +2342,89 @@ Ce bandeau reste visible tant que le mode n'est pas désactivé — c'est votre 
 
 #### Ampoules d'équipe (v10.0.0 + #213)
 
-Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de salle). À l'avenir (#213), une ampoule peut être affectée à une équipe spécifique : ces ampoules **restent toujours pilotées par le jeu** (couleur de l'équipe active), jamais éteintes ou forcées par le sélecteur général.
+Le sélecteur ON/AUTO/OFF ne contrôle **que la zone générale** (ampoules de salle). Une ampoule peut être affectée à une équipe spécifique (rôle « équipe ») : ces ampoules **restent toujours pilotées par le jeu** (couleur de l'équipe active), jamais éteintes ou forcées par le sélecteur général.
 
 **Exemple** : vous avez 2 ampoules salle (zone générale) et 1 ampoule rouge dédiée à l'équipe « Les Rouges »
 - Mode OFF : les 2 ampoules salle s'éteignent
 - Les Rouges jouent : l'ampoule rouge reste allumée en couleur rouge (équipe active)
 - Au retour sur AUTO : les 2 ampoules salle reprennent leur scène de jeu
+
+### Groupes d'ampoules et trois zones (v11.7.0, #225)
+
+Le sous-onglet **Groupes** de `/admin/ambiance` › **Lumière** range les ampoules générales en **groupes**, répartis en **trois zones** :
+
+| Zone | Qui elle éclaire | Groupes |
+|------|------------------|---------|
+| **Ambiance** | la salle | jusqu'à **12** groupes |
+| **Animateur** | le pupitre, la régie | jusqu'à **12** groupes |
+| **Public** | le public | jusqu'à **12** groupes |
+
+- Les groupes sont numérotés **par zone** : « Groupe 1 », « Groupe 2 »… Ils **n'ont pas de nom**. Le numéro est le rang du groupe dans sa zone ; un groupe vide garde son numéro.
+- Une ampoule ne peut être que dans **un seul** groupe. Les ampoules qui ne sont dans aucun groupe restent sur la scène de salle ordinaire.
+- La zone **Ambiance** existe toujours (les ampoules hors groupe en font partie). Les zones **Animateur** et **Public** n'existent que si elles ont au moins un groupe non vide : sans groupe, elles n'apparaissent pas dans les réglages.
+- **Enregistrement** : les modifications ne prennent effet qu'après **Enregistrer**. Chaque groupe garde son identifiant à l'enregistrement, même après un déplacement. Une ampoule groupée qui passe en rôle équipe est retirée de son groupe automatiquement.
+- **Glisser-déposer** : une ampoule se déplace d'un groupe à l'autre, ou d'une zone à l'autre ; un groupe se réordonne dans sa zone.
+- **Essai** : le bouton d'essai d'un groupe enregistré joue une **séquence visible de 6 secondes** sur ses ampoules : éteint, blanc à 50 %, blanc à 100 %, rouge, vert, bleu, un pas par seconde. Le groupe revient ensuite à son état de jeu. « Arrêter l'essai » l'interrompt. Un nouvel essai remplace celui qui tourne. L'essai est indisponible si le brouillon n'est pas enregistré, si le groupe est vide, si l'éclairage est désactivé ou si le pont est injoignable ; une infobulle indique la raison.
+
+#### Zone Animateur
+
+La zone **Animateur** éclaire l'animateur (pupitre, régie) :
+
+- Sans effet choisi, ses ampoules restent en **blanc fixe** dès que l'éclairage est actif.
+- **Les réglages de la salle ne l'atteignent pas** : ni ON, ni OFF, ni le Flash.
+- Elle s'éteint seulement par l'**interrupteur général** « Éclairage d'ambiance activé » et par l'**arrêt du serveur**.
+
+#### Zone Public
+
+La zone **Public** est pilotée seulement si un effet y est choisi :
+
+- **Sans effet pour le moment vivant, BuzzControl n'envoie rien** à ces ampoules : ni scène de salle, ni blanc fixe. Elles gardent leur état, réglé à la main ou laissé par le dernier effet.
+- Au **démarrage** du serveur, rien n'est envoyé à la zone Public.
+- ON, OFF et Flash ne la modifient pas.
+- Elle s'éteint à l'**interrupteur général** et à l'**arrêt du serveur**, comme les autres ampoules assignées.
+- À la **fin d'un moment** joué sur cette zone, l'état « fin » de l'effet (`post`) reste affiché s'il existe ; sinon les ampoules gardent le dernier état.
+- Après un **essai** (de groupe ou d'effet) sur cette zone, l'état des ampoules est relu sur le pont avant l'essai, puis réécrit à la fin. Si la lecture est impossible, elles sont éteintes à la fin de l'essai.
+
+#### Ce qu'éteint chaque commande
+
+| Commande | Zone Ambiance | Zone Animateur | Zone Public |
+|----------|---------------|----------------|-------------|
+| Sélecteur ON / AUTO / OFF | Oui | Non | Non |
+| Flash | Oui | Non | Non |
+| Interrupteur général « Éclairage d'ambiance activé » | Oui (éteint) | Oui (éteint) | Oui (éteint) |
+| Arrêt du serveur | Oui | Oui | Oui |
+
+### Sous-onglet Effets (v11.7.0, #223)
+
+Le sous-onglet **Effets** choisit, pour chaque **zone** et chaque **moment**, l'effet joué et sa **vitesse** :
+
+| Moment | Quand il s'applique |
+|--------|---------------------|
+| **Chronomètre** (`chrono`) | Pendant le décompte d'une question |
+| **Calme** (`calm`) | Attente, pause et entracte |
+| **Score** (`score`) | Pendant l'attribution des points |
+
+- **Effet** : `Aucun effet`, ou un effet du catalogue qui déclare le moment. Le choix par défaut de la salle au chronomètre est la **pulsation** ; l'option « (actuel) » marque la valeur par défaut.
+- **Vitesse** : `0.5`, `0.75`, `1`, `1.5` ou `2`. Une vitesse plus rapide est plafonnée quand la durée d'un tick descendrait sous 250 ms ; l'interface l'indique.
+- **Bouton « Tester »** : joue l'effet sur sa zone, à la vitesse réglée, pendant la durée par défaut du serveur (10 secondes, 5 secondes pour un effet de score seul ; la durée est lue dans la réponse). « Arrêter » l'interrompt. Il est grisé (avec une infobulle) quand aucun effet n'est choisi, quand l'effet ne s'applique pas à la zone, quand l'éclairage est désactivé, quand le pont est injoignable, et **pendant une question en cours** (toute phase autre qu'arrêt, nouvelle partie ou inscription). Pour la zone Ambiance seulement, il est aussi grisé quand le mode est forcé (ON, OFF) ou que le Flash est actif. Le serveur refuse quand même l'essai pendant une question (409 `game`), par sécurité.
+- Un effet qui ne peut pas jouer sur une zone (par exemple un effet qui demande 3 groupes, dans une zone qui n'en a que 2) reste grisé avec sa raison.
+- Le réglage s'enregistre à chaque changement. Il se règle aussi **par manche** (dialogue « Ambiance de la manche », valeur « Hérité » pour suivre le réglage global).
+- Les effets sont des fichiers `.yaml` du dossier `data/files/effects/` ; un fichier modifié est rechargé en 2 secondes, sans redémarrer le serveur. Un fichier invalide est écarté et son erreur (fichier, ligne, message) est signalée. Les effets livrés se trouvent dans `data/files/effects/natifs/` : ce dossier est une copie de référence à ne pas modifier. Pour écrire un effet, voir `docs/LIGHT_EFFECTS.md`.
+- Effets livrés à ce jour : **pulsation**, **chenillard**, **chenillard avec traînée** (à partir de 5 groupes), **couleur d'équipe** (score) et **dégradé** (calme).
+
+#### Catalogue des effets (v11.7.0, #299)
+
+Sous les réglages du sous-onglet Effets, le **catalogue** liste chaque effet disponible, sous forme de carte :
+
+- **Étiquette d'origine** : « natif », « personnalisé » (fichier de l'utilisateur) ou « natif modifié » (fichier qui remplace un effet livré, avec la mention « remplace natifs/… »).
+- **Moments** et **description** de l'effet, et la ligne **Fichier** : nombre de pas (« 2 pas »), durée d'un tick, nombre de groupes demandé.
+- **« utilisé : zone, moment »** : où l'effet est choisi dans les réglages **globaux** (zones existantes seulement), avec la vitesse si elle n'est pas ×1 (par exemple « utilisé : Animateur, chronomètre (×1,5) »). Les manches ne sont pas listées.
+- **Fichiers en erreur** : un bandeau affiche chaque fichier invalide, sa ligne et la cause. Les autres effets restent utilisables.
+- **↻ Recharger les fichiers** : demande au serveur de relire le dossier `data/files/effects/` sans redémarrer. Le serveur relit déjà le dossier toutes les 2 secondes, mais l'écran ne se met à jour qu'à l'ouverture du sous-onglet ou au clic sur ↻ : il n'y a pas de rafraîchissement automatique de l'écran.
+- **▶ Aperçu** : rejoue l'effet tel qu'il serait joué, sur des ampoules dessinées g1, g2… (une par groupe). Sous les ampoules s'affichent le **numéro du tick** et le **pas joué** : « PRE », « pas 0 », « pas 1 », « dernier ». Le compte à rebours simulé (20 s pour le chronomètre) est affiché. Un seul aperçu tourne à la fois. Si l'effet ne s'applique pas à assez de groupes, l'aperçu est calculé avec le nombre de groupes choisi et l'indique (« simulation avec N groupes »). Un groupe que l'effet n'a jamais peint est affiché en blanc atténué : c'est la scène ordinaire.
+- **💡 Essayer sur la salle** : joue l'effet sur la **zone ambiance**, à la vitesse ×1, pendant la durée par défaut du serveur (10 secondes, 5 secondes pour un effet qui ne sert qu'au score). « ■ Arrêter l'essai » l'interrompt. Le dernier essai lancé remplace l'autre : un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble.
+- Le bouton d'essai est grisé avec une infobulle quand l'effet est inapplicable à la zone Ambiance, quand le pont est injoignable, quand l'éclairage est désactivé, quand le mode est forcé (ON, OFF) ou que le Flash est actif, et pendant une question en cours.
+- Depuis les réglages, le lien **« Voir l'aperçu »** d'un effet choisi fait défiler la page jusqu'à sa carte du catalogue.
 
 ### Comportement à l'arrêt du serveur
 

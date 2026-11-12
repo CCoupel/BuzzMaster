@@ -89,6 +89,8 @@ type HTTPServer struct {
 	// Lighting gives the /api/lighting/* handlers the live Hue driver (#207,
 	// contracts/hue-bridge.md §7); nil provider or nil driver = "disabled".
 	Lighting LightingProvider
+	// Effects serves the light-effect catalogue (v11.7.0, #223); nil = no catalogue.
+	Effects EffectsProvider
 	// Sound gives the /api/sounds/*, /api/sound/status handlers access to
 	// the live sound engine (#230, contracts/http-endpoints.md §Sound); nil
 	// provider is never expected in production (cmd/server always sets it,
@@ -489,6 +491,11 @@ func (h *HTTPServer) setupRoutes() {
 	h.mux.HandleFunc("/api/lighting/register", h.handleLightingRegister)
 	h.mux.HandleFunc("/api/lighting/lights", h.handleLightingLights)
 	h.mux.HandleFunc("/api/lighting/test", h.handleLightingTest)
+	h.mux.HandleFunc("/api/lighting/groups/test", h.handleLightingGroupTest)
+	h.mux.HandleFunc("/api/lighting/groups/test/stop", h.handleLightingGroupTestStop)
+	h.mux.HandleFunc("/api/lighting/effects", h.handleLightingEffects)
+	h.mux.HandleFunc("/api/lighting/effects/reload", h.handleLightingEffectsReload)
+	h.mux.HandleFunc("/api/lighting/effects/", h.handleLightingEffectsSub)
 	h.mux.HandleFunc("/api/lighting/preview", h.handleLightingPreview)
 	// Conduite manuelle — sélecteur tri-état + Flash (#208, contract §10.1)
 	h.mux.HandleFunc("/api/lighting/mode", h.handleLightingMode)
@@ -1894,6 +1901,9 @@ func maskedConfigJSON(cfg *config.Config) ([]byte, error) {
 	if resp.Lighting.Lights == nil {
 		resp.Lighting.Lights = []config.LightingLightEntry{} // [] not null for the frontend
 	}
+	if resp.Lighting.Groups == nil {
+		resp.Lighting.Groups = []config.LightingGroupEntry{}
+	}
 	return json.MarshalIndent(&resp, "", "  ")
 }
 
@@ -1960,7 +1970,10 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 
 		current := config.Get()
-		cfg := *current // value copy: every section is a plain struct, no aliasing
+		// Shallow value copy: the sections are structs, but their maps and slices (e.g. Lighting.Effects,
+		// Lighting.Speeds, Lighting.Groups, Sound.CuesDisabled) are SHARED with the live config — a section
+		// that merges into one must copy it first, or a refused patch would still change the live config.
+		cfg := *current
 		// #290 (ambiance-settings.md §4.2): resolved values and round layer BEFORE the merge,
 		// to tell which fields this request really changes (a "geste direct").
 		ambBefore, _ := h.ambianceSettingsNow()
@@ -2174,6 +2187,117 @@ func (h *HTTPServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 					lights = append(lights, l)
 				}
 				cfg.Lighting.Lights = lights
+				// v11.7.0 #225 (light-effects.md §2.1): a bulb removed or switched
+				// to role=team leaves its group in the same write.
+				cfg.Lighting.Groups = config.PruneLightingGroups(cfg.Lighting.Groups, lights)
+			}
+			// v11.7.0, #225: full replacement of the ambiance groups, validated
+			// against the bulb list as it will be after this very write.
+			if rawGroups, ok := lRaw["groups"]; ok {
+				// Révision 3 (light-effects.md §2.1): groups have no name and no near_teams any
+				// more — refused on write (a config.json of an older build is read leniently).
+				var probe []map[string]json.RawMessage
+				if json.Unmarshal(rawGroups, &probe) == nil {
+					for _, g := range probe {
+						for _, k := range []string{"name", "near_teams"} {
+							if _, has := g[k]; has {
+								http.Error(w, "lighting.groups : la clé « "+k+" » n'est plus acceptée (un groupe n'a plus que id, role et lights)", http.StatusBadRequest)
+								return
+							}
+						}
+					}
+				}
+				incomingGroups := make([]config.LightingGroupEntry, 0, len(incoming.Groups))
+				for _, g := range incoming.Groups {
+					for i, ln := range g.Lights {
+						g.Lights[i] = hue.NormalizeLightName(ln)
+					}
+					incomingGroups = append(incomingGroups, g)
+				}
+				groups, gerr := config.ValidateLightingGroups(incomingGroups, cfg.Lighting.Lights)
+				if gerr != nil {
+					http.Error(w, gerr.Error(), http.StatusBadRequest)
+					return
+				}
+				cfg.Lighting.Groups = groups
+			}
+			// v11.7.0, #223 (light-effects.md §6, revision 4): the effect and the speed of each
+			// moment, by zone — PARTIAL patches merged zone by zone and moment by moment (the
+			// front writes one moment at a time). The flat QUALIF forms and the host_* tables
+			// are no longer accepted on write.
+			for _, old := range []string{"host_effects", "host_speeds"} {
+				if _, has := lRaw[old]; has {
+					http.Error(w, "lighting."+old+" n'est plus accepté : les réglages se font par zone (lighting.effects.<zone>.<moment>)", http.StatusBadRequest)
+					return
+				}
+			}
+			if rawEff, ok := lRaw["effects"]; ok {
+				var in map[string]map[string]string
+				if err := json.Unmarshal(rawEff, &in); err != nil {
+					http.Error(w, "lighting.effects : table zone → moment → effet attendue (ambiance, animateur, public)", http.StatusBadRequest)
+					return
+				}
+				// Deep copy: cfg is a shallow copy of the live config, so merging in place would
+				// change it even when a later key of the same patch is refused (a 400 changes nothing).
+				merged := config.ZoneEffects{}
+				for z, mm := range cfg.Lighting.Effects {
+					merged[z] = map[string]string{}
+					for m, id := range mm {
+						merged[z][m] = id
+					}
+				}
+				for zone, mm := range in {
+					if !ambiancecfg.ValidZone(zone) {
+						http.Error(w, "lighting.effects : zone inconnue « "+zone+" » (ambiance, animateur ou public)", http.StatusBadRequest)
+						return
+					}
+					for m, id := range mm {
+						if !ambiancecfg.ValidMoment(m) {
+							http.Error(w, "lighting.effects."+zone+" : moment inconnu « "+m+" » (chrono, calm ou score)", http.StatusBadRequest)
+							return
+						}
+						if id != "" && !h.effectExists(m, id) {
+							http.Error(w, "lighting.effects."+zone+"."+m+" : l'effet « "+id+" » n'existe pas ou ne déclare pas ce moment", http.StatusBadRequest)
+							return
+						}
+						if merged[zone] == nil {
+							merged[zone] = map[string]string{}
+						}
+						merged[zone][m] = id
+					}
+				}
+				cfg.Lighting.Effects = merged
+			}
+			if rawSp, ok := lRaw["speeds"]; ok {
+				var in map[string]map[string]float64
+				if err := json.Unmarshal(rawSp, &in); err != nil {
+					http.Error(w, "lighting.speeds : table zone → moment → vitesse attendue (ambiance, animateur, public)", http.StatusBadRequest)
+					return
+				}
+				merged := config.ZoneSpeeds{}
+				for z, mm := range cfg.Lighting.Speeds {
+					merged[z] = map[string]float64{}
+					for m, v := range mm {
+						merged[z][m] = v
+					}
+				}
+				for zone, mm := range in {
+					if !ambiancecfg.ValidZone(zone) {
+						http.Error(w, "lighting.speeds : zone inconnue « "+zone+" » (ambiance, animateur ou public)", http.StatusBadRequest)
+						return
+					}
+					for m, v := range mm {
+						if !ambiancecfg.ValidMoment(m) || !ambiancecfg.ValidSpeed(v) {
+							http.Error(w, "lighting.speeds."+zone+"."+m+" : vitesse ou moment invalide (0,5 ; 0,75 ; 1 ; 1,5 ou 2)", http.StatusBadRequest)
+							return
+						}
+						if merged[zone] == nil {
+							merged[zone] = map[string]float64{}
+						}
+						merged[zone][m] = v
+					}
+				}
+				cfg.Lighting.Speeds = merged
 			}
 			// The secret: absent or empty preserves, clear_api_key erases,
 			// a non-empty value replaces. Derived/request-only flags never persist.
@@ -3113,6 +3237,13 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 		if _, err := os.Stat(gameConfigPath); err == nil {
 			h.addFileToTAR(tw, gameConfigPath, "config/game-config.json")
 		}
+		// v11.7.0, #223 (light-effects.md §3.2): the user's light effects
+		// (files/effects/, without the natifs/ reference copy) belong to the
+		// "ambiance" category.
+		effectsDir := filepath.Join(filesDir, "effects")
+		if _, err := os.Stat(effectsDir); err == nil {
+			h.addEffectsDirToTAR(tw, effectsDir, "files/effects")
+		}
 	}
 
 	// Add game_state.json (#141) — quiz metadata (name/theme/notes/
@@ -3173,6 +3304,52 @@ func (h *HTTPServer) handleBackupSelect(w http.ResponseWriter, r *http.Request) 
 	}
 
 	log.Printf("[HTTP] Selective backup completed")
+}
+
+// isEffectsReferencePath reports whether rel (slash-separated, relative to the data or
+// files directory) is inside the native-effects reference copy.
+func isEffectsReferencePath(rel string) bool {
+	for _, p := range []string{"files/effects/natifs", "effects/natifs"} {
+		if rel == p || strings.HasPrefix(rel, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// addEffectsDirToTAR archives the user effects directory except its natifs/ subfolder.
+func (h *HTTPServer) addEffectsDirToTAR(tw *tar.Writer, sourceDir, tarPrefix string) {
+	_ = filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, rerr := filepath.Rel(sourceDir, path)
+		if rerr != nil || rel == "." {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "natifs" || strings.HasPrefix(rel, "natifs/") {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		header, herr := tar.FileInfoHeader(info, "")
+		if herr != nil {
+			return nil
+		}
+		header.Name = tarPrefix + "/" + rel
+		if tw.WriteHeader(header) != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			if f, oerr := os.Open(path); oerr == nil {
+				defer f.Close()
+				_, _ = io.Copy(tw, f)
+			}
+		}
+		return nil
+	})
 }
 
 // addFileToTAR adds a single file to TAR archive
@@ -3460,6 +3637,15 @@ func (h *HTTPServer) createTARBackup(w http.ResponseWriter, r *http.Request, sou
 			return nil
 		}
 
+		// v11.7.0 (#223, light-effects.md §3.2): the reference copy of the native
+		// effects is rewritten at every start and never read back — not archived.
+		if isEffectsReferencePath(filepath.ToSlash(relPath)) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
 		// Create TAR header
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
@@ -3580,6 +3766,12 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		case strings.HasPrefix(tarPath, "files/sounds/"):
 			// v11.0, #229 — ne pas reproduire le trou #152.
 			if detected["sounds"] {
+				targetPath = filepath.Join(h.dataDir, tarPath)
+				allowed = true
+			}
+		case strings.HasPrefix(tarPath, "files/effects/"):
+			// v11.7.0, #223 — the natifs/ reference copy is never restored.
+			if detected["effects"] && !isEffectsReferencePath(tarPath) {
 				targetPath = filepath.Join(h.dataDir, tarPath)
 				allowed = true
 			}
@@ -3733,6 +3925,14 @@ func (h *HTTPServer) handleRestore(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[HTTP] Restore: Sounds restored")
 	}
 
+	if detected["effects"] {
+		restoredMap["effects"] = true
+		if h.Effects != nil {
+			h.Effects.EffectsReload() // the catalogue follows the restored files at once
+		}
+		log.Printf("[HTTP] Restore: Light effects restored")
+	}
+
 	if detected["gameConfig"] {
 		// #150 — reload from the just-extracted file (same path
 		// GameConfigPath() already resolves to, set once at startup) and
@@ -3805,6 +4005,7 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 		"gameState":   false, // #141 — game_state.json (quiz metadata)
 		"rafale":      false, // #197 (v8.0.0) — files/rafale/ + config/rafale_used.json
 		"sounds":      false, // v11.0, #229 — files/sounds/ (bruitage d'événement)
+		"effects":     false, // v11.7.0, #223 — files/effects/ (effets lumière de l'utilisateur, sans natifs/)
 	}
 
 	tr := tar.NewReader(bytes.NewReader(data))
@@ -3827,6 +4028,8 @@ func (h *HTTPServer) detectTARContents(data []byte) map[string]bool {
 			detected["entracte"] = true
 		case strings.HasPrefix(tarPath, "files/sounds/"):
 			detected["sounds"] = true
+		case strings.HasPrefix(tarPath, "files/effects/") && !isEffectsReferencePath(tarPath):
+			detected["effects"] = true
 		case tarPath == "config/teams.json" || tarPath == "teams.json":
 			detected["teams"] = true
 		case tarPath == "config/bumpers.json" || tarPath == "bumpers.json":

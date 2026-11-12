@@ -772,10 +772,10 @@ func (r *tw290fRecorder) waitFor(t *testing.T, n int) []int {
 // tw290fAudio branche un moteur RÉEL (FileBank sur le dossier des sons) sur un enregistreur ; sound.enabled=true.
 func tw290fAudio(t *testing.T, e *tw290Env) *tw290fRecorder {
 	t.Helper()
-	if err := json.Unmarshal([]byte(`{"sound":{"enabled":true,"muted":false,"cues_disabled":{}}}`), config.Get()); err != nil {
+	if err := config.PatchJSON([]byte(`{"sound":{"enabled":true,"muted":false,"cues_disabled":{}}}`)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { config.Get().Sound = config.SoundConfig{} })
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound = config.SoundConfig{} }) })
 	rec := &tw290fRecorder{}
 	e.app.httpServer.Sound = e.app
 	e.app.soundEngine.Store(audio.NewEngine(audio.Config{Output: rec, Bank: e.app.buildSoundBank()}))

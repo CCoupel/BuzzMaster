@@ -454,20 +454,28 @@ func waitForCount(t *testing.T, f *lighting.FakeDriver, n int) {
 	t.Fatalf("driver received %d state(s), want >= %d", f.Count(), n)
 }
 
-// waitForChronoPulseTier polls the LIVE atomics runChronoPulse writes
-// (never a value this test computes itself) until they report the wanted
-// tier while active, or the timeout elapses.
-func waitForChronoPulseTier(t *testing.T, app *App, wantTier int32) {
+// waitForPulseLow polls what REACHES the driver until the low phase of the pulsation
+// (colour + intensity of the wanted tier) is rendered on the 'general' zone — the pulse is
+// the native `pulsation` effect played by the effect reader since v11.7.0 (#223).
+func waitForPulseLow(t *testing.T, f *lighting.FakeDriver, color [3]int, intensity int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if app.ambCtl().ChronoPulseActive.Load() && app.ambCtl().ChronoPulseTier.Load() == wantTier {
-			return
+		if last, ok := f.Last(); ok && len(last.Zones) > 0 {
+			if z := last.Zones[0]; z.Color == color && z.Intensity == intensity {
+				return
+			}
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("chrono-pulse never reported tier %d (active=%v tier=%d)", wantTier, app.ambCtl().ChronoPulseActive.Load(), app.ambCtl().ChronoPulseTier.Load())
+	t.Fatalf("pulsation: low phase %v/%d never rendered", color, intensity)
 }
+
+var (
+	pulseWhiteLow = [3]int{255, 255, 255} // tier 1 low phase = urgence (white above 10 s)
+	pulseAmber    = [3]int{255, 170, 0}   // tier 2 low phase
+	pulseRed      = [3]int{230, 30, 30}   // tier 3 low phase
+)
 
 // TestDevChronoPulse_TierSelectionFromLiveTimer covers runChronoPulse's own
 // tier arithmetic against the REAL engine timer (StartImmediate(delay) sets
@@ -481,30 +489,33 @@ func TestDevChronoPulse_TierSelectionFromLiveTimer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
-	go app.runChronoPulse(ctx) // not wired via a bare Start(ctx) — see startAmbianceWriter's own two call sites
+	go app.ambCtl().RunEffects(ctx) // the pulsation is played by the effect reader
 
 	for _, tt := range []struct {
-		delay    int
-		wantTier int32
+		delay int
+		color [3]int
+		inten int
 	}{
-		{15, 1}, // > 10 s remaining
-		{10, 2}, // <= 10 s remaining
-		{5, 3},  // <= 5 s remaining
+		{15, pulseWhiteLow, 128}, // > 10 s remaining: tier 1, low phase = theme at 50 %
+		{10, pulseAmber, 128},    // <= 10 s: tier 2, amber at 50 %
+		{5, pulseRed, 128},       // <= 5 s: red at 50 % (revision 3, light-effects.md §5.5)
 	} {
 		qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
 		app.engine.Ready(qcm.ID, qcm)
 		app.engine.StartImmediate(tt.delay)
-		waitForChronoPulseTier(t, app, tt.wantTier)
+		waitForPulseLow(t, fake, tt.color, tt.inten)
 		app.engine.Stop()
-		// Leaving RUNNING must clear the pulse promptly (belt-and-suspenders
-		// NotifyState in runChronoPulse's own "become inactive" branch —
-		// see its doc comment on why this isn't load-bearing either way).
-		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) && app.ambCtl().ChronoPulseActive.Load() {
+		// Leaving RUNNING gives the ordinary idle scene back (white, 200) promptly.
+		deadline := time.Now().Add(3 * time.Second)
+		back := false
+		for time.Now().Before(deadline) && !back {
+			if last, ok := fake.Last(); ok && len(last.Zones) > 0 && last.Zones[0].Intensity == 200 {
+				back = true
+			}
 			time.Sleep(5 * time.Millisecond)
 		}
-		if app.ambCtl().ChronoPulseActive.Load() {
-			t.Fatalf("delay=%d: chrono-pulse still active after Stop()", tt.delay)
+		if !back {
+			t.Fatalf("delay=%d: pulsation still rendered after Stop()", tt.delay)
 		}
 	}
 }
@@ -537,13 +548,13 @@ func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *test
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
-	go app.runChronoPulse(ctx)
+	go app.ambCtl().RunEffects(ctx)
 
 	qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
 	app.engine.Ready(qcm.ID, qcm)
 	app.engine.StartImmediate(4) // tier 3 immediately: theme <-> red
 	defer app.engine.Stop()
-	waitForChronoPulseTier(t, app, 3)
+	waitForPulseLow(t, fake, pulseRed, 128)
 
 	white := [3]int{255, 255, 255}
 	sawHighWhiteFull, sawLowRedDim := false, false
@@ -557,10 +568,10 @@ func TestDevChronoPulse_RenderedZoneSwitchesInstantlyBetweenPhaseColours(t *test
 			if z.TransitionMs != 0 {
 				t.Fatalf("every chrono-pulse write must be an instant switch (TransitionMs 0) since the 2026-09-08 colour-artifact fix, got %+v", z)
 			}
-			if z.Color == white && z.Intensity == chronoPulseIntensityFull {
+			if z.Color == white && z.Intensity == 255 {
 				sawHighWhiteFull = true
 			}
-			if z.Color == ambianceChronoPulseRed && z.Intensity == chronoPulseIntensityLow {
+			if z.Color == pulseRed && z.Intensity == 128 {
 				sawLowRedDim = true
 			}
 		}
@@ -582,13 +593,13 @@ func TestDevChronoPulse_SuppressedBySelector(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
-	go app.runChronoPulse(ctx)
+	go app.ambCtl().RunEffects(ctx)
 
 	qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM}
 	app.engine.Ready(qcm.ID, qcm)
 	app.engine.StartImmediate(15)
 	defer app.engine.Stop()
-	waitForChronoPulseTier(t, app, 1) // pulse genuinely active underneath
+	waitForPulseLow(t, fake, pulseWhiteLow, 128) // pulse genuinely active underneath
 
 	// OFF (not ON): its forced {0,0,0}/0 can never coincide with a pulse
 	// phase's own colour/intensity (white/theme, amber or red, always >0),
@@ -639,14 +650,14 @@ func TestDevChronoPulse_SuppressedBySelector_ON(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go app.ambiance().Start(ctx)
-	go app.runChronoPulse(ctx)
+	go app.ambCtl().RunEffects(ctx)
 
 	geography := [3]int{0x3b, 0x82, 0xf6} // #3b82f6 (hardcodedCategories) — deliberately NOT white, unlike lightingOnColor
 	qcm := &game.Question{ID: "q1", Type: game.QuestionTypeQCM, Category: game.CategoryGeography}
 	app.engine.Ready(qcm.ID, qcm)
 	app.engine.StartImmediate(15)
 	defer app.engine.Stop()
-	waitForChronoPulseTier(t, app, 1)
+	waitForPulseLow(t, fake, pulseWhiteLow, 128) // revision 3: the low phase is the urgency colour (white), not the theme
 	if got := app.ambianceThemeColor(); got != geography {
 		t.Fatalf("setup invalide : thème attendu GEOGRAPHY %v, got %v", geography, got)
 	}

@@ -2,6 +2,51 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.7.0] - 2026-11-12 — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#211, #225, #223, #299)
+
+La lumière d'ambiance se règle par **trois zones** — la salle, l'animateur et le public — découpées en groupes numérotés
+(sans nom). Les effets sont des **fichiers de pas** éditables à la main, joués sur une zone à la fois, avec un effet et une
+vitesse par moment et par zone. Un catalogue présente les effets, avec aperçu animé et essai sur la salle. Les effets #300 (remplissage), #301 (vague) et #302 (scintillement) sortent de la v11.7.0 : ils passent au backlog.
+
+### Added
+
+- **Groupes à trois zones (#225)** — sous-onglet **Groupes** de `/admin/ambiance` › Lumière. Trois zones : **Ambiance** (la salle), **Animateur** (pupitre, régie), **Public**. **12 groupes au maximum par zone**, numérotés « Groupe 1 », « Groupe 2 »… sans nom. Glisser-déposer des ampoules entre groupes et zones. Voir `docs/ADMIN_GUIDE.md`.
+- **Essai d'un groupe en séquence (#225)** — six pas d'une seconde : éteint, blanc 50 %, blanc 100 %, rouge, vert, bleu, puis retour à l'état de jeu. Bouton « Arrêter l'essai ». Un nouvel essai remplace le précédent.
+- **Zone Animateur (#225)** — blanc fixe sans effet choisi. ON / OFF et Flash ne la modifient pas ; seuls l'interrupteur général et l'arrêt du serveur l'éteignent.
+- **Zone Public (#225)** — rien n'est envoyé à ces ampoules sans effet choisi ; elles gardent leur état. Un effet peut y jouer ; sa fin peut laisser un état (`post`). Éteinte par l'interrupteur général et à l'arrêt. Après un essai, l'état lu sur le pont est réécrit.
+- **Moteur d'effets pas à pas (#223)** — nouveau paquet `internal/effects`. Un effet est un fichier YAML (`version: 2`) : `pre` (départ), `pas` (la boucle, un pas par tick), `dernier` (fin de tour), `post` (fin du moment). Cibles `g0` (toute la zone), `g1`… (numéro réel), variables de groupe (`gA: g1; +1`, listes, voisins `gA+1`), couleurs nommées vivantes (`theme`, `equipe`, `urgence`, `scene`). Voir `docs/LIGHT_EFFECTS.md`.
+- **Dossier `data/files/effects/` (#223)** — effets de l'utilisateur. Le dossier `natifs/` contient une copie de référence réécrite à chaque démarrage. Un fichier de même `id` qu'un natif le surcharge ; le supprimer restaure le natif. Rechargement à chaud toutes les 2 secondes. Un fichier invalide est écarté : son erreur (fichier, ligne, message) est signalée, les autres effets restent disponibles.
+- **Effets natifs (#223)** — `pulsation` (chronomètre), `chenillard` (chronomètre, un groupe par seconde), `chenillard-traine` (chronomètre, à partir de 5 groupes), `couleur-equipe` (score), `degrade` (calme, une couleur par groupe, #211).
+- **Réglages par zone et par moment (#223)** — `lighting.effects.<zone>.<moment>` et `lighting.speeds.<zone>.<moment>` dans `config.json` ; `light.effects` et `light.speeds` dans les réglages (salle, zones, surcharge de manche). Sous-onglet **Effets** de `/admin/ambiance` › Lumière, et dialogue « Ambiance de la manche ».
+- **Vitesse (#223)** — `0.5`, `0.75`, `1`, `1.5` ou `2`. La durée d'un tick est `duree_tick_ms` ÷ vitesse, jamais sous 250 ms.
+- **Bouton « Tester » (#223)** — joue un effet sur sa zone, à la vitesse réglée, pendant la durée par défaut du serveur (10 s, 5 s pour un effet de score seul). `POST /api/lighting/effects/{id}/try` (`zone`, `speed`, `seconds`) et `POST /api/lighting/effects/try/stop`. Réponse immédiate `{"ok": true, "duration_ms": 10000}`.
+- **`GET /api/lighting/effects`** (catalogue : `groups` et `applicable` par zone, `tick_ms`, `errors`, `unresolved`) et **`POST /api/lighting/effects/reload`** (#223).
+- **Catalogue des effets (#299)** — sous les réglages du sous-onglet Effets : une carte par effet (étiquette natif / personnalisé / natif modifié, moments, description, nombre de pas, « utilisé : zone, moment » d'après les réglages globaux), bandeau des fichiers en erreur (fichier, ligne, cause), « ↻ Recharger les fichiers ». Lien « Voir l'aperçu » depuis les réglages.
+- **Aperçu animé d'un effet (#299)** — « ▶ Aperçu » rejoue l'effet sur des ampoules dessinées g1, g2… avec le numéro du tick et le pas joué (PRE, pas 0, dernier). `GET /api/lighting/effects/{id}/preview?groups=N&moment=…` calcule les trames côté serveur, une par tick, sans rien envoyer au pont. Durée 20 s (chrono, calme) ou 5 s (score).
+- **Essai sur la salle depuis le catalogue (#299)** — « 💡 Essayer sur la salle » joue l'effet sur la zone ambiance à la vitesse ×1, 10 s (5 s pour un effet de score seul). Un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble : le dernier lancé remplace l'autre.
+- **Champ `steps`** dans le catalogue (`GET /api/lighting/effects`) : nombre de pas de la boucle.
+- **Sauvegarde et restauration (#223)** — `data/files/effects/` (sans `natifs/`) est inclus dans la catégorie `ambiance` de `/backup-select`, dans `/game-backup` et dans `/restore`.
+- **`POST /api/lighting/groups/test`** et **`POST /api/lighting/groups/test/stop`** (#225) — `{"group": n}` (zone ambiance), `{"group": "host<k>"}` ou `{"group": "public<k>"}`. Erreurs : `400`, `409`, `503`.
+- **Champ `group` dans `GET /api/lighting/lights`** — `0`, `n`, `"host<k>"` ou `"public<k>"`.
+- **Groupes Hue (#225)** — `buzzmaster-general`, `buzzmaster-host`, `buzzmaster-public` par zone (à partir de 2 ampoules), et `…-<n>` par groupe (à partir de 3).
+
+### Changed
+
+- **Pulsation (#223, décision utilisateur)** — la pulsation devient un effet natif joué par le moteur. **Son rendu change** : phase haute au thème à 100 %, phase basse à **blanc** 50 % au-dessus de 10 s (au lieu du thème à 50 %) ; sous 5 s, rouge à **50 %** (au lieu de 30 %), battement de **500 / 500 ms** (au lieu de 250 / 750 ms). Le tableau de l'ancien rendu est dans `contracts/light-effects.md` §5.5.
+- **Sous-onglets de Lumière (#225, #223)** — « Pont et ampoules », « Groupes » et « Effets ». Visibles une fois le pont associé.
+- **Pilote Hue (#225)** — `buzzmaster-general` ne contient plus les ampoules des zones animateur et public. Si toutes les ampoules d'une zone ont le même état, une seule écriture comme avant.
+- **Toolchain Go 1.26.11** (`go.mod`, environnement de développement) — aucun effet pour l'utilisateur.
+
+### Migration
+
+- **Groupes sans nom** : les clés `name` et `near_teams` ne sont plus acceptées ; une configuration de QUALIF qui les contient les voit ignorées, et elles disparaissent au prochain enregistrement des groupes.
+- **Réglages d'effets des groupes animateur** (`host_effects`, `host_speeds`, anciennes clés par `id`) : **ignorés**. La zone Animateur revient au blanc fixe ; refaire le réglage dans Effets › Animateur.
+- **Anciennes formes à plat** (`lighting.effects.{chrono,calm,score}`) : lues comme celles de la zone Ambiance, réécrites au prochain enregistrement.
+- **Anciens fichiers d'effets** (`version: 1`, motifs calculés) : **refusés** avec le message « format d'effet de la version précédente : réécrire en pas à pas ». Repartir d'un natif (`docs/LIGHT_EFFECTS.md`, « Créer un effet »).
+- **Groupes Hue renommés** : les anciens `buzzmaster-general-host<k>` disparaissent à la réconciliation ; la zone Animateur utilise `buzzmaster-host` (dès 2 ampoules) et `buzzmaster-host-<n>` par groupe (dès 3 ampoules).
+- **Pulsation** : rendu différent de la v11.6.0 (voir Changed).
+- Aucune version publiée (PROD) n'est concernée par les éléments de la v11.7.0.
+
 ## [11.6.0] - 2026-11-10 — Milestone v11.6.0 « Ambiance : portée étendue » (#283, #232, #235, #231, #290)
 
 Son et éclairage d'ambiance deviennent réglables **par manche**, et les bruitages sont étendus aux types de jeu (QCM, MEMORY, MEMOTION, RAFALE) et aux médias de question (MEMORY, MEMOTION, ENTRACTE).

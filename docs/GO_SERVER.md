@@ -47,7 +47,9 @@ server-go/
 │   ├── diag/                 # Journalisation sûre des valeurs client, séquence ARDOISE (#291)
 │   ├── demo/                 # Données de démo et de développement (#291)
 │   ├── led/                  # LED_SET vers les buzzers (#291/#295)
-│   └── ambiance/             # Couche d'ambiance lumineuse (#205, #295)
+│   ├── ambiance/             # Couche d'ambiance lumineuse (#205, #295)
+│   ├── ambiancecfg/          # Réglages d'ambiance : Settings, Partial, Sources, effets et vitesses par zone et par moment (#290, #223)
+│   └── effects/              # Effets lumière pas à pas : schéma YAML, validation, rendu, catalogue, rechargement (#223)
 ├── data/
 │   └── files/
 │       └── questions/        # Question storage (mirrors ESP32 structure)
@@ -103,6 +105,18 @@ L'`App` implémente ces interfaces dans `cmd/server/hosts.go`. Les paquets `vpla
 Deux modèles coexistent, à ne pas mélanger :
 - **LED** (`internal/led`) : l'état (`bumperLEDState`, `bumperBuzzState`, `ledStateMu`) reste dans l'`App`. Le `Controller` le partage par pointeur (`*map`, `*sync.RWMutex`), car une partie des tests réassigne ces maps.
 - **Ambiance** (`internal/ambiance`) : le `Controller` **possède** son état (writer, pilote Hue, verrou, atomics flash/score/chrono). Les champs ont été retirés de l'`App` ; `*App` ne fait que déléguer en une ligne (`ambiance_delegates.go`).
+
+### Moteur d'effets `internal/effects` (v11.7.0, #223)
+
+- **Pur** : pas de goroutine ni d'E/S réseau ; n'importe ni `internal/game` ni `internal/lighting/hue`. `Render(e, ctx, tick)` est déterministe ; `RenderPost` rend `post` à la fin du moment.
+- **Format pas à pas** (`light-effects.md` §4) : `Parse` / `ParseFile` (YAML strict), validation interne, `Render`, `LoadDir` (catalogue), `Manager` (`NewManager`, `Run` : signature du dossier toutes les 2 s, `ReloadInterval`), `EnsureDirs` (copie de référence `natifs/`). Les motifs calculés (`uniform`, `shift`, `gauge`, `random`, `gradient`) n'existent plus.
+- **Lecteur par zone** : `RunEffects` (goroutine sur `Host.Ctx()`, tic de 100 ms) vit dans `internal/ambiance/effects.go`. Il calcule **une trame par zone existante** (`ambiance`, `animateur`, `public`) avec le réglage de la zone, puis appelle `Writer().NotifyState()` quand une trame change. Zone public sans effet : aucune entrée émise.
+- **Vitesse** : durée réelle du tick = `duree_tick_ms` ÷ vitesse, plancher 250 ms ; changement pris au tick suivant (`ambiancecfg.SpeedValues`).
+- **Natifs** : lus depuis `assets/effects/*.yaml` (`go:embed`, `assets/embed.go`) : `pulsation`, `chenillard`, `chenillard-traine`, `couleur-equipe`, `degrade`.
+- **Horloge injectable** : `Controller.EffectsClock` et `EffectsTick` (par instance) ; `EffectsStep()` pour les tests sans ticker.
+- **Précédence** : `ON` / `OFF` / Flash suspendent les trames de la **zone ambiance** seulement. L'essai de groupe (`grouptest.go`) et l'essai d'effet (`…/try`) priment sur le moment vivant pour leur zone ou leur groupe. L'arrêt et l'interrupteur général annulent le lecteur (`quiesceAmbiance`).
+- **Zone public** : au démarrage, rien n'est envoyé ; le rétablissement après un essai lit le pont de façon synchrone (1,5 s au plus), puis réécrit l'état.
+- **Dépendance** : `go.yaml.in/yaml/v4` (déjà indirecte, désormais directe) — pas de nouvelle dépendance tierce ; `TestCA7_NoNewThirdPartyDependency` la liste.
 
 ### Règles pour les tests
 

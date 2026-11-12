@@ -1430,3 +1430,22 @@ ne surcharge pas le champ**, le global persisté (comportement v11.4.0 conservé
 réponse `200` porte `{"status":"ok","scope":"round"}` (additif ; `"scope":"global"` sinon) pour que la page Ambiance
 puisse l'indiquer.
 
+
+---
+
+## Lighting — groupes et effets (v11.7.0, #225, #223, #299, #211)
+
+> Détail normatif : `contracts/light-effects.md` (révision 4 : trois zones `ambiance`, `animateur`, `public`).
+
+| Méthode | Chemin | Rôle | Lot |
+|---|---|---|---|
+| POST | `/config.json` `{"lighting":{"groups":[…]}}` | Groupes `{id, role, lights[]}`, rôle `salle` \| `animateur` \| `public`, 12 par zone (§2.1) | LOT-1 |
+| GET | `/api/lighting/lights` | Champ additif `group` par ampoule (`0` \| `n` \| `"host<k>"` \| `"public<k>"`) | LOT-1 |
+| POST | `/api/lighting/groups/test` | Essai d'un groupe : séquence visible de 6 s, réponse immédiate, `group` = `n`, `"host<k>"` ou `"public<k>"` (§2.4) | LOT-1 |
+| POST | `/api/lighting/groups/test/stop` | Arrête l'essai de groupe en cours | LOT-1 |
+| POST | `/config.json` `{"lighting":{"effects":{"<zone>":{…}},"speeds":{"<zone>":{…}}}}` | Effet et vitesse par moment et par zone, global (§6) | LOT-2 |
+| GET | `/api/ambiance/settings` | `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` dans `global`, `effective`, `sources`, `round_override` | LOT-2 |
+| GET | `/api/lighting/effects` | Catalogue : `groups` par zone, `applicable` par zone, `tick_ms`, `steps`, erreurs de fichiers (§7.1) | LOT-2 |
+| POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |
+| POST | `/api/lighting/effects/{id}/try`, `/api/lighting/effects/try/stop` | Essai d'un effet sur une zone, à une vitesse donnée : bouton « Tester » de l'onglet Effets et essai du catalogue (§7.4) | LOT-2 |
+| GET | `/api/lighting/effects/{id}/preview` | Aperçu simulé : une trame par tick avec `tick`, `step` (`"pre"` \| `"pas:<n>"` \| `"dernier"`), `groups` ; `duration_ms` (20 000 ou 5 000 pour `score`), `chrono_s`, `tick_ms` (§7.3) | LOT-3 |

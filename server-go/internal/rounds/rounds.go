@@ -35,6 +35,12 @@ const (
 )
 
 // ReloadRounds re-reads rounds.json into GameState.ROUNDS (startup, restore).
+// EffectChecker is optionally implemented by the Host: the catalogue check of the light
+// effects of a round override (v11.7.0, #223). A Host without it refuses any effect id.
+type EffectChecker interface {
+	EffectExists(moment, id string) bool
+}
+
 func ReloadRounds(h Host) {
 	h.Engine().SetRounds(server.LoadRoundsFile(h.QuestionsDirPath()).Rounds)
 }
@@ -240,6 +246,17 @@ func ApplyUpdate(h Host, req protocol.RoundsUpdatePayload) (protocol.RoundsUpdat
 		p, bad := ambiancecfg.ParsePartial(r.Ambiance, knownCue)
 		for _, b := range bad {
 			badAmbiance = append(badAmbiance, label+":"+b)
+		}
+		if len(bad) == 0 {
+			// v11.7.0 (#223): an effect id must exist in the catalogue for its moment.
+			if ec, ok := h.(EffectChecker); ok {
+				bad = p.InvalidEffects(func(_, moment, id string) bool { return ec.EffectExists(moment, id) })
+			} else {
+				bad = p.InvalidEffects(func(string, string, string) bool { return false })
+			}
+			for _, b := range bad {
+				badAmbiance = append(badAmbiance, label+":"+b)
+			}
 		}
 		if len(bad) == 0 {
 			pp := p

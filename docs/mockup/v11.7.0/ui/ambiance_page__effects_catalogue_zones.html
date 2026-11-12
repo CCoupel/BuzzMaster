@@ -1,0 +1,194 @@
+<!--
+mockup:
+  composant: ambiance_page
+  feature: effects_catalogue_zones
+  version: 11.7.0
+  type: ui
+  issue: "#299 #223 #211"
+  validee_le: 2026-11-11
+  complete: [docs/mockup/v11.7.0/ui/ambiance_page__light_groups_zones.html, docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects_zones.html]
+  remplace: [docs/mockup/v11.7.0/ui/ambiance_page__effects_catalogue.html]
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambiance › Lumière › Effets — catalogue des effets pas à pas, aperçu simulé, essai sur la salle (#299)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; font-size:.8rem; } .mock-bar strong { color:#fff; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1100px; margin:1.4rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.4rem 0 .9rem; }
+.subtab { padding:.4rem .8rem; font-size:.84rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; } .subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+.btn { font:inherit; font-size:.78rem; padding:.32rem .65rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; cursor:pointer; }
+.btn[disabled] { opacity:.5; cursor:not-allowed; }
+.hint { font-size:.77rem; color:var(--gray-500); margin:.35rem 0; line-height:1.45; } .hint code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.err { font-size:.79rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--error); }
+.err ul { margin:.3rem 0 0 1.1rem; padding:0; } .err code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+.warn { font-size:.79rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--warning); }
+.head { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.grid { display:grid; grid-template-columns: 1fr 1fr; gap:.8rem; margin-top:.7rem; }
+.fx { border:1px solid var(--gray-200); border-radius:.6rem; padding:.75rem .8rem; }
+.fx h4 { margin:0 0 .25rem; font-size:.92rem; display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+.fx p { margin:.25rem 0 .5rem; font-size:.79rem; color:var(--gray-600); line-height:1.4; }
+.b { font-size:.64rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:.1rem .4rem; border-radius:.3rem; background:var(--gray-200); color:var(--gray-600); }
+.b.user { background:#dcfce7; color:#166534; } .b.over { background:var(--amberbg); color:var(--amber); } .b.use { background:var(--primary-100); color:#3730a3; text-transform:none; letter-spacing:0; }
+.m { font-size:.7rem; padding:.1rem .45rem; border-radius:999px; border:1px solid var(--gray-300); color:var(--gray-600); }
+.stage { background:#0f172a; border-radius:.5rem; padding:.9rem .6rem .55rem; margin:.4rem 0 .5rem; }
+.bulbs { display:flex; justify-content:space-around; align-items:center; }
+.bulb { width:2rem; height:2rem; border-radius:50%; background:#1e293b; transition: background-color .12s linear, box-shadow .12s linear; }
+.nums { display:flex; justify-content:space-around; margin-top:.35rem; font-size:.64rem; color:#64748b; }
+.clock { text-align:center; font-size:.68rem; color:#94a3b8; margin-top:.3rem; font-variant-numeric: tabular-nums; min-height:1em; }
+.file { font-size:.7rem; color:var(--gray-500); margin-top:.35rem; } .file code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.fx.na .stage { opacity:.45; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette v11.7.0 — #299 (révision 4)</strong> · Ambiance › Lumière › Effets : catalogue des effets pas à pas. Les aperçus de cette maquette sont animés (boutons « Aperçu »).</div>
+
+<p class="mock-note"><b>Révision 4 (remplace <code>ambiance_page__effects_catalogue</code>).</b> Le catalogue est adapté au format « pas à pas » et aux trois zones : les effets listés sont ceux de cette version ; l'aperçu affiche le <b>numéro du tick et le pas joué</b>, avec des groupes étiquetés <code>g1</code>, <code>g2</code>… ; « utilisé : … » cite la <b>zone</b> ; un même effet peut servir aux trois zones. Deux façons d'essayer sur les vraies ampoules coexistent : le bouton <b>« Tester »</b> des réglages (sur sa zone, à la vitesse réglée — maquette <code>ambiance_settings_panel__light_effects_zones</code>) et le bouton <b>« Essayer sur la salle »</b> du catalogue (vitesse d'origine ×1, zone Ambiance).</p>
+
+<p class="mock-note"><b>Place dans la page.</b> Sous-onglet <b>Effets</b> de Ambiance › Lumière. En haut, la section « Réglages d'ambiance — Lumière » (effet, vitesse et test par moment et par zone, non redessinée ici) ; en dessous, le <b>catalogue</b>. Le lien « Voir l'aperçu » d'un sélecteur d'effet fait défiler jusqu'à la carte de l'effet.</p>
+
+<h2 class="mock-h">01 — Catalogue des effets</h2>
+<div class="card">
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab">Groupes <span style="font-size:.68rem;background:var(--gray-200);border-radius:999px;padding:0 .3rem">9</span></span><span class="subtab active">Effets</span></div>
+  <p class="hint">(Section « Réglages d'ambiance — Lumière » : mode par défaut ; effet, vitesse et test par moment et par zone — voir la maquette dédiée.)</p>
+
+  <div class="head"><h3 style="margin:0">Catalogue des effets</h3><span style="flex:1"></span><button class="btn">↻ Recharger les fichiers</button></div>
+  <p class="hint">Chaque effet est un fichier texte dans le dossier <code>data/files/effects</code> du serveur : une liste de pas qui donnent, tick après tick, une couleur à des groupes (<code>g1</code>, <code>g2</code>… ; <code>g0</code> = toute la zone). Un même effet peut être joué sur la zone Ambiance, Animateur ou Public. Pour créer un effet, copiez un fichier du sous-dossier <code>natifs</code> dans ce dossier, changez son identifiant et modifiez-le : il apparaît ici en quelques secondes. <a style="color:var(--primary);text-decoration:underline">Comment écrire un effet</a></p>
+
+  <div class="err"><b>2 fichiers n'ont pas pu être chargés.</b> Les autres effets ne sont pas touchés.
+    <ul>
+      <li><code>mon-chenillard.yaml</code>, ligne 12 : la variable « gB » n'est pas déclarée dans <code>variables</code>.</li>
+      <li><code>ancien-effet.yaml</code> : format d'effet de la version précédente, à réécrire en pas à pas.</li>
+    </ul>
+  </div>
+
+  <div class="grid">
+    <div class="fx" data-fx="pulse">
+      <h4>Pulsation <span class="b">natif</span><span class="m">Chronomètre</span><span class="b use">utilisé : Ambiance, chronomètre</span></h4>
+      <p>Toute la zone respire deux fois par seconde : couleur du thème, puis une phase plus douce qui passe du blanc à l'orange à 10 secondes, puis au rouge à 5 secondes.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur la salle (10 s)</button>
+      <div class="file">Fichier : <code>natifs/pulsation.yaml</code> · 2 pas · tick de 0,5 s</div>
+    </div>
+    <div class="fx" data-fx="chase">
+      <h4>Chenillard <span class="b">natif</span><span class="m">Chronomètre</span><span class="b use">utilisé : Animateur, chronomètre (×1,5)</span></h4>
+      <p>Un point lumineux fait le tour de la zone, un groupe par seconde, sur un fond à la couleur du thème. Le point passe à l'orange puis au rouge quand le temps presse.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur la salle (10 s)</button>
+      <div class="file">Fichier : <code>natifs/chenillard.yaml</code> · 1 pas · tick de 1 s · demande 3 groupes dans la zone</div>
+    </div>
+    <div class="fx" data-fx="trail">
+      <h4>Chenillard avec traînée <span class="b">natif</span><span class="m">Chronomètre</span></h4>
+      <p>Le même chenillard, avec le groupe d'avant et le groupe d'après à mi-intensité de part et d'autre du point.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur la salle (10 s)</button>
+      <div class="file">Fichier : <code>natifs/chenillard-traine.yaml</code> · 1 pas · tick de 1 s · demande 5 groupes dans la zone</div>
+    </div>
+    <div class="fx" data-fx="team">
+      <h4>Couleur de l'équipe <span class="b">natif</span><span class="m">Équipe qui marque</span><span class="b use">utilisé : Animateur, Public</span></h4>
+      <p>Toute la zone prend la couleur de l'équipe qui marque, le temps de l'attribution des points.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur la salle (5 s)</button>
+      <div class="file">Fichier : <code>natifs/couleur-equipe.yaml</code> · 1 pas</div>
+    </div>
+    <div class="fx" data-fx="gradient">
+      <h4>Dégradé <span class="b over">natif modifié</span><span class="m">Phases calmes</span></h4>
+      <p>Une couleur différente par groupe, sur toute la zone.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur la salle (10 s)</button>
+      <div class="file">Fichier : <code>degrade.yaml</code> remplace <code>natifs/degrade.yaml</code>. Supprimez-le pour revenir à l'effet d'origine. · demande 2 groupes dans la zone</div>
+    </div>
+    <div class="fx" data-fx="bounce">
+      <h4>Aller-retour <span class="b user">personnalisé</span><span class="m">Chronomètre</span><span class="m">Phases calmes</span></h4>
+      <p>Exemple d'effet écrit par l'utilisateur : un point blanc va et vient d'un bout à l'autre de la zone (une variable en liste <code>gC: [g1, g2, g3, g4, g5, g6, g5, g4, g3, g2]</code>).</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <button class="btn play">▶ Aperçu</button><button class="btn try">💡 Essayer sur la salle (10 s)</button>
+      <div class="file">Fichier : <code>aller-retour.yaml</code> · 1 pas · tick de 0,5 s</div>
+    </div>
+  </div>
+</div>
+
+<p class="mock-note"><b>Comportement.</b><br>
+• <b>Aperçu</b> : anime des ampoules dessinées, une par groupe de la zone Ambiance (6 dans la maquette ; 6 par défaut si elle n'a aucun groupe), étiquetées <code>g1</code>, <code>g2</code>… Sous les ampoules : le <b>numéro du tick</b> et le <b>pas joué</b> (« PRE », « pas 0 », « pas 1 », « dernier »), puis, pour un effet de chronomètre, un compte à rebours simulé de 20 secondes. Les ticks sont calculés par le serveur à partir du fichier. Le bouton devient « ■ Arrêter » ; un seul aperçu tourne à la fois. L'aperçu est à la vitesse d'origine (×1).<br>
+• <b>Essayer sur la salle</b> : joue l'effet sur les vraies ampoules de la <b>zone Ambiance</b>, à sa <b>vitesse d'origine (×1)</b>, pendant la durée indiquée, puis l'éclairage revient à son état normal. Le bouton devient « ■ Arrêter l'essai ». Pour essayer un effet sur la zone Animateur ou Public, ou à une autre vitesse, on utilise le bouton « Tester » des réglages, en haut de l'onglet. Un essai et un test ne tournent jamais en même temps : le dernier lancé remplace l'autre.<br>
+• <b>Étiquettes</b> : « natif » (livré avec BuzzControl), « personnalisé » (fichier de l'utilisateur), « natif modifié » (un fichier de l'utilisateur remplace l'effet d'origine). « utilisé : … » rappelle les zones et les moments où l'effet est réglé en global, avec la vitesse si elle n'est pas ×1 (les manches ne sont pas listées).<br>
+• <b>Ligne « Fichier »</b> : nom du fichier, nombre de pas de la boucle, durée du tick, nombre de groupes demandé dans la zone où l'effet est joué.<br>
+• <b>Recharger les fichiers</b> : relit le dossier tout de suite. Sans ce bouton, un fichier modifié est pris en compte en quelques secondes.<br>
+• <b>Fichier en erreur</b> : listé dans le bandeau rouge avec le nom du fichier, la ligne et la cause. Si l'effet existait déjà, sa dernière version valide reste jouée. Un fichier écrit dans le format de la version précédente y figure avec le message « à réécrire en pas à pas ».<br>
+• Le catalogue n'a pas de bouton de création, de modification ni de suppression : l'éditeur d'effets (une grille ticks × groupes) est prévu pour la version suivante (v11.8.0).</p>
+
+<h2 class="mock-h">02 — Cas particuliers</h2>
+<div class="card">
+  <div class="grid">
+    <div class="fx na">
+      <h4>Chenillard avec traînée <span class="b">natif</span><span class="m">Chronomètre</span></h4>
+      <div class="warn" style="margin:.3rem 0">Demande 5 groupes ; la zone Ambiance en a 3. <a style="text-decoration:underline">Gérer les groupes</a></div>
+      <button class="btn">▶ Aperçu</button><button class="btn" disabled title="Demande 5 groupes">💡 Essayer sur la salle</button>
+      <p class="hint">L'aperçu reste disponible (simulé avec 6 groupes, mention « simulation avec 6 groupes » sous les ampoules).</p>
+    </div>
+    <div class="fx">
+      <h4>Essai indisponible</h4>
+      <p>Le bouton « Essayer sur la salle » est désactivé, avec une infobulle qui donne la raison :</p>
+      <p class="hint">• « L'éclairage d'ambiance est désactivé. »<br>• « Aucun pont associé » / « Pont injoignable ».<br>• « L'éclairage est forcé sur ON ou OFF, ou le Flash est actif : repassez en AUTO. »<br>• « Une question est en cours : l'essai est possible hors question. »</p>
+    </div>
+  </div>
+  <p class="hint">Catalogue vide (dossier illisible) : « Aucun effet disponible » et le bandeau d'erreur ; les effets natifs, embarqués dans le serveur, restent joués.</p>
+</div>
+
+<script>
+// Animation de démonstration de la maquette (dans le produit, les ticks viennent du serveur).
+(function () {
+  var N = 6, THEME = [79,70,229], TEAM = [229,57,53], WHITE = [255,255,255], ORANGE = [255,170,0], RED = [230,30,30];
+  var PAL = [[79,70,229],[20,184,166],[245,158,11],[236,72,153]];
+  function paint(el, rgb, pct) {
+    var k = pct / 100, c = rgb.map(function (v) { return Math.round(30 + (v - 30) * k); });
+    el.style.backgroundColor = 'rgb(' + c.join(',') + ')';
+    el.style.boxShadow = k > 0.15 ? '0 0 ' + (4 + 14 * k) + 'px rgba(' + rgb.join(',') + ',' + (0.75 * k) + ')' : 'none';
+  }
+  function urgence(rem) { return rem <= 5 ? RED : rem <= 10 ? ORANGE : WHITE; }
+  function all(look) { return Array.from({length: N}, function () { return look; }); }
+  var BOUNCE = [0,1,2,3,4,5,4,3,2,1];
+  var FX = {
+    pulse:    { ms: 500, chrono: true, f: function (t, rem) { return (t % 2 === 0) ? { pas: 'pas 0', g: all([THEME, 100]) } : { pas: 'pas 1', g: all([urgence(rem), 50]) }; } },
+    chase:    { ms: 1000, chrono: true, f: function (t, rem) { var p = t % N; return { pas: 'pas 0 · gA = g' + (p + 1), g: Array.from({length: N}, function (_, i) { return i === p ? [urgence(rem), 100] : [THEME, 100]; }) }; } },
+    trail:    { ms: 1000, chrono: true, f: function (t, rem) { var p = t % N; return { pas: 'pas 0 · gA = g' + (p + 1), g: Array.from({length: N}, function (_, i) {
+                if (i === p) return [urgence(rem), 100]; if (i === (p + 1) % N || i === (p + N - 1) % N) return [THEME, 45]; return [THEME, 100]; }) }; } },
+    team:     { ms: 1000, f: function () { return { pas: 'pas 0', g: all([TEAM, 100]) }; } },
+    gradient: { ms: 1000, f: function () { return { pas: 'pas 0', g: Array.from({length: N}, function (_, i) { return [PAL[i % PAL.length], 80]; }) }; } },
+    bounce:   { ms: 500, f: function (t) { var p = BOUNCE[t % BOUNCE.length]; return { pas: 'pas 0 · gC = g' + (p + 1), g: Array.from({length: N}, function (_, i) { return i === p ? [WHITE, 100] : [THEME, 35]; }) }; } }
+  };
+  var running = null;
+  document.querySelectorAll('.fx[data-fx]').forEach(function (card) {
+    var fx = FX[card.dataset.fx], bulbs = card.querySelector('.bulbs'), nums = card.querySelector('.nums'), clock = card.querySelector('.clock'), btn = card.querySelector('.play');
+    for (var i = 0; i < N; i++) { var b = document.createElement('div'); b.className = 'bulb'; bulbs.appendChild(b); var n = document.createElement('span'); n.textContent = 'g' + (i + 1); nums.appendChild(n); }
+    var els = bulbs.children;
+    function draw(t) {
+      var rem = 20 - (Math.floor(t * fx.ms / 1000) % 21), r = fx.f(t, rem);
+      r.g.forEach(function (g, i) { paint(els[i], g[0], g[1]); });
+      clock.textContent = 'tick ' + t + ' · ' + r.pas + (fx.chrono ? ' · chronomètre simulé : ' + rem + ' s' : '');
+    }
+    draw(0);
+    function stop() { clearInterval(card._t); card._t = null; btn.textContent = '▶ Aperçu'; if (running === card) running = null; }
+    btn.addEventListener('click', function () {
+      if (card._t) { stop(); return; }
+      if (running) running._stop();
+      var t = 0; running = card; btn.textContent = '■ Arrêter';
+      card._t = setInterval(function () { t++; draw(t); }, fx.ms);
+    });
+    card._stop = stop;
+    var tryBtn = card.querySelector('.try'), label = tryBtn.textContent;
+    tryBtn.addEventListener('click', function () { this.textContent = this.textContent.indexOf('■') === 0 ? label : '■ Arrêter l\'essai'; });
+  });
+})();
+</script>
+</body>
+</html>

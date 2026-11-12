@@ -1018,6 +1018,158 @@ Toujours sérialisé, sans persistance (dérivé). Recalculé à chaque changeme
 
 `config.json` existants restent valides : clé absente ⇒ `AUTO`.
 
+## Groupes d'ambiance et zones — v11.7.0 (#225, #223)
+
+Référence : `contracts/light-effects.md` (§2 zones, §4 format, §6 réglages, §7 API).
+
+### config.json — `lighting.groups`
+
+Tableau ordonné. Un groupe n'a **ni nom ni `near_teams`** : il n'est identifié que par son `id` stable et par son numéro,
+qui est son rang **dans sa zone** (1-based, groupes vides compris).
+
+| Champ | Type | Défaut | Description |
+|-------|------|--------|-------------|
+| `id` | String | attribué par le serveur | Identifiant **stable** (`[a-z0-9]{1,12}`, unique). Absent ou vide à l'enregistrement ⇒ le serveur en attribue un. Renommer ou déplacer un groupe ne le change pas. N'est la clé d'aucun réglage |
+| `role` | String | `"salle"` (absent ou vide) | Zone du groupe : `"salle"` (zone `ambiance`), `"animateur"` ou `"public"` |
+| `lights` | Array of String | `[]` | Noms d'ampoules de rôle `general`, chacune dans un seul groupe |
+
+- `groups` absent ou `[]` ⇒ comportement v11.6.0 exact.
+- **Plafond : 12 groupes par zone.** Un dépassement ⇒ `400`.
+- Écriture : remplacement complet du tableau (`POST /config.json`). Refus `400` avec message lisible : ampoule inconnue, ampoule de rôle `team`, ampoule dans deux groupes, `id` en double ou mal formé, rôle inconnu, plus de 12 groupes dans une zone. Les clés `name` et `near_teams` ne sont plus acceptées (`400`) ; lues dans une configuration de QUALIF antérieure, elles sont ignorées et disparaissent au prochain enregistrement.
+- Une ampoule passée en rôle `team` ou retirée de `lights` est retirée de son groupe dans la même écriture.
+- Une ampoule générale **hors groupe** appartient à la zone `ambiance` (son `g0`). Elle n'entre dans les zones `animateur` ou `public` que par son groupe.
+- Go : `config.LightingGroupEntry {ID, Role, Lights}` ; constantes `GroupRoleSalle = "salle"`, `GroupRoleAnimateur = "animateur"`, `GroupRolePublic = "public"` ; `LightingConfig.ZoneGroups(zone)` (tous les groupes d'une zone, vides compris), `NonEmptyGroups(zone)`, `ZoneExists(zone)`, `GroupOfLight()`.
+
+Exemple :
+
+```json
+"lighting": {
+  "groups": [
+    { "id": "g3f9a1", "role": "salle",     "lights": ["BuzzHue1", "BuzzHue4"] },
+    { "id": "g81c02", "role": "salle",     "lights": ["BuzzHue2"] },
+    { "id": "g5d7e4", "role": "animateur", "lights": ["BuzzHue8"] },
+    { "id": "g0b6c9", "role": "animateur", "lights": ["BuzzHue9"] },
+    { "id": "g7a2d1", "role": "public",    "lights": ["BuzzHue11", "BuzzHue12"] }
+  ]
+}
+```
+
+### config.json — `lighting.effects` et `lighting.speeds` (v11.7.0, #223)
+
+Réglage **global** par zone et par moment (`light-effects.md` §6). Dans les réglages de salle et de manche, la même donnée
+est `light.effects` / `light.speeds` (voir plus bas).
+
+| Clé | Type | Défaut | Description |
+|-----|------|--------|-------------|
+| `lighting.effects.<zone>.<moment>` | String | `ambiance.chrono` : `"pulsation"` ; le reste : `""` | Effet joué. `""` = aucun effet (salle : scène ordinaire ; animateur : blanc fixe ; public : zone non pilotée) |
+| `lighting.speeds.<zone>.<moment>` | Number | `1` | Vitesse : `0.5`, `0.75`, `1`, `1.5` ou `2` |
+
+- `<zone>` ∈ `ambiance`, `animateur`, `public` ; `<moment>` ∈ `chrono`, `calm`, `score`. Forme complète : neuf valeurs toujours présentes.
+- Valeur d'effet : `""` ou l'`id` d'un effet du catalogue qui déclare le moment. Sinon `400`.
+- Fusion par moment à l'écriture. Clé de zone, de moment ou valeur inconnue ⇒ `400`.
+- **Forme à plat refusée** (`lighting.effects.<moment>` sans zone, `host_effects`, `host_speeds`) : `400`.
+- **Lecture tolérante** d'une configuration de QUALIF antérieure : `lighting.effects` / `speeds` à plat sont lus comme ceux de la zone `ambiance` ; `host_effects` et `host_speeds` sont ignorés. Ils disparaissent au prochain enregistrement.
+
+### Modèle de réglages — `light.*` (Go `ambiancecfg`, `rounds.json`, `GameState.AMBIANCE_EFFECTIVE`)
+
+| Champ | JSON | Source globale | Par manche |
+|-------|------|----------------|------------|
+| `LightEffects[zone][moment]` | `light.effects.<zone>.<moment>` | `lighting.effects.<zone>.<moment>` | oui |
+| `LightSpeeds[zone][moment]` | `light.speeds.<zone>.<moment>` | `lighting.speeds.<zone>.<moment>` | oui |
+
+- Forme complète (`global`, `effective`, `AMBIANCE_EFFECTIVE`) : trois zones et trois moments toujours présents, même si la zone n'existe pas. `Partial` (manche) : seules les valeurs surchargées.
+- `Sources.light.effects.<zone>.<moment>` et `Sources.light.speeds.<zone>.<moment>` ∈ `global` | `round`.
+- La conversion `lighting.*` ↔ `light.*` se fait une seule fois, dans `ambiancecfg.FromConfig` / `ToConfigPatch`. `lighting.*` n'apparaît jamais dans `rounds.json` ni dans `AMBIANCE_EFFECTIVE` ; `light.*` n'apparaît jamais dans `config.json`.
+- Go : `ambiancecfg.SpeedValues = {0.5, 0.75, 1, 1.5, 2}` ; `ambiancecfg.ValidSpeed(v)`.
+
+### Zones dans l'écrivain — `lighting.ZoneState` et `LightSpec` (Go)
+
+| Champ | Valeurs | Sens |
+|-------|---------|------|
+| `Area` (`lighting.Area`) | `AreaAmbiance` (zéro), `AreaHost`, `AreaPublic` | Zone de l'entrée |
+| `Group` (`int`) | `0` ou `n ≥ 1` | `0` = toute la zone ; `n` = le groupe numéro n de la zone |
+
+- `{Zone:"general"}` (les deux champs à zéro) reste l'état de la zone ambiance, toujours émis en premier.
+- Une entrée `Group ≥ 1` **précise** l'entrée `Group 0` de sa zone pour ses ampoules.
+- `Scene()` : blanc fixe (255) pour la zone animateur (entrée `Area: AreaHost, Group: 0`) ; **aucune entrée** pour la zone public sans effet, ni POST, ni essai.
+- Un effet joué sur une zone n'émet que des entrées de cette zone. Les entrées `Group ≥ 1` ne sont émises que lorsqu'un effet réparti est joué sur la zone.
+- `HostGroup(k) = -k` **n'existe plus** (révision 4).
+
+### Pilote Hue — groupes et zones
+
+| Zone | Groupe Hue de zone | Groupes Hue de groupe |
+|------|--------------------|-----------------------|
+| ambiance | `buzzmaster-general` (à partir de 2 ampoules) | `buzzmaster-general-<n>` (à partir de 3) |
+| animateur | `buzzmaster-host` (à partir de 2) | `buzzmaster-host-<n>` (à partir de 3) |
+| public | `buzzmaster-public` (à partir de 2) | `buzzmaster-public-<n>` (à partir de 3) |
+
+- `hue.AreaGroupMinLights = 2` ; `hue.SubGroupMinLights = 3`.
+- `LightSpec` porte `Area` et `Group`. Quand tous les groupes d'une zone ont le même état cible, une seule écriture sur le groupe de zone.
+- `buzzmaster-general` exclut les ampoules des zones animateur et public. Une ampoule de ces zones ne reçoit jamais une entrée de la zone ambiance.
+- Une ampoule de la zone public sans entrée émise n'est **jamais écrite**.
+- Les anciens `buzzmaster-general-host<k>` disparaissent à la réconciliation.
+
+### `GET /api/lighting/lights` — champ `group`
+
+Chaque ampoule porte `group` : `0` (hors groupe ou ampoule d'équipe), `n ≥ 1` (groupe de la zone ambiance), `"host<k>"` (groupe k de la zone animateur) ou `"public<k>"` (groupe k de la zone public).
+
+### `GET /api/lighting/effects` — catalogue (v11.7.0, #223)
+
+Réponse (`light-effects.md` §7.1) :
+
+```json
+{
+  "groups": { "ambiance": 4, "animateur": 2, "public": 0 },
+  "effects": [
+    { "id": "chenillard", "name": "Chenillard", "description": "…", "moments": ["chrono"],
+      "origin": "native", "file": "natifs/chenillard.yaml", "min_groups": 3, "tick_ms": 1000, "steps": 1,
+      "applicable": { "ambiance": true, "animateur": false, "public": false } }
+  ],
+  "errors": [ { "file": "mon-effet.yaml", "line": 12, "message": "…" } ],
+  "unresolved": [ { "zone": "ambiance", "moment": "calm", "id": "mon-effet", "scope": "global" } ],
+  "dir": "data/files/effects"
+}
+```
+
+- `groups` : nombre de groupes **non vides** par zone. `applicable` : table par zone.
+- `origin` ∈ `native` | `user` | `override`.
+- `tick_ms` = `duree_tick_ms` du fichier. `steps` = nombre de pas de `pas` (sans `pre`, `dernier` ni `post`).
+- Les champs `reason` et `host_applicable` n'existent plus.
+
+### `POST /api/lighting/effects/{id}/try` et `…/try/stop` (v11.7.0, #223)
+
+Corps : `{"zone": "ambiance", "speed": 1, "seconds": 10}` (`zone` par défaut `ambiance` ; `speed` parmi les valeurs de `SpeedValues` ; `seconds` de 1 à 20, défaut 10, ou 5 pour un effet qui ne déclare que `score`). Le bouton « Essayer sur la salle » du catalogue envoie un corps vide ou `{}` : zone ambiance, vitesse ×1. Réponse immédiate `200 {"ok": true, "duration_ms": 10000}`. Refus : `409` avec `reason` (`disabled`, `game`, `not_applicable`, `mode`), `503` pont injoignable, `400`, `404`. Jamais `502`. L'essai n'est pas persisté.
+
+### `GET /api/lighting/effects/{id}/preview` — aperçu (v11.7.0, #299)
+
+Trames calculées par le serveur (`effects.Preview`, qui appelle `Render` : rien n'est joué sur le pont). Requête : `groups` de 1 à 12 (défaut : groupes non vides de la zone ambiance, 6 s'il n'y en a pas), `moment` ∈ `chrono`, `calm`, `score` (défaut : premier moment de l'effet). Vitesse ×1. Refus : `404` effet inconnu, `400` paramètre invalide ou moment non déclaré, `405` hors GET.
+
+```json
+{ "id": "chenillard", "moment": "chrono", "groups": 6, "tick_ms": 1000,
+  "duration_ms": 20000, "chrono_s": 20, "loop": true,
+  "frames": [
+    { "at_ms": 0, "tick": 0, "step": "pas:0",
+      "groups": [ { "color": [255,255,255], "intensity": 255 }, { "color": [79,70,229], "intensity": 255 } ] } ] }
+```
+
+- **Une trame par tick**, même identique à la précédente. Si une couleur nommée change entre deux ticks, une trame de plus est insérée au même `tick` et `step`.
+- `tick` : numéro du tick depuis le début de l'effet. `step` : `"pre"`, `"pas:<n>"` (rang du pas dans `pas`, à partir de 0) ou `"dernier"`. `post` n'apparaît jamais.
+- `at_ms` : instant depuis le début de l'aperçu (`tick` × `tick_ms` pour une trame de tick).
+- `groups` : un état par groupe, dans l'ordre g1…gN ; `color` (RGB), `intensity` (0-255). Pas de `fade_ms`.
+- Groupe jamais peint par l'effet : blanc `[255,255,255]`, intensité `200` (scène ordinaire simulée, valeur d'affichage propre à l'aperçu).
+- Calculé même sous `groupes_min` : c'est l'interface qui lit `applicable`.
+- Aucun pas visible (tous sautés) : `200` avec `"frames": []`.
+- `duration_ms` : 20 000 pour `chrono` et `calm`, 5 000 pour `score`. `chrono_s` : 20 pour `chrono`, 0 sinon. 400 trames au plus (au-delà, l'aperçu est tronqué et `duration_ms` raccourci).
+
+### `internal/effects` — effets lumière (Go, #223)
+
+Paquet pur (sans goroutine ni E/S réseau).
+
+- **Types** : `Effect` (`ID`, `Name` = `nom`, `MinGroups` = `groupes_min`, `TickMs` = `duree_tick_ms`, `Loop` = `boucle`, `Vars`, `Pre`, `Steps`, `Last` = `dernier`, `Post`), `Step` (liste ordonnée d'`Action`, 1 à 16), `Action` (`Target`, `Off`, `Color`, `Pct`), `Target` (`g0`, `gN` numéro, variable et décalage), `Var` (progression ou liste), `Color` (nom vivant ou RGB fixe), `Error {File, Line, Message}`.
+- **Fonctions** : `Parse` / `ParseFile` (YAML strict, `KnownFields(true)`), validation interne, `Render(e, ctx, tick)` (déterministe) et `RenderPost`, `LoadDir` (catalogue), `NewManager` / `Run` (signature du dossier vérifiée toutes les 2 s, `ReloadInterval`), `EnsureDirs` (copie `natifs/`).
+- **Limites** : 64 Ko par fichier (`MaxFileBytes`), 100 fichiers (`MaxFiles`), 12 groupes (`MaxGroups`), 200 pas (`MaxSteps`), 16 actions par pas (`MaxActions`), 8 variables (`MaxVars`), incrément ±12 (`MaxIncr`), `id` et `nom` de 40 caractères, `description` de 500, `duree_tick_ms` entre 250 et 60 000 (`MinTickMs`, `MaxTickMs`).
+- **Format** : `version: 2` seule acceptée ; `version: 1` est refusée avec un message dédié. Format et exemples : `docs/LIGHT_EFFECTS.md`.
+
 ## Game Flow
 
 > **Documentation complète**: Voir [GAME_STATE_MACHINE.md](GAME_STATE_MACHINE.md) pour la spécification détaillée.

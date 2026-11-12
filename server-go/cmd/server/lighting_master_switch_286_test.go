@@ -74,15 +74,15 @@ func (b *tw286Bridge) handler() http.HandlerFunc {
 	}
 }
 
+// tw286SetLightingEnabled flips lighting.enabled the way the server does — by publishing a NEW
+// config instance (POST /config.json copies the live one and calls SetInstance), never by writing
+// into the live object: the ambiance writer and the effect reader read config.Get() from their own
+// goroutines, and an in-place write is a data race that production code never has.
 func tw286SetLightingEnabled(t *testing.T, enabled bool) {
 	t.Helper()
-	raw := `{"lighting":{"enabled":false}}`
-	if enabled {
-		raw = `{"lighting":{"enabled":true}}`
-	}
-	if err := json.Unmarshal([]byte(raw), config.Get()); err != nil {
-		t.Fatalf("setup invalide : %v", err)
-	}
+	next := *config.Get()
+	next.Lighting.Enabled = enabled
+	config.SetInstance(&next)
 }
 
 func tw286WaitDriver(t *testing.T, app *App, wantNil bool) {

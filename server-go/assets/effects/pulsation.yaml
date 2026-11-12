@@ -1,0 +1,15 @@
+# Pulsation — toute la salle respire au rythme du chronomètre.
+# Phase haute : la couleur du thème à 100 %. Phase basse : la couleur d'urgence à 50 %
+# (blanc, puis orange à 10 s ou moins, puis rouge à 5 s ou moins). 500 ms chacune.
+id: pulsation
+nom: Pulsation
+description: >
+  Toute la salle respire pendant le chronomètre : thème, puis blanc. La phase basse passe
+  à l'orange à 10 secondes ou moins, puis au rouge à 5 secondes ou moins.
+version: 2
+moments: [chrono]
+duree_tick_ms: 500
+
+pas:
+  - { g0: [theme, 100] }
+  - { g0: [urgence, 50] }

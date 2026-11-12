@@ -1536,7 +1536,7 @@ func TestDevGroupWriteFallsBackToPerLightOnFailure(t *testing.T) {
 	var groupID string
 	f.mu.Lock()
 	for id, g := range f.groups {
-		if g.name == groupNameGeneral {
+		if g.name == "buzzmaster-general" {
 			groupID = id
 		}
 	}
@@ -1638,7 +1638,7 @@ func TestDevMeasureGroupGainAtN30(t *testing.T) {
 	var generalMembers int
 	fAfter.mu.Lock()
 	for _, g := range fAfter.groups {
-		if g.name == groupNameGeneral {
+		if g.name == "buzzmaster-general" {
 			generalMembers = len(g.lights)
 		}
 	}

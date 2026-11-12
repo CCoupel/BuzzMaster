@@ -1,0 +1,13 @@
+# Couleur d'équipe — la couleur de l'équipe créditée, fixe, le temps de l'attribution.
+# Pensé pour un groupe animateur (n'écrit que g0), utilisable aussi en salle.
+id: couleur-equipe
+nom: Couleur de l'équipe
+description: >
+  La couleur de l'équipe qui vient de marquer, fixe, le temps de l'attribution des points.
+  Pensé pour un groupe animateur.
+version: 2
+moments: [score]
+duree_tick_ms: 1000
+
+pas:
+  - { g0: [equipe, 100] }

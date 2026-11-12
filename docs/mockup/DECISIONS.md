@@ -82,6 +82,21 @@
 
 ## ambiance_page
 - L'interrupteur général « Éclairage d'ambiance activé » est persisté ; éteint, aucune commande n'atteint les ampoules. _(v11.4.0, #286, 2026-11-05)_
+- Page Groupes : pas de bouton de création automatique d'un groupe par ampoule (« Créer un groupe par ampoule » retiré) ; on crée un groupe, puis on y glisse des ampoules. _(v11.7.0, light_groups_multi_host, #225, GATE LOT-1 du 2026-11-11)_
+- « Tester le groupe » joue une séquence visible — éteint, blanc 50 %, blanc 100 %, rouge, vert, bleu, une seconde par étape — puis le groupe retrouve son éclairage d'avant ; jamais un simple clignotement blanc. Vaut pour les groupes de salle et les groupes animateur. _(v11.7.0, light_groups_multi_host, #225, GATE LOT-1 du 2026-11-11)_
+- **Trois zones** : Ambiance (la salle), Animateur, Public. Une ampoule garde le rôle « Éclairage général » et entre dans une zone **par son groupe** (page Groupes) ; chaque zone a ses groupes numérotés `g1`…`gN` et son `g0`. Jamais « un effet par groupe animateur ». _(v11.7.0, light_groups_zones, #225, révision 4 du 2026-11-11 — remplace « plusieurs groupes animateur, chacun avec ses effets »)_
+- **Zone Public** : sans groupe public, rien ne change ; avec un groupe et sans effet, BuzzControl ne lui envoie rien (ni scène de salle, ni blanc fixe, rien au démarrage) ; ON / OFF et le Flash ne la touchent pas. La zone Animateur reste en blanc fixe sans effet, hors ON / OFF / Flash. _(v11.7.0, light_groups_zones, #225, révision 4 du 2026-11-11)_
+- « Équipes à proximité » est **retiré** de la page Groupes : il ne servait qu'à l'effet Vague (#301), sorti de v11.7.0 ; à rouvrir avec la vague. _(v11.7.0, light_groups_numbered, #225, révision 3 du 2026-11-11 — remplace la contrainte « conservé » du GATE LOT-1)_
+- Les groupes n'ont **pas de nom** : un groupe est son numéro (son rang), affiché « Groupe n » / « Groupe animateur n » ; c'est ce numéro que citent les effets (`g1`, `g2`… ; `g0` = toute la zone). Jamais de champ de nom. _(v11.7.0, light_groups_numbered, #225, 2e refus du GATE LOT-1, 2026-11-11)_
+
+## ambiance_effects (fichiers d'effets lumière)
+- Un effet s'écrit **pas à pas** : à chaque tick, un pas donne une couleur et une intensité à des groupes cités par leur numéro ou par une variable (`gA: g1; +1`, `gC: [g1, g4, g3, g7]`), avec les pas spéciaux PRE, LAST (`dernier`) et POST. Jamais de motif calculé (« chenillard », « jauge », « dégradé » paramétrés) : option proposée puis refusée. Mots-clés des fichiers en français. _(v11.7.0, #223, 2e refus du GATE LOT-1, 2026-11-11)_
+- Règle d'avance validée sur chronogramme : PRE et le premier pas 0 voient les variables à leur départ ; ensuite un cran par pas de la boucle ; PRE, LAST et POST ne font pas avancer ; LAST est joué à chaque tour ; POST ne retarde jamais la scène suivante. _(v11.7.0, #223, 2026-11-11)_
+
+## ambiance_settings_panel (effets lumière)
+- **Vitesse réglable à l'usage** : la durée d'un pas reste dans le fichier d'effet ; un multiplicateur de vitesse (×0,5 à ×2) se choisit dans les réglages d'ambiance, à côté de chaque choix d'effet, en global et par manche, sans toucher au fichier. _(v11.7.0, light_effects_numbered, #223, 2026-11-11)_
+- **Un effet et une vitesse par moment et par zone** (Ambiance, Animateur, Public), en global et par manche ; un bloc par zone, jamais un bloc par groupe. _(v11.7.0, light_effects_zones, #223, révision 4 du 2026-11-11 — remplace « Groupe animateur n »)_
+- **Test à la vitesse réglée** : un bouton « Tester » à côté de chaque choix d'effet joue l'effet sur sa zone, à la vitesse réglée (page Ambiance seulement, pas dans la fenêtre de manche). L'essai du catalogue est conservé à part : vitesse d'origine ×1, sur la salle. _(v11.7.0, light_effects_zones / effects_catalogue_zones, #223 #299, révision 4 du 2026-11-11)_
 
 ## admin_game_award
 - Le bouton d'attribution ne porte jamais de compteur et tient sur une ligne ; le compteur « x joueurs · y équipes » / « y équipes » / « Aucune sélection » occupe sa propre ligne. _(v11.4.0, selection_lines, #289, 2026-11-05)_

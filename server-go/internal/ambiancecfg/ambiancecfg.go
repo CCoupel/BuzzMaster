@@ -27,6 +27,36 @@ const (
 // Valid reports whether m is one of ON / AUTO / OFF.
 func (m LightMode) Valid() bool { return m == LightOn || m == LightAuto || m == LightOff }
 
+// Moments of the light effects (light-effects.md §6) and the default of each
+// (v11.6.0 behaviour: the chrono pulse stays, nothing else changes).
+const (
+	MomentChrono = "chrono"
+	MomentCalm   = "calm"
+	MomentScore  = "score"
+	// PulsationID is the default effect of the chrono moment.
+	PulsationID = "pulsation"
+)
+
+// Moments lists the three moments in their normative order.
+var Moments = []string{MomentChrono, MomentCalm, MomentScore}
+
+// ValidMoment reports whether m is a known moment.
+func ValidMoment(m string) bool { return m == MomentChrono || m == MomentCalm || m == MomentScore }
+
+// Speeds (light-effects.md §6): the multiplier of an effect's tick, per moment.
+// Allowed values 0.5, 0.75, 1, 1.5, 2 — default 1.
+var SpeedValues = []float64{0.5, 0.75, 1, 1.5, 2}
+
+// ValidSpeed reports whether v is one of the allowed multipliers.
+func ValidSpeed(v float64) bool {
+	for _, x := range SpeedValues {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}
+
 // Source says which layer a resolved field comes from.
 type Source string
 
@@ -46,6 +76,11 @@ type Settings struct {
 	// SoundFiles (r3, #290): path of the sound file of each cue + "decompte", relative to
 	// data/files/sounds/ — complete form ("<cue>.wav" / "decompte.wav" for the catalogue).
 	SoundFiles map[string]string
+	// LightEffects / LightSpeeds (v11.7.0, #223, revision 4): the effect id and the speed
+	// multiplier of each moment, by zone (ambiance, animateur, public). Complete form = the
+	// three zones and the three moments always present.
+	LightEffects map[string]map[string]string
+	LightSpeeds  map[string]map[string]float64
 }
 
 // Partial is an overlay: every field optional, absent = inherited.
@@ -58,6 +93,9 @@ type Partial struct {
 	// SoundFiles (r3): partial, "rounds/<roundID>/<cue>.wav" — only the cues for which the
 	// round has its own file. The direct layer never carries files (§4.2 point 4).
 	SoundFiles map[string]string
+	// LightEffects / LightSpeeds: partial, only the overridden zones and moments.
+	LightEffects map[string]map[string]string
+	LightSpeeds  map[string]map[string]float64
 }
 
 // Sources gives, for each resolved field, the layer it comes from.
@@ -67,7 +105,9 @@ type Sources struct {
 	CountdownLoop    Source
 	LightMode        Source
 	CuesEnabled      map[string]Source
-	SoundFiles       map[string]Source // "global" | "round"
+	SoundFiles       map[string]Source            // "global" | "round"
+	LightEffects     map[string]map[string]Source // by zone, then moment: "global" | "round"
+	LightSpeeds      map[string]map[string]Source
 }
 
 // Effective is the published resolution (GameState.AMBIANCE_EFFECTIVE).
@@ -99,6 +139,8 @@ func (s Settings) Clone() Settings {
 			c.SoundFiles[k] = v
 		}
 	}
+	c.LightEffects = cloneEffects(s.LightEffects)
+	c.LightSpeeds = cloneSpeeds(s.LightSpeeds)
 	return c
 }
 
@@ -133,13 +175,20 @@ func (p Partial) Clone() Partial {
 			c.SoundFiles[k] = v
 		}
 	}
+	if len(p.LightEffects) > 0 {
+		c.LightEffects = cloneEffects(p.LightEffects)
+	}
+	if len(p.LightSpeeds) > 0 {
+		c.LightSpeeds = cloneSpeeds(p.LightSpeeds)
+	}
 	return c
 }
 
 // IsEmpty reports whether p overrides nothing (`{}`).
 func (p Partial) IsEmpty() bool {
 	return p.SoundMuted == nil && p.CountdownEnabled == nil && p.CountdownLoop == nil &&
-		p.LightMode == nil && len(p.CuesEnabled) == 0 && len(p.SoundFiles) == 0
+		p.LightMode == nil && len(p.CuesEnabled) == 0 && len(p.SoundFiles) == 0 &&
+		len(p.LightEffects) == 0 && len(p.LightSpeeds) == 0
 }
 
 // Merge returns p overlaid by q (every field defined in q wins).
@@ -170,6 +219,28 @@ func (p Partial) Merge(q Partial) Partial {
 		}
 		out.SoundFiles[k] = v
 	}
+	for z, mm := range q.LightEffects {
+		if out.LightEffects == nil {
+			out.LightEffects = map[string]map[string]string{}
+		}
+		if out.LightEffects[z] == nil {
+			out.LightEffects[z] = map[string]string{}
+		}
+		for m, v := range mm {
+			out.LightEffects[z][m] = v
+		}
+	}
+	for z, mm := range q.LightSpeeds {
+		if out.LightSpeeds == nil {
+			out.LightSpeeds = map[string]map[string]float64{}
+		}
+		if out.LightSpeeds[z] == nil {
+			out.LightSpeeds[z] = map[string]float64{}
+		}
+		for m, v := range mm {
+			out.LightSpeeds[z][m] = v
+		}
+	}
 	return out
 }
 
@@ -190,6 +261,16 @@ func Resolve(global Settings, layers ...Partial) (Settings, Sources) {
 		for k := range eff.SoundFiles {
 			src.SoundFiles[k] = SourceGlobal
 		}
+	}
+	// Light effects and speeds (revision 4): the three zones × three moments, always. A
+	// Settings built without them (older callers) gets the defaults.
+	eff.LightEffects = completeEffects(eff.LightEffects)
+	eff.LightSpeeds = completeSpeeds(eff.LightSpeeds)
+	src.LightEffects = map[string]map[string]Source{}
+	src.LightSpeeds = map[string]map[string]Source{}
+	for _, z := range Zones {
+		src.LightEffects[z] = map[string]Source{MomentChrono: SourceGlobal, MomentCalm: SourceGlobal, MomentScore: SourceGlobal}
+		src.LightSpeeds[z] = map[string]Source{MomentChrono: SourceGlobal, MomentCalm: SourceGlobal, MomentScore: SourceGlobal}
 	}
 	for i, l := range layers {
 		s := SourceRound
@@ -213,6 +294,28 @@ func Resolve(global Settings, layers ...Partial) (Settings, Sources) {
 		}
 		for cue, v := range l.CuesEnabled {
 			eff.CuesEnabled[cue], src.CuesEnabled[cue] = v, s
+		}
+		// Effects and speeds never come from a direct gesture (§6): the round layer is the
+		// only override. An unknown zone or moment is ignored here (validation refuses it).
+		for z, mm := range l.LightEffects {
+			if !ValidZone(z) {
+				continue
+			}
+			for m, v := range mm {
+				if ValidMoment(m) {
+					eff.LightEffects[z][m], src.LightEffects[z][m] = v, s
+				}
+			}
+		}
+		for z, mm := range l.LightSpeeds {
+			if !ValidZone(z) {
+				continue
+			}
+			for m, v := range mm {
+				if ValidMoment(m) {
+					eff.LightSpeeds[z][m], src.LightSpeeds[z][m] = v, s
+				}
+			}
 		}
 		for cue, v := range l.SoundFiles { // files come from the round layer only (never "direct")
 			if eff.SoundFiles == nil {
@@ -251,6 +354,42 @@ func (p Partial) InvalidPaths(known func(cue string) bool) []string {
 			bad = append(bad, PathCuePrefix+cue)
 		}
 	}
+	for _, z := range sortedZoneKeys(p.LightEffects) {
+		for m := range p.LightEffects[z] {
+			if !ValidZone(z) || !ValidMoment(m) {
+				bad = append(bad, PathLightEffects+z+"."+m)
+			}
+		}
+	}
+	for _, z := range sortedZoneKeys(p.LightSpeeds) {
+		for m, v := range p.LightSpeeds[z] {
+			if !ValidZone(z) || !ValidMoment(m) || !ValidSpeed(v) {
+				bad = append(bad, PathLightSpeeds+z+"."+m)
+			}
+		}
+	}
+	sort.Strings(bad)
+	return bad
+}
+
+// Light effect paths (ambiance-settings.md §10).
+const (
+	PathLightEffects = "light.effects."
+	PathLightSpeeds  = "light.speeds."
+)
+
+// InvalidEffects checks every effect id of p against exists(zone, moment, id) — the
+// catalogue check, done by the caller that knows it. "" is always valid (no effect).
+// Returns the offending JSON paths.
+func (p Partial) InvalidEffects(exists func(zone, moment, id string) bool) []string {
+	var bad []string
+	for _, z := range sortedZoneKeys(p.LightEffects) {
+		for m, id := range p.LightEffects[z] {
+			if id != "" && ValidZone(z) && ValidMoment(m) && !exists(z, m, id) {
+				bad = append(bad, PathLightEffects+z+"."+m)
+			}
+		}
+	}
 	sort.Strings(bad)
 	return bad
 }
@@ -270,7 +409,9 @@ type partialSoundWire struct {
 	Files     map[string]string `json:"files,omitempty"`
 }
 type partialLightWire struct {
-	Mode *LightMode `json:"mode,omitempty"`
+	Mode    *LightMode  `json:"mode,omitempty"`
+	Effects effectsWire `json:"effects,omitempty"`
+	Speeds  speedsWire  `json:"speeds,omitempty"`
 }
 type partialWire struct {
 	Sound *partialSoundWire `json:"sound,omitempty"`
@@ -293,8 +434,14 @@ func (p Partial) MarshalJSON() ([]byte, error) {
 			w.Sound.Files = p.SoundFiles
 		}
 	}
-	if p.LightMode != nil {
+	if p.LightMode != nil || len(p.LightEffects) > 0 || len(p.LightSpeeds) > 0 {
 		w.Light = &partialLightWire{Mode: p.LightMode}
+		if len(p.LightEffects) > 0 {
+			w.Light.Effects = effectsWire(p.LightEffects)
+		}
+		if len(p.LightSpeeds) > 0 {
+			w.Light.Speeds = speedsWire(p.LightSpeeds)
+		}
 	}
 	return json.Marshal(w)
 }
@@ -323,6 +470,12 @@ func (p *Partial) UnmarshalJSON(data []byte) error {
 	}
 	if w.Light != nil {
 		p.LightMode = w.Light.Mode
+		if len(w.Light.Effects) > 0 {
+			p.LightEffects = map[string]map[string]string(w.Light.Effects)
+		}
+		if len(w.Light.Speeds) > 0 {
+			p.LightSpeeds = map[string]map[string]float64(w.Light.Speeds)
+		}
 	}
 	return nil
 }
@@ -400,12 +553,49 @@ func ValidateRaw(raw []byte, known func(cue string) bool) []string {
 				continue
 			}
 			for lk, lv := range lm {
-				if lk != "mode" {
+				switch lk {
+				case "mode":
+					if s, ok := lv.(string); !ok || !LightMode(s).Valid() {
+						bad = append(bad, PathLightMode)
+					}
+				case "effects":
+					zm, ok := lv.(map[string]interface{})
+					if !ok {
+						bad = append(bad, "light.effects")
+						continue
+					}
+					for zk, zv := range zm {
+						mm, isObj := zv.(map[string]interface{})
+						if !isObj || !ValidZone(zk) {
+							bad = append(bad, "light.effects."+zk)
+							continue
+						}
+						for mk, mv := range mm {
+							if _, isStr := mv.(string); !isStr || !ValidMoment(mk) {
+								bad = append(bad, "light.effects."+zk+"."+mk)
+							}
+						}
+					}
+				case "speeds":
+					zm, ok := lv.(map[string]interface{})
+					if !ok {
+						bad = append(bad, "light.speeds")
+						continue
+					}
+					for zk, zv := range zm {
+						mm, isObj := zv.(map[string]interface{})
+						if !isObj || !ValidZone(zk) {
+							bad = append(bad, "light.speeds."+zk)
+							continue
+						}
+						for mk, mv := range mm {
+							if f, isNum := mv.(float64); !isNum || !ValidMoment(mk) || !ValidSpeed(f) {
+								bad = append(bad, "light.speeds."+zk+"."+mk)
+							}
+						}
+					}
+				default:
 					bad = append(bad, "light."+lk)
-					continue
-				}
-				if s, ok := lv.(string); !ok || !LightMode(s).Valid() {
-					bad = append(bad, PathLightMode)
 				}
 			}
 		default:
@@ -439,7 +629,9 @@ type settingsWire struct {
 		Files map[string]string `json:"files"`
 	} `json:"sound"`
 	Light struct {
-		Mode LightMode `json:"mode"`
+		Mode    LightMode                     `json:"mode"`
+		Effects effectsWire                   `json:"effects"`
+		Speeds  map[string]map[string]float64 `json:"speeds"`
 	} `json:"light"`
 }
 
@@ -458,6 +650,8 @@ func (s Settings) MarshalJSON() ([]byte, error) {
 		w.Sound.Files = map[string]string{}
 	}
 	w.Light.Mode = s.LightMode
+	w.Light.Effects = effectsWire(completeEffects(s.LightEffects))
+	w.Light.Speeds = completeSpeeds(s.LightSpeeds)
 	return json.Marshal(w)
 }
 
@@ -476,6 +670,8 @@ func (s *Settings) UnmarshalJSON(data []byte) error {
 		s.SoundFiles = w.Sound.Files
 	}
 	s.LightMode = w.Light.Mode
+	s.LightEffects = map[string]map[string]string(w.Light.Effects)
+	s.LightSpeeds = w.Light.Speeds
 	return nil
 }
 
@@ -490,7 +686,9 @@ type sourcesWire struct {
 		Files map[string]Source `json:"files"`
 	} `json:"sound"`
 	Light struct {
-		Mode Source `json:"mode"`
+		Mode    Source                       `json:"mode"`
+		Effects map[string]map[string]Source `json:"effects"`
+		Speeds  map[string]map[string]Source `json:"speeds"`
 	} `json:"light"`
 }
 
@@ -515,6 +713,16 @@ func (s Sources) MarshalJSON() ([]byte, error) {
 		w.Sound.Files = map[string]Source{}
 	}
 	w.Light.Mode = def(s.LightMode)
+	w.Light.Effects = map[string]map[string]Source{}
+	w.Light.Speeds = map[string]map[string]Source{}
+	for _, z := range Zones {
+		w.Light.Effects[z] = map[string]Source{}
+		w.Light.Speeds[z] = map[string]Source{}
+		for _, m := range Moments {
+			w.Light.Effects[z][m] = def(s.LightEffects[z][m])
+			w.Light.Speeds[z][m] = def(s.LightSpeeds[z][m])
+		}
+	}
 	return json.Marshal(w)
 }
 

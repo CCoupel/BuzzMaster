@@ -1,0 +1,198 @@
+<!--
+mockup:
+  composant: ambiance_settings_panel
+  feature: light_effects_zones
+  version: 11.7.0
+  type: ui
+  issue: "#223 #211"
+  validee_le: 2026-11-11
+  complete: [docs/mockup/v11.6.0/ui/ambiance_settings_panel__global_per_type_tabs.html, docs/mockup/v11.6.0/ui/ambiance_settings_panel__round_override_files.html]
+  remplace: [docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects_numbered.html]
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Réglages d'ambiance — Lumière : effet, vitesse et test par moment et par zone (#223)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; font-size:.8rem; } .mock-bar strong { color:#fff; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1100px; margin:1.4rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1040px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.modal { max-width:820px; border:1px solid var(--gray-300); }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.4rem 0 .9rem; }
+.subtab { padding:.4rem .8rem; font-size:.84rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; } .subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+h4.zone { margin:1.1rem 0 .1rem; font-size:.9rem; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+h4.zone small { font-weight:400; color:var(--gray-500); font-size:.75rem; }
+.tag { display:inline-block; margin-left:.5rem; font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.1rem .4rem; border-radius:.3rem; background:var(--primary-100); color:var(--primary); vertical-align:middle; }
+.new { display:inline-block; font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:.1rem .35rem; border-radius:.3rem; background:#dcfce7; color:#166534; vertical-align:middle; }
+.row { display:grid; grid-template-columns: 190px 210px 78px 84px 1fr; gap:.6rem; align-items:center; padding:.5rem 0; border-bottom:1px solid var(--gray-200); font-size:.84rem; }
+.row.o { grid-template-columns: 190px 230px 110px 1fr; }
+.row .lbl { font-weight:600; } .row .lbl small { display:block; font-weight:400; color:var(--gray-500); font-size:.73rem; }
+.sel, .spd { font:inherit; font-size:.8rem; padding:.3rem .35rem; border:1px solid var(--gray-300); border-radius:.35rem; background:#fff; width:100%; }
+.btn { font:inherit; font-size:.76rem; padding:.3rem .5rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); width:100%; }
+.btn[disabled], .spd[disabled] { opacity:.45; }
+.btn.run { background:var(--primary); border-color:var(--primary); color:#fff; }
+.hint { font-size:.76rem; color:var(--gray-500); margin:0; line-height:1.4; }
+.lnk { color:var(--primary); font-size:.76rem; text-decoration:underline; }
+.warn { font-size:.77rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.35rem .55rem; border-left:3px solid var(--warning); }
+.tristate { display:inline-flex; border:1px solid var(--gray-300); border-radius:.4rem; overflow:hidden; font-size:.78rem; }
+.tristate span { padding:.28rem .7rem; background:#fff; color:var(--gray-600); border-right:1px solid var(--gray-300); } .tristate span:last-child { border-right:0; }
+.tristate .on { background:var(--primary); color:#fff; font-weight:700; }
+.badge { display:inline-block; font-size:.7rem; font-weight:700; padding:.12rem .45rem; border-radius:999px; background:var(--primary-100); color:#3730a3; }
+.opt { font-size:.78rem; color:var(--gray-700); background:var(--gray-50); border:1px solid var(--gray-200); border-radius:.4rem; padding:.5rem .7rem; margin:.5rem 0; line-height:1.6; }
+.opt b { color:var(--gray-900); } .opt .dis { color:var(--gray-400); }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette v11.7.0 — #223, #211 (révision 4)</strong> · Composant « Réglages d'ambiance », section Lumière : effet, vitesse et test par moment et par zone. Non interactif.</div>
+
+<p class="mock-note"><b>Révision 4 (remplace <code>ambiance_settings_panel__light_effects_numbered</code>).</b> Deux changements. (1) Les effets se règlent <b>par zone</b> : un bloc <b>Ambiance</b>, un bloc <b>Animateur</b>, un bloc <b>Public</b> — et non plus un bloc par groupe animateur. Chaque bloc a les trois mêmes moments. (2) Un bouton <b>« Tester »</b> à droite de chaque ligne joue l'effet choisi <b>sur sa zone, à la vitesse réglée</b>. Les sélecteurs d'effet et de vitesse, « Hérité » et le badge de manche sont inchangés.</p>
+
+<h2 class="mock-h">01 — Mode global (Ambiance › Lumière › Effets)</h2>
+<div class="card">
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab">Groupes</span><span class="subtab active">Effets</span></div>
+  <h3>Réglages d'ambiance — Lumière <span class="tag">composant mutualisé</span></h3>
+  <div class="row o"><span class="lbl">Mode d'éclairage par défaut</span><span class="tristate"><span>ON</span><span class="on">AUTO</span><span>OFF</span></span><span></span><span class="hint">Inchangé (v11.6.0). Agit sur la zone Ambiance seulement.</span></div>
+
+  <h4 class="zone">💡 Zone Ambiance <small>la salle · 4 groupes</small></h4>
+  <div class="row"><span class="lbl">Pendant le chronomètre<small>Question chronométrée en cours</small></span>
+    <select class="sel"><option>Pulsation (par défaut)</option><option>Chenillard</option><option>Chenillard avec traînée</option><option>Aucun effet</option></select>
+    <select class="spd" title="Vitesse de l'effet"><option>×0,5</option><option>×0,75</option><option selected>×1</option><option>×1,5</option><option>×2</option></select>
+    <button class="btn">▶ Tester</button>
+    <span class="hint">Toute la salle respire au rythme des secondes. <a class="lnk">Voir l'aperçu</a></span></div>
+  <div class="row"><span class="lbl">Phases calmes<small>Hors partie, pause, entracte</small></span>
+    <select class="sel"><option>Aucun effet (par défaut)</option><option>Dégradé</option></select>
+    <select class="spd" disabled><option>×1</option></select>
+    <button class="btn" disabled>▶ Tester</button>
+    <span class="hint">Éclairage fixe de la salle.</span></div>
+  <div class="row" style="border-bottom:0"><span class="lbl">Quand une équipe marque<small>Attribution de points</small></span>
+    <select class="sel"><option>Aucun effet (par défaut)</option><option>Couleur de l'équipe</option></select>
+    <select class="spd" disabled><option>×1</option></select>
+    <button class="btn" disabled>▶ Tester</button>
+    <span class="hint">La salle prend la couleur de l'équipe, comme aujourd'hui.</span></div>
+
+  <h4 class="zone">🎤 Zone Animateur <small>2 groupes · sans effet : blanc fixe</small></h4>
+  <div class="row"><span class="lbl">Pendant le chronomètre</span>
+    <select class="sel"><option>Chenillard</option><option>Aucun effet (blanc fixe)</option><option>Pulsation</option></select>
+    <select class="spd"><option>×0,5</option><option>×0,75</option><option>×1</option><option selected>×1,5</option><option>×2</option></select>
+    <button class="btn run">■ Arrêter</button>
+    <span class="hint">Test en cours sur la zone Animateur, à la vitesse ×1,5…</span></div>
+  <div class="row"><span class="lbl">Phases calmes</span>
+    <select class="sel"><option>Aucun effet (blanc fixe)</option><option>Dégradé</option></select>
+    <select class="spd" disabled><option>×1</option></select>
+    <button class="btn" disabled>▶ Tester</button>
+    <span class="hint">La zone reste blanche.</span></div>
+  <div class="row" style="border-bottom:0"><span class="lbl">Quand une équipe marque</span>
+    <select class="sel"><option>Couleur de l'équipe</option><option>Aucun effet (blanc fixe)</option></select>
+    <select class="spd"><option>×0,5</option><option>×0,75</option><option selected>×1</option><option>×1,5</option><option>×2</option></select>
+    <button class="btn">▶ Tester</button>
+    <span class="hint">La zone prend la couleur de l'équipe, puis revient au blanc.</span></div>
+
+  <h4 class="zone">👥 Zone Public <span class="new">nouveau</span> <small>1 groupe · sans effet : non pilotée</small></h4>
+  <div class="row"><span class="lbl">Pendant le chronomètre</span>
+    <select class="sel"><option>Aucun effet (par défaut)</option><option>Pulsation</option></select>
+    <select class="spd" disabled><option>×1</option></select>
+    <button class="btn" disabled>▶ Tester</button>
+    <span class="hint">BuzzControl n'envoie rien aux lampes du public.</span></div>
+  <div class="row"><span class="lbl">Phases calmes</span>
+    <select class="sel"><option>Aucun effet (par défaut)</option></select>
+    <select class="spd" disabled><option>×1</option></select>
+    <button class="btn" disabled>▶ Tester</button>
+    <span class="hint">BuzzControl n'envoie rien aux lampes du public.</span></div>
+  <div class="row" style="border-bottom:0"><span class="lbl">Quand une équipe marque</span>
+    <select class="sel"><option>Couleur de l'équipe</option><option>Aucun effet</option></select>
+    <select class="spd"><option>×0,5</option><option>×0,75</option><option selected>×1</option><option>×1,5</option><option>×2</option></select>
+    <button class="btn">▶ Tester</button>
+    <span class="hint">Les lampes du public prennent la couleur de l'équipe, puis restent dans leur dernier état.</span></div>
+
+  <p class="hint" style="margin-top:.7rem">Effet et vitesse sont enregistrés à chaque changement. Le bloc d'une zone Animateur ou Public n'apparaît que si la zone a au moins un groupe ; sinon une ligne « Aucun groupe animateur — <a class="lnk">en créer un</a> » (ou « public ») le remplace.</p>
+</div>
+
+<p class="mock-note"><b>Bouton « Tester ».</b><br>
+• Il joue l'effet affiché sur la ligne, <b>sur la zone de la ligne</b> et <b>à la vitesse affichée</b>, pendant 10 secondes, puis la zone revient à son éclairage normal. Pendant le test, le bouton devient « ■ Arrêter » et la ligne indique la zone et la vitesse.<br>
+• Un seul test à la fois : lancer un autre test (ou l'essai d'un groupe) arrête le précédent. Changer l'effet ou la vitesse pendant un test l'arrête.<br>
+• Il est grisé, avec une infobulle qui dit pourquoi, quand : aucun effet n'est choisi ; l'éclairage est désactivé ou le pont injoignable ; une question est en cours ; pour la zone Ambiance seulement, l'éclairage est forcé sur ON ou OFF ou le Flash est actif.<br>
+• Zone Public : après un test, les lampes retrouvent l'état qu'elles avaient avant.<br>
+• Le catalogue, plus bas dans l'onglet, garde son propre bouton « Essayer sur les ampoules » : il joue l'effet à sa vitesse d'origine (×1), sur la zone Ambiance.</p>
+
+<h2 class="mock-h">02 — Mode global : contenu des listes et cas particuliers</h2>
+<div class="card">
+  <div class="opt"><b>Liste d'un moment, pour une zone</b> = « Aucun effet », puis les effets du catalogue qui déclarent ce moment : natifs d'abord, puis effets personnalisés par ordre alphabétique, suivis de « (personnalisé) ». Les mêmes effets sont proposés aux trois zones.<br>
+  <span class="dis">Chenillard avec traînée — demande 5 groupes, 2 dans cette zone</span> : un effet qui demande plus de groupes que la zone n'en a reste visible, grisé, avec la raison.</div>
+  <div class="row"><span class="lbl">Pendant le chronomètre<small>Zone Ambiance</small></span>
+    <select class="sel"><option>Chenillard avec traînée</option></select>
+    <select class="spd"><option>×1</option></select>
+    <button class="btn" disabled>▶ Tester</button>
+    <span class="warn">Cet effet demande 5 groupes et la zone en a 3 : la pulsation est jouée à la place. <a class="lnk">Gérer les groupes</a></span></div>
+  <div class="row"><span class="lbl">Phases calmes<small>Zone Animateur</small></span>
+    <select class="sel"><option>mon-effet (introuvable)</option></select>
+    <select class="spd"><option>×1</option></select>
+    <button class="btn" disabled>▶ Tester</button>
+    <span class="warn">Le fichier de cet effet est absent ou invalide : la zone reste en blanc fixe. <a class="lnk">Voir le catalogue</a></span></div>
+  <div class="row" style="border-bottom:0"><span class="lbl">Pendant le chronomètre<small>Zone Ambiance</small></span>
+    <select class="sel"><option>Aller-retour (personnalisé)</option></select>
+    <select class="spd"><option>×2 · plafonné</option></select>
+    <button class="btn">▶ Tester</button>
+    <span class="hint">« plafonné » : à cette vitesse l'effet dépasserait 4 changements par seconde ; il est joué à 4 par seconde.</span></div>
+  <p class="hint" style="margin-top:.6rem">Sans pont associé ou éclairage désactivé : les sélecteurs restent modifiables (réglages persistés), les boutons « Tester » sont grisés, avec la mention existante « Éclairage d'ambiance désactivé ».</p>
+</div>
+
+<h2 class="mock-h">03 — Mode surcharge (fenêtre « Ambiance de la manche », section Lumière)</h2>
+<div class="card modal">
+  <h3>Ambiance de la manche « Blind-test » — Lumière</h3>
+  <div class="row o"><span class="lbl">Mode d'éclairage</span><span class="tristate"><span class="on">Hérité (AUTO)</span><span>ON</span><span>AUTO</span><span>OFF</span></span><span></span><span class="hint">Inchangé (v11.6.0).</span></div>
+
+  <h4 class="zone">💡 Zone Ambiance</h4>
+  <div class="row o"><span class="lbl">Pendant le chronomètre</span>
+    <select class="sel"><option>Hérité (Pulsation)</option><option>Pulsation</option><option>Chenillard</option><option>Chenillard avec traînée</option><option>Aucun effet</option></select>
+    <select class="spd"><option>Hérité (×1)</option><option>×0,5</option><option>×0,75</option><option>×1</option><option>×1,5</option><option>×2</option></select>
+    <span class="hint">Valeurs globales appliquées.</span></div>
+  <div class="row o"><span class="lbl">Phases calmes</span>
+    <select class="sel"><option>Dégradé</option></select>
+    <select class="spd"><option>Hérité (×1)</option></select>
+    <span class="hint"><span class="badge">manche</span> Remplace « Aucun effet » pendant cette manche.</span></div>
+  <div class="row o" style="border-bottom:0"><span class="lbl">Quand une équipe marque</span>
+    <select class="sel"><option>Hérité (Aucun effet)</option><option>Couleur de l'équipe</option><option>Aucun effet</option></select>
+    <select class="spd"><option>Hérité (×1)</option></select>
+    <span class="hint">Valeurs globales appliquées.</span></div>
+
+  <h4 class="zone">🎤 Zone Animateur</h4>
+  <div class="row o"><span class="lbl">Pendant le chronomètre</span>
+    <select class="sel"><option>Hérité (Chenillard)</option><option>Aucun effet (blanc fixe)</option><option>Pulsation</option><option>Chenillard</option></select>
+    <select class="spd"><option>×2</option></select>
+    <span class="hint"><span class="badge">manche</span> Vitesse ×2 au lieu de ×1,5 pendant cette manche.</span></div>
+  <div class="row o"><span class="lbl">Phases calmes</span>
+    <select class="sel"><option>Hérité (Aucun effet)</option></select>
+    <select class="spd"><option>Hérité (×1)</option></select>
+    <span class="hint">Valeurs globales appliquées.</span></div>
+  <div class="row o" style="border-bottom:0"><span class="lbl">Quand une équipe marque</span>
+    <select class="sel"><option>Hérité (Couleur de l'équipe)</option></select>
+    <select class="spd"><option>Hérité (×1)</option></select>
+    <span class="hint">Valeurs globales appliquées.</span></div>
+
+  <h4 class="zone">👥 Zone Public</h4>
+  <div class="row o"><span class="lbl">Pendant le chronomètre</span>
+    <select class="sel"><option>Hérité (Aucun effet)</option><option>Pulsation</option></select>
+    <select class="spd"><option>Hérité (×1)</option></select>
+    <span class="hint">Valeurs globales appliquées.</span></div>
+  <div class="row o"><span class="lbl">Phases calmes</span>
+    <select class="sel"><option>Hérité (Aucun effet)</option></select>
+    <select class="spd"><option>Hérité (×1)</option></select>
+    <span class="hint">Valeurs globales appliquées.</span></div>
+  <div class="row o" style="border-bottom:0"><span class="lbl">Quand une équipe marque</span>
+    <select class="sel"><option>Hérité (Couleur de l'équipe)</option></select>
+    <select class="spd"><option>Hérité (×1)</option></select>
+    <span class="hint">Valeurs globales appliquées.</span></div>
+
+  <p class="hint" style="margin-top:.6rem">« Hérité (…) » affiche entre parenthèses la valeur globale. Chaque sélecteur surchargé (effet ou vitesse) compte pour un réglage dans le badge « Ambiance : N réglages » de l'en-tête de manche. <b>Pas de bouton « Tester » dans cette fenêtre</b> : on teste sur la page Ambiance.</p>
+</div>
+
+<p class="mock-note"><b>Popover d'en-tête « Ambiance ».</b> Inchangé : il ne montre ni ne modifie les effets.</p>
+</body>
+</html>

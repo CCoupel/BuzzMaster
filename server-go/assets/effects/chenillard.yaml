@@ -1,0 +1,16 @@
+# Chenillard — un point lumineux fait le tour de la salle, un groupe par seconde.
+id: chenillard
+nom: Chenillard
+description: >
+  Un point lumineux fait le tour de la salle pendant le chronomètre : la tête prend la
+  couleur d'urgence (blanc, orange puis rouge), le reste de la salle garde le thème.
+version: 2
+moments: [chrono]
+groupes_min: 3
+duree_tick_ms: 1000
+
+variables:
+  gA: g1; +1        # la tête : part du groupe 1, avance d'un groupe par tick
+
+pas:
+  - { g0: [theme, 100], gA: [urgence, 100] }

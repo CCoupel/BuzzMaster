@@ -1,0 +1,16 @@
+# Chenillard avec traînée — comme le chenillard, avec une traînée à 50 % de part et d'autre.
+id: chenillard-traine
+nom: Chenillard avec traînée
+description: >
+  Le même chenillard avec une traînée à 50 % de chaque côté de la tête.
+  Proposé à partir de 5 groupes.
+version: 2
+moments: [chrono]
+groupes_min: 5
+duree_tick_ms: 1000
+
+variables:
+  gA: g1; +1
+
+pas:
+  - { g0: [theme, 100], gA-1: [theme, 50], gA+1: [theme, 50], gA: [urgence, 100] }

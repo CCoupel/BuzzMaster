@@ -243,6 +243,7 @@ func (c *Controller) StartScoreFlash(team string, points int) {
 	if team == "" {
 		return
 	}
+	c.noteScorePulse(team) // #223: start of the "score" moment of the light effects
 	// ceil(points/5) via integer arithmetic — no float round-trip — then
 	// clamped to [1, 6]. points<=0 (defensive: every real call site already
 	// gates on points>0) falls through to the floor of 1.
@@ -437,6 +438,11 @@ func (c *Controller) ShutdownExtinguish() {
 // quiesceAmbiance is steps 1 and 2: detach the writer's driver
 // synchronously and cancel the Flash goroutine.
 func (c *Controller) quiesceAmbiance() {
+	c.abandonPublic()          // #223: no restore of the public bulbs — the extinction has the last word
+	c.StopEffectTrial()        // #223: shutdown and disabling cancel a running trial too
+	c.StopGroupTest()          // #225 (§2.4): shutdown and disabling cancel a running group test
+	c.effectsQuiet.Store(true) // #223 (§5.3): the effect reader stops publishing before the extinction
+	c.effectFrames.Store(nil)
 	c.Writer().SetDriver(nil) // step 1 — nil-safe, synchronously quiesces the old driver
 
 	c.ambianceMu.Lock()
@@ -484,6 +490,12 @@ func (c *Controller) extinguishFreshDriver(requireEnabled bool) {
 	ctx, cancelTimeout := context.WithTimeout(context.Background(), shutdownLightingTimeout)
 	defer cancelTimeout()
 	off := lighting.State{Zones: []lighting.ZoneState{{Zone: lighting.ZoneGeneral, Intensity: 0}}}
+	for _, zone := range []string{config.ZoneAnimateur, config.ZonePublic} {
+		if config.Get().Lighting.ZoneExists(zone) {
+			// The animateur and public areas ignore the room's Group 0: extinguish each explicitly.
+			off.Zones = append(off.Zones, lighting.ZoneState{Zone: lighting.ZoneGeneral, Area: areaOfZone(zone), Intensity: 0})
+		}
+	}
 	seen := map[string]bool{}
 	for _, l := range config.Get().Lighting.Lights {
 		if l.Role == string(hue.RoleTeam) && l.Team != "" && !seen[l.Team] {

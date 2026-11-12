@@ -101,10 +101,10 @@ func TestSoundsAPI231_List_DecompteStaysInLong_NotInCues(t *testing.T) {
 func TestSoundsAPI231_CuesDisabled_FiltersNewCues(t *testing.T) {
 	s, dataDir := setupTestHTTPServer(t)
 	tw230SeedDefaultSounds(t, dataDir)
-	if err := json.Unmarshal([]byte(`{"sound":{"cues_disabled":{"rafale-bonne":true,"memory-carte":true}}}`), config.Get()); err != nil {
+	if err := config.PatchJSON([]byte(`{"sound":{"cues_disabled":{"rafale-bonne":true,"memory-carte":true}}}`)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { config.Get().Sound.CuesDisabled = nil })
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil }) })
 	cues, _ := tw231hGetSounds(t, s)
 	for _, c := range cues {
 		want := !(c["cue"] == "rafale-bonne" || c["cue"] == "memory-carte")
@@ -174,8 +174,8 @@ func TestSoundsAPI231_TestEndpoint_NewCue_Played(t *testing.T) {
 func TestSoundsAPI231_TestEndpoint_NewCueDisabled_StillTestable(t *testing.T) {
 	s, dataDir := setupTestHTTPServer(t)
 	tw230SeedDefaultSounds(t, dataDir)
-	_ = json.Unmarshal([]byte(`{"sound":{"cues_disabled":{"rafale-fin-lot":true}}}`), config.Get())
-	t.Cleanup(func() { config.Get().Sound.CuesDisabled = nil })
+	_ = config.PatchJSON([]byte(`{"sound":{"cues_disabled":{"rafale-fin-lot":true}}}`))
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil }) })
 	fake := &tw230eFakeSoundProvider{enabled: true, outputAvailable: true, testAccepted: true}
 	s.Sound = fake
 	if w := tw230Post(t, s, "/api/sounds/rafale-fin-lot/test", nil, ""); w.Code != http.StatusOK || len(fake.testCalls) != 1 {

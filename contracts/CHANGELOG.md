@@ -1,6 +1,225 @@
 # Changelog des Contrats API
 
 ---
+## [20261112] — v11.7.0 — précisions de l'aperçu d'effet après la revue LOT-3 (#299)
+
+Source : `_work/reports/code-review-lot3-20261112-040000.md` (table des choix validés). Le code livré fait foi ; le contrat
+est aligné. **Aucun changement de comportement, aucun BREAKING.**
+
+- **[CHANGED]** `GET /api/lighting/effects/{id}/preview` (`light-effects.md` §7.3) — trois précisions : un groupe jamais
+  écrit par l'effet apparaît avec la scène ordinaire simulée, blanc `[255,255,255]` à l'intensité `200` ; l'aperçu est
+  calculé même quand `groups` est inférieur à `groupes_min` (l'interface lit `applicable` et annonce une simulation) ;
+  `"frames": []` (jamais `null`) quand aucun pas n'est visible pour le nombre de groupes demandé, les autres champs
+  restant renseignés.
+
+---
+## [20261111] — v11.7.0 — compléments de l'API pour le catalogue (#299, LOT-3)
+
+Relevés par `dev-frontend` (`_work/handoff/dev-frontend-20261111-182000.md`) pour couvrir la maquette
+`ambiance_page__effects_catalogue_zones`. Champs additifs, **aucun BREAKING** (l'aperçu n'est pas encore livré).
+
+- **[NEW]** `GET /api/lighting/effects/{id}/preview` (`light-effects.md` §7.3) — par trame : `tick` (numéro du tick) et
+  `step` (`"pre"` | `"pas:<n>"` | `"dernier"`, n à partir de 0 ; jamais `"post"`). **Une trame par tick**, même identique
+  à la précédente (remplace « seulement si elle diffère »), plus une trame quand une couleur nommée change entre deux
+  ticks. Au niveau de la réponse : `moment`, `tick_ms`, `chrono_s` (20 pour `chrono`, 0 sinon).
+- **[CHANGED]** Durée de l'aperçu fixée au contrat et renvoyée dans `duration_ms` : 20 000 ms pour `chrono` et `calm`,
+  **5 000 ms pour `score`** ; l'interface lit cette valeur. `fade_ms` retiré des états de groupe (pas de fondu).
+- **[NEW]** `GET /api/lighting/effects` (§7.1) — `steps` : nombre de pas de la boucle de l'effet.
+- **[CHANGED]** `POST /api/lighting/effects/{id}/try` (§7.4) — `seconds` par défaut : 5 pour un effet qui ne déclare que
+  le moment `score`, 10 sinon.
+
+---
+## [20261111] — v11.7.0 — révision 4 : trois zones symétriques (ambiance, animateur, public), test à la vitesse réglée
+
+Retour utilisateur sur la maquette du catalogue. **Rien n'est en PROD** ; les marques **[BREAKING]** valent par rapport
+au code de la branche (Batch R : `34ced5bf`, `c25b1b13`, `2ce84d3b`, `d2104208`, `beb68938`).
+
+- **[NEW]** Zones : `lighting.groups[].role` gagne `public` ; chaque zone a ses groupes `g1`…`gN` et son `g0` ; 12 groupes
+  par zone. Zone public : non pilotée sans effet (ni scène, ni blanc fixe, rien au démarrage), insensible à ON / OFF /
+  Flash, éteinte par l'interrupteur général et à l'arrêt, POST appliqué et tenu, état lu puis réécrit autour d'un essai.
+  `light-effects.md` §2.1, §2.5.
+- **[BREAKING]** Zone animateur : **un effet pour la zone**, rendu sur ses N groupes — plus un effet par groupe.
+  Applicabilité (§4.7) : même règle pour les trois zones ; la règle « n'écrit que `g0` » est supprimée.
+- **[BREAKING]** Réglages (§6, réécrit) : `lighting.effects.<zone>.<moment>` et `lighting.speeds.<zone>.<moment>`
+  (`config.json`) ; `light.effects.<zone>.<moment>` et `light.speeds.<zone>.<moment>` (manche, API, état de jeu). Les clés
+  `host_effects`, `host_speeds` et les formes à plat `effects.<moment>` / `speeds.<moment>` sont supprimées (la forme à
+  plat d'une configuration antérieure est lue comme la zone `ambiance`).
+- **[BREAKING]** Adressage d'état (§2.2) : `ZoneState.Area` + `Group` remplace les numéros négatifs `HostGroup(k)` ;
+  groupes Hue `buzzmaster-host[-<n>]`, `buzzmaster-public[-<n>]` (remplacent `buzzmaster-general-host<k>`).
+  `hue-bridge.md` §11.
+- **[BREAKING]** `GET /api/lighting/effects` (§7.1) : `groups` et `applicable` deviennent des tables par zone ;
+  `host_applicable` et `reason` supprimés ; `unresolved[].zone` ajouté.
+- **[NEW]** `GET /api/lighting/effects` : `tick_ms` par effet (indication « plafonné » de la vitesse).
+- **[CHANGED]** `POST /api/lighting/effects/{id}/try` (§7.4) : corps `{zone, speed, seconds}` ; sert au bouton « Tester »
+  de l'onglet Effets (zone et vitesse du réglage) et à l'essai du catalogue (×1, zone ambiance) ; refus `mode` pour la
+  seule zone ambiance. Passe du LOT-3 au LOT-2.
+- **[CHANGED]** Forme de `group` : ajout de `"public<k>"` (`GET /api/lighting/lights`, `POST /api/lighting/groups/test`).
+- **[CHANGED]** Précisions issues du Batch R, sans changement de comportement : numéro réel pour une cible directe, rangs
+  parmi les groupes non vides pour les variables (§4.3) ; sans `pre`, le pas 0 est au tick 0 (§4.5) ; POST sans effet
+  visible en zones ambiance et animateur (§4.5) ; changement de vitesse au tick suivant (§6) ; `degrade` livré avec le
+  LOT-2 (§9).
+
+---
+## [20261111] — v11.7.0 — révision 3 : effets écrits pas à pas, groupes sans nom (#223, #225 — 2e refus du GATE LOT-1)
+
+Modèle figé par l'utilisateur (`_work/reports/effects-chronogram-r2-20261111-223000.md`). **Rien n'est en PROD** ; les
+marques **[BREAKING]** valent par rapport au code de la branche (LOT-1 Batch C, LOT-2 Batch 2.1 à 2.3).
+
+- **[BREAKING]** Format d'effet (`light-effects.md` §4, réécrit) : **format unique pas à pas**, `version: 2`, mots-clés
+  français — `nom`, `groupes_min`, `duree_tick_ms`, `boucle`, `variables`, `pre`, `pas`, `dernier`, `post`. Les motifs
+  calculés (`uniform`, `shift`, `gauge`, `random`, `gradient`), `target`, `min_groups`, `looks`, `pattern`, `stages`,
+  `duration_ms`, `fade_ms` sont **supprimés** ; un fichier `version: 1` est refusé.
+- **[NEW]** Variables de groupe : progression `gA: g1; +1`, liste `gC: [g1, g4, g3, g7]`, voisins `gA+1` / `gA-1`, `gN`,
+  rebouclage sur le nombre réel de groupes non vides. Règle d'avance : PRE et le premier pas 0 au départ, puis un cran
+  par pas de la boucle joué ; PRE, `dernier` (LAST) et POST ne font pas avancer (§4.5, chronogramme de référence).
+- **[NEW]** Sémantique des pas : un pas = un tick ; `g0` = toute la zone ; actions dans l'ordre écrit ; groupe non cité =
+  état conservé ; groupe absent = action ignorée ; pas ne visant aucune cible existante = sauté ; LAST à chaque tour ;
+  POST appliqué à la fin du moment sans retarder la scène suivante. Couleurs `#RRGGBB` ou `theme`, `equipe`, `urgence`,
+  `scene`, résolues à chaque rendu.
+- **[BREAKING]** Applicabilité (§4.7) : salle = `groupes_min` ; groupe animateur = effet qui n'écrit que `g0`.
+  `GET /api/lighting/effects` : champ `target` supprimé, `min_groups` = `groupes_min`.
+- **[BREAKING]** `lighting.groups[]` : `name` et `near_teams` **supprimés** (groupes désignés par leur rang) ; ignorés à la
+  lecture d'un `config.json` antérieur, refusés à l'écriture. `light-effects.md` §2.1, `hue-bridge.md` §11.
+- **[BREAKING]** Pulsation (§5.5) : effet natif pas à pas, **rendu non identique à v11.6.0** (phase basse blanche au-dessus
+  de 10 s ; à 5 s, rouge à 50 % et battement régulier). Le test d'identité de `7a7a33aa` est remplacé.
+- **[CHANGED]** Effets natifs (§9) : `pulsation`, `chenillard`, `chenillard-traine` (à partir de 5 groupes),
+  `couleur-equipe`, `degrade`. **Retirés du milestone** : `remplissage` (#300), `vague` et `vague-lente` (#301),
+  `scintillement` (#302).
+- **[NEW]** *(ajout à la validation)* Vitesse réglable à l'usage : `lighting.speeds.<moment>` et
+  `lighting.host_speeds.<id>.<moment>` (`config.json`) ; `light.speeds.<moment>` et `light.host_speeds.<id>.<moment>`
+  (réglages de manche, `GET /api/ambiance/settings`, `AMBIANCE_EFFECTIVE`) ; valeurs `0.5 | 0.75 | 1 | 1.5 | 2`, défaut `1` ;
+  tick réel = `duree_tick_ms` ÷ vitesse, plancher 250 ms ; le fichier d'effet n'est pas modifié. `light-effects.md` §6,
+  `ambiance-settings.md` §10.
+- Sans changement : dossier d'effets, natifs embarqués, surcharge par `id`, rechargement à chaud, erreurs fichier / ligne
+  (§3) ; lecteur, moments, précédence (§5.1 à §5.4) ; réglages par moment, salle et par groupe animateur (§6) ; groupes
+  animateur multiples et essai de groupe en séquence (§2.4, §2.5) ; aperçu calculé par le serveur et essai d'effet (§7).
+
+---
+## [20261111] — v11.7.0 — `hue-bridge.md` §11 aligné sur les groupes animateur multiples (#225, #223)
+
+- **[CHANGED]** Correction rédactionnelle, sans changement de comportement : le §11 de `hue-bridge.md` gardait trois
+  formulations d'avant le GATE LOT-1 (« un seul » groupe animateur, `lighting.GroupHost (-1)` / `buzzmaster-general-host`,
+  `"host"`, et `lighting.host_effects {chrono, calm, score}` en forme plate). Elles sont alignées sur `light-effects.md`
+  §2.1, §2.5, §6 et sur le code (3d3e5426) : plusieurs groupes animateur, `HostGroup(k) = -k`,
+  `buzzmaster-general-host<k>`, `"host<k>"`, `lighting.host_effects { "<id>": { chrono, calm, score } }`.
+
+---
+## [20261111] — v11.7.0 — corrections du GATE LOT-1 refusé (#225, impacts #223)
+
+Retour utilisateur sur la QUALIF 11.7.0.2. **Aucun de ces points n'a été livré en PROD** ; les marques **[BREAKING]**
+ci-dessous valent **par rapport au code déjà livré sur la branche** (LOT-1, LOT-2 Batch 2.1 / 2.2), à reprendre.
+
+- **[BREAKING]** Groupes animateur **multiples** : la limite « un seul » est levée (4 au plus, 12 groupes de salle au
+  plus). Rang propre A1, A2… ; `ZoneState.Group = -k` (`lighting.HostGroup(k)`, remplace la constante unique
+  `GroupHost`) ; groupes Hue `buzzmaster-general-host<k>` (remplace `buzzmaster-general-host`). `light-effects.md` §2.1,
+  §2.2, §2.5 ; `hue-bridge.md` §11.
+- **[BREAKING]** Forme de `group` (`GET /api/lighting/lights`, `POST /api/lighting/groups/test`) : `"host"` devient
+  `"host<k>"` (`"host1"`, `"host2"`…). `light-effects.md` §2.4.
+- **[BREAKING]** `lighting.host_effects` / `light.host_effects` : de `{chrono, calm, score}` à une **table par groupe
+  animateur** `{"<id>": {chrono, calm, score}}` ; `Sources` de même forme ; `id` de groupe inconnu écarté sans erreur ;
+  ancienne forme plate ignorée à la lecture. `light-effects.md` §6, `ambiance-settings.md` §10.
+- **[NEW]** `lighting.groups[].id` — identifiant stable, attribué par le serveur s'il est absent. `light-effects.md` §2.1.
+- **[BREAKING]** `POST /api/lighting/groups/test` — **séquence visible** en 6 pas d'une seconde (éteint, blanc 50 %, blanc
+  100 %, rouge, vert, bleu) puis retour à l'état vivant ; réponse **immédiate** `{"ok":true,"duration_ms":6000}` ;
+  portée par `Scene()` et l'écrivain (aucune écriture directe au pilote) ; un nouvel essai remplace le précédent ; `429`
+  et `500` ne sont plus renvoyés (`400`, `409`, `503` conservés). `light-effects.md` §2.4.
+- **[NEW]** `POST /api/lighting/groups/test/stop` — arrête l'essai en cours. `light-effects.md` §2.4.
+- **[CHANGED]** Lecteur d'effets : une trame indépendante **par** groupe animateur non vide. `light-effects.md` §5.3.
+- Sans changement : `near_teams` (origine de la vague, groupes de salle seulement) ; l'essai d'un effet du catalogue
+  (§7.4) ne joue jamais sur un groupe animateur.
+- Interface : bouton « Créer un groupe par ampoule » supprimé (maquette `ambiance_page__light_groups_multi_host`).
+
+---
+## [20261111] — v11.7.0 — sémantique du motif `gradient` (#223, LOT-2 Batch 2.1)
+
+Deux interprétations remontées par `test-writer` sur l'implémentation 1bc18a87 ; règle fixée en `light-effects.md` §4.3.1.
+
+- **[CHANGED]** `travel: none` — dégradé **fixe du premier au dernier arrêt** (groupe 1 = premier arrêt, dernier groupe =
+  dernier arrêt) ; `repeat` n'a aucun effet et le dégradé ne reboucle **jamais** sur le premier arrêt. Le rendu actuel
+  (rebouclage) est **non conforme**.
+- **[CHANGED]** `travel: outward` (et `forward` / `backward` avec `repeat: false`) — **propagation dans le temps** depuis
+  un groupe de départ : front à la distance d au pas d, chaque groupe atteint parcourt les arrêts un par pas puis reste
+  sur le dernier (`repeat: false`) ou reboucle (`repeat: true`). L'atténuation selon la distance à l'origine de
+  l'implémentation actuelle est **non conforme** à l'intention de la vague (#301).
+- **[CHANGED]** `travel: forward` / `backward` avec `repeat: true` — anneau fermé qui tourne d'un groupe par pas.
+- **[NEW]** paramètre optionnel `rest: look` du motif `gradient` (apparence des groupes non encore atteints ; absent ⇒
+  aucun état émis, le groupe garde la scène de salle). Validation : `rest` / `origin` réservés à la propagation.
+- **[CHANGED]** §9 — natifs `vague` (crête blanche puis couleur de l'équipe, `rest` explicite), `vague-lente` (anneau),
+  `degrade` (premier → dernier arrêt) précisés.
+
+---
+## [20261111] — v11.7.0 — applicabilité d'un effet `target: all` (#223, LOT-2)
+
+- **[CHANGED]** `light-effects.md` §4.6 — levée d'une ambiguïté (remontée par `test-writer`) : un effet `target: all` est
+  **toujours applicable**, même sans aucun groupe (N = 0) ; il écrit un seul état sur la zone générale entière
+  (`Group 0`). `min_groups` ne concerne que `target: groups` (absent ou 1 avec `target: all`, sinon erreur de validation) ;
+  `target: all` n'accepte que le motif `uniform`. Non-régression v11.6.0 : `pulsation` jouée sans groupe.
+- **[CHANGED]** Groupe animateur (§2.5, §9) : un effet `target: all` lui est toujours applicable ; `target: groups` si
+  `min_groups` ≤ 1. `couleur-equipe` devient `target: all` (jouable en salle sans groupe).
+- **[CHANGED]** `GET /api/lighting/effects` (§7.1) — champs additifs `target` et `host_applicable` ; `min_groups` = 0 pour
+  un effet `target: all`.
+
+---
+## [20261111] — v11.7.0 — nommage des clés d'effet figé avant le LOT-2 (#223)
+
+- **[CHANGED]** Précision, sans changement de comportement : `light-effects.md` §2.5 écrivait `light.host_effects` et
+  `hue-bridge.md` §11 `lighting.host_effects`. Les **deux sont exacts**, chacun dans son fichier : `config.json` porte
+  `lighting.effects.<moment>` et `lighting.host_effects.<moment>` (valeur globale) ; le modèle de réglages (`rounds.json`
+  → `Round.AMBIANCE`, `ROUNDS_UPDATE`, `GET /api/ambiance/settings`, `AMBIANCE_EFFECTIVE`) porte `light.effects.<moment>`
+  et `light.host_effects.<moment>`. Même règle que `lighting.default_mode` ↔ `light.mode` (v11.6.0). Table normative
+  ajoutée à `light-effects.md` §6 ; §2.5, §7.5, `hue-bridge.md` §11 et `http-endpoints.md` alignés (ligne
+  `POST /config.json {"lighting":{"host_effects"}}` ajoutée).
+
+---
+## [20261111] — v11.7.0 — amendements après la revue LOT-1 (#225)
+
+Source : `_work/reports/code-review-lot1-20261111-150000.md`, « Arbitrage des écarts » 1 à 4. Le code livré fait foi ; le
+contrat est aligné.
+
+- **[CHANGED]** `GET /api/lighting/lights` et `POST /api/lighting/groups/test` — forme de `group` figée : `0` (hors
+  groupe) | `n ≥ 1` (groupe de salle) | `"host"` (groupe animateur). `light-effects.md` §2.4, `hue-bridge.md` §11.
+- **[CHANGED]** Groupes vides (`light-effects.md` §2.1) — levée d'une contradiction : un groupe vide **garde son
+  numéro** et est **ignoré du séquenceur** ; N = nombre de groupes de salle **non vides** ; le séquenceur rend sur la
+  suite des groupes non vides et écrit avec les numéros réels. **À respecter au LOT-2** (tâches 9 et 12).
+- **[CHANGED]** `POST /api/lighting/groups/test` — erreurs = formes de `/api/lighting/test` (`400`, `409`, `429`, `500`,
+  `503`) ; « `502` » retiré. Même règle annoncée pour `POST /api/lighting/effects/{id}/try` (LOT-3).
+- **[CHANGED]** Groupe Hue `buzzmaster-general` — exclut les ampoules du groupe animateur ; `buzzmaster-ambiance` les
+  inclut toujours. `light-effects.md` §2.3, `hue-bridge.md` §11.
+- Aucun **BREAKING** (API non encore publiée en PROD).
+
+---
+## [20261111] — v11.7.0 — Ambiance lumière : groupes d'ambiance et effets déclaratifs (#225, #223, #299, #300, #301, #302, #211)
+
+- **[NEW]** `contracts/light-effects.md` — groupes d'ambiance (`lighting.groups[]`), fichiers d'effets YAML
+  (`data/files/effects/`, natifs embarqués, surcharge par `id`, rechargement à chaud, fichier invalide écarté et signalé),
+  schéma d'un effet (apparences, motifs `uniform` / `shift` / `gauge` / `random` / `gradient`, étapes), séquenceur
+  (`internal/effects` + lecteur dans `internal/ambiance`), précédence, budget d'écriture, 7 effets natifs.
+- **[NEW]** `lighting.groups[] {name, lights[], near_teams[]}` (`config.json`) ; `POST /api/lighting/groups/test`. LOT-1.
+- **[NEW]** `lighting.effects {chrono, calm, score}` (`config.json`) ; `Settings.LightEffects` / `Partial.LightEffects`,
+  JSON `light.effects.<moment>` (global ← manche) ; `GameState.AMBIANCE_EFFECTIVE.SETTINGS.light.effects` toujours
+  sérialisé ; `Round.AMBIANCE.light.effects` accepté par `ROUNDS_UPDATE` (refus `INVALID_AMBIANCE` si `id` inconnu ou
+  moment non déclaré). `ambiance-settings.md` §10. LOT-2 (`chrono`), LOT-4 (`calm`), LOT-5 (`score`).
+- **[NEW]** `GET /api/lighting/effects`, `POST /api/lighting/effects/reload` (LOT-2) ;
+  `GET /api/lighting/effects/{id}/preview`, `POST /api/lighting/effects/{id}/try`, `POST /api/lighting/effects/try/stop`
+  (LOT-3). `http-endpoints.md` §Lighting — groupes et effets.
+- **[NEW]** *(amendement du GATE 2)* Groupe animateur : `lighting.groups[].role` (`salle` | `animateur`, un seul
+  animateur), constante `lighting.GroupHost = -1`, blanc fixe par défaut, hors effets de salle, hors `ON` / `OFF` / Flash
+  (LOT-1) ; `lighting.host_effects {chrono, calm, score}` / `light.host_effects.<moment>` global ← manche (LOT-2) ; effet
+  natif `couleur-equipe` ; `POST /api/lighting/groups/test {"group":"host"}`. `light-effects.md` §2.5.
+- **[CHANGED]** `lighting.ZoneState` — champ additif `Group int` (0 = toute la zone, comportement actuel).
+  `lighting.md` §13.
+- **[CHANGED]** `hue.LightSpec` — champ additif `Group` ; groupes Hue `buzzmaster-general-<n>` ; une seule écriture
+  `buzzmaster-general` conservée quand toutes les ampoules générales ont le même état. `hue-bridge.md` §11.
+- **[CHANGED]** `GET /api/lighting/lights` — champ additif `group` par ampoule.
+- **[CHANGED]** Pulsation chronomètre (`lighting.md` §8.2) — devient l'effet natif `pulsation`, rendu identique exigé ;
+  n'est plus le seul rendu du chronomètre (`light.effects.chrono`).
+- **[CHANGED]** `go.mod` — `go.yaml.in/yaml/v4` passe de dépendance indirecte à directe (déjà dans la liste de
+  `TestCA7_NoNewThirdPartyDependency`, aucun nouveau module).
+- **[CHANGED]** Sauvegarde / restauration — `data/files/effects/` (hors `natifs/`) inclus dans la catégorie `ambiance`.
+- Aucun **BREAKING** : `config.json` sans `lighting.groups` ni `lighting.effects`, `rounds.json` sans `light.effects`
+  ⇒ comportement v11.6.0 exact ; protocole buzzer inchangé.
+
+---
 ## [20261109] — v11.6.0 révision 3 — fichiers de son par manche (#290, LOT-4 Batch 2, GATE LOT-4 refusé)
 
 - **[CHANGED]** `ambiance-settings.md` §2 — **D7′** : annule « les fichiers des sons sont hors surcharge » ; les 15 bruitages et le

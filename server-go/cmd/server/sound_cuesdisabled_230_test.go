@@ -33,7 +33,7 @@ import (
 func TestT3_EmptyCuesDisabled_ProducesExactlySameCuesAsBefore(t *testing.T) {
 	// CuesDisabled explicitement laissé à sa valeur zéro (nil) — c'est le
 	// point même du test.
-	config.Get().Sound.CuesDisabled = nil
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil })
 
 	app, fake := twa227WireSound(t)
 	speedy := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy}
@@ -53,8 +53,8 @@ func TestT3_EmptyCuesDisabled_ProducesExactlySameCuesAsBefore(t *testing.T) {
 // filtering is normative (contract §6.3): "dans notifySound
 // (cmd/server/sound.go), avant l'appel au moteur — jamais ailleurs."
 func TestT3_CueDisabled_NeverReachesEngineViaNotifySound(t *testing.T) {
-	config.Get().Sound.CuesDisabled = map[string]bool{"depart": true}
-	t.Cleanup(func() { config.Get().Sound.CuesDisabled = nil })
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = map[string]bool{"depart": true} })
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil }) })
 
 	app, fake := twa227WireSound(t)
 	speedy := &game.Question{ID: "q1", Type: game.QuestionTypeSpeedy}
@@ -74,8 +74,8 @@ func TestT3_CueDisabled_NeverReachesEngineViaNotifySound(t *testing.T) {
 // normally even while another one is disabled (mockup: "Erreur est
 // éteint... tandis que les six autres continuent").
 func TestT3_OnlyTheListedCueIsFiltered_OthersUnaffected(t *testing.T) {
-	config.Get().Sound.CuesDisabled = map[string]bool{"perdu": true}
-	t.Cleanup(func() { config.Get().Sound.CuesDisabled = nil })
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = map[string]bool{"perdu": true} })
+	t.Cleanup(func() { config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil }) })
 
 	app, fake := twa227WireSound(t)
 	app.engine.SetTeams(map[string]*game.Team{"Les Rouges": {Name: "Les Rouges"}})
@@ -100,7 +100,7 @@ func TestT3_OnlyTheListedCueIsFiltered_OthersUnaffected(t *testing.T) {
 // CuesDisabled") — a cue NOT in CuesDisabled (so individually enabled)
 // still produces nothing when the engine itself is disabled.
 func TestT3_GeneralSwitch_OverridesPerCueSwitches(t *testing.T) {
-	config.Get().Sound.CuesDisabled = nil // aucune cue individuellement désactivée
+	config.Mutate(func(c *config.Config) { c.Sound.CuesDisabled = nil }) // aucune cue individuellement désactivée
 
 	app := newTestAppWithHub(t)
 	// setupCallbacks() déréférence a.httpServer.OnAction (main.go) —

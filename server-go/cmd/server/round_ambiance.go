@@ -202,6 +202,14 @@ func ambianceEffectiveEqual(x, y ambiancecfg.Effective) bool {
 			return false
 		}
 	}
+	for _, z := range ambiancecfg.Zones { // effects and speeds by zone, and where they come from
+		for _, m := range ambiancecfg.Moments {
+			if xs.LightEffects[z][m] != ys.LightEffects[z][m] || x.Sources.LightEffects[z][m] != y.Sources.LightEffects[z][m] ||
+				xs.LightSpeeds[z][m] != ys.LightSpeeds[z][m] || x.Sources.LightSpeeds[z][m] != y.Sources.LightSpeeds[z][m] {
+				return false
+			}
+		}
+	}
 	xo, yo := x.Sources, y.Sources
 	return xo.SoundMuted == yo.SoundMuted && xo.CountdownEnabled == yo.CountdownEnabled &&
 		xo.CountdownLoop == yo.CountdownLoop && xo.LightMode == yo.LightMode

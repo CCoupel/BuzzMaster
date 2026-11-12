@@ -79,22 +79,23 @@ type Controller struct {
 	scoreFlashPhaseGold atomic.Bool
 	scoreFlashEpoch     atomic.Int64
 	scoreFlashCancel    context.CancelFunc
-	// chronoPulse* drive the RUNNING-only breathing pulse on 'general'
-	// synchronised to the active question's global timer (2026-09-08,
-	// contracts/lighting.md §5.4/§8.1) — chronoPulseActive is whether a
-	// pulse is currently live (KindRunning + a timed question),
-	// chronoPulseTier is 1/2/3 (ambianceChronoPulseColor, ambiance.go),
-	// chronoPulseHigh the current phase. All three are written ONLY by
-	// runChronoPulse (ambiance.go) and read ONLY by ambianceScene — no
-	// mutex needed, same pattern as scoreFlashPhaseGold. chronoPulseStarted
-	// makes runChronoPulse's own goroutine start idempotent (it is invoked
-	// from two call sites, mirroring the writer's own two "go w.Start"
-	// sites, which are mutually exclusive in practice but not provably so
-	// without this guard — see runChronoPulse's own doc comment).
-	ChronoPulseActive  atomic.Bool
-	ChronoPulseTier    atomic.Int32
-	chronoPulseHigh    atomic.Bool
-	chronoPulseStarted atomic.Bool
+
+	// Light-effect reader (v11.7.0, #223, effects.go). EffectsClock / EffectsTick are
+	// injectable per instance (nil / 0 = production), never package-level.
+	EffectsClock   func() time.Time
+	EffectsTick    time.Duration
+	effectsStarted atomic.Bool
+	effectsQuiet   atomic.Bool
+	effectFrames   atomic.Pointer[effectFrames]
+	effects        effectsState
+
+	// Group test sequence (v11.7.0, #225, grouptest.go). GroupTestStep is injectable per
+	// instance (0 = 1 s).
+	GroupTestStep time.Duration
+	groupTest     groupTestRuntime
+	// Effect trial and the public zone's hold (v11.7.0, #223, trial.go / grouptest.go).
+	trial  trialRuntime
+	public publicHold
 }
 
 // New builds a Controller over the given Host.
@@ -140,8 +141,15 @@ func (c *Controller) BuildHueDriverOpt(requireEnabled bool) *hue.Driver {
 		return nil
 	}
 	specs := make([]hue.LightSpec, 0, len(lc.Lights))
+	refs := lc.GroupOfLight() // v11.7.0, #225: zone and group number of every grouped bulb
 	for _, l := range lc.Lights {
-		specs = append(specs, hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team})
+		spec := hue.LightSpec{Name: l.Name, Role: hue.LightRole(l.Role), Team: l.Team}
+		if l.Role != string(hue.RoleTeam) {
+			if ref, ok := refs[l.Name]; ok {
+				spec.Area, spec.Group = areaOfZone(ref.Zone), ref.Num
+			}
+		}
+		specs = append(specs, spec)
 	}
 	d, err := hue.New(hue.Config{
 		BridgeIP: lc.BridgeIP,
@@ -238,7 +246,7 @@ func (c *Controller) StartWriter() {
 	w := c.Writer()
 	if w != nil {
 		go w.Start(c.h.Ctx())
-		go c.RunChronoPulse(c.h.Ctx()) // idempotent (chronoPulseStarted) — see its own doc comment
+		go c.RunEffects(c.h.Ctx()) // idempotent (effectsStarted) — #223
 	}
 	w.NotifyState()
 }
@@ -267,12 +275,13 @@ func (c *Controller) Reconfigure() {
 		c.LightingWriter.Store(w) // first runtime enable: publish, then start
 		if c.h.Ctx() != nil {
 			go w.Start(c.h.Ctx())
-			go c.RunChronoPulse(c.h.Ctx()) // idempotent (chronoPulseStarted) — see its own doc comment
+			go c.RunEffects(c.h.Ctx()) // idempotent (effectsStarted) — #223
 		}
 		w.NotifyState()
 		return
 	}
 	c.hueDriver.Store(d)
+	c.effectsQuiet.Store(false)
 	// A nil *hue.Driver must become a nil INTERFACE (a typed nil would count
 	// as an attached driver and panic on Close).
 	var drv lighting.Driver
@@ -496,178 +505,11 @@ func SceneFor(ev lighting.Event) ambianceSceneDef {
 }
 
 // ---------------------------------------------------------------------------
-// Chrono-pulse — 'general' pulses in sync with the active question's GLOBAL
-// timer (2026-09-08, planner-v10-chrono-pulse-v2-20260908-120128.md §3,
-// design confirmed by the user; switched to an INSTANT phase change —
-// chronoPulseTransitionMs, below — after a colour-artifact fix on
-// 2026-09-08). One phase-flag/re-derivation loop (runChronoPulse), the
-// exact patron of runScoreFlash/runLightingFlash — internal/lighting/hue/
-// is untouched, the driver still only ever sees ordinary State values.
+// The chrono pulse is the native `pulsation` effect (assets/effects/pulsation.yaml),
+// played by the effect reader (effects.go) since v11.7.0, #223: same colours, same
+// 255 / 128 / 77 intensities, same 1 s cycle, instant switch (fade 0) — proved by
+// pulsation_identity_test.go against a frozen copy of the v11.6.0 code.
 // ---------------------------------------------------------------------------
-
-const (
-	// chronoPulseTickInterval is how often runChronoPulse re-examines the
-	// LIVE game state — never a write cadence. Fine enough to land within
-	// a perceptually negligible margin of tier 3's 250 ms phase boundary.
-	chronoPulseTickInterval = 100 * time.Millisecond
-	// chronoPulseCycle is the pulse's cycle length for EVERY tier — the
-	// user's own explicit choice (report §3/§4 option B) over the literal
-	// request's 0.5 s at tier 3: the planner's budget analysis showed
-	// 0.5 s exceeds both the /groups recommendation (§5.8) and the
-	// writer's own 250 ms MinInterval floor with no headroom for HTTP
-	// latency, which would make the rhythm irregular rather than merely
-	// slower. Urgency at tier 3 is carried by colour dominance and
-	// amplitude instead (ambianceChronoPulseColor, below), at the SAME
-	// write cost as tiers 1-2.
-	chronoPulseCycle = 1 * time.Second
-	// chronoPulseHighMsTier3 is tier 3's asymmetric split within its 1 s
-	// cycle (250 ms theme / 750 ms red — "rouge dominant"); tiers 1-2 split
-	// their cycle evenly (chronoPulseCycle/2).
-	chronoPulseHighMsTier3 = 250 * time.Millisecond
-	// chronoPulseTransitionMs — 2026-09-08, REVISED after QUALIF v10.0.0.17:
-	// the fade WAS "demi-cycle" (500 ms, chronoPulseCycle/2), sent as
-	// transitiontime on every write so the bridge itself would interpolate
-	// a breathing effect. Investigation
-	// (_work/reports/dev-backend-pulse-color-artifact-20260908.md)
-	// confirmed the user's report: the bridge interpolates colour in raw
-	// CIE xy space, and a straight line between two sufficiently different
-	// hues (a cool theme <-> the tier 2/3 amber/red, in particular) passes
-	// near or through the white point — a real, visible "washed out"
-	// artifact, not implementation noise. A second, independent cause was
-	// also found: tier 3's asymmetric 250/750 ms phase split was shorter
-	// than the flat 500 ms fade, so the "theme" phase was cut off
-	// mid-transition on every cycle.
-	//
-	// User's decision: an INSTANT switch (0) on all 3 tiers, including
-	// tier 1 — simpler than fading only where hue changes (tiers 2-3) and
-	// keeping tier 1's pure intensity breathing, which was this package's
-	// own first recommendation. tier 1 never changes hue (couleurBasse ==
-	// couleurHaute) so it was never subject to the xy artifact either way;
-	// dropping its fade too is a readability choice, not a workaround.
-	//
-	// The constant — and lighting.ZoneState.TransitionMs / the hue driver's
-	// whole per-write transitiontime plumbing it drives — are DELIBERATELY
-	// kept, not removed: this is the ONLY line that needs to change to
-	// re-enable fading later (v10.1+), and the mechanism itself remains
-	// available to any other effect that wants it (contract hue-bridge.md
-	// §5.2's own amendment is unaffected).
-	ChronoPulseTransitionMs = 0
-
-	ChronoPulseIntensityFull = 255 // 100%
-	chronoPulseIntensityHalf = 128 // 50% of 255, rounded (127.5 -> 128) — tiers 1-2's low phase
-	ChronoPulseIntensityLow  = 77  // 30% of 255, rounded (76.5 -> 77) — tier 3's low phase, amplitude accrue
-)
-
-var (
-	// ambianceChronoPulseOrange/-Red are literal colours reused from the
-	// PRE-theme PAUSE_ALL/REVEAL scenes (both theme-coloured themselves as
-	// of §8's 2026-09-08 revision, above) — chosen here for their cultural
-	// meaning (amber = caution, red = urgency), independent of whatever
-	// PAUSE_ALL/REVEAL currently render. Never a 3rd/4th colour (the
-	// handoff's own explicit constraint): reuse, not invent.
-	ambianceChronoPulseOrange = [3]int{255, 170, 0}
-	ChronoPulseRed            = [3]int{230, 30, 30}
-)
-
-// ambianceChronoPulseColor resolves 'general's colour/intensity for the
-// CURRENT chrono-pulse phase (a.chronoPulseTier/-High, written only by
-// runChronoPulse), given the already-resolved theme colour. Tier 1's high
-// AND low phases are both the theme colour (couleurBasse == couleurHaute,
-// "respiration pure") — not a special case, the same shape as tiers 2-3
-// with the tier-specific low colour substituted for the theme.
-func ChronoPulseColor(theme [3]int, tier int, high bool) ([3]int, int) {
-	if high {
-		return theme, ChronoPulseIntensityFull
-	}
-	switch tier {
-	case 3:
-		return ChronoPulseRed, ChronoPulseIntensityLow
-	case 2:
-		return ambianceChronoPulseOrange, chronoPulseIntensityHalf
-	default: // tier 1
-		return theme, chronoPulseIntensityHalf
-	}
-}
-
-// runChronoPulse is the always-on evaluation loop backing the chrono-pulse
-// (see the section comment above). Idempotent (chronoPulseStarted): called
-// from both of startAmbianceWriter's/reconfigureAmbiance's "go w.Start"
-// sites, mirroring the writer's own lifecycle exactly — mutually exclusive
-// in practice (the writer object is only ever first-started at one of the
-// two), but this guard makes that provable rather than assumed, at
-// negligible cost (one CompareAndSwap), the same spirit as
-// lighting.Writer.Start's own running.CompareAndSwap.
-//
-// STATELESS by design between ticks besides the local "did anything
-// change" bookkeeping below: every tick re-derives eligibility from the
-// LIVE GameState via deriveAmbianceEvent() (the exact same function that
-// decides every other scene), never a separately-tracked "am I in a
-// question" flag of its own. This is what makes the four "s'efface
-// devant"/"périmètre" requirements fall out for free, with no dedicated
-// code for any of them:
-//   - only KindRunning is eligible — BUZZ/PAUSE_ALL/REVEAL/ENTRACTE/TEAM_TURN
-//     are simply different Kinds, so the pulse is never even considered;
-//   - RAFALE and MEMOTION are excluded too, NOT via a special case: a
-//     RAFALE round or an active MEMOTION card always has a current team
-//     (ambianceActiveTeam), so deriveAmbianceEvent already returns
-//     KindTeamTurn for them, never KindRunning;
-//   - "se gèle en pause" needs no freeze logic: PhasePaused derives
-//     KindBuzz/KindPauseAll, not KindRunning, so the pulse simply stops
-//     being rendered — GameState.CurrentTime itself already stops
-//     ticking while paused (existing engine behaviour, unrelated to this
-//     effect);
-//   - the ON/AUTO/OFF selector/Flash are consulted directly in
-//     ambianceScene (below), the same primitives lightingOverrideGeneral
-//     is built from, so the two can never drift apart.
-func (c *Controller) RunChronoPulse(ctx context.Context) {
-	if !c.chronoPulseStarted.CompareAndSwap(false, true) {
-		return
-	}
-	ticker := time.NewTicker(chronoPulseTickInterval)
-	defer ticker.Stop()
-	lastActive, lastTier, lastHigh := false, 0, true
-	cycleMs := int64(chronoPulseCycle / time.Millisecond)
-	highMsTier12 := cycleMs / 2
-	highMsTier3 := int64(chronoPulseHighMsTier3 / time.Millisecond)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-		ev := c.DeriveEvent()
-		state := c.h.Engine().GetState()
-		active := ev.Kind == lighting.KindRunning && state.Delay > 0
-		if !active {
-			if lastActive {
-				c.ChronoPulseActive.Store(false)
-				lastActive = false
-				c.Writer().NotifyState() // prompt clear — see doc comment above on why this is belt-and-suspenders, not load-bearing
-			}
-			continue
-		}
-		remaining := state.CurrentTime
-		tier := 1
-		if remaining <= 10 {
-			tier = 2
-		}
-		if remaining <= 5 {
-			tier = 3
-		}
-		highMs := highMsTier12
-		if tier == 3 {
-			highMs = highMsTier3
-		}
-		high := time.Now().UnixMilli()%cycleMs < highMs
-		if !lastActive || tier != lastTier || high != lastHigh {
-			c.ChronoPulseTier.Store(int32(tier))
-			c.chronoPulseHigh.Store(high)
-			c.ChronoPulseActive.Store(true)
-			lastActive, lastTier, lastHigh = true, tier, high
-			c.Writer().NotifyState()
-		}
-	}
-}
 
 // ambianceTeamZoneDimsWhenUndistinguished reports whether ev's Kind is one
 // of the three "active game" phases (STARTED/PAUSED/REVEALED, transposed
@@ -772,32 +614,8 @@ func (c *Controller) CurrentScoreFlashTeam() string {
 // replacing it with another team's or the room's. It is the only exception
 // to that rule besides §10.4's shutdown extinction.
 func (c *Controller) Scene(ev lighting.Event) lighting.State {
-	def := SceneFor(ev)
-	color := def.Color
-	intensity := def.Intensity
-	switch {
-	case def.UseTeamColor:
-		team := ""
-		if len(ev.Teams) > 0 {
-			team = ev.Teams[0]
-		}
-		color = c.h.TeamNameColor(team)
-	case def.UseThemeColor:
-		color = c.ThemeColor()
-	}
-	// Chrono-pulse (2026-09-08): only for the LIVE KindRunning scene, and
-	// only when the selector is in AUTO with Flash off — checked with the
-	// EXACT SAME two primitives lightingOverrideGeneral (below) is built
-	// from (isLightingFlashOn/lightingMode), so "s'efface devant le
-	// sélecteur" can never drift out of sync between the two: whenever this
-	// condition is true, lightingOverrideGeneral's own AUTO branch is
-	// necessarily a pure passthrough, so transitionMs never survives into a
-	// forced ON/OFF/Flash state — no separate reset needed after it runs.
+	color, intensity := c.baseSceneColor(ev)
 	transitionMs := 0
-	if ev.Kind == lighting.KindRunning && c.ChronoPulseActive.Load() && !c.isLightingFlashOn() && c.lightingMode() == ModeAuto {
-		color, intensity = ChronoPulseColor(color, int(c.ChronoPulseTier.Load()), c.chronoPulseHigh.Load())
-		transitionMs = ChronoPulseTransitionMs
-	}
 	// #208 (contract §10.1): the manual ON/AUTO/OFF selector and Flash act
 	// ONLY on this "general" zone, applied last so they always win over the
 	// auto-derived scene — team zones below are never touched (Batch C/C1a:
@@ -810,6 +628,7 @@ func (c *Controller) Scene(ev lighting.Event) lighting.State {
 		Intensity:    intensity,
 		TransitionMs: transitionMs,
 	}}
+	zones = c.applyEffectFrames(ev, zones)              // v11.7.0 (#223): the room effect frame, when one is live
 	seen := map[string]bool{lighting.ZoneGeneral: true} // defensive: a team literally named "general" must never shadow it
 	distinguished := make(map[string]bool, len(ev.Teams))
 	for _, team := range ev.Teams {
@@ -842,7 +661,44 @@ func (c *Controller) Scene(ev lighting.Event) lighting.State {
 			Intensity: teamIntensity,
 		})
 	}
+	// v11.7.0 (#225, light-effects.md §2.5, revision 4): the animateur zone shows a fixed
+	// white whatever the game does — emitted AFTER the override above, which never touches
+	// it (ON / OFF / Flash act on the room only) — unless its own effect is live (effects.go).
+	// The public zone gets NO entry unless an effect, a held POST or a test drives it: the
+	// server never writes those bulbs on its own. Only the master switch and the shutdown
+	// extinction turn the zones off.
+	zones = c.zoneEntries(ev, zones)
+	zones = c.applyGroupTest(zones) // #225 §2.4: the test sequence of one group, over everything else
 	return lighting.State{Zones: zones}
+}
+
+// areaOfZone maps a config zone name to the writer's Area.
+func areaOfZone(zone string) lighting.Area {
+	switch zone {
+	case config.ZoneAnimateur:
+		return lighting.AreaHost
+	case config.ZonePublic:
+		return lighting.AreaPublic
+	}
+	return lighting.AreaAmbiance
+}
+
+// baseSceneColor is the colour and intensity of the ordinary scene of ev (before the
+// chrono pulse and the override) — also the "scene" colour handed to the effects.
+func (c *Controller) baseSceneColor(ev lighting.Event) ([3]int, int) {
+	def := SceneFor(ev)
+	color := def.Color
+	switch {
+	case def.UseTeamColor:
+		team := ""
+		if len(ev.Teams) > 0 {
+			team = ev.Teams[0]
+		}
+		color = c.h.TeamNameColor(team)
+	case def.UseThemeColor:
+		color = c.ThemeColor()
+	}
+	return color, def.Intensity
 }
 
 // ambianceThemeColor resolves the CURRENT question's category theme colour

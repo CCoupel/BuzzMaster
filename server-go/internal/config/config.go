@@ -88,6 +88,153 @@ type LightingConfig struct {
 	// selector ("ON" | "AUTO" | "OFF"); absent ⇒ "AUTO". Read ONLY through the
 	// ambiance adapter (cmd/server/round_ambiance.go FromConfig).
 	DefaultMode string `json:"default_mode,omitempty"`
+	// Groups (v11.7.0, #225 — contracts/light-effects.md §2.1): ordered
+	// ambiance groups of role=general bulbs. The number of a group is its rank among the
+	// groups of its zone (salle = ambiance, animateur, public). Absent/empty ⇒ v11.6.0 exactly.
+	Groups []LightingGroupEntry `json:"groups"`
+	// Effects / Speeds (v11.7.0, #223 — light-effects.md §6, revision 4): the effect id and the
+	// speed multiplier of each moment (chrono, calm, score), by zone (ambiance, animateur,
+	// public). Read ONLY through the ambiance adapter (server.AmbianceFromConfig). A config.json
+	// of a QUALIF build (flat tables, host_effects / host_speeds) is read leniently: flat
+	// values are the "ambiance" zone, host_* keys are ignored.
+	Effects ZoneEffects `json:"effects"`
+	Speeds  ZoneSpeeds  `json:"speeds"`
+}
+
+// ZoneEffects is lighting.effects: zone → moment → effect id.
+type ZoneEffects map[string]map[string]string
+
+// UnmarshalJSON is lenient: the flat QUALIF form {moment: id} is read as the ambiance zone,
+// anything else that does not fit is dropped.
+func (z *ZoneEffects) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		*z = nil
+		return nil
+	}
+	out := ZoneEffects{}
+	for k, v := range raw {
+		var obj map[string]string
+		if isZone(k) && json.Unmarshal(v, &obj) == nil {
+			if out[k] == nil {
+				out[k] = map[string]string{}
+			}
+			for m, id := range obj {
+				out[k][m] = id
+			}
+			continue
+		}
+		var id string
+		if isMoment(k) && json.Unmarshal(v, &id) == nil {
+			if out[ZoneAmbiance] == nil {
+				out[ZoneAmbiance] = map[string]string{}
+			}
+			out[ZoneAmbiance][k] = id
+		}
+	}
+	*z = out
+	return nil
+}
+
+// ZoneSpeeds is lighting.speeds: zone → moment → speed multiplier.
+type ZoneSpeeds map[string]map[string]float64
+
+// UnmarshalJSON is lenient, like ZoneEffects.
+func (z *ZoneSpeeds) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		*z = nil
+		return nil
+	}
+	out := ZoneSpeeds{}
+	for k, v := range raw {
+		var obj map[string]float64
+		if isZone(k) && json.Unmarshal(v, &obj) == nil {
+			if out[k] == nil {
+				out[k] = map[string]float64{}
+			}
+			for m, f := range obj {
+				out[k][m] = f
+			}
+			continue
+		}
+		var f float64
+		if isMoment(k) && json.Unmarshal(v, &f) == nil {
+			if out[ZoneAmbiance] == nil {
+				out[ZoneAmbiance] = map[string]float64{}
+			}
+			out[ZoneAmbiance][k] = f
+		}
+	}
+	*z = out
+	return nil
+}
+
+func isZone(k string) bool   { return k == ZoneAmbiance || k == ZoneAnimateur || k == ZonePublic }
+func isMoment(k string) bool { return k == "chrono" || k == "calm" || k == "score" }
+
+// Moments of the light effects, in order.
+var lightMoments = []string{"chrono", "calm", "score"}
+
+// completeZoneEffects returns the table with the three zones and three moments present (the
+// room's chrono defaults to the pulsation, everything else to no effect).
+func completeZoneEffects(in ZoneEffects) ZoneEffects {
+	out := ZoneEffects{}
+	for _, z := range Zones {
+		out[z] = map[string]string{}
+		for _, m := range lightMoments {
+			out[z][m] = ""
+		}
+	}
+	out[ZoneAmbiance]["chrono"] = "pulsation"
+	for z, mm := range in {
+		if !isZone(z) {
+			continue
+		}
+		for m, id := range mm {
+			if isMoment(m) {
+				out[z][m] = id
+			}
+		}
+	}
+	return out
+}
+
+func completeZoneSpeeds(in ZoneSpeeds) ZoneSpeeds {
+	out := ZoneSpeeds{}
+	for _, z := range Zones {
+		out[z] = map[string]float64{}
+		for _, m := range lightMoments {
+			out[z][m] = 1
+		}
+	}
+	for z, mm := range in {
+		if !isZone(z) {
+			continue
+		}
+		for m, v := range mm {
+			if isMoment(m) {
+				out[z][m] = v
+			}
+		}
+	}
+	return out
+}
+
+// Lighting group roles (contracts/light-effects.md §2.1): the role of a group is its zone.
+const (
+	GroupRoleSalle     = "salle"
+	GroupRoleAnimateur = "animateur"
+	GroupRolePublic    = "public"
+)
+
+// LightingGroupEntry is one ambiance group. Role "" means "salle".
+type LightingGroupEntry struct {
+	// ID is the stable identifier of the group (light-effects.md §2.1): assigned by the
+	// server when absent.
+	ID     string   `json:"id"`
+	Role   string   `json:"role"`
+	Lights []string `json:"lights"`
 }
 
 // LightingLightEntry is one bulb, addressed by NAME (Hue ids are reassignable).
@@ -181,9 +328,9 @@ type AIConfig struct {
 	// the damage to one batch instead of the entire request. Defaults applied
 	// in ApplyDefaults (contract ai-multi-provider.md §2-§4).
 	BatchSize              int `json:"batch_size"`               // default 20, bounds 1..50
-	InterBatchDelayMs      int `json:"inter_batch_delay_ms"`      // default 60000
-	ContextTokenBudget     int `json:"context_token_budget"`      // default 1500 (character/4 estimate)
-	MaxConsecutiveFailures int `json:"max_consecutive_failures"`  // default 2
+	InterBatchDelayMs      int `json:"inter_batch_delay_ms"`     // default 60000
+	ContextTokenBudget     int `json:"context_token_budget"`     // default 1500 (character/4 estimate)
+	MaxConsecutiveFailures int `json:"max_consecutive_failures"` // default 2
 
 	// Multi-provider selection (v6.1.0, #137 Phase 3) — "anthropic" | "groq".
 	// The Groq key follows exactly the same secret rules as AnthropicAPIKey
@@ -197,9 +344,9 @@ type AIConfig struct {
 	// key nobody has supplied to this environment yet). Selecting
 	// provider="groq" without ai_groq.go implemented is inert until that
 	// lands; it does not by itself cause any outbound Groq request.
-	Provider             string `json:"provider"`               // default "anthropic"
+	Provider             string `json:"provider"` // default "anthropic"
 	GroqAPIKey           string `json:"groq_api_key"`
-	GroqModel            string `json:"groq_model"`             // default "openai/gpt-oss-120b"
+	GroqModel            string `json:"groq_model"` // default "openai/gpt-oss-120b"
 	GroqAPIKeyConfigured bool   `json:"groq_api_key_configured,omitempty"`
 	ClearGroqAPIKey      bool   `json:"clear_groq_api_key,omitempty"`
 
@@ -280,8 +427,8 @@ type ServerConfig struct {
 	HTTPPort         int    `json:"http_port"`
 	WebSocketPath    string `json:"websocket_path"`
 	AutoOpenBrowsers bool   `json:"auto_open_browsers"` // Auto-open browsers on startup
-	Debug            bool   `json:"debug"`               // Enable debug mode (includes /logs)
-	AutoCheckUpdates bool   `json:"auto_check_updates"`  // Auto-check for updates on startup
+	Debug            bool   `json:"debug"`              // Enable debug mode (includes /logs)
+	AutoCheckUpdates bool   `json:"auto_check_updates"` // Auto-check for updates on startup
 	// ACK protocol settings (added in v3.8.0)
 	AckTimeoutMs  int `json:"ack_timeout_ms"`  // Milliseconds before retrying an unacknowledged message (default 2000)
 	AckMaxRetries int `json:"ack_max_retries"` // Maximum retry attempts before giving up (default 3)
@@ -460,6 +607,21 @@ func ApplyDefaults(cfg *Config) {
 			cfg.Lighting.Lights[i].Role = "general"
 		}
 	}
+	for i := range cfg.Lighting.Groups {
+		g := &cfg.Lighting.Groups[i]
+		if g.Role == "" {
+			g.Role = GroupRoleSalle
+		}
+		if g.Lights == nil {
+			g.Lights = []string{}
+		}
+	}
+	if cfg.Lighting.Groups == nil {
+		cfg.Lighting.Groups = []LightingGroupEntry{}
+	}
+	AssignGroupIDs(cfg.Lighting.Groups)
+	cfg.Lighting.Effects = completeZoneEffects(cfg.Lighting.Effects)
+	cfg.Lighting.Speeds = completeZoneSpeeds(cfg.Lighting.Speeds)
 	if cfg.Lighting.Lights == nil {
 		cfg.Lighting.Lights = []LightingLightEntry{}
 	}
@@ -588,4 +750,3 @@ func Save(cfg *Config) error {
 	}
 	return nil
 }
-
