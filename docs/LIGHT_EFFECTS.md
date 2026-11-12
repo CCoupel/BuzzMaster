@@ -195,10 +195,14 @@ facteur     := entier | "N" | "g*" | "g" entier | variable | "(" expression ")" 
 - **Sans valeur** : une variable ne désigne aucun groupe — et les actions qui la visent sont ignorées — quand N = 0,
   quand elle cite une liste vide pour cette zone, ou quand une division par zéro survient **à l'exécution**
   (`6/(N-3)` avec N = 3). Une division par zéro écrite en dur (`N/0`) est une erreur de validation.
+  Exemple : `gA: 1; N/(N-1)` sur une salle d'un seul groupe divise par zéro à chaque tick ; la variable ne désigne alors
+  aucun groupe pour cette salle, et l'aperçu du simulateur l'affiche avec une valeur nulle (`vars` à 0).
 - **Cas à zéro** (division entière) : `N/2` avec N = 1 vaut 0 ⇒ rang 1 (le seul groupe) ; `N/3` avec N = 2 vaut 0 ⇒
   rang 2 (le dernier groupe) ; **un pas qui vaut 0 n'avance pas** (`gA: 1; N/3` avec N = 2 reste sur `g1`).
 - Écritures v11.7.0 : `gA: g1; +1`, `gB: g2; +2`, `gE: g3; 0` gardent exactement leur sens.
 - Le pas constant n'est plus borné à ±12 : il reboucle comme le reste.
+- **Coût** : un effet qui ne contient pas de `g0` et laisse des groupes sans jamais les écrire se calcule un peu plus
+  lentement aux ticks très élevés. Sans effet visible en usage normal.
 - Une variable s'appelle `g` suivi d'une **majuscule quelconque**, puis lettres ou chiffres : `gA`, `gB2`, `gN`.
 
 ### 7.2 Exemple A — départ au milieu, variable qui suit, pas relatif
