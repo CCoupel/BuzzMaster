@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Button from './Button'
 import LightEffectPreview from './LightEffectPreview'
 import { ImportResults, ConflictDialog, Modal, postImport, requestDelete } from './LightEffectsImport'
+import NameIdDialog from './EffectNameDialog'
+import { copyId } from '../utils/effectDocument'
 import {
-  MOMENTS, ZONE_LABEL, TRY_SECONDS, TRY_EVENT, formatSpeed, globalEffect, globalSpeed, visibleZones,
+  MOMENTS, ZONE_LABEL, TRY_SECONDS, TRY_EVENT, formatSpeed, globalEffect, globalSpeed, visibleZones, readTryZone, saveTryZone,
 } from '../utils/lightEffects'
 import './LightEffectsCatalogue.css'
 
@@ -16,6 +18,8 @@ import './LightEffectsCatalogue.css'
 //   lighting       section `lighting` de config.json (« utilisé : zone, moment » d'après les réglages GLOBAUX)
 //   zoneGroups     { ambiance, animateur, public } groupes non vides par zone
 //   onReload()     POST /api/lighting/effects/reload ; onTry(id, zone) -> {ok, duration_ms?} ; onStopTry()
+//   onCreate({id, name}) : « Nouvel effet » validé ; onDuplicate(effect, {id, name}) : « Dupliquer » validé (à défaut, onCreate reçoit
+//     {id, name, from}) ; onEdit(id) : « Modifier » / « Ouvrir » (#210). Sans ces rappels, les boutons correspondants ne sont pas affichés
 //   onCatalogue(catalogue) : catalogue renvoyé par l'import (§11.7) ou la suppression (§11.5), appliqué par le parent
 //   (à défaut : onReload()). L'import et la suppression sont des appels `fetch` faits ici.
 //   tryUnavailable(zone) -> '' | raison (éclairage désactivé, pont, forçage ON/OFF/Flash, question en cours)
@@ -41,10 +45,6 @@ export function usedBy(lighting, zoneGroups, id) {
   return out
 }
 
-// Dernière zone choisie pour « Essayer sur la salle » : retenue par navigateur (§11.8).
-const ZONE_KEY = 'buzzcontrol.effects.tryZone'
-const readZone = () => { try { return window.localStorage.getItem(ZONE_KEY) || 'ambiance' } catch { return 'ambiance' } }
-const saveZone = (z) => { try { window.localStorage.setItem(ZONE_KEY, z) } catch { /* sans stockage : non retenue */ } }
 // Applicabilité d'un effet à une zone (table `applicable` du §7.1 ; catalogue antérieur : booléen).
 const applicableTo = (e, zone) => (e.applicable && typeof e.applicable === 'object' ? e.applicable[zone] !== false : e.applicable !== false)
 const downloadHref = (id) => `/api/lighting/effects/${encodeURIComponent(id)}/download`
@@ -54,7 +54,7 @@ const tickText = (ms) => `${String(ms / 1000).replace('.', ',')} s`
 
 export default function LightEffectsCatalogue({
   catalog, lighting = {}, zoneGroups = { ambiance: 0, animateur: 0, public: 0 }, onReload, onTry, onStopTry,
-  tryUnavailable = () => '', onManageGroups = null, focus = null, onCatalogue = null,
+  tryUnavailable = () => '', onManageGroups = null, focus = null, onCatalogue = null, onCreate = null, onEdit = null, onDuplicate = null,
 }) {
   const [previewId, setPreviewId] = useState(null)
   const [trying, setTrying] = useState(null) // { id, durationMs }
@@ -62,7 +62,7 @@ export default function LightEffectsCatalogue({
   const [reloading, setReloading] = useState(false)
   const timer = useRef(null)
   const fileInput = useRef(null)
-  const [tryZone, setTryZone] = useState(readZone)
+  const [tryZone, setTryZone] = useState(readTryZone)
   const [importing, setImporting] = useState(false)
   const [importRows, setImportRows] = useState([])
   const [importError, setImportError] = useState('')
@@ -71,6 +71,7 @@ export default function LightEffectsCatalogue({
   const [confirm, setConfirm] = useState(null) // effet à supprimer / restaurer
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [nameDialog, setNameDialog] = useState(null) // { kind: 'create' } | { kind: 'duplicate', effect }
   // Version du catalogue : change à chaque (re)chargement ; invalide les aperçus en cache (trames périmées).
   const versionRef = useRef(0)
   const version = useMemo(() => { versionRef.current += 1; return versionRef.current }, [catalog])
@@ -89,7 +90,7 @@ export default function LightEffectsCatalogue({
 
   const zones = visibleZones(zoneGroups)
   const zone = zones.includes(tryZone) ? tryZone : 'ambiance'
-  const chooseZone = (z) => { setTryZone(z); saveZone(z) }
+  const chooseZone = (z) => { setTryZone(z); saveTryZone(z) }
 
   // « utilisé : … » sur TOUTES les zones (un réglage qui cite l'effet compte même si la zone n'a plus de groupe).
   const usedEverywhere = (id) => usedBy(lighting, { ambiance: 1, animateur: 1, public: 1 }, id)
@@ -178,6 +179,7 @@ export default function LightEffectsCatalogue({
       <div className="lfx-head">
         <h3 id="lfx-title" className="lfx-title">Catalogue des effets</h3>
         <span className="lfx-spacer" />
+        {onCreate && <Button variant="primary" size="sm" onClick={() => setNameDialog({ kind: 'create' })}>＋ Nouvel effet</Button>}
         <input
           ref={fileInput} type="file" accept=".yaml,.yml" multiple hidden data-testid="lfx-import-input"
           onChange={(e) => { importFiles(e.target.files); e.target.value = '' }}
@@ -186,11 +188,11 @@ export default function LightEffectsCatalogue({
         <Button variant="secondary" size="sm" onClick={reload} loading={reloading}>↻ Recharger les fichiers</Button>
       </div>
       <p className="ambiance-hint">
-        Chaque effet est un fichier texte dans le dossier <code>{catalog?.dir || 'data/files/effects'}</code> du serveur : une liste
-        de pas qui donnent, tick après tick, une couleur à des groupes (<code>g1</code>, <code>g2</code>… ; <code>g0</code> = toute
-        la zone). Un même effet peut être joué sur la zone Ambiance, Animateur ou Public. Téléchargez un effet pour le garder ou le
-        partager, importez un fichier d'effet (bouton « Importer… » ou glisser-déposer sur le catalogue), ou copiez un fichier du
-        sous-dossier <code>natifs</code> dans ce dossier, changez son identifiant et modifiez-le : il apparaît ici en quelques
+        Un effet est une liste de pas qui donnent, tick après tick, une couleur à des groupes (<code>g1</code>, <code>g2</code>… ;
+        <code>g0</code> = toute la zone). Un même effet peut être joué sur la zone Ambiance, Animateur ou Public.
+        {onCreate ? <> Créez un effet avec « Nouvel effet », ou partez d'un effet existant avec « Dupliquer ».</> : null}
+        {' '}Chaque effet est aussi un fichier texte du dossier <code>{catalog?.dir || 'data/files/effects'}</code> du serveur, que l'on peut
+        télécharger, importer (bouton « Importer… » ou glisser-déposer sur le catalogue) ou modifier à la main : il apparaît ici en quelques
         secondes.
       </p>
       {dragging && <div className="lfx-drop" role="note">Déposez ici des fichiers d'effet (<code>.yaml</code>)</div>}
@@ -268,6 +270,10 @@ export default function LightEffectsCatalogue({
                   </select>
                 </span>
                 <span className="lfx-sep" />
+                {onEdit && (e.origin === 'user'
+                  ? <Button variant="primary" size="sm" onClick={() => onEdit(e.id)}>✎ Modifier</Button>
+                  : <Button variant="secondary" size="sm" onClick={() => onEdit(e.id)}>👁 Ouvrir</Button>)}
+                {(onDuplicate || onCreate) && <Button variant="secondary" size="sm" onClick={() => setNameDialog({ kind: 'duplicate', effect: e })}>⧉ Dupliquer</Button>}
                 <a className="btn btn-secondary btn-sm lfx-dl" href={downloadHref(e.id)} download={`${e.id}.yaml`}>⭳ Télécharger</a>
                 {e.origin === 'user' && (
                   <Button variant="danger" size="sm" onClick={() => { setDeleteError(''); setConfirm(e) }}>🗑 Supprimer</Button>
@@ -295,6 +301,18 @@ export default function LightEffectsCatalogue({
           conflict={{ result: importRows[pending.queue[0]] }}
           usedText={usedEverywhere(importRows[pending.queue[0]]?.id).join(' · ')}
           onChoose={resolveConflict}
+        />
+      )}
+      {nameDialog && (
+        <NameIdDialog
+          title={nameDialog.kind === 'create' ? 'Nouvel effet' : `Dupliquer « ${nameDialog.effect.name} »`}
+          initialName={nameDialog.kind === 'create' ? '' : `${nameDialog.effect.name} (copie)`}
+          initialId={nameDialog.kind === 'create' ? '' : copyId(nameDialog.effect.id)}
+          takenIds={effects.map(x => x.id)} confirmLabel="Créer"
+          onCancel={() => setNameDialog(null)}
+          onConfirm={(info) => { const d = nameDialog; setNameDialog(null); if (d.kind === 'create') onCreate?.(info)
+            else if (onDuplicate) onDuplicate(d.effect, info)
+            else onCreate?.({ ...info, from: d.effect.id }) }}
         />
       )}
       {confirm && (() => {

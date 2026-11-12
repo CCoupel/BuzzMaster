@@ -39,6 +39,7 @@ export function useEffectDraft({ id, create = false, initialDoc = null, groups =
   const [tab, setTab] = useState('grid')
   const [draft, setDraft] = useState(null) // dernière réponse de `draft` : { ok, errors, previews, yaml, grid, …, from }
   const [pending, setPending] = useState(false)
+  const [validPreviews, setValidPreviews] = useState([]) // aperçus du dernier brouillon VALIDE : le simulateur le rejoue pendant une erreur
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [persisted, setPersisted] = useState(false) // le fichier existe sur le serveur (télécharger possible)
@@ -71,6 +72,7 @@ export function useEffectDraft({ id, create = false, initialDoc = null, groups =
     }
     if (!mounted.current || mine !== seq.current) return // réponse périmée : une modification plus récente est en route
     setDraft({ ...out, errors: out.errors || [], previews: out.previews || [], from })
+    if (out.ok && Array.isArray(out.previews)) setValidPreviews(out.previews)
     setPending(false)
     // Grille → Texte : le texte devient le fichier régénéré (commentaires perdus, §11.8) dès que la grille a été modifiée.
     if (from === 'grid' && out.ok && typeof out.yaml === 'string' && last.current === 'grid' && gridModified.current) {
@@ -222,7 +224,7 @@ export function useEffectDraft({ id, create = false, initialDoc = null, groups =
   return {
     status, loadError, source, readOnly, gridEditable,
     doc, text, tab, setTab: switchTab, setDoc, setText,
-    draft, pending, errors: draft?.errors || [], previews: draft?.previews || [],
+    draft, pending, errors: draft?.errors || [], previews: draft?.previews || [], lastValidPreviews: validPreviews,
     dirty, canSave, saving, saveError, save, persisted,
     // Avertissements d'ouverture (§11.2, §11.8)
     hasComments: !!source?.has_comments, customOrder: !!source?.custom_order,

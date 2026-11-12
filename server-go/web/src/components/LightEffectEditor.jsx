@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Button from './Button'
 import EffectBrush, { DEFAULT_BRUSH, brushToAction } from './EffectBrush'
 import EffectGrid from './EffectGrid'
+import EffectSimulator from './EffectSimulator'
 import EffectTextTab from './EffectTextTab'
+import EffectTryBar from './EffectTryBar'
 import EffectVariablesPanel from './EffectVariablesPanel'
 import { Modal } from './LightEffectsImport'
-import { useEffectDraft } from '../hooks/useEffectDraft'
+import { useEffectDraft, DEFAULT_PREVIEW_GROUPS } from '../hooks/useEffectDraft'
+import { ZONE_LABEL, ZONES } from '../utils/lightEffects'
 import {
   addGroup, addStep, addVariable, duplicateStep, highestNumbered, initialNumberedRows, insertStepBefore, locateError, moveStep,
   moveVariable, parseTickSeconds, removeGroup, removeStep, removeVariable, setCell, setVariableKind, starRowUsed, tickSecondsText,
@@ -21,11 +24,12 @@ import './LightEffectEditor.css'
 //   id            identifiant de l'effet à ouvrir (GET …/source) — ou de l'effet neuf quand `initialDoc` est donné
 //   initialDoc    document d'un nouvel effet ou d'une copie (avec `create`) ; pas de GET
 //   create        le premier enregistrement crée le fichier (`PUT … create: true`)
-//   previewGroups tailles de salle des aperçus (défaut 1, 3, 6, 12) — le simulateur (F2.3) y ajoute les zones réelles
+//   zoneGroups    { ambiance, animateur, public } : groupes par zone — rangées « zone réelle » du simulateur et zones de l'essai
+//   tryUnavailable(zone) -> '' | raison ; onStopTry() : « Essayer sur la salle » (brouillon, §11.10)
+//   onDirtyChange(bool) : modifications non enregistrées (la page garde l'éditeur monté)
 //   onClose()     « ← Retour au catalogue » (après la question « modifications non enregistrées » le cas échéant)
 //   onSaved(catalogue)  catalogue renvoyé par PUT, à appliquer par le parent
-//   onDuplicate(source) facultatif : bouton « Dupliquer » (effet livré ou non)
-//   children      emplacement du simulateur et de la barre d'essai (F2.3)
+//   onDuplicate(source, doc) facultatif : bouton « Dupliquer » ; `doc` = le document tel qu'il est à l'écran
 
 const MOMENT_LABELS = [['chrono', 'Chronomètre'], ['calm', 'Phases calmes'], ['score', 'Équipe qui marque']]
 const ORIGIN = { native: ['natif', ''], override: ['natif modifié', 'over'], user: ['personnalisé', 'user'] }
@@ -50,9 +54,25 @@ function placeErrors(errors) {
 }
 
 export default function LightEffectEditor({
-  id, initialDoc = null, create = false, previewGroups, onClose, onSaved, onDuplicate = null, children = null,
+  id, initialDoc = null, create = false, zoneGroups = { ambiance: 0, animateur: 0, public: 0 }, tryUnavailable, onStopTry,
+  onDirtyChange, onClose, onSaved, onDuplicate = null,
 }) {
-  const d = useEffectDraft({ id, initialDoc, create, groups: previewGroups })
+  // Tailles simulées : 1, 3, 6, 12 + le nombre de groupes de chaque zone réelle qui n'y est pas déjà (8 au plus, §11.3).
+  const simRows = useMemo(() => {
+    const rows = DEFAULT_PREVIEW_GROUPS.map(n => ({ n, label: `${n} groupe${n > 1 ? 's' : ''}` }))
+    const extra = new Map()
+    for (const z of ZONES) {
+      const n = zoneGroups?.[z] ?? 0
+      if (n > 0 && !DEFAULT_PREVIEW_GROUPS.includes(n)) extra.set(n, [...(extra.get(n) || []), ZONE_LABEL[z]])
+    }
+    for (const [n, names] of extra) rows.push({ n, real: true, label: `${names.length > 1 ? 'Zones' : 'Zone'} ${names.join(', ')} — ${n} groupe${n > 1 ? 's' : ''}` })
+    return rows.slice(0, 8)
+  }, [zoneGroups?.ambiance, zoneGroups?.animateur, zoneGroups?.public]) // eslint-disable-line react-hooks/exhaustive-deps
+  const previewGroups = useMemo(() => simRows.map(r => r.n), [simRows])
+  const [moment, setMoment] = useState('')
+  const [seek, setSeek] = useState(null)
+  const [playingColumn, setPlayingColumn] = useState(null)
+  const d = useEffectDraft({ id, initialDoc, create, groups: previewGroups, moment })
   const { doc, text, status, readOnly, gridEditable, source } = d
 
   const [brush, setBrush] = useState(DEFAULT_BRUSH)
@@ -72,6 +92,7 @@ export default function LightEffectEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.tick_ms])
 
+  useEffect(() => { onDirtyChange?.(!!d.dirty) }, [d.dirty]) // eslint-disable-line react-hooks/exhaustive-deps
   const placed = useMemo(() => placeErrors(d.draft?.from === 'text' ? [] : d.errors), [d.draft, d.errors])
   const textErrors = d.draft?.from === 'text' ? d.errors : []
   const editable = !readOnly
@@ -119,14 +140,14 @@ export default function LightEffectEditor({
         {d.dirty && <span className="efx-b dirty" role="status">modifications non enregistrées</span>}
         <span className="efx-grow" />
         {d.persisted && <a className="btn btn-secondary btn-sm" href={downloadHref(doc.id)} download={`${doc.id}.yaml`}>⭳ Télécharger</a>}
-        {onDuplicate && <Button variant="secondary" size="sm" onClick={() => onDuplicate(source)}>⧉ Dupliquer</Button>}
+        {onDuplicate && <Button variant="secondary" size="sm" onClick={() => onDuplicate(source, doc)}>⧉ Dupliquer</Button>}
         {editable && <Button variant="primary" size="sm" disabled={!d.canSave} loading={d.saving} onClick={save}>Enregistrer</Button>}
       </div>
 
       {readOnly && (
         <div className="efx-info" role="status">
           <b>« {doc.name} » est un effet livré avec BuzzControl : il ne se modifie pas.</b> Dupliquez-le pour en faire le vôtre.
-          {onDuplicate && <> <Button variant="secondary" size="sm" onClick={() => onDuplicate(source)}>⧉ Dupliquer</Button></>}
+          {onDuplicate && <> <Button variant="secondary" size="sm" onClick={() => onDuplicate(source, doc)}>⧉ Dupliquer</Button></>}
         </div>
       )}
       {d.saveError && <div className="efx-err" role="alert">{d.saveError}</div>}
@@ -223,6 +244,7 @@ export default function LightEffectEditor({
                 onAddStep={() => edit(addStep)} onDuplicateStep={(c) => edit(x => duplicateStep(x, c))}
                 onInsertStep={(c) => edit(x => insertStepBefore(x, c))} onMoveStep={(c, delta) => edit(x => moveStep(x, c, delta))}
                 onRemoveStep={(c) => edit(x => removeStep(x, c))}
+                onGoStep={(c) => setSeek({ column: c, nonce: Date.now() })} playingColumn={playingColumn}
                 onAddGroup={() => { edit(x => addGroup(x, numbered)); setNumbered(n => n + 1) }} onRemoveGroup={askRemoveGroup}
               />
               <p className="efx-hint">
@@ -250,7 +272,16 @@ export default function LightEffectEditor({
         />
       )}
 
-      {children}
+      <EffectSimulator
+        previews={d.lastValidPreviews} rows={simRows} minGroups={doc.min_groups || 0} tickMs={doc.tick_ms || 1000}
+        moments={doc.moments} moment={moment && doc.moments.includes(moment) ? moment : (doc.moments[0] || '')} onMoment={setMoment}
+        seek={seek} onColumn={setPlayingColumn} stale={d.errors.length > 0}
+      />
+      <EffectTryBar
+        body={d.lastSource === 'text' ? { yaml: text } : { effect: doc }} valid={!!d.draft?.ok && !d.pending}
+        zoneGroups={zoneGroups} minGroups={doc.min_groups || 0} tryUnavailable={tryUnavailable} onStopTry={onStopTry}
+        seconds={doc.moments.length === 1 && doc.moments[0] === 'score' ? 5 : 10}
+      />
 
       {dialog === 'leave' && (
         <Modal titleId="efx-leave-title" title="Modifications non enregistrées" onCancel={() => setDialog(null)}>

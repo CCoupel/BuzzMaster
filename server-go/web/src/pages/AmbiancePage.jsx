@@ -12,6 +12,9 @@ import SoundsManager from '../components/SoundsManager'
 import AmbianceSettingsPanel from '../components/AmbianceSettingsPanel'
 import LightGroupsManager from '../components/LightGroupsManager'
 import LightEffectsCatalogue from '../components/LightEffectsCatalogue'
+import LightEffectEditor from '../components/LightEffectEditor'
+import NameIdDialog from '../components/EffectNameDialog'
+import { copyDocument, copyId, newEffectDocument } from '../utils/effectDocument'
 import { groupLabelForLight, groupPillText, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
 import { configKeyFor, configPatchFor, globalEffect, globalSpeed, zoneGroupCounts, MOMENTS, ZONES, TRY_REFUSALS, isQuestionRunning } from '../utils/lightEffects'
@@ -386,6 +389,9 @@ export default function AmbiancePage() {
   const zoneGroups = useMemo(() => zoneGroupCounts(lighting.groups), [lighting.groups])
   const [focusZone, setFocusZone] = useState(null)
   const [focusEffect, setFocusEffect] = useState(null)
+  // #210 — éditeur d'effet : remplace le catalogue du sous-onglet Effets ; reste monté (modifications gardées) quand on change de sous-onglet.
+  const [editing, setEditing] = useState(null) // { key, id, initialDoc?, create? }
+  const [dupDialog, setDupDialog] = useState(null) // { doc, name, id } : « Dupliquer » demandé depuis l'éditeur
   const effectsSettings = useMemo(() => ({
     light: {
       mode: lighting.default_mode || 'AUTO',
@@ -416,6 +422,17 @@ export default function AmbiancePage() {
     } catch (error) {
       setToast({ message: 'Erreur : ' + error.message, type: 'error' })
       return { ok: false, message: error.message }
+    }
+  }
+  const startEditor = (spec) => setEditing({ key: Date.now(), ...spec })
+  const docOfSource = (src) => ((src?.grid?.editable !== false && src?.grid?.effect) ? src.grid.effect : src?.effect)
+  const handleCatalogueDuplicate = async (effect, info) => {
+    try {
+      const res = await fetch(`/api/lighting/effects/${encodeURIComponent(effect.id)}/source`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      startEditor({ id: info.id, initialDoc: copyDocument(docOfSource(await res.json()), info), create: true })
+    } catch (error) {
+      setToast({ message: 'Duplication impossible : ' + error.message, type: 'error' })
     }
   }
   const handleStopTry = async () => {
@@ -1237,7 +1254,25 @@ export default function AmbiancePage() {
           />
         )}
 
-        {configLoaded && step === 3 && lightSubTab === 'effects' && (
+        {configLoaded && step === 3 && editing && (
+          <section className="ambiance-step" aria-label="Éditeur d'effet" hidden={lightSubTab !== 'effects'}>
+            <LightEffectEditor
+              key={editing.key} id={editing.id} initialDoc={editing.initialDoc || null} create={!!editing.create}
+              zoneGroups={zoneGroups} tryUnavailable={(zone = 'ambiance') => tryUnavailable(zone)} onStopTry={handleStopTry}
+              onClose={() => { setEditing(null); refreshCatalog() }}
+              onSaved={(c) => { if (c) applyCatalogue(c); setToast({ message: 'Effet enregistré.', type: 'success' }) }}
+              onDuplicate={(src, doc) => setDupDialog({ doc: doc || docOfSource(src), name: src?.effect?.name || doc?.name || '', id: src?.id || doc?.id })}
+            />
+          </section>
+        )}
+        {dupDialog && (
+          <NameIdDialog
+            title={`Dupliquer « ${dupDialog.name} »`} initialName={`${dupDialog.name} (copie)`} initialId={copyId(dupDialog.id)}
+            takenIds={catalog.effects.map(e => e.id)} confirmLabel="Créer" onCancel={() => setDupDialog(null)}
+            onConfirm={(info) => { const d = dupDialog; setDupDialog(null); startEditor({ id: info.id, initialDoc: copyDocument(d.doc, info), create: true }) }}
+          />
+        )}
+        {configLoaded && step === 3 && lightSubTab === 'effects' && !editing && (
           <section className="ambiance-step" aria-labelledby="ambiance-effects-title">
             <h2 id="ambiance-effects-title" className="ambiance-step-title">Effets</h2>
             <AmbianceSettingsPanel
@@ -1268,6 +1303,9 @@ export default function AmbiancePage() {
               onTry={handleCatalogueTry}
               onStopTry={handleStopTry}
               onCatalogue={applyCatalogue}
+              onEdit={(id) => startEditor({ id })}
+              onCreate={(info) => startEditor({ id: info.id, initialDoc: newEffectDocument(info), create: true })}
+              onDuplicate={handleCatalogueDuplicate}
               tryUnavailable={(zone = 'ambiance') => (isQuestionRunning(gameState?.phase) ? 'Une question est en cours : l\'essai est possible hors question.' : tryUnavailable(zone))}
               onManageGroups={() => openSubTab('groups')}
               focus={focusEffect}

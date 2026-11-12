@@ -118,3 +118,27 @@
 @media (max-width: 960px) { .efx-two { grid-template-columns: 1fr; } }
 .efx-yaml { width: 100%; min-height: 22rem; box-sizing: border-box; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78rem; line-height: 1.5; padding: 0.6rem 0.7rem; border: 1px solid var(--gray-300); border-radius: 0.5rem; background: #0f172a; color: #e2e8f0; }
 .efx-modal-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+
+/* simulateur et essai (F2.3) */
+.efx-btn { font: inherit; font-size: 0.78rem; padding: 0.32rem 0.65rem; border-radius: 0.4rem; border: 1px solid var(--gray-300); background: #fff; color: var(--gray-700); cursor: pointer; }
+.efx-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.efx-btn-primary { background: var(--primary-500, #4f46e5); border-color: var(--primary-500, #4f46e5); color: #fff; }
+.efx-nomargin { margin: 0; }
+.efs-transport { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; flex: 1; }
+.efs-transport input[type='range'] { flex: 1; min-width: 10rem; }
+.efs-stage { background: #0f172a; border-radius: 0.5rem; padding: 0.6rem 0.7rem; margin: 0.5rem 0; }
+.efs-row { display: grid; grid-template-columns: 13rem 1fr 15rem; gap: 0.6rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #1e293b; }
+.efs-row:last-of-type { border-bottom: 0; }
+@media (max-width: 760px) { .efs-row { grid-template-columns: 1fr; } }
+.efs-lbl { font-size: 0.72rem; color: #cbd5e1; }
+.efs-lbl small { display: block; color: #f59e0b; }
+.efs-lbl input { margin-right: 0.35rem; }
+.efs-lbl.is-real { color: #a5b4fc; font-weight: 600; }
+.efs-bulbs { display: flex; justify-content: space-around; align-items: center; }
+.efs-bulb { width: 1.5rem; height: 1.5rem; border-radius: 50%; background: #1e293b; transition: background-color 0.12s linear, box-shadow 0.12s linear; }
+.efs-nums { display: flex; justify-content: space-around; font-size: 0.55rem; color: #64748b; margin-top: 0.15rem; }
+.efs-vv { font-size: 0.66rem; color: #94a3b8; font-family: ui-monospace, monospace; text-align: right; }
+.efs-row.is-off .efs-bulbs-wrap { opacity: 0.15; }
+.efs-clock { text-align: center; font-size: 0.72rem; color: #94a3b8; font-variant-numeric: tabular-nums; padding-top: 0.35rem; }
+.efx-trybar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; border: 1px solid var(--gray-200); border-radius: 0.6rem; padding: 0.5rem 0.7rem; margin-top: 0.6rem; background: var(--gray-50); }
+.efx-trybar-t { font-size: 0.82rem; }
