@@ -126,3 +126,28 @@ func TestValidate_GNAndLoops_Dev(t *testing.T) {
 		t.Errorf("gN déclarée : %+v", errs)
 	}
 }
+
+func TestExprOverflowBounded_Dev(t *testing.T) {
+	t.Parallel()
+	if _, err := ParseExpr("999*999*999"); err == nil || !strings.Contains(err.Error(), "dépasse la valeur permise") {
+		t.Errorf("constante trop grande refusée : %v", err)
+	}
+	if _, err := ParseExpr("999*999"); err != nil {
+		t.Errorf("999*999 (< 1 000 000) accepté : %v", err)
+	}
+	// à l'exécution : N * 999 * 999 dépasse → variable sans valeur, jamais un débordement
+	e := mustParse(t, fx("variables:\n  gA: N*999*999\npas:\n  - { g0: [theme, 100], gA: [urgence, 100] }\n"))
+	if vp := e.VarPositions([]int{1, 2, 3}, 0); vp["gA"] != 0 {
+		t.Errorf("valeur > 1 000 000 : sans valeur, obtenu %v", vp)
+	}
+	// départ + pas × cran très grand : même rang qu'en arbitraire précision
+	e = mustParse(t, fx("variables:\n  gA: 1; 999*999\npas:\n  - { gA: [urgence, 100] }\n"))
+	nums := []int{1, 2, 3, 4, 5}
+	k := 2000000000
+	want := int((int64(1)+999999*int64(k)-1)%5) + 1
+	r := newResolver(&e, nums)
+	r.setCran(k)
+	if rk, ok := r.rank(0, k); !ok || rk != want {
+		t.Errorf("rang au cran %d : %d (%v), attendu %d", k, rk, ok, want)
+	}
+}

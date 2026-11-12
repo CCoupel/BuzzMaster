@@ -262,57 +262,73 @@ func (p *exprParser) factor() (*exprNode, error) {
 	return nil, p.malformed()
 }
 
-// constValue returns the value of a node that depends on neither N nor a variable.
-func constValue(n *exprNode) (int, bool) {
+// ExprLimit bounds every intermediate value of an expression (|v| ≤ 1 000 000): beyond it a
+// constant is refused at validation and a run-time value is "without value". The bound keeps
+// the arithmetic identical on 32- and 64-bit machines (§12.2).
+const ExprLimit = 1000000
+
+// constValue returns the value of a node that depends on neither N nor a variable; over=true
+// when an intermediate value exceeds ExprLimit.
+func constValue(n *exprNode) (v int64, isConst, over bool) {
 	switch n.op {
 	case opNum:
-		return n.val, true
+		return int64(n.val), true, false
 	case opN, opVar:
-		return 0, false
+		return 0, false, false
 	case opNeg:
-		v, ok := constValue(n.l)
-		return -v, ok
+		v, ok, over := constValue(n.l)
+		return -v, ok, over
 	}
-	a, ok := constValue(n.l)
-	if !ok {
-		return 0, false
+	a, ok, o1 := constValue(n.l)
+	b, ok2, o2 := constValue(n.r)
+	if o1 || o2 {
+		return 0, false, true
 	}
-	b, ok := constValue(n.r)
-	if !ok {
-		return 0, false
+	if !ok || !ok2 {
+		return 0, false, false
 	}
 	switch n.op {
 	case opAdd:
-		return a + b, true
+		v = a + b
 	case opSub:
-		return a - b, true
+		v = a - b
 	case opMul:
-		return a * b, true
+		v = a * b
 	case opDiv:
 		if b == 0 {
-			return 0, false
+			return 0, false, false
 		}
-		return a / b, true
+		v = a / b
 	}
-	return 0, false
+	if v > ExprLimit || v < -ExprLimit {
+		return 0, false, true
+	}
+	return v, true, false
 }
 
 // checkConstDivision refuses a division by a constant zero written in the expression (N/0,
-// 3/(2-2)); a divisor that depends on N or a variable is only checked when evaluated.
+// 3/(2-2)) and a constant that grows past ExprLimit; a divisor that depends on N or a variable
+// is only checked when evaluated.
 func checkConstDivision(n *exprNode, src string) error {
+	if _, _, over := constValue(n); over {
+		return &exprError{fmt.Sprintf("l'expression « %s » dépasse la valeur permise (%d au plus)", src, ExprLimit)}
+	}
+	return checkZero(n, src)
+}
+
+func checkZero(n *exprNode, src string) error {
 	if n == nil {
 		return nil
 	}
 	if n.op == opDiv {
-		if b, ok := constValue(n.r); ok && b == 0 {
+		if b, ok, _ := constValue(n.r); ok && b == 0 {
 			return &exprError{fmt.Sprintf("division par zéro dans « %s »", src)}
 		}
-		// a constant sub-expression that itself divides by zero is caught by the recursion below
 	}
-	if err := checkConstDivision(n.l, src); err != nil {
+	if err := checkZero(n.l, src); err != nil {
 		return err
 	}
-	return checkConstDivision(n.r, src)
+	return checkZero(n.r, src)
 }
 
 // Refs lists the variable names the expression cites (without duplicates, in order of appearance).
@@ -336,25 +352,29 @@ func (x *Expr) Refs() []string {
 }
 
 // eval computes the expression with n groups; ref gives the rank (1…n) of a cited variable.
-// ok=false: no value (a division by zero at run time, or a cited variable without value).
+// ok=false: no value (a division by zero at run time, a cited variable without value, or an
+// intermediate value past ExprLimit).
 func (x *Expr) eval(n int, ref func(name string) (int, bool)) (int, bool) {
-	return x.root.eval(n, ref)
+	v, ok := x.root.eval(n, ref)
+	return int(v), ok
 }
 
-func (nd *exprNode) eval(n int, ref func(string) (int, bool)) (int, bool) {
+func (nd *exprNode) eval(n int, ref func(string) (int, bool)) (int64, bool) {
+	var v int64
 	switch nd.op {
 	case opNum:
-		return nd.val, true
+		return int64(nd.val), true
 	case opN:
-		return n, true
+		return int64(n), true
 	case opVar:
 		if ref == nil {
 			return 0, false
 		}
-		return ref(nd.name)
+		r, ok := ref(nd.name)
+		return int64(r), ok
 	case opNeg:
-		v, ok := nd.l.eval(n, ref)
-		return -v, ok
+		a, ok := nd.l.eval(n, ref)
+		return -a, ok
 	}
 	a, ok := nd.l.eval(n, ref)
 	if !ok {
@@ -366,16 +386,19 @@ func (nd *exprNode) eval(n int, ref func(string) (int, bool)) (int, bool) {
 	}
 	switch nd.op {
 	case opAdd:
-		return a + b, true
+		v = a + b
 	case opSub:
-		return a - b, true
+		v = a - b
 	case opMul:
-		return a * b, true
+		v = a * b
 	case opDiv:
 		if b == 0 {
 			return 0, false
 		}
-		return a / b, true // Go truncates toward zero, as the contract asks
+		v = a / b // Go truncates toward zero, as the contract asks
 	}
-	return 0, false
+	if v > ExprLimit || v < -ExprLimit {
+		return 0, false
+	}
+	return v, true
 }

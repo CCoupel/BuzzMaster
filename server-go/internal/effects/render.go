@@ -277,7 +277,8 @@ func (r *resolver) compute(i, kk int) (int, bool) {
 	if b.state == 2 {
 		return 0, false
 	}
-	return rankOf(b.val+r.step[i]*kk, r.n), true
+	// 64-bit: the same rank on every machine, whatever the cran
+	return int(posMod64(int64(b.val)+int64(r.step[i])*int64(kk)-1, int64(r.n))) + 1, true
 }
 
 // rankOf is the rank (1…n) a value designates: ((v-1) mod n)+1 with a positive remainder (§12.2).
@@ -342,6 +343,13 @@ func (e Effect) VarPositions(nums []int, tick int) map[string]int {
 		}
 	}
 	return out
+}
+
+func posMod64(a, m int64) int64 {
+	if m <= 0 {
+		return 0
+	}
+	return ((a % m) + m) % m
 }
 
 func posMod(a, m int) int {

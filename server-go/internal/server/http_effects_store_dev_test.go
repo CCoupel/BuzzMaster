@@ -170,3 +170,14 @@ func TestAPIEffects_ImportTooLarge_Dev(t *testing.T) {
 		t.Fatalf("2,4 Mo : %d", w.Code)
 	}
 }
+
+func TestAPIEffects_DraftEffectReservedAndWindows_Dev(t *testing.T) {
+	srv, _ := stStoreServer(t)
+	for _, id := range []string{"con", "draft"} {
+		body := `{"effect":{"id":"` + id + `","name":"X","description":"","moments":["calm"],"min_groups":0,"tick_ms":1000,"loop":true,"variables":[],"pre":null,"steps":[[{"target":"g0","color":"theme","intensity":100}]],"last":null,"post":null}}`
+		w := stDo(srv, "POST", "/api/lighting/effects/draft", bytes.NewBufferString(body), "application/json")
+		if w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":false`) {
+			t.Errorf("%s : %d %s", id, w.Code, w.Body.String())
+		}
+	}
+}

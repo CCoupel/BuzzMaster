@@ -132,6 +132,11 @@ func readDraft(b editorBody) draft {
 	}
 	doc := effects.DocumentOf(e)
 	text, _ := effects.Serialize(doc)
+	// The text that PUT would store goes through the same checks as a yaml draft.
+	if _, verrs := effects.ValidateText([]byte(text)); len(verrs) > 0 {
+		d.errs = draftErrors(verrs)
+		return d
+	}
 	d.ok, d.e, d.doc, d.yaml, d.text = true, e, &doc, text, []byte(text)
 	return d
 }
