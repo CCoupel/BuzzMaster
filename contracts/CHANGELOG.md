@@ -31,6 +31,18 @@ Compléments du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md`, `-104
 - **[CHANGED]** Usage de `POST /api/lighting/effects/{id}/try` par le catalogue : la zone est choisie par
   l'utilisateur et envoyée dans `zone` (route inchangée, §7.4).
 
+Révision 6 — évolutions du **format de fichier** (`light-effects.md` **§12**, décisions du 2026-11-12,
+`plan-ambiguities-20261112-111000.md`). **Aucun BREAKING pour les fichiers existants** : tout fichier valide en v11.7.0
+reste valide, avec le même rendu.
+
+- **[CHANGED]** Le dernier groupe de la zone s'écrit **`g*`** (cible et départ de variable). `gN` reste lu comme le
+  dernier groupe dans un fichier qui ne déclare pas de variable `gN` (§12.3).
+- **[CHANGED]** Nom de variable : la lettre `N` est autorisée (`gN`, `gNord`…).
+- **[CHANGED]** Limites relevées : **24 variables** par effet (8 auparavant), **40 actions** par pas (16 auparavant).
+- **[NEW]** `grid` : une cible directe `g*` est convertie en variable d'incrément 0 ; la grille n'a pas de ligne `g*`.
+- **Attention (sens inverse)** : un fichier qui utilise `g*`, une variable en `N`, plus de 8 variables ou plus de 16
+  actions par pas est refusé par un serveur v11.7.0. `version` reste `2`.
+
 ---
 ## [20261112] — v11.7.0 — précisions de l'aperçu d'effet après la revue LOT-3 (#299)
 
