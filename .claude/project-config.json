@@ -76,9 +76,13 @@
           "credentials_env": [],
           "verified": {
             "status": "ok",
-            "at": "2026-10-27T13:57:43Z",
+            "at": "2026-11-12T08:18:29Z",
             "checks": [
-              "repo-push (gh api permissions.push=true)"
+              "gh-auth (CCoupel via GH_TOKEN, scopes repo+workflow) : ok",
+              "repo-push (gh api permissions.push=true) : ok",
+              "pipeline (.github/workflows/release.yml + ci-branch.yml presents, actifs, declencheur tags v*) : ok",
+              "tag v11.7.0 / Release v11.7.0 : absents (attendu avant PUBLISH PROD)",
+              "branche main : sans protection ni ruleset (push direct possible)"
             ]
           }
         }
