@@ -138,6 +138,8 @@ type Error struct {
 	// Path locates a problem of an editor draft (`steps[2]`, `variables[0]`, `tick_ms`…, §11.3);
 	// empty for a file.
 	Path string `json:"path,omitempty"`
+	// part narrows Path inside a variable ("start" or "step"), set by the validator.
+	part string
 }
 
 func (e Error) Error() string {

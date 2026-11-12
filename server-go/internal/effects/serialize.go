@@ -103,6 +103,11 @@ func Serialize(d Document) (string, []Error) {
 	bad := func(path, format string, args ...any) {
 		errs = append(errs, Error{Path: path, Message: fmt.Sprintf(format, args...)})
 	}
+	if IsReserved(d.ID) {
+		bad("id", "« %s » est un mot réservé : changez l'identifiant", d.ID)
+	} else if IsWindowsDevice(d.ID) {
+		bad("id", "« %s » est un nom réservé par Windows : changez l'identifiant", d.ID)
+	}
 	w := &textWriter{}
 	w.add("id", "id: "+scalar(d.ID))
 	w.add("name", "nom: "+scalar(d.Name))
@@ -189,6 +194,9 @@ func Serialize(d Document) (string, []Error) {
 			p := ""
 			if pe.Line >= 1 && pe.Line <= len(w.paths) {
 				p = w.paths[pe.Line-1]
+			}
+			if pe.part != "" && strings.HasPrefix(p, "variables[") {
+				p += "." + pe.part
 			}
 			errs = append(errs, Error{Path: p, Message: pe.Message})
 		}

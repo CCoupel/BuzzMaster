@@ -543,3 +543,14 @@ func RewriteID(text, newID string) (string, error) {
 	}
 	return string(out), nil
 }
+
+// ValidateText is the validation an effect text goes through before it is stored or drafted:
+// size, UTF-8, no YAML alias, the schema of §4 / §12, reserved ids and Windows device names.
+// Errors carry no file name.
+func ValidateText(data []byte) (Effect, []Error) { return checkText("", data) }
+
+// EffectsWrite is Write seen through the server's EffectsStore interface (it returns the
+// reloaded catalogue).
+func (m *Manager) EffectsWrite(id string, data []byte, create bool) (string, Catalogue, error) {
+	return m.Write(id, data, create)
+}

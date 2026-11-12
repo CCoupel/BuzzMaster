@@ -104,6 +104,17 @@ func (c *Controller) StartEffectTrial(id, zone string, speed float64, seconds in
 	if !ok {
 		return 0, ErrTrialUnknownEffect
 	}
+	return c.startTrial(en, zone, speed, seconds)
+}
+
+// StartDraftTrial plays an effect that is not in the catalogue (the draft of the editor,
+// §11.10): same controls, same refusals, same replacement of a running trial as
+// StartEffectTrial. Nothing is written, the catalogue is untouched.
+func (c *Controller) StartDraftTrial(e effects.Effect, zone string, speed float64, seconds int) (int, error) {
+	return c.startTrial(effects.Entry{Effect: e, Origin: effects.OriginUser}, zone, speed, seconds)
+}
+
+func (c *Controller) startTrial(en effects.Entry, zone string, speed float64, seconds int) (int, error) {
 	lc := config.Get().Lighting
 	if !lc.Enabled || c.Writer() == nil || c.effectsQuiet.Load() {
 		return 0, &TrialError{Reason: "disabled"}

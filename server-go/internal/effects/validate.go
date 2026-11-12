@@ -30,6 +30,11 @@ func (v *validator) add(line int, format string, args ...any) {
 	v.errs = append(v.errs, Error{File: v.file, Line: line, Message: fmt.Sprintf(format, args...)})
 }
 
+// addPart is add for a problem of the start or the step of a variable (`variables[i].start`).
+func (v *validator) addPart(line int, part, format string, args ...any) {
+	v.errs = append(v.errs, Error{File: v.file, Line: line, Message: fmt.Sprintf(format, args...), part: part})
+}
+
 // build checks the decoded file against the schema of §4 and returns the effect.
 func (v *validator) build(r *rawEffect, present map[string]int) Effect {
 	e := Effect{ID: r.ID, Name: r.Nom, Description: r.Description, Version: r.Version, Moments: r.Moments,
@@ -174,18 +179,18 @@ func (v *validator) progression(vr *Var, val *yaml.Node) bool {
 	}
 	start, err := ParseExpr(parts[0])
 	if err != nil {
-		v.add(val.Line, "la déclaration de « %s » : %s", vr.Name, err.Error())
+		v.addPart(val.Line, "start", "la déclaration de « %s » : %s", vr.Name, err.Error())
 		return false
 	}
 	vr.Start = start
 	if len(parts) == 2 {
 		step, err := ParseExpr(parts[1])
 		if err != nil {
-			v.add(val.Line, "la déclaration de « %s » : %s", vr.Name, err.Error())
+			v.addPart(val.Line, "step", "la déclaration de « %s » : %s", vr.Name, err.Error())
 			return false
 		}
 		if refs := step.Refs(); len(refs) > 0 {
-			v.add(val.Line, "le pas ne peut pas citer une variable (%s)", refs[0])
+			v.addPart(val.Line, "step", "le pas ne peut pas citer une variable (%s)", refs[0])
 			return false
 		}
 		vr.Step = step
@@ -194,12 +199,12 @@ func (v *validator) progression(vr *Var, val *yaml.Node) bool {
 }
 
 // undeclared reports a variable used in a target or an expression without a declaration.
-func (v *validator) undeclared(line int, name string) {
+func (v *validator) undeclared(line int, name, part string) {
 	if name == "gN" {
-		v.add(line, "« gN » n'est pas déclarée dans variables. gN est désormais une variable comme les autres : pour le dernier groupe, écrivez g*")
+		v.addPart(line, part, "« gN » n'est pas déclarée dans variables. gN est désormais une variable comme les autres : pour le dernier groupe, écrivez g*")
 		return
 	}
-	v.add(line, "la variable « %s » n'est pas déclarée dans variables", name)
+	v.addPart(line, part, "la variable « %s » n'est pas déclarée dans variables", name)
 }
 
 // references checks that the variables cited by the starts are declared and that no loop
@@ -219,7 +224,7 @@ func (v *validator) references(vars []Var) {
 		good := true
 		for _, ref := range vr.Start.Refs() {
 			if !v.vars[ref] {
-				v.undeclared(vr.Line, ref)
+				v.undeclared(vr.Line, ref, "start")
 				good = false
 			}
 		}
@@ -330,7 +335,7 @@ func (v *validator) step(n *yaml.Node, where string) Step {
 			continue
 		}
 		if varName != "" && !v.vars[varName] {
-			v.undeclared(k.Line, varName)
+			v.undeclared(k.Line, varName, "")
 			continue
 		}
 		act := Action{Target: tg, Line: k.Line}

@@ -98,6 +98,14 @@ func (a *App) EffectsDelete(id string) (effects.Catalogue, error) {
 	return a.effects.Delete(id)
 }
 
+// EffectsWrite stores the text of an effect and reloads (PUT, §11.4).
+func (a *App) EffectsWrite(id string, data []byte, create bool) (string, effects.Catalogue, error) {
+	if a.effects == nil {
+		return "", effects.Catalogue{}, &effects.StoreError{Code: effects.ReasonUnavailable}
+	}
+	return a.effects.Write(id, data, create)
+}
+
 func (a *App) EffectsImport(files []effects.ImportFile, onConflict string) ([]effects.ImportResult, effects.Catalogue) {
 	if a.effects == nil {
 		return nil, effects.Catalogue{}
@@ -195,6 +203,11 @@ func (a *App) anyRoundEffects() bool {
 // StartEffectTrial / StopEffectTrial implement server.EffectTrialer (#223, §7.4).
 func (a *App) StartEffectTrial(id, zone string, speed float64, seconds int) (int, error) {
 	return a.ambCtl().StartEffectTrial(id, zone, speed, seconds)
+}
+
+// StartDraftTrial implements server.DraftTrialer (#210, §11.10).
+func (a *App) StartDraftTrial(e effects.Effect, zone string, speed float64, seconds int) (int, error) {
+	return a.ambCtl().StartDraftTrial(e, zone, speed, seconds)
 }
 
 func (a *App) StopEffectTrial() { a.ambCtl().StopEffectTrial() }

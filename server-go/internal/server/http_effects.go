@@ -12,7 +12,6 @@ import (
 	"buzzcontrol/internal/ambiancecfg"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/effects"
-	"buzzcontrol/internal/lighting/hue"
 )
 
 // Light-effect catalogue endpoints (v11.7.0, #223 — contracts/light-effects.md §7.1, §7.2).
@@ -35,6 +34,9 @@ type EffectsStore interface {
 	EffectsSource(id string) ([]byte, effects.Entry, error)
 	// EffectsDelete removes the user file of an effect (a native's override included) and reloads.
 	EffectsDelete(id string) (effects.Catalogue, error)
+	// EffectsWrite stores the text of an effect (create: the id must be free; else it must exist)
+	// and reloads; it returns the file name used.
+	EffectsWrite(id string, data []byte, create bool) (string, effects.Catalogue, error)
 	// EffectsImport stores each file on its own, reloads once.
 	EffectsImport(files []effects.ImportFile, onConflict string) ([]effects.ImportResult, effects.Catalogue)
 }
@@ -160,6 +162,10 @@ func (h *HTTPServer) handleLightingEffects(w http.ResponseWriter, r *http.Reques
 
 // handleLightingEffectsReload serves POST /api/lighting/effects/reload.
 func (h *HTTPServer) handleLightingEffectsReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPut { // PUT /…/reload: "reload" is a reserved id (§11.4)
+		http.Error(w, "identifiant réservé", http.StatusBadRequest)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -201,11 +207,23 @@ type trialRefusal interface{ TrialReason() string }
 // POST /api/lighting/effects/try/stop (§7.4).
 func (h *HTTPServer) handleLightingEffectsSub(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/api/lighting/effects/")
+	if r.Method == http.MethodPut && effects.IsReserved(rest) { // a route word is never an effect id (§11.4)
+		http.Error(w, "identifiant réservé", http.StatusBadRequest)
+		return
+	}
 	switch {
 	case rest == "try/stop":
 		h.handleEffectTrialStop(w, r)
 	case rest == "import":
 		h.handleEffectsImport(w, r)
+	case rest == "draft":
+		h.handleEffectDraft(w, r)
+	case rest == "draft/try":
+		h.handleEffectDraftTry(w, r)
+	case strings.HasSuffix(rest, "/source") && !strings.Contains(strings.TrimSuffix(rest, "/source"), "/"):
+		h.handleEffectSource(w, r, strings.TrimSuffix(rest, "/source"))
+	case rest != "" && !strings.Contains(rest, "/") && r.Method == http.MethodPut:
+		h.handleEffectPut(w, r, rest)
 	case strings.HasSuffix(rest, "/download") && !strings.Contains(strings.TrimSuffix(rest, "/download"), "/"):
 		h.handleEffectDownload(w, r, strings.TrimSuffix(rest, "/download"))
 	case rest != "" && !strings.Contains(rest, "/") && r.Method == http.MethodDelete:
@@ -267,31 +285,8 @@ func (h *HTTPServer) handleEffectTrial(w http.ResponseWriter, r *http.Request, i
 	if req.Seconds == 0 { // default: 5 s for an effect that only declares the score moment, else 10 s
 		req.Seconds = trialDefaultSeconds(en.Effect)
 	}
-	d, t := h.lightingDriver(), h.effectTrialer()
-	if d == nil || t == nil {
-		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "disabled"})
-		return
-	}
-	switch d.Status().State {
-	case hue.StateRefused:
-		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "disabled"})
-		return
-	case hue.StateUnreachable:
-		writeLightingJSON(w, http.StatusServiceUnavailable, map[string]string{"result": "unreachable"})
-		return
-	}
-	ms, err := t.StartEffectTrial(id, req.Zone, req.Speed, req.Seconds)
-	if err != nil {
-		var tr trialRefusal
-		switch {
-		case errors.As(err, &tr):
-			writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": tr.TrialReason()})
-		default:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		}
-		return
-	}
-	writeLightingJSON(w, http.StatusOK, map[string]any{"ok": true, "duration_ms": ms})
+	t := h.effectTrialer()
+	h.playTrial(w, t != nil, func() (int, error) { return t.StartEffectTrial(id, req.Zone, req.Speed, req.Seconds) })
 }
 
 // handleEffectPreview serves GET /api/lighting/effects/{id}/preview?groups=N&moment=chrono
@@ -409,15 +404,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	case effects.ReasonTooBig:
 		http.Error(w, "fichier trop gros", http.StatusRequestEntityTooLarge)
 	case effects.ReasonInvalid:
-		type jsonErr struct {
-			Line    int    `json:"line"`
-			Message string `json:"message"`
-		}
-		list := make([]jsonErr, 0, len(se.Errors))
-		for _, e := range se.Errors {
-			list = append(list, jsonErr{Line: e.Line, Message: e.Message})
-		}
-		writeLightingJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "errors": list})
+		writeLightingJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "errors": draftErrors(se.Errors)})
 	default:
 		http.Error(w, "écriture impossible", http.StatusInternalServerError)
 	}

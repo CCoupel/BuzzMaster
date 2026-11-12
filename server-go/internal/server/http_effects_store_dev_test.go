@@ -20,7 +20,10 @@ import (
 type stStoreProv struct{ devEffectsProv }
 
 func (p stStoreProv) EffectsSource(id string) ([]byte, effects.Entry, error) { return p.m.Source(id) }
-func (p stStoreProv) EffectsDelete(id string) (effects.Catalogue, error)     { return p.m.Delete(id) }
+func (p stStoreProv) EffectsWrite(id string, d []byte, c bool) (string, effects.Catalogue, error) {
+	return p.m.Write(id, d, c)
+}
+func (p stStoreProv) EffectsDelete(id string) (effects.Catalogue, error) { return p.m.Delete(id) }
 func (p stStoreProv) EffectsImport(f []effects.ImportFile, c string) ([]effects.ImportResult, effects.Catalogue) {
 	return p.m.Import(f, c)
 }
