@@ -2145,15 +2145,16 @@ sous-onglet (modifications gardées). Contrat : `light-effects.md` §11.1 à §1
   lignes + `g*`), document neuf, placement des erreurs par `path`. **Aucune analyse YAML et aucun calcul de trame dans le
   navigateur** : tout passe par le serveur.
 - **Brouillon** : `web/src/hooks/useEffectDraft.js` — `GET …/{id}/source` (ou `initialDoc` pour un effet neuf ou une copie) ;
-  `POST …/draft` après 300 ms, avec `groups` = 1, 3, 6, 12 et `moment` ; les réponses périmées sont ignorées. Règle
+  `POST …/draft` après 300 ms, avec `groups` = 1, 3, 6, 12 plus les zones réelles, et `moment` ; les réponses périmées sont ignorées. Règle
   Grille ↔ Texte du §11.8 (le texte est régénéré seulement si la grille a été modifiée ; Texte → Grille refusé si le texte est
   invalide ou si `grid.editable` est faux). Enregistrer envoie `yaml` si le texte est la dernière source, `effect` sinon, et
   `create: true` au premier `PUT` d'une création. Les refus `400` / `413` / `503` sont du **texte brut** serveur et s'affichent
   tels quels ; `409 limit` a un message dédié.
 - **Repères de test** : `data-testid` `effect-editor`, `effect-grid`, `cell-<colonne>-<cible>` (colonne : indice de pas,
   `pre`, `last`, `post`), `var-<nom>`, `effect-brush`, `effect-text`, `effect-errors`.
-- **Props** : `<LightEffectEditor id initialDoc create previewGroups onClose onSaved(catalogue) onDuplicate(source)>`, avec
-  le simulateur et l'essai passés en enfants.
+- **Props** : `id`, `initialDoc`, `create`, `zoneGroups`, `tryUnavailable`, `onStopTry`, `onDirtyChange`, `onClose`,
+  `onSaved(catalogue)`, `onDuplicate(source, doc)`, `leaveRequest`, `onLeaveCancel`. Pas d'enfants : le simulateur et
+  l'essai sont dans le composant. `previewGroups` est calculé en interne (1, 3, 6, 12 et les zones réelles, 8 au plus).
 - **Catalogue (v11.8.0)** : `LightEffectsCatalogue` affiche « ＋ Nouvel effet », « ✎ Modifier » (personnalisé) / « 👁 Ouvrir »
   (livré, natif modifié) et « ⧉ Dupliquer », seulement si les props `onCreate` / `onEdit` sont fournies. `onDuplicate(effect,
   info)` ou, à défaut, `onCreate({…, from})`. `EffectNameDialog` refuse un identifiant déjà pris, mal formé ou réservé.
@@ -2164,7 +2165,7 @@ sous-onglet (modifications gardées). Contrat : `light-effects.md` §11.1 à §1
   chips ; dernière zone partagée avec le catalogue (`readTryZone` / `saveTryZone`). « ■ Arrêter l'essai » → `…/try/stop`.
 - **Garde** : « ← Retour au catalogue » demande confirmation si des modifications ne sont pas enregistrées. Quitter la page
   avec un éditeur modifié ouvre **la même fenêtre** (Enregistrer / Abandonner / Rester) pour : un clic sur un lien interne
-  vers une autre page, et Précédent / Suivant (une entrée d'historique « garde » est ajoutée tant que l'éditeur est modifié).
+  vers une autre page, et Précédent (une entrée d'historique « garde » est ajoutée tant que l'éditeur est modifié ; Suivant n'a pas de cible tant que cette entrée est en tête).
   « Enregistrer » puis reprise de la navigation ; « Abandonner » reprend la navigation (le clic est rejoué, ou
   `history.go(-2)` pour Précédent) ; « Rester » l'annule. La fermeture ou le rechargement de l'onglet passe par
   `beforeunload` : c'est l'invite native du navigateur, sans fenêtre de l'application.

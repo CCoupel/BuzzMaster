@@ -1156,7 +1156,8 @@ Détail normatif : `contracts/light-effects.md` §11.5 à §11.7. Routes : `cont
 Détail normatif : `contracts/light-effects.md` §11.1 à §11.4 et §11.10. Routes : `contracts/http-endpoints.md`.
 Le document d'effet (JSON d'échange, §11.1) a `variables[]` (`kind` `progression` avec `start` et `step` en expressions,
 `step: null` = « suit » ; `kind` `list` avec `items`), `pre`, `steps[][]`, `last`, `post`, `loop`, `min_groups`, `tick_ms`.
-Tous les champs sont toujours présents.
+Tous les champs du document sont présents, sauf, dans une action, `color` et `intensity` (action `off`) ou `off` (autres
+actions). `step` d'une variable est toujours présent (`null` = « suit »).
 
 - **`GET /api/lighting/effects/{id}/source`** : `200 {id, origin, file, read_only, yaml, effect, has_comments, custom_order, grid}`.
   `read_only` est vrai pour `native` et `override`. `grid` = document sans voisin (`editable`, `effect`, `converted[]`,
@@ -1164,7 +1165,7 @@ Tous les champs sont toujours présents.
 - **`POST /api/lighting/effects/draft`** : corps `{effect}` **ou** `{yaml}`, plus `groups` (0 à 8 valeurs de 1 à 12) et
   `moment`. `200 {ok, errors[], effect, yaml, has_comments, custom_order, grid, moment, previews[]}`. Chaque erreur porte
   `line` (brouillon `yaml`) ou `path` (brouillon `effect`, ex. `steps[2]`, `variables[0].start`). Rien n'est écrit ni joué.
-  `400` : JSON illisible, les deux clés ou aucune, `groups` hors bornes ; `413` : corps trop gros.
+  `400` : JSON illisible, les deux clés ou aucune, `groups` hors bornes, `moment` invalide ; `413` : corps trop gros.
 - **`PUT /api/lighting/effects/{id}`** : corps `{effect}` (fichier régénéré, sans commentaire) **ou** `{yaml}` (texte écrit
   tel quel, commentaires conservés), et `create: true` pour une création. `409 {reason: exists | native | limit}` ; `404`
   si `create` est absent et l'`id` inconnu ; `400` : erreurs de validation (`errors[]`) ou identifiant réservé (texte brut) ;

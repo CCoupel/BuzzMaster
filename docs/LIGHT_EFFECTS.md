@@ -175,7 +175,7 @@ facteur     := entier | "N" | "g*" | "g" entier | variable | "(" expression ")" 
 | entier (0 à 999) | lui-même |
 | `N` | le nombre de groupes **non vides** de la zone où l'effet est joué |
 | `g*` | `N` (le rang du dernier groupe) |
-| `g1`…`g12` | le nombre écrit (`g3` = 3) — écriture v11.7.0, conservée |
+| `g1`…`g99` | le nombre écrit (`g3` = 3) — écriture v11.7.0, conservée (les **cibles** restent `g1`…`g12`) |
 | `gA` (variable) | le **rang** (1…N) du groupe que désigne cette variable ; **dans le départ seulement** — le pas ne cite jamais de variable |
 | `+ - *` | arithmétique entière |
 | `/` | **division entière** : le quotient est **tronqué** (`5/2` = 2, `2/3` = 0, `-5/3` = −1) |
@@ -344,8 +344,8 @@ mon-effet.yaml, ligne 12 : la variable « gB » n'est pas déclarée dans variab
 | clé inconnue | faute de frappe dans une clé |
 | clé obligatoire absente | `id`, `nom`, `version`, `moments`, `duree_tick_ms` ou `pas` manque |
 | `id` invalide ou en double | caractères hors a-z, 0-9, tiret ; ou deux fichiers utilisateur de même `id` |
-| `id` réservé ou nom Windows | `reload`, `try`, `draft`, `import` ; `con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9` |
-| alias YAML | `*nom` : écrire la valeur en toutes lettres (aucun alias n'est développé) |
+| `id` réservé ou nom Windows | à l'import, à l'enregistrement et dans le brouillon de l'éditeur : `reload`, `try`, `draft`, `import` ; `con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`. Un fichier déposé à la main dans le dossier avec un tel `id` reste chargé. |
+| alias YAML | à l'import, à l'enregistrement et dans le brouillon : `*nom` est refusé, avec sa ligne ; écrire la valeur en toutes lettres. Le chargeur du dossier ne refuse pas un alias. |
 | `moments` vide ou valeur inconnue | utiliser `chrono`, `calm` ou `score` |
 | `duree_tick_ms` hors bornes | entre 250 et 60 000 ms |
 | `pas` vide ou trop long | 1 à 200 pas, 1 à 40 actions par pas |
@@ -512,8 +512,9 @@ temps de l'édition ; « Retour au catalogue » le ferme. Référence : `contrac
 
 ### 16.4 Pas, pinceaux et couleurs
 
-- **Pas** : ajouter, dupliquer, insérer avant, déplacer, supprimer ; 200 pas au plus, 40 actions par pas. Le menu d'un
-  pas le déplace ou le supprime.
+- **Pas** : ajouter, dupliquer, insérer avant, déplacer, supprimer ; 200 pas au plus, 40 actions par pas. Le menu ▾ d'un
+  pas propose : dupliquer, insérer un pas avant, déplacer à gauche ou à droite, supprimer ; le bouton ＋ de
+  l'en-tête ajoute un pas.
 - **Pinceaux** : thème, équipe, urgence, scène, couleur libre, éteint, gomme ; chacun a une info-bulle qui dit ce qu'il
   allume, et l'intensité a la sienne.
 - **Couleur libre** : une roue (teinte, saturation, luminosité) ou un champ `#RRGGBB`, avec aperçu et couleurs récentes
@@ -535,7 +536,7 @@ temps de l'édition ; « Retour au catalogue » le ferme. Référence : `contrac
 
 - « Retour au catalogue » avec des modifications non enregistrées demande confirmation (« Modifications non enregistrées »).
   Changer de sous-onglet garde l'éditeur ouvert avec ses modifications. Quitter la page avec un éditeur modifié
-  demande confirmation. Pour un lien vers une autre page ou Précédent / Suivant, c'est la fenêtre de l'éditeur (Enregistrer /
+  demande confirmation. Pour un lien vers une autre page ou Précédent, c'est la fenêtre de l'éditeur (Enregistrer /
   Abandonner / Rester). Fermer ou recharger l'onglet affiche l'invite du navigateur.
 - Retirer un groupe qui n'est pas vide demande confirmation.
 
