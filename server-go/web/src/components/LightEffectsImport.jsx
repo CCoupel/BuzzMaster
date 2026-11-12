@@ -12,10 +12,13 @@ export async function postImport(files, onConflict = 'ask') {
   form.append('on_conflict', onConflict)
   try {
     const res = await fetch('/api/lighting/effects/import', { method: 'POST', body: form })
-    const data = await res.json().catch(() => ({}))
+    // Les refus (400, 413) sont du texte brut (http.Error) : on affiche le message du serveur tel quel (§11.7).
+    const raw = await res.text().catch(() => '')
+    let data = {}
+    try { data = raw ? JSON.parse(raw) : {} } catch { /* texte brut */ }
     if (!res.ok) {
       const fallback = res.status === 413 ? 'Envoi trop gros (2 Mo au plus).' : `Import impossible (HTTP ${res.status}).`
-      return { ok: false, message: data?.error || data?.message || fallback }
+      return { ok: false, message: data?.error || data?.message || raw.trim() || fallback }
     }
     return { ok: true, results: Array.isArray(data?.results) ? data.results : [], catalogue: data?.catalogue }
   } catch (e) {

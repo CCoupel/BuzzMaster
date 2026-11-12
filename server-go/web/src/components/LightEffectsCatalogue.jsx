@@ -220,7 +220,7 @@ export default function LightEffectsCatalogue({
           const applicable = e.applicable && typeof e.applicable === 'object' ? e.applicable.ambiance !== false : e.applicable !== false
           const min = e.min_groups || 0
           const isTrying = trying?.id === e.id
-          const zoneOk = applicableTo(e, zone)
+          const zoneOk = applicableTo(e, zone) && (min <= 0 || (zoneGroups[zone] ?? 0) >= min) // le serveur juge, l'interface double la règle des groupes
           const unavailable = isTrying ? ''
             : !zoneOk ? `Demande ${min} groupe${min > 1 ? 's' : ''} ; la zone ${ZONE_LABEL[zone]} en a ${zoneGroups[zone] ?? 0}`
             : tryUnavailable(zone)
