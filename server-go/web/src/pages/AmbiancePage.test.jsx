@@ -685,8 +685,8 @@ describe('Cas dégradés (maquette §07, contrat §5.6)', () => {
     expect(badge().textContent).not.toContain('refusée')
     expect(screen.getByText(/La partie continue normalement/)).toBeInTheDocument()
 
-    const list = document.querySelector('.ambiance-lights')
-    expect(list.classList.contains('is-frozen')).toBe(true)
+    // `is-frozen` dérive de l'inventaire (`/api/lighting/lights`, 503), une requête distincte du statut : attendre l'état final.
+    await waitFor(() => expect(document.querySelector('.ambiance-lights').classList.contains('is-frozen')).toBe(true))
     screen.getAllByRole('checkbox').forEach(b => { expect(b).toBeDisabled(); expect(b).toBeChecked() })
     expect(screen.getByText('Enregistrer').closest('button')).toBeDisabled()
     expect(screen.queryByText('Ré-associer')).toBeNull()
@@ -701,7 +701,7 @@ describe('Cas dégradés (maquette §07, contrat §5.6)', () => {
     render(<AmbiancePage />)
 
     await screen.findByText('Ré-associer')
-    expect(badge().dataset.state).toBe('refused')
+    await waitFor(() => expect(badge().dataset.state).toBe('refused'))
     expect(badge().textContent).toContain('Association refusée')
     expect(badge().textContent).not.toContain('injoignable')
 
