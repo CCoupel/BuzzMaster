@@ -280,6 +280,22 @@ Effets livrés à ce jour : `pulsation`, `chenillard`, `chenillard-traine`, `cou
 - **Effet à vous** : supprimez son fichier. Un moment qui le réglait joue alors sa valeur par défaut (`pulsation` pour
   `chrono` dans la salle, aucun effet ailleurs). Depuis le catalogue (v11.8.0), le bouton « 🗑 Supprimer » fait la même chose.
 
+## 14. Vérifier son effet
+
+- **Catalogue** : Ambiance › Lumière › Effets, sous les réglages. Chaque carte indique l'origine de l'effet (natif,
+  personnalisé, natif modifié), ses moments, son nombre de pas et l'endroit où il est utilisé.
+- **Erreurs** : le bandeau du catalogue liste les fichiers invalides (fichier, ligne, cause), comme
+  `GET /api/lighting/effects` (champ `errors`) et le journal du serveur.
+- **Aperçu** : « ▶ Aperçu » rejoue l'effet sur des ampoules dessinées g1, g2… ; le numéro du tick et le pas joué
+  (PRE, pas 0, dernier) s'affichent. L'aperçu ne simule ni la fin du moment ni la vitesse.
+- **Essai sur la salle** : « 💡 Essayer sur la salle » joue l'effet sur la zone choisie (par défaut ambiance), à la vitesse
+  ×1, pendant la durée par défaut du serveur (10 secondes, 5 secondes pour un effet de score seul). « ■ Arrêter l'essai »
+  l'interrompt.
+- **Tester** (réglages) : joue l'effet sur sa zone, à la vitesse réglée pour ce moment. Le dernier essai lancé remplace
+  l'autre.
+- **Grisage** : l'essai est grisé pendant une question en cours, et le serveur refuse un essai pendant une question
+  (409 `game`).
+
 ## 15. Importer, télécharger, supprimer depuis le catalogue (v11.8.0, #305)
 
 Le catalogue (Ambiance › Lumière › Effets) permet de gérer les fichiers sans passer par le dossier du serveur.
@@ -309,24 +325,8 @@ Référence normative : `contracts/light-effects.md` §11.5 à §11.7 ; routes d
   les moments qui utilisent l'effet (« utilisé : … ») et propose de télécharger le fichier avant. Un effet livré n'a ni
   l'un ni l'autre. Les réglages qui citaient l'effet ne sont pas modifiés : le moment joue sa valeur par défaut.
 - **Effet importé** : il apparaît aussitôt dans le catalogue et dans les sélecteurs des réglages, sans redémarrage.
-- **Essai sur la salle** : le bouton demande la zone (liste accolée : Ambiance, Animateur, Public, celles qui ont des
-  groupes). Une zone qui a trop peu de groupes pour l'effet est refusée, avec la raison (« demande 5 groupes ; la zone
-  Animateur en a 3 »). Le dernier choix de zone est retenu dans ce navigateur.
+- **Essai sur la salle** : le bouton demande la zone (liste accolée : Ambiance, toujours proposée, puis Animateur et Public
+  s'ils ont au moins un groupe). Une zone qui a trop peu de groupes pour l'effet est refusée, avec la raison (« Demande 5
+  groupes ; la zone Animateur en a 3 »). Le dernier choix de zone est retenu dans ce navigateur.
 - Rien n'est écrit hors de `data/files/effects/`, ni dans `natifs/`, quel que soit le nom du fichier envoyé : le nom
   envoyé ne sert qu'aux messages.
-
-## 14. Vérifier son effet
-
-- **Catalogue** : Ambiance › Lumière › Effets, sous les réglages. Chaque carte indique l'origine de l'effet (natif,
-  personnalisé, natif modifié), ses moments, son nombre de pas et l'endroit où il est utilisé.
-- **Erreurs** : le bandeau du catalogue liste les fichiers invalides (fichier, ligne, cause), comme
-  `GET /api/lighting/effects` (champ `errors`) et le journal du serveur.
-- **Aperçu** : « ▶ Aperçu » rejoue l'effet sur des ampoules dessinées g1, g2… ; le numéro du tick et le pas joué
-  (PRE, pas 0, dernier) s'affichent. L'aperçu ne simule ni la fin du moment ni la vitesse.
-- **Essai sur la salle** : « 💡 Essayer sur la salle » joue l'effet sur la zone choisie (par défaut ambiance), à la vitesse
-  ×1, pendant la durée par défaut du serveur (10 secondes, 5 secondes pour un effet de score seul). « ■ Arrêter l'essai »
-  l'interrompt.
-- **Tester** (réglages) : joue l'effet sur sa zone, à la vitesse réglée pour ce moment. Le dernier essai lancé remplace
-  l'autre.
-- **Grisage** : l'essai est grisé pendant une question en cours, et le serveur refuse un essai pendant une question
-  (409 `game`).
