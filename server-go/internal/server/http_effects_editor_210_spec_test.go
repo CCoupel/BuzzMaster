@@ -590,6 +590,10 @@ func TestTW210_Critical_NonRegression_V1170Routes_AndPreviewAdditiveVars(t *test
 	if v, ok := f["vars"].(map[string]any); !ok || len(v) != 0 {
 		t.Errorf("vars : objet vide sans variable (champ additif) : %v", f["vars"])
 	}
+	_, outC := tw210Do(t, srv, "GET", "/api/lighting/effects/chenillard/preview?groups=4&moment=chrono", nil)
+	if v, ok := outC["frames"].([]any)[0].(map[string]any)["vars"].(map[string]any); !ok || v["gA"] == nil {
+		t.Errorf("chenillard déclare gA : vars contient gA : %v", v)
+	}
 	for _, k := range []string{"at_ms", "tick", "step", "groups"} {
 		if _, ok := f[k]; !ok {
 			t.Errorf("champ v11.7.0 %q conservé", k)
