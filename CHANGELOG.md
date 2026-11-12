@@ -2,9 +2,9 @@
 
 Historique des versions du projet BuzzControl.
 
-## [11.8.0] - 2026-11-12 — En cours : import / export des effets livré (#305) ; éditeur d'effets (#210) à venir
+## [11.8.0] - 2026-11-12 — En cours : import / export des effets (#305) et éditeur d'effets pas à pas (#210)
 
-Entrée partielle (LOT-1). Seul ce qui est livré dans le lot est décrit ici.
+Entrée en cours (LOT-1 #305 et LOT-2 #210 développés ; QA et QUALIF à faire). Seul ce qui est livré dans ces lots est décrit ici.
 
 ### Added
 
@@ -15,14 +15,27 @@ Entrée partielle (LOT-1). Seul ce qui est livré dans le lot est décrit ici.
 - **Supprimer un effet (#305)** — « 🗑 Supprimer » pour un effet à vous, « ↺ Revenir à l'effet d'origine » pour un natif modifié ; confirmation citant où l'effet est utilisé. Un effet livré n'a ni l'un ni l'autre. `DELETE /api/lighting/effects/{id}` (natif : `409`).
 - **Zone de l'essai depuis le catalogue (#305)** — « Essayer sur la salle » demande la zone (Ambiance, toujours proposée ; Animateur et Public seulement s'ils ont au moins un groupe) ; un effet qui demande plus de groupes que la zone n'en a est grisé, avec la raison. La dernière zone choisie est retenue dans le navigateur.
 - **Écriture sûre des fichiers d'effets (#305)** — écriture atomique ; rien n'est écrit hors de `data/files/effects/`, ni dans `natifs/`, quel que soit le nom du fichier envoyé. Limite de 100 fichiers.
+- **Éditeur d'effets pas à pas (#210)** — « ＋ Nouvel effet », « ✎ Modifier », « 👁 Ouvrir » (effet livré, lecture seule) et « ⧉ Dupliquer » dans le sous-onglet Effets. Grille pas × cibles (variables en haut, `g*` en dernière ligne, 6 groupes par défaut, 12 au plus), panneau des variables, onglet Texte (commentaires conservés à l'enregistrement depuis le Texte, perdus avec avertissement dès qu'on modifie la grille), pinceaux et roue de couleur, simulateur sur 1, 3, 6, 12 groupes et les zones réelles, essai du brouillon par zone sans enregistrer. Un fichier qui emploie des voisins (`gA-1`, `gA+1`) s'ouvre avec ces voisins remplacés par des variables de même rendu.
+- **Expressions dans les variables (#210)** — le départ et le pas d'une variable sont des expressions : entiers, `N`, `g*`, `g<k>`, une autre variable (au départ seulement), `+ - * /` (division entière tronquée), parenthèses. Une boucle entre variables et une division par zéro écrite en dur sont refusées. Détail : `docs/LIGHT_EFFECTS.md` §7.1.
+- **`g*` (#210)** — cible du dernier groupe non vide de la zone (vaut `N` dans une expression).
+- **Routes de l'éditeur (#210)** — `GET /api/lighting/effects/{id}/source`, `POST /api/lighting/effects/draft` (validation, conversion, aperçus multi-tailles, sans écriture), `PUT /api/lighting/effects/{id}` (création et enregistrement), `POST /api/lighting/effects/draft/try` (essai d'un brouillon). Champ additif `vars` dans les trames de `preview`.
+- **Limites relevées (#210)** — 24 variables par effet (8 en v11.7.0), 40 actions par pas (16 en v11.7.0).
 
 ### Changed
 
 - **`POST /api/lighting/effects/{id}/try` (#305)** — inchangée ; le catalogue envoie désormais la zone choisie (`{"zone": …}`) au lieu de jouer toujours sur la zone ambiance.
+- **[BREAKING] `gN` ne désigne plus le dernier groupe (#210)** — `gN` devient un nom de variable ordinaire. Un fichier **utilisateur** écrit à la main pour la v11.7.0 qui emploie `gN` (cible ou départ) sans déclarer de variable `gN` est **refusé** avec le message « … écrivez g* » ; il figure dans le bandeau du catalogue, les autres effets restent chargés. **Correction** : remplacer `gN` par `g*` (`gD: gN; -1` devient `gD: g*; -1`). **Aucun effet natif n'est concerné.** Les écritures v11.7.0 (`g1; +1`, listes, voisins) gardent leur rendu.
 
 ### Documentation
 
-- `docs/LIGHT_EFFECTS.md` (§15 : import, téléchargement, suppression), `docs/ADMIN_GUIDE.md` (catalogue), `docs/REACT_INTERFACE.md` (composants du catalogue).
+- `docs/LIGHT_EFFECTS.md` réécrit pour le format r7 (§7 expressions et chronogrammes, §16 éditeur, §17 compatibilité `gN`), `docs/ADMIN_GUIDE.md` (catalogue, éditeur, `gN`), `docs/REACT_INTERFACE.md` (composants de l'éditeur et du catalogue), `docs/DATA_MODELS.md` (routes de l'éditeur, champ `vars`), `docs/GO_SERVER.md` (paquet `effects` format r7 et écriture).
+
+### Migration
+
+- **Fichiers v11.7.0 avec `gN`** : à corriger en `g*` (voir Changed, [BREAKING]). Les effets livrés ne sont pas concernés.
+- **Sens inverse** : un fichier v11.8.0 qui utilise `g*`, une expression, une variable nommée `gN`, plus de 8 variables ou
+  plus de 16 actions par pas est refusé par un serveur v11.7.0 (message de validation). Ne pas copier un effet v11.8.0 vers une
+  installation v11.7.0.
 
 ## [11.7.0] - 2026-11-12 — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#211, #225, #223, #299)
 

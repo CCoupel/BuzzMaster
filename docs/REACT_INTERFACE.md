@@ -2126,6 +2126,46 @@ Le sous-onglet Effets rend le composant **mutualisé** `AmbianceSettingsPanel` (
 - **Vitesse « plafonnée »** : indiquée quand la durée d'un tick passerait sous 250 ms (champ `tick_ms` du catalogue).
 - **Lien « Voir l'aperçu »** : sous le choix d'un effet, appelle `onShowEffect(id)` pour mettre en vue la carte du catalogue.
 
+#### Éditeur d'effets — `LightEffectEditor` (v11.8.0, #210)
+
+Ouvert dans le sous-onglet Effets de `AmbiancePage.jsx` (depuis « ＋ Nouvel effet », « ✎ Modifier », « 👁 Ouvrir » ou
+« ⧉ Dupliquer »). Il **remplace** les réglages et le catalogue pendant l'édition, et reste monté, caché, quand on change de
+sous-onglet (modifications gardées). Contrat : `light-effects.md` §11.1 à §11.10 ; format : `docs/LIGHT_EFFECTS.md` §16.
+
+- **Fichiers** : `web/src/components/LightEffectEditor.jsx` + `.css` (fiche, onglets Grille / Texte, avertissements
+  « commentaires », « ordre des actions », voisins remplacés, effet livré en lecture seule, fenêtres « Modifications non
+  enregistrées » et « Retirer un groupe ? ») ; `EffectGrid.jsx` (variables en haut, bandeaux, `g*` en dernière ligne,
+  menu de pas, « Ajouter / Retirer un groupe », colonnes en erreur) ; `EffectVariablesPanel.jsx` (bulle « ? » avec la suite
+  lue dans `vars`, expressions départ / pas, erreur par `path`) ; `EffectBrush.jsx` (info-bulles, intensité) ; `ColorWheel.jsx`
+  (roue maison, luminosité, `#RRGGBB`, couleurs récentes en `localStorage` `buzzcontrol.effects.recentColors`) ;
+  `EffectTextTab.jsx` (onglet Texte) ; `EffectSimulator.jsx` (aperçu multi-tailles, une horloge) ; `EffectTryBar.jsx`
+  (essai du brouillon par zone) ; `EffectNameDialog.jsx` (nom et identifiant à la création).
+- **Logique pure** : `web/src/utils/effectDocument.js` — écrire ou vider une case, pas (ajouter, dupliquer, insérer, déplacer,
+  supprimer), variables (ajout, type, ordre, suppression avec ses actions), groupes de la grille (`max(5, plus grand g<k>)`
+  lignes + `g*`), document neuf, placement des erreurs par `path`. **Aucune analyse YAML et aucun calcul de trame dans le
+  navigateur** : tout passe par le serveur.
+- **Brouillon** : `web/src/hooks/useEffectDraft.js` — `GET …/{id}/source` (ou `initialDoc` pour un effet neuf ou une copie) ;
+  `POST …/draft` après 300 ms, avec `groups` = 1, 3, 6, 12 et `moment` ; les réponses périmées sont ignorées. Règle
+  Grille ↔ Texte du §11.8 (le texte est régénéré seulement si la grille a été modifiée ; Texte → Grille refusé si le texte est
+  invalide ou si `grid.editable` est faux). Enregistrer envoie `yaml` si le texte est la dernière source, `effect` sinon, et
+  `create: true` au premier `PUT` d'une création. Les refus `400` / `413` / `503` sont du **texte brut** serveur et s'affichent
+  tels quels ; `409 limit` a un message dédié.
+- **Repères de test** : `data-testid` `effect-editor`, `effect-grid`, `cell-<colonne>-<cible>` (colonne : indice de pas,
+  `pre`, `last`, `post`), `var-<nom>`, `effect-brush`, `effect-text`, `effect-errors`.
+- **Props** : `<LightEffectEditor id initialDoc create previewGroups onClose onSaved(catalogue) onDuplicate(source)>`, avec
+  le simulateur et l'essai passés en enfants.
+- **Catalogue (v11.8.0)** : `LightEffectsCatalogue` affiche « ＋ Nouvel effet », « ✎ Modifier » (personnalisé) / « 👁 Ouvrir »
+  (livré, natif modifié) et « ⧉ Dupliquer », seulement si les props `onCreate` / `onEdit` sont fournies. `onDuplicate(effect,
+  info)` ou, à défaut, `onCreate({…, from})`. `EffectNameDialog` refuse un identifiant déjà pris, mal formé ou réservé.
+- **Simulateur** : une rangée par taille (1, 3, 6, 12, plus les zones réelles de taille différente), une seule horloge,
+  lecture / pause, tick précédent / suivant, retour au début, réglette. Ne rejoue que les trames du **dernier brouillon
+  valide** (`lastValidPreviews`). Clic sur un en-tête de pas : `seek`, le pas joué est surligné (`onColumn`).
+- **Essai du brouillon** : `POST /api/lighting/effects/draft/try` avec `{effect|yaml, zone, speed: 1}` ; zones proposées en
+  chips ; dernière zone partagée avec le catalogue (`readTryZone` / `saveTryZone`). « ■ Arrêter l'essai » → `…/try/stop`.
+- **Garde** : « Retour au catalogue » demande confirmation si des modifications ne sont pas enregistrées ; quitter la page
+  par la navigation ne demande pas encore de confirmation (point ouvert).
+- **`LightEffectPreview`** : `BulbRow` extrait pour réutilisation ; le catalogue est inchangé.
+
 #### Catalogue des effets — `LightEffectsCatalogue` et `LightEffectPreview` (v11.7.0, #299)
 
 **Fichiers** : `web/src/components/LightEffectsCatalogue.jsx` + `.css` (cartes, bandeau d'erreurs, recharger, essai) ; `web/src/components/LightEffectPreview.jsx` (aperçu animé) ; `web/src/utils/lightEffects.js` (`TRY_EVENT`, `TRY_SECONDS`, `visibleZones`, `formatSpeed`).

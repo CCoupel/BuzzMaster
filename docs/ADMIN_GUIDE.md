@@ -2427,6 +2427,27 @@ Sous les réglages du sous-onglet Effets, le **catalogue** liste chaque effet di
 - Le bouton d'essai est grisé avec une infobulle quand l'effet est inapplicable à la zone choisie, quand le pont est injoignable, quand l'éclairage est désactivé, quand le mode est forcé (ON, OFF) ou que le Flash est actif (ces deux derniers cas pour la zone Ambiance seulement), et pendant une question en cours.
 - Depuis les réglages, le lien **« Voir l'aperçu »** d'un effet choisi fait défiler la page jusqu'à sa carte du catalogue.
 
+#### Créer et modifier un effet — éditeur (v11.8.0, #210)
+
+Le catalogue propose **＋ Nouvel effet**, **✎ Modifier** (effet à vous), **👁 Ouvrir** (effet livré : lecture seule) et
+**⧉ Dupliquer** (copie `<id>-copie`, pour modifier un effet livré). L'éditeur remplace les réglages le temps de l'édition.
+
+- **Grille** : une colonne par pas (PRE, pas 1…n, DERNIER, POST), une ligne par groupe (`g1`…, avec **`g*`** en dernière
+  ligne = le dernier groupe de la zone), les variables en haut. **Ajouter un groupe** / **Retirer un groupe** changent le
+  nombre de lignes (12 au plus).
+- **Variables** : jusqu'à 24, avec un départ et un pas (expressions : `1`, `N/2`, `gA+1`…). La bulle « ? » montre la suite
+  obtenue pour 1, 3, 6 et 12 groupes.
+- **Onglet Texte** : le fichier YAML. Passer de la grille au texte régénère le fichier et **supprime les commentaires**
+  (avertissement affiché) ; passer du texte à la grille est impossible si le texte contient une erreur.
+- **Simulateur** : aperçu pas à pas sur 1, 3, 6, 12 groupes et sur les zones réelles ; **Essayer sur la salle** joue le
+  brouillon sur une zone, sans l'enregistrer.
+- **Enregistrer** : disponible sans redémarrage. Impossible tant que le brouillon contient des erreurs.
+- Détail (règles des pas, expressions, ordre d'écriture) : `docs/LIGHT_EFFECTS.md`, §7 et §16.
+
+> **Attention (v11.8.0)** : `gN` ne désigne plus le dernier groupe. Un fichier écrit à la main en v11.7.0 qui emploie
+> `gN` sans variable `gN` est refusé avec le message « … écrivez g* ». Remplacez `gN` par `g*`. Aucun effet livré n'est
+> concerné.
+
 #### Importer, télécharger et supprimer des effets (v11.8.0, #305)
 
 - **⭱ Importer…** (ou glisser-déposer sur le catalogue) : un ou plusieurs fichiers `.yaml` / `.yml`, 20 au plus, 64 Ko chacun. Le panneau de résultat indique pour chaque fichier **importé**, **remplacé**, **gardé en double** ou **refusé**, avec la ligne et la cause. Un fichier refusé n'est jamais écrit et n'empêche pas les autres.
