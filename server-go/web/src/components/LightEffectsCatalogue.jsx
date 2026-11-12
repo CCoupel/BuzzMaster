@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Button from './Button'
 import LightEffectPreview from './LightEffectPreview'
-import { ImportResults, ConflictDialog, Modal } from './LightEffectsImport'
+import { ImportResults, ConflictDialog, Modal, postImport, requestDelete } from './LightEffectsImport'
 import {
   MOMENTS, ZONE_LABEL, TRY_SECONDS, TRY_EVENT, formatSpeed, globalEffect, globalSpeed, visibleZones,
 } from '../utils/lightEffects'
@@ -16,7 +16,8 @@ import './LightEffectsCatalogue.css'
 //   lighting       section `lighting` de config.json (« utilisé : zone, moment » d'après les réglages GLOBAUX)
 //   zoneGroups     { ambiance, animateur, public } groupes non vides par zone
 //   onReload()     POST /api/lighting/effects/reload ; onTry(id, zone) -> {ok, duration_ms?} ; onStopTry()
-//   onImport(files, onConflict) -> {ok, results[] | message} (#305, §11.7) ; onDelete(id) -> {ok, message?} (§11.5)
+//   onCatalogue(catalogue) : catalogue renvoyé par l'import (§11.7) ou la suppression (§11.5), appliqué par le parent
+//   (à défaut : onReload()). L'import et la suppression sont des appels `fetch` faits ici.
 //   tryUnavailable(zone) -> '' | raison (éclairage désactivé, pont, forçage ON/OFF/Flash, question en cours)
 //   onManageGroups() ; focus : {id, n} carte à mettre en vue (lien « Voir l'aperçu » des réglages)
 //
@@ -53,7 +54,7 @@ const tickText = (ms) => `${String(ms / 1000).replace('.', ',')} s`
 
 export default function LightEffectsCatalogue({
   catalog, lighting = {}, zoneGroups = { ambiance: 0, animateur: 0, public: 0 }, onReload, onTry, onStopTry,
-  tryUnavailable = () => '', onManageGroups = null, focus = null, onImport = null, onDelete = null,
+  tryUnavailable = () => '', onManageGroups = null, focus = null, onCatalogue = null,
 }) {
   const [previewId, setPreviewId] = useState(null)
   const [trying, setTrying] = useState(null) // { id, durationMs }
@@ -90,13 +91,18 @@ export default function LightEffectsCatalogue({
   const zone = zones.includes(tryZone) ? tryZone : 'ambiance'
   const chooseZone = (z) => { setTryZone(z); saveZone(z) }
 
+  // « utilisé : … » sur TOUTES les zones (un réglage qui cite l'effet compte même si la zone n'a plus de groupe).
+  const usedEverywhere = (id) => usedBy(lighting, { ambiance: 1, animateur: 1, public: 1 }, id)
+  const applyCatalogue = (c) => { if (c) onCatalogue?.(c); else onReload?.() }
+
   const importFiles = async (list) => {
     const files = Array.from(list || [])
-    if (!files.length || !onImport || importing) return
+    if (!files.length || importing) return
     setImporting(true); setImportError(''); setPending(null)
     try {
-      const out = await onImport(files, 'ask')
+      const out = await postImport(files, 'ask')
       if (!out?.ok) { setImportRows([]); setImportError(out?.message || 'Import impossible.'); return }
+      applyCatalogue(out.catalogue)
       setImportRows(out.results)
       const queue = out.results.flatMap((r, i) => (r.status === 'conflict' ? [i] : []))
       if (queue.length) setPending({ files, queue })
@@ -111,7 +117,8 @@ export default function LightEffectsCatalogue({
     if (choice === 'cancel') {
       row = { ...importRows[idx], status: 'cancelled' }
     } else {
-      const out = await onImport([file], choice)
+      const out = await postImport([file], choice)
+      if (out?.ok) applyCatalogue(out.catalogue)
       row = out?.ok && out.results[0]
         ? { ...out.results[0], file: importRows[idx].file }
         : { file: importRows[idx].file, status: 'invalid', errors: [{ message: out?.message || 'Import impossible.' }] }
@@ -124,8 +131,8 @@ export default function LightEffectsCatalogue({
   const doDelete = async () => {
     setDeleting(true); setDeleteError('')
     try {
-      const out = await onDelete?.(confirm.id)
-      if (out?.ok) setConfirm(null)
+      const out = await requestDelete(confirm.id)
+      if (out?.ok) { applyCatalogue(out.catalogue); setConfirm(null) }
       else setDeleteError(out?.message || 'Suppression impossible.')
     } finally { setDeleting(false) }
   }
@@ -163,23 +170,19 @@ export default function LightEffectsCatalogue({
 
   return (
     <section
-      className={`lfx${dragging ? ' is-drop' : ''}`} aria-labelledby="lfx-title" data-testid="lfx-catalogue"
-      onDragOver={onImport ? (e) => { e.preventDefault(); setDragging(true) } : undefined}
-      onDragLeave={onImport ? (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) } : undefined}
-      onDrop={onImport ? (e) => { e.preventDefault(); setDragging(false); importFiles(e.dataTransfer?.files) } : undefined}
+      className={`lfx${dragging ? ' is-drop' : ''}`} aria-labelledby="lfx-title" data-testid="catalogue-dropzone"
+      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false) }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); importFiles(e.dataTransfer?.files) }}
     >
       <div className="lfx-head">
         <h3 id="lfx-title" className="lfx-title">Catalogue des effets</h3>
         <span className="lfx-spacer" />
-        {onImport && (
-          <>
-            <input
-              ref={fileInput} type="file" accept=".yaml,.yml" multiple hidden data-testid="lfx-import-input"
-              onChange={(e) => { importFiles(e.target.files); e.target.value = '' }}
-            />
-            <Button variant="secondary" size="sm" onClick={() => fileInput.current?.click()} loading={importing}>⭱ Importer…</Button>
-          </>
-        )}
+        <input
+          ref={fileInput} type="file" accept=".yaml,.yml" multiple hidden data-testid="lfx-import-input"
+          onChange={(e) => { importFiles(e.target.files); e.target.value = '' }}
+        />
+        <Button variant="secondary" size="sm" onClick={() => fileInput.current?.click()} loading={importing}>⭱ Importer…</Button>
         <Button variant="secondary" size="sm" onClick={reload} loading={reloading}>↻ Recharger les fichiers</Button>
       </div>
       <p className="ambiance-hint">
@@ -264,12 +267,12 @@ export default function LightEffectsCatalogue({
                     {zones.map(z => <option key={z} value={z}>{ZONE_LABEL[z]}</option>)}
                   </select>
                 </span>
-                {(onImport || onDelete) && <span className="lfx-sep" />}
+                <span className="lfx-sep" />
                 <a className="btn btn-secondary btn-sm lfx-dl" href={downloadHref(e.id)} download={`${e.id}.yaml`}>⭳ Télécharger</a>
-                {onDelete && e.origin === 'user' && (
+                {e.origin === 'user' && (
                   <Button variant="danger" size="sm" onClick={() => { setDeleteError(''); setConfirm(e) }}>🗑 Supprimer</Button>
                 )}
-                {onDelete && e.origin === 'override' && (
+                {e.origin === 'override' && (
                   <Button variant="danger" size="sm" onClick={() => { setDeleteError(''); setConfirm(e) }}>↺ Revenir à l'effet d'origine</Button>
                 )}
               </div>
@@ -290,13 +293,13 @@ export default function LightEffectsCatalogue({
       {pending && (
         <ConflictDialog
           conflict={{ result: importRows[pending.queue[0]] }}
-          usedText={usedBy(lighting, zoneGroups, importRows[pending.queue[0]]?.id).join(' · ')}
+          usedText={usedEverywhere(importRows[pending.queue[0]]?.id).join(' · ')}
           onChoose={resolveConflict}
         />
       )}
       {confirm && (() => {
         const restore = confirm.origin === 'override'
-        const used = usedBy(lighting, zoneGroups, confirm.id)
+        const used = usedEverywhere(confirm.id)
         return (
           <Modal
             titleId="lfx-confirm-title" onCancel={() => setConfirm(null)}

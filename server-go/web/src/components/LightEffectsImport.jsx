@@ -4,6 +4,40 @@ import Button from './Button'
 // #305 (v11.8.0, LOT-1) — import d'effets : panneau de résultat par fichier et fenêtre de conflit.
 // Maquette : docs/mockup/v11.8.0/ui/ambiance_page__effects_catalogue_import_export.html §02. Contrat : contracts/light-effects.md §11.7.
 
+// POST /api/lighting/effects/import (§11.7) : multipart, champ `files` répété, `on_conflict` = ask | replace | keep_both.
+// -> { ok: true, results, catalogue } | { ok: false, message }.
+export async function postImport(files, onConflict = 'ask') {
+  const form = new FormData()
+  for (const f of files) form.append('files', f, f.name)
+  form.append('on_conflict', onConflict)
+  try {
+    const res = await fetch('/api/lighting/effects/import', { method: 'POST', body: form })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const fallback = res.status === 413 ? 'Envoi trop gros (2 Mo au plus).' : `Import impossible (HTTP ${res.status}).`
+      return { ok: false, message: data?.error || data?.message || fallback }
+    }
+    return { ok: true, results: Array.isArray(data?.results) ? data.results : [], catalogue: data?.catalogue }
+  } catch (e) {
+    return { ok: false, message: `Import impossible : ${e.message}` }
+  }
+}
+
+// DELETE /api/lighting/effects/{id} (§11.5) : supprime l'effet utilisateur, ou le fichier qui remplace un natif.
+export async function requestDelete(id) {
+  try {
+    const res = await fetch(`/api/lighting/effects/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) return { ok: true, catalogue: data?.catalogue }
+    const message = res.status === 409 ? 'Un effet livré ne peut pas être supprimé.'
+      : res.status === 404 ? 'Effet inconnu — rechargez le catalogue.'
+      : `Suppression impossible (HTTP ${res.status}).`
+    return { ok: false, status: res.status, message }
+  } catch (e) {
+    return { ok: false, message: `Suppression impossible : ${e.message}` }
+  }
+}
+
 // Une ligne de résultat : { ok, text, errors[] } d'après le `status` du serveur (§11.7).
 export function describeResult(r) {
   const name = r.name ? `« ${r.name} »` : ''
@@ -27,7 +61,7 @@ export function describeResult(r) {
 export function ImportResults({ rows, onClose }) {
   if (!rows?.length) return null
   return (
-    <section className="lfx-res" aria-label="Résultat de l'import" data-testid="lfx-import-result">
+    <section className="lfx-res" aria-label="Résultat de l'import" data-testid="import-result">
       <div className="lfx-res-head">
         <h4 className="lfx-res-title">Résultat de l'import</h4>
         <span className="lfx-spacer" />
