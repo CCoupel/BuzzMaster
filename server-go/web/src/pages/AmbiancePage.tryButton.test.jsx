@@ -79,13 +79,13 @@ describe('AmbiancePage › Effets — bouton « Tester »', () => {
     expect(screen.queryByTestId('asp-zone-animateur')).toBeNull()
   })
 
-  it('catalogue sous les réglages : « Essayer sur la salle » poste un corps sans zone ni vitesse', async () => {
+  it('catalogue sous les réglages : « Essayer sur la salle » poste la zone choisie (Ambiance par défaut), sans vitesse', async () => {
     const calls = server()
     render(<AmbiancePage />)
     await open()
     const card = await screen.findByTestId('fx-pulsation')
     fireEvent.click(card.querySelector('button[title^="Joue l\'effet sur la zone Ambiance"]'))
-    await waitFor(() => expect(calls.at(-1)).toEqual({ url: '/api/lighting/effects/pulsation/try', body: {} }))
+    await waitFor(() => expect(calls.at(-1)).toEqual({ url: '/api/lighting/effects/pulsation/try', body: { zone: 'ambiance' } }))
   })
 
   it('catalogue : essai grisé pendant une question', async () => {

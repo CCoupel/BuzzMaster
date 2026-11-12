@@ -28,3 +28,26 @@
 .lfx-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .lfx-file { font-size: 0.7rem; color: var(--gray-500); margin-top: 0.35rem; }
 .lfx-file code { background: var(--gray-100); padding: 0 0.25rem; border-radius: 0.2rem; }
+
+/* #305 (v11.8.0) — actions du catalogue, import, fenêtres. Maquette ambiance_page__effects_catalogue_import_export. */
+.lfx.is-drop { outline: 2px dashed var(--primary-500, #4f46e5); outline-offset: 4px; border-radius: 0.6rem; }
+.lfx-drop { text-align: center; padding: 0.8rem; border: 2px dashed var(--primary-500, #4f46e5); border-radius: 0.5rem; background: var(--primary-100, #e0e7ff); font-size: 0.85rem; }
+.lfx-tryz { display: inline-flex; gap: 0.25rem; align-items: center; }
+.lfx-zone { font: inherit; font-size: 0.8rem; padding: 0.3rem 0.4rem; border: 1px solid var(--gray-300); border-radius: 0.4rem; background: #fff; }
+.lfx-sep { flex: 1; }
+.lfx-dl { text-decoration: none; display: inline-flex; align-items: center; }
+.lfx-res { border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 0.6rem 0.75rem; background: #fff; }
+.lfx-res-head { display: flex; align-items: center; gap: 0.5rem; }
+.lfx-res-title { margin: 0; font-size: 0.9rem; }
+.lfx-res-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; }
+.lfx-res-ok { color: #166534; }
+.lfx-res-ko { color: #991b1b; }
+.lfx-res-skip { color: var(--gray-500); }
+.lfx-res-list code { background: var(--gray-100); padding: 0 0.25rem; border-radius: 0.2rem; }
+.lfx-res-err { display: block; margin-left: 1.1rem; }
+.lfx-modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+.lfx-modal-box { background: #fff; border-radius: 0.7rem; padding: 1rem 1.2rem; max-width: 32rem; width: 100%; font-size: 0.85rem; line-height: 1.45; }
+.lfx-modal-title { margin: 0 0 0.5rem; font-size: 1rem; }
+.lfx-modal-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+.lfx-modal-note { margin: 0.7rem 0 0; font-size: 0.78rem; color: var(--gray-600); }
+.lfx-modal-err { color: #991b1b; }

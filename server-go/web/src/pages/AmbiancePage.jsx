@@ -208,7 +208,7 @@ export default function AmbiancePage() {
   // #225 — sous-onglets de Lumière (pont associé seulement) : 'bridge' | 'groups' | 'effects'.
   const [lightSubTab, setLightSubTab] = useState('bridge')
   // #223 — catalogue d'effets (sous-onglet Effets) ; relu à chaque ouverture du sous-onglet.
-  const { catalog, refresh: refreshCatalog, reload: reloadCatalog } = useLightEffects()
+  const { catalog, refresh: refreshCatalog, reload: reloadCatalog, importFiles: importEffects, deleteEffect } = useLightEffects()
   const [configLoaded, setConfigLoaded] = useState(false)
 
   // Étape 1 — découverte.
@@ -397,8 +397,14 @@ export default function AmbiancePage() {
   // Bouton « Tester » (contrat §7.4) : POST /api/lighting/effects/{id}/try {zone, speed} (durée : défaut du serveur, §7.4) ; réponse immédiate
   // `{ok, duration_ms}` ; 409 `reason` : disabled | game | not_applicable | mode ; 503 pont injoignable ; 404 / 400.
   const handleTryEffect = async ({ zone, id, speed }) => tryEffect(id, { zone, speed })
-  // Bouton « Essayer sur la salle » du catalogue : essai SANS zone ni vitesse (zone ambiance, ×1, §7.4), durée fixée par le serveur.
-  const handleCatalogueTry = (id) => tryEffect(id, {})
+  // Bouton « Essayer sur la salle » du catalogue (v11.8.0, §11.8) : zone choisie sur la carte, ×1, durée fixée par le serveur (§7.4).
+  const handleCatalogueTry = (id, zone = 'ambiance') => tryEffect(id, { zone })
+  // #305 : suppression / retour à l'effet d'origine (§11.5) ; confirmation dans le catalogue, toast de résultat ici.
+  const handleDeleteEffect = async (id) => {
+    const out = await deleteEffect(id)
+    if (out.ok) setToast({ message: 'Effet supprimé.', type: 'success' })
+    return out
+  }
   const tryEffect = async (id, body) => {
     try {
       const res = await postJson(`/api/lighting/effects/${encodeURIComponent(id)}/try`, body)
@@ -1267,7 +1273,9 @@ export default function AmbiancePage() {
               onReload={reloadCatalog}
               onTry={handleCatalogueTry}
               onStopTry={handleStopTry}
-              tryUnavailable={() => (isQuestionRunning(gameState?.phase) ? 'Une question est en cours : l\'essai est possible hors question.' : tryUnavailable('ambiance'))}
+              onImport={importEffects}
+              onDelete={handleDeleteEffect}
+              tryUnavailable={(zone = 'ambiance') => (isQuestionRunning(gameState?.phase) ? 'Une question est en cours : l\'essai est possible hors question.' : tryUnavailable(zone))}
               onManageGroups={() => openSubTab('groups')}
               focus={focusEffect}
             />
