@@ -9,14 +9,18 @@ import { Modal } from './LightEffectsImport'
 export const slugify = (name) => String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/g, '')
 const ID_RE = /^[a-z0-9-]{1,40}$/
 // Identifiants réservés (contrat §11.4, §4.8) : mots de route et noms de périphériques Windows ; le serveur reste juge.
-const RESERVED_ID = /^(reload|try|draft|import|con|prn|aux|nul|com[1-9]|lpt[1-9])$/
+const ROUTE_WORD = /^(reload|try|draft|import)$/
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/
+// Même texte que le serveur (§4.8, avec « identifiant » à la place de « clé id »).
+const reservedMessage = (id) => (ROUTE_WORD.test(id) ? `« ${id} » est un mot réservé : changez l'identifiant`
+  : WINDOWS_DEVICE.test(id) ? `« ${id} » est un nom réservé par Windows : changez l'identifiant` : '')
 
 // Fenêtre « Nouvel effet » / « Dupliquer » : nom et identifiant (nom de fichier, non modifiable ensuite).
 export default function NameIdDialog({ title, initialName, initialId, takenIds, confirmLabel, onConfirm, onCancel }) {
   const [name, setName] = useState(initialName)
   const [id, setId] = useState(initialId)
   const [idTouched, setIdTouched] = useState(!!initialId)
-  const idError = !ID_RE.test(id) ? "Lettres minuscules, chiffres et tirets (40 au plus)." : takenIds.includes(id) ? 'Cet identifiant est déjà utilisé.' : RESERVED_ID.test(id) ? 'Cet identifiant est réservé.' : ''
+  const idError = !ID_RE.test(id) ? "Lettres minuscules, chiffres et tirets (40 au plus)." : takenIds.includes(id) ? 'Cet identifiant est déjà utilisé.' : reservedMessage(id)
   const ok = name.trim() !== '' && !idError
   return (
     <Modal titleId="lfx-name-title" title={title} onCancel={onCancel}>
