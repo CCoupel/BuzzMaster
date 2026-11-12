@@ -425,7 +425,7 @@ func checkText(file string, data []byte) (Effect, []Error) {
 		return Effect{}, []Error{{File: file, Line: idLine(data), Message: "« " + e.ID + " » est un mot réservé : changez la clé id"}}
 	}
 	if IsWindowsDevice(e.ID) {
-		return Effect{}, []Error{{File: file, Line: idLine(data), Message: "« " + e.ID + " » est un nom réservé par Windows (nom de fichier impossible) : changez la clé id"}}
+		return Effect{}, []Error{{File: file, Line: idLine(data), Message: "« " + e.ID + " » est un nom réservé par Windows : changez la clé id"}}
 	}
 	return e, nil
 }

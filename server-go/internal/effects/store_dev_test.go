@@ -154,7 +154,7 @@ func TestWindowsDeviceIDsRefused_Dev(t *testing.T) {
 			t.Errorf("%s : reason %q", id, reason)
 		}
 		res, _ := m.Import([]ImportFile{{Name: "x.yaml", Data: []byte(tw305Src(id, ""))}}, ConflictAsk)
-		if res[0].Status != StatusInvalid || !strings.Contains(res[0].Errors[0].Message, "Windows") || res[0].Errors[0].Line != 1 {
+		if res[0].Status != StatusInvalid || !strings.Contains(res[0].Errors[0].Message, "nom réservé par Windows : changez la clé id") || res[0].Errors[0].Line != 1 {
 			t.Errorf("%s : %+v", id, res[0])
 		}
 	}
