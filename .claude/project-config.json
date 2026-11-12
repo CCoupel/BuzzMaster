@@ -48,7 +48,7 @@
           "credentials_env": [],
           "verified": {
             "status": "failed",
-            "at": "2026-11-11T14:50:00Z",
+            "at": "2026-11-12T09:05:00Z",
             "checks": [
               "target-dir (build/ writable) : ok",
               "local-shell (powershell.exe/cmd.exe//mnt/c) : failed — absents du conteneur Claude-Launcher ; exe Windows lance par l utilisateur (deploy.qualif.md), etat normal de ce mode",
