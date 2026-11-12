@@ -14,6 +14,7 @@ import LightGroupsManager from '../components/LightGroupsManager'
 import LightEffectsCatalogue from '../components/LightEffectsCatalogue'
 import LightEffectEditor from '../components/LightEffectEditor'
 import NameIdDialog from '../components/EffectNameDialog'
+import { useUnsavedGuard } from '../hooks/useUnsavedGuard'
 import { copyDocument, copyId, newEffectDocument } from '../utils/effectDocument'
 import { groupLabelForLight, groupPillText, teamRoleWarning } from '../utils/lightGroups'
 import { useLightEffects } from '../hooks/useLightEffects'
@@ -392,6 +393,8 @@ export default function AmbiancePage() {
   // #210 — éditeur d'effet : remplace le catalogue du sous-onglet Effets ; reste monté (modifications gardées) quand on change de sous-onglet.
   const [editing, setEditing] = useState(null) // { key, id, initialDoc?, create? }
   const [dupDialog, setDupDialog] = useState(null) // { doc, name, id } : « Dupliquer » demandé depuis l'éditeur
+  const [editorDirty, setEditorDirty] = useState(false)
+  useUnsavedGuard(!!editing && editorDirty) // quitter la page avec un effet modifié : confirmation (lien interne, Précédent, fermeture de l'onglet)
   const effectsSettings = useMemo(() => ({
     light: {
       mode: lighting.default_mode || 'AUTO',
@@ -424,7 +427,7 @@ export default function AmbiancePage() {
       return { ok: false, message: error.message }
     }
   }
-  const startEditor = (spec) => setEditing({ key: Date.now(), ...spec })
+  const startEditor = (spec) => { setEditorDirty(false); setEditing({ key: Date.now(), ...spec }) }
   const docOfSource = (src) => ((src?.grid?.editable !== false && src?.grid?.effect) ? src.grid.effect : src?.effect)
   const handleCatalogueDuplicate = async (effect, info) => {
     try {
@@ -1259,7 +1262,7 @@ export default function AmbiancePage() {
             <LightEffectEditor
               key={editing.key} id={editing.id} initialDoc={editing.initialDoc || null} create={!!editing.create}
               zoneGroups={zoneGroups} tryUnavailable={(zone = 'ambiance') => tryUnavailable(zone)} onStopTry={handleStopTry}
-              onClose={() => { setEditing(null); refreshCatalog() }}
+              onDirtyChange={setEditorDirty} onClose={() => { setEditorDirty(false); setEditing(null); refreshCatalog() }}
               onSaved={(c) => { if (c) applyCatalogue(c); setToast({ message: 'Effet enregistré.', type: 'success' }) }}
               onDuplicate={(src, doc) => setDupDialog({ doc: doc || docOfSource(src), name: src?.effect?.name || doc?.name || '', id: src?.id || doc?.id })}
             />
