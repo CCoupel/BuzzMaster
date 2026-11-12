@@ -118,7 +118,7 @@ La section **Sauvegarde** permet de choisir quoi inclure dans l'archive :
 | Joueurs | Fichier `bumpers.json` |
 | Historique | Fichier `history.json` |
 | Fonds | Images de fond d'ecran |
-| Réglages de jeu | Réglages de jeu (délai, effet néon, réglages d'ambiance) et **effets lumière personnalisés** : les fichiers de `data/files/effects/`, sans le dossier `natifs/` (copie de référence des effets livrés) |
+| Réglages de jeu | Réglages de jeu (délai par défaut, effet néon) et **effets lumière personnalisés** : les fichiers de `data/files/effects/`, sans le dossier `natifs/` (copie de référence des effets livrés) |
 
 **Effets lumière dans les sauvegardes (v11.8.0)** :
 
@@ -143,7 +143,7 @@ Retourne un fichier TAR contenant uniquement les elements selectionnes.
 - `bumpers` — configuration des joueurs
 - `history` — historique des parties
 - `medias` — images de fond / ressources
-- `ambiance` — case « Réglages de jeu » : configuration ambiance (fonds d'ecran, musique, effets) et fichiers des effets lumière personnalisés — independant de `history`
+- `ambiance` — case « Réglages de jeu » : `game-config.json` (délai par défaut, effet néon) et fichiers des effets lumière personnalisés — independant de `history`
 
 #### Sauvegarde complete (legacy)
 
