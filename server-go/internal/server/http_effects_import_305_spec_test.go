@@ -36,6 +36,19 @@ func (p *tw305Provider) EffectsCatalogue() effects.Catalogue { return p.Manager.
 func (p *tw305Provider) EffectsReload() effects.Catalogue    { return p.Manager.Reload() }
 func (p *tw305Provider) EffectsDir() string                  { return p.dir }
 
+// Interface optionnelle EffectsStore (http_effects.go) : adaptateurs vers le Manager.
+func (p *tw305Provider) EffectsSource(id string) ([]byte, effects.Entry, error) {
+	return p.Manager.Source(id)
+}
+func (p *tw305Provider) EffectsDelete(id string) (effects.Catalogue, error) {
+	return p.Manager.Delete(id)
+}
+func (p *tw305Provider) EffectsImport(files []effects.ImportFile, onConflict string) ([]effects.ImportResult, effects.Catalogue) {
+	return p.Manager.Import(files, onConflict)
+}
+
+var _ EffectsStore = (*tw305Provider)(nil)
+
 func tw305Server(t *testing.T) (*HTTPServer, *tw305Provider, string) {
 	t.Helper()
 	srv, dataDir := setupTestHTTPServer(t)
@@ -355,9 +368,9 @@ func TestTW305_Import_KeepBoth_OnlyIDKeyRewritten(t *testing.T) {
 func TestTW305_KeepBoth_SuffixedIDTruncatedTo40(t *testing.T) {
 	srv, prov, dir := tw305Server(t)
 	long := strings.Repeat("a", 40)
-	_ = os.WriteFile(filepath.Join(dir, "l.yaml"), []byte(tw305Src(long, "")), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "l.yaml"), []byte(strings.Replace(tw305Src(long, ""), "nom: Effet "+long, "nom: Long", 1)), 0o644)
 	prov.Reload()
-	_, out := tw305Import(t, srv, "keep_both", tw305File{"l.yaml", tw305Src(long, "")})
+	_, out := tw305Import(t, srv, "keep_both", tw305File{"l.yaml", strings.Replace(tw305Src(long, ""), "nom: Effet "+long, "nom: Long", 1)})
 	id, _ := tw305Results(t, out)[0]["new_id"].(string)
 	if id == "" || len(id) > 40 || !strings.HasSuffix(id, "-2") {
 		t.Errorf("id suffixé tronqué à 40 : %q", id)
