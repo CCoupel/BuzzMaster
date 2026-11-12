@@ -1,6 +1,6 @@
 # Écrire un effet lumière
 
-> **Version** : v11.7.0 (#223, format pas à pas, modèle à trois zones).
+> **Version** : v11.7.0 (#223, format pas à pas, modèle à trois zones) ; v11.8.0 (#305) : import, téléchargement et suppression depuis le catalogue (§15).
 > **Référence normative** : `contracts/light-effects.md` (§2 zones, §4 format, §6 réglages, §9 natifs).
 > **Où régler** : Ambiance › Lumière › **Effets** (`/admin/ambiance`), voir `docs/ADMIN_GUIDE.md`.
 
@@ -276,9 +276,42 @@ Effets livrés à ce jour : `pulsation`, `chenillard`, `chenillard-traine`, `cou
 ## 13. Revenir à l'effet d'origine
 
 - **Effet livré** : supprimez (ou renommez hors `.yaml`) votre fichier qui porte le même `id`. Le natif reprend au
-  rechargement suivant.
+  rechargement suivant. Depuis le catalogue (v11.8.0), le bouton « ↺ Revenir à l'effet d'origine » fait la même chose.
 - **Effet à vous** : supprimez son fichier. Un moment qui le réglait joue alors sa valeur par défaut (`pulsation` pour
-  `chrono` dans la salle, aucun effet ailleurs).
+  `chrono` dans la salle, aucun effet ailleurs). Depuis le catalogue (v11.8.0), le bouton « 🗑 Supprimer » fait la même chose.
+
+## 15. Importer, télécharger, supprimer depuis le catalogue (v11.8.0, #305)
+
+Le catalogue (Ambiance › Lumière › Effets) permet de gérer les fichiers sans passer par le dossier du serveur.
+Référence normative : `contracts/light-effects.md` §11.5 à §11.7 ; routes dans `contracts/http-endpoints.md`.
+
+- **Importer…** : choisissez un ou plusieurs fichiers `.yaml` ou `.yml` (bouton « ⭱ Importer… ») ou déposez-les sur le
+  catalogue. 20 fichiers au plus par envoi, 64 Ko par fichier.
+- **Chaque fichier est vérifié seul**, avec les règles du §4 (et du §10 pour les messages). Un fichier invalide n'est
+  jamais écrit et n'empêche pas les autres. Le panneau de résultat affiche une ligne par fichier :
+  - **importé** : nouvel effet, écrit tel quel ;
+  - **remplacé** : remplace un effet à vous de même `id` (choix « Remplacer ») ;
+  - **gardé en double** : importé sous un identifiant suffixé (`<id>-2`…) ; seule la valeur de la clé `id` est modifiée,
+    le reste du fichier (commentaires compris) est intact (choix « Garder les deux ») ;
+  - **refusé** : la ligne et la cause sont indiquées. Cas courants : fichier en `version: 1`, YAML illisible, `id` réservé
+    (`reload`, `try`, `draft`, `import`), **alias YAML** (`*nom`) — écrivez les valeurs en toutes lettres, un alias pouvant
+    faire grossir un petit fichier de façon démesurée — ou fichier trop lourd.
+- **Même `id` qu'un effet à vous** : une fenêtre demande **Remplacer**, **Garder les deux** ou **Annuler**. Elle est posée
+  fichier par fichier, après le traitement des autres. « Annuler » ignore ce fichier.
+- **Effet livré** : un fichier qui porte l'`id` d'un effet livré est **refusé** (ligne « pulsation.yaml », message clair
+  pour changer la clé `id`). Il n'est jamais écrit et ne remplace jamais un natif. Pour surcharger un natif, passez par la
+  copie décrite au §3 et gardez volontairement son `id`, à la main dans le dossier.
+- **Télécharger** : le lien « ⭳ Télécharger » donne le fichier `<id>.yaml` de tout effet, livrés compris, identique au
+  fichier du serveur. Pour garder une copie avant une suppression, téléchargez d'abord.
+- **Supprimer** (effet à vous) et **Revenir à l'effet d'origine** (natif modifié, §13) : une fenêtre de confirmation cite
+  les moments qui utilisent l'effet (« utilisé : … ») et propose de télécharger le fichier avant. Un effet livré n'a ni
+  l'un ni l'autre. Les réglages qui citaient l'effet ne sont pas modifiés : le moment joue sa valeur par défaut.
+- **Effet importé** : il apparaît aussitôt dans le catalogue et dans les sélecteurs des réglages, sans redémarrage.
+- **Essai sur la salle** : le bouton demande la zone (liste accolée : Ambiance, Animateur, Public, celles qui ont des
+  groupes). Une zone qui a trop peu de groupes pour l'effet est refusée, avec la raison (« demande 5 groupes ; la zone
+  Animateur en a 3 »). Le dernier choix de zone est retenu dans ce navigateur.
+- Rien n'est écrit hors de `data/files/effects/`, ni dans `natifs/`, quel que soit le nom du fichier envoyé : le nom
+  envoyé ne sert qu'aux messages.
 
 ## 14. Vérifier son effet
 
@@ -288,8 +321,9 @@ Effets livrés à ce jour : `pulsation`, `chenillard`, `chenillard-traine`, `cou
   `GET /api/lighting/effects` (champ `errors`) et le journal du serveur.
 - **Aperçu** : « ▶ Aperçu » rejoue l'effet sur des ampoules dessinées g1, g2… ; le numéro du tick et le pas joué
   (PRE, pas 0, dernier) s'affichent. L'aperçu ne simule ni la fin du moment ni la vitesse.
-- **Essai sur la salle** : « 💡 Essayer sur la salle » joue l'effet sur la zone ambiance, à la vitesse ×1, pendant
-  la durée par défaut du serveur (10 secondes, 5 secondes pour un effet de score seul). « ■ Arrêter l'essai » l'interrompt.
+- **Essai sur la salle** : « 💡 Essayer sur la salle » joue l'effet sur la zone choisie (par défaut ambiance), à la vitesse
+  ×1, pendant la durée par défaut du serveur (10 secondes, 5 secondes pour un effet de score seul). « ■ Arrêter l'essai »
+  l'interrompt.
 - **Tester** (réglages) : joue l'effet sur sa zone, à la vitesse réglée pour ce moment. Le dernier essai lancé remplace
   l'autre.
 - **Grisage** : l'essai est grisé pendant une question en cours, et le serveur refuse un essai pendant une question

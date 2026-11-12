@@ -2,6 +2,27 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.8.0] - 2026-11-12 — En cours : import / export des effets livré (#305) ; éditeur d'effets (#210) à venir
+
+Entrée partielle (LOT-1). Seul ce qui est livré dans le lot est décrit ici.
+
+### Added
+
+- **Import d'effets (#305)** — catalogue de `/admin/ambiance` › Lumière › Effets : « ⭱ Importer… » ou glisser-déposer sur le catalogue. Un ou plusieurs fichiers `.yaml` / `.yml` (20 au plus, 64 Ko chacun). Chaque fichier est validé seul ; le panneau de résultat indique « importé », « remplacé », « gardé en double » ou « refusé », avec la ligne et la cause. Un fichier refusé n'est pas écrit et n'empêche pas les autres. Un fichier qui emploie des alias YAML (`*nom`) est refusé à l'écriture et à l'import. `POST /api/lighting/effects/import` (`multipart`, `on_conflict` = `ask` | `replace` | `keep_both`).
+- **Même identifiant qu'un effet à vous (#305)** — fenêtre « Remplacer / Garder les deux / Annuler » ; « Garder les deux » importe sous un identifiant suffixé sans toucher au reste du fichier. Un fichier portant l'identifiant d'un effet livré est refusé, sans écriture.
+- **Télécharger un effet (#305)** — « ⭳ Télécharger » donne le fichier `<id>.yaml` de tout effet, livrés compris. `GET /api/lighting/effects/{id}/download`.
+- **Supprimer un effet (#305)** — « 🗑 Supprimer » pour un effet à vous, « ↺ Revenir à l'effet d'origine » pour un natif modifié ; confirmation citant où l'effet est utilisé. Un effet livré n'a ni l'un ni l'autre. `DELETE /api/lighting/effects/{id}` (natif : `409`).
+- **Zone de l'essai depuis le catalogue (#305)** — « Essayer sur la salle » demande la zone (Ambiance, Animateur ou Public, celles qui ont des groupes) ; un effet qui demande plus de groupes que la zone n'en a est grisé, avec la raison. La dernière zone choisie est retenue dans le navigateur.
+- **Écriture sûre des fichiers d'effets (#305)** — écriture atomique ; rien n'est écrit hors de `data/files/effects/`, ni dans `natifs/`, quel que soit le nom du fichier envoyé. Limite de 100 fichiers.
+
+### Changed
+
+- **`POST /api/lighting/effects/{id}/try` (#305)** — inchangée ; le catalogue envoie désormais la zone choisie (`{"zone": …}`) au lieu de jouer toujours sur la zone ambiance.
+
+### Documentation
+
+- `docs/LIGHT_EFFECTS.md` (§15 : import, téléchargement, suppression), `docs/ADMIN_GUIDE.md` (catalogue), `docs/REACT_INTERFACE.md` (composants du catalogue).
+
 ## [11.7.0] - 2026-11-12 — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#211, #225, #223, #299)
 
 La lumière d'ambiance se règle par **trois zones** — la salle, l'animateur et le public — découpées en groupes numérotés

@@ -2422,9 +2422,20 @@ Sous les réglages du sous-onglet Effets, le **catalogue** liste chaque effet di
 - **Fichiers en erreur** : un bandeau affiche chaque fichier invalide, sa ligne et la cause. Les autres effets restent utilisables.
 - **↻ Recharger les fichiers** : demande au serveur de relire le dossier `data/files/effects/` sans redémarrer. Le serveur relit déjà le dossier toutes les 2 secondes, mais l'écran ne se met à jour qu'à l'ouverture du sous-onglet ou au clic sur ↻ : il n'y a pas de rafraîchissement automatique de l'écran.
 - **▶ Aperçu** : rejoue l'effet tel qu'il serait joué, sur des ampoules dessinées g1, g2… (une par groupe). Sous les ampoules s'affichent le **numéro du tick** et le **pas joué** : « PRE », « pas 0 », « pas 1 », « dernier ». Le compte à rebours simulé (20 s pour le chronomètre) est affiché. Un seul aperçu tourne à la fois. Si l'effet ne s'applique pas à assez de groupes, l'aperçu est calculé avec le nombre de groupes choisi et l'indique (« simulation avec N groupes »). Un groupe que l'effet n'a jamais peint est affiché en blanc atténué : c'est la scène ordinaire.
-- **💡 Essayer sur la salle** : joue l'effet sur la **zone ambiance**, à la vitesse ×1, pendant la durée par défaut du serveur (10 secondes, 5 secondes pour un effet qui ne sert qu'au score). « ■ Arrêter l'essai » l'interrompt. Le dernier essai lancé remplace l'autre : un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble.
-- Le bouton d'essai est grisé avec une infobulle quand l'effet est inapplicable à la zone Ambiance, quand le pont est injoignable, quand l'éclairage est désactivé, quand le mode est forcé (ON, OFF) ou que le Flash est actif, et pendant une question en cours.
+- **💡 Essayer sur la salle** : une liste accolée au bouton demande la **zone** (Ambiance, Animateur ou Public ; seules les zones qui ont au moins un groupe sont proposées). L'essai joue l'effet sur les vraies ampoules de cette zone, à la vitesse ×1, pendant la durée par défaut du serveur (10 secondes, 5 secondes pour un effet qui ne sert qu'au score), puis l'éclairage revient à son état normal. « ■ Arrêter l'essai » l'interrompt. La zone choisie est retenue pour les autres cartes de ce navigateur. Le dernier essai lancé remplace l'autre : un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble.
+- Si l'effet demande plus de groupes que la zone n'en a, le bouton est grisé avec la raison (« demande 5 groupes ; la zone Animateur en a 3 »).
+- Le bouton d'essai est grisé avec une infobulle quand l'effet est inapplicable à la zone choisie, quand le pont est injoignable, quand l'éclairage est désactivé, quand le mode est forcé (ON, OFF) ou que le Flash est actif (ces deux derniers cas pour la zone Ambiance seulement), et pendant une question en cours.
 - Depuis les réglages, le lien **« Voir l'aperçu »** d'un effet choisi fait défiler la page jusqu'à sa carte du catalogue.
+
+#### Importer, télécharger et supprimer des effets (v11.8.0, #305)
+
+- **⭱ Importer…** (ou glisser-déposer sur le catalogue) : un ou plusieurs fichiers `.yaml` / `.yml`, 20 au plus, 64 Ko chacun. Le panneau de résultat indique pour chaque fichier **importé**, **remplacé**, **gardé en double** ou **refusé**, avec la ligne et la cause. Un fichier refusé n'est jamais écrit et n'empêche pas les autres.
+- **Même identifiant qu'un effet à vous** : fenêtre **Remplacer / Garder les deux / Annuler**, posée fichier par fichier. « Garder les deux » importe sous un identifiant suffixé sans toucher au reste du fichier.
+- **Identifiant d'un effet livré** : refusé avec un message clair ; aucun fichier n'est écrit.
+- **⭳ Télécharger** : donne le fichier `<id>.yaml` de tout effet, livrés compris (identique au fichier du serveur).
+- **🗑 Supprimer** (effet à vous) : après confirmation, la fenêtre cite où l'effet est utilisé (« utilisé : … ») et propose de télécharger le fichier avant. **↺ Revenir à l'effet d'origine** (natif modifié) : même confirmation, le natif reprend. Un effet livré n'a ni l'un ni l'autre.
+- Un effet importé ou supprimé apparaît ou disparaît aussitôt dans le catalogue et dans les sélecteurs des réglages.
+- Le détail des règles (formats refusés, alias YAML, identifiants réservés) est dans `docs/LIGHT_EFFECTS.md`, §15.
 
 ### Comportement à l'arrêt du serveur
 
