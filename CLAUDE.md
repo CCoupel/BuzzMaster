@@ -38,6 +38,7 @@ buzzcontrol/
 | [docs/FIRMWARE_UPDATE.md](docs/FIRMWARE_UPDATE.md) | Guide mise à jour firmware BuzzClick |
 | [docs/DEV_COMMANDS.md](docs/DEV_COMMANDS.md) | Commandes de développement, tests |
 | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Guide utilisateur (backup, scores, persistance) |
+| [docs/LIGHT_EFFECTS.md](docs/LIGHT_EFFECTS.md) | Écrire un effet lumière (format pas à pas, variables de groupe, zones) — v11.7.0 |
 
 ## Commandes Essentielles
 

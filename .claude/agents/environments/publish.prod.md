@@ -19,6 +19,11 @@ Avant **tout merge dans `main`** et **tout tag** :
 2. `govulncheck` propre juste avant le tag (même audit que `release.yml`), et `npm audit --audit-level=high` propre dans `server-go/web` (toutes dépendances, #270).
 3. Si un run échoue : analyser, corriger sur la branche, relancer. **Ne jamais merger ni tagger** tant que le run n'est pas vert.
    Un tag ne sert jamais de test.
+4. Avant tout tag, aligner les fichiers de version sur `X.Y.Z` exact et rejouer localement la logique du job
+   Checking de `release.yml` : `server-go/config.json`, `server-go/internal/server/config.json`,
+   `server-go/web/package.json`, `platformio.ini` (`VERSION` + `FIRMWARE_VERSION`), `server-go/assets/firmware/version.txt`
+   (suffixe de build accepté par le Checking). Liste de référence : `docs/RELEASE_PROCEDURE.md` §3. Un écart = pas de tag
+   (incidents v11.6.0 et v11.7.0, suivi #304).
 
 Sans ce run vert sur le SHA exact, l'ordre PUBLISH PROD est **bloqué** : le deployer ne merge ni ne tague, et le signale au CDP.
 
