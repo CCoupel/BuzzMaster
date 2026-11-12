@@ -14,9 +14,9 @@ badge a chaque release. Cette regle remplace celle du 2026-09-25 (heritage du ba
   `feature-card--new` sur la carte), avec la version de sa premiere apparition, figee ensuite.
 - A chaque release, les versions qui sortent de la fenetre perdent le badge : les retrograder en badge neutre
   `vX.Y.Z` (carte et chip), sans toucher aux autres cartes.
-- Sur le site live il n'y a ni script ni date : le retrait est **manuel**, a faire lors de la premiere
-  republication reelle apres le changement de majeure. Ne jamais republier uniquement pour retirer un badge
-  (un `RIEN A PUBLIER` reste un arret net).
+- Sur le site live il n'y a ni script ni date : le retrait est **manuel**, a faire a **chaque republication
+  reelle** (fenetre glissante : majeure en cours + 2 dernieres mineures). Ne jamais republier uniquement pour
+  retirer un badge (un `RIEN A PUBLIER` reste un arret net).
 - Verifier l'etat reel via l'historique gh-pages (`git log -S'Nouveau v' origin/gh-pages -- index.html`) plutot
   que par deduction.
 
