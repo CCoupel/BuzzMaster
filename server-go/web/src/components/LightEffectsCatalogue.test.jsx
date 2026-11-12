@@ -309,9 +309,9 @@ describe('LightEffectsCatalogue — « utilisé : zone, moment » et états du c
     expect(usedBy({ effects: { ambiance: { chrono: 'chenillard' } } }, GROUPS, 'pulsation')).toEqual([])
   })
 
-  it('aucun bouton de création, de modification ni de suppression (éditeur prévu en v11.8.0)', () => {
+  it('aucun bouton de création ni de modification (éditeur : LOT-2) ; Supprimer n\'existe que sur un effet personnalisé (#305)', () => {
     mount()
-    expect(screen.queryByRole('button', { name: /Créer|Nouvel effet|Modifier|Supprimer|Éditer/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Créer|Nouvel effet|Modifier|Éditer/i })).toBeNull()
   })
 
   it('un seul fichier en erreur : message au singulier ; sans erreur, pas de bandeau', () => {
