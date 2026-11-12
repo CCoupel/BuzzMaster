@@ -21,14 +21,15 @@ import (
 
 // Reasons carried by a StoreError (the `reason` of the 409 answers, §11.4).
 const (
-	ReasonExists   = "exists"   // create on an id already in the catalogue
-	ReasonNative   = "native"   // the id is a shipped effect's (E2)
-	ReasonLimit    = "limit"    // 100 files reached
-	ReasonNotFound = "unknown"  // unknown id (404)
-	ReasonReserved = "reserved" // id is a route word (400)
-	ReasonInvalid  = "invalid"  // validation failed (Errors) or reserved id
-	ReasonTooBig   = "too_big"  // more than 64 KB
-	ReasonIO       = "io"       // disk failure
+	ReasonExists      = "exists"      // create on an id already in the catalogue
+	ReasonNative      = "native"      // the id is a shipped effect's (E2)
+	ReasonLimit       = "limit"       // 100 files reached
+	ReasonNotFound    = "unknown"     // unknown id (404)
+	ReasonReserved    = "reserved"    // id is a route word (400)
+	ReasonInvalid     = "invalid"     // validation failed (Errors) or reserved id
+	ReasonTooBig      = "too_big"     // more than 64 KB
+	ReasonIO          = "io"          // disk failure
+	ReasonUnavailable = "unavailable" // no storage behind the manager (503)
 )
 
 // ReservedIDs are route words: no effect may take them as id.
@@ -164,6 +165,9 @@ func (m *Manager) Write(id string, data []byte, create bool) (string, Catalogue,
 	cat := m.reloadLocked()
 	if IsReserved(id) {
 		return "", cat, &StoreError{Code: ReasonReserved}
+	}
+	if len(data) > MaxFileBytes {
+		return "", cat, &StoreError{Code: ReasonTooBig}
 	}
 	e, errs := checkText("", data)
 	if len(errs) > 0 {
@@ -420,7 +424,20 @@ func checkText(file string, data []byte) (Effect, []Error) {
 	if IsReserved(e.ID) {
 		return Effect{}, []Error{{File: file, Line: idLine(data), Message: "« " + e.ID + " » est un mot réservé : changez la clé id"}}
 	}
+	if IsWindowsDevice(e.ID) {
+		return Effect{}, []Error{{File: file, Line: idLine(data), Message: "« " + e.ID + " » est un nom réservé par Windows (nom de fichier impossible) : changez la clé id"}}
+	}
 	return e, nil
+}
+
+// IsWindowsDevice reports whether id, used as a file name (<id>.yaml), is a device name that
+// Windows reserves: con, prn, aux, nul, com1-9, lpt1-9 (the server also runs on Windows).
+func IsWindowsDevice(id string) bool {
+	switch id {
+	case "con", "prn", "aux", "nul":
+		return true
+	}
+	return len(id) == 4 && (strings.HasPrefix(id, "com") || strings.HasPrefix(id, "lpt")) && id[3] >= '1' && id[3] <= '9'
 }
 
 func aliasLine(n *yaml.Node) int {
@@ -441,11 +458,7 @@ func validationError(errs []Error) *StoreError {
 		e.File = ""
 		out[i] = e
 	}
-	code := ReasonInvalid
-	if len(errs) == 1 && strings.HasPrefix(errs[0].Message, "fichier trop gros") {
-		code = ReasonTooBig
-	}
-	return &StoreError{Code: code, Errors: out}
+	return &StoreError{Code: ReasonInvalid, Errors: out}
 }
 
 // safeLabel keeps only the final element of an uploaded name, for messages.

@@ -145,3 +145,34 @@ func TestRewriteID_KeepsComment_Dev(t *testing.T) {
 		t.Fatal("erreur attendue sans clé id")
 	}
 }
+
+func TestWindowsDeviceIDsRefused_Dev(t *testing.T) {
+	t.Parallel()
+	m, dir := tw305Manager(t)
+	for _, id := range []string{"con", "nul", "aux", "prn", "com1", "lpt9"} {
+		if _, reason := storeWrite(m, id, tw305Src(id, ""), true); reason != "invalid" {
+			t.Errorf("%s : reason %q", id, reason)
+		}
+		res, _ := m.Import([]ImportFile{{Name: "x.yaml", Data: []byte(tw305Src(id, ""))}}, ConflictAsk)
+		if res[0].Status != StatusInvalid || !strings.Contains(res[0].Errors[0].Message, "Windows") || res[0].Errors[0].Line != 1 {
+			t.Errorf("%s : %+v", id, res[0])
+		}
+	}
+	for _, id := range []string{"com0", "com10", "console", "lpt"} {
+		if IsWindowsDevice(id) {
+			t.Errorf("%s ne doit pas être refusé", id)
+		}
+	}
+	if n := tw305Yaml(t, dir); len(n) != 0 {
+		t.Fatalf("rien ne devait être écrit : %v", n)
+	}
+}
+
+func TestWriteTooBigIsACode_Dev(t *testing.T) {
+	t.Parallel()
+	m, _ := tw305Manager(t)
+	_, reason := storeWrite(m, "gros", "id: gros\n"+strings.Repeat("#", MaxFileBytes), true)
+	if reason != ReasonTooBig {
+		t.Fatalf("%q", reason)
+	}
+}

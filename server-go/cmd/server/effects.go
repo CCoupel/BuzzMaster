@@ -82,17 +82,18 @@ func (a *App) EffectsDir() string { return a.effectsDir() }
 // §11.7). Without a manager (natives could not be prepared) nothing can be written.
 func (a *App) EffectsSource(id string) ([]byte, effects.Entry, error) {
 	if a.effects == nil {
-		if en, ok := a.EffectsCatalogue().Get(id); ok {
-			return nil, en, &effects.StoreError{Code: effects.ReasonIO}
+		en, ok := a.EffectsCatalogue().Get(id)
+		if !ok {
+			return nil, effects.Entry{}, &effects.StoreError{Code: effects.ReasonNotFound}
 		}
-		return nil, effects.Entry{}, &effects.StoreError{Code: effects.ReasonNotFound}
+		return nil, en, &effects.StoreError{Code: effects.ReasonUnavailable}
 	}
 	return a.effects.Source(id)
 }
 
 func (a *App) EffectsDelete(id string) (effects.Catalogue, error) {
 	if a.effects == nil {
-		return effects.Catalogue{}, &effects.StoreError{Code: effects.ReasonNotFound}
+		return effects.Catalogue{}, &effects.StoreError{Code: effects.ReasonUnavailable}
 	}
 	return a.effects.Delete(id)
 }

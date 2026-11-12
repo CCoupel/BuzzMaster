@@ -68,7 +68,7 @@ func stDo(srv *HTTPServer, method, path string, body *bytes.Buffer, ct string) *
 func TestAPIEffects_DownloadNativeAndUser_Dev(t *testing.T) {
 	srv, _ := stStoreServer(t)
 	w := stDo(srv, "GET", "/api/lighting/effects/pul/download", nil, "")
-	if w.Code != 200 || w.Body.String() != devEff("pul", "chrono") ||
+	if w.Code != 200 || w.Header().Get("X-Content-Type-Options") != "nosniff" || w.Body.String() != devEff("pul", "chrono") ||
 		w.Header().Get("Content-Disposition") != `attachment; filename="pul.yaml"` || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/yaml") {
 		t.Fatalf("download natif : %d %v %q", w.Code, w.Header(), w.Body.String())
 	}

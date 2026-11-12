@@ -371,6 +371,7 @@ func (h *HTTPServer) handleEffectDownload(w http.ResponseWriter, r *http.Request
 	}
 	// id is validated by the loader ([a-z0-9-]{1,40}): safe in a header.
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`.yaml"`)
 	_, _ = w.Write(data)
 }
@@ -403,6 +404,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeLightingJSON(w, http.StatusConflict, map[string]string{"reason": se.Code})
 	case effects.ReasonReserved:
 		http.Error(w, "identifiant réservé", http.StatusBadRequest)
+	case effects.ReasonUnavailable:
+		http.Error(w, "stockage des effets indisponible", http.StatusServiceUnavailable)
 	case effects.ReasonTooBig:
 		http.Error(w, "fichier trop gros", http.StatusRequestEntityTooLarge)
 	case effects.ReasonInvalid:
@@ -502,8 +505,9 @@ func (h *HTTPServer) handleEffectsImport(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	results, _ := st.EffectsImport(files, onConflict)
-	if results == nil {
-		results = []effects.ImportResult{}
+	if results == nil { // no storage behind the manager
+		http.Error(w, "stockage des effets indisponible", http.StatusServiceUnavailable)
+		return
 	}
 	writeEffectsJSON(w, map[string]any{"results": results, "catalogue": h.effectsView()})
 }
