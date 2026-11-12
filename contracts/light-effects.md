@@ -598,7 +598,7 @@ du §6 (défaut `1`) ; `seconds` de 1 à 20 (défaut **10**, ou **5** si l'effet
 | Appelant | Appel | Rendu |
 |---|---|---|
 | Bouton **« Tester »** de l'onglet Effets, à côté d'un choix d'effet (zone, moment) | `zone` = la zone du réglage, `speed` = la vitesse réglée pour ce moment | l'effet tel qu'il sera joué en jeu, sur sa zone |
-| Bouton **« Essayer »** du catalogue | corps vide ou `{}` | vitesse ×1, zone `ambiance` |
+| Bouton **« Essayer sur la salle »** du catalogue | v11.7.0 : corps vide ou `{}` ; **v11.8.0 : `{"zone": <zone choisie>}`** (§11.8) | vitesse ×1, sur la zone choisie (`ambiance` par défaut) |
 
 - Contexte simulé : thème `#4F46E5`, équipe `#E53935`, chronomètre simulé qui descend de 15 s (la couleur `urgence`
   passe par l'orange puis le rouge pendant un essai de 10 s).
@@ -681,11 +681,17 @@ ajustées après l'essai sur matériel sans changer ce contrat.
 
 > Décisions utilisateur du 2026-11-12 (GATE 1.5, `_work/reports/plan-ambiguities-20261112-100000.md`) :
 > **E1** l'éditeur est une grille **pas × cibles** (colonnes PRE, pas 0…n, DERNIER, POST ; lignes `g0`, `g1`…`g12`, `gN`,
-> puis une ligne par variable déclarée et par voisin utilisé), avec un panneau de déclaration des variables et un onglet
+> précédées d'une ligne par variable déclarée), avec un panneau de déclaration des variables et un onglet
 > **Texte** (le fichier YAML, validé en direct) ; **E2** un effet natif est en **lecture seule** : on le duplique ;
 > l'interface et l'import n'écrivent jamais un fichier portant l'`id` d'un natif ; **E3** un enregistrement depuis la
 > grille **régénère** le fichier (commentaires `#` perdus, avertissement) ; l'import et l'onglet Texte écrivent le
 > texte **tel quel** ; **E4** l'aperçu de l'éditeur est joué sur plusieurs tailles de salle à la fois.
+>
+> Décisions du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md` et `-104000.md`) : **E5** la grille n'a **pas de
+> ligne « voisin »** (`gA-1`, `gA+1`) : un voisin lu dans un fichier est **converti en variable** à l'ouverture (§11.2) ;
+> les voisins restent valides dans le fichier et dans l'onglet Texte ; **E6** les variables sont affichées **en haut** de
+> la grille mais écrites **après** `g0` et les groupes ; **E7** tout essai sur les ampoules (catalogue, éditeur)
+> **demande la zone** ; l'essai de l'éditeur joue le **brouillon**, sans enregistrer (§11.10).
 >
 > **Le format de fichier du §4 ne change pas** (`version: 2`). Le serveur reste le **seul** analyseur, le seul
 > validateur et le seul interprète : le navigateur n'analyse jamais de YAML et ne calcule aucune trame.
@@ -727,9 +733,10 @@ Forme JSON d'un effet, produite et relue par le serveur (`effects.Document`). Le
   (mêmes trames pour tout N de 1 à 12). Test exigé sur chaque natif et sur les fichiers d'exemple (§11.9).
 
 **Ordre canonique des actions d'un pas** (celui qu'écrit la grille) : `g0` ; puis `g1`…`g12` par numéro croissant ; puis
-`gN` ; puis, pour chaque variable dans l'ordre de `variables`, ses voisins par décalage croissant (`gA-2`, `gA-1`,
-`gA+1`, `gA+2`) **puis la variable elle-même en dernier** (la tête repeint ses voisins quand ils se confondent : c'est
-l'ordre de `chenillard-traine`). `custom_order` (§11.2) est vrai quand au moins un pas du fichier n'est pas dans cet ordre.
+`gN` ; puis les variables **dans l'ordre de `variables`** — la dernière déclarée est écrite en dernier, donc gagne
+quand deux variables désignent le même groupe. Une variable repeint toujours le fond et les groupes fixes. (Un voisin,
+qui ne peut venir que d'un fichier ou de l'onglet Texte, se range juste avant sa variable, par décalage croissant.)
+`custom_order` (§11.2) est vrai quand au moins un pas du fichier n'est pas dans cet ordre.
 
 ### 11.2 `GET /api/lighting/effects/{id}/source`
 
@@ -738,8 +745,32 @@ Ouvre un effet du catalogue dans l'éditeur.
 ```json
 { "id": "chenillard", "origin": "native", "file": "natifs/chenillard.yaml", "read_only": true,
   "yaml": "# Chenillard — …\nid: chenillard\n…", "effect": { … document §11.1 … },
-  "has_comments": true, "custom_order": false }
+  "has_comments": true, "custom_order": false,
+  "grid": { "editable": true, "effect": { … document sans voisin … },
+            "converted": [ { "from": "gA-1", "to": "gB" }, { "from": "gA+1", "to": "gC" } ], "blocked": [] } }
 ```
+
+**`grid` — le document tel que la grille l'affiche (E5).** `effect` (ci-dessus) est le document fidèle au fichier ;
+`grid.effect` est le même effet **sans aucune cible voisine**, chaque voisin étant remplacé par une variable :
+
+| Voisin dans le fichier | Variable créée |
+|---|---|
+| `gX+m` / `gX-m`, `gX` progression de départ `g<s>` et d'incrément `i`, avec 1 ≤ s+m ≤ 12 | progression de départ `g<s+m>`, incrément `i` |
+| `gX-1`, départ `g1` | départ `gN`, incrément `i` |
+| `gX+1`, départ `gN` | départ `g1`, incrément `i` |
+| tout autre cas : `gX` est une liste ; départ décalé inexprimable (`g1` − 2, `gN` − 1, au-delà de `g12`) ; plus de 8 variables au total | **non convertible** |
+
+- Nom de la variable créée : la première lettre libre (`gB`, `gC`… ; jamais `gN`). Un même voisin utilisé dans plusieurs
+  pas donne une seule variable. Les variables créées sont insérées **juste avant** leur variable d'origine, par décalage
+  croissant : la variable d'origine reste écrite après elles et continue de gagner (ordre canonique, §11.1).
+- **Garantie** : `grid.effect` rend les mêmes trames que `effect` pour tout N de 1 à 12 (test exigé, §11.9). Avec la
+  règle de position du §4.4, le voisin à `m` rangs d'une progression est exactement la progression partie de `m` rangs
+  plus loin.
+- `converted[]` liste les remplacements (pour le message de l'interface) ; vide s'il n'y avait aucun voisin (alors
+  `grid.effect` = `effect`).
+- Un voisin non convertible ⇒ `grid.editable: false`, `grid.effect: null`, `blocked[]` = les cibles en cause : la grille
+  est affichée en lecture seule d'après `effect`, l'effet se modifie dans l'onglet Texte.
+- Rien n'est écrit : le fichier n'est réécrit (sans voisin) qu'à un enregistrement fait depuis la grille.
 
 - `yaml` : le texte du fichier tel qu'il est lu (natif : le texte embarqué, **sans** l'en-tête de la copie de référence).
 - `read_only` : vrai pour `origin` = `native` **et** `override` (E2 : l'interface n'écrit jamais un `id` de natif).
@@ -763,6 +794,7 @@ Réponse `200` dans tous les cas où le corps JSON est lisible :
 ```json
 { "ok": true, "errors": [],
   "effect": { … document … }, "yaml": "id: mon-effet\nnom: …", "has_comments": false, "custom_order": false,
+  "grid": { "editable": true, "effect": { … }, "converted": [], "blocked": [] },
   "moment": "chrono",
   "previews": [ { … réponse du §7.3 pour groups = 1 … }, { … groups = 3 … }, … ] }
 ```
@@ -772,6 +804,7 @@ Réponse `200` dans tous les cas où le corps JSON est lisible :
   sans nom de fichier), `previews: []` ; `effect` est `null` si le texte n'est pas analysable, `yaml` est `""` si le
   document n'est pas sérialisable. Pour un brouillon `effect`, chaque erreur porte en plus `path` quand elle vise un
   endroit précis (`"steps[2]"`, `"variables[0]"`, `"pre"`, `"tick_ms"`…), pour que la grille la place.
+- **`grid`** : même objet qu'au §11.2, calculé sur le brouillon (pour le passage Texte → Grille). `null` si `ok: false`.
 - **Conversion** : `effect` = le document du brouillon (analysé depuis `yaml`, ou renvoyé normalisé) ; `yaml` = le texte
   **régénéré** depuis le document (§11.4), toujours — c'est le texte qu'afficherait l'onglet Texte après une
   modification dans la grille. `has_comments` et `custom_order` décrivent le brouillon `yaml` reçu (faux pour `effect`).
@@ -863,17 +896,47 @@ n'empêche pas les autres. Réponse `200` :
   - Texte → Grille : possible seulement si le texte est valide (`ok: true`) ; la grille prend `effect`.
   - **Enregistrer** : envoie `yaml` si le texte est la dernière source modifiée (ou si rien n'a été modifié dans la
     grille), `effect` sinon.
-- **Grille** : une case vide = le groupe garde son état (aucune action). Les actions d'un pas sont écrites dans l'ordre
-  canonique (§11.1) ; à l'ouverture d'un fichier `custom_order`, un avertissement dit que la grille réorganisera les
-  actions des pas modifiés — l'aperçu montre toujours le résultat réel.
-- **Variables** : déclarées dans le panneau (nom `gA`…, progression ou liste) ; une variable déclarée ajoute sa ligne ;
-  un voisin (`gA-1`, `gA+1`…) s'ajoute comme ligne à la demande. Supprimer une variable retire ses lignes et ses actions.
+  - La grille travaille sur `grid.effect` (§11.2) : Texte → Grille est refusé aussi quand `grid.editable` est faux.
+- **Grille** : une case vide = le groupe garde son état (aucune action). **Ordre d'affichage des lignes ≠ ordre
+  d'écriture** : les lignes des variables sont **en haut**, dans l'ordre de `variables`, puis `g0`, `g1`…`g12`, `gN` ;
+  les actions d'un pas sont écrites dans l'ordre canonique (§11.1 : fond, groupes, `gN`, puis variables). L'interface le
+  dit (« une variable repeint le fond et les groupes ; entre deux variables, celle du bas gagne »). À l'ouverture d'un
+  fichier `custom_order`, un avertissement dit que la grille réorganisera les actions des pas modifiés — l'aperçu
+  montre toujours le résultat réel.
+- **Pas de ligne « voisin »** (E5) : la grille ne crée jamais de cible `gA+1` / `gA-1`. Un décalage se fait par une
+  autre variable. À l'ouverture, `grid.converted` non vide ⇒ message « les voisins … sont remplacés par les variables
+  … : même rendu » ; `grid.editable` faux ⇒ grille en lecture seule, modification par l'onglet Texte.
+- **Variables** : déclarées dans le panneau — nom proposé (`gA`…), type **« Avance régulière »** (`progression` : départ,
+  incrément) ou **« Suite de groupes »** (`list`), phrase d'explication, et la **suite obtenue pour 1, 3, 6 et 12
+  groupes**, lue dans `vars` des aperçus du brouillon (jamais calculée par le navigateur). Une variable déclarée ajoute
+  sa ligne ; les variables se réordonnent (l'ordre décide laquelle gagne) ; supprimer une variable retire sa ligne et
+  ses actions.
+- **Pinceau** : info-bulle sur chaque couleur et sur l'intensité (définitions du §4.2) ; couleur libre choisie sur une
+  roue teinte / saturation avec luminosité, champ `#RRGGBB`, aperçu et couleurs récentes (composant maison, aucune
+  dépendance) ; les couleurs récentes sont mémorisées par navigateur.
 - **Aperçu** : tailles demandées = `1, 3, 6, 12`, plus le nombre de groupes de chaque zone réelle qui n'est pas déjà
   dans la liste (zones existantes seulement) ; toutes les rangées sont jouées **sur la même horloge**. Sous `groupes_min`,
   la rangée porte « sous le minimum : non joué en salle ». Le pas joué est surligné dans la grille ; `vars` est affiché.
-- **Essai sur les ampoules** depuis l'éditeur : après enregistrement, par la route existante (§7.4).
-- Effet `read_only` : grille et texte en lecture ; actions « Dupliquer » et « Télécharger » seulement.
+- **Essai sur les ampoules** (E7) : l'éditeur a un bloc « Essayer sur la salle » avec le **choix de la zone** (zones
+  existantes seulement) ; il joue le **brouillon courant**, sans enregistrer (§11.10). Le bouton « Essayer sur la salle »
+  du catalogue demande lui aussi la zone et l'envoie à la route existante (§7.4, champ `zone`). La dernière zone
+  choisie est retenue par navigateur.
+- Effet `read_only` : grille et texte en lecture ; « Dupliquer », « Télécharger » et « Essayer sur la salle » seulement.
 - **Dupliquer** : ouvre l'éditeur sur une copie (`id` proposé `<id>-copie`, libre), créée par `PUT … create: true`.
+
+### 11.10 Essayer un brouillon — `POST /api/lighting/effects/draft/try` (E7)
+
+Joue un brouillon **non enregistré** sur les ampoules d'une zone. Corps : celui du §11.3 sans `groups` ni `moment`
+(`effect` **ou** `yaml`), plus les champs du §7.4 : `{"effect": {…}, "zone": "animateur", "speed": 1, "seconds": 10}`.
+
+- Mêmes règles, mêmes valeurs par défaut, mêmes réponses et mêmes refus que `POST /api/lighting/effects/{id}/try`
+  (§7.4) : `200 {"ok": true, "duration_ms": …}`, `409` avec `reason` (`disabled`, `game`, `not_applicable`, `mode`),
+  `503`. L'applicabilité (§4.7) est calculée sur le brouillon et la zone demandée.
+- Brouillon invalide ⇒ `400 {"ok": false, "errors": [...]}` ; rien n'est joué.
+- Rien n'est écrit sur le disque, le catalogue n'est pas modifié ; l'`id` du brouillon peut être celui d'un effet
+  existant (c'est le brouillon qui est joué, pas l'effet enregistré).
+- Arrêt : route existante `POST /api/lighting/effects/try/stop`. Un essai en remplace un autre, quel qu'en soit l'origine.
+- L'identifiant `draft` étant réservé (§11.4), `…/draft/try` ne peut pas désigner un effet du catalogue.
 
 ### 11.9 Tests exigés (v11.8.0)
 
@@ -890,4 +953,8 @@ n'empêche pas les autres. Réponse `200` :
 - `import` : chacun des `status` ; `keep_both` ne change que la clé `id` ; nom envoyé hostile (`../x.yaml`, chemin
   absolu, nom de périphérique Windows) jamais utilisé comme chemin ; rien n'est écrit hors de `data/files/effects/` ni
   dans `natifs/` ; YAML à ancres / alias imbriqués refusé sans explosion mémoire.
+- `grid` (E5) : `chenillard-traine` converti en `gB: gN; +1`, `gC: g2; +1`, `gA` déclarée en dernier ; **mêmes trames**
+  que l'original pour N = 1 à 12 ; chaque ligne de la table du §11.2 ; chaque cas non convertible ⇒ `editable: false` ;
+  effet sans voisin ⇒ `grid.effect` identique à `effect`.
+- `draft/try` : joue le brouillon sur la zone demandée sans rien écrire ; mêmes refus que §7.4 ; brouillon invalide `400`.
 - Non-régression : catalogue, aperçu, essai et rechargement de v11.7.0 inchangés (hors champ additif `vars`).

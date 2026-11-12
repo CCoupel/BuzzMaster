@@ -20,6 +20,17 @@ séquenceur et les routes de v11.7.0 sont inchangés.
 - **[NEW]** Identifiants réservés, refusés à l'enregistrement et à l'import : `reload`, `try`, `draft`, `import`. Un
   fichier déposé à la main avec un de ces `id` reste chargé comme en v11.7.0.
 
+Compléments du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md`, `-104000.md`) — **aucun BREAKING** :
+
+- **[NEW]** `grid` dans les réponses de `…/{id}/source` et de `…/draft` : document sans cible voisine, chaque voisin
+  (`gA-1`, `gA+1`) étant converti en variable de même rendu ; `editable: false` quand la conversion exacte est
+  impossible (§11.2). Le format de fichier garde les voisins.
+- **[NEW]** `POST /api/lighting/effects/draft/try` — essai d'un brouillon non enregistré sur une zone (§11.10).
+- **[CHANGED]** Ordre canonique des actions écrites par la grille : fond, groupes, `gN`, puis variables dans l'ordre de
+  déclaration (§11.1) ; lignes des variables affichées en haut de la grille (§11.8).
+- **[CHANGED]** Usage de `POST /api/lighting/effects/{id}/try` par le catalogue : la zone est choisie par
+  l'utilisateur et envoyée dans `zone` (route inchangée, §7.4).
+
 ---
 ## [20261112] — v11.7.0 — précisions de l'aperçu d'effet après la revue LOT-3 (#299)
 

@@ -1459,7 +1459,9 @@ puisse l'indiquer.
 | GET | `/api/lighting/effects/{id}/download` | Télécharge le fichier `.yaml` d'un effet, natifs compris (§11.6) | LOT-1 |
 | POST | `/api/lighting/effects/import` | Import `multipart` de 1 à 20 fichiers, validés un par un ; `on_conflict` = `ask` \| `replace` \| `keep_both` ; un `id` de natif est refusé (§11.7) | LOT-1 |
 | DELETE | `/api/lighting/effects/{id}` | Supprime un effet utilisateur, ou le fichier qui surcharge un natif ; natif refusé `409` (§11.5) | LOT-1 |
-| GET | `/api/lighting/effects/{id}/source` | Texte du fichier + document JSON de l'effet, `read_only`, `has_comments`, `custom_order` (§11.2) | LOT-2 |
+| GET | `/api/lighting/effects/{id}/source` | Texte du fichier + document JSON de l'effet, `read_only`, `has_comments`, `custom_order`, `grid` (document sans voisin pour la grille) (§11.2) | LOT-2 |
 | POST | `/api/lighting/effects/draft` | Valide un brouillon (`effect` ou `yaml`), le convertit dans l'autre forme et renvoie les aperçus pour plusieurs tailles de salle ; rien n'est écrit (§11.3) | LOT-2 |
 | PUT | `/api/lighting/effects/{id}` | Crée ou enregistre un effet utilisateur : fichier régénéré (`effect`) ou texte tel quel (`yaml`) ; natif refusé `409` (§11.4) | LOT-2 |
 | GET | `/api/lighting/effects/{id}/preview` | Champ additif `vars` par trame : groupe désigné par chaque variable (§11.3) | LOT-2 |
+| POST | `/api/lighting/effects/draft/try` | Joue un brouillon non enregistré sur une zone (`zone`, `speed`, `seconds`) ; mêmes refus que `…/{id}/try` (§11.10) | LOT-2 |
+| POST | `/api/lighting/effects/{id}/try` | Inchangée ; le catalogue envoie désormais la zone choisie (`{"zone": …}`) (§7.4, §11.8) | LOT-1 |
