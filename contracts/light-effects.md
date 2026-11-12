@@ -28,6 +28,12 @@
 > **`g*`** (plus `gN`) ; **`gN` devient un nom de variable ordinaire** ; **24 variables** au plus (au lieu de 8) ;
 > **40 actions** au plus par pas (au lieu de 16). `version` reste `2`. Un fichier v11.7.0 reste lu sans modification
 > (§12.3). **Les §4.1 à §4.8 se lisent avec les amendements du §12.**
+>
+> **Révision 7 (2026-11-12, v11.8.0, 3e retour du GATE 2) — §12 réécrit.** Le **départ et le pas d'une variable sont des
+> expressions** (`N` = nombre de groupes, `+ - * /`, parenthèses, autre variable : `gA: N/2; +1`, `gB: gA+1`) ; division
+> **entière** ; **`gN` employé sans être déclaré est refusé** (plus de lecture de compatibilité — **cassant** pour un
+> fichier utilisateur v11.7.0 qui l'emploie) ; la grille de l'éditeur a un nombre de groupes réglable dont la
+> **dernière ligne est `g*`**. Remplace, dans la révision 6 : « un fichier v11.7.0 reste lu sans modification ».
 
 ---
 
@@ -694,7 +700,8 @@ ajustées après l'essai sur matériel sans changer ce contrat.
 >
 > Décisions du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md` et `-104000.md`) : **E5** la grille n'a **pas de
 > ligne « voisin »** (`gA-1`, `gA+1`) : un voisin lu dans un fichier est **converti en variable** à l'ouverture (§11.2) ;
-> les voisins restent valides dans le fichier et dans l'onglet Texte ; **E6** les variables sont affichées **en haut** de
+> les voisins restent valides dans le fichier et dans l'onglet Texte (révision 7 : la variable créée **suit** l'autre,
+> `gB: gA-1`) ; **E6** les variables sont affichées **en haut** de
 > la grille mais écrites **après** `g0` et les groupes ; **E7** tout essai sur les ampoules (catalogue, éditeur)
 > **demande la zone** ; l'essai de l'éditeur joue le **brouillon**, sans enregistrer (§11.10).
 >
@@ -711,7 +718,8 @@ Forme JSON d'un effet, produite et relue par le serveur (`effects.Document`). Le
   "id": "mon-chenillard", "name": "Mon chenillard", "description": "Un point fait le tour de la zone.",
   "moments": ["chrono"], "min_groups": 3, "tick_ms": 1000, "loop": true,
   "variables": [
-    { "name": "gA", "kind": "progression", "start": "g1", "step": 1 },
+    { "name": "gA", "kind": "progression", "start": "N/2", "step": "+1" },
+    { "name": "gB", "kind": "progression", "start": "gA+1", "step": null },
     { "name": "gC", "kind": "list", "items": ["g1", "g4", "g3"] }
   ],
   "pre":   [ { "target": "g0", "color": "theme", "intensity": 100 } ],
@@ -727,7 +735,7 @@ Forme JSON d'un effet, produite et relue par le serveur (`effects.Document`). Le
 |---|---|---|
 | `id`, `name`, `description` | `id`, `nom`, `description` | bornes du §4 |
 | `moments`, `min_groups`, `tick_ms`, `loop` | `moments`, `groupes_min`, `duree_tick_ms`, `boucle` | `min_groups` 0 = clé absente ; `loop` true = défaut |
-| `variables[]` | `variables` | **ordre du tableau = ordre d'écriture**. `kind: "progression"` : `start` (`"g1"`…`"g12"` ou `"g*"`), `step` (−12 à +12). `kind: "list"` : `items[]` (`"g1"`…`"g12"`). `[]` = aucune |
+| `variables[]` | `variables` | **ordre du tableau = ordre d'écriture**. `kind: "progression"` : `start` et `step` sont des **expressions en texte** (§12.2), `step` = `null` quand la déclaration n'a pas de pas (« suit », §12.2). `kind: "list"` : `items[]` (`"g1"`…`"g12"`). `[]` = aucune |
 | `pre`, `last`, `post` | `pre`, `dernier`, `post` | tableau d'actions, ou `null` = pas absent |
 | `steps[][]` | `pas` | 1 à 200 pas, chacun 1 à 40 actions, **dans l'ordre d'application** |
 | action | `cible: [couleur, intensité]` | `target` écrit comme dans le fichier (`g0`, `g3`, `g*`, `gA`, `gA+1`, `gA-2`) ; `color` = `"#RRGGBB"` ou `theme` / `equipe` / `urgence` / `scene` ; `intensity` 0-100. `[eteint]` ⇔ `{"target": …, "off": true}` (sans `color` ni `intensity`) |
@@ -738,7 +746,7 @@ Forme JSON d'un effet, produite et relue par le serveur (`effects.Document`). Le
   (mêmes trames pour tout N de 1 à 12). Test exigé sur chaque natif et sur les fichiers d'exemple (§11.9).
 
 **Ordre canonique des actions d'un pas** (celui qu'écrit la grille) : `g0` ; puis `g1`…`g12` par numéro croissant ; puis
-`g*` (qui ne peut venir que d'un fichier ou de l'onglet Texte) ; puis les variables **dans l'ordre de `variables`** — la dernière déclarée est écrite en dernier, donc gagne
+`g*` ; puis les variables **dans l'ordre de `variables`** — la dernière déclarée est écrite en dernier, donc gagne
 quand deux variables désignent le même groupe. Une variable repeint toujours le fond et les groupes fixes. (Un voisin,
 qui ne peut venir que d'un fichier ou de l'onglet Texte, se range juste avant sa variable, par décalage croissant.)
 `custom_order` (§11.2) est vrai quand au moins un pas du fichier n'est pas dans cet ordre.
@@ -755,21 +763,16 @@ Ouvre un effet du catalogue dans l'éditeur.
             "converted": [ { "from": "gA-1", "to": "gB" }, { "from": "gA+1", "to": "gC" } ], "blocked": [] } }
 ```
 
-**`grid` — le document tel que la grille l'affiche (E5, E8).** `effect` (ci-dessus) est le document fidèle au fichier ;
-`grid.effect` est le même effet **sans aucune cible voisine et sans cible `g*`**, chacune étant remplacée par une variable :
+**`grid` — le document tel que la grille l'affiche (E5).** `effect` (ci-dessus) est le document fidèle au fichier ;
+`grid.effect` est le même effet **sans aucune cible voisine** dans ses pas : chaque voisin `gX+m` / `gX-m` est remplacé
+par une variable **qui suit** `gX` — déclaration `gY: gX+m` (sans pas, §12.2), exacte dans tous les cas, que `gX` soit
+une avance ou une suite de groupes. *(Révision 7 : remplace la table de conversion par départ décalé ; une cible `g*`
+n'est plus convertie, elle a sa ligne dans la grille.)*
 
-| Cible dans le fichier | Variable créée |
-|---|---|
-| `gX+m` / `gX-m`, `gX` progression de départ `g<s>` et d'incrément `i`, avec 1 ≤ s+m ≤ 12 | progression de départ `g<s+m>`, incrément `i` |
-| `gX-1`, départ `g1` | départ `g*`, incrément `i` |
-| `gX+1`, départ `g*` | départ `g1`, incrément `i` |
-| **`g*` cible directe** *(révision 6)* | progression de départ `g*`, incrément `0` (désigne toujours le dernier groupe) |
-| tout autre cas : `gX` est une liste ; départ décalé inexprimable (`g1` − 2, `g*` − 1, au-delà de `g12`) ; plus de 24 variables au total | **non convertible** |
-
-- Nom de la variable créée : la première lettre libre de `gA` à `gZ` (`gN` comprise, révision 6). La variable née d'une
-  cible `g*` est insérée **avant** les autres variables (elle était écrite avant elles, §11.1). Un même voisin utilisé dans plusieurs
-  pas donne une seule variable. Les variables créées sont insérées **juste avant** leur variable d'origine, par décalage
+- Nom de la variable créée : la première lettre libre de `gA` à `gZ`. Un même voisin utilisé dans plusieurs pas donne
+  une seule variable. Les variables créées sont insérées **juste avant** leur variable d'origine, par décalage
   croissant : la variable d'origine reste écrite après elles et continue de gagner (ordre canonique, §11.1).
+- Seul cas non convertible : la conversion ferait dépasser 24 variables.
 - **Garantie** : `grid.effect` rend les mêmes trames que `effect` pour tout N de 1 à 12 (test exigé, §11.9). Avec la
   règle de position du §4.4, le voisin à `m` rangs d'une progression est exactement la progression partie de `m` rangs
   plus loin.
@@ -777,7 +780,6 @@ Ouvre un effet du catalogue dans l'éditeur.
   `grid.effect` = `effect`).
 - Un voisin non convertible ⇒ `grid.editable: false`, `grid.effect: null`, `blocked[]` = les cibles en cause : la grille
   est affichée en lecture seule d'après `effect`, l'effet se modifie dans l'onglet Texte.
-- Un `gN` d'un fichier v11.7.0 (dernier groupe, §12.3) apparaît dans `effect` et `grid.effect` sous la forme `g*`.
 - Rien n'est écrit : le fichier n'est réécrit (sans voisin) qu'à un enregistrement fait depuis la grille.
 
 - `yaml` : le texte du fichier tel qu'il est lu (natif : le texte embarqué, **sans** l'en-tête de la copie de référence).
@@ -906,20 +908,25 @@ n'empêche pas les autres. Réponse `200` :
     grille), `effect` sinon.
   - La grille travaille sur `grid.effect` (§11.2) : Texte → Grille est refusé aussi quand `grid.editable` est faux.
 - **Grille** : une case vide = le groupe garde son état (aucune action). **Ordre d'affichage des lignes ≠ ordre
-  d'écriture** : les lignes des variables sont **en haut**, dans l'ordre de `variables`, puis `g0`, `g1`…`g12` ;
-  les actions d'un pas sont écrites dans l'ordre canonique (§11.1 : fond, groupes, puis variables).
-- **`g*` n'a pas de ligne** *(E8, révision 6)* : la ligne `g<n>` porte un repère « g* · … » pour chaque salle de l'aperçu
-  dont `n` est le dernier groupe (salles types 1, 3, 6, 12 et zones réelles). Le repère est une indication : peindre
-  cette ligne écrit sur `g<n>`, pas sur `g*`. Pour agir sur le dernier groupe de toute salle, on déclare une variable
-  qui part de `g*` (incrément 0 pour y rester) ; c'est ce que fait la conversion du §11.2 pour un fichier qui écrit `g*`. L'interface le
-  dit (« une variable repeint le fond et les groupes ; entre deux variables, celle du bas gagne »). À l'ouverture d'un
-  fichier `custom_order`, un avertissement dit que la grille réorganisera les actions des pas modifiés — l'aperçu
-  montre toujours le résultat réel.
+  d'écriture** : les lignes des variables sont **en haut**, dans l'ordre de `variables`, puis `g0`, les groupes numérotés, `g*` ;
+  les actions d'un pas sont écrites dans l'ordre canonique (§11.1 : fond, groupes, `g*`, puis variables).
+- **Groupes de la grille** *(révision 7)* : la grille affiche `n` lignes de groupes, **6 par défaut** (`g1`…`g5` puis
+  `g*`) ; **la dernière ligne est toujours `g*`** et écrit la cible `g*` ; les autres écrivent `g<numéro>`.
+  - « Ajouter un groupe » (jusqu'à 12 lignes) : dans tous les pas, les actions de la ligne `g*` sont **renommées**
+    `g<n>` (la ligne garde son contenu et devient un groupe numéroté) ; une nouvelle ligne `g*` vide apparaît.
+  - « Retirer un groupe » (au moins 1 ligne) : les actions de la ligne `g*` sont **supprimées** (confirmation si elle
+    n'est pas vide), puis celles de la ligne `g<n-1>` sont renommées `g*`.
+  - Le nombre de lignes **n'est pas enregistré** dans l'effet. À l'ouverture : `max(5, plus grand g<k> utilisé)` lignes
+    numérotées, plus la ligne `g*`. Un effet qui écrit `g12` (natif `degrade`) s'ouvre donc avec `g1`…`g12` et la ligne
+    `g*` (13 lignes) ; « Ajouter un groupe » est alors indisponible.
+  - Les salles de l'aperçu (1, 3, 6, 12 et zones réelles) sont indépendantes du nombre de lignes.
 - **Pas de ligne « voisin »** (E5) : la grille ne crée jamais de cible `gA+1` / `gA-1`. Un décalage se fait par une
   autre variable. À l'ouverture, `grid.converted` non vide ⇒ message « les voisins … sont remplacés par les variables
   … : même rendu » ; `grid.editable` faux ⇒ grille en lecture seule, modification par l'onglet Texte.
 - **Variables** : déclarées dans le panneau, une ligne par variable — nom proposé (`gA`…`gX`, 24 au plus), type
-  **« Avance régulière »** (`progression` : départ `g1`…`g12` ou `g*`, incrément) ou **« Suite de groupes »** (`list`).
+  **« Avance régulière »** (`progression` : champs **départ** et **pas**, des expressions du §12.2 avec propositions `1`, `N/2`,
+  `N`, `gA+1` ; pas vide = « suit ») ou **« Suite de groupes »** (`list`). Les erreurs d'expression viennent de `draft`
+  (`path` : `variables[i].start`, `variables[i].step`).
   *(révision 6)* L'explication et la **suite obtenue pour 1, 3, 6 et 12 groupes** — lue dans `vars` des aperçus du
   brouillon, jamais calculée par le navigateur — ne sont affichées que **dans une bulle** ouverte par un bouton « ? ». Une variable déclarée ajoute
   sa ligne ; les variables se réordonnent (l'ordre décide laquelle gagne) ; supprimer une variable retire sa ligne et
@@ -970,68 +977,159 @@ Joue un brouillon **non enregistré** sur les ampoules d'une zone. Corps : celui
 - `import` : chacun des `status` ; `keep_both` ne change que la clé `id` ; nom envoyé hostile (`../x.yaml`, chemin
   absolu, nom de périphérique Windows) jamais utilisé comme chemin ; rien n'est écrit hors de `data/files/effects/` ni
   dans `natifs/` ; YAML à ancres / alias imbriqués refusé sans explosion mémoire.
-- `grid` (E5, E8) : `chenillard-traine` converti en `gB: g*; +1`, `gC: g2; +1`, `gA` déclarée en dernier ; cible `g*`
-  convertie en variable d'incrément 0 ; **mêmes trames**
-  que l'original pour N = 1 à 12 ; chaque ligne de la table du §11.2 ; chaque cas non convertible ⇒ `editable: false` ;
+- `grid` (E5) : `chenillard-traine` converti en `gB: gA-1`, `gC: gA+1`, `gA` déclarée en dernier ; voisin d'une suite
+  de groupes converti de même ; **mêmes trames**
+  que l'original pour N = 1 à 12 ; dépassement de 24 variables ⇒ `editable: false` ;
   effet sans voisin ⇒ `grid.effect` identique à `effect`.
 - `draft/try` : joue le brouillon sur la zone demandée sans rien écrire ; mêmes refus que §7.4 ; brouillon invalide `400`.
 - Non-régression : catalogue, aperçu, essai et rechargement de v11.7.0 inchangés (hors champ additif `vars`).
 
 ---
 
-## 12. Évolutions du format en v11.8.0 — révision 6 (#210)
+## 12. Évolutions du format en v11.8.0 — révision 7 (#210)
 
-> Décisions utilisateur du 2026-11-12 (GATE 2, `_work/reports/plan-ambiguities-20261112-111000.md`) : **E8** le dernier
-> groupe s'écrit `g*`, n'a pas de ligne dans la grille de l'éditeur, et `gN` n'est plus un nom interdit ; **E9**
-> 24 variables par effet, et la limite d'actions par pas est relevée en conséquence.
+> Décisions utilisateur du 2026-11-12 (GATE 2) : `_work/reports/plan-ambiguities-20261112-111000.md` (**E8** dernier
+> groupe = `g*`, `gN` devient un nom de variable ; **E9** 24 variables, limite d'actions relevée) et
+> `plan-ambiguities-20261112-113000.md` (**E10** départ et pas en **expressions**, division **entière**, une variable
+> peut en **suivre** une autre ou **partir** d'elle ; **E11** `gN` non déclaré = **refus** ; **E12** grille de l'éditeur à
+> nombre de groupes réglable, dernière ligne = `g*`, §11.8).
 > Ce chapitre **amende** les §4.1 à §4.8 ; tout ce qu'il ne cite pas est inchangé. `version` reste `2`.
 
 ### 12.1 Ce qui change
 
 | Sujet | v11.7.0 (§4) | v11.8.0 |
 |---|---|---|
-| Dernier groupe non vide de la zone | `gN` | **`g*`** — comme cible (`g*: [theme, 100]`) et comme départ d'une variable (`gD: g*; -1`) |
-| Nom d'une variable | `g` + majuscule **autre que N**, puis lettres ou chiffres | `g` + **une majuscule quelconque**, puis lettres ou chiffres : `gN`, `gNord` sont des variables ordinaires |
+| Dernier groupe non vide de la zone | `gN` | **`g*`** — cible (`g*: [theme, 100]`) ; dans une expression, `g*` vaut `N` |
+| Nom d'une variable | `g` + majuscule **autre que N**, puis lettres ou chiffres | `g` + **une majuscule quelconque**, puis lettres ou chiffres : `gN` est une variable ordinaire |
+| `gN` sans variable `gN` déclarée | le dernier groupe | **refusé** (§12.4) |
+| Déclaration d'une progression | `gA: g<k>; <entier>` ou `gA: gN; <entier>` | `gA: <départ>` ou `gA: <départ>; <pas>` — **expressions** (§12.2) |
 | Variables par effet | 8 | **24** |
-| Actions par pas | 16 | **40** (une action par cible possible : `g0`, 12 groupes, `g*`, 24 variables = 38, arrondi) |
-| Voisin du dernier groupe | — | `g*+1`, `g*-1` ne sont **pas** des cibles (comme en v11.7.0 pour `gN`) : un voisin ne se prend que sur une variable |
+| Actions par pas | 16 | **40** (une par cible possible : `g0`, 12 groupes, `g*`, 24 variables = 38, arrondi) |
 
 - `g*` désigne, dans la zone où l'effet est joué, le **dernier groupe non vide** : `g3` dans une zone de 3 groupes, `g6`
   dans une zone de 6. Avec N = 0, toute action sur `g*` est ignorée. Ne pas confondre avec `g0` (toute la zone).
-- `g*` s'écrit sans guillemets dans le YAML (`{ g*: [theme, 100] }`, `gD: g*; -1`) : l'analyseur le lit comme un texte
-  ordinaire, l'astérisque n'étant pas en première position.
-- Limites inchangées : 200 pas, 64 Ko par fichier, 100 fichiers, incrément de −12 à +12, 12 groupes par zone. Un
-  effet qui remplirait 200 pas de 40 actions dépasse 64 Ko : il est refusé par la limite de taille (inchangée).
-- Les 5 effets natifs n'utilisent ni `gN` ni plus de 8 variables : ils ne changent pas.
+- `g*` s'écrit sans guillemets dans le YAML (`{ g*: [theme, 100] }`).
+- Cibles d'un pas : inchangées par ailleurs (`g0`, `g1`…`g12`, `g*`, une variable, le voisin d'une variable `gA+1`).
+  `g*+1` n'est pas une cible. **Une cible n'est jamais une expression** : les expressions ne s'écrivent que dans
+  `variables`.
+- Les listes (`gC: [g1, g4, g3]`) sont inchangées.
+- Limites inchangées : 200 pas, 64 Ko par fichier, 100 fichiers, 12 groupes par zone. Les 5 effets natifs ne changent
+  pas (aucun n'emploie `gN` ; leurs déclarations `g1; +1` restent valides telles quelles).
 
-### 12.2 Messages de validation (complète §4.8)
+### 12.2 Expressions du départ et du pas — normatif
 
-- cible mal écrite : « la cible « … » est mal écrite (g0, g1…, g*, ou une variable comme gA) » ;
-- déclaration de variable : « … « g1; +1 » (départ g1, g2… ou g*, puis incrément) » ;
-- « 24 variables au plus », « un pas compte de 1 à 40 actions ».
+```
+déclaration := départ                      # sans pas : « suit »
+             | départ ";" pas              # avec pas : « avance »
+départ, pas := expression
+expression  := terme { ("+" | "-") terme }
+terme       := facteur { ("*" | "/") facteur }
+facteur     := entier | "N" | "g*" | "g" entier | variable | "(" expression ")" | ("+" | "-") facteur
+```
 
-### 12.3 Compatibilité — fichiers écrits pour la v11.7.0
-
-Aucun fichier valide en v11.7.0 ne devient invalide ni ne change de rendu.
-
-| Écriture v11.7.0 | Lecture en v11.8.0 |
+| Élément | Vaut |
 |---|---|
-| `gD: gN; -1` (départ d'une variable) | départ au dernier groupe, **toujours** : le départ d'une variable n'est jamais une autre variable. Équivaut à `g*; -1` |
-| `gN: [theme, 100]` (cible) **sans** variable `gN` déclarée | le dernier groupe, comme `g*` (lecture de compatibilité) |
-| `gN: [theme, 100]` (cible) **avec** `gN` déclarée dans `variables` | la variable `gN` (ne peut exister que dans un fichier v11.8.0) |
-| `gN+1`, `gN-1` | sans `gN` déclarée : refusé, comme en v11.7.0 ; avec `gN` déclarée : voisin de la variable |
+| entier (0 à 999) | lui-même |
+| `N` | le nombre de groupes **non vides** de la zone où l'effet est joué |
+| `g*` | `N` (le rang du dernier groupe) |
+| `g1`…`g12` | le nombre écrit (`g3` = 3) — écriture v11.7.0, conservée |
+| `gA` (variable) | le **rang** (1…N) du groupe que désigne cette variable ; **dans le départ seulement** — le pas ne cite jamais de variable |
+| `+ - *` | arithmétique entière |
+| `/` | **division entière** : le quotient est **tronqué** (`5/2` = 2, `2/3` = 0, `-5/3` = −1) |
 
-- La lecture de compatibilité ne produit ni erreur ni avertissement. Le document (§11.1) et l'aperçu montrent `g*` ; un
-  enregistrement depuis la grille écrit `g*` ; l'onglet Texte et l'import laissent le texte tel quel.
-- Dans l'autre sens, un fichier v11.8.0 qui utilise `g*`, une variable en `N`, plus de 8 variables ou plus de 16
-  actions par pas est **refusé par un serveur v11.7.0** (message de validation, les autres effets restent chargés) :
-  il n'y a pas de retour arrière pour ces fichiers. La documentation de l'import / export le dit.
+- Espaces libres. 60 caractères au plus par expression. Un signe en tête est admis (`+1`, `-N/3`).
+- **Rang obtenu → groupe** : la valeur `v` d'une expression désigne le rang `((v − 1) mod N) + 1`, avec un reste toujours
+  positif — règle de rebouclage du §4.4, étendue aux valeurs nulles et négatives : `N+1` ⇒ rang 1, **`0` ⇒ rang N (le
+  dernier groupe)**, `−1` ⇒ rang N−1. Les rangs sont ceux des groupes non vides (§4.3).
+- **Valeur d'une variable au cran `k`** (le cran est celui du §4.5, inchangé) :
+  - **avec pas** — `gA: D; P` : rang de `D(0) + P × k`. `D(0)` est le départ évalué au cran 0 : une variable citée y
+    vaut sa position **de départ**. `P` est évalué une fois (il ne dépend que de `N`).
+  - **sans pas** — `gA: D` : rang de `D(k)`, le départ **réévalué à chaque cran** : une variable citée y vaut sa position
+    **au cran `k`**. `gB: gA+1` est donc toujours le groupe après `gA` ; `gE: N/2` (aucune variable citée) désigne un
+    groupe fixe.
+- **Dépendances** : une variable peut en citer une autre, déclarée avant ou après elle, progression ou liste. Une
+  boucle (`gA: gB+1`, `gB: gA+1`, ou `gA: gA+1`) est une **erreur de validation**. L'ordre d'évaluation suit les
+  dépendances ; l'ordre de déclaration ne sert qu'à l'ordre d'écriture (§11.1).
+- **Sans valeur** : une variable ne désigne aucun groupe — et les actions qui la visent sont ignorées — quand N = 0,
+  quand elle cite une liste vide pour cette zone, ou quand une division par zéro survient **à l'exécution**
+  (`6/(N-3)` avec N = 3). Une division par zéro écrite en dur (`N/0`) est une erreur de validation.
+- **Cas à zéro** (division entière) : `N/2` avec N = 1 vaut 0 ⇒ rang 1 (le seul groupe) ; `N/3` avec N = 2 vaut 0 ⇒
+  rang 2 (le dernier groupe) ; **un pas qui vaut 0 n'avance pas** (`gA: 1; N/3` avec N = 2 reste sur `g1`).
+- Écritures v11.7.0 : `gA: g1; +1`, `gB: g2; +2`, `gE: g3; 0` gardent exactement leur sens. L'ancien `gD: gN; -1`
+  devient `gD: g*; -1` (ou `N; -1`).
+- Le pas constant n'est plus borné à ±12 : il reboucle comme le reste.
 
-### 12.4 Exemple — fichier et chronogramme
+### 12.3 Messages de validation (complète §4.8)
+
+Chaque message porte fichier et ligne (ou `path` pour un brouillon de l'éditeur, §11.3) :
+
+- « « gN » n'est pas déclarée dans variables. gN est désormais une variable comme les autres : pour le dernier groupe,
+  écrivez g* » (§12.4) ;
+- « la variable « gB » n'est pas déclarée dans variables » (cible ou expression) ;
+- « l'expression « gA+ » est incomplète », « l'expression « N//2 » est mal écrite », « parenthèse non fermée » ;
+- « division par zéro dans « N/0 » » ;
+- « les variables gA et gB dépendent l'une de l'autre » ;
+- « le pas ne peut pas citer une variable (gA) » ;
+- « 24 variables au plus », « un pas compte de 1 à 40 actions » ;
+- cible mal écrite : « … (g0, g1…, g*, ou une variable comme gA) ».
+
+### 12.4 Compatibilité — **[BREAKING] pour un fichier utilisateur v11.7.0 qui emploie `gN`**
+
+| Écriture v11.7.0 | En v11.8.0 |
+|---|---|
+| `gA: g1; +1`, `gB: g2; +2`, `gE: g3; 0`, listes, voisins | **inchangé**, même rendu |
+| `gN: [theme, 100]` (cible) sans variable `gN` | **refusé** — message du §12.3 |
+| `gD: gN; -1` (départ) sans variable `gN` | **refusé** — même message |
+| incrément au-delà de ±12 | accepté (refusé en v11.7.0) |
+
+- Le fichier refusé est **écarté** comme tout fichier invalide (§3.3) : il figure dans `errors[]` et dans le bandeau du
+  catalogue avec son nom, sa ligne et le message ; les autres effets restent chargés ; un réglage qui le citait joue
+  la valeur par défaut du moment (`unresolved[]`). **Correction** : remplacer `gN` par `g*`.
+- **Aucun effet natif n'est concerné.** Le cas ne touche qu'un fichier écrit à la main entre la v11.7.0 et la v11.8.0.
+  À annoncer dans les notes de version et dans `docs/LIGHT_EFFECTS.md`.
+- Dans l'autre sens, un fichier v11.8.0 qui utilise `g*`, une expression, une variable en `N`, plus de 8 variables ou
+  plus de 16 actions par pas est refusé par un serveur v11.7.0 (message de validation).
+
+### 12.5 Exemples — fichiers et chronogrammes
+
+**Exemple A — départ au milieu, variable qui suit, pas relatif.**
 
 ```yaml
-# Deux points qui se croisent : l'un part du premier groupe et avance,
-# l'autre part du dernier groupe et recule. « gN » est ici une variable comme une autre.
+id: milieu-et-suiveur
+nom: Milieu et suiveur
+version: 2
+moments: [chrono]
+duree_tick_ms: 1000
+variables:
+  gB: gA+1            # sans pas : toujours le groupe juste après gA
+  gC: N; -N/3         # part du dernier groupe, recule d'un tiers de zone par pas
+  gA: N/2; +1         # part du milieu (division entière), avance d'un groupe par pas
+pas:
+  - { g0: [theme, 100], gB: [theme, 50], gC: ["#14B8A6", 100], gA: [urgence, 100] }
+```
+
+Pas de `pre` : le pas 0 est joué au tick 0, et le cran `k` vaut le numéro du tick.
+
+| Zone | `N/2` | `N/3` | gA (`N/2; +1`) aux ticks 0, 1, 2… | gB (`gA+1`) | gC (`N; -N/3`) |
+|---|---|---|---|---|---|
+| **5 groupes** | 2 | 1 | g2, g3, g4, g5, g1, g2 | g3, g4, g5, g1, g2, g3 | g5, g4, g3, g2, g1, g5 |
+| **6 groupes** | 3 | 2 | g3, g4, g5, g6, g1, g2 | g4, g5, g6, g1, g2, g3 | g6, g4, g2, g6, g4, g2 |
+| **2 groupes** | 1 | **0** | g1, g2, g1, g2 | g2, g1, g2, g1 | **g2, g2, g2, g2** (pas nul : ne bouge pas) |
+| **1 groupe** | **0** ⇒ rang 1 | 0 | g1, g1, g1 | g1, g1, g1 | g1, g1, g1 |
+
+Détail pour 5 groupes :
+
+| Tick | Joué | k | gA | gB | gC | État |
+|---|---|---|---|---|---|---|
+| 0 | pas 0 | 0 | g2 | g3 | g5 | fond au thème ; g3 à 50 % ; g5 turquoise ; g2 à la couleur d'urgence |
+| 1 | pas 0 | 1 | g3 | g4 | g4 | g4 : `gB` puis `gC` écrivent le même groupe, **`gC` gagne** (écrite après) ; g3 urgence |
+| 2 | pas 0 | 2 | g4 | g5 | g3 | g5 à 50 % ; g3 turquoise ; g4 urgence |
+| 3 | pas 0 | 3 | g5 | g1 | g2 | g1 à 50 % ; g2 turquoise ; g5 urgence |
+| 4 | pas 0 | 4 | g1 | g2 | g1 | g2 à 50 % ; g1 : `gC` puis `gA`, **`gA` gagne** (urgence) |
+
+**Exemple B — partir d'une autre variable, puis avancer seule ; `gN` comme variable ; `g*` comme cible.**
+
+```yaml
 id: croisement
 nom: Croisement
 version: 2
@@ -1039,38 +1137,41 @@ moments: [chrono]
 groupes_min: 3
 duree_tick_ms: 1000
 variables:
-  gA: g1; +1          # part du premier groupe, avance
-  gN: g*; -1          # part du DERNIER groupe de la zone, recule
+  gA: 1; +1           # part du premier groupe, avance
+  gN: g*; -1          # « gN » est ici une variable comme une autre : part du dernier groupe, recule
+  gD: gA+1; +2        # AVEC pas : part du groupe après le départ de gA (g2), puis avance de 2
 pre:
   { g0: [theme, 100], g*: [scene, 100] }     # au départ, le dernier groupe à la couleur de la scène
 pas:
-  - { g0: [theme, 100], gA: [urgence, 100], gN: [urgence, 100] }
+  - { g0: [theme, 100], gA: [urgence, 100], gN: [urgence, 100], gD: [theme, 40] }
 ```
 
-Zone de **4 groupes** (`g*` = `g4`) :
+Zone de **4 groupes** (`g*` = `g4`) — `gD` avec pas : `D(0) + 2k` = 2, 4, 6, 8… ⇒ g2, g4, g2, g4 :
 
-| Tick | Joué | k | gA | gN | État |
+| Tick | Joué | k | gA | gN | gD |
 |---|---|---|---|---|---|
-| 0 | PRE | 0 | g1 | g4 | fond au thème ; g4 à la couleur de la scène |
-| 1 | pas 0 | 0 | g1 | g4 | fond au thème ; g1 et g4 à la couleur d'urgence |
-| 2 | pas 0 | 1 | g2 | g3 | g2 et g3 |
-| 3 | pas 0 | 2 | g3 | g2 | g3 et g2 |
-| 4 | pas 0 | 3 | g4 | g1 | g4 et g1 |
-| 5 | pas 0 | 4 | g1 | g4 | g1 et g4 |
+| 0 | PRE | 0 | g1 | g4 | g2 |
+| 1 | pas 0 | 0 | g1 | g4 | g2 |
+| 2 | pas 0 | 1 | g2 | g3 | g4 |
+| 3 | pas 0 | 2 | g3 | g2 | g2 |
+| 4 | pas 0 | 3 | g4 | g1 | g4 |
+| 5 | pas 0 | 4 | g1 | g4 | g2 |
 
-Zone de **6 groupes** (`g*` = `g6`) : `gA` = g1, g2, g3, g4, g5, g6, g1… ; `gN` = g6, g5, g4, g3, g2, g1, g6…
-Dans la grille de l'éditeur, cet effet a deux lignes de variables (`gA`, `gN`) et, pour `pre`, une troisième variable
-créée par la conversion du §11.2 (`gB: g*; 0`) à la place de la cible `g*`.
+Écrite **sans** pas (`gD: gA+1`), `gD` vaudrait g2, g2, g3, g4, g1, g2 : toujours le groupe après `gA`.
 
-### 12.5 Tests exigés
+### 12.6 Tests exigés
 
-- `g*` cible et départ : dernier groupe non vide pour N = 1, 3, 4, 6, 12, y compris avec des groupes vides ; N = 0 ignoré.
-- Chronogramme du §12.4 tick par tick (4 et 6 groupes).
-- Variable nommée `gN`, `gNord` : acceptée, rendue comme toute variable ; `gN+1` voisin de la variable.
-- Compatibilité §12.3 : chaque ligne de la table ; un fichier v11.7.0 utilisant `gN` rend **les mêmes trames**
-  qu'avant (comparaison avec le même fichier réécrit en `g*`).
-- Limites : 24 variables acceptées, 25 refusées ; 40 actions acceptées, 41 refusées ; messages du §12.2.
-- Coût du rendu : `Render` d'un effet de 24 variables et 40 actions par pas, au tick 10 000, reste compatible avec le
-  lecteur à 10 Hz — banc de mesure (`go test -bench`), valeur consignée dans le rapport de QA ; au-delà de 1 ms par
-  appel, `dev-backend` mémoïse l'état au lieu de rejouer depuis le tick 0.
-- Les 5 natifs : mêmes trames qu'en v11.7.0.
+- Chronogrammes du §12.5 tick par tick : exemple A sur 5, 6, 2 et 1 groupes ; exemple B sur 4 groupes ; variante sans pas.
+- Expressions : priorité des opérateurs, parenthèses, signe en tête, division tronquée (positifs et négatifs), valeurs
+  0, négatives et supérieures à N (rebouclage), `g*` = `N`, `g<k>` = k, pas nul, pas relatif.
+- Suivre / partir : `gB: gA+1` réévalué à chaque cran ; `gB: gA+1; +2` figé au départ ; variable citant une liste ;
+  chaîne de trois variables ; déclaration avant et après la variable citée ; liste vide ⇒ sans valeur.
+- Erreurs : chacun des messages du §12.3, avec la ligne ; boucle directe, indirecte et sur soi-même ; division par zéro
+  écrite en dur (validation) et à l'exécution (variable sans valeur, effet non interrompu).
+- `gN` : cible et départ sans déclaration ⇒ refus avec le message ; déclarée ⇒ variable ordinaire, `gN+1` voisin.
+- Compatibilité §12.4 : les 5 natifs et les exemples de `docs/LIGHT_EFFECTS.md` (hors `gN`) rendent **les mêmes trames**
+  qu'en v11.7.0 pour N = 1 à 12, y compris avec des groupes vides.
+- Limites : 24 variables acceptées, 25 refusées ; 40 actions acceptées, 41 refusées.
+- Coût du rendu : `Render` d'un effet de 24 variables (dont une chaîne de dépendances) et 40 actions par pas, au tick
+  10 000, reste compatible avec le lecteur à 10 Hz — banc de mesure (`go test -bench`), valeur consignée dans le
+  rapport de QA ; au-delà de 1 ms par appel, `dev-backend` mémoïse au lieu de rejouer depuis le tick 0.

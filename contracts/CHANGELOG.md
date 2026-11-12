@@ -31,17 +31,24 @@ Compléments du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md`, `-104
 - **[CHANGED]** Usage de `POST /api/lighting/effects/{id}/try` par le catalogue : la zone est choisie par
   l'utilisateur et envoyée dans `zone` (route inchangée, §7.4).
 
-Révision 6 — évolutions du **format de fichier** (`light-effects.md` **§12**, décisions du 2026-11-12,
-`plan-ambiguities-20261112-111000.md`). **Aucun BREAKING pour les fichiers existants** : tout fichier valide en v11.7.0
-reste valide, avec le même rendu.
+Révisions 6 et 7 — évolutions du **format de fichier** (`light-effects.md` **§12**, décisions du 2026-11-12,
+`plan-ambiguities-20261112-111000.md` et `-113000.md`). `version` reste `2`.
 
-- **[CHANGED]** Le dernier groupe de la zone s'écrit **`g*`** (cible et départ de variable). `gN` reste lu comme le
-  dernier groupe dans un fichier qui ne déclare pas de variable `gN` (§12.3).
-- **[CHANGED]** Nom de variable : la lettre `N` est autorisée (`gN`, `gNord`…).
-- **[CHANGED]** Limites relevées : **24 variables** par effet (8 auparavant), **40 actions** par pas (16 auparavant).
-- **[NEW]** `grid` : une cible directe `g*` est convertie en variable d'incrément 0 ; la grille n'a pas de ligne `g*`.
-- **Attention (sens inverse)** : un fichier qui utilise `g*`, une variable en `N`, plus de 8 variables ou plus de 16
-  actions par pas est refusé par un serveur v11.7.0. `version` reste `2`.
+- **[BREAKING]** `gN` ne désigne plus le dernier groupe : c'est un nom de variable ordinaire. Un fichier qui emploie
+  `gN` (cible ou départ) sans déclarer de variable `gN` est **refusé** avec le message « … pour le dernier groupe,
+  écrivez g* » (§12.4). Touche uniquement un fichier **utilisateur** écrit pour la v11.7.0 ; **aucun effet natif**.
+  Correction : remplacer `gN` par `g*`.
+- **[NEW]** `g*` : le dernier groupe de la zone (cible ; vaut `N` dans une expression).
+- **[NEW]** Départ et pas d'une variable en **expressions** : entiers, `N`, `g*`, `g<k>`, autre variable (départ
+  seulement), `+ - * /` (division entière tronquée), parenthèses ; `gA: D; P` (avance) ou `gA: D` (suit) ; rebouclage
+  des valeurs nulles et négatives ; boucle de dépendances refusée (§12.2). Les écritures v11.7.0 (`g1; +1`) gardent
+  leur sens.
+- **[CHANGED]** Limites relevées : **24 variables** par effet (8), **40 actions** par pas (16) ; pas constant non borné.
+- **[CHANGED]** Document d'effet (§11.1) : `start` et `step` d'une variable sont des expressions en texte, `step: null`
+  = « suit ». `grid` (§11.2) : un voisin est converti en variable qui suit (`gB: gA-1`), toujours exact ; une cible
+  `g*` n'est plus convertie.
+- **[NEW]** Éditeur (§11.8) : grille à nombre de groupes réglable (6 par défaut, 1 à 12), dernière ligne = `g*`.
+- **Attention (sens inverse)** : un fichier qui utilise ces nouveautés est refusé par un serveur v11.7.0.
 
 ---
 ## [20261112] — v11.7.0 — précisions de l'aperçu d'effet après la revue LOT-3 (#299)
