@@ -17,8 +17,15 @@ export const DEFAULT_PREVIEW_GROUPS = Object.freeze([1, 3, 6, 12])
 
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
-async function readJson(res) {
-  try { return await res.json() } catch { return {} }
+// Corps d'une réponse : JSON quand c'en est un, sinon le texte brut (les refus 400 / 413 / 503 du serveur sont du texte, `http.Error`).
+async function readBody(res) {
+  if (typeof res.text !== 'function') {
+    try { return { data: await res.json(), raw: '' } } catch { return { data: {}, raw: '' } }
+  }
+  const raw = await res.text().catch(() => '')
+  let data = {}
+  try { data = raw ? JSON.parse(raw) : {} } catch { /* texte brut */ }
+  return { data, raw: raw.trim() }
 }
 
 const networkDraft = (e) => ({ ok: false, errors: [{ line: 0, message: `Vérification impossible : ${e.message}` }], previews: [], network: true })
@@ -57,8 +64,8 @@ export function useEffectDraft({ id, create = false, initialDoc = null, groups =
     let out
     try {
       const res = await post('/api/lighting/effects/draft', payload)
-      const data = await readJson(res)
-      out = res.ok ? data : { ok: false, errors: [{ line: 0, message: data?.error || `Vérification impossible (HTTP ${res.status}).` }], previews: [] }
+      const { data, raw } = await readBody(res)
+      out = res.ok ? data : { ok: false, errors: [{ line: 0, message: data?.error || raw || `Vérification impossible (HTTP ${res.status}).` }], previews: [] }
     } catch (e) {
       out = networkDraft(e)
     }
@@ -182,7 +189,7 @@ export function useEffectDraft({ id, create = false, initialDoc = null, groups =
       const res = await fetch(`/api/lighting/effects/${encodeURIComponent(id)}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
-      const data = await readJson(res)
+      const { data, raw } = await readBody(res)
       if (res.ok) {
         created.current = true
         setPersisted(true)
@@ -191,9 +198,14 @@ export function useEffectDraft({ id, create = false, initialDoc = null, groups =
         return { ok: true, catalogue: data?.catalogue }
       }
       let message
-      if (res.status === 409) message = data?.reason === 'exists' ? 'Un effet porte déjà cet identifiant.' : 'Un effet livré ne peut pas être modifié : dupliquez-le.'
-      else if (res.status === 404) message = 'Effet inconnu — rechargez le catalogue.'
+      if (res.status === 409) {
+        message = data?.reason === 'exists' ? 'Un effet porte déjà cet identifiant.'
+          : data?.reason === 'limit' ? 'Le dossier contient déjà 100 effets : supprimez-en avant d\'enregistrer.'
+          : 'Un effet livré ne peut pas être modifié : dupliquez-le.'
+      } else if (res.status === 404) message = 'Effet inconnu — rechargez le catalogue.'
       else if (res.status === 413) message = 'Fichier trop gros (64 Ko au plus).'
+      else if (res.status === 503) message = 'Stockage des effets indisponible.'
+      else if (res.status === 400 && !data?.errors?.length && raw) message = `Enregistrement refusé : ${raw}.`
       else if (res.status === 400 && data?.errors?.length) {
         message = 'Le serveur refuse cet effet.'
         setDraft(d => ({ ...(d || {}), ok: false, errors: data.errors, from: last.current }))
