@@ -1140,6 +1140,17 @@ Réponse (`light-effects.md` §7.1) :
 
 Corps : `{"zone": "ambiance", "speed": 1, "seconds": 10}` (`zone` par défaut `ambiance` ; `speed` parmi les valeurs de `SpeedValues` ; `seconds` de 1 à 20, défaut 10, ou 5 pour un effet qui ne déclare que `score`). Le bouton « Essayer sur la salle » du catalogue envoie un corps vide ou `{}` : zone ambiance, vitesse ×1. Réponse immédiate `200 {"ok": true, "duration_ms": 10000}`. Refus : `409` avec `reason` (`disabled`, `game`, `not_applicable`, `mode`), `503` pont injoignable, `400`, `404`. Jamais `502`. L'essai n'est pas persisté.
 
+### `GET /api/lighting/effects/{id}/download`, `POST /api/lighting/effects/import`, `DELETE /api/lighting/effects/{id}` (v11.8.0, #305)
+
+Détail normatif : `contracts/light-effects.md` §11.5 à §11.7. Routes : `contracts/http-endpoints.md`.
+
+- **Télécharger** : `200` avec le texte du fichier (`yaml` au §11.2), natifs compris. `Content-Type: application/yaml; charset=utf-8`, `Content-Disposition: attachment; filename="<id>.yaml"`. `404` effet inconnu. `405` hors GET.
+- **Importer** : `multipart/form-data`, champ `files` répété (1 à 20 fichiers `.yaml` / `.yml`, 64 Ko chacun, 2 Mo au total), champ facultatif `on_conflict` = `ask` (défaut) | `replace` | `keep_both`. Réponse `200` : `{ "results": [ { "file", "status", … } ], "catalogue": {…} }`.
+  - `status` ∈ `imported`, `replaced`, `renamed` (avec `new_id`), `conflict` (avec `existing`, fichier non écrit), `native` (`id` d'un effet livré, toujours refusé), `invalid` (`errors[]` : `line`, `message`), `too_big`, `limit`.
+  - Chaque fichier est traité seul ; un seul rechargement en fin de traitement. Le nom envoyé ne sert jamais de chemin.
+  - Refus global : `400` texte brut (envoi illisible, aucun fichier, plus de 20 fichiers, extension refusée, `on_conflict` invalide) ; `413` texte brut (plus de 2 Mo) ; `503` si l'import est indisponible.
+- **Supprimer** : `200 {"ok": true, "catalogue": {…}}`. Un effet à vous, ou le fichier qui surcharge un natif (le natif reprend). `409 {"reason": "native"}` pour un natif. `404` effet inconnu (texte brut). Les réglages qui citaient l'effet ne sont pas modifiés (`unresolved[]`).
+
 ### `GET /api/lighting/effects/{id}/preview` — aperçu (v11.7.0, #299)
 
 Trames calculées par le serveur (`effects.Preview`, qui appelle `Render` : rien n'est joué sur le pont). Requête : `groups` de 1 à 12 (défaut : groupes non vides de la zone ambiance, 6 s'il n'y en a pas), `moment` ∈ `chrono`, `calm`, `score` (défaut : premier moment de l'effet). Vitesse ×1. Refus : `404` effet inconnu, `400` paramètre invalide ou moment non déclaré, `405` hors GET.
