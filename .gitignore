@@ -139,6 +139,7 @@ server-go/QA_REPORT_*.md
 server-go/releases/
 server-go/web/dist/
 server-go/cmd/server/dist/
+server-go/web/.vitest/
 
 # BuzzControl - Temp/debug files
 server-go/nul
