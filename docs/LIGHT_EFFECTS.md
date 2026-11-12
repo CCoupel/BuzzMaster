@@ -345,7 +345,7 @@ mon-effet.yaml, ligne 12 : la variable « gB » n'est pas déclarée dans variab
 | clé obligatoire absente | `id`, `nom`, `version`, `moments`, `duree_tick_ms` ou `pas` manque |
 | `id` invalide ou en double | caractères hors a-z, 0-9, tiret ; ou deux fichiers utilisateur de même `id` |
 | `id` réservé ou nom Windows | à l'import, à l'enregistrement et dans le brouillon de l'éditeur : `reload`, `try`, `draft`, `import` ; `con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`. Un fichier déposé à la main dans le dossier avec un tel `id` reste chargé. |
-| alias YAML | à l'import, à l'enregistrement et dans le brouillon : `*nom` est refusé, avec sa ligne ; écrire la valeur en toutes lettres. Le chargeur du dossier ne refuse pas un alias. |
+| alias YAML | Seuls l'import, l'enregistrement et le brouillon refusent `*nom` avec sa ligne et le message dédié : écrire la valeur en toutes lettres. Dans un fichier du dossier, un alias sur un champ texte (`nom`, `description`) est accepté ; un alias dans un pas ou dans `moments` fait refuser le fichier par le chargeur, avec un message de validation ordinaire qui ne parle pas d'alias (par exemple « la couleur « c » est invalide »). |
 | `moments` vide ou valeur inconnue | utiliser `chrono`, `calm` ou `score` |
 | `duree_tick_ms` hors bornes | entre 250 et 60 000 ms |
 | `pas` vide ou trop long | 1 à 200 pas, 1 à 40 actions par pas |
