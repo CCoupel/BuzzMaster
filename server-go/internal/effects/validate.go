@@ -14,8 +14,8 @@ var (
 	reID      = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 	reHex     = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 	reGn      = regexp.MustCompile(`^g([1-9][0-9]?)$`)
-	reVarName = regexp.MustCompile(`^g[A-MO-Z][A-Za-z0-9]*$`)
-	reVarRef  = regexp.MustCompile(`^(g[A-MO-Z][A-Za-z0-9]*)([+-][0-9]+)?$`)
+	reVarName = regexp.MustCompile(`^g[A-Z][A-Za-z0-9]*$`)
+	reVarRef  = regexp.MustCompile(`^(g[A-Z][A-Za-z0-9]*)([+-][0-9]+)?$`)
 )
 
 var namedColors = map[string]bool{"theme": true, "equipe": true, "urgence": true, "scene": true}
@@ -107,7 +107,8 @@ func (v *validator) build(r *rawEffect, present map[string]int) Effect {
 	return e
 }
 
-// variables parses the `variables` table (§4.4).
+// variables parses the `variables` table (§4.4, §12.2). Two passes: declarations and
+// expression syntax, then the references between variables (declared, no loop).
 func (v *validator) variables(n *yaml.Node) []Var {
 	if n.Kind != yaml.MappingNode {
 		v.add(n.Line, "« variables » doit être une table « gA: g1; +1 »")
@@ -120,32 +121,20 @@ func (v *validator) variables(n *yaml.Node) []Var {
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		k, val := n.Content[i], n.Content[i+1]
 		if !reVarName.MatchString(k.Value) {
-			v.add(k.Line, "le nom de variable « %s » est invalide : « g » suivi d'une lettre majuscule autre que N, puis de lettres ou de chiffres", k.Value)
+			v.add(k.Line, "le nom de variable « %s » est invalide : « g » suivi d'une lettre majuscule, puis de lettres ou de chiffres", k.Value)
 			continue
 		}
 		if v.vars[k.Value] {
 			v.add(k.Line, "la variable « %s » est déclarée deux fois", k.Value)
 			continue
 		}
+		v.vars[k.Value] = true // registered at once: a bad declaration does not make its uses "undeclared"
 		vr := Var{Name: k.Value, Line: k.Line}
 		switch val.Kind {
 		case yaml.ScalarNode:
-			parts := strings.Split(val.Value, ";")
-			if len(parts) != 2 {
-				v.add(val.Line, "la déclaration de « %s » est mal écrite : « g1; +1 » (départ, puis incrément)", k.Value)
+			if !v.progression(&vr, val) {
 				continue
 			}
-			start, ok := parseGroupStart(strings.TrimSpace(parts[0]))
-			incr, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(parts[1]), "+"))
-			if !ok || err != nil {
-				v.add(val.Line, "la déclaration de « %s » est mal écrite : « g1; +1 » (départ g1, g2… ou gN, puis incrément)", k.Value)
-				continue
-			}
-			if incr < -MaxIncr || incr > MaxIncr {
-				v.add(val.Line, "l'incrément de « %s » doit être compris entre -%d et %d", k.Value, MaxIncr, MaxIncr)
-				continue
-			}
-			vr.Start, vr.Incr = start, incr
 		case yaml.SequenceNode:
 			vr.IsList = true
 			if len(val.Content) == 0 {
@@ -167,24 +156,138 @@ func (v *validator) variables(n *yaml.Node) []Var {
 				continue
 			}
 		default:
-			v.add(val.Line, "la déclaration de « %s » est mal écrite : « g1; +1 » ou une liste [g1, g3]", k.Value)
+			v.add(val.Line, "la déclaration de « %s » est mal écrite : « g1; +1 », « N/2 » ou une liste [g1, g3]", k.Value)
 			continue
 		}
-		v.vars[k.Value] = true
 		out = append(out, vr)
+	}
+	v.references(out)
+	return out
+}
+
+// progression parses "start" or "start; step" into vr; false when an error was reported.
+func (v *validator) progression(vr *Var, val *yaml.Node) bool {
+	parts := strings.Split(val.Value, ";")
+	if len(parts) > 2 {
+		v.add(val.Line, "la déclaration de « %s » est mal écrite : « départ » ou « départ; pas » (un seul « ; »)", vr.Name)
+		return false
+	}
+	start, err := ParseExpr(parts[0])
+	if err != nil {
+		v.add(val.Line, "la déclaration de « %s » : %s", vr.Name, err.Error())
+		return false
+	}
+	vr.Start = start
+	if len(parts) == 2 {
+		step, err := ParseExpr(parts[1])
+		if err != nil {
+			v.add(val.Line, "la déclaration de « %s » : %s", vr.Name, err.Error())
+			return false
+		}
+		if refs := step.Refs(); len(refs) > 0 {
+			v.add(val.Line, "le pas ne peut pas citer une variable (%s)", refs[0])
+			return false
+		}
+		vr.Step = step
+	}
+	return true
+}
+
+// undeclared reports a variable used in a target or an expression without a declaration.
+func (v *validator) undeclared(line int, name string) {
+	if name == "gN" {
+		v.add(line, "« gN » n'est pas déclarée dans variables. gN est désormais une variable comme les autres : pour le dernier groupe, écrivez g*")
+		return
+	}
+	v.add(line, "la variable « %s » n'est pas déclarée dans variables", name)
+}
+
+// references checks that the variables cited by the starts are declared and that no loop
+// links them (§12.2).
+func (v *validator) references(vars []Var) {
+	byName := map[string]*Var{}
+	for i := range vars {
+		byName[vars[i].Name] = &vars[i]
+	}
+	ok := map[string]bool{}
+	for i := range vars {
+		vr := &vars[i]
+		if vr.IsList {
+			ok[vr.Name] = true
+			continue
+		}
+		good := true
+		for _, ref := range vr.Start.Refs() {
+			if !v.vars[ref] {
+				v.undeclared(vr.Line, ref)
+				good = false
+			}
+		}
+		ok[vr.Name] = good
+	}
+	// Loops: depth-first search over the (valid) citations.
+	const (
+		white = iota
+		grey
+		black
+	)
+	colour := map[string]int{}
+	var stack []string
+	reported := map[string]bool{}
+	var visit func(name string)
+	visit = func(name string) {
+		vr := byName[name]
+		if vr == nil || vr.IsList || !ok[name] {
+			return
+		}
+		colour[name] = grey
+		stack = append(stack, name)
+		for _, ref := range vr.Start.Refs() {
+			switch colour[ref] {
+			case grey:
+				// the cycle is the stack from ref to here
+				i := len(stack) - 1
+				for stack[i] != ref {
+					i--
+				}
+				cyc := append([]string(nil), stack[i:]...)
+				key := strings.Join(sortedCopy(cyc), ",")
+				if !reported[key] {
+					reported[key] = true
+					v.add(byName[cyc[0]].Line, "%s", cycleMessage(cyc))
+				}
+			case white:
+				visit(ref)
+			}
+		}
+		stack = stack[:len(stack)-1]
+		colour[name] = black
+	}
+	for i := range vars {
+		if colour[vars[i].Name] == white {
+			visit(vars[i].Name)
+		}
+	}
+}
+
+func sortedCopy(in []string) []string {
+	out := append([]string(nil), in...)
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j] < out[j-1]; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
 	}
 	return out
 }
 
-func parseGroupStart(s string) (Target, bool) {
-	if s == "gN" {
-		return Target{Kind: TargetGN}, true
+func cycleMessage(cyc []string) string {
+	switch len(cyc) {
+	case 1:
+		return fmt.Sprintf("la variable %s dépend d'elle-même", cyc[0])
+	case 2:
+		return fmt.Sprintf("les variables %s et %s dépendent l'une de l'autre", cyc[0], cyc[1])
 	}
-	if m := reGn.FindStringSubmatch(s); m != nil {
-		n, _ := strconv.Atoi(m[1])
-		return Target{Kind: TargetGn, N: n}, true
-	}
-	return Target{}, false
+	return fmt.Sprintf("les variables %s et %s dépendent les unes des autres", strings.Join(cyc[:len(cyc)-1], ", "), cyc[len(cyc)-1])
 }
 
 // parseTarget reads the left side of an action; ok=false on a malformed write.
@@ -192,7 +295,7 @@ func parseTarget(s string) (Target, bool, string) {
 	switch {
 	case s == "g0":
 		return Target{Kind: TargetG0}, true, ""
-	case s == "gN":
+	case s == "g*":
 		return Target{Kind: TargetGN}, true, ""
 	}
 	if m := reGn.FindStringSubmatch(s); m != nil {
@@ -223,11 +326,11 @@ func (v *validator) step(n *yaml.Node, where string) Step {
 		k, val := n.Content[i], n.Content[i+1]
 		tg, ok, varName := parseTarget(k.Value)
 		if !ok {
-			v.add(k.Line, "la cible « %s » est mal écrite (g0, g1…, gN, ou une variable comme gA, gA+1)", k.Value)
+			v.add(k.Line, "la cible « %s » est mal écrite (g0, g1…, g*, ou une variable comme gA)", k.Value)
 			continue
 		}
 		if varName != "" && !v.vars[varName] {
-			v.add(k.Line, "la variable « %s » n'est pas déclarée dans variables", varName)
+			v.undeclared(k.Line, varName)
 			continue
 		}
 		act := Action{Target: tg, Line: k.Line}

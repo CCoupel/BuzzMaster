@@ -6,6 +6,7 @@ package effects
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -153,16 +154,15 @@ func TestLoad_InvalidFiles_EachProducesLocatedFrenchError_OthersSurvive(t *testi
 		{"variable-non-declaree.yaml", head + "pas:\n  - { gB: [scene, 100] }\n", true, "gB"},
 		{"voisin-non-declare.yaml", head + "pas:\n  - { gB+1: [scene, 100] }\n", true, "gB"},
 		{"declaration-mal-ecrite.yaml", head + "variables:\n  gA: partir de g1\npas:\n  - { gA: [scene, 100] }\n", true, "gA"},
-		{"increment-hors-bornes.yaml", head + "variables:\n  gA: g1; +13\npas:\n  - { gA: [scene, 100] }\n", true, "gA"},
-		{"variable-nommee-gN.yaml", head + "variables:\n  gN: g1; +1\npas:\n  - { gN: [scene, 100] }\n", true, "gN"},
-		{"trop-de-variables.yaml", head + "variables:\n" + variablesN(9) + "pas:\n  - { gA: [scene, 100] }\n", true, "variables"},
+		{"variable-nommee-minuscule.yaml", head + "variables:\n  ga: g1; +1\npas:\n  - { g0: [scene, 100] }\n", true, "ga"},
+		{"trop-de-variables.yaml", head + "variables:\n" + variablesN(25) + "pas:\n  - { gA: [scene, 100] }\n", true, "variables"},
 		{"couleur-invalide.yaml", head + "pas:\n  - { g1: [\"#GG0000\", 100] }\n", true, "couleur"},
 		{"couleur-inconnue.yaml", head + "pas:\n  - { g1: [rose, 100] }\n", true, "rose"},
 		{"intensite-trop-haute.yaml", head + "pas:\n  - { g1: [scene, 150] }\n", true, "intensité|intensite"},
 		{"intensite-negative.yaml", head + "pas:\n  - { g1: [scene, -5] }\n", true, "intensité|intensite"},
 		{"action-mal-formee.yaml", head + "pas:\n  - { g1: scene }\n", true, "g1"},
 		{"pas-vide-action.yaml", head + "pas:\n  - { }\n", true, "pas|action"},
-		{"trop-d-actions.yaml", head + abcDecl + "pas:\n  - { " + actionsN(17) + " }\n", true, "action"},
+		{"trop-d-actions.yaml", head + abcDecl + "pas:\n  - { " + actionsN(41) + " }\n", true, "action"},
 		{"boucle-invalide.yaml", head + "boucle: peut-etre\n" + okPas, true, "boucle"},
 		{"dans-pre.yaml", head + "pre:\n  { gZ: [scene, 100] }\n" + okPas, true, "gZ"},
 		{"dans-dernier.yaml", head + "dernier:\n  { gZ: [scene, 100] }\n" + okPas, true, "gZ"},
@@ -226,7 +226,10 @@ func variablesN(n int) string {
 
 // actionsN : n actions distinctes (g0, g1…g12, gN, gA, gB, gC) — les variables gA, gB, gC doivent être déclarées.
 func actionsN(n int) string {
-	targets := []string{"g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12", "gN", "gA", "gB", "gC"}
+	targets := []string{"g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12", "g*", "gA", "gB", "gC"}
+	for i := 1; len(targets) < n; i++ { // distinct neighbours of gA complete the list
+		targets = append(targets, "gA+"+strconv.Itoa(i))
+	}
 	parts := make([]string, n)
 	for i := range parts {
 		parts[i] = targets[i] + ": [scene, 100]"
@@ -324,8 +327,8 @@ func TestParse_AcceptedBoundaries(t *testing.T) {
 		"tick 250":          head + "duree_tick_ms: 250\npas:\n  - { g0: [scene, 100] }\n",
 		"tick 60000":        head + "duree_tick_ms: 60000\npas:\n  - { g0: [scene, 100] }\n",
 		"200 pas":           head + "duree_tick_ms: 1000\npas:\n" + strings.Repeat("  - { g1: [scene, 100] }\n", 200),
-		"8 variables":       head + "duree_tick_ms: 1000\nvariables:\n" + variablesN(8) + "pas:\n  - { gA: [scene, 100] }\n",
-		"16 actions":        head + "duree_tick_ms: 1000\n" + abcDecl + "pas:\n  - { " + actionsN(16) + " }\n",
+		"24 variables":      head + "duree_tick_ms: 1000\nvariables:\n" + variablesN(24) + "pas:\n  - { gA: [scene, 100] }\n",
+		"40 actions":        head + "duree_tick_ms: 1000\n" + abcDecl + "pas:\n  - { " + actionsN(40) + " }\n",
 		"description 500":   head + "duree_tick_ms: 1000\ndescription: " + strings.Repeat("d", 500) + "\npas:\n  - { g0: [scene, 100] }\n",
 		"boucle non":        head + "duree_tick_ms: 1000\nboucle: non\npas:\n  - { g0: [scene, 100] }\n",
 		"groupes_min 12":    head + "duree_tick_ms: 1000\ngroupes_min: 12\npas:\n  - { g1: [scene, 100] }\n",
@@ -352,7 +355,7 @@ func TestParse_NamedColoursAndEteintAccepted(t *testing.T) {
 }
 
 func TestParse_AllTargetForms_Accepted(t *testing.T) {
-	src := fx("variables:\n  gA: g1; +1\n  gB: gN; -1\n  gC: [g1, g4, g3, g7]\n  gD: g3; 0\npas:\n  - { g0: [scene, 100], g1: [scene, 100], gN: [scene, 100], gA: [scene, 100], gA+1: [scene, 100], gA-2: [scene, 100], gC: [scene, 100] }\n")
+	src := fx("variables:\n  gA: g1; +1\n  gB: g*; -1\n  gC: [g1, g4, g3, g7]\n  gD: g3; 0\npas:\n  - { g0: [scene, 100], g1: [scene, 100], g*: [scene, 100], gA: [scene, 100], gA+1: [scene, 100], gA-2: [scene, 100], gC: [scene, 100] }\n")
 	if _, errs := parseEffect(src); len(errs) != 0 {
 		t.Errorf("g0, gn, gN, variables, voisins, liste : %+v", errs)
 	}

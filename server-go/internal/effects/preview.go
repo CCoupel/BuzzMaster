@@ -53,6 +53,9 @@ type PreviewFrame struct {
 	Tick   int            `json:"tick"`
 	Step   string         `json:"step"`
 	Groups []PreviewGroup `json:"groups"`
+	// Vars: for each declared variable, the real number of the group it designates at this tick
+	// (0 = none) — additive field of v11.8.0 (§11.3); `{}` without variable.
+	Vars map[string]int `json:"vars"`
 }
 
 // PreviewResult is the answer of GET /api/lighting/effects/{id}/preview.
@@ -122,11 +125,12 @@ func Preview(e Effect, n int, m Moment) PreviewResult {
 		}
 		step := e.stepName(e.playedAt(t, live))
 		base := render(t, at)
-		res.Frames = append(res.Frames, PreviewFrame{AtMs: int(at / time.Millisecond), Tick: t, Step: step, Groups: base})
+		vars := e.VarPositions(nums, t)
+		res.Frames = append(res.Frames, PreviewFrame{AtMs: int(at / time.Millisecond), Tick: t, Step: step, Groups: base, Vars: vars})
 		for _, c := range changes {
 			if c > at && c < at+tick && c < span && len(res.Frames) < PreviewMaxFrames {
 				if g := render(t, c); !samePreview(g, base) {
-					res.Frames = append(res.Frames, PreviewFrame{AtMs: int(c / time.Millisecond), Tick: t, Step: step, Groups: g})
+					res.Frames = append(res.Frames, PreviewFrame{AtMs: int(c / time.Millisecond), Tick: t, Step: step, Groups: g, Vars: vars})
 					base = g
 				}
 			}
