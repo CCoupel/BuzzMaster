@@ -19,6 +19,10 @@
 > (la salle), `animateur`, `public`. Chaque zone a ses groupes numérotés `g1`…`gN` et son `g0` ; on choisit **un effet et
 > une vitesse par moment et par zone**. Les réglages par groupe animateur (`host_effects`, `host_speeds`) disparaissent.
 > Référence : `_work/reports/plan-ambiguities-20261111-234500.md`.
+>
+> **Révision 5 (2026-11-12, v11.8.0 — #210, #305) — édition, import et export.** Ajout du **§11** : document d'effet
+> (forme JSON), routes `source`, `draft`, `PUT`, `DELETE`, `download`, `import`, champ additif `vars` des trames
+> d'aperçu. **Le format de fichier (§4) et le séquenceur ne changent pas.**
 
 ---
 
@@ -665,8 +669,225 @@ ajustées après l'essai sur matériel sans changer ce contrat.
 
 | Sujet | Où |
 |---|---|
-| Éditeur de scènes et d'effets dans l'interface | v11.8.0 (#210) — écrit le format du §4 (grille ticks × groupes) |
+| Éditeur d'effets dans l'interface, import et export | v11.8.0 (#210, #305) — **§11** de ce contrat |
 | Remplissage (#300), vague (#301), scintillement (#302) ; variantes selon le temps restant, hasard, étalement sur le chronomètre, départ depuis l'équipe, fondu | hors v11.7.0 (révision 3) — backlog |
 | Rôles fins par ampoule (accentuation, fond) | hors v11.7.0 (décision D3) ; le besoin « animateur » est couvert par la zone animateur (§2.5) |
 | Effets sur les ampoules d'équipe, effets des buzzers | inchangés (`hue-bridge.md` §5.2, `LED_SET_PROTOCOL.md`) |
 | Geste direct de choix d'effet depuis le popover | non prévu |
+
+---
+
+## 11. Édition, import et export des effets (v11.8.0 — #210, #305) — révision 5
+
+> Décisions utilisateur du 2026-11-12 (GATE 1.5, `_work/reports/plan-ambiguities-20261112-100000.md`) :
+> **E1** l'éditeur est une grille **pas × cibles** (colonnes PRE, pas 0…n, DERNIER, POST ; lignes `g0`, `g1`…`g12`, `gN`,
+> puis une ligne par variable déclarée et par voisin utilisé), avec un panneau de déclaration des variables et un onglet
+> **Texte** (le fichier YAML, validé en direct) ; **E2** un effet natif est en **lecture seule** : on le duplique ;
+> l'interface et l'import n'écrivent jamais un fichier portant l'`id` d'un natif ; **E3** un enregistrement depuis la
+> grille **régénère** le fichier (commentaires `#` perdus, avertissement) ; l'import et l'onglet Texte écrivent le
+> texte **tel quel** ; **E4** l'aperçu de l'éditeur est joué sur plusieurs tailles de salle à la fois.
+>
+> **Le format de fichier du §4 ne change pas** (`version: 2`). Le serveur reste le **seul** analyseur, le seul
+> validateur et le seul interprète : le navigateur n'analyse jamais de YAML et ne calcule aucune trame.
+> Les routes de ce chapitre ont la même protection que les autres routes `/api/lighting/*` (aucune de plus).
+
+### 11.1 Document d'effet — forme JSON d'échange
+
+Forme JSON d'un effet, produite et relue par le serveur (`effects.Document`). Les noms sont ceux de l'API (§7.1).
+
+```json
+{
+  "id": "mon-chenillard", "name": "Mon chenillard", "description": "Un point fait le tour de la zone.",
+  "moments": ["chrono"], "min_groups": 3, "tick_ms": 1000, "loop": true,
+  "variables": [
+    { "name": "gA", "kind": "progression", "start": "g1", "step": 1 },
+    { "name": "gC", "kind": "list", "items": ["g1", "g4", "g3"] }
+  ],
+  "pre":   [ { "target": "g0", "color": "theme", "intensity": 100 } ],
+  "steps": [ [ { "target": "g0", "color": "theme", "intensity": 100 },
+               { "target": "gA-1", "color": "theme", "intensity": 50 },
+               { "target": "gA", "color": "urgence", "intensity": 100 } ] ],
+  "last":  null,
+  "post":  [ { "target": "g2", "off": true } ]
+}
+```
+
+| Champ | Fichier (§4) | Règle |
+|---|---|---|
+| `id`, `name`, `description` | `id`, `nom`, `description` | bornes du §4 |
+| `moments`, `min_groups`, `tick_ms`, `loop` | `moments`, `groupes_min`, `duree_tick_ms`, `boucle` | `min_groups` 0 = clé absente ; `loop` true = défaut |
+| `variables[]` | `variables` | **ordre du tableau = ordre d'écriture**. `kind: "progression"` : `start` (`"g1"`…`"g12"` ou `"gN"`), `step` (−12 à +12). `kind: "list"` : `items[]` (`"g1"`…`"g12"`). `[]` = aucune |
+| `pre`, `last`, `post` | `pre`, `dernier`, `post` | tableau d'actions, ou `null` = pas absent |
+| `steps[][]` | `pas` | 1 à 200 pas, chacun 1 à 16 actions, **dans l'ordre d'application** |
+| action | `cible: [couleur, intensité]` | `target` écrit comme dans le fichier (`g0`, `g3`, `gN`, `gA`, `gA+1`, `gA-2`) ; `color` = `"#RRGGBB"` ou `theme` / `equipe` / `urgence` / `scene` ; `intensity` 0-100. `[eteint]` ⇔ `{"target": …, "off": true}` (sans `color` ni `intensity`) |
+
+- `version` n'est pas dans le document : le serveur écrit toujours `version: 2`.
+- Tous les champs sont toujours présents dans une réponse (`variables: []`, `pre: null`…), jamais omis.
+- **Aller-retour garanti** : pour tout effet valide `e`, `Parse(Serialize(DocumentOf(e)))` rend le même effet
+  (mêmes trames pour tout N de 1 à 12). Test exigé sur chaque natif et sur les fichiers d'exemple (§11.9).
+
+**Ordre canonique des actions d'un pas** (celui qu'écrit la grille) : `g0` ; puis `g1`…`g12` par numéro croissant ; puis
+`gN` ; puis, pour chaque variable dans l'ordre de `variables`, ses voisins par décalage croissant (`gA-2`, `gA-1`,
+`gA+1`, `gA+2`) **puis la variable elle-même en dernier** (la tête repeint ses voisins quand ils se confondent : c'est
+l'ordre de `chenillard-traine`). `custom_order` (§11.2) est vrai quand au moins un pas du fichier n'est pas dans cet ordre.
+
+### 11.2 `GET /api/lighting/effects/{id}/source`
+
+Ouvre un effet du catalogue dans l'éditeur.
+
+```json
+{ "id": "chenillard", "origin": "native", "file": "natifs/chenillard.yaml", "read_only": true,
+  "yaml": "# Chenillard — …\nid: chenillard\n…", "effect": { … document §11.1 … },
+  "has_comments": true, "custom_order": false }
+```
+
+- `yaml` : le texte du fichier tel qu'il est lu (natif : le texte embarqué, **sans** l'en-tête de la copie de référence).
+- `read_only` : vrai pour `origin` = `native` **et** `override` (E2 : l'interface n'écrit jamais un `id` de natif).
+- `has_comments` : le texte contient au moins un commentaire `#`. `custom_order` : §11.1.
+- `404` effet inconnu.
+
+### 11.3 `POST /api/lighting/effects/draft` — valider, convertir et prévisualiser un brouillon
+
+Rien n'est écrit, rien n'est joué. Sert à la fois à la validation en direct, au passage grille ↔ texte et à l'aperçu
+multi-tailles. Corps (64 Ko au plus) — **exactement une** des deux clés `effect` ou `yaml` :
+
+```json
+{ "effect": { … document §11.1 … },        // brouillon de la grille
+  "yaml": "id: mon-effet\n…",              // ou brouillon de l'onglet Texte
+  "groups": [1, 3, 6, 12, 4],              // tailles de salle à prévisualiser : 0 à 8 valeurs distinctes de 1 à 12
+  "moment": "chrono" }                      // facultatif ; défaut : premier moment déclaré
+```
+
+Réponse `200` dans tous les cas où le corps JSON est lisible :
+
+```json
+{ "ok": true, "errors": [],
+  "effect": { … document … }, "yaml": "id: mon-effet\nnom: …", "has_comments": false, "custom_order": false,
+  "moment": "chrono",
+  "previews": [ { … réponse du §7.3 pour groups = 1 … }, { … groups = 3 … }, … ] }
+```
+
+- **Validation** : celle du §4, par le même code que le chargement des fichiers. Brouillon invalide ⇒ `ok: false`,
+  `errors[]` (`line` — 0 pour un brouillon `effect`, la ligne du texte pour un brouillon `yaml` — et `message` du §4.8,
+  sans nom de fichier), `previews: []` ; `effect` est `null` si le texte n'est pas analysable, `yaml` est `""` si le
+  document n'est pas sérialisable. Pour un brouillon `effect`, chaque erreur porte en plus `path` quand elle vise un
+  endroit précis (`"steps[2]"`, `"variables[0]"`, `"pre"`, `"tick_ms"`…), pour que la grille la place.
+- **Conversion** : `effect` = le document du brouillon (analysé depuis `yaml`, ou renvoyé normalisé) ; `yaml` = le texte
+  **régénéré** depuis le document (§11.4), toujours — c'est le texte qu'afficherait l'onglet Texte après une
+  modification dans la grille. `has_comments` et `custom_order` décrivent le brouillon `yaml` reçu (faux pour `effect`).
+- **Aperçus** : un élément par valeur de `groups`, dans l'ordre demandé, chacun de la forme du §7.3 (`id` = l'`id` du
+  brouillon, mêmes règles : une trame par tick, `frames: []` si aucun pas visible, calculé même sous `groupes_min`).
+  `moment` non déclaré par le brouillon ⇒ `ok: false` avec l'erreur correspondante.
+- L'`id` du brouillon n'a pas à être libre : l'unicité n'est vérifiée qu'à l'enregistrement.
+- `400` : JSON illisible, les deux clés ou aucune, `groups` hors bornes. `413` : corps trop gros.
+
+**Champ additif des trames (§7.3 et ici)** — `vars` : pour chaque variable déclarée, le **numéro réel** du groupe
+qu'elle désigne à ce tick (`0` = aucun) : `"vars": { "gA": 3, "gB": 2 }`. Objet vide `{}` sans variable. Ajouté aussi à
+`GET /api/lighting/effects/{id}/preview` (additif, sans effet sur le catalogue v11.7.0).
+
+### 11.4 Enregistrer — `PUT /api/lighting/effects/{id}`
+
+Corps (64 Ko au plus) : `{"effect": {…}}` **ou** `{"yaml": "…"}`, et `"create": true` pour une création.
+
+| Cas | Résultat |
+|---|---|
+| `effect` | le fichier est **régénéré** : clés dans l'ordre du §4.1, un pas par ligne en écriture `{ cible: [couleur, intensité] }`, `description` en bloc `>`, sans commentaire, fin de ligne `\n`, UTF-8 |
+| `yaml` | le texte est écrit **tel quel** (commentaires conservés), après validation |
+| `create: true` et `id` déjà au catalogue (natif ou utilisateur) | `409 {"reason": "exists"}` |
+| `create` absent et `id` inconnu | `404` |
+| `id` d'un natif (y compris un natif surchargé) | `409 {"reason": "native"}` — rien n'est écrit (E2) |
+| `id` du corps ≠ `{id}` du chemin | `400` (l'identifiant ne se change pas : dupliquer) |
+| `id` réservé : `reload`, `try`, `draft`, `import` | `400` |
+| brouillon invalide | `400 {"ok": false, "errors": [...]}` (forme du §11.3) — rien n'est écrit |
+| 100 fichiers atteints (création) | `409 {"reason": "limit"}` |
+
+- **Fichier écrit** : celui qui définit déjà cet `id` (son nom est conservé) ; sinon `<id>.yaml` ; si ce nom est pris
+  par un fichier qui ne définit pas cet `id` (autre effet, fichier invalide), `<id>-2.yaml`, `<id>-3.yaml`…
+- **Écriture atomique** (fichier temporaire dans le même dossier — nom ne finissant pas par `.yaml` — puis renommage),
+  jamais dans `natifs/`, jamais hors de `data/files/effects/`.
+- Rechargement immédiat du catalogue (comme §7.2) avant de répondre : `200 {"ok": true, "file": "mon-effet.yaml",
+  "catalogue": { … réponse du §7.1 … }}`. Un effet en cours de lecture repart avec sa nouvelle définition (§3.3).
+- Un `PUT` sur un fichier modifié entre-temps à la main l'écrase : dernier écrit gagne (pas de verrou).
+
+### 11.5 Supprimer — `DELETE /api/lighting/effects/{id}`
+
+- `origin: user` : le fichier est supprimé ; `origin: override` : le fichier utilisateur est supprimé, **le natif
+  reprend** (« Revenir à l'effet d'origine ») ; `origin: native` : `409 {"reason": "native"}`. `404` effet inconnu.
+- Rechargement immédiat ; `200 {"ok": true, "catalogue": {…}}`.
+- Les réglages qui citaient l'effet ne sont **pas** modifiés : le moment joue sa valeur par défaut et l'écart figure
+  dans `unresolved[]` (§3.3, §7.1). C'est l'interface qui prévient avant de supprimer (« utilisé : … »).
+
+### 11.6 Télécharger — `GET /api/lighting/effects/{id}/download` (#305)
+
+Le texte du fichier (celui de `yaml` au §11.2), pour tout effet du catalogue, natifs compris.
+`Content-Type: application/yaml; charset=utf-8`, `Content-Disposition: attachment; filename="<id>.yaml"`. `404` inconnu.
+
+### 11.7 Importer — `POST /api/lighting/effects/import` (#305)
+
+`multipart/form-data` : champ `files` répété (1 à 20 fichiers, `.yaml` ou `.yml`, 64 Ko chacun, 2 Mo au total), champ
+facultatif `on_conflict` = `ask` (défaut) | `replace` | `keep_both`. Chaque fichier est traité seul ; un fichier refusé
+n'empêche pas les autres. Réponse `200` :
+
+```json
+{ "results": [
+    { "file": "aller-retour.yaml", "status": "imported", "id": "aller-retour", "name": "Aller-retour", "stored": "aller-retour.yaml" },
+    { "file": "mon-chenillard.yaml", "status": "conflict", "id": "mon-chenillard", "name": "Mon chenillard", "existing": { "name": "Mon chenillard", "file": "mon-chenillard.yaml" } },
+    { "file": "pulsation.yaml", "status": "native", "id": "pulsation", "errors": [ { "line": 2, "message": "« pulsation » est l'identifiant d'un effet livré : changez la clé id" } ] },
+    { "file": "casse.yaml", "status": "invalid", "errors": [ { "line": 12, "message": "la variable « gB » n'est pas déclarée dans variables" } ] } ],
+  "catalogue": { … réponse du §7.1 … } }
+```
+
+| `status` | Sens | Écrit |
+|---|---|---|
+| `imported` | nouvel effet | oui, **tel quel** |
+| `replaced` | `on_conflict: replace` : remplace l'effet utilisateur de même `id` (dans son fichier) | oui, tel quel |
+| `renamed` | `on_conflict: keep_both` : importé sous un `id` suffixé (`<id>-2`, `-3`… le premier libre, tronqué à 40) ; `new_id` le donne. **Seule la valeur de la clé `id` est réécrite** dans le texte ; le reste, commentaires compris, est intact | oui |
+| `conflict` | `on_conflict: ask` et un effet **utilisateur** de même `id` existe : l'interface demande, puis renvoie ce seul fichier avec `replace` ou `keep_both` | non |
+| `native` | l'`id` est celui d'un effet livré (E2) — quel que soit `on_conflict` | non |
+| `invalid` | validation du §4 en échec (dont format `version: 1`, YAML illisible, `id` réservé) ; `errors[]` : `line`, `message` | non |
+| `too_big` | plus de 64 Ko | non |
+| `limit` | 100 fichiers atteints | non |
+
+- Nom du fichier écrit (`stored`) : règle du §11.4 (`<id>.yaml`…) ; le nom du fichier envoyé ne sert qu'aux messages
+  (il n'est jamais utilisé comme chemin). Deux fichiers du même envoi avec le même `id` : le second est un `conflict`
+  (ou suit `on_conflict`).
+- Écriture atomique, rechargement **une fois** en fin de traitement. `400` : envoi illisible, aucun fichier, plus de 20
+  fichiers, extension refusée. `413` : plus de 2 Mo.
+
+### 11.8 Comportement de l'éditeur (normatif pour l'interface)
+
+- **Deux onglets, une seule source** : *Grille* (document) et *Texte* (YAML). Le brouillon est envoyé à §11.3 après
+  chaque modification (temporisation de 300 ms) : erreurs, aperçus et conversion viennent de la réponse.
+  - Grille → Texte : si la grille a été modifiée depuis la dernière synchronisation, le texte devient le `yaml`
+    régénéré (commentaires perdus : avertissement si `has_comments`) ; sinon le texte est inchangé.
+  - Texte → Grille : possible seulement si le texte est valide (`ok: true`) ; la grille prend `effect`.
+  - **Enregistrer** : envoie `yaml` si le texte est la dernière source modifiée (ou si rien n'a été modifié dans la
+    grille), `effect` sinon.
+- **Grille** : une case vide = le groupe garde son état (aucune action). Les actions d'un pas sont écrites dans l'ordre
+  canonique (§11.1) ; à l'ouverture d'un fichier `custom_order`, un avertissement dit que la grille réorganisera les
+  actions des pas modifiés — l'aperçu montre toujours le résultat réel.
+- **Variables** : déclarées dans le panneau (nom `gA`…, progression ou liste) ; une variable déclarée ajoute sa ligne ;
+  un voisin (`gA-1`, `gA+1`…) s'ajoute comme ligne à la demande. Supprimer une variable retire ses lignes et ses actions.
+- **Aperçu** : tailles demandées = `1, 3, 6, 12`, plus le nombre de groupes de chaque zone réelle qui n'est pas déjà
+  dans la liste (zones existantes seulement) ; toutes les rangées sont jouées **sur la même horloge**. Sous `groupes_min`,
+  la rangée porte « sous le minimum : non joué en salle ». Le pas joué est surligné dans la grille ; `vars` est affiché.
+- **Essai sur les ampoules** depuis l'éditeur : après enregistrement, par la route existante (§7.4).
+- Effet `read_only` : grille et texte en lecture ; actions « Dupliquer » et « Télécharger » seulement.
+- **Dupliquer** : ouvre l'éditeur sur une copie (`id` proposé `<id>-copie`, libre), créée par `PUT … create: true`.
+
+### 11.9 Tests exigés (v11.8.0)
+
+- Aller-retour §11.1 sur les 5 natifs, sur l'exemple du §4.5 et sur un effet à liste, voisins, `[eteint]`, `pre`,
+  `dernier`, `post`, `boucle: non` : mêmes trames pour N = 1, 3, 6, 12.
+- Sérialisation : texte régénéré stable (deux enregistrements successifs = même fichier), relu sans erreur.
+- `draft` : chaque erreur du §4.8 remonte avec `line` (brouillon `yaml`) ou `path` (brouillon `effect`) ; `previews`
+  dans l'ordre de `groups` ; `vars` conforme au chronogramme du §4.5 ; rien n'est écrit sur le disque.
+- `PUT` : création, modification (nom de fichier conservé), `exists`, `native` (natif et natif surchargé), `id`
+  réservé, `id` différent du chemin, invalide (fichier inchangé), limite de 100, écriture atomique (aucun `.yaml`
+  partiel visible du chargeur), catalogue renvoyé à jour, texte `yaml` écrit à l'octet près.
+- `DELETE` : utilisateur, surcharge (retour au natif), natif refusé ; réglages inchangés et `unresolved[]` renseigné.
+- `download` : contenu identique au fichier, en-têtes ; natif sans l'en-tête de la copie de référence.
+- `import` : chacun des `status` ; `keep_both` ne change que la clé `id` ; nom envoyé hostile (`../x.yaml`, chemin
+  absolu, nom de périphérique Windows) jamais utilisé comme chemin ; rien n'est écrit hors de `data/files/effects/` ni
+  dans `natifs/` ; YAML à ancres / alias imbriqués refusé sans explosion mémoire.
+- Non-régression : catalogue, aperçu, essai et rechargement de v11.7.0 inchangés (hors champ additif `vars`).

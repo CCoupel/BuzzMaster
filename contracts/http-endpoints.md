@@ -1449,3 +1449,17 @@ puisse l'indiquer.
 | POST | `/api/lighting/effects/reload` | Rechargement des fichiers | LOT-2 |
 | POST | `/api/lighting/effects/{id}/try`, `/api/lighting/effects/try/stop` | Essai d'un effet sur une zone, à une vitesse donnée : bouton « Tester » de l'onglet Effets et essai du catalogue (§7.4) | LOT-2 |
 | GET | `/api/lighting/effects/{id}/preview` | Aperçu simulé : une trame par tick avec `tick`, `step` (`"pre"` \| `"pas:<n>"` \| `"dernier"`), `groups` ; `duration_ms` (20 000 ou 5 000 pour `score`), `chrono_s`, `tick_ms` (§7.3) | LOT-3 |
+
+### Édition, import et export des effets (v11.8.0, #210, #305)
+
+> Détail normatif : `contracts/light-effects.md` **§11** (révision 5). Le format de fichier ne change pas.
+
+| Méthode | Chemin | Rôle | Lot |
+|---|---|---|---|
+| GET | `/api/lighting/effects/{id}/download` | Télécharge le fichier `.yaml` d'un effet, natifs compris (§11.6) | LOT-1 |
+| POST | `/api/lighting/effects/import` | Import `multipart` de 1 à 20 fichiers, validés un par un ; `on_conflict` = `ask` \| `replace` \| `keep_both` ; un `id` de natif est refusé (§11.7) | LOT-1 |
+| DELETE | `/api/lighting/effects/{id}` | Supprime un effet utilisateur, ou le fichier qui surcharge un natif ; natif refusé `409` (§11.5) | LOT-1 |
+| GET | `/api/lighting/effects/{id}/source` | Texte du fichier + document JSON de l'effet, `read_only`, `has_comments`, `custom_order` (§11.2) | LOT-2 |
+| POST | `/api/lighting/effects/draft` | Valide un brouillon (`effect` ou `yaml`), le convertit dans l'autre forme et renvoie les aperçus pour plusieurs tailles de salle ; rien n'est écrit (§11.3) | LOT-2 |
+| PUT | `/api/lighting/effects/{id}` | Crée ou enregistre un effet utilisateur : fichier régénéré (`effect`) ou texte tel quel (`yaml`) ; natif refusé `409` (§11.4) | LOT-2 |
+| GET | `/api/lighting/effects/{id}/preview` | Champ additif `vars` par trame : groupe désigné par chaque variable (§11.3) | LOT-2 |

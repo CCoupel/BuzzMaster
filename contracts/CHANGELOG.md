@@ -1,6 +1,26 @@
 # Changelog des Contrats API
 
 ---
+## [20261112] — v11.8.0 — éditeur d'effets, import et export (#210, #305)
+
+`light-effects.md` **révision 5, §11** ; table de `http-endpoints.md`. Décisions utilisateur du 2026-11-12
+(`_work/reports/plan-ambiguities-20261112-100000.md`). **Aucun BREAKING** : le format de fichier (`version: 2`), le
+séquenceur et les routes de v11.7.0 sont inchangés.
+
+- **[NEW]** `GET /api/lighting/effects/{id}/download` — téléchargement du fichier d'un effet, natifs compris (§11.6).
+- **[NEW]** `POST /api/lighting/effects/import` — import de fichiers avec validation par le schéma existant, statut par
+  fichier (`imported`, `replaced`, `renamed`, `conflict`, `native`, `invalid`, `too_big`, `limit`) (§11.7).
+- **[NEW]** `DELETE /api/lighting/effects/{id}` — suppression d'un effet utilisateur ou d'une surcharge ; natif refusé (§11.5).
+- **[NEW]** `GET /api/lighting/effects/{id}/source` — texte et document JSON d'un effet pour l'éditeur (§11.2).
+- **[NEW]** `POST /api/lighting/effects/draft` — validation, conversion grille ↔ texte et aperçus multi-tailles d'un
+  brouillon, sans écriture (§11.3).
+- **[NEW]** `PUT /api/lighting/effects/{id}` — création et enregistrement d'un effet utilisateur (§11.4).
+- **[NEW]** Document d'effet : forme JSON d'échange d'un effet, aller-retour garanti avec le fichier (§11.1).
+- **[CHANGED]** `GET /api/lighting/effects/{id}/preview` — champ additif `vars` par trame (rétrocompatible).
+- **[NEW]** Identifiants réservés, refusés à l'enregistrement et à l'import : `reload`, `try`, `draft`, `import`. Un
+  fichier déposé à la main avec un de ces `id` reste chargé comme en v11.7.0.
+
+---
 ## [20261112] — v11.7.0 — précisions de l'aperçu d'effet après la revue LOT-3 (#299)
 
 Source : `_work/reports/code-review-lot3-20261112-040000.md` (table des choix validés). Le code livré fait foi ; le contrat
