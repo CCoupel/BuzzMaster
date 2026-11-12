@@ -1,22 +1,95 @@
 {
   "type": "FEATURE",
-  "version": "11.7.0",
-  "description": "v11.7.0 — Ambiance lumière : nouveaux effets de salle (effets en fichiers YAML éditables)",
-  "branch": "milestone/v11.7.0",
-  "milestone_num": 45,
-  "issue_nums": [
-    225,
-    223,
-    211,
-    299
-  ],
+  "description": "v11.8.0 — éditeur d'effets pas à pas (#210) + import/export des effets (#305), simulateur multi-configurations, maquette",
   "status": "completed",
-  "started_at": "2026-11-11T10:15:00Z",
-  "updated_at": "2026-11-12T09:00:00Z",
-  "cycles": 4,
-  "plan": ".claude/workflow/plan-11.7.0.md",
-  "intensite_depart": "complet",
-  "start_sha": "dc0da983",
+  "branch": "milestone/v11.8.0",
+  "version": "11.8.0",
+  "started_at": "2026-11-12T09:48:00Z",
+  "updated_at": "2026-11-12T13:45:00Z",
+  "cycles": 1,
+  "issue_nums": [
+    210,
+    305
+  ],
+  "milestone_num": 46,
+  "start_sha": "4a2cd00d",
+  "intensite_depart": "complet — minor, défaut projet ; QUALIF disponible",
+  "plan": ".claude/workflow/plan-v11.8.0.md",
+  "phases": {
+    "clarification": {
+      "status": "completed",
+      "skipped": false
+    },
+    "plan": {
+      "status": "completed",
+      "report": "_work/reports/planner-20261112-101000.md",
+      "sha": "c81c51bf",
+      "timestamp": "2026-11-12T11:20:00Z"
+    },
+    "dev-backend": {
+      "status": "completed",
+      "sha": "dff77d1d",
+      "handoff": "_work/handoff/dev-backend-20261112-112247.md"
+    },
+    "dev-frontend": {
+      "status": "completed",
+      "sha": "8c8ff9e2",
+      "handoff": "_work/handoff/dev-frontend-20261112-113500.md"
+    },
+    "test-writer": {
+      "status": "completed",
+      "sha": "2bc22a66",
+      "handoff": "_work/handoff/test-writer-20261112-112457.md"
+    },
+    "review": {
+      "status": "completed",
+      "report": "_work/reports/code-reviewer-lot1-20261112-113000.md"
+    },
+    "qa": {
+      "status": "completed",
+      "report": "_work/reports/qa-lot1-20261112-113826.md"
+    },
+    "doc": {
+      "status": "completed",
+      "sha": "1ade4123",
+      "report": "_work/reports/code-reviewer-docs-lot1-20261112-120000.md"
+    },
+    "deploy-qualif": {
+      "status": "completed",
+      "steps": {
+        "build": {
+          "status": "pending"
+        },
+        "publish": {
+          "status": "pending"
+        },
+        "deploy": {
+          "status": "pending"
+        }
+      },
+      "version": "11.8.0.1"
+    },
+    "deploy-prod": {
+      "status": "completed",
+      "version_sha": "7d495d9b",
+      "merge_sha": "f681ed0b",
+      "tag": "v11.8.0",
+      "release_run": "43226962934",
+      "steps": {
+        "publish": {
+          "status": "completed"
+        },
+        "deploy": {
+          "status": "completed"
+        }
+      }
+    },
+    "marketing": {
+      "status": "completed",
+      "gh_pages": "c33232f8",
+      "notes": "6b6e4165"
+    }
+  },
   "cadrage": {
     "intensite": "complet",
     "test_writer": true,
@@ -28,246 +101,36 @@
       "dev-frontend",
       "test-writer",
       "code-reviewer",
-      "qa",
-      "doc-updater"
+      "doc-updater",
+      "qa"
     ],
-    "ponctuel": [
-      "infra",
-      "marketing"
-    ],
-    "qa_parallelizable": false,
-    "valide": "GATE 2 2026-11-11 (amendement groupe animateur validé)"
-  },
-  "decisions": {
-    "qualif_hue": "deployer copie build/qualif_v11.6.0/config.json -> build/qualif_v11.7.0/ après le 1er PUBLISH",
-    "acces_md": "créé par l'utilisateur",
-    "batch0_gitignore": "réaffecté à dev-backend (Batch 1.1), infra arrêté",
-    "go_bump": "Go 1.26.11 (décision utilisateur 2026-11-11) — infra",
-    "effects_format": "Pas à pas + variables de groupe cycliques gA={g1;+1}, gB={g2;+2}, gC=[g1,g4,g3,g7] (utilisateur 2026-11-11) ; couleurs RGB ou nommées ; pas cité groupes absents sauté ; un effet par groupe animateur",
-    "effects_format_details": "variables avancent à chaque tick d horloge ; pas spéciaux PRE / POST / LAST ; groupe non cité garde son état ; noyau seul (#300 #301 #302 hors v11.7.0) ; mots-clés en français ; chronogramme demandé",
-    "effects_format_details2": "LAST à chaque tour ; PRE = pas 0 avec variables au départ, pas d avance PRE→pas 0 ; POST sans attendre (appliqué puis remplacé) ; 1 pas = 1 tick ; chronogramme r2 demandé",
-    "effects_model_final": "Chronogramme r2 validé ; avance = un cran par pas de boucle, PRE/LAST/POST n avancent pas ; plan amendé demandé au planner",
-    "removed_from_milestone": [
-      300,
-      301,
-      302
-    ],
-    "zones": "3 zones par groupe (ambiance/animateur/public) ; public sans effet par défaut, non piloté, hors ON/OFF/Flash ; animateur hors ON/OFF/Flash ; essai aux deux endroits (onglet Effets vitesse réglée sur sa zone, catalogue x1 salle) ; un effet par moment et par zone",
-    "lot4": "supprimé, #211 rattachée au LOT-2"
+    "valide": "GATE 2"
   },
   "lots": {
-    "current": null,
+    "current": "LOT-2",
     "items": {
       "LOT-1": {
         "status": "completed",
         "issues": [
-          225
+          305
         ],
-        "phase": "closed",
-        "batch": "Z",
-        "valid_humaine": true,
-        "qualif": "11.7.0.4",
-        "gate_lot": "2026-11-11 VALIDÉ sur 11.7.0.4",
-        "ci": {
-          "sha": "4e9028d5",
-          "run": 43082385671,
-          "status": "failure (data race cmd/server TestLightingMasterSwitch286)"
-        },
-        "ci_fix": [
-          "d6acced2",
-          "97dd12f3"
-        ],
-        "ci_sha": "c09a7dd0",
-        "ci_run": 43085256594,
-        "closed": true
+        "phase": "validated",
+        "qualif": "11.8.0.1",
+        "ci_sha": "64e23283"
       },
       "LOT-2": {
         "status": "completed",
         "issues": [
-          223,
-          211
+          210
         ],
-        "phase": "closed",
-        "batch": "Z",
-        "valid_humaine": true,
-        "batchZ": {
-          "backend": "4633d028",
-          "frontend": [
-            "c8550e59",
-            "ceabf89a",
-            "d5ee52a3"
-          ],
-          "tests": [
-            "b1496e17",
-            "4b7194e3",
-            "2b459561",
-            "c5d9e3e0",
-            "f968fa1c",
-            "c5d29c76"
-          ]
-        },
-        "qualif": "11.7.0.4",
-        "gate_lot": "2026-11-11 VALIDÉ sur 11.7.0.4",
-        "ci": {
-          "sha": "4e9028d5",
-          "run": 43082385671,
-          "status": "failure (data race cmd/server TestLightingMasterSwitch286)"
-        },
-        "ci_sha": "c09a7dd0",
-        "ci_run": 43085256594,
-        "closed": true
-      },
-      "LOT-3": {
-        "status": "completed",
-        "issues": [
-          299
-        ],
-        "phase": "closed",
-        "batch": "3.1",
-        "commits": {
-          "backend": [
-            "f9471dba",
-            "c61e2b38"
-          ],
-          "frontend": [
-            "fb77104c",
-            "6b28787d"
-          ],
-          "tests": [
-            "0f2561d7",
-            "e5375b0b",
-            "4e9028d5"
-          ]
-        },
-        "valid_humaine": true,
-        "review": {
-          "verdict": "APPROUVE AVEC RESERVES (levées)",
-          "report": "_work/reports/code-review-lot3-20261112-040000.md",
-          "fixes": [
-            "b1b25f16",
-            "28dfa3ee",
-            "6a7c9ce2",
-            "1c45f594"
-          ]
-        },
-        "qa": {
-          "verdict": "VALIDATED (feature + NR)",
-          "report": "_work/reports/qa-lot3-20261112-010000.md",
-          "metrics": "780b8f32",
-          "tree": "8f8ce603"
-        },
-        "doc": {
-          "sha": [
-            "785c6974",
-            "58d3b68d"
-          ],
-          "review": "APPROUVE"
-        },
-        "qualif": "11.7.0.5",
-        "qualif_binary": "build/qualif_v11.7.0/buzzcontrol-qualif-11.7.0.5-windows-amd64.exe",
-        "gate_lot": "2026-11-11 VALIDÉ sur 11.7.0.5",
-        "ci_sha": "b0c4b8a8",
-        "ci_run": 43086054215,
-        "closed": true
+        "phase": "validated",
+        "dev_sha": "fe5004fc",
+        "review": "_work/reports/code-reviewer-lot2-20261112-133000.md",
+        "qa": "_work/reports/qa-lot2-delta-20261112-124428.md",
+        "ci_sha": "15cf3523",
+        "qualif": "11.8.0.2"
       }
     }
   },
-  "phases": {
-    "clarification": {
-      "status": "completed",
-      "report": "_work/reports/plan-ambiguities-20261111-102120.md"
-    },
-    "plan": {
-      "status": "completed",
-      "report": "_work/reports/plan-v11.7.0-20261111-235900.md",
-      "infra": "_work/reports/infra-prep-20261111-102500.md"
-    },
-    "dev-backend": {
-      "status": "completed",
-      "sha": "577c3376"
-    },
-    "dev-frontend": {
-      "status": "completed",
-      "sha": "d5ee52a3"
-    },
-    "test-writer": {
-      "status": "completed",
-      "sha": "c5d29c76"
-    },
-    "review": {
-      "status": "completed",
-      "verdict": "LOT-1 et LOT-2 APPROUVE AVEC RESERVES (levées : 63f59e58, 9a2e4d03, 1a5a1a08, 577c3376)",
-      "report": "_work/reports/code-review-batchZ-20261112-020000.md"
-    },
-    "qa": {
-      "status": "completed",
-      "verdict": "VALIDATED delta",
-      "report": "_work/reports/qa-delta-20261112-020000.md",
-      "sha": "97dd12f3",
-      "metrics": "c09a7dd0"
-    },
-    "doc": {
-      "status": "completed",
-      "sha": "6a3f1e64"
-    },
-    "deploy-qualif": {
-      "status": "completed",
-      "version": "11.7.0.4",
-      "report": "_work/reports/deployer-qualif-batchZ-20261111-181704.md"
-    },
-    "nr-full": {
-      "status": "completed",
-      "verdict": "VALIDATED",
-      "tree": "895f88ce"
-    },
-    "doc-review": {
-      "status": "completed"
-    },
-    "doc-finalize": {
-      "status": "completed",
-      "sha": "4722085e",
-      "note": "vérif des autres docs déléguée à code-reviewer"
-    },
-    "changelog-review": {
-      "status": "completed",
-      "sha": [
-        "47ce4e6c",
-        "d060730f"
-      ]
-    },
-    "gate4": {
-      "status": "completed",
-      "validated": "2026-11-12"
-    },
-    "deploy-prod": {
-      "status": "completed",
-      "merge": "32969267",
-      "tag": "v11.7.0",
-      "release_run": 43184530829,
-      "release": "https://github.com/CCoupel/BuzzMaster/releases/tag/v11.7.0"
-    },
-    "marketing": {
-      "status": "completed",
-      "site": "gh-pages 5d92da58",
-      "notes": "36db98b2"
-    },
-    "closure": {
-      "status": "in_progress"
-    }
-  },
-  "contracts_sha": "305e41c1",
-  "notes_lot2": [
-    "Tâches 9 et 12 : N = groupes de salle non vides ; rendre sur la suite des groupes non vides et écrire avec le numéro réel (GroupAssignment), sans renuméroter (light-effects.md §2.1, eaf9d560)"
-  ],
-  "plan_revisions": [
-    "_work/reports/plan-v11.7.0-20261111-115226.md",
-    "_work/reports/plan-v11.7.0-20261111-131041.md",
-    "_work/reports/plan-v11.7.0-20261111-182000.md",
-    "_work/reports/plan-v11.7.0-20261111-230000.md",
-    "_work/reports/plan-v11.7.0-20261111-233000.md",
-    "_work/reports/plan-v11.7.0-20261111-235900.md"
-  ],
-  "prod_notes": [
-    "FIRMWARE_VERSION de platformio.ini resté à 11.7.0.0 : aligner les 5 fichiers de version sur 11.7.0 avant le tag (#304)"
-  ]
+  "prod_notes": "Release https://github.com/CCoupel/BuzzMaster/releases/tag/v11.8.0 ; milestone #46 fermé ; marketing GATE 4d en cours"
 }
