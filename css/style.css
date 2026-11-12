@@ -808,3 +808,18 @@ body {
         justify-content: center;
     }
 }
+
+/* --- Schema anime des zones de lumiere (v11.7.0) --- */
+.feature-card--wide { grid-column: 1 / -1; }
+.zones-demo { margin: 1.25rem 0 0.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.zones-demo svg { width: 100%; max-width: 100%; height: auto; display: block; border-radius: 14px; }
+.zones-demo svg circle.zd-b { fill: #334155; transition: fill 0.3s ease; }
+.zones-demo svg circle.zd-h { fill: #334155; opacity: 0; transition: fill 0.3s ease, opacity 0.3s ease; }
+.zd-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: space-between; }
+.zd-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.zones-demo button { font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--text); background: var(--secondary); border: 1px solid #475569; border-radius: 999px; padding: 0.35rem 0.9rem; cursor: pointer; }
+.zones-demo button[aria-pressed="true"], .zones-demo .zd-tabs button.active { background: var(--primary); border-color: var(--primary); color: #0f172a; }
+.zones-demo button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.zones-demo figcaption { font-size: 0.9rem; color: var(--text-muted); min-height: 2.6em; }
+.zones-demo figcaption strong { color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .zones-demo svg circle { transition: none !important; } .zd-pause { display: none; } }

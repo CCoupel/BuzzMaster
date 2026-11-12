@@ -491,8 +491,8 @@
             <!-- Version badge (populated dynamically by js/main.js via GitHub Releases API) -->
             <div class="version-badge">
                 <span class="version-label">Version actuelle</span>
-                <span class="version-number" id="hero-version">v11.6.0</span>
-                <span class="version-date" id="hero-version-date">9 novembre 2026</span>
+                <span class="version-number" id="hero-version">v11.7.0</span>
+                <span class="version-date" id="hero-version-date">12 novembre 2026</span>
             </div>
 
             <!-- CTA Buttons -->
@@ -896,10 +896,10 @@
                             <span class="aud-badge aud-technique">🔧 Technique</span>
                         </div>
                     </div>
-                    <div class="feature-card feature-card--new">
+                    <div class="feature-card">
                         <div class="feature-card-top">
                             <div class="feature-icon">🎧</div>
-                            <span class="badge badge-new">Nouveau v11.1.0</span>
+                            <span class="badge">v11.1.0</span>
                         </div>
                         <h3>Question sonore</h3>
                         <p>Attachez un son à une question SPEEDY, QCM ou ARDOISE (fichier WAV de 30 s et 6 Mio maximum, ajouté depuis l'éditeur Quiz) : il se joue au lancement de la question sur l'enceinte du serveur. Choisissez, question par question, si le chronomètre démarre en même temps que le son ou seulement à sa fin — la mention « Le chrono démarre à la fin du son » s'affiche alors sur l'administration, l'animateur et la TV. L'animateur garde la main : Rejouer, Pause/Reprise, Stop. Et avant le lancement, une vérification de disponibilité prévient si le son ne pourra pas être joué (audio désactivé, enceinte absente, fichier introuvable).</p>
@@ -908,10 +908,10 @@
                             <span class="aud-badge aud-public">👀 Public</span>
                         </div>
                     </div>
-                    <div class="feature-card feature-card--new">
+                    <div class="feature-card">
                         <div class="feature-card-top">
                             <div class="feature-icon">🎆</div>
-                            <span class="badge badge-new">Nouveau v11.2.1</span>
+                            <span class="badge">v11.2.1</span>
                         </div>
                         <h3>Points en feu d'artifice</h3>
                         <p>Quand l'animateur donne des points à plusieurs équipes d'un coup, la TV les célèbre par lots de 6 équipes au plus, rangées dans une grille 3 × 2 : une fusée par équipe, des étincelles, et chaque carte reste bien lisible, sans recouvrement. Sur sa tablette, chaque équipe ne voit que son propre gain, au moment où son lot passe sur la TV. Les noms trop longs sont tronqués proprement, et les joueurs qui préfèrent éviter les animations voient un simple fondu. Une correction de score cachée, elle, n'anime rien.</p>
@@ -920,10 +920,10 @@
                             <span class="aud-badge aud-animateur">🎤 Animateur</span>
                         </div>
                     </div>
-                    <div class="feature-card feature-card--new">
+                    <div class="feature-card">
                         <div class="feature-card-top">
                             <div class="feature-icon">🎯</div>
-                            <span class="badge badge-new">Nouveau v11.2.2</span>
+                            <span class="badge">v11.2.2</span>
                         </div>
                         <h3>Barème de points par carte MEMOTION</h3>
                         <p>Chaque carte MEMOTION choisit comment elle rapporte des points. Pour une carte à réponse simple (SPEEDY, QCM) : les étoiles ou un montant fixe. Pour une carte à progression (MEMORY, RAFALE) : le prorata des étoiles, les étoiles pleines, un montant fixe ou un montant par unité. Le montant s'affiche dans le zoom et le bandeau de l'animateur et dans le panneau admin ; avant le jeu, le prorata indique « jusqu'à N pts ».</p>
@@ -938,6 +938,47 @@
                         </div>
                         <h3>Ambiance par manche</h3>
                         <p>Chaque manche peut avoir sa propre ambiance : son coupé ou non, décompte, quinze bruitages et mode d'éclairage se règlent manche par manche, champ par champ, sur le principe global ← manche ← geste direct. Une manche peut même remplacer le son de chaque bruitage et du décompte par un fichier à elle. Réglage depuis le bouton 🎛 « Ambiance de la manche » de l'éditeur ; « Tout remettre à Hérité » revient d'un clic à l'ambiance globale. Les réglages globaux ne sont jamais modifiés par une manche.</p>
+                        <div class="audience-badges">
+                            <span class="aud-badge aud-animateur">🎤 Animateur</span>
+                            <span class="aud-badge aud-public">👀 Public</span>
+                        </div>
+                    </div>
+                    <div class="feature-card feature-card--new feature-card--wide">
+                        <div class="feature-card-top">
+                            <div class="feature-icon">💡</div>
+                            <span class="badge badge-new">Nouveau v11.7.0</span>
+                        </div>
+                        <h3>Effets de lumière de salle</h3>
+                        <p>La lumière d'ambiance se règle désormais par trois zones : la salle, l'animateur et le public, chacune découpée en groupes d'ampoules que l'on déplace d'un glisser-déposer. Chaque moment du jeu (chronomètre, calme, score) reçoit son effet et sa vitesse, zone par zone : pulsation, chenillard, chenillard à traînée, couleur d'équipe, dégradé. Un catalogue présente chaque effet avec un aperçu animé, et un bouton permet de l'essayer en direct sur la salle. Les effets sont de simples fichiers modifiables à la main : créez les vôtres. Entièrement optionnel, avec un pont Philips Hue.</p>
+                        <figure class="zones-demo" id="zones-demo">
+                            <svg viewBox="0 0 800 440" role="img" aria-label="Plan de salle vu de dessus : zone Ambiance avec trois équipes et six groupes d'ampoules, zone Public à gauche en bas, zone Animateur à droite en bas, avec des effets de démonstration">
+                                <rect x="10" y="10" width="780" height="420" rx="18" fill="#0b1220" stroke="#334155" stroke-width="2"/>
+                                <rect x="30" y="30" width="740" height="262" rx="12" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="7 6"/>
+                                <text x="46" y="52" fill="#f59e0b" font-size="14" font-weight="700" font-family="Nunito,sans-serif">AMBIANCE · la salle</text>
+                                <g id="zd-teams" font-family="Nunito,sans-serif" font-size="13" fill="#cbd5e1" text-anchor="middle"></g>
+                                <g id="zd-bulbs-a"></g>
+                                <rect x="30" y="308" width="460" height="112" rx="12" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="7 6"/>
+                                <text x="46" y="330" fill="#a78bfa" font-size="14" font-weight="700" font-family="Nunito,sans-serif">PUBLIC</text>
+                                <text id="zd-public-note" x="474" y="330" text-anchor="end" fill="#94a3b8" font-size="12" font-family="Nunito,sans-serif">non pilotée</text>
+                                <g id="zd-seats" fill="#1e293b"></g>
+                                <g id="zd-bulbs-p"></g>
+                                <rect x="510" y="308" width="260" height="112" rx="12" fill="none" stroke="#06b6d4" stroke-width="2" stroke-dasharray="7 6"/>
+                                <text x="526" y="330" fill="#06b6d4" font-size="14" font-weight="700" font-family="Nunito,sans-serif">ANIMATEUR · pupitre</text>
+                                <rect x="570" y="378" width="140" height="26" rx="6" fill="#1e293b" stroke="#475569"/>
+                                <circle cx="640" cy="364" r="9" fill="#475569"/>
+                                <g id="zd-bulbs-h"></g>
+                            </svg>
+                            <div class="zd-controls">
+                                <div class="zd-tabs" role="group" aria-label="Effet de démonstration">
+                                    <button type="button" data-zd="0">Chenillard</button>
+                                    <button type="button" data-zd="1">Pulsation</button>
+                                    <button type="button" data-zd="2">Couleur d'équipe</button>
+                                    <button type="button" data-zd="3">Dégradé</button>
+                                </div>
+                                <button type="button" class="zd-pause" id="zd-pause" aria-pressed="false">⏸ Pause</button>
+                            </div>
+                            <figcaption id="zd-caption"></figcaption>
+                        </figure>
                         <div class="audience-badges">
                             <span class="aud-badge aud-animateur">🎤 Animateur</span>
                             <span class="aud-badge aud-public">👀 Public</span>
@@ -1058,10 +1099,10 @@
                 </div>
                 <p class="cat-desc">Ce qui garde la partie stable et les données en sécurité, même en conditions réelles (WiFi instable, mises à jour, erreur de manipulation).</p>
                 <div class="features-grid">
-                    <div class="feature-card feature-card--new">
+                    <div class="feature-card">
                         <div class="feature-card-top">
                             <div class="feature-icon">✅</div>
-                            <span class="badge badge-new">Nouveau v11.2.1</span>
+                            <span class="badge">v11.2.1</span>
                         </div>
                         <h3>Réponses tablette confirmées</h3>
                         <p>Une réponse QCM ou un buzz SPEEDY n'est confirmé (« ✓ Réponse reçue », « ✓ Buzz reçu ») qu'une fois le serveur certain de l'avoir reçu. En cas de coupure WiFi, la tablette renvoie d'elle-même la réponse à la reconnexion, et le joueur sait toujours où il en est : reçue, ou définitivement non reçue. Même sécurité pour le retournement d'une carte MEMORY / MEMOTION : un geste renvoyé ne retourne jamais la carte deux fois.</p>
@@ -1070,10 +1111,10 @@
                             <span class="aud-badge aud-technique">🔧 Technique</span>
                         </div>
                     </div>
-                    <div class="feature-card feature-card--new">
+                    <div class="feature-card">
                         <div class="feature-card-top">
                             <div class="feature-icon">📡</div>
-                            <span class="badge badge-new">Nouveau v11.2.2</span>
+                            <span class="badge">v11.2.2</span>
                         </div>
                         <h3>Alerte « serveur sans réseau »</h3>
                         <p>Si le serveur perd son réseau en pleine partie, l'administration affiche un message plein écran « Le serveur n'a pas de réseau disponible ». « Continuer quand même » le replie en bandeau rouge qui indique depuis quand le réseau est perdu ; au retour du réseau, un message « Réseau rétabli » le confirme. Les interfaces virtuelles (WSL, Hyper-V, docker…) ne comptent pas comme un réseau.</p>
@@ -1197,6 +1238,78 @@
         </div>
     </footer>
 
+    <script>
+(function () {
+    var root = document.getElementById('zones-demo');
+    if (!root) return;
+    var NS = 'http://www.w3.org/2000/svg';
+    function mk(tag, attrs, parent) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; }
+    var OFF = '#334155', THEME = '#f59e0b', TEAMS = ['#ef4444', '#22c55e', '#3b82f6'];
+    var PAL = ['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#a78bfa'];
+    function bulbs(gid, pts, label) {
+        var g = document.getElementById(gid), out = [];
+        pts.forEach(function (p, i) {
+            var halo = mk('circle', { cx: p[0], cy: p[1], r: 24, fill: OFF, opacity: 0 }, g);
+            halo.style.transition = 'fill .3s ease, opacity .3s ease';
+            var c = mk('circle', { cx: p[0], cy: p[1], r: 11, 'class': 'zd-b', stroke: '#0b1220', 'stroke-width': 2 }, g);
+            var t = mk('text', { x: p[0], y: p[1] + 28, 'text-anchor': 'middle', fill: '#94a3b8', 'font-size': 11, 'font-family': 'Nunito,sans-serif' }, g);
+            t.textContent = label + (i + 1);
+            out.push({ c: c, h: halo });
+        });
+        return out;
+    }
+    var A = bulbs('zd-bulbs-a', [[140,76],[400,76],[660,76],[660,266],[400,266],[140,266]], 'g');
+    var P = bulbs('zd-bulbs-p', [[100,350],[220,350],[340,350],[440,350]], 'g');
+    var H = bulbs('zd-bulbs-h', [[550,350],[730,350]], 'g');
+    var tg = document.getElementById('zd-teams'), tx = [190, 400, 610], buzz = [];
+    tx.forEach(function (x, i) {
+        mk('rect', { x: x - 70, y: 142, width: 140, height: 56, rx: 8, fill: '#1e293b', stroke: '#475569' }, tg);
+        var arr = [];
+        for (var k = 0; k < 4; k++) arr.push(mk('circle', { cx: x - 45 + k * 30, cy: 160, r: 8, fill: TEAMS[i], opacity: 0.75 }, tg));
+        buzz.push(arr);
+        var t = mk('text', { x: x, y: 188 }, tg); t.textContent = 'Équipe ' + (i + 1);
+    });
+    var seats = document.getElementById('zd-seats');
+    for (var r = 0; r < 2; r++) for (var s = 0; s < 14; s++) mk('circle', { cx: 60 + s * 31, cy: 394 + r * 0 + (r ? 12 : 0) - 12, r: 5 }, seats);
+    function set(b, col, on) { b.c.style.fill = col || OFF; b.h.style.fill = col || OFF; b.h.style.opacity = on === false || !col ? 0 : 0.35; }
+    function allA(col) { A.forEach(function (b) { set(b, col); }); }
+    function resetBuzz() { buzz.forEach(function (a) { a.forEach(function (c) { c.setAttribute('opacity', 0.75); }); }); }
+    var PH = [
+        { name: 'Chenillard', ticks: 12, ms: 450, pub: false,
+          cap: '<strong>Chenillard</strong> sur la salle : un point de lumière fait le tour des groupes g1 à g6, un groupe par tick, sur le fond à la couleur du thème. L’animateur reste en blanc fixe ; le public n’est pas piloté.',
+          f: function (t) { A.forEach(function (b, i) { set(b, i === t % 6 ? '#ffffff' : '#7c5a14'); }); } },
+        { name: 'Pulsation', ticks: 16, ms: 300, pub: false,
+          cap: '<strong>Pulsation</strong> au chronomètre : toute la zone respire, couleur du thème puis blanc, et passe au rouge dans les 5 dernières secondes.',
+          f: function (t) { var urgent = t >= 11, hi = t % 2 === 0; allA(urgent ? (hi ? '#ef4444' : '#7f1d1d') : (hi ? THEME : '#e2e8f0')); } },
+        { name: 'Couleur d’équipe', ticks: 10, ms: 400, pub: false,
+          cap: '<strong>Couleur d’équipe</strong> : quand l’équipe 2 marque, toute la salle prend sa couleur le temps de l’attribution des points.',
+          f: function (t) { var on = t < 8; allA(on ? TEAMS[1] : '#7c5a14'); buzz[1].forEach(function (c, k) { c.setAttribute('opacity', on && (t + k) % 2 === 0 ? 1 : 0.5); }); } },
+        { name: 'Dégradé', ticks: 12, ms: 500, pub: true,
+          cap: '<strong>Dégradé</strong> : une couleur différente par groupe sur toute la zone. Ici le public joue aussi son propre effet ; sans réglage, ses ampoules gardent leur état.',
+          f: function (t) { A.forEach(function (b, i) { set(b, PAL[(i + Math.floor(t / 2)) % 6]); }); P.forEach(function (b, i) { set(b, PAL[(i + 2 + Math.floor(t / 2)) % 6]); }); } }
+    ];
+    var cap = document.getElementById('zd-caption'), note = document.getElementById('zd-public-note');
+    var tabs = root.querySelectorAll('[data-zd]'), pauseBtn = document.getElementById('zd-pause');
+    var cur = 0, tick = 0, timer = null, paused = false;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    H.forEach(function (b) { set(b, '#ffffff'); });
+    function enter(i) {
+        cur = i; tick = 0; resetBuzz(); allA(null); P.forEach(function (b) { set(b, null); });
+        tabs.forEach(function (b, k) { b.classList.toggle('active', k === i); });
+        cap.innerHTML = PH[i].cap; note.textContent = PH[i].pub ? 'effet propre' : 'non pilotée';
+        PH[i].f(reduce ? 3 : 0);
+    }
+    function step() {
+        tick++;
+        if (tick >= PH[cur].ticks) { enter((cur + 1) % PH.length); schedule(); return; }
+        PH[cur].f(tick);
+    }
+    function schedule() { clearInterval(timer); if (!reduce && !paused) timer = setInterval(step, PH[cur].ms); }
+    tabs.forEach(function (b) { b.addEventListener('click', function () { enter(+b.dataset.zd); schedule(); }); });
+    pauseBtn.addEventListener('click', function () { paused = !paused; pauseBtn.setAttribute('aria-pressed', paused); pauseBtn.textContent = paused ? '▶ Lecture' : '⏸ Pause'; schedule(); });
+    enter(reduce ? 3 : 0); schedule();
+})();
+</script>
     <script src="js/main.js"></script>
 </body>
 </html>
