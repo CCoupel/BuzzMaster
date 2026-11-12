@@ -2162,8 +2162,16 @@ sous-onglet (modifications gardées). Contrat : `light-effects.md` §11.1 à §1
   valide** (`lastValidPreviews`). Clic sur un en-tête de pas : `seek`, le pas joué est surligné (`onColumn`).
 - **Essai du brouillon** : `POST /api/lighting/effects/draft/try` avec `{effect|yaml, zone, speed: 1}` ; zones proposées en
   chips ; dernière zone partagée avec le catalogue (`readTryZone` / `saveTryZone`). « ■ Arrêter l'essai » → `…/try/stop`.
-- **Garde** : « Retour au catalogue » demande confirmation si des modifications ne sont pas enregistrées ; quitter la page
-  par la navigation ne demande pas encore de confirmation (point ouvert).
+- **Garde** : « Retour au catalogue » demande confirmation si des modifications ne sont pas enregistrées. Quitter la page
+  avec un éditeur modifié demande aussi confirmation : fermeture ou rechargement de l'onglet (`beforeunload`, confirmation
+  native du navigateur), clic sur un lien interne vers une autre page (`window.confirm`, navigation annulée sur refus),
+  Précédent / Suivant (une entrée d'historique « garde » est ajoutée tant que l'éditeur est modifié ; refus = garde remise).
+  Fichiers : `web/src/hooks/useUnsavedGuard.js`, branché dans `AmbiancePage.jsx` (`editorDirty` via `onDirtyChange`).
+  **Limites** : l'application utilise `BrowserRouter` (pas de `useBlocker`) ; une navigation **programmatique**
+  (`navigate()`) n'est pas interceptée — la page Ambiance n'en fait aucune, la Navbar pourrait en faire : à vérifier en QUALIF
+  (clic sur chaque entrée de la Navbar avec un éditeur modifié). La garde Précédent laisse une entrée d'historique en plus
+  après enregistrement ou fermeture de l'éditeur. `window.confirm` bloque une automatisation de navigateur : à prévoir dans
+  la procédure manuelle.
 - **`LightEffectPreview`** : `BulbRow` extrait pour réutilisation ; le catalogue est inchangé.
 
 #### Catalogue des effets — `LightEffectsCatalogue` et `LightEffectPreview` (v11.7.0, #299)

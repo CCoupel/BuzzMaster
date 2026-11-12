@@ -181,6 +181,9 @@ facteur     := entier | "N" | "g*" | "g" entier | variable | "(" expression ")" 
 | `/` | **division entière** : le quotient est **tronqué** (`5/2` = 2, `2/3` = 0, `-5/3` = −1) |
 
 - Espaces libres. 60 caractères au plus par expression. Un signe en tête est admis (`+1`, `-N/3`).
+- **Plafond ±1 000 000** : une constante hors de cette borne est refusée à la validation (« dépasse la valeur permise »).
+  Un calcul qui sort de la borne à l'exécution rend la variable sans valeur, comme une division par zéro. Le calcul se fait
+  sur 64 bits : un même effet désigne le même groupe sur un système 32 bits et sur un système 64 bits.
 - **Rang obtenu → groupe** : la valeur `v` désigne le rang `((v − 1) mod N) + 1`, avec un reste toujours positif.
   `N+1` ⇒ rang 1 ; **`0` ⇒ rang N (le dernier groupe)** ; `−1` ⇒ rang N−1.
 - **Valeur d'une variable au cran `k`** (le cran est celui de §8, inchangé) :
@@ -468,7 +471,8 @@ temps de l'édition ; « Retour au catalogue » le ferme. Référence : `contrac
 ### 16.1 Ouvrir l'éditeur
 
 - **＋ Nouvel effet** : une fenêtre demande le **nom** ; l'**identifiant** se propose à partir du nom (`[a-z0-9-]`, 40
-  caractères au plus). Refusés : identifiant déjà pris, mal formé, réservé ou nom Windows. Le nouvel effet part d'une
+  caractères au plus). Refusés : identifiant déjà pris, mal formé, réservé ou nom Windows. Un identifiant réservé ou un nom
+  Windows est aussi refusé dès le brouillon, avant l'enregistrement. Le nouvel effet part d'une
   seule ligne `g0` au thème à 100 %.
 - **✎ Modifier** (effet à vous) : ouvre l'effet dans l'éditeur, modifiable.
 - **👁 Ouvrir** (effet livré, ou natif modifié) : ouvre l'effet **en lecture seule**. Pour le changer, dupliquez-le.
@@ -530,8 +534,8 @@ temps de l'édition ; « Retour au catalogue » le ferme. Référence : `contrac
 ### 16.6 Quitter
 
 - « Retour au catalogue » avec des modifications non enregistrées demande confirmation (« Modifications non enregistrées »).
-  Changer de sous-onglet garde l'éditeur ouvert avec ses modifications. Quitter la page par la navigation ne demande
-  **pas** encore de confirmation (point ouvert).
+  Changer de sous-onglet garde l'éditeur ouvert avec ses modifications. Quitter la page avec un éditeur modifié
+  (fermeture ou rechargement de l'onglet, lien vers une autre page, Précédent / Suivant) demande confirmation.
 - Retirer un groupe qui n'est pas vide demande confirmation.
 
 ## 17. Compatibilité v11.7.0 → v11.8.0 — **changement cassant**
