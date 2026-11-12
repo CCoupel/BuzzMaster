@@ -142,6 +142,10 @@ describe('AmbiancePage › Lumière — colonne « Groupe » (#225)', () => {
   it('cliquer la pastille ouvre le sous-onglet Groupes', async () => {
     makeServer()
     render(<AmbiancePage />)
+    // Avant la réponse de /api/lighting/lights, la page affiche des lignes provisoires tirées de la config (clé `cfg-…`, « introuvable
+    // sur le pont ») ; elles sont REMPLACÉES (clé `inv-…`) quand l'inventaire arrive. Cliquer la pastille provisoire clique un nœud
+    // détaché : rien ne se passe (preuve : isConnected=false au moment du clic, CI rouge ×4). On attend donc la ligne définitive.
+    await screen.findByText(/id 1 · joignable/)
     fireEvent.click(await screen.findByLabelText('Groupe de BuzzHue1'))
     expect(await screen.findByTestId('lgm-pool')).toBeInTheDocument()
   })
