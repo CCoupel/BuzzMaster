@@ -41,5 +41,8 @@ export function useLightEffects({ withGroups = false } = {}) {
     return false
   }, [refresh])
 
-  return { catalog, zoneGroups, loaded, refresh, reload }
+  // Catalogue renvoyé par une route d'écriture (import §11.7, suppression §11.5) : appliqué tel quel, sans relecture.
+  const applyCatalogue = useCallback((data) => setCatalog(normalizeCatalog(data)), [])
+
+  return { catalog, zoneGroups, loaded, refresh, reload, applyCatalogue }
 }

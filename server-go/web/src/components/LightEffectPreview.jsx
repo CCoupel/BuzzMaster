@@ -40,6 +40,22 @@ export function frameAt(preview, t) {
   return { frame: cur, at: tt }
 }
 
+// Rangée d'ampoules (une par groupe, étiquetées g1, g2…) peinte d'après une trame du serveur ; partagée avec le simulateur de l'éditeur.
+export function BulbRow({ groups, frame, className = 'lfx' }) {
+  const bulbs = Array.from({ length: groups }, (_, i) => {
+    const g = frame?.groups?.[i]
+    return g ? paintStyle(g.color, g.intensity) : undefined
+  })
+  return (
+    <>
+      <div className={`${className}-bulbs`}>
+        {bulbs.map((style, i) => <div key={i} className={`${className}-bulb`} style={style} />)}
+      </div>
+      <div className={`${className}-nums`}>{bulbs.map((_, i) => <span key={i}>g{i + 1}</span>)}</div>
+    </>
+  )
+}
+
 // `version` : change à chaque rechargement du catalogue (fichier édité, ajouté, retiré) et invalide l'aperçu mis en cache.
 export default function LightEffectPreview({ id, groups, moment, version = 0, playing, onUnavailable = () => {} }) {
   const [preview, setPreview] = useState(null)
@@ -74,18 +90,11 @@ export default function LightEffectPreview({ id, groups, moment, version = 0, pl
 
   const current = useMemo(() => (playing ? frameAt(preview, now) : null), [playing, preview, now])
   const n = preview?.groups ?? groups
-  const bulbs = Array.from({ length: n }, (_, i) => {
-    const g = current?.frame?.groups?.[i]
-    return g ? paintStyle(g.color, g.intensity) : undefined
-  })
   const rem = current ? chronoRemaining(preview, current.at) : null
 
   return (
     <div className="lfx-stage" data-testid={`preview-${id}`}>
-      <div className="lfx-bulbs">
-        {bulbs.map((style, i) => <div key={i} className="lfx-bulb" style={style} />)}
-      </div>
-      <div className="lfx-nums">{bulbs.map((_, i) => <span key={i}>g{i + 1}</span>)}</div>
+      <BulbRow groups={n} frame={current?.frame} />
       <div className="lfx-clock" aria-live="off">
         {error ? 'Aperçu indisponible'
           : current

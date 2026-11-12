@@ -1,6 +1,65 @@
 # Changelog des Contrats API
 
 ---
+## [20261112] — v11.8.0 — éditeur d'effets, import et export (#210, #305)
+
+`light-effects.md` **révision 5, §11** ; table de `http-endpoints.md`. Décisions utilisateur du 2026-11-12
+(`_work/reports/plan-ambiguities-20261112-100000.md`). **Aucun BREAKING** : le format de fichier (`version: 2`), le
+séquenceur et les routes de v11.7.0 sont inchangés.
+
+- **[NEW]** `GET /api/lighting/effects/{id}/download` — téléchargement du fichier d'un effet, natifs compris (§11.6).
+- **[NEW]** `POST /api/lighting/effects/import` — import de fichiers avec validation par le schéma existant, statut par
+  fichier (`imported`, `replaced`, `renamed`, `conflict`, `native`, `invalid`, `too_big`, `limit`) (§11.7).
+- **[NEW]** `DELETE /api/lighting/effects/{id}` — suppression d'un effet utilisateur ou d'une surcharge ; natif refusé (§11.5).
+- **[NEW]** `GET /api/lighting/effects/{id}/source` — texte et document JSON d'un effet pour l'éditeur (§11.2).
+- **[NEW]** `POST /api/lighting/effects/draft` — validation, conversion grille ↔ texte et aperçus multi-tailles d'un
+  brouillon, sans écriture (§11.3).
+- **[NEW]** `PUT /api/lighting/effects/{id}` — création et enregistrement d'un effet utilisateur (§11.4).
+- **[NEW]** Document d'effet : forme JSON d'échange d'un effet, aller-retour garanti avec le fichier (§11.1).
+- **[CHANGED]** `GET /api/lighting/effects/{id}/preview` — champ additif `vars` par trame (rétrocompatible).
+- **[NEW]** Identifiants réservés, refusés à l'enregistrement et à l'import : `reload`, `try`, `draft`, `import`. Un
+  fichier déposé à la main avec un de ces `id` reste chargé comme en v11.7.0.
+
+Précisions après la revue du LOT-1 (`_work/reports/code-reviewer-lot1-20261112-113000.md`, m1 et m2) — `light-effects.md`
+§4.8, §11.4, §11.7, §11.9. **Aucun BREAKING** (routes nouvelles en v11.8.0) :
+
+- **[NEW]** Un texte enregistré (`PUT`) ou importé qui contient un **alias YAML** (`*nom`) est refusé avec la ligne de
+  l'alias ; aucun alias n'est développé. Comportement déjà livré (`internal/effects/store.go`), désormais au contrat.
+- **[NEW]** Identifiants réservés étendus aux **noms de périphérique Windows** (`con`, `prn`, `aux`, `nul`, `com1`-`com9`,
+  `lpt1`-`lpt9`) : refus à l'enregistrement et à l'import, avec message. Le chargement d'un fichier déposé à la main
+  est inchangé.
+
+Compléments du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md`, `-104000.md`) — **aucun BREAKING** :
+
+- **[NEW]** `grid` dans les réponses de `…/{id}/source` et de `…/draft` : document sans cible voisine, chaque voisin
+  (`gA-1`, `gA+1`) étant converti en variable de même rendu ; `editable: false` quand la conversion exacte est
+  impossible (§11.2). Le format de fichier garde les voisins.
+- **[NEW]** `POST /api/lighting/effects/draft/try` — essai d'un brouillon non enregistré sur une zone (§11.10).
+- **[CHANGED]** Ordre canonique des actions écrites par la grille : fond, groupes, `gN`, puis variables dans l'ordre de
+  déclaration (§11.1) ; lignes des variables affichées en haut de la grille (§11.8).
+- **[CHANGED]** Usage de `POST /api/lighting/effects/{id}/try` par le catalogue : la zone est choisie par
+  l'utilisateur et envoyée dans `zone` (route inchangée, §7.4).
+
+Révisions 6 et 7 — évolutions du **format de fichier** (`light-effects.md` **§12**, décisions du 2026-11-12,
+`plan-ambiguities-20261112-111000.md` et `-113000.md`). `version` reste `2`.
+
+- **[BREAKING]** `gN` ne désigne plus le dernier groupe : c'est un nom de variable ordinaire. Un fichier qui emploie
+  `gN` (cible ou départ) sans déclarer de variable `gN` est **refusé** avec le message « … pour le dernier groupe,
+  écrivez g* » (§12.4). Touche uniquement un fichier **utilisateur** écrit pour la v11.7.0 ; **aucun effet natif**.
+  Correction : remplacer `gN` par `g*`.
+- **[NEW]** `g*` : le dernier groupe de la zone (cible ; vaut `N` dans une expression).
+- **[NEW]** Départ et pas d'une variable en **expressions** : entiers, `N`, `g*`, `g<k>`, autre variable (départ
+  seulement), `+ - * /` (division entière tronquée), parenthèses ; `gA: D; P` (avance) ou `gA: D` (suit) ; rebouclage
+  des valeurs nulles et négatives ; boucle de dépendances refusée (§12.2). Les écritures v11.7.0 (`g1; +1`) gardent
+  leur sens.
+- **[CHANGED]** Limites relevées : **24 variables** par effet (8), **40 actions** par pas (16) ; pas constant non borné.
+- **[CHANGED]** Document d'effet (§11.1) : `start` et `step` d'une variable sont des expressions en texte, `step: null`
+  = « suit ». `grid` (§11.2) : un voisin est converti en variable qui suit (`gB: gA-1`), toujours exact ; une cible
+  `g*` n'est plus convertie.
+- **[NEW]** Éditeur (§11.8) : grille à nombre de groupes réglable (6 par défaut, 1 à 12), dernière ligne = `g*`.
+- **Attention (sens inverse)** : un fichier qui utilise ces nouveautés est refusé par un serveur v11.7.0.
+
+---
 ## [20261112] — v11.7.0 — précisions de l'aperçu d'effet après la revue LOT-3 (#299)
 
 Source : `_work/reports/code-review-lot3-20261112-040000.md` (table des choix validés). Le code livré fait foi ; le contrat

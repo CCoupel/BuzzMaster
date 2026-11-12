@@ -189,3 +189,8 @@ export const TRY_REFUSALS = {
   not_applicable: "Cet effet n'est pas applicable à cette zone.",
   mode: "L'éclairage est forcé sur ON / OFF ou le Flash est actif : le test de la zone Ambiance est refusé.",
 }
+
+// Dernière zone choisie pour « Essayer sur la salle » (catalogue, éditeur) : retenue par navigateur (contrat §11.8).
+const TRY_ZONE_KEY = 'buzzcontrol.effects.tryZone'
+export const readTryZone = () => { try { return window.localStorage.getItem(TRY_ZONE_KEY) || 'ambiance' } catch { return 'ambiance' } }
+export const saveTryZone = (z) => { try { window.localStorage.setItem(TRY_ZONE_KEY, z) } catch { /* sans stockage : non retenue */ } }

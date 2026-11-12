@@ -1,0 +1,536 @@
+<!--
+mockup:
+  composant: ambiance_page
+  feature: effect_editor
+  version: 11.8.0
+  type: ui
+  issue: "#210"
+  validee_le: 2026-11-12
+  complete: [docs/mockup/v11.7.0/ui/ambiance_page__light_groups_zones.html, docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects_zones.html, docs/mockup/v11.8.0/ui/ambiance_page__effects_catalogue_import_export.html]
+  remplace: []
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambiance › Lumière › Effets — éditeur d'effet pas à pas, révision 4 (#210)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --amber:#b45309; --amberbg:#fef3c7; --var:#7c3aed; --varbg:#f5f3ff; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; font-size:.8rem; } .mock-bar strong { color:#fff; }
+.mock-note { max-width:1240px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1240px; margin:1.4rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1200px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.subtabs, .tabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.4rem 0 .9rem; }
+.subtab, .tab { padding:.4rem .8rem; font-size:.84rem; color:var(--gray-600); border:0; border-bottom:2px solid transparent; margin-bottom:-2px; background:none; font-family:inherit; cursor:pointer; }
+.subtab.active, .tab.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:700; }
+h3 { font-size:.9rem; margin:1rem 0 .4rem; }
+.btn { font:inherit; font-size:.78rem; padding:.32rem .65rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); cursor:pointer; }
+.btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; } .btn[disabled] { opacity:.5; cursor:not-allowed; }
+.btn.mini { font-size:.7rem; padding:.1rem .35rem; }
+.hint { font-size:.77rem; color:var(--gray-500); margin:.35rem 0; line-height:1.45; } .hint code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.err { font-size:.79rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--error); }
+.warn { font-size:.79rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--warning); }
+.info { font-size:.79rem; color:#3730a3; background:var(--primary-100); border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--primary); }
+.head { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.b { font-size:.64rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:.1rem .4rem; border-radius:.3rem; background:var(--gray-200); color:var(--gray-600); }
+.b.user { background:#dcfce7; color:#166534; } .b.dirty { background:var(--amberbg); color:var(--amber); text-transform:none; letter-spacing:0; }
+.form { display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:.6rem .9rem; margin:.7rem 0; }
+.form label { font-size:.72rem; color:var(--gray-600); display:flex; flex-direction:column; gap:.2rem; }
+input, select { font:inherit; font-size:.8rem; padding:.3rem .45rem; border:1px solid var(--gray-300); border-radius:.35rem; background:#fff; }
+.form input[readonly] { background:var(--gray-100); color:var(--gray-500); }
+.form .wide { grid-column: span 2; } .form .full { grid-column: span 4; }
+.chips { display:flex; gap:.3rem; flex-wrap:wrap; align-items:center; }
+.chip { font-size:.74rem; padding:.2rem .55rem; border-radius:999px; border:1px solid var(--gray-300); background:#fff; color:var(--gray-600); cursor:pointer; }
+.chip.on { background:var(--primary-100); border-color:var(--primary); color:#3730a3; font-weight:600; }
+.cols { display:grid; grid-template-columns: 372px 1fr; gap:1rem; align-items:start; }
+.panel { border:1px solid var(--gray-200); border-radius:.6rem; padding:.6rem .7rem; } .panel h3 { margin:0 0 .4rem; }
+.var { border:1px solid #ddd6fe; background:var(--varbg); border-radius:.5rem; padding:.3rem .4rem; margin:.3rem 0; font-size:.74rem; position:relative; }
+.pop { position:absolute; left:.4rem; right:.4rem; top:calc(100% + 4px); z-index:60; background:#111827; color:#f9fafb; border-radius:.45rem; padding:.55rem .65rem; box-shadow:0 8px 20px rgba(0,0,0,.3); font-size:.72rem; line-height:1.45; }
+.pop .seq { color:#cbd5e1; } .pop .seq b { color:#94a3b8; } .pop p { margin:0 0 .4rem; }
+.q { width:1.25rem; height:1.25rem; border-radius:50%; border:1px solid var(--var); background:#fff; color:var(--var); font-weight:700; font-size:.7rem; cursor:pointer; padding:0; line-height:1; }
+.transport { display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; } .transport input[type=range] { flex:1; min-width:10rem; padding:0; border:0; }
+table.grid thead th.stepgo { cursor:pointer; }
+table.grid tbody tr.last th { color:#92400e; background:#fffbeb; } table.grid tbody tr.last td { background:#fffdf5; }
+.star { font-family: Inter, system-ui, sans-serif; font-size:.6rem; font-weight:600; color:#92400e; background:#fef3c7; border:1px solid #fde68a; border-radius:999px; padding:0 .35rem; margin-left:.35rem; white-space:nowrap; }
+.var .l1 { display:flex; align-items:center; gap:.3rem; flex-wrap:wrap; } .var .nm { font-family: ui-monospace, monospace; font-weight:700; color:var(--var); font-size:.86rem; margin-right:.15rem; }
+.var select { font-size:.74rem; padding:.2rem .3rem; } .var input { width:3rem; font-size:.74rem; padding:.2rem .3rem; }
+.var .say { color:var(--gray-600); margin:.3rem 0 .2rem; line-height:1.4; }
+.var .seq { font-family: ui-monospace, monospace; font-size:.68rem; color:var(--gray-600); line-height:1.5; } .var .seq b { font-family: Inter, system-ui, sans-serif; font-weight:600; color:var(--gray-500); display:inline-block; width:5.4rem; }
+.brush { display:flex; gap:.3rem; flex-wrap:wrap; align-items:center; }
+.sw { width:1.4rem; height:1.4rem; border-radius:.3rem; border:2px solid var(--gray-300); display:inline-block; }
+.swl { display:flex; align-items:center; gap:.25rem; font-size:.72rem; color:var(--gray-600); cursor:pointer; padding:.12rem .3rem; border-radius:.3rem; border:1px solid transparent; position:relative; } .swl.sel { background:var(--primary-100); color:#3730a3; font-weight:600; border-color:var(--primary); }
+[data-tip]:hover::after { content: attr(data-tip); position:absolute; left:0; top:calc(100% + 6px); z-index:50; width:17rem; background:#111827; color:#f9fafb; font-size:.7rem; font-weight:400; line-height:1.4; padding:.4rem .5rem; border-radius:.35rem; box-shadow:0 6px 16px rgba(0,0,0,.25); white-space:normal; }
+[data-tip] { position:relative; }
+.picker { display:grid; grid-template-columns: 9rem 1fr; gap:.7rem; margin-top:.5rem; padding-top:.5rem; border-top:1px dashed var(--gray-200); }
+.wheel { width:9rem; height:9rem; border-radius:50%; position:relative; cursor:crosshair; background: radial-gradient(circle closest-side, #fff 0%, rgba(255,255,255,0) 100%), conic-gradient(from 90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); border:1px solid var(--gray-300); }
+.wheel i { position:absolute; width:.8rem; height:.8rem; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #111827; transform:translate(-50%,-50%); pointer-events:none; }
+.picker label { font-size:.7rem; color:var(--gray-600); display:block; margin-bottom:.35rem; } .picker input[type=range] { width:100%; padding:0; border:0; }
+.picker .now { display:flex; align-items:center; gap:.4rem; } .picker .now span { width:2rem; height:2rem; border-radius:.4rem; border:1px solid var(--gray-300); display:inline-block; } .picker .now input { width:5.6rem; font-family: ui-monospace, monospace; }
+.recent { display:flex; gap:.25rem; flex-wrap:wrap; } .recent span { width:1.2rem; height:1.2rem; border-radius:.25rem; border:1px solid var(--gray-300); cursor:pointer; }
+.gridwrap { overflow-x:auto; border:1px solid var(--gray-200); border-radius:.6rem; }
+table.grid { border-collapse:separate; border-spacing:0; font-size:.72rem; }
+table.grid th, table.grid td { border-right:1px solid var(--gray-200); border-bottom:1px solid var(--gray-200); }
+table.grid thead th { background:var(--gray-50); padding:.3rem .35rem; min-width:4.6rem; font-weight:600; color:var(--gray-700); white-space:nowrap; }
+table.grid thead th.sp { background:#eef2ff; color:#3730a3; } table.grid thead th.add { min-width:2rem; cursor:pointer; color:var(--primary); }
+table.grid thead th.playing { background:var(--primary); color:#fff; }
+table.grid tbody th { position:sticky; left:0; background:#fff; text-align:left; padding:.25rem .5rem; font-family: ui-monospace, monospace; white-space:nowrap; z-index:2; min-width:13rem; }
+table.grid tbody th small { font-family: Inter, system-ui, sans-serif; color:var(--gray-400); font-weight:400; margin-left:.3rem; }
+table.grid tbody tr.var th { color:var(--var); background:var(--varbg); } table.grid tbody tr.var td { background:#fbfaff; }
+table.grid tbody tr.band th { font-family: Inter, system-ui, sans-serif; font-size:.66rem; font-weight:600; color:var(--gray-500); background:var(--gray-50); text-transform:uppercase; letter-spacing:.04em; padding:.2rem .5rem; position:static; }
+td.cell { height:1.75rem; cursor:pointer; text-align:center; padding:0; }
+td.cell:hover { outline:2px solid var(--primary); outline-offset:-2px; }
+td.cell.playing { background:rgba(79,70,229,.09) !important; }
+.act { display:inline-flex; align-items:center; font-size:.68rem; padding:.08rem .35rem; border-radius:.3rem; border:1px solid rgba(0,0,0,.15); }
+.stage { background:#0f172a; border-radius:.5rem; padding:.6rem .7rem; margin:.5rem 0; }
+.row { display:grid; grid-template-columns: 13rem 1fr 15rem; gap:.6rem; align-items:center; padding:.3rem 0; border-bottom:1px solid #1e293b; } .row:last-child { border-bottom:0; }
+.row .lbl { font-size:.72rem; color:#cbd5e1; } .row .lbl small { display:block; color:#f59e0b; } .row .lbl input { margin-right:.35rem; }
+.row .lbl.real { color:#a5b4fc; font-weight:600; }
+.bulbs { display:flex; justify-content:space-around; align-items:center; }
+.bulb { width:1.5rem; height:1.5rem; border-radius:50%; background:#1e293b; transition: background-color .12s linear, box-shadow .12s linear; display:flex; align-items:center; justify-content:center; font-size:.52rem; color:rgba(255,255,255,.55); }
+.row .vv { font-size:.66rem; color:#94a3b8; font-family: ui-monospace, monospace; text-align:right; }
+.row.off .bulbs { opacity:.15; }
+.clock { text-align:center; font-size:.72rem; color:#94a3b8; font-variant-numeric: tabular-nums; padding-top:.35rem; }
+.trybar { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; border:1px solid var(--gray-200); border-radius:.6rem; padding:.5rem .7rem; margin-top:.6rem; background:var(--gray-50); }
+textarea.yaml { width:100%; min-height:22rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; line-height:1.5; padding:.6rem .7rem; border:1px solid var(--gray-300); border-radius:.5rem; background:#0f172a; color:#e2e8f0; }
+.dlg { max-width:30rem; border:1px solid var(--gray-300); border-radius:.6rem; padding:.9rem 1rem; box-shadow:0 8px 24px rgba(0,0,0,.14); background:#fff; } .dlg h4 { margin:0 0 .4rem; font-size:.9rem; } .dlg p { font-size:.8rem; color:var(--gray-600); margin:.3rem 0 .7rem; }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:.9rem; }
+table.tips { border-collapse:collapse; font-size:.78rem; width:100%; } table.tips td { border-bottom:1px solid var(--gray-200); padding:.3rem .4rem; vertical-align:top; } table.tips td:first-child { font-weight:600; white-space:nowrap; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette v11.8.0 — #210, révision 4</strong> · Ambiance › Lumière › Effets : <b>éditeur d'effet pas à pas</b>. La grille, les variables, la roue de couleur et le simulateur sont vivants.</div>
+
+<p class="mock-note"><b>Révision 4 — ce qui change par rapport à la révision 3.</b> ① La grille a un <b>nombre de groupes réglable</b> : 6 au départ, « ＋ Ajouter un groupe » / « － Retirer un groupe » ; <b>la dernière ligne est toujours <code>g*</code></b> (le dernier groupe de la zone). Les repères « g* · salle de n » de la révision 3 disparaissent. ② Le <b>départ et le pas d'une variable sont des expressions</b> : <code>N</code> = nombre de groupes de la zone (<code>N/2</code> = le milieu), <code>+ - * /</code>, parenthèses, et une autre variable (<code>gA+1</code>). ③ <code>gN</code> employé sans être déclaré est refusé, avec un message.<br><b>Acquis</b> : variables en haut, explication en bulle « ? », pas à pas, info-bulles des pinceaux, roue de couleur, essai par zone, pas de ligne « voisin », 24 variables.</p>
+
+<h2 class="mock-h">01 — Éditeur, onglet Grille</h2>
+<div class="card">
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab">Groupes</span><span class="subtab active">Effets</span></div>
+
+  <div class="head">
+    <button class="btn">← Retour au catalogue</button>
+    <h3 style="margin:0;font-size:1rem">Chenillard du milieu</h3><span class="b user">personnalisé</span><span class="b dirty" id="dirty" style="display:none">modifications non enregistrées</span>
+    <span style="flex:1"></span>
+    <button class="btn">⭳ Télécharger</button><button class="btn">⧉ Dupliquer</button><button class="btn primary">Enregistrer</button>
+  </div>
+
+  <div class="form">
+    <label class="wide">Nom<input value="Chenillard du milieu"></label>
+    <label>Identifiant<input value="chenillard-milieu" readonly title="Choisi à la création. Pour en changer : Dupliquer."></label>
+    <label>Durée d'un tick (secondes)<input value="1" id="tick"></label>
+    <label class="full">Description<input value="Un point lumineux part du milieu de la zone et en fait le tour, avec une traînée à 50 % de chaque côté."></label>
+    <label class="wide">Proposé pour les moments
+      <span class="chips"><span class="chip on">Chronomètre</span><span class="chip">Phases calmes</span><span class="chip">Équipe qui marque</span></span></label>
+    <label>Groupes demandés dans la zone (minimum)<input value="3" id="gmin"></label>
+    <label>À la fin des pas
+      <span class="chips"><span class="chip on">Recommencer (boucle)</span><span class="chip">S'arrêter</span></span></label>
+  </div>
+
+  <div class="tabs"><button class="tab active">Grille</button><button class="tab">Texte</button></div>
+
+  <div class="cols">
+    <div>
+      <div class="panel">
+        <div class="head" style="position:relative"><h3 style="margin:0">Variables de groupe</h3><button class="q" id="qvars" title="À quoi servent les variables ?">?</button><span style="flex:1"></span><button class="btn mini" id="addvar">+ Ajouter</button>
+          <div class="pop" id="popvars" style="display:none"><p>Une variable désigne un groupe qui <b>change à chaque pas</b>. Chaque variable a sa ligne en haut de la grille.</p><p><b>Avance régulière</b> — un <b>départ</b> et un <b>pas</b>. Exemples : départ <code>1</code>, pas <code>+1</code> → g1, g2, g3… ; départ <code>N/2</code> → part du milieu ; départ <code>N</code> ou <code>g*</code>, pas <code>-1</code> → part du dernier groupe et recule.</p><p><b>N</b> est le nombre de groupes de la zone où l'effet est joué. On peut écrire <code>N/2</code>, <code>N/2+1</code>, <code>N-1</code>, <code>(N+1)/2</code>… Une division ne garde que la partie entière (5 groupes : <code>N/2</code> = 2). Un résultat hors de 1…N reboucle : <code>N+1</code> = g1, <code>0</code> = le dernier groupe.</p><p><b>Suivre une autre variable</b> : départ <code>gA+1</code> <b>sans pas</b> → toujours le groupe juste après gA. Avec un pas (<code>gA+1</code>, pas <code>+2</code>) → part du groupe après le départ de gA, puis avance seule.</p><p><b>Suite de groupes</b> : suit l'ordre que vous donnez, un groupe par pas, puis recommence (g1, g4, g2 → g1, g4, g2, g1…).</p><p>Si deux variables tombent sur le même groupe, <b>celle du bas gagne</b> : les flèches ▲▼ changent l'ordre.</p></div></div>
+        <div id="vars"></div>
+        <datalist id="starts"><option value="1"><option value="N/2"><option value="N/2+1"><option value="N"><option value="g*"><option value="gA+1"><option value="gA-1"></datalist>
+      </div>
+      <div class="panel" style="margin-top:.7rem">
+        <h3>Pinceau</h3>
+        <div class="brush" id="brush"></div>
+        <div class="brush" style="margin-top:.45rem"><span class="hint" style="margin:0" data-tip="Puissance de l'éclairage du groupe, de 0 à 100 %. 0 % revient à éteindre. L'intensité s'applique à toutes les couleurs.">Intensité ⓘ</span>
+          <span class="chip" data-i="25">25 %</span><span class="chip" data-i="50">50 %</span><span class="chip" data-i="75">75 %</span><span class="chip on" data-i="100">100 %</span>
+          <input id="ifree" value="100" style="width:3.2rem" title="Autre valeur, de 0 à 100"> %</div>
+        <div class="picker" id="picker">
+          <div class="wheel" id="wheel"><i id="dot"></i></div>
+          <div>
+            <label>Luminosité de la couleur<input type="range" id="val" min="20" max="100" value="100"></label>
+            <label>Couleur choisie</label>
+            <div class="now"><span id="now"></span><input id="hex" value="#14B8A6" maxlength="7"></div>
+            <label style="margin-top:.5rem">Couleurs récentes</label>
+            <div class="recent" id="recent"></div>
+          </div>
+        </div>
+        <p class="hint">Choisissez une couleur et une intensité, puis cliquez les cases. La roue apparaît quand le pinceau « couleur libre » est choisi : cliquez dans la roue (teinte et saturation), ou saisissez le code de la couleur.</p>
+      </div>
+    </div>
+
+    <div>
+      <div class="gridwrap"><table class="grid" id="grid"></table></div>
+      <p class="hint"><b>Colonnes</b> : <b>PRE</b> (joué une fois au début), les <b>pas</b> de la boucle (un par tick), <b>DERNIER</b> (fin de chaque tour), <b>POST</b> (fin du moment). Menu d'un pas (clic sur son en-tête) : dupliquer, insérer avant, déplacer, supprimer.<br>
+      <b>Lignes</b> : les variables en haut, puis <code>g0</code> = toute la zone, puis les groupes. La grille part avec <b>6 groupes</b> ; « ＋ Ajouter un groupe » en ajoute un (12 au plus), « － Retirer un groupe » retire le dernier.<br>
+      <b>La dernière ligne est <code>g*</code></b> : le dernier groupe de la zone, quel que soit son nombre de groupes (g3 dans une salle de 3, g6 dans une salle de 6). Les autres lignes désignent toujours le groupe de leur numéro. Quand on ajoute un groupe, l'ancienne dernière ligne garde son contenu et devient un groupe numéroté ; quand on en retire un, la dernière ligne est supprimée avec son contenu et celle du dessus devient <code>g*</code>.<br>
+      <b>Qui repeint qui</b> : dans un pas, le fond (<code>g0</code>) est posé d'abord, puis les groupes numérotés, puis <code>g*</code>, puis les variables. Une variable repeint donc toujours le groupe sur lequel elle se trouve, même si elle est affichée au-dessus.</p>
+      <div class="err" id="errs" style="display:none"></div>
+    </div>
+  </div>
+
+  <h3>Simulateur</h3>
+  <div class="head">
+    <span class="transport" style="flex:1">
+      <button class="btn" id="first" title="Revenir au début">⏮</button>
+      <button class="btn" id="prev" title="Tick précédent">◀ tick</button>
+      <button class="btn primary" id="play" title="Lecture / pause">▶ Lecture</button>
+      <button class="btn" id="next" title="Tick suivant">tick ▶</button>
+      <input type="range" id="pos" min="0" max="20" value="0" title="Position dans l'aperçu (tick)">
+    </span>
+    <span class="hint" style="margin:0">Moment simulé :</span><span class="chips"><span class="chip on">Chronomètre</span></span>
+    </div>
+  <div class="stage" id="stage"></div>
+  <p class="hint">Les rangées sont jouées <b>en même temps, sur la même horloge</b> : quatre salles types (1, 3, 6 et 12 groupes) et une rangée par zone réelle dont le nombre de groupes est différent (ici Ambiance, 4 groupes ; la zone Animateur a 3 groupes, déjà représentée). Décochez une rangée pour la masquer. À droite : le groupe que désigne chaque variable à ce tick. Le pas joué est surligné dans la grille.<br><b>Pas à pas</b> : « ◀ tick » et « tick ▶ » reculent ou avancent d'un tick et mettent l'aperçu en pause ; la réglette va directement à un tick ; « ⏮ » revient au début ; un clic sur l'en-tête d'un pas de la grille place l'aperçu sur le premier tick où ce pas est joué. À l'arrêt, le tick, le pas joué et la valeur des variables restent affichés. Vitesse d'origine (×1) ; l'aperçu suit le brouillon, sans enregistrer.</p>
+
+  <div class="trybar">
+    <b style="font-size:.82rem">Essayer sur la salle</b>
+    <span class="hint" style="margin:0">Zone :</span>
+    <span class="chips" id="zones"><span class="chip on">Ambiance · 4 groupes</span><span class="chip">Animateur · 3 groupes</span><span class="chip" style="opacity:.45;cursor:not-allowed" title="Aucun groupe dans la zone Public">Public · aucun groupe</span></span>
+    <button class="btn" id="try">💡 Essayer 10 s</button>
+    <span class="hint" style="margin:0" id="trymsg">Joue l'effet tel qu'il est à l'écran, sans l'enregistrer, sur les vraies ampoules de la zone choisie ; puis l'éclairage revient à son état normal.</span>
+  </div>
+</div>
+
+<p class="mock-note"><b>Comportement.</b><br>
+• <b>Une case</b> = ce que le pas écrit sur la cible : une couleur et une intensité, ou « éteint ». Une case vide n'écrit rien : le groupe garde l'état qu'il avait.<br>
+• <b>Groupes de la grille</b> : 6 à la création ; à l'ouverture d'un effet existant, 6 ou davantage si l'effet utilise un groupe plus haut. Le nombre de lignes n'est pas enregistré dans l'effet : il sert à l'écrire. « － Retirer un groupe » demande confirmation si la dernière ligne n'est pas vide. Le simulateur garde ses propres salles (1, 3, 6, 12 groupes et zones réelles), indépendantes du nombre de lignes.<br>
+• <b>Variables</b> : une ligne par variable — nom proposé (<code>gA</code>, <code>gB</code>…), type (« Avance régulière » ou « Suite de groupes »), <b>départ</b> et <b>pas</b> (expressions, avec des propositions : <code>1</code>, <code>N/2</code>, <code>N</code>, <code>gA+1</code>…), ordre, suppression. Un pas laissé vide avec un départ qui cite une variable = « suit cette variable ». Les expressions sont vérifiées par le serveur ; une erreur s'affiche sous la variable. Le bouton <b>?</b> d'une variable ouvre une bulle : ce que fait la variable et la suite obtenue pour 1, 3, 6 et 12 groupes. Le <b>?</b> du titre explique les expressions. 24 variables au plus.<br>
+• <b>Essayer sur la salle</b> : la zone se choisit parmi celles qui existent (une zone sans groupe est grisée) ; l'essai joue le brouillon, à la vitesse ×1, 10 secondes (5 pour un effet de score). Le bouton devient « ■ Arrêter l'essai ». Il est grisé avec la raison quand l'essai est impossible : brouillon en erreur, éclairage désactivé, pont injoignable, question en cours, effet qui demande plus de groupes que la zone n'en a, éclairage forcé sur ON / OFF ou Flash actif (zone Ambiance).<br>
+• <b>Erreurs</b> : vérifiées par le serveur à chaque modification ; le bandeau rouge sous la grille les liste et la colonne ou le champ fautif est entouré. « Enregistrer » est grisé tant qu'il reste une erreur.<br>
+• <b>Retour au catalogue</b> avec des modifications non enregistrées : fenêtre « Enregistrer / Abandonner les modifications / Rester ».</p>
+
+<h2 class="mock-h">02 — Info-bulles des pinceaux (texte affiché au survol)</h2>
+<div class="card">
+  <table class="tips" id="tips"></table>
+</div>
+
+<h2 class="mock-h">03 — Onglet Texte</h2>
+<div class="card">
+  <div class="tabs"><button class="tab">Grille</button><button class="tab active">Texte</button></div>
+  <div class="two">
+    <div>
+<textarea class="yaml" spellcheck="false"># Chenillard du milieu — essai pour la soirée du 14.
+id: chenillard-milieu
+nom: Chenillard du milieu
+description: >
+  Un point lumineux part du milieu de la zone et en fait le tour,
+  avec une traînée à 50 % de chaque côté.
+version: 2
+moments: [chrono]
+groupes_min: 3
+duree_tick_ms: 1000
+
+variables:
+  gB: gA-1            # suit gA : le groupe juste avant
+  gC: gA+1            # suit gA : le groupe juste après
+  gA: N/2; +1         # part du milieu, avance d'un groupe par pas
+
+pas:
+  - { g0: [theme, 100], gB: [theme, 50], gC: [theme, 50], gN: [urgence, 100] }
+</textarea>
+    </div>
+    <div>
+      <div class="err"><b>Ligne 18</b> : « gN » n'est pas déclarée dans <code>variables</code>. <code>gN</code> est désormais une variable comme les autres : pour le dernier groupe, écrivez <code>g*</code>.</div>
+      <p class="hint">Le texte est celui du fichier ; tout le format y reste permis, y compris les voisins (<code>gA-1</code>, <code>gA+1</code>). Il est vérifié par le serveur pendant la saisie ; les erreurs donnent la ligne et la cause. Tant que le texte contient une erreur, on ne peut ni enregistrer, ni essayer, ni revenir à la grille. Le simulateur joue le dernier texte valide.</p>
+      <div class="warn"><b>Ce fichier contient des commentaires</b> (lignes qui commencent par <code>#</code>). Ils sont conservés tant que vous enregistrez depuis l'onglet Texte. Une modification faite dans la grille réécrit le fichier : les commentaires sont alors perdus.</div>
+      <p class="hint">Passer de Texte à Grille reprend le texte dans la grille. Passer de Grille à Texte montre le fichier tel qu'il sera enregistré.</p>
+    </div>
+  </div>
+</div>
+
+<h2 class="mock-h">04 — Cas particuliers</h2>
+<div class="card">
+  <div class="two">
+    <div>
+      <h3 style="margin-top:0">Fichier qui utilise des voisins dans ses pas</h3>
+      <div class="info"><b>Ce fichier utilisait des voisins (<code>gA-1</code>, <code>gA+1</code>).</b> Dans la grille, ils sont remplacés par les variables <code>gB</code> (= <code>gA-1</code>) et <code>gC</code> (= <code>gA+1</code>) : le rendu est le même. Le fichier ne sera réécrit qu'à l'enregistrement.</div>
+      <p class="hint">Vaut pour l'effet livré « Chenillard avec traînée » et pour ses copies. La conversion est toujours possible, sauf si elle ferait dépasser 24 variables : la grille est alors en lecture seule et l'effet se modifie dans l'onglet Texte.</p>
+      <h3>Fichier de la version précédente qui écrit <code>gN</code></h3>
+      <div class="err"><code>mon-effet.yaml</code>, ligne 9 : « gN » n'est pas déclarée dans <code>variables</code>. <code>gN</code> est désormais une variable comme les autres : pour le dernier groupe, écrivez <code>g*</code>.</div>
+      <p class="hint">Le fichier est écarté du catalogue (les autres effets restent chargés) jusqu'à sa correction ; l'import le refuse avec le même message. Aucun effet livré n'est concerné.</p>
+      <h3>Expression en erreur</h3>
+      <div class="err"><b>gB</b>, départ « gA+ » : expression incomplète.<br><b>gB</b> et <b>gC</b> dépendent l'une de l'autre (<code>gB: gC+1</code>, <code>gC: gB+1</code>).</div>
+      <h3>Effet « Dégradé » : 12 groupes numérotés</h3>
+      <p class="hint">Un effet qui écrit sur <code>g12</code> s'ouvre avec les lignes <code>g1</code> à <code>g12</code>, suivies de la ligne <code>g*</code> (vide). « Ajouter un groupe » est alors grisé.</p>
+      <h3>Beaucoup de variables</h3>
+      <p class="hint">Jusqu'à 24 variables : le bloc « Variables » de la grille et le panneau défilent au-delà de 8 lignes ; les en-têtes de pas restent visibles. « + Ajouter » est grisé à 24.</p>
+      <h3>Effet livré : lecture seule</h3>
+      <div class="info"><b>Chenillard avec traînée est un effet livré avec BuzzControl : il ne se modifie pas.</b> Dupliquez-le pour en faire le vôtre. <button class="btn mini">⧉ Dupliquer</button></div>
+      <p class="hint">La fiche, la grille (voisins déjà montrés en variables), le texte, le simulateur et « Essayer sur la salle » sont disponibles, sans pinceau ni « Enregistrer ». Même présentation pour un « natif modifié ».</p>
+      <h3>Dupliquer / Nouvel effet</h3>
+      <div class="dlg"><h4>Dupliquer « Chenillard avec traînée »</h4>
+        <div class="form" style="grid-template-columns:1fr;margin:.4rem 0"><label>Nom<input value="Chenillard avec traînée (copie)"></label><label>Identifiant<input value="chenillard-traine-copie"></label></div>
+        <p>L'identifiant sert de nom de fichier et de référence dans les réglages : lettres minuscules, chiffres et tirets. Il ne pourra plus être changé.</p>
+        <button class="btn primary">Créer</button> <button class="btn">Annuler</button></div>
+      <p class="hint">« Nouvel effet » ouvre la même fenêtre, puis l'éditeur sur un effet d'un seul pas (<code>g0</code> au thème, 100 %), sans variable.</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Ouverture d'un fichier écrit à la main</h3>
+      <div class="warn"><b>Ce fichier contient des commentaires.</b> Ils seront perdus si vous modifiez l'effet dans la grille. Pour les garder, modifiez-le dans l'onglet Texte.</div>
+      <div class="warn"><b>Dans ce fichier, certaines actions ne sont pas dans l'ordre de la grille</b> (fond, groupes, puis variables). Un pas que vous modifiez dans la grille sera réordonné ; le simulateur montre le résultat.</div>
+      <h3>Rangée sous le minimum, pas sans effet</h3>
+      <p class="hint">Dans le simulateur, une rangée qui a moins de groupes que le minimum demandé porte la mention « sous le minimum : non joué en salle ». Un pas dont aucune cible n'existe dans une salle est sauté pour cette rangée : la rangée l'indique par « pas sauté ».</p>
+      <h3>Essai refusé</h3>
+      <p class="hint">« Cet effet demande 5 groupes ; la zone Animateur en a 3. » · « Une question est en cours : l'essai est possible hors question. » · « L'éclairage d'ambiance est désactivé. » · « Corrigez les erreurs de l'effet avant de l'essayer. »</p>
+      <h3>Quitter sans enregistrer</h3>
+      <div class="dlg"><h4>Modifications non enregistrées</h4><p>« Chenillard avec traînée (copie) » a été modifié.</p><button class="btn primary">Enregistrer</button> <button class="btn">Abandonner les modifications</button> <button class="btn">Rester</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Démonstration de la maquette. Dans le produit, la validation, la suite des variables et les trames viennent du serveur.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var NAMED = { theme: { l: 'thème', c: [79,70,229] }, equipe: { l: 'équipe', c: [229,57,53] }, urgence: { l: 'urgence', c: [255,255,255] }, scene: { l: 'scène', c: [226,232,240] } };
+  var TIPS = [
+    ['theme', 'Thème', 'La couleur du thème de la question en cours. Blanc si la question n\'a pas de thème.'],
+    ['equipe', 'Équipe', 'La couleur de l\'équipe qui vient de marquer. Ne sert qu\'au moment « Équipe qui marque » ; blanc aux autres moments.'],
+    ['urgence', 'Urgence', 'Suit le chronomètre : blanc, puis orange quand il reste 10 secondes, puis rouge quand il en reste 5. Blanc hors chronomètre. La couleur change toute seule, sans nouveau pas.'],
+    ['scene', 'Scène', 'La couleur que la salle aurait sans effet à ce moment du jeu. Blanc pour les zones Animateur et Public.'],
+    ['free', 'Couleur libre', 'Une couleur fixe que vous choisissez sur la roue. Elle ne dépend ni de la question ni du chronomètre.'],
+    ['off', 'Éteint', 'Éteint le groupe. Il reste éteint jusqu\'à ce qu\'un pas lui redonne une couleur.'],
+    ['erase', 'Gomme', 'Vide la case : ce pas n\'écrit plus rien sur ce groupe, qui garde l\'état qu\'il avait au pas d\'avant.']
+  ];
+  var LAST = 'g*';   // dernière ligne de groupe de la grille = le dernier groupe de la zone
+  var nFix = 5;      // groupes numérotés affichés (g1…g5) ; avec la ligne g*, la grille a 6 groupes
+  var LABEL = { g0: 'toute la zone' };
+  function fix() { var r = ['g0']; for (var i = 1; i <= nFix; i++) r.push('g' + i); r.push(LAST); return r; }
+  var vars = [{ n: 'gB', kind: 'avance', start: 'gA-1', step: '' }, { n: 'gC', kind: 'avance', start: 'gA+1', step: '' }, { n: 'gA', kind: 'avance', start: 'N/2', step: '+1' }];
+  var COLS = [{ k: 'pre', t: 'PRE', sp: 1 }, { k: 0, t: 'pas 0' }, { k: 'last', t: 'DERNIER', sp: 1 }, { k: 'post', t: 'POST', sp: 1 }];
+  var cells = { pre: {}, 0: { g0: ['theme', 100], 'g*': ['scene', 60], gB: ['theme', 50], gC: ['theme', 50], gA: ['urgence', 100] }, last: {}, post: {} };
+  var brush = { color: 'urgence', i: 100 }, free = '#14B8A6', playingCol = null, recents = ['#14B8A6', '#F59E0B', '#EC4899', '#0A84FF'];
+  function hexRgb(h) { h = h.replace('#', ''); return [0, 2, 4].map(function (i) { return parseInt(h.substr(i, 2), 16); }); }
+  function rgbOf(color, rem) { if (color === 'urgence') return rem <= 5 ? [230,30,30] : rem <= 10 ? [255,170,0] : [255,255,255]; if (NAMED[color]) return NAMED[color].c; return hexRgb(color); }
+  function css(c) { return 'rgb(' + c.join(',') + ')'; }
+  function dirty() { $('dirty').style.display = ''; }
+
+  // --- pinceau et info-bulles
+  var bEl = $('brush');
+  TIPS.forEach(function (b) {
+    var s = document.createElement('span'); s.className = 'swl' + (b[0] === brush.color ? ' sel' : ''); s.dataset.tip = b[2]; s.dataset.c = b[0];
+    var bg = b[0] === 'off' ? '#0f172a' : b[0] === 'erase' ? 'repeating-linear-gradient(45deg,#fff,#fff 3px,#e5e7eb 3px,#e5e7eb 6px)' : b[0] === 'free' ? free : css(rgbOf(b[0], 20));
+    s.innerHTML = '<span class="sw" style="background:' + bg + '"></span>' + b[1].toLowerCase(); bEl.appendChild(s);
+    s.addEventListener('click', function () { brush.color = b[0]; bEl.querySelectorAll('.swl').forEach(function (x) { x.classList.toggle('sel', x === s); }); $('picker').style.opacity = b[0] === 'free' ? 1 : .45; });
+    var tr = document.createElement('tr'); tr.innerHTML = '<td>' + b[1] + '</td><td>' + b[2] + '</td>'; $('tips').appendChild(tr);
+  });
+  var trI = document.createElement('tr'); trI.innerHTML = '<td>Intensité</td><td>Puissance de l\'éclairage du groupe, de 0 à 100 %. 0 % revient à éteindre. L\'intensité s\'applique à toutes les couleurs.</td>'; $('tips').appendChild(trI);
+  $('picker').style.opacity = .45;
+  function setI(v) { brush.i = Math.max(0, Math.min(100, v)); $('ifree').value = brush.i; document.querySelectorAll('[data-i]').forEach(function (x) { x.classList.toggle('on', +x.dataset.i === brush.i); }); }
+  document.querySelectorAll('[data-i]').forEach(function (c) { c.addEventListener('click', function () { setI(+c.dataset.i); }); });
+  $('ifree').addEventListener('change', function () { setI(parseInt(this.value, 10) || 0); });
+
+  // --- roue chromatique (teinte = angle, saturation = distance au centre, luminosité = curseur)
+  function hsv(h, s, v) { var c = v * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = v - c, r = [[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][Math.floor(h / 60) % 6]; return r.map(function (k) { return Math.round((k + m) * 255); }); }
+  function toHex(c) { return '#' + c.map(function (v) { return ('0' + v.toString(16)).slice(-2); }).join('').toUpperCase(); }
+  var pick = { h: 174, s: 0.89 };
+  function setFree(hex, keep) {
+    free = hex; $('hex').value = hex; $('now').style.background = hex; bEl.querySelector('[data-c=free] .sw').style.background = hex;
+    if (!keep && recents.indexOf(hex) < 0) { recents.unshift(hex); recents = recents.slice(0, 8); drawRecents(); }
+  }
+  function placeDot() { var a = pick.h * Math.PI / 180, r = pick.s * 50; $('dot').style.left = (50 + r * Math.cos(a)) + '%'; $('dot').style.top = (50 + r * Math.sin(a)) + '%'; }
+  function fromWheel(keep) { setFree(toHex(hsv(pick.h, pick.s, $('val').value / 100)), keep); placeDot(); }
+  $('wheel').addEventListener('click', function (e) {
+    var r = this.getBoundingClientRect(), x = (e.clientX - r.left) / (r.width || 1) - .5, y = (e.clientY - r.top) / (r.height || 1) - .5;
+    if (isNaN(x) || isNaN(y)) return; pick.h = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360; pick.s = Math.min(1, Math.sqrt(x * x + y * y) * 2); fromWheel(false);
+  });
+  $('val').addEventListener('input', function () { fromWheel(true); });
+  $('hex').addEventListener('change', function () { if (/^#[0-9a-fA-F]{6}$/.test(this.value)) setFree(this.value.toUpperCase(), false); else this.value = free; });
+  function drawRecents() { var el = $('recent'); el.innerHTML = ''; recents.forEach(function (h) { var s = document.createElement('span'); s.style.background = h; s.title = h; s.addEventListener('click', function () { setFree(h, true); }); el.appendChild(s); }); }
+  drawRecents(); setFree(free, true); placeDot();
+
+  // --- variables : position au cran k dans une salle de n groupes, suite affichée
+  // Mini-évaluateur de la maquette : entiers, N, g<k>, g*, variables, + - * / ( ) ; division entière (tronquée).
+  function evalExpr(src, n, k, seen) {
+    var tk = String(src).match(/\s*(\d+|N|g\*|g\d+|g[A-Z][A-Za-z0-9]*|[-+*\/()])/g), i = 0;
+    if (!tk || tk.join('').replace(/\s/g, '') !== String(src).replace(/\s/g, '')) throw new Error('expression mal écrite');
+    tk = tk.map(function (t) { return t.trim(); });
+    function atom() {
+      var t = tk[i++];
+      if (t === undefined) throw new Error('expression incomplète');
+      if (t === '(') { var v = sum(); if (tk[i++] !== ')') throw new Error('parenthèse non fermée'); return v; }
+      if (t === '-') return -atom(); if (t === '+') return atom();
+      if (/^\d+$/.test(t)) return +t; if (t === 'N' || t === 'g*') return n; if (/^g\d+$/.test(t)) return +t.slice(1);
+      var ref = vars.filter(function (x) { return x.n === t; })[0];
+      if (!ref) throw new Error('« ' + t + ' » n\'est pas déclarée' + (t === 'gN' ? ' (pour le dernier groupe, écrivez g*)' : ''));
+      if (seen.indexOf(t) >= 0) throw new Error(seen.concat(t).join(' → ') + ' : les variables dépendent l\'une de l\'autre');
+      var p = posOf(ref, k, n, seen.concat(t)); if (p < 0) throw new Error('vide'); return p + 1;
+    }
+    function prod() { var v = atom(); while (tk[i] === '*' || tk[i] === '/') { var o = tk[i++], r = atom(); if (o === '/' && r === 0) throw new Error('division par zéro'); v = o === '*' ? v * r : Math.trunc(v / r); } return v; }
+    function sum() { var v = prod(); while (tk[i] === '+' || tk[i] === '-') { var o = tk[i++], r = prod(); v = o === '+' ? v + r : v - r; } return v; }
+    var out = sum(); if (i < tk.length) throw new Error('expression mal écrite'); return out;
+  }
+  // Position (0…n-1) au cran k ; sans pas : le départ est recalculé à chaque cran (suit) ; avec pas : départ au cran 0 + pas × k.
+  function posOf(v, k, n, seen) {
+    seen = seen || [v.n];
+    if (v.kind === 'liste') { var it = v.items.filter(function (g) { return g <= n; }); return it.length ? it[k % it.length] - 1 : -1; }
+    var hasStep = String(v.step).trim() !== '', val = hasStep ? evalExpr(v.start, n, 0, seen) + evalExpr(v.step, n, 0, seen) * k : evalExpr(v.start, n, k, seen);
+    return (((val - 1) % n) + n) % n;
+  }
+  function varError(v) { try { [1, 3, 6, 12].forEach(function (n) { posOf(v, 0, n); posOf(v, 1, n); }); return ''; } catch (e) { return e.message === 'vide' ? '' : e.message; } }
+  function safePos(v, k, n) { try { return posOf(v, k, n); } catch (e) { return -1; } }
+  function seqText(v, n) { var out = []; for (var k = 0; k < 7; k++) { var p = safePos(v, k, n); out.push(p < 0 ? '—' : 'g' + (p + 1)); } return out.join(' ') + ' …'; }
+  var openPop = null, MAXVARS = 24;
+  function drawVars() {
+    var el = $('vars'); el.innerHTML = '';
+    vars.forEach(function (v, i) {
+      var d = document.createElement('div'); d.className = 'var';
+      var follows = v.kind === 'avance' && String(v.step).trim() === '' && /g[A-Z]/.test(v.start);
+      var params = v.kind === 'avance'
+        ? 'départ <input class="vs" list="starts" style="width:4.6rem" title="Groupe de départ : un numéro, N (nombre de groupes), N/2, g*, ou une autre variable (gA+1)" value="' + v.start + '"> pas <input class="vi" style="width:3.2rem" title="Avance à chaque pas ; vide = suit le départ" placeholder="suit" value="' + v.step + '">'
+        : '<input class="vl" style="width:8.5rem" title="Groupes suivis, dans l\'ordre" value="' + v.items.map(function (g) { return 'g' + g; }).join(', ') + '">';
+      var err = v.kind === 'avance' ? varError(v) : '';
+      var say = v.kind === 'liste' ? 'Suit les groupes dans l\'ordre donné, un par pas, puis recommence. Un groupe qui n\'existe pas dans la salle est ignoré.'
+        : follows ? 'Vaut toujours « ' + v.start + ' » : elle suit la variable citée, pas après pas.'
+        : String(v.step).trim() === '' ? 'Reste sur le groupe « ' + v.start + ' ».'
+        : 'Part du groupe « ' + v.start + ' » et avance de « ' + v.step + ' » à chaque pas ; après le dernier groupe, repart du premier. N = nombre de groupes de la zone ; une division ne garde que la partie entière ; hors de 1…N, on reboucle (0 = dernier groupe).';
+      d.innerHTML = '<div class="l1"><span class="nm">' + v.n + '</span><select class="vk"><option value="avance"' + (v.kind === 'avance' ? ' selected' : '') + '>Avance régulière</option><option value="liste"' + (v.kind === 'liste' ? ' selected' : '') + '>Suite de groupes</option></select>' + params + '<span style="flex:1"></span>'
+        + '<button class="q qv" title="Ce que fait cette variable">?</button><button class="btn mini up" title="Monter"' + (i === 0 ? ' disabled' : '') + '>▲</button><button class="btn mini dn" title="Descendre"' + (i === vars.length - 1 ? ' disabled' : '') + '>▼</button><button class="btn mini rm" title="Supprimer la variable">✕</button></div>'
+        + (err ? '<div style="color:#b91c1c;margin-top:.2rem">' + err + '</div>' : '') + '<div class="pop" style="display:' + (openPop === v.n ? '' : 'none') + '"><p><b>' + v.n + '</b> — ' + say + '</p><div class="seq">' + [1, 3, 6, 12].map(function (n) { return '<b>' + n + ' groupe' + (n > 1 ? 's' : '') + ' :</b>' + seqText(v, n); }).join('<br>') + '</div></div>';
+      el.appendChild(d);
+      var q = function (c) { return d.querySelector(c); };
+      q('.qv').addEventListener('click', function () { openPop = openPop === v.n ? null : v.n; drawVars(); });
+      q('.vk').addEventListener('change', function () { v.kind = this.value; if (v.kind === 'liste' && !v.items) v.items = [1, 4, 2]; changed(); });
+      if (q('.vs')) q('.vs').addEventListener('change', function () { v.start = this.value.trim() || '1'; changed(); });
+      if (q('.vi')) q('.vi').addEventListener('change', function () { v.step = this.value.trim(); changed(); });
+      if (q('.vl')) q('.vl').addEventListener('change', function () { v.items = (this.value.match(/\d+/g) || []).map(Number).filter(function (g) { return g >= 1 && g <= 12; }); changed(); });
+      q('.up').addEventListener('click', function () { vars.splice(i - 1, 0, vars.splice(i, 1)[0]); changed(); });
+      q('.dn').addEventListener('click', function () { vars.splice(i + 1, 0, vars.splice(i, 1)[0]); changed(); });
+      q('.rm').addEventListener('click', function () { vars.splice(i, 1); Object.keys(cells).forEach(function (k) { delete cells[k][v.n]; }); changed(); });
+    });
+    $('addvar').disabled = vars.length >= MAXVARS;
+  }
+  $('qvars').addEventListener('click', function () { var p = $('popvars'); p.style.display = p.style.display === 'none' ? '' : 'none'; });
+  $('addvar').addEventListener('click', function () {
+    if (vars.length >= MAXVARS) return;
+    var used = vars.map(function (v) { return v.n; }), n = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(function (c) { return 'g' + c; }).filter(function (x) { return used.indexOf(x) < 0; })[0];
+    vars.push({ n: n, kind: 'avance', start: '1', step: '+1' }); changed();
+  });
+  function changed() { dirty(); drawVars(); validate(); render(t); }
+
+  // --- grille : variables en haut ; ordre d'écriture = g0, groupes, puis variables (ordre du panneau)
+  function rows() { return vars.map(function (v) { return v.n; }).concat(fix()); }
+  function writeOrder() { return fix().concat(vars.map(function (v) { return v.n; })); }
+  function steps() { return COLS.filter(function (c) { return typeof c.k === 'number'; }); }
+  function draw() {
+    var h = '<thead><tr><th></th>';
+    COLS.forEach(function (c, i) {
+      h += '<th class="stepgo ' + (c.sp ? 'sp' : '') + (playingCol === c.k ? ' playing' : '') + '" data-go="' + c.k + '" title="Placer l\'aperçu sur ce pas">' + c.t + (c.sp ? '' : ' ▾') + '</th>';
+      if (!c.sp && (i + 1 >= COLS.length || COLS[i + 1].sp)) h += '<th class="add" id="add" title="Ajouter un pas">＋</th>';
+    });
+    h += '</tr></thead><tbody>';
+    var span = COLS.length + 2;
+    if (vars.length) h += '<tr class="band"><th colspan="' + span + '">Variables — repeignent le fond et les groupes</th></tr>';
+    rows().forEach(function (r) {
+      var v = vars.filter(function (x) { return x.n === r; })[0];
+      if (r === 'g0') h += '<tr class="band"><th colspan="' + span + '">Fond et groupes fixes</th></tr>';
+      h += '<tr class="' + (v ? 'var' : '') + (r === LAST ? ' last' : '') + '"><th>' + r + '<small>' + (v ? (v.kind === 'avance' ? v.start + (String(v.step).trim() === '' ? '' : ' ; ' + v.step) : 'suite') : r === LAST ? 'dernier groupe — g' + (nFix + 1) + ' ici' : (LABEL[r] || '')) + '</small></th>';
+      COLS.forEach(function (c, i) {
+        var a = (cells[c.k] || {})[r], inner = '';
+        if (a) { var off = a[0] === 'off', col = off ? [15,23,42] : rgbOf(a[0], 20), lum = col[0] * .3 + col[1] * .59 + col[2] * .11;
+          inner = '<span class="act" style="background:' + css(col) + ';color:' + (lum < 150 ? '#fff' : '#111827') + ';opacity:' + (off ? 1 : 0.45 + a[1] / 180) + '">' + (off ? 'éteint' : (NAMED[a[0]] ? NAMED[a[0]].l : a[0]) + ' ' + a[1] + ' %') + '</span>'; }
+        h += '<td class="cell' + (playingCol === c.k ? ' playing' : '') + '" data-c="' + c.k + '" data-r="' + r + '">' + inner + '</td>';
+        if (!c.sp && (i + 1 >= COLS.length || COLS[i + 1].sp)) h += '<td></td>';
+      });
+      h += '</tr>';
+    });
+    h += '<tr><th colspan="' + span + '" style="font-family:inherit;font-weight:400;position:static"><button class="btn mini" id="addg"' + (nFix >= 11 ? ' disabled' : '') + '>＋ Ajouter un groupe</button> <button class="btn mini" id="rmg"' + (nFix < 1 ? ' disabled' : '') + '>－ Retirer un groupe</button> <span class="hint">' + (nFix + 1) + ' groupe' + (nFix ? 's' : '') + ' dans la grille · la dernière ligne est toujours g*</span></th></tr></tbody>';
+    $('grid').innerHTML = h;
+    $('grid').querySelectorAll('td.cell').forEach(function (td) { td.addEventListener('click', function () {
+      var k = td.dataset.c; k = isNaN(+k) ? k : +k; cells[k] = cells[k] || {};
+      if (brush.color === 'erase') delete cells[k][td.dataset.r]; else cells[k][td.dataset.r] = [brush.color === 'free' ? free : brush.color, brush.i];
+      dirty(); draw(); validate();
+    }); });
+    $('grid').querySelectorAll('th.stepgo').forEach(function (th) { th.addEventListener('click', function () { var k = th.dataset.go; k = isNaN(+k) ? k : +k; var sq = sequence(6), i = sq.findIndex(function (x) { return x[0] === k; }); if (i >= 0) goTo(i); }); });
+    $('addg').addEventListener('click', function () {   // la ligne g* garde son contenu et devient g<n> ; nouvelle ligne g* vide
+      if (nFix >= 11) return; nFix++; Object.keys(cells).forEach(function (k) { if (cells[k][LAST]) { cells[k]['g' + nFix] = cells[k][LAST]; delete cells[k][LAST]; } }); changed();
+    });
+    $('rmg').addEventListener('click', function () {    // la ligne g* est retirée avec son contenu ; la ligne du dessus devient g*
+      if (nFix < 1) return; Object.keys(cells).forEach(function (k) { delete cells[k][LAST]; if (cells[k]['g' + nFix]) { cells[k][LAST] = cells[k]['g' + nFix]; delete cells[k]['g' + nFix]; } }); nFix--; changed();
+    });
+    $('add').addEventListener('click', function () {
+      var n = steps().length, at = COLS.findIndex(function (c) { return c.k === 'last'; });
+      COLS.splice(at, 0, { k: n, t: 'pas ' + n }); cells[n] = {}; dirty(); draw(); validate();
+    });
+  }
+  function validate() {
+    var bad = steps().filter(function (c) { return Object.keys(cells[c.k] || {}).length === 0; }).map(function (c) { return c.t; }), e = $('errs');
+    e.style.display = bad.length ? '' : 'none';
+    e.innerHTML = bad.length ? '<b>' + bad.join(', ') + '</b> : un pas doit écrire au moins une case. Remplissez-le, ou supprimez-le.' : '';
+    var verr = vars.map(function (v) { return v.kind === 'avance' ? varError(v) : ''; }).filter(Boolean);
+    if (verr.length) { e.style.display = ''; e.innerHTML += (bad.length ? '<br>' : '') + 'Variables : ' + verr.join(' ; ') + '.'; }
+    $('try').disabled = bad.length > 0 || verr.length > 0;
+  }
+
+  // --- simulateur (démonstration)
+  var CONFIGS = [{ n: 1, l: '1 groupe' }, { n: 3, l: '3 groupes' }, { n: 6, l: '6 groupes' }, { n: 12, l: '12 groupes' }, { n: 4, l: 'Zone Ambiance — 4 groupes', real: 1 }];
+  var stage = $('stage');
+  CONFIGS.forEach(function (cf) {
+    var row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = '<label class="lbl' + (cf.real ? ' real' : '') + '"><input type="checkbox" checked>' + cf.l + '<small></small></label><div class="bulbs"></div><div class="vv"></div>';
+    for (var i = 0; i < cf.n; i++) { var b = document.createElement('div'); b.className = 'bulb'; b.textContent = 'g' + (i + 1); row.querySelector('.bulbs').appendChild(b); }
+    row.querySelector('input').addEventListener('change', function () { row.classList.toggle('off', !this.checked); });
+    cf.row = row; stage.appendChild(row);
+  });
+  var clock = document.createElement('div'); clock.className = 'clock'; stage.appendChild(clock);
+  function paint(el, rgb, pct) { var k = pct / 100, D = [30,41,59], c = rgb.map(function (v, i) { return Math.round(D[i] + (v - D[i]) * k); }); el.style.backgroundColor = css(c); el.style.boxShadow = k > 0.15 ? '0 0 ' + (3 + 10 * k) + 'px rgba(' + rgb.join(',') + ',' + (0.75 * k) + ')' : 'none'; }
+  function targets(r, n, k) {
+    if (r === 'g0') return Array.from({ length: n }, function (_, i) { return i; });
+    if (r === LAST) return [n - 1];
+    var v = vars.filter(function (x) { return x.n === r; })[0];
+    if (v) { var p = safePos(v, k, n); return p < 0 ? [] : [p]; }
+    var g = parseInt(r.slice(1), 10); return g <= n ? [g - 1] : [];
+  }
+  function live(k, n) { var c = cells[k] || {}; return writeOrder().some(function (r) { return c[r] && targets(r, n, 0).length; }); }
+  function sequence(n) {
+    var seq = [], st = steps().filter(function (c) { return live(c.k, n); }), k = 0, first = true;
+    if (Object.keys(cells.pre || {}).length) seq.push(['pre', 0]);
+    if (!st.length) return seq;
+    while (seq.length < 60) {
+      st.forEach(function (c) { if (!first) k++; first = false; seq.push([c.k, k]); });
+      if (Object.keys(cells.last || {}).length) seq.push(['last', k]);
+    }
+    return seq;
+  }
+  function render(tt) {
+    var tickS = parseFloat(String($('tick').value).replace(',', '.')) || 1, rem = Math.max(0, 20 - Math.floor(tt * tickS)), gmin = parseInt($('gmin').value, 10) || 0, shown = null;
+    CONFIGS.forEach(function (cf) {
+      var n = cf.n, seq = sequence(n), state = Array.from({ length: n }, function () { return [[255,255,255], 78]; }), cur = null;
+      for (var i = 0; i <= Math.min(tt, seq.length - 1); i++) {
+        cur = seq[i];
+        writeOrder().forEach(function (r) { var a = (cells[cur[0]] || {})[r]; if (!a) return; targets(r, n, cur[1]).forEach(function (g) { state[g] = a[0] === 'off' ? [[0,0,0], 0] : [a[0], a[1]]; }); });
+      }
+      var bulbs = cf.row.querySelectorAll('.bulb');
+      state.forEach(function (s, g) { paint(bulbs[g], typeof s[0] === 'string' ? rgbOf(s[0], rem) : s[0], s[1]); });
+      cf.row.querySelector('.vv').textContent = vars.map(function (v) { var p = safePos(v, cur ? cur[1] : 0, n); return v.n + ' = ' + (p < 0 ? '—' : 'g' + (p + 1)); }).join(' · ');
+      cf.row.querySelector('small').textContent = n < gmin ? 'sous le minimum : non joué en salle' : '';
+      if (cf.n === 6 && cur) shown = cur[0];
+    });
+    playingCol = shown; draw();
+    clock.textContent = 'tick ' + tt + ' · ' + (shown === null ? '—' : shown === 'pre' ? 'PRE' : shown === 'last' ? 'DERNIER' : 'pas ' + shown) + ' · chronomètre simulé : ' + rem + ' s';
+  }
+  var timer = null, t = 0, playBtn = $('play'), MAXT = 20;
+  function show() { $('pos').value = t; render(t); }
+  function pause() { if (timer) { clearInterval(timer); timer = null; } playBtn.textContent = '▶ Lecture'; }
+  function goTo(i) { pause(); t = Math.max(0, Math.min(MAXT, i)); show(); }
+  playBtn.addEventListener('click', function () {
+    if (timer) { pause(); return; }
+    playBtn.textContent = '⏸ Pause'; show();
+    timer = setInterval(function () { t = (t + 1) % (MAXT + 1); show(); }, 700);
+  });
+  $('prev').addEventListener('click', function () { goTo(t - 1); });
+  $('next').addEventListener('click', function () { goTo(t + 1); });
+  $('first').addEventListener('click', function () { goTo(0); });
+  $('pos').addEventListener('input', function () { goTo(+this.value); });
+
+  // --- essai sur la salle : choix de la zone
+  $('zones').querySelectorAll('.chip').forEach(function (c, i) { if (i < 2) c.addEventListener('click', function () { $('zones').querySelectorAll('.chip').forEach(function (x) { x.classList.toggle('on', x === c); });
+    $('trymsg').textContent = i === 1 ? 'Cet effet demande 5 groupes ; la zone Animateur en a 3.' : 'Joue l\'effet tel qu\'il est à l\'écran, sans l\'enregistrer, sur les vraies ampoules de la zone choisie ; puis l\'éclairage revient à son état normal.';
+    $('try').disabled = i === 1; }); });
+  $('try').addEventListener('click', function () { this.textContent = this.textContent.indexOf('■') === 0 ? '💡 Essayer 10 s' : '■ Arrêter l\'essai'; });
+
+  drawVars(); draw(); validate(); render(0);
+})();
+</script>
+</body>
+</html>

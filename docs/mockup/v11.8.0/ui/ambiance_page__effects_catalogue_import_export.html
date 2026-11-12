@@ -1,0 +1,239 @@
+<!--
+mockup:
+  composant: ambiance_page
+  feature: effects_catalogue_import_export
+  version: 11.8.0
+  type: ui
+  issue: "#305 #210"
+  validee_le: 2026-11-12
+  complete: [docs/mockup/v11.7.0/ui/ambiance_page__light_groups_zones.html, docs/mockup/v11.7.0/ui/ambiance_settings_panel__light_effects_zones.html, docs/mockup/v11.8.0/ui/ambiance_page__effect_editor.html]
+  remplace: [docs/mockup/v11.7.0/ui/ambiance_page__effects_catalogue_zones.html]
+-->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambiance › Lumière › Effets — catalogue : créer, modifier, importer, télécharger, supprimer (#305, #210)</title>
+<style>
+:root { --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-900:#111827; --primary:#4f46e5; --primary-100:#e0e7ff; --warning:#f59e0b; --error:#ef4444; --amber:#b45309; --amberbg:#fef3c7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--gray-100); color:var(--gray-900); }
+.mock-bar { position:sticky; top:0; z-index:300; background:#111827; color:#e5e7eb; padding:.55rem 1rem; font-size:.8rem; } .mock-bar strong { color:#fff; }
+.mock-note { max-width:1100px; margin:.6rem auto; padding:0 1rem; font-size:.8rem; color:var(--gray-500); line-height:1.45; } .mock-note b { color:var(--gray-700); } .mock-note code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+h2.mock-h { max-width:1100px; margin:1.4rem auto .3rem; padding:0 1rem; font-size:.95rem; color:var(--gray-700); }
+.card { max-width:1000px; margin:.6rem auto 1.2rem; background:#fff; border-radius:.7rem; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:1rem 1.2rem; }
+.subtabs { display:flex; gap:.25rem; border-bottom:2px solid var(--gray-200); margin:.4rem 0 .9rem; }
+.subtab { padding:.4rem .8rem; font-size:.84rem; color:var(--gray-600); border-bottom:2px solid transparent; margin-bottom:-2px; } .subtab.active { color:var(--primary); border-color:var(--primary); font-weight:700; }
+h3 { font-size:.95rem; margin:1rem 0 .4rem; } h3:first-of-type { margin-top:.2rem; }
+.btn { font:inherit; font-size:.78rem; padding:.32rem .65rem; border-radius:.4rem; border:1px solid var(--gray-300); background:#fff; color:var(--gray-700); margin-right:.3rem; cursor:pointer; }
+.btn[disabled] { opacity:.5; cursor:not-allowed; }
+.hint { font-size:.77rem; color:var(--gray-500); margin:.35rem 0; line-height:1.45; } .hint code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.err { font-size:.79rem; color:#991b1b; background:#fee2e2; border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--error); }
+.err ul { margin:.3rem 0 0 1.1rem; padding:0; } .err code { background:#fff; padding:0 .25rem; border-radius:.2rem; }
+.warn { font-size:.79rem; color:var(--amber); background:var(--amberbg); border-radius:.4rem; padding:.5rem .65rem; margin:.6rem 0; border-left:3px solid var(--warning); }
+.head { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.grid { display:grid; grid-template-columns: 1fr 1fr; gap:.8rem; margin-top:.7rem; }
+.fx { border:1px solid var(--gray-200); border-radius:.6rem; padding:.75rem .8rem; }
+.fx h4 { margin:0 0 .25rem; font-size:.92rem; display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+.fx p { margin:.25rem 0 .5rem; font-size:.79rem; color:var(--gray-600); line-height:1.4; }
+.b { font-size:.64rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:.1rem .4rem; border-radius:.3rem; background:var(--gray-200); color:var(--gray-600); }
+.b.user { background:#dcfce7; color:#166534; } .b.over { background:var(--amberbg); color:var(--amber); } .b.use { background:var(--primary-100); color:#3730a3; text-transform:none; letter-spacing:0; }
+.m { font-size:.7rem; padding:.1rem .45rem; border-radius:999px; border:1px solid var(--gray-300); color:var(--gray-600); }
+.stage { background:#0f172a; border-radius:.5rem; padding:.9rem .6rem .55rem; margin:.4rem 0 .5rem; }
+.bulbs { display:flex; justify-content:space-around; align-items:center; }
+.bulb { width:2rem; height:2rem; border-radius:50%; background:#1e293b; transition: background-color .12s linear, box-shadow .12s linear; }
+.nums { display:flex; justify-content:space-around; margin-top:.35rem; font-size:.64rem; color:#64748b; }
+.clock { text-align:center; font-size:.68rem; color:#94a3b8; margin-top:.3rem; font-variant-numeric: tabular-nums; min-height:1em; }
+.file { font-size:.7rem; color:var(--gray-500); margin-top:.35rem; } .file code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.fx.na .stage { opacity:.45; }
+
+.btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; } .btn.danger { color:#b91c1c; border-color:#fecaca; }
+.acts { display:flex; flex-wrap:wrap; gap:.3rem 0; align-items:center; } .acts .sep { width:1px; height:1.2rem; background:var(--gray-200); margin:0 .45rem 0 .15rem; }
+.res { font-size:.79rem; border:1px solid var(--gray-200); border-radius:.5rem; margin:.6rem 0; } .res div { padding:.4rem .65rem; border-bottom:1px solid var(--gray-200); } .res div:last-child { border-bottom:0; }
+.res .ok { color:#166534; } .res .ko { color:#991b1b; } .res .ask { color:var(--amber); } .res code { background:var(--gray-100); padding:0 .25rem; border-radius:.2rem; }
+.dlg { max-width:31rem; border:1px solid var(--gray-300); border-radius:.6rem; padding:.9rem 1rem; box-shadow:0 8px 24px rgba(0,0,0,.14); background:#fff; } .dlg h4 { margin:0 0 .4rem; font-size:.9rem; } .dlg p { font-size:.8rem; color:var(--gray-600); margin:.3rem 0 .7rem; }
+.tryz { display:inline-flex; align-items:center; margin-right:.3rem; } .tryz .btn { margin-right:0; border-top-right-radius:0; border-bottom-right-radius:0; } .tryz select { font:inherit; font-size:.78rem; padding:.32rem .3rem; border:1px solid var(--gray-300); border-left:0; border-radius:0 .4rem .4rem 0; background:#fff; color:var(--gray-700); }
+.drop { border:2px dashed var(--gray-300); border-radius:.6rem; padding:.8rem; text-align:center; font-size:.8rem; color:var(--gray-500); margin:.6rem 0; }
+</style>
+</head>
+<body>
+<div class="mock-bar"><strong>Maquette v11.8.0 — #305, #210, révision 2</strong> · Ambiance › Lumière › Effets : catalogue des effets, avec création, modification, import et téléchargement. Les aperçus sont animés (boutons « Aperçu »).</div>
+
+<p class="mock-note"><b>Remplace <code>ambiance_page__effects_catalogue_zones</code> (v11.7.0).</b> Le catalogue est repris en entier. <b>Nouveau</b> : en tête, « Nouvel effet » et « Importer » ; sur chaque carte, « Modifier » (ou « Ouvrir » pour un effet livré), « Dupliquer », « Télécharger », « Supprimer ». « Essayer sur la salle » demande maintenant <b>la zone</b> où jouer. L'aperçu, les étiquettes, « utilisé : … », le bandeau des fichiers en erreur et le rechargement sont <b>inchangés</b>. L'éditeur lui-même est dans la maquette <code>ambiance_page__effect_editor</code>.</p>
+
+<h2 class="mock-h">01 — Catalogue des effets</h2>
+<div class="card">
+  <div class="subtabs"><span class="subtab">Pont et ampoules</span><span class="subtab">Groupes <span style="font-size:.68rem;background:var(--gray-200);border-radius:999px;padding:0 .3rem">9</span></span><span class="subtab active">Effets</span></div>
+  <p class="hint">(Section « Réglages d'ambiance — Lumière » : mode par défaut ; effet, vitesse et test par moment et par zone — inchangée, voir la maquette dédiée.)</p>
+
+  <div class="head"><h3 style="margin:0">Catalogue des effets</h3><span style="flex:1"></span><button class="btn primary">＋ Nouvel effet</button><button class="btn">⭱ Importer…</button><button class="btn">↻ Recharger les fichiers</button></div>
+  <p class="hint">Un effet est une liste de pas qui donnent, tick après tick, une couleur à des groupes (<code>g1</code>, <code>g2</code>… ; <code>g0</code> = toute la zone). Un même effet peut être joué sur la zone Ambiance, Animateur ou Public. Créez un effet avec « Nouvel effet », ou partez d'un effet existant avec « Dupliquer ». Chaque effet est aussi un fichier texte du dossier <code>data/files/effects</code> du serveur, que l'on peut télécharger, importer ou modifier à la main. <a style="color:var(--primary);text-decoration:underline">Comment écrire un effet</a></p>
+
+  <div class="err"><b>1 fichier n'a pas pu être chargé.</b> Les autres effets ne sont pas touchés.
+    <ul><li><code>ancien-effet.yaml</code> : format d'effet de la version précédente, à réécrire en pas à pas.</li></ul>
+  </div>
+
+  <div class="grid">
+    <div class="fx" data-fx="pulse">
+      <h4>Pulsation <span class="b">natif</span><span class="m">Chronomètre</span><span class="b use">utilisé : Ambiance, chronomètre</span></h4>
+      <p>Toute la zone respire deux fois par seconde : couleur du thème, puis une phase plus douce qui passe du blanc à l'orange à 10 secondes, puis au rouge à 5 secondes.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <div class="acts"><button class="btn play">▶ Aperçu</button><span class="tryz"><button class="btn try">💡 Essayer sur la salle</button><select class="zone" title="Zone où jouer l'essai"><option>Ambiance</option><option>Animateur</option><option disabled>Public (aucun groupe)</option></select></span><span class="sep"></span><button class="btn">👁 Ouvrir</button><button class="btn">⧉ Dupliquer</button><button class="btn">⭳ Télécharger</button></div>
+      <div class="file">Fichier : <code>natifs/pulsation.yaml</code> · 2 pas · tick de 0,5 s</div>
+    </div>
+    <div class="fx" data-fx="chase">
+      <h4>Chenillard <span class="b">natif</span><span class="m">Chronomètre</span><span class="b use">utilisé : Animateur, chronomètre (×1,5)</span></h4>
+      <p>Un point lumineux fait le tour de la zone, un groupe par seconde, sur un fond à la couleur du thème.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <div class="acts"><button class="btn play">▶ Aperçu</button><span class="tryz"><button class="btn try">💡 Essayer sur la salle</button><select class="zone" title="Zone où jouer l'essai"><option>Ambiance</option><option>Animateur</option><option disabled>Public (aucun groupe)</option></select></span><span class="sep"></span><button class="btn">👁 Ouvrir</button><button class="btn">⧉ Dupliquer</button><button class="btn">⭳ Télécharger</button></div>
+      <div class="file">Fichier : <code>natifs/chenillard.yaml</code> · 1 pas · tick de 1 s · demande 3 groupes dans la zone</div>
+    </div>
+    <div class="fx" data-fx="trail">
+      <h4>Chenillard avec traînée <span class="b">natif</span><span class="m">Chronomètre</span></h4>
+      <p>Le même chenillard, avec le groupe d'avant et le groupe d'après à mi-intensité de part et d'autre du point.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <div class="acts"><button class="btn play">▶ Aperçu</button><span class="tryz"><button class="btn try">💡 Essayer sur la salle</button><select class="zone" title="Zone où jouer l'essai"><option>Ambiance</option><option>Animateur</option><option disabled>Public (aucun groupe)</option></select></span><span class="sep"></span><button class="btn">👁 Ouvrir</button><button class="btn">⧉ Dupliquer</button><button class="btn">⭳ Télécharger</button></div>
+      <div class="file">Fichier : <code>natifs/chenillard-traine.yaml</code> · 1 pas · tick de 1 s · demande 5 groupes dans la zone</div>
+    </div>
+    <div class="fx" data-fx="team">
+      <h4>Couleur de l'équipe <span class="b">natif</span><span class="m">Équipe qui marque</span><span class="b use">utilisé : Animateur, Public</span></h4>
+      <p>Toute la zone prend la couleur de l'équipe qui marque, le temps de l'attribution des points.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <div class="acts"><button class="btn play">▶ Aperçu</button><span class="tryz"><button class="btn try">💡 Essayer sur la salle</button><select class="zone" title="Zone où jouer l'essai"><option>Ambiance</option><option>Animateur</option><option disabled>Public (aucun groupe)</option></select></span><span class="sep"></span><button class="btn">👁 Ouvrir</button><button class="btn">⧉ Dupliquer</button><button class="btn">⭳ Télécharger</button></div>
+      <div class="file">Fichier : <code>natifs/couleur-equipe.yaml</code> · 1 pas</div>
+    </div>
+    <div class="fx" data-fx="gradient">
+      <h4>Dégradé <span class="b over">natif modifié</span><span class="m">Phases calmes</span></h4>
+      <p>Une couleur différente par groupe, sur toute la zone.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <div class="acts"><button class="btn play">▶ Aperçu</button><span class="tryz"><button class="btn try">💡 Essayer sur la salle</button><select class="zone" title="Zone où jouer l'essai"><option>Ambiance</option><option>Animateur</option><option disabled>Public (aucun groupe)</option></select></span><span class="sep"></span><button class="btn">👁 Ouvrir</button><button class="btn">⧉ Dupliquer</button><button class="btn">⭳ Télécharger</button><button class="btn danger">↺ Revenir à l'effet d'origine</button></div>
+      <div class="file">Fichier : <code>degrade.yaml</code> remplace <code>natifs/degrade.yaml</code> (fichier déposé à la main dans le dossier). · demande 2 groupes dans la zone</div>
+    </div>
+    <div class="fx" data-fx="bounce">
+      <h4>Aller-retour <span class="b user">personnalisé</span><span class="m">Chronomètre</span><span class="m">Phases calmes</span><span class="b use">utilisé : Public, phases calmes</span></h4>
+      <p>Un point blanc va et vient d'un bout à l'autre de la zone.</p>
+      <div class="stage"><div class="bulbs"></div><div class="nums"></div><div class="clock"></div></div>
+      <div class="acts"><button class="btn play">▶ Aperçu</button><span class="tryz"><button class="btn try">💡 Essayer sur la salle</button><select class="zone" title="Zone où jouer l'essai"><option>Ambiance</option><option>Animateur</option><option disabled>Public (aucun groupe)</option></select></span><span class="sep"></span><button class="btn primary">✎ Modifier</button><button class="btn">⧉ Dupliquer</button><button class="btn">⭳ Télécharger</button><button class="btn danger">🗑 Supprimer</button></div>
+      <div class="file">Fichier : <code>aller-retour.yaml</code> · 1 pas · tick de 0,5 s</div>
+    </div>
+  </div>
+</div>
+
+<p class="mock-note"><b>Boutons d'une carte.</b><br>
+• <b>Aperçu</b> : comme en v11.7.0 (aperçu simulé avec le nombre de groupes de la zone Ambiance).<br>
+• <b>Essayer sur la salle</b> : <b>nouveau — on choisit la zone</b> (Ambiance, Animateur ou Public) dans la liste accolée au bouton ; l'essai joue l'effet sur les vraies ampoules de cette zone, à la vitesse ×1, 10 secondes (5 pour un effet de score), puis l'éclairage revient à son état normal. La liste ne propose que les zones qui ont au moins un groupe ; la zone choisie est retenue pour les autres cartes. Si l'effet demande plus de groupes que la zone n'en a, le bouton est grisé avec la raison (« demande 5 groupes ; la zone Animateur en a 3 »).<br>
+• <b>Modifier</b> (effet personnalisé) : ouvre l'éditeur. <b>Ouvrir</b> (effet livré ou « natif modifié ») : ouvre l'éditeur en lecture seule.<br>
+• <b>Dupliquer</b> : demande un nom et un identifiant, puis ouvre l'éditeur sur la copie. C'est la façon de partir d'un effet livré.<br>
+• <b>Télécharger</b> : enregistre le fichier <code>identifiant.yaml</code> sur l'ordinateur. Disponible pour tous les effets, livrés compris.<br>
+• <b>Supprimer</b> (effet personnalisé) : après confirmation. <b>Revenir à l'effet d'origine</b> (« natif modifié ») : supprime le fichier qui remplace l'effet livré, après confirmation.<br>
+• Un effet livré n'a ni « Modifier » ni « Supprimer ».</p>
+
+<h2 class="mock-h">02 — Importer des effets</h2>
+<div class="card">
+  <div class="grid">
+    <div>
+      <h3 style="margin-top:0">Choix des fichiers</h3>
+      <p class="hint">« Importer… » ouvre le choix de fichiers de l'ordinateur (un ou plusieurs fichiers <code>.yaml</code>, 20 au plus). On peut aussi déposer des fichiers sur le catalogue :</p>
+      <div class="drop">Déposez ici des fichiers d'effet (<code>.yaml</code>)</div>
+      <h3>Résultat de l'import</h3>
+      <div class="res">
+        <div class="ok">✓ <code>vague-douce.yaml</code> — « Vague douce » importé.</div>
+        <div class="ok">✓ <code>aller-retour (1).yaml</code> — « Aller-retour » remplacé.</div>
+        <div class="ko">✕ <code>casse.yaml</code> — refusé. Ligne 12 : la variable « gB » n'est pas déclarée dans <code>variables</code>.</div>
+        <div class="ko">✕ <code>pulsation.yaml</code> — refusé. « pulsation » est l'identifiant d'un effet livré : changez la clé <code>id</code> du fichier.</div>
+        <div class="ko">✕ <code>notes.yaml</code> — refusé. Ligne 3 : YAML illisible.</div>
+      </div>
+      <p class="hint">Chaque fichier est vérifié seul, avec les mêmes règles que les fichiers du dossier. Un fichier refusé n'est pas enregistré et n'empêche pas les autres. Le résultat reste affiché au-dessus du catalogue jusqu'à sa fermeture ; les effets importés apparaissent aussitôt dans le catalogue et dans les réglages.</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Un effet du même identifiant existe déjà</h3>
+      <div class="dlg"><h4>« Aller-retour » existe déjà</h4>
+        <p>Le fichier <code>aller-retour (1).yaml</code> porte l'identifiant <code>aller-retour</code>, déjà utilisé par un de vos effets (utilisé : Public, phases calmes).</p>
+        <button class="btn primary">Remplacer</button> <button class="btn">Garder les deux</button> <button class="btn">Annuler</button>
+        <p style="margin:.7rem 0 0">« Garder les deux » importe le fichier sous l'identifiant <code>aller-retour-2</code>. « Annuler » ignore ce fichier.</p></div>
+      <p class="hint">La question est posée pour chaque fichier concerné, après le traitement des autres. Elle ne se pose jamais pour un effet livré : l'import est alors refusé (ligne « pulsation.yaml » ci-contre).</p>
+      <h3>Autres refus</h3>
+      <p class="hint">• « Fichier trop gros (64 Ko au plus). »<br>• « Le dossier contient déjà 100 effets : supprimez-en avant d'importer. »<br>• « Ce fichier n'est pas un fichier d'effet (.yaml). »<br>• « Format d'effet de la version précédente : à réécrire en pas à pas. »</p>
+    </div>
+  </div>
+</div>
+
+<h2 class="mock-h">03 — Supprimer, revenir à l'effet d'origine</h2>
+<div class="card">
+  <div class="grid">
+    <div class="dlg"><h4>Supprimer « Aller-retour » ?</h4>
+      <p>Cet effet est <b>utilisé : Public, phases calmes</b>. Après la suppression, ce moment n'aura plus d'effet (les réglages des manches qui le citent non plus). Le fichier <code>aller-retour.yaml</code> est supprimé du serveur : téléchargez-le d'abord pour le garder.</p>
+      <button class="btn danger">Supprimer</button> <button class="btn">⭳ Télécharger</button> <button class="btn">Annuler</button></div>
+    <div class="dlg"><h4>Revenir au « Dégradé » d'origine ?</h4>
+      <p>Le fichier <code>degrade.yaml</code>, qui remplace l'effet livré, est supprimé du serveur. L'effet livré avec BuzzControl reprend aussitôt, partout où « Dégradé » est utilisé.</p>
+      <button class="btn danger">Revenir à l'effet d'origine</button> <button class="btn">⭳ Télécharger</button> <button class="btn">Annuler</button></div>
+  </div>
+  <p class="hint">Un effet non utilisé se supprime avec la même fenêtre, sans le paragraphe « utilisé ». Pendant une question en cours, un effet supprimé ou modifié est pris en compte tout de suite : le moment qui le jouait retrouve son éclairage par défaut.</p>
+</div>
+
+<h2 class="mock-h">04 — Cas particuliers (inchangés)</h2>
+<div class="card">
+  <div class="grid">
+    <div class="fx na">
+      <h4>Chenillard avec traînée <span class="b">natif</span><span class="m">Chronomètre</span></h4>
+      <div class="warn" style="margin:.3rem 0">Demande 5 groupes ; la zone Ambiance en a 3. <a style="text-decoration:underline">Gérer les groupes</a></div>
+      <button class="btn">▶ Aperçu</button><button class="btn" disabled title="Demande 5 groupes">💡 Essayer sur la salle</button>
+      <p class="hint">L'aperçu reste disponible (simulé avec 6 groupes, mention « simulation avec 6 groupes »). « Ouvrir », « Dupliquer » et « Télécharger » restent disponibles.</p>
+    </div>
+    <div class="fx">
+      <h4>Essai indisponible</h4>
+      <p class="hint">Bouton « Essayer sur la salle » désactivé, infobulle avec la raison : éclairage d'ambiance désactivé ; aucun pont associé ou pont injoignable ; question en cours ; effet qui demande plus de groupes que la zone choisie n'en a ; pour la zone Ambiance seulement, éclairage forcé sur ON ou OFF, ou Flash actif.</p>
+      <p class="hint">Catalogue vide (dossier illisible) : « Aucun effet disponible » et le bandeau d'erreur ; « Nouvel effet » et « Importer » sont alors refusés avec le message du serveur.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Animation de démonstration de la maquette (dans le produit, les ticks viennent du serveur).
+(function () {
+  var N = 6, THEME = [79,70,229], TEAM = [229,57,53], WHITE = [255,255,255], ORANGE = [255,170,0], RED = [230,30,30];
+  var PAL = [[79,70,229],[20,184,166],[245,158,11],[236,72,153]];
+  function paint(el, rgb, pct) {
+    var k = pct / 100, c = rgb.map(function (v) { return Math.round(30 + (v - 30) * k); });
+    el.style.backgroundColor = 'rgb(' + c.join(',') + ')';
+    el.style.boxShadow = k > 0.15 ? '0 0 ' + (4 + 14 * k) + 'px rgba(' + rgb.join(',') + ',' + (0.75 * k) + ')' : 'none';
+  }
+  function urgence(rem) { return rem <= 5 ? RED : rem <= 10 ? ORANGE : WHITE; }
+  function all(look) { return Array.from({length: N}, function () { return look; }); }
+  var BOUNCE = [0,1,2,3,4,5,4,3,2,1];
+  var FX = {
+    pulse:    { ms: 500, chrono: true, f: function (t, rem) { return (t % 2 === 0) ? { pas: 'pas 0', g: all([THEME, 100]) } : { pas: 'pas 1', g: all([urgence(rem), 50]) }; } },
+    chase:    { ms: 1000, chrono: true, f: function (t, rem) { var p = t % N; return { pas: 'pas 0 · gA = g' + (p + 1), g: Array.from({length: N}, function (_, i) { return i === p ? [urgence(rem), 100] : [THEME, 100]; }) }; } },
+    trail:    { ms: 1000, chrono: true, f: function (t, rem) { var p = t % N; return { pas: 'pas 0 · gA = g' + (p + 1), g: Array.from({length: N}, function (_, i) {
+                if (i === p) return [urgence(rem), 100]; if (i === (p + 1) % N || i === (p + N - 1) % N) return [THEME, 45]; return [THEME, 100]; }) }; } },
+    team:     { ms: 1000, f: function () { return { pas: 'pas 0', g: all([TEAM, 100]) }; } },
+    gradient: { ms: 1000, f: function () { return { pas: 'pas 0', g: Array.from({length: N}, function (_, i) { return [PAL[i % PAL.length], 80]; }) }; } },
+    bounce:   { ms: 500, f: function (t) { var p = BOUNCE[t % BOUNCE.length]; return { pas: 'pas 0 · gC = g' + (p + 1), g: Array.from({length: N}, function (_, i) { return i === p ? [WHITE, 100] : [THEME, 35]; }) }; } }
+  };
+  var running = null;
+  document.querySelectorAll('.fx[data-fx]').forEach(function (card) {
+    var fx = FX[card.dataset.fx], bulbs = card.querySelector('.bulbs'), nums = card.querySelector('.nums'), clock = card.querySelector('.clock'), btn = card.querySelector('.play');
+    for (var i = 0; i < N; i++) { var b = document.createElement('div'); b.className = 'bulb'; bulbs.appendChild(b); var n = document.createElement('span'); n.textContent = 'g' + (i + 1); nums.appendChild(n); }
+    var els = bulbs.children;
+    function draw(t) {
+      var rem = 20 - (Math.floor(t * fx.ms / 1000) % 21), r = fx.f(t, rem);
+      r.g.forEach(function (g, i) { paint(els[i], g[0], g[1]); });
+      clock.textContent = 'tick ' + t + ' · ' + r.pas + (fx.chrono ? ' · chronomètre simulé : ' + rem + ' s' : '');
+    }
+    draw(0);
+    function stop() { clearInterval(card._t); card._t = null; btn.textContent = '▶ Aperçu'; if (running === card) running = null; }
+    btn.addEventListener('click', function () {
+      if (card._t) { stop(); return; }
+      if (running) running._stop();
+      var t = 0; running = card; btn.textContent = '■ Arrêter';
+      card._t = setInterval(function () { t++; draw(t); }, fx.ms);
+    });
+    card._stop = stop;
+    var tryBtn = card.querySelector('.try'), label = tryBtn.textContent;
+    tryBtn.addEventListener('click', function () { this.textContent = this.textContent.indexOf('■') === 0 ? label : '■ Arrêter l\'essai'; });
+  });
+})();
+</script>
+</body>
+</html>

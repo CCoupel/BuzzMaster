@@ -24,9 +24,8 @@ const (
 	MinTickMs    = 250
 	MaxTickMs    = 60000
 	MaxSteps     = 200
-	MaxActions   = 16
-	MaxVars      = 8
-	MaxIncr      = 12
+	MaxActions   = 40
+	MaxVars      = 24
 	MaxIDLen     = 40
 	MaxNameLen   = 40
 	MaxDescLen   = 500
@@ -56,7 +55,7 @@ type TargetKind int
 const (
 	TargetG0  TargetKind = iota // g0 — the whole zone
 	TargetGn                    // g1, g2… — the salle group of that number
-	TargetGN                    // gN — the last non-empty group
+	TargetGN                    // g* — the last non-empty group (v11.8.0: was gN)
 	TargetVar                   // gA, gB… (+ neighbour offset) — a declared variable
 )
 
@@ -84,16 +83,19 @@ type Action struct {
 	Line   int
 }
 
-// Step is an ordered list of actions (1 to 16): the order written is the order applied.
+// Step is an ordered list of actions (1 to 40): the order written is the order applied.
 type Step []Action
 
-// Var is a group variable (§4.4): a progression (start, increment) or a list.
+// Var is a group variable (§4.4, §12.2): a progression or a list. A progression has a start
+// expression and, optionally, a step expression: with a step it "advances" (rank of
+// start(0) + step × k), without it it "follows" (rank of start(k), the start being
+// re-evaluated at every cran).
 type Var struct {
 	Name   string
-	Start  Target // TargetGn or TargetGN (progression)
-	Incr   int
 	IsList bool
-	List   []Target // TargetGn elements
+	List   []Target // TargetGn elements (list)
+	Start  *Expr    // progression
+	Step   *Expr    // progression: nil = follows
 	Line   int
 }
 
@@ -133,6 +135,11 @@ type Error struct {
 	File    string `json:"file"`
 	Line    int    `json:"line"`
 	Message string `json:"message"`
+	// Path locates a problem of an editor draft (`steps[2]`, `variables[0]`, `tick_ms`…, §11.3);
+	// empty for a file.
+	Path string `json:"path,omitempty"`
+	// part narrows Path inside a variable ("start" or "step"), set by the validator.
+	part string
 }
 
 func (e Error) Error() string {

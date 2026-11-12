@@ -43,7 +43,7 @@ func TestVariables_StartGroupAndIncrement(t *testing.T) {
 
 func TestVariables_NegativeIncrement_FromLastGroup(t *testing.T) {
 	// gD: gN; -1 : part du dernier groupe et recule, avec rebouclage
-	eqRows(t, "gN; -1", rows(t, headSrc("gA: gN; -1"), ctxN(4), 6), []string{"bbbW", "bbWb", "bWbb", "Wbbb", "bbbW", "bbWb"})
+	eqRows(t, "g*; -1", rows(t, headSrc("gA: g*; -1"), ctxN(4), 6), []string{"bbbW", "bbWb", "bWbb", "Wbbb", "bbbW", "bbWb"})
 	// -2 sur 5 groupes depuis g2 : g2, g5, g3, g1, g4
 	eqRows(t, "g2; -2", rows(t, headSrc("gA: g2; -2"), ctxN(5), 5), []string{"bWbbb", "bbbbW", "bbWbb", "Wbbbb", "bbbWb"})
 }
@@ -134,8 +134,8 @@ func TestTargets_FixedGroup_AbsentOrEmptyIgnored(t *testing.T) {
 	}
 }
 
-func TestTargets_LastGroup_gN(t *testing.T) {
-	src := fx("pas:\n  - { g0: [\"#0000FF\", 40], gN: [\"#FFFFFF\", 100] }\n")
+func TestTargets_LastGroup_GStar(t *testing.T) {
+	src := fx("pas:\n  - { g0: [\"#0000FF\", 40], g*: [\"#FFFFFF\", 100] }\n")
 	for _, n := range []int{1, 4, 12} {
 		if got := rows(t, src, ctxN(n), 1)[0]; got != headRow(n, n) {
 			t.Errorf("gN avec N = %d : le dernier groupe : %q", n, got)
@@ -218,7 +218,7 @@ func TestActions_AppliedInWrittenOrder_LastWinsOnSameBulb(t *testing.T) {
 }
 
 func TestActions_SameBulbTwiceInOneStep_LastWins(t *testing.T) {
-	if got := rows(t, fx("pas:\n  - { g1: [\"#FF0000\", 100], gN: [\"#00FF00\", 100] }\n"), ctxN(1), 1)[0]; got != "G" {
+	if got := rows(t, fx("pas:\n  - { g1: [\"#FF0000\", 100], g*: [\"#00FF00\", 100] }\n"), ctxN(1), 1)[0]; got != "G" {
 		t.Errorf("g1 = gN avec N = 1 : la dernière action gagne : %q", got)
 	}
 }
@@ -357,7 +357,7 @@ func TestApplicability_HostRequiresG0Only_AcrossPreStepsLastPost(t *testing.T) {
 	for name, body := range map[string]string{
 		"pas":      "pas:\n  - { g0: [\"#FFFFFF\", 100], g1: [\"#FF0000\", 100] }\n",
 		"pre":      "pre:\n  { g2: [\"#FF0000\", 100] }\npas:\n  - { g0: [\"#FFFFFF\", 100] }\n",
-		"dernier":  "pas:\n  - { g0: [\"#FFFFFF\", 100] }\ndernier:\n  { gN: [\"#FF0000\", 100] }\n",
+		"dernier":  "pas:\n  - { g0: [\"#FFFFFF\", 100] }\ndernier:\n  { g*: [\"#FF0000\", 100] }\n",
 		"post":     "pas:\n  - { g0: [\"#FFFFFF\", 100] }\npost:\n  { g1: [\"#FF0000\", 100] }\n",
 		"variable": "variables:\n  gA: g1; +1\npas:\n  - { g0: [\"#FFFFFF\", 100], gA: [\"#FF0000\", 100] }\n",
 	} {

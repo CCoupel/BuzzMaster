@@ -1140,6 +1140,44 @@ Réponse (`light-effects.md` §7.1) :
 
 Corps : `{"zone": "ambiance", "speed": 1, "seconds": 10}` (`zone` par défaut `ambiance` ; `speed` parmi les valeurs de `SpeedValues` ; `seconds` de 1 à 20, défaut 10, ou 5 pour un effet qui ne déclare que `score`). Le bouton « Essayer sur la salle » du catalogue envoie un corps vide ou `{}` : zone ambiance, vitesse ×1. Réponse immédiate `200 {"ok": true, "duration_ms": 10000}`. Refus : `409` avec `reason` (`disabled`, `game`, `not_applicable`, `mode`), `503` pont injoignable, `400`, `404`. Jamais `502`. L'essai n'est pas persisté.
 
+### `GET /api/lighting/effects/{id}/download`, `POST /api/lighting/effects/import`, `DELETE /api/lighting/effects/{id}` (v11.8.0, #305)
+
+Détail normatif : `contracts/light-effects.md` §11.5 à §11.7. Routes : `contracts/http-endpoints.md`.
+
+- **Télécharger** : `200` avec le texte du fichier (`yaml` au §11.2), natifs compris. `Content-Type: application/yaml; charset=utf-8`, `Content-Disposition: attachment; filename="<id>.yaml"`, `X-Content-Type-Options: nosniff`. `404` effet inconnu. `405` hors GET. `503` texte brut « stockage des effets indisponible » (pas de stockage derrière le gestionnaire).
+- **Importer** : `multipart/form-data`, champ `files` répété (1 à 20 fichiers `.yaml` / `.yml`, 64 Ko chacun, 2 Mo au total), champ facultatif `on_conflict` = `ask` (défaut) | `replace` | `keep_both`. Réponse `200` : `{ "results": [ { "file", "status", … } ], "catalogue": {…} }`.
+  - `status` ∈ `imported`, `replaced`, `renamed` (avec `new_id`), `conflict` (avec `existing`, fichier non écrit), `native` (`id` d'un effet livré, toujours refusé), `invalid` (`errors[]` : `line`, `message` ; couvre aussi les mots réservés et les noms réservés Windows `con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`), `too_big`, `limit`.
+  - Chaque fichier est traité seul ; un seul rechargement en fin de traitement. Le nom envoyé ne sert jamais de chemin.
+  - Refus global : `400` texte brut (envoi illisible, aucun fichier, plus de 20 fichiers, extension refusée, `on_conflict` invalide) ; `413` texte brut (plus de 2 Mo) ; `503` texte brut « stockage des effets indisponible » (pas de stockage derrière le gestionnaire).
+- **Supprimer** : `200 {"ok": true, "catalogue": {…}}`. Un effet à vous, ou le fichier qui surcharge un natif (le natif reprend). `409 {"reason": "native"}` pour un natif. `404` effet inconnu (texte brut). `503` texte brut « stockage des effets indisponible » (pas de stockage derrière le gestionnaire). Les réglages qui citaient l'effet ne sont pas modifiés (`unresolved[]`).
+
+### Éditeur : `GET …/{id}/source`, `POST …/draft`, `PUT …/{id}`, `POST …/draft/try` (v11.8.0, #210)
+
+Détail normatif : `contracts/light-effects.md` §11.1 à §11.4 et §11.10. Routes : `contracts/http-endpoints.md`.
+Le document d'effet (JSON d'échange, §11.1) a `variables[]` (`kind` `progression` avec `start` et `step` en expressions,
+`step: null` = « suit » ; `kind` `list` avec `items`), `pre`, `steps[][]`, `last`, `post`, `loop`, `min_groups`, `tick_ms`.
+Tous les champs du document sont présents, sauf, dans une action, `color` et `intensity` (action `off`) ou `off` (autres
+actions). `step` d'une variable est toujours présent (`null` = « suit »).
+
+- **`GET /api/lighting/effects/{id}/source`** : `200 {id, origin, file, read_only, yaml, effect, has_comments, custom_order, grid}`.
+  `read_only` est vrai pour `native` et `override`. `grid` = document sans voisin (`editable`, `effect`, `converted[]`,
+  `blocked[]`) : chaque voisin `gX±m` devient une variable qui suit `gX`. `404` effet inconnu.
+- **`POST /api/lighting/effects/draft`** : corps `{effect}` **ou** `{yaml}`, plus `groups` (0 à 8 valeurs de 1 à 12) et
+  `moment`. `200 {ok, errors[], effect, yaml, has_comments, custom_order, grid, moment, previews[]}`. Chaque erreur porte
+  `line` (brouillon `yaml`) ou `path` (brouillon `effect`, ex. `steps[2]`, `variables[0].start`). Rien n'est écrit ni joué.
+  `400` : JSON illisible, les deux clés ou aucune, `groups` hors bornes, `moment` invalide ; `413` : corps trop gros.
+- **`PUT /api/lighting/effects/{id}`** : corps `{effect}` (fichier régénéré, sans commentaire) **ou** `{yaml}` (texte écrit
+  tel quel, commentaires conservés), et `create: true` pour une création. `409 {reason: exists | native | limit}` ; `404`
+  si `create` est absent et l'`id` inconnu ; `400` : erreurs de validation (`errors[]`) ou identifiant réservé (texte brut) ;
+  `413` : trop gros ; `503` : stockage indisponible (texte brut).
+- **`POST /api/lighting/effects/draft/try`** : joue un brouillon sans l'écrire, sur `zone`, `speed`, `seconds` (mêmes
+  refus que `…/{id}/try` : `409` `disabled`, `game`, `not_applicable`, `mode` ; `503`). Brouillon invalide : `400
+  {ok: false, errors}`. Arrêt : `POST /api/lighting/effects/try/stop`.
+
+**Champ additif `vars`** : dans chaque trame de `GET /api/lighting/effects/{id}/preview` et des `previews` du brouillon,
+le numéro réel du groupe désigné par chaque variable à ce tick (`0` = aucun) : `"vars": {"gA": 3, "gB": 2}`, `{}` sans
+variable. Champ additif : le catalogue v11.7.0 est inchangé.
+
 ### `GET /api/lighting/effects/{id}/preview` — aperçu (v11.7.0, #299)
 
 Trames calculées par le serveur (`effects.Preview`, qui appelle `Render` : rien n'est joué sur le pont). Requête : `groups` de 1 à 12 (défaut : groupes non vides de la zone ambiance, 6 s'il n'y en a pas), `moment` ∈ `chrono`, `calm`, `score` (défaut : premier moment de l'effet). Vitesse ×1. Refus : `404` effet inconnu, `400` paramètre invalide ou moment non déclaré, `405` hors GET.

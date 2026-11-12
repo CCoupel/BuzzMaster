@@ -2,6 +2,42 @@
 
 Historique des versions du projet BuzzControl.
 
+## [11.8.0] - 2026-11-12 — Import / export des effets et éditeur d'effets pas à pas (#305, #210)
+
+Effets lumière : import, téléchargement et suppression depuis le catalogue (#305), éditeur d'effets dans l'interface (#210), format de fichier révision 7 avec un changement cassant pour `gN`.
+
+### Added
+
+- **Import d'effets (#305)** — catalogue de `/admin/ambiance` › Lumière › Effets : « ⭱ Importer… » ou glisser-déposer sur le catalogue. Un ou plusieurs fichiers `.yaml` / `.yml` (20 au plus, 64 Ko chacun). Chaque fichier est validé seul ; le panneau de résultat indique « importé », « remplacé », « gardé en double » ou « refusé », avec la ligne et la cause. Un fichier refusé n'est pas écrit et n'empêche pas les autres. Un fichier qui emploie des alias YAML (`*nom`) est refusé à l'import. `POST /api/lighting/effects/import` (`multipart`, `on_conflict` = `ask` | `replace` | `keep_both`).
+- **Même identifiant qu'un effet à vous (#305)** — fenêtre « Remplacer / Garder les deux / Annuler » ; « Garder les deux » importe sous un identifiant suffixé sans toucher au reste du fichier. Un fichier portant l'identifiant d'un effet livré est refusé, sans écriture.
+- **Télécharger un effet (#305)** — « ⭳ Télécharger » donne le fichier `<id>.yaml` de tout effet, livrés compris, avec `X-Content-Type-Options: nosniff`. `GET /api/lighting/effects/{id}/download`. Sans stockage derrière le gestionnaire : `503` « stockage des effets indisponible ».
+- **Noms réservés (#305)** — un `id` qui est un nom réservé par Windows (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`) est refusé à l'import, à l'enregistrement et dès le brouillon de l'éditeur (ligne de la clé `id` à l'import).
+- **Supprimer un effet (#305)** — « 🗑 Supprimer » pour un effet à vous, « ↺ Revenir à l'effet d'origine » pour un natif modifié ; confirmation citant où l'effet est utilisé. Un effet livré n'a ni l'un ni l'autre. `DELETE /api/lighting/effects/{id}` (natif : `409`).
+- **Zone de l'essai depuis le catalogue (#305)** — « Essayer sur la salle » demande la zone (Ambiance, toujours proposée ; Animateur et Public seulement s'ils ont au moins un groupe) ; un effet qui demande plus de groupes que la zone n'en a est grisé, avec la raison. La dernière zone choisie est retenue dans le navigateur.
+- **Écriture sûre des fichiers d'effets (#305)** — écriture atomique ; rien n'est écrit hors de `data/files/effects/`, ni dans `natifs/`, quel que soit le nom du fichier envoyé. Limite de 100 fichiers.
+- **Éditeur d'effets pas à pas (#210)** — « ＋ Nouvel effet », « ✎ Modifier », « 👁 Ouvrir » (effet livré, lecture seule) et « ⧉ Dupliquer » dans le sous-onglet Effets. Grille pas × cibles (variables en haut, `g*` en dernière ligne, 6 groupes par défaut, 12 au plus), panneau des variables, onglet Texte (commentaires conservés à l'enregistrement depuis le Texte, perdus avec avertissement dès qu'on modifie la grille), pinceaux et roue de couleur, simulateur sur 1, 3, 6, 12 groupes et les zones réelles, essai du brouillon par zone sans enregistrer. Garde de sortie : fermer ou recharger l'onglet, quitter vers une autre page ou revenir en arrière avec un éditeur modifié demande confirmation. Un fichier qui emploie des voisins (`gA-1`, `gA+1`) s'ouvre avec ces voisins remplacés par des variables de même rendu.
+- **Expressions dans les variables (#210)** — le départ et le pas d'une variable sont des expressions : entiers, `N`, `g*`, `g<k>`, une autre variable (au départ seulement), `+ - * /` (division entière tronquée), parenthèses. Une boucle entre variables et une division par zéro écrite en dur sont refusées. Valeurs bornées à ±1 000 000 (constante hors borne refusée ; calcul sur 64 bits). Détail : `docs/LIGHT_EFFECTS.md` §7.1.
+- **`g*` (#210)** — cible du dernier groupe non vide de la zone (vaut `N` dans une expression).
+- **Routes de l'éditeur (#210)** — `GET /api/lighting/effects/{id}/source`, `POST /api/lighting/effects/draft` (validation, conversion, aperçus multi-tailles, sans écriture), `PUT /api/lighting/effects/{id}` (création et enregistrement), `POST /api/lighting/effects/draft/try` (essai d'un brouillon). Champ additif `vars` dans les trames de `preview`.
+- **Limites relevées (#210)** — 24 variables par effet (8 en v11.7.0), 40 actions par pas (16 en v11.7.0).
+
+### Changed
+
+- **`POST /api/lighting/effects/{id}/try` (#305)** — inchangée ; le catalogue envoie désormais la zone choisie (`{"zone": …}`) au lieu de jouer toujours sur la zone ambiance.
+- **[BREAKING] `gN` ne désigne plus le dernier groupe (#210)** — `gN` devient un nom de variable ordinaire. Un fichier **utilisateur** écrit à la main pour la v11.7.0 qui emploie `gN` (cible ou départ) sans déclarer de variable `gN` est **refusé** avec le message « … écrivez g* » ; il figure dans le bandeau du catalogue, les autres effets restent chargés. **Correction** : remplacer `gN` par `g*` (`gD: gN; -1` devient `gD: g*; -1`). **Aucun effet natif n'est concerné.** Les écritures v11.7.0 (`g1; +1`, listes, voisins) gardent leur rendu.
+
+### Documentation
+
+- Sauvegarde des effets lumière (`docs/ADMIN_GUIDE.md`) : précisions sur la case **Réglages de jeu**, la sauvegarde « partie » et la restauration. Aucun changement de code.
+- `docs/LIGHT_EFFECTS.md` réécrit pour le format r7 (§7 expressions et chronogrammes, §16 éditeur, §17 compatibilité `gN`), `docs/ADMIN_GUIDE.md` (catalogue, éditeur, `gN`), `docs/REACT_INTERFACE.md` (composants de l'éditeur et du catalogue), `docs/DATA_MODELS.md` (routes de l'éditeur, champ `vars`), `docs/GO_SERVER.md` (paquet `effects` format r7 et écriture).
+
+### Migration
+
+- **Fichiers v11.7.0 avec `gN`** : à corriger en `g*` (voir Changed, [BREAKING]). Les effets livrés ne sont pas concernés.
+- **Sens inverse** : un fichier v11.8.0 qui utilise `g*`, une expression, une variable nommée `gN`, plus de 8 variables ou
+  plus de 16 actions par pas est refusé par un serveur v11.7.0 (message de validation). Ne pas copier un effet v11.8.0 vers une
+  installation v11.7.0.
+
 ## [11.7.0] - 2026-11-12 — Milestone v11.7.0 « Ambiance lumière : nouveaux effets de salle » (#211, #225, #223, #299)
 
 La lumière d'ambiance se règle par **trois zones** — la salle, l'animateur et le public — découpées en groupes numérotés

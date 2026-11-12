@@ -199,11 +199,11 @@ describe('LightEffectsCatalogue — « Essayer sur la salle » ×1 sur la zone A
     mount({ lighting: { speeds: { ambiance: { chrono: 2 } } }, onTry })
     fireEvent.click(card('chenillard').getByRole('button', { name: /Essayer sur la salle/ }))
     await waitFor(() => expect(onTry).toHaveBeenCalledTimes(1))
-    expect(onTry.mock.calls[0]).toEqual(['chenillard'])
+    expect(onTry.mock.calls[0]).toEqual(['chenillard', 'ambiance'])
     onTry.mockResolvedValue({ ok: true, duration_ms: 5000 })
     fireEvent.click(card('couleur-equipe').getByRole('button', { name: /Essayer sur la salle/ }))
     await waitFor(() => expect(onTry).toHaveBeenCalledTimes(2))
-    expect(onTry.mock.calls[1]).toEqual(['couleur-equipe'])
+    expect(onTry.mock.calls[1]).toEqual(['couleur-equipe', 'ambiance'])
   })
 
   it('la durée de l\'essai est celle que renvoie le serveur (5 s pour un effet de score) : le bouton se rétablit à ce moment', async () => {
@@ -309,9 +309,9 @@ describe('LightEffectsCatalogue — « utilisé : zone, moment » et états du c
     expect(usedBy({ effects: { ambiance: { chrono: 'chenillard' } } }, GROUPS, 'pulsation')).toEqual([])
   })
 
-  it('aucun bouton de création, de modification ni de suppression (éditeur prévu en v11.8.0)', () => {
+  it('aucun bouton de création ni de modification (éditeur : LOT-2) ; Supprimer n\'existe que sur un effet personnalisé (#305)', () => {
     mount()
-    expect(screen.queryByRole('button', { name: /Créer|Nouvel effet|Modifier|Supprimer|Éditer/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Créer|Nouvel effet|Modifier|Éditer/i })).toBeNull()
   })
 
   it('un seul fichier en erreur : message au singulier ; sans erreur, pas de bandeau', () => {
@@ -327,7 +327,7 @@ describe('LightEffectsCatalogue — « utilisé : zone, moment » et états du c
     mount({ onManageGroups, catalog: { ...CATALOG, groups: { ambiance: 2, animateur: 0, public: 0 }, effects: CATALOG.effects.map(e => (e.id === 'chenillard' ? { ...e, min_groups: 5, applicable: { ambiance: false, animateur: false, public: false } } : e)) }, zoneGroups: { ambiance: 2, animateur: 0, public: 0 } })
     fireEvent.click(card('chenillard').getByRole('button', { name: 'Gérer les groupes' }))
     expect(onManageGroups).toHaveBeenCalled()
-    expect(card('chenillard').getByRole('button', { name: /Essayer sur la salle/ }).title).toBe('Demande 5 groupes')
+    expect(card('chenillard').getByRole('button', { name: /Essayer sur la salle/ }).title).toBe('Demande 5 groupes ; la zone Ambiance en a 2')
   })
 
   it('« Recharger les fichiers » : un seul appel par clic, bouton occupé pendant l\'appel', async () => {

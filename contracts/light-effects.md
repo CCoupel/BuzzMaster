@@ -19,6 +19,21 @@
 > (la salle), `animateur`, `public`. Chaque zone a ses groupes numérotés `g1`…`gN` et son `g0` ; on choisit **un effet et
 > une vitesse par moment et par zone**. Les réglages par groupe animateur (`host_effects`, `host_speeds`) disparaissent.
 > Référence : `_work/reports/plan-ambiguities-20261111-234500.md`.
+>
+> **Révision 5 (2026-11-12, v11.8.0 — #210, #305) — édition, import et export.** Ajout du **§11** : document d'effet
+> (forme JSON), routes `source`, `draft`, `PUT`, `DELETE`, `download`, `import`, champ additif `vars` des trames
+> d'aperçu. Le séquenceur ne change pas.
+>
+> **Révision 6 (2026-11-12, v11.8.0, GATE 2) — évolutions du format, §12.** Le dernier groupe de la zone s'écrit
+> **`g*`** (plus `gN`) ; **`gN` devient un nom de variable ordinaire** ; **24 variables** au plus (au lieu de 8) ;
+> **40 actions** au plus par pas (au lieu de 16). `version` reste `2`. Un fichier v11.7.0 reste lu sans modification
+> (§12.3). **Les §4.1 à §4.8 se lisent avec les amendements du §12.**
+>
+> **Révision 7 (2026-11-12, v11.8.0, 3e retour du GATE 2) — §12 réécrit.** Le **départ et le pas d'une variable sont des
+> expressions** (`N` = nombre de groupes, `+ - * /`, parenthèses, autre variable : `gA: N/2; +1`, `gB: gA+1`) ; division
+> **entière** ; **`gN` employé sans être déclaré est refusé** (plus de lecture de compatibilité — **cassant** pour un
+> fichier utilisateur v11.7.0 qui l'emploie) ; la grille de l'éditeur a un nombre de groupes réglable dont la
+> **dernière ligne est `g*`**. Remplace, dans la révision 6 : « un fichier v11.7.0 reste lu sans modification ».
 
 ---
 
@@ -280,7 +295,7 @@ est refusée. `duree_tick_ms` : 250 à 60 000. Un fichier `version: 1` (motifs c
 
 ### 4.2 Un pas, une action
 
-Un pas (`pre`, chaque élément de `pas`, `dernier`, `post`) est une table `cible: action`, 1 à 16 actions.
+Un pas (`pre`, chaque élément de `pas`, `dernier`, `post`) est une table `cible: action`, 1 à 16 actions *(révision 6 : 40, §12)*.
 
 - **Action** : `[couleur, intensité]` — intensité de 0 à 100 (pourcentage ; 0 = éteint) — ou `[eteint]`. Fondu toujours
   nul (`TransitionMs = 0`).
@@ -299,8 +314,8 @@ Un pas (`pre`, chaque élément de `pas`, `dernier`, `post`) est une table `cibl
 |---|---|
 | `g0` | toute la zone où l'effet est joué : pour `ambiance`, toutes les ampoules d'ambiance, groupées ou non ; pour `animateur` et `public`, toutes les ampoules des groupes de la zone. Jamais une ampoule d'une autre zone ni d'une équipe |
 | `g1`, `g2`… | le groupe de ce **numéro réel** dans la zone (§2.1) ; **absent ou vide ⇒ action ignorée** |
-| `gN` | le dernier groupe non vide |
-| `gA`, `gB`… (`g` + une lettre majuscule autre que `N`, puis lettres ou chiffres) | une variable déclarée dans `variables` |
+| `gN` | le dernier groupe non vide — ***révision 6 : s'écrit `g*`, §12*** |
+| `gA`, `gB`… (`g` + une lettre majuscule autre que `N`, puis lettres ou chiffres) | une variable déclarée dans `variables` — ***révision 6 : `N` est autorisée, §12*** |
 | `gA+1`, `gA-2` | le voisin du groupe que désigne `gA`, à m rangs ; après le dernier groupe on revient au premier |
 
 N = nombre de groupes **non vides** de la zone où l'effet est joué. Les **rangs** 1…N sont la suite ordonnée de ces
@@ -326,7 +341,7 @@ tick et ne fait pas avancer les variables. Si tous les pas de la boucle sont sau
 
 - Progression : au cran k, la variable désigne la position `((départ − 1 + incrément × k) mod N) + 1`. Un départ au-delà
   de N reboucle (`g7` avec N = 4 ⇒ position 3). Incrément : entier de −12 à +12.
-- 8 variables au plus par effet. N = 0 ⇒ toute action sur une variable est ignorée.
+- 8 variables au plus par effet *(révision 6 : 24, §12)*. N = 0 ⇒ toute action sur une variable est ignorée.
 
 ### 4.5 Déroulement et règle d'avance — normatif
 
@@ -380,6 +395,23 @@ Chaque erreur porte `file`, `line` (0 si inconnue), `message` en français, sans
 inconnue, clé obligatoire absente, `id` invalide ou en double, `version` non prise en charge, `moments` vide ou valeur
 inconnue, `duree_tick_ms` hors bornes, `pas` vide ou trop long, cible mal écrite, variable non déclarée, déclaration de
 variable mal écrite, couleur invalide, intensité hors 0-100, fichier trop gros.
+
+**Textes écrits par le serveur (v11.8.0, §11.4 et §11.7)** — deux refus de plus, qui ne valent que pour un texte
+**enregistré** (`PUT`) ou **importé**, pas pour le chargement du dossier :
+
+- **Alias YAML** : un texte qui contient un alias (`*nom`, référence à une ancre `&nom`) est refusé, avec la ligne du
+  premier alias : « les alias YAML (*nom) ne sont pas acceptés : écrivez les valeurs en toutes lettres ». Le contrôle
+  se fait sur l'arbre du document, **avant** tout décodage : aucun alias n'est développé. Une ancre seule (`&nom`, sans
+  alias) est acceptée.
+- **Identifiant réservé** : un `id` qui est un mot de route (`reload`, `try`, `draft`, `import`) ou un **nom de
+  périphérique Windows** (`con`, `prn`, `aux`, `nul`, `com1` à `com9`, `lpt1` à `lpt9`) est refusé, avec la ligne de la
+  clé `id` — le nom du fichier écrit dérive de l'`id` (§11.4) et `con.yaml` n'est pas un nom de fichier utilisable sous
+  Windows. Messages : « « reload » est un mot réservé : changez la clé id » ; « « con » est un nom réservé par Windows :
+  changez la clé id ».
+
+Un fichier **déposé à la main** dans le dossier garde les règles de v11.7.0 : son nom est libre, son `id` peut être
+l'un de ces mots, et ses alias sont traités par le chargeur (dont l'analyseur borne lui-même le développement des
+alias ; la taille du fichier reste limitée à 64 Ko).
 
 ---
 
@@ -594,7 +626,7 @@ du §6 (défaut `1`) ; `seconds` de 1 à 20 (défaut **10**, ou **5** si l'effet
 | Appelant | Appel | Rendu |
 |---|---|---|
 | Bouton **« Tester »** de l'onglet Effets, à côté d'un choix d'effet (zone, moment) | `zone` = la zone du réglage, `speed` = la vitesse réglée pour ce moment | l'effet tel qu'il sera joué en jeu, sur sa zone |
-| Bouton **« Essayer »** du catalogue | corps vide ou `{}` | vitesse ×1, zone `ambiance` |
+| Bouton **« Essayer sur la salle »** du catalogue | v11.7.0 : corps vide ou `{}` ; **v11.8.0 : `{"zone": <zone choisie>}`** (§11.8) | vitesse ×1, sur la zone choisie (`ambiance` par défaut) |
 
 - Contexte simulé : thème `#4F46E5`, équipe `#E53935`, chronomètre simulé qui descend de 15 s (la couleur `urgence`
   passe par l'orange puis le rouge pendant un essai de 10 s).
@@ -665,8 +697,502 @@ ajustées après l'essai sur matériel sans changer ce contrat.
 
 | Sujet | Où |
 |---|---|
-| Éditeur de scènes et d'effets dans l'interface | v11.8.0 (#210) — écrit le format du §4 (grille ticks × groupes) |
+| Éditeur d'effets dans l'interface, import et export | v11.8.0 (#210, #305) — **§11** de ce contrat |
 | Remplissage (#300), vague (#301), scintillement (#302) ; variantes selon le temps restant, hasard, étalement sur le chronomètre, départ depuis l'équipe, fondu | hors v11.7.0 (révision 3) — backlog |
 | Rôles fins par ampoule (accentuation, fond) | hors v11.7.0 (décision D3) ; le besoin « animateur » est couvert par la zone animateur (§2.5) |
 | Effets sur les ampoules d'équipe, effets des buzzers | inchangés (`hue-bridge.md` §5.2, `LED_SET_PROTOCOL.md`) |
 | Geste direct de choix d'effet depuis le popover | non prévu |
+
+---
+
+## 11. Édition, import et export des effets (v11.8.0 — #210, #305) — révision 5
+
+> Décisions utilisateur du 2026-11-12 (GATE 1.5, `_work/reports/plan-ambiguities-20261112-100000.md`) :
+> **E1** l'éditeur est une grille **pas × cibles** (colonnes PRE, pas 0…n, DERNIER, POST ; lignes `g0`, `g1`…`g12`,
+> précédées d'une ligne par variable déclarée), avec un panneau de déclaration des variables et un onglet
+> **Texte** (le fichier YAML, validé en direct) ; **E2** un effet natif est en **lecture seule** : on le duplique ;
+> l'interface et l'import n'écrivent jamais un fichier portant l'`id` d'un natif ; **E3** un enregistrement depuis la
+> grille **régénère** le fichier (commentaires `#` perdus, avertissement) ; l'import et l'onglet Texte écrivent le
+> texte **tel quel** ; **E4** l'aperçu de l'éditeur est joué sur plusieurs tailles de salle à la fois.
+>
+> Décisions du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md` et `-104000.md`) : **E5** la grille n'a **pas de
+> ligne « voisin »** (`gA-1`, `gA+1`) : un voisin lu dans un fichier est **converti en variable** à l'ouverture (§11.2) ;
+> les voisins restent valides dans le fichier et dans l'onglet Texte (révision 7 : la variable créée **suit** l'autre,
+> `gB: gA-1`) ; **E6** les variables sont affichées **en haut** de
+> la grille mais écrites **après** `g0` et les groupes ; **E7** tout essai sur les ampoules (catalogue, éditeur)
+> **demande la zone** ; l'essai de l'éditeur joue le **brouillon**, sans enregistrer (§11.10).
+>
+> Le format de fichier évolue à la marge (**§12**, `version: 2` conservée). Le serveur reste le **seul** analyseur, le seul
+> validateur et le seul interprète : le navigateur n'analyse jamais de YAML et ne calcule aucune trame.
+> Les routes de ce chapitre ont la même protection que les autres routes `/api/lighting/*` (aucune de plus).
+
+### 11.1 Document d'effet — forme JSON d'échange
+
+Forme JSON d'un effet, produite et relue par le serveur (`effects.Document`). Les noms sont ceux de l'API (§7.1).
+
+```json
+{
+  "id": "mon-chenillard", "name": "Mon chenillard", "description": "Un point fait le tour de la zone.",
+  "moments": ["chrono"], "min_groups": 3, "tick_ms": 1000, "loop": true,
+  "variables": [
+    { "name": "gA", "kind": "progression", "start": "N/2", "step": "+1" },
+    { "name": "gB", "kind": "progression", "start": "gA+1", "step": null },
+    { "name": "gC", "kind": "list", "items": ["g1", "g4", "g3"] }
+  ],
+  "pre":   [ { "target": "g0", "color": "theme", "intensity": 100 } ],
+  "steps": [ [ { "target": "g0", "color": "theme", "intensity": 100 },
+               { "target": "gA-1", "color": "theme", "intensity": 50 },
+               { "target": "gA", "color": "urgence", "intensity": 100 } ] ],
+  "last":  null,
+  "post":  [ { "target": "g2", "off": true } ]
+}
+```
+
+| Champ | Fichier (§4) | Règle |
+|---|---|---|
+| `id`, `name`, `description` | `id`, `nom`, `description` | bornes du §4 |
+| `moments`, `min_groups`, `tick_ms`, `loop` | `moments`, `groupes_min`, `duree_tick_ms`, `boucle` | `min_groups` 0 = clé absente ; `loop` true = défaut |
+| `variables[]` | `variables` | **ordre du tableau = ordre d'écriture**. `kind: "progression"` : `start` et `step` sont des **expressions en texte** (§12.2), `step` = `null` quand la déclaration n'a pas de pas (« suit », §12.2). `kind: "list"` : `items[]` (`"g1"`…`"g12"`). `[]` = aucune |
+| `pre`, `last`, `post` | `pre`, `dernier`, `post` | tableau d'actions, ou `null` = pas absent |
+| `steps[][]` | `pas` | 1 à 200 pas, chacun 1 à 40 actions, **dans l'ordre d'application** |
+| action | `cible: [couleur, intensité]` | `target` écrit comme dans le fichier (`g0`, `g3`, `g*`, `gA`, `gA+1`, `gA-2`) ; `color` = `"#RRGGBB"` ou `theme` / `equipe` / `urgence` / `scene` ; `intensity` 0-100. `[eteint]` ⇔ `{"target": …, "off": true}` (sans `color` ni `intensity`) |
+
+- `version` n'est pas dans le document : le serveur écrit toujours `version: 2`.
+- Tous les champs sont toujours présents dans une réponse (`variables: []`, `pre: null`…), jamais omis.
+- **Aller-retour garanti** : pour tout effet valide `e`, `Parse(Serialize(DocumentOf(e)))` rend le même effet
+  (mêmes trames pour tout N de 1 à 12). Test exigé sur chaque natif et sur les fichiers d'exemple (§11.9).
+
+**Ordre canonique des actions d'un pas** (celui qu'écrit la grille) : `g0` ; puis `g1`…`g12` par numéro croissant ; puis
+`g*` ; puis les variables **dans l'ordre de `variables`** — la dernière déclarée est écrite en dernier, donc gagne
+quand deux variables désignent le même groupe. Une variable repeint toujours le fond et les groupes fixes. (Un voisin,
+qui ne peut venir que d'un fichier ou de l'onglet Texte, se range juste avant sa variable, par décalage croissant.)
+`custom_order` (§11.2) est vrai quand au moins un pas du fichier n'est pas dans cet ordre.
+
+### 11.2 `GET /api/lighting/effects/{id}/source`
+
+Ouvre un effet du catalogue dans l'éditeur.
+
+```json
+{ "id": "chenillard", "origin": "native", "file": "natifs/chenillard.yaml", "read_only": true,
+  "yaml": "# Chenillard — …\nid: chenillard\n…", "effect": { … document §11.1 … },
+  "has_comments": true, "custom_order": false,
+  "grid": { "editable": true, "effect": { … document sans voisin … },
+            "converted": [ { "from": "gA-1", "to": "gB" }, { "from": "gA+1", "to": "gC" } ], "blocked": [] } }
+```
+
+**`grid` — le document tel que la grille l'affiche (E5).** `effect` (ci-dessus) est le document fidèle au fichier ;
+`grid.effect` est le même effet **sans aucune cible voisine** dans ses pas : chaque voisin `gX+m` / `gX-m` est remplacé
+par une variable **qui suit** `gX` — déclaration `gY: gX+m` (sans pas, §12.2), exacte dans tous les cas, que `gX` soit
+une avance ou une suite de groupes. *(Révision 7 : remplace la table de conversion par départ décalé ; une cible `g*`
+n'est plus convertie, elle a sa ligne dans la grille.)*
+
+- Nom de la variable créée : la première lettre libre de `gA` à `gZ`. Un même voisin utilisé dans plusieurs pas donne
+  une seule variable. Les variables créées sont insérées **juste avant** leur variable d'origine, par décalage
+  croissant : la variable d'origine reste écrite après elles et continue de gagner (ordre canonique, §11.1).
+- Seul cas non convertible : la conversion ferait dépasser 24 variables.
+- **Garantie** : `grid.effect` rend les mêmes trames que `effect` pour tout N de 1 à 12 (test exigé, §11.9). Avec la
+  règle de position du §4.4, le voisin à `m` rangs d'une progression est exactement la progression partie de `m` rangs
+  plus loin.
+- `converted[]` liste les remplacements (pour le message de l'interface) ; vide s'il n'y avait aucun voisin (alors
+  `grid.effect` = `effect`).
+- Un voisin non convertible ⇒ `grid.editable: false`, `grid.effect: null`, `blocked[]` = les cibles en cause : la grille
+  est affichée en lecture seule d'après `effect`, l'effet se modifie dans l'onglet Texte.
+- Rien n'est écrit : le fichier n'est réécrit (sans voisin) qu'à un enregistrement fait depuis la grille.
+
+- `yaml` : le texte du fichier tel qu'il est lu (natif : le texte embarqué, **sans** l'en-tête de la copie de référence).
+- `read_only` : vrai pour `origin` = `native` **et** `override` (E2 : l'interface n'écrit jamais un `id` de natif).
+- `has_comments` : le texte contient au moins un commentaire `#`. `custom_order` : §11.1.
+- `404` effet inconnu.
+
+### 11.3 `POST /api/lighting/effects/draft` — valider, convertir et prévisualiser un brouillon
+
+Rien n'est écrit, rien n'est joué. Sert à la fois à la validation en direct, au passage grille ↔ texte et à l'aperçu
+multi-tailles. Corps (64 Ko au plus) — **exactement une** des deux clés `effect` ou `yaml` :
+
+```json
+{ "effect": { … document §11.1 … },        // brouillon de la grille
+  "yaml": "id: mon-effet\n…",              // ou brouillon de l'onglet Texte
+  "groups": [1, 3, 6, 12, 4],              // tailles de salle à prévisualiser : 0 à 8 valeurs distinctes de 1 à 12
+  "moment": "chrono" }                      // facultatif ; défaut : premier moment déclaré
+```
+
+Réponse `200` dans tous les cas où le corps JSON est lisible :
+
+```json
+{ "ok": true, "errors": [],
+  "effect": { … document … }, "yaml": "id: mon-effet\nnom: …", "has_comments": false, "custom_order": false,
+  "grid": { "editable": true, "effect": { … }, "converted": [], "blocked": [] },
+  "moment": "chrono",
+  "previews": [ { … réponse du §7.3 pour groups = 1 … }, { … groups = 3 … }, … ] }
+```
+
+- **Validation** : celle du §4, par le même code que le chargement des fichiers. Brouillon invalide ⇒ `ok: false`,
+  `errors[]` (`line` — 0 pour un brouillon `effect`, la ligne du texte pour un brouillon `yaml` — et `message` du §4.8,
+  sans nom de fichier), `previews: []` ; `effect` est `null` si le texte n'est pas analysable, `yaml` est `""` si le
+  document n'est pas sérialisable. Pour un brouillon `effect`, chaque erreur porte en plus `path` quand elle vise un
+  endroit précis (`"steps[2]"`, `"variables[0]"`, `"pre"`, `"tick_ms"`…), pour que la grille la place.
+- **`grid`** : même objet qu'au §11.2, calculé sur le brouillon (pour le passage Texte → Grille). `null` si `ok: false`.
+- **Conversion** : `effect` = le document du brouillon (analysé depuis `yaml`, ou renvoyé normalisé) ; `yaml` = le texte
+  **régénéré** depuis le document (§11.4), toujours — c'est le texte qu'afficherait l'onglet Texte après une
+  modification dans la grille. `has_comments` et `custom_order` décrivent le brouillon `yaml` reçu (faux pour `effect`).
+- **Aperçus** : un élément par valeur de `groups`, dans l'ordre demandé, chacun de la forme du §7.3 (`id` = l'`id` du
+  brouillon, mêmes règles : une trame par tick, `frames: []` si aucun pas visible, calculé même sous `groupes_min`).
+  `moment` non déclaré par le brouillon ⇒ `ok: false` avec l'erreur correspondante.
+- L'`id` du brouillon n'a pas à être libre : l'unicité n'est vérifiée qu'à l'enregistrement.
+- `400` : JSON illisible, les deux clés ou aucune, `groups` hors bornes. `413` : corps trop gros.
+
+**Champ additif des trames (§7.3 et ici)** — `vars` : pour chaque variable déclarée, le **numéro réel** du groupe
+qu'elle désigne à ce tick (`0` = aucun) : `"vars": { "gA": 3, "gB": 2 }`. Objet vide `{}` sans variable. Ajouté aussi à
+`GET /api/lighting/effects/{id}/preview` (additif, sans effet sur le catalogue v11.7.0).
+
+### 11.4 Enregistrer — `PUT /api/lighting/effects/{id}`
+
+Corps (64 Ko au plus) : `{"effect": {…}}` **ou** `{"yaml": "…"}`, et `"create": true` pour une création.
+
+| Cas | Résultat |
+|---|---|
+| `effect` | le fichier est **régénéré** : clés dans l'ordre du §4.1, un pas par ligne en écriture `{ cible: [couleur, intensité] }`, `description` en bloc `>`, sans commentaire, fin de ligne `\n`, UTF-8 |
+| `yaml` | le texte est écrit **tel quel** (commentaires conservés), après validation |
+| `create: true` et `id` déjà au catalogue (natif ou utilisateur) | `409 {"reason": "exists"}` |
+| `create` absent et `id` inconnu | `404` |
+| `id` d'un natif (y compris un natif surchargé) | `409 {"reason": "native"}` — rien n'est écrit (E2) |
+| `id` du corps ≠ `{id}` du chemin | `400` (l'identifiant ne se change pas : dupliquer) |
+| `id` réservé : mot de route (`reload`, `try`, `draft`, `import`) ou nom de périphérique Windows (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`) — §4.8 | `400` avec `errors[]` |
+| texte `yaml` contenant un alias YAML (`*nom`) — §4.8 | `400` avec `errors[]` (ligne de l'alias) — rien n'est écrit |
+| brouillon invalide | `400 {"ok": false, "errors": [...]}` (forme du §11.3) — rien n'est écrit |
+| 100 fichiers atteints (création) | `409 {"reason": "limit"}` |
+
+- **Fichier écrit** : celui qui définit déjà cet `id` (son nom est conservé) ; sinon `<id>.yaml` ; si ce nom est pris
+  par un fichier qui ne définit pas cet `id` (autre effet, fichier invalide), `<id>-2.yaml`, `<id>-3.yaml`…
+- **Écriture atomique** (fichier temporaire dans le même dossier — nom ne finissant pas par `.yaml` — puis renommage),
+  jamais dans `natifs/`, jamais hors de `data/files/effects/`.
+- Rechargement immédiat du catalogue (comme §7.2) avant de répondre : `200 {"ok": true, "file": "mon-effet.yaml",
+  "catalogue": { … réponse du §7.1 … }}`. Un effet en cours de lecture repart avec sa nouvelle définition (§3.3).
+- Un `PUT` sur un fichier modifié entre-temps à la main l'écrase : dernier écrit gagne (pas de verrou).
+
+### 11.5 Supprimer — `DELETE /api/lighting/effects/{id}`
+
+- `origin: user` : le fichier est supprimé ; `origin: override` : le fichier utilisateur est supprimé, **le natif
+  reprend** (« Revenir à l'effet d'origine ») ; `origin: native` : `409 {"reason": "native"}`. `404` effet inconnu.
+- Rechargement immédiat ; `200 {"ok": true, "catalogue": {…}}`.
+- Les réglages qui citaient l'effet ne sont **pas** modifiés : le moment joue sa valeur par défaut et l'écart figure
+  dans `unresolved[]` (§3.3, §7.1). C'est l'interface qui prévient avant de supprimer (« utilisé : … »).
+
+### 11.6 Télécharger — `GET /api/lighting/effects/{id}/download` (#305)
+
+Le texte du fichier (celui de `yaml` au §11.2), pour tout effet du catalogue, natifs compris.
+`Content-Type: application/yaml; charset=utf-8`, `Content-Disposition: attachment; filename="<id>.yaml"`. `404` inconnu.
+
+### 11.7 Importer — `POST /api/lighting/effects/import` (#305)
+
+`multipart/form-data` : champ `files` répété (1 à 20 fichiers, `.yaml` ou `.yml`, 64 Ko chacun, 2 Mo au total), champ
+facultatif `on_conflict` = `ask` (défaut) | `replace` | `keep_both`. Chaque fichier est traité seul ; un fichier refusé
+n'empêche pas les autres. Réponse `200` :
+
+```json
+{ "results": [
+    { "file": "aller-retour.yaml", "status": "imported", "id": "aller-retour", "name": "Aller-retour", "stored": "aller-retour.yaml" },
+    { "file": "mon-chenillard.yaml", "status": "conflict", "id": "mon-chenillard", "name": "Mon chenillard", "existing": { "name": "Mon chenillard", "file": "mon-chenillard.yaml" } },
+    { "file": "pulsation.yaml", "status": "native", "id": "pulsation", "errors": [ { "line": 2, "message": "« pulsation » est l'identifiant d'un effet livré : changez la clé id" } ] },
+    { "file": "casse.yaml", "status": "invalid", "errors": [ { "line": 12, "message": "la variable « gB » n'est pas déclarée dans variables" } ] } ],
+  "catalogue": { … réponse du §7.1 … } }
+```
+
+| `status` | Sens | Écrit |
+|---|---|---|
+| `imported` | nouvel effet | oui, **tel quel** |
+| `replaced` | `on_conflict: replace` : remplace l'effet utilisateur de même `id` (dans son fichier) | oui, tel quel |
+| `renamed` | `on_conflict: keep_both` : importé sous un `id` suffixé (`<id>-2`, `-3`… le premier libre, tronqué à 40) ; `new_id` le donne. **Seule la valeur de la clé `id` est réécrite** dans le texte ; le reste, commentaires compris, est intact | oui |
+| `conflict` | `on_conflict: ask` et un effet **utilisateur** de même `id` existe : l'interface demande, puis renvoie ce seul fichier avec `replace` ou `keep_both` | non |
+| `native` | l'`id` est celui d'un effet livré (E2) — quel que soit `on_conflict` | non |
+| `invalid` | validation du §4 en échec (dont format `version: 1`, YAML illisible), **alias YAML**, `id` réservé (mot de route ou nom de périphérique Windows) — §4.8 ; `errors[]` : `line`, `message` | non |
+| `too_big` | plus de 64 Ko | non |
+| `limit` | 100 fichiers atteints | non |
+
+- Nom du fichier écrit (`stored`) : règle du §11.4 (`<id>.yaml`…) ; le nom du fichier envoyé ne sert qu'aux messages
+  (il n'est jamais utilisé comme chemin). Deux fichiers du même envoi avec le même `id` : le second est un `conflict`
+  (ou suit `on_conflict`).
+- Écriture atomique, rechargement **une fois** en fin de traitement. `400` : envoi illisible, aucun fichier, plus de 20
+  fichiers, extension refusée. `413` : plus de 2 Mo.
+
+### 11.8 Comportement de l'éditeur (normatif pour l'interface)
+
+- **Deux onglets, une seule source** : *Grille* (document) et *Texte* (YAML). Le brouillon est envoyé à §11.3 après
+  chaque modification (temporisation de 300 ms) : erreurs, aperçus et conversion viennent de la réponse.
+  - Grille → Texte : si la grille a été modifiée depuis la dernière synchronisation, le texte devient le `yaml`
+    régénéré (commentaires perdus : avertissement si `has_comments`) ; sinon le texte est inchangé.
+  - Texte → Grille : possible seulement si le texte est valide (`ok: true`) ; la grille prend `effect`.
+  - **Enregistrer** : envoie `yaml` si le texte est la dernière source modifiée (ou si rien n'a été modifié dans la
+    grille), `effect` sinon.
+  - La grille travaille sur `grid.effect` (§11.2) : Texte → Grille est refusé aussi quand `grid.editable` est faux.
+- **Grille** : une case vide = le groupe garde son état (aucune action). **Ordre d'affichage des lignes ≠ ordre
+  d'écriture** : les lignes des variables sont **en haut**, dans l'ordre de `variables`, puis `g0`, les groupes numérotés, `g*` ;
+  les actions d'un pas sont écrites dans l'ordre canonique (§11.1 : fond, groupes, `g*`, puis variables).
+- **Groupes de la grille** *(révision 7)* : la grille affiche `n` lignes de groupes, **6 par défaut** (`g1`…`g5` puis
+  `g*`) ; **la dernière ligne est toujours `g*`** et écrit la cible `g*` ; les autres écrivent `g<numéro>`.
+  - « Ajouter un groupe » (jusqu'à 12 lignes) : dans tous les pas, les actions de la ligne `g*` sont **renommées**
+    `g<n>` (la ligne garde son contenu et devient un groupe numéroté) ; une nouvelle ligne `g*` vide apparaît.
+  - « Retirer un groupe » (au moins 1 ligne) : les actions de la ligne `g*` sont **supprimées** (confirmation si elle
+    n'est pas vide), puis celles de la ligne `g<n-1>` sont renommées `g*`.
+  - Le nombre de lignes **n'est pas enregistré** dans l'effet. À l'ouverture : `max(5, plus grand g<k> utilisé)` lignes
+    numérotées, plus la ligne `g*`. Un effet qui écrit `g12` (natif `degrade`) s'ouvre donc avec `g1`…`g12` et la ligne
+    `g*` (13 lignes) ; « Ajouter un groupe » est alors indisponible.
+  - Les salles de l'aperçu (1, 3, 6, 12 et zones réelles) sont indépendantes du nombre de lignes.
+- **Pas de ligne « voisin »** (E5) : la grille ne crée jamais de cible `gA+1` / `gA-1`. Un décalage se fait par une
+  autre variable. À l'ouverture, `grid.converted` non vide ⇒ message « les voisins … sont remplacés par les variables
+  … : même rendu » ; `grid.editable` faux ⇒ grille en lecture seule, modification par l'onglet Texte.
+- **Variables** : déclarées dans le panneau, une ligne par variable — nom proposé (`gA`…`gX`, 24 au plus), type
+  **« Avance régulière »** (`progression` : champs **départ** et **pas**, des expressions du §12.2 avec propositions `1`, `N/2`,
+  `N`, `gA+1` ; pas vide = « suit ») ou **« Suite de groupes »** (`list`). Les erreurs d'expression viennent de `draft`
+  (`path` : `variables[i].start`, `variables[i].step`).
+  *(révision 6)* L'explication et la **suite obtenue pour 1, 3, 6 et 12 groupes** — lue dans `vars` des aperçus du
+  brouillon, jamais calculée par le navigateur — ne sont affichées que **dans une bulle** ouverte par un bouton « ? ». Une variable déclarée ajoute
+  sa ligne ; les variables se réordonnent (l'ordre décide laquelle gagne) ; supprimer une variable retire sa ligne et
+  ses actions.
+- **Pinceau** : info-bulle sur chaque couleur et sur l'intensité (définitions du §4.2) ; couleur libre choisie sur une
+  roue teinte / saturation avec luminosité, champ `#RRGGBB`, aperçu et couleurs récentes (composant maison, aucune
+  dépendance) ; les couleurs récentes sont mémorisées par navigateur.
+- **Pas à pas** *(révision 6)* : l'aperçu de l'éditeur a lecture / pause, tick précédent, tick suivant, retour au début
+  et une réglette de position ; un clic sur l'en-tête d'un pas de la grille place l'aperçu sur le premier tick où ce
+  pas est joué. À l'arrêt, tick, pas joué et `vars` restent affichés. Aucune route nouvelle : l'interface se déplace
+  dans les trames déjà reçues (§11.3). L'aperçu des cartes du catalogue garde lecture / arrêt seulement.
+- **Aperçu** : tailles demandées = `1, 3, 6, 12`, plus le nombre de groupes de chaque zone réelle qui n'est pas déjà
+  dans la liste (zones existantes seulement) ; toutes les rangées sont jouées **sur la même horloge**. Sous `groupes_min`,
+  la rangée porte « sous le minimum : non joué en salle ». Le pas joué est surligné dans la grille ; `vars` est affiché.
+- **Essai sur les ampoules** (E7) : l'éditeur a un bloc « Essayer sur la salle » avec le **choix de la zone** (zones
+  existantes seulement) ; il joue le **brouillon courant**, sans enregistrer (§11.10). Le bouton « Essayer sur la salle »
+  du catalogue demande lui aussi la zone et l'envoie à la route existante (§7.4, champ `zone`). La dernière zone
+  choisie est retenue par navigateur.
+- Effet `read_only` : grille et texte en lecture ; « Dupliquer », « Télécharger » et « Essayer sur la salle » seulement.
+- **Dupliquer** : ouvre l'éditeur sur une copie (`id` proposé `<id>-copie`, libre), créée par `PUT … create: true`.
+
+### 11.10 Essayer un brouillon — `POST /api/lighting/effects/draft/try` (E7)
+
+Joue un brouillon **non enregistré** sur les ampoules d'une zone. Corps : celui du §11.3 sans `groups` ni `moment`
+(`effect` **ou** `yaml`), plus les champs du §7.4 : `{"effect": {…}, "zone": "animateur", "speed": 1, "seconds": 10}`.
+
+- Mêmes règles, mêmes valeurs par défaut, mêmes réponses et mêmes refus que `POST /api/lighting/effects/{id}/try`
+  (§7.4) : `200 {"ok": true, "duration_ms": …}`, `409` avec `reason` (`disabled`, `game`, `not_applicable`, `mode`),
+  `503`. L'applicabilité (§4.7) est calculée sur le brouillon et la zone demandée.
+- Brouillon invalide ⇒ `400 {"ok": false, "errors": [...]}` ; rien n'est joué.
+- Rien n'est écrit sur le disque, le catalogue n'est pas modifié ; l'`id` du brouillon peut être celui d'un effet
+  existant (c'est le brouillon qui est joué, pas l'effet enregistré).
+- Arrêt : route existante `POST /api/lighting/effects/try/stop`. Un essai en remplace un autre, quel qu'en soit l'origine.
+- L'identifiant `draft` étant réservé (§11.4), `…/draft/try` ne peut pas désigner un effet du catalogue.
+
+### 11.9 Tests exigés (v11.8.0)
+
+- Aller-retour §11.1 sur les 5 natifs, sur l'exemple du §4.5 et sur un effet à liste, voisins, `[eteint]`, `pre`,
+  `dernier`, `post`, `boucle: non` : mêmes trames pour N = 1, 3, 6, 12.
+- Sérialisation : texte régénéré stable (deux enregistrements successifs = même fichier), relu sans erreur.
+- `draft` : chaque erreur du §4.8 remonte avec `line` (brouillon `yaml`) ou `path` (brouillon `effect`) ; `previews`
+  dans l'ordre de `groups` ; `vars` conforme au chronogramme du §4.5 ; rien n'est écrit sur le disque.
+- `PUT` : création, modification (nom de fichier conservé), `exists`, `native` (natif et natif surchargé), `id`
+  réservé, `id` différent du chemin, invalide (fichier inchangé), limite de 100, écriture atomique (aucun `.yaml`
+  partiel visible du chargeur), catalogue renvoyé à jour, texte `yaml` écrit à l'octet près.
+- `DELETE` : utilisateur, surcharge (retour au natif), natif refusé ; réglages inchangés et `unresolved[]` renseigné.
+- `download` : contenu identique au fichier, en-têtes ; natif sans l'en-tête de la copie de référence.
+- `import` et `PUT` : alias YAML refusé avec sa ligne (alias simple, alias imbriqués), ancre seule acceptée ; `id`
+  `con`, `nul`, `com1`, `lpt9` refusés avec leur message, `console` et `com10` acceptés ; `keep_both` ne propose jamais
+  un identifiant réservé.
+- `import` : chacun des `status` ; `keep_both` ne change que la clé `id` ; nom envoyé hostile (`../x.yaml`, chemin
+  absolu, nom de périphérique Windows) jamais utilisé comme chemin ; rien n'est écrit hors de `data/files/effects/` ni
+  dans `natifs/` ; YAML à ancres / alias imbriqués refusé sans explosion mémoire.
+- `grid` (E5) : `chenillard-traine` converti en `gB: gA-1`, `gC: gA+1`, `gA` déclarée en dernier ; voisin d'une suite
+  de groupes converti de même ; **mêmes trames**
+  que l'original pour N = 1 à 12 ; dépassement de 24 variables ⇒ `editable: false` ;
+  effet sans voisin ⇒ `grid.effect` identique à `effect`.
+- `draft/try` : joue le brouillon sur la zone demandée sans rien écrire ; mêmes refus que §7.4 ; brouillon invalide `400`.
+- Non-régression : catalogue, aperçu, essai et rechargement de v11.7.0 inchangés (hors champ additif `vars`).
+
+---
+
+## 12. Évolutions du format en v11.8.0 — révision 7 (#210)
+
+> Décisions utilisateur du 2026-11-12 (GATE 2) : `_work/reports/plan-ambiguities-20261112-111000.md` (**E8** dernier
+> groupe = `g*`, `gN` devient un nom de variable ; **E9** 24 variables, limite d'actions relevée) et
+> `plan-ambiguities-20261112-113000.md` (**E10** départ et pas en **expressions**, division **entière**, une variable
+> peut en **suivre** une autre ou **partir** d'elle ; **E11** `gN` non déclaré = **refus** ; **E12** grille de l'éditeur à
+> nombre de groupes réglable, dernière ligne = `g*`, §11.8).
+> Ce chapitre **amende** les §4.1 à §4.8 ; tout ce qu'il ne cite pas est inchangé. `version` reste `2`.
+
+### 12.1 Ce qui change
+
+| Sujet | v11.7.0 (§4) | v11.8.0 |
+|---|---|---|
+| Dernier groupe non vide de la zone | `gN` | **`g*`** — cible (`g*: [theme, 100]`) ; dans une expression, `g*` vaut `N` |
+| Nom d'une variable | `g` + majuscule **autre que N**, puis lettres ou chiffres | `g` + **une majuscule quelconque**, puis lettres ou chiffres : `gN` est une variable ordinaire |
+| `gN` sans variable `gN` déclarée | le dernier groupe | **refusé** (§12.4) |
+| Déclaration d'une progression | `gA: g<k>; <entier>` ou `gA: gN; <entier>` | `gA: <départ>` ou `gA: <départ>; <pas>` — **expressions** (§12.2) |
+| Variables par effet | 8 | **24** |
+| Actions par pas | 16 | **40** (une par cible possible : `g0`, 12 groupes, `g*`, 24 variables = 38, arrondi) |
+
+- `g*` désigne, dans la zone où l'effet est joué, le **dernier groupe non vide** : `g3` dans une zone de 3 groupes, `g6`
+  dans une zone de 6. Avec N = 0, toute action sur `g*` est ignorée. Ne pas confondre avec `g0` (toute la zone).
+- `g*` s'écrit sans guillemets dans le YAML (`{ g*: [theme, 100] }`).
+- Cibles d'un pas : inchangées par ailleurs (`g0`, `g1`…`g12`, `g*`, une variable, le voisin d'une variable `gA+1`).
+  `g*+1` n'est pas une cible. **Une cible n'est jamais une expression** : les expressions ne s'écrivent que dans
+  `variables`.
+- Les listes (`gC: [g1, g4, g3]`) sont inchangées.
+- Limites inchangées : 200 pas, 64 Ko par fichier, 100 fichiers, 12 groupes par zone. Les 5 effets natifs ne changent
+  pas (aucun n'emploie `gN` ; leurs déclarations `g1; +1` restent valides telles quelles).
+
+### 12.2 Expressions du départ et du pas — normatif
+
+```
+déclaration := départ                      # sans pas : « suit »
+             | départ ";" pas              # avec pas : « avance »
+départ, pas := expression
+expression  := terme { ("+" | "-") terme }
+terme       := facteur { ("*" | "/") facteur }
+facteur     := entier | "N" | "g*" | "g" entier | variable | "(" expression ")" | ("+" | "-") facteur
+```
+
+| Élément | Vaut |
+|---|---|
+| entier (0 à 999) | lui-même |
+| `N` | le nombre de groupes **non vides** de la zone où l'effet est joué |
+| `g*` | `N` (le rang du dernier groupe) |
+| `g1`…`g12` | le nombre écrit (`g3` = 3) — écriture v11.7.0, conservée |
+| `gA` (variable) | le **rang** (1…N) du groupe que désigne cette variable ; **dans le départ seulement** — le pas ne cite jamais de variable |
+| `+ - *` | arithmétique entière |
+| `/` | **division entière** : le quotient est **tronqué** (`5/2` = 2, `2/3` = 0, `-5/3` = −1) |
+
+- Espaces libres. 60 caractères au plus par expression. Un signe en tête est admis (`+1`, `-N/3`).
+- **Rang obtenu → groupe** : la valeur `v` d'une expression désigne le rang `((v − 1) mod N) + 1`, avec un reste toujours
+  positif — règle de rebouclage du §4.4, étendue aux valeurs nulles et négatives : `N+1` ⇒ rang 1, **`0` ⇒ rang N (le
+  dernier groupe)**, `−1` ⇒ rang N−1. Les rangs sont ceux des groupes non vides (§4.3).
+- **Valeur d'une variable au cran `k`** (le cran est celui du §4.5, inchangé) :
+  - **avec pas** — `gA: D; P` : rang de `D(0) + P × k`. `D(0)` est le départ évalué au cran 0 : une variable citée y
+    vaut sa position **de départ**. `P` est évalué une fois (il ne dépend que de `N`).
+  - **sans pas** — `gA: D` : rang de `D(k)`, le départ **réévalué à chaque cran** : une variable citée y vaut sa position
+    **au cran `k`**. `gB: gA+1` est donc toujours le groupe après `gA` ; `gE: N/2` (aucune variable citée) désigne un
+    groupe fixe.
+- **Dépendances** : une variable peut en citer une autre, déclarée avant ou après elle, progression ou liste. Une
+  boucle (`gA: gB+1`, `gB: gA+1`, ou `gA: gA+1`) est une **erreur de validation**. L'ordre d'évaluation suit les
+  dépendances ; l'ordre de déclaration ne sert qu'à l'ordre d'écriture (§11.1).
+- **Sans valeur** : une variable ne désigne aucun groupe — et les actions qui la visent sont ignorées — quand N = 0,
+  quand elle cite une liste vide pour cette zone, ou quand une division par zéro survient **à l'exécution**
+  (`6/(N-3)` avec N = 3). Une division par zéro écrite en dur (`N/0`) est une erreur de validation.
+- **Cas à zéro** (division entière) : `N/2` avec N = 1 vaut 0 ⇒ rang 1 (le seul groupe) ; `N/3` avec N = 2 vaut 0 ⇒
+  rang 2 (le dernier groupe) ; **un pas qui vaut 0 n'avance pas** (`gA: 1; N/3` avec N = 2 reste sur `g1`).
+- Écritures v11.7.0 : `gA: g1; +1`, `gB: g2; +2`, `gE: g3; 0` gardent exactement leur sens. L'ancien `gD: gN; -1`
+  devient `gD: g*; -1` (ou `N; -1`).
+- Le pas constant n'est plus borné à ±12 : il reboucle comme le reste.
+
+### 12.3 Messages de validation (complète §4.8)
+
+Chaque message porte fichier et ligne (ou `path` pour un brouillon de l'éditeur, §11.3) :
+
+- « « gN » n'est pas déclarée dans variables. gN est désormais une variable comme les autres : pour le dernier groupe,
+  écrivez g* » (§12.4) ;
+- « la variable « gB » n'est pas déclarée dans variables » (cible ou expression) ;
+- « l'expression « gA+ » est incomplète », « l'expression « N//2 » est mal écrite », « parenthèse non fermée » ;
+- « division par zéro dans « N/0 » » ;
+- « les variables gA et gB dépendent l'une de l'autre » ;
+- « le pas ne peut pas citer une variable (gA) » ;
+- « 24 variables au plus », « un pas compte de 1 à 40 actions » ;
+- cible mal écrite : « … (g0, g1…, g*, ou une variable comme gA) ».
+
+### 12.4 Compatibilité — **[BREAKING] pour un fichier utilisateur v11.7.0 qui emploie `gN`**
+
+| Écriture v11.7.0 | En v11.8.0 |
+|---|---|
+| `gA: g1; +1`, `gB: g2; +2`, `gE: g3; 0`, listes, voisins | **inchangé**, même rendu |
+| `gN: [theme, 100]` (cible) sans variable `gN` | **refusé** — message du §12.3 |
+| `gD: gN; -1` (départ) sans variable `gN` | **refusé** — même message |
+| incrément au-delà de ±12 | accepté (refusé en v11.7.0) |
+
+- Le fichier refusé est **écarté** comme tout fichier invalide (§3.3) : il figure dans `errors[]` et dans le bandeau du
+  catalogue avec son nom, sa ligne et le message ; les autres effets restent chargés ; un réglage qui le citait joue
+  la valeur par défaut du moment (`unresolved[]`). **Correction** : remplacer `gN` par `g*`.
+- **Aucun effet natif n'est concerné.** Le cas ne touche qu'un fichier écrit à la main entre la v11.7.0 et la v11.8.0.
+  À annoncer dans les notes de version et dans `docs/LIGHT_EFFECTS.md`.
+- Dans l'autre sens, un fichier v11.8.0 qui utilise `g*`, une expression, une variable en `N`, plus de 8 variables ou
+  plus de 16 actions par pas est refusé par un serveur v11.7.0 (message de validation).
+
+### 12.5 Exemples — fichiers et chronogrammes
+
+**Exemple A — départ au milieu, variable qui suit, pas relatif.**
+
+```yaml
+id: milieu-et-suiveur
+nom: Milieu et suiveur
+version: 2
+moments: [chrono]
+duree_tick_ms: 1000
+variables:
+  gB: gA+1            # sans pas : toujours le groupe juste après gA
+  gC: N; -N/3         # part du dernier groupe, recule d'un tiers de zone par pas
+  gA: N/2; +1         # part du milieu (division entière), avance d'un groupe par pas
+pas:
+  - { g0: [theme, 100], gB: [theme, 50], gC: ["#14B8A6", 100], gA: [urgence, 100] }
+```
+
+Pas de `pre` : le pas 0 est joué au tick 0, et le cran `k` vaut le numéro du tick.
+
+| Zone | `N/2` | `N/3` | gA (`N/2; +1`) aux ticks 0, 1, 2… | gB (`gA+1`) | gC (`N; -N/3`) |
+|---|---|---|---|---|---|
+| **5 groupes** | 2 | 1 | g2, g3, g4, g5, g1, g2 | g3, g4, g5, g1, g2, g3 | g5, g4, g3, g2, g1, g5 |
+| **6 groupes** | 3 | 2 | g3, g4, g5, g6, g1, g2 | g4, g5, g6, g1, g2, g3 | g6, g4, g2, g6, g4, g2 |
+| **2 groupes** | 1 | **0** | g1, g2, g1, g2 | g2, g1, g2, g1 | **g2, g2, g2, g2** (pas nul : ne bouge pas) |
+| **1 groupe** | **0** ⇒ rang 1 | 0 | g1, g1, g1 | g1, g1, g1 | g1, g1, g1 |
+
+Détail pour 5 groupes :
+
+| Tick | Joué | k | gA | gB | gC | État |
+|---|---|---|---|---|---|---|
+| 0 | pas 0 | 0 | g2 | g3 | g5 | fond au thème ; g3 à 50 % ; g5 turquoise ; g2 à la couleur d'urgence |
+| 1 | pas 0 | 1 | g3 | g4 | g4 | g4 : `gB` puis `gC` écrivent le même groupe, **`gC` gagne** (écrite après) ; g3 urgence |
+| 2 | pas 0 | 2 | g4 | g5 | g3 | g5 à 50 % ; g3 turquoise ; g4 urgence |
+| 3 | pas 0 | 3 | g5 | g1 | g2 | g1 à 50 % ; g2 turquoise ; g5 urgence |
+| 4 | pas 0 | 4 | g1 | g2 | g1 | g2 à 50 % ; g1 : `gC` puis `gA`, **`gA` gagne** (urgence) |
+
+**Exemple B — partir d'une autre variable, puis avancer seule ; `gN` comme variable ; `g*` comme cible.**
+
+```yaml
+id: croisement
+nom: Croisement
+version: 2
+moments: [chrono]
+groupes_min: 3
+duree_tick_ms: 1000
+variables:
+  gA: 1; +1           # part du premier groupe, avance
+  gN: g*; -1          # « gN » est ici une variable comme une autre : part du dernier groupe, recule
+  gD: gA+1; +2        # AVEC pas : part du groupe après le départ de gA (g2), puis avance de 2
+pre:
+  { g0: [theme, 100], g*: [scene, 100] }     # au départ, le dernier groupe à la couleur de la scène
+pas:
+  - { g0: [theme, 100], gA: [urgence, 100], gN: [urgence, 100], gD: [theme, 40] }
+```
+
+Zone de **4 groupes** (`g*` = `g4`) — `gD` avec pas : `D(0) + 2k` = 2, 4, 6, 8… ⇒ g2, g4, g2, g4 :
+
+| Tick | Joué | k | gA | gN | gD |
+|---|---|---|---|---|---|
+| 0 | PRE | 0 | g1 | g4 | g2 |
+| 1 | pas 0 | 0 | g1 | g4 | g2 |
+| 2 | pas 0 | 1 | g2 | g3 | g4 |
+| 3 | pas 0 | 2 | g3 | g2 | g2 |
+| 4 | pas 0 | 3 | g4 | g1 | g4 |
+| 5 | pas 0 | 4 | g1 | g4 | g2 |
+
+Écrite **sans** pas (`gD: gA+1`), `gD` vaudrait g2, g2, g3, g4, g1, g2 : toujours le groupe après `gA`.
+
+### 12.6 Tests exigés
+
+- Chronogrammes du §12.5 tick par tick : exemple A sur 5, 6, 2 et 1 groupes ; exemple B sur 4 groupes ; variante sans pas.
+- Expressions : priorité des opérateurs, parenthèses, signe en tête, division tronquée (positifs et négatifs), valeurs
+  0, négatives et supérieures à N (rebouclage), `g*` = `N`, `g<k>` = k, pas nul, pas relatif.
+- Suivre / partir : `gB: gA+1` réévalué à chaque cran ; `gB: gA+1; +2` figé au départ ; variable citant une liste ;
+  chaîne de trois variables ; déclaration avant et après la variable citée ; liste vide ⇒ sans valeur.
+- Erreurs : chacun des messages du §12.3, avec la ligne ; boucle directe, indirecte et sur soi-même ; division par zéro
+  écrite en dur (validation) et à l'exécution (variable sans valeur, effet non interrompu).
+- `gN` : cible et départ sans déclaration ⇒ refus avec le message ; déclarée ⇒ variable ordinaire, `gN+1` voisin.
+- Compatibilité §12.4 : les 5 natifs et les exemples de `docs/LIGHT_EFFECTS.md` (hors `gN`) rendent **les mêmes trames**
+  qu'en v11.7.0 pour N = 1 à 12, y compris avec des groupes vides.
+- Limites : 24 variables acceptées, 25 refusées ; 40 actions acceptées, 41 refusées.
+- Coût du rendu : `Render` d'un effet de 24 variables (dont une chaîne de dépendances) et 40 actions par pas, au tick
+  10 000, reste compatible avec le lecteur à 10 Hz — banc de mesure (`go test -bench`), valeur consignée dans le
+  rapport de QA ; au-delà de 1 ms par appel, `dev-backend` mémoïse au lieu de rejouer depuis le tick 0.

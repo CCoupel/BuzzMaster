@@ -12,7 +12,6 @@ import (
 	"buzzcontrol/internal/ambiancecfg"
 	"buzzcontrol/internal/config"
 	"buzzcontrol/internal/effects"
-	"buzzcontrol/internal/lighting/hue"
 )
 
 // Light-effect catalogue endpoints (v11.7.0, #223 — contracts/light-effects.md §7.1, §7.2).
@@ -25,6 +24,29 @@ type EffectsProvider interface {
 	EffectsReload() effects.Catalogue
 	// EffectsDir is the user effects directory.
 	EffectsDir() string
+}
+
+// EffectsStore is optionally implemented by the EffectsProvider (the App): writing, reading and
+// deleting the user effect files (v11.8.0, #305 — light-effects.md §11.5 to §11.7). The errors
+// are *effects.StoreError.
+type EffectsStore interface {
+	// EffectsSource is the stored text of an effect (a native: the embedded text) and its entry.
+	EffectsSource(id string) ([]byte, effects.Entry, error)
+	// EffectsDelete removes the user file of an effect (a native's override included) and reloads.
+	EffectsDelete(id string) (effects.Catalogue, error)
+	// EffectsWrite stores the text of an effect (create: the id must be free; else it must exist)
+	// and reloads; it returns the file name used.
+	EffectsWrite(id string, data []byte, create bool) (string, effects.Catalogue, error)
+	// EffectsImport stores each file on its own, reloads once.
+	EffectsImport(files []effects.ImportFile, onConflict string) ([]effects.ImportResult, effects.Catalogue)
+}
+
+func (h *HTTPServer) effectsStore() EffectsStore {
+	if h.Effects == nil {
+		return nil
+	}
+	s, _ := h.Effects.(EffectsStore)
+	return s
 }
 
 // effectExists reports whether an effect with this id exists in the catalogue and
@@ -140,6 +162,10 @@ func (h *HTTPServer) handleLightingEffects(w http.ResponseWriter, r *http.Reques
 
 // handleLightingEffectsReload serves POST /api/lighting/effects/reload.
 func (h *HTTPServer) handleLightingEffectsReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPut { // PUT /…/reload: "reload" is a reserved id (§11.4)
+		http.Error(w, "identifiant réservé", http.StatusBadRequest)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -181,9 +207,27 @@ type trialRefusal interface{ TrialReason() string }
 // POST /api/lighting/effects/try/stop (§7.4).
 func (h *HTTPServer) handleLightingEffectsSub(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/api/lighting/effects/")
+	if r.Method == http.MethodPut && effects.IsReserved(rest) { // a route word is never an effect id (§11.4)
+		http.Error(w, "identifiant réservé", http.StatusBadRequest)
+		return
+	}
 	switch {
 	case rest == "try/stop":
 		h.handleEffectTrialStop(w, r)
+	case rest == "import":
+		h.handleEffectsImport(w, r)
+	case rest == "draft":
+		h.handleEffectDraft(w, r)
+	case rest == "draft/try":
+		h.handleEffectDraftTry(w, r)
+	case strings.HasSuffix(rest, "/source") && !strings.Contains(strings.TrimSuffix(rest, "/source"), "/"):
+		h.handleEffectSource(w, r, strings.TrimSuffix(rest, "/source"))
+	case rest != "" && !strings.Contains(rest, "/") && r.Method == http.MethodPut:
+		h.handleEffectPut(w, r, rest)
+	case strings.HasSuffix(rest, "/download") && !strings.Contains(strings.TrimSuffix(rest, "/download"), "/"):
+		h.handleEffectDownload(w, r, strings.TrimSuffix(rest, "/download"))
+	case rest != "" && !strings.Contains(rest, "/") && r.Method == http.MethodDelete:
+		h.handleEffectDelete(w, r, rest)
 	case strings.HasSuffix(rest, "/preview") && !strings.Contains(strings.TrimSuffix(rest, "/preview"), "/"):
 		h.handleEffectPreview(w, r, strings.TrimSuffix(rest, "/preview"))
 	case strings.HasSuffix(rest, "/try") && !strings.Contains(strings.TrimSuffix(rest, "/try"), "/"):
@@ -241,31 +285,8 @@ func (h *HTTPServer) handleEffectTrial(w http.ResponseWriter, r *http.Request, i
 	if req.Seconds == 0 { // default: 5 s for an effect that only declares the score moment, else 10 s
 		req.Seconds = trialDefaultSeconds(en.Effect)
 	}
-	d, t := h.lightingDriver(), h.effectTrialer()
-	if d == nil || t == nil {
-		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "disabled"})
-		return
-	}
-	switch d.Status().State {
-	case hue.StateRefused:
-		writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": "disabled"})
-		return
-	case hue.StateUnreachable:
-		writeLightingJSON(w, http.StatusServiceUnavailable, map[string]string{"result": "unreachable"})
-		return
-	}
-	ms, err := t.StartEffectTrial(id, req.Zone, req.Speed, req.Seconds)
-	if err != nil {
-		var tr trialRefusal
-		switch {
-		case errors.As(err, &tr):
-			writeLightingJSON(w, http.StatusConflict, map[string]string{"result": "refused", "reason": tr.TrialReason()})
-		default:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		}
-		return
-	}
-	writeLightingJSON(w, http.StatusOK, map[string]any{"ok": true, "duration_ms": ms})
+	t := h.effectTrialer()
+	h.playTrial(w, t != nil, func() (int, error) { return t.StartEffectTrial(id, req.Zone, req.Speed, req.Seconds) })
 }
 
 // handleEffectPreview serves GET /api/lighting/effects/{id}/preview?groups=N&moment=chrono
@@ -319,4 +340,170 @@ func trialDefaultSeconds(e effects.Effect) int {
 		return 5
 	}
 	return 10
+}
+
+// Import limits (§11.7).
+const (
+	importMaxFiles = 20
+	importMaxTotal = 2 << 20
+)
+
+// handleEffectDownload serves GET /api/lighting/effects/{id}/download (§11.6).
+func (h *HTTPServer) handleEffectDownload(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	st := h.effectsStore()
+	if st == nil {
+		http.Error(w, "effet inconnu", http.StatusNotFound)
+		return
+	}
+	data, _, err := st.EffectsSource(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	// id is validated by the loader ([a-z0-9-]{1,40}): safe in a header.
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`.yaml"`)
+	_, _ = w.Write(data)
+}
+
+// handleEffectDelete serves DELETE /api/lighting/effects/{id} (§11.5).
+func (h *HTTPServer) handleEffectDelete(w http.ResponseWriter, _ *http.Request, id string) {
+	st := h.effectsStore()
+	if st == nil {
+		http.Error(w, "effet inconnu", http.StatusNotFound)
+		return
+	}
+	if _, err := st.EffectsDelete(id); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeEffectsJSON(w, map[string]any{"ok": true, "catalogue": h.effectsView()})
+}
+
+// writeStoreError maps a *effects.StoreError to its HTTP answer (§11.4, §11.5).
+func writeStoreError(w http.ResponseWriter, err error) {
+	var se *effects.StoreError
+	if !errors.As(err, &se) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	switch se.Code {
+	case effects.ReasonNotFound:
+		http.Error(w, "effet inconnu", http.StatusNotFound)
+	case effects.ReasonNative, effects.ReasonExists, effects.ReasonLimit:
+		writeLightingJSON(w, http.StatusConflict, map[string]string{"reason": se.Code})
+	case effects.ReasonReserved:
+		http.Error(w, "identifiant réservé", http.StatusBadRequest)
+	case effects.ReasonUnavailable:
+		http.Error(w, "stockage des effets indisponible", http.StatusServiceUnavailable)
+	case effects.ReasonTooBig:
+		http.Error(w, "fichier trop gros", http.StatusRequestEntityTooLarge)
+	case effects.ReasonInvalid:
+		writeLightingJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "errors": draftErrors(se.Errors)})
+	default:
+		http.Error(w, "écriture impossible", http.StatusInternalServerError)
+	}
+}
+
+// handleEffectsImport serves POST /api/lighting/effects/import (§11.7): multipart, field
+// `files` (1 to 20 `.yaml` / `.yml`, 64 KB each, 2 MB in all), optional `on_conflict`.
+// The name of an uploaded file only labels the messages: it is never used as a path.
+func (h *HTTPServer) handleEffectsImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	st := h.effectsStore()
+	if st == nil {
+		http.Error(w, "import indisponible", http.StatusServiceUnavailable)
+		return
+	}
+	// 2 MB of files plus the multipart framing; anything beyond is refused whatever the parts.
+	r.Body = http.MaxBytesReader(w, r.Body, importMaxTotal+(1<<20))
+	mr, err := r.MultipartReader()
+	if err != nil {
+		http.Error(w, "envoi multipart attendu", http.StatusBadRequest)
+		return
+	}
+	var files []effects.ImportFile
+	onConflict, total := effects.ConflictAsk, 0
+	for {
+		part, err := mr.NextPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			writeImportReadError(w, err)
+			return
+		}
+		switch part.FormName() {
+		case "on_conflict":
+			b, err := io.ReadAll(io.LimitReader(part, 32))
+			if err != nil {
+				writeImportReadError(w, err)
+				return
+			}
+			switch v := strings.TrimSpace(string(b)); v {
+			case effects.ConflictAsk, effects.ConflictReplace, effects.ConflictKeepBoth:
+				onConflict = v
+			default:
+				http.Error(w, "on_conflict : ask, replace ou keep_both", http.StatusBadRequest)
+				return
+			}
+		case "files":
+			name := part.FileName()
+			if name == "" {
+				http.Error(w, "le champ files doit contenir des fichiers", http.StatusBadRequest)
+				return
+			}
+			if len(files) >= importMaxFiles {
+				http.Error(w, "20 fichiers au plus par envoi", http.StatusBadRequest)
+				return
+			}
+			if ext := strings.ToLower(filepath.Ext(name)); ext != ".yaml" && ext != ".yml" {
+				http.Error(w, "extension refusée (.yaml ou .yml) : "+name, http.StatusBadRequest)
+				return
+			}
+			// One byte past the limit is enough to flag a too-big file; the rest is counted, not kept.
+			data, err := io.ReadAll(io.LimitReader(part, effects.MaxFileBytes+1))
+			if err != nil {
+				writeImportReadError(w, err)
+				return
+			}
+			rest, err := io.Copy(io.Discard, part)
+			if err != nil {
+				writeImportReadError(w, err)
+				return
+			}
+			if total += len(data) + int(rest); total > importMaxTotal {
+				http.Error(w, "plus de 2 Mo envoyés", http.StatusRequestEntityTooLarge)
+				return
+			}
+			files = append(files, effects.ImportFile{Name: name, Data: data})
+		}
+	}
+	if len(files) == 0 {
+		http.Error(w, "aucun fichier (champ files)", http.StatusBadRequest)
+		return
+	}
+	results, _ := st.EffectsImport(files, onConflict)
+	if results == nil { // no storage behind the manager
+		http.Error(w, "stockage des effets indisponible", http.StatusServiceUnavailable)
+		return
+	}
+	writeEffectsJSON(w, map[string]any{"results": results, "catalogue": h.effectsView()})
+}
+
+func writeImportReadError(w http.ResponseWriter, err error) {
+	var mbe *http.MaxBytesError
+	if errors.As(err, &mbe) {
+		http.Error(w, "plus de 2 Mo envoyés", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "envoi illisible", http.StatusBadRequest)
 }

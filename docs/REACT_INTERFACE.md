@@ -2126,11 +2126,67 @@ Le sous-onglet Effets rend le composant **mutualisé** `AmbianceSettingsPanel` (
 - **Vitesse « plafonnée »** : indiquée quand la durée d'un tick passerait sous 250 ms (champ `tick_ms` du catalogue).
 - **Lien « Voir l'aperçu »** : sous le choix d'un effet, appelle `onShowEffect(id)` pour mettre en vue la carte du catalogue.
 
+#### Éditeur d'effets — `LightEffectEditor` (v11.8.0, #210)
+
+Ouvert dans le sous-onglet Effets de `AmbiancePage.jsx` (depuis « ＋ Nouvel effet », « ✎ Modifier », « 👁 Ouvrir » ou
+« ⧉ Dupliquer »). Il **remplace** les réglages et le catalogue pendant l'édition, et reste monté, caché, quand on change de
+sous-onglet (modifications gardées). Contrat : `light-effects.md` §11.1 à §11.10 ; format : `docs/LIGHT_EFFECTS.md` §16.
+
+- **Fichiers** : `web/src/components/LightEffectEditor.jsx` + `.css` (fiche, onglets Grille / Texte, avertissements
+  « commentaires », « ordre des actions », voisins remplacés, effet livré en lecture seule, fenêtres « Modifications non
+  enregistrées » et « Retirer un groupe ? ») ; `EffectGrid.jsx` (variables en haut, bandeaux, `g*` en dernière ligne,
+  menu de pas, « Ajouter / Retirer un groupe », colonnes en erreur) ; `EffectVariablesPanel.jsx` (bulle « ? » avec la suite
+  lue dans `vars`, expressions départ / pas, erreur par `path`) ; `EffectBrush.jsx` (info-bulles, intensité) ; `ColorWheel.jsx`
+  (roue maison, luminosité, `#RRGGBB`, couleurs récentes en `localStorage` `buzzcontrol.effects.recentColors`) ;
+  `EffectTextTab.jsx` (onglet Texte) ; `EffectSimulator.jsx` (aperçu multi-tailles, une horloge) ; `EffectTryBar.jsx`
+  (essai du brouillon par zone) ; `EffectNameDialog.jsx` (nom et identifiant à la création).
+- **Logique pure** : `web/src/utils/effectDocument.js` — écrire ou vider une case, pas (ajouter, dupliquer, insérer, déplacer,
+  supprimer), variables (ajout, type, ordre, suppression avec ses actions), groupes de la grille (`max(5, plus grand g<k>)`
+  lignes + `g*`), document neuf, placement des erreurs par `path`. **Aucune analyse YAML et aucun calcul de trame dans le
+  navigateur** : tout passe par le serveur.
+- **Brouillon** : `web/src/hooks/useEffectDraft.js` — `GET …/{id}/source` (ou `initialDoc` pour un effet neuf ou une copie) ;
+  `POST …/draft` après 300 ms, avec `groups` = 1, 3, 6, 12 plus les zones réelles, et `moment` ; les réponses périmées sont ignorées. Règle
+  Grille ↔ Texte du §11.8 (le texte est régénéré seulement si la grille a été modifiée ; Texte → Grille refusé si le texte est
+  invalide ou si `grid.editable` est faux). Enregistrer envoie `yaml` si le texte est la dernière source, `effect` sinon, et
+  `create: true` au premier `PUT` d'une création. Les refus `400` / `413` / `503` sont du **texte brut** serveur et s'affichent
+  tels quels ; `409 limit` a un message dédié.
+- **Repères de test** : `data-testid` `effect-editor`, `effect-grid`, `cell-<colonne>-<cible>` (colonne : indice de pas,
+  `pre`, `last`, `post`), `var-<nom>`, `effect-brush`, `effect-text`, `effect-errors`.
+- **Props** : `id`, `initialDoc`, `create`, `zoneGroups`, `tryUnavailable`, `onStopTry`, `onDirtyChange`, `onClose`,
+  `onSaved(catalogue)`, `onDuplicate(source, doc)`, `leaveRequest`, `onLeaveCancel`. Pas d'enfants : le simulateur et
+  l'essai sont dans le composant. `previewGroups` est calculé en interne (1, 3, 6, 12 et les zones réelles, 8 au plus).
+- **Catalogue (v11.8.0)** : `LightEffectsCatalogue` affiche « ＋ Nouvel effet », « ✎ Modifier » (personnalisé) / « 👁 Ouvrir »
+  (livré, natif modifié) et « ⧉ Dupliquer », seulement si les props `onCreate` / `onEdit` sont fournies. `onDuplicate(effect,
+  info)` ou, à défaut, `onCreate({…, from})`. `EffectNameDialog` refuse un identifiant déjà pris, mal formé ou réservé.
+- **Simulateur** : une rangée par taille (1, 3, 6, 12, plus les zones réelles de taille différente), une seule horloge,
+  lecture / pause, tick précédent / suivant, retour au début, réglette. Ne rejoue que les trames du **dernier brouillon
+  valide** (`lastValidPreviews`). Clic sur un en-tête de pas : `seek`, le pas joué est surligné (`onColumn`).
+- **Essai du brouillon** : `POST /api/lighting/effects/draft/try` avec `{effect|yaml, zone, speed: 1}` ; zones proposées en
+  chips ; dernière zone partagée avec le catalogue (`readTryZone` / `saveTryZone`). « ■ Arrêter l'essai » → `…/try/stop`.
+- **Garde** : « ← Retour au catalogue » demande confirmation si des modifications ne sont pas enregistrées. Quitter la page
+  avec un éditeur modifié ouvre **la même fenêtre** (Enregistrer / Abandonner / Rester) pour : un clic sur un lien interne
+  vers une autre page, et Précédent (une entrée d'historique « garde » est ajoutée tant que l'éditeur est modifié ; Suivant n'a pas de cible tant que cette entrée est en tête).
+  « Enregistrer » puis reprise de la navigation ; « Abandonner » reprend la navigation (le clic est rejoué, ou
+  `history.go(-2)` pour Précédent) ; « Rester » l'annule. La fermeture ou le rechargement de l'onglet passe par
+  `beforeunload` : c'est l'invite native du navigateur, sans fenêtre de l'application.
+  Fichiers : `web/src/hooks/useUnsavedGuard.js` (`useUnsavedGuard(dirty, { onBlocked, message })` ; sans `onBlocked`, repli
+  sur `window.confirm`), branché dans `AmbiancePage.jsx` (`editorDirty` via `onDirtyChange` ; l'éditeur reçoit
+  `leaveRequest { proceed }` et `onLeaveCancel`).
+  **Limites** : l'application utilise `BrowserRouter` (pas de `useBlocker`) ; une navigation **programmatique**
+  (`navigate()`) n'est pas interceptée — la page Ambiance n'en fait aucune, la Navbar pourrait en faire : à vérifier en QUALIF
+  (clic sur chaque entrée de la Navbar avec un éditeur modifié). La garde Précédent laisse une entrée d'historique en plus
+  après enregistrement ou fermeture de l'éditeur. L'invite `beforeunload` du navigateur est un dialogue natif : à prévoir
+  dans la procédure manuelle.
+- **`LightEffectPreview`** : `BulbRow` extrait pour réutilisation ; le catalogue est inchangé.
+
 #### Catalogue des effets — `LightEffectsCatalogue` et `LightEffectPreview` (v11.7.0, #299)
 
 **Fichiers** : `web/src/components/LightEffectsCatalogue.jsx` + `.css` (cartes, bandeau d'erreurs, recharger, essai) ; `web/src/components/LightEffectPreview.jsx` (aperçu animé) ; `web/src/utils/lightEffects.js` (`TRY_EVENT`, `TRY_SECONDS`, `visibleZones`, `formatSpeed`).
 
-- **Props de `LightEffectsCatalogue`** : `catalog` (réponse normalisée de `GET /api/lighting/effects`, via `useLightEffects`), `lighting` (section `lighting` de `config.json`, pour « utilisé : … » d'après les réglages globaux), `zoneGroups` (groupes non vides par zone), `onReload()` (`POST /api/lighting/effects/reload`), `onTry(id)` (`POST /api/lighting/effects/{id}/try`, corps `{}` : zone ambiance, vitesse ×1, durée par défaut du serveur), `onStopTry()` (`…/try/stop`), `tryUnavailable()` (raison ou `''`), `onManageGroups()`, `focus` (`{id, n}` : carte à mettre en vue).
+- **Props de `LightEffectsCatalogue`** : `catalog` (réponse normalisée de `GET /api/lighting/effects`, via `useLightEffects`), `lighting` (section `lighting` de `config.json`, pour « utilisé : … » d'après les réglages globaux), `zoneGroups` (groupes non vides par zone), `onReload()` (`POST /api/lighting/effects/reload`), `onTry(id, zone)` (`POST /api/lighting/effects/{id}/try`, corps `{zone}` ; vitesse ×1, durée par défaut du serveur), `onStopTry()` (`…/try/stop`), `tryUnavailable(zone)` (raison ou `''`), `onManageGroups()`, `focus` (`{id, n}` : carte à mettre en vue), `onCatalogue(catalogue)` (v11.8.0, #305 : catalogue renvoyé par l'import ou la suppression, appliqué par le parent ; à défaut, `onReload()`).
+- **Import, téléchargement, suppression (v11.8.0, #305)** : `LightEffectsCatalogue` fait lui-même les appels `fetch` (`POST /api/lighting/effects/import`, `DELETE /api/lighting/effects/{id}`) et le lien « Télécharger » (`GET …/{id}/download`). Les composants et fonctions du panneau de résultat sont dans `web/src/components/LightEffectsImport.jsx` : `postImport(files, onConflict)` (lit le texte des erreurs 400 et 413, qui sont du texte brut et non du JSON), `requestDelete(id)`, `ImportResults` (une ligne par fichier, « Fermer »), `ConflictDialog` (Remplacer / Garder les deux / Annuler / Échap, un fichier à la fois, renvoi du seul fichier concerné avec `on_conflict`), `Modal`. Le dépôt de fichiers porte `data-testid="catalogue-dropzone"`.
+- **Choix de la zone d'essai (v11.8.0, #305)** : un `<select>` (`aria-label` « Zone où jouer l'essai ») accolé au bouton « Essayer sur la salle » liste les zones visibles (`visibleZones` : ambiance, plus les zones qui ont des groupes). Le choix est gardé en `localStorage` (`buzzcontrol.effects.tryZone`) ; une zone sans groupe, Ambiance exceptée, n'est pas proposée. Le grisage par zone lit `applicable[zone]` ; sa raison s'affiche en infobulle.
+- **Rechargement côté page (v11.8.0, #305)** : `useLightEffects.applyCatalogue(data)` remplace le catalogue par la réponse normalisée ; `AmbiancePage` le passe en `onCatalogue`.
 - **Un seul aperçu et un seul essai à la fois** : un essai du catalogue et un « Tester » des réglages ne tournent jamais ensemble. Le dernier lancé remplace l'autre : l'événement fenêtre `TRY_EVENT` (`'buzzcontrol:effect-try'`) prévient l'autre composant.
 - **`LightEffectPreview`** : rejoue les trames de `GET /api/lighting/effects/{id}/preview?groups=N&moment=…`. Le navigateur ne calcule rien : il lit `frames[]` (`at_ms`, `tick`, `step`, `groups[]` avec `color` et `intensity`) à partir de `at_ms`. `stepLabel(step)` traduit `pre` en « PRE », `pas:<n>` en « pas n », `dernier` en « dernier ». Le cache de l'aperçu est invalidé par un numéro de version du catalogue, qui change à chaque rechargement.
 - **Étiquettes d'origine** : `ORIGIN_BADGE` — `native` → « natif », `user` → « personnalisé », `override` → « natif modifié ».
