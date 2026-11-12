@@ -20,6 +20,15 @@ séquenceur et les routes de v11.7.0 sont inchangés.
 - **[NEW]** Identifiants réservés, refusés à l'enregistrement et à l'import : `reload`, `try`, `draft`, `import`. Un
   fichier déposé à la main avec un de ces `id` reste chargé comme en v11.7.0.
 
+Précisions après la revue du LOT-1 (`_work/reports/code-reviewer-lot1-20261112-113000.md`, m1 et m2) — `light-effects.md`
+§4.8, §11.4, §11.7, §11.9. **Aucun BREAKING** (routes nouvelles en v11.8.0) :
+
+- **[NEW]** Un texte enregistré (`PUT`) ou importé qui contient un **alias YAML** (`*nom`) est refusé avec la ligne de
+  l'alias ; aucun alias n'est développé. Comportement déjà livré (`internal/effects/store.go`), désormais au contrat.
+- **[NEW]** Identifiants réservés étendus aux **noms de périphérique Windows** (`con`, `prn`, `aux`, `nul`, `com1`-`com9`,
+  `lpt1`-`lpt9`) : refus à l'enregistrement et à l'import, avec message. Le chargement d'un fichier déposé à la main
+  est inchangé.
+
 Compléments du GATE 2 (2026-11-12, `plan-ambiguities-20261112-103000.md`, `-104000.md`) — **aucun BREAKING** :
 
 - **[NEW]** `grid` dans les réponses de `…/{id}/source` et de `…/draft` : document sans cible voisine, chaque voisin

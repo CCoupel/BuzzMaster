@@ -396,6 +396,23 @@ inconnue, clé obligatoire absente, `id` invalide ou en double, `version` non pr
 inconnue, `duree_tick_ms` hors bornes, `pas` vide ou trop long, cible mal écrite, variable non déclarée, déclaration de
 variable mal écrite, couleur invalide, intensité hors 0-100, fichier trop gros.
 
+**Textes écrits par le serveur (v11.8.0, §11.4 et §11.7)** — deux refus de plus, qui ne valent que pour un texte
+**enregistré** (`PUT`) ou **importé**, pas pour le chargement du dossier :
+
+- **Alias YAML** : un texte qui contient un alias (`*nom`, référence à une ancre `&nom`) est refusé, avec la ligne du
+  premier alias : « les alias YAML (*nom) ne sont pas acceptés : écrivez les valeurs en toutes lettres ». Le contrôle
+  se fait sur l'arbre du document, **avant** tout décodage : aucun alias n'est développé. Une ancre seule (`&nom`, sans
+  alias) est acceptée.
+- **Identifiant réservé** : un `id` qui est un mot de route (`reload`, `try`, `draft`, `import`) ou un **nom de
+  périphérique Windows** (`con`, `prn`, `aux`, `nul`, `com1` à `com9`, `lpt1` à `lpt9`) est refusé, avec la ligne de la
+  clé `id` — le nom du fichier écrit dérive de l'`id` (§11.4) et `con.yaml` n'est pas un nom de fichier utilisable sous
+  Windows. Messages : « « reload » est un mot réservé : changez la clé id » ; « « con » est un nom réservé par Windows :
+  changez la clé id ».
+
+Un fichier **déposé à la main** dans le dossier garde les règles de v11.7.0 : son nom est libre, son `id` peut être
+l'un de ces mots, et ses alias sont traités par le chargeur (dont l'analyseur borne lui-même le développement des
+alias ; la taille du fichier reste limitée à 64 Ko).
+
 ---
 
 ## 5. Séquenceur
@@ -840,7 +857,8 @@ Corps (64 Ko au plus) : `{"effect": {…}}` **ou** `{"yaml": "…"}`, et `"creat
 | `create` absent et `id` inconnu | `404` |
 | `id` d'un natif (y compris un natif surchargé) | `409 {"reason": "native"}` — rien n'est écrit (E2) |
 | `id` du corps ≠ `{id}` du chemin | `400` (l'identifiant ne se change pas : dupliquer) |
-| `id` réservé : `reload`, `try`, `draft`, `import` | `400` |
+| `id` réservé : mot de route (`reload`, `try`, `draft`, `import`) ou nom de périphérique Windows (`con`, `prn`, `aux`, `nul`, `com1`-`com9`, `lpt1`-`lpt9`) — §4.8 | `400` avec `errors[]` |
+| texte `yaml` contenant un alias YAML (`*nom`) — §4.8 | `400` avec `errors[]` (ligne de l'alias) — rien n'est écrit |
 | brouillon invalide | `400 {"ok": false, "errors": [...]}` (forme du §11.3) — rien n'est écrit |
 | 100 fichiers atteints (création) | `409 {"reason": "limit"}` |
 
@@ -887,7 +905,7 @@ n'empêche pas les autres. Réponse `200` :
 | `renamed` | `on_conflict: keep_both` : importé sous un `id` suffixé (`<id>-2`, `-3`… le premier libre, tronqué à 40) ; `new_id` le donne. **Seule la valeur de la clé `id` est réécrite** dans le texte ; le reste, commentaires compris, est intact | oui |
 | `conflict` | `on_conflict: ask` et un effet **utilisateur** de même `id` existe : l'interface demande, puis renvoie ce seul fichier avec `replace` ou `keep_both` | non |
 | `native` | l'`id` est celui d'un effet livré (E2) — quel que soit `on_conflict` | non |
-| `invalid` | validation du §4 en échec (dont format `version: 1`, YAML illisible, `id` réservé) ; `errors[]` : `line`, `message` | non |
+| `invalid` | validation du §4 en échec (dont format `version: 1`, YAML illisible), **alias YAML**, `id` réservé (mot de route ou nom de périphérique Windows) — §4.8 ; `errors[]` : `line`, `message` | non |
 | `too_big` | plus de 64 Ko | non |
 | `limit` | 100 fichiers atteints | non |
 
@@ -974,6 +992,9 @@ Joue un brouillon **non enregistré** sur les ampoules d'une zone. Corps : celui
   partiel visible du chargeur), catalogue renvoyé à jour, texte `yaml` écrit à l'octet près.
 - `DELETE` : utilisateur, surcharge (retour au natif), natif refusé ; réglages inchangés et `unresolved[]` renseigné.
 - `download` : contenu identique au fichier, en-têtes ; natif sans l'en-tête de la copie de référence.
+- `import` et `PUT` : alias YAML refusé avec sa ligne (alias simple, alias imbriqués), ancre seule acceptée ; `id`
+  `con`, `nul`, `com1`, `lpt9` refusés avec leur message, `console` et `com10` acceptés ; `keep_both` ne propose jamais
+  un identifiant réservé.
 - `import` : chacun des `status` ; `keep_both` ne change que la clé `id` ; nom envoyé hostile (`../x.yaml`, chemin
   absolu, nom de périphérique Windows) jamais utilisé comme chemin ; rien n'est écrit hors de `data/files/effects/` ni
   dans `natifs/` ; YAML à ancres / alias imbriqués refusé sans explosion mémoire.
