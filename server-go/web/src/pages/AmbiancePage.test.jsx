@@ -736,6 +736,6 @@ describe('Cas dégradés (maquette §07, contrat §5.6)', () => {
     })
     render(<AmbiancePage />)
     await screen.findByText('Rechercher un pont')
-    expect(badge().dataset.state).toBe('disabled')
+    await waitFor(() => expect(badge().dataset.state).toBe('disabled'))
   })
 })
