@@ -153,9 +153,3 @@ describe('Nouvel effet — fenêtre nom + identifiant', () => {
     expect(h.onCreate).not.toHaveBeenCalled()
   })
 })
-
-describe('garde « modifications non enregistrées » (AmbiancePage)', () => {
-  it('voir LightEffectEditor.210.test.jsx : question Enregistrer / Abandonner / Rester au retour au catalogue', () => {
-    expect(true).toBe(true) // couverte au niveau de l'éditeur ; le branchement de la page est vérifié par la procédure (scénario 6)
-  })
-})

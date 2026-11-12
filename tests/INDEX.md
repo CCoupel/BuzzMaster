@@ -250,3 +250,5 @@
 | server-go/web/src/components/EffectBrush.210.test.jsx | unit | admin-game | #210 pinceau : action écrite, info-bulles accessibles, roue | feature | |
 | server-go/web/src/components/LightEffectEditor.210.test.jsx | unit | admin-game | #210 éditeur intégré : ouverture, avertissements, lecture seule, groupes, onglets, enregistrement, garde de sortie, création | feature | |
 | tests/procedures/light-effects-editor-210.md | manual | admin-game, lighting | #210 procédure manuelle : chronogrammes, gN refusé, création, grille ⇄ texte, lecture seule, simulateur, essai du brouillon | feature | |
+| server-go/web/src/components/LightEffectEditor.simulator.210.test.jsx | unit | admin-game, lighting | #210 F2.3 simulateur multi-salles (rangées, masquage, sous le minimum), pas à pas (tick ±, début, réglette, clic sur un pas, vars lues, pas surligné, une horloge), essai du brouillon (zone, arrêt, refus) | feature | |
+| server-go/web/src/components/LightEffectsCatalogue.editor-actions.210.test.jsx | unit | admin-game | #210 F2.3 catalogue : Nouvel effet, Modifier, Ouvrir, Dupliquer, fenêtre nom + identifiant (refus id pris / mal formé) | feature | |
