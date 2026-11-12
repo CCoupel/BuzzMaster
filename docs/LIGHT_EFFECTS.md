@@ -535,7 +535,8 @@ temps de l'édition ; « Retour au catalogue » le ferme. Référence : `contrac
 
 - « Retour au catalogue » avec des modifications non enregistrées demande confirmation (« Modifications non enregistrées »).
   Changer de sous-onglet garde l'éditeur ouvert avec ses modifications. Quitter la page avec un éditeur modifié
-  (fermeture ou rechargement de l'onglet, lien vers une autre page, Précédent / Suivant) demande confirmation.
+  demande confirmation. Pour un lien vers une autre page ou Précédent / Suivant, c'est la fenêtre de l'éditeur (Enregistrer /
+  Abandonner / Rester). Fermer ou recharger l'onglet affiche l'invite du navigateur.
 - Retirer un groupe qui n'est pas vide demande confirmation.
 
 ## 17. Compatibilité v11.7.0 → v11.8.0 — **changement cassant**

@@ -2162,16 +2162,20 @@ sous-onglet (modifications gardées). Contrat : `light-effects.md` §11.1 à §1
   valide** (`lastValidPreviews`). Clic sur un en-tête de pas : `seek`, le pas joué est surligné (`onColumn`).
 - **Essai du brouillon** : `POST /api/lighting/effects/draft/try` avec `{effect|yaml, zone, speed: 1}` ; zones proposées en
   chips ; dernière zone partagée avec le catalogue (`readTryZone` / `saveTryZone`). « ■ Arrêter l'essai » → `…/try/stop`.
-- **Garde** : « Retour au catalogue » demande confirmation si des modifications ne sont pas enregistrées. Quitter la page
-  avec un éditeur modifié demande aussi confirmation : fermeture ou rechargement de l'onglet (`beforeunload`, confirmation
-  native du navigateur), clic sur un lien interne vers une autre page (`window.confirm`, navigation annulée sur refus),
-  Précédent / Suivant (une entrée d'historique « garde » est ajoutée tant que l'éditeur est modifié ; refus = garde remise).
-  Fichiers : `web/src/hooks/useUnsavedGuard.js`, branché dans `AmbiancePage.jsx` (`editorDirty` via `onDirtyChange`).
+- **Garde** : « ← Retour au catalogue » demande confirmation si des modifications ne sont pas enregistrées. Quitter la page
+  avec un éditeur modifié ouvre **la même fenêtre** (Enregistrer / Abandonner / Rester) pour : un clic sur un lien interne
+  vers une autre page, et Précédent / Suivant (une entrée d'historique « garde » est ajoutée tant que l'éditeur est modifié).
+  « Enregistrer » puis reprise de la navigation ; « Abandonner » reprend la navigation (le clic est rejoué, ou
+  `history.go(-2)` pour Précédent) ; « Rester » l'annule. La fermeture ou le rechargement de l'onglet passe par
+  `beforeunload` : c'est l'invite native du navigateur, sans fenêtre de l'application.
+  Fichiers : `web/src/hooks/useUnsavedGuard.js` (`useUnsavedGuard(dirty, { onBlocked, message })` ; sans `onBlocked`, repli
+  sur `window.confirm`), branché dans `AmbiancePage.jsx` (`editorDirty` via `onDirtyChange` ; l'éditeur reçoit
+  `leaveRequest { proceed }` et `onLeaveCancel`).
   **Limites** : l'application utilise `BrowserRouter` (pas de `useBlocker`) ; une navigation **programmatique**
   (`navigate()`) n'est pas interceptée — la page Ambiance n'en fait aucune, la Navbar pourrait en faire : à vérifier en QUALIF
   (clic sur chaque entrée de la Navbar avec un éditeur modifié). La garde Précédent laisse une entrée d'historique en plus
-  après enregistrement ou fermeture de l'éditeur. `window.confirm` bloque une automatisation de navigateur : à prévoir dans
-  la procédure manuelle.
+  après enregistrement ou fermeture de l'éditeur. L'invite `beforeunload` du navigateur est un dialogue natif : à prévoir
+  dans la procédure manuelle.
 - **`LightEffectPreview`** : `BulbRow` extrait pour réutilisation ; le catalogue est inchangé.
 
 #### Catalogue des effets — `LightEffectsCatalogue` et `LightEffectPreview` (v11.7.0, #299)
